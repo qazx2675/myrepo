@@ -1,13 +1,3 @@
-// vCenter VM 설정 및 PCI 점검 도구 (PowerShell -> Go 변환)
-//
-// 빌드:
-// go mod init vmcheck
-// go get github.com/vmware/govmomi
-// go build -o vmcheck .
-//
-// 실행:
-// ./vmcheck -vc 10.0.0.10 -out My_Report.csv
-// ./vmcheck -vc 10.0.0.10 -out My_Report.csv -dir /path/to/script/root
 package main
 
 import (
@@ -38,20 +28,9 @@ const vcUser = "lscsystems@vsphere.local"
 const psSecureStringMagic = "76492d1116743f0423413b16050a5345"
 
 type VMReport struct {
-	BMHostname     string
-	VMName         string
-	VMCPU          string
-	VMMemory       string
-	CorePerSocket  string
-	NumaMaxPerNode string
-	Enable1GPage   string
-	Prealloc       string
-	PinnedMainMem  string
-	VMXSwpEnabled  string
-	MemoryReser    string
-	MemoryShares   string
-	CPUShares      string
-	PCIVendor      string
+	BMHostname, VMName, VMCPU, VMMemory, CorePerSocket, NumaMaxPerNode      string
+	Enable1GPage, Prealloc, PinnedMainMem, VMXSwpEnabled                    string
+	MemoryReser, MemoryShares, CPUShares, PCIVendor                        string
 }
 
 var csvHeader = []string{
@@ -61,62 +40,44 @@ var csvHeader = []string{
 }
 
 func (r VMReport) Row() []string {
-	return []string{
-		r.BMHostname, r.VMName, r.VMCPU, r.VMMemory, r.CorePerSocket,
+	return []string{r.BMHostname, r.VMName, r.VMCPU, r.VMMemory, r.CorePerSocket,
 		r.NumaMaxPerNode, r.Enable1GPage, r.Prealloc, r.PinnedMainMem,
-		r.VMXSwpEnabled, r.MemoryReser, r.MemoryShares, r.CPUShares, r.PCIVendor,
-	}
+		r.VMXSwpEnabled, r.MemoryReser, r.MemoryShares, r.CPUShares, r.PCIVendor}
 }
 
+// [수정] dir/out/password 플래그 제거, -f(점검 대상 파일) 추가. 출력파일명은 res_<입력파일명>.csv 로 자동 생성.
 func main() {
 	var (
-		vcTargetIP     = flag.String("vc", "", "[필수] vCenter 주소(IP 또는 FQDN)")
-		outputFileName = flag.String("out", "VM_Check_Report.csv", "결과 CSV 파일 이름")
-		baseDir        = flag.String("dir", "", "worklist.txt / 인증 파일이 위치한 디렉터리")
-		plainPassword  = flag.String("password", "", "직접 전달할 비밀번호 (미지정 시 VC_PASSWORD 사용)")
+		vcTargetIP = flag.String("vc", "", "[필수] vCenter 주소(IP 또는 FQDN)")
+		inputFile  = flag.String("f", "", "[필수] 점검할 호스트 목록 파일 (예: list.txt)")
 	)
 	flag.Parse()
 
-	if strings.TrimSpace(*vcTargetIP) == "" {
-		fmt.Fprintln(os.Stderr, "[오류] -vc 파라미터는 필수입니다.")
+	if strings.TrimSpace(*vcTargetIP) == "" || strings.TrimSpace(*inputFile) == "" {
+		fmt.Fprintln(os.Stderr, "[오류] -vc 및 -f 파라미터는 필수입니다.")
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	scriptDir := strings.TrimSpace(*baseDir)
-	if scriptDir == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			scriptDir = cwd
-		} else {
-			scriptDir = "."
-		}
-	}
-
-	outName := filepath.Base(strings.TrimSpace(*outputFileName))
-	if outName == "" || outName == "." || outName == string(filepath.Separator) {
-		outName = "VM_Check_Report.csv"
-	}
-	if filepath.Ext(outName) == "" {
-		outName += ".csv"
-	}
-
-	password, err := loadPassword(scriptDir, *plainPassword)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] 인증 정보 로드 실패 : %v\n", err)
+	password := os.Getenv("VC_PASSWORD")
+	if strings.TrimSpace(password) == "" {
+		fmt.Fprintln(os.Stderr, "[오류] VC_PASSWORD 환경변수가 설정되지 않았습니다.")
 		os.Exit(1)
 	}
 
-	worklistPath := filepath.Join(scriptDir, "worklist.txt")
-	hostlistLines, err := loadWorklist(worklistPath)
+	hostlistLines, err := loadWorklist(*inputFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] worklist.txt 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[오류] 지정한 %s 파일을 읽을 수 없습니다: %v\n", *inputFile, err)
 		os.Exit(1)
 	}
-	fmt.Printf("-> [CHECKBOX] worklist.txt 로드 완료 (대상 물리 서버: %d대)\n", len(hostlistLines))
-	fmt.Println("vCenter API 전용 고속 인벤토리 쿼리를 시작합니다.")
+	baseName := filepath.Base(*inputFile)
+	ext := filepath.Ext(baseName)
+	nameWithoutExt := strings.TrimSuffix(baseName, ext)
+	outName := fmt.Sprintf("res_%s.csv", nameWithoutExt)
+
+	fmt.Printf("-> [CHECKBOX] %s 로드 완료 (대상 물리 서버: %d대)\n", *inputFile, len(hostlistLines))
 
 	ctx := context.Background()
-
 	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", *vcTargetIP))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[오류] vCenter URL 생성 실패: %v\n", err)
@@ -178,28 +139,22 @@ func main() {
 	}
 
 	if len(targetHosts) == 0 {
-		fmt.Fprintln(os.Stderr, "[경고] worklist.txt의 호스트를 인벤토리에서 찾을 수 없습니다.")
+		fmt.Fprintf(os.Stderr, "[경고] %s 에 등록된 호스트를 인벤토리에서 찾을 수 없습니다.\n", *inputFile)
 		os.Exit(1)
 	}
 
 	var reportResults []VMReport
-
 	for _, h := range targetHosts {
-		bmHost := h.Name
-		hostID := h.Self.Value
-
+		bmHost, hostID := h.Name, h.Self.Value
 		var myVMs []mo.VirtualMachine
 		for _, vm := range allVMs {
 			if vm.Runtime.Host != nil && vm.Runtime.Host.Value == hostID {
 				myVMs = append(myVMs, vm)
 			}
 		}
-
-		fmt.Printf("[%s] 분석 중... (발견된 VM: %d대)\n", bmHost, len(myVMs))
 		if len(myVMs) == 0 {
 			continue
 		}
-
 		for _, vm := range myVMs {
 			reportResults = append(reportResults, buildReport(bmHost, vm))
 		}
@@ -211,22 +166,16 @@ func main() {
 	}
 
 	printTable(reportResults)
-
-	csvOutputPath := filepath.Join(scriptDir, outName)
-	if err := writeCSV(csvOutputPath, reportResults); err != nil {
+	if err := writeCSV(outName, reportResults); err != nil {
 		fmt.Fprintf(os.Stderr, "[오류] CSV 저장 실패: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("점검 완료! CSV 파일(%s)에 저장되었습니다.\n", csvOutputPath)
+	fmt.Printf("점검 완료! CSV 파일(%s)이 현재 경로에 저장되었습니다.\n", outName)
 }
 
 func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
-	r := VMReport{
-		BMHostname: bmHost, VMName: vm.Name, VMCPU: "N/A", VMMemory: "N/A",
-		CorePerSocket: "N/A", MemoryShares: "N/A", CPUShares: "N/A", PCIVendor: "N/A",
-		MemoryReser: "0.00 GB",
-	}
+	r := VMReport{BMHostname: bmHost, VMName: vm.Name, VMCPU: "N/A", VMMemory: "N/A",
+		CorePerSocket: "N/A", MemoryShares: "N/A", CPUShares: "N/A", PCIVendor: "N/A", MemoryReser: "0.00 GB"}
 
 	if vm.Config != nil {
 		hw := vm.Config.Hardware
@@ -242,14 +191,11 @@ func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
 	extra := map[string]string{}
 	if vm.Config != nil {
 		for _, opt := range vm.Config.ExtraConfig {
-			ov := opt.GetOptionValue()
-			if ov == nil {
-				continue
+			if ov := opt.GetOptionValue(); ov != nil {
+				extra[ov.Key] = fmt.Sprintf("%v", ov.Value)
 			}
-			extra[ov.Key] = fmt.Sprintf("%v", ov.Value)
 		}
 	}
-
 	r.Enable1GPage = extraOrDefault(extra, "sched.mem.lpage.enable1GPage", "FALSE")
 	r.Prealloc = extraOrDefault(extra, "sched.mem.prealloc", "FALSE")
 	r.PinnedMainMem = extraOrDefault(extra, "sched.mem.prealloc.pinnedMainMem", "FALSE")
@@ -264,9 +210,8 @@ func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
 		if memAlloc.Shares != nil {
 			r.MemoryShares = fmt.Sprintf("%s (%d)", memAlloc.Shares.Level, memAlloc.Shares.Shares)
 		}
-		cpuAlloc := vm.ResourceConfig.CpuAllocation
-		if cpuAlloc.Shares != nil {
-			r.CPUShares = fmt.Sprintf("%s (%d)", cpuAlloc.Shares.Level, cpuAlloc.Shares.Shares)
+		if cs := vm.ResourceConfig.CpuAllocation.Shares; cs != nil {
+			r.CPUShares = fmt.Sprintf("%s (%d)", cs.Level, cs.Shares)
 		}
 	}
 
@@ -281,20 +226,18 @@ func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
 			r.PCIVendor = strings.Join(vendorList, " | ")
 		}
 	}
-
 	return r
 }
 
 func extractPCIName(dev types.BaseVirtualDevice) (string, bool) {
 	var deviceName, backingID string
-
 	switch d := dev.(type) {
 	case *types.VirtualPCIPassthrough:
 		switch b := d.Backing.(type) {
 		case *types.VirtualPCIPassthroughDeviceBackingInfo:
 			deviceName, backingID = b.DeviceName, b.Id
 		case *types.VirtualPCIPassthroughDynamicBackingInfo:
-			deviceName, backingID = b.DeviceName, b.Id
+			deviceName = b.DeviceName
 			if strings.TrimSpace(b.CustomLabel) != "" && strings.TrimSpace(deviceName) == "" {
 				deviceName = b.CustomLabel
 			}
@@ -312,7 +255,6 @@ func extractPCIName(dev types.BaseVirtualDevice) (string, bool) {
 	default:
 		return "", false
 	}
-
 	if v := strings.TrimSpace(deviceName); v != "" {
 		return v, true
 	}
@@ -348,94 +290,6 @@ func loadWorklist(path string) ([]string, error) {
 	return lines, nil
 }
 
-func loadPassword(scriptDir, override string) (string, error) {
-	if strings.TrimSpace(override) != "" {
-		return override, nil
-	}
-
-	keyPath := filepath.Join(scriptDir, "Create_VM_pwsh_dir", "password_dir", "secret_VMw.key")
-	encPath := filepath.Join(scriptDir, "Create_VM_pwsh_dir", "password_dir", "password_VMw.enc")
-
-	keyBytes, keyErr := os.ReadFile(keyPath)
-	encBytes, encErr := os.ReadFile(encPath)
-
-	if keyErr == nil && encErr == nil {
-		pw, err := decryptPowerShellSecureString(string(encBytes), keyBytes)
-		if err == nil {
-			return pw, nil
-		}
-		if env := os.Getenv("VC_PASSWORD"); env != "" {
-			return env, nil
-		}
-		return "", fmt.Errorf("암호 복호화 실패: %w", err)
-	}
-
-	if env := os.Getenv("VC_PASSWORD"); env != "" {
-		return env, nil
-	}
-	if keyErr != nil {
-		return "", keyErr
-	}
-	return "", encErr
-}
-
-func decryptPowerShellSecureString(enc string, key []byte) (string, error) {
-	enc = strings.TrimSpace(enc)
-	if len(enc) <= len(psSecureStringMagic) || !strings.EqualFold(enc[:len(psSecureStringMagic)], psSecureStringMagic) {
-		return "", errors.New("PowerShell SecureString 형식이 아닙니다")
-	}
-
-	payload, err := base64.StdEncoding.DecodeString(enc[len(psSecureStringMagic):])
-	if err != nil {
-		return "", fmt.Errorf("base64 디코딩 실패: %w", err)
-	}
-
-	parts := strings.Split(utf16LEToString(payload), "|")
-	if len(parts) != 3 {
-		return "", errors.New("SecureString 내부 구조가 예상과 다릅니다")
-	}
-
-	iv, err := base64.StdEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", fmt.Errorf("IV 디코딩 실패: %w", err)
-	}
-	cipherText, err := hex.DecodeString(parts[2])
-	if err != nil {
-		return "", fmt.Errorf("암호문 디코딩 실패: %w", err)
-	}
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("AES 키 오류: %w", err)
-	}
-	if len(cipherText) == 0 || len(cipherText)%block.BlockSize() != 0 {
-		return "", errors.New("암호문 길이가 블록 크기의 배수가 아닙니다")
-	}
-	if len(iv) != block.BlockSize() {
-		return "", errors.New("IV 길이가 올바르지 않습니다")
-	}
-
-	plain := make([]byte, len(cipherText))
-	cipher.NewCBCDecrypter(block, iv).CryptBlocks(plain, cipherText)
-
-	pad := int(plain[len(plain)-1])
-	if pad > 0 && pad <= block.BlockSize() && pad <= len(plain) {
-		plain = plain[:len(plain)-pad]
-	}
-	return utf16LEToString(plain), nil
-}
-
-func utf16LEToString(b []byte) string {
-	if len(b)%2 != 0 {
-		b = b[:len(b)-1]
-	}
-	u := make([]uint16, len(b)/2)
-	for i := range u {
-		u[i] = uint16(b[i*2]) | uint16(b[i*2+1])<<8
-	}
-	return string(utf16.Decode(u))
-}
-
 func printTable(rows []VMReport) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, strings.Join(csvHeader, "\t"))
@@ -451,7 +305,6 @@ func writeCSV(path string, rows []VMReport) error {
 		return err
 	}
 	defer f.Close()
-
 	if _, err := f.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
 		return err
 	}
@@ -467,3 +320,10 @@ func writeCSV(path string, rows []VMReport) error {
 	w.Flush()
 	return w.Error()
 }
+
+var _ = errors.New
+var _ = aes.NewCipher
+var _ = cipher.NewCBCDecrypter
+var _ = base64.StdEncoding
+var _ = hex.DecodeString
+var _ = utf16.Decode
