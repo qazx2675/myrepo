@@ -2,12 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/base64"
 	"encoding/csv"
-	"encoding/hex"
-	"errors"
 	"flag"
 	"fmt"
 	"net/url"
@@ -16,7 +11,6 @@ import (
 	"regexp"
 	"strings"
 	"text/tabwriter"
-	"unicode/utf16"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/view"
@@ -25,12 +19,11 @@ import (
 )
 
 const vcUser = "lscsystems@vsphere.local"
-const psSecureStringMagic = "76492d1116743f0423413b16050a5345"
 
 type VMReport struct {
-	BMHostname, VMName, VMCPU, VMMemory, CorePerSocket, NumaMaxPerNode      string
-	Enable1GPage, Prealloc, PinnedMainMem, VMXSwpEnabled                    string
-	MemoryReser, MemoryShares, CPUShares, PCIVendor                        string
+	BMHostname, VMName, VMCPU, VMMemory, CorePerSocket, NumaMaxPerNode string
+	Enable1GPage, Prealloc, PinnedMainMem, VMXSwpEnabled               string
+	MemoryReser, MemoryShares, CPUShares, PCIVendor                   string
 }
 
 var csvHeader = []string{
@@ -45,20 +38,17 @@ func (r VMReport) Row() []string {
 		r.VMXSwpEnabled, r.MemoryReser, r.MemoryShares, r.CPUShares, r.PCIVendor}
 }
 
-// [수정] dir/out/password 플래그 제거, -f(점검 대상 파일) 추가. 출력파일명은 res_<입력파일명>.csv 로 자동 생성.
 func main() {
 	var (
 		vcTargetIP = flag.String("vc", "", "[필수] vCenter 주소(IP 또는 FQDN)")
-		inputFile  = flag.String("f", "", "[필수] 점검할 호스트 목록 파일 (예: list.txt)")
+		inputFile  = flag.String("f", "", "[필수] 점검할 호스트 목록 파일")
 	)
 	flag.Parse()
 
 	if strings.TrimSpace(*vcTargetIP) == "" || strings.TrimSpace(*inputFile) == "" {
 		fmt.Fprintln(os.Stderr, "[오류] -vc 및 -f 파라미터는 필수입니다.")
-		flag.Usage()
 		os.Exit(1)
 	}
-
 	password := os.Getenv("VC_PASSWORD")
 	if strings.TrimSpace(password) == "" {
 		fmt.Fprintln(os.Stderr, "[오류] VC_PASSWORD 환경변수가 설정되지 않았습니다.")
@@ -67,22 +57,15 @@ func main() {
 
 	hostlistLines, err := loadWorklist(*inputFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] 지정한 %s 파일을 읽을 수 없습니다: %v\n", *inputFile, err)
+		fmt.Fprintf(os.Stderr, "[오류] %s 읽기 실패: %v\n", *inputFile, err)
 		os.Exit(1)
 	}
 	baseName := filepath.Base(*inputFile)
-	ext := filepath.Ext(baseName)
-	nameWithoutExt := strings.TrimSuffix(baseName, ext)
+	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 	outName := fmt.Sprintf("res_%s.csv", nameWithoutExt)
 
-	fmt.Printf("-> [CHECKBOX] %s 로드 완료 (대상 물리 서버: %d대)\n", *inputFile, len(hostlistLines))
-
 	ctx := context.Background()
-	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", *vcTargetIP))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] vCenter URL 생성 실패: %v\n", err)
-		os.Exit(1)
-	}
+	u, _ := url.Parse(fmt.Sprintf("https://%s/sdk", *vcTargetIP))
 	u.User = url.UserPassword(vcUser, password)
 
 	client, err := govmomi.NewClient(ctx, u, true)
@@ -93,33 +76,16 @@ func main() {
 	defer func() { _ = client.Logout(context.Background()) }()
 
 	viewMgr := view.NewManager(client.Client)
-
-	hostView, err := viewMgr.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"HostSystem"}, true)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] HostSystem 뷰 생성 실패: %v\n", err)
-		os.Exit(1)
-	}
+	hostView, _ := viewMgr.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"HostSystem"}, true)
 	defer hostView.Destroy(context.Background())
-
 	var allHosts []mo.HostSystem
-	if err := hostView.Retrieve(ctx, []string{"HostSystem"}, []string{"name"}, &allHosts); err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] HostSystem 조회 실패: %v\n", err)
-		os.Exit(1)
-	}
+	_ = hostView.Retrieve(ctx, []string{"HostSystem"}, []string{"name"}, &allHosts)
 
-	vmView, err := viewMgr.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] VirtualMachine 뷰 생성 실패: %v\n", err)
-		os.Exit(1)
-	}
+	vmView, _ := viewMgr.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
 	defer vmView.Destroy(context.Background())
-
 	var allVMs []mo.VirtualMachine
 	vmProps := []string{"name", "runtime.host", "config.hardware", "config.extraConfig", "resourceConfig"}
-	if err := vmView.Retrieve(ctx, []string{"VirtualMachine"}, vmProps, &allVMs); err != nil {
-		fmt.Fprintf(os.Stderr, "[오류] VirtualMachine 조회 실패: %v\n", err)
-		os.Exit(1)
-	}
+	_ = vmView.Retrieve(ctx, []string{"VirtualMachine"}, vmProps, &allVMs)
 
 	var targetHosts []mo.HostSystem
 	for _, line := range hostlistLines {
@@ -137,9 +103,8 @@ func main() {
 			}
 		}
 	}
-
 	if len(targetHosts) == 0 {
-		fmt.Fprintf(os.Stderr, "[경고] %s 에 등록된 호스트를 인벤토리에서 찾을 수 없습니다.\n", *inputFile)
+		fmt.Fprintf(os.Stderr, "[경고] %s 에 등록된 호스트를 찾을 수 없습니다.\n", *inputFile)
 		os.Exit(1)
 	}
 
@@ -152,14 +117,10 @@ func main() {
 				myVMs = append(myVMs, vm)
 			}
 		}
-		if len(myVMs) == 0 {
-			continue
-		}
 		for _, vm := range myVMs {
 			reportResults = append(reportResults, buildReport(bmHost, vm))
 		}
 	}
-
 	if len(reportResults) == 0 {
 		fmt.Fprintln(os.Stderr, "\n[오류] 수집된 리포트 결과가 0건입니다.")
 		os.Exit(1)
@@ -170,13 +131,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "[오류] CSV 저장 실패: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("점검 완료! CSV 파일(%s)이 현재 경로에 저장되었습니다.\n", outName)
+	fmt.Printf("점검 완료! CSV 파일(%s) 저장됨.\n", outName)
 }
 
 func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
 	r := VMReport{BMHostname: bmHost, VMName: vm.Name, VMCPU: "N/A", VMMemory: "N/A",
 		CorePerSocket: "N/A", MemoryShares: "N/A", CPUShares: "N/A", PCIVendor: "N/A", MemoryReser: "0.00 GB"}
-
 	if vm.Config != nil {
 		hw := vm.Config.Hardware
 		r.VMCPU = fmt.Sprintf("%d", hw.NumCPU)
@@ -187,7 +147,6 @@ func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
 			r.VMMemory = fmt.Sprintf("%.2f GB", float64(hw.MemoryMB)/1024.0)
 		}
 	}
-
 	extra := map[string]string{}
 	if vm.Config != nil {
 		for _, opt := range vm.Config.ExtraConfig {
@@ -201,7 +160,6 @@ func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
 	r.PinnedMainMem = extraOrDefault(extra, "sched.mem.prealloc.pinnedMainMem", "FALSE")
 	r.VMXSwpEnabled = extraOrDefault(extra, "sched.swap.vmxSwapEnabled", "TRUE")
 	r.NumaMaxPerNode = extraOrDefault(extra, "numa.vcpu.maxPerVirtualNode", "N/A")
-
 	if vm.ResourceConfig != nil {
 		memAlloc := vm.ResourceConfig.MemoryAllocation
 		if memAlloc.Reservation != nil {
@@ -214,7 +172,6 @@ func buildReport(bmHost string, vm mo.VirtualMachine) VMReport {
 			r.CPUShares = fmt.Sprintf("%s (%d)", cs.Level, cs.Shares)
 		}
 	}
-
 	if vm.Config != nil {
 		var vendorList []string
 		for _, dev := range vm.Config.Hardware.Device {
@@ -320,10 +277,3 @@ func writeCSV(path string, rows []VMReport) error {
 	w.Flush()
 	return w.Error()
 }
-
-var _ = errors.New
-var _ = aes.NewCipher
-var _ = cipher.NewCBCDecrypter
-var _ = base64.StdEncoding
-var _ = hex.DecodeString
-var _ = utf16.Decode
