@@ -141,3 +141,11 @@ func main() {
 	}
 	fmt.Println("모든 VM의 어피니티 설정이 완벽하게 적용되었습니다!")
 }
+
+// --- vm_affinity_bulk (2026-08-10 개선판) ---
+// worklist 기반으로 ev01~ev03 VM에 affinity 설정 파일을 일괄(비동기 Task) 적용.
+// -vm_cnt 로 대상 VM 개수 제어. AUTO 모드는 vCPU 수 기준 1:1 매핑(-ht 반영)을 자동 생성.
+// 사용법:
+//   export VC_PASSWORD='...'
+//   ./vm_affinity_bulk -vcTargetIP 192.168.0.50 -vm_cnt 3 \
+//     -affinityFile01 affinity_ev01.txt -affinityFile02 affinity_ev02.txt -affinityFile03 affinity_ev03.txt
