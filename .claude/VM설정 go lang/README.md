@@ -4,27 +4,45 @@ worklist(호스트 목록) 기반으로 각 호스트의 `ev01`~`ev03` VM에 설
 
 - **`main_affinity.go`** → `vm_affinity_bulk` : CPU affinity 설정(`sched.vcpuN.affinity` 등 ExtraConfig) — **병렬(워커풀)**
 - **`main_lpage.go`** → `vm_lpage_bulk` : HugePage/메모리 고정 설정 + CPU 토폴로지(소켓당 코어 수, NUMA 노드) — **병렬(워커풀)**
-- **`main_vm_create.go`** → `vm_create` : BM 호스트별 EV01~EV03 VM을 동적 생성(디스크/NIC/펌웨어 설정) + 생성 후 CPU/메모리 예약·공유 설정 — **순차(sequential) 방식** (아래 "병렬화 대상에서 제외" 참고)
+- **`main_vm_create.go`** → `vm_create` : BM 호스트별 EV01~EV03 VM을 동적 생성(디스크/NIC/펌웨어 설정) + 생성 후 CPU/메모리 예약·공유 설정 — **병렬(워커풀), v2**
 
 이 디렉토리에는 **파일명이 다른 독립적인 단일 파일 프로그램 3개**가 들어 있다. 같은 디렉토리에 있지만 각자 `package main`이고 `main()` 함수를 가지고 있어서, **`go build .`(디렉토리 전체 빌드)는 사용할 수 없다** — 반드시 파일명을 직접 지정해서 빌드해야 한다.
 
-## main_vm_create.go — 병렬화 대상에서 제외
+## main_vm_create.go — 병렬화 검토 결과 (v2)
 
-`vm_affinity_bulk`/`vm_lpage_bulk`와 달리 **`vm_vm_create`는 병렬화하지 않고 원본 로직을 그대로 유지**했다 (요청에 따라 기존 설정값/동작을 변경하지 않음). 참고로 분석한 병렬성 현황은 다음과 같다 — **전 과정이 순차(sequential)** 이며, 앞선 두 도구보다도 순차 API 호출 지점이 많다:
+**전 과정이 병렬로 처리되도록 재작성됨.** v1(순차 버전)과 비교하면:
 
-| 구간 | 방식 | 비고 |
+| 구간 | v1 | v2 (현재) |
 |---|---|---|
-| 호스트별 `HostSystem` 조회 | 순차 | 호스트 수만큼 반복 |
-| 호스트별 `Properties(datastore)` 조회 | 순차 | 호스트 수만큼 반복 |
-| **호스트×데이터스토어별 `Properties(summary)` 조회** | **순차, 중첩 루프** | 호스트 수 × 데이터스토어 수만큼 반복 — 가장 API 호출이 많이 누적되는 지점 |
-| 호스트별 `ResourcePool`/`DefaultFolder` 조회 | 순차 | 호스트 수만큼 반복 (`DefaultFolder`는 매번 동일한 값이라 사실상 중복 호출) |
-| `CreateVM` Task 전송 | 순차 | VM 수만큼 반복 (응답만 받고 안 기다림) |
-| 생성 Task `Wait` | 순차 | VM 수만큼 반복 |
-| Reconfigure 대상 `finder.VirtualMachine(name)` 조회 | 순차 | VM 수만큼 반복 (이름 기반 개별 검색) |
-| `Reconfigure` Task 전송 | 순차 | VM 수만큼 반복 |
-| Reconfigure Task `Wait` | 순차 | VM 수만큼 반복 |
+| VM/호스트 인벤토리 조회 | Finder로 재귀 순회 | **`ContainerView`로 1회 배치 조회** (VM 이름, 호스트+데이터스토어 목록) |
+| 호스트별 데이터스토어 정보 조회 | 호스트×데이터스토어 중첩 순차 루프 | **호스트당 1회 배치 조회**(`property.Collector.Retrieve`) — 워커풀(`-prepConcurrency`, 기본 16)로 호스트 간 병렬 처리 |
+| `CreateVM` 전송+대기 | 순차 | **워커풀**(`-taskConcurrency`, 기본 24) — 워커 하나가 VM 1대의 전송+Wait를 통째로 담당 |
+| `Reconfigure` 전송+대기 | 순차 | **워커풀**(동일 `-taskConcurrency`) |
+| 진행 상황 로그 | 없음(끝나고 일괄 출력) | 완료되는 즉시 `[N/전체]` 실시간 출력 |
+| 전역 타임아웃 | 없음 | 60분 컨텍스트 타임아웃 추가 |
 
-대규모(호스트 수백 대) 실행 시 `vm_affinity_bulk`/`vm_lpage_bulk`의 이전(v1) 순차 버전보다도 더 많은 순차 API 호출이 발생할 수 있다 (특히 호스트×데이터스토어 중첩 루프). 병렬화가 필요하면 별도로 요청해달라 — 기존 설정값(플래그 기본값, VM 스펙 로직 등)은 이번 업로드에서 전혀 변경하지 않았다.
+### 검증 내용 (vcsim)
+
+1. **race detector** 빌드로 호스트 2대 × VM 2개(=4대), `-prepConcurrency 5 -taskConcurrency 5`로 실행 — **데이터 레이스 없음** 확인.
+2. 생성된 VM의 실제 CPU/메모리 값을 `govc`로 직접 대조 — ev01(2vCPU/4GB)과 ev02(4vCPU/8GB)가 호스트 2대 모두 정확히 분리 적용됨, 교차 오염 없음 확인.
+3. "생성 대상 VM 수"와 "리소스 설정 대상 VM 수"가 정확히 일치함을 확인 (생성된 VM이 재조회 실패 없이 전부 다음 단계로 이어짐).
+
+### ⚠️ 테스트 중 발견한 기존 버그 (v1부터 존재, 이번 업로드에서 코드는 변경하지 않음)
+
+`loadHostgroupMap`이 `hostgroup.txt`의 각 줄을 **공백 또는 콤마**(`[,\s]+`)로 분리한다. 그런데 **포트그룹(네트워크) 이름 자체에 공백이 들어가는 경우**(예: vSphere 기본 포트그룹명인 `"VM Network"`)가 실제로 매우 흔한데, 이 경우 `"BM호스트명 VM Network"` 줄이 `["BM호스트명", "VM", "Network"]` 3개 필드로 쪼개져서 **`fields[1]`인 `"VM"`만 네트워크 이름으로 잘못 사용된다.**
+
+- vcsim으로 재현 테스트 결과: 존재하지 않는 네트워크 이름(`"VM"`)이 NIC의 `DeviceName`으로 전달되면서 **vcsim 시뮬레이터 자체가 nil 포인터 참조로 크래시**했다 (`simulator/virtual_machine.go:1300`, `ctx.Map.FindByName(...).Reference()`에서 조회 결과가 nil인데 바로 `.Reference()` 호출). 실제 vCenter는 vcsim처럼 프로세스가 죽지는 않고 API 에러를 반환할 가능성이 높지만(vcsim은 어디까지나 테스트 시뮬레이터), **어느 쪽이든 잘못된 네트워크 이름이 전달되어 해당 VM의 NIC 연결이 실패하거나 VM 생성 자체가 실패할 위험**은 동일하다.
+- 재현 방법: `hostgroup.txt`에 공백이 포함된 포트그룹 이름(`"VM Network"`)을 넣고 실행하면 재현됨. 공백이 없는 이름(`"DC0_DVPG0"` 등)으로는 정상 동작.
+- **요청에 따라 파서 로직(설정값 포함 기존 코드)은 이번 업로드에서 전혀 수정하지 않았다.** 실제 운영 환경의 `hostgroup.txt`에 공백이 포함된 포트그룹 이름이 등장할 가능성이 있다면 별도로 수정을 요청해달라.
+
+### 옵션 (v2 신규)
+
+| 플래그 | 기본값 | 설명 |
+|---|---|---|
+| `-prepConcurrency` | `16` | 호스트 사전 조사(데이터스토어/리소스풀 조회) 동시 처리 수 |
+| `-taskConcurrency` | `24` | CreateVM/Reconfigure 전송+대기 동시 처리 수 |
+
+기존 플래그(`-ev01Cpu` 등 VM 스펙, `-firmware`, `-vmCount` 등)의 기본값과 동작은 전혀 변경되지 않았다.
 
 ## 빌드 (다운로드 후 처음 할 일 — 오프라인 가능)
 
