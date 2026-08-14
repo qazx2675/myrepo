@@ -1,4 +1,4 @@
-// vm_affinity_bulk: worklist 기반으로 ev01~ev03 VM에 affinity 설정 파일을 일괄(비동기 Task) 적용. -vm_cnt 로 대상 VM 개수 제어
+// vm_affinity_bulk: worklist 기반으로 ev01~ev03 VM에 affinity 설정 파일을 일괄(병렬 워커풀) 적용. -vm_cnt 로 대상 VM 개수, -concurrency 로 동시 처리 개수 제어
 
 package main
 
@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
@@ -23,6 +24,7 @@ import (
 )
 
 const maxVMCount = 3
+const defaultConcurrency = 20
 
 // optionPair: 파일 순서를 보존하기 위해 map 대신 slice 사용 (로그 재현성 확보)
 type optionPair struct {
@@ -37,11 +39,30 @@ type affinitySpec struct {
 	pairs    []optionPair
 }
 
-// vmTask: 전송한 Reconfigure Task 와 대상 VM 이름 (실패 집계 및 적용여부 검증용)
-type vmTask struct {
+// vmJob: 워커풀에 넘기는 작업 단위 (VM 1대 = Reconfigure 전송 + Wait 를 한 워커가 전부 처리)
+type vmJob struct {
+	vmName string
+	vm     *object.VirtualMachine
+	specI  *affinitySpec
+	numCPU int
+}
+
+// vmResult: 워커풀 처리 결과 (성공/실패/스킵 집계 및 재조회 검증용)
+type vmResult struct {
 	vmName   string
-	task     *object.Task
 	expected []optionPair
+	skipped  bool
+	failed   bool
+	message  string
+}
+
+// printMu: 여러 고루틴이 동시에 fmt.Printf 를 호출할 때 줄이 섞이지 않도록 보호
+var printMu sync.Mutex
+
+func safePrintf(format string, a ...interface{}) {
+	printMu.Lock()
+	defer printMu.Unlock()
+	fmt.Printf(format, a...)
 }
 
 func readLines(path string) ([]string, error) {
@@ -155,6 +176,7 @@ func main() {
 	affinityFile03 := flag.String("affinityFile03", "", "ev03 affinity 설정 파일 (vm_cnt>=3 이면 필수)")
 	affinityLegacy := flag.String("affinityFile", "", "[구버전 호환] -affinityFile02 미지정 시 ev02 설정 파일로 사용")
 	htMode := flag.String("ht", "ON", "Hyper-Threading 모드 (설정 파일 내용이 AUTO 인 경우에만 사용 / ON: 0=0,1 / OFF: 0=0)")
+	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (VM 목록 조회 / Reconfigure 전송+대기 전 구간에 적용)")
 
 	flag.Parse()
 
@@ -164,6 +186,10 @@ func main() {
 
 	if *vmCnt < 1 || *vmCnt > maxVMCount {
 		log.Fatalf("-vm_cnt 값이 올바르지 않습니다: %d (1~%d 만 허용)", *vmCnt, maxVMCount)
+	}
+
+	if *concurrency < 1 {
+		log.Fatalf("-concurrency 값이 올바르지 않습니다: %d (1 이상)", *concurrency)
 	}
 
 	htOn := true
@@ -247,7 +273,7 @@ func main() {
 		}
 	}
 
-	fmt.Printf("비동기(Task) 방식 어피니티 일괄 할당을 시작합니다.\n")
+	fmt.Printf("병렬(워커풀) 방식 어피니티 일괄 할당을 시작합니다. (동시 처리 제한: %d)\n", *concurrency)
 	fmt.Printf("  접속 계정 : %s\n", *vcId)
 	fmt.Printf("  vCenter   : %s\n", *vcTargetIP)
 	fmt.Printf("  대상 호스트: %d대 / VM 개수: %d (%s)\n",
@@ -292,33 +318,48 @@ func main() {
 
 	regexMatcher := regexp.MustCompile("^(" + strings.Join(safeVmNames, "|") + ")$")
 
-	// ---- 전체 데이터센터 순회하며 VM 목록 수집 ----
-	finder := find.NewFinder(client.Client, true)
-	dcList, err := finder.DatacenterList(ctx, "*")
+	// ---- 전체 데이터센터 순회하며 VM 목록 수집 (데이터센터별 동시 조회, -concurrency 제한 적용) ----
+	bootstrapFinder := find.NewFinder(client.Client, true)
+	dcList, err := bootstrapFinder.DatacenterList(ctx, "*")
 	if err != nil || len(dcList) == 0 {
 		log.Fatalf("데이터센터 조회 실패: %v", err)
 	}
 
+	var listMu sync.Mutex
+	var listWg sync.WaitGroup
+	dcSem := make(chan struct{}, *concurrency)
 	targetVmMap := make(map[string]*object.VirtualMachine)
+
 	for _, dc := range dcList {
-		finder.SetDatacenter(dc)
-		vms, listErr := finder.VirtualMachineList(ctx, "*")
-		if listErr != nil {
-			// 해당 DC 에 VM 이 없는 경우도 에러로 반환되므로 치명적으로 다루지 않음
-			continue
-		}
-		for _, vm := range vms {
-			if regexMatcher.MatchString(vm.Name()) {
-				targetVmMap[vm.Name()] = vm
+		listWg.Add(1)
+		dcSem <- struct{}{}
+		go func(dc *object.Datacenter) {
+			defer listWg.Done()
+			defer func() { <-dcSem }()
+
+			dcFinder := find.NewFinder(client.Client, true)
+			dcFinder.SetDatacenter(dc)
+			vms, listErr := dcFinder.VirtualMachineList(ctx, "*")
+			if listErr != nil {
+				// 해당 DC 에 VM 이 없는 경우도 에러로 반환되므로 치명적으로 다루지 않음
+				return
 			}
-		}
+			listMu.Lock()
+			for _, vm := range vms {
+				if regexMatcher.MatchString(vm.Name()) {
+					targetVmMap[vm.Name()] = vm
+				}
+			}
+			listMu.Unlock()
+		}(dc)
 	}
+	listWg.Wait()
 
 	if len(targetVmMap) == 0 {
 		log.Fatal("worklist 와 매칭되는 VM 을 vCenter 에서 찾지 못했습니다.")
 	}
 
-	// ---- AUTO 모드가 있을 때만 numCPU 배치 조회 (property.Collector) ----
+	// ---- AUTO 모드가 있을 때만 numCPU 배치 조회 (property.Collector, 이미 단일 배치 호출) ----
 	cpuMap := make(map[string]int, len(targetVmMap))
 	if needCPUInfo {
 		refs := make([]types.ManagedObjectReference, 0, len(targetVmMap))
@@ -338,33 +379,55 @@ func main() {
 		}
 	}
 
-	// ---- Reconfigure Task 전송 ----
-	var allTasks []vmTask
-	var skipped int
-
+	// ---- 작업 목록 구성 (호스트 x vm_cnt 매트릭스를 평탄화) ----
+	var jobs []vmJob
+	var preSkipped int
 	for _, baseHost := range hostlistLines {
 		cleanHost := strings.TrimSpace(baseHost)
 		if cleanHost == "" {
 			continue
 		}
-
 		for i := 0; i < *vmCnt; i++ {
 			vmName := cleanHost + suffixes[i]
 			vm, ok := targetVmMap[vmName]
 			if !ok {
-				fmt.Printf("[%s] 경고: 대상 VM 이 존재하지 않습니다. (PASS)\n", vmName)
-				skipped++
+				safePrintf("[%s] 경고: 대상 VM 이 존재하지 않습니다. (PASS)\n", vmName)
+				preSkipped++
 				continue
 			}
+			jobs = append(jobs, vmJob{vmName: vmName, vm: vm, specI: specs[i], numCPU: cpuMap[vmName]})
+		}
+	}
 
-			extraConfig, buildErr := buildExtraConfig(specs[i], cpuMap[vmName], htOn)
+	if len(jobs) == 0 {
+		fmt.Println("\n실행할 작업이 없습니다.")
+		if preSkipped > 0 {
+			os.Exit(2)
+		}
+		return
+	}
+
+	fmt.Printf("\n총 %d개의 설정 작업을 동시 %d개 제한으로 처리합니다 (전송+완료대기를 워커 단위로 병렬 수행).\n", len(jobs), *concurrency)
+
+	// ---- 워커풀: 각 워커가 Reconfigure 전송 + Wait 완료까지 한 VM 단위로 전부 처리 ----
+	sem := make(chan struct{}, *concurrency)
+	results := make(chan vmResult, len(jobs))
+	var jobWg sync.WaitGroup
+
+	for _, j := range jobs {
+		jobWg.Add(1)
+		sem <- struct{}{}
+		go func(j vmJob) {
+			defer jobWg.Done()
+			defer func() { <-sem }()
+
+			extraConfig, buildErr := buildExtraConfig(j.specI, j.numCPU, htOn)
 			if buildErr != nil {
-				fmt.Printf("[%s] 설정 생성 실패: %v (PASS)\n", vmName, buildErr)
-				skipped++
-				continue
+				safePrintf("[%s] 설정 생성 실패: %v (PASS)\n", j.vmName, buildErr)
+				results <- vmResult{vmName: j.vmName, skipped: true}
+				return
 			}
 
-			// 재조회 검증용으로 우리가 보낸 key=value 를 그대로 보관
 			expectedPairs := make([]optionPair, 0, len(extraConfig))
 			for _, ov := range extraConfig {
 				if opt, ok := ov.(*types.OptionValue); ok {
@@ -374,49 +437,51 @@ func main() {
 
 			spec := types.VirtualMachineConfigSpec{ExtraConfig: extraConfig}
 
-			task, taskErr := vm.Reconfigure(ctx, spec)
+			task, taskErr := j.vm.Reconfigure(ctx, spec)
 			if taskErr != nil {
-				fmt.Printf("[%s] Reconfigure 명령 전송 실패: %v\n", vmName, taskErr)
-				skipped++
-				continue
+				safePrintf("[%s] Reconfigure 명령 전송 실패: %v\n", j.vmName, taskErr)
+				results <- vmResult{vmName: j.vmName, skipped: true}
+				return
 			}
 
-			allTasks = append(allTasks, vmTask{vmName: vmName, task: task, expected: expectedPairs})
-
-			if specs[i].auto {
-				fmt.Printf("[%s] AUTO 1:1 코어 비동기 설정 명령 전송 완료 (HT=%s, vCPU=%d)\n",
-					vmName, htLabel, cpuMap[vmName])
+			if j.specI.auto {
+				safePrintf("[%s] AUTO 1:1 코어 병렬 설정 명령 전송 완료 (HT=%s, vCPU=%d)\n",
+					j.vmName, htLabel, j.numCPU)
 			} else {
-				fmt.Printf("[%s] %s 기반 비동기 설정 명령 전송 완료 (%d개 항목)\n",
-					vmName, specs[i].fileName, len(specs[i].pairs))
+				safePrintf("[%s] %s 기반 병렬 설정 명령 전송 완료 (%d개 항목)\n",
+					j.vmName, j.specI.fileName, len(j.specI.pairs))
 			}
-		}
+
+			if waitErr := task.Wait(ctx); waitErr != nil {
+				safePrintf("[%s] 작업 실패: %v\n", j.vmName, waitErr)
+				results <- vmResult{vmName: j.vmName, failed: true}
+				return
+			}
+
+			results <- vmResult{vmName: j.vmName, expected: expectedPairs}
+		}(j)
 	}
 
-	// ---- Task 완료 대기 및 결과 집계 ----
-	if len(allTasks) == 0 {
-		fmt.Println("\n실행할 비동기 작업이 없습니다.")
-		if skipped > 0 {
-			os.Exit(2)
-		}
-		return
-	}
+	jobWg.Wait()
+	close(results)
 
-	fmt.Printf("\n총 %d개의 설정 작업이 vCenter 백그라운드에서 동시 처리 중입니다.\n", len(allTasks))
-	fmt.Println("모든 작업이 완료될 때까지 안전하게 대기합니다...")
-
-	var failed int
-	successVmNames := make([]string, 0, len(allTasks))
-	for _, t := range allTasks {
-		if waitErr := t.task.Wait(ctx); waitErr != nil {
-			fmt.Printf("[%s] 작업 실패: %v\n", t.vmName, waitErr)
+	var failed, skipped int
+	successVmNames := make([]string, 0, len(jobs))
+	expectedByName := make(map[string][]optionPair, len(jobs))
+	for r := range results {
+		switch {
+		case r.skipped:
+			skipped++
+		case r.failed:
 			failed++
-			continue
+		default:
+			successVmNames = append(successVmNames, r.vmName)
+			expectedByName[r.vmName] = r.expected
 		}
-		successVmNames = append(successVmNames, t.vmName)
 	}
+	skipped += preSkipped
 
-	// ---- 실제 적용여부 배치 검증 (config.extraConfig 재조회, Task 성공분만 대상) ----
+	// ---- 실제 적용여부 배치 검증 (config.extraConfig 재조회, Task 성공분만 대상, 단일 배치 호출) ----
 	var mismatched int
 	if len(successVmNames) > 0 {
 		nameSet := make(map[string]bool, len(successVmNames))
@@ -447,34 +512,31 @@ func main() {
 				actualMap[vp.Name] = m
 			}
 
-			for _, t := range allTasks {
-				if !nameSet[t.vmName] {
-					continue
-				}
-				actual, ok := actualMap[t.vmName]
+			for _, name := range successVmNames {
+				actual, ok := actualMap[name]
 				if !ok {
-					fmt.Printf("[%s] 실제 적용 확인 실패: 재조회 결과 없음\n", t.vmName)
+					fmt.Printf("[%s] 실제 적용 확인 실패: 재조회 결과 없음\n", name)
 					mismatched++
 					continue
 				}
 				var bad []string
-				for _, exp := range t.expected {
+				for _, exp := range expectedByName[name] {
 					if actual[exp.Key] != exp.Value {
 						bad = append(bad, fmt.Sprintf("%s(기대=%s,실제=%s)", exp.Key, exp.Value, actual[exp.Key]))
 					}
 				}
 				if len(bad) > 0 {
-					fmt.Printf("[%s] 실제 적용 불일치: %s\n", t.vmName, strings.Join(bad, ", "))
+					fmt.Printf("[%s] 실제 적용 불일치: %s\n", name, strings.Join(bad, ", "))
 					mismatched++
 				} else {
-					fmt.Printf("[%s] 실제 적용 확인 완료 (%d개 항목 일치)\n", t.vmName, len(t.expected))
+					fmt.Printf("[%s] 실제 적용 확인 완료 (%d개 항목 일치)\n", name, len(expectedByName[name]))
 				}
 			}
 		}
 	}
 
 	fmt.Printf("\n완료: 성공 %d / 실패 %d / 스킵 %d / 적용불일치 %d\n",
-		len(allTasks)-failed-mismatched, failed, skipped, mismatched)
+		len(successVmNames)-mismatched, failed, skipped, mismatched)
 	if failed > 0 || skipped > 0 || mismatched > 0 {
 		os.Exit(2)
 	}
