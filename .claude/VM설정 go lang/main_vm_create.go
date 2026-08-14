@@ -11,10 +11,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -31,6 +36,21 @@ type PendingConfig struct {
 	Config VMSpec
 }
 
+type hostPrep struct {
+	Index      int
+	BMHost     string
+	OK         bool
+	BaseName   string
+	HostObj    *object.HostSystem
+	ResPool    *object.ResourcePool
+	Folder     *object.Folder
+	DSName     string
+	PGName     string
+	HasNetwork bool
+}
+
+var bomPrefix = string(rune(0xFEFF))
+
 func readLines(path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -43,7 +63,7 @@ func readLines(path string) ([]string, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if first {
-			line = strings.TrimPrefix(line, string([]byte{0xEF, 0xBB, 0xBF})) // BOM 제거
+			line = strings.TrimPrefix(line, bomPrefix)
 			first = false
 		}
 		line = strings.TrimSpace(line)
@@ -54,9 +74,6 @@ func readLines(path string) ([]string, error) {
 	return lines, scanner.Err()
 }
 
-// loadHostgroupMap은 "BM hostgroup이름" 형식의 파일을 읽어
-// BM 호스트명 -> hostgroup(포트그룹) 이름 맵으로 만든다.
-// 공백 또는 콤마 구분을 모두 허용한다.
 func loadHostgroupMap(path string) (map[string]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -83,9 +100,6 @@ func loadHostgroupMap(path string) (map[string]string, error) {
 }
 
 func main() {
-	// =========================================================================
-	// 1. 파라미터(Flag) 설정
-	// =========================================================================
 	vcId := flag.String("id", "lscsystems@vsphere.local", "vCenter 로그인 계정 ID")
 	vcTargetIP := flag.String("vcTargetIP", "", "vCenter 접속 IP (필수)")
 	worklistFile := flag.String("worklistFile", "worklist.txt", "작업 대상 호스트 목록 파일")
@@ -93,6 +107,9 @@ func main() {
 	mapFile := flag.String("mapFile", "hostgroup.txt", "\"BM hostgroup이름\" 형식의 네트워크 매핑 파일 (다른 이름 지정 가능)")
 	firmware := flag.String("firmware", "efi", "펌웨어 타입 (bios 또는 efi) - 정상 부팅되는 서버가 EFI(권장) 확인됨")
 	datacenterName := flag.String("datacenter", "", "데이터센터 이름 (데이터센터가 여러 개면 필수, 1개뿐이면 생략 가능)")
+
+	prepConc := flag.Int("prepConcurrency", 16, "호스트 사전 조사 동시 처리 수 (500대 규모 권장: 12~24)")
+	taskConc := flag.Int("taskConcurrency", 24, "vCenter 작업(Task) 동시 실행 수 (500대 규모 권장: 16~32)")
 
 	ev01Cpu := flag.Int("ev01Cpu", 0, "EV01 CPU")
 	ev01Mem := flag.Int("ev01Mem", 0, "EV01 Mem")
@@ -121,6 +138,13 @@ func main() {
 
 	if *firmware != "bios" && *firmware != "efi" {
 		log.Fatal("-firmware 값은 bios 또는 efi 여야 합니다.")
+	}
+
+	if *prepConc < 1 {
+		*prepConc = 1
+	}
+	if *taskConc < 1 {
+		*taskConc = 1
 	}
 
 	vmConfigs := map[int]VMSpec{
@@ -152,8 +176,11 @@ func main() {
 	fmt.Printf("[INFO] 매핑 파일(%s) 로드 완료 (%d건)\n", *mapFile, len(hostgroupMap))
 
 	fmt.Printf("\n[INFO] 동적 VM 생성 (Phase 3) 시작 (접속 계정: %s)\n", *vcId)
+	fmt.Printf("[INFO] 대상 물리 호스트 %d대 / 조사 동시성 %d / 작업 동시성 %d\n",
+		len(serverList), *prepConc, *taskConc)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// 개선 4: 전역 타임아웃 추가 (500대 규모에서 어딘가 멈춰도 무한정 걸리지 않도록)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 	defer cancel()
 
 	u := &url.URL{Scheme: "https", Host: *vcTargetIP, Path: "/sdk"}
@@ -174,22 +201,25 @@ func main() {
 		}
 	}
 
-	finder := find.NewFinder(client.Client, true)
+	baseFinder := find.NewFinder(client.Client, true)
 
+	var selectedDC *object.Datacenter
 	if *datacenterName != "" {
-		dc, dcErr := finder.Datacenter(ctx, *datacenterName)
+		dc, dcErr := baseFinder.Datacenter(ctx, *datacenterName)
 		if dcErr != nil {
 			log.Fatalf("데이터센터 '%s'를 찾을 수 없습니다: %v", *datacenterName, dcErr)
 		}
-		finder.SetDatacenter(dc)
+		selectedDC = dc
+		baseFinder.SetDatacenter(dc)
 		fmt.Printf("[INFO] 데이터센터 [%s] 사용\n", dc.Name())
 	} else {
-		dcs, dcErr := finder.DatacenterList(ctx, "*")
+		dcs, dcErr := baseFinder.DatacenterList(ctx, "*")
 		if dcErr != nil || len(dcs) == 0 {
 			log.Fatalf("데이터센터 목록 조회 실패: %v", dcErr)
 		}
 		if len(dcs) == 1 {
-			finder.SetDatacenter(dcs[0])
+			selectedDC = dcs[0]
+			baseFinder.SetDatacenter(dcs[0])
 			fmt.Printf("[INFO] 데이터센터가 1개뿐이라 자동 선택: [%s]\n", dcs[0].Name())
 		} else {
 			var names []string
@@ -200,82 +230,197 @@ func main() {
 		}
 	}
 
+	newFinder := func() *find.Finder {
+		f := find.NewFinder(client.Client, true)
+		f.SetDatacenter(selectedDC)
+		return f
+	}
+
+	defaultFolder, _ := baseFinder.DefaultFolder(ctx)
+
 	vmFilterPattern := "^(" + strings.Join(safeVmNames, "|") + ")$"
 	regexMatcher := regexp.MustCompile(vmFilterPattern)
 
-	existingVms, _ := finder.VirtualMachineList(ctx, "*")
+	mgr := view.NewManager(client.Client)
+
+	// 개선 1: 재귀 Finder 순회(VirtualMachineList) 대신 ContainerView로
+	// VM 이름만 1회 배치 조회한다.
+	vmView, err := mgr.CreateContainerView(ctx, selectedDC.Reference(), []string{"VirtualMachine"}, true)
+	if err != nil {
+		log.Fatalf("VM 인벤토리 조회용 ContainerView 생성 실패: %v", err)
+	}
+	var allVMs []mo.VirtualMachine
+	if err := vmView.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name"}, &allVMs); err != nil {
+		log.Fatalf("VM 인벤토리 조회 실패: %v", err)
+	}
+	_ = vmView.Destroy(ctx)
+
 	existingVmNames := make(map[string]bool)
-	for _, vm := range existingVms {
-		if regexMatcher.MatchString(vm.Name()) {
-			existingVmNames[vm.Name()] = true
+	for _, vm := range allVMs {
+		if regexMatcher.MatchString(vm.Name) {
+			existingVmNames[vm.Name] = true
 		}
 	}
 
-	var creationTasks []*object.Task
-	var pendingConfigs []PendingConfig
+	// 개선 2: goroutine 안에서 finder.HostSystem()을 매번 호출하는 대신,
+	// 전체 HostSystem을 ContainerView로 1회 배치 조회해 맵으로 만들어둔다.
+	// worklist의 항목이 FQDN이든 짧은 이름이든 조회되도록 둘 다 키로 등록한다.
+	hostView, err := mgr.CreateContainerView(ctx, selectedDC.Reference(), []string{"HostSystem"}, true)
+	if err != nil {
+		log.Fatalf("호스트 인벤토리 조회용 ContainerView 생성 실패: %v", err)
+	}
+	var allHosts []mo.HostSystem
+	if err := hostView.Retrieve(ctx, []string{"HostSystem"}, []string{"name", "datastore"}, &allHosts); err != nil {
+		log.Fatalf("호스트 인벤토리 조회 실패: %v", err)
+	}
+	_ = hostView.Destroy(ctx)
 
-	for _, bmHost := range serverList {
-		baseName := strings.Split(bmHost, ".")[0]
+	hostByName := make(map[string]mo.HostSystem, len(allHosts)*2)
+	for _, h := range allHosts {
+		hostByName[h.Name] = h
+		shortName := strings.Split(h.Name, ".")[0]
+		hostByName[shortName] = h
+	}
 
-		hostObj, err := finder.HostSystem(ctx, bmHost)
-		if err != nil {
-			continue
-		}
+	pc := property.DefaultCollector(client.Client)
+	preps := make([]hostPrep, len(serverList))
 
-		var host mo.HostSystem
-		err = hostObj.Properties(ctx, hostObj.Reference(), []string{"datastore"}, &host)
-		if err != nil || len(host.Datastore) == 0 {
-			continue
-		}
+	var wgPrep sync.WaitGroup
+	semPrep := make(chan struct{}, *prepConc)
 
-		var bestDs mo.Datastore
-		maxFreeSpace := int64(-1)
+	// 개선 3: 사전조사 진행 상황을 goroutine이 끝나는 즉시 출력한다.
+	// (기존처럼 Logs에 모았다가 wgPrep.Wait() 이후 한꺼번에 출력하지 않음)
+	total := len(serverList)
+	var doneCount int32
+	progressLogger := log.New(os.Stdout, "", 0)
 
-		for _, dsRef := range host.Datastore {
-			var ds mo.Datastore
-			tempDsObj := object.NewDatastore(client.Client, dsRef)
-			err := tempDsObj.Properties(ctx, tempDsObj.Reference(), []string{"summary"}, &ds)
-			if err == nil && ds.Summary.FreeSpace > maxFreeSpace {
-				maxFreeSpace = ds.Summary.FreeSpace
-				bestDs = ds
+	for idx, bmHost := range serverList {
+		wgPrep.Add(1)
+		semPrep <- struct{}{}
+
+		go func(idx int, bmHost string) {
+			defer wgPrep.Done()
+			defer func() { <-semPrep }()
+			defer func() {
+				n := atomic.AddInt32(&doneCount, 1)
+				progressLogger.Printf("[%d/%d] %s 조사 완료", n, total, bmHost)
+			}()
+
+			p := hostPrep{Index: idx, BMHost: bmHost}
+			p.BaseName = strings.Split(bmHost, ".")[0]
+
+			host, found := hostByName[bmHost]
+			if !found || len(host.Datastore) == 0 {
+				preps[idx] = p
+				return
 			}
-		}
 
-		if maxFreeSpace == -1 {
+			hostObj := object.NewHostSystem(client.Client, host.Reference())
+
+			var dsList []mo.Datastore
+			if err := pc.Retrieve(ctx, host.Datastore, []string{"summary"}, &dsList); err != nil {
+				preps[idx] = p
+				return
+			}
+
+			dsByRef := make(map[types.ManagedObjectReference]mo.Datastore, len(dsList))
+			for _, d := range dsList {
+				dsByRef[d.Self] = d
+			}
+
+			var bestDs mo.Datastore
+			maxFreeSpace := int64(-1)
+			for _, dsRef := range host.Datastore {
+				d, found := dsByRef[dsRef]
+				if !found {
+					continue
+				}
+				if d.Summary.FreeSpace > maxFreeSpace {
+					maxFreeSpace = d.Summary.FreeSpace
+					bestDs = d
+				}
+			}
+			if maxFreeSpace == -1 {
+				preps[idx] = p
+				return
+			}
+
+			hostRP, _ := hostObj.ResourcePool(ctx)
+
+			pgName, hasNetwork := hostgroupMap[bmHost]
+			if !hasNetwork || pgName == "" {
+				progressLogger.Printf("[경고] [%s] 매핑 파일에 hostgroup이 없음 — 어댑터 없이 생성됩니다.", bmHost)
+			} else {
+				progressLogger.Printf("[INFO] [%s] 네트워크 선택: %s", bmHost, pgName)
+			}
+
+			p.OK = true
+			p.HostObj = hostObj
+			p.ResPool = hostRP
+			p.Folder = defaultFolder
+			p.DSName = bestDs.Summary.Name
+			p.PGName = pgName
+			p.HasNetwork = hasNetwork
+
+			preps[idx] = p
+		}(idx, bmHost)
+	}
+	wgPrep.Wait()
+
+	type createJob struct {
+		Prep   *hostPrep
+		Idx    int
+		VMName string
+		Cfg    VMSpec
+	}
+
+	var jobs []createJob
+	for i := range preps {
+		p := &preps[i]
+		if !p.OK {
 			continue
 		}
-
-		hostRP, _ := hostObj.ResourcePool(ctx)
-		folder, _ := finder.DefaultFolder(ctx)
-
-		// 이 BM에 대응하는 hostgroup(포트그룹) 이름을 매핑 파일에서 찾는다
-		pgName, hasNetwork := hostgroupMap[bmHost]
-		if !hasNetwork || pgName == "" {
-			fmt.Printf("[경고] [%s] 매핑 파일에 hostgroup이 없음 — 어댑터 없이 생성됩니다.\n", bmHost)
-		} else {
-			fmt.Printf("[INFO] [%s] 네트워크 선택: %s\n", bmHost, pgName)
+		for n := 1; n <= *vmCount; n++ {
+			vmName := fmt.Sprintf("%sev%02d", p.BaseName, n)
+			if existingVmNames[vmName] {
+				continue
+			}
+			jobs = append(jobs, createJob{Prep: p, Idx: n, VMName: vmName, Cfg: vmConfigs[n]})
 		}
+	}
 
-		for i := 1; i <= *vmCount; i++ {
-			vmName := fmt.Sprintf("%sev%02d", baseName, i)
-			cfg := vmConfigs[i]
+	pendingConfigs := make([]PendingConfig, len(jobs))
+	pendingOK := make([]bool, len(jobs))
 
-			if !existingVmNames[vmName] {
-				// 1. 기본 VM 스펙
+	if len(jobs) > 0 {
+		fmt.Printf("[INFO] 생성 대상 VM %d대 — 생성 작업을 시작합니다.\n", len(jobs))
+
+		var wgCreate sync.WaitGroup
+		semCreate := make(chan struct{}, *taskConc)
+
+		for ji := range jobs {
+			wgCreate.Add(1)
+			semCreate <- struct{}{}
+
+			go func(ji int) {
+				defer wgCreate.Done()
+				defer func() { <-semCreate }()
+
+				j := jobs[ji]
+				p := j.Prep
+				cfg := j.Cfg
+
 				spec := types.VirtualMachineConfigSpec{
-					Name:     vmName,
+					Name:     j.VMName,
 					GuestId:  "rhel8_64Guest",
 					Firmware: *firmware,
 					NumCPUs:  int32(cfg.Cpu),
 					MemoryMB: int64(cfg.Mem * 1024),
 					Files: &types.VirtualMachineFileInfo{
-						VmPathName: fmt.Sprintf("[%s]", bestDs.Summary.Name),
+						VmPathName: fmt.Sprintf("[%s]", p.DSName),
 					},
 				}
 
-				// =========================================================================
-				// 2. SCSI 컨트롤러: VMware Paravirtual 유형으로 설정
-				// =========================================================================
 				scsi := &types.ParaVirtualSCSIController{
 					VirtualSCSIController: types.VirtualSCSIController{
 						SharedBus: types.VirtualSCSISharingNoSharing,
@@ -288,9 +433,6 @@ func main() {
 					},
 				}
 
-				// =========================================================================
-				// 3. 디스크 생성: Thick Provision Lazy Zeroed 적용
-				// =========================================================================
 				disk := &types.VirtualDisk{
 					VirtualDevice: types.VirtualDevice{
 						Key:           -2,
@@ -298,25 +440,21 @@ func main() {
 						UnitNumber:    types.NewInt32(0),
 						Backing: &types.VirtualDiskFlatVer2BackingInfo{
 							VirtualDeviceFileBackingInfo: types.VirtualDeviceFileBackingInfo{
-								FileName: fmt.Sprintf("[%s]", bestDs.Summary.Name),
+								FileName: fmt.Sprintf("[%s]", p.DSName),
 							},
 							DiskMode:        string(types.VirtualDiskModePersistent),
-							ThinProvisioned: types.NewBool(false), // Thick 할당
-							EagerlyScrub:    types.NewBool(false), // Lazy Zeroed (느리게 비워짐)
+							ThinProvisioned: types.NewBool(false),
+							EagerlyScrub:    types.NewBool(false),
 						},
 					},
 					CapacityInKB: int64(cfg.Disk) * 1024 * 1024,
 				}
 
-				// =========================================================================
-				// 4. NIC: 매핑 파일에서 찾은 hostgroup(포트그룹) 이름을 그대로 DeviceName으로 사용
-				// (vCenter Network 오브젝트 조회 없이 PowerCLI와 동일한 방식)
-				// =========================================================================
 				var nic *types.VirtualVmxnet3
-				if hasNetwork && pgName != "" {
+				if p.HasNetwork && p.PGName != "" {
 					backing := &types.VirtualEthernetCardNetworkBackingInfo{
 						VirtualDeviceDeviceBackingInfo: types.VirtualDeviceDeviceBackingInfo{
-							DeviceName: pgName,
+							DeviceName: p.PGName,
 						},
 					}
 					nic = &types.VirtualVmxnet3{
@@ -328,7 +466,6 @@ func main() {
 									Connectable: &types.VirtualDeviceConnectInfo{
 										StartConnected:    true,
 										AllowGuestControl: true,
-										// Connected는 생성 시점(파워온 전)에는 의미가 없어 제외
 									},
 								},
 								AddressType:      string(types.VirtualEthernetCardMacTypeGenerated),
@@ -357,74 +494,110 @@ func main() {
 					})
 				}
 
-				task, err := folder.CreateVM(ctx, spec, hostRP, hostObj)
-				if err == nil {
-					creationTasks = append(creationTasks, task)
-					pendingConfigs = append(pendingConfigs, PendingConfig{
-						Name:   vmName,
-						Config: cfg,
-					})
+				task, err := p.Folder.CreateVM(ctx, spec, p.ResPool, p.HostObj)
+				if err != nil {
+					return
 				}
-			}
+
+				_ = task.Wait(ctx)
+
+				pendingConfigs[ji] = PendingConfig{Name: j.VMName, Config: cfg}
+				pendingOK[ji] = true
+			}(ji)
+		}
+		wgCreate.Wait()
+	}
+
+	var confirmed []PendingConfig
+	for i, ok := range pendingOK {
+		if ok {
+			confirmed = append(confirmed, pendingConfigs[i])
 		}
 	}
 
-	if len(creationTasks) > 0 {
-		for _, task := range creationTasks {
-			_ = task.Wait(ctx)
+	if len(confirmed) > 0 {
+		fmt.Printf("[INFO] 리소스 설정 대상 VM %d대 — 설정 작업을 시작합니다.\n", len(confirmed))
+
+		var wgCfg sync.WaitGroup
+		semCfg := make(chan struct{}, *taskConc)
+
+		for ci := range confirmed {
+			wgCfg.Add(1)
+			semCfg <- struct{}{}
+
+			go func(ci int) {
+				defer wgCfg.Done()
+				defer func() { <-semCfg }()
+
+				pending := confirmed[ci]
+
+				finder := newFinder()
+				targetVM, err := finder.VirtualMachine(ctx, pending.Name)
+				if err != nil {
+					return
+				}
+
+				cfg := pending.Config
+				spec := types.VirtualMachineConfigSpec{}
+
+				spec.MemoryReservationLockedToMax = types.NewBool(true)
+				spec.BootOptions = &types.VirtualMachineBootOptions{
+					EfiSecureBootEnabled: types.NewBool(false),
+				}
+
+				var vmProps mo.VirtualMachine
+				if propErr := targetVM.Properties(ctx, targetVM.Reference(), []string{"config.hardware.device"}, &vmProps); propErr == nil {
+					devices := object.VirtualDeviceList(vmProps.Config.Hardware.Device)
+					var bootOrder []types.BaseVirtualMachineBootOptionsBootableDevice
+
+					disks := devices.SelectByType((*types.VirtualDisk)(nil))
+					if len(disks) > 0 {
+						diskKey := disks[0].GetVirtualDevice().Key
+						bootOrder = append(bootOrder, &types.VirtualMachineBootOptionsBootableDiskDevice{DeviceKey: diskKey})
+					}
+
+					nics := devices.SelectByType((*types.VirtualEthernetCard)(nil))
+					if len(nics) > 0 {
+						nicKey := nics[0].GetVirtualDevice().Key
+						bootOrder = append(bootOrder, &types.VirtualMachineBootOptionsBootableEthernetDevice{DeviceKey: nicKey})
+					}
+
+					if len(bootOrder) > 0 {
+						spec.BootOptions.BootOrder = bootOrder
+					}
+				}
+
+				spec.CpuAllocation = &types.ResourceAllocationInfo{
+					Shares: &types.SharesInfo{
+						Level:  types.SharesLevelCustom,
+						Shares: int32(cfg.Share),
+					},
+				}
+
+				spec.MemoryAllocation = &types.ResourceAllocationInfo{
+					Reservation: types.NewInt64(int64(cfg.Mem * 1024)),
+					Shares: &types.SharesInfo{
+						Level:  types.SharesLevelCustom,
+						Shares: int32(cfg.Share),
+					},
+				}
+
+				extraConfig := []types.BaseOptionValue{
+					&types.OptionValue{Key: "sched.mem.pin", Value: "TRUE"},
+					&types.OptionValue{Key: "sched.mem.prealloc", Value: "TRUE"},
+					&types.OptionValue{Key: "sched.mem.prealloc.pinnedMainMem", Value: "TRUE"},
+					&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
+				}
+				spec.ExtraConfig = extraConfig
+
+				task, err := targetVM.Reconfigure(ctx, spec)
+				if err != nil {
+					return
+				}
+				_ = task.Wait(ctx)
+			}(ci)
 		}
-	}
-
-	if len(pendingConfigs) > 0 {
-		var configTasks []*object.Task
-
-		for _, pending := range pendingConfigs {
-			targetVM, err := finder.VirtualMachine(ctx, pending.Name)
-			if err != nil {
-				continue
-			}
-
-			cfg := pending.Config
-			spec := types.VirtualMachineConfigSpec{}
-
-			spec.MemoryReservationLockedToMax = types.NewBool(true)
-			spec.BootOptions = &types.VirtualMachineBootOptions{
-				EfiSecureBootEnabled: types.NewBool(false),
-			}
-
-			spec.CpuAllocation = &types.ResourceAllocationInfo{
-				Shares: &types.SharesInfo{
-					Level:  types.SharesLevelCustom,
-					Shares: int32(cfg.Share),
-				},
-			}
-
-			spec.MemoryAllocation = &types.ResourceAllocationInfo{
-				Reservation: types.NewInt64(int64(cfg.Mem * 1024)),
-				Shares: &types.SharesInfo{
-					Level:  types.SharesLevelCustom,
-					Shares: int32(cfg.Share),
-				},
-			}
-
-			extraConfig := []types.BaseOptionValue{
-				&types.OptionValue{Key: "sched.mem.pin", Value: "TRUE"},
-				&types.OptionValue{Key: "sched.mem.prealloc", Value: "TRUE"},
-				&types.OptionValue{Key: "sched.mem.prealloc.pinnedMainMem", Value: "TRUE"},
-				&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
-			}
-			spec.ExtraConfig = extraConfig
-
-			// VM Reconfigure 작업 수행 (CPU/메모리 예약 및 공유 설정)
-			task, err := targetVM.Reconfigure(ctx, spec)
-			if err == nil {
-				configTasks = append(configTasks, task)
-			}
-		}
-
-		for _, task := range configTasks {
-			_ = task.Wait(ctx)
-		}
+		wgCfg.Wait()
 
 		fmt.Println("[INFO] VM 생성 및 리소스 설정이 완료되었습니다!")
 	} else {
