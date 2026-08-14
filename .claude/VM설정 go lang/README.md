@@ -5,22 +5,46 @@ worklist(호스트 목록) 기반으로 각 호스트의 `ev01`~`ev03` VM에 설
 - **`main_affinity.go`** → `vm_affinity_bulk` : CPU affinity 설정(`sched.vcpuN.affinity` 등 ExtraConfig) — **병렬(워커풀)**
 - **`main_lpage.go`** → `vm_lpage_bulk` : HugePage/메모리 고정 설정 + CPU 토폴로지(소켓당 코어 수, NUMA 노드) — **병렬(워커풀)**
 - **`main_vm_create.go`** → `vm_create` : BM 호스트별 EV01~EV03 VM을 동적 생성(디스크/NIC/펌웨어 설정) + 생성 후 CPU/메모리 예약·공유 설정 — **병렬(워커풀), v2**
-- **`main_connect.go`** → `vm_connect` (Phase 1) : ESXi 호스트를 vCenter의 클러스터/폴더/데이터센터에 등록(`AddHost`/`AddStandaloneHost`), SSL 미신뢰(SSLVerifyFault) 시 thumbprint 자동 재시도 — **부분 병렬** (아래 "병렬성 체크 결과" 참고)
+- **`main_connect.go`** → `vm_connect` (Phase 1) : ESXi 호스트를 vCenter의 클러스터/폴더/데이터센터에 등록(`AddHost`/`AddStandaloneHost`), SSL 미신뢰(SSLVerifyFault) 시 thumbprint 자동 재시도 — **병렬(워커풀), v2**
 
 이 디렉토리에는 **파일명이 다른 독립적인 단일 파일 프로그램 4개**가 들어 있다. 같은 디렉토리에 있지만 각자 `package main`이고 `main()` 함수를 가지고 있어서, **`go build .`(디렉토리 전체 빌드)는 사용할 수 없다** — 반드시 파일명을 직접 지정해서 빌드해야 한다.
 
-## main_connect.go — 병렬성 체크 결과
+## main_connect.go — 병렬화 + 버그 수정 (v2)
 
-**전 과정이 병렬은 아닙니다.** 두 구간으로 나뉜다:
+**전 과정이 병렬로 처리되도록 재작성됨.** v1과 비교:
 
-| 구간 | 방식 | 비고 |
+| 구간 | v1 | v2 (현재) |
 |---|---|---|
-| 이미 등록된 호스트 여부 확인(`finder.HostSystem(host)`) | **순차** | worklist 호스트 수만큼 개별 검색 API 호출 반복 — 호스트가 많을수록(수백 대) 이 구간이 누적되어 느려짐 |
-| 대상 위치(클러스터/폴더/데이터센터) 탐색 | 순차 | 1회성 호출이라 규모와 무관 |
-| **호스트 등록**(`AddHost`/`AddStandaloneHost` 전송 + `WaitForResult` 대기, SSL thumbprint 재시도 포함) | **병렬 (goroutine)** | `targets`에 있는 모든 호스트에 대해 **동시성 제한 없이** 고루틴을 한 번에 전부 띄움 |
+| 이미 등록된 호스트 여부 확인 | 순차 (호스트 수만큼 반복) | **워커풀**(`-concurrency`, 기본 20)로 병렬 확인. 결과는 인덱스별 슬라이스에 기록 후, worklist 순서 그대로 정리해서 출력(완료 순서로 뒤섞이지 않게) |
+| 호스트 등록(`AddHost` 전송+대기) | 병렬이지만 **동시성 제한 없음**(전체를 한 번에 goroutine으로 실행) | 동일한 워커풀(`-concurrency`)로 **제한된 동시성**으로 실행 |
 
-- **동시성 제한(`-concurrency` 같은 플래그)이 없다.** 다른 3개 도구(`vm_affinity_bulk`/`vm_lpage_bulk`/`vm_create`)는 모두 기본값이 있는 동시성 제한 플래그를 갖고 있는데, 이 도구만 예외적으로 `len(targets)`개를 한 번에 전부 병렬 실행한다. 호스트가 수백 대 규모면 vCenter에 한 번에 수백 개의 `AddHost` Task가 동시에 몰리게 되므로, vCenter 자체의 동시 작업 처리 한계에 걸릴 위험이 있다. 필요하면 세마포어 기반 동시성 제한을 추가하는 방향으로 수정할 수 있다 — 원하시면 요청해달라.
-- 검증 방법 한계: **vcsim(테스트 시뮬레이터)이 `AddHost`/`AddStandaloneHost` API를 구현하지 않아** 이 도구는 vcsim으로 실행 테스트를 할 수 없었다. 빌드(`go build -mod=vendor`)와 `gofmt` 정적 검증만 통과 확인했고, 실제 vCenter를 통한 기능 검증은 하지 못했다.
+### ⚠️ v1 코드 리뷰 중 vcsim으로 실제 재현한 버그 2건 (v2에서 수정함)
+
+v1은 `finder.HostSystem()`/`finder.ClusterComputeResource()`/`finder.Folder()`를 호출하기 전에 `finder.SetDatacenter()`를 **한 번도 호출하지 않았다.** govmomi의 `find.Finder`는 이런 검색에 데이터센터 컨텍스트(`f.dc`)가 필요한데, 이게 없으면 내부적으로 `"please specify a datacenter"` 에러가 나서 호출이 항상 실패한다. vcsim으로 재현한 실제 증상:
+
+1. **"이미 등록됨" 체크가 항상 실패** — 이미 vCenter에 등록된 호스트도 매번 "미등록"으로 잘못 판정되어, 실행할 때마다 이미 등록된 호스트에 대해서도 불필요하게(그리고 실패할 가능성이 높은) 재등록을 시도했다.
+2. **`-folderName`에 클러스터/폴더 이름을 넣으면 항상 실패** — 실제로 존재하는 클러스터(예: vcsim의 `DC0_C0`)를 지정해도 `[오류] vCenter 내에 'DC0_C0' 위치를 찾을 수 없습니다`로 실패했다. 결과적으로 `-folderName`은 사실상 데이터센터 이름을 넣었을 때만 동작했고(그 경로만 데이터센터 컨텍스트가 필요 없는 검색이라 우연히 동작함), 파라미터 이름이 뜻하는 "폴더/클러스터" 지정 용도로는 쓸 수 없었다.
+
+**수정 방법**: `vm_create.go`와 동일한 패턴으로 `-datacenter` 플래그를 추가하고(데이터센터가 1개면 자동 선택, 여러 개면 필수), 데이터센터를 먼저 확정해서 `finder.SetDatacenter()`를 호출한 뒤에 클러스터/폴더/호스트 검색을 수행하도록 순서를 바꿨다. 병렬 사전 체크의 각 고루틴이 만드는 개별 `find.Finder` 인스턴스에도 각자 `SetDatacenter()`를 호출한다(Finder 인스턴스별로 상태가 분리되어 있어, 공유 finder의 SetDatacenter가 고루틴별 신규 Finder에 자동으로 반영되지 않기 때문).
+
+### 검증 내용 (vcsim)
+
+- **race detector** 빌드로 반복 실행, 데이터 레이스 없음 확인.
+- 깨끗한 vcsim 인스턴스에서: 실제 존재하는 클러스터(`DC0_C0`)를 `-folderName`으로 지정 → 정상 감지됨(수정 전엔 실패).
+- 깨끗한 vcsim 인스턴스에서: 이미 등록된 호스트 2대 + 신규 가짜 호스트 2대를 섞은 worklist로 실행 → 등록된 2대는 "이미 등록됨 (PASS)"로 정확히 걸러지고, 신규 2대만 등록 진행됨(수정 전엔 4대 전부 재등록 시도했음).
+- `-concurrency 5`로 신규 호스트 5대를 클러스터 대상으로 동시 등록 → 전부 정상 완료, 레이스 없음.
+
+### 옵션 (v2 신규/변경)
+
+| 플래그 | 기본값 | 설명 |
+|---|---|---|
+| `-datacenter` | (없음) | 데이터센터 이름. 데이터센터가 1개뿐이면 생략 가능(자동 선택), 여러 개면 필수 |
+| `-concurrency` | `20` | 등록 여부 확인 + 호스트 등록 전송+대기의 동시 처리 개수 제한 |
+| `-folderName` | (필수) | 이제 **데이터센터가 확정된 상태에서** 그 안의 클러스터 또는 폴더 이름을 찾는다. 클러스터/폴더 둘 다 아니고 `-datacenter`(또는 자동 선택된 데이터센터)와 이름이 같으면 그 데이터센터의 기본 HostFolder를 사용 |
+
+### 알려진 한계
+
+- vcsim이 `AddHost`/`AddStandaloneHost`를 완전히 검증하지는 않는다(가짜 호스트명도 실패 없이 등록에 성공함) — 즉 **실제 ESXi 연결 실패, 잘못된 자격증명 등 vCenter가 실제로 반환하는 에러 상황은 vcsim으로 재현/검증할 수 없었다.** SSL thumbprint 자동 재시도 로직(`SSLVerifyFault` 처리) 자체도 vcsim에서 이 에러가 발생하지 않아 별도로 검증하지 못했다 — 코드 리뷰로만 확인함.
 
 ## main_vm_create.go — 병렬화 검토 결과 (v2)
 
