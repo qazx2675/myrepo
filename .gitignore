@@ -1,0 +1,16 @@
+# 실제 작업 로그(개인/사내 데이터 포함 가능)는 저장소에 올리지 않음
+logs/open/*
+logs/users/*
+logs/artifacts/*
+logs/sessions/*
+logs/all.log
+
+# 폴더 구조는 유지
+!logs/open/.gitkeep
+!logs/users/.gitkeep
+!logs/artifacts/.gitkeep
+!logs/sessions/.gitkeep
+
+# 기타
+*.swp
+.DS_Store
