@@ -1,12 +1,26 @@
-# VM 설정 일괄 적용 도구 (vm_affinity_bulk / vm_lpage_bulk / vm_create)
+# VM 설정 일괄 적용 도구 (vm_affinity_bulk / vm_lpage_bulk / vm_create / vm_connect)
 
-worklist(호스트 목록) 기반으로 각 호스트의 `ev01`~`ev03` VM에 설정을 적용하거나 VM 자체를 생성하는 govmomi 기반 도구 3종.
+worklist(호스트 목록) 기반으로 각 호스트의 `ev01`~`ev03` VM에 설정을 적용하거나, VM 자체를 생성하거나, ESXi 호스트 자체를 vCenter에 등록하는 govmomi 기반 도구 4종.
 
 - **`main_affinity.go`** → `vm_affinity_bulk` : CPU affinity 설정(`sched.vcpuN.affinity` 등 ExtraConfig) — **병렬(워커풀)**
 - **`main_lpage.go`** → `vm_lpage_bulk` : HugePage/메모리 고정 설정 + CPU 토폴로지(소켓당 코어 수, NUMA 노드) — **병렬(워커풀)**
 - **`main_vm_create.go`** → `vm_create` : BM 호스트별 EV01~EV03 VM을 동적 생성(디스크/NIC/펌웨어 설정) + 생성 후 CPU/메모리 예약·공유 설정 — **병렬(워커풀), v2**
+- **`main_connect.go`** → `vm_connect` (Phase 1) : ESXi 호스트를 vCenter의 클러스터/폴더/데이터센터에 등록(`AddHost`/`AddStandaloneHost`), SSL 미신뢰(SSLVerifyFault) 시 thumbprint 자동 재시도 — **부분 병렬** (아래 "병렬성 체크 결과" 참고)
 
-이 디렉토리에는 **파일명이 다른 독립적인 단일 파일 프로그램 3개**가 들어 있다. 같은 디렉토리에 있지만 각자 `package main`이고 `main()` 함수를 가지고 있어서, **`go build .`(디렉토리 전체 빌드)는 사용할 수 없다** — 반드시 파일명을 직접 지정해서 빌드해야 한다.
+이 디렉토리에는 **파일명이 다른 독립적인 단일 파일 프로그램 4개**가 들어 있다. 같은 디렉토리에 있지만 각자 `package main`이고 `main()` 함수를 가지고 있어서, **`go build .`(디렉토리 전체 빌드)는 사용할 수 없다** — 반드시 파일명을 직접 지정해서 빌드해야 한다.
+
+## main_connect.go — 병렬성 체크 결과
+
+**전 과정이 병렬은 아닙니다.** 두 구간으로 나뉜다:
+
+| 구간 | 방식 | 비고 |
+|---|---|---|
+| 이미 등록된 호스트 여부 확인(`finder.HostSystem(host)`) | **순차** | worklist 호스트 수만큼 개별 검색 API 호출 반복 — 호스트가 많을수록(수백 대) 이 구간이 누적되어 느려짐 |
+| 대상 위치(클러스터/폴더/데이터센터) 탐색 | 순차 | 1회성 호출이라 규모와 무관 |
+| **호스트 등록**(`AddHost`/`AddStandaloneHost` 전송 + `WaitForResult` 대기, SSL thumbprint 재시도 포함) | **병렬 (goroutine)** | `targets`에 있는 모든 호스트에 대해 **동시성 제한 없이** 고루틴을 한 번에 전부 띄움 |
+
+- **동시성 제한(`-concurrency` 같은 플래그)이 없다.** 다른 3개 도구(`vm_affinity_bulk`/`vm_lpage_bulk`/`vm_create`)는 모두 기본값이 있는 동시성 제한 플래그를 갖고 있는데, 이 도구만 예외적으로 `len(targets)`개를 한 번에 전부 병렬 실행한다. 호스트가 수백 대 규모면 vCenter에 한 번에 수백 개의 `AddHost` Task가 동시에 몰리게 되므로, vCenter 자체의 동시 작업 처리 한계에 걸릴 위험이 있다. 필요하면 세마포어 기반 동시성 제한을 추가하는 방향으로 수정할 수 있다 — 원하시면 요청해달라.
+- 검증 방법 한계: **vcsim(테스트 시뮬레이터)이 `AddHost`/`AddStandaloneHost` API를 구현하지 않아** 이 도구는 vcsim으로 실행 테스트를 할 수 없었다. 빌드(`go build -mod=vendor`)와 `gofmt` 정적 검증만 통과 확인했고, 실제 vCenter를 통한 기능 검증은 하지 못했다.
 
 ## main_vm_create.go — 병렬화 검토 결과 (v2)
 
