@@ -20,12 +20,25 @@ gossh 바이너리가 PATH에 없으면 `-gosshPath`로 경로를 지정한다:
 esxi-log-check -w hosts.txt -gosshPath=/root/go-ssh-pack/gossh
 ```
 
-## 빌드
+## 빌드 (다운로드 후 처음 할 일)
+
+이 디렉토리를 통째로 받았다면(git clone 또는 ZIP 다운로드), **개별 `.go` 파일을 지정해서 빌드하는 게 아니라** 이 디렉토리(`.claude/ESXi 로그점검/`) 안에서 `go build .` 형태로 빌드한다. Go는 `go.mod`가 있는 디렉토리를 기준으로 같은 패키지(`package main`)에 속한 `.go` 파일(`main.go`, `collect.go`)을 전부 묶어서 하나의 실행 파일로 만들기 때문에, 파일을 하나씩 골라 빌드할 필요가 없다. (`internal/` 아래 파일들은 `main.go`가 import해서 자동으로 같이 빌드된다.)
 
 ```bash
-go mod tidy   # gopkg.in/yaml.v3 다운로드 (인터넷 필요 — air-gapped면 vendor/ 미리 준비)
+# 1. 이 디렉토리로 이동
+cd ".claude/ESXi 로그점검"
+
+# 2. 의존성 다운로드 (gopkg.in/yaml.v3 등, 인터넷 필요 — air-gapped 환경이면 vendor/ 미리 준비)
+go mod tidy
+
+# 3. 빌드 — "." 는 "현재 디렉토리의 main 패키지 전체(main.go + collect.go)"라는 뜻
 go build -o esxi-log-check .
 ```
+
+빌드가 끝나면 현재 디렉토리에 `esxi-log-check`(Windows는 `esxi-log-check.exe`) 실행 파일이 생긴다. 이후 사용법은 위 "가장 빠른 시작" 절과 동일하게 `./esxi-log-check -w hosts.txt` 형태로 실행하면 된다.
+
+- `esxi_critical_patterns.yaml`은 빌드 시 포함되는 게 아니라 **실행 시점에** 같은 디렉토리에서 읽는 파일이다. 실행 파일만 다른 위치로 옮길 경우 `-patterns <path>`로 이 YAML의 경로를 같이 지정해야 한다.
+- `go build`가 아니라 실수로 `go run main.go`만 실행하면 `collect.go`가 빠져서 컴파일 에러가 난다. 반드시 `go run .` 또는 `go build .`처럼 디렉토리 전체를 대상으로 해야 한다.
 
 ## 옵션 전체 목록
 
