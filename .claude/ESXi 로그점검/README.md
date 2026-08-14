@@ -24,19 +24,21 @@ esxi-log-check -w hosts.txt -gosshPath=/root/go-ssh-pack/gossh
 
 이 디렉토리를 통째로 받았다면(git clone 또는 ZIP 다운로드), **개별 `.go` 파일을 지정해서 빌드하는 게 아니라** 이 디렉토리(`.claude/ESXi 로그점검/`) 안에서 `go build .` 형태로 빌드한다. Go는 `go.mod`가 있는 디렉토리를 기준으로 같은 패키지(`package main`)에 속한 `.go` 파일(`main.go`, `collect.go`)을 전부 묶어서 하나의 실행 파일로 만들기 때문에, 파일을 하나씩 골라 빌드할 필요가 없다. (`internal/` 아래 파일들은 `main.go`가 import해서 자동으로 같이 빌드된다.)
 
+이 저장소에는 의존성(`gopkg.in/yaml.v3`)을 미리 내려받아 둔 **`vendor/` 디렉토리를 포함**시켜 두었다. 압축을 풀거나 clone한 직후 **인터넷 연결 없이(air-gapped 환경 포함) 바로 빌드**할 수 있다.
+
 ```bash
 # 1. 이 디렉토리로 이동
 cd ".claude/ESXi 로그점검"
 
-# 2. 의존성 다운로드 (gopkg.in/yaml.v3 등, 인터넷 필요 — air-gapped 환경이면 vendor/ 미리 준비)
-go mod tidy
-
-# 3. 빌드 — "." 는 "현재 디렉토리의 main 패키지 전체(main.go + collect.go)"라는 뜻
-go build -o esxi-log-check .
+# 2. 빌드 — vendor/ 에 있는 의존성을 그대로 사용 (인터넷/go mod tidy 불필요)
+#    "." 는 "현재 디렉토리의 main 패키지 전체(main.go + collect.go)"라는 뜻
+go build -mod=vendor -o esxi-log-check .
 ```
 
 빌드가 끝나면 현재 디렉토리에 `esxi-log-check`(Windows는 `esxi-log-check.exe`) 실행 파일이 생긴다. 이후 사용법은 위 "가장 빠른 시작" 절과 동일하게 `./esxi-log-check -w hosts.txt` 형태로 실행하면 된다.
 
+- `-mod=vendor` 플래그를 꼭 붙여야 `vendor/` 안의 의존성을 쓴다. 이 플래그 없이 `go build .`만 실행하면 Go 버전/설정에 따라 인터넷에서 다시 받으려고 시도할 수 있다.
+- 의존성 버전을 올리는 등 `go.mod`를 수정했다면, 인터넷이 되는 환경에서 `go mod vendor`를 다시 실행해 `vendor/`를 최신 상태로 갱신한 뒤 커밋해야 한다.
 - `esxi_critical_patterns.yaml`은 빌드 시 포함되는 게 아니라 **실행 시점에** 같은 디렉토리에서 읽는 파일이다. 실행 파일만 다른 위치로 옮길 경우 `-patterns <path>`로 이 YAML의 경로를 같이 지정해야 한다.
 - `go build`가 아니라 실수로 `go run main.go`만 실행하면 `collect.go`가 빠져서 컴파일 에러가 난다. 반드시 `go run .` 또는 `go build .`처럼 디렉토리 전체를 대상으로 해야 한다.
 
