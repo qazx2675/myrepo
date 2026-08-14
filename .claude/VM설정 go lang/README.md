@@ -207,6 +207,97 @@ vCenter에 접속하기 전에 아래 조건을 검증하고, 위반 시 즉시 
 - 코어 수가 소켓 수로 나누어떨어지지 않음: `[ev0N] 코어 수(X)가 소켓 수(Y)로 나누어떨어지지 않습니다.`
 - 코어 수가 NUMA 노드 수로 나누어떨어지지 않음: `[ev0N] 코어 수(X)가 NUMA 노드 수(Y)로 나누어떨어지지 않습니다.`
 
+## vm_create 사용법
+
+BM(물리) 호스트별로 EV01~EV03 VM을 동적으로 생성(SCSI/디스크/NIC 구성 + 펌웨어 선택)하고, 생성 직후 CPU/메모리 예약·공유(Shares) 설정까지 이어서 적용한다.
+
+```bash
+export VC_PASSWORD='실제_비밀번호'
+
+./vm_create -vcTargetIP 192.168.0.50 \
+  -id administrator@vsphere.local \
+  -folderName MyCluster \
+  -vmCount 2 \
+  -ev01Cpu 2 -ev01Mem 4 -ev01Disk 40 -ev01Share 1000 \
+  -ev02Cpu 4 -ev02Mem 8 -ev02Disk 60 -ev02Share 2000 \
+  -mapFile hostgroup.txt \
+  -firmware efi \
+  -prepConcurrency 16 -taskConcurrency 24
+```
+
+### 옵션
+
+| 플래그 | 기본값 | 설명 |
+|---|---|---|
+| `-id` | `lscsystems@vsphere.local` | vCenter 로그인 계정 |
+| `-vcTargetIP` | (필수) | vCenter 접속 IP |
+| `-worklistFile` | `worklist.txt` | 대상 BM 호스트 목록 (한 줄에 호스트 하나, VM을 실제로 붙일 ESXi 호스트) |
+| `-vmCount` | `2` | 호스트당 생성할 VM 개수 (1~3, ev01~ev0N) |
+| `-mapFile` | `hostgroup.txt` | `"BM호스트명 포트그룹이름"` 형식의 네트워크 매핑 파일 (공백/콤마 구분자, 포트그룹 이름에 공백이 있으면 오작동하니 주의 — 아래 "알려진 문제" 참고) |
+| `-firmware` | `efi` | `bios` 또는 `efi` |
+| `-datacenter` | (없음) | 데이터센터 이름. 1개뿐이면 생략 가능(자동 선택), 여러 개면 필수 |
+| `-ev01Cpu/Mem/Disk/Share` | (필수, 단 ev01/ev02) | ev01 vCPU 수 / 메모리(GB) / 디스크(GB) / CPU·메모리 Shares 값 |
+| `-ev02Cpu/Mem/Disk/Share` | (필수) | ev02 스펙 |
+| `-ev03Cpu/Mem/Disk/Share` | `1`/`1`/`20`/`1000` | ev03 스펙 (vmCount=3일 때만 사용) |
+| `-prepConcurrency` | **16** | 호스트 사전 조사(데이터스토어/리소스풀 조회) 동시 처리 수 |
+| `-taskConcurrency` | **24** | `CreateVM`/`Reconfigure` 전송+대기 동시 처리 수 |
+
+환경 변수 `VC_PASSWORD`가 반드시 설정되어 있어야 한다 (없으면 즉시 종료).
+
+### 동작 방식
+
+1. VM/호스트 인벤토리를 `ContainerView`로 1회 배치 조회
+2. worklist의 각 BM 호스트를 `-prepConcurrency` 워커풀로 병렬 조사 — 여유 공간이 가장 큰 데이터스토어 선택, 리소스풀 확인, `mapFile`에서 네트워크(포트그룹) 매핑
+3. 아직 존재하지 않는 VM(`ev01`~`ev0N`)만 골라 `-taskConcurrency` 워커풀로 `CreateVM` 전송+대기 (SCSI 컨트롤러 Paravirtual, 디스크 Thick Lazy Zeroed, NIC vmxnet3)
+4. 생성된 VM에 대해 다시 `-taskConcurrency` 워커풀로 `Reconfigure` 전송+대기 — CPU/메모리 Shares(Custom), 메모리 예약(`MemoryReservationLockedToMax`), 부팅 순서(디스크→NIC), `sched.mem.pin` 등 ExtraConfig 적용
+5. "생성 대상 VM 수"와 "리소스 설정 대상 VM 수"를 출력 — 두 숫자가 다르면 일부 VM이 생성은 됐지만 재조회에 실패했거나(드묾) `CreateVM` 자체가 실패한 것이므로 로그에서 원인 확인 필요
+
+### 알려진 문제
+
+`loadHostgroupMap`이 `mapFile`의 각 줄을 **공백 또는 콤마**로 분리하기 때문에, 포트그룹 이름 자체에 공백이 들어가면(예: vSphere 기본 포트그룹명 `"VM Network"`) 잘못 잘려서 엉뚱한 네트워크 이름이 전달된다. 공백 없는 포트그룹 이름(예: 분산 포트그룹)을 쓰거나, 이 문제가 실제로 걸리면 파서 수정을 요청해달라.
+
+## vm_connect 사용법
+
+worklist에 있는 ESXi 호스트들을 vCenter의 지정한 클러스터/폴더에 병렬로 등록한다. SSL 인증서가 미신뢰 상태(자가서명 인증서, 폐쇄망 환경 등)면 `SSLVerifyFault`에서 실제 thumbprint를 꺼내 자동으로 한 번 재시도한다.
+
+```bash
+export VC_PASSWORD='실제_비밀번호'
+export ESXI_PASSWORD='ESXi_root_비밀번호'
+
+# 클러스터에 등록
+./vm_connect -vcTargetIP 192.168.0.50 \
+  -id administrator@vsphere.local \
+  -folderName MyCluster \
+  -concurrency 20
+
+# 데이터센터가 여러 개일 때는 -datacenter로 명시
+./vm_connect -vcTargetIP 192.168.0.50 \
+  -folderName MyCluster -datacenter DC01 \
+  -worklistFile esxi_hosts.txt
+```
+
+### 옵션
+
+| 플래그 | 기본값 | 설명 |
+|---|---|---|
+| `-id` | `lscsystems@vsphere.local` | vCenter 로그인 계정 |
+| `-vcTargetIP` | (필수) | vCenter 접속 IP |
+| `-folderName` | (필수) | 데이터센터 내 클러스터 또는 폴더 이름. 데이터센터 이름과 같으면 그 데이터센터의 기본 HostFolder 사용 |
+| `-datacenter` | (없음) | 데이터센터 이름. 1개뿐이면 생략 가능(자동 선택), 여러 개면 필수 |
+| `-worklistFile` | `worklist.txt` | 등록할 ESXi 호스트 목록 (한 줄에 하나, IP 또는 FQDN) |
+| `-concurrency` | **20** | "이미 등록됨" 확인 + 호스트 등록 전송+대기의 동시 처리 개수 제한 |
+
+환경 변수 `VC_PASSWORD`(vCenter 로그인)와 `ESXI_PASSWORD`(각 ESXi 호스트의 root 비밀번호 — 모든 대상 호스트가 동일한 root 비밀번호를 쓴다고 가정)가 반드시 설정되어 있어야 한다.
+
+### 동작 방식
+
+1. `-datacenter`(또는 자동 선택된 유일한 데이터센터)로 데이터센터 컨텍스트를 먼저 확정
+2. `-folderName`으로 클러스터 → 폴더 → (데이터센터 자체 이름과 일치 시) 기본 HostFolder 순으로 대상 위치 탐색
+3. worklist의 각 호스트가 이미 vCenter에 등록되어 있는지 `-concurrency` 워커풀로 병렬 확인 — 이미 있으면 "PASS", 없으면 등록 대상에 포함
+4. 등록 대상 호스트를 `-concurrency` 워커풀로 병렬 등록 (`AddHost`/`AddStandaloneHost` 전송 + 완료 대기) — `root` 계정, `-force` 강제 등록
+5. `SSLVerifyFault` 발생 시 응답에 담긴 실제 thumbprint를 `spec.SslThumbprint`에 채워 자동 재시도
+6. 성공/실패 호스트를 요약 출력
+
 ## 실패 시 나오는 메시지 (원인별, 공통)
 
 | 상황 | 메시지 예 | 발생 시점 |
