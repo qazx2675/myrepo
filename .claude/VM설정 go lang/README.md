@@ -1,11 +1,30 @@
-# VM 설정 일괄 적용 도구 (vm_affinity_bulk / vm_lpage_bulk)
+# VM 설정 일괄 적용 도구 (vm_affinity_bulk / vm_lpage_bulk / vm_create)
 
-worklist(호스트 목록) 기반으로 각 호스트의 `ev01`~`ev03` VM에 설정을 **병렬(워커풀)** 로 일괄 적용하는 govmomi 기반 도구 2종.
+worklist(호스트 목록) 기반으로 각 호스트의 `ev01`~`ev03` VM에 설정을 적용하거나 VM 자체를 생성하는 govmomi 기반 도구 3종.
 
-- **`main_affinity.go`** → `vm_affinity_bulk` : CPU affinity 설정(`sched.vcpuN.affinity` 등 ExtraConfig)
-- **`main_lpage.go`** → `vm_lpage_bulk` : HugePage/메모리 고정 설정 + CPU 토폴로지(소켓당 코어 수, NUMA 노드)
+- **`main_affinity.go`** → `vm_affinity_bulk` : CPU affinity 설정(`sched.vcpuN.affinity` 등 ExtraConfig) — **병렬(워커풀)**
+- **`main_lpage.go`** → `vm_lpage_bulk` : HugePage/메모리 고정 설정 + CPU 토폴로지(소켓당 코어 수, NUMA 노드) — **병렬(워커풀)**
+- **`main_vm_create.go`** → `vm_create` : BM 호스트별 EV01~EV03 VM을 동적 생성(디스크/NIC/펌웨어 설정) + 생성 후 CPU/메모리 예약·공유 설정 — **순차(sequential) 방식** (아래 "병렬화 대상에서 제외" 참고)
 
-이 디렉토리에는 **파일명이 다른 독립적인 두 개의 단일 파일 프로그램**이 들어 있다. 같은 디렉토리에 있지만 각자 `package main`이고 `main()` 함수를 가지고 있어서, **`go build .`(디렉토리 전체 빌드)는 사용할 수 없다** — 반드시 파일명을 직접 지정해서 빌드해야 한다.
+이 디렉토리에는 **파일명이 다른 독립적인 단일 파일 프로그램 3개**가 들어 있다. 같은 디렉토리에 있지만 각자 `package main`이고 `main()` 함수를 가지고 있어서, **`go build .`(디렉토리 전체 빌드)는 사용할 수 없다** — 반드시 파일명을 직접 지정해서 빌드해야 한다.
+
+## main_vm_create.go — 병렬화 대상에서 제외
+
+`vm_affinity_bulk`/`vm_lpage_bulk`와 달리 **`vm_vm_create`는 병렬화하지 않고 원본 로직을 그대로 유지**했다 (요청에 따라 기존 설정값/동작을 변경하지 않음). 참고로 분석한 병렬성 현황은 다음과 같다 — **전 과정이 순차(sequential)** 이며, 앞선 두 도구보다도 순차 API 호출 지점이 많다:
+
+| 구간 | 방식 | 비고 |
+|---|---|---|
+| 호스트별 `HostSystem` 조회 | 순차 | 호스트 수만큼 반복 |
+| 호스트별 `Properties(datastore)` 조회 | 순차 | 호스트 수만큼 반복 |
+| **호스트×데이터스토어별 `Properties(summary)` 조회** | **순차, 중첩 루프** | 호스트 수 × 데이터스토어 수만큼 반복 — 가장 API 호출이 많이 누적되는 지점 |
+| 호스트별 `ResourcePool`/`DefaultFolder` 조회 | 순차 | 호스트 수만큼 반복 (`DefaultFolder`는 매번 동일한 값이라 사실상 중복 호출) |
+| `CreateVM` Task 전송 | 순차 | VM 수만큼 반복 (응답만 받고 안 기다림) |
+| 생성 Task `Wait` | 순차 | VM 수만큼 반복 |
+| Reconfigure 대상 `finder.VirtualMachine(name)` 조회 | 순차 | VM 수만큼 반복 (이름 기반 개별 검색) |
+| `Reconfigure` Task 전송 | 순차 | VM 수만큼 반복 |
+| Reconfigure Task `Wait` | 순차 | VM 수만큼 반복 |
+
+대규모(호스트 수백 대) 실행 시 `vm_affinity_bulk`/`vm_lpage_bulk`의 이전(v1) 순차 버전보다도 더 많은 순차 API 호출이 발생할 수 있다 (특히 호스트×데이터스토어 중첩 루프). 병렬화가 필요하면 별도로 요청해달라 — 기존 설정값(플래그 기본값, VM 스펙 로직 등)은 이번 업로드에서 전혀 변경하지 않았다.
 
 ## 빌드 (다운로드 후 처음 할 일 — 오프라인 가능)
 
