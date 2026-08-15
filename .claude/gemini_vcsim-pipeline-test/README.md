@@ -1,4 +1,4 @@
-# vcsim-pipeline-test
+# gemini_vcsim-pipeline-test
 
 govmomi의 내장 vcsim(VMware vCenter Simulator)을 이용한 **전체 파이프라인 통합 테스트 프레임워크**.
 
@@ -22,7 +22,7 @@ connect → create → affinity/lpage → param-check → FAIL 수정 → 재검
 ## 테스트 구조
 
 ```
-vcsim-pipeline-test/
+gemini_vcsim-pipeline-test/
 ├── pipeline_test.go   # 전체 파이프라인 통합 테스트 (7개 Phase)
 ├── helpers_test.go    # VM 오브젝트 헬퍼 (newVMObject)
 ├── go.mod
@@ -47,7 +47,7 @@ vcsim-pipeline-test/
 ### Rocky Linux에서 실행 (폐쇄망 포함)
 
 ```bash
-cd /root/vcsim-pipeline-test   # 또는 .claude/vcsim-pipeline-test
+cd /root/gemini_vcsim-pipeline-test   # 또는 .claude/gemini_vcsim-pipeline-test
 
 # 전체 테스트 실행 (vendor/ 사용)
 go test -mod=vendor -v -timeout 180s ./...
