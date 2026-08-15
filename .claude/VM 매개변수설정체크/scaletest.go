@@ -172,7 +172,7 @@ func buildScaleOKVM(name, group string) model.VMInfo {
 		ExtraConfig:       map[string]string{},
 		HostName:          fmt.Sprintf("esxi-%02d", (len(name)*7)%8+1),
 		HostPowerPolicy:   "High Performance",
-		Networks:          []string{"prod-portgroup-A"},
+		Networks:          []model.NetworkAdapter{{Portgroup: "prod-portgroup-A", Connected: true}},
 	}
 	locked := true
 	vm.MemoryReservationLockedToMax = &locked

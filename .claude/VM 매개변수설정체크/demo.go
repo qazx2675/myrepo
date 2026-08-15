@@ -131,7 +131,7 @@ func buildAllOKVM() model.VMInfo {
 		ExtraConfig:       map[string]string{},
 		HostName:          "demo-esxi-01",
 		HostPowerPolicy:   "High Performance",
-		Networks:          []string{"prod-portgroup-A"},
+		Networks:          []model.NetworkAdapter{{Portgroup: "prod-portgroup-A", Connected: true}},
 	}
 	locked := true
 	vm.MemoryReservationLockedToMax = &locked
@@ -167,7 +167,7 @@ func buildFailVM() model.VMInfo {
 		ExtraConfig:       map[string]string{},
 		HostName:          "demo-esxi-02",
 		HostPowerPolicy:   "Balanced", // 기대값(High Performance)과 다르게 일부러 FAIL
-		Networks:          []string{"prod-portgroup-B"},
+		Networks:          []model.NetworkAdapter{{Portgroup: "prod-portgroup-B", Connected: false}},
 	}
 	locked := false // Reserve all guest memory 꺼짐 -> FAIL
 	vm.MemoryReservationLockedToMax = &locked
@@ -208,7 +208,7 @@ func buildEV02CountGapVM() model.VMInfo {
 		ExtraConfig:       map[string]string{},
 		HostName:          "demo-esxi-01",
 		HostPowerPolicy:   "High Performance",
-		Networks:          []string{"prod-portgroup-A"},
+		Networks:          []model.NetworkAdapter{{Portgroup: "prod-portgroup-A", Connected: true}},
 	}
 	locked := true
 	vm.MemoryReservationLockedToMax = &locked

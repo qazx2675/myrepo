@@ -30,10 +30,19 @@ type VMInfo struct {
 	// (vSphere API 8.0.0.1+ 필요). nil이면 이 VM에 vNUMA 커스텀 설정이 없다는 뜻(정상적인 "미설정" 상태).
 	NumaCoresPerNode *int32
 
-	Networks []string // 연결된 네트워크 어댑터의 포트그룹 이름 목록
+	// Networks는 VM에 붙어있는 네트워크 어댑터 전부(커넥트/디스커넥트 무관)를 담는다.
+	// 포트그룹 이름은 연결 상태와 무관하게 항상 조사되어야 한다 — 디스커넥트라고 해서
+	// 어댑터가 없는 게 아니라 vSphere에서 연결만 꺼둔 것뿐이라서다.
+	Networks []NetworkAdapter
 
 	HostName        string // 이 VM이 돌고 있는 ESXi 호스트 이름
 	HostPowerPolicy string // 그 호스트의 현재 전원 정책 표시 이름 (예: "High Performance")
+}
+
+// NetworkAdapter는 VM에 붙은 네트워크 어댑터 1개 — 포트그룹 이름 + 커넥트/디스커넥트 상태.
+type NetworkAdapter struct {
+	Portgroup string
+	Connected bool
 }
 
 // Finding은 체크 항목 1건의 결과 — CSV 한 줄에 대응한다.

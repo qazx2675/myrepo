@@ -27,20 +27,30 @@ func CheckHostPower(vm model.VMInfo) model.Finding {
 }
 
 // CheckNetwork는 3-6 네트워크 포트그룹 체크 — OK/FAIL 판정 없이 정보성으로만 기록한다.
+// 포트그룹 이름은 어댑터의 커넥트/디스커넥트 상태와 무관하게 항상 조사하고, 그 상태도
+// 비고란에 함께 남긴다 — 디스커넥트라고 어댑터 자체가 없는 게 아니기 때문이다.
 func CheckNetwork(vm model.VMInfo) []model.Finding {
 	if len(vm.Networks) == 0 {
 		return []model.Finding{{VM: vm.Name, Source: "network", Key: "portgroup", Result: "설정없음", Note: "연결된 네트워크 어댑터 없음"}}
 	}
 	var findings []model.Finding
-	for i, pg := range vm.Networks {
+	for i, nic := range vm.Networks {
 		findings = append(findings, model.Finding{
 			VM: vm.Name, Source: "network",
 			Key:    formatNicKey(i),
-			Actual: pg,
+			Actual: nic.Portgroup,
 			Result: "정보",
+			Note:   connectNote(nic.Connected),
 		})
 	}
 	return findings
+}
+
+func connectNote(connected bool) string {
+	if connected {
+		return "커넥트"
+	}
+	return "디스커넥트"
 }
 
 func formatNicKey(i int) string {
