@@ -1,0 +1,18 @@
+{{define "content"}}
+<h1>Phase 4 — MAC/IP 추출 (Kickstart 리스트)</h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/phase4">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>대상 BM 호스트 목록 (줄바꿈으로 구분, ev01/ev02 VM을 자동 매칭)
+    <textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&#10;esxi02.lab.local"></textarea>
+  </label>
+  <label>배포 인자 1 (arg1, 필수 — 예: 프로젝트/프로파일 이름)<input type="text" name="arg1" required placeholder="PROJ_X"></label>
+  <label>배포 정수 인자 (argInt, 필수)<input type="number" name="arg_int" required placeholder="8080"></label>
+  <label>배포 문자 인자 (argStr, 필수)<input type="text" name="arg_str" required placeholder="Standard"></label>
+  <button type="submit">추출 실행</button>
+</form>
+{{end}}

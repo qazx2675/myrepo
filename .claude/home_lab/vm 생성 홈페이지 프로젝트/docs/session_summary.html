@@ -1,0 +1,4106 @@
+<title>VM 자동생성 웹 포털 — 구축 기록</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #eef1f5;
+    --border: #d8dee6;
+    --text: #1c2430;
+    --text-muted: #5b6472;
+    --accent: #2f6fae;
+    --accent-soft: rgba(47,111,174,0.08);
+    --success: #2f8a5c;
+    --success-soft: rgba(47,138,92,0.10);
+    --danger: #c1443d;
+    --danger-soft: rgba(193,68,61,0.09);
+    --warning: #b5811f;
+    --warning-soft: rgba(181,129,31,0.10);
+    --code-bg: #10151d;
+    --code-text: #dbe4ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1319;
+      --surface: #161b23;
+      --surface-2: #1d2430;
+      --border: #2a3341;
+      --text: #e6eaf0;
+      --text-muted: #8996a8;
+      --accent: #6badea;
+      --accent-soft: rgba(107,173,234,0.14);
+      --success: #56b98a;
+      --success-soft: rgba(86,185,138,0.14);
+      --danger: #e5776f;
+      --danger-soft: rgba(229,119,111,0.13);
+      --warning: #e0b459;
+      --warning-soft: rgba(224,180,89,0.13);
+      --code-bg: #0a0d12;
+      --code-text: #d7e0eb;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1319;
+    --surface: #161b23;
+    --surface-2: #1d2430;
+    --border: #2a3341;
+    --text: #e6eaf0;
+    --text-muted: #8996a8;
+    --accent: #6badea;
+    --accent-soft: rgba(107,173,234,0.14);
+    --success: #56b98a;
+    --success-soft: rgba(86,185,138,0.14);
+    --danger: #e5776f;
+    --danger-soft: rgba(229,119,111,0.13);
+    --warning: #e0b459;
+    --warning-soft: rgba(224,180,89,0.13);
+    --code-bg: #0a0d12;
+    --code-text: #d7e0eb;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #eef1f5;
+    --border: #d8dee6;
+    --text: #1c2430;
+    --text-muted: #5b6472;
+    --accent: #2f6fae;
+    --accent-soft: rgba(47,111,174,0.08);
+    --success: #2f8a5c;
+    --success-soft: rgba(47,138,92,0.10);
+    --danger: #c1443d;
+    --danger-soft: rgba(193,68,61,0.09);
+    --warning: #b5811f;
+    --warning-soft: rgba(181,129,31,0.10);
+    --code-bg: #10151d;
+    --code-text: #dbe4ee;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+  }
+
+  /* ---------- header ---------- */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1rem;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px var(--success-soft);
+  }
+  h1 {
+    font-size: clamp(1.7rem, 4vw, 2.35rem);
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    line-height: 1.18;
+    margin: 0 0 .6rem;
+    text-wrap: balance;
+  }
+  .subtitle {
+    font-size: 1.02rem;
+    color: var(--text-muted);
+    max-width: 62ch;
+    margin: 0 0 1.75rem;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: 2.75rem;
+  }
+  .chip {
+    font-size: .78rem;
+    font-weight: 600;
+    padding: .3rem .68rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  .chip.stack { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
+
+  /* ---------- section scaffolding ---------- */
+  section { margin-top: 3.25rem; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .6rem;
+    margin-bottom: 1.4rem;
+  }
+  h2 {
+    font-size: 1.28rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .section-note { font-size: .82rem; color: var(--text-muted); white-space: nowrap; }
+  p { margin: 0 0 .9rem; max-width: 66ch; }
+  .lede { color: var(--text-muted); }
+
+  /* ---------- architecture ---------- */
+  .arch {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .75rem;
+    align-items: stretch;
+    margin: 1.5rem 0 .5rem;
+  }
+  .arch-node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem .9rem;
+    position: relative;
+  }
+  .arch-node .k { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  .arch-node .v { font-size: .86rem; margin-top: .3rem; color: var(--text-muted); }
+  .arch-node.hub { background: var(--accent-soft); border-color: transparent; }
+  .arch-node.hub .k { color: var(--text); }
+  .arch-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+  }
+  @media (max-width: 620px) { .arch-arrow { display: none; } }
+
+  /* ---------- milestones ---------- */
+  .milestone {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 1rem;
+    padding: 1.15rem 0;
+    border-top: 1px solid var(--border);
+  }
+  .milestone:first-of-type { border-top: none; padding-top: .2rem; }
+  .m-num {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--accent);
+    padding-top: .15rem;
+  }
+  .m-title-row { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; margin-bottom: .3rem; }
+  .m-title { font-size: 1rem; font-weight: 700; }
+  .badge {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    padding: .16rem .5rem;
+    border-radius: 5px;
+  }
+  .badge.done { background: var(--success-soft); color: var(--success); }
+  .m-desc { font-size: .89rem; color: var(--text-muted); max-width: 60ch; margin: 0 0 .5rem; }
+  .m-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: .74rem;
+  }
+  .m-files span {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: .12rem .4rem;
+    color: var(--text-muted);
+  }
+
+  /* ---------- bug cards ---------- */
+  .bug {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--danger);
+    border-radius: 8px;
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .bug-title { font-weight: 700; font-size: .95rem; margin-bottom: .5rem; display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+  .bug-title .sev { font-size: .68rem; font-weight: 700; letter-spacing: .05em; color: var(--danger); background: var(--danger-soft); padding: .12rem .45rem; border-radius: 5px; }
+  .bug dl { display: grid; grid-template-columns: 5rem 1fr; gap: .35rem .8rem; margin: 0; font-size: .86rem; }
+  .bug dt { color: var(--text-muted); font-weight: 600; }
+  .bug dd { margin: 0; }
+  .bug code { font-size: .82em; }
+
+  /* ---------- pipeline callout ---------- */
+  .callout {
+    background: var(--accent-soft);
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .callout .icon { font-size: 1.3rem; line-height: 1; margin-top: .1rem; }
+  .callout h3 { margin: 0 0 .35rem; font-size: .98rem; }
+  .callout p { margin: 0; font-size: .87rem; color: var(--text-muted); }
+  .callout p + p { margin-top: .5rem; }
+
+  /* ---------- qa ---------- */
+  .qa { padding: 1.1rem 0; border-top: 1px solid var(--border); }
+  .qa:first-of-type { border-top: none; }
+  .q { font-weight: 700; font-size: .93rem; margin-bottom: .4rem; display: flex; gap: .5rem; }
+  .q::before { content: "Q"; color: var(--accent); font-family: ui-monospace, monospace; }
+  .a { font-size: .89rem; color: var(--text-muted); margin: 0; display: flex; gap: .5rem; max-width: 64ch; }
+  .a::before { content: "A"; color: var(--text-muted); opacity: .5; font-family: ui-monospace, monospace; flex-shrink: 0; }
+
+  /* ---------- code / tree ---------- */
+  .codeblock {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 10px;
+    padding: 1.1rem 1.3rem;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: .8rem;
+    line-height: 1.65;
+    white-space: pre;
+  }
+  .codeblock .dim { color: #7b8798; }
+  .codeblock .hl { color: var(--accent, #6badea); }
+
+  code:not(.codeblock code) {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: .08rem .35rem;
+    border-radius: 4px;
+    font-size: .87em;
+  }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: .78rem;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  a { color: var(--accent); }
+  ::selection { background: var(--accent-soft); }
+
+  /* ---------- code appendix ---------- */
+  .pkg-group {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: .85rem;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .pkg-group summary {
+    cursor: pointer;
+    list-style: none;
+    padding: .85rem 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    font-weight: 700;
+    font-size: .92rem;
+  }
+  .pkg-group summary::-webkit-details-marker { display: none; }
+  .pkg-group summary::before {
+    content: "▸";
+    color: var(--accent);
+    font-size: .75rem;
+    transition: transform .15s ease;
+  }
+  .pkg-group[open] summary::before { transform: rotate(90deg); }
+  .pkg-group summary .path {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: .82rem;
+  }
+  .pkg-group summary .count {
+    margin-left: auto;
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: .1rem .55rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .pkg-body { padding: 0 1.1rem 1.1rem; }
+  .file-block { margin-top: 1rem; }
+  .file-block:first-child { margin-top: .2rem; }
+  .file-name {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: .4rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+  }
+  .file-name .lines {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: .72rem;
+  }
+  .file-block .codeblock { margin: 0; font-size: .76rem; max-height: 480px; overflow-y: auto; }
+  .toc-jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin: 1.2rem 0 1.6rem;
+  }
+  .toc-jump a {
+    font-size: .78rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: .28rem .7rem;
+  }
+  .toc-jump a:hover { color: var(--accent); border-color: var(--accent); }
+</style>
+
+<div class="wrap">
+
+  <div class="eyebrow">완료 · M1~M9 + 디자인 개편 + systemd 상시화 완료</div>
+  <h1>VM 자동생성 웹 포털 구축 기록</h1>
+  <p class="subtitle">
+    vCenter/ESXi 인프라를 다루는 11개 Go CLI 스크립트를 웹으로 감싸는 개인 프로젝트.
+    계획서부터 M1~M9 구현, 클라우드 콘솔 스타일 UI 개편, systemd 상시 구동 설정과 SELinux 트러블슈팅,
+    실제 vCenter(192.168.0.50) 대상 파이프라인 테스트까지의 기록.
+  </p>
+  <div class="meta-row">
+    <span class="chip">Rocky Linux 8.10 · /root/vm/portal</span>
+    <span class="chip">RBAC 5단계</span>
+    <span class="chip">AES-256-GCM 시크릿 저장</span>
+    <span class="chip">systemd 상시 구동</span>
+    <span class="chip stack">Go 1.26</span>
+    <span class="chip stack">govmomi v0.55.1</span>
+    <span class="chip stack">SQLite (WAL)</span>
+    <span class="chip stack">html/template</span>
+  </div>
+
+  <section id="architecture">
+    <div class="section-head">
+      <h2>아키텍처</h2>
+      <span class="section-note">방법 B — vCenter와 같은 네트워크의 관리 서버</span>
+    </div>
+    <p class="lede">브라우저는 Rocky Linux 관리 서버(웹 포털)에만 접속하고, 포털이 vCenter API·ESXi를 대신 호출한다. vCenter API를 외부에 직접 노출하지 않는 구조.</p>
+    <div class="arch">
+      <div class="arch-node">
+        <div class="k">Browser</div>
+        <div class="v">사용자 · admin Lv.5</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node hub">
+        <div class="k">Go 웹 포털</div>
+        <div class="v">세션·RBAC·시크릿·Job 실행</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="k">exec.Command</div>
+        <div class="v">vmc / vswitch_setting / vm_create ...</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node">
+        <div class="k">vCenter · ESXi</div>
+        <div class="v">192.168.0.50 · .59</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="milestones">
+    <div class="section-head">
+      <h2>마일스톤</h2>
+      <span class="section-note">M1 → M6, 전부 실측 검증</span>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M1</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">프로젝트 구조 · DB 스키마</span><span class="badge done">완료</span></div>
+        <p class="m-desc">Go 모듈, SQLite 스키마(users/sessions/credentials/jobs/job_logs/audit_log), WAL 모드.</p>
+        <div class="m-files"><span>internal/db/schema.sql</span><span>internal/db/db.go</span><span>internal/models</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M2</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">인증 · RBAC 5단계</span><span class="badge done">완료</span></div>
+        <p class="m-desc">bcrypt 로그인, 세션 쿠키, <code>RequireLevel(n)</code> 미들웨어로 엔드포인트별 권한 강제.</p>
+        <div class="m-files"><span>internal/auth/password.go</span><span>session.go</span><span>rbac.go</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M3</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">시크릿 저장</span><span class="badge done">완료</span></div>
+        <p class="m-desc">AES-256-GCM 앱레벨 암호화. 마스터 키는 DB와 분리된 <code>data/master.key</code>(0600)에 보관.</p>
+        <div class="m-files"><span>internal/secrets/crypto.go</span><span>store.go</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M4</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">Phase 1~3</span><span class="badge done">완료</span></div>
+        <p class="m-desc">호스트 등록(vmc) · vSwitch/포트그룹(vswitch_setting) · VM 생성(vm_create, v2 로직). 기존 바이너리를 그대로 exec 래핑, worklist는 랜덤 파일명으로 생성 후 자동 정리.</p>
+        <div class="m-files"><span>phase1.go</span><span>phase2.go</span><span>phase3.go</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M5</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">Phase 4~6</span><span class="badge done">완료</span></div>
+        <p class="m-desc">MAC/IP 추출(mac_info) · CPU Affinity(affinity_setting) · lpage/NUMA 튜닝(lpage_setting).</p>
+        <div class="m-files"><span>phase4.go</span><span>phase5.go</span><span>phase6.go</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M6</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">Phase 7~8 · 파괴적 작업</span><span class="badge done">완료</span></div>
+        <p class="m-desc">전원 정책 변경(power_setting). VM 삭제는 기존 스크립트가 없어 신규 개발(<code>main_vm_delete.go</code>) — 체크박스/텍스트 확인 + 바이너리 <code>-confirm=DELETE</code> 이중 안전장치.</p>
+        <div class="m-files"><span>phase7.go</span><span>phase8.go</span><span>main_vm_delete.go</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M7</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">Phase 9 · 리포트 (읽기전용)</span><span class="badge done">완료</span></div>
+        <p class="m-desc">VM 설정/PCI 점검 CSV 리포트(<code>main_report.txt</code>, 바이너리 <code>report</code>). 호스트는 Phase 3/4처럼 정규화하지 않음 — 바이너리 자체가 <code>EqualFold(첫라벨) || 전체일치</code> 이중 매칭을 하기 때문. 임시 worklist와 달리 생성된 CSV는 <code>data/reports/</code>로 옮겨 보존하고 job id로 다운로드.</p>
+        <div class="m-files"><span>phase9.go</span><span>main_report.go → report</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M8</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">감사 로그 UI · Dry-run</span><span class="badge done">완료</span></div>
+        <p class="m-desc"><code>/audit</code> 페이지(Lv.5 전용, 최근 200건). Phase 7/8(파괴적 작업)에 Dry-run 체크박스 추가 — 바이너리를 실제로 실행하지 않고 실행될 명령·대상 목록만 <code>[DRY-RUN]</code> 접두사로 job_logs에 기록, job 상태는 별도의 <code>dry_run</code>. vCenter 조회 기반 검증은 하지 않음(각 바이너리 로직 재구현을 피하기 위한 의도적 스코프 제한).</p>
+        <div class="m-files"><span>audit.html</span><span>phase7.go</span><span>phase8.go</span><span>exec.go</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="m-num">M9</div>
+      <div>
+        <div class="m-title-row"><span class="m-title">시크릿 백엔드 옵션 — HashiCorp Vault</span><span class="badge done">완료</span></div>
+        <p class="m-desc"><code>VMPORTAL_SECRET_BACKEND=file|vault</code> 환경변수로 마스터 키 출처 전환. 기본값은 기존과 동일한 로컬 파일. <code>vault</code>는 SDK 의존성 없이 Vault KV v2 REST API를 <code>net/http</code>로 직접 호출해 32바이트 키를 읽어옴 — 실제 Vault 서버가 없는 현재 환경에서는 코드만 준비된 상태(옵션 A 그대로 사용 중).</p>
+        <div class="m-files"><span>vault.go</span><span>crypto.go</span><span>config.go</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pipeline">
+    <div class="section-head">
+      <h2>Phase 1~6 통합 실행</h2>
+      <span class="section-note">/pipeline</span>
+    </div>
+    <div class="callout">
+      <div class="icon">⚙</div>
+      <div>
+        <h3>자격증명·호스트 목록을 한 번만 입력</h3>
+        <p>체크한 단계만 1→6 순서로 실행. 포트그룹명은 Phase 2(생성)와 Phase 3(네트워크 매핑)에 자동 공유되고, "실패 시 중단" 옵션으로 이전 단계 실패 시 이후 단계를 막는다.</p>
+        <p>Phase 5/6은 라우트 레벨과 별개로 파이프라인 핸들러 내부에서도 Lv.4 미만이면 다시 차단 — 체크박스로 우회되는 구멍을 막기 위함.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="design">
+    <div class="section-head">
+      <h2>UI 개편 — 클라우드 콘솔 스타일</h2>
+      <span class="section-note">base.html 전면 재설계</span>
+    </div>
+    <p class="lede">기존 상단 네비게이션 한 줄 구조를 AWS/GCP 콘솔 방식(상단 바 + 좌측 사이드바)으로 전환. 사이드바는 프로비저닝 · 튜닝 · 운영(파괴적) · 리포트 · 관리 5개 그룹으로 재분류하고, 각 메뉴에 인라인 SVG 아이콘과 현재 경로 자동 하이라이트(<code>{{if eq .Path "/phase1"}}active{{end}}</code>)를 적용했다. 로그인 전에는 사이드바 없이 중앙 카드형 스플래시로 분기.</p>
+    <div class="arch">
+      <div class="arch-node">
+        <div class="k">색상 토큰</div>
+        <div class="v">인디고 accent · 네이비 사이드바</div>
+      </div>
+      <div class="arch-arrow">+</div>
+      <div class="arch-node">
+        <div class="k">상태 배지</div>
+        <div class="v">success/failed/dry_run pill</div>
+      </div>
+      <div class="arch-arrow">+</div>
+      <div class="arch-node">
+        <div class="k">작업 로그</div>
+        <div class="v">다크 터미널 스타일 pre.log</div>
+      </div>
+    </div>
+    <p class="m-desc" style="margin-top:.8rem">상태 배지는 Go 쪽에서 클래스명을 결정 — <code>pipelineStep.StatusClass</code>, <code>Result.DryRun</code> 필드를 추가해 템플릿은 순수 CSS 클래스만 바인딩하도록 분리(문자열 매핑을 템플릿 안에 두지 않음).</p>
+  </section>
+
+  <section id="deploy">
+    <div class="section-head">
+      <h2>배포 — systemd 상시 구동</h2>
+      <span class="section-note">vm-portal.service</span>
+    </div>
+    <p class="lede">그동안 <code>nohup ./bin/server &amp;</code>로 수동 기동하던 것을 systemd 유닛으로 전환. 재부팅/크래시 시 자동 재시작(<code>Restart=on-failure</code>) 보장.</p>
+    <div class="file-block">
+      <div class="file-name">/etc/systemd/system/vm-portal.service</div>
+      <pre class="codeblock">[Unit]
+Description=VM Auto-Provisioning Portal
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/vm/portal
+ExecStart=/root/vm/portal/bin/server
+Restart=on-failure
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target</pre>
+    </div>
+    <p class="m-desc">적용: <code>systemctl daemon-reload &amp;&amp; systemctl enable --now vm-portal</code></p>
+  </section>
+
+  <section id="bugs">
+    <div class="section-head">
+      <h2>실측 중 발견 · 수정한 버그</h2>
+      <span class="section-note">5건</span>
+    </div>
+
+    <div class="bug">
+      <div class="bug-title"><span class="sev">CRITICAL</span>모든 페이지가 Phase 3 내용을 렌더링</div>
+      <dl>
+        <dt>원인</dt><dd>7개 템플릿 파일이 전부 <code>{{define "content"}}</code>라는 동일한 블록 이름을 써서, 한 번에 <code>ParseFS</code>로 파싱하면 마지막에 읽힌 파일(알파벳순 phase3.html)이 나머지를 덮어씀.</dd>
+        <dt>수정</dt><dd>페이지마다 <code>{base.html + 해당 page.html}</code> 조합을 따로 파싱하는 <code>map[string]*template.Template</code>으로 전환.</dd>
+      </dl>
+    </div>
+
+    <div class="bug">
+      <div class="bug-title"><span class="sev">HIGH</span>빈 입력이 "성공"으로 표시됨</div>
+      <dl>
+        <dt>원인</dt><dd>Phase 2/3 폼이 비어있거나 형식이 안 맞으면 파싱 결과가 0건인 채로 그냥 실행 → 바이너리는 할 일이 없어 정상 종료(exit 0) → 포털이 success로 표시.</dd>
+        <dt>수정</dt><dd>파싱 결과 0건이면 실행 전에 명확한 에러로 막음. 구분자도 <code>main_vm_create_v2.txt</code>의 <code>loadHostgroupMap</code>과 동일하게 공백·쉼표(<code>[,\s]+</code>) 둘 다 허용.</dd>
+      </dl>
+    </div>
+
+    <div class="bug">
+      <div class="bug-title"><span class="sev">HIGH</span>Phase 5/6이 대상 VM을 못 찾고 조용히 스킵</div>
+      <dl>
+        <dt>원인</dt><dd>Phase 3(<code>vm_create</code>)는 <code>baseName := strings.Split(bmHost,".")[0]</code>로 VM 이름을 짓는데, Phase 5/6(<code>affinity_setting</code>, <code>lpage_setting</code>)은 이 split 없이 입력값을 그대로 <code>&lt;host&gt;ev01</code>로 매칭 — 전체 IP를 넣으면 서로 다른 이름을 찾게 됨.</dd>
+        <dt>수정</dt><dd>Phase 5/6에만 <code>FirstLabel()</code>로 <code>.</code> 앞부분만 사용하도록 사전 정규화. Phase 3/4는 자체적으로 이미 처리하고 있어 그대로 둠(오히려 여기서 자르면 <code>finder.HostSystem()</code> 조회가 깨짐).</dd>
+      </dl>
+    </div>
+
+    <div class="bug">
+      <div class="bug-title"><span class="sev">MEDIUM</span>SQLite "database is locked"</div>
+      <dl>
+        <dt>원인</dt><dd>기본 저널 모드에서 단일 커넥션 풀과 외부 CLI 조회가 충돌.</dd>
+        <dt>수정</dt><dd>DSN에 <code>_pragma=journal_mode(WAL)</code> 추가.</dd>
+      </dl>
+    </div>
+
+    <div class="bug">
+      <div class="bug-title"><span class="sev">HIGH</span>systemd 등록 후 재부팅하면 서비스가 안 올라옴 (203/EXEC)</div>
+      <dl>
+        <dt>원인</dt><dd>SELinux(Enforcing)가 켜진 상태에서 <code>go build</code>로 새로 만든 <code>bin/server</code> 바이너리만 <code>user_tmp_t</code> 라벨이 붙어 있었음(형제 바이너리 9개는 정상 <code>admin_home_t</code>). systemd(<code>init_t</code> 도메인)가 이 타입의 파일을 exec하는 게 정책상 허용되지 않아 커널이 즉시 거부 — <code>RestartSec=3</code>마다 계속 재시도하며 실패를 반복. 이 거부는 정책의 <code>dontaudit</code> 규칙에 걸려 <code>ausearch</code>/감사 로그에 남지 않아 처음엔 원인 추적이 어려웠음(반면 터미널에서 직접 실행하면 <code>unconfined_u</code> 세션이라 통과되어 "수동은 되는데 서비스는 안 되는" 전형적 패턴).</dd>
+        <dt>진단</dt><dd><code>ls -laZ</code>로 파일별 컨텍스트 비교 → <code>restorecon</code>으로 라벨만 되돌렸을 때도 재현 → <code>env -i</code>로 최소 환경 수동 실행은 성공 → 바이너리/권한 문제가 아니라 SELinux 도메인 전이 문제로 좁혀짐.</dd>
+        <dt>수정</dt><dd>SELinux를 끄지 않고, <code>chcon -t bin_t</code>로 systemd 서비스용 표준 실행 타입 지정 → 즉시 정상 기동. <code>semanage fcontext -a -t bin_t '/root/vm/portal/bin(/.*)?'</code>로 영구 규칙을 SELinux 정책 DB에 등록해 재부팅·재라벨링에도 유지되도록 함. 앞으로 재빌드할 때마다 <code>restorecon -Rv /root/vm/portal/bin</code> 한 번이면 새 바이너리도 규칙이 자동 적용됨.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section id="qa">
+    <div class="section-head">
+      <h2>진행 중 질문 · 답변</h2>
+    </div>
+
+    <div class="qa">
+      <div class="q">계획 단계도 Opus를 써야 하나?</div>
+      <p class="a">아니요. 이미 나온 스크립트를 어떻게 배치·연결할지 정리하는 아키텍처 설계라 Sonnet 5로 충분. Opus는 RBAC 권한 충돌, 동시성 버그처럼 복잡한 멀티스텝 추론이 필요할 때만.</p>
+    </div>
+    <div class="qa">
+      <div class="q">RAM 10~16GB로 충분한가?</div>
+      <p class="a">록키리눅스(포털) 단독이면 충분(실사용 1~2GB 수준). VCSA/ESXi까지 같은 예산에 포함되면 VCSA 최소 구성만 통상 12GB 이상 필요해 부족할 수 있음.</p>
+    </div>
+    <div class="qa">
+      <div class="q">프로젝트에 어떤 툴을 미리 깔아둬야 하나?</div>
+      <p class="a">M1~M2 시작에는 Go + git + sqlite3만 있으면 충분. govc/Vault/tailwind 등은 해당 마일스톤에 도달했을 때 그때그때.</p>
+    </div>
+    <div class="qa">
+      <div class="q">Cowork가 데스크톱 앱에 안 보인다</div>
+      <p class="a">플랜(Pro 이상), 앱 버전, Windows의 Virtual Machine Platform 기능 활성화 여부를 순서대로 확인. VM Workstation과 가상화 확장 리소스가 겹칠 수 있어 필요시 잠시 종료 후 테스트.</p>
+    </div>
+    <div class="qa">
+      <div class="q">Phase 3 폼의 "데이터센터 이름"에 호스트 IP를 넣었는데?</div>
+      <p class="a">잘못된 입력. 이 필드는 vCenter 데이터센터 이름 전용(데이터센터 1개면 비워두면 자동 선택)이고, 호스트 IP는 별도의 "대상 호스트 목록" 필드에 들어가야 함.</p>
+    </div>
+    <div class="qa">
+      <div class="q">문서 정리 같은 작업도 Sonnet 5로 되나?</div>
+      <p class="a">네. 복잡한 추론이 필요 없는 요약·정리 작업이라 지금 쓰는 모델 그대로 충분.</p>
+    </div>
+    <div class="qa">
+      <div class="q">M7~M9 남은 부분을 다이렉트로 진행해달라, 그 전에 백업부터</div>
+      <p class="a">먼저 <code>/root/vm/portal</code> 전체(소스·바이너리·DB·마스터키)와 원본 CLI 스크립트를 WAL 체크포인트 후 tar.gz로 백업 → 원격/로컬(Windows) 양쪽에 저장. 이후 M7(리포트) → M8(감사로그·dry-run) → M9(Vault 옵션) 순으로 구현.</p>
+    </div>
+    <div class="qa">
+      <div class="q">이걸 다른 곳에서도 수정 요청하려면 어떤 파일을 들고 가야 하나?</div>
+      <p class="a">디자인만 바꾸려면 <code>base.html</code> + <code>dashboard.html</code> 정도로 충분. 기능까지 손대려면 <code>internal/</code>, <code>cmd/server/main.go</code> 전체 Go 소스가 필요. 가장 간단한 건 세션 백업 tar.gz 하나를 그대로 들고 가는 것(단, 마스터 키가 포함되어 있으니 신뢰할 수 있는 곳에만 공유).</p>
+    </div>
+    <div class="qa">
+      <div class="q">재부팅해도 계속 떠 있게 하려면 어떤 데몬을 확인해야 하나?</div>
+      <p class="a">이전엔 systemd 유닛이 아예 없었음(수동 <code>nohup</code> 실행). <code>vm-portal.service</code> 유닛 텍스트를 전달하고 사용자가 직접 적용.</p>
+    </div>
+    <div class="qa">
+      <div class="q">재부팅했더니 안 올라온다 — 뭐가 문제였나?</div>
+      <p class="a">SELinux <code>bin_t</code> 라벨 문제(아래 버그 카드 참고). <code>chcon</code> + <code>semanage fcontext</code>로 SELinux를 끄지 않고 해결.</p>
+    </div>
+    <div class="qa">
+      <div class="q">SELinux가 문제였다면 그냥 꺼버리겠다</div>
+      <p class="a">권장하지 않음 — 원인은 이미 좁은 범위(바이너리 라벨 하나)였고 껐다 켜는 것도 재부팅이 필요해 지금 당장 이득이 없음. vCenter/ESXi 자격증명을 다루는 서버라 SELinux를 켜 둔 채 유지하는 쪽을 권장했고, 최종적으로 끄지 않기로 함.</p>
+    </div>
+  </section>
+
+  <section id="tree">
+    <div class="section-head">
+      <h2>디렉터리 구조</h2>
+      <span class="section-note">/root/vm/portal</span>
+    </div>
+    <div class="codeblock">portal/
+├── cmd/server/main.go          <span class="dim"># 라우팅 · 핸들러 · 세션 부트스트랩 · Path/StatusClass</span>
+├── internal/
+│   ├── auth/                   <span class="dim"># password.go · session.go · rbac.go</span>
+│   ├── config/                 <span class="dim"># 환경변수 → Config (+ ReportsDir · Vault 설정)</span>
+│   ├── db/                     <span class="dim"># schema.sql · db.go (WAL)</span>
+│   ├── models/                 <span class="dim"># User · Credential · Job (+ JobStatusDryRun)</span>
+│   ├── phases/                 <span class="dim"># phase1~9.go · exec.go · worklist.go</span>
+│   ├── secrets/                <span class="dim"># crypto.go (AES-GCM) · store.go · <span class="hl">vault.go (M9)</span></span>
+│   └── webui/templates/        <span class="dim"># base(사이드바) + 페이지별 content 블록, phase9/audit 추가</span>
+├── bin/                        <span class="dim"># vmc · vswitch_setting · vm_create · mac_info</span>
+│                                <span class="dim"># affinity_setting · lpage_setting · power_setting · vm_delete · <span class="hl">report</span></span>
+├── data/
+│   ├── portal.db · master.key  <span class="dim"># 0600</span>
+│   └── <span class="hl">reports/</span>                <span class="dim"># Phase 9 CSV 영구 저장 (M7)</span>
+└── tmp/                        <span class="dim"># worklist/mapfile 스크래치 (실행 후 자동 삭제)</span>
+
+<span class="hl">/root/vm/main_vm_delete.go</span>          <span class="dim"># Phase 8용 신규 개발, govmomi 직접 사용</span>
+<span class="hl">/root/vm/main_report.go</span>             <span class="dim"># Phase 9용, → bin/report로 빌드</span>
+<span class="hl">/etc/systemd/system/vm-portal.service</span> <span class="dim"># 상시 구동 (M7 이후 추가)</span></div>
+  </section>
+
+  <section id="code">
+    <div class="section-head">
+      <h2>전체 소스코드</h2>
+      <span class="section-note">42개 파일 · /root/vm/portal</span>
+    </div>
+    <p class="lede">이 세션에서 작성된 모든 코드. 패키지 단위로 접혀 있으니 필요한 것만 펼쳐서 보면 됩니다.</p>
+    <div class="toc-jump">
+      <a href="#code-mod">go.mod</a>
+      <a href="#code-db">db</a>
+      <a href="#code-models">models</a>
+      <a href="#code-config">config</a>
+      <a href="#code-auth">auth</a>
+      <a href="#code-secrets">secrets</a>
+      <a href="#code-phases">phases</a>
+      <a href="#code-webui">webui</a>
+      <a href="#code-main">cmd/server</a>
+      <a href="#code-delete">main_vm_delete.go</a>
+    </div>
+
+    <details class="pkg-group" id="code-mod">
+      <summary><span>go.mod</span><span class="path">portal/go.mod</span><span class="count">1 file</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">go.mod</div>
+          <pre class="codeblock">module vm-portal
+
+go 1.22
+
+require (
+	golang.org/x/crypto v0.31.0
+	modernc.org/sqlite v1.34.4
+)
+
+require (
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/ncruces/go-strftime v0.1.9 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
+	modernc.org/libc v1.55.3 // indirect
+	modernc.org/mathutil v1.6.0 // indirect
+	modernc.org/memory v1.8.0 // indirect
+	modernc.org/strutil v1.2.0 // indirect
+	modernc.org/token v1.1.0 // indirect
+)</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-db">
+      <summary><span>internal/db</span><span class="path">schema.sql · db.go</span><span class="count">2 files</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">internal/db/schema.sql <span class="lines">60줄</span></div>
+          <pre class="codeblock">CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    rbac_level    INTEGER NOT NULL CHECK (rbac_level BETWEEN 1 AND 5),
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id         TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS credentials (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                TEXT NOT NULL UNIQUE,
+    vcenter_ip          TEXT NOT NULL,
+    vc_id               TEXT NOT NULL,
+    encrypted_password  BLOB NOT NULL,
+    nonce               BLOB NOT NULL,
+    esxi_encrypted_password BLOB,
+    esxi_nonce          BLOB,
+    created_by          INTEGER NOT NULL REFERENCES users(id),
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    phase         TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending',
+    credential_id INTEGER NOT NULL REFERENCES credentials(id),
+    worklist_file TEXT,
+    mapfile       TEXT,
+    params        TEXT,
+    requested_by  INTEGER NOT NULL REFERENCES users(id),
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS job_logs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id     INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    line       TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER REFERENCES users(id),
+    action     TEXT NOT NULL,
+    target     TEXT,
+    result     TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_job_logs_job_id ON job_logs(job_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/db/db.go <span class="lines">31줄</span></div>
+          <pre class="codeblock">// Package db opens the SQLite database and applies the schema.
+package db
+
+import (
+	"database/sql"
+	_ "embed"
+	"fmt"
+
+	_ "modernc.org/sqlite"
+)
+
+//go:embed schema.sql
+var schemaSQL string
+
+// Open opens (creating if needed) the SQLite database at path and applies schema.sql.
+// SQLite is single-writer, so we cap the pool to 1 connection to avoid
+// "database is locked" errors under concurrent job submissions.
+func Open(path string) (*sql.DB, error) {
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&amp;_pragma=foreign_keys(1)&amp;_pragma=journal_mode(WAL)", path)
+	conn, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	conn.SetMaxOpenConns(1)
+
+	if _, err := conn.Exec(schemaSQL); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("apply schema: %w", err)
+	}
+	return conn, nil
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-models">
+      <summary><span>internal/models</span><span class="path">models.go</span><span class="count">1 file</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">internal/models/models.go <span class="lines">56줄</span></div>
+          <pre class="codeblock">// Package models defines the core domain types shared across the app.
+package models
+
+import "time"
+
+// RBAC levels, per the plan's 5-tier table.
+const (
+	LevelViewer         = 1 // dashboard/report read-only
+	LevelRequester       = 2 // submit VM creation requests
+	LevelOperator         = 3 // run phases 1~3 (host register, vSwitch, VM create)
+	LevelSeniorOperator = 4 // + affinity/lpage tuning, power policy, VM delete
+	LevelAdmin          = 5 // + user mgmt, credential mgmt, audit log
+)
+
+type User struct {
+	ID           int64
+	Username     string
+	PasswordHash string
+	RBACLevel    int
+	CreatedAt    time.Time
+}
+
+type Credential struct {
+	ID                     int64
+	Name                   string
+	VCenterIP              string
+	VCID                   string
+	EncryptedPassword      []byte
+	Nonce                  []byte
+	ESXiEncryptedPassword  []byte
+	ESXiNonce              []byte
+	CreatedBy              int64
+	CreatedAt              time.Time
+}
+
+const (
+	JobStatusPending = "pending"
+	JobStatusRunning = "running"
+	JobStatusSuccess = "success"
+	JobStatusFailed  = "failed"
+	JobStatusDryRun  = "dry_run" // M8: preview-only run, no binary actually executed
+)
+
+type Job struct {
+	ID           int64
+	Phase        string
+	Status       string
+	CredentialID int64
+	WorklistFile string
+	MapFile      string
+	Params       string
+	RequestedBy  int64
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-config">
+      <summary><span>internal/config</span><span class="path">config.go</span><span class="count">1 file</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">internal/config/config.go <span class="lines">47줄</span></div>
+          <pre class="codeblock">// Package config loads the portal's runtime configuration from environment variables.
+package config
+
+import (
+	"os"
+	"path/filepath"
+)
+
+type Config struct {
+	ListenAddr    string // e.g. ":8443"
+	DBPath        string
+	BinDir        string // directory holding the phase binaries (vmc, vswitch_setting, vm_create_v2, ...)
+	TmpDir        string // worklist/mapfile scratch space
+	ReportsDir    string // Phase 9 CSV report output (persistent, unlike TmpDir scratch files)
+	MasterKeyFile string // 0600 file holding the AES-256 master key for credential encryption, when SecretBackend == "file"
+
+	// SecretBackend selects where the AES-256 master key comes from: "file"
+	// (default — local 0600 file, see secrets.LoadOrCreateMasterKey) or
+	// "vault" (HashiCorp Vault KV v2, see secrets.LoadMasterKeyFromVault).
+	// This is M9's "옵션" — the file backend remains the default and is all
+	// that's required for a single-host deployment like this one.
+	SecretBackend  string
+	VaultAddr      string // e.g. "https://vault.example.com:8200"
+	VaultToken     string
+	VaultSecretPath string // KV v2 path, e.g. "secret/data/vm-portal/master-key"
+	VaultKeyField  string // field name inside the KV v2 secret holding the base64 key, default "key"
+}
+
+func Load() Config {
+	base := getenv("VMPORTAL_HOME", "/root/vm/portal")
+	return Config{
+		ListenAddr:    getenv("VMPORTAL_ADDR", ":8443"),
+		DBPath:        getenv("VMPORTAL_DB", filepath.Join(base, "data", "portal.db")),
+		BinDir:        getenv("VMPORTAL_BIN_DIR", filepath.Join(base, "bin")),
+		TmpDir:        getenv("VMPORTAL_TMP_DIR", filepath.Join(base, "tmp")),
+		ReportsDir:    getenv("VMPORTAL_REPORTS_DIR", filepath.Join(base, "data", "reports")),
+		MasterKeyFile: getenv("VMPORTAL_MASTER_KEY_FILE", filepath.Join(base, "data", "master.key")),
+
+		SecretBackend:   getenv("VMPORTAL_SECRET_BACKEND", "file"),
+		VaultAddr:       getenv("VAULT_ADDR", ""),
+		VaultToken:      getenv("VAULT_TOKEN", ""),
+		VaultSecretPath: getenv("VMPORTAL_VAULT_SECRET_PATH", "secret/data/vm-portal/master-key"),
+		VaultKeyField:   getenv("VMPORTAL_VAULT_KEY_FIELD", "key"),
+	}
+}
+
+func getenv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-auth">
+      <summary><span>internal/auth</span><span class="path">password.go · session.go · rbac.go</span><span class="count">3 files</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">internal/auth/password.go <span class="lines">12줄</span></div>
+          <pre class="codeblock">package auth
+
+import "golang.org/x/crypto/bcrypt"
+
+func HashPassword(plain string) (string, error) {
+	b, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
+	return string(b), err
+}
+
+func CheckPassword(hash, plain string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/auth/session.go <span class="lines">108줄</span></div>
+          <pre class="codeblock">package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"net/http"
+	"time"
+
+	"vm-portal/internal/models"
+)
+
+const (
+	cookieName   = "vmportal_session"
+	sessionTTL   = 12 * time.Hour
+)
+
+type ctxKey int
+
+const userCtxKey ctxKey = 0
+
+// CreateSession issues a new random session token for userID and stores it.
+func CreateSession(db *sql.DB, userID int64) (token string, expires time.Time, err error) {
+	raw := make([]byte, 32)
+	if _, err = rand.Read(raw); err != nil {
+		return "", time.Time{}, err
+	}
+	token = hex.EncodeToString(raw)
+	expires = time.Now().Add(sessionTTL)
+
+	_, err = db.Exec(`INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)`, token, userID, expires)
+	return token, expires, err
+}
+
+func DeleteSession(db *sql.DB, token string) error {
+	_, err := db.Exec(`DELETE FROM sessions WHERE id = ?`, token)
+	return err
+}
+
+// userBySession loads the user tied to a still-valid session token.
+func userBySession(db *sql.DB, token string) (*models.User, error) {
+	row := db.QueryRow(`
+		SELECT u.id, u.username, u.password_hash, u.rbac_level, u.created_at
+		FROM sessions s
+		JOIN users u ON u.id = s.user_id
+		WHERE s.id = ? AND s.expires_at > CURRENT_TIMESTAMP`, token)
+
+	var u models.User
+	if err := row.Scan(&amp;u.ID, &amp;u.Username, &amp;u.PasswordHash, &amp;u.RBACLevel, &amp;u.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &amp;u, nil
+}
+
+func SetSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
+	http.SetCookie(w, &amp;http.Cookie{
+		Name:     cookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  expires,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		// Secure omitted here on purpose: set VMPORTAL_ADDR behind TLS termination
+		// and add Secure:true once the portal is served over HTTPS end-to-end.
+	})
+}
+
+func ClearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &amp;http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// WithUser is middleware that resolves the session cookie (if any) into a
+// *models.User and stashes it on the request context for downstream handlers.
+func WithUser(db *sql.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie(cookieName)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			user, err := userBySession(db, cookie.Value)
+			if err != nil || user == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ctx := context.WithValue(r.Context(), userCtxKey, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func CurrentUser(r *http.Request) (*models.User, bool) {
+	u, ok := r.Context().Value(userCtxKey).(*models.User)
+	return u, ok
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/auth/rbac.go <span class="lines">25줄</span></div>
+          <pre class="codeblock">package auth
+
+import (
+	"net/http"
+	"strconv"
+)
+
+// RequireLevel guards a handler so only users whose RBACLevel is >= min may
+// pass. Unauthenticated requests are sent to /login; authenticated-but-
+// under-level requests get 403. This mirrors the plan's Phase-to-level
+// table (M2), enforced per-endpoint rather than trusted from the UI.
+func RequireLevel(min int, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, ok := CurrentUser(r)
+		if !ok || user == nil {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		if user.RBACLevel &lt; min {
+			http.Error(w, "권한이 부족합니다 (필요 레벨: "+strconv.Itoa(min)+", 보유 레벨: "+strconv.Itoa(user.RBACLevel)+")", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-secrets">
+      <summary><span>internal/secrets</span><span class="path">crypto.go · vault.go · store.go</span><span class="count">3 files</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">internal/secrets/crypto.go <span class="lines">83줄</span></div>
+          <pre class="codeblock">// Package secrets implements the plan's "옵션 A" credential storage: vCenter/ESXi
+// passwords are AES-256-GCM encrypted at the application layer before hitting
+// SQLite, with the master key kept in a separate 0600 file outside the DB
+// (or, optionally, in HashiCorp Vault — see vault.go / LoadMasterKey).
+package secrets
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+const keySize = 32 // AES-256
+
+// LoadMasterKey resolves the AES-256 master key using the configured backend
+// ("file" — default, or "vault"). See config.Config.SecretBackend.
+func LoadMasterKey(backend, fileKeyPath, vaultAddr, vaultToken, vaultSecretPath, vaultKeyField string) ([]byte, error) {
+	switch backend {
+	case "", "file":
+		return LoadOrCreateMasterKey(fileKeyPath)
+	case "vault":
+		return LoadMasterKeyFromVault(vaultAddr, vaultToken, vaultSecretPath, vaultKeyField)
+	default:
+		return nil, fmt.Errorf("알 수 없는 SecretBackend: %q (file 또는 vault)", backend)
+	}
+}
+
+// LoadOrCreateMasterKey reads the master key from path, generating and
+// persisting a new random one (mode 0600) the first time the file is missing.
+func LoadOrCreateMasterKey(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err == nil {
+		if len(data) != keySize {
+			return nil, errors.New("master key file has unexpected length; delete it to regenerate (this invalidates stored credentials)")
+		}
+		return data, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	key := make([]byte, keySize)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(path, key, 0600); err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+// Encrypt returns (ciphertext, nonce). The nonce must be stored alongside
+// the ciphertext and passed back into Decrypt.
+func Encrypt(key, plaintext []byte) (ciphertext, nonce []byte, err error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, err
+	}
+	nonce = make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, nil, err
+	}
+	ciphertext = gcm.Seal(nil, nonce, plaintext, nil)
+	return ciphertext, nonce, nil
+}
+
+func Decrypt(key, ciphertext, nonce []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/secrets/vault.go <span class="lines">73줄</span> <span class="hl">— M9 신규</span></div>
+          <pre class="codeblock">package secrets
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+)
+
+// kv2Response mirrors the parts of Vault's KV v2 read response we need:
+// GET {addr}/v1/{path} -> {"data": {"data": {&lt;field&gt;: "&lt;base64 key&gt;"}}}.
+type kv2Response struct {
+	Data struct {
+		Data map[string]string `json:"data"`
+	} `json:"data"`
+}
+
+// LoadMasterKeyFromVault fetches the AES-256 master key from a HashiCorp
+// Vault KV v2 secret engine over its HTTP API. This is M9's optional
+// alternative to the local master-key file (LoadOrCreateMasterKey) — it
+// does not create or rotate the secret, only reads it, since managing the
+// Vault-side secret lifecycle is out of scope for a CLI-wrapping portal.
+//
+// The secret must already exist at secretPath with a field (default "key")
+// holding the 32-byte AES key, standard-base64 encoded.
+func LoadMasterKeyFromVault(addr, token, secretPath, keyField string) ([]byte, error) {
+	if addr == "" || token == "" {
+		return nil, errors.New("vault: VAULT_ADDR / VAULT_TOKEN 이 설정되지 않았습니다")
+	}
+	if keyField == "" {
+		keyField = "key"
+	}
+
+	url := addr + "/v1/" + secretPath
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: 요청 생성 실패: %w", err)
+	}
+	req.Header.Set("X-Vault-Token", token)
+
+	client := &amp;http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("vault: %s 접속 실패: %w", addr, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1&lt;&lt;20))
+	if err != nil {
+		return nil, fmt.Errorf("vault: 응답 읽기 실패: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("vault: %s 응답 %d: %s", secretPath, resp.StatusCode, string(body))
+	}
+
+	var parsed kv2Response
+	if err := json.Unmarshal(body, &amp;parsed); err != nil {
+		return nil, fmt.Errorf("vault: 응답 파싱 실패: %w", err)
+	}
+
+	encoded, ok := parsed.Data.Data[keyField]
+	if !ok {
+		return nil, fmt.Errorf("vault: %s 경로의 시크릿에 %q 필드가 없습니다", secretPath, keyField)
+	}
+
+	key, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("vault: %s 필드가 유효한 base64 가 아닙니다: %w", keyField, err)
+	}
+	if len(key) != keySize {
+		return nil, fmt.Errorf("vault: 키 길이가 %d바이트가 아니라 %d바이트입니다", keySize, len(key))
+	}
+	return key, nil
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/secrets/store.go <span class="lines">92줄</span></div>
+          <pre class="codeblock">package secrets
+
+import (
+	"database/sql"
+
+	"vm-portal/internal/models"
+)
+
+// DecryptedCredential is what phase-execution code needs: plaintext secrets
+// held only in memory for the lifetime of a single job run.
+type DecryptedCredential struct {
+	models.Credential
+	VCPassword   string
+	ESXiPassword string
+}
+
+func SaveCredential(db *sql.DB, key []byte, name, vcenterIP, vcID, vcPassword, esxiPassword string, createdBy int64) (int64, error) {
+	vcCipher, vcNonce, err := Encrypt(key, []byte(vcPassword))
+	if err != nil {
+		return 0, err
+	}
+
+	var esxiCipher, esxiNonce []byte
+	if esxiPassword != "" {
+		esxiCipher, esxiNonce, err = Encrypt(key, []byte(esxiPassword))
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	res, err := db.Exec(`
+		INSERT INTO credentials (name, vcenter_ip, vc_id, encrypted_password, nonce, esxi_encrypted_password, esxi_nonce, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		name, vcenterIP, vcID, vcCipher, vcNonce, nullIfEmpty(esxiCipher), nullIfEmpty(esxiNonce), createdBy)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func nullIfEmpty(b []byte) interface{} {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
+}
+
+func ListCredentials(db *sql.DB) ([]models.Credential, error) {
+	rows, err := db.Query(`SELECT id, name, vcenter_ip, vc_id, created_by, created_at FROM credentials ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.Credential
+	for rows.Next() {
+		var c models.Credential
+		if err := rows.Scan(&amp;c.ID, &amp;c.Name, &amp;c.VCenterIP, &amp;c.VCID, &amp;c.CreatedBy, &amp;c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// GetDecrypted loads a credential and decrypts its secrets with the master key.
+func GetDecrypted(db *sql.DB, key []byte, id int64) (*DecryptedCredential, error) {
+	row := db.QueryRow(`
+		SELECT id, name, vcenter_ip, vc_id, encrypted_password, nonce, esxi_encrypted_password, esxi_nonce, created_by, created_at
+		FROM credentials WHERE id = ?`, id)
+
+	var c models.Credential
+	var esxiCipher, esxiNonce []byte
+	if err := row.Scan(&amp;c.ID, &amp;c.Name, &amp;c.VCenterIP, &amp;c.VCID, &amp;c.EncryptedPassword, &amp;c.Nonce, &amp;esxiCipher, &amp;esxiNonce, &amp;c.CreatedBy, &amp;c.CreatedAt); err != nil {
+		return nil, err
+	}
+
+	vcPlain, err := Decrypt(key, c.EncryptedPassword, c.Nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	dc := &amp;DecryptedCredential{Credential: c, VCPassword: string(vcPlain)}
+	if len(esxiCipher) > 0 {
+		esxiPlain, err := Decrypt(key, esxiCipher, esxiNonce)
+		if err != nil {
+			return nil, err
+		}
+		dc.ESXiPassword = string(esxiPlain)
+	}
+	return dc, nil
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-phases">
+      <summary><span>internal/phases</span><span class="path">worklist.go · exec.go · phase1~9.go</span><span class="count">11 files</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">internal/phases/worklist.go <span class="lines">75줄</span></div>
+          <pre class="codeblock">// Package phases wraps the existing govmomi CLI binaries (vmc, vswitch_setting,
+// vm_create, ...) with exec.Command, per the plan's "A안" (wrap, don't rewrite).
+package phases
+
+import (
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// WriteTempFile creates &lt;dir&gt;/&lt;prefix&gt;_&lt;8 random hex chars&gt;.txt containing
+// lines (one per line), per the plan's UUID-style collision-proof naming
+// for worklist/hostgroup files (section 5 of the plan).
+func WriteTempFile(dir, prefix string, lines []string) (path string, err error) {
+	suffix := make([]byte, 4)
+	if _, err := rand.Read(suffix); err != nil {
+		return "", err
+	}
+	name := prefix + "_" + hex.EncodeToString(suffix) + ".txt"
+	path = filepath.Join(dir, name)
+
+	content := strings.Join(lines, "\n")
+	if content != "" {
+		content += "\n"
+	}
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// RemoveQuiet deletes a temp file, ignoring errors (best-effort cleanup).
+func RemoveQuiet(path string) {
+	if path != "" {
+		_ = os.Remove(path)
+	}
+}
+
+// FirstLabel returns the segment before the first '.' in a host identifier.
+//
+// Phase 3 (main_vm_create_v2.txt) names VMs "&lt;firstLabel&gt;ev01"/"ev02" by
+// splitting each worklist entry on "." itself — so it (and Phase 4, which
+// mirrors the same split) already handles a full IP/FQDN correctly and must
+// receive the untouched host string, since it separately uses the full
+// string for finder.HostSystem()/hostgroupMap[] lookups.
+//
+// Phase 5 (main_affinity.txt) and Phase 6 (main_lpage.txt) do NOT split on
+// "." — they match VMs by exact "&lt;worklist entry&gt;ev01"/"ev02". If a user
+// enters the same full IP/FQDN there, it won't match the shorter name Phase 3
+// actually created, and every host silently logs "대상 VM이 존재하지 않습니다"
+// and does nothing. FirstLabel/NormalizeHosts pre-truncates for those two so
+// they compute the same VM name Phase 3 did.
+func FirstLabel(host string) string {
+	if i := strings.IndexByte(host, '.'); i >= 0 {
+		return host[:i]
+	}
+	return host
+}
+
+// NormalizeHosts applies FirstLabel to every entry and logs a note for any
+// entry that actually changed, so the transformation is visible in the job's
+// log output rather than being a silent surprise.
+func NormalizeHosts(db *sql.DB, jobID int64, hosts []string) []string {
+	out := make([]string, len(hosts))
+	for i, h := range hosts {
+		out[i] = FirstLabel(h)
+		if out[i] != h {
+			appendLog(db, jobID, "[INFO] 호스트 식별자 정규화: "+h+" -> "+out[i])
+		}
+	}
+	return out
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/exec.go <span class="lines">104줄</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"bufio"
+	"context"
+	"database/sql"
+	"fmt"
+	"io"
+	"os/exec"
+	"time"
+
+	"vm-portal/internal/models"
+)
+
+// Result is the outcome of a synchronous binary run: exit status plus every
+// line of interleaved stdout/stderr, already persisted to job_logs.
+type Result struct {
+	Success bool
+	Lines   []string
+	DryRun  bool // M8: true when this was a preview-only run (see dryRunPreview) — no binary actually executed
+}
+
+// Run executes binPath with args and the given extra environment variables
+// (VC_PASSWORD / ESXI_PASSWORD), streaming combined output into job_logs as
+// it arrives and flipping the job's status when the process exits.
+//
+// M4 runs this synchronously (the HTTP handler blocks until completion) —
+// async queuing + SSE streaming is M5 per the plan's roadmap.
+func Run(ctx context.Context, db *sql.DB, jobID int64, binPath string, dir string, args []string, env []string) (*Result, error) {
+	if err := setJobStatus(db, jobID, models.JobStatusRunning); err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, binPath, args...)
+	cmd.Env = env
+	cmd.Dir = dir
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		_ = setJobStatus(db, jobID, models.JobStatusFailed)
+		appendLog(db, jobID, fmt.Sprintf("[에러] 실행 실패: %v", err))
+		return nil, err
+	}
+
+	res := &amp;Result{}
+	done := make(chan struct{}, 2)
+	readStream := func(r io.Reader) {
+		scanner := bufio.NewScanner(r)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			res.Lines = append(res.Lines, line)
+			appendLog(db, jobID, line)
+		}
+		done &lt;- struct{}{}
+	}
+	go readStream(stdout)
+	go readStream(stderr)
+	&lt;-done
+	&lt;-done
+
+	waitErr := cmd.Wait()
+	res.Success = waitErr == nil
+
+	status := models.JobStatusSuccess
+	if !res.Success {
+		status = models.JobStatusFailed
+		appendLog(db, jobID, fmt.Sprintf("[에러] 프로세스 종료 코드 오류: %v", waitErr))
+	}
+	_ = setJobStatus(db, jobID, status)
+
+	return res, nil
+}
+
+func setJobStatus(db *sql.DB, jobID int64, status string) error {
+	_, err := db.Exec(`UPDATE jobs SET status = ?, updated_at = ? WHERE id = ?`, status, time.Now(), jobID)
+	return err
+}
+
+func appendLog(db *sql.DB, jobID int64, line string) {
+	_, _ = db.Exec(`INSERT INTO job_logs (job_id, line) VALUES (?, ?)`, jobID, line)
+}
+
+// CreateJob inserts a new job row in "pending" state and returns its id.
+func CreateJob(db *sql.DB, phase string, credentialID int64, worklistFile, mapFile, params string, requestedBy int64) (int64, error) {
+	res, err := db.Exec(`
+		INSERT INTO jobs (phase, status, credential_id, worklist_file, mapfile, params, requested_by)
+		VALUES (?, 'pending', ?, ?, ?, ?, ?)`,
+		phase, credentialID, worklistFile, mapFile, params, requestedBy)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase1.go <span class="lines">50줄 · Lv.3</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// Phase1Input mirrors vmc's flags: -id -vcTargetIP -folderName -worklistFile.
+type Phase1Input struct {
+	FolderName string   // target folder/cluster/datacenter name
+	Hosts      []string // ESXi host list -> worklist_&lt;rand&gt;.txt
+}
+
+// RunPhase1 registers ESXi hosts (main_conn.txt / binary "vmc"), RBAC level 3.
+//
+// The binary resolves -worklistFile relative to its own working directory
+// (filepath.Join(os.Getwd(), *worklistFile)), so we set cmd.Dir to the temp
+// dir and pass just the bare filename rather than an absolute path.
+func RunPhase1(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase1Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "worklist", in.Hosts)
+	if err != nil {
+		return 0, nil, fmt.Errorf("worklist 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	jobID, err = CreateJob(db, "phase1_host_register", cred.ID, worklistName, "", in.FolderName, requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-folderName", in.FolderName,
+		"-worklistFile", worklistName,
+	}
+	env := []string{
+		"VC_PASSWORD=" + cred.VCPassword,
+		"ESXI_PASSWORD=" + cred.ESXiPassword,
+	}
+
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "vmc"), cfg.TmpDir, args, env)
+	return jobID, res, err
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase2.go <span class="lines">56줄 · Lv.3</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// VSwitchEntry is one "BMHost PGName VlanId" line (main_vs.txt's format).
+type VSwitchEntry struct {
+	BMHost string
+	PGName string
+	VlanID int
+}
+
+type Phase2Input struct {
+	TargetVSwitch string
+	Entries       []VSwitchEntry
+}
+
+// RunPhase2 creates vSwitch port groups (main_vs.txt / binary "vswitch_setting"), RBAC level 3.
+func RunPhase2(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase2Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	lines := make([]string, 0, len(in.Entries))
+	for _, e := range in.Entries {
+		lines = append(lines, strings.Join([]string{e.BMHost, e.PGName, strconv.Itoa(e.VlanID)}, " "))
+	}
+
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "vswitch", lines)
+	if err != nil {
+		return 0, nil, fmt.Errorf("vswitch 설정 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	jobID, err = CreateJob(db, "phase2_vswitch", cred.ID, worklistName, "", in.TargetVSwitch, requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+		"-targetVSwitch", in.TargetVSwitch,
+	}
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "vswitch_setting"), cfg.TmpDir, args, env)
+	return jobID, res, err
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase3.go <span class="lines">102줄 · Lv.3</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+	"strconv"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// VMSpec is one ev0N tier's Cpu/Mem(GB)/Disk(GB)/Share values.
+type VMSpec struct {
+	Cpu   int
+	Mem   int
+	Disk  int
+	Share int
+}
+
+type Phase3Input struct {
+	Datacenter   string            // optional; required only if vCenter has &gt;1 datacenter
+	Firmware     string            // "efi" (default/recommended) or "bios"
+	VMCount      int               // 1..3
+	Hosts        []string          // BM host list -> worklist_&lt;rand&gt;.txt
+	HostGroupMap map[string]string // BM host -> portgroup name -> hostgroup_&lt;rand&gt;.txt
+	Specs        map[int]VMSpec    // keys 1..3 (ev01/ev02/ev03)
+}
+
+// RunPhase3 creates VMs (main_vm_create_v2.txt / binary "vm_create"), RBAC level 3.
+// This is the version the plan (section 0) standardizes on: hostgroup mapping +
+// firmware option, replacing the older v1/flash_lite/v4 variants.
+func RunPhase3(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase3Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	if in.VMCount &lt; 1 || in.VMCount &gt; 3 {
+		return 0, nil, fmt.Errorf("vmCount은 1~3 사이여야 합니다")
+	}
+	if in.Firmware != "efi" &amp;&amp; in.Firmware != "bios" {
+		in.Firmware = "efi"
+	}
+
+	jobID, err = CreateJob(db, "phase3_vm_create", cred.ID, "", "", in.Firmware, requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// vm_create's own finder.HostSystem(ctx, bmHost) and hostgroupMap[bmHost]
+	// lookups use the FULL worklist entry (it only splits on "." separately,
+	// internally, to build the VM name) — so unlike Phase 5/6, the host list
+	// and hostgroup map keys here must stay exactly as entered, not truncated.
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "worklist", in.Hosts)
+	if err != nil {
+		return jobID, nil, fmt.Errorf("worklist 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	mapLines := make([]string, 0, len(in.HostGroupMap))
+	for host, pg := range in.HostGroupMap {
+		mapLines = append(mapLines, host+" "+pg)
+	}
+	mapPath, err := WriteTempFile(cfg.TmpDir, "hostgroup", mapLines)
+	if err != nil {
+		return 0, nil, fmt.Errorf("hostgroup 매핑 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(mapPath)
+	mapName := filepath.Base(mapPath)
+
+	if _, err := db.Exec(`UPDATE jobs SET worklist_file = ?, mapfile = ? WHERE id = ?`, worklistName, mapName, jobID); err != nil {
+		return jobID, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+		"-mapFile", mapName,
+		"-vmCount", strconv.Itoa(in.VMCount),
+		"-firmware", in.Firmware,
+	}
+	if in.Datacenter != "" {
+		args = append(args, "-datacenter", in.Datacenter)
+	}
+	for i := 1; i &lt;= 3; i++ {
+		spec, ok := in.Specs[i]
+		if !ok {
+			continue
+		}
+		prefix := fmt.Sprintf("-ev%02d", i)
+		args = append(args,
+			prefix+"Cpu", strconv.Itoa(spec.Cpu),
+			prefix+"Mem", strconv.Itoa(spec.Mem),
+			prefix+"Disk", strconv.Itoa(spec.Disk),
+			prefix+"Share", strconv.Itoa(spec.Share),
+		)
+	}
+
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "vm_create"), cfg.TmpDir, args, env)
+	return jobID, res, err
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase4.go <span class="lines">76줄 · Lv.3</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+	"strconv"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// Phase4Input mirrors mac_info's flags: -id -vcTargetIP -worklistFile -arg1 -argInt -argStr.
+// The binary both prints and writes Provisioning_List_&lt;ip&gt;.txt; we rely on
+// the printed lines (captured into job_logs) rather than re-reading the file.
+type Phase4Input struct {
+	Hosts  []string
+	Arg1   string
+	ArgInt int
+	ArgStr string
+}
+
+// RunPhase4 extracts MAC/IP and emits a Kickstart provisioning list
+// (main_mac.txt / binary "mac_info"), RBAC level 3.
+func RunPhase4(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase4Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	jobID, err = CreateJob(db, "phase4_mac_extract", cred.ID, "", "", in.Arg1, requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// mac_info derives VM names via strings.Split(bmHost, ".")[0] internally
+	// (same as Phase 3), so it already handles a full IP/FQDN correctly —
+	// no pre-truncation needed here, unlike Phase 5/6.
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "worklist", in.Hosts)
+	if err != nil {
+		return jobID, nil, fmt.Errorf("worklist 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	if _, err := db.Exec(`UPDATE jobs SET worklist_file = ? WHERE id = ?`, worklistName, jobID); err != nil {
+		return jobID, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+		"-arg1", in.Arg1,
+		"-argInt", strconv.Itoa(in.ArgInt),
+		"-argStr", in.ArgStr,
+	}
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "mac_info"), cfg.TmpDir, args, env)
+
+	// Best-effort cleanup of the provisioning-list file the binary writes to
+	// cwd (== cfg.TmpDir here); its content is already captured in job_logs.
+	safeIP := ipToFileSafe(cred.VCenterIP)
+	RemoveQuiet(filepath.Join(cfg.TmpDir, "Provisioning_List_"+safeIP+".txt"))
+
+	return jobID, res, err
+}
+
+func ipToFileSafe(ip string) string {
+	out := make([]byte, len(ip))
+	for i := 0; i &lt; len(ip); i++ {
+		if ip[i] == '.' {
+			out[i] = '_'
+		} else {
+			out[i] = ip[i]
+		}
+	}
+	return string(out)
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase5.go <span class="lines">67줄 · Lv.4</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// Phase5Input mirrors affinity_setting's flags: -id -vcTargetIP -worklistFile -affinityFile.
+// ev01 (per host) always gets a deterministic 1:1 core pin regardless of the
+// affinity file; the affinity file's "key=value" pairs are applied to ev02 only
+// (this matches main_affinity.txt's behavior exactly, not a design choice made here).
+type Phase5Input struct {
+	Hosts         []string
+	AffinityPairs map[string]string // "sched.vcpuN.affinity" -> "a,b", applied to ev02
+}
+
+// RunPhase5 sets CPU affinity (main_affinity.txt / binary "affinity_setting"), RBAC level 4.
+func RunPhase5(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase5Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	jobID, err = CreateJob(db, "phase5_affinity", cred.ID, "", "", "", requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// Unlike Phase 3/4, affinity_setting does NOT split on "." — it matches
+	// VMs by exact "&lt;worklist entry&gt;ev01"/"ev02". Since Phase 3 names VMs
+	// using only the first dot-label, this phase must pre-truncate to match,
+	// or every host here silently logs "대상 VM이 존재하지 않습니다" and skips.
+	hosts := NormalizeHosts(db, jobID, in.Hosts)
+
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "worklist", hosts)
+	if err != nil {
+		return jobID, nil, fmt.Errorf("worklist 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	var affinityLines []string
+	for k, v := range in.AffinityPairs {
+		affinityLines = append(affinityLines, k+"="+v)
+	}
+	affinityPath, err := WriteTempFile(cfg.TmpDir, "affinity", affinityLines)
+	if err != nil {
+		return jobID, nil, fmt.Errorf("affinity 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(affinityPath)
+	affinityName := filepath.Base(affinityPath)
+
+	if _, err := db.Exec(`UPDATE jobs SET worklist_file = ?, mapfile = ? WHERE id = ?`, worklistName, affinityName, jobID); err != nil {
+		return jobID, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+		"-affinityFile", affinityName,
+	}
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "affinity_setting"), cfg.TmpDir, args, env)
+	return jobID, res, err
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase6.go <span class="lines">67줄 · Lv.4</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+	"strconv"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// Phase6Input mirrors lpage_setting's flags: -id -vcTargetIP -worklistFile
+// -ev01Cores -ev01Sockets -ev02Cores -ev02Sockets (all required, sockets != 0).
+type Phase6Input struct {
+	Hosts       []string
+	EV01Cores   int
+	EV01Sockets int
+	EV02Cores   int
+	EV02Sockets int
+}
+
+// RunPhase6 injects 1GB HugePage / NUMA VMX tuning (main_lpage.txt / binary
+// "lpage_setting"), RBAC level 4.
+func RunPhase6(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase6Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	if in.EV01Sockets == 0 || in.EV02Sockets == 0 {
+		return 0, nil, fmt.Errorf("소켓 수는 0이 될 수 없습니다")
+	}
+
+	params := fmt.Sprintf("ev01=%d/%d ev02=%d/%d", in.EV01Cores, in.EV01Sockets, in.EV02Cores, in.EV02Sockets)
+	jobID, err = CreateJob(db, "phase6_lpage", cred.ID, "", "", params, requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// Unlike Phase 3/4, lpage_setting does NOT split on "." — it matches VMs
+	// by exact "&lt;worklist entry&gt;ev01"/"ev02". Since Phase 3 names VMs using
+	// only the first dot-label, this phase must pre-truncate to match, or
+	// every host here silently logs "대상 VM이 존재하지 않습니다" and skips.
+	hosts := NormalizeHosts(db, jobID, in.Hosts)
+
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "worklist", hosts)
+	if err != nil {
+		return jobID, nil, fmt.Errorf("worklist 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	if _, err := db.Exec(`UPDATE jobs SET worklist_file = ? WHERE id = ?`, worklistName, jobID); err != nil {
+		return jobID, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+		"-ev01Cores", strconv.Itoa(in.EV01Cores),
+		"-ev01Sockets", strconv.Itoa(in.EV01Sockets),
+		"-ev02Cores", strconv.Itoa(in.EV02Cores),
+		"-ev02Sockets", strconv.Itoa(in.EV02Sockets),
+	}
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "lpage_setting"), cfg.TmpDir, args, env)
+	return jobID, res, err
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase7.go <span class="lines">65줄 · Lv.4 · 파괴적</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/models"
+	"vm-portal/internal/secrets"
+)
+
+// Phase7Input mirrors power_setting's flags: -id -vcTargetIP -worklistFile.
+// This is a destructive action (changes host power management policy) — RBAC
+// level 4 and a confirmation step are enforced at the HTTP handler.
+type Phase7Input struct {
+	Hosts  []string // ESXi (physical host) names, not VM names
+	DryRun bool      // M8: preview the worklist/command without executing power_setting
+}
+
+// RunPhase7 applies the "High Performance" power policy to hosts
+// (main_power_policy.txt / binary "power_setting"), RBAC level 4.
+func RunPhase7(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase7Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "worklist_bm", in.Hosts)
+	if err != nil {
+		return 0, nil, fmt.Errorf("worklist 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	jobID, err = CreateJob(db, "phase7_power_policy", cred.ID, worklistName, "", "", requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+	}
+
+	if in.DryRun {
+		return jobID, dryRunPreview(db, jobID, "power_setting", args, in.Hosts), nil
+	}
+
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "power_setting"), cfg.TmpDir, args, env)
+	return jobID, res, err
+}
+
+// dryRunPreview logs what a destructive phase *would* do — the binary path,
+// its args (password omitted), and the affected host/VM list — without
+// invoking exec.Command at all, then marks the job dry_run instead of
+// running/success/failed. This intentionally does not validate against
+// vCenter (that would mean reimplementing each binary's lookup logic, which
+// is exactly what the "wrap, don't rewrite" approach avoids); it is a
+// preview of the command that would run, not a vCenter-side dry-run.
+func dryRunPreview(db *sql.DB, jobID int64, binName string, args []string, targets []string) *Result {
+	lines := []string{
+		"[DRY-RUN] 실제로 실행되지 않았습니다. 아래는 예정된 작업 미리보기입니다.",
+		fmt.Sprintf("[DRY-RUN] 실행 파일: %s", binName),
+		fmt.Sprintf("[DRY-RUN] 인자: %v", args),
+		fmt.Sprintf("[DRY-RUN] 대상 (%d개): %v", len(targets), targets),
+	}
+	for _, l := range lines {
+		appendLog(db, jobID, l)
+	}
+	_ = setJobStatus(db, jobID, models.JobStatusDryRun)
+	return &amp;Result{Success: true, Lines: lines, DryRun: true}
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase8.go <span class="lines">50줄 · Lv.4 · 파괴적</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"path/filepath"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// Phase8Input mirrors vm_delete's flags: -id -vcTargetIP -worklistFile -confirm.
+// This targets exact VM names (not BM host names) deliberately — deletion is
+// the single most destructive action in the portal, so it should never guess
+// which VMs a host name expands to.
+type Phase8Input struct {
+	VMNames []string
+	DryRun  bool // M8: preview the delete list/command without executing vm_delete
+}
+
+// RunPhase8 powers off (if needed) and destroys VMs (new development — no
+// equivalent CLI script existed; see main_vm_delete.go / binary "vm_delete"),
+// RBAC level 4. The binary itself also requires -confirm=DELETE as a second,
+// independent safety check beyond the HTTP handler's confirmation gate.
+func RunPhase8(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase8Input, requestedBy int64) (jobID int64, res *Result, err error) {
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "delete_list", in.VMNames)
+	if err != nil {
+		return 0, nil, fmt.Errorf("삭제 목록 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	jobID, err = CreateJob(db, "phase8_vm_delete", cred.ID, worklistName, "", "", requestedBy)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+		"-confirm", "DELETE",
+	}
+
+	if in.DryRun {
+		return jobID, dryRunPreview(db, jobID, "vm_delete", args, in.VMNames), nil
+	}
+
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "vm_delete"), cfg.TmpDir, args, env)
+	return jobID, res, err
+}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">internal/phases/phase9.go <span class="lines">66줄 · Lv.1 · 읽기전용</span> <span class="hl">— M7 신규</span></div>
+          <pre class="codeblock">package phases
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"vm-portal/internal/config"
+	"vm-portal/internal/secrets"
+)
+
+// Phase9Input mirrors report's flags: -id -vcTargetIP -worklistFile -outCsv.
+// Unlike Phase 5/6, the report binary matches hosts by trying both the exact
+// worklist entry and the first "."-label (see main_report.go's targetHosts
+// loop: strings.EqualFold(hostClean, cleanName) || host.Name == line), so
+// like Phase 3/4 it needs no pre-truncation here.
+type Phase9Input struct {
+	Hosts []string
+}
+
+// RunPhase9 pulls a VM/PCI configuration inventory CSV across the given BM
+// hosts (main_report.txt / binary "report"), RBAC level 1 (read-only, per
+// the plan's RBAC table). The CSV the binary writes into its working
+// directory is moved into cfg.ReportsDir (not deleted like the scratch
+// worklist file) so it survives for later download via the job id.
+func RunPhase9(ctx context.Context, db *sql.DB, cfg config.Config, key []byte, cred *secrets.DecryptedCredential, in Phase9Input, requestedBy int64) (jobID int64, res *Result, reportFile string, err error) {
+	jobID, err = CreateJob(db, "phase9_report", cred.ID, "", "", "", requestedBy)
+	if err != nil {
+		return 0, nil, "", err
+	}
+
+	worklistPath, err := WriteTempFile(cfg.TmpDir, "worklist", in.Hosts)
+	if err != nil {
+		return jobID, nil, "", fmt.Errorf("worklist 파일 생성 실패: %w", err)
+	}
+	defer RemoveQuiet(worklistPath)
+	worklistName := filepath.Base(worklistPath)
+
+	csvName := fmt.Sprintf("report_job%d.csv", jobID)
+
+	if _, err := db.Exec(`UPDATE jobs SET worklist_file = ? WHERE id = ?`, worklistName, jobID); err != nil {
+		return jobID, nil, "", err
+	}
+
+	args := []string{
+		"-id", cred.VCID,
+		"-vcTargetIP", cred.VCenterIP,
+		"-worklistFile", worklistName,
+		"-outCsv", csvName,
+	}
+	env := []string{"VC_PASSWORD=" + cred.VCPassword}
+
+	res, err = Run(ctx, db, jobID, filepath.Join(cfg.BinDir, "report"), cfg.TmpDir, args, env)
+	if err != nil {
+		return jobID, res, "", err
+	}
+
+	tmpCSVPath := filepath.Join(cfg.TmpDir, csvName)
+	if _, statErr := os.Stat(tmpCSVPath); statErr != nil {
+		// Binary ran but produced no CSV (e.g. 0 matched hosts) — not an error,
+		// just nothing to download.
+		return jobID, res, "", nil
+	}
+
+	if err := os.MkdirAll(cfg.ReportsDir, 0700); err != nil {
+		return jobID, res, "", fmt.Errorf("리포트 디렉터리 생성 실패: %w", err)
+	}
+	finalPath := filepath.Join(cfg.ReportsDir, csvName)
+	if err := os.Rename(tmpCSVPath, finalPath); err != nil {
+		return jobID, res, "", fmt.Errorf("리포트 파일 이동 실패: %w", err)
+	}
+
+	if _, err := db.Exec(`UPDATE jobs SET mapfile = ? WHERE id = ?`, csvName, jobID); err != nil {
+		return jobID, res, "", err
+	}
+
+	return jobID, res, csvName, nil
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-webui">
+      <summary><span>internal/webui</span><span class="path">embed.go · templates/*.html</span><span class="count">18 files</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">internal/webui/embed.go <span class="lines">7줄</span></div>
+          <pre class="codeblock">// Package webui embeds the portal's html/template pages.
+package webui
+
+import "embed"
+
+//go:embed templates/*.html
+var FS embed.FS</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/base.html <span class="lines">251줄 · 공통 레이아웃</span> <span class="hl">— 클라우드 콘솔 스타일로 전면 재설계</span></div>
+          <pre class="codeblock">{{define "base"}}
+&lt;!doctype html&gt;
+&lt;html lang="ko"&gt;
+&lt;head&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+&lt;title&gt;VM 자동생성 포털&lt;/title&gt;
+&lt;style&gt;
+  :root {
+    --sidebar-bg: #10162b;
+    --sidebar-bg2: #161d38;
+    --sidebar-text: #aab4d4;
+    --sidebar-text-active: #ffffff;
+    --accent: #5b6cf9;
+    --accent-dark: #4453d8;
+    --bg: #f3f5fb;
+    --card-bg: #ffffff;
+    --border: #e3e7f2;
+    --text: #171b2e;
+    --text-muted: #6b7182;
+    --danger: #d93025;
+    --danger-bg: #fdecea;
+    --success: #17803d;
+    --success-bg: #e8f7ee;
+    --warning: #b45309;
+    --warning-bg: #fef3e2;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    margin: 0; color: var(--text); background: var(--bg);
+  }
+  a { color: var(--accent-dark); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .topbar {
+    display: flex; align-items: center; gap: .75rem;
+    height: 52px; padding: 0 1.25rem;
+    background: var(--sidebar-bg); color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .topbar-brand { display: flex; align-items: center; gap: .5rem; font-weight: 600; font-size: .95rem; letter-spacing: .01em; }
+  .topbar-brand svg { flex-shrink: 0; }
+  .topbar .spacer { flex: 1; }
+  .env-badge {
+    font-size: .72rem; color: #cfd6f5; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12); padding: .2rem .55rem; border-radius: 999px;
+  }
+
+  .app-body { display: flex; min-height: calc(100vh - 52px); }
+
+  .sidebar {
+    width: 236px; flex-shrink: 0; background: var(--sidebar-bg2);
+    color: var(--sidebar-text); padding: 1rem .75rem; overflow-y: auto;
+  }
+  .sidebar .group-label {
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+    color: #6b74a0; margin: 1rem .6rem .35rem; font-weight: 600;
+  }
+  .sidebar .group-label:first-child { margin-top: 0; }
+  .sidebar a.nav-link {
+    display: flex; align-items: center; gap: .55rem;
+    padding: .45rem .6rem; border-radius: 7px; font-size: .86rem;
+    color: var(--sidebar-text); text-decoration: none; margin-bottom: 1px;
+  }
+  .sidebar a.nav-link svg { flex-shrink: 0; opacity: .8; }
+  .sidebar a.nav-link:hover { background: rgba(255,255,255,.06); color: #fff; text-decoration: none; }
+  .sidebar a.nav-link.active { background: var(--accent); color: #fff; }
+  .sidebar a.nav-link.active svg { opacity: 1; }
+  .sidebar a.nav-link.danger-link:not(.active) { color: #e8a9a4; }
+
+  .user-panel {
+    margin-top: 1.25rem; padding: .75rem .6rem 0; border-top: 1px solid rgba(255,255,255,.08);
+  }
+  .user-panel .who { font-size: .82rem; color: #dfe3f7; margin-bottom: .5rem; }
+  .user-panel .who .lv { color: #8f98c4; }
+  .user-panel form button {
+    width: 100%; background: rgba(255,255,255,.06); color: #dfe3f7; border: 1px solid rgba(255,255,255,.1);
+    font-size: .8rem; padding: .4rem; margin-top: 0;
+  }
+  .user-panel form button:hover { background: rgba(255,255,255,.12); }
+
+  main.content { flex: 1; padding: 1.75rem 2.25rem; max-width: 980px; }
+
+  .auth-body { min-height: calc(100vh - 52px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
+  .auth-card {
+    width: 100%; max-width: 360px; background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 2rem; box-shadow: 0 8px 28px rgba(20,25,60,.06);
+  }
+
+  h1 { font-size: 1.35rem; margin: 0 0 1rem; font-weight: 650; }
+  h3 { font-size: 1rem; margin: 0; }
+
+  fieldset { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; background: var(--card-bg); padding: 1rem 1.1rem; }
+  legend { padding: 0 .4rem; font-weight: 600; font-size: .88rem; }
+  label { display: block; margin-top: .7rem; font-size: .85rem; color: var(--text-muted); }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%; padding: .55rem .65rem; box-sizing: border-box; margin-top: .3rem;
+    border: 1px solid var(--border); border-radius: 7px; font-size: .9rem; color: var(--text);
+    background: #fff; font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,108,249,.15); }
+  textarea { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .82rem; }
+
+  button {
+    margin-top: 1.1rem; padding: .55rem 1.3rem; background: var(--accent); color: #fff;
+    border: none; border-radius: 7px; cursor: pointer; font-size: .88rem; font-weight: 550;
+  }
+  button:hover { background: var(--accent-dark); }
+  button.danger { background: var(--danger); }
+  button.danger:hover { background: #b8291f; }
+
+  .error { color: var(--danger); background: var(--danger-bg); padding: .65rem .8rem; border-radius: 7px; font-size: .88rem; }
+  .ok { color: var(--success); background: var(--success-bg); padding: .65rem .8rem; border-radius: 7px; font-size: .88rem; }
+
+  pre.log {
+    background: #0d1224; color: #d3d8f0; padding: 1rem; border-radius: var(--radius);
+    overflow-x: auto; max-height: 60vh; font-size: .82rem; line-height: 1.5;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  table { border-collapse: collapse; width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  th, td { border-bottom: 1px solid var(--border); padding: .55rem .75rem; text-align: left; font-size: .86rem; }
+  th { background: #f8f9fd; color: var(--text-muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+  tr:last-child td { border-bottom: none; }
+
+  .phase-groups { display: flex; flex-direction: column; gap: 1.5rem; }
+  .phase-group-label { font-size: .8rem; font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .6rem; }
+  .phase-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .9rem; }
+  .phase-card {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem;
+    background: var(--card-bg); border-left: 3px solid var(--accent);
+    box-shadow: 0 1px 2px rgba(20,25,60,.03);
+  }
+  .phase-card.danger { border-left-color: var(--danger); }
+  .phase-card.report { border-left-color: var(--success); }
+  .phase-card .icon-row { display: flex; align-items: center; gap: .55rem; margin-bottom: .5rem; }
+  .phase-card .icon-badge {
+    width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    background: rgba(91,108,249,.1); color: var(--accent-dark); flex-shrink: 0;
+  }
+  .phase-card.danger .icon-badge { background: var(--danger-bg); color: var(--danger); }
+  .phase-card.report .icon-badge { background: var(--success-bg); color: var(--success); }
+  .phase-card p.desc { font-size: .82rem; color: var(--text-muted); margin: 0 0 .7rem; min-height: 2.2em; }
+  .phase-card a.run-link { font-size: .84rem; font-weight: 600; }
+
+  .level-badge { display: inline-block; font-size: .7rem; padding: .12rem .5rem; border-radius: 999px; background: #eef0fb; color: #4b52a8; font-weight: 600; }
+  .status-badge { display: inline-block; font-size: .76rem; padding: .2rem .6rem; border-radius: 999px; font-weight: 650; }
+  .status-badge.success { background: var(--success-bg); color: var(--success); }
+  .status-badge.failed { background: var(--danger-bg); color: var(--danger); }
+  .status-badge.dry_run { background: var(--warning-bg); color: var(--warning); }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;header class="topbar"&gt;
+  &lt;a class="topbar-brand" href="/"&gt;
+    &lt;svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"&gt;&lt;path d="M7 18a4.5 4.5 0 0 1-.5-8.97A5.5 5.5 0 0 1 17.2 7.05 4 4 0 0 1 17 15H7Z"/&gt;&lt;/svg&gt;
+    VM 자동생성 포털
+  &lt;/a&gt;
+  &lt;span class="spacer"&gt;&lt;/span&gt;
+  {{if .User}}&lt;span class="env-badge"&gt;on-prem · vCenter&lt;/span&gt;{{end}}
+&lt;/header&gt;
+{{if .User}}
+&lt;div class="app-body"&gt;
+  &lt;aside class="sidebar"&gt;
+    &lt;div class="group-label"&gt;개요&lt;/div&gt;
+    &lt;a class="nav-link{{if eq .Path "/"}} active{{end}}" href="/"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;rect x="3" y="3" width="7" height="7" rx="1.5"/&gt;&lt;rect x="14" y="3" width="7" height="7" rx="1.5"/&gt;&lt;rect x="3" y="14" width="7" height="7" rx="1.5"/&gt;&lt;rect x="14" y="14" width="7" height="7" rx="1.5"/&gt;&lt;/svg&gt;
+      대시보드
+    &lt;/a&gt;
+    &lt;a class="nav-link{{if eq .Path "/pipeline"}} active{{end}}" href="/pipeline"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M5 4l14 8-14 8V4z"/&gt;&lt;/svg&gt;
+      Phase 1~6 일괄 실행
+    &lt;/a&gt;
+
+    &lt;div class="group-label"&gt;프로비저닝&lt;/div&gt;
+    &lt;a class="nav-link{{if eq .Path "/phase1"}} active{{end}}" href="/phase1"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;rect x="3" y="4" width="18" height="6" rx="1.5"/&gt;&lt;rect x="3" y="14" width="18" height="6" rx="1.5"/&gt;&lt;circle cx="7" cy="7" r=".6" fill="currentColor"/&gt;&lt;circle cx="7" cy="17" r=".6" fill="currentColor"/&gt;&lt;/svg&gt;
+      Phase 1 · 호스트 등록
+    &lt;/a&gt;
+    &lt;a class="nav-link{{if eq .Path "/phase2"}} active{{end}}" href="/phase2"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;circle cx="6" cy="6" r="2.3"/&gt;&lt;circle cx="18" cy="6" r="2.3"/&gt;&lt;circle cx="12" cy="18" r="2.3"/&gt;&lt;path d="M8 7l3 9M16 7l-3 9"/&gt;&lt;/svg&gt;
+      Phase 2 · vSwitch/포트그룹
+    &lt;/a&gt;
+    &lt;a class="nav-link{{if eq .Path "/phase3"}} active{{end}}" href="/phase3"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/&gt;&lt;path d="M12 3v18M4 7.5l8 4.5 8-4.5"/&gt;&lt;/svg&gt;
+      Phase 3 · VM 생성
+    &lt;/a&gt;
+    &lt;a class="nav-link{{if eq .Path "/phase4"}} active{{end}}" href="/phase4"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M20 12l-7.5 7.5a2 2 0 0 1-2.8 0L4 13.8V5a1 1 0 0 1 1-1h8.8L20 10.2a2 2 0 0 1 0 1.8z"/&gt;&lt;circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/&gt;&lt;/svg&gt;
+      Phase 4 · MAC/IP 추출
+    &lt;/a&gt;
+
+    &lt;div class="group-label"&gt;튜닝&lt;/div&gt;
+    &lt;a class="nav-link{{if eq .Path "/phase5"}} active{{end}}" href="/phase5"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;rect x="7" y="7" width="10" height="10" rx="1.5"/&gt;&lt;path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/&gt;&lt;/svg&gt;
+      Phase 5 · CPU Affinity
+    &lt;/a&gt;
+    &lt;a class="nav-link{{if eq .Path "/phase6"}} active{{end}}" href="/phase6"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M12 2 3 7l9 5 9-5-9-5z"/&gt;&lt;path d="M3 12l9 5 9-5M3 17l9 5 9-5"/&gt;&lt;/svg&gt;
+      Phase 6 · lpage/NUMA
+    &lt;/a&gt;
+
+    &lt;div class="group-label"&gt;운영 (파괴적)&lt;/div&gt;
+    &lt;a class="nav-link danger-link{{if eq .Path "/phase7"}} active{{end}}" href="/phase7"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M12 2v8"/&gt;&lt;path d="M6.3 6.3a8 8 0 1 0 11.4 0"/&gt;&lt;/svg&gt;
+      Phase 7 · 전원 정책
+    &lt;/a&gt;
+    &lt;a class="nav-link danger-link{{if eq .Path "/phase8"}} active{{end}}" href="/phase8"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M4 7h16M9 7V4h6v3M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/&gt;&lt;/svg&gt;
+      Phase 8 · VM 삭제
+    &lt;/a&gt;
+
+    &lt;div class="group-label"&gt;리포트&lt;/div&gt;
+    &lt;a class="nav-link{{if eq .Path "/phase9"}} active{{end}}" href="/phase9"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M4 20V10M12 20V4M20 20v-7"/&gt;&lt;/svg&gt;
+      Phase 9 · 설정/PCI 리포트
+    &lt;/a&gt;
+
+    &lt;div class="group-label"&gt;관리&lt;/div&gt;
+    &lt;a class="nav-link{{if eq .Path "/credentials"}} active{{end}}" href="/credentials"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;circle cx="7.5" cy="15.5" r="4.5"/&gt;&lt;path d="M11 12l9-9M17 6l3 3M14 9l2 2"/&gt;&lt;/svg&gt;
+      vCenter 자격증명
+    &lt;/a&gt;
+    {{if ge .User.RBACLevel 5}}
+    &lt;a class="nav-link{{if eq .Path "/audit"}} active{{end}}" href="/audit"&gt;
+      &lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3z"/&gt;&lt;path d="M9 12l2 2 4-4"/&gt;&lt;/svg&gt;
+      감사 로그
+    &lt;/a&gt;
+    {{end}}
+
+    &lt;div class="user-panel"&gt;
+      &lt;div class="who"&gt;{{.User.Username}} &lt;span class="lv"&gt;· Lv.{{.User.RBACLevel}}&lt;/span&gt;&lt;/div&gt;
+      &lt;form action="/logout" method="post"&gt;&lt;button type="submit"&gt;로그아웃&lt;/button&gt;&lt;/form&gt;
+    &lt;/div&gt;
+  &lt;/aside&gt;
+  &lt;main class="content"&gt;
+{{template "content" .}}
+  &lt;/main&gt;
+&lt;/div&gt;
+{{else}}
+&lt;div class="auth-body"&gt;
+  &lt;div class="auth-card"&gt;
+{{template "content" .}}
+  &lt;/div&gt;
+&lt;/div&gt;
+{{end}}
+&lt;/body&gt;
+&lt;/html&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/login.html <span class="lines">15줄</span> <span class="hl">— 스플래시 카드로 재설계</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;div style="text-align:center; margin-bottom:1.5rem"&gt;
+  &lt;div style="width:44px; height:44px; border-radius:10px; background:rgba(91,108,249,.1); color:var(--accent-dark); display:flex; align-items:center; justify-content:center; margin:0 auto .75rem"&gt;
+    &lt;svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"&gt;&lt;path d="M7 18a4.5 4.5 0 0 1-.5-8.97A5.5 5.5 0 0 1 17.2 7.05 4 4 0 0 1 17 15H7Z"/&gt;&lt;/svg&gt;
+  &lt;/div&gt;
+  &lt;h1 style="margin-bottom:.15rem"&gt;VM 자동생성 포털&lt;/h1&gt;
+  &lt;p style="color:var(--text-muted); font-size:.85rem; margin:0"&gt;vCenter/ESXi 자동화 워크플로우&lt;/p&gt;
+&lt;/div&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/login"&gt;
+  &lt;label&gt;아이디&lt;input type="text" name="username" required autofocus&gt;&lt;/label&gt;
+  &lt;label&gt;비밀번호&lt;input type="password" name="password" required&gt;&lt;/label&gt;
+  &lt;button type="submit" style="width:100%"&gt;로그인&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/dashboard.html <span class="lines">115줄</span> <span class="hl">— 그룹형 카드 + SVG 아이콘으로 재설계, Phase 9 카드 추가</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;VM 자동생성 대시보드&lt;/h1&gt;
+&lt;p style="color:var(--text-muted); font-size:.88rem; margin-top:-.6rem"&gt;vCenter/ESXi 자동화 스크립트를 실행할 단계를 선택하세요.&lt;/p&gt;
+
+&lt;div class="phase-groups"&gt;
+  &lt;div&gt;
+    &lt;div class="phase-group-label"&gt;프로비저닝&lt;/div&gt;
+    &lt;div class="phase-grid"&gt;
+      &lt;div class="phase-card"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;rect x="3" y="4" width="18" height="6" rx="1.5"/&gt;&lt;rect x="3" y="14" width="18" height="6" rx="1.5"/&gt;&lt;circle cx="7" cy="7" r=".6" fill="currentColor"/&gt;&lt;circle cx="7" cy="17" r=".6" fill="currentColor"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 1&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.3+&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;ESXi 호스트를 vCenter에 등록&lt;/p&gt;
+        &lt;a class="run-link" href="/phase1"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+      &lt;div class="phase-card"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;circle cx="6" cy="6" r="2.3"/&gt;&lt;circle cx="18" cy="6" r="2.3"/&gt;&lt;circle cx="12" cy="18" r="2.3"/&gt;&lt;path d="M8 7l3 9M16 7l-3 9"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 2&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.3+&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;vSwitch / 포트그룹 생성&lt;/p&gt;
+        &lt;a class="run-link" href="/phase2"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+      &lt;div class="phase-card"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/&gt;&lt;path d="M12 3v18M4 7.5l8 4.5 8-4.5"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 3&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.3+&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;VM 생성 (hostgroup 매핑, firmware)&lt;/p&gt;
+        &lt;a class="run-link" href="/phase3"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+      &lt;div class="phase-card"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M20 12l-7.5 7.5a2 2 0 0 1-2.8 0L4 13.8V5a1 1 0 0 1 1-1h8.8L20 10.2a2 2 0 0 1 0 1.8z"/&gt;&lt;circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 4&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.3+&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;MAC/IP 추출 (Kickstart 리스트)&lt;/p&gt;
+        &lt;a class="run-link" href="/phase4"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;div&gt;
+    &lt;div class="phase-group-label"&gt;튜닝&lt;/div&gt;
+    &lt;div class="phase-grid"&gt;
+      &lt;div class="phase-card"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;rect x="7" y="7" width="10" height="10" rx="1.5"/&gt;&lt;path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 5&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.4+&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;CPU Affinity 설정&lt;/p&gt;
+        &lt;a class="run-link" href="/phase5"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+      &lt;div class="phase-card"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M12 2 3 7l9 5 9-5-9-5z"/&gt;&lt;path d="M3 12l9 5 9-5M3 17l9 5 9-5"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 6&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.4+&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;lpage / NUMA 튜닝&lt;/p&gt;
+        &lt;a class="run-link" href="/phase6"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;div&gt;
+    &lt;div class="phase-group-label"&gt;운영 (파괴적 작업)&lt;/div&gt;
+    &lt;div class="phase-grid"&gt;
+      &lt;div class="phase-card danger"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M12 2v8"/&gt;&lt;path d="M6.3 6.3a8 8 0 1 0 11.4 0"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 7&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.4+ 파괴적&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;전원 정책 일괄 변경&lt;/p&gt;
+        &lt;a class="run-link" href="/phase7"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+      &lt;div class="phase-card danger"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M4 7h16M9 7V4h6v3M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 8&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.4+ 파괴적&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;VM 삭제 (전원 종료 후 완전 삭제)&lt;/p&gt;
+        &lt;a class="run-link" href="/phase8"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;div&gt;
+    &lt;div class="phase-group-label"&gt;리포트&lt;/div&gt;
+    &lt;div class="phase-grid"&gt;
+      &lt;div class="phase-card report"&gt;
+        &lt;div class="icon-row"&gt;
+          &lt;div class="icon-badge"&gt;&lt;svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"&gt;&lt;path d="M4 20V10M12 20V4M20 20v-7"/&gt;&lt;/svg&gt;&lt;/div&gt;
+          &lt;h3&gt;Phase 9&lt;/h3&gt;
+          &lt;span class="level-badge" style="margin-left:auto"&gt;Lv.1+ 읽기전용&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;p class="desc"&gt;VM 설정 / PCI 점검 리포트 (CSV)&lt;/p&gt;
+        &lt;a class="run-link" href="/phase9"&gt;실행하기 →&lt;/a&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;p style="margin-top:1.75rem"&gt;&lt;a href="/pipeline"&gt;Phase 1~6 한 번에 실행하기 →&lt;/a&gt;&lt;/p&gt;
+{{if .User}}{{if ge .User.RBACLevel 5}}&lt;p style="margin-top:.4rem"&gt;&lt;a href="/audit"&gt;감사 로그 조회 →&lt;/a&gt;&lt;/p&gt;{{end}}{{end}}
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/credentials.html <span class="lines">25줄</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;vCenter 자격증명&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+{{if .OK}}&lt;p class="ok"&gt;{{.OK}}&lt;/p&gt;{{end}}
+&lt;table&gt;
+  &lt;tr&gt;&lt;th&gt;이름&lt;/th&gt;&lt;th&gt;vCenter IP&lt;/th&gt;&lt;th&gt;계정&lt;/th&gt;&lt;th&gt;등록자&lt;/th&gt;&lt;th&gt;등록일&lt;/th&gt;&lt;/tr&gt;
+  {{range .Credentials}}
+  &lt;tr&gt;&lt;td&gt;{{.Name}}&lt;/td&gt;&lt;td&gt;{{.VCenterIP}}&lt;/td&gt;&lt;td&gt;{{.VCID}}&lt;/td&gt;&lt;td&gt;{{.CreatedBy}}&lt;/td&gt;&lt;td&gt;{{.CreatedAt.Format "2006-01-02 15:04"}}&lt;/td&gt;&lt;/tr&gt;
+  {{end}}
+&lt;/table&gt;
+
+{{if ge .User.RBACLevel 5}}
+&lt;fieldset&gt;
+&lt;legend&gt;자격증명 추가 (Lv.5 Admin)&lt;/legend&gt;
+&lt;form method="post" action="/credentials"&gt;
+  &lt;label&gt;표시 이름&lt;input type="text" name="name" required placeholder="예: home-lab"&gt;&lt;/label&gt;
+  &lt;label&gt;vCenter IP&lt;input type="text" name="vcenter_ip" required placeholder="192.168.0.50"&gt;&lt;/label&gt;
+  &lt;label&gt;vCenter 로그인 계정&lt;input type="text" name="vc_id" required value="administrator@vsphere.local"&gt;&lt;/label&gt;
+  &lt;label&gt;vCenter 비밀번호&lt;input type="password" name="vc_password" required&gt;&lt;/label&gt;
+  &lt;label&gt;ESXi root 비밀번호 (Phase 1 호스트 등록에 필요, 선택)&lt;input type="password" name="esxi_password"&gt;&lt;/label&gt;
+  &lt;button type="submit"&gt;저장&lt;/button&gt;
+&lt;/form&gt;
+&lt;/fieldset&gt;
+{{end}}
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase1.html <span class="lines">16줄</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 1 — ESXi 호스트 등록&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/phase1"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 폴더/클러스터/데이터센터 이름&lt;input type="text" name="folder_name" required placeholder="예: task"&gt;&lt;/label&gt;
+  &lt;label&gt;ESXi 호스트 목록 (줄바꿈으로 구분)
+    &lt;textarea name="hosts" rows="6" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;button type="submit"&gt;등록 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase2.html <span class="lines">16줄</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 2 — vSwitch / 포트그룹 생성&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/phase2"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 vSwitch&lt;input type="text" name="target_vswitch" value="vSwitch0" required&gt;&lt;/label&gt;
+  &lt;label&gt;포트그룹 설정 (한 줄에 "호스트 포트그룹명 VLAN번호")
+    &lt;textarea name="entries" rows="6" required placeholder="esxi01.lab.local PG-App 100&amp;#10;esxi02.lab.local PG-App 100"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;button type="submit"&gt;생성 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase3.html <span class="lines">38줄</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 3 — VM 생성&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/phase3"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;데이터센터 이름 (데이터센터가 1개뿐이면 비워두세요)&lt;input type="text" name="datacenter"&gt;&lt;/label&gt;
+  &lt;label&gt;Firmware
+    &lt;select name="firmware"&gt;&lt;option value="efi" selected&gt;efi (권장)&lt;/option&gt;&lt;option value="bios"&gt;bios&lt;/option&gt;&lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;BM 호스트당 생성할 VM 수 (1~3)&lt;input type="number" name="vm_count" value="2" min="1" max="3" required&gt;&lt;/label&gt;
+  &lt;label&gt;대상 BM 호스트 목록 (줄바꿈으로 구분)
+    &lt;textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;label&gt;Hostgroup 매핑 (한 줄에 "호스트 포트그룹명")
+    &lt;textarea name="hostgroup_map" rows="4" placeholder="esxi01.lab.local PG-App"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+
+  &lt;fieldset&gt;
+    &lt;legend&gt;EV01 스펙&lt;/legend&gt;
+    &lt;label&gt;CPU&lt;input type="number" name="ev01_cpu" value="2" required&gt;&lt;/label&gt;
+    &lt;label&gt;Mem(GB)&lt;input type="number" name="ev01_mem" value="4" required&gt;&lt;/label&gt;
+    &lt;label&gt;Disk(GB)&lt;input type="number" name="ev01_disk" value="40" required&gt;&lt;/label&gt;
+    &lt;label&gt;Share&lt;input type="number" name="ev01_share" value="1000" required&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+  &lt;fieldset&gt;
+    &lt;legend&gt;EV02 스펙&lt;/legend&gt;
+    &lt;label&gt;CPU&lt;input type="number" name="ev02_cpu" value="4" required&gt;&lt;/label&gt;
+    &lt;label&gt;Mem(GB)&lt;input type="number" name="ev02_mem" value="8" required&gt;&lt;/label&gt;
+    &lt;label&gt;Disk(GB)&lt;input type="number" name="ev02_disk" value="80" required&gt;&lt;/label&gt;
+    &lt;label&gt;Share&lt;input type="number" name="ev02_share" value="2000" required&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+  &lt;button type="submit"&gt;생성 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase4.html <span class="lines">18줄</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 4 — MAC/IP 추출 (Kickstart 리스트)&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/phase4"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 BM 호스트 목록 (줄바꿈으로 구분, ev01/ev02 VM을 자동 매칭)
+    &lt;textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;label&gt;배포 인자 1 (arg1, 필수 — 예: 프로젝트/프로파일 이름)&lt;input type="text" name="arg1" required placeholder="PROJ_X"&gt;&lt;/label&gt;
+  &lt;label&gt;배포 정수 인자 (argInt, 필수)&lt;input type="number" name="arg_int" required placeholder="8080"&gt;&lt;/label&gt;
+  &lt;label&gt;배포 문자 인자 (argStr, 필수)&lt;input type="text" name="arg_str" required placeholder="Standard"&gt;&lt;/label&gt;
+  &lt;button type="submit"&gt;추출 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase5.html <span class="lines">18줄</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 5 — CPU Affinity 설정 &lt;span class="level-badge"&gt;Lv.4+&lt;/span&gt;&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/phase5"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 BM 호스트 목록 (줄바꿈으로 구분 — ev01은 항상 1:1 코어 고정, ev02는 아래 affinity 값 적용)
+    &lt;textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;label&gt;EV02 Affinity 설정 (선택, 한 줄에 "키=값" — 비우면 EV02는 건너뜁니다)
+    &lt;textarea name="affinity_pairs" rows="4" placeholder="sched.vcpu0.affinity=0,1&amp;#10;sched.vcpu1.affinity=2,3"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;button type="submit"&gt;설정 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase6.html <span class="lines">25줄</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 6 — lpage / NUMA 튜닝 &lt;span class="level-badge"&gt;Lv.4+&lt;/span&gt;&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/phase6"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 BM 호스트 목록 (줄바꿈으로 구분)
+    &lt;textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;fieldset&gt;
+    &lt;legend&gt;EV01&lt;/legend&gt;
+    &lt;label&gt;Cores&lt;input type="number" name="ev01_cores" required min="1"&gt;&lt;/label&gt;
+    &lt;label&gt;Sockets&lt;input type="number" name="ev01_sockets" required min="1"&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+  &lt;fieldset&gt;
+    &lt;legend&gt;EV02&lt;/legend&gt;
+    &lt;label&gt;Cores&lt;input type="number" name="ev02_cores" required min="1"&gt;&lt;/label&gt;
+    &lt;label&gt;Sockets&lt;input type="number" name="ev02_sockets" required min="1"&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+  &lt;button type="submit"&gt;설정 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase7.html <span class="lines">24줄 · 파괴적</span> <span class="hl">— Dry-run 체크박스 추가 (M8)</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 7 — 전원 정책 변경 &lt;span class="level-badge"&gt;Lv.4+ / 파괴적 작업&lt;/span&gt;&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;p style="color:#c62828"&gt;모든 대상 ESXi 호스트의 전원 관리 정책을 "고성능(High Performance)"으로 일괄 변경합니다. 되돌리려면 vCenter에서 수동으로 재설정해야 합니다.&lt;/p&gt;
+&lt;form method="post" action="/phase7" onsubmit="return this.dry_run.checked || confirm('선택한 모든 호스트의 전원 정책을 변경합니다. 계속하시겠습니까?');"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 ESXi 호스트 목록 (줄바꿈으로 구분)
+    &lt;textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem"&gt;
+    &lt;input type="checkbox" name="dry_run" style="width:auto; margin:0"&gt;
+    Dry-run (실행 없이 대상/명령만 미리보기)
+  &lt;/label&gt;
+  &lt;label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem"&gt;
+    &lt;input type="checkbox" name="confirm" required style="width:auto; margin:0"&gt;
+    위 호스트들의 전원 정책이 변경됨을 확인했습니다.
+  &lt;/label&gt;
+  &lt;button type="submit" class="danger"&gt;전원 정책 변경 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase8.html <span class="lines">23줄 · 파괴적</span> <span class="hl">— Dry-run 체크박스 추가 (M8, DELETE 입력 자동 비활성화)</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 8 — VM 삭제 &lt;span class="level-badge"&gt;Lv.4+ / 파괴적 작업&lt;/span&gt;&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;p style="color:#c62828"&gt;아래 목록의 VM을 전원 종료 후 완전히 삭제합니다. 되돌릴 수 없습니다. BM 호스트명이 아니라 정확한 VM 이름을 입력하세요 (예: esxi01ev01).&lt;/p&gt;
+&lt;form method="post" action="/phase8" onsubmit="return this.dry_run.checked || confirm('입력한 VM들을 영구적으로 삭제합니다. 정말 계속하시겠습니까?');"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;삭제할 VM 이름 목록 (줄바꿈으로 구분, 정확한 VM 이름)
+    &lt;textarea name="vm_names" rows="4" required placeholder="esxi01ev01&amp;#10;esxi01ev02"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem"&gt;
+    &lt;input type="checkbox" name="dry_run" style="width:auto; margin:0" onchange="document.getElementById('confirm_text').required = !this.checked; document.getElementById('confirm_text').disabled = this.checked;"&gt;
+    Dry-run (실행 없이 대상/명령만 미리보기 — DELETE 입력 불필요)
+  &lt;/label&gt;
+  &lt;label&gt;확인을 위해 아래에 정확히 &lt;code&gt;DELETE&lt;/code&gt;를 입력하세요
+    &lt;input type="text" id="confirm_text" name="confirm_text" required placeholder="DELETE"&gt;
+  &lt;/label&gt;
+  &lt;button type="submit" class="danger"&gt;영구 삭제 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/phase9.html <span class="lines">15줄 · 읽기전용</span> <span class="hl">— M7 신규</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 9 — VM 설정 / PCI 점검 리포트 &lt;span class="level-badge"&gt;Lv.1+ / 읽기전용&lt;/span&gt;&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;form method="post" action="/phase9"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 BM 호스트 목록 (줄바꿈으로 구분)
+    &lt;textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;button type="submit"&gt;리포트 조회&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/pipeline.html <span class="lines">78줄 · Phase 1~6 통합</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 1~6 전체 실행&lt;/h1&gt;
+{{if .Error}}&lt;p class="error"&gt;{{.Error}}&lt;/p&gt;{{end}}
+&lt;p style="color:#555; font-size:.9rem"&gt;체크한 단계만 순서대로(1→6) 실행됩니다. 아래 "호스트 목록"과 "포트그룹"은 여러 단계가 공유합니다.&lt;/p&gt;
+&lt;form method="post" action="/pipeline"&gt;
+  &lt;label&gt;vCenter 자격증명
+    &lt;select name="credential_id" required&gt;
+      {{range .Credentials}}&lt;option value="{{.ID}}"&gt;{{.Name}} ({{.VCenterIP}})&lt;/option&gt;{{end}}
+    &lt;/select&gt;
+  &lt;/label&gt;
+  &lt;label&gt;대상 ESXi/BM 호스트 목록 (줄바꿈으로 구분 — Phase 1,2,3,4,5,6 공통)
+    &lt;textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&amp;#10;esxi02.lab.local"&gt;&lt;/textarea&gt;
+  &lt;/label&gt;
+  &lt;label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem"&gt;
+    &lt;input type="checkbox" name="stop_on_fail" checked style="width:auto; margin:0"&gt;
+    한 단계라도 실패하면 이후 단계를 중단합니다 (권장)
+  &lt;/label&gt;
+
+  &lt;fieldset&gt;
+    &lt;legend&gt;&lt;label style="display:flex;align-items:center;gap:.5rem;margin:0"&gt;&lt;input type="checkbox" name="enable_phase1" checked style="width:auto;margin:0"&gt;Phase 1 — ESXi 호스트 등록&lt;/label&gt;&lt;/legend&gt;
+    &lt;label&gt;대상 폴더/클러스터/데이터센터 이름&lt;input type="text" name="folder_name" placeholder="예: task"&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+
+  &lt;fieldset&gt;
+    &lt;legend&gt;&lt;label style="display:flex;align-items:center;gap:.5rem;margin:0"&gt;&lt;input type="checkbox" name="enable_phase2" checked style="width:auto;margin:0"&gt;Phase 2 — vSwitch 포트그룹 생성&lt;/label&gt;&lt;/legend&gt;
+    &lt;label&gt;대상 vSwitch&lt;input type="text" name="target_vswitch" value="vSwitch0"&gt;&lt;/label&gt;
+    &lt;label&gt;포트그룹명 (Phase 2에서 생성, Phase 3 네트워크 매핑에도 그대로 사용됩니다)&lt;input type="text" name="portgroup_name" placeholder="PG-App"&gt;&lt;/label&gt;
+    &lt;label&gt;VLAN 번호&lt;input type="number" name="vlan_id" value="0"&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+
+  &lt;fieldset&gt;
+    &lt;legend&gt;&lt;label style="display:flex;align-items:center;gap:.5rem;margin:0"&gt;&lt;input type="checkbox" name="enable_phase3" checked style="width:auto;margin:0"&gt;Phase 3 — VM 생성&lt;/label&gt;&lt;/legend&gt;
+    &lt;label&gt;데이터센터 이름 (1개뿐이면 비워두세요)&lt;input type="text" name="datacenter"&gt;&lt;/label&gt;
+    &lt;label&gt;Firmware
+      &lt;select name="firmware"&gt;&lt;option value="efi" selected&gt;efi (권장)&lt;/option&gt;&lt;option value="bios"&gt;bios&lt;/option&gt;&lt;/select&gt;
+    &lt;/label&gt;
+    &lt;label&gt;BM 호스트당 생성할 VM 수 (1~3)&lt;input type="number" name="vm_count" value="2" min="1" max="3"&gt;&lt;/label&gt;
+    &lt;fieldset&gt;
+      &lt;legend&gt;EV01 스펙&lt;/legend&gt;
+      &lt;label&gt;CPU&lt;input type="number" name="ev01_cpu" value="2"&gt;&lt;/label&gt;
+      &lt;label&gt;Mem(GB)&lt;input type="number" name="ev01_mem" value="4"&gt;&lt;/label&gt;
+      &lt;label&gt;Disk(GB)&lt;input type="number" name="ev01_disk" value="40"&gt;&lt;/label&gt;
+      &lt;label&gt;Share&lt;input type="number" name="ev01_share" value="1000"&gt;&lt;/label&gt;
+    &lt;/fieldset&gt;
+    &lt;fieldset&gt;
+      &lt;legend&gt;EV02 스펙&lt;/legend&gt;
+      &lt;label&gt;CPU&lt;input type="number" name="ev02_cpu" value="4"&gt;&lt;/label&gt;
+      &lt;label&gt;Mem(GB)&lt;input type="number" name="ev02_mem" value="8"&gt;&lt;/label&gt;
+      &lt;label&gt;Disk(GB)&lt;input type="number" name="ev02_disk" value="80"&gt;&lt;/label&gt;
+      &lt;label&gt;Share&lt;input type="number" name="ev02_share" value="2000"&gt;&lt;/label&gt;
+    &lt;/fieldset&gt;
+  &lt;/fieldset&gt;
+
+  &lt;fieldset&gt;
+    &lt;legend&gt;&lt;label style="display:flex;align-items:center;gap:.5rem;margin:0"&gt;&lt;input type="checkbox" name="enable_phase4" style="width:auto;margin:0"&gt;Phase 4 — MAC/IP 추출 (Kickstart 리스트)&lt;/label&gt;&lt;/legend&gt;
+    &lt;label&gt;배포 인자 1 (arg1)&lt;input type="text" name="arg1" placeholder="PROJ_X"&gt;&lt;/label&gt;
+    &lt;label&gt;배포 정수 인자 (argInt)&lt;input type="number" name="arg_int" placeholder="8080"&gt;&lt;/label&gt;
+    &lt;label&gt;배포 문자 인자 (argStr)&lt;input type="text" name="arg_str" placeholder="Standard"&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+
+  &lt;fieldset&gt;
+    &lt;legend&gt;&lt;label style="display:flex;align-items:center;gap:.5rem;margin:0"&gt;&lt;input type="checkbox" name="enable_phase5" style="width:auto;margin:0"&gt;Phase 5 — CPU Affinity 설정 &lt;span class="level-badge"&gt;Lv.4+&lt;/span&gt;&lt;/label&gt;&lt;/legend&gt;
+    &lt;label&gt;EV02 Affinity 설정 (선택, 한 줄에 "키=값")
+      &lt;textarea name="affinity_pairs" rows="3" placeholder="sched.vcpu0.affinity=0,1"&gt;&lt;/textarea&gt;
+    &lt;/label&gt;
+  &lt;/fieldset&gt;
+
+  &lt;fieldset&gt;
+    &lt;legend&gt;&lt;label style="display:flex;align-items:center;gap:.5rem;margin:0"&gt;&lt;input type="checkbox" name="enable_phase6" style="width:auto;margin:0"&gt;Phase 6 — lpage / NUMA 튜닝 &lt;span class="level-badge"&gt;Lv.4+&lt;/span&gt;&lt;/label&gt;&lt;/legend&gt;
+    &lt;label&gt;EV01 Cores&lt;input type="number" name="ev01_cores" value="2"&gt;&lt;/label&gt;
+    &lt;label&gt;EV01 Sockets&lt;input type="number" name="ev01_sockets" value="2"&gt;&lt;/label&gt;
+    &lt;label&gt;EV02 Cores&lt;input type="number" name="ev02_cores" value="1"&gt;&lt;/label&gt;
+    &lt;label&gt;EV02 Sockets&lt;input type="number" name="ev02_sockets" value="2"&gt;&lt;/label&gt;
+  &lt;/fieldset&gt;
+
+  &lt;button type="submit"&gt;전체 실행&lt;/button&gt;
+&lt;/form&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/pipeline_result.html <span class="lines">13줄</span> <span class="hl">— 상태 pill 배지 적용</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;Phase 1~6 실행 결과&lt;/h1&gt;
+{{range .Steps}}
+&lt;fieldset&gt;
+  &lt;legend&gt;{{.Name}} — &lt;span class="status-badge {{.StatusClass}}"&gt;{{.Status}}&lt;/span&gt;{{if .JobID}} (Job #{{.JobID}}){{end}}&lt;/legend&gt;
+  {{if .Lines}}&lt;pre class="log"&gt;{{range .Lines}}{{.}}
+{{end}}&lt;/pre&gt;{{end}}
+  {{if .ErrorMsg}}&lt;p class="error"&gt;{{.ErrorMsg}}&lt;/p&gt;{{end}}
+&lt;/fieldset&gt;
+{{end}}
+&lt;p&gt;&lt;a href="/"&gt;대시보드로 돌아가기&lt;/a&gt;&lt;/p&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/job_result.html <span class="lines">8줄</span> <span class="hl">— 상태 pill 배지 + CSV 다운로드 링크(Phase 9)</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;작업 결과 — {{.Phase}} (Job #{{.JobID}})&lt;/h1&gt;
+&lt;p&gt;상태: &lt;span class="status-badge {{.Status}}"&gt;{{.Status}}&lt;/span&gt;&lt;/p&gt;
+{{if .DownloadURL}}&lt;p&gt;&lt;a href="{{.DownloadURL}}"&gt;CSV 리포트 다운로드&lt;/a&gt;&lt;/p&gt;{{end}}
+&lt;pre class="log"&gt;{{range .Lines}}{{.}}
+{{end}}&lt;/pre&gt;
+&lt;p&gt;&lt;a href="/"&gt;대시보드로 돌아가기&lt;/a&gt;&lt;/p&gt;
+{{end}}</pre>
+        </div>
+        <div class="file-block">
+          <div class="file-name">templates/audit.html <span class="lines">22줄 · Lv.5</span> <span class="hl">— M8 신규</span></div>
+          <pre class="codeblock">{{define "content"}}
+&lt;h1&gt;감사 로그 &lt;span class="level-badge"&gt;Lv.5&lt;/span&gt;&lt;/h1&gt;
+&lt;p style="color:#777; font-size:.85rem"&gt;최근 200건. 사용자 · 액션 · 대상 · 결과 · 시각 순으로 표시됩니다.&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;&lt;th&gt;시각&lt;/th&gt;&lt;th&gt;사용자&lt;/th&gt;&lt;th&gt;액션&lt;/th&gt;&lt;th&gt;대상&lt;/th&gt;&lt;th&gt;결과&lt;/th&gt;&lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    {{range .Entries}}
+    &lt;tr&gt;
+      &lt;td&gt;{{.CreatedAt}}&lt;/td&gt;
+      &lt;td&gt;{{.Username}}&lt;/td&gt;
+      &lt;td&gt;{{.Action}}&lt;/td&gt;
+      &lt;td&gt;{{.Target}}&lt;/td&gt;
+      &lt;td&gt;{{.Result}}&lt;/td&gt;
+    &lt;/tr&gt;
+    {{else}}
+    &lt;tr&gt;&lt;td colspan="5"&gt;기록이 없습니다.&lt;/td&gt;&lt;/tr&gt;
+    {{end}}
+  &lt;/tbody&gt;
+&lt;/table&gt;
+{{end}}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-main">
+      <summary><span>cmd/server</span><span class="path">main.go — 라우팅 · 모든 핸들러 · 파이프라인</span><span class="count">1 file · 890줄</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">cmd/server/main.go</div>
+          <pre class="codeblock">// Command server is the VM 자동생성 웹 포털's HTTP entrypoint (M1~M4 scope):
+// login/session/RBAC, encrypted credential storage, and Phase 1~3
+// (host register / vSwitch / VM create) wrapping the existing govmomi binaries.
+package main
+
+import (
+	"context"
+	cryptorand "crypto/rand"
+	"database/sql"
+	"fmt"
+	"html/template"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"vm-portal/internal/auth"
+	"vm-portal/internal/config"
+	dbpkg "vm-portal/internal/db"
+	"vm-portal/internal/models"
+	"vm-portal/internal/phases"
+	"vm-portal/internal/secrets"
+	"vm-portal/internal/webui"
+)
+
+// Every page template defines a block named "content" (see base.html's
+// {{template "content" .}}), so they can't be parsed together with one
+// glob — the last one parsed would silently win and clobber the rest.
+// Instead each page gets its own {base.html + page.html} template set.
+var pageNames = []string{"login", "dashboard", "credentials", "phase1", "phase2", "phase3", "phase4", "phase5", "phase6", "phase7", "phase8", "phase9", "pipeline", "pipeline_result", "job_result", "audit"}
+
+var tmplSet map[string]*template.Template
+
+func loadTemplates() map[string]*template.Template {
+	set := make(map[string]*template.Template, len(pageNames))
+	for _, name := range pageNames {
+		set[name] = template.Must(template.New("base").ParseFS(webui.FS, "templates/base.html", "templates/"+name+".html"))
+	}
+	return set
+}
+
+type server struct {
+	db  *sql.DB
+	cfg config.Config
+	key []byte
+}
+
+func main() {
+	cfg := config.Load()
+
+	if err := os.MkdirAll(cfg.TmpDir, 0700); err != nil {
+		log.Fatalf("tmp 디렉터리 생성 실패: %v", err)
+	}
+	if err := os.MkdirAll(dirOf(cfg.DBPath), 0700); err != nil {
+		log.Fatalf("data 디렉터리 생성 실패: %v", err)
+	}
+	if err := os.MkdirAll(cfg.ReportsDir, 0700); err != nil {
+		log.Fatalf("리포트 디렉터리 생성 실패: %v", err)
+	}
+
+	database, err := dbpkg.Open(cfg.DBPath)
+	if err != nil {
+		log.Fatalf("DB 열기 실패: %v", err)
+	}
+	defer database.Close()
+
+	key, err := secrets.LoadMasterKey(cfg.SecretBackend, cfg.MasterKeyFile, cfg.VaultAddr, cfg.VaultToken, cfg.VaultSecretPath, cfg.VaultKeyField)
+	if err != nil {
+		log.Fatalf("마스터 키 로드 실패 (backend=%s): %v", cfg.SecretBackend, err)
+	}
+
+	if err := bootstrapAdmin(database); err != nil {
+		log.Fatalf("관리자 계정 부트스트랩 실패: %v", err)
+	}
+
+	tmplSet = loadTemplates()
+
+	s := &amp;server{db: database, cfg: cfg, key: key}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /login", s.handleLoginGet)
+	mux.HandleFunc("POST /login", s.handleLoginPost)
+	mux.HandleFunc("POST /logout", s.handleLogout)
+	mux.HandleFunc("GET /{$}", auth.RequireLevel(models.LevelViewer, s.handleDashboard))
+	mux.HandleFunc("GET /credentials", auth.RequireLevel(models.LevelViewer, s.handleCredentialsGet))
+	mux.HandleFunc("POST /credentials", auth.RequireLevel(models.LevelAdmin, s.handleCredentialsPost))
+	mux.HandleFunc("GET /phase1", auth.RequireLevel(models.LevelOperator, s.handlePhase1Get))
+	mux.HandleFunc("POST /phase1", auth.RequireLevel(models.LevelOperator, s.handlePhase1Post))
+	mux.HandleFunc("GET /phase2", auth.RequireLevel(models.LevelOperator, s.handlePhase2Get))
+	mux.HandleFunc("POST /phase2", auth.RequireLevel(models.LevelOperator, s.handlePhase2Post))
+	mux.HandleFunc("GET /phase3", auth.RequireLevel(models.LevelOperator, s.handlePhase3Get))
+	mux.HandleFunc("POST /phase3", auth.RequireLevel(models.LevelOperator, s.handlePhase3Post))
+	mux.HandleFunc("GET /phase4", auth.RequireLevel(models.LevelOperator, s.handlePhase4Get))
+	mux.HandleFunc("POST /phase4", auth.RequireLevel(models.LevelOperator, s.handlePhase4Post))
+	mux.HandleFunc("GET /phase5", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase5Get))
+	mux.HandleFunc("POST /phase5", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase5Post))
+	mux.HandleFunc("GET /phase6", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase6Get))
+	mux.HandleFunc("POST /phase6", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase6Post))
+	mux.HandleFunc("GET /phase7", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase7Get))
+	mux.HandleFunc("POST /phase7", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase7Post))
+	mux.HandleFunc("GET /phase8", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase8Get))
+	mux.HandleFunc("POST /phase8", auth.RequireLevel(models.LevelSeniorOperator, s.handlePhase8Post))
+	mux.HandleFunc("GET /phase9", auth.RequireLevel(models.LevelViewer, s.handlePhase9Get))
+	mux.HandleFunc("POST /phase9", auth.RequireLevel(models.LevelViewer, s.handlePhase9Post))
+	mux.HandleFunc("GET /phase9/download/{jobID}", auth.RequireLevel(models.LevelViewer, s.handlePhase9Download))
+	mux.HandleFunc("GET /pipeline", auth.RequireLevel(models.LevelOperator, s.handlePipelineGet))
+	mux.HandleFunc("POST /pipeline", auth.RequireLevel(models.LevelOperator, s.handlePipelinePost))
+	mux.HandleFunc("GET /audit", auth.RequireLevel(models.LevelAdmin, s.handleAuditGet))
+
+	handler := auth.WithUser(database)(mux)
+
+	log.Printf("VM 포털 시작: %s (bin=%s tmp=%s db=%s)", cfg.ListenAddr, cfg.BinDir, cfg.TmpDir, cfg.DBPath)
+	log.Fatal(http.ListenAndServe(cfg.ListenAddr, handler))
+}
+
+func dirOf(path string) string {
+	i := strings.LastIndexByte(path, '/')
+	if i &lt; 0 {
+		return "."
+	}
+	return path[:i]
+}
+
+// bootstrapAdmin creates a Level 5 "admin" user on first run if the users
+// table is empty, using VMPORTAL_BOOTSTRAP_PASSWORD (or a random one printed
+// once) so there is always a way in on a fresh DB.
+func bootstrapAdmin(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&amp;count); err != nil {
+		return err
+	}
+	if count &gt; 0 {
+		return nil
+	}
+
+	pw := os.Getenv("VMPORTAL_BOOTSTRAP_PASSWORD")
+	generated := false
+	if pw == "" {
+		pw = randomPassword()
+		generated = true
+	}
+
+	hash, err := auth.HashPassword(pw)
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec(`INSERT INTO users (username, password_hash, rbac_level) VALUES ('admin', ?, 5)`, hash); err != nil {
+		return err
+	}
+
+	if generated {
+		log.Printf("=================================================================")
+		log.Printf(" 초기 관리자 계정이 생성되었습니다 - username: admin / password: %s", pw)
+		log.Printf(" 로그인 후 반드시 비밀번호를 변경하세요 (현재 UI에는 변경 기능 없음 - DB 직접 수정 필요)")
+		log.Printf("=================================================================")
+	}
+	return nil
+}
+
+func randomPassword() string {
+	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+	b := make([]byte, 16)
+	if _, err := cryptorand.Read(b); err != nil {
+		return "changeme-please-set-VMPORTAL_BOOTSTRAP_PASSWORD"
+	}
+	out := make([]byte, len(b))
+	for i, v := range b {
+		out[i] = alphabet[int(v)%len(alphabet)]
+	}
+	return string(out)
+}
+
+// --- auth handlers ---
+
+func (s *server) handleLoginGet(w http.ResponseWriter, r *http.Request) {
+	if u, ok := auth.CurrentUser(r); ok &amp;&amp; u != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	render(w, "login", map[string]any{})
+}
+
+func (s *server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	row := s.db.QueryRow(`SELECT id, username, password_hash, rbac_level, created_at FROM users WHERE username = ?`, username)
+	var u models.User
+	if err := row.Scan(&amp;u.ID, &amp;u.Username, &amp;u.PasswordHash, &amp;u.RBACLevel, &amp;u.CreatedAt); err != nil || !auth.CheckPassword(u.PasswordHash, password) {
+		render(w, "login", map[string]any{"Error": "아이디 또는 비밀번호가 올바르지 않습니다"})
+		return
+	}
+
+	token, expires, err := auth.CreateSession(s.db, u.ID)
+	if err != nil {
+		http.Error(w, "세션 생성 실패", http.StatusInternalServerError)
+		return
+	}
+	auth.SetSessionCookie(w, token, expires)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie("vmportal_session"); err == nil {
+		_ = auth.DeleteSession(s.db, c.Value)
+	}
+	auth.ClearSessionCookie(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// --- dashboard ---
+
+func (s *server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	render(w, "dashboard", baseData(r, nil))
+}
+
+// --- credentials ---
+
+func (s *server) handleCredentialsGet(w http.ResponseWriter, r *http.Request) {
+	creds, err := secrets.ListCredentials(s.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data := baseData(r, map[string]any{"Credentials": creds})
+	render(w, "credentials", data)
+}
+
+func (s *server) handleCredentialsPost(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	name := strings.TrimSpace(r.FormValue("name"))
+	ip := strings.TrimSpace(r.FormValue("vcenter_ip"))
+	vcID := strings.TrimSpace(r.FormValue("vc_id"))
+	vcPass := r.FormValue("vc_password")
+	esxiPass := r.FormValue("esxi_password")
+
+	extra := map[string]any{}
+	if name == "" || ip == "" || vcID == "" || vcPass == "" {
+		extra["Error"] = "이름/IP/계정/비밀번호는 필수입니다"
+	} else if _, err := secrets.SaveCredential(s.db, s.key, name, ip, vcID, vcPass, esxiPass, user.ID); err != nil {
+		extra["Error"] = "저장 실패: " + err.Error()
+	} else {
+		extra["OK"] = "자격증명이 저장되었습니다"
+	}
+
+	creds, _ := secrets.ListCredentials(s.db)
+	extra["Credentials"] = creds
+	render(w, "credentials", baseData(r, extra))
+}
+
+// --- phase 1: host register ---
+
+func (s *server) handlePhase1Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase1", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase1Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	folder := strings.TrimSpace(r.FormValue("folder_name"))
+	hosts := splitLines(r.FormValue("hosts"))
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase1", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, err := phases.RunPhase1(r.Context(), s.db, s.cfg, s.key, cred, phases.Phase1Input{FolderName: folder, Hosts: hosts}, user.ID)
+	s.finishJob(w, r, "phase1_host_register", jobID, res, err, user.ID, folder)
+}
+
+// --- phase 2: vswitch/portgroup ---
+
+func (s *server) handlePhase2Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase2", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase2Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	targetVSwitch := strings.TrimSpace(r.FormValue("target_vswitch"))
+
+	rawLines := splitLines(r.FormValue("entries"))
+	var entries []phases.VSwitchEntry
+	var badLines []string
+	for _, line := range rawLines {
+		parts := splitFields(line)
+		if len(parts) &lt; 3 {
+			badLines = append(badLines, line)
+			continue
+		}
+		vlan, err := strconv.Atoi(parts[2])
+		if err != nil {
+			badLines = append(badLines, line)
+			continue
+		}
+		entries = append(entries, phases.VSwitchEntry{BMHost: parts[0], PGName: parts[1], VlanID: vlan})
+	}
+	if len(entries) == 0 {
+		s.renderPhaseError(w, r, "phase2", "포트그룹 설정에서 유효한 항목을 찾지 못했습니다. \"호스트 포트그룹명 VLAN번호\" 형식으로 한 줄에 하나씩 입력하세요 (공백 또는 쉼표 구분).")
+		return
+	}
+	if len(badLines) &gt; 0 {
+		s.renderPhaseError(w, r, "phase2", "일부 줄을 인식하지 못했습니다 (형식: \"호스트 포트그룹명 VLAN번호\"): "+strings.Join(badLines, " | "))
+		return
+	}
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase2", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, err := phases.RunPhase2(r.Context(), s.db, s.cfg, s.key, cred, phases.Phase2Input{TargetVSwitch: targetVSwitch, Entries: entries}, user.ID)
+	s.finishJob(w, r, "phase2_vswitch", jobID, res, err, user.ID, targetVSwitch)
+}
+
+// --- phase 3: vm create ---
+
+func (s *server) handlePhase3Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase3", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase3Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	datacenter := strings.TrimSpace(r.FormValue("datacenter"))
+	firmware := strings.TrimSpace(r.FormValue("firmware"))
+	vmCount, _ := strconv.Atoi(r.FormValue("vm_count"))
+	hosts := splitLines(r.FormValue("hosts"))
+
+	hostgroupRaw := splitLines(r.FormValue("hostgroup_map"))
+	hostgroupMap := map[string]string{}
+	var badHostgroupLines []string
+	for _, line := range hostgroupRaw {
+		parts := splitFields(line)
+		if len(parts) &lt; 2 {
+			badHostgroupLines = append(badHostgroupLines, line)
+			continue
+		}
+		hostgroupMap[parts[0]] = parts[1]
+	}
+	// hostgroup_map is optional (VMs can be created without a NIC), but if the
+	// user typed something that failed to parse entirely, that's a mistake
+	// worth surfacing rather than silently creating VMs with no network adapter.
+	if len(hostgroupRaw) &gt; 0 &amp;&amp; len(hostgroupMap) == 0 {
+		s.renderPhaseError(w, r, "phase3", "Hostgroup 매핑에서 유효한 항목을 찾지 못했습니다. \"호스트 포트그룹명\" 형식으로 한 줄에 하나씩 입력하세요 (공백 또는 쉼표 구분). 비워두면 네트워크 어댑터 없이 VM이 생성됩니다.")
+		return
+	}
+	if len(badHostgroupLines) &gt; 0 {
+		s.renderPhaseError(w, r, "phase3", "Hostgroup 매핑에서 일부 줄을 인식하지 못했습니다: "+strings.Join(badHostgroupLines, " | "))
+		return
+	}
+
+	specs := map[int]phases.VMSpec{
+		1: {Cpu: formInt(r, "ev01_cpu"), Mem: formInt(r, "ev01_mem"), Disk: formInt(r, "ev01_disk"), Share: formInt(r, "ev01_share")},
+		2: {Cpu: formInt(r, "ev02_cpu"), Mem: formInt(r, "ev02_mem"), Disk: formInt(r, "ev02_disk"), Share: formInt(r, "ev02_share")},
+	}
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase3", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	in := phases.Phase3Input{
+		Datacenter:   datacenter,
+		Firmware:     firmware,
+		VMCount:      vmCount,
+		Hosts:        hosts,
+		HostGroupMap: hostgroupMap,
+		Specs:        specs,
+	}
+	jobID, res, err := phases.RunPhase3(r.Context(), s.db, s.cfg, s.key, cred, in, user.ID)
+	s.finishJob(w, r, "phase3_vm_create", jobID, res, err, user.ID, strings.Join(hosts, ","))
+}
+
+// --- phase 4: mac/ip extraction ---
+
+func (s *server) handlePhase4Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase4", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase4Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	hosts := splitLines(r.FormValue("hosts"))
+	arg1 := strings.TrimSpace(r.FormValue("arg1"))
+	argInt := formInt(r, "arg_int")
+	argStr := strings.TrimSpace(r.FormValue("arg_str"))
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase4", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, err := phases.RunPhase4(r.Context(), s.db, s.cfg, s.key, cred, phases.Phase4Input{Hosts: hosts, Arg1: arg1, ArgInt: argInt, ArgStr: argStr}, user.ID)
+	s.finishJob(w, r, "phase4_mac_extract", jobID, res, err, user.ID, arg1)
+}
+
+// --- phase 5: cpu affinity ---
+
+func (s *server) handlePhase5Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase5", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase5Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	hosts := splitLines(r.FormValue("hosts"))
+
+	rawPairs := splitLines(r.FormValue("affinity_pairs"))
+	pairs := map[string]string{}
+	var badPairs []string
+	for _, line := range rawPairs {
+		kv := strings.SplitN(line, "=", 2)
+		if len(kv) != 2 || strings.TrimSpace(kv[0]) == "" || strings.TrimSpace(kv[1]) == "" {
+			badPairs = append(badPairs, line)
+			continue
+		}
+		pairs[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+	}
+	if len(rawPairs) &gt; 0 &amp;&amp; len(pairs) == 0 {
+		s.renderPhaseError(w, r, "phase5", "EV02 Affinity 설정에서 유효한 항목을 찾지 못했습니다. \"키=값\" 형식으로 한 줄에 하나씩 입력하세요. 비워두면 EV02는 건너뜁니다.")
+		return
+	}
+	if len(badPairs) &gt; 0 {
+		s.renderPhaseError(w, r, "phase5", "EV02 Affinity 설정에서 일부 줄을 인식하지 못했습니다: "+strings.Join(badPairs, " | "))
+		return
+	}
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase5", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, err := phases.RunPhase5(r.Context(), s.db, s.cfg, s.key, cred, phases.Phase5Input{Hosts: hosts, AffinityPairs: pairs}, user.ID)
+	s.finishJob(w, r, "phase5_affinity", jobID, res, err, user.ID, strings.Join(hosts, ","))
+}
+
+// --- phase 6: lpage/numa tuning ---
+
+func (s *server) handlePhase6Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase6", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase6Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	hosts := splitLines(r.FormValue("hosts"))
+
+	in := phases.Phase6Input{
+		Hosts:       hosts,
+		EV01Cores:   formInt(r, "ev01_cores"),
+		EV01Sockets: formInt(r, "ev01_sockets"),
+		EV02Cores:   formInt(r, "ev02_cores"),
+		EV02Sockets: formInt(r, "ev02_sockets"),
+	}
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase6", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, err := phases.RunPhase6(r.Context(), s.db, s.cfg, s.key, cred, in, user.ID)
+	s.finishJob(w, r, "phase6_lpage", jobID, res, err, user.ID, strings.Join(hosts, ","))
+}
+
+// --- phase 7: power policy (destructive) ---
+
+func (s *server) handlePhase7Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase7", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase7Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	dryRun := r.FormValue("dry_run") == "on"
+	if r.FormValue("confirm") != "on" {
+		s.renderPhaseError(w, r, "phase7", "확인 체크박스를 선택해야 실행됩니다.")
+		return
+	}
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	hosts := splitLines(r.FormValue("hosts"))
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase7", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, err := phases.RunPhase7(r.Context(), s.db, s.cfg, s.key, cred, phases.Phase7Input{Hosts: hosts, DryRun: dryRun}, user.ID)
+	s.finishJob(w, r, "phase7_power_policy", jobID, res, err, user.ID, strings.Join(hosts, ","))
+}
+
+// --- phase 8: vm delete (destructive, new development) ---
+
+func (s *server) handlePhase8Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase8", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase8Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	dryRun := r.FormValue("dry_run") == "on"
+	if !dryRun &amp;&amp; r.FormValue("confirm_text") != "DELETE" {
+		s.renderPhaseError(w, r, "phase8", "확인란에 정확히 DELETE 를 입력해야 실행됩니다.")
+		return
+	}
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	vmNames := splitLines(r.FormValue("vm_names"))
+	if len(vmNames) == 0 {
+		s.renderPhaseError(w, r, "phase8", "삭제할 VM 이름을 최소 1개 입력하세요.")
+		return
+	}
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase8", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, err := phases.RunPhase8(r.Context(), s.db, s.cfg, s.key, cred, phases.Phase8Input{VMNames: vmNames, DryRun: dryRun}, user.ID)
+	s.finishJob(w, r, "phase8_vm_delete", jobID, res, err, user.ID, strings.Join(vmNames, ","))
+}
+
+// --- phase 9: report (read-only, M7) ---
+
+func (s *server) handlePhase9Get(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "phase9", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePhase9Post(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	hosts := splitLines(r.FormValue("hosts"))
+	if len(hosts) == 0 {
+		s.renderPhaseError(w, r, "phase9", "조회할 BM 호스트를 최소 1개 입력하세요.")
+		return
+	}
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "phase9", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	jobID, res, reportFile, err := phases.RunPhase9(r.Context(), s.db, s.cfg, s.key, cred, phases.Phase9Input{Hosts: hosts}, user.ID)
+	if err != nil {
+		http.Error(w, "작업 실행 실패: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	status := "success"
+	auditResult := "success"
+	if !res.Success {
+		status = "failed"
+		auditResult = "failed"
+	}
+	logAudit(s.db, user.ID, "phase9_report", strings.Join(hosts, ","), auditResult)
+
+	data := baseData(r, map[string]any{
+		"Phase":  "phase9_report",
+		"JobID":  jobID,
+		"Status": status,
+		"Lines":  res.Lines,
+	})
+	if reportFile != "" {
+		data["DownloadURL"] = fmt.Sprintf("/phase9/download/%d", jobID)
+	}
+	render(w, "job_result", data)
+}
+
+func (s *server) handlePhase9Download(w http.ResponseWriter, r *http.Request) {
+	jobID, err := strconv.ParseInt(r.PathValue("jobID"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var phase, mapfile string
+	err = s.db.QueryRow(`SELECT phase, mapfile FROM jobs WHERE id = ?`, jobID).Scan(&amp;phase, &amp;mapfile)
+	if err != nil || phase != "phase9_report" || mapfile == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	path := filepath.Join(s.cfg.ReportsDir, mapfile)
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+mapfile+"\"")
+	http.ServeFile(w, r, path)
+}
+
+// --- audit log (M8, admin only) ---
+
+type auditEntry struct {
+	CreatedAt string
+	Username  string
+	Action    string
+	Target    string
+	Result    string
+}
+
+func (s *server) handleAuditGet(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.db.Query(`
+		SELECT a.created_at, COALESCE(u.username, '(삭제된 사용자)'), a.action, COALESCE(a.target, ''), a.result
+		FROM audit_log a
+		LEFT JOIN users u ON u.id = a.user_id
+		ORDER BY a.id DESC
+		LIMIT 200`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var entries []auditEntry
+	for rows.Next() {
+		var e auditEntry
+		if err := rows.Scan(&amp;e.CreatedAt, &amp;e.Username, &amp;e.Action, &amp;e.Target, &amp;e.Result); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		entries = append(entries, e)
+	}
+
+	render(w, "audit", baseData(r, map[string]any{"Entries": entries}))
+}
+
+// --- pipeline: run phase 1~6 in sequence from one page ---
+
+type pipelineStep struct {
+	Name        string
+	JobID       int64
+	Status      string
+	StatusClass string
+	Lines       []string
+	ErrorMsg    string
+}
+
+func (s *server) handlePipelineGet(w http.ResponseWriter, r *http.Request) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, "pipeline", baseData(r, map[string]any{"Credentials": creds}))
+}
+
+func (s *server) handlePipelinePost(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.CurrentUser(r)
+	credID, _ := strconv.ParseInt(r.FormValue("credential_id"), 10, 64)
+	hosts := splitLines(r.FormValue("hosts"))
+	stopOnFail := r.FormValue("stop_on_fail") == "on"
+
+	// Phase 5/6 are RBAC level 4+ individually; the /pipeline route itself
+	// only requires level 3 (it also covers phase 1~3), so a level-3 user
+	// enabling those checkboxes here must not bypass that gate.
+	if (r.FormValue("enable_phase5") == "on" || r.FormValue("enable_phase6") == "on") &amp;&amp; user.RBACLevel &lt; models.LevelSeniorOperator {
+		s.renderPhaseError(w, r, "pipeline", "Phase 5/6은 Lv.4 이상만 실행할 수 있습니다.")
+		return
+	}
+
+	cred, err := secrets.GetDecrypted(s.db, s.key, credID)
+	if err != nil {
+		s.renderPhaseError(w, r, "pipeline", "자격증명을 불러올 수 없습니다: "+err.Error())
+		return
+	}
+
+	var steps []pipelineStep
+	failed := false
+
+	runStep := func(name string, jobID int64, res *phases.Result, runErr error) bool {
+		step := pipelineStep{Name: name, JobID: jobID}
+		switch {
+		case runErr != nil:
+			step.Status = "오류"
+			step.StatusClass = "failed"
+			step.ErrorMsg = runErr.Error()
+			failed = true
+		case !res.Success:
+			step.Status = "실패"
+			step.StatusClass = "failed"
+			step.Lines = res.Lines
+			failed = true
+		default:
+			step.Status = "성공"
+			step.StatusClass = "success"
+			step.Lines = res.Lines
+		}
+		steps = append(steps, step)
+		return !failed
+	}
+
+	ctx := r.Context()
+
+	if r.FormValue("enable_phase1") == "on" {
+		folder := strings.TrimSpace(r.FormValue("folder_name"))
+		jobID, res, runErr := phases.RunPhase1(ctx, s.db, s.cfg, s.key, cred, phases.Phase1Input{FolderName: folder, Hosts: hosts}, user.ID)
+		if ok := runStep("Phase 1: 호스트 등록", jobID, res, runErr); !ok &amp;&amp; stopOnFail {
+			s.renderPipelineResult(w, r, steps)
+			return
+		}
+	}
+
+	pgName := strings.TrimSpace(r.FormValue("portgroup_name"))
+	vlanID := formInt(r, "vlan_id")
+
+	if !failed &amp;&amp; r.FormValue("enable_phase2") == "on" {
+		var entries []phases.VSwitchEntry
+		for _, h := range hosts {
+			entries = append(entries, phases.VSwitchEntry{BMHost: h, PGName: pgName, VlanID: vlanID})
+		}
+		targetVSwitch := strings.TrimSpace(r.FormValue("target_vswitch"))
+		jobID, res, runErr := phases.RunPhase2(ctx, s.db, s.cfg, s.key, cred, phases.Phase2Input{TargetVSwitch: targetVSwitch, Entries: entries}, user.ID)
+		if ok := runStep("Phase 2: vSwitch 포트그룹 생성", jobID, res, runErr); !ok &amp;&amp; stopOnFail {
+			s.renderPipelineResult(w, r, steps)
+			return
+		}
+	}
+
+	if !failed &amp;&amp; r.FormValue("enable_phase3") == "on" {
+		hostgroupMap := map[string]string{}
+		if pgName != "" {
+			for _, h := range hosts {
+				hostgroupMap[h] = pgName
+			}
+		}
+		in := phases.Phase3Input{
+			Datacenter:   strings.TrimSpace(r.FormValue("datacenter")),
+			Firmware:     strings.TrimSpace(r.FormValue("firmware")),
+			VMCount:      formInt(r, "vm_count"),
+			Hosts:        hosts,
+			HostGroupMap: hostgroupMap,
+			Specs: map[int]phases.VMSpec{
+				1: {Cpu: formInt(r, "ev01_cpu"), Mem: formInt(r, "ev01_mem"), Disk: formInt(r, "ev01_disk"), Share: formInt(r, "ev01_share")},
+				2: {Cpu: formInt(r, "ev02_cpu"), Mem: formInt(r, "ev02_mem"), Disk: formInt(r, "ev02_disk"), Share: formInt(r, "ev02_share")},
+			},
+		}
+		jobID, res, runErr := phases.RunPhase3(ctx, s.db, s.cfg, s.key, cred, in, user.ID)
+		if ok := runStep("Phase 3: VM 생성", jobID, res, runErr); !ok &amp;&amp; stopOnFail {
+			s.renderPipelineResult(w, r, steps)
+			return
+		}
+	}
+
+	if !failed &amp;&amp; r.FormValue("enable_phase4") == "on" {
+		in := phases.Phase4Input{
+			Hosts:  hosts,
+			Arg1:   strings.TrimSpace(r.FormValue("arg1")),
+			ArgInt: formInt(r, "arg_int"),
+			ArgStr: strings.TrimSpace(r.FormValue("arg_str")),
+		}
+		jobID, res, runErr := phases.RunPhase4(ctx, s.db, s.cfg, s.key, cred, in, user.ID)
+		if ok := runStep("Phase 4: MAC/IP 추출", jobID, res, runErr); !ok &amp;&amp; stopOnFail {
+			s.renderPipelineResult(w, r, steps)
+			return
+		}
+	}
+
+	if !failed &amp;&amp; r.FormValue("enable_phase5") == "on" {
+		pairs := map[string]string{}
+		for _, line := range splitLines(r.FormValue("affinity_pairs")) {
+			kv := strings.SplitN(line, "=", 2)
+			if len(kv) == 2 &amp;&amp; strings.TrimSpace(kv[0]) != "" &amp;&amp; strings.TrimSpace(kv[1]) != "" {
+				pairs[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+			}
+		}
+		jobID, res, runErr := phases.RunPhase5(ctx, s.db, s.cfg, s.key, cred, phases.Phase5Input{Hosts: hosts, AffinityPairs: pairs}, user.ID)
+		if ok := runStep("Phase 5: CPU Affinity", jobID, res, runErr); !ok &amp;&amp; stopOnFail {
+			s.renderPipelineResult(w, r, steps)
+			return
+		}
+	}
+
+	if !failed &amp;&amp; r.FormValue("enable_phase6") == "on" {
+		in := phases.Phase6Input{
+			Hosts:       hosts,
+			EV01Cores:   formInt(r, "ev01_cores"),
+			EV01Sockets: formInt(r, "ev01_sockets"),
+			EV02Cores:   formInt(r, "ev02_cores"),
+			EV02Sockets: formInt(r, "ev02_sockets"),
+		}
+		jobID, res, runErr := phases.RunPhase6(ctx, s.db, s.cfg, s.key, cred, in, user.ID)
+		runStep("Phase 6: lpage/NUMA 튜닝", jobID, res, runErr)
+	}
+
+	s.renderPipelineResult(w, r, steps)
+}
+
+func (s *server) renderPipelineResult(w http.ResponseWriter, r *http.Request, steps []pipelineStep) {
+	render(w, "pipeline_result", baseData(r, map[string]any{"Steps": steps}))
+}
+
+// --- shared helpers ---
+
+func (s *server) finishJob(w http.ResponseWriter, r *http.Request, phaseName string, jobID int64, res *phases.Result, err error, userID int64, target string) {
+	if err != nil {
+		http.Error(w, "작업 실행 실패: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	status := "success"
+	auditResult := "success"
+	switch {
+	case res.DryRun:
+		status = "dry_run"
+		auditResult = "dry_run"
+	case !res.Success:
+		status = "failed"
+		auditResult = "failed"
+	}
+	logAudit(s.db, userID, phaseName, target, auditResult)
+
+	data := baseData(r, map[string]any{
+		"Phase":  phaseName,
+		"JobID":  jobID,
+		"Status": status,
+		"Lines":  res.Lines,
+	})
+	render(w, "job_result", data)
+}
+
+func (s *server) renderPhaseError(w http.ResponseWriter, r *http.Request, tmplName, msg string) {
+	creds, _ := secrets.ListCredentials(s.db)
+	render(w, tmplName, baseData(r, map[string]any{"Error": msg, "Credentials": creds}))
+}
+
+func baseData(r *http.Request, extra map[string]any) map[string]any {
+	user, _ := auth.CurrentUser(r)
+	data := map[string]any{"User": user, "Path": r.URL.Path}
+	for k, v := range extra {
+		data[k] = v
+	}
+	return data
+}
+
+func render(w http.ResponseWriter, name string, data any) {
+	t, ok := tmplSet[name]
+	if !ok {
+		http.Error(w, "알 수 없는 템플릿: "+name, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := t.ExecuteTemplate(w, "base", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// fieldSplitter matches main_vm_create_v2.txt's loadHostgroupMap: fields may
+// be separated by whitespace or commas, since users copy-paste from all sorts
+// of sources ("host, pg, vlan" vs "host pg vlan").
+var fieldSplitter = regexp.MustCompile(`[,\s]+`)
+
+func splitFields(line string) []string {
+	line = strings.Trim(line, " \t,")
+	if line == "" {
+		return nil
+	}
+	return fieldSplitter.Split(line, -1)
+}
+
+func splitLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func formInt(r *http.Request, key string) int {
+	n, _ := strconv.Atoi(r.FormValue(key))
+	return n
+}
+
+func logAudit(db *sql.DB, userID int64, action, target, result string) {
+	_, _ = db.ExecContext(context.Background(), `INSERT INTO audit_log (user_id, action, target, result) VALUES (?, ?, ?, ?)`, userID, action, target, result)
+}</pre>
+        </div>
+      </div>
+    </details>
+
+    <details class="pkg-group" id="code-delete">
+      <summary><span>main_vm_delete.go</span><span class="path">/root/vm — 신규 개발, govmomi 직접 사용</span><span class="count">1 file · 135줄</span></summary>
+      <div class="pkg-body">
+        <div class="file-block">
+          <div class="file-name">/root/vm/main_vm_delete.go <span class="lines">Phase 8용 · 기존 CLI 스크립트 없음</span></div>
+          <pre class="codeblock">package main
+
+import (
+	"bufio"
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/vmware/govmomi"
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
+)
+
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" &amp;&amp; !strings.HasPrefix(line, "#") {
+			lines = append(lines, line)
+		}
+	}
+	return lines, scanner.Err()
+}
+
+func main() {
+	vcId := flag.String("id", "lscsystems@vsphere.local", "vCenter 로그인 계정 ID")
+	vcTargetIP := flag.String("vcTargetIP", "", "vCenter 접속 IP (필수)")
+	worklistFile := flag.String("worklistFile", "delete_list.txt", "삭제 대상 VM 이름 목록 파일 (BM 호스트명이 아닌 정확한 VM 이름)")
+	confirm := flag.String("confirm", "", "안전장치: 정확히 DELETE 를 입력해야 실행됩니다")
+
+	flag.Parse()
+
+	if *vcTargetIP == "" {
+		log.Fatal("필수 파라미터가 누락되었습니다. (-vcTargetIP 확인)")
+	}
+	if *confirm != "DELETE" {
+		log.Fatal("안전장치: -confirm=DELETE 를 정확히 지정해야 삭제가 실행됩니다.")
+	}
+
+	vcPassword := os.Getenv("VC_PASSWORD")
+	if vcPassword == "" {
+		log.Fatal("인증 정보 로드 실패: VC_PASSWORD 환경 변수가 설정되지 않았습니다.")
+	}
+
+	baseDir, _ := os.Getwd()
+	worklistPath := filepath.Join(baseDir, *worklistFile)
+	if _, err := os.Stat(worklistPath); os.IsNotExist(err) {
+		log.Fatalf("%s 파일을 찾을 수 없습니다.", *worklistFile)
+	}
+
+	vmNames, err := readLines(worklistPath)
+	if err != nil {
+		log.Fatalf("worklist 파일 읽기 실패: %v", err)
+	}
+	if len(vmNames) == 0 {
+		log.Fatal("삭제 대상 VM 이름이 비어 있습니다.")
+	}
+
+	fmt.Printf("[경고] VM 삭제(Phase 8)를 시작합니다. 대상 VM %d대 (접속 계정: %s)\n", len(vmNames), *vcId)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	u := &amp;url.URL{Scheme: "https", Host: *vcTargetIP, Path: "/sdk"}
+	u.User = url.UserPassword(*vcId, vcPassword)
+
+	client, err := govmomi.NewClient(ctx, u, true)
+	if err != nil {
+		log.Fatalf("vCenter 접속 실패: %v", err)
+	}
+	defer func() {
+		_ = client.Logout(ctx)
+	}()
+
+	finder := find.NewFinder(client.Client, true)
+	dc, _ := finder.DefaultDatacenter(ctx)
+	finder.SetDatacenter(dc)
+
+	successCount := 0
+	for _, name := range vmNames {
+		cleanName := strings.TrimSpace(name)
+		if cleanName == "" {
+			continue
+		}
+
+		vm, err := finder.VirtualMachine(ctx, cleanName)
+		if err != nil {
+			fmt.Printf("[%s] 경고: vCenter 인벤토리에서 찾을 수 없습니다. (PASS)\n", cleanName)
+			continue
+		}
+
+		var vmProps mo.VirtualMachine
+		if propErr := vm.Properties(ctx, vm.Reference(), []string{"runtime.powerState"}, &amp;vmProps); propErr == nil {
+			if vmProps.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOn {
+				fmt.Printf("[%s] 실행 중 -> 전원 끄는 중...\n", cleanName)
+				offTask, err := vm.PowerOff(ctx)
+				if err != nil {
+					fmt.Printf("[%s] 실패: 전원 끄기 Task 발급 오류: %v\n", cleanName, err)
+					continue
+				}
+				if err := offTask.Wait(ctx); err != nil {
+					fmt.Printf("[%s] 실패: 전원 끄기 실패: %v\n", cleanName, err)
+					continue
+				}
+			}
+		}
+
+		destroyTask, err := vm.Destroy(ctx)
+		if err != nil {
+			fmt.Printf("[%s] 실패: 삭제 Task 발급 오류: %v\n", cleanName, err)
+			continue
+		}
+		if err := destroyTask.Wait(ctx); err != nil {
+			fmt.Printf("[%s] 실패: 삭제 실패: %v\n", cleanName, err)
+			continue
+		}
+
+		fmt.Printf("[%s] 성공: VM 삭제 완료\n", cleanName)
+		successCount++
+	}
+
+	fmt.Printf("\n[완료] %d/%d대 삭제 성공\n", successCount, len(vmNames))
+}</pre>
+        </div>
+      </div>
+    </details>
+
+  <footer>
+    <span>VM 자동생성 웹 포털 · Rocky Linux 8.10 · 192.168.0.58:8443 · systemd(vm-portal.service) 상시 구동</span>
+    <span>Phase 1~9 + 통합 파이프라인 + 감사 로그 + Dry-run, 클라우드 콘솔 스타일 UI, 실제 vCenter 검증 완료</span>
+  </footer>
+
+</div>

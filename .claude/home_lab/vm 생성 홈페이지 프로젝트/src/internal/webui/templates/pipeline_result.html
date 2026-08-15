@@ -1,0 +1,12 @@
+{{define "content"}}
+<h1>Phase 1~6 실행 결과</h1>
+{{range .Steps}}
+<fieldset>
+  <legend>{{.Name}} — <span class="status-badge {{.StatusClass}}">{{.Status}}</span>{{if .JobID}} (Job #{{.JobID}}){{end}}</legend>
+  {{if .Lines}}<pre class="log">{{range .Lines}}{{.}}
+{{end}}</pre>{{end}}
+  {{if .ErrorMsg}}<p class="error">{{.ErrorMsg}}</p>{{end}}
+</fieldset>
+{{end}}
+<p><a href="/">대시보드로 돌아가기</a></p>
+{{end}}

@@ -1,0 +1,8 @@
+{{define "content"}}
+<h1>작업 결과 — {{.Phase}} (Job #{{.JobID}})</h1>
+<p>상태: <span class="status-badge {{.Status}}">{{.Status}}</span></p>
+{{if .DownloadURL}}<p><a href="{{.DownloadURL}}">CSV 리포트 다운로드</a></p>{{end}}
+<pre class="log">{{range .Lines}}{{.}}
+{{end}}</pre>
+<p><a href="/">대시보드로 돌아가기</a></p>
+{{end}}

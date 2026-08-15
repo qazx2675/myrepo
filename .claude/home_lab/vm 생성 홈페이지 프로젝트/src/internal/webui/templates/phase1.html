@@ -1,0 +1,16 @@
+{{define "content"}}
+<h1>Phase 1 — ESXi 호스트 등록</h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/phase1">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>대상 폴더/클러스터/데이터센터 이름<input type="text" name="folder_name" required placeholder="예: task"></label>
+  <label>ESXi 호스트 목록 (줄바꿈으로 구분)
+    <textarea name="hosts" rows="6" required placeholder="esxi01.lab.local&#10;esxi02.lab.local"></textarea>
+  </label>
+  <button type="submit">등록 실행</button>
+</form>
+{{end}}

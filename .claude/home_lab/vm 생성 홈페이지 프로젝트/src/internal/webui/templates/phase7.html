@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1>Phase 7 — 전원 정책 변경 <span class="level-badge">Lv.4+ / 파괴적 작업</span></h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<p style="color:#c62828">모든 대상 ESXi 호스트의 전원 관리 정책을 "고성능(High Performance)"으로 일괄 변경합니다. 되돌리려면 vCenter에서 수동으로 재설정해야 합니다.</p>
+<form method="post" action="/phase7" onsubmit="return this.dry_run.checked || confirm('선택한 모든 호스트의 전원 정책을 변경합니다. 계속하시겠습니까?');">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>대상 ESXi 호스트 목록 (줄바꿈으로 구분)
+    <textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&#10;esxi02.lab.local"></textarea>
+  </label>
+  <label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem">
+    <input type="checkbox" name="dry_run" style="width:auto; margin:0">
+    Dry-run (실행 없이 대상/명령만 미리보기)
+  </label>
+  <label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem">
+    <input type="checkbox" name="confirm" required style="width:auto; margin:0">
+    위 호스트들의 전원 정책이 변경됨을 확인했습니다.
+  </label>
+  <button type="submit" class="danger">전원 정책 변경 실행</button>
+</form>
+{{end}}
