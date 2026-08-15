@@ -233,7 +233,11 @@ func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, t
 			default:
 				if nic, ok := dev.(types.BaseVirtualEthernetCard); ok {
 					card := nic.GetVirtualEthernetCard()
-					info.Networks = append(info.Networks, resolvePortgroupName(card.Backing, dvPortgroups))
+					connected := card.Connectable != nil && card.Connectable.Connected
+					info.Networks = append(info.Networks, model.NetworkAdapter{
+						Portgroup: resolvePortgroupName(card.Backing, dvPortgroups),
+						Connected: connected,
+					})
 				}
 			}
 		}

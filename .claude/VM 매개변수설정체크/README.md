@@ -179,7 +179,7 @@ export VC_PASS='...'
 | `ev01` | hostname에 `ev01` 포함된 VM — vCPU affinity(HT on/off + 코어수로 자동계산), Shares(CPU/메모리) — 항상 필수 체크 |
 | `ev02` | hostname에 `ev02` 포함된 VM — affinity(파일 기반), Shares(CPU/메모리) — `-affinity-ev02`/`-shares-ev02` 옵션을 줬을 때만, VM이 1대뿐이면 스킵 |
 | `ev03` | ev02와 동일하되 `ev03` 그룹 |
-| `network` | 연결된 네트워크 어댑터의 포트그룹 이름 (판정 없음, 정보성) |
+| `network` | VM에 붙은 네트워크 어댑터의 포트그룹 이름 (판정 없음, 정보성). 커넥트/디스커넥트 상태와 무관하게 항상 조사하며, 그 상태는 비고란에 "커넥트"/"디스커넥트"로 기록 |
 
 ## 체크 항목 상세 (실제로 조회/비교하는 값)
 
@@ -200,7 +200,7 @@ export VC_PASS='...'
 | config.hardware.numCPU | ev01/미분류=`-cpu`, ev02=`-cpu-ev02`, ev03=`-cpu-ev03` | vCPU 수 — ev02/ev03는 옵션 안 주면 스킵 |
 | config.hardware.memoryMB | ev01/미분류=`-mem`, ev02=`-mem-ev02`, ev03=`-mem-ev03` (GB→MB 환산) | 메모리 크기 — ev02/ev03는 옵션 안 주면 스킵 |
 | 디스크 총 용량 | ev01/미분류=`-disk`, ev02=`-disk-ev02`, ev03=`-disk-ev03` (GB, 반올림) | 연결된 모든 VirtualDisk 용량 합산 — ev02/ev03는 옵션 안 주면 스킵 |
-| 네트워크 포트그룹 | (판정 없음) | 연결된 어댑터의 포트그룹 이름만 정보로 기록 |
+| 네트워크 포트그룹 | (판정 없음) | 어댑터의 포트그룹 이름을 커넥트/디스커넥트 상태와 무관하게 정보로 기록. 커넥트/디스커넥트 상태 자체도 비고란에 새로 표시(예전엔 이름만 보이고 상태는 안 보였음) |
 
 ### ev01 / ev02 / ev03 그룹별 (hostname에 문자열 포함 여부로 분류)
 
