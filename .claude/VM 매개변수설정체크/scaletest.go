@@ -59,8 +59,8 @@ func runScale(n int, out string, onlyFail, noColor bool) {
 			group := classifyGroup(vm.Hostname)
 			var f []model.Finding
 			f = append(f, checker.CheckFixed(vm)...)
-			f = append(f, checker.CheckTopology(vm, scaleExpectCores, scaleExpectNuma)...)
-			f = append(f, checker.CheckHardware(vm, scaleExpectCPU, scaleExpectMemGB, scaleExpectDiskGB, shares, group, singleVMMode)...)
+			f = append(f, checker.CheckTopology(vm, checker.CoresExpect{Base: scaleExpectCores}, checker.NumaExpect{Base: scaleExpectNuma}, group, singleVMMode)...)
+			f = append(f, checker.CheckHardware(vm, checker.CPUExpect{Base: scaleExpectCPU}, checker.MemExpect{Base: scaleExpectMemGB}, checker.DiskExpect{Base: scaleExpectDiskGB}, shares, group, singleVMMode)...)
 			f = append(f, checker.CheckHostPower(vm))
 			f = append(f, checker.CheckNetwork(vm)...)
 

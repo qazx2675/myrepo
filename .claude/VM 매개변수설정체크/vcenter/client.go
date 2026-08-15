@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/vmware/govmomi"
-	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
@@ -48,8 +47,14 @@ func displayPowerPolicy(shortName string) string {
 	return shortName
 }
 
-// fetchHostPower는 전체 ESXi 호스트의 이름+전원정책을 딱 2번의 벌크 호출로 가져와
+// fetchHostPower는 전체 ESXi 호스트의 이름+전원정책을 딱 1번의 벌크 호출로 가져와
 // host moref 기준 맵으로 반환한다. (power-policy 프로젝트와 동일한 벌크조회 패턴)
+//
+// 이전에는 configManager.powerSystem을 통해 HostPowerSystem 객체를 별도로 벌크
+// 조회했는데, vcsim(govmomi 시뮬레이터)에는 이 객체가 실제로 등록돼 있지 않아
+// "ManagedObjectNotFound" 계열 오류로 실패한다(실 vCenter에서는 문제 없었음, vcsim
+// 테스트 중 확인됨). HostSystem 자체의 config.powerSystemInfo 프로퍼티로 읽으면
+// 실 vCenter/vcsim 양쪽에서 동일하게 동작하고, 벌크 호출도 1번으로 줄어든다.
 func fetchHostPower(ctx context.Context, client *govmomi.Client) (map[types.ManagedObjectReference]hostPowerInfo, error) {
 	m := view.NewManager(client.Client)
 	cv, err := m.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"HostSystem"}, true)
@@ -59,33 +64,20 @@ func fetchHostPower(ctx context.Context, client *govmomi.Client) (map[types.Mana
 	defer cv.Destroy(ctx)
 
 	var hosts []mo.HostSystem
-	if err := cv.Retrieve(ctx, []string{"HostSystem"}, []string{"name", "configManager"}, &hosts); err != nil {
+	if err := cv.Retrieve(ctx, []string{"HostSystem"}, []string{"name", "config.powerSystemInfo"}, &hosts); err != nil {
 		return nil, fmt.Errorf("호스트 벌크 조회 실패: %w", err)
 	}
 
-	var powerRefs []types.ManagedObjectReference
-	refToHost := map[types.ManagedObjectReference]mo.HostSystem{}
-	for _, h := range hosts {
-		if h.ConfigManager.PowerSystem != nil {
-			powerRefs = append(powerRefs, *h.ConfigManager.PowerSystem)
-			refToHost[*h.ConfigManager.PowerSystem] = h
-		}
-	}
-
 	result := map[types.ManagedObjectReference]hostPowerInfo{}
-	if len(powerRefs) == 0 {
-		return result, nil
-	}
-
-	var powerSystems []mo.HostPowerSystem
-	pc := property.DefaultCollector(client.Client)
-	if err := pc.Retrieve(ctx, powerRefs, []string{"info"}, &powerSystems); err != nil {
-		return nil, fmt.Errorf("전원 정책 벌크 조회 실패: %w", err)
-	}
-
-	for _, ps := range powerSystems {
-		h := refToHost[ps.Self]
-		result[h.Self] = hostPowerInfo{Name: h.Name, ShortName: ps.Info.CurrentPolicy.ShortName}
+	for _, h := range hosts {
+		if h.Config == nil {
+			continue
+		}
+		shortName := h.Config.PowerSystemInfo.CurrentPolicy.ShortName
+		if shortName == "" {
+			continue
+		}
+		result[h.Self] = hostPowerInfo{Name: h.Name, ShortName: shortName}
 	}
 	return result, nil
 }
