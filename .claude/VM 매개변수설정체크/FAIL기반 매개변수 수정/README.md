@@ -66,7 +66,7 @@ export VC_PASSWORD='실제_비밀번호'
 ### 동작 순서
 
 1. CSV를 읽어 FAIL/설정없음 항목을 태그(affinity/lpage/power/manual)로 분류
-2. **[게이트] 그룹 동질성 검증**: 같은 ev01끼리, 같은 ev02끼리 vCPU/코어수/메모리/디스크/Shares가 전부 같은지 실시간 조회로 확인 — 하나라도 다르면 무엇이 다른지 보여주고 즉시 중단
+2. **[게이트] 그룹 동질성 검증**: 같은 ev01끼리, 같은 ev02끼리, 같은 ev03끼리 vCPU/코어수/메모리/디스크/Shares/NUMA/HT가 전부 같은지, 그리고 ev01/ev02/ev03 그룹 간 VM 대수가 서로 같은지 실시간 조회로 확인 — 하나라도 다르면 무엇이 다른지 보여주고 즉시 중단
 3. **[게이트] 전원 OFF 검증**: 교정 대상 VM이 한 대라도 켜져 있으면 그 이름을 보여주고 즉시 중단
 4. dry-run으로 "어떤 태그가 어떤 명령으로 실행될 예정인지" 전부 출력
 5. `y` 입력으로 명시적 확인 (그 외 입력은 전부 취소로 처리 — 아무것도 바뀌지 않음)
@@ -82,8 +82,13 @@ export VC_PASSWORD='실제_비밀번호'
 | `host power policy` | `power` |
 | 그 외(vCPU 수, 메모리, 디스크, Shares, Reserve all guest memory, 네트워크) | **manual** — 이 도구가 다루지 않음, 사람이 직접 조치 |
 
-ev03(hostname에 `ev03` 포함) 관련 항목은 태그와 무관하게 전부 manual로 취급합니다 —
-`affinity_setting`/`lpage_setting` 둘 다 ev03을 지원하지 않기 때문입니다.
+ev03(hostname에 `ev03` 포함) 관련 항목도 ev01/ev02와 동일한 기준으로 태그가 부여됩니다
+(향후 `affinity_setting`/`lpage_setting`이 ev03을 지원하게 되면 별도 수정 없이 그대로
+적용됩니다). 단, 현재 이 저장소의 레거시 `affinity_setting`(`old/go-lang/phase4-2-affinity`)과
+현재세대 `lpage_setting`(`vm_lpage_bulk`)은 실제로 ev03을 처리하지 않으므로, ev03 대상이
+있는 상태에서 이 도구들을 그대로 쓰면 해당 도구가 ev03 worklist 항목을 무시하거나 에러를
+낼 수 있습니다 — ev03을 실제로 적용하려면 ev03을 지원하는 버전의 외부 도구를
+`-affinityTool`/`-lpageTool`로 지정해야 합니다.
 
 ## 테스트 방법 (실제 외부 도구 없이)
 
@@ -107,9 +112,14 @@ chmod +x affinity_setting
 
 ## 알려진 한계
 
-- 그룹 동질성 검증은 vCPU 수/코어당 소켓 수/메모리/디스크/CPU Shares만 비교합니다. NUMA 노드
-  수, HT(하이퍼스레딩) 상태 자체는 이번 버전에서 비교 대상에 포함하지 않았습니다.
+- 그룹 동질성 검증은 vCPU 수/코어당 소켓 수/메모리/디스크/CPU Shares/NUMA(`numa.vcpu.maxPerVirtualNode`
+  extraConfig 값)/HT(`sched.vcpu0.affinity` extraConfig 값이 콤마로 구분된 pCPU 2개 이상인지)와
+  ev01/ev02/ev03 그룹 간 VM 대수를 비교합니다. NUMA/HT 값이 vCenter에 아예 설정되어 있지 않은
+  VM은 "설정없음" 상태로 취급되어 같은 미설정 상태끼리는 동일한 것으로 봅니다.
 - vCPU 수/메모리/디스크/Shares/Reserve-all-guest-memory FAIL은 자동교정 대상이 아니라
   manual로만 표시됩니다(현재 조사된 외부 도구 중 이 값들을 정확히 커버하는 게 없음).
 - `-affinityFile`(ev02용)을 안 주면 ev02 affinity FAIL이 있어도 ev01만 교정되고 ev02는
   건너뜁니다(경고 메시지로 안내).
+- ev03도 다른 그룹과 동일하게 태그가 부여되지만, 이 저장소에 포함된 레거시/현재세대
+  외부 도구는 ev03 적용을 지원하지 않습니다 — ev03을 실제로 교정하려면 이를 지원하는
+  버전의 외부 도구를 지정해야 합니다.

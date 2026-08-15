@@ -55,8 +55,8 @@ vm-param-check 결과 CSV(상세)
 
 | vm-param-check의 Key/Source | 태그 | 담당 도구 |
 |---|---|---|
-| `sched.vcpuN.affinity` (ev01/ev02, **ev03 미지원**) | `affinity` | `affinity_setting` (레거시 `affinity.go`) |
-| `sched.mem.lpage.enable1GPage`, `sched.mem.prealloc*`, `sched.swap.vmxSwapEnabled`, `cpuid.coresPerSocket`, `hardware.numCoresPerSocket`, `numa.vcpu.maxPerVirtualNode`, `config.numaInfo.coresPerNumaNode` (ev01/ev02, **ev03 미지원**) | `lpage` | `lpage_setting` (현재세대 `vm_lpage_bulk`) |
+| `sched.vcpuN.affinity` (ev01/ev02/ev03 전부) | `affinity` | `affinity_setting` (레거시 `affinity.go`, **ev03 미지원**이라 실제 적용 도구 교체 필요) |
+| `sched.mem.lpage.enable1GPage`, `sched.mem.prealloc*`, `sched.swap.vmxSwapEnabled`, `cpuid.coresPerSocket`, `hardware.numCoresPerSocket`, `numa.vcpu.maxPerVirtualNode`, `config.numaInfo.coresPerNumaNode` (ev01/ev02/ev03 전부) | `lpage` | `lpage_setting` (현재세대 `vm_lpage_bulk`, **ev03 미지원**이라 실제 적용 도구 교체 필요) |
 | `host power policy` (source=`host`) | `power` | `power_setting` (레거시 `power_policy.go`) |
 | `config.hardware.numCPU`, `config.hardware.memoryMB`, 디스크 용량, Shares, `config.memoryReservationLockedToMax`, 네트워크 | **수동조치 필요** (자동교정 대상 아님) | — |
 
@@ -65,10 +65,11 @@ vCPU 수/메모리/디스크/Reserve-all-guest-memory는 지금 조사한 3개 �
 ## 안전장치 설계
 
 ### 1) 그룹 동질성 검증
-작업대상 파일(worklist)에 나열된 모든 BM(호스트)의 ev01/ev02(/ev03) VM을 병렬로 조회해서 아래 값이 그룹 내에서 전부 동일한지 확인:
-- VM 대수(구성이 몇 대인지)
+작업대상 파일(worklist)에 나열된 모든 BM(호스트)의 ev01/ev02/ev03 VM을 병렬로 조회해서 아래 값이 그룹 내에서 전부 동일한지 확인:
+- ev01/ev02/ev03 그룹 간 VM 대수(구성이 몇 대인지) 일치 여부
 - ev01 Shares ratio, ev02 Shares ratio
-- vCPU 수, 메모리 GB, 디스크 GB
+- vCPU 수, 코어당 소켓 수, 메모리 GB, 디스크 GB
+- NUMA 노드 구성(`numa.vcpu.maxPerVirtualNode`), HT(하이퍼스레딩) 상태
 
 하나라도 다르면 **어떤 호스트의 무엇이 얼마나 다른지 표로 보여주고 즉시 중단**. (예: "host03의 ev01은 disk=300GB인데 나머지는 500GB")
 
@@ -128,8 +129,8 @@ export VC_PASSWORD='...'
 
 1. ~~전원정책 도구~~ → **해결**: 레거시 `power_policy.go`를 그대로 서브프로세스로 호출.
 2. ~~인증 방식 통일~~ → **해결**: `vm-param-fix` 자체는 `VC_PASSWORD` + `-id`를 표준으로 사용(3개 외부 도구와 동일). 재검증 단계에서만 내부적으로 `VC_USER`/`VC_PASS`로 변환해서 `vm-param-check`를 호출.
-3. **동질성 판정 범위**: 구현에서는 vCPU 수/코어당소켓수/메모리MB/디스크GB/CPU Shares(레벨+ratio)를 비교한다. NUMA 노드 수와 HT 상태는 이번 구현에 포함하지 않음 — README "알려진 한계"에 명시.
-4. ~~ev03 지원 범위~~ → **해결**: ev03 관련 FAIL은 태그와 무관하게 전부 "수동조치 필요"로 분류(자동교정 대상 아님).
+3. **동질성 판정 범위**: 구현에서는 vCPU 수/코어당소켓수/메모리MB/디스크GB/CPU Shares(레벨+ratio)/NUMA(`numa.vcpu.maxPerVirtualNode`)/HT(`sched.vcpu0.affinity`의 콤마 구분 pCPU 개수)를 비교하고, ev01/ev02/ev03 그룹 간 VM 대수도 서로 같은지 확인한다.
+4. **ev03 지원 범위**: ev03 관련 FAIL도 ev01/ev02와 동일한 기준으로 태그가 부여된다(자동교정 대상에서 배제하지 않음) — 향후 외부 도구가 ev03을 지원하면 별도 코드 수정 없이 그대로 적용된다. 단, 이 저장소에 포함된 레거시 `affinity_setting`/현재세대 `lpage_setting`은 실제로 ev03을 처리하지 않으므로 운영에서는 ev03을 지원하는 버전의 외부 도구를 지정해야 한다 — README "알려진 한계"에 명시.
 5. ~~재검증 방식~~ → **해결**: 태그별 도구 실행 후 `vm-param-check`를 원래 CSV에 있던 VM 전체 대상으로 다시 통째로 재실행(부분 재조회 아님). 전역 기대값(cpu/cores/numa/mem/disk/shares/ht)은 원래 CSV에서 그대로 복원해서 넘기므로 사용자가 다시 입력할 필요 없음.
 6. ~~`affinity_setting`이 병렬이 아닌 문제~~ → **해결**: 사용자 확인 — 회사 실제 환경의 `affinity_setting`/`power_setting`은 이미 병렬로 구현되어 있음(이 저장소의 레거시 파일은 테스트용 참고 코드일 뿐). `vm-param-fix`는 세 도구를 손대지 않고 그대로 서브프로세스로 부르므로, 실제 환경에서는 태그별 도구 자체도 병렬 동작한다.
 
