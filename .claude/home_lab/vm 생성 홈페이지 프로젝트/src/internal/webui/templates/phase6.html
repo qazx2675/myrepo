@@ -1,0 +1,25 @@
+{{define "content"}}
+<h1>Phase 6 — lpage / NUMA 튜닝 <span class="level-badge">Lv.4+</span></h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/phase6">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>대상 BM 호스트 목록 (줄바꿈으로 구분)
+    <textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&#10;esxi02.lab.local"></textarea>
+  </label>
+  <fieldset>
+    <legend>EV01</legend>
+    <label>Cores<input type="number" name="ev01_cores" required min="1"></label>
+    <label>Sockets<input type="number" name="ev01_sockets" required min="1"></label>
+  </fieldset>
+  <fieldset>
+    <legend>EV02</legend>
+    <label>Cores<input type="number" name="ev02_cores" required min="1"></label>
+    <label>Sockets<input type="number" name="ev02_sockets" required min="1"></label>
+  </fieldset>
+  <button type="submit">설정 실행</button>
+</form>
+{{end}}

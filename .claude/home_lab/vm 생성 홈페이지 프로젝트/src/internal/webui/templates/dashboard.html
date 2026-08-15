@@ -1,0 +1,114 @@
+{{define "content"}}
+<h1>VM 자동생성 대시보드</h1>
+<p style="color:var(--text-muted); font-size:.88rem; margin-top:-.6rem">vCenter/ESXi 자동화 스크립트를 실행할 단계를 선택하세요.</p>
+
+<div class="phase-groups">
+  <div>
+    <div class="phase-group-label">프로비저닝</div>
+    <div class="phase-grid">
+      <div class="phase-card">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><circle cx="7" cy="7" r=".6" fill="currentColor"/><circle cx="7" cy="17" r=".6" fill="currentColor"/></svg></div>
+          <h3>Phase 1</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.3+</span>
+        </div>
+        <p class="desc">ESXi 호스트를 vCenter에 등록</p>
+        <a class="run-link" href="/phase1">실행하기 →</a>
+      </div>
+      <div class="phase-card">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><path d="M8 7l3 9M16 7l-3 9"/></svg></div>
+          <h3>Phase 2</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.3+</span>
+        </div>
+        <p class="desc">vSwitch / 포트그룹 생성</p>
+        <a class="run-link" href="/phase2">실행하기 →</a>
+      </div>
+      <div class="phase-card">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 3v18M4 7.5l8 4.5 8-4.5"/></svg></div>
+          <h3>Phase 3</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.3+</span>
+        </div>
+        <p class="desc">VM 생성 (hostgroup 매핑, firmware)</p>
+        <a class="run-link" href="/phase3">실행하기 →</a>
+      </div>
+      <div class="phase-card">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12l-7.5 7.5a2 2 0 0 1-2.8 0L4 13.8V5a1 1 0 0 1 1-1h8.8L20 10.2a2 2 0 0 1 0 1.8z"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/></svg></div>
+          <h3>Phase 4</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.3+</span>
+        </div>
+        <p class="desc">MAC/IP 추출 (Kickstart 리스트)</p>
+        <a class="run-link" href="/phase4">실행하기 →</a>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="phase-group-label">튜닝</div>
+    <div class="phase-grid">
+      <div class="phase-card">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/></svg></div>
+          <h3>Phase 5</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.4+</span>
+        </div>
+        <p class="desc">CPU Affinity 설정</p>
+        <a class="run-link" href="/phase5">실행하기 →</a>
+      </div>
+      <div class="phase-card">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 7l9 5 9-5-9-5z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/></svg></div>
+          <h3>Phase 6</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.4+</span>
+        </div>
+        <p class="desc">lpage / NUMA 튜닝</p>
+        <a class="run-link" href="/phase6">실행하기 →</a>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="phase-group-label">운영 (파괴적 작업)</div>
+    <div class="phase-grid">
+      <div class="phase-card danger">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></div>
+          <h3>Phase 7</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.4+ 파괴적</span>
+        </div>
+        <p class="desc">전원 정책 일괄 변경</p>
+        <a class="run-link" href="/phase7">실행하기 →</a>
+      </div>
+      <div class="phase-card danger">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></div>
+          <h3>Phase 8</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.4+ 파괴적</span>
+        </div>
+        <p class="desc">VM 삭제 (전원 종료 후 완전 삭제)</p>
+        <a class="run-link" href="/phase8">실행하기 →</a>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="phase-group-label">리포트</div>
+    <div class="phase-grid">
+      <div class="phase-card report">
+        <div class="icon-row">
+          <div class="icon-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div>
+          <h3>Phase 9</h3>
+          <span class="level-badge" style="margin-left:auto">Lv.1+ 읽기전용</span>
+        </div>
+        <p class="desc">VM 설정 / PCI 점검 리포트 (CSV)</p>
+        <a class="run-link" href="/phase9">실행하기 →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top:1.75rem"><a href="/pipeline">Phase 1~6 한 번에 실행하기 →</a></p>
+{{if .User}}{{if ge .User.RBACLevel 5}}<p style="margin-top:.4rem"><a href="/audit">감사 로그 조회 →</a></p>{{end}}{{end}}
+{{end}}

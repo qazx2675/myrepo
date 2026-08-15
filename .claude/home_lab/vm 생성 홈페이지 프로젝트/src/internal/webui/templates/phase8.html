@@ -1,0 +1,23 @@
+{{define "content"}}
+<h1>Phase 8 — VM 삭제 <span class="level-badge">Lv.4+ / 파괴적 작업</span></h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<p style="color:#c62828">아래 목록의 VM을 전원 종료 후 완전히 삭제합니다. 되돌릴 수 없습니다. BM 호스트명이 아니라 정확한 VM 이름을 입력하세요 (예: esxi01ev01).</p>
+<form method="post" action="/phase8" onsubmit="return this.dry_run.checked || confirm('입력한 VM들을 영구적으로 삭제합니다. 정말 계속하시겠습니까?');">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>삭제할 VM 이름 목록 (줄바꿈으로 구분, 정확한 VM 이름)
+    <textarea name="vm_names" rows="4" required placeholder="esxi01ev01&#10;esxi01ev02"></textarea>
+  </label>
+  <label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem">
+    <input type="checkbox" name="dry_run" style="width:auto; margin:0" onchange="document.getElementById('confirm_text').required = !this.checked; document.getElementById('confirm_text').disabled = this.checked;">
+    Dry-run (실행 없이 대상/명령만 미리보기 — DELETE 입력 불필요)
+  </label>
+  <label>확인을 위해 아래에 정확히 <code>DELETE</code>를 입력하세요
+    <input type="text" id="confirm_text" name="confirm_text" required placeholder="DELETE">
+  </label>
+  <button type="submit" class="danger">영구 삭제 실행</button>
+</form>
+{{end}}

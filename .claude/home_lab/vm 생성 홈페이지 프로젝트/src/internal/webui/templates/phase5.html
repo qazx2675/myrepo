@@ -1,0 +1,18 @@
+{{define "content"}}
+<h1>Phase 5 — CPU Affinity 설정 <span class="level-badge">Lv.4+</span></h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/phase5">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>대상 BM 호스트 목록 (줄바꿈으로 구분 — ev01은 항상 1:1 코어 고정, ev02는 아래 affinity 값 적용)
+    <textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&#10;esxi02.lab.local"></textarea>
+  </label>
+  <label>EV02 Affinity 설정 (선택, 한 줄에 "키=값" — 비우면 EV02는 건너뜁니다)
+    <textarea name="affinity_pairs" rows="4" placeholder="sched.vcpu0.affinity=0,1&#10;sched.vcpu1.affinity=2,3"></textarea>
+  </label>
+  <button type="submit">설정 실행</button>
+</form>
+{{end}}

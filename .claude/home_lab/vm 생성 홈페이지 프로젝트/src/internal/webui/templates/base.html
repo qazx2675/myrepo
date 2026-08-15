@@ -1,0 +1,251 @@
+{{define "base"}}
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VM 자동생성 포털</title>
+<style>
+  :root {
+    --sidebar-bg: #10162b;
+    --sidebar-bg2: #161d38;
+    --sidebar-text: #aab4d4;
+    --sidebar-text-active: #ffffff;
+    --accent: #5b6cf9;
+    --accent-dark: #4453d8;
+    --bg: #f3f5fb;
+    --card-bg: #ffffff;
+    --border: #e3e7f2;
+    --text: #171b2e;
+    --text-muted: #6b7182;
+    --danger: #d93025;
+    --danger-bg: #fdecea;
+    --success: #17803d;
+    --success-bg: #e8f7ee;
+    --warning: #b45309;
+    --warning-bg: #fef3e2;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    margin: 0; color: var(--text); background: var(--bg);
+  }
+  a { color: var(--accent-dark); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .topbar {
+    display: flex; align-items: center; gap: .75rem;
+    height: 52px; padding: 0 1.25rem;
+    background: var(--sidebar-bg); color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .topbar-brand { display: flex; align-items: center; gap: .5rem; font-weight: 600; font-size: .95rem; letter-spacing: .01em; }
+  .topbar-brand svg { flex-shrink: 0; }
+  .topbar .spacer { flex: 1; }
+  .env-badge {
+    font-size: .72rem; color: #cfd6f5; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12); padding: .2rem .55rem; border-radius: 999px;
+  }
+
+  .app-body { display: flex; min-height: calc(100vh - 52px); }
+
+  .sidebar {
+    width: 236px; flex-shrink: 0; background: var(--sidebar-bg2);
+    color: var(--sidebar-text); padding: 1rem .75rem; overflow-y: auto;
+  }
+  .sidebar .group-label {
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+    color: #6b74a0; margin: 1rem .6rem .35rem; font-weight: 600;
+  }
+  .sidebar .group-label:first-child { margin-top: 0; }
+  .sidebar a.nav-link {
+    display: flex; align-items: center; gap: .55rem;
+    padding: .45rem .6rem; border-radius: 7px; font-size: .86rem;
+    color: var(--sidebar-text); text-decoration: none; margin-bottom: 1px;
+  }
+  .sidebar a.nav-link svg { flex-shrink: 0; opacity: .8; }
+  .sidebar a.nav-link:hover { background: rgba(255,255,255,.06); color: #fff; text-decoration: none; }
+  .sidebar a.nav-link.active { background: var(--accent); color: #fff; }
+  .sidebar a.nav-link.active svg { opacity: 1; }
+  .sidebar a.nav-link.danger-link:not(.active) { color: #e8a9a4; }
+
+  .user-panel {
+    margin-top: 1.25rem; padding: .75rem .6rem 0; border-top: 1px solid rgba(255,255,255,.08);
+  }
+  .user-panel .who { font-size: .82rem; color: #dfe3f7; margin-bottom: .5rem; }
+  .user-panel .who .lv { color: #8f98c4; }
+  .user-panel form button {
+    width: 100%; background: rgba(255,255,255,.06); color: #dfe3f7; border: 1px solid rgba(255,255,255,.1);
+    font-size: .8rem; padding: .4rem; margin-top: 0;
+  }
+  .user-panel form button:hover { background: rgba(255,255,255,.12); }
+
+  main.content { flex: 1; padding: 1.75rem 2.25rem; max-width: 980px; }
+
+  .auth-body { min-height: calc(100vh - 52px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
+  .auth-card {
+    width: 100%; max-width: 360px; background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 2rem; box-shadow: 0 8px 28px rgba(20,25,60,.06);
+  }
+
+  h1 { font-size: 1.35rem; margin: 0 0 1rem; font-weight: 650; }
+  h3 { font-size: 1rem; margin: 0; }
+
+  fieldset { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; background: var(--card-bg); padding: 1rem 1.1rem; }
+  legend { padding: 0 .4rem; font-weight: 600; font-size: .88rem; }
+  label { display: block; margin-top: .7rem; font-size: .85rem; color: var(--text-muted); }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%; padding: .55rem .65rem; box-sizing: border-box; margin-top: .3rem;
+    border: 1px solid var(--border); border-radius: 7px; font-size: .9rem; color: var(--text);
+    background: #fff; font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,108,249,.15); }
+  textarea { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .82rem; }
+
+  button {
+    margin-top: 1.1rem; padding: .55rem 1.3rem; background: var(--accent); color: #fff;
+    border: none; border-radius: 7px; cursor: pointer; font-size: .88rem; font-weight: 550;
+  }
+  button:hover { background: var(--accent-dark); }
+  button.danger { background: var(--danger); }
+  button.danger:hover { background: #b8291f; }
+
+  .error { color: var(--danger); background: var(--danger-bg); padding: .65rem .8rem; border-radius: 7px; font-size: .88rem; }
+  .ok { color: var(--success); background: var(--success-bg); padding: .65rem .8rem; border-radius: 7px; font-size: .88rem; }
+
+  pre.log {
+    background: #0d1224; color: #d3d8f0; padding: 1rem; border-radius: var(--radius);
+    overflow-x: auto; max-height: 60vh; font-size: .82rem; line-height: 1.5;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  table { border-collapse: collapse; width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  th, td { border-bottom: 1px solid var(--border); padding: .55rem .75rem; text-align: left; font-size: .86rem; }
+  th { background: #f8f9fd; color: var(--text-muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+  tr:last-child td { border-bottom: none; }
+
+  .phase-groups { display: flex; flex-direction: column; gap: 1.5rem; }
+  .phase-group-label { font-size: .8rem; font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .6rem; }
+  .phase-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .9rem; }
+  .phase-card {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem;
+    background: var(--card-bg); border-left: 3px solid var(--accent);
+    box-shadow: 0 1px 2px rgba(20,25,60,.03);
+  }
+  .phase-card.danger { border-left-color: var(--danger); }
+  .phase-card.report { border-left-color: var(--success); }
+  .phase-card .icon-row { display: flex; align-items: center; gap: .55rem; margin-bottom: .5rem; }
+  .phase-card .icon-badge {
+    width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    background: rgba(91,108,249,.1); color: var(--accent-dark); flex-shrink: 0;
+  }
+  .phase-card.danger .icon-badge { background: var(--danger-bg); color: var(--danger); }
+  .phase-card.report .icon-badge { background: var(--success-bg); color: var(--success); }
+  .phase-card p.desc { font-size: .82rem; color: var(--text-muted); margin: 0 0 .7rem; min-height: 2.2em; }
+  .phase-card a.run-link { font-size: .84rem; font-weight: 600; }
+
+  .level-badge { display: inline-block; font-size: .7rem; padding: .12rem .5rem; border-radius: 999px; background: #eef0fb; color: #4b52a8; font-weight: 600; }
+  .status-badge { display: inline-block; font-size: .76rem; padding: .2rem .6rem; border-radius: 999px; font-weight: 650; }
+  .status-badge.success { background: var(--success-bg); color: var(--success); }
+  .status-badge.failed { background: var(--danger-bg); color: var(--danger); }
+  .status-badge.dry_run { background: var(--warning-bg); color: var(--warning); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="topbar-brand" href="/">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A5.5 5.5 0 0 1 17.2 7.05 4 4 0 0 1 17 15H7Z"/></svg>
+    VM 자동생성 포털
+  </a>
+  <span class="spacer"></span>
+  {{if .User}}<span class="env-badge">on-prem · vCenter</span>{{end}}
+</header>
+{{if .User}}
+<div class="app-body">
+  <aside class="sidebar">
+    <div class="group-label">개요</div>
+    <a class="nav-link{{if eq .Path "/"}} active{{end}}" href="/">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      대시보드
+    </a>
+    <a class="nav-link{{if eq .Path "/pipeline"}} active{{end}}" href="/pipeline">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4l14 8-14 8V4z"/></svg>
+      Phase 1~6 일괄 실행
+    </a>
+
+    <div class="group-label">프로비저닝</div>
+    <a class="nav-link{{if eq .Path "/phase1"}} active{{end}}" href="/phase1">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><circle cx="7" cy="7" r=".6" fill="currentColor"/><circle cx="7" cy="17" r=".6" fill="currentColor"/></svg>
+      Phase 1 · 호스트 등록
+    </a>
+    <a class="nav-link{{if eq .Path "/phase2"}} active{{end}}" href="/phase2">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><path d="M8 7l3 9M16 7l-3 9"/></svg>
+      Phase 2 · vSwitch/포트그룹
+    </a>
+    <a class="nav-link{{if eq .Path "/phase3"}} active{{end}}" href="/phase3">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 3v18M4 7.5l8 4.5 8-4.5"/></svg>
+      Phase 3 · VM 생성
+    </a>
+    <a class="nav-link{{if eq .Path "/phase4"}} active{{end}}" href="/phase4">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12l-7.5 7.5a2 2 0 0 1-2.8 0L4 13.8V5a1 1 0 0 1 1-1h8.8L20 10.2a2 2 0 0 1 0 1.8z"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/></svg>
+      Phase 4 · MAC/IP 추출
+    </a>
+
+    <div class="group-label">튜닝</div>
+    <a class="nav-link{{if eq .Path "/phase5"}} active{{end}}" href="/phase5">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M4.9 19.1l2-2M17.1 6.9l2-2"/></svg>
+      Phase 5 · CPU Affinity
+    </a>
+    <a class="nav-link{{if eq .Path "/phase6"}} active{{end}}" href="/phase6">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 7l9 5 9-5-9-5z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/></svg>
+      Phase 6 · lpage/NUMA
+    </a>
+
+    <div class="group-label">운영 (파괴적)</div>
+    <a class="nav-link danger-link{{if eq .Path "/phase7"}} active{{end}}" href="/phase7">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+      Phase 7 · 전원 정책
+    </a>
+    <a class="nav-link danger-link{{if eq .Path "/phase8"}} active{{end}}" href="/phase8">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>
+      Phase 8 · VM 삭제
+    </a>
+
+    <div class="group-label">리포트</div>
+    <a class="nav-link{{if eq .Path "/phase9"}} active{{end}}" href="/phase9">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+      Phase 9 · 설정/PCI 리포트
+    </a>
+
+    <div class="group-label">관리</div>
+    <a class="nav-link{{if eq .Path "/credentials"}} active{{end}}" href="/credentials">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></svg>
+      vCenter 자격증명
+    </a>
+    {{if ge .User.RBACLevel 5}}
+    <a class="nav-link{{if eq .Path "/audit"}} active{{end}}" href="/audit">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3z"/><path d="M9 12l2 2 4-4"/></svg>
+      감사 로그
+    </a>
+    {{end}}
+
+    <div class="user-panel">
+      <div class="who">{{.User.Username}} <span class="lv">· Lv.{{.User.RBACLevel}}</span></div>
+      <form action="/logout" method="post"><button type="submit">로그아웃</button></form>
+    </div>
+  </aside>
+  <main class="content">
+{{template "content" .}}
+  </main>
+</div>
+{{else}}
+<div class="auth-body">
+  <div class="auth-card">
+{{template "content" .}}
+  </div>
+</div>
+{{end}}
+</body>
+</html>
+{{end}}

@@ -1,0 +1,15 @@
+{{define "content"}}
+<div style="text-align:center; margin-bottom:1.5rem">
+  <div style="width:44px; height:44px; border-radius:10px; background:rgba(91,108,249,.1); color:var(--accent-dark); display:flex; align-items:center; justify-content:center; margin:0 auto .75rem">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A5.5 5.5 0 0 1 17.2 7.05 4 4 0 0 1 17 15H7Z"/></svg>
+  </div>
+  <h1 style="margin-bottom:.15rem">VM 자동생성 포털</h1>
+  <p style="color:var(--text-muted); font-size:.85rem; margin:0">vCenter/ESXi 자동화 워크플로우</p>
+</div>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/login">
+  <label>아이디<input type="text" name="username" required autofocus></label>
+  <label>비밀번호<input type="password" name="password" required></label>
+  <button type="submit" style="width:100%">로그인</button>
+</form>
+{{end}}

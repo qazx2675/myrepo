@@ -1,0 +1,14 @@
+[Unit]
+Description=VM Auto-Provisioning Portal
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/vm/portal
+ExecStart=/root/vm/portal/bin/server
+Restart=on-failure
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,78 @@
+{{define "content"}}
+<h1>Phase 1~6 전체 실행</h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<p style="color:#555; font-size:.9rem">체크한 단계만 순서대로(1→6) 실행됩니다. 아래 "호스트 목록"과 "포트그룹"은 여러 단계가 공유합니다.</p>
+<form method="post" action="/pipeline">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>대상 ESXi/BM 호스트 목록 (줄바꿈으로 구분 — Phase 1,2,3,4,5,6 공통)
+    <textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&#10;esxi02.lab.local"></textarea>
+  </label>
+  <label style="display:flex; align-items:center; gap:.5rem; margin-top:1rem">
+    <input type="checkbox" name="stop_on_fail" checked style="width:auto; margin:0">
+    한 단계라도 실패하면 이후 단계를 중단합니다 (권장)
+  </label>
+
+  <fieldset>
+    <legend><label style="display:flex;align-items:center;gap:.5rem;margin:0"><input type="checkbox" name="enable_phase1" checked style="width:auto;margin:0">Phase 1 — ESXi 호스트 등록</label></legend>
+    <label>대상 폴더/클러스터/데이터센터 이름<input type="text" name="folder_name" placeholder="예: task"></label>
+  </fieldset>
+
+  <fieldset>
+    <legend><label style="display:flex;align-items:center;gap:.5rem;margin:0"><input type="checkbox" name="enable_phase2" checked style="width:auto;margin:0">Phase 2 — vSwitch 포트그룹 생성</label></legend>
+    <label>대상 vSwitch<input type="text" name="target_vswitch" value="vSwitch0"></label>
+    <label>포트그룹명 (Phase 2에서 생성, Phase 3 네트워크 매핑에도 그대로 사용됩니다)<input type="text" name="portgroup_name" placeholder="PG-App"></label>
+    <label>VLAN 번호<input type="number" name="vlan_id" value="0"></label>
+  </fieldset>
+
+  <fieldset>
+    <legend><label style="display:flex;align-items:center;gap:.5rem;margin:0"><input type="checkbox" name="enable_phase3" checked style="width:auto;margin:0">Phase 3 — VM 생성</label></legend>
+    <label>데이터센터 이름 (1개뿐이면 비워두세요)<input type="text" name="datacenter"></label>
+    <label>Firmware
+      <select name="firmware"><option value="efi" selected>efi (권장)</option><option value="bios">bios</option></select>
+    </label>
+    <label>BM 호스트당 생성할 VM 수 (1~3)<input type="number" name="vm_count" value="2" min="1" max="3"></label>
+    <fieldset>
+      <legend>EV01 스펙</legend>
+      <label>CPU<input type="number" name="ev01_cpu" value="2"></label>
+      <label>Mem(GB)<input type="number" name="ev01_mem" value="4"></label>
+      <label>Disk(GB)<input type="number" name="ev01_disk" value="40"></label>
+      <label>Share<input type="number" name="ev01_share" value="1000"></label>
+    </fieldset>
+    <fieldset>
+      <legend>EV02 스펙</legend>
+      <label>CPU<input type="number" name="ev02_cpu" value="4"></label>
+      <label>Mem(GB)<input type="number" name="ev02_mem" value="8"></label>
+      <label>Disk(GB)<input type="number" name="ev02_disk" value="80"></label>
+      <label>Share<input type="number" name="ev02_share" value="2000"></label>
+    </fieldset>
+  </fieldset>
+
+  <fieldset>
+    <legend><label style="display:flex;align-items:center;gap:.5rem;margin:0"><input type="checkbox" name="enable_phase4" style="width:auto;margin:0">Phase 4 — MAC/IP 추출 (Kickstart 리스트)</label></legend>
+    <label>배포 인자 1 (arg1)<input type="text" name="arg1" placeholder="PROJ_X"></label>
+    <label>배포 정수 인자 (argInt)<input type="number" name="arg_int" placeholder="8080"></label>
+    <label>배포 문자 인자 (argStr)<input type="text" name="arg_str" placeholder="Standard"></label>
+  </fieldset>
+
+  <fieldset>
+    <legend><label style="display:flex;align-items:center;gap:.5rem;margin:0"><input type="checkbox" name="enable_phase5" style="width:auto;margin:0">Phase 5 — CPU Affinity 설정 <span class="level-badge">Lv.4+</span></label></legend>
+    <label>EV02 Affinity 설정 (선택, 한 줄에 "키=값")
+      <textarea name="affinity_pairs" rows="3" placeholder="sched.vcpu0.affinity=0,1"></textarea>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend><label style="display:flex;align-items:center;gap:.5rem;margin:0"><input type="checkbox" name="enable_phase6" style="width:auto;margin:0">Phase 6 — lpage / NUMA 튜닝 <span class="level-badge">Lv.4+</span></label></legend>
+    <label>EV01 Cores<input type="number" name="ev01_cores" value="2"></label>
+    <label>EV01 Sockets<input type="number" name="ev01_sockets" value="2"></label>
+    <label>EV02 Cores<input type="number" name="ev02_cores" value="1"></label>
+    <label>EV02 Sockets<input type="number" name="ev02_sockets" value="2"></label>
+  </fieldset>
+
+  <button type="submit">전체 실행</button>
+</form>
+{{end}}

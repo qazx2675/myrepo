@@ -1,0 +1,38 @@
+{{define "content"}}
+<h1>Phase 3 — VM 생성</h1>
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<form method="post" action="/phase3">
+  <label>vCenter 자격증명
+    <select name="credential_id" required>
+      {{range .Credentials}}<option value="{{.ID}}">{{.Name}} ({{.VCenterIP}})</option>{{end}}
+    </select>
+  </label>
+  <label>데이터센터 이름 (데이터센터가 1개뿐이면 비워두세요)<input type="text" name="datacenter"></label>
+  <label>Firmware
+    <select name="firmware"><option value="efi" selected>efi (권장)</option><option value="bios">bios</option></select>
+  </label>
+  <label>BM 호스트당 생성할 VM 수 (1~3)<input type="number" name="vm_count" value="2" min="1" max="3" required></label>
+  <label>대상 BM 호스트 목록 (줄바꿈으로 구분)
+    <textarea name="hosts" rows="4" required placeholder="esxi01.lab.local&#10;esxi02.lab.local"></textarea>
+  </label>
+  <label>Hostgroup 매핑 (한 줄에 "호스트 포트그룹명")
+    <textarea name="hostgroup_map" rows="4" placeholder="esxi01.lab.local PG-App"></textarea>
+  </label>
+
+  <fieldset>
+    <legend>EV01 스펙</legend>
+    <label>CPU<input type="number" name="ev01_cpu" value="2" required></label>
+    <label>Mem(GB)<input type="number" name="ev01_mem" value="4" required></label>
+    <label>Disk(GB)<input type="number" name="ev01_disk" value="40" required></label>
+    <label>Share<input type="number" name="ev01_share" value="1000" required></label>
+  </fieldset>
+  <fieldset>
+    <legend>EV02 스펙</legend>
+    <label>CPU<input type="number" name="ev02_cpu" value="4" required></label>
+    <label>Mem(GB)<input type="number" name="ev02_mem" value="8" required></label>
+    <label>Disk(GB)<input type="number" name="ev02_disk" value="80" required></label>
+    <label>Share<input type="number" name="ev02_share" value="2000" required></label>
+  </fieldset>
+  <button type="submit">생성 실행</button>
+</form>
+{{end}}

@@ -1,0 +1,22 @@
+{{define "content"}}
+<h1>감사 로그 <span class="level-badge">Lv.5</span></h1>
+<p style="color:#777; font-size:.85rem">최근 200건. 사용자 · 액션 · 대상 · 결과 · 시각 순으로 표시됩니다.</p>
+<table>
+  <thead>
+    <tr><th>시각</th><th>사용자</th><th>액션</th><th>대상</th><th>결과</th></tr>
+  </thead>
+  <tbody>
+    {{range .Entries}}
+    <tr>
+      <td>{{.CreatedAt}}</td>
+      <td>{{.Username}}</td>
+      <td>{{.Action}}</td>
+      <td>{{.Target}}</td>
+      <td>{{.Result}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5">기록이 없습니다.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
