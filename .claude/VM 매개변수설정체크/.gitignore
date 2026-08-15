@@ -7,3 +7,11 @@ vm-param-check
 # 환경별 실행 입력 파일 (vCenter 주소, -f 대상 목록, affinity 파일 등) — 실제 인프라 정보가
 # 들어가므로 저장소에 올리지 않는다. README의 사용법 예시를 보고 각자 환경에 맞게 만들 것.
 vcenter.txt
+
+# 테스트 스크립트(scale_test.sh, real_test.sh) 실행 결과물 — 재현 가능한 산출물이라 안 올림
+scale_test_out/
+real_test_out/
+*.log
+
+# 컴파일된 레이스 디텍터 바이너리(개발용, 커밋 대상 아님)
+vm-param-check-race

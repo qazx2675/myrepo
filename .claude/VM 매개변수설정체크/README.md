@@ -72,10 +72,11 @@ export VC_PASS='...'
 | `-shares-ev01 <N>` | (필수) | 기대값: ev01 그룹 Shares(ratio) — CPU/메모리 Shares 둘 다 이 값으로 체크 |
 | `-shares-ev02 <N>` | (옵션) | 기대값: ev02 그룹 Shares(ratio). 안 주면 ev02 shares 체크 스킵 |
 | `-shares-ev03 <N>` | (옵션) | 기대값: ev03 그룹 Shares(ratio). 안 주면 ev03 shares 체크 스킵 |
+| `-affinity-ev01 <path>` | (옵션) | ev01 그룹 기대 affinity 파일. **안 주면 기존과 동일하게 `-ht`/`-cores` 기반 자동계산 사용**. 주면 자동계산 대신 이 파일값으로 비교 |
 | `-affinity-ev02 <path>` | (옵션) | ev02 그룹 기대 affinity 파일. 안 주면 ev02 affinity 체크 스킵 |
 | `-affinity-ev03 <path>` | (옵션) | ev03 그룹 기대 affinity 파일. 안 주면 ev03 affinity 체크 스킵 |
 | `-out <path>` | (없음 → 타임스탬프 자동생성) | 상세 CSV 출력 경로. 같은 이름에 `_summary`가 붙은 요약 CSV가 하나 더 생성됨 |
-| `-onlyFail` | `false` | PASS(문제 없음)인 VM은 콘솔/CSV 모두에서 제외하고 FAIL/설정없음이 있는 VM만 출력 (대수 많을 때 가독성용) |
+| `-onlyFail` | `false` | PASS(문제 없음)인 VM은 콘솔/CSV 모두에서 제외하고 FAIL/설정없음이 있는 VM만 출력 (대수 많을 때 가독성용). **콘솔 상세 섹션도 이때는 FAIL/설정없음 항목만** 보여줌. 미지정(기본)이면 콘솔 상세 섹션에 OK/정보 항목까지 전부 출력됨 |
 | `-noColor` | `false` | 콘솔 출력에서 ANSI 컬러(FAIL=빨강/설정없음=노랑/PASS=초록)를 끔 — 컬러 미지원 터미널/파일 리다이렉트용 |
 | `-demo` | `false` | vCenter에 연결하지 않고, affinity 항목이 많은 8~16vCPU급 가짜 VM 3대(OK/FAIL/개수불일치 케이스)로 콘솔+CSV 출력을 보여주는 데모 모드. 다른 모든 플래그를 무시하고 고정된 데모 기대값 사용 |
 
@@ -85,11 +86,12 @@ export VC_PASS='...'
 ```bash
 ./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
   --shares-ev01=2000 --shares-ev02=1000 --shares-ev03=1000 \
-  --affinity-ev02=ev02.txt --affinity-ev03=ev03.txt \
+  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt --affinity-ev03=ev03.txt \
   --out=result.csv
 ```
+(`--affinity-ev01`을 안 주면 ev01은 그대로 `-ht`/`-cores` 자동계산을 씁니다. 세 옵션 다 선택사항이라 필요한 것만 주면 됩니다.)
 
-**2. 지정 대상 모드 — hostname 목록 파일로 특정 VM들만:**
+**2. 지정 대상 모드 — hostname 목록 파일로 특정 VM들만 (affinity-evNN 옵션도 그대로 사용 가능):**
 ```bash
 # kdh.txt: 체크할 BM(VM) hostname을 한 줄씩
 cat kdh.txt
@@ -97,8 +99,11 @@ cat kdh.txt
 # 192ev02
 
 ./vm-param-check -f kdh.txt --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --out=result.csv
+  --shares-ev01=2000 --shares-ev02=1000 \
+  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt \
+  --out=result.csv
 ```
+`-f`는 "어떤 vCenter의 어떤 VM들만 볼지"만 제한할 뿐, `--affinity-ev01/02/03` 등 나머지 옵션은 전체 순회 모드와 완전히 동일하게 동작합니다 — 모드와 무관하게 항상 같이 쓸 수 있습니다.
 
 **3. 대수 많을 때 문제 있는 VM만 보기:**
 ```bash
@@ -123,6 +128,13 @@ cat kdh.txt
 export VC_USER='administrator@vsphere.local'
 export VC_PASS='...'
 ```
+
+## 콘솔 출력
+
+콘솔은 항상 `[1] VM별 요약 표`(대수/OK/FAIL/설정없음/정보 집계)를 먼저 보여주고, 그 아래 `[2]` 상세 섹션이 이어집니다.
+
+- **기본(= `-onlyFail` 미지정)**: `[2]`는 모든 VM의 모든 항목(OK/FAIL/설정없음/정보)을 빠짐없이 보여줍니다 — CSV 상세와 동일한 정보를 콘솔에서도 확인할 수 있습니다. VM이 많으면 그만큼 출력도 길어집니다.
+- **`-onlyFail`**: `[2]`는 FAIL이 있는 VM만, 그 안에서도 FAIL/설정없음 항목만 보여줘서 문제만 빠르게 훑어볼 수 있습니다.
 
 ## 출력 파일
 
@@ -175,12 +187,17 @@ export VC_PASS='...'
 
 | 그룹 | 조건 | 체크 항목 | 기대값 산출 방식 |
 |---|---|---|---|
-| ev01 | hostname에 `ev01` 포함 | vCPU affinity(`sched.vcpuN.affinity`), CPU/메모리 Shares(ratio) | affinity는 `-ht`(on/off) + `-cores`로 자동계산, shares는 `-shares-ev01` — 둘 다 항상 필수 체크 |
+| ev01 | hostname에 `ev01` 포함 | vCPU affinity(`sched.vcpuN.affinity`), CPU/메모리 Shares(ratio) | affinity는 기본적으로 `-ht`(on/off) + `-cores`로 자동계산하지만, `-affinity-ev01` 파일을 주면 그 값으로 대체됨. shares는 `-shares-ev01` — 둘 다 항상 필수 체크 |
 | ev02 | hostname에 `ev02` 포함 | 위와 동일 | affinity는 `-affinity-ev02` 파일, shares는 `-shares-ev02` — 옵션 안 주면 스킵 |
 | ev03 | hostname에 `ev03` 포함 | 위와 동일 | `-affinity-ev03` / `-shares-ev03` — 옵션 안 주면 스킵 |
 
 - affinity 자동계산(ev01): HT ON이면 코어 2개씩 페어(`sched.vcpu0.affinity=0,1`, `sched.vcpu1.affinity=2,3`...), HT OFF면 1:1(`sched.vcpu0.affinity=0`...)
 - **조사 대상 VM이 1대뿐이면** ev02/ev03 옵션이 주어져 있어도 그 체크는 무조건 스킵됩니다 (여러 대를 비교할 때만 의미가 있는 로직이라서).
+
+## 데이터센터 범위 / 병렬 처리
+
+- **데이터센터 무관 전체 탐색**: vCenter 조회는 `ServiceContent.RootFolder`(vCenter 최상위, 모든 Datacenter의 부모)를 재귀적으로 순회합니다. 특정 Datacenter로 범위를 좁히지 않기 때문에, VM이나 호스트가 vCenter 내부의 어느 Datacenter에 속해 있어도 빠짐없이 조회·체크됩니다.
+- **병렬 처리**: `-vcenterList`에 vCenter가 여러 개면 접속·조회를 동시에 진행합니다(하나씩 순서대로 기다리지 않음). VM별 설정값 비교(체크)도 CPU 코어 수만큼 워커풀로 동시에 처리합니다. 결과는 항상 같은 순서로 모아서 출력하므로, 병렬로 처리해도 콘솔/CSV 결과 순서는 매번 동일하게 재현됩니다.
 
 ## 알려진 한계
 

@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"vm-param-check/checker"
@@ -39,6 +41,7 @@ func main() {
 	sharesEV02Str := flag.String("shares-ev02", "", "기대값: ev02 그룹 CPU Shares(ratio) (옵션, 안 주면 ev02 shares 체크 스킵)")
 	sharesEV03Str := flag.String("shares-ev03", "", "기대값: ev03 그룹 CPU Shares(ratio) (옵션, 안 주면 ev03 shares 체크 스킵)")
 
+	affinityEV01Path := flag.String("affinity-ev01", "", "ev01 그룹 기대 affinity 파일 (옵션. 안 주면 기존과 동일하게 -ht/-cores 기반 자동계산을 사용. 주면 파일값으로 대체)")
 	affinityEV02Path := flag.String("affinity-ev02", "", "ev02 그룹 기대 affinity 파일 (옵션, 안 주면 ev02 affinity 체크 스킵)")
 	affinityEV03Path := flag.String("affinity-ev03", "", "ev03 그룹 기대 affinity 파일 (옵션, 안 주면 ev03 affinity 체크 스킵)")
 
@@ -47,11 +50,17 @@ func main() {
 	noColor := flag.Bool("noColor", false, "콘솔 출력에서 ANSI 컬러(FAIL=빨강/설정없음=노랑/PASS=초록)를 끔 — 컬러 미지원 터미널이나 파일로 리다이렉트할 때 사용")
 
 	demo := flag.Bool("demo", false, "vCenter에 연결하지 않고, affinity 항목이 많은 8~16vCPU급 가짜 VM 3대(OK/FAIL/개수불일치 케이스)로 콘솔+CSV 출력을 보여주는 데모 모드. 실제 인프라를 전혀 건드리지 않음. 이 모드에서는 다른 모든 플래그를 무시하고 고정된 데모 기대값을 사용함")
+	scale := flag.Int("scale", 0, "테스트용: vCenter 연결 없이 N대 규모의 합성 VM으로 콘솔+CSV 출력이 대량 환경에서 어떻게 보이는지 시뮬레이션 (가독성 테스트 전용, -demo와 별개, 실제 인프라 미접속)")
 
 	flag.Parse()
 
 	if *demo {
 		runDemo(*out, *onlyFail, *noColor)
+		return
+	}
+
+	if *scale > 0 {
+		runScale(*scale, *out, *onlyFail, *noColor)
 		return
 	}
 
@@ -78,7 +87,14 @@ func main() {
 		sharesEV03 = &v
 	}
 
-	var affinityEV02, affinityEV03 map[string]string
+	var affinityEV01, affinityEV02, affinityEV03 map[string]string
+	if *affinityEV01Path != "" {
+		m, err := config.LoadAffinityFile(*affinityEV01Path)
+		if err != nil {
+			log.Fatalf("-affinity-ev01 파일 읽기 실패: %v", err)
+		}
+		affinityEV01 = m
+	}
 	if *affinityEV02Path != "" {
 		m, err := config.LoadAffinityFile(*affinityEV02Path)
 		if err != nil {
@@ -123,23 +139,44 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var allVMs []model.VMInfo
-	for _, addr := range vcenters {
-		fmt.Printf("[%s] 접속 중...\n", addr)
-		client, err := vcenter.Connect(ctx, addr, vcUser, vcPass)
-		if err != nil {
-			fmt.Printf("[%s] 접속 실패, 이 vCenter는 건너뜁니다: %v\n", addr, err)
-			continue
-		}
+	// vCenter별 접속+조회는 서로 완전히 독립적이라 동시에 실행한다(vcenterList가 여러 개일 때
+	// 순차 접속 대기시간을 없애기 위함). 결과는 vcenters 순서대로 모아서, 콘솔 로그 순서가
+	// 매번 달라지지 않고(결정적) 재현 가능하게 유지한다.
+	type vcResult struct {
+		vms []model.VMInfo
+		err error
+	}
+	results := make([]vcResult, len(vcenters))
+	var wg sync.WaitGroup
+	for i, addr := range vcenters {
+		wg.Add(1)
+		go func(i int, addr string) {
+			defer wg.Done()
+			client, err := vcenter.Connect(ctx, addr, vcUser, vcPass)
+			if err != nil {
+				results[i] = vcResult{err: fmt.Errorf("접속 실패: %w", err)}
+				return
+			}
+			vms, err := vcenter.FetchVMs(ctx, client, addr, targetNames)
+			_ = client.Logout(ctx)
+			if err != nil {
+				results[i] = vcResult{err: fmt.Errorf("VM 조회 실패: %w", err)}
+				return
+			}
+			results[i] = vcResult{vms: vms}
+		}(i, addr)
+	}
+	wg.Wait()
 
-		vms, err := vcenter.FetchVMs(ctx, client, addr, targetNames)
-		_ = client.Logout(ctx)
-		if err != nil {
-			fmt.Printf("[%s] VM 조회 실패, 이 vCenter는 건너뜁니다: %v\n", addr, err)
+	var allVMs []model.VMInfo
+	for i, addr := range vcenters {
+		r := results[i]
+		if r.err != nil {
+			fmt.Printf("[%s] %v, 이 vCenter는 건너뜁니다\n", addr, r.err)
 			continue
 		}
-		fmt.Printf("[%s] VM %d대 조회됨\n", addr, len(vms))
-		allVMs = append(allVMs, vms...)
+		fmt.Printf("[%s] VM %d대 조회됨\n", addr, len(r.vms))
+		allVMs = append(allVMs, r.vms...)
 	}
 
 	if len(allVMs) == 0 {
@@ -154,29 +191,52 @@ func main() {
 
 	shares := checker.SharesExpect{EV01: *sharesEV01, EV02: sharesEV02, EV03: sharesEV03}
 
+	// VM별 체크는 서로 데이터를 공유하지 않는 순수 함수 호출이라 워커풀로 동시에 처리한다.
+	// 결과는 VM 인덱스별 슬롯에 쓰고 마지막에 순서대로 이어붙여서, 병렬 처리와 무관하게
+	// CSV/콘솔 출력 순서가 항상 결정적으로 재현되게 한다.
+	findingsPerVM := make([][]model.Finding, len(allVMs))
+	sem := make(chan struct{}, runtime.NumCPU())
+	var checkWG sync.WaitGroup
+	for i, vm := range allVMs {
+		checkWG.Add(1)
+		sem <- struct{}{}
+		go func(i int, vm model.VMInfo) {
+			defer checkWG.Done()
+			defer func() { <-sem }()
+
+			group := classifyGroup(vm.Hostname)
+			var f []model.Finding
+			f = append(f, checker.CheckFixed(vm)...)
+			f = append(f, checker.CheckTopology(vm, *cores, *numa)...)
+			f = append(f, checker.CheckHardware(vm, *cpu, *mem, *disk, shares, group, singleVMMode)...)
+			f = append(f, checker.CheckHostPower(vm))
+			f = append(f, checker.CheckNetwork(vm)...)
+
+			switch group {
+			case "ev01":
+				if affinityEV01 != nil {
+					f = append(f, checker.CheckAffinity(vm, affinityEV01, "ev01")...)
+				} else {
+					expected := checker.GenerateExpectedAffinityEV01(vm.NumCPU, *ht == "on")
+					f = append(f, checker.CheckAffinity(vm, expected, "ev01")...)
+				}
+			case "ev02":
+				if !singleVMMode && affinityEV02 != nil {
+					f = append(f, checker.CheckAffinity(vm, affinityEV02, "ev02")...)
+				}
+			case "ev03":
+				if !singleVMMode && affinityEV03 != nil {
+					f = append(f, checker.CheckAffinity(vm, affinityEV03, "ev03")...)
+				}
+			}
+			findingsPerVM[i] = f
+		}(i, vm)
+	}
+	checkWG.Wait()
+
 	var allFindings []model.Finding
-	for _, vm := range allVMs {
-		group := classifyGroup(vm.Hostname)
-
-		allFindings = append(allFindings, checker.CheckFixed(vm)...)
-		allFindings = append(allFindings, checker.CheckTopology(vm, *cores, *numa)...)
-		allFindings = append(allFindings, checker.CheckHardware(vm, *cpu, *mem, *disk, shares, group, singleVMMode)...)
-		allFindings = append(allFindings, checker.CheckHostPower(vm))
-		allFindings = append(allFindings, checker.CheckNetwork(vm)...)
-
-		switch group {
-		case "ev01":
-			expected := checker.GenerateExpectedAffinityEV01(vm.NumCPU, *ht == "on")
-			allFindings = append(allFindings, checker.CheckAffinity(vm, expected, "ev01")...)
-		case "ev02":
-			if !singleVMMode && affinityEV02 != nil {
-				allFindings = append(allFindings, checker.CheckAffinity(vm, affinityEV02, "ev02")...)
-			}
-		case "ev03":
-			if !singleVMMode && affinityEV03 != nil {
-				allFindings = append(allFindings, checker.CheckAffinity(vm, affinityEV03, "ev03")...)
-			}
-		}
+	for _, f := range findingsPerVM {
+		allFindings = append(allFindings, f...)
 	}
 
 	if *onlyFail {
@@ -187,7 +247,7 @@ func main() {
 	}
 
 	fmt.Println()
-	report.PrintConsole(os.Stdout, allFindings, !*noColor)
+	report.PrintConsole(os.Stdout, allFindings, !*noColor, !*onlyFail)
 
 	detailPath, summaryPath := deriveOutputPaths(*out)
 	if err := report.WriteSummaryCSV(summaryPath, allFindings); err != nil {

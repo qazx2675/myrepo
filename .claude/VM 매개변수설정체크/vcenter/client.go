@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sync"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/property"
@@ -116,14 +117,31 @@ func fetchDVPortgroupNames(ctx context.Context, client *govmomi.Client) (map[str
 // FetchVMs는 대상 vCenter의 VM 전체(또는 targetNames로 제한한 VM만)를 벌크 조회해서
 // model.VMInfo 슬라이스로 변환한다.
 // targetNames가 nil이면 인벤토리 전체(전체 순회 모드), non-nil이면 그 이름 집합만 포함(단일/지정 대상 모드).
+//
+// ContainerView는 client.ServiceContent.RootFolder(vCenter 최상위 — 모든 Datacenter의
+// 부모)를 recursive=true로 순회하므로, VM/HostSystem이 어느 Datacenter에 속해 있든
+// 상관없이 전부 조회된다 (Datacenter로 범위를 좁히지 않는 govmomi 표준 패턴).
 func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, targetNames map[string]bool) ([]model.VMInfo, error) {
-	hostPower, err := fetchHostPower(ctx, client)
-	if err != nil {
-		return nil, err
+	// 호스트 전원정책과 분산포트그룹 이름은 서로 무관한 벌크조회라 동시에 실행한다.
+	var hostPower map[types.ManagedObjectReference]hostPowerInfo
+	var dvPortgroups map[string]string
+	var hpErr, dvErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		hostPower, hpErr = fetchHostPower(ctx, client)
+	}()
+	go func() {
+		defer wg.Done()
+		dvPortgroups, dvErr = fetchDVPortgroupNames(ctx, client)
+	}()
+	wg.Wait()
+	if hpErr != nil {
+		return nil, hpErr
 	}
-	dvPortgroups, err := fetchDVPortgroupNames(ctx, client)
-	if err != nil {
-		return nil, err
+	if dvErr != nil {
+		return nil, dvErr
 	}
 
 	m := view.NewManager(client.Client)
