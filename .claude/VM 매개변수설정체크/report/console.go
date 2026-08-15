@@ -23,10 +23,15 @@ func colorize(s, code string, color bool) string {
 	return code + s + ansiReset
 }
 
-// PrintConsole은 [1] VM별 요약 표 + [2] FAIL/설정없음만 모은 상세 섹션을 출력한다.
+// PrintConsole은 [1] VM별 요약 표 + [2] 상세 섹션을 출력한다.
 // color=true면 FAIL은 빨간색, OK/PASS는 초록색, 설정없음은 노란색으로 강조한다
 // (컬러 미지원 터미널이나 파일로 리다이렉트할 때는 -noColor로 끌 수 있음).
-func PrintConsole(w io.Writer, findings []model.Finding, color bool) {
+//
+// fullDetail=false(-onlyFail과 짝을 이루는 기존 동작): FAIL인 VM만, 그 안에서도
+// FAIL/설정없음 항목만 보여준다 (문제만 빠르게 훑어보는 용도).
+// fullDetail=true(기본, -onlyFail 미지정 시): 모든 VM, 모든 항목(OK/FAIL/설정없음/정보)을
+// 빠짐없이 보여준다 — CSV 상세와 동일한 정보를 콘솔에서도 확인 가능하게 함.
+func PrintConsole(w io.Writer, findings []model.Finding, color bool, fullDetail bool) {
 	statuses := Summarize(findings)
 
 	byVM := map[string][]model.Finding{}
@@ -59,43 +64,65 @@ func PrintConsole(w io.Writer, findings []model.Finding, color bool) {
 	}
 	fmt.Fprintf(w, "\n총 %d대 중 PASS %d대, FAIL %d대\n", len(statuses), pass, len(statuses)-pass)
 
-	problemVMs := 0
-	for _, s := range statuses {
-		if s.Overall == "FAIL" {
-			problemVMs++
+	if !fullDetail {
+		problemVMs := 0
+		for _, s := range statuses {
+			if s.Overall == "FAIL" {
+				problemVMs++
+			}
 		}
-	}
-	if problemVMs == 0 {
+		if problemVMs == 0 {
+			return
+		}
+
+		fmt.Fprintln(w, "\n=== [2] 문제 항목 상세 (FAIL / 설정없음만) ===")
+		for _, s := range statuses {
+			if s.Overall != "FAIL" {
+				continue
+			}
+			fmt.Fprintf(w, "\n▶ %s (FAIL %d건, 설정없음 %d건)\n", s.VM, s.Fail, s.NoValue)
+			printItems(w, byVM[s.VM], color, true)
+		}
 		return
 	}
 
-	fmt.Fprintln(w, "\n=== [2] 문제 항목 상세 (FAIL / 설정없음만) ===")
+	fmt.Fprintln(w, "\n=== [2] 항목 상세 (전체 — OK/정보 포함, 빠짐없이) ===")
 	for _, s := range statuses {
-		if s.Overall != "FAIL" {
+		fmt.Fprintf(w, "\n▶ %s (OK %d건, FAIL %d건, 설정없음 %d건, 정보 %d건)\n", s.VM, s.OK, s.Fail, s.NoValue, s.Info)
+		printItems(w, byVM[s.VM], color, false)
+	}
+}
+
+// printItems는 VM 1대의 항목들을 Key 오름차순으로 출력한다.
+// onlyProblems=true면 FAIL/설정없음만, false면 OK/정보까지 전부 출력한다.
+func printItems(w io.Writer, items []model.Finding, color bool, onlyProblems bool) {
+	sort.SliceStable(items, func(i, j int) bool { return items[i].Key < items[j].Key })
+	for _, f := range items {
+		if onlyProblems && f.Result != "FAIL" && f.Result != "설정없음" {
 			continue
 		}
-		fmt.Fprintf(w, "\n▶ %s (FAIL %d건, 설정없음 %d건)\n", s.VM, s.Fail, s.NoValue)
-		items := byVM[s.VM]
-		sort.SliceStable(items, func(i, j int) bool { return items[i].Key < items[j].Key })
-		for _, f := range items {
-			if f.Result != "FAIL" && f.Result != "설정없음" {
-				continue
-			}
-			var tag string
-			if f.Result == "설정없음" {
-				tag = colorize("[설정없음]    ", ansiYellow, color)
-			} else {
-				tag = colorize("[FAIL]        ", ansiRed, color)
-			}
-			src := ""
-			if f.Source != "-" {
-				src = fmt.Sprintf(" (%s)", f.Source)
-			}
-			if f.Result == "설정없음" {
-				fmt.Fprintf(w, "  %s%s%s: 기대값=%s, 실제값 없음\n", tag, f.Key, src, f.Expected)
-			} else {
-				fmt.Fprintf(w, "  %s%s%s: 기대값=%s, 실제값=%s\n", tag, f.Key, src, f.Expected, f.Actual)
-			}
+		var tag string
+		switch f.Result {
+		case "설정없음":
+			tag = colorize("[설정없음]    ", ansiYellow, color)
+		case "FAIL":
+			tag = colorize("[FAIL]        ", ansiRed, color)
+		case "OK":
+			tag = colorize("[OK]          ", ansiGreen, color)
+		default: // "정보"
+			tag = "[정보]        "
+		}
+		src := ""
+		if f.Source != "-" {
+			src = fmt.Sprintf(" (%s)", f.Source)
+		}
+		switch f.Result {
+		case "설정없음":
+			fmt.Fprintf(w, "  %s%s%s: 기대값=%s, 실제값 없음\n", tag, f.Key, src, f.Expected)
+		case "정보":
+			fmt.Fprintf(w, "  %s%s%s: 실제값=%s\n", tag, f.Key, src, f.Actual)
+		default:
+			fmt.Fprintf(w, "  %s%s%s: 기대값=%s, 실제값=%s\n", tag, f.Key, src, f.Expected, f.Actual)
 		}
 	}
 }

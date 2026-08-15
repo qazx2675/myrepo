@@ -65,7 +65,7 @@ func runDemo(out string, onlyFail, noColor bool) {
 	}
 
 	fmt.Println()
-	report.PrintConsole(os.Stdout, findings, !noColor)
+	report.PrintConsole(os.Stdout, findings, !noColor, !onlyFail)
 
 	base := out
 	if base == "" {
