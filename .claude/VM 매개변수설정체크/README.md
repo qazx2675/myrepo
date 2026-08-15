@@ -2,11 +2,54 @@
 
 vCenter에 있는 VM들이 고성능(High Performance) 설정 기준(CPU/메모리/NUMA 토폴로지, vCPU affinity, Shares, 호스트 전원정책 등)을 만족하는지 자동으로 점검해서, 콘솔 요약과 CSV 상세 로그로 OK/FAIL을 산출하는 도구입니다. (`PLAN.md` 참고)
 
-## 빌드
+## 설치 및 빌드
+
+이 저장소는 Go 모듈 의존성(`github.com/vmware/govmomi` 등)을 `vendor/` 폴더에 통째로 포함하고 있습니다.
+그래서 **폴더를 그대로 복사(또는 git clone)해서 옮기면 인터넷이 없는 폐쇄망에서도 빌드가 가능**합니다.
+
+### 1) 저장소 받기
 
 ```bash
-go mod tidy   # gopkg.in/yaml.v3 등 의존성 다운로드 (인터넷 필요)
+git clone <이 저장소 주소> vm-param-check
+cd vm-param-check
+```
+
+인터넷이 안 되는 폐쇄망 서버로 옮길 때는 `git clone`이 된 이 폴더(`.git` 포함) 전체를 압축해서
+그대로 복사해 넣으면 됩니다. (`vendor/`가 이미 포함돼 있으므로 다시 받을 필요 없음)
+
+```bash
+# 인터넷 되는 곳에서
+tar czf vm-param-check.tar.gz vm-param-check/
+# USB/scp 등으로 폐쇄망 서버에 복사 후
+tar xzf vm-param-check.tar.gz
+```
+
+### 2) 빌드
+
+**폐쇄망(오프라인, 기본 권장)** — Go만 설치되어 있으면 인터넷 없이 됩니다:
+
+```bash
+go build -mod=vendor -o vm-param-check .
+```
+
+**인터넷이 되는 환경** — 의존성을 새로 받아 최신화하고 싶을 때만:
+
+```bash
+go mod tidy      # go.mod/go.sum/vendor 최신화 (인터넷 필요)
+go mod vendor
 go build -o vm-param-check .
+```
+
+Go 요구 버전: `go.mod`에 명시된 대로 **1.21 이상**. 폐쇄망 서버(Rocky Linux 등)에도 Go 바이너리를
+(예: `go1.26.5.linux-amd64.tar.gz`) 미리 복사해서 `/usr/local/go`에 풀고 `PATH`에 `/usr/local/go/bin`을
+추가하면 됩니다.
+
+### 3) 실행
+
+```bash
+export VC_USER='administrator@vsphere.local'
+export VC_PASS='...'
+./vm-param-check -demo   # 먼저 데모 모드로 동작 확인 (vCenter 접속 없이)
 ```
 
 ## 실행 모드
@@ -106,6 +149,38 @@ export VC_PASS='...'
 | `ev02` | hostname에 `ev02` 포함된 VM — affinity(파일 기반), Shares(CPU/메모리) — `-affinity-ev02`/`-shares-ev02` 옵션을 줬을 때만, VM이 1대뿐이면 스킵 |
 | `ev03` | ev02와 동일하되 `ev03` 그룹 |
 | `network` | 연결된 네트워크 어댑터의 포트그룹 이름 (판정 없음, 정보성) |
+
+## 체크 항목 상세 (실제로 조회/비교하는 값)
+
+### 공통 고정값 — 모든 VM
+
+| Key | 기대값 | 비고 |
+|---|---|---|
+| ESXi 호스트 전원 정책 | High Performance | VM이 돌고 있는 호스트 기준, 항상 고정 |
+| sched.mem.lpage.enable1GPage | TRUE | VM Advanced Config |
+| sched.mem.prealloc | TRUE | VM Advanced Config |
+| sched.mem.prealloc.pinnedMainMem | TRUE | VM Advanced Config |
+| sched.swap.vmxSwapEnabled | FALSE | VM Advanced Config |
+| config.memoryReservationLockedToMax | true | "모든 게스트 메모리 예약" — 항상 켜져 있어야 함 |
+| cpuid.coresPerSocket | `-cores` 값 | Advanced Config |
+| hardware.numCoresPerSocket | `-cores` 값 | VM 옵션 → CPU 토폴로지 UI 값 (Advanced Config와 별도로 이중 확인) |
+| numa.vcpu.maxPerVirtualNode | `-numa` 값 | Advanced Config |
+| config.numaInfo.coresPerNumaNode | `-numa` 값 | CPU 토폴로지 UI 값 (vSphere API 8.0.0.1+ 필요, 없으면 "설정없음") |
+| config.hardware.numCPU | `-cpu` 값 | vCPU 수 |
+| config.hardware.memoryMB | `-mem` 값(GB→MB 환산) | 메모리 크기 |
+| 디스크 총 용량 | `-disk` 값(GB, 반올림) | 연결된 모든 VirtualDisk 용량 합산 |
+| 네트워크 포트그룹 | (판정 없음) | 연결된 어댑터의 포트그룹 이름만 정보로 기록 |
+
+### ev01 / ev02 / ev03 그룹별 (hostname에 문자열 포함 여부로 분류)
+
+| 그룹 | 조건 | 체크 항목 | 기대값 산출 방식 |
+|---|---|---|---|
+| ev01 | hostname에 `ev01` 포함 | vCPU affinity(`sched.vcpuN.affinity`), CPU/메모리 Shares(ratio) | affinity는 `-ht`(on/off) + `-cores`로 자동계산, shares는 `-shares-ev01` — 둘 다 항상 필수 체크 |
+| ev02 | hostname에 `ev02` 포함 | 위와 동일 | affinity는 `-affinity-ev02` 파일, shares는 `-shares-ev02` — 옵션 안 주면 스킵 |
+| ev03 | hostname에 `ev03` 포함 | 위와 동일 | `-affinity-ev03` / `-shares-ev03` — 옵션 안 주면 스킵 |
+
+- affinity 자동계산(ev01): HT ON이면 코어 2개씩 페어(`sched.vcpu0.affinity=0,1`, `sched.vcpu1.affinity=2,3`...), HT OFF면 1:1(`sched.vcpu0.affinity=0`...)
+- **조사 대상 VM이 1대뿐이면** ev02/ev03 옵션이 주어져 있어도 그 체크는 무조건 스킵됩니다 (여러 대를 비교할 때만 의미가 있는 로직이라서).
 
 ## 알려진 한계
 
