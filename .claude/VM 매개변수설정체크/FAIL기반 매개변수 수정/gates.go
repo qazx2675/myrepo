@@ -13,10 +13,9 @@ import (
 // checkHomogeneity는 target 안의 VM들을 ev01/ev02/ev03 그룹으로 나눠서, 같은 그룹 안의
 // 모든 VM이 NumCPU/코어수/메모리/디스크/CPU Shares/NUMA/HT가 전부 동일한지, 그리고
 // ev01/ev02/ev03 그룹 간 VM 대수가 서로 같은지(1:1:1 구성인지) 확인한다.
-// vm-param-check 자체가 이미 전체 VM에 단일 기대값(--cpu/--cores 등)을 적용하는 도구라,
-// 이 도구에 들어온 CSV는 원래 "동일해야 하는" 대상만 담고 있는 게 정상이다 — 이 검증은
-// 그 전제가 실제로 vCenter 상에서도 깨지지 않았는지(예: 누군가 중간에 손으로 바꿔놨는지)
-// 재확인하는 역할이다.
+// (참고: vm-param-check는 ev01과 ev02가 서로 다른 기대값(-cpu-ev02 등)을 가질 수 있지만,
+// "같은 그룹 안"에서는 여전히 전부 동일해야 한다는 전제는 그대로다 — 이 검증은 그 전제가
+// 실제로 vCenter 상에서도 깨지지 않았는지(예: 누군가 중간에 손으로 바꿔놨는지) 재확인하는 역할이다.)
 func checkHomogeneity(target map[string]bool, specs map[string]VMSpec) error {
 	groups := map[string][]VMSpec{} // "ev01" | "ev02" | "ev03" -> specs
 	for vm := range target {

@@ -56,7 +56,7 @@ export VC_PASSWORD='실제_비밀번호'
   -id=administrator@vsphere.local
 ```
 
-- `-checkResult`: `vm-param-check`가 낸 **상세** CSV(`result.csv`, `_summary.csv` 아님). FAIL/설정없음 항목뿐 아니라 OK 항목도 포함된 CSV여야 전역 기대값(vCPU/코어/NUMA/메모리/디스크/Shares)을 정확히 복원할 수 있습니다.
+- `-checkResult`: `vm-param-check`가 낸 **상세** CSV(`result.csv`, `_summary.csv` 아님). FAIL/설정없음 항목뿐 아니라 OK 항목도 포함된 CSV여야 기대값(vCPU/코어/NUMA/메모리/디스크/Shares)을 정확히 복원할 수 있습니다. `vm-param-check`가 `-cores-ev02`/`-cpu-ev02` 등으로 ev01과 다른 ev02 스펙을 체크한 CSV라면, 이 값들도 ev02 전용으로 따로 복원해서 `lpage_setting`에 `-ev02Cores`/`-ev02Numa`를 ev01과 다르게 넘깁니다(ev01/ev02 스펙이 정말 다른 환경도 지원). ev03는 코어/NUMA 관련 FAIL(`lpage` 태그)이 있으면 `lpage_setting`이 ev03를 지원하지 않아 자동교정을 거부하고 수동조치를 안내합니다.
 - `-vcTargetIP` / `-id`: 필수·옵션 각각 vm-param-check와 동일한 의미.
 - `-affinityFile`: ev02 affinity FAIL이 있을 때만 필요. `vm-param-check`를 처음 돌릴 때 썼던 `--affinity-ev02` 파일과 같은 것을 그대로 넘기면 됩니다(ev01은 자동계산이라 불필요).
 - `-affinityTool` / `-lpageTool` / `-powerTool` / `-recheckTool`: 각 외부 도구 경로(기본값은 현재 디렉토리의 동명 바이너리).
