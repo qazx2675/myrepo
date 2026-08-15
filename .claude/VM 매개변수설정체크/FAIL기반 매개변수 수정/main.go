@@ -166,15 +166,44 @@ func main() {
 		planned = append(planned, plannedCmd{"affinity", *affinityTool, args})
 	}
 	if len(lpageVMs) > 0 {
+		// ev03는 lpage_setting 자체가 -ev03Cores/-ev03Sockets/-ev03Numa를 지원하지 않는다
+		// (계획서에서 이미 "ev03는 수동조치"로 결정됨) — 여기서 잘못 ev01/ev02 값으로
+		// 교정해버리면 안 되므로 명확히 막는다.
+		if hasGroup(lpageVMs, "ev03") {
+			log.Fatal("ev03 VM에 lpage FAIL이 있습니다 — lpage_setting이 ev03를 지원하지 않아 자동교정 대상이 아닙니다(계획서 결정 사항). 수동으로 조치하세요.")
+		}
+
 		if g.Cores == 0 || g.CPU%g.Cores != 0 {
-			log.Fatalf("lpage 교정 불가: vCPU(%d)가 코어수(%d)로 나누어떨어지지 않습니다", g.CPU, g.Cores)
+			log.Fatalf("lpage 교정 불가: ev01 vCPU(%d)가 코어수(%d)로 나누어떨어지지 않습니다", g.CPU, g.Cores)
 		}
 		sockets := strconv.Itoa(g.CPU / g.Cores)
 		args := []string{"-id", *id, "-vcTargetIP", *vcTargetIP, "-worklistFile", lpageWorklist,
-			"-ev01Cores", strconv.Itoa(g.CPU), "-ev01Sockets", sockets,
-			"-ev02Cores", strconv.Itoa(g.CPU), "-ev02Sockets", sockets}
+			"-ev01Cores", strconv.Itoa(g.CPU), "-ev01Sockets", sockets}
 		if g.Numa > 0 {
-			args = append(args, "-ev01Numa", strconv.Itoa(g.Numa), "-ev02Numa", strconv.Itoa(g.Numa))
+			args = append(args, "-ev01Numa", strconv.Itoa(g.Numa))
+		}
+
+		if hasGroup(lpageVMs, "ev02") {
+			// ev02는 vm-param-check에 -cores-ev02/-cpu-ev02 등을 줘야만 CSV에 값이 남는다.
+			// ev01과 스펙이 다를 수 있으니(그게 이 기능을 넣은 이유) ev01 값을 대신 쓰면 안 된다.
+			if g.CPUEV02 == nil || g.CoresEV02 == nil {
+				log.Fatal("ev02 VM에 lpage FAIL이 있는데 CSV에 ev02용 vCPU/코어수 기대값이 없습니다 — vm-param-check를 -cores-ev02/-cpu-ev02와 함께 다시 돌려서 CSV를 새로 만드세요.")
+			}
+			if *g.CoresEV02 == 0 || *g.CPUEV02%*g.CoresEV02 != 0 {
+				log.Fatalf("lpage 교정 불가: ev02 vCPU(%d)가 코어수(%d)로 나누어떨어지지 않습니다", *g.CPUEV02, *g.CoresEV02)
+			}
+			ev02Sockets := strconv.Itoa(*g.CPUEV02 / *g.CoresEV02)
+			args = append(args, "-ev02Cores", strconv.Itoa(*g.CPUEV02), "-ev02Sockets", ev02Sockets)
+			if g.NumaEV02 != nil && *g.NumaEV02 > 0 {
+				args = append(args, "-ev02Numa", strconv.Itoa(*g.NumaEV02))
+			}
+		} else {
+			// worklist에 ev02 대상이 아예 없으면 lpage_setting이 이 플래그들을 필수로 요구하더라도
+			// 실제로 적용될 곳이 없어 무해하다 — 기존 동작대로 ev01 값을 그대로 채워 넘긴다.
+			args = append(args, "-ev02Cores", strconv.Itoa(g.CPU), "-ev02Sockets", sockets)
+			if g.Numa > 0 {
+				args = append(args, "-ev02Numa", strconv.Itoa(g.Numa))
+			}
 		}
 		planned = append(planned, plannedCmd{"lpage", *lpageTool, args})
 	}
@@ -244,6 +273,23 @@ func main() {
 	if g.SharesEV02 != nil {
 		recheckArgs = append(recheckArgs, "--shares-ev02="+strconv.Itoa(*g.SharesEV02))
 	}
+	// ev02/ev03 전용 하드웨어 기대값도 원래 CSV에 있었으면 재검증에 그대로 실어 보낸다 —
+	// 안 실으면 재검증이 그 그룹 항목들을 전부 스킵해버려서 실제로 교정됐는지 확인이 안 된다.
+	appendEVArg := func(flag string, v *int) {
+		if v != nil {
+			recheckArgs = append(recheckArgs, flag+"="+strconv.Itoa(*v))
+		}
+	}
+	appendEVArg("--cores-ev02", g.CoresEV02)
+	appendEVArg("--numa-ev02", g.NumaEV02)
+	appendEVArg("--cpu-ev02", g.CPUEV02)
+	appendEVArg("--mem-ev02", g.MemGBEV02)
+	appendEVArg("--disk-ev02", g.DiskGBEV02)
+	appendEVArg("--cores-ev03", g.CoresEV03)
+	appendEVArg("--numa-ev03", g.NumaEV03)
+	appendEVArg("--cpu-ev03", g.CPUEV03)
+	appendEVArg("--mem-ev03", g.MemGBEV03)
+	appendEVArg("--disk-ev03", g.DiskGBEV03)
 	// vm-param-check는 VC_USER/VC_PASS(또는 VCENTER_USER/VCENTER_PASS)를 쓰는데 이 도구는
 	// affinity_setting/lpage_setting/power_setting과 맞추려고 VC_PASSWORD+-id를 쓰므로,
 	// 재검증 호출 시에만 그 값을 VC_USER/VC_PASS로 변환해 넘긴다.
@@ -255,8 +301,13 @@ func main() {
 }
 
 func hasEV02(vms map[string]bool) bool {
+	return hasGroup(vms, "ev02")
+}
+
+// hasGroup은 vms 중 하나라도 groupOf(vm)이 group인 게 있는지 본다.
+func hasGroup(vms map[string]bool, group string) bool {
 	for vm := range vms {
-		if strings.Contains(vm, "ev02") {
+		if groupOf(vm) == group {
 			return true
 		}
 	}

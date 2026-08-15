@@ -103,85 +103,121 @@ func loadCSV(path string) ([]Row, error) {
 	return rows, nil
 }
 
-// GlobalExpect는 CSV 전체에서 복원한, vm-param-check 실행 시 쓰였던 전역 기대값이다.
-// (cpu/cores/numa/mem/disk는 계획서 3-4상 모든 VM 공통이라 어느 행에서 뽑아도 동일해야 한다.)
+// GlobalExpect는 CSV 전체에서 복원한, vm-param-check 실행 시 쓰였던 기대값이다.
+// vm-param-check가 이제 ev02/ev03에 별도 기대값(-cores-ev02 등)을 받을 수 있어서,
+// cpu/cores/numa/mem/disk는 더 이상 CSV 전체에 걸쳐 하나일 필요가 없다 — 대신 그룹별로만
+// 일관돼야 한다(ev01 안에서는 다 같아야 하고, ev02 안에서도 다 같아야 하는 식).
+// Base는 ev01+미분류(vm-param-check에서 항상 -cores 등으로 필수 체크됨) 기준값이고,
+// EV02/EV03는 옵션(-cores-ev02 등)이 아예 없어서 CSV에 해당 항목이 없으면 nil.
 type GlobalExpect struct {
-	CPU, Cores, Numa, MemGB, DiskGB int
+	CPU, Cores, Numa, MemGB, DiskGB                       int
+	CPUEV02, CoresEV02, NumaEV02, MemGBEV02, DiskGBEV02   *int
+	CPUEV03, CoresEV03, NumaEV03, MemGBEV03, DiskGBEV03   *int
 	SharesEV01                      int
 	SharesEV02                      *int
 	HTOn                            bool
 	HasAffinityIssue, HasLpageIssue, HasPowerIssue bool
+	HasEV03LpageIssue bool // ev03는 lpage_setting이 -ev03Cores/-ev03Numa를 지원하지 않아 별도 관리
 }
 
-// extractGlobalExpect는 CSV 전체(FAIL 여부 무관)를 훑어서 위 값들을 뽑고, 같은 Key가
-// 서로 다른 기대값을 갖고 있으면(=vm-param-check를 서로 다른 옵션으로 여러 번 돌린 CSV를
-// 섞어 쓴 경우) 즉시 에러로 중단한다 — "동일한 설정의 그룹" 전제 자체가 깨진 것이므로.
+// hwGroupOf는 VM 이름으로 하드웨어 기대값이 어느 묶음("base"=ev01+미분류 | "ev02" | "ev03")에
+// 속하는지 정한다 — vm-param-check의 group 판정(ev01/미분류는 같은 -cores 등을 씀)과 맞춤.
+func hwGroupOf(vmName string) string {
+	switch groupOf(vmName) {
+	case "ev02":
+		return "ev02"
+	case "ev03":
+		return "ev03"
+	default: // "ev01" 또는 "기타" — vm-param-check에서 동일한 -cores 등을 적용받음
+		return "base"
+	}
+}
+
+// extractGroupValue는 key에 해당하는 행 중 bucket("base"|"ev02"|"ev03")에 속한 것만 모아
+// 정수 기대값 하나로 합친다. bucket 안에서 값이 서로 다르면(=서로 다른 조건으로 체크한 결과가
+// 섞인 것) 에러. bucket에 해당 행이 아예 없으면 found=false(옵션이 안 주어졌던 것).
+func extractGroupValue(rows []Row, key, bucket string) (value int, found bool, err error) {
+	var expected string
+	for _, r := range rows {
+		if r.Key != key || hwGroupOf(r.VM) != bucket {
+			continue
+		}
+		if !found {
+			expected = r.Expected
+			found = true
+			continue
+		}
+		if r.Expected != expected {
+			return 0, false, fmt.Errorf("CSV 안에서 %q(%s 그룹)의 기대값이 VM마다 다릅니다(%q vs %q) — 서로 다른 조건으로 체크한 결과를 섞어 쓴 것으로 보입니다", key, bucket, expected, r.Expected)
+		}
+	}
+	if !found {
+		return 0, false, nil
+	}
+	n, _ := strconv.Atoi(expected)
+	return n, true, nil
+}
+
+// extractGlobalExpect는 CSV 전체(FAIL 여부 무관)를 훑어서 위 값들을 뽑는다.
 func extractGlobalExpect(rows []Row) (GlobalExpect, error) {
 	var g GlobalExpect
-	seen := map[string]string{}
-	take := func(key string) (string, bool) {
-		for _, r := range rows {
-			if r.Key == key {
-				if prev, ok := seen[key]; ok && prev != r.Expected {
-					return "", false
-				}
-				seen[key] = r.Expected
-				return r.Expected, true
-			}
-		}
-		return "", false
-	}
-	assertConsistent := func(key string) error {
-		var expected string
-		found := false
-		for _, r := range rows {
-			if r.Key != key {
-				continue
-			}
-			if !found {
-				expected = r.Expected
-				found = true
-				continue
-			}
-			if r.Expected != expected {
-				return fmt.Errorf("CSV 안에서 %q의 기대값이 VM마다 다릅니다(%q vs %q) — 서로 다른 조건으로 체크한 결과를 섞어 쓴 것으로 보입니다", key, expected, r.Expected)
-			}
-		}
-		return nil
-	}
 
 	requiredKeys := []string{"config.hardware.numCPU", "cpuid.coresPerSocket", "numa.vcpu.maxPerVirtualNode",
 		"config.hardware.memoryMB (GB 환산)", "disk total capacity (GB 환산, 반올림)"}
 	for _, key := range requiredKeys {
-		if err := assertConsistent(key); err != nil {
+		if _, found, err := extractGroupValue(rows, key, "base"); err != nil {
 			return g, err
-		}
-		found := false
-		for _, r := range rows {
-			if r.Key == key {
-				found = true
-				break
-			}
-		}
-		if !found {
+		} else if !found {
 			return g, fmt.Errorf("CSV에 %q 항목이 전혀 없습니다 — vm-param-check의 상세(detail) CSV가 맞는지, 요약(summary) CSV를 잘못 넣은 건 아닌지 확인하세요", key)
 		}
 	}
+	// ev02/ev03는 옵션이라 CSV에 아예 없을 수 있음 — 있으면 그룹 내 일관성만 에러로 잡는다.
+	for _, key := range []string{"config.hardware.numCPU", "cpuid.coresPerSocket", "numa.vcpu.maxPerVirtualNode",
+		"config.hardware.memoryMB (GB 환산)", "disk total capacity (GB 환산, 반올림)"} {
+		for _, bucket := range []string{"ev02", "ev03"} {
+			if _, _, err := extractGroupValue(rows, key, bucket); err != nil {
+				return g, err
+			}
+		}
+	}
 
-	if v, ok := take("config.hardware.numCPU"); ok {
-		g.CPU, _ = strconv.Atoi(v)
+	if v, found, _ := extractGroupValue(rows, "config.hardware.numCPU", "base"); found {
+		g.CPU = v
 	}
-	if v, ok := take("cpuid.coresPerSocket"); ok {
-		g.Cores, _ = strconv.Atoi(v)
+	if v, found, _ := extractGroupValue(rows, "cpuid.coresPerSocket", "base"); found {
+		g.Cores = v
 	}
-	if v, ok := take("numa.vcpu.maxPerVirtualNode"); ok {
-		g.Numa, _ = strconv.Atoi(v)
+	if v, found, _ := extractGroupValue(rows, "numa.vcpu.maxPerVirtualNode", "base"); found {
+		g.Numa = v
 	}
-	if v, ok := take("config.hardware.memoryMB (GB 환산)"); ok {
-		g.MemGB, _ = strconv.Atoi(v)
+	if v, found, _ := extractGroupValue(rows, "config.hardware.memoryMB (GB 환산)", "base"); found {
+		g.MemGB = v
 	}
-	if v, ok := take("disk total capacity (GB 환산, 반올림)"); ok {
-		g.DiskGB, _ = strconv.Atoi(v)
+	if v, found, _ := extractGroupValue(rows, "disk total capacity (GB 환산, 반올림)", "base"); found {
+		g.DiskGB = v
+	}
+
+	assignEV := func(key, bucket string, dst **int) {
+		if v, found, _ := extractGroupValue(rows, key, bucket); found {
+			vv := v
+			*dst = &vv
+		}
+	}
+	assignEV("config.hardware.numCPU", "ev02", &g.CPUEV02)
+	assignEV("cpuid.coresPerSocket", "ev02", &g.CoresEV02)
+	assignEV("numa.vcpu.maxPerVirtualNode", "ev02", &g.NumaEV02)
+	assignEV("config.hardware.memoryMB (GB 환산)", "ev02", &g.MemGBEV02)
+	assignEV("disk total capacity (GB 환산, 반올림)", "ev02", &g.DiskGBEV02)
+	assignEV("config.hardware.numCPU", "ev03", &g.CPUEV03)
+	assignEV("cpuid.coresPerSocket", "ev03", &g.CoresEV03)
+	assignEV("numa.vcpu.maxPerVirtualNode", "ev03", &g.NumaEV03)
+	assignEV("config.hardware.memoryMB (GB 환산)", "ev03", &g.MemGBEV03)
+	assignEV("disk total capacity (GB 환산, 반올림)", "ev03", &g.DiskGBEV03)
+
+	for _, r := range rows {
+		if lpageKeys[r.Key] && (r.Result == "FAIL" || r.Result == "설정없음") && groupOf(r.VM) == "ev03" {
+			g.HasEV03LpageIssue = true
+		}
 	}
 
 	for _, r := range rows {
