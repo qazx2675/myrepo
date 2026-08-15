@@ -64,11 +64,21 @@ export VC_PASS='...'
 | `-vcenterList <path>` | `vcenter.txt` | 전체 순회 모드에서 사용할 vCenter 주소 목록 파일 (한 줄에 하나) |
 | `-f <path>` | (없음) | 단일/지정 대상 모드: 체크할 BM(VM) hostname 목록 파일 (한 줄에 하나, `#` 주석 가능). 지정 시 `-vcenterList`의 vCenter들 안에서 이 hostname들만 체크. 미지정 시 인벤토리 전체 체크 |
 | `-ht <on\|off>` | (필수) | 하이퍼스레딩 상태 — ev01 그룹 affinity 자동계산에 사용 |
-| `-cores <N>` | (필수) | 기대값: 소켓당 코어 수 |
-| `-numa <N>` | (필수) | 기대값: NUMA 노드당 최대 vCPU(코어) 수 |
-| `-cpu <N>` | (필수) | 기대값: vCPU 수 |
-| `-mem <N>` | (필수) | 기대값: 메모리 GB |
-| `-disk <N>` | (필수) | 기대값: 디스크 총량 GB |
+| `-cores <N>` | (필수) | 기대값: 소켓당 코어 수 — ev01 및 미분류(ev01/02/03 어디에도 안 속하는) VM에 적용 |
+| `-cores-ev02 <N>` | (옵션) | 기대값: ev02 그룹 소켓당 코어 수. 안 주면 ev02 코어수 체크 스킵 |
+| `-cores-ev03 <N>` | (옵션) | 기대값: ev03 그룹 소켓당 코어 수. 안 주면 ev03 코어수 체크 스킵 |
+| `-numa <N>` | (필수) | 기대값: NUMA 노드당 최대 vCPU(코어) 수 — ev01 및 미분류 VM에 적용 |
+| `-numa-ev02 <N>` | (옵션) | 기대값: ev02 그룹 NUMA 노드당 최대 vCPU 수. 안 주면 ev02 NUMA 체크 스킵 |
+| `-numa-ev03 <N>` | (옵션) | 기대값: ev03 그룹 NUMA 노드당 최대 vCPU 수. 안 주면 ev03 NUMA 체크 스킵 |
+| `-cpu <N>` | (필수) | 기대값: vCPU 수 — ev01 및 미분류 VM에 적용 |
+| `-cpu-ev02 <N>` | (옵션) | 기대값: ev02 그룹 vCPU 수. 안 주면 ev02 vCPU 체크 스킵 |
+| `-cpu-ev03 <N>` | (옵션) | 기대값: ev03 그룹 vCPU 수. 안 주면 ev03 vCPU 체크 스킵 |
+| `-mem <N>` | (필수) | 기대값: 메모리 GB — ev01 및 미분류 VM에 적용 |
+| `-mem-ev02 <N>` | (옵션) | 기대값: ev02 그룹 메모리 GB. 안 주면 ev02 메모리 체크 스킵 |
+| `-mem-ev03 <N>` | (옵션) | 기대값: ev03 그룹 메모리 GB. 안 주면 ev03 메모리 체크 스킵 |
+| `-disk <N>` | (필수) | 기대값: 디스크 총량 GB — ev01 및 미분류 VM에 적용 |
+| `-disk-ev02 <N>` | (옵션) | 기대값: ev02 그룹 디스크 총량 GB. 안 주면 ev02 디스크 체크 스킵 |
+| `-disk-ev03 <N>` | (옵션) | 기대값: ev03 그룹 디스크 총량 GB. 안 주면 ev03 디스크 체크 스킵 |
 | `-shares-ev01 <N>` | (필수) | 기대값: ev01 그룹 Shares(ratio) — CPU/메모리 Shares 둘 다 이 값으로 체크 |
 | `-shares-ev02 <N>` | (옵션) | 기대값: ev02 그룹 Shares(ratio). 안 주면 ev02 shares 체크 스킵 |
 | `-shares-ev03 <N>` | (옵션) | 기대값: ev03 그룹 Shares(ratio). 안 주면 ev03 shares 체크 스킵 |
@@ -90,6 +100,15 @@ export VC_PASS='...'
   --out=result.csv
 ```
 (`--affinity-ev01`을 안 주면 ev01은 그대로 `-ht`/`-cores` 자동계산을 씁니다. 세 옵션 다 선택사항이라 필요한 것만 주면 됩니다.)
+
+**1-1. ev02/ev03가 스펙이 다를 때 — 코어수/NUMA/vCPU/메모리/디스크도 그룹별로 다르게:**
+```bash
+./vm-param-check --ht=on \
+  --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 --shares-ev01=2000 \
+  --cores-ev02=4 --numa-ev02=4 --cpu-ev02=8 --mem-ev02=32 --disk-ev02=200 --shares-ev02=1000 \
+  --out=result.csv
+```
+(`-cores`/`-numa`/`-cpu`/`-mem`/`-disk`는 ev01과 미분류 VM에 적용되는 필수값입니다. `-cores-ev02` 등을 안 주면 ev02 VM은 그 항목만 체크에서 빠집니다 — ev03도 `-cores-ev03` 등으로 동일하게 동작합니다.)
 
 **2. 지정 대상 모드 — hostname 목록 파일로 특정 VM들만 (affinity-evNN 옵션도 그대로 사용 가능):**
 ```bash
@@ -174,22 +193,24 @@ export VC_PASS='...'
 | sched.mem.prealloc.pinnedMainMem | TRUE | VM Advanced Config |
 | sched.swap.vmxSwapEnabled | FALSE | VM Advanced Config |
 | config.memoryReservationLockedToMax | true | "모든 게스트 메모리 예약" — 항상 켜져 있어야 함 |
-| cpuid.coresPerSocket | `-cores` 값 | Advanced Config |
-| hardware.numCoresPerSocket | `-cores` 값 | VM 옵션 → CPU 토폴로지 UI 값 (Advanced Config와 별도로 이중 확인) |
-| numa.vcpu.maxPerVirtualNode | `-numa` 값 | Advanced Config |
-| config.numaInfo.coresPerNumaNode | `-numa` 값 | CPU 토폴로지 UI 값 (vSphere API 8.0.0.1+ 필요, 없으면 "설정없음") |
-| config.hardware.numCPU | `-cpu` 값 | vCPU 수 |
-| config.hardware.memoryMB | `-mem` 값(GB→MB 환산) | 메모리 크기 |
-| 디스크 총 용량 | `-disk` 값(GB, 반올림) | 연결된 모든 VirtualDisk 용량 합산 |
+| cpuid.coresPerSocket | ev01/미분류=`-cores`, ev02=`-cores-ev02`, ev03=`-cores-ev03` | Advanced Config — ev02/ev03는 옵션 안 주면 이 항목 자체를 스킵 |
+| hardware.numCoresPerSocket | 위와 동일 | VM 옵션 → CPU 토폴로지 UI 값 (Advanced Config와 별도로 이중 확인) |
+| numa.vcpu.maxPerVirtualNode | ev01/미분류=`-numa`, ev02=`-numa-ev02`, ev03=`-numa-ev03` | Advanced Config — ev02/ev03는 옵션 안 주면 스킵 |
+| config.numaInfo.coresPerNumaNode | 위와 동일 | CPU 토폴로지 UI 값 (vSphere API 8.0.0.1+ 필요, 없으면 "설정없음") |
+| config.hardware.numCPU | ev01/미분류=`-cpu`, ev02=`-cpu-ev02`, ev03=`-cpu-ev03` | vCPU 수 — ev02/ev03는 옵션 안 주면 스킵 |
+| config.hardware.memoryMB | ev01/미분류=`-mem`, ev02=`-mem-ev02`, ev03=`-mem-ev03` (GB→MB 환산) | 메모리 크기 — ev02/ev03는 옵션 안 주면 스킵 |
+| 디스크 총 용량 | ev01/미분류=`-disk`, ev02=`-disk-ev02`, ev03=`-disk-ev03` (GB, 반올림) | 연결된 모든 VirtualDisk 용량 합산 — ev02/ev03는 옵션 안 주면 스킵 |
 | 네트워크 포트그룹 | (판정 없음) | 연결된 어댑터의 포트그룹 이름만 정보로 기록 |
 
 ### ev01 / ev02 / ev03 그룹별 (hostname에 문자열 포함 여부로 분류)
 
 | 그룹 | 조건 | 체크 항목 | 기대값 산출 방식 |
 |---|---|---|---|
-| ev01 | hostname에 `ev01` 포함 | vCPU affinity(`sched.vcpuN.affinity`), CPU/메모리 Shares(ratio) | affinity는 기본적으로 `-ht`(on/off) + `-cores`로 자동계산하지만, `-affinity-ev01` 파일을 주면 그 값으로 대체됨. shares는 `-shares-ev01` — 둘 다 항상 필수 체크 |
-| ev02 | hostname에 `ev02` 포함 | 위와 동일 | affinity는 `-affinity-ev02` 파일, shares는 `-shares-ev02` — 옵션 안 주면 스킵 |
-| ev03 | hostname에 `ev03` 포함 | 위와 동일 | `-affinity-ev03` / `-shares-ev03` — 옵션 안 주면 스킵 |
+| ev01 | hostname에 `ev01` 포함 | 코어수/NUMA/vCPU/메모리/디스크, vCPU affinity(`sched.vcpuN.affinity`), CPU/메모리 Shares(ratio) | `-cores`/`-numa`/`-cpu`/`-mem`/`-disk`/`-shares-ev01` — 전부 항상 필수 체크. affinity는 기본적으로 `-ht`(on/off) + `-cores`로 자동계산하지만, `-affinity-ev01` 파일을 주면 그 값으로 대체됨 |
+| ev02 | hostname에 `ev02` 포함 | 위와 동일 | `-cores-ev02`/`-numa-ev02`/`-cpu-ev02`/`-mem-ev02`/`-disk-ev02`/`-affinity-ev02`/`-shares-ev02` — 항목별로 옵션 안 주면 그 항목만 스킵(전부 독립적) |
+| ev03 | hostname에 `ev03` 포함 | 위와 동일 | `-cores-ev03`/`-numa-ev03`/`-cpu-ev03`/`-mem-ev03`/`-disk-ev03`/`-affinity-ev03`/`-shares-ev03` — 항목별로 옵션 안 주면 그 항목만 스킵 |
+
+**참고**: ev01/02/03 어디에도 속하지 않는(hostname에 `ev01`/`ev02`/`ev03`가 없는) VM은 코어수/NUMA/vCPU/메모리/디스크 체크만 `-cores`/`-numa`/`-cpu`/`-mem`/`-disk`(ev01과 동일한 값)로 받고, affinity/shares는 대상이 아니라 스킵됩니다(기존 동작 그대로 유지).
 
 - affinity 자동계산(ev01): HT ON이면 코어 2개씩 페어(`sched.vcpu0.affinity=0,1`, `sched.vcpu1.affinity=2,3`...), HT OFF면 1:1(`sched.vcpu0.affinity=0`...)
 - **조사 대상 VM이 1대뿐이면** ev02/ev03 옵션이 주어져 있어도 그 체크는 무조건 스킵됩니다 (여러 대를 비교할 때만 의미가 있는 로직이라서).

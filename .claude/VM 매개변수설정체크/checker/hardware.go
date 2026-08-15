@@ -16,43 +16,91 @@ type SharesExpect struct {
 	EV03 *int
 }
 
+// CPUExpect/MemExpect/DiskExpect는 SharesExpect와 동일한 패턴 — Base는 ev01/미분류
+// VM에 적용되는 필수값, EV02/EV03는 옵션(nil이면 해당 그룹 체크 스킵).
+type CPUExpect struct {
+	Base int
+	EV02 *int
+	EV03 *int
+}
+
+type MemExpect struct {
+	Base int
+	EV02 *int
+	EV03 *int
+}
+
+type DiskExpect struct {
+	Base int
+	EV02 *int
+	EV03 *int
+}
+
+// resolveGroupExpect는 그룹(ev01/ev02/ev03/미분류)에 따라 기대값을 정한다.
+// ev01과 미분류("")는 항상 base를 그대로 쓴다(기존 동작 유지, 필수).
+// ev02/ev03는 override가 있고 singleVMMode가 아닐 때만 쓰고, 없으면 ok=false로
+// "이 항목은 체크 자체를 스킵"을 알린다 — checkShares/checkAffinity와 동일한 3-0/3-5 규칙.
+func resolveGroupExpect(base int, ev02, ev03 *int, group string, singleVMMode bool) (int, bool) {
+	switch group {
+	case "ev02":
+		if singleVMMode || ev02 == nil {
+			return 0, false
+		}
+		return *ev02, true
+	case "ev03":
+		if singleVMMode || ev03 == nil {
+			return 0, false
+		}
+		return *ev03, true
+	default:
+		return base, true
+	}
+}
+
 // CheckHardware는 3-4 가상 하드웨어 체크(vCPU/메모리/디스크/메모리예약/Shares)를 수행한다.
 // group은 3-0 분류 결과("ev01"|"ev02"|"ev03"|""), singleVMMode는 이번 실행의 조사 대상이
 // 총 1개인지 여부 — 계획서 3-0/3-4/3-5의 "VM이 1개뿐이면 ev02/ev03는 옵션이 있어도 스킵" 규칙 적용용.
-func CheckHardware(vm model.VMInfo, expectCPU, expectMemGB, expectDiskGB int, shares SharesExpect, group string, singleVMMode bool) []model.Finding {
+// cpu/mem/disk도 shares와 동일하게 ev02/ev03 옵션이 없으면 그 항목만 스킵한다(있으면 체크, 없으면 패스).
+func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpect, shares SharesExpect, group string, singleVMMode bool) []model.Finding {
 	var findings []model.Finding
 
 	// vCPU
-	f := model.Finding{VM: vm.Name, Source: "-", Key: "config.hardware.numCPU", Expected: strconv.Itoa(expectCPU), Actual: strconv.Itoa(int(vm.NumCPU))}
-	if int(vm.NumCPU) == expectCPU {
-		f.Result = "OK"
-	} else {
-		f.Result = "FAIL"
+	if expectCPU, ok := resolveGroupExpect(cpu.Base, cpu.EV02, cpu.EV03, group, singleVMMode); ok {
+		f := model.Finding{VM: vm.Name, Source: "-", Key: "config.hardware.numCPU", Expected: strconv.Itoa(expectCPU), Actual: strconv.Itoa(int(vm.NumCPU))}
+		if int(vm.NumCPU) == expectCPU {
+			f.Result = "OK"
+		} else {
+			f.Result = "FAIL"
+		}
+		findings = append(findings, f)
 	}
-	findings = append(findings, f)
 
 	// 메모리 (GB)
-	actualMemGB := int(vm.MemoryMB) / 1024
-	f = model.Finding{VM: vm.Name, Source: "-", Key: "config.hardware.memoryMB (GB 환산)", Expected: strconv.Itoa(expectMemGB), Actual: strconv.Itoa(actualMemGB)}
-	if actualMemGB == expectMemGB {
-		f.Result = "OK"
-	} else {
-		f.Result = "FAIL"
+	if expectMemGB, ok := resolveGroupExpect(mem.Base, mem.EV02, mem.EV03, group, singleVMMode); ok {
+		actualMemGB := int(vm.MemoryMB) / 1024
+		f := model.Finding{VM: vm.Name, Source: "-", Key: "config.hardware.memoryMB (GB 환산)", Expected: strconv.Itoa(expectMemGB), Actual: strconv.Itoa(actualMemGB)}
+		if actualMemGB == expectMemGB {
+			f.Result = "OK"
+		} else {
+			f.Result = "FAIL"
+		}
+		findings = append(findings, f)
 	}
-	findings = append(findings, f)
 
 	// 디스크 (GB, 반올림)
-	actualDiskGB := int(math.Round(vm.DiskGB))
-	f = model.Finding{VM: vm.Name, Source: "-", Key: "disk total capacity (GB 환산, 반올림)", Expected: strconv.Itoa(expectDiskGB), Actual: strconv.Itoa(actualDiskGB)}
-	if actualDiskGB == expectDiskGB {
-		f.Result = "OK"
-	} else {
-		f.Result = "FAIL"
+	if expectDiskGB, ok := resolveGroupExpect(disk.Base, disk.EV02, disk.EV03, group, singleVMMode); ok {
+		actualDiskGB := int(math.Round(vm.DiskGB))
+		f := model.Finding{VM: vm.Name, Source: "-", Key: "disk total capacity (GB 환산, 반올림)", Expected: strconv.Itoa(expectDiskGB), Actual: strconv.Itoa(actualDiskGB)}
+		if actualDiskGB == expectDiskGB {
+			f.Result = "OK"
+		} else {
+			f.Result = "FAIL"
+		}
+		findings = append(findings, f)
 	}
-	findings = append(findings, f)
 
-	// 모든 게스트 메모리 예약 (고정 기대값: 항상 true)
-	f = model.Finding{VM: vm.Name, Source: "-", Key: "config.memoryReservationLockedToMax (Reserve all guest memory)", Expected: "true"}
+	// 모든 게스트 메모리 예약 (고정 기대값: 항상 true) — 그룹과 무관, 기존 동작 유지.
+	f := model.Finding{VM: vm.Name, Source: "-", Key: "config.memoryReservationLockedToMax (Reserve all guest memory)", Expected: "true"}
 	if vm.MemoryReservationLockedToMax == nil {
 		f.Result = "설정없음"
 	} else {

@@ -31,11 +31,22 @@ func main() {
 	targetsPath := flag.String("f", "", "단일/지정 대상 모드: 체크할 BM(VM) hostname 목록 파일 (한 줄에 하나, '#' 주석 가능. 예: -f kdh.txt). 지정 시 vcenterList의 vCenter들 안에서 이 hostname들만 체크. 미지정 시 인벤토리 전체를 체크(전체 순회 모드)")
 
 	ht := flag.String("ht", "", "HT(하이퍼스레딩) 상태: on | off (필수, ev01 affinity 자동계산에 사용)")
-	cores := flag.Int("cores", 0, "기대값: 소켓당 코어 수 (필수)")
-	numa := flag.Int("numa", 0, "기대값: NUMA 노드당 최대 vCPU 수 (필수)")
-	cpu := flag.Int("cpu", 0, "기대값: vCPU 수 (필수)")
-	mem := flag.Int("mem", 0, "기대값: 메모리 GB (필수)")
-	disk := flag.Int("disk", 0, "기대값: 디스크 총량 GB (필수)")
+	cores := flag.Int("cores", 0, "기대값: 소켓당 코어 수 — ev01 및 미분류 VM에 적용 (필수)")
+	numa := flag.Int("numa", 0, "기대값: NUMA 노드당 최대 vCPU 수 — ev01 및 미분류 VM에 적용 (필수)")
+	cpu := flag.Int("cpu", 0, "기대값: vCPU 수 — ev01 및 미분류 VM에 적용 (필수)")
+	mem := flag.Int("mem", 0, "기대값: 메모리 GB — ev01 및 미분류 VM에 적용 (필수)")
+	disk := flag.Int("disk", 0, "기대값: 디스크 총량 GB — ev01 및 미분류 VM에 적용 (필수)")
+
+	coresEV02Str := flag.String("cores-ev02", "", "기대값: ev02 그룹 소켓당 코어 수 (옵션, 안 주면 ev02 코어수 체크 스킵)")
+	coresEV03Str := flag.String("cores-ev03", "", "기대값: ev03 그룹 소켓당 코어 수 (옵션, 안 주면 ev03 코어수 체크 스킵)")
+	numaEV02Str := flag.String("numa-ev02", "", "기대값: ev02 그룹 NUMA 노드당 최대 vCPU 수 (옵션, 안 주면 ev02 NUMA 체크 스킵)")
+	numaEV03Str := flag.String("numa-ev03", "", "기대값: ev03 그룹 NUMA 노드당 최대 vCPU 수 (옵션, 안 주면 ev03 NUMA 체크 스킵)")
+	cpuEV02Str := flag.String("cpu-ev02", "", "기대값: ev02 그룹 vCPU 수 (옵션, 안 주면 ev02 vCPU 체크 스킵)")
+	cpuEV03Str := flag.String("cpu-ev03", "", "기대값: ev03 그룹 vCPU 수 (옵션, 안 주면 ev03 vCPU 체크 스킵)")
+	memEV02Str := flag.String("mem-ev02", "", "기대값: ev02 그룹 메모리 GB (옵션, 안 주면 ev02 메모리 체크 스킵)")
+	memEV03Str := flag.String("mem-ev03", "", "기대값: ev03 그룹 메모리 GB (옵션, 안 주면 ev03 메모리 체크 스킵)")
+	diskEV02Str := flag.String("disk-ev02", "", "기대값: ev02 그룹 디스크 총량 GB (옵션, 안 주면 ev02 디스크 체크 스킵)")
+	diskEV03Str := flag.String("disk-ev03", "", "기대값: ev03 그룹 디스크 총량 GB (옵션, 안 주면 ev03 디스크 체크 스킵)")
 
 	sharesEV01 := flag.Int("shares-ev01", 0, "기대값: ev01 그룹 CPU Shares(ratio) (필수)")
 	sharesEV02Str := flag.String("shares-ev02", "", "기대값: ev02 그룹 CPU Shares(ratio) (옵션, 안 주면 ev02 shares 체크 스킵)")
@@ -85,6 +96,47 @@ func main() {
 			log.Fatalf("-shares-ev03 값이 정수가 아닙니다: %v", err)
 		}
 		sharesEV03 = &v
+	}
+
+	coresEV02, err := parseOptionalIntFlag("cores-ev02", *coresEV02Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	coresEV03, err := parseOptionalIntFlag("cores-ev03", *coresEV03Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	numaEV02, err := parseOptionalIntFlag("numa-ev02", *numaEV02Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	numaEV03, err := parseOptionalIntFlag("numa-ev03", *numaEV03Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cpuEV02, err := parseOptionalIntFlag("cpu-ev02", *cpuEV02Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cpuEV03, err := parseOptionalIntFlag("cpu-ev03", *cpuEV03Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	memEV02, err := parseOptionalIntFlag("mem-ev02", *memEV02Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	memEV03, err := parseOptionalIntFlag("mem-ev03", *memEV03Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	diskEV02, err := parseOptionalIntFlag("disk-ev02", *diskEV02Str)
+	if err != nil {
+		log.Fatal(err)
+	}
+	diskEV03, err := parseOptionalIntFlag("disk-ev03", *diskEV03Str)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	var affinityEV01, affinityEV02, affinityEV03 map[string]string
@@ -190,6 +242,11 @@ func main() {
 	}
 
 	shares := checker.SharesExpect{EV01: *sharesEV01, EV02: sharesEV02, EV03: sharesEV03}
+	coresExpect := checker.CoresExpect{Base: *cores, EV02: coresEV02, EV03: coresEV03}
+	numaExpect := checker.NumaExpect{Base: *numa, EV02: numaEV02, EV03: numaEV03}
+	cpuExpect := checker.CPUExpect{Base: *cpu, EV02: cpuEV02, EV03: cpuEV03}
+	memExpect := checker.MemExpect{Base: *mem, EV02: memEV02, EV03: memEV03}
+	diskExpect := checker.DiskExpect{Base: *disk, EV02: diskEV02, EV03: diskEV03}
 
 	// VM별 체크는 서로 데이터를 공유하지 않는 순수 함수 호출이라 워커풀로 동시에 처리한다.
 	// 결과는 VM 인덱스별 슬롯에 쓰고 마지막에 순서대로 이어붙여서, 병렬 처리와 무관하게
@@ -207,8 +264,8 @@ func main() {
 			group := classifyGroup(vm.Hostname)
 			var f []model.Finding
 			f = append(f, checker.CheckFixed(vm)...)
-			f = append(f, checker.CheckTopology(vm, *cores, *numa)...)
-			f = append(f, checker.CheckHardware(vm, *cpu, *mem, *disk, shares, group, singleVMMode)...)
+			f = append(f, checker.CheckTopology(vm, coresExpect, numaExpect, group, singleVMMode)...)
+			f = append(f, checker.CheckHardware(vm, cpuExpect, memExpect, diskExpect, shares, group, singleVMMode)...)
 			f = append(f, checker.CheckHostPower(vm))
 			f = append(f, checker.CheckNetwork(vm)...)
 
@@ -289,6 +346,19 @@ func classifyGroup(hostname string) string {
 	default:
 		return ""
 	}
+}
+
+// parseOptionalIntFlag는 "-cores-ev02" 같은 옵션 문자열 플래그를 *int로 바꾼다.
+// 빈 문자열이면 nil(옵션 자체가 안 주어짐, 해당 그룹 체크 스킵)을 반환한다.
+func parseOptionalIntFlag(flagName, val string) (*int, error) {
+	if val == "" {
+		return nil, nil
+	}
+	v, err := strconv.Atoi(val)
+	if err != nil {
+		return nil, fmt.Errorf("-%s 값이 정수가 아닙니다: %w", flagName, err)
+	}
+	return &v, nil
 }
 
 func firstNonEmpty(vals ...string) string {

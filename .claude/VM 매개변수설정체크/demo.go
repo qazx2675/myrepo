@@ -43,8 +43,8 @@ func runDemo(out string, onlyFail, noColor bool) {
 		group := classifyGroup(vm.Hostname)
 
 		findings = append(findings, checker.CheckFixed(vm)...)
-		findings = append(findings, checker.CheckTopology(vm, demoExpectCores, demoExpectNuma)...)
-		findings = append(findings, checker.CheckHardware(vm, demoExpectCPU, demoExpectMemGB, demoExpectDiskGB, shares, group, singleVMMode)...)
+		findings = append(findings, checker.CheckTopology(vm, checker.CoresExpect{Base: demoExpectCores}, checker.NumaExpect{Base: demoExpectNuma}, group, singleVMMode)...)
+		findings = append(findings, checker.CheckHardware(vm, checker.CPUExpect{Base: demoExpectCPU}, checker.MemExpect{Base: demoExpectMemGB}, checker.DiskExpect{Base: demoExpectDiskGB}, shares, group, singleVMMode)...)
 		findings = append(findings, checker.CheckHostPower(vm))
 		findings = append(findings, checker.CheckNetwork(vm)...)
 
