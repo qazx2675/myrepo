@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/view"
@@ -29,6 +30,8 @@ type VMSpec struct {
 	DiskGB            float64
 	CPUSharesLevel    string
 	CPUShares         int32
+	NumaSetting       string // extraConfig "numa.vcpu.maxPerVirtualNode" 값 (NUMA 노드 구성), 미설정이면 ""
+	HTOn              bool   // extraConfig "sched.vcpu0.affinity" 값에 콤마로 구분된 pCPU가 2개 이상이면 true (HT 페어 핀닝)
 	PoweredOn         bool
 	Found             bool
 }
@@ -43,7 +46,7 @@ func fetchVMSpecs(ctx context.Context, client *govmomi.Client, vmNames map[strin
 	}
 	defer cv.Destroy(ctx)
 
-	props := []string{"name", "config.hardware", "config.cpuAllocation", "runtime.powerState"}
+	props := []string{"name", "config.hardware", "config.cpuAllocation", "config.extraConfig", "runtime.powerState"}
 	var vms []mo.VirtualMachine
 	if err := cv.Retrieve(ctx, []string{"VirtualMachine"}, props, &vms); err != nil {
 		return nil, fmt.Errorf("VM 벌크 조회 실패: %w", err)
@@ -72,7 +75,26 @@ func fetchVMSpecs(ctx context.Context, client *govmomi.Client, vmNames map[strin
 			spec.CPUSharesLevel = string(vm.Config.CpuAllocation.Shares.Level)
 			spec.CPUShares = vm.Config.CpuAllocation.Shares.Shares
 		}
+
+		spec.NumaSetting = extraConfigValue(vm.Config.ExtraConfig, "numa.vcpu.maxPerVirtualNode")
+		spec.HTOn = strings.Count(extraConfigValue(vm.Config.ExtraConfig, "sched.vcpu0.affinity"), ",") > 0
+
 		result[vm.Name] = spec
 	}
 	return result, nil
+}
+
+// extraConfigValue는 VM의 extraConfig(advanced settings) 목록에서 key에 해당하는 값을 찾는다.
+// 없으면 빈 문자열을 반환한다.
+func extraConfigValue(ec []types.BaseOptionValue, key string) string {
+	for _, ov := range ec {
+		opt := ov.GetOptionValue()
+		if opt == nil || opt.Key != key {
+			continue
+		}
+		if s, ok := opt.Value.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
