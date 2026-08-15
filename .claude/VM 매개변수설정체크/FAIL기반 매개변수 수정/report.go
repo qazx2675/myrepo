@@ -150,10 +150,21 @@ func extractGlobalExpect(rows []Row) (GlobalExpect, error) {
 		return nil
 	}
 
-	for _, key := range []string{"config.hardware.numCPU", "cpuid.coresPerSocket", "numa.vcpu.maxPerVirtualNode",
-		"config.hardware.memoryMB (GB 환산)", "disk total capacity (GB 환산, 반올림)"} {
+	requiredKeys := []string{"config.hardware.numCPU", "cpuid.coresPerSocket", "numa.vcpu.maxPerVirtualNode",
+		"config.hardware.memoryMB (GB 환산)", "disk total capacity (GB 환산, 반올림)"}
+	for _, key := range requiredKeys {
 		if err := assertConsistent(key); err != nil {
 			return g, err
+		}
+		found := false
+		for _, r := range rows {
+			if r.Key == key {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return g, fmt.Errorf("CSV에 %q 항목이 전혀 없습니다 — vm-param-check의 상세(detail) CSV가 맞는지, 요약(summary) CSV를 잘못 넣은 건 아닌지 확인하세요", key)
 		}
 	}
 
@@ -196,6 +207,20 @@ func extractGlobalExpect(rows []Row) (GlobalExpect, error) {
 		if r.Key == "host power policy" && (r.Result == "FAIL" || r.Result == "설정없음") {
 			g.HasPowerIssue = true
 		}
+	}
+
+	hasEV01Row := false
+	hasEV01Shares := false
+	for _, r := range rows {
+		if strings.Contains(r.VM, "ev01") {
+			hasEV01Row = true
+		}
+		if r.Key == "cpuAllocation.shares (CPU Shares Ratio)" && r.Source == "ev01" {
+			hasEV01Shares = true
+		}
+	}
+	if hasEV01Row && !hasEV01Shares {
+		return g, fmt.Errorf("CSV에 ev01 VM은 있는데 ev01 Shares 항목(cpuAllocation.shares)이 없습니다 — 상세 CSV가 맞는지 확인하세요")
 	}
 
 	return g, nil
