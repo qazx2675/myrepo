@@ -36,7 +36,15 @@ func main() {
 	workDir := flag.String("workDir", ".", "생성되는 worklist 파일들을 저장할 디렉토리")
 	out := flag.String("out", "", "재검증 CSV 출력 경로 (미지정 시 타임스탬프 자동생성)")
 
+	scale := flag.Int("scale", 0, "테스트용: 실제 vCenter/CSV 없이 N대 규모의 합성 데이터로 태그분류/게이트/dry-run/병렬실행을 시뮬레이션 (가독성·규모 테스트 전용)")
+	scaleMismatch := flag.Bool("scaleMismatch", false, "-scale과 함께 사용: VM 1대의 스펙을 일부러 다르게 만들어 동질성 게이트가 대량 환경에서도 잡아내는지 확인")
+
 	flag.Parse()
+
+	if *scale > 0 {
+		runScale(*scale, *scaleMismatch, *affinityTool, *lpageTool, *powerTool)
+		return
+	}
 
 	if *checkResult == "" || *vcTargetIP == "" {
 		log.Fatal("-checkResult 와 -vcTargetIP 는 필수입니다")
