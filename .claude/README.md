@@ -15,7 +15,7 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | [`VM설정 go lang`](./VM%20업무/VM설정%20go%20lang/) | CPU affinity/large page/전원정책 설정과 VM/ESXi 호스트 생성·등록을 담당하는 govmomi 기반 도구 4종(`vm_affinity_bulk`/`vm_lpage_bulk`/`vm_create`/`vm_connect`). 위 레거시 교정 파이프라인이 서브프로세스로 호출하는 실행파일들의 소스. |
 | [`ESXi 로그점검`](./VM%20업무/ESXi%20로그점검/) | 다중 ESXi 호스트 로그를 패턴 레지스트리로 매칭해서 CRITICAL/HIGH 하드웨어 장애 이벤트를 뽑아내는 도구(`esxi-log-check`). |
 | [`vcenter 테스트환경구축 (vcsim)`](./VM%20업무/vcenter%20테스트환경구축%20%28vcsim%29/) | 실 vCenter의 인벤토리 구조를 읽어와 `vcsim`(vCenter 시뮬레이터) 위에 동일하게 재현하는 도구(`vc-test-env`). 실 인프라를 건드리지 않고 다른 govmomi 도구를 안전하게 테스트할 때 사용. |
-| [`gemini_vcsim-pipeline-test`](./VM%20업무/gemini_vcsim-pipeline-test/) | `vcsim` 기반 VM 생성/설정/점검/수정 전체 파이프라인 통합 테스트 프레임워크. |
+| ~~[`gemini_vcsim-pipeline-test`](./VM%20업무/gemini_vcsim-pipeline-test/)~~ | ~~`vcsim` 기반 VM 생성/설정/점검/수정 전체 파이프라인 통합 테스트 프레임워크.~~ |
 | [`home_lab`](./VM%20업무/home_lab/) | (`vm 생성 홈페이지 프로젝트`) govmomi 기반 vCenter/ESXi 자동화 CLI들을 RBAC + 암호화 자격증명 + 감사 로그를 갖춘 웹 포털로 감싼 프로젝트. |
 
 ## HPC/
