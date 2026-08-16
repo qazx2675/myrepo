@@ -1,6 +1,6 @@
 // summary.go: findings를 VM 단위로 집계하는 공통 로직.
 // console.go(화면 요약 표)와 csv.go(요약 CSV, -onlyFail 필터링)가 전부 이걸 재사용한다
-// — 세 군데서 "VM별로 묶어서 OK/FAIL/설정없음/정보 세는" 로직을 따로 구현하면
+// — 세 군데서 "VM별로 묶어서 OK/FAIL/설정없음/미지원/정보 세는" 로직을 따로 구현하면
 // 나중에 하나만 고치고 나머지를 놓치기 쉬워서 여기 한 곳으로 모았다.
 package report
 
@@ -12,12 +12,13 @@ import (
 
 // VMStatus는 VM 1대의 findings를 집계한 결과다.
 type VMStatus struct {
-	VM      string
-	OK      int
-	Fail    int
-	NoValue int
-	Info    int
-	Overall string // "PASS" | "FAIL" (FAIL/설정없음이 하나라도 있으면 FAIL)
+	VM          string
+	OK          int
+	Fail        int
+	NoValue     int
+	Unsupported int
+	Info        int
+	Overall     string // "PASS" | "FAIL" (FAIL/설정없음이 하나라도 있으면 FAIL)
 }
 
 // Summarize는 findings를 VM별로 묶어 VMStatus 목록을 VM명 오름차순으로 반환한다.
@@ -38,6 +39,8 @@ func Summarize(findings []model.Finding) []VMStatus {
 			s.Fail++
 		case "설정없음":
 			s.NoValue++
+		case "미지원":
+			s.Unsupported++
 		case "정보":
 			s.Info++
 		}

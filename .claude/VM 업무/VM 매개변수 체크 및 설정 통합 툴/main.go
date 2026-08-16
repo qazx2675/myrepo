@@ -340,10 +340,12 @@ func evaluateVM(vm model.VMInfo, coresExpect checker.CoresExpect, numaExpect che
 	affinityEV01, affinityEV02, affinityEV03 map[string]string, htOn bool, singleVMMode bool) []model.Finding {
 
 	group := classifyGroup(vm.Hostname)
+	// vcsim (127.0.0.1:54321)에서는 일부 필드를 지원하지 않으므로 플래그 계산
+	isVcsim := strings.HasPrefix(vm.VCenter, "127.0.0.1")
 	var f []model.Finding
 	f = append(f, checker.CheckFixed(vm)...)
-	f = append(f, checker.CheckTopology(vm, coresExpect, numaExpect, group, singleVMMode)...)
-	f = append(f, checker.CheckHardware(vm, cpuExpect, memExpect, diskExpect, shares, group, singleVMMode)...)
+	f = append(f, checker.CheckTopology(vm, coresExpect, numaExpect, group, singleVMMode, isVcsim)...)
+	f = append(f, checker.CheckHardware(vm, cpuExpect, memExpect, diskExpect, shares, group, singleVMMode, isVcsim)...)
 	f = append(f, checker.CheckHostPower(vm))
 	f = append(f, checker.CheckNetwork(vm)...)
 
