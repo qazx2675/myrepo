@@ -110,4 +110,4 @@ vc-test-env/
 
 ## 저장소
 
-애초 clipSend(Android 프로젝트) 저장소와는 무관해서 로컬(`C:\Users\qazx2\AndroidStudioProjects\vc-test-env`)에 별도 저장소로 만들었다가, `vm-param-check`/`vm-param-fix` 등 다른 vCenter 도구들이 이미 모여 있는 `myrepo`의 `.claude/vcenter 테스트환경구축 (vcsim)/`로 옮겨서 같이 관리함.
+애초 clipSend(Android 프로젝트) 저장소와는 무관해서 로컬(`C:\Users\qazx2\AndroidStudioProjects\vc-test-env`)에 별도 저장소로 만들었다가, `vm-param-check`/`vm-param-fix` 등 다른 vCenter 도구들이 이미 모여 있는 `myrepo`의 `.claude/vcenter 테스트환경구축 (vcsim)/`로 옮겨서 같이 관리함. (이후 `.claude/VM 업무/vcenter 테스트환경구축 (vcsim)/`로 한 번 더 정리됨)

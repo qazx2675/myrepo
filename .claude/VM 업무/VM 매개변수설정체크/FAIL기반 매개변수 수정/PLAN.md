@@ -15,7 +15,7 @@
 |---|---|---|---|
 | `affinity_setting -vcTargetIP -worklistFile -affinityFile -id` | `old/go-lang/phase4-2-affinity/affinity.go` (레거시) | 병렬 아님(Task만 비동기 전송 후 일괄 Wait) | `-id`/`-vcTargetIP`/`-worklistFile`(기본 worklist.txt)/`-affinityFile`(기본 affinity.txt) 플래그명이 전부 정확히 일치. `-ht`(ON/OFF) 플래그도 있음(사용자 예시엔 생략됐지만 존재) |
 | `power_setting -vcTargetIP -worklistFile -id` | `old/go-lang/phase4-3-power-policy/power_policy.go` (레거시) | **이미 병렬**(워커풀, `-concurrency` 기본 10) | `-id`/`-vcTargetIP`/`-worklistFile`(기본 worklist_bm.txt, ESXi 물리 호스트명)/`-concurrency` 전부 일치 |
-| `lpage_setting [옵션 깃허브문서 참조]` | `.claude/VM설정 go lang/main_lpage.go` → 빌드명 `vm_lpage_bulk` (**현재 세대**) | **이미 병렬**(워커풀, `-concurrency` 기본 20) | 실제로 README에 문서화된 lpage 도구는 이것 하나뿐(레거시 phase4-4 버전은 문서 없음) — "깃허브문서 참조"가 가리키는 게 이 도구로 보임. 플래그: `-id`/`-vcTargetIP`/`-worklistFile`/`-ev01Cores`/`-ev01Sockets`/`-ev02Cores`/`-ev02Sockets`/`-ev01Numa`/`-ev02Numa`/`-applyTopology`/`-concurrency` |
+| `lpage_setting [옵션 깃허브문서 참조]` | `.claude/VM 업무/VM설정 go lang/main_lpage.go` → 빌드명 `vm_lpage_bulk` (**현재 세대**) | **이미 병렬**(워커풀, `-concurrency` 기본 20) | 실제로 README에 문서화된 lpage 도구는 이것 하나뿐(레거시 phase4-4 버전은 문서 없음) — "깃허브문서 참조"가 가리키는 게 이 도구로 보임. 플래그: `-id`/`-vcTargetIP`/`-worklistFile`/`-ev01Cores`/`-ev01Sockets`/`-ev02Cores`/`-ev02Sockets`/`-ev01Numa`/`-ev02Numa`/`-applyTopology`/`-concurrency` |
 
 즉 **affinity/power는 레거시 도구, lpage만 현재 세대 도구**를 그대로 서브프로세스로 호출하는 게 사용자가 준 명령어와 일치합니다. (열린 질문 1번 — "전원정책 도구를 레거시 그대로 쓸지" — 는 이걸로 답이 나온 걸로 보고 아래서 반영함.)
 
@@ -121,7 +121,7 @@ export VC_PASSWORD='...'
 
 ## Git 업로드 계획
 
-- 경로: `.claude/VM 매개변수설정체크/FAIL기반 매개변수 수정/` (요청하신 대로, 체크 도구 하위)
+- 경로: `.claude/VM 매개변수설정체크/FAIL기반 매개변수 수정/` (요청하신 대로, 체크 도구 하위) — 이후 `.claude/VM 업무/VM 매개변수설정체크/FAIL기반 매개변수 수정/`로 한 번 더 정리됨
 - `vendor/` 포함해서 오프라인 빌드 가능하게
 - README에 vm-param-check와 동일한 수준으로: 체크리스트 항목 설명, git clone → 오프라인 빌드 → 실행법, 그리고 **이 도구가 실제로 설정을 "쓰는" 도구라는 경고 문구**(체크 도구와 달리 되돌리기 어려움)를 명확히 넣음
 

@@ -87,7 +87,7 @@ v1은 `finder.HostSystem()`/`finder.ClusterComputeResource()`/`finder.Folder()`�
 이 디렉토리에는 의존성(`govmomi`)을 미리 받아둔 **`vendor/` 디렉토리가 포함**되어 있다. 압축을 풀거나 clone한 직후 **인터넷 연결 없이 바로 빌드**할 수 있다.
 
 ```bash
-cd ".claude/VM설정 go lang"
+cd ".claude/VM 업무/VM설정 go lang"
 
 # affinity 도구
 go build -mod=vendor -o vm_affinity_bulk main_affinity.go

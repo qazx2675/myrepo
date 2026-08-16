@@ -20,7 +20,7 @@
 
 ```bash
 git clone <이 저장소 주소> myrepo
-cd "myrepo/.claude/VM 매개변수설정체크/FAIL기반 매개변수 수정"
+cd "myrepo/.claude/VM 업무/VM 매개변수설정체크/FAIL기반 매개변수 수정"
 go build -mod=vendor -o vm-param-fix .
 ```
 
@@ -32,7 +32,7 @@ go build -mod=vendor -o vm-param-fix .
 | 태그 | 기본 경로 | 이 저장소에서 빌드하는 법(참고용 — 실제 운영 환경은 이미 병렬화된 사내 버전을 사용) |
 |---|---|---|
 | `affinity` | `./affinity_setting` | `cd old/go-lang/phase4-2-affinity && go build -o affinity_setting affinity.go` |
-| `lpage` | `./lpage_setting` | `cd ".claude/VM설정 go lang" && go build -mod=vendor -o lpage_setting main_lpage.go` |
+| `lpage` | `./lpage_setting` | `cd ".claude/VM 업무/VM설정 go lang" && go build -mod=vendor -o lpage_setting main_lpage.go` |
 | `power` | `./power_setting` | `cd old/go-lang/phase4-3-power-policy && go build -o power_setting power_policy.go` |
 
 **참고**: 이 저장소의 `old/go-lang/phase4-2-affinity`, `phase4-3-power-policy`는 레거시(테스트용) 버전입니다.

@@ -12,19 +12,19 @@
 
 ## 2. 다운로드
 
-이 도구는 저장소 안의 `.claude/vcenter 테스트환경구축 (vcsim)/` 폴더 하나에 전부 들어 있습니다.
+이 도구는 저장소 안의 `.claude/VM 업무/vcenter 테스트환경구축 (vcsim)/` 폴더 하나에 전부 들어 있습니다.
 
 **저장소 전체를 받는 경우:**
 ```bash
 git clone <이 저장소 주소> myrepo
-cd myrepo/.claude/vcenter\ 테스트환경구축\ \(vcsim\)/
+cd myrepo/.claude/VM\ 업무/vcenter\ 테스트환경구축\ \(vcsim\)/
 ```
 
 **이 폴더만 필요한 경우** (예: 폐쇄망으로 옮기기 전에 이 폴더만 압축):
 ```bash
 # 인터넷 되는 곳에서, 저장소를 받은 뒤
 cd myrepo
-tar czf vc-test-env.tar.gz ".claude/vcenter 테스트환경구축 (vcsim)"
+tar czf vc-test-env.tar.gz ".claude/VM 업무/vcenter 테스트환경구축 (vcsim)"
 ```
 
 ## 3. 빌드 (인터넷 여부와 무관 — vendor/ 포함되어 있음)
@@ -32,7 +32,7 @@ tar czf vc-test-env.tar.gz ".claude/vcenter 테스트환경구축 (vcsim)"
 폴더 안으로 들어가서 바로 빌드합니다:
 
 ```bash
-cd ".claude/vcenter 테스트환경구축 (vcsim)"
+cd ".claude/VM 업무/vcenter 테스트환경구축 (vcsim)"
 GOFLAGS=-mod=vendor go build -o vc-test-env .
 ```
 
@@ -47,13 +47,13 @@ GOFLAGS=-mod=vendor go build -o vc-test-env .
 ```bash
 # 1) 인터넷 되는 곳에서 (예: Rocky Linux)
 cd myrepo
-tar czf vc-test-env.tar.gz ".claude/vcenter 테스트환경구축 (vcsim)"
+tar czf vc-test-env.tar.gz ".claude/VM 업무/vcenter 테스트환경구축 (vcsim)"
 
 # 2) USB/scp 등으로 폐쇄망 RHEL 8.10 서버로 파일 복사
 
 # 3) 폐쇄망 서버에서 압축 해제 후 빌드
 tar xzf vc-test-env.tar.gz
-cd ".claude/vcenter 테스트환경구축 (vcsim)"
+cd ".claude/VM 업무/vcenter 테스트환경구축 (vcsim)"
 GOFLAGS=-mod=vendor go build -o vc-test-env .
 ```
 
