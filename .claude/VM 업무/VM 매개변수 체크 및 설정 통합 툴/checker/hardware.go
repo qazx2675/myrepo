@@ -61,7 +61,8 @@ func resolveGroupExpect(base int, ev02, ev03 *int, group string, singleVMMode bo
 // group은 3-0 분류 결과("ev01"|"ev02"|"ev03"|""), singleVMMode는 이번 실행의 조사 대상이
 // 총 1개인지 여부 — 계획서 3-0/3-4/3-5의 "VM이 1개뿐이면 ev02/ev03는 옵션이 있어도 스킵" 규칙 적용용.
 // cpu/mem/disk도 shares와 동일하게 ev02/ev03 옵션이 없으면 그 항목만 스킵한다(있으면 체크, 없으면 패스).
-func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpect, shares SharesExpect, group string, singleVMMode bool) []model.Finding {
+// isVcsim이 true이면 vcsim에서 지원하지 않는 필드를 "[미지원]"으로 표시한다.
+func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpect, shares SharesExpect, group string, singleVMMode bool, isVcsim bool) []model.Finding {
 	var findings []model.Finding
 
 	// vCPU
@@ -100,8 +101,11 @@ func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpec
 	}
 
 	// 모든 게스트 메모리 예약 (고정 기대값: 항상 true) — 그룹과 무관, 기존 동작 유지.
+	// vcsim에서는 미지원 필드이므로 "[미지원]"으로 표시.
 	f := model.Finding{VM: vm.Name, Source: "-", Key: "config.memoryReservationLockedToMax (Reserve all guest memory)", Expected: "true"}
-	if vm.MemoryReservationLockedToMax == nil {
+	if isVcsim {
+		f.Result = "미지원"
+	} else if vm.MemoryReservationLockedToMax == nil {
 		f.Result = "설정없음"
 	} else {
 		f.Actual = strconv.FormatBool(*vm.MemoryReservationLockedToMax)

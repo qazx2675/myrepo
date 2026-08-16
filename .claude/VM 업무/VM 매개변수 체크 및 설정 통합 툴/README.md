@@ -114,7 +114,7 @@ export VCENTER_PASS='...'
 | `-affinity-ev02 <path>` / `-affinity-ev03 <path>` | (옵션) | ev02/ev03 기대 affinity 파일. 안 주면 해당 그룹 affinity 체크 스킵 |
 | `-out <path>` | 타임스탬프 자동생성 | 상세 CSV 경로. `_summary` 붙은 요약 CSV가 하나 더 생성됨 |
 | `-user <이름>` | (없음) | **CSV 파일명 접미사**. `-out=result.csv -user=kdh` → `result_kdh.csv`, `result_kdh_summary.csv`. 여러 사람이 동시에 실행할 때 파일명 충돌 방지용 |
-| `-onlyFail` | `false` | PASS인 VM은 콘솔/CSV 모두에서 제외, FAIL/설정없음 있는 VM만 출력 |
+| `-onlyFail` | `false` | PASS인 VM은 콘솔/CSV 모두에서 제외, FAIL/설정없음/미지원 있는 VM만 출력 |
 | `-noColor` | `false` | 콘솔 ANSI 컬러 끔 |
 | `-demo` | `false` | vCenter 연결 없이 합성 VM 3대로 동작 확인 |
 | `-scale <N>` | `0` | vCenter 연결 없이 N대 규모 합성 VM으로 대량 환경 출력 시뮬레이션 |
@@ -205,15 +205,16 @@ affinity를 전부 하나의 요청에 담아서 보냅니다.
 ## 10. 콘솔 출력 / 출력 파일 형식
 
 콘솔은 항상 `[1] VM별 요약 표`를 먼저 보여주고 `[2]` 상세 섹션이 이어집니다. `-onlyFail`이면
-FAIL이 있는 VM만, 그 안에서도 FAIL/설정없음 항목만 보여줍니다.
+FAIL이 있는 VM만, 그 안에서도 FAIL/설정없음/미지원 항목만 보여줍니다.
 
 CSV 2종(상세/요약)이 생성됩니다.
 - **상세 CSV**: `VM명, 소스, 항목Key, 기대값, 실제값, 결과, 비고` — OK 포함, 필터링 없음(`-onlyFail`
   지정 시엔 콘솔과 동일하게 PASS VM 제외)
-- **요약 CSV**: `VM명, 전체결과, OK, FAIL, 설정없음, 정보` — VM 1대당 한 줄
+- **요약 CSV**: `VM명, 전체결과, OK, FAIL, 설정없음, 미지원, 정보` — VM 1대당 한 줄
 
-결과 값은 4가지: `OK`(일치) / `FAIL`(설정은 있으나 다름) / `설정없음`(아예 미설정) / `정보`(판정 없는
-정보성 항목).
+결과 값은 5가지: `OK`(일치) / `FAIL`(설정은 있으나 다름) / `설정없음`(아예 미설정) / `미지원`(대상이
+vcsim 시뮬레이터일 때만 나타남 — 실제 vCenter엔 있지만 vcsim이 구현하지 않아 값 자체를 조회할 수
+없는 필드. 아래 13장 "알려진 한계" 참고) / `정보`(판정 없는 정보성 항목).
 
 ## 11. 체크 항목 카테고리 (소스 컬럼)
 
@@ -241,9 +242,14 @@ CSV 2종(상세/요약)이 생성됩니다.
 - `config.numaInfo.coresPerNumaNode`(CPU 토폴로지 UI의 NUMA 노드당 코어 수)는 vSphere API
   8.0.0.1+ 필요. 이 필드가 없는 구버전 vCenter에서는 "설정없음"으로만 나오고 교정도 반영되지 않을
   수 있습니다.
-- **vcsim(govmomi v0.55.1) 시뮬레이터는 `VirtualNuma`/`NumaInfo` 필드를 구현하지 않습니다** —
-  vcsim으로 테스트하면 이 항목만 교정 후에도 "설정없음"으로 남습니다(시뮬레이터 한계, 실제
-  vCenter에서는 정상 반영됨 — 12장 검증 이력 참고).
+- **vcsim(`127.0.0.1:54321`) 시뮬레이터는 아래 3개 필드를 자체적으로 구현하지 않습니다** — vcsim을
+  대상으로 체크할 때만 이 필드들이 `설정없음`이 아니라 `미지원`으로 구분 표시되고(값이 없는 게
+  아니라 "이 시뮬레이터로는 확인 자체가 불가능하다"는 의미), `-fix` 대상에서도 자동 제외됩니다.
+  실제 vCenter를 대상으로 할 때는 이 판정이 전혀 개입하지 않고 항상 정상적으로 OK/FAIL/설정없음이
+  나옵니다(12장 검증 이력의 192.168.0.50 실측 참고).
+  - `config.memoryReservationLockedToMax` ("모든 게스트 메모리 예약")
+  - `config.numaInfo.coresPerNumaNode` (NUMA 노드당 코어 수, CPU 토폴로지 UI 값)
+  - `cpuid.coresPerSocket` (소켓당 코어 수, Advanced Config)
 - Shares는 CPU/메모리 구분 없이 `-shares-evNN` 값 하나를 양쪽에 동일하게 적용합니다.
 - 호스트 고성능 전원정책 변경은 이번 범위에 포함하지 않습니다(체크만, 자동교정 대상 아님).
 

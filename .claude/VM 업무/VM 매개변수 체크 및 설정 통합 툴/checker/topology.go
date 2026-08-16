@@ -28,20 +28,25 @@ type NumaExpect struct {
 // group/singleVMMode로 ev02/ev03 그룹 옵션 유무에 따라 스킵 여부를 정한다
 // (checkShares와 동일한 3-0/3-5 규칙 — ev01/미분류는 Base로 항상 체크,
 // ev02/ev03는 해당 옵션이 있고 singleVMMode가 아닐 때만 체크).
+// isVcsim이 true이면 vcsim에서 지원하지 않는 필드를 "[미지원]"으로 표시한다.
 //
 // NUMA "UI 값"에 대한 참고: govmomi vim25 타입 조사 결과, vSphere Client의
 // "CPU 토폴로지 > NUMA 노드당 코어 수" UI는 ExtraConfig의 numa.vcpu.maxPerVirtualNode가
 // 아니라 config.numaInfo.coresPerNumaNode(VirtualMachineConfigInfo.NumaInfo.CoresPerNumaNode)를
 // 읽고 쓴다 — vSphere API 8.0.0.1+ 에서 노출되는 별개 필드다(실측 vCenter는 8.0.3.0으로 지원 확인).
 // 이 값이 nil이면 해당 VM에 커스텀 vNUMA 설정이 없다는 뜻이라 "설정없음"으로 처리한다.
-func CheckTopology(vm model.VMInfo, cores CoresExpect, numa NumaExpect, group string, singleVMMode bool) []model.Finding {
+// vcsim에서는 이 필드를 미지원하므로 "[미지원]"으로 표시한다.
+func CheckTopology(vm model.VMInfo, cores CoresExpect, numa NumaExpect, group string, singleVMMode bool, isVcsim bool) []model.Finding {
 	var findings []model.Finding
 
 	if expectCores, ok := resolveGroupExpect(cores.Base, cores.EV02, cores.EV03, group, singleVMMode); ok {
 		// 코어수 (1) Advanced Config: cpuid.coresPerSocket
+		// vcsim에서는 미지원 필드이므로 "[미지원]"으로 표시.
 		coresAdvActual, coresAdvExists := vm.ExtraConfig[coresKey]
 		f1 := model.Finding{VM: vm.Name, Source: "-", Key: coresKey, Expected: strconv.Itoa(expectCores)}
-		if !coresAdvExists {
+		if isVcsim {
+			f1.Result = "미지원"
+		} else if !coresAdvExists {
 			f1.Result = "설정없음"
 		} else {
 			f1.Actual = coresAdvActual
@@ -85,12 +90,15 @@ func CheckTopology(vm model.VMInfo, cores CoresExpect, numa NumaExpect, group st
 		findings = append(findings, f3)
 
 		// NUMA (2) CPU 토폴로지 UI: config.numaInfo.coresPerNumaNode (ExtraConfig와 별개 API 필드)
+		// vcsim에서는 미지원 필드이므로 "[미지원]"으로 표시.
 		f4 := model.Finding{
 			VM: vm.Name, Source: "-",
 			Key:      "config.numaInfo.coresPerNumaNode (CPU 토폴로지 UI)",
 			Expected: strconv.Itoa(expectNuma),
 		}
-		if vm.NumaCoresPerNode == nil {
+		if isVcsim {
+			f4.Result = "미지원"
+		} else if vm.NumaCoresPerNode == nil {
 			f4.Result = "설정없음"
 		} else {
 			f4.Actual = strconv.Itoa(int(*vm.NumaCoresPerNode))

@@ -11,7 +11,7 @@ import (
 )
 
 var csvHeader = []string{"VM명", "소스", "항목Key", "기대값", "실제값", "결과", "비고"}
-var summaryCSVHeader = []string{"VM명", "전체결과", "OK", "FAIL", "설정없음", "정보"}
+var summaryCSVHeader = []string{"VM명", "전체결과", "OK", "FAIL", "설정없음", "미지원", "정보"}
 
 // sourceRank는 CSV 정렬 시 소스 컬럼의 노출 순서를 고정한다.
 // 사람이 스프레드시트로 훑을 때 "공통설정 -> 호스트 -> ev01 -> ev02 -> ev03 -> 네트워크" 순으로
@@ -94,7 +94,7 @@ func WriteSummaryCSV(path string, findings []model.Finding) error {
 	for _, s := range statuses {
 		row := []string{
 			s.VM, s.Overall,
-			strconv.Itoa(s.OK), strconv.Itoa(s.Fail), strconv.Itoa(s.NoValue), strconv.Itoa(s.Info),
+			strconv.Itoa(s.OK), strconv.Itoa(s.Fail), strconv.Itoa(s.NoValue), strconv.Itoa(s.Unsupported), strconv.Itoa(s.Info),
 		}
 		if err := w.Write(row); err != nil {
 			return err
