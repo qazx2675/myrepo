@@ -40,6 +40,7 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | 폴더 | 설명 |
 |---|---|
 | [`home_lab`](./개인프로젝트/home_lab/) | (`vm 생성 홈페이지 프로젝트`) govmomi 기반 vCenter/ESXi 자동화 CLI들을 RBAC + 암호화 자격증명 + 감사 로그를 갖춘 웹 포털로 감싼 프로젝트. |
+| [`clipSend`](./개인프로젝트/clipSend/) | 클립보드 텍스트를 자동으로 메일로 보내주는 Android 애플리케이션. Kotlin/Jetpack Compose 기반. |
 
 ## 기타
 
