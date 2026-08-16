@@ -7,10 +7,12 @@
 ## 가장 빠른 시작
 
 ```bash
-./gossh -w hosts.txt cat /etc/os-release
+./gossh -w hosts.txt "cat /etc/os-release"
 ```
 
 `hosts.txt`는 호스트 한 줄에 하나, `#` 주석 가능. 결과는 `호스트명: 출력줄` 형식으로 콘솔에 그대로 찍힌다.
+
+**주의**: 명령어는 항상 **따옴표로 묶어야** 합니다. 안 묶으면 쉘이 `|`, `>`, `<` 같은 특수문자를 먼저 해석해버려서 의도와 다르게 실행됩니다.
 
 ## 빌드 (다운로드 후 처음 할 일)
 
@@ -90,7 +92,7 @@ go build -mod=vendor -o gossh .
 
 **1. 가장 기본 — 모든 호스트에 명령 실행:**
 ```bash
-./gossh -w hosts.txt cat /etc/os-release
+./gossh -w hosts.txt "cat /etc/os-release"
 ```
 
 **2. pdsh 스타일 호스트 범위 확장 (`hosts.txt` 안에 아래처럼 쓰면):**
@@ -101,7 +103,7 @@ esxi[0001-0020]
 
 **3. 대량 서버 상태 점검 + OS설치중/svrauto 미마운트 서버 분류:**
 ```bash
-./gossh -w hosts.txt -pm cat /etc/os-release
+./gossh -w hosts.txt -pm "cat /etc/os-release"
 ```
 
 **4. 순수 결과만 파일로 저장 (다른 도구의 입력으로 쓸 때):**
@@ -111,12 +113,12 @@ esxi[0001-0020]
 
 **5. 비밀번호 인증, 커스텀 포트, 낮은 동시성:**
 ```bash
-./gossh -w hosts.txt -u admin -p '...' -P 2222 -c 50 uptime
+./gossh -w hosts.txt -u admin -p '...' -P 2222 -c 50 "uptime"
 ```
 
 **6. 위험 명령(재부팅) — 이중 확인 후 실행:**
 ```bash
-./gossh -dnlgjawkrdjqghkrdls -w hosts.txt reboot
+./gossh -dnlgjawkrdjqghkrdls -w hosts.txt "reboot"
 ```
 
 ## 알려진 한계
