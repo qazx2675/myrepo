@@ -1,0 +1,131 @@
+# gossh
+
+`pdsh` 스타일로 다수 서버에 동시에 SSH 명령을 실행하고 호스트별 결과를 `호스트명: 출력줄` 형태로
+찍어주는 병렬 SSH 실행 도구. 저장소 안의 [`ESXi 로그점검`](../../VM%20업무/ESXi%20로그점검/), `OS 환경설정 체크`
+등 여러 도구가 내부적으로 이 바이너리를 서브프로세스로 호출한다.
+
+## 가장 빠른 시작
+
+```bash
+./gossh -w hosts.txt cat /etc/os-release
+```
+
+`hosts.txt`는 호스트 한 줄에 하나, `#` 주석 가능. 결과는 `호스트명: 출력줄` 형식으로 콘솔에 그대로 찍힌다.
+
+## 빌드 (다운로드 후 처음 할 일)
+
+이 디렉토리를 통째로 받았다면(git clone 또는 ZIP 다운로드) 이 디렉토리(`.claude/공통/gossh/`) 안에서
+`go build .` 형태로 빌드한다.
+
+이 저장소에는 의존성(`golang.org/x/crypto`)을 미리 내려받아 둔 **`vendor/` 디렉토리를 포함**시켜 두었다.
+압축을 풀거나 clone한 직후 **인터넷 연결 없이(air-gapped 환경 포함) 바로 빌드**할 수 있다.
+
+```bash
+# 1. 이 디렉토리로 이동
+cd ".claude/공통/gossh"
+
+# 2. 빌드 — vendor/ 에 있는 의존성을 그대로 사용 (인터넷/go mod tidy 불필요)
+go build -mod=vendor -o gossh .
+```
+
+빌드가 끝나면 현재 디렉토리에 `gossh`(Windows는 `gossh.exe`) 실행 파일이 생긴다.
+
+- `-mod=vendor` 플래그를 꼭 붙여야 `vendor/` 안의 의존성을 쓴다. 이 플래그 없이 `go build .`만 실행하면 Go 버전/설정에 따라 인터넷에서 다시 받으려고 시도할 수 있다.
+- 의존성 버전을 올리는 등 `go.mod`를 수정했다면, 인터넷이 되는 환경에서 `go mod vendor`를 다시 실행해 `vendor/`를 최신 상태로 갱신한 뒤 커밋해야 한다.
+- 폐쇄망(air-gapped) 서버에서 `GOPROXY=off GOFLAGS=-mod=vendor go build -o gossh .`로 완전 오프라인 빌드가 되는 것까지 확인했다.
+
+다른 도구가 이 바이너리를 서브프로세스로 부를 때는(예: `ESXi 로그점검`의 `-gosshPath`) 빌드된
+`gossh` 실행 파일을 PATH에 넣거나, 해당 도구의 경로 옵션으로 전체 경로를 지정하면 된다.
+
+## 인증
+
+비밀번호(`-p`)를 안 주면 SSH 키 기반 인증을 시도한다. `-i`로 키 경로를 직접 지정하지 않으면
+`~/.ssh/id_ed25519` → `id_ecdsa` → `id_rsa` 순서로 존재하는 키를 찾아서 쓴다.
+
+## 옵션 전체 목록
+
+| 플래그 | 기본값 | 설명 |
+|---|---|---|
+| `-w <hostfile>` | (필수) | 호스트 목록 파일. 한 줄에 호스트 하나(또는 쉼표로 여러 개), `#` 주석 가능. `esxi[0001-0020]` 같은 pdsh 스타일 `[시작-끝]` 범위 표기를 자동 확장(0-padding 유지, 중첩 표기도 재귀 확장). 중복 호스트는 자동 제거. |
+| `-u <계정>` | `root` | SSH 접속 계정. |
+| `-p <비밀번호>` | (없음) | SSH 비밀번호 인증. 안 주면 키 인증으로 전환. |
+| `-i <경로>` | (없음, `~/.ssh/` 자동탐색) | SSH 개인키 경로. `~/`로 시작하면 홈 디렉토리 기준으로 해석. |
+| `-P <포트>` | `22` | SSH 포트. |
+| `-c <N>` | `1000` | 동시 접속 수(세마포어). |
+| `-t <초>` | `15` | 접속 타임아웃(초). |
+| `-script` | `false` | 작업 요약(`=== 작업 요약 ===` 블록)을 끄고 호스트별 결과만 순수 출력. 결과를 파일로 리다이렉트해서 다른 도구의 입력으로 쓸 때 사용(예: `ESXi 로그점검`의 수동 모드 입력 파일 만들기). |
+| `-pm` | `false` | 추가 점검 2종을 켠다: (1) `~/.profile`에 `anaconda` 문자열이 있으면 "OS 설치중"으로 분류하고 명령 실행 자체를 건너뜀, (2) 명령 실행 후 `/user/svrauto` 디렉토리 존재 여부를 확인해 없는 호스트를 별도 목록에 기록. |
+| `-dnlgjawkrdjqghkrdls` | `false` | **위험 명령(재부팅/전원종료 등) 강제 실행 확인.** 아래 "위험 명령 가드" 참고. 오타 방지를 위해 일부러 알아보기 힘든 이름을 씀. |
+
+## 위험 명령 가드
+
+명령어에 `reboot`/`poweroff`/`shutdown`/`halt`/`init 0`/`init 6`/`ddc`가 포함되어 있으면(대소문자 무관),
+`-dnlgjawkrdjqghkrdls` 옵션 없이는 **아예 실행되지 않고** 경고만 출력하고 종료한다.
+
+```bash
+./gossh -w hosts.txt reboot
+# ==> [경고] 위험 작업(시스템 종료/재부팅)이 감지되었습니다! ... 실행하려면 -dnlgjawkrdjqghkrdls 를 추가하세요
+```
+
+`-dnlgjawkrdjqghkrdls`를 주면 대상 호스트 전체 목록을 화면에 출력하고 `(y/N)` 확인을 한 번 더 받은 뒤에만
+실제로 실행한다. 대량의 서버에 실수로 재부팅/전원종료를 날리는 사고를 막기 위한 이중 안전장치다.
+
+```bash
+./gossh -dnlgjawkrdjqghkrdls -w hosts.txt reboot
+```
+
+## 결과 파일
+
+실행이 끝나면 `-w`로 지정한 파일명을 기준으로 아래 4개 파일이 (해당 항목이 1건이라도 있을 때만) 같은
+디렉토리에 생성된다.
+
+| 파일명 | 내용 |
+|---|---|
+| `<hostfile>_res_off` | 접속 실패(타임아웃 등) 호스트 |
+| `<hostfile>_res_refsed` | Connection refused(포트 닫힘) 호스트 |
+| `<hostfile>_os_install` | `-pm` 옵션 사용 시, OS 설치 중으로 분류된 호스트 |
+| `<hostfile>_nosvrauto` | `-pm` 옵션 사용 시, `/user/svrauto` 미접근 호스트 |
+
+## 사용 예시
+
+**1. 가장 기본 — 모든 호스트에 명령 실행:**
+```bash
+./gossh -w hosts.txt cat /etc/os-release
+```
+
+**2. pdsh 스타일 호스트 범위 확장 (`hosts.txt` 안에 아래처럼 쓰면):**
+```
+esxi[0001-0020]
+```
+→ `esxi0001` ~ `esxi0020`으로 자동 확장(0-padding 유지).
+
+**3. 대량 서버 상태 점검 + OS설치중/svrauto 미마운트 서버 분류:**
+```bash
+./gossh -w hosts.txt -pm cat /etc/os-release
+```
+
+**4. 순수 결과만 파일로 저장 (다른 도구의 입력으로 쓸 때):**
+```bash
+./gossh -w hosts.txt -script "tail -300 /var/run/log/vobd.log" > collected/vobd.txt
+```
+
+**5. 비밀번호 인증, 커스텀 포트, 낮은 동시성:**
+```bash
+./gossh -w hosts.txt -u admin -p '...' -P 2222 -c 50 uptime
+```
+
+**6. 위험 명령(재부팅) — 이중 확인 후 실행:**
+```bash
+./gossh -dnlgjawkrdjqghkrdls -w hosts.txt reboot
+```
+
+## 알려진 한계
+
+- 위험 명령 감지는 문자열 포함 여부(대소문자 무관) 기반이라, 정상 명령 안에 우연히 `halt`나 `ddc`
+  같은 문자열이 들어가면(예: 파일명, 변수명) 오탐으로 가드가 걸릴 수 있다 — 그럴 땐
+  `-dnlgjawkrdjqghkrdls`로 우회하면 된다.
+- `-pm`의 OS 설치 중 판정은 `~/.profile`에 `anaconda` 문자열이 있는지만 보는 휴리스틱이라, 이
+  환경(사내 OS 배포 스크립트가 설치 중 `~/.profile`에 `anaconda`를 남기는 방식)에 맞춰져 있다. 다른
+  방식으로 OS를 배포하는 환경에서는 이 판정이 그대로 맞지 않을 수 있다.
+- 호스트 키 검증을 하지 않는다(`InsecureIgnoreHostKey`) — 신뢰할 수 있는 내부망에서 사용하는 것을
+  전제로 한다.
