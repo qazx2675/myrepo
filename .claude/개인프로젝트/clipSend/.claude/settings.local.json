@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:claude.ai)",
+      "Bash(git mv *)",
+      "Bash(./gradlew assembleDebug --console=plain)",
+      "Bash(export JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\")"
+    ]
+  }
+}
