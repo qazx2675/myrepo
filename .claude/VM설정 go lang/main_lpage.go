@@ -1,5 +1,3 @@
-// vm_lpage_bulk: worklist 기반으로 ev01~ev02 VM에 HugePage/CPU 토폴로지(소켓당 코어/NUMA) 설정을 병렬(워커풀) 적용. -concurrency 로 동시 처리 개수 제어
-
 package main
 
 import (
@@ -14,34 +12,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
 )
-
-const defaultConcurrency = 20
-
-// vmJob: 워커풀에 넘기는 작업 단위 (VM 1대 = Reconfigure 전송 + Wait 를 한 워커가 전부 처리)
-type vmJob struct {
-	vmName           string
-	vm               *object.VirtualMachine
-	cores            int
-	coresPerSocket   int
-	numa             int
-	coresPerNumaNode int
-}
-
-// printMu: 여러 고루틴이 동시에 fmt.Printf 를 호출할 때 줄이 섞이지 않도록 보호
-var printMu sync.Mutex
-
-func safePrintf(format string, a ...interface{}) {
-	printMu.Lock()
-	defer printMu.Unlock()
-	fmt.Printf(format, a...)
-}
 
 func readLines(path string) ([]string, error) {
 	file, err := os.Open(path)
@@ -73,7 +49,6 @@ func main() {
 	ev01Numa := flag.Int("ev01Numa", 0, "[ev01] NUMA 노드 수 (0이면 토폴로지 NUMA 설정 생략)")
 	ev02Numa := flag.Int("ev02Numa", 0, "[ev02] NUMA 노드 수 (0이면 토폴로지 NUMA 설정 생략)")
 	applyTopology := flag.Bool("applyTopology", true, "설정 편집 > CPU 토폴로지(소켓당 코어 수/NUMA 노드) 적용 여부")
-	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (Reconfigure 전송+대기 전 구간에 적용)")
 
 	flag.Parse()
 
@@ -83,10 +58,6 @@ func main() {
 
 	if *ev01Sockets == 0 || *ev02Sockets == 0 {
 		log.Fatal("소켓 수는 0이 될 수 없습니다.")
-	}
-
-	if *concurrency < 1 {
-		log.Fatalf("-concurrency 값이 올바르지 않습니다: %d (1 이상)", *concurrency)
 	}
 
 	if *ev01Cores%*ev01Sockets != 0 {
@@ -119,7 +90,7 @@ func main() {
 		log.Fatalf("worklist 파일 읽기 실패: %v", err)
 	}
 
-	fmt.Printf("병렬(워커풀) 방식 성능 최적화(VMX) 파라미터 주입을 시작합니다. (접속 계정: %s, 동시 처리 제한: %d)\n", *vcId, *concurrency)
+	fmt.Printf("비동기(Task) 방식 성능 최적화(VMX) 파라미터 주입을 시작합니다. (접속 계정: %s)\n", *vcId)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -173,8 +144,8 @@ func main() {
 		}
 	}
 
-	// ---- 작업 목록 구성 (호스트 x ev01/ev02 를 평탄화) ----
-	var jobs []vmJob
+	var allTasks []*object.Task
+
 	for _, baseHost := range hostlistLines {
 		cleanHost := strings.TrimSpace(baseHost)
 		if cleanHost == "" {
@@ -186,108 +157,98 @@ func main() {
 
 		if _, exists01 := targetVmMap[vmName01]; !exists01 {
 			if _, exists02 := targetVmMap[vmName02]; !exists02 {
-				safePrintf("[%s] 경고: 대상 VM이 존재하지 않습니다. (PASS)\n", cleanHost)
+				fmt.Printf("[%s] 경고: 대상 VM이 존재하지 않습니다. (PASS)\n", cleanHost)
 				continue
 			}
 		}
 
 		if vm01, ok := targetVmMap[vmName01]; ok {
-			jobs = append(jobs, vmJob{
-				vmName: vmName01, vm: vm01,
-				cores: *ev01Cores, coresPerSocket: ev01CoresPerSocket,
-				numa: *ev01Numa, coresPerNumaNode: ev01CoresPerNumaNode,
-			})
-		}
-		if vm02, ok := targetVmMap[vmName02]; ok {
-			jobs = append(jobs, vmJob{
-				vmName: vmName02, vm: vm02,
-				cores: *ev02Cores, coresPerSocket: ev02CoresPerSocket,
-				numa: *ev02Numa, coresPerNumaNode: ev02CoresPerNumaNode,
-			})
-		}
-	}
-
-	if len(jobs) == 0 {
-		fmt.Println("\n실행할 작업이 없습니다.")
-		return
-	}
-
-	fmt.Printf("\n총 %d개의 성능 최적화 작업을 동시 %d개 제한으로 처리합니다 (전송+완료대기를 워커 단위로 병렬 수행).\n", len(jobs), *concurrency)
-
-	// ---- 워커풀: 각 워커가 Reconfigure 전송 + Wait 완료까지 한 VM 단위로 전부 처리 ----
-	sem := make(chan struct{}, *concurrency)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var succeeded, failedCnt int
-
-	for _, j := range jobs {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(j vmJob) {
-			defer wg.Done()
-			defer func() { <-sem }()
-
-			spec := types.VirtualMachineConfigSpec{}
-			// numa.vcpu.maxPerVirtualNode 는 NUMA 노드당 코어 수가 아니라
-			// "소켓당 코어 수"를 사용하기로 확정됨 (의도된 설계, 버그 아님).
-			coresStr := strconv.Itoa(j.coresPerSocket)
-			spec.ExtraConfig = []types.BaseOptionValue{
+			spec01 := types.VirtualMachineConfigSpec{}
+			coresStr01 := strconv.Itoa(ev01CoresPerSocket)
+			spec01.ExtraConfig = []types.BaseOptionValue{
 				&types.OptionValue{Key: "sched.mem.lpage.enable1GPage", Value: "TRUE"},
 				&types.OptionValue{Key: "sched.mem.pin", Value: "TRUE"},
 				&types.OptionValue{Key: "sched.mem.prealloc", Value: "TRUE"},
 				&types.OptionValue{Key: "sched.mem.prealloc.pinnedMainMem", Value: "TRUE"},
 				&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
-				&types.OptionValue{Key: "numa.vcpu.maxPerVirtualNode", Value: coresStr},
+				&types.OptionValue{Key: "numa.vcpu.maxPerVirtualNode", Value: coresStr01},
+				&types.OptionValue{Key: "cpuid.coresPerSocket", Value: coresStr01},
 			}
 
-			topoMsg := ""
+			topoMsg01 := ""
 			if *applyTopology {
-				spec.NumCPUs = int32(j.cores)
-				cps := int32(j.coresPerSocket)
-				spec.NumCoresPerSocket = &cps
-				topoMsg = fmt.Sprintf(", 토폴로지(vCPU %d / 소켓당 코어 %d", j.cores, j.coresPerSocket)
+				spec01.NumCPUs = int32(*ev01Cores)
+				cps01 := int32(ev01CoresPerSocket)
+				spec01.NumCoresPerSocket = &cps01
+				topoMsg01 = fmt.Sprintf(", 토폴로지(vCPU %d / 소켓당 코어 %d", *ev01Cores, ev01CoresPerSocket)
 
-				if j.coresPerNumaNode > 0 {
-					cpn := int32(j.coresPerNumaNode)
-					spec.VirtualNuma = &types.VirtualMachineVirtualNuma{
+				if ev01CoresPerNumaNode > 0 {
+					cpn := int32(ev01CoresPerNumaNode)
+					spec01.VirtualNuma = &types.VirtualMachineVirtualNuma{
 						CoresPerNumaNode: &cpn,
 					}
-					topoMsg += fmt.Sprintf(" / NUMA 노드 %d", j.numa)
+					topoMsg01 += fmt.Sprintf(" / NUMA 노드 %d", *ev01Numa)
 				}
-				topoMsg += ")"
+				topoMsg01 += ")"
 			}
 
-			task, taskErr := j.vm.Reconfigure(ctx, spec)
-			if taskErr != nil {
-				safePrintf("[%s] 설정 요청 실패: %v\n", j.vmName, taskErr)
-				mu.Lock()
-				failedCnt++
-				mu.Unlock()
-				return
+			task, err := vm01.Reconfigure(ctx, spec01)
+			if err == nil {
+				allTasks = append(allTasks, task)
+				fmt.Printf("[%s] HugePage 및 코어당 소켓(%s)%s 비동기 주입 완료\n", vmName01, coresStr01, topoMsg01)
+			} else {
+				fmt.Printf("[%s] 설정 요청 실패: %v\n", vmName01, err)
+			}
+		}
+
+		if vm02, ok := targetVmMap[vmName02]; ok {
+			spec02 := types.VirtualMachineConfigSpec{}
+			coresStr02 := strconv.Itoa(ev02CoresPerSocket)
+			spec02.ExtraConfig = []types.BaseOptionValue{
+				&types.OptionValue{Key: "sched.mem.lpage.enable1GPage", Value: "TRUE"},
+				&types.OptionValue{Key: "sched.mem.pin", Value: "TRUE"},
+				&types.OptionValue{Key: "sched.mem.prealloc", Value: "TRUE"},
+				&types.OptionValue{Key: "sched.mem.prealloc.pinnedMainMem", Value: "TRUE"},
+				&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
+				&types.OptionValue{Key: "numa.vcpu.maxPerVirtualNode", Value: coresStr02},
+				&types.OptionValue{Key: "cpuid.coresPerSocket", Value: coresStr02},
 			}
 
-			safePrintf("[%s] HugePage 및 코어당 소켓(%s)%s 병렬 주입 요청 전송 완료\n", j.vmName, coresStr, topoMsg)
+			topoMsg02 := ""
+			if *applyTopology {
+				spec02.NumCPUs = int32(*ev02Cores)
+				cps02 := int32(ev02CoresPerSocket)
+				spec02.NumCoresPerSocket = &cps02
+				topoMsg02 = fmt.Sprintf(", 토폴로지(vCPU %d / 소켓당 코어 %d", *ev02Cores, ev02CoresPerSocket)
 
-			if waitErr := task.Wait(ctx); waitErr != nil {
-				safePrintf("[%s] 작업 실패: %v\n", j.vmName, waitErr)
-				mu.Lock()
-				failedCnt++
-				mu.Unlock()
-				return
+				if ev02CoresPerNumaNode > 0 {
+					cpn := int32(ev02CoresPerNumaNode)
+					spec02.VirtualNuma = &types.VirtualMachineVirtualNuma{
+						CoresPerNumaNode: &cpn,
+					}
+					topoMsg02 += fmt.Sprintf(" / NUMA 노드 %d", *ev02Numa)
+				}
+				topoMsg02 += ")"
 			}
 
-			safePrintf("[%s] 완료 확인됨\n", j.vmName)
-			mu.Lock()
-			succeeded++
-			mu.Unlock()
-		}(j)
+			task, err := vm02.Reconfigure(ctx, spec02)
+			if err == nil {
+				allTasks = append(allTasks, task)
+				fmt.Printf("[%s] HugePage 및 코어당 소켓(%s)%s 비동기 주입 완료\n", vmName02, coresStr02, topoMsg02)
+			} else {
+				fmt.Printf("[%s] 설정 요청 실패: %v\n", vmName02, err)
+			}
+		}
 	}
 
-	wg.Wait()
-
-	fmt.Printf("\n완료: 성공 %d / 실패 %d\n", succeeded, failedCnt)
-	if failedCnt > 0 {
-		os.Exit(2)
+	if len(allTasks) > 0 {
+		fmt.Printf("\n총 %d개의 성능 최적화 작업이 vCenter 큐(Queue)에서 동시 처리 중입니다.\n", len(allTasks))
+		fmt.Println("완료될 때까지 대기합니다...")
+		for _, task := range allTasks {
+			_ = task.Wait(ctx)
+		}
+		fmt.Println("모든 VM의 VMX 성능 파라미터가 완벽하게 주입되었습니다!")
+	} else {
+		fmt.Println("\n실행할 비동기 작업이 없습니다.")
 	}
-	fmt.Println("모든 VM의 VMX 성능 파라미터가 완벽하게 주입되었습니다!")
 }
