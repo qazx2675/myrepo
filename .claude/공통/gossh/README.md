@@ -65,7 +65,7 @@ go build -mod=vendor -o gossh .
 `-dnlgjawkrdjqghkrdls` 옵션 없이는 **아예 실행되지 않고** 경고만 출력하고 종료한다.
 
 ```bash
-./gossh -w hosts.txt reboot
+./gossh -w hosts.txt "reboot"
 # ==> [경고] 위험 작업(시스템 종료/재부팅)이 감지되었습니다! ... 실행하려면 -dnlgjawkrdjqghkrdls 를 추가하세요
 ```
 
@@ -73,7 +73,7 @@ go build -mod=vendor -o gossh .
 실제로 실행한다. 대량의 서버에 실수로 재부팅/전원종료를 날리는 사고를 막기 위한 이중 안전장치다.
 
 ```bash
-./gossh -dnlgjawkrdjqghkrdls -w hosts.txt reboot
+./gossh -dnlgjawkrdjqghkrdls -w hosts.txt "reboot"
 ```
 
 ## 결과 파일
