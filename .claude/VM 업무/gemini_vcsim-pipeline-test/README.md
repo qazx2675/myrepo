@@ -53,12 +53,12 @@ gemini_vcsim-pipeline-test/
 
 ## 4. 실행 방법
 
-모든 명령어는 Rocky Linux 서버의 프로젝트 디렉토리(`/root/myrepo/.claude/gemini_vcsim-pipeline-test`)에서 수행합니다.
+모든 명령어는 Rocky Linux 서버의 프로젝트 디렉토리(`/root/myrepo/.claude/VM 업무/gemini_vcsim-pipeline-test`)에서 수행합니다.
 
 ### 4.1 전체 파이프라인 일괄 실행
 
 ```bash
-cd /root/myrepo/.claude/gemini_vcsim-pipeline-test
+cd /root/myrepo/.claude/VM 업무/gemini_vcsim-pipeline-test
 
 # 폐쇄망 / 오프라인 환경 (vendor 사용)
 go test -mod=vendor -v -timeout 180s ./...

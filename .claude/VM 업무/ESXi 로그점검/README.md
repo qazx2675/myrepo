@@ -22,13 +22,13 @@ esxi-log-check -w hosts.txt -gosshPath=/root/go-ssh-pack/gossh
 
 ## 빌드 (다운로드 후 처음 할 일)
 
-이 디렉토리를 통째로 받았다면(git clone 또는 ZIP 다운로드), **개별 `.go` 파일을 지정해서 빌드하는 게 아니라** 이 디렉토리(`.claude/ESXi 로그점검/`) 안에서 `go build .` 형태로 빌드한다. Go는 `go.mod`가 있는 디렉토리를 기준으로 같은 패키지(`package main`)에 속한 `.go` 파일(`main.go`, `collect.go`)을 전부 묶어서 하나의 실행 파일로 만들기 때문에, 파일을 하나씩 골라 빌드할 필요가 없다. (`internal/` 아래 파일들은 `main.go`가 import해서 자동으로 같이 빌드된다.)
+이 디렉토리를 통째로 받았다면(git clone 또는 ZIP 다운로드), **개별 `.go` 파일을 지정해서 빌드하는 게 아니라** 이 디렉토리(`.claude/VM 업무/ESXi 로그점검/`) 안에서 `go build .` 형태로 빌드한다. Go는 `go.mod`가 있는 디렉토리를 기준으로 같은 패키지(`package main`)에 속한 `.go` 파일(`main.go`, `collect.go`)을 전부 묶어서 하나의 실행 파일로 만들기 때문에, 파일을 하나씩 골라 빌드할 필요가 없다. (`internal/` 아래 파일들은 `main.go`가 import해서 자동으로 같이 빌드된다.)
 
 이 저장소에는 의존성(`gopkg.in/yaml.v3`)을 미리 내려받아 둔 **`vendor/` 디렉토리를 포함**시켜 두었다. 압축을 풀거나 clone한 직후 **인터넷 연결 없이(air-gapped 환경 포함) 바로 빌드**할 수 있다.
 
 ```bash
 # 1. 이 디렉토리로 이동
-cd ".claude/ESXi 로그점검"
+cd ".claude/VM 업무/ESXi 로그점검"
 
 # 2. 빌드 — vendor/ 에 있는 의존성을 그대로 사용 (인터넷/go mod tidy 불필요)
 #    "." 는 "현재 디렉토리의 main 패키지 전체(main.go + collect.go)"라는 뜻

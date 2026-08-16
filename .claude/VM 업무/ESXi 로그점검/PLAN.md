@@ -57,7 +57,7 @@
 ### 4. 빌드
 
 ```bash
-cd ".claude/ESXi 로그점검"
+cd ".claude/VM 업무/ESXi 로그점검"
 go mod tidy   # gopkg.in/yaml.v3 등 의존성 다운로드 (인터넷 필요 — air-gapped면 vendor/ 미리 준비)
 go build -o esxi-log-check .
 ```

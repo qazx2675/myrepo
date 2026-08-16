@@ -25,20 +25,20 @@ Shares, 호스트 전원정책 등)을 만족하는지 자동으로 점검하고
 **저장소 전체를 받는 경우:**
 ```bash
 git clone <이 저장소 주소> myrepo
-cd "myrepo/.claude/VM 매개변수 체크 및 설정 통합 툴"
+cd "myrepo/.claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴"
 ```
 
 **이 폴더만 필요한 경우** (예: 폐쇄망으로 옮기기 전에 이 폴더만 압축):
 ```bash
 # 인터넷 되는 곳에서, 저장소를 받은 뒤
 cd myrepo
-tar czf vm-param-check.tar.gz ".claude/VM 매개변수 체크 및 설정 통합 툴"
+tar czf vm-param-check.tar.gz ".claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴"
 ```
 
 ## 3. 빌드 (인터넷 여부와 무관 — vendor/ 포함되어 있음)
 
 ```bash
-cd ".claude/VM 매개변수 체크 및 설정 통합 툴"
+cd ".claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴"
 go build -mod=vendor -o vm-param-check .
 ```
 
@@ -58,14 +58,14 @@ go build -o vm-param-check .
 ```bash
 # 1) 인터넷 되는 곳에서
 cd myrepo
-tar czf vm-param-check.tar.gz ".claude/VM 매개변수 체크 및 설정 통합 툴"
+tar czf vm-param-check.tar.gz ".claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴"
 
 # 2) USB/scp 등으로 폐쇄망 서버로 파일 복사
 scp vm-param-check.tar.gz user@폐쇄망서버:/path/to/dest/
 
 # 3) 폐쇄망 서버에서 압축 해제 후 빌드
 tar xzf vm-param-check.tar.gz
-cd ".claude/VM 매개변수 체크 및 설정 통합 툴"
+cd ".claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴"
 go build -mod=vendor -o vm-param-check .
 ```
 
