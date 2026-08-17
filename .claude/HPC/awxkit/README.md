@@ -11,7 +11,7 @@
 인터넷이 연결된 환경에서 코드를 다운로드한 뒤, 의존성이 포함된 해당 폴더 전체를 폐쇄망으로 이동시킵니다.
 ```bash
 # 인터넷이 되는 환경에서 저장소 다운로드 후 압축
-tar czf awxkit.tar.gz ".claude/HPC/OS 환경설정 체크/awxkit"
+tar czf awxkit.tar.gz ".claude/HPC/awxkit"
 ```
 
 ### 1.2 폐쇄망 환경에서 빌드
@@ -19,7 +19,7 @@ tar czf awxkit.tar.gz ".claude/HPC/OS 환경설정 체크/awxkit"
 ```bash
 # 압축 해제 및 폴더 이동
 tar xzf awxkit.tar.gz
-cd ".claude/HPC/OS 환경설정 체크/awxkit"
+cd ".claude/HPC/awxkit"
 
 # 빌드 스크립트 실행 (내부적으로 GOFLAGS=-mod=vendor 사용)
 bash setup.sh
