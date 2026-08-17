@@ -1,8 +1,11 @@
-# vm-param-check
+# vm-param-check 기술문서
 
 vCenter에 있는 VM들이 고성능(High Performance) 설정 기준(CPU/메모리/NUMA 토폴로지, vCPU affinity, Shares, 호스트 전원정책 등)을 만족하는지 자동으로 점검해서, 콘솔 요약과 CSV 상세 로그로 OK/FAIL을 산출하는 도구입니다. (`PLAN.md` 참고)
 
-## 설치 및 빌드
+> ⚠️ **주의사항 (Disclaimer)**
+> 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.
+
+## 1. 빌드 및 설치 방법
 
 이 저장소는 Go 모듈 의존성(`github.com/vmware/govmomi` 등)을 `vendor/` 폴더에 통째로 포함하고 있습니다.
 그래서 **폴더를 그대로 복사(또는 git clone)해서 옮기면 인터넷이 없는 폐쇄망에서도 빌드가 가능**합니다.
@@ -52,12 +55,75 @@ export VC_PASS='...'
 ./vm-param-check -demo   # 먼저 데모 모드로 동작 확인 (vCenter 접속 없이)
 ```
 
-## 실행 모드
+### 4) 전역 명령어로 사용하기 (선택 사항)
+빌드된 실행 바이너리를 매번 해당 폴더로 이동하지 않고 시스템 어디서든 기본 명령어처럼 편리하게 사용하려면, 환경 변수(`PATH`)가 지정된 기본 경로로 파일을 복사하거나 이동해 주시면 됩니다.
+```bash
+# 예: /usr/local/bin 경로로 복사하여 전역 명령어로 등록
+sudo cp vm-param-check /usr/local/bin/
+```
+이후부터는 터미널 어느 경로에서나 `vm-param-check` 명령어만 입력하면 툴이 즉시 실행됩니다.
+
+## 2. 사용 방법
 
 - **전체 순회 모드 (기본)**: `-vcenterList`에 나열된 모든 vCenter의 VM 인벤토리 전체를 체크
 - **단일/지정 대상 모드**: `-f <파일>`로 체크할 BM(VM) hostname 목록을 주면 그 VM들만 체크
 
-## 옵션 전체 목록
+### 사용 예시
+
+**1. 전체 순회 모드 — vcenter.txt에 있는 모든 vCenter의 VM 전체 체크:**
+```bash
+./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --shares-ev02=1000 --shares-ev03=1000 \
+  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt --affinity-ev03=ev03.txt \
+  --out=result.csv
+```
+(`--affinity-ev01`을 안 주면 ev01은 그대로 `-ht`/`-cores` 자동계산을 씁니다. 세 옵션 다 선택사항이라 필요한 것만 주면 됩니다.)
+
+**1-1. ev02/ev03가 스펙이 다를 때 — 코어수/NUMA/vCPU/메모리/디스크도 그룹별로 다르게:**
+```bash
+./vm-param-check --ht=on \
+  --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 --shares-ev01=2000 \
+  --cores-ev02=4 --numa-ev02=4 --cpu-ev02=8 --mem-ev02=32 --disk-ev02=200 --shares-ev02=1000 \
+  --out=result.csv
+```
+
+**2. 지정 대상 모드 — hostname 목록 파일로 특정 VM들만:**
+```bash
+# kdh.txt: 체크할 BM(VM) hostname을 한 줄씩
+cat kdh.txt
+# 192ev01
+# 192ev02
+
+./vm-param-check -f kdh.txt --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --shares-ev02=1000 \
+  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt \
+  --out=result.csv
+```
+
+**3. 대수 많을 때 문제 있는 VM만 보기:**
+```bash
+./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --onlyFail --out=result.csv
+```
+
+**4. 컬러 없이(파일로 리다이렉트하거나 컬러 미지원 터미널):**
+```bash
+./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --noColor --out=result.csv > report.txt
+```
+
+**5. 실제 인프라 없이 동작만 확인 — 데모 모드:**
+```bash
+./vm-param-check -demo
+```
+
+인증은 공통 환경변수를 사용합니다: `VC_USER`/`VC_PASS` (없으면 `VCENTER_USER`/`VCENTER_PASS`로 폴백).
+```bash
+export VC_USER='administrator@vsphere.local'
+export VC_PASS='...'
+```
+
+## 3. 옵션별 상세 설명
 
 | 플래그 | 기본값 | 설명 |
 |---|---|---|
@@ -88,77 +154,17 @@ export VC_PASS='...'
 | `-out <path>` | (없음 → 타임스탬프 자동생성) | 상세 CSV 출력 경로. 같은 이름에 `_summary`가 붙은 요약 CSV가 하나 더 생성됨 |
 | `-onlyFail` | `false` | PASS(문제 없음)인 VM은 콘솔/CSV 모두에서 제외하고 FAIL/설정없음이 있는 VM만 출력 (대수 많을 때 가독성용). **콘솔 상세 섹션도 이때는 FAIL/설정없음 항목만** 보여줌. 미지정(기본)이면 콘솔 상세 섹션에 OK/정보 항목까지 전부 출력됨 |
 | `-noColor` | `false` | 콘솔 출력에서 ANSI 컬러(FAIL=빨강/설정없음=노랑/PASS=초록)를 끔 — 컬러 미지원 터미널/파일 리다이렉트용 |
-| `-demo` | `false` | vCenter에 연결하지 않고, affinity 항목이 많은 8~16vCPU급 가짜 VM 3대(OK/FAIL/개수불일치 케이스)로 콘솔+CSV 출력을 보여주는 데모 모드. 다른 모든 플래그를 무시하고 고정된 데모 기대값 사용 |
+| `-demo` | `false` | vCenter에 연결하지 않고, affinity 항목이 많은 가짜 VM 3대로 콘솔+CSV 출력을 보여주는 데모 모드 |
 
-## 사용 예시
+## 4. 문서별 고유 설명
 
-**1. 전체 순회 모드 — vcenter.txt에 있는 모든 vCenter의 VM 전체 체크:**
-```bash
-./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --shares-ev02=1000 --shares-ev03=1000 \
-  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt --affinity-ev03=ev03.txt \
-  --out=result.csv
-```
-(`--affinity-ev01`을 안 주면 ev01은 그대로 `-ht`/`-cores` 자동계산을 씁니다. 세 옵션 다 선택사항이라 필요한 것만 주면 됩니다.)
-
-**1-1. ev02/ev03가 스펙이 다를 때 — 코어수/NUMA/vCPU/메모리/디스크도 그룹별로 다르게:**
-```bash
-./vm-param-check --ht=on \
-  --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 --shares-ev01=2000 \
-  --cores-ev02=4 --numa-ev02=4 --cpu-ev02=8 --mem-ev02=32 --disk-ev02=200 --shares-ev02=1000 \
-  --out=result.csv
-```
-(`-cores`/`-numa`/`-cpu`/`-mem`/`-disk`는 ev01과 미분류 VM에 적용되는 필수값입니다. `-cores-ev02` 등을 안 주면 ev02 VM은 그 항목만 체크에서 빠집니다 — ev03도 `-cores-ev03` 등으로 동일하게 동작합니다.)
-
-**2. 지정 대상 모드 — hostname 목록 파일로 특정 VM들만 (affinity-evNN 옵션도 그대로 사용 가능):**
-```bash
-# kdh.txt: 체크할 BM(VM) hostname을 한 줄씩
-cat kdh.txt
-# 192ev01
-# 192ev02
-
-./vm-param-check -f kdh.txt --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --shares-ev02=1000 \
-  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt \
-  --out=result.csv
-```
-`-f`는 "어떤 vCenter의 어떤 VM들만 볼지"만 제한할 뿐, `--affinity-ev01/02/03` 등 나머지 옵션은 전체 순회 모드와 완전히 동일하게 동작합니다 — 모드와 무관하게 항상 같이 쓸 수 있습니다.
-
-**3. 대수 많을 때 문제 있는 VM만 보기:**
-```bash
-./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --onlyFail --out=result.csv
-```
-
-**4. 컬러 없이(파일로 리다이렉트하거나 컬러 미지원 터미널):**
-```bash
-./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --noColor --out=result.csv > report.txt
-```
-
-**5. 실제 인프라 없이 동작만 확인 — 데모 모드:**
-```bash
-./vm-param-check -demo
-```
-
-인증은 공통 환경변수를 사용합니다: `VC_USER`/`VC_PASS` (없으면 `VCENTER_USER`/`VCENTER_PASS`로 폴백).
-
-```bash
-export VC_USER='administrator@vsphere.local'
-export VC_PASS='...'
-```
-
-## 콘솔 출력
-
+### 콘솔 출력
 콘솔은 항상 `[1] VM별 요약 표`(대수/OK/FAIL/설정없음/정보 집계)를 먼저 보여주고, 그 아래 `[2]` 상세 섹션이 이어집니다.
-
 - **기본(= `-onlyFail` 미지정)**: `[2]`는 모든 VM의 모든 항목(OK/FAIL/설정없음/정보)을 빠짐없이 보여줍니다 — CSV 상세와 동일한 정보를 콘솔에서도 확인할 수 있습니다. VM이 많으면 그만큼 출력도 길어집니다.
 - **`-onlyFail`**: `[2]`는 FAIL이 있는 VM만, 그 안에서도 FAIL/설정없음 항목만 보여줘서 문제만 빠르게 훑어볼 수 있습니다.
 
-## 출력 파일
-
+### 출력 파일
 `-out=result.csv`로 실행하면 파일 2개가 생성됩니다.
-
 - **`result.csv` (상세)**: 조사한 모든 설정값을 항목(Key) 단위로 빠짐없이 기록 (OK 포함, 필터링 없음). 컬럼: `VM명, 소스, 항목Key, 기대값, 실제값, 결과, 비고`
 - **`result_summary.csv` (요약)**: VM 1대당 한 줄. 컬럼: `VM명, 전체결과, OK, FAIL, 설정없음, 정보`
 
@@ -170,7 +176,7 @@ export VC_PASS='...'
 - `설정없음`: 해당 설정 자체가 없음 (FAIL과 구분 — 아예 미설정 상태)
 - `정보`: OK/FAIL 판정이 없는 정보성 항목 (네트워크 포트그룹 등)
 
-## 체크 항목 카테고리 (소스 컬럼)
+### 체크 항목 카테고리 (소스 컬럼)
 
 | 소스 | 의미 |
 |---|---|
@@ -178,13 +184,12 @@ export VC_PASS='...'
 | `host` | 이 VM이 돌고 있는 ESXi 호스트의 전원 정책 (기대값 항상 High Performance) |
 | `ev01` | hostname에 `ev01` 포함된 VM — vCPU affinity(HT on/off + 코어수로 자동계산), Shares(CPU/메모리) — 항상 필수 체크 |
 | `ev02` | hostname에 `ev02` 포함된 VM — affinity(파일 기반), Shares(CPU/메모리) — `-affinity-ev02`/`-shares-ev02` 옵션을 줬을 때만, VM이 1대뿐이면 스킵 |
-| `ev03` | ev02와 동일하되 `ev03` 그룹 |
-| `network` | VM에 붙은 네트워크 어댑터의 포트그룹 이름 (판정 없음, 정보성). 커넥트/디스커넥트 상태와 무관하게 항상 조사하며, 그 상태는 비고란에 "커넥트"/"디스커넥트"로 기록 |
+| `ev03` | ev03 그룹 |
+| `network` | VM에 붙은 네트워크 어댑터의 포트그룹 이름 (판정 없음, 정보성). |
 
-## 체크 항목 상세 (실제로 조회/비교하는 값)
+### 체크 항목 상세 (실제로 조회/비교하는 값)
 
-### 공통 고정값 — 모든 VM
-
+**공통 고정값 — 모든 VM**
 | Key | 기대값 | 비고 |
 |---|---|---|
 | ESXi 호스트 전원 정책 | High Performance | VM이 돌고 있는 호스트 기준, 항상 고정 |
@@ -193,34 +198,25 @@ export VC_PASS='...'
 | sched.mem.prealloc.pinnedMainMem | TRUE | VM Advanced Config |
 | sched.swap.vmxSwapEnabled | FALSE | VM Advanced Config |
 | config.memoryReservationLockedToMax | true | "모든 게스트 메모리 예약" — 항상 켜져 있어야 함 |
-| cpuid.coresPerSocket | ev01/미분류=`-cores`, ev02=`-cores-ev02`, ev03=`-cores-ev03` | Advanced Config — ev02/ev03는 옵션 안 주면 이 항목 자체를 스킵 |
-| hardware.numCoresPerSocket | 위와 동일 | VM 옵션 → CPU 토폴로지 UI 값 (Advanced Config와 별도로 이중 확인) |
-| numa.vcpu.maxPerVirtualNode | ev01/미분류=`-numa`, ev02=`-numa-ev02`, ev03=`-numa-ev03` | Advanced Config — ev02/ev03는 옵션 안 주면 스킵 |
-| config.numaInfo.coresPerNumaNode | 위와 동일 | CPU 토폴로지 UI 값 (vSphere API 8.0.0.1+ 필요, 없으면 "설정없음") |
-| config.hardware.numCPU | ev01/미분류=`-cpu`, ev02=`-cpu-ev02`, ev03=`-cpu-ev03` | vCPU 수 — ev02/ev03는 옵션 안 주면 스킵 |
-| config.hardware.memoryMB | ev01/미분류=`-mem`, ev02=`-mem-ev02`, ev03=`-mem-ev03` (GB→MB 환산) | 메모리 크기 — ev02/ev03는 옵션 안 주면 스킵 |
-| 디스크 총 용량 | ev01/미분류=`-disk`, ev02=`-disk-ev02`, ev03=`-disk-ev03` (GB, 반올림) | 연결된 모든 VirtualDisk 용량 합산 — ev02/ev03는 옵션 안 주면 스킵 |
-| 네트워크 포트그룹 | (판정 없음) | 어댑터의 포트그룹 이름을 커넥트/디스커넥트 상태와 무관하게 정보로 기록. 커넥트/디스커넥트 상태 자체도 비고란에 새로 표시(예전엔 이름만 보이고 상태는 안 보였음) |
+| cpuid.coresPerSocket | (그룹별 지정) | Advanced Config |
+| hardware.numCoresPerSocket | (그룹별 지정) | VM 옵션 → CPU 토폴로지 UI 값 |
+| numa.vcpu.maxPerVirtualNode | (그룹별 지정) | Advanced Config |
+| config.numaInfo.coresPerNumaNode | (그룹별 지정) | CPU 토폴로지 UI 값 (vSphere API 8.0.0.1+ 필요) |
+| config.hardware.numCPU | (그룹별 지정) | vCPU 수 |
+| config.hardware.memoryMB | (그룹별 지정) | 메모리 크기 |
+| 디스크 총 용량 | (그룹별 지정) | 연결된 모든 VirtualDisk 용량 합산 |
+| 네트워크 포트그룹 | (판정 없음) | 어댑터의 포트그룹 이름 |
 
-### ev01 / ev02 / ev03 그룹별 (hostname에 문자열 포함 여부로 분류)
-
+**ev01 / ev02 / ev03 그룹별**
 | 그룹 | 조건 | 체크 항목 | 기대값 산출 방식 |
 |---|---|---|---|
-| ev01 | hostname에 `ev01` 포함 | 코어수/NUMA/vCPU/메모리/디스크, vCPU affinity(`sched.vcpuN.affinity`), CPU/메모리 Shares(ratio) | `-cores`/`-numa`/`-cpu`/`-mem`/`-disk`/`-shares-ev01` — 전부 항상 필수 체크. affinity는 기본적으로 `-ht`(on/off) + `-cores`로 자동계산하지만, `-affinity-ev01` 파일을 주면 그 값으로 대체됨 |
-| ev02 | hostname에 `ev02` 포함 | 위와 동일 | `-cores-ev02`/`-numa-ev02`/`-cpu-ev02`/`-mem-ev02`/`-disk-ev02`/`-affinity-ev02`/`-shares-ev02` — 항목별로 옵션 안 주면 그 항목만 스킵(전부 독립적) |
-| ev03 | hostname에 `ev03` 포함 | 위와 동일 | `-cores-ev03`/`-numa-ev03`/`-cpu-ev03`/`-mem-ev03`/`-disk-ev03`/`-affinity-ev03`/`-shares-ev03` — 항목별로 옵션 안 주면 그 항목만 스킵 |
+| ev01 | hostname에 `ev01` 포함 | 코어수/NUMA/vCPU/메모리/디스크, vCPU affinity, Shares | `-cores`/`-numa`/`-cpu`/`-mem`/`-disk`/`-shares-ev01` 항상 체크 |
+| ev02 | hostname에 `ev02` 포함 | 위와 동일 | 각각의 `-ev02` 옵션 사용 |
+| ev03 | hostname에 `ev03` 포함 | 위와 동일 | 각각의 `-ev03` 옵션 사용 |
 
-**참고**: ev01/02/03 어디에도 속하지 않는(hostname에 `ev01`/`ev02`/`ev03`가 없는) VM은 코어수/NUMA/vCPU/메모리/디스크 체크만 `-cores`/`-numa`/`-cpu`/`-mem`/`-disk`(ev01과 동일한 값)로 받고, affinity/shares는 대상이 아니라 스킵됩니다(기존 동작 그대로 유지).
-
-- affinity 자동계산(ev01): HT ON이면 코어 2개씩 페어(`sched.vcpu0.affinity=0,1`, `sched.vcpu1.affinity=2,3`...), HT OFF면 1:1(`sched.vcpu0.affinity=0`...)
-- **조사 대상 VM이 1대뿐이면** ev02/ev03 옵션이 주어져 있어도 그 체크는 무조건 스킵됩니다 (여러 대를 비교할 때만 의미가 있는 로직이라서).
-
-## 데이터센터 범위 / 병렬 처리
-
-- **데이터센터 무관 전체 탐색**: vCenter 조회는 `ServiceContent.RootFolder`(vCenter 최상위, 모든 Datacenter의 부모)를 재귀적으로 순회합니다. 특정 Datacenter로 범위를 좁히지 않기 때문에, VM이나 호스트가 vCenter 내부의 어느 Datacenter에 속해 있어도 빠짐없이 조회·체크됩니다.
-- **병렬 처리**: `-vcenterList`에 vCenter가 여러 개면 접속·조회를 동시에 진행합니다(하나씩 순서대로 기다리지 않음). VM별 설정값 비교(체크)도 CPU 코어 수만큼 워커풀로 동시에 처리합니다. 결과는 항상 같은 순서로 모아서 출력하므로, 병렬로 처리해도 콘솔/CSV 결과 순서는 매번 동일하게 재현됩니다.
-
-## 알려진 한계
-
-- NUMA "코어수/UI 값" 비교 중 하나는 `config.numaInfo.coresPerNumaNode`(vSphere API 8.0.0.1+ 필요)를 쓰는데, 이 필드가 없는 구버전 vCenter에서는 "설정없음"으로 나옵니다.
-- Shares는 계획서에 CPU/메모리 구분이 없어 `-shares-evNN` 값 하나를 CPU/메모리 Shares 양쪽에 동일하게 적용합니다.
+### 데이터센터 범위 및 알려진 한계
+- **데이터센터 무관 전체 탐색**: vCenter 조회는 `ServiceContent.RootFolder`(vCenter 최상위, 모든 Datacenter의 부모)를 재귀적으로 순회합니다.
+- **병렬 처리**: `-vcenterList`에 vCenter가 여러 개면 접속·조회를 동시에 진행합니다(하나씩 순서대로 기다리지 않음).
+- **알려진 한계**:
+  - NUMA "코어수/UI 값" 비교 중 하나는 `config.numaInfo.coresPerNumaNode`(vSphere API 8.0.0.1+ 필요)를 쓰는데, 이 필드가 없는 구버전 vCenter에서는 "설정없음"으로 나옵니다.
+  - Shares는 계획서에 CPU/메모리 구분이 없어 `-shares-evNN` 값 하나를 CPU/메모리 Shares 양쪽에 동일하게 적용합니다.
