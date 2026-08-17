@@ -28,6 +28,14 @@
    chmod +x run_analyzer.sh
    chmod +x esxi-log-check
    ```
+5. **전역 명령어로 사용하기 (선택 사항)**
+   빌드된 `esxi-log-check` 바이너리를 매번 해당 폴더로 이동하지 않고 시스템 어디서든 기본 명령어처럼 편리하게 사용하려면, 환경 변수(`PATH`)가 지정된 기본 경로로 파일을 복사하거나 이동해 주시면 됩니다.
+   ```bash
+   # 예: /usr/local/bin 경로로 복사하여 전역 명령어로 등록
+   sudo cp esxi-log-check /usr/local/bin/
+   ```
+   이후부터는 터미널 어느 경로에서나 `esxi-log-check` 명령어만 입력하면 툴이 즉시 실행됩니다.
+
 
 ---
 
