@@ -122,6 +122,9 @@ func main() {
 
 	rand.Seed(time.Now().UnixNano())
 
+	// 확장 생성된 시나리오 템플릿(35개+) 합치기
+	templates = append(templates, getExtraTemplates()...)
+
 	fmt.Printf("Starting ESXi 8.x Mock Logger (Generating %d scenarios)...\n", *countPtr)
 
 	// Ensure directories exist
