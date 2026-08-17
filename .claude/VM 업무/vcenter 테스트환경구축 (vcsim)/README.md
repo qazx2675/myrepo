@@ -102,6 +102,26 @@ Get-VM
 Get-Cluster
 ```
 
+### 테스트 환경을 다른 서버로 이동해서 사용하려면
+
+추출된 레시피 데이터(`~/.vc-test-env/recipes/`)와 실행 파일을 함께 다른 서버로 넘기면, 해당 서버에서는 실제 vCenter에 연결하지 않고도 기존 환경을 완벽히 동일하게 재현할 수 있습니다.
+
+이를 위해 함께 제공되는 `export_vcsim_env.sh` 스크립트를 사용하면 한 번에 이관할 수 있습니다.
+
+```bash
+# 사용법 (현재 vcsim 폴더 내에서 실행)
+bash export_vcsim_env.sh <이동할_대상_서버_IP>
+
+# 예시
+bash export_vcsim_env.sh 192.168.0.60
+```
+
+**스크립트 내부 동작 과정:**
+1. 현재 프로그램 폴더와 `~/.vc-test-env/` 폴더를 하나로 압축 (`/tmp/vcsim_with_recipes.tar.gz`)
+2. 대상 서버의 `/root/` 경로로 파일 전송 (대상 서버 비밀번호 필요)
+3. 대상 서버에서 압축 해제 및 임시 파일 자동 삭제
+4. 이후 대상 서버에 접속하여 `/root/vcenter 테스트환경구축 (vcsim)/vc-test-env`를 바로 실행 가능
+
 ## 3. 옵션별 상세 설명
 
 ```bash
