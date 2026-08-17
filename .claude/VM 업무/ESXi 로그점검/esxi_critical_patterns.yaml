@@ -1,64 +1,64 @@
-# esxi_critical_patterns.yaml: ESXi ?�리?�컬/?�드?�어 ?�애 로그 ?�턴 ?��??�트�?(M0 ?�출�?
-# 주의: 모든 regex??Go RE2 문법 기�? ??lookahead/lookbehind/backreference ?�용 금�?
-# severity: CRITICAL > HIGH > MEDIUM > LOW > CLEAR(복구마커) > NOISE(?�탐?�터)
+# esxi_critical_patterns.yaml: ESXi 크리티컬/하드웨어 장애 로그 패턴 레지스트리 (M0 산출물)
+# 주의: 모든 regex는 Go RE2 문법 기준 — lookahead/lookbehind/backreference 사용 금지
+# severity: CRITICAL > HIGH > MEDIUM > LOW > CLEAR(복구마커) > NOISE(오탐필터)
 
 version: "0.1-draft"
 updated: "2026-08-12"
-status: "1�?조사�????�환�?vm-support 번들�?검�??�요 (verification_gaps 참조)"
+status: "1차 조사본 — 실환경 vm-support 번들로 검증 필요 (verification_gaps 참조)"
 
 # ---------------------------------------------------------------------------
-# gossh 출력 ?�싱 규칙
+# gossh 출력 파싱 규칙
 # ---------------------------------------------------------------------------
 gossh:
-  # gossh 출력 ?�태: "esxi01 : 2026-06-09T14:10:13.374Z In(14) vobd[2097669]: ..."
-  # 로그 ?�인 ?�체??':' 가 ?�수 ?�함?��?�?반드??"�?구분??�??�라?�다.
+  # gossh 출력 형태: "esxi01 : 2026-06-09T14:10:13.374Z In(14) vobd[2097669]: ..."
+  # 로그 라인 자체에 ':' 가 다수 포함되므로 반드시 "첫 구분자"만 잘라낸다.
   prefix_regex: '^(?P<host>[^\s:]+)\s*:\s?(?P<line>.*)$'
 
-  # 구분??변???�??(?�경/버전???�라 ?��? ???�어 fallback ?�서�??�도)
+  # 구분자 변형 대응 (환경/버전에 따라 다를 수 있어 fallback 순서로 시도)
   prefix_fallbacks:
     - '^(?P<host>[^\s:]+):\s(?P<line>.*)$'
     - '^\[(?P<host>[^\]]+)\]\s*(?P<line>.*)$'
 
-  # prefix ?�싱 ?�패 ?�인 처리: "carry"(직전 ?�스?�에 귀?? | "drop" | "unknown"
+  # prefix 파싱 실패 라인 처리: "carry"(직전 호스트에 귀속) | "drop" | "unknown"
   orphan_line_policy: "carry"
 
-  # ?�스???�위 ?�집 ?�패 ?�정 (분석 ?�?�에???�외?�고 별도 리포??
+  # 호스트 단위 수집 실패 판정 (분석 대상에서 제외하고 별도 리포트)
   collection_failure_patterns:
     - 'ssh: connect to host .* (Connection refused|No route to host|timed out)'
     - 'Permission denied \(publickey'
     - 'No such file or directory'
     - 'Host key verification failed'
     - 'kex_exchange_identification'
-    - 'no matching (key exchange method|host key type|cipher) found'   # 구형 ESXi SSH ?�환??
+    - 'no matching (key exchange method|host key type|cipher) found'   # 구형 ESXi SSH 호환성
 
-  # -w ?�션 host list ?�일 ?�싱
+  # -w 옵션 host list 파일 파싱
   host_list:
     comment_prefix: "#"
     strip_inline_comment: true
     allow_blank: true
 
 # ---------------------------------------------------------------------------
-# ?�집 ?�??로그
+# 수집 대상 로그
 # ---------------------------------------------------------------------------
 sources:
   - path: "/var/run/log/vmkernel.log"
     aliases: ["/var/log/vmkernel.log"]
     priority: 1
-  - path: "/var/run/log/vmkwarning.log"     # vmkernel??WARNING/ALERT ?�약 ??1�??�크리닝???�리
+  - path: "/var/run/log/vmkwarning.log"     # vmkernel의 WARNING/ALERT 요약 — 1차 스크리닝에 유리
     priority: 1
-  - path: "/var/run/log/vobd.log"           # VMkernel Observation ???�태?�이 ?�벤?��? ?�형?�되??매칭 ?�확??최상
+  - path: "/var/run/log/vobd.log"           # VMkernel Observation — 상태전이 이벤트가 정형화되어 매칭 정확도 최상
     priority: 1
   - path: "/var/run/log/hostd.log"
     priority: 2
-  - path: "/var/run/log/vmksummary.log"     # 부??종료/uptime ?�스?�리 ??비정???��????��?분석??
+  - path: "/var/run/log/vmksummary.log"     # 부팅/종료/uptime 히스토리 — 비정상 재부팅 상관분석용
     priority: 2
-  - path: "/var/run/log/sensord.log"        # ?�도/???�원 ?�서, IPMI/CIM ?�링
+  - path: "/var/run/log/sensord.log"        # 온도/팬/전원 센서, IPMI/CIM 폴링
     priority: 2
-  - path: "/var/log/ipmi_sel"               # 존재 ??
+  - path: "/var/log/ipmi_sel"               # 존재 시
     priority: 3
-  - cmd: "localcli hardware ipmi sel list"  # 로그가 ?�긴 무증??리�???silent failure) 규명???�심
+  - cmd: "localcli hardware ipmi sel list"  # 로그가 끊긴 무증상 리부팅(silent failure) 규명의 핵심
     priority: 1
-    note: "PSOD/코어?�프 ?�이 리�??�된 케?�스??SEL?�만 근거가 ?�음"
+    note: "PSOD/코어덤프 없이 리부팅된 케이스는 SEL에만 근거가 남음"
   - cmd: "esxcli storage core device list"
     priority: 3
   - cmd: "esxcli network nic list"
@@ -67,17 +67,17 @@ sources:
     priority: 3
 
 # ---------------------------------------------------------------------------
-# ?�턴 ?�의
+# 패턴 정의
 # ---------------------------------------------------------------------------
 patterns:
 
-  # ===== CPU / 메모�??�드?�어 (최우?? =====
+  # ===== CPU / 메모리 하드웨어 (최우선) =====
   - id: MCE_PSOD_BLUESCREEN
     category: CPU_MCE
     severity: CRITICAL
     source: vmkernel.log
     regex: '@BlueScreen:\s*Machine Check Exception on PCPU\s*(?P<pcpu>\d+)'
-    recommendation: "CPU가 ?�정 불�? ?�드?�어 결함 감�? ??PSOD. 즉시 ?�드?�어 벤더 ?�스컬레?�션. 반복 ??pcpu 번호 ?�일 ?��? ?�인(?�일?�면 ?�정 CPU/?�켓 ?�심)"
+    hint: "CPU가 정정 불가 하드웨어 결함 감지 → PSOD. 즉시 하드웨어 벤더 에스컬레이션. 반복 시 pcpu 번호 동일 여부 확인(동일하면 특정 CPU/소켓 의심)"
     ref: "Lenovo LP2176 / KB343033"
 
   - id: MCE_HARDWARE_ERROR_MSG
@@ -85,7 +85,7 @@ patterns:
     severity: CRITICAL
     source: vmkernel.log
     regex: 'System has encountered a Hardware Error'
-    recommendation: "MCE ?�반 메시지. ?�독 ?�장?�도 CRITICAL 취급"
+    hint: "MCE 동반 메시지. 단독 등장해도 CRITICAL 취급"
 
   - id: MCA_BANK_REPORT
     category: CPU_MCE
@@ -93,14 +93,14 @@ patterns:
     source: vmkernel.log
     regex: 'MCA:\s*(?P<bank>\d+):\s*(?P<type>CE|UE)\s+(?P<mode>Poll|Excp)'
     escalate_when: { type: "UE" , to: CRITICAL }
-    recommendation: "CE=?�정???�적 ???�험), UE=?�정 불�?. ?�일 bank 반복 발생???�심 ?�호"
+    hint: "CE=정정됨(누적 시 위험), UE=정정 불가. 동일 bank 반복 발생이 핵심 신호"
 
   - id: MEMORY_CONTROLLER_ERROR
     category: MEMORY
     severity: CRITICAL
     source: vmkernel.log
     regex: 'Memory Controller (Read|Write|Scrubbing|Scrub) Error on Channel\s*(?P<ch>\d+)'
-    recommendation: "?�정가??메모�??�러 ?�??발생 ???�스??무응???�토리�? 지??CPU ?�업 ??hostd hang?�로 ?�쇄. 채널 번호�?DIMM ?�치 추적"
+    hint: "정정가능 메모리 에러 대량 발생 시 호스트 무응답/스토리지 지연/CPU 락업 → hostd hang으로 연쇄. 채널 번호로 DIMM 위치 추적"
     ref: "Broadcom KB373203"
 
   - id: IPMI_ECC_UNCORRECTABLE
@@ -108,7 +108,7 @@ patterns:
     severity: CRITICAL
     source: ipmi_sel
     regex: '(Uncorrectable ECC|Uncorrectable Memory Error|Memory UE)'
-    recommendation: "DIMM 교체 ?�?? SEL ?�코???�?�스?�프?� vmkernel.log 중단 ?�점 ?��?
+    hint: "DIMM 교체 대상. SEL 레코드 타임스탬프와 vmkernel.log 중단 시점 대조"
 
   - id: IPMI_ECC_CORRECTABLE
     category: SENSOR_IPMI
@@ -116,30 +116,30 @@ patterns:
     source: ipmi_sel
     regex: '(Correctable ECC|Correctable Memory Error)'
     aggregate: { window: "24h", count: 10, escalate_to: CRITICAL }
-    recommendation: "?�발?� ?�상 범주. ?�계 초과 ??DIMM ?�화 ?�호"
+    hint: "단발은 정상 범주. 임계 초과 시 DIMM 열화 신호"
 
   - id: IPMI_PROC_NONRECOVERABLE
     category: SENSOR_IPMI
     severity: CRITICAL
     source: ipmi_sel
     regex: 'Processor Transition to Non-recoverable'
-    recommendation: "PSOD/코어?�프 ?�이 리�??�된 케?�스???�??근거. ?�드?�어 ?�벨?�서 즉시 halt/reset?�어 ESXi 로그??그냥 ?��?"
+    hint: "PSOD/코어덤프 없이 리부팅된 케이스의 대표 근거. 하드웨어 레벨에서 즉시 halt/reset되어 ESXi 로그는 그냥 끊김"
     ref: "Broadcom KB421433"
 
-  # ===== PSOD / 커널 ?�닉 =====
+  # ===== PSOD / 커널 패닉 =====
   - id: PSOD_GENERIC
     category: PSOD
     severity: CRITICAL
     source: vmkernel.log
     regex: '@BlueScreen:'
-    recommendation: "PSOD 발생. ?�따르는 ?�택?�레?�스�??�께 캡처?�야 ?�인 분류 가??
+    hint: "PSOD 발생. 뒤따르는 스택트레이스를 함께 캡처해야 원인 분류 가능"
 
   - id: PSOD_PCPU_LOCKUP
     category: PSOD
     severity: CRITICAL
     source: vmkernel.log
     regex: 'PCPU\s*(?P<pcpu>\d+)\s*locked up'
-    recommendation: "물리 CPU가 메모�??�이지?�이�?TLB) ?�리 ?�패. ?�드?�어 ?�심 경로"
+    hint: "물리 CPU가 메모리 페이지테이블(TLB) 정리 실패. 하드웨어 의심 경로"
 
   - id: PSOD_TLB_INVALIDATE
     category: PSOD
@@ -153,14 +153,14 @@ patterns:
     severity: CRITICAL
     source: vmkernel.log
     regex: 'Spin count exceeded.*possible deadlock'
-    recommendation: "?��????�드?? ?�택??매번 ?�일?�면 SW, 매번 ?�르�?HW ?�심"
+    hint: "스핀락 데드락. 스택이 매번 동일하면 SW, 매번 다르면 HW 의심"
 
   - id: PSOD_EXCEPTION
     category: PSOD
     severity: CRITICAL
     source: vmkernel.log
     regex: '(#GP Exception\(13\)|#PF Exception (type )?14|Exception type (?P<etype>\d+) in world)'
-    recommendation: "13=General Protection Fault, 14=Page Fault, 18(#MC)=Machine Check"
+    hint: "13=General Protection Fault, 14=Page Fault, 18(#MC)=Machine Check"
 
   - id: PSOD_PANIC
     category: PSOD
@@ -173,15 +173,15 @@ patterns:
     severity: HIGH
     source: vmkernel.log
     regex: '(Starting coredump to disk|Dumping using slot \d+ of \d+)'
-    recommendation: "PSOD ?�정 마커. zdump ?�집 ?��? ?�인"
+    hint: "PSOD 확정 마커. zdump 수집 여부 확인"
 
-  # ===== ?�원 / 비정???��???=====
+  # ===== 전원 / 비정상 재부팅 =====
   - id: POWEROFF_UNEXPECTED
     category: POWER
     severity: CRITICAL
     source: vobd.log
     regex: 'esx\.audit\.host\.poweroff\.reason\.unavailable'
-    recommendation: "커널?�러/?�도???��????�다?�이 ?�닌 ?�원 차단 ???�원 ?�실, PSU/부??결함, 과열. BMC SEL?�서 Power Input Lost / Power Supply Fault / Critical Temperature ?��?
+    hint: "커널에러/의도적 재부팅/셧다운이 아닌 전원 차단 → 전원 손실, PSU/부품 결함, 과열. BMC SEL에서 Power Input Lost / Power Supply Fault / Critical Temperature 대조"
     ref: "Broadcom KB317245 / KB432839"
 
   - id: HOSTD_POWEROFF_EVENT
@@ -226,14 +226,14 @@ patterns:
     source: ipmi_sel
     regex: '(Slot/Connector Transition to Critical|Cable/Interconnect Transition to Critical|Add-in Card Install Error)'
 
-  # ===== ?�토리�?: PDL (?�구 ?�실) =====
+  # ===== 스토리지: PDL (영구 손실) =====
   - id: STORAGE_PDL
     category: STORAGE_PDL
     severity: CRITICAL
     source: vobd.log
     regex: '(esx\.problem|vob)\.scsi\.device\.state\.permanentloss'
     extract: { device: 'naa\.[0-9a-fA-F]+|mpx\.vmhba[\w:.]+|eui\.[0-9a-fA-F]+' }
-    recommendation: "?�바?�스 ?�거 ?�는 ?�구 ?�근 불�?. ?�스??LUN 물리 ?�애 ?�는 ?�프리젠??
+    hint: "디바이스 제거 또는 영구 접근 불가. 디스크/LUN 물리 장애 또는 언프리젠트"
 
   - id: STORAGE_CONNECTIVITY_LOST
     category: STORAGE_PATH
@@ -248,9 +248,9 @@ patterns:
     regex: 'vob\.scsi\.scsipath\.pathstate\.dead'
     extract: { path: 'vmhba\d+:C\d+:T\d+:L\d+' }
     aggregate: { window: "5m", count: 2, escalate_to: CRITICAL }
-    recommendation: "?�로 ?�른 vmhba가 같�? ms 구간???�시 dead ???�위 공유구간(SAN ?�위�??�레??컨트롤러/PSU) ?�애 ?�호"
+    hint: "서로 다른 vmhba가 같은 ms 구간에 동시 dead → 상위 공유구간(SAN 스위치/어레이 컨트롤러/PSU) 장애 신호"
 
-  # ===== ?�토리�?: APD =====
+  # ===== 스토리지: APD =====
   - id: STORAGE_APD_START
     category: STORAGE_APD
     severity: HIGH
@@ -262,7 +262,7 @@ patterns:
     severity: CRITICAL
     source: vobd.log
     regex: '(esx\.problem|vob)\.storage\.apd\.timeout'
-    recommendation: "기본 140�?APD ?�?�아??경과 ??I/O fast fail. ?�스?��? vCenter?�서 Not Responding?�로 빠�????�형 경로"
+    hint: "기본 140초 APD 타임아웃 경과 → I/O fast fail. 호스트가 vCenter에서 Not Responding으로 빠지는 전형 경로"
 
   - id: STORAGE_APD_HANDLER
     category: STORAGE_APD
@@ -275,7 +275,7 @@ patterns:
     severity: CLEAR
     source: vobd.log
     regex: '(esx\.clear|vob)\.storage\.apd\.exit'
-    recommendation: "복구 마커. start?� ?�어링해 APD 지?�시�?계산 ??짧�? flapping 반복?�면 물리계층/NFS GETATTR ?�심"
+    hint: "복구 마커. start와 페어링해 APD 지속시간 계산 → 짧은 flapping 반복이면 물리계층/NFS GETATTR 의심"
 
   - id: NMP_FAST_PATH_BLOCKED
     category: STORAGE_PATH
@@ -283,28 +283,28 @@ patterns:
     source: vmkernel.log
     regex: '(awaiting fast path state update|state in doubt; requested fast path state update)'
 
-  # ===== ?�토리�?: SCSI sense =====
+  # ===== 스토리지: SCSI sense =====
   - id: SCSI_CMD_FAILED
     category: STORAGE_SCSI
-    severity: DYNAMIC          # sense_key_map?�로 결정
+    severity: DYNAMIC          # sense_key_map으로 결정
     source: vmkernel.log
-    # 2026-08-12 ?�측(ESXi 8.0.3): "...Failed:"?� "H:0x.. sense data:.."가 ?�제로는
-    # 같�? 줄이 ?�니???�로 ?�른 ??줄로 출력??nmp_ThrottleLogForDevice:3893 / :3898).
-    # 그래??"failed " 리터???�구�??�규?�에??뺐고, ?�??requires_prev_line_suffix�?
-    # "직전 줄이 Failed:�??�나?��?"�?matcher.go?�서 별도 ?�인?�다.
-    # 직전 �?조건까�? 만족 -> ?�정(CRITICAL/HIGH ???�상 ?�각??.
-    # ???�규?�만 만족(직전 �?조건 불충�? -> match.Finding.Suspected=true�??�시,
-    # 리포??[2-1] ?�심(SUSPECTED) ?�션??별도�??�옴.
+    # 2026-08-12 실측(ESXi 8.0.3): "...Failed:"와 "H:0x.. sense data:.."가 실제로는
+    # 같은 줄이 아니라 서로 다른 두 줄로 출력됨(nmp_ThrottleLogForDevice:3893 / :3898).
+    # 그래서 "failed " 리터럴 요구를 정규식에서 뺐고, 대신 requires_prev_line_suffix로
+    # "직전 줄이 Failed:로 끝나는지"를 matcher.go에서 별도 확인한다.
+    # 직전 줄 조건까지 만족 -> 확정(CRITICAL/HIGH 등 정상 심각도).
+    # 이 정규식만 만족(직전 줄 조건 불충족) -> match.Finding.Suspected=true로 표시,
+    # 리포트 [2-1] 의심(SUSPECTED) 섹션에 별도로 나옴.
     regex: 'H:0x(?P<h>[0-9a-fA-F]+) D:0x(?P<d>[0-9a-fA-F]+) P:0x(?P<p>[0-9a-fA-F]+)\s+(Valid|Possible) sense data: 0x(?P<sk>[0-9a-fA-F]+) 0x(?P<asc>[0-9a-fA-F]+) 0x(?P<ascq>[0-9a-fA-F]+)'
     requires_prev_line_suffix: "Failed:"
-    recommendation: "sense key�??�각??분기. 0x3/0x4??물리 미디???�드?�어 ?�애 직결"
+    hint: "sense key로 심각도 분기. 0x3/0x4는 물리 미디어/하드웨어 장애 직결"
 
   - id: SCSI_MEDIUM_ERROR_LBA
     category: STORAGE_SCSI
     severity: CRITICAL
     source: vmkernel.log
     regex: 'Medium Error, LBA:\s*(?P<lba>\d+)'
-    recommendation: "?�당 LBA ?�독 불�? ???�바?�스가 ?�정 ?�패. ?�스??교체 ?�단 근거"
+    hint: "해당 LBA 판독 불가 — 디바이스가 정정 실패. 디스크 교체 판단 근거"
 
   - id: SCSI_PERF_DETERIORATED
     category: STORAGE_SCSI
@@ -312,7 +312,7 @@ patterns:
     source: vmkernel.log
     regex: 'ScsiDeviceIO:.*performance has deteriorated'
     aggregate: { window: "1h", count: 5, escalate_to: HIGH }
-    recommendation: "메모�?컨트롤러 ?�러 ??CPU ?�유 ???�토리�? 지???�쇄??중간 지?�로 ?�주 ?�장"
+    hint: "메모리 컨트롤러 에러 → CPU 점유 → 스토리지 지연 연쇄의 중간 지표로 자주 등장"
 
   # ===== VMFS / vSAN =====
   - id: VMFS_HEARTBEAT_TIMEOUT
@@ -351,7 +351,7 @@ patterns:
     source: vobd.log
     regex: 'esx\.problem\.(vob\.vsan\.lsom\.componentthreshold|vsan\.lsom\.congestionthreshold)'
 
-  # ===== ?�트?�크 =====
+  # ===== 네트워크 =====
   - id: NET_VMNIC_LINK_DOWN
     category: NETWORK
     severity: HIGH
@@ -359,14 +359,14 @@ patterns:
     regex: '(esx\.problem|vob)\.net\.vmnic\.linkstate\.down'
     extract: { vmnic: 'vmnic\d+|vusb\d+' }
     aggregate: { window: "1h", count: 4, escalate_to: CRITICAL, label: "link flapping" }
-    recommendation: "flapping 반복?� SFP/케?�블/?�라?�버/?�웨???�화 ?�호"
+    hint: "flapping 반복은 SFP/케이블/드라이버/펌웨어 열화 신호"
 
   - id: NET_UPLINK_TRANSITION_DOWN
     category: NETWORK
     severity: HIGH
     source: vobd.log
     regex: 'vob\.net\.(pg|dvport)\.uplink\.transition\.down.*Failed criteria:\s*(?P<criteria>\d+)'
-    recommendation: "criteria??비트마스???? 130 = 2 + 128). 128 = ?�라?�버가 링크?�운 보고 ???�라?�버/?�웨??SFP/케?�블/?�위치포???��? ?�??
+    hint: "criteria는 비트마스크(예: 130 = 2 + 128). 128 = 드라이버가 링크다운 보고 → 드라이버/펌웨어/SFP/케이블/스위치포트 점검 대상"
     escalate_when: { uplinks_up: 0, to: CRITICAL }
 
   - id: NET_ZERO_UPLINK
@@ -375,7 +375,7 @@ patterns:
     source: vobd.log
     regex: '(?P<up>\d+) uplinks up'
     match_condition: "up == 0"
-    recommendation: "가???�링??0 ???�트그룹 ?�면 ?�신 ?�절"
+    hint: "가용 업링크 0 — 포트그룹 전면 통신 단절"
 
   - id: NET_DVPORT_CONNECTIVITY_LOST
     category: NETWORK
@@ -388,7 +388,7 @@ patterns:
     severity: HIGH
     source: vobd.log
     regex: '(esx\.problem|vob)\.net\.lacp\.uplink\.transition\.down'
-    recommendation: "LAG?�서 ?�링???�탈. ?�위치측 config mismatch ?�는 NIC ?�드?�어 ?�슈"
+    hint: "LAG에서 업링크 이탈. 스위치측 config mismatch 또는 NIC 하드웨어 이슈"
 
   - id: NET_REDUNDANCY_LOST
     category: NETWORK
@@ -401,15 +401,15 @@ patterns:
     severity: HIGH
     source: vmkernel.log
     regex: 'failed to allocate \d+ MSIX interrupts'
-    recommendation: "NIC ?�수 ?�착 ?�버?�서 vmnic 미인?? lspci??보이??esxcfg-nics -l???�음"
+    hint: "NIC 다수 장착 서버에서 vmnic 미인식. lspci엔 보이나 esxcfg-nics -l엔 없음"
 
-  # ===== ?�비????=====
+  # ===== 서비스 행 =====
   - id: HOSTD_NONRESPONSIVE
     category: SERVICE_HANG
     severity: CRITICAL
     source: vmkernel.log
     regex: 'ALERT:\s*hostd detected to be non-responsive'
-    recommendation: "메모�?컨트롤러 ?�러 ??CPU ?�업 ???�토리�? I/O 지????hostd hang 체인??종착??
+    hint: "메모리 컨트롤러 에러 → CPU 락업 → 스토리지 I/O 지연 → hostd hang 체인의 종착점"
 
   - id: WATCHDOG_RESTART
     category: SERVICE_HANG
@@ -423,23 +423,23 @@ patterns:
     source: vmkernel.log
     regex: 'UserDump:.*Dumping cartel'
     extract: { pcpu: 'cpu(?P<n>\d+):' }
-    recommendation: "userworld ?�래?? ?�러 ?�애?�서 ?�일 물리 CPU가 반복 ?�장?�면 CPU/?�켓 ?�드?�어 ?�심"
+    hint: "userworld 크래시. 여러 장애에서 동일 물리 CPU가 반복 등장하면 CPU/소켓 하드웨어 의심"
 
 # ---------------------------------------------------------------------------
-# SCSI sense key ???�각??매핑 (SCSI_CMD_FAILED ?�턴?�서 ?�용)
+# SCSI sense key → 심각도 매핑 (SCSI_CMD_FAILED 패턴에서 사용)
 # ---------------------------------------------------------------------------
 sense_key_map:
   "0x0": { name: "NO SENSE",        severity: NOISE }
   "0x1": { name: "RECOVERED ERROR", severity: MEDIUM }
   "0x2": { name: "NOT READY",       severity: MEDIUM }
-  "0x3": { name: "MEDIUM ERROR",    severity: CRITICAL, hint: "물리 미디???�독/기록 ?�패 ???�스??교체 검?? }
-  "0x4": { name: "HARDWARE ERROR",  severity: CRITICAL, hint: "?�바?�스 ?�드?�어 ?�애 ??벤더 ?�스컬레?�션" }
-  "0x5": { name: "ILLEGAL REQUEST", severity: NOISE,    hint: "0x5 0x20/0x24??미�???명령 ???�부�?무해???�시 ?�이�? }
+  "0x3": { name: "MEDIUM ERROR",    severity: CRITICAL, hint: "물리 미디어 판독/기록 실패 — 디스크 교체 검토" }
+  "0x4": { name: "HARDWARE ERROR",  severity: CRITICAL, hint: "디바이스 하드웨어 장애 — 벤더 에스컬레이션" }
+  "0x5": { name: "ILLEGAL REQUEST", severity: NOISE,    hint: "0x5 0x20/0x24는 미지원 명령 — 대부분 무해한 상시 노이즈" }
   "0x6": { name: "UNIT ATTENTION",  severity: LOW }
-  "0x7": { name: "DATA PROTECT",    severity: HIGH,     hint: "0x7 0x27 = WRITE PROTECTED. vSAN ?�스?��? ?�기 불�? ?�태�??�환??경우" }
+  "0x7": { name: "DATA PROTECT",    severity: HIGH,     hint: "0x7 0x27 = WRITE PROTECTED. vSAN 디스크가 쓰기 불가 상태로 전환된 경우" }
   "0xb": { name: "ABORTED COMMAND", severity: MEDIUM }
 
-# H: (host status) 코드 ??�??�석?� SCSI Sense Code Decoder�??��?�??�요 (verification_gaps 참조)
+# H: (host status) 코드 — 값 해석은 SCSI Sense Code Decoder로 재검증 필요 (verification_gaps 참조)
 host_status_map:
   "0x0": { name: "OK",         severity: NOISE }
   "0x1": { name: "NO_CONNECT", severity: HIGH,  verify: true }
@@ -449,113 +449,64 @@ host_status_map:
   "0x8": { name: "RESET",      severity: MEDIUM, verify: true }
 
 # ---------------------------------------------------------------------------
-# ?�탐 ?�터 (매칭?�더?�도 CRITICAL�??�리지 ?�음)
+# 오탐 필터 (매칭되더라도 CRITICAL로 올리지 않음)
 # ---------------------------------------------------------------------------
 noise_filters:
   - id: NF_CLEAR_EVENTS
     regex: 'esx\.clear\.'
-    reason: "복구 ?�벤?????��?분석?�만 ?�용"
+    reason: "복구 이벤트 — 상관분석에만 사용"
   - id: NF_ILLEGAL_REQUEST
     regex: 'sense data: 0x5 0x(20|24) 0x0'
-    reason: "미�???opcode / CDB ?�드 ?�류 ??SAS/RAID 컨트롤러?�서 ?�시 발생"
+    reason: "미지원 opcode / CDB 필드 오류 — SAS/RAID 컨트롤러에서 상시 발생"
   - id: NF_NO_MEDIUM
     regex: 'sense data: 0x2 0x3a 0x0'
-    reason: "미디???�음 ??�?CD/DVD ?�라?�브"
+    reason: "미디어 없음 — 빈 CD/DVD 드라이브"
   - id: NF_APD_BOOT_MSG
     regex: 'APD Handle Created with lock'
-    reason: "부?????�상 출력?�는 경우 ?�음 ???�재 APD ?�태�??��??��? ?�음"
+    reason: "부팅 시 정상 출력되는 경우 있음 — 현재 APD 상태를 의미하지 않음"
   - id: NF_VUSB_LINKSTATE
     regex: '(vob|esx\.\w+)\.net\.vmnic\.linkstate\.\w+.*vusb\d+'
-    reason: "vmkusb 기반 vusb ?�터?�이?????�제 ?�이??경로 ?�닌 경우 ?�수 (?�경�??�단)"
+    reason: "vmkusb 기반 vusb 인터페이스 — 실제 데이터 경로 아닌 경우 다수 (환경별 판단)"
 
 # ---------------------------------------------------------------------------
-# ?��?관�?체인 (Correlator 규칙 ??M3 ?�계 구현 ?�?? M0?�서???�의�?
+# 상관관계 체인 (Correlator 규칙 — M3 단계 구현 대상, M0에서는 정의만)
 # ---------------------------------------------------------------------------
 correlation_chains:
   - id: CHAIN_MEM_TO_HOSTD_HANG
     window: "30m"
     sequence: [MEMORY_CONTROLLER_ERROR, SCSI_PERF_DETERIORATED, HOSTD_NONRESPONSIVE]
-    verdict: "메모�?컨트롤러 ?�러 기인 ?�스??무응????DIMM 교체 ?�??
+    verdict: "메모리 컨트롤러 에러 기인 호스트 무응답 — DIMM 교체 대상"
     severity: CRITICAL
 
   - id: CHAIN_FABRIC_WIDE_APD
     window: "1m"
-    condition: "SCSI_PATH_DEAD ?�벤?��? ?�로 ?�른 vmhba 2�??�상?�서 발생"
+    condition: "SCSI_PATH_DEAD 이벤트가 서로 다른 vmhba 2개 이상에서 발생"
     then: [STORAGE_APD_START]
-    verdict: "?�위 공유구간(SAN ?�위�??�레??컨트롤러/PDU) ?�애 ???�스???�독 ?�슈 ?�님"
+    verdict: "상위 공유구간(SAN 스위치/어레이 컨트롤러/PDU) 장애 — 호스트 단독 이슈 아님"
     severity: CRITICAL
 
   - id: CHAIN_SILENT_REBOOT
     window: "10m"
-    condition: "vmkernel.log가 ?�별???�러 ?�이 중단 + 직후 부??로그 + PSOD/zdump ?�음"
+    condition: "vmkernel.log가 특별한 에러 없이 중단 + 직후 부팅 로그 + PSOD/zdump 없음"
     require_source: "ipmi_sel"
-    verdict: "?�드?�어 ?�벨 즉시 halt/reset ??SEL??Processor Non-recoverable / Power Input Lost ?�인 ?�수"
+    verdict: "하드웨어 레벨 즉시 halt/reset — SEL의 Processor Non-recoverable / Power Input Lost 확인 필수"
     severity: CRITICAL
-    note: "regex ?�독?�로 �??�음. 로그 ?�간�?�??��? + SEL ?��?로직 ?�요"
+    note: "regex 단독으로 못 잡음. 로그 시간축 갭 탐지 + SEL 대조 로직 필요"
 
   - id: CHAIN_NIC_TO_STORAGE
     window: "5m"
     sequence: [NET_VMNIC_LINK_DOWN, NET_ZERO_UPLINK, VMFS_HEARTBEAT_TIMEOUT]
-    verdict: "물리 NIC ?�애가 iSCSI/NFS ?�이?�스?�어 ?�절�??�파"
+    verdict: "물리 NIC 장애가 iSCSI/NFS 데이터스토어 단절로 전파"
     severity: CRITICAL
 
 # ---------------------------------------------------------------------------
-# M0 미�?�???�� ???�환�??�이?�로 채워????공백
+# M0 미검증 항목 — 실환경 데이터로 채워야 할 공백
 # ---------------------------------------------------------------------------
 verification_gaps:
-  - "H: (host status) 코드 ?��? ??SCSI Sense Code Decoder�??�수 ?�확????host_status_map ?�정"
-  - "벤더�?IPMI SEL 문구 차이 (Dell iDRAC / HPE iLO / Cray / Lenovo XCC) ???�제 SEL ?�프�??�규??보정 ?�요"
-  - "ESXi 7.x vs 8.x 로그 ?�맷 차이 ??8.x??'In(182) vmkernel:' ?�태 ?�드가 추�?�?붙음. prefix ?�싱�?별개�?본문 ?�싱???�향"
-  - "vobd.log ?�체 VOB ID 목록 ???�스?�에??/usr/lib/vmware/hostd/extensions/hostdiag/locale/en/event.vmsg �??�수 추출??카탈로그??
-  - "sensord.log ?�제 출력 ?�맷 ???�재 ?�턴 ?�음. ?�플 ?�보 ??추�?"
-  - "?�사 ?�경 ?�시 ?�이�????�상 ?�스??로그�?베이?�라?�으�??�려 ?�탐 목록 ?�정"
-  - "로그 로테?�션 주기 ??.gz ?�카?�브까�? 볼�?, 최근 N?�만 볼�? ?�책 결정"
-  # ===== �ű� ESXi 8.x Ưȭ ���� =====
-  - id: ESX8_NVME_HPP_PATH_DOWN
-    category: STORAGE_HPP
-    severity: CRITICAL
-    source: vmkernel.log
-    regex: 'WARNING: HPP: HppDeviceFindActivePath:\d+: No active path found for device'
-    recommendation: "NVMeoF HPP ��� ����. �к긯 ��Ʈ��ũ, ����ġ, ���丮�� Ÿ�� ���� ���� �ʿ�."
-
-  - id: ESX8_NVME_TRANSPORT_ERR
-    category: STORAGE_HPP
-    severity: HIGH
-    source: vmkernel.log
-    regex: 'Transport error on ctrl .* status: 0x2'
-    recommendation: "NVMeoF ���� ����. SAN ��Ʈ��ũ ��Ŷ ��� Ȥ�� Ÿ�� ���� ���� ����."
-
-  - id: ESX8_VSAN_ESA_CONGESTION
-    category: VSAN_ESA
-    severity: HIGH
-    source: vobd.log
-    regex: '\[esx\.problem\.vsan\.lsom\.congestionthreshold\]'
-    recommendation: "vSAN 8 ESA ȥ�� ����. SSD ���� �Ӱ�ġ �ʰ� �Ǵ� ��Ʈ��ũ �뿪�� ���� ����."
-
-  - id: ESX8_VSAN_ESA_UNHEALTHY
-    category: VSAN_ESA
-    severity: CRITICAL
-    source: vobd.log
-    regex: '\[esx\.problem\.vob\.vsan\.lsom\.diskunhealthy\]'
-    recommendation: "vSAN 8 ESA ��ũ ������ ����. �ش� NVMe ��ġ �ｺ üũ �� ��ü ����."
-    
-  - id: ESX8_VSAN_ESA_PDL
-    category: VSAN_ESA
-    severity: CRITICAL
-    source: vobd.log
-    regex: '\[esx\.problem\.vob\.vsan\.pdl\.offline\]'
-    recommendation: "vSAN ��ũ ���� ��������(PDL). ��� ���丮��/���� ���� ���� ����."
-
-  - id: ESX8_DPU_PCI_ERR
-    category: NETWORK_DPU
-    severity: CRITICAL
-    source: vmkernel.log
-    regex: 'Health: PCI error detected\. Device internal error state is set\.'
-    recommendation: "DPU/SmartNIC(nmlx5) PCIe ���� ���� ����. �߿��� �ֽ�ȭ �Ǵ� H/W ��ü, ȣ��Ʈ ����� �ʿ�."
-
-  - id: ESX8_DPU_UPLINK_DOWN
-    category: NETWORK_DPU
-    severity: HIGH
-    source: vobd.log
-    regex: '\[vob\.net\.dvport\.uplink\.transition\.down\] Uplink: .* is down'
-    recommendation: "DPU ���� ��ũ ����. ���̺� �ټ�, ����ġ ��Ʈ ���� �� Ʈ���ù� ���(SFP) ����."
+  - "H: (host status) 코드 의미 — SCSI Sense Code Decoder로 전수 재확인 후 host_status_map 확정"
+  - "벤더별 IPMI SEL 문구 차이 (Dell iDRAC / HPE iLO / Cray / Lenovo XCC) — 실제 SEL 덤프로 정규식 보정 필요"
+  - "ESXi 7.x vs 8.x 로그 포맷 차이 — 8.x는 'In(182) vmkernel:' 형태 필드가 추가로 붙음. prefix 파싱과 별개로 본문 파싱에 영향"
+  - "vobd.log 전체 VOB ID 목록 — 호스트에서 /usr/lib/vmware/hostd/extensions/hostdiag/locale/en/event.vmsg 로 전수 추출해 카탈로그화"
+  - "sensord.log 실제 출력 포맷 — 현재 패턴 없음. 샘플 확보 후 추가"
+  - "자사 환경 상시 노이즈 — 정상 호스트 로그를 베이스라인으로 돌려 오탐 목록 확정"
+  - "로그 로테이션 주기 — .gz 아카이브까지 볼지, 최근 N일만 볼지 정책 결정"
