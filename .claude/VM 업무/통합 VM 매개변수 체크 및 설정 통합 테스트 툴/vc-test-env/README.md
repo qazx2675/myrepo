@@ -4,13 +4,19 @@
 
 > **상태**: Rocky Linux(192.168.0.58, govmomi v0.55.1)에서 실 vCenter(192.168.0.50)를 대상으로 `extract`/`tree`/`build`(vcsim 재생성)/`diff`/PowerCLI 접속까지 전부 실제로 빌드·실행해서 검증 완료. 아래 "알려진 한계" 항목만 남아 있음.
 
-## 1. 필요 환경
+⚠️ **주의사항 (Disclaimer)**
+본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.
+
+## 1. 빌드 및 설치 방법
+
+### 1.1 필요 환경
+
 
 - Go 1.21 이상 (Rocky Linux 7.6.4에서 govmomi v0.55.1 기준으로 빌드·검증 완료)
 - 최종 실행 대상: RHEL 8.10(폐쇄망), PowerCLI 설치되어 있음
 - **인터넷은 필요 없습니다** — `vendor/` 디렉터리에 의존성(govmomi 등)이 이미 통째로 포함되어 있어서, 이 폴더만 옮기면 바로 오프라인 빌드가 됩니다.
 
-## 2. 다운로드
+### 1.2 다운로드
 
 이 도구는 저장소 안의 `.claude/VM 업무/vcenter 테스트환경구축 (vcsim)/` 폴더 하나에 전부 들어 있습니다.
 
@@ -27,7 +33,7 @@ cd myrepo
 tar czf vc-test-env.tar.gz ".claude/VM 업무/vcenter 테스트환경구축 (vcsim)"
 ```
 
-## 3. 빌드 (인터넷 여부와 무관 — vendor/ 포함되어 있음)
+### 1.3 빌드 (인터넷 여부와 무관 — vendor/ 포함되어 있음)
 
 폴더 안으로 들어가서 바로 빌드합니다:
 
@@ -40,7 +46,7 @@ GOFLAGS=-mod=vendor go build -o vc-test-env .
 
 (의존성을 최신화하고 싶을 때만, 인터넷 되는 환경에서 `go mod tidy && go mod vendor`로 `vendor/`를 다시 채우면 됩니다 — 평소엔 필요 없습니다.)
 
-## 4. 폐쇄망(RHEL 8.10)으로 이관
+### 1.4 폐쇄망(RHEL 8.10)으로 이관
 
 인터넷이 되는 환경에서 받은 뒤, `vendor/`가 포함된 이 폴더 전체를 압축해서 그대로 옮기면 됩니다.
 
@@ -59,7 +65,16 @@ GOFLAGS=-mod=vendor go build -o vc-test-env .
 
 이 3단계만 하면 폐쇄망에서 인터넷 연결 없이 바로 빌드·실행됩니다. `go.mod`/`go.sum`/`vendor/`를 전부 그대로 가져가는 게 핵심이라, 이 폴더를 통째로(부분 복사 없이) 옮겨야 합니다.
 
-## 5. 사용법
+### 1.5 전역 명령어로 사용하기 (선택 사항)
+빌드된 실행 파일을 PATH 환경 변수에 포함된 디렉터리로 이동하거나, 실행 파일이 있는 경로를 PATH에 추가하면 어디서든 명령어처럼 사용할 수 있습니다.
+
+예시 (실행 파일을 `/usr/local/bin`으로 복사):
+```bash
+sudo cp vc-test-env /usr/local/bin/
+# 이후 어느 위치에서나 명령어처럼 실행 가능
+```
+
+## 2. 사용 방법
 
 ### 인증
 
@@ -106,6 +121,8 @@ Get-Cluster
 
 (vcsim은 기본적으로 아무 자격증명이나 받아들입니다. 자체서명 인증서라 `-Force`가 필요합니다.)
 
+## 3. 옵션별 상세 설명
+
 ### 서브커맨드
 
 ```bash
@@ -120,7 +137,9 @@ Get-Cluster
 ./vc-test-env diff -vc=192.168.0.50 -sim=127.0.0.1:54321
 ```
 
-## 6. 지금 다루는 항목 (1차 범위)
+## 4. 문서별 고유 설명
+
+### 4.1 지금 다루는 항목 (1차 범위)
 
 - 구조: 데이터센터, VM 폴더, 네트워크 폴더, 클러스터, 호스트, VM, 네트워크(이름)
 - VM: vCPU 수, 코어/소켓 수, 메모리MB, CPU Affinity, `sched.mem.lpage.enable1GPage` / `sched.mem.prealloc*` / `sched.swap.vmxSwapEnabled` / `numa.vcpu.maxPerVirtualNode`
@@ -129,7 +148,7 @@ Get-Cluster
 
 **범위 밖(추가 안 함)**: VM "설정 편집"의 나머지 항목(부팅옵션/비디오카드/USB/고급 vmx 파라미터 등), 호스트 "구성" 탭 전체(Advanced System Settings, vSwitch 등), 디스크는 용량만 추적하고 실제 VirtualDisk 디바이스로는 재현 안 함.
 
-## 7. 필드 추가하는 법 (확장 지점)
+### 4.2 필드 추가하는 법 (확장 지점)
 
 새로 추적해야 할 VM 설정 항목이 생기면 `internal/fields/fields.go`의 `VMFields` 슬라이스에 항목 하나만 추가하면 됩니다. `extract`/`tree`/`build`/`diff` 전부 자동으로 반영됩니다.
 
@@ -139,7 +158,7 @@ extraConfigField("새로운.ExtraConfig.키"),
 
 ExtraConfig 형태가 아닌 구조화된 필드(예: 디스크 provisioning 방식 등)는 `Field{Key, Extract, Apply}`를 직접 작성해서 추가하면 됩니다.
 
-## 8. 검증 결과 (192.168.0.50 대상, Rocky Linux에서 실제 실행)
+### 4.3 검증 결과 (192.168.0.50 대상, Rocky Linux에서 실제 실행)
 
 - `extract`: ExtraConfig 키(`sched.mem.lpage.enable1GPage`, `sched.mem.prealloc`, `sched.swap.vmxSwapEnabled`, `numa.vcpu.maxPerVirtualNode`)가 실제로 정확한 이름으로 잡힘 — 확인 완료.
 - `tree`: 실 vCenter(독립형 호스트 `192.168.0.59`, VM `192ev01`/`192ev02`/`vcenter`) 구조가 정확히 나옴 — 확인 완료. 클러스터가 없는 독립형 호스트 환경도 처리하도록 수정함(처음엔 놓쳤었음).
@@ -148,7 +167,7 @@ ExtraConfig 형태가 아닌 구조화된 필드(예: 디스크 provisioning 방
 - PowerCLI: `Connect-VIServer` + `Get-VM`으로 재생성된 VM 이름/CPU/메모리가 실제와 동일하게 조회됨 — 확인 완료. (`Set-PowerCLIConfiguration -InvalidCertificateAction Ignore`로 자체서명 인증서 허용 필요)
 - 네트워크 어댑터: `vm-param-check`로 재생성본을 체크했을 때 `192ev01`/`192ev02`의 포트그룹 이름(`test_hostgroup_123`, `page-test-1-2-3`)과 디스커넥트 상태가 실 vCenter와 동일하게 나옴 — 확인 완료. (`vcenter` VM은 실 vCenter에서 커넥트인데 재생성본에서는 디스커넥트로 나오는 사소한 불일치가 하나 있음 — 아래 한계 참고)
 
-## 9. 알려진 한계 / TODO
+### 4.4 알려진 한계 / TODO
 
 - **씨드 호스트가 하나 더 보임**: vcsim에 데이터스토어를 정상적으로 연결하려면 Model이 기본 제공하는 데이터센터+호스트+데이터스토어 조합을 빌려써야 하는데(직접 `HostDatastoreSystem.CreateLocalDatastore`로 만든 데이터스토어는 vcsim 버그로 `Datacenter.Datastore` 목록에 반영이 안 됨), 그 씨드 호스트(`DC0_H0` 등, VM 없음)를 지우는 방법을 vcsim이 제공하지 않아서 트리에 빈 호스트가 하나 더 보인다. 실제 VM 동작에는 영향 없음.
 - 데이터센터가 2개 이상인 레시피는 아직 완전히 지원 안 함(위 씨드 데이터스토어 트릭이 첫 번째 DC에만 적용됨) — 실 환경은 데이터센터 1개라 현재 범위에서는 문제 없음.
