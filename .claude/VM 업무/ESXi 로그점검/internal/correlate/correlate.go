@@ -48,7 +48,7 @@ func BuildChainFindings(allFindings []match.Finding, chains []registry.CompiledC
 				Host:      "(전체)",
 				Source:    "correlation",
 				Line:      "이 체인은 sequence/condition 형태를 자동 인식하지 못해 미구현 상태입니다 — 수동 확인 필요",
-				Hint:      cc.Def.Condition,
+				Recommendation:      cc.Def.Condition,
 			})
 		}
 	}
@@ -98,7 +98,7 @@ func buildSequenceChain(allFindings []match.Finding, cc registry.CompiledChain) 
 					Source:    "correlation",
 					Line:      fmt.Sprintf("체인 성립: %s (window=%s, 시작=%s)", strings.Join(cc.Def.Sequence, " -> "), cc.Def.Window, t0.Format(time.RFC3339)),
 					Timestamp: t0,
-					Hint:      cc.Def.Verdict,
+					Recommendation:      cc.Def.Verdict,
 				})
 				break // 호스트당 1건만 (같은 체인이 여러 번 성립해도 반복 보고 안 함)
 			}
@@ -172,7 +172,7 @@ func buildFabricWideAPD(allFindings []match.Finding, cc registry.CompiledChain) 
 						Source:    "correlation",
 						Line:      fmt.Sprintf("체인 성립: SCSI_PATH_DEAD(vmhba %d개) -> STORAGE_APD_START (window=%s)", len(distinct), cc.Def.Window),
 						Timestamp: deads[i].Timestamp,
-						Hint:      cc.Def.Verdict,
+						Recommendation:      cc.Def.Verdict,
 					})
 					found = true
 					break
@@ -279,7 +279,7 @@ func DetectSilentReboots(vmkernelLines []gossh.ParsedLine, allFindings []match.F
 				Line: fmt.Sprintf("로그 공백 %s (직전: %s, 재개: %s) 직후: %s",
 					gap.Round(time.Second), lines[i-1].Timestamp.Format(time.RFC3339), lines[i].Timestamp.Format(time.RFC3339), lines[i].Text),
 				Timestamp:   lines[i].Timestamp,
-				Hint:        verdict,
+				Recommendation:        verdict,
 				DynamicNote: dynNote,
 			})
 		}

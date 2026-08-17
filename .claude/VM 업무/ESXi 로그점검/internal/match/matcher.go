@@ -53,7 +53,7 @@ type Finding struct {
 	LineNo        int
 	Timestamp     time.Time `json:",omitempty"` // 로그 본문에서 파싱한 타임스탬프. 못 찾으면 zero value.
 	Extracted     map[string]string
-	Hint          string
+	Recommendation string
 	Ref           string
 	NoiseReason   string // 비어있지 않으면 noise_filters에 의해 NOISE로 강등됨
 	DynamicNote   string // DYNAMIC 심각도 해석 근거/경고
@@ -121,7 +121,7 @@ func Match(lines []gossh.ParsedLine, sourceName string, c *registry.Compiled) []
 				LineNo:      pl.LineNo,
 				Timestamp:   pl.Timestamp,
 				Extracted:   extracted,
-				Hint:        cp.Def.Hint,
+				Recommendation: cp.Def.Recommendation,
 				Ref:         cp.Def.Ref,
 				NoiseReason: noiseReason,
 				DynamicNote: dynNote,

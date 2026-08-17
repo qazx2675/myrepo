@@ -76,6 +76,8 @@ func main() {
 	hostFile := flag.String("w", "", "gossh -w 와 동일한 사용감의 원샷 모드: 호스트 목록 파일 하나만 지정하면 내부적으로 gossh를 호출해 vobd.log/vmkernel.log/ipmi_sel을 자동 수집하고 점검+리포트까지 실행. -input과 병행 가능(같은 source명은 -input이 우선). -hostlist를 따로 안 주면 이 파일을 hostlist로도 사용함")
 	gosshPath := flag.String("gosshPath", "/usr/local/bin/gossh", "-w 모드에서 내부적으로 호출할 gossh 바이너리 경로")
 	tailLines := flag.Int("tailLines", 300, "-w 모드에서 vobd.log/vmkernel.log를 각각 몇 줄 tail 할지")
+	testMock := flag.Int("test-mock", 0, "?? ?? ?? ?? (?? esxi_mock_logger ??)")
+	testMockHost := flag.String("test-mock-host", "192.168.0.58", "??? ?? ???")
 
 	var inputs inputMap
 	flag.Var(&inputs, "input",
@@ -84,11 +86,26 @@ func main() {
 	flag.Parse()
 
 	var tempFiles []string
+
 	defer func() {
 		for _, f := range tempFiles {
 			os.Remove(f)
 		}
 	}()
+	if *testMock > 0 {
+		fmt.Printf("=== ??? ?? (test-mock: %d, ??: %s) ===\n", *testMock, *testMockHost)
+		testHostFile := "mock_test_hosts.txt"
+		os.WriteFile(testHostFile, []byte(*testMockHost+"\n"), 0644)
+		tempFiles = append(tempFiles, testHostFile)
+		mockCmd := fmt.Sprintf("/usr/local/bin/esxi_mock_logger -count %d", *testMock)
+		fmt.Printf("[Mock] ?? %s ? %d? ?? ?? ??????...\n", *testMockHost, *testMock)
+		gossh.RunCommand(*gosshPath, testHostFile, mockCmd)
+		*hostFile = testHostFile
+		if *format != "html" {
+			*format = "html"
+			fmt.Println("[Mock] HTML ?? ???? ?? ?????.")
+		}
+	}
 
 	if *hostFile != "" {
 		collected := collectAllViaGossh(*gosshPath, *hostFile, *tailLines)
@@ -198,6 +215,19 @@ func main() {
 	}
 
 	switch *format {
+	case "html":
+		htmlPath := *outPath
+		if htmlPath == "" {
+			htmlPath = "esxi-report.html"
+		}
+		hf, err := os.Create(htmlPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "HTML ?? ?? ??: %v\n", err)
+		} else {
+			report.WriteHTML(hf, result, report.TextOptions{OnlyProblems: *onlyProblems})
+			hf.Close()
+			fmt.Printf("HTML ??? ??: %s\n", htmlPath)
+		}
 	case "json":
 		if err := report.WriteJSON(w, result); err != nil {
 			fatal(err)
