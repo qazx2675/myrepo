@@ -111,22 +111,27 @@ func Match(lines []gossh.ParsedLine, sourceName string, c *registry.Compiled) []
 				severity = "NOISE"
 			}
 
-			findings = append(findings, Finding{
-				PatternID:   cp.Def.ID,
-				Category:    cp.Def.Category,
-				Severity:    severity,
-				Host:        pl.Host,
-				Source:      sourceName,
-				Line:        pl.Raw,
-				LineNo:      pl.LineNo,
-				Timestamp:   pl.Timestamp,
-				Extracted:   extracted,
+			finding := Finding{
+				PatternID:      cp.Def.ID,
+				Category:       cp.Def.Category,
+				Severity:       severity,
+				Host:           pl.Host,
+				Source:         sourceName,
+				Line:           pl.Raw,
+				LineNo:         pl.LineNo,
+				Timestamp:      pl.Timestamp,
+				Extracted:      extracted,
 				Recommendation: cp.Def.Recommendation,
-				Ref:         cp.Def.Ref,
-				NoiseReason: noiseReason,
-				DynamicNote: dynNote,
-				Suspected:   suspected,
-			})
+				Ref:            cp.Def.Ref,
+				NoiseReason:    noiseReason,
+				DynamicNote:    dynNote,
+				Suspected:      suspected,
+			}
+			if finding.Recommendation == "" && cp.Def.Hint != "" {
+				finding.Recommendation = cp.Def.Hint
+			}
+
+			findings = append(findings, finding)
 		}
 
 		lastLineByHost[pl.Host] = pl

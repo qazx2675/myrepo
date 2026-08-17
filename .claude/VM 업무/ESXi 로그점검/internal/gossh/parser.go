@@ -106,7 +106,7 @@ func ParseStream(r io.Reader, gs registry.CompiledGoSSH, sourceName string) (lin
 	buf := make([]byte, 0, 64*1024)
 	sc.Buffer(buf, 10*1024*1024)
 
-	lastHost := ""
+	lastHost := "localhost" // raw 로컬 파일(prefix 없음) 분석 시 기본 호스트명
 	lineNo := 0
 
 	for sc.Scan() {
