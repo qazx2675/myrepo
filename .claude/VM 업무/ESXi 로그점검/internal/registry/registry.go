@@ -76,6 +76,7 @@ type PatternDef struct {
 	Source   string `yaml:"source"`
 	Regex    string `yaml:"regex"`
 	Recommendation string `yaml:"recommendation"`
+	Hint     string `yaml:"hint"`
 	Ref      string `yaml:"ref"`
 
 	Extract        map[string]string     `yaml:"extract"`

@@ -222,11 +222,15 @@ func main() {
 		}
 		hf, err := os.Create(htmlPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "HTML ?? ?? ??: %v\n", err)
+			fmt.Fprintf(os.Stderr, "HTML 리포트 생성 오류: %v\n", err)
 		} else {
 			report.WriteHTML(hf, result, report.TextOptions{OnlyProblems: *onlyProblems})
 			hf.Close()
-			fmt.Printf("HTML ??? ??: %s\n", htmlPath)
+			fmt.Printf("\n[INFO] HTML 리포트 생성 완료: %s\n", htmlPath)
+			fmt.Println("================================================================")
+			fmt.Println("                       터미널 요약 출력                         ")
+			fmt.Println("================================================================")
+			report.WriteText(os.Stdout, result, report.TextOptions{OnlyProblems: *onlyProblems})
 		}
 	case "json":
 		if err := report.WriteJSON(w, result); err != nil {

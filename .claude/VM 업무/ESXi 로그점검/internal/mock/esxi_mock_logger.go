@@ -146,6 +146,16 @@ func main() {
 		dvport := fmt.Sprintf("10%d/00 50 56 61 %02x %02x", rand.Intn(999), rand.Intn(255), rand.Intn(255))
 		ch := fmt.Sprintf("%d", rand.Intn(4))
 
+		// --- 기존 로그 파일 초기화 ---
+		// 최신 내용만 유지하기 위해 매번 시나리오 생성 전 기존 로그를 삭제합니다.
+		os.Remove(filepath.Join(*logDirPtr, "vmkernel.log"))
+		os.Remove(filepath.Join(*logDirPtr, "vobd.log"))
+		os.Remove(filepath.Join(*logDirPtr, "hostd.log"))
+		os.Remove(filepath.Join(*logDirPtr, "vmkwarning.log"))
+		os.Remove(filepath.Join(*logDirPtr, "vmksummary.log"))
+		os.Remove(filepath.Join(*logDirPtr, "sensord.log"))
+		os.Remove(filepath.Join(*logDirPtr, "ipmi", "sel"))
+
 		fmt.Printf("Executing Scenario: %s (%s)\n", tmpl.ID, tmpl.Desc)
 
 		for _, logTmpl := range tmpl.Logs {
