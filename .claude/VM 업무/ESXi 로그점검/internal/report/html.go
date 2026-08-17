@@ -266,3 +266,11 @@ func htmlEscape(s string) string {
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	return s
 }
+
+func GetRoleAndAction(category string) (string, string) {
+	catUpper := strings.ToUpper(category)
+	if catUpper == "STORAGE" || catUpper == "NETWORK" || catUpper == "HARDWARE" {
+		return "엔지니어 확인 영역", "즉시 확인 및 원인 분석 요망"
+	}
+	return "운영자 모니터링 영역", "추이 관찰 및 필요시 엔지니어 이관"
+}

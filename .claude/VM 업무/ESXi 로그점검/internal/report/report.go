@@ -149,6 +149,8 @@ type TextOptions struct {
 	// SUSPECTED 전부 0)인 호스트는 개별 나열 대신 카운트만 표시한다.
 	// 기본값(false)은 기존과 동일하게 전체 호스트를 나열한다 — 하위호환.
 	OnlyProblems bool
+	IsServerMode bool
+	IsMockMode   bool
 }
 
 // WriteText는 사람이 읽기 위한 리포트를 출력한다.
