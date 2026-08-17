@@ -1,69 +1,81 @@
 # ESXi 로그점검 (ESXi Log Check) 툴 및 모의 환경
 
-이 프로젝트는 ESXi 장비에서 발생하는 각종 치명적인 로그(MCE, PSOD, APD/PDL, vSAN ESA, NVMeoF 단절 등)를 수집하여 분석하는 도구(`esxi-log-check`)와, 이를 테스트할 수 있는 **ESXi 8.0 이상 모의 환경(Mock Generator)**을 포함합니다.
+이 프로젝트는 ESXi 장비에서 발생하는 각종 치명적인 로그(MCE, PSOD, APD/PDL, vSAN ESA, NVMeoF 단절 등)를 수집하여 분석하는 도구(`esxi-log-check`)와, 이를 록키 리눅스 등에서 테스트할 수 있는 **ESXi 8.0 이상 모의 환경(Mock Generator)**을 포함합니다.
 
-## 디렉토리 구조
-- `main.go`, `collect.go`, `parse.go`: 실제 ESXi 장비(혹은 모의 환경)에 SSH로 접속하여 로그를 긁어오고 분석하는 핵심 Go 애플리케이션입니다.
-- `esxi_critical_patterns.yaml`: ESXi 치명적 오류를 판별하는 정규표현식 정의 파일입니다.
-- `internal/mock/`: ESXi가 없는 환경(Rocky Linux 등)에서 ESXi 8.0 이상의 로그를 방대하게 쏟아내고 CLI를 흉내 내는 가짜 환경 스크립트들이 들어 있습니다.
-  - `esxi_mock_logger.go`: 300종 이상의 치명적 에러를 뿜어내는 모의 로그 생성기 (Go 기반).
-  - `localcli_mock.sh`, `esxcli_mock.sh`: ESXi의 하드웨어 정보를 리턴하는 CLI 래퍼.
-- `vendor/`, `go.mod`, `go.sum`: 폐쇄망 오프라인 빌드를 위한 의존성 패키징 폴더.
+> ⚠️ **주의사항 (Disclaimer)**
+> 본 로그 분석 관련 스크립트 및 툴은 **100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장**합니다. 하드웨어의 복합적인 결함이나 벤더사(HPE, Dell, Lenovo 등) 특화 로그는 공식 벤더 분석(vm-support 번들 분석 등)을 통한 최종 확인이 필수적입니다.
 
 ---
 
-## 1. 폐쇄망 환경 오프라인 빌드 가이드 (`esxi-log-check`)
+## 1. 옵션별 상세
 
-본 폴더에는 필요한 모든 Go 의존성(`yaml.v3`, `crypto/ssh` 등)이 `vendor/` 디렉토리에 함께 포함되어 있습니다. 따라서 인터넷(외부망) 연결 없이도 빌드가 가능합니다.
+분석 툴(`run_analyzer.sh` 또는 `esxi-log-check`)을 실행할 때 다양한 옵션을 제공합니다.
 
-1. **Go 설치 확인**: Linux 시스템에 Go가 설치되어 있어야 합니다. (Rocky Linux의 경우 `dnf install golang`)
-2. **프로젝트 다운로드**: Git 등에서 이 폴더를 통째로 압축하여 폐쇄망 서버(Rocky Linux 등)로 옮긴 후 압축을 풉니다.
-3. **빌드 명령어 실행**: 해당 폴더 내부로 이동하여 **`-mod=vendor`** 플래그를 주고 빌드합니다.
-   ```bash
-   cd "ESXi 로그점검"
-   go build -mod=vendor -o esxi-log-check main.go collect.go parse.go
-   ```
-4. **실행**:
-   ```bash
-   ./esxi-log-check -host 192.168.0.58 -user root -pass "password" -mode all
-   ```
+### CLI 플래그 (`esxi-log-check`)
+- `-w <파일명>`: 타겟 호스트(IP) 목록이 담긴 파일을 지정합니다. (예: `-w hosts.txt`)
+- `-format <형식>`: 출력 형식을 지정합니다. 지원되는 포맷은 `text`, `html`, `json` 입니다.
+- `-out <파일명>`: 결과를 저장할 파일명을 지정합니다. (기본적으로 터미널에 출력됨)
+- `-server <주소:포트>`: HTTP 웹 서버 모드로 실행하여 브라우저에서 리포트를 렌더링합니다. (예: `-server :12345`)
+- `-onlyProblems`: 발견된 오류(Finding)가 있는 호스트만 출력합니다. (정상 호스트 숨김)
+
+### 인터랙티브 스크립트 (`run_analyzer.sh`)
+복잡한 커맨드 입력 없이, `./run_analyzer.sh`를 실행하여 메뉴를 통해 쉽게 사용할 수 있습니다:
+1. **실제 ESXi 서버 분석 (IP 직접 입력)**: 분석할 단일 타겟 IP를 입력하면 즉시 로그를 당겨와 텍스트로 요약을 출력합니다.
+2. **실제 ESXi 서버 분석 (호스트 목록 파일 기반)**: 분석 대상 서버들의 IP가 기재된 파일(예: `real_hosts.txt`)을 입력받아 일괄 분석하고 HTML 리포트로 추출합니다.
+3. **모의 테스트 모드 실행**: 전체 에러 패턴을 모의 주입하여 `mock_test_report.html`을 생성합니다. (기능 정상 작동 여부 검증용)
+4. **웹 서버 모드로 실행 (백그라운드)**: 대상을 선택(모의 테스트 / 실제 IP / 호스트 파일)하여 백그라운드에서 웹 서버를 구동합니다. `http://서버IP:12345`를 통해 웹 브라우저에서 분석 결과를 실시간으로 모니터링할 수 있습니다.
+5. **임시 파일 및 캐시 정리**: 분석 과정에서 생성된 캐시, 임시 파일, `.csv` 등을 싹 정리합니다.
+6. **종료**: 메뉴를 빠져나갑니다.
 
 ---
 
-## 2. 모의 환경 (Mock Environment) 셋업 가이드
+## 2. 사용방법
 
-ESXi 실장비 없이 `192.168.0.58` (Rocky Linux) 서버를 ESXi인 것처럼 속여 방대한 로그 수집/분석 테스트를 진행할 수 있습니다.
+가장 권장되는 사용 방법은 `run_analyzer.sh` 스크립트를 활용하는 것입니다.
 
-### 2.1 Mock Logger (랜덤 로그 발생기) 빌드 및 배포
-`internal/mock/esxi_mock_logger.go`를 빌드하여 실행하면 `/var/run/log/` 경로에 가짜 ESXi 로그가 무작위로 생성됩니다.
-
+### 권장 실행 방법
 ```bash
-cd internal/mock/
-# 의존성이 필요 없는 단일 파일이므로 바로 빌드 가능합니다.
-go build -o esxi_mock_logger esxi_mock_logger.go
-
-# 시스템 바이너리 경로로 이동
-sudo mv esxi_mock_logger /usr/local/bin/
-sudo chmod +x /usr/local/bin/esxi_mock_logger
+cd "ESXi 로그점검"
+chmod +x run_analyzer.sh
+./run_analyzer.sh
 ```
 
-### 2.2 ESXi CLI 래퍼 (localcli, esxcli) 배포
-ESXi의 고유 CLI 명령어를 흉내 내어 가짜 결과를 출력하는 스크립트를 배포합니다.
+### 웹 모니터링 연동 방법
+1. `./run_analyzer.sh` 실행 후 `4`번(웹 서버 모드)을 선택합니다.
+2. "2) 실제 ESXi IP 직접 입력" 또는 "3) 실제 호스트 목록 파일 기반"을 선택합니다.
+3. 브라우저를 열고 록키 리눅스의 `192.168.0.58:12345` 주소로 접속합니다.
+4. 웹 화면 우측 상단의 업데이트 버튼을 통해 리포트를 실시간으로 갱신하거나 결과를 확인할 수 있습니다.
 
-```bash
-sudo cp localcli_mock.sh /usr/local/bin/localcli
-sudo cp esxcli_mock.sh /usr/local/bin/esxcli
-sudo chmod +x /usr/local/bin/localcli /usr/local/bin/esxcli
-```
+---
 
-### 2.3 모의 테스트 진행 방법
-1. Mock Logger를 실행하여 가짜 에러를 발생시킵니다. `-count` 인자로 발생시킬 복합 시나리오의 갯수를 지정할 수 있습니다. (1~10개 동시 다발적 생성 추천)
-   ```bash
-   # 5개의 서로 다른 장애 상황을 무작위로 혼합하여 발생시킵니다.
-   esxi_mock_logger -count 5
-   ```
-2. 이제 `esxi-log-check` 분석 도구를 해당 Rocky Linux IP로 향하게 하여 실행합니다.
-   ```bash
-   ./esxi-log-check -host 192.168.0.58 -user root -pass "password" -mode all
-   ```
-3. 분석 툴이 `/var/run/log/vmkernel.log` 등을 긁어와 `esxi_critical_patterns.yaml` 룰셋에 기반하여 정확하게 장애를 탐지하고 리포팅하는지 확인합니다.
+## 3. 로그패턴 분류 (32종 카테고리)
+
+현재 `esxi_critical_patterns.yaml`에 정의된 주요 카테고리는 다음과 같습니다. 하드웨어 교체나 벤더 점검이 필요한 **엔지니어 영역**과, 논리적 구성 및 재부팅 조치로 해결 가능한 **서버운영 영역**으로 엄격히 분리되어 리포팅됩니다.
+
+* **CPU_MCE**: MCE(Machine Check Exception), PSOD 유발 하드웨어 에러 (엔지니어 영역)
+* **MEMORY**: 메모리 컨트롤러 불량, Uncorrectable ECC 에러 (엔지니어 영역)
+* **STORAGE_APD_PDL**: All Paths Down, Permanent Device Loss (서버운영/엔지니어 복합)
+* **STORAGE_LATENCY**: 스토리지 응답 지연 (서버운영 영역)
+* **VSAN_ESA**: vSAN 관련 네트워크 단절, 디스크 그룹 장애 (엔지니어/운영 영역)
+* **NETWORK_LINK**: NIC 링크 다운, vmnic 단절 (서버운영 영역)
+* **NFS_LOST**: NFS 데이터스토어 연결 유실 (서버운영 영역)
+* **HOSTD_CRASH**: hostd 프로세스 크래시 (서버운영 영역 - 보통 재부팅 조치)
+* **KERNEL_PANIC**: 커널 패닉 및 비정상 리부트 (서버운영 영역)
+* **HARDWARE_SENSOR**: 온도, 팬, 전원 등 IPMI 센서 에러 (엔지니어 영역)
+* **DUMP**: 코어덤프 및 크래시 덤프 수집 에러 (엔지니어 영역)
+
+*(그 외 NVM_EOF, VM_STUN, SECURE_BOOT 등 총 32개 정규표현식 카테고리 지원)*
+
+---
+
+## 4. 로그패턴에 대한 테스트 케이스
+
+모의 테스트 도구(`esxi_mock_logger`)는 실제 운영에서 발생할 수 있는 32개 카테고리의 100여 개 세부 상황을 완벽하게 재현합니다. 주요 테스트 케이스는 다음과 같습니다.
+
+* **MCE / PSOD 발생 테스트**: `vmkernel.log`에 `@BlueScreen: Machine Check Exception` 메시지를 주입하고 분석기가 이를 `CRITICAL`로 짚어내어 **하드웨어 엔지니어 조치 권고**를 내리는지 확인합니다.
+* **메모리 Uncorrectable 에러 테스트**: `Memory controller error` 메시지 발생 시 정확하게 메모리 뱅크 점검이 필요한 엔지니어 영역으로 분류하는지 테스트합니다.
+* **커널 패닉(Kernel Panic) 테스트**: `hostd.log`나 시스템 로그에 커널 패닉 메시지가 주입되었을 때, 이를 **서버운영 영역 (재부팅 조치 필요)**으로 가이드하는지 확인합니다.
+* **코어 덤프(DUMP) 테스트**: 덤프 파일 수집 실패(예: 디스크 공간 부족 등) 로그 발생 시, 덤프 수집 권한과 롤을 가진 **하드웨어 엔지니어**에게 배정되도록 테스트합니다.
+* **스토리지(APD/PDL) 테스트**: 일시적 경로 단절(APD)과 영구 장치 손실(PDL)을 구분하여 리포팅하고 스토리지 스위치 조치를 권고하는지 검증합니다.
+
+위의 테스트 케이스들은 `./run_analyzer.sh` 의 **3번 메뉴(모의 테스트 모드)**를 통해 터미널이나 웹 인터페이스에서 언제든 원클릭으로 검증(무결성 확인)해 볼 수 있습니다.
