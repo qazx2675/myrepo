@@ -18,21 +18,10 @@ worklist(호스트 목록) 기반으로 각 호스트의 `ev01`~`ev03` VM에 설
 
 ```bash
 cd ".claude/VM 업무/VM설정 go lang"
-
-# affinity 도구
-go build -mod=vendor -o vm_affinity_bulk main_affinity.go
-
-# lpage(HugePage/CPU 토폴로지) 도구
-go build -mod=vendor -o vm_lpage_bulk main_lpage.go
-
-# create 도구
-go build -mod=vendor -o vm_create main_vm_create.go
-
-# connect 도구
-go build -mod=vendor -o vm_connect main_connect.go
+bash setup.sh
 ```
 
-- `-mod=vendor`를 꼭 붙여야 `vendor/` 안의 의존성을 사용한다. 빠뜨리면 Go가 인터넷에서 재다운로드를 시도할 수 있다.
+- `setup.sh` 스크립트를 실행하면 내부적으로 `-mod=vendor` 플래그를 사용하여 `vendor/` 안의 의존성을 사용한다. 빠뜨리면 Go가 인터넷에서 재다운로드를 시도할 수 있다.
 - **반드시 파일명을 직접 지정**해서 빌드해야 한다. `go build .` 나 `go build *.go`를 쓰면 두 파일이 같은 패키지로 취급되어 컴파일 오류가 난다.
 - `go.mod`를 수정(의존성 버전 변경 등)했다면, 인터넷이 되는 환경에서 `go mod vendor`를 다시 실행해 `vendor/`를 갱신한 뒤 커밋해야 한다.
 

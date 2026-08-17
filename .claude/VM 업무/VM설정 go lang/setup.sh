@@ -6,4 +6,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 go build -mod=vendor -o vm_affinity_bulk main_affinity.go
 go build -mod=vendor -o vm_lpage_bulk main_lpage.go
-echo "빌드 완료: $(pwd)/vm_affinity_bulk, $(pwd)/vm_lpage_bulk"
+go build -mod=vendor -o vm_create main_vm_create.go
+go build -mod=vendor -o vm_connect main_connect.go
+echo "빌드 완료: $(pwd)/vm_affinity_bulk, vm_lpage_bulk, vm_create, vm_connect"

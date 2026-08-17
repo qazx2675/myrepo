@@ -32,7 +32,8 @@ tar xzf vm-param-check.tar.gz
 **폐쇄망(오프라인, 기본 권장)** — Go만 설치되어 있으면 인터넷 없이 됩니다:
 
 ```bash
-go build -mod=vendor -o vm-param-check .
+cd ".claude/VM 업무/VM 매개변수설정체크"
+bash setup.sh
 ```
 
 **인터넷이 되는 환경** — 의존성을 새로 받아 최신화하고 싶을 때만:

@@ -36,9 +36,9 @@ tar czf vm-param-check.tar.gz ".claude/VM 업무/VM 매개변수 체크 및 설�
 ### 빌드 (인터넷 여부와 무관 — vendor/ 포함되어 있음)
 ```bash
 cd ".claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴"
-go build -mod=vendor -o vm-param-check .
+bash setup.sh
 ```
-`-mod=vendor`가 핵심입니다 — 인터넷에서 새로 받으려 하지 않고 `vendor/` 안의 소스만 그대로 씁니다.
+`setup.sh` 스크립트를 실행하면 내부적으로 `-mod=vendor` 플래그를 사용하여 인터넷에서 새로 받지 않고 `vendor/` 안의 소스만 그대로 씁니다.
 
 의존성을 최신화하고 싶을 때만(인터넷 되는 환경에서):
 ```bash
@@ -60,7 +60,7 @@ scp vm-param-check.tar.gz user@폐쇄망서버:/path/to/dest/
 # 3) 폐쇄망 서버에서 압축 해제 후 빌드
 tar xzf vm-param-check.tar.gz
 cd ".claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴"
-go build -mod=vendor -o vm-param-check .
+bash setup.sh
 ```
 
 이 3단계만 하면 폐쇄망에서 인터넷 연결 없이 바로 빌드·실행됩니다. Go 자체가 안 깔려 있으면 Go 배포 바이너리(예: `go1.26.5.linux-amd64.tar.gz`)를 미리 받아서 `/usr/local/go`에 풀고 `PATH`에 `/usr/local/go/bin`을 추가하면 됩니다(이 단계도 인터넷 불필요, tar.gz 파일만 있으면 됨).

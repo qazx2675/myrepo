@@ -2,7 +2,7 @@
 
 `vm-param-check`(체크+자동교정, `-fix` 내장)와 `vc-test-env`(vcsim 테스트환경 복제)를
 **한 폴더로 묶어**, 인터넷이 안 되는 폐쇄망 서버로 그대로 옮겨서 빌드→테스트까지 끝낼 수 있게
-만든 배포 패키지입니다. 두 도구 모두 Go 모듈 자체에 `vendor/`를 포함하고 있어 `go build -mod=vendor`
+만든 배포 패키지입니다. 두 도구 모두 Go 모듈 자체에 `vendor/`를 포함하고 있어 `bash setup.sh`
 한 줄이면 인터넷 없이 빌드됩니다.
 
 ```
@@ -63,7 +63,7 @@ chmod +x testkit/*.sh
 ```bash
 # 인터넷 되는 곳에서, 원본 vCenter 구조를 레시피로 추출
 cd vc-test-env
-go build -mod=vendor -o vc-test-env .
+bash setup.sh
 VC_USER=administrator@vsphere.local VC_PASS='<비밀번호>' ./vc-test-env extract -vc=192.168.0.50
 
 # 이 파일을 폐쇄망 서버의 같은 경로로 복사
