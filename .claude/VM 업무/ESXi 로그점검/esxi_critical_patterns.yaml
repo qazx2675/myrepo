@@ -428,6 +428,251 @@ patterns:
 # ---------------------------------------------------------------------------
 # SCSI sense key → 심각도 매핑 (SCSI_CMD_FAILED 패턴에서 사용)
 # ---------------------------------------------------------------------------
+  - id: ESX8_NVMEOF_TIMEOUT
+    category: STORAGE_NVME
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'NVMe-oF: Timeout for command'
+    recommendation: "NVMe-oF 타겟과의 통신 지연/타임아웃. 네트워크 스위치 구성(RoCE/TCP) 및 스토리지 패브릭 부하 점검."
+
+  - id: ESX8_NVMEOF_DISCONNECT
+    category: STORAGE_NVME
+    severity: CRITICAL
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.nvmeof\.disconnect\]'
+    recommendation: "NVMe-oF 연결이 단절되었습니다. 컨트롤러 가용성, 패브릭 상태 점검 요망."
+
+  - id: ESX8_TRUST_AUTHORITY_ERR
+    category: SECURITY
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vta\.attestation\.failed\]'
+    recommendation: "vSphere Trust Authority 증명 실패. KMS 및 Key Provider 상태, 호스트 보안 설정 재확인."
+
+  - id: ESX8_SMARTNIC_FW_CRASH
+    category: NETWORK_DPU
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'SmartNIC Firmware crash detected'
+    recommendation: "DPU 펌웨어 크래시 발생. DPU 리부팅 또는 최신 펌웨어/드라이버 업데이트 필요."
+
+  - id: ESX8_SECURE_BOOT_VIOLATION
+    category: SECURITY
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Secure Boot violation detected'
+    recommendation: "서명되지 않은 VIB 또는 펌웨어 로드 시도됨. 호스트 침해 의심 또는 무결성 위반, VIB 서명 재확인."
+
+  - id: ESX8_VSAN_ESA_CAPACITY
+    category: VSAN_ESA
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vsan\.esa\.capacity\.threshold\]'
+    recommendation: "vSAN ESA 스토리지 풀 용량 임계치 초과. 스토리지 노드 증설 또는 데이터 정리."
+
+  - id: ESX8_CXL_MEM_ERR
+    category: HARDWARE
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'CXL Memory Error: Uncorrectable'
+    recommendation: "CXL 메모리 모듈 하드웨어 에러. 해당 CXL 장치 교체 요망."
+
+  - id: ESX8_PCIE_AER_FATAL
+    category: HARDWARE
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'PCIe AER: Fatal error occurred'
+    recommendation: "PCIe Advanced Error Reporting Fatal 발생. 마더보드/라이저 카드/PCIe 장치 점검."
+
+  - id: ESX8_VMM_GPF
+    category: VM_EXEC
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'VMM: General Protection Fault'
+    recommendation: "가상 머신 모니터(VMM) GPF 크래시. VMWare vSphere 패치 적용 또는 호스트 재부팅 권장."
+
+  - id: ESX8_NVM_WEAR_OUT
+    category: HARDWARE
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.nvme\.wearout\]'
+    recommendation: "NVMe 드라이브 수명(TBW) 임계치 도달. 데이터 유실 전 즉각적인 디스크 교체 요망."
+
+  - id: ESX8_RDMA_ROCE_LINK
+    category: NETWORK_RDMA
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'RDMA RoCE link down'
+    recommendation: "RoCE/RDMA 링크 다운. 패브릭 스위치 PFC/ECN 설정 및 포트 상태 점검."
+
+  - id: ESX8_HOSTD_MEM_LEAK
+    category: DAEMON
+    severity: HIGH
+    source: hostd.log
+    regex: 'Memory leak detected in hostd'
+    recommendation: "hostd 메모리 릭 한계점 도달. services.sh restart 실행 후 임시 조치, ESXi 패치 적용."
+
+  - id: ESX8_VMAUTH_FAILED
+    category: SECURITY
+    severity: MEDIUM
+    source: hostd.log
+    regex: 'Authentication failed for user'
+    recommendation: "지속적인 인증 실패. 무차별 대입 공격(Brute-force) 의심. vCenter 및 ESXi 접근 통제 확인."
+
+  - id: ESX8_NUMA_MISALIGNED
+    category: PERFORMANCE
+    severity: LOW
+    source: vmkernel.log
+    regex: 'NUMA node alignment suboptimal'
+    recommendation: "VM NUMA 토폴로지 불균형으로 성능 저하 가능성. VM vNUMA 및 CPU/Mem 할당 재검토."
+
+  - id: ESX8_FIBRE_CHANNEL_LIP
+    category: STORAGE_FC
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'Fibre Channel LIP Reset occurred'
+    recommendation: "FC 패브릭 초기화 이벤트(LIP). SAN 스위치 조닝(Zoning) 문제나 케이블 불안정 점검."
+
+  - id: ESX8_NFS_STALE_HANDLE
+    category: STORAGE_NFS
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'NFS: Stale file handle'
+    recommendation: "NFS 서버와의 세션/핸들 만료. 백엔드 NAS 재부팅 여부 확인 후 데이터스토어 재연결."
+
+  - id: ESX8_ISCSI_LOGIN_FAIL
+    category: STORAGE_ISCSI
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.iscsi\.login\.failed\]'
+    recommendation: "iSCSI 타겟 로그인 실패. CHAP 인증, 포트 3260 오픈 여부, 타겟 LUN 맵핑 확인."
+
+  - id: ESX8_VVOL_BIND_FAIL
+    category: STORAGE_VVOL
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vvol\.bind\.failed\]'
+    recommendation: "vVol 바인딩 실패. VASA Provider 상태 점검 및 재등록 필요."
+
+  - id: ESX8_SDDC_CERT_EXPIRE
+    category: SECURITY
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.cert\.expired\]'
+    recommendation: "ESXi 시스템 인증서 만료. vCenter에서 인증서 갱신(Renew) 수행."
+
+  - id: ESX8_VMC_ISOLATION
+    category: NETWORK
+    severity: CRITICAL
+    source: vobd.log
+    regex: '\[esx\.problem\.net\.isolation\]'
+    recommendation: "관리 네트워크 격리. HA 이벤트 발생 위험. 관리 네트워크 스위치 및 vmk0 인터페이스 점검."
+
+  - id: ESX8_VPXA_CRASH
+    category: DAEMON
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vpxa\.crash\]'
+    recommendation: "vpxa 데몬 크래시로 vCenter 연결 단절. /etc/init.d/vpxa restart 시도."
+
+  - id: ESX8_SDCARD_DEGRADED
+    category: HARDWARE
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.sdcard\.degraded\]'
+    recommendation: "부팅용 SD카드/USB 성능 저하 또는 마모. ESXi 8.0부터 SD카드 사용은 권장되지 않음. 로컬 디스크로 마이그레이션 요망."
+
+  - id: ESX8_TPM_FAIL
+    category: SECURITY
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'TPM initialization failed'
+    recommendation: "TPM 칩 초기화 실패. 호스트 보안 증명(Attestation) 기능 불가능. BIOS TPM 설정 및 펌웨어 확인."
+
+  - id: ESX8_GPU_ECC_ERR
+    category: HARDWARE_GPU
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'NVRM: GPU at PCI:.* has fallen off the bus'
+    recommendation: "VDI용/AI용 GPU의 PCI 버스 단절(Fallen off the bus). GPU 물리적 결착 상태 또는 과열 점검."
+
+  - id: ESX8_PCIE_LINK_DEGRADED
+    category: HARDWARE
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'PCIe link degraded'
+    recommendation: "PCIe 대역폭 하락(예: x16 -> x8). 카드 재결착 또는 슬롯 불량/마더보드 점검."
+
+  - id: ESX8_PTP_SYNC_LOST
+    category: TIME
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'PTP sync lost'
+    recommendation: "PTP(Precision Time Protocol) 동기화 상실. 5G 코어 등 정밀 시간 필수 환경에서 주의. PTP 그랜드마스터 연결 확인."
+
+  - id: ESX8_NTP_STRATUM_ERR
+    category: TIME
+    severity: MEDIUM
+    source: vobd.log
+    regex: '\[esx\.problem\.time\.ntp\.stratum\]'
+    recommendation: "NTP 서버의 Stratum 레벨 불량으로 시간 동기화 실패. 내부 NTP 서버 계층 상태 확인."
+
+  - id: ESX8_PSOD_DUMP_FAIL
+    category: SYSTEM
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Failed to save core dump'
+    recommendation: "PSOD 덤프 저장 실패. Coredump 파티션 용량 부족 또는 네트워크 덤프 수집기 연결 오류."
+
+  - id: ESX8_VMK_OOM
+    category: SYSTEM
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Out of memory for VMkernel heap'
+    recommendation: "VMkernel 메모리 고갈. 시스템 중단 가능성 매우 높음. 즉각적인 호스트 재부팅 후 메모리 누수 분석 요망."
+
+  - id: ESX8_K8S_CNS_FAIL
+    category: CLOUD_NATIVE
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.cns\.volume\.attach\.failed\]'
+    recommendation: "Tanzu/K8s CNS 볼륨 연결 실패. vCenter CNS(Cloud Native Storage) 서비스 및 정책 확인."
+
+  - id: ESX8_LACP_NEG_FAIL
+    category: NETWORK
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'LACP negotiation failed on uplink'
+    recommendation: "LACP 협상 실패로 인한 업링크 단절. 물리 스위치의 LACP(Active/Passive) 설정과 분산 스위치 설정 일치 여부 확인."
+
+  - id: ESX8_FDM_ELECTION_FAIL
+    category: HA
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.ha\.fdm\.election\.failed\]'
+    recommendation: "vSphere HA(FDM) 마스터 선출 실패. 데이터스토어 하트비트 및 격리 주소(Isolation Address) 통신 점검."
+
+  - id: ESX8_MICROCODE_UPDATE_REQ
+    category: HARDWARE
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'CPU microcode update required'
+    recommendation: "알려진 CPU 취약점(Spectre 등) 보호를 위해 BIOS 및 CPU 마이크로코드 업데이트 권장."
+
+  - id: ESX8_NSX_EDGE_DISCONNECT
+    category: NETWORK_NSX
+    severity: CRITICAL
+    source: vobd.log
+    regex: '\[esx\.problem\.nsx\.edge\.disconnect\]'
+    recommendation: "NSX Edge/TEP 터널 단절. 오버레이 네트워크 통신 장애. 언더레이 네트워크 점검 요망."
+
+  - id: ESX8_CBL_HOTPLUG_ERR
+    category: HARDWARE
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'Hotplug event failed on device'
+    recommendation: "PCIe/NVMe 핫플러그 실패. 기기 제거 전 소프트웨어적인 Detach가 수행되었는지 확인 요망."
+
 sense_key_map:
   "0x0": { name: "NO SENSE",        severity: NOISE }
   "0x1": { name: "RECOVERED ERROR", severity: MEDIUM }
@@ -472,6 +717,24 @@ noise_filters:
 # 상관관계 체인 (Correlator 규칙 — M3 단계 구현 대상, M0에서는 정의만)
 # ---------------------------------------------------------------------------
 correlation_chains:
+  - id: CHAIN_ESX8_DPU_CRASH
+    window: 2m
+    sequence:
+      - ESX8_SMARTNIC_FW_CRASH
+      - NET_UPLINK_TRANSITION_DOWN
+    verdict: "DPU 펌웨어 크래시로 인한 네트워크 업링크 동시 상실 연쇄 장애"
+    severity: CRITICAL
+    note: "DPU 카드의 소프트웨어/펌웨어 결함으로 전체 통신이 단절된 상황입니다. 서버 하드 리셋(BMC) 및 DPU 펌웨어 진단이 필요합니다."
+
+  - id: CHAIN_ESX8_NVMEOF_TIMEOUT
+    window: 5m
+    sequence:
+      - ESX8_NVMEOF_TIMEOUT
+      - ESX8_NVMEOF_DISCONNECT
+    verdict: "NVMe-oF 지연 누적으로 인한 스토리지 타겟 최종 단절"
+    severity: CRITICAL
+    note: "패브릭 혼잡 또는 스토리지 배열 부하로 NVMe 연결이 끊겼습니다. RoCE 환경이라면 PFC/ECN 드롭 통계를 확인하세요."
+
   - id: CHAIN_MEM_TO_HOSTD_HANG
     window: "30m"
     sequence: [MEMORY_CONTROLLER_ERROR, SCSI_PERF_DETERIORATED, HOSTD_NONRESPONSIVE]
