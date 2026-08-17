@@ -156,6 +156,23 @@ func main() {
 		os.Remove(filepath.Join(*logDirPtr, "sensord.log"))
 		os.Remove(filepath.Join(*logDirPtr, "ipmi", "sel"))
 
+		// esxi-log-check 분석기가 파일을 찾지 못해 종료되는 것을 방지하기 위해 빈 파일 생성
+		filesToTouch := []string{
+			filepath.Join(*logDirPtr, "vmkernel.log"),
+			filepath.Join(*logDirPtr, "vobd.log"),
+			filepath.Join(*logDirPtr, "hostd.log"),
+			filepath.Join(*logDirPtr, "vmkwarning.log"),
+			filepath.Join(*logDirPtr, "vmksummary.log"),
+			filepath.Join(*logDirPtr, "sensord.log"),
+			filepath.Join(*logDirPtr, "ipmi", "sel"),
+		}
+		for _, fpath := range filesToTouch {
+			os.MkdirAll(filepath.Dir(fpath), 0755)
+			if f, err := os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				f.Close()
+			}
+		}
+
 		fmt.Printf("Executing Scenario: %s (%s)\n", tmpl.ID, tmpl.Desc)
 
 		for _, logTmpl := range tmpl.Logs {
