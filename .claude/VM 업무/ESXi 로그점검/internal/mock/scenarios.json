@@ -1,0 +1,2182 @@
+[
+  {
+    "id": "SCENARIO_1",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000003203)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu12:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000003203\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000003203] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000003203]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000003203] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_2",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000010388)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu4:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000010388\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000010388 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_3",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000001685)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu5:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000001685\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000001685] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000001685]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000001685] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_4",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000016672)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu2:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000016672\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000016672 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_5",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000009555)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu5:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000009555\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000009555] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000009555]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000009555] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_6",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000018920)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu5:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000018920\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000018920 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_7",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000008553)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu10:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000008553\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000008553] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000008553]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000008553] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_8",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000010253)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu5:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000010253\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000010253 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_9",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000007899)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu15:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000007899\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000007899] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000007899]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000007899] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_10",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000013899)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu9:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000013899\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000013899 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_11",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000007002)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu9:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000007002\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000007002] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000007002]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000007002] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_12",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000015556)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000015556\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000015556 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_13",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000003806)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu5:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000003806\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000003806] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000003806]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000003806] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_14",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000015280)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu12:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000015280\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000015280 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_15",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000000353)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu5:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000000353\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000000353] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000000353]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000000353] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_16",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000019935)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu6:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000019935\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000019935 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_17",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000008827)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu15:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000008827\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000008827] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000008827]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000008827] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_18",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000018481)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu13:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000018481\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000018481 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_19",
+    "desc": "스토리지 APD 타임아웃 발생 (디바이스: naa.6000000000000000000000000009690)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu0:2049)WARNING: NMP: nmp_DeviceStartLoop:721: NMP Device \"naa.6000000000000000000000000009690\" is blocked. Not starting I/O from device."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[APDCorrelator] 1234567890us: [esx.problem.storage.apd.start] Device or filesystem with identifier [naa.6000000000000000000000000009690] has entered the All Paths Down state."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu0:2049)StorageApdHandler: 1204: APD Handle Created with lock [naa.6000000000000000000000000009690]"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 140000,
+        "msg": "[APDCorrelator] 1234707890us: [esx.problem.storage.apd.timeout] Device or filesystem with identifier [naa.6000000000000000000000000009690] has entered the All Paths Down Timeout state after being in the All Paths Down state for 140 seconds."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_20",
+    "desc": "스토리지 영구 손실 PDL (디바이스: naa.60000000000000000000000000014474)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu9:2050)WARNING: NMP: nmp_IssueCommandToDevice:2954: I/O could not be issued to device \"naa.60000000000000000000000000014474\" due to Not found"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[scsiCorrelator] 2234567890us: [esx.problem.scsi.device.state.permanentloss] The path to device naa.60000000000000000000000000014474 has been permanently lost."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_21",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000000714, LBA: 5076343)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu23:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000000714\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 5076343"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_22",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000009576, LBA: 8358418)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu2:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000009576\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 8358418"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_23",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000005435, LBA: 7180910)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000005435\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 7180910"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_24",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000001569, LBA: 4037994)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu24:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000001569\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 4037994"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_25",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000006948, LBA: 5220841)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu30:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000006948\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 5220841"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_26",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000002403, LBA: 5869528)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu22:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000002403\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 5869528"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_27",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000004517, LBA: 5803458)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu8:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000004517\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 5803458"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_28",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000003186, LBA: 8958805)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu0:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000003186\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 8958805"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_29",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000002410, LBA: 8812779)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu31:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000002410\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 8812779"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_30",
+    "desc": "디스크 물리 베드섹터 Medium Error (디바이스: naa.5000000000000000000000000006365, LBA: 8762411)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu19:2097669)ScsiDeviceIO: 4181: Cmd(0x459a40b3c080) 0x28, CmdSN 0x1234 from world 1000 to dev \"naa.5000000000000000000000000006365\" failed H:0x0 D:0x2 P:0x0 Valid sense data: 0x3 0x11 0x0."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu4:2097669)ScsiDeviceIO: 4182: Medium Error, LBA: 8762411"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_31",
+    "desc": "네트워크 vmnic7 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic7: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic7 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic7 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_32",
+    "desc": "네트워크 vmnic0 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic0: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic0 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic0 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_33",
+    "desc": "네트워크 vmnic4 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic4: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic4 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic4 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_34",
+    "desc": "네트워크 vmnic6 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic6: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic6 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic6 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_35",
+    "desc": "네트워크 vmnic6 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic6: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic6 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic6 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_36",
+    "desc": "네트워크 vmnic5 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic5: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic5 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic5 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_37",
+    "desc": "네트워크 vmnic3 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic3: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic3 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic3 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_38",
+    "desc": "네트워크 vmnic0 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic0: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic0 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic0 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_39",
+    "desc": "네트워크 vmnic7 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic7: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic7 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic7 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_40",
+    "desc": "네트워크 vmnic7 링크 단절 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu1:2097)Uplink: 339: vmnic7: link down"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[netCorrelator] 3234567890us: [esx.problem.net.vmnic.linkstate.down] Physical NIC vmnic7 link state is down."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 200,
+        "msg": "[netCorrelator] 3234567990us: [esx.problem.net.redundancy.lost] Network connectivity issues on virtual switch \"vSwitch0\". Redundancy lost."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 300,
+        "msg": "[netCorrelator] 3234568090us: [vob.net.pg.uplink.transition.down] Uplink vmnic7 is down. Failed criteria: 128"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_41",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 51)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu51:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu51:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu51:2097)@BlueScreen: Machine Check Exception on PCPU 51"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_42",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 8)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu8:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu8:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu8:2097)@BlueScreen: Machine Check Exception on PCPU 8"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_43",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 40)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu40:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu40:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu40:2097)@BlueScreen: Machine Check Exception on PCPU 40"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_44",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 21)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu21:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu21:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu21:2097)@BlueScreen: Machine Check Exception on PCPU 21"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_45",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 50)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu50:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu50:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu50:2097)@BlueScreen: Machine Check Exception on PCPU 50"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_46",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 31)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu31:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu31:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu31:2097)@BlueScreen: Machine Check Exception on PCPU 31"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_47",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 59)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu59:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu59:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu59:2097)@BlueScreen: Machine Check Exception on PCPU 59"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_48",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 7)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu7:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu7:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu7:2097)@BlueScreen: Machine Check Exception on PCPU 7"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_49",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 21)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu21:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu21:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu21:2097)@BlueScreen: Machine Check Exception on PCPU 21"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_50",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 22)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu22:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu22:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu22:2097)@BlueScreen: Machine Check Exception on PCPU 22"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_51",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 62)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu62:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu62:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu62:2097)@BlueScreen: Machine Check Exception on PCPU 62"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_52",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 4)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu4:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu4:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu4:2097)@BlueScreen: Machine Check Exception on PCPU 4"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_53",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 47)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu47:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu47:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu47:2097)@BlueScreen: Machine Check Exception on PCPU 47"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_54",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 3)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu3:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu3:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu3:2097)@BlueScreen: Machine Check Exception on PCPU 3"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_55",
+    "desc": "CPU 하드웨어 결함 (MCE) 및 PSOD 발생 (PCPU: 53)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu53:2097)MCA: 4: UE Excp"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10,
+        "msg": "cpu53:2097)System has encountered a Hardware Error"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 50,
+        "msg": "cpu53:2097)@BlueScreen: Machine Check Exception on PCPU 53"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 60,
+        "msg": "cpu0:2049)Starting coredump to disk..."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_56",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 6)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu6:2097)PCPU 6 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu6:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu6:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_57",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 51)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu51:2097)PCPU 51 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu51:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu51:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_58",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 32)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu32:2097)PCPU 32 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu32:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu32:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_59",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 12)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu12:2097)PCPU 12 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu12:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu12:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_60",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 8)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu8:2097)PCPU 8 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu8:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu8:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_61",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 13)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu13:2097)PCPU 13 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu13:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu13:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_62",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 32)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu32:2097)PCPU 32 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu32:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu32:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_63",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 12)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu12:2097)PCPU 12 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu12:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu12:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_64",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 42)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu42:2097)PCPU 42 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu42:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu42:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_65",
+    "desc": "물리 CPU 락업 및 스핀락 데드락 (PCPU: 53)",
+    "logs": [
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 0,
+        "msg": "cpu53:2097)PCPU 53 locked up."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu53:2097)Failed to ack TLB invalidate."
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu53:2097)Spin count exceeded - possible deadlock"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_66",
+    "desc": "하드웨어 전원 단절 및 호스트 비정상 셧다운",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:00:00 | Power Supply 2 | Power Supply Fault | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 12:00:01 | Power Unit | Power Input Lost | Asserted"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 5000,
+        "msg": "[auditCorrelator] 4234567890us: [esx.audit.host.poweroff.reason.unavailable] Host powered off unexpectedly"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_67",
+    "desc": "하드웨어 전원 단절 및 호스트 비정상 셧다운",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:00:00 | Power Supply 2 | Power Supply Fault | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 12:00:01 | Power Unit | Power Input Lost | Asserted"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 5000,
+        "msg": "[auditCorrelator] 4234567890us: [esx.audit.host.poweroff.reason.unavailable] Host powered off unexpectedly"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_68",
+    "desc": "하드웨어 전원 단절 및 호스트 비정상 셧다운",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:00:00 | Power Supply 2 | Power Supply Fault | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 12:00:01 | Power Unit | Power Input Lost | Asserted"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 5000,
+        "msg": "[auditCorrelator] 4234567890us: [esx.audit.host.poweroff.reason.unavailable] Host powered off unexpectedly"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_69",
+    "desc": "하드웨어 전원 단절 및 호스트 비정상 셧다운",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:00:00 | Power Supply 2 | Power Supply Fault | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 12:00:01 | Power Unit | Power Input Lost | Asserted"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 5000,
+        "msg": "[auditCorrelator] 4234567890us: [esx.audit.host.poweroff.reason.unavailable] Host powered off unexpectedly"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_70",
+    "desc": "하드웨어 전원 단절 및 호스트 비정상 셧다운",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:00:00 | Power Supply 2 | Power Supply Fault | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 12:00:01 | Power Unit | Power Input Lost | Asserted"
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 5000,
+        "msg": "[auditCorrelator] 4234567890us: [esx.audit.host.poweroff.reason.unavailable] Host powered off unexpectedly"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_71",
+    "desc": "하드웨어 과열 (Thermal Critical) 경보",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 13:00:00 | Temperature | Upper Critical going high | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu0:2049)ALERT: Hardware temperature threshold exceeded"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_72",
+    "desc": "하드웨어 과열 (Thermal Critical) 경보",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 13:00:00 | Temperature | Upper Critical going high | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu0:2049)ALERT: Hardware temperature threshold exceeded"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_73",
+    "desc": "하드웨어 과열 (Thermal Critical) 경보",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 13:00:00 | Temperature | Upper Critical going high | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu0:2049)ALERT: Hardware temperature threshold exceeded"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_74",
+    "desc": "하드웨어 과열 (Thermal Critical) 경보",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 13:00:00 | Temperature | Upper Critical going high | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu0:2049)ALERT: Hardware temperature threshold exceeded"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_75",
+    "desc": "하드웨어 과열 (Thermal Critical) 경보",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 13:00:00 | Temperature | Upper Critical going high | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu0:2049)ALERT: Hardware temperature threshold exceeded"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_76",
+    "desc": "팬 고장 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 14:00:00 | Fan Block 3 | Transition to Critical | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 14:00:01 | Fan | Redundancy Lost | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_77",
+    "desc": "팬 고장 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 14:00:00 | Fan Block 3 | Transition to Critical | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 14:00:01 | Fan | Redundancy Lost | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_78",
+    "desc": "팬 고장 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 14:00:00 | Fan Block 3 | Transition to Critical | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 14:00:01 | Fan | Redundancy Lost | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_79",
+    "desc": "팬 고장 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 14:00:00 | Fan Block 2 | Transition to Critical | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 14:00:01 | Fan | Redundancy Lost | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_80",
+    "desc": "팬 고장 및 리던던시 상실",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 14:00:00 | Fan Block 3 | Transition to Critical | Asserted"
+      },
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 10,
+        "msg": "2026-08-17 14:00:01 | Fan | Redundancy Lost | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_81",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 3)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu1:2097)Memory Controller Read Error on Channel 3"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu25:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_82",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 1)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu20:2097)Memory Controller Read Error on Channel 1"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu8:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_83",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 1)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu9:2097)Memory Controller Read Error on Channel 1"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu13:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_84",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 2)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu22:2097)Memory Controller Read Error on Channel 2"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu13:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_85",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 1)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu27:2097)Memory Controller Read Error on Channel 1"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu29:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_86",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 2)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu21:2097)Memory Controller Read Error on Channel 2"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu30:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_87",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 1)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu29:2097)Memory Controller Read Error on Channel 1"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu7:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_88",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 1)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu15:2097)Memory Controller Read Error on Channel 1"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu17:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_89",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 0)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu11:2097)Memory Controller Read Error on Channel 0"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu8:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_90",
+    "desc": "Uncorrectable ECC 메모리 에러 및 서비스 Hang (채널: 3)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:10:00 | Memory | Uncorrectable ECC | Asserted"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 100,
+        "msg": "cpu26:2097)Memory Controller Read Error on Channel 3"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 200,
+        "msg": "cpu3:2097)ScsiDeviceIO: performance has deteriorated"
+      },
+      {
+        "file": "vmkernel.log",
+        "delay_ms": 10000,
+        "msg": "cpu0:2049)ALERT: hostd detected to be non-responsive"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_91",
+    "desc": "vSAN 디스크 오프라인 및 에러 (디바이스: naa.6000000000000000000000000007437)",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vsanCorrelator] 5234567890us: [esx.problem.vob.vsan.lsom.diskerror] vSAN disk error detected."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vsanCorrelator] 5234567990us: [esx.problem.vob.vsan.pdl.offline] vSAN device naa.6000000000000000000000000007437 has gone offline."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_92",
+    "desc": "vSAN 디스크 오프라인 및 에러 (디바이스: naa.6000000000000000000000000004912)",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vsanCorrelator] 5234567890us: [esx.problem.vob.vsan.lsom.diskerror] vSAN disk error detected."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vsanCorrelator] 5234567990us: [esx.problem.vob.vsan.pdl.offline] vSAN device naa.6000000000000000000000000004912 has gone offline."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_93",
+    "desc": "vSAN 디스크 오프라인 및 에러 (디바이스: naa.6000000000000000000000000002137)",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vsanCorrelator] 5234567890us: [esx.problem.vob.vsan.lsom.diskerror] vSAN disk error detected."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vsanCorrelator] 5234567990us: [esx.problem.vob.vsan.pdl.offline] vSAN device naa.6000000000000000000000000002137 has gone offline."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_94",
+    "desc": "vSAN 디스크 오프라인 및 에러 (디바이스: naa.6000000000000000000000000007987)",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vsanCorrelator] 5234567890us: [esx.problem.vob.vsan.lsom.diskerror] vSAN disk error detected."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vsanCorrelator] 5234567990us: [esx.problem.vob.vsan.pdl.offline] vSAN device naa.6000000000000000000000000007987 has gone offline."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_95",
+    "desc": "vSAN 디스크 오프라인 및 에러 (디바이스: naa.6000000000000000000000000006874)",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vsanCorrelator] 5234567890us: [esx.problem.vob.vsan.lsom.diskerror] vSAN disk error detected."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vsanCorrelator] 5234567990us: [esx.problem.vob.vsan.pdl.offline] vSAN device naa.6000000000000000000000000006874 has gone offline."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_96",
+    "desc": "PSOD 없는 하드웨어 즉시 재부팅 (Silent Reboot)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:20:00 | Processor | Processor Transition to Non-recoverable | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_97",
+    "desc": "PSOD 없는 하드웨어 즉시 재부팅 (Silent Reboot)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:20:00 | Processor | Processor Transition to Non-recoverable | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_98",
+    "desc": "PSOD 없는 하드웨어 즉시 재부팅 (Silent Reboot)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:20:00 | Processor | Processor Transition to Non-recoverable | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_99",
+    "desc": "PSOD 없는 하드웨어 즉시 재부팅 (Silent Reboot)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:20:00 | Processor | Processor Transition to Non-recoverable | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_100",
+    "desc": "PSOD 없는 하드웨어 즉시 재부팅 (Silent Reboot)",
+    "logs": [
+      {
+        "file": "ipmi_sel",
+        "delay_ms": 0,
+        "msg": "2026-08-17 12:20:00 | Processor | Processor Transition to Non-recoverable | Asserted"
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_101",
+    "desc": "VMFS Lock Corrupt 및 데이터스토어 타임아웃",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vmfsCorrelator] 6234567890us: [esx.problem.vmfs.heartbeat.timedout] VMFS heartbeat timed out."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vmfsCorrelator] 6234567990us: [esx.problem.vmfs.lock.corruptondisk] VMFS lock corrupt on disk."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_102",
+    "desc": "VMFS Lock Corrupt 및 데이터스토어 타임아웃",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vmfsCorrelator] 6234567890us: [esx.problem.vmfs.heartbeat.timedout] VMFS heartbeat timed out."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vmfsCorrelator] 6234567990us: [esx.problem.vmfs.lock.corruptondisk] VMFS lock corrupt on disk."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_103",
+    "desc": "VMFS Lock Corrupt 및 데이터스토어 타임아웃",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vmfsCorrelator] 6234567890us: [esx.problem.vmfs.heartbeat.timedout] VMFS heartbeat timed out."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vmfsCorrelator] 6234567990us: [esx.problem.vmfs.lock.corruptondisk] VMFS lock corrupt on disk."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_104",
+    "desc": "VMFS Lock Corrupt 및 데이터스토어 타임아웃",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vmfsCorrelator] 6234567890us: [esx.problem.vmfs.heartbeat.timedout] VMFS heartbeat timed out."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vmfsCorrelator] 6234567990us: [esx.problem.vmfs.lock.corruptondisk] VMFS lock corrupt on disk."
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_105",
+    "desc": "VMFS Lock Corrupt 및 데이터스토어 타임아웃",
+    "logs": [
+      {
+        "file": "vobd.log",
+        "delay_ms": 0,
+        "msg": "[vmfsCorrelator] 6234567890us: [esx.problem.vmfs.heartbeat.timedout] VMFS heartbeat timed out."
+      },
+      {
+        "file": "vobd.log",
+        "delay_ms": 100,
+        "msg": "[vmfsCorrelator] 6234567990us: [esx.problem.vmfs.lock.corruptondisk] VMFS lock corrupt on disk."
+      }
+    ]
+  }
+]

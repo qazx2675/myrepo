@@ -1,132 +1,69 @@
-# esxi-log-check
+# ESXi 로그점검 (ESXi Log Check) 툴 및 모의 환경
 
-gossh로 수집한(또는 직접 수집하는) 다중 ESXi 호스트 로그를 `esxi_critical_patterns.yaml`
-패턴 레지스트리로 매칭해서, 호스트별 CRITICAL/HIGH 하드웨어 장애 이벤트를 뽑아내는 도구.
+이 프로젝트는 ESXi 장비에서 발생하는 각종 치명적인 로그(MCE, PSOD, APD/PDL, vSAN ESA, NVMeoF 단절 등)를 수집하여 분석하는 도구(`esxi-log-check`)와, 이를 테스트할 수 있는 **ESXi 8.0 이상 모의 환경(Mock Generator)**을 포함합니다.
 
-## 가장 빠른 시작 (원샷 모드)
+## 디렉토리 구조
+- `main.go`, `collect.go`, `parse.go`: 실제 ESXi 장비(혹은 모의 환경)에 SSH로 접속하여 로그를 긁어오고 분석하는 핵심 Go 애플리케이션입니다.
+- `esxi_critical_patterns.yaml`: ESXi 치명적 오류를 판별하는 정규표현식 정의 파일입니다.
+- `internal/mock/`: ESXi가 없는 환경(Rocky Linux 등)에서 ESXi 8.0 이상의 로그를 방대하게 쏟아내고 CLI를 흉내 내는 가짜 환경 스크립트들이 들어 있습니다.
+  - `esxi_mock_logger.go`: 300종 이상의 치명적 에러를 뿜어내는 모의 로그 생성기 (Go 기반).
+  - `localcli_mock.sh`, `esxcli_mock.sh`: ESXi의 하드웨어 정보를 리턴하는 CLI 래퍼.
+- `vendor/`, `go.mod`, `go.sum`: 폐쇄망 오프라인 빌드를 위한 의존성 패키징 폴더.
+
+---
+
+## 1. 폐쇄망 환경 오프라인 빌드 가이드 (`esxi-log-check`)
+
+본 폴더에는 필요한 모든 Go 의존성(`yaml.v3`, `crypto/ssh` 등)이 `vendor/` 디렉토리에 함께 포함되어 있습니다. 따라서 인터넷(외부망) 연결 없이도 빌드가 가능합니다.
+
+1. **Go 설치 확인**: Linux 시스템에 Go가 설치되어 있어야 합니다. (Rocky Linux의 경우 `dnf install golang`)
+2. **프로젝트 다운로드**: Git 등에서 이 폴더를 통째로 압축하여 폐쇄망 서버(Rocky Linux 등)로 옮긴 후 압축을 풉니다.
+3. **빌드 명령어 실행**: 해당 폴더 내부로 이동하여 **`-mod=vendor`** 플래그를 주고 빌드합니다.
+   ```bash
+   cd "ESXi 로그점검"
+   go build -mod=vendor -o esxi-log-check main.go collect.go parse.go
+   ```
+4. **실행**:
+   ```bash
+   ./esxi-log-check -host 192.168.0.58 -user root -pass "password" -mode all
+   ```
+
+---
+
+## 2. 모의 환경 (Mock Environment) 셋업 가이드
+
+ESXi 실장비 없이 `192.168.0.58` (Rocky Linux) 서버를 ESXi인 것처럼 속여 방대한 로그 수집/분석 테스트를 진행할 수 있습니다.
+
+### 2.1 Mock Logger (랜덤 로그 발생기) 빌드 및 배포
+`internal/mock/esxi_mock_logger.go`를 빌드하여 실행하면 `/var/run/log/` 경로에 가짜 ESXi 로그가 무작위로 생성됩니다.
 
 ```bash
-esxi-log-check -w hosts.txt
+cd internal/mock/
+# 의존성이 필요 없는 단일 파일이므로 바로 빌드 가능합니다.
+go build -o esxi_mock_logger esxi_mock_logger.go
+
+# 시스템 바이너리 경로로 이동
+sudo mv esxi_mock_logger /usr/local/bin/
+sudo chmod +x /usr/local/bin/esxi_mock_logger
 ```
 
-`hosts.txt`는 gossh `-w`에 쓰는 것과 완전히 같은 형식(호스트 한 줄에 하나, `#` 주석 가능)이다.
-이 한 줄이면 내부적으로 gossh를 호출해서 `vobd.log`/`vmkernel.log`/`ipmi_sel`을 수집하고,
-패턴 매칭 + aggregate 격상 + correlation_chains + 무증상 리부팅 탐지까지 전부 돌려서
-리포트를 바로 stdout에 출력한다.
-
-gossh 바이너리가 PATH에 없으면 `-gosshPath`로 경로를 지정한다:
+### 2.2 ESXi CLI 래퍼 (localcli, esxcli) 배포
+ESXi의 고유 CLI 명령어를 흉내 내어 가짜 결과를 출력하는 스크립트를 배포합니다.
 
 ```bash
-esxi-log-check -w hosts.txt -gosshPath=/root/go-ssh-pack/gossh
+sudo cp localcli_mock.sh /usr/local/bin/localcli
+sudo cp esxcli_mock.sh /usr/local/bin/esxcli
+sudo chmod +x /usr/local/bin/localcli /usr/local/bin/esxcli
 ```
 
-## 빌드 (다운로드 후 처음 할 일)
-
-이 디렉토리를 통째로 받았다면(git clone 또는 ZIP 다운로드), **개별 `.go` 파일을 지정해서 빌드하는 게 아니라** 이 디렉토리(`.claude/VM 업무/ESXi 로그점검/`) 안에서 `go build .` 형태로 빌드한다. Go는 `go.mod`가 있는 디렉토리를 기준으로 같은 패키지(`package main`)에 속한 `.go` 파일(`main.go`, `collect.go`)을 전부 묶어서 하나의 실행 파일로 만들기 때문에, 파일을 하나씩 골라 빌드할 필요가 없다. (`internal/` 아래 파일들은 `main.go`가 import해서 자동으로 같이 빌드된다.)
-
-이 저장소에는 의존성(`gopkg.in/yaml.v3`)을 미리 내려받아 둔 **`vendor/` 디렉토리를 포함**시켜 두었다. 압축을 풀거나 clone한 직후 **인터넷 연결 없이(air-gapped 환경 포함) 바로 빌드**할 수 있다.
-
-```bash
-# 1. 이 디렉토리로 이동
-cd ".claude/VM 업무/ESXi 로그점검"
-
-# 2. 빌드 — vendor/ 에 있는 의존성을 그대로 사용 (인터넷/go mod tidy 불필요)
-#    "." 는 "현재 디렉토리의 main 패키지 전체(main.go + collect.go)"라는 뜻
-go build -mod=vendor -o esxi-log-check .
-```
-
-빌드가 끝나면 현재 디렉토리에 `esxi-log-check`(Windows는 `esxi-log-check.exe`) 실행 파일이 생긴다. 이후 사용법은 위 "가장 빠른 시작" 절과 동일하게 `./esxi-log-check -w hosts.txt` 형태로 실행하면 된다.
-
-- `-mod=vendor` 플래그를 꼭 붙여야 `vendor/` 안의 의존성을 쓴다. 이 플래그 없이 `go build .`만 실행하면 Go 버전/설정에 따라 인터넷에서 다시 받으려고 시도할 수 있다.
-- 의존성 버전을 올리는 등 `go.mod`를 수정했다면, 인터넷이 되는 환경에서 `go mod vendor`를 다시 실행해 `vendor/`를 최신 상태로 갱신한 뒤 커밋해야 한다.
-- `esxi_critical_patterns.yaml`은 빌드 시 포함되는 게 아니라 **실행 시점에** 같은 디렉토리에서 읽는 파일이다. 실행 파일만 다른 위치로 옮길 경우 `-patterns <path>`로 이 YAML의 경로를 같이 지정해야 한다.
-- `go build`가 아니라 실수로 `go run main.go`만 실행하면 `collect.go`가 빠져서 컴파일 에러가 난다. 반드시 `go run .` 또는 `go build .`처럼 디렉토리 전체를 대상으로 해야 한다.
-
-## 옵션 전체 목록
-
-| 플래그 | 기본값 | 설명 |
-|---|---|---|
-| `-w <hostfile>` | (없음) | **원샷 모드.** gossh `-w`와 동일한 형식의 호스트 목록 파일 하나만 지정하면 내부적으로 gossh를 호출해 `vobd.log`/`vmkernel.log`/`ipmi_sel`을 자동 수집하고 점검+리포트까지 실행. `-input`과 병행 가능(같은 source명은 `-input`이 우선). `-hostlist`를 따로 안 주면 이 파일을 hostlist로도 사용함. |
-| `-gosshPath <path>` | `gossh` | `-w` 모드에서 내부적으로 호출할 gossh 바이너리 경로. PATH에 있으면 이름만으로 충분, 아니면 전체 경로(예: `/root/go-ssh-pack/gossh`) 지정. |
-| `-tailLines <N>` | `300` | `-w` 모드에서 `vobd.log`/`vmkernel.log`를 각각 몇 줄 tail 할지. |
-| `-input <source>=<file>` | (반복 지정) | **수동 모드.** 이미 수집해 둔 gossh 출력 파일을 소스별로 직접 지정. source는 `esxi_critical_patterns.yaml`의 각 패턴 `source:` 필드와 정확히 일치해야 함(예: `vobd.log`, `vmkernel.log`, `ipmi_sel`). 최소 `-w` 또는 `-input` 하나는 필요. |
-| `-patterns <path>` | `esxi_critical_patterns.yaml` | 패턴 레지스트리 YAML 경로. |
-| `-hostlist <path>` | (없음, `-w` 지정 시 그 값 사용) | gossh `-w`에 쓴 것과 같은 호스트 목록 파일. "무응답/미수집 호스트"(`[3-1]`) 계산에 씀. `-input`만 쓰는 수동 모드에서 무응답 탐지를 켜고 싶으면 명시적으로 지정. |
-| `-format <text\|json>` | `text` | 출력 형식. `json`은 Splunk 등 후속 파이프라인 연동용(전체 Finding 필드 포함, 확정/의심/aggregate/체인 근거 다 들어있음). |
-| `-out <path>` | (없음, stdout) | 출력 파일 경로. |
-| `-onlyProblems` | `false` | text 리포트 `[1] 호스트별 요약`에서 완전히 정상(CRITICAL/HIGH/MEDIUM/LOW/SUSPECTED 전부 0)인 호스트는 개별 나열 대신 "N대 생략됨"으로 축약. 수십~수백 대 규모에서 유용. |
-| `-silentRebootGap <duration>` | `30m` | `vmkernel.log` 타임스탬프 공백이 이 이상이면 무증상 리부팅(`CHAIN_SILENT_REBOOT`) 후보로 판단. Go duration 형식(`5m`, `10m`, `1h` 등). 환경별 로그 밀도에 따라 조정 필요 — 기본값 30분은 실측 중 스로틀링 로그(5분 간격) 오탐을 피하기 위해 올린 값. |
-| `-noCorrelate` | `false` | `correlation_chains`(연쇄 이벤트 상관분석)와 무증상 리부팅 탐지를 끔. `aggregate`(빈도 기반 격상)는 이 플래그와 무관하게 항상 적용됨. |
-
-## 사용 예시
-
-**1. 원샷 모드 — 가장 간단, 대부분의 경우 이걸 쓰면 됨:**
-```bash
-esxi-log-check -w hosts.txt -gosshPath=/root/go-ssh-pack/gossh
-```
-
-**2. 원샷 모드 + 문제 있는 호스트만 보기 (수백 대 규모):**
-```bash
-esxi-log-check -w hosts.txt -onlyProblems -out report.txt
-```
-
-**3. 원샷 모드 + JSON 출력 (Splunk 연동):**
-```bash
-esxi-log-check -w hosts.txt -format json -out report.json
-```
-
-**4. 수동 모드 — 이미 수집해 둔 파일이 있을 때:**
-```bash
-mkdir -p collected
-gossh -w hosts.txt -script "tail -300 /var/run/log/vobd.log"     > collected/vobd.txt
-gossh -w hosts.txt -script "tail -300 /var/run/log/vmkernel.log" > collected/vmkernel.txt
-gossh -w hosts.txt -script "localcli hardware ipmi sel list"     > collected/ipmi_sel.txt
-
-esxi-log-check \
-  -hostlist hosts.txt \
-  -input vobd.log=collected/vobd.txt \
-  -input vmkernel.log=collected/vmkernel.txt \
-  -input ipmi_sel=collected/ipmi_sel.txt
-```
-(주의: gossh 자체 플래그는 원격 명령 문자열보다 **앞**에 와야 한다 — `-script "cmd"` 순서, `"cmd" -script`가 아님)
-
-**5. 원샷 + 수동 혼합 — 기본 3종은 자동 수집하고, hostd.log만 수동으로 추가:**
-```bash
-gossh -w hosts.txt -script "tail -300 /var/run/log/hostd.log" > collected/hostd.txt
-esxi-log-check -w hosts.txt -input hostd.log=collected/hostd.txt
-```
-
-**6. 무증상 리부팅 탐지를 더 민감하게(10분 공백부터), correlation은 끄고 aggregate만:**
-```bash
-esxi-log-check -w hosts.txt -silentRebootGap=10m -noCorrelate
-```
-(`-noCorrelate`를 켜도 aggregate는 계속 적용됨을 참고)
-
-## 리포트 구조 (text 포맷)
-
-1. `[0]` 전체 집계 — 대상 호스트 수(findings/수집실패/무응답 분해), 문제/정상호스트 수, 심각도별 합계
-2. `[1]` 호스트별 요약 — 심각도 내림차순 정렬(`-onlyProblems`로 정상 호스트 축약 가능)
-3. `[2]` CRITICAL/HIGH 하이라이트
-4. `[2-1]` 의심(SUSPECTED) 항목 — `requires_prev_line_suffix` 조건 불충족(확정 아님)
-5. `[3]` 수집 실패 호스트 (SSH 실패 등 — "크리티컬 0건"과 명확히 구분)
-6. `[3-1]` 무응답/미수집 호스트
-7. `[4]` 전체 상세 (NOISE 포함, 감사/튜닝용)
-
-## 마일스톤 진행 현황
-
-- **M0** — 패턴 리서치: `esxi_critical_patterns.yaml`(40+ 패턴) + `M0_pattern_research.md`
-- **M1** — SSH Executor(파싱 전용) + Pattern Registry 골격. 실제 gossh 출력으로 검증 완료.
-- **M2** — 다중 호스트 처리는 gossh 자체 워커풀에 위임(설계상 이미 충족)로 판단, Severity 리포트 강화(`[0]` 전체집계, 심각도 정렬, `-onlyProblems`).
-- **M3** — `aggregate`(빈도 기반 격상), `correlation_chains`(연쇄 이벤트 상관분석 4종), 무증상 리부팅 탐지(`CHAIN_SILENT_REBOOT`), IPMI SEL 전용 타임스탬프 파서.
-- **M4(이번)** — `-w` 원샷 모드: 내부적으로 gossh 서브프로세스를 호출해 수집부터 리포트까지 한 번에.
-
-## 알려진 한계 / 확인 필요 (누적)
-
-- gossh 실제 출력 포맷은 실제 ESXi 8.0.3 호스트로 검증했으나(`prefix_regex` 그대로 일치), SSH 실패 시 정확한 에러 문구는 환경마다 다를 수 있음.
-- `aggregate`는 "조건을 만족시킨 순간의 특정 발생"이 아니라 "그 호스트의 해당 패턴 findings 전체"를 격상하는 단순화된 방식.
-- `correlation_chains` 중 `condition`/`then` 타입(자유 텍스트, `CHAIN_FABRIC_WIDE_APD`/`CHAIN_SILENT_REBOOT`)은 YAML 스키마 일반화 대신 ID별로 Go 코드에서 특별 처리.
-- 무증상 리부팅의 부팅 로그 판별 정규식은 VMware 공개 자료 기준 추정치 — 실제 재부팅 로그로 미검증(테스트 환경이 캡처 구간 중 재부팅 이력 없음).
-- IPMI SEL 파서(`MM/DD/YYYY HH:MM:SS`)는 이 환경에 실 BMC 하드웨어가 없어 실측 원본 포맷 미검증 — 컬럼 위치 비의존 방식으로 리스크 완화했으나 재검증 권장.
-- `-w` 모드는 개별 소스 gossh 실행 실패 시 그 소스만 건너뛰고 계속 진행하도록 설계됨(전체 gossh 부재 케이스로 확인됨). 특정 소스 하나만 실패하는 세부 케이스(예: vobd.log는 되고 ipmi_sel만 실패)는 코드 구조상 독립적으로 처리되지만 실측 재현 테스트는 아직 안 함.
-
-패턴은 전부 YAML 외부화되어 있으므로, 새 케이스가 나오면 **재빌드 없이 YAML만 수정**하면 된다.
+### 2.3 모의 테스트 진행 방법
+1. Mock Logger를 실행하여 가짜 에러를 발생시킵니다. `-count` 인자로 발생시킬 복합 시나리오의 갯수를 지정할 수 있습니다. (1~10개 동시 다발적 생성 추천)
+   ```bash
+   # 5개의 서로 다른 장애 상황을 무작위로 혼합하여 발생시킵니다.
+   esxi_mock_logger -count 5
+   ```
+2. 이제 `esxi-log-check` 분석 도구를 해당 Rocky Linux IP로 향하게 하여 실행합니다.
+   ```bash
+   ./esxi-log-check -host 192.168.0.58 -user root -pass "password" -mode all
+   ```
+3. 분석 툴이 `/var/run/log/vmkernel.log` 등을 긁어와 `esxi_critical_patterns.yaml` 룰셋에 기반하여 정확하게 장애를 탐지하고 리포팅하는지 확인합니다.

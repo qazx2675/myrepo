@@ -241,8 +241,8 @@ func WriteText(w io.Writer, r Result, opts TextOptions) {
 func printFinding(w io.Writer, f match.Finding) {
 	fmt.Fprintf(w, "  [%s] %s / %s @ %s (source=%s line=%d)\n", f.Severity, f.PatternID, f.Category, f.Host, f.Source, f.LineNo)
 	fmt.Fprintf(w, "    %s\n", f.Line)
-	if f.Hint != "" {
-		fmt.Fprintf(w, "    hint: %s\n", f.Hint)
+	if f.Recommendation != "" {
+		fmt.Fprintf(w, "    hint: %s\n", f.Recommendation)
 	}
 	if f.DynamicNote != "" {
 		fmt.Fprintf(w, "    dynamic: %s\n", f.DynamicNote)

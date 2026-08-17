@@ -75,7 +75,7 @@ type PatternDef struct {
 	Severity string `yaml:"severity"` // CRITICAL/HIGH/MEDIUM/LOW/CLEAR/DYNAMIC
 	Source   string `yaml:"source"`
 	Regex    string `yaml:"regex"`
-	Hint     string `yaml:"hint"`
+	Recommendation string `yaml:"recommendation"`
 	Ref      string `yaml:"ref"`
 
 	Extract        map[string]string     `yaml:"extract"`

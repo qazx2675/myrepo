@@ -2,6 +2,9 @@
 package gossh
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
 	"bufio"
 	"io"
 	"regexp"
@@ -207,4 +210,14 @@ func matchAny(text string, patterns []*regexp.Regexp) (*regexp.Regexp, bool) {
 		}
 	}
 	return nil, false
+}
+
+// RunCommand is used by -test-mock to execute esxi_mock_logger remotely.
+func RunCommand(gosshPath, hostFile, cmd string) {
+	c := exec.Command(gosshPath, "-w", hostFile, "-script", cmd)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "[RunCommand] gossh failed: %v\n", err)
+	}
 }
