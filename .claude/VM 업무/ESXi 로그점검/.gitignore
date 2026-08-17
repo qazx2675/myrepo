@@ -1,2 +1,9 @@
+mock_test_hosts.txt
+real_hosts.txt
+test_hosts.txt
+web_target_host.txt
+*.html
+*.csv
+*.log
+server.log
 esxi-log-check
-*.exe

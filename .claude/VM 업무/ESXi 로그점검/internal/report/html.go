@@ -11,6 +11,81 @@ import (
 
 // WriteHTML은 브라우저에서 보기 좋은 HTML 형식의 리포트를 출력한다.
 func WriteHTML(w io.Writer, r Result, opts TextOptions) {
+	buttonHtml := ""
+	if opts.IsServerMode {
+		buttonHtml = `
+		<div>
+			<button id="updateBtn" class="btn-update">테스트케이스 10개 업데이트</button>
+			<button id="updateAllBtn" class="btn-update" style="margin-left: 10px; background-color: #9b59b6;">모든 케이스 업데이트</button>`
+
+		if opts.IsMockMode {
+			buttonHtml += `
+			<button id="toggleMockBtn" class="btn-update" style="margin-left: 10px; background-color: #e74c3c;">실제 로그로 돌아가기</button>`
+		} else {
+			buttonHtml += `
+			<button id="toggleMockBtn" class="btn-update" style="margin-left: 10px; background-color: #34495e;">생성된 모의 로그만 보기</button>`
+		}
+
+		buttonHtml += `
+			<span id="updateStatus" style="margin-left: 10px; font-weight: bold;"></span>
+		</div>
+		<script>
+		function triggerUpdate(url, btn1, btn2, status) {
+			if(btn1) btn1.disabled = true;
+			if(btn2) btn2.disabled = true;
+			status.textContent = "명령어 실행 중... (시간이 다소 소요될 수 있습니다)";
+			status.style.color = "#f39c12";
+			
+			fetch(url, { method: 'POST' })
+				.then(res => res.json())
+				.then(data => {
+					if(data.status === 'ok') {
+						status.textContent = "명령어 실행 완료! 새로고침 중...";
+						status.style.color = "#2ecc71";
+						setTimeout(() => location.href = '/?mock=true', 1000);
+					} else {
+						status.textContent = "오류 발생: " + data.message;
+						status.style.color = "#e74c3c";
+						if(btn1) btn1.disabled = false;
+						if(btn2) btn2.disabled = false;
+					}
+				})
+				.catch(err => {
+					status.textContent = "네트워크 오류: " + err;
+					status.style.color = "#e74c3c";
+					if(btn1) btn1.disabled = false;
+					if(btn2) btn2.disabled = false;
+				});
+		}
+
+		document.getElementById('updateBtn').addEventListener('click', function() {
+			var status = document.getElementById('updateStatus');
+			var btnAll = document.getElementById('updateAllBtn');
+			triggerUpdate('/api/update', this, btnAll, status);
+		});
+
+		document.getElementById('updateAllBtn').addEventListener('click', function() {
+			var status = document.getElementById('updateStatus');
+			var btn10 = document.getElementById('updateBtn');
+			triggerUpdate('/api/update?all=true', this, btn10, status);
+		});
+
+		document.getElementById('toggleMockBtn').addEventListener('click', function() {
+			var isMock = %t;
+			if (isMock) {
+				location.href = '/';
+			} else {
+				location.href = '/?mock=true';
+			}
+		});
+		</script>`
+	}
+
+	formattedButtonHtml := ""
+	if buttonHtml != "" {
+		formattedButtonHtml = fmt.Sprintf(buttonHtml, opts.IsMockMode)
+	}
+
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -43,11 +118,21 @@ func WriteHTML(w io.Writer, r Result, opts TextOptions) {
 	.bg-SUSPECTED { background-color: #34495e; }
 	.finding-details { background: #f9f9f9; padding: 10px; border: 1px solid #e0e0e0; border-radius: 4px; margin-top: 5px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word;}
 	.recommendation { margin-top: 10px; color: #0056b3; font-weight: bold; }
+	.role-engineer { margin-top: 10px; color: #c0392b; font-weight: bold; background: #fadbd8; display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+	.role-operator { margin-top: 10px; color: #2980b9; font-weight: bold; background: #d6eaf8; display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+	.btn-update { padding: 10px 20px; font-size: 14px; font-weight: bold; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s; }
+	.btn-update:hover { background-color: #2980b9; }
+	.btn-update:disabled { background-color: #95a5a6; cursor: not-allowed; }
 </style>
 </head>
 <body>
+<div style="margin-bottom: 15px; margin-left: 10px;">
+	%s
+</div>
 <div class="container">
-	<h1>ESXi 크리티컬 로그 점검 리포트</h1>
+	<div>
+		<h1>ESXi 크리티컬 로그 점검 리포트</h1>
+	</div>
 	<p><strong>생성 시간:</strong> %s</p>
 	<p><strong>대상 호스트:</strong> %d대 (Findings 있음: %d / 수집실패: %d / 무응답: %d)</p>
 
@@ -75,7 +160,7 @@ func WriteHTML(w io.Writer, r Result, opts TextOptions) {
 			</tr>
 		</thead>
 		<tbody>
-`, r.GeneratedAt, r.TargetHostCount, len(r.HostSummary), r.FailedHostCount, len(r.SilentHosts),
+`, formattedButtonHtml, r.GeneratedAt, r.TargetHostCount, len(r.HostSummary), r.FailedHostCount, len(r.SilentHosts),
 		r.Total.Critical, r.Total.High, r.Total.Medium, r.Total.Low, r.Total.Clear)
 
 	hosts := make([]string, 0, len(r.HostSummary))
@@ -157,6 +242,12 @@ func renderFindingHTML(w io.Writer, f match.Finding) {
 	fmt.Fprintf(w, `<div><span class="badge bg-%s">%s</span> <strong>%s</strong> (%s) @ %s</div>`, f.Severity, f.Severity, f.PatternID, f.Category, f.Host)
 	fmt.Fprintf(w, `<div style="margin-top: 8px; font-size: 0.85em; color: #555;">소스: %s (라인 %d)</div>`, f.Source, f.LineNo)
 	fmt.Fprintf(w, `<div class="finding-details">%s</div>`, htmlEscape(f.Line))
+	role, action := GetRoleAndAction(f.Category)
+	if role == "엔지니어 확인 영역" {
+		fmt.Fprintf(w, `<div class="role-engineer">[%s] %s</div>`, role, action)
+	} else {
+		fmt.Fprintf(w, `<div class="role-operator">[%s] %s</div>`, role, action)
+	}
 	if f.Recommendation != "" {
 		fmt.Fprintf(w, `<div class="recommendation">조치 권고: %s</div>`, htmlEscape(f.Recommendation))
 	}
