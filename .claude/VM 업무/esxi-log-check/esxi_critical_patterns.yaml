@@ -1,0 +1,775 @@
+# esxi_critical_patterns.yaml: ESXi 크리티컬/하드웨어 장애 로그 패턴 레지스트리 (M0 산출물)
+# 주의: 모든 regex는 Go RE2 문법 기준 — lookahead/lookbehind/backreference 사용 금지
+# severity: CRITICAL > HIGH > MEDIUM > LOW > CLEAR(복구마커) > NOISE(오탐필터)
+
+version: "0.1-draft"
+updated: "2026-08-12"
+status: "1차 조사본 — 실환경 vm-support 번들로 검증 필요 (verification_gaps 참조)"
+
+# ---------------------------------------------------------------------------
+# gossh 출력 파싱 규칙
+# ---------------------------------------------------------------------------
+gossh:
+  # gossh 출력 형태: "esxi01 : 2026-06-09T14:10:13.374Z In(14) vobd[2097669]: ..."
+  # 로그 라인 자체에 ':' 가 다수 포함되므로 반드시 "첫 구분자"만 잘라낸다.
+  prefix_regex: '^(?P<host>[^\s:]+)\s*:\s?(?P<line>.*)$'
+
+  # 구분자 변형 대응 (환경/버전에 따라 다를 수 있어 fallback 순서로 시도)
+  prefix_fallbacks:
+    - '^(?P<host>[^\s:]+):\s(?P<line>.*)$'
+    - '^\[(?P<host>[^\]]+)\]\s*(?P<line>.*)$'
+
+  # prefix 파싱 실패 라인 처리: "carry"(직전 호스트에 귀속) | "drop" | "unknown"
+  orphan_line_policy: "carry"
+
+  # 호스트 단위 수집 실패 판정 (분석 대상에서 제외하고 별도 리포트)
+  collection_failure_patterns:
+    - 'ssh: connect to host .* (Connection refused|No route to host|timed out)'
+    - 'Permission denied \(publickey'
+    - 'No such file or directory'
+    - 'Host key verification failed'
+    - 'kex_exchange_identification'
+    - 'no matching (key exchange method|host key type|cipher) found'   # 구형 ESXi SSH 호환성
+
+  # -w 옵션 host list 파일 파싱
+  host_list:
+    comment_prefix: "#"
+    strip_inline_comment: true
+    allow_blank: true
+
+# ---------------------------------------------------------------------------
+# 수집 대상 로그
+# ---------------------------------------------------------------------------
+sources:
+  - path: "/var/run/log/vmkernel.log"
+    aliases: ["/var/log/vmkernel.log"]
+    priority: 1
+  - path: "/var/run/log/vmkwarning.log"     # vmkernel의 WARNING/ALERT 요약 — 1차 스크리닝에 유리
+    priority: 1
+  - path: "/var/run/log/vobd.log"           # VMkernel Observation — 상태전이 이벤트가 정형화되어 매칭 정확도 최상
+    priority: 1
+  - path: "/var/run/log/hostd.log"
+    priority: 2
+  - path: "/var/run/log/vmksummary.log"     # 부팅/종료/uptime 히스토리 — 비정상 재부팅 상관분석용
+    priority: 2
+  - path: "/var/run/log/sensord.log"        # 온도/팬/전원 센서, IPMI/CIM 폴링
+    priority: 2
+  - path: "/var/log/ipmi_sel"               # 존재 시
+    priority: 3
+  - cmd: "localcli hardware ipmi sel list"  # 로그가 끊긴 무증상 리부팅(silent failure) 규명의 핵심
+    priority: 1
+    note: "PSOD/코어덤프 없이 리부팅된 케이스는 SEL에만 근거가 남음"
+  - cmd: "esxcli storage core device list"
+    priority: 3
+  - cmd: "esxcli network nic list"
+    priority: 3
+  - cmd: "vim-cmd hostsvc/hostsummary"      # hardware health status
+    priority: 3
+
+# ---------------------------------------------------------------------------
+# 패턴 정의
+# ---------------------------------------------------------------------------
+patterns:
+
+  # ===== CPU / 메모리 하드웨어 (최우선) =====
+  - id: MCE_PSOD_BLUESCREEN
+    category: CPU_MCE
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: '@BlueScreen:\s*Machine Check Exception on PCPU\s*(?P<pcpu>\d+)'
+    hint: "CPU가 정정 불가 하드웨어 결함 감지 → PSOD. 즉시 하드웨어 벤더 에스컬레이션. 반복 시 pcpu 번호 동일 여부 확인(동일하면 특정 CPU/소켓 의심)"
+    ref: "Lenovo LP2176 / KB343033"
+
+  - id: MCE_HARDWARE_ERROR_MSG
+    category: CPU_MCE
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'System has encountered a Hardware Error'
+    hint: "MCE 동반 메시지. 단독 등장해도 CRITICAL 취급"
+
+  - id: MCA_BANK_REPORT
+    category: CPU_MCE
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'MCA:\s*(?P<bank>\d+):\s*(?P<type>CE|UE)\s+(?P<mode>Poll|Excp)'
+    escalate_when: { type: "UE" , to: CRITICAL }
+    hint: "CE=정정됨(누적 시 위험), UE=정정 불가. 동일 bank 반복 발생이 핵심 신호"
+
+  - id: MEMORY_CONTROLLER_ERROR
+    category: MEMORY
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Memory Controller (Read|Write|Scrubbing|Scrub) Error on Channel\s*(?P<ch>\d+)'
+    hint: "정정가능 메모리 에러 대량 발생 시 호스트 무응답/스토리지 지연/CPU 락업 → hostd hang으로 연쇄. 채널 번호로 DIMM 위치 추적"
+    ref: "Broadcom KB373203"
+
+  - id: IPMI_ECC_UNCORRECTABLE
+    category: SENSOR_IPMI
+    severity: CRITICAL
+    source: ipmi_sel
+    regex: '(Uncorrectable ECC|Uncorrectable Memory Error|Memory UE)'
+    hint: "DIMM 교체 대상. SEL 레코드 타임스탬프와 vmkernel.log 중단 시점 대조"
+
+  - id: IPMI_ECC_CORRECTABLE
+    category: SENSOR_IPMI
+    severity: MEDIUM
+    source: ipmi_sel
+    regex: '(Correctable ECC|Correctable Memory Error)'
+    aggregate: { window: "24h", count: 10, escalate_to: CRITICAL }
+    hint: "단발은 정상 범주. 임계 초과 시 DIMM 열화 신호"
+
+  - id: IPMI_PROC_NONRECOVERABLE
+    category: SENSOR_IPMI
+    severity: CRITICAL
+    source: ipmi_sel
+    regex: 'Processor Transition to Non-recoverable'
+    hint: "PSOD/코어덤프 없이 리부팅된 케이스의 대표 근거. 하드웨어 레벨에서 즉시 halt/reset되어 ESXi 로그는 그냥 끊김"
+    ref: "Broadcom KB421433"
+
+  # ===== PSOD / 커널 패닉 =====
+  - id: PSOD_GENERIC
+    category: PSOD
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: '@BlueScreen:'
+    hint: "PSOD 발생. 뒤따르는 스택트레이스를 함께 캡처해야 원인 분류 가능"
+
+  - id: PSOD_PCPU_LOCKUP
+    category: PSOD
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'PCPU\s*(?P<pcpu>\d+)\s*locked up'
+    hint: "물리 CPU가 메모리 페이지테이블(TLB) 정리 실패. 하드웨어 의심 경로"
+
+  - id: PSOD_TLB_INVALIDATE
+    category: PSOD
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Failed to ack TLB invalidate'
+    ref: "KB343033"
+
+  - id: PSOD_SPIN_COUNT
+    category: PSOD
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Spin count exceeded.*possible deadlock'
+    hint: "스핀락 데드락. 스택이 매번 동일하면 SW, 매번 다르면 HW 의심"
+
+  - id: PSOD_EXCEPTION
+    category: PSOD
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: '(#GP Exception\(13\)|#PF Exception (type )?14|Exception type (?P<etype>\d+) in world)'
+    hint: "13=General Protection Fault, 14=Page Fault, 18(#MC)=Machine Check"
+
+  - id: PSOD_PANIC
+    category: PSOD
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: '(PANIC bora/vmkernel|BlueScreen: NOT_IMPLEMENTED bora/vmkernel|Usage error in dlmalloc)'
+
+  - id: PSOD_COREDUMP
+    category: PSOD
+    severity: HIGH
+    source: vmkernel.log
+    regex: '(Starting coredump to disk|Dumping using slot \d+ of \d+)'
+    hint: "PSOD 확정 마커. zdump 수집 여부 확인"
+
+  # ===== 전원 / 비정상 재부팅 =====
+  - id: POWEROFF_UNEXPECTED
+    category: POWER
+    severity: CRITICAL
+    source: vobd.log
+    regex: 'esx\.audit\.host\.poweroff\.reason\.unavailable'
+    hint: "커널에러/의도적 재부팅/셧다운이 아닌 전원 차단 → 전원 손실, PSU/부품 결함, 과열. BMC SEL에서 Power Input Lost / Power Supply Fault / Critical Temperature 대조"
+    ref: "Broadcom KB317245 / KB432839"
+
+  - id: HOSTD_POWEROFF_EVENT
+    category: POWER
+    severity: HIGH
+    source: hostd.log
+    regex: 'Host had been powered off'
+
+  - id: IPMI_POWER_FAULT
+    category: SENSOR_IPMI
+    severity: CRITICAL
+    source: ipmi_sel
+    regex: '(Power Input Lost|Power Supply.*(Fault|Failure)|Power Unit.*(Failure|Redundancy Lost))'
+
+  - id: IPMI_THERMAL_CRITICAL
+    category: SENSOR_IPMI
+    severity: CRITICAL
+    source: ipmi_sel
+    regex: 'Temperature.*(Transition to (Critical|Non-recoverable)|Upper Critical going high|Lower Critical going low)'
+
+  - id: IPMI_FAN_FAULT
+    category: SENSOR_IPMI
+    severity: HIGH
+    source: ipmi_sel
+    regex: 'Fan.*(Transition to Critical|Transition to Off Line|Redundancy Lost)'
+
+  - id: IPMI_VOLTAGE_FAULT
+    category: SENSOR_IPMI
+    severity: HIGH
+    source: ipmi_sel
+    regex: 'Voltage.*(Limit Exceeded|Transition to Critical)'
+
+  - id: IPMI_BUS_FATAL
+    category: SENSOR_IPMI
+    severity: CRITICAL
+    source: ipmi_sel
+    regex: '(Bus Uncorrectable Error|Bus Fatal Error|Critical Interrupt.*Fatal)'
+
+  - id: IPMI_SLOT_CABLE_CRITICAL
+    category: SENSOR_IPMI
+    severity: HIGH
+    source: ipmi_sel
+    regex: '(Slot/Connector Transition to Critical|Cable/Interconnect Transition to Critical|Add-in Card Install Error)'
+
+  # ===== 스토리지: PDL (영구 손실) =====
+  - id: STORAGE_PDL
+    category: STORAGE_PDL
+    severity: CRITICAL
+    source: vobd.log
+    regex: '(esx\.problem|vob)\.scsi\.device\.state\.permanentloss'
+    extract: { device: 'naa\.[0-9a-fA-F]+|mpx\.vmhba[\w:.]+|eui\.[0-9a-fA-F]+' }
+    hint: "디바이스 제거 또는 영구 접근 불가. 디스크/LUN 물리 장애 또는 언프리젠트"
+
+  - id: STORAGE_CONNECTIVITY_LOST
+    category: STORAGE_PATH
+    severity: HIGH
+    source: vobd.log
+    regex: 'esx\.problem\.storage\.connectivity\.lost'
+
+  - id: SCSI_PATH_DEAD
+    category: STORAGE_PATH
+    severity: HIGH
+    source: vobd.log
+    regex: 'vob\.scsi\.scsipath\.pathstate\.dead'
+    extract: { path: 'vmhba\d+:C\d+:T\d+:L\d+' }
+    aggregate: { window: "5m", count: 2, escalate_to: CRITICAL }
+    hint: "서로 다른 vmhba가 같은 ms 구간에 동시 dead → 상위 공유구간(SAN 스위치/어레이 컨트롤러/PSU) 장애 신호"
+
+  # ===== 스토리지: APD =====
+  - id: STORAGE_APD_START
+    category: STORAGE_APD
+    severity: HIGH
+    source: vobd.log
+    regex: '(esx\.problem|vob)\.storage\.apd\.start'
+
+  - id: STORAGE_APD_TIMEOUT
+    category: STORAGE_APD
+    severity: CRITICAL
+    source: vobd.log
+    regex: '(esx\.problem|vob)\.storage\.apd\.timeout'
+    hint: "기본 140초 APD 타임아웃 경과 → I/O fast fail. 호스트가 vCenter에서 Not Responding으로 빠지는 전형 경로"
+
+  - id: STORAGE_APD_HANDLER
+    category: STORAGE_APD
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'StorageApdHandler(Ev)?:.*(All Paths Down|APD Handle Created)'
+
+  - id: STORAGE_APD_EXIT
+    category: STORAGE_APD
+    severity: CLEAR
+    source: vobd.log
+    regex: '(esx\.clear|vob)\.storage\.apd\.exit'
+    hint: "복구 마커. start와 페어링해 APD 지속시간 계산 → 짧은 flapping 반복이면 물리계층/NFS GETATTR 의심"
+
+  - id: NMP_FAST_PATH_BLOCKED
+    category: STORAGE_PATH
+    severity: HIGH
+    source: vmkernel.log
+    regex: '(awaiting fast path state update|state in doubt; requested fast path state update)'
+
+  # ===== 스토리지: SCSI sense =====
+  - id: SCSI_CMD_FAILED
+    category: STORAGE_SCSI
+    severity: DYNAMIC          # sense_key_map으로 결정
+    source: vmkernel.log
+    # 2026-08-12 실측(ESXi 8.0.3): "...Failed:"와 "H:0x.. sense data:.."가 실제로는
+    # 같은 줄이 아니라 서로 다른 두 줄로 출력됨(nmp_ThrottleLogForDevice:3893 / :3898).
+    # 그래서 "failed " 리터럴 요구를 정규식에서 뺐고, 대신 requires_prev_line_suffix로
+    # "직전 줄이 Failed:로 끝나는지"를 matcher.go에서 별도 확인한다.
+    # 직전 줄 조건까지 만족 -> 확정(CRITICAL/HIGH 등 정상 심각도).
+    # 이 정규식만 만족(직전 줄 조건 불충족) -> match.Finding.Suspected=true로 표시,
+    # 리포트 [2-1] 의심(SUSPECTED) 섹션에 별도로 나옴.
+    regex: 'H:0x(?P<h>[0-9a-fA-F]+) D:0x(?P<d>[0-9a-fA-F]+) P:0x(?P<p>[0-9a-fA-F]+)\s+(Valid|Possible) sense data: 0x(?P<sk>[0-9a-fA-F]+) 0x(?P<asc>[0-9a-fA-F]+) 0x(?P<ascq>[0-9a-fA-F]+)'
+    requires_prev_line_suffix: "Failed:"
+    hint: "sense key로 심각도 분기. 0x3/0x4는 물리 미디어/하드웨어 장애 직결"
+
+  - id: SCSI_MEDIUM_ERROR_LBA
+    category: STORAGE_SCSI
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Medium Error, LBA:\s*(?P<lba>\d+)'
+    hint: "해당 LBA 판독 불가 — 디바이스가 정정 실패. 디스크 교체 판단 근거"
+
+  - id: SCSI_PERF_DETERIORATED
+    category: STORAGE_SCSI
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'ScsiDeviceIO:.*performance has deteriorated'
+    aggregate: { window: "1h", count: 5, escalate_to: HIGH }
+    hint: "메모리 컨트롤러 에러 → CPU 점유 → 스토리지 지연 연쇄의 중간 지표로 자주 등장"
+
+  # ===== VMFS / vSAN =====
+  - id: VMFS_HEARTBEAT_TIMEOUT
+    category: VMFS
+    severity: HIGH
+    source: vobd.log
+    regex: 'esx\.problem\.vmfs\.heartbeat\.timedout'
+
+  - id: VMFS_LOCK_CORRUPT
+    category: VMFS
+    severity: CRITICAL
+    source: vobd.log
+    regex: 'esx\.problem\.vmfs\.lock\.corruptondisk'
+
+  - id: VSAN_DISK_ERROR
+    category: VSAN
+    severity: CRITICAL
+    source: vobd.log
+    regex: 'esx\.problem\.vob\.vsan\.lsom\.diskerror'
+
+  - id: VSAN_PDL_OFFLINE
+    category: VSAN
+    severity: CRITICAL
+    source: vobd.log
+    regex: 'esx\.problem\.vob\.vsan\.pdl\.offline'
+
+  - id: VSAN_NET_REDUNDANCY
+    category: VSAN
+    severity: HIGH
+    source: vobd.log
+    regex: 'esx\.problem\.vsan\.net\.redundancy\.(reduced|lost)'
+
+  - id: VSAN_THRESHOLD
+    category: VSAN
+    severity: MEDIUM
+    source: vobd.log
+    regex: 'esx\.problem\.(vob\.vsan\.lsom\.componentthreshold|vsan\.lsom\.congestionthreshold)'
+
+  # ===== 네트워크 =====
+  - id: NET_VMNIC_LINK_DOWN
+    category: NETWORK
+    severity: HIGH
+    source: vobd.log
+    regex: '(esx\.problem|vob)\.net\.vmnic\.linkstate\.down'
+    extract: { vmnic: 'vmnic\d+|vusb\d+' }
+    aggregate: { window: "1h", count: 4, escalate_to: CRITICAL, label: "link flapping" }
+    hint: "flapping 반복은 SFP/케이블/드라이버/펌웨어 열화 신호"
+
+  - id: NET_UPLINK_TRANSITION_DOWN
+    category: NETWORK
+    severity: HIGH
+    source: vobd.log
+    regex: 'vob\.net\.(pg|dvport)\.uplink\.transition\.down.*Failed criteria:\s*(?P<criteria>\d+)'
+    hint: "criteria는 비트마스크(예: 130 = 2 + 128). 128 = 드라이버가 링크다운 보고 → 드라이버/펌웨어/SFP/케이블/스위치포트 점검 대상"
+    escalate_when: { uplinks_up: 0, to: CRITICAL }
+
+  - id: NET_ZERO_UPLINK
+    category: NETWORK
+    severity: CRITICAL
+    source: vobd.log
+    regex: '(?P<up>\d+) uplinks up'
+    match_condition: "up == 0"
+    hint: "가용 업링크 0 — 포트그룹 전면 통신 단절"
+
+  - id: NET_DVPORT_CONNECTIVITY_LOST
+    category: NETWORK
+    severity: CRITICAL
+    source: vobd.log
+    regex: 'esx\.problem\.net\.dvport\.connectivity\.lost'
+
+  - id: NET_LACP_UPLINK_DOWN
+    category: NETWORK
+    severity: HIGH
+    source: vobd.log
+    regex: '(esx\.problem|vob)\.net\.lacp\.uplink\.transition\.down'
+    hint: "LAG에서 업링크 이탈. 스위치측 config mismatch 또는 NIC 하드웨어 이슈"
+
+  - id: NET_REDUNDANCY_LOST
+    category: NETWORK
+    severity: HIGH
+    source: vobd.log
+    regex: 'esx\.problem\.net\.(redundancy\.lost|redundancy\.degraded)'
+
+  - id: NET_MSIX_ALLOC_FAIL
+    category: NETWORK
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'failed to allocate \d+ MSIX interrupts'
+    hint: "NIC 다수 장착 서버에서 vmnic 미인식. lspci엔 보이나 esxcfg-nics -l엔 없음"
+
+  # ===== 서비스 행 =====
+  - id: HOSTD_NONRESPONSIVE
+    category: SERVICE_HANG
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'ALERT:\s*hostd detected to be non-responsive'
+    hint: "메모리 컨트롤러 에러 → CPU 락업 → 스토리지 I/O 지연 → hostd hang 체인의 종착점"
+
+  - id: WATCHDOG_RESTART
+    category: SERVICE_HANG
+    severity: MEDIUM
+    source: watchdog.log
+    regex: '(Watchdog.*(respawn|restart)|Detected .* exited)'
+
+  - id: USERWORLD_ZDUMP
+    category: SERVICE_HANG
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'UserDump:.*Dumping cartel'
+    extract: { pcpu: 'cpu(?P<n>\d+):' }
+    hint: "userworld 크래시. 여러 장애에서 동일 물리 CPU가 반복 등장하면 CPU/소켓 하드웨어 의심"
+
+# ---------------------------------------------------------------------------
+# SCSI sense key → 심각도 매핑 (SCSI_CMD_FAILED 패턴에서 사용)
+# ---------------------------------------------------------------------------
+  - id: ESX8_NVMEOF_TIMEOUT
+    category: STORAGE_NVME
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'NVMe-oF: Timeout for command'
+    recommendation: "NVMe-oF 타겟과의 통신 지연/타임아웃. 네트워크 스위치 구성(RoCE/TCP) 및 스토리지 패브릭 부하 점검."
+
+  - id: ESX8_NVMEOF_DISCONNECT
+    category: STORAGE_NVME
+    severity: CRITICAL
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.nvmeof\.disconnect\]'
+    recommendation: "NVMe-oF 연결이 단절되었습니다. 컨트롤러 가용성, 패브릭 상태 점검 요망."
+
+  - id: ESX8_TRUST_AUTHORITY_ERR
+    category: SECURITY
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vta\.attestation\.failed\]'
+    recommendation: "vSphere Trust Authority 증명 실패. KMS 및 Key Provider 상태, 호스트 보안 설정 재확인."
+
+  - id: ESX8_SMARTNIC_FW_CRASH
+    category: NETWORK_DPU
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'SmartNIC Firmware crash detected'
+    recommendation: "DPU 펌웨어 크래시 발생. DPU 리부팅 또는 최신 펌웨어/드라이버 업데이트 필요."
+
+  - id: ESX8_SECURE_BOOT_VIOLATION
+    category: SECURITY
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Secure Boot violation detected'
+    recommendation: "서명되지 않은 VIB 또는 펌웨어 로드 시도됨. 호스트 침해 의심 또는 무결성 위반, VIB 서명 재확인."
+
+  - id: ESX8_VSAN_ESA_CAPACITY
+    category: VSAN_ESA
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vsan\.esa\.capacity\.threshold\]'
+    recommendation: "vSAN ESA 스토리지 풀 용량 임계치 초과. 스토리지 노드 증설 또는 데이터 정리."
+
+  - id: ESX8_CXL_MEM_ERR
+    category: HARDWARE
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'CXL Memory Error: Uncorrectable'
+    recommendation: "CXL 메모리 모듈 하드웨어 에러. 해당 CXL 장치 교체 요망."
+
+  - id: ESX8_PCIE_AER_FATAL
+    category: HARDWARE
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'PCIe AER: Fatal error occurred'
+    recommendation: "PCIe Advanced Error Reporting Fatal 발생. 마더보드/라이저 카드/PCIe 장치 점검."
+
+  - id: ESX8_VMM_GPF
+    category: VM_EXEC
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'VMM: General Protection Fault'
+    recommendation: "가상 머신 모니터(VMM) GPF 크래시. VMWare vSphere 패치 적용 또는 호스트 재부팅 권장."
+
+  - id: ESX8_NVM_WEAR_OUT
+    category: HARDWARE
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.nvme\.wearout\]'
+    recommendation: "NVMe 드라이브 수명(TBW) 임계치 도달. 데이터 유실 전 즉각적인 디스크 교체 요망."
+
+  - id: ESX8_RDMA_ROCE_LINK
+    category: NETWORK_RDMA
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'RDMA RoCE link down'
+    recommendation: "RoCE/RDMA 링크 다운. 패브릭 스위치 PFC/ECN 설정 및 포트 상태 점검."
+
+  - id: ESX8_HOSTD_MEM_LEAK
+    category: DAEMON
+    severity: HIGH
+    source: hostd.log
+    regex: 'Memory leak detected in hostd'
+    recommendation: "hostd 메모리 릭 한계점 도달. services.sh restart 실행 후 임시 조치, ESXi 패치 적용."
+
+  - id: ESX8_VMAUTH_FAILED
+    category: SECURITY
+    severity: MEDIUM
+    source: hostd.log
+    regex: 'Authentication failed for user'
+    recommendation: "지속적인 인증 실패. 무차별 대입 공격(Brute-force) 의심. vCenter 및 ESXi 접근 통제 확인."
+
+  - id: ESX8_NUMA_MISALIGNED
+    category: PERFORMANCE
+    severity: LOW
+    source: vmkernel.log
+    regex: 'NUMA node alignment suboptimal'
+    recommendation: "VM NUMA 토폴로지 불균형으로 성능 저하 가능성. VM vNUMA 및 CPU/Mem 할당 재검토."
+
+  - id: ESX8_FIBRE_CHANNEL_LIP
+    category: STORAGE_FC
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'Fibre Channel LIP Reset occurred'
+    recommendation: "FC 패브릭 초기화 이벤트(LIP). SAN 스위치 조닝(Zoning) 문제나 케이블 불안정 점검."
+
+  - id: ESX8_NFS_STALE_HANDLE
+    category: STORAGE_NFS
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'NFS: Stale file handle'
+    recommendation: "NFS 서버와의 세션/핸들 만료. 백엔드 NAS 재부팅 여부 확인 후 데이터스토어 재연결."
+
+  - id: ESX8_ISCSI_LOGIN_FAIL
+    category: STORAGE_ISCSI
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.iscsi\.login\.failed\]'
+    recommendation: "iSCSI 타겟 로그인 실패. CHAP 인증, 포트 3260 오픈 여부, 타겟 LUN 맵핑 확인."
+
+  - id: ESX8_VVOL_BIND_FAIL
+    category: STORAGE_VVOL
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vvol\.bind\.failed\]'
+    recommendation: "vVol 바인딩 실패. VASA Provider 상태 점검 및 재등록 필요."
+
+  - id: ESX8_SDDC_CERT_EXPIRE
+    category: SECURITY
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.cert\.expired\]'
+    recommendation: "ESXi 시스템 인증서 만료. vCenter에서 인증서 갱신(Renew) 수행."
+
+  - id: ESX8_VMC_ISOLATION
+    category: NETWORK
+    severity: CRITICAL
+    source: vobd.log
+    regex: '\[esx\.problem\.net\.isolation\]'
+    recommendation: "관리 네트워크 격리. HA 이벤트 발생 위험. 관리 네트워크 스위치 및 vmk0 인터페이스 점검."
+
+  - id: ESX8_VPXA_CRASH
+    category: DAEMON
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.vpxa\.crash\]'
+    recommendation: "vpxa 데몬 크래시로 vCenter 연결 단절. /etc/init.d/vpxa restart 시도."
+
+  - id: ESX8_SDCARD_DEGRADED
+    category: HARDWARE
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.storage\.sdcard\.degraded\]'
+    recommendation: "부팅용 SD카드/USB 성능 저하 또는 마모. ESXi 8.0부터 SD카드 사용은 권장되지 않음. 로컬 디스크로 마이그레이션 요망."
+
+  - id: ESX8_TPM_FAIL
+    category: SECURITY
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'TPM initialization failed'
+    recommendation: "TPM 칩 초기화 실패. 호스트 보안 증명(Attestation) 기능 불가능. BIOS TPM 설정 및 펌웨어 확인."
+
+  - id: ESX8_GPU_ECC_ERR
+    category: HARDWARE_GPU
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'NVRM: GPU at PCI:.* has fallen off the bus'
+    recommendation: "VDI용/AI용 GPU의 PCI 버스 단절(Fallen off the bus). GPU 물리적 결착 상태 또는 과열 점검."
+
+  - id: ESX8_PCIE_LINK_DEGRADED
+    category: HARDWARE
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'PCIe link degraded'
+    recommendation: "PCIe 대역폭 하락(예: x16 -> x8). 카드 재결착 또는 슬롯 불량/마더보드 점검."
+
+  - id: ESX8_PTP_SYNC_LOST
+    category: TIME
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'PTP sync lost'
+    recommendation: "PTP(Precision Time Protocol) 동기화 상실. 5G 코어 등 정밀 시간 필수 환경에서 주의. PTP 그랜드마스터 연결 확인."
+
+  - id: ESX8_NTP_STRATUM_ERR
+    category: TIME
+    severity: MEDIUM
+    source: vobd.log
+    regex: '\[esx\.problem\.time\.ntp\.stratum\]'
+    recommendation: "NTP 서버의 Stratum 레벨 불량으로 시간 동기화 실패. 내부 NTP 서버 계층 상태 확인."
+
+  - id: ESX8_PSOD_DUMP_FAIL
+    category: SYSTEM
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Failed to save core dump'
+    recommendation: "PSOD 덤프 저장 실패. Coredump 파티션 용량 부족 또는 네트워크 덤프 수집기 연결 오류."
+
+  - id: ESX8_VMK_OOM
+    category: SYSTEM
+    severity: CRITICAL
+    source: vmkernel.log
+    regex: 'Out of memory for VMkernel heap'
+    recommendation: "VMkernel 메모리 고갈. 시스템 중단 가능성 매우 높음. 즉각적인 호스트 재부팅 후 메모리 누수 분석 요망."
+
+  - id: ESX8_K8S_CNS_FAIL
+    category: CLOUD_NATIVE
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.cns\.volume\.attach\.failed\]'
+    recommendation: "Tanzu/K8s CNS 볼륨 연결 실패. vCenter CNS(Cloud Native Storage) 서비스 및 정책 확인."
+
+  - id: ESX8_LACP_NEG_FAIL
+    category: NETWORK
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'LACP negotiation failed on uplink'
+    recommendation: "LACP 협상 실패로 인한 업링크 단절. 물리 스위치의 LACP(Active/Passive) 설정과 분산 스위치 설정 일치 여부 확인."
+
+  - id: ESX8_FDM_ELECTION_FAIL
+    category: HA
+    severity: HIGH
+    source: vobd.log
+    regex: '\[esx\.problem\.ha\.fdm\.election\.failed\]'
+    recommendation: "vSphere HA(FDM) 마스터 선출 실패. 데이터스토어 하트비트 및 격리 주소(Isolation Address) 통신 점검."
+
+  - id: ESX8_MICROCODE_UPDATE_REQ
+    category: HARDWARE
+    severity: MEDIUM
+    source: vmkernel.log
+    regex: 'CPU microcode update required'
+    recommendation: "알려진 CPU 취약점(Spectre 등) 보호를 위해 BIOS 및 CPU 마이크로코드 업데이트 권장."
+
+  - id: ESX8_NSX_EDGE_DISCONNECT
+    category: NETWORK_NSX
+    severity: CRITICAL
+    source: vobd.log
+    regex: '\[esx\.problem\.nsx\.edge\.disconnect\]'
+    recommendation: "NSX Edge/TEP 터널 단절. 오버레이 네트워크 통신 장애. 언더레이 네트워크 점검 요망."
+
+  - id: ESX8_CBL_HOTPLUG_ERR
+    category: HARDWARE
+    severity: HIGH
+    source: vmkernel.log
+    regex: 'Hotplug event failed on device'
+    recommendation: "PCIe/NVMe 핫플러그 실패. 기기 제거 전 소프트웨어적인 Detach가 수행되었는지 확인 요망."
+
+sense_key_map:
+  "0x0": { name: "NO SENSE",        severity: NOISE }
+  "0x1": { name: "RECOVERED ERROR", severity: MEDIUM }
+  "0x2": { name: "NOT READY",       severity: MEDIUM }
+  "0x3": { name: "MEDIUM ERROR",    severity: CRITICAL, hint: "물리 미디어 판독/기록 실패 — 디스크 교체 검토" }
+  "0x4": { name: "HARDWARE ERROR",  severity: CRITICAL, hint: "디바이스 하드웨어 장애 — 벤더 에스컬레이션" }
+  "0x5": { name: "ILLEGAL REQUEST", severity: NOISE,    hint: "0x5 0x20/0x24는 미지원 명령 — 대부분 무해한 상시 노이즈" }
+  "0x6": { name: "UNIT ATTENTION",  severity: LOW }
+  "0x7": { name: "DATA PROTECT",    severity: HIGH,     hint: "0x7 0x27 = WRITE PROTECTED. vSAN 디스크가 쓰기 불가 상태로 전환된 경우" }
+  "0xb": { name: "ABORTED COMMAND", severity: MEDIUM }
+
+# H: (host status) 코드 — 값 해석은 SCSI Sense Code Decoder로 재검증 필요 (verification_gaps 참조)
+host_status_map:
+  "0x0": { name: "OK",         severity: NOISE }
+  "0x1": { name: "NO_CONNECT", severity: HIGH,  verify: true }
+  "0x2": { name: "BUS_BUSY",   severity: MEDIUM, verify: true }
+  "0x5": { name: "TIMEOUT",    severity: HIGH,  verify: true }
+  "0x7": { name: "ERROR",      severity: HIGH,  verify: true }
+  "0x8": { name: "RESET",      severity: MEDIUM, verify: true }
+
+# ---------------------------------------------------------------------------
+# 오탐 필터 (매칭되더라도 CRITICAL로 올리지 않음)
+# ---------------------------------------------------------------------------
+noise_filters:
+  - id: NF_CLEAR_EVENTS
+    regex: 'esx\.clear\.'
+    reason: "복구 이벤트 — 상관분석에만 사용"
+  - id: NF_ILLEGAL_REQUEST
+    regex: 'sense data: 0x5 0x(20|24) 0x0'
+    reason: "미지원 opcode / CDB 필드 오류 — SAS/RAID 컨트롤러에서 상시 발생"
+  - id: NF_NO_MEDIUM
+    regex: 'sense data: 0x2 0x3a 0x0'
+    reason: "미디어 없음 — 빈 CD/DVD 드라이브"
+  - id: NF_APD_BOOT_MSG
+    regex: 'APD Handle Created with lock'
+    reason: "부팅 시 정상 출력되는 경우 있음 — 현재 APD 상태를 의미하지 않음"
+  - id: NF_VUSB_LINKSTATE
+    regex: '(vob|esx\.\w+)\.net\.vmnic\.linkstate\.\w+.*vusb\d+'
+    reason: "vmkusb 기반 vusb 인터페이스 — 실제 데이터 경로 아닌 경우 다수 (환경별 판단)"
+
+# ---------------------------------------------------------------------------
+# 상관관계 체인 (Correlator 규칙 — M3 단계 구현 대상, M0에서는 정의만)
+# ---------------------------------------------------------------------------
+correlation_chains:
+  - id: CHAIN_ESX8_DPU_CRASH
+    window: 2m
+    sequence:
+      - ESX8_SMARTNIC_FW_CRASH
+      - NET_UPLINK_TRANSITION_DOWN
+    verdict: "DPU 펌웨어 크래시로 인한 네트워크 업링크 동시 상실 연쇄 장애"
+    severity: CRITICAL
+    note: "DPU 카드의 소프트웨어/펌웨어 결함으로 전체 통신이 단절된 상황입니다. 서버 하드 리셋(BMC) 및 DPU 펌웨어 진단이 필요합니다."
+
+  - id: CHAIN_ESX8_NVMEOF_TIMEOUT
+    window: 5m
+    sequence:
+      - ESX8_NVMEOF_TIMEOUT
+      - ESX8_NVMEOF_DISCONNECT
+    verdict: "NVMe-oF 지연 누적으로 인한 스토리지 타겟 최종 단절"
+    severity: CRITICAL
+    note: "패브릭 혼잡 또는 스토리지 배열 부하로 NVMe 연결이 끊겼습니다. RoCE 환경이라면 PFC/ECN 드롭 통계를 확인하세요."
+
+  - id: CHAIN_MEM_TO_HOSTD_HANG
+    window: "30m"
+    sequence: [MEMORY_CONTROLLER_ERROR, SCSI_PERF_DETERIORATED, HOSTD_NONRESPONSIVE]
+    verdict: "메모리 컨트롤러 에러 기인 호스트 무응답 — DIMM 교체 대상"
+    severity: CRITICAL
+
+  - id: CHAIN_FABRIC_WIDE_APD
+    window: "1m"
+    condition: "SCSI_PATH_DEAD 이벤트가 서로 다른 vmhba 2개 이상에서 발생"
+    then: [STORAGE_APD_START]
+    verdict: "상위 공유구간(SAN 스위치/어레이 컨트롤러/PDU) 장애 — 호스트 단독 이슈 아님"
+    severity: CRITICAL
+
+  - id: CHAIN_SILENT_REBOOT
+    window: "10m"
+    condition: "vmkernel.log가 특별한 에러 없이 중단 + 직후 부팅 로그 + PSOD/zdump 없음"
+    require_source: "ipmi_sel"
+    verdict: "하드웨어 레벨 즉시 halt/reset — SEL의 Processor Non-recoverable / Power Input Lost 확인 필수"
+    severity: CRITICAL
+    note: "regex 단독으로 못 잡음. 로그 시간축 갭 탐지 + SEL 대조 로직 필요"
+
+  - id: CHAIN_NIC_TO_STORAGE
+    window: "5m"
+    sequence: [NET_VMNIC_LINK_DOWN, NET_ZERO_UPLINK, VMFS_HEARTBEAT_TIMEOUT]
+    verdict: "물리 NIC 장애가 iSCSI/NFS 데이터스토어 단절로 전파"
+    severity: CRITICAL
+
+# ---------------------------------------------------------------------------
+# M0 미검증 항목 — 실환경 데이터로 채워야 할 공백
+# ---------------------------------------------------------------------------
+verification_gaps:
+  - "H: (host status) 코드 의미 — SCSI Sense Code Decoder로 전수 재확인 후 host_status_map 확정"
+  - "벤더별 IPMI SEL 문구 차이 (Dell iDRAC / HPE iLO / Cray / Lenovo XCC) — 실제 SEL 덤프로 정규식 보정 필요"
+  - "ESXi 7.x vs 8.x 로그 포맷 차이 — 8.x는 'In(182) vmkernel:' 형태 필드가 추가로 붙음. prefix 파싱과 별개로 본문 파싱에 영향"
+  - "vobd.log 전체 VOB ID 목록 — 호스트에서 /usr/lib/vmware/hostd/extensions/hostdiag/locale/en/event.vmsg 로 전수 추출해 카탈로그화"
+  - "sensord.log 실제 출력 포맷 — 현재 패턴 없음. 샘플 확보 후 추가"
+  - "자사 환경 상시 노이즈 — 정상 호스트 로그를 베이스라인으로 돌려 오탐 목록 확정"
+  - "로그 로테이션 주기 — .gz 아카이브까지 볼지, 최근 N일만 볼지 정책 결정"

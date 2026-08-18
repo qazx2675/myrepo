@@ -1,0 +1,15 @@
+# 컴파일된 바이너리
+vm-param-fix
+vm-param-fix-race
+affinity_setting
+lpage_setting
+power_setting
+vm-param-check
+
+# 실행 결과물
+*.csv
+worklist_*.txt
+vcenter_recheck.txt
+
+# 테스트용 임시 디렉토리(mock 스크립트, 로컬 실행 산출물)
+testrun/
