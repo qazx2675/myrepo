@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/vmware/govmomi"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
@@ -106,7 +107,106 @@ func fetchDVPortgroupNames(ctx context.Context, client *govmomi.Client) (map[str
 	return result, nil
 }
 
-// FetchVMs는 대상 vCenter의 VM 전체(또는 targetNames로 제한한 VM만)를 벌크 조회해서
+// vmProps는 체크에 필요한 VM 속성 목록이다. config.hardware/extraConfig처럼 VM 1대당
+// 크기가 큰 속성이 섞여 있어서, 대상이 정해져 있을 때 인벤토리 전체에 대해 이걸 받아오면
+// 대상 대수와 무관하게 인벤토리 규모에 비례해 느려진다 (retrieveVMProps 참고).
+var vmProps = []string{
+	"name",
+	"guest.hostName",
+	"config.hardware",
+	"config.extraConfig",
+	"config.memoryReservationLockedToMax",
+	"config.cpuAllocation",
+	"config.memoryAllocation",
+	"config.numaInfo",
+	"runtime.host",
+	"runtime.powerState",
+	"parent", // VM이 속한 인벤토리 폴더 — 폴더명 기반 스펙 자동매칭에서 쓴다
+}
+
+// fetchFolderNames는 VM들의 부모 폴더 이름을 한 번의 벌크 호출로 가져온다.
+// VM의 parent가 Folder가 아닌 경우(vApp 소속 등)는 폴더명을 알 수 없으므로 그냥 건너뛴다.
+func fetchFolderNames(ctx context.Context, client *govmomi.Client, vms []mo.VirtualMachine) (map[types.ManagedObjectReference]string, error) {
+	seen := map[types.ManagedObjectReference]bool{}
+	var refs []types.ManagedObjectReference
+	for _, vm := range vms {
+		if vm.Parent == nil || vm.Parent.Type != "Folder" || seen[*vm.Parent] {
+			continue
+		}
+		seen[*vm.Parent] = true
+		refs = append(refs, *vm.Parent)
+	}
+	if len(refs) == 0 {
+		return map[types.ManagedObjectReference]string{}, nil
+	}
+
+	var folders []mo.Folder
+	if err := property.DefaultCollector(client.Client).Retrieve(ctx, refs, []string{"name"}, &folders); err != nil {
+		return nil, fmt.Errorf("VM 폴더 이름 조회 실패: %w", err)
+	}
+
+	result := map[types.ManagedObjectReference]string{}
+	for _, f := range folders {
+		result[f.Self] = f.Name
+	}
+	return result, nil
+}
+
+// retrieveVMProps는 체크 대상 VM의 속성을 조회한다.
+//
+// targetNames가 nil인 전체 순회 모드에서는 어차피 전부 필요하므로 기존처럼 1회 벌크조회한다.
+// targetNames가 있는 지정 대상 모드에서는 2단계로 나눈다:
+//
+//	1차: 이름 계열 속성(name, guest.hostName)만 가볍게 벌크조회해서 대상 VM의 moref를 추린다.
+//	2차: 그 moref들에 대해서만 PropertyCollector로 무거운 속성(vmProps)을 조회한다.
+//
+// 이렇게 나누지 않고 인벤토리 전체를 vmProps로 받은 뒤 클라이언트에서 걸러내면, 대상이
+// 2대뿐이어도 인벤토리에 있는 모든 VM의 하드웨어/ExtraConfig를 전부 전송받게 된다.
+func retrieveVMProps(ctx context.Context, client *govmomi.Client, targetNames map[string]bool) ([]mo.VirtualMachine, error) {
+	m := view.NewManager(client.Client)
+	cv, err := m.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
+	if err != nil {
+		return nil, fmt.Errorf("VM ContainerView 생성 실패: %w", err)
+	}
+	defer cv.Destroy(ctx)
+
+	if targetNames == nil {
+		var vms []mo.VirtualMachine
+		if err := cv.Retrieve(ctx, []string{"VirtualMachine"}, vmProps, &vms); err != nil {
+			return nil, fmt.Errorf("VM 벌크 조회 실패: %w", err)
+		}
+		return vms, nil
+	}
+
+	var index []mo.VirtualMachine
+	if err := cv.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name", "guest.hostName"}, &index); err != nil {
+		return nil, fmt.Errorf("VM 이름 목록 조회 실패: %w", err)
+	}
+
+	var refs []types.ManagedObjectReference
+	for _, vm := range index {
+		guestHostName := ""
+		if vm.Guest != nil {
+			guestHostName = vm.Guest.HostName
+		}
+		if targetNames[vm.Name] || targetNames[guestHostName] {
+			refs = append(refs, vm.Self)
+		}
+	}
+	// 이 vCenter에 대상 VM이 하나도 없는 건 정상 상황이다(대상이 다른 vCenter에 있음).
+	// PropertyCollector.Retrieve는 빈 목록을 에러로 처리하므로 여기서 먼저 빠져나간다.
+	if len(refs) == 0 {
+		return nil, nil
+	}
+
+	var vms []mo.VirtualMachine
+	if err := property.DefaultCollector(client.Client).Retrieve(ctx, refs, vmProps, &vms); err != nil {
+		return nil, fmt.Errorf("VM 속성 조회 실패: %w", err)
+	}
+	return vms, nil
+}
+
+// FetchVMs는 대상 vCenter의 VM 전체(또는 targetNames로 제한한 VM만)를 조회해서
 // model.VMInfo 슬라이스로 변환한다.
 // targetNames가 nil이면 인벤토리 전체(전체 순회 모드), non-nil이면 그 이름 집합만 포함(단일/지정 대상 모드).
 //
@@ -136,29 +236,14 @@ func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, t
 		return nil, dvErr
 	}
 
-	m := view.NewManager(client.Client)
-	cv, err := m.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
+	vms, err := retrieveVMProps(ctx, client, targetNames)
 	if err != nil {
-		return nil, fmt.Errorf("VM ContainerView 생성 실패: %w", err)
-	}
-	defer cv.Destroy(ctx)
-
-	props := []string{
-		"name",
-		"guest.hostName",
-		"config.hardware",
-		"config.extraConfig",
-		"config.memoryReservationLockedToMax",
-		"config.cpuAllocation",
-		"config.memoryAllocation",
-		"config.numaInfo",
-		"runtime.host",
-		"runtime.powerState",
+		return nil, err
 	}
 
-	var vms []mo.VirtualMachine
-	if err := cv.Retrieve(ctx, []string{"VirtualMachine"}, props, &vms); err != nil {
-		return nil, fmt.Errorf("VM 벌크 조회 실패: %w", err)
+	folderNames, err := fetchFolderNames(ctx, client, vms)
+	if err != nil {
+		return nil, err
 	}
 
 	var result []model.VMInfo
@@ -171,15 +256,15 @@ func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, t
 			guestHostName = vm.Guest.HostName
 		}
 
-		if targetNames != nil && !targetNames[vm.Name] && !targetNames[guestHostName] {
-			continue
-		}
-
 		info := model.VMInfo{
 			Name:      vm.Name,
 			VCenter:   vcenterAddr,
 			Ref:       vm.Self,
 			PoweredOn: vm.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOn,
+		}
+
+		if vm.Parent != nil {
+			info.Folder = folderNames[*vm.Parent]
 		}
 
 		// VMware Tools가 없거나 hostname을 보고하지 않으면 guest.hostName 자체가 nil이라
