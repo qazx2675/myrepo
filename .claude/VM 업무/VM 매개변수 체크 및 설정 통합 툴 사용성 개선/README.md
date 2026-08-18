@@ -5,6 +5,59 @@
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정을 변경한 후 반드시 랜덤하게 몇 개의 서버를 직접 접속·확인하여 실제로 설정이 제대로 반영되었는지 교차 검증을 진행하십시오.
 
+## 빠른 시작 (지금 바로 실행해보기)
+
+```bash
+# 1) 저장소를 받고 실제 도구 폴더로 이동 (인터넷 필요, 딱 이번 한 번만)
+git clone https://github.com/qazx2675/myrepo.git myrepo
+cd "myrepo/.claude/VM 업무/VM 매개변수 체크 및 설정 통합 툴 사용성 개선/VM 매개변수 체크 및 설정 통합 툴"
+
+# 2) 빌드 (인터넷 불필요 — vendor/에 의존성이 전부 포함되어 있음)
+bash setup.sh
+
+# 3) 실제 인프라 없이 동작만 먼저 확인 (아무것도 안 건드림)
+./vm-param-check -demo
+```
+
+여기까지 되면 빌드는 끝났습니다. 이제 실제 vCenter를 체크하려면:
+
+```bash
+# 4) vCenter 인증 정보
+export VC_USER='administrator@vsphere.local'
+export VC_PASS='...'
+
+# 5) 체크할 vCenter 주소 목록 (한 줄에 하나)
+echo '192.168.0.50' > vcenter.txt
+
+# 6) 체크할 VM hostname 목록 (한 줄에 하나)
+printf '192ev01\n192ev02\n' > targets.txt
+
+# 7) 옵션을 하나도 안 주고, 폴더명으로 자동매칭해서 체크
+#    (-specRoot 아래에 스펙이 미리 준비되어 있어야 함 — 없으면 8번으로)
+./vm-param-check -vcenterList=vcenter.txt -f=targets.txt -specRoot=./specroot -out=result.csv
+```
+
+**스펙이 아직 없다면** (`-specRoot` 아래 디렉터리가 비어있다면) 먼저 만들어야 합니다 — VM이 속한 vCenter 폴더 이름(예: `TST-CAE001-SAMP48c-QRST`)과 똑같은 이름으로:
+
+```bash
+# 8) 스펙 디렉터리+틀 생성 (vCenter 연결 안 함)
+mkdir -p ./specroot
+./vm-param-check -specRoot=./specroot -initFolder="TST-CAE001-SAMP48c-QRST"
+
+# 9) 생성된 ./specroot/TST-CAE001-SAMP48c-QRST/TST-CAE001-SAMP48c-QRST_spec.txt 파일을
+#    열어서 ht/cores/numa/cpu/mem/disk/shares-ev01 값을 채운 뒤, 7번 명령을 다시 실행
+```
+
+옵션을 매번 직접 지정하고 싶다면(스펙 자동매칭 없이) 이렇게도 됩니다:
+
+```bash
+./vm-param-check -vcenterList=vcenter.txt -f=targets.txt \
+  --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 --shares-ev01=2000 \
+  --out=result.csv
+```
+
+**폐쇄망(오프라인) 서버에 옮겨서 쓰려면** 1~2번 대신, 인터넷 되는 곳에서 이 폴더 전체를 압축해 USB/scp로 옮긴 뒤 그 서버에서 `bash setup.sh`만 실행하면 됩니다 — 더 자세한 절차와 각 옵션의 의미는 아래 "사용법" 절의 하위 문서를 참고하세요.
+
 ## 이 프로젝트에서 무엇이 바뀌었나
 
 | 문제 | 해결 |
