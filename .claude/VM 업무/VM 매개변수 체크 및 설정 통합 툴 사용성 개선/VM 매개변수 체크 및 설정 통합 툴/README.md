@@ -137,10 +137,10 @@ export VCENTER_PASS='...'
 
 #### 1단계 — 스펙 저장소 폴더 하나를 정합니다
 
-옵션 값들을 저장해 둘 로컬 디렉터리를 아무 이름으로나 하나 만듭니다(예: `./specroot`). 이 폴더는 vCenter 안에 있는 게 아니라, 이 도구를 실행하는 서버(Rocky Linux 등)의 로컬 디렉터리입니다.
+옵션 값들을 저장해 둘 로컬 디렉터리를 아무 이름으로나 하나 만듭니다(`-specRoot`는 그냥 경로 하나를 받는 옵션이라 이름이 강제되지 않습니다. 아래 예시와 `folder_setup.sh`/`vm_setting_check_insert.sh`는 `SPEC_DIR`로 통일해서 씁니다). 이 폴더는 vCenter 안에 있는 게 아니라, 이 도구를 실행하는 서버(Rocky Linux 등)의 로컬 디렉터리입니다.
 
 ```bash
-mkdir -p ./specroot
+mkdir -p ./SPEC_DIR
 ```
 
 #### 2단계 — 스펙 디렉터리를 만듭니다 (직접 만들거나, `-initFolder`로 자동 생성)
@@ -150,10 +150,10 @@ mkdir -p ./specroot
 가장 쉬운 방법은 `-initFolder`로 만드는 것입니다(빈 틀이 자동으로 생깁니다):
 
 ```bash
-./vm-param-check -specRoot=./specroot -initFolder="RND-CAE001-LICE48c-TCAD"
+./vm-param-check -specRoot=./SPEC_DIR -initFolder="RND-CAE001-LICE48c-TCAD"
 ```
 
-실행하면 이런 파일이 생깁니다 — `./specroot/RND-CAE001-LICE48c-TCAD/RND-CAE001-LICE48c-TCAD_spec.txt`:
+실행하면 이런 파일이 생깁니다 — `./SPEC_DIR/RND-CAE001-LICE48c-TCAD/RND-CAE001-LICE48c-TCAD_spec.txt`:
 
 ```
 # RND-CAE001-LICE48c-TCAD 스펙 정의 파일
@@ -185,7 +185,7 @@ shares-ev01=1000
 이미 비슷한 스펙이 있다면 `-template`으로 그 값을 그대로 복사해서 시작할 수도 있습니다(다른 부분만 고치면 됨):
 
 ```bash
-./vm-param-check -specRoot=./specroot -initFolder="RND-CAE002-LICE48c-XCAD" -template="RND-CAE001-LICE48c-TCAD"
+./vm-param-check -specRoot=./SPEC_DIR -initFolder="RND-CAE002-LICE48c-XCAD" -template="RND-CAE001-LICE48c-TCAD"
 ```
 
 > 이미 같은 스펙으로 매칭되는 디렉터리가 있으면(차수만 달라도) 실수로 덮어쓰지 않도록 `-initFolder`가 자동으로 막습니다.
@@ -197,7 +197,7 @@ shares-ev01=1000
 ```bash
 export VC_USER='administrator@vsphere.local'
 export VC_PASS='...'
-./vm-param-check -vcenterList=vcenter.txt -f=kdh.txt -specRoot=./specroot -out=result.csv
+./vm-param-check -vcenterList=vcenter.txt -f=kdh.txt -specRoot=./SPEC_DIR -out=result.csv
 ```
 
 내부적으로 이렇게 동작합니다.
@@ -208,7 +208,7 @@ export VC_PASS='...'
    ```
    === 폴더명 기반 스펙 자동매칭 ===
 
-   [스펙] specroot/RND-CAE001-LICE48c-TCAD/RND-CAE001-LICE48c-TCAD_spec.txt
+   [스펙] SPEC_DIR/RND-CAE001-LICE48c-TCAD/RND-CAE001-LICE48c-TCAD_spec.txt
      vCenter 폴더: RND-CAE003-LICE48c-TCAD  (VM: 192ev01, 192ev02)
        [스펙적용] -ht=on
        [스펙적용] -cores=20
@@ -218,7 +218,7 @@ export VC_PASS='...'
    ```
 4. `y`를 눌러야 체크가 진행됩니다. (`-yes`를 주면 이 확인만 생략됩니다 — 아래 "`-yes`의 범위" 참고)
 
-**직접 지정한 옵션이 항상 우선합니다.** 예를 들어 `-specRoot=./specroot -cores=99`처럼 같이 주면, `cores`는 스펙 파일 값이 아니라 직접 준 `99`가 쓰이고 화면에 `[수동 우선]`으로 표시됩니다. 나머지 옵션은 그대로 스펙에서 채워집니다.
+**직접 지정한 옵션이 항상 우선합니다.** 예를 들어 `-specRoot=./SPEC_DIR -cores=99`처럼 같이 주면, `cores`는 스펙 파일 값이 아니라 직접 준 `99`가 쓰이고 화면에 `[수동 우선]`으로 표시됩니다. 나머지 옵션은 그대로 스펙에서 채워집니다.
 
 **대상이 여러 vCenter나 여러 폴더에 걸쳐 있어도 괜찮습니다.** VM마다 자기가 속한 폴더의 스펙을 각각 찾아서 적용하므로, `vcenter.txt`에 vCenter 여러 개를 넣고 `-f`로 서로 다른 스펙에 속한 VM들을 한꺼번에 대상으로 지정해도 각자 올바른 스펙으로 체크됩니다.
 
@@ -229,6 +229,10 @@ export VC_PASS='...'
   어느 vCenter에서도 찾지 못한 대상 2대: zzzev01, zzzev02
   조회에 실패해 건너뛴 vCenter 1개: 192.168.0.60
 ```
+
+#### 보조 스크립트
+
+1·2단계는 `folder_setup.sh`(대화형으로 폴더명·값을 물어보고 `SPEC_DIR` 아래에 생성), 3단계는 `vm_setting_check_insert.sh`(상단 변수와 `set_user()`만 채워두면 `-f`/`-out`을 자동으로 구성)로 대신할 수 있습니다. 둘 다 이 폴더에 있고 `bash <스크립트명>`으로 실행합니다.
 
 ### 2-5. Task 폴더(임시 작업 폴더)에 있는 VM 체크하기
 
