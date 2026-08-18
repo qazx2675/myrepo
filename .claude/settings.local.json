@@ -4,7 +4,8 @@
       "WebFetch(domain:claude.ai)",
       "Bash(git mv *)",
       "Bash(./gradlew assembleDebug --console=plain)",
-      "Bash(export JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\")"
+      "Bash(export JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\")",
+      "mcp__Claude_Code_Remote__get_session"
     ]
   }
 }
