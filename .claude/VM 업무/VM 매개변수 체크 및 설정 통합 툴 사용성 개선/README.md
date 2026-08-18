@@ -34,19 +34,34 @@ printf '192ev01\n192ev02\n' > targets.txt
 
 # 7) 옵션을 하나도 안 주고, 폴더명으로 자동매칭해서 체크
 #    (-specRoot 아래에 스펙이 미리 준비되어 있어야 함 — 없으면 8번으로)
-./vm-param-check -vcenterList=vcenter.txt -f=targets.txt -specRoot=./specroot -out=result.csv
+./vm-param-check -vcenterList=vcenter.txt -f=targets.txt -specRoot=./SPEC_DIR -out=result.csv
 ```
 
 **스펙이 아직 없다면** (`-specRoot` 아래 디렉터리가 비어있다면) 먼저 만들어야 합니다 — VM이 속한 vCenter 폴더 이름(예: `TST-CAE001-SAMP48c-QRST`)과 똑같은 이름으로:
 
 ```bash
 # 8) 스펙 디렉터리+틀 생성 (vCenter 연결 안 함)
-mkdir -p ./specroot
-./vm-param-check -specRoot=./specroot -initFolder="TST-CAE001-SAMP48c-QRST"
+mkdir -p ./SPEC_DIR
+./vm-param-check -specRoot=./SPEC_DIR -initFolder="TST-CAE001-SAMP48c-QRST"
 
-# 9) 생성된 ./specroot/TST-CAE001-SAMP48c-QRST/TST-CAE001-SAMP48c-QRST_spec.txt 파일을
+# 9) 생성된 ./SPEC_DIR/TST-CAE001-SAMP48c-QRST/TST-CAE001-SAMP48c-QRST_spec.txt 파일을
 #    열어서 ht/cores/numa/cpu/mem/disk/shares-ev01 값을 채운 뒤, 7번 명령을 다시 실행
 ```
+
+### 보조 스크립트로 한 번에 하기
+
+위 4~9번을 매번 손으로 치는 대신, 이 폴더(도구 폴더)에 있는 보조 스크립트 두 개를 쓸 수 있습니다.
+
+- **`folder_setup.sh`** — 위 8~9번을 대신합니다. `SPEC_DIR`(스크립트와 같은 위치에 만들어지는 로컬 폴더) 아래에 새 스펙을 만들 때, 폴더 이름과 필수 값(ht/cores/numa/cpu/mem/disk/shares-ev01)을 대화형으로 물어보고, 필요하면 ev02/ev03 값도 이어서 물어봅니다(비워두면 스킵). 폴더명 규칙 검사와 중복 거부는 `vm-param-check -initFolder`가 그대로 해줍니다.
+  ```bash
+  bash folder_setup.sh
+  ```
+  이렇게 만든 스펙은 팀이 함께 쓰도록 **git에 커밋하는 것을 권장**합니다(인증정보 같은 민감정보가 아니라 CAE 스펙 정의값이라서).
+
+- **`vm_setting_check_insert.sh`** — 위 4~7번을 대신합니다. 스크립트 상단의 `VC_USER`/`VC_PASS`/`VCENTER_LIST`/`SPEC_ROOT` 변수와, `set_user()` 함수 안의 `user` 값(예: `user="kdh"`)을 채워두면, `-f "<user>.txt"`로 대상 목록을 읽고 `result_<user>.csv`로 결과를 저장합니다. 실행하면 "실제로 설정을 변경(-fix)하시겠습니까?"를 먼저 물어보고, `y`를 답해도 `vm-param-check` 자체의 최종 변경 확인을 한 번 더 거칩니다(이중 확인).
+  ```bash
+  bash vm_setting_check_insert.sh
+  ```
 
 옵션을 매번 직접 지정하고 싶다면(스펙 자동매칭 없이) 이렇게도 됩니다:
 
