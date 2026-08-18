@@ -20,6 +20,10 @@ type VMInfo struct {
 	Hostname       string // 그룹 분류(ev01/ev02/ev03)에 실제로 사용하는 hostname
 	HostnameSource string // "guest.hostName" | "config.name(fallback)" — CSV 비고란에 기록
 
+	// Folder는 이 VM이 속한 vCenter 인벤토리 폴더 이름(예: RND-CAE001-LICE48c-TCAD).
+	// 폴더명 규칙으로 스펙 파일(_spec.txt)을 자동으로 찾는 데 쓴다. 폴더를 알 수 없으면 빈 문자열.
+	Folder string
+
 	NumCPU            int32
 	NumCoresPerSocket int32
 	MemoryMB          int32
