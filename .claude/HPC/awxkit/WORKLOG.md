@@ -59,3 +59,11 @@
 - `nodeinfo.go` 재작성: hostname 목록을 줄바꿈으로 이어붙여(`strings.Join(hosts, "\n")`) 하나의 extra_vars 값으로 전달, launch/poll/fetch를 모두 1회만 수행. 결과 저장 파일도 hostname별(`{hostname}.yaml`)이 아니라 실행 1회당 하나(`s1_output_dir/${user}_nodeinfo.yaml`)로 변경. `history_file` 기록도 hostname 개수(`hosts=N`)만 남기도록 조정.
 - PLAN.md/README.md의 [S1] 관련 서술과 예시 출력을 새 동작에 맞게 갱신.
 - **검증**: Rocky Linux(192.168.0.58)에서 `gofmt`/빌드/`go vet` 통과. extra_vars로 받은 hostname 텍스트를 그대로 파싱해 결과 YAML을 만드는 상태 저장형 스텁 서버로, 3개 hostname이 한 번의 launch·한 개의 결과 파일로 처리되는 것을 확인. 검증 후 VM 임시 파일 정리함.
+
+## 2026-08-19 (계속) — 다운로드 후 양식 변환 확인(Y/N) 게이트 추가
+
+- **요구사항**: 다운로드된 결과를 정해진 양식으로 바꾸는 스크립트가 별도로 있음. 사용자가 다른 터미널에서 그 스크립트를 직접 실행하고, 완료되면 awxkit에서 Y를 눌러 진행하는 방식. awxkit은 스크립트를 직접 실행하지 않고, 사람의 확인(Y/N)만으로 완료 여부를 판단(종료코드는 awxkit이 직접 실행하지 않으므로 볼 수 없음).
+- `main.go`에 `promptYesNo()` 헬퍼 추가.
+- `nodeinfo.go`: 결과 파일 저장 후 "[✔] 다운로드 완료"를 먼저 출력하고, 양식 변환 스크립트를 다른 터미널에서 실행하라는 안내 + `Y/N` 확인을 받도록 변경. `N`(또는 그 외 입력)이면 `history_file`에 `status=downloaded_unconfirmed`로 기록하고 종료 코드 1. `Y`면 기존과 같이 `status=successful`로 기록(`format_confirmed=true` 추가).
+- README/PLAN 갱신: 실행 예시에 확인 프롬프트 추가, 설계 결정 표에 "양식 변환 확인" 항목 추가.
+- **검증**: Rocky Linux(192.168.0.58)에서 `gofmt`/빌드/`go vet` 통과. 표준입력으로 `y`/`n`을 각각 넣어 두 경로(성공 확정 / downloaded_unconfirmed) 모두 확인. 검증 후 VM 임시 파일 정리함.
