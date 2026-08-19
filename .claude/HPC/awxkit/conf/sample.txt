@@ -1,0 +1,5 @@
+# nodeinfo용 호스트 목록 샘플. 실제 사용 시 conf/${user}.txt 로 복사해 값을 채우세요.
+# 한 줄에 hostname 하나, '#' 이후는 주석.
+web01
+web02
+db01

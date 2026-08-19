@@ -1,0 +1,4 @@
+# Windows에서 체크아웃해도 CRLF로 바뀌지 않도록 강제 (폐쇄망 Linux에서 그대로 빌드/실행되어야 함)
+*.sh text eol=lf
+*.go text eol=lf
+go.mod text eol=lf

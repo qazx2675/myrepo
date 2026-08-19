@@ -20,15 +20,19 @@ const usage = `awxkit - AWX 템플릿 실행 CLI (터미널 전용)
   doctor    설정/연결/권한을 점검합니다
   ls        템플릿 목록을 조회합니다
   survey <ID|이름>   템플릿의 survey 정의(변수명·선택지)를 조회합니다
-  nodeinfo  [S1] NodeInfo 템플릿 실행 (다음 단계 예정)
+  nodeinfo  [S1] NodeInfo 템플릿을 ${user}.txt의 각 hostname마다 실행하고 결과를 저장합니다
   invsync   [S2] 인벤토리 동기화 (다음 단계 예정)
   dhcp      [S3] DHCP 등록 (다음 단계 예정)
   pxe       [S4] PXE 등록 (다음 단계 예정)
+
+nodeinfo 전용 플래그:
+  -hosts <경로>   ${user}.txt 대신 사용할 호스트 목록 파일을 직접 지정합니다
 `
 
 func main() {
 	confFlag := flag.String("conf", "", "설정 파일 경로를 직접 지정합니다")
 	userFlag := flag.String("user", "", "사용자 식별자를 직접 지정합니다 (AWXKIT_USER 환경변수보다 낮은 우선순위)")
+	hostsFlag := flag.String("hosts", "", "nodeinfo에서 사용할 호스트 목록 파일 경로 (기본: ${user}.txt)")
 	flag.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	flag.Parse()
 
@@ -73,7 +77,13 @@ func main() {
 			templateArg = args[1]
 		}
 		runSurvey(confPath, templateArg)
-	case "nodeinfo", "invsync", "dhcp", "pxe":
+	case "nodeinfo":
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+			os.Exit(1)
+		}
+		runNodeInfo(confPath, user, *hostsFlag)
+	case "invsync", "dhcp", "pxe":
 		fmt.Printf("[!] '%s' 명령은 다음 단계에서 구현될 예정입니다. PLAN.md를 참고하세요.\n", cmd)
 		os.Exit(1)
 	default:
