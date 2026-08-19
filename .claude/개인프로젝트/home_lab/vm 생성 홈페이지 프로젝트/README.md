@@ -73,7 +73,33 @@ sudo systemctl enable --now vm-portal
 
 ## 4. 문서별 고유 설명
 
-### 4.1 자세한 배경
+### 4.1 디렉토리 구조
+
+```
+vm 생성 홈페이지 프로젝트/
+├── README.md               # 이 문서
+├── deploy/
+│   └── vm-portal.service   # 재부팅 후 자동 기동을 위한 systemd 유닛 파일
+├── docs/
+│   ├── session_summary.html  # 프로젝트 진행 중 Q&A/아키텍처/버그 해결 과정 정리 문서
+│   └── os_deploy_plan.md     # OS 자동 배포(M10~M13) 기능 계획서
+└── src/                     # Go 백엔드 전체 소스
+    ├── go.mod / go.sum        # Go 모듈 정의 파일
+    ├── setup.sh              # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+    ├── cmd/server/            # 서버 실행 진입점 (main 패키지)
+    ├── internal/
+    │   ├── audit/    # 주요 작업에 대한 감사 로그 기록
+    │   ├── auth/       # 인증/RBAC(권한별 접근 제어)
+    │   ├── config/       # 설정/환경변수 로딩
+    │   ├── db/             # SQLite 데이터베이스 접근
+    │   ├── models/          # 데이터 모델 정의
+    │   ├── phases/            # Phase 1~9 자동화 파이프라인(호스트 등록, VM 생성, 튜닝 등) 로직
+    │   ├── secrets/            # 자격증명 암호화 저장 (파일 기반 마스터키 / Vault KV v2)
+    │   └── webui/               # 웹 UI 라우팅/템플릿
+    └── vendor/                # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
+### 4.2 자세한 배경
 
 전체 설계 배경, 겪었던 문제(SELinux 203/EXEC, PID 혼동 등), 질의응답 히스토리는
 `docs/session_summary.html`을 열어서 확인.

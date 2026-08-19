@@ -99,6 +99,18 @@ export VC_PASSWORD='실제_비밀번호'
      `sched.swap.vmxSwapEnabled` = FALSE (extraConfig)
 9. 전체 완료 메시지 출력.
 
+## 6. 디렉토리 구조
+
+```
+vm_create-source/
+├── README.md      # 이 문서
+├── main.go        # 호스트별 VM 동적 생성 + CPU/메모리/Shares/부트옵션 일괄 설정 로직 전체
+├── go.mod / go.sum  # Go 모듈 정의 파일
+├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── vm_create      # setup.sh로 빌드된 실행 바이너리
+└── vendor/        # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
 ## 5. 알려진 한계
 
 - `-vmCount`는 1~3만 지원하며, ev04 이상은 지원하지 않습니다.

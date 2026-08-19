@@ -122,6 +122,22 @@ chmod +x affinity_setting
 조회하면서(진짜 안전장치 동작 확인) 실제 설정 변경만 mock으로 대체되어 dry-run/확인/병렬
 실행/재검증 파이프라인 전체를 안전하게 검증할 수 있습니다.
 
+### 디렉토리 구조
+
+```
+fail-based-param-fix/
+├── README.md       # 이 문서
+├── PLAN.md         # 설계 계획 메모
+├── main.go         # CLI 진입점 (옵션 파싱, 오케스트레이션 흐름 제어)
+├── gates.go        # 그룹 동질성/전원 OFF 게이트 검증 로직
+├── report.go       # 결과 리포트/CSV 출력
+├── scaletest.go    # 대량 환경 시뮬레이션용 코드
+├── vcenter.go      # vCenter API 접속/조회 로직
+├── go.mod / go.sum   # Go 모듈 정의 파일
+├── setup.sh        # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+└── vendor/         # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
 ### 알려진 한계
 
 - 그룹 동질성 검증은 vCPU 수/코어당 소켓 수/메모리/디스크/CPU Shares/NUMA(`numa.vcpu.maxPerVirtualNode`

@@ -195,3 +195,18 @@ vcsim이 `AddHost`/`AddStandaloneHost`를 완전히 검증하지는 않는다(�
 | Reconfigure 명령 자체가 거부됨 | `[VM명] Reconfigure 명령 전송 실패: <상세>` / `설정 요청 실패: <상세>` | Task 전송 시 |
 | Task는 전송됐지만 vCenter에서 실패 처리됨 | `[VM명] 작업 실패: <상세>` | Task 완료 대기 중 |
 | (affinity 도구만) 실제 반영값이 보낸 값과 다름 | `[VM명] 실제 적용 불일치: key(기대=X,실제=Y)` | 재조회 검증 시 |
+
+### 4.4 디렉토리 구조
+
+```
+vm-setting-go-lang/
+├── README.md          # 이 문서
+├── PLAN.md            # 개발/변경 계획 메모
+├── main_affinity.go   # vm_affinity_bulk 소스 (CPU affinity 병렬 설정)
+├── main_lpage.go      # vm_lpage_bulk 소스 (HugePage/CPU 토폴로지 병렬 설정)
+├── main_vm_create.go  # vm_create 소스 (VM 동적 생성 + 초기 설정)
+├── main_connect.go    # vm_connect 소스 (ESXi 호스트를 vCenter에 병렬 등록)
+├── go.mod / go.sum      # Go 모듈 정의 파일
+├── setup.sh           # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트 (파일명을 지정해 4개 바이너리를 각각 빌드)
+└── vendor/            # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
