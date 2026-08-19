@@ -14,3 +14,15 @@
 
 ### 다음 단계
 - 1단계: `config` 패키지(conf 로더 + `CurrentUser()` 훅) + `cmd doctor` 구현
+
+## 2026-08-19 (계속) — 1단계 구현
+
+- `config/config.go`: `key = value` 평문 conf 파서(`#` 주석 허용), `-conf` → `./conf/${user}_setting.conf` → `~/.awxkit/${user}_setting.conf` → `<실행파일>/conf/${user}_setting.conf` 순 탐색.
+- `config/user.go`: `CurrentUser()` 훅(빈 문자열 반환) + `ResolveUser()`(CurrentUser → `-user` → `AWXKIT_USER` → `$USER`/`$USERNAME` 폴백).
+- `awx/client.go`: Basic 인증 HTTP 클라이언트. `Ping`, `ListJobTemplates`, `ResolveTemplate`(ID 또는 이름), `GetSurveySpec`, `Launch`, `GetJob`, `GetJobStdout`, `SyncInventorySource`, `GetInventoryUpdate`, `CountInventoryHosts` — 2~6단계에서 바로 재사용할 수 있도록 API 매핑 전체를 미리 구현.
+- `main.go` / `doctor.go`: 전역 플래그(`-conf`, `-user`), 인자 없을 때 번호 선택 메뉴(스피너/화면 재그리기 없음, ETX 환경 고려), `doctor` 명령 — conf 파일 권한 경고(`chmod 600` 안내, Windows는 건너뜀), AWX 연결/버전, 템플릿 개수, S1/S3/S4 설정 템플릿의 존재·실행 권한·`ask_variables_on_launch` 점검.
+- `conf/sample_setting.conf` 추가.
+- **검증**: Rocky Linux(192.168.0.58)로 소스 전송 후 `go build`/`go vet` 통과. Python `http.server`로 `/api/v2/ping/`, `/api/v2/job_templates/` 스텁을 띄워 `doctor`의 정상 경로(연결 성공, 템플릿 권한/`ask_variables_on_launch` 경고 출력)와 오류 경로(서버 연결 실패, conf 파일 없음, 사용자 미상)를 모두 실행 확인. 검증 후 VM의 임시 파일은 정리함.
+
+### 다음 단계
+- 2단계: `ls`(템플릿 목록) / `survey`(survey_spec → conf 스니펫 출력) 명령 구현. `awx/client.go`에 이미 필요한 메서드는 준비되어 있어 CLI 배선만 남음.

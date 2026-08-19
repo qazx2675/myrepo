@@ -1,6 +1,7 @@
 # AWX 템플릿 실행 CLI (awxkit) - 계획서
 
-> **진행 상태 (2026-08-19 기준)**: 0단계(저장소·문서 골격) 진행 중. 1단계부터 구현 착수 예정.
+> **진행 상태 (2026-08-19 기준)**: 0단계·1단계(config 로더 + `CurrentUser()` 훅 + `doctor`) 완료.
+> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 `doctor` 정상/오류 경로 검증 완료. 2단계(공통 클라이언트 + `ls`/`survey`)부터 이어서 진행 예정.
 > 작업 이력은 [`WORKLOG.md`](./WORKLOG.md), 사용법은 [`README.md`](./README.md) 참고.
 
 ## 목적
@@ -116,8 +117,8 @@ history_file   = ./awxkit_history.log
 
 | 단계 | 내용 | 완료 기준 (검증 가능) |
 |---|---|---|
-| **0** | 저장소 클론, 폴더 구조·`PLAN.md`·`WORKLOG.md` 정비 | 원격 파일 유실 없이 커밋 |
-| **1** | config 로더 + `CurrentUser()` 훅 + `awxkit doctor` | conf에 URL/ID/PW만 넣고 `doctor` 실행 → 버전·인증·템플릿 개수 출력 |
+| **0** | 저장소 클론, 폴더 구조·`PLAN.md`·`WORKLOG.md` 정비 | ✅ 완료 (2026-08-19) — 원격 파일 유실 없이 커밋 |
+| **1** | config 로더 + `CurrentUser()` 훅 + `awxkit doctor` | ✅ 완료 (2026-08-19) — conf에 URL/ID/PW만 넣고 `doctor` 실행 → 버전·인증·템플릿 개수·권한·`ask_variables_on_launch` 점검까지 출력. Rocky Linux(192.168.0.58) 빌드/`go vet` 통과, 스텁 서버로 정상/오류 경로 검증 |
 | **2** | 공통 AWX 클라이언트(launch/poll/stdout) + `ls` / `survey` | 템플릿 목록과 survey 정의가 conf 스니펫 형태로 출력 |
 | **3** | [S1] `nodeinfo -host <hostname>` + 결과 파일 저장 | Job 성공 및 `s1_output_dir`에 결과 파일 생성 |
 | **4** | [S2] `invsync` 인벤토리 동기화 + 등록 결과 조회 | sync 성공 상태 + 호스트 리스트 출력 |

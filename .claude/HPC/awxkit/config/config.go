@@ -1,0 +1,179 @@
+// Package config는 ${user}_setting.conf 형식의 평문 설정 파일을 읽는다.
+// 외부 의존성 없는 폐쇄망 빌드 원칙에 따라 YAML/TOML 파서 대신
+// "key = value" 형태의 자체 포맷을 사용한다.
+package config
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+// Config는 awxkit 실행에 필요한 전체 설정값을 담는다.
+type Config struct {
+	// AWX 접속 정보
+	AWXURL      string
+	Username    string
+	Password    string
+	InsecureTLS bool
+
+	// [S1] NodeInfo
+	S1Template     string
+	S1HostnameKey  string
+	S1Fetch        string // artifacts | stdout | remote
+	S1RemotePath   string
+	S1OutputDir    string
+
+	// [S2] 인벤토리 동기화
+	S2InventorySource string
+	S2Inventory       string
+
+	// [S3] DHCP
+	S3Template     string
+	S3InfraKey     string
+	S3InfraChoices string
+
+	// [S4] PXE
+	S4Template   string
+	S4InfraKey   string
+	S4OSVerKey   string
+	S4BootModeKey string
+	S4SplunkKey  string
+	S4Inventory  string
+
+	// 공통 동작
+	PollIntervalSec int
+	HistoryFile     string
+
+	// 로드된 실제 경로 (진단 출력용)
+	SourcePath string
+}
+
+// 원본 key -> Config 필드 매핑 목록. 새 키를 추가할 때 여기만 늘리면 된다.
+func (c *Config) fieldSetters() map[string]func(string) {
+	return map[string]func(string){
+		"awx_url":      func(v string) { c.AWXURL = v },
+		"username":     func(v string) { c.Username = v },
+		"password":     func(v string) { c.Password = v },
+		"insecure_tls": func(v string) { c.InsecureTLS = parseBool(v) },
+
+		"s1_template":     func(v string) { c.S1Template = v },
+		"s1_hostname_key": func(v string) { c.S1HostnameKey = v },
+		"s1_fetch":        func(v string) { c.S1Fetch = v },
+		"s1_remote_path":  func(v string) { c.S1RemotePath = v },
+		"s1_output_dir":   func(v string) { c.S1OutputDir = v },
+
+		"s2_inventory_source": func(v string) { c.S2InventorySource = v },
+		"s2_inventory":        func(v string) { c.S2Inventory = v },
+
+		"s3_template":      func(v string) { c.S3Template = v },
+		"s3_infra_key":     func(v string) { c.S3InfraKey = v },
+		"s3_infra_choices": func(v string) { c.S3InfraChoices = v },
+
+		"s4_template":     func(v string) { c.S4Template = v },
+		"s4_infra_key":    func(v string) { c.S4InfraKey = v },
+		"s4_osver_key":    func(v string) { c.S4OSVerKey = v },
+		"s4_bootmode_key": func(v string) { c.S4BootModeKey = v },
+		"s4_splunk_key":   func(v string) { c.S4SplunkKey = v },
+		"s4_inventory":    func(v string) { c.S4Inventory = v },
+
+		"poll_interval": func(v string) {
+			if n, err := strconv.Atoi(v); err == nil {
+				c.PollIntervalSec = n
+			}
+		},
+		"history_file": func(v string) { c.HistoryFile = v },
+	}
+}
+
+func parseBool(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "true", "yes", "y", "1", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// Load는 지정된 경로의 conf 파일을 파싱한다.
+func Load(path string) (*Config, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("설정 파일을 열 수 없습니다 (%s): %w", path, err)
+	}
+	defer f.Close()
+
+	c := &Config{
+		S1Fetch:         "artifacts",
+		S1OutputDir:     "./output",
+		PollIntervalSec: 3,
+		HistoryFile:     "./awxkit_history.log",
+		SourcePath:      path,
+	}
+	setters := c.fieldSetters()
+
+	scanner := bufio.NewScanner(f)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := scanner.Text()
+		if idx := strings.Index(line, "#"); idx >= 0 {
+			line = line[:idx]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		eq := strings.Index(line, "=")
+		if eq < 0 {
+			return nil, fmt.Errorf("%s:%d: '=' 형식이 아닙니다: %q", path, lineNo, line)
+		}
+		key := strings.TrimSpace(line[:eq])
+		val := strings.TrimSpace(line[eq+1:])
+		if setter, ok := setters[key]; ok {
+			setter(val)
+		}
+		// 모르는 키는 향후 단계에서 쓸 수 있으므로 조용히 무시한다.
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("설정 파일 읽기 오류 (%s): %w", path, err)
+	}
+
+	return c, nil
+}
+
+// ResolvePath는 -conf 플래그, 사용자별 conf, 사용자 홈 디렉터리, 실행 파일 위치 순으로
+// 설정 파일을 탐색해 최초로 존재하는 경로를 반환한다.
+func ResolvePath(explicit, user string) (string, error) {
+	if explicit != "" {
+		if _, err := os.Stat(explicit); err == nil {
+			return explicit, nil
+		}
+		return "", fmt.Errorf("지정한 설정 파일이 없습니다: %s", explicit)
+	}
+
+	if user == "" {
+		return "", fmt.Errorf("사용자를 식별할 수 없습니다 (-user 플래그, AWXKIT_USER 환경변수, 또는 config.CurrentUser()를 확인하세요)")
+	}
+	filename := user + "_setting.conf"
+
+	candidates := []string{
+		filepath.Join(".", "conf", filename),
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".awxkit", filename))
+	}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "conf", filename))
+	}
+
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("%s 파일을 찾지 못했습니다 (확인한 경로: %s)", filename, strings.Join(candidates, ", "))
+}
