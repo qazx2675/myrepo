@@ -43,6 +43,19 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | [`home_lab`](./개인프로젝트/home_lab/) | (`vm 생성 홈페이지 프로젝트`) govmomi 기반 vCenter/ESXi 자동화 CLI들을 RBAC + 암호화 자격증명 + 감사 로그를 갖춘 웹 포털로 감싼 프로젝트. |
 | [`clipSend`](./개인프로젝트/clipSend/) | 클립보드 텍스트를 자동으로 메일로 보내주는 Android 애플리케이션. Kotlin/Jetpack Compose 기반. |
 
-## 기타
+## 디렉토리 구조
 
+```
+.claude/
+├── VM/                  # vCenter/ESXi VM 점검·설정·테스트 도구 모음 (위 표 참고)
+├── HPC/                 # HPC 서버 OS/GPU 레벨 점검·설정 도구 모음 (위 표 참고)
+├── 공통/                 # 여러 도구가 같이 쓰는 기반 도구 (gossh 등)
+├── 개인프로젝트/           # 개인/실험 목적 프로젝트 (home_lab, clipSend)
+├── update_readme.py     # 하위 폴더 README.md들의 빌드 안내 문구를 일괄 치환하는 보조 스크립트
+├── 바이너리셋업.sh         # VM/ 하위 Go 도구들을 빌드해서 지정 경로(기본 /usr/local/bin)에 한 번에 설치하는 스크립트
+└── settings.local.json  # Claude Code 로컬 설정 파일
+```
+
+- `update_readme.py` — `VM/` 하위 각 폴더의 `README.md`를 순회하며 정해진 빌드 안내 문구를 새 문구로 일괄 치환하는 관리용 스크립트.
+- `바이너리셋업.sh` — `VM/` 폴더의 Go 프로젝트들을 각각 빌드한 뒤 지정한 경로(기본값 `/usr/local/bin`)로 복사해 전역 명령어처럼 쓸 수 있게 만드는 설치 스크립트.
 - `settings.local.json` — Claude Code 로컬 설정 파일.

@@ -105,7 +105,25 @@ chmod +x affinity_setting
 
 이렇게 해두고 `vm-param-fix`를 실행하면, 동질성/전원 게이트는 실제 vCenter에 그대로 조회하면서(진짜 안전장치 동작 확인) 실제 설정 변경만 mock으로 대체되어 dry-run/확인/병렬 실행/재검증 파이프라인 전체를 안전하게 검증할 수 있습니다.
 
-### 4.4 알려진 한계
+### 4.4 디렉토리 구조
+
+```
+vm-param-fix/
+├── README.md       # 이 문서
+├── PLAN.md         # 설계 계획 메모
+├── main.go         # CLI 진입점 (옵션 파싱, 오케스트레이션 흐름 제어)
+├── gates.go        # 그룹 동질성/전원 OFF 게이트 검증 로직
+├── report.go       # 결과 리포트/CSV 출력
+├── scaletest.go    # 대량 환경 시뮬레이션용 코드
+├── vcenter.go      # vCenter API 접속/조회 로직
+├── go.mod / go.sum   # Go 모듈 정의 파일
+├── setup.sh        # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── test.sh         # 테스트 실행 스크립트
+├── power_setting   # 호스트 전원정책 자동교정 도구 (소스 미확인, 컴파일된 바이너리만 보관)
+└── vendor/         # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
+### 4.5 알려진 한계
 - 그룹 동질성 검증은 vCPU 수/코어당 소켓 수/메모리/디스크/CPU Shares/NUMA(`numa.vcpu.maxPerVirtualNode` extraConfig 값)/HT(`sched.vcpu0.affinity` extraConfig 값이 콤마로 구분된 pCPU 2개 이상인지)와 ev01/ev02/ev03 그룹 간 VM 대수를 비교합니다. NUMA/HT 값이 vCenter에 아예 설정되어 있지 않은 VM은 "설정없음" 상태로 취급되어 같은 미설정 상태끼리는 동일한 것으로 봅니다.
 - vCPU 수/메모리/디스크/Shares/Reserve-all-guest-memory FAIL은 자동교정 대상이 아니라 manual로만 표시됩니다(현재 조사된 외부 도구 중 이 값들을 정확히 커버하는 게 없음).
 - `-affinityFile`(ev02용)을 안 주면 ev02 affinity FAIL이 있어도 ev01만 교정되고 ev02는 건너뜁니다(경고 메시지로 안내).

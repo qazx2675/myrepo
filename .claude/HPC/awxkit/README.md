@@ -119,3 +119,21 @@ $ ./awxkit doctor
 - 상세 설계·API 매핑·단계별 계획: [`PLAN.md`](./PLAN.md)
 - 작업 이력: [`WORKLOG.md`](./WORKLOG.md)
 - 현재 1단계(설정 로딩 + `doctor`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
+
+### 4.1 디렉토리 구조
+
+```
+awxkit/
+├── README.md          # 이 문서
+├── PLAN.md             # 설계·API 매핑·단계별 계획
+├── WORKLOG.md          # 작업 이력
+├── go.mod              # Go 모듈 정의 파일 (module awxkit)
+├── main.go             # 진입점 — 전역 플래그, 대화형 메뉴, 명령 디스패치
+├── doctor.go           # doctor 명령 — conf/연결/권한/파라미터 점검
+├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트
+├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go)
+├── awx/                 # AWX REST API(/api/v2) 클라이언트
+├── conf/
+│   └── sample_setting.conf   # ${user}_setting.conf 작성용 샘플
+└── vendor/              # 빌드에 필요한 Go 의존성 패키지 모음 (현재 외부 의존성 없음)
+```

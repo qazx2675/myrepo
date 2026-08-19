@@ -70,6 +70,18 @@ export VC_PASSWORD='실제_비밀번호'
 7. 콘솔에 전체 리스트를 출력하는 동시에, 현재 작업 디렉터리에
    `Provisioning_List_<vcTargetIP의 .을 _로 치환>.txt` 파일로 저장.
 
+## 6. 디렉토리 구조
+
+```
+mac_info-source/
+├── README.md      # 이 문서
+├── main.go        # VM MAC 주소 조회 + Provisioning List 생성 로직 전체
+├── go.mod / go.sum  # Go 모듈 정의 파일
+├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── mac_info       # setup.sh로 빌드된 실행 바이너리
+└── vendor/        # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
 ## 5. 알려진 한계
 
 - IP 조회 로직이 없어 IP 필드는 항상 `<VM이름>_DNS_AND_TOOLS_NOT_FOUND` 고정값입니다.

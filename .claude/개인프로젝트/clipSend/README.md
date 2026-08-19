@@ -209,3 +209,23 @@ find /var/log -name "*.log" -mtime +30 -delete
 ### 4.6 라이선스
 
 개인 프로젝트 (비상업용)
+
+### 4.7 디렉토리 구조
+
+```
+clipSend/
+├── README.md               # 이 문서
+├── CLAUDE.md                # Claude Code용 프로젝트 안내 문서
+├── vm-param-allinone-plan.md / vm-param-fix-plan.md  # (다른 프로젝트에서 옮겨온) 계획 메모
+├── build.gradle.kts          # 최상위 Gradle 빌드 설정
+├── settings.gradle.kts       # Gradle 모듈 구성
+├── gradle.properties         # Gradle 속성 설정
+├── gradlew / gradlew.bat     # Gradle 래퍼 실행 스크립트
+├── gradle/                   # Gradle 래퍼 설정 및 버전 카탈로그(libs.versions.toml)
+└── app/                      # 앱 모듈
+    ├── build.gradle.kts      # 앱 모듈 Gradle 빌드 설정
+    └── src/
+        ├── main/             # 앱 소스 코드(Kotlin), 매니페스트, 리소스(res/)
+        ├── test/             # 단위 테스트
+        └── androidTest/      # 계측(instrumentation) 테스트
+```
