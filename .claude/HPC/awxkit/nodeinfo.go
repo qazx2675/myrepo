@@ -5,13 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"awxkit/awx"
 	"awxkit/config"
 )
 
-// runNodeInfo는 [S1] NodeInfo 템플릿을 hostsPath에 나열된 hostname마다 각각 실행하고,
-// 결과를 hostname별 파일로 저장한다.
+// runNodeInfo는 [S1] NodeInfo 템플릿을 한 번 실행한다.
+// hostsPath(기본 ${user}.txt)에 나열된 hostname 전체를 줄바꿈으로 이어붙여
+// 하나의 extra_vars 값으로 넘기고, 그 결과를 파일 하나로 받는다.
+// (NodeInfo 템플릿 자체가 여러 hostname을 텍스트로 한 번에 받아 처리하는 구조이므로,
+//
+//	hostname마다 별도로 launch하지 않는다.)
 func runNodeInfo(confPath, user, hostsFlag string) {
 	cfg, client, err := loadConfigAndClient(confPath)
 	if err != nil {
@@ -50,54 +55,44 @@ func runNodeInfo(confPath, user, hostsFlag string) {
 		os.Exit(1)
 	}
 
-	var succeeded, failed []string
-	for i, host := range hosts {
-		fmt.Printf("[%d/%d] %s 실행 중...\n", i+1, len(hosts), host)
+	hostText := strings.Join(hosts, "\n")
+	fmt.Printf("[i] %s 실행 중... (%d개 hostname을 한 번에 전달)\n", t.Name, len(hosts))
 
-		result, err := client.Launch(t.ID, map[string]interface{}{cfg.S1HostnameKey: host})
-		if err != nil {
-			fmt.Printf("    [X] 실행 요청 실패: %v\n", err)
-			failed = append(failed, host)
-			appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo host=%s status=launch_error error=%q", user, host, err.Error()))
-			continue
-		}
-		if len(result.IgnoredFields) > 0 {
-			fmt.Printf("    [!] 일부 값이 무시되었습니다(ignored_fields): %v — 템플릿의 ask_variables_on_launch 설정을 확인하세요.\n", result.IgnoredFields)
-		}
-
-		job, err := pollJob(client, result.Job, cfg.PollIntervalSec)
-		if err != nil {
-			fmt.Printf("    [X] 상태 조회 실패: %v\n", err)
-			failed = append(failed, host)
-			appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo host=%s job=%d status=poll_error error=%q", user, host, result.Job, err.Error()))
-			continue
-		}
-		if job.Status != "successful" {
-			fmt.Printf("    [X] Job 실패 (status=%s)\n", job.Status)
-			printStdoutTail(client, job.ID, 30)
-			failed = append(failed, host)
-			appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo host=%s job=%d status=%s", user, host, job.ID, job.Status))
-			continue
-		}
-
-		outPath := filepath.Join(cfg.S1OutputDir, host+".yaml")
-		if err := saveNodeInfoResult(client, cfg, job, outPath); err != nil {
-			fmt.Printf("    [X] 결과 저장 실패: %v\n", err)
-			failed = append(failed, host)
-			appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo host=%s job=%d status=fetch_error error=%q", user, host, job.ID, err.Error()))
-			continue
-		}
-
-		fmt.Printf("    [✔] 완료 (job %d)\n", job.ID)
-		succeeded = append(succeeded, host)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo host=%s job=%d status=successful output=%s", user, host, job.ID, outPath))
-	}
-
-	fmt.Printf("\n총 %d개 중 성공 %d개, 실패 %d개\n", len(hosts), len(succeeded), len(failed))
-	if len(failed) > 0 {
-		fmt.Printf("실패한 호스트: %v\n", failed)
+	result, err := client.Launch(t.ID, map[string]interface{}{cfg.S1HostnameKey: hostText})
+	if err != nil {
+		fmt.Printf("[X] 실행 요청 실패: %v\n", err)
+		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d status=launch_error error=%q", user, len(hosts), err.Error()))
 		os.Exit(1)
 	}
+	if len(result.IgnoredFields) > 0 {
+		fmt.Printf("    [!] 일부 값이 무시되었습니다(ignored_fields): %v — 템플릿의 ask_variables_on_launch 설정을 확인하세요.\n", result.IgnoredFields)
+	}
+
+	job, err := pollJob(client, result.Job, cfg.PollIntervalSec)
+	if err != nil {
+		fmt.Printf("[X] 상태 조회 실패: %v\n", err)
+		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=poll_error error=%q", user, len(hosts), result.Job, err.Error()))
+		os.Exit(1)
+	}
+	if job.Status != "successful" {
+		fmt.Printf("[X] Job 실패 (status=%s)\n", job.Status)
+		printStdoutTail(client, job.ID, 30)
+		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=%s", user, len(hosts), job.ID, job.Status))
+		os.Exit(1)
+	}
+
+	outPath := filepath.Join(cfg.S1OutputDir, user+"_nodeinfo.yaml")
+	if user == "" {
+		outPath = filepath.Join(cfg.S1OutputDir, "nodeinfo_result.yaml")
+	}
+	if err := saveNodeInfoResult(client, cfg, job, outPath); err != nil {
+		fmt.Printf("[X] 결과 저장 실패: %v\n", err)
+		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=fetch_error error=%q", user, len(hosts), job.ID, err.Error()))
+		os.Exit(1)
+	}
+
+	fmt.Printf("[✔] 완료 (job %d) — 결과 저장: %s\n", job.ID, outPath)
+	appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=successful output=%s", user, len(hosts), job.ID, outPath))
 }
 
 // saveNodeInfoResult는 cfg.S1Fetch 설정에 따라 결과를 취득해 outPath에 저장한다.

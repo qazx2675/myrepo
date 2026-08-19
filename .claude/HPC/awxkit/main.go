@@ -20,7 +20,7 @@ const usage = `awxkit - AWX 템플릿 실행 CLI (터미널 전용)
   doctor    설정/연결/권한을 점검합니다
   ls        템플릿 목록을 조회합니다
   survey <ID|이름>   템플릿의 survey 정의(변수명·선택지)를 조회합니다
-  nodeinfo  [S1] NodeInfo 템플릿을 ${user}.txt의 각 hostname마다 실행하고 결과를 저장합니다
+  nodeinfo  [S1] ${user}.txt의 모든 hostname을 한 번에 넣어 NodeInfo 템플릿을 실행하고 결과를 저장합니다
   invsync   [S2] 인벤토리 동기화 (다음 단계 예정)
   dhcp      [S3] DHCP 등록 (다음 단계 예정)
   pxe       [S4] PXE 등록 (다음 단계 예정)
