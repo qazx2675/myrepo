@@ -21,11 +21,12 @@ type Config struct {
 	InsecureTLS bool
 
 	// [S1] NodeInfo
-	S1Template     string
-	S1HostnameKey  string
-	S1Fetch        string // artifacts | stdout | remote
-	S1RemotePath   string
-	S1OutputDir    string
+	S1Template    string
+	S1HostnameKey string
+	S1Fetch       string // artifacts | stdout | remote
+	S1ArtifactKey string // s1_fetch=artifacts 일 때 결과가 담긴 artifacts의 키. 비우면 전체 artifacts를 저장
+	S1RemotePath  string
+	S1OutputDir   string
 
 	// [S2] 인벤토리 동기화
 	S2InventorySource string
@@ -37,12 +38,12 @@ type Config struct {
 	S3InfraChoices string
 
 	// [S4] PXE
-	S4Template   string
-	S4InfraKey   string
-	S4OSVerKey   string
+	S4Template    string
+	S4InfraKey    string
+	S4OSVerKey    string
 	S4BootModeKey string
-	S4SplunkKey  string
-	S4Inventory  string
+	S4SplunkKey   string
+	S4Inventory   string
 
 	// 공통 동작
 	PollIntervalSec int
@@ -63,6 +64,7 @@ func (c *Config) fieldSetters() map[string]func(string) {
 		"s1_template":     func(v string) { c.S1Template = v },
 		"s1_hostname_key": func(v string) { c.S1HostnameKey = v },
 		"s1_fetch":        func(v string) { c.S1Fetch = v },
+		"s1_artifact_key": func(v string) { c.S1ArtifactKey = v },
 		"s1_remote_path":  func(v string) { c.S1RemotePath = v },
 		"s1_output_dir":   func(v string) { c.S1OutputDir = v },
 
@@ -148,17 +150,22 @@ func Load(path string) (*Config, error) {
 // ResolvePath는 -conf 플래그, 사용자별 conf, 사용자 홈 디렉터리, 실행 파일 위치 순으로
 // 설정 파일을 탐색해 최초로 존재하는 경로를 반환한다.
 func ResolvePath(explicit, user string) (string, error) {
+	if user == "" && explicit == "" {
+		return "", fmt.Errorf("사용자를 식별할 수 없습니다 (-user 플래그, AWXKIT_USER 환경변수, 또는 config.CurrentUser()를 확인하세요)")
+	}
+	return ResolveNamedPath(explicit, user+"_setting.conf")
+}
+
+// ResolveNamedPath는 -conf류 명시적 경로가 있으면 그대로 쓰고, 없으면 ${user}_setting.conf와
+// 동일한 탐색 순서(./conf/<filename> → ~/.awxkit/<filename> → <실행파일>/conf/<filename>)로 찾는다.
+// hostlist(${user}.txt) 등 conf와 같은 규칙을 따르는 다른 파일에도 재사용한다.
+func ResolveNamedPath(explicit, filename string) (string, error) {
 	if explicit != "" {
 		if _, err := os.Stat(explicit); err == nil {
 			return explicit, nil
 		}
-		return "", fmt.Errorf("지정한 설정 파일이 없습니다: %s", explicit)
+		return "", fmt.Errorf("지정한 파일이 없습니다: %s", explicit)
 	}
-
-	if user == "" {
-		return "", fmt.Errorf("사용자를 식별할 수 없습니다 (-user 플래그, AWXKIT_USER 환경변수, 또는 config.CurrentUser()를 확인하세요)")
-	}
-	filename := user + "_setting.conf"
 
 	candidates := []string{
 		filepath.Join(".", "conf", filename),
@@ -176,4 +183,35 @@ func ResolvePath(explicit, user string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%s 파일을 찾지 못했습니다 (확인한 경로: %s)", filename, strings.Join(candidates, ", "))
+}
+
+// ReadHostList는 ${user}.txt 형식의 hostname 목록 파일을 읽는다.
+// 한 줄에 hostname 하나, '#' 이후는 주석, 빈 줄은 무시한다.
+func ReadHostList(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("호스트 목록 파일을 열 수 없습니다 (%s): %w", path, err)
+	}
+	defer f.Close()
+
+	var hosts []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if idx := strings.Index(line, "#"); idx >= 0 {
+			line = line[:idx]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		hosts = append(hosts, line)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("호스트 목록 파일 읽기 오류 (%s): %w", path, err)
+	}
+	if len(hosts) == 0 {
+		return nil, fmt.Errorf("%s에 유효한 hostname이 없습니다", path)
+	}
+	return hosts, nil
 }

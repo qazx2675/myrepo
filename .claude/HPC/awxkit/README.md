@@ -33,6 +33,14 @@ cp awxkit /usr/local/bin/
 # 이후 어디서든 awxkit 명령어로 실행 가능
 ```
 
+### 1.4 매번 직접 빌드하지 않고 바로 실행하기 (`run.sh`)
+빌드 여부를 신경 쓰지 않고 곧바로 쓰고 싶다면 `run.sh`를 쓰면 됩니다.
+바이너리가 없으면 자동으로 `setup.sh`를 실행해 빌드한 뒤, 넘긴 인자를 그대로 `awxkit`에 전달합니다.
+```bash
+bash run.sh doctor
+bash run.sh              # 인자 없이 실행하면 대화형 메뉴
+```
+
 ## 2. 사용 방법
 
 ### 2.1 설정 파일 준비
@@ -99,6 +107,36 @@ $ ./awxkit doctor
 ```
 `survey`에 인자를 주지 않으면(`./awxkit survey`, 또는 메뉴에서 선택) 템플릿 ID/이름을 물어봅니다.
 
+### 2.6 [S1] NodeInfo 실행 (`nodeinfo`)
+hostname은 하나씩 넘기지 않고, **`${user}.txt`에 한 줄씩 나열**해서 한 번에 실행합니다.
+탐색 순서는 conf 파일과 동일합니다: `./conf/${user}.txt` → `~/.awxkit/${user}.txt` → `<awxkit 실행 파일 위치>/conf/${user}.txt`.
+
+```bash
+# conf/hong.txt
+web01
+web02
+db01
+```
+```bash
+./awxkit nodeinfo
+# [i] 호스트 목록: conf/hong.txt (3개)
+# [1/3] web01 실행 중...
+#     [job 1234] running
+#     [job 1234] successful
+#     [✔] 완료 (job 1234)
+# ...
+# 총 3개 중 성공 2개, 실패 1개
+# 실패한 호스트: [db01]
+```
+- hostname마다 `s1_template`을 개별 실행하고, 결과를 `s1_output_dir/{hostname}.yaml`로 저장합니다.
+- 결과 취득 방식(`s1_fetch`)에 따라: `artifacts`(기본, `s1_artifact_key`로 값을 지정하지 않으면 전체 artifacts를 저장), `stdout`(표준출력 그대로 저장), `remote`(API로 받을 수 없어 원격 경로 안내만 출력).
+- 실패한 hostname은 stdout 마지막 30줄을 함께 보여주고, 종료 코드 1로 끝납니다.
+- 모든 실행은 `history_file`에 한 줄씩 기록됩니다.
+- `${user}.txt` 대신 다른 파일을 쓰려면 `-hosts <경로>`로 직접 지정할 수 있습니다.
+```bash
+./awxkit -hosts ./retry_list.txt nodeinfo
+```
+
 ## 3. 옵션별 상세 설명
 
 ### 3.1 전역 플래그
@@ -106,6 +144,7 @@ $ ./awxkit doctor
 |---|---|
 | `-conf <경로>` | 설정 파일 경로를 직접 지정 (탐색 순서 무시) |
 | `-user <이름>` | 사용자 식별자를 직접 지정 (`AWXKIT_USER` 환경변수보다 우선순위 낮음) |
+| `-hosts <경로>` | (`nodeinfo` 전용) `${user}.txt` 대신 사용할 호스트 목록 파일 |
 
 ### 3.2 명령
 | 명령 | 상태 | 설명 |
@@ -113,7 +152,7 @@ $ ./awxkit doctor
 | `doctor` | **구현됨** | conf 로딩, 파일 권한, AWX 연결/버전, 템플릿 존재·실행 권한·`ask_variables_on_launch` 점검 |
 | `ls` | **구현됨** | 템플릿 목록(ID·이름·extra_vars 허용 여부·survey 유무) 조회 |
 | `survey <ID\|이름>` | **구현됨** | 템플릿의 survey 문항(질문명·변수명·선택지·기본값·필수여부) 조회. 인자를 생략하면 대화형으로 물어봄 |
-| `nodeinfo` | 예정 | [S1] NodeInfo 템플릿 실행 및 결과 파일 저장 |
+| `nodeinfo` | **구현됨** | [S1] `${user}.txt`의 각 hostname마다 NodeInfo 템플릿 실행 및 결과 파일 저장 |
 | `invsync` | 예정 | [S2] 인벤토리 동기화 |
 | `dhcp` | 예정 | [S3] DHCP 등록 |
 | `pxe` | 예정 | [S4] PXE 등록 및 호스트 수 리포트 |
@@ -125,7 +164,7 @@ $ ./awxkit doctor
 |---|---|
 | `awx_url` / `username` / `password` | AWX 접속 정보 |
 | `insecure_tls` | 사설 인증서 환경에서 `true` |
-| `s1_*` | [S1] NodeInfo 템플릿/파라미터/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote)/저장 경로 |
+| `s1_*` | [S1] NodeInfo 템플릿/파라미터/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
 | `s2_*` | [S2] 인벤토리 소스·대상 인벤토리 ID |
 | `s3_*` | [S3] DHCP 템플릿/인프라 선택 변수명·옵션 |
 | `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명, 결과 집계용 인벤토리 ID |
@@ -135,7 +174,7 @@ $ ./awxkit doctor
 ## 4. 문서별 고유 설명
 - 상세 설계·API 매핑·단계별 계획: [`PLAN.md`](./PLAN.md)
 - 작업 이력: [`WORKLOG.md`](./WORKLOG.md)
-- 현재 2단계(설정 로딩 + `doctor` + `ls`/`survey`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
+- 현재 3단계(설정 로딩 + `doctor` + `ls`/`survey` + `nodeinfo`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
 
 ### 4.1 디렉토리 구조
 
@@ -145,12 +184,15 @@ awxkit/
 ├── PLAN.md             # 설계·API 매핑·단계별 계획
 ├── WORKLOG.md          # 작업 이력
 ├── go.mod              # Go 모듈 정의 파일 (module awxkit)
+├── .gitattributes       # *.sh/*.go/go.mod를 LF로 강제 (Windows 체크아웃 시 CRLF로 깨지는 것 방지)
 ├── main.go             # 진입점 — 전역 플래그, 대화형 메뉴, 명령 디스패치
-├── common.go            # conf 로딩 + AWX 클라이언트 생성 공용 헬퍼
+├── common.go            # conf 로딩 + AWX 클라이언트 생성 + Job 폴링 등 공용 헬퍼
 ├── doctor.go           # doctor 명령 — conf/연결/권한/파라미터 점검
 ├── catalog.go           # ls / survey 명령 — 템플릿·survey 정의 조회
-├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트
-├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go)
+├── nodeinfo.go           # nodeinfo 명령 — [S1] hostname별 NodeInfo 실행 및 결과 저장
+├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트 (go build -o awxkit .)
+├── run.sh              # 바이너리가 없으면 자동 빌드 후 실행하는 래퍼 스크립트
+├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go) + 호스트 목록 로더
 ├── awx/                 # AWX REST API(/api/v2) 클라이언트
 ├── conf/
 │   └── sample_setting.conf   # ${user}_setting.conf 작성용 샘플

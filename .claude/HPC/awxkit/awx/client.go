@@ -41,7 +41,7 @@ func NewClient(baseURL, username, password string, insecureTLS bool, timeout tim
 // authTransport는 모든 요청에 Basic 인증 헤더를 자동으로 붙이는 http.RoundTripper 래퍼다.
 type authTransport struct {
 	username, password string
-	base                http.RoundTripper
+	base               http.RoundTripper
 }
 
 func (a *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -109,7 +109,7 @@ func (c *Client) do(method, path string, body interface{}, out interface{}) erro
 
 // PingResult는 GET /api/v2/ping/ 응답이다.
 type PingResult struct {
-	Version string `json:"version"`
+	Version    string `json:"version"`
 	ActiveNode string `json:"active_node"`
 }
 
@@ -124,11 +124,11 @@ func (c *Client) Ping() (*PingResult, error) {
 
 // JobTemplate은 job_templates 목록/조회 응답의 일부다.
 type JobTemplate struct {
-	ID                    int    `json:"id"`
-	Name                  string `json:"name"`
-	AskVariablesOnLaunch  bool   `json:"ask_variables_on_launch"`
-	SurveyEnabled         bool   `json:"survey_enabled"`
-	SummaryFields struct {
+	ID                   int    `json:"id"`
+	Name                 string `json:"name"`
+	AskVariablesOnLaunch bool   `json:"ask_variables_on_launch"`
+	SurveyEnabled        bool   `json:"survey_enabled"`
+	SummaryFields        struct {
 		UserCapabilities struct {
 			Start bool `json:"start"`
 		} `json:"user_capabilities"`
@@ -173,19 +173,19 @@ func (c *Client) ResolveTemplate(idOrName string) (*JobTemplate, error) {
 
 // SurveySpec은 job_templates/{id}/survey_spec/ 응답이다.
 type SurveySpec struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
 	Spec        []SurveyQuestion `json:"spec"`
 }
 
 // SurveyQuestion은 survey_spec.spec 배열의 항목 하나다.
 type SurveyQuestion struct {
-	QuestionName string        `json:"question_name"`
-	Variable     string        `json:"variable"`
-	Type         string        `json:"type"`
-	Choices      interface{}   `json:"choices"` // 문자열(줄바꿈 구분) 또는 배열로 올 수 있음
-	Default      interface{}   `json:"default"`
-	Required     bool          `json:"required"`
+	QuestionName string      `json:"question_name"`
+	Variable     string      `json:"variable"`
+	Type         string      `json:"type"`
+	Choices      interface{} `json:"choices"` // 문자열(줄바꿈 구분) 또는 배열로 올 수 있음
+	Default      interface{} `json:"default"`
+	Required     bool        `json:"required"`
 }
 
 // GetSurveySpec은 템플릿의 survey 정의를 조회한다.
@@ -199,7 +199,7 @@ func (c *Client) GetSurveySpec(templateID int) (*SurveySpec, error) {
 
 // LaunchResult는 launch/ 호출 응답의 일부다.
 type LaunchResult struct {
-	Job           int      `json:"job"`
+	Job           int                    `json:"job"`
 	IgnoredFields map[string]interface{} `json:"ignored_fields"`
 }
 

@@ -1,7 +1,8 @@
 # AWX 템플릿 실행 CLI (awxkit) - 계획서
 
-> **진행 상태 (2026-08-19 기준)**: 0~2단계 완료 (config 로더 + `CurrentUser()` 훅 + `doctor` + `ls`/`survey`).
-> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 `doctor`/`ls`/`survey` 정상·오류 경로 검증 완료. 3단계([S1] NodeInfo)부터 이어서 진행 예정.
+> **진행 상태 (2026-08-19 기준)**: 0~3단계 완료 (config 로더 + `CurrentUser()` 훅 + `doctor` + `ls`/`survey` + `nodeinfo`).
+> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 정상·오류 경로 검증 완료. 4단계([S2] 인벤토리 동기화)부터 이어서 진행 예정.
+> hostname은 `-host` 단일 플래그가 아니라 `${user}.txt`(conf와 동일한 탐색 규칙) 목록 파일로 받도록 설계 변경됨 — hostname은 NodeInfo 단계에서만 필요하고, 이후 단계는 인벤토리에 등록된 상태를 기준으로 동작하기 때문.
 > 작업 이력은 [`WORKLOG.md`](./WORKLOG.md), 사용법은 [`README.md`](./README.md) 참고.
 
 ## 목적
@@ -45,6 +46,8 @@ ETX 원격 터미널 환경에서 AWX 웹 GUI를 띄우면 화면 지연(Lag)이
 | 결과 파일 | 취득 경로 3종(`artifacts`/`stdout`/원격파일) 모두 지원, **로컬 저장 경로는 conf에 지정** | 현장에서 어느 경로로 나오는지 미확정이므로 전부 대비 |
 | 설정 포맷 | `key = value` 평문 (`#` 주석 허용) | 의존성 제로 원칙상 YAML/TOML 파서 사용 불가. 현장에서 vi로 여는 파일이라 오히려 적합 |
 | 사용자 식별 | `config.CurrentUser()` 함수 **껍데기만 제공** | 사용자가 현장 로직을 직접 채워 넣음 |
+| hostname 입력 | `-host` 단일 플래그 대신 **`${user}.txt`** 목록 파일 (conf와 동일한 탐색 규칙) | hostname은 [S1] NodeInfo에서만 필요. 이후 [S2]~[S4]는 인벤토리 등록 상태를 기준으로 동작 |
+| 실행 환경 | 핵심 로직은 Go 바이너리, `run.sh`로 감싸 바이너리 없으면 자동 빌드 후 실행 | Go로 만든 걸 bash로 쉽게 실행할 수 있어야 한다는 요청 반영 |
 
 ### 설정 파일 예시 (`conf/sample_setting.conf`)
 
@@ -59,8 +62,9 @@ insecure_tls   = true
 s1_template        = nodeinfo      # ID(숫자) 또는 템플릿 이름 둘 다 허용
 s1_hostname_key    = target_host
 s1_fetch           = artifacts     # artifacts | stdout | remote
+s1_artifact_key    =               # s1_fetch=artifacts 일 때 결과가 담긴 artifacts 키. 비우면 전체 저장
 s1_remote_path     =               # s1_fetch=remote 일 때 AWX 실행노드상의 경로
-s1_output_dir      = ./output      # 로컬 저장 경로
+s1_output_dir      = ./output      # 로컬 저장 경로 (hostname별로 {hostname}.yaml)
 
 # ── [S2] 인벤토리 동기화 ────────────────────────────────
 s2_inventory_source = 5
@@ -84,12 +88,14 @@ poll_interval  = 3               # Job 상태 폴링 간격(초)
 history_file   = ./awxkit_history.log
 ```
 
-### 설정 파일 탐색 순서
+### 설정 파일 / 호스트 목록 탐색 순서
 
-1. `-conf <경로>` 플래그
-2. `./conf/${user}_setting.conf`
-3. `~/.awxkit/${user}_setting.conf`
-4. `<바이너리 위치>/conf/${user}_setting.conf`
+`${user}_setting.conf`와 `${user}.txt`(nodeinfo용 hostname 목록) 모두 동일한 규칙을 따른다.
+
+1. `-conf <경로>` (또는 `-hosts <경로>`) 플래그
+2. `./conf/<파일명>`
+3. `~/.awxkit/<파일명>`
+4. `<바이너리 위치>/conf/<파일명>`
 
 `${user}`는 `config.CurrentUser()` → `-user` 플래그 → `AWXKIT_USER` 환경변수 → `$USER` 순으로 결정한다.
 `CurrentUser()`가 빈 문자열을 반환해도 나머지 폴백으로 도구는 정상 동작한다.
@@ -120,7 +126,7 @@ history_file   = ./awxkit_history.log
 | **0** | 저장소 클론, 폴더 구조·`PLAN.md`·`WORKLOG.md` 정비 | ✅ 완료 (2026-08-19) — 원격 파일 유실 없이 커밋 |
 | **1** | config 로더 + `CurrentUser()` 훅 + `awxkit doctor` | ✅ 완료 (2026-08-19) — conf에 URL/ID/PW만 넣고 `doctor` 실행 → 버전·인증·템플릿 개수·권한·`ask_variables_on_launch` 점검까지 출력. Rocky Linux(192.168.0.58) 빌드/`go vet` 통과, 스텁 서버로 정상/오류 경로 검증 |
 | **2** | 공통 AWX 클라이언트(launch/poll/stdout) + `ls` / `survey` | ✅ 완료 (2026-08-19) — 템플릿 목록과 survey 정의(변수명·선택지·기본값)를 조회해 출력. 스텁 서버로 정상/오류(비-survey 템플릿, 존재하지 않는 템플릿) 경로 검증 |
-| **3** | [S1] `nodeinfo -host <hostname>` + 결과 파일 저장 | Job 성공 및 `s1_output_dir`에 결과 파일 생성 |
+| **3** | [S1] `nodeinfo` (`${user}.txt`의 각 hostname마다 실행) + 결과 파일 저장 | ✅ 완료 (2026-08-19) — hostname별 Job 실행·폴링·결과 저장(`{hostname}.yaml`), 실패 시 stdout 마지막 30줄, `history_file` 기록. `setup.sh`가 `main.go`만 빌드하던 버그와 CRLF 줄바꿈 문제(`.gitattributes` 추가)도 함께 수정 |
 | **4** | [S2] `invsync` 인벤토리 동기화 + 등록 결과 조회 | sync 성공 상태 + 호스트 리스트 출력 |
 | **5** | [S3] `dhcp -infra <n\|이름>` | `successful`/`failed` 판정 즉시 출력, 실패 시 stdout 마지막 30줄 |
 | **6** | [S4] `pxe` 4개 옵션 조합 + 호스트 수 리포트 | "총 N대의 호스트가 등록 완료되었습니다." 출력 |
@@ -134,8 +140,8 @@ history_file   = ./awxkit_history.log
 ## 시나리오별 상세
 
 ### [S1] NodeInfo 템플릿 실행 및 결과 파일 저장
-`hostname`을 `s1_hostname_key`에 담아 템플릿 실행 → Job 상태 실시간 추적 → 성공 시 결과 취득.
-취득 경로는 `s1_fetch`로 선택하며, 저장 위치는 `s1_output_dir`이다.
+`${user}.txt`에 나열된 hostname마다 `s1_hostname_key`에 담아 템플릿을 개별 실행 → Job 상태 실시간 추적 → 성공 시 결과 취득.
+취득 경로는 `s1_fetch`로 선택하며, 저장 위치는 `s1_output_dir/{hostname}.yaml`이다. 실패한 hostname은 요약에 별도로 나열된다.
 
 ### [S2] 인벤토리 동적 동기화
 [S1]에서 받은 YAML을 AWX가 참조하는 경로에 등록하거나 인벤토리 소스로 주입한 뒤,

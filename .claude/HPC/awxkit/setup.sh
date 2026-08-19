@@ -4,7 +4,7 @@
 echo "AWX 조작 툴 빌드를 시작합니다..."
 
 # 의존성이 포함된 vendor 폴더를 사용하여 오프라인 빌드 진행
-GOFLAGS=-mod=vendor go build -o awxkit main.go
+GOFLAGS=-mod=vendor go build -o awxkit .
 
 if [ $? -eq 0 ]; then
     echo "빌드 완료: awxkit 실행 파일이 생성되었습니다."

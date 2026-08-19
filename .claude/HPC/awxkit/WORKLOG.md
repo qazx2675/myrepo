@@ -36,3 +36,19 @@
 
 ### 다음 단계
 - 3단계: [S1] `nodeinfo -host <hostname>` 구현 — 템플릿 실행, Job 상태 폴링, 결과 취득(`s1_fetch`: artifacts/stdout/remote)과 `s1_output_dir` 저장까지.
+
+## 2026-08-19 (계속) — 3단계 구현
+
+- **설계 변경**: hostname을 `-host` 단일 플래그가 아니라 `${user}.txt`(conf와 동일한 탐색 규칙) 목록 파일로 받도록 사용자 요청 반영. hostname은 NodeInfo 단계에서만 필요하고 이후는 인벤토리 등록 상태를 기준으로 동작하기 때문. 또한 Go 바이너리를 bash로 쉽게 실행할 수 있는 환경이 필요하다는 요청에 따라 `run.sh` 래퍼 스크립트 추가.
+- `config/config.go`: `ResolvePath`를 `ResolveNamedPath(explicit, filename)`로 일반화(conf 탐색 로직 재사용), `ReadHostList()` 추가(`#` 주석/빈 줄 무시), conf에 `s1_artifact_key`(artifacts에서 결과가 담긴 키, 미설정 시 전체 저장) 필드 추가.
+- `common.go`: `pollJob`(상태 바뀔 때만 한 줄 출력, ETX 환경 고려), `printStdoutTail`(실패 시 마지막 N줄), `appendHistory`(`history_file`에 실행 이력 기록) 공용 헬퍼 추가 — 4~6단계(S2~S4)에서도 재사용 예정.
+- `nodeinfo.go`: `${user}.txt`(또는 `-hosts`로 지정한 파일)의 hostname마다 `s1_template`을 개별 실행 → 폴링 → `s1_fetch`(artifacts/stdout/remote)에 따라 결과를 `s1_output_dir/{hostname}.yaml`에 저장. 실패 hostname은 stdout 마지막 30줄 출력 + 종료코드 1. 매 실행을 `history_file`에 기록.
+- `main.go`: `-hosts` 플래그, `nodeinfo` 명령 배선.
+- `conf/sample_setting.conf`(s1_artifact_key 추가), `conf/sample.txt`(hostname 목록 샘플) 추가.
+- **버그 수정 2건** (검증 중 발견):
+  1. `setup.sh`가 `go build -o awxkit main.go`로 **main.go 한 파일만** 빌드하고 있어 doctor.go/catalog.go/common.go/nodeinfo.go가 누락되어 있었음(원격 스텁 상태부터 있던 문제, 지금까지는 `go build .`로 직접 빌드해 검증해왔기 때문에 발견 못함). `go build -o awxkit .`로 수정.
+  2. `setup.sh`/`go.mod`가 CRLF 줄바꿈으로 체크아웃되어 있어(Windows `core.autocrlf=true` 환경 특성) 리눅스에서 `setup.sh` 실행 시 `$'\r': command not found` 등으로 깨짐. LF로 정규화하고, 앞으로도 깨지지 않도록 `.gitattributes`(`*.sh`, `*.go`, `go.mod`를 `eol=lf`로 강제) 추가.
+- **검증**: Rocky Linux(192.168.0.58)로 소스 전송 후 `go build`/`go vet` 통과. launch/poll/stdout/artifacts를 흉내내는 상태 저장형 스텁 서버로 성공 2건 + 실패 1건(stdout tail 확인) + `ignored_fields` 경고 + `history_file` 기록을 한 번에 검증. 이어서 `s1_artifact_key` 미설정 폴백, `-hosts` 오버라이드, 그리고 위 버그 수정 후 `bash run.sh doctor`(바이너리 없는 상태 → 자동 빌드 → 실행)까지 별도로 재확인. 검증 후 VM 임시 파일 정리함.
+
+### 다음 단계
+- 4단계: [S2] `invsync` — 인벤토리 소스 동기화 트리거 + 등록된 호스트 리스트 확인.
