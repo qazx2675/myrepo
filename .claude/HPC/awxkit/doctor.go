@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"time"
 
 	"awxkit/awx"
-	"awxkit/config"
 )
 
 // runDoctor는 설정 파일 로딩부터 AWX 연결·권한·파라미터 설정까지를 순서대로 점검하고
@@ -16,18 +14,11 @@ func runDoctor(confPath string) {
 	fmt.Printf("[i] 설정 파일: %s\n", confPath)
 	warnIfWorldReadable(confPath)
 
-	cfg, err := config.Load(confPath)
+	cfg, client, err := loadConfigAndClient(confPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[X] 설정 파일 파싱 실패: %v\n", err)
+		fmt.Printf("[X] 설정 오류: %v\n", err)
 		os.Exit(1)
 	}
-
-	if cfg.AWXURL == "" || cfg.Username == "" || cfg.Password == "" {
-		fmt.Println("[X] awx_url / username / password 중 비어있는 값이 있습니다.")
-		os.Exit(1)
-	}
-
-	client := awx.NewClient(cfg.AWXURL, cfg.Username, cfg.Password, cfg.InsecureTLS, 10*time.Second)
 
 	ping, err := client.Ping()
 	if err != nil {
