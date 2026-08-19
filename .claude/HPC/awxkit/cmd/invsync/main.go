@@ -1,14 +1,29 @@
+// awxkit-invsync는 [S2] 인벤토리 소스 동기화를 트리거하고, 완료되면 등록된 호스트 목록을 보여준다.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
+
+	"awxkit/cli"
+	"awxkit/config"
 )
 
-// runInvSync는 [S2] 인벤토리 소스 동기화를 트리거하고, 완료되면 등록된 호스트 목록을 보여준다.
-func runInvSync(confPath, user string) {
-	cfg, client, err := loadConfigAndClient(confPath)
+func main() {
+	confFlag := flag.String("conf", "", "설정 파일 경로를 직접 지정합니다")
+	userFlag := flag.String("user", "", "사용자 식별자를 직접 지정합니다 (AWXKIT_USER 환경변수보다 낮은 우선순위)")
+	flag.Parse()
+
+	user := config.ResolveUser(*userFlag)
+	confPath, err := config.ResolvePath(*confFlag, user)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		os.Exit(1)
+	}
+
+	cfg, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
 		fmt.Printf("[X] 설정 오류: %v\n", err)
 		os.Exit(1)
@@ -27,23 +42,23 @@ func runInvSync(confPath, user string) {
 	updateID, err := client.SyncInventorySource(sourceID)
 	if err != nil {
 		fmt.Printf("[X] 동기화 요청 실패: %v\n", err)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d status=sync_error error=%q", user, sourceID, err.Error()))
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d status=sync_error error=%q", user, sourceID, err.Error()))
 		os.Exit(1)
 	}
 
-	upd, err := pollInventoryUpdate(client, updateID, cfg.PollIntervalSec)
+	upd, err := cli.PollInventoryUpdate(client, updateID, cfg.PollIntervalSec)
 	if err != nil {
 		fmt.Printf("[X] 상태 조회 실패: %v\n", err)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=poll_error error=%q", user, sourceID, updateID, err.Error()))
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=poll_error error=%q", user, sourceID, updateID, err.Error()))
 		os.Exit(1)
 	}
 	if upd.Status != "successful" {
 		fmt.Printf("[X] 동기화 실패 (status=%s)\n", upd.Status)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=%s", user, sourceID, updateID, upd.Status))
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=%s", user, sourceID, updateID, upd.Status))
 		os.Exit(1)
 	}
 	fmt.Printf("[✔] 동기화 완료 (inventory_update %d)\n", updateID)
-	appendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=successful", user, sourceID, updateID))
+	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=successful", user, sourceID, updateID))
 
 	if cfg.S2Inventory == "" {
 		fmt.Println("[i] conf의 s2_inventory가 설정되지 않아 등록된 호스트 목록 조회는 건너뜁니다.")

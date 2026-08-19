@@ -2,6 +2,8 @@
 
 이 도구는 Ansible AWX 서버를 조작하고 상태를 점검하기 위해 작성된 Go 언어 기반의 도구입니다. 폐쇄망 환경에서도 `vendor/` 폴더를 통해 독립적으로 빌드 및 실행이 가능하도록 구성되어 있습니다.
 
+단일 바이너리가 아니라 **단계별로 독립된 바이너리**(`awxkit-doctor`, `awxkit-nodeinfo` 등)로 나뉘어 있고, 각 바이너리는 같은 이름의 bash 스크립트(`doctor.sh`, `nodeinfo.sh` 등)로 감싸져 있어 그 스크립트만 실행하면 됩니다.
+
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.
 
@@ -24,21 +26,21 @@ cd ".claude/HPC/awxkit"
 # 빌드 스크립트 실행 (내부적으로 GOFLAGS=-mod=vendor 사용)
 bash setup.sh
 ```
-성공적으로 완료되면 `awxkit` 바이너리 파일이 생성됩니다.
+성공적으로 완료되면 단계별 바이너리(`awxkit-doctor`, `awxkit-ls`, `awxkit-survey`, `awxkit-nodeinfo`, `awxkit-invsync`, `awxkit-dhcp`, `awxkit-pxe`) 7개가 한 번에 생성됩니다.
 
 ### 1.3 전역 명령어로 사용하기 (선택 사항)
 빌드된 실행 파일을 PATH 환경 변수에 포함된 디렉터리로 이동하면 어디서든 명령어처럼 사용할 수 있습니다.
 ```bash
-cp awxkit /usr/local/bin/
-# 이후 어디서든 awxkit 명령어로 실행 가능
+cp awxkit-* /usr/local/bin/
+# 이후 어디서든 awxkit-doctor, awxkit-nodeinfo 등으로 실행 가능
 ```
 
-### 1.4 매번 직접 빌드하지 않고 바로 실행하기 (`run.sh`)
-빌드 여부를 신경 쓰지 않고 곧바로 쓰고 싶다면 `run.sh`를 쓰면 됩니다.
-바이너리가 없으면 자동으로 `setup.sh`를 실행해 빌드한 뒤, 넘긴 인자를 그대로 `awxkit`에 전달합니다.
+### 1.4 매번 직접 빌드하지 않고 바로 실행하기 (`*.sh`)
+바이너리 존재 여부를 신경 쓰지 않고 곧바로 쓰고 싶다면 각 단계의 bash 스크립트를 실행하면 됩니다.
+해당 바이너리가 없으면 자동으로 `setup.sh`를 실행해 7개를 전부 빌드한 뒤, 넘긴 인자를 그대로 바이너리에 전달합니다.
 ```bash
-bash run.sh doctor
-bash run.sh              # 인자 없이 실행하면 대화형 메뉴
+bash doctor.sh
+bash nodeinfo.sh
 ```
 
 ## 2. 사용 방법
@@ -63,23 +65,12 @@ chmod 600 conf/hong_setting.conf   # 평문 비밀번호가 들어있으므로 �
 
 1. `./conf/${user}_setting.conf`
 2. `~/.awxkit/${user}_setting.conf`
-3. `<awxkit 실행 파일 위치>/conf/${user}_setting.conf`
+3. `<바이너리 위치>/conf/${user}_setting.conf`
 
-### 2.3 실행
-```bash
-# 인자 없이 실행하면 번호 선택 메뉴가 뜹니다
-./awxkit
-
-# 또는 명령을 바로 지정 (스크립트에서 호출하기 좋음)
-./awxkit doctor
-AWXKIT_USER=hong ./awxkit doctor
-./awxkit -conf /path/to/other.conf -user hong doctor
+### 2.3 doctor로 최초 점검
+설정을 채운 뒤 가장 먼저 `doctor.sh`를 실행해 연결·권한·파라미터 설정을 확인합니다.
 ```
-
-### 2.4 doctor로 최초 점검
-설정을 채운 뒤 가장 먼저 `doctor`를 실행해 연결·권한·파라미터 설정을 확인합니다.
-```
-$ ./awxkit doctor
+$ bash doctor.sh
 [i] 설정 파일: conf/hong_setting.conf
 [✔] AWX 연결 성공 (버전: 23.0.0)
 [✔] 조회 가능한 템플릿 12개
@@ -88,29 +79,35 @@ $ ./awxkit doctor
 ...
 점검 완료.
 ```
-`[X]`가 있으면 그 항목을 해결하기 전까지 이후 명령이 정상 동작하지 않습니다.
+`[X]`가 있으면 그 항목을 해결하기 전까지 이후 단계가 정상 동작하지 않습니다.
 
-### 2.5 템플릿 탐색 (`ls` / `survey`)
+```bash
+# -conf / -user 로 직접 지정하고 싶을 때
+AWXKIT_USER=hong bash doctor.sh
+bash doctor.sh -conf /path/to/other.conf -user hong
+```
+
+### 2.4 템플릿 탐색 (`ls.sh` / `survey.sh`)
 현장 정보 수집 양식을 손으로 채우기 전에, 실제 AWX에서 템플릿과 변수명을 먼저 조회할 수 있습니다.
 ```bash
-./awxkit ls
+bash ls.sh
 # 총 12개 템플릿
 #   ID: 7     | nodeinfo                       | extra_vars 허용    | -
 #   ID: 24    | pxe-register                   | extra_vars 허용    | survey 있음
 
-./awxkit survey pxe-register     # 또는 survey 24
+bash survey.sh pxe-register     # 또는 survey.sh 24
 # [✔] pxe-register (ID: 24) — survey 4개 문항
 #   1) 인프라        var=pxe_infra       (필수)
 #      선택지: [seoul | daejeon | busan]
 #   ...
 # 위 var= 값을 conf의 관련 key(s3_infra_key, s4_osver_key 등)에 그대로 사용하세요.
 ```
-`survey`에 인자를 주지 않으면(`./awxkit survey`, 또는 메뉴에서 선택) 템플릿 ID/이름을 물어봅니다.
+`survey.sh`에 인자를 주지 않으면 템플릿 ID/이름을 물어봅니다.
 
-### 2.6 [S1] NodeInfo 실행 (`nodeinfo`)
+### 2.5 [S1] NodeInfo 실행 (`nodeinfo.sh`)
 NodeInfo 템플릿은 hostname을 텍스트로 한 번에 받아 처리하는 구조입니다. hostname마다 따로 실행하지 않고,
 **`${user}.txt`에 나열된 hostname 전체를 줄바꿈으로 이어붙여 템플릿을 한 번만 실행**하고, 결과도 파일 하나로 받습니다.
-탐색 순서는 conf 파일과 동일합니다: `./conf/${user}.txt` → `~/.awxkit/${user}.txt` → `<awxkit 실행 파일 위치>/conf/${user}.txt`.
+탐색 순서는 conf 파일과 동일합니다: `./conf/${user}.txt` → `~/.awxkit/${user}.txt` → `<바이너리 위치>/conf/${user}.txt`.
 
 ```bash
 # conf/hong.txt
@@ -119,7 +116,7 @@ web02
 db01
 ```
 ```bash
-./awxkit nodeinfo
+bash nodeinfo.sh
 # [i] 호스트 목록: conf/hong.txt (3개)
 # [i] nodeinfo 실행 중... (3개 hostname을 한 번에 전달)
 #     [job 1234] running
@@ -136,13 +133,13 @@ db01
 - 모든 실행은 `history_file`에 한 줄씩 기록됩니다 (`status=successful` 또는 `status=downloaded_unconfirmed` 등).
 - `${user}.txt` 대신 다른 파일을 쓰려면 `-hosts <경로>`로 직접 지정할 수 있습니다.
 ```bash
-./awxkit -hosts ./retry_list.txt nodeinfo
+bash nodeinfo.sh -hosts ./retry_list.txt
 ```
 
-### 2.7 [S2] 인벤토리 동기화 (`invsync`)
+### 2.6 [S2] 인벤토리 동기화 (`invsync.sh`)
 `s2_inventory_source`(인벤토리 소스 ID)의 동기화를 트리거하고 완료를 기다린 뒤, `s2_inventory`(대상 인벤토리 ID)가 설정되어 있으면 등록된 호스트 전체를 나열합니다.
 ```bash
-./awxkit invsync
+bash invsync.sh
 # [i] 인벤토리 소스(5) 동기화 시작...
 #     [inventory_update 400] running
 #     [inventory_update 400] successful
@@ -154,17 +151,17 @@ db01
 ```
 `s2_inventory`를 비워두면 동기화만 하고 호스트 목록 조회는 건너뜁니다. 동기화가 `successful`이 아니면 종료 코드 1로 끝납니다.
 
-### 2.8 [S3] DHCP 등록 (`dhcp`)
+### 2.7 [S3] DHCP 등록 (`dhcp.sh`)
 인프라를 선택해 `s3_template`을 실행하고, 최종 상태를 즉시 보여줍니다. 설정 변경 작업이므로 완료 후 검증 권고 문구가 항상 함께 출력됩니다.
 ```bash
 # 번호로 지정 (s3_infra_choices의 순서 기준)
-./awxkit -infra 1 dhcp
+bash dhcp.sh -infra 1
 
 # 값으로 직접 지정
-./awxkit -infra daejeon dhcp
+bash dhcp.sh -infra daejeon
 
 # 생략하면 s3_infra_choices가 있을 때 번호 선택 메뉴, 없으면 자유 입력을 받음
-./awxkit dhcp
+bash dhcp.sh
 # 인프라 선택:
 #   1) seoul
 #   2) daejeon
@@ -175,42 +172,44 @@ db01
 # [✔] 성공 (job 501)
 # [!] 설정 변경 작업입니다. 완료 후 랜덤하게 서버 몇 대를 직접 확인해 실제로 변경되었는지 검증하세요.
 ```
-`-infra`는 **반드시 `dhcp`보다 앞에** 와야 합니다 (Go의 `flag` 패키지는 명령 뒤에 오는 플래그를 파싱하지 않습니다). `s3_infra_choices`가 설정된 상태에서 목록에 없는 값을 주면 오류로 종료합니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
+`s3_infra_choices`가 설정된 상태에서 목록에 없는 값을 주면 오류로 종료합니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
 
-### 2.9 [S4] PXE 등록 (`pxe`)
-인프라·OS 버전·Boot Mode·Splunk 설치 여부 4개 옵션을 조합해 `s4_template`을 실행하고, 완료 후 `s4_inventory`의 전체 호스트 수를 리포트합니다. 각 옵션은 `dhcp`의 `-infra`와 같은 방식(번호/값/생략)으로 동작합니다.
+### 2.8 [S4] PXE 등록 (`pxe.sh`)
+인프라·OS 버전·Boot Mode·Splunk 설치 여부 4개 옵션을 조합해 `s4_template`을 실행하고, 완료 후 `s4_inventory`의 전체 호스트 수를 리포트합니다. 각 옵션은 `dhcp.sh`의 `-infra`와 같은 방식(번호/값/생략)으로 동작합니다.
 ```bash
-./awxkit -infra 1 -os rocky-9.2 -boot uefi -splunk true pxe
+bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 # [i] pxe-register 실행 중... (pxe_infra=seoul, os_version=rocky-9.2, boot_mode=uefi, install_splunk=true)
 #     [job 600] successful
 # [✔] 성공 (job 600)
 # 총 42대의 호스트가 등록 완료되었습니다.
 ```
-4개 플래그(`-infra`/`-os`/`-boot`/`-splunk`) 모두 **`pxe`보다 앞에** 와야 합니다. 각 옵션의 선택지(`s4_infra_choices` 등)는 선택 사항 — 비워두면 해당 옵션은 자유 입력을 받습니다. `s4_inventory`를 비워두면 호스트 수 집계는 건너뜁니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
+각 옵션의 선택지(`s4_infra_choices` 등)는 선택 사항 — 비워두면 해당 옵션은 자유 입력을 받습니다. `s4_inventory`를 비워두면 호스트 수 집계는 건너뜁니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
 
 ## 3. 옵션별 상세 설명
 
-### 3.1 전역 플래그
-| 플래그 | 설명 |
-|---|---|
-| `-conf <경로>` | 설정 파일 경로를 직접 지정 (탐색 순서 무시) |
-| `-user <이름>` | 사용자 식별자를 직접 지정 (`AWXKIT_USER` 환경변수보다 우선순위 낮음) |
-| `-hosts <경로>` | (`nodeinfo` 전용) `${user}.txt` 대신 사용할 호스트 목록 파일 |
-| `-infra <번호\|값>` | (`dhcp`/`pxe`) 인프라 선택지 번호 또는 값 |
-| `-os <번호\|값>` | (`pxe` 전용) OS 버전 선택지 번호 또는 값 |
-| `-boot <번호\|값>` | (`pxe` 전용) Boot Mode 선택지 번호 또는 값 |
-| `-splunk <번호\|값>` | (`pxe` 전용) Splunk 설치 여부 선택지 번호 또는 값 |
+### 3.1 스크립트별 전용 플래그
+모든 스크립트가 `-conf <경로>` / `-user <이름>`을 공용으로 받습니다.
 
-### 3.2 명령
-| 명령 | 상태 | 설명 |
+| 스크립트 | 전용 플래그 |
+|---|---|
+| `doctor.sh` | (없음) |
+| `ls.sh` | (없음) |
+| `survey.sh` | `<ID\|이름>` (위치 인자, 생략 시 대화형 입력) |
+| `nodeinfo.sh` | `-hosts <경로>` — `${user}.txt` 대신 사용할 호스트 목록 파일 |
+| `invsync.sh` | (없음) |
+| `dhcp.sh` | `-infra <번호\|값>` — 인프라 선택지 번호 또는 값 |
+| `pxe.sh` | `-infra` / `-os` / `-boot` / `-splunk` <번호\|값> |
+
+### 3.2 단계별 바이너리·스크립트
+| 스크립트 | 바이너리 | 설명 |
 |---|---|---|
-| `doctor` | **구현됨** | conf 로딩, 파일 권한, AWX 연결/버전, 템플릿 존재·실행 권한·`ask_variables_on_launch` 점검 |
-| `ls` | **구현됨** | 템플릿 목록(ID·이름·extra_vars 허용 여부·survey 유무) 조회 |
-| `survey <ID\|이름>` | **구현됨** | 템플릿의 survey 문항(질문명·변수명·선택지·기본값·필수여부) 조회. 인자를 생략하면 대화형으로 물어봄 |
-| `nodeinfo` | **구현됨** | [S1] `${user}.txt`의 hostname 전체를 한 번에 넣어 NodeInfo 템플릿 실행 및 결과 파일 저장 |
-| `invsync` | **구현됨** | [S2] `s2_inventory_source` 동기화 트리거·완료 대기 후 `s2_inventory`의 등록 호스트 목록 조회 |
-| `dhcp` | **구현됨** | [S3] 인프라 선택 후 DHCP 등록 템플릿 실행, 최종 상태 즉시 출력, 설정 변경 검증 권고 문구 출력 |
-| `pxe` | **구현됨** | [S4] 인프라·OS 버전·Boot Mode·Splunk 설치 여부 조합 실행 후 등록 완료 호스트 수 리포트 |
+| `doctor.sh` | `awxkit-doctor` | conf 로딩, 파일 권한, AWX 연결/버전, 템플릿 존재·실행 권한·`ask_variables_on_launch` 점검 |
+| `ls.sh` | `awxkit-ls` | 템플릿 목록(ID·이름·extra_vars 허용 여부·survey 유무) 조회 |
+| `survey.sh` | `awxkit-survey` | 템플릿의 survey 문항(질문명·변수명·선택지·기본값·필수여부) 조회 |
+| `nodeinfo.sh` | `awxkit-nodeinfo` | [S1] `${user}.txt`의 hostname 전체를 한 번에 넣어 NodeInfo 템플릿 실행 및 결과 파일 저장 |
+| `invsync.sh` | `awxkit-invsync` | [S2] `s2_inventory_source` 동기화 트리거·완료 대기 후 `s2_inventory`의 등록 호스트 목록 조회 |
+| `dhcp.sh` | `awxkit-dhcp` | [S3] 인프라 선택 후 DHCP 등록 템플릿 실행, 최종 상태 즉시 출력, 설정 변경 검증 권고 문구 출력 |
+| `pxe.sh` | `awxkit-pxe` | [S4] 인프라·OS 버전·Boot Mode·Splunk 설치 여부 조합 실행 후 등록 완료 호스트 수 리포트 |
 
 ### 3.3 설정 파일(`${user}_setting.conf`) 키
 `key = value` 형식, `#` 이후는 주석. 전체 항목은 [`conf/sample_setting.conf`](./conf/sample_setting.conf) 참고.
@@ -229,30 +228,37 @@ db01
 ## 4. 문서별 고유 설명
 - 상세 설계·API 매핑·단계별 계획: [`PLAN.md`](./PLAN.md)
 - 작업 이력: [`WORKLOG.md`](./WORKLOG.md)
-- 현재 4대 시나리오(NodeInfo/인벤토리 동기화/DHCP/PXE)를 포함한 6단계까지 전부 구현 완료. 남은 것은 7단계(폐쇄망 패키징 정비)뿐입니다.
+- 4대 시나리오(NodeInfo/인벤토리 동기화/DHCP/PXE)를 포함한 6단계까지 전부 구현 완료. 단계별 독립 바이너리 구조로 전환됨. 남은 것은 7단계(폐쇄망 패키징 정비)뿐입니다.
 
 ### 4.1 디렉토리 구조
 
 ```
 awxkit/
-├── README.md          # 이 문서
-├── PLAN.md             # 설계·API 매핑·단계별 계획
-├── WORKLOG.md          # 작업 이력
-├── go.mod              # Go 모듈 정의 파일 (module awxkit)
-├── .gitattributes       # *.sh/*.go/go.mod를 LF로 강제 (Windows 체크아웃 시 CRLF로 깨지는 것 방지)
-├── main.go             # 진입점 — 전역 플래그, 대화형 메뉴, 명령 디스패치
-├── common.go            # conf 로딩 + AWX 클라이언트 생성 + Job 폴링 등 공용 헬퍼
-├── doctor.go           # doctor 명령 — conf/연결/권한/파라미터 점검
-├── catalog.go           # ls / survey 명령 — 템플릿·survey 정의 조회
-├── nodeinfo.go           # nodeinfo 명령 — [S1] hostname 전체를 한 번에 넣어 NodeInfo 실행 및 결과 저장
-├── invsync.go             # invsync 명령 — [S2] 인벤토리 소스 동기화 + 등록 호스트 목록 조회
-├── dhcp.go                # dhcp 명령 — [S3] 인프라 선택 후 DHCP 등록 템플릿 실행
-├── pxe.go                 # pxe 명령 — [S4] 4개 옵션 조합 실행 + 등록 호스트 수 리포트
-├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트 (go build -o awxkit .)
-├── run.sh              # 바이너리가 없으면 자동 빌드 후 실행하는 래퍼 스크립트
-├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go) + 호스트 목록 로더
-├── awx/                 # AWX REST API(/api/v2) 클라이언트
+├── README.md              # 이 문서
+├── PLAN.md                 # 설계·API 매핑·단계별 계획
+├── WORKLOG.md               # 작업 이력
+├── go.mod                    # Go 모듈 정의 파일 (module awxkit)
+├── .gitattributes             # *.sh/*.go/go.mod를 LF로 강제 (Windows 체크아웃 시 CRLF로 깨지는 것 방지)
+├── setup.sh                   # cmd/ 아래 7개 하위 명령을 각각 awxkit-<이름> 바이너리로 빌드
+├── doctor.sh / ls.sh / survey.sh / nodeinfo.sh / invsync.sh / dhcp.sh / pxe.sh
+│                                # 각 바이너리가 없으면 자동 빌드 후 실행하는 래퍼 스크립트
+├── cli/                        # 7개 바이너리가 공유하는 로직
+│   ├── client.go                 # conf 로딩 + AWX 클라이언트 생성, 실행 이력 기록
+│   ├── poll.go                    # Job/인벤토리 동기화 상태 폴링, 실패 시 stdout tail
+│   ├── choice.go                   # 번호/값/생략 선택지 처리 (dhcp, pxe가 공유)
+│   └── prompt.go                    # 표준입력 프롬프트 헬퍼
+├── cmd/                        # 단계별 진입점(각각 독립된 main 패키지)
+│   ├── doctor/main.go
+│   ├── ls/main.go
+│   ├── survey/main.go
+│   ├── nodeinfo/main.go
+│   ├── invsync/main.go
+│   ├── dhcp/main.go
+│   └── pxe/main.go
+├── config/                     # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go) + 호스트 목록 로더
+├── awx/                        # AWX REST API(/api/v2) 클라이언트
 ├── conf/
-│   └── sample_setting.conf   # ${user}_setting.conf 작성용 샘플
-└── vendor/              # 빌드에 필요한 Go 의존성 패키지 모음 (현재 외부 의존성 없음)
+│   ├── sample_setting.conf       # ${user}_setting.conf 작성용 샘플
+│   └── sample.txt                 # ${user}.txt(호스트 목록) 작성용 샘플
+└── vendor/                     # 빌드에 필요한 Go 의존성 패키지 모음 (현재 외부 의존성 없음)
 ```

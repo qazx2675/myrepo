@@ -1,24 +1,37 @@
+// awxkit-nodeinfo는 [S1] NodeInfo 템플릿을 한 번 실행한다.
+// ${user}.txt(또는 -hosts로 지정한 파일)에 나열된 hostname 전체를 줄바꿈으로 이어붙여
+// 하나의 extra_vars 값으로 넘기고, 그 결과를 파일 하나로 받는다.
+// (NodeInfo 템플릿 자체가 여러 hostname을 텍스트로 한 번에 받아 처리하는 구조이므로,
+// hostname마다 별도로 launch하지 않는다.)
 package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"awxkit/awx"
+	"awxkit/cli"
 	"awxkit/config"
 )
 
-// runNodeInfo는 [S1] NodeInfo 템플릿을 한 번 실행한다.
-// hostsPath(기본 ${user}.txt)에 나열된 hostname 전체를 줄바꿈으로 이어붙여
-// 하나의 extra_vars 값으로 넘기고, 그 결과를 파일 하나로 받는다.
-// (NodeInfo 템플릿 자체가 여러 hostname을 텍스트로 한 번에 받아 처리하는 구조이므로,
-//
-//	hostname마다 별도로 launch하지 않는다.)
-func runNodeInfo(confPath, user, hostsFlag string) {
-	cfg, client, err := loadConfigAndClient(confPath)
+func main() {
+	confFlag := flag.String("conf", "", "설정 파일 경로를 직접 지정합니다")
+	userFlag := flag.String("user", "", "사용자 식별자를 직접 지정합니다 (AWXKIT_USER 환경변수보다 낮은 우선순위)")
+	hostsFlag := flag.String("hosts", "", "사용할 호스트 목록 파일 경로 (기본: ${user}.txt)")
+	flag.Parse()
+
+	user := config.ResolveUser(*userFlag)
+	confPath, err := config.ResolvePath(*confFlag, user)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		os.Exit(1)
+	}
+
+	cfg, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
 		fmt.Printf("[X] 설정 오류: %v\n", err)
 		os.Exit(1)
@@ -28,11 +41,11 @@ func runNodeInfo(confPath, user, hostsFlag string) {
 		os.Exit(1)
 	}
 
-	if hostsFlag == "" && user == "" {
+	if *hostsFlag == "" && user == "" {
 		fmt.Println("[X] 사용자를 식별할 수 없어 ${user}.txt를 찾을 수 없습니다. -hosts로 직접 지정하거나 -user/AWXKIT_USER를 설정하세요.")
 		os.Exit(1)
 	}
-	hostsPath, err := config.ResolveNamedPath(hostsFlag, user+".txt")
+	hostsPath, err := config.ResolveNamedPath(*hostsFlag, user+".txt")
 	if err != nil {
 		fmt.Printf("[X] 호스트 목록 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
@@ -61,23 +74,23 @@ func runNodeInfo(confPath, user, hostsFlag string) {
 	result, err := client.Launch(t.ID, map[string]interface{}{cfg.S1HostnameKey: hostText})
 	if err != nil {
 		fmt.Printf("[X] 실행 요청 실패: %v\n", err)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d status=launch_error error=%q", user, len(hosts), err.Error()))
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d status=launch_error error=%q", user, len(hosts), err.Error()))
 		os.Exit(1)
 	}
 	if len(result.IgnoredFields) > 0 {
 		fmt.Printf("    [!] 일부 값이 무시되었습니다(ignored_fields): %v — 템플릿의 ask_variables_on_launch 설정을 확인하세요.\n", result.IgnoredFields)
 	}
 
-	job, err := pollJob(client, result.Job, cfg.PollIntervalSec)
+	job, err := cli.PollJob(client, result.Job, cfg.PollIntervalSec)
 	if err != nil {
 		fmt.Printf("[X] 상태 조회 실패: %v\n", err)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=poll_error error=%q", user, len(hosts), result.Job, err.Error()))
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=poll_error error=%q", user, len(hosts), result.Job, err.Error()))
 		os.Exit(1)
 	}
 	if job.Status != "successful" {
 		fmt.Printf("[X] Job 실패 (status=%s)\n", job.Status)
-		printStdoutTail(client, job.ID, 30)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=%s", user, len(hosts), job.ID, job.Status))
+		cli.PrintStdoutTail(client, job.ID, 30)
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=%s", user, len(hosts), job.ID, job.Status))
 		os.Exit(1)
 	}
 
@@ -87,21 +100,21 @@ func runNodeInfo(confPath, user, hostsFlag string) {
 	}
 	if err := saveNodeInfoResult(client, cfg, job, outPath); err != nil {
 		fmt.Printf("[X] 결과 저장 실패: %v\n", err)
-		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=fetch_error error=%q", user, len(hosts), job.ID, err.Error()))
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=fetch_error error=%q", user, len(hosts), job.ID, err.Error()))
 		os.Exit(1)
 	}
 
 	fmt.Printf("[✔] 다운로드 완료 (job %d) — 결과 저장: %s\n", job.ID, outPath)
 
 	fmt.Println("[?] 다른 터미널에서 양식 변환 스크립트를 실행해 위 파일을 변환하세요.")
-	if !promptYesNo("변환이 완료되었으면 Y를 입력하세요 (Y/N): ") {
+	if !cli.PromptYesNo("변환이 완료되었으면 Y를 입력하세요 (Y/N): ") {
 		fmt.Println("[X] 양식 변환이 확인되지 않았습니다. 변환을 완료한 뒤 nodeinfo를 다시 실행해 확인해주세요.")
-		appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=downloaded_unconfirmed output=%s", user, len(hosts), job.ID, outPath))
+		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=downloaded_unconfirmed output=%s", user, len(hosts), job.ID, outPath))
 		os.Exit(1)
 	}
 
 	fmt.Println("[✔] 양식 변환 확인 완료.")
-	appendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=successful output=%s format_confirmed=true", user, len(hosts), job.ID, outPath))
+	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=successful output=%s format_confirmed=true", user, len(hosts), job.ID, outPath))
 }
 
 // saveNodeInfoResult는 cfg.S1Fetch 설정에 따라 결과를 취득해 outPath에 저장한다.
