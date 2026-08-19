@@ -139,6 +139,21 @@ db01
 ./awxkit -hosts ./retry_list.txt nodeinfo
 ```
 
+### 2.7 [S2] 인벤토리 동기화 (`invsync`)
+`s2_inventory_source`(인벤토리 소스 ID)의 동기화를 트리거하고 완료를 기다린 뒤, `s2_inventory`(대상 인벤토리 ID)가 설정되어 있으면 등록된 호스트 전체를 나열합니다.
+```bash
+./awxkit invsync
+# [i] 인벤토리 소스(5) 동기화 시작...
+#     [inventory_update 400] running
+#     [inventory_update 400] successful
+# [✔] 동기화 완료 (inventory_update 400)
+# [✔] 인벤토리(3)에 총 3대 등록됨
+#   - web01 (enabled)
+#   - web02 (enabled)
+#   - db01 (disabled)
+```
+`s2_inventory`를 비워두면 동기화만 하고 호스트 목록 조회는 건너뜁니다. 동기화가 `successful`이 아니면 종료 코드 1로 끝납니다.
+
 ## 3. 옵션별 상세 설명
 
 ### 3.1 전역 플래그
@@ -155,7 +170,7 @@ db01
 | `ls` | **구현됨** | 템플릿 목록(ID·이름·extra_vars 허용 여부·survey 유무) 조회 |
 | `survey <ID\|이름>` | **구현됨** | 템플릿의 survey 문항(질문명·변수명·선택지·기본값·필수여부) 조회. 인자를 생략하면 대화형으로 물어봄 |
 | `nodeinfo` | **구현됨** | [S1] `${user}.txt`의 hostname 전체를 한 번에 넣어 NodeInfo 템플릿 실행 및 결과 파일 저장 |
-| `invsync` | 예정 | [S2] 인벤토리 동기화 |
+| `invsync` | **구현됨** | [S2] `s2_inventory_source` 동기화 트리거·완료 대기 후 `s2_inventory`의 등록 호스트 목록 조회 |
 | `dhcp` | 예정 | [S3] DHCP 등록 |
 | `pxe` | 예정 | [S4] PXE 등록 및 호스트 수 리포트 |
 
@@ -176,7 +191,7 @@ db01
 ## 4. 문서별 고유 설명
 - 상세 설계·API 매핑·단계별 계획: [`PLAN.md`](./PLAN.md)
 - 작업 이력: [`WORKLOG.md`](./WORKLOG.md)
-- 현재 3단계(설정 로딩 + `doctor` + `ls`/`survey` + `nodeinfo`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
+- 현재 4단계(설정 로딩 + `doctor` + `ls`/`survey` + `nodeinfo` + `invsync`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
 
 ### 4.1 디렉토리 구조
 
@@ -192,6 +207,7 @@ awxkit/
 ├── doctor.go           # doctor 명령 — conf/연결/권한/파라미터 점검
 ├── catalog.go           # ls / survey 명령 — 템플릿·survey 정의 조회
 ├── nodeinfo.go           # nodeinfo 명령 — [S1] hostname 전체를 한 번에 넣어 NodeInfo 실행 및 결과 저장
+├── invsync.go             # invsync 명령 — [S2] 인벤토리 소스 동기화 + 등록 호스트 목록 조회
 ├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트 (go build -o awxkit .)
 ├── run.sh              # 바이너리가 없으면 자동 빌드 후 실행하는 래퍼 스크립트
 ├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go) + 호스트 목록 로더
