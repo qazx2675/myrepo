@@ -1,0 +1,11 @@
+[Unit]
+Description=NVIDIA GPU Power Limit (75%) Persistence
+After=nvidia-persistenced.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nvidia-smi -pl 75
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
