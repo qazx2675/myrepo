@@ -138,21 +138,43 @@ bash export_vcsim_env.sh 192.168.0.60
 
 ## 4. 문서별 고유 설명
 
-### 4.1 지금 다루는 항목 (1차 범위)
+### 4.1 디렉토리 구조
+
+```
+vcenter-test-env-vcsim/
+├── README.md              # 이 문서
+├── PLAN.md                # 개발/변경 계획 메모
+├── main.go                # CLI 진입점 (기본 실행, extract/tree/diff 서브커맨드 처리)
+├── go.mod / go.sum          # Go 모듈 정의 파일
+├── setup.sh               # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── export_vcsim_env.sh    # 실행 파일 + 캐시된 레시피를 다른 서버로 통째로 이관하는 스크립트
+├── internal/
+│   ├── builder/     # 추출한 레시피로 vcsim 위에 인벤토리를 재생성
+│   ├── connect/       # 실 vCenter/vcsim 접속 처리
+│   ├── fields/          # 추적 대상 VM 설정 필드 정의 (확장 지점)
+│   ├── history/          # 접속했던 vCenter 이력 관리
+│   ├── inventory/         # 인벤토리 구조(데이터센터/클러스터/호스트/VM 등) 모델
+│   ├── recipe/              # vCenter에서 추출한 레시피 저장/로딩
+│   └── tree/                 # 인벤토리 구조를 트리 형태로 출력
+├── vc-test-env             # setup.sh로 빌드된 실행 바이너리
+└── vendor/                 # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
+### 4.2 지금 다루는 항목 (1차 범위)
 - 구조: 데이터센터, VM 폴더, 네트워크 폴더, 클러스터, 호스트, VM, 네트워크(이름)
 - VM: vCPU 수, 코어/소켓 수, 메모리MB, CPU Affinity, `sched.mem.lpage.enable1GPage` / `sched.mem.prealloc*` / `sched.swap.vmxSwapEnabled` / `numa.vcpu.maxPerVirtualNode`
 - VM 네트워크 어댑터: 포트그룹 이름 + 커넥트/디스커넥트 상태를 실제 디바이스로 재현
 
 **범위 밖(추가 안 함)**: VM "설정 편집"의 나머지 항목(부팅옵션/비디오카드/USB 등), 호스트 "구성" 탭 전체, 디스크는 용량만 추적하고 디바이스로 재현 안 함.
 
-### 4.2 필드 추가하는 법 (확장 지점)
+### 4.3 필드 추가하는 법 (확장 지점)
 새로 추적해야 할 VM 설정 항목이 생기면 `internal/fields/fields.go`의 `VMFields` 슬라이스에 항목 하나만 추가하면 됩니다. `extract`/`tree`/`build`/`diff` 전부 자동으로 반영됩니다.
 ```go
 extraConfigField("새로운.ExtraConfig.키"),
 ```
 ExtraConfig 형태가 아닌 구조화된 필드는 `Field{Key, Extract, Apply}`를 직접 작성해서 추가하면 됩니다.
 
-### 4.3 검증 결과 (192.168.0.50 대상, Rocky Linux에서 실제 실행)
+### 4.4 검증 결과 (192.168.0.50 대상, Rocky Linux에서 실제 실행)
 - `extract`: ExtraConfig 키가 실제로 정확한 이름으로 잡힘 — 확인 완료.
 - `tree`: 실 vCenter 구조가 정확히 나옴 — 확인 완료. 클러스터가 없는 독립형 호스트 환경도 처리하도록 수정함.
 - `build`: vcsim에 동일 구조 재생성 성공 — 확인 완료.
@@ -160,7 +182,7 @@ ExtraConfig 형태가 아닌 구조화된 필드는 `Field{Key, Extract, Apply}`
 - PowerCLI: `Connect-VIServer` + `Get-VM`으로 재생성된 VM 이름/CPU/메모리가 실제와 동일하게 조회됨 — 확인 완료.
 - 네트워크 어댑터: `vm-param-check`로 재생성본을 체크했을 때 동일하게 나옴 — 확인 완료.
 
-### 4.4 알려진 한계 / TODO
+### 4.5 알려진 한계 / TODO
 - **씨드 호스트가 하나 더 보임**: 데이터스토어 연결을 위해 사용한 트릭 때문에 빈 호스트가 하나 더 보이나, 실제 VM 동작에는 영향 없음.
 - 데이터센터가 2개 이상인 레시피는 아직 완전히 지원 안 함.
 - 네트워크는 포트그룹 이름/커넥트 상태만 재현하고 VLAN ID는 아직 안 함.

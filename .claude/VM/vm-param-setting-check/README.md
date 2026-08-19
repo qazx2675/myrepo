@@ -215,6 +215,28 @@ export VC_PASS='...'
 | ev02 | hostname에 `ev02` 포함 | 위와 동일 | 각각의 `-ev02` 옵션 사용 |
 | ev03 | hostname에 `ev03` 포함 | 위와 동일 | 각각의 `-ev03` 옵션 사용 |
 
+### 디렉토리 구조
+
+```
+vm-param-setting-check/
+├── README.md      # 이 문서
+├── PLAN.md        # 개발/변경 계획 메모
+├── main.go        # CLI 진입점 (옵션 파싱, 체크 실행)
+├── demo.go        # -demo 모드 (합성 VM으로 동작 확인)
+├── scaletest.go   # 대량 환경 시뮬레이션용 코드
+├── go.mod / go.sum  # Go 모듈 정의 파일
+├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── real_test.sh / scale_test.sh  # 실 vCenter/스케일 테스트용 실행 스크립트
+├── checker/       # CPU/메모리/NUMA/affinity/전원정책 등 점검 로직
+├── config/        # 점검 대상 VM 목록 등 설정 로딩
+├── model/         # 체크 결과 등 공용 데이터 모델
+├── report/        # 콘솔/CSV 리포트 출력
+├── vcenter/       # vCenter API 접속 클라이언트
+├── testfiles/     # affinity 등 테스트용 샘플 파일
+├── fail-based-param-fix/  # 점검 결과를 외부 도구로 교정하던 레거시 오케스트레이터 (하위 README 참고)
+└── vendor/        # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
 ### 데이터센터 범위 및 알려진 한계
 - **데이터센터 무관 전체 탐색**: vCenter 조회는 `ServiceContent.RootFolder`(vCenter 최상위, 모든 Datacenter의 부모)를 재귀적으로 순회합니다.
 - **병렬 처리**: `-vcenterList`에 vCenter가 여러 개면 접속·조회를 동시에 진행합니다(하나씩 순서대로 기다리지 않음).

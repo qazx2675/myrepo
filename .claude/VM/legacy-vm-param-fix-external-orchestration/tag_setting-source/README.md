@@ -80,6 +80,18 @@ export VC_PASSWORD='실제_비밀번호'
 5. 모든 goroutine 완료 후, 실패 목록이 있으면 `[일부 실패]`로 요약 출력, 없으면
    `[성공]` 메시지 출력.
 
+## 6. 디렉토리 구조
+
+```
+tag_setting-source/
+├── README.md      # 이 문서
+├── main.go        # Custom Attribute(DEPT_NAME/PURPOSE/VM_TYPE) 병렬 일괄 설정 로직 전체
+├── go.mod / go.sum  # Go 모듈 정의 파일
+├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── tag_setting    # setup.sh로 빌드된 실행 바이너리
+└── vendor/        # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
 ## 5. 알려진 한계
 
 - 대상 VM마다 **동시성 제한 없이** goroutine을 하나씩 띄웁니다(다른 도구들과 달리

@@ -77,7 +77,32 @@ sudo cp esxi-log-check /usr/local/bin/
 
 ## 4. 문서별 고유 설명
 
-### 4.1 로그패턴 분류 (32종 카테고리)
+### 4.1 디렉토리 구조
+
+```
+esxi-log-check/
+├── README.md                     # 이 문서
+├── PLAN.md                       # 개발/변경 계획 메모
+├── walkthrough.md                # 작업 완료 보고서 (변경 이력 정리)
+├── main.go                       # esxi-log-check CLI 진입점 (옵션 파싱, 분석 실행)
+├── collect.go                    # -w 모드 전용 로그 수집 로직 (gossh를 서브프로세스로 호출)
+├── esxi_critical_patterns.yaml   # 로그 패턴 분류 규칙(카테고리/정규표현식) 정의 파일
+├── go.mod / go.sum                # Go 모듈 정의 파일
+├── setup.sh                      # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── run_analyzer.sh                # 대화형 메뉴 기반 실행 스크립트 (권장 사용법)
+├── run_test_server.sh             # 모의 테스트용 웹 서버 실행 스크립트
+├── start_server.sh / stop_server.sh  # 웹 서버 모드 시작/중지 스크립트
+├── internal/
+│   ├── correlate/   # 로그 이벤트 간 상관관계 분석 로직
+│   ├── gossh/        # gossh 실행 결과 파싱
+│   ├── match/         # 로그 패턴 매칭 엔진
+│   ├── mock/           # 모의(Mock) 로그 생성기 및 테스트 시나리오
+│   ├── registry/       # 패턴 레지스트리(카테고리·힌트·권고안 로딩)
+│   └── report/          # 텍스트/HTML 리포트 생성
+└── vendor/            # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
+### 4.2 로그패턴 분류 (32종 카테고리)
 현재 `esxi_critical_patterns.yaml` 환경 설정 파일에 정의된 주요 카테고리는 다음과 같습니다.
 
 * **CPU_MCE**: MCE(Machine Check Exception), PSOD를 유발하는 치명적인 하드웨어 에러 (엔지니어 영역)
@@ -94,7 +119,7 @@ sudo cp esxi-log-check /usr/local/bin/
 
 *(그 외 NVM_EOF, VM_STUN, SECURE_BOOT 등 총 32개의 세밀한 정규표현식 카테고리를 지원하여 각종 문제를 분류합니다.)*
 
-### 4.2 로그패턴에 대한 테스트 케이스
+### 4.3 로그패턴에 대한 테스트 케이스
 모의 테스트 도구(`esxi_mock_logger`)는 실제 운영망에서 발생할 수 있는 32개 카테고리의 100여 개 세부 상황을 코드 수준에서 재현할 수 있습니다. 이를 통해 툴의 신뢰성과 무결성을 사전에 검증할 수 있습니다.
 
 * **MCE / PSOD 발생 테스트**:

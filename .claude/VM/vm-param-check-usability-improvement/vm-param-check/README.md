@@ -405,3 +405,27 @@ VM이 속한 폴더가 위 매칭 규칙에 안 맞으면(예: 임시 작업용 
 
 ### 4.7 기존 개별 도구와의 관계
 저장소의 `vm-param-setting-check/`(체크 전용)와 `vm-param-setting-check/fail-based-param-fix/`(레거시 외부 도구 오케스트레이션 방식)는 삭제하지 않고 그대로 남겨뒀습니다. 이 폴더는 그 둘을 대체하는 통합본입니다 — 새로 시작하는 경우 이 폴더만 쓰면 됩니다.
+
+### 4.8 디렉토리 구조
+
+```
+vm-param-check/
+├── README.md          # 이 문서
+├── 계획서.md            # 설계 배경/검증 근거 문서
+├── main.go            # CLI 진입점 (옵션 파싱, 체크/-fix 파이프라인 실행)
+├── demo.go            # -demo 모드 (합성 VM 3대로 동작 확인)
+├── scaletest.go       # -scale 모드 (합성 VM N대로 대량 환경 시뮬레이션)
+├── go.mod / go.sum      # Go 모듈 정의 파일
+├── setup.sh           # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── folder_setup.sh    # 스펙 디렉터리/틀을 대화형으로 생성하는 보조 스크립트
+├── vm_setting_check_insert.sh  # 체크+교정 실행을 변수 설정만으로 감싸주는 보조 스크립트
+├── real_test.sh / scale_test.sh  # 실 vCenter/스케일 테스트용 실행 스크립트
+├── checker/           # CPU/메모리/NUMA/affinity/전원정책 등 점검 로직 (단위 테스트 포함)
+├── config/            # 스펙 자동매칭, 포트그룹, 점검 대상 설정 로딩 (단위 테스트 포함)
+├── fixer/             # -fix 파이프라인 (게이트 검증, dry-run 계획 산출, 적용)
+├── model/             # 체크 결과 등 공용 데이터 모델
+├── report/            # 콘솔/CSV 리포트 출력
+├── vcenter/           # vCenter API 접속 클라이언트
+├── testfiles/         # affinity 등 테스트용 샘플 파일
+└── vendor/            # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```

@@ -65,3 +65,11 @@ FAIL	GPU 1 power limit = 800W (target 825W)
 
 ⚠️ **주의사항**: 참고용 점검 스크립트입니다. `nvidia-smi` 출력 형식은 드라이버 버전에 따라
 달라질 수 있으므로, 대규모 배포 전에는 일부 서버에서 결과를 직접 확인하는 것을 권장합니다.
+
+## 5. 디렉토리 구조
+
+```
+GPU 체크스크립트/
+├── README.md                    # 이 문서
+└── check-gpu-power-limit.sh     # GPU power limit 적용 상태를 점검하는 스크립트 본체
+```
