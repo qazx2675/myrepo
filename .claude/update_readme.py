@@ -1,7 +1,7 @@
 import os
 import re
 
-base_dir = r"c:\Users\qazx2\myrepo\.git\myrepo\.claude\VM 업무"
+base_dir = r"c:\Users\qazx2\myrepo\.git\myrepo\.claude\VM"
 
 for root, dirs, files in os.walk(base_dir):
     if 'vendor' in dirs:

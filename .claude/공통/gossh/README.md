@@ -1,7 +1,7 @@
 # gossh
 
 `pdsh` 스타일로 다수 서버에 동시에 SSH 명령을 실행하고 호스트별 결과를 `호스트명: 출력줄` 형태로
-찍어주는 병렬 SSH 실행 도구. 저장소 안의 [`esxi-log-check`](../../VM%20업무/esxi-log-check/), `OS 환경설정 체크`
+찍어주는 병렬 SSH 실행 도구. 저장소 안의 [`esxi-log-check`](../../VM/esxi-log-check/), `OS 환경설정 체크`
 등 여러 도구가 내부적으로 이 바이너리를 서브프로세스로 호출한다.
 
 ⚠️ **주의사항 (Disclaimer)**

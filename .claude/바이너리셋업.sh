@@ -6,7 +6,7 @@
 TARGET_DIR="${1:-/usr/local/bin}"
 
 echo "========================================"
-echo " VM 업무 관련 바이너리 설치 스크립트"
+echo " VM 관련 바이너리 설치 스크립트"
 echo " 대상 경로: $TARGET_DIR"
 echo "========================================"
 
@@ -21,7 +21,7 @@ fi
 
 # 현재 스크립트가 위치한 디렉토리의 절대 경로 확인 (.claude)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VM_DIR="$SCRIPT_DIR/VM 업무"
+VM_DIR="$SCRIPT_DIR/VM"
 
 if [ ! -d "$VM_DIR" ]; then
     echo "오류: '$VM_DIR' 폴더를 찾을 수 없습니다."
@@ -31,7 +31,7 @@ fi
 echo "바이너리 검색 및 복사를 시작합니다..."
 count=0
 
-# VM 업무 폴더 내에서 .sh, .bat, .ps1, .exe 파일을 제외한 모든 실행 가능한 파일을 찾아 복사합니다.
+# VM 폴더 내에서 .sh, .bat, .ps1, .exe 파일을 제외한 모든 실행 가능한 파일을 찾아 복사합니다.
 find "$VM_DIR" -type f -executable ! -name "*.sh" ! -name "*.bat" ! -name "*.ps1" ! -name "*.exe" | while read -r BIN_PATH; do
     # vendor 디렉토리 등 의존성 폴더 내부의 실행파일은 제외
     if [[ "$BIN_PATH" == *"/vendor/"* ]] || [[ "$BIN_PATH" == *"/.git/"* ]]; then
