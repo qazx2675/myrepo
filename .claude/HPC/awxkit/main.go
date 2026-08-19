@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"awxkit/config"
 )
@@ -17,8 +18,8 @@ const usage = `awxkit - AWX 템플릿 실행 CLI (터미널 전용)
 
 명령:
   doctor    설정/연결/권한을 점검합니다
-  ls        템플릿 목록을 조회합니다 (다음 단계 예정)
-  survey    템플릿의 survey 정의를 조회합니다 (다음 단계 예정)
+  ls        템플릿 목록을 조회합니다
+  survey <ID|이름>   템플릿의 survey 정의(변수명·선택지)를 조회합니다
   nodeinfo  [S1] NodeInfo 템플릿 실행 (다음 단계 예정)
   invsync   [S2] 인벤토리 동기화 (다음 단계 예정)
   dhcp      [S3] DHCP 등록 (다음 단계 예정)
@@ -56,7 +57,23 @@ func main() {
 			os.Exit(1)
 		}
 		runDoctor(confPath)
-	case "ls", "survey", "nodeinfo", "invsync", "dhcp", "pxe":
+	case "ls":
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+			os.Exit(1)
+		}
+		runLs(confPath)
+	case "survey":
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+			os.Exit(1)
+		}
+		var templateArg string
+		if len(args) > 1 {
+			templateArg = args[1]
+		}
+		runSurvey(confPath, templateArg)
+	case "nodeinfo", "invsync", "dhcp", "pxe":
 		fmt.Printf("[!] '%s' 명령은 다음 단계에서 구현될 예정입니다. PLAN.md를 참고하세요.\n", cmd)
 		os.Exit(1)
 	default:
@@ -95,4 +112,12 @@ func runMenu() string {
 		return ""
 	}
 	return options[choice-1].cmd
+}
+
+// promptLine은 프롬프트를 출력하고 표준입력에서 한 줄을 읽어 반환한다.
+func promptLine(prompt string) string {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	return strings.TrimSpace(line)
 }

@@ -26,3 +26,13 @@
 
 ### 다음 단계
 - 2단계: `ls`(템플릿 목록) / `survey`(survey_spec → conf 스니펫 출력) 명령 구현. `awx/client.go`에 이미 필요한 메서드는 준비되어 있어 CLI 배선만 남음.
+
+## 2026-08-19 (계속) — 2단계 구현
+
+- `common.go` 신설: conf 로딩 + AWX 클라이언트 생성을 `loadConfigAndClient()`로 공용화. `doctor.go`가 이 헬퍼를 쓰도록 리팩터링(동작 변화 없음).
+- `catalog.go`: `runLs`(템플릿 ID·이름·extra_vars 허용 여부·survey 유무 표 출력), `runSurvey`(survey_spec 조회 → 질문명·변수명·선택지·기본값·필수여부 출력, 비-survey/미존재 템플릿 처리, 인자 생략 시 표준입력으로 프롬프트). AWX가 `choices`를 줄바꿈 문자열 또는 배열 어느 쪽으로 주더라도 처리하도록 `formatChoices` 구현.
+- `main.go`: `ls`/`survey` 명령 배선, `survey`용 `promptLine` 헬퍼 추가.
+- **검증**: Rocky Linux(192.168.0.58)로 소스 전송 후 `go build`/`go vet` 통과. 스텁 서버에 `/api/v2/job_templates/{id}/`, `/survey_spec/` 엔드포인트를 보강해 이름/ID 조회, choices가 문자열·배열인 경우, survey 비활성 템플릿, 존재하지 않는 템플릿 4가지 경로를 모두 실행 확인. 검증 후 VM 임시 파일 정리함.
+
+### 다음 단계
+- 3단계: [S1] `nodeinfo -host <hostname>` 구현 — 템플릿 실행, Job 상태 폴링, 결과 취득(`s1_fetch`: artifacts/stdout/remote)과 `s1_output_dir` 저장까지.

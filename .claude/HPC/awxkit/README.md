@@ -82,6 +82,23 @@ $ ./awxkit doctor
 ```
 `[X]`가 있으면 그 항목을 해결하기 전까지 이후 명령이 정상 동작하지 않습니다.
 
+### 2.5 템플릿 탐색 (`ls` / `survey`)
+현장 정보 수집 양식을 손으로 채우기 전에, 실제 AWX에서 템플릿과 변수명을 먼저 조회할 수 있습니다.
+```bash
+./awxkit ls
+# 총 12개 템플릿
+#   ID: 7     | nodeinfo                       | extra_vars 허용    | -
+#   ID: 24    | pxe-register                   | extra_vars 허용    | survey 있음
+
+./awxkit survey pxe-register     # 또는 survey 24
+# [✔] pxe-register (ID: 24) — survey 4개 문항
+#   1) 인프라        var=pxe_infra       (필수)
+#      선택지: [seoul | daejeon | busan]
+#   ...
+# 위 var= 값을 conf의 관련 key(s3_infra_key, s4_osver_key 등)에 그대로 사용하세요.
+```
+`survey`에 인자를 주지 않으면(`./awxkit survey`, 또는 메뉴에서 선택) 템플릿 ID/이름을 물어봅니다.
+
 ## 3. 옵션별 상세 설명
 
 ### 3.1 전역 플래그
@@ -94,8 +111,8 @@ $ ./awxkit doctor
 | 명령 | 상태 | 설명 |
 |---|---|---|
 | `doctor` | **구현됨** | conf 로딩, 파일 권한, AWX 연결/버전, 템플릿 존재·실행 권한·`ask_variables_on_launch` 점검 |
-| `ls` | 예정 | 템플릿 목록 조회 |
-| `survey` | 예정 | 템플릿의 survey 정의(변수명·선택지) 조회 → conf 스니펫 출력 |
+| `ls` | **구현됨** | 템플릿 목록(ID·이름·extra_vars 허용 여부·survey 유무) 조회 |
+| `survey <ID\|이름>` | **구현됨** | 템플릿의 survey 문항(질문명·변수명·선택지·기본값·필수여부) 조회. 인자를 생략하면 대화형으로 물어봄 |
 | `nodeinfo` | 예정 | [S1] NodeInfo 템플릿 실행 및 결과 파일 저장 |
 | `invsync` | 예정 | [S2] 인벤토리 동기화 |
 | `dhcp` | 예정 | [S3] DHCP 등록 |
@@ -118,7 +135,7 @@ $ ./awxkit doctor
 ## 4. 문서별 고유 설명
 - 상세 설계·API 매핑·단계별 계획: [`PLAN.md`](./PLAN.md)
 - 작업 이력: [`WORKLOG.md`](./WORKLOG.md)
-- 현재 1단계(설정 로딩 + `doctor`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
+- 현재 2단계(설정 로딩 + `doctor` + `ls`/`survey`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
 
 ### 4.1 디렉토리 구조
 
@@ -129,7 +146,9 @@ awxkit/
 ├── WORKLOG.md          # 작업 이력
 ├── go.mod              # Go 모듈 정의 파일 (module awxkit)
 ├── main.go             # 진입점 — 전역 플래그, 대화형 메뉴, 명령 디스패치
+├── common.go            # conf 로딩 + AWX 클라이언트 생성 공용 헬퍼
 ├── doctor.go           # doctor 명령 — conf/연결/권한/파라미터 점검
+├── catalog.go           # ls / survey 명령 — 템플릿·survey 정의 조회
 ├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트
 ├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go)
 ├── awx/                 # AWX REST API(/api/v2) 클라이언트
