@@ -13,7 +13,8 @@ import (
 const usage = `awxkit - AWX 템플릿 실행 CLI (터미널 전용)
 
 사용법:
-  awxkit [-conf <경로>] [-user <사용자>] [-hosts <경로>] [-infra <번호|값>] <명령>
+  awxkit [-conf <경로>] [-user <사용자>] [-hosts <경로>] [-infra <번호|값>]
+         [-os <번호|값>] [-boot <번호|값>] [-splunk <번호|값>] <명령>
   awxkit                          (인자 없이 실행하면 대화형 메뉴)
 
 주의: 플래그는 반드시 명령보다 앞에 와야 합니다. (예: awxkit -infra 1 dhcp, 잘못된 예: awxkit dhcp -infra 1)
@@ -25,19 +26,26 @@ const usage = `awxkit - AWX 템플릿 실행 CLI (터미널 전용)
   nodeinfo  [S1] ${user}.txt의 모든 hostname을 한 번에 넣어 NodeInfo 템플릿을 실행하고 결과를 저장합니다
   invsync   [S2] 인벤토리 소스 동기화 트리거 후 등록된 호스트 목록을 보여줍니다
   dhcp      [S3] 인프라를 선택해 DHCP 등록 템플릿을 실행하고 최종 상태를 출력합니다
-  pxe       [S4] PXE 등록 (다음 단계 예정)
+  pxe       [S4] 인프라·OS 버전·Boot Mode·Splunk 설치 여부를 선택해 PXE 등록 템플릿을 실행하고 호스트 수를 리포트합니다
 
 nodeinfo 전용 플래그:
   -hosts <경로>   ${user}.txt 대신 사용할 호스트 목록 파일을 직접 지정합니다
-dhcp 전용 플래그:
+dhcp/pxe 공용 플래그:
   -infra <번호|값>   인프라 선택지 번호 또는 값을 직접 지정합니다 (생략 시 대화형 선택/입력)
+pxe 전용 플래그:
+  -os <번호|값>       OS 버전 선택지 번호 또는 값
+  -boot <번호|값>     Boot Mode 선택지 번호 또는 값
+  -splunk <번호|값>   Splunk 설치 여부 선택지 번호 또는 값
 `
 
 func main() {
 	confFlag := flag.String("conf", "", "설정 파일 경로를 직접 지정합니다")
 	userFlag := flag.String("user", "", "사용자 식별자를 직접 지정합니다 (AWXKIT_USER 환경변수보다 낮은 우선순위)")
 	hostsFlag := flag.String("hosts", "", "nodeinfo에서 사용할 호스트 목록 파일 경로 (기본: ${user}.txt)")
-	infraFlag := flag.String("infra", "", "dhcp에서 사용할 인프라 선택지 번호 또는 값")
+	infraFlag := flag.String("infra", "", "dhcp/pxe에서 사용할 인프라 선택지 번호 또는 값")
+	osFlag := flag.String("os", "", "pxe에서 사용할 OS 버전 선택지 번호 또는 값")
+	bootFlag := flag.String("boot", "", "pxe에서 사용할 Boot Mode 선택지 번호 또는 값")
+	splunkFlag := flag.String("splunk", "", "pxe에서 사용할 Splunk 설치 여부 선택지 번호 또는 값")
 	flag.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	flag.Parse()
 
@@ -101,8 +109,11 @@ func main() {
 		}
 		runDhcp(confPath, user, *infraFlag)
 	case "pxe":
-		fmt.Printf("[!] '%s' 명령은 다음 단계에서 구현될 예정입니다. PLAN.md를 참고하세요.\n", cmd)
-		os.Exit(1)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+			os.Exit(1)
+		}
+		runPxe(confPath, user, pxeOpts{infra: *infraFlag, osVer: *osFlag, bootMode: *bootFlag, splunk: *splunkFlag})
 	default:
 		fmt.Fprintf(os.Stderr, "알 수 없는 명령입니다: %s\n\n%s", cmd, usage)
 		os.Exit(1)
