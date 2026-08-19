@@ -1,20 +1,33 @@
+// awxkit-doctor는 conf 로딩부터 AWX 연결·권한·파라미터 설정까지를 점검한다.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"runtime"
 
 	"awxkit/awx"
+	"awxkit/cli"
+	"awxkit/config"
 )
 
-// runDoctor는 설정 파일 로딩부터 AWX 연결·권한·파라미터 설정까지를 순서대로 점검하고
-// 문제가 있으면 즉시 화면에 알려준다.
-func runDoctor(confPath string) {
+func main() {
+	confFlag := flag.String("conf", "", "설정 파일 경로를 직접 지정합니다")
+	userFlag := flag.String("user", "", "사용자 식별자를 직접 지정합니다 (AWXKIT_USER 환경변수보다 낮은 우선순위)")
+	flag.Parse()
+
+	user := config.ResolveUser(*userFlag)
+	confPath, err := config.ResolvePath(*confFlag, user)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("[i] 설정 파일: %s\n", confPath)
 	warnIfWorldReadable(confPath)
 
-	cfg, client, err := loadConfigAndClient(confPath)
+	cfg, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
 		fmt.Printf("[X] 설정 오류: %v\n", err)
 		os.Exit(1)

@@ -1,7 +1,8 @@
 # AWX 템플릿 실행 CLI (awxkit) - 계획서
 
 > **진행 상태 (2026-08-19 기준)**: 0~6단계 완료 — 4대 핵심 시나리오(NodeInfo/인벤토리 동기화/DHCP/PXE)와 그 기반(config 로더, `CurrentUser()` 훅, `doctor`, `ls`/`survey`)까지 전부 구현.
-> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 정상·오류 경로 검증 완료. 남은 것은 7단계(폐쇄망 패키징 정비)뿐.
+> 단일 `awxkit` 바이너리 구조를 **단계별 독립 바이너리(`awxkit-doctor` 등 7개) + 단계별 bash 스크립트** 구조로 재구성 완료.
+> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 정상·오류 경로 검증 완료. 남은 것은 7단계(폐쇄망 패키징 정비)뿐. 현재 현장 검증 대기 중.
 > hostname은 `-host` 단일 플래그가 아니라 `${user}.txt`(conf와 동일한 탐색 규칙) 목록 파일로 받도록 설계 변경됨 — hostname은 NodeInfo 단계에서만 필요하고, 이후 단계는 인벤토리에 등록된 상태를 기준으로 동작하기 때문.
 > 작업 이력은 [`WORKLOG.md`](./WORKLOG.md), 사용법은 [`README.md`](./README.md) 참고.
 
@@ -49,7 +50,7 @@ ETX 원격 터미널 환경에서 AWX 웹 GUI를 띄우면 화면 지연(Lag)이
 | hostname 입력 | `-host` 단일 플래그 대신 **`${user}.txt`** 목록 파일 (conf와 동일한 탐색 규칙) | hostname은 [S1] NodeInfo에서만 필요. 이후 [S2]~[S4]는 인벤토리 등록 상태를 기준으로 동작 |
 | NodeInfo 실행 방식 | hostname마다 개별 launch가 아니라, **`${user}.txt`의 전체 hostname을 줄바꿈으로 이어붙여 템플릿을 한 번만 실행** | NodeInfo 템플릿 자체가 hostname을 텍스트로 한 번에 받아 처리하는 구조. 결과도 파일 하나로 나옴 |
 | 양식 변환 확인 | 다운로드 결과를 정해진 양식으로 바꾸는 스크립트는 **awxkit이 실행하지 않음**. 사용자가 별도 터미널에서 직접 실행한 뒤, awxkit이 물어보는 `Y/N`에 답해야 완료 처리됨 | 변환 스크립트는 사용자가 이미 보유한 별도 자산이며 자동 호출 대상이 아님. 종료코드는 awxkit이 볼 수 없으므로(직접 실행하지 않으므로) 사람의 확인으로 판단 |
-| 실행 환경 | 핵심 로직은 Go 바이너리, `run.sh`로 감싸 바이너리 없으면 자동 빌드 후 실행 | Go로 만든 걸 bash로 쉽게 실행할 수 있어야 한다는 요청 반영 |
+| 실행 환경 | 단계별로 독립된 Go 바이너리(`awxkit-doctor`, `awxkit-nodeinfo` 등 7개), 각각을 감싸는 bash 스크립트(`doctor.sh` 등)로 실행. 바이너리 없으면 스크립트가 `setup.sh`를 자동 호출해 7개를 한 번에 빌드 | 하나의 `awxkit <명령>` CLI보다 단계별로 분리된 바이너리+bash 실행이 낫다는 요청 반영. `config`/`awx` 패키지는 공유, 공용 로직(conf 로딩·폴링·선택지 처리·prompt)은 새 `cli` 패키지로 분리 |
 
 ### 설정 파일 예시 (`conf/sample_setting.conf`)
 

@@ -99,3 +99,21 @@
 
 ### 다음 단계
 - 7단계: 폐쇄망 패키징 정비 — 실제로는 외부 의존성이 없어 `vendor/`가 비어 있어도 되는 상태이므로, README에 이 점을 명확히 하고 크로스컴파일(`GOOS=linux GOARCH=amd64`) 절차를 재확인.
+
+## 2026-08-19 (계속) — 단일 CLI → 단계별 독립 바이너리 구조로 재구성
+
+- **요구사항**: 현장 검증을 앞두고, 하나의 `awxkit <명령>` CLI보다 **단계별 바이너리를 만들고 bash로 실행**하는 방식이 낫겠다는 요청.
+- 새 패키지 `cli/`를 만들어 7개 바이너리가 공유하는 로직을 옮김:
+  - `cli/client.go`: `LoadConfigAndClient`, `AppendHistory`, `SettingChangeWarning`
+  - `cli/poll.go`: `IsTerminalStatus`, `PollJob`, `PollInventoryUpdate`, `PrintStdoutTail`
+  - `cli/choice.go`: `ParseChoices`, `ResolveChoice` (dhcp/pxe가 공유하던 로직)
+  - `cli/prompt.go`: `PromptLine`, `PromptYesNo`
+- `cmd/doctor`, `cmd/ls`, `cmd/survey`, `cmd/nodeinfo`, `cmd/invsync`, `cmd/dhcp`, `cmd/pxe` — 각각 독립된 `main` 패키지로 신설. 기존 `main.go`/`common.go`/`doctor.go`/`catalog.go`/`nodeinfo.go`/`invsync.go`/`dhcp.go`/`pxe.go`(플랫 package main)는 삭제하고 로직을 그대로 각 `cmd/*/main.go`로 이식(동작 변화 없음). survey의 `formatChoices`, nodeinfo의 `saveNodeInfoResult`/`artifactKeys`처럼 단일 명령에서만 쓰는 헬퍼는 해당 `cmd` 패키지에 그대로 둠.
+- 대화형 전체 메뉴(인자 없이 실행 시 7개 중 번호 선택)는 제거됨 — 이제 각 bash 스크립트 자체가 진입점이라 더 이상 필요 없음. 각 명령 내부의 개별 프롬프트(예: survey 템플릿 미지정 시 물어보기, dhcp/pxe 선택지 번호 메뉴, nodeinfo의 Y/N 확인)는 그대로 유지.
+- `setup.sh`: `go build -o awxkit .` → `cmd/*/` 각각을 `awxkit-<이름>`으로 빌드하는 반복문으로 변경.
+- 기존 `run.sh`(단일 바이너리용) 삭제, 대신 `doctor.sh`/`ls.sh`/`survey.sh`/`nodeinfo.sh`/`invsync.sh`/`dhcp.sh`/`pxe.sh` 7개 신설 — 각각 대응하는 `awxkit-<이름>`이 없으면 `setup.sh`를 호출해 빌드한 뒤 인자를 그대로 전달.
+- README.md 전면 재작성(1~4장, 디렉토리 구조), PLAN.md의 "실행 환경" 설계 결정 행 갱신.
+- **검증**: Rocky Linux(192.168.0.58)에서 `go build ./...`/`go vet ./...`/`gofmt -l .` 전부 통과(포맷 이슈 없음). `bash setup.sh`로 7개 바이너리 일괄 빌드 확인. 4대 시나리오 + doctor/ls/survey 전부를 하나의 상태 저장형 스텁 서버로 각 `*.sh` 스크립트를 통해 실행해 동작 동일함을 확인(성공 경로 중심 — 개별 실패/경계 케이스는 기존 단계별 검증에서 이미 확인됨, 로직 자체는 옮기기만 했으므로 재검증 생략). 검증 후 VM 임시 파일 정리함.
+
+### 다음 단계
+- 이 구조로 현장 검증 진행 예정. 검증 결과에 따라 7단계(폐쇄망 패키징 정비) 및 미확정 리스크(S1 결과 취득 경로, S1→S2 전달 절차) 해소.
