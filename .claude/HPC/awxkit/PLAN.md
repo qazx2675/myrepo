@@ -1,7 +1,7 @@
 # AWX 템플릿 실행 CLI (awxkit) - 계획서
 
-> **진행 상태 (2026-08-19 기준)**: 0~3단계 완료 (config 로더 + `CurrentUser()` 훅 + `doctor` + `ls`/`survey` + `nodeinfo`).
-> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 정상·오류 경로 검증 완료. 4단계([S2] 인벤토리 동기화)부터 이어서 진행 예정.
+> **진행 상태 (2026-08-19 기준)**: 0~4단계 완료 (config 로더 + `CurrentUser()` 훅 + `doctor` + `ls`/`survey` + `nodeinfo` + `invsync`).
+> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 정상·오류 경로 검증 완료. 5단계([S3] DHCP)부터 이어서 진행 예정.
 > hostname은 `-host` 단일 플래그가 아니라 `${user}.txt`(conf와 동일한 탐색 규칙) 목록 파일로 받도록 설계 변경됨 — hostname은 NodeInfo 단계에서만 필요하고, 이후 단계는 인벤토리에 등록된 상태를 기준으로 동작하기 때문.
 > 작업 이력은 [`WORKLOG.md`](./WORKLOG.md), 사용법은 [`README.md`](./README.md) 참고.
 
@@ -129,7 +129,7 @@ history_file   = ./awxkit_history.log
 | **1** | config 로더 + `CurrentUser()` 훅 + `awxkit doctor` | ✅ 완료 (2026-08-19) — conf에 URL/ID/PW만 넣고 `doctor` 실행 → 버전·인증·템플릿 개수·권한·`ask_variables_on_launch` 점검까지 출력. Rocky Linux(192.168.0.58) 빌드/`go vet` 통과, 스텁 서버로 정상/오류 경로 검증 |
 | **2** | 공통 AWX 클라이언트(launch/poll/stdout) + `ls` / `survey` | ✅ 완료 (2026-08-19) — 템플릿 목록과 survey 정의(변수명·선택지·기본값)를 조회해 출력. 스텁 서버로 정상/오류(비-survey 템플릿, 존재하지 않는 템플릿) 경로 검증 |
 | **3** | [S1] `nodeinfo` (`${user}.txt`의 hostname 전체를 한 번에 실행) + 결과 파일 저장 | ✅ 완료 (2026-08-19) — 전체 hostname을 하나의 extra_vars로 묶어 1회 실행·폴링·결과 저장(`${user}_nodeinfo.yaml`), 실패 시 stdout 마지막 30줄, `history_file` 기록. `setup.sh`가 `main.go`만 빌드하던 버그와 CRLF 줄바꿈 문제(`.gitattributes` 추가)도 함께 수정 |
-| **4** | [S2] `invsync` 인벤토리 동기화 + 등록 결과 조회 | sync 성공 상태 + 호스트 리스트 출력 |
+| **4** | [S2] `invsync` 인벤토리 동기화 + 등록 결과 조회 | ✅ 완료 (2026-08-19) — `s2_inventory_source` 동기화 트리거·폴링, 성공 시 `s2_inventory`의 등록 호스트 전체(이름·활성 여부)를 나열. 스텁 서버로 성공/실패/`s2_inventory` 미설정 3가지 경로 검증 |
 | **5** | [S3] `dhcp -infra <n\|이름>` | `successful`/`failed` 판정 즉시 출력, 실패 시 stdout 마지막 30줄 |
 | **6** | [S4] `pxe` 4개 옵션 조합 + 호스트 수 리포트 | "총 N대의 호스트가 등록 완료되었습니다." 출력 |
 | **7** | 폐쇄망 패키징(실 vendor, 크로스컴파일) + README 2~4장 완성 | 인터넷 차단 상태에서 `bash setup.sh` 빌드 성공 |
@@ -148,8 +148,8 @@ history_file   = ./awxkit_history.log
 완료 여부를 `Y/N`으로 확인받는다. `Y`가 아니면 `downloaded_unconfirmed` 상태로 종료 코드 1을 반환한다.
 
 ### [S2] 인벤토리 동적 동기화
-[S1]에서 받은 YAML을 AWX가 참조하는 경로에 등록하거나 인벤토리 소스로 주입한 뒤,
-`inventory_sources/{id}/update/`로 sync를 트리거하고 등록 결과를 리스트/JSON으로 확인한다.
+`inventory_sources/{id}/update/`로 sync를 트리거하고 완료를 폴링한 뒤, 성공하면 대상 인벤토리의 등록 호스트 전체를 리스트로 보여준다.
+**[S1]에서 받은 결과 파일을 AWX가 인벤토리 소스로 인식하게 만드는 방법(수동 배치 / Git 프로젝트 커밋 / SCP 등)은 아직 미확정** — 현재 `invsync`는 이미 등록된(또는 다른 경로로 등록될) 소스의 동기화 트리거와 결과 확인만 담당한다. 자세한 내용은 아래 리스크 항목 참고.
 
 ### [S3] DHCP 등록 및 결과 검증
 인프라 선택지를 번호로 고르거나 `-infra` 플래그로 지정 → 템플릿 실행 → 최종 상태를 즉시 출력.
@@ -178,6 +178,7 @@ history_file   = ./awxkit_history.log
 | 리스크 | 영향 | 대응 |
 |---|---|---|
 | 결과 파일 취득 경로 미확정 | [S1]이 막힘 | `s1_fetch`로 3가지 경로 모두 지원, 현장에서 선택 |
+| [S1]→[S2] 파일 전달 방식 미확정 | `${user}_nodeinfo.yaml`을 AWX가 인벤토리 소스로 인식하게 만드는 절차(수동 배치/Git 프로젝트 커밋/SCP 등)를 모름 | 현재 `invsync`는 이미 등록된 소스의 동기화 트리거·결과 확인만 구현. 현장에서 실제 절차 확인 후 필요하면 자동화 추가 |
 | `ask_variables_on_launch` 미허용 | extra_vars가 **무시된 채 성공**으로 보임 (에러 없음) | `doctor`가 사전 경고 + launch 응답의 `ignored_fields` 검사 |
 | 계정 권한 부족(템플릿 실행 불가) | 403 | `doctor`에서 실행 권한 사전 확인 |
 | survey 문항의 변수명 불일치 | 파라미터가 전달되지 않음 | `survey` 명령으로 실제 `variable` 값을 조회해 conf에 반영 |

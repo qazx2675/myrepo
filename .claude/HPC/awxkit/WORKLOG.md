@@ -67,3 +67,15 @@
 - `nodeinfo.go`: 결과 파일 저장 후 "[✔] 다운로드 완료"를 먼저 출력하고, 양식 변환 스크립트를 다른 터미널에서 실행하라는 안내 + `Y/N` 확인을 받도록 변경. `N`(또는 그 외 입력)이면 `history_file`에 `status=downloaded_unconfirmed`로 기록하고 종료 코드 1. `Y`면 기존과 같이 `status=successful`로 기록(`format_confirmed=true` 추가).
 - README/PLAN 갱신: 실행 예시에 확인 프롬프트 추가, 설계 결정 표에 "양식 변환 확인" 항목 추가.
 - **검증**: Rocky Linux(192.168.0.58)에서 `gofmt`/빌드/`go vet` 통과. 표준입력으로 `y`/`n`을 각각 넣어 두 경로(성공 확정 / downloaded_unconfirmed) 모두 확인. 검증 후 VM 임시 파일 정리함.
+
+## 2026-08-19 (계속) — 4단계 구현
+
+- `awx/client.go`: `Host` 구조체와 `ListInventoryHosts()`(이름·활성 여부 포함 전체 목록, 최대 500개) 추가. 기존 `CountInventoryHosts`는 유지(4단계에서는 미사용, S4에서 재사용 예정).
+- `common.go`: `pollInventoryUpdate()` 추가 — `pollJob`과 같은 패턴(상태 바뀔 때만 출력)으로 인벤토리 동기화 상태를 폴링.
+- `invsync.go`: `s2_inventory_source` 동기화 트리거 → `pollInventoryUpdate`로 완료 대기 → 실패면 종료 코드 1 → 성공이면 `s2_inventory`(설정된 경우)의 등록 호스트 전체를 이름+활성 여부로 나열. `s2_inventory` 미설정 시 호스트 목록 조회는 건너뜀. 모든 단계를 `history_file`에 기록.
+- `main.go`: `invsync` 명령 배선.
+- **미확정 리스크 명시**: [S1]이 만든 결과 파일을 AWX가 실제로 인벤토리 소스로 인식하게 만드는 절차(수동 배치/Git 프로젝트 커밋/SCP 등)는 여전히 현장 확인이 필요함. 현재 `invsync`는 이미 등록된(또는 이미 다른 경로로 채워질) 소스의 동기화 트리거·결과 확인만 구현하고, 이 부분은 PLAN.md 리스크 항목에 남겨둠.
+- **검증**: Rocky Linux(192.168.0.58)에서 `gofmt`/빌드/`go vet` 통과. inventory_source별로 다른 결과(성공/실패)를 흉내내는 상태 저장형 스텁 서버로 성공+호스트 목록, 실패, `s2_inventory` 미설정 3가지 경로 모두 확인. 검증 후 VM 임시 파일 정리함.
+
+### 다음 단계
+- 5단계: [S3] `dhcp` — 인프라 선택지를 번호/이름으로 받아 DHCP 템플릿 실행, 최종 상태 즉시 출력, 설정 변경 검증 권고 문구 출력.

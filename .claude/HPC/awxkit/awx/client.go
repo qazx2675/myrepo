@@ -284,7 +284,15 @@ func (c *Client) GetInventoryUpdate(id int) (*InventoryUpdate, error) {
 }
 
 type hostListResult struct {
-	Count int `json:"count"`
+	Count   int    `json:"count"`
+	Results []Host `json:"results"`
+}
+
+// Host는 inventories/{id}/hosts/ 응답의 항목 하나다.
+type Host struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
 }
 
 // CountInventoryHosts는 인벤토리에 등록된 호스트 수를 조회한다.
@@ -294,4 +302,13 @@ func (c *Client) CountInventoryHosts(inventoryID int) (int, error) {
 		return 0, err
 	}
 	return out.Count, nil
+}
+
+// ListInventoryHosts는 인벤토리에 등록된 호스트 전체를 조회한다(최대 500개).
+func (c *Client) ListInventoryHosts(inventoryID int) ([]Host, error) {
+	var out hostListResult
+	if err := c.get(fmt.Sprintf("/api/v2/inventories/%d/hosts/?page_size=500", inventoryID), &out); err != nil {
+		return nil, err
+	}
+	return out.Results, nil
 }

@@ -71,6 +71,28 @@ func pollJob(client *awx.Client, jobID int, intervalSec int) (*awx.Job, error) {
 	}
 }
 
+// pollInventoryUpdate는 인벤토리 동기화가 최종 상태가 될 때까지 intervalSec 간격으로 상태를 조회한다.
+func pollInventoryUpdate(client *awx.Client, updateID int, intervalSec int) (*awx.InventoryUpdate, error) {
+	if intervalSec <= 0 {
+		intervalSec = 3
+	}
+	last := ""
+	for {
+		upd, err := client.GetInventoryUpdate(updateID)
+		if err != nil {
+			return nil, err
+		}
+		if upd.Status != last {
+			fmt.Printf("    [inventory_update %d] %s\n", updateID, upd.Status)
+			last = upd.Status
+		}
+		if isTerminalStatus(upd.Status) {
+			return upd, nil
+		}
+		time.Sleep(time.Duration(intervalSec) * time.Second)
+	}
+}
+
 // printStdoutTail은 Job stdout의 마지막 n줄을 출력한다 (실패 원인 확인용).
 func printStdoutTail(client *awx.Client, jobID int, n int) {
 	stdout, err := client.GetJobStdout(jobID)
