@@ -8,12 +8,17 @@ import (
 	"vm-param-check/model"
 )
 
-// SharesExpect는 그룹별(ev01 필수/ev02·ev03 옵션) 기대 CPU Shares(ratio) 값이다.
-// 값이 nil이면 "해당 그룹 옵션이 아예 주어지지 않음"을 의미한다.
+// SharesExpect는 그룹별(ev01 필수/ev02·ev03 옵션) 기대 CPU Shares 값이다.
+// EV02/EV03가 nil이면 "해당 그룹 옵션이 아예 주어지지 않음"을 의미한다.
+//
+// ev01만 Level이 Normal인 경우를 기대값으로 쓸 수 있다(EV01Normal). 현업에서 Shares를
+// Custom ratio로 박지 않고 Normal 그대로 두는 스펙이 있어서, 그때는 ratio 숫자가 아니라
+// Level 자체를 비교해야 한다. ev02/ev03는 지금까지처럼 ratio 숫자만 받는다.
 type SharesExpect struct {
-	EV01 int
-	EV02 *int
-	EV03 *int
+	EV01       int
+	EV01Normal bool // true면 EV01 무시하고 "Level이 normal인가"로 판정
+	EV02       *int
+	EV03       *int
 }
 
 // CPUExpect/MemExpect/DiskExpect는 SharesExpect와 동일한 패턴 — Base는 ev01/미분류
@@ -130,6 +135,9 @@ func checkShares(vm model.VMInfo, shares SharesExpect, group string, singleVMMod
 	var expected *int
 	switch group {
 	case "ev01":
+		if shares.EV01Normal {
+			return checkSharesNormal(vm, group)
+		}
 		v := shares.EV01
 		expected = &v
 	case "ev02":
@@ -170,6 +178,28 @@ func checkShares(vm model.VMInfo, shares SharesExpect, group string, singleVMMod
 		} else {
 			mem.Result = "FAIL"
 		}
+	}
+
+	return []model.Finding{cpu, mem}
+}
+
+// checkSharesNormal은 -shares-ev01=normal 일 때의 판정이다. ratio 숫자는 VM 사양에 따라
+// vCenter가 알아서 계산하므로 비교 대상이 아니고, Level이 normal인지만 본다(CPU/메모리 둘 다).
+func checkSharesNormal(vm model.VMInfo, group string) []model.Finding {
+	cpu := model.Finding{VM: vm.Name, Source: group, Key: "cpuAllocation.shares (CPU Shares Level)", Expected: "normal"}
+	cpu.Actual = fmt.Sprintf("level=%s", vm.CPUSharesLevel)
+	if vm.CPUSharesLevel == "normal" {
+		cpu.Result = "OK"
+	} else {
+		cpu.Result = "FAIL"
+	}
+
+	mem := model.Finding{VM: vm.Name, Source: group, Key: "memoryAllocation.shares (Memory Shares Level)", Expected: "normal"}
+	mem.Actual = fmt.Sprintf("level=%s", vm.MemorySharesLevel)
+	if vm.MemorySharesLevel == "normal" {
+		mem.Result = "OK"
+	} else {
+		mem.Result = "FAIL"
 	}
 
 	return []model.Finding{cpu, mem}

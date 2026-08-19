@@ -52,7 +52,7 @@ numa=$(ask_required "numa (NUMA 노드당 최대 vCPU 수)")
 cpu=$(ask_required "cpu (vCPU 수)")
 mem=$(ask_required "mem (메모리 GB)")
 disk=$(ask_required "disk (디스크 총량 GB)")
-shares_ev01=$(ask_required "shares-ev01 (CPU/메모리 Shares ratio)")
+shares_ev01=$(ask_required "shares-ev01 (CPU/메모리 Shares — ratio 숫자 또는 normal)")
 
 echo
 echo "=== ev02 값 (선택 — 전부 비워두면 ev02 관련 체크는 스킵됨) ==="

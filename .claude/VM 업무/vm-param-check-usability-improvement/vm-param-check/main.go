@@ -59,7 +59,7 @@ func main() {
 	diskEV02Str := flag.String("disk-ev02", "", "기대값: ev02 그룹 디스크 총량 GB (옵션, 안 주면 ev02 디스크 체크 스킵)")
 	diskEV03Str := flag.String("disk-ev03", "", "기대값: ev03 그룹 디스크 총량 GB (옵션, 안 주면 ev03 디스크 체크 스킵)")
 
-	sharesEV01 := flag.Int("shares-ev01", 0, "기대값: ev01 그룹 CPU Shares(ratio) (필수)")
+	sharesEV01Str := flag.String("shares-ev01", "", "기대값: ev01 그룹 CPU Shares (필수). ratio 숫자(예: 4000) 또는 'normal'. normal을 주면 ratio 숫자 대신 CPU/메모리 Shares Level이 둘 다 normal인지를 본다")
 	sharesEV02Str := flag.String("shares-ev02", "", "기대값: ev02 그룹 CPU Shares(ratio) (옵션, 안 주면 ev02 shares 체크 스킵)")
 	sharesEV03Str := flag.String("shares-ev03", "", "기대값: ev03 그룹 CPU Shares(ratio) (옵션, 안 주면 ev03 shares 체크 스킵)")
 
@@ -118,7 +118,7 @@ func main() {
 		if *ht != "on" && *ht != "off" {
 			log.Fatal("-ht=on 또는 -ht=off 필수")
 		}
-		if *cores == 0 || *numa == 0 || *cpu == 0 || *mem == 0 || *disk == 0 || *sharesEV01 == 0 {
+		if *cores == 0 || *numa == 0 || *cpu == 0 || *mem == 0 || *disk == 0 || *sharesEV01Str == "" {
 			log.Fatal("-cores/-numa/-cpu/-mem/-disk/-shares-ev01 은 모두 필수입니다 (-specRoot로 자동으로 채울 수도 있습니다)")
 		}
 	}
@@ -241,6 +241,17 @@ func main() {
 	buildExpect := func() expectSet {
 		requireExpectFlags()
 
+		// ev01만 'normal'(Level 비교)을 허용한다. 그 외에는 지금까지처럼 ratio 숫자.
+		var sharesEV01 int
+		sharesEV01Normal := strings.EqualFold(*sharesEV01Str, "normal")
+		if !sharesEV01Normal {
+			v, err := strconv.Atoi(*sharesEV01Str)
+			if err != nil {
+				log.Fatalf("-shares-ev01 값은 ratio 숫자 또는 'normal' 이어야 합니다 (받은 값: %q)", *sharesEV01Str)
+			}
+			sharesEV01 = v
+		}
+
 		var sharesEV02, sharesEV03 *int
 		if *sharesEV02Str != "" {
 			v, err := strconv.Atoi(*sharesEV02Str)
@@ -304,7 +315,7 @@ func main() {
 			CPU:    checker.CPUExpect{Base: *cpu, EV02: cpuEV02, EV03: cpuEV03},
 			Mem:    checker.MemExpect{Base: *mem, EV02: memEV02, EV03: memEV03},
 			Disk:   checker.DiskExpect{Base: *disk, EV02: diskEV02, EV03: diskEV03},
-			Shares: checker.SharesExpect{EV01: *sharesEV01, EV02: sharesEV02, EV03: sharesEV03},
+			Shares: checker.SharesExpect{EV01: sharesEV01, EV01Normal: sharesEV01Normal, EV02: sharesEV02, EV03: sharesEV03},
 			HTOn:   *ht == "on",
 		}
 		if *affinityEV01Path != "" {

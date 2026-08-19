@@ -27,7 +27,7 @@ numa=
 cpu=
 mem=
 disk=
-shares-ev01=
+shares-ev01=          # ratio 숫자(예: 4000) 또는 normal
 
 # --- 선택: ev02 그룹 (없으면 ev02 관련 체크는 스킵됨) ---
 # cores-ev02=

@@ -163,7 +163,7 @@ numa=
 cpu=
 mem=
 disk=
-shares-ev01=
+shares-ev01=          # ratio 숫자(예: 4000) 또는 normal
 
 # --- 선택: ev02 그룹 (없으면 ev02 관련 체크는 스킵됨) ---
 # cores-ev02=
@@ -180,6 +180,12 @@ cpu=40
 mem=16
 disk=100
 shares-ev01=1000
+```
+
+Shares를 Custom ratio로 박지 않고 vCenter 기본값(Normal) 그대로 두는 스펙이라면 숫자 대신 `normal`이라고 적으면 됩니다. 이때는 ratio 숫자를 비교하지 않고 **CPU/메모리 Shares Level이 둘 다 `normal`인지**만 봅니다.
+
+```
+shares-ev01=normal
 ```
 
 이미 비슷한 스펙이 있다면 `-template`으로 그 값을 그대로 복사해서 시작할 수도 있습니다(다른 부분만 고치면 됨):
@@ -273,7 +279,7 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 | `-cpu <N>` / `-cpu-ev02` / `-cpu-ev03` | 필수/옵션/옵션 | 기대값: vCPU 수 |
 | `-mem <N>` / `-mem-ev02` / `-mem-ev03` | 필수/옵션/옵션 | 기대값: 메모리 GB |
 | `-disk <N>` / `-disk-ev02` / `-disk-ev03` | 필수/옵션/옵션 | 기대값: 디스크 총량 GB |
-| `-shares-ev01 <N>` / `-shares-ev02` / `-shares-ev03` | 필수/옵션/옵션 | 기대값: CPU/메모리 Shares(ratio) |
+| `-shares-ev01 <N\|normal>` / `-shares-ev02` / `-shares-ev03` | 필수/옵션/옵션 | 기대값: CPU/메모리 Shares(ratio). `-shares-ev01`만 `normal`을 받으며, 이때는 ratio 숫자 대신 **CPU/메모리 Shares Level이 둘 다 `normal`인지**를 봅니다. `-shares-ev02`/`-shares-ev03`는 숫자만 |
 | `-affinity-ev01 <path>` | (옵션) | ev01 기대 affinity 파일. 안 주면 `-ht`/`-cores` 기반 자동계산 |
 | `-affinity-ev02 <path>` / `-affinity-ev03 <path>` | (옵션) | ev02/ev03 기대 affinity 파일. 안 주면 해당 그룹 affinity 체크 스킵 |
 | `-out <path>` | 타임스탬프 자동생성 | 상세 CSV 경로. `_summary` 붙은 요약 CSV가 하나 더 생성됨 |
