@@ -45,7 +45,23 @@ VC_PASSWORD='<비밀번호>' ./vm-param-fix -checkResult=<체크CSV> -vcTargetIP
 
 ## 4. 문서별 고유 설명
 
-### power_setting에 대한 중요 안내
+### 4.1 디렉토리 구조
+
+```
+legacy-vm-param-fix-external-orchestration/
+├── README.md                    # 이 문서
+├── vm-param-fix/                # 체크 CSV를 태그별로 분류해 아래 외부 도구들을 호출하는 오케스트레이터 (power_setting 바이너리 포함)
+├── affinity_setting-source/     # affinity 태그 담당 외부 도구 소스
+├── lpage_setting-source/        # lpage(HugePage/CPU 토폴로지) 태그 담당 외부 도구 소스
+├── license_assign-source/       # 라이선스 할당 도구 소스 (하위 README 참고)
+├── mac_info-source/             # MAC 주소 정보 조회 도구 소스 (하위 README 참고)
+├── main_conn-source/            # vCenter/ESXi 접속 확인 도구 소스 (하위 README 참고)
+├── tag_setting-source/          # VM 태그 설정 도구 소스 (하위 README 참고)
+├── vm_create-source/            # VM 생성 도구 소스 (하위 README 참고)
+└── vswitch_setting-source/      # 가상 스위치 설정 도구 소스 (하위 README 참고)
+```
+
+### 4.2 power_setting에 대한 중요 안내
 
 `power_setting`의 **Go 소스 코드를 Rocky Linux 어디에서도 확실하게 찾지 못했습니다.**
 로컬 파일 여러 개(`/root/pro/main.go` 등)를 대조해봤지만, 실행 바이너리의 플래그 구성

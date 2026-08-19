@@ -278,3 +278,25 @@ vcsim 시뮬레이터일 때만 나타남 — 실제 vCenter엔 있지만 vcsim�
 저장소의 `vm-param-setting-check/`(체크 전용)와 `vm-param-setting-check/fail-based-param-fix/`(레거시
 외부 도구 오케스트레이션 방식)는 삭제하지 않고 그대로 남겨뒀습니다. 이 폴더는 그 둘을 대체하는
 통합본입니다 — 새로 시작하는 경우 이 폴더만 쓰면 됩니다.
+
+### 4.7 디렉토리 구조
+
+```
+vm-param-check/
+├── README.md      # 이 문서
+├── 계획서.md        # 설계 배경/판단 근거 문서
+├── main.go        # CLI 진입점 (옵션 파싱, 체크/-fix 파이프라인 실행)
+├── demo.go        # -demo 모드 (합성 VM 3대로 동작 확인)
+├── scaletest.go   # -scale 모드 (합성 VM N대로 대량 환경 시뮬레이션)
+├── go.mod / go.sum  # Go 모듈 정의 파일
+├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── real_test.sh / scale_test.sh  # 실 vCenter/스케일 테스트용 실행 스크립트
+├── checker/       # CPU/메모리/NUMA/affinity/전원정책 등 점검 로직
+├── config/        # 점검 대상 VM 목록 등 설정 로딩
+├── fixer/         # -fix 파이프라인 (게이트 검증, dry-run 계획 산출, 적용)
+├── model/         # 체크 결과 등 공용 데이터 모델
+├── report/        # 콘솔/CSV 리포트 출력
+├── vcenter/       # vCenter API 접속 클라이언트
+├── testfiles/     # affinity 등 테스트용 샘플 파일
+└── vendor/        # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```

@@ -57,6 +57,18 @@ hostList := []HostTarget{
    클러스터에 일괄 적용.
 4. 완료 메시지 출력.
 
+## 6. 디렉토리 구조
+
+```
+vswitch_setting-source/
+├── README.md         # 이 문서
+├── main.go           # 클러스터 HostGroup(DRS 그룹) 일괄 매핑 로직 전체 (대상 정보는 소스에 하드코딩)
+├── go.mod / go.sum     # Go 모듈 정의 파일
+├── setup.sh          # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── vswitch_setting   # setup.sh로 빌드된 실행 바이너리
+└── vendor/           # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
 ## 5. 알려진 한계
 
 - 호스트↔그룹 매핑이 소스코드에 하드코딩되어 있어, 실제 운영에서는 파일 기반 입력으로

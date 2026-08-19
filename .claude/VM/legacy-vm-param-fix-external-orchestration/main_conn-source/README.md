@@ -64,6 +64,18 @@ bash setup.sh
 5. 각 호스트별 성공(`[SUCCESS]`)/실패(`[FAIL]`) 메시지를 콘솔에 출력, 전체 goroutine이
    끝날 때까지 대기(`sync.WaitGroup`) 후 종료.
 
+## 5. 디렉토리 구조
+
+```
+main_conn-source/
+├── README.md      # 이 문서
+├── main.go        # ESXi 호스트를 vCenter 클러스터에 병렬 등록하는 로직 전체 (대상 정보는 소스에 하드코딩)
+├── go.mod / go.sum  # Go 모듈 정의 파일
+├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── main_conn      # setup.sh로 빌드된 실행 바이너리
+└── vendor/        # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+```
+
 ## 4. 알려진 한계
 
 - 커맨드라인 옵션이 없어 대상이 바뀔 때마다 소스 수정 + 재빌드가 필요합니다.

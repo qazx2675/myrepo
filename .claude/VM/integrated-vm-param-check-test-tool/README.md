@@ -129,7 +129,21 @@ echo "192.168.0.50" > vcenter.txt
 
 ## 4. 문서별 고유 설명
 
-### 자주 겪는 문제
+### 4.1 디렉토리 구조
+
+```
+integrated-vm-param-check-test-tool/
+├── README.md          # 이 문서
+├── vm-param-check/    # VM 파라미터 체크+자동교정 도구 (소스+vendor/), 상세는 하위 README 참고
+├── vc-test-env/       # 실 vCenter -> vcsim 복제 도구 (소스+vendor/), 상세는 하위 README 참고
+└── testkit/            # 위 두 도구를 엮어 빌드·테스트하는 셸 스크립트 모음
+    ├── build-all.sh    # vm-param-check, vc-test-env 두 바이너리를 한 번에 빌드
+    ├── start-vcsim.sh  # vcsim(테스트용 가상 vCenter)을 기동
+    ├── run-tests.sh    # vcsim을 대상으로 체크+자동교정 테스트 실행 (결과는 testkit/out/에 저장)
+    └── stop-vcsim.sh   # 기동한 vcsim 종료
+```
+
+### 4.2 자주 겪는 문제
 
 | 증상 | 원인/해결 |
 |---|---|
