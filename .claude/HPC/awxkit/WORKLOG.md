@@ -88,3 +88,14 @@
 
 ### 다음 단계
 - 6단계: [S4] `pxe` — 인프라·OS 버전·Boot Mode·Splunk 설치 여부 4개 옵션 조합 실행, 완료 후 대상 인벤토리 호스트 수 리포트("총 N대의 호스트가 등록 완료되었습니다").
+
+## 2026-08-19 (계속) — 6단계 구현 (4대 시나리오 전부 완료)
+
+- `config/config.go`: `s4_infra_choices`/`s4_osver_choices`/`s4_bootmode_choices`/`s4_splunk_choices`(전부 선택 사항) 필드 추가.
+- `pxe.go`: `dhcp.go`의 `resolveChoice`/`parseChoices`를 그대로 재사용해 4개 옵션(인프라/OS 버전/Boot Mode/Splunk 설치 여부)을 각각 번호·값·생략(선택지 있으면 메뉴, 없으면 자유입력)으로 받음 → `s4_template` 실행 → 폴링 → 실패 시 stdout tail + 종료 코드 1 → 성공 시 `s4_inventory`가 설정되어 있으면 `CountInventoryHosts`로 "총 N대의 호스트가 등록 완료되었습니다." 출력.
+- `main.go`: `-os`/`-boot`/`-splunk` 플래그(‑infra는 dhcp/pxe 공용) 추가, `pxe` 명령 배선.
+- **검증**: Rocky Linux(192.168.0.58)에서 `gofmt`/빌드/`go vet` 통과. 인프라 값에 따라 성공/실패를 다르게 응답하는 스텁 서버로 4개 플래그 전부 지정한 성공+호스트 수 집계, 실패(stdout tail), `s4_inventory` 미설정(집계 건너뜀) 3가지 경로 확인. 검증 후 VM 임시 파일 정리함.
+- 이로써 계획서의 4대 핵심 시나리오(NodeInfo/인벤토리 동기화/DHCP/PXE)가 모두 구현됨. 남은 것은 7단계(폐쇄망 패키징 정비 — vendor 실채움, 크로스컴파일 확인)뿐.
+
+### 다음 단계
+- 7단계: 폐쇄망 패키징 정비 — 실제로는 외부 의존성이 없어 `vendor/`가 비어 있어도 되는 상태이므로, README에 이 점을 명확히 하고 크로스컴파일(`GOOS=linux GOARCH=amd64`) 절차를 재확인.

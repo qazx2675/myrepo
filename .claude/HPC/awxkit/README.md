@@ -177,6 +177,17 @@ db01
 ```
 `-infra`는 **반드시 `dhcp`보다 앞에** 와야 합니다 (Go의 `flag` 패키지는 명령 뒤에 오는 플래그를 파싱하지 않습니다). `s3_infra_choices`가 설정된 상태에서 목록에 없는 값을 주면 오류로 종료합니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
 
+### 2.9 [S4] PXE 등록 (`pxe`)
+인프라·OS 버전·Boot Mode·Splunk 설치 여부 4개 옵션을 조합해 `s4_template`을 실행하고, 완료 후 `s4_inventory`의 전체 호스트 수를 리포트합니다. 각 옵션은 `dhcp`의 `-infra`와 같은 방식(번호/값/생략)으로 동작합니다.
+```bash
+./awxkit -infra 1 -os rocky-9.2 -boot uefi -splunk true pxe
+# [i] pxe-register 실행 중... (pxe_infra=seoul, os_version=rocky-9.2, boot_mode=uefi, install_splunk=true)
+#     [job 600] successful
+# [✔] 성공 (job 600)
+# 총 42대의 호스트가 등록 완료되었습니다.
+```
+4개 플래그(`-infra`/`-os`/`-boot`/`-splunk`) 모두 **`pxe`보다 앞에** 와야 합니다. 각 옵션의 선택지(`s4_infra_choices` 등)는 선택 사항 — 비워두면 해당 옵션은 자유 입력을 받습니다. `s4_inventory`를 비워두면 호스트 수 집계는 건너뜁니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
+
 ## 3. 옵션별 상세 설명
 
 ### 3.1 전역 플래그
@@ -185,7 +196,10 @@ db01
 | `-conf <경로>` | 설정 파일 경로를 직접 지정 (탐색 순서 무시) |
 | `-user <이름>` | 사용자 식별자를 직접 지정 (`AWXKIT_USER` 환경변수보다 우선순위 낮음) |
 | `-hosts <경로>` | (`nodeinfo` 전용) `${user}.txt` 대신 사용할 호스트 목록 파일 |
-| `-infra <번호\|값>` | (`dhcp` 전용) 인프라 선택지 번호 또는 값 |
+| `-infra <번호\|값>` | (`dhcp`/`pxe`) 인프라 선택지 번호 또는 값 |
+| `-os <번호\|값>` | (`pxe` 전용) OS 버전 선택지 번호 또는 값 |
+| `-boot <번호\|값>` | (`pxe` 전용) Boot Mode 선택지 번호 또는 값 |
+| `-splunk <번호\|값>` | (`pxe` 전용) Splunk 설치 여부 선택지 번호 또는 값 |
 
 ### 3.2 명령
 | 명령 | 상태 | 설명 |
@@ -196,7 +210,7 @@ db01
 | `nodeinfo` | **구현됨** | [S1] `${user}.txt`의 hostname 전체를 한 번에 넣어 NodeInfo 템플릿 실행 및 결과 파일 저장 |
 | `invsync` | **구현됨** | [S2] `s2_inventory_source` 동기화 트리거·완료 대기 후 `s2_inventory`의 등록 호스트 목록 조회 |
 | `dhcp` | **구현됨** | [S3] 인프라 선택 후 DHCP 등록 템플릿 실행, 최종 상태 즉시 출력, 설정 변경 검증 권고 문구 출력 |
-| `pxe` | 예정 | [S4] PXE 등록 및 호스트 수 리포트 |
+| `pxe` | **구현됨** | [S4] 인프라·OS 버전·Boot Mode·Splunk 설치 여부 조합 실행 후 등록 완료 호스트 수 리포트 |
 
 ### 3.3 설정 파일(`${user}_setting.conf`) 키
 `key = value` 형식, `#` 이후는 주석. 전체 항목은 [`conf/sample_setting.conf`](./conf/sample_setting.conf) 참고.
@@ -208,14 +222,14 @@ db01
 | `s1_*` | [S1] NodeInfo 템플릿/파라미터/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
 | `s2_*` | [S2] 인벤토리 소스·대상 인벤토리 ID |
 | `s3_*` | [S3] DHCP 템플릿/인프라 선택 변수명·옵션 |
-| `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명, 결과 집계용 인벤토리 ID |
+| `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명과 각각의 선택지(`*_choices`, 선택 사항), 결과 집계용 인벤토리 ID |
 | `poll_interval` | Job 상태 폴링 간격(초) |
 | `history_file` | 실행 이력 기록 파일 |
 
 ## 4. 문서별 고유 설명
 - 상세 설계·API 매핑·단계별 계획: [`PLAN.md`](./PLAN.md)
 - 작업 이력: [`WORKLOG.md`](./WORKLOG.md)
-- 현재 5단계(설정 로딩 + `doctor` + `ls`/`survey` + `nodeinfo` + `invsync` + `dhcp`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
+- 현재 4대 시나리오(NodeInfo/인벤토리 동기화/DHCP/PXE)를 포함한 6단계까지 전부 구현 완료. 남은 것은 7단계(폐쇄망 패키징 정비)뿐입니다.
 
 ### 4.1 디렉토리 구조
 
@@ -233,6 +247,7 @@ awxkit/
 ├── nodeinfo.go           # nodeinfo 명령 — [S1] hostname 전체를 한 번에 넣어 NodeInfo 실행 및 결과 저장
 ├── invsync.go             # invsync 명령 — [S2] 인벤토리 소스 동기화 + 등록 호스트 목록 조회
 ├── dhcp.go                # dhcp 명령 — [S3] 인프라 선택 후 DHCP 등록 템플릿 실행
+├── pxe.go                 # pxe 명령 — [S4] 4개 옵션 조합 실행 + 등록 호스트 수 리포트
 ├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트 (go build -o awxkit .)
 ├── run.sh              # 바이너리가 없으면 자동 빌드 후 실행하는 래퍼 스크립트
 ├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go) + 호스트 목록 로더

@@ -38,12 +38,16 @@ type Config struct {
 	S3InfraChoices string
 
 	// [S4] PXE
-	S4Template    string
-	S4InfraKey    string
-	S4OSVerKey    string
-	S4BootModeKey string
-	S4SplunkKey   string
-	S4Inventory   string
+	S4Template        string
+	S4InfraKey        string
+	S4InfraChoices    string
+	S4OSVerKey        string
+	S4OSVerChoices    string
+	S4BootModeKey     string
+	S4BootModeChoices string
+	S4SplunkKey       string
+	S4SplunkChoices   string
+	S4Inventory       string
 
 	// 공통 동작
 	PollIntervalSec int
@@ -75,12 +79,16 @@ func (c *Config) fieldSetters() map[string]func(string) {
 		"s3_infra_key":     func(v string) { c.S3InfraKey = v },
 		"s3_infra_choices": func(v string) { c.S3InfraChoices = v },
 
-		"s4_template":     func(v string) { c.S4Template = v },
-		"s4_infra_key":    func(v string) { c.S4InfraKey = v },
-		"s4_osver_key":    func(v string) { c.S4OSVerKey = v },
-		"s4_bootmode_key": func(v string) { c.S4BootModeKey = v },
-		"s4_splunk_key":   func(v string) { c.S4SplunkKey = v },
-		"s4_inventory":    func(v string) { c.S4Inventory = v },
+		"s4_template":         func(v string) { c.S4Template = v },
+		"s4_infra_key":        func(v string) { c.S4InfraKey = v },
+		"s4_infra_choices":    func(v string) { c.S4InfraChoices = v },
+		"s4_osver_key":        func(v string) { c.S4OSVerKey = v },
+		"s4_osver_choices":    func(v string) { c.S4OSVerChoices = v },
+		"s4_bootmode_key":     func(v string) { c.S4BootModeKey = v },
+		"s4_bootmode_choices": func(v string) { c.S4BootModeChoices = v },
+		"s4_splunk_key":       func(v string) { c.S4SplunkKey = v },
+		"s4_splunk_choices":   func(v string) { c.S4SplunkChoices = v },
+		"s4_inventory":        func(v string) { c.S4Inventory = v },
 
 		"poll_interval": func(v string) {
 			if n, err := strconv.Atoi(v); err == nil {
