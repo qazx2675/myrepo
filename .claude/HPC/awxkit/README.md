@@ -124,12 +124,16 @@ db01
 # [i] nodeinfo 실행 중... (3개 hostname을 한 번에 전달)
 #     [job 1234] running
 #     [job 1234] successful
-# [✔] 완료 (job 1234) — 결과 저장: output/hong_nodeinfo.yaml
+# [✔] 다운로드 완료 (job 1234) — 결과 저장: output/hong_nodeinfo.yaml
+# [?] 다른 터미널에서 양식 변환 스크립트를 실행해 위 파일을 변환하세요.
+# 변환이 완료되었으면 Y를 입력하세요 (Y/N): y
+# [✔] 양식 변환 확인 완료.
 ```
 - `s1_hostname_key`에 hostname 전체(줄바꿈으로 이어붙인 텍스트)를 담아 `s1_template`을 한 번 실행하고, 결과를 `s1_output_dir/${user}_nodeinfo.yaml` 하나로 저장합니다.
 - 결과 취득 방식(`s1_fetch`)에 따라: `artifacts`(기본, `s1_artifact_key`로 값을 지정하지 않으면 전체 artifacts를 저장), `stdout`(표준출력 그대로 저장), `remote`(API로 받을 수 없어 원격 경로 안내만 출력).
+- **양식 변환 확인**: 다운로드된 결과 파일을 정해진 양식으로 바꾸는 스크립트는 awxkit이 실행하지 않습니다. 사용자가 다른 터미널에서 그 스크립트를 직접 실행한 뒤, awxkit이 물어보는 `Y/N`에 `Y`로 답해야 실행이 완료됩니다. `N`이거나 다른 입력이면 `downloaded_unconfirmed` 상태로 종료 코드 1을 반환합니다 — 다운로드는 됐지만 변환이 확인되지 않았다는 뜻입니다.
 - 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
-- 모든 실행은 `history_file`에 한 줄씩 기록됩니다.
+- 모든 실행은 `history_file`에 한 줄씩 기록됩니다 (`status=successful` 또는 `status=downloaded_unconfirmed` 등).
 - `${user}.txt` 대신 다른 파일을 쓰려면 `-hosts <경로>`로 직접 지정할 수 있습니다.
 ```bash
 ./awxkit -hosts ./retry_list.txt nodeinfo

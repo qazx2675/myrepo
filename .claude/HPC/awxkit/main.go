@@ -131,3 +131,9 @@ func promptLine(prompt string) string {
 	line, _ := reader.ReadString('\n')
 	return strings.TrimSpace(line)
 }
+
+// promptYesNo는 프롬프트를 출력하고 y/yes(대소문자 무관) 입력일 때만 true를 반환한다.
+func promptYesNo(prompt string) bool {
+	ans := strings.ToLower(promptLine(prompt))
+	return ans == "y" || ans == "yes"
+}
