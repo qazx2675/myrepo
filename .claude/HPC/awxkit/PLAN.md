@@ -47,6 +47,7 @@ ETX 원격 터미널 환경에서 AWX 웹 GUI를 띄우면 화면 지연(Lag)이
 | 설정 포맷 | `key = value` 평문 (`#` 주석 허용) | 의존성 제로 원칙상 YAML/TOML 파서 사용 불가. 현장에서 vi로 여는 파일이라 오히려 적합 |
 | 사용자 식별 | `config.CurrentUser()` 함수 **껍데기만 제공** | 사용자가 현장 로직을 직접 채워 넣음 |
 | hostname 입력 | `-host` 단일 플래그 대신 **`${user}.txt`** 목록 파일 (conf와 동일한 탐색 규칙) | hostname은 [S1] NodeInfo에서만 필요. 이후 [S2]~[S4]는 인벤토리 등록 상태를 기준으로 동작 |
+| NodeInfo 실행 방식 | hostname마다 개별 launch가 아니라, **`${user}.txt`의 전체 hostname을 줄바꿈으로 이어붙여 템플릿을 한 번만 실행** | NodeInfo 템플릿 자체가 hostname을 텍스트로 한 번에 받아 처리하는 구조. 결과도 파일 하나로 나옴 |
 | 실행 환경 | 핵심 로직은 Go 바이너리, `run.sh`로 감싸 바이너리 없으면 자동 빌드 후 실행 | Go로 만든 걸 bash로 쉽게 실행할 수 있어야 한다는 요청 반영 |
 
 ### 설정 파일 예시 (`conf/sample_setting.conf`)
@@ -64,7 +65,7 @@ s1_hostname_key    = target_host
 s1_fetch           = artifacts     # artifacts | stdout | remote
 s1_artifact_key    =               # s1_fetch=artifacts 일 때 결과가 담긴 artifacts 키. 비우면 전체 저장
 s1_remote_path     =               # s1_fetch=remote 일 때 AWX 실행노드상의 경로
-s1_output_dir      = ./output      # 로컬 저장 경로 (hostname별로 {hostname}.yaml)
+s1_output_dir      = ./output      # 로컬 저장 경로 (실행 1회당 ${user}_nodeinfo.yaml 하나)
 
 # ── [S2] 인벤토리 동기화 ────────────────────────────────
 s2_inventory_source = 5
@@ -126,7 +127,7 @@ history_file   = ./awxkit_history.log
 | **0** | 저장소 클론, 폴더 구조·`PLAN.md`·`WORKLOG.md` 정비 | ✅ 완료 (2026-08-19) — 원격 파일 유실 없이 커밋 |
 | **1** | config 로더 + `CurrentUser()` 훅 + `awxkit doctor` | ✅ 완료 (2026-08-19) — conf에 URL/ID/PW만 넣고 `doctor` 실행 → 버전·인증·템플릿 개수·권한·`ask_variables_on_launch` 점검까지 출력. Rocky Linux(192.168.0.58) 빌드/`go vet` 통과, 스텁 서버로 정상/오류 경로 검증 |
 | **2** | 공통 AWX 클라이언트(launch/poll/stdout) + `ls` / `survey` | ✅ 완료 (2026-08-19) — 템플릿 목록과 survey 정의(변수명·선택지·기본값)를 조회해 출력. 스텁 서버로 정상/오류(비-survey 템플릿, 존재하지 않는 템플릿) 경로 검증 |
-| **3** | [S1] `nodeinfo` (`${user}.txt`의 각 hostname마다 실행) + 결과 파일 저장 | ✅ 완료 (2026-08-19) — hostname별 Job 실행·폴링·결과 저장(`{hostname}.yaml`), 실패 시 stdout 마지막 30줄, `history_file` 기록. `setup.sh`가 `main.go`만 빌드하던 버그와 CRLF 줄바꿈 문제(`.gitattributes` 추가)도 함께 수정 |
+| **3** | [S1] `nodeinfo` (`${user}.txt`의 hostname 전체를 한 번에 실행) + 결과 파일 저장 | ✅ 완료 (2026-08-19) — 전체 hostname을 하나의 extra_vars로 묶어 1회 실행·폴링·결과 저장(`${user}_nodeinfo.yaml`), 실패 시 stdout 마지막 30줄, `history_file` 기록. `setup.sh`가 `main.go`만 빌드하던 버그와 CRLF 줄바꿈 문제(`.gitattributes` 추가)도 함께 수정 |
 | **4** | [S2] `invsync` 인벤토리 동기화 + 등록 결과 조회 | sync 성공 상태 + 호스트 리스트 출력 |
 | **5** | [S3] `dhcp -infra <n\|이름>` | `successful`/`failed` 판정 즉시 출력, 실패 시 stdout 마지막 30줄 |
 | **6** | [S4] `pxe` 4개 옵션 조합 + 호스트 수 리포트 | "총 N대의 호스트가 등록 완료되었습니다." 출력 |
@@ -140,8 +141,8 @@ history_file   = ./awxkit_history.log
 ## 시나리오별 상세
 
 ### [S1] NodeInfo 템플릿 실행 및 결과 파일 저장
-`${user}.txt`에 나열된 hostname마다 `s1_hostname_key`에 담아 템플릿을 개별 실행 → Job 상태 실시간 추적 → 성공 시 결과 취득.
-취득 경로는 `s1_fetch`로 선택하며, 저장 위치는 `s1_output_dir/{hostname}.yaml`이다. 실패한 hostname은 요약에 별도로 나열된다.
+`${user}.txt`에 나열된 hostname 전체를 줄바꿈으로 이어붙여 `s1_hostname_key`에 담아 템플릿을 한 번 실행 → Job 상태 실시간 추적 → 성공 시 결과 취득.
+취득 경로는 `s1_fetch`로 선택하며, 저장 위치는 `s1_output_dir/${user}_nodeinfo.yaml`이다.
 
 ### [S2] 인벤토리 동적 동기화
 [S1]에서 받은 YAML을 AWX가 참조하는 경로에 등록하거나 인벤토리 소스로 주입한 뒤,

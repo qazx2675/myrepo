@@ -52,3 +52,10 @@
 
 ### 다음 단계
 - 4단계: [S2] `invsync` — 인벤토리 소스 동기화 트리거 + 등록된 호스트 리스트 확인.
+
+## 2026-08-19 (계속) — nodeinfo 실행 방식 수정 (hostname별 개별 실행 → 전체 일괄 실행)
+
+- **사용자 정정**: NodeInfo 템플릿은 hostname을 텍스트로 한 번에 받아 처리하는 구조. `${user}.txt`의 hostname마다 launch를 반복하는 게 아니라, 전체 hostname을 한 번에 넣고 템플릿을 1회만 실행해야 함.
+- `nodeinfo.go` 재작성: hostname 목록을 줄바꿈으로 이어붙여(`strings.Join(hosts, "\n")`) 하나의 extra_vars 값으로 전달, launch/poll/fetch를 모두 1회만 수행. 결과 저장 파일도 hostname별(`{hostname}.yaml`)이 아니라 실행 1회당 하나(`s1_output_dir/${user}_nodeinfo.yaml`)로 변경. `history_file` 기록도 hostname 개수(`hosts=N`)만 남기도록 조정.
+- PLAN.md/README.md의 [S1] 관련 서술과 예시 출력을 새 동작에 맞게 갱신.
+- **검증**: Rocky Linux(192.168.0.58)에서 `gofmt`/빌드/`go vet` 통과. extra_vars로 받은 hostname 텍스트를 그대로 파싱해 결과 YAML을 만드는 상태 저장형 스텁 서버로, 3개 hostname이 한 번의 launch·한 개의 결과 파일로 처리되는 것을 확인. 검증 후 VM 임시 파일 정리함.
