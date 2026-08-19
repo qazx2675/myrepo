@@ -11,6 +11,11 @@ ESXi 호스트의 총 메모리, ev01 VM에 이미 할당된 메모리, vCPU 수
 
 ```bash
 cd ".claude/VM 업무/lpage_search"
+bash setup.sh
+```
+
+`setup.sh`는 내부적으로 `go build -o lpage_search main.go`를 실행한다. 직접 빌드하려면:
+```bash
 go build -o lpage_search main.go
 ```
 
