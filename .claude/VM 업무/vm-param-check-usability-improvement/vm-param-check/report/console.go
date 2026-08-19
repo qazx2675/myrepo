@@ -24,15 +24,22 @@ func colorize(s, code string, color bool) string {
 	return code + s + ansiReset
 }
 
-// PrintConsole은 [1] VM별 요약 표 + [2] 상세 섹션을 출력한다.
+// PrintConsole은 [1] 상세 섹션 + [2] VM별 요약 표를 출력한다.
 // color=true면 FAIL은 빨간색, OK/PASS는 초록색, 설정없음은 노란색, 미지원은 파란색으로 강조한다
 // (컬러 미지원 터미널이나 파일로 리다이렉트할 때는 -noColor로 끌 수 있음).
+//
+// findings는 상세 섹션에 쓰는 것(-onlyFail이면 걸러진 것)이고, allFindings는 요약 표에
+// 쓰는 필터 전 전체다 — -onlyFail을 줘도 PASS인 VM이 요약에서 사라지면 "이 서버는 검사가
+// 된 건가 안 된 건가"를 알 수 없어서, 요약만은 항상 전체 대수를 보여준다.
+// 필터를 안 쓴 호출부는 두 인자에 같은 슬라이스를 넘기면 된다.
+//
+// 요약은 맨 아래에 둔다 — 대수가 많으면 상세가 길어서 위쪽 요약이 스크롤 밖으로 밀린다.
 //
 // fullDetail=false(-onlyFail과 짝을 이루는 기존 동작): FAIL인 VM만, 그 안에서도
 // FAIL/설정없음 항목만 보여준다 (문제만 빠르게 훑어보는 용도).
 // fullDetail=true(기본, -onlyFail 미지정 시): 모든 VM, 모든 항목(OK/FAIL/설정없음/미지원/정보)을
 // 빠짐없이 보여준다 — CSV 상세와 동일한 정보를 콘솔에서도 확인 가능하게 함.
-func PrintConsole(w io.Writer, findings []model.Finding, color bool, fullDetail bool) {
+func PrintConsole(w io.Writer, findings, allFindings []model.Finding, color bool, fullDetail bool) {
 	statuses := Summarize(findings)
 
 	byVM := map[string][]model.Finding{}
@@ -40,7 +47,35 @@ func PrintConsole(w io.Writer, findings []model.Finding, color bool, fullDetail 
 		byVM[f.VM] = append(byVM[f.VM], f)
 	}
 
-	fmt.Fprintln(w, "=== [1] VM별 요약 ===")
+	if fullDetail {
+		fmt.Fprintln(w, "=== [1] 항목 상세 (전체 — OK/정보 포함, 빠짐없이) ===")
+		for _, s := range statuses {
+			fmt.Fprintf(w, "\n▶ %s (OK %d건, FAIL %d건, 설정없음 %d건, 미지원 %d건, 정보 %d건)\n", s.VM, s.OK, s.Fail, s.NoValue, s.Unsupported, s.Info)
+			printItems(w, byVM[s.VM], color, false)
+		}
+	} else {
+		fmt.Fprintln(w, "=== [1] 문제 항목 상세 (FAIL / 설정없음 / 미지원만) ===")
+		problemVMs := 0
+		for _, s := range statuses {
+			if s.Overall != "FAIL" {
+				continue
+			}
+			problemVMs++
+			fmt.Fprintf(w, "\n▶ %s (FAIL %d건, 설정없음 %d건, 미지원 %d건)\n", s.VM, s.Fail, s.NoValue, s.Unsupported)
+			printItems(w, byVM[s.VM], color, true)
+		}
+		if problemVMs == 0 {
+			fmt.Fprintln(w, "\n문제 항목이 있는 VM이 없습니다.")
+		}
+	}
+
+	fmt.Fprintln(w)
+	printSummaryTable(w, Summarize(allFindings), color)
+}
+
+// printSummaryTable은 VM별 요약 표를 출력한다.
+func printSummaryTable(w io.Writer, statuses []VMStatus, color bool) {
+	fmt.Fprintln(w, "=== [2] VM별 요약 ===")
 	fmt.Fprintf(w, "%-30s %-8s %6s %6s %8s %8s %6s\n", "VM", "전체결과", "OK", "FAIL", "설정없음", "미지원", "정보")
 	fmt.Fprintln(w, "-----------------------------------------------------------------------")
 	pass := 0
@@ -66,34 +101,6 @@ func PrintConsole(w io.Writer, findings []model.Finding, color bool, fullDetail 
 		fmt.Fprintf(w, "%-30s %s %6d %s %s %s %6d\n", s.VM, overallDisp, s.OK, failDisp, noValueDisp, unsupportedDisp, s.Info)
 	}
 	fmt.Fprintf(w, "\n총 %d대 중 PASS %d대, FAIL %d대\n", len(statuses), pass, len(statuses)-pass)
-
-	if !fullDetail {
-		problemVMs := 0
-		for _, s := range statuses {
-			if s.Overall == "FAIL" {
-				problemVMs++
-			}
-		}
-		if problemVMs == 0 {
-			return
-		}
-
-		fmt.Fprintln(w, "\n=== [2] 문제 항목 상세 (FAIL / 설정없음 / 미지원만) ===")
-		for _, s := range statuses {
-			if s.Overall != "FAIL" {
-				continue
-			}
-			fmt.Fprintf(w, "\n▶ %s (FAIL %d건, 설정없음 %d건, 미지원 %d건)\n", s.VM, s.Fail, s.NoValue, s.Unsupported)
-			printItems(w, byVM[s.VM], color, true)
-		}
-		return
-	}
-
-	fmt.Fprintln(w, "\n=== [2] 항목 상세 (전체 — OK/정보 포함, 빠짐없이) ===")
-	for _, s := range statuses {
-		fmt.Fprintf(w, "\n▶ %s (OK %d건, FAIL %d건, 설정없음 %d건, 미지원 %d건, 정보 %d건)\n", s.VM, s.OK, s.Fail, s.NoValue, s.Unsupported, s.Info)
-		printItems(w, byVM[s.VM], color, false)
-	}
 }
 
 // printItems는 VM 1대의 항목들을 Key 오름차순으로 출력한다.

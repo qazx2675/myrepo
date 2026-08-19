@@ -57,15 +57,16 @@ func runDemo(out, user string, onlyFail, noColor bool) {
 		}
 	}
 
+	allFindings := findings // 요약 표는 -onlyFail이어도 전체 대수를 보여줘야 해서 원본을 남긴다
 	if onlyFail {
 		before := len(report.Summarize(findings))
 		findings = report.FilterOnlyFail(findings)
 		after := len(report.Summarize(findings))
-		fmt.Printf("-onlyFail: PASS인 VM %d대는 결과에서 제외 (총 %d대 중 %d대만 출력)\n", before-after, before, after)
+		fmt.Printf("-onlyFail: PASS인 VM %d대는 상세에서 제외 (총 %d대 중 %d대만 출력)\n", before-after, before, after)
 	}
 
 	fmt.Println()
-	report.PrintConsole(os.Stdout, findings, !noColor, !onlyFail)
+	report.PrintConsole(os.Stdout, findings, allFindings, !noColor, !onlyFail)
 
 	base := out
 	if base == "" {
@@ -73,7 +74,7 @@ func runDemo(out, user string, onlyFail, noColor bool) {
 	}
 	base = withUserSuffix(base, user)
 	summaryPath := strings.TrimSuffix(base, ".csv") + "_summary.csv"
-	if err := report.WriteSummaryCSV(summaryPath, findings); err != nil {
+	if err := report.WriteSummaryCSV(summaryPath, allFindings); err != nil {
 		fmt.Fprintf(os.Stderr, "요약 CSV 저장 실패: %v\n", err)
 		return
 	}

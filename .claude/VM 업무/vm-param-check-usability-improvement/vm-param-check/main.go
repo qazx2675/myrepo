@@ -71,7 +71,7 @@ func main() {
 
 	out := flag.String("out", "", "상세 CSV 출력 경로 (미지정 시 vm-param-check_<타임스탬프>.csv 자동 생성). 같은 이름에 _summary가 붙은 요약 CSV가 하나 더 생성됨")
 	user := flag.String("user", "", "CSV 파일명에 붙일 접미사 (예: -out=result.csv -user=kdh -> result_kdh.csv, result_kdh_summary.csv). 여러 사람이 동시에 실행할 때 파일명 충돌 방지용")
-	onlyFail := flag.Bool("onlyFail", false, "PASS(문제 없음)인 VM은 콘솔/CSV 모두에서 제외하고, FAIL/설정없음이 있는 VM만 출력 (대수 많을 때 가독성용)")
+	onlyFail := flag.Bool("onlyFail", false, "PASS(문제 없음)인 VM은 '상세'와 상세 CSV에서 제외하고, FAIL/설정없음이 있는 VM만 출력 (대수 많을 때 가독성용). VM별 요약(화면/요약 CSV)에는 PASS 서버도 그대로 나온다")
 	noColor := flag.Bool("noColor", false, "콘솔 출력에서 ANSI 컬러(FAIL=빨강/설정없음=노랑/PASS=초록)를 끔 — 컬러 미지원 터미널이나 파일로 리다이렉트할 때 사용")
 
 	fix := flag.Bool("fix", false, "체크 완료 후 FAIL/설정없음 항목을 게이트 검증 -> 확인 -> 자동교정 -> 재검증까지 이어서 진행 (미지정 시 기존과 동일하게 체크+CSV까지만)")
@@ -391,14 +391,16 @@ func main() {
 		before := len(report.Summarize(displayFindings))
 		displayFindings = report.FilterOnlyFail(displayFindings)
 		after := len(report.Summarize(displayFindings))
-		fmt.Printf("-onlyFail: PASS인 VM %d대는 결과에서 제외 (총 %d대 중 %d대만 출력)\n", before-after, before, after)
+		fmt.Printf("-onlyFail: PASS인 VM %d대는 상세에서 제외 (총 %d대 중 %d대만 출력, 요약에는 전부 나옵니다)\n", before-after, before, after)
 	}
 
 	fmt.Println()
-	report.PrintConsole(os.Stdout, displayFindings, !*noColor, !*onlyFail)
+	report.PrintConsole(os.Stdout, displayFindings, allFindings, !*noColor, !*onlyFail)
 
+	// 요약(화면/CSV)은 -onlyFail이어도 PASS 서버까지 전부 보여준다 — 어떤 서버가 검사됐고
+	// 이상 없었는지가 요약에서 사라지면 안 된다. 상세만 문제 항목으로 좁힌다.
 	detailPath, summaryPath := deriveOutputPaths(*out, *user)
-	if err := report.WriteSummaryCSV(summaryPath, displayFindings); err != nil {
+	if err := report.WriteSummaryCSV(summaryPath, allFindings); err != nil {
 		log.Fatalf("요약 CSV 저장 실패: %v", err)
 	}
 	if err := report.WriteCSV(detailPath, displayFindings); err != nil {
@@ -556,7 +558,7 @@ func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVM
 		log.Fatalf("재검증 실패: %v", err)
 	}
 
-	report.PrintConsole(os.Stdout, recheckFindings, true, true)
+	report.PrintConsole(os.Stdout, recheckFindings, recheckFindings, true, true)
 
 	recheckDetail, recheckSummary := deriveRecheckPaths(originalDetailPath, fixOutFlag)
 	if err := report.WriteSummaryCSV(recheckSummary, recheckFindings); err != nil {
