@@ -30,7 +30,7 @@ export VC_PASS='...'
 echo '192.168.0.50' > vcenter.txt
 
 # 6) 체크할 VM hostname 목록 (한 줄에 하나)
-printf '192ev01\n192ev02\n' > targets.txt
+printf '1번VM\n2번VM\n' > targets.txt
 
 # 7) 옵션을 하나도 안 주고, 폴더명으로 자동매칭해서 체크
 #    (-specRoot 아래에 스펙이 미리 준비되어 있어야 함 — 없으면 8번으로)

@@ -221,7 +221,7 @@ export VC_PASS='...'
    === 폴더명 기반 스펙 자동매칭 ===
 
    [스펙] SPEC_DIR/TST-CAE001-SAMP48c-QRST/TST-CAE001-SAMP48c-QRST_spec.txt
-     vCenter 폴더: TST-CAE003-SAMP48c-QRST  (VM: 192ev01, 192ev02)
+     vCenter 폴더: TST-CAE003-SAMP48c-QRST  (VM: 1번VM, 2번VM)
        [스펙적용] -ht=on
        [스펙적용] -cores=20
        ...
@@ -238,7 +238,7 @@ export VC_PASS='...'
 
 ```
 *** 경고: 요청한 대상을 전부 체크하지 못했습니다 ***
-  어느 vCenter에서도 찾지 못한 대상 2대: zzzev01, zzzev02
+  어느 vCenter에서도 찾지 못한 대상 2대: 미확인VM1, 미확인VM2
   조회에 실패해 건너뛴 vCenter 1개: 192.168.0.60
 ```
 
@@ -252,7 +252,7 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 
 1. **포트그룹명에서 유추**: VM에 붙은 네트워크 어댑터의 포트그룹 이름이 `<원래폴더명>-cae-옥텟-옥텟-옥텟-옥텟` 형태(예: `TST-CAE003-SAMP48c-QRST-cae-10-1-2-3`)면, 거기서 원래 폴더명을 복원해서 그 스펙으로 자동 진행합니다. 화면에는 이렇게 표시됩니다.
    ```
-   vCenter 폴더: Task  (VM: 192ev01, 192ev02)  ※ CAE 규칙과 안 맞아 포트그룹 파싱으로 스펙 결정
+   vCenter 폴더: Task  (VM: 1번VM, 2번VM)  ※ CAE 규칙과 안 맞아 포트그룹 파싱으로 스펙 결정
    ```
 2. **자동으로 못 정하면 직접 물어봅니다**: 포트그룹으로도 못 찾으면(또는 후보가 여러 개면) 아래처럼 물어봅니다. `?`를 입력하면 `-specRoot` 아래 사용 가능한 스펙 목록을 보여줍니다.
    ```
@@ -388,8 +388,8 @@ VM이 속한 폴더가 위 매칭 규칙에 안 맞으면(예: 임시 작업용 
 
 ### 4.5 검증 이력
 - **단위 테스트**: `go test -mod=vendor ./...` — `fixer`(계획 산출/게이트), `config`(폴더명 매칭/스펙 파싱/포트그룹 파싱/`-initFolder`) 패키지 전부 통과
-- **vcsim(재현 환경)**: 실제 vCenter 192.168.0.50의 `192ev01`/`192ev02` 구조를 그대로 재현한 vcsim에서 `-fix` 파이프라인 전체(게이트 → dry-run → 취소 → 적용 → 재검증) 실행 확인. `cpuid.coresPerSocket`, `numa.vcpu.maxPerVirtualNode`, `NumCoresPerSocket` 하드웨어 필드 교정 정상 동작 확인
-- **실제 vCenter(192.168.0.50)**: `192ev01`/`192ev02` 대상으로 동일 파이프라인 실행, 적용 후 재검증에서 전부 OK 전환 확인. vSphere Client의 설정 편집 > VM 옵션 > CPU 토폴로지 화면에서 "Cores per Socket"/"NUMA 노드당 코어 수"가 실제 숫자로 표시되는 것까지 확인
+- **vcsim(재현 환경)**: 실제 vCenter 192.168.0.50의 `1번VM`/`2번VM` 구조를 그대로 재현한 vcsim에서 `-fix` 파이프라인 전체(게이트 → dry-run → 취소 → 적용 → 재검증) 실행 확인. `cpuid.coresPerSocket`, `numa.vcpu.maxPerVirtualNode`, `NumCoresPerSocket` 하드웨어 필드 교정 정상 동작 확인
+- **실제 vCenter(192.168.0.50)**: `1번VM`/`2번VM` 대상으로 동일 파이프라인 실행, 적용 후 재검증에서 전부 OK 전환 확인. vSphere Client의 설정 편집 > VM 옵션 > CPU 토폴로지 화면에서 "Cores per Socket"/"NUMA 노드당 코어 수"가 실제 숫자로 표시되는 것까지 확인
 - **폴더명 자동매칭**: vcsim에 실제와 같은 형태의 CAE 폴더/`Task` 폴더를 만들어 종단 테스트 — 정상 폴더 매칭(차수만 다른 경우 포함), 수동 옵션 우선, 확인 취소, 매칭 실패, 다중 vCenter에 흩어진 대상이 각자 다른 스펙으로 매칭되는 경우, 포트그룹 유추, 대화형 폴백까지 전부 확인. 매번 `-specRoot` 없이 실행한 결과가 이 CSV들과 완전히 동일함을 확인해 기존 사용 방식에 회귀가 없음을 검증
 
 ### 4.6 알려진 한계
