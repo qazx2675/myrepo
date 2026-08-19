@@ -24,6 +24,7 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | 폴더 | 설명 |
 |---|---|
 | [`OS 환경설정 체크`](./HPC/OS%20환경설정%20체크/) | `gossh` 기반으로 OS 배포 후 상태 점검 → 환경설정 적용 → 재점검까지 한 번에 처리하는 자동화 스크립트(`os_check_final_annotated.sh`). |
+| [`GPU 체크스크립트`](./HPC/GPU%20체크스크립트/) | `nvidia-persistenced` + `gpu-power-limit.service`로 설정한 GPU power capping(최대 전력의 75%)이 정상 적용됐는지 일회성으로 점검하는 스크립트(`check-gpu-power-limit.sh`). `gossh`로 여러 서버 일괄 점검용. |
 
 ## 공통/
 
