@@ -154,6 +154,29 @@ db01
 ```
 `s2_inventory`를 비워두면 동기화만 하고 호스트 목록 조회는 건너뜁니다. 동기화가 `successful`이 아니면 종료 코드 1로 끝납니다.
 
+### 2.8 [S3] DHCP 등록 (`dhcp`)
+인프라를 선택해 `s3_template`을 실행하고, 최종 상태를 즉시 보여줍니다. 설정 변경 작업이므로 완료 후 검증 권고 문구가 항상 함께 출력됩니다.
+```bash
+# 번호로 지정 (s3_infra_choices의 순서 기준)
+./awxkit -infra 1 dhcp
+
+# 값으로 직접 지정
+./awxkit -infra daejeon dhcp
+
+# 생략하면 s3_infra_choices가 있을 때 번호 선택 메뉴, 없으면 자유 입력을 받음
+./awxkit dhcp
+# 인프라 선택:
+#   1) seoul
+#   2) daejeon
+#   3) busan
+# 번호 선택: 2
+# [i] dhcp-register 실행 중... (infra_type=daejeon)
+#     [job 501] successful
+# [✔] 성공 (job 501)
+# [!] 설정 변경 작업입니다. 완료 후 랜덤하게 서버 몇 대를 직접 확인해 실제로 변경되었는지 검증하세요.
+```
+`-infra`는 **반드시 `dhcp`보다 앞에** 와야 합니다 (Go의 `flag` 패키지는 명령 뒤에 오는 플래그를 파싱하지 않습니다). `s3_infra_choices`가 설정된 상태에서 목록에 없는 값을 주면 오류로 종료합니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
+
 ## 3. 옵션별 상세 설명
 
 ### 3.1 전역 플래그
@@ -162,6 +185,7 @@ db01
 | `-conf <경로>` | 설정 파일 경로를 직접 지정 (탐색 순서 무시) |
 | `-user <이름>` | 사용자 식별자를 직접 지정 (`AWXKIT_USER` 환경변수보다 우선순위 낮음) |
 | `-hosts <경로>` | (`nodeinfo` 전용) `${user}.txt` 대신 사용할 호스트 목록 파일 |
+| `-infra <번호\|값>` | (`dhcp` 전용) 인프라 선택지 번호 또는 값 |
 
 ### 3.2 명령
 | 명령 | 상태 | 설명 |
@@ -171,7 +195,7 @@ db01
 | `survey <ID\|이름>` | **구현됨** | 템플릿의 survey 문항(질문명·변수명·선택지·기본값·필수여부) 조회. 인자를 생략하면 대화형으로 물어봄 |
 | `nodeinfo` | **구현됨** | [S1] `${user}.txt`의 hostname 전체를 한 번에 넣어 NodeInfo 템플릿 실행 및 결과 파일 저장 |
 | `invsync` | **구현됨** | [S2] `s2_inventory_source` 동기화 트리거·완료 대기 후 `s2_inventory`의 등록 호스트 목록 조회 |
-| `dhcp` | 예정 | [S3] DHCP 등록 |
+| `dhcp` | **구현됨** | [S3] 인프라 선택 후 DHCP 등록 템플릿 실행, 최종 상태 즉시 출력, 설정 변경 검증 권고 문구 출력 |
 | `pxe` | 예정 | [S4] PXE 등록 및 호스트 수 리포트 |
 
 ### 3.3 설정 파일(`${user}_setting.conf`) 키
@@ -191,7 +215,7 @@ db01
 ## 4. 문서별 고유 설명
 - 상세 설계·API 매핑·단계별 계획: [`PLAN.md`](./PLAN.md)
 - 작업 이력: [`WORKLOG.md`](./WORKLOG.md)
-- 현재 4단계(설정 로딩 + `doctor` + `ls`/`survey` + `nodeinfo` + `invsync`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
+- 현재 5단계(설정 로딩 + `doctor` + `ls`/`survey` + `nodeinfo` + `invsync` + `dhcp`)까지 구현 완료. 나머지 명령은 `PLAN.md`의 단계별 마일스톤에 따라 순차 구현됩니다.
 
 ### 4.1 디렉토리 구조
 
@@ -208,6 +232,7 @@ awxkit/
 ├── catalog.go           # ls / survey 명령 — 템플릿·survey 정의 조회
 ├── nodeinfo.go           # nodeinfo 명령 — [S1] hostname 전체를 한 번에 넣어 NodeInfo 실행 및 결과 저장
 ├── invsync.go             # invsync 명령 — [S2] 인벤토리 소스 동기화 + 등록 호스트 목록 조회
+├── dhcp.go                # dhcp 명령 — [S3] 인프라 선택 후 DHCP 등록 템플릿 실행
 ├── setup.sh            # vendor 패키지를 사용해 폐쇄망에서도 빌드하는 스크립트 (go build -o awxkit .)
 ├── run.sh              # 바이너리가 없으면 자동 빌드 후 실행하는 래퍼 스크립트
 ├── config/              # 설정 파일 로더(config.go) + 사용자 식별 훅(user.go) + 호스트 목록 로더

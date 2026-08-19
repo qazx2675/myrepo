@@ -1,7 +1,7 @@
 # AWX 템플릿 실행 CLI (awxkit) - 계획서
 
-> **진행 상태 (2026-08-19 기준)**: 0~4단계 완료 (config 로더 + `CurrentUser()` 훅 + `doctor` + `ls`/`survey` + `nodeinfo` + `invsync`).
-> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 정상·오류 경로 검증 완료. 5단계([S3] DHCP)부터 이어서 진행 예정.
+> **진행 상태 (2026-08-19 기준)**: 0~5단계 완료 (config 로더 + `CurrentUser()` 훅 + `doctor` + `ls`/`survey` + `nodeinfo` + `invsync` + `dhcp`).
+> Rocky Linux(192.168.0.58)에서 빌드/`go vet` 통과, 로컬 HTTP 스텁 서버로 정상·오류 경로 검증 완료. 6단계([S4] PXE)부터 이어서 진행 예정.
 > hostname은 `-host` 단일 플래그가 아니라 `${user}.txt`(conf와 동일한 탐색 규칙) 목록 파일로 받도록 설계 변경됨 — hostname은 NodeInfo 단계에서만 필요하고, 이후 단계는 인벤토리에 등록된 상태를 기준으로 동작하기 때문.
 > 작업 이력은 [`WORKLOG.md`](./WORKLOG.md), 사용법은 [`README.md`](./README.md) 참고.
 
@@ -130,7 +130,7 @@ history_file   = ./awxkit_history.log
 | **2** | 공통 AWX 클라이언트(launch/poll/stdout) + `ls` / `survey` | ✅ 완료 (2026-08-19) — 템플릿 목록과 survey 정의(변수명·선택지·기본값)를 조회해 출력. 스텁 서버로 정상/오류(비-survey 템플릿, 존재하지 않는 템플릿) 경로 검증 |
 | **3** | [S1] `nodeinfo` (`${user}.txt`의 hostname 전체를 한 번에 실행) + 결과 파일 저장 | ✅ 완료 (2026-08-19) — 전체 hostname을 하나의 extra_vars로 묶어 1회 실행·폴링·결과 저장(`${user}_nodeinfo.yaml`), 실패 시 stdout 마지막 30줄, `history_file` 기록. `setup.sh`가 `main.go`만 빌드하던 버그와 CRLF 줄바꿈 문제(`.gitattributes` 추가)도 함께 수정 |
 | **4** | [S2] `invsync` 인벤토리 동기화 + 등록 결과 조회 | ✅ 완료 (2026-08-19) — `s2_inventory_source` 동기화 트리거·폴링, 성공 시 `s2_inventory`의 등록 호스트 전체(이름·활성 여부)를 나열. 스텁 서버로 성공/실패/`s2_inventory` 미설정 3가지 경로 검증 |
-| **5** | [S3] `dhcp -infra <n\|이름>` | `successful`/`failed` 판정 즉시 출력, 실패 시 stdout 마지막 30줄 |
+| **5** | [S3] `dhcp -infra <n\|이름>` | ✅ 완료 (2026-08-19) — 번호/값/생략(대화형 메뉴 또는 자유입력) 3가지 방식으로 인프라 지정, `successful`/`failed` 즉시 출력, 실패 시 stdout 마지막 30줄, 완료 후 설정 변경 검증 권고 문구 항상 출력. 스텁 서버로 5가지 경로(성공/실패/목록 외 값/범위 초과/대화형) 검증 |
 | **6** | [S4] `pxe` 4개 옵션 조합 + 호스트 수 리포트 | "총 N대의 호스트가 등록 완료되었습니다." 출력 |
 | **7** | 폐쇄망 패키징(실 vendor, 크로스컴파일) + README 2~4장 완성 | 인터넷 차단 상태에서 `bash setup.sh` 빌드 성공 |
 
