@@ -288,6 +288,8 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 | `-shares-ev01 <N\|normal>` / `-shares-ev02` / `-shares-ev03` | 필수/옵션/옵션 | 기대값: CPU/메모리 Shares(ratio). `-shares-ev01`만 `normal`을 받으며, 이때는 ratio 숫자 대신 **CPU/메모리 Shares Level이 둘 다 `normal`인지**를 봅니다. `-shares-ev02`/`-shares-ev03`는 숫자만 |
 | `-affinity-ev01 <path>` | (옵션) | ev01 기대 affinity 파일. 안 주면 `-ht`/`-cores` 기반 자동계산 |
 | `-affinity-ev02 <path>` / `-affinity-ev03 <path>` | (옵션) | ev02/ev03 기대 affinity 파일. 안 주면 해당 그룹 affinity 체크 스킵 |
+
+> **affinity 비교는 순서를 무시합니다.** `sched.vcpuN.affinity`는 "이 vCPU를 돌릴 수 있는 물리 CPU 목록"이라 순서에 의미가 없으므로(우선순위가 아니고, ESXi 스케줄러가 그 안에서 배치), `31,29,27,25,23,21,19,17`과 `17,19,21,23,25,27,29,31`은 **같은 설정으로 보고 OK**입니다. 단 개수는 맞춰서 보므로 `16,17`과 `16,17,17`은 다른 것으로 판정합니다(잘못 들어간 중복을 조용히 통과시키지 않기 위해). 리포트에는 vCenter에 실제로 박힌 원본 문자열이 그대로 표시됩니다.
 | `-out <path>` | 타임스탬프 자동생성 | 상세 CSV 경로. `_summary` 붙은 요약 CSV가 하나 더 생성됨 |
 | `-user <이름>` | (없음) | **CSV 파일명 접미사**. `-out=result.csv -user=kdh` → `result_kdh.csv`, `result_kdh_summary.csv`. 여러 사람이 동시에 실행할 때 파일명 충돌 방지용 |
 | `-onlyFail` | `false` | PASS인 VM은 **상세**(콘솔/상세 CSV)에서 제외하고, FAIL/설정없음/미지원 있는 VM만 출력. **VM별 요약(콘솔 맨 아래 표 + 요약 CSV)에는 PASS 서버도 그대로 나옵니다** — 어떤 서버가 검사됐고 이상 없었는지가 요약에서 사라지면 안 되므로 |

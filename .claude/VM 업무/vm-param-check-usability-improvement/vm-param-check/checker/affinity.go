@@ -2,6 +2,8 @@ package checker
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"vm-param-check/model"
@@ -38,7 +40,7 @@ func CheckAffinity(vm model.VMInfo, expected map[string]string, source string) [
 			f.Result = "설정없음"
 		} else {
 			f.Actual = actual
-			if strings.EqualFold(strings.TrimSpace(actual), exp) {
+			if sameAffinity(actual, exp) {
 				f.Result = "OK"
 			} else {
 				f.Result = "FAIL"
@@ -47,4 +49,50 @@ func CheckAffinity(vm model.VMInfo, expected map[string]string, source string) [
 		findings = append(findings, f)
 	}
 	return findings
+}
+
+// sameAffinity는 affinity 값 두 개가 같은 설정인지 판정한다.
+//
+// sched.vcpuN.affinity는 "이 vCPU를 돌릴 수 있는 물리 CPU 목록"이라 순서에 의미가 없다
+// (우선순위가 아니고, ESXi 스케줄러가 그 안에서 알아서 배치한다). 그래서 "31,29,27"과
+// "27,29,31"은 동일한 설정으로 봐야 한다 — 순서 때문에 FAIL이 나면 실제로는 정상인 VM을
+// 고치려 들게 된다.
+//
+// 다만 개수는 맞춰서 본다(다중집합 비교) — "16,17"과 "16,17,17"을 같다고 하면 잘못 들어간
+// 중복을 조용히 통과시켜 버린다.
+//
+// 값이 숫자가 아닌 경우(예: "all")는 쪼개서 정렬한 뒤 문자열로 비교한다.
+func sameAffinity(a, b string) bool {
+	return affinityKey(a) == affinityKey(b)
+}
+
+// affinityKey는 비교용 정규화 문자열을 만든다. 공백을 없애고, 쉼표로 쪼개서
+// 숫자면 숫자 순으로(그래서 2가 10보다 앞), 아니면 문자열 순으로 정렬해 다시 잇는다.
+func affinityKey(s string) string {
+	parts := strings.Split(strings.TrimSpace(s), ",")
+	tokens := make([]string, 0, len(parts))
+	allNum := true
+	nums := make([]int, 0, len(parts))
+	for _, p := range parts {
+		p = strings.ToLower(strings.TrimSpace(p))
+		tokens = append(tokens, p)
+		if allNum {
+			n, err := strconv.Atoi(p)
+			if err != nil {
+				allNum = false
+			} else {
+				nums = append(nums, n)
+			}
+		}
+	}
+	if allNum {
+		sort.Ints(nums)
+		strs := make([]string, len(nums))
+		for i, n := range nums {
+			strs[i] = strconv.Itoa(n)
+		}
+		return strings.Join(strs, ",")
+	}
+	sort.Strings(tokens)
+	return strings.Join(tokens, ",")
 }
