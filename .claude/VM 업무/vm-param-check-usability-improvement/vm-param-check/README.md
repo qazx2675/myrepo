@@ -162,7 +162,7 @@ cores=
 numa=
 cpu=
 mem=
-disk=
+disk=                 # GB. 쉼표로 여러 개 주면 그 중 하나만 맞아도 OK (예: 1024,1026)
 shares-ev01=          # ratio 숫자(예: 4000) 또는 normal
 
 # --- 선택: ev02 그룹 (없으면 ev02 관련 체크는 스킵됨) ---
@@ -186,6 +186,12 @@ Shares를 Custom ratio로 박지 않고 vCenter 기본값(Normal) 그대로 두�
 
 ```
 shares-ev01=normal
+```
+
+디스크 총량이 같은 스펙인데도 환산/파티션 차이로 몇 GB 갈리는 경우에는, 허용값을 쉼표로 여러 개 적으면 **그 중 하나와 맞으면 OK**로 판정합니다(`disk-ev02`/`disk-ev03`도 동일).
+
+```
+disk=1024,1026
 ```
 
 이미 비슷한 스펙이 있다면 `-template`으로 그 값을 그대로 복사해서 시작할 수도 있습니다(다른 부분만 고치면 됨):
@@ -278,7 +284,7 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 | `-numa <N>` / `-numa-ev02` / `-numa-ev03` | 필수/옵션/옵션 | 기대값: NUMA 노드당 최대 vCPU(코어) 수 |
 | `-cpu <N>` / `-cpu-ev02` / `-cpu-ev03` | 필수/옵션/옵션 | 기대값: vCPU 수 |
 | `-mem <N>` / `-mem-ev02` / `-mem-ev03` | 필수/옵션/옵션 | 기대값: 메모리 GB |
-| `-disk <N>` / `-disk-ev02` / `-disk-ev03` | 필수/옵션/옵션 | 기대값: 디스크 총량 GB |
+| `-disk <N[,N...]>` / `-disk-ev02` / `-disk-ev03` | 필수/옵션/옵션 | 기대값: 디스크 총량 GB. **쉼표로 여러 개를 주면 그 중 하나와 맞으면 OK** (예: `-disk=1024,1026`) — 같은 스펙인데도 환산/파티션 차이로 몇 GB 갈리는 경우를 위해서. 3개 옵션 모두 동일하게 지원 |
 | `-shares-ev01 <N\|normal>` / `-shares-ev02` / `-shares-ev03` | 필수/옵션/옵션 | 기대값: CPU/메모리 Shares(ratio). `-shares-ev01`만 `normal`을 받으며, 이때는 ratio 숫자 대신 **CPU/메모리 Shares Level이 둘 다 `normal`인지**를 봅니다. `-shares-ev02`/`-shares-ev03`는 숫자만 |
 | `-affinity-ev01 <path>` | (옵션) | ev01 기대 affinity 파일. 안 주면 `-ht`/`-cores` 기반 자동계산 |
 | `-affinity-ev02 <path>` / `-affinity-ev03 <path>` | (옵션) | ev02/ev03 기대 affinity 파일. 안 주면 해당 그룹 affinity 체크 스킵 |

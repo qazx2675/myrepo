@@ -46,7 +46,7 @@ func main() {
 	numa := flag.Int("numa", 0, "기대값: NUMA 노드당 최대 vCPU 수 — ev01 및 미분류 VM에 적용 (필수)")
 	cpu := flag.Int("cpu", 0, "기대값: vCPU 수 — ev01 및 미분류 VM에 적용 (필수)")
 	mem := flag.Int("mem", 0, "기대값: 메모리 GB — ev01 및 미분류 VM에 적용 (필수)")
-	disk := flag.Int("disk", 0, "기대값: 디스크 총량 GB — ev01 및 미분류 VM에 적용 (필수)")
+	diskStr := flag.String("disk", "", "기대값: 디스크 총량 GB — ev01 및 미분류 VM에 적용 (필수). 쉼표로 여러 개를 주면 그 중 하나와 맞으면 OK (예: -disk=1024,1026)")
 
 	coresEV02Str := flag.String("cores-ev02", "", "기대값: ev02 그룹 소켓당 코어 수 (옵션, 안 주면 ev02 코어수 체크 스킵)")
 	coresEV03Str := flag.String("cores-ev03", "", "기대값: ev03 그룹 소켓당 코어 수 (옵션, 안 주면 ev03 코어수 체크 스킵)")
@@ -56,8 +56,8 @@ func main() {
 	cpuEV03Str := flag.String("cpu-ev03", "", "기대값: ev03 그룹 vCPU 수 (옵션, 안 주면 ev03 vCPU 체크 스킵)")
 	memEV02Str := flag.String("mem-ev02", "", "기대값: ev02 그룹 메모리 GB (옵션, 안 주면 ev02 메모리 체크 스킵)")
 	memEV03Str := flag.String("mem-ev03", "", "기대값: ev03 그룹 메모리 GB (옵션, 안 주면 ev03 메모리 체크 스킵)")
-	diskEV02Str := flag.String("disk-ev02", "", "기대값: ev02 그룹 디스크 총량 GB (옵션, 안 주면 ev02 디스크 체크 스킵)")
-	diskEV03Str := flag.String("disk-ev03", "", "기대값: ev03 그룹 디스크 총량 GB (옵션, 안 주면 ev03 디스크 체크 스킵)")
+	diskEV02Str := flag.String("disk-ev02", "", "기대값: ev02 그룹 디스크 총량 GB (옵션, 안 주면 ev02 디스크 체크 스킵). -disk와 동일하게 쉼표로 여러 개 허용")
+	diskEV03Str := flag.String("disk-ev03", "", "기대값: ev03 그룹 디스크 총량 GB (옵션, 안 주면 ev03 디스크 체크 스킵). -disk와 동일하게 쉼표로 여러 개 허용")
 
 	sharesEV01Str := flag.String("shares-ev01", "", "기대값: ev01 그룹 CPU Shares (필수). ratio 숫자(예: 4000) 또는 'normal'. normal을 주면 ratio 숫자 대신 CPU/메모리 Shares Level이 둘 다 normal인지를 본다")
 	sharesEV02Str := flag.String("shares-ev02", "", "기대값: ev02 그룹 CPU Shares(ratio) (옵션, 안 주면 ev02 shares 체크 스킵)")
@@ -118,7 +118,7 @@ func main() {
 		if *ht != "on" && *ht != "off" {
 			log.Fatal("-ht=on 또는 -ht=off 필수")
 		}
-		if *cores == 0 || *numa == 0 || *cpu == 0 || *mem == 0 || *disk == 0 || *sharesEV01Str == "" {
+		if *cores == 0 || *numa == 0 || *cpu == 0 || *mem == 0 || *diskStr == "" || *sharesEV01Str == "" {
 			log.Fatal("-cores/-numa/-cpu/-mem/-disk/-shares-ev01 은 모두 필수입니다 (-specRoot로 자동으로 채울 수도 있습니다)")
 		}
 	}
@@ -300,11 +300,16 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		diskEV02, err := parseOptionalIntFlag("disk-ev02", *diskEV02Str)
+		// 디스크는 허용값을 여러 개 줄 수 있어서 목록으로 읽는다.
+		diskBase, err := parseIntListFlag("disk", *diskStr)
 		if err != nil {
 			log.Fatal(err)
 		}
-		diskEV03, err := parseOptionalIntFlag("disk-ev03", *diskEV03Str)
+		diskEV02, err := parseIntListFlag("disk-ev02", *diskEV02Str)
+		if err != nil {
+			log.Fatal(err)
+		}
+		diskEV03, err := parseIntListFlag("disk-ev03", *diskEV03Str)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -314,7 +319,7 @@ func main() {
 			Numa:   checker.NumaExpect{Base: *numa, EV02: numaEV02, EV03: numaEV03},
 			CPU:    checker.CPUExpect{Base: *cpu, EV02: cpuEV02, EV03: cpuEV03},
 			Mem:    checker.MemExpect{Base: *mem, EV02: memEV02, EV03: memEV03},
-			Disk:   checker.DiskExpect{Base: *disk, EV02: diskEV02, EV03: diskEV03},
+			Disk:   checker.DiskExpect{Base: diskBase, EV02: diskEV02, EV03: diskEV03},
 			Shares: checker.SharesExpect{EV01: sharesEV01, EV01Normal: sharesEV01Normal, EV02: sharesEV02, EV03: sharesEV03},
 			HTOn:   *ht == "on",
 		}
@@ -993,6 +998,27 @@ func parseOptionalIntFlag(flagName, val string) (*int, error) {
 		return nil, fmt.Errorf("-%s 값이 정수가 아닙니다: %w", flagName, err)
 	}
 	return &v, nil
+}
+
+// parseIntListFlag는 쉼표로 구분된 정수 목록을 읽는다(디스크 허용값용).
+// 값이 비면 nil을 돌려주므로, ev02/ev03에서는 그대로 "옵션 없음"이 된다.
+func parseIntListFlag(flagName, val string) ([]int, error) {
+	if val == "" {
+		return nil, nil
+	}
+	var out []int
+	for _, tok := range strings.Split(val, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			return nil, fmt.Errorf("-%s 에 빈 값이 있습니다: %q", flagName, val)
+		}
+		v, err := strconv.Atoi(tok)
+		if err != nil {
+			return nil, fmt.Errorf("-%s 값이 정수가 아닙니다(%q): %w", flagName, tok, err)
+		}
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 func firstNonEmpty(vals ...string) string {

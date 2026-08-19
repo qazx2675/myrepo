@@ -26,7 +26,7 @@ cores=
 numa=
 cpu=
 mem=
-disk=
+disk=                 # GB. 쉼표로 여러 개 주면 그 중 하나만 맞아도 OK (예: 1024,1026)
 shares-ev01=          # ratio 숫자(예: 4000) 또는 normal
 
 # --- 선택: ev02 그룹 (없으면 ev02 관련 체크는 스킵됨) ---

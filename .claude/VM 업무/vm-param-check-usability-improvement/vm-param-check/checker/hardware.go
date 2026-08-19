@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"vm-param-check/model"
 )
@@ -35,10 +36,13 @@ type MemExpect struct {
 	EV03 *int
 }
 
+// DiskExpect만 값이 슬라이스다 — 같은 스펙인데도 디스크 총량이 환산/파티션 차이로 1024,
+// 1026처럼 몇 GB 갈리는 경우가 있어서, 허용값을 여러 개 둘 수 있게 했다.
+// 하나만 쓸 거면 원소 1개 슬라이스를 주면 된다.
 type DiskExpect struct {
-	Base int
-	EV02 *int
-	EV03 *int
+	Base []int
+	EV02 []int
+	EV03 []int
 }
 
 // resolveGroupExpect는 그룹(ev01/ev02/ev03/미분류)에 따라 기대값을 정한다.
@@ -60,6 +64,44 @@ func resolveGroupExpect(base int, ev02, ev03 *int, group string, singleVMMode bo
 	default:
 		return base, true
 	}
+}
+
+// resolveGroupExpectList는 resolveGroupExpect와 같은 규칙의 슬라이스 버전이다(디스크 전용).
+// ev02/ev03는 "옵션 없음"을 nil이 아니라 빈 슬라이스로도 표현할 수 있어서 len으로 판단한다.
+func resolveGroupExpectList(base, ev02, ev03 []int, group string, singleVMMode bool) ([]int, bool) {
+	switch group {
+	case "ev02":
+		if singleVMMode || len(ev02) == 0 {
+			return nil, false
+		}
+		return ev02, true
+	case "ev03":
+		if singleVMMode || len(ev03) == 0 {
+			return nil, false
+		}
+		return ev03, true
+	default:
+		return base, true
+	}
+}
+
+// formatExpectList는 허용값 목록을 리포트에 적을 문자열로 만든다.
+// 1개면 지금까지와 똑같이 숫자만 나오고(기존 CSV/화면과 동일), 여러 개면 "1024 또는 1026".
+func formatExpectList(values []int) string {
+	strs := make([]string, len(values))
+	for i, v := range values {
+		strs[i] = strconv.Itoa(v)
+	}
+	return strings.Join(strs, " 또는 ")
+}
+
+func containsInt(values []int, want int) bool {
+	for _, v := range values {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckHardware는 3-4 가상 하드웨어 체크(vCPU/메모리/디스크/메모리예약/Shares)를 수행한다.
@@ -94,10 +136,10 @@ func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpec
 	}
 
 	// 디스크 (GB, 반올림)
-	if expectDiskGB, ok := resolveGroupExpect(disk.Base, disk.EV02, disk.EV03, group, singleVMMode); ok {
+	if expectDiskGB, ok := resolveGroupExpectList(disk.Base, disk.EV02, disk.EV03, group, singleVMMode); ok {
 		actualDiskGB := int(math.Round(vm.DiskGB))
-		f := model.Finding{VM: vm.Name, Source: "-", Key: "disk total capacity (GB 환산, 반올림)", Expected: strconv.Itoa(expectDiskGB), Actual: strconv.Itoa(actualDiskGB)}
-		if actualDiskGB == expectDiskGB {
+		f := model.Finding{VM: vm.Name, Source: "-", Key: "disk total capacity (GB 환산, 반올림)", Expected: formatExpectList(expectDiskGB), Actual: strconv.Itoa(actualDiskGB)}
+		if containsInt(expectDiskGB, actualDiskGB) {
 			f.Result = "OK"
 		} else {
 			f.Result = "FAIL"

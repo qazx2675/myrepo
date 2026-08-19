@@ -48,6 +48,49 @@ func TestCheckSharesNormal(t *testing.T) {
 	}
 }
 
+// 디스크는 허용값을 여러 개 줄 수 있다(환산 차이로 1024/1026처럼 갈리는 경우).
+func TestCheckHardwareDiskAllowsMultiple(t *testing.T) {
+	diskFinding := func(actualGB float64, expect []int) model.Finding {
+		vm := model.VMInfo{Name: "host01ev01", DiskGB: actualGB}
+		got := CheckHardware(vm,
+			CPUExpect{}, MemExpect{}, DiskExpect{Base: expect},
+			SharesExpect{EV01Normal: true}, "ev01", false, false)
+		for _, f := range got {
+			if f.Key == "disk total capacity (GB 환산, 반올림)" {
+				return f
+			}
+		}
+		t.Fatalf("디스크 Finding이 없습니다: %+v", got)
+		return model.Finding{}
+	}
+
+	tests := []struct {
+		name     string
+		actual   float64
+		expect   []int
+		want     string
+		wantExpS string
+	}{
+		{"목록 첫번째와 일치", 1024, []int{1024, 1026}, "OK", "1024 또는 1026"},
+		{"목록 두번째와 일치", 1026, []int{1024, 1026}, "OK", "1024 또는 1026"},
+		{"목록에 없음", 1025, []int{1024, 1026}, "FAIL", "1024 또는 1026"},
+		// 값 1개면 표시도 기존과 똑같이 숫자만 나와야 한다(CSV 회귀 방지).
+		{"단일값 일치", 500, []int{500}, "OK", "500"},
+		{"단일값 불일치", 400, []int{500}, "FAIL", "500"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := diskFinding(tt.actual, tt.expect)
+			if f.Result != tt.want {
+				t.Errorf("Result = %q, 기대 %q", f.Result, tt.want)
+			}
+			if f.Expected != tt.wantExpS {
+				t.Errorf("Expected 표시 = %q, 기대 %q", f.Expected, tt.wantExpS)
+			}
+		})
+	}
+}
+
 // normal을 안 주면 기존 동작(ratio 숫자 비교) 그대로여야 한다 — 회귀 방지.
 func TestCheckSharesRatioUnchanged(t *testing.T) {
 	vm := model.VMInfo{
