@@ -79,7 +79,7 @@ func main() {
 	fixConcurrency := flag.Int("fixConcurrency", 20, "-fix 적용 시 동시 Reconfigure 처리 개수")
 	fixOut := flag.String("fixOut", "", "-fix 재검증 CSV 경로 (미지정 시 원본 상세 CSV 이름 기준 '_recheck_<타임스탬프>' 자동 생성)")
 
-	initFolder := flag.String("initFolder", "", "vCenter에 연결하지 않고, -specRoot 아래에 이 이름의 스펙 디렉터리와 '<이름>_spec.txt' 스캐폴드를 만들고 종료한다. 이름은 CAE 폴더 규칙(레코드 4개, 2번째가 CAE<숫자>)을 따라야 한다. -template을 같이 주면 그 스펙의 옵션 값을 그대로 복사해서 채운다(안 주면 빈 틀만 생성)")
+	initFolder := flag.String("initFolder", "", "vCenter에 연결하지 않고, -specRoot 아래에 이 이름의 스펙 디렉터리와 '<이름>_spec.txt' 스캐폴드를 만들고 종료한다. 이름은 CAE 폴더 규칙(레코드 4개, 2번째가 CAE<숫자> 또는 LSI<숫자>)을 따라야 한다. -template을 같이 주면 그 스펙의 옵션 값을 그대로 복사해서 채운다(안 주면 빈 틀만 생성)")
 	template := flag.String("template", "", "-initFolder와 함께 사용: 값을 그대로 복사해올 기존 vCenter 폴더 이름(또는 그 폴더가 매칭되는 스펙)")
 
 	demo := flag.Bool("demo", false, "vCenter에 연결하지 않고, affinity 항목이 많은 8~16vCPU급 가짜 VM 3대(OK/FAIL/개수불일치 케이스)로 콘솔+CSV 출력을 보여주는 데모 모드. 실제 인프라를 전혀 건드리지 않음. 이 모드에서는 다른 모든 플래그를 무시하고 고정된 데모 기대값을 사용함")

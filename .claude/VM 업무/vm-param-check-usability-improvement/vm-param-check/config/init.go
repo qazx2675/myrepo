@@ -62,7 +62,7 @@ shares-ev01=
 // 같은 스펙으로 이미 존재하는 디렉터리가 있으면 실수로 덮어쓰지 않도록 에러로 막는다.
 func InitFolder(specRoot, folderName, templateFolder string) (specFile string, err error) {
 	if _, ok := NormalizeFolderName(folderName); !ok {
-		return "", fmt.Errorf("폴더명 %q은(는) CAE 폴더 규칙(하이픈 %d개 레코드, 2번째가 CAE<숫자>)과 맞지 않습니다 — 이 규칙에 안 맞으면 만들어도 자동매칭되지 않습니다", folderName, folderRecordCount)
+		return "", fmt.Errorf("폴더명 %q은(는) CAE 폴더 규칙(하이픈 %d개 레코드, 2번째가 CAE<숫자> 또는 LSI<숫자>)과 맞지 않습니다 — 이 규칙에 안 맞으면 만들어도 자동매칭되지 않습니다", folderName, folderRecordCount)
 	}
 
 	existing, err := FindSpec(specRoot, folderName)

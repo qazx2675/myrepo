@@ -16,7 +16,9 @@ import (
 
 // caeRecord는 폴더명 2번째 레코드(차수 정보)를 알아보는 패턴이다. CAE001/CAE002/... 처럼
 // 뒤의 숫자만 다른 경우는 같은 스펙으로 취급해야 해서, 비교 전에 숫자를 떼어낸다.
-var caeRecord = regexp.MustCompile(`(?i)^CAE\d+$`)
+// 접두어는 CAE 외에 LSI도 쓰이며, 새 접두어가 생기면 여기에 추가한다. 오타 폴더가 규칙에
+// 맞는 것처럼 인식되지 않도록 아무 영문자나 받지 않고 목록으로 고정한다.
+var caeRecord = regexp.MustCompile(`(?i)^(CAE|LSI)\d+$`)
 
 // folderRecordCount는 CAE 폴더명이 가지는 하이픈 구분 레코드 개수다.
 // 예: TST-CAE001-SAMP48c-QRST -> [TST, CAE001, SAMP48c, QRST]
@@ -26,19 +28,23 @@ const folderRecordCount = 4
 // 1·3·4번째 레코드는 그대로 두고, 2번째(차수) 레코드의 숫자만 떼어낸다.
 // 예: TST-CAE001-SAMP48c-QRST, TST-CAE003-SAMP48c-QRST -> 둘 다 TST-CAE-SAMP48c-QRST
 //
-// 레코드가 4개가 아니거나 2번째가 CAE<숫자> 형태가 아니면 이 규칙의 대상이 아니므로
+// 접두어(CAE/LSI)는 스펙을 가르는 정보라서 그대로 남긴다 — TST-CAE001-...과
+// TST-LSI001-...은 서로 다른 스펙이다.
+//
+// 레코드가 4개가 아니거나 2번째가 CAE<숫자>/LSI<숫자> 형태가 아니면 이 규칙의 대상이 아니므로
 // ok=false를 돌려준다(Task 폴더 등 예외 경로에서 따로 처리해야 하는 케이스).
 func NormalizeFolderName(name string) (string, bool) {
 	records := strings.Split(name, "-")
 	if len(records) != folderRecordCount {
 		return "", false
 	}
-	if !caeRecord.MatchString(records[1]) {
+	m := caeRecord.FindStringSubmatch(records[1])
+	if m == nil {
 		return "", false
 	}
 	normalized := make([]string, len(records))
 	copy(normalized, records)
-	normalized[1] = "CAE"
+	normalized[1] = strings.ToUpper(m[1])
 	return strings.Join(normalized, "-"), true
 }
 
@@ -65,7 +71,7 @@ type SpecMatch struct {
 func FindSpec(specRoot, folderName string) (*SpecMatch, error) {
 	wanted, ok := NormalizeFolderName(folderName)
 	if !ok {
-		return nil, fmt.Errorf("폴더명 %q은(는) CAE 폴더 규칙(하이픈 %d개 레코드, 2번째가 CAE<숫자>)과 맞지 않습니다", folderName, folderRecordCount)
+		return nil, fmt.Errorf("폴더명 %q은(는) CAE 폴더 규칙(하이픈 %d개 레코드, 2번째가 CAE<숫자> 또는 LSI<숫자>)과 맞지 않습니다", folderName, folderRecordCount)
 	}
 
 	entries, err := os.ReadDir(specRoot)

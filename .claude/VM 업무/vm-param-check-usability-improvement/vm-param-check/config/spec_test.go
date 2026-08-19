@@ -20,10 +20,15 @@ func TestNormalizeFolderName(t *testing.T) {
 		// 차수만 다른 건 같은 스펙으로 모여야 한다.
 		{"차수 다름", "TST-CAE003-SAMP48c-QRST", "TST-CAE-SAMP48c-QRST", true},
 		{"차수 자릿수 다름", "TST-CAE12-SAMP48c-QRST", "TST-CAE-SAMP48c-QRST", true},
+		// LSI 접두어도 CAE와 같은 규칙으로 동작해야 한다. 단, 접두어 자체는 남는다.
+		{"LSI 접두어", "TST-LSI001-SAMP48c-QRST", "TST-LSI-SAMP48c-QRST", true},
+		{"LSI 차수 다름", "TST-LSI003-SAMP48c-QRST", "TST-LSI-SAMP48c-QRST", true},
+		{"LSI 소문자", "TST-lsi001-SAMP48c-QRST", "TST-LSI-SAMP48c-QRST", true},
+		{"LSI 숫자 없음", "TST-LSI-SAMP48c-QRST", "", false},
 		// 규칙에서 벗어나면 매칭 대상이 아니다.
 		{"레코드 3개", "TST-CAE001-QRST", "", false},
 		{"레코드 5개", "TST-CAE001-SAMP48c-QRST-X", "", false},
-		{"2번째가 CAE 아님", "TST-XYZ001-SAMP48c-QRST", "", false},
+		{"2번째가 CAE/LSI 아님", "TST-XYZ001-SAMP48c-QRST", "", false},
 		{"2번째에 숫자 없음", "TST-CAE-SAMP48c-QRST", "", false},
 		{"Task 폴더", "Task", "", false},
 	}
@@ -43,6 +48,8 @@ func TestNormalizeFolderNameDistinct(t *testing.T) {
 		"TST-CAE001-SAMP48c-QRST",
 		"DEV-CAE001-SAMB16c-UVWX",
 		"DEV-CAE001-SAMC16c-UVWX+VDT",
+		// 접두어만 다른 폴더는 서로 다른 스펙이다 — 정규화 때 접두어를 CAE로 뭉개면 여기서 잡힌다.
+		"TST-LSI001-SAMP48c-QRST",
 	}
 	seen := map[string]string{}
 	for _, s := range samples {
