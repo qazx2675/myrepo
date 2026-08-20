@@ -471,7 +471,15 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 	affinityEV01, affinityEV02, affinityEV03 := e.AffinityEV01, e.AffinityEV02, e.AffinityEV03
 	htOn := e.HTOn
 
-	group := classifyGroup(vm.Hostname)
+	// ev01/ev02/ev03 그룹은 vCenter에 등록된 VM 이름(vm.Name) 기준으로 정한다. 게스트 OS가
+	// 보고하는 hostname(vm.Hostname)은 클론/구성 실수로 vCenter 이름과 어긋날 수 있어(예:
+	// 두 VM의 내부 hostname이 서로 바뀌어 설정됨) 그룹 판정 기준으로 쓰면 엉뚱한 스펙으로
+	// 체크되는 사고가 난다 — 대상 지정(-f)도 vm.Name 기준이라 일관성도 맞는다.
+	group := classifyGroup(vm.Name)
+	if hostnameGroup := classifyGroup(vm.Hostname); hostnameGroup != "" && hostnameGroup != group {
+		fmt.Printf("  [경고] %s: vCenter 이름 기준 그룹(%q)과 게스트 hostname(%s) 기준 그룹(%q)이 다릅니다 — vCenter 이름 기준으로 체크합니다. 게스트 OS의 hostname이 실제와 다르게 설정되어 있을 수 있으니 확인하세요\n",
+			vm.Name, group, vm.Hostname, hostnameGroup)
+	}
 	// vcsim (127.0.0.1:54321)에서는 일부 필드를 지원하지 않으므로 플래그 계산
 	isVcsim := strings.HasPrefix(vm.VCenter, "127.0.0.1")
 	var f []model.Finding

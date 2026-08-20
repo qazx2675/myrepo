@@ -56,7 +56,7 @@ func runScale(n int, out, user string, onlyFail, noColor bool) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			group := classifyGroup(vm.Hostname)
+			group := classifyGroup(vm.Name)
 			var f []model.Finding
 			f = append(f, checker.CheckFixed(vm)...)
 			f = append(f, checker.CheckTopology(vm, checker.CoresExpect{Base: scaleExpectCores}, checker.NumaExpect{Base: scaleExpectNuma}, group, singleVMMode, false)...)
