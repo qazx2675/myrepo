@@ -90,6 +90,10 @@ mkdir -p ./SPEC_DIR
 
 빌드·설치(폐쇄망 오프라인 빌드 절차 포함)도 같은 문서의 "1. 빌드 및 설치 방법"을 참고하세요 — `vendor/`에 의존성이 전부 포함되어 있어 이번 개선으로 새로 추가된 의존성 없이 그대로 오프라인 빌드됩니다.
 
+## 변경 이력
+
+이 프로젝트에 매개변수/기능이 추가되거나 수정될 때마다의 기록은 [`CHANGELOG.md`](./CHANGELOG.md)에 날짜순으로 남깁니다.
+
 ## 설계 배경과 검증 근거
 
 이 개선을 진행하며 확인한 사실(코드 근거), 결정 사항, vcsim/실 vCenter 검증 결과는 [`계획서.md`](./계획서.md)에 단계별로 정리되어 있습니다. 특히 "속도 문제"의 실제 원인이 어디였는지(0장), 폴더명 매칭 규칙이 실제 예시로 어떻게 검증됐는지(3단계), 다중 vCenter/`-yes` 관련 결정 배경(3-1·3-2단계) 등은 이 문서에서만 확인할 수 있습니다.
@@ -103,6 +107,8 @@ mkdir -p ./SPEC_DIR
 ```
 vm-param-check-usability-improvement/
 ├── README.md          # 이 문서
+├── CHANGELOG.md        # 날짜별 변경 이력
 ├── 계획서.md            # 설계 배경/검증 근거 문서
+├── update_deploy.sh    # 원격 서버(/root/vm-param-check-usability-improvement/vm-param-check)에 최신 소스를 배포/재빌드하는 스크립트
 └── vm-param-check/    # 실제 도구 소스코드 (스펙 자동매칭, 2단계 조회 등 개선사항 포함), 상세는 하위 README 참고
 ```

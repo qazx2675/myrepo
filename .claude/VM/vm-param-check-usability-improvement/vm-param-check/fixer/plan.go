@@ -29,7 +29,8 @@ const (
 
 // advancedOrder는 ExtraConfig(고급 설정)로 교정하는 키들 — 출력/기록 순서를 고정해서
 // dry-run 로그가 실행할 때마다 달라지지 않게 한다. 앞의 4개는 checker/fixed.go의 고정
-// 기대값이고, 뒤의 2개는 토폴로지 기대값(-cores/-numa)이 반영되는 항목이다.
+// 기대값이고, 다음 2개는 토폴로지 기대값(-cores/-numa)이 반영되는 항목, 마지막은
+// numa.vcpu.preferHT(-preferHT/SPEC_DIR로 값이 주어졌을 때만 체크 대상이 됨) 이다.
 var advancedOrder = []string{
 	"sched.mem.lpage.enable1GPage",
 	"sched.mem.prealloc",
@@ -37,6 +38,7 @@ var advancedOrder = []string{
 	"sched.swap.vmxSwapEnabled",
 	"cpuid.coresPerSocket",
 	"numa.vcpu.maxPerVirtualNode",
+	"numa.vcpu.preferHT",
 }
 
 // memPinKey는 vCenter가 Advanced Config로 되돌려주지 않아 체크 대상에서는 빠져 있지만
