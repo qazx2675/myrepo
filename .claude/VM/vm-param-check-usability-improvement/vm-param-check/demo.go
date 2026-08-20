@@ -40,7 +40,7 @@ func runDemo(out, user string, onlyFail, noColor bool) {
 
 	var findings []model.Finding
 	for _, vm := range vms {
-		group := classifyGroup(vm.Hostname)
+		group := classifyGroup(vm.Name)
 
 		findings = append(findings, checker.CheckFixed(vm)...)
 		findings = append(findings, checker.CheckTopology(vm, checker.CoresExpect{Base: demoExpectCores}, checker.NumaExpect{Base: demoExpectNuma}, group, singleVMMode, false)...)
