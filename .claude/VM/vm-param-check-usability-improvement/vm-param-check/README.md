@@ -280,6 +280,7 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 | `-vcenterList <path>` | `vcenter.txt` | 전체 순회 모드에서 사용할 vCenter 주소 목록 파일 (한 줄에 하나) |
 | `-f <path>` | (없음) | 단일/지정 대상 모드: 체크할 BM(VM) hostname 목록 파일 (한 줄에 하나, `#` 주석 가능) |
 | `-ht <on\|off>` | (필수) | 하이퍼스레딩 상태 — ev01 그룹 affinity 자동계산에 사용 |
+| `-preferHT <값>` | (옵션, 그룹 구분 없음) | 기대값: `numa.vcpu.preferHT` (Advanced Config). 모든 VM에 공통 적용되는 단일 항목이라 ev02/ev03용 옵션이 따로 없다. **SPEC_DIR 스펙 파일 또는 이 플래그로 값(예: `TRUE`)이 실제로 주어졌을 때만 체크**하며, 결과는 FAIL/OK만 나온다(다른 항목과 달리 "설정없음"으로는 표시되지 않음 — 값이 없으면 곧 FAIL). 아예 주어지지 않으면 이 항목 자체가 출력에서 빠진다(콘솔/CSV 어디에도 나오지 않음) |
 | `-cores <N>` / `-cores-ev02` / `-cores-ev03` | 필수/옵션/옵션 | 기대값: 소켓당 코어 수 |
 | `-numa <N>` / `-numa-ev02` / `-numa-ev03` | 필수/옵션/옵션 | 기대값: NUMA 노드당 최대 vCPU(코어) 수 |
 | `-cpu <N>` / `-cpu-ev02` / `-cpu-ev03` | 필수/옵션/옵션 | 기대값: vCPU 수 |
@@ -327,6 +328,7 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 | `cpuid.coresPerSocket` (Advanced Config) | 디스크 총 용량 |
 | `hardware.numCoresPerSocket` (CPU 토폴로지 UI → `NumCoresPerSocket`) | CPU/메모리 Shares(ratio) |
 | `numa.vcpu.maxPerVirtualNode` (Advanced Config) | 호스트 전원정책 |
+| `numa.vcpu.preferHT` (Advanced Config, `-preferHT` 지정 시에만 체크 대상) | |
 | `config.numaInfo.coresPerNumaNode` (CPU 토폴로지 UI → `VirtualNuma.CoresPerNumaNode`, 설정편집 > VM 옵션 > CPU 토폴로지 화면의 그 필드) | "모든 게스트 메모리 예약" |
 | `sched.vcpuN.affinity` (ev01은 `-ht`+vCPU로 자동계산, ev02/ev03는 `-affinity-evNN` 파일) | 네트워크 포트그룹 |
 | `config.hardware.numCPU` (vCPU 수, 코어수와 함께 조합으로 교정) | |

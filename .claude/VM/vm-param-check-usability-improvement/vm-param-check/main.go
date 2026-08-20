@@ -3,8 +3,9 @@
 // FAIL/설정없음 항목을 게이트 검증 후 자동 교정하고 재검증까지 마친다. (PLAN.md 참고)
 //
 // 파이프라인 (통합):
-//   [1] 정상값 입력 + vCenter 체크 -> [2] CSV 생성(-user 접미사) -> [3] -fix 없으면 종료
-//   -> [4] 게이트(그룹 동질성/전원 OFF) -> [5] dry-run 확인 -> [6] 실제 적용 -> [7] 재검증 CSV
+//
+//	[1] 정상값 입력 + vCenter 체크 -> [2] CSV 생성(-user 접미사) -> [3] -fix 없으면 종료
+//	-> [4] 게이트(그룹 동질성/전원 OFF) -> [5] dry-run 확인 -> [6] 실제 적용 -> [7] 재검증 CSV
 //
 // 실행 모드 (계획서 2장):
 //   - 전체 순회 모드 (기본): -vcenterList로 지정된 모든 vCenter의 VM 인벤토리 전체를 체크
@@ -42,6 +43,7 @@ func main() {
 	targetsPath := flag.String("f", "", "단일/지정 대상 모드: 체크할 BM(VM) hostname 목록 파일 (한 줄에 하나, '#' 주석 가능. 예: -f kdh.txt). 지정 시 vcenterList의 vCenter들 안에서 이 hostname들만 체크. 미지정 시 인벤토리 전체를 체크(전체 순회 모드)")
 
 	ht := flag.String("ht", "", "HT(하이퍼스레딩) 상태: on | off (필수, ev01 affinity 자동계산에 사용)")
+	preferHT := flag.String("preferHT", "", "기대값: numa.vcpu.preferHT — 모든 VM에 공통 적용(그룹 구분 없음). SPEC_DIR 스펙 파일 또는 이 플래그로 값(예: TRUE)이 주어졌을 때만 체크하고, 주어지지 않으면 이 항목은 아예 체크하지 않음(출력 없음)")
 	cores := flag.Int("cores", 0, "기대값: 소켓당 코어 수 — ev01 및 미분류 VM에 적용 (필수)")
 	numa := flag.Int("numa", 0, "기대값: NUMA 노드당 최대 vCPU 수 — ev01 및 미분류 VM에 적용 (필수)")
 	cpu := flag.Int("cpu", 0, "기대값: vCPU 수 — ev01 및 미분류 VM에 적용 (필수)")
@@ -315,13 +317,14 @@ func main() {
 		}
 
 		e := expectSet{
-			Cores:  checker.CoresExpect{Base: *cores, EV02: coresEV02, EV03: coresEV03},
-			Numa:   checker.NumaExpect{Base: *numa, EV02: numaEV02, EV03: numaEV03},
-			CPU:    checker.CPUExpect{Base: *cpu, EV02: cpuEV02, EV03: cpuEV03},
-			Mem:    checker.MemExpect{Base: *mem, EV02: memEV02, EV03: memEV03},
-			Disk:   checker.DiskExpect{Base: diskBase, EV02: diskEV02, EV03: diskEV03},
-			Shares: checker.SharesExpect{EV01: sharesEV01, EV01Normal: sharesEV01Normal, EV02: sharesEV02, EV03: sharesEV03},
-			HTOn:   *ht == "on",
+			Cores:    checker.CoresExpect{Base: *cores, EV02: coresEV02, EV03: coresEV03},
+			Numa:     checker.NumaExpect{Base: *numa, EV02: numaEV02, EV03: numaEV03},
+			CPU:      checker.CPUExpect{Base: *cpu, EV02: cpuEV02, EV03: cpuEV03},
+			Mem:      checker.MemExpect{Base: *mem, EV02: memEV02, EV03: memEV03},
+			Disk:     checker.DiskExpect{Base: diskBase, EV02: diskEV02, EV03: diskEV03},
+			Shares:   checker.SharesExpect{EV01: sharesEV01, EV01Normal: sharesEV01Normal, EV02: sharesEV02, EV03: sharesEV03},
+			HTOn:     *ht == "on",
+			PreferHT: *preferHT,
 		}
 		if *affinityEV01Path != "" {
 			m, err := config.LoadAffinityFile(*affinityEV01Path)
@@ -439,6 +442,10 @@ type expectSet struct {
 	AffinityEV03 map[string]string
 
 	HTOn bool
+
+	// PreferHT는 numa.vcpu.preferHT 기대값(예: "TRUE")이다. 모든 VM에 공통 적용되는
+	// 단일 값이라 그룹별 구조체가 아니다. 빈 문자열이면 이 항목은 체크하지 않는다.
+	PreferHT string
 }
 
 // findMissingTargets는 -f로 요청했는데 어느 vCenter에서도 나오지 않은 이름을 돌려준다.
@@ -485,6 +492,7 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 	var f []model.Finding
 	f = append(f, checker.CheckFixed(vm)...)
 	f = append(f, checker.CheckTopology(vm, coresExpect, numaExpect, group, singleVMMode, isVcsim)...)
+	f = append(f, checker.CheckPreferHT(vm, e.PreferHT)...)
 	f = append(f, checker.CheckHardware(vm, cpuExpect, memExpect, diskExpect, shares, group, singleVMMode, isVcsim)...)
 	f = append(f, checker.CheckHostPower(vm))
 	f = append(f, checker.CheckNetwork(vm)...)
@@ -637,7 +645,7 @@ func recheckVMs(ctx context.Context, clientsByAddr map[string]*govmomi.Client, v
 // 스펙 파일이 -fix나 -out 같은 동작 플래그까지 건드릴 수 있으면 파일 하나로 실제 설정 변경이
 // 시작될 수도 있어서, 기대값(정상값) 관련 플래그로만 제한한다.
 var specSettableFlags = map[string]bool{
-	"ht": true, "cores": true, "numa": true, "cpu": true, "mem": true, "disk": true,
+	"ht": true, "preferHT": true, "cores": true, "numa": true, "cpu": true, "mem": true, "disk": true,
 	"shares-ev01": true, "shares-ev02": true, "shares-ev03": true,
 	"cores-ev02": true, "cores-ev03": true,
 	"numa-ev02": true, "numa-ev03": true,
@@ -786,9 +794,9 @@ func resolveVMFolders(specRoot string, vms []model.VMInfo, autoYes bool) map[str
 }
 
 // resolveExceptionFolder는 vm.Folder가 CAE 규칙과 안 맞을 때(예: Task 폴더)의 폴백이다.
-// 1) 이 VM의 포트그룹 이름들 중 "<폴더명>-cae-옥텟-옥텟-옥텟-옥텟" 패턴에서 폴더명을 뽑아,
-//    그 폴더명으로 스펙이 실제로 있는지 확인한다. 유일하게 하나만 있으면 그걸로 확정한다.
-// 2) 후보가 없거나 여럿이면(자동으로 하나를 고를 근거가 없으면) 사람에게 직접 물어본다.
+//  1. 이 VM의 포트그룹 이름들 중 "<폴더명>-cae-옥텟-옥텟-옥텟-옥텟" 패턴에서 폴더명을 뽑아,
+//     그 폴더명으로 스펙이 실제로 있는지 확인한다. 유일하게 하나만 있으면 그걸로 확정한다.
+//  2. 후보가 없거나 여럿이면(자동으로 하나를 고를 근거가 없으면) 사람에게 직접 물어본다.
 func resolveExceptionFolder(specRoot string, vm model.VMInfo, autoYes bool) (string, string) {
 	seen := map[string]bool{}
 	var candidates []string
