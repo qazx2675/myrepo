@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-08-21 — `-shares-ev01/02/03` 쉼표 다중값 + `normal` 혼합 지원
+
+- **파싱(`main.go`)**: 세 플래그 모두 기존엔 ev01만 "ratio 숫자 하나 또는 normal 하나"를 받고 ev02/ev03는 정수 하나만 받았는데, 이제 `-disk`처럼 쉼표로 여러 값을 나열할 수 있고 ratio 숫자와 `normal`을 섞어도 된다(예: `-shares-ev01=4000,normal`). 새 헬퍼 `parseSharesListFlag`가 파싱을 전담(`parseIntListFlag`와 동일한 패턴).
+- **체크(`checker/hardware.go`)**: `SharesExpect`를 `EV01 int / EV01Normal bool / EV02,EV03 *int` 구조에서 `EV01,EV02,EV03 []SharesItem`(각 항목은 `{Ratio int, Normal bool}`)으로 재설계. `checkShares`는 이제 허용값 목록 중 **하나라도 실제값과 맞으면 OK**로 판정한다 — CPU/메모리는 서로 독립적으로 판정하므로 "CPU는 ratio로, 메모리는 normal로" 맞는 경우도 둘 다 OK가 된다. 실제값 표시도 `level=custom (ratio=4000)` / `level=normal`처럼 상태를 명확히 보여주도록 통일.
+- **영향 범위**: `main.go`(파싱/헬퍼), `checker/hardware.go`(구조체+판정 로직), `demo.go`/`scaletest.go`(고정 데모/스케일값을 새 `checker.RatioShares()` 헬퍼로 감싸도록만 수정 — 실제 판정 로직 변경 없음), `checker/hardware_test.go`(신규 구조체 반영 + 혼합 목록 판정 테스트 추가). ev01이 그룹 미분류("")에서는 체크되지 않는 기존 동작, ev02/ev03 옵션 미지정 시 스킵되는 기존 동작은 그대로 유지.
+- **검증**: `go build`/`go vet`/`go test` 전부 통과. vcsim(포트 54322 임시 인스턴스)에 CPU shares=custom/ratio=4000, Memory shares=level normal로 설정한 VM을 만들어 `-shares-ev01=4000,normal`로 체크 — CPU는 ratio 매칭으로 OK, 메모리는 normal 매칭으로 OK, 두 항목 모두 `기대값=4000 또는 normal`로 정확히 표시됨을 확인.
+
 ## 2026-08-21 — `numa.vcpu.preferHT` 매개변수 체크/자동교정 추가
 
 - **체크(`checker/preferht.go`, 신규 파일)**: `numa.vcpu.preferHT`를 체크하는 `CheckPreferHT` 함수 추가. 모든 VM에 공통 적용되는 단일 항목이라 그룹(ev01/ev02/ev03)별 옵션이 따로 없다.

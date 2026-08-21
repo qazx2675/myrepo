@@ -9,17 +9,27 @@ import (
 	"vm-param-check/model"
 )
 
-// SharesExpect는 그룹별(ev01 필수/ev02·ev03 옵션) 기대 CPU Shares 값이다.
-// EV02/EV03가 nil이면 "해당 그룹 옵션이 아예 주어지지 않음"을 의미한다.
-//
-// ev01만 Level이 Normal인 경우를 기대값으로 쓸 수 있다(EV01Normal). 현업에서 Shares를
-// Custom ratio로 박지 않고 Normal 그대로 두는 스펙이 있어서, 그때는 ratio 숫자가 아니라
-// Level 자체를 비교해야 한다. ev02/ev03는 지금까지처럼 ratio 숫자만 받는다.
+// SharesItem은 -shares-evNN 하나에 콤마로 나열 가능한 허용값 중 한 항목이다.
+// Normal이 true면 "Level 자체가 normal인가"를 보고, 아니면 "Level이 custom이고
+// ratio가 Ratio와 같은가"를 본다. 콤마로 여러 개(예: "4000,normal")를 주면 그 중
+// 하나라도 맞으면 OK로 판정한다.
+type SharesItem struct {
+	Ratio  int
+	Normal bool
+}
+
+// RatioShares는 ratio 숫자 하나만 허용값으로 갖는 SharesItem 목록을 만든다
+// (데모/스케일테스트처럼 고정 정수 기대값을 코드에서 직접 구성할 때 사용).
+func RatioShares(ratio int) []SharesItem {
+	return []SharesItem{{Ratio: ratio}}
+}
+
+// SharesExpect는 그룹별(ev01 필수/ev02·ev03 옵션) 기대 CPU Shares 허용값 목록이다.
+// EV02/EV03가 빈 슬라이스(nil)면 "해당 그룹 옵션이 아예 주어지지 않음"을 의미한다.
 type SharesExpect struct {
-	EV01       int
-	EV01Normal bool // true면 EV01 무시하고 "Level이 normal인가"로 판정
-	EV02       *int
-	EV03       *int
+	EV01 []SharesItem
+	EV02 []SharesItem
+	EV03 []SharesItem
 }
 
 // CPUExpect/MemExpect/DiskExpect는 SharesExpect와 동일한 패턴 — Base는 ev01/미분류
@@ -173,72 +183,84 @@ func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpec
 	return findings
 }
 
-func checkShares(vm model.VMInfo, shares SharesExpect, group string, singleVMMode bool) []model.Finding {
-	var expected *int
+// resolveGroupExpectShares는 checkShares 전용 그룹 분기다. 기존 동작을 그대로 유지해
+// group이 ev01/ev02/ev03가 아니면(미분류 "") shares는 아예 체크하지 않는다.
+func resolveGroupExpectShares(ev01, ev02, ev03 []SharesItem, group string, singleVMMode bool) ([]SharesItem, bool) {
 	switch group {
 	case "ev01":
-		if shares.EV01Normal {
-			return checkSharesNormal(vm, group)
-		}
-		v := shares.EV01
-		expected = &v
+		return ev01, true
 	case "ev02":
-		if singleVMMode || shares.EV02 == nil {
-			return nil // 옵션 없거나 단일 VM 예외 -> 스킵 (Finding 자체를 만들지 않음)
+		if singleVMMode || len(ev02) == 0 {
+			return nil, false // 옵션 없거나 단일 VM 예외 -> 스킵 (Finding 자체를 만들지 않음)
 		}
-		expected = shares.EV02
+		return ev02, true
 	case "ev03":
-		if singleVMMode || shares.EV03 == nil {
-			return nil
+		if singleVMMode || len(ev03) == 0 {
+			return nil, false
 		}
-		expected = shares.EV03
+		return ev03, true
 	default:
-		return nil // ev01/02/03 어디에도 속하지 않는 VM은 shares 비교 대상 아님
+		return nil, false // ev01/02/03 어디에도 속하지 않는 VM은 shares 비교 대상 아님
 	}
-
-	cpu := model.Finding{VM: vm.Name, Source: group, Key: "cpuAllocation.shares (CPU Shares Ratio)", Expected: strconv.Itoa(*expected)}
-	if vm.CPUSharesLevel != "custom" {
-		cpu.Actual = fmt.Sprintf("level=%s (custom 아님, ratio 값 무의미)", vm.CPUSharesLevel)
-		cpu.Result = "FAIL"
-	} else {
-		cpu.Actual = strconv.Itoa(int(vm.CPUShares))
-		if int(vm.CPUShares) == *expected {
-			cpu.Result = "OK"
-		} else {
-			cpu.Result = "FAIL"
-		}
-	}
-
-	mem := model.Finding{VM: vm.Name, Source: group, Key: "memoryAllocation.shares (Memory Shares Ratio)", Expected: strconv.Itoa(*expected)}
-	if vm.MemorySharesLevel != "custom" {
-		mem.Actual = fmt.Sprintf("level=%s (custom 아님, ratio 값 무의미)", vm.MemorySharesLevel)
-		mem.Result = "FAIL"
-	} else {
-		mem.Actual = strconv.Itoa(int(vm.MemoryShares))
-		if int(vm.MemoryShares) == *expected {
-			mem.Result = "OK"
-		} else {
-			mem.Result = "FAIL"
-		}
-	}
-
-	return []model.Finding{cpu, mem}
 }
 
-// checkSharesNormal은 -shares-ev01=normal 일 때의 판정이다. ratio 숫자는 VM 사양에 따라
-// vCenter가 알아서 계산하므로 비교 대상이 아니고, Level이 normal인지만 본다(CPU/메모리 둘 다).
-func checkSharesNormal(vm model.VMInfo, group string) []model.Finding {
-	cpu := model.Finding{VM: vm.Name, Source: group, Key: "cpuAllocation.shares (CPU Shares Level)", Expected: "normal"}
-	cpu.Actual = fmt.Sprintf("level=%s", vm.CPUSharesLevel)
-	if vm.CPUSharesLevel == "normal" {
+// formatSharesItems는 허용값 목록을 리포트에 적을 문자열로 만든다("4000 또는 normal").
+func formatSharesItems(items []SharesItem) string {
+	strs := make([]string, len(items))
+	for i, it := range items {
+		if it.Normal {
+			strs[i] = "normal"
+		} else {
+			strs[i] = strconv.Itoa(it.Ratio)
+		}
+	}
+	return strings.Join(strs, " 또는 ")
+}
+
+// sharesMatch는 허용값 목록 중 하나라도 실제 level/ratio와 맞으면 true다.
+// normal 항목은 level=="normal"인지만 보고, ratio 항목은 level=="custom"이고
+// ratio가 같은지를 본다(레벨이 custom이 아니면 ratio 숫자 자체가 무의미하므로 매칭 안 됨).
+func sharesMatch(items []SharesItem, level string, ratio int) bool {
+	for _, it := range items {
+		if it.Normal {
+			if level == "normal" {
+				return true
+			}
+			continue
+		}
+		if level == "custom" && ratio == it.Ratio {
+			return true
+		}
+	}
+	return false
+}
+
+func checkShares(vm model.VMInfo, shares SharesExpect, group string, singleVMMode bool) []model.Finding {
+	items, ok := resolveGroupExpectShares(shares.EV01, shares.EV02, shares.EV03, group, singleVMMode)
+	if !ok {
+		return nil
+	}
+	expected := formatSharesItems(items)
+
+	cpu := model.Finding{VM: vm.Name, Source: group, Key: "cpuAllocation.shares (CPU Shares)", Expected: expected}
+	if vm.CPUSharesLevel == "custom" {
+		cpu.Actual = fmt.Sprintf("level=custom (ratio=%d)", int(vm.CPUShares))
+	} else {
+		cpu.Actual = fmt.Sprintf("level=%s", vm.CPUSharesLevel)
+	}
+	if sharesMatch(items, vm.CPUSharesLevel, int(vm.CPUShares)) {
 		cpu.Result = "OK"
 	} else {
 		cpu.Result = "FAIL"
 	}
 
-	mem := model.Finding{VM: vm.Name, Source: group, Key: "memoryAllocation.shares (Memory Shares Level)", Expected: "normal"}
-	mem.Actual = fmt.Sprintf("level=%s", vm.MemorySharesLevel)
-	if vm.MemorySharesLevel == "normal" {
+	mem := model.Finding{VM: vm.Name, Source: group, Key: "memoryAllocation.shares (Memory Shares)", Expected: expected}
+	if vm.MemorySharesLevel == "custom" {
+		mem.Actual = fmt.Sprintf("level=custom (ratio=%d)", int(vm.MemoryShares))
+	} else {
+		mem.Actual = fmt.Sprintf("level=%s", vm.MemorySharesLevel)
+	}
+	if sharesMatch(items, vm.MemorySharesLevel, int(vm.MemoryShares)) {
 		mem.Result = "OK"
 	} else {
 		mem.Result = "FAIL"
