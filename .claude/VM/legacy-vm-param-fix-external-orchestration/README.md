@@ -58,7 +58,8 @@ legacy-vm-param-fix-external-orchestration/
 ├── main_conn-source/            # vCenter/ESXi 접속 확인 도구 소스 (하위 README 참고)
 ├── tag_setting-source/          # VM 태그 설정 도구 소스 (하위 README 참고)
 ├── vm_create-source/            # VM 생성 도구 소스 (하위 README 참고)
-└── vswitch_setting-source/      # 가상 스위치 설정 도구 소스 (하위 README 참고)
+├── vswitch_setting-source/      # 가상 스위치 설정 도구 소스 (하위 README 참고)
+└── numa_preferht_setting-source/ # numa.vcpu.preferHT=TRUE 일괄 적용 도구 소스, 병렬(워커풀), 전원OFF 조건 (하위 README 참고)
 ```
 
 ### 4.2 power_setting에 대한 중요 안내
