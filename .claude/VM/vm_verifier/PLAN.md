@@ -50,7 +50,7 @@
 - **감사 로그 저장소 — 확정:** 원본 계획의 "암호화 해시 + 중앙 로그 서버 직송" 요구는 폐기. 대신 **불일치(FAIL/WARN)가 감지된 경우에만** 실행 디렉토리의 `LOG/vm-verifier-YYYYMMDD.log`에 append. 별도 로그 서버 불필요. PASS/INCONCLUSIVE만 있는 정상 실행은 로그를 남기지 않는다(노이즈 방지).
 - **DNS 서버 종류 확인 방법 — 확정:** `check_dns_type.sh`로 SSH 접속 없이 CHAOS 클래스 쿼리(`dig version.bind/version.server chaos txt`)를 날려 원격에서 소프트웨어를 추정한다. 다만 이 방식은 대상 DNS가 CHAOS 쿼리를 막아두면(예: 퍼블릭 DNS) 응답이 안 올 수 있어, 그 경우엔 담당자 확인이 필요하다. **실제 운영 DNS가 어떤 소프트웨어인지는 아직 확인되지 않음** — PTR/A 레코드 조회 자체는 표준 `net.LookupHost`/`net.LookupAddr`로 구현되어 있어 일반적인 DNS라면 그대로 동작한다.
   - **용도:** 검증 로직 자체가 이 스크립트 결과에 의존하진 않는다(운영/트러블슈팅 보조 도구). §4에서 DHCP 대역 파일 자동 판별과 5단계 3/4단계가 전부 DNS 응답에 의존하게 되면서 중요도가 커졌다 — DNS 조회 실패가 났을 때 "DNS 서버 자체 특성(캐싱/CHAOS 차단 등) 때문인지" "진짜 오설치 때문인지" 구분하는 데 쓴다.
-- **Race condition 대응 — 미해결:** Tools 기동 직후 IP/hostname이 아직 안정화되지 않을 수 있음. v1에는 재시도 로직이 없다 — 작업자가 수동 실행이므로 Tools가 완전히 뜬 뒤 실행하는 것으로 우선 대응(운영 절차로 커버), 추후 필요시 `-retry`/backoff 옵션 추가 검토.
+- **Race condition 대응 — 불필요 판단(확정), 구현 안 함:** DNS 조회(`net.LookupHost`/`net.LookupAddr`)는 `/etc/resolv.conf`에 등록된 서버에 단순 질의만 하는 상태 없는(stateless) 호출이라 그 자체로는 타이밍 문제가 없다. 애초 우려는 DNS가 아니라 vCenter Guest Tools 하트비트(`guest.hostName`/`guest.net`, 2~4단계에서 사용)가 Tools 기동 직후에는 아직 최신값이 아닐 수 있다는 이론적 가능성이었는데, 실제 운영 방식이 OS 설치 완료 후 작업자가 `run.sh`를 수동 실행하는 것이라 Tools가 막 켜지는 시점과 실행 시점이 겹치지 않고, 실제 환경에서도 싱크 문제가 없었던 것으로 확인되어 재시도/backoff 로직은 추가하지 않기로 함.
 
 ## 7. 개발팀 제출 인수 기준 (Checklist) — 구현 완료 반영
 - [x] DHCP 파일 로드 실패 시 무조건 Block 처리 (우회 로직 금지)
@@ -62,9 +62,9 @@
 - [x] Goroutine + worker pool 기반 병렬 검증 — vCenter 접속/DHCP 조회/5단계 검증 전부 병렬, 동시 실행 수는 CPU 코어 기준 최대 16개로 제한 (`-race` 디텍터로 데이터 레이스 없음 확인)
 - [x] BM 접두어당 VM 개수는 옵션이 아니라 vCenter 실제 등록 수만큼 자동 파악
 - [x] 같은 그룹 형제끼리 MAC이 뒤바뀐 교차 설치(역설치)를 별도로 탐지해 Fail 사유에 명시 (실제 vCenter VM으로 재현 테스트 완료)
-- [ ] Race condition 대응(Tools 기동 직후 재시도/backoff) — 미구현, §6 참고
+- [x] Race condition 대응 — 검토 결과 불필요로 확정 (§6 참고), 구현 안 함
 
 ## 8. 구현 현황
-`.claude/VM/vm_verifier/`에 Go 모듈로 구현 완료. 실제 vCenter(192.168.0.50) + `/user/caedhcp/` 샘플 파일로 end-to-end 테스트 완료(정상 케이스 PASS, MAC 오기입 케이스 FAIL 모두 확인). 상세 사용법은 [README.md](./README.md) 참고.
+`.claude/VM/vm_verifier/`에 Go 모듈로 구현 완료. 실제 vCenter(192.168.0.50) + `/user/caedhcp/` 샘플 파일로 end-to-end 테스트 완료 — 정상 케이스 PASS, MAC 오기입 케이스 FAIL, 그룹 내 교차 설치(역설치) 탐지, vCenter 간 VM명 중복 경고까지 전부 실제 인프라로 재현 테스트 완료. 상세 사용법은 [README.md](./README.md) 참고.
 
-남은 작업은 §6의 "미해결" 항목(Race condition 대응)과 §7 체크리스트의 미구현 항목(goroutine 병렬화)뿐이다.
+§6·§7의 확정 항목은 모두 반영 완료. v1 범위는 마무리됨 — 추가 요구사항이 없으면 이 계획서는 완결 상태로 본다.
