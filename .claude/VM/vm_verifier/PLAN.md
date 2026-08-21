@@ -13,16 +13,15 @@
 - **불일치 발견 시 조치: 로그/알림만.** VM 강제 종료나 네트워크 격리 같은 자동 조치는 하지 않는다. Pass/Fail 판정과 상세 사유만 출력·기록하고, 이후 조치는 작업자가 수동으로 판단한다.
 - **동시성:** 여러 VM(ev01~03)을 한 번에 검증할 경우 goroutine 기반 병렬 처리, worker pool로 동시성 제한 ([[rhel-esxi-troubleshooting]] 기준 — 무제한 goroutine 금지).
 
-## 3. 인증 — 확정
+## 3. 인증 — 확정 (구현 시 단순화됨)
 기존 vCenter 접속 도구들과 동일한 환경변수 규약을 따른다 (`vm-param-setting-check` 등에서 이미 사용 중인 패턴).
 
 | 용도 | 환경변수 |
 |---|---|
 | vCenter 접속 | `VC_USER` / `VC_PASS` (또는 `VCENTER_USER` / `VCENTER_PASS`) |
-| Guest OS 접속 (Guest Operations API) | `GUEST_USER` / `GUEST_PASS` |
 
-- Guest Operations API 호출 전 대상 VM에 VMware Tools가 실행 중인지 먼저 확인. Tools 미기동 시 "검증 불가(Inconclusive)"로 별도 처리하고 Fail과 구분한다.
-- Guest 자격증명이 VM마다 다를 경우를 대비해, 단일 계정으로 안 될 경우 계정을 VM 그룹(ev01/02/03)별로 오버라이드할 수 있게 열어둔다 (v1은 단일 계정 우선).
+- **Guest Operations API(별도 게스트 로그인)는 쓰지 않는다.** 대신 vCenter가 VMware Tools 하트비트로 이미 보고받은 `guest.hostName` / `guest.net`(IP) 값을 그대로 읽는다. 게스트 자격증명 관리·계정 오버라이드가 통째로 필요 없어지고, 진짜 에이전트리스가 된다.
+- Tools가 실행 중이 아니면(`guest.toolsRunningStatus != guestToolsRunning`) 2~4단계는 "검증 불가(Inconclusive)"로 별도 처리하고 Fail과 구분한다.
 
 ## 4. DHCP 설정 파일 조회 — 확정
 - 경로: `/user/caedhcp/{/24대역}` (예: `/user/caedhcp/10.10.10.0`)
@@ -42,24 +41,24 @@
 | 4 | DNS 역방향 Lookup | 할당 IP로 PTR 조회 → 반환 hostname이 실제 OS hostname과 일치하는지 |
 | 5 | VM UUID(DMI Product UUID) 이력 대조 | vCenter가 보고하는 VM UUID를 기록해두고, 동일 hostname에 대해 이전 검증 시점의 UUID와 다르면 별도 경고(재설치/복제 이력 가능성)로 표시. MAC/hostname/IP/DNS가 모두 일치해도 UUID가 바뀌었으면 Warning으로 별도 보고 (Fail과는 구분) |
 
-## 6. 미확정 / 추가 논의 필요 (제안)
-아래는 검토 중 발견한 항목으로, 아직 사용자 결정이 없어 v1 범위에 넣지 않았다. 필요 시 다음 논의에서 확정.
+## 6. 확정된 미해결 항목 / 여전히 남은 항목
 
-- **UUID 이력 저장소:** 5단계 UUID 대조를 하려면 과거 UUID를 어딘가에 저장해야 함 (로컬 파일? §6의 감사 로그와 같은 저장소?) — 감사 로그 저장소 확정 시 함께 결정.
-- **DHCP/DNS 서버 종류:** DHCP는 `/user/caedhcp/` 경로 파일 기반으로 확정. DNS는 어떤 서버(BIND/PowerDNS 등)이고 조회 방식이 zone file 직접 파싱인지 API인지 미정 — PTR 조회는 우선 표준 `net.LookupAddr` 사용 예정이나, 특수 DNS 서버라면 별도 구현 필요.
-- **감사 로그 저장소:** "암호화 해시 처리 후 중앙 로그 서버 직송"이 원본 계획에 있으나 로그 서버 종류(Syslog/파일 서버/기타)가 미정. v1은 우선 로컬 파일(JSON) 출력으로 시작하고 추후 확정.
-- **Race condition 대응:** Tools 기동 직후 IP/hostname이 아직 안정화되지 않을 수 있어 재시도(retry + backoff) 로직이 필요. v1 구현 시 반영 예정.
+- **UUID 이력 저장소 — 확정:** 실행 디렉토리의 `vm-verifier-uuid-history.json`(로컬 파일, git 미포함)에 hostname→UUID로 저장. 별도 중앙 저장소 불필요.
+- **감사 로그 저장소 — 확정:** 원본 계획의 "암호화 해시 + 중앙 로그 서버 직송" 요구는 폐기. 대신 **불일치(FAIL/WARN)가 감지된 경우에만** 실행 디렉토리의 `LOG/vm-verifier-YYYYMMDD.log`에 append. 별도 로그 서버 불필요. PASS/INCONCLUSIVE만 있는 정상 실행은 로그를 남기지 않는다(노이즈 방지).
+- **DNS 서버 종류 확인 방법 — 확정:** `check_dns_type.sh`로 SSH 접속 없이 CHAOS 클래스 쿼리(`dig version.bind/version.server chaos txt`)를 날려 원격에서 소프트웨어를 추정한다. 다만 이 방식은 대상 DNS가 CHAOS 쿼리를 막아두면(예: 퍼블릭 DNS) 응답이 안 올 수 있어, 그 경우엔 담당자 확인이 필요하다. **실제 운영 DNS가 어떤 소프트웨어인지는 아직 확인되지 않음** — PTR/A 레코드 조회 자체는 표준 `net.LookupHost`/`net.LookupAddr`로 구현되어 있어 일반적인 DNS라면 그대로 동작한다.
+- **Race condition 대응 — 미해결:** Tools 기동 직후 IP/hostname이 아직 안정화되지 않을 수 있음. v1에는 재시도 로직이 없다 — 작업자가 수동 실행이므로 Tools가 완전히 뜬 뒤 실행하는 것으로 우선 대응(운영 절차로 커버), 추후 필요시 `-retry`/backoff 옵션 추가 검토.
 
-## 7. 개발팀 제출 인수 기준 (Checklist) — 원본 유지 + 보완
-- [ ] DHCP 파일 로드 실패 시 무조건 Block 처리 (우회 로직 금지)
-- [ ] Goroutine + worker pool 기반 병렬 검증 (ev01~03 동시 처리)
-- [ ] 에이전트리스: 대상 서버에 별도 데몬 설치 없이 vCenter API(govmomi) + Go 표준 라이브러리만 사용
-- [ ] 검증 결과(Pass/Fail) 리포트 출력 — 로그/알림까지만, 자동 조치(강제종료 등) 없음
-- [ ] VMware Tools 미기동 상태는 Fail이 아닌 별도 상태(Inconclusive)로 구분
-- [ ] Guest 인증 실패와 정합성 불일치(Fail)를 로그에서 구분 가능하게 표기
-- [ ] UUID 이력 불일치는 Fail과 분리된 Warning으로 표기
+## 7. 개발팀 제출 인수 기준 (Checklist) — 구현 완료 반영
+- [x] DHCP 파일 로드 실패 시 무조건 Block 처리 (우회 로직 금지)
+- [x] 에이전트리스: 대상 서버에 별도 데몬/게스트 로그인 없이 vCenter API(govmomi) + Go 표준 라이브러리만 사용
+- [x] 검증 결과(Pass/Fail) 리포트 출력 — 로그/알림까지만, 자동 조치(강제종료 등) 없음
+- [x] VMware Tools 미기동 상태는 Fail이 아닌 별도 상태(Inconclusive)로 구분
+- [x] UUID 이력 불일치는 Fail과 분리된 Warning으로 표기
+- [x] 불일치(FAIL/WARN) 감지 시에만 로컬 `LOG/` 폴더에 감사 로그 기록
+- [ ] Goroutine + worker pool 기반 병렬 검증 (ev01~03 동시 처리) — v1은 순차 처리, 미구현
+- [ ] Race condition 대응(재시도/backoff) — 미구현, §6 참고
 
-## 8. 다음 단계
-1. §6 미확정 항목(UUID 이력 저장소, DNS 서버 종류, 감사 로그 저장소) 확정
-2. Go 모듈 스캐폴딩 (`go.mod`, `main.go`) — [[home-test]] 규칙에 따라 실행용 bash 스크립트 + 실질 작업용 Go 스크립트 세트로 구성
-3. `/user/caedhcp/` 샘플 파일로 파서 유닛 테스트
+## 8. 구현 현황
+`.claude/VM/vm_verifier/`에 Go 모듈로 구현 완료. 실제 vCenter(192.168.0.50) + `/user/caedhcp/` 샘플 파일로 end-to-end 테스트 완료(정상 케이스 PASS, MAC 오기입 케이스 FAIL 모두 확인). 상세 사용법은 [README.md](./README.md) 참고.
+
+남은 작업은 §6의 "미해결" 항목(Race condition 대응)과 §7 체크리스트의 미구현 항목(goroutine 병렬화)뿐이다.

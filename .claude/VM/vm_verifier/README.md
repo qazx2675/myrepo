@@ -40,7 +40,19 @@ VC_USER='administrator@vsphere.local' VC_PASS='...' \
 
 VMware Tools가 아직 안 켜져 있으면 2~4단계는 `INCONCLUSIVE`로 표시된다(Fail 아님) — Tools 기동 전 실행하면 정상적인 현상이다.
 
-## 4. 알려진 제약 / 다음 단계 (PLAN.md 6장·8장 참고)
-- DNS 서버 종류(BIND/PowerDNS 등)에 따른 특수 조회는 미구현. 현재는 표준 `net.LookupHost`/`net.LookupAddr` 사용.
-- UUID 이력은 로컬 JSON 파일(`vm-verifier-uuid-history.json`, git 미포함)에 저장 — 중앙 감사 로그 저장소가 확정되면 이관 필요.
+## 4. 감사 로그
+
+불일치(FAIL 또는 WARN)가 감지된 hostname만 실행 디렉토리의 `LOG/vm-verifier-YYYYMMDD.log`에 append된다(git 미포함). 별도 중앙 로그 서버는 쓰지 않는다. 정상(PASS/INCONCLUSIVE)만 있으면 로그를 남기지 않는다.
+
+## 5. DNS 서버 종류 확인
+
+```bash
+bash check_dns_type.sh
+```
+`/etc/resolv.conf`의 네임서버들에 SSH 접속 없이 CHAOS 클래스 쿼리(`version.bind`)를 날려 소프트웨어를 추정한다. 서버가 CHAOS 쿼리를 막아뒀으면 응답이 비어있을 수 있다.
+
+## 6. 알려진 제약 / 다음 단계 (PLAN.md 6장·7장 참고)
+- Race condition 대응(Tools 기동 직후 재시도) 미구현 — Tools가 완전히 뜬 뒤 실행할 것.
+- 여러 VM 동시 검증 시 goroutine 병렬화 미구현 (v1은 순차 처리).
+- UUID 이력은 로컬 JSON 파일(`vm-verifier-uuid-history.json`, git 미포함)에 저장.
 - 트리거는 작업자 수동 실행만 지원 (이벤트 구독형 자동 트리거는 범위 밖).

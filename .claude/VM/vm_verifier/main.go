@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
+	"vm-verifier/auditlog"
 	"vm-verifier/dhcp"
 	"vm-verifier/history"
 	"vm-verifier/vc"
@@ -90,11 +92,18 @@ func main() {
 		log.Fatalf("UUID 이력 로드 실패: %v", err)
 	}
 
+	now := time.Now()
 	exitFail := false
 	for _, hostname := range hostnames {
 		vmInfo, found := vmInfos[hostname]
 		if !found {
+			result := verify.Result{Hostname: hostname, Steps: []verify.StepResult{
+				{Step: 0, Name: "vCenter VM 존재 여부", Status: verify.Fail, Detail: "vCenter에 해당 이름의 VM이 없음"},
+			}}
 			fmt.Printf("[%s] FAIL — vCenter에 해당 이름의 VM이 없음\n", hostname)
+			if err := auditlog.Write(".", now, result); err != nil {
+				log.Printf("감사 로그 기록 실패(치명적이지 않음): %v", err)
+			}
 			exitFail = true
 			continue
 		}
@@ -104,6 +113,9 @@ func main() {
 		fmt.Printf("=== %s : %s ===\n", hostname, result.Overall())
 		for _, s := range result.Steps {
 			fmt.Printf("  [%d] %-24s %-12s %s\n", s.Step, s.Name, s.Status, s.Detail)
+		}
+		if err := auditlog.Write(".", now, result); err != nil {
+			log.Printf("감사 로그 기록 실패(치명적이지 않음): %v", err)
 		}
 		if result.Overall() == verify.Fail {
 			exitFail = true
