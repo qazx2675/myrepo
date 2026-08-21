@@ -68,6 +68,6 @@ bash check_dns_type.sh
 
 ## 6. 알려진 제약 / 다음 단계 (PLAN.md 6장·7장 참고)
 - Race condition 대응(Tools 기동 직후 재시도) 미구현 — Tools가 완전히 뜬 뒤 실행할 것.
-- 이름이 여러 vCenter에 걸쳐 중복되면(동일 VM명이 vCenter A, B에 둘 다 있는 경우) 마지막으로 조회된 값으로 덮어써진다 — 보통 vCenter 간 VM명은 고유하다는 전제.
+- 이름이 여러 vCenter에 걸쳐 중복되면(동일 VM명이 vCenter A, B에 둘 다 있는 경우) 마지막으로 조회된 값으로 덮어쓰되, 빨간 깜빡임 경고를 콘솔에 출력한다 — 보통 vCenter 간 VM명은 고유하다는 전제라 이 이상의 별도 처리는 하지 않는다.
 - UUID 이력은 로컬 JSON 파일(`vm-verifier-uuid-history.json`, git 미포함)에 저장.
 - 트리거는 작업자 수동 실행만 지원 (이벤트 구독형 자동 트리거는 범위 밖).
