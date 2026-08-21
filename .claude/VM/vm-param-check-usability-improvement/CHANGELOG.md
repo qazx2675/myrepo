@@ -13,4 +13,4 @@
 - **자동교정(`fixer/plan.go`)**: `advancedOrder`에 `numa.vcpu.preferHT` 추가 — 기존 고급설정 교정 로직(`fixable`/`BuildPlan`)을 그대로 재사용하므로 이 한 줄 추가만으로 `-fix` 실행 시 FAIL 항목이 자동교정 계획에 포함되고, 실제 적용까지 이어진다.
 - **검증**: vcsim(포트 54321)에 대해 ① `-preferHT` 미지정 시 출력 없음 ② `-preferHT TRUE` 지정 + 값 없음 → FAIL ③ `-fix` dry-run 계획에 `numa.vcpu.preferHT: (설정없음) -> TRUE` 1건만 정확히 잡힘 ④ 적용 후 재검증에서 OK로 전환 — 4가지 시나리오 모두 실제 vCenter API로 확인함.
 - **범위**: 이번 변경은 위 파일들(`checker/preferht.go` 신규, `main.go`/`fixer/plan.go` 각 수 줄)에 한정되며, 기존 체크/교정 로직은 전혀 건드리지 않음.
-- **참고**: 이 매개변수를 독립적으로 vCenter에 일괄 적용하는 별도 병렬 스크립트(`numa_preferht_setting-source`, `legacy-vm-param-fix-external-orchestration/`에 추가 예정)는 이 변경에 포함되지 않음 — 별도로 작업 진행.
+- **참고**: 이 매개변수를 독립적으로 vCenter에 일괄 적용하는 별도 병렬 스크립트는 `legacy-vm-param-fix-external-orchestration/numa_preferht_setting-source/`에 별도로 추가됨(이 도구의 체크/자동교정 로직과는 무관한 독립 스크립트 — 변경 이력은 그 폴더의 README.md 참고).
