@@ -34,7 +34,7 @@ func runDemo(out, user string, onlyFail, noColor bool) {
 		demoExpectCores, demoExpectNuma, demoExpectCPU, demoExpectMemGB, demoExpectDiskGB, demoExpectShares)
 
 	vms := BuildSyntheticVMs()
-	shares := checker.SharesExpect{EV01: demoExpectShares, EV02: intPtr(demoExpectShares)}
+	shares := checker.SharesExpect{EV01: checker.RatioShares(demoExpectShares), EV02: checker.RatioShares(demoExpectShares)}
 	affinityEV02 := demoAffinityEV02()
 	singleVMMode := len(vms) == 1 // 합성 데이터는 항상 3대라 여기선 사실상 false
 

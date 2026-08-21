@@ -61,9 +61,9 @@ func main() {
 	diskEV02Str := flag.String("disk-ev02", "", "기대값: ev02 그룹 디스크 총량 GB (옵션, 안 주면 ev02 디스크 체크 스킵). -disk와 동일하게 쉼표로 여러 개 허용")
 	diskEV03Str := flag.String("disk-ev03", "", "기대값: ev03 그룹 디스크 총량 GB (옵션, 안 주면 ev03 디스크 체크 스킵). -disk와 동일하게 쉼표로 여러 개 허용")
 
-	sharesEV01Str := flag.String("shares-ev01", "", "기대값: ev01 그룹 CPU Shares (필수). ratio 숫자(예: 4000) 또는 'normal'. normal을 주면 ratio 숫자 대신 CPU/메모리 Shares Level이 둘 다 normal인지를 본다")
-	sharesEV02Str := flag.String("shares-ev02", "", "기대값: ev02 그룹 CPU Shares(ratio) (옵션, 안 주면 ev02 shares 체크 스킵)")
-	sharesEV03Str := flag.String("shares-ev03", "", "기대값: ev03 그룹 CPU Shares(ratio) (옵션, 안 주면 ev03 shares 체크 스킵)")
+	sharesEV01Str := flag.String("shares-ev01", "", "기대값: ev01 그룹 CPU Shares (필수). ratio 숫자(예: 4000) 또는 'normal', 쉼표로 여러 개 나열 가능(예: 4000,normal) — 그 중 하나만 맞아도 OK. normal은 CPU/메모리 Shares Level이 normal인지를 본다")
+	sharesEV02Str := flag.String("shares-ev02", "", "기대값: ev02 그룹 CPU Shares (옵션, 안 주면 ev02 shares 체크 스킵). -shares-ev01과 동일하게 ratio 숫자/'normal'을 쉼표로 여러 개 허용")
+	sharesEV03Str := flag.String("shares-ev03", "", "기대값: ev03 그룹 CPU Shares (옵션, 안 주면 ev03 shares 체크 스킵). -shares-ev01과 동일하게 ratio 숫자/'normal'을 쉼표로 여러 개 허용")
 
 	affinityEV01Path := flag.String("affinity-ev01", "", "ev01 그룹 기대 affinity 파일 (옵션. 안 주면 기존과 동일하게 -ht/-cores 기반 자동계산을 사용. 주면 파일값으로 대체)")
 	affinityEV02Path := flag.String("affinity-ev02", "", "ev02 그룹 기대 affinity 파일 (옵션, 안 주면 ev02 affinity 체크 스킵)")
@@ -243,31 +243,18 @@ func main() {
 	buildExpect := func() expectSet {
 		requireExpectFlags()
 
-		// ev01만 'normal'(Level 비교)을 허용한다. 그 외에는 지금까지처럼 ratio 숫자.
-		var sharesEV01 int
-		sharesEV01Normal := strings.EqualFold(*sharesEV01Str, "normal")
-		if !sharesEV01Normal {
-			v, err := strconv.Atoi(*sharesEV01Str)
-			if err != nil {
-				log.Fatalf("-shares-ev01 값은 ratio 숫자 또는 'normal' 이어야 합니다 (받은 값: %q)", *sharesEV01Str)
-			}
-			sharesEV01 = v
+		// shares-ev01/02/03는 쉼표로 여러 개(ratio 숫자 또는 'normal' 혼합) 허용.
+		sharesEV01, err := parseSharesListFlag("shares-ev01", *sharesEV01Str)
+		if err != nil {
+			log.Fatal(err)
 		}
-
-		var sharesEV02, sharesEV03 *int
-		if *sharesEV02Str != "" {
-			v, err := strconv.Atoi(*sharesEV02Str)
-			if err != nil {
-				log.Fatalf("-shares-ev02 값이 정수가 아닙니다: %v", err)
-			}
-			sharesEV02 = &v
+		sharesEV02, err := parseSharesListFlag("shares-ev02", *sharesEV02Str)
+		if err != nil {
+			log.Fatal(err)
 		}
-		if *sharesEV03Str != "" {
-			v, err := strconv.Atoi(*sharesEV03Str)
-			if err != nil {
-				log.Fatalf("-shares-ev03 값이 정수가 아닙니다: %v", err)
-			}
-			sharesEV03 = &v
+		sharesEV03, err := parseSharesListFlag("shares-ev03", *sharesEV03Str)
+		if err != nil {
+			log.Fatal(err)
 		}
 
 		coresEV02, err := parseOptionalIntFlag("cores-ev02", *coresEV02Str)
@@ -322,7 +309,7 @@ func main() {
 			CPU:      checker.CPUExpect{Base: *cpu, EV02: cpuEV02, EV03: cpuEV03},
 			Mem:      checker.MemExpect{Base: *mem, EV02: memEV02, EV03: memEV03},
 			Disk:     checker.DiskExpect{Base: diskBase, EV02: diskEV02, EV03: diskEV03},
-			Shares:   checker.SharesExpect{EV01: sharesEV01, EV01Normal: sharesEV01Normal, EV02: sharesEV02, EV03: sharesEV03},
+			Shares:   checker.SharesExpect{EV01: sharesEV01, EV02: sharesEV02, EV03: sharesEV03},
 			HTOn:     *ht == "on",
 			PreferHT: *preferHT,
 		}
@@ -1033,6 +1020,32 @@ func parseIntListFlag(flagName, val string) ([]int, error) {
 			return nil, fmt.Errorf("-%s 값이 정수가 아닙니다(%q): %w", flagName, tok, err)
 		}
 		out = append(out, v)
+	}
+	return out, nil
+}
+
+// parseSharesListFlag는 쉼표로 구분된 shares 허용값 목록을 읽는다(-shares-evNN용).
+// 각 항목은 정수(ratio) 또는 'normal'일 수 있고, 섞어서 나열해도 된다(예: "4000,normal").
+// 값이 비면 nil을 돌려주므로, ev02/ev03에서는 그대로 "옵션 없음"이 된다.
+func parseSharesListFlag(flagName, val string) ([]checker.SharesItem, error) {
+	if val == "" {
+		return nil, nil
+	}
+	var out []checker.SharesItem
+	for _, tok := range strings.Split(val, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			return nil, fmt.Errorf("-%s 에 빈 값이 있습니다: %q", flagName, val)
+		}
+		if strings.EqualFold(tok, "normal") {
+			out = append(out, checker.SharesItem{Normal: true})
+			continue
+		}
+		v, err := strconv.Atoi(tok)
+		if err != nil {
+			return nil, fmt.Errorf("-%s 값은 ratio 숫자 또는 'normal' 이어야 합니다(%q): %w", flagName, tok, err)
+		}
+		out = append(out, checker.SharesItem{Ratio: v})
 	}
 	return out, nil
 }

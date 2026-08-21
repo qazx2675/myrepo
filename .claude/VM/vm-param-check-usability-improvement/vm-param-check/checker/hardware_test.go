@@ -31,7 +31,7 @@ func TestCheckSharesNormal(t *testing.T) {
 				CPUShares:    12345,
 				MemoryShares: 67890,
 			}
-			got := checkShares(vm, SharesExpect{EV01Normal: true}, "ev01", false)
+			got := checkShares(vm, SharesExpect{EV01: []SharesItem{{Normal: true}}}, "ev01", false)
 			if len(got) != 2 {
 				t.Fatalf("Finding %d개, 기대 2개(CPU/메모리): %+v", len(got), got)
 			}
@@ -54,7 +54,7 @@ func TestCheckHardwareDiskAllowsMultiple(t *testing.T) {
 		vm := model.VMInfo{Name: "host01ev01", DiskGB: actualGB}
 		got := CheckHardware(vm,
 			CPUExpect{}, MemExpect{}, DiskExpect{Base: expect},
-			SharesExpect{EV01Normal: true}, "ev01", false, false)
+			SharesExpect{EV01: []SharesItem{{Normal: true}}}, "ev01", false, false)
 		for _, f := range got {
 			if f.Key == "disk total capacity (GB 환산, 반올림)" {
 				return f
@@ -100,7 +100,7 @@ func TestCheckSharesRatioUnchanged(t *testing.T) {
 		CPUShares:         4000,
 		MemoryShares:      4000,
 	}
-	got := checkShares(vm, SharesExpect{EV01: 4000}, "ev01", false)
+	got := checkShares(vm, SharesExpect{EV01: RatioShares(4000)}, "ev01", false)
 	if len(got) != 2 {
 		t.Fatalf("Finding %d개, 기대 2개: %+v", len(got), got)
 	}
@@ -110,8 +110,40 @@ func TestCheckSharesRatioUnchanged(t *testing.T) {
 
 	// Level이 custom이 아니면 ratio 모드에서는 여전히 FAIL이어야 한다.
 	vm.CPUSharesLevel = "normal"
-	got = checkShares(vm, SharesExpect{EV01: 4000}, "ev01", false)
+	got = checkShares(vm, SharesExpect{EV01: RatioShares(4000)}, "ev01", false)
 	if got[0].Result != "FAIL" {
 		t.Errorf("ratio 모드인데 level=normal이 FAIL이 아닙니다: %q", got[0].Result)
+	}
+}
+
+// -shares-ev01=4000,normal 처럼 쉼표로 여러 개를 섞으면 둘 중 하나만 맞아도 OK여야 한다.
+func TestCheckSharesMixedList(t *testing.T) {
+	items := []SharesItem{{Ratio: 4000}, {Normal: true}}
+
+	// ratio로 일치
+	vm := model.VMInfo{Name: "host01ev01", CPUSharesLevel: "custom", CPUShares: 4000, MemorySharesLevel: "custom", MemoryShares: 4000}
+	got := checkShares(vm, SharesExpect{EV01: items}, "ev01", false)
+	if got[0].Result != "OK" || got[1].Result != "OK" {
+		t.Errorf("ratio 매칭인데 OK가 아닙니다: cpu=%q mem=%q", got[0].Result, got[1].Result)
+	}
+
+	// normal로 일치 (ratio는 목록에 없는 값이어도 normal이면 OK)
+	vm = model.VMInfo{Name: "host01ev01", CPUSharesLevel: "normal", CPUShares: 99999, MemorySharesLevel: "normal", MemoryShares: 99999}
+	got = checkShares(vm, SharesExpect{EV01: items}, "ev01", false)
+	if got[0].Result != "OK" || got[1].Result != "OK" {
+		t.Errorf("normal 매칭인데 OK가 아닙니다: cpu=%q mem=%q", got[0].Result, got[1].Result)
+	}
+	if got[0].Actual != "level=normal" {
+		t.Errorf("Actual 표시가 예상과 다릅니다: %q", got[0].Actual)
+	}
+
+	// 둘 다 아니면 FAIL
+	vm = model.VMInfo{Name: "host01ev01", CPUSharesLevel: "custom", CPUShares: 1234, MemorySharesLevel: "custom", MemoryShares: 1234}
+	got = checkShares(vm, SharesExpect{EV01: items}, "ev01", false)
+	if got[0].Result != "FAIL" || got[1].Result != "FAIL" {
+		t.Errorf("둘 다 불일치인데 FAIL이 아닙니다: cpu=%q mem=%q", got[0].Result, got[1].Result)
+	}
+	if got[0].Expected != "4000 또는 normal" {
+		t.Errorf("Expected 표시가 예상과 다릅니다: %q", got[0].Expected)
 	}
 }

@@ -39,7 +39,7 @@ func runScale(n int, out, user string, onlyFail, noColor bool) {
 
 	start := time.Now()
 	vms := buildSyntheticVMsN(n)
-	shares := checker.SharesExpect{EV01: scaleExpectShares, EV02: intPtr(scaleExpectShares), EV03: intPtr(scaleExpectShares)}
+	shares := checker.SharesExpect{EV01: checker.RatioShares(scaleExpectShares), EV02: checker.RatioShares(scaleExpectShares), EV03: checker.RatioShares(scaleExpectShares)}
 	affinityEV02 := singleCoreAffinityExpect(scaleExpectCPU)
 	affinityEV03 := singleCoreAffinityExpect(scaleExpectCPU)
 	singleVMMode := len(vms) == 1
