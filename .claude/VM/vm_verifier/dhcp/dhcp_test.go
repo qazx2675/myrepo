@@ -1,0 +1,50 @@
+package dhcp
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestParseFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "10.10.10.0")
+	content := `
+subnet 10.10.10.0 netmask 255.255.255.0 {
+    host svr01ev01 {
+        hardware ethernet 00:11:22:33:44:01;
+        fixed-address 10.10.10.15;
+    }
+    host svr01ev02 {
+        hardware ethernet 00:11:22:33:44:02;
+        fixed-address 10.10.10.89;
+    }
+    host svr01ev03 {
+        hardware ethernet 00:11:22:33:44:03;
+        fixed-address 10.10.10.201;
+    }
+}
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	records, err := ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile 실패: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("호스트 3개가 파싱돼야 하는데 %d개", len(records))
+	}
+
+	got := records["svr01ev02"]
+	if got.MAC != "00:11:22:33:44:02" || got.IP != "10.10.10.89" {
+		t.Fatalf("svr01ev02 불일치: %+v", got)
+	}
+}
+
+func TestParseFile_NotFound(t *testing.T) {
+	if _, err := ParseFile("/no/such/file"); err == nil {
+		t.Fatal("파일 없을 때 에러가 나야 함 (우회 통과 금지)")
+	}
+}
