@@ -176,13 +176,21 @@ func fetchAllVMs(vcAddrs []string, vcUser, vcPass string) map[string]vc.VMInfo {
 	close(resCh)
 
 	allVMs := make(map[string]vc.VMInfo)
+	origin := make(map[string]string) // VM 이름 -> 그 값을 채운 vCenter 주소 (중복 탐지용)
 	for r := range resCh {
 		if r.err != nil {
 			log.Printf("[경고] vCenter %s 조회 실패, 이 vCenter는 건너뜀: %v", r.addr, r.err)
 			continue
 		}
 		for name, info := range r.vms {
+			if prevAddr, dup := origin[name]; dup && prevAddr != r.addr {
+				// vCenter 간 VM 이름은 보통 고유하지만(호스트가 unique), 혹시 겹치면 조용히
+				// 덮어쓰지 않고 빨간 깜빡임 경고로 눈에 띄게 알린다.
+				fmt.Printf("\033[5;31m[경고] VM 이름 중복: %s 가 %s 와 %s 양쪽 vCenter에 모두 존재함 — 마지막 조회 값(%s)으로 덮어씀\033[0m\n",
+					name, prevAddr, r.addr, r.addr)
+			}
 			allVMs[name] = info
+			origin[name] = r.addr
 		}
 	}
 	return allVMs

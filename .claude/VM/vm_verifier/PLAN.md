@@ -45,6 +45,7 @@
 
 ## 6. 확정된 미해결 항목 / 여전히 남은 항목
 
+- **vCenter 간 VM명 중복 — 확정:** vCenter들의 host(VM)명은 보통 고유하므로 별도 식별 로직은 추가하지 않는다. 다만 혹시 중복되면 조용히 덮어쓰지 않고 빨간 깜빡임 경고(ANSI `\033[5;31m`)를 콘솔에 출력한다 — 실제로 2개의 vCenter 항목이 같은 VM명을 반환하는 상황으로 재현 테스트 완료.
 - **UUID 이력 저장소 — 확정:** 실행 디렉토리의 `vm-verifier-uuid-history.json`(로컬 파일, git 미포함)에 hostname→UUID로 저장. 별도 중앙 저장소 불필요.
 - **감사 로그 저장소 — 확정:** 원본 계획의 "암호화 해시 + 중앙 로그 서버 직송" 요구는 폐기. 대신 **불일치(FAIL/WARN)가 감지된 경우에만** 실행 디렉토리의 `LOG/vm-verifier-YYYYMMDD.log`에 append. 별도 로그 서버 불필요. PASS/INCONCLUSIVE만 있는 정상 실행은 로그를 남기지 않는다(노이즈 방지).
 - **DNS 서버 종류 확인 방법 — 확정:** `check_dns_type.sh`로 SSH 접속 없이 CHAOS 클래스 쿼리(`dig version.bind/version.server chaos txt`)를 날려 원격에서 소프트웨어를 추정한다. 다만 이 방식은 대상 DNS가 CHAOS 쿼리를 막아두면(예: 퍼블릭 DNS) 응답이 안 올 수 있어, 그 경우엔 담당자 확인이 필요하다. **실제 운영 DNS가 어떤 소프트웨어인지는 아직 확인되지 않음** — PTR/A 레코드 조회 자체는 표준 `net.LookupHost`/`net.LookupAddr`로 구현되어 있어 일반적인 DNS라면 그대로 동작한다.
