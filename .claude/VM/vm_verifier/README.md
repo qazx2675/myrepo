@@ -57,16 +57,7 @@ VMware Tools가 아직 안 켜져 있으면 2~4단계는 `INCONCLUSIVE`로 표�
 
 불일치(FAIL 또는 WARN)가 감지된 hostname만 실행 디렉토리의 `LOG/vm-verifier-YYYYMMDD.log`에 append된다(git 미포함). 별도 중앙 로그 서버는 쓰지 않는다. 정상(PASS/INCONCLUSIVE)만 있으면 로그를 남기지 않는다.
 
-## 5. DNS 서버 종류 확인
-
-```bash
-bash check_dns_type.sh
-```
-`/etc/resolv.conf`의 네임서버들에 SSH 접속 없이 CHAOS 클래스 쿼리(`version.bind`)를 날려 소프트웨어를 추정한다. 서버가 CHAOS 쿼리를 막아뒀으면 응답이 비어있을 수 있다.
-
-검증 로직 자체가 이 결과에 의존하진 않는다 — DHCP 대역 파일 자동 판별과 3/4단계가 전부 DNS 응답에 의존하게 되면서, DNS 조회가 실패했을 때 "DNS 서버 특성 때문인지" "진짜 오설치 때문인지" 구분하는 운영/트러블슈팅 보조 도구다.
-
-## 6. 알려진 제약 (PLAN.md 6장·7장 참고)
+## 5. 알려진 제약 (PLAN.md 6장·7장 참고)
 - 이름이 여러 vCenter에 걸쳐 중복되면(동일 VM명이 vCenter A, B에 둘 다 있는 경우) 마지막으로 조회된 값으로 덮어쓰되, 빨간 깜빡임 경고를 콘솔에 출력한다 — 보통 vCenter 간 VM명은 고유하다는 전제라 이 이상의 별도 처리는 하지 않는다.
 - UUID 이력은 로컬 JSON 파일(`vm-verifier-uuid-history.json`, git 미포함)에 저장.
 - 트리거는 작업자 수동 실행만 지원 (이벤트 구독형 자동 트리거는 범위 밖).
