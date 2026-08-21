@@ -48,8 +48,7 @@
 - **vCenter 간 VM명 중복 — 확정:** vCenter들의 host(VM)명은 보통 고유하므로 별도 식별 로직은 추가하지 않는다. 다만 혹시 중복되면 조용히 덮어쓰지 않고 빨간 깜빡임 경고(ANSI `\033[5;31m`)를 콘솔에 출력한다 — 실제로 2개의 vCenter 항목이 같은 VM명을 반환하는 상황으로 재현 테스트 완료.
 - **UUID 이력 저장소 — 확정:** 실행 디렉토리의 `vm-verifier-uuid-history.json`(로컬 파일, git 미포함)에 hostname→UUID로 저장. 별도 중앙 저장소 불필요.
 - **감사 로그 저장소 — 확정:** 원본 계획의 "암호화 해시 + 중앙 로그 서버 직송" 요구는 폐기. 대신 **불일치(FAIL/WARN)가 감지된 경우에만** 실행 디렉토리의 `LOG/vm-verifier-YYYYMMDD.log`에 append. 별도 로그 서버 불필요. PASS/INCONCLUSIVE만 있는 정상 실행은 로그를 남기지 않는다(노이즈 방지).
-- **DNS 서버 종류 확인 방법 — 확정:** `check_dns_type.sh`로 SSH 접속 없이 CHAOS 클래스 쿼리(`dig version.bind/version.server chaos txt`)를 날려 원격에서 소프트웨어를 추정한다. 다만 이 방식은 대상 DNS가 CHAOS 쿼리를 막아두면(예: 퍼블릭 DNS) 응답이 안 올 수 있어, 그 경우엔 담당자 확인이 필요하다. **실제 운영 DNS가 어떤 소프트웨어인지는 아직 확인되지 않음** — PTR/A 레코드 조회 자체는 표준 `net.LookupHost`/`net.LookupAddr`로 구현되어 있어 일반적인 DNS라면 그대로 동작한다.
-  - **용도:** 검증 로직 자체가 이 스크립트 결과에 의존하진 않는다(운영/트러블슈팅 보조 도구). §4에서 DHCP 대역 파일 자동 판별과 5단계 3/4단계가 전부 DNS 응답에 의존하게 되면서 중요도가 커졌다 — DNS 조회 실패가 났을 때 "DNS 서버 자체 특성(캐싱/CHAOS 차단 등) 때문인지" "진짜 오설치 때문인지" 구분하는 데 쓴다.
+- **DNS 서버 종류 확인 — 불필요 판단(확정), 도구 제거:** SSH 없이 CHAOS 쿼리로 DNS 소프트웨어를 추정하는 `check_dns_type.sh`를 만들었으나, 검증 로직이 그 결과에 의존하지 않는 운영 보조 도구였고 실익이 적어 삭제함. PTR/A 레코드 조회는 표준 `net.LookupHost`/`net.LookupAddr`로 구현되어 있어 일반적인 DNS 서버라면 그대로 동작한다.
 - **Race condition 대응 — 불필요 판단(확정), 구현 안 함:** DNS 조회(`net.LookupHost`/`net.LookupAddr`)는 `/etc/resolv.conf`에 등록된 서버에 단순 질의만 하는 상태 없는(stateless) 호출이라 그 자체로는 타이밍 문제가 없다. 애초 우려는 DNS가 아니라 vCenter Guest Tools 하트비트(`guest.hostName`/`guest.net`, 2~4단계에서 사용)가 Tools 기동 직후에는 아직 최신값이 아닐 수 있다는 이론적 가능성이었는데, 실제 운영 방식이 OS 설치 완료 후 작업자가 `run.sh`를 수동 실행하는 것이라 Tools가 막 켜지는 시점과 실행 시점이 겹치지 않고, 실제 환경에서도 싱크 문제가 없었던 것으로 확인되어 재시도/backoff 로직은 추가하지 않기로 함.
 
 ## 7. 개발팀 제출 인수 기준 (Checklist) — 구현 완료 반영
