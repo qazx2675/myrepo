@@ -1,9 +1,11 @@
-// Package dhcp는 /user/caedhcp/{/24대역} 형식의 isc-dhcp-server 설정 파일에서
+// Package dhcp는 /user/caedhcp/{3옥텟 대역} 형식의 isc-dhcp-server 설정 파일에서
 // "host <hostname> { hardware ethernet ...; fixed-address ...; }" 블록을 파싱한다. (PLAN.md 4장)
+// 파일명은 IP의 앞 3옥텟까지만 쓴다 (예: 10.10.10.15 → 파일명 "10.10.10", 뒤에 ".0" 안 붙임).
 package dhcp
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -46,7 +48,40 @@ func ParseFile(path string) (map[string]Record, error) {
 	return result, nil
 }
 
-// PathForSubnet은 /24 대역 문자열(예: 10.10.10.0)로부터 DHCP 파일 경로를 만든다.
-func PathForSubnet(root, subnet string) string {
-	return root + "/" + subnet
+// SubnetPrefix는 IPv4 주소의 앞 3옥텟을 돌려준다 (예: "10.10.10.15" -> "10.10.10").
+// DHCP 대역 파일명 규칙이 이 3옥텟까지만 쓰기 때문에, IP만 있으면 -subnet 없이 파일 경로를 만들 수 있다.
+func SubnetPrefix(ip string) (string, error) {
+	parts := strings.Split(ip, ".")
+	if len(parts) != 4 {
+		return "", fmt.Errorf("IPv4 형식이 아님: %s", ip)
+	}
+	return strings.Join(parts[:3], "."), nil
+}
+
+// Resolve는 hostname을 DNS로 조회해 소속 대역을 알아낸 뒤, root/{3옥텟} 파일을 읽어
+// 그 안의 hostname 레코드를 돌려준다. -subnet 옵션 없이 대역 파일을 자동으로 특정하기 위한 함수.
+// DNS 조회 실패, 대역 파일 없음, 파일 안에 hostname 블록이 없음은 모두 에러로 반환된다 —
+// 호출부는 이 경우 해당 hostname을 검증 실패(Block) 처리해야 한다.
+func Resolve(root, hostname string) (Record, error) {
+	ips, err := net.LookupHost(hostname)
+	if err != nil || len(ips) == 0 {
+		return Record{}, fmt.Errorf("DNS에서 %s의 IP를 찾지 못함: %v", hostname, err)
+	}
+
+	prefix, err := SubnetPrefix(ips[0])
+	if err != nil {
+		return Record{}, fmt.Errorf("%s의 DNS 응답(%s) 처리 실패: %w", hostname, ips[0], err)
+	}
+
+	path := root + "/" + prefix
+	recs, err := ParseFile(path)
+	if err != nil {
+		return Record{}, err
+	}
+
+	rec, ok := recs[hostname]
+	if !ok {
+		return Record{}, fmt.Errorf("%s 안에 %s 호스트 블록이 없음", path, hostname)
+	}
+	return rec, nil
 }

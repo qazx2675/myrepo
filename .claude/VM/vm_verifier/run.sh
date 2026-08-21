@@ -8,12 +8,6 @@ if [ ! -x ./vm-verifier ]; then
     ./setup.sh
 fi
 
-read -p "vCenter 주소 (예: 192.168.0.50): " VC_ADDR
-read -p "검증 대상 호스트명 접두어 (예: svr01): " PREFIX
-read -p "대상 IP가 속한 /24 대역 (예: 10.10.10.0): " SUBNET
-read -p "DHCP 파일 루트 경로 [/user/caedhcp]: " DHCP_ROOT
-DHCP_ROOT=${DHCP_ROOT:-/user/caedhcp}
-
 if [ -z "${VC_USER:-}" ]; then
     read -p "VC_USER: " VC_USER
 fi
@@ -21,7 +15,12 @@ if [ -z "${VC_PASS:-}" ]; then
     read -s -p "VC_PASS: " VC_PASS
     echo
 fi
-
 export VC_USER VC_PASS
 
-./vm-verifier -vc "$VC_ADDR" -prefix "$PREFIX" -subnet "$SUBNET" -dhcp-root "$DHCP_ROOT"
+read -p "vCenter 목록 파일 [vcenter.txt]: " VCENTER_LIST
+VCENTER_LIST=${VCENTER_LIST:-vcenter.txt}
+read -p "검증 대상 BM 접두어 목록 파일: " TARGETS
+read -p "DHCP 파일 루트 경로 [/user/caedhcp]: " DHCP_ROOT
+DHCP_ROOT=${DHCP_ROOT:-/user/caedhcp}
+
+./vm-verifier -vcenterList "$VCENTER_LIST" -f "$TARGETS" -dhcp-root "$DHCP_ROOT"

@@ -8,7 +8,7 @@ import (
 
 func TestParseFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "10.10.10.0")
+	path := filepath.Join(dir, "10.10.10")
 	content := `
 subnet 10.10.10.0 netmask 255.255.255.0 {
     host svr01ev01 {
@@ -46,5 +46,35 @@ subnet 10.10.10.0 netmask 255.255.255.0 {
 func TestParseFile_NotFound(t *testing.T) {
 	if _, err := ParseFile("/no/such/file"); err == nil {
 		t.Fatal("파일 없을 때 에러가 나야 함 (우회 통과 금지)")
+	}
+}
+
+func TestSubnetPrefix(t *testing.T) {
+	got, err := SubnetPrefix("10.10.10.15")
+	if err != nil {
+		t.Fatalf("SubnetPrefix 실패: %v", err)
+	}
+	if got != "10.10.10" {
+		t.Fatalf("기대값 10.10.10, 실제값 %s", got)
+	}
+
+	got, err = SubnetPrefix("1.1.1.1")
+	if err != nil {
+		t.Fatalf("SubnetPrefix 실패: %v", err)
+	}
+	if got != "1.1.1" {
+		t.Fatalf("기대값 1.1.1, 실제값 %s", got)
+	}
+}
+
+func TestSubnetPrefix_Invalid(t *testing.T) {
+	if _, err := SubnetPrefix("not-an-ip"); err == nil {
+		t.Fatal("IPv4 형식이 아니면 에러가 나야 함")
+	}
+}
+
+func TestResolve_DNSFailure(t *testing.T) {
+	if _, err := Resolve(t.TempDir(), "no-such-host.invalid."); err == nil {
+		t.Fatal("존재하지 않는 hostname은 DNS 조회 실패로 에러가 나야 함")
 	}
 }

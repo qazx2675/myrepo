@@ -46,6 +46,12 @@ func (r Result) Overall() Status {
 	return overall
 }
 
+// ContainsFold는 list 안에 target과 대소문자 무시하고 일치하는 값이 있는지 본다.
+// main.go의 교차 스왑 탐지(같은 BM 그룹 형제끼리 MAC 대조)에서도 재사용한다.
+func ContainsFold(list []string, target string) bool {
+	return containsFold(list, target)
+}
+
 func containsFold(list []string, target string) bool {
 	for _, v := range list {
 		if strings.EqualFold(v, target) {
@@ -56,18 +62,24 @@ func containsFold(list []string, target string) bool {
 }
 
 // Check는 hostname 1개(예: svr01ev01)에 대해 5단계를 순서대로 실행한다.
-// dhcpRecord: DHCP 파일에서 파싱된 이 호스트의 정적 MAC/IP.
+// dhcpRecord/dhcpErr: DNS로 대역을 자동 판별해 읽은(dhcp.Resolve) 이 호스트의 정적 MAC/IP.
+// dhcpErr가 있으면 DNS 조회/파일 로드/호스트 블록 중 하나를 못 찾은 것이라 1단계는 무조건 Fail.
+// swapNote: 같은 BM 그룹 형제와 MAC이 뒤바뀐 교차 설치(역설치)가 확인되면 그 설명, 아니면 "".
 // vmInfo: vCenter에서 조회한 이 VM의 정보.
 // prevUUID: 이전 실행에서 기록된 UUID(없으면 "").
-func Check(hostname string, dhcpRecord dhcp.Record, vmInfo vc.VMInfo, prevUUID string) Result {
+func Check(hostname string, dhcpRecord dhcp.Record, dhcpErr error, swapNote string, vmInfo vc.VMInfo, prevUUID string) Result {
 	r := Result{Hostname: hostname}
 
 	// 1단계: vCenter vNIC MAC ↔ DHCP MAC
-	if dhcpRecord.MAC == "" {
-		r.Steps = append(r.Steps, StepResult{1, "vCenter MAC ↔ DHCP", Fail, "DHCP 파일에 해당 호스트 블록이 없음"})
-	} else if containsFold(vmInfo.MACs, dhcpRecord.MAC) {
+	switch {
+	case dhcpErr != nil:
+		r.Steps = append(r.Steps, StepResult{1, "vCenter MAC ↔ DHCP", Fail, dhcpErr.Error()})
+	case containsFold(vmInfo.MACs, dhcpRecord.MAC):
 		r.Steps = append(r.Steps, StepResult{1, "vCenter MAC ↔ DHCP", Pass, dhcpRecord.MAC})
-	} else {
+	case swapNote != "":
+		r.Steps = append(r.Steps, StepResult{1, "vCenter MAC ↔ DHCP", Fail,
+			fmt.Sprintf("DHCP=%s, vCenter vNIC=%v — %s", dhcpRecord.MAC, vmInfo.MACs, swapNote)})
+	default:
 		r.Steps = append(r.Steps, StepResult{1, "vCenter MAC ↔ DHCP", Fail,
 			fmt.Sprintf("DHCP=%s, vCenter vNIC=%v", dhcpRecord.MAC, vmInfo.MACs)})
 	}
@@ -89,7 +101,9 @@ func Check(hostname string, dhcpRecord dhcp.Record, vmInfo vc.VMInfo, prevUUID s
 		}
 
 		// 3단계: 실제 할당 IP ↔ DHCP fixed-address / DNS A 레코드
-		if dhcpRecord.IP == "" {
+		if dhcpErr != nil {
+			r.Steps = append(r.Steps, StepResult{3, "실제 할당 IP ↔ DHCP/DNS", Fail, "DHCP 조회 실패 — 1단계 사유 참고"})
+		} else if dhcpRecord.IP == "" {
 			r.Steps = append(r.Steps, StepResult{3, "실제 할당 IP ↔ DHCP/DNS", Fail, "DHCP fixed-address 없음"})
 		} else if !containsFold(vmInfo.GuestIPAddresses, dhcpRecord.IP) {
 			r.Steps = append(r.Steps, StepResult{3, "실제 할당 IP ↔ DHCP/DNS", Fail,

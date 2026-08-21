@@ -38,7 +38,17 @@ func FetchByNames(ctx context.Context, client *govmomi.Client, names []string) (
 	for _, n := range names {
 		wanted[n] = true
 	}
+	return fetch(ctx, client, wanted)
+}
 
+// FetchAll은 이 vCenter의 모든 VM 정보를 가져온다. 배치 모드(-vcenterList + -f)에서
+// vCenter별로 VM 전체를 긁어온 뒤, 호출부가 BM 접두어 패턴(예: {prefix}ev\d+)으로 매칭한다.
+func FetchAll(ctx context.Context, client *govmomi.Client) (map[string]VMInfo, error) {
+	return fetch(ctx, client, nil)
+}
+
+// fetch는 wanted가 nil이면 전체, 아니면 wanted에 있는 이름만 걸러서 반환한다.
+func fetch(ctx context.Context, client *govmomi.Client, wanted map[string]bool) (map[string]VMInfo, error) {
 	m := view.NewManager(client.Client)
 	cv, err := m.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
 	if err != nil {
@@ -57,7 +67,7 @@ func FetchByNames(ctx context.Context, client *govmomi.Client, names []string) (
 
 	result := make(map[string]VMInfo)
 	for _, vm := range vms {
-		if !wanted[vm.Name] {
+		if wanted != nil && !wanted[vm.Name] {
 			continue
 		}
 		info := VMInfo{
