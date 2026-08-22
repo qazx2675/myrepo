@@ -69,6 +69,14 @@ tar xzf "$PS_TARBALL" -C "$PS_INSTALL_DIR"
 ln -sf "${PS_INSTALL_DIR}/pwsh" "$PS_SYMLINK"
 chmod +x "${PS_INSTALL_DIR}/pwsh"
 
+# 폐쇄망에서는 pwsh가 시작할 때마다 업데이트 확인을 위해 인터넷으로 DNS 조회를 시도하다
+# 실패할 때까지 대기해서 셸 기동이 눈에 띄게 느려진다. 시스템 전역으로 꺼둔다.
+grep -qsF "POWERSHELL_UPDATECHECK" /etc/environment 2>/dev/null || echo "POWERSHELL_UPDATECHECK=Off" >> /etc/environment
+cat > /etc/profile.d/pwsh-updatecheck-off.sh <<'EOF'
+export POWERSHELL_UPDATECHECK=Off
+EOF
+log "폐쇄망 대응: POWERSHELL_UPDATECHECK=Off 등록 (재로그인 후 적용됨)"
+
 # ---------- 3. 모듈 배치 ----------
 log "PowerCLI / PSReadLine 모듈 배치: $PS_MODULE_DIR"
 mkdir -p "$PS_MODULE_DIR"
