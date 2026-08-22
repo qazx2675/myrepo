@@ -2,12 +2,16 @@
 # vCenter 순차 조회 cmdlet에 대해 Get-View 기반 대안을 안내하는 프록시 함수 모듈.
 # 규칙 출처: ../command-advisory-rules.md
 
-# 원본 cmdlet을 찾으려면 PowerCLI가 먼저 로드되어 있어야 함 (프로필에서 이 모듈을 바로 Import하므로 여기서도 보장)
-if (-not (Get-Module -Name VMware.PowerCLI)) {
+# 원본 cmdlet을 찾으려면 PowerCLI가 먼저 로드되어 있어야 함.
+# VMware.PowerCLI(통합 패키지, 하위 모듈 17개)는 import에만 10초 이상 걸릴 수 있어
+# 프로필에서 매번 그걸 로드하면 셸 진입이 눈에 띄게 느려진다. 이 프로젝트가 실제로 쓰는
+# cmdlet(Get-VM/Get-VMHost/Get-View/Connect-VIServer 등)은 전부 VMware.VimAutomation.Core
+# 하나에만 들어 있으므로 그것만 로드한다 (관측 벤치마크상 1초 미만).
+if (-not (Get-Module -Name VMware.VimAutomation.Core)) {
     try {
-        Import-Module VMware.PowerCLI -ErrorAction Stop
+        Import-Module VMware.VimAutomation.Core -ErrorAction Stop
     } catch {
-        Write-Warning "VMware.PowerCLI 모듈을 불러오지 못해 순차 조회 권고 기능을 건너뜁니다: $($_.Exception.Message)"
+        Write-Warning "VMware.VimAutomation.Core 모듈을 불러오지 못해 순차 조회 권고 기능을 건너뜁니다: $($_.Exception.Message)"
         return
     }
 }
