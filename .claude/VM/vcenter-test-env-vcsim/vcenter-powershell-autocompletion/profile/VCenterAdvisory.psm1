@@ -2,6 +2,16 @@
 # vCenter 순차 조회 cmdlet에 대해 Get-View 기반 대안을 안내하는 프록시 함수 모듈.
 # 규칙 출처: ../command-advisory-rules.md
 
+# 원본 cmdlet을 찾으려면 PowerCLI가 먼저 로드되어 있어야 함 (프로필에서 이 모듈을 바로 Import하므로 여기서도 보장)
+if (-not (Get-Module -Name VMware.PowerCLI)) {
+    try {
+        Import-Module VMware.PowerCLI -ErrorAction Stop
+    } catch {
+        Write-Warning "VMware.PowerCLI 모듈을 불러오지 못해 순차 조회 권고 기능을 건너뜁니다: $($_.Exception.Message)"
+        return
+    }
+}
+
 # 세션 전체 안내 끄기: $Global:VCAdvisory_Disabled = $true
 if (-not (Get-Variable -Name VCAdvisory_Disabled -Scope Global -ErrorAction SilentlyContinue)) {
     $Global:VCAdvisory_Disabled = $false
@@ -39,20 +49,35 @@ function New-VCenterAdvisoryProxy {
         [Parameter(Mandatory)] [string] $ViewType
     )
 
-    $original = Get-Command -Name $CmdletName -Module VMware.VimAutomation.Core -ErrorAction SilentlyContinue
-    if (-not $original) {
-        Write-Verbose "PowerCLI cmdlet '$CmdletName'을 찾을 수 없어 프록시 생성을 건너뜁니다 (모듈 미로드?)."
+    try {
+        $original = Get-Command -Name $CmdletName -CommandType Cmdlet, Function -ErrorAction Stop |
+            Select-Object -First 1
+    } catch {
+        Write-Verbose "PowerCLI cmdlet '$CmdletName'을 찾을 수 없어 프록시 생성을 건너뜁니다: $($_.Exception.Message)"
         return
     }
 
-    # 원본 cmdlet의 전체 파라미터 시그니처를 그대로 재현 — 자동완성/파라미터 힌트가 원본과 동일하게 동작
-    $proxyBody = [System.Management.Automation.ProxyCommand]::Create($original.Metadata)
+    try {
+        # 원본 cmdlet의 전체 파라미터 시그니처를 그대로 재현 — 자동완성/파라미터 힌트가 원본과 동일하게 동작
+        $metadata = [System.Management.Automation.CommandMetadata]::new($original)
+        $proxyBody = [System.Management.Automation.ProxyCommand]::Create($metadata)
+    } catch {
+        Write-Warning "'$CmdletName' 프록시 생성 실패, 원본 cmdlet을 그대로 둡니다: $($_.Exception.Message)"
+        return
+    }
+
+    # param 블록에 -SkipAdvisory 스위치 추가
     $proxyBody = $proxyBody -replace `
         '(\bparam\s*\()', `
         "param(`n        [switch] `$SkipAdvisory,`n"
+
+    # 안내 메시지 출력 + SkipAdvisory를 $PSBoundParameters에서 제거하는 로직을
+    # begin 블록 맨 앞(원본 cmdlet으로 파라미터를 그대로 전달하기 직전)에 삽입.
+    # process 블록에 넣으면 안 됨 — @PSBoundParameters 전달은 begin 블록에서 미리 구성되므로
+    # 거기서 SkipAdvisory를 지우지 않으면 원본 cmdlet이 모르는 파라미터라며 오류가 난다.
     $proxyBody = $proxyBody -replace `
-        '(process\s*\{)', `
-        "process {`n        if (-not `$SkipAdvisory -and -not `$Global:VCAdvisory_Disabled) { Write-VCenterAdvisory -Cmdlet '$CmdletName' -ViewType '$ViewType' }`n"
+        'begin\s*\{\s*try\s*\{', `
+        "begin`n{`n    try {`n        if (-not `$SkipAdvisory -and -not `$Global:VCAdvisory_Disabled) { Write-VCenterAdvisory -Cmdlet '$CmdletName' -ViewType '$ViewType' }`n        `$PSBoundParameters.Remove('SkipAdvisory') | Out-Null`n"
 
     Set-Item -Path "function:script:$CmdletName" -Value ([scriptblock]::Create($proxyBody))
     Export-ModuleMember -Function $CmdletName

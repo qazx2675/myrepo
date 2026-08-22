@@ -34,7 +34,7 @@ function Get-VCenterNameCandidates {
 function Register-VCenterNameCompleter {
     param(
         [Parameter(Mandatory)] [string[]] $CommandName,
-        [Parameter(Mandatory)] [string[]] $ParameterName,
+        [Parameter(Mandatory)] [string] $ParameterName,
         [Parameter(Mandatory)] [string] $ViewType
     )
 
