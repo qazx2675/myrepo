@@ -34,7 +34,19 @@ curl -LO https://github.com/PowerShell/PowerShell/releases/download/v7.6.4/power
 
 ### PowerCLI / PSReadLine
 
-`offline-package-structure.md`의 "각 구성요소 확보 방법" 참고 (`Save-Module`로 오프라인 저장).
+`Save-Module`로 오프라인 저장하는 방법은 `offline-package-structure.md`의 "각 구성요소 확보 방법" 참고. 수동으로 받고 싶으면 아래 링크 사용.
+
+**VMware.PowerCLI**
+- 페이지: https://www.powershellgallery.com/packages/VMware.PowerCLI/13.3.0.24145081
+- 직접 다운로드(.nupkg): https://www.powershellgallery.com/api/v2/package/VMware.PowerCLI/13.3.0.24145081
+- ⚠️ 같은 버전 문자열의 `13.3.0.24145083`은 PowerShell Gallery에서 deprecated 처리되어 `VCF.PowerCLI`로 이전 안내 중 — 위 `13.3.0.24145081`이 정상 배포 버전.
+
+**PSReadLine**
+- 페이지: https://www.powershellgallery.com/packages/PSReadLine/2.4.5
+- 직접 다운로드(.nupkg): https://www.powershellgallery.com/api/v2/package/PSReadLine/2.4.5
+- 참고: PSReadLine 2.4.5는 PowerShell 7.6 계열에 이미 기본 포함되어 있어, 다른 버전을 강제 고정하고 싶을 때만 별도 다운로드가 필요함.
+
+`.nupkg`는 zip 포맷이므로 확장자를 `.zip`으로 바꿔 압축을 풀면 `offline-package-structure.md`가 기대하는 `modules/<ModuleName>/` 폴더 구조를 만들 수 있음.
 
 ## 현재 상태
 
