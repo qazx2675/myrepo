@@ -122,9 +122,13 @@ done
 
 # ---------- 4. PowerCLI 기본 설정 ----------
 log "PowerCLI 기본 설정 적용 (인증서 경고 무시, CEIP 비활성화)"
+# -Scope AllUsers를 지정해야 설치 스크립트를 실행한 이 세션이 아니라
+# 실제 교육생 계정에서 새로 여는 세션에도 적용된다. (지정 안 하면 기본은 Session 범위라
+# 여기서만 적용되고, 학생 세션에서는 CEIP가 여전히 켜진 채로 매번 원격 텔레메트리 전송을
+# 시도하다 폐쇄망이라 타임아웃 — pwsh 시작이 느려지는 흔한 원인 중 하나)
 pwsh -NoProfile -Command '
   Import-Module VMware.PowerCLI -ErrorAction Stop
-  Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -ParticipateInCEIP $false -Confirm:$false | Out-Null
+  Set-PowerCLIConfiguration -Scope AllUsers -InvalidCertificateAction Ignore -ParticipateInCEIP $false -Confirm:$false | Out-Null
 '
 
 # ---------- 5. 커스텀 프로필 모듈 배치 + $PROFILE 등록 ----------
