@@ -48,6 +48,20 @@ curl -LO https://github.com/PowerShell/PowerShell/releases/download/v7.6.4/power
 
 받은 `.nupkg` 파일은 직접 풀 필요 없이 `modules/`(또는 `module/`) 폴더에 그대로 두면 된다 — `setup.sh`가 실행 시점에 알아서 `unzip`으로 풀고, 안의 `.nuspec` 메타데이터를 읽어 `Modules/<ModuleName>/<Version>/` 구조로 자동 배치한다.
 
+## 문제 해결
+
+### pwsh 실행/셸 진입이 느리다 (특히 폐쇄망)
+
+`pwsh`는 기본적으로 시작할 때마다 새 버전이 있는지 인터넷으로 확인하려 시도한다. 폐쇄망에서는 이 DNS 조회가 실패할 때까지 대기하면서 그만큼 셸 진입이 느려진다 — `A new PowerShell stable release is available: v7.x.x` 메시지가 뜨는 것도 이 기능 때문이다.
+
+`setup.sh`가 `/etc/environment`와 `/etc/profile.d/pwsh-updatecheck-off.sh`에 `POWERSHELL_UPDATECHECK=Off`을 등록해 자동으로 꺼주지만, **이미 설치한 뒤라면 재로그인해야 적용**된다. 지금 세션에 바로 적용하려면:
+
+```bash
+export POWERSHELL_UPDATECHECK=Off
+```
+
+(참고) `VMware.PowerCLI` 자체가 여러 하위 모듈을 로드하느라 원래 import에 몇 초 걸리는 건 별개 — 이건 PowerCLI 고유의 특성이라 이 프로젝트에서 줄일 수 있는 부분이 아니다.
+
 ## 현재 상태
 
 - Phase 1~4 설계/코드 산출물 작성 완료 (Windows 환경에서 문법 검증만 완료, 실제 pwsh 실행 검증은 아직)
