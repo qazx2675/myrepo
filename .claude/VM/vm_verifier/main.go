@@ -1,5 +1,6 @@
-// main.go: vm-verifier — OS 설치 직후 작업자가 수동 실행해서, vCenter/DHCP/DNS/Guest OS
-// 상태를 교차 대조해 오설치(DHCP MAC 오기입 등)를 탐지한다. (PLAN.md 참고)
+// main.go: vm-verifier — VM 생성 직후(OS 설치/파워온 전) 작업자가 수동 실행해서,
+// vCenter vNIC MAC과 DHCP 예약 MAC을 대조해 오설치(DHCP MAC 오기입으로 인한 역설치)를
+// 탐지한다. (PLAN.md 참고)
 //
 // -vcenterList로 지정된 모든 vCenter를 병렬로 조회하고, -f 파일에 나열된 BM 접두어마다
 // vCenter에 실제 등록된 {prefix}ev\d+ 패턴의 VM을 전부(자동 개수 파악) 찾아 병렬로 검증한다.
@@ -9,6 +10,7 @@
 //
 //	VC_USER=administrator@vsphere.local VC_PASS='...' \
 //	  ./vm-verifier -vcenterList vcenter.txt -f targets.txt
+//	  ./vm-verifier -vcenterList vcenter.txt -f targets.txt -failonly   # 이상 있는 것만 출력
 package main
 
 import (
@@ -26,7 +28,6 @@ import (
 
 	"vm-verifier/auditlog"
 	"vm-verifier/dhcp"
-	"vm-verifier/history"
 	"vm-verifier/vc"
 	"vm-verifier/verify"
 )
@@ -78,7 +79,7 @@ func main() {
 	vcenterListPath := flag.String("vcenterList", "vcenter.txt", "vCenter 주소 목록 파일 (한 줄에 하나)")
 	targetsPath := flag.String("f", "", "검증할 BM 접두어 목록 파일 (한 줄에 하나, '#' 주석 가능, 필수)")
 	dhcpRoot := flag.String("dhcp-root", "/user/caedhcp", "DHCP 설정 파일 루트 경로")
-	historyPath := flag.String("history", "vm-verifier-uuid-history.json", "UUID 이력 저장 파일 경로")
+	failOnly := flag.Bool("failonly", false, "PASS는 출력하지 않고 FAIL만 출력. 전부 PASS면 요약 한 줄만 출력")
 	flag.Parse()
 
 	if *targetsPath == "" {
@@ -109,6 +110,7 @@ func main() {
 	allVMs := fetchAllVMs(vcAddrs, vcUser, vcPass)
 
 	// 2) 접두어마다 실제 등록된 VM을 개수 제한 없이 전부 찾는다.
+	exitFail := false
 	var groups []group
 	for _, prefix := range targets {
 		re := regexp.MustCompile("^" + regexp.QuoteMeta(prefix) + `ev\d+$`)
@@ -119,10 +121,10 @@ func main() {
 			}
 		}
 		if len(matched) == 0 {
+			exitFail = true
 			fmt.Printf("[%s*] FAIL — 조회된 vCenter들 안에 해당 접두어의 VM이 하나도 없음\n", prefix)
-			auditlog.Write(".", time.Now(), verify.Result{Hostname: prefix + "*", Steps: []verify.StepResult{
-				{Step: 0, Name: "vCenter VM 존재 여부", Status: verify.Fail, Detail: "해당 접두어의 VM이 하나도 없음"},
-			}})
+			auditlog.Write(".", time.Now(), verify.Result{Hostname: prefix + "*", Status: verify.Fail,
+				Detail: "해당 접두어의 VM이 하나도 없음"})
 			continue
 		}
 		groups = append(groups, group{prefix, matched})
@@ -132,16 +134,14 @@ func main() {
 	//    뒤바뀐 교차 설치(역설치)가 있는지 대조한 뒤 검증 작업 목록을 만든다.
 	jobs := buildJobs(groups, allVMs, *dhcpRoot)
 
-	hist, err := history.Load(*historyPath)
-	if err != nil {
-		log.Fatalf("UUID 이력 로드 실패: %v", err)
+	if runJobs(jobs, *failOnly) {
+		exitFail = true
 	}
 
-	exitFail := runJobs(jobs, hist)
-
-	if err := history.Save(*historyPath, hist); err != nil {
-		log.Printf("UUID 이력 저장 실패(치명적이지 않음): %v", err)
+	if *failOnly && !exitFail && len(jobs) > 0 {
+		fmt.Printf("검증 완료 — 이상 없음 (VM %d대, MAC 주소가 모두 DHCP 등록 정보와 일치)\n", len(jobs))
 	}
+
 	if exitFail {
 		os.Exit(1)
 	}
@@ -257,8 +257,9 @@ func buildJobs(groups []group, allVMs map[string]vc.VMInfo, dhcpRoot string) []j
 }
 
 // runJobs는 검증 대상들을 worker pool(무제한 goroutine 금지)로 병렬 실행한다.
-// 콘솔 출력/감사 로그/UUID 이력은 공유 자원이라 mutex로 보호한다.
-func runJobs(jobs []job, hist map[string]string) bool {
+// failOnly면 PASS 결과는 콘솔에 출력하지 않는다(감사 로그는 원래도 FAIL만 기록).
+// 콘솔 출력/감사 로그는 공유 자원이라 mutex로 보호한다.
+func runJobs(jobs []job, failOnly bool) bool {
 	concurrency := runtime.NumCPU()
 	if concurrency > 16 {
 		concurrency = 16
@@ -280,28 +281,17 @@ func runJobs(jobs []job, hist map[string]string) bool {
 			defer wg.Done()
 			defer func() { <-sem }()
 
+			result := verify.Check(j.hostname, j.dhcpRec, j.dhcpErr, j.swapNote, j.vmInfo)
+
 			mu.Lock()
-			prevUUID := hist[j.hostname]
-			mu.Unlock()
-
-			result := verify.Check(j.hostname, j.dhcpRec, j.dhcpErr, j.swapNote, j.vmInfo, prevUUID)
-
-			var sb strings.Builder
-			fmt.Fprintf(&sb, "=== %s : %s ===\n", j.hostname, result.Overall())
-			for _, s := range result.Steps {
-				fmt.Fprintf(&sb, "  [%d] %-24s %-12s %s\n", s.Step, s.Name, s.Status, s.Detail)
+			if !failOnly || result.Status == verify.Fail {
+				fmt.Printf("%s : %s — %s\n", result.Hostname, result.Status, result.Detail)
 			}
-
-			mu.Lock()
-			fmt.Print(sb.String())
 			if err := auditlog.Write(".", now, result); err != nil {
 				log.Printf("감사 로그 기록 실패(치명적이지 않음): %v", err)
 			}
-			if result.Overall() == verify.Fail {
+			if result.Status == verify.Fail {
 				exitFail = true
-			}
-			if j.vmInfo.UUID != "" {
-				hist[j.hostname] = j.vmInfo.UUID
 			}
 			mu.Unlock()
 		}(j)
