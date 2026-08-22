@@ -1,0 +1,1 @@
+VMware.PowerCLI, PSReadLine 등의 .nupkg 파일을 이 폴더에 그대로 넣으세요 (압축 해제 불필요, setup_폐쇄망pwsh.sh가 자동으로 풉니다).
