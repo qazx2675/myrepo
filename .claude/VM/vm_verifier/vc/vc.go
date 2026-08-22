@@ -1,7 +1,6 @@
-// Package vc는 govmomi로 vCenter에 접속해 대상 VM들의 vNIC MAC, UUID,
-// Guest OS hostname/IP(VMware Tools가 이미 보고하는 값)를 조회한다.
-// Guest Operations API(별도 게스트 로그인)는 쓰지 않는다 — Tools 하트비트 정보만으로
-// 충분하고, 그래야 진짜 에이전트리스가 된다. (PLAN.md 3장 대비 단순화된 부분)
+// Package vc는 govmomi로 vCenter에 접속해 대상 VM들의 vNIC MAC 주소를 조회한다.
+// VM 생성 직후(파워온/OS 설치 전)에 쓰는 도구라 Guest OS 정보(Tools/hostname/IP)는
+// 아예 조회하지 않는다 — 그 시점엔 어차피 Tools가 켜져 있을 수 없다.
 package vc
 
 import (
@@ -14,14 +13,10 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 )
 
-// VMInfo는 검증 1~5단계에 필요한 VM 1대의 조회 결과다.
+// VMInfo는 검증에 필요한 VM 1대의 조회 결과다.
 type VMInfo struct {
-	Name             string
-	UUID             string // Config.Uuid (BIOS/DMI Product UUID, 게스트 내부 dmidecode 값과 동일)
-	MACs             []string
-	ToolsRunning     bool
-	GuestHostname    string
-	GuestIPAddresses []string
+	Name string
+	MACs []string
 }
 
 // Connect는 vCenter에 로그인한다. insecure(자체서명 인증서 허용)는 기존 govmomi 도구들과 동일하게 true 고정.
@@ -31,8 +26,7 @@ func Connect(ctx context.Context, address, user, pass string) (*govmomi.Client, 
 	return govmomi.NewClient(ctx, u, true)
 }
 
-// FetchByNames는 지정한 VM 이름들(예: svr01ev01, svr01ev02, svr01ev03)의 정보를
-// ContainerView + PropertyCollector 벌크 조회로 한 번에 가져온다.
+// FetchByNames는 지정한 VM 이름들의 정보를 ContainerView + PropertyCollector 벌크 조회로 한 번에 가져온다.
 func FetchByNames(ctx context.Context, client *govmomi.Client, names []string) (map[string]VMInfo, error) {
 	wanted := make(map[string]bool, len(names))
 	for _, n := range names {
@@ -41,8 +35,7 @@ func FetchByNames(ctx context.Context, client *govmomi.Client, names []string) (
 	return fetch(ctx, client, wanted)
 }
 
-// FetchAll은 이 vCenter의 모든 VM 정보를 가져온다. 배치 모드(-vcenterList + -f)에서
-// vCenter별로 VM 전체를 긁어온 뒤, 호출부가 BM 접두어 패턴(예: {prefix}ev\d+)으로 매칭한다.
+// FetchAll은 이 vCenter의 모든 VM 정보를 가져온다. 호출부가 BM 접두어 패턴(예: {prefix}ev\d+)으로 매칭한다.
 func FetchAll(ctx context.Context, client *govmomi.Client) (map[string]VMInfo, error) {
 	return fetch(ctx, client, nil)
 }
@@ -57,10 +50,7 @@ func fetch(ctx context.Context, client *govmomi.Client, wanted map[string]bool) 
 	defer cv.Destroy(ctx)
 
 	var vms []mo.VirtualMachine
-	err = cv.Retrieve(ctx, []string{"VirtualMachine"}, []string{
-		"name", "config.uuid", "config.hardware.device",
-		"guest.toolsRunningStatus", "guest.hostName", "guest.net",
-	}, &vms)
+	err = cv.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name", "config.hardware.device"}, &vms)
 	if err != nil {
 		return nil, fmt.Errorf("VM 벌크 조회 실패: %w", err)
 	}
@@ -70,19 +60,9 @@ func fetch(ctx context.Context, client *govmomi.Client, wanted map[string]bool) 
 		if wanted != nil && !wanted[vm.Name] {
 			continue
 		}
-		info := VMInfo{
-			Name:         vm.Name,
-			ToolsRunning: vm.Guest != nil && vm.Guest.ToolsRunningStatus == "guestToolsRunning",
-		}
+		info := VMInfo{Name: vm.Name}
 		if vm.Config != nil {
-			info.UUID = vm.Config.Uuid
 			info.MACs = macsFromDevices(vm.Config.Hardware.Device)
-		}
-		if vm.Guest != nil {
-			info.GuestHostname = vm.Guest.HostName
-			for _, nic := range vm.Guest.Net {
-				info.GuestIPAddresses = append(info.GuestIPAddresses, nic.IpAddress...)
-			}
 		}
 		result[vm.Name] = info
 	}

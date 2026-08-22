@@ -22,5 +22,11 @@ VCENTER_LIST=${VCENTER_LIST:-vcenter.txt}
 read -p "검증 대상 BM 접두어 목록 파일: " TARGETS
 read -p "DHCP 파일 루트 경로 [/user/caedhcp]: " DHCP_ROOT
 DHCP_ROOT=${DHCP_ROOT:-/user/caedhcp}
+read -p "이상 있는 것만 출력할까요? (y/N): " FAILONLY_YN
 
-./vm-verifier -vcenterList "$VCENTER_LIST" -f "$TARGETS" -dhcp-root "$DHCP_ROOT"
+FAILONLY_FLAG=""
+if [ "$FAILONLY_YN" = "y" ] || [ "$FAILONLY_YN" = "Y" ]; then
+    FAILONLY_FLAG="-failonly"
+fi
+
+./vm-verifier -vcenterList "$VCENTER_LIST" -f "$TARGETS" -dhcp-root "$DHCP_ROOT" $FAILONLY_FLAG
