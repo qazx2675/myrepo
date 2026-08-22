@@ -86,9 +86,12 @@ func Check(hostname string, dhcpRecord dhcp.Record, dhcpErr error, swapNote stri
 
 	// Tools 미기동이면 2~4단계는 게스트 정보에 의존하므로 판정 불가
 	if !vmInfo.ToolsRunning {
-		for step, name := range map[int]string{2: "OS Hostname ↔ VM Name", 3: "실제 할당 IP ↔ DHCP/DNS", 4: "DNS 역방향 Lookup"} {
-			r.Steps = append(r.Steps, StepResult{step, name, Inconclusive, "VMware Tools 미기동 — 게스트 정보 없음"})
+		inconclusiveSteps := []StepResult{
+			{2, "OS Hostname ↔ VM Name", Inconclusive, "VMware Tools 미기동 — 게스트 정보 없음"},
+			{3, "실제 할당 IP ↔ DHCP/DNS", Inconclusive, "VMware Tools 미기동 — 게스트 정보 없음"},
+			{4, "DNS 역방향 Lookup", Inconclusive, "VMware Tools 미기동 — 게스트 정보 없음"},
 		}
+		r.Steps = append(r.Steps, inconclusiveSteps...)
 	} else {
 		// 2단계: OS Hostname ↔ VM Name/DHCP 식별자
 		guestHost := strings.ToLower(strings.SplitN(vmInfo.GuestHostname, ".", 2)[0])
