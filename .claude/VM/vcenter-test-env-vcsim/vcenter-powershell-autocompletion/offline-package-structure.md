@@ -8,9 +8,10 @@ vcenter-ps-bundle/
 ├── VERSIONS.txt                    # 번들에 포함된 각 구성요소 버전 고정 기록
 ├── powershell/
 │   └── powershell-7.6.4-linux-<arch>.tar.gz     # 공식 릴리스 tar.gz (x64/arm64 등 타겟별)
-├── modules/
-│   ├── VMware.PowerCLI/            # Save-Module -Name VMware.PowerCLI -Path 로 받은 오프라인 모듈 전체
-│   └── PSReadLine/                 # Save-Module -Name PSReadLine -Path 로 받은 오프라인 모듈 전체 (2.2.2+)
+├── modules/                         # 폴더명은 modules/ 또는 module/ 둘 다 setup.sh가 인식함
+│   ├── vmware.powercli.13.3.0.24145081.nupkg   # PSGallery에서 받은 원본 .nupkg 그대로 두면 setup.sh가 압축 해제
+│   └── psreadline.2.4.5.nupkg                  # 마찬가지로 원본 .nupkg 그대로 두면 됨
+│   # (또는 Save-Module로 이미 풀어놓은 VMware.PowerCLI/, PSReadLine/ 폴더를 넣어도 됨 — 하위 호환)
 ├── profile/
 │   ├── VCenterAdvisory.psm1        # Phase 3: 순차 조회 권고 프록시 함수 모듈
 │   └── VCenterCompleters.psm1      # Phase 3: ArgumentCompleter 모듈
@@ -25,7 +26,14 @@ vcenter-ps-bundle/
 # 1) PowerShell 7.6.4 릴리스 tar.gz 다운로드 (타겟 아키텍처에 맞게)
 curl -LO https://github.com/PowerShell/PowerShell/releases/download/v7.6.4/powershell-7.6.4-linux-x64.tar.gz
 
-# 2) PowerCLI / PSReadLine을 오프라인 모듈 폴더로 저장
+# 2) PowerCLI / PSReadLine 확보 — 아래 둘 중 하나만 하면 됨
+
+# 2-a) 가장 간단: PowerShell Gallery에서 .nupkg 원본을 그대로 받아 modules/ 에 둔다
+#      (setup.sh가 unzip으로 풀어서 .nuspec 기준으로 자동 배치함)
+curl -LO https://www.powershellgallery.com/api/v2/package/VMware.PowerCLI/13.3.0.24145081
+curl -LO https://www.powershellgallery.com/api/v2/package/PSReadLine/2.4.5
+
+# 2-b) 또는 pwsh가 있는 환경이면 Save-Module로 이미 풀린 폴더째로 받아도 됨 (하위 호환)
 pwsh -NoProfile -Command "Save-Module -Name VMware.PowerCLI -Path ./modules -Repository PSGallery"
 pwsh -NoProfile -Command "Save-Module -Name PSReadLine -Path ./modules -Repository PSGallery"
 

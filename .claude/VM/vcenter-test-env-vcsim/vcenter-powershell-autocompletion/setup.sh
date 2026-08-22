@@ -38,8 +38,28 @@ for lib in libicu libssl; do
   ldconfig -p | grep -q "$lib" || log "경고: $lib 관련 라이브러리를 찾지 못했습니다. PowerShell 실행 시 오류가 나면 이 패키지를 먼저 설치하세요."
 done
 
-[ -d "${BUNDLE_DIR}/modules/VMware.PowerCLI" ] || fail "번들 안에 modules/VMware.PowerCLI 가 없습니다."
-[ -d "${BUNDLE_DIR}/modules/PSReadLine" ]      || fail "번들 안에 modules/PSReadLine 이 없습니다."
+command -v unzip >/dev/null 2>&1 || fail "unzip 명령이 필요합니다 (.nupkg 압축 해제용)."
+
+# 모듈 소스 폴더: modules/ 또는 module/ 둘 다 인식 (먼저 발견되는 쪽 사용)
+MODULE_SRC_DIR=""
+for candidate in "${BUNDLE_DIR}/modules" "${BUNDLE_DIR}/module"; do
+  if [ -d "$candidate" ]; then
+    MODULE_SRC_DIR="$candidate"
+    break
+  fi
+done
+[ -n "$MODULE_SRC_DIR" ] || fail "번들 안에서 modules/ 또는 module/ 폴더를 찾을 수 없습니다."
+log "모듈 소스 폴더: $MODULE_SRC_DIR"
+
+shopt -s nullglob
+NUPKG_FILES=("${MODULE_SRC_DIR}"/*.nupkg)
+MODULE_DIRS=()
+for entry in "${MODULE_SRC_DIR}"/*/; do
+  [ -d "$entry" ] && MODULE_DIRS+=("${entry%/}")
+done
+shopt -u nullglob
+[ "${#NUPKG_FILES[@]}" -gt 0 ] || [ "${#MODULE_DIRS[@]}" -gt 0 ] || fail "$MODULE_SRC_DIR 안에 .nupkg 파일도, 이미 풀린 모듈 폴더도 없습니다."
+
 [ -x "${BUNDLE_DIR}/vc-test-env/vc-test-env" ] || log "경고: vc-test-env 실행 바이너리가 없습니다 — 실습 환경 연동 단계는 건너뜁니다."
 
 # ---------- 2. PowerShell 바이너리 배치 ----------
@@ -52,8 +72,45 @@ chmod +x "${PS_INSTALL_DIR}/pwsh"
 # ---------- 3. 모듈 배치 ----------
 log "PowerCLI / PSReadLine 모듈 배치: $PS_MODULE_DIR"
 mkdir -p "$PS_MODULE_DIR"
-cp -r "${BUNDLE_DIR}/modules/VMware.PowerCLI" "$PS_MODULE_DIR/"
-cp -r "${BUNDLE_DIR}/modules/PSReadLine"      "$PS_MODULE_DIR/"
+
+# .nupkg(zip 포맷) 하나를 풀어서, 안의 .nuspec에서 모듈명/버전을 읽어
+# PowerShell이 인식하는 $PS_MODULE_DIR/<모듈명>/<버전>/ 구조로 배치한다.
+# (파일명 파싱 대신 .nuspec을 쓰는 이유: VMware.PowerCLI처럼 이름 자체에 점이 있으면
+#  "이름.버전.nupkg" 파일명만으로는 경계를 안전하게 구분할 수 없다.)
+extract_nupkg_module() {
+  local nupkg="$1"
+  local tmp
+  tmp="$(mktemp -d)"
+  unzip -q "$nupkg" -d "$tmp"
+
+  local nuspec
+  nuspec="$(find "$tmp" -maxdepth 1 -name '*.nuspec' | head -n1)"
+  [ -n "$nuspec" ] || fail "$(basename "$nupkg") 안에서 .nuspec을 찾을 수 없습니다."
+
+  local mod_name mod_version
+  mod_name="$(grep -oP '(?<=<id>).*?(?=</id>)' "$nuspec" | head -n1)"
+  mod_version="$(grep -oP '(?<=<version>).*?(?=</version>)' "$nuspec" | head -n1)"
+  [ -n "$mod_name" ] && [ -n "$mod_version" ] || fail "$(basename "$nupkg")의 .nuspec에서 모듈명/버전을 읽지 못했습니다."
+
+  local dest="${PS_MODULE_DIR}/${mod_name}/${mod_version}"
+  mkdir -p "$dest"
+  cp -r "$tmp"/. "$dest"/
+  # nupkg 패키징 메타데이터(모듈 동작에 불필요)는 제거
+  rm -rf "$dest/_rels" "$dest/package" "$dest"/*.nuspec "$dest/[Content_Types].xml" 2>/dev/null || true
+  rm -rf "$tmp"
+
+  log "모듈 배치 완료: ${mod_name} ${mod_version} -> ${dest}"
+}
+
+for nupkg in "${NUPKG_FILES[@]}"; do
+  extract_nupkg_module "$nupkg"
+done
+
+# 이미 풀려 있는 모듈 폴더(예: modules/VMware.PowerCLI/)는 그대로 복사 (하위 호환)
+for dir in "${MODULE_DIRS[@]}"; do
+  log "이미 풀린 모듈 폴더 복사: $(basename "$dir")"
+  cp -r "$dir" "$PS_MODULE_DIR/"
+done
 
 # ---------- 4. PowerCLI 기본 설정 ----------
 log "PowerCLI 기본 설정 적용 (인증서 경고 무시, CEIP 비활성화)"
