@@ -13,6 +13,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"strconv"
@@ -189,6 +190,9 @@ func runUp(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if isLocalVcsim(target) {
+		return fmt.Errorf("%s 는 이 도구가 띄우는 vcsim 자신의 주소입니다 — 복제할 실 vCenter 주소를 지정하세요. (떠 있는 vcsim을 들여다보고 싶으면 'vc-test-env tree -vc=%s' 또는 'vc-test-env diff'를 쓰세요)", target, target)
+	}
 
 	h, err := history.Load()
 	if err != nil {
@@ -252,6 +256,19 @@ func runUp(ctx context.Context, args []string) error {
 	waitForInterrupt()
 	fmt.Println("종료 중...")
 	return nil
+}
+
+// isLocalVcsim은 target이 이 도구가 항상 고정 포트(builder.Port)로 띄우는 로컬 vcsim
+// 자신의 주소인지 확인한다. 실수로 이 주소를 "복제할 실 vCenter"로 지정하면, 그 시점에
+// 떠 있던 vcsim의 내부 시드 오브젝트(예: "DC0_H0")까지 레시피에 그대로 캡처되어, 나중에
+// 그 레시피로 새 vcsim을 재생성할 때 새 vcsim 자신의 시드 오브젝트와 이름이 겹쳐
+// "DuplicateName" 에러가 난다(실제로 겪음).
+func isLocalVcsim(target string) bool {
+	host, port, err := net.SplitHostPort(target)
+	if err != nil {
+		return false
+	}
+	return (host == "127.0.0.1" || host == "localhost") && port == builder.Port
 }
 
 func resolveTarget(flagVal string) (string, error) {
