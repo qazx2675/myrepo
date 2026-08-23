@@ -195,6 +195,16 @@ ExtraConfig 형태가 아닌 구조화된 필드는 `Field{Key, Extract, Apply}`
 - 네트워크는 포트그룹 이름/커넥트 상태만 재현하고 VLAN ID는 아직 안 함.
 - 호스트 전원정책은 읽기만 하고 vcsim에 재현하는 건 TODO.
 - 디스크는 용량만 추적하고 실제 VirtualDisk 디바이스로는 재현하지 않음.
+- **`Get-View`로 VM의 `Runtime`/`Summary`(또는 속성 지정 없이 전체 조회)를 가져오면 PowerCLI에서
+  `Error in deserializing body of reply message for operation 'RetrieveProperties'` 에러가 남.**
+  원인은 `VirtualMachineRuntimeInfo.OperationNotSupported` 필드 하나가 vcsim(govmomi 시뮬레이터)
+  자체에서 PowerCLI의 .NET SOAP 클라이언트가 못 읽는 형태로 직렬화되기 때문(실제로 겪고 원인
+  필드까지 특정함 — `vc-test-env`가 만드는 recipe/rebuild 로직과는 무관한 govmomi 시뮬레이터 자체
+  한계). 우회 방법:
+  - 필요한 속성만 좁혀서 조회: `Get-View -ViewType VirtualMachine -Property Name,Config,Guest` 처럼
+    `Runtime`/`Summary`를 빼고 필요한 것만 지정하면 정상 동작.
+  - 또는 `Get-VM`, `Get-VM | Select-Object ...` 같은 고수준 cmdlet을 쓰면 이 문제를 피해간다
+    (실제로 확인함 — `Get-VM`은 정상 동작).
 - `-vc`에 이 도구 자신이 띄우는 vcsim 주소(`127.0.0.1:54321`)를 실수로 지정하면 지금은 즉시
   에러로 막힙니다. 과거(이 가드가 없던 버전)에 이 실수로 히스토리/레시피 캐시가 오염되면
   `~/.vc-test-env/history.json`에서 `127.0.0.1:54321` 항목을 지우고
