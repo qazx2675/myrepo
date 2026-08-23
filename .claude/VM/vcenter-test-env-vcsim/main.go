@@ -22,6 +22,7 @@ import (
 	"vc-test-env/internal/connect"
 	"vc-test-env/internal/history"
 	"vc-test-env/internal/inventory"
+	"vc-test-env/internal/portcheck"
 	"vc-test-env/internal/recipe"
 	"vc-test-env/internal/tree"
 )
@@ -218,6 +219,10 @@ func runUp(ctx context.Context, args []string) error {
 		fmt.Println("레시피 저장됨:", path)
 	}
 	if err := h.Add(target); err != nil {
+		return err
+	}
+
+	if err := portcheck.EnsureFree(builder.Port); err != nil {
 		return err
 	}
 
