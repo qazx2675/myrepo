@@ -169,7 +169,12 @@ vcenter-test-env-vcsim/
 
 ### 4.2 지금 다루는 항목 (1차 범위)
 - 구조: 데이터센터, VM 폴더, 네트워크 폴더, 클러스터, 호스트, VM, 네트워크(이름)
-- VM: vCPU 수, 코어/소켓 수, 메모리MB, CPU Affinity, `sched.mem.lpage.enable1GPage` / `sched.mem.prealloc*` / `sched.swap.vmxSwapEnabled` / `numa.vcpu.maxPerVirtualNode`
+- VM: vCPU 수, 코어/소켓 수, 메모리MB, 구조화된 CPU Affinity(`Config.CpuAffinity.AffinitySet`),
+  per-vCPU ExtraConfig 방식 CPU Affinity(`sched.vcpu<N>.affinity` — vCPU 개수만큼 동적으로 생기는
+  키라 고정 레지스트리가 아니라 `internal/inventory/walk.go`에서 패턴으로 직접 스캔), `sched.mem.lpage.enable1GPage` / `sched.mem.prealloc*` / `sched.swap.vmxSwapEnabled` / `numa.vcpu.maxPerVirtualNode`
+  - 실제로 겪은 함정: 두 CPU Affinity 방식은 서로 다른 저장 위치라 실 vCenter에서 어느 한쪽만
+    값이 있고 다른 쪽은 비어있을 수 있다(`affinity_setting-source` 도구로 설정한 VM은
+    `Config.CpuAffinity`가 아니라 `sched.vcpu<N>.affinity` ExtraConfig에만 값이 들어감 — 실제로 확인함).
 - VM 네트워크 어댑터: 포트그룹 이름 + 커넥트/디스커넥트 상태를 실제 디바이스로 재현
 
 **범위 밖(추가 안 함)**: VM "설정 편집"의 나머지 항목(부팅옵션/비디오카드/USB 등), 호스트 "구성" 탭 전체, 디스크는 용량만 추적하고 디바이스로 재현 안 함.

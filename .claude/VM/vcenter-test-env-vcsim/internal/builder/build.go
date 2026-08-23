@@ -342,6 +342,14 @@ func createVM(ctx context.Context, vmFolder *object.Folder, pool *object.Resourc
 		}
 	}
 
+	// sched.vcpuN.affinity는 vCPU 개수만큼 키가 생겨서 fields.VMFields(고정 키 레지스트리)에
+	// 담을 수 없다 — inventory.walkVM이 v.Values에 그대로 담아둔 걸 여기서 직접 재현한다.
+	for key, val := range v.Values {
+		if strings.HasPrefix(key, "sched.vcpu") && strings.HasSuffix(key, ".affinity") {
+			spec.ExtraConfig = append(spec.ExtraConfig, &types.OptionValue{Key: key, Value: val})
+		}
+	}
+
 	task, err := vmFolder.CreateVM(ctx, spec, pool, host)
 	if err != nil {
 		return err
