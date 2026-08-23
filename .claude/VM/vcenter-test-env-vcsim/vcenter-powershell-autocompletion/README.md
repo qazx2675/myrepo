@@ -39,6 +39,11 @@ curl -LO https://github.com/PowerShell/PowerShell/releases/download/v7.6.4/power
 **VMware.PowerCLI**
 - 페이지: https://www.powershellgallery.com/packages/VMware.PowerCLI/13.3.0.24145081
 - 직접 다운로드(.nupkg): https://www.powershellgallery.com/api/v2/package/VMware.PowerCLI/13.3.0.24145081
+- ⚠️ **이 .nupkg 하나만 받아서는 안 됨.** `VMware.PowerCLI`는 자체 코드가 없는 메타 패키지라 실제
+  기능은 `RequiredModules`로 선언된 하위 모듈 80여 개(`VMware.VimAutomation.Sdk` 등)에 들어있는데,
+  이 다운로드 링크는 딱 그 패키지 자신의 nupkg만 주고 의존성은 안 준다. 이 방법만 쓰면
+  `Import-Module VMware.PowerCLI` 시점에 `The required module 'VMware.VimAutomation.Sdk' is not
+  loaded` 에러로 실패한다(실제로 겪음). **의존성까지 전부 받으려면 위 `Save-Module` 방법을 쓸 것.**
 - ⚠️ 같은 버전 문자열의 `13.3.0.24145083`은 PowerShell Gallery에서 deprecated 처리되어 `VCF.PowerCLI`로 이전 안내 중 — 위 `13.3.0.24145081`이 정상 배포 버전.
 
 **PSReadLine**
