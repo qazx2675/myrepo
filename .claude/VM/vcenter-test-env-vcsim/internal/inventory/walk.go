@@ -5,6 +5,7 @@ package inventory
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/property"
@@ -14,6 +15,13 @@ import (
 
 	"vc-test-env/internal/fields"
 )
+
+// vcpuAffinityKeyRegex는 "sched.vcpu0.affinity", "sched.vcpu12.affinity" 같은 per-vCPU
+// affinity 키를 찾는다. vCPU 개수가 VM마다 달라서 fields.VMFields(고정 키 레지스트리)로는
+// 다룰 수 없어 별도로 스캔한다. Config.CpuAffinity(구조화 필드)와는 별개로, 이 값은 항상
+// ExtraConfig에만 들어있다(실 vCenter에서 실제로 확인함 — CpuAffinity.AffinitySet은
+// 비어있는데 이 ExtraConfig 키에 값이 있는 VM이 있었음).
+var vcpuAffinityKeyRegex = regexp.MustCompile(`^sched\.vcpu\d+\.affinity$`)
 
 type VM struct {
 	Name           string            `json:"name"`
@@ -224,6 +232,16 @@ func walkVM(ctx context.Context, pc *property.Collector, ref types.ManagedObject
 	for _, f := range fields.VMFields {
 		if val, ok := f.Extract(vm); ok {
 			v.Values[f.Key] = val
+		}
+	}
+
+	for _, ec := range vm.Config.ExtraConfig {
+		opt := ec.GetOptionValue()
+		if opt == nil || !vcpuAffinityKeyRegex.MatchString(opt.Key) {
+			continue
+		}
+		if s, ok := opt.Value.(string); ok {
+			v.Values[opt.Key] = s
 		}
 	}
 
