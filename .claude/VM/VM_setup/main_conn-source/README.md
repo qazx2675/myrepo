@@ -15,7 +15,7 @@ SSL 인증서가 신뢰되지 않은 호스트를 만나면 vCenter가 응답으
 
 ```bash
 git clone <이 저장소 주소> myrepo
-cd "myrepo/.claude/VM/legacy-vm-param-fix-external-orchestration/main_conn-source"
+cd "myrepo/.claude/VM/VM_setup/main_conn-source"
 bash setup.sh
 # 빌드 완료: .../main_conn-source/main_conn
 ```

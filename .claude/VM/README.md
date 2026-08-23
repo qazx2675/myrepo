@@ -5,7 +5,7 @@ ESXi/vCenter 운영·점검·자동화 관련 도구 모음. 폴더별 상세 �
 - `esxi-log-check` : ESXi 치명적 로그(MCE, PSOD, APD/PDL, vSAN ESA, NVMeoF 단절 등) 수집·분석 도구 + 검증용 모의(Mock) ESXi 환경
 - `gemini_vcsim-pipeline-test` : govmomi 내장 vcsim(vCenter Simulator)으로 VM 생성/설정/점검/수정 전체 흐름을 검증하는 통합 테스트 프레임워크
 - `integrated-vm-param-check-test-tool` : `vm-param-check`(체크+자동교정)와 `vc-test-env`(vcsim 복제)를 한 폴더로 묶어, 폐쇄망 서버로 그대로 옮겨 빌드→테스트까지 끝낼 수 있게 만든 배포 패키지
-- `legacy-vm-param-fix-external-orchestration` : **보관용 아카이브(더 이상 권장 안 함)**. 예전 방식(외부 도구 오케스트레이션)으로 만든 vm-param-fix 산출물. 새로 시작할 땐 `vm-param-check-usability-improvement` 쪽을 사용
+- `VM_setup` : VM 설정 적용(affinity/lpage/전원정책/태그/vSwitch/라이선스 할당/VM 생성 등)용 스크립트 모음
 - `lpage_search` : ESXi Large Page(2MB) 메모리 사이징 계산기. vCenter/ESXi 접속 없이 순수 계산만 수행하는 단일 파일 Go 프로그램
 - `powershell` : 폐쇄망에 일반 업무용 PowerShell + PowerCLI를 설치하는 스크립트 모음
 - `vcenter-test-env-vcsim` : 실 vCenter의 인벤토리 구조를 읽어와 vcsim 위에 그대로 재현하는 도구. 실 vCenter를 건드리지 않고 다른 도구를 테스트할 때 사용

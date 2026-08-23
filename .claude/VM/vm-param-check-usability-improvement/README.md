@@ -100,7 +100,7 @@ mkdir -p ./SPEC_DIR
 
 ## 기존 개별 도구와의 관계
 
-저장소의 `vm-param-setting-check/`(체크 전용, 구세대)와 `legacy-vm-param-fix-external-orchestration/`는 삭제하지 않고 그대로 남겨뒀습니다. 이 프로젝트는 하위의 통합 도구(`vm-param-check`) 위에 사용성 개선을 얹은 것으로, 새로 시작하는 경우 이 폴더 아래의 도구만 쓰면 됩니다.
+저장소의 `vm-param-setting-check/`(체크 전용, 구세대)와 `VM_setup/`는 삭제하지 않고 그대로 남겨뒀습니다. 이 프로젝트는 하위의 통합 도구(`vm-param-check`) 위에 사용성 개선을 얹은 것으로, 새로 시작하는 경우 이 폴더 아래의 도구만 쓰면 됩니다.
 
 ## 디렉토리 구조
 

@@ -13,7 +13,7 @@
 `vendor/`를 포함하고 있어 폐쇄망에서도 오프라인 빌드가 됩니다.
 
 ```bash
-cd "myrepo/.claude/VM/legacy-vm-param-fix-external-orchestration/mac_info-source"
+cd "myrepo/.claude/VM/VM_setup/mac_info-source"
 bash setup.sh
 # 빌드 완료: .../mac_info-source/mac_info
 ```
