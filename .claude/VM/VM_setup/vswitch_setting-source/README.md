@@ -11,7 +11,7 @@
 `vendor/`를 포함하고 있어 폐쇄망에서도 오프라인 빌드가 됩니다.
 
 ```bash
-cd "myrepo/.claude/VM/legacy-vm-param-fix-external-orchestration/vswitch_setting-source"
+cd "myrepo/.claude/VM/VM_setup/vswitch_setting-source"
 bash setup.sh
 # 빌드 완료: .../vswitch_setting-source/vswitch_setting
 ```

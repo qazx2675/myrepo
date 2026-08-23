@@ -11,7 +11,7 @@ extraConfig까지 **일괄 설정**하는 도구입니다. (원본 파이프라�
 `vendor/`를 포함하고 있어 폐쇄망에서도 오프라인 빌드가 됩니다.
 
 ```bash
-cd "myrepo/.claude/VM/legacy-vm-param-fix-external-orchestration/vm_create-source"
+cd "myrepo/.claude/VM/VM_setup/vm_create-source"
 bash setup.sh
 # 빌드 완료: .../vm_create-source/vm_create
 ```

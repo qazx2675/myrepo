@@ -1,8 +1,12 @@
-# 레거시 vm-param-fix (외부 도구 오케스트레이션 방식) — 보관용 아카이브
+# VM_setup — VM 설정 적용 스크립트 모음
 
-**이 폴더는 더 이상 권장되는 방식이 아닙니다.** 새로 시작하는 경우 대신 `../vm-param-check-usability-improvement/vm-param-check/`(자체 내장 `-fix`, 외부 도구 불필요)을 쓰세요. 자세한 대체 배경은 그 폴더의 README.md "기존 개별 도구와의 관계" 절 참고.
+VM/ESXi/vCenter의 개별 설정(affinity, lpage/HugePage, 전원정책, 태그, vSwitch, 라이선스 할당, VM 생성 등)을
+적용하는 도구들을 모아둔 폴더입니다. 각 도구는 독립적인 소스+`vendor/`를 갖춰서 개별 빌드가 가능합니다.
 
-이 폴더는 Rocky Linux 로컬(`/root/vm-param-fix`, `/root/affinity-test`, `/root/lpage-test`)에만 남아있던 작업 산출물을 로컬 디스크 정리 전에 git으로 옮겨 보관한 것입니다(2026-08-16).
+이 중 `vm-param-fix/`(체크 CSV 기반 오케스트레이터)는 같은 기능을 자체 내장한
+`../vm-param-check-usability-improvement/vm-param-check/`(`-fix` 옵션, 외부 도구 불필요)로 대체되었으니
+새로 시작하는 경우 그쪽을 쓰는 걸 권장합니다. 나머지 개별 도구(affinity/lpage/tag/vswitch/license/vm 생성 등)는
+그대로 사용 가능합니다.
 
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.
@@ -48,7 +52,7 @@ VC_PASSWORD='<비밀번호>' ./vm-param-fix -checkResult=<체크CSV> -vcTargetIP
 ### 4.1 디렉토리 구조
 
 ```
-legacy-vm-param-fix-external-orchestration/
+VM_setup/
 ├── README.md                    # 이 문서
 ├── vm-param-fix/                # 체크 CSV를 태그별로 분류해 아래 외부 도구들을 호출하는 오케스트레이터 (power_setting 바이너리 포함)
 ├── affinity_setting-source/     # affinity 태그 담당 외부 도구 소스

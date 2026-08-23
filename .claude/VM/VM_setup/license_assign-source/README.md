@@ -13,7 +13,7 @@
 `vendor/`를 포함하고 있어 폐쇄망에서도 오프라인 빌드가 됩니다(`license` 패키지 포함).
 
 ```bash
-cd "myrepo/.claude/VM/legacy-vm-param-fix-external-orchestration/license_assign-source"
+cd "myrepo/.claude/VM/VM_setup/license_assign-source"
 bash setup.sh
 # 빌드 완료: .../license_assign-source/license_assign
 ```

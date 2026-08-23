@@ -15,7 +15,7 @@ Attribute)** — `DEPT_NAME`, `PURPOSE`, `VM_TYPE` — 을 순번(ev01, ev02, ..
 `vendor/`를 포함하고 있어 폐쇄망에서도 오프라인 빌드가 됩니다.
 
 ```bash
-cd "myrepo/.claude/VM/legacy-vm-param-fix-external-orchestration/tag_setting-source"
+cd "myrepo/.claude/VM/VM_setup/tag_setting-source"
 bash setup.sh
 # 빌드 완료: .../tag_setting-source/tag_setting
 ```
