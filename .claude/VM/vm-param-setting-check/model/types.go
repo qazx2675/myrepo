@@ -30,6 +30,12 @@ type VMInfo struct {
 	// (vSphere API 8.0.0.1+ 필요). nil이면 이 VM에 vNUMA 커스텀 설정이 없다는 뜻(정상적인 "미설정" 상태).
 	NumaCoresPerNode *int32
 
+	// NumaAutoCoresPerNode는 config.numaInfo.autoCoresPerNumaNode. true면 NumaCoresPerNode가
+	// "지난 전원 켜짐 시점의 값이 남아있을 뿐 무시해야 하는" 값이라는 뜻이다(govmomi 타입 주석 근거) —
+	// UI에는 "전원을 켤 때 할당됨"으로 표시된다. 이 경우 checker는 NumaCoresPerNode 값을 기대값과
+	// 비교하지 않고 "설정없음"으로 처리한다(우연히 값이 같은 과거 이력 때문에 OK로 오판되는 것 방지).
+	NumaAutoCoresPerNode *bool
+
 	// Networks는 VM에 붙어있는 네트워크 어댑터 전부(커넥트/디스커넥트 무관)를 담는다.
 	// 포트그룹 이름은 연결 상태와 무관하게 항상 조사되어야 한다 — 디스커넥트라고 해서
 	// 어댑터가 없는 게 아니라 vSphere에서 연결만 꺼둔 것뿐이라서다.

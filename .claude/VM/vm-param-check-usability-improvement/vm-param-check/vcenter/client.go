@@ -298,6 +298,7 @@ func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, t
 
 		if vm.Config.NumaInfo != nil {
 			info.NumaCoresPerNode = vm.Config.NumaInfo.CoresPerNumaNode
+			info.NumaAutoCoresPerNode = vm.Config.NumaInfo.AutoCoresPerNumaNode
 		}
 
 		if vm.Config.CpuAllocation != nil {

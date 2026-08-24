@@ -98,6 +98,10 @@ func CheckTopology(vm model.VMInfo, cores CoresExpect, numa NumaExpect, group st
 		}
 		if isVcsim {
 			f4.Result = "미지원"
+		} else if vm.NumaAutoCoresPerNode != nil && *vm.NumaAutoCoresPerNode {
+			f4.Actual = "자동(전원을 켤 때 할당됨)"
+			f4.Result = "설정없음"
+			f4.Note = "NUMA 노드당 코어 수가 자동(Auto)으로 설정되어 있어 전원을 켤 때마다 재계산됨 — 고정값이 아니므로 수동 설정 필요"
 		} else if vm.NumaCoresPerNode == nil {
 			f4.Result = "설정없음"
 		} else {
