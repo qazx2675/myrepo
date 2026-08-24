@@ -12,6 +12,18 @@
 # mock 관련 코드(가짜 gossh, select_user 더미값)는 실 서비스 스크립트가 아니므로
 # 이 파일에는 포함하지 않았습니다 — select_user/get_dhcp_info/check_ev_extra는
 # 다시 TODO 상태로 되돌려 두었습니다.
+#
+# 이후 추가 반영된 변경사항:
+#   7) report_ldap_info / report_splunk_info : 출력 형식을 "INFO ldap <값>" /
+#      "INFO HPC Splunk <값>" / "FAIL ... confirmation required"로 변경.
+#      LDAP 값은 공백으로 구분된 여러 토큰이어도 첫 토큰만 화면에 표시.
+#   8) parse_pm_result : "===== 분류 요약 =====" 화면 출력 블록 제거 (아래 단계에서
+#      이미 자체 요약을 출력하므로 중복). 배열 계산 로직은 그대로.
+#   9) run_os_check : gossh -pm 옵션 순서 수정 — "-w ... -pm"이면 정상 동작하지
+#      않아 "-pm -w ..."로 변경.
+#  10) apply_os_setting/apply_extra_setting : 실행되는 스크립트 목록은 그대로 두고,
+#      로그에 "(y: 기본 환경설정)"/"(set: 추가 환경설정)" 표시를 붙여 y/set이 각각
+#      무엇을 실행하는지 화면에서 구분되게 함.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -72,12 +84,13 @@ is_prefix_host() {
     [[ "$1" =~ ^(s2h|s3h|s4h|sh|c|h) ]]
 }
 
-# [수정금지] gossh -pm 호출 및 결과 출력 로직 자체는 이번 요청과 무관합니다.
+# [수정됨] gossh -pm 옵션은 -w(대상목록)보다 앞에 와야 정상 동작한다(뒤에 두면 명령이
+# 정상 실행되지 않음) — 그래서 "gossh -w ... "cmd" -pm"에서 "gossh -pm -w ... "cmd""로 순서를 바꿨다.
 run_os_check() {
     PM_RAW="/tmp/pm_raw_${user}.$$"
 
     echo "[INFO] gossh 분류 점검 실행 중..."
-    gossh -w "${TARGET_LIST}" "${CLASSIFY_CMD}" -pm > "${PM_RAW}" 2>&1
+    gossh -pm -w "${TARGET_LIST}" "${CLASSIFY_CMD}" > "${PM_RAW}" 2>&1
 
     echo
     echo "===== gossh 분류 결과 원본 ====="
@@ -94,9 +107,11 @@ PAT_PINGX="ping"
 PAT_REFUSED="refused"
 PAT_ANACONDA="anaconda"
 
-# [수정금지] UP/DOWN, PREFIX_UP/PREFIX_DOWN/NONPREFIX_HOSTS 분류 로직 전체.
-# 이번 요청과 무관하며, build_message_case6to9 등 여러 함수가 이 결과에 의존하므로
-# 절대 건드리지 마세요.
+# [수정금지] UP/DOWN, PREFIX_UP/PREFIX_DOWN/NONPREFIX_HOSTS 분류 로직 자체는
+# build_message_case6to9 등 여러 함수가 이 결과(배열)에 의존하므로 건드리지 마세요.
+# [수정됨] "===== 분류 요약 =====" 화면 출력 블록은 제거했습니다 — 아래 작업 단계(OS
+# 체크/설정 적용)에서 이미 자체 요약을 출력하므로 여기서 한 번 더 보여줄 필요가 없다는
+# 요청 반영. 배열 계산(위) 자체는 그대로 남아있어 다른 함수들에 영향 없습니다.
 parse_pm_result() {
     local h
 
@@ -131,16 +146,6 @@ parse_pm_result() {
         fi
     done
 
-    echo "===== 분류 요약 ====="
-    echo "- /user/svrauto 안 붙는 서버 : $(print_horizontal "${NOSVRAUTO_HOSTS[@]}")"
-    echo "- ping 불가 서버            : $(print_horizontal "${PINGX_HOSTS[@]}")"
-    echo "- 22 port refused 서버      : $(print_horizontal "${REFUSED_HOSTS[@]}")"
-    echo "- anaconda 설치 진행중 서버 : $(print_horizontal "${ANACONDA_HOSTS[@]}")"
-    echo "---------------------"
-    echo "- 접속 가능 : ${#UP_HOSTS[@]} 대"
-    echo "- 접속 불가 : ${#DOWN_HOSTS[@]} 대"
-    echo "====================="
-    echo
 }
 
 # [수정됨] target_list / output_file 을 인자로 받도록 일반화했습니다.
@@ -179,6 +184,9 @@ run_post_apply_check() {
 # [수정됨] LDAP 값이 전부 동일하면 1줄만 출력합니다. 값이 2종류 이상이면
 # 케이스별로 별도 파일에 떨어뜨리고, 화면에는 요약(케이스 수 / 파일명 / 값 /
 # 대상 호스트)만 출력합니다.
+# [수정됨] 출력 형식을 "INFO ldap <값>"/"FAIL ldap ..."으로 변경했습니다. 값은
+# "infra site"처럼 공백으로 구분된 여러 토큰일 수 있는데, 요청에 따라 첫 번째
+# 토큰(예: infra)만 보여줍니다 — 파일에 저장되는 원본 값(value: ...)은 전체를 그대로 둡니다.
 # [수정필요] 아래 3가지는 이번에 임의로 정한 것이라 확인/조정이 필요합니다:
 #   - 파일명 규칙: ldap_case{N}_${user} — N은 값이 등장한 순서 기준(빈도순 아님)
 #   - 저장 위치: 스크립트 실행 위치(cwd)에 그대로 생성됨. 별도 결과 디렉토리로
@@ -186,6 +194,16 @@ run_post_apply_check() {
 #   - 파일 내부 포맷: "value: ..." / "hosts: ..." 2줄 — 다른 도구가 이 파일을
 #     파싱해서 쓴다면 포맷이 맞는지 확인 필요.
 # [연계] 이 함수 안에서만 쓰이는 로컬 상태이고, 다른 함수와의 연계는 없습니다.
+# [신규] LDAP 값에서 화면 표시용 토큰(예: "infra")만 뽑는다. 원본 값이
+# "ldap infra site"처럼 grep 키워드(ldap)가 라벨로 그대로 남아있는 경우 그 라벨을
+# 먼저 제거하고("infra site"), 남은 값의 첫 토큰("infra")만 반환한다 — "site"는
+# 버린다. 원본 값(파일에 저장되는 value)은 이 함수와 무관하게 그대로 유지된다.
+ldap_display_token() {
+    local v="$1"
+    v="${v#[Ll][Dd][Aa][Pp] }"
+    echo "${v%% *}"
+}
+
 report_ldap_info() {
     [ -f "${CHECK_RES_FILE}" ] || return 0
 
@@ -206,9 +224,9 @@ report_ldap_info() {
     done < <(grep -i "ldap" "${CHECK_RES_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
-        echo "(해당 없음)"
+        echo "FAIL ldap infra confirmation required"
     elif [ ${#case_order[@]} -eq 1 ]; then
-        echo "${case_order[0]}"
+        echo "INFO ldap $(ldap_display_token "${case_order[0]}")"
     else
         echo "[경고] LDAP 값이 ${#case_order[@]}종류로 서로 다릅니다 — 케이스별 파일로 분리합니다."
         local idx=1
@@ -219,7 +237,7 @@ report_ldap_info() {
                 echo "value: ${value}"
                 echo "hosts:${ldap_hosts_by_value[${value}]}"
             } > "${outfile}"
-            echo "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}"
+            echo "  - case${idx} (${outfile}) : INFO ldap $(ldap_display_token "${value}")  =>  대상:${ldap_hosts_by_value[${value}]}"
             idx=$((idx + 1))
         done
     fi
@@ -231,9 +249,18 @@ report_ldap_info() {
 # [수정됨] SPLUNK 값이 전부 동일하면 1줄만 출력합니다. 값이 2종류 이상이면
 # 각 항목(고유값)별로 "값: N대" 형태로 대수만 집계해서 출력합니다
 # (LDAP과 달리 파일로는 분리하지 않음 — 요청하신 그대로입니다).
+# [수정됨] 출력 형식을 "INFO HPC Splunk <값>"/"FAIL Splunk type confirmation required"로 변경.
 # UP_HOSTS 필터를 안 거는 것(주석 처리된 contains 라인)은 원본 그대로
 # 유지했습니다.
 # [연계] 다른 함수와의 연계는 없습니다.
+# [신규] splunk_display_value는 원본 값이 "splunk typeA"처럼 grep 키워드(splunk)가
+# 라벨로 남아있는 경우 그 라벨만 제거한다("typeA") — LDAP과 달리 나머지 값은
+# 전부(첫 토큰만이 아니라) 그대로 보여준다.
+splunk_display_value() {
+    local v="$1"
+    echo "${v#[Ss][Pp][Ll][Uu][Nn][Kk] }"
+}
+
 report_splunk_info() {
     [ -f "${CHECK_RES_FILE}" ] || return 0
 
@@ -255,12 +282,12 @@ report_splunk_info() {
     done < <(grep -i "splunk" "${CHECK_RES_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
-        echo "(해당 없음)"
+        echo "FAIL Splunk type confirmation required"
     elif [ ${#case_order[@]} -eq 1 ]; then
-        echo "${case_order[0]}"
+        echo "INFO HPC Splunk $(splunk_display_value "${case_order[0]}")"
     else
         for value in "${case_order[@]}"; do
-            echo "${value}: ${splunk_count[${value}]}대"
+            echo "INFO HPC Splunk $(splunk_display_value "${value}") (${splunk_count[${value}]}대)"
         done
     fi
 
@@ -347,31 +374,36 @@ filter_svrauto_targets() {
     return 0
 }
 
-# [수정금지] 기본 환경설정 적용 로직 자체는 이번 요청과 무관합니다.
+# [수정금지] 기본 환경설정 적용 로직(호출하는 스크립트 3종) 자체는 이번 요청과 무관합니다.
+# [수정됨] y/set 둘 다 이 함수를 거쳐가는데 화면상 뭘 실행하는지 구분이 안 된다는
+# 지적이 있어, "(y: 기본 환경설정)" 표시를 각 단계 로그에 붙였습니다 — 실행되는
+# 스크립트 목록 자체(setting_insert.sh/rclocal.sh/appl_change.sh)는 그대로입니다.
 # [연계] main()에서 이 함수 호출 직후 run_post_apply_check가 이어서 호출됩니다.
 apply_os_setting() {
-    echo "[INFO] setting_insert.sh 실행..."
+    echo "[INFO] (y: 기본 환경설정) setting_insert.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/setting_insert.sh" -script
 
-    echo "[INFO] rclocal.sh 실행..."
+    echo "[INFO] (y: 기본 환경설정) rclocal.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${RCLOCAL_SH}" -script
 
-    echo "[INFO] appl_change.sh 실행..."
+    echo "[INFO] (y: 기본 환경설정) appl_change.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/appl_change.sh" -script
 
-    echo "[INFO] 기본 환경설정 적용 완료"
+    echo "[INFO] 기본 환경설정 적용 완료 (setting_insert.sh + rclocal.sh + appl_change.sh)"
     echo
 }
 
 # [수정금지] 추가 환경설정 적용 로직 자체는 이번 요청과 무관합니다.
+# [수정됨] apply_os_setting과 동일하게, set에서만 추가로 도는 setting.sh 단계임을
+# 로그에 "(set: 추가 환경설정)"으로 명시했습니다.
 # [연계] main()에서 이 함수 호출 직후 run_post_apply_check가 이어서 호출됩니다.
 apply_extra_setting() {
     apply_os_setting
 
-    echo "[INFO] setting.sh 추가 실행..."
+    echo "[INFO] (set: 추가 환경설정) setting.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/setting.sh" -script
 
-    echo "[INFO] 추가 환경설정 적용 완료"
+    echo "[INFO] 추가 환경설정 적용 완료 (기본 환경설정 3종 + setting.sh)"
     echo
 }
 
