@@ -31,10 +31,22 @@
 #      가능+불가 합이 커지는 증상). 빈 줄/CR을 제거한 사본을 만들어 TARGET_LIST가
 #      그 사본을 가리키도록 수정 — 이후 모든 gossh -w 호출과 ALL_HOSTS 계산이 항상
 #      같은 정제된 목록을 보게 됨.
+#  12) run_info_check (신규) / report_ldap_info / report_splunk_info : check.res_${user}
+#      (run.sh 결과)는 LDAP/SPLUNK가 정상이면 "OK"만 찍혀서 실제 값을 알 수 없었음.
+#      그래서 이제 check.res_${user}를 grep하지 않고, LDAP/SPLUNK 실제 값을 조사하는
+#      별도 스크립트(INFO_CHECK_SH, 경로는 [수정필요])를 gossh로 따로 실행해
+#      INFO_CHECK_FILE(check.res_${user}_info)을 만들고, 두 report 함수가 그 파일을 본다.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
 RCLOCAL_SH="/path/to/setting/rclocal.sh"
+
+# [신규] [수정필요] check.res_${user}(run.sh 결과)는 LDAP/SPLUNK 설정에 문제가 없으면
+# 그냥 "OK"만 찍혀서 실제 값(어떤 LDAP infra/SPLUNK type인지)을 알 수 없다는 문제가
+# 있었다. 그래서 LDAP/SPLUNK 실제 값은 check.res_${user}에서 grep하는 대신, 이 값을
+# 조사해서 출력해주는 별도 스크립트를 gossh로 직접 실행해서 얻는다. 아래 경로를
+# 실제 조사 스크립트 경로로 채워 넣으세요.
+INFO_CHECK_SH="/path/to/check/info_check.sh"
 
 CLASSIFY_CMD="hostname"
 
@@ -48,6 +60,7 @@ select_user() {
 TARGET_LIST=""            # ${user}.txt를 빈 줄/CR 제거해서 정제한 사본을 가리킨다 (main 참고)
 CLEAN_TARGET_LIST=""      # 위 정제 사본의 실제 파일 경로 (cleanup에서 삭제용)
 CHECK_RES_FILE=""         # check.res_${user} (최초 OS 체크 결과)
+INFO_CHECK_FILE=""        # check.res_${user}_info (INFO_CHECK_SH 실행 결과 — LDAP/SPLUNK 실제값 조사용)
 SETTING_TARGET_LIST=""    # 설정 적용 대상만 추린 임시 목록 파일
 # [연계] 설정 적용(apply_os_setting/apply_extra_setting) 완료 후 run_post_apply_check가
 # 이 변수에 재점검 결과 파일 경로를 채웁니다. report_setting_check_fail은 이 변수를
@@ -173,6 +186,23 @@ run_check_script() {
     echo
 }
 
+# [신규] check.res_${user}(run.sh 결과)는 LDAP/SPLUNK가 정상이면 "OK"만 찍혀서 실제
+# 값(어떤 infra/type인지)을 알 수 없어, report_ldap_info/report_splunk_info가 더 이상
+# check.res_${user}를 보지 않고 이 함수가 만드는 INFO_CHECK_FILE을 대신 본다.
+# run_check_script와 동일한 (target_list, output_file) 파라미터 패턴이지만 실행하는
+# 스크립트가 다르므로(INFO_CHECK_SH) 별도 함수로 뺐다.
+# [연계] main()에서 최초 OS 체크(run_check_script) 직후, report_ldap_info/
+# report_splunk_info 호출 전에 실행되어야 합니다.
+run_info_check() {
+    local target_list="$1"
+    local output_file="$2"
+
+    echo "[INFO] ${INFO_CHECK_SH} 실행 중 (LDAP/SPLUNK 정보 조사)..."
+    gossh -w "${target_list}" "bash ${INFO_CHECK_SH}" -script > "${output_file}" 2>&1
+    echo "[INFO] LDAP/SPLUNK 정보 조사 결과 저장 완료 : ${output_file}"
+    echo
+}
+
 # [신규] 설정 적용(apply_os_setting/apply_extra_setting) 완료 후, 설정 적용
 # 대상(SETTING_TARGET_LIST)만 골라 run_check_script를 재사용해 재점검합니다.
 # 결과 파일은 최초 OS체크 결과(check.res_${user})와 겹치지 않도록
@@ -202,6 +232,9 @@ run_post_apply_check() {
 #   - 파일 내부 포맷: "value: ..." / "hosts: ..." 2줄 — 다른 도구가 이 파일을
 #     파싱해서 쓴다면 포맷이 맞는지 확인 필요.
 # [연계] 이 함수 안에서만 쓰이는 로컬 상태이고, 다른 함수와의 연계는 없습니다.
+# [수정됨] check.res_${user}(run.sh 결과)는 LDAP이 정상이면 "OK"만 찍혀서 실제 값을
+# 알 수 없어, 이제 CHECK_RES_FILE이 아니라 별도로 조사한 INFO_CHECK_FILE(run_info_check
+# 실행 결과)에서 값을 가져옵니다.
 # [신규] LDAP 값에서 화면 표시용 토큰(예: "infra")만 뽑는다. 원본 값이
 # "ldap infra site"처럼 grep 키워드(ldap)가 라벨로 그대로 남아있는 경우 그 라벨을
 # 먼저 제거하고("infra site"), 남은 값의 첫 토큰("infra")만 반환한다 — "site"는
@@ -213,7 +246,7 @@ ldap_display_token() {
 }
 
 report_ldap_info() {
-    [ -f "${CHECK_RES_FILE}" ] || return 0
+    [ -f "${INFO_CHECK_FILE}" ] || return 0
 
     echo "===== LDAP 정보 (접속 가능 서버) ====="
 
@@ -229,7 +262,7 @@ report_ldap_info() {
             case_order+=("${value}")
         fi
         ldap_hosts_by_value["${value}"]="${ldap_hosts_by_value[${value}]:-} ${host}"
-    done < <(grep -i "ldap" "${CHECK_RES_FILE}")
+    done < <(grep -i "ldap" "${INFO_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
         echo "FAIL ldap infra confirmation required"
@@ -261,6 +294,9 @@ report_ldap_info() {
 # UP_HOSTS 필터를 안 거는 것(주석 처리된 contains 라인)은 원본 그대로
 # 유지했습니다.
 # [연계] 다른 함수와의 연계는 없습니다.
+# [수정됨] check.res_${user}(run.sh 결과)는 SPLUNK가 정상이면 "OK"만 찍혀서 실제 값을
+# 알 수 없어, 이제 CHECK_RES_FILE이 아니라 별도로 조사한 INFO_CHECK_FILE(run_info_check
+# 실행 결과)에서 값을 가져옵니다.
 # [신규] splunk_display_value는 원본 값이 "splunk typeA"처럼 grep 키워드(splunk)가
 # 라벨로 남아있는 경우 그 라벨만 제거한다("typeA") — LDAP과 달리 나머지 값은
 # 전부(첫 토큰만이 아니라) 그대로 보여준다.
@@ -270,7 +306,7 @@ splunk_display_value() {
 }
 
 report_splunk_info() {
-    [ -f "${CHECK_RES_FILE}" ] || return 0
+    [ -f "${INFO_CHECK_FILE}" ] || return 0
 
     echo "===== SPLUNK 정보 ====="
 
@@ -287,7 +323,7 @@ report_splunk_info() {
             splunk_count["${value}"]=0
         fi
         splunk_count["${value}"]=$(( splunk_count["${value}"] + 1 ))
-    done < <(grep -i "splunk" "${CHECK_RES_FILE}")
+    done < <(grep -i "splunk" "${INFO_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
         echo "FAIL Splunk type confirmation required"
@@ -555,6 +591,7 @@ main() {
 
     TARGET_LIST="${user}.txt"
     CHECK_RES_FILE="check.res_${user}"
+    INFO_CHECK_FILE="check.res_${user}_info"
 
     if [ ! -f "${TARGET_LIST}" ]; then
         echo "[ERROR] 대상 목록 파일이 없습니다 : ${TARGET_LIST}"
@@ -579,11 +616,15 @@ main() {
 
     # [수정금지] OS 체크 진행 여부 프롬프트/분기 자체는 이번 요청과 무관합니다.
     # [수정됨] run_check_script 호출부에 (target_list, output_file) 인자 추가.
+    # [수정됨] LDAP/SPLUNK 실제 값은 check.res_${user}로는 안 나와서(정상이면 OK만
+    # 찍힘), run_info_check로 INFO_CHECK_SH를 따로 실행해 INFO_CHECK_FILE을 만들고
+    # report_ldap_info/report_splunk_info가 그 파일을 보도록 함.
     read -rp "OS 체크를 진행하시겠습니까? (y/n) : " ans_check
     case "${ans_check}" in
         y|Y)
             run_os_check
             run_check_script "${TARGET_LIST}" "${CHECK_RES_FILE}"
+            run_info_check "${TARGET_LIST}" "${INFO_CHECK_FILE}"
             report_ldap_info
             report_splunk_info
             report_lacp_info
