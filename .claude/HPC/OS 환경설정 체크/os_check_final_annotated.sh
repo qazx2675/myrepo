@@ -100,6 +100,29 @@ contains() {
     return 1
 }
 
+# [신규] 출력 가독성을 위한 색상 처리 — 불가/FAIL=빨강, 정상/완료(INFO)=초록,
+# 그 외 경고/확인필요=노랑. 터미널이 아닌 곳(파일 리다이렉트 등)으로 출력할 때는
+# 이스케이프 문자가 그대로 섞여 나오지 않도록 자동으로 색을 끈다(NO_COLOR=1로도
+# 강제로 끌 수 있음).
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_RESET='\033[0m'
+else
+    C_RED=''; C_GREEN=''; C_YELLOW=''; C_RESET=''
+fi
+red()    { printf '%b%s%b\n' "${C_RED}"    "$*" "${C_RESET}"; }
+green()  { printf '%b%s%b\n' "${C_GREEN}"  "$*" "${C_RESET}"; }
+yellow() { printf '%b%s%b\n' "${C_YELLOW}" "$*" "${C_RESET}"; }
+
+# [신규] 이미 "FAIL ..."/"INFO ..."로 시작하는 완성 문자열(ldap/splunk 리포트 값 등)을
+# 내용에 따라 자동으로 색칠한다.
+color_by_status() {
+    case "$1" in
+        FAIL*) red "$1" ;;
+        INFO*) green "$1" ;;
+        *) yellow "$1" ;;
+    esac
+}
+
 # [수정금지] 접두사 분류 기준. 이번 요청과 무관하니 절대 건드리지 마세요.
 is_prefix_host() {
     [[ "$1" =~ ^(s2h|s3h|s4h|sh|c|h) ]]
@@ -110,7 +133,7 @@ is_prefix_host() {
 run_os_check() {
     PM_RAW="/tmp/pm_raw_${user}.$$"
 
-    echo "[INFO] gossh 분류 점검 실행 중..."
+    green "[INFO] gossh 분류 점검 실행 중..."
     gossh -pm -w "${TARGET_LIST}" "${CLASSIFY_CMD}" > "${PM_RAW}" 2>&1
 
     echo
@@ -180,9 +203,9 @@ run_check_script() {
     local target_list="$1"
     local output_file="$2"
 
-    echo "[INFO] ${RUN_SH_DIR}/run.sh 실행 중..."
+    green "[INFO] ${RUN_SH_DIR}/run.sh 실행 중..."
     gossh -w "${target_list}" "bash ${RUN_SH_DIR}/run.sh" -script > "${output_file}" 2>&1
-    echo "[INFO] 체크 결과 저장 완료 : ${output_file}"
+    green "[INFO] 체크 결과 저장 완료 : ${output_file}"
     echo
 }
 
@@ -197,9 +220,9 @@ run_info_check() {
     local target_list="$1"
     local output_file="$2"
 
-    echo "[INFO] ${INFO_CHECK_SH} 실행 중 (LDAP/SPLUNK 정보 조사)..."
+    green "[INFO] ${INFO_CHECK_SH} 실행 중 (LDAP/SPLUNK 정보 조사)..."
     gossh -w "${target_list}" "bash ${INFO_CHECK_SH}" -script > "${output_file}" 2>&1
-    echo "[INFO] LDAP/SPLUNK 정보 조사 결과 저장 완료 : ${output_file}"
+    green "[INFO] LDAP/SPLUNK 정보 조사 결과 저장 완료 : ${output_file}"
     echo
 }
 
@@ -215,7 +238,7 @@ run_info_check() {
 # 바로 뒤, report_setting_check_fail 호출 바로 앞에 위치해야 합니다.
 run_post_apply_check() {
     POST_APPLY_CHECK_FILE="check.res_${user}_postapply"
-    echo "[INFO] 설정 적용 후 재점검 실행 중..."
+    green "[INFO] 설정 적용 후 재점검 실행 중..."
     run_check_script "${SETTING_TARGET_LIST}" "${POST_APPLY_CHECK_FILE}"
 }
 
@@ -274,11 +297,11 @@ report_ldap_info() {
     done < <(grep -i "ldap" "${INFO_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
-        echo "FAIL ldap infra confirmation required"
+        red "FAIL ldap infra confirmation required"
     elif [ ${#case_order[@]} -eq 1 ]; then
-        echo "${case_order[0]}"
+        color_by_status "${case_order[0]}"
     else
-        echo "[경고] LDAP 값이 ${#case_order[@]}종류로 서로 다릅니다 — 케이스별 파일로 분리합니다."
+        yellow "[경고] LDAP 값이 ${#case_order[@]}종류로 서로 다릅니다 — 케이스별 파일로 분리합니다."
         local idx=1
         local outfile
         for value in "${case_order[@]}"; do
@@ -287,7 +310,11 @@ report_ldap_info() {
                 echo "value: ${value}"
                 echo "hosts:${ldap_hosts_by_value[${value}]}"
             } > "${outfile}"
-            echo "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}"
+            case "${value}" in
+                FAIL*) red    "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}" ;;
+                INFO*) green  "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}" ;;
+                *)     yellow "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}" ;;
+            esac
             idx=$((idx + 1))
         done
     fi
@@ -335,12 +362,12 @@ report_splunk_info() {
     done < <(grep -i "splunk" "${INFO_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
-        echo "FAIL Splunk type confirmation required"
+        red "FAIL Splunk type confirmation required"
     elif [ ${#case_order[@]} -eq 1 ]; then
-        echo "INFO HPC Splunk $(splunk_display_value "${case_order[0]}")"
+        green "INFO HPC Splunk $(splunk_display_value "${case_order[0]}")"
     else
         for value in "${case_order[@]}"; do
-            echo "INFO HPC Splunk $(splunk_display_value "${value}") (${splunk_count[${value}]}대)"
+            green "INFO HPC Splunk $(splunk_display_value "${value}") (${splunk_count[${value}]}대)"
         done
     fi
 
@@ -366,9 +393,9 @@ report_setting_check_fail() {
     local found
     found=$(grep -i "FAIL" "${target_file}")
     if [ -z "${found}" ]; then
-        echo "(FAIL 항목 없음)"
+        green "(FAIL 항목 없음)"
     else
-        echo "${found}"
+        red "${found}"
     fi
     echo "====================================="
     echo
@@ -390,7 +417,7 @@ check_lacp() {
         [ -z "${line}" ] && continue
         bond_value="${line#"${h}" }"
         if [[ "${bond_value}" == *"802.3ad"* ]]; then
-            echo "${h} : LACP(${bond_value}) 사용 중"
+            yellow "${h} : LACP(${bond_value}) 사용 중"
         fi
     done
 }
@@ -419,7 +446,7 @@ filter_svrauto_targets() {
 
     local cnt
     cnt=$(grep -cv '^[[:space:]]*$' "${SETTING_TARGET_LIST}")
-    echo "[INFO] 설정 적용 대상 (접속가능 + svrauto 정상) : ${cnt} 대"
+    green "[INFO] 설정 적용 대상 (접속가능 + svrauto 정상) : ${cnt} 대"
     echo "$(print_horizontal $(cat "${SETTING_TARGET_LIST}"))"
     echo
 
@@ -433,16 +460,16 @@ filter_svrauto_targets() {
 # 스크립트 목록 자체(setting_insert.sh/rclocal.sh/appl_change.sh)는 그대로입니다.
 # [연계] main()에서 이 함수 호출 직후 run_post_apply_check가 이어서 호출됩니다.
 apply_os_setting() {
-    echo "[INFO] (y: 기본 환경설정) setting_insert.sh 실행..."
+    green "[INFO] (y: 기본 환경설정) setting_insert.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/setting_insert.sh" -script
 
-    echo "[INFO] (y: 기본 환경설정) rclocal.sh 실행..."
+    green "[INFO] (y: 기본 환경설정) rclocal.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${RCLOCAL_SH}" -script
 
-    echo "[INFO] (y: 기본 환경설정) appl_change.sh 실행..."
+    green "[INFO] (y: 기본 환경설정) appl_change.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/appl_change.sh" -script
 
-    echo "[INFO] 기본 환경설정 적용 완료 (setting_insert.sh + rclocal.sh + appl_change.sh)"
+    green "[INFO] 기본 환경설정 적용 완료 (setting_insert.sh + rclocal.sh + appl_change.sh)"
     echo
 }
 
@@ -453,10 +480,10 @@ apply_os_setting() {
 apply_extra_setting() {
     apply_os_setting
 
-    echo "[INFO] (set: 추가 환경설정) setting.sh 실행..."
+    green "[INFO] (set: 추가 환경설정) setting.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/setting.sh" -script
 
-    echo "[INFO] 추가 환경설정 적용 완료 (기본 환경설정 3종 + setting.sh)"
+    green "[INFO] 추가 환경설정 적용 완료 (기본 환경설정 3종 + setting.sh)"
     echo
 }
 
@@ -594,7 +621,7 @@ main() {
     select_user   # [수정필요] select_user 본문을 채우기 전엔 아래 공백 체크에서 바로 종료됩니다.
 
     if [ -z "${user}" ]; then
-        echo "[ERROR] user 값이 비어 있습니다."
+        red "[ERROR] user 값이 비어 있습니다."
         exit 1
     fi
 
@@ -603,7 +630,7 @@ main() {
     INFO_CHECK_FILE="check.res_${user}_info"
 
     if [ ! -f "${TARGET_LIST}" ]; then
-        echo "[ERROR] 대상 목록 파일이 없습니다 : ${TARGET_LIST}"
+        red "[ERROR] 대상 목록 파일이 없습니다 : ${TARGET_LIST}"
         exit 1
     fi
 
@@ -639,7 +666,7 @@ main() {
             report_lacp_info
             ;;
         *)
-            echo "[INFO] OS 체크를 진행하지 않고 종료합니다."
+            yellow "[INFO] OS 체크를 진행하지 않고 종료합니다."
             exit 0
             ;;
     esac
@@ -655,7 +682,7 @@ main() {
                 run_post_apply_check
                 report_setting_check_fail "${POST_APPLY_CHECK_FILE}"
             else
-                echo "[WARN] 설정 적용 대상이 없어 건너뜁니다."
+                yellow "[WARN] 설정 적용 대상이 없어 건너뜁니다."
             fi
             ;;
         set|SET)
@@ -664,11 +691,11 @@ main() {
                 run_post_apply_check
                 report_setting_check_fail "${POST_APPLY_CHECK_FILE}"
             else
-                echo "[WARN] 설정 적용 대상이 없어 건너뜁니다."
+                yellow "[WARN] 설정 적용 대상이 없어 건너뜁니다."
             fi
             ;;
         *)
-            echo "[INFO] 환경설정 수정은 건너뜁니다."
+            yellow "[INFO] 환경설정 수정은 건너뜁니다."
             ;;
     esac
 
