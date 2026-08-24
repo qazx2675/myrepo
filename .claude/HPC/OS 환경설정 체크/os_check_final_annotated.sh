@@ -235,16 +235,12 @@ run_post_apply_check() {
 # [수정됨] check.res_${user}(run.sh 결과)는 LDAP이 정상이면 "OK"만 찍혀서 실제 값을
 # 알 수 없어, 이제 CHECK_RES_FILE이 아니라 별도로 조사한 INFO_CHECK_FILE(run_info_check
 # 실행 결과)에서 값을 가져옵니다.
-# [신규] LDAP 값에서 화면 표시용 토큰(예: "infra")만 뽑는다. 원본 값이
-# "ldap infra site"처럼 grep 키워드(ldap)가 라벨로 그대로 남아있는 경우 그 라벨을
-# 먼저 제거하고("infra site"), 남은 값의 첫 토큰("infra")만 반환한다 — "site"는
-# 버린다. 원본 값(파일에 저장되는 value)은 이 함수와 무관하게 그대로 유지된다.
-ldap_display_token() {
-    local v="$1"
-    v="${v#[Ll][Dd][Aa][Pp] }"
-    echo "${v%% *}"
-}
-
+# [수정됨] INFO_CHECK_SH의 실제 출력이 "hostname : INFO ldap infra" 형태로, host와
+# 값 사이가 공백 1칸이 아니라 콜론(:)으로 구분되고(콜론 앞뒤 공백 유무는 호스트마다
+# 다를 수 있음), 값 자체에 이미 "INFO ldap ..."/"FAIL ldap ..."이 완성된 문자열로
+# 들어있습니다. 그래서 더 이상 값을 잘라 재조합하지 않고, 콜론 뒤 텍스트를 있는
+# 그대로 출력합니다(ldap_display_token 재가공 제거 — 이중으로 "INFO ldap"이
+# 붙던 버그 수정).
 report_ldap_info() {
     [ -f "${INFO_CHECK_FILE}" ] || return 0
 
@@ -255,9 +251,14 @@ report_ldap_info() {
     local case_order=()
 
     while IFS= read -r line; do
-        host=$(echo "${line}" | awk '{print $1}')
+        if [[ "${line}" =~ ^([^[:space:]]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            host="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+        else
+            host=$(echo "${line}" | awk '{print $1}')
+            value="${line#"${host}" }"
+        fi
         contains "${host}" "${UP_HOSTS[@]}" || continue
-        value="${line#"${host}" }"
         if [ -z "${ldap_hosts_by_value[${value}]:-}" ]; then
             case_order+=("${value}")
         fi
@@ -267,7 +268,7 @@ report_ldap_info() {
     if [ ${#case_order[@]} -eq 0 ]; then
         echo "FAIL ldap infra confirmation required"
     elif [ ${#case_order[@]} -eq 1 ]; then
-        echo "INFO ldap $(ldap_display_token "${case_order[0]}")"
+        echo "${case_order[0]}"
     else
         echo "[경고] LDAP 값이 ${#case_order[@]}종류로 서로 다릅니다 — 케이스별 파일로 분리합니다."
         local idx=1
@@ -278,7 +279,7 @@ report_ldap_info() {
                 echo "value: ${value}"
                 echo "hosts:${ldap_hosts_by_value[${value}]}"
             } > "${outfile}"
-            echo "  - case${idx} (${outfile}) : INFO ldap $(ldap_display_token "${value}")  =>  대상:${ldap_hosts_by_value[${value}]}"
+            echo "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}"
             idx=$((idx + 1))
         done
     fi
