@@ -241,6 +241,8 @@ run_post_apply_check() {
 # 들어있습니다. 그래서 더 이상 값을 잘라 재조합하지 않고, 콜론 뒤 텍스트를 있는
 # 그대로 출력합니다(ldap_display_token 재가공 제거 — 이중으로 "INFO ldap"이
 # 붙던 버그 수정).
+# [수정됨] "infra" 뒤에 인프라와 무관한 텍스트가 더 붙어 나오는 경우가 있어, 앞 3
+# 토큰(예: "INFO ldap infra")만 남기고 나머지는 버립니다.
 report_ldap_info() {
     [ -f "${INFO_CHECK_FILE}" ] || return 0
 
@@ -259,6 +261,12 @@ report_ldap_info() {
             value="${line#"${host}" }"
         fi
         contains "${host}" "${UP_HOSTS[@]}" || continue
+
+        set -- ${value}
+        value="${1:-}"
+        [ -n "${2:-}" ] && value="${value} ${2}"
+        [ -n "${3:-}" ] && value="${value} ${3}"
+
         if [ -z "${ldap_hosts_by_value[${value}]:-}" ]; then
             case_order+=("${value}")
         fi
