@@ -24,6 +24,13 @@
 #  10) apply_os_setting/apply_extra_setting : 실행되는 스크립트 목록은 그대로 두고,
 #      로그에 "(y: 기본 환경설정)"/"(set: 추가 환경설정)" 표시를 붙여 y/set이 각각
 #      무엇을 실행하는지 화면에서 구분되게 함.
+#  11) main() : TARGET_LIST(${user}.txt)를 gossh -w에 원본 그대로 넘기고 있어서,
+#      파일에 빈 줄이 섞여 있으면 gossh가 이를 빈 호스트명 타겟으로 인식해 접속을
+#      시도하고 그 실패 라인이 PM_RAW에 남아 ping/refused/anaconda 패턴에 우연히
+#      걸리면서 DOWN_HOSTS에 유령 항목이 잡히는 버그가 있었음(실제 대수보다 접속
+#      가능+불가 합이 커지는 증상). 빈 줄/CR을 제거한 사본을 만들어 TARGET_LIST가
+#      그 사본을 가리키도록 수정 — 이후 모든 gossh -w 호출과 ALL_HOSTS 계산이 항상
+#      같은 정제된 목록을 보게 됨.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -38,7 +45,8 @@ select_user() {
     user=""   # <-- 여기에 기존 user 선택 함수 붙여넣기 (결과값이 user 에 들어가면 됨)
 }
 
-TARGET_LIST=""            # ${user}.txt
+TARGET_LIST=""            # ${user}.txt를 빈 줄/CR 제거해서 정제한 사본을 가리킨다 (main 참고)
+CLEAN_TARGET_LIST=""      # 위 정제 사본의 실제 파일 경로 (cleanup에서 삭제용)
 CHECK_RES_FILE=""         # check.res_${user} (최초 OS 체크 결과)
 SETTING_TARGET_LIST=""    # 설정 적용 대상만 추린 임시 목록 파일
 # [연계] 설정 적용(apply_os_setting/apply_extra_setting) 완료 후 run_post_apply_check가
@@ -529,10 +537,11 @@ report_ev_hosts() {
     echo
 }
 
-# [수정금지] 이번 요청과 무관합니다.
+# [수정됨] CLEAN_TARGET_LIST(정제된 TARGET_LIST 사본) 삭제 추가.
 cleanup() {
     [ -n "${PM_RAW}" ] && rm -f "${PM_RAW}"
     [ -n "${SETTING_TARGET_LIST}" ] && rm -f "${SETTING_TARGET_LIST}"
+    [ -n "${CLEAN_TARGET_LIST}" ] && rm -f "${CLEAN_TARGET_LIST}"
 }
 trap cleanup EXIT
 
@@ -551,6 +560,18 @@ main() {
         echo "[ERROR] 대상 목록 파일이 없습니다 : ${TARGET_LIST}"
         exit 1
     fi
+
+    # [신규] TARGET_LIST 원본에 빈 줄/CR이 섞여 있으면 gossh -w가 이를 빈 호스트명
+    # 타겟으로 인식해서 접속을 시도하고, 그 실패 결과 라인이 PM_RAW에 남아 ping/refused/
+    # anaconda 패턴에 우연히 걸리면서 DOWN_HOSTS에 유령 항목이 잡히는 문제가 있었다
+    # (실제 대수보다 접속가능+접속불가 합이 더 크게 나오는 증상의 원인). ALL_HOSTS는
+    # 이미 이 필터를 적용해서 만들고 있었는데 gossh에 실제로 넘기는 파일은 원본
+    # 그대로였던 게 불일치의 원인 — 정제된 사본을 만들어 TARGET_LIST가 이후부터 그
+    # 사본을 가리키게 해서, gossh 호출과 ALL_HOSTS 계산이 항상 같은 정제된 목록을
+    # 보도록 통일한다.
+    CLEAN_TARGET_LIST="/tmp/target_clean_${user}.$$"
+    grep -v '^[[:space:]]*$' "${TARGET_LIST}" | tr -d '\r' > "${CLEAN_TARGET_LIST}"
+    TARGET_LIST="${CLEAN_TARGET_LIST}"
 
     echo "user        : ${user}"
     echo "target list : ${TARGET_LIST}"
