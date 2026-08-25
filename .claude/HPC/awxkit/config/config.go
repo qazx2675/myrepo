@@ -38,6 +38,7 @@ type Config struct {
 	S3Template     string
 	S3InfraKey     string
 	S3InfraChoices string
+	S3ExtraVars    string // "key=value, key2=value2" 형태. 템플릿의 다른 필수 survey 항목을 채울 때 사용
 
 	// [S4] PXE
 	S4Template        string
@@ -50,6 +51,7 @@ type Config struct {
 	S4SplunkKey       string
 	S4SplunkChoices   string
 	S4Inventory       string
+	S4ExtraVars       string // "key=value, key2=value2" 형태. 템플릿의 다른 필수 survey 항목을 채울 때 사용
 
 	// 공통 동작
 	PollIntervalSec int
@@ -82,6 +84,7 @@ func (c *Config) fieldSetters() map[string]func(string) {
 		"s3_template":      func(v string) { c.S3Template = v },
 		"s3_infra_key":     func(v string) { c.S3InfraKey = v },
 		"s3_infra_choices": func(v string) { c.S3InfraChoices = v },
+		"s3_extra_vars":    func(v string) { c.S3ExtraVars = v },
 
 		"s4_template":         func(v string) { c.S4Template = v },
 		"s4_infra_key":        func(v string) { c.S4InfraKey = v },
@@ -93,6 +96,7 @@ func (c *Config) fieldSetters() map[string]func(string) {
 		"s4_splunk_key":       func(v string) { c.S4SplunkKey = v },
 		"s4_splunk_choices":   func(v string) { c.S4SplunkChoices = v },
 		"s4_inventory":        func(v string) { c.S4Inventory = v },
+		"s4_extra_vars":       func(v string) { c.S4ExtraVars = v },
 
 		"poll_interval": func(v string) {
 			if n, err := strconv.Atoi(v); err == nil {

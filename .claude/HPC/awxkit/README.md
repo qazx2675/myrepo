@@ -181,6 +181,7 @@ bash dhcp.sh
 # [!] 설정 변경 작업입니다. 완료 후 랜덤하게 서버 몇 대를 직접 확인해 실제로 변경되었는지 검증하세요.
 ```
 `s3_infra_choices`가 설정된 상태에서 목록에 없는 값을 주면 오류로 종료합니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
+템플릿에 `-infra` 외 다른 필수 survey 항목이 있다면 `s3_extra_vars`에 `"key=value, key2=value2"` 형태로 채우면 launch 시 함께 전달됩니다 ([S1]의 `s1_extra_vars`와 동일한 방식).
 
 ### 2.8 [S4] PXE 등록 (`pxe.sh`)
 인프라·OS 버전·Boot Mode·Splunk 설치 여부 4개 옵션을 조합해 `s4_template`을 실행하고, 완료 후 `s4_inventory`의 전체 호스트 수를 리포트합니다. 각 옵션은 `dhcp.sh`의 `-infra`와 같은 방식(번호/값/생략)으로 동작합니다.
@@ -192,6 +193,7 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 # 총 42대의 호스트가 등록 완료되었습니다.
 ```
 각 옵션의 선택지(`s4_infra_choices` 등)는 선택 사항 — 비워두면 해당 옵션은 자유 입력을 받습니다. `s4_inventory`를 비워두면 호스트 수 집계는 건너뜁니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
+템플릿에 위 4개 옵션 외 다른 필수 survey 항목이 있다면 `s4_extra_vars`에 `"key=value, key2=value2"` 형태로 채우면 launch 시 함께 전달됩니다 ([S1]의 `s1_extra_vars`와 동일한 방식).
 
 ## 3. 옵션별 상세 설명
 
@@ -228,8 +230,8 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 | `insecure_tls` | 사설 인증서 환경에서 `true` |
 | `s1_*` | [S1] NodeInfo 템플릿/파라미터(`s1_extra_vars`로 추가 필수 survey 항목 전달)/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
 | `s2_*` | [S2] 소스 ID(`s2_inventory_source`, 비우면 `s2_inventory` 밑에서 자동 탐색)·대상 인벤토리 ID(`s2_inventory`)·yaml 파일명 저장 필드(`s2_source_field`, 기본 `source_path`) |
-| `s3_*` | [S3] DHCP 템플릿/인프라 선택 변수명·옵션 |
-| `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명과 각각의 선택지(`*_choices`, 선택 사항), 결과 집계용 인벤토리 ID |
+| `s3_*` | [S3] DHCP 템플릿/인프라 선택 변수명·옵션(`s3_extra_vars`로 추가 필수 survey 항목 전달) |
+| `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명과 각각의 선택지(`*_choices`, 선택 사항), 결과 집계용 인벤토리 ID, 추가 필수 survey 항목(`s4_extra_vars`) |
 | `poll_interval` | Job 상태 폴링 간격(초) |
 | `history_file` | 실행 이력 기록 파일 |
 

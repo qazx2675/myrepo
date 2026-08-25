@@ -65,18 +65,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	extraVars := map[string]interface{}{
+	launchVars := map[string]interface{}{
 		cfg.S4InfraKey:    infra,
 		cfg.S4OSVerKey:    osVer,
 		cfg.S4BootModeKey: bootMode,
 		cfg.S4SplunkKey:   splunk,
+	}
+	extraVars, err := config.ParseKeyValues(cfg.S4ExtraVars)
+	if err != nil {
+		fmt.Printf("[X] conf의 s4_extra_vars 형식이 올바르지 않습니다: %v\n", err)
+		os.Exit(1)
+	}
+	for k, v := range extraVars {
+		launchVars[k] = v
 	}
 	fmt.Printf("[i] %s 실행 중... (%s=%s, %s=%s, %s=%s, %s=%s)\n", t.Name,
 		cfg.S4InfraKey, infra, cfg.S4OSVerKey, osVer, cfg.S4BootModeKey, bootMode, cfg.S4SplunkKey, splunk)
 
 	histParams := fmt.Sprintf("infra=%s os=%s boot=%s splunk=%s", infra, osVer, bootMode, splunk)
 
-	result, err := client.Launch(t.ID, extraVars)
+	result, err := client.Launch(t.ID, launchVars)
 	if err != nil {
 		fmt.Printf("[X] 실행 요청 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=pxe %s status=launch_error error=%q", user, histParams, err.Error()))
