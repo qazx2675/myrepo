@@ -21,13 +21,15 @@ type Config struct {
 	InsecureTLS bool
 
 	// [S1] NodeInfo
-	S1Template    string
-	S1HostnameKey string
-	S1ExtraVars   string // "key=value, key2=value2" 형태. 템플릿의 다른 필수 survey 항목을 채울 때 사용
-	S1Fetch       string // artifacts | stdout | remote
-	S1ArtifactKey string // s1_fetch=artifacts 일 때 결과가 담긴 artifacts의 키. 비우면 전체 artifacts를 저장
-	S1RemotePath  string
-	S1OutputDir   string
+	S1Template     string
+	S1HostnameKey  string
+	S1OSVerKey     string // -os 플래그 값을 담을 extra_var 변수명. 비우면 -os 플래그 자체를 사용하지 않음
+	S1OSVerChoices string // -os 선택지 목록(선택 사항). 비우면 -os 값을 검증 없이 그대로 사용
+	S1ExtraVars    string // "key=value, key2=value2" 형태. -os 외 다른 필수 survey 항목을 채울 때 사용
+	S1Fetch        string // artifacts | stdout | remote
+	S1ArtifactKey  string // s1_fetch=artifacts 일 때 결과가 담긴 artifacts의 키. 비우면 전체 artifacts를 저장
+	S1RemotePath   string
+	S1OutputDir    string
 
 	// [S2] 인벤토리 동기화
 	S2InventorySource string // 비우면 s2_inventory 아래 소스 목록 중 첫 번째를 자동 선택. 채우면 그 ID를 고정으로 사용(자동탐색 생략)
@@ -69,10 +71,12 @@ func (c *Config) fieldSetters() map[string]func(string) {
 		"password":     func(v string) { c.Password = v },
 		"insecure_tls": func(v string) { c.InsecureTLS = parseBool(v) },
 
-		"s1_template":     func(v string) { c.S1Template = v },
-		"s1_hostname_key": func(v string) { c.S1HostnameKey = v },
-		"s1_extra_vars":   func(v string) { c.S1ExtraVars = v },
-		"s1_fetch":        func(v string) { c.S1Fetch = v },
+		"s1_template":      func(v string) { c.S1Template = v },
+		"s1_hostname_key":  func(v string) { c.S1HostnameKey = v },
+		"s1_osver_key":     func(v string) { c.S1OSVerKey = v },
+		"s1_osver_choices": func(v string) { c.S1OSVerChoices = v },
+		"s1_extra_vars":    func(v string) { c.S1ExtraVars = v },
+		"s1_fetch":         func(v string) { c.S1Fetch = v },
 		"s1_artifact_key": func(v string) { c.S1ArtifactKey = v },
 		"s1_remote_path":  func(v string) { c.S1RemotePath = v },
 		"s1_output_dir":   func(v string) { c.S1OutputDir = v },

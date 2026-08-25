@@ -22,6 +22,7 @@ func main() {
 	confFlag := flag.String("conf", "", "설정 파일 경로를 직접 지정합니다")
 	userFlag := flag.String("user", "", "사용자 식별자를 직접 지정합니다 (AWXKIT_USER 환경변수보다 낮은 우선순위)")
 	hostsFlag := flag.String("hosts", "", "사용할 호스트 목록 파일 경로 (기본: ${user}.txt)")
+	osFlag := flag.String("os", "", "OS 버전 (예: 8.10). s1_osver_key가 설정된 경우에만 사용됨")
 	flag.Parse()
 
 	user := config.ResolveUser(*userFlag)
@@ -78,6 +79,15 @@ func main() {
 	launchVars := map[string]interface{}{cfg.S1HostnameKey: hostText}
 	for k, v := range extraVars {
 		launchVars[k] = v
+	}
+
+	if cfg.S1OSVerKey != "" {
+		osVer, err := cli.ResolveChoice("OS 버전", cli.ParseChoices(cfg.S1OSVerChoices), *osFlag)
+		if err != nil {
+			fmt.Printf("[X] %v\n", err)
+			os.Exit(1)
+		}
+		launchVars[cfg.S1OSVerKey] = osVer
 	}
 	fmt.Printf("[i] %s 실행 중... (%d개 hostname을 한 번에 전달)\n", t.Name, len(hosts))
 

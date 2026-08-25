@@ -116,7 +116,7 @@ web02
 db01
 ```
 ```bash
-bash nodeinfo.sh
+bash nodeinfo.sh -os 8.10
 # [i] 호스트 목록: conf/hong.txt (3개)
 # [i] nodeinfo 실행 중... (3개 hostname을 한 번에 전달)
 #     [job 1234] running
@@ -127,7 +127,8 @@ bash nodeinfo.sh
 # [✔] 양식 변환 확인 완료.
 ```
 - `s1_hostname_key`에 hostname 전체(줄바꿈으로 이어붙인 텍스트)를 담아 `s1_template`을 한 번 실행하고, 결과를 `s1_output_dir/${user}_nodeinfo.yaml` 하나로 저장합니다.
-- 템플릿에 `s1_hostname_key` 외의 필수 survey 항목이 더 있다면(`variables_needed_to_start` 오류), `s1_extra_vars`에 `"key=value, key2=value2"` 형태로 채우면 launch 시 함께 전달됩니다.
+- OS 버전은 `-os` 플래그로 받습니다(예: `-os 8.10`). `s1_osver_key`가 설정된 경우에만 사용되며, 그 변수명으로 launch 시 전달됩니다. `s1_osver_choices`를 채우면 목록에 없는 값은 오류, 비우면 검증 없이 그대로 사용합니다.
+- 템플릿에 `s1_hostname_key`/`s1_osver_key` 외의 필수 survey 항목이 더 있다면(`variables_needed_to_start` 오류), `s1_extra_vars`에 `"key=value, key2=value2"` 형태로 채우면 launch 시 함께 전달됩니다. `survey.sh`로 조회한 변수명=값을 그대로 넣으면 됩니다.
 - 결과 취득 방식(`s1_fetch`)에 따라: `artifacts`(기본, `s1_artifact_key`로 값을 지정하지 않으면 전체 artifacts를 저장), `stdout`(표준출력 그대로 저장), `remote`(API로 받을 수 없어 원격 경로 안내만 출력).
 - **양식 변환 확인**: 다운로드된 결과 파일을 정해진 양식으로 바꾸는 스크립트는 awxkit이 실행하지 않습니다. 사용자가 다른 터미널에서 그 스크립트를 직접 실행한 뒤, awxkit이 물어보는 `Y/N`에 `Y`로 답해야 실행이 완료됩니다. `N`이거나 다른 입력이면 `downloaded_unconfirmed` 상태로 종료 코드 1을 반환합니다 — 다운로드는 됐지만 변환이 확인되지 않았다는 뜻입니다.
 - 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
@@ -186,12 +187,13 @@ bash dhcp.sh
 ### 2.8 [S4] PXE 등록 (`pxe.sh`)
 인프라·OS 버전·Boot Mode·Splunk 설치 여부 4개 옵션을 조합해 `s4_template`을 실행하고, 완료 후 `s4_inventory`의 전체 호스트 수를 리포트합니다. 각 옵션은 `dhcp.sh`의 `-infra`와 같은 방식(번호/값/생략)으로 동작합니다.
 ```bash
-bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
-# [i] pxe-register 실행 중... (pxe_infra=seoul, os_version=rocky-9.2, boot_mode=uefi, install_splunk=true)
+bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk On-premise
+# [i] pxe-register 실행 중... (pxe_infra=seoul, os_version=rocky-9.2, boot_mode=uefi, install_splunk=On-premise)
 #     [job 600] successful
 # [✔] 성공 (job 600)
 # 총 42대의 호스트가 등록 완료되었습니다.
 ```
+`-boot`는 `legacy` 또는 `uefi`, `-splunk`는 `On-premise` / `Cloud` / `no` 중 하나를 받습니다 (`s4_bootmode_choices`/`s4_splunk_choices`로 선택지 강제 가능).
 각 옵션의 선택지(`s4_infra_choices` 등)는 선택 사항 — 비워두면 해당 옵션은 자유 입력을 받습니다. `s4_inventory`를 비워두면 호스트 수 집계는 건너뜁니다. 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
 템플릿에 위 4개 옵션 외 다른 필수 survey 항목이 있다면 `s4_extra_vars`에 `"key=value, key2=value2"` 형태로 채우면 launch 시 함께 전달됩니다 ([S1]의 `s1_extra_vars`와 동일한 방식).
 
@@ -205,7 +207,7 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 | `doctor.sh` | (없음) |
 | `ls.sh` | (없음) |
 | `survey.sh` | `<ID\|이름>` (위치 인자, 생략 시 대화형 입력) |
-| `nodeinfo.sh` | `-hosts <경로>` — `${user}.txt` 대신 사용할 호스트 목록 파일 |
+| `nodeinfo.sh` | `-hosts <경로>` — `${user}.txt` 대신 사용할 호스트 목록 파일 / `-os <값>` — OS 버전(`s1_osver_key` 설정 시) |
 | `invsync.sh` | `-file <파일명>` (필수) — git에 이미 업로드된 인벤토리 yaml 파일명 |
 | `dhcp.sh` | `-infra <번호\|값>` — 인프라 선택지 번호 또는 값 |
 | `pxe.sh` | `-infra` / `-os` / `-boot` / `-splunk` <번호\|값> |
@@ -228,7 +230,7 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 |---|---|
 | `awx_url` / `username` / `password` | AWX 접속 정보 |
 | `insecure_tls` | 사설 인증서 환경에서 `true` |
-| `s1_*` | [S1] NodeInfo 템플릿/파라미터(`s1_extra_vars`로 추가 필수 survey 항목 전달)/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
+| `s1_*` | [S1] NodeInfo 템플릿/파라미터(`s1_osver_key`+`-os` 플래그로 OS 버전, `s1_extra_vars`로 그 외 필수 survey 항목 전달)/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
 | `s2_*` | [S2] 소스 ID(`s2_inventory_source`, 비우면 `s2_inventory` 밑에서 자동 탐색)·대상 인벤토리 ID(`s2_inventory`)·yaml 파일명 저장 필드(`s2_source_field`, 기본 `source_path`) |
 | `s3_*` | [S3] DHCP 템플릿/인프라 선택 변수명·옵션(`s3_extra_vars`로 추가 필수 survey 항목 전달) |
 | `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명과 각각의 선택지(`*_choices`, 선택 사항), 결과 집계용 인벤토리 ID, 추가 필수 survey 항목(`s4_extra_vars`) |
