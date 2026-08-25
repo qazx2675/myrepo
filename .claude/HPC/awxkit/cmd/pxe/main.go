@@ -24,44 +24,44 @@ func main() {
 	user := config.ResolveUser(*userFlag)
 	confPath, err := config.ResolvePath(*confFlag, user)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Fprintf(os.Stderr, cli.MarkFail+" 설정 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
 	}
 
 	cfg, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
-		fmt.Printf("[X] 설정 오류: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 설정 오류: %v\n", err)
 		os.Exit(1)
 	}
 	if cfg.S4Template == "" {
-		fmt.Println("[X] conf의 s4_template이 설정되지 않았습니다.")
+		fmt.Println(cli.MarkFail+" conf의 s4_template이 설정되지 않았습니다.")
 		os.Exit(1)
 	}
 
 	infra, err := cli.ResolveChoice("인프라", cli.ParseChoices(cfg.S4InfraChoices), *infraFlag)
 	if err != nil {
-		fmt.Printf("[X] %v\n", err)
+		fmt.Printf(cli.MarkFail+" %v\n", err)
 		os.Exit(1)
 	}
 	osVer, err := cli.ResolveChoice("OS 버전", cli.ParseChoices(cfg.S4OSVerChoices), *osFlag)
 	if err != nil {
-		fmt.Printf("[X] %v\n", err)
+		fmt.Printf(cli.MarkFail+" %v\n", err)
 		os.Exit(1)
 	}
 	bootMode, err := cli.ResolveChoice("Boot Mode", cli.ParseChoices(cfg.S4BootModeChoices), *bootFlag)
 	if err != nil {
-		fmt.Printf("[X] %v\n", err)
+		fmt.Printf(cli.MarkFail+" %v\n", err)
 		os.Exit(1)
 	}
 	splunk, err := cli.ResolveChoice("Splunk 설치 여부", cli.ParseChoices(cfg.S4SplunkChoices), *splunkFlag)
 	if err != nil {
-		fmt.Printf("[X] %v\n", err)
+		fmt.Printf(cli.MarkFail+" %v\n", err)
 		os.Exit(1)
 	}
 
 	t, err := client.ResolveTemplate(cfg.S4Template)
 	if err != nil {
-		fmt.Printf("[X] 템플릿(%s)을 찾을 수 없습니다: %v\n", cfg.S4Template, err)
+		fmt.Printf(cli.MarkFail+" 템플릿(%s)을 찾을 수 없습니다: %v\n", cfg.S4Template, err)
 		os.Exit(1)
 	}
 
@@ -73,7 +73,7 @@ func main() {
 	}
 	extraVars, err := config.ParseKeyValues(cfg.S4ExtraVars)
 	if err != nil {
-		fmt.Printf("[X] conf의 s4_extra_vars 형식이 올바르지 않습니다: %v\n", err)
+		fmt.Printf(cli.MarkFail+" conf의 s4_extra_vars 형식이 올바르지 않습니다: %v\n", err)
 		os.Exit(1)
 	}
 	for k, v := range extraVars {
@@ -86,27 +86,27 @@ func main() {
 
 	result, err := client.Launch(t.ID, launchVars)
 	if err != nil {
-		fmt.Printf("[X] 실행 요청 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 실행 요청 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=pxe %s status=launch_error error=%q", user, histParams, err.Error()))
 		os.Exit(1)
 	}
 	if len(result.IgnoredFields) > 0 {
-		fmt.Printf("    [!] 일부 값이 무시되었습니다(ignored_fields): %v — 템플릿의 ask_variables_on_launch 설정을 확인하세요.\n", result.IgnoredFields)
+		fmt.Printf("    " + cli.MarkWarn + " 일부 값이 무시되었습니다(ignored_fields): %v — 템플릿의 ask_variables_on_launch 설정을 확인하세요.\n", result.IgnoredFields)
 	}
 
 	job, err := cli.PollJob(client, result.Job, cfg.PollIntervalSec)
 	if err != nil {
-		fmt.Printf("[X] 상태 조회 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 상태 조회 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=pxe %s job=%d status=poll_error error=%q", user, histParams, result.Job, err.Error()))
 		os.Exit(1)
 	}
 	if job.Status != "successful" {
-		fmt.Printf("[X] 실패 (status=%s)\n", job.Status)
+		fmt.Printf(cli.MarkFail+" 실패 (status=%s)\n", job.Status)
 		cli.PrintStdoutTail(client, job.ID, 30)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=pxe %s job=%d status=%s", user, histParams, job.ID, job.Status))
 		os.Exit(1)
 	}
-	fmt.Printf("[✔] 성공 (job %d)\n", job.ID)
+	fmt.Printf(cli.MarkOK+" 성공 (job %d)\n", job.ID)
 	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=pxe %s job=%d status=successful", user, histParams, job.ID))
 
 	if cfg.S4Inventory == "" {
@@ -115,12 +115,12 @@ func main() {
 	}
 	inventoryID, err := strconv.Atoi(cfg.S4Inventory)
 	if err != nil {
-		fmt.Printf("[X] s4_inventory(%s)는 숫자 ID여야 합니다.\n", cfg.S4Inventory)
+		fmt.Printf(cli.MarkFail+" s4_inventory(%s)는 숫자 ID여야 합니다.\n", cfg.S4Inventory)
 		os.Exit(1)
 	}
 	count, err := client.CountInventoryHosts(inventoryID)
 	if err != nil {
-		fmt.Printf("[X] 인벤토리(%d) 호스트 수 조회 실패: %v\n", inventoryID, err)
+		fmt.Printf(cli.MarkFail+" 인벤토리(%d) 호스트 수 조회 실패: %v\n", inventoryID, err)
 		os.Exit(1)
 	}
 	fmt.Printf("총 %d대의 호스트가 등록 완료되었습니다.\n", count)

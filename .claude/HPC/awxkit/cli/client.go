@@ -31,7 +31,7 @@ func AppendHistory(cfg *config.Config, line string) {
 	}
 	f, err := os.OpenFile(cfg.HistoryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		fmt.Printf("[!] 이력 파일 기록 실패 (%s): %v\n", cfg.HistoryFile, err)
+		fmt.Printf(MarkWarn+" 이력 파일 기록 실패 (%s): %v\n", cfg.HistoryFile, err)
 		return
 	}
 	defer f.Close()
@@ -39,4 +39,4 @@ func AppendHistory(cfg *config.Config, line string) {
 }
 
 // SettingChangeWarning은 설정을 바꾸는 시나리오(DHCP 등) 실행 후 항상 보여주는 검증 권고 문구다.
-const SettingChangeWarning = "[!] 설정 변경 작업입니다. 완료 후 랜덤하게 서버 몇 대를 직접 확인해 실제로 변경되었는지 검증하세요."
+var SettingChangeWarning = MarkWarn + " 설정 변경 작업입니다. 완료 후 랜덤하게 서버 몇 대를 직접 확인해 실제로 변경되었는지 검증하세요."

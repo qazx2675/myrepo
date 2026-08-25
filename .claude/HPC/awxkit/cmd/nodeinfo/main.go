@@ -28,50 +28,50 @@ func main() {
 	user := config.ResolveUser(*userFlag)
 	confPath, err := config.ResolvePath(*confFlag, user)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Fprintf(os.Stderr, cli.MarkFail+" 설정 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
 	}
 
 	cfg, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
-		fmt.Printf("[X] 설정 오류: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 설정 오류: %v\n", err)
 		os.Exit(1)
 	}
 	if cfg.S1Template == "" {
-		fmt.Println("[X] conf의 s1_template이 설정되지 않았습니다.")
+		fmt.Println(cli.MarkFail+" conf의 s1_template이 설정되지 않았습니다.")
 		os.Exit(1)
 	}
 
 	if *hostsFlag == "" && user == "" {
-		fmt.Println("[X] 사용자를 식별할 수 없어 ${user}.txt를 찾을 수 없습니다. -hosts로 직접 지정하거나 -user/AWXKIT_USER를 설정하세요.")
+		fmt.Println(cli.MarkFail+" 사용자를 식별할 수 없어 ${user}.txt를 찾을 수 없습니다. -hosts로 직접 지정하거나 -user/AWXKIT_USER를 설정하세요.")
 		os.Exit(1)
 	}
 	hostsPath, err := config.ResolveNamedPath(*hostsFlag, user+".txt")
 	if err != nil {
-		fmt.Printf("[X] 호스트 목록 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 호스트 목록 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
 	}
 	hosts, err := config.ReadHostList(hostsPath)
 	if err != nil {
-		fmt.Printf("[X] %v\n", err)
+		fmt.Printf(cli.MarkFail+" %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("[i] 호스트 목록: %s (%d개)\n", hostsPath, len(hosts))
 
 	t, err := client.ResolveTemplate(cfg.S1Template)
 	if err != nil {
-		fmt.Printf("[X] 템플릿(%s)을 찾을 수 없습니다: %v\n", cfg.S1Template, err)
+		fmt.Printf(cli.MarkFail+" 템플릿(%s)을 찾을 수 없습니다: %v\n", cfg.S1Template, err)
 		os.Exit(1)
 	}
 
 	if err := os.MkdirAll(cfg.S1OutputDir, 0o755); err != nil {
-		fmt.Printf("[X] 결과 저장 디렉터리를 만들 수 없습니다 (%s): %v\n", cfg.S1OutputDir, err)
+		fmt.Printf(cli.MarkFail+" 결과 저장 디렉터리를 만들 수 없습니다 (%s): %v\n", cfg.S1OutputDir, err)
 		os.Exit(1)
 	}
 
 	extraVars, err := config.ParseKeyValues(cfg.S1ExtraVars)
 	if err != nil {
-		fmt.Printf("[X] conf의 s1_extra_vars 형식이 올바르지 않습니다: %v\n", err)
+		fmt.Printf(cli.MarkFail+" conf의 s1_extra_vars 형식이 올바르지 않습니다: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -84,7 +84,7 @@ func main() {
 	if cfg.S1OSVerKey != "" {
 		osVer, err := cli.ResolveChoice("OS 버전", cli.ParseChoices(cfg.S1OSVerChoices), *osFlag)
 		if err != nil {
-			fmt.Printf("[X] %v\n", err)
+			fmt.Printf(cli.MarkFail+" %v\n", err)
 			os.Exit(1)
 		}
 		launchVars[cfg.S1OSVerKey] = osVer
@@ -93,22 +93,22 @@ func main() {
 
 	result, err := client.Launch(t.ID, launchVars)
 	if err != nil {
-		fmt.Printf("[X] 실행 요청 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 실행 요청 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d status=launch_error error=%q", user, len(hosts), err.Error()))
 		os.Exit(1)
 	}
 	if len(result.IgnoredFields) > 0 {
-		fmt.Printf("    [!] 일부 값이 무시되었습니다(ignored_fields): %v — 템플릿의 ask_variables_on_launch 설정을 확인하세요.\n", result.IgnoredFields)
+		fmt.Printf("    " + cli.MarkWarn + " 일부 값이 무시되었습니다(ignored_fields): %v — 템플릿의 ask_variables_on_launch 설정을 확인하세요.\n", result.IgnoredFields)
 	}
 
 	job, err := cli.PollJob(client, result.Job, cfg.PollIntervalSec)
 	if err != nil {
-		fmt.Printf("[X] 상태 조회 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 상태 조회 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=poll_error error=%q", user, len(hosts), result.Job, err.Error()))
 		os.Exit(1)
 	}
 	if job.Status != "successful" {
-		fmt.Printf("[X] Job 실패 (status=%s)\n", job.Status)
+		fmt.Printf(cli.MarkFail+" Job 실패 (status=%s)\n", job.Status)
 		cli.PrintStdoutTail(client, job.ID, 30)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=%s", user, len(hosts), job.ID, job.Status))
 		os.Exit(1)
@@ -119,21 +119,21 @@ func main() {
 		outPath = filepath.Join(cfg.S1OutputDir, "nodeinfo_result.yaml")
 	}
 	if err := saveNodeInfoResult(client, cfg, job, outPath); err != nil {
-		fmt.Printf("[X] 결과 저장 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 결과 저장 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=fetch_error error=%q", user, len(hosts), job.ID, err.Error()))
 		os.Exit(1)
 	}
 
-	fmt.Printf("[✔] 다운로드 완료 (job %d) — 결과 저장: %s\n", job.ID, outPath)
+	fmt.Printf(cli.MarkOK+" 다운로드 완료 (job %d) — 결과 저장: %s\n", job.ID, outPath)
 
-	fmt.Println("[?] 다른 터미널에서 양식 변환 스크립트를 실행해 위 파일을 변환하세요.")
+	fmt.Println(cli.MarkAsk+" 다른 터미널에서 양식 변환 스크립트를 실행해 위 파일을 변환하세요.")
 	if !cli.PromptYesNo("변환이 완료되었으면 Y를 입력하세요 (Y/N): ") {
-		fmt.Println("[X] 양식 변환이 확인되지 않았습니다. 변환을 완료한 뒤 nodeinfo를 다시 실행해 확인해주세요.")
+		fmt.Println(cli.MarkFail+" 양식 변환이 확인되지 않았습니다. 변환을 완료한 뒤 nodeinfo를 다시 실행해 확인해주세요.")
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=downloaded_unconfirmed output=%s", user, len(hosts), job.ID, outPath))
 		os.Exit(1)
 	}
 
-	fmt.Println("[✔] 양식 변환 확인 완료.")
+	fmt.Println(cli.MarkOK+" 양식 변환 확인 완료.")
 	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=successful output=%s format_confirmed=true", user, len(hosts), job.ID, outPath))
 }
 
@@ -171,7 +171,7 @@ func saveNodeInfoResult(client *awx.Client, cfg *config.Config, job *awx.Job, ou
 		if len(job.Artifacts) == 0 {
 			return fmt.Errorf("Job에 artifacts가 없습니다 (플레이북이 set_stats를 사용하는지 확인하세요)")
 		}
-		fmt.Println("    [!] conf에 s1_artifact_key가 설정되지 않아 artifacts 전체를 저장합니다.")
+		fmt.Println("    " + cli.MarkWarn + " conf에 s1_artifact_key가 설정되지 않아 artifacts 전체를 저장합니다.")
 		data, err := json.MarshalIndent(job.Artifacts, "", "  ")
 		if err != nil {
 			return err
