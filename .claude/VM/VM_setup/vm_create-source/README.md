@@ -84,20 +84,33 @@ export VC_PASSWORD='실제_비밀번호'
    미리 인덱싱 (중복 생성 방지).
 5. `ContainerView`로 **호스트 전체 목록을 1회 배치 조회**해서 FQDN/짧은 이름 둘 다로
    조회 가능하게 맵 구성(호스트마다 개별 조회하지 않음 → 대규모에서 빠름).
-6. **[사전조사 단계]** `worklist.txt`의 각 호스트를 goroutine으로 동시 조사
+6. **데이터스토어 요약과 리소스풀을 각각 1회씩 배치 조회**해서 맵으로 만들어둠
+   (호스트마다 개별 조회하지 않음). 리소스풀은 여러 호스트가 같은 클러스터를 공유하므로
+   부모를 중복 제거한 뒤 `ComputeResource`/`ClusterComputeResource` 타입별로 한 번씩만 조회.
+7. **[사전조사 단계]** `worklist.txt`의 각 호스트를 goroutine으로 동시 조사
    (`-prepConcurrency`로 제한): 데이터스토어 중 여유공간이 가장 큰 곳 선택, 리소스풀
-   조회, hostgroup.txt 매핑으로 네트워크 포트그룹 결정. 진행 상황은 완료되는 즉시
+   결정, hostgroup.txt 매핑으로 네트워크 포트그룹 결정. 위 5·6번에서 모두 배치 조회해뒀기
+   때문에 이 단계에서는 vCenter 왕복이 발생하지 않음. 진행 상황은 완료되는 즉시
    `[n/총계] 조사 완료`로 출력.
-7. **[생성 단계]** 사전조사에 성공하고 아직 존재하지 않는 VM만 골라, `-taskConcurrency`
-   로 동시 생성(ParaVirtual SCSI 컨트롤러 + Thin 아닌 디스크 + 매핑된 네트워크가
-   있으면 vmxnet3 NIC 추가).
-8. **[설정 단계]** 생성에 성공한 VM만 골라 `-taskConcurrency`로 동시에 Reconfigure:
+8. **[생성 단계]** 사전조사에 성공하고 아직 존재하지 않는 VM만 골라, `-taskConcurrency`
+   로 동시 생성. 이때 **아래 값을 생성 스펙에 함께 담아 Task 1회로 처리**한다
+   (ParaVirtual SCSI 컨트롤러 + Thin 아닌 디스크 + 매핑된 네트워크가 있으면 vmxnet3 NIC):
    - `MemoryReservationLockedToMax=true`, 메모리 전체 예약
-   - 부트옵션: EFI Secure Boot 비활성화, 디스크→NIC 순서로 부트 순서 지정
    - CPU/메모리 Shares (숫자 또는 Normal — 위 "Share 값 상세" 참고)
+   - EFI Secure Boot 비활성화
    - `sched.mem.pin` / `sched.mem.prealloc` / `sched.mem.prealloc.pinnedMainMem` = TRUE,
      `sched.swap.vmxSwapEnabled` = FALSE (extraConfig)
-9. 전체 완료 메시지 출력.
+
+   생성 Task가 돌려준 VM의 MoRef를 그대로 보관해서, 다음 단계에서 인벤토리를 다시 뒤지지 않는다.
+9. **[부팅 순서 설정 단계]** 부트 순서는 실제 device key가 있어야 지정할 수 있어
+   생성 이후에만 처리 가능하다. 생성된 VM 전체의 디바이스 목록을 **1회 배치 조회**한 뒤,
+   `-taskConcurrency`로 동시에 Reconfigure해서 디스크→NIC 순서로 부트 순서를 지정한다.
+10. 전체 완료 메시지 출력.
+
+> **성능 메모** — VM 1대당 vCenter Task가 2회(생성 + 설정)에서 1회(생성)로 줄었고,
+> 설정 단계에서 VM마다 수행하던 인벤토리 재귀 탐색(`finder`)과 개별 속성 조회가 사라졌습니다.
+> 사전조사 단계의 호스트당 왕복(데이터스토어 조회 1회 + 리소스풀 조회 2회)도 전부 배치 조회로
+> 대체되어, 대상 호스트가 많을수록 차이가 커집니다. 최종 VM 설정 결과는 이전과 동일합니다.
 
 ## 6. 디렉토리 구조
 

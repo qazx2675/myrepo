@@ -33,9 +33,11 @@ type VMSpec struct {
 	Share      int32
 }
 
-type PendingConfig struct {
-	Name   string
-	Config VMSpec
+// createdVM은 생성 Task가 성공적으로 돌려준 VM이다. Ref는 생성 Task의 결과로 받은
+// MoRef라서, 부팅 순서 설정 단계에서 finder로 인벤토리를 다시 뒤질 필요가 없다.
+type createdVM struct {
+	Name string
+	Ref  types.ManagedObjectReference
 }
 
 type hostPrep struct {
@@ -251,12 +253,6 @@ func main() {
 		}
 	}
 
-	newFinder := func() *find.Finder {
-		f := find.NewFinder(client.Client, true)
-		f.SetDatacenter(selectedDC)
-		return f
-	}
-
 	defaultFolder, _ := baseFinder.DefaultFolder(ctx)
 
 	vmFilterPattern := "^(" + strings.Join(safeVmNames, "|") + ")$"
@@ -291,7 +287,8 @@ func main() {
 		log.Fatalf("호스트 인벤토리 조회용 ContainerView 생성 실패: %v", err)
 	}
 	var allHosts []mo.HostSystem
-	if err := hostView.Retrieve(ctx, []string{"HostSystem"}, []string{"name", "datastore"}, &allHosts); err != nil {
+	// parent는 아래 리소스풀 배치 조회에 쓴다(HostSystem.ResourcePool()이 내부적으로 읽는 값).
+	if err := hostView.Retrieve(ctx, []string{"HostSystem"}, []string{"name", "datastore", "parent"}, &allHosts); err != nil {
 		log.Fatalf("호스트 인벤토리 조회 실패: %v", err)
 	}
 	_ = hostView.Destroy(ctx)
@@ -304,6 +301,79 @@ func main() {
 	}
 
 	pc := property.DefaultCollector(client.Client)
+
+	// 개선 5: 사전조사 goroutine 안에서 호스트마다 pc.Retrieve(datastore)를 부르던 것을,
+	// 전체 호스트의 데이터스토어를 중복 제거해 1회 배치 조회한다.
+	// (호스트 수만큼 발생하던 왕복이 1회로 줄어든다. 선택 로직은 그대로 host.Datastore
+	//  안에서만 최대 여유공간을 고르므로 결과는 동일하다.)
+	dsRefSet := make(map[types.ManagedObjectReference]struct{})
+	for _, h := range allHosts {
+		for _, ref := range h.Datastore {
+			dsRefSet[ref] = struct{}{}
+		}
+	}
+	dsByRef := make(map[types.ManagedObjectReference]mo.Datastore, len(dsRefSet))
+	if len(dsRefSet) > 0 {
+		dsRefs := make([]types.ManagedObjectReference, 0, len(dsRefSet))
+		for ref := range dsRefSet {
+			dsRefs = append(dsRefs, ref)
+		}
+		var dsList []mo.Datastore
+		if err := pc.Retrieve(ctx, dsRefs, []string{"summary"}, &dsList); err != nil {
+			// 기존에도 호스트별 조회가 실패하면 그 호스트를 건너뛰기만 했으므로,
+			// 여기서도 치명적 종료가 아니라 경고만 남기고 진행한다(해당 호스트들은 스킵됨).
+			log.Printf("[경고] 데이터스토어 배치 조회 실패: %v", err)
+		}
+		for _, d := range dsList {
+			dsByRef[d.Self] = d
+		}
+	}
+
+	// 개선 6: 호스트마다 HostSystem.ResourcePool()을 부르면 내부적으로 parent 조회 +
+	// ComputeResource 조회로 호스트당 2회 왕복이 발생한다. 여러 호스트가 같은 클러스터를
+	// 공유하므로 부모를 중복 제거해서 타입별로 한 번씩만 배치 조회한다.
+	// (govmomi의 ResourcePool()과 동일하게 ComputeResource/ClusterComputeResource를 구분)
+	var crRefs, ccrRefs []types.ManagedObjectReference
+	seenParent := make(map[types.ManagedObjectReference]struct{})
+	for _, h := range allHosts {
+		if h.Parent == nil {
+			continue
+		}
+		if _, dup := seenParent[*h.Parent]; dup {
+			continue
+		}
+		seenParent[*h.Parent] = struct{}{}
+		switch h.Parent.Type {
+		case "ComputeResource":
+			crRefs = append(crRefs, *h.Parent)
+		case "ClusterComputeResource":
+			ccrRefs = append(ccrRefs, *h.Parent)
+		}
+	}
+	rpByParent := make(map[types.ManagedObjectReference]*object.ResourcePool, len(seenParent))
+	if len(crRefs) > 0 {
+		var crs []mo.ComputeResource
+		if err := pc.Retrieve(ctx, crRefs, []string{"resourcePool"}, &crs); err != nil {
+			log.Printf("[경고] ComputeResource 배치 조회 실패: %v", err)
+		}
+		for _, cr := range crs {
+			if cr.ResourcePool != nil {
+				rpByParent[cr.Self] = object.NewResourcePool(client.Client, *cr.ResourcePool)
+			}
+		}
+	}
+	if len(ccrRefs) > 0 {
+		var ccrs []mo.ClusterComputeResource
+		if err := pc.Retrieve(ctx, ccrRefs, []string{"resourcePool"}, &ccrs); err != nil {
+			log.Printf("[경고] ClusterComputeResource 배치 조회 실패: %v", err)
+		}
+		for _, ccr := range ccrs {
+			if ccr.ResourcePool != nil {
+				rpByParent[ccr.Self] = object.NewResourcePool(client.Client, *ccr.ResourcePool)
+			}
+		}
+	}
+
 	preps := make([]hostPrep, len(serverList))
 
 	var wgPrep sync.WaitGroup
@@ -338,17 +408,8 @@ func main() {
 
 			hostObj := object.NewHostSystem(client.Client, host.Reference())
 
-			var dsList []mo.Datastore
-			if err := pc.Retrieve(ctx, host.Datastore, []string{"summary"}, &dsList); err != nil {
-				preps[idx] = p
-				return
-			}
-
-			dsByRef := make(map[types.ManagedObjectReference]mo.Datastore, len(dsList))
-			for _, d := range dsList {
-				dsByRef[d.Self] = d
-			}
-
+			// 데이터스토어/리소스풀 모두 위에서 배치 조회해둔 맵을 참조하므로
+			// 이 goroutine 안에서는 vCenter 왕복이 발생하지 않는다.
 			var bestDs mo.Datastore
 			maxFreeSpace := int64(-1)
 			for _, dsRef := range host.Datastore {
@@ -366,7 +427,10 @@ func main() {
 				return
 			}
 
-			hostRP, _ := hostObj.ResourcePool(ctx)
+			var hostRP *object.ResourcePool
+			if host.Parent != nil {
+				hostRP = rpByParent[*host.Parent]
+			}
 
 			pgName, hasNetwork := hostgroupMap[bmHost]
 			if !hasNetwork || pgName == "" {
@@ -410,8 +474,8 @@ func main() {
 		}
 	}
 
-	pendingConfigs := make([]PendingConfig, len(jobs))
-	pendingOK := make([]bool, len(jobs))
+	createdList := make([]createdVM, len(jobs))
+	createdOK := make([]bool, len(jobs))
 
 	if len(jobs) > 0 {
 		fmt.Printf("[INFO] 생성 대상 VM %d대 — 생성 작업을 시작합니다.\n", len(jobs))
@@ -431,6 +495,11 @@ func main() {
 				p := j.Prep
 				cfg := j.Cfg
 
+				// 개선 7: 예전에는 생성 후 별도 Reconfigure Task로 넣던 값들(메모리 예약,
+				// CPU/메모리 Shares, ExtraConfig, Secure Boot 해제)을 생성 스펙에 함께 넣는다.
+				// 이 값들은 생성 시점에 이미 확정돼 있어 device key에 의존하지 않으므로
+				// 최종 상태는 동일하고, VM당 vCenter Task가 2회 -> 1회로 줄어든다.
+				// (device key가 필요한 부팅 순서만 아래 2단계에 남겨둔다)
 				spec := types.VirtualMachineConfigSpec{
 					Name:     j.VMName,
 					GuestId:  "rhel8_64Guest",
@@ -439,6 +508,29 @@ func main() {
 					MemoryMB: int64(cfg.Mem * 1024),
 					Files: &types.VirtualMachineFileInfo{
 						VmPathName: fmt.Sprintf("[%s]", p.DSName),
+					},
+					MemoryReservationLockedToMax: types.NewBool(true),
+					BootOptions: &types.VirtualMachineBootOptions{
+						EfiSecureBootEnabled: types.NewBool(false),
+					},
+					CpuAllocation: &types.ResourceAllocationInfo{
+						Shares: &types.SharesInfo{
+							Level:  cfg.ShareLevel,
+							Shares: cfg.Share,
+						},
+					},
+					MemoryAllocation: &types.ResourceAllocationInfo{
+						Reservation: types.NewInt64(int64(cfg.Mem * 1024)),
+						Shares: &types.SharesInfo{
+							Level:  cfg.ShareLevel,
+							Shares: cfg.Share,
+						},
+					},
+					ExtraConfig: []types.BaseOptionValue{
+						&types.OptionValue{Key: "sched.mem.pin", Value: "TRUE"},
+						&types.OptionValue{Key: "sched.mem.prealloc", Value: "TRUE"},
+						&types.OptionValue{Key: "sched.mem.prealloc.pinnedMainMem", Value: "TRUE"},
+						&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
 					},
 				}
 
@@ -520,24 +612,52 @@ func main() {
 					return
 				}
 
-				_ = task.Wait(ctx)
+				// 개선 8: Wait 대신 WaitForResult로 생성된 VM의 MoRef를 바로 받는다.
+				// 예전에는 다음 단계에서 finder.VirtualMachine()으로 인벤토리를 VM마다
+				// 다시 뒤졌는데(재귀 탐색이라 대수가 많을수록 급격히 느려짐), 그 과정이 통째로 사라진다.
+				info, waitErr := task.WaitForResult(ctx)
+				if waitErr != nil || info == nil {
+					return
+				}
+				ref, ok := info.Result.(types.ManagedObjectReference)
+				if !ok {
+					return
+				}
 
-				pendingConfigs[ji] = PendingConfig{Name: j.VMName, Config: cfg}
-				pendingOK[ji] = true
+				createdList[ji] = createdVM{Name: j.VMName, Ref: ref}
+				createdOK[ji] = true
 			}(ji)
 		}
 		wgCreate.Wait()
 	}
 
-	var confirmed []PendingConfig
-	for i, ok := range pendingOK {
+	var confirmed []createdVM
+	for i, ok := range createdOK {
 		if ok {
-			confirmed = append(confirmed, pendingConfigs[i])
+			confirmed = append(confirmed, createdList[i])
 		}
 	}
 
 	if len(confirmed) > 0 {
-		fmt.Printf("[INFO] 리소스 설정 대상 VM %d대 — 설정 작업을 시작합니다.\n", len(confirmed))
+		fmt.Printf("[INFO] 부팅 순서 설정 대상 VM %d대 — 설정 작업을 시작합니다.\n", len(confirmed))
+
+		// 개선 9: VM마다 Properties()로 디바이스 목록을 따로 조회하던 것을
+		// 생성된 VM 전체에 대해 1회 배치 조회로 바꾼다.
+		refs := make([]types.ManagedObjectReference, len(confirmed))
+		for i, c := range confirmed {
+			refs[i] = c.Ref
+		}
+		devByRef := make(map[types.ManagedObjectReference][]types.BaseVirtualDevice, len(refs))
+		var vmPropList []mo.VirtualMachine
+		if err := pc.Retrieve(ctx, refs, []string{"config.hardware.device"}, &vmPropList); err != nil {
+			// 기존에도 조회 실패 시 부팅 순서만 생략하고 나머지는 그대로 적용했으므로 동일하게 진행한다.
+			log.Printf("[경고] 생성된 VM 디바이스 배치 조회 실패 (부팅 순서 생략): %v", err)
+		}
+		for _, vp := range vmPropList {
+			if vp.Config != nil {
+				devByRef[vp.Self] = vp.Config.Hardware.Device
+			}
+		}
 
 		var wgCfg sync.WaitGroup
 		semCfg := make(chan struct{}, *taskConc)
@@ -550,25 +670,17 @@ func main() {
 				defer wgCfg.Done()
 				defer func() { <-semCfg }()
 
-				pending := confirmed[ci]
+				c := confirmed[ci]
+				targetVM := object.NewVirtualMachine(client.Client, c.Ref)
 
-				finder := newFinder()
-				targetVM, err := finder.VirtualMachine(ctx, pending.Name)
-				if err != nil {
-					return
+				spec := types.VirtualMachineConfigSpec{
+					BootOptions: &types.VirtualMachineBootOptions{
+						EfiSecureBootEnabled: types.NewBool(false),
+					},
 				}
 
-				cfg := pending.Config
-				spec := types.VirtualMachineConfigSpec{}
-
-				spec.MemoryReservationLockedToMax = types.NewBool(true)
-				spec.BootOptions = &types.VirtualMachineBootOptions{
-					EfiSecureBootEnabled: types.NewBool(false),
-				}
-
-				var vmProps mo.VirtualMachine
-				if propErr := targetVM.Properties(ctx, targetVM.Reference(), []string{"config.hardware.device"}, &vmProps); propErr == nil {
-					devices := object.VirtualDeviceList(vmProps.Config.Hardware.Device)
+				if devs, found := devByRef[c.Ref]; found {
+					devices := object.VirtualDeviceList(devs)
 					var bootOrder []types.BaseVirtualMachineBootOptionsBootableDevice
 
 					disks := devices.SelectByType((*types.VirtualDisk)(nil))
@@ -587,29 +699,6 @@ func main() {
 						spec.BootOptions.BootOrder = bootOrder
 					}
 				}
-
-				spec.CpuAllocation = &types.ResourceAllocationInfo{
-					Shares: &types.SharesInfo{
-						Level:  cfg.ShareLevel,
-						Shares: cfg.Share,
-					},
-				}
-
-				spec.MemoryAllocation = &types.ResourceAllocationInfo{
-					Reservation: types.NewInt64(int64(cfg.Mem * 1024)),
-					Shares: &types.SharesInfo{
-						Level:  cfg.ShareLevel,
-						Shares: cfg.Share,
-					},
-				}
-
-				extraConfig := []types.BaseOptionValue{
-					&types.OptionValue{Key: "sched.mem.pin", Value: "TRUE"},
-					&types.OptionValue{Key: "sched.mem.prealloc", Value: "TRUE"},
-					&types.OptionValue{Key: "sched.mem.prealloc.pinnedMainMem", Value: "TRUE"},
-					&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
-				}
-				spec.ExtraConfig = extraConfig
 
 				task, err := targetVM.Reconfigure(ctx, spec)
 				if err != nil {
