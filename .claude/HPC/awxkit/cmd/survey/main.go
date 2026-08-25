@@ -19,7 +19,7 @@ func main() {
 	user := config.ResolveUser(*userFlag)
 	confPath, err := config.ResolvePath(*confFlag, user)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Fprintf(os.Stderr, cli.MarkFail+" 설정 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -31,19 +31,19 @@ func main() {
 		templateArg = cli.PromptLine("템플릿 ID 또는 이름: ")
 	}
 	if templateArg == "" {
-		fmt.Println("[X] 템플릿을 지정하지 않았습니다.")
+		fmt.Println(cli.MarkFail+" 템플릿을 지정하지 않았습니다.")
 		os.Exit(1)
 	}
 
 	_, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
-		fmt.Printf("[X] 설정 오류: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 설정 오류: %v\n", err)
 		os.Exit(1)
 	}
 
 	t, err := client.ResolveTemplate(templateArg)
 	if err != nil {
-		fmt.Printf("[X] 템플릿(%s)을 찾을 수 없습니다: %v\n", templateArg, err)
+		fmt.Printf(cli.MarkFail+" 템플릿(%s)을 찾을 수 없습니다: %v\n", templateArg, err)
 		os.Exit(1)
 	}
 
@@ -57,11 +57,11 @@ func main() {
 
 	spec, err := client.GetSurveySpec(t.ID)
 	if err != nil {
-		fmt.Printf("[X] survey 정의 조회 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" survey 정의 조회 실패: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("[✔] %s (ID: %d) — survey %d개 문항\n", t.Name, t.ID, len(spec.Spec))
+	fmt.Printf(cli.MarkOK+" %s (ID: %d) — survey %d개 문항\n", t.Name, t.ID, len(spec.Spec))
 	for i, q := range spec.Spec {
 		required := ""
 		if q.Required {

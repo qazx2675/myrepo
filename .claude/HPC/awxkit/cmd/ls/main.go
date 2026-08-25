@@ -18,19 +18,19 @@ func main() {
 	user := config.ResolveUser(*userFlag)
 	confPath, err := config.ResolvePath(*confFlag, user)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Fprintf(os.Stderr, cli.MarkFail+" 설정 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
 	}
 
 	_, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
-		fmt.Printf("[X] 설정 오류: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 설정 오류: %v\n", err)
 		os.Exit(1)
 	}
 
 	templates, err := client.ListJobTemplates()
 	if err != nil {
-		fmt.Printf("[X] 템플릿 목록 조회 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 템플릿 목록 조회 실패: %v\n", err)
 		os.Exit(1)
 	}
 

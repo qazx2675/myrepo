@@ -20,7 +20,7 @@ func main() {
 	user := config.ResolveUser(*userFlag)
 	confPath, err := config.ResolvePath(*confFlag, user)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Fprintf(os.Stderr, cli.MarkFail+" 설정 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -29,23 +29,23 @@ func main() {
 
 	cfg, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
-		fmt.Printf("[X] 설정 오류: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 설정 오류: %v\n", err)
 		os.Exit(1)
 	}
 
 	ping, err := client.Ping()
 	if err != nil {
-		fmt.Printf("[X] AWX 서버 연결 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" AWX 서버 연결 실패: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("[✔] AWX 연결 성공 (버전: %s)\n", ping.Version)
+	fmt.Printf(cli.MarkOK+" AWX 연결 성공 (버전: %s)\n", ping.Version)
 
 	templates, err := client.ListJobTemplates()
 	if err != nil {
-		fmt.Printf("[X] 템플릿 목록 조회 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 템플릿 목록 조회 실패: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("[✔] 조회 가능한 템플릿 %d개\n", len(templates))
+	fmt.Printf(cli.MarkOK+" 조회 가능한 템플릿 %d개\n", len(templates))
 
 	checkConfiguredTemplate(client, "S1 (NodeInfo)", cfg.S1Template)
 	checkConfiguredTemplate(client, "S3 (DHCP)", cfg.S3Template)
@@ -64,18 +64,18 @@ func checkConfiguredTemplate(client *awx.Client, label, idOrName string) {
 
 	t, err := client.ResolveTemplate(idOrName)
 	if err != nil {
-		fmt.Printf("[X] %s: 템플릿(%s)을 찾을 수 없습니다: %v\n", label, idOrName, err)
+		fmt.Printf(cli.MarkFail+" %s: 템플릿(%s)을 찾을 수 없습니다: %v\n", label, idOrName, err)
 		return
 	}
 
 	if !t.AskVariablesOnLaunch {
-		fmt.Printf("[!] %s: 템플릿(%s)의 'ask_variables_on_launch'가 꺼져 있습니다. extra_vars를 보내도 조용히 무시됩니다.\n", label, t.Name)
+		fmt.Printf(cli.MarkWarn+" %s: 템플릿(%s)의 'ask_variables_on_launch'가 꺼져 있습니다. extra_vars를 보내도 조용히 무시됩니다.\n", label, t.Name)
 	}
 	if !t.SummaryFields.UserCapabilities.Start {
-		fmt.Printf("[X] %s: 템플릿(%s)을 실행할 권한이 없습니다.\n", label, t.Name)
+		fmt.Printf(cli.MarkFail+" %s: 템플릿(%s)을 실행할 권한이 없습니다.\n", label, t.Name)
 		return
 	}
-	fmt.Printf("[✔] %s: 템플릿(%s, ID=%d) 실행 가능\n", label, t.Name, t.ID)
+	fmt.Printf(cli.MarkOK+" %s: 템플릿(%s, ID=%d) 실행 가능\n", label, t.Name, t.ID)
 }
 
 // warnIfWorldReadable은 conf 파일에 평문 비밀번호가 들어있으므로 권한이 과도하게
@@ -90,6 +90,6 @@ func warnIfWorldReadable(path string) {
 	}
 	mode := info.Mode().Perm()
 	if mode&0o077 != 0 {
-		fmt.Printf("[!] %s 파일 권한이 %o 입니다. 비밀번호가 평문으로 들어있으니 'chmod 600 %s'를 권장합니다.\n", path, mode, path)
+		fmt.Printf(cli.MarkWarn+" %s 파일 권한이 %o 입니다. 비밀번호가 평문으로 들어있으니 'chmod 600 %s'를 권장합니다.\n", path, mode, path)
 	}
 }

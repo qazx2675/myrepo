@@ -31,7 +31,7 @@ func PollJob(client *awx.Client, jobID int, intervalSec int) (*awx.Job, error) {
 			return nil, err
 		}
 		if job.Status != last {
-			fmt.Printf("    [job %d] %s\n", jobID, job.Status)
+			fmt.Printf("    [job %d] %s\n", jobID, ColorStatus(job.Status))
 			last = job.Status
 		}
 		if IsTerminalStatus(job.Status) {
@@ -53,7 +53,7 @@ func PollInventoryUpdate(client *awx.Client, updateID int, intervalSec int) (*aw
 			return nil, err
 		}
 		if upd.Status != last {
-			fmt.Printf("    [inventory_update %d] %s\n", updateID, upd.Status)
+			fmt.Printf("    [inventory_update %d] %s\n", updateID, ColorStatus(upd.Status))
 			last = upd.Status
 		}
 		if IsTerminalStatus(upd.Status) {

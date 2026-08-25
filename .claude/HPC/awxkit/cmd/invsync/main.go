@@ -21,29 +21,29 @@ func main() {
 	user := config.ResolveUser(*userFlag)
 	confPath, err := config.ResolvePath(*confFlag, user)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[X] 설정 파일을 찾을 수 없습니다: %v\n", err)
+		fmt.Fprintf(os.Stderr, cli.MarkFail+" 설정 파일을 찾을 수 없습니다: %v\n", err)
 		os.Exit(1)
 	}
 
 	cfg, client, err := cli.LoadConfigAndClient(confPath)
 	if err != nil {
-		fmt.Printf("[X] 설정 오류: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 설정 오류: %v\n", err)
 		os.Exit(1)
 	}
 	if *fileFlag == "" {
-		fmt.Println("[X] -file로 git에 업로드된 인벤토리 yaml 파일명을 지정해야 합니다.")
+		fmt.Println(cli.MarkFail+" -file로 git에 업로드된 인벤토리 yaml 파일명을 지정해야 합니다.")
 		os.Exit(1)
 	}
 
 	sourceID, err := resolveSourceID(client, cfg)
 	if err != nil {
-		fmt.Printf("[X] %v\n", err)
+		fmt.Printf(cli.MarkFail+" %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("[i] 인벤토리 소스(%d)의 %s를 %q로 저장 중...\n", sourceID, cfg.S2SourceField, *fileFlag)
 	if err := client.UpdateInventorySourceField(sourceID, cfg.S2SourceField, *fileFlag); err != nil {
-		fmt.Printf("[X] 소스 필드 저장 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 소스 필드 저장 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d file=%s status=patch_error error=%q", user, sourceID, *fileFlag, err.Error()))
 		os.Exit(1)
 	}
@@ -51,23 +51,23 @@ func main() {
 	fmt.Printf("[i] 인벤토리 소스(%d) 동기화 시작...\n", sourceID)
 	updateID, err := client.SyncInventorySource(sourceID)
 	if err != nil {
-		fmt.Printf("[X] 동기화 요청 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 동기화 요청 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d status=sync_error error=%q", user, sourceID, err.Error()))
 		os.Exit(1)
 	}
 
 	upd, err := cli.PollInventoryUpdate(client, updateID, cfg.PollIntervalSec)
 	if err != nil {
-		fmt.Printf("[X] 상태 조회 실패: %v\n", err)
+		fmt.Printf(cli.MarkFail+" 상태 조회 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=poll_error error=%q", user, sourceID, updateID, err.Error()))
 		os.Exit(1)
 	}
 	if upd.Status != "successful" {
-		fmt.Printf("[X] 동기화 실패 (status=%s)\n", upd.Status)
+		fmt.Printf(cli.MarkFail+" 동기화 실패 (status=%s)\n", upd.Status)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=%s", user, sourceID, updateID, upd.Status))
 		os.Exit(1)
 	}
-	fmt.Printf("[✔] 동기화 완료 (inventory_update %d)\n", updateID)
+	fmt.Printf(cli.MarkOK+" 동기화 완료 (inventory_update %d)\n", updateID)
 	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=invsync source=%d update=%d status=successful", user, sourceID, updateID))
 
 	if cfg.S2Inventory == "" {
@@ -76,16 +76,16 @@ func main() {
 	}
 	inventoryID, err := strconv.Atoi(cfg.S2Inventory)
 	if err != nil {
-		fmt.Printf("[X] s2_inventory(%s)는 숫자 ID여야 합니다.\n", cfg.S2Inventory)
+		fmt.Printf(cli.MarkFail+" s2_inventory(%s)는 숫자 ID여야 합니다.\n", cfg.S2Inventory)
 		os.Exit(1)
 	}
 	hosts, err := client.ListInventoryHosts(inventoryID)
 	if err != nil {
-		fmt.Printf("[X] 인벤토리(%d) 호스트 조회 실패: %v\n", inventoryID, err)
+		fmt.Printf(cli.MarkFail+" 인벤토리(%d) 호스트 조회 실패: %v\n", inventoryID, err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("[✔] 인벤토리(%d)에 총 %d대 등록됨\n", inventoryID, len(hosts))
+	fmt.Printf(cli.MarkOK+" 인벤토리(%d)에 총 %d대 등록됨\n", inventoryID, len(hosts))
 	for _, h := range hosts {
 		status := "enabled"
 		if !h.Enabled {
