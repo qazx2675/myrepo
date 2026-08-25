@@ -4,7 +4,13 @@
 
 ---
 
-## 2026-08-21 — `-shares-ev01/02/03` 쉼표 다중값 + `normal` 혼합 지원
+## 2026-08-23 — NUMA 노드당 코어수(`config.numaInfo.coresPerNumaNode`) 체크가 Auto 모드를 무시하던 버그 수정
+
+- **문제**: `autoCoresPerNumaNode=true`(vCenter UI: "NUMA 노드 - 전원을 켤 때 할당됨")인 VM은 `coresPerNumaNode`에 지난 전원 켜짐 시점의 값이 그대로 남아있을 뿐이라 무시해야 하는데, 체크가 이 값을 그대로 기대값과 비교해서 **우연히 값이 같으면 OK로 잘못 판정**하고 있었다.
+- **조회(`vcenter/client.go`)**: `vm.Config.NumaInfo.AutoCoresPerNumaNode`를 함께 조회하도록 추가. `model.VMInfo`에 `NumaAutoCoresPerNode *bool` 필드 신설(governomi 타입 주석 근거를 코드 주석에 명시).
+- **체크(`checker/topology.go`)**: `CheckTopology`에서 `NumaAutoCoresPerNode`가 true면 `NumaCoresPerNode` 값 비교 없이 **"설정없음"으로 처리**하도록 분기 추가(실제값은 "자동(전원을 켤 때 할당됨)"으로 표시, Note에 사유 명시).
+- **영향 범위**: 이 폴더의 `vm-param-check`뿐 아니라, 레거시 체크 전용 도구 `vm-param-setting-check`의 `checker/topology.go`/`model/types.go`/`vcenter/client.go`에도 동일한 수정을 함께 적용(같은 버그가 양쪽에 존재).
+- **검증**: `go build`/`go vet`/`go test` 전부 통과.
 
 - **파싱(`main.go`)**: 세 플래그 모두 기존엔 ev01만 "ratio 숫자 하나 또는 normal 하나"를 받고 ev02/ev03는 정수 하나만 받았는데, 이제 `-disk`처럼 쉼표로 여러 값을 나열할 수 있고 ratio 숫자와 `normal`을 섞어도 된다(예: `-shares-ev01=4000,normal`). 새 헬퍼 `parseSharesListFlag`가 파싱을 전담(`parseIntListFlag`와 동일한 패턴).
 - **체크(`checker/hardware.go`)**: `SharesExpect`를 `EV01 int / EV01Normal bool / EV02,EV03 *int` 구조에서 `EV01,EV02,EV03 []SharesItem`(각 항목은 `{Ratio int, Normal bool}`)으로 재설계. `checkShares`는 이제 허용값 목록 중 **하나라도 실제값과 맞으면 OK**로 판정한다 — CPU/메모리는 서로 독립적으로 판정하므로 "CPU는 ratio로, 메모리는 normal로" 맞는 경우도 둘 다 OK가 된다. 실제값 표시도 `level=custom (ratio=4000)` / `level=normal`처럼 상태를 명확히 보여주도록 통일.

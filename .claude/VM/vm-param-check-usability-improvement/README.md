@@ -106,9 +106,59 @@ mkdir -p ./SPEC_DIR
 
 ```
 vm-param-check-usability-improvement/
-├── README.md          # 이 문서
-├── CHANGELOG.md        # 날짜별 변경 이력
-├── 계획서.md            # 설계 배경/검증 근거 문서
-├── update_deploy.sh    # 원격 서버(/root/vm-param-check-usability-improvement/vm-param-check)에 최신 소스를 배포/재빌드하는 스크립트
-└── vm-param-check/    # 실제 도구 소스코드 (스펙 자동매칭, 2단계 조회 등 개선사항 포함), 상세는 하위 README 참고
+├── README.md                    # 이 문서
+├── CHANGELOG.md                 # 날짜별 변경 이력
+├── 계획서.md                      # 설계 배경/검증 근거 문서
+├── update_deploy.sh             # 원격 서버(/root/vm-param-check-usability-improvement/vm-param-check)에 최신 소스를 배포/재빌드하는 스크립트
+└── vm-param-check/              # 실제 도구 소스코드 (스펙 자동매칭, 2단계 조회 등 개선사항 포함), 상세는 하위 README 참고
+    ├── README.md                 # 하위 도구 사용법 문서 (옵션 설명, 튜토리얼)
+    ├── 계획서.md                   # 하위 도구 자체의 별도 설계 메모
+    ├── main.go                   # CLI 진입점 (옵션 파싱, -specRoot 병합, 실행 흐름)
+    ├── demo.go                   # -demo 모드 (합성 VM으로 동작만 확인, vCenter 미접속)
+    ├── scaletest.go              # -scale 모드 (대량 인벤토리 성능 측정용)
+    ├── setup.sh                  # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+    ├── folder_setup.sh           # -initFolder 대화형 래퍼 스크립트
+    ├── vm_setting_check_insert.sh  # 체크/-fix 실행 래퍼 스크립트(이중 확인 포함)
+    ├── real_test.sh              # 실 vCenter 대상 테스트 스크립트
+    ├── scale_test.sh             # 스케일 테스트 스크립트
+    ├── go.mod / go.sum           # Go 모듈 정의 파일
+    ├── checker/                  # CPU/메모리/NUMA/affinity/전원정책/preferHT 등 점검 로직
+    │   ├── hardware.go             # CPU/메모리/디스크/shares 체크
+    │   ├── hardware_test.go
+    │   ├── topology.go             # cores/NUMA 토폴로지 체크 (Auto 모드 예외 처리 포함)
+    │   ├── affinity.go             # CPU affinity 체크
+    │   ├── affinity_test.go
+    │   ├── power.go                # 전원 정책 체크
+    │   ├── preferht.go             # numa.vcpu.preferHT 체크
+    │   └── fixed.go                # 고정값 체크 유틸
+    ├── config/                   # 스펙 자동매칭(-specRoot)·폴더 스캐폴드(-initFolder)·대상 목록 로딩
+    │   ├── spec.go                 # 폴더명 정규화 + _spec.txt 탐색/파싱
+    │   ├── spec_test.go
+    │   ├── init.go                 # -initFolder 스캐폴드 생성
+    │   ├── init_test.go
+    │   ├── portgroup.go            # Task 폴더 예외 처리(포트그룹명 파싱)
+    │   ├── portgroup_test.go
+    │   └── targets.go              # 대상 VM 목록 파일 로딩
+    ├── fixer/                    # -fix 자동교정 계획 수립·적용 (동질성/전원OFF 게이트 포함)
+    │   ├── plan.go                 # 교정 계획(diff) 생성
+    │   ├── plan_test.go
+    │   ├── apply.go                 # 워커풀 병렬 교정 적용
+    │   ├── gates.go                 # 안전장치(그룹 동질성, 전원 OFF 확인)
+    │   └── describe.go              # 교정 계획 dry-run 출력
+    ├── model/                    # 체크 결과 등 공용 데이터 모델
+    │   └── types.go                 # VMInfo 등 구조체 정의
+    ├── report/                   # 콘솔/CSV 리포트 출력
+    │   ├── console.go
+    │   ├── csv.go
+    │   └── summary.go
+    ├── vcenter/                  # vCenter API 접속 클라이언트
+    │   └── client.go                # FetchVMs(2단계 조회), 폴더/포트그룹 조회
+    ├── testfiles/                # affinity 등 테스트용 샘플 파일
+    │   ├── affinity-ev01.txt
+    │   ├── affinity-ev02.txt
+    │   ├── affinity-ev03.txt
+    │   └── kdh.txt
+    └── vendor/                   # 폐쇄망 오프라인 빌드용 Go 의존성 패키지 (문서화 대상 제외)
+        ├── github.com/
+        └── modules.txt
 ```
