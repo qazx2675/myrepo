@@ -12,10 +12,41 @@
 # mock 관련 코드(가짜 gossh, select_user 더미값)는 실 서비스 스크립트가 아니므로
 # 이 파일에는 포함하지 않았습니다 — select_user/get_dhcp_info/check_ev_extra는
 # 다시 TODO 상태로 되돌려 두었습니다.
+#
+# 이후 추가 반영된 변경사항:
+#   7) report_ldap_info / report_splunk_info : 출력 형식을 "INFO ldap <값>" /
+#      "INFO HPC Splunk <값>" / "FAIL ... confirmation required"로 변경.
+#      LDAP 값은 공백으로 구분된 여러 토큰이어도 첫 토큰만 화면에 표시.
+#   8) parse_pm_result : "===== 분류 요약 =====" 화면 출력 블록 제거 (아래 단계에서
+#      이미 자체 요약을 출력하므로 중복). 배열 계산 로직은 그대로.
+#   9) run_os_check : gossh -pm 옵션 순서 수정 — "-w ... -pm"이면 정상 동작하지
+#      않아 "-pm -w ..."로 변경.
+#  10) apply_os_setting/apply_extra_setting : 실행되는 스크립트 목록은 그대로 두고,
+#      로그에 "(y: 기본 환경설정)"/"(set: 추가 환경설정)" 표시를 붙여 y/set이 각각
+#      무엇을 실행하는지 화면에서 구분되게 함.
+#  11) main() : TARGET_LIST(${user}.txt)를 gossh -w에 원본 그대로 넘기고 있어서,
+#      파일에 빈 줄이 섞여 있으면 gossh가 이를 빈 호스트명 타겟으로 인식해 접속을
+#      시도하고 그 실패 라인이 PM_RAW에 남아 ping/refused/anaconda 패턴에 우연히
+#      걸리면서 DOWN_HOSTS에 유령 항목이 잡히는 버그가 있었음(실제 대수보다 접속
+#      가능+불가 합이 커지는 증상). 빈 줄/CR을 제거한 사본을 만들어 TARGET_LIST가
+#      그 사본을 가리키도록 수정 — 이후 모든 gossh -w 호출과 ALL_HOSTS 계산이 항상
+#      같은 정제된 목록을 보게 됨.
+#  12) run_info_check (신규) / report_ldap_info / report_splunk_info : check.res_${user}
+#      (run.sh 결과)는 LDAP/SPLUNK가 정상이면 "OK"만 찍혀서 실제 값을 알 수 없었음.
+#      그래서 이제 check.res_${user}를 grep하지 않고, LDAP/SPLUNK 실제 값을 조사하는
+#      별도 스크립트(INFO_CHECK_SH, 경로는 [수정필요])를 gossh로 따로 실행해
+#      INFO_CHECK_FILE(check.res_${user}_info)을 만들고, 두 report 함수가 그 파일을 본다.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
 RCLOCAL_SH="/path/to/setting/rclocal.sh"
+
+# [신규] [수정필요] check.res_${user}(run.sh 결과)는 LDAP/SPLUNK 설정에 문제가 없으면
+# 그냥 "OK"만 찍혀서 실제 값(어떤 LDAP infra/SPLUNK type인지)을 알 수 없다는 문제가
+# 있었다. 그래서 LDAP/SPLUNK 실제 값은 check.res_${user}에서 grep하는 대신, 이 값을
+# 조사해서 출력해주는 별도 스크립트를 gossh로 직접 실행해서 얻는다. 아래 경로를
+# 실제 조사 스크립트 경로로 채워 넣으세요.
+INFO_CHECK_SH="/path/to/check/info_check.sh"
 
 CLASSIFY_CMD="hostname"
 
@@ -26,8 +57,10 @@ select_user() {
     user=""   # <-- 여기에 기존 user 선택 함수 붙여넣기 (결과값이 user 에 들어가면 됨)
 }
 
-TARGET_LIST=""            # ${user}.txt
+TARGET_LIST=""            # ${user}.txt를 빈 줄/CR 제거해서 정제한 사본을 가리킨다 (main 참고)
+CLEAN_TARGET_LIST=""      # 위 정제 사본의 실제 파일 경로 (cleanup에서 삭제용)
 CHECK_RES_FILE=""         # check.res_${user} (최초 OS 체크 결과)
+INFO_CHECK_FILE=""        # check.res_${user}_info (INFO_CHECK_SH 실행 결과 — LDAP/SPLUNK 실제값 조사용)
 SETTING_TARGET_LIST=""    # 설정 적용 대상만 추린 임시 목록 파일
 # [연계] 설정 적용(apply_os_setting/apply_extra_setting) 완료 후 run_post_apply_check가
 # 이 변수에 재점검 결과 파일 경로를 채웁니다. report_setting_check_fail은 이 변수를
@@ -67,17 +100,41 @@ contains() {
     return 1
 }
 
+# [신규] 출력 가독성을 위한 색상 처리 — 불가/FAIL=빨강, 정상/완료(INFO)=초록,
+# 그 외 경고/확인필요=노랑. 터미널이 아닌 곳(파일 리다이렉트 등)으로 출력할 때는
+# 이스케이프 문자가 그대로 섞여 나오지 않도록 자동으로 색을 끈다(NO_COLOR=1로도
+# 강제로 끌 수 있음).
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_RESET='\033[0m'
+else
+    C_RED=''; C_GREEN=''; C_YELLOW=''; C_RESET=''
+fi
+red()    { printf '%b%s%b\n' "${C_RED}"    "$*" "${C_RESET}"; }
+green()  { printf '%b%s%b\n' "${C_GREEN}"  "$*" "${C_RESET}"; }
+yellow() { printf '%b%s%b\n' "${C_YELLOW}" "$*" "${C_RESET}"; }
+
+# [신규] 이미 "FAIL ..."/"INFO ..."로 시작하는 완성 문자열(ldap/splunk 리포트 값 등)을
+# 내용에 따라 자동으로 색칠한다.
+color_by_status() {
+    case "$1" in
+        FAIL*) red "$1" ;;
+        INFO*) green "$1" ;;
+        *) yellow "$1" ;;
+    esac
+}
+
 # [수정금지] 접두사 분류 기준. 이번 요청과 무관하니 절대 건드리지 마세요.
 is_prefix_host() {
     [[ "$1" =~ ^(s2h|s3h|s4h|sh|c|h) ]]
 }
 
-# [수정금지] gossh -pm 호출 및 결과 출력 로직 자체는 이번 요청과 무관합니다.
+# [수정됨] gossh -pm 옵션은 -w(대상목록)보다 앞에 와야 정상 동작한다(뒤에 두면 명령이
+# 정상 실행되지 않음) — 그래서 "gossh -w ... "cmd" -pm"에서 "gossh -pm -w ... "cmd""로 순서를 바꿨다.
 run_os_check() {
     PM_RAW="/tmp/pm_raw_${user}.$$"
 
-    echo "[INFO] gossh 분류 점검 실행 중..."
-    gossh -w "${TARGET_LIST}" "${CLASSIFY_CMD}" -pm > "${PM_RAW}" 2>&1
+    green "[INFO] gossh 분류 점검 실행 중..."
+    gossh -pm -w "${TARGET_LIST}" "${CLASSIFY_CMD}" > "${PM_RAW}" 2>&1
 
     echo
     echo "===== gossh 분류 결과 원본 ====="
@@ -94,9 +151,11 @@ PAT_PINGX="ping"
 PAT_REFUSED="refused"
 PAT_ANACONDA="anaconda"
 
-# [수정금지] UP/DOWN, PREFIX_UP/PREFIX_DOWN/NONPREFIX_HOSTS 분류 로직 전체.
-# 이번 요청과 무관하며, build_message_case6to9 등 여러 함수가 이 결과에 의존하므로
-# 절대 건드리지 마세요.
+# [수정금지] UP/DOWN, PREFIX_UP/PREFIX_DOWN/NONPREFIX_HOSTS 분류 로직 자체는
+# build_message_case6to9 등 여러 함수가 이 결과(배열)에 의존하므로 건드리지 마세요.
+# [수정됨] "===== 분류 요약 =====" 화면 출력 블록은 제거했습니다 — 아래 작업 단계(OS
+# 체크/설정 적용)에서 이미 자체 요약을 출력하므로 여기서 한 번 더 보여줄 필요가 없다는
+# 요청 반영. 배열 계산(위) 자체는 그대로 남아있어 다른 함수들에 영향 없습니다.
 parse_pm_result() {
     local h
 
@@ -131,16 +190,6 @@ parse_pm_result() {
         fi
     done
 
-    echo "===== 분류 요약 ====="
-    echo "- /user/svrauto 안 붙는 서버 : $(print_horizontal "${NOSVRAUTO_HOSTS[@]}")"
-    echo "- ping 불가 서버            : $(print_horizontal "${PINGX_HOSTS[@]}")"
-    echo "- 22 port refused 서버      : $(print_horizontal "${REFUSED_HOSTS[@]}")"
-    echo "- anaconda 설치 진행중 서버 : $(print_horizontal "${ANACONDA_HOSTS[@]}")"
-    echo "---------------------"
-    echo "- 접속 가능 : ${#UP_HOSTS[@]} 대"
-    echo "- 접속 불가 : ${#DOWN_HOSTS[@]} 대"
-    echo "====================="
-    echo
 }
 
 # [수정됨] target_list / output_file 을 인자로 받도록 일반화했습니다.
@@ -154,9 +203,26 @@ run_check_script() {
     local target_list="$1"
     local output_file="$2"
 
-    echo "[INFO] ${RUN_SH_DIR}/run.sh 실행 중..."
+    green "[INFO] ${RUN_SH_DIR}/run.sh 실행 중..."
     gossh -w "${target_list}" "bash ${RUN_SH_DIR}/run.sh" -script > "${output_file}" 2>&1
-    echo "[INFO] 체크 결과 저장 완료 : ${output_file}"
+    green "[INFO] 체크 결과 저장 완료 : ${output_file}"
+    echo
+}
+
+# [신규] check.res_${user}(run.sh 결과)는 LDAP/SPLUNK가 정상이면 "OK"만 찍혀서 실제
+# 값(어떤 infra/type인지)을 알 수 없어, report_ldap_info/report_splunk_info가 더 이상
+# check.res_${user}를 보지 않고 이 함수가 만드는 INFO_CHECK_FILE을 대신 본다.
+# run_check_script와 동일한 (target_list, output_file) 파라미터 패턴이지만 실행하는
+# 스크립트가 다르므로(INFO_CHECK_SH) 별도 함수로 뺐다.
+# [연계] main()에서 최초 OS 체크(run_check_script) 직후, report_ldap_info/
+# report_splunk_info 호출 전에 실행되어야 합니다.
+run_info_check() {
+    local target_list="$1"
+    local output_file="$2"
+
+    green "[INFO] ${INFO_CHECK_SH} 실행 중 (LDAP/SPLUNK 정보 조사)..."
+    gossh -w "${target_list}" "bash ${INFO_CHECK_SH}" -script > "${output_file}" 2>&1
+    green "[INFO] LDAP/SPLUNK 정보 조사 결과 저장 완료 : ${output_file}"
     echo
 }
 
@@ -172,13 +238,16 @@ run_check_script() {
 # 바로 뒤, report_setting_check_fail 호출 바로 앞에 위치해야 합니다.
 run_post_apply_check() {
     POST_APPLY_CHECK_FILE="check.res_${user}_postapply"
-    echo "[INFO] 설정 적용 후 재점검 실행 중..."
+    green "[INFO] 설정 적용 후 재점검 실행 중..."
     run_check_script "${SETTING_TARGET_LIST}" "${POST_APPLY_CHECK_FILE}"
 }
 
 # [수정됨] LDAP 값이 전부 동일하면 1줄만 출력합니다. 값이 2종류 이상이면
 # 케이스별로 별도 파일에 떨어뜨리고, 화면에는 요약(케이스 수 / 파일명 / 값 /
 # 대상 호스트)만 출력합니다.
+# [수정됨] 출력 형식을 "INFO ldap <값>"/"FAIL ldap ..."으로 변경했습니다. 값은
+# "infra site"처럼 공백으로 구분된 여러 토큰일 수 있는데, 요청에 따라 첫 번째
+# 토큰(예: infra)만 보여줍니다 — 파일에 저장되는 원본 값(value: ...)은 전체를 그대로 둡니다.
 # [수정필요] 아래 3가지는 이번에 임의로 정한 것이라 확인/조정이 필요합니다:
 #   - 파일명 규칙: ldap_case{N}_${user} — N은 값이 등장한 순서 기준(빈도순 아님)
 #   - 저장 위치: 스크립트 실행 위치(cwd)에 그대로 생성됨. 별도 결과 디렉토리로
@@ -186,8 +255,19 @@ run_post_apply_check() {
 #   - 파일 내부 포맷: "value: ..." / "hosts: ..." 2줄 — 다른 도구가 이 파일을
 #     파싱해서 쓴다면 포맷이 맞는지 확인 필요.
 # [연계] 이 함수 안에서만 쓰이는 로컬 상태이고, 다른 함수와의 연계는 없습니다.
+# [수정됨] check.res_${user}(run.sh 결과)는 LDAP이 정상이면 "OK"만 찍혀서 실제 값을
+# 알 수 없어, 이제 CHECK_RES_FILE이 아니라 별도로 조사한 INFO_CHECK_FILE(run_info_check
+# 실행 결과)에서 값을 가져옵니다.
+# [수정됨] INFO_CHECK_SH의 실제 출력이 "hostname : INFO ldap infra" 형태로, host와
+# 값 사이가 공백 1칸이 아니라 콜론(:)으로 구분되고(콜론 앞뒤 공백 유무는 호스트마다
+# 다를 수 있음), 값 자체에 이미 "INFO ldap ..."/"FAIL ldap ..."이 완성된 문자열로
+# 들어있습니다. 그래서 더 이상 값을 잘라 재조합하지 않고, 콜론 뒤 텍스트를 있는
+# 그대로 출력합니다(ldap_display_token 재가공 제거 — 이중으로 "INFO ldap"이
+# 붙던 버그 수정).
+# [수정됨] "infra" 뒤에 인프라와 무관한 텍스트가 더 붙어 나오는 경우가 있어, 앞 3
+# 토큰(예: "INFO ldap infra")만 남기고 나머지는 버립니다.
 report_ldap_info() {
-    [ -f "${CHECK_RES_FILE}" ] || return 0
+    [ -f "${INFO_CHECK_FILE}" ] || return 0
 
     echo "===== LDAP 정보 (접속 가능 서버) ====="
 
@@ -196,21 +276,32 @@ report_ldap_info() {
     local case_order=()
 
     while IFS= read -r line; do
-        host=$(echo "${line}" | awk '{print $1}')
+        if [[ "${line}" =~ ^([^[:space:]]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            host="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+        else
+            host=$(echo "${line}" | awk '{print $1}')
+            value="${line#"${host}" }"
+        fi
         contains "${host}" "${UP_HOSTS[@]}" || continue
-        value="${line#"${host}" }"
+
+        set -- ${value}
+        value="${1:-}"
+        [ -n "${2:-}" ] && value="${value} ${2}"
+        [ -n "${3:-}" ] && value="${value} ${3}"
+
         if [ -z "${ldap_hosts_by_value[${value}]:-}" ]; then
             case_order+=("${value}")
         fi
         ldap_hosts_by_value["${value}"]="${ldap_hosts_by_value[${value}]:-} ${host}"
-    done < <(grep -i "ldap" "${CHECK_RES_FILE}")
+    done < <(grep -i "ldap" "${INFO_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
-        echo "(해당 없음)"
+        red "FAIL ldap infra confirmation required"
     elif [ ${#case_order[@]} -eq 1 ]; then
-        echo "${case_order[0]}"
+        color_by_status "${case_order[0]}"
     else
-        echo "[경고] LDAP 값이 ${#case_order[@]}종류로 서로 다릅니다 — 케이스별 파일로 분리합니다."
+        yellow "[경고] LDAP 값이 ${#case_order[@]}종류로 서로 다릅니다 — 케이스별 파일로 분리합니다."
         local idx=1
         local outfile
         for value in "${case_order[@]}"; do
@@ -219,7 +310,11 @@ report_ldap_info() {
                 echo "value: ${value}"
                 echo "hosts:${ldap_hosts_by_value[${value}]}"
             } > "${outfile}"
-            echo "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}"
+            case "${value}" in
+                FAIL*) red    "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}" ;;
+                INFO*) green  "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}" ;;
+                *)     yellow "  - case${idx} (${outfile}) : ${value}  =>  대상:${ldap_hosts_by_value[${value}]}" ;;
+            esac
             idx=$((idx + 1))
         done
     fi
@@ -231,11 +326,23 @@ report_ldap_info() {
 # [수정됨] SPLUNK 값이 전부 동일하면 1줄만 출력합니다. 값이 2종류 이상이면
 # 각 항목(고유값)별로 "값: N대" 형태로 대수만 집계해서 출력합니다
 # (LDAP과 달리 파일로는 분리하지 않음 — 요청하신 그대로입니다).
+# [수정됨] 출력 형식을 "INFO HPC Splunk <값>"/"FAIL Splunk type confirmation required"로 변경.
 # UP_HOSTS 필터를 안 거는 것(주석 처리된 contains 라인)은 원본 그대로
 # 유지했습니다.
 # [연계] 다른 함수와의 연계는 없습니다.
+# [수정됨] check.res_${user}(run.sh 결과)는 SPLUNK가 정상이면 "OK"만 찍혀서 실제 값을
+# 알 수 없어, 이제 CHECK_RES_FILE이 아니라 별도로 조사한 INFO_CHECK_FILE(run_info_check
+# 실행 결과)에서 값을 가져옵니다.
+# [신규] splunk_display_value는 원본 값이 "splunk typeA"처럼 grep 키워드(splunk)가
+# 라벨로 남아있는 경우 그 라벨만 제거한다("typeA") — LDAP과 달리 나머지 값은
+# 전부(첫 토큰만이 아니라) 그대로 보여준다.
+splunk_display_value() {
+    local v="$1"
+    echo "${v#[Ss][Pp][Ll][Uu][Nn][Kk] }"
+}
+
 report_splunk_info() {
-    [ -f "${CHECK_RES_FILE}" ] || return 0
+    [ -f "${INFO_CHECK_FILE}" ] || return 0
 
     echo "===== SPLUNK 정보 ====="
 
@@ -252,15 +359,15 @@ report_splunk_info() {
             splunk_count["${value}"]=0
         fi
         splunk_count["${value}"]=$(( splunk_count["${value}"] + 1 ))
-    done < <(grep -i "splunk" "${CHECK_RES_FILE}")
+    done < <(grep -i "splunk" "${INFO_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
-        echo "(해당 없음)"
+        red "FAIL Splunk type confirmation required"
     elif [ ${#case_order[@]} -eq 1 ]; then
-        echo "${case_order[0]}"
+        green "INFO HPC Splunk $(splunk_display_value "${case_order[0]}")"
     else
         for value in "${case_order[@]}"; do
-            echo "${value}: ${splunk_count[${value}]}대"
+            green "INFO HPC Splunk $(splunk_display_value "${value}") (${splunk_count[${value}]}대)"
         done
     fi
 
@@ -286,9 +393,9 @@ report_setting_check_fail() {
     local found
     found=$(grep -i "FAIL" "${target_file}")
     if [ -z "${found}" ]; then
-        echo "(FAIL 항목 없음)"
+        green "(FAIL 항목 없음)"
     else
-        echo "${found}"
+        red "${found}"
     fi
     echo "====================================="
     echo
@@ -310,7 +417,7 @@ check_lacp() {
         [ -z "${line}" ] && continue
         bond_value="${line#"${h}" }"
         if [[ "${bond_value}" == *"802.3ad"* ]]; then
-            echo "${h} : LACP(${bond_value}) 사용 중"
+            yellow "${h} : LACP(${bond_value}) 사용 중"
         fi
     done
 }
@@ -339,7 +446,7 @@ filter_svrauto_targets() {
 
     local cnt
     cnt=$(grep -cv '^[[:space:]]*$' "${SETTING_TARGET_LIST}")
-    echo "[INFO] 설정 적용 대상 (접속가능 + svrauto 정상) : ${cnt} 대"
+    green "[INFO] 설정 적용 대상 (접속가능 + svrauto 정상) : ${cnt} 대"
     echo "$(print_horizontal $(cat "${SETTING_TARGET_LIST}"))"
     echo
 
@@ -347,31 +454,36 @@ filter_svrauto_targets() {
     return 0
 }
 
-# [수정금지] 기본 환경설정 적용 로직 자체는 이번 요청과 무관합니다.
+# [수정금지] 기본 환경설정 적용 로직(호출하는 스크립트 3종) 자체는 이번 요청과 무관합니다.
+# [수정됨] y/set 둘 다 이 함수를 거쳐가는데 화면상 뭘 실행하는지 구분이 안 된다는
+# 지적이 있어, "(y: 기본 환경설정)" 표시를 각 단계 로그에 붙였습니다 — 실행되는
+# 스크립트 목록 자체(setting_insert.sh/rclocal.sh/appl_change.sh)는 그대로입니다.
 # [연계] main()에서 이 함수 호출 직후 run_post_apply_check가 이어서 호출됩니다.
 apply_os_setting() {
-    echo "[INFO] setting_insert.sh 실행..."
+    green "[INFO] (y: 기본 환경설정) setting_insert.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/setting_insert.sh" -script
 
-    echo "[INFO] rclocal.sh 실행..."
+    green "[INFO] (y: 기본 환경설정) rclocal.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${RCLOCAL_SH}" -script
 
-    echo "[INFO] appl_change.sh 실행..."
+    green "[INFO] (y: 기본 환경설정) appl_change.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/appl_change.sh" -script
 
-    echo "[INFO] 기본 환경설정 적용 완료"
+    green "[INFO] 기본 환경설정 적용 완료 (setting_insert.sh + rclocal.sh + appl_change.sh)"
     echo
 }
 
 # [수정금지] 추가 환경설정 적용 로직 자체는 이번 요청과 무관합니다.
+# [수정됨] apply_os_setting과 동일하게, set에서만 추가로 도는 setting.sh 단계임을
+# 로그에 "(set: 추가 환경설정)"으로 명시했습니다.
 # [연계] main()에서 이 함수 호출 직후 run_post_apply_check가 이어서 호출됩니다.
 apply_extra_setting() {
     apply_os_setting
 
-    echo "[INFO] setting.sh 추가 실행..."
+    green "[INFO] (set: 추가 환경설정) setting.sh 실행..."
     gossh -w "${SETTING_TARGET_LIST}" "bash ${SETTING_DIR}/setting.sh" -script
 
-    echo "[INFO] 추가 환경설정 적용 완료"
+    green "[INFO] 추가 환경설정 적용 완료 (기본 환경설정 3종 + setting.sh)"
     echo
 }
 
@@ -497,10 +609,11 @@ report_ev_hosts() {
     echo
 }
 
-# [수정금지] 이번 요청과 무관합니다.
+# [수정됨] CLEAN_TARGET_LIST(정제된 TARGET_LIST 사본) 삭제 추가.
 cleanup() {
     [ -n "${PM_RAW}" ] && rm -f "${PM_RAW}"
     [ -n "${SETTING_TARGET_LIST}" ] && rm -f "${SETTING_TARGET_LIST}"
+    [ -n "${CLEAN_TARGET_LIST}" ] && rm -f "${CLEAN_TARGET_LIST}"
 }
 trap cleanup EXIT
 
@@ -508,17 +621,30 @@ main() {
     select_user   # [수정필요] select_user 본문을 채우기 전엔 아래 공백 체크에서 바로 종료됩니다.
 
     if [ -z "${user}" ]; then
-        echo "[ERROR] user 값이 비어 있습니다."
+        red "[ERROR] user 값이 비어 있습니다."
         exit 1
     fi
 
     TARGET_LIST="${user}.txt"
     CHECK_RES_FILE="check.res_${user}"
+    INFO_CHECK_FILE="check.res_${user}_info"
 
     if [ ! -f "${TARGET_LIST}" ]; then
-        echo "[ERROR] 대상 목록 파일이 없습니다 : ${TARGET_LIST}"
+        red "[ERROR] 대상 목록 파일이 없습니다 : ${TARGET_LIST}"
         exit 1
     fi
+
+    # [신규] TARGET_LIST 원본에 빈 줄/CR이 섞여 있으면 gossh -w가 이를 빈 호스트명
+    # 타겟으로 인식해서 접속을 시도하고, 그 실패 결과 라인이 PM_RAW에 남아 ping/refused/
+    # anaconda 패턴에 우연히 걸리면서 DOWN_HOSTS에 유령 항목이 잡히는 문제가 있었다
+    # (실제 대수보다 접속가능+접속불가 합이 더 크게 나오는 증상의 원인). ALL_HOSTS는
+    # 이미 이 필터를 적용해서 만들고 있었는데 gossh에 실제로 넘기는 파일은 원본
+    # 그대로였던 게 불일치의 원인 — 정제된 사본을 만들어 TARGET_LIST가 이후부터 그
+    # 사본을 가리키게 해서, gossh 호출과 ALL_HOSTS 계산이 항상 같은 정제된 목록을
+    # 보도록 통일한다.
+    CLEAN_TARGET_LIST="/tmp/target_clean_${user}.$$"
+    grep -v '^[[:space:]]*$' "${TARGET_LIST}" | tr -d '\r' > "${CLEAN_TARGET_LIST}"
+    TARGET_LIST="${CLEAN_TARGET_LIST}"
 
     echo "user        : ${user}"
     echo "target list : ${TARGET_LIST}"
@@ -526,17 +652,21 @@ main() {
 
     # [수정금지] OS 체크 진행 여부 프롬프트/분기 자체는 이번 요청과 무관합니다.
     # [수정됨] run_check_script 호출부에 (target_list, output_file) 인자 추가.
+    # [수정됨] LDAP/SPLUNK 실제 값은 check.res_${user}로는 안 나와서(정상이면 OK만
+    # 찍힘), run_info_check로 INFO_CHECK_SH를 따로 실행해 INFO_CHECK_FILE을 만들고
+    # report_ldap_info/report_splunk_info가 그 파일을 보도록 함.
     read -rp "OS 체크를 진행하시겠습니까? (y/n) : " ans_check
     case "${ans_check}" in
         y|Y)
             run_os_check
             run_check_script "${TARGET_LIST}" "${CHECK_RES_FILE}"
+            run_info_check "${TARGET_LIST}" "${INFO_CHECK_FILE}"
             report_ldap_info
             report_splunk_info
             report_lacp_info
             ;;
         *)
-            echo "[INFO] OS 체크를 진행하지 않고 종료합니다."
+            yellow "[INFO] OS 체크를 진행하지 않고 종료합니다."
             exit 0
             ;;
     esac
@@ -552,7 +682,7 @@ main() {
                 run_post_apply_check
                 report_setting_check_fail "${POST_APPLY_CHECK_FILE}"
             else
-                echo "[WARN] 설정 적용 대상이 없어 건너뜁니다."
+                yellow "[WARN] 설정 적용 대상이 없어 건너뜁니다."
             fi
             ;;
         set|SET)
@@ -561,11 +691,11 @@ main() {
                 run_post_apply_check
                 report_setting_check_fail "${POST_APPLY_CHECK_FILE}"
             else
-                echo "[WARN] 설정 적용 대상이 없어 건너뜁니다."
+                yellow "[WARN] 설정 적용 대상이 없어 건너뜁니다."
             fi
             ;;
         *)
-            echo "[INFO] 환경설정 수정은 건너뜁니다."
+            yellow "[INFO] 환경설정 수정은 건너뜁니다."
             ;;
     esac
 
