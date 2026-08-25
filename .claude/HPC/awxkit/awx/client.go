@@ -68,6 +68,10 @@ func (c *Client) post(path string, body interface{}, out interface{}) error {
 	return c.do(http.MethodPost, path, body, out)
 }
 
+func (c *Client) patch(path string, body interface{}, out interface{}) error {
+	return c.do(http.MethodPatch, path, body, out)
+}
+
 func (c *Client) do(method, path string, body interface{}, out interface{}) error {
 	var reqBody io.Reader
 	if body != nil {
@@ -252,6 +256,35 @@ func (c *Client) GetJobStdout(jobID int) (string, error) {
 		return "", &APIError{StatusCode: resp.StatusCode, Body: string(data)}
 	}
 	return string(data), nil
+}
+
+// InventorySource는 inventories/{id}/inventory_sources/ 응답의 항목 하나다.
+type InventorySource struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	SourcePath string `json:"source_path"`
+}
+
+type inventorySourceListResult struct {
+	Count   int               `json:"count"`
+	Results []InventorySource `json:"results"`
+}
+
+// ListInventorySources는 지정된 인벤토리에 속한 소스 목록을 조회한다(최대 200개, id 오름차순).
+func (c *Client) ListInventorySources(inventoryID int) ([]InventorySource, error) {
+	var out inventorySourceListResult
+	if err := c.get(fmt.Sprintf("/api/v2/inventories/%d/inventory_sources/?page_size=200&order_by=id", inventoryID), &out); err != nil {
+		return nil, err
+	}
+	return out.Results, nil
+}
+
+// UpdateInventorySourceField는 인벤토리 소스의 필드 하나를 PATCH로 갱신한다.
+// (예: source_path에 git 저장소 내 yaml 파일명을 지정)
+func (c *Client) UpdateInventorySourceField(sourceID int, field, value string) error {
+	body := map[string]interface{}{field: value}
+	var out InventorySource
+	return c.patch(fmt.Sprintf("/api/v2/inventory_sources/%d/", sourceID), body, &out)
 }
 
 type inventorySourceUpdateResult struct {

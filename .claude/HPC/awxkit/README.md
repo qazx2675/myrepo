@@ -138,9 +138,13 @@ bash nodeinfo.sh -hosts ./retry_list.txt
 ```
 
 ### 2.6 [S2] 인벤토리 동기화 (`invsync.sh`)
-`s2_inventory_source`(인벤토리 소스 ID)의 동기화를 트리거하고 완료를 기다린 뒤, `s2_inventory`(대상 인벤토리 ID)가 설정되어 있으면 등록된 호스트 전체를 나열합니다.
+nodeinfo 이후 별도 스크립트가 폐쇄망 git에 이미 업로드해 둔 yaml 파일명을 `-file`로 받아,
+(1) 인벤토리 소스의 `s2_source_field`(기본 `source_path`)에 그 파일명을 저장 → (2) 소스 동기화 →
+(3) `s2_inventory`(대상 인벤토리 ID)가 설정되어 있으면 등록된 호스트 전체를 나열합니다.
 ```bash
-bash invsync.sh
+bash invsync.sh -file hong_nodeinfo.yaml
+# [i] 소스가 2개 있어 첫 번째(main-source, ID=5)를 사용합니다.
+# [i] 인벤토리 소스(5)의 source_path를 "hong_nodeinfo.yaml"로 저장 중...
 # [i] 인벤토리 소스(5) 동기화 시작...
 #     [inventory_update 400] running
 #     [inventory_update 400] successful
@@ -150,7 +154,10 @@ bash invsync.sh
 #   - web02 (enabled)
 #   - db01 (disabled)
 ```
-`s2_inventory`를 비워두면 동기화만 하고 호스트 목록 조회는 건너뜁니다. 동기화가 `successful`이 아니면 종료 코드 1로 끝납니다.
+- `-file`은 필수입니다. yaml 파일 자체를 git에 올리는 건 이 스크립트가 하지 않고, 이미 올라가 있다는 전제로 파일명만 넘깁니다.
+- 사용할 소스는 `s2_inventory_source`가 채워져 있으면 그 ID를 고정으로 쓰고, 비어 있으면 `s2_inventory` 아래 소스 목록 중 첫 번째(ID 오름차순)를 자동 선택합니다.
+- `s2_source_field`가 실제 AWX 필드명과 다르면(기본 추정값은 `source_path`) 저장이 무의미해질 수 있으니, 최초 1회는 AWX 웹 UI에서 값이 실제로 바뀌었는지 확인하는 걸 권장합니다.
+- `s2_inventory`를 비워두면 동기화만 하고 호스트 목록 조회는 건너뜁니다. 필드 저장 실패, 동기화가 `successful`이 아닌 경우 등은 종료 코드 1로 끝납니다.
 
 ### 2.7 [S3] DHCP 등록 (`dhcp.sh`)
 인프라를 선택해 `s3_template`을 실행하고, 최종 상태를 즉시 보여줍니다. 설정 변경 작업이므로 완료 후 검증 권고 문구가 항상 함께 출력됩니다.
@@ -197,7 +204,7 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 | `ls.sh` | (없음) |
 | `survey.sh` | `<ID\|이름>` (위치 인자, 생략 시 대화형 입력) |
 | `nodeinfo.sh` | `-hosts <경로>` — `${user}.txt` 대신 사용할 호스트 목록 파일 |
-| `invsync.sh` | (없음) |
+| `invsync.sh` | `-file <파일명>` (필수) — git에 이미 업로드된 인벤토리 yaml 파일명 |
 | `dhcp.sh` | `-infra <번호\|값>` — 인프라 선택지 번호 또는 값 |
 | `pxe.sh` | `-infra` / `-os` / `-boot` / `-splunk` <번호\|값> |
 
@@ -208,7 +215,7 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 | `ls.sh` | `awxkit-ls` | 템플릿 목록(ID·이름·extra_vars 허용 여부·survey 유무) 조회 |
 | `survey.sh` | `awxkit-survey` | 템플릿의 survey 문항(질문명·변수명·선택지·기본값·필수여부) 조회 |
 | `nodeinfo.sh` | `awxkit-nodeinfo` | [S1] `${user}.txt`의 hostname 전체를 한 번에 넣어 NodeInfo 템플릿 실행 및 결과 파일 저장 |
-| `invsync.sh` | `awxkit-invsync` | [S2] `s2_inventory_source` 동기화 트리거·완료 대기 후 `s2_inventory`의 등록 호스트 목록 조회 |
+| `invsync.sh` | `awxkit-invsync` | [S2] `-file`로 받은 yaml 파일명을 소스의 `s2_source_field`에 저장 → 동기화 트리거·완료 대기 → `s2_inventory`의 등록 호스트 목록 조회 |
 | `dhcp.sh` | `awxkit-dhcp` | [S3] 인프라 선택 후 DHCP 등록 템플릿 실행, 최종 상태 즉시 출력, 설정 변경 검증 권고 문구 출력 |
 | `pxe.sh` | `awxkit-pxe` | [S4] 인프라·OS 버전·Boot Mode·Splunk 설치 여부 조합 실행 후 등록 완료 호스트 수 리포트 |
 
@@ -220,7 +227,7 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 | `awx_url` / `username` / `password` | AWX 접속 정보 |
 | `insecure_tls` | 사설 인증서 환경에서 `true` |
 | `s1_*` | [S1] NodeInfo 템플릿/파라미터(`s1_extra_vars`로 추가 필수 survey 항목 전달)/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
-| `s2_*` | [S2] 인벤토리 소스·대상 인벤토리 ID |
+| `s2_*` | [S2] 소스 ID(`s2_inventory_source`, 비우면 `s2_inventory` 밑에서 자동 탐색)·대상 인벤토리 ID(`s2_inventory`)·yaml 파일명 저장 필드(`s2_source_field`, 기본 `source_path`) |
 | `s3_*` | [S3] DHCP 템플릿/인프라 선택 변수명·옵션 |
 | `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명과 각각의 선택지(`*_choices`, 선택 사항), 결과 집계용 인벤토리 ID |
 | `poll_interval` | Job 상태 폴링 간격(초) |
