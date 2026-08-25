@@ -30,8 +30,9 @@ type Config struct {
 	S1OutputDir   string
 
 	// [S2] 인벤토리 동기화
-	S2InventorySource string
+	S2InventorySource string // 비우면 s2_inventory 아래 소스 목록 중 첫 번째를 자동 선택. 채우면 그 ID를 고정으로 사용(자동탐색 생략)
 	S2Inventory       string
+	S2SourceField     string // 소스에 yaml 파일명을 저장할 필드명 (기본: source_path)
 
 	// [S3] DHCP
 	S3Template     string
@@ -76,6 +77,7 @@ func (c *Config) fieldSetters() map[string]func(string) {
 
 		"s2_inventory_source": func(v string) { c.S2InventorySource = v },
 		"s2_inventory":        func(v string) { c.S2Inventory = v },
+		"s2_source_field":     func(v string) { c.S2SourceField = v },
 
 		"s3_template":      func(v string) { c.S3Template = v },
 		"s3_infra_key":     func(v string) { c.S3InfraKey = v },
@@ -121,6 +123,7 @@ func Load(path string) (*Config, error) {
 	c := &Config{
 		S1Fetch:         "artifacts",
 		S1OutputDir:     "./output",
+		S2SourceField:   "source_path",
 		PollIntervalSec: 3,
 		HistoryFile:     "./awxkit_history.log",
 		SourcePath:      path,
