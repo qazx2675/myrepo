@@ -46,8 +46,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	extraVars, err := config.ParseKeyValues(cfg.S3ExtraVars)
+	if err != nil {
+		fmt.Printf("[X] conf의 s3_extra_vars 형식이 올바르지 않습니다: %v\n", err)
+		os.Exit(1)
+	}
+	launchVars := map[string]interface{}{cfg.S3InfraKey: infra}
+	for k, v := range extraVars {
+		launchVars[k] = v
+	}
+
 	fmt.Printf("[i] %s 실행 중... (%s=%s)\n", t.Name, cfg.S3InfraKey, infra)
-	result, err := client.Launch(t.ID, map[string]interface{}{cfg.S3InfraKey: infra})
+	result, err := client.Launch(t.ID, launchVars)
 	if err != nil {
 		fmt.Printf("[X] 실행 요청 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=dhcp infra=%s status=launch_error error=%q", user, infra, err.Error()))
