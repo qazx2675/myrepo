@@ -41,6 +41,7 @@ export VC_PASSWORD='실제_비밀번호'
   -ev01Cpu=4 -ev01Mem=8 -ev01Disk=100 -ev01Share=nomal \
   -ev02Cpu=2 -ev02Mem=4 -ev02Disk=50  -ev02Share=1000 \
   -firmware=efi \
+  -guestId=rhel9_64Guest \
   -prepConcurrency=16 -taskConcurrency=24
 ```
 
@@ -54,6 +55,7 @@ export VC_PASSWORD='실제_비밀번호'
 | `-mapFile` | `hostgroup.txt` | | `"BM호스트 hostgroup이름"` 네트워크 매핑 파일. |
 | `-vmCount` | `2` | | 호스트 1대당 생성할 VM 수. **1~3만 지원**(그 외 값은 즉시 종료). |
 | `-firmware` | `efi` | | `bios` 또는 `efi`만 허용. 정상 부팅이 확인된 값은 `efi`(권장). |
+| `-guestId` | `rhel8_64Guest` | | 생성할 VM의 게스트 OS 식별자. 지정하지 않으면 `rhel8_64Guest`가 그대로 쓰이고, `-guestId=rhel9_64Guest`처럼 주면 그 값으로 생성됩니다. 지원 목록은 vSphere 버전마다 다르므로 도구가 화이트리스트로 막지 않고 **vCenter가 유효성을 판정**합니다(잘못된 값이면 생성이 실패하고 실패 건수가 출력됩니다). |
 | `-datacenter` | (없음) | 조건부 | 데이터센터가 여러 개일 때만 필수. 1개뿐이면 자동 선택되어 생략 가능. |
 | `-prepConcurrency` | `16` | | 호스트 사전 조사(데이터스토어/리소스풀 조회) 동시 처리 수. 500대 규모 기준 12~24 권장. |
 | `-taskConcurrency` | `24` | | VM 생성/리소스 설정 Task 동시 실행 수. 500대 규모 기준 16~32 권장. |
@@ -77,7 +79,8 @@ export VC_PASSWORD='실제_비밀번호'
 
 ## 4. 동작 순서
 
-1. 플래그 검증(`-vcTargetIP`, ev01/ev02 CPU, `-vmCount` 범위, `-firmware`, Share 값 파싱).
+1. 플래그 검증(`-vcTargetIP`, ev01/ev02 CPU, `-vmCount` 범위, `-firmware`, `-guestId` 빈 값 여부,
+   Share 값 파싱). 사용할 게스트 OS/펌웨어는 시작 시 `[INFO] 게스트 OS: ... / 펌웨어: ...`로 출력.
 2. `VC_PASSWORD` 로드, `worklist.txt`/`hostgroup.txt` 읽기.
 3. vCenter 접속, 데이터센터 선택(단일 자동 선택 또는 `-datacenter` 지정).
 4. `ContainerView`로 **VM 전체 목록을 1회 배치 조회**해서 이미 존재하는 VM 이름을
@@ -102,6 +105,8 @@ export VC_PASSWORD='실제_비밀번호'
      `sched.swap.vmxSwapEnabled` = FALSE (extraConfig)
 
    생성 Task가 돌려준 VM의 MoRef를 그대로 보관해서, 다음 단계에서 인벤토리를 다시 뒤지지 않는다.
+   생성에 실패한 VM은 사유를 출력하고(대수가 많을 때 로그가 넘치지 않도록 처음 5건까지만 상세 출력),
+   마지막에 실패 총 건수를 알려준다.
 9. **[부팅 순서 설정 단계]** 부트 순서는 실제 device key가 있어야 지정할 수 있어
    생성 이후에만 처리 가능하다. 생성된 VM 전체의 디바이스 목록을 **1회 배치 조회**한 뒤,
    `-taskConcurrency`로 동시에 Reconfigure해서 디스크→NIC 순서로 부트 순서를 지정한다.
@@ -129,5 +134,9 @@ vm_create-source/
 - `-vmCount`는 1~3만 지원하며, ev04 이상은 지원하지 않습니다.
 - `hostgroup.txt`에 매핑이 없는 호스트는 네트워크 어댑터 없이 VM이 생성됩니다
   (경고만 출력, 중단되지 않음).
-- 게스트 OS는 `rhel8_64Guest`로 고정되어 있습니다(플래그로 변경 불가, 소스 수정 필요).
+- 게스트 OS는 `-guestId`로 지정합니다(미지정 시 `rhel8_64Guest`). 도구는 값의 유효성을
+  검사하지 않고 vCenter에 그대로 넘기므로, 대상 vSphere 버전이 지원하지 않는 식별자를 주면
+  VM 생성이 실패합니다(실패 건수와 사유가 출력됩니다).
+- 호스트 1대에 만드는 ev01/ev02/ev03 VM은 **모두 같은 게스트 OS**로 생성됩니다
+  (VM별로 다른 게스트 OS를 주는 옵션은 없습니다).
 - 전체 타임아웃이 60분(`context.WithTimeout`)으로 고정되어 있습니다.
