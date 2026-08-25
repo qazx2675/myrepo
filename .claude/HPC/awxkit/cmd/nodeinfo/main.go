@@ -68,10 +68,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	extraVars, err := config.ParseKeyValues(cfg.S1ExtraVars)
+	if err != nil {
+		fmt.Printf("[X] conf의 s1_extra_vars 형식이 올바르지 않습니다: %v\n", err)
+		os.Exit(1)
+	}
+
 	hostText := strings.Join(hosts, "\n")
+	launchVars := map[string]interface{}{cfg.S1HostnameKey: hostText}
+	for k, v := range extraVars {
+		launchVars[k] = v
+	}
 	fmt.Printf("[i] %s 실행 중... (%d개 hostname을 한 번에 전달)\n", t.Name, len(hosts))
 
-	result, err := client.Launch(t.ID, map[string]interface{}{cfg.S1HostnameKey: hostText})
+	result, err := client.Launch(t.ID, launchVars)
 	if err != nil {
 		fmt.Printf("[X] 실행 요청 실패: %v\n", err)
 		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d status=launch_error error=%q", user, len(hosts), err.Error()))

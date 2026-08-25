@@ -127,6 +127,7 @@ bash nodeinfo.sh
 # [✔] 양식 변환 확인 완료.
 ```
 - `s1_hostname_key`에 hostname 전체(줄바꿈으로 이어붙인 텍스트)를 담아 `s1_template`을 한 번 실행하고, 결과를 `s1_output_dir/${user}_nodeinfo.yaml` 하나로 저장합니다.
+- 템플릿에 `s1_hostname_key` 외의 필수 survey 항목이 더 있다면(`variables_needed_to_start` 오류), `s1_extra_vars`에 `"key=value, key2=value2"` 형태로 채우면 launch 시 함께 전달됩니다.
 - 결과 취득 방식(`s1_fetch`)에 따라: `artifacts`(기본, `s1_artifact_key`로 값을 지정하지 않으면 전체 artifacts를 저장), `stdout`(표준출력 그대로 저장), `remote`(API로 받을 수 없어 원격 경로 안내만 출력).
 - **양식 변환 확인**: 다운로드된 결과 파일을 정해진 양식으로 바꾸는 스크립트는 awxkit이 실행하지 않습니다. 사용자가 다른 터미널에서 그 스크립트를 직접 실행한 뒤, awxkit이 물어보는 `Y/N`에 `Y`로 답해야 실행이 완료됩니다. `N`이거나 다른 입력이면 `downloaded_unconfirmed` 상태로 종료 코드 1을 반환합니다 — 다운로드는 됐지만 변환이 확인되지 않았다는 뜻입니다.
 - 실패하면 stdout 마지막 30줄을 보여주고 종료 코드 1로 끝납니다.
@@ -218,7 +219,7 @@ bash pxe.sh -infra 1 -os rocky-9.2 -boot uefi -splunk true
 |---|---|
 | `awx_url` / `username` / `password` | AWX 접속 정보 |
 | `insecure_tls` | 사설 인증서 환경에서 `true` |
-| `s1_*` | [S1] NodeInfo 템플릿/파라미터/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
+| `s1_*` | [S1] NodeInfo 템플릿/파라미터(`s1_extra_vars`로 추가 필수 survey 항목 전달)/결과 취득 방식(`s1_fetch`: artifacts\|stdout\|remote, `s1_artifact_key`)/저장 경로(`s1_output_dir`) |
 | `s2_*` | [S2] 인벤토리 소스·대상 인벤토리 ID |
 | `s3_*` | [S3] DHCP 템플릿/인프라 선택 변수명·옵션 |
 | `s4_*` | [S4] PXE 템플릿/인프라·OS·Boot Mode·Splunk 변수명과 각각의 선택지(`*_choices`, 선택 사항), 결과 집계용 인벤토리 ID |

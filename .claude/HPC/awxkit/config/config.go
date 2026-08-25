@@ -23,6 +23,7 @@ type Config struct {
 	// [S1] NodeInfo
 	S1Template    string
 	S1HostnameKey string
+	S1ExtraVars   string // "key=value, key2=value2" 형태. 템플릿의 다른 필수 survey 항목을 채울 때 사용
 	S1Fetch       string // artifacts | stdout | remote
 	S1ArtifactKey string // s1_fetch=artifacts 일 때 결과가 담긴 artifacts의 키. 비우면 전체 artifacts를 저장
 	S1RemotePath  string
@@ -67,6 +68,7 @@ func (c *Config) fieldSetters() map[string]func(string) {
 
 		"s1_template":     func(v string) { c.S1Template = v },
 		"s1_hostname_key": func(v string) { c.S1HostnameKey = v },
+		"s1_extra_vars":   func(v string) { c.S1ExtraVars = v },
 		"s1_fetch":        func(v string) { c.S1Fetch = v },
 		"s1_artifact_key": func(v string) { c.S1ArtifactKey = v },
 		"s1_remote_path":  func(v string) { c.S1RemotePath = v },
@@ -222,4 +224,24 @@ func ReadHostList(path string) ([]string, error) {
 		return nil, fmt.Errorf("%s에 유효한 hostname이 없습니다", path)
 	}
 	return hosts, nil
+}
+
+// ParseKeyValues는 "key=value, key2=value2" 형태의 conf 값을 map으로 나눈다.
+func ParseKeyValues(raw string) (map[string]string, error) {
+	result := map[string]string{}
+	if strings.TrimSpace(raw) == "" {
+		return result, nil
+	}
+	for _, pair := range strings.Split(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(pair, "=")
+		if !ok || strings.TrimSpace(k) == "" {
+			return nil, fmt.Errorf("형식이 올바르지 않습니다 (key=value): %q", pair)
+		}
+		result[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	return result, nil
 }
