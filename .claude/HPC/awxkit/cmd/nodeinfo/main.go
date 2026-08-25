@@ -125,16 +125,7 @@ func main() {
 	}
 
 	fmt.Printf(cli.MarkOK+" 다운로드 완료 (job %d) — 결과 저장: %s\n", job.ID, outPath)
-
-	fmt.Println(cli.MarkAsk+" 다른 터미널에서 양식 변환 스크립트를 실행해 위 파일을 변환하세요.")
-	if !cli.PromptYesNo("변환이 완료되었으면 Y를 입력하세요 (Y/N): ") {
-		fmt.Println(cli.MarkFail+" 양식 변환이 확인되지 않았습니다. 변환을 완료한 뒤 nodeinfo를 다시 실행해 확인해주세요.")
-		cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=downloaded_unconfirmed output=%s", user, len(hosts), job.ID, outPath))
-		os.Exit(1)
-	}
-
-	fmt.Println(cli.MarkOK+" 양식 변환 확인 완료.")
-	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=successful output=%s format_confirmed=true", user, len(hosts), job.ID, outPath))
+	cli.AppendHistory(cfg, fmt.Sprintf("user=%s action=nodeinfo hosts=%d job=%d status=successful output=%s", user, len(hosts), job.ID, outPath))
 }
 
 // saveNodeInfoResult는 cfg.S1Fetch 설정에 따라 결과를 취득해 outPath에 저장한다.
