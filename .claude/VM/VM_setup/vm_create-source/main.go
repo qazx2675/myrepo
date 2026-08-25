@@ -125,6 +125,7 @@ func main() {
 	vmCount := flag.Int("vmCount", 2, "생성할 VM 개수 (1~3)")
 	mapFile := flag.String("mapFile", "hostgroup.txt", "\"BM hostgroup이름\" 형식의 네트워크 매핑 파일 (다른 이름 지정 가능)")
 	firmware := flag.String("firmware", "efi", "펌웨어 타입 (bios 또는 efi) - 정상 부팅되는 서버가 EFI(권장) 확인됨")
+	guestId := flag.String("guestId", "rhel8_64Guest", "게스트 OS 식별자 (미지정 시 rhel8_64Guest). 예: rhel9_64Guest, rhel7_64Guest, centos8_64Guest. 유효한 값인지는 vCenter가 판정하므로, 대상 vSphere 버전이 지원하는 식별자를 넣어야 한다")
 	datacenterName := flag.String("datacenter", "", "데이터센터 이름 (데이터센터가 여러 개면 필수, 1개뿐이면 생략 가능)")
 
 	prepConc := flag.Int("prepConcurrency", 16, "호스트 사전 조사 동시 처리 수 (500대 규모 권장: 12~24)")
@@ -157,6 +158,14 @@ func main() {
 
 	if *firmware != "bios" && *firmware != "efi" {
 		log.Fatal("-firmware 값은 bios 또는 efi 여야 합니다.")
+	}
+
+	// 게스트 OS 식별자는 vSphere 버전마다 지원 목록이 달라서 여기서 화이트리스트로
+	// 막지 않는다(막으면 새 OS가 나올 때마다 소스를 고쳐야 함). 빈 값만 걸러내고,
+	// 실제 유효성은 vCenter가 CreateVM 단계에서 판정하게 둔다.
+	*guestId = strings.TrimSpace(*guestId)
+	if *guestId == "" {
+		log.Fatal("-guestId 값이 비어 있습니다. (미지정 시 기본값 rhel8_64Guest)")
 	}
 
 	if *prepConc < 1 {
@@ -201,6 +210,7 @@ func main() {
 	fmt.Printf("\n[INFO] 동적 VM 생성 (Phase 3) 시작 (접속 계정: %s)\n", *vcId)
 	fmt.Printf("[INFO] 대상 물리 호스트 %d대 / 조사 동시성 %d / 작업 동시성 %d\n",
 		len(serverList), *prepConc, *taskConc)
+	fmt.Printf("[INFO] 게스트 OS: %s / 펌웨어: %s\n", *guestId, *firmware)
 
 	// 개선 4: 전역 타임아웃 추가 (500대 규모에서 어딘가 멈춰도 무한정 걸리지 않도록)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
@@ -477,6 +487,18 @@ func main() {
 	createdList := make([]createdVM, len(jobs))
 	createdOK := make([]bool, len(jobs))
 
+	// 생성 실패는 예전엔 조용히 무시돼서, 예를 들어 -guestId에 오타가 있으면
+	// "생성 대상 12대" 라고 찍고는 아무것도 안 만들어진 채 끝나 원인을 알 수 없었다.
+	// 대수가 많을 때 로그가 넘치지 않도록 처음 몇 건만 상세히 찍고, 총계는 끝에 알려준다.
+	const maxShownCreateErr = 5
+	var createFailCount, createErrShown int32
+	reportCreateErr := func(vmName string, err error) {
+		atomic.AddInt32(&createFailCount, 1)
+		if atomic.AddInt32(&createErrShown, 1) <= maxShownCreateErr {
+			progressLogger.Printf("[오류] [%s] VM 생성 실패: %v", vmName, err)
+		}
+	}
+
 	if len(jobs) > 0 {
 		fmt.Printf("[INFO] 생성 대상 VM %d대 — 생성 작업을 시작합니다.\n", len(jobs))
 
@@ -502,7 +524,7 @@ func main() {
 				// (device key가 필요한 부팅 순서만 아래 2단계에 남겨둔다)
 				spec := types.VirtualMachineConfigSpec{
 					Name:     j.VMName,
-					GuestId:  "rhel8_64Guest",
+					GuestId:  *guestId,
 					Firmware: *firmware,
 					NumCPUs:  int32(cfg.Cpu),
 					MemoryMB: int64(cfg.Mem * 1024),
@@ -609,6 +631,7 @@ func main() {
 
 				task, err := p.Folder.CreateVM(ctx, spec, p.ResPool, p.HostObj)
 				if err != nil {
+					reportCreateErr(j.VMName, err)
 					return
 				}
 
@@ -616,11 +639,17 @@ func main() {
 				// 예전에는 다음 단계에서 finder.VirtualMachine()으로 인벤토리를 VM마다
 				// 다시 뒤졌는데(재귀 탐색이라 대수가 많을수록 급격히 느려짐), 그 과정이 통째로 사라진다.
 				info, waitErr := task.WaitForResult(ctx)
-				if waitErr != nil || info == nil {
+				if waitErr != nil {
+					reportCreateErr(j.VMName, waitErr)
+					return
+				}
+				if info == nil {
+					reportCreateErr(j.VMName, fmt.Errorf("생성 Task 결과가 비어 있음"))
 					return
 				}
 				ref, ok := info.Result.(types.ManagedObjectReference)
 				if !ok {
+					reportCreateErr(j.VMName, fmt.Errorf("생성 Task가 VM 참조를 돌려주지 않음"))
 					return
 				}
 
@@ -629,6 +658,14 @@ func main() {
 			}(ji)
 		}
 		wgCreate.Wait()
+
+		if n := atomic.LoadInt32(&createFailCount); n > 0 {
+			fmt.Printf("[경고] VM 생성 실패 %d건 (전체 %d건 중).", n, len(jobs))
+			if n > maxShownCreateErr {
+				fmt.Printf(" 위에는 처음 %d건만 표시했습니다.", maxShownCreateErr)
+			}
+			fmt.Println(" -guestId 값이 대상 vSphere 버전에서 지원되는지 확인해 보세요.")
+		}
 	}
 
 	var confirmed []createdVM
