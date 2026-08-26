@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // Record는 DHCP 파일에 선언된 호스트 1개의 정적 MAC/IP 쌍이다.
@@ -74,7 +75,7 @@ func Resolve(root, hostname string) (Record, error) {
 	}
 
 	path := root + "/" + prefix
-	recs, err := ParseFile(path)
+	recs, err := parseFileCached(path)
 	if err != nil {
 		return Record{}, err
 	}
@@ -84,4 +85,31 @@ func Resolve(root, hostname string) (Record, error) {
 		return Record{}, fmt.Errorf("%s 안에 %s 호스트 블록이 없음", path, hostname)
 	}
 	return rec, nil
+}
+
+// 아래는 대역 파일 파싱 결과 캐시다. Resolve는 hostname 1개마다 불리는데, 보통 수많은
+// hostname이 같은 대역(=같은 파일)에 속한다. 캐시가 없으면 그 파일을 hostname 수만큼
+// 반복해서 읽고 정규식으로 다시 파싱하게 되어, 대상이 많아질수록 그대로 느려진다.
+// 실행 1회 동안만 유지되는 캐시이고, 반환되는 맵은 파싱 후 읽기 전용으로만 쓴다.
+var (
+	fileCacheMu sync.Mutex
+	fileCache   = map[string]cachedParse{}
+)
+
+type cachedParse struct {
+	recs map[string]Record
+	err  error
+}
+
+// parseFileCached는 같은 경로에 대해 ParseFile을 한 번만 수행한다(에러도 함께 캐시).
+func parseFileCached(path string) (map[string]Record, error) {
+	fileCacheMu.Lock()
+	defer fileCacheMu.Unlock()
+
+	if c, ok := fileCache[path]; ok {
+		return c.recs, c.err
+	}
+	recs, err := ParseFile(path)
+	fileCache[path] = cachedParse{recs: recs, err: err}
+	return recs, err
 }

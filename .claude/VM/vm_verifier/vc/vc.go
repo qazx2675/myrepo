@@ -9,8 +9,10 @@ import (
 	"net/url"
 
 	"github.com/vmware/govmomi"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 // VMInfo는 검증에 필요한 VM 1대의 조회 결과다.
@@ -26,22 +28,32 @@ func Connect(ctx context.Context, address, user, pass string) (*govmomi.Client, 
 	return govmomi.NewClient(ctx, u, true)
 }
 
-// FetchByNames는 지정한 VM 이름들의 정보를 ContainerView + PropertyCollector 벌크 조회로 한 번에 가져온다.
+// FetchByNames는 지정한 VM 이름들의 정보만 조회한다.
 func FetchByNames(ctx context.Context, client *govmomi.Client, names []string) (map[string]VMInfo, error) {
 	wanted := make(map[string]bool, len(names))
 	for _, n := range names {
 		wanted[n] = true
 	}
-	return fetch(ctx, client, wanted)
+	return FetchMatching(ctx, client, func(name string) bool { return wanted[name] })
 }
 
-// FetchAll은 이 vCenter의 모든 VM 정보를 가져온다. 호출부가 BM 접두어 패턴(예: {prefix}ev\d+)으로 매칭한다.
+// FetchAll은 이 vCenter의 모든 VM 정보를 가져온다.
+// 인벤토리가 크면 그만큼 무거우므로, 대상이 정해져 있다면 FetchMatching을 쓰는 편이 훨씬 빠르다.
 func FetchAll(ctx context.Context, client *govmomi.Client) (map[string]VMInfo, error) {
-	return fetch(ctx, client, nil)
+	return FetchMatching(ctx, client, nil)
 }
 
-// fetch는 wanted가 nil이면 전체, 아니면 wanted에 있는 이름만 걸러서 반환한다.
-func fetch(ctx context.Context, client *govmomi.Client, wanted map[string]bool) (map[string]VMInfo, error) {
+// FetchMatching은 match(name)이 true인 VM만 조회한다(match가 nil이면 전체).
+//
+// 2단계로 나눠 조회하는 것이 핵심이다:
+//
+//	1단계 — 인벤토리 전체에서 "name" 하나만 가볍게 훑는다.
+//	2단계 — match를 통과한 VM들의 MoRef에 대해서만 config.hardware.device를 배치 조회한다.
+//
+// config.hardware.device는 디스크/컨트롤러/NIC/비디오카드까지 다 들어있는 아주 무거운
+// 속성이라, 예전처럼 인벤토리 전체에 대해 이 속성을 받아오면 실제로 필요한 건 몇 대뿐인데도
+// 응답 크기가 VM 수에 비례해 커진다. 대규모 vCenter에서 조회가 느렸던 주된 원인이다.
+func FetchMatching(ctx context.Context, client *govmomi.Client, match func(string) bool) (map[string]VMInfo, error) {
 	m := view.NewManager(client.Client)
 	cv, err := m.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
 	if err != nil {
@@ -49,22 +61,41 @@ func fetch(ctx context.Context, client *govmomi.Client, wanted map[string]bool) 
 	}
 	defer cv.Destroy(ctx)
 
-	var vms []mo.VirtualMachine
-	err = cv.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name", "config.hardware.device"}, &vms)
-	if err != nil {
-		return nil, fmt.Errorf("VM 벌크 조회 실패: %w", err)
+	var named []mo.VirtualMachine
+	if err := cv.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name"}, &named); err != nil {
+		return nil, fmt.Errorf("VM 이름 조회 실패: %w", err)
 	}
 
 	result := make(map[string]VMInfo)
-	for _, vm := range vms {
-		if wanted != nil && !wanted[vm.Name] {
+	refToName := make(map[types.ManagedObjectReference]string)
+	var refs []types.ManagedObjectReference
+	for _, vm := range named {
+		if match != nil && !match(vm.Name) {
 			continue
 		}
-		info := VMInfo{Name: vm.Name}
+		result[vm.Name] = VMInfo{Name: vm.Name}
+		refs = append(refs, vm.Self)
+		refToName[vm.Self] = vm.Name
+	}
+	if len(refs) == 0 {
+		return result, nil
+	}
+
+	var detailed []mo.VirtualMachine
+	pc := property.DefaultCollector(client.Client)
+	if err := pc.Retrieve(ctx, refs, []string{"config.hardware.device"}, &detailed); err != nil {
+		return nil, fmt.Errorf("VM 장치 정보 조회 실패: %w", err)
+	}
+	for _, vm := range detailed {
+		name, ok := refToName[vm.Self]
+		if !ok {
+			continue
+		}
+		info := result[name]
 		if vm.Config != nil {
 			info.MACs = macsFromDevices(vm.Config.Hardware.Device)
 		}
-		result[vm.Name] = info
+		result[name] = info
 	}
 	return result, nil
 }
