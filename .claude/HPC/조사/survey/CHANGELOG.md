@@ -5,6 +5,14 @@
 ### Added
 - `[gossh].timeout` — gossh 타임아웃 초(`-t`). 설정값·인프라망 두 gossh 호출 모두에 적용.
   비우면 gossh 기본값 사용.
+- **ESXi 판별 + VM 2차 조사** (`cmd/survey/vm.go`)
+  - `설정값 = 없음` 인 호스트에 `uname` 실행 → `VMkernel` 이면 ESXi. 1차 결과 `특이사항` 에 `esxi`.
+  - ESXi 가 1대 이상이면 `<esxi_hostname>ev01~ev03` (규칙 고정)을 만들어 별도 파일로 조사.
+    VM 은 1차와 같은 `config_value`/`infra_net`/O·X 로직. 위치·상태·O·X 기준은 소속 ESXi(표1)를 상속.
+  - DNS 미등록 VM 은 행 제외. 어떤 ESXi 의 VM 이 모두 실패면 그 ESXi 이름으로 `접속불가` 1행.
+  - 타임아웃 VM 만 1회 재조사(무한 루프 방지).
+  - 출력 파일: `result_YYYYMMDD_HHMM.tsv` + (ESXi 있을 때만) `result_vm_YYYYMMDD_HHMM.tsv`.
+- `detectError` 가 이름 해석 실패를 `DNS 미등록` 으로 별도 분류(기존: `접속불가`).
 
 ## [v0.3.0] - 2026-08-27
 
