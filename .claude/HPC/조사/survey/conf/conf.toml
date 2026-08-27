@@ -12,7 +12,7 @@ extra_args  = ""                               # 필요 시 추가 플래그
 [scripts]
 # 원격 실행 커맨드 — 스크립트 변경 시 이 값만 수정
 config_value = "cat /etc/auto.appl | grep -v '#' | grep -w '/appl'"
-# 인프라망 조사 스크립트 (로컬 실행, 인자로 hostname 전달) — 교체 시 이 값만 수정
+# 인프라망 조사 스크립트 — `bash <이 경로> <hostname>` 으로 실행됨. 교체 시 이 값만 수정
 infra_net    = "/root/HPC/조사/scripts/infra_survey.sh"
 # 스크립트 출력에서 인프라망 값을 뽑는 정규식 (캡처 그룹 1). 비우면 첫 줄 전체 사용.
 # 예: 출력이 "web01: INFO ldap infra site" 이면 아래 정규식으로 "ldap infra site" 추출
