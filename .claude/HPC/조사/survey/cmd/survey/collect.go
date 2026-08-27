@@ -42,6 +42,9 @@ func runGossh(cfg *Config, hostnames []string, script string, withConc bool) (li
 	if withConc && cfg.GosshConc > 0 {
 		args = append(args, "-c", strconv.Itoa(cfg.GosshConc))
 	}
+	if cfg.GosshTimeout > 0 {
+		args = append(args, "-t", strconv.Itoa(cfg.GosshTimeout))
+	}
 	if strings.TrimSpace(cfg.GosshArgs) != "" {
 		args = append(args, strings.Fields(cfg.GosshArgs)...)
 	}

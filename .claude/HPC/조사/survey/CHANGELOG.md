@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [Unreleased]
+
+### Added
+- `[gossh].timeout` — gossh 타임아웃 초(`-t`). 설정값·인프라망 두 gossh 호출 모두에 적용.
+  비우면 gossh 기본값 사용.
+
 ## [v0.3.0] - 2026-08-27
 
 ### Changed

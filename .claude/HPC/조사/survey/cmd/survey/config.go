@@ -21,15 +21,16 @@ type MountRule struct {
 
 // Config 는 conf.toml 에서 읽어들인 실행 설정이다.
 type Config struct {
-	AssetFile   string // [input].asset_file  : 표1 텍스트 경로
-	GosshBin    string // [gossh].bin          : gossh 실행 파일
-	GosshConc   int    // [gossh].concurrency  : gossh 동시 실행 수 (-c). 설정값 조사에만 적용
-	GosshArgs   string // [gossh].extra_args   : gossh 추가 플래그
-	ConfigValue string // [scripts].config_value : 설정값(appl) 원격 커맨드 (gossh -script)
-	InfraNet    string // [scripts].infra_net  : 인프라망 조사 대상. gossh -script "bash <이 값>" 으로 실행
-	InfraRegex  string // [scripts].infra_regex : gossh 출력값(hostname: 뒤)에서 값 추출용 정규식(캡처 그룹 1)
-	InfraRe     *regexp.Regexp // InfraRegex 를 컴파일한 것 (없으면 nil)
-	Mounts      []MountRule
+	AssetFile    string // [input].asset_file    : 표1 텍스트 경로
+	GosshBin     string // [gossh].bin           : gossh 실행 파일
+	GosshConc    int    // [gossh].concurrency   : gossh 동시 실행 수 (-c). 설정값 조사에만 적용
+	GosshTimeout int    // [gossh].timeout       : gossh 타임아웃 초 (-t). 0 이면 지정 안 함
+	GosshArgs    string // [gossh].extra_args    : gossh 추가 플래그
+	ConfigValue  string // [scripts].config_value: 설정값(appl) 원격 커맨드 (gossh -script)
+	InfraNet     string // [scripts].infra_net   : 인프라망 조사 대상. gossh -script "bash <이 값>" 으로 실행
+	InfraRegex   string // [scripts].infra_regex : gossh 출력값(hostname: 뒤)에서 값 추출용 정규식(캡처 그룹 1)
+	InfraRe      *regexp.Regexp // InfraRegex 를 컴파일한 것 (없으면 nil)
+	Mounts       []MountRule
 }
 
 // LoadConfig 는 conf.toml 의 고정된 하위집합만 파싱한다.
@@ -79,6 +80,12 @@ func LoadConfig(path string) (*Config, error) {
 					return nil, fmt.Errorf("conf %d행: concurrency 는 양의 정수여야 합니다: %q", lineNo, val)
 				}
 				cfg.GosshConc = n
+			case "timeout":
+				n, cerr := strconv.Atoi(val)
+				if cerr != nil || n <= 0 {
+					return nil, fmt.Errorf("conf %d행: timeout 은 양의 정수(초)여야 합니다: %q", lineNo, val)
+				}
+				cfg.GosshTimeout = n
 			case "extra_args":
 				cfg.GosshArgs = val
 			}
