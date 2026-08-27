@@ -1,0 +1,31 @@
+# 자산 조사 스크립트 설정 (샘플)
+# 경로/값은 환경에 맞게 수정하십시오.
+
+[input]
+asset_file = "/root/HPC/조사/asset_list.txt"   # 표1 텍스트 경로 (자산ID  hostname  상태  위치)
+
+[gossh]
+bin         = "/usr/local/bin/gossh"
+concurrency = 4000                             # gossh 동시 실행 수 (-c). 설정값(appl) 조사에만 적용
+extra_args  = ""                               # 필요 시 추가 플래그
+
+[scripts]
+# 원격 실행 커맨드 — 스크립트 변경 시 이 값만 수정
+config_value = "cat /etc/auto.appl | grep -v '#' | grep -w '/appl'"
+# 인프라망 조사 스크립트 (로컬 실행, 인자로 hostname 전달) — 교체 시 이 값만 수정
+infra_net    = "/root/HPC/조사/scripts/infra_survey.sh"
+
+# 설정값 mountpoint 이름별 "정상 위치".
+#   설정값 "nas-a:/appl2/appl2" 에서 ':' 앞부분(nas-a)을 name 과 대조하고,
+#   매칭된 location 이 표1의 위치와 같으면 O, 다르면 X.
+[[mountpoint]]
+name     = "nas-a"
+location = "A센터"
+
+[[mountpoint]]
+name     = "nas-b"
+location = "B센터"
+
+[[mountpoint]]
+name     = "nas-dr"
+location = "DR"
