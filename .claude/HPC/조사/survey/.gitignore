@@ -1,0 +1,10 @@
+# 빌드 산출물
+/survey
+/survey.exe
+
+# 실행 결과
+result_*.tsv
+
+# 로컬 입력 예시(실데이터)
+asset_list.txt
+list.txt
