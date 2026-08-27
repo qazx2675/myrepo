@@ -8,7 +8,7 @@
 | `cmd/survey/config.go` | `conf/conf.toml` 하위집합 파서. `Config`, `MountRule` 정의 |
 | `cmd/survey/asset.go` | 표1 텍스트 파서. 조사 대상 hostname 순서 목록 + `hostname -> (상태, 위치)` |
 | `cmd/survey/collect.go` | 임시 hostfile 작성, `gossh -c <concurrency> -w file -script` **1회 배치 실행**, `hostname: 결과` 파싱, 설정값 추출, 접속 실패 감지 |
-| `cmd/survey/rule.go` | `InfraNet`(인프라망 스크립트를 **호스트마다** 실행, `infra_regex` 로 값 추출, gossh 아님), `ApplStatus`(mountpoint→정상위치→표1위치 비교로 O/X) |
+| `cmd/survey/rule.go` | `InfraNet`(`bash <infra_net> <hostname>` 을 **호스트마다** 실행, `infra_regex` 로 값 추출, gossh 아님), `ApplStatus`(mountpoint→정상위치→표1위치 비교로 O/X) |
 | `cmd/survey/output.go` | TSV 헤더/행 조립, 필드 정규화(탭·개행 제거), 결과 파일 저장 |
 | `cmd/survey/survey_test.go` | 순수 함수 단위 테스트 (파싱·판정) |
 | `run_survey.sh` | 실행 래퍼: 바이너리/conf 확인, 폴더 이동 후 실행 |

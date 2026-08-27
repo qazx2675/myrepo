@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// InfraNet 은 conf 에 지정된 인프라망 조사 스크립트를 `<script> <hostname>` 으로 실행하고
+// InfraNet 은 conf 에 지정된 인프라망 조사 스크립트를 `bash <script> <hostname>` 으로 실행하고
 // stdout 첫 비어있지 않은 줄에 conf 정규식(re)을 적용해 인프라망 값을 뽑는다.
 //   - scriptPath 가 비어 있으면 빈 값(오류 아님)
 //   - re 가 nil 이면 첫 줄 전체를 값으로 사용
@@ -17,7 +17,7 @@ func InfraNet(scriptPath string, re *regexp.Regexp, hostname string) (string, er
 	if strings.TrimSpace(scriptPath) == "" {
 		return "", nil
 	}
-	cmd := exec.Command(scriptPath, hostname)
+	cmd := exec.Command("bash", scriptPath, hostname)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	runErr := cmd.Run()
