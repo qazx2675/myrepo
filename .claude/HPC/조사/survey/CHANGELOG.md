@@ -13,6 +13,14 @@
   - 타임아웃 VM 만 1회 재조사(무한 루프 방지).
   - 출력 파일: `result_YYYYMMDD_HHMM.tsv` + (ESXi 있을 때만) `result_vm_YYYYMMDD_HHMM.tsv`.
 - `detectError` 가 이름 해석 실패를 `DNS 미등록` 으로 별도 분류(기존: `접속불가`).
+- **인프라망 fallback**: `infra_regex` 매칭 실패 호스트에 `[scripts].infra_fallback_cmd`
+  (기본 `cat /etc/openldap/ldap.conf | grep -i binddn`)를 gossh 로 재조사하고
+  `infra_fallback_regex` 로 값 추출. 정상 출력 `INFO⇥LDAP⇥[infra]` → `infra`,
+  실패 출력 `FAIL⇥LDAP⇥확인필요`/`undefined` → fallback.
+- **SDC 분리 파일**: 인프라망 값이 `SDC` 인 호스트는 A·B 에서 빠지고 `result_sdc_YYYYMMDD_HHMM.tsv`
+  로만 기록. A·B·SDC 간 호스트 중복 없음. (출력 파일 최대 3개)
+- **`update.sh`**: 폐쇄망 증분 업데이트. 변경/신규 파일만 복사, `conf/conf.toml`·`result_*.tsv`·
+  `asset_list.txt` 보존, 대상에만 있는 오래된 `cmd/**/*.go` 제거, 멱등.
 
 ## [v0.3.0] - 2026-08-27
 

@@ -16,9 +16,10 @@ hostname	위치	상태	설정값	인프라망	appl설정유무	특이사항
 - 표1의 모든 hostname은 접속 실패와 무관하게 **1행씩** 출력된다(실패 시 사유는 `특이사항`).
 - 셀 구분은 **오직 탭**. 필드 내부의 탭/개행은 스페이스로 치환된다.
 
-**출력 파일은 최대 2개**:
+**출력 파일은 최대 3개** (호스트는 파일 간 중복되지 않음):
 - `result_YYYYMMDD_HHMM.tsv` — 표1 전체 조사 결과 (항상 생성)
-- `result_vm_YYYYMMDD_HHMM.tsv` — 표1에서 ESXi 로 판별된 호스트의 VM 조사 결과 (ESXi 가 1대 이상일 때만)
+- `result_vm_YYYYMMDD_HHMM.tsv` — ESXi 로 판별된 호스트의 VM 조사 결과 (ESXi ≥ 1대, 행이 있을 때만)
+- `result_sdc_YYYYMMDD_HHMM.tsv` — 인프라망 값이 `SDC` 인 호스트 (A·B 에서 빠져 여기로 이동, 있을 때만)
 
 ---
 
@@ -62,6 +63,21 @@ scripts/infra_survey.sh
 ```
 
 `survey` 는 자신이 있는 디렉터리의 `conf/conf.toml` 을 자동으로 읽는다.
+
+### 폐쇄망 증분 업데이트
+
+설치 디렉터리(예: `/root/HPC/조사`)를 통째로 덮어쓰지 않고 **바뀐 파일만** 갱신한다.
+
+```bash
+# 새 버전 zip 을 폐쇄망에 반입해 다른 경로에 풀고
+unzip survey-new.zip -d /tmp/survey-new
+/tmp/survey-new/.../survey/update.sh /root/HPC/조사
+# -> 변경/신규 파일만 복사, 오래된 *.go 제거
+(cd /root/HPC/조사 && go build -o survey ./cmd/survey)
+```
+
+- `conf/conf.toml`, `result_*.tsv`, `asset_list.txt` 는 **건드리지 않는다**.
+- 같은 내용 파일은 건너뛴다(멱등). 대상에만 있는 오래된 `cmd/**/*.go` 는 빌드 깨짐 방지를 위해 제거한다.
 
 ---
 
@@ -114,7 +130,9 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 | `[gossh].extra_args` | `gossh` 에 넘길 추가 플래그(공백 구분). 비워도 됨 |
 | `[scripts].config_value` | 설정값 조사: `gossh ... -script "<이 값>"` 으로 원격 실행. **변경 시 이 값만 수정** |
 | `[scripts].infra_net` | 인프라망 조사: `gossh -w <hosts> -script "bash <이 값>"` 으로 원격 실행. 조사 대상 호스트에 배포된 스크립트 경로(또는 명령). 비우면 인프라망 열 공란 |
-| `[scripts].infra_regex` | gossh 출력 `hostname: 출력값` 의 **출력값**에 적용하는 정규식(캡처 그룹 1). 비우면 출력값 그대로. 매칭 안 되면 공란(미조사). 예: `'INFO\s+(.+)'` → `INFO ldap infra site` 에서 `ldap infra site` |
+| `[scripts].infra_regex` | gossh 출력 `hostname: 출력값` 의 **출력값**에 적용하는 정규식(캡처 그룹 1). 비우면 출력값 그대로. **매칭 안 되면 아래 fallback 으로 재조사**. 예: `'\[([^\]]+)\]'` → `INFO⇥LDAP⇥[infra]` 에서 `infra` |
+| `[scripts].infra_fallback_cmd` | `infra_regex` 매칭 실패 호스트에 다시 실행할 gossh 커맨드. 비우면 재조사 안 함. 예: `"cat /etc/openldap/ldap.conf \| grep -i binddn"` |
+| `[scripts].infra_fallback_regex` | fallback 출력에서 값 추출용 정규식(캡처 그룹 1). 비우면 첫 줄 전체. 예: `'ou=([^,[:space:]]+)'` → binddn 의 `ou=SDC` 에서 `SDC` |
 | `[[mountpoint]].name` | 설정값 `이름:/경로` 에서 `:` 앞부분(마운트 대상 이름) |
 | `[[mountpoint]].location` | 그 이름이 정상적으로 위치해야 하는 곳. 표1의 `위치` 와 비교 |
 
@@ -130,7 +148,11 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
   - 이름이 conf 에 없으면 `X` + 특이사항 `mountpoint 미정의`
   - 접속 실패면 → 공란
 - **인프라망**: `gossh -w <hosts> -script "bash <infra_net>"` → 각 호스트 출력값에 `infra_regex` 적용.
-  설정값 조사와 별개의 gossh 호출이며 `-c` 는 붙지 않는다.
+  - `infra_regex` 매칭 실패(예: `FAIL⇥LDAP⇥확인필요` / `undefined`) → `infra_fallback_cmd` 로 재조사 →
+    그 출력에 `infra_fallback_regex` 적용 (예: `binddn` 값의 `ou=` 부분)
+  - 설정값 조사와 별개의 gossh 호출이며 `-c` 는 붙지 않는다
+- **SDC 분리**: 위에서 구한 인프라망 값이 정확히 `SDC` 면 그 호스트는 A·B 에서 빠져
+  `result_sdc_*.tsv` 로만 기록된다.
 - **특이사항**: `접속불가` / `타임아웃` / `DNS 미등록` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라 스크립트 없음` / `esxi`
 
 ### ESXi / VM 2차 조사
@@ -158,6 +180,7 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 | `conf/conf.toml` | 실행 설정 (유일한 설정 파일) |
 | `scripts/infra_survey.sh` | 인프라망 판별 스크립트 **샘플**. 조사 대상 호스트에 배포해 `gossh ... -script "bash <경로>"` 로 원격 실행됨 (교체 대상) |
 | `examples/asset_list.sample.txt` | 표1(탭 구분) 샘플 |
+| `update.sh` | 폐쇄망 증분 업데이트 스크립트 |
 | `.github/workflows/ci.yml` | 커밋마다 build/vet/test 자동 실행 |
 
 ---

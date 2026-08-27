@@ -11,6 +11,22 @@ import (
 // confRelPath 는 실행 파일이 있는 디렉터리 기준 설정 파일 경로다.
 const confRelPath = "conf/conf.toml"
 
+// infraCol 은 TSV 행에서 인프라망 컬럼 인덱스다 (hostname,위치,상태,설정값,[인프라망],appl,특이사항).
+const infraCol = 4
+
+// splitSDC 는 rows 중 인프라망 값이 "SDC" 인 행을 sdc 로 옮기고 나머지를 rest 로 돌려준다.
+func splitSDC(sdc, rows [][]string) (outSDC, rest [][]string) {
+	outSDC = sdc
+	for _, r := range rows {
+		if len(r) > infraCol && strings.TrimSpace(r[infraCol]) == sdcInfraValue {
+			outSDC = append(outSDC, r)
+		} else {
+			rest = append(rest, r)
+		}
+	}
+	return outSDC, rest
+}
+
 func confPath() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -92,6 +108,10 @@ func main() {
 		})
 	}
 
+	// 인프라망 == "SDC" 인 행은 result_sdc 로 분리 (A/B/SDC 호스트 중복 없음)
+	var sdcRows [][]string
+	sdcRows, rows = splitSDC(sdcRows, rows)
+
 	out := fmt.Sprintf("result_%s.tsv", ts)
 	if err := WriteTSV(out, rows); err != nil {
 		fmt.Fprintln(os.Stderr, "[error] 결과 파일 저장 실패:", err)
@@ -108,11 +128,23 @@ func main() {
 			}
 		}
 		vmRows := SurveyVMs(cfg, esxiHosts, assets)
-		vmOut := fmt.Sprintf("result_vm_%s.tsv", ts)
-		if err := WriteTSV(vmOut, vmRows); err != nil {
-			fmt.Fprintln(os.Stderr, "[error] VM 결과 파일 저장 실패:", err)
+		sdcRows, vmRows = splitSDC(sdcRows, vmRows)
+		if len(vmRows) > 0 {
+			vmOut := fmt.Sprintf("result_vm_%s.tsv", ts)
+			if err := WriteTSV(vmOut, vmRows); err != nil {
+				fmt.Fprintln(os.Stderr, "[error] VM 결과 파일 저장 실패:", err)
+				os.Exit(1)
+			}
+			fmt.Fprintf(os.Stderr, "[info] VM 조사: ESXi %d대 -> %s (%d행)\n", len(esxiHosts), vmOut, len(vmRows))
+		}
+	}
+
+	if len(sdcRows) > 0 {
+		sdcOut := fmt.Sprintf("result_sdc_%s.tsv", ts)
+		if err := WriteTSV(sdcOut, sdcRows); err != nil {
+			fmt.Fprintln(os.Stderr, "[error] SDC 결과 파일 저장 실패:", err)
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "[info] VM 조사: ESXi %d대 -> %s (%d행)\n", len(esxiHosts), vmOut, len(vmRows))
+		fmt.Fprintf(os.Stderr, "[info] SDC 분리: %s (%d행)\n", sdcOut, len(sdcRows))
 	}
 }
