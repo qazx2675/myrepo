@@ -16,6 +16,10 @@ hostname	위치	상태	설정값	인프라망	appl설정유무	특이사항
 - 표1의 모든 hostname은 접속 실패와 무관하게 **1행씩** 출력된다(실패 시 사유는 `특이사항`).
 - 셀 구분은 **오직 탭**. 필드 내부의 탭/개행은 스페이스로 치환된다.
 
+**출력 파일은 최대 2개**:
+- `result_YYYYMMDD_HHMM.tsv` — 표1 전체 조사 결과 (항상 생성)
+- `result_vm_YYYYMMDD_HHMM.tsv` — 표1에서 ESXi 로 판별된 호스트의 VM 조사 결과 (ESXi 가 1대 이상일 때만)
+
 ---
 
 ## 1. 빌드 및 설치 방법
@@ -87,7 +91,8 @@ scripts/infra_survey.sh
 
 ### 활용
 
-결과 파일을 열어 전체 복사 → 엑셀에 붙여넣으면 탭 구분으로 셀이 자동 분리된다.
+결과 파일(들)을 열어 전체 복사 → 엑셀에 붙여넣으면 탭 구분으로 셀이 자동 분리된다.
+ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 
 ---
 
@@ -126,7 +131,19 @@ scripts/infra_survey.sh
   - 접속 실패면 → 공란
 - **인프라망**: `gossh -w <hosts> -script "bash <infra_net>"` → 각 호스트 출력값에 `infra_regex` 적용.
   설정값 조사와 별개의 gossh 호출이며 `-c` 는 붙지 않는다.
-- **특이사항**: `접속불가` / `타임아웃` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라 스크립트 없음`
+- **특이사항**: `접속불가` / `타임아웃` / `DNS 미등록` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라 스크립트 없음` / `esxi`
+
+### ESXi / VM 2차 조사
+
+1. 1차 조사에서 `설정값 = 없음` 인 호스트에 `uname` 을 실행한다.
+2. 출력에 `VMkernel` 이 있으면 **ESXi** 로 보고, 1차 결과의 `특이사항` 에 `esxi` 를 남긴다.
+3. ESXi 가 1대 이상이면 각 ESXi 의 VM 을 **고정 규칙**으로 만들어 2차 조사한다:
+   `<esxi_hostname>ev01`, `<esxi_hostname>ev02`, `<esxi_hostname>ev03` (conf 설정 없음, 규칙 고정)
+4. VM 도 1차와 **같은** `config_value` / `infra_net` / `infra_regex` / O·X 로직으로 조사한다.
+   - VM 의 `위치` / `상태` 는 소속 ESXi(표1)의 값을 상속하고, O·X 판정도 그 `위치` 로 한다.
+   - **DNS 미등록** VM 은 `result_vm` 에 행을 만들지 않는다.
+   - 어떤 ESXi 의 VM 이 모두 행이 안 만들어지면 그 ESXi 이름으로 `접속불가` 1행을 남긴다.
+   - `타임아웃` 인 VM 만 모아 **딱 1회** 재조사한다(무한 루프 방지).
 
 ---
 

@@ -90,6 +90,26 @@ func TestFirstNonEmptyLine(t *testing.T) {
 	}
 }
 
+func TestDetectError(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"ssh: Could not resolve hostname bm01ev09: Name or service not known", "DNS 미등록"},
+		{"ssh: connect to host x port 22: Connection timed out", "타임아웃"},
+		{"ssh: connect to host x port 22: Connection refused", "접속불가"},
+		{"/appl -ro nas-a:/x", ""},
+	}
+	for _, c := range cases {
+		if got := detectError([]string{c.in}); got != c.want {
+			t.Errorf("detectError(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestVMName(t *testing.T) {
+	if got := vmName("bm01", 2); got != "bm01ev02" {
+		t.Errorf("vmName(bm01,2) = %q, want bm01ev02", got)
+	}
+}
+
 func TestNormalizeField(t *testing.T) {
 	if got := normalizeField("a\tb\nc\r"); got != "a b c" {
 		t.Errorf("normalizeField = %q, want %q", got, "a b c")

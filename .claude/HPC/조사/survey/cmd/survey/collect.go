@@ -152,6 +152,11 @@ func parsePdshLine(line string) (host, rest string, ok bool) {
 func detectError(lines []string) string {
 	joined := strings.ToLower(strings.Join(lines, "\n"))
 	switch {
+	case strings.Contains(joined, "could not resolve"),
+		strings.Contains(joined, "name or service not known"),
+		strings.Contains(joined, "nodename nor servname"),
+		strings.Contains(joined, "temporary failure in name resolution"):
+		return "DNS 미등록"
 	case strings.Contains(joined, "timed out"), strings.Contains(joined, "timeout"):
 		return "타임아웃"
 	case strings.Contains(joined, "connection refused"),
