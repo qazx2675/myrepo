@@ -105,6 +105,7 @@ scripts/infra_survey.sh
 | `[input].asset_file` | 표1 텍스트 경로 (탭 구분) |
 | `[gossh].bin` | `gossh` 실행 파일 경로 |
 | `[gossh].concurrency` | `gossh` 동시 실행 수(`-c`). 기본 `4000`. **설정값(appl) 조사에만 적용** |
+| `[gossh].timeout` | `gossh` 타임아웃 초(`-t`). 양의 정수. 지우면 `gossh` 기본값. 두 조사(설정값·인프라망) 모두 적용 |
 | `[gossh].extra_args` | `gossh` 에 넘길 추가 플래그(공백 구분). 비워도 됨 |
 | `[scripts].config_value` | 설정값 조사: `gossh ... -script "<이 값>"` 으로 원격 실행. **변경 시 이 값만 수정** |
 | `[scripts].infra_net` | 인프라망 조사: `gossh -w <hosts> -script "bash <이 값>"` 으로 원격 실행. 조사 대상 호스트에 배포된 스크립트 경로(또는 명령). 비우면 인프라망 열 공란 |

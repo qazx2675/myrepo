@@ -7,6 +7,7 @@ asset_file = "/root/HPC/조사/asset_list.txt"   # 표1 텍스트 경로. 탭(\t
 [gossh]
 bin         = "/usr/local/bin/gossh"
 concurrency = 4000                             # gossh 동시 실행 수 (-c). 설정값(appl) 조사에만 적용
+timeout     = 10                               # gossh 타임아웃 초 (-t). 지우면 gossh 기본값 사용
 extra_args  = ""                               # 필요 시 추가 플래그
 
 [scripts]
