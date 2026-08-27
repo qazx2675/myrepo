@@ -18,7 +18,12 @@
 - `.github/workflows/ci.yml` (build/vet/test)
 - 단위 테스트 `cmd/survey/survey_test.go`
 
+### Verified
+- Rocky Linux (go 1.26.5) 에서 `go build ./...` / `go vet ./...` / `go test ./...` 통과.
+- 가짜 gossh(pdsh 형식 출력) + 접속불가 host 1대 섞은 스모크 테스트:
+  3행 모두 출력, 탭 구분, 접속불가 host 는 특이사항만 채워짐, O/X 정상.
+
 ### Notes
 - 외부 모듈 의존성 없음(표준 라이브러리만) → 폐쇄망에서 `go build` 만으로 빌드.
   이 때문에 계획서의 "TOML 라이브러리 + go mod vendor" 대신 conf 하위집합 자체 파서를 사용.
-- 미확정 항목(리스크): `gossh` 실제 출력 형식, 인프라망 판별 실제 규칙.
+- 미확정 항목(리스크): 실제 `gossh` 출력 형식(pdsh 가정), 인프라망 판별 실제 규칙(샘플 제공).
