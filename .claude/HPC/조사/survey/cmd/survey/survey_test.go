@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
 
 func TestParsePdshLine(t *testing.T) {
 	cases := []struct {
@@ -49,13 +52,38 @@ func TestApplStatus(t *testing.T) {
 		{"nas-a:/appl2/appl2", "A센터", "O", ""},
 		{"nas-a:/appl2/appl2", "B센터", "X", ""},
 		{"nas-x:/appl2/appl2", "A센터", "X", "mountpoint 미정의"},
-		{"", "A센터", "X", ""},
+		{"", "A센터", "", ""},
 	}
 	for _, c := range cases {
 		m, n := ApplStatus(mounts, c.cv, c.loc)
 		if m != c.mark || n != c.note {
 			t.Errorf("ApplStatus(%q,%q) = (%q,%q), want (%q,%q)", c.cv, c.loc, m, n, c.mark, c.note)
 		}
+	}
+}
+
+func TestApplyInfraRegex(t *testing.T) {
+	re := regexp.MustCompile(`^\S+:\s+INFO\s+(.+)$`)
+	cases := []struct {
+		re   *regexp.Regexp
+		line string
+		want string
+	}{
+		{re, "web01: INFO ldap infra site", "ldap infra site"},
+		{re, "web01: WARN something", ""},          // 매칭 안 됨 → 미조사
+		{nil, "web01: INFO ldap infra site", "web01: INFO ldap infra site"}, // 정규식 없으면 원문
+		{re, "", ""},
+	}
+	for _, c := range cases {
+		if got := applyInfraRegex(c.re, c.line); got != c.want {
+			t.Errorf("applyInfraRegex(%v, %q) = %q, want %q", c.re, c.line, got, c.want)
+		}
+	}
+}
+
+func TestFirstNonEmptyLine(t *testing.T) {
+	if got := firstNonEmptyLine("\n  \r\n web01: INFO x \n more"); got != "web01: INFO x" {
+		t.Errorf("firstNonEmptyLine = %q", got)
 	}
 }
 

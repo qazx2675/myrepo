@@ -11,7 +11,8 @@ import (
 
 // CollectResult 는 gossh 원격 수집 결과다.
 type CollectResult struct {
-	ConfigValue string // 예: nas-a:/appl2/appl2  ("" 이면 미수집)
+	ConfigValue string // 예: nas-a:/appl2/appl2
+	Reached     bool   // gossh 응답을 정상 수신했는지 (true 이고 ConfigValue 가 "" 이면 "설정값 없음")
 	Note        string // 특이사항 사유 ("" 이면 정상)
 }
 
@@ -74,12 +75,8 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 			res[h] = CollectResult{Note: note}
 			continue
 		}
-		cv := extractConfigValue(hl)
-		if cv == "" {
-			res[h] = CollectResult{Note: "설정값 없음"}
-			continue
-		}
-		res[h] = CollectResult{ConfigValue: cv}
+		// 응답은 받았으나 매칭 행이 없으면 ConfigValue "" + Reached true → "없음" 으로 출력
+		res[h] = CollectResult{ConfigValue: extractConfigValue(hl), Reached: true}
 	}
 	return res
 }
