@@ -46,14 +46,24 @@ func main() {
 			notes = append(notes, c.Note)
 		}
 
-		infra, ierr := InfraNet(cfg.InfraNet, h)
-		if ierr != nil {
-			notes = append(notes, "인프라망 조사 실패")
+		var configCell, mark, mnote string
+		switch {
+		case !c.Reached:
+			// 접속불가 등 — 사유는 특이사항에 있음. 설정값/판정은 공란.
+		case c.ConfigValue == "":
+			configCell = "없음"
+			mark = "없음"
+		default:
+			configCell = c.ConfigValue
+			mark, mnote = ApplStatus(cfg.Mounts, c.ConfigValue, a.Location)
 		}
-
-		mark, mnote := ApplStatus(cfg.Mounts, c.ConfigValue, a.Location)
 		if mnote != "" {
 			notes = append(notes, mnote)
+		}
+
+		infra, ierr := InfraNet(cfg.InfraNet, cfg.InfraRe, h)
+		if ierr != nil {
+			notes = append(notes, "인프라망 조사 실패")
 		}
 
 		if c.Note == "" {
@@ -63,7 +73,7 @@ func main() {
 		}
 
 		rows = append(rows, []string{
-			h, a.Location, a.Status, c.ConfigValue, infra, mark, strings.Join(notes, "; "),
+			h, a.Location, a.Status, configCell, infra, mark, strings.Join(notes, "; "),
 		})
 	}
 

@@ -14,6 +14,9 @@ extra_args  = ""                               # 필요 시 추가 플래그
 config_value = "cat /etc/auto.appl | grep -v '#' | grep -w '/appl'"
 # 인프라망 조사 스크립트 (로컬 실행, 인자로 hostname 전달) — 교체 시 이 값만 수정
 infra_net    = "/root/HPC/조사/scripts/infra_survey.sh"
+# 스크립트 출력에서 인프라망 값을 뽑는 정규식 (캡처 그룹 1). 비우면 첫 줄 전체 사용.
+# 예: 출력이 "web01: INFO ldap infra site" 이면 아래 정규식으로 "ldap infra site" 추출
+infra_regex  = '^\S+:\s+INFO\s+(.+)$'
 
 # 설정값 mountpoint 이름별 "정상 위치".
 #   설정값 "nas-a:/appl2/appl2" 에서 ':' 앞부분(nas-a)을 name 과 대조하고,

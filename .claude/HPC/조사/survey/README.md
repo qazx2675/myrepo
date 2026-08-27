@@ -108,18 +108,23 @@ scripts/infra_survey.sh
 | `[gossh].extra_args` | `gossh` 에 넘길 추가 플래그(공백 구분). 비워도 됨 |
 | `[scripts].config_value` | 원격에서 실행할 커맨드. **스크립트 변경 시 이 값만 수정** |
 | `[scripts].infra_net` | 인프라망 조사 스크립트 경로(인자로 hostname 전달). 비우면 인프라망 열이 공란 |
+| `[scripts].infra_regex` | 스크립트 출력에서 값을 뽑는 정규식(캡처 그룹 1). 비우면 첫 줄 전체 사용. 매칭 안 되면 공란(미조사). 예: `'^\S+:\s+INFO\s+(.+)$'` → `web01: INFO ldap infra site` 에서 `ldap infra site` |
 | `[[mountpoint]].name` | 설정값 `이름:/경로` 에서 `:` 앞부분(마운트 대상 이름) |
 | `[[mountpoint]].location` | 그 이름이 정상적으로 위치해야 하는 곳. 표1의 `위치` 와 비교 |
 
 ### 판정 규칙
 
 - **설정값**: `gossh` 로 받은 auto.appl 매칭 행의 마지막 필드(`이름:/경로`).
+  - 응답은 받았으나 매칭 행이 없으면 `없음`
+  - 접속불가 등으로 조사 자체가 안 되면 공란(사유는 특이사항)
 - **appl설정유무**:
-  - 설정값에서 `:` 앞부분(이름) 분리
-  - `[[mountpoint]]` 에서 그 이름의 `location` 조회
+  - 설정값이 `없음` 이면 `없음`
+  - 설정값에서 `:` 앞부분(이름) 분리 → `[[mountpoint]]` 에서 그 이름의 `location` 조회
   - `location == 표1의 위치` → `O`, 다르면 `X`
   - 이름이 conf 에 없으면 `X` + 특이사항 `mountpoint 미정의`
-- **특이사항**: `접속불가` / `타임아웃` / `명령실패` / `gossh 실행 실패` / `설정값 없음` / `mountpoint 미정의` / `인프라망 조사 실패`
+  - 조사 자체가 안 됐으면 공란
+- **인프라망**: `infra_net` 스크립트 실행 → `infra_regex` 로 값 추출. gossh 접속 여부와 무관하게 조사된다.
+- **특이사항**: `접속불가` / `타임아웃` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라망 조사 실패`
 
 ---
 

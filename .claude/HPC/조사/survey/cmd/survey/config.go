@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -26,6 +27,8 @@ type Config struct {
 	GosshArgs   string // [gossh].extra_args   : gossh 추가 플래그
 	ConfigValue string // [scripts].config_value : 원격 실행 커맨드
 	InfraNet    string // [scripts].infra_net  : 인프라망 조사 스크립트 경로
+	InfraRegex  string // [scripts].infra_regex : 스크립트 출력에서 값 추출용 정규식(캡처 그룹 1)
+	InfraRe     *regexp.Regexp // InfraRegex 를 컴파일한 것 (없으면 nil)
 	Mounts      []MountRule
 }
 
@@ -85,6 +88,8 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.ConfigValue = val
 			case "infra_net":
 				cfg.InfraNet = val
+			case "infra_regex":
+				cfg.InfraRegex = val
 			}
 		case "mountpoint":
 			if len(cfg.Mounts) == 0 {
@@ -108,6 +113,13 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.ConfigValue == "" {
 		return nil, errors.New("conf: [scripts].config_value 가 필요합니다")
 	}
+	if cfg.InfraRegex != "" {
+		re, rerr := regexp.Compile(cfg.InfraRegex)
+		if rerr != nil {
+			return nil, fmt.Errorf("conf: infra_regex 컴파일 실패: %w", rerr)
+		}
+		cfg.InfraRe = re
+	}
 	return cfg, nil
 }
 
@@ -125,8 +137,9 @@ func splitKV(line string) (key, val string, ok bool) {
 	if rest == "" {
 		return key, "", true
 	}
-	if rest[0] == '"' {
-		j := strings.Index(rest[1:], `"`)
+	if rest[0] == '"' || rest[0] == '\'' {
+		q := rest[0]
+		j := strings.IndexByte(rest[1:], q)
 		if j < 0 {
 			return "", "", false
 		}
