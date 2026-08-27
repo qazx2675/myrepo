@@ -17,10 +17,11 @@ type AssetRow struct {
 // LoadAsset 은 표1 텍스트를 읽어 조사 대상 hostname 순서 목록과
 // hostname -> (상태, 위치) 매핑을 돌려준다.
 //
-// 기대 양식(공백 또는 탭 구분): 자산ID  hostname  상태  위치
+// 기대 양식: 자산ID <TAB> hostname <TAB> 상태 <TAB> 위치
+//   - 탭(\t) 구분. 상태·위치에 공백이 들어갈 수 있으므로 탭이 있으면 탭으로만 나눈다.
+//   - 탭이 없는 줄은 공백으로 나눈다(구식 파일 대비).
 //   - 헤더 행(2번째 필드가 "hostname")과 빈 줄, '#' 주석은 건너뛴다.
-//   - 필드가 2개 미만인 행은 건너뛰고 stderr 에 경고한다.
-//   - 위치에 공백이 있을 수 있으므로 4번째 이후 필드는 이어붙여 위치로 본다.
+//   - 필드가 2개 미만이거나 hostname 이 비면 건너뛰고 stderr 에 경고한다.
 func LoadAsset(path string) (order []string, rows map[string]AssetRow, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -32,16 +33,32 @@ func LoadAsset(path string) (order []string, rows map[string]AssetRow, err error
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		raw := sc.Text()
+		if strings.TrimSpace(raw) == "" || strings.HasPrefix(strings.TrimSpace(raw), "#") {
 			continue
 		}
-		fields := strings.Fields(line)
+
+		var fields []string
+		if strings.Contains(raw, "\t") {
+			fields = strings.Split(raw, "\t")
+		} else {
+			fields = strings.Fields(raw)
+		}
+		for i := range fields {
+			fields[i] = strings.TrimSpace(fields[i])
+		}
+		for len(fields) > 0 && fields[len(fields)-1] == "" {
+			fields = fields[:len(fields)-1]
+		}
 		if len(fields) < 2 {
-			fmt.Fprintf(os.Stderr, "[warn] 필드 부족으로 건너뜀: %q\n", line)
+			fmt.Fprintf(os.Stderr, "[warn] 필드 부족으로 건너뜀: %q\n", raw)
 			continue
 		}
 		host := fields[1]
+		if host == "" {
+			fmt.Fprintf(os.Stderr, "[warn] hostname 열이 비어 건너뜀: %q\n", raw)
+			continue
+		}
 		if strings.EqualFold(host, "hostname") {
 			continue // 헤더 행
 		}
@@ -54,7 +71,7 @@ func LoadAsset(path string) (order []string, rows map[string]AssetRow, err error
 			row.Status = fields[2]
 		}
 		if len(fields) >= 4 {
-			row.Location = strings.Join(fields[3:], " ")
+			row.Location = fields[3]
 		}
 		order = append(order, host)
 		rows[host] = row

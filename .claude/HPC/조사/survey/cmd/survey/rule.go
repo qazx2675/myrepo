@@ -1,37 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"os/exec"
 	"regexp"
 	"strings"
 )
 
-// InfraNet 은 conf 에 지정된 인프라망 조사 스크립트를 `bash <script> <hostname>` 으로 실행하고
-// stdout 첫 비어있지 않은 줄에 conf 정규식(re)을 적용해 인프라망 값을 뽑는다.
-//   - scriptPath 가 비어 있으면 빈 값(오류 아님)
-//   - re 가 nil 이면 첫 줄 전체를 값으로 사용
-//   - re 가 있으나 매칭되지 않으면 빈 값 (인프라 미조사로 취급)
-//   - 스크립트가 0이 아닌 코드로 끝나도 stdout 이 있으면 그 출력을 사용한다
-func InfraNet(scriptPath string, re *regexp.Regexp, hostname string) (string, error) {
-	if strings.TrimSpace(scriptPath) == "" {
-		return "", nil
-	}
-	cmd := exec.Command("bash", scriptPath, hostname)
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	runErr := cmd.Run()
-
-	line := firstNonEmptyLine(stdout.String())
-	if line == "" {
-		if runErr != nil {
-			return "", runErr
-		}
-		return "", nil
-	}
-	return applyInfraRegex(re, line), nil
-}
-
+// firstNonEmptyLine 은 여러 줄 문자열에서 첫 비어있지 않은(trim 후) 줄을 돌려준다.
 func firstNonEmptyLine(s string) string {
 	for _, l := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
 		if l = strings.TrimSpace(l); l != "" {
@@ -41,14 +15,17 @@ func firstNonEmptyLine(s string) string {
 	return ""
 }
 
-func applyInfraRegex(re *regexp.Regexp, line string) string {
-	if line == "" {
+// applyInfraRegex 는 인프라망 스크립트 출력값에 conf 정규식(캡처 그룹 1)을 적용한다.
+//   - re 가 nil 이면 출력값 그대로
+//   - 매칭 안 되면 "" (인프라 미조사로 취급)
+func applyInfraRegex(re *regexp.Regexp, out string) string {
+	if out == "" {
 		return ""
 	}
 	if re == nil {
-		return line
+		return out
 	}
-	m := re.FindStringSubmatch(line)
+	m := re.FindStringSubmatch(out)
 	if m == nil {
 		return ""
 	}

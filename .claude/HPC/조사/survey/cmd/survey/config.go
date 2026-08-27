@@ -25,9 +25,9 @@ type Config struct {
 	GosshBin    string // [gossh].bin          : gossh 실행 파일
 	GosshConc   int    // [gossh].concurrency  : gossh 동시 실행 수 (-c). 설정값 조사에만 적용
 	GosshArgs   string // [gossh].extra_args   : gossh 추가 플래그
-	ConfigValue string // [scripts].config_value : 원격 실행 커맨드
-	InfraNet    string // [scripts].infra_net  : 인프라망 조사 스크립트 경로
-	InfraRegex  string // [scripts].infra_regex : 스크립트 출력에서 값 추출용 정규식(캡처 그룹 1)
+	ConfigValue string // [scripts].config_value : 설정값(appl) 원격 커맨드 (gossh -script)
+	InfraNet    string // [scripts].infra_net  : 인프라망 조사 대상. gossh -script "bash <이 값>" 으로 실행
+	InfraRegex  string // [scripts].infra_regex : gossh 출력값(hostname: 뒤)에서 값 추출용 정규식(캡처 그룹 1)
 	InfraRe     *regexp.Regexp // InfraRegex 를 컴파일한 것 (없으면 nil)
 	Mounts      []MountRule
 }

@@ -9,29 +9,28 @@ import (
 	"strings"
 )
 
-// CollectResult 는 gossh 원격 수집 결과다.
+// CollectResult 는 설정값(appl) gossh 수집 결과다.
 type CollectResult struct {
 	ConfigValue string // 예: nas-a:/appl2/appl2
-	Reached     bool   // gossh 응답을 정상 수신했는지 (true 이고 ConfigValue 가 "" 이면 "설정값 없음")
+	Reached     bool   // 접속 실패가 아닌 상태. true 이고 ConfigValue 가 "" 이면 "설정값 없음"(출력 없음)
 	Note        string // 특이사항 사유 ("" 이면 정상)
 }
 
-// Collect 는 표1 hostname 목록으로 임시 hostfile 을 만들고
-// `gossh -c <concurrency> -w <hostfile> -script "<config_value>"` 를 1회 실행한 뒤
-// pdsh 형식(`hostname: 결과`) 출력을 hostname 기준으로 파싱한다.
-// (인프라망 조사는 gossh 가 아니라 rule.go 의 InfraNet 이 호스트마다 따로 실행한다)
-func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
-	res := make(map[string]CollectResult, len(hostnames))
-	for _, h := range hostnames {
-		res[h] = CollectResult{Note: "접속불가"} // 응답이 확인될 때까지 기본값
-	}
+// InfraResult 는 인프라망 gossh 조사 결과다.
+type InfraResult struct {
+	Value string
+	Note  string
+}
+
+// runGossh 는 hostnames 로 임시 hostfile 을 만들고 gossh 를 1회 실행한 뒤
+// pdsh 형식(`hostname: 결과`) 출력을 hostname -> 라인들 로 파싱해 돌려준다.
+// withConc 가 true 면 `-c <concurrency>` 를 붙인다(설정값 조사에만).
+func runGossh(cfg *Config, hostnames []string, script string, withConc bool) (lines map[string][]string, globalErr bool) {
+	lines = map[string][]string{}
 
 	hostfile, err := os.CreateTemp("", "survey-hosts-*.txt")
 	if err != nil {
-		for _, h := range hostnames {
-			res[h] = CollectResult{Note: "hostfile 생성 실패"}
-		}
-		return res
+		return lines, true
 	}
 	defer os.Remove(hostfile.Name())
 	for _, h := range hostnames {
@@ -40,13 +39,13 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 	hostfile.Close()
 
 	var args []string
-	if cfg.GosshConc > 0 {
+	if withConc && cfg.GosshConc > 0 {
 		args = append(args, "-c", strconv.Itoa(cfg.GosshConc))
 	}
 	if strings.TrimSpace(cfg.GosshArgs) != "" {
 		args = append(args, strings.Fields(cfg.GosshArgs)...)
 	}
-	args = append(args, "-w", hostfile.Name(), "-script", cfg.ConfigValue)
+	args = append(args, "-w", hostfile.Name(), "-script", script)
 
 	cmd := exec.Command(cfg.GosshBin, args...)
 	var stdout, stderr bytes.Buffer
@@ -54,7 +53,6 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 	cmd.Stderr = &stderr
 	runErr := cmd.Run()
 
-	lines := map[string][]string{}
 	for _, raw := range append(splitLines(stdout.String()), splitLines(stderr.String())...) {
 		host, rest, ok := parsePdshLine(raw)
 		if !ok {
@@ -62,21 +60,57 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 		}
 		lines[host] = append(lines[host], rest)
 	}
+	return lines, runErr != nil && stdout.Len() == 0
+}
+
+// Collect 는 `gossh -c <concurrency> -w <hostfile> -script "<config_value>"` 를 1회 실행하고
+// 각 호스트의 auto.appl 매칭 행에서 설정값을 뽑는다.
+func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
+	res := make(map[string]CollectResult, len(hostnames))
+	lines, globalErr := runGossh(cfg, hostnames, cfg.ConfigValue, true)
 
 	for _, h := range hostnames {
 		hl := lines[h]
-		if len(hl) == 0 {
-			if runErr != nil && stdout.Len() == 0 {
-				res[h] = CollectResult{Note: "gossh 실행 실패"}
-			}
-			continue // 기본값 "접속불가" 유지
-		}
+		// 접속 실패 흔적(ssh 에러 등)이 있으면 접속불가/타임아웃.
 		if note := detectError(hl); note != "" {
 			res[h] = CollectResult{Note: note}
 			continue
 		}
-		// 응답은 받았으나 매칭 행이 없으면 ConfigValue "" + Reached true → "없음" 으로 출력
+		// gossh 자체가 통째로 실패했으면 실행 실패.
+		if len(hl) == 0 && globalErr {
+			res[h] = CollectResult{Note: "gossh 실행 실패"}
+			continue
+		}
+		// 그 외 — 출력이 아예 없거나 auto.appl 매칭 행이 없으면 설정값 "없음".
+		// (사용자 정의: "설정값 없음" = 해당 호스트 출력이 없는 상태)
 		res[h] = CollectResult{ConfigValue: extractConfigValue(hl), Reached: true}
+	}
+	return res
+}
+
+// CollectInfra 는 `gossh -w <hostfile> -script "bash <infra_net>"` 를 1회 실행하고
+// 각 호스트 출력(`hostname: 출력값`)의 출력값에 infra_regex 를 적용한다.
+// infra_net 이 비어 있으면 조사하지 않는다(인프라망 열 공란).
+func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
+	res := make(map[string]InfraResult, len(hostnames))
+	if strings.TrimSpace(cfg.InfraNet) == "" {
+		return res
+	}
+	lines, _ := runGossh(cfg, hostnames, "bash "+cfg.InfraNet, false)
+
+	for _, h := range hostnames {
+		hl := lines[h]
+		if len(hl) == 0 {
+			continue // 값 없음. 접속불가 사유는 설정값 조사에서 특이사항으로 남음
+		}
+		joined := strings.ToLower(strings.Join(hl, "\n"))
+		if strings.Contains(joined, "no such file") ||
+			strings.Contains(joined, "command not found") ||
+			strings.Contains(joined, "not found") {
+			res[h] = InfraResult{Note: "인프라 스크립트 없음"}
+			continue
+		}
+		res[h] = InfraResult{Value: applyInfraRegex(cfg.InfraRe, firstNonEmptyLine(strings.Join(hl, "\n")))}
 	}
 	return res
 }
@@ -110,7 +144,8 @@ func parsePdshLine(line string) (host, rest string, ok bool) {
 	return host, rest, true
 }
 
-// detectError 는 해당 host 의 출력 라인에서 접속/실행 실패 흔적을 찾는다.
+// detectError 는 해당 host 의 출력 라인에서 "접속" 실패 흔적만 찾는다.
+// (원격 명령이 매칭 없이 종료한 경우는 실패가 아니라 "설정값 없음" 으로 취급하므로 여기서 잡지 않는다)
 func detectError(lines []string) string {
 	joined := strings.ToLower(strings.Join(lines, "\n"))
 	switch {
@@ -129,12 +164,12 @@ func detectError(lines []string) string {
 	return ""
 }
 
-// extractConfigValue 는 auto.appl 매칭 행에서 마운트 대상 토큰(마지막 필드)을 뽑는다.
-// 여러 행이면 첫 유효 행을 쓴다. (계획: /appl 매칭 행은 1개로 가정)
+// extractConfigValue 는 auto.appl 매칭 행(`/` 로 시작)에서 마운트 대상 토큰(마지막 필드)을 뽑는다.
+// `/` 로 시작하지 않는 줄(gossh/grep 에러 등)은 무시한다. 매칭 행이 없으면 "".
 func extractConfigValue(lines []string) string {
 	for _, l := range lines {
 		l = strings.TrimSpace(l)
-		if l == "" || strings.HasPrefix(l, "#") {
+		if l == "" || strings.HasPrefix(l, "#") || !strings.HasPrefix(l, "/") {
 			continue
 		}
 		fields := strings.Fields(l)

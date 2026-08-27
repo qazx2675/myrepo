@@ -34,6 +34,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "[info] 조사 대상 %d대\n", len(hostnames))
 
 	collected := Collect(cfg, hostnames)
+	infra := CollectInfra(cfg, hostnames)
 
 	rows := make([][]string, 0, len(hostnames))
 	okCnt, failCnt := 0, 0
@@ -61,9 +62,9 @@ func main() {
 			notes = append(notes, mnote)
 		}
 
-		infra, ierr := InfraNet(cfg.InfraNet, cfg.InfraRe, h)
-		if ierr != nil {
-			notes = append(notes, "인프라망 조사 실패")
+		ir := infra[h]
+		if ir.Note != "" {
+			notes = append(notes, ir.Note)
 		}
 
 		if c.Note == "" {
@@ -73,7 +74,7 @@ func main() {
 		}
 
 		rows = append(rows, []string{
-			h, a.Location, a.Status, configCell, infra, mark, strings.Join(notes, "; "),
+			h, a.Location, a.Status, configCell, ir.Value, mark, strings.Join(notes, "; "),
 		})
 	}
 
