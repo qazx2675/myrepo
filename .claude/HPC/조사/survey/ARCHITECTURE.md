@@ -4,15 +4,16 @@
 
 | 폴더/파일 | 역할 |
 |---|---|
-| `cmd/survey/main.go` | CLI 진입점. conf→표1→설정값/인프라망 수집→ESXi 판별→결과파일 A 저장→(ESXi 있으면) VM 조사→결과파일 B 저장 |
+| `cmd/survey/main.go` | CLI 진입점. conf→표1→설정값/인프라망 수집→ESXi 판별→SDC 분리→결과파일 A/B/SDC 저장. `splitSDC` |
 | `cmd/survey/config.go` | `conf/conf.toml` 하위집합 파서. `Config`, `MountRule` 정의 |
 | `cmd/survey/asset.go` | 표1 텍스트 파서. 조사 대상 hostname 순서 목록 + `hostname -> (상태, 위치)` |
-| `cmd/survey/collect.go` | `runGossh`(임시 hostfile + gossh 1회 배치 + `hostname: 결과` 파싱). `Collect`(설정값, `-c` 붙음), `CollectInfra`(인프라망, `-script "bash <infra_net>"`), 설정값 추출, 접속 실패 감지 |
+| `cmd/survey/collect.go` | `runGossh`(임시 hostfile + gossh 1회 배치 + `hostname: 결과` 파싱). `Collect`(설정값, `-c` 붙음), `CollectInfra`(인프라망 + `infra_regex` 실패 시 `infra_fallback_cmd` 재조사), 설정값 추출, 접속 실패 감지(`DNS 미등록` 분리) |
 | `cmd/survey/rule.go` | `applyInfraRegex`(gossh 출력값에 `infra_regex` 적용), `ApplStatus`(mountpoint→정상위치→표1위치 비교로 O/X) |
 | `cmd/survey/vm.go` | `DetectESXi`(설정값 없음 호스트에 `uname`→VMkernel), `SurveyVMs`(`<esxi>ev01~03` 생성·조사, DNS 미등록 제외, 타임아웃 1회 재조사), `vmName` |
 | `cmd/survey/output.go` | TSV 헤더/행 조립, 필드 정규화(탭·개행 제거), 결과 파일 저장 |
 | `cmd/survey/survey_test.go` | 순수 함수 단위 테스트 (파싱·판정) |
 | `run_survey.sh` | 실행 래퍼: 바이너리/conf 확인, 폴더 이동 후 실행 |
+| `update.sh` | 폐쇄망 증분 업데이트(변경분만 복사, conf·result·asset 보존, 오래된 *.go 제거, 멱등) |
 | `scripts/infra_survey.sh` | 인프라망 판별 **샘플** 스크립트. 사내 규칙에 맞게 교체 |
 | `conf/conf.toml` | 실행 설정 (유일한 설정 파일, 실행 파일 옆 `conf/` 에 위치) |
 | `.github/workflows/ci.yml` | push/PR 마다 `go build/vet/test` |
@@ -23,7 +24,8 @@
 |---|---|
 | "설정값 수집 명령 바꿔줘" | `conf/conf.toml` 의 `[scripts].config_value` (코드 수정 불필요) |
 | "인프라망 판별 로직 바꿔줘" | `scripts/infra_survey.sh` (또는 `conf/conf.toml` 의 `infra_net` 경로) |
-| "인프라망 스크립트 출력 형식이 달라" | `conf/conf.toml` 의 `[scripts].infra_regex` (코드 수정 불필요) |
+| "인프라망 스크립트 출력 형식이 달라" | `conf/conf.toml` 의 `[scripts].infra_regex` / `infra_fallback_cmd` / `infra_fallback_regex` (코드 수정 불필요) |
+| "SDC 분리 기준(문자열) 바꿔줘" | `cmd/survey/config.go` — `sdcInfraValue` 상수 |
 | "gossh 출력 형식이 달라" | `cmd/survey/collect.go` — `parsePdshLine`, `detectError` |
 | "gossh 동시 실행 수 바꿔줘" | `conf/conf.toml` 의 `[gossh].concurrency` (코드 수정 불필요) |
 | "O/X 판정 기준 바꿔줘" | `cmd/survey/rule.go` — `ApplStatus` |

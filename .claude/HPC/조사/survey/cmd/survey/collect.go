@@ -93,7 +93,9 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 
 // CollectInfra 는 `gossh -w <hostfile> -script "bash <infra_net>"` 를 1회 실행하고
 // 각 호스트 출력(`hostname: 출력값`)의 출력값에 infra_regex 를 적용한다.
-// infra_net 이 비어 있으면 조사하지 않는다(인프라망 열 공란).
+//   - infra_regex 가 매칭되지 않는 호스트는 infra_fallback_cmd 로 한 번 더 조사해
+//     그 출력에 infra_fallback_regex 를 적용한다.
+//   - infra_net 이 비어 있으면 조사하지 않는다(인프라망 열 공란).
 func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 	res := make(map[string]InfraResult, len(hostnames))
 	if strings.TrimSpace(cfg.InfraNet) == "" {
@@ -101,19 +103,33 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 	}
 	lines, _ := runGossh(cfg, hostnames, "bash "+cfg.InfraNet, false)
 
+	var fallback []string
 	for _, h := range hostnames {
 		hl := lines[h]
-		if len(hl) == 0 {
-			continue // 값 없음. 접속불가 사유는 설정값 조사에서 특이사항으로 남음
+		if len(hl) == 0 || detectError(hl) != "" {
+			continue // 값 없음 / 접속 문제 (사유는 설정값 조사 특이사항)
 		}
 		joined := strings.ToLower(strings.Join(hl, "\n"))
-		if strings.Contains(joined, "no such file") ||
-			strings.Contains(joined, "command not found") ||
-			strings.Contains(joined, "not found") {
+		if strings.Contains(joined, "no such file") || strings.Contains(joined, "command not found") {
 			res[h] = InfraResult{Note: "인프라 스크립트 없음"}
 			continue
 		}
-		res[h] = InfraResult{Value: applyInfraRegex(cfg.InfraRe, firstNonEmptyLine(strings.Join(hl, "\n")))}
+		if v := applyInfraRegex(cfg.InfraRe, firstNonEmptyLine(strings.Join(hl, "\n"))); v != "" {
+			res[h] = InfraResult{Value: v}
+			continue
+		}
+		fallback = append(fallback, h) // infra_regex 매칭 실패 → 폴백 대상
+	}
+
+	if strings.TrimSpace(cfg.InfraFallbackCmd) != "" && len(fallback) > 0 {
+		fl, _ := runGossh(cfg, fallback, cfg.InfraFallbackCmd, false)
+		for _, h := range fallback {
+			hl := fl[h]
+			if len(hl) == 0 || detectError(hl) != "" {
+				continue
+			}
+			res[h] = InfraResult{Value: applyInfraRegex(cfg.InfraFallbackRe, firstNonEmptyLine(strings.Join(hl, "\n")))}
+		}
 	}
 	return res
 }

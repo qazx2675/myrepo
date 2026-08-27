@@ -66,21 +66,36 @@ func TestApplStatus(t *testing.T) {
 
 func TestApplyInfraRegex(t *testing.T) {
 	// gossh 출력 "hostname: 출력값" 에서 파싱된 '출력값' 에 적용된다.
-	re := regexp.MustCompile(`INFO\s+(.+)`)
+	re := regexp.MustCompile(`\[([^\]]+)\]`)
+	fb := regexp.MustCompile(`ou=([^,[:space:]]+)`)
 	cases := []struct {
 		re   *regexp.Regexp
 		out  string
 		want string
 	}{
-		{re, "INFO ldap infra site", "ldap infra site"},
-		{re, "WARN something", ""},                    // 매칭 안 됨 → 미조사
-		{nil, "ldap infra site", "ldap infra site"},   // 정규식 없으면 출력값 그대로
+		{re, "INFO\tLDAP\t[infra]", "infra"},           // 정상 → 대괄호 안
+		{re, "FAIL\tLDAP\t확인필요", ""},               // 매칭 실패 → 폴백 대상
+		{re, "FAIL\tLDAP\tundefined", ""},
+		{fb, `binddn cn=proxy,ou=SDC,dc=corp`, "SDC"},  // 폴백: binddn 에서 ou 추출
+		{nil, "그대로", "그대로"},
 		{re, "", ""},
 	}
 	for _, c := range cases {
 		if got := applyInfraRegex(c.re, c.out); got != c.want {
 			t.Errorf("applyInfraRegex(%v, %q) = %q, want %q", c.re, c.out, got, c.want)
 		}
+	}
+}
+
+func TestSplitSDC(t *testing.T) {
+	rows := [][]string{
+		{"h1", "loc", "st", "cv", "업무망", "O", ""},
+		{"h2", "loc", "st", "cv", "SDC", "O", ""},
+		{"h3", "loc", "st", "cv", " SDC ", "X", ""},
+	}
+	sdc, rest := splitSDC(nil, rows)
+	if len(sdc) != 2 || len(rest) != 1 || rest[0][0] != "h1" {
+		t.Errorf("splitSDC = sdc %d, rest %d (rest0=%v)", len(sdc), len(rest), rest[0])
 	}
 }
 

@@ -30,8 +30,16 @@ type Config struct {
 	InfraNet     string // [scripts].infra_net   : 인프라망 조사 대상. gossh -script "bash <이 값>" 으로 실행
 	InfraRegex   string // [scripts].infra_regex : gossh 출력값(hostname: 뒤)에서 값 추출용 정규식(캡처 그룹 1)
 	InfraRe      *regexp.Regexp // InfraRegex 를 컴파일한 것 (없으면 nil)
-	Mounts       []MountRule
+
+	InfraFallbackCmd   string // [scripts].infra_fallback_cmd   : infra_regex 매칭 실패 시 재조사할 gossh 커맨드
+	InfraFallbackRegex string // [scripts].infra_fallback_regex : 재조사 출력에서 값 추출용 정규식(캡처 그룹 1)
+	InfraFallbackRe    *regexp.Regexp
+
+	Mounts []MountRule
 }
+
+// sdcInfraValue 는 인프라망 값이 이것이면 해당 호스트를 result_sdc_*.tsv 로 분리한다.
+const sdcInfraValue = "SDC"
 
 // LoadConfig 는 conf.toml 의 고정된 하위집합만 파싱한다.
 // 지원 구문: [section], [[mountpoint]], key = "value" 또는 key = value, '#' 주석.
@@ -97,6 +105,10 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.InfraNet = val
 			case "infra_regex":
 				cfg.InfraRegex = val
+			case "infra_fallback_cmd":
+				cfg.InfraFallbackCmd = val
+			case "infra_fallback_regex":
+				cfg.InfraFallbackRegex = val
 			}
 		case "mountpoint":
 			if len(cfg.Mounts) == 0 {
@@ -126,6 +138,13 @@ func LoadConfig(path string) (*Config, error) {
 			return nil, fmt.Errorf("conf: infra_regex 컴파일 실패: %w", rerr)
 		}
 		cfg.InfraRe = re
+	}
+	if cfg.InfraFallbackRegex != "" {
+		re, rerr := regexp.Compile(cfg.InfraFallbackRegex)
+		if rerr != nil {
+			return nil, fmt.Errorf("conf: infra_fallback_regex 컴파일 실패: %w", rerr)
+		}
+		cfg.InfraFallbackRe = re
 	}
 	return cfg, nil
 }
