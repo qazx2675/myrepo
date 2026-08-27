@@ -1,5 +1,5 @@
-자산ID    hostname    상태    위치
-A-001     web01       운영    A센터
-A-002     web02       운영    A센터
-A-003     db01        운영    B센터
-A-004     was01       점검    DR
+자산ID	hostname	상태	위치
+A-001	web01	운영	서울 A센터
+A-002	web02	운영	서울 A센터
+A-003	db01	운영	부산 B센터
+A-004	was01	점검	DR 센터

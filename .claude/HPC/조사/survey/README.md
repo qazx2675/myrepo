@@ -67,13 +67,13 @@ scripts/infra_survey.sh
 
 1. 표1(자산양식)을 터미널에 출력해 텍스트 파일로 저장한다. 예: `asset_list.txt`
    ```
-   자산ID    hostname    상태    위치
-   A-001     web01       운영    A센터
-   A-002     web02       운영    A센터
-   A-003     db01        운영    B센터
+   자산ID<TAB>hostname<TAB>상태<TAB>위치
+   A-001<TAB>web01<TAB>운영<TAB>서울 A센터
+   A-002<TAB>db01<TAB>운영<TAB>부산 B센터
    ```
-   - 공백/탭 구분 모두 허용. 첫 행이 헤더면 자동으로 건너뛴다.
+   - **탭(`\t`) 구분**. 상태·위치에 공백이 들어가도 됨(탭으로만 나눔). 첫 행이 헤더면 자동 스킵.
    - 조사할 hostname은 이 파일에 넣기만 하면 된다(중간 목록 파일 불필요).
+   - `examples/asset_list.sample.txt` 참고.
 2. `conf/conf.toml` 의 `asset_file` 을 이 파일 경로로 맞춘다.
 
 ### 실행
@@ -102,30 +102,30 @@ scripts/infra_survey.sh
 
 | 키 | 설명 |
 |---|---|
-| `[input].asset_file` | 표1 텍스트 경로 |
+| `[input].asset_file` | 표1 텍스트 경로 (탭 구분) |
 | `[gossh].bin` | `gossh` 실행 파일 경로 |
 | `[gossh].concurrency` | `gossh` 동시 실행 수(`-c`). 기본 `4000`. **설정값(appl) 조사에만 적용** |
 | `[gossh].extra_args` | `gossh` 에 넘길 추가 플래그(공백 구분). 비워도 됨 |
-| `[scripts].config_value` | 원격에서 실행할 커맨드. **스크립트 변경 시 이 값만 수정** |
-| `[scripts].infra_net` | 인프라망 조사 스크립트 경로. `bash <경로> <hostname>` 으로 실행된다. 비우면 인프라망 열이 공란 |
-| `[scripts].infra_regex` | 스크립트 출력에서 값을 뽑는 정규식(캡처 그룹 1). 비우면 첫 줄 전체 사용. 매칭 안 되면 공란(미조사). 예: `'^\S+:\s+INFO\s+(.+)$'` → `web01: INFO ldap infra site` 에서 `ldap infra site` |
+| `[scripts].config_value` | 설정값 조사: `gossh ... -script "<이 값>"` 으로 원격 실행. **변경 시 이 값만 수정** |
+| `[scripts].infra_net` | 인프라망 조사: `gossh -w <hosts> -script "bash <이 값>"` 으로 원격 실행. 조사 대상 호스트에 배포된 스크립트 경로(또는 명령). 비우면 인프라망 열 공란 |
+| `[scripts].infra_regex` | gossh 출력 `hostname: 출력값` 의 **출력값**에 적용하는 정규식(캡처 그룹 1). 비우면 출력값 그대로. 매칭 안 되면 공란(미조사). 예: `'INFO\s+(.+)'` → `INFO ldap infra site` 에서 `ldap infra site` |
 | `[[mountpoint]].name` | 설정값 `이름:/경로` 에서 `:` 앞부분(마운트 대상 이름) |
 | `[[mountpoint]].location` | 그 이름이 정상적으로 위치해야 하는 곳. 표1의 `위치` 와 비교 |
 
 ### 판정 규칙
 
-- **설정값**: `gossh` 로 받은 auto.appl 매칭 행의 마지막 필드(`이름:/경로`).
-  - 응답은 받았으나 매칭 행이 없으면 `없음`
-  - 접속불가 등으로 조사 자체가 안 되면 공란(사유는 특이사항)
+- **설정값**: `gossh` 로 받은 auto.appl 매칭 행(`/` 로 시작)의 마지막 필드(`이름:/경로`).
+  - 해당 호스트 출력이 아예 없거나 `/appl` 매칭 행이 없으면 → `없음`
+  - 접속 실패(ssh 에러 등)면 → 공란 (사유는 특이사항 `접속불가`/`타임아웃`)
 - **appl설정유무**:
-  - 설정값이 `없음` 이면 `없음`
+  - 설정값이 `없음` 이면 → `없음`
   - 설정값에서 `:` 앞부분(이름) 분리 → `[[mountpoint]]` 에서 그 이름의 `location` 조회
   - `location == 표1의 위치` → `O`, 다르면 `X`
   - 이름이 conf 에 없으면 `X` + 특이사항 `mountpoint 미정의`
-  - 조사 자체가 안 됐으면 공란
-- **인프라망**: `bash <infra_net> <hostname>` 실행 → stdout 첫 줄에 `infra_regex` 로 값 추출.
-  gossh 접속 여부와 무관하게 조사된다.
-- **특이사항**: `접속불가` / `타임아웃` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라망 조사 실패`
+  - 접속 실패면 → 공란
+- **인프라망**: `gossh -w <hosts> -script "bash <infra_net>"` → 각 호스트 출력값에 `infra_regex` 적용.
+  설정값 조사와 별개의 gossh 호출이며 `-c` 는 붙지 않는다.
+- **특이사항**: `접속불가` / `타임아웃` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라 스크립트 없음`
 
 ---
 
@@ -138,7 +138,8 @@ scripts/infra_survey.sh
 | `CHANGELOG.md` | 날짜순 변경 이력 |
 | `PR_CHECKLIST.md` | 배포/수정 전 점검 목록 |
 | `conf/conf.toml` | 실행 설정 (유일한 설정 파일) |
-| `scripts/infra_survey.sh` | 인프라망 판별 스크립트 **샘플** (`bash` 로 실행됨, 교체 대상) |
+| `scripts/infra_survey.sh` | 인프라망 판별 스크립트 **샘플**. 조사 대상 호스트에 배포해 `gossh ... -script "bash <경로>"` 로 원격 실행됨 (교체 대상) |
+| `examples/asset_list.sample.txt` | 표1(탭 구분) 샘플 |
 | `.github/workflows/ci.yml` | 커밋마다 build/vet/test 자동 실행 |
 
 ---

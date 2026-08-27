@@ -35,6 +35,8 @@ func TestExtractConfigValue(t *testing.T) {
 		{[]string{"# comment", "/appl  -fstype=nfs  nas-b:/appl2/appl2"}, "nas-b:/appl2/appl2"},
 		{[]string{""}, ""},
 		{[]string{"/appl nomount"}, "nomount"},
+		{[]string{"ERROR: grep exited 1"}, ""},              // '/' 로 시작 안 함 → 설정값 없음
+		{[]string{"bash: cat: command not found"}, ""},      // 에러 라인 무시
 	}
 	for _, c := range cases {
 		if got := extractConfigValue(c.in); got != c.want {
@@ -63,26 +65,27 @@ func TestApplStatus(t *testing.T) {
 }
 
 func TestApplyInfraRegex(t *testing.T) {
-	re := regexp.MustCompile(`^\S+:\s+INFO\s+(.+)$`)
+	// gossh 출력 "hostname: 출력값" 에서 파싱된 '출력값' 에 적용된다.
+	re := regexp.MustCompile(`INFO\s+(.+)`)
 	cases := []struct {
 		re   *regexp.Regexp
-		line string
+		out  string
 		want string
 	}{
-		{re, "web01: INFO ldap infra site", "ldap infra site"},
-		{re, "web01: WARN something", ""},          // 매칭 안 됨 → 미조사
-		{nil, "web01: INFO ldap infra site", "web01: INFO ldap infra site"}, // 정규식 없으면 원문
+		{re, "INFO ldap infra site", "ldap infra site"},
+		{re, "WARN something", ""},                    // 매칭 안 됨 → 미조사
+		{nil, "ldap infra site", "ldap infra site"},   // 정규식 없으면 출력값 그대로
 		{re, "", ""},
 	}
 	for _, c := range cases {
-		if got := applyInfraRegex(c.re, c.line); got != c.want {
-			t.Errorf("applyInfraRegex(%v, %q) = %q, want %q", c.re, c.line, got, c.want)
+		if got := applyInfraRegex(c.re, c.out); got != c.want {
+			t.Errorf("applyInfraRegex(%v, %q) = %q, want %q", c.re, c.out, got, c.want)
 		}
 	}
 }
 
 func TestFirstNonEmptyLine(t *testing.T) {
-	if got := firstNonEmptyLine("\n  \r\n web01: INFO x \n more"); got != "web01: INFO x" {
+	if got := firstNonEmptyLine("\n  \r\n ldap infra site \n more"); got != "ldap infra site" {
 		t.Errorf("firstNonEmptyLine = %q", got)
 	}
 }
