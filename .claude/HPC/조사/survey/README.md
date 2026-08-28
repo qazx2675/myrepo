@@ -151,9 +151,10 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
   (출력이 여러 줄이면 줄마다 시도해 처음 매칭되는 줄).
   - 매칭 실패(`FAIL ldap Undefined` 등) **또는** 스크립트 미배포(`no such file`) →
     `infra_fallback_cmd`(기본 binddn) 로 재조사 → `infra_fallback_regex` 적용
-  - 폴백이 값을 채우면 그 값을 기록(예: `SDC`). 폴백도 실패하면 `특이사항` 에:
+  - 폴백(binddn) 출력이 있으면: `infra_fallback_regex` 로 뽑은 값(예: `SDC`), 못 뽑으면 **binddn 원본 줄** 을 인프라망에 기록
+  - 폴백 응답이 아예 없을 때만 `특이사항` 에:
     - 스크립트 없음 → `인프라 스크립트 없음`
-    - 매칭 실패 → `인프라 확인필요(FAIL ldap Undefined)` — **공백으로 두지 않고 원본을 함께 남김**
+    - 그 외 → `인프라 확인필요(FAIL ldap Undefined)` — 공백으로 두지 않고 원본을 남김
   - 설정값 조사와 별개의 gossh 호출이며 `-c` 는 붙지 않는다
   - VM(파일 B)에도 **동일하게** 적용된다
 - **SDC 분리**: 위에서 구한 인프라망 값이 정확히 `SDC` 면 그 호스트는 A·B 에서 빠져

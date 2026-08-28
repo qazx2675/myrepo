@@ -11,8 +11,9 @@
   파일 A 와 동일하게 `인프라 스크립트 없음` 등 인프라 Note 를 `특이사항` 에 표기한다.
 - 인프라 출력이 여러 줄일 때(`FAIL ldap_site` + `INFO ldap infra`) 첫 줄만 보고 매칭
   실패하던 문제. 이제 각 줄에 `infra_regex` 를 적용해 **처음 매칭되는 줄**을 쓴다.
-- `infra_regex` 도 fallback(binddn) 도 값을 못 얻을 때 인프라망이 아무 표시 없이 공백이던 문제.
-  이제 `특이사항` 에 `인프라 확인필요(<원본 출력>)` 를 남긴다 (예: `인프라 확인필요(FAIL ldap Undefined)`).
+- `infra_regex` 매칭 실패 시 fallback(binddn) 결과 처리:
+  - binddn 출력이 있으면 `infra_fallback_regex` 로 값을 뽑고, 못 뽑으면 **binddn 원본 줄**을 인프라망에 기록.
+  - binddn 응답이 아예 없을 때만 `특이사항` 에 `인프라 확인필요(<원본>)` / `인프라 스크립트 없음`.
 - 인프라 스크립트가 대상 호스트에 없을 때(`no such file`)도 `infra_fallback_cmd`(binddn)
   로 재조사하도록 변경 (기존: 바로 포기). VM 에 infra 스크립트를 안 깔아도 ldap.conf 로 대체 가능.
 
