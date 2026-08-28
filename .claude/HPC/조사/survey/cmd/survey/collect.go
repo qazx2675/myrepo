@@ -93,9 +93,11 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 
 // CollectInfra 는 `gossh -w <hostfile> -script "bash <infra_net>"` 를 1회 실행하고
 // 각 호스트 출력(`hostname: 출력값`)의 출력값에 infra_regex 를 적용한다. 설정값(A)·VM(B) 모두 사용.
-//   - infra_regex 미매칭 또는 스크립트 없음(no such file) 호스트는 infra_fallback_cmd 로
-//     한 번 더 조사해 infra_fallback_regex 를 적용한다.
-//   - 폴백도 값을 못 채우면 스크립트 없음 호스트는 Note "인프라 스크립트 없음" 을 남긴다.
+//   - infra_regex 미매칭(예: "FAIL ldap Undefined") 또는 스크립트 없음(no such file) 호스트는
+//     infra_fallback_cmd(기본 binddn) 로 한 번 더 조사해 infra_fallback_regex 를 적용한다.
+//   - 폴백이 값을 채우면 그 값을 기록. 폴백도 실패하면:
+//       스크립트 없음  -> Note "인프라 스크립트 없음"
+//       매칭 실패      -> Note "인프라 확인필요(<원본 출력>)"  (공백으로 두지 않음)
 //   - infra_net 이 비어 있으면 조사하지 않는다(인프라망 열 공란).
 func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 	res := make(map[string]InfraResult, len(hostnames))
@@ -112,16 +114,19 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 		}
 		joined := strings.ToLower(strings.Join(hl, "\n"))
 		scriptMissing := strings.Contains(joined, "no such file") || strings.Contains(joined, "command not found")
-		if !scriptMissing {
+		if scriptMissing {
+			res[h] = InfraResult{Note: "인프라 스크립트 없음"} // fallback 이 값을 못 채우면 유지
+		} else {
 			// 여러 줄이면(예: "FAIL ldap_site\nINFO ldap infra") 조건에 맞는 줄만 고른다
 			if v := matchInfraLines(cfg.InfraRe, hl); v != "" {
 				res[h] = InfraResult{Value: v}
 				continue
 			}
-		} else {
-			res[h] = InfraResult{Note: "인프라 스크립트 없음"} // fallback 이 값을 못 채우면 유지
+			// 매칭 실패(예: "FAIL ldap Undefined") → fallback 이 값을 못 채우면 이 사유가 보이게
+			raw := firstNonEmptyLine(strings.Join(hl, "\n"))
+			res[h] = InfraResult{Note: "인프라 확인필요(" + normalizeField(raw) + ")"}
 		}
-		fallback = append(fallback, h) // infra_regex 매칭 실패 또는 스크립트 없음 → 폴백
+		fallback = append(fallback, h) // 매칭 실패 또는 스크립트 없음 → binddn 재조사
 	}
 
 	if strings.TrimSpace(cfg.InfraFallbackCmd) != "" && len(fallback) > 0 {
@@ -129,10 +134,10 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 		for _, h := range fallback {
 			hl := fl[h]
 			if len(hl) == 0 || detectError(hl) != "" {
-				continue // res[h] 유지 (스크립트 없음 note 또는 미설정)
+				continue // res[h] 유지 (스크립트 없음 / 확인필요 사유)
 			}
 			if v := matchInfraLines(cfg.InfraFallbackRe, hl); v != "" {
-				res[h] = InfraResult{Value: v}
+				res[h] = InfraResult{Value: v} // 폴백 성공 → 사유 덮어쓰고 값 기록
 			}
 		}
 	}
