@@ -166,7 +166,9 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 > `survey` 를 실행하는 호스트(크론 서버)가 VM 이름을 DNS/`/etc/hosts` 로 해석할 수 있어야 한다.
 
 1. 1차 조사에서 `설정값 = 없음` 인 호스트에 `uname` 을 실행한다.
-2. 출력에 `VMkernel` 이 있으면 **ESXi** 로 보고, 1차 결과의 `특이사항` 에 `esxi` 를 남긴다.
+2. 출력에 `VMkernel` 이 있으면 **ESXi 물리장비**로 본다. 이 호스트는
+   **인프라·설정값 조사를 하지 않고** `설정값`/`인프라망`/`appl설정유무` 를 모두 `없음`,
+   `특이사항` 을 `esxi` 로 기록한다.
 3. ESXi 가 1대 이상이면 각 ESXi 의 VM 을 **고정 규칙**으로 만든다:
    `<esxi_hostname>ev01`, `<esxi_hostname>ev02`, `<esxi_hostname>ev03` (conf 설정 없음, 규칙 고정)
 4. 만든 VM 이름을 **`survey` 가 직접 DNS 조회**(`/etc/hosts` 포함)한다.

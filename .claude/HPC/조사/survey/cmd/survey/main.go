@@ -50,7 +50,6 @@ func main() {
 	fmt.Fprintf(os.Stderr, "[info] 조사 대상 %d대\n", len(hostnames))
 
 	collected := Collect(cfg, hostnames)
-	infra := CollectInfra(cfg, hostnames)
 
 	// 설정값이 "없음"(응답 O) 인 호스트 → uname 으로 ESXi(VMkernel) 판별
 	var noneHosts []string
@@ -61,12 +60,29 @@ func main() {
 	}
 	esxiSet := DetectESXi(cfg, noneHosts)
 
+	// 인프라 조사는 ESXi 물리장비를 제외하고 진행한다
+	var infraHosts []string
+	for _, h := range hostnames {
+		if !esxiSet[h] {
+			infraHosts = append(infraHosts, h)
+		}
+	}
+	infra := CollectInfra(cfg, infraHosts)
+
 	ts := time.Now().Format("20060102_1504")
 
 	rows := make([][]string, 0, len(hostnames))
 	okCnt, failCnt := 0, 0
 	for _, h := range hostnames {
 		a := assets[h]
+
+		// ESXi 물리장비: 인프라·설정값 조사를 하지 않고 모두 "없음" 으로, 비고는 "esxi"
+		if esxiSet[h] {
+			rows = append(rows, []string{h, a.Location, a.Status, "없음", "없음", "없음", "esxi"})
+			okCnt++
+			continue
+		}
+
 		c := collected[h]
 
 		var notes []string
@@ -87,9 +103,6 @@ func main() {
 		}
 		if mnote != "" {
 			notes = append(notes, mnote)
-		}
-		if esxiSet[h] {
-			notes = append(notes, "esxi")
 		}
 
 		ir := infra[h]
