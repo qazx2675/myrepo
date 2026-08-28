@@ -95,7 +95,8 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 // 각 호스트 출력(`hostname: 출력값`)의 출력값에 infra_regex 를 적용한다. 설정값(A)·VM(B) 모두 사용.
 //   - infra_regex 미매칭(예: "FAIL ldap Undefined") 또는 스크립트 없음(no such file) 호스트는
 //     infra_fallback_cmd(기본 binddn) 로 한 번 더 조사해 infra_fallback_regex 를 적용한다.
-//   - 폴백이 값을 채우면 그 값을 기록. 폴백도 실패하면:
+//   - 폴백 출력이 있으면 infra_fallback_regex 로 값을 뽑고, 못 뽑으면 폴백 원본 줄(binddn) 그대로 기록.
+//   - 폴백 응답이 아예 없을 때만:
 //       스크립트 없음  -> Note "인프라 스크립트 없음"
 //       매칭 실패      -> Note "인프라 확인필요(<원본 출력>)"  (공백으로 두지 않음)
 //   - infra_net 이 비어 있으면 조사하지 않는다(인프라망 열 공란).
@@ -136,9 +137,15 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 			if len(hl) == 0 || detectError(hl) != "" {
 				continue // res[h] 유지 (스크립트 없음 / 확인필요 사유)
 			}
-			if v := matchInfraLines(cfg.InfraFallbackRe, hl); v != "" {
-				res[h] = InfraResult{Value: v} // 폴백 성공 → 사유 덮어쓰고 값 기록
+			raw := firstNonEmptyLine(strings.Join(hl, "\n"))
+			if raw == "" {
+				continue // binddn 응답이 아예 없음 → 사유 유지
 			}
+			v := matchInfraLines(cfg.InfraFallbackRe, hl) // 예: ou= 부분
+			if v == "" {
+				v = normalizeField(raw) // 정규식이 못 뽑으면 binddn 원본 줄을 기록
+			}
+			res[h] = InfraResult{Value: v} // 사유 덮어쓰고 값 기록
 		}
 	}
 	return res
