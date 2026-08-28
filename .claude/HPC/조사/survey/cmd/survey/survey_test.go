@@ -109,6 +109,7 @@ func TestFirstNonEmptyLine(t *testing.T) {
 func TestDetectError(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"ssh: Could not resolve hostname bm01ev09: Name or service not known", "DNS 미등록"},
+		{"dial tcp: lookup bm01ev09 on 10.0.0.1:53: no such host", "DNS 미등록"},
 		{"ssh: connect to host x port 22: Connection timed out", "타임아웃"},
 		{"ssh: connect to host x port 22: Connection refused", "접속불가"},
 		{"/appl -ro nas-a:/x", ""},

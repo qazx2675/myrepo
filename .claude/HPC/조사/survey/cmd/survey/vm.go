@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"net"
+	"os"
 	"strings"
 )
 
-// vmPerEsxi 는 ESXi 한 대당 생성하는 VM 수다. 규칙 고정(<esxi>ev01 ~ ev03).
+// vmPerEsxi 는 ESXi 한 대당 만드는 VM 후보 수다. 규칙 고정(<esxi>ev01 ~ ev03).
 const vmPerEsxi = 3
 
 // DetectESXi 는 설정값이 없는 호스트들에 `uname` 을 실행해
@@ -29,39 +31,54 @@ func vmName(esxi string, n int) string {
 	return fmt.Sprintf("%sev%02d", esxi, n)
 }
 
+// dnsResolvable 은 host 가 DNS(또는 /etc/hosts)로 해석되는지 확인한다.
+// gossh 에러 텍스트 파싱에 의존하지 않고, 존재하지 않는 VM 을 조사 전에 걸러내기 위함.
+func dnsResolvable(host string) bool {
+	addrs, err := net.LookupHost(host)
+	return err == nil && len(addrs) > 0
+}
+
 // SurveyVMs 는 각 ESXi 의 VM(<esxi>ev01~ev03)에 대해 설정값·인프라망·O/X 를 수집해 행 목록을 만든다.
-//   - 위치/상태는 소속 ESXi(표1)의 값을 상속하고, O/X 판정도 그 위치로 한다
-//   - DNS 미등록 VM 은 행에 넣지 않는다
-//   - 어떤 ESXi 의 VM 이 모두 행 생성에 실패하면 그 ESXi 이름으로 "접속불가" 1행
-//   - 타임아웃 VM 은 딱 1회 재조사한다(무한 루프 방지)
+//   - VM 이름을 만든 뒤 **DNS 로 해석되는 것만** 조사한다. 해석 안 되는 VM 은 어떤 행도 남기지 않는다.
+//   - 위치/상태·O·X 기준 위치는 소속 ESXi(표1)의 값을 상속한다.
+//   - 어떤 ESXi 의 조사 대상 VM 이 하나도 없으면(전부 미해석) 그 ESXi 이름으로 "접속불가" 1행.
+//   - 타임아웃 VM 은 딱 1회 재조사한다(무한 루프 방지).
 func SurveyVMs(cfg *Config, esxiHosts []string, assets map[string]AssetRow) [][]string {
 	var vmNames []string
 	vmsByEsxi := map[string][]string{}
 	for _, e := range esxiHosts {
 		for i := 1; i <= vmPerEsxi; i++ {
 			v := vmName(e, i)
+			if !dnsResolvable(v) {
+				fmt.Fprintf(os.Stderr, "[info] VM %s DNS 미해석 → 조사 제외\n", v)
+				continue
+			}
 			vmNames = append(vmNames, v)
 			vmsByEsxi[e] = append(vmsByEsxi[e], v)
 		}
 	}
 
-	collected := Collect(cfg, vmNames)
-	infra := CollectInfra(cfg, vmNames)
+	collected := map[string]CollectResult{}
+	infra := map[string]InfraResult{}
+	if len(vmNames) > 0 {
+		collected = Collect(cfg, vmNames)
+		infra = CollectInfra(cfg, vmNames)
 
-	// 타임아웃 VM 재조사 (1회 제한)
-	var retry []string
-	for _, v := range vmNames {
-		if collected[v].Note == "타임아웃" {
-			retry = append(retry, v)
+		// 타임아웃 VM 재조사 (1회 제한)
+		var retry []string
+		for _, v := range vmNames {
+			if collected[v].Note == "타임아웃" {
+				retry = append(retry, v)
+			}
 		}
-	}
-	if len(retry) > 0 {
-		rc := Collect(cfg, retry)
-		ri := CollectInfra(cfg, retry)
-		for _, v := range retry {
-			collected[v] = rc[v]
-			if r, ok := ri[v]; ok {
-				infra[v] = r
+		if len(retry) > 0 {
+			rc := Collect(cfg, retry)
+			ri := CollectInfra(cfg, retry)
+			for _, v := range retry {
+				collected[v] = rc[v]
+				if r, ok := ri[v]; ok {
+					infra[v] = r
+				}
 			}
 		}
 	}
@@ -74,9 +91,6 @@ func SurveyVMs(cfg *Config, esxiHosts []string, assets map[string]AssetRow) [][]
 		var esxiRows [][]string
 		for _, v := range vmsByEsxi[e] {
 			c := collected[v]
-			if c.Note == "DNS 미등록" {
-				continue // 출력파일에 기록하지 않음
-			}
 			var configCell, mark string
 			var notes []string
 			switch {
@@ -98,7 +112,7 @@ func SurveyVMs(cfg *Config, esxiHosts []string, assets map[string]AssetRow) [][]
 		}
 
 		if len(esxiRows) == 0 {
-			// VM 이 전부 DNS 미등록이거나 행이 안 만들어진 경우
+			// 조사할 수 있는 VM 이 하나도 없음
 			rows = append(rows, []string{e, loc, st, "", "", "", "접속불가"})
 			continue
 		}

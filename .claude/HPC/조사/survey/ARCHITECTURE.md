@@ -9,7 +9,7 @@
 | `cmd/survey/asset.go` | 표1 텍스트 파서. 조사 대상 hostname 순서 목록 + `hostname -> (상태, 위치)` |
 | `cmd/survey/collect.go` | `runGossh`(임시 hostfile + gossh 1회 배치 + `hostname: 결과` 파싱). `Collect`(설정값, `-c` 붙음), `CollectInfra`(인프라망 + `infra_regex` 실패 시 `infra_fallback_cmd` 재조사), 설정값 추출, 접속 실패 감지(`DNS 미등록` 분리) |
 | `cmd/survey/rule.go` | `applyInfraRegex`(gossh 출력값에 `infra_regex` 적용), `ApplStatus`(mountpoint→정상위치→표1위치 비교로 O/X) |
-| `cmd/survey/vm.go` | `DetectESXi`(설정값 없음 호스트에 `uname`→VMkernel), `SurveyVMs`(`<esxi>ev01~03` 생성·조사, DNS 미등록 제외, 타임아웃 1회 재조사), `vmName` |
+| `cmd/survey/vm.go` | `DetectESXi`(설정값 없음 호스트에 `uname`→VMkernel), `dnsResolvable`(`net.LookupHost` 로 존재 확인), `SurveyVMs`(`<esxi>ev01~03` 생성→DNS 해석되는 것만 조사, 타임아웃 1회 재조사), `vmName` |
 | `cmd/survey/output.go` | TSV 헤더/행 조립, 필드 정규화(탭·개행 제거), 결과 파일 저장 |
 | `cmd/survey/survey_test.go` | 순수 함수 단위 테스트 (파싱·판정) |
 | `run_survey.sh` | 실행 래퍼: 바이너리/conf 확인, 폴더 이동 후 실행 |
