@@ -4,7 +4,6 @@
 # 이번에 반영된 변경사항 요약:
 #   1) report_ldap_info : LDAP 값이 전부 동일하면 1줄만, 2종류 이상이면 케이스별 파일로 분리
 #   2) report_splunk_info : SPLUNK 값이 전부 동일하면 1줄만, 2종류 이상이면 "값: N대" 카운트
-#   3) check_lacp : bond_mode=802.3ad 인 호스트만 코멘트 출력 (실사용 로직 반영, 그 외는 TODO)
 #   4) run_check_script : (target_list, output_file) 파라미터화 → 재사용 가능하게 변경
 #   5) run_post_apply_check (신규) : 설정 적용 후 SETTING_TARGET_LIST를 재점검
 #   6) report_setting_check_fail (신규) : 재점검 결과 파일에서 FAIL만 grep
@@ -36,6 +35,25 @@
 #      그래서 이제 check.res_${user}를 grep하지 않고, LDAP/SPLUNK 실제 값을 조사하는
 #      별도 스크립트(INFO_CHECK_SH, 경로는 [수정필요])를 gossh로 따로 실행해
 #      INFO_CHECK_FILE(check.res_${user}_info)을 만들고, 두 report 함수가 그 파일을 본다.
+#
+# 이후 추가 반영된 변경사항 (2026-08-26):
+#  13) build_check_target_list (신규) : 접속 불가(DOWN_HOSTS) / svrauto 접근 불가
+#      (NOSVRAUTO_HOSTS) 호스트를 OS 체크(run_check_script)/정보 조사(run_info_check)
+#      대상에서 제외. 기존에는 이미 접속 불가로 분류된 호스트까지 다시 gossh로
+#      접속 시도하느라 전체 수행 시간이 늘어지고, 그 결과가 check.res_*에도 섞여
+#      들어갔음.
+#  14) report_ldap_info : grep -i "ldap"에 "FAIL ldap_site ..."처럼 LDAP 정보와
+#      무관한 항목까지 걸려 들어오던 것을, "INFO ldap ..."/"FAIL ldap ..." 두
+#      케이스만 인정하도록 필터 추가.
+#  15) check_lacp/report_lacp_info 삭제 : LACP는 OS 체크스크립트에 없어도 되는
+#      내용이라는 요청에 따라 관련 함수와 main() 호출부를 제거.
+#  16) report_kernel_info (신규) : 대상 서버 커널 버전을 출력. 전체 동일하면 1줄 +
+#      "전체 동일" 문구만, 아니면 값별 "값 : N대"와 대상 호스트 목록을 출력.
+#  17) build_message_case6to9 : "모든 서버 정상" 케이스에 대상 호스트 목록
+#      (print_horizontal) 출력 추가 — 다른 케이스와 동일한 형식으로 통일.
+#  18) report_dhcp_info : 판단 기준을 DOWN_HOSTS 전체 → PINGX_HOSTS(ping 불가,
+#      파워오프로 추정)로 좁힘. ssh 거부(REFUSED)/설치중(ANACONDA)만 있는 경우는
+#      네트워크가 살아있는 상태라 DHCP 조사가 불필요하므로 메시지 자체가 안 뜨도록 함.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -61,6 +79,7 @@ TARGET_LIST=""            # ${user}.txt를 빈 줄/CR 제거해서 정제한 사
 CLEAN_TARGET_LIST=""      # 위 정제 사본의 실제 파일 경로 (cleanup에서 삭제용)
 CHECK_RES_FILE=""         # check.res_${user} (최초 OS 체크 결과)
 INFO_CHECK_FILE=""        # check.res_${user}_info (INFO_CHECK_SH 실행 결과 — LDAP/SPLUNK 실제값 조사용)
+CHECK_TARGET_LIST=""      # OS 체크/정보 조사 대상만 추린 임시 목록 파일 (접속가능 + svrauto 정상)
 SETTING_TARGET_LIST=""    # 설정 적용 대상만 추린 임시 목록 파일
 # [연계] 설정 적용(apply_os_setting/apply_extra_setting) 완료 후 run_post_apply_check가
 # 이 변수에 재점검 결과 파일 경로를 채웁니다. report_setting_check_fail은 이 변수를
@@ -285,6 +304,12 @@ report_ldap_info() {
         fi
         contains "${host}" "${UP_HOSTS[@]}" || continue
 
+        # [수정됨] grep -i "ldap"에는 "FAIL ldap_site ..."처럼 LDAP 정보와 무관한
+        # 항목까지 같이 걸려 들어왔다. LDAP 정보로 인정하는 것은 "INFO ldap ..." /
+        # "FAIL ldap ..." 두 케이스뿐이므로(ldap 뒤가 공백이거나 줄 끝), 그 외
+        # 토큰(ldap_site 등)은 여기서 버린다. 이후 처리 규칙은 동일하다.
+        [[ "${value}" =~ ^(INFO|FAIL)[[:space:]]+[Ll][Dd][Aa][Pp]([[:space:]]|$) ]] || continue
+
         set -- ${value}
         value="${1:-}"
         [ -n "${2:-}" ] && value="${value} ${2}"
@@ -375,6 +400,53 @@ report_splunk_info() {
     echo
 }
 
+# [신규] 대상 서버들의 커널 버전을 출력합니다. 모든 대상의 커널 버전이 동일하면
+# 그 버전 1줄과 "전체 동일" 문구만 출력하고, 2종류 이상이면 값별로 "값 : N대"와
+# 해당 호스트 목록을 출력합니다 (SPLUNK와 동일한 집계 방식, 파일 분리는 하지 않음).
+# [수정필요] 커널 버전 값은 check.res_${user}(run.sh 결과, CHECK_RES_FILE)에
+# "hostname kernel_version" 형태(공백 또는 콜론 구분)로 한 줄씩 있다고 가정하고
+# grep -i "kernel"로 뽑아옵니다. run.sh 결과의 실제 라인 포맷이 다르면 파싱 부분을
+# 맞게 조정해주세요.
+# [연계] 다른 함수와의 연계는 없습니다.
+report_kernel_info() {
+    [ -f "${CHECK_RES_FILE}" ] || return 0
+
+    echo "===== 커널 버전 ====="
+
+    local line host value
+    declare -A kernel_hosts_by_value
+    local case_order=()
+
+    while IFS= read -r line; do
+        if [[ "${line}" =~ ^([^[:space:]]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            host="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+        else
+            host=$(echo "${line}" | awk '{print $1}')
+            value="${line#"${host}" }"
+        fi
+
+        if [ -z "${kernel_hosts_by_value[${value}]:-}" ]; then
+            case_order+=("${value}")
+        fi
+        kernel_hosts_by_value["${value}"]="${kernel_hosts_by_value[${value}]:-} ${host}"
+    done < <(grep -i "kernel" "${CHECK_RES_FILE}")
+
+    if [ ${#case_order[@]} -eq 0 ]; then
+        yellow "FAIL kernel version confirmation required"
+    elif [ ${#case_order[@]} -eq 1 ]; then
+        green "INFO kernel ${case_order[0]} (전체 동일)"
+    else
+        yellow "[경고] 커널 버전이 ${#case_order[@]}종류로 서로 다릅니다."
+        for value in "${case_order[@]}"; do
+            yellow "  - ${value} : $(( $(echo "${kernel_hosts_by_value[${value}]}" | wc -w) ))대  =>  대상:${kernel_hosts_by_value[${value}]}"
+        done
+    fi
+
+    echo "======================"
+    echo
+}
+
 # [신규] "환경설정 점검결과"는 최초 OS 체크가 아니라, 설정 적용
 # (apply_os_setting/apply_extra_setting) 완료 후의 재점검 결과를 가리키는
 #것으로 확인되어, 대상 파일을 인자로 받는 형태로 만들었습니다.
@@ -401,36 +473,37 @@ report_setting_check_fail() {
     echo
 }
 
-# [수정됨] LACP(bond_mode=802.3ad)를 실제로 쓰는 호스트만 check.res_${user}
-# (최초 OS 체크 결과)에서 걸러서 코멘트를 출력합니다. LACP를 안 쓰거나 정보가
-# 없는 호스트는 아무 출력도 하지 않습니다 (요청하신 그대로).
-# [수정필요] check.res_${user} 안에 실제로 bond_mode=... 형태의 항목이
-# run.sh 점검 결과에 포함되는지, 그리고 "802.3ad"가 LACP를 뜻하는 유일한
-# 값인지(다른 LACP 모드 표기가 있는지) 확인이 필요합니다.
-check_lacp() {
-    local hosts=("$@")
-    [ -f "${CHECK_RES_FILE}" ] || return 0
+# [신규] 접속 불가(DOWN_HOSTS) 또는 svrauto 계정 접근 불가(NOSVRAUTO_HOSTS) 호스트를
+# OS 체크/정보 조사 대상에서 제외한 목록을 만든다.
+# 기존에는 run_check_script/run_info_check에 원본 TARGET_LIST를 그대로 넘겨서, 이미
+# 접속 불가로 분류된 호스트까지 gossh가 다시 붙어보고 타임아웃 날 때까지 기다리느라
+# 전체 수행 시간이 길어지고, 그 실패 출력이 결과 파일(check.res_*)에도 섞여 들어갔다.
+# 분류 단계(parse_pm_result)에서 이미 알고 있는 정보를 그대로 활용해 대상에서 뺀다.
+# [연계] main()에서 run_os_check 직후 호출되며, 결과 파일(CHECK_TARGET_LIST)을
+# run_check_script / run_info_check가 target_list 인자로 받습니다.
+build_check_target_list() {
+    CHECK_TARGET_LIST="/tmp/check_target_${user}.$$"
+    : > "${CHECK_TARGET_LIST}"
 
-    local h line bond_value
-    for h in "${hosts[@]}"; do
-        line=$(grep -i "bond_mode" "${CHECK_RES_FILE}" | awk -v host="$h" '$1==host {print; exit}')
-        [ -z "${line}" ] && continue
-        bond_value="${line#"${h}" }"
-        if [[ "${bond_value}" == *"802.3ad"* ]]; then
-            yellow "${h} : LACP(${bond_value}) 사용 중"
-        fi
+    local h
+    for h in "${UP_HOSTS[@]}"; do
+        contains "$h" "${NOSVRAUTO_HOSTS[@]}" && continue
+        echo "$h" >> "${CHECK_TARGET_LIST}"
     done
-}
 
-# [수정금지] report_lacp_info 자체는 이번 요청과 무관 (내부에서 호출하는
-# check_lacp만 바뀜).
-report_lacp_info() {
-    [ ${#UP_HOSTS[@]} -eq 0 ] && return 0
-
-    echo "===== LACP 체크 결과 ====="
-    check_lacp "${UP_HOSTS[@]}"
-    echo "=========================="
+    local cnt
+    cnt=$(grep -cv '^[[:space:]]*$' "${CHECK_TARGET_LIST}")
+    green "[INFO] 체크 대상 (접속가능 + svrauto 정상) : ${cnt} 대"
+    if [ ${#DOWN_HOSTS[@]} -gt 0 ]; then
+        yellow "[INFO] 접속 불가로 제외 (${#DOWN_HOSTS[@]} 대) : $(print_horizontal "${DOWN_HOSTS[@]}")"
+    fi
+    if [ ${#NOSVRAUTO_HOSTS[@]} -gt 0 ]; then
+        yellow "[INFO] svrauto 접근 불가로 제외 (${#NOSVRAUTO_HOSTS[@]} 대) : $(print_horizontal "${NOSVRAUTO_HOSTS[@]}")"
+    fi
     echo
+
+    [ "${cnt}" -eq 0 ] && return 1
+    return 0
 }
 
 # [수정금지] 설정 적용 대상 필터링 로직. 이번 요청과 무관합니다.
@@ -502,8 +575,9 @@ check_ev_extra() {
     :
 }
 
-# [수정금지] 메시지 케이스 6~9 문구/조건문. 이번 요청과 전혀 무관하니
-# 절대 손대지 마세요.
+# [수정됨] "모든 서버 정상" 케이스(전체 ALL_HOSTS 정상, DOWN_HOSTS 없음)에서
+# 다른 케이스(PREFIX_DOWN/PREFIX_UP)와 달리 대상 호스트 목록(print_horizontal)이
+# 빠져 있어서 추가했습니다. 그 외 문구/조건문은 원본 그대로입니다.
 build_message_case6to9() {
 
     if [ ${#PREFIX_DOWN[@]} -gt 0 ]; then
@@ -532,6 +606,7 @@ build_message_case6to9() {
         echo "안녕하세요. C* 담당자 님"
         echo "${#ALL_HOSTS[@]}대 OS 설치 완료하였습니다."
         echo "감사합니다."
+        print_horizontal "${ALL_HOSTS[@]}"
         echo "-------------------------------------------"
         echo
     fi
@@ -546,13 +621,18 @@ build_message_case6to9() {
     fi
 }
 
-# [수정금지] 이번 요청과 무관 (get_dhcp_info 호출부만 TODO 상태).
+# [수정됨] DHCP 정보는 "파워오프로 추정되는 서버"(ping 자체가 안 되는 PINGX_HOSTS)가
+# 있을 때만 필요하다는 요청에 따라, 판단 기준을 DOWN_HOSTS 전체에서 PINGX_HOSTS로
+# 좁혔습니다. REFUSED_HOSTS(ssh 거부 — 네트워크는 살아있음)나 ANACONDA_HOSTS(설치
+# 진행중 — 마찬가지로 네트워크 살아있음)만 있는 경우는 DHCP 조사가 필요 없어
+# 이 메시지 자체가 출력되지 않습니다. get_dhcp_info 호출 대상도 ALL_HOSTS에서
+# PINGX_HOSTS로 좁혔습니다 (get_dhcp_info 구현 자체는 여전히 TODO 상태).
 report_dhcp_info() {
-    [ ${#DOWN_HOSTS[@]} -eq 0 ] && return 0
+    [ ${#PINGX_HOSTS[@]} -eq 0 ] && return 0
 
     echo "-------------------------------------------"
     echo "dhcp정보는 아래와 같이 등록되어있습니다."
-    get_dhcp_info "${ALL_HOSTS[@]}"
+    get_dhcp_info "${PINGX_HOSTS[@]}"
     echo "-------------------------------------------"
     echo
 }
@@ -612,6 +692,7 @@ report_ev_hosts() {
 # [수정됨] CLEAN_TARGET_LIST(정제된 TARGET_LIST 사본) 삭제 추가.
 cleanup() {
     [ -n "${PM_RAW}" ] && rm -f "${PM_RAW}"
+    [ -n "${CHECK_TARGET_LIST}" ] && rm -f "${CHECK_TARGET_LIST}"
     [ -n "${SETTING_TARGET_LIST}" ] && rm -f "${SETTING_TARGET_LIST}"
     [ -n "${CLEAN_TARGET_LIST}" ] && rm -f "${CLEAN_TARGET_LIST}"
 }
@@ -659,11 +740,17 @@ main() {
     case "${ans_check}" in
         y|Y)
             run_os_check
-            run_check_script "${TARGET_LIST}" "${CHECK_RES_FILE}"
-            run_info_check "${TARGET_LIST}" "${INFO_CHECK_FILE}"
-            report_ldap_info
-            report_splunk_info
-            report_lacp_info
+            # [수정됨] 접속 불가 / svrauto 접근 불가 호스트는 체크 대상에서 제외한
+            # 목록(CHECK_TARGET_LIST)으로 실행한다 (기존에는 TARGET_LIST 전체).
+            if build_check_target_list; then
+                run_check_script "${CHECK_TARGET_LIST}" "${CHECK_RES_FILE}"
+                run_info_check "${CHECK_TARGET_LIST}" "${INFO_CHECK_FILE}"
+                report_ldap_info
+                report_splunk_info
+                report_kernel_info
+            else
+                yellow "[WARN] 체크 대상이 없어 OS 체크/정보 조사를 건너뜁니다."
+            fi
             ;;
         *)
             yellow "[INFO] OS 체크를 진행하지 않고 종료합니다."
