@@ -23,6 +23,11 @@
   (기존: ESXi 에도 infra gossh 를 날려 `인프라 확인필요(...)` 같은 값이 들어가던 것 제거)
 
 ### Added
+- RHEL 6 지원: `go.mod` 를 `go 1.20` 으로 낮춤. Go 1.21+ 는 런타임이 커널 3.2+ 를
+  요구해 RHEL 6(커널 2.6.32)에서 즉시 죽는다. Go 1.20 이 2.6.32 지원 마지막 릴리스.
+  코드는 표준 라이브러리만 쓰므로 로직 변경 없음.
+  배포용 정적 바이너리: `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w"`
+  (glibc 의존 없음 → RHEL 6 glibc 2.12 에서도 동작). `examples/` 참고.
 - `[gossh].retry_timeout` — 일반서버(표1, VM 제외) 재조사 시 쓸 긴 타임아웃.
   `DNS 미등록`/`타임아웃` 호스트를 이 타임아웃으로 **1회 더** 조사(답을 더 기다림).
 - 인프라망 값 치환: `VIP` → `SLSI_VIP` (`mapInfraValue`).
