@@ -157,14 +157,19 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 
 ### ESXi / VM 2차 조사
 
+> `survey` 를 실행하는 호스트(크론 서버)가 VM 이름을 DNS/`/etc/hosts` 로 해석할 수 있어야 한다.
+
 1. 1차 조사에서 `설정값 = 없음` 인 호스트에 `uname` 을 실행한다.
 2. 출력에 `VMkernel` 이 있으면 **ESXi** 로 보고, 1차 결과의 `특이사항` 에 `esxi` 를 남긴다.
-3. ESXi 가 1대 이상이면 각 ESXi 의 VM 을 **고정 규칙**으로 만들어 2차 조사한다:
+3. ESXi 가 1대 이상이면 각 ESXi 의 VM 을 **고정 규칙**으로 만든다:
    `<esxi_hostname>ev01`, `<esxi_hostname>ev02`, `<esxi_hostname>ev03` (conf 설정 없음, 규칙 고정)
-4. VM 도 1차와 **같은** `config_value` / `infra_net` / `infra_regex` / O·X 로직으로 조사한다.
+4. 만든 VM 이름을 **`survey` 가 직접 DNS 조회**(`/etc/hosts` 포함)한다.
+   - **해석되지 않는 VM(존재하지 않음)은 조사 대상에서 빠지고 어떤 행도 남기지 않는다.**
+     (gossh 의 에러 메시지에 의존하지 않음 → `ev01`,`ev02` 만 있는 ESXi 는 `ev03` 이 기록되지 않음)
+5. 해석되는 VM 만 1차와 **같은** `config_value` / `infra_net` / `infra_regex` / O·X 로직으로 조사한다.
    - VM 의 `위치` / `상태` 는 소속 ESXi(표1)의 값을 상속하고, O·X 판정도 그 `위치` 로 한다.
-   - **DNS 미등록** VM 은 `result_vm` 에 행을 만들지 않는다.
-   - 어떤 ESXi 의 VM 이 모두 행이 안 만들어지면 그 ESXi 이름으로 `접속불가` 1행을 남긴다.
+   - 해석되지만 SSH 실패(전원 꺼짐 등)면 그 VM 은 `접속불가` 행으로 남는다.
+   - 어떤 ESXi 의 조사 가능한 VM 이 하나도 없으면 그 ESXi 이름으로 `접속불가` 1행을 남긴다.
    - `타임아웃` 인 VM 만 모아 **딱 1회** 재조사한다(무한 루프 방지).
 
 ---

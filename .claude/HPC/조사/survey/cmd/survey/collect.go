@@ -171,7 +171,9 @@ func detectError(lines []string) string {
 	case strings.Contains(joined, "could not resolve"),
 		strings.Contains(joined, "name or service not known"),
 		strings.Contains(joined, "nodename nor servname"),
-		strings.Contains(joined, "temporary failure in name resolution"):
+		strings.Contains(joined, "temporary failure in name resolution"),
+		strings.Contains(joined, "no such host"),
+		strings.Contains(joined, "server misbehaving"):
 		return "DNS 미등록"
 	case strings.Contains(joined, "timed out"), strings.Contains(joined, "timeout"):
 		return "타임아웃"

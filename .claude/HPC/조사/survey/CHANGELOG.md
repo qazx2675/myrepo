@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- VM 2차 조사: 존재하지 않는 VM(`ev03` 등)이 gossh 에러 파싱 실패로 `접속불가` 행으로
+  잘못 기록되던 문제. 이제 `survey` 가 VM 이름을 **직접 `net.LookupHost` 로 조회**해
+  해석되지 않으면 조사 대상에서 빼고 어떤 행도 남기지 않는다. (`ev01`,`ev02` 만 있으면
+  `ev03` 은 파일에 없음). `detectError` 에 Go 스타일 `no such host` 도 DNS 미등록으로 추가.
+
 ### Added
 - `[gossh].timeout` — gossh 타임아웃 초(`-t`). 설정값·인프라망 두 gossh 호출 모두에 적용.
   비우면 gossh 기본값 사용.
