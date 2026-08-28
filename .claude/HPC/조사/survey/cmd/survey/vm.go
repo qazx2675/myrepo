@@ -106,8 +106,12 @@ func SurveyVMs(cfg *Config, esxiHosts []string, assets map[string]AssetRow) [][]
 					notes = append(notes, mn)
 				}
 			}
+			ir := infra[v]
+			if ir.Note != "" {
+				notes = append(notes, ir.Note) // 예: "인프라 스크립트 없음" (파일 A 와 동일하게 표기)
+			}
 			esxiRows = append(esxiRows, []string{
-				v, loc, st, configCell, infra[v].Value, mark, strings.Join(notes, "; "),
+				v, loc, st, configCell, ir.Value, mark, strings.Join(notes, "; "),
 			})
 		}
 

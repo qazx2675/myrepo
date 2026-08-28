@@ -92,9 +92,10 @@ func Collect(cfg *Config, hostnames []string) map[string]CollectResult {
 }
 
 // CollectInfra 는 `gossh -w <hostfile> -script "bash <infra_net>"` 를 1회 실행하고
-// 각 호스트 출력(`hostname: 출력값`)의 출력값에 infra_regex 를 적용한다.
-//   - infra_regex 가 매칭되지 않는 호스트는 infra_fallback_cmd 로 한 번 더 조사해
-//     그 출력에 infra_fallback_regex 를 적용한다.
+// 각 호스트 출력(`hostname: 출력값`)의 출력값에 infra_regex 를 적용한다. 설정값(A)·VM(B) 모두 사용.
+//   - infra_regex 미매칭 또는 스크립트 없음(no such file) 호스트는 infra_fallback_cmd 로
+//     한 번 더 조사해 infra_fallback_regex 를 적용한다.
+//   - 폴백도 값을 못 채우면 스크립트 없음 호스트는 Note "인프라 스크립트 없음" 을 남긴다.
 //   - infra_net 이 비어 있으면 조사하지 않는다(인프라망 열 공란).
 func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 	res := make(map[string]InfraResult, len(hostnames))
@@ -110,15 +111,17 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 			continue // 값 없음 / 접속 문제 (사유는 설정값 조사 특이사항)
 		}
 		joined := strings.ToLower(strings.Join(hl, "\n"))
-		if strings.Contains(joined, "no such file") || strings.Contains(joined, "command not found") {
-			res[h] = InfraResult{Note: "인프라 스크립트 없음"}
-			continue
+		scriptMissing := strings.Contains(joined, "no such file") || strings.Contains(joined, "command not found")
+		if !scriptMissing {
+			// 여러 줄이면(예: "FAIL ldap_site\nINFO ldap infra") 조건에 맞는 줄만 고른다
+			if v := matchInfraLines(cfg.InfraRe, hl); v != "" {
+				res[h] = InfraResult{Value: v}
+				continue
+			}
+		} else {
+			res[h] = InfraResult{Note: "인프라 스크립트 없음"} // fallback 이 값을 못 채우면 유지
 		}
-		if v := applyInfraRegex(cfg.InfraRe, firstNonEmptyLine(strings.Join(hl, "\n"))); v != "" {
-			res[h] = InfraResult{Value: v}
-			continue
-		}
-		fallback = append(fallback, h) // infra_regex 매칭 실패 → 폴백 대상
+		fallback = append(fallback, h) // infra_regex 매칭 실패 또는 스크립트 없음 → 폴백
 	}
 
 	if strings.TrimSpace(cfg.InfraFallbackCmd) != "" && len(fallback) > 0 {
@@ -126,9 +129,11 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 		for _, h := range fallback {
 			hl := fl[h]
 			if len(hl) == 0 || detectError(hl) != "" {
-				continue
+				continue // res[h] 유지 (스크립트 없음 note 또는 미설정)
 			}
-			res[h] = InfraResult{Value: applyInfraRegex(cfg.InfraFallbackRe, firstNonEmptyLine(strings.Join(hl, "\n")))}
+			if v := matchInfraLines(cfg.InfraFallbackRe, hl); v != "" {
+				res[h] = InfraResult{Value: v}
+			}
 		}
 	}
 	return res

@@ -15,7 +15,22 @@ func firstNonEmptyLine(s string) string {
 	return ""
 }
 
-// applyInfraRegex 는 인프라망 스크립트 출력값에 conf 정규식(캡처 그룹 1)을 적용한다.
+// matchInfraLines 는 여러 줄 중 re 가 처음으로 매칭되는 줄의 값을 돌려준다.
+// 출력이 "FAIL ldap_site\nINFO ldap infra" 처럼 여러 줄일 때, 조건에 맞는 줄만 고른다.
+// re 가 nil 이면 첫 비어있지 않은 줄 전체.
+func matchInfraLines(re *regexp.Regexp, lines []string) string {
+	for _, l := range lines {
+		if l = strings.TrimSpace(l); l == "" {
+			continue
+		}
+		if v := applyInfraRegex(re, l); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// applyInfraRegex 는 인프라망 스크립트 출력값 한 줄에 conf 정규식(캡처 그룹 1)을 적용한다.
 //   - re 가 nil 이면 출력값 그대로
 //   - 매칭 안 되면 "" (인프라 미조사로 취급)
 func applyInfraRegex(re *regexp.Regexp, out string) string {

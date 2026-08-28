@@ -100,6 +100,24 @@ func TestSplitSDC(t *testing.T) {
 	}
 }
 
+func TestMatchInfraLines(t *testing.T) {
+	re := regexp.MustCompile(`^INFO\s+\S+\s+(\S+)`)
+	// 두 줄 중 INFO 로 시작하는 줄만 고른다
+	if got := matchInfraLines(re, []string{"FAIL ldap_site", "INFO ldap infra"}); got != "infra" {
+		t.Errorf("matchInfraLines(2줄) = %q, want infra", got)
+	}
+	if got := matchInfraLines(re, []string{"INFO ldap infra site match"}); got != "infra" {
+		t.Errorf("matchInfraLines(1줄) = %q, want infra", got)
+	}
+	if got := matchInfraLines(re, []string{"FAIL ldap_site", "FAIL LDAP 확인필요"}); got != "" {
+		t.Errorf("matchInfraLines(매칭없음) = %q, want empty", got)
+	}
+	// re 가 nil 이면 첫 비어있지 않은 줄
+	if got := matchInfraLines(nil, []string{"", "  ", "second"}); got != "second" {
+		t.Errorf("matchInfraLines(nil) = %q, want second", got)
+	}
+}
+
 func TestFirstNonEmptyLine(t *testing.T) {
 	if got := firstNonEmptyLine("\n  \r\n ldap infra site \n more"); got != "ldap infra site" {
 		t.Errorf("firstNonEmptyLine = %q", got)
