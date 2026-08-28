@@ -66,16 +66,17 @@ func TestApplStatus(t *testing.T) {
 
 func TestApplyInfraRegex(t *testing.T) {
 	// gossh 출력 "hostname: 출력값" 에서 파싱된 '출력값' 에 적용된다.
-	re := regexp.MustCompile(`\[([^\]]+)\]`)
+	re := regexp.MustCompile(`^INFO\s+\S+\s+(\S+)`)
 	fb := regexp.MustCompile(`ou=([^,[:space:]]+)`)
 	cases := []struct {
 		re   *regexp.Regexp
 		out  string
 		want string
 	}{
-		{re, "INFO\tLDAP\t[infra]", "infra"},           // 정상 → 대괄호 안
-		{re, "FAIL\tLDAP\t확인필요", ""},               // 매칭 실패 → 폴백 대상
-		{re, "FAIL\tLDAP\tundefined", ""},
+		{re, "INFO ldap infra site match", "infra"},    // 정상 → 3번째 토큰
+		{re, "INFO\tLDAP\t[infra]", "[infra]"},         // 탭 구분도 매칭
+		{re, "FAIL LDAP 확인필요", ""},                 // INFO 로 시작 안 함 → 폴백
+		{re, "FAIL LDAP undefined", ""},
 		{fb, `binddn cn=proxy,ou=SDC,dc=corp`, "SDC"},  // 폴백: binddn 에서 ou 추출
 		{nil, "그대로", "그대로"},
 		{re, "", ""},
