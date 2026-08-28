@@ -17,6 +17,11 @@
 - 인프라 스크립트가 대상 호스트에 없을 때(`no such file`)도 `infra_fallback_cmd`(binddn)
   로 재조사하도록 변경 (기존: 바로 포기). VM 에 infra 스크립트를 안 깔아도 ldap.conf 로 대체 가능.
 
+### Changed
+- ESXi 물리장비로 판별된 호스트는 인프라·설정값 조사를 **아예 하지 않는다**.
+  `설정값`/`인프라망`/`appl설정유무` 모두 `없음`, `특이사항` `esxi` 로만 기록.
+  (기존: ESXi 에도 infra gossh 를 날려 `인프라 확인필요(...)` 같은 값이 들어가던 것 제거)
+
 ### Added
 - `[gossh].timeout` — gossh 타임아웃 초(`-t`). 설정값·인프라망 두 gossh 호출 모두에 적용.
   비우면 gossh 기본값 사용.
