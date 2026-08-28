@@ -7,6 +7,12 @@
   잘못 기록되던 문제. 이제 `survey` 가 VM 이름을 **직접 `net.LookupHost` 로 조회**해
   해석되지 않으면 조사 대상에서 빼고 어떤 행도 남기지 않는다. (`ev01`,`ev02` 만 있으면
   `ev03` 은 파일에 없음). `detectError` 에 Go 스타일 `no such host` 도 DNS 미등록으로 추가.
+- VM 결과파일(B): 인프라망이 비어 있어도 사유가 안 보이던 문제. `SurveyVMs` 가 이제
+  파일 A 와 동일하게 `인프라 스크립트 없음` 등 인프라 Note 를 `특이사항` 에 표기한다.
+- 인프라 출력이 여러 줄일 때(`FAIL ldap_site` + `INFO ldap infra`) 첫 줄만 보고 매칭
+  실패하던 문제. 이제 각 줄에 `infra_regex` 를 적용해 **처음 매칭되는 줄**을 쓴다.
+- 인프라 스크립트가 대상 호스트에 없을 때(`no such file`)도 `infra_fallback_cmd`(binddn)
+  로 재조사하도록 변경 (기존: 바로 포기). VM 에 infra 스크립트를 안 깔아도 ldap.conf 로 대체 가능.
 
 ### Added
 - `[gossh].timeout` — gossh 타임아웃 초(`-t`). 설정값·인프라망 두 gossh 호출 모두에 적용.

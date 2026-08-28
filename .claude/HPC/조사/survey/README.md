@@ -130,7 +130,7 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 | `[gossh].extra_args` | `gossh` 에 넘길 추가 플래그(공백 구분). 비워도 됨 |
 | `[scripts].config_value` | 설정값 조사: `gossh ... -script "<이 값>"` 으로 원격 실행. **변경 시 이 값만 수정** |
 | `[scripts].infra_net` | 인프라망 조사: `gossh -w <hosts> -script "bash <이 값>"` 으로 원격 실행. 조사 대상 호스트에 배포된 스크립트 경로(또는 명령). 비우면 인프라망 열 공란 |
-| `[scripts].infra_regex` | gossh 출력 `hostname: 출력값` 의 **출력값**에 적용하는 정규식(캡처 그룹 1). `\s` 는 공백·탭 모두 매칭. 비우면 출력값 그대로. **매칭 안 되면 아래 fallback 으로 재조사**. 예: `'^INFO\s+\S+\s+(\S+)'` → `INFO ldap infra site match` 에서 `infra` |
+| `[scripts].infra_regex` | gossh 출력값에 적용하는 정규식(캡처 그룹 1). `\s` 는 공백·탭 모두 매칭. **여러 줄이면 각 줄에 적용해 처음 매칭되는 줄**을 쓴다(`FAIL ldap_site` + `INFO ldap infra` → `infra`). 비우면 첫 줄 그대로. **매칭 안 되면 아래 fallback 재조사**. 예: `'^INFO\s+\S+\s+(\S+)'` |
 | `[scripts].infra_fallback_cmd` | `infra_regex` 매칭 실패 호스트에 다시 실행할 gossh 커맨드. 비우면 재조사 안 함. 예: `"cat /etc/openldap/ldap.conf \| grep -i binddn"` |
 | `[scripts].infra_fallback_regex` | fallback 출력에서 값 추출용 정규식(캡처 그룹 1). 비우면 첫 줄 전체. 예: `'ou=([^,[:space:]]+)'` → binddn 의 `ou=SDC` 에서 `SDC` |
 | `[[mountpoint]].name` | 설정값 `이름:/경로` 에서 `:` 앞부분(마운트 대상 이름) |
@@ -147,10 +147,13 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
   - `location == 표1의 위치` → `O`, 다르면 `X`
   - 이름이 conf 에 없으면 `X` + 특이사항 `mountpoint 미정의`
   - 접속 실패면 → 공란
-- **인프라망**: `gossh -w <hosts> -script "bash <infra_net>"` → 각 호스트 출력값에 `infra_regex` 적용.
-  - `infra_regex` 매칭 실패(예: `FAIL LDAP 확인필요` / `undefined`) → `infra_fallback_cmd` 로 재조사 →
-    그 출력에 `infra_fallback_regex` 적용 (예: `binddn` 값의 `ou=` 부분)
+- **인프라망**: `gossh -w <hosts> -script "bash <infra_net>"` → 각 호스트 출력에 `infra_regex` 적용
+  (출력이 여러 줄이면 줄마다 시도해 처음 매칭되는 줄).
+  - 매칭 실패(`FAIL LDAP 확인필요`/`undefined`) **또는** 스크립트 미배포(`no such file`) →
+    `infra_fallback_cmd`(기본 binddn) 로 재조사 → `infra_fallback_regex` 적용
+  - 폴백도 값을 못 얻고 스크립트가 없었으면 `특이사항` 에 `인프라 스크립트 없음`
   - 설정값 조사와 별개의 gossh 호출이며 `-c` 는 붙지 않는다
+  - VM(파일 B)에도 **동일하게** 적용된다
 - **SDC 분리**: 위에서 구한 인프라망 값이 정확히 `SDC` 면 그 호스트는 A·B 에서 빠져
   `result_sdc_*.tsv` 로만 기록된다.
 - **특이사항**: `접속불가` / `타임아웃` / `DNS 미등록` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라 스크립트 없음` / `esxi`
