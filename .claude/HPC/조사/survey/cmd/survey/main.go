@@ -69,6 +69,32 @@ func main() {
 	}
 	infra := CollectInfra(cfg, infraHosts)
 
+	// 일반서버(표1, VM 제외) 재조사: DNS 미등록/타임아웃 은 1회 더 시도.
+	// 재조사는 답을 더 기다리도록 retry_timeout(설정 시)을 쓴다.
+	var retryHosts []string
+	for _, h := range hostnames {
+		if esxiSet[h] {
+			continue
+		}
+		switch collected[h].Note {
+		case "DNS 미등록", "타임아웃":
+			retryHosts = append(retryHosts, h)
+		}
+	}
+	if len(retryHosts) > 0 {
+		rcfg := *cfg
+		if cfg.GosshRetryTimeout > 0 {
+			rcfg.GosshTimeout = cfg.GosshRetryTimeout
+		}
+		fmt.Fprintf(os.Stderr, "[info] 재조사 %d대 (DNS 미등록/타임아웃, timeout=%ds)\n", len(retryHosts), rcfg.GosshTimeout)
+		for h, r := range Collect(&rcfg, retryHosts) {
+			collected[h] = r
+		}
+		for h, r := range CollectInfra(&rcfg, retryHosts) {
+			infra[h] = r
+		}
+	}
+
 	ts := time.Now().Format("20060102_1504")
 
 	rows := make([][]string, 0, len(hostnames))

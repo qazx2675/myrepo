@@ -145,6 +145,32 @@ func TestVMName(t *testing.T) {
 	}
 }
 
+func TestMapInfraValue(t *testing.T) {
+	if got := mapInfraValue("VIP"); got != "SLSI_VIP" {
+		t.Errorf("mapInfraValue(VIP) = %q, want SLSI_VIP", got)
+	}
+	if got := mapInfraValue(" VIP "); got != "SLSI_VIP" {
+		t.Errorf("mapInfraValue( VIP ) = %q, want SLSI_VIP", got)
+	}
+	if got := mapInfraValue("infra"); got != "infra" {
+		t.Errorf("mapInfraValue(infra) = %q, want infra", got)
+	}
+}
+
+func TestFallbackRegexUidOu(t *testing.T) {
+	re := regexp.MustCompile(`(?:uid|ou)=([^,\s]+)`)
+	cases := map[string]string{
+		"binddn uid=svc_ldap,ou=SDC,dc=corp": "svc_ldap",
+		`binddn "cn=mgr,ou=SDC,dc=corp"`:     "SDC",
+		"binddn cn=mgr,dc=corp":              "",
+	}
+	for in, want := range cases {
+		if got := matchInfraLines(re, []string{in}); got != want {
+			t.Errorf("uid/ou 정규식(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestNormalizeField(t *testing.T) {
 	if got := normalizeField("a\tb\nc\r"); got != "a b c" {
 		t.Errorf("normalizeField = %q, want %q", got, "a b c")

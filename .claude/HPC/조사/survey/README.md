@@ -127,12 +127,13 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 | `[gossh].bin` | `gossh` 실행 파일 경로 |
 | `[gossh].concurrency` | `gossh` 동시 실행 수(`-c`). 기본 `4000`. **설정값(appl) 조사에만 적용** |
 | `[gossh].timeout` | `gossh` 타임아웃 초(`-t`). 양의 정수. 지우면 `gossh` 기본값. 두 조사(설정값·인프라망) 모두 적용 |
+| `[gossh].retry_timeout` | 재조사(일반서버의 `DNS 미등록`/`타임아웃`, VM 제외) 때 쓸 **긴** 타임아웃 초. 지우면 `timeout` 그대로 |
 | `[gossh].extra_args` | `gossh` 에 넘길 추가 플래그(공백 구분). 비워도 됨 |
 | `[scripts].config_value` | 설정값 조사: `gossh ... -script "<이 값>"` 으로 원격 실행. **변경 시 이 값만 수정** |
 | `[scripts].infra_net` | 인프라망 조사: `gossh -w <hosts> -script "bash <이 값>"` 으로 원격 실행. 조사 대상 호스트에 배포된 스크립트 경로(또는 명령). 비우면 인프라망 열 공란 |
 | `[scripts].infra_regex` | gossh 출력값에 적용하는 정규식(캡처 그룹 1). `\s` 는 공백·탭 모두 매칭. **여러 줄이면 각 줄에 적용해 처음 매칭되는 줄**을 쓴다(`FAIL ldap_site` + `INFO ldap infra` → `infra`). 비우면 첫 줄 그대로. **매칭 안 되면 아래 fallback 재조사**. 예: `'^INFO\s+\S+\s+(\S+)'` |
 | `[scripts].infra_fallback_cmd` | `infra_regex` 매칭 실패 호스트에 다시 실행할 gossh 커맨드. 비우면 재조사 안 함. 예: `"cat /etc/openldap/ldap.conf \| grep -i binddn"` |
-| `[scripts].infra_fallback_regex` | fallback 출력에서 값 추출용 정규식(캡처 그룹 1). 비우면 첫 줄 전체. 예: `'ou=([^,[:space:]]+)'` → binddn 의 `ou=SDC` 에서 `SDC` |
+| `[scripts].infra_fallback_regex` | fallback(binddn) 출력에서 값 추출용 정규식(캡처 그룹 1). 비우면 첫 줄 전체. 기본 `'(?:uid|ou)=([^,\s]+)'` → binddn 의 `uid=` 또는 `ou=` 값(문자열에서 먼저 나오는 쪽) |
 | `[[mountpoint]].name` | 설정값 `이름:/경로` 에서 `:` 앞부분(마운트 대상 이름) |
 | `[[mountpoint]].location` | 그 이름이 정상적으로 위치해야 하는 곳. 표1의 `위치` 와 비교 |
 
@@ -157,8 +158,11 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
     - 그 외 → `인프라 확인필요(FAIL ldap Undefined)` — 공백으로 두지 않고 원본을 남김
   - 설정값 조사와 별개의 gossh 호출이며 `-c` 는 붙지 않는다
   - VM(파일 B)에도 **동일하게** 적용된다
+- **값 치환**: 인프라망 값이 정확히 `VIP` 면 `SLSI_VIP` 로 바꿔 기록한다.
 - **SDC 분리**: 위에서 구한 인프라망 값이 정확히 `SDC` 면 그 호스트는 A·B 에서 빠져
   `result_sdc_*.tsv` 로만 기록된다.
+- **일반서버 재조사**: VM 이 아닌 표1 호스트가 `DNS 미등록`/`타임아웃` 이면 **1회 더** 조사한다
+  (`[gossh].retry_timeout` 이 있으면 그 긴 타임아웃으로 답을 기다림). VM 은 별도 규칙(위 참고).
 - **특이사항**: `접속불가` / `타임아웃` / `DNS 미등록` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라 스크립트 없음` / `esxi`
 
 ### ESXi / VM 2차 조사

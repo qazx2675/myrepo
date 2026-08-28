@@ -25,6 +25,7 @@ type Config struct {
 	GosshBin     string // [gossh].bin           : gossh 실행 파일
 	GosshConc    int    // [gossh].concurrency   : gossh 동시 실행 수 (-c). 설정값 조사에만 적용
 	GosshTimeout int    // [gossh].timeout       : gossh 타임아웃 초 (-t). 0 이면 지정 안 함
+	GosshRetryTimeout int // [gossh].retry_timeout : 재조사(DNS 미등록/타임아웃) 시 쓸 긴 타임아웃 초. 0 이면 timeout 그대로
 	GosshArgs    string // [gossh].extra_args    : gossh 추가 플래그
 	ConfigValue  string // [scripts].config_value: 설정값(appl) 원격 커맨드 (gossh -script)
 	InfraNet     string // [scripts].infra_net   : 인프라망 조사 대상. gossh -script "bash <이 값>" 으로 실행
@@ -94,6 +95,12 @@ func LoadConfig(path string) (*Config, error) {
 					return nil, fmt.Errorf("conf %d행: timeout 은 양의 정수(초)여야 합니다: %q", lineNo, val)
 				}
 				cfg.GosshTimeout = n
+			case "retry_timeout":
+				n, cerr := strconv.Atoi(val)
+				if cerr != nil || n <= 0 {
+					return nil, fmt.Errorf("conf %d행: retry_timeout 은 양의 정수(초)여야 합니다: %q", lineNo, val)
+				}
+				cfg.GosshRetryTimeout = n
 			case "extra_args":
 				cfg.GosshArgs = val
 			}
