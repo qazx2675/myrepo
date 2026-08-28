@@ -157,16 +157,17 @@ func TestMapInfraValue(t *testing.T) {
 	}
 }
 
-func TestFallbackRegexUidOu(t *testing.T) {
-	re := regexp.MustCompile(`(?:uid|ou)=([^,\s]+)`)
+func TestFallbackRegexUid(t *testing.T) {
+	re := regexp.MustCompile(`uid=([^,\s]+)`)
 	cases := map[string]string{
 		"binddn uid=svc_ldap,ou=SDC,dc=corp": "svc_ldap",
-		`binddn "cn=mgr,ou=SDC,dc=corp"`:     "SDC",
+		"binddn ou=SDC,uid=svc_ldap,dc=corp": "svc_ldap", // 순서 무관, uid 만 뽑음
+		`binddn "cn=mgr,ou=SDC,dc=corp"`:     "",          // uid 없음 → 매칭 실패
 		"binddn cn=mgr,dc=corp":              "",
 	}
 	for in, want := range cases {
 		if got := matchInfraLines(re, []string{in}); got != want {
-			t.Errorf("uid/ou 정규식(%q) = %q, want %q", in, got, want)
+			t.Errorf("uid 정규식(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

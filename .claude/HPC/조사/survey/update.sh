@@ -61,6 +61,16 @@ while IFS= read -r -d '' f; do
   fi
 done < <(find . -type f -not -path './.git/*' -print0)
 
+# 1-b) conf 는 보존하지만, 배포본과 달라졌으면 알림 (수동 반영 필요)
+conf_drift=0
+if [[ -f "$SRC/conf/conf.toml" && -f "$DST/conf/conf.toml" ]] \
+   && ! cmp -s "$SRC/conf/conf.toml" "$DST/conf/conf.toml"; then
+  conf_drift=1
+  echo "  ! conf/conf.toml 이 새 배포본과 다릅니다 (보존됨, 자동 반영 안 함)"
+  echo "    차이:"
+  diff -u "$DST/conf/conf.toml" "$SRC/conf/conf.toml" | sed 's/^/      /' || true
+fi
+
 # 2) 대상에만 있는 오래된 Go 소스 제거 (빌드 깨짐 방지)
 cd "$DST"
 while IFS= read -r -d '' f; do
@@ -81,6 +91,9 @@ fi
 echo ""
 echo "완료: 추가 $added / 변경 $changed / 제거 $removed   (대상: $DST)"
 echo "보존됨: conf/conf.toml, result_*.tsv, asset_list.txt"
+if (( conf_drift )); then
+  echo "[주의] conf/conf.toml 변경분은 위 diff 를 보고 직접 반영하세요 (update.sh 는 conf 를 덮지 않음)."
+fi
 if (( added + changed + removed > 0 )); then
   echo "재빌드:  (cd \"$DST\" && go build -o survey ./cmd/survey)"
 fi

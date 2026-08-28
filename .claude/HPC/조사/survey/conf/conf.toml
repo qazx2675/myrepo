@@ -28,9 +28,12 @@ infra_regex  = '^INFO\s+\S+\s+(\S+)'
 # infra_regex 매칭 실패 시 재조사할 gossh 커맨드 (비우면 재조사 안 함)
 infra_fallback_cmd   = "cat /etc/openldap/ldap.conf | grep -i binddn"
 # 재조사(binddn) 출력에서 값 추출용 정규식 (캡처 그룹 1). 비우면 첫 줄 전체.
-#   binddn 의 uid= 또는 ou= 값을 뽑는다 (문자열에서 먼저 나오는 쪽).
-#   예: "binddn uid=svc,ou=SDC,dc=x" -> "svc"  /  "binddn ...,ou=SDC" -> "SDC"
-infra_fallback_regex = '(?:uid|ou)=([^,\s]+)'
+#   binddn 의 uid= 값을 뽑는다.
+#   예: "binddn uid=svc_ldap,ou=People,dc=corp" -> "svc_ldap"
+#   주: uid= 가 없는 binddn(예: cn=Manager,ou=SDC,...)은 매칭 실패 -> binddn 원본 줄이
+#       인프라망에 기록됨(SDC 파일 분리 안 됨). ou 기반 SDC 판별이 필요하면
+#       'ou=([^,\s]+)' 로 바꾸거나 알려주세요.
+infra_fallback_regex = 'uid=([^,\s]+)'
 
 # 설정값 mountpoint 이름별 "정상 위치".
 #   설정값 "nas-a:/appl2/appl2" 에서 ':' 앞부분(nas-a)을 name 과 대조하고,
