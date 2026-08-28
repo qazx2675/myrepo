@@ -62,10 +62,19 @@
 #      아예 없어서 항상 "안 나옴" 상태였음. run_kernel_check(신규)가 gossh -pm으로
 #      직접 "uname -r"을 실행해 KERNEL_CHECK_FILE을 만들고, report_kernel_info가
 #      그 파일을 보도록 변경.
+#  21) get_dhcp_info : TODO 상태였던 것을 구현. gossh 원격 실행이 아니라 현재
+#      디렉토리의 dhcp.sh를 "dhcp.sh <호스트목록파일>" 형태로 로컬 실행하도록
+#      변경(DHCP_SH 경로 신규 변수, 기본값 "./dhcp.sh").
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
 RCLOCAL_SH="/path/to/setting/rclocal.sh"
+
+# [신규] DHCP 등록 정보 조회 스크립트. gossh로 원격 서버에서 실행하는 게 아니라,
+# 이 스크립트(os_check_final_annotated.sh)를 실행하는 현재 디렉토리에서 그대로
+# 실행합니다: "dhcp.sh <호스트목록파일>" 형태로 호출되며, get_dhcp_info가 조회
+# 대상 호스트를 파일로 만들어 인자로 넘깁니다.
+DHCP_SH="./dhcp.sh"
 
 # [신규] [수정필요] check.res_${user}(run.sh 결과)는 LDAP/SPLUNK 설정에 문제가 없으면
 # 그냥 "OK"만 찍혀서 실제 값(어떤 LDAP infra/SPLUNK type인지)을 알 수 없다는 문제가
@@ -599,12 +608,18 @@ apply_extra_setting() {
     echo
 }
 
-# [수정필요] DHCP 정보 조회 로직 미구현 (TODO). report_dhcp_info가
-# ALL_HOSTS를 인자로 넘겨 호출합니다. 결과값을 어떻게 보여줄지(echo로 바로
-# 출력할지, 별도 변수/파일에 담을지)는 기존에 쓰시던 방식에 맞춰 구현해주세요.
+# [수정됨] DHCP 정보는 gossh로 원격 실행하는 게 아니라, 현재 디렉토리의
+# dhcp.sh를 "dhcp.sh <호스트목록파일>" 형태로 로컬 실행해서 얻습니다. 인자로
+# 받은 호스트 목록을 임시 파일로 만들어 넘기고, dhcp.sh의 출력(stdout)을
+# 그대로 화면에 보여줍니다.
 get_dhcp_info() {
     local hosts=("$@")
-    :
+    [ ${#hosts[@]} -eq 0 ] && return 0
+
+    local dhcp_target_file="/tmp/dhcp_target_${user}.$$"
+    printf '%s\n' "${hosts[@]}" > "${dhcp_target_file}"
+    bash "${DHCP_SH}" "${dhcp_target_file}"
+    rm -f "${dhcp_target_file}"
 }
 
 # [수정필요] ev 호스트 추가 점검 로직 미구현 (TODO). report_ev_hosts가
