@@ -30,6 +30,15 @@ func matchInfraLines(re *regexp.Regexp, lines []string) string {
 	return ""
 }
 
+// mapInfraValue 는 인프라망 값의 고정 치환 규칙을 적용한다.
+//   - "VIP" → "SLSI_VIP"
+func mapInfraValue(v string) string {
+	if strings.TrimSpace(v) == "VIP" {
+		return "SLSI_VIP"
+	}
+	return v
+}
+
 // applyInfraRegex 는 인프라망 스크립트 출력값 한 줄에 conf 정규식(캡처 그룹 1)을 적용한다.
 //   - re 가 nil 이면 출력값 그대로
 //   - 매칭 안 되면 "" (인프라 미조사로 취급)

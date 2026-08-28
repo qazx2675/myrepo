@@ -23,6 +23,10 @@
   (기존: ESXi 에도 infra gossh 를 날려 `인프라 확인필요(...)` 같은 값이 들어가던 것 제거)
 
 ### Added
+- `[gossh].retry_timeout` — 일반서버(표1, VM 제외) 재조사 시 쓸 긴 타임아웃.
+  `DNS 미등록`/`타임아웃` 호스트를 이 타임아웃으로 **1회 더** 조사(답을 더 기다림).
+- 인프라망 값 치환: `VIP` → `SLSI_VIP` (`mapInfraValue`).
+- `infra_fallback_regex` 기본값을 `(?:uid|ou)=([^,\s]+)` 로 변경 — binddn 의 `uid=` 값도 추출.
 - `[gossh].timeout` — gossh 타임아웃 초(`-t`). 설정값·인프라망 두 gossh 호출 모두에 적용.
   비우면 gossh 기본값 사용.
 - **ESXi 판별 + VM 2차 조사** (`cmd/survey/vm.go`)

@@ -120,7 +120,7 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 		} else {
 			// 여러 줄이면(예: "FAIL ldap_site\nINFO ldap infra") 조건에 맞는 줄만 고른다
 			if v := matchInfraLines(cfg.InfraRe, hl); v != "" {
-				res[h] = InfraResult{Value: v}
+				res[h] = InfraResult{Value: mapInfraValue(v)}
 				continue
 			}
 			// 매칭 실패(예: "FAIL ldap Undefined") → fallback 이 값을 못 채우면 이 사유가 보이게
@@ -141,11 +141,11 @@ func CollectInfra(cfg *Config, hostnames []string) map[string]InfraResult {
 			if raw == "" {
 				continue // binddn 응답이 아예 없음 → 사유 유지
 			}
-			v := matchInfraLines(cfg.InfraFallbackRe, hl) // 예: ou= 부분
+			v := matchInfraLines(cfg.InfraFallbackRe, hl) // 예: binddn 의 uid=/ou= 부분
 			if v == "" {
 				v = normalizeField(raw) // 정규식이 못 뽑으면 binddn 원본 줄을 기록
 			}
-			res[h] = InfraResult{Value: v} // 사유 덮어쓰고 값 기록
+			res[h] = InfraResult{Value: mapInfraValue(v)} // 사유 덮어쓰고 값 기록
 		}
 	}
 	return res
