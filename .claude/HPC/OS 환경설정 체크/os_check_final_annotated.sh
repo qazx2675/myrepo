@@ -54,6 +54,14 @@
 #  18) report_dhcp_info : 판단 기준을 DOWN_HOSTS 전체 → PINGX_HOSTS(ping 불가,
 #      파워오프로 추정)로 좁힘. ssh 거부(REFUSED)/설치중(ANACONDA)만 있는 경우는
 #      네트워크가 살아있는 상태라 DHCP 조사가 불필요하므로 메시지 자체가 안 뜨도록 함.
+#  19) parse_pm_result : PM_RAW의 요약/헤더성 줄에 패턴 단어(refused 등)가 우연히
+#      포함되어 실제 호스트가 아닌 값이 REFUSED_HOSTS 등에 유령으로 잡히는 문제가
+#      있어(대상 파일 자체엔 빈 줄이 없어도 재발), 각 분류 배열을 ALL_HOSTS에
+#      실제로 있는 호스트만 남기도록 필터링 추가.
+#  20) report_kernel_info : check.res_${user}(run.sh 결과)에는 kernel 관련 라인이
+#      아예 없어서 항상 "안 나옴" 상태였음. run_kernel_check(신규)가 gossh -pm으로
+#      직접 "uname -r"을 실행해 KERNEL_CHECK_FILE을 만들고, report_kernel_info가
+#      그 파일을 보도록 변경.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -68,6 +76,10 @@ INFO_CHECK_SH="/path/to/check/info_check.sh"
 
 CLASSIFY_CMD="hostname"
 
+# [수정됨] 커널 버전은 check.res_${user}(run.sh 결과)에서 파싱하는 대신, run_os_check와
+# 동일한 방식(gossh -pm으로 원격에서 직접 명령 실행)으로 "uname -r"을 실행해서 얻는다.
+KERNEL_CMD="uname -r"
+
 # [수정필요] 기존에 쓰시던 user 선택 로직을 여기에 그대로 붙여넣으세요.
 # 결과값이 반드시 전역 변수 `user`에 들어가야 합니다 (main()의 user 공백 체크가
 # 이 값을 그대로 사용합니다).
@@ -79,6 +91,7 @@ TARGET_LIST=""            # ${user}.txt를 빈 줄/CR 제거해서 정제한 사
 CLEAN_TARGET_LIST=""      # 위 정제 사본의 실제 파일 경로 (cleanup에서 삭제용)
 CHECK_RES_FILE=""         # check.res_${user} (최초 OS 체크 결과)
 INFO_CHECK_FILE=""        # check.res_${user}_info (INFO_CHECK_SH 실행 결과 — LDAP/SPLUNK 실제값 조사용)
+KERNEL_CHECK_FILE=""      # check.res_${user}_kernel (uname -r 실행 결과)
 CHECK_TARGET_LIST=""      # OS 체크/정보 조사 대상만 추린 임시 목록 파일 (접속가능 + svrauto 정상)
 SETTING_TARGET_LIST=""    # 설정 적용 대상만 추린 임시 목록 파일
 # [연계] 설정 적용(apply_os_setting/apply_extra_setting) 완료 후 run_post_apply_check가
@@ -164,6 +177,20 @@ run_os_check() {
     parse_pm_result
 }
 
+# [신규] 커널 버전은 check.res_${user}(run.sh 결과)를 파싱하는 대신, run_os_check와
+# 동일한 방식으로 gossh -pm을 통해 대상 서버에서 직접 "uname -r"을 실행해서 얻는다.
+# run_check_script/run_info_check와 동일한 (target_list, output_file) 파라미터 패턴.
+# [연계] main()에서 run_info_check 직후, report_kernel_info 호출 전에 실행되어야 합니다.
+run_kernel_check() {
+    local target_list="$1"
+    local output_file="$2"
+
+    green "[INFO] ${KERNEL_CMD} 커널 버전 조사 중..."
+    gossh -pm -w "${target_list}" "${KERNEL_CMD}" > "${output_file}" 2>&1
+    green "[INFO] 커널 버전 조사 결과 저장 완료 : ${output_file}"
+    echo
+}
+
 # [수정금지] 분류 패턴/기준. 이번 요청과 무관하니 손대지 마세요.
 PAT_NOSVRAUTO="svrauto"
 PAT_PINGX="ping"
@@ -184,6 +211,18 @@ parse_pm_result() {
     mapfile -t PINGX_HOSTS     < <(grep -i "${PAT_PINGX}"     "${PM_RAW}" | awk '{print $1}' | sort -u)
     mapfile -t REFUSED_HOSTS   < <(grep -i "${PAT_REFUSED}"   "${PM_RAW}" | awk '{print $1}' | sort -u)
     mapfile -t ANACONDA_HOSTS  < <(grep -i "${PAT_ANACONDA}"  "${PM_RAW}" | awk '{print $1}' | sort -u)
+
+    # [수정됨] PM_RAW(gossh -pm 원본 출력)에는 호스트별 실패 줄 외에 요약/헤더성
+    # 줄도 섞여 있는데, 그런 줄에 우연히 "refused" 등의 패턴 단어가 들어있으면
+    # 그 줄의 첫 토큰(실제 호스트명이 아닌 값)이 그대로 REFUSED_HOSTS 등에
+    # 유령으로 잡히는 문제가 있었다(TARGET_LIST 빈 줄 문제와 같은 유형의
+    # 버그가 PM_RAW 쪽에서 재발). ALL_HOSTS(원래 대상 목록)에 실제로 있는
+    # 호스트만 남기도록 각 분류 배열을 필터링한다.
+    local filtered
+    filtered=(); for h in "${NOSVRAUTO_HOSTS[@]}"; do contains "$h" "${ALL_HOSTS[@]}" && filtered+=("$h"); done; NOSVRAUTO_HOSTS=("${filtered[@]}")
+    filtered=(); for h in "${PINGX_HOSTS[@]}";     do contains "$h" "${ALL_HOSTS[@]}" && filtered+=("$h"); done; PINGX_HOSTS=("${filtered[@]}")
+    filtered=(); for h in "${REFUSED_HOSTS[@]}";   do contains "$h" "${ALL_HOSTS[@]}" && filtered+=("$h"); done; REFUSED_HOSTS=("${filtered[@]}")
+    filtered=(); for h in "${ANACONDA_HOSTS[@]}";  do contains "$h" "${ALL_HOSTS[@]}" && filtered+=("$h"); done; ANACONDA_HOSTS=("${filtered[@]}")
 
     DOWN_HOSTS=()
     for h in "${PINGX_HOSTS[@]}" "${REFUSED_HOSTS[@]}" "${ANACONDA_HOSTS[@]}"; do
@@ -400,16 +439,15 @@ report_splunk_info() {
     echo
 }
 
-# [신규] 대상 서버들의 커널 버전을 출력합니다. 모든 대상의 커널 버전이 동일하면
-# 그 버전 1줄과 "전체 동일" 문구만 출력하고, 2종류 이상이면 값별로 "값 : N대"와
-# 해당 호스트 목록을 출력합니다 (SPLUNK와 동일한 집계 방식, 파일 분리는 하지 않음).
-# [수정필요] 커널 버전 값은 check.res_${user}(run.sh 결과, CHECK_RES_FILE)에
-# "hostname kernel_version" 형태(공백 또는 콜론 구분)로 한 줄씩 있다고 가정하고
-# grep -i "kernel"로 뽑아옵니다. run.sh 결과의 실제 라인 포맷이 다르면 파싱 부분을
-# 맞게 조정해주세요.
-# [연계] 다른 함수와의 연계는 없습니다.
+# [수정됨] 커널 버전은 check.res_${user}(run.sh 결과)에서 grep -i "kernel"로 뽑아오는
+# 대신, run_kernel_check가 gossh -pm으로 직접 "uname -r"을 실행해 만든
+# KERNEL_CHECK_FILE 전체를 파싱합니다(run.sh 결과에는 kernel 관련 라인이 아예
+# 없었던 것으로 확인됨). 모든 대상의 커널 버전이 동일하면 그 버전 1줄과 "전체
+# 동일" 문구만 출력하고, 2종류 이상이면 값별로 "값 : N대"와 해당 호스트 목록을
+# 출력합니다 (SPLUNK와 동일한 집계 방식, 파일 분리는 하지 않음).
+# [연계] main()에서 run_kernel_check 실행 후에 호출되어야 합니다.
 report_kernel_info() {
-    [ -f "${CHECK_RES_FILE}" ] || return 0
+    [ -f "${KERNEL_CHECK_FILE}" ] || return 0
 
     echo "===== 커널 버전 ====="
 
@@ -425,12 +463,13 @@ report_kernel_info() {
             host=$(echo "${line}" | awk '{print $1}')
             value="${line#"${host}" }"
         fi
+        [ -z "${host}" ] && continue
 
         if [ -z "${kernel_hosts_by_value[${value}]:-}" ]; then
             case_order+=("${value}")
         fi
         kernel_hosts_by_value["${value}"]="${kernel_hosts_by_value[${value}]:-} ${host}"
-    done < <(grep -i "kernel" "${CHECK_RES_FILE}")
+    done < <(grep -v '^[[:space:]]*$' "${KERNEL_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
         yellow "FAIL kernel version confirmation required"
@@ -709,6 +748,7 @@ main() {
     TARGET_LIST="${user}.txt"
     CHECK_RES_FILE="check.res_${user}"
     INFO_CHECK_FILE="check.res_${user}_info"
+    KERNEL_CHECK_FILE="check.res_${user}_kernel"
 
     if [ ! -f "${TARGET_LIST}" ]; then
         red "[ERROR] 대상 목록 파일이 없습니다 : ${TARGET_LIST}"
@@ -745,6 +785,7 @@ main() {
             if build_check_target_list; then
                 run_check_script "${CHECK_TARGET_LIST}" "${CHECK_RES_FILE}"
                 run_info_check "${CHECK_TARGET_LIST}" "${INFO_CHECK_FILE}"
+                run_kernel_check "${CHECK_TARGET_LIST}" "${KERNEL_CHECK_FILE}"
                 report_ldap_info
                 report_splunk_info
                 report_kernel_info
