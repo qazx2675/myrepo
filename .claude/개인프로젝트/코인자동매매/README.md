@@ -43,17 +43,19 @@ run_backtest.bat  [--holdout]     M3-a 단일종목 백테스터 데모 (MA 크�
 run_m2a.bat       [--holdout]     M2-a 하락형 필터 A/B + 패턴 탐지빈도 + 차트
 run_m2b.bat       [--holdout]     M2-b 진입규칙 A/B/C/D (패턴 가중치)
 run_m4.bat        [--holdout]     M4 포트폴리오 백테스터 (리스크 규칙 + 패턴 실측정)
+run_m5.bat        [--ntfy]        M5 빗썸 공지/경보 + 뉴스 RSS 실조회 (--ntfy: 테스트 알림)
 ```
 
 홀드아웃(2025-01~2026-06)은 **1회만**. `data/.holdout_used` 에 기록된다.
 
 ## 현재 상태
 
-M1 + M3-a + M2-a + M2-b + M4 완료. M1 인증부만 키 대기.
+M1 + M3-a + M2-a + M2-b + M4 + M5 완료. M1 인증부만 키 대기.
 
-- **리스크/자금관리(`risk.py`) + 포트폴리오 백테스터 완료.** conservative MDD -9% (목표 10% 이내).
-- **차트 패턴은 진입 게이트로 채택 안 함** — M2-a/M2-b/M4 세 번의 측정 모두 중립~약손해.
-  엔진(`engine_a.py`)은 유지하되 소프트 가산(`PATTERN_SCORE_WEIGHT=0.20`)으로만.
+- **리스크/자금관리(`risk.py`) + 포트폴리오 백테스터.** conservative MDD -9% (목표 10% 이내).
+- **차트 패턴은 진입 게이트로 채택 안 함** (M2-a/M2-b/M4 세 측정 모두 중립~약손해). 소프트 가산만.
+- **공지/뉴스 감시(`notice.py` / `news.py`) + ntfy(`notifier.py`).** LLM 런타임 호출 0.
+  유의종목/거래지원종료 → 즉시 청산. 뉴스 청산 판정은 보수적(제목+정식명칭+키워드 동시).
 
-다음: **M5 (공지 감시 + 뉴스 RSS 키워드 필터 + ntfy notifier)**.
+다음: **M5.5 (실시간 호가 순차소진 체결 엔진 `paper.py`)**.
 

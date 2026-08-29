@@ -57,3 +57,26 @@ SCREEN_ENTRY_THRESHOLD  = 0.55    # 최종 점수가 이 값 이상이어야 진
 
 # ── 포트폴리오 백테스터 (M4) ─────────────────────────────────────────
 PF_EXEC_DELAY_BARS      = 1
+
+# ── 공지 감시 / 뉴스 (M5) ────────────────────────────────────────────
+NOTICE_URL   = "https://api.bithumb.com/v1/notices"
+WARNING_URL  = "https://api.bithumb.com/v1/market/virtual_asset_warning"
+NOTICE_POLL_COUNT = 30
+
+# 공지 categories → 대응 (계획서 8장)
+NOTICE_LIQUIDATE_CATS = ("거래유의", "거래지원종료")          # 즉시 전량 시장가 청산
+NOTICE_BLOCK_CATS     = ("입출금", "마켓 추가", "마켓추가")   # 신규 진입 금지 (마켓추가=신규상장 변동성)
+# virtual_asset_warning: 이 단계 이상이면 신규 진입 금지 (청산까지는 아님)
+WARNING_BLOCK_STEPS   = ("WARNING", "DANGER")
+
+# 뉴스 RSS (제목/요약 키워드 매칭. LLM 미사용 — 계획서 13.1)
+NEWS_RSS_FEEDS = (
+    "https://cointelegraph.com/rss",
+    "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    "https://www.theblock.co/rss.xml",
+)
+NEWS_TIMEOUT = 8
+NEWS_LIQUIDATE_KEYWORDS = ("해킹", "탈취", "상장폐지", "거래중단", "횡령", "파산",
+                           "도난", "지급불능", "러그풀", "rug pull", "hack", "exploit", "stolen")
+NEWS_BLOCK_KEYWORDS     = ("소송", "규제", "조사", "압수수색", "제재", "논란",
+                           "lawsuit", "sec ", "investigation", "sanction")
