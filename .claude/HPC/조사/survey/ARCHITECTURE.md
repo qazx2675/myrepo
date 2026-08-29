@@ -12,7 +12,7 @@
 | `cmd/survey/vm.go` | `DetectESXi`(설정값 없음 호스트에 `uname`→VMkernel), `dnsResolvable`(`net.LookupHost` 로 존재 확인), `SurveyVMs`(`<esxi>ev01~03` 생성→DNS 해석되는 것만 조사, 타임아웃 1회 재조사), `vmName` |
 | `cmd/survey/output.go` | TSV 헤더/행 조립, 필드 정규화(탭·개행 제거), 결과 파일 저장 |
 | `cmd/survey/survey_test.go` | 순수 함수 단위 테스트 (파싱·판정) |
-| `run_survey.sh` | 실행 래퍼: 바이너리/conf 확인, 폴더 이동 후 실행 |
+| `run_survey.sh` | 오케스트레이터: 자산 필터(`[asset_filter]`) → B 조사 → `타임아웃`/`접속불가` 추출 → A 서버 재조사(`[server_a]`) → hostname 기준 병합 → 최종 `result_*.tsv` |
 | `update.sh` | 폐쇄망 증분 업데이트(변경분만 복사, conf·result·asset 보존, 오래된 *.go 제거, 멱등) |
 | `scripts/infra_survey.sh` | 인프라망 판별 **샘플** 스크립트. 사내 규칙에 맞게 교체 |
 | `conf/conf.toml` | 실행 설정 (유일한 설정 파일, 실행 파일 옆 `conf/` 에 위치) |

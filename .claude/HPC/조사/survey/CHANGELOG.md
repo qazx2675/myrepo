@@ -28,6 +28,13 @@
   (기존: ESXi 에도 infra gossh 를 날려 `인프라 확인필요(...)` 같은 값이 들어가던 것 제거)
 
 ### Added
+- **A·B 서버 연동 + 자산 필터링 (`run_survey.sh`, Go 바이너리 불변)**
+  - `[asset_filter]` (source/include/exclude): 원본 표1 을 `egrep -E` 로 걸러 `[input].asset_file` 생성.
+  - `[server_a]` (enabled/host/user/dir/asset_file): B 결과에서 `타임아웃`/`접속불가` 호스트만
+    (DNS 미등록 제외) A 서버(RHEL6 빌드)로 `scp`+`ssh` 재조사 → B·A 결과를 hostname 기준 병합.
+    재조사 성공분은 A 행으로 교체. A 접속 실패 시 경고 후 B 결과만으로 진행.
+  - 병합 후에도 `result_*.tsv` / `_sdc_` / `_vm_` 간 hostname 중복 없음.
+  - 두 섹션 모두 conf.toml 에 있어도 `survey` 바이너리는 무시(미지정 키). 없으면 기존 동작 그대로.
 - RHEL 6 지원: `go.mod` 를 `go 1.20` 으로 낮춤. Go 1.21+ 는 런타임이 커널 3.2+ 를
   요구해 RHEL 6(커널 2.6.32)에서 즉시 죽는다. Go 1.20 이 2.6.32 지원 마지막 릴리스.
   코드는 표준 라이브러리만 쓰므로 로직 변경 없음.
