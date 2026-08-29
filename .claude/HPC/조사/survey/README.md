@@ -121,16 +121,20 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 B 서버(전용, 팀만 접근)에서 전체를 조사하고, **`타임아웃`/`접속불가`** 로만 나온 소수를
 A 서버(공용, 일부 대상망 전용)에서 1회 재조사해 결과를 합친다. `DNS 미등록` 은 재조사 대상이 아니다.
 
-1. `conf/conf.toml` 의 `[server_a]` 를 채우고 `enabled = true` 로 둔다.
-2. A 서버 `[server_a].dir` 에 아래 3개가 있어야 한다 (B·A 는 다른 장비 — B 바이너리는 관계 없음):
-   - **RHEL 6 정적 빌드** 바이너리 (파일명 = `[server_a].bin`, 예: `survey-rhel6`)
-   - `conf/conf.toml` (A망 기준. `[input].asset_file` = `[server_a].asset_file` 과 같은 경로)
-   - `scripts/` 등 그 conf 가 참조하는 것들
-3. B→A 는 `[server_a].user`(예: `root`) 계정으로 **패스워드리스 SSH/SCP** 가 돼야 한다.
-4. `./run_survey.sh` 한 번이면 필터 → B 조사 → A 재조사 → 병합까지 끝나고
-   최종 `result_*.tsv` (+ `_sdc_` / `_vm_`) 만 이 폴더에 남는다. 파일 간 hostname 중복 없음.
+**전제**: A·B 가 `[server_a].dir` 을 **auto mount 로 공유**한다(양쪽에서 같은 절대경로).
+파일은 B 가 그 경로에 직접 만들고, **실행만** `ssh` 로 A 에서 한다(대상망 접근이 A 에서만 되므로).
 
-A 접속이 안 되면 경고만 내고 **B 결과만으로** 최종 파일을 만든다(재조사분은 원래 `타임아웃` 행 유지).
+1. 공유 디렉토리(예: `/user/autofs1/조사`)에 B 것과 함께 **RHEL 6 정적 빌드** 바이너리를
+   `[server_a].bin` 이름(예: `survey-rhel6`)으로 둔다. `conf/`·`scripts/` 는 B 것을 공유한다.
+2. `conf/conf.toml` 의 `[server_a]` 를 채우고 `enabled = true`.
+3. B→A 는 `[server_a].user`(기본 `root`) 로 **패스워드리스 SSH** 가 돼야 한다(scp 는 불필요).
+4. 동작: run_survey.sh 가 `dir` 아래 임시 폴더(`.resurvey.XXXXXX/`)에 재조사 목록과
+   **`[input].asset_file` 만 그 목록으로 바꾼 conf 사본**을 만들고,
+   `ssh A "cd .resurvey.XXXXXX && ./survey-rhel6"` 로 실행 → 결과를 읽어 병합 후 임시 폴더 삭제.
+
+`./run_survey.sh` 한 번이면 필터 → B 조사 → A 재조사 → 병합까지 끝나고
+최종 `result_*.tsv` (+ `_sdc_` / `_vm_`) 만 이 폴더에 남는다. 파일 간 hostname 중복 없음.
+A 실행이 안 되면 경고만 내고 **B 결과만으로** 최종 파일을 만든다(재조사분은 원래 행 유지).
 
 ---
 
@@ -161,10 +165,9 @@ A 접속이 안 되면 경고만 내고 **B 결과만으로** 최종 파일을 �
 | `[asset_filter].source` | **(run_survey.sh 전용)** 원본 표1 경로. include/exclude 로 걸러 `[input].asset_file` 을 만든다. 비우면 필터 생략 |
 | `[asset_filter].include` / `.exclude` | `egrep -E` 패턴. `include` 매칭 줄만 남기고 `exclude` 매칭 줄을 뺀다. OR 은 `\|`. 특수문자는 따옴표로 감쌀 것 |
 | `[server_a].enabled` | **(run_survey.sh 전용)** `true` 면 B 의 `타임아웃`/`접속불가` 호스트를 A 서버에서 1회 재조사 |
-| `[server_a].host` / `.user` | A 서버 주소 / 패스워드리스 SSH 계정 (예: `root`) |
-| `[server_a].dir` | A 서버에서 바이너리+`conf/` 가 있고 결과가 생기는 디렉토리. 여기서 `cd` 후 실행 |
-| `[server_a].bin` | A 서버의 바이너리 파일명(`dir` 아래). 기본 `survey`. RHEL6 빌드를 B 것과 안 겹치게 예: `survey-rhel6` |
-| `[server_a].asset_file` | 재조사 목록을 B→A 로 올려둘 경로. **A conf 의 `[input].asset_file` 과 같은 경로**여야 함(전용 경로 권장, A 의 표1 경로 재사용 금지) |
+| `[server_a].host` / `.user` | A 서버 주소 / 패스워드리스 SSH 계정 (기본 `root`) |
+| `[server_a].dir` | **A·B 가 auto mount 로 공유하는 디렉토리(같은 절대경로).** 이 아래에 A 용 바이너리와 `conf/` 가 있어야 함 |
+| `[server_a].bin` | A(RHEL6)에서 돌릴 바이너리 파일명(`dir` 아래). 기본 `survey`. B 것과 안 겹치게 예: `survey-rhel6` |
 
 ### 판정 규칙
 

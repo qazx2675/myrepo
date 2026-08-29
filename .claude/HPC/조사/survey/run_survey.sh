@@ -50,8 +50,8 @@ A_ENABLED="$(conf_get server_a enabled)"
 A_HOST="$(conf_get server_a host)"
 A_USER="$(conf_get server_a user)"
 A_DIR="$(conf_get server_a dir)"
-A_ASSET="$(conf_get server_a asset_file)"
 A_BIN="$(conf_get server_a bin)"; A_BIN="${A_BIN:-survey}"
+A_USER="${A_USER:-root}"
 
 [[ -n "$ASSET_FILE" ]] || { echo "[error] conf [input].asset_file 이 필요합니다" >&2; exit 1; }
 
@@ -106,25 +106,36 @@ if (( N_TO > 0 )); then
 fi
 
 # ── 4) A 조사 ────────────────────────────────────────────────────────────
+# 전제: A·B 가 [server_a].dir 을 auto mount 로 공유(같은 절대경로). 파일은 직접
+# 만들고, 대상망 접근이 되는 A 에서 '실행'만 ssh 로 한다. (scp 불필요)
 A_OUT="$WORK/a"; mkdir -p "$A_OUT"
 if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
-  : "${A_HOST:?[server_a].host 필요}" "${A_USER:?[server_a].user 필요}"
-  : "${A_DIR:?[server_a].dir 필요}"   "${A_ASSET:?[server_a].asset_file 필요}"
+  : "${A_HOST:?[server_a].host 필요}" "${A_DIR:?[server_a].dir 필요}"
   SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
-  SCP=(scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
-  if "${SSH[@]}" "${A_USER}@${A_HOST}" "test -x '${A_DIR}/${A_BIN}' && test -f '${A_DIR}/conf/conf.toml'"; then
-    "${SCP[@]}" "$TO_ASSETS" "${A_USER}@${A_HOST}:${A_ASSET}"
-    "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_DIR}' && rm -f result_*.tsv && ./'${A_BIN}'" >&2 || true
-    "${SCP[@]}" "${A_USER}@${A_HOST}:${A_DIR}/result_*.tsv" "$A_OUT/" 2>/dev/null || true
-    "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_DIR}' && rm -f result_*.tsv" || true
-    shopt -s nullglob; A_FILES=( "$A_OUT"/result_*.tsv ); shopt -u nullglob
-    if (( ${#A_FILES[@]} )); then
-      echo "[info] A 결과 파일 ${#A_FILES[@]}개 회수" >&2
+  SRC_BIN="${A_DIR}/${A_BIN}"
+  if [[ -x "$SRC_BIN" && -f "${A_DIR}/conf/conf.toml" ]]; then
+    # dir 아래 임시 실행폴더: 재조사 전용 conf([input].asset_file 만 교체) + 바이너리 사본
+    A_RUN="$(mktemp -d "${A_DIR}/.resurvey.XXXXXX")"
+    mkdir -p "${A_RUN}/conf"
+    cp -p "$SRC_BIN" "${A_RUN}/${A_BIN}"
+    [[ -d "${A_DIR}/scripts" ]] && cp -rp "${A_DIR}/scripts" "${A_RUN}/"
+    cp "$TO_ASSETS" "${A_RUN}/resurvey_list.txt"
+    awk -v af="${A_RUN}/resurvey_list.txt" '
+      /^[[:space:]]*\[/ { in_input = ($0 ~ /^\[input\]/) }
+      in_input && /^[[:space:]]*asset_file[[:space:]]*=/ { print "asset_file = \"" af "\""; next }
+      { print }
+    ' "${A_DIR}/conf/conf.toml" > "${A_RUN}/conf/conf.toml"
+    rm -f "${A_RUN}"/result_*.tsv
+    if "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_RUN}' && ./'${A_BIN}'" >&2; then
+      shopt -s nullglob; A_FILES=( "${A_RUN}"/result_*.tsv ); shopt -u nullglob
+      (( ${#A_FILES[@]} )) && cp "${A_FILES[@]}" "$A_OUT/"
+      echo "[info] A 결과 파일 ${#A_FILES[@]}개 수집" >&2
     else
-      echo "[warn] A 결과 파일을 회수하지 못했습니다 — B 결과만으로 진행" >&2
+      echo "[warn] A 실행 실패 — B 결과만으로 진행" >&2
     fi
+    rm -rf "$A_RUN"
   else
-    echo "[warn] A 서버에 survey/conf 가 없습니다 — B 결과만으로 진행" >&2
+    echo "[warn] A 바이너리/conf 없음: $SRC_BIN — B 결과만으로 진행" >&2
   fi
 elif [[ "$A_ENABLED" == "true" ]]; then
   echo "[info] 재조사 대상 없음 — A 생략" >&2

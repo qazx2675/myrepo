@@ -30,9 +30,12 @@
 ### Added
 - **A·B 서버 연동 + 자산 필터링 (`run_survey.sh`, Go 바이너리 불변)**
   - `[asset_filter]` (source/include/exclude): 원본 표1 을 `egrep -E` 로 걸러 `[input].asset_file` 생성.
-  - `[server_a]` (enabled/host/user/dir/bin/asset_file): B 결과에서 `타임아웃`/`접속불가` 호스트만
-    (DNS 미등록 제외) A 서버(RHEL6 빌드)로 `scp`+`ssh` 재조사 → B·A 결과를 hostname 기준 병합.
-    재조사 성공분은 A 행으로 교체. A 접속 실패 시 경고 후 B 결과만으로 진행.
+  - `[server_a]` (enabled/host/user/dir/bin): B 결과에서 `타임아웃`/`접속불가` 호스트만
+    (DNS 미등록 제외) A 서버(RHEL6 빌드)에서 재조사 → B·A 결과를 hostname 기준 병합.
+    재조사 성공분은 A 행으로 교체. A 실행 실패 시 경고 후 B 결과만으로 진행.
+  - 전제: A·B 가 `dir` 을 auto mount 로 공유. B 가 `dir/.resurvey.XXXXXX/` 에 재조사 목록 +
+    `[input].asset_file` 만 바꾼 conf 사본을 만들고 `ssh` 로 실행만 A 에서 한다(scp 안 씀).
+    A 바이너리 파일명은 `[server_a].bin` 으로 지정(B 것과 겹치지 않게, 예 `survey-rhel6`).
   - 병합 후에도 `result_*.tsv` / `_sdc_` / `_vm_` 간 hostname 중복 없음.
   - 두 섹션 모두 conf.toml 에 있어도 `survey` 바이너리는 무시(미지정 키). 없으면 기존 동작 그대로.
 - RHEL 6 지원: `go.mod` 를 `go 1.20` 으로 낮춤. Go 1.21+ 는 런타임이 커널 3.2+ 를

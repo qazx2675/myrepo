@@ -66,16 +66,14 @@ include = ""
 exclude = ""
 
 [server_a]
-# B 서버에서 '타임아웃'/'접속불가' 로 나온 호스트만 A 서버에서 1회 재조사한다.
-# (DNS 미등록은 제외 — 재조사해도 의미 없음)
-enabled    = false
-host       = "a-server"
-user       = "root"
-# A 서버에서 survey 바이너리와 conf/ 가 있는 디렉토리. 여기서 cd 후 실행된다.
-# 결과 result_*.tsv 도 여기 생겼다가 B 로 회수된다.
-dir        = "/root/HPC/조사"
-# A 서버의 바이너리 파일명 (dir 아래). RHEL6 정적 빌드를 B 것과 이름이 겹치지 않게 둔다.
-bin        = "survey-rhel6"
-# 재조사 대상 목록을 B→A 로 올려둘 경로.
-# A 서버 conf 의 [input].asset_file 과 반드시 같은 경로여야 한다 (B 는 이 경로로 scp 만 함).
-asset_file = "/root/HPC/조사/resurvey_list.txt"
+# B 결과에서 '타임아웃'/'접속불가' 인 호스트만 A 서버에서 1회 재조사한다.
+# (DNS 미등록 제외). 전제: A·B 가 dir 을 auto mount 로 공유(같은 절대경로).
+#   run_survey.sh 가 dir 아래에 임시 폴더를 만들어 재조사 전용 conf 를 두고,
+#   실행만 ssh 로 A 에서 한다. 파일은 공유라 scp 하지 않는다.
+enabled = false
+host    = "a-server"
+user    = "root"
+# A·B 공유 디렉토리(같은 경로). 이 아래에 A 용 바이너리와 conf/ 가 있어야 한다.
+dir     = "/user/autofs1/조사"
+# A(RHEL6)에서 돌릴 바이너리 파일명 (dir 아래). B 것과 겹치지 않게. 기본 survey.
+bin     = "survey-rhel6"
