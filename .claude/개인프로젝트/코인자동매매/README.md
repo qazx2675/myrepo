@@ -45,18 +45,25 @@ run_m2b.bat       [--holdout]     M2-b 진입규칙 A/B/C/D (패턴 가중치)
 run_m4.bat        [--holdout]     M4 포트폴리오 백테스터 (리스크 규칙 + 패턴 실측정)
 run_m5.bat        [--ntfy]        M5 빗썸 공지/경보 + 뉴스 RSS 실조회 (--ntfy: 테스트 알림)
 run_m55.bat                       M5.5 실시간 호가 주문크기별 슬리피지 측정
+run_m6.bat  [--once|--reset]      M6 페이퍼 매매 루프 (조회 전용 키, paper 체결)
 ```
 
 홀드아웃(2025-01~2026-06)은 **1회만**. `data/.holdout_used` 에 기록된다.
 
 ## 현재 상태
 
-M1 + M3-a + M2-a + M2-b + M4 + M5 + M5.5 완료. M1 인증부만 키 대기.
+**M1 ~ M6 루프까지 코드 완성.** 남은 건 실행/승인 단계.
 
-- **리스크/자금관리(`risk.py`) + 포트폴리오 백테스터.** conservative MDD -9% (목표 10% 이내).
-- **차트 패턴은 진입 게이트로 채택 안 함** (M2-a/M2-b/M4 세 측정 모두 중립~약손해). 소프트 가산만.
-- **공지/뉴스 감시(`notice.py` / `news.py`) + ntfy(`notifier.py`).** LLM 런타임 호출 0.
-- **실시간 호가 체결 엔진(`paper.py`).** 호가 순차소진 + 수수료 + 300ms 지연.
+- 부품: `screener` / `risk` / `paper`(실시간 호가체결) / `notice`·`news`(감시) / `notifier`(ntfy) / `store`(SQLite)
+- `live_loop.py` 가 이걸 엮어 페이퍼 매매. 재시작 시 `data/trades.db` 에서 포지션 복원.
+- **차트 패턴은 진입 게이트로 채택 안 함** (3번 측정 모두 중립). 엔진은 소프트 가산만.
 
-다음: **M6-a (페이퍼 1억 2~4주) — 부품들을 `live_loop.py` 로 조립**.
+### 남은 단계 (사용자 몫)
+
+| 단계 | 할 일 |
+|---|---|
+| **튜닝** | 현재 데모 스크리너로는 conservative MDD ~15% (목표 10% 초과). `screener.base_score` 보강 / 손절폭 조정 후 `run_m4` → 홀드아웃 검증 |
+| **M6-a** | `.env` 에 `NTFY_TOPIC`. `run_m6.bat --reset` 을 집 PC/VPS 에서 **2~4주** 상시 구동 (`PAPER_CAPITAL=1억`) |
+| **M6-b** | `settings.PAPER_CAPITAL = 100_000` 으로 바꿔 `run_m6.bat --reset`, **1주**. 거부된 주문 0건 확인 |
+| **M7** | 빗썸 **주문 권한** 키 발급 + `DRY_RUN=False` — **명시적 승인 시에만** 실주문 코드 작성 |
 

@@ -87,8 +87,9 @@ def poll() -> dict:
     except Exception as e:                        # noqa: BLE001
         log.error("공지/경보 조회 실패 (%s): %s", type(e).__name__, e)
         return {"liquidate": set(), "block": set(), "ok": False}
+    liq = liquidation_markets(notices)
     return {
-        "liquidate": liquidation_markets(notices),
-        "block": entry_blocked_markets(notices, warnings),
+        "liquidate": liq,
+        "block": entry_blocked_markets(notices, warnings) | liq,  # 청산 대상은 재진입도 금지
         "ok": True,
     }

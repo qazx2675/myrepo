@@ -46,10 +46,16 @@ def base_score(history: pd.DataFrame) -> float:
 
 
 def liquidity_ok(history: pd.DataFrame, min_24h_value_krw: float) -> bool:
-    """최근 봉의 거래대금(value = candle_acc_trade_price)이 기준 이상인가."""
-    if "value" not in history or len(history) == 0:
+    """최근 완결된 봉들의 평균 일 거래대금이 기준 이상인가.
+
+    마지막 봉은 '오늘'이라 진행 중일 수 있어(부분 거래대금) 제외하고 직전 7일 평균을 쓴다.
+    """
+    if "value" not in history or len(history) < 3:
         return False
-    return float(history["value"].iloc[-1]) >= min_24h_value_krw
+    recent = history["value"].iloc[-8:-1]
+    if recent.empty:
+        recent = history["value"].iloc[:-1]
+    return float(recent.mean()) >= min_24h_value_krw
 
 
 def combine(base: float, det: Detection | None) -> float:
