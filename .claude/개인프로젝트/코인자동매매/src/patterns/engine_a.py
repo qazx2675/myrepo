@@ -158,3 +158,21 @@ def detect(df: pd.DataFrame, window: int | None = None) -> Detection | None:
 def is_bearish(det: Detection | None) -> bool:
     """M2-a 회피 필터: 이 패턴이 잡히면 진입 후보에서 제외한다."""
     return det is not None and det.pattern in BEARISH
+
+
+def is_bullish(det: Detection | None) -> bool:
+    return det is not None and det.pattern in BULLISH
+
+
+def pattern_score(det: Detection | None) -> float:
+    """패턴을 [-1, 1] 점수로. 상승형 +, 하락형 -, 중립/미탐지 0. 신뢰도로 스케일.
+
+    M2-b 에서 스크리너 점수에 '가산'된다. 이 값만으로 진입하지 않는다.
+    """
+    if det is None:
+        return 0.0
+    if det.pattern in BULLISH:
+        return det.confidence
+    if det.pattern in BEARISH:
+        return -1.0 if settings.PATTERN_BEARISH_VETO else -det.confidence
+    return 0.0

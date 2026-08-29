@@ -43,3 +43,8 @@ PATTERN_CHANNEL_TOL     = 0.30    # |끝폭 - 시작폭| / 시작폭 이 이 값
 PATTERN_MIN_CONFIDENCE  = 0.55    # 두 추세선 적합도(min R²) 하한. 미만이면 미탐지
 PATTERN_FLAG_LOOKBACK   = 15      # 깃발 방향 판정용: 윈도우 직전 추세 확인 봉수
 PATTERN_DEBUG_DIR       = "data/pattern_charts"
+
+# ── 차트 패턴 → 스크리너 점수 (M2-b) ──────────────────────────────────
+# 패턴은 '가산 가중치'다. 단독 진입 신호가 아니다 (계획서 7.6).
+PATTERN_SCORE_WEIGHT    = 0.20    # 최종 점수 = base_score + WEIGHT * pattern_score([-1,1])
+PATTERN_BEARISH_VETO    = True    # 하락형이면 pattern_score 를 강하게 음수로 (M2-a 회피와 연결)
