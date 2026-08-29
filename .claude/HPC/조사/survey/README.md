@@ -19,7 +19,10 @@ hostname	위치	상태	설정값	인프라망	appl설정유무	특이사항
 **출력 파일은 최대 3개** (호스트는 파일 간 중복되지 않음):
 - `result_YYYYMMDD_HHMM.tsv` — 표1 전체 조사 결과 (항상 생성)
 - `result_vm_YYYYMMDD_HHMM.tsv` — ESXi 로 판별된 호스트의 VM 조사 결과 (ESXi ≥ 1대, 행이 있을 때만)
-- `result_sdc_YYYYMMDD_HHMM.tsv` — 인프라망 값이 `SDC` 인 호스트 (A·B 에서 빠져 여기로 이동, 있을 때만)
+- `result_sdc_YYYYMMDD_HHMM.tsv` — 인프라망 값이 `SDC` 인 호스트 (다른 파일에서 빠져 여기로 이동, 있을 때만)
+
+`run_survey.sh` 는 위 조사 앞뒤로 **자산 필터링**과 **A 서버 재조사·병합**까지 처리한다(2·3장).
+`survey` 바이너리만 단독 실행하면 필터/재조사 없이 conf 의 `asset_file` 을 그대로 조사한다.
 
 ---
 
@@ -27,7 +30,9 @@ hostname	위치	상태	설정값	인프라망	appl설정유무	특이사항
 
 ### 사전 요구
 
-- Go 1.21 이상
+- Go 1.20 이상 (`go.mod` 는 `go 1.20`). **RHEL 6 대상 바이너리는 반드시 Go 1.20.x 로 빌드**
+  (Go 1.21+ 런타임은 커널 3.2+ 를 요구 → RHEL 6 커널 2.6.32 에서 실행 불가).
+  RHEL 6 정적 빌드: `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o survey ./cmd/survey`
 - `gossh` (pdsh 유사 병렬 실행 툴) — 경로는 `conf.toml` 의 `[gossh].bin` 에 지정
 - 인프라망 판별 스크립트 — `scripts/infra_survey.sh` 를 사내 규칙에 맞게 교체
 
@@ -77,6 +82,7 @@ unzip survey-new.zip -d /tmp/survey-new
 ```
 
 - `conf/conf.toml`, `result_*.tsv`, `asset_list.txt` 는 **건드리지 않는다**.
+  단 새 배포본의 `conf/conf.toml` 이 다르면 `diff` 를 출력하고 "직접 반영 필요" 경고를 낸다.
 - 같은 내용 파일은 건너뛴다(멱등). 대상에만 있는 오래된 `cmd/**/*.go` 는 빌드 깨짐 방지를 위해 제거한다.
 
 ---
@@ -110,6 +116,20 @@ unzip survey-new.zip -d /tmp/survey-new
 결과 파일(들)을 열어 전체 복사 → 엑셀에 붙여넣으면 탭 구분으로 셀이 자동 분리된다.
 ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 
+### A·B 서버 연동 (`run_survey.sh` 전용)
+
+B 서버(전용, 팀만 접근)에서 전체를 조사하고, **`타임아웃`/`접속불가`** 로만 나온 소수를
+A 서버(공용, 일부 대상망 전용)에서 1회 재조사해 결과를 합친다. `DNS 미등록` 은 재조사 대상이 아니다.
+
+1. `conf/conf.toml` 의 `[server_a]` 를 채우고 `enabled = true` 로 둔다.
+2. A 서버에 **RHEL 6 정적 빌드** `survey` 와 `conf/` 를 `[server_a].dir` 경로에 배포한다.
+   A 서버 conf 의 `[input].asset_file` 은 `[server_a].asset_file` 과 **같은 경로**여야 한다.
+3. B→A 는 `[server_a].user` 계정으로 **패스워드리스 SSH/SCP** 가 돼야 한다(`autofs` 등 양쪽 접근 계정).
+4. `./run_survey.sh` 한 번이면 필터 → B 조사 → A 재조사 → 병합까지 끝나고
+   최종 `result_*.tsv` (+ `_sdc_` / `_vm_`) 만 이 폴더에 남는다. 파일 간 hostname 중복 없음.
+
+A 접속이 안 되면 경고만 내고 **B 결과만으로** 최종 파일을 만든다(재조사분은 원래 `타임아웃` 행 유지).
+
 ---
 
 ## 3. 옵션별 상세 설명
@@ -133,9 +153,15 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 | `[scripts].infra_net` | 인프라망 조사: `gossh -w <hosts> -script "bash <이 값>"` 으로 원격 실행. 조사 대상 호스트에 배포된 스크립트 경로(또는 명령). 비우면 인프라망 열 공란 |
 | `[scripts].infra_regex` | gossh 출력값에 적용하는 정규식(캡처 그룹 1). `\s` 는 공백·탭 모두 매칭. **여러 줄이면 각 줄에 적용해 처음 매칭되는 줄**을 쓴다(`FAIL ldap_site` + `INFO ldap infra` → `infra`). 비우면 첫 줄 그대로. **매칭 안 되면 아래 fallback 재조사**. 예: `'^INFO\s+\S+\s+(\S+)'` |
 | `[scripts].infra_fallback_cmd` | `infra_regex` 매칭 실패 호스트에 다시 실행할 gossh 커맨드. 비우면 재조사 안 함. 예: `"cat /etc/openldap/ldap.conf \| grep -i binddn"` |
-| `[scripts].infra_fallback_regex` | fallback(binddn) 출력에서 값 추출용 정규식(캡처 그룹 1). 비우면 첫 줄 전체. 기본 `'(?:uid|ou)=([^,\s]+)'` → binddn 의 `uid=` 또는 `ou=` 값(문자열에서 먼저 나오는 쪽) |
+| `[scripts].infra_fallback_regex` | fallback(binddn) 출력에서 값 추출용 정규식(캡처 그룹 1). 비우면 첫 줄 전체. 기본 `'uid=([^,\s]+)'` → binddn 의 `uid=` 값. `uid=` 없는 binddn 은 매칭 실패 → 원본 줄 기록(SDC 자동 분리 안 됨) |
 | `[[mountpoint]].name` | 설정값 `이름:/경로` 에서 `:` 앞부분(마운트 대상 이름) |
 | `[[mountpoint]].location` | 그 이름이 정상적으로 위치해야 하는 곳. 표1의 `위치` 와 비교 |
+| `[asset_filter].source` | **(run_survey.sh 전용)** 원본 표1 경로. include/exclude 로 걸러 `[input].asset_file` 을 만든다. 비우면 필터 생략 |
+| `[asset_filter].include` / `.exclude` | `egrep -E` 패턴. `include` 매칭 줄만 남기고 `exclude` 매칭 줄을 뺀다. OR 은 `\|`. 특수문자는 따옴표로 감쌀 것 |
+| `[server_a].enabled` | **(run_survey.sh 전용)** `true` 면 B 의 `타임아웃`/`접속불가` 호스트를 A 서버에서 1회 재조사 |
+| `[server_a].host` / `.user` | A 서버 주소 / 패스워드리스 SSH 계정 |
+| `[server_a].dir` | A 서버에서 `survey`(RHEL6 빌드)+`conf/` 가 있는 디렉토리. 여기서 실행됨 |
+| `[server_a].asset_file` | 재조사 목록을 B→A 로 올려둘 경로. **A conf 의 `[input].asset_file` 과 같아야 함** |
 
 ### 판정 규칙
 
@@ -161,8 +187,10 @@ ESXi 가 있었으면 `result_vm_*.tsv` 도 같이 생성된다.
 - **값 치환**: 인프라망 값이 정확히 `VIP` 면 `SLSI_VIP` 로 바꿔 기록한다.
 - **SDC 분리**: 위에서 구한 인프라망 값이 정확히 `SDC` 면 그 호스트는 A·B 에서 빠져
   `result_sdc_*.tsv` 로만 기록된다.
-- **일반서버 재조사**: VM 이 아닌 표1 호스트가 `DNS 미등록`/`타임아웃` 이면 **1회 더** 조사한다
+- **일반서버 재조사(바이너리 내부)**: VM 이 아닌 표1 호스트가 `DNS 미등록`/`타임아웃` 이면 **1회 더** 조사한다
   (`[gossh].retry_timeout` 이 있으면 그 긴 타임아웃으로 답을 기다림). VM 은 별도 규칙(위 참고).
+- **A 서버 재조사(`run_survey.sh`)**: 위 내부 재조사 후에도 `타임아웃`/`접속불가` 인 호스트만
+  A 서버로 넘겨 **1회** 재조사하고, 성공하면 그 행으로 교체한다(`DNS 미등록` 제외). 2·3장 참고.
 - **특이사항**: `접속불가` / `타임아웃` / `DNS 미등록` / `gossh 실행 실패` / `mountpoint 미정의` / `인프라 스크립트 없음` / `esxi`
 
 ### ESXi / VM 2차 조사
