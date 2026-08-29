@@ -1,0 +1,45 @@
+"""전역 설정 상수. 계획서 5.1 참조."""
+
+DRY_RUN         = True            # 기본값. False 전환은 사용자 명시 요청 시에만
+PAPER_CAPITAL   = 100_000_000     # 실전 전 100_000 으로 재검증 필수
+MODE            = "conservative"
+ENTRY_HOURS     = None            # 24시간 진입 (제한 없음)
+
+NOTIFIER        = "ntfy"         # ntfy 푸시. 토픽/토큰은 .env
+NTFY_SERVER     = "https://ntfy.sh"   # 자가호스팅 시 교체
+HEARTBEAT_HOUR  = 9               # 일 1회 생존 신호
+
+FEE_EXPECTED    = 0.0004          # 쿠폰 적용 기준
+FEE_ALERT_ABOVE = 0.0005          # 실효 수수료율 초과 시 경고+진입중단
+
+MIN_ORDER_KRW   = 5000            # 빗썸 KRW 마켓 최소 주문금액
+
+# 페이퍼 엔진 현실성 (끄지 말 것)
+PAPER_USE_ORDERBOOK = True        # 호가 잔량 순차 소진 방식 체결 (M6 준비 단계에서 구현)
+PAPER_FEE_RATE      = 0.0004
+PAPER_LATENCY_MS    = 300         # 신호~주문 지연 반영
+
+# ── 백테스터 (M3-a) ────────────────────────────────────────────────────
+BACKTEST_FEE_RATE       = 0.0004  # 쿠폰 적용 기준. 실전 검증은 미적용(0.0025)도 한 번 돌려볼 것
+FILL_SLIPPAGE_BPS       = 5       # 시장가 체결 편도 슬리피지(bp). 캔들 백테스트 상수.
+                                  # 주문금액 대비 슬리피지는 M6 실시간 호가 엔진의 몫.
+BACKTEST_EXEC_DELAY_BARS = 1      # 신호는 다음 봉 시가에 체결 (PAPER_LATENCY_MS 의 봉단위 반영)
+CANDLE_CACHE_DIR        = "data/candles"
+
+# 튜닝 / 홀드아웃 기간 분리 (계획서 7.7). 홀드아웃은 한 번만 돌린다.
+TUNE_START    = "2023-05-19"
+TUNE_END      = "2024-12-31"
+HOLDOUT_START = "2025-01-01"
+HOLDOUT_END   = "2026-06-30"
+
+# ── 차트 패턴 엔진 A (M2-a) ────────────────────────────────────────────
+# 고점/저점 스윙에 각각 추세선 1개씩 피팅 → 기울기 부호 + 수렴/발산으로 분류.
+PATTERN_WINDOW          = 40      # 분석 봉수
+PATTERN_SWING_K         = 3       # 프랙탈 스윙: 좌우 K봉보다 높아야(낮아야) 스윙
+PATTERN_MIN_SWINGS      = 3       # 추세선 한쪽당 최소 스윙 개수
+PATTERN_FLAT_SLOPE      = 0.0010  # |정규화 기울기| 가 이 값 이하면 '수평' (분율/봉)
+PATTERN_CONVERGE_RATIO  = 0.65    # 끝폭 < 시작폭 * 이 값  이면 수렴
+PATTERN_CHANNEL_TOL     = 0.30    # |끝폭 - 시작폭| / 시작폭 이 이 값 이하면 평행채널
+PATTERN_MIN_CONFIDENCE  = 0.55    # 두 추세선 적합도(min R²) 하한. 미만이면 미탐지
+PATTERN_FLAG_LOOKBACK   = 15      # 깃발 방향 판정용: 윈도우 직전 추세 확인 봉수
+PATTERN_DEBUG_DIR       = "data/pattern_charts"
