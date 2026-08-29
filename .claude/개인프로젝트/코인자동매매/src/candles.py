@@ -40,3 +40,11 @@ def load(market: str, interval: str = "day", count: int = 1200, refresh: bool = 
 def slice_period(df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     """[start, end] 양끝 포함으로 자른다. 'YYYY-MM-DD'."""
     return df.loc[start:end]
+
+
+def align(panel: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """여러 코인 DataFrame 을 공통 날짜(교집합)로 맞춘다."""
+    common = None
+    for df in panel.values():
+        common = df.index if common is None else common.intersection(df.index)
+    return {m: df.loc[common] for m, df in panel.items()}
