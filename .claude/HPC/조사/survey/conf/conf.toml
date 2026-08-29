@@ -70,9 +70,12 @@ exclude = ""
 # (DNS 미등록은 제외 — 재조사해도 의미 없음)
 enabled    = false
 host       = "a-server"
-user       = "autofs"
-# A 서버에서 survey 바이너리(RHEL6 정적 빌드)와 conf/ 가 있는 디렉토리. 여기서 실행된다.
-dir        = "/app/autofs/조사"
+user       = "root"
+# A 서버에서 survey 바이너리와 conf/ 가 있는 디렉토리. 여기서 cd 후 실행된다.
+# 결과 result_*.tsv 도 여기 생겼다가 B 로 회수된다.
+dir        = "/root/HPC/조사"
+# A 서버의 바이너리 파일명 (dir 아래). RHEL6 정적 빌드를 B 것과 이름이 겹치지 않게 둔다.
+bin        = "survey-rhel6"
 # 재조사 대상 목록을 B→A 로 올려둘 경로.
-# A 서버 conf 의 [input].asset_file 과 반드시 같아야 한다.
-asset_file = "/app/autofs/조사/asset_list.txt"
+# A 서버 conf 의 [input].asset_file 과 반드시 같은 경로여야 한다 (B 는 이 경로로 scp 만 함).
+asset_file = "/root/HPC/조사/resurvey_list.txt"

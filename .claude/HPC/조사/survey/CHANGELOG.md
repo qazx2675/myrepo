@@ -30,7 +30,7 @@
 ### Added
 - **A·B 서버 연동 + 자산 필터링 (`run_survey.sh`, Go 바이너리 불변)**
   - `[asset_filter]` (source/include/exclude): 원본 표1 을 `egrep -E` 로 걸러 `[input].asset_file` 생성.
-  - `[server_a]` (enabled/host/user/dir/asset_file): B 결과에서 `타임아웃`/`접속불가` 호스트만
+  - `[server_a]` (enabled/host/user/dir/bin/asset_file): B 결과에서 `타임아웃`/`접속불가` 호스트만
     (DNS 미등록 제외) A 서버(RHEL6 빌드)로 `scp`+`ssh` 재조사 → B·A 결과를 hostname 기준 병합.
     재조사 성공분은 A 행으로 교체. A 접속 실패 시 경고 후 B 결과만으로 진행.
   - 병합 후에도 `result_*.tsv` / `_sdc_` / `_vm_` 간 hostname 중복 없음.

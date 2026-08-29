@@ -51,6 +51,7 @@ A_HOST="$(conf_get server_a host)"
 A_USER="$(conf_get server_a user)"
 A_DIR="$(conf_get server_a dir)"
 A_ASSET="$(conf_get server_a asset_file)"
+A_BIN="$(conf_get server_a bin)"; A_BIN="${A_BIN:-survey}"
 
 [[ -n "$ASSET_FILE" ]] || { echo "[error] conf [input].asset_file 이 필요합니다" >&2; exit 1; }
 
@@ -111,9 +112,9 @@ if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
   : "${A_DIR:?[server_a].dir 필요}"   "${A_ASSET:?[server_a].asset_file 필요}"
   SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
   SCP=(scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
-  if "${SSH[@]}" "${A_USER}@${A_HOST}" "test -x '${A_DIR}/survey' && test -f '${A_DIR}/conf/conf.toml'"; then
+  if "${SSH[@]}" "${A_USER}@${A_HOST}" "test -x '${A_DIR}/${A_BIN}' && test -f '${A_DIR}/conf/conf.toml'"; then
     "${SCP[@]}" "$TO_ASSETS" "${A_USER}@${A_HOST}:${A_ASSET}"
-    "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_DIR}' && rm -f result_*.tsv && ./survey" >&2 || true
+    "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_DIR}' && rm -f result_*.tsv && ./'${A_BIN}'" >&2 || true
     "${SCP[@]}" "${A_USER}@${A_HOST}:${A_DIR}/result_*.tsv" "$A_OUT/" 2>/dev/null || true
     "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_DIR}' && rm -f result_*.tsv" || true
     shopt -s nullglob; A_FILES=( "$A_OUT"/result_*.tsv ); shopt -u nullglob

@@ -122,9 +122,11 @@ B 서버(전용, 팀만 접근)에서 전체를 조사하고, **`타임아웃`/`
 A 서버(공용, 일부 대상망 전용)에서 1회 재조사해 결과를 합친다. `DNS 미등록` 은 재조사 대상이 아니다.
 
 1. `conf/conf.toml` 의 `[server_a]` 를 채우고 `enabled = true` 로 둔다.
-2. A 서버에 **RHEL 6 정적 빌드** `survey` 와 `conf/` 를 `[server_a].dir` 경로에 배포한다.
-   A 서버 conf 의 `[input].asset_file` 은 `[server_a].asset_file` 과 **같은 경로**여야 한다.
-3. B→A 는 `[server_a].user` 계정으로 **패스워드리스 SSH/SCP** 가 돼야 한다(`autofs` 등 양쪽 접근 계정).
+2. A 서버 `[server_a].dir` 에 아래 3개가 있어야 한다 (B·A 는 다른 장비 — B 바이너리는 관계 없음):
+   - **RHEL 6 정적 빌드** 바이너리 (파일명 = `[server_a].bin`, 예: `survey-rhel6`)
+   - `conf/conf.toml` (A망 기준. `[input].asset_file` = `[server_a].asset_file` 과 같은 경로)
+   - `scripts/` 등 그 conf 가 참조하는 것들
+3. B→A 는 `[server_a].user`(예: `root`) 계정으로 **패스워드리스 SSH/SCP** 가 돼야 한다.
 4. `./run_survey.sh` 한 번이면 필터 → B 조사 → A 재조사 → 병합까지 끝나고
    최종 `result_*.tsv` (+ `_sdc_` / `_vm_`) 만 이 폴더에 남는다. 파일 간 hostname 중복 없음.
 
@@ -159,9 +161,10 @@ A 접속이 안 되면 경고만 내고 **B 결과만으로** 최종 파일을 �
 | `[asset_filter].source` | **(run_survey.sh 전용)** 원본 표1 경로. include/exclude 로 걸러 `[input].asset_file` 을 만든다. 비우면 필터 생략 |
 | `[asset_filter].include` / `.exclude` | `egrep -E` 패턴. `include` 매칭 줄만 남기고 `exclude` 매칭 줄을 뺀다. OR 은 `\|`. 특수문자는 따옴표로 감쌀 것 |
 | `[server_a].enabled` | **(run_survey.sh 전용)** `true` 면 B 의 `타임아웃`/`접속불가` 호스트를 A 서버에서 1회 재조사 |
-| `[server_a].host` / `.user` | A 서버 주소 / 패스워드리스 SSH 계정 |
-| `[server_a].dir` | A 서버에서 `survey`(RHEL6 빌드)+`conf/` 가 있는 디렉토리. 여기서 실행됨 |
-| `[server_a].asset_file` | 재조사 목록을 B→A 로 올려둘 경로. **A conf 의 `[input].asset_file` 과 같아야 함** |
+| `[server_a].host` / `.user` | A 서버 주소 / 패스워드리스 SSH 계정 (예: `root`) |
+| `[server_a].dir` | A 서버에서 바이너리+`conf/` 가 있고 결과가 생기는 디렉토리. 여기서 `cd` 후 실행 |
+| `[server_a].bin` | A 서버의 바이너리 파일명(`dir` 아래). 기본 `survey`. RHEL6 빌드를 B 것과 안 겹치게 예: `survey-rhel6` |
+| `[server_a].asset_file` | 재조사 목록을 B→A 로 올려둘 경로. **A conf 의 `[input].asset_file` 과 같은 경로**여야 함(전용 경로 권장, A 의 표1 경로 재사용 금지) |
 
 ### 판정 규칙
 
