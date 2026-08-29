@@ -125,8 +125,9 @@ def scan(headlines: list[Headline] | None = None,
 def poll(markets: tuple[str, ...] | None = None) -> dict:
     """(liquidate set, block set). 실패하면 빈 결과."""
     v = scan(markets=markets)
+    liq = {x.market for x in v if x.level == "liquidate"}
     return {
-        "liquidate": {x.market for x in v if x.level == "liquidate"},
-        "block": {x.market for x in v if x.level == "block"},
+        "liquidate": liq,
+        "block": {x.market for x in v if x.level == "block"} | liq,  # 청산 대상은 재진입도 금지
         "verdicts": v,
     }

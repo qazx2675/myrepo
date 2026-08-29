@@ -65,6 +65,24 @@ class BithumbClient:
         return pb.get_market_all()
 
     @staticmethod
+    def krw_markets() -> list[str]:
+        return [m["market"] for m in pb.get_market_all() if m["market"].startswith("KRW-")]
+
+    @staticmethod
+    def tickers(markets: list[str]) -> dict[str, dict]:
+        """마켓별 ticker (acc_trade_price_24h 등). 한 번에 조회."""
+        import requests
+        out: dict[str, dict] = {}
+        for i in range(0, len(markets), 100):
+            chunk = markets[i:i + 100]
+            r = requests.get("https://api.bithumb.com/v1/ticker",
+                             params={"markets": ",".join(chunk)}, timeout=10)
+            r.raise_for_status()
+            for t in r.json():
+                out[t["market"]] = t
+        return out
+
+    @staticmethod
     def virtual_asset_warning():
         """투자경보/유의 마켓 목록. 계획서 8장 — 유의종목 지정 시 즉시 청산 근거."""
         return pb.get_virtual_asset_warning()
