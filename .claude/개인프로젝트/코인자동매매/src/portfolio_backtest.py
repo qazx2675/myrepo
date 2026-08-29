@@ -52,7 +52,10 @@ def _rows_for(panel: dict[str, pd.DataFrame], i: int) -> dict[str, pd.Series]:
 
 def run(panel: dict[str, pd.DataFrame], mode: Mode, initial_cash: float,
         use_pattern: bool = True, bearish_veto: bool = True,
-        fee_rate: float | None = None, slippage_bps: float | None = None) -> PFResult:
+        fee_rate: float | None = None, slippage_bps: float | None = None,
+        liquidate_provider=None) -> PFResult:
+    """liquidate_provider(date, held_markets) -> set[str]: 유의종목 등 즉시 청산 대상.
+    실시간 루프에선 notice.poll()/news.poll() 결과를 넘긴다. 백테스트 기본값은 없음."""
     fee_rate = settings.BACKTEST_FEE_RATE if fee_rate is None else fee_rate
     slippage_bps = settings.FILL_SLIPPAGE_BPS if slippage_bps is None else slippage_bps
     delay = settings.PF_EXEC_DELAY_BARS
@@ -123,6 +126,9 @@ def run(panel: dict[str, pd.DataFrame], mode: Mode, initial_cash: float,
 
         # 2) 청산 점검 (다음 봉 체결 예약)
         exec_i = i + delay
+        liquidate = set()
+        if liquidate_provider is not None:
+            liquidate = liquidate_provider(idx[i], set(positions)) or set()
         for m, p in list(positions.items()):
             if i >= len(panel[m]):
                 continue
@@ -131,6 +137,10 @@ def run(panel: dict[str, pd.DataFrame], mode: Mode, initial_cash: float,
             if any(mm == m and oo.side == "sell" for (_, mm, oo) in pending):
                 continue  # 이미 매도 예약됨
             if exec_i >= n:
+                continue
+            # 유의종목 즉시 청산 (불변 규칙 7) — 손절보다 우선
+            if m in liquidate:
+                pending.append((exec_i, m, Order("sell", "market", volume=p.volume, tag="warning")))
                 continue
             # 손절
             sp = risk.stop_price(mode, p.entry_price, p.peak_price)
