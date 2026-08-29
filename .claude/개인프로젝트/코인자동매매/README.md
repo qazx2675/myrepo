@@ -39,16 +39,21 @@ run_m1.bat --private    .env 키로 잔고 조회 + 권한 검증
 ## 백테스트 / 패턴
 
 ```
-run_backtest.bat  [--holdout]     M3-a 백테스터 데모 (MA 크로스 — 파이프라인 확인용, 실전 아님)
-run_m2a.bat       [--holdout]     M2-a 하락형 회피 필터 A/B + 패턴 탐지빈도 + 차트
+run_backtest.bat  [--holdout]     M3-a 단일종목 백테스터 데모 (MA 크로스 — 파이프라인 확인용)
+run_m2a.bat       [--holdout]     M2-a 하락형 필터 A/B + 패턴 탐지빈도 + 차트
 run_m2b.bat       [--holdout]     M2-b 진입규칙 A/B/C/D (패턴 가중치)
+run_m4.bat        [--holdout]     M4 포트폴리오 백테스터 (리스크 규칙 + 패턴 실측정)
 ```
 
 홀드아웃(2025-01~2026-06)은 **1회만**. `data/.holdout_used` 에 기록된다.
 
 ## 현재 상태
 
-M1 + M3-a + M2-a + M2-b 완료. M1 인증부만 키 대기.
-패턴 엔진/스코어링 메커니즘은 됐고, **필터·가중치 채택 여부는 M4**(진짜 스크리너 진입 로직) 에서
-홀드아웃으로 재측정한다. 다음: **M4 리스크/자금관리**.
+M1 + M3-a + M2-a + M2-b + M4 완료. M1 인증부만 키 대기.
+
+- **리스크/자금관리(`risk.py`) + 포트폴리오 백테스터 완료.** conservative MDD -9% (목표 10% 이내).
+- **차트 패턴은 진입 게이트로 채택 안 함** — M2-a/M2-b/M4 세 번의 측정 모두 중립~약손해.
+  엔진(`engine_a.py`)은 유지하되 소프트 가산(`PATTERN_SCORE_WEIGHT=0.20`)으로만.
+
+다음: **M5 (공지 감시 + 뉴스 RSS 키워드 필터 + ntfy notifier)**.
 
