@@ -16,7 +16,7 @@ from config import settings
 
 log = logging.getLogger("notifier")
 
-_PRIO = {"min": "1", "low": "2", "default": "3", "high": "4", "urgent": "5"}
+_PRIO = {"min": 1, "low": 2, "default": 3, "high": 4, "urgent": 5}
 
 
 def _config() -> tuple[str, str, str] | None:
@@ -30,22 +30,23 @@ def _config() -> tuple[str, str, str] | None:
 
 def notify(message: str, title: str | None = None, priority: str = "default",
            tags: str | None = None) -> bool:
-    """ntfy 로 발송. 성공 여부 반환 (실패해도 예외 안 냄)."""
+    """ntfy 로 발송. 성공 여부 반환 (실패해도 예외 안 냄).
+
+    JSON 발행 방식을 쓴다. 헤더 방식은 한글 제목이 latin-1 로 안 넘어간다.
+    """
     cfg = _config()
     if cfg is None:
         log.warning("NTFY_TOPIC 미설정 — 알림 생략: %s", title or message[:40])
         return False
     server, topic, token = cfg
-    headers = {"Priority": _PRIO.get(priority, "3")}
+    payload = {"topic": topic, "message": message, "priority": _PRIO.get(priority, 3)}
     if title:
-        headers["Title"] = title
+        payload["title"] = title
     if tags:
-        headers["Tags"] = tags
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+        payload["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        r = requests.post(f"{server}/{topic}", data=message.encode("utf-8"),
-                          headers=headers, timeout=5)
+        r = requests.post(server, json=payload, headers=headers, timeout=5)
         r.raise_for_status()
         return True
     except Exception as e:                       # noqa: BLE001 — 매매를 막으면 안 됨
