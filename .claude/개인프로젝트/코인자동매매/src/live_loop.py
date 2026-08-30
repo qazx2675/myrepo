@@ -73,12 +73,23 @@ class Bot:
         self.mode = risk.get_mode(mode)
         self.data = data or LiveData()
         self.db = db
+
+        # 페이퍼에서만 동시보유·틱당 진입을 확장 (실거래는 mode 기본값 = 2, 1건/틱)
+        paper = settings.DRY_RUN
+        sets = max(1, settings.PAPER_POSITION_SETS) if paper else 1
+        self.max_positions = self.mode.max_positions * sets
+        self.entries_per_tick = settings.PAPER_ENTRIES_PER_TICK if paper else 1
+
         store.init(db)
         if store.get_meta("cash", None, db) is None:
             store.set_cash(settings.PAPER_CAPITAL, db)
             store.set_meta("mode", self.mode.name, db)
             store.set_meta("start_equity", repr(float(settings.PAPER_CAPITAL)), db)
             store.set_meta("started_at", self.data.now().isoformat(), db)
+        store.set_meta("max_positions", self.max_positions, db)
+        if self.max_positions != self.mode.max_positions:
+            log.warning("페이퍼 확장: 동시보유 %d (실거래는 %d)",
+                        self.max_positions, self.mode.max_positions)
 
     # -- 청산 점검 --
     def _exits(self, ev: dict):
@@ -134,9 +145,9 @@ class Bot:
                 store.upsert_position(p, self.db)
         store.set_cash(cash, self.db)
 
-    # -- 스크리닝 --
-    def _pick(self, positions: dict, block: set[str]) -> str | None:
-        best_m, best_s = None, settings.SCREEN_ENTRY_THRESHOLD
+    # -- 스크리닝: 후보를 점수 내림차순으로 --
+    def _rank(self, positions: dict, block: set[str]) -> list[str]:
+        scored = []
         for m in self.data.top_by_volume(self.mode.screen_top_n):
             if m in positions or m in block:
                 continue
@@ -144,14 +155,15 @@ class Bot:
             if hist is None or len(hist) < settings.SCREEN_MOMENTUM_DAYS + 2:
                 continue
             s, _, _ = screener.score(hist, self.mode.min_24h_value_krw)
-            if s > best_s:
-                best_m, best_s = m, s
-        return best_m
+            if s >= settings.SCREEN_ENTRY_THRESHOLD:
+                scored.append((s, m))
+        scored.sort(reverse=True)
+        return [m for _, m in scored]
 
-    # -- 신규 진입 --
+    # -- 신규 진입 (페이퍼면 틱당 여러 건) --
     def _entry(self, ev: dict):
         positions = store.load_positions(self.db)
-        if len(positions) >= self.mode.max_positions:
+        if len(positions) >= self.max_positions:
             return
         cash = store.get_cash(self.db)
         prices = self.data.prices(list(positions))
@@ -163,21 +175,29 @@ class Bot:
         if risk.fee_coupon_suspect(store.all_trades(self.db)):
             log.warning("실효 수수료율 경보 — 신규 진입 중단")
             return
-        cand = self._pick(positions, ev["block"])
-        if not cand:
-            return
-        krw = risk.entry_krw(self.mode, cash, len(positions))
-        if krw <= 0:
-            return
-        fill = self.data.fill(Order("buy", "market", krw=krw, tag="entry"), cand)
-        if fill is None:
-            return
-        cost = fill.notional + fill.fee
-        store.set_cash(cash - cost, self.db)
-        store.upsert_position(store.Position(cand, fill.volume, fill.price,
-                                             self.data.now().isoformat(), cost, fill.price), self.db)
-        notifier.alert(f"진입 {cand}  {cost:,.0f}원 @ {fill.price:,.4g}",
-                       title=f"코인봇 {self.mode.name}")
+
+        candidates = self._rank(positions, ev["block"])
+        opened = 0
+        for cand in candidates:
+            if opened >= self.entries_per_tick:
+                break
+            if len(positions) >= self.max_positions:
+                break
+            krw = risk.entry_krw(self.mode, cash, len(positions), self.max_positions)
+            if krw <= 0:
+                break
+            fill = self.data.fill(Order("buy", "market", krw=krw, tag="entry"), cand)
+            if fill is None:
+                continue
+            cost = fill.notional + fill.fee
+            cash -= cost
+            store.set_cash(cash, self.db)
+            positions[cand] = store.Position(cand, fill.volume, fill.price,
+                                             self.data.now().isoformat(), cost, fill.price)
+            store.upsert_position(positions[cand], self.db)
+            notifier.alert(f"진입 {cand}  {cost:,.0f}원 @ {fill.price:,.4g}",
+                           title=f"코인봇 {self.mode.name}")
+            opened += 1
 
     # -- 스냅샷 / 일일 롤오버 / 하트비트 --
     def _bookkeeping(self):

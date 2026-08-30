@@ -61,13 +61,15 @@ def get_mode(name: str | None = None) -> Mode:
 
 
 # ── 진입 사이징 ─────────────────────────────────────────────────────────
-def entry_krw(mode: Mode, cash_available: float, held_count: int) -> int:
+def entry_krw(mode: Mode, cash_available: float, held_count: int,
+              max_positions: int | None = None) -> int:
     """1차 진입에 쓸 KRW. 진입 불가면 0.
 
-    - 이미 최대 보유 → 0
+    - 이미 최대 보유 → 0  (max_positions 미지정 시 mode 기본값)
     - 계산액이 최소 주문금액 미만 → 0 (진입 스킵. 계획서 4.2)
     """
-    if held_count >= mode.max_positions:
+    cap = mode.max_positions if max_positions is None else max_positions
+    if held_count >= cap:
         return 0
     want = min(mode.per_coin_max * mode.first_entry_frac, cash_available)
     krw = int(want)
