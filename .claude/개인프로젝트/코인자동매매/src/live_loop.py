@@ -145,6 +145,25 @@ class Bot:
                 store.upsert_position(p, self.db)
         store.set_cash(cash, self.db)
 
+    # -- 재진입 쿨다운: 최근 청산한 코인 --
+    def _cooldown_markets(self) -> set[str]:
+        hrs = settings.REENTRY_COOLDOWN_HOURS
+        if hrs <= 0:
+            return set()
+        now = self.data.now()
+        latest: dict[str, str] = {}
+        for t in store.all_trades(self.db):          # id 오름차순 → 마지막이 최신
+            latest[t["market"]] = t.get("exit_ts")
+        out = set()
+        for m, ts in latest.items():
+            try:
+                when = datetime.fromisoformat(ts)
+            except (ValueError, TypeError):
+                continue
+            if (now - when).total_seconds() < hrs * 3600:
+                out.add(m)
+        return out
+
     # -- 스크리닝: 후보를 점수 내림차순으로 --
     def _rank(self, positions: dict, block: set[str]) -> list[str]:
         scored = []
@@ -176,7 +195,8 @@ class Bot:
             log.warning("실효 수수료율 경보 — 신규 진입 중단")
             return
 
-        candidates = self._rank(positions, ev["block"])
+        blocked = ev["block"] | self._cooldown_markets()
+        candidates = self._rank(positions, blocked)
         opened = 0
         for cand in candidates:
             if opened >= self.entries_per_tick:
@@ -200,6 +220,18 @@ class Bot:
             opened += 1
 
     # -- 스냅샷 / 일일 롤오버 / 하트비트 --
+    def _rollover_day(self):
+        """새 날이면 '오늘 시작 자산' 을 지금 자산으로 리셋. tick 맨 앞에서 호출.
+        (일일 손실 한도가 어제 기준으로 신규 진입을 막는 걸 방지)"""
+        today = self.data.now().date().isoformat()
+        if store.get_meta("day", None, self.db) == today:
+            return
+        positions = store.load_positions(self.db)
+        prices = self.data.prices(list(positions))
+        pv = sum(p.volume * prices.get(m, p.entry_price) for m, p in positions.items())
+        store.set_meta("day", today, self.db)
+        store.set_meta("day_start_equity", repr(store.get_cash(self.db) + pv), self.db)
+
     def _bookkeeping(self):
         now = self.data.now()
         positions = store.load_positions(self.db)
@@ -209,9 +241,6 @@ class Bot:
         store.record_equity(now.isoformat(), cash, pv, self.db)
 
         today = now.date().isoformat()
-        if store.get_meta("day", None, self.db) != today:
-            store.set_meta("day", today, self.db)
-            store.set_meta("day_start_equity", repr(cash + pv), self.db)
         if now.hour >= settings.HEARTBEAT_HOUR \
                 and store.get_meta("last_heartbeat_date", None, self.db) != today:
             store.set_meta("last_heartbeat_date", today, self.db)
@@ -264,6 +293,7 @@ class Bot:
                            f"평단 {p.entry_price:,.4g}", title=f"코인봇 {self.mode.name}")
 
     def tick(self):
+        self._rollover_day()
         ev = self.data.risk_events()
         self._exits(ev)
         self._averaging()

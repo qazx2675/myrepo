@@ -87,9 +87,30 @@ def render(db: str = store.DB_PATH, prices: dict[str, float] | None = None,
     if invested > 0:
         L.append(f" 투입 대비 손익  {(pos_value - invested):>+18,.0f} 원   "
                  f"({(pos_value / invested - 1):+.2%}, 투입 {_fmt(invested)}원)")
-    L += [f" 보유 {len(positions)}/{_max_pos(mode, db)}",
-          "═" * W, ""]
+    L.append(f" 보유 {len(positions)}/{_max_pos(mode, db)}")
+    cd = _cooldown(db, now or datetime.now())
+    if cd:
+        L.append(f" 재진입 쿨다운   {', '.join(sorted(cd))}")
+    L += ["═" * W, ""]
     return "\n".join(L)
+
+
+def _cooldown(db: str, now: datetime) -> set[str]:
+    hrs = settings.REENTRY_COOLDOWN_HOURS
+    if hrs <= 0:
+        return set()
+    latest = {}
+    for t in store.all_trades(db):
+        latest[t["market"]] = t.get("exit_ts")
+    out = set()
+    for m, ts in latest.items():
+        try:
+            when = datetime.fromisoformat(ts)
+        except (ValueError, TypeError):
+            continue
+        if (now - when).total_seconds() < hrs * 3600:
+            out.add(m)
+    return out
 
 
 def _max_pos(mode_name: str, db: str) -> int:

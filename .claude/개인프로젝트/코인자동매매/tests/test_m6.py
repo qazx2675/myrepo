@@ -113,6 +113,40 @@ def test_tick_enters_then_stops_out():
         os.remove(db)
 
 
+def test_reentry_cooldown():
+    db = _tmpdb()
+    fake = FakeData()
+    fake.px["KRW-AAA"] = 100.0
+    from config import settings
+    old_cap, old_cd = settings.PAPER_CAPITAL, settings.REENTRY_COOLDOWN_HOURS
+    settings.PAPER_CAPITAL = 100_000
+    settings.REENTRY_COOLDOWN_HOURS = 24
+    try:
+        bot = Bot(mode="conservative", data=fake, db=db)
+        bot.tick()                                        # AAA 진입
+        assert "KRW-AAA" in store.load_positions(db)
+
+        fake.px["KRW-AAA"] = 80.0                          # 폭락 → 손절
+        fake.t = datetime(2026, 1, 1, 12, 0, 0)
+        bot.tick()
+        assert "KRW-AAA" not in store.load_positions(db)
+
+        # 손절 직후: 가격 회복해서 스크리너 1등이어도 재진입 금지
+        fake.px["KRW-AAA"] = 100.0
+        fake.t = datetime(2026, 1, 1, 13, 0, 0)            # +1h
+        bot.tick()
+        assert "KRW-AAA" not in store.load_positions(db), "쿨다운 중인데 재진입됨"
+
+        # 25시간 뒤: 재진입 허용
+        fake.t = datetime(2026, 1, 2, 14, 0, 0)
+        bot.tick()
+        assert "KRW-AAA" in store.load_positions(db), "쿨다운 지났는데 재진입 안 됨"
+        print("  reentry_cooldown OK")
+    finally:
+        settings.PAPER_CAPITAL, settings.REENTRY_COOLDOWN_HOURS = old_cap, old_cd
+        os.remove(db)
+
+
 def test_tick_liquidates_on_warning():
     db = _tmpdb()
     fake = FakeData()

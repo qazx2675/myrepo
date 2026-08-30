@@ -157,6 +157,7 @@ def run(panel: dict[str, pd.DataFrame], mode: Mode, initial_cash: float,
         # 3) 신규 진입
         cur_equity = equity_at(i)
         room = len(positions) < mode.max_positions
+        cd_bars = int(settings.REENTRY_COOLDOWN_HOURS / 24)   # 일봉이므로 시간→봉 근사
         if room and not risk.daily_loss_exceeded(mode, day_start_equity, cur_equity) \
                 and not risk.fee_coupon_suspect(trades):
             best_m, best_s = None, settings.SCREEN_ENTRY_THRESHOLD
@@ -165,6 +166,9 @@ def run(panel: dict[str, pd.DataFrame], mode: Mode, initial_cash: float,
                     continue
                 if any(mm == m for (_, mm, _) in pending):
                     continue
+                if cd_bars > 0 and any(t["market"] == m and idx.get_loc(t["exit_time"]) > i - cd_bars
+                                       for t in trades):
+                    continue                                   # 재진입 쿨다운
                 hist = df.iloc[: i + 1]
                 s, _, _ = screener.score(hist, mode.min_24h_value_krw, use_pattern, bearish_veto)
                 if s > best_s:
