@@ -46,8 +46,11 @@ run_m4.bat        [--holdout]     M4 포트폴리오 백테스터 (리스크 규
 run_m5.bat        [--ntfy]        M5 빗썸 공지/경보 + 뉴스 RSS 실조회 (--ntfy: 테스트 알림)
 run_m55.bat                       M5.5 실시간 호가 주문크기별 슬리피지 측정
 run_m6.bat  [--once|--reset]      M6 매매 루프 (기본 = 조회 전용 키 + paper 체결)
+run_dashboard.bat                 지금 보유 현황 1회 출력 (코인/수량/평단/현재가/투입/평가액/손익)
 approve_averaging.bat KRW-XXX     M8 물타기 제안 승인
 ```
+
+`run_m6.bat` 은 매 틱(60분)마다 이 대시보드를 터미널에 찍는다.
 
 홀드아웃(2025-01~2026-06)은 **1회만**. `data/.holdout_used` 에 기록된다.
 

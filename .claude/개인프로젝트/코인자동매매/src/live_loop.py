@@ -21,7 +21,7 @@ import time
 from datetime import datetime
 
 from config import settings
-from src import averaging, news, notice, notifier, paper, risk, screener, store
+from src import averaging, dashboard, news, notice, notifier, paper, risk, screener, store
 from src.fills import Order
 
 log = logging.getLogger("live")
@@ -248,6 +248,12 @@ class Bot:
         self._averaging()
         self._entry(ev)
         self._bookkeeping()
+        try:
+            positions = store.load_positions(self.db)
+            prices = self.data.prices(list(positions)) if positions else {}
+            print(dashboard.render(self.db, prices, self.data.now()))
+        except Exception as e:                # noqa: BLE001 — 대시보드가 루프를 막으면 안 됨
+            log.error("대시보드 렌더 실패: %s", e)
 
     def run(self, interval_sec: float, iterations: int | None = None):
         i = 0
