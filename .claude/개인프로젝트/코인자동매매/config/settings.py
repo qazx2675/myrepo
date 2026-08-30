@@ -55,6 +55,8 @@ SCREEN_MOMENTUM_DAYS    = 20      # 모멘텀/이평 기준 봉수
 SCREEN_RSI_DAYS         = 14
 SCREEN_RSI_OVERBOUGHT   = 75      # 이 위면 base_score 감점
 SCREEN_ENTRY_THRESHOLD  = 0.55    # 최종 점수가 이 값 이상이어야 진입 후보
+REENTRY_COOLDOWN_HOURS  = 24      # 청산(손절/익절/유의종목)한 코인은 이 시간동안 재진입 금지.
+                                  # 0 이면 쿨다운 없음. "손절한 칼 다시 안 잡는다"
 
 # ── 포트폴리오 백테스터 (M4) ─────────────────────────────────────────
 PF_EXEC_DELAY_BARS      = 1
