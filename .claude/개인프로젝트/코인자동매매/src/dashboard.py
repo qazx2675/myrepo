@@ -24,6 +24,16 @@ def _px(n: float) -> str:
     return f"{n:.6f}".rstrip("0")
 
 
+def _vol(n: float) -> str:
+    if n >= 1:
+        s = f"{n:,.4f}"
+    elif n >= 0.0001:
+        s = f"{n:.8f}"
+    else:
+        return f"{n:.4e}"
+    return s.rstrip("0").rstrip(".")
+
+
 def render(db: str = store.DB_PATH, prices: dict[str, float] | None = None,
            now: datetime | None = None) -> str:
     positions = store.load_positions(db)
@@ -44,7 +54,7 @@ def render(db: str = store.DB_PATH, prices: dict[str, float] | None = None,
                 prices = {}
 
     ts = (now or datetime.now()).strftime("%Y-%m-%d %H:%M")
-    W = 74
+    W = 86
     L = ["", "═" * W,
          f" {ts}   모드 {mode}   {'★실주문★' if live else '페이퍼'}",
          "═" * W,
@@ -53,31 +63,39 @@ def render(db: str = store.DB_PATH, prices: dict[str, float] | None = None,
     pos_value = 0.0
     if positions:
         L.append("")
-        L.append(f" {'코인':<10}{'수량':>15}{'평단':>11}{'현재가':>11}{'투입':>13}{'평가액':>13}{'손익':>8}")
+        L.append(f" {'코인':<11}{'수량':>16}{'평단':>13}{'현재가':>13}{'투입':>12}{'평가액':>12}{'손익':>8}")
         L.append(" " + "─" * (W - 2))
         for m, p in sorted(positions.items()):
             px = prices.get(m, p.entry_price)
             val = p.volume * px
             pos_value += val
             pnl_pct = (val - p.cost_krw) / p.cost_krw * 100 if p.cost_krw else 0.0
-            vol = f"{p.volume:,.4f}".rstrip("0").rstrip(".")
-            L.append(f" {m:<10}{vol:>15}{_px(p.entry_price):>11}{_px(px):>11}"
-                     f"{_fmt(p.cost_krw):>13}{_fmt(val):>13}{pnl_pct:>+7.1f}%")
+            L.append(f" {m:<11}{_vol(p.volume):>16}{_px(p.entry_price):>13}{_px(px):>13}"
+                     f"{_fmt(p.cost_krw):>12}{_fmt(val):>12}{pnl_pct:>+7.1f}%")
         L.append(" " + "─" * (W - 2))
     else:
         L.append("")
         L.append("  (보유 없음)")
 
     total = cash + pos_value
+    invested = sum(p.cost_krw for p in positions.values())
+    realized = sum(t["pnl_krw"] for t in trades)
     L += ["",
           f" 평가액          {_fmt(pos_value):>18} 원",
           f" 총 자산         {_fmt(total):>18} 원   시작 대비 {total / start - 1:+.2%}",
-          f" 보유 {len(positions)}/{_mode_max(mode)}   ·   누적 거래 {len(trades)}건",
+          f" 실현손익 누적   {realized:>+18,.0f} 원   ({len(trades)}건)"]
+    if invested > 0:
+        L.append(f" 투입 대비 손익  {(pos_value - invested):>+18,.0f} 원   "
+                 f"({(pos_value / invested - 1):+.2%}, 투입 {_fmt(invested)}원)")
+    L += [f" 보유 {len(positions)}/{_max_pos(mode, db)}",
           "═" * W, ""]
     return "\n".join(L)
 
 
-def _mode_max(mode_name: str) -> int:
+def _max_pos(mode_name: str, db: str) -> int:
+    v = store.get_meta("max_positions", None, db)
+    if v is not None:
+        return int(v)
     from src.risk import MODES
     m = MODES.get(mode_name)
     return m.max_positions if m else 2
