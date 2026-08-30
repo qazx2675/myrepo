@@ -29,10 +29,11 @@ def _config() -> tuple[str, str, str] | None:
 
 
 def notify(message: str, title: str | None = None, priority: str = "default",
-           tags: str | None = None) -> bool:
+           tags: str | None = None, actions: list[dict] | None = None) -> bool:
     """ntfy 로 발송. 성공 여부 반환 (실패해도 예외 안 냄).
 
     JSON 발행 방식을 쓴다. 헤더 방식은 한글 제목이 latin-1 로 안 넘어간다.
+    actions: ntfy 액션 버튼 리스트 (http/view 등). 그대로 전달.
     """
     cfg = _config()
     if cfg is None:
@@ -44,6 +45,8 @@ def notify(message: str, title: str | None = None, priority: str = "default",
         payload["title"] = title
     if tags:
         payload["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
+    if actions:
+        payload["actions"] = actions
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         r = requests.post(server, json=payload, headers=headers, timeout=5)

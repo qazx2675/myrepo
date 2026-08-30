@@ -17,7 +17,11 @@ def _fmt(n: float) -> str:
 
 
 def _px(n: float) -> str:
-    return f"{n:,.0f}" if n >= 100 else f"{n:,.4f}"
+    if n >= 100:
+        return f"{n:,.0f}"
+    if n >= 1:
+        return f"{n:,.2f}"
+    return f"{n:.6f}".rstrip("0")
 
 
 def render(db: str = store.DB_PATH, prices: dict[str, float] | None = None,

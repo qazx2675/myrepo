@@ -13,6 +13,9 @@ import tempfile
 import numpy as np
 import pandas as pd
 
+import os as _os
+_os.environ["NTFY_APPROVAL_TOPIC"] = ""          # 폰 승인 폴링이 실 ntfy 안 때리게
+
 from config import settings
 from src import averaging, trader
 from src.store import Position
@@ -91,6 +94,42 @@ def test_approve_and_consume():
     assert set(got) == {"KRW-BBB", "KRW-CCC"}
     assert averaging.take_approved() == []                   # 1회성 (소비됨)
     print("  approve_and_consume OK")
+
+
+def test_poll_phone_approvals(monkeypatch=None):
+    import json as _json
+    import tempfile
+
+    fd, db = tempfile.mkstemp(suffix=".db"); os.close(fd); os.remove(db)
+    from src import store
+    store.init(db)
+    _os.environ["NTFY_APPROVAL_TOPIC"] = "test-approve-topic"
+
+    class _Resp:
+        def __init__(self, lines): self.text = "\n".join(lines); self.status_code = 200
+        def raise_for_status(self): pass
+
+    calls = {}
+    def fake_get(url, params=None, timeout=None):
+        calls["params"] = params
+        return _Resp([
+            _json.dumps({"event": "message", "id": "id-1", "message": "KRW-TRUMP"}),
+            _json.dumps({"event": "keepalive", "id": "x"}),
+            _json.dumps({"event": "message", "id": "id-2", "message": "설명 텍스트"}),  # 무시
+        ])
+    averaging.requests.get = fake_get
+    try:
+        got = averaging.poll_phone_approvals(db)
+        assert got == ["KRW-TRUMP"], got
+        assert store.get_meta("ntfy_approval_since", None, db) == "id-2"   # 마지막 id 저장
+        assert calls["params"]["since"] == "15m"                          # 첫 폴은 15분
+
+        averaging.requests.get = lambda *a, **k: _Resp([])                # 이후엔 비어있음
+        assert averaging.poll_phone_approvals(db) == []
+    finally:
+        _os.environ["NTFY_APPROVAL_TOPIC"] = ""
+        os.remove(db)
+    print("  poll_phone_approvals OK")
 
 
 class _Fake:
