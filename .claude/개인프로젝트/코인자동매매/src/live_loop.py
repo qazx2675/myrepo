@@ -210,7 +210,7 @@ class Bot:
             if px is not None and averaging.should_propose(p, px, self.mode):
                 averaging.propose(p, px, self.mode.name)
 
-        approved = set(averaging.take_approved())
+        approved = set(averaging.take_approved()) | set(averaging.poll_phone_approvals(self.db))
         if not approved:
             return
         cash = store.get_cash(self.db)
