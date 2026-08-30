@@ -1,6 +1,7 @@
 """전역 설정 상수. 계획서 5.1 참조."""
 
 DRY_RUN         = True            # 기본값. False 전환은 사용자 명시 요청 시에만
+                                  # 실주문은 이것 + .env LIVE_TRADING=1 + 주문권한 키, 3중 게이트
 PAPER_CAPITAL   = 100_000_000     # 실전 전 100_000 으로 재검증 필수
 MODE            = "conservative"
 ENTRY_HOURS     = None            # 24시간 진입 (제한 없음)
@@ -57,6 +58,13 @@ SCREEN_ENTRY_THRESHOLD  = 0.55    # 최종 점수가 이 값 이상이어야 진
 
 # ── 포트폴리오 백테스터 (M4) ─────────────────────────────────────────
 PF_EXEC_DELAY_BARS      = 1
+
+# ── 물타기 (M8) — 자동 실행 금지. 사람 승인만 (불변 규칙 2) ───────────
+# 제안 트리거는 '추적 손절보다 2%p 덜 빠진 지점'. 손절 전에 사람이 승인할 창을 준다.
+AVG_TRIGGER_MARGIN_PCT = 2.0   # trailing_stop_pct + 이 값 지점에서 제안
+AVG_ADD_FRAC      = 0.5        # 승인 시 (per_coin_max - 현재투입) 의 이 비율만큼 추가 매수
+AVG_REQUEST_DIR   = "data/averaging"
+AVG_APPROVED_FILE = "data/averaging_approved.txt"
 
 # ── 공지 감시 / 뉴스 (M5) ────────────────────────────────────────────
 NOTICE_URL   = "https://api.bithumb.com/v1/notices"
