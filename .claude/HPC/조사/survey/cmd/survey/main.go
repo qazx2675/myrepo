@@ -90,7 +90,27 @@ func main() {
 		for h, r := range Collect(&rcfg, retryHosts) {
 			collected[h] = r
 		}
-		for h, r := range CollectInfra(&rcfg, retryHosts) {
+
+		// 1차에서 타임아웃/DNS 미등록이라 ESXi 판별을 못 한 호스트가 있다.
+		// 재조사에서 응답했고 설정값이 없으면 여기서 다시 ESXi 를 판별한다.
+		var retryNone []string
+		for _, h := range retryHosts {
+			if c := collected[h]; c.Reached && c.ConfigValue == "" {
+				retryNone = append(retryNone, h)
+			}
+		}
+		for h := range DetectESXi(&rcfg, retryNone) {
+			esxiSet[h] = true
+		}
+
+		// 인프라 조사는 여기서도 ESXi 를 제외한다
+		var retryInfra []string
+		for _, h := range retryHosts {
+			if !esxiSet[h] {
+				retryInfra = append(retryInfra, h)
+			}
+		}
+		for h, r := range CollectInfra(&rcfg, retryInfra) {
 			infra[h] = r
 		}
 	}
