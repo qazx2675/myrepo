@@ -21,7 +21,7 @@ import time
 from datetime import datetime
 
 from config import settings
-from src import news, notice, notifier, paper, risk, screener, store
+from src import averaging, news, notice, notifier, paper, risk, screener, store
 from src.fills import Order
 
 log = logging.getLogger("live")
@@ -31,7 +31,11 @@ log = logging.getLogger("live")
 class LiveData:
     def __init__(self):
         from src.bithumb_client import BithumbClient
+        from src import trader
         self._C = BithumbClient
+        ok, why = trader.live_enabled()
+        self._trader = trader.Trader(BithumbClient) if ok else None
+        log.warning("체결 모드: %s (%s)", "실주문" if ok else "페이퍼", why)
 
     def now(self) -> datetime:
         return datetime.now()
@@ -53,6 +57,8 @@ class LiveData:
         return pb.get_ohlcv(market, interval="day", count=count)
 
     def fill(self, order: Order, market: str):
+        if self._trader is not None:
+            return self._trader.execute(order, market)
         return paper.execute_live(order, market, client=self._C)
 
     def risk_events(self) -> dict:
@@ -194,9 +200,52 @@ class Bot:
                 f"(시작 대비 {(cash + pv) / start - 1:+.2%}) / 보유 {len(positions)}종 "
                 f"{sorted(positions) or '-'}")
 
+    # -- 물타기 (M8): 제안만 자동, 실행은 사용자 승인 후 --
+    def _averaging(self):
+        positions = store.load_positions(self.db)
+        prices = self.data.prices(list(positions))
+        for m, p in positions.items():
+            px = prices.get(m)
+            if px is not None and averaging.should_propose(p, px, self.mode):
+                averaging.propose(p, px, self.mode.name)
+
+        approved = set(averaging.take_approved())
+        if not approved:
+            return
+        cash = store.get_cash(self.db)
+        positions = store.load_positions(self.db)
+        for m in approved:
+            p = positions.get(m)
+            if p is None:
+                averaging.clear_pending(m)
+                continue
+            room = self.mode.per_coin_max - p.cost_krw
+            add = int(min(settings.AVG_ADD_FRAC * max(0.0, room), cash))
+            if add < settings.MIN_ORDER_KRW:
+                notifier.notify(f"{m} 물타기 승인됐지만 한도/현금 부족 (추가 {add:,}원)",
+                                title=f"물타기 취소 [{self.mode.name}]", priority="default")
+                averaging.clear_pending(m)
+                continue
+            fill = self.data.fill(Order("buy", "market", krw=add, tag="averaging"), m)
+            if fill is None:
+                continue
+            cost = fill.notional + fill.fee
+            new_vol = p.volume + fill.volume
+            p.entry_price = (p.entry_price * p.volume + fill.price * fill.volume) / new_vol
+            p.volume = new_vol
+            p.cost_krw += cost
+            p.peak_price = max(p.peak_price, fill.price)
+            store.upsert_position(p, self.db)
+            store.set_cash(cash - cost, self.db)
+            cash -= cost
+            averaging.clear_pending(m)
+            notifier.alert(f"물타기 실행 {m}  +{cost:,.0f}원 @ {fill.price:,.4g}  "
+                           f"평단 {p.entry_price:,.4g}", title=f"코인봇 {self.mode.name}")
+
     def tick(self):
         ev = self.data.risk_events()
         self._exits(ev)
+        self._averaging()
         self._entry(ev)
         self._bookkeeping()
 
