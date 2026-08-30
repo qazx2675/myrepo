@@ -127,6 +127,7 @@ class Bot:
             p.cost_krw -= cost_part
             if p.volume <= 1e-9:
                 store.delete_position(m, self.db)
+                averaging.clear_pending(m)         # 청산되면 물타기 제안도 소멸
             else:
                 if order.tag.startswith("take_profit"):
                     p.tp_done = True
