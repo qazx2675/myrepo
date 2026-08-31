@@ -89,6 +89,12 @@
 #  28) report_all_ok_summary : 전체 OK일 때만 뭔가 나오고 FAIL이 섞여 있으면
 #      아무것도 안 보이던 문제 수정 — FAIL이 하나라도 있으면 결과 파일
 #      (check.res_${user} 등) 전체를 cat으로 출력하도록 변경.
+#  29) report_all_ok_summary : gossh 출력에 캐리지리턴(\r)/트레일링 공백이
+#      섞여 "OK\r"처럼 나오면 정상인데도 FAIL로 오판되던 버그 수정(status
+#      트림 추가). "FAIL이 포함되어 있습니다" 문구도 실제로 FAIL 단어가 있을
+#      때만 쓰도록 grep으로 재확인. 이 함수는 run_check_script에서만 호출되어
+#      check.res_${user}_info(run_info_check 결과, LDAP/SPLUNK 조사 파일)는
+#      원래부터 대상이 아님.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -303,7 +309,15 @@ parse_pm_result() {
 # "체크 결과 저장 완료" 로그 바로 다음에 출력되어야 한다는 요청에 따라
 # run_check_script 안에서 직접 호출한다 — report_check_res_summary의 맨 아래
 # total=... 요약과는 별개. 파싱 방식은 report_check_res_summary와 동일(콜론
-# 구분, "hostname: OK").
+# 구분, "hostname: OK"). 이 함수는 run_check_script(위)에서만 호출되므로
+# check.res_${user}_info(run_info_check가 만드는 LDAP/SPLUNK 조사 파일 — 여기엔
+# 원래 "FAIL ldap ..."/"FAIL Splunk ..." 같은 정상적인 값이 있을 수 있음)는
+# 대상이 아닙니다.
+# [수정됨] gossh 출력에 캐리지리턴(\r)이나 트레일링 공백이 섞여 "OK\r"처럼
+# 나오는 호스트가 있으면, 실제로는 정상인데도 "OK"와 정확히 일치하지 않아
+# FAIL로 오판되는 문제가 있었다. status의 앞뒤 공백/개행을 트림해서 비교하도록
+# 수정. 그리고 "FAIL이 포함되어 있습니다" 문구도 실제로 FAIL이라는 단어가
+# 있을 때만 쓰고, OK도 FAIL도 아닌 다른 값이면 더 정확한 문구로 구분한다.
 report_all_ok_summary() {
     local target_file="$1"
     [ -f "${target_file}" ] || return 0
@@ -320,6 +334,8 @@ report_all_ok_summary() {
             status="${line#"${h}" }"
         fi
         [ -z "${h}" ] && continue
+        status="${status%$'\r'}"
+        status="${status%"${status##*[![:space:]]}"}"
         host_status["${h}"]="${status}"
     done < <(grep -v '^[[:space:]]*$' "${target_file}")
 
@@ -330,8 +346,11 @@ report_all_ok_summary() {
 
     if [ ${#host_status[@]} -gt 0 ] && [ "${ok}" -eq ${#host_status[@]} ]; then
         green "모든서버 체크결과 OK (${ok}대)"
-    else
+    elif grep -qi "FAIL" "${target_file}"; then
         yellow "[경고] FAIL이 포함되어 있습니다 — 결과 파일 원본 : ${target_file}"
+        cat "${target_file}"
+    else
+        yellow "[경고] OK가 아닌 항목이 있습니다 — 결과 파일 원본 : ${target_file}"
         cat "${target_file}"
     fi
 }
