@@ -76,6 +76,10 @@
 #  24) report_kernel_by_infra (신규) : report_splunk_info가 채운 infra(SDS/HPC 등)별
 #      호스트 목록을 이용해, infra별로 커널 버전을 따로 집계해서 출력. infra가
 #      1종류면 1개, 섞여 있으면 존재하는 만큼 여러 개 출력.
+#  25) report_splunk_info : host/value 구분자를 탭으로 가정했던 것을 콜론(LDAP과
+#      동일한 "hostname : INFO SDS Splunk" 형태)으로 정정. 탭 기준 파싱이 실제
+#      형식과 안 맞아 값이 전혀 안 걸리고 "FAIL ... confirmation required"만
+#      뜨던 문제 수정.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -424,10 +428,11 @@ report_ldap_info() {
 # 있었다(예: "INFO HPC Splunk INFO SDS Splunk typeA"처럼 이중으로 찍히는 버그).
 # LDAP과 동일하게, 값 자체가 이미 "INFO <infra> Splunk ..."/"FAIL ..." 완성
 # 문자열이므로 그대로(색만 입혀서) 출력하도록 수정했다.
-# [수정됨] host/value 구분자가 호스트마다 공백 개수가 다르게 나오는 문제가
-# 있었는데, 확인해보니 실제로는 탭(\t) 구분이었다. line#"${host}" (공백 1칸)
-# 로 자르던 걸 탭 기준으로 자르도록 변경했다(탭이 없는 줄은 기존 방식으로
-# 대체 파싱).
+# [수정됨] host/value 구분자를 탭으로 가정했었는데, 실제 INFO_CHECK_FILE의
+# SPLUNK 줄은 LDAP과 동일하게 "hostname : INFO SDS Splunk" 형태(콜론 구분,
+# 콜론 앞뒤 공백 유무는 호스트마다 다를 수 있음)였다. 탭 기준 파싱은 이 콜론
+# 형식과 안 맞아 값이 하나도 안 걸려 "FAIL ... confirmation required"만
+# 뜨는 문제가 있어, LDAP/커널과 동일한 콜론 정규식 파싱으로 교체했다.
 # [수정됨] 값이 1종류든 여러 종류든 관계없이 항상 "(N대)" 형태로 대상 대수를
 # 같이 출력하도록 통일했다(기존엔 2종류 이상일 때만 대수가 붙었음).
 # [신규] 값이 "INFO <infra> Splunk ..." 형태면 infra(SDS/HPC 등) 라벨을 뽑아서
@@ -449,17 +454,13 @@ report_splunk_info() {
     INFRA_HOSTS=(); INFRA_ORDER=()
 
     while IFS= read -r line; do
-        if [[ "${line}" == *$'\t'* ]]; then
-            host="${line%%$'\t'*}"
-            value="${line#*$'\t'}"
+        if [[ "${line}" =~ ^([^[:space:]]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            host="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
         else
             host=$(echo "${line}" | awk '{print $1}')
             value="${line#"${host}" }"
         fi
-        # [수정됨] 탭/구분자 뒤에 공백이 추가로 더 붙어 나오는 호스트가 있으면
-        # value 앞에 공백이 남아 아래 "^(INFO|FAIL)..." 정규식이 매칭에 실패해서
-        # 그 값이 통째로 누락되는 문제가 있어, 값 앞쪽 공백을 우선 제거한다.
-        value="${value#"${value%%[![:space:]]*}"}"
         # contains "${host}" "${UP_HOSTS[@]}" || continue
 
         # [수정됨] grep -i "splunk"에는 무관한 줄이 걸릴 수 있어, LDAP과 동일하게
