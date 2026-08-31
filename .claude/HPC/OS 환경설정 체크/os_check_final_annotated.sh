@@ -65,6 +65,10 @@
 #  21) get_dhcp_info : TODO 상태였던 것을 구현. gossh 원격 실행이 아니라 현재
 #      디렉토리의 dhcp.sh를 "dhcp.sh <호스트목록파일>" 형태로 로컬 실행하도록
 #      변경(DHCP_SH 경로 신규 변수, 기본값 "./dhcp.sh").
+#  22) parse_pm_result : gossh 출력이 호스트마다 "host:메시지"(공백 없는 콜론)로
+#      나올 수 있어, awk '{print $1}'로 뽑은 토큰에 콜론이 그대로 붙어 ALL_HOSTS와
+#      매칭이 안 되고(19번 필터에서 걸러짐) 접속불가 서버가 DOWN_HOSTS에서 통째로
+#      빠지는 문제가 있었음. 토큰 끝 콜론을 제거(sed 's/:$//')하도록 수정.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -216,10 +220,16 @@ parse_pm_result() {
 
     mapfile -t ALL_HOSTS < <(grep -v '^[[:space:]]*$' "${TARGET_LIST}" | tr -d '\r')
 
-    mapfile -t NOSVRAUTO_HOSTS < <(grep -i "${PAT_NOSVRAUTO}" "${PM_RAW}" | awk '{print $1}' | sort -u)
-    mapfile -t PINGX_HOSTS     < <(grep -i "${PAT_PINGX}"     "${PM_RAW}" | awk '{print $1}' | sort -u)
-    mapfile -t REFUSED_HOSTS   < <(grep -i "${PAT_REFUSED}"   "${PM_RAW}" | awk '{print $1}' | sort -u)
-    mapfile -t ANACONDA_HOSTS  < <(grep -i "${PAT_ANACONDA}"  "${PM_RAW}" | awk '{print $1}' | sort -u)
+    # [수정됨] gossh 출력은 호스트마다 "host:메시지"(공백 없이 콜론)/"host : 메시지"
+    # (공백 있는 콜론) 형식이 섞여 나올 수 있다(report_ldap_info에서도 동일하게
+    # 확인된 문제). awk '{print $1}'만으로는 공백 없는 콜론이 호스트명에 그대로
+    # 붙어("host:") 나와서 ALL_HOSTS의 순수 호스트명과 매칭이 안 되고, 아래
+    # ALL_HOSTS 필터에서 걸러져 접속불가 서버가 DOWN_HOSTS에서 빠지는 문제가
+    # 있었다. 토큰 끝의 콜론을 제거해서 이 불일치를 없앤다.
+    mapfile -t NOSVRAUTO_HOSTS < <(grep -i "${PAT_NOSVRAUTO}" "${PM_RAW}" | awk '{print $1}' | sed 's/:$//' | sort -u)
+    mapfile -t PINGX_HOSTS     < <(grep -i "${PAT_PINGX}"     "${PM_RAW}" | awk '{print $1}' | sed 's/:$//' | sort -u)
+    mapfile -t REFUSED_HOSTS   < <(grep -i "${PAT_REFUSED}"   "${PM_RAW}" | awk '{print $1}' | sed 's/:$//' | sort -u)
+    mapfile -t ANACONDA_HOSTS  < <(grep -i "${PAT_ANACONDA}"  "${PM_RAW}" | awk '{print $1}' | sed 's/:$//' | sort -u)
 
     # [수정됨] PM_RAW(gossh -pm 원본 출력)에는 호스트별 실패 줄 외에 요약/헤더성
     # 줄도 섞여 있는데, 그런 줄에 우연히 "refused" 등의 패턴 단어가 들어있으면
