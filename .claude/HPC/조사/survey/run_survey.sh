@@ -51,6 +51,7 @@ A_HOST="$(conf_get server_a host)"
 A_USER="$(conf_get server_a user)"
 A_DIR="$(conf_get server_a dir)"
 A_BIN="$(conf_get server_a bin)"; A_BIN="${A_BIN:-survey}"
+A_GOSSH="$(conf_get server_a gossh_bin)"
 A_USER="${A_USER:-root}"
 
 [[ -n "$ASSET_FILE" ]] || { echo "[error] conf [input].asset_file 이 필요합니다" >&2; exit 1; }
@@ -120,9 +121,12 @@ if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
     cp -p "$SRC_BIN" "${A_RUN}/${A_BIN}"
     [[ -d "${A_DIR}/scripts" ]] && cp -rp "${A_DIR}/scripts" "${A_RUN}/"
     cp "$TO_ASSETS" "${A_RUN}/resurvey_list.txt"
-    awk -v af="${A_RUN}/resurvey_list.txt" '
-      /^[[:space:]]*\[/ { in_input = ($0 ~ /^\[input\]/) }
-      in_input && /^[[:space:]]*asset_file[[:space:]]*=/ { print "asset_file = \"" af "\""; next }
+    # A 전용 conf: [input].asset_file 은 재조사 목록으로, [gossh].bin 은
+    # gossh_bin 이 설정돼 있으면 A 쪽 경로로 바꾼다. 나머지는 B conf 그대로.
+    awk -v af="${A_RUN}/resurvey_list.txt" -v gb="$A_GOSSH" '
+      /^[[:space:]]*\[/ { sec=$0; sub(/^[[:space:]]+/,"",sec); sub(/[[:space:]]+$/,"",sec) }
+      sec=="[input]" && /^[[:space:]]*asset_file[[:space:]]*=/ { print "asset_file = \"" af "\""; next }
+      gb!="" && sec=="[gossh]" && /^[[:space:]]*bin[[:space:]]*=/ { print "bin = \"" gb "\""; next }
       { print }
     ' "${A_DIR}/conf/conf.toml" > "${A_RUN}/conf/conf.toml"
     rm -f "${A_RUN}"/result_*.tsv

@@ -77,3 +77,6 @@ user    = "root"
 dir     = "/user/autofs1/조사"
 # A(RHEL6)에서 돌릴 바이너리 파일명 (dir 아래). B 것과 겹치지 않게. 기본 survey.
 bin     = "survey-rhel6"
+# A 서버의 gossh 경로. A 에도 gossh 가 있어야 조사가 된다(survey 가 gossh 를 호출).
+# 비우면 위 [gossh].bin 을 그대로 쓴다. A 의 gossh 위치가 B 와 다르면 여기 지정.
+gossh_bin = ""

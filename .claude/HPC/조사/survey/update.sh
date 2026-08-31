@@ -7,7 +7,8 @@
 #       대상디렉토리(기본 /root/HPC/조사)로 "변경분만" 복사한다.
 #     - 내용이 같은 파일은 건너뛴다. 새 파일은 추가한다.
 #     - 아래 파일은 절대 건드리지 않는다(사용자 데이터/설정/결과):
-#         conf/conf.toml, result_*.tsv, asset_list.txt, list.txt, survey(바이너리)
+#         conf/conf.toml, result_*.tsv, asset_list.txt, list.txt,
+#         survey / survey-rhel6 (바이너리)
 #     - 대상에만 있는 오래된 *.go 는 빌드 깨짐 방지를 위해 제거한다.
 #
 #   흐름 예:
@@ -36,6 +37,7 @@ preserve() {
     result_*.tsv)              return 0 ;;
     asset_list.txt|list.txt)   return 0 ;;
     survey|survey.exe)         return 0 ;;
+    survey-rhel6)              return 0 ;;  # A(RHEL6)용 바이너리
     update.sh)                 return 0 ;;  # 마지막에 따로 처리
   esac
   return 1
@@ -90,7 +92,7 @@ fi
 
 echo ""
 echo "완료: 추가 $added / 변경 $changed / 제거 $removed   (대상: $DST)"
-echo "보존됨: conf/conf.toml, result_*.tsv, asset_list.txt"
+echo "보존됨: conf/conf.toml, result_*.tsv, asset_list.txt, survey, survey-rhel6"
 if (( conf_drift )); then
   echo "[주의] conf/conf.toml 변경분은 위 diff 를 보고 직접 반영하세요 (update.sh 는 conf 를 덮지 않음)."
 fi
