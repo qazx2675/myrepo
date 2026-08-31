@@ -69,6 +69,13 @@
 #      나올 수 있어, awk '{print $1}'로 뽑은 토큰에 콜론이 그대로 붙어 ALL_HOSTS와
 #      매칭이 안 되고(19번 필터에서 걸러짐) 접속불가 서버가 DOWN_HOSTS에서 통째로
 #      빠지는 문제가 있었음. 토큰 끝 콜론을 제거(sed 's/:$//')하도록 수정.
+#  23) report_splunk_info : 원본 값이 이미 "INFO SDS Splunk ..." 완성 문자열인데
+#      "INFO HPC Splunk"를 하드코딩으로 또 붙여서 이중 출력되던 버그 수정(LDAP과
+#      동일하게 값을 그대로 출력). host/value 구분자를 공백이 아닌 탭 기준으로
+#      변경. 값이 1종류든 여러 종류든 항상 "(N대)" 카운트를 같이 출력하도록 통일.
+#  24) report_kernel_by_infra (신규) : report_splunk_info가 채운 infra(SDS/HPC 등)별
+#      호스트 목록을 이용해, infra별로 커널 버전을 따로 집계해서 출력. infra가
+#      1종류면 1개, 섞여 있으면 존재하는 만큼 여러 개 출력.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -112,6 +119,12 @@ SETTING_TARGET_LIST=""    # 설정 적용 대상만 추린 임시 목록 파일
 # 인자로 받아서 사용합니다.
 POST_APPLY_CHECK_FILE=""  # check.res_${user}_postapply (설정 적용 후 재점검 결과)
 PM_RAW=""                 # gossh -pm 원본 출력 임시 파일
+
+# [신규] SPLUNK infra(SDS/HPC 등) 라벨별 호스트 목록. report_splunk_info가
+# INFO_CHECK_FILE을 파싱하면서 채우고, report_kernel_by_infra가 이를 이용해
+# infra별 커널 버전을 집계합니다.
+declare -A INFRA_HOSTS    # infra 라벨(SDS/HPC 등) -> " host1 host2 ..."
+INFRA_ORDER=()            # 위 INFRA_HOSTS의 키를 최초 등장 순서로 기록
 
 ALL_HOSTS=()
 NOSVRAUTO_HOSTS=()
@@ -406,51 +419,74 @@ report_ldap_info() {
     echo
 }
 
-# [수정됨] SPLUNK 값이 전부 동일하면 1줄만 출력합니다. 값이 2종류 이상이면
-# 각 항목(고유값)별로 "값: N대" 형태로 대수만 집계해서 출력합니다
-# (LDAP과 달리 파일로는 분리하지 않음 — 요청하신 그대로입니다).
-# [수정됨] 출력 형식을 "INFO HPC Splunk <값>"/"FAIL Splunk type confirmation required"로 변경.
+# [수정됨] 기존엔 grep으로 뽑은 원본 값(이미 "INFO SDS Splunk ..." 처럼 완성된
+# 문자열)에 "INFO HPC Splunk"라는 문구를 하드코딩으로 또 덧붙여서 출력하고
+# 있었다(예: "INFO HPC Splunk INFO SDS Splunk typeA"처럼 이중으로 찍히는 버그).
+# LDAP과 동일하게, 값 자체가 이미 "INFO <infra> Splunk ..."/"FAIL ..." 완성
+# 문자열이므로 그대로(색만 입혀서) 출력하도록 수정했다.
+# [수정됨] host/value 구분자가 호스트마다 공백 개수가 다르게 나오는 문제가
+# 있었는데, 확인해보니 실제로는 탭(\t) 구분이었다. line#"${host}" (공백 1칸)
+# 로 자르던 걸 탭 기준으로 자르도록 변경했다(탭이 없는 줄은 기존 방식으로
+# 대체 파싱).
+# [수정됨] 값이 1종류든 여러 종류든 관계없이 항상 "(N대)" 형태로 대상 대수를
+# 같이 출력하도록 통일했다(기존엔 2종류 이상일 때만 대수가 붙었음).
+# [신규] 값이 "INFO <infra> Splunk ..." 형태면 infra(SDS/HPC 등) 라벨을 뽑아서
+# 전역 INFRA_HOSTS/INFRA_ORDER에 host를 채워 넣는다 — report_kernel_by_infra가
+# infra별 커널 버전을 집계할 때 사용한다.
 # UP_HOSTS 필터를 안 거는 것(주석 처리된 contains 라인)은 원본 그대로
 # 유지했습니다.
-# [연계] 다른 함수와의 연계는 없습니다.
 # [수정됨] check.res_${user}(run.sh 결과)는 SPLUNK가 정상이면 "OK"만 찍혀서 실제 값을
 # 알 수 없어, 이제 CHECK_RES_FILE이 아니라 별도로 조사한 INFO_CHECK_FILE(run_info_check
 # 실행 결과)에서 값을 가져옵니다.
-# [신규] splunk_display_value는 원본 값이 "splunk typeA"처럼 grep 키워드(splunk)가
-# 라벨로 남아있는 경우 그 라벨만 제거한다("typeA") — LDAP과 달리 나머지 값은
-# 전부(첫 토큰만이 아니라) 그대로 보여준다.
-splunk_display_value() {
-    local v="$1"
-    echo "${v#[Ss][Pp][Ll][Uu][Nn][Kk] }"
-}
-
 report_splunk_info() {
     [ -f "${INFO_CHECK_FILE}" ] || return 0
 
     echo "===== SPLUNK 정보 ====="
 
     local line host value
-    declare -A splunk_count
+    declare -A splunk_hosts_by_value
     local case_order=()
+    INFRA_HOSTS=(); INFRA_ORDER=()
 
     while IFS= read -r line; do
-        host=$(echo "${line}" | awk '{print $1}')
-        # contains "${host}" "${UP_HOSTS[@]}" || continue
-        value="${line#"${host}" }"
-        if [ -z "${splunk_count[${value}]:-}" ]; then
-            case_order+=("${value}")
-            splunk_count["${value}"]=0
+        if [[ "${line}" == *$'\t'* ]]; then
+            host="${line%%$'\t'*}"
+            value="${line#*$'\t'}"
+        else
+            host=$(echo "${line}" | awk '{print $1}')
+            value="${line#"${host}" }"
         fi
-        splunk_count["${value}"]=$(( splunk_count["${value}"] + 1 ))
+        # [수정됨] 탭/구분자 뒤에 공백이 추가로 더 붙어 나오는 호스트가 있으면
+        # value 앞에 공백이 남아 아래 "^(INFO|FAIL)..." 정규식이 매칭에 실패해서
+        # 그 값이 통째로 누락되는 문제가 있어, 값 앞쪽 공백을 우선 제거한다.
+        value="${value#"${value%%[![:space:]]*}"}"
+        # contains "${host}" "${UP_HOSTS[@]}" || continue
+
+        # [수정됨] grep -i "splunk"에는 무관한 줄이 걸릴 수 있어, LDAP과 동일하게
+        # "INFO .../FAIL ... Splunk" 형태만 인정한다.
+        [[ "${value}" =~ ^(INFO|FAIL)[[:space:]]+.*[Ss][Pp][Ll][Uu][Nn][Kk] ]] || continue
+
+        if [ -z "${splunk_hosts_by_value[${value}]:-}" ]; then
+            case_order+=("${value}")
+        fi
+        splunk_hosts_by_value["${value}"]="${splunk_hosts_by_value[${value}]:-} ${host}"
+
+        if [[ "${value}" =~ ^INFO[[:space:]]+([A-Za-z0-9_]+)[[:space:]]+[Ss][Pp][Ll][Uu][Nn][Kk] ]]; then
+            local infra="${BASH_REMATCH[1]}"
+            if [ -z "${INFRA_HOSTS[${infra}]:-}" ]; then
+                INFRA_ORDER+=("${infra}")
+            fi
+            INFRA_HOSTS["${infra}"]="${INFRA_HOSTS[${infra}]:-} ${host}"
+        fi
     done < <(grep -i "splunk" "${INFO_CHECK_FILE}")
 
     if [ ${#case_order[@]} -eq 0 ]; then
         red "FAIL Splunk type confirmation required"
-    elif [ ${#case_order[@]} -eq 1 ]; then
-        green "INFO HPC Splunk $(splunk_display_value "${case_order[0]}")"
     else
+        local cnt
         for value in "${case_order[@]}"; do
-            green "INFO HPC Splunk $(splunk_display_value "${value}") (${splunk_count[${value}]}대)"
+            cnt=$(echo "${splunk_hosts_by_value[${value}]}" | wc -w)
+            color_by_status "${value} (${cnt}대)"
         done
     fi
 
@@ -503,6 +539,62 @@ report_kernel_info() {
 
     echo "======================"
     echo
+}
+
+# [신규] SPLUNK infra(SDS/HPC 등 — report_splunk_info가 파싱하며 채워둔
+# INFRA_HOSTS/INFRA_ORDER)별로 커널 버전을 따로 집계해서 출력합니다.
+# infra가 1종류만 있으면 그 1개만, SDS/HPC처럼 섞여 있으면 존재하는 만큼
+# 여러 개가 출력됩니다. 집계 로직 자체는 report_kernel_info와 동일합니다
+# (전체 동일하면 1줄 + "전체 동일", 아니면 값별 "값 : N대"와 대상 호스트).
+# [연계] report_splunk_info(INFRA_HOSTS/INFRA_ORDER를 채움)와 run_kernel_check
+# (KERNEL_CHECK_FILE을 만듦)가 먼저 실행된 뒤에 호출되어야 합니다.
+report_kernel_by_infra() {
+    [ -f "${KERNEL_CHECK_FILE}" ] || return 0
+    [ ${#INFRA_ORDER[@]} -eq 0 ] && return 0
+
+    local line host value infra h kv
+    declare -A host_kernel
+
+    while IFS= read -r line; do
+        if [[ "${line}" =~ ^([^[:space:]]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            host="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+        else
+            host=$(echo "${line}" | awk '{print $1}')
+            value="${line#"${host}" }"
+        fi
+        [ -z "${host}" ] && continue
+        host_kernel["${host}"]="${value}"
+    done < <(grep -v '^[[:space:]]*$' "${KERNEL_CHECK_FILE}")
+
+    for infra in "${INFRA_ORDER[@]}"; do
+        echo "===== ${infra} infra 커널 버전 ====="
+
+        declare -A kernel_hosts_by_value
+        local case_order=()
+        for h in ${INFRA_HOSTS[${infra}]}; do
+            kv="${host_kernel[${h}]:-}"
+            [ -z "${kv}" ] && continue
+            if [ -z "${kernel_hosts_by_value[${kv}]:-}" ]; then
+                case_order+=("${kv}")
+            fi
+            kernel_hosts_by_value["${kv}"]="${kernel_hosts_by_value[${kv}]:-} ${h}"
+        done
+
+        if [ ${#case_order[@]} -eq 0 ]; then
+            yellow "FAIL kernel version confirmation required"
+        elif [ ${#case_order[@]} -eq 1 ]; then
+            green "INFO kernel ${case_order[0]} (전체 동일)"
+        else
+            yellow "[경고] 커널 버전이 ${#case_order[@]}종류로 서로 다릅니다."
+            for value in "${case_order[@]}"; do
+                yellow "  - ${value} : $(( $(echo "${kernel_hosts_by_value[${value}]}" | wc -w) ))대  =>  대상:${kernel_hosts_by_value[${value}]}"
+            done
+        fi
+
+        echo "=========================="
+        echo
+    done
 }
 
 # [신규] "환경설정 점검결과"는 최초 OS 체크가 아니라, 설정 적용
@@ -814,6 +906,7 @@ main() {
                 report_ldap_info
                 report_splunk_info
                 report_kernel_info
+                report_kernel_by_infra
             else
                 yellow "[WARN] 체크 대상이 없어 OS 체크/정보 조사를 건너뜁니다."
             fi
