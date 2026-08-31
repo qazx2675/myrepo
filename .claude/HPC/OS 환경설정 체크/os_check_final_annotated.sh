@@ -95,10 +95,24 @@
 #      때만 쓰도록 grep으로 재확인. 이 함수는 run_check_script에서만 호출되어
 #      check.res_${user}_info(run_info_check 결과, LDAP/SPLUNK 조사 파일)는
 #      원래부터 대상이 아님.
+#  30) GOSSH_SAFETY_FILTER (신규) : gossh는 명령어에 "/user/"로 시작하는 경로가
+#      있으면 "[안전장치] ... autofs 마운트가 아니거나 ..." 안내 문구를 결과에
+#      같이 찍어서 check.res_*/PM_RAW 등 파싱 대상 파일이 오염되는 문제가 있었음.
+#      run_os_check/run_check_script/run_info_check/run_kernel_check의 gossh
+#      결과를 파일에 저장하기 전에 이 문구를 egrep -v로 걸러내도록 수정.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
 RCLOCAL_SH="/path/to/setting/rclocal.sh"
+
+# [신규] gossh는 실행하는 명령어에 "/user/" 로 시작하는 경로가 포함되어 있으면
+# "[안전장치] 명령어에 '/user/' 경로가 감지되어 ... autofs 마운트가 아니거나
+# ..." 같은 안내 문구를 결과에 같이 찍는다. 이 문구가 check.res_*/PM_RAW 등
+# 파싱 대상 파일에 그대로 섞여 들어가 비교(OK 여부 등)를 방해하므로, gossh
+# 결과를 파일에 저장하기 전에 이 필터로 걸러낸다. "350대"처럼 매 실행마다
+# 바뀌는 숫자 대신 "[안전장치]"/"autofs 마운트"처럼 고정된 문구를 기준으로
+# 잡아서, 대수가 달라져도 계속 걸러지도록 했다.
+GOSSH_SAFETY_FILTER='\[안전장치\]|autofs 마운트'
 
 # [신규] DHCP 등록 정보 조회 스크립트. gossh로 원격 서버에서 실행하는 게 아니라,
 # 이 스크립트(os_check_final_annotated.sh)를 실행하는 현재 디렉토리에서 그대로
@@ -211,7 +225,7 @@ run_os_check() {
     PM_RAW="/tmp/pm_raw_${user}.$$"
 
     green "[INFO] gossh 분류 점검 실행 중..."
-    gossh -pm -w "${TARGET_LIST}" "${CLASSIFY_CMD}" > "${PM_RAW}" 2>&1
+    gossh -pm -w "${TARGET_LIST}" "${CLASSIFY_CMD}" 2>&1 | egrep -v "${GOSSH_SAFETY_FILTER}" > "${PM_RAW}"
 
     echo
     echo "===== gossh 분류 결과 원본 ====="
@@ -231,7 +245,7 @@ run_kernel_check() {
     local output_file="$2"
 
     green "[INFO] ${KERNEL_CMD} 커널 버전 조사 중..."
-    gossh -pm -w "${target_list}" "${KERNEL_CMD}" > "${output_file}" 2>&1
+    gossh -pm -w "${target_list}" "${KERNEL_CMD}" 2>&1 | egrep -v "${GOSSH_SAFETY_FILTER}" > "${output_file}"
     green "[INFO] 커널 버전 조사 결과 저장 완료 : ${output_file}"
     echo
 }
@@ -369,7 +383,7 @@ run_check_script() {
     local output_file="$2"
 
     green "[INFO] ${RUN_SH_DIR}/run.sh 실행 중..."
-    gossh -w "${target_list}" "bash ${RUN_SH_DIR}/run.sh" -script > "${output_file}" 2>&1
+    gossh -w "${target_list}" "bash ${RUN_SH_DIR}/run.sh" -script 2>&1 | egrep -v "${GOSSH_SAFETY_FILTER}" > "${output_file}"
     green "[INFO] 체크 결과 저장 완료 : ${output_file}"
     report_all_ok_summary "${output_file}"
     echo
@@ -387,7 +401,7 @@ run_info_check() {
     local output_file="$2"
 
     green "[INFO] ${INFO_CHECK_SH} 실행 중 (LDAP/SPLUNK 정보 조사)..."
-    gossh -w "${target_list}" "bash ${INFO_CHECK_SH}" -script > "${output_file}" 2>&1
+    gossh -w "${target_list}" "bash ${INFO_CHECK_SH}" -script 2>&1 | egrep -v "${GOSSH_SAFETY_FILTER}" > "${output_file}"
     green "[INFO] LDAP/SPLUNK 정보 조사 결과 저장 완료 : ${output_file}"
     echo
 }
