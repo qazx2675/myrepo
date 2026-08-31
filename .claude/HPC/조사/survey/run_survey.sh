@@ -102,8 +102,22 @@ echo "[info] A 재조사 대상 ${N_TO}대" >&2
 TO_ASSETS="$WORK/timeout_assets.txt"
 : > "$TO_ASSETS"
 if (( N_TO > 0 )); then
-  # 원본 표1 행(자산ID<TAB>hostname<TAB>상태<TAB>위치)으로 복원해서 넘긴다
-  awk -F'\t' 'NR==FNR { h[$1]=1; next } ($2 in h)' "$TO_HOSTS" "$ASSET_FILE" > "$TO_ASSETS"
+  # 원본 표1 행(자산ID<TAB>hostname<TAB>상태<TAB>위치)으로 복원해서 넘긴다.
+  # 구분자는 survey(asset.go)와 동일하게 판단한다: 탭이 있으면 탭, 없으면 공백.
+  awk 'NR==FNR { h[$1]=1; next }
+       {
+         line=$0
+         sub(/^[[:space:]]+/,"",line); sub(/[[:space:]]+$/,"",line)
+         if (line=="" || line ~ /^#/) next
+         if (index(line,"\t")) split(line, f, "\t"); else split(line, f, /[ \t]+/)
+         g=f[2]; gsub(/^[[:space:]]+|[[:space:]]+$/,"",g)
+         if (g in h) print
+       }' "$TO_HOSTS" "$ASSET_FILE" > "$TO_ASSETS"
+  N_MATCH=$(wc -l < "$TO_ASSETS")
+  if (( N_MATCH < N_TO )); then
+    echo "[warn] 재조사 대상 ${N_TO}대 중 ${N_MATCH}대만 자산 파일에서 찾았습니다" >&2
+    echo "       $ASSET_FILE 의 2번째 열이 hostname 인지 확인하세요" >&2
+  fi
 fi
 
 # ── 4) A 조사 ────────────────────────────────────────────────────────────
@@ -114,6 +128,10 @@ if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
   : "${A_HOST:?[server_a].host 필요}" "${A_DIR:?[server_a].dir 필요}"
   SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
   SRC_BIN="${A_DIR}/${A_BIN}"
+  [[ -e "$SRC_BIN" ]]              || echo "[warn] A 바이너리 없음: $SRC_BIN" >&2
+  [[ ! -e "$SRC_BIN" || -x "$SRC_BIN" ]] \
+                                   || echo "[warn] A 바이너리에 실행권한 없음: $SRC_BIN (chmod +x 필요)" >&2
+  [[ -f "${A_DIR}/conf/conf.toml" ]] || echo "[warn] A conf 없음: ${A_DIR}/conf/conf.toml" >&2
   if [[ -x "$SRC_BIN" && -f "${A_DIR}/conf/conf.toml" ]]; then
     # dir 아래 임시 실행폴더: 재조사 전용 conf([input].asset_file 만 교체) + 바이너리 사본
     A_RUN="$(mktemp -d "${A_DIR}/.resurvey.XXXXXX")"
@@ -139,10 +157,15 @@ if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
     fi
     rm -rf "$A_RUN"
   else
-    echo "[warn] A 바이너리/conf 없음: $SRC_BIN — B 결과만으로 진행" >&2
+    echo "[warn] 위 사유로 A 조사 생략 — B 결과만으로 진행" >&2
   fi
 elif [[ "$A_ENABLED" == "true" ]]; then
-  echo "[info] 재조사 대상 없음 — A 생략" >&2
+  if (( N_TO > 0 )); then
+    echo "[error] 재조사 대상 ${N_TO}대인데 자산 파일에서 한 행도 찾지 못했습니다 — A 생략" >&2
+    echo "        $ASSET_FILE 의 2번째 열이 hostname 인지 확인하세요" >&2
+  else
+    echo "[info] 재조사 대상 없음 — A 생략" >&2
+  fi
 else
   echo "[info] [server_a].enabled != true — A 생략" >&2
 fi
