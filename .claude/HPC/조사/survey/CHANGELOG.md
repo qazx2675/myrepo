@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- `[server_a].gossh_bin` — A 서버의 `gossh` 경로. `run_survey.sh` 가 A 전용 conf 사본을
+  만들 때 `[gossh].bin` 을 이 값으로 바꾼다. 비우면 B 의 `[gossh].bin` 을 그대로 쓴다.
+  (`survey` 는 조사를 직접 하지 않고 `gossh` 를 exec 하므로 A 에도 gossh 가 있어야 한다)
+- `update.sh` 보존 목록에 `survey-rhel6` 추가 (A용 바이너리가 덮이지 않도록).
+
 ### Fixed
 - ESXi 인데도 `ldap.conf`(인프라 fallback)를 조사하던 경로 제거. 1차 조사에서
   `타임아웃`/`DNS 미등록` 이었던 호스트는 `DetectESXi` 대상(`Reached && 설정값 없음`)에

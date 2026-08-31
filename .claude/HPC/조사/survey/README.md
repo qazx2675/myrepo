@@ -124,12 +124,16 @@ A 서버(공용, 일부 대상망 전용)에서 1회 재조사해 결과를 합�
 **전제**: A·B 가 `[server_a].dir` 을 **auto mount 로 공유**한다(양쪽에서 같은 절대경로).
 파일은 B 가 그 경로에 직접 만들고, **실행만** `ssh` 로 A 에서 한다(대상망 접근이 A 에서만 되므로).
 
-1. 공유 디렉토리(예: `/user/autofs1/조사`)에 B 것과 함께 **RHEL 6 정적 빌드** 바이너리를
-   `[server_a].bin` 이름(예: `survey-rhel6`)으로 둔다. `conf/`·`scripts/` 는 B 것을 공유한다.
+1. 공유 디렉토리에 B 것과 함께 **RHEL 6 정적 빌드** 바이너리를 `[server_a].bin`
+   이름(예: `survey-rhel6`)으로 둔다. `conf/`·`scripts/` 는 B 것을 공유한다.
+   `dir` 은 **바이너리와 `conf/` 가 들어있는 폴더**(= `run_survey.sh` 위치)를 가리켜야 한다.
+   예: `/user/autofs1/조사/survey` (그 아래에 `survey-rhel6`, `conf/conf.toml`)
 2. `conf/conf.toml` 의 `[server_a]` 를 채우고 `enabled = true`.
 3. B→A 는 `[server_a].user`(기본 `root`) 로 **패스워드리스 SSH** 가 돼야 한다(scp 는 불필요).
-4. 동작: run_survey.sh 가 `dir` 아래 임시 폴더(`.resurvey.XXXXXX/`)에 재조사 목록과
-   **`[input].asset_file` 만 그 목록으로 바꾼 conf 사본**을 만들고,
+4. **A 에도 `gossh` 가 설치돼 있어야 한다.** `survey` 는 조사를 직접 하지 않고 `gossh` 를
+   호출한다. A 의 gossh 경로가 B 와 다르면 `[server_a].gossh_bin` 에 지정한다(비우면 B 값 사용).
+5. 동작: run_survey.sh 가 `dir` 아래 임시 폴더(`.resurvey.XXXXXX/`)에 재조사 목록과
+   **`[input].asset_file`(+ 설정 시 `[gossh].bin`)만 바꾼 conf 사본**을 만들고,
    `ssh A "cd .resurvey.XXXXXX && ./survey-rhel6"` 로 실행 → 결과를 읽어 병합 후 임시 폴더 삭제.
 
 `./run_survey.sh` 한 번이면 필터 → B 조사 → A 재조사 → 병합까지 끝나고
@@ -168,6 +172,7 @@ A 실행이 안 되면 경고만 내고 **B 결과만으로** 최종 파일을 �
 | `[server_a].host` / `.user` | A 서버 주소 / 패스워드리스 SSH 계정 (기본 `root`) |
 | `[server_a].dir` | **A·B 가 auto mount 로 공유하는 디렉토리(같은 절대경로).** 이 아래에 A 용 바이너리와 `conf/` 가 있어야 함 |
 | `[server_a].bin` | A(RHEL6)에서 돌릴 바이너리 파일명(`dir` 아래). 기본 `survey`. B 것과 안 겹치게 예: `survey-rhel6` |
+| `[server_a].gossh_bin` | A 서버의 `gossh` 경로. 비우면 `[gossh].bin` 을 그대로 사용. **A 에도 gossh 는 반드시 있어야 함** |
 
 ### 판정 규칙
 
