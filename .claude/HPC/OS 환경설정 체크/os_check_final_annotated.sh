@@ -81,8 +81,11 @@
 #      형식과 안 맞아 값이 전혀 안 걸리고 "FAIL ... confirmation required"만
 #      뜨던 문제 수정.
 #  26) report_check_res_summary (신규) : check.res_${user}(호스트별 "hostname: OK")를
-#      집계해서, 전체가 OK면 "모든서버 체크결과 OK (N대)" 요약 1줄을 출력하고
-#      맨 아래에 total/ok/no_svrauto/refused/poweroff 대수를 한 줄로 출력.
+#      집계해서 맨 아래에 total/ok/no_svrauto/refused/poweroff 대수를 한 줄로 출력.
+#  27) report_all_ok_summary (신규) : "모든서버 체크결과 OK (N대)" 요약 1줄은
+#      report_check_res_summary(맨 아래)가 아니라, run_check_script의 "체크 결과
+#      저장 완료" 로그 바로 다음에 출력되어야 한다는 요청에 따라 분리 — 이제
+#      run_check_script 안에서 직접 호출.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -289,6 +292,41 @@ parse_pm_result() {
 
 }
 
+# [신규] run_check_script가 만든 결과 파일(check.res_${user} 또는
+# check.res_${user}_postapply)에서 대상 전체가 다 OK인지 확인해서, 다 OK면
+# "모든서버 체크결과 OK (N대)" 한 줄만 출력한다("체크 결과 저장 완료" 로그
+# 바로 다음에 출력되어야 한다는 요청에 따라 run_check_script 안에서 직접
+# 호출한다 — report_check_res_summary의 맨 아래 total=... 요약과는 별개).
+# 파싱 방식은 report_check_res_summary와 동일(콜론 구분, "hostname: OK").
+report_all_ok_summary() {
+    local target_file="$1"
+    [ -f "${target_file}" ] || return 0
+
+    local line h status
+    declare -A host_status
+
+    while IFS= read -r line; do
+        if [[ "${line}" =~ ^([^[:space:]]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            h="${BASH_REMATCH[1]}"
+            status="${BASH_REMATCH[2]}"
+        else
+            h=$(echo "${line}" | awk '{print $1}')
+            status="${line#"${h}" }"
+        fi
+        [ -z "${h}" ] && continue
+        host_status["${h}"]="${status}"
+    done < <(grep -v '^[[:space:]]*$' "${target_file}")
+
+    local ok=0
+    for h in "${!host_status[@]}"; do
+        [ "${host_status[${h}]}" == "OK" ] && ok=$((ok + 1))
+    done
+
+    if [ ${#host_status[@]} -gt 0 ] && [ "${ok}" -eq ${#host_status[@]} ]; then
+        green "모든서버 체크결과 OK (${ok}대)"
+    fi
+}
+
 # [수정됨] target_list / output_file 을 인자로 받도록 일반화했습니다.
 # 기존에는 TARGET_LIST/CHECK_RES_FILE 전역 변수를 직접 참조했지만, 설정 적용 후
 # 재점검(다른 대상 목록 · 다른 결과 파일)에도 동일 로직을 재사용하기 위해
@@ -296,6 +334,8 @@ parse_pm_result() {
 # [연계] main()의 최초 OS 체크 단계에서 run_check_script "${TARGET_LIST}" "${CHECK_RES_FILE}"
 # 로 호출되고, run_post_apply_check가 이 함수를 재사용해서
 # run_check_script "${SETTING_TARGET_LIST}" "${POST_APPLY_CHECK_FILE}" 로도 호출합니다.
+# [수정됨] "체크 결과 저장 완료" 로그 바로 다음에 report_all_ok_summary를 호출해서
+# 전체 OK 여부를 바로 보여줍니다.
 run_check_script() {
     local target_list="$1"
     local output_file="$2"
@@ -303,6 +343,7 @@ run_check_script() {
     green "[INFO] ${RUN_SH_DIR}/run.sh 실행 중..."
     gossh -w "${target_list}" "bash ${RUN_SH_DIR}/run.sh" -script > "${output_file}" 2>&1
     green "[INFO] 체크 결과 저장 완료 : ${output_file}"
+    report_all_ok_summary "${output_file}"
     echo
 }
 
@@ -603,8 +644,11 @@ report_kernel_by_infra() {
 
 # [신규] check.res_${user}(run.sh 결과, CHECK_RES_FILE)는 호스트별로
 # "hostname: OK" 형태(LDAP/커널과 동일하게 콜론 구분, 콜론 앞뒤 공백 유무는
-# 호스트마다 다를 수 있음)로 결과가 찍힌다. 전체 대상이 다 OK면 요약 1줄만,
-# 그리고 맨 아래에 total/ok/no_svrauto/refused/poweroff 대수를 한 줄로 출력한다.
+# 호스트마다 다를 수 있음)로 결과가 찍힌다. 맨 아래에
+# total/ok/no_svrauto/refused/poweroff 대수를 한 줄로 출력한다("모든서버
+# 체크결과 OK" 한 줄 요약은 report_all_ok_summary가 담당 — run_check_script
+# 안에서 "체크 결과 저장 완료" 로그 바로 다음에 출력되어야 한다는 요청에 따라
+# 분리했습니다).
 # no_svrauto/refused/poweroff는 parse_pm_result가 이미 분류해 둔
 # NOSVRAUTO_HOSTS/REFUSED_HOSTS/PINGX_HOSTS(ping 불가=파워오프 추정) 배열을 그대로 쓴다.
 # [연계] main()에서 run_check_script 실행 후 언제든 호출 가능합니다.
@@ -632,9 +676,6 @@ report_check_res_summary() {
     done
 
     echo "===== OS 체크 결과 요약 ====="
-    if [ ${#host_status[@]} -gt 0 ] && [ "${ok}" -eq ${#host_status[@]} ]; then
-        green "모든서버 체크결과 OK (${ok}대)"
-    fi
     echo "total=${#ALL_HOSTS[@]} ok=${ok} no_svrauto=${#NOSVRAUTO_HOSTS[@]} refused=${#REFUSED_HOSTS[@]} poweroff=${#PINGX_HOSTS[@]}"
     echo "=============================="
     echo
