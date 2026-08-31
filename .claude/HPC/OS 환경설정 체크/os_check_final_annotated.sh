@@ -86,6 +86,9 @@
 #      report_check_res_summary(맨 아래)가 아니라, run_check_script의 "체크 결과
 #      저장 완료" 로그 바로 다음에 출력되어야 한다는 요청에 따라 분리 — 이제
 #      run_check_script 안에서 직접 호출.
+#  28) report_all_ok_summary : 전체 OK일 때만 뭔가 나오고 FAIL이 섞여 있으면
+#      아무것도 안 보이던 문제 수정 — FAIL이 하나라도 있으면 결과 파일
+#      (check.res_${user} 등) 전체를 cat으로 출력하도록 변경.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -293,11 +296,14 @@ parse_pm_result() {
 }
 
 # [신규] run_check_script가 만든 결과 파일(check.res_${user} 또는
-# check.res_${user}_postapply)에서 대상 전체가 다 OK인지 확인해서, 다 OK면
-# "모든서버 체크결과 OK (N대)" 한 줄만 출력한다("체크 결과 저장 완료" 로그
-# 바로 다음에 출력되어야 한다는 요청에 따라 run_check_script 안에서 직접
-# 호출한다 — report_check_res_summary의 맨 아래 total=... 요약과는 별개).
-# 파싱 방식은 report_check_res_summary와 동일(콜론 구분, "hostname: OK").
+# check.res_${user}_postapply)에서 대상 전체가 다 OK인지 확인한다. 다 OK면
+# "모든서버 체크결과 OK (N대)" 한 줄만 출력하고, FAIL이 하나라도 섞여 있으면
+# 어디가 왜 실패했는지 바로 보이도록 결과 파일 전체를 cat으로 출력한다
+# ("전체 OK일 때만 뭔가 나오고 FAIL이 있으면 아무것도 안 보이던" 문제 수정).
+# "체크 결과 저장 완료" 로그 바로 다음에 출력되어야 한다는 요청에 따라
+# run_check_script 안에서 직접 호출한다 — report_check_res_summary의 맨 아래
+# total=... 요약과는 별개. 파싱 방식은 report_check_res_summary와 동일(콜론
+# 구분, "hostname: OK").
 report_all_ok_summary() {
     local target_file="$1"
     [ -f "${target_file}" ] || return 0
@@ -324,6 +330,9 @@ report_all_ok_summary() {
 
     if [ ${#host_status[@]} -gt 0 ] && [ "${ok}" -eq ${#host_status[@]} ]; then
         green "모든서버 체크결과 OK (${ok}대)"
+    else
+        yellow "[경고] FAIL이 포함되어 있습니다 — 결과 파일 원본 : ${target_file}"
+        cat "${target_file}"
     fi
 }
 
