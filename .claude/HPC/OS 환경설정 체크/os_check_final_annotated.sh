@@ -80,6 +80,9 @@
 #      동일한 "hostname : INFO SDS Splunk" 형태)으로 정정. 탭 기준 파싱이 실제
 #      형식과 안 맞아 값이 전혀 안 걸리고 "FAIL ... confirmation required"만
 #      뜨던 문제 수정.
+#  26) report_check_res_summary (신규) : check.res_${user}(호스트별 "hostname: OK")를
+#      집계해서, 전체가 OK면 "모든서버 체크결과 OK (N대)" 요약 1줄을 출력하고
+#      맨 아래에 total/ok/no_svrauto/refused/poweroff 대수를 한 줄로 출력.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -598,6 +601,45 @@ report_kernel_by_infra() {
     done
 }
 
+# [신규] check.res_${user}(run.sh 결과, CHECK_RES_FILE)는 호스트별로
+# "hostname: OK" 형태(LDAP/커널과 동일하게 콜론 구분, 콜론 앞뒤 공백 유무는
+# 호스트마다 다를 수 있음)로 결과가 찍힌다. 전체 대상이 다 OK면 요약 1줄만,
+# 그리고 맨 아래에 total/ok/no_svrauto/refused/poweroff 대수를 한 줄로 출력한다.
+# no_svrauto/refused/poweroff는 parse_pm_result가 이미 분류해 둔
+# NOSVRAUTO_HOSTS/REFUSED_HOSTS/PINGX_HOSTS(ping 불가=파워오프 추정) 배열을 그대로 쓴다.
+# [연계] main()에서 run_check_script 실행 후 언제든 호출 가능합니다.
+report_check_res_summary() {
+    [ -f "${CHECK_RES_FILE}" ] || return 0
+
+    local line h status
+    declare -A host_status
+
+    while IFS= read -r line; do
+        if [[ "${line}" =~ ^([^[:space:]]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+            h="${BASH_REMATCH[1]}"
+            status="${BASH_REMATCH[2]}"
+        else
+            h=$(echo "${line}" | awk '{print $1}')
+            status="${line#"${h}" }"
+        fi
+        [ -z "${h}" ] && continue
+        host_status["${h}"]="${status}"
+    done < <(grep -v '^[[:space:]]*$' "${CHECK_RES_FILE}")
+
+    local ok=0
+    for h in "${!host_status[@]}"; do
+        [ "${host_status[${h}]}" == "OK" ] && ok=$((ok + 1))
+    done
+
+    echo "===== OS 체크 결과 요약 ====="
+    if [ ${#host_status[@]} -gt 0 ] && [ "${ok}" -eq ${#host_status[@]} ]; then
+        green "모든서버 체크결과 OK (${ok}대)"
+    fi
+    echo "total=${#ALL_HOSTS[@]} ok=${ok} no_svrauto=${#NOSVRAUTO_HOSTS[@]} refused=${#REFUSED_HOSTS[@]} poweroff=${#PINGX_HOSTS[@]}"
+    echo "=============================="
+    echo
+}
+
 # [신규] "환경설정 점검결과"는 최초 OS 체크가 아니라, 설정 적용
 # (apply_os_setting/apply_extra_setting) 완료 후의 재점검 결과를 가리키는
 #것으로 확인되어, 대상 파일을 인자로 받는 형태로 만들었습니다.
@@ -908,6 +950,7 @@ main() {
                 report_splunk_info
                 report_kernel_info
                 report_kernel_by_infra
+                report_check_res_summary
             else
                 yellow "[WARN] 체크 대상이 없어 OS 체크/정보 조사를 건너뜁니다."
             fi
