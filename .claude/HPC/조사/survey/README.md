@@ -146,8 +146,17 @@ A 실행이 안 되면 경고만 내고 **B 결과만으로** 최종 파일을 �
 
 ### 실행
 
-`./run_survey.sh` — 인자 없음. `survey` 바이너리를 직접 실행해도 된다(`./survey`).
+`./run_survey.sh` — `survey` 바이너리를 직접 실행해도 된다(`./survey`).
 설정은 항상 실행 파일 옆 `conf/conf.toml` 을 읽는다.
+
+**디버그 모드**: `./run_survey.sh --debug` (또는 `DEBUG=1 ./run_survey.sh`)
+
+- 읽어들인 conf 값, 임시 경로, A 실행 명령을 `[debug]` 로 출력
+- A 용 임시 conf 의 `[gossh].bin` / `[input].asset_file` 실제 값 확인
+- A 서버에 gossh 가 있는지 사전 점검
+- 임시 작업 디렉토리와 A 실행폴더(`.resurvey.XXXXXX/`)를 지우지 않고 남김
+
+`survey` 바이너리는 항상 실행한 gossh 명령줄을 `[gossh]` 로 출력한다.
 
 ### `conf/conf.toml` 항목
 

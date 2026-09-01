@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- `run_survey.sh --debug` (또는 `DEBUG=1`): 읽어들인 conf 값·임시 경로·A 실행 명령을
+  `[debug]` 로 출력하고, A 용 임시 conf 의 `[gossh].bin`/`[input].asset_file` 실제 값을
+  보여주며, 임시 작업 디렉토리와 A 실행폴더를 지우지 않고 남긴다.
+- A 실행 직전 A 서버에 gossh 가 있는지(`test -x`) 점검해 없으면 경고.
+- B 조사 후 **특이사항 분포**를 항상 출력. 재조사 대상이 0대일 때 그 이유가 바로 보인다
+  (`gossh 실행 실패` 는 타임아웃/접속불가가 아니므로 A 재조사 대상이 아니다).
 - `[server_a].gossh_bin` — A 서버의 `gossh` 경로. `run_survey.sh` 가 A 전용 conf 사본을
   만들 때 `[gossh].bin` 을 이 값으로 바꾼다. 비우면 B 의 `[gossh].bin` 을 그대로 쓴다.
   (`survey` 는 조사를 직접 하지 않고 `gossh` 를 exec 하므로 A 에도 gossh 가 있어야 한다)
