@@ -48,7 +48,10 @@ func runGossh(cfg *Config, hostnames []string, script string, withConc bool) (li
 	if strings.TrimSpace(cfg.GosshArgs) != "" {
 		args = append(args, strings.Fields(cfg.GosshArgs)...)
 	}
-	args = append(args, "-w", hostfile.Name(), "-script", script)
+	// 일부 gossh 빌드(RHEL6용)는 -script 인자가 따옴표 문자로 끝나면
+	// 자체 인자 파싱이 깨진다. 끝에 공백 한 칸을 붙이면 정상 동작하고,
+	// 정상 shell 명령에는 영향이 없다 (sh -c "cmd " == sh -c "cmd").
+	args = append(args, "-w", hostfile.Name(), "-script", script+" ")
 
 	// 실제 실행한 명령줄을 남긴다 (gossh 버전/플래그 차이 진단용)
 	fmt.Fprintf(os.Stderr, "[gossh] %s %s  (대상 %d대)\n", cfg.GosshBin, strings.Join(args, " "), len(hostnames))
