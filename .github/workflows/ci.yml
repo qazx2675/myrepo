@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: .claude/VM/VM_setup/vm-network-migration
+        working-directory: .claude/VM/vm-network-migration
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
