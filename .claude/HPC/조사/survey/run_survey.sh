@@ -18,6 +18,19 @@
 #
 set -euo pipefail
 
+# ── 디버그 모드 ───────────────────────────────────────────────────────────
+#   ./run_survey.sh --debug   또는   DEBUG=1 ./run_survey.sh
+#   - 각 단계의 값/경로/명령을 [debug] 로 출력
+#   - 임시 작업 디렉토리와 A 실행폴더를 지우지 않고 남긴다
+DEBUG="${DEBUG:-0}"
+for a in "$@"; do
+  case "$a" in
+    --debug|-d) DEBUG=1 ;;
+    *) echo "[error] 알 수 없는 인자: $a (사용법: $0 [--debug])" >&2; exit 1 ;;
+  esac
+done
+dbg() { (( DEBUG )) && echo "[debug] $*" >&2 || true; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="${SCRIPT_DIR}/survey"
 CONF="${SCRIPT_DIR}/conf/conf.toml"
@@ -56,10 +69,25 @@ A_USER="${A_USER:-root}"
 
 [[ -n "$ASSET_FILE" ]] || { echo "[error] conf [input].asset_file 이 필요합니다" >&2; exit 1; }
 
+dbg "conf              = $CONF"
+dbg "[input].asset_file= $ASSET_FILE"
+dbg "[gossh].bin       = $(conf_get gossh bin)   (B 서버용)"
+dbg "[asset_filter].source = ${F_SOURCE:-(없음 → 필터 생략)}"
+dbg "[server_a].enabled= ${A_ENABLED:-(없음)}"
+dbg "[server_a].host   = ${A_HOST:-(없음)}"
+dbg "[server_a].user   = $A_USER"
+dbg "[server_a].dir    = ${A_DIR:-(없음)}"
+dbg "[server_a].bin    = $A_BIN"
+dbg "[server_a].gossh_bin = ${A_GOSSH:-(없음 → B 의 [gossh].bin 사용)}"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/survey.XXXXXX")"
 ok=0
-finish() { if (( ok )); then rm -rf "$WORK"; else echo "[info] 작업 디렉토리 보존(디버그용): $WORK" >&2; fi; }
+finish() {
+  if (( ok )) && ! (( DEBUG )); then rm -rf "$WORK"
+  else echo "[info] 작업 디렉토리 보존: $WORK" >&2; fi
+}
 trap finish EXIT
+dbg "작업 디렉토리     = $WORK"
 
 # ── 1) 자산 필터링 ────────────────────────────────────────────────────────
 if [[ -n "$F_SOURCE" ]]; then
@@ -97,7 +125,16 @@ awk -F'\t' 'NR>1 { n=$7
   if (n ~ /(^|; )타임아웃(;|$)/ || n ~ /(^|; )접속불가(;|$)/) print $1
 }' "$B_MAIN" | sort -u > "$TO_HOSTS"
 N_TO=$(wc -l < "$TO_HOSTS")
-echo "[info] A 재조사 대상 ${N_TO}대" >&2
+
+# B 결과의 특이사항 분포 — 재조사 대상이 0대일 때 왜 그런지 바로 보이게 한다
+echo "[info] B 특이사항 분포:" >&2
+awk -F'\t' 'NR>1 { print ($7=="" ? "(정상)" : $7) }' "$B_MAIN" \
+  | sort | uniq -c | sort -rn | head -15 | sed 's/^/         /' >&2
+
+echo "[info] A 재조사 대상 ${N_TO}대 (타임아웃/접속불가만, DNS 미등록 제외)" >&2
+dbg "B 메인 결과 파일  = $B_MAIN"
+dbg "재조사 호스트 목록 = $TO_HOSTS"
+(( DEBUG && N_TO > 0 )) && head -5 "$TO_HOSTS" | sed 's/^/[debug]   /' >&2
 
 TO_ASSETS="$WORK/timeout_assets.txt"
 : > "$TO_ASSETS"
@@ -148,6 +185,23 @@ if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
       { print }
     ' "${A_DIR}/conf/conf.toml" > "${A_RUN}/conf/conf.toml"
     rm -f "${A_RUN}"/result_*.tsv
+
+    dbg "A 실행폴더        = $A_RUN"
+    dbg "A conf 확인:"
+    (( DEBUG )) && grep -nE '^[[:space:]]*(bin|asset_file)[[:space:]]*=' "${A_RUN}/conf/conf.toml" \
+                   | sed 's/^/[debug]   /' >&2
+    dbg "A 재조사 목록     = $(wc -l < "${A_RUN}/resurvey_list.txt")행"
+
+    # A 에 gossh 가 실제로 있는지 먼저 확인 (없으면 전 호스트 'gossh 실행 실패')
+    A_GOSSH_EFF="${A_GOSSH:-$(conf_get gossh bin)}"
+    if ! "${SSH[@]}" "${A_USER}@${A_HOST}" "test -x '${A_GOSSH_EFF}'"; then
+      echo "[warn] A 서버에 gossh 가 없거나 실행권한 없음: ${A_GOSSH_EFF}" >&2
+      echo "       [server_a].gossh_bin 을 A 기준 절대경로로 지정하세요" >&2
+    else
+      dbg "A gossh 확인 OK   = $A_GOSSH_EFF"
+    fi
+
+    dbg "A 실행 명령       = ssh ${A_USER}@${A_HOST} \"cd '${A_RUN}' && ./'${A_BIN}'\""
     if "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_RUN}' && ./'${A_BIN}'" >&2; then
       shopt -s nullglob; A_FILES=( "${A_RUN}"/result_*.tsv ); shopt -u nullglob
       (( ${#A_FILES[@]} )) && cp "${A_FILES[@]}" "$A_OUT/"
@@ -155,7 +209,7 @@ if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
     else
       echo "[warn] A 실행 실패 — B 결과만으로 진행" >&2
     fi
-    rm -rf "$A_RUN"
+    if (( DEBUG )); then echo "[info] A 실행폴더 보존: $A_RUN" >&2; else rm -rf "$A_RUN"; fi
   else
     echo "[warn] 위 사유로 A 조사 생략 — B 결과만으로 진행" >&2
   fi
