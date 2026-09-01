@@ -161,6 +161,16 @@ fi
 # 전제: A·B 가 [server_a].dir 을 auto mount 로 공유(같은 절대경로). 파일은 직접
 # 만들고, 대상망 접근이 되는 A 에서 '실행'만 ssh 로 한다. (scp 불필요)
 A_OUT="$WORK/a"; mkdir -p "$A_OUT"
+A_RAN=0   # A 조사가 실제로 결과를 냈는지 (마지막 요약용)
+
+echo "========== 4) A 서버 재조사 ==========" >&2
+echo "[info] enabled=${A_ENABLED:-(빈값)} / host=${A_HOST:-(빈값)} / 대상=${N_TO}대 / 자산행=$(wc -l < "$TO_ASSETS")" >&2
+if (( DEBUG )); then
+  echo "[debug] conf 의 [server_a] 섹션 원문:" >&2
+  awk '/^[[:space:]]*\[server_a\]/{f=1} f&&/^[[:space:]]*\[/&&!/\[server_a\]/{f=0} f' "$CONF" \
+    | sed 's/^/[debug]   /' >&2
+fi
+
 if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
   : "${A_HOST:?[server_a].host 필요}" "${A_DIR:?[server_a].dir 필요}"
   SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
@@ -204,8 +214,13 @@ if [[ "$A_ENABLED" == "true" && -s "$TO_ASSETS" ]]; then
     dbg "A 실행 명령       = ssh ${A_USER}@${A_HOST} \"cd '${A_RUN}' && ./'${A_BIN}'\""
     if "${SSH[@]}" "${A_USER}@${A_HOST}" "cd '${A_RUN}' && ./'${A_BIN}'" >&2; then
       shopt -s nullglob; A_FILES=( "${A_RUN}"/result_*.tsv ); shopt -u nullglob
-      (( ${#A_FILES[@]} )) && cp "${A_FILES[@]}" "$A_OUT/"
-      echo "[info] A 결과 파일 ${#A_FILES[@]}개 수집" >&2
+      if (( ${#A_FILES[@]} )); then
+        cp "${A_FILES[@]}" "$A_OUT/"
+        A_RAN=1
+        echo "[info] A 결과 파일 ${#A_FILES[@]}개 수집" >&2
+      else
+        echo "[warn] A 는 정상 종료했는데 result_*.tsv 가 없습니다: $A_RUN" >&2
+      fi
     else
       echo "[warn] A 실행 실패 — B 결과만으로 진행" >&2
     fi
@@ -221,7 +236,13 @@ elif [[ "$A_ENABLED" == "true" ]]; then
     echo "[info] 재조사 대상 없음 — A 생략" >&2
   fi
 else
-  echo "[info] [server_a].enabled != true — A 생략" >&2
+  echo "[info] [server_a].enabled != true — A 생략 (읽은 값: ${A_ENABLED:-(빈값)})" >&2
+fi
+
+if (( A_RAN )); then
+  echo "[info] A 재조사 반영됨" >&2
+else
+  echo "[warn] A 재조사 미반영 — 위 사유 확인. 결과는 B 값만 담깁니다" >&2
 fi
 
 # ── 5) 병합 -> 최종 결과 파일 ────────────────────────────────────────────
