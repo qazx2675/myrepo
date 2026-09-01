@@ -9,6 +9,11 @@
 - `update.sh` 보존 목록에 `survey-rhel6` 추가 (A용 바이너리가 덮이지 않도록).
 
 ### Fixed
+- **gossh `-script` 인자가 따옴표 문자(`'`/`"`)로 끝나면** 원격 bash 가
+  `unexpected EOF while looking for matching '` 로 죽던 문제. 기본 `config_value`
+  (`... | grep -w '/appl'`)가 `'` 로 끝나 **모든 호스트가 `gossh 실행 실패`/설정값 공란**이
+  됐다. `runGossh` 가 스크립트 문자열 끝에 공백 한 칸을 붙이도록 수정
+  (`sh -c "cmd " == sh -c "cmd"` 이라 정상 명령엔 영향 없음). RHEL6·RHEL9 gossh 공통 버그.
 - `run_survey.sh` 가 A 재조사 목록을 만들 때 자산 파일을 **탭 구분으로만** 파싱해,
   공백 구분 자산 파일에서는 목록이 비어 A 조사가 조용히 생략되던 문제.
   이제 `asset.go` 와 동일하게 "탭이 있으면 탭, 없으면 공백" 으로 판단한다.
