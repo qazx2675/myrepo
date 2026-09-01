@@ -50,11 +50,29 @@ func runGossh(cfg *Config, hostnames []string, script string, withConc bool) (li
 	}
 	args = append(args, "-w", hostfile.Name(), "-script", script)
 
+	// 실제 실행한 명령줄을 남긴다 (gossh 버전/플래그 차이 진단용)
+	fmt.Fprintf(os.Stderr, "[gossh] %s %s  (대상 %d대)\n", cfg.GosshBin, strings.Join(args, " "), len(hostnames))
+
 	cmd := exec.Command(cfg.GosshBin, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	runErr := cmd.Run()
+
+	if runErr != nil {
+		fmt.Fprintf(os.Stderr, "[gossh] 종료 오류: %v\n", runErr)
+	}
+	if stdout.Len() == 0 {
+		// 출력이 아예 없으면 stderr 앞부분을 보여준다 (플래그 미지원 등)
+		if e := strings.TrimSpace(stderr.String()); e != "" {
+			if len(e) > 500 {
+				e = e[:500] + " ...(생략)"
+			}
+			fmt.Fprintf(os.Stderr, "[gossh] stdout 없음. stderr: %s\n", e)
+		} else {
+			fmt.Fprintln(os.Stderr, "[gossh] stdout/stderr 모두 비어 있음")
+		}
+	}
 
 	for _, raw := range append(splitLines(stdout.String()), splitLines(stderr.String())...) {
 		host, rest, ok := parsePdshLine(raw)
