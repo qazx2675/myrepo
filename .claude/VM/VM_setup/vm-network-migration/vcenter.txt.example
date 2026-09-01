@@ -1,0 +1,11 @@
+# vCenter 접속 설정. vcenter.txt 로 복사한 뒤 값을 채우세요.
+#   cp vcenter.txt.example vcenter.txt && chmod 600 vcenter.txt
+# 주의: vcenter.txt 에는 평문 비밀번호가 들어갑니다. 절대 git 에 커밋하지 마세요(.gitignore 에 등록됨).
+
+VCENTER_HOST=vcenter.example.local
+VCENTER_USER=administrator@vsphere.local
+VCENTER_PASS=ChangeMe!
+VCENTER_DATACENTER=Datacenter1
+
+# 사설 인증서를 쓰는 폐쇄망이면 true(기본값). 정식 인증서면 false 권장.
+VCENTER_INSECURE=true
