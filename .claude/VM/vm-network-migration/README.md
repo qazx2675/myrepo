@@ -30,7 +30,7 @@ vCenter 에 등록된 여러 VM 의 가상 NIC 를 **지정한 포트그룹으�
 
 ```bash
 git clone <저장소 주소>
-cd <저장소>/.claude/VM/VM_setup/vm-network-migration
+cd <저장소>/.claude/VM/vm-network-migration
 bash setup.sh
 ```
 
