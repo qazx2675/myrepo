@@ -13,8 +13,9 @@ import (
 	"time"
 )
 
-// Version 은 도구 전체의 버전입니다. CHANGELOG 의 최신 항목과 맞춥니다.
-const Version = "1.0.0"
+// timeout 은 전체 작업 제한 시간입니다. 대상이 수백 대여도 넉넉한 값이라
+// 옵션으로 열지 않고 상수로 둡니다.
+const timeout = 30 * time.Minute
 
 // 종료 코드 규약.
 //
@@ -28,6 +29,10 @@ const (
 )
 
 // Flags 는 모든 단계 바이너리가 공통으로 받는 옵션입니다.
+//
+// 파일 경로는 대부분 -user 에서 파생되므로 개별 플래그로 열지 않습니다.
+// -state-file 만 예외인데, dry-run 이 실제 상태 파일을 건드리지 않도록
+// run.sh 가 임시 경로로 돌려야 하기 때문입니다.
 type Flags struct {
 	User         string
 	VCenterFile  string
@@ -39,7 +44,6 @@ type Flags struct {
 	Concurrency  int
 	Timeout      time.Duration
 	DryRun       bool
-	ShowVersion  bool
 }
 
 // Register 는 공통 플래그를 등록합니다. 반환된 Flags 는 Parse 후에 Resolve 를 불러야 합니다.
@@ -47,19 +51,14 @@ func Register(fs *flag.FlagSet) *Flags {
 	f := &Flags{}
 	fs.StringVar(&f.User, "user", "", "작업 대상 사용자 토큰. 나머지 파일 경로의 기본값을 결정합니다 (필수)")
 	fs.StringVar(&f.VCenterFile, "vcenter-file", "vcenter.txt", "vCenter 주소 목록 파일 (한 줄에 하나)")
-	fs.StringVar(&f.VMFile, "vm-file", "", "대상 VM 목록 파일 (기본: {user}.txt)")
-	fs.StringVar(&f.WorklistFile, "worklist-file", "", "신규 네트워크 설정 파일 (기본: vswitch_{user}.txt)")
 	fs.StringVar(&f.StateFile, "state-file", "", "롤백용 상태 파일 (기본: state_{user}.json)")
-	fs.StringVar(&f.FailedFile, "failed-file", "", "실패한 VM 이름을 기록할 파일 (기본: failed_{user}.txt)")
 	fs.IntVar(&f.NicIndex, "nic-index", 0, "대상 가상 NIC 순번 (0 = 네트워크 어댑터 1)")
 	fs.IntVar(&f.Concurrency, "concurrency", 8, "동시에 처리할 VM 수 (vCenter 부하 조절)")
-	fs.DurationVar(&f.Timeout, "timeout", 30*time.Minute, "전체 작업 제한 시간")
 	fs.BoolVar(&f.DryRun, "dry-run", false, "실제 변경 없이 무엇이 바뀔지만 출력")
-	fs.BoolVar(&f.ShowVersion, "version", false, "버전 출력 후 종료")
 	return f
 }
 
-// Resolve 는 -user 로부터 나머지 파일 경로 기본값을 채우고 값을 검증합니다.
+// Resolve 는 -user 로부터 나머지 파일 경로를 정하고 값을 검증합니다.
 func (f *Flags) Resolve() error {
 	if f.User == "" {
 		return fmt.Errorf("-user 는 필수입니다 (예: -user=hong)")
@@ -67,17 +66,12 @@ func (f *Flags) Resolve() error {
 	if strings.ContainsAny(f.User, `/\ `) {
 		return fmt.Errorf("-user 에 경로 구분자나 공백을 쓸 수 없습니다: %q", f.User)
 	}
-	if f.VMFile == "" {
-		f.VMFile = f.User + ".txt"
-	}
-	if f.WorklistFile == "" {
-		f.WorklistFile = "vswitch_" + f.User + ".txt"
-	}
+	f.VMFile = f.User + ".txt"
+	f.WorklistFile = "vswitch_" + f.User + ".txt"
+	f.FailedFile = "failed_" + f.User + ".txt"
+	f.Timeout = timeout
 	if f.StateFile == "" {
 		f.StateFile = "state_" + f.User + ".json"
-	}
-	if f.FailedFile == "" {
-		f.FailedFile = "failed_" + f.User + ".txt"
 	}
 	if f.Concurrency < 1 {
 		f.Concurrency = 1

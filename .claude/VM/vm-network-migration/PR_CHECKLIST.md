@@ -35,7 +35,7 @@
 - [ ] `CHANGELOG.md` 에 날짜순(최신 위) 항목 추가 — 검증 내용 포함
 - [ ] `README.md` 옵션 표 / 알려진 한계 갱신 필요 여부 확인
 - [ ] `ARCHITECTURE.md` 파일 역할 표 갱신 필요 여부 확인
-- [ ] 배포 시 버전 태그 — `internal/cli.Version` 과 태그를 맞출 것
+- [ ] 배포 시 버전 태그 — 태그 메시지에 어느 CHANGELOG 항목까지 포함하는지 적을 것
 
 ```bash
 git tag -a v1.0.0 -m "<변경 요약> (CHANGELOG 2026-09-02 항목)"

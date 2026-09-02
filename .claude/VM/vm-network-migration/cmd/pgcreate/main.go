@@ -26,11 +26,6 @@ func run() int {
 	f := cli.Register(fs)
 	vswitch := fs.String("target-vswitch", "vSwitch0", "포트그룹을 만들 대상 표준 가상 스위치")
 	_ = fs.Parse(os.Args[1:])
-
-	if f.ShowVersion {
-		fmt.Println("nm-pgcreate", cli.Version)
-		return cli.ExitOK
-	}
 	if err := f.Resolve(); err != nil {
 		return cli.Usage("%v", err)
 	}

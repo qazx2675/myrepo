@@ -184,17 +184,16 @@ nm-backup -user=hong
 
 | 플래그 | 기본값 | 설명 |
 |---|---|---|
-| `-user` | (필수) | 작업 단위 토큰. 아래 파일 경로의 기본값을 결정합니다. |
+| `-user` | (필수) | 작업 단위 토큰. 아래 파일 이름을 결정합니다. |
 | `-vcenter-file` | `vcenter.txt` | vCenter 주소 목록 (한 줄에 하나). |
-| `-vm-file` | `{user}.txt` | 대상 VM 이름 목록. |
-| `-worklist-file` | `vswitch_{user}.txt` | 신규 네트워크 설정 (BM호스트/포트그룹/VLAN). |
-| `-state-file` | `state_{user}.json` | 롤백용 상태 파일. |
-| `-failed-file` | `failed_{user}.txt` | 실패한 VM 이름을 기록할 파일. |
+| `-state-file` | `state_{user}.json` | 롤백용 상태 파일. `run.sh` 가 dry-run 일 때 임시 경로로 돌립니다. |
 | `-nic-index` | `0` | 대상 NIC 순번. |
 | `-concurrency` | `8` | 동시 처리 수. |
-| `-timeout` | `30m` | 전체 작업 제한 시간. |
 | `-dry-run` | `false` | 변경 없이 예정 내용만 출력. |
-| `-version` | `false` | 버전 출력 후 종료. |
+
+`{user}.txt`(대상 VM), `vswitch_{user}.txt`(신규 네트워크 설정),
+`failed_{user}.txt`(실패 목록)는 `-user` 에서 파생되며 따로 지정할 수 없습니다.
+전체 작업 제한 시간은 30분 고정입니다.
 
 ### 3.3 바이너리별 고유 옵션
 

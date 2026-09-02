@@ -28,11 +28,6 @@ func run() int {
 	fs := flag.NewFlagSet("nm-verify", flag.ExitOnError)
 	f := cli.Register(fs)
 	_ = fs.Parse(os.Args[1:])
-
-	if f.ShowVersion {
-		fmt.Println("nm-verify", cli.Version)
-		return cli.ExitOK
-	}
 	if err := f.Resolve(); err != nil {
 		return cli.Usage("%v", err)
 	}
