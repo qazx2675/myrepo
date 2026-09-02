@@ -19,13 +19,15 @@ const (
 
 // Result 는 VM 한 대의 처리 결과입니다. 리포트 CSV 와 롤백 CSV 의 원본이 됩니다.
 type Result struct {
-	VMName  string
-	NicKey  int32
-	NicName string
-	FromPG  string
-	ToPG    string
-	Status  string
-	Message string
+	VCenter    string
+	Datacenter string
+	VMName     string
+	NicKey     int32
+	NicName    string
+	FromPG     string
+	ToPG       string
+	Status     string
+	Message    string
 }
 
 // migrateOptions 는 VM 한 대를 처리할 때 필요한 설정 묶음입니다.

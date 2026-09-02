@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"sync"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
@@ -15,25 +16,120 @@ import (
 )
 
 // connectVCenter 는 vCenter SOAP 세션을 엽니다.
-func connectVCenter(ctx context.Context, cfg *Config) (*govmomi.Client, error) {
-	u, err := url.Parse(fmt.Sprintf("https://%s/sdk", cfg.Host))
-	if err != nil {
-		return nil, err
-	}
-	u.User = url.UserPassword(cfg.User, cfg.Password)
-	return govmomi.NewClient(ctx, u, cfg.Insecure)
+// 자체서명 인증서 환경이 전제라 insecure 는 기존 govmomi 도구들과 동일하게 true 고정입니다.
+func connectVCenter(ctx context.Context, address, user, pass string) (*govmomi.Client, error) {
+	u := &url.URL{Scheme: "https", Host: address, Path: "/sdk"}
+	u.User = url.UserPassword(user, pass)
+	return govmomi.NewClient(ctx, u, true)
 }
 
-// vmEntry 는 인벤토리에서 찾은 VM 한 대의 요약 정보입니다.
-type vmEntry struct {
-	Ref        types.ManagedObjectReference
-	PowerState types.VirtualMachinePowerState
+// dcIndex 는 데이터센터 하나의 조회 결과입니다.
+type dcIndex struct {
+	Name string
+	DC   *object.Datacenter
+	VMs  map[string]types.ManagedObjectReference // VM 이름 -> MoRef
+	Dups []string                                // 이 데이터센터 안에서 이름이 겹치는 VM
+	Net  *networkIndex
+}
+
+// vcConn 은 vCenter 한 대의 접속과 그 안의 데이터센터별 색인입니다.
+type vcConn struct {
+	Addr   string
+	Client *govmomi.Client
+	DCs    []*dcIndex
+	Err    error
+}
+
+// Close 는 세션을 정리합니다.
+func (v *vcConn) Close(ctx context.Context) {
+	if v.Client != nil {
+		_ = v.Client.Logout(ctx)
+	}
+}
+
+// surveyVCenter 는 vCenter 한 대에 접속해서 모든 데이터센터의 VM/네트워크 색인을 만듭니다.
+// 데이터센터가 여러 개면 데이터센터끼리도 동시에 조회합니다.
+func surveyVCenter(ctx context.Context, address, user, pass string) *vcConn {
+	res := &vcConn{Addr: address}
+
+	client, err := connectVCenter(ctx, address, user, pass)
+	if err != nil {
+		res.Err = fmt.Errorf("접속 실패: %w", err)
+		return res
+	}
+	res.Client = client
+
+	finder := find.NewFinder(client.Client, true)
+	dcs, err := finder.DatacenterList(ctx, "*")
+	if err != nil {
+		res.Err = fmt.Errorf("데이터센터 목록 조회 실패: %w", err)
+		return res
+	}
+	if len(dcs) == 0 {
+		res.Err = fmt.Errorf("데이터센터가 없습니다")
+		return res
+	}
+
+	idx := make([]*dcIndex, len(dcs))
+	errs := make([]error, len(dcs))
+	var wg sync.WaitGroup
+	for i, dc := range dcs {
+		wg.Add(1)
+		go func(i int, dc *object.Datacenter) {
+			defer wg.Done()
+			one, err := surveyDatacenter(ctx, client, dc)
+			idx[i], errs[i] = one, err
+		}(i, dc)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			res.Err = fmt.Errorf("데이터센터 %s 조회 실패: %w", dcs[i].Name(), err)
+			return res
+		}
+	}
+	res.DCs = idx
+	return res
+}
+
+// surveyDatacenter 는 데이터센터 하나의 VM 이름 색인과 네트워크 색인을 만듭니다.
+// VM 조회와 네트워크 조회도 동시에 실행합니다.
+func surveyDatacenter(ctx context.Context, c *govmomi.Client, dc *object.Datacenter) (*dcIndex, error) {
+	out := &dcIndex{Name: dc.Name(), DC: dc}
+
+	var (
+		wg            sync.WaitGroup
+		vmErr, netErr error
+		vms           map[string]types.ManagedObjectReference
+		dups          []string
+		net           *networkIndex
+	)
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		vms, dups, vmErr = buildVMIndex(ctx, c, dc)
+	}()
+	go func() {
+		defer wg.Done()
+		net, netErr = buildNetworkIndex(ctx, c, dc)
+	}()
+	wg.Wait()
+
+	if vmErr != nil {
+		return nil, vmErr
+	}
+	if netErr != nil {
+		return nil, netErr
+	}
+	out.VMs, out.Dups, out.Net = vms, dups, net
+	return out, nil
 }
 
 // buildVMIndex 는 데이터센터 전체를 훑어 VM 이름 -> MoRef 색인을 만듭니다.
 // 폴더 깊이에 상관없이 찾을 수 있고, Finder 를 고루틴에서 공유하지 않아도 됩니다.
-// 같은 이름의 VM 이 두 대 이상이면 어느 쪽인지 특정할 수 없으므로 dup 목록으로 돌려줍니다.
-func buildVMIndex(ctx context.Context, c *govmomi.Client, dc *object.Datacenter) (map[string]vmEntry, []string, error) {
+func buildVMIndex(ctx context.Context, c *govmomi.Client, dc *object.Datacenter) (map[string]types.ManagedObjectReference, []string, error) {
 	m := view.NewManager(c.Client)
 	cv, err := m.CreateContainerView(ctx, dc.Reference(), []string{"VirtualMachine"}, true)
 	if err != nil {
@@ -42,18 +138,18 @@ func buildVMIndex(ctx context.Context, c *govmomi.Client, dc *object.Datacenter)
 	defer cv.Destroy(ctx)
 
 	var vms []mo.VirtualMachine
-	if err := cv.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name", "runtime.powerState"}, &vms); err != nil {
+	if err := cv.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name"}, &vms); err != nil {
 		return nil, nil, err
 	}
 
-	idx := make(map[string]vmEntry, len(vms))
+	idx := make(map[string]types.ManagedObjectReference, len(vms))
 	dupSet := make(map[string]bool)
 	for _, v := range vms {
 		if _, exists := idx[v.Name]; exists {
 			dupSet[v.Name] = true
 			continue
 		}
-		idx[v.Name] = vmEntry{Ref: v.Self, PowerState: v.Runtime.PowerState}
+		idx[v.Name] = v.Self
 	}
 	var dups []string
 	for n := range dupSet {
@@ -109,9 +205,13 @@ func (ni *networkIndex) portgroupName(b types.BaseVirtualDeviceBackingInfo) stri
 	return "unknown"
 }
 
-// resolveBacking 은 포트그룹 이름으로 NIC 에 붙일 백킹 정보를 만듭니다.
-// 고루틴을 띄우기 전에 한 번만 호출해서 결과를 공유합니다(읽기 전용).
-func resolveBacking(ctx context.Context, finder *find.Finder, pgName string) (types.BaseVirtualDeviceBackingInfo, error) {
+// resolveBacking 은 특정 데이터센터에서 포트그룹 이름으로 NIC 백킹 정보를 만듭니다.
+// 고루틴을 띄우기 전에 미리 확인해 두는 용도입니다(결과는 읽기 전용으로 공유).
+func resolveBacking(ctx context.Context, c *govmomi.Client, dc *object.Datacenter, pgName string) (types.BaseVirtualDeviceBackingInfo, error) {
+	// Finder 는 동시 사용에 안전하지 않으므로 호출할 때마다 새로 만듭니다.
+	finder := find.NewFinder(c.Client, true)
+	finder.SetDatacenter(dc)
+
 	net, err := finder.Network(ctx, pgName)
 	if err != nil {
 		return nil, fmt.Errorf("포트그룹 '%s' 조회 실패: %w", pgName, err)

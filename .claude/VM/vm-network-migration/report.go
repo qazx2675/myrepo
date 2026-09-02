@@ -10,30 +10,25 @@ import (
 )
 
 // rollbackEntry 는 롤백 CSV 한 줄입니다.
-// "이 VM 의 이 NIC 를 원래 포트그룹으로 되돌려라" 라는 뜻입니다.
+// "이 vCenter 의 이 VM 의 이 NIC 를 원래 포트그룹으로 되돌려라" 라는 뜻입니다.
 type rollbackEntry struct {
-	VMName string
-	NicKey int32
-	OldPG  string
+	VCenter string
+	VMName  string
+	NicKey  int32
+	OldPG   string
 }
-
-var rollbackHeader = []string{"vm_name", "nic_key", "old_portgroup", "new_portgroup"}
 
 // writeRollbackCSV 는 실제로 변경된 VM 의 이전 상태를 파일로 남깁니다.
 // 이 파일이 있어야 -rollback 으로 되돌릴 수 있으므로, 마이그레이션 직후 반드시 보관하세요.
 func writeRollbackCSV(path string, results []Result) (int, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return 0, err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, w, err := newCSV(path)
 	if err != nil {
 		return 0, err
 	}
 	defer f.Close()
-
-	w := csv.NewWriter(f)
 	defer w.Flush()
-	if err := w.Write(rollbackHeader); err != nil {
+
+	if err := w.Write([]string{"vcenter", "vm_name", "nic_key", "old_portgroup", "new_portgroup"}); err != nil {
 		return 0, err
 	}
 	n := 0
@@ -42,7 +37,7 @@ func writeRollbackCSV(path string, results []Result) (int, error) {
 		if r.Status != StatusSuccess || r.FromPG == "" {
 			continue
 		}
-		row := []string{r.VMName, strconv.FormatInt(int64(r.NicKey), 10), r.FromPG, r.ToPG}
+		row := []string{r.VCenter, r.VMName, strconv.FormatInt(int64(r.NicKey), 10), r.FromPG, r.ToPG}
 		if err := w.Write(row); err != nil {
 			return n, err
 		}
@@ -59,8 +54,7 @@ func readRollbackCSV(path string) ([]rollbackEntry, error) {
 	}
 	defer f.Close()
 
-	r := csv.NewReader(f)
-	rows, err := r.ReadAll()
+	rows, err := csv.NewReader(f).ReadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -70,37 +64,37 @@ func readRollbackCSV(path string) ([]rollbackEntry, error) {
 
 	var entries []rollbackEntry
 	for i, row := range rows[1:] { // 첫 줄은 헤더
-		if len(row) < 3 {
-			return nil, fmt.Errorf("%s %d번째 줄 형식이 잘못되었습니다", path, i+2)
+		if len(row) < 4 {
+			return nil, fmt.Errorf("%s %d번째 줄 형식이 잘못되었습니다(vcenter,vm_name,nic_key,old_portgroup 필요)", path, i+2)
 		}
-		key, err := strconv.ParseInt(row[1], 10, 32)
+		key, err := strconv.ParseInt(row[2], 10, 32)
 		if err != nil {
 			return nil, fmt.Errorf("%s %d번째 줄 nic_key 파싱 실패: %v", path, i+2, err)
 		}
-		entries = append(entries, rollbackEntry{VMName: row[0], NicKey: int32(key), OldPG: row[2]})
+		entries = append(entries, rollbackEntry{
+			VCenter: row[0], VMName: row[1], NicKey: int32(key), OldPG: row[3],
+		})
 	}
 	return entries, nil
 }
 
 // writeReportCSV 는 전체 처리 결과를 CSV 로 남깁니다.
 func writeReportCSV(path string, results []Result) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, w, err := newCSV(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-
-	w := csv.NewWriter(f)
 	defer w.Flush()
-	if err := w.Write([]string{"vm_name", "status", "nic_key", "nic_label", "from_portgroup", "to_portgroup", "message"}); err != nil {
+
+	header := []string{"vcenter", "datacenter", "vm_name", "status", "nic_key", "nic_label", "from_portgroup", "to_portgroup", "message"}
+	if err := w.Write(header); err != nil {
 		return err
 	}
 	for _, r := range results {
 		row := []string{
-			r.VMName, r.Status, strconv.FormatInt(int64(r.NicKey), 10),
+			r.VCenter, r.Datacenter, r.VMName, r.Status,
+			strconv.FormatInt(int64(r.NicKey), 10),
 			r.NicName, r.FromPG, r.ToPG, r.Message,
 		}
 		if err := w.Write(row); err != nil {
@@ -110,13 +104,31 @@ func writeReportCSV(path string, results []Result) error {
 	return w.Error()
 }
 
+// newCSV 는 디렉터리를 만들고 권한 0600 으로 CSV 파일을 엽니다.
+func newCSV(path string) (*os.File, *csv.Writer, error) {
+	if dir := filepath.Dir(path); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, nil, err
+		}
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, csv.NewWriter(f), nil
+}
+
 // printSummary 는 콘솔에 결과를 상태별로 묶어 출력하고 실패 건수를 돌려줍니다.
-func printSummary(results []Result) int {
+// vCenter 가 여러 대면 어느 vCenter 결과인지 함께 보여줍니다.
+func printSummary(results []Result, multiVC bool) int {
 	sorted := make([]Result, len(results))
 	copy(sorted, results)
 	sort.Slice(sorted, func(i, j int) bool {
 		if sorted[i].Status != sorted[j].Status {
 			return statusRank(sorted[i].Status) < statusRank(sorted[j].Status)
+		}
+		if sorted[i].VCenter != sorted[j].VCenter {
+			return sorted[i].VCenter < sorted[j].VCenter
 		}
 		return sorted[i].VMName < sorted[j].VMName
 	})
@@ -126,7 +138,11 @@ func printSummary(results []Result) int {
 	fmt.Println("=================== 처리 결과 ===================")
 	for _, r := range sorted {
 		counts[r.Status]++
-		fmt.Printf("[%-7s] %-30s %s\n", r.Status, r.VMName, r.Message)
+		if multiVC {
+			fmt.Printf("[%-7s] %-22s %-28s %s\n", r.Status, r.VCenter, r.VMName, r.Message)
+		} else {
+			fmt.Printf("[%-7s] %-30s %s\n", r.Status, r.VMName, r.Message)
+		}
 	}
 	fmt.Println("-------------------------------------------------")
 	fmt.Printf("총 %d대 | 성공 %d | 건너뜀 %d | 실패 %d | 예행 %d\n",

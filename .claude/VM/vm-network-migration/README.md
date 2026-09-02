@@ -1,15 +1,16 @@
 # vm-network-migration
 
-vCenter 에 등록된 여러 VM 의 가상 NIC 를 **지정한 포트그룹으로 일괄 이관**하는 도구입니다.
+**여러 vCenter**에 걸친 VM 들의 가상 NIC 를 **지정한 포트그룹으로 일괄 이관**하는 도구입니다.
 
 - 포트그룹을 **삭제하지 않습니다.** 다른 VM 이 쓰고 있어도 안전합니다.
 - NIC 를 끊었다 붙이지 않고 **Reconfigure 1회로 백킹(backing)만 교체**하므로 게스트 입장에서는 순단으로 끝납니다.
 - 변경 전 상태를 **롤백 CSV 로 자동 저장**하고, `-rollback` 으로 되돌릴 수 있습니다.
+- vCenter 접속·데이터센터 조회·VM 색인·포트그룹 확인이 **전부 동시에** 진행됩니다.
 - 표준 vSwitch 포트그룹, 분산 스위치(DVS) 포트그룹을 모두 지원합니다.
+- 계정은 파일이 아니라 **환경 변수(`VC_USER`/`VC_PASS`)** 로 받습니다. (`vm-param-check` 와 동일한 규약)
 
 > **포트그룹 "생성"은 이 도구의 역할이 아닙니다.** 이미 만들어져 있는 포트그룹을 전제로 동작하며,
 > 생성이 필요하면 `-pg-cmd` 로 외부 생성 도구를 전체 작업 **전에 딱 한 번** 호출할 수 있습니다.
-> 자세한 내용은 7. 알려진 한계 를 보세요.
 
 ---
 
@@ -24,7 +25,7 @@ vCenter 에 등록된 여러 VM 의 가상 NIC 를 **지정한 포트그룹으�
 |---|---|---|
 | Go | 1.21 이상 (개발/검증은 1.26.5) | 폐쇄망 서버에 미리 설치되어 있어야 합니다 |
 | OS | Linux (x86_64) | RHEL/Rocky 8 이상에서 검증 |
-| 네트워크 | vCenter 443/tcp 도달 | 인터넷은 필요 없습니다 |
+| 네트워크 | 각 vCenter 443/tcp 도달 | 인터넷은 필요 없습니다 |
 
 ### 1.2 내려받아서 빌드하기
 
@@ -37,31 +38,45 @@ bash setup.sh
 빌드가 끝나면 같은 폴더에 `vm-network-migration` 실행 파일이 생깁니다.
 zip 으로 받은 경우에도 폴더를 통째로 풀고 `bash setup.sh` 만 실행하면 됩니다.
 
-### 1.3 설정 파일 준비
+### 1.3 계정 설정 (환경 변수)
+
+vCenter 계정은 **설정 파일에 적지 않습니다.** 아래 환경 변수로 전달합니다.
+
+```bash
+export VC_USER='administrator@vsphere.local'
+read -rs -p 'vCenter 비밀번호: ' VC_PASS; export VC_PASS; echo
+```
+
+| 환경 변수 | 대체 이름 | 설명 |
+|---|---|---|
+| `VC_USER` | `VCENTER_USER` | vCenter 계정 |
+| `VC_PASS` | `VCENTER_PASS` | vCenter 비밀번호 |
+
+`VC_*` 가 우선이고, 없으면 `VCENTER_*` 를 씁니다. 둘 다 없으면 vCenter 에 접속하지 않고 종료(exit 2)합니다.
+목록에 적힌 **모든 vCenter 에 같은 계정으로 접속**합니다.
+
+> `read -rs` 는 입력이 화면에 보이지 않습니다. 비밀번호를 명령줄 인자나 `export VC_PASS=...` 로 직접 적으면
+> 셸 히스토리와 `ps` 출력에 남을 수 있으니 위 방식을 쓰세요.
+
+### 1.4 대상 파일 준비
 
 ```bash
 cp vcenter.txt.example vcenter.txt
-chmod 600 vcenter.txt
-vi vcenter.txt
+vi vcenter.txt      # vCenter 주소를 한 줄에 하나씩
 
 cp vmlist.txt.example vmlist.txt
-vi vmlist.txt
+vi vmlist.txt       # 대상 VM 이름을 한 줄에 하나씩
 ```
 
-`vcenter.txt` 에는 평문 비밀번호가 들어갑니다. 권한을 반드시 600 으로 좁히세요.
-`vcenter.txt` 와 `vmlist.txt` 는 `.gitignore` 에 등록되어 있어 커밋되지 않습니다.
+**`vcenter.txt`** — 주소만 적습니다. 계정 정보는 들어가지 않습니다.
 
-**`vcenter.txt` 형식**
-
-```ini
-VCENTER_HOST=vcenter.example.local
-VCENTER_USER=administrator@vsphere.local
-VCENTER_PASS=ChangeMe!
-VCENTER_DATACENTER=Datacenter1
-VCENTER_INSECURE=true
+```text
+vcenter-a.example.local
+vcenter-b.example.local
+10.10.20.50
 ```
 
-**`vmlist.txt` 형식** — 한 줄에 VM 하나. 빈 줄과 `#` 주석은 무시하고, 중복은 자동 제거합니다.
+**`vmlist.txt`** — 한 줄에 VM 하나.
 
 ```text
 vm-app-01
@@ -69,14 +84,16 @@ vm-web-02
 vm-db-03
 ```
 
-> 여기 적는 이름은 **게스트 OS 의 hostname 이 아니라 vCenter 인벤토리에 보이는 VM 이름**입니다.
-> 둘이 다른 환경이라면 인벤토리 이름 기준으로 목록을 만드세요.
+두 파일 모두 빈 줄과 `#` 주석은 무시하고, 중복은 자동 제거합니다.
+`.gitignore` 에 등록되어 있어 커밋되지 않습니다.
+
+> `vmlist.txt` 에 적는 이름은 **게스트 OS 의 hostname 이 아니라 vCenter 인벤토리에 보이는 VM 이름**입니다.
 
 ---
 
 ## 2. 사용 방법
 
-`run.sh` 는 설정 파일 확인 → (소스가 바뀌었으면) 재빌드 → 실행까지 한 번에 해 주는 래퍼입니다.
+`run.sh` 는 자격증명/목록 파일 확인 → (소스가 바뀌었으면) 재빌드 → 실행까지 한 번에 해 주는 래퍼입니다.
 넘긴 인자는 그대로 Go 바이너리에 전달됩니다. 바이너리를 직접 실행해도 동일합니다.
 
 ### 2.1 먼저 예행 연습 (권장 · 아무것도 바꾸지 않음)
@@ -86,12 +103,16 @@ vm-db-03
 ```
 
 ```
-[DRY-RUN] vm-app-01    변경 예정: PG-OLD-010 -> PG-NEW-100 (NIC key=4000, 전원=poweredOn)
-[DRY-RUN] vm-web-02    변경 예정: PG-OLD-010 -> PG-NEW-100 (NIC key=4000, 전원=poweredOn)
-총 2대 | 성공 0 | 건너뜀 0 | 실패 0 | 예행 2
+vCenter 2대 / 대상 VM 3대를 PG-NEW-100 포트그룹으로 이관합니다.
+vCenter 2대를 동시에 조회합니다...
+  vcenter-a.example.local : 데이터센터 2개 (DC-A, DC-B)
+  vcenter-b.example.local : 데이터센터 1개 (DC-C)
+
+[DRY-RUN] vcenter-a...  vm-app-01   변경 예정: PG-OLD-010 -> PG-NEW-100 (NIC key=4000, 전원=poweredOn)
+[DRY-RUN] vcenter-b...  vm-web-02   변경 예정: PG-OLD-010 -> PG-NEW-100 (NIC key=4000, 전원=poweredOn)
 ```
 
-무엇이 어디서 어디로 바뀌는지 확인한 뒤 실제 실행으로 넘어가세요.
+어느 vCenter 의 VM 이 어디서 어디로 바뀌는지 확인한 뒤 실제 실행으로 넘어가세요.
 
 ### 2.2 실제 이관
 
@@ -101,10 +122,25 @@ vm-db-03
 
 정상 종료하면 두 개의 파일이 생깁니다.
 
-- `report_YYYYmmdd_HHMMSS.csv` — 전체 처리 결과
+- `report_YYYYmmdd_HHMMSS.csv` — 전체 처리 결과 (vcenter · datacenter 컬럼 포함)
 - `rollback_YYYYmmdd_HHMMSS.csv` — **실제로 바뀐 VM 의 이전 포트그룹.** 되돌릴 때 필요하니 반드시 보관하세요.
 
-### 2.3 NIC 가 여러 개일 때 — 바꿀 NIC 지정
+### 2.3 여러 vCenter 를 쓸 때
+
+`vcenter.txt` 에 여러 줄을 적으면 됩니다. 별도 옵션은 필요 없습니다.
+
+- 모든 vCenter 에 **동시에** 접속하고, 각 vCenter 안의 **데이터센터도 동시에** 조회합니다.
+- VM 이름으로 **어느 vCenter 의 어느 데이터센터에 있는지 자동으로 찾습니다.** 목록을 vCenter 별로 나눌 필요가 없습니다.
+- 포트그룹은 VM 이 속한 데이터센터에서 각각 조회합니다. vCenter 마다 같은 이름의 포트그룹이 있어도 올바른 쪽을 씁니다.
+
+주의할 점 두 가지가 있습니다.
+
+- **vCenter 한 대라도 접속에 실패하면 전체를 중단합니다.** 그대로 진행하면 그 vCenter 의 VM 이
+  "찾을 수 없음"으로 잘못 보고되어, 실제로는 이관되지 않았는데 넘어갈 수 있기 때문입니다.
+- **같은 VM 이름이 두 곳 이상에 있으면** 그 VM 만 `FAILED` 로 처리하고 어디에 있는지 알려줍니다.
+  이름을 정리하거나 해당 VM 을 목록에서 빼고 따로 처리하세요.
+
+### 2.4 NIC 가 여러 개일 때 — 바꿀 NIC 지정
 
 방법 A) "이 포트그룹에 붙어 있는 NIC" 만 바꾸기 (권장)
 
@@ -120,7 +156,7 @@ vm-db-03
 
 방법 A 는 해당 포트그룹에 붙은 NIC 가 없는 VM 을 `SKIPPED` 로 넘기므로, 대상이 섞여 있어도 안전합니다.
 
-### 2.4 단계적 적용 (카나리 → 확대)
+### 2.5 단계적 적용 (카나리 → 확대)
 
 전 VM 을 한 번에 바꾸지 마세요. 목록을 나눠서 단계적으로 진행하는 것을 권장합니다.
 
@@ -135,32 +171,35 @@ head -1 vmlist.txt > canary.txt
 ./run.sh -to-portgroup=PG-NEW-100 -concurrency=8
 ```
 
-### 2.5 되돌리기 (롤백)
+### 2.6 되돌리기 (롤백)
 
 ```bash
-./run.sh -rollback=rollback_20260901_143000.csv
+./run.sh -rollback=rollback_20260902_143000.csv
 ```
 
-롤백 모드는 CSV 에 기록된 **VM · NIC device key · 이전 포트그룹**을 그대로 복원합니다.
+롤백 CSV 에는 **vCenter 주소 · VM 이름 · NIC device key · 이전 포트그룹**이 기록되어 있어,
+여러 vCenter 를 한꺼번에 작업했어도 각각 원래 자리로 되돌립니다.
 NIC 순번이 아니라 device key 로 찾기 때문에 그 사이 NIC 가 추가/삭제되어도 엉뚱한 NIC 를 건드리지 않습니다.
 
-### 2.6 포트그룹 생성 도구를 함께 호출하기
+> 롤백 모드에서도 `vcenter.txt` 는 필요합니다. CSV 에 적힌 vCenter 주소가 목록에 있어야 접속할 수 있습니다.
+
+### 2.7 포트그룹 생성 도구를 함께 호출하기
 
 ```bash
-./run.sh -to-portgroup=PG-NEW-100 -pg-cmd="/opt/vswitch_setting/setup_pg.sh {{PG}}"
+./run.sh -to-portgroup=PG-NEW-100 -pg-cmd="/opt/도구/setup_pg.sh {{PG}}"
 ```
 
 `{{PG}}` 가 `-to-portgroup` 값으로 치환되어 **전체 작업 전에 한 번만** 실행됩니다.
 VM 마다 실행하지 않습니다. 같은 포트그룹을 동시에 여러 번 만들다 충돌하는 문제를 막기 위해서입니다.
 명령이 실패하면 VM 을 한 대도 건드리지 않고 즉시 중단합니다.
 
-### 2.7 종료 코드
+### 2.8 종료 코드
 
 | 코드 | 의미 |
 |---|---|
 | `0` | 전부 성공(또는 건너뜀 / 예행) |
-| `1` | 1대 이상 실패, 또는 접속·포트그룹 조회 실패 |
-| `2` | 인자·설정 파일 오류 (vCenter 에 접속하기 전에 중단) |
+| `1` | 1대 이상 실패, vCenter 접속 실패, 또는 포트그룹 조회 실패 |
+| `2` | 인자·환경 변수·목록 파일 오류 (vCenter 에 접속하기 전에 중단) |
 
 ---
 
@@ -169,11 +208,11 @@ VM 마다 실행하지 않습니다. 같은 포트그룹을 동시에 여러 번
 | 플래그 | 기본값 | 설명 |
 |---|---|---|
 | `-to-portgroup` | (없음) | **필수.** 이관할 목표 포트그룹 이름. 실행 전에 존재 여부를 먼저 확인하며, 없으면 VM 을 한 대도 건드리지 않고 종료합니다. `-rollback` 사용 시에는 지정하지 않습니다. |
+| `-vcenter-file` | `vcenter.txt` | vCenter **주소 목록** 파일. 한 줄에 하나. 여러 대면 모두 동시에 조회합니다. (`vm-param-check` 의 `-vcenterList` 에 해당) |
+| `-vm-file` | `vmlist.txt` | 대상 VM 이름 목록 파일. 어느 vCenter 에 있는지는 자동으로 찾으므로 vCenter 별로 나눌 필요가 없습니다. |
 | `-from-portgroup` | `""` | 지정하면 **이 포트그룹에 연결된 NIC 만** 대상으로 삼습니다. 해당 NIC 가 없는 VM 은 `SKIPPED`. NIC 가 여러 개인 환경에서 가장 안전한 지정 방식입니다. |
 | `-nic-index` | `0` | `-from-portgroup` 을 쓰지 않을 때 바꿀 NIC 순번. device key 오름차순이라 실행할 때마다 같은 NIC 를 가리킵니다. |
-| `-vm-file` | `vmlist.txt` | 대상 VM 이름 목록 파일. 빈 줄/`#` 주석 무시, 중복 자동 제거. |
-| `-vcenter-file` | `vcenter.txt` | vCenter 접속 설정 파일. 필수 항목(HOST/USER/PASS)이 비어 있으면 접속 시도 없이 종료합니다. |
-| `-concurrency` | `8` | 동시에 처리할 VM 수. 전 VM 동시 변경은 장애 시 피해가 크고 vCenter 태스크도 몰리므로 기본값을 8로 제한했습니다. 대규모 작업이라도 16~24 를 넘기지 않기를 권장합니다. |
+| `-concurrency` | `8` | 동시에 처리할 **VM** 수. 전 VM 동시 변경은 장애 시 피해가 크고 vCenter 태스크도 몰리므로 기본값을 8로 제한했습니다. 대규모 작업이라도 16~24 를 넘기지 않기를 권장합니다. (조회 단계는 이 값과 무관하게 항상 전부 동시에 실행됩니다) |
 | `-dry-run` | `false` | 실제 변경 없이 어느 VM 의 어느 NIC 가 어디서 어디로 바뀔지만 출력합니다. 리포트 CSV 는 남지만 롤백 파일은 만들지 않습니다. |
 | `-rollback` | `""` | 롤백 CSV 경로. 지정하면 롤백 모드로 동작하며 `-to-portgroup` / `-vm-file` 은 무시됩니다. |
 | `-pg-cmd` | `""` | 마이그레이션 시작 전 **한 번만** 실행할 외부 명령. `{{PG}}` 가 목표 포트그룹 이름으로 치환됩니다. `/bin/bash -c` 로 실행하고 출력을 그대로 보여줍니다. 실패하면 전체 중단. |
@@ -187,7 +226,7 @@ VM 마다 실행하지 않습니다. 같은 포트그룹을 동시에 여러 번
 |---|---|---|
 | `SUCCESS` | 백킹 교체 + 검증 통과 | 롤백 CSV 에 기록됨 |
 | `SKIPPED` | 이미 목표 포트그룹이거나, `-from-portgroup` 에 해당하는 NIC 없음 | 정상. 재실행해도 안전합니다 |
-| `FAILED` | VM 못 찾음 / NIC 없음 / Reconfigure 실패 / 검증 불일치 | 리포트 CSV 의 `message` 확인 |
+| `FAILED` | VM 못 찾음 / 이름 중복으로 특정 불가 / NIC 없음 / Reconfigure 실패 / 검증 불일치 | 리포트 CSV 의 `message` 확인 |
 | `DRY-RUN` | 예행 연습 결과 | - |
 
 ---
@@ -195,11 +234,18 @@ VM 마다 실행하지 않습니다. 같은 포트그룹을 동시에 여러 번
 ## 4. 동작 순서
 
 ```
-1) 설정·목록 읽기 (중복 제거)
+0) 환경 변수에서 계정 읽기 -> 없으면 접속 전에 종료(exit 2)
+1) vcenter.txt / vmlist.txt 읽기 (중복 제거)
 2) [-pg-cmd 지정 시] 포트그룹 생성 명령 1회 실행
-3) vCenter 접속 -> 데이터센터 조회
-4) 인벤토리 전체를 훑어 VM 이름 색인 생성 (폴더 깊이 무관, 동명이인 경고)
-5) 목표 포트그룹 존재 확인 + 백킹 정보 생성   <- 여기서 실패하면 VM 무손상 종료
+3) [동시] 모든 vCenter 접속
+      └ [동시] vCenter 안의 모든 데이터센터
+             ├ [동시] VM 이름 색인 생성 (폴더 깊이 무관)
+             └ [동시] 분산 포트그룹 key->name 색인 생성
+      * 한 대라도 실패하면 여기서 중단 (VM 무손상)
+4) VM 이름 -> 위치(vCenter/데이터센터) 해석
+      * 못 찾음 / 여러 곳에 존재 -> 그 VM 만 FAILED
+5) [동시] 필요한 (데이터센터, 포트그룹) 조합의 백킹 정보 확인
+      * 하나라도 실패하면 중단 (VM 무손상)
 6) [동시 N대] VM 별 처리
      - 현재 NIC 와 현재 포트그룹 확인
      - 이미 목표 포트그룹이면 SKIP
@@ -220,14 +266,14 @@ VM 마다 실행하지 않습니다. 같은 포트그룹을 동시에 여러 번
 | `PR_CHECKLIST.md` | 배포/수정 전 확인 목록 |
 | `CHANGELOG.md` | 날짜순 변경 이력 |
 | `setup.sh` | 폐쇄망 오프라인 빌드 (`-mod=vendor`, `GOPROXY=off`) |
-| `run.sh` | 실행 편의 래퍼. 설정 확인 → 재빌드 → 실행 → 주의 안내 |
-| `main.go` | CLI 진입점. 플래그 파싱, 사전 검증, 병렬 실행, 리포트 저장 |
-| `config.go` | `vcenter.txt` / `vmlist.txt` 파싱 |
-| `vsphere.go` | vCenter 접속, VM·네트워크 색인, NIC 조회 |
+| `run.sh` | 실행 편의 래퍼. 자격증명/목록 확인 → 재빌드 → 실행 → 사후 확인 안내 |
+| `main.go` | CLI 진입점. 플래그 파싱, 병렬 조사, 위치 해석, 사전 검증, 병렬 이관, 리포트 저장 |
+| `config.go` | 목록 파일 파싱(`LoadLines`), 환경 변수 자격증명 로드 |
+| `vsphere.go` | vCenter 접속, 데이터센터/VM/네트워크 병렬 색인, NIC 조회, 백킹 생성 |
 | `migrate.go` | VM 1대의 백킹 교체 + 검증 (핵심 로직) |
 | `report.go` | 결과 요약 출력, report/rollback CSV 입출력 |
-| `vcenter.txt.example` | 접속 설정 예시 |
-| `vmlist.txt.example` | 대상 목록 예시 |
+| `vcenter.txt.example` | vCenter 주소 목록 예시 |
+| `vmlist.txt.example` | 대상 VM 목록 예시 |
 | `vendor/` | 빌드에 필요한 서드파티 패키지 (govmomi 등). 문서화 대상 아님 |
 
 ---
@@ -246,7 +292,7 @@ sudo install -m 0755 vm-network-migration /usr/local/bin/vm-network-migration
 vm-network-migration -version
 ```
 
-전역 설치 시에는 실행하는 **현재 디렉터리**의 `vcenter.txt` / `vmlist.txt` 를 읽습니다.
+전역 설치 시에도 계정은 환경 변수에서 읽고, 목록 파일은 **현재 디렉터리** 기준으로 찾습니다.
 설정을 한곳에 모아두려면 경로를 명시하세요.
 
 ```bash
@@ -259,12 +305,13 @@ vm-network-migration -vcenter-file=/etc/vm-migration/vcenter.txt -vm-file=/etc/v
 
 - **포트그룹을 만들지 않습니다.** 목표 포트그룹은 미리 생성되어 있어야 하며, 없으면 시작 단계에서 중단합니다.
   생성 도구를 `-pg-cmd` 로 연결해 쓰세요.
+- **모든 vCenter 에 같은 계정으로 접속합니다.** vCenter 마다 계정이 다르면 나눠서 실행해야 합니다.
+- **VM 이름이 vCenter/데이터센터를 넘어 중복되면** 자동으로 고를 수 없어 해당 VM 을 `FAILED` 로 처리합니다.
 - **게스트 OS 내부는 건드리지 않습니다.** 포트그룹 변경에 VLAN 변경이 함께 일어나는 경우,
   고정 IP 를 쓰는 VM 은 게스트 안에서 IP/게이트웨이를 직접 바꿔 주어야 통신이 됩니다.
   이 도구가 `SUCCESS` 를 냈다는 것은 **vSphere 레벨의 연결이 바뀌었다는 뜻일 뿐**, L3 통신이 된다는 보장이 아닙니다.
 - **전원이 꺼진 VM** 은 `StartConnected` 만 켭니다. 실제 연결은 부팅 시점에 이루어집니다.
-- **동명이인 VM** (인벤토리에 같은 이름이 둘 이상) 은 경고를 출력하고 먼저 찾은 쪽을 씁니다.
-  이런 환경에서는 이름을 먼저 정리한 뒤 사용하세요.
+- **인증서 검증은 하지 않습니다.** 자체서명 인증서 환경이 전제라 기존 govmomi 도구들과 동일하게 고정입니다.
 - **롤백 파일이 없으면 되돌릴 수 없습니다.** `rollback_*.csv` 를 지우지 마세요.
 
 ---
@@ -278,6 +325,7 @@ vm-network-migration -vcenter-file=/etc/vm-migration/vcenter.txt -vm-file=/etc/v
 >
 > **설정 변경 후에는 반드시 변경된 서버 중 무작위로 몇 대를 골라, vCenter UI 또는 게스트 OS 에 직접 접속해서
 > 포트그룹과 통신 상태가 의도한 대로 변경되었는지 직접 확인하십시오.**
+> vCenter 를 여러 대 대상으로 돌렸다면 **vCenter 마다 몇 대씩** 골라서 확인하세요.
 >
 > 그 밖에 권장하는 사항:
 > - 운영 반영 전 `-dry-run` 으로 변경 내역을 먼저 확인하세요.
