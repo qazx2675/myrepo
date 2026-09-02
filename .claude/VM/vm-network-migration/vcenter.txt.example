@@ -1,0 +1,5 @@
+# vcenter.txt — 대상 vCenter 주소 목록 (한 줄에 하나)
+# 계정/비밀번호는 이 파일이 아니라 환경변수 VC_USER / VC_PASSWORD 로 넘깁니다.
+# 빈 줄과 # 로 시작하는 줄은 무시합니다.
+192.168.0.50
+# vcenter-b.example.local

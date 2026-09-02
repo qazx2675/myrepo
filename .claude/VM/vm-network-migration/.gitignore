@@ -1,0 +1,11 @@
+# 빌드 산출물
+bin/
+
+# 실행 중 생성되는 운영 데이터 (사이트마다 다르고, 자격증명/자산 정보가 들어갑니다)
+state_*.json
+failed_*.txt
+rollback_failed_*.txt
+vcenter.txt
+
+# 대상 목록은 예시 파일(*.example)만 저장소에 둡니다
+!*.example
