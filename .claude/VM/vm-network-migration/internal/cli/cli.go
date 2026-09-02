@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// DefaultID 는 -id 를 주지 않았을 때 쓰는 vCenter 로그인 계정입니다.
+// VM_setup 아래 다른 도구들과 같은 기본값을 씁니다.
+const DefaultID = "lscsystems@vsphere.local"
+
 // timeout 은 전체 작업 제한 시간입니다. 대상이 수백 대여도 넉넉한 값이라
 // 옵션으로 열지 않고 상수로 둡니다.
 const timeout = 30 * time.Minute
@@ -35,6 +39,7 @@ const (
 // run.sh 가 임시 경로로 돌려야 하기 때문입니다.
 type Flags struct {
 	User         string
+	ID           string
 	VCenterFile  string
 	VMFile       string
 	WorklistFile string
@@ -50,6 +55,7 @@ type Flags struct {
 func Register(fs *flag.FlagSet) *Flags {
 	f := &Flags{}
 	fs.StringVar(&f.User, "user", "", "작업 대상 사용자 토큰. 나머지 파일 경로의 기본값을 결정합니다 (필수)")
+	fs.StringVar(&f.ID, "id", DefaultID, "vCenter 로그인 계정 ID")
 	fs.StringVar(&f.VCenterFile, "vcenter-file", "vcenter.txt", "vCenter 주소 목록 파일 (한 줄에 하나)")
 	fs.StringVar(&f.StateFile, "state-file", "", "롤백용 상태 파일 (기본: state_{user}.json)")
 	fs.IntVar(&f.NicIndex, "nic-index", 0, "대상 가상 NIC 순번 (0 = 네트워크 어댑터 1)")
@@ -65,6 +71,9 @@ func (f *Flags) Resolve() error {
 	}
 	if strings.ContainsAny(f.User, `/\ `) {
 		return fmt.Errorf("-user 에 경로 구분자나 공백을 쓸 수 없습니다: %q", f.User)
+	}
+	if strings.TrimSpace(f.ID) == "" {
+		return fmt.Errorf("-id 가 비어 있습니다")
 	}
 	f.VMFile = f.User + ".txt"
 	f.WorklistFile = "vswitch_" + f.User + ".txt"

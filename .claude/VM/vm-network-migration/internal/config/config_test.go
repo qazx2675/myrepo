@@ -89,28 +89,25 @@ func TestTargetForHost(t *testing.T) {
 	}
 }
 
-func TestCredentials(t *testing.T) {
-	for _, k := range []string{"VC_USER", "VC_PASSWORD", "VC_PASS", "VCENTER_USER", "VCENTER_PASS"} {
+func TestPassword(t *testing.T) {
+	for _, k := range []string{"VC_PASSWORD", "VC_PASS", "VCENTER_PASS"} {
 		t.Setenv(k, "")
 	}
-	if _, _, err := Credentials(); err == nil {
-		t.Fatal("자격증명이 없는데 에러가 나지 않았습니다")
+	if _, err := Password(); err == nil {
+		t.Fatal("비밀번호가 없는데 에러가 나지 않았습니다")
 	}
 
-	t.Setenv("VC_USER", "u")
 	t.Setenv("VC_PASSWORD", "p")
-	u, p, err := Credentials()
-	if err != nil || u != "u" || p != "p" {
-		t.Fatalf("got (%q,%q,%v)", u, p, err)
+	p, err := Password()
+	if err != nil || p != "p" {
+		t.Fatalf("got (%q,%v)", p, err)
 	}
 
 	// 대체 변수명도 인식해야 합니다.
-	t.Setenv("VC_USER", "")
 	t.Setenv("VC_PASSWORD", "")
-	t.Setenv("VCENTER_USER", "u2")
 	t.Setenv("VCENTER_PASS", "p2")
-	u, p, err = Credentials()
-	if err != nil || u != "u2" || p != "p2" {
-		t.Fatalf("대체 변수명 처리 실패: (%q,%q,%v)", u, p, err)
+	p, err = Password()
+	if err != nil || p != "p2" {
+		t.Fatalf("대체 변수명 처리 실패: (%q,%v)", p, err)
 	}
 }

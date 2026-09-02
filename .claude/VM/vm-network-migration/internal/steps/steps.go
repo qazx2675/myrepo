@@ -23,7 +23,7 @@ type Action func(ctx context.Context, s *vsphere.Session, info *vsphere.VMInfo,
 // Prepare 는 자격증명/vcenter 목록/상태 파일을 읽고 vCenter 에 접속합니다.
 // 반환된 Fleet 은 호출 측이 Close 해야 합니다.
 func Prepare(ctx context.Context, f *cli.Flags) (*vsphere.Fleet, *state.File, error) {
-	user, pass, err := config.Credentials()
+	pass, err := config.Password()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -35,7 +35,7 @@ func Prepare(ctx context.Context, f *cli.Flags) (*vsphere.Fleet, *state.File, er
 	if err != nil {
 		return nil, nil, fmt.Errorf("상태 파일을 읽을 수 없습니다(먼저 nm-backup 을 실행하세요): %w", err)
 	}
-	fleet, err := vsphere.ConnectFleet(ctx, vcenters, user, pass, f.Concurrency)
+	fleet, err := vsphere.ConnectFleet(ctx, vcenters, f.ID, pass, f.Concurrency)
 	if err != nil {
 		return nil, nil, err
 	}

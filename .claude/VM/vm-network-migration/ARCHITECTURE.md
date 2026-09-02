@@ -27,7 +27,7 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
 | `cmd/verify/` | **Step 4** 인벤토리 재조회로 실제 반영 여부 검증 |
 | `cmd/rollback/` | 역순 실행(3-Undo → 1-Undo)으로 원복. `-prune` 으로 대상에서 제외 |
 | `internal/cli/` | 공통 플래그·결과 리포트·종료 코드 규약. 모든 바이너리가 공유 |
-| `internal/config/` | 입력 파일 파싱(`vcenter.txt`/`{user}.txt`/`vswitch_{user}.txt`)과 자격증명 |
+| `internal/config/` | 입력 파일 파싱(`vcenter.txt`/`{user}.txt`/`vswitch_{user}.txt`)과 비밀번호 조회 |
 | `internal/state/` | `state_{user}.json` 읽기/원자적 쓰기, 레코드 필터·제외 |
 | `internal/vsphere/` | vCenter 접속, 인벤토리 색인, NIC/포트그룹 조작 |
 | `internal/steps/` | 해제·연결·검증·롤백이 공유하는 "레코드마다 VM 처리" 뼈대 |
@@ -69,4 +69,5 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
    접속 전에 걸러야 합니다.
 5. **부분 실패는 그 VM 에 갇혀야 합니다.** 한 대가 실패해도 나머지는 계속 진행하고,
    실패한 VM 만 원복 후 대상에서 제외합니다.
-6. **자격증명은 환경변수로만 받습니다.** 플래그나 설정 파일에 비밀번호를 두지 않습니다.
+6. **비밀번호는 환경변수로만 받습니다.** 계정 ID 는 `-id` 로 받되(기본 `lscsystems@vsphere.local`),
+   비밀번호는 플래그나 설정 파일에 두지 않습니다 — 셸 히스토리와 `ps` 에 남기 때문입니다.

@@ -14,6 +14,7 @@ BIN="$(pwd)/bin"
 USER_TOKEN=""
 CONCURRENCY=8
 NIC_INDEX=0
+VC_ID="lscsystems@vsphere.local"
 TARGET_VSWITCH="vSwitch0"
 DRY_RUN=""
 ASSUME_YES=0
@@ -27,6 +28,7 @@ usage() {
 
 옵션:
   -u, --user <토큰>        작업 대상 사용자 토큰 (미지정 시 대화형 선택)
+      --id <계정>          vCenter 로그인 계정 ID (기본 lscsystems@vsphere.local)
   -c, --concurrency <N>    동시에 처리할 VM 수 (기본 8)
       --nic-index <N>      대상 가상 NIC 순번 (기본 0 = 네트워크 어댑터 1)
       --vswitch <이름>     포트그룹을 만들 표준 가상 스위치 (기본 vSwitch0)
@@ -38,14 +40,14 @@ usage() {
   -h, --help               이 도움말
 
 환경변수 (필수):
-  VC_USER       vCenter 로그인 계정
-  VC_PASSWORD   vCenter 비밀번호
+  VC_PASSWORD   vCenter 비밀번호 (계정 ID 는 --id 로 지정)
 USAGE
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -u|--user)        USER_TOKEN="$2"; shift 2 ;;
+    --id)             VC_ID="$2"; shift 2 ;;
     -c|--concurrency) CONCURRENCY="$2"; shift 2 ;;
     --nic-index)      NIC_INDEX="$2"; shift 2 ;;
     --vswitch)        TARGET_VSWITCH="$2"; shift 2 ;;
@@ -133,10 +135,10 @@ preflight() {
   done
   [ "$missing" -eq 1 ] && exit 2
 
-  if [ -z "${VC_USER:-}" ] || [ -z "${VC_PASSWORD:-}" ]; then
-    echo "오류: 환경변수 VC_USER / VC_PASSWORD 를 설정하세요." >&2
-    echo "      예: export VC_USER='administrator@vsphere.local'" >&2
-    echo "          read -rsp '비밀번호: ' VC_PASSWORD; export VC_PASSWORD; echo" >&2
+  if [ -z "${VC_PASSWORD:-}" ]; then
+    echo "오류: 환경변수 VC_PASSWORD 를 설정하세요." >&2
+    echo "      예: read -rsp '비밀번호: ' VC_PASSWORD; export VC_PASSWORD; echo" >&2
+    echo "      계정 ID 는 --id 로 지정합니다 (기본 $VC_ID)." >&2
     exit 2
   fi
 
@@ -155,7 +157,7 @@ preflight() {
 # 하므로 dry-run 에서도 상태 파일을 만들어야 뒤 단계가 무엇을 할지 계산할 수 있는데,
 # 그렇다고 진짜 state_{user}.json 을 건드리면 실제 작업의 원본 기록이 오염됩니다.
 common_args() {
-  printf '%s' "-user=$USER_TOKEN -concurrency=$CONCURRENCY -nic-index=$NIC_INDEX $DRY_RUN -state-file=$STATE_FILE"
+  printf '%s' "-user=$USER_TOKEN -id=$VC_ID -concurrency=$CONCURRENCY -nic-index=$NIC_INDEX $DRY_RUN -state-file=$STATE_FILE"
 }
 
 FAILED_FILE=""
@@ -254,6 +256,7 @@ cat <<BANNER
  VM 네트워크 마이그레이션
 --------------------------------------------------------------------
  대상 사용자   : $USER_TOKEN
+ 접속 계정     : $VC_ID
  VM 목록       : ${USER_TOKEN}.txt (${VM_COUNT}대)
  네트워크 설정 : vswitch_${USER_TOKEN}.txt
  상태 파일     : state_${USER_TOKEN}.json

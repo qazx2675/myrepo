@@ -30,7 +30,7 @@ func run() int {
 		return cli.Usage("%v", err)
 	}
 
-	user, pass, err := config.Credentials()
+	pass, err := config.Password()
 	if err != nil {
 		return cli.Usage("%v", err)
 	}
@@ -49,7 +49,7 @@ func run() int {
 	fmt.Printf("[Step 2] 신규 포트그룹 생성 — 항목 %d건 / vSwitch=%s (동시 %d)\n",
 		len(worklist), *vswitch, f.Concurrency)
 
-	fleet, err := vsphere.ConnectFleet(ctx, vcenters, user, pass, f.Concurrency)
+	fleet, err := vsphere.ConnectFleet(ctx, vcenters, f.ID, pass, f.Concurrency)
 	if err != nil {
 		return cli.Usage("%v", err)
 	}
