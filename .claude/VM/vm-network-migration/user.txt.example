@@ -1,0 +1,4 @@
+# {user}.txt — 마이그레이션 대상 VM 이름 목록 (한 줄에 하나)
+# vCenter 인벤토리에 표시되는 VM 이름과 정확히 같아야 합니다.
+BM1hostname.domain
+BM2hostname.domain
