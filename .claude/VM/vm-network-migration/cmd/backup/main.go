@@ -29,11 +29,6 @@ func run() int {
 	f := cli.Register(fs)
 	force := fs.Bool("force", false, "상태 파일이 이미 있어도 덮어씁니다")
 	_ = fs.Parse(os.Args[1:])
-
-	if f.ShowVersion {
-		fmt.Println("nm-backup", cli.Version)
-		return cli.ExitOK
-	}
 	if err := f.Resolve(); err != nil {
 		return cli.Usage("%v", err)
 	}

@@ -42,11 +42,6 @@ func run() int {
 	onlyFile := fs.String("only-file", "", "롤백할 VM 이름 목록 파일 (보통 failed_{user}.txt)")
 	prune := fs.Bool("prune", false, "롤백에 성공한 VM 을 상태 파일에서 제거해 이후 단계의 대상에서 뺍니다")
 	_ = fs.Parse(os.Args[1:])
-
-	if f.ShowVersion {
-		fmt.Println("nm-rollback", cli.Version)
-		return cli.ExitOK
-	}
 	if err := f.Resolve(); err != nil {
 		return cli.Usage("%v", err)
 	}
