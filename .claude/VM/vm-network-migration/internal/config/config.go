@@ -149,18 +149,20 @@ func TargetForHost(entries []WorkEntry, host string) (WorkEntry, error) {
 	}
 }
 
-// Credentials 는 vCenter 계정을 환경변수에서 읽습니다.
-// 설정 파일에 비밀번호를 남기지 않기 위한 것으로, 목록의 모든 vCenter 에 같은 계정을 씁니다.
+// Password 는 vCenter 비밀번호를 환경변수에서 읽습니다.
 //
-//	VC_USER     / VC_PASSWORD  (기본)
-//	VCENTER_USER / VC_PASS     (대체)
-func Credentials() (string, string, error) {
-	user := firstNonEmpty(os.Getenv("VC_USER"), os.Getenv("VCENTER_USER"))
+// 계정 ID 는 -id 플래그로 받고(기본 lscsystems@vsphere.local), 비밀번호만 환경변수로
+// 받습니다. 비밀번호를 명령행에 적으면 셸 히스토리와 프로세스 목록(ps)에 남기 때문입니다.
+// 목록의 모든 vCenter 에 같은 계정을 씁니다.
+//
+//	VC_PASSWORD              (기본)
+//	VC_PASS / VCENTER_PASS   (대체)
+func Password() (string, error) {
 	pass := firstNonEmpty(os.Getenv("VC_PASSWORD"), os.Getenv("VC_PASS"), os.Getenv("VCENTER_PASS"))
-	if user == "" || pass == "" {
-		return "", "", fmt.Errorf("vCenter 계정이 없습니다. 환경변수 VC_USER / VC_PASSWORD 를 설정하세요")
+	if pass == "" {
+		return "", fmt.Errorf("vCenter 비밀번호가 없습니다. 환경변수 VC_PASSWORD 를 설정하세요")
 	}
-	return user, pass, nil
+	return pass, nil
 }
 
 func firstNonEmpty(vals ...string) string {

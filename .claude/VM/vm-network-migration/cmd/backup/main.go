@@ -40,7 +40,7 @@ func run() int {
 			"정말 새로 백업하려면 -force 를 주세요", f.StateFile)
 	}
 
-	user, pass, err := config.Credentials()
+	pass, err := config.Password()
 	if err != nil {
 		return cli.Usage("%v", err)
 	}
@@ -63,7 +63,7 @@ func run() int {
 	fmt.Printf("[Step 0] 사전 상태 백업 — vCenter %d대 / 대상 VM %d대 (동시 %d)\n",
 		len(vcenters), len(vmNames), f.Concurrency)
 
-	fleet, err := vsphere.ConnectFleet(ctx, vcenters, user, pass, f.Concurrency)
+	fleet, err := vsphere.ConnectFleet(ctx, vcenters, f.ID, pass, f.Concurrency)
 	if err != nil {
 		return cli.Usage("%v", err)
 	}

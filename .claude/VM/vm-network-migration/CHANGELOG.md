@@ -96,3 +96,24 @@ ESXi 192.168.0.59, 대상 VM 2대)에서 확인:
 
 **검증**: gofmt / `go vet` / `go test` 통과, 폐쇄망 빌드 성공. 실 랩에서 dry-run →
 전체 실행 → 롤백까지 이전과 동일하게 동작하고, 롤백 후 원본 상태로 복구됨을 확인.
+
+## 2026-09-02 — vCenter 계정 지정 방식을 `-id` 플래그로 변경
+
+VM_setup 아래 다른 도구들(`vswitch_setting-source` 등)과 계정 지정 관례를 맞췄습니다.
+
+- **`-id` 플래그 신설** (`run.sh` 는 `--id`). 기본값은 **`lscsystems@vsphere.local`**
+  이고, 다른 계정을 쓰려면 `-id=administrator@vsphere.local` 처럼 지정합니다.
+- **`VC_USER` / `VCENTER_USER` 환경변수는 더 이상 쓰지 않습니다.** 계정 ID 가 플래그로
+  넘어오므로 환경변수와 플래그 중 무엇이 이기는지 헷갈릴 여지를 없앴습니다.
+  기존에 `VC_USER` 로 계정을 넘기던 절차가 있다면 `-id` 로 바꿔야 합니다.
+- **비밀번호는 그대로 환경변수로만** 받습니다(`VC_PASSWORD`, 대체 `VC_PASS` /
+  `VCENTER_PASS`). 비밀번호를 명령행에 적으면 셸 히스토리와 `ps` 에 남기 때문에
+  플래그로 열지 않았습니다.
+- `config.Credentials()` → `config.Password()` 로 정리, `-id` 가 빈 값이면 종료 코드 2.
+- `run.sh` 배너에 접속 계정을 표시해 어떤 계정으로 도는지 바로 보이게 했습니다.
+
+**검증**: gofmt / `go vet` / `go test` 통과, 폐쇄망 빌드 성공. 실 랩에서
+① `-id` 미지정 시 `lscsystems@vsphere.local` 로 접속을 시도해 권한 오류로 중단
+(기본값이 실제로 쓰이는지 확인) ② `-id=administrator@vsphere.local` 지정 시 백업 →
+전체 실행 → 롤백까지 정상 동작 ③ `VC_PASSWORD` 누락 시 종료 코드 2 ④ `-id=""` 거부 —
+네 가지 모두 확인. 검증 후 랩은 원상복구했습니다.

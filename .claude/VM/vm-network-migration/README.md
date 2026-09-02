@@ -64,14 +64,22 @@ cp vswitch_user.txt.example vswitch_hong.txt
 
 ### 1.4 자격증명
 
-비밀번호는 파일에 적지 않고 **환경변수로만** 넘깁니다.
+계정 ID 는 `-id`(`run.sh` 는 `--id`)로 지정하고, **비밀번호만 환경변수로** 넘깁니다.
+비밀번호를 명령행에 적으면 셸 히스토리와 프로세스 목록(`ps`)에 남기 때문입니다.
 
 ```bash
-export VC_USER='administrator@vsphere.local'
 read -rsp 'vCenter 비밀번호: ' VC_PASSWORD; export VC_PASSWORD; echo
 ```
 
-`VCENTER_USER` / `VC_PASS` / `VCENTER_PASS` 도 대체 이름으로 인식합니다.
+`-id` 를 주지 않으면 **`lscsystems@vsphere.local`** 로 접속합니다.
+다른 계정을 쓰려면 지정하십시오.
+
+```bash
+./run.sh -u hong --id administrator@vsphere.local
+```
+
+비밀번호 환경변수는 `VC_PASSWORD` 가 기본이고, `VC_PASS` / `VCENTER_PASS` 도
+대체 이름으로 인식합니다.
 
 ### 1.5 전역 명령어로 사용하기 (선택 사항)
 
@@ -170,6 +178,7 @@ nm-backup -user=hong
 | 옵션 | 기본값 | 설명 |
 |---|---|---|
 | `-u`, `--user <토큰>` | (대화형 선택) | 작업 단위 토큰. 나머지 파일 이름을 결정합니다. |
+| `--id <계정>` | `lscsystems@vsphere.local` | vCenter 로그인 계정 ID. |
 | `-c`, `--concurrency <N>` | `8` | 동시에 처리할 VM 수. vCenter 부하를 조절합니다. |
 | `--nic-index <N>` | `0` | 대상 가상 NIC 순번. `0` = 네트워크 어댑터 1. |
 | `--vswitch <이름>` | `vSwitch0` | 포트그룹을 만들 대상 표준 가상 스위치. |
@@ -185,6 +194,7 @@ nm-backup -user=hong
 | 플래그 | 기본값 | 설명 |
 |---|---|---|
 | `-user` | (필수) | 작업 단위 토큰. 아래 파일 이름을 결정합니다. |
+| `-id` | `lscsystems@vsphere.local` | vCenter 로그인 계정 ID. |
 | `-vcenter-file` | `vcenter.txt` | vCenter 주소 목록 (한 줄에 하나). |
 | `-state-file` | `state_{user}.json` | 롤백용 상태 파일. `run.sh` 가 dry-run 일 때 임시 경로로 돌립니다. |
 | `-nic-index` | `0` | 대상 NIC 순번. |
@@ -321,6 +331,8 @@ Rocky Linux 8 / go1.26.5 / vCenter 8 (govmomi v0.55.1) 환경에서 확인했습
   백업값과 정확히 일치함을 독립 조회로 확인
 - 부분 실패 주입 시 **실패분만 원복 → 상태 파일에서 제외 → 나머지로 계속 진행** 확인
 - 자동 롤백까지 실패하는 경우 종료 코드 3 + 수동 확인 안내 확인
-- 자격증명/`-user` 누락 시 vCenter 접속 전에 종료 코드 2 로 중단 확인
+- 비밀번호/`-user` 누락, `-id` 빈 값이면 vCenter 접속 전에 종료 코드 2 로 중단 확인
+- `-id` 미지정 시 기본 계정 `lscsystems@vsphere.local` 로 접속하고, `-id` 지정 시
+  해당 계정으로 접속함을 실 vCenter 로 확인
 
 자세한 내용은 [`CHANGELOG.md`](CHANGELOG.md) 참고.
