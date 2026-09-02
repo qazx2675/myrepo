@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-09-02 — `vswitch_setting-source` 코드 교체 (HostGroup 매핑 → vSwitch 포트그룹 생성)
+
+- 메일(`go lang 모음 V2`)의 `main_vs.txt`로 `main.go` 전체를 교체했다. 기존 코드는 폴더명과 달리 클러스터 HostGroup(DRS 그룹)을 매핑하는 도구였는데, 새 코드는 폴더명 그대로 **`worklist.txt`의 (호스트, 포트그룹, VLAN)을 읽어 각 호스트 `vSwitch0`에 포트그룹을 일괄 생성**한다(`HostNetworkSystem.AddPortGroup`).
+- 플래그 변경: `-url`/`-cluster`/`-concurrency` → `-vcTargetIP`(필수), `-id`, `-worklistFile`, `-targetVSwitch`. 비밀번호는 환경변수 `VC_PASSWORD`로 받는다.
+- 오래된 빌드 산출물 `vswitch_setting`(옛 로직 바이너리)을 삭제했다. 폐쇄망에서 `bash setup.sh`로 재빌드해야 한다.
+- `README.md`를 새 동작/플래그에 맞게 다시 작성했다.
+- `go.mod`/`go.sum`/`vendor/`는 그대로 두었다. 새 코드가 쓰는 패키지(`object`, `view`, `mo`, `types`)는 모두 기존 `vendor/`에 포함돼 있다.
+- **검증**: 이 환경에 Go 툴체인이 없어 빌드/실행 검증은 하지 못했다. 소스 교체와 import 대상이 vendor에 존재하는지만 확인.
+
 ## 2026-08-25 — `vm_create-source` 게스트 OS 지정 옵션(`-guestId`) 추가
 
 - **`-guestId` 플래그 신설 (`main.go`)**: 기존에는 `rhel8_64Guest`가 소스에 하드코딩돼 있어 다른 OS로 만들려면 소스를 고쳐야 했다. 이제 `-guestId=rhel9_64Guest`처럼 인자로 지정할 수 있고, **아무것도 주지 않으면 종전과 동일하게 `rhel8_64Guest`가 기본값**으로 쓰인다.
