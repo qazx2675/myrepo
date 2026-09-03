@@ -18,7 +18,7 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
 
 | 폴더/파일 | 역할 |
 |---|---|
-| `run.sh` | 사용자 진입점. 단계 순서 제어, 종료 코드 확인, 자동 롤백, 대화형 프롬프트 |
+| `run.sh` | 사용자 진입점. 단계 순서 제어, 종료 코드 확인, 자동 롤백, 대화형 프롬프트. 일부 폐쇄망 배포는 이걸 `portgroup_change.sh` 로 이름 바꾸고 로컬 편의 기능을 추가해 씀(README §2.8, 이 저장소에는 그 코드 없음) |
 | `setup.sh` | 폐쇄망 오프라인 빌드 (`-mod=vendor`, `GOPROXY=off`) |
 | `cmd/backup/` | **Step 0** 현재 NIC 상태를 읽어 상태 파일 생성. 목표 포트그룹 확정 |
 | `cmd/pgcreate/` | **Step 2** BM 호스트 vSwitch 에 포트그룹 생성 (worklist 기준) |
@@ -32,6 +32,7 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
 | `internal/vsphere/` | vCenter 접속, 인벤토리 색인, NIC/포트그룹 조작 |
 | `internal/steps/` | 해제·연결·검증·롤백이 공유하는 "레코드마다 VM 처리" 뼈대 |
 | `internal/pool/` | 세마포어 기반 워커 풀 (동시 실행 개수 제한) |
+| `internal/color/` | 터미널 출력 ANSI 색상. TTY 가 아니거나 `NO_COLOR` 설정 시 자동으로 꺼짐 |
 | `vendor/` | Go 의존성 (govmomi 등). 폐쇄망 빌드용, 직접 수정하지 않음 |
 | `*.example` | 입력 파일 서식 예시 |
 

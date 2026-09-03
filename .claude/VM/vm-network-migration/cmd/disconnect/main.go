@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"vm-network-migration/internal/cli"
+	"vm-network-migration/internal/color"
 	"vm-network-migration/internal/state"
 	"vm-network-migration/internal/steps"
 	"vm-network-migration/internal/vsphere"
@@ -38,7 +39,7 @@ func run() int {
 	}
 	defer fleet.Close(context.Background())
 
-	fmt.Printf("[Step 1] 기존 포트그룹 연결 해제 — 대상 %d대 (동시 %d)\n", len(sf.Records), f.Concurrency)
+	fmt.Printf("%s 기존 포트그룹 연결 해제 — 대상 %d대 (동시 %d)\n", color.BoldCyan("[Step 1]"), len(sf.Records), f.Concurrency)
 
 	rep := steps.Run(ctx, "기존 포트그룹 연결 해제", fleet, sf.Records, f.Concurrency,
 		func(ctx context.Context, s *vsphere.Session, info *vsphere.VMInfo, rec state.Record) (string, string, error) {

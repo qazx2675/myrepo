@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"vm-network-migration/internal/color"
 )
 
 // DefaultID 는 -id 를 주지 않았을 때 쓰는 vCenter 로그인 계정입니다.
@@ -112,7 +114,24 @@ type Report struct {
 // Print 는 건별 결과를 순서대로 출력합니다.
 func (r *Report) Print() {
 	for _, res := range r.Results {
-		fmt.Printf("  [%s] %-40s %s\n", res.Status, res.Name, res.Message)
+		fmt.Printf("  [%s] %-40s %s\n", colorStatus(res.Status), res.Name, res.Message)
+	}
+}
+
+// colorStatus 는 상태값에 맞는 색을 입힙니다. Name 컬럼 정렬(%-40s)은 상태값이
+// 아니라 이름에 걸려 있어서, 상태값에 ANSI 코드가 섞여도 정렬은 그대로입니다.
+func colorStatus(status string) string {
+	switch status {
+	case StatusOK:
+		return color.Green(status)
+	case StatusSkipped:
+		return color.Yellow(status)
+	case StatusFailed:
+		return color.BoldRed(status)
+	case StatusDryRun:
+		return color.Cyan(status)
+	default:
+		return status
 	}
 }
 
@@ -145,10 +164,10 @@ func (r *Report) Finish(failedFile string) int {
 			dry++
 		}
 	}
-	fmt.Printf("\n[요약] %s — 전체 %d건 / 성공 %d / 스킵 %d / 실패 %d",
-		r.Step, len(r.Results), ok, skip, fail)
+	fmt.Printf("\n[요약] %s — 전체 %d건 / %s %d / %s %d / %s %d",
+		r.Step, len(r.Results), color.Green("성공"), ok, color.Yellow("스킵"), skip, color.BoldRed("실패"), fail)
 	if dry > 0 {
-		fmt.Printf(" / 변경예정 %d", dry)
+		fmt.Printf(" / %s %d", color.Cyan("변경예정"), dry)
 	}
 	fmt.Println()
 
@@ -161,15 +180,16 @@ func (r *Report) Finish(failedFile string) int {
 
 	body := strings.Join(failed, "\n") + "\n"
 	if err := os.WriteFile(failedFile, []byte(body), 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "[경고] 실패 목록 파일(%s) 저장 실패: %v\n", failedFile, err)
+		fmt.Fprintf(os.Stderr, "%s 실패 목록 파일(%s) 저장 실패: %v\n", color.Yellow("[경고]"), failedFile, err)
 	} else {
-		fmt.Printf("[INFO] 실패한 VM %d건을 %s 에 기록했습니다.\n", len(failed), failedFile)
+		fmt.Printf("%s 실패한 VM %d건을 %s 에 기록했습니다.\n", color.Cyan("[INFO]"), len(failed), failedFile)
 	}
 	return ExitFailed
 }
 
 // Usage 는 설정/입력 오류를 stderr 로 알리고 종료 코드 2 를 돌려줍니다.
 func Usage(format string, args ...any) int {
-	fmt.Fprintf(os.Stderr, "오류: "+format+"\n", args...)
+	fmt.Fprint(os.Stderr, color.BoldRed("오류: "))
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	return ExitUsage
 }

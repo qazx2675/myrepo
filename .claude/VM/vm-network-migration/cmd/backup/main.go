@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"vm-network-migration/internal/cli"
+	"vm-network-migration/internal/color"
 	"vm-network-migration/internal/config"
 	"vm-network-migration/internal/pool"
 	"vm-network-migration/internal/state"
@@ -60,8 +61,8 @@ func run() int {
 	ctx, cancel := context.WithTimeout(context.Background(), f.Timeout)
 	defer cancel()
 
-	fmt.Printf("[Step 0] 사전 상태 백업 — vCenter %d대 / 대상 VM %d대 (동시 %d)\n",
-		len(vcenters), len(vmNames), f.Concurrency)
+	fmt.Printf("%s 사전 상태 백업 — vCenter %d대 / 대상 VM %d대 (동시 %d)\n",
+		color.BoldCyan("[Step 0]"), len(vcenters), len(vmNames), f.Concurrency)
 
 	fleet, err := vsphere.ConnectFleet(ctx, vcenters, f.ID, pass, f.Concurrency)
 	if err != nil {
@@ -86,7 +87,7 @@ func run() int {
 	rep.Print()
 
 	if len(rep.Failed()) > 0 {
-		fmt.Fprintln(os.Stderr, "\n[중단] 백업하지 못한 VM 이 있어 상태 파일을 만들지 않았습니다.")
+		fmt.Fprintln(os.Stderr, "\n"+color.BoldRed("[중단]")+" 백업하지 못한 VM 이 있어 상태 파일을 만들지 않았습니다.")
 		fmt.Fprintln(os.Stderr, "        롤백 불가능한 상태로 변경을 시작하지 않기 위한 의도적인 중단입니다.")
 		return rep.Finish(f.FailedFile)
 	}
@@ -107,7 +108,7 @@ func run() int {
 	if err := state.Save(f.StateFile, sf); err != nil {
 		return cli.Usage("상태 파일 저장 실패: %v", err)
 	}
-	fmt.Printf("\n[INFO] 상태 파일 저장 완료: %s (%d건)\n", f.StateFile, len(sf.Records))
+	fmt.Printf("\n%s 상태 파일 저장 완료: %s (%d건)\n", color.Cyan("[INFO]"), f.StateFile, len(sf.Records))
 	return rep.Finish(f.FailedFile)
 }
 

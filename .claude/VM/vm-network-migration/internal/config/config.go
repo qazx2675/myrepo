@@ -10,6 +10,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"vm-network-migration/internal/color"
 )
 
 // LoadLines 는 목록 파일을 읽어 의미 있는 줄만 돌려줍니다.
@@ -60,7 +62,7 @@ func LoadVCenters(path string) ([]string, error) {
 		return nil, fmt.Errorf("%s 에 유효한 vCenter 주소가 없습니다", path)
 	}
 	if removed > 0 {
-		fmt.Printf("[INFO] %s: 중복 주소 %d건 제거\n", path, removed)
+		fmt.Printf("%s %s: 중복 주소 %d건 제거\n", color.Cyan("[INFO]"), path, removed)
 	}
 	return out, nil
 }
@@ -76,7 +78,7 @@ func LoadVMList(path string) ([]string, error) {
 		return nil, fmt.Errorf("%s 에 대상 VM 이 없습니다", path)
 	}
 	if removed > 0 {
-		fmt.Printf("[INFO] %s: 중복 VM %d건 제거\n", path, removed)
+		fmt.Printf("%s %s: 중복 VM %d건 제거\n", color.Cyan("[INFO]"), path, removed)
 	}
 	return out, nil
 }
