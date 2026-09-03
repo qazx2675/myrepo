@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"vm-network-migration/internal/cli"
+	"vm-network-migration/internal/color"
 	"vm-network-migration/internal/state"
 	"vm-network-migration/internal/steps"
 	"vm-network-migration/internal/vsphere"
@@ -66,7 +67,7 @@ func run() int {
 		return cli.Usage("%v", err)
 	}
 	if len(records) == 0 {
-		fmt.Println("[INFO] 롤백할 대상이 없습니다.")
+		fmt.Println(color.Cyan("[INFO]") + " 롤백할 대상이 없습니다.")
 		return cli.ExitOK
 	}
 
@@ -74,8 +75,8 @@ func run() int {
 	if len(targets) > 0 {
 		scope = "선택"
 	}
-	fmt.Printf("[롤백] 작업 전 상태로 원복 — 대상 %d대 (%s, 동시 %d)\n",
-		len(records), scope, f.Concurrency)
+	fmt.Printf("%s 작업 전 상태로 원복 — 대상 %d대 (%s, 동시 %d)\n",
+		color.BoldCyan("[롤백]"), len(records), scope, f.Concurrency)
 
 	rep := steps.Run(ctx, "롤백", fleet, records, f.Concurrency,
 		func(ctx context.Context, s *vsphere.Session, info *vsphere.VMInfo, rec state.Record) (string, string, error) {
@@ -120,16 +121,16 @@ func run() int {
 		}
 		if n := sf.Remove(done); n > 0 {
 			if err := state.Save(f.StateFile, sf); err != nil {
-				fmt.Fprintf(os.Stderr, "[경고] 상태 파일 갱신 실패: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%s 상태 파일 갱신 실패: %v\n", color.Yellow("[경고]"), err)
 			} else {
-				fmt.Printf("[INFO] 원복 완료한 %d대를 상태 파일에서 제외했습니다. 남은 대상 %d대.\n",
-					n, len(sf.Records))
+				fmt.Printf("%s 원복 완료한 %d대를 상태 파일에서 제외했습니다. 남은 대상 %d대.\n",
+					color.Cyan("[INFO]"), n, len(sf.Records))
 			}
 		}
 	}
 
 	if code != cli.ExitOK {
-		fmt.Fprintln(os.Stderr, "\n[경고] 자동 롤백에 실패한 VM 이 있습니다. 수동 확인이 필요합니다.")
+		fmt.Fprintln(os.Stderr, "\n"+color.BoldRed("[경고]")+" 자동 롤백에 실패한 VM 이 있습니다. 수동 확인이 필요합니다.")
 	}
 	return code
 }

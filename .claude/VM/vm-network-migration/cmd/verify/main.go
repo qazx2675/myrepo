@@ -17,6 +17,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 
 	"vm-network-migration/internal/cli"
+	"vm-network-migration/internal/color"
 	"vm-network-migration/internal/state"
 	"vm-network-migration/internal/steps"
 	"vm-network-migration/internal/vsphere"
@@ -35,7 +36,7 @@ func run() int {
 	// 검증은 "실제로 바뀌었는지"를 확인하는 단계입니다. dry-run 은 아무것도 바꾸지
 	// 않으므로 검증할 대상이 없고, 그대로 돌리면 전부 불일치로 나와 오해를 부릅니다.
 	if f.DryRun {
-		fmt.Println("[Step 4] 연결성 검증 — dry-run 에서는 검증할 변경이 없으므로 건너뜁니다.")
+		fmt.Println(color.BoldCyan("[Step 4]") + " 연결성 검증 — dry-run 에서는 검증할 변경이 없으므로 건너뜁니다.")
 		return cli.ExitOK
 	}
 
@@ -48,7 +49,7 @@ func run() int {
 	}
 	defer fleet.Close(context.Background())
 
-	fmt.Printf("[Step 4] 연결성 검증 — 대상 %d대 (동시 %d)\n", len(sf.Records), f.Concurrency)
+	fmt.Printf("%s 연결성 검증 — 대상 %d대 (동시 %d)\n", color.BoldCyan("[Step 4]"), len(sf.Records), f.Concurrency)
 
 	rep := steps.Run(ctx, "연결성 검증", fleet, sf.Records, f.Concurrency,
 		func(ctx context.Context, s *vsphere.Session, info *vsphere.VMInfo, rec state.Record) (string, string, error) {
@@ -93,7 +94,7 @@ func run() int {
 	rep.Print()
 	code := rep.Finish(f.FailedFile)
 	if code == cli.ExitOK {
-		fmt.Println("[INFO] 모든 대상 VM 이 계획된 포트그룹에 정상 연결되었습니다.")
+		fmt.Println(color.Cyan("[INFO]") + " 모든 대상 VM 이 계획된 포트그룹에 정상 연결되었습니다.")
 	}
 	return code
 }

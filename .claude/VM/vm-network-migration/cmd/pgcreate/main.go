@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"vm-network-migration/internal/cli"
+	"vm-network-migration/internal/color"
 	"vm-network-migration/internal/config"
 	"vm-network-migration/internal/pool"
 	"vm-network-migration/internal/vsphere"
@@ -46,8 +47,8 @@ func run() int {
 	ctx, cancel := context.WithTimeout(context.Background(), f.Timeout)
 	defer cancel()
 
-	fmt.Printf("[Step 2] 신규 포트그룹 생성 — 항목 %d건 / vSwitch=%s (동시 %d)\n",
-		len(worklist), *vswitch, f.Concurrency)
+	fmt.Printf("%s 신규 포트그룹 생성 — 항목 %d건 / vSwitch=%s (동시 %d)\n",
+		color.BoldCyan("[Step 2]"), len(worklist), *vswitch, f.Concurrency)
 
 	fleet, err := vsphere.ConnectFleet(ctx, vcenters, f.ID, pass, f.Concurrency)
 	if err != nil {
