@@ -22,6 +22,41 @@ var hostRangeRegex = regexp.MustCompile(`(.*?)\[(\d+)-(\d+)\](.*)`)
 // ★ /user/ 로 시작하는 경로(autofs 마운트 경로)가 명령어에 포함되어 있는지 확인
 var autofsUserPathRegex = regexp.MustCompile(`(^|[\s"'])/user/`)
 
+// ★ 가독성용 ANSI 색상. -script 모드에서는 다른 도구가 결과를 파싱/파이프하는 용도라
+// 이스케이프 코드가 섞이면 안 되므로 colorEnabled를 false로 두고 그대로 원문을 출력한다.
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorCyanB  = "\033[1;36m"
+)
+
+var colorEnabled bool
+
+func colorize(color, s string) string {
+	if !colorEnabled {
+		return s
+	}
+	return color + s + colorReset
+}
+
+// ★ pdsh 스타일 "플래그+값 붙여쓰기"를 -w에 한해 지원한다.
+// "-w^file", "-wfile" 처럼 공백/등호 없이 붙어 있는 경우를 Go flag 패키지가 이해하는
+// "-w" "값" 두 토큰으로 분리한다. "-w=value"(Go 관용 표기)와 "-w" 단독, "-w ^file"
+// (이미 공백으로 분리되어 있는 경우)은 그대로 둔다.
+func preprocessArgs(args []string) []string {
+	var out []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-w") && len(a) > 2 && a[2] != '=' {
+			out = append(out, "-w", a[2:])
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // ★ esxi[0001-0020] 패턴을 자동으로 확장해 주는 함수
 func expandHostLine(line string) []string {
 	matches := hostRangeRegex.FindStringSubmatch(line)
@@ -118,26 +153,77 @@ func getAuthMethods(keyPath string, password string) ([]ssh.AuthMethod, error) {
 	return []ssh.AuthMethod{ssh.PublicKeys(signers...)}, nil
 }
 
-func printPdshStyle(host string, output string, err error) {
+// renderResultLines는 printPdshStyle이 host 접두어 없이 찍을 본문 줄들을 그대로 만들어준다.
+// -b(묶어 출력) 모드에서 호스트별 결과를 비교하기 위해 printPdshStyle과 별도로 필요하다.
+func renderResultLines(output string, err error) string {
 	output = strings.TrimSpace(output)
 
 	if err != nil {
 		if output != "" {
+			var lines []string
 			for _, line := range strings.Split(output, "\n") {
-				fmt.Printf("%s: ERROR: %s\n", host, strings.TrimSpace(line))
+				lines = append(lines, "ERROR: "+strings.TrimSpace(line))
 			}
-		} else {
-			fmt.Printf("%s: ERROR: %v\n", host, err)
+			return strings.Join(lines, "\n")
 		}
-		return
+		return fmt.Sprintf("ERROR: %v", err)
 	}
 
 	if output == "" {
-		return
+		return ""
 	}
 
+	var lines []string
 	for _, line := range strings.Split(output, "\n") {
-		fmt.Printf("%s: %s\n", host, strings.TrimSpace(line))
+		lines = append(lines, strings.TrimSpace(line))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func printPdshStyle(host string, output string, err error) {
+	text := renderResultLines(output, err)
+	if text == "" {
+		return
+	}
+	color := colorGreen
+	if err != nil {
+		color = colorRed
+	}
+	for _, line := range strings.Split(text, "\n") {
+		fmt.Println(colorize(color, fmt.Sprintf("%s: %s", host, line)))
+	}
+}
+
+// printBunched는 clush -b와 동일하게, 결과 본문이 완전히 같은 호스트끼리 묶어서
+// 한 번만 출력한다. hosts 순서대로 훑으면서 처음 보는 결과 내용마다 그룹을 만든다.
+func printBunched(hosts []string, outputs map[string]string) {
+	type group struct {
+		text  string
+		hosts []string
+	}
+	var groups []*group
+	seen := map[string]*group{}
+
+	for _, h := range hosts {
+		text, ok := outputs[h]
+		if !ok || text == "" {
+			continue
+		}
+		g, exists := seen[text]
+		if !exists {
+			g = &group{text: text}
+			seen[text] = g
+			groups = append(groups, g)
+		}
+		g.hosts = append(g.hosts, h)
+	}
+
+	divider := strings.Repeat("-", 20)
+	for _, g := range groups {
+		fmt.Println(colorize(colorCyanB, divider))
+		fmt.Println(colorize(colorCyanB, strings.Join(g.hosts, ",")))
+		fmt.Println(colorize(colorCyanB, divider))
+		fmt.Println(g.text)
 	}
 }
 
@@ -165,7 +251,7 @@ func isAnacondaRunning(client *ssh.Client) bool {
 	return lastLine == "1"
 }
 
-func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, wg *sync.WaitGroup, sem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex) {
+func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, bunchMode bool, bunchOutputs map[string]string, wg *sync.WaitGroup, sem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex) {
 	defer wg.Done()
 	sem <- struct{}{}
 	defer func() { <-sem }()
@@ -199,7 +285,7 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 
 	// 2. ★ [수정] -pm 옵션이 있을 때만 ~/.profile 기반으로 OS 설치 중인지 검사
 	if pmMode && isAnacondaRunning(client) {
-		printPdshStyle(host, "OS 설치중 (~/.profile anaconda 감지)", nil)
+		fmt.Println(colorize(colorYellow, fmt.Sprintf("%s: OS 설치중 (~/.profile anaconda 감지)", host)))
 		mu.Lock()
 		*osInstallHosts = append(*osInstallHosts, host)
 		mu.Unlock()
@@ -218,7 +304,14 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	defer session.Close()
 
 	output, err := session.CombinedOutput(command)
-	printPdshStyle(host, string(output), err)
+	if bunchMode {
+		text := renderResultLines(string(output), err)
+		mu.Lock()
+		bunchOutputs[host] = text
+		mu.Unlock()
+	} else {
+		printPdshStyle(host, string(output), err)
+	}
 
 	mu.Lock()
 	*successCount++
@@ -272,10 +365,16 @@ func main() {
 	forceConcurrency := flag.Int("cf", 0, "동시 접속 수 강제 지정 (autofs /user/ 경로 감지로 인한 자동 제한을 무시)")
 	timeoutSec := flag.Int("t", 15, "접속 타임아웃 초 (기본 15초)")
 	dangerConfirm := flag.Bool("dnlgjawkrdjqghkrdls", false, "위험 작업 강제 실행 확인 옵션")
-	scriptMode := flag.Bool("script", false, "작업 요약 출력 숨김 (순수 결과만 출력)")
+	// ★ 실행 파일 이름이 pdsh면 -script 기본값을 true로 (필요하면 -script=false로 명시적 해제 가능)
+	defaultScriptMode := filepath.Base(os.Args[0]) == "pdsh"
+	scriptMode := flag.Bool("script", defaultScriptMode, "작업 요약 출력 숨김 (순수 결과만 출력). 실행 파일 이름이 pdsh면 기본값 true")
 	pmMode := flag.Bool("pm", false, "/user/svrauto 마운트 상태 추가 점검 및 OS설치중 감지")
+	bMode := flag.Bool("b", false, "clush 스타일: 결과가 동일한 호스트끼리 묶어서 출력 (-script와 함께 쓰면 무시되고 호스트별로 출력)")
 
-	flag.Parse()
+	// ★ pdsh 스타일 "-w^file"/"-wfile" 붙여쓰기 지원을 위해 flag.Parse() 대신 전처리한 인자로 파싱
+	flag.CommandLine.Parse(preprocessArgs(os.Args[1:]))
+
+	colorEnabled = !*scriptMode
 
 	args := flag.Args()
 	if *hostFile == "" || len(args) == 0 {
@@ -291,7 +390,11 @@ func main() {
 	cleanHostFile := strings.TrimPrefix(*hostFile, "^")
 
 	command := strings.Join(args, " ")
-	command = strings.Trim(command, "\"'")
+	// ★ [버그 수정] 예전에는 여기서 strings.Trim(command, "\"'")로 앞뒤 따옴표를 무조건
+	// 제거했는데, 이러면 명령어 끝이 실제로 따옴표로 끝나는 경우(예: grep 'asdf')까지
+	// 그 따옴표를 잘라내버려서 명령어가 깨졌다(실제로 재현: `cat test |grep 'asdf'`가
+	// `cat test |grep 'asdf`로 깨짐). 쉘이 넘겨준 인자에는 이미 실제 따옴표가 없으므로
+	// 이 처리 자체가 불필요해서 제거했다.
 
 	// ★ autofs 안전장치: /user/ 경로가 명령어에 포함되어 있으면 병렬 수를 500으로 강제.
 	// -cf 로 명시적으로 병렬 수를 지정한 경우에만 이 제한을 무시하고 지정값을 그대로 쓴다.
@@ -300,8 +403,8 @@ func main() {
 		effectiveConcurrency = *forceConcurrency
 	} else if isAutofsUserPath(command) {
 		effectiveConcurrency = autofsSafeConcurrency
-		fmt.Printf("[안전장치] 명령어에 \"/user/\" 경로가 감지되어 병렬 실행 수를 %d대로 자동 제한합니다. (원래 지정값 무시: -c %d)\n", autofsSafeConcurrency, *concurrency)
-		fmt.Printf("           이 경로가 autofs 마운트가 아니거나 더 높은 병렬 수가 필요하면 -cf <숫자> 옵션으로 강제 지정하세요.\n")
+		fmt.Println(colorize(colorYellow, fmt.Sprintf("[안전장치] 명령어에 \"/user/\" 경로가 감지되어 병렬 실행 수를 %d대로 자동 제한합니다. (원래 지정값 무시: -c %d)", autofsSafeConcurrency, *concurrency)))
+		fmt.Println(colorize(colorYellow, "           이 경로가 autofs 마운트가 아니거나 더 높은 병렬 수가 필요하면 -cf <숫자> 옵션으로 강제 지정하세요."))
 	}
 
 	lowerCmd := strings.ToLower(command)
@@ -314,9 +417,9 @@ func main() {
 		strings.Contains(lowerCmd, "ddc")
 
 	if isDangerous && !*dangerConfirm {
-		fmt.Println("================================================================")
-		fmt.Println(" [경고] 위험 작업(시스템 종료/재부팅)이 감지되었습니다!")
-		fmt.Println("================================================================")
+		fmt.Println(colorize(colorRed, "================================================================"))
+		fmt.Println(colorize(colorRed, " [경고] 위험 작업(시스템 종료/재부팅)이 감지되었습니다!"))
+		fmt.Println(colorize(colorRed, "================================================================"))
 		fmt.Printf(" 감지된 명령어 : %s\n", command)
 		fmt.Println(" 실행을 원하신다면 명령어에 '-dnlgjawkrdjqghkrdls' 옵션을 추가하세요.")
 		fmt.Println(" 예시) ./gossh -dnlgjawkrdjqghkrdls -w kdh.txt reboot")
@@ -394,14 +497,23 @@ func main() {
 	var osInstallHosts []string
 	var noSvrAutoHosts []string // ★ /user/svrauto 미접근 호스트 기록
 
+	// ★ -b는 -script와 같이 오면 무시한다(순수 결과 모드에서는 묶어 보여주는 요약형 출력이
+	// 목적과 안 맞음). bunchMode가 false면 기존과 동일하게 즉시 호스트별로 출력한다.
+	bunchMode := *bMode && !*scriptMode
+	bunchOutputs := map[string]string{}
+
 	startTime := time.Now()
 
 	for _, host := range hosts {
 		wg.Add(1)
-		go runSSHCommand(host, command, *user, authMethods, *port, timeout, *pmMode, &wg, sem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu)
+		go runSSHCommand(host, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &wg, sem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu)
 	}
 
 	wg.Wait()
+
+	if bunchMode {
+		printBunched(hosts, bunchOutputs)
+	}
 
 	// 결과 파일 생성 및 저장
 	offFilename := cleanHostFile + "_res_off"
@@ -416,14 +528,14 @@ func main() {
 
 	// -script 옵션이 없을 때만 요약 출력
 	if !*scriptMode {
-		fmt.Printf("\n================= 작업 요약 =================\n")
+		fmt.Println(colorize(colorCyanB, "\n================= 작업 요약 ================="))
 		fmt.Printf("총 대상 서버 : %d 대 (소요시간: %v)\n", len(hosts), time.Since(startTime))
 		fmt.Printf(" 동시 접속 수 : %d\n", effectiveConcurrency)
-		fmt.Printf(" 정상 접속 가능 : %d 대\n", successCount)
+		fmt.Println(colorize(colorGreen, fmt.Sprintf(" 정상 접속 가능 : %d 대", successCount)))
 
 		// OS 설치 중 출력 (-pm 옵션을 준 경우에만 기록되므로 바로 출력)
 		if len(osInstallHosts) > 0 {
-			fmt.Printf(" OS 설치중 : %d 대\n", len(osInstallHosts))
+			fmt.Println(colorize(colorYellow, fmt.Sprintf(" OS 설치중 : %d 대", len(osInstallHosts))))
 			for _, h := range osInstallHosts {
 				fmt.Printf("   - %s\n", h)
 			}
@@ -432,19 +544,25 @@ func main() {
 
 		// ★ pm 옵션을 사용했고, 미접근 서버가 존재하는 경우 출력
 		if *pmMode && len(noSvrAutoHosts) > 0 {
-			fmt.Printf(" svrauto미접근 : 접속가능 %d대 중 %d대\n", successCount, len(noSvrAutoHosts))
+			fmt.Println(colorize(colorYellow, fmt.Sprintf(" svrauto미접근 : 접속가능 %d대 중 %d대", successCount, len(noSvrAutoHosts))))
 			fmt.Printf("  -> %s 에 목록 저장됨\n", noSvrAutoFilename)
 		}
 
-		fmt.Printf(" 접속 불가(Timeout 등) : %d 대", len(failedHosts))
+		failLine := fmt.Sprintf(" 접속 불가(Timeout 등) : %d 대", len(failedHosts))
 		if len(failedHosts) > 0 {
-			fmt.Printf("\n  -> %s 에 목록 저장됨", offFilename)
+			fmt.Println(colorize(colorRed, failLine))
+			fmt.Printf("  -> %s 에 목록 저장됨\n", offFilename)
+		} else {
+			fmt.Println(failLine)
 		}
 
-		fmt.Printf("\n Refused(포트 닫힘) : %d 대", len(refusedHosts))
+		refusedLine := fmt.Sprintf(" Refused(포트 닫힘) : %d 대", len(refusedHosts))
 		if len(refusedHosts) > 0 {
-			fmt.Printf("\n  -> %s 에 목록 저장됨", refusedFilename)
+			fmt.Println(colorize(colorRed, refusedLine))
+			fmt.Printf("  -> %s 에 목록 저장됨\n", refusedFilename)
+		} else {
+			fmt.Println(refusedLine)
 		}
-		fmt.Printf("\n=============================================\n")
+		fmt.Println(colorize(colorCyanB, "============================================="))
 	}
 }
