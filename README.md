@@ -243,8 +243,11 @@ cd ".claude/공통/gossh/v2"
 |---|---|---|
 | `-c <N>` | `1000` | 동시 접속 수(세마포어). **명령어에 `/user/...` 경로가 있으면 이 값은 무시되고 500으로 강제된다** (`-cf`로 우회 가능). |
 | `-cf <N>` | (없음, 미지정 시 0) | `/user/...` autofs 안전장치를 무시하고 동시 접속 수를 강제로 `N`으로 지정. `/user/` 경로가 없는 명령어에는 영향 없음(원래대로 `-c`/기본값 사용). |
+| `-b` | `false` | clush 스타일 그룹 출력. 결과가 완전히 같은 호스트끼리 묶어서 한 번만 출력(5.7절 참고). `-script`와 같이 쓰면 무시됨. |
+| `-w <값>` | (필수) | 기존과 동일하되, `-w^파일명`처럼 공백 없이 붙여쓰는 pdsh 스타일 표기도 지원(5.7절 참고). |
+| `-script` | 실행 파일 이름이 `pdsh`면 `true`, 아니면 `false` | 기존과 동일한 옵션이지만 **기본값이 실행 파일 이름에 따라 달라진다**(5.7절 참고). 명시적으로 `-script=false`/`-script=true`로 덮어쓸 수 있음. |
 
-나머지 옵션(`-w`, `-u`, `-p`, `-i`, `-P`, `-t`, `-script`, `-pm`, `-dnlgjawkrdjqghkrdls`)은 기존
+나머지 옵션(`-u`, `-p`, `-i`, `-P`, `-t`, `-pm`, `-dnlgjawkrdjqghkrdls`)은 기존
 gossh와 동일하다(3.1절 참고).
 
 ### 5.5 검증 내용
@@ -262,11 +265,89 @@ gossh와 동일하다(3.1절 참고).
 
 ```
 gossh/v2/
-├── main.go     # 기존 main.go + autofs "/user/" 경로 감지 시 동시 접속 수 자동 제한(-cf로 우회) 로직 추가
+├── main.go       # 기존 main.go + autofs 안전장치/pdsh 호환 문법/-b/색상 등 v2 전용 변경 전부
 ├── go.mod / go.sum
-├── setup.sh    # vendor 패키지로 폐쇄망에서도 빌드하는 실행 편의 스크립트
-└── vendor/     # 빌드에 필요한 Go 의존성 패키지 모음
+├── setup.sh      # vendor 패키지로 폐쇄망에서도 빌드하는 실행 편의 스크립트
+├── gossh_os6     # ★ RHEL/CentOS 6(OS6) 대상 미리 빌드된 바이너리 (5.8절 참고)
+└── vendor/       # 빌드에 필요한 Go 의존성 패키지 모음
 ```
+
+### 5.7 pdsh 호환 문법 / `-b` 그룹 출력 / 버그 수정 / 색상 (2번째 업데이트)
+
+autofs 안전장치 이후 추가된 변경사항. 전부 `-w host "명령어"` 기본 사용법에는 영향 없다.
+
+**① pdsh 스타일 `-w` 붙여쓰기 지원**
+기존 gossh는 Go의 `flag` 패키지 특성상 `-w 파일명` 또는 `-w=파일명`만 됐는데, `pdsh`를 그대로
+대체할 수 있도록 `-w`에 값이 공백 없이 붙는 표기도 지원한다.
+
+```bash
+./gossh -w hosts.txt "cat /etc/os-release"   # 기존 방식(그대로 됨)
+./gossh -w ^hosts.txt "cat /etc/os-release"  # ^ 접두어(그대로 됨) — pdsh처럼 "고정폭 표시" 의미
+./gossh -w^hosts.txt "cat /etc/os-release"   # ★ 신규: 공백 없이 붙여써도 됨
+```
+
+**② `-b` 옵션: clush 스타일 그룹 출력**
+결과(stdout/stderr 본문)가 완전히 같은 호스트끼리는 한 번만 묶어서 보여준다(`clush -b`와 동일한 개념).
+
+```bash
+./gossh -w hosts.txt -b "cat /etc/os-release"
+```
+```
+--------------------
+esxi0001,esxi0002,esxi0003
+--------------------
+Rocky Linux 8.10 (Green Obsidian)
+```
+
+`-script`와 함께 쓰면 **`-b`는 무시되고 기존과 동일하게 호스트별 결과만 출력**된다(스크립트 모드는
+다른 도구가 파싱/파이프하는 순수 결과용이라, 묶어서 보여주는 요약형 출력과 목적이 안 맞기 때문).
+
+**③ 버그 수정: 명령어가 따옴표로 끝나면 깨지던 문제**
+```bash
+# 예전: 이렇게 하면 명령어 끝의 홑따옴표가 잘려서 실패했음
+./gossh -w hosts.txt -script "cat test |grep 'asdf'"
+# 우회하려면 끝에 공백을 하나 더 넣어야 했음(이제는 필요 없음)
+./gossh -w hosts.txt -script "cat test |grep 'asdf' "
+```
+원인은 명령어 문자열 앞뒤의 따옴표를 무조건 잘라내는 처리(`strings.Trim(cmd, "\"'")`)가 `grep 'asdf'`처럼
+명령어가 실제로 따옴표로 끝나는 경우까지 그 따옴표를 삭제해버렸기 때문. 이 처리를 제거해서 고쳤다.
+
+**④ 가독성용 색상**
+성공한 호스트 결과는 초록, 에러는 빨강, OS 설치중/안전장치 경고 같은 주의 메시지는 노랑, 작업 요약
+헤더는 굵은 청록으로 표시한다. **`-script` 모드에서는 색상 코드를 전혀 넣지 않는다** — 다른 도구가
+결과를 파싱/파이프하는 용도라 ANSI 이스케이프 코드가 섞이면 안 되기 때문.
+
+**⑤ (선택) 실행 파일 이름이 `pdsh`면 `-script` 기본 적용**
+빌드 결과물을 `pdsh`라는 이름으로 배치해서 쓰는 경우, `-script`를 안 줘도 기본으로 순수 결과만
+출력하도록(요약 블록/색상 없이) 만들 수 있다. 필요하면 `-script=false`로 명시적으로 다시 켤 수 있다.
+
+```bash
+cp gossh pdsh
+./pdsh -w hosts.txt "uptime"          # -script 안 줘도 순수 결과만 출력됨
+./pdsh -w hosts.txt -script=false "uptime"  # 요약 블록까지 다시 보고 싶으면
+```
+
+### 5.8 OS6(RHEL/CentOS 6) 빌드
+
+RHEL/CentOS 6은 커널·glibc가 오래돼서, 최신 Go 툴체인이 요구하는 최신 `golang.org/x/crypto`가
+쓰는 표준 라이브러리 기능(`crypto/fips140`, `crypto/mlkem` 등)과 안 맞는다. 그래서 v2는:
+
+- `golang.org/x/crypto`를 `v0.31.0`(자체 `go.mod`가 정확히 `go 1.20`을 요구하는, Go 1.20과
+  호환되는 최신 버전)으로, `golang.org/x/sys`도 그에 맞춰 `v0.28.0`으로 고정했다. 최신 Go
+  툴체인(예: 1.26)으로 빌드해도 이 버전으로 그대로 빌드되므로, **일반 빌드와 OS6 빌드가 같은
+  `go.mod`/`vendor/`를 공유**한다(별도 관리 불필요).
+- `go.mod`의 `go` 지시자도 `1.20`으로 맞춰뒀다.
+
+빌드는 Go 1.20 툴체인으로 진행한다(예: `/opt/go1.20/bin/go` 같은 별도 설치본).
+
+```bash
+cd ".claude/공통/gossh/v2"
+CGO_ENABLED=0 GOPROXY=off /opt/go1.20/bin/go build -mod=vendor -o gossh_os6 .
+```
+
+`CGO_ENABLED=0`이라 결과물이 정적 링크된 단일 바이너리다(`file`로 확인하면 `statically linked`) —
+OS6 대상 서버에 이 파일 하나만 복사하면 별도 라이브러리 설치 없이 바로 실행된다. 저장소에는 이렇게
+미리 빌드해 둔 `gossh_os6`를 그대로 커밋해 뒀다.
 
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다.
