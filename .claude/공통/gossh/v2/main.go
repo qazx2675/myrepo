@@ -181,10 +181,11 @@ func writeHostsToFile(filename string, hosts []string) {
 	}
 }
 
+// ★ [변경] 키(패스워드 없는) 인증을 항상 먼저 시도하고, -p로 비밀번호를 지정했어도
+// 그건 폴백으로만 쓴다. ssh.ClientConfig.Auth는 나열된 순서대로 시도하다가 먼저 성공하는
+// 것에서 멈추므로, 키만으로 접속되는 호스트는 -p를 줬어도 비밀번호가 실제로 쓰이지 않는다.
 func getAuthMethods(keyPath string, password string) ([]ssh.AuthMethod, error) {
-	if password != "" {
-		return []ssh.AuthMethod{ssh.Password(password)}, nil
-	}
+	var methods []ssh.AuthMethod
 
 	var signers []ssh.Signer
 	var paths []string
@@ -218,11 +219,19 @@ func getAuthMethods(keyPath string, password string) ([]ssh.AuthMethod, error) {
 		signers = append(signers, signer)
 	}
 
-	if len(signers) == 0 {
+	if len(signers) > 0 {
+		methods = append(methods, ssh.PublicKeys(signers...))
+	}
+
+	if password != "" {
+		methods = append(methods, ssh.Password(password))
+	}
+
+	if len(methods) == 0 {
 		return nil, fmt.Errorf("사용 가능한 SSH 키를 찾을 수 없습니다 (~/.ssh/ 하위 확인)")
 	}
 
-	return []ssh.AuthMethod{ssh.PublicKeys(signers...)}, nil
+	return methods, nil
 }
 
 // renderResultLines는 printPdshStyle이 host 접두어 없이 찍을 본문 줄들을 그대로 만들어준다.
