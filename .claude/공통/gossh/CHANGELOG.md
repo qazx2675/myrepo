@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-09-04 — v2: 호스트명 압축 표기 + -b 접속불가 그룹 + autofs 제한값 350
+
+- **신규 기능(`v2/main.go`)**: `splitTrailingDigits()`/`compressHosts()` 추가 — 접두어+자릿수가
+  같고 번호가 연속인 호스트를 `prefix[start-end]` 형태로 압축(`expandHostLine`의 역함수). 결과
+  파일(`writeHostsToFile`)과 `-b` 그룹 출력(`printBunched`)에 적용. 압축 결과는 그대로 `-w`로
+  재사용 가능.
+- **신규 기능(`v2/main.go`)**: `printUnreachableGroup()` 추가 — `-b` 사용 시 타임아웃/Refused로
+  접속 자체가 안 된 호스트를 내용 비교 없이 별도 그룹으로 표시.
+- **변경(`v2/main.go`)**: `autofsSafeConcurrency` 500 → 350.
+- **확인만 하고 변경 없음**: "명령어 실행 타임아웃"은 실제로 존재하지 않음(-t는 접속 단계에만
+  적용)을 확인하고 요청자에게 전달, 추가 구현 불필요로 확정.
+- **영향 범위**: `.claude/공통/gossh/v2/main.go`, `v2/gossh_os6`(재빌드). 운영 중인 `main.go`는
+  무수정.
+- **검증**: 192.168.0.58에서 압축/재사용, `-b` 접속불가 그룹, 350 제한 전부 실행 테스트로 확인.
+  192.168.0.60(Go 1.20)에서 OS6 바이너리 재빌드 후 정상 동작 확인.
+
 ## 2026-09-04 — v2: pdsh 호환 문법 + -b 그룹출력 + 버그수정 + 색상 + OS6 빌드
 
 - **파싱(`v2/main.go`)**: `-w^file`/`-wfile`처럼 공백 없이 붙는 pdsh 스타일 표기를 `preprocessArgs()`로
