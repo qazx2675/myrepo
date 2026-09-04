@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,6 +95,75 @@ func expandHostLine(line string) []string {
 	return results
 }
 
+// splitTrailingDigits는 호스트명 끝의 연속된 숫자(있다면)와 그 앞부분을 나눈다.
+// 0-padding(예: "0001")을 그대로 보존하기 위해 문자열 그대로 반환한다.
+func splitTrailingDigits(host string) (prefix string, numStr string, ok bool) {
+	i := len(host)
+	for i > 0 && host[i-1] >= '0' && host[i-1] <= '9' {
+		i--
+	}
+	if i == len(host) {
+		return "", "", false
+	}
+	return host[:i], host[i:], true
+}
+
+// compressHosts는 expandHostLine의 역방향이다: "esxi0001", "esxi0002", "esxi0003"처럼
+// 접두어+자릿수가 같고 번호가 연속인 호스트들을 "esxi[0001-0003]" 하나로 압축한다.
+// 결과 토큰은 expandHostLine이 그대로 다시 풀 수 있는 형태라, 이 함수의 출력을 그대로
+// 파일에 저장해서 -w로 다시 넣어도 동작한다.
+func compressHosts(hosts []string) []string {
+	type groupKey struct {
+		prefix string
+		width  int
+	}
+
+	groups := map[groupKey][]int{}
+	var groupOrder []groupKey
+	seenGroup := map[groupKey]bool{}
+	var singles []string
+
+	for _, h := range hosts {
+		prefix, numStr, ok := splitTrailingDigits(h)
+		if !ok {
+			singles = append(singles, h)
+			continue
+		}
+		n, err := strconv.Atoi(numStr)
+		if err != nil {
+			singles = append(singles, h)
+			continue
+		}
+		key := groupKey{prefix: prefix, width: len(numStr)}
+		if !seenGroup[key] {
+			seenGroup[key] = true
+			groupOrder = append(groupOrder, key)
+		}
+		groups[key] = append(groups[key], n)
+	}
+
+	var out []string
+	for _, key := range groupOrder {
+		nums := groups[key]
+		sort.Ints(nums)
+		i := 0
+		for i < len(nums) {
+			j := i
+			for j+1 < len(nums) && nums[j+1] == nums[j]+1 {
+				j++
+			}
+			if j > i {
+				out = append(out, fmt.Sprintf("%s[%0*d-%0*d]", key.prefix, key.width, nums[i], key.width, nums[j]))
+			} else {
+				out = append(out, fmt.Sprintf("%s%0*d", key.prefix, key.width, nums[i]))
+			}
+			i = j + 1
+		}
+	}
+	out = append(out, singles...)
+	return out
+}
+
 func writeHostsToFile(filename string, hosts []string) {
 	if len(hosts) == 0 {
 		return
@@ -104,8 +174,10 @@ func writeHostsToFile(filename string, hosts []string) {
 		return
 	}
 	defer file.Close()
-	for _, host := range hosts {
-		file.WriteString(host + "\n")
+	// ★ 연속된 호스트명은 esxi[0001-0003] 형태로 압축해서 저장한다. -w로 그대로
+	// 다시 읽어도 expandHostLine이 풀어주므로 재실행 가능하다.
+	for _, token := range compressHosts(hosts) {
+		file.WriteString(token + "\n")
 	}
 }
 
@@ -221,10 +293,25 @@ func printBunched(hosts []string, outputs map[string]string) {
 	divider := strings.Repeat("-", 20)
 	for _, g := range groups {
 		fmt.Println(colorize(colorCyanB, divider))
-		fmt.Println(colorize(colorCyanB, strings.Join(g.hosts, ",")))
+		fmt.Println(colorize(colorCyanB, strings.Join(compressHosts(g.hosts), ",")))
 		fmt.Println(colorize(colorCyanB, divider))
 		fmt.Println(g.text)
 	}
+}
+
+// printUnreachableGroup은 -b 모드에서 접속 자체가 안 된 호스트(타임아웃/Refused)를
+// 별도 그룹으로 묶어서 보여준다. 이 호스트들은 세션이 아예 생성되지 않아 결과 본문이
+// 없으므로(printBunched의 내용 비교 대상이 아님) 접속불가라는 이유 하나로만 묶는다.
+func printUnreachableGroup(failedHosts, refusedHosts []string) {
+	unreachable := append(append([]string{}, failedHosts...), refusedHosts...)
+	if len(unreachable) == 0 {
+		return
+	}
+	divider := strings.Repeat("-", 20)
+	fmt.Println(colorize(colorRed, divider))
+	fmt.Println(colorize(colorRed, strings.Join(compressHosts(unreachable), ",")))
+	fmt.Println(colorize(colorRed, divider))
+	fmt.Println(colorize(colorRed, "접속불가 (Timeout/Refused)"))
 }
 
 // ★ [수정] ~/.profile 파일 내에 anaconda 문자열이 있는지 확인
@@ -349,7 +436,7 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 // ★ autofs 안전장치: 명령어에 "/user/..." 로 시작하는 경로가 포함되어 있으면 true.
 // "echo 'user'" 처럼 단어 중간에 user가 들어간 경우는 대상이 아니고,
 // 반드시 "/user/" 형태의 경로여야만 감지된다.
-const autofsSafeConcurrency = 500
+const autofsSafeConcurrency = 350
 
 func isAutofsUserPath(command string) bool {
 	return autofsUserPathRegex.MatchString(command)
@@ -396,7 +483,7 @@ func main() {
 	// `cat test |grep 'asdf`로 깨짐). 쉘이 넘겨준 인자에는 이미 실제 따옴표가 없으므로
 	// 이 처리 자체가 불필요해서 제거했다.
 
-	// ★ autofs 안전장치: /user/ 경로가 명령어에 포함되어 있으면 병렬 수를 500으로 강제.
+	// ★ autofs 안전장치: /user/ 경로가 명령어에 포함되어 있으면 병렬 수를 350으로 강제.
 	// -cf 로 명시적으로 병렬 수를 지정한 경우에만 이 제한을 무시하고 지정값을 그대로 쓴다.
 	effectiveConcurrency := *concurrency
 	if *forceConcurrency > 0 {
@@ -513,6 +600,7 @@ func main() {
 
 	if bunchMode {
 		printBunched(hosts, bunchOutputs)
+		printUnreachableGroup(failedHosts, refusedHosts)
 	}
 
 	// 결과 파일 생성 및 저장
