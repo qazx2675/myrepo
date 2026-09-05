@@ -194,6 +194,13 @@ class Bot:
         if risk.fee_coupon_suspect(store.all_trades(self.db)):
             log.warning("실효 수수료율 경보 — 신규 진입 중단")
             return
+        if settings.SCREEN_BTC_REGIME:
+            try:
+                if not screener.btc_regime_ok(self.data.candles("KRW-BTC", 220)):
+                    log.info("BTC 200일선 아래 — 신규 진입 중단 (레짐 필터)")
+                    return
+            except Exception as e:                # noqa: BLE001
+                log.error("BTC 레짐 조회 실패: %s", e)
 
         blocked = ev["block"] | self._cooldown_markets()
         candidates = self._rank(positions, blocked)

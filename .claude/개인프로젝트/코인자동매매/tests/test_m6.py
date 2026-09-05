@@ -12,6 +12,10 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+from config import settings as _s   # 루프 메커니즘 테스트 — 전략 고정
+_s.SCREEN_STRATEGY = "momentum"
+_s.SCREEN_BTC_REGIME = False
+
 from src import store
 from src.live_loop import Bot
 from src.paper import execute_against_book

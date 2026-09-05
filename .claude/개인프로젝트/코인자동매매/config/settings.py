@@ -51,6 +51,8 @@ PATTERN_SCORE_WEIGHT    = 0.20    # 최종 점수 = base_score + WEIGHT * patter
 PATTERN_BEARISH_VETO    = True    # 하락형이면 pattern_score 를 강하게 음수로 (M2-a 회피와 연결)
 
 # ── 스크리너 base_score (M4) ──────────────────────────────────────────
+SCREEN_STRATEGY        = "breakout"   # "momentum" | "meanrev". 진입 신호 방식
+SCREEN_BTC_REGIME      = True         # BTC 200일선 아래면 신규 진입 전면 중단 (레짐 필터)
 SCREEN_MOMENTUM_DAYS    = 20      # 모멘텀/이평 기준 봉수
 SCREEN_RSI_DAYS         = 14
 SCREEN_RSI_OVERBOUGHT   = 75      # 이 위면 base_score 감점

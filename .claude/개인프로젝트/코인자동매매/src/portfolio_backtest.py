@@ -158,7 +158,9 @@ def run(panel: dict[str, pd.DataFrame], mode: Mode, initial_cash: float,
         cur_equity = equity_at(i)
         room = len(positions) < mode.max_positions
         cd_bars = int(settings.REENTRY_COOLDOWN_HOURS / 24)   # 일봉이므로 시간→봉 근사
-        if room and not risk.daily_loss_exceeded(mode, day_start_equity, cur_equity) \
+        btc_hist = panel["KRW-BTC"].iloc[: i + 1] if "KRW-BTC" in panel else None
+        if room and screener.btc_regime_ok(btc_hist) \
+                and not risk.daily_loss_exceeded(mode, day_start_equity, cur_equity) \
                 and not risk.fee_coupon_suspect(trades):
             best_m, best_s = None, settings.SCREEN_ENTRY_THRESHOLD
             for m, df in panel.items():
