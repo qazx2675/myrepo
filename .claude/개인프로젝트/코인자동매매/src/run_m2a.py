@@ -53,7 +53,7 @@ def _period(holdout: bool):
     if holdout:
         os.makedirs("data", exist_ok=True)
         if os.path.exists(_MARKER):
-            print("⚠ 이미 홀드아웃 실행 기록 있음:", open(_MARKER).read().strip())
+            print("⚠ 이미 홀드아웃 실행 기록 있음:", open(_MARKER, encoding="utf-8").read().strip())
         print("⚠ 홀드아웃 실행. 이 결과 보고 파라미터 만지면 검증 무의미.")
         return settings.HOLDOUT_START, settings.HOLDOUT_END, "HOLDOUT"
     return settings.TUNE_START, settings.TUNE_END, "튜닝"
