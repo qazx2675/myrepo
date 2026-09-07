@@ -25,6 +25,8 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 |---|---|
 | [`OS 환경설정 체크`](./HPC/OS%20환경설정%20체크/) | `gossh` 기반으로 OS 배포 후 상태 점검 → 환경설정 적용 → 재점검까지 한 번에 처리하는 자동화 스크립트(`os_check_final_annotated.sh`). |
 | [`GPU 체크스크립트`](./HPC/GPU%20체크스크립트/) | `nvidia-persistenced` + `gpu-power-limit.service`로 설정한 GPU power capping(최대 전력의 75%)이 정상 적용됐는지 일회성으로 점검하는 스크립트(`check-gpu-power-limit.sh`). `gossh`로 여러 서버 일괄 점검용. |
+| [`ldap_setting`](./HPC/ldap_setting/) | 자산현황(`hostname<TAB>site`)을 읽어 인프라·사이트별 LDAP/DNS/NTP/autofs 설정 7종을 `gossh`로 일괄 적용하는 Go 엔진(`ldap-config-engine`)과 배포 래퍼(`deploy_ldap.sh`). 파일 전체를 덮지 않고 해당 키만 수술적으로 갱신하며, 바뀐 파일에 대응하는 서비스만 재시작. RHEL7/8 및 `s4` 호스트 예외 분기 포함. |
+| [`ldap_check`](./HPC/ldap_check/) | 위 설정이 제대로 반영됐는지 노드에서 로컬 점검하는 단독 bash 스크립트(`ldap_check.sh`). DNS+NTP / LDAP / auto.appl 3중 교차 검증으로 인프라·사이트를 판별하고 7개 파일을 OK/FAIL로 출력. jq 불필요, `gossh` 일괄 점검용. |
 
 ## 공통/
 
