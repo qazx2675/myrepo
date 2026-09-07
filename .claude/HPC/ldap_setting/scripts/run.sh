@@ -22,6 +22,7 @@ cd "$(dirname "$0")" || exit 2
 ENGINE="../bin/ldap-config-engine"
 CONFIG="${CONFIG:-../conf/ldap_config.conf}"
 ASSETS="${ASSETS:-../conf/assets.txt}"   # 자산현황(사이트 판정 기준). 항상 conf/ 안의 것을 씁니다.
+GOSSH="${GOSSH:-gossh}"                  # PATH 에 없으면 GOSSH=/usr/local/bin/gossh 처럼 절대경로로 지정하십시오.
 
 ###############################################################################
 # 1. 작업 계정 선택
@@ -121,6 +122,21 @@ if [ ! -x "$ENGINE" ]; then
     exit 2
 fi
 
+# 오래된 바이너리(-host-file 이 추가되기 전)를 그대로 쓰고 있으면 여기서 바로
+# 알아채도록 합니다. 이 검사가 없으면 자산현황/작업대상 혼동 문제가 조용히
+# 재발합니다 (엔진이 -host-file 을 몰라 그냥 오류로 죽거나 무시하기 때문).
+if ! "$ENGINE" -h 2>&1 | grep -q -- '-host-file'; then
+    echo "오류: $ENGINE 가 -host-file 을 지원하지 않는 예전 버전입니다."
+    echo "      ../update.sh 로 코드를 갱신한 뒤 ../setup.sh 로 재빌드하십시오."
+    exit 2
+fi
+
+if ! command -v "$GOSSH" >/dev/null 2>&1; then
+    echo "오류: gossh 를 찾을 수 없습니다 ($GOSSH)."
+    echo "      PATH 에 없으면 GOSSH=/usr/local/bin/gossh 처럼 절대경로로 지정해 실행하십시오."
+    exit 2
+fi
+
 if [ ! -f "$CONFIG" ]; then
     echo "오류: 설정 파일이 없습니다: $CONFIG"
     exit 2
@@ -165,7 +181,7 @@ echo "=============================================================="
 
 echo
 echo "########## DRY-RUN — 무엇이 바뀔지 먼저 확인합니다 ##########"
-"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -host-file "$HOSTS" -infra "$INFRA" -dry-run
+"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -host-file "$HOSTS" -infra "$INFRA" -gossh "$GOSSH" -dry-run
 DRY_RC=$?
 
 if [ "$DRY_RC" != "0" ]; then
@@ -191,7 +207,7 @@ fi
 
 echo
 echo "########## 실제 적용 ##########"
-"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -host-file "$HOSTS" -infra "$INFRA"
+"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -host-file "$HOSTS" -infra "$INFRA" -gossh "$GOSSH"
 APPLY_RC=$?
 
 echo
@@ -204,7 +220,7 @@ echo "     bash ../../ldap_check/ldap_check.sh   (노드에서 직접)"
 echo "     또는 ./deploy_ldap.sh -infra $INFRA -check-only"
 echo
 echo "   되돌리려면:"
-echo "     $ENGINE -assets $ASSETS -host-file $HOSTS -rollback -dry-run"
+echo "     $ENGINE -assets $ASSETS -host-file $HOSTS -gossh $GOSSH -rollback -dry-run"
 echo "=============================================================="
 
 exit $APPLY_RC
