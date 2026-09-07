@@ -56,10 +56,16 @@ func WriteHostFile(hosts []string) (string, func(), error) {
 // 스크립트에 bindpw 가 들어 있으므로 퍼미션을 600 으로 만들고,
 // 실행이 끝나면 성공/실패와 무관하게 지웁니다.
 //
-// base64 결과는 [A-Za-z0-9+/=] 만 포함해 셸에서 따옴표 없이도 안전하므로
-// 감싸지 않습니다 — gossh 가 이 명령 전체를 자기 쪽에서 다시 따옴표로
-// 감싸 ssh 에 넘기는 경우, 우리가 심은 작은따옴표가 그 바깥 따옴표를
-// 조기에 닫아버려 "Command not found" 로 깨지는 사고가 있었습니다.
+// 대상 계정의 로그인 셸이 csh/tcsh 이면 "VAR=값 명령", "rc=$?" 같은 bash
+// 문법을 그 셸이 직접 해석하려다 "Command not found" / "Undefined variable"
+// 로 깨집니다. bash -c '...' 로 감싸 봤지만, gossh 가 명령 전체를 다시
+// 자기 쪽에서 따옴표로 감싸 ssh 에 넘기는 경우 우리가 심은 작은따옴표가
+// 그 바깥 따옴표와 부딪혀 tcsh 에서 "Unmatched '''" 로 또 깨졌습니다.
+//
+// 그래서 명령 자체(umask/env/bash 호출 등)까지 통째로 base64 로 한 번 더
+// 감싸, 전송되는 명령줄에 따옴표를 아예 하나도 남기지 않습니다.
+// "echo <b64> | base64 -d | bash" 는 로그인 셸이 bash 든 csh/tcsh 든
+// 동일하게 해석되고, 어떤 셸도 명령 안쪽 문법을 직접 파싱할 일이 없습니다.
 func BuildCommand(script string, o Options) string {
 	b64 := base64.StdEncoding.EncodeToString([]byte(script))
 	path := o.RemotePath
@@ -75,9 +81,11 @@ func BuildCommand(script string, o Options) string {
 		env += "DRYRUN=1 "
 	}
 
-	return fmt.Sprintf(
+	inner := fmt.Sprintf(
 		"umask 077; echo %s | base64 -d > %s && chmod 600 %s && %sbash %s; rc=$?; rm -f %s; exit $rc",
 		b64, path, path, env, path, path)
+	innerB64 := base64.StdEncoding.EncodeToString([]byte(inner))
+	return fmt.Sprintf("echo %s | base64 -d | bash", innerB64)
 }
 
 // Run 은 gossh 를 실행하고 호스트별 출력 줄을 모아 돌려줍니다.
