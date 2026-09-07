@@ -1,0 +1,7 @@
+# 실제 운영값(bindpw 포함)이 들어가는 파일은 절대 커밋하지 않습니다.
+conf/ldap_config.conf
+conf/assets.txt
+*.txt
+!*.txt.sample
+!conf/*.sample
+bin/
