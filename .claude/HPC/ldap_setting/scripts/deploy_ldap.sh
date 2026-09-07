@@ -225,7 +225,13 @@ CHECK_B64="$(base64 -w0 < "$CHECK_LOCAL")"
 CONF_B64="$(base64 -w0 < "$CONFIG")"
 
 # 공유 경로에 스크립트가 있으면 그걸 쓰고, 없으면 /root 로 복원해서 실행합니다.
-REMOTE_CMD="umask 077;
+#
+# 이 스크립트 자체를 통째로 base64 로 감싸 "echo <b64> | base64 -d | bash" 형태로
+# 보냅니다 — 대상 계정의 로그인 셸이 무엇인지 알 수 없는데, 위 내용에는 따옴표와
+# "rc=$?" 같은 bash 전용 문법이 들어 있어 로그인 셸이 csh/tcsh 면 그대로 gossh 에
+# 넘겼을 때 "Command not found"/"Undefined variable" 로 깨집니다 (engine 쪽
+# internal/remote.BuildCommand 에서 실제로 겪은 문제와 동일. ARCHITECTURE.md 11번).
+REMOTE_SCRIPT="umask 077;
 if [ -f '$SHARED_CHECK' ]; then
     LDAP_CONFIG=\$(dirname '$SHARED_CHECK')/ldap_config.conf bash '$SHARED_CHECK';
 else
@@ -237,6 +243,8 @@ else
     rm -f $FALLBACK_CHECK /root/ldap_config.conf;
     exit \$rc;
 fi"
+REMOTE_SCRIPT_B64="$(printf '%s' "$REMOTE_SCRIPT" | base64 -w0)"
+REMOTE_CMD="echo $REMOTE_SCRIPT_B64 | base64 -d | bash"
 
 RESULT_FILE="$(mktemp)"
 gossh -script -w "$TARGETS" "$REMOTE_CMD" > "$RESULT_FILE" 2>&1
