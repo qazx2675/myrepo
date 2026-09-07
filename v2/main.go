@@ -462,8 +462,8 @@ func main() {
 	timeoutSec := flag.Int("t", 15, "접속 타임아웃 초 (기본 15초)")
 	dangerConfirm := flag.Bool("dnlgjawkrdjqghkrdls", false, "위험 작업 강제 실행 확인 옵션")
 	// ★ 실행 파일 이름이 pdsh면 -script 기본값을 true로 (필요하면 -script=false로 명시적 해제 가능)
-	defaultScriptMode := filepath.Base(os.Args[0]) == "pdsh"
-	scriptMode := flag.Bool("script", defaultScriptMode, "작업 요약 출력 숨김 (순수 결과만 출력). 실행 파일 이름이 pdsh면 기본값 true")
+	isPdshName := filepath.Base(os.Args[0]) == "pdsh"
+	scriptMode := flag.Bool("script", isPdshName, "작업 요약 출력 숨김 (순수 결과만 출력). 실행 파일 이름이 pdsh면 기본값 true")
 	pmMode := flag.Bool("pm", false, "/user/svrauto 마운트 상태 추가 점검 및 OS설치중 감지")
 	bMode := flag.Bool("b", false, "clush 스타일: 결과가 동일한 호스트끼리 묶어서 출력 (-script와 함께 쓰면 무시되고 호스트별로 출력)")
 
@@ -499,8 +499,12 @@ func main() {
 		effectiveConcurrency = *forceConcurrency
 	} else if isAutofsUserPath(command) {
 		effectiveConcurrency = autofsSafeConcurrency
-		fmt.Println(colorize(colorYellow, fmt.Sprintf("[안전장치] 명령어에 \"/user/\" 경로가 감지되어 병렬 실행 수를 %d대로 자동 제한합니다. (원래 지정값 무시: -c %d)", autofsSafeConcurrency, *concurrency)))
-		fmt.Println(colorize(colorYellow, "           이 경로가 autofs 마운트가 아니거나 더 높은 병렬 수가 필요하면 -cf <숫자> 옵션으로 강제 지정하세요."))
+		// ★ 실행 파일 이름이 pdsh면 이 안내 메시지를 찍지 않는다(위험 작업 경고 메시지만 예외).
+		// pdsh 대체용으로 쓸 때는 pdsh에 없는 gossh 전용 메시지가 섞이면 안 되기 때문.
+		if !isPdshName {
+			fmt.Println(colorize(colorYellow, fmt.Sprintf("[안전장치] 명령어에 \"/user/\" 경로가 감지되어 병렬 실행 수를 %d대로 자동 제한합니다. (원래 지정값 무시: -c %d)", autofsSafeConcurrency, *concurrency)))
+			fmt.Println(colorize(colorYellow, "           이 경로가 autofs 마운트가 아니거나 더 높은 병렬 수가 필요하면 -cf <숫자> 옵션으로 강제 지정하세요."))
+		}
 	}
 
 	lowerCmd := strings.ToLower(command)
