@@ -55,6 +55,11 @@ func WriteHostFile(hosts []string) (string, func(), error) {
 //
 // 스크립트에 bindpw 가 들어 있으므로 퍼미션을 600 으로 만들고,
 // 실행이 끝나면 성공/실패와 무관하게 지웁니다.
+//
+// base64 결과는 [A-Za-z0-9+/=] 만 포함해 셸에서 따옴표 없이도 안전하므로
+// 감싸지 않습니다 — gossh 가 이 명령 전체를 자기 쪽에서 다시 따옴표로
+// 감싸 ssh 에 넘기는 경우, 우리가 심은 작은따옴표가 그 바깥 따옴표를
+// 조기에 닫아버려 "Command not found" 로 깨지는 사고가 있었습니다.
 func BuildCommand(script string, o Options) string {
 	b64 := base64.StdEncoding.EncodeToString([]byte(script))
 	path := o.RemotePath
@@ -71,7 +76,7 @@ func BuildCommand(script string, o Options) string {
 	}
 
 	return fmt.Sprintf(
-		"umask 077; echo '%s' | base64 -d > %s && chmod 600 %s && %sbash %s; rc=$?; rm -f %s; exit $rc",
+		"umask 077; echo %s | base64 -d > %s && chmod 600 %s && %sbash %s; rc=$?; rm -f %s; exit $rc",
 		b64, path, path, env, path, path)
 }
 
