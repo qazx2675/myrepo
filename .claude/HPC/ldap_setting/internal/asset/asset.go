@@ -42,7 +42,9 @@ func Load(path string) ([]Entry, error) {
 
 		host, site, ok := strings.Cut(s, "\t")
 		if !ok {
-			return nil, fmt.Errorf("%s:%d: 탭 구분자가 없습니다: %q", path, line, s)
+			return nil, fmt.Errorf("%s:%d: 탭(\\t) 구분자가 없습니다 — 스페이스는 구분자로 인정하지 않습니다.\n"+
+				"  내용(스페이스=·, 탭=→로 표시): %s",
+				path, line, visualizeWhitespace(s))
 		}
 		host = strings.TrimSpace(host)
 		site = strings.TrimSpace(site)
@@ -95,6 +97,12 @@ func LoadHostList(path string) ([]string, error) {
 		return nil, fmt.Errorf("%s: 유효한 호스트가 없습니다", path)
 	}
 	return out, nil
+}
+
+// visualizeWhitespace 는 스페이스와 탭을 눈에 보이는 기호로 바꿔, 사용자가
+// "탭인 줄 알았는데 사실 스페이스였다" 를 에러 메시지만 보고 바로 알 수 있게 합니다.
+func visualizeWhitespace(s string) string {
+	return strings.NewReplacer(" ", "·", "\t", "→").Replace(s)
 }
 
 // GroupBySite 는 사이트별로 호스트를 묶습니다. 배포는 사이트 단위로 나가기 때문입니다.
