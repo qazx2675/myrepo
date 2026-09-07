@@ -58,3 +58,12 @@
     의 `{계정명}.txt` 는 그중 어떤 호스트를 고를지만 정하는 순수 hostname 목록이며,
     여기에 site 정보를 넣거나 이 파일을 site 판정에 쓰면 안 됩니다. 실제로 이 둘을
     섞어 써서 자산현황이 우회되는 문제가 있었습니다.
+11. **`internal/remote.BuildCommand` 가 만드는 명령줄에는 따옴표를 절대 넣지 마십시오.**
+    대상 계정의 로그인 셸이 무엇인지(bash/csh/tcsh) 알 수 없고, gossh 가 이 명령을
+    다시 자기 쪽에서 따옴표로 감싸 ssh 로 넘길 수도 있습니다. `VAR=값 명령`, `rc=$?`
+    같은 bash 전용 문법도 넣지 마십시오 — csh/tcsh 는 이해하지 못하고 "Command not
+    found"/"Undefined variable" 로 깨집니다. 항상 명령 전체를 base64 로 감싸
+    `echo <b64> | base64 -d | bash` 형태로 보내, 어떤 로그인 셸을 만나도 따옴표나
+    bash 문법이 그 셸에 직접 보이지 않게 하십시오. 실제로 이 규칙을 어겨서 두 번
+    연달아 문제가 재발했습니다 (`bash -c '...'` 로 감싸는 중간 시도도 tcsh 에서
+    `Unmatched '''` 로 깨짐).
