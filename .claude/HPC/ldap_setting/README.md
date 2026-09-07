@@ -70,6 +70,35 @@ go test ./...     # 단위 테스트
 `test_all.sh` 는 적용 결과를 `../ldap_check/ldap_check.sh` 로 검사하므로 **그 디렉터리가 함께 있어야 합니다.**
 다른 위치에 뒀다면 `CHECK=<경로> ./test_all.sh` 로 지정하십시오.
 
+### 1.5 이미 배포된 서버의 코드만 갱신하기 — `update.sh`
+
+실 서버(예: `/root/ldap_setting`)에 이 폴더를 통째로 복사해 독립적으로 운영하는 경우,
+`conf/ldap_config.conf` · `conf/assets.txt` 에는 이미 실제 값이 채워져 있을 것입니다.
+새 버전이 나왔을 때 이 두 파일은 그대로 두고 **코드만** 갱신하려면:
+
+```bash
+# 1) 새 버전을 어딘가에 받아둠 (git clone 등)
+git clone https://github.com/qazx2675/myrepo.git /tmp/myrepo
+
+# 2) 실 서버에서 실행 중인 디렉터리에서
+cd /root/ldap_setting
+./update.sh /tmp/myrepo/.claude/HPC/ldap_setting
+
+# 3) 반드시 재빌드
+./setup.sh
+```
+
+- `conf/ldap_config.conf`, `conf/assets.txt` 는 갱신 전 임시 위치에 백업했다가 그대로
+  복원합니다 — **내용이 절대 바뀌지 않습니다.**
+- `bin/`(빌드 산출물)과 `.git/` 은 동기화 대상에서 제외합니다. 갱신 후에는 반드시
+  `./setup.sh` 로 다시 빌드해야 새 코드가 반영됩니다.
+- `rsync` 가 있으면 그걸 쓰고, 폐쇄망이라 없으면 `find`+`cp` 로 자동 대체합니다.
+- 소스와 대상이 같은 디렉터리이거나, 소스가 `ldap_setting` 프로젝트로 보이지 않으면
+  (`go.mod`/`cmd/` 없음) 아무것도 하지 않고 오류로 멈춥니다.
+- 갱신 후 `conf/ldap_config.conf.sample` 과 실제 `conf/ldap_config.conf` 를 `diff` 해서
+  새로 추가된 키가 있는지 확인하십시오. 스키마가 바뀌었다면 새 키는 자동으로 채워지지
+  않으므로 직접 넣어야 합니다.
+
 ---
 
 ## 2. 사용 방법
@@ -113,8 +142,8 @@ go test ./...     # 단위 테스트
 
 ==============================================================
  계정        : admin1
- 대상 파일   : admin1.txt  (42줄)
- 대상 사이트 : a1 a2 a3
+ 대상 파일   : admin1.txt  (42대, hostname 목록)
+ 자산현황    : ../conf/assets.txt  (site 판정 기준)
  대상 인프라 : zxcv
 ==============================================================
 
@@ -132,7 +161,11 @@ go test ./...     # 단위 테스트
   `{계정명}.txt` 파일을 **이 스크립트와 같은 디렉터리(`scripts/`)** 에서 찾습니다.
   실제 환경에서는 스크립트 안의 `# TODO` 표시된 두 곳(메뉴 출력, 번호→계정명 매핑)을
   채워 번호 선택 방식으로 바꿔 쓰십시오.
-- `{계정명}.txt` 형식은 `conf/assets.txt` 와 **동일**합니다: `hostname<TAB>site`.
+- **`{계정명}.txt` 는 사이트 정보 없는 순수 호스트 목록입니다** — 한 줄에 hostname 하나.
+  **자산현황(`conf/assets.txt`, hostname\<TAB\>site)과는 다른 파일이며 형식도 다릅니다.**
+  `{계정명}.txt` 는 "이 중에서 작업할 대상을 고른다"는 선별 목록일 뿐이고, 그 호스트가
+  실제로 어느 사이트인지는 **항상 `conf/assets.txt` 에서 조회**합니다. `{계정명}.txt` 에
+  자산현황에 없는 호스트가 섞여 있으면 조용히 무시하지 않고 경고를 찍고 건너뜁니다.
 - 인프라는 **`ldap_config.conf` 에 실제로 정의된 것만** 메뉴에 뜹니다. 목록에 없는
   이름은 애초에 고를 수 없어 오타로 다른 인프라를 잘못 적용하는 사고를 막습니다.
 - 사이트별 처리는 선택하지 않습니다. 대상 파일의 `site` 컬럼을 보고 **엔진이 알아서**
@@ -226,7 +259,8 @@ ROOT=/tmp/fixture bash ../ldap_check/ldap_check.sh
 | `-assets` | `./assets.txt` | 자산현황 파일 (`hostname<TAB>site`) |
 | `-infra` | *(없음, 필수)* | 대상 인프라 이름. **기본값을 두지 않습니다** — 다른 인프라 값을 실수로 밀어 넣는 사고를 막기 위해서입니다 |
 | `-site` | *(전체)* | 이 사이트만 처리 |
-| `-host` | *(전체)* | 이 호스트만 처리. 소수 노드 선행 검증에 사용 |
+| `-host` | *(전체)* | 이 호스트 하나만 처리. 소수 노드 선행 검증에 사용 |
+| `-host-file` | *(전체)* | 이 파일에 나열된 호스트만 처리 (한 줄에 hostname 하나, **site 정보 없음**). site 는 항상 `-assets` 에서 조회. 자산현황에 없는 호스트는 경고 후 건너뜀 |
 | `-dry-run` | `false` | 파일을 바꾸지 않고 바뀔 내용(diff)만 보고. 서비스도 재시작하지 않음 |
 | `-print-script` | `false` | 생성될 적용 스크립트를 표준출력으로 찍고 종료. `-site` 필요 |
 | `-root` | *(빈값 = 실제 `/etc`)* | 원격에서 기록할 루트. 테스트용. **값이 있으면 서비스 재시작을 건너뜁니다** |
@@ -293,6 +327,7 @@ ROOT=/tmp/fixture bash ../ldap_check/ldap_check.sh
 | `PR_CHECKLIST.md` | 배포·수정 전 확인 목록 |
 | `교육자료.html` | 이 도구를 어떤 지시와 명령으로 만들었는지 정리한 교육자료. 브라우저로 열어 보십시오 |
 | `setup.sh` | 폐쇄망 오프라인 빌드 |
+| `update.sh` | 실 서버에 배포된 코드만 새 버전으로 갱신. `conf/ldap_config.conf`·`conf/assets.txt` 는 보존 |
 | `test_all.sh` | 장비 없이 돌리는 왕복 회귀 테스트 |
 | `conf/*.sample` | 설정·자산 예시 |
 

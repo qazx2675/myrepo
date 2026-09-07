@@ -64,6 +64,39 @@ func Load(path string) ([]Entry, error) {
 	return out, nil
 }
 
+// LoadHostList 는 순수 호스트 목록을 읽습니다. 한 줄에 hostname 하나, site 정보는
+// 없습니다. -host-file 로 "이 호스트들만 처리" 를 지정할 때 씁니다 — site 판정은
+// 항상 자산현황(-assets)에서 이뤄지고, 이 목록은 그중 어떤 호스트를 고를지만 정합니다.
+func LoadHostList(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var out []string
+	seen := map[string]bool{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		h := strings.TrimSpace(sc.Text())
+		if h == "" || strings.HasPrefix(h, "#") {
+			continue
+		}
+		if seen[h] {
+			continue
+		}
+		seen[h] = true
+		out = append(out, h)
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s: 유효한 호스트가 없습니다", path)
+	}
+	return out, nil
+}
+
 // GroupBySite 는 사이트별로 호스트를 묶습니다. 배포는 사이트 단위로 나가기 때문입니다.
 func GroupBySite(entries []Entry) map[string][]string {
 	out := map[string][]string{}
