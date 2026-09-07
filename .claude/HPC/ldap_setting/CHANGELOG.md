@@ -166,3 +166,20 @@
   gossh 로 왕복 — 수정 전 문법으로는 정확히 사용자가 겪은 두 에러가 그대로
   재현됐고, 수정 후에는 OS 판정·7개 대상 파일 diff·재시작 계획까지 DRY-RUN
   전체가 정상 출력됨을 확인. `go test ./...`, `test_all.sh` (22 PASS) 도 통과.
+
+### 수정 — `deploy_ldap.sh` 검증 단계에도 같은 csh/tcsh 문제가 남아 있었음
+- 엔진 쪽(`internal/remote.BuildCommand`)만 고치고 `deploy_ldap.sh` 의 검증(`-check-only`
+  포함) 단계는 그대로 두었던 것을 놓쳤다. 이 단계는 `REMOTE_CMD` 를 직접 문자열로
+  조립해 `gossh -script -w ... "$REMOTE_CMD"` 로 보내는데, 그 안에 작은따옴표와
+  `rc=$?` 같은 bash 전용 문법이 그대로 들어 있어 대상 계정 로그인 셸이 csh/tcsh 면
+  똑같이 "Command not found"/"Undefined variable" 로 깨졌다.
+- 실사용자가 run.sh 로 적용은 성공한 뒤, 검증을 위해 (run.sh 가 안내하는 대로)
+  `deploy_ldap.sh -check-only` 를 실행하다 이 문제를 겪은 것으로 보인다.
+- 수정: `REMOTE_CMD` 조립 로직은 그대로 두고, 최종 문자열을 base64 로 한 번 더
+  감싸 `echo <b64> | base64 -d | bash` 형태로 gossh 에 넘기도록 바꿨다
+  (engine 쪽과 동일한 패턴, ARCHITECTURE.md 11번 규칙).
+- 검증: 192.168.0.58 에 `/bin/tcsh` 계정을 다시 만들어, 수정한 `REMOTE_CMD` 조립
+  로직을 그 계정으로 실제 gossh 호출 — 셸 에러 없이 `ldap_check.sh` 가 정상
+  실행되고 결과(`FAIL infra-mismatch` 등, 이 노드가 미구성이라 정상적으로 나오는
+  값)가 그대로 돌아옴을 확인. `go test ./...`, `test_all.sh`(22 PASS),
+  `ldap_check/test_check.sh`(10 PASS) 도 통과.
