@@ -4,10 +4,13 @@
 - [ ] 단위 테스트 통과 (`go test ./...`)
 - [ ] `go vet ./...` 통과
 - [ ] `bash -n setup.sh scripts/deploy_ldap.sh test_all.sh` 통과
-- [ ] `./test_all.sh` 왕복 테스트 통과 (PASS 14 / FAIL 0)
+- [ ] `./test_all.sh` 왕복 테스트 통과 (PASS 22 / FAIL 0)
 - [ ] `apply_body.sh` 를 고쳤다면 `../ldap_check/ldap_check.sh` 의 대응 검사도 같이 고쳤는지
 - [ ] `conf/ldap_config.conf.sample` 을 고쳤다면 `../ldap_check/ldap_config.conf.sample` 도 같이 고쳤는지
 - [ ] 멱등성 확인 (같은 스크립트를 두 번 돌렸을 때 두 번째는 `NOCHANGE`)
+- [ ] 롤백 확인 — 적용 후 `-rollback` 하면 **원본과 완전히 일치**하는지 (특히 여러 번 고치는 ldap.conf)
+- [ ] 백업이 한 실행에서 파일당 한 번만 생성되는지 (`.bak.<시점>` 이 파일당 1개)
+- [ ] 서비스 재시작 표를 고쳤다면 `lib_common.sh` 한 곳만 고쳤는지 (apply/rollback 양쪽에 반영됨)
 - [ ] `-dry-run` 출력이 실제 변경과 일치하는지 확인
 - [ ] 실제 노드 또는 `-root` fixture 로 최소 1개 시나리오 검증
 - [ ] 설정 변경을 적용했다면 **무작위 서버 몇 대를 직접 확인한 결과**를 PR 에 기재

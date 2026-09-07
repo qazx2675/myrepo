@@ -62,3 +62,64 @@ func TestUnknownSite(t *testing.T) {
 		t.Fatal("없는 사이트인데 오류가 나지 않았습니다")
 	}
 }
+
+func TestRollbackScriptModes(t *testing.T) {
+	for _, tc := range []struct {
+		mode  RollbackMode
+		stamp string
+		want  string
+	}{
+		{RollbackList, "", "MODE='list'"},
+		{RollbackLatest, "", "MODE='latest'"},
+		{RollbackStamp, "20260907120000", "STAMP='20260907120000'"},
+	} {
+		s, err := RollbackScript(tc.mode, tc.stamp)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.mode, err)
+		}
+		if !strings.Contains(s, tc.want) {
+			t.Errorf("%s: %q 가 없습니다", tc.mode, tc.want)
+		}
+		// 공용 라이브러리가 붙어 있어야 restart_for_changed 를 쓸 수 있습니다.
+		if !strings.Contains(s, "restart_for_changed()") {
+			t.Errorf("%s: lib_common.sh 가 붙지 않았습니다", tc.mode)
+		}
+	}
+}
+
+// list/latest 에는 STAMP 가 들어가면 안 됩니다(오해 방지).
+func TestRollbackStampClearedForNonStampModes(t *testing.T) {
+	s, err := RollbackScript(RollbackLatest, "20260907120000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "STAMP=''") {
+		t.Error("latest 모드인데 STAMP 가 비워지지 않았습니다")
+	}
+}
+
+// STAMP 는 원격 셸로 나가는 값이라 숫자 14자리만 허용해야 합니다.
+func TestRollbackStampValidation(t *testing.T) {
+	for _, bad := range []string{"", "abc", "2026090712000", "202609071200000", "20260907; rm -rf /", "2026-09-07"} {
+		if _, err := RollbackScript(RollbackStamp, bad); err == nil {
+			t.Errorf("잘못된 STAMP %q 가 통과했습니다", bad)
+		}
+	}
+}
+
+func TestRollbackUnknownMode(t *testing.T) {
+	if _, err := RollbackScript(RollbackMode("wipe"), ""); err == nil {
+		t.Fatal("알 수 없는 모드인데 오류가 나지 않았습니다")
+	}
+}
+
+// apply 스크립트도 공용 라이브러리를 포함해야 합니다.
+func TestApplyScriptIncludesLib(t *testing.T) {
+	s, err := ApplyScript(infra(), config.S4Rule{}, "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "restart_for_changed()") || !strings.Contains(s, "restart_for_changed\n") {
+		t.Error("apply 스크립트에 공용 라이브러리 또는 호출이 없습니다")
+	}
+}

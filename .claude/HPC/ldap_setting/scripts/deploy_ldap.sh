@@ -38,20 +38,33 @@ usage()
   -check-only     설정 적용을 건너뛰고 검증만 수행
   -h              이 도움말
 
-환경변수 CONFIG / ASSETS / SHARED_CHECK 로도 지정할 수 있습니다.
+되돌리기 (적용 시 남긴 <파일>.bak.<시점> 을 복원합니다)
+
+  -list-backups        각 노드에 남아 있는 백업 시점 목록 조회 (변경 없음)
+  -rollback            가장 최근 시점으로 되돌리고 검증까지 수행
+  -rollback-to <시점>  지정한 시점(숫자 14자리)으로 되돌리고 검증까지 수행
+
+  되돌리기에는 -infra 가 필요 없습니다. 노드에 남아 있는 백업만 보고 판단합니다.
+  -dry-run 을 함께 주면 무엇이 복원될지만 보여줍니다.
+
+환경변수 CONFIG / ASSETS / SHARED_CHECK / CHECK_LOCAL 로도 지정할 수 있습니다.
 EOF
 }
 
 CHECK_ONLY=0
+ROLLBACK_ARG=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        -infra)      INFRA="${2:-}"; shift 2 ;;
-        -dry-run)    DRYRUN=1; shift ;;
-        -config)     CONFIG="${2:-}"; shift 2 ;;
-        -assets)     ASSETS="${2:-}"; shift 2 ;;
-        -check-only) CHECK_ONLY=1; shift ;;
-        -h|--help)   usage; exit 0 ;;
-        *)           echo "알 수 없는 옵션: $1"; usage; exit 2 ;;
+        -infra)         INFRA="${2:-}"; shift 2 ;;
+        -dry-run)       DRYRUN=1; shift ;;
+        -config)        CONFIG="${2:-}"; shift 2 ;;
+        -assets)        ASSETS="${2:-}"; shift 2 ;;
+        -check-only)    CHECK_ONLY=1; shift ;;
+        -list-backups)  ROLLBACK_ARG="-list-backups"; shift ;;
+        -rollback)      ROLLBACK_ARG="-rollback"; shift ;;
+        -rollback-to)   ROLLBACK_ARG="-rollback-to ${2:-}"; shift 2 ;;
+        -h|--help)      usage; exit 0 ;;
+        *)              echo "알 수 없는 옵션: $1"; usage; exit 2 ;;
     esac
 done
 
@@ -88,7 +101,8 @@ select_user_context()
 # 사전 점검
 ###############################################################################
 
-if [ -z "$INFRA" ]; then
+# 되돌리기는 인프라 값을 쓰지 않으므로 -infra 를 요구하지 않습니다.
+if [ -z "$ROLLBACK_ARG" ] && [ -z "$INFRA" ]; then
     echo "오류: -infra 를 지정하십시오."
     usage
     exit 2
@@ -114,6 +128,57 @@ if [ ! -f "$TARGETS" ]; then
     TARGETS="$(mktemp)"
     cut -f1 "$ASSETS" | sed '/^[[:space:]]*$/d; /^#/d' > "$TARGETS"
     TARGETS_TMP=1
+fi
+
+###############################################################################
+# 2-R. 되돌리기 (지정된 경우 여기서 처리)
+#
+#   -list-backups 는 조회만 하고 끝냅니다.
+#   -rollback / -rollback-to 는 되돌린 뒤 아래 검증 단계로 넘어갑니다.
+###############################################################################
+
+if [ -n "$ROLLBACK_ARG" ]; then
+    if [ ! -x "$ENGINE" ]; then
+        echo "오류: 설정 엔진이 없습니다: $ENGINE  (setup.sh 로 먼저 빌드하십시오)"
+        exit 2
+    fi
+
+    RB_ARGS="-assets $ASSETS $ROLLBACK_ARG"
+    [ "$DRYRUN" = "1" ] && RB_ARGS="$RB_ARGS -dry-run"
+
+    echo
+    # shellcheck disable=SC2086
+    "$ENGINE" $RB_ARGS
+    RB_RC=$?
+
+    case "$ROLLBACK_ARG" in
+        -list-backups)
+            # 조회만 하고 끝냅니다. 검증할 것이 없습니다.
+            [ "${TARGETS_TMP:-0}" = "1" ] && rm -f "$TARGETS"
+            exit $RB_RC
+            ;;
+    esac
+
+    if [ "$RB_RC" != "0" ]; then
+        echo "경고: 되돌리기가 실패를 보고했습니다 (rc=$RB_RC). 검증은 계속합니다."
+    fi
+
+    # 되돌린 뒤 상태를 확인하려면 인프라 기준값이 필요합니다.
+    # -infra 없이 되돌리기만 한 경우 검증은 건너뜁니다.
+    if [ -z "$INFRA" ]; then
+        echo
+        echo "안내: -infra 가 없어 되돌린 뒤 검증은 건너뜁니다."
+        echo "      검증하려면 -infra <이름> 을 함께 주거나 -check-only 로 다시 실행하십시오."
+        echo
+        echo "=============================================================="
+        echo " ★ 되돌리기 후에는 대상 서버 중 무작위로 몇 대에 직접 접속해"
+        echo "   설정이 실제로 복원됐는지 반드시 눈으로 확인하십시오."
+        echo "=============================================================="
+        [ "${TARGETS_TMP:-0}" = "1" ] && rm -f "$TARGETS"
+        exit $RB_RC
+    fi
+
+    CHECK_ONLY=1        # 아래 적용 단계는 건너뛰고 검증만 수행
 fi
 
 ###############################################################################
