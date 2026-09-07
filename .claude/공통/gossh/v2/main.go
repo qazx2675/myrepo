@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -354,8 +355,9 @@ func isAnacondaRunning(client *ssh.Client) bool {
 	return lastLine == "1"
 }
 
-func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, bunchMode bool, bunchOutputs map[string]string, wg *sync.WaitGroup, sem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex) {
+func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, bunchMode bool, bunchOutputs map[string]string, wg *sync.WaitGroup, sem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex, completed *int64) {
 	defer wg.Done()
+	defer atomic.AddInt64(completed, 1) // ★ 진행률 카운트 — 성공/실패 어떤 경로로 끝나든 항상 1 증가
 	sem <- struct{}{}
 	defer func() { <-sem }()
 
@@ -614,12 +616,50 @@ func main() {
 
 	startTime := time.Now()
 
+	// ★ 진행률 표시(카운트, 1초 갱신). 표준에러로 출력하고(데이터 아님, 리다이렉션에 안 섞이게),
+	// pdsh 이름일 때는 아예 찍지 않는다(pdsh에 없는 gossh 전용 출력이 섞이면 안 되기 때문).
+	var completed int64
+	var progressWG sync.WaitGroup
+	progressStop := make(chan struct{})
+	total := int64(len(hosts))
+	if !isPdshName {
+		printProgress := func() {
+			c := atomic.LoadInt64(&completed)
+			pct := int64(0)
+			if total > 0 {
+				pct = c * 100 / total
+			}
+			fmt.Fprintf(os.Stderr, "\r진행: %d/%d (%d%%)", c, total, pct)
+		}
+		progressWG.Add(1)
+		go func() {
+			defer progressWG.Done()
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					printProgress()
+				case <-progressStop:
+					printProgress()
+					fmt.Fprintln(os.Stderr)
+					return
+				}
+			}
+		}()
+	}
+
 	for _, host := range hosts {
 		wg.Add(1)
-		go runSSHCommand(host, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &wg, sem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu)
+		go runSSHCommand(host, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &wg, sem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu, &completed)
 	}
 
 	wg.Wait()
+
+	if !isPdshName {
+		close(progressStop)
+		progressWG.Wait()
+	}
 
 	if bunchMode {
 		printBunched(hosts, bunchOutputs)
