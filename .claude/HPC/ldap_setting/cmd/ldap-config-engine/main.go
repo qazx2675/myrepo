@@ -19,14 +19,15 @@ import (
 
 func main() {
 	var (
-		confPath    = flag.String("config", "./ldap_config.conf", "설정 파일 경로")
-		assetPath   = flag.String("assets", "./assets.txt", "자산현황 파일 경로 (hostname<TAB>site)")
-		infraName   = flag.String("infra", "", "대상 인프라 이름 (필수). 실수 방지를 위해 기본값 없음")
-		onlySite    = flag.String("site", "", "이 사이트만 처리 (비우면 전체)")
-		onlyHost    = flag.String("host", "", "이 호스트만 처리 (비우면 전체)")
-		dryRun      = flag.Bool("dry-run", false, "실제로 바꾸지 않고 바뀔 내용만 보고")
-		printScript = flag.Bool("print-script", false, "apply 스크립트만 표준출력으로 찍고 종료 (-site 필요)")
-		root        = flag.String("root", "", "원격에서 기록할 루트 (테스트용. 비우면 실제 /etc)")
+		confPath     = flag.String("config", "./ldap_config.conf", "설정 파일 경로")
+		assetPath    = flag.String("assets", "./assets.txt", "자산현황 파일 경로 (hostname<TAB>site)")
+		infraName    = flag.String("infra", "", "대상 인프라 이름 (필수). 실수 방지를 위해 기본값 없음")
+		onlySite     = flag.String("site", "", "이 사이트만 처리 (비우면 전체)")
+		onlyHost     = flag.String("host", "", "이 호스트 하나만 처리 (비우면 전체)")
+		hostListPath = flag.String("host-file", "", "이 파일에 나열된 호스트만 처리 (한 줄에 hostname 하나, site 정보 없음). 사이트는 항상 -assets 에서 조회합니다")
+		dryRun       = flag.Bool("dry-run", false, "실제로 바꾸지 않고 바뀔 내용만 보고")
+		printScript  = flag.Bool("print-script", false, "apply 스크립트만 표준출력으로 찍고 종료 (-site 필요)")
+		root         = flag.String("root", "", "원격에서 기록할 루트 (테스트용. 비우면 실제 /etc)")
 
 		listBackups = flag.Bool("list-backups", false, "각 노드에 남아 있는 백업 시점 목록만 조회 (변경 없음)")
 		rollback    = flag.Bool("rollback", false, "가장 최근 백업 시점으로 되돌리기")
@@ -62,7 +63,7 @@ func main() {
 
 	if err := run(opts{
 		confPath: *confPath, assetPath: *assetPath, infraName: *infraName,
-		onlySite: *onlySite, onlyHost: *onlyHost, dryRun: *dryRun,
+		onlySite: *onlySite, onlyHost: *onlyHost, hostListPath: *hostListPath, dryRun: *dryRun,
 		printScript: *printScript, root: *root,
 		rbMode: rbMode, rbStamp: *rollbackTo,
 		remote: remote.Options{
@@ -78,17 +79,18 @@ func main() {
 }
 
 type opts struct {
-	confPath    string
-	assetPath   string
-	infraName   string
-	onlySite    string
-	onlyHost    string
-	dryRun      bool
-	printScript bool
-	root        string
-	rbMode      render.RollbackMode
-	rbStamp     string
-	remote      remote.Options
+	confPath     string
+	assetPath    string
+	infraName    string
+	onlySite     string
+	onlyHost     string
+	hostListPath string
+	dryRun       bool
+	printScript  bool
+	root         string
+	rbMode       render.RollbackMode
+	rbStamp      string
+	remote       remote.Options
 }
 
 func run(o opts) error {
@@ -230,7 +232,11 @@ func run(o opts) error {
 	return nil
 }
 
-// loadTargets 는 자산현황을 읽고 -site / -host 필터를 적용합니다.
+// loadTargets 는 자산현황(-assets)을 유일한 사이트 판정 기준으로 읽고,
+// -site / -host / -host-file 필터를 적용합니다.
+//
+// -host-file 은 "어떤 호스트를 고를지" 만 정할 뿐, site 는 절대 이 파일에서
+// 가져오지 않습니다 — site 는 항상 -assets(자산현황)에서 조회합니다.
 func loadTargets(o opts) ([]asset.Entry, error) {
 	entries, err := asset.Load(o.assetPath)
 	if err != nil {
@@ -247,6 +253,33 @@ func loadTargets(o opts) ([]asset.Entry, error) {
 		}
 		targets = append(targets, e)
 	}
+
+	if o.hostListPath != "" {
+		wanted, err := asset.LoadHostList(o.hostListPath)
+		if err != nil {
+			return nil, fmt.Errorf("작업 대상 목록(-host-file): %w", err)
+		}
+		byHost := map[string]asset.Entry{}
+		for _, e := range targets {
+			byHost[e.Host] = e
+		}
+		var filtered []asset.Entry
+		var missing []string
+		for _, h := range wanted {
+			if e, ok := byHost[h]; ok {
+				filtered = append(filtered, e)
+			} else {
+				missing = append(missing, h)
+			}
+		}
+		if len(missing) > 0 {
+			fmt.Fprintf(os.Stderr,
+				"경고: 다음 호스트는 자산현황(%s)에 없어 건너뜁니다: %s\n",
+				o.assetPath, strings.Join(missing, ", "))
+		}
+		targets = filtered
+	}
+
 	if len(targets) == 0 {
 		return nil, fmt.Errorf("조건에 맞는 대상 호스트가 없습니다")
 	}

@@ -40,6 +40,47 @@ func TestDuplicateHostRejected(t *testing.T) {
 	}
 }
 
+func TestLoadHostList(t *testing.T) {
+	list, err := LoadHostList(write(t, "# 주석\n\nsvr001\nsvr002\n  svr003  \n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 3 || list[0] != "svr001" || list[2] != "svr003" {
+		t.Fatalf("호스트 목록 파싱 결과: %v", list)
+	}
+}
+
+// 같은 호스트가 여러 번 있어도 한 번만 남아야 합니다 (중복 SSH 방지).
+func TestLoadHostListDedup(t *testing.T) {
+	list, err := LoadHostList(write(t, "svr001\nsvr001\nsvr002\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("중복 제거 실패: %v", list)
+	}
+}
+
+func TestLoadHostListEmpty(t *testing.T) {
+	if _, err := LoadHostList(write(t, "\n# 주석뿐\n")); err == nil {
+		t.Fatal("빈 목록인데 오류가 나지 않았습니다")
+	}
+}
+
+// 탭(hostname\tsite)이 들어와도 LoadHostList 는 site 를 잘라내지 않고
+// 줄 전체를 하나의 '호스트'로 취급합니다 — 이 파일에 site 를 넣는 것 자체가
+// 잘못된 사용이므로, 조용히 파싱해주지 않고 명백히 이상한 값으로 남겨
+// 사용자가 바로 알아채게 합니다.
+func TestLoadHostListDoesNotSplitTabs(t *testing.T) {
+	list, err := LoadHostList(write(t, "svr001\ta1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || !strings.Contains(list[0], "\t") {
+		t.Fatalf("탭을 분리해버렸습니다(자산현황 형식과 혼동 방지 실패): %v", list)
+	}
+}
+
 func TestGroupBySite(t *testing.T) {
 	e, err := Load(write(t, "s1\ta1\ns2\ta1\ns3\ta2\n"))
 	if err != nil {

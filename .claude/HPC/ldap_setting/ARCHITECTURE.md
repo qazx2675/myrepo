@@ -3,10 +3,11 @@
 | 폴더/파일 | 역할 |
 |---|---|
 | `setup.sh` | 폐쇄망 오프라인 빌드. `GOPROXY=off`, `CGO_ENABLED=0` 정적 빌드 |
+| `update.sh` | 실 배포본의 코드만 새 버전으로 갱신. `conf/ldap_config.conf`·`conf/assets.txt` 를 백업 후 복원해 보존 |
 | `test_all.sh` | 왕복 회귀 테스트. 적용 후 `../ldap_check/ldap_check.sh` 로 검사 |
 | `cmd/ldap-config-engine/main.go` | CLI 진입점. 플래그 파싱 → 자산 로드 → 사이트별 스크립트 생성 → gossh 호출 → 결과 집계 |
 | `internal/config/` | `ldap_config.conf`(평문 key=value) 파싱과 검증. storage 고유성·uri_order 참조 무결성을 여기서 잡음 |
-| `internal/asset/` | 자산현황(`hostname<TAB>site`) 파싱. 중복 호스트 검출, 사이트별 그룹핑 |
+| `internal/asset/` | 자산현황(`hostname<TAB>site`) 파싱 + `-host-file` 용 순수 호스트 목록(`LoadHostList`) 파싱. 자산현황은 site 판정의 유일한 근거, 호스트 목록은 그중 무엇을 고를지만 결정 |
 | `internal/render/render.go` | 사이트별 값을 bash 변수 헤더로 만들고 `lib_common.sh` + `apply_body.sh` 를 이어붙임. 되돌리기 스크립트(`RollbackScript`)도 여기서 조립 |
 | `internal/render/lib_common.sh` | apply·rollback 공용. 로그, 변경 추적, OS 판정, **서비스 재시작 표**. 이 표가 두 곳으로 갈라지면 반드시 어긋나므로 여기 한 곳에만 둡니다 |
 | `internal/render/rollback_body.sh` | 되돌리기 본체. `<파일>.bak.<시점>` 조회·복원 후 대응 서비스만 재시작. 파일을 삭제하지는 않음 |
@@ -52,3 +53,8 @@
 8. **롤백은 새 백업을 만들지 않습니다.** 그래야 같은 시점으로 두 번 되돌려도 멱등합니다.
 9. **롤백은 파일을 삭제하지 않습니다.** 적용이 새로 만든 파일은 백업이 없는데, 이를 지우는
    것은 위험하므로 `NO-BACKUP` 으로 보고만 합니다.
+10. **자산현황(`conf/assets.txt`)과 작업 대상 목록(`{user}.txt`, `-host-file`)을 혼동하지
+    마십시오.** site 판정은 **항상** 자산현황에서만 이뤄집니다. `-host-file` / `run.sh`
+    의 `{계정명}.txt` 는 그중 어떤 호스트를 고를지만 정하는 순수 hostname 목록이며,
+    여기에 site 정보를 넣거나 이 파일을 site 판정에 쓰면 안 됩니다. 실제로 이 둘을
+    섞어 써서 자산현황이 우회되는 문제가 있었습니다.

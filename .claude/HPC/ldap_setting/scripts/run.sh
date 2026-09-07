@@ -7,11 +7,13 @@
 # 적용까지만 하고, 검증은 deploy_ldap.sh -check-only 또는 ldap_check 를 쓰십시오.
 #
 # 흐름
-#   1. 작업 계정 선택 (select_user_context) → {user}.txt 가 작업 대상이 됩니다.
-#      {user}.txt 형식은 conf/assets.txt 와 동일합니다: "hostname<TAB>site" 한 줄에 하나.
+#   1. 작업 계정 선택 (select_user_context) → {user}.txt 가 작업 대상(호스트 목록)이 됩니다.
+#      {user}.txt 형식은 한 줄에 hostname 하나입니다. site 정보는 여기 넣지 않습니다 —
+#      그 호스트가 어느 사이트인지는 항상 conf/assets.txt(자산현황)에서 조회합니다.
+#      즉 {user}.txt = "누구를 대상으로 할지", conf/assets.txt = "그 대상이 어느 사이트인지".
 #   2. ldap_config.conf 에 정의된 인프라 목록에서 대상 인프라를 메뉴로 선택합니다.
 #   3. DRY-RUN 으로 먼저 무엇이 바뀔지 보여주고, 확인을 받은 뒤에만 실제로 적용합니다.
-#      사이트별 설정은 엔진이 작업 대상 파일의 site 컬럼을 보고 알아서 나눠 처리합니다.
+#      사이트별 설정은 엔진이 conf/assets.txt 를 조회해 알아서 나눠 처리합니다.
 ###############################################################################
 
 set -u
@@ -19,12 +21,15 @@ cd "$(dirname "$0")" || exit 2
 
 ENGINE="../bin/ldap-config-engine"
 CONFIG="${CONFIG:-../conf/ldap_config.conf}"
+ASSETS="${ASSETS:-../conf/assets.txt}"   # 자산현황(사이트 판정 기준). 항상 conf/ 안의 것을 씁니다.
 
 ###############################################################################
 # 1. 작업 계정 선택
 #
 #   여기서 고른 이름으로 작업 대상 파일 {user}.txt 를 이 스크립트와 같은 디렉터리
-#   (scripts/) 에서 찾습니다. 파일 형식은 conf/assets.txt 와 동일합니다.
+#   (scripts/) 에서 찾습니다. 이 파일은 site 정보 없이 hostname 만 한 줄에 하나
+#   적습니다 (예: deploy_ldap.sh 의 {user}.txt 와 같은 형식). site 판정에는
+#   전혀 쓰이지 않고, "이 중에서 골라 처리" 라는 대상 선별 용도로만 씁니다.
 #
 #   [실환경 전용 로직 적용부] 실제 계정 목록으로 아래를 채워서 쓰십시오.
 #   지금은 골격만 있고 목록이 비어 있어, 무엇을 입력하든 그 값이 그대로
@@ -121,13 +126,20 @@ if [ ! -f "$CONFIG" ]; then
     exit 2
 fi
 
+if [ ! -f "$ASSETS" ]; then
+    echo "오류: 자산현황 파일이 없습니다: $ASSETS"
+    echo "      \"hostname<TAB>site\" 형식으로 conf/ 안에 만들어 두십시오."
+    echo "      (형식 예시는 conf/assets.txt.sample 참고)"
+    exit 2
+fi
+
 select_user_context
 
-ASSETS="${RUN_USER}.txt"
-if [ ! -f "$ASSETS" ]; then
-    echo "오류: 작업 대상 파일이 없습니다: $ASSETS"
-    echo "      \"hostname<TAB>site\" 형식으로 이 디렉터리(scripts/)에 만들어 두십시오."
-    echo "      (형식 예시는 ../conf/assets.txt.sample 참고)"
+HOSTS="${RUN_USER}.txt"
+if [ ! -f "$HOSTS" ]; then
+    echo "오류: 작업 대상 파일이 없습니다: $HOSTS"
+    echo "      한 줄에 hostname 하나씩, 이 디렉터리(scripts/)에 만들어 두십시오."
+    echo "      (site 정보는 넣지 않습니다 — site 는 $ASSETS 에서 조회합니다)"
     exit 2
 fi
 
@@ -137,14 +149,13 @@ select_infra
 # 작업 대상 요약
 ###############################################################################
 
-TOTAL_HOSTS="$(grep -c $'\t' "$ASSETS" 2>/dev/null || echo 0)"
-SITES_IN_FILE="$(cut -f2 "$ASSETS" 2>/dev/null | sed '/^[[:space:]]*$/d' | sort -u | tr '\n' ' ')"
+TOTAL_HOSTS="$(grep -vc '^[[:space:]]*\(#\|$\)' "$HOSTS" 2>/dev/null || echo 0)"
 
 echo
 echo "=============================================================="
 echo " 계정        : $RUN_USER"
-echo " 대상 파일   : $ASSETS  (${TOTAL_HOSTS}줄)"
-echo " 대상 사이트 : $SITES_IN_FILE"
+echo " 대상 파일   : $HOSTS  (${TOTAL_HOSTS}대, hostname 목록)"
+echo " 자산현황    : $ASSETS  (site 판정 기준)"
 echo " 대상 인프라 : $INFRA"
 echo "=============================================================="
 
@@ -154,7 +165,7 @@ echo "=============================================================="
 
 echo
 echo "########## DRY-RUN — 무엇이 바뀔지 먼저 확인합니다 ##########"
-"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -infra "$INFRA" -dry-run
+"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -host-file "$HOSTS" -infra "$INFRA" -dry-run
 DRY_RC=$?
 
 if [ "$DRY_RC" != "0" ]; then
@@ -180,7 +191,7 @@ fi
 
 echo
 echo "########## 실제 적용 ##########"
-"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -infra "$INFRA"
+"$ENGINE" -config "$CONFIG" -assets "$ASSETS" -host-file "$HOSTS" -infra "$INFRA"
 APPLY_RC=$?
 
 echo
@@ -193,7 +204,7 @@ echo "     bash ../../ldap_check/ldap_check.sh   (노드에서 직접)"
 echo "     또는 ./deploy_ldap.sh -infra $INFRA -check-only"
 echo
 echo "   되돌리려면:"
-echo "     $ENGINE -assets $ASSETS -rollback -dry-run"
+echo "     $ENGINE -assets $ASSETS -host-file $HOSTS -rollback -dry-run"
 echo "=============================================================="
 
 exit $APPLY_RC

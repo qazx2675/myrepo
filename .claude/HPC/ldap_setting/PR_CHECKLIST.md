@@ -17,3 +17,6 @@
 - [ ] `conf/ldap_config.conf` / `conf/assets.txt` 실물(bindpw 포함)이 커밋에 들어가지 않았는지 확인
 - [ ] CHANGELOG.md 항목 추가
 - [ ] README.md 옵션 표 갱신 필요 여부 확인
+
+- [ ] `-host-file` 을 쓸 때 site 판정이 **항상** `-assets`(자산현황)에서 이뤄지는지, 호스트 목록 파일에 site 정보가 새어 들어가지 않는지 확인
+- [ ] `update.sh` 로 갱신해도 `conf/ldap_config.conf`, `conf/assets.txt` 실제 값이 바뀌지 않는지 확인
