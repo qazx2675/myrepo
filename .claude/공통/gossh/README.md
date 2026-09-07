@@ -328,6 +328,10 @@ cp gossh pdsh
 ./pdsh -w hosts.txt -script=false "uptime"  # 요약 블록까지 다시 보고 싶으면
 ```
 
+실행 파일 이름이 `pdsh`면, `/user/` 안전장치가 걸려도 `[안전장치] ...` 안내 메시지를 찍지 않는다
+(동시 접속 수는 그대로 350으로 제한되지만 메시지만 숨김). **위험 작업(reboot 등) 경고 메시지는
+예외로 그대로 뜬다.** pdsh를 대체하는 용도라 pdsh에 없는 gossh 전용 안내가 섞이면 안 되기 때문.
+
 ### 5.8 OS6(RHEL/CentOS 6) 빌드
 
 RHEL/CentOS 6은 커널·glibc가 오래돼서, 최신 Go 툴체인이 요구하는 최신 `golang.org/x/crypto`가
