@@ -7,7 +7,9 @@
 | `cmd/ldap-config-engine/main.go` | CLI 진입점. 플래그 파싱 → 자산 로드 → 사이트별 스크립트 생성 → gossh 호출 → 결과 집계 |
 | `internal/config/` | `ldap_config.conf`(평문 key=value) 파싱과 검증. storage 고유성·uri_order 참조 무결성을 여기서 잡음 |
 | `internal/asset/` | 자산현황(`hostname<TAB>site`) 파싱. 중복 호스트 검출, 사이트별 그룹핑 |
-| `internal/render/render.go` | 사이트별 값을 bash 변수 헤더로 만들고 `apply_body.sh` 를 이어붙임 |
+| `internal/render/render.go` | 사이트별 값을 bash 변수 헤더로 만들고 `lib_common.sh` + `apply_body.sh` 를 이어붙임. 되돌리기 스크립트(`RollbackScript`)도 여기서 조립 |
+| `internal/render/lib_common.sh` | apply·rollback 공용. 로그, 변경 추적, OS 판정, **서비스 재시작 표**. 이 표가 두 곳으로 갈라지면 반드시 어긋나므로 여기 한 곳에만 둡니다 |
+| `internal/render/rollback_body.sh` | 되돌리기 본체. `<파일>.bak.<시점>` 조회·복원 후 대응 서비스만 재시작. 파일을 삭제하지는 않음 |
 | `internal/render/apply_body.sh` | **실제 설정을 바꾸는 본체.** 노드에서 OS/s4 판정, 키 단위 갱신, 백업, 변경된 파일에 대응하는 서비스만 재시작 |
 | `internal/remote/` | gossh 호출. base64 로 인코딩해 원격 주입하고 `<host>: <내용>` 출력을 파싱 |
 | `scripts/deploy_ldap.sh` | 관리자용 래퍼. 계정 선택 → 엔진 실행 → 전 노드 검증 |
@@ -22,6 +24,9 @@
 | "conf 스키마에 키 추가" | `internal/config/config.go`, `conf/ldap_config.conf.sample`, `internal/render/render.go`, 그리고 `../ldap_check/ldap_config.conf.sample` |
 | "CLI 옵션 추가" | `cmd/ldap-config-engine/main.go` |
 | "gossh 호출 방식 변경" | `internal/remote/remote.go` |
+| "서비스 재시작 대상 변경" | `internal/render/lib_common.sh` 의 `restart_for_changed` **한 곳만** (apply·rollback 양쪽에 반영됨) |
+| "되돌리기 동작 변경" | `internal/render/rollback_body.sh` |
+| "되돌리기 CLI 변경" | `cmd/ldap-config-engine/main.go` 의 `runRollback` |
 | "자산현황 형식 변경" | `internal/asset/asset.go` |
 
 ## 반드시 지킬 것
@@ -39,3 +44,10 @@
 5. **`-infra` 에 기본값을 두지 마십시오.** 다른 인프라 값을 통째로 밀어넣는 사고가 가능해집니다.
 6. **파일을 통째로 덮어쓰지 마십시오.** `autofs.conf` 와 `sssd.conf` 에는 우리가 모르는
    운영 설정이 함께 들어 있습니다.
+7. **백업은 한 실행에서 파일당 한 번만 뜹니다.** `commit_file` 은 `.bak.$STAMP` 가 이미
+   있으면 다시 만들지 않습니다. `ldap.conf` 처럼 한 파일을 여러 번(URI/BINDDN/BINDPW) 고치는데
+   매번 백업을 덮으면, 백업이 '이미 일부 수정된 상태' 가 되어 롤백해도 원본으로 돌아가지
+   않습니다. 실제로 이 버그가 있었고 test_all.sh [9] 가 이를 잡습니다.
+8. **롤백은 새 백업을 만들지 않습니다.** 그래야 같은 시점으로 두 번 되돌려도 멱등합니다.
+9. **롤백은 파일을 삭제하지 않습니다.** 적용이 새로 만든 파일은 백업이 없는데, 이를 지우는
+   것은 위험하므로 `NO-BACKUP` 으로 보고만 합니다.

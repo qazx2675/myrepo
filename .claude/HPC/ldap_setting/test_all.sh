@@ -205,6 +205,122 @@ else
 fi
 
 ###############################################################################
+echo "[9] 롤백 : 적용 전 상태로 정확히 되돌아가야 한다"
+###############################################################################
+
+"$ENGINE" -rollback      -print-script > "$WORK/rb_latest.sh" 2>/dev/null
+"$ENGINE" -list-backups  -print-script > "$WORK/rb_list.sh"   2>/dev/null
+
+make_fixture "$WORK/rb" 8
+cp -a "$WORK/rb" "$WORK/rb_orig"
+
+apply "$WORK/rb" "$WORK/ap_a1.sh"
+out="$(ROOT="$WORK/rb" bash "$WORK/rb_latest.sh" 2>&1)"; rc=$?
+
+# 백업 파일과, 적용이 새로 만들어 되돌릴 수 없는 파일은 비교에서 뺍니다.
+if [ "$rc" = "0" ] &&
+   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' \
+        "$WORK/rb_orig" "$WORK/rb" >/dev/null 2>&1; then
+    ok "롤백 후 원본과 완전히 일치"
+else
+    ng "롤백 결과가 원본과 다름 (rc=$rc)" \
+       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' "$WORK/rb_orig" "$WORK/rb" 2>&1 | head -20)"
+fi
+
+# 여러 번 고치는 파일(ldap.conf 는 URI/BINDDN/BINDPW 3회)이 제대로 돌아왔는지 콕 집어 확인.
+# 백업을 매 수정마다 덮어쓰면 여기서 '부분 적용 상태' 가 남습니다.
+if diff -q "$WORK/rb_orig/etc/openldap/ldap.conf" "$WORK/rb/etc/openldap/ldap.conf" >/dev/null 2>&1; then
+    ok "여러 번 수정된 ldap.conf 도 원본으로 복원"
+else
+    ng "ldap.conf 가 부분 적용 상태로 복원됨" \
+       "$(diff -u "$WORK/rb_orig/etc/openldap/ldap.conf" "$WORK/rb/etc/openldap/ldap.conf" 2>&1 | head -15)"
+fi
+
+###############################################################################
+echo "[10] 롤백 재실행은 NOCHANGE 여야 한다"
+###############################################################################
+
+out="$(ROOT="$WORK/rb" bash "$WORK/rb_latest.sh" 2>&1)"
+if printf '%s\n' "$out" | grep -q 'NOCHANGE'; then
+    ok "롤백 멱등"
+else
+    ng "롤백이 멱등하지 않음" "$out"
+fi
+
+###############################################################################
+echo "[11] 롤백 DRY-RUN 은 아무것도 바꾸지 않아야 한다"
+###############################################################################
+
+make_fixture "$WORK/rbd" 8
+apply "$WORK/rbd" "$WORK/ap_a1.sh"
+cp -a "$WORK/rbd" "$WORK/rbd_before"
+out="$(ROOT="$WORK/rbd" DRYRUN=1 bash "$WORK/rb_latest.sh" 2>&1)"
+if printf '%s\n' "$out" | grep -q 'WOULD-RESTORE' &&
+   diff -r "$WORK/rbd_before" "$WORK/rbd" >/dev/null 2>&1; then
+    ok "DRY-RUN 은 보고만 하고 파일을 건드리지 않음"
+else
+    ng "DRY-RUN 이 파일을 바꿨거나 보고하지 않음" "$out"
+fi
+
+###############################################################################
+echo "[12] -list-backups 는 시점과 파일 목록을 보여주고 아무것도 바꾸지 않아야 한다"
+###############################################################################
+
+cp -a "$WORK/rbd" "$WORK/rbl_before"
+out="$(ROOT="$WORK/rbd" bash "$WORK/rb_list.sh" 2>&1)"
+stamp="$(printf '%s\n' "$out" | sed -n 's/^BACKUP|\([0-9]\{14\}\)|.*/\1/p' | head -n1)"
+if [ -n "$stamp" ] && printf '%s\n' "$out" | grep -q 'LISTED' &&
+   diff -r "$WORK/rbl_before" "$WORK/rbd" >/dev/null 2>&1; then
+    ok "백업 시점 조회 ($stamp), 파일 변경 없음"
+else
+    ng "-list-backups 오류" "$out"
+fi
+
+###############################################################################
+echo "[13] 두 번 적용한 뒤 '첫 적용 이전' 시점으로 정확히 되돌아가야 한다"
+###############################################################################
+
+make_fixture "$WORK/rb2" 8
+cp -a "$WORK/rb2" "$WORK/rb2_orig"
+
+apply "$WORK/rb2" "$WORK/ap_a1.sh"
+first_stamp="$(ROOT="$WORK/rb2" bash "$WORK/rb_list.sh" 2>&1 \
+    | sed -n 's/^BACKUP|\([0-9]\{14\}\)|.*/\1/p' | head -n1)"
+
+sleep 1                       # 타임스탬프가 겹치지 않도록
+apply "$WORK/rb2" "$WORK/ap_a3.sh"
+
+nstamps="$(ROOT="$WORK/rb2" bash "$WORK/rb_list.sh" 2>&1 | grep -c '^BACKUP|')"
+if [ "$nstamps" -ge 2 ]; then
+    ok "적용 2회 → 백업 시점 2개 이상 ($nstamps)"
+else
+    ng "백업 시점이 쌓이지 않음 ($nstamps)"
+fi
+
+"$ENGINE" -rollback-to "$first_stamp" -print-script > "$WORK/rb_first.sh" 2>/dev/null
+out="$(ROOT="$WORK/rb2" bash "$WORK/rb_first.sh" 2>&1)"; rc=$?
+if [ "$rc" = "0" ] &&
+   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' \
+        "$WORK/rb2_orig" "$WORK/rb2" >/dev/null 2>&1; then
+    ok "-rollback-to $first_stamp 로 최초 상태 복원"
+else
+    ng "지정 시점 복원 실패 (rc=$rc)" \
+       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' "$WORK/rb2_orig" "$WORK/rb2" 2>&1 | head -20)"
+fi
+
+###############################################################################
+echo "[14] 백업이 하나도 없으면 NOBACKUP 을 보고해야 한다"
+###############################################################################
+
+make_fixture "$WORK/rbn" 8
+out="$(ROOT="$WORK/rbn" bash "$WORK/rb_latest.sh" 2>&1)"; rc=$?
+if [ "$rc" = "0" ] && printf '%s\n' "$out" | grep -q 'NOBACKUP'; then
+    ok "백업 없음 → NOBACKUP, exit 0"
+else
+    ng "NOBACKUP 처리 오류 (rc=$rc)" "$out"
+fi
+
+###############################################################################
 echo
 echo "=============================="
 echo " PASS: $PASS   FAIL: $FAIL"

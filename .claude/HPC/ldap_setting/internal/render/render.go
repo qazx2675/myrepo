@@ -12,8 +12,14 @@ import (
 	"ldap-automation/internal/config"
 )
 
+//go:embed lib_common.sh
+var libCommon string
+
 //go:embed apply_body.sh
 var applyBody string
+
+//go:embed rollback_body.sh
+var rollbackBody string
 
 // ApplyScript 는 (인프라, 사이트) 조합 하나에 대한 apply 스크립트 전문을 만듭니다.
 func ApplyScript(in config.Infra, s4 config.S4Rule, site string) (string, error) {
@@ -54,8 +60,66 @@ func ApplyScript(in config.Infra, s4 config.S4Rule, site string) (string, error)
 	writeVar(&b, "S4_NTP", boolVar(hasService(s4, "ntp")))
 
 	b.WriteString("\n")
+	b.WriteString(libCommon)
+	b.WriteString("\n")
 	b.WriteString(applyBody)
 	return b.String(), nil
+}
+
+// RollbackMode 는 되돌리기 방식입니다.
+type RollbackMode string
+
+const (
+	// RollbackList 는 남아 있는 백업 시점만 조회합니다. 아무것도 바꾸지 않습니다.
+	RollbackList RollbackMode = "list"
+	// RollbackLatest 는 가장 최근 시점으로 되돌립니다.
+	RollbackLatest RollbackMode = "latest"
+	// RollbackStamp 는 지정한 시점으로 되돌립니다.
+	RollbackStamp RollbackMode = "stamp"
+)
+
+// RollbackScript 는 되돌리기 스크립트 전문을 만듭니다.
+//
+// 적용 스크립트와 달리 인프라·사이트 값이 필요 없습니다.
+// 노드에 남아 있는 <파일>.bak.<STAMP> 만 보고 판단하기 때문입니다.
+func RollbackScript(mode RollbackMode, stamp string) (string, error) {
+	switch mode {
+	case RollbackList, RollbackLatest:
+		stamp = ""
+	case RollbackStamp:
+		if !validStamp(stamp) {
+			return "", fmt.Errorf("시점(STAMP)은 숫자 14자리여야 합니다: %q", stamp)
+		}
+	default:
+		return "", fmt.Errorf("알 수 없는 롤백 방식: %q", mode)
+	}
+
+	var b strings.Builder
+	b.WriteString("#!/bin/bash\n")
+	b.WriteString("# ldap-config-engine 이 자동 생성한 파일입니다. 직접 편집하지 마십시오.\n")
+	b.WriteString(fmt.Sprintf("# rollback mode=%s stamp=%s\n", mode, stamp))
+	b.WriteString("set -u\n\n")
+	writeVar(&b, "MODE", string(mode))
+	writeVar(&b, "STAMP", stamp)
+	b.WriteString("\n")
+	b.WriteString(libCommon)
+	b.WriteString("\n")
+	b.WriteString(rollbackBody)
+	return b.String(), nil
+}
+
+// validStamp 은 apply 가 만드는 %Y%m%d%H%M%S 형식인지 봅니다.
+// 원격 셸로 나가는 값이라 숫자만 허용합니다.
+func validStamp(s string) bool {
+	if len(s) != 14 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // writeVar 는 값을 홑따옴표로 감싸 bash 변수 대입문을 씁니다.

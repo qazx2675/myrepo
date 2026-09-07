@@ -1,57 +1,17 @@
 ###############################################################################
-# 여기부터는 사이트와 무관한 공통 로직입니다. (Go 엔진이 위 헤더만 사이트별로 생성)
+# 설정 적용 본체. (Go 엔진이 위 헤더에 사이트별 값을, 앞에 lib_common.sh 를 붙입니다)
 #
 # 동작
 #   1. 이 노드의 RHEL 메이저 버전과 hostname 으로 nslcd/sssd, ntp/chrony 를 결정
-#   2. 대상 파일의 '해당 키만' 갱신 (전체 덮어쓰기 아님). 바뀌면 .bak 백업
+#   2. 대상 파일의 '해당 키만' 갱신 (전체 덮어쓰기 아님). 바뀌면 .bak.<STAMP> 백업
 #   3. 실제로 내용이 바뀐 파일에 대응하는 서비스만 재시작
 #
-# 환경변수
-#   ROOT   기록 대상 루트. 기본 "" (= 실제 /etc). 테스트 시 /tmp/fixture 등을 넣음
-#   DRYRUN 1 이면 파일을 쓰지 않고 바뀔 내용만 보고
+# 한 번의 실행이 남기는 백업은 전부 같은 STAMP 를 씁니다.
+# rollback 은 이 STAMP 를 복원 단위로 사용합니다.
 ###############################################################################
 
-ROOT="${ROOT:-}"
-DRYRUN="${DRYRUN:-0}"
 STAMP="$(date +%Y%m%d%H%M%S)"
 
-CHANGED=""
-FAILED=0
-
-log()  { echo "APPLY|$1|$2"; }
-fail() { echo "APPLY|FAIL|$1"; FAILED=1; }
-
-changed_has()
-{
-    case " $CHANGED " in
-        *" $1 "*) return 0 ;;
-    esac
-    return 1
-}
-
-# 같은 파일을 여러 번 손대도 목록에는 한 번만 남깁니다.
-mark_changed()
-{
-    changed_has "$1" || CHANGED="$CHANGED $1"
-}
-
-#------------------------------------------------------------------------------
-# 이 노드 정보 판정
-#------------------------------------------------------------------------------
-
-NODE_HOST="$(hostname -s 2>/dev/null || hostname)"
-
-detect_os_major()
-{
-    local v=""
-    if [ -f "$ROOT/etc/redhat-release" ]; then
-        v="$(sed -n 's/.*release \([0-9][0-9]*\).*/\1/p' "$ROOT/etc/redhat-release" | head -n1)"
-    fi
-    if [ -z "$v" ] && [ -f "$ROOT/etc/os-release" ]; then
-        v="$(sed -n 's/^VERSION_ID="\{0,1\}\([0-9][0-9]*\).*/\1/p' "$ROOT/etc/os-release" | head -n1)"
-    fi
-    echo "$v"
-}
 
 OS_MAJOR="$(detect_os_major)"
 if [ -z "$OS_MAJOR" ]; then
@@ -126,7 +86,10 @@ commit_file()
 
     mkdir -p "$(dirname "$real")" || { fail "디렉터리 생성 실패: $logical"; rm -f "$tmp"; return 1; }
 
-    if [ -f "$real" ]; then
+    # ★ 백업은 이 실행에서 파일당 딱 한 번만 뜹니다.
+    #   한 파일을 여러 번 고치기 때문에(ldap.conf 의 URI/BINDDN/BINDPW 등), 매번 덮어쓰면
+    #   백업이 '이미 일부 수정된 상태' 가 되어 롤백해도 원본으로 돌아가지 않습니다.
+    if [ -f "$real" ] && [ ! -f "$real.bak.$STAMP" ]; then
         cp -p "$real" "$real.bak.$STAMP" || { fail "백업 실패: $logical"; rm -f "$tmp"; return 1; }
     fi
 
@@ -454,60 +417,10 @@ apply_auto_appl()
 apply_auto_appl
 
 ###############################################################################
-# 8. 바뀐 파일에 대응하는 서비스만 재시작
-#
-#   ldap.conf / resolv.conf : 재시작 대상 없음 (라이브러리·리졸버 설정)
+# 8. 바뀐 파일에 대응하는 서비스만 재시작 (표는 lib_common.sh 에 있습니다)
 ###############################################################################
 
-restart_svc()
-{
-    local svc="$1"
-    if [ "$DRYRUN" = "1" ]; then
-        log WOULD-RESTART "$svc"
-        return 0
-    fi
-    # ROOT 가 지정된 테스트 모드에서는 실제 서비스를 절대 건드리지 않습니다.
-    # (fixture 디렉터리에 쓰면서 이 노드의 진짜 sssd 를 재시작하면 안 됩니다)
-    if [ -n "$ROOT" ]; then
-        log SKIP-RESTART "$svc (ROOT=$ROOT 테스트 모드)"
-        return 0
-    fi
-    if ! systemctl is-enabled "$svc" >/dev/null 2>&1 && ! systemctl is-active "$svc" >/dev/null 2>&1; then
-        log SKIP-RESTART "$svc (미설치 또는 비활성)"
-        return 0
-    fi
-    if systemctl restart "$svc" >/dev/null 2>&1; then
-        log RESTARTED "$svc"
-    else
-        fail "서비스 재시작 실패: $svc"
-    fi
-}
-
-NEED_AUTOFS=0
-changed_has /etc/autofs.conf            && NEED_AUTOFS=1
-changed_has /etc/autofs_ldap_auth.conf  && NEED_AUTOFS=1
-changed_has /etc/auto.appl              && NEED_AUTOFS=1
-
-if changed_has /etc/nslcd.conf; then
-    restart_svc nslcd
-fi
-
-if changed_has /etc/sssd/sssd.conf; then
-    [ "$DRYRUN" = "1" ] || sss_cache -E >/dev/null 2>&1
-    restart_svc sssd
-fi
-
-if [ "$NEED_AUTOFS" = "1" ]; then
-    restart_svc autofs
-fi
-
-if changed_has /etc/ntp.conf; then
-    restart_svc ntpd
-fi
-
-if changed_has /etc/chrony.conf; then
-    restart_svc chronyd
-fi
+restart_for_changed
 
 ###############################################################################
 # 9. 결과 한 줄 요약

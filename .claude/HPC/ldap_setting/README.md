@@ -119,7 +119,42 @@ OK           85대
 
 무엇이 노드에서 실행되는지 그대로 나옵니다. 대규모 적용 전에 한 번 읽어 보십시오.
 
-### 2.4 실제 장비 없이 시험하기
+### 2.4 되돌리기 (rollback)
+
+적용할 때마다 `<파일>.bak.<시점>` 백업이 남습니다. **한 번의 적용 실행이 남기는 백업은
+전부 같은 시점 값을 쓰므로**, 시점 하나가 "그 적용 직전 상태" 를 정확히 가리킵니다.
+
+```bash
+# 1) 어떤 시점으로 돌아갈 수 있는지 먼저 확인
+./scripts/deploy_ldap.sh -list-backups
+
+# 2) 무엇이 복원될지 확인 (파일을 건드리지 않음)
+./scripts/deploy_ldap.sh -rollback -dry-run
+
+# 3) 가장 최근 적용을 취소
+./scripts/deploy_ldap.sh -rollback -infra zxcv
+
+# 4) 특정 시점으로 되돌리기
+./scripts/deploy_ldap.sh -rollback-to 20260907153012 -infra zxcv
+```
+
+`-list-backups` 출력:
+
+```
+  svr001
+      20260907153012   /etc/openldap/ldap.conf,/etc/autofs.conf,/etc/sssd/sssd.conf,/etc/resolv.conf,/etc/chrony.conf,/etc/auto.appl
+      20260906104455   /etc/resolv.conf,/etc/chrony.conf
+```
+
+- 되돌리기에는 **`-infra` 가 필요 없습니다.** 노드에 남아 있는 백업만 보고 판단합니다.
+  다만 `-infra` 를 함께 주면 되돌린 뒤 검증까지 이어서 수행합니다.
+- 복원된 파일에 대응하는 **서비스만** 재시작합니다(적용과 같은 표).
+- 되돌리기는 새 백업을 만들지 않습니다. 같은 시점으로 두 번 되돌리면 두 번째는 `NOCHANGE` 입니다.
+- **적용이 새로 만들어낸 파일**(그 전에 없던 파일, 보통 `autofs_ldap_auth.conf`)은 백업이
+  없어 되돌릴 수 없습니다. 삭제는 위험하므로 하지 않고 `NO-BACKUP` 으로 보고만 합니다.
+  필요하면 직접 지우십시오.
+
+### 2.5 실제 장비 없이 시험하기
 
 `-root` 를 주면 `/etc` 대신 그 아래에 기록하고, **서비스도 재시작하지 않습니다.**
 
@@ -152,6 +187,9 @@ ROOT=/tmp/fixture bash ../ldap_check/ldap_check.sh
 | `-c` | *(gossh 기본)* | 동시 접속 수 |
 | `-t` | *(gossh 기본)* | 접속 타임아웃(초) |
 | `-remote-path` | `/root/ldap_apply.sh` | 원격에 잠시 떨어뜨릴 스크립트 경로. 실행 후 삭제 |
+| `-list-backups` | `false` | 각 노드에 남아 있는 백업 시점 목록만 조회. 아무것도 바꾸지 않음 |
+| `-rollback` | `false` | 가장 최근 백업 시점으로 되돌리기 |
+| `-rollback-to` | *(없음)* | 지정한 백업 시점(숫자 14자리)으로 되돌리기 |
 
 종료 코드: `0` 정상 / `1` 설정·인자 오류 / `2` 일부 노드 FAIL·응답 없음.
 
@@ -159,11 +197,14 @@ ROOT=/tmp/fixture bash ../ldap_check/ldap_check.sh
 
 | 옵션 | 설명 |
 |---|---|
-| `-infra <이름>` | 대상 인프라 (필수) |
-| `-dry-run` | 적용 없이 확인만 |
+| `-infra <이름>` | 대상 인프라. 적용·검증에는 필수, 되돌리기에는 선택 |
+| `-dry-run` | 적용·되돌리기 없이 확인만 |
 | `-config <경로>` | 설정 파일 (환경변수 `CONFIG` 로도 지정) |
 | `-assets <경로>` | 자산현황 파일 (환경변수 `ASSETS`) |
 | `-check-only` | 설정 적용을 건너뛰고 검증만 |
+| `-list-backups` | 각 노드의 백업 시점 목록을 조회하고 종료 |
+| `-rollback` | 가장 최근 시점으로 되돌리기. `-infra` 를 함께 주면 검증까지 수행 |
+| `-rollback-to <시점>` | 지정한 시점으로 되돌리기 |
 | `-h` | 도움말 |
 
 | 환경변수 | 기본값 | 설명 |
@@ -288,13 +329,20 @@ sudo rm -f /usr/local/bin/ldap-config-engine
 3. 문제가 없으면 전체에 적용합니다.
 4. 적용 후 **무작위 표본을 직접 접속해 확인**합니다.
 
-되돌리기: 변경 전 원본이 같은 디렉터리에 `<파일명>.bak.<타임스탬프>` 로 남습니다.
-복원한 뒤 해당 서비스를 재시작하십시오.
+**되돌리기가 잘못됐을 때:** 도구에 내장된 롤백을 쓰십시오(2.4 참고). 손으로 파일을
+복사하지 마십시오 — 서비스 재시작을 빠뜨리기 쉽습니다.
 
 ```bash
-gossh -w hosts.txt "ls -t /etc/sssd/sssd.conf.bak.* | head -1"
-gossh -w hosts.txt "cp \$(ls -t /etc/sssd/sssd.conf.bak.* | head -1) /etc/sssd/sssd.conf && systemctl restart sssd"
+./scripts/deploy_ldap.sh -list-backups            # 어느 시점으로 갈 수 있는지
+./scripts/deploy_ldap.sh -rollback -dry-run       # 무엇이 복원될지
+./scripts/deploy_ldap.sh -rollback -infra zxcv    # 되돌리고 검증
 ```
+
+롤백도 되돌린 파일에 대응하는 서비스만 재시작합니다. 다만 **롤백 역시 인증 설정을 바꾸는
+작업**이므로, 끝난 뒤 무작위 표본을 직접 확인해야 하는 것은 적용과 같습니다.
+
+백업 파일(`<파일명>.bak.<시점>`)은 자동으로 지워지지 않고 계속 쌓입니다. 오래된 것은
+운영 정책에 맞춰 주기적으로 정리하십시오.
 
 기타:
 
