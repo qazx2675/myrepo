@@ -1,0 +1,52 @@
+name: ldap-automation CI
+
+on:
+  push:
+    paths:
+      - '.claude/HPC/ldap_setting/**'
+      - '.claude/HPC/ldap_check/**'
+      - '.github/workflows/ldap-automation.yml'
+  pull_request:
+    paths:
+      - '.claude/HPC/ldap_setting/**'
+      - '.claude/HPC/ldap_check/**'
+      - '.github/workflows/ldap-automation.yml'
+
+jobs:
+  ldap-setting:
+    name: ldap_setting (Go 빌드·테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/ldap_setting
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      - name: 오프라인 빌드
+        run: CGO_ENABLED=0 go build ./...
+      - name: go vet
+        run: go vet ./...
+      - name: 단위 테스트
+        run: go test ./...
+      - name: bash 문법 검사
+        run: bash -n setup.sh scripts/deploy_ldap.sh test_all.sh
+      # 적용 → 검증 왕복 테스트. ../ldap_check 를 사용하므로 저장소 전체 체크아웃이 필요합니다.
+      - name: 왕복 회귀 테스트
+        run: ./setup.sh && ./test_all.sh
+
+  ldap-check:
+    name: ldap_check (bash 단독 테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/ldap_check
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash 문법 검사
+        run: bash -n ldap_check.sh test_check.sh
+      - name: 회귀 테스트
+        run: ./test_check.sh
+      # 두 디렉터리의 기준값 파일은 항상 같아야 합니다.
+      - name: 설정 샘플 동기화 확인
+        run: diff -u ldap_config.conf.sample ../ldap_setting/conf/ldap_config.conf.sample
