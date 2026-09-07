@@ -28,8 +28,13 @@ func TestLoadTabSeparated(t *testing.T) {
 
 // 구분자가 탭이므로 공백으로만 나뉜 줄은 오류여야 합니다.
 func TestSpaceSeparatedRejected(t *testing.T) {
-	if _, err := Load(write(t, "svr001 a1\n")); err == nil {
+	_, err := Load(write(t, "svr001 a1\n"))
+	if err == nil {
 		t.Fatal("공백 구분인데 통과했습니다")
+	}
+	// "탭인 줄 알았는데 사실 스페이스" 를 사용자가 에러 메시지만 보고 알 수 있어야 합니다.
+	if !strings.Contains(err.Error(), "svr001·a1") {
+		t.Fatalf("스페이스를 눈에 보이게 표시하지 않았습니다: %v", err)
 	}
 }
 
