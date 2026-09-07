@@ -112,3 +112,15 @@
 - `-host-file`: 자산현황에 3대, 호스트 목록에 1대만 있을 때 그 1대만 처리되고
   site 는 자산현황에서 정확히 조회됨을 실제 gossh 경유로 확인. 목록에 자산현황에
   없는 호스트가 섞였을 때 경고 후 건너뛰는 것도 확인.
+
+### 수정 — 실 서버 DRY-RUN 이 "ERROR Command not found" (rc=2) 로 깨지던 문제
+- 원인: `remote.BuildCommand` 가 base64 payload 를 작은따옴표로 감싸 보냈는데
+  (`echo '<b64>' | base64 -d ...`), gossh 가 명령 전체를 다시 자기 쪽에서
+  따옴표로 감싸 ssh 로 넘기는 경우 이 안쪽 작은따옴표가 바깥 따옴표를 조기에
+  닫아버려 명령이 토막났다. base64 결과는 `[A-Za-z0-9+/=]` 만 포함해 원래
+  따옴표가 필요 없으므로 제거.
+- 대상 노드에 bash/base64/awk/sed 가 모두 있는데도(사용자가 gossh 로 직접
+  `which` 확인) 재현되던 것과 부합하는 원인.
+- 검증: `go test ./...`, `test_all.sh` (22 PASS), 그리고 192.168.0.58 에서
+  실제 gossh 왕복(-host-file, -root fixture)으로 명령이 정상 전달·실행·
+  파싱됨을 확인.
