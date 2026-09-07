@@ -124,3 +124,17 @@
 - 검증: `go test ./...`, `test_all.sh` (22 PASS), 그리고 192.168.0.58 에서
   실제 gossh 왕복(-host-file, -root fixture)으로 명령이 정상 전달·실행·
   파싱됨을 확인.
+
+### 수정 — `run.sh` 사전점검 누락으로 이전 두 문제가 조용히 재발할 수 있었음
+- `run.sh` 에 `gossh` 존재 여부(`command -v`) 검사가 없어서, PATH 에 없으면
+  (예: `sudo` 의 `secure_path` 가 `/usr/local/bin` 을 빼버리는 환경) 엔진이
+  gossh 를 로컬에서 못 찾아 아무 호스트에도 못 나가고 `NORESULT` 로만
+  보고했다. `deploy_ldap.sh` 에는 이미 있던 검사를 `run.sh` 에도 추가하고,
+  `GOSSH` 환경변수(기본값 `gossh`)로 절대경로를 지정할 수 있게 함.
+- `run.sh` 에 `-host-file` 을 모르는 예전 바이너리를 그대로 쓰고 있어도
+  바로 알아채지 못했다. `$ENGINE -h` 출력에 `-host-file` 이 있는지 미리
+  검사해, 오래된 빌드면 "update.sh 로 갱신 후 setup.sh 로 재빌드하십시오"
+  라고 바로 안내하도록 함.
+- 검증: 192.168.0.58 에서 존재하지 않는 gossh 이름을 줬을 때 사전점검에서
+  바로 실패하는지, 정상 이름일 때 hostname 한 줄짜리 목록 + 자산현황만으로
+  site 가 올바르게 조회되어 gossh 까지 정상 도달하는지 실제로 실행해 확인.
