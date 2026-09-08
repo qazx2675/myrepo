@@ -214,3 +214,31 @@
   `--exclude='auto.appl_back'` 추가).
 - `../ldap_check/test_check.sh` 10/10 PASS (`wappl_mount` 를 넣은 zxcv/a1 기준
   fixture 로 OK 8건 확인).
+
+## 2026-09-09
+
+### 수정 — /wappl 설정 추가 후 "이상한 base64 값" 이 출력되고 적용이 안 되던 문제
+- 증상: `run.sh` 실제 적용 단계에서 `<base64 덩어리>|base64 -d | bash` 처럼
+  보이는 텍스트가 그대로 출력되고 해당 호스트는 아무것도 바뀌지 않음.
+  `wappl_mount` 설정을 빼면 정상 동작, 넣으면 재현됨(사용자 확인).
+- 원인: gossh 가 명령 문자열에 `reboot`/`poweroff`/`shutdown`/`halt`/`ddc`
+  (대소문자 무시, 부분일치) 가 섞여 있으면 위험 작업으로 보고 실행을 거부하며
+  그 명령을 그대로 stderr 에 찍는 안전장치가 있음(`gossh` 자체 기능, 정상
+  동작). `BuildCommand` 가 스크립트 전체를 base64 로 감싸는데, base64 는
+  사실상 무작위 문자열이라 스크립트가 길어질수록 이 중 3글자 이상 짧은
+  조각(특히 `ddc`)이 우연히 섞여 나올 확률이 올라간다. `/wappl` 기능으로
+  스크립트가 늘어나면서(약 20KB) 이 확률에 걸림.
+- 대응: `BuildCommand` 가 만드는 최종 base64 문자열을 `spaceOut` 으로 두
+  글자마다 공백을 끼워 넣어 보내도록 변경(`echo <spaced-b64> | tr -d ' ' |
+  base64 -d | bash`). 3글자 이상 이어진 조각 자체가 없어져 위험 키워드와
+  우연히 일치할 가능성을 원천 차단. base64 원문에는 공백이 없으므로 원격에서
+  `tr -d ' '` 로 지우기만 하면 원래 내용이 정확히 복원됨.
+  gossh 자체의 위험 작업 확인 플래그(`-dnlgjawkrdjqghkrdls`)는 대화형 y/N
+  확인까지 강제해 자동화에 쓸 수 없어 우회하지 않고 우리 쪽 인코딩을 고침
+  (ARCHITECTURE.md 13번).
+- 검증: `internal/remote/remote_test.go` 신규 — 다양한 크기의 스크립트에서
+  명령 문자열에 위험 키워드가 전혀 나타나지 않는지, 공백을 끼워 넣어도
+  왕복 복원이 정확한지, 3글자 이상 이어진 조각이 없는지 확인. `go test ./...`,
+  `test_all.sh` 22/22, `ldap_check/test_check.sh` 10/10 통과. 실제 gossh +
+  tcsh 로그인 계정으로 `/wappl` 이 설정된 conf 로 DRY-RUN·실제 적용 모두
+  정상 처리됨을 확인.
