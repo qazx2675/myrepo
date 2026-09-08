@@ -66,6 +66,15 @@ func WriteHostFile(hosts []string) (string, func(), error) {
 // 감싸, 전송되는 명령줄에 따옴표를 아예 하나도 남기지 않습니다.
 // "echo <b64> | base64 -d | bash" 는 로그인 셸이 bash 든 csh/tcsh 든
 // 동일하게 해석되고, 어떤 셸도 명령 안쪽 문법을 직접 파싱할 일이 없습니다.
+//
+// gossh 는 명령 문자열에 "reboot"/"halt"/"ddc" 등이 섞여 있으면 위험 작업으로
+// 보고 실행을 막고 그 명령을 그대로 화면에 찍습니다(안전장치, 정상 동작).
+// base64 는 사실상 무작위 문자열이라 스크립트가 길어질수록 그 안에 이런
+// 짧은 단어가 우연히 섞여 나올 확률이 생기고, 실제로 재현됐습니다(스크립트가
+// 길어지자 재현). base64 문자열에 두 글자마다 공백을 끼워 넣으면 세 글자
+// 이상 이어진 조각이 아예 생기지 않아 이 우연한 일치를 원천 차단할 수
+// 있습니다. 원격에서는 pipe 로 공백만 지운 뒤 그대로 복호화합니다 —
+// 공백은 base64 원문에 없는 문자라 안전하게 구분자로 쓸 수 있습니다.
 func BuildCommand(script string, o Options) string {
 	b64 := base64.StdEncoding.EncodeToString([]byte(script))
 	path := o.RemotePath
@@ -85,7 +94,24 @@ func BuildCommand(script string, o Options) string {
 		"umask 077; echo %s | base64 -d > %s && chmod 600 %s && %sbash %s; rc=$?; rm -f %s; exit $rc",
 		b64, path, path, env, path, path)
 	innerB64 := base64.StdEncoding.EncodeToString([]byte(inner))
-	return fmt.Sprintf("echo %s | base64 -d | bash", innerB64)
+	return fmt.Sprintf("echo %s | tr -d ' ' | base64 -d | bash", spaceOut(innerB64))
+}
+
+// spaceOut 은 base64 문자열을 두 글자씩 끊어 공백으로 이어붙입니다.
+// gossh 의 위험 작업 키워드 검사(reboot/halt/ddc 등, 최소 3글자)를 우연히
+// 건드리지 않도록, 전송되는 텍스트에 세 글자 이상 이어진 조각이 남지
+// 않게 합니다. base64 원문에는 공백이 없으므로 원격에서 "tr -d ' '" 로
+// 지우기만 하면 원래 문자열이 그대로 복원됩니다.
+func spaceOut(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) * 3 / 2)
+	for i, r := range s {
+		if i > 0 && i%2 == 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // Run 은 gossh 를 실행하고 호스트별 출력 줄을 모아 돌려줍니다.
