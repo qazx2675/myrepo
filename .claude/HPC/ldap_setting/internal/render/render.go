@@ -53,6 +53,7 @@ func ApplyScript(in config.Infra, s4 config.S4Rule, site string) (string, error)
 	writeVar(&b, "NTP_LIST", strings.Join(in.NTP, "\n"))
 	writeVar(&b, "APPL_STORAGE", st.Storage)
 	writeVar(&b, "APPL_MOUNT", st.Mountpoint)
+	writeVar(&b, "WAPPL_MOUNT", st.WapplMount)
 
 	writeVar(&b, "S4_ENABLED", boolVar(s4.Enabled))
 	writeVar(&b, "S4_PREFIX", s4.Prefix)

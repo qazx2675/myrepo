@@ -382,6 +382,12 @@ fi
 
 ###############################################################################
 # 7. /etc/auto.appl
+#
+# 이 파일은 우리가 전적으로 관리하는 파일이라, 기존 내용을 보존하며 고치지
+# 않고 통째로 덮어씁니다(위 다른 파일들과 다른 방식입니다 — autofs.conf/
+# sssd.conf 처럼 운영자가 손댄 다른 설정과 섞여 있지 않기 때문입니다).
+#
+# /wappl 은 site 에 wappl_mount 가 설정된 경우에만 줄을 추가합니다(선택 항목).
 ###############################################################################
 
 apply_auto_appl()
@@ -389,27 +395,20 @@ apply_auto_appl()
     local logical=/etc/auto.appl
     local real="$ROOT$logical"
     local tmp; tmp="$(mktemp)"
-    local newline="/appl${TAB}-rw,soft,intr${TAB}${APPL_STORAGE}:${APPL_MOUNT}"
-    local seen=0
 
-    if [ -f "$real" ]; then
-        while IFS= read -r line || [ -n "$line" ]; do
-            case "$line" in
-                /appl*)
-                    if [ "$seen" = "0" ]; then
-                        printf '%s\n' "$newline"
-                        seen=1
-                    fi
-                    ;;
-                *)
-                    printf '%s\n' "$line"
-                    ;;
-            esac
-        done < "$real" > "$tmp"
-    fi
+    {
+        printf '/appl%s-ro,hard,tcp,vers=3%s%s:%s\n' "$TAB" "$TAB" "$APPL_STORAGE" "$APPL_MOUNT"
+        if [ -n "$WAPPL_MOUNT" ]; then
+            printf '/wappl%s-rw,hard,tcp,vers=3%s%s:%s\n' "$TAB" "$TAB" "$APPL_STORAGE" "$WAPPL_MOUNT"
+        fi
+    } > "$tmp"
 
-    if [ "$seen" = "0" ]; then
-        printf '%s\n' "$newline" >> "$tmp"
+    # 덮어쓰기 전, 기존 파일이 있으면 고정 이름으로도 한 벌 남깁니다.
+    # (아래 commit_file 이 만드는 .bak.$STAMP 백업과는 별개로, 요청에 따라
+    #  항상 같은 이름 하나로 최근 이전 내용을 바로 찾아볼 수 있게 합니다.
+    #  되돌리기(rollback)는 여전히 .bak.$STAMP 를 씁니다 — 이 파일은 참고용입니다.)
+    if [ -f "$real" ] && [ "$DRYRUN" != "1" ]; then
+        cp -p "$real" "${ROOT}/etc/auto.appl_back" || { fail "백업 실패: /etc/auto.appl_back"; rm -f "$tmp"; return 1; }
     fi
 
     commit_file "$logical" "$tmp"

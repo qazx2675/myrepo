@@ -219,12 +219,12 @@ out="$(ROOT="$WORK/rb" bash "$WORK/rb_latest.sh" 2>&1)"; rc=$?
 
 # 백업 파일과, 적용이 새로 만들어 되돌릴 수 없는 파일은 비교에서 뺍니다.
 if [ "$rc" = "0" ] &&
-   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' \
+   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' \
         "$WORK/rb_orig" "$WORK/rb" >/dev/null 2>&1; then
     ok "롤백 후 원본과 완전히 일치"
 else
     ng "롤백 결과가 원본과 다름 (rc=$rc)" \
-       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' "$WORK/rb_orig" "$WORK/rb" 2>&1 | head -20)"
+       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' "$WORK/rb_orig" "$WORK/rb" 2>&1 | head -20)"
 fi
 
 # 여러 번 고치는 파일(ldap.conf 는 URI/BINDDN/BINDPW 3회)이 제대로 돌아왔는지 콕 집어 확인.
@@ -300,12 +300,12 @@ fi
 "$ENGINE" -rollback-to "$first_stamp" -print-script > "$WORK/rb_first.sh" 2>/dev/null
 out="$(ROOT="$WORK/rb2" bash "$WORK/rb_first.sh" 2>&1)"; rc=$?
 if [ "$rc" = "0" ] &&
-   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' \
+   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' \
         "$WORK/rb2_orig" "$WORK/rb2" >/dev/null 2>&1; then
     ok "-rollback-to $first_stamp 로 최초 상태 복원"
 else
     ng "지정 시점 복원 실패 (rc=$rc)" \
-       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' "$WORK/rb2_orig" "$WORK/rb2" 2>&1 | head -20)"
+       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' "$WORK/rb2_orig" "$WORK/rb2" 2>&1 | head -20)"
 fi
 
 ###############################################################################

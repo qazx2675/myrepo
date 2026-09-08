@@ -18,3 +18,16 @@
 ### 알려진 제약
 - 설정 파일의 내용만 검사합니다. 서비스 기동 상태나 실제 LDAP 바인드 성공 여부는 확인하지 않습니다.
 - `bindpw` 는 문자열 비교이며 실제 바인드 테스트가 아닙니다.
+
+## 2026-09-08
+
+### 신규 — `/wappl` 검사 추가
+- `ldap_setting` 쪽에서 `/etc/auto.appl` 에 `/wappl` 줄을 추가로 쓸 수 있게 되어
+  (`infra.<이름>.site.<사이트>.wappl_mount` 설정 시) 짝을 맞춤.
+- `infra.$INFRA.site.$SITE.wappl_mount` 가 설정된 사이트에서만 `/wappl` 의
+  mountpoint 를 검사(선택 항목 — 미설정 사이트는 지금처럼 검사하지 않음).
+- `ldap_config.conf.sample` 에 `wappl_mount` 예시 추가(zxcv/a1).
+
+### 검증
+- `test_check.sh` 10/10 PASS. 기준 fixture(zxcv/a1)에 `/wappl` 줄을 추가하고
+  OK 건수 기대값을 7→8 로 갱신.

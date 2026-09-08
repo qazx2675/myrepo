@@ -17,7 +17,8 @@ type Site struct {
 	Name       string
 	URIOrder   []string // "uri1","uri2","uri3" 같은 키 이름의 나열
 	Storage    string   // auto.appl 의 storage 이름 (사이트 판별 키)
-	Mountpoint string   // auto.appl 의 원격 경로
+	Mountpoint string   // auto.appl 의 /appl 원격 경로
+	WapplMount string   // auto.appl 의 /wappl 원격 경로. 비어 있으면 /wappl 줄을 만들지 않음(선택 항목)
 }
 
 // Infra 는 DNS/NTP 로 구분되는 인프라 하나입니다.
@@ -144,6 +145,7 @@ func buildInfra(raw map[string]string, name string) (Infra, error) {
 			URIOrder:   splitList(raw[sp+"uri_order"]),
 			Storage:    raw[sp+"storage"],
 			Mountpoint: raw[sp+"mountpoint"],
+			WapplMount: raw[sp+"wappl_mount"],
 		}
 	}
 

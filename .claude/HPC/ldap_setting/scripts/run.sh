@@ -19,6 +19,12 @@
 set -u
 cd "$(dirname "$0")" || exit 2
 
+if [ -t 1 ]; then
+    C_RED='\033[31m'; C_GREEN='\033[32m'; C_RESET='\033[0m'
+else
+    C_RED=''; C_GREEN=''; C_RESET=''
+fi
+
 ENGINE="../bin/ldap-config-engine"
 CONFIG="${CONFIG:-../conf/ldap_config.conf}"
 ASSETS="${ASSETS:-../conf/assets.txt}"   # 자산현황(사이트 판정 기준). 항상 conf/ 안의 것을 씁니다.
@@ -186,8 +192,11 @@ DRY_RC=$?
 
 if [ "$DRY_RC" != "0" ]; then
     echo
-    echo "경고: DRY-RUN 이 일부 실패를 보고했습니다 (rc=$DRY_RC)."
+    echo "${C_RED}경고: DRY-RUN 이 일부 실패를 보고했습니다 (rc=$DRY_RC).${C_RESET}"
     echo "      위 내용을 확인하십시오. 그래도 진행할 수는 있습니다."
+else
+    echo
+    echo "${C_GREEN}DRY-RUN 성공 (rc=0)${C_RESET}"
 fi
 
 ###############################################################################
@@ -209,6 +218,13 @@ echo
 echo "########## 실제 적용 ##########"
 "$ENGINE" -config "$CONFIG" -assets "$ASSETS" -host-file "$HOSTS" -infra "$INFRA" -gossh "$GOSSH"
 APPLY_RC=$?
+
+echo
+if [ "$APPLY_RC" = "0" ]; then
+    echo "${C_GREEN}적용 성공 (rc=0)${C_RESET}"
+else
+    echo "${C_RED}적용 중 실패 발생 (rc=$APPLY_RC) — 위 출력에서 FAIL/NORESULT 호스트를 확인하십시오.${C_RESET}"
+fi
 
 echo
 echo "=============================================================="

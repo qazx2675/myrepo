@@ -151,6 +151,10 @@ ACTUAL_STORAGE="$(awk '$1 ~ /^\/appl/ { t=$3; sub(/[:/].*$/,"",t); if (t != "") 
 ACTUAL_MOUNT="$(awk '$1 ~ /^\/appl/ { t=$3; sub(/^[^:/]*[:]/,"",t); if (t != "") print t; exit }' \
                     "$ROOT/etc/auto.appl" 2>/dev/null)"
 
+# --- auto.appl : /wappl 로 시작하는 줄의 mountpoint (있을 때만 검사, 선택 항목) ---
+ACTUAL_WAPPL_MOUNT="$(awk '$1 ~ /^\/wappl/ { t=$3; sub(/^[^:/]*[:]/,"",t); if (t != "") print t; exit }' \
+                    "$ROOT/etc/auto.appl" 2>/dev/null)"
+
 ###############################################################################
 # 1차 : DNS + NTP 로 인프라 판별
 ###############################################################################
@@ -320,5 +324,12 @@ EXPECT_STORAGE="$(conf_get "infra.$INFRA.site.$SITE.storage")"
 EXPECT_MOUNT="$(conf_get "infra.$INFRA.site.$SITE.mountpoint")"
 [ "$ACTUAL_STORAGE" = "$EXPECT_STORAGE" ] && [ "$ACTUAL_MOUNT" = "$EXPECT_MOUNT" ]
 report $? auto.appl "$SITE"
+
+# 8. auto.appl(/wappl) — 이 site 에 wappl_mount 가 설정된 경우에만 검사(선택 항목)
+EXPECT_WAPPL_MOUNT="$(conf_get "infra.$INFRA.site.$SITE.wappl_mount")"
+if [ -n "$EXPECT_WAPPL_MOUNT" ]; then
+    [ "$ACTUAL_WAPPL_MOUNT" = "$EXPECT_WAPPL_MOUNT" ]
+    report $? auto.appl-wappl "$SITE"
+fi
 
 exit $RC
