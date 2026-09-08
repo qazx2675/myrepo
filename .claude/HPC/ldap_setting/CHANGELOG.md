@@ -183,3 +183,34 @@
   실행되고 결과(`FAIL infra-mismatch` 등, 이 노드가 미구성이라 정상적으로 나오는
   값)가 그대로 돌아옴을 확인. `go test ./...`, `test_all.sh`(22 PASS),
   `ldap_check/test_check.sh`(10 PASS) 도 통과.
+
+## 2026-09-08
+
+### 신규 — `/wappl` 마운트 지원, `/etc/auto.appl` 전체 덮어쓰기로 전환
+- 일부 인프라에만 존재하는 `/wappl` 마운트를 지원. `ldap_config.conf` 의
+  `infra.<이름>.site.<사이트>.wappl_mount` 가 설정된 사이트만 `/wappl` 줄을
+  만든다(선택 항목 — 없으면 그 사이트는 지금처럼 `/appl` 한 줄만 유지).
+- 마운트 옵션 변경: `/appl` 은 `-rw,soft,intr` → `-ro,hard,tcp,vers=3`,
+  `/wappl` 은 `-rw,hard,tcp,vers=3`. 구분자는 기존과 동일하게 탭.
+- `internal/render/apply_body.sh` 의 `apply_auto_appl` 을 기존 줄 보존형 편집에서
+  **전체 덮어쓰기** 로 변경. `/etc/auto.appl` 은 다른 설정 파일과 달리 운영자가
+  손댄 다른 내용과 섞여 있지 않아 통째로 관리해도 안전하다고 판단.
+- 적용 전 `/etc/auto.appl` 이 있으면 고정 이름 `/etc/auto.appl_back` 으로도
+  별도 백업. `commit_file` 이 만드는 `.bak.<시점>` 백업(및 그걸 쓰는 rollback)은
+  그대로 유지 — `auto.appl_back` 은 참고용 추가 백업일 뿐, rollback 이 이 파일을
+  지우거나 복원 대상으로 쓰지는 않음(ARCHITECTURE.md 12번).
+- `internal/config`, `internal/render`, `conf/ldap_config.conf.sample`,
+  `../ldap_check/ldap_config.conf.sample`, `../ldap_check/ldap_check.sh` 모두
+  짝을 맞춰 갱신(`wappl_mount` 가 설정된 사이트만 `/wappl` 검사도 추가로 수행).
+
+### 개선 — `run.sh` 성공/실패 표시에 색 추가
+- DRY-RUN·실제 적용 각각 종료 후 rc 로 성공(초록)/실패(빨강) 한 줄을 덧붙임.
+  터미널이 아니면(`[ -t 1 ]` 거짓) 색 없이 그대로 출력해 로그에 이스케이프
+  코드가 섞이지 않게 함.
+
+### 검증
+- `go build/vet/test ./...` 통과.
+- `test_all.sh` 22/22 PASS (auto.appl_back 이 rollback 비교 대상에서 제외되도록
+  `--exclude='auto.appl_back'` 추가).
+- `../ldap_check/test_check.sh` 10/10 PASS (`wappl_mount` 를 넣은 zxcv/a1 기준
+  fixture 로 OK 8건 확인).

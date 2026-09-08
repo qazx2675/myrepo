@@ -53,18 +53,18 @@ make_good()
 
     printf 'search example.com\nnameserver 10.10.1.10\nnameserver 10.10.1.11\n' > "$d/etc/resolv.conf"
     printf '# chrony\nserver 10.20.1.10 iburst\nserver 10.20.1.11 iburst\ndriftfile /var/lib/chrony/drift\n' > "$d/etc/chrony.conf"
-    printf '/appl\t-rw,soft,intr\tasdf1:/appl1\n' > "$d/etc/auto.appl"
+    printf '/appl\t-ro,hard,tcp,vers=3\tasdf1:/appl1\n/wappl\t-rw,hard,tcp,vers=3\tasdf1:/wappl1\n' > "$d/etc/auto.appl"
 }
 
 ###############################################################################
-echo "[1] 정상 노드는 7개 항목이 모두 OK 여야 한다"
+echo "[1] 정상 노드는 8개 항목이 모두 OK 여야 한다"
 ###############################################################################
 
 make_good "$WORK/good"
 out="$(check "$WORK/good")"; rc=$?
 nok="$(printf '%s\n' "$out" | grep -c '^OK')"
-if [ "$rc" = "0" ] && [ "$nok" = "7" ] && ! printf '%s\n' "$out" | grep -q '^FAIL'; then
-    ok "정상 노드 → OK 7건, exit 0"
+if [ "$rc" = "0" ] && [ "$nok" = "8" ] && ! printf '%s\n' "$out" | grep -q '^FAIL'; then
+    ok "정상 노드 → OK 8건, exit 0"
 else
     ng "정상 노드 판정 실패 (rc=$rc, OK=$nok)" "$out"
 fi
