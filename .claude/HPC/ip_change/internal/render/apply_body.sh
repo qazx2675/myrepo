@@ -51,15 +51,17 @@ fi
 GATEWAY="$(echo "$NEW_IP" | awk -F. '{print $1"."$2"."$3".1"}')"
 
 #------------------------------------------------------------------------------
-# 2. 현재 서비스 IP 조회
+# 2. 현재 서비스 IP 조회 (IPv4 전용 — IPv6/IPv4 둘 다 등록된 노드에서
+#    getent hosts 가 IPv6(::, fe80: 등)를 먼저 돌려주는 경우가 있어
+#    반드시 IPv4(점 4개짜리) 줄만 골라 씁니다)
 #------------------------------------------------------------------------------
 
-CUR_IP="$(getent hosts "$NODE_FQDN" 2>/dev/null | awk '{print $1; exit}')"
+CUR_IP="$(getent hosts "$NODE_FQDN" 2>/dev/null | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $1; exit}')"
 if [ -z "$CUR_IP" ]; then
-    CUR_IP="$(getent hosts "$NODE_HOST" 2>/dev/null | awk '{print $1; exit}')"
+    CUR_IP="$(getent hosts "$NODE_HOST" 2>/dev/null | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $1; exit}')"
 fi
 if [ -z "$CUR_IP" ]; then
-    fail_out "getent hosts 로 현재 서비스 IP 를 확인할 수 없습니다"
+    fail_out "getent hosts 로 현재 서비스 IP(IPv4)를 확인할 수 없습니다"
 fi
 
 #------------------------------------------------------------------------------

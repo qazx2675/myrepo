@@ -111,6 +111,57 @@ func TestApplyScriptEndToEnd(t *testing.T) {
 	}
 }
 
+// getent hosts 가 IPv6 을 IPv4 보다 먼저 돌려주는 노드에서도 IPv4 만 골라 쓰는지 확인합니다.
+func TestApplyScriptEndToEndSkipsIPv6(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash 가 없는 환경이라 건너뜁니다")
+	}
+
+	work := t.TempDir()
+	fixtureDir := filepath.Join(work, "network-scripts")
+	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ifcfg := filepath.Join(fixtureDir, "ifcfg-eth0")
+	if err := os.WriteFile(ifcfg, []byte("DEVICE=eth0\nBOOTPROTO=none\nIPADDR=192.168.1.50\nGATEWAY=192.168.1.1\nONBOOT=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fakebin := filepath.Join(work, "fakebin")
+	if err := os.MkdirAll(fakebin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFake(t, filepath.Join(fakebin, "hostname"), "#!/bin/sh\necho testnode\n")
+	// 실제 랩에서 관찰된 상황 재현: getent hosts 가 IPv6(fe80::...) 을 먼저 찍고
+	// IPv4 는 그 뒤에 옵니다.
+	writeFake(t, filepath.Join(fakebin, "getent"), "#!/bin/sh\nprintf 'fe80::20c:29ff:fe3f:8ac1 testnode\\n192.168.1.50 testnode\\n'\n")
+
+	entries := []target.Entry{{Host: "testnode", NewIP: "192.168.1.99"}}
+	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
+	script, err := ApplyScript(entries, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scriptPath := filepath.Join(work, "apply.sh")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script failed: %v\noutput:\n%s", err, out)
+	}
+
+	got := strings.TrimSpace(string(out))
+	want := "testnode 192.168.1.99 192.168.1.1"
+	if got != want {
+		t.Fatalf("output = %q, want %q (IPv6 을 걸러내지 못했을 가능성)", got, want)
+	}
+}
+
 func TestApplyScriptEndToEndUnknownHost(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash 가 없는 환경이라 건너뜁니다")
