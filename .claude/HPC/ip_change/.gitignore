@@ -1,0 +1,5 @@
+# 실제 작업 대상(hostname/IP)이 들어가는 파일은 절대 커밋하지 않습니다.
+conf/*.txt
+conf/ip_change.conf
+!conf/*.sample
+bin/
