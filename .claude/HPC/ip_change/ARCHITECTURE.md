@@ -7,7 +7,7 @@
 | `internal/target/target.go` | `{user}.txt`(`hostname 변경될ip`) 파싱, 중복/형식 검증, 게이트웨이(마지막 옥텟 `.1`) 계산 |
 | `internal/config/config.go` | `ip_change.conf`(평문 key=value) 파싱. 파일이 없어도 기본값으로 동작 |
 | `internal/render/render.go` | 대상 전체를 담은 apply 스크립트 한 벌 조립. `apply_body.sh` 를 `go:embed` 하고 헤더에 `NETWORK_SCRIPTS_DIR`/`RHEL9_PATH`/호스트→IP 표를 삽입 |
-| `internal/render/apply_body.sh` | **실제 IP/GATEWAY 를 바꾸는 본체.** 노드에서 자기 hostname 으로 호스트→IP 표에서 자기 행을 찾고, `getent hosts` 로 현재 서비스 IP 확인, ifcfg 탐색·백업·갱신·검증 |
+| `internal/render/apply_body.sh` | **실제 IP/GATEWAY 를 바꾸는 본체.** 노드에서 자기 hostname 으로 호스트→IP 표에서 자기 행을 찾고, `hostname -I`(호스트 해석이 아니라 실제 인터페이스 주소)로 현재 IPv4 확인, ifcfg 탐색·백업·갱신·검증 |
 | `internal/remote/remote.go` | gossh 호출. base64(spaceOut 포함)로 인코딩해 원격 주입하고 `<host>: <내용>` 출력을 파싱 |
 | `internal/color/color.go` | 관리 노드 출력 전용 ANSI 색상. 대상 노드로 전송되는 스크립트에는 관여하지 않음 |
 | `scripts/run_ip_change.sh` | 관리자용 래퍼. 계정 선택(`select_user_context`, 의도적으로 빈 자리) → 엔진 실행 |

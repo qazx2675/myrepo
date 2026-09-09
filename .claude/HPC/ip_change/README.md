@@ -26,7 +26,7 @@ Red Hat Enterprise Linux 대상 노드들의 **IP·게이트웨이 설정을 일
 |---|---|---|
 | Go 툴체인 | 관리 노드 | `go.mod` 기준 1.26.5. 빌드할 때만 필요 |
 | `gossh` | 관리 노드 | 저장소의 [`.claude/공통/gossh/v2`](../../공통/gossh/v2/) |
-| bash / awk / sed / getent | 대상 노드 | 기본 설치분으로 충분 |
+| bash / awk / sed / `hostname -I`(또는 `ip`) | 대상 노드 | 기본 설치분으로 충분 |
 
 > **`gossh` 는 v2 를 쓰십시오.** 구버전에는 명령 앞뒤 따옴표를 잘라내는 버그가 있어
 > 원격 주입이 깨집니다. `gossh -h` 에 `-cf` 와 `-b` 가 보이면 v2 입니다.
@@ -91,7 +91,9 @@ cd scripts
 1. `select_user_context()` 로 작업 계정을 선택 → `conf/${RUN_USER}.txt` 로드
 2. 대상 전체에 대한 apply 스크립트 하나를 만들어 gossh 로 일괄 전송
 3. 각 노드에서:
-   - `getent hosts $(hostname)` 로 **현재 서비스 IP** 확인
+   - `hostname -I`(실패 시 `ip -4 addr`)로 이 노드에 실제 할당된 **IPv4 주소**를 확인
+     (`getent hosts` 는 `/etc/hosts`·DNS 에 좌우돼 쓰지 않음 — IPv4 항목이 없거나
+     IPv6 만 등록된 노드가 있었음)
    - `network_scripts_dir`(RHEL 9+ 이고 `rhel9_path` 가 설정돼 있으면 그 경로) 안에서
      `IPADDR=<현재 서비스 IP>` 인 ifcfg 파일 탐색
    - 원본을 `.bak.<시각>` 백업 후 `IPADDR`/`GATEWAY` 두 줄만 갱신
