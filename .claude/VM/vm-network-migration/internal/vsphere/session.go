@@ -50,7 +50,11 @@ type Session struct {
 // Connect 는 vCenter 에 접속하고 VM/호스트/네트워크 색인을 한 번에 만듭니다.
 //
 // 인증서 검증은 하지 않습니다(insecure). 폐쇄망 자체서명 인증서 환경을 전제로 합니다.
-func Connect(ctx context.Context, addr, user, pass string) (*Session, error) {
+//
+// concurrency 만큼 idle 커넥션을 유지하도록 Transport 를 조정합니다. Go 기본값은
+// 호스트당 2개라, -concurrency 를 올려도 대부분의 요청이 매번 TLS 핸드셰이크를
+// 새로 하게 되어 병렬화 효과가 줄어들기 때문입니다.
+func Connect(ctx context.Context, addr, user, pass string, concurrency int) (*Session, error) {
 	u := &url.URL{Scheme: "https", Host: addr, Path: "/sdk"}
 	u.User = url.UserPassword(user, pass)
 
@@ -58,6 +62,7 @@ func Connect(ctx context.Context, addr, user, pass string) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s 접속 실패: %w", addr, err)
 	}
+	c.Client.DefaultTransport().MaxIdleConnsPerHost = concurrency
 
 	s := &Session{
 		Addr:     addr,
@@ -189,7 +194,7 @@ func ConnectFleet(ctx context.Context, addrs []string, user, pass string, concur
 	errs := make([]error, len(addrs))
 
 	pool.Run(concurrency, addrs, func(i int, addr string) {
-		s, err := Connect(ctx, addr, user, pass)
+		s, err := Connect(ctx, addr, user, pass, concurrency)
 		sessions[i], errs[i] = s, err
 	})
 

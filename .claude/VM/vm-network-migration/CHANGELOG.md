@@ -179,3 +179,20 @@ worklist 에 없습니다"로 각각 실패. 파일 내용을 정상으로 봐�
 백업 → 생성 → 해제 → 연결 → 검증 → 롤백 전 과정이 정상 동작함을 확인(수정 전
 이었다면 1번째 줄 VM/호스트에서 각각 실패했을 조건). 랩은 원상복구, 테스트
 포트그룹도 삭제했습니다.
+
+## 2026-09-09 — vCenter 접속 idle 커넥션 수를 -concurrency 에 맞춤
+
+`-concurrency` 를 올려도 실제 처리량이 기대만큼 늘지 않는 문제를 점검하다가
+발견했습니다. Go 의 `http.Transport` 는 호스트당 idle(재사용 가능) 커넥션을
+기본 2개만 유지합니다. `-concurrency` 로 같은 vCenter 에 여러 요청을 동시에
+보내도 idle 커넥션이 2개뿐이면 나머지는 매번 TLS 핸드셰이크를 새로 하게 되어
+병렬화 효과가 줄어듭니다.
+
+- `internal/vsphere.Connect` 에 `concurrency` 인자를 추가하고, 접속 직후
+  `c.Client.DefaultTransport().MaxIdleConnsPerHost = concurrency` 로
+  설정했습니다. govmomi 벤더 코드는 건드리지 않았습니다(`DefaultTransport()` 가
+  이미 export 되어 있어 우리 쪽에서 값만 지정하면 됩니다).
+- `ConnectFleet` 의 호출부만 갱신했고, 그 외 동작/플래그 변경은 없습니다.
+
+**검증**: gofmt / `go vet` / `go test` 통과, 6개 바이너리 오프라인 벤더
+빌드(`GOFLAGS=-mod=vendor GOPROXY=off`) 성공(Rocky Linux 빌드 호스트).
