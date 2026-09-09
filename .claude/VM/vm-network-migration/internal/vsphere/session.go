@@ -7,7 +7,9 @@ package vsphere
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/vmware/govmomi"
@@ -137,7 +139,7 @@ func (s *Session) index(ctx context.Context) error {
 		h := &hosts[i]
 		info := &HostInfo{Name: h.Name, Ref: h.Self, NetworkSystem: h.ConfigManager.NetworkSystem, Networks: h.Network}
 		s.hosts[h.Self] = info
-		s.hostByNm[strings.ToLower(h.Name)] = info
+		s.registerHostName(h.Name, info)
 	}
 
 	var nets []mo.Network
@@ -173,10 +175,76 @@ func (s *Session) HostHasPortgroup(h *HostInfo, name string) bool {
 	return false
 }
 
+// registerHostName 은 호스트를 FQDN 과 short name(첫 '.' 앞) 양쪽으로 색인합니다.
+//
+// vswitch 파일은 FQDN 으로 적지만 vCenter 인벤토리에는 short name 으로 등록돼
+// 있을 수 있어(상위폴더가 둘 이상인 환경에서 관찰됨), 양쪽 다 찾히게 합니다.
+// short name 이 서로 다른 두 호스트와 겹치면 그 별칭은 nil(모호)로 둡니다.
+func (s *Session) registerHostName(name string, info *HostInfo) {
+	full := strings.ToLower(name)
+	s.hostByNm[full] = info
+
+	short := full
+	if i := strings.IndexByte(full, '.'); i >= 0 {
+		short = full[:i]
+	}
+	if short == full {
+		return
+	}
+	if prev, ok := s.hostByNm[short]; ok && prev != info {
+		s.hostByNm[short] = nil
+		return
+	}
+	s.hostByNm[short] = info
+}
+
 // HostByName 은 이름으로 ESXi 호스트를 찾습니다. (포트그룹 생성용)
+//
+// FQDN 으로 못 찾으면 short name 으로 한 번 더 시도합니다. 모호한 별칭(nil)은
+// 못 찾은 것으로 취급합니다.
 func (s *Session) HostByName(name string) (*HostInfo, bool) {
-	h, ok := s.hostByNm[strings.ToLower(name)]
-	return h, ok
+	key := strings.ToLower(name)
+	if h, ok := s.hostByNm[key]; ok && h != nil {
+		return h, true
+	}
+	if i := strings.IndexByte(key, '.'); i >= 0 {
+		if h, ok := s.hostByNm[key[:i]]; ok && h != nil {
+			return h, true
+		}
+	}
+	return nil, false
+}
+
+// WriteInventory 는 이 세션이 색인한 VM/호스트를 사람이 읽을 수 있게 씁니다.
+// nm-inventory(진단 모드)에서 vCenter 가 실제로 보고하는 이름을 확인할 때 씁니다.
+func (s *Session) WriteInventory(w io.Writer) {
+	fmt.Fprintf(w, "=== %s ===\n", s.Addr)
+
+	names := make([]string, 0, len(s.vmByName))
+	for k, v := range s.vmByName {
+		if v == nil {
+			continue // 동명 모호 표시
+		}
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		v := s.vmByName[k]
+		host := "(호스트 미상)"
+		if h, ok := s.HostByRef(v.HostRef); ok {
+			host = h.Name
+		}
+		fmt.Fprintf(w, "VM   %-40s host=%-30s power=%s\n", v.Name, host, v.PowerState)
+	}
+
+	hostNames := make([]string, 0, len(s.hosts))
+	for _, h := range s.hosts {
+		hostNames = append(hostNames, h.Name)
+	}
+	sort.Strings(hostNames)
+	for _, n := range hostNames {
+		fmt.Fprintf(w, "HOST %s\n", n)
+	}
 }
 
 // Fleet 은 vcenter.txt 에 적힌 모든 vCenter 세션 묶음입니다.
@@ -228,6 +296,26 @@ func (f *Fleet) Close(ctx context.Context) {
 	}
 }
 
+// vmCount 는 전 vCenter 에 색인된 VM 개수입니다(동명 모호 항목 제외).
+func (f *Fleet) vmCount() int {
+	n := 0
+	for _, s := range f.Sessions {
+		for _, v := range s.vmByName {
+			if v != nil {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// WriteInventory 는 모든 vCenter 세션의 색인 내용을 씁니다 (nm-inventory 용).
+func (f *Fleet) WriteInventory(w io.Writer) {
+	for _, s := range f.Sessions {
+		s.WriteInventory(w)
+	}
+}
+
 // LookupVM 은 이름으로 VM 을 찾습니다. 여러 vCenter 에 동명 VM 이 있으면 에러입니다.
 func (f *Fleet) LookupVM(name string) (*Session, *VMInfo, error) {
 	var (
@@ -248,7 +336,10 @@ func (f *Fleet) LookupVM(name string) (*Session, *VMInfo, error) {
 	}
 	switch len(hitV) {
 	case 0:
-		return nil, nil, fmt.Errorf("VM %q 를 어느 vCenter 에서도 찾을 수 없습니다", name)
+		return nil, nil, fmt.Errorf(
+			"VM %q 를 어느 vCenter 에서도 찾을 수 없습니다 "+
+				"(색인된 VM %d대 — 실제 이름 목록은 nm-inventory 로 확인하세요)",
+			name, f.vmCount())
 	case 1:
 		return hitS[0], hitV[0], nil
 	default:

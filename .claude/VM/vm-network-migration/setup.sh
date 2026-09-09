@@ -17,7 +17,7 @@ fi
 mkdir -p bin
 
 # 단계별로 독립된 바이너리를 만듭니다. run.sh 는 bin/ 아래에서 이들을 찾습니다.
-BINS="backup pgcreate disconnect connect verify rollback"
+BINS="backup pgcreate disconnect connect verify rollback inventory"
 
 export GOFLAGS=-mod=vendor
 export GOPROXY=off

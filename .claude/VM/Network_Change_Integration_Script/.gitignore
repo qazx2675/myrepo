@@ -1,0 +1,22 @@
+# 빌드 산출물
+bin/
+
+# 실행 중 생성되는 운영 데이터 (자격증명·자산 정보가 들어갈 수 있음)
+logs/*
+work/*
+results/*
+incidents/*
+conf/*.conf
+vcenter.txt
+
+# 대상/설정 파일은 예시(.sample)만 저장소에 둡니다
+*.txt
+!*.sample
+!*.md
+!.gitkeep
+
+# 디렉터리는 유지
+!logs/.gitkeep
+!work/.gitkeep
+!results/.gitkeep
+!incidents/.gitkeep

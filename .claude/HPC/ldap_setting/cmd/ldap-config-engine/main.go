@@ -28,6 +28,7 @@ func main() {
 		dryRun       = flag.Bool("dry-run", false, "실제로 바꾸지 않고 바뀔 내용만 보고")
 		printScript  = flag.Bool("print-script", false, "apply 스크립트만 표준출력으로 찍고 종료 (-site 필요)")
 		root         = flag.String("root", "", "원격에서 기록할 루트 (테스트용. 비우면 실제 /etc)")
+		defaultSite  = flag.String("default-site", "", "자산현황에서 못 찾은 호스트에 적용할 site (conf 의 default_site 를 덮어씀)")
 
 		listBackups = flag.Bool("list-backups", false, "각 노드에 남아 있는 백업 시점 목록만 조회 (변경 없음)")
 		rollback    = flag.Bool("rollback", false, "가장 최근 백업 시점으로 되돌리기")
@@ -64,7 +65,7 @@ func main() {
 	if err := run(opts{
 		confPath: *confPath, assetPath: *assetPath, infraName: *infraName,
 		onlySite: *onlySite, onlyHost: *onlyHost, hostListPath: *hostListPath, dryRun: *dryRun,
-		printScript: *printScript, root: *root,
+		printScript: *printScript, root: *root, defaultSite: *defaultSite,
 		rbMode: rbMode, rbStamp: *rollbackTo,
 		remote: remote.Options{
 			GosshPath: *gosshPath, User: *user, Password: *password,
@@ -88,6 +89,7 @@ type opts struct {
 	dryRun       bool
 	printScript  bool
 	root         string
+	defaultSite  string
 	rbMode       render.RollbackMode
 	rbStamp      string
 	remote       remote.Options
@@ -105,6 +107,12 @@ func run(o opts) error {
 		return fmt.Errorf("설정 파일: %w", err)
 	}
 
+	// -default-site 플래그는 conf 의 default_site 를 덮어씁니다.
+	// (통합 스크립트가 운영자 conf 를 건드리지 않고 값을 넘길 때 씀)
+	if o.defaultSite != "" {
+		cfg.DefaultSite = o.defaultSite
+	}
+
 	if o.infraName == "" {
 		return fmt.Errorf("-infra 를 지정하십시오. 정의된 인프라: %s",
 			strings.Join(cfg.InfraNames(), ", "))
@@ -113,6 +121,15 @@ func run(o opts) error {
 	if !ok {
 		return fmt.Errorf("인프라 %q 가 설정에 없습니다. 정의된 인프라: %s",
 			o.infraName, strings.Join(cfg.InfraNames(), ", "))
+	}
+
+	// default_site 는 자산현황에 없는 호스트에 조용히 적용되므로, 값이 틀렸으면
+	// 한 대도 건드리기 전에 여기서 멈춰야 합니다.
+	if cfg.DefaultSite != "" {
+		if _, ok := in.Sites[cfg.DefaultSite]; !ok {
+			return fmt.Errorf("default_site %q 가 인프라 %q 에 정의되어 있지 않습니다 (정의된 사이트: %s)",
+				cfg.DefaultSite, in.Name, strings.Join(in.SiteNames(), ", "))
+		}
 	}
 
 	// -print-script 는 자산현황 없이도 동작합니다(스크립트 확인·테스트용).
@@ -129,7 +146,7 @@ func run(o opts) error {
 		return nil
 	}
 
-	targets, err := loadTargets(o)
+	targets, err := loadTargets(o, cfg.DefaultSite, false)
 	if err != nil {
 		return err
 	}
@@ -236,8 +253,15 @@ func run(o opts) error {
 // -site / -host / -host-file 필터를 적용합니다.
 //
 // -host-file 은 "어떤 호스트를 고를지" 만 정할 뿐, site 는 절대 이 파일에서
-// 가져오지 않습니다 — site 는 항상 -assets(자산현황)에서 조회합니다.
-func loadTargets(o opts) ([]asset.Entry, error) {
+// 가져오지 않습니다 — site 는 항상 -assets(자산현황) 또는 defaultSite 에서 옵니다.
+//
+// -host-file 의 호스트가 자산현황에 없으면 아래 순서로 fallback 합니다.
+//  1. 이름 그대로 조회
+//  2. ev01~ev03 접미사를 떼고 BM 이름으로 재조회 (site 만 BM 것을 쓰고,
+//     SSH 대상 이름은 원래 VM 이름을 유지)
+//  3. defaultSite 적용 (경고 출력)
+//  4. keepUnmatched 면 site 없이 그대로 포함(롤백용), 아니면 건너뜀
+func loadTargets(o opts, defaultSite string, keepUnmatched bool) ([]asset.Entry, error) {
 	entries, err := asset.Load(o.assetPath)
 	if err != nil {
 		return nil, fmt.Errorf("자산현황 파일: %w", err)
@@ -259,22 +283,55 @@ func loadTargets(o opts) ([]asset.Entry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("작업 대상 목록(-host-file): %w", err)
 		}
+		// byHost: -site/-host 필터가 걸린 대상 (정확 일치용)
 		byHost := map[string]asset.Entry{}
 		for _, e := range targets {
 			byHost[e.Host] = e
 		}
+		// byAll: 필터 전 전체 자산현황 (ev 축약 BM 조회용 — 필터를 우회하는
+		// 이유는, host-file 이 "이 호스트를 처리하라" 고 이미 명시했기 때문)
+		byAll := map[string]asset.Entry{}
+		for _, e := range entries {
+			byAll[e.Host] = e
+		}
+
 		var filtered []asset.Entry
-		var missing []string
+		var viaEV, viaDefault, missing []string
 		for _, h := range wanted {
 			if e, ok := byHost[h]; ok {
 				filtered = append(filtered, e)
-			} else {
-				missing = append(missing, h)
+				continue
 			}
+			if base, ok := asset.StripEV(h); ok {
+				if e, ok := byAll[base]; ok {
+					filtered = append(filtered, asset.Entry{Host: h, Site: e.Site, Line: e.Line})
+					viaEV = append(viaEV, h+"→"+base)
+					continue
+				}
+			}
+			if defaultSite != "" {
+				filtered = append(filtered, asset.Entry{Host: h, Site: defaultSite})
+				viaDefault = append(viaDefault, h)
+				continue
+			}
+			if keepUnmatched {
+				filtered = append(filtered, asset.Entry{Host: h})
+				continue
+			}
+			missing = append(missing, h)
+		}
+		if len(viaEV) > 0 {
+			fmt.Fprintf(os.Stderr,
+				"정보: 자산현황에 VM 이 없어 BM 기준으로 site 판정: %s\n", strings.Join(viaEV, ", "))
+		}
+		if len(viaDefault) > 0 {
+			fmt.Fprintf(os.Stderr,
+				"경고: 자산현황에서 못 찾아 default_site(%q) 적용 (%d대): %s\n",
+				defaultSite, len(viaDefault), strings.Join(viaDefault, ", "))
 		}
 		if len(missing) > 0 {
 			fmt.Fprintf(os.Stderr,
-				"경고: 다음 호스트는 자산현황(%s)에 없어 건너뜁니다: %s\n",
+				"경고: 다음 호스트는 자산현황(%s)에 없고 default_site 도 없어 건너뜁니다: %s\n",
 				o.assetPath, strings.Join(missing, ", "))
 		}
 		targets = filtered
@@ -301,7 +358,10 @@ func runRollback(o opts) error {
 		return nil
 	}
 
-	targets, err := loadTargets(o)
+	// 롤백은 site 가 필요 없으므로, 자산현황에 없는 호스트도 대상에 남깁니다.
+	// (적용 때 default_site 로만 포함됐던 호스트가 롤백에서 빠지면, 그 호스트만
+	//  원복이 안 되는 구멍이 생깁니다.)
+	targets, err := loadTargets(o, "", true)
 	if err != nil {
 		return err
 	}

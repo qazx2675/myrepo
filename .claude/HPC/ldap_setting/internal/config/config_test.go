@@ -54,6 +54,23 @@ func TestLoadGood(t *testing.T) {
 	}
 }
 
+func TestDefaultSiteParsed(t *testing.T) {
+	c, err := Load(write(t, good))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DefaultSite != "" {
+		t.Errorf("default_site 미지정 시 빈 문자열이어야 합니다: %q", c.DefaultSite)
+	}
+	c, err = Load(write(t, good+"\ndefault_site = a1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DefaultSite != "a1" {
+		t.Errorf("default_site = a1 이 파싱되지 않았습니다: %q", c.DefaultSite)
+	}
+}
+
 // uri3 = NONE 이면 URI 목록에서 빠져야 합니다.
 func TestURIListSkipsNONE(t *testing.T) {
 	c, err := Load(write(t, good))

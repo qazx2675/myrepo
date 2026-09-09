@@ -71,10 +71,16 @@ func LoadVCenters(path string) ([]string, error) {
 }
 
 // LoadVMList 는 {user}.txt 를 읽어 마이그레이션 대상 VM 이름 목록을 만듭니다.
+//
+// 한 줄에 VM 이름만 있어도 되고, 뒤에 다른 값(예: 통합 스크립트가 쓰는
+// "VM이름 변경될IP" 형식)이 붙어 있어도 됩니다 — 첫 번째 공백 앞까지만 읽습니다.
 func LoadVMList(path string) ([]string, error) {
 	lines, err := LoadLines(path)
 	if err != nil {
 		return nil, err
+	}
+	for i, l := range lines {
+		lines[i] = strings.Fields(l)[0] // LoadLines 가 빈 줄을 걸러 항상 필드가 1개 이상
 	}
 	out, removed := dedup(lines)
 	if len(out) == 0 {
@@ -135,13 +141,21 @@ func LoadWorklist(path string) ([]WorkEntry, error) {
 func TargetForHost(entries []WorkEntry, host string) (WorkEntry, error) {
 	var found []WorkEntry
 	for _, e := range entries {
-		if strings.EqualFold(e.BMHost, host) {
+		if SameHost(e.BMHost, host) {
 			found = append(found, e)
 		}
 	}
 	switch len(found) {
 	case 0:
-		return WorkEntry{}, fmt.Errorf("BM 호스트 %q 에 대한 항목이 worklist 에 없습니다", host)
+		have := make([]string, 0, len(entries))
+		for _, e := range entries {
+			have = append(have, e.BMHost)
+		}
+		return WorkEntry{}, fmt.Errorf(
+			"BM 호스트 %q 에 대한 항목이 worklist 에 없습니다 "+
+				"(vswitch 파일의 BM 이름: %s) — vCenter 가 보고한 호스트 이름과 "+
+				"vswitch 1열 표기가 일치하는지 확인하세요",
+			host, strings.Join(have, ", "))
 	case 1:
 		return found[0], nil
 	default:
@@ -168,6 +182,27 @@ func Password() (string, error) {
 		return "", fmt.Errorf("vCenter 비밀번호가 없습니다. 환경변수 VC_PASSWORD 를 설정하세요")
 	}
 	return pass, nil
+}
+
+// SameHost 는 두 ESXi 호스트 이름이 같은 호스트를 가리키는지 봅니다.
+//
+// vswitch 파일에는 FQDN(예: esxi01.seccae.com)으로 적는데, vCenter 인벤토리에는
+// short name(esxi01)으로 등록돼 있을 수 있습니다(상위폴더가 둘 이상인 환경에서
+// 한쪽만 그런 경우가 관찰됨). 그래서 FQDN 전체가 같거나, 첫 마디(도메인 앞)가
+// 같으면 같은 호스트로 봅니다.
+func SameHost(a, b string) bool {
+	if strings.EqualFold(a, b) {
+		return true
+	}
+	return strings.EqualFold(hostShort(a), hostShort(b))
+}
+
+// hostShort 는 호스트 이름에서 첫 '.' 앞 부분만 돌려줍니다.
+func hostShort(s string) string {
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 func firstNonEmpty(vals ...string) string {

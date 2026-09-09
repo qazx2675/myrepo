@@ -21,6 +21,7 @@ ASSUME_YES=0
 ROLLBACK_ONLY=0
 RESUME=0
 FORCE_BACKUP=0
+DEBUG_INVENTORY=0
 
 usage() {
   cat <<'USAGE'
@@ -35,6 +36,7 @@ usage() {
       --dry-run            실제 변경 없이 무엇이 바뀔지만 출력
   -y, --yes                실행 전 확인 프롬프트를 건너뜁니다
       --rollback           마이그레이션 없이 롤백만 수행합니다
+      --debug-inventory    vCenter 가 보고하는 VM/호스트 이름을 그대로 덤프하고 종료 (변경 없음)
       --resume             기존 상태 파일을 그대로 두고 Step 0(백업)을 건너뜁니다
       --force-backup       기존 상태 파일을 현재 상태로 덮어씁니다 (주의: 이전 원본 기록이 사라집니다)
   -h, --help               이 도움말
@@ -54,6 +56,7 @@ while [ $# -gt 0 ]; do
     --dry-run)        DRY_RUN="-dry-run"; shift ;;
     -y|--yes)         ASSUME_YES=1; shift ;;
     --rollback)       ROLLBACK_ONLY=1; shift ;;
+    --debug-inventory) DEBUG_INVENTORY=1; shift ;;
     --resume)         RESUME=1; shift ;;
     --force-backup)   FORCE_BACKUP=1; shift ;;
     -h|--help)        usage; exit 0 ;;
@@ -239,6 +242,25 @@ step() {
 # -----------------------------------------------------------------------------
 # 본체
 # -----------------------------------------------------------------------------
+
+# --debug-inventory: vCenter 인벤토리만 덤프하고 끝냅니다. 사용자 토큰도,
+# 대상 파일도 필요 없습니다 — vcenter.txt 와 VC_PASSWORD 만 있으면 됩니다.
+if [ "$DEBUG_INVENTORY" -eq 1 ]; then
+  if [ ! -x "$BIN/nm-inventory" ]; then
+    echo "오류: $BIN/nm-inventory 가 없습니다. ./setup.sh 를 다시 실행하세요." >&2
+    exit 2
+  fi
+  if [ -z "${VC_PASSWORD:-}" ]; then
+    echo "오류: 환경변수 VC_PASSWORD 를 설정하세요." >&2
+    exit 2
+  fi
+  if [ ! -f vcenter.txt ]; then
+    echo "오류: vcenter.txt 가 없습니다." >&2
+    exit 2
+  fi
+  exec "$BIN/nm-inventory" -vcenter-file=vcenter.txt -id="$VC_ID" -concurrency="$CONCURRENCY"
+fi
+
 [ -z "$USER_TOKEN" ] && select_user
 FAILED_FILE="failed_${USER_TOKEN}.txt"
 STATE_FILE="state_${USER_TOKEN}.json"

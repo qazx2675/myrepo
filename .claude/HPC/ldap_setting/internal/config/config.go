@@ -43,7 +43,12 @@ type S4Rule struct {
 type Config struct {
 	Infras map[string]Infra
 	S4     S4Rule
-	raw    map[string]string
+
+	// DefaultSite 는 자산현황에서 site 를 못 찾은 호스트에 적용할 site 입니다.
+	// 비어 있으면(기본) 그런 호스트는 건너뜁니다 — 예전 동작입니다.
+	DefaultSite string
+
+	raw map[string]string
 }
 
 // Load 는 지정한 경로의 설정 파일을 읽어 Config 로 만듭니다.
@@ -77,6 +82,8 @@ func Load(path string) (*Config, error) {
 
 func build(raw map[string]string) (*Config, error) {
 	c := &Config{Infras: map[string]Infra{}, raw: raw}
+
+	c.DefaultSite = raw["default_site"]
 
 	c.S4 = S4Rule{
 		Enabled:  raw["s4.enabled"] == "true",

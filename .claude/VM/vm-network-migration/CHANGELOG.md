@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-09-09 — 통합 스크립트(Network_Change_Integration_Script) 연동
+
+- `{user}.txt` 를 `VM이름 변경될IP` 2열로 써도 되도록, `LoadVMList` 가 각 줄의
+  **첫 번째 필드만** VM 이름으로 읽습니다. (통합 스크립트가 IP 변경 대상 목록과
+  VM 목록을 한 파일로 공유하기 위함. VM 이름만 있는 기존 형식도 그대로 동작)
+- **`nm-inventory` 추가** (`run.sh --debug-inventory`). vCenter 가 실제로 보고하는
+  VM/ESXi 호스트 이름을 그대로 덤프합니다. "상위폴더가 둘 이상인 환경에서 일부
+  VM/호스트를 못 찾는다" 는 증상의 원인(이름 표기 불일치 등)을 확인하는 진단용.
+  대상 목록 파일을 읽지 않으므로 `-user` 없이 동작합니다.
+- ESXi 호스트 이름 매칭을 **FQDN ↔ short name 양쪽**으로 확장. vswitch 파일은
+  FQDN(`esxi01.seccae.com`)으로 적지만 vCenter 인벤토리에는 short name(`esxi01`)
+  으로 등록돼 있을 수 있어(상위폴더가 둘 이상인 환경에서 관찰됨), `HostByName`
+  과 `config.SameHost` 가 첫 마디만 같아도 같은 호스트로 봅니다. short name 이
+  서로 다른 두 호스트와 겹치면 그 별칭은 모호함으로 두어 오매칭을 막습니다.
+- `TargetForHost` / `LookupVM` 의 "찾을 수 없음" 오류에 **후보 목록·색인 개수**와
+  `nm-inventory` 안내를 덧붙여, 이름 불일치를 화면에서 바로 알 수 있게 함.
+
+---
+
 ## 2026-09-02 — 재설계 신규 작성 (v1.0.0)
 
 이전 `vm-network-migration`(v0.2.0, 단일 바이너리)을 제거하고, "VM 인프라 네트워크

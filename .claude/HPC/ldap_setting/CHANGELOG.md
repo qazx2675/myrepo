@@ -1,5 +1,18 @@
 # CHANGELOG — ldap_setting
 
+## 2026-09-09
+
+### 변경
+- 자산현황(`assets.txt`)에 같은 호스트가 여러 줄이면 **오류 대신 마지막 줄을 채택**
+  (경고만 출력). 갱신된 자산현황을 그대로 쓸 수 있게 함.
+- `default_site` conf 키 추가. `-host-file` 의 호스트가 자산현황에 없을 때
+  `ev01~ev03` 접미사를 뗀 BM 이름으로 재조회하고, 그래도 없으면 `default_site` 를
+  site 로 적용. `default_site` 가 해당 인프라에 없는 site 면 시작 시 오류로 중단.
+- 롤백은 자산현황에 없는 호스트도 대상에 유지 (site 불필요). `default_site` 로만
+  포함되던 호스트가 롤백에서 누락되는 문제 방지.
+- `-default-site` 플래그 추가 — conf 의 `default_site` 를 덮어씁니다. 통합
+  스크립트가 운영자 conf 를 건드리지 않고 값을 넘길 수 있게 함.
+
 ## 2026-09-07
 
 ### 신규
