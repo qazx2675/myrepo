@@ -19,3 +19,10 @@
   엉뚱한 IPv6 값을 "현재 서비스 IP" 로 오인해 ifcfg 탐색에 실패하던 문제 수정.
   이제 `getent hosts` 출력 중 IPv4(점 4개짜리) 줄만 골라 씁니다. 실제 랩(192.168.0.58)에서
   `getent hosts $(hostname)` 가 `fe80::...` 를 먼저 찍는 것을 확인해 재현·검증했습니다.
+
+## 2026-09-09 (개선)
+
+- 실행 전 작업 대상 목록(hostname -> 변경 예정 IP)을 화면에 출력하도록 추가.
+- 결과 출력 형식을 `hostname 기존IP -> 변경IP (GW 게이트웨이)` 로 변경 (기존: `hostname 변경IP 게이트웨이`).
+  - `apply_body.sh` 는 이제 `RESULT|OK|host|기존IP|변경IP|GW` / `RESULT|FAIL|host|사유` 형태의
+    기계용 한 줄만 찍고, `cmd/ip-change-engine/main.go` 의 `formatResultLine` 이 화면 표시 형식을 만든다.
