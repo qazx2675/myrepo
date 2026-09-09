@@ -26,3 +26,13 @@
 - 결과 출력 형식을 `hostname 기존IP -> 변경IP (GW 게이트웨이)` 로 변경 (기존: `hostname 변경IP 게이트웨이`).
   - `apply_body.sh` 는 이제 `RESULT|OK|host|기존IP|변경IP|GW` / `RESULT|FAIL|host|사유` 형태의
     기계용 한 줄만 찍고, `cmd/ip-change-engine/main.go` 의 `formatResultLine` 이 화면 표시 형식을 만든다.
+
+## 2026-09-09 (수정 2)
+
+- 현재 서비스 IP 확인 방식을 `getent hosts $(hostname)` 에서 `hostname -I`
+  (실패 시 `ip -4 addr show scope global`) 로 교체. 실제 랩에서 작업대상 서버의
+  /etc/hosts·DNS 항목에 IPv4 가 아예 없고(또는 IPv6 만 등록되어) getent 로는
+  현재 IP 를 알 수 없어 "getent hosts 로 현재 서비스 IP(IPv4)를 확인할 수
+  없습니다" FAIL 이 발생하는 것을 확인했다. hostname 해석에 기대지 않고 이
+  노드에 실제로 할당된 IPv4 주소를 인터페이스에서 직접 조회하도록 바꿔
+  /etc/hosts·DNS 설정 상태와 무관하게 동작하게 했다.

@@ -3,9 +3,10 @@
 #
 # 동작
 #   1. 이 노드의 hostname 으로 HOST_MAP 에서 자신의 "변경될 IP" 를 찾음
-#   2. getent hosts 로 "현재 서비스 IP" 를 구함
-#   3. NETWORK_SCRIPTS_DIR(또는 RHEL 9+ 이면 RHEL9_PATH) 안에서
-#      IPADDR=<현재 서비스 IP> 인 ifcfg-* 파일을 찾음
+#   2. 이 노드에 실제로 할당된 IPv4 주소 목록을 구함 (hosts/DNS 에 의존하지 않음 —
+#      /etc/hosts 에 IPv4 항목이 없거나 IPv6 만 등록된 노드가 실제로 있었음)
+#   3. NETWORK_SCRIPTS_DIR(또는 RHEL 9+ 이면 RHEL9_PATH) 안에서, IPADDR 값이
+#      2번 목록에 있는 ifcfg-* 파일을 찾음(= 지금 서비스 중인 IP)
 #   4. 그 파일을 .bak.<STAMP> 로 백업한 뒤 IPADDR/GATEWAY 두 줄만 갱신
 #      (파일을 통째로 덮어쓰지 않음). 네트워크 서비스는 재시작하지 않음
 #   5. 갱신 결과를 다시 읽어 검증
@@ -52,17 +53,21 @@ fi
 GATEWAY="$(echo "$NEW_IP" | awk -F. '{print $1"."$2"."$3".1"}')"
 
 #------------------------------------------------------------------------------
-# 2. 현재 서비스 IP 조회 (IPv4 전용 — IPv6/IPv4 둘 다 등록된 노드에서
-#    getent hosts 가 IPv6(::, fe80: 등)를 먼저 돌려주는 경우가 있어
-#    반드시 IPv4(점 4개짜리) 줄만 골라 씁니다)
+# 2. 이 노드에 실제 할당된 IPv4 주소 목록 조회
+#
+#    getent hosts "$(hostname)" 로 알아내는 방식은 쓰지 않습니다 — /etc/hosts·DNS
+#    설정에 좌우되어, 실제 랩에서 그 항목에 IPv4 가 아예 없고 IPv6 만 등록된
+#    노드가 있었습니다(호스트 해석과 실제 인터페이스 주소가 다를 수 있음).
+#    대신 인터페이스에 직접 물어봅니다.
 #------------------------------------------------------------------------------
 
-CUR_IP="$(getent hosts "$NODE_FQDN" 2>/dev/null | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $1; exit}')"
-if [ -z "$CUR_IP" ]; then
-    CUR_IP="$(getent hosts "$NODE_HOST" 2>/dev/null | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $1; exit}')"
+LOCAL_IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')"
+if [ -z "$LOCAL_IPS" ]; then
+    # hostname -I 를 지원하지 않는 구형 환경 대비
+    LOCAL_IPS="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1)"
 fi
-if [ -z "$CUR_IP" ]; then
-    fail_out "getent hosts 로 현재 서비스 IP(IPv4)를 확인할 수 없습니다"
+if [ -z "$LOCAL_IPS" ]; then
+    fail_out "이 노드의 IPv4 주소를 확인할 수 없습니다 (hostname -I / ip addr 모두 실패)"
 fi
 
 #------------------------------------------------------------------------------
@@ -92,25 +97,29 @@ if [ ! -d "$SEARCH_DIR" ]; then
 fi
 
 #------------------------------------------------------------------------------
-# 4. 현재 서비스 IP 가 등록된 ifcfg 파일 찾기
+# 4. LOCAL_IPS 중 하나가 등록된 ifcfg 파일 찾기 (= 지금 서비스 중인 IP)
 #------------------------------------------------------------------------------
 
 TARGET_FILE=""
+CUR_IP=""
 for f in "$SEARCH_DIR"/ifcfg-*; do
     [ -f "$f" ] || continue
     line="$(grep -i '^[[:space:]]*IPADDR[[:space:]]*=' "$f" | tail -n1)"
     [ -z "$line" ] && continue
     val="$(echo "$line" | cut -d= -f2- | tr -d '"'"'"' \t')"
-    if [ "$val" = "$CUR_IP" ]; then
-        if [ -n "$TARGET_FILE" ]; then
-            fail_out "IPADDR=$CUR_IP 가 등록된 파일이 둘 이상입니다: $TARGET_FILE, $f"
+    for ip in $LOCAL_IPS; do
+        if [ "$val" = "$ip" ]; then
+            if [ -n "$TARGET_FILE" ]; then
+                fail_out "이 노드의 IPv4($val)가 등록된 ifcfg 파일이 둘 이상입니다: $TARGET_FILE, $f"
+            fi
+            TARGET_FILE="$f"
+            CUR_IP="$val"
         fi
-        TARGET_FILE="$f"
-    fi
+    done
 done
 
 if [ -z "$TARGET_FILE" ]; then
-    fail_out "$SEARCH_DIR 에서 IPADDR=$CUR_IP 인 ifcfg 파일을 찾지 못했습니다"
+    fail_out "$SEARCH_DIR 에서 이 노드의 IPv4($(echo "$LOCAL_IPS" | tr '\n' ' '))와 일치하는 ifcfg 파일을 찾지 못했습니다"
 fi
 
 #------------------------------------------------------------------------------

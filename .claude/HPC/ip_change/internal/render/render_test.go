@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,8 +38,9 @@ func TestApplyScriptEmbedsHostMap(t *testing.T) {
 }
 
 // bash 가 있는 환경(리눅스 빌드 서버)에서만 실제 스크립트를 실행해 왕복 검증합니다.
-// hostname/getent 는 PATH 에 가짜 실행파일을 앞세워 위조합니다(ldap_setting 의
-// test_all.sh 와 같은 기법).
+// hostname 은 PATH 에 가짜 실행파일을 앞세워 위조합니다(ldap_setting 의
+// test_all.sh 와 같은 기법). "hostname -I" 로 이 노드의 실제 IPv4 를 위조합니다 —
+// getent hosts(호스트 해석)에는 의존하지 않습니다.
 func TestApplyScriptEndToEnd(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash 가 없는 환경이라 건너뜁니다")
@@ -58,8 +60,7 @@ func TestApplyScriptEndToEnd(t *testing.T) {
 	if err := os.MkdirAll(fakebin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFake(t, filepath.Join(fakebin, "hostname"), "#!/bin/sh\necho testnode\n")
-	writeFake(t, filepath.Join(fakebin, "getent"), "#!/bin/sh\necho '192.168.1.50 testnode'\n")
+	writeFakeHostname(t, fakebin, "testnode", "192.168.1.50")
 
 	entries := []target.Entry{{Host: "testnode", NewIP: "192.168.1.99"}}
 	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
@@ -111,8 +112,10 @@ func TestApplyScriptEndToEnd(t *testing.T) {
 	}
 }
 
-// getent hosts 가 IPv6 을 IPv4 보다 먼저 돌려주는 노드에서도 IPv4 만 골라 쓰는지 확인합니다.
-func TestApplyScriptEndToEndSkipsIPv6(t *testing.T) {
+// 실제 랩에서 관찰된 상황 재현: /etc/hosts·DNS 에 IPv4 항목이 없어(또는 IPv6
+// 만 등록돼) getent hosts 로는 이 노드의 IPv4 를 알 수 없는 경우에도, hostname -I
+// (인터페이스 실제 주소)로 정상 동작해야 합니다. IPv6 이 함께 나와도 걸러냅니다.
+func TestApplyScriptEndToEndIgnoresHostsIPv6(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash 가 없는 환경이라 건너뜁니다")
 	}
@@ -131,10 +134,8 @@ func TestApplyScriptEndToEndSkipsIPv6(t *testing.T) {
 	if err := os.MkdirAll(fakebin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFake(t, filepath.Join(fakebin, "hostname"), "#!/bin/sh\necho testnode\n")
-	// 실제 랩에서 관찰된 상황 재현: getent hosts 가 IPv6(fe80::...) 을 먼저 찍고
-	// IPv4 는 그 뒤에 옵니다.
-	writeFake(t, filepath.Join(fakebin, "getent"), "#!/bin/sh\nprintf 'fe80::20c:29ff:fe3f:8ac1 testnode\\n192.168.1.50 testnode\\n'\n")
+	// hostname -I 가 IPv6 과 IPv4 를 함께 돌려주는 상황을 재현합니다.
+	writeFakeHostname(t, fakebin, "testnode", "fe80::20c:29ff:fe3f:8ac1 192.168.1.50")
 
 	entries := []target.Entry{{Host: "testnode", NewIP: "192.168.1.99"}}
 	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
@@ -172,7 +173,7 @@ func TestApplyScriptEndToEndUnknownHost(t *testing.T) {
 	if err := os.MkdirAll(fakebin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFake(t, filepath.Join(fakebin, "hostname"), "#!/bin/sh\necho othernode\n")
+	writeFakeHostname(t, fakebin, "othernode", "192.168.1.50")
 
 	entries := []target.Entry{{Host: "testnode", NewIP: "192.168.1.99"}}
 	cfg := &config.Config{NetworkScriptsDir: work}
@@ -203,4 +204,12 @@ func writeFake(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// writeFakeHostname 은 apply_body.sh 가 쓰는 세 호출 형태
+// (hostname -s / hostname / hostname -I) 를 모두 위조하는 가짜 실행파일을 만듭니다.
+func writeFakeHostname(t *testing.T, fakebin, name, localIPs string) {
+	t.Helper()
+	script := fmt.Sprintf("#!/bin/sh\ncase \"$1\" in\n  -I) echo %q ;;\n  *) echo %q ;;\nesac\n", localIPs, name)
+	writeFake(t, filepath.Join(fakebin, "hostname"), script)
 }
