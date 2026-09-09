@@ -10,9 +10,10 @@
 #      (파일을 통째로 덮어쓰지 않음). 네트워크 서비스는 재시작하지 않음
 #   5. 갱신 결과를 다시 읽어 검증
 #
-# 출력 형식 (한 줄, gossh 가 "<host>: " 를 앞에 붙임)
-#   성공: <hostname> <새IP> <게이트웨이>
-#   실패: <hostname> FAIL <사유>
+# 출력 형식 (한 줄, gossh 가 "<host>: " 를 앞에 붙임. "|" 구분 기계용 포맷 —
+# 화면에 보이는 "hostname 기존IP -> 변경IP" 표시는 ip-change-engine(main.go) 이 만듭니다)
+#   성공: RESULT|OK|<hostname>|<기존IP>|<변경IP>|<게이트웨이>
+#   실패: RESULT|FAIL|<hostname>|<사유>
 ###############################################################################
 
 STAMP="$(date +%Y%m%d%H%M%S)"
@@ -25,7 +26,7 @@ ROOT="${ROOT:-}"
 
 fail_out()
 {
-    echo "$NODE_HOST FAIL $1"
+    echo "RESULT|FAIL|$NODE_HOST|$1"
     exit 1
 }
 
@@ -166,5 +167,5 @@ if [ "$check_ip" != "$NEW_IP" ] || [ "$check_gw" != "$GATEWAY" ]; then
     fail_out "$TARGET_FILE 갱신 검증 실패 (IPADDR=$check_ip GATEWAY=$check_gw)"
 fi
 
-echo "$NODE_HOST $NEW_IP $GATEWAY"
+echo "RESULT|OK|$NODE_HOST|$CUR_IP|$NEW_IP|$GATEWAY"
 exit 0

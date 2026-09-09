@@ -81,7 +81,7 @@ func TestApplyScriptEndToEnd(t *testing.T) {
 	}
 
 	got := strings.TrimSpace(string(out))
-	want := "testnode 192.168.1.99 192.168.1.1"
+	want := "RESULT|OK|testnode|192.168.1.50|192.168.1.99|192.168.1.1"
 	if got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -156,7 +156,7 @@ func TestApplyScriptEndToEndSkipsIPv6(t *testing.T) {
 	}
 
 	got := strings.TrimSpace(string(out))
-	want := "testnode 192.168.1.99 192.168.1.1"
+	want := "RESULT|OK|testnode|192.168.1.50|192.168.1.99|192.168.1.1"
 	if got != want {
 		t.Fatalf("output = %q, want %q (IPv6 을 걸러내지 못했을 가능성)", got, want)
 	}
@@ -193,7 +193,7 @@ func TestApplyScriptEndToEndUnknownHost(t *testing.T) {
 		t.Fatalf("want non-zero exit for unknown host, output:\n%s", out)
 	}
 	got := strings.TrimSpace(string(out))
-	if !strings.HasPrefix(got, "othernode FAIL") {
+	if !strings.HasPrefix(got, "RESULT|FAIL|othernode|") {
 		t.Fatalf("output = %q, want FAIL for unmapped host", got)
 	}
 }
