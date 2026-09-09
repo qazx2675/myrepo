@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ldap-automation 제작 과정</title>
+<style>
+:root{
+  --bg:#fbfaf8; --panel:#ffffff; --ink:#1c1b19; --muted:#6b6862;
+  --line:#e4e0d9; --accent:#8a5a2b; --accent-soft:#f3ece3;
+  --ok:#2f6f43; --ng:#a33a2a; --code-bg:#f5f2ed;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16151a; --panel:#1e1d23; --ink:#e8e6e1; --muted:#9c988f;
+    --line:#302e37; --accent:#d0a06a; --accent-soft:#2a2620;
+    --ok:#7fbf95; --ng:#e08b7a; --code-bg:#232128;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16151a; --panel:#1e1d23; --ink:#e8e6e1; --muted:#9c988f;
+  --line:#302e37; --accent:#d0a06a; --accent-soft:#2a2620;
+  --ok:#7fbf95; --ng:#e08b7a; --code-bg:#232128;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;
+}
+.wrap{max-width:920px;margin:0 auto;padding:56px 24px 96px}
+header{border-bottom:2px solid var(--ink);padding-bottom:24px;margin-bottom:8px}
+.kicker{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}
+h1{font-size:38px;line-height:1.2;margin:10px 0 8px;letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:15px;margin:0}
+h2{font-size:24px;margin:56px 0 4px;letter-spacing:-.01em}
+h2 .num{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:10px}
+h3{font-size:17px;margin:32px 0 6px}
+p{margin:12px 0}
+.lede{color:var(--muted);margin:0 0 8px;font-size:15px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;
+  background:var(--code-bg);padding:2px 5px;border-radius:4px}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;overflow-x:auto;margin:14px 0}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+th{background:var(--accent-soft);font-weight:700;white-space:nowrap}
+.step{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:0 8px 8px 0;padding:18px 22px;margin:18px 0}
+.step .tag{display:inline-block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);font-weight:700;margin-bottom:6px}
+.step h3{margin-top:0}
+blockquote{margin:12px 0;padding:10px 16px;border-left:3px solid var(--line);
+  color:var(--muted);font-style:normal;background:var(--accent-soft);border-radius:0 6px 6px 0}
+blockquote p{margin:4px 0}
+.ok{color:var(--ok);font-weight:700}
+.ng{color:var(--ng);font-weight:700}
+.note{border:1px dashed var(--line);border-radius:8px;padding:14px 18px;margin:18px 0;
+  background:var(--panel);font-size:14.5px}
+.note b{color:var(--accent)}
+footer{margin-top:72px;padding-top:20px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:13px}
+ul,ol{padding-left:22px}
+li{margin:6px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">교육자료 · Making of</div>
+  <h1>ldap-automation 을 만든 과정</h1>
+  <p class="sub">어떤 지시를 어떤 순서로 주었고, 그것이 어떤 설계 결정과 명령으로 이어졌는지에 대한 기록.
+  2026-09-07 · Rocky Linux 8.10 (192.168.0.58) 에서 작업</p>
+</header>
+
+<p class="lede">이 문서는 완성된 코드를 설명하지 않습니다. <b>코드에 도달하기까지의 판단</b>을 설명합니다.
+같은 방식으로 다른 도구를 만들 때 참고하시라고 남깁니다.</p>
+
+<h2><span class="num">01</span>출발점: 계획서와 그 결함</h2>
+
+<p>시작은 이미 작성된 설계 계획서(<code>ldap_automation_system_design.md</code>)와,
+appl 사이트 판별 방식을 안내하는 참고 스크립트(<code>ntp_dns_app.txt</code>) 두 개였습니다.
+지시는 <q>계획서다. 누락된 항목이나 설계 단계에서 애매한 것이 있으면 나한테 질문해줘</q> 였습니다.</p>
+
+<p>여기서 바로 코드를 쓰지 않은 것이 이 프로젝트의 첫 갈림길입니다. 계획서를 읽고 나온 것은
+<b>동작하지 않을 결함 6개와 결정이 필요한 질문 22개</b>였습니다. 대표적인 것:</p>
+
+<table>
+<tr><th>결함</th><th>내용</th></tr>
+<tr><td>a2/a3 판별 불가</td><td>두 사이트의 <code>uri_order</code> 가 <code>uri2,uri1,uri3</code> 로 <b>완전히 동일</b>. URI 순서로는 절대 구분할 수 없는데 계획서의 판별 로직은 URI 순서에 의존</td></tr>
+<tr><td>uri3=NONE 시 재충돌</td><td>uri3 를 빼면 a1 과 a4 의 패턴이 <code>uri1 uri2</code> 로 같아짐</td></tr>
+<tr><td>INFRA 개념 부재</td><td>계획서 스키마는 단일 인프라 전제인데, 요구사항은 인프라가 여러 개</td></tr>
+<tr><td>죽은 코드</td><td><code>CURRENT_MP</code>(auto.appl 파싱)와 <code>OS_VERSION</code> 을 구해놓고 한 번도 쓰지 않음</td></tr>
+<tr><td>배포 흐름 단절</td><td>래퍼가 <b>로컬에서</b> 엔진을 돌리고 원격에는 체크만 보냄. 원격 설정 적용 단계가 없음</td></tr>
+<tr><td>서비스 재시작 누락</td><td>파일만 고치고 <code>sssd</code>/<code>nslcd</code>/<code>autofs</code> 재시작 언급이 한 줄도 없음. 그러면 실제로 적용되지 않음</td></tr>
+</table>
+
+<div class="note">
+<b>배울 점.</b> 계획서가 있다고 해서 그 계획서가 맞는 것은 아닙니다.
+a2/a3 문제는 표를 한 번만 세로로 읽어보면 보이지만, 코드를 먼저 쓰기 시작하면
+"일단 계획대로" 구현하고 나중에 통합 테스트에서 발견하게 됩니다.
+</div>
+
+<h2><span class="num">02</span>질문을 객관식으로 바꾼 지점</h2>
+
+<p>질문 22개를 던졌지만 답이 오지 않았습니다. 대신 다른 스킬이 세 번 연속 호출됐습니다
+(<code>git-upload-sk</code>, <code>home-test</code>, <code>andrej-karpathy-skills</code>).
+목록이 길어 답하기 부담스러운 상태라고 판단하고, <b>객관식으로 답할 수 있는 4개를 선택지로 재구성</b>했습니다.</p>
+
+<p>이때 답이 나왔습니다.</p>
+
+<table>
+<tr><th>질문</th><th>선택된 답</th></tr>
+<tr><td>판별 기준</td><td>DNS+NTP / LDAP / auto.appl <b>셋 다 교차 검증</b></td></tr>
+<tr><td>엔진 실행 위치</td><td>관리 노드에서 원격 제어, <b>사용자가 만든 gossh 사용</b></td></tr>
+<tr><td>설정 파일 형식</td><td>대상 노드에 jq 가 없음 → <b>flat key=value</b></td></tr>
+<tr><td>대상 OS</td><td>RHEL 7 포함 → <code>CGO_ENABLED=0</code> 정적 빌드</td></tr>
+</table>
+
+<p>이어진 답변에서 판별 모델이 더 정확해졌습니다.
+<q>URI DNS+NTP binddn binpw 모든 집합을 기준으로 해야 한다</q>,
+<q>DNS + NTP를 세트로 1차 인프라 분류를 진행하고 mountpoint는 site별 설정값이 고유하다</q>.</p>
+
+<div class="note">
+<b>배울 점.</b> 답이 안 온다고 추측해서 진행하지 마십시오. 대신 <b>질문의 형태를 바꾸십시오.</b>
+서술형 22개보다 객관식 4개가 훨씬 빨리 답을 받습니다.
+그리고 답할 수 없는 것(자산 파일 실제 포맷 같은)은 끝까지 물어야 합니다 — 추측하면 100% 다시 씁니다.
+</div>
+
+<h2><span class="num">03</span>환경을 물어보지 않고 직접 확인한 것들</h2>
+
+<p>빌드 환경이 <code>root@192.168.0.58</code> 로 정해지자, 물어볼 필요 없는 것은 직접 조사했습니다.</p>
+
+<pre><code>ssh root@192.168.0.58 'cat /etc/redhat-release; go version'
+# → Rocky Linux 8.10 / go1.26.5
+
+# 인터넷 연결 확인 (go mod vendor 가능 여부)
+curl -sI https://proxy.golang.org/     # → HTTP/2 200
+
+# 도구 존재 확인
+for t in jq git gossh shellcheck sssd nslcd chronyd ntpd autofs; do
+    command -v $t &gt;/dev/null &amp;&amp; echo "$t yes" || echo "$t no"
+done
+# → jq/git/gossh/sssd/chronyd 있음, shellcheck/nslcd/ntpd/autofs 없음</code></pre>
+
+<p>이 한 번의 조사로 세 가지가 결정됐습니다.</p>
+<ul>
+<li><code>shellcheck</code> 미설치 → CI 는 <code>bash -n</code> 만 사용</li>
+<li><code>nslcd</code>/<code>ntpd</code>/<code>autofs</code> 미설치 → RHEL 7 경로를 실장비로 검증 불가
+    → <b><code>--root</code> 플래그를 설계에 추가</b>해 가짜 <code>/etc</code> 트리로 테스트</li>
+<li>인터넷 연결됨 → <code>vendor/</code> 를 만들 수 있음 (다만 이 프로젝트는 표준 라이브러리만 써서 결국 불필요)</li>
+</ul>
+
+<h3>gossh 소스를 읽은 것이 설계를 바꿨습니다</h3>
+
+<pre><code>ssh root@192.168.0.58 'cd "/root/myrepo/.claude/공통/gossh/v2" &amp;&amp; \
+  grep -n "flag\.\|Sprintf\|Session\|CombinedOutput" main.go'</code></pre>
+
+<table>
+<tr><th>소스에서 발견한 것</th><th>설계에 미친 영향</th></tr>
+<tr><td>파일 전송 옵션이 없음</td><td><code>scp</code> 대신 <b>base64 파이프 주입</b> 채택. base64 는 <code>[A-Za-z0-9+/=]</code> 뿐이라 따옴표·개행·특수문자로 명령이 깨지지 않음</td></tr>
+<tr><td>명령에 <code>/user/</code> 가 있으면 병렬 350 강제</td><td>autofs 보호 장치. <code>-cf</code> 로 뚫지 않고 그대로 존중</td></tr>
+<tr><td>위험어 = reboot/poweroff/shutdown/halt/init 0/init 6/ddc</td><td>우리 명령은 해당 없음 → <code>-dnlgjawkrdjqghkrdls</code> 미사용 확정</td></tr>
+<tr><td>출력이 <code>&lt;host&gt;: &lt;내용&gt;</code> 고정</td><td>결과 파서를 이 형식에 맞춰 작성</td></tr>
+<tr><td>구버전의 따옴표 절단 버그가 v2 에서 수정됨</td><td>README 에 <b>"v2 를 쓰라"</b> 를 명시</td></tr>
+</table>
+
+<div class="note">
+<b>배울 점.</b> 의존하는 도구의 <code>--help</code> 만 보지 말고 <b>소스를 읽으십시오.</b>
+<code>--help</code> 에는 "/user/ 경로면 병렬을 350으로 줄인다" 같은 내용이 없습니다.
+이걸 모르고 <code>-c 1000</code> 을 믿었다면 실제 동작과 다른 가정 위에 설계했을 것입니다.
+</div>
+
+<h2><span class="num">04</span>구현 중 내린 설계 결정</h2>
+
+<div class="step">
+  <span class="tag">결정 A6</span>
+  <h3>파일 전체 교체가 아니라 키 단위 수술적 갱신</h3>
+  <p><code>autofs.conf</code> 와 <code>sssd.conf</code> 에는 우리가 건드리지 않는 운영 설정이 함께 있습니다.
+  템플릿으로 통째 생성하면 그게 전부 날아갑니다. 해당 키만 바꾸고 없으면 추가하는 방식으로 갔습니다.</p>
+  <p>검증: fixture 적용 후 <code>BASE</code>, <code>TLS_CACERTDIR</code>, <code>timeout</code>,
+  <code>browse_mode</code>, <code>id_provider</code>, <code>cache_credentials</code>, <code>driftfile</code> 이
+  모두 그대로 남아 있는지 확인.</p>
+</div>
+
+<div class="step">
+  <span class="tag">결정 A7</span>
+  <h3>노드별이 아니라 사이트별로 스크립트를 만든다</h3>
+  <p>RHEL 버전과 hostname(s4) 판정을 <b>노드 현장</b>에서 하게 만들면, 같은 사이트의 노드는 전부
+  동일한 스크립트를 받으면 됩니다. gossh 호출이 노드 수가 아니라 <b>사이트 수(보통 4회)</b>로 끝납니다.</p>
+</div>
+
+<div class="step">
+  <span class="tag">결정</span>
+  <h3><code>-infra</code> 에 기본값을 두지 않는다</h3>
+  <p>자산현황 파일이 <code>hostname&lt;TAB&gt;site</code> 두 컬럼이라 인프라 정보가 없습니다.
+  기본값을 두면 다른 인프라의 LDAP 값을 통째로 밀어넣는 사고가 가능합니다. 그래서 필수 인자로 만들었습니다.</p>
+</div>
+
+<div class="step">
+  <span class="tag">결정</span>
+  <h3>사이트 판별은 auto.appl storage 로만 한다</h3>
+  <p>01 에서 발견한 a2/a3 문제의 해법입니다. URI 순서는 사이트끼리 겹칠 수 있으므로
+  <b>판별 키가 될 수 없고</b>, 사이트가 정해진 뒤 "그 기대 순서와 맞는가"를 보는 <b>검증에만</b> 씁니다.</p>
+</div>
+
+<h2><span class="num">05</span>테스트가 잡아낸 실제 버그 3개</h2>
+
+<p>이것들은 코드 리뷰로는 안 잡히고 <b>돌려봐야</b> 나오는 종류입니다.</p>
+
+<h3><span class="ng">버그 1</span> — awk <code>-v</code> 가 정규식을 먹어치움</h3>
+
+<pre><code>awk -v secre="^[ \t]*\[domain/" ...
+# awk: warning: escape sequence `\[' treated as plain `['
+# → 정규식이 ^[ TAB]*[domain/ 로 깨져 문자클래스가 열린 채 끝남
+# → awk 가 빈 출력을 내고, 그게 sssd.conf 에 그대로 쓰여 파일이 날아감</code></pre>
+
+<p>수정은 두 갈래였습니다.</p>
+<ol>
+<li><b>원인 제거</b> — 데이터를 <code>-v</code> 로 넘기지 않고 환경변수 + <code>ENVIRON[]</code> 사용.
+    섹션 판정도 정규식을 버리고 문자열 접두사 비교로 변경.</li>
+<li><b>방어선 추가</b> — <code>commit_file</code> 에 "원본에 내용이 있었는데 결과가 비면 반영하지 않는다" 가드 추가.
+    다음에 다른 곳에서 비슷한 사고가 나도 설정 파일이 날아가지 않습니다.</li>
+</ol>
+
+<h3><span class="ng">버그 2</span> — 테스트 모드인데 진짜 서비스를 재시작</h3>
+
+<p><code>ROOT=/tmp/fx8</code> 로 fixture 에 쓰면서 <code>systemctl restart sssd</code> 가
+<b>실제 .58 의 sssd</b> 를 재시작했습니다. 운영 노드에서 이런 테스트를 했다면 사고입니다.</p>
+
+<pre><code>if [ -n "$ROOT" ]; then
+    log SKIP-RESTART "$svc (ROOT=$ROOT 테스트 모드)"
+    return 0
+fi</code></pre>
+
+<h3><span class="ng">버그 3</span> — chrony 의 <code>pool</code> 줄을 안 지움</h3>
+
+<p>apply 는 <code>server</code> 줄만 교체했는데, 체크 스크립트는 <code>ntp_dns_app.txt</code> 를 따라
+<code>server</code> 와 <code>pool</code> 을 <b>둘 다</b> NTP 소스로 셉니다. 결과적으로
+"적용은 성공했는데 검증은 FAIL" 이 나왔습니다.</p>
+
+<p>흥미로운 점은 <b>체크 스크립트가 apply 스크립트의 버그를 잡아냈다</b>는 것입니다.
+두 스크립트를 독립적으로 만들고 왕복(round-trip) 테스트를 한 덕분입니다.</p>
+
+<div class="note">
+<b>배울 점.</b> "설정하는 쪽"과 "검사하는 쪽"을 한 코드에서 공유하지 마십시오.
+따로 만들어서 <b>A로 적용한 뒤 B로 검사</b>하면, 둘 중 하나가 틀렸을 때 드러납니다.
+같은 로직을 공유했다면 이 버그는 조용히 통과했을 것입니다.
+</div>
+
+<h3><span class="ng">덤</span> — 테스트 하니스 자체의 버그</h3>
+
+<p>첫 회귀 테스트 실행에서 7개가 FAIL 로 떴는데, 출력을 보니 도구는 전부 정확했습니다.
+<code>grep '&lt;TAB&gt;FAIL&lt;TAB&gt;'</code> 로 찾고 있었지만 실제 출력은 <code>FAIL</code> 이 줄 맨 앞이었습니다.
+<b>실패를 봤을 때 코드가 아니라 테스트를 먼저 의심해야 하는 경우</b>가 있습니다.</p>
+
+<h2><span class="num">06</span>최종 검증</h2>
+
+<pre><code>cd /root/myrepo/.claude/HPC/ldap-automation
+./setup.sh          # 오프라인 빌드
+go test ./...       # 단위 테스트
+./test_all.sh       # fixture 회귀 테스트 (장비 불필요)</code></pre>
+
+<p><span class="ok">PASS: 14 &nbsp; FAIL: 0</span></p>
+
+<table>
+<tr><th>시나리오</th><th>확인 내용</th></tr>
+<tr><td>RHEL 8 · a1~a4</td><td>적용 → 검증 왕복이 전부 OK, 사이트가 정확히 식별됨</td></tr>
+<tr><td>멱등성</td><td>두 번째 실행은 <code>NOCHANGE</code></td></tr>
+<tr><td>RHEL 7</td><td><code>nslcd</code>+<code>ntp</code> 선택, <code>sssd.conf</code> 는 생성조차 안 함</td></tr>
+<tr><td>s4 예외</td><td>RHEL 8 인데 <code>nslcd</code>+<code>ntp</code> 강제, <code>sssd</code>/<code>chrony</code> 미변경</td></tr>
+<tr><td>인프라 혼재</td><td><code>auto.appl</code> 만 다른 인프라 값 → 전 항목 FAIL</td></tr>
+<tr><td>URI 순서 오류</td><td><code>ldap.conf</code> 만 FAIL, 나머지 6개는 OK</td></tr>
+<tr><td>uri3=NONE</td><td>URI 줄이 동일해진 a1/a4 를 storage 로 정확히 구분 <b>(원래 계획서가 못 하던 것)</b></td></tr>
+</table>
+
+<p>그리고 실제 gossh 경로를 통한 전 구간 시험:</p>
+
+<pre><code>printf '192.168.0.58\ta1\n' &gt; conf/assets.txt
+./bin/ldap-config-engine -config conf/ldap_config.conf -assets conf/assets.txt \
+                         -infra zxcv -root /tmp/e2e -dry-run
+./bin/ldap-config-engine ... -infra zxcv -root /tmp/e2e
+ROOT=/tmp/e2e bash scripts/ldap_check.sh</code></pre>
+
+<h2><span class="num">07</span>정리 — 다음에 비슷한 걸 만든다면</h2>
+
+<ol>
+<li><b>계획서를 먼저 반증하십시오.</b> 표를 세로로 읽고, 값이 겹치는 곳을 찾고, 데이터 흐름이 끊긴 곳을 찾으십시오.</li>
+<li><b>추측할 수 없는 것은 끝까지 물으십시오.</b> 다만 답이 안 오면 질문의 <b>형태</b>를 바꾸십시오.</li>
+<li><b>의존 도구의 소스를 읽으십시오.</b> <code>--help</code> 는 절반만 알려줍니다.</li>
+<li><b>테스트 가능성을 설계에 넣으십시오.</b> <code>--root</code> 하나로 실장비 없이 전 분기를 검증할 수 있게 됐습니다.</li>
+<li><b>적용과 검사를 분리하십시오.</b> 서로가 서로의 버그를 잡습니다.</li>
+<li><b>파괴적 동작에는 방어선을 두 겹 치십시오.</b> 원인 제거 + 최후 가드.</li>
+<li><b>테스트 실패를 봤을 때 테스트를 먼저 의심하십시오.</b></li>
+</ol>
+
+<div class="note">
+<b>그래도 남는 것.</b> 이 도구는 인증과 이름해석에 직결되는 파일을 고칩니다.
+14개 테스트가 통과했다는 사실이 "운영에서 안전하다"를 뜻하지 않습니다.
+<code>-dry-run</code> → 소수 노드 → 전체 순서를 지키고, <b>적용 후에는 무작위 서버 몇 대를 직접 확인</b>하십시오.
+</div>
+
+<footer>
+ldap-automation · 제작 기록 · 2026-09-07<br>
+본 도구의 점검 결과는 참고용(보조 도구)입니다. 설정 변경 후 실제 반영 여부는 직접 확인하십시오.
+</footer>
+
+</div>
+</body>
+</html>
