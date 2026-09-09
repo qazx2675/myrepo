@@ -53,7 +53,10 @@ ldap_conf   = ../../HPC/ldap_setting/conf/ldap_config.conf
 ldap_assets = ../../HPC/ldap_setting/conf/assets.txt
 
 # 대상 인프라 이름 (ldap_config.conf 의 infra.<이름>)
-ldap_infra =
+# ★ 여기서는 지정하지 않습니다. 이전 작업의 값이 그대로 남아 다음 실행에서
+#   조용히 다른 인프라에 적용되는 사고를 막기 위해, change.sh 가 매 실행마다
+#   ./change.sh --infra <이름> 또는 대화형 선택으로 직접 물어봅니다
+#   (원본 ldap_setting 의 "-infra 에 기본값을 두지 말라" 규칙과 동일).
 
 # 자산현황에 없는 호스트에 적용할 site. 비우면 그런 호스트는 건너뜁니다.
 # (ev01~ev03 접미사를 뗀 BM 조회까지 실패했을 때만 쓰임 — §11)
