@@ -58,7 +58,6 @@ $EDITOR integration.conf        # 아래 값은 반드시 채웁니다
 
 | 키 | 설명 |
 |---|---|
-| `ldap_infra` | `ldap_config.conf` 의 대상 인프라 이름 |
 | `ldap_conf` / `ldap_assets` | 운영자가 관리하는 실제 LDAP 설정·자산현황 파일 경로 |
 | `vc_id` | vCenter 로그인 계정 (포트그룹 단계) |
 | `bm_domain` | BM 호스트에 붙일 도메인 (기본 `seccae.com`) |
@@ -66,6 +65,13 @@ $EDITOR integration.conf        # 아래 값은 반드시 채웁니다
 
 `conf/ip_change.conf` 는 실행 시 `integration.conf` 의 `ipchange.*` 키에서
 **자동 렌더링**되므로 직접 만들지 않습니다.
+
+> **LDAP 대상 인프라는 `integration.conf` 에 두지 않습니다.** 원본
+> `ldap_setting` 이 `-infra` 에 기본값을 두지 않는 것과 같은 이유로, 이전
+> 작업의 인프라 값이 그대로 남아 다음 실행에서 조용히 다른 인프라에 적용되는
+> 사고를 막기 위함입니다. LDAP 단계 실행마다 `--infra <이름>` 을 넘기거나,
+> 생략하면 `ldap_config.conf` 에 정의된 인프라 목록을 보여주고 대화형으로
+> 물어봅니다(비대화형 실행은 `--infra` 가 없으면 오류로 중단).
 
 ### 1.3 사용자 커스텀 영역 (선택)
 
@@ -112,7 +118,7 @@ read -rsp 'vCenter PW: ' VC_PASSWORD; export VC_PASSWORD; echo  # 포트그룹 �
 ```
 전처리(vswitch 표준화)
   → [C] IP 변경        대상표 출력 → 확인 → ip-change-engine
-  → [D] LDAP 설정      ldap-config-engine (site 는 자산현황/기본값)
+  → [D] LDAP 설정      대상 인프라 선택(--infra 또는 대화형) → 확인 → ldap-config-engine (site 는 자산현황/기본값)
   → 결과 파일 기록 (§6)
   → 포트그룹 진행할까요?
        y → [E] vm-network-migration run.sh 에 위임
@@ -171,6 +177,7 @@ rollback 명령이 없음) 대상 VM 목록을 출력하고 각 노드에서
 | `--from C\|D\|E` | 해당 단계부터 끝까지 |
 | `--folder <이름>` | 전처리 3열(`BM IP VLAN`) 줄에 쓸 폴더명 (비대화형일 때 필수) |
 | `--tag <문자열>` | 전처리 가운데 문자열 (기본 `integration.conf` 의 `preprocess_tag`) |
+| `--infra <이름>` | LDAP 대상 인프라(`ldap_config.conf` 의 `infra.<이름>`). 미지정 시 대화형 선택(비대화형일 때 필수) |
 
 단계 문자: **C** = IP 변경, **D** = LDAP, **E** = 포트그룹.
 
@@ -240,7 +247,7 @@ IP 가 실패한 VM 이 새 VLAN 으로 옮겨져 "옛 IP + 새 VLAN" 으로 고
 | **C1** | IP: `ip-change-engine` 실행 실패 (설정/입력) | `logs/` 의 엔진 출력 확인, `conf/ip_change.conf` |
 | **C2** | IP: 일부/전체 대상에서 변경 실패 | `failed_<계정>.txt` 확인 후 `--retry ip` |
 | **D1** | LDAP: 자산현황·기본값 모두로 site 판정 실패 | 자산현황에 호스트 추가, 또는 `default_site` 설정 |
-| **D2** | LDAP: `ldap-config-engine` 실행 실패 (설정/입력) | `ldap_infra`, `ldap_conf` 경로 확인 |
+| **D2** | LDAP: `ldap-config-engine` 실행 실패 (설정/입력), 또는 `--infra` 미지정(비대화형)/`ldap_conf` 에서 infra 목록을 못 찾음 | `--infra <이름>` 지정, `ldap_conf` 경로·내용 확인 |
 | **D3** | LDAP: 일부/전체 대상에서 변경 실패 | `failed_<계정>.txt` 확인 후 `--retry ldap` |
 | **E1** | 포트그룹: VM 을 vCenter 에서 못 찾음 | `--debug-inventory` 로 실제 이름 확인 |
 | **E2** | 포트그룹: 동명 VM 이 여러 개 | vCenter 에서 정리 후 재시도 |

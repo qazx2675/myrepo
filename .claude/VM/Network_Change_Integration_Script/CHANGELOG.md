@@ -2,6 +2,36 @@
 
 날짜순(최신이 위).
 
+## 2026-09-09 — LDAP 대상 인프라를 매 실행 필수 선택으로 변경
+
+- **`change.sh`**: `--infra <이름>` 옵션 추가 (usage 에 반영, `usage()` 의
+  헤더 주석 추출 범위도 수정).
+- **`lib/stages.sh`**: `select_ldap_infra()`/`_ldap_infra_names()` 추가.
+  `--infra` 가 없으면 `ldap_conf`(`ldap_config.conf`)에서 `infra.<이름>.` 패턴을
+  뽑아 대화형(`select`)으로 고르게 하고, 비대화형이면 사용 가능한 이름 목록과
+  함께 D2 로 중단. `stage_ldap()` 진입 시 선택된 인프라를 로그로 남기고
+  (`-y`/`--dry-run` 이 아니면) 적용 전 확인 프롬프트를 추가. `_run_ldap` 은
+  `conf_get ldap_infra` 대신 전역 `$INFRA` 사용.
+- **`lib/incident.sh`**: 인시던트 저장 시 선택된 `INFRA` 를 `meta` 의
+  `ldap_infra` 로 기록하고, `incident_load` 에서 복원. `rollback_incident` 는
+  `conf_get ldap_infra` 대신 인시던트에 저장된 `$INFRA` 로 롤백해 항상 원래
+  적용됐던 인프라로 정확히 되돌아가게 함. 저장값이 없는(구버전) 인시던트는
+  자동 롤백을 건너뛰고 수동 명령을 안내.
+- **`integration.conf.sample`**: `ldap_infra` 키 제거(주석으로 사유 설명만
+  남김). `README.md` 설정 표·옵션 표·에러코드(D2) 대응표·전체 흐름 다이어그램
+  갱신. `Network_Change_Integration_Plan.md` §11.4 에 배경 설명 추가.
+- **사유**: 원본 `ldap_setting`(`deploy_ldap.sh`)은 `-infra` 를 매 실행 필수
+  CLI 인자로 요구해(기본값 없음, ARCHITECTURE 규칙 5) 이전 작업의 인프라가
+  남아 다음 실행에 잘못 적용되는 사고를 막았는데, 통합 스크립트는 이를
+  `integration.conf` 의 정적 값으로 되돌려 그 안전장치를 무력화하고 있었음.
+  원본과 동일한 안전장치로 복원.
+- **영향 범위**: `change.sh`, `lib/stages.sh`, `lib/incident.sh`,
+  `integration.conf.sample`, `README.md`, `Network_Change_Integration_Plan.md`.
+- **검증**: `bash -n` 전체 통과. `tests/test_preprocess.sh` 통과(무관 영역
+  회귀 없음 확인). `select_ldap_infra` 를 `ldap_config.conf.sample` 로 단위
+  실행: `--infra zxcv` 지정 시 그대로 사용, 미지정+비대화형(`</dev/null`) 시
+  사용 가능한 이름 목록과 함께 D2 로 정상 중단되는 것 확인.
+
 ## 2026-09-09 — 최초 구현 (nci-v0.1.0)
 
 ### 신규

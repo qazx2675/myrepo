@@ -17,6 +17,9 @@
 #   --from  C|D|E       해당 단계부터 끝까지
 #   --folder <이름>     전처리 3열(BM IP VLAN) 줄에 쓸 폴더명
 #   --tag <문자열>      전처리 가운데 문자열 (기본 integration.conf 의 preprocess_tag)
+#   --infra <이름>      LDAP 대상 인프라 (ldap_config.conf 의 infra.<이름>).
+#                        미지정 시 대화형으로 물어봅니다(비대화형이면 오류).
+#                        integration.conf 에는 기본값을 두지 않습니다.
 #
 # 환경변수:
 #   GOSSH_PW      대상 노드 SSH 비밀번호 (IP/LDAP 단계)
@@ -36,12 +39,12 @@ cd "$(dirname "$0")"
 CONF_FILE="${INTEGRATION_CONF:-./integration.conf}"
 WORK="./work"; LOG_DIR="./logs"; CONF_DIR="./conf"
 
-usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # ── 인자 파싱 ──────────────────────────────────────────────────────────────
 SUBCMD=""; RETRY=""; RUN_USER=""; DRY_RUN=0; DEBUG_LEVEL=0
 DEBUG_INVENTORY=0; PP_FOLDER=""; PP_TAG_OVERRIDE=""; ONLY=""; FROM=""
-INCIDENT_ARG=""; ASSUME_YES=0
+INCIDENT_ARG=""; ASSUME_YES=0; INFRA_ARG=""; INFRA=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -57,6 +60,7 @@ while [ $# -gt 0 ]; do
     --from)            FROM="${2:-}"; shift 2 ;;
     --folder)          PP_FOLDER="${2:-}"; shift 2 ;;
     --tag)             PP_TAG_OVERRIDE="${2:-}"; shift 2 ;;
+    --infra)           INFRA_ARG="${2:-}"; shift 2 ;;
     -y|--yes)          ASSUME_YES=1; shift ;;
     -u|--user)         RUN_USER="${2:-}"; shift 2 ;;
     -h|--help)         usage; exit 0 ;;
