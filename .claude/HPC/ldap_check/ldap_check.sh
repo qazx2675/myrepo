@@ -18,7 +18,9 @@
 #   (URI 순서는 사이트마다 겹칠 수 있어 판별 키로 쓸 수 없습니다. 판별이 아니라
 #    '결정된 사이트의 기대 순서와 맞는지' 검증에만 씁니다.)
 #
-# 출력   <OK|FAIL><TAB>/<infra><TAB><파일명>[<TAB>부가정보]
+# 출력   한 줄 요약만 찍습니다.
+#          정상: INFO<TAB>LDAP<TAB><infra><TAB><site>
+#          실패: FAIL<TAB>LDAP<TAB>UNDEFINED  (원인은 이 스크립트 안에서만 판정, 밖으로는 안 찍음)
 # 종료코드  0 = 전부 OK,  1 = 설정 불일치,  2 = 판별 불가 또는 파일 없음
 #
 # jq 를 쓰지 않습니다. 설정 파일이 평문 key=value 이기 때문입니다.
@@ -28,7 +30,7 @@ CONFIG_FILE="${LDAP_CONFIG:-$(dirname "$0")/ldap_config.conf}"
 ROOT="${ROOT:-}"
 
 if [ ! -f "$CONFIG_FILE" ]; then
-    echo "FAIL	/unknown	config	설정 파일 없음: $CONFIG_FILE"
+    echo "FAIL	LDAP	UNDEFINED"
     exit 2
 fi
 
@@ -56,7 +58,7 @@ conf_list()
 INFRAS="$(sed -n 's/^[[:space:]]*infra\.\([^.]*\)\..*$/\1/p' "$CONFIG_FILE" | sort -u)"
 
 if [ -z "$INFRAS" ]; then
-    echo "FAIL	/unknown	config	설정 파일에 infra 정의가 없습니다"
+    echo "FAIL	LDAP	UNDEFINED"
     exit 2
 fi
 
@@ -93,7 +95,7 @@ if [ -z "$OS_MAJOR" ]; then
     OS_MAJOR="$(sed -n 's/^VERSION_ID="\{0,1\}\([0-9][0-9]*\).*/\1/p' "$ROOT/etc/os-release" 2>/dev/null | head -n1)"
 fi
 if [ -z "$OS_MAJOR" ]; then
-    echo "FAIL	/unknown	os	OS 버전 판별 불가"
+    echo "FAIL	LDAP	UNDEFINED"
     exit 2
 fi
 
@@ -214,27 +216,20 @@ fi
 # 교차 검증
 ###############################################################################
 
-FILES="resolv.conf $(basename "$TIME_FILE") ldap.conf autofs.conf autofs_ldap_auth.conf $(basename "$AUTH_FILE") auto.appl"
-
 if [ -z "$INFRA_DNSNTP" ] || [ -z "$INFRA_LDAP" ] || [ -z "$INFRA_APPL" ] ||
    [ "$INFRA_DNSNTP" != "$INFRA_LDAP" ] || [ "$INFRA_DNSNTP" != "$INFRA_APPL" ]; then
 
-    echo "FAIL	/unknown	infra-mismatch	dns+ntp=${INFRA_DNSNTP:-?} ldap=${INFRA_LDAP:-?} appl=${INFRA_APPL:-?}"
-    for f in $FILES; do
-        echo "FAIL	/unknown	$f"
-    done
+    echo "FAIL	LDAP	UNDEFINED"
     exit 1
 fi
 
 INFRA="$INFRA_DNSNTP"
 RC=0
+# 파일별 결과는 더 이상 화면에 찍지 않고, RC 만 조용히 추적합니다.
+# 사람이 원인을 봐야 할 때는 이 스크립트를 노드에서 직접 실행해 디버깅하십시오.
 report()
 {
-    if [ "$1" = "0" ]; then
-        shift; echo "OK	/$INFRA	$*"
-    else
-        shift; echo "FAIL	/$INFRA	$*"; RC=1
-    fi
+    [ "$1" = "0" ] || RC=1
 }
 
 ###############################################################################
@@ -332,4 +327,9 @@ if [ -n "$EXPECT_WAPPL_MOUNT" ]; then
     report $? auto.appl-wappl "$SITE"
 fi
 
+if [ "$RC" = "0" ]; then
+    echo "INFO	LDAP	$INFRA	$SITE"
+else
+    echo "FAIL	LDAP	UNDEFINED"
+fi
 exit $RC

@@ -15,6 +15,7 @@
 | `internal/remote/` | gossh 호출. base64 로 인코딩해 원격 주입하고 `<host>: <내용>` 출력을 파싱 |
 | `scripts/deploy_ldap.sh` | 관리자용 래퍼. 계정 선택 → 엔진 실행 → 전 노드 검증 |
 | `scripts/run.sh` | 대화형 실행 래퍼. 계정 선택(목록 비어있는 골격) → conf 에서 읽은 인프라 메뉴 선택 → DRY-RUN → `yes` 확인 → 적용. 검증은 하지 않음 |
+| `scripts/add_infra_from_ldapconf.sh` | 보조 도구. 기존 `ldap.conf` 에서 URI/BINDDN/BINDPW 를 읽어 conf 에 `infra.<이름>.*` 블록을 이어붙임. dns/ntp/site/storage/mountpoint 는 ldap.conf 에 없어 TODO 로만 남김 |
 | `conf/*.sample` | 설정·자산 예시. 실제 값 파일은 `.gitignore` 로 커밋 차단 |
 | `교육자료.html` | 제작 과정 기록 |
 

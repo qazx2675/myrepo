@@ -84,8 +84,7 @@ for S in a1 a2 a3 a4; do
     make_fixture "$WORK/f_$S" 8
     apply "$WORK/f_$S" "$WORK/ap_$S.sh"
     out="$(check "$WORK/f_$S")"; rc=$?
-    if [ "$rc" = "0" ] && ! printf '%s\n' "$out" | grep -q '^FAIL' &&
-       printf '%s\n' "$out" | grep -q "auto.appl $S"; then
+    if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tzxcv\t%s' "$S")" ]; then
         ok "zxcv/$S 라운드트립"
     else
         ng "zxcv/$S 라운드트립 (rc=$rc)" "$out"
@@ -118,7 +117,7 @@ else
 fi
 
 out="$(check "$WORK/f7")"
-if [ -z "$(printf '%s' "$out" | grep FAIL)" ] && printf '%s' "$out" | grep -q "ntp.conf"; then
+if [ "$out" = "$(printf 'INFO\tLDAP\tzxcv\ta1')" ]; then
     ok "RHEL7 검증 OK"
 else
     ng "RHEL7 검증 실패" "$out"
@@ -146,8 +145,7 @@ echo "[5] 인프라 혼재 : auto.appl 만 다른 인프라 값이면 전부 FAI
 cp -a "$WORK/f_a1" "$WORK/fmix"
 printf '/appl\t-rw,soft,intr\tqwer3:/appl3\n' > "$WORK/fmix/etc/auto.appl"
 out="$(check "$WORK/fmix")"; rc=$?
-if [ "$rc" = "1" ] && printf '%s\n' "$out" | grep -q "infra-mismatch" &&
-   ! printf '%s\n' "$out" | grep -q '^OK'; then
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
     ok "인프라 혼재 감지"
 else
     ng "인프라 혼재를 잡지 못함 (rc=$rc)" "$out"
@@ -160,11 +158,10 @@ echo "[6] URI 순서 오류 : ldap.conf 만 FAIL 이고 나머지는 OK 여야 �
 cp -a "$WORK/f_a1" "$WORK/ford"
 sed -i 's|^URI .*|URI ldap://10.10.1.21/ ldap://10.10.1.20/ ldap://10.10.1.22/|' "$WORK/ford/etc/openldap/ldap.conf"
 out="$(check "$WORK/ford")"; rc=$?
-nfail="$(printf '%s\n' "$out" | grep -c '^FAIL')"
-if [ "$rc" = "1" ] && [ "$nfail" = "1" ] && printf '%s\n' "$out" | grep '^FAIL' | grep -q "ldap.conf"; then
-    ok "URI 순서 오류를 ldap.conf 에서만 감지"
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
+    ok "URI 순서 오류 감지"
 else
-    ng "URI 순서 검사 오류 (rc=$rc, FAIL 수=$nfail)" "$out"
+    ng "URI 순서 검사 오류 (rc=$rc)" "$out"
 fi
 
 ###############################################################################
@@ -176,8 +173,7 @@ for S in a1 a4; do
     make_fixture "$WORK/fq_$S" 8
     apply "$WORK/fq_$S" "$WORK/q_$S.sh"
     out="$(check "$WORK/fq_$S")"; rc=$?
-    if [ "$rc" = "0" ] && printf '%s\n' "$out" | grep -q "auto.appl $S" &&
-       printf '%s\n' "$out" | grep -q "/qwer"; then
+    if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tqwer\t%s' "$S")" ]; then
         ok "qwer/$S (uri3=NONE) 판별"
     else
         ng "qwer/$S 판별 실패 (rc=$rc)" "$out"

@@ -57,22 +57,15 @@ make_good()
 }
 
 ###############################################################################
-echo "[1] 정상 노드는 8개 항목이 모두 OK 여야 한다"
+echo "[1] 정상 노드는 INFO 한 줄만 나와야 한다"
 ###############################################################################
 
 make_good "$WORK/good"
 out="$(check "$WORK/good")"; rc=$?
-nok="$(printf '%s\n' "$out" | grep -c '^OK')"
-if [ "$rc" = "0" ] && [ "$nok" = "8" ] && ! printf '%s\n' "$out" | grep -q '^FAIL'; then
-    ok "정상 노드 → OK 8건, exit 0"
+if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tzxcv\ta1')" ]; then
+    ok "정상 노드 → INFO 한 줄, exit 0"
 else
-    ng "정상 노드 판정 실패 (rc=$rc, OK=$nok)" "$out"
-fi
-
-if printf '%s\n' "$out" | grep -q 'auto.appl a1' && printf '%s\n' "$out" | grep -q '/zxcv'; then
-    ok "infra=zxcv, site=a1 로 판별"
-else
-    ng "판별 결과가 다름" "$out"
+    ng "정상 노드 판정 실패 (rc=$rc)" "$out"
 fi
 
 ###############################################################################
@@ -82,8 +75,8 @@ echo "[2] DNS 만 다른 인프라 값이면 교차 검증에서 걸려야 한�
 cp -a "$WORK/good" "$WORK/dns"
 printf 'nameserver 10.10.2.10\nnameserver 10.10.2.11\n' > "$WORK/dns/etc/resolv.conf"
 out="$(check "$WORK/dns")"; rc=$?
-if [ "$rc" = "1" ] && printf '%s\n' "$out" | grep -q 'infra-mismatch'; then
-    ok "DNS 불일치 → infra-mismatch"
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
+    ok "DNS 불일치 → FAIL 한 줄"
 else
     ng "DNS 불일치를 잡지 못함 (rc=$rc)" "$out"
 fi
@@ -95,8 +88,8 @@ echo "[3] auto.appl 만 다른 인프라 값이면 걸려야 한다"
 cp -a "$WORK/good" "$WORK/appl"
 printf '/appl\t-rw,soft,intr\tqwer3:/appl3\n' > "$WORK/appl/etc/auto.appl"
 out="$(check "$WORK/appl")"; rc=$?
-if [ "$rc" = "1" ] && printf '%s\n' "$out" | grep -q 'appl=qwer'; then
-    ok "auto.appl 혼재 → infra-mismatch (ldap=zxcv appl=qwer)"
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
+    ok "auto.appl 혼재 → FAIL 한 줄"
 else
     ng "auto.appl 혼재를 잡지 못함 (rc=$rc)" "$out"
 fi
@@ -108,8 +101,8 @@ echo "[4] bindpw 만 틀리면 LDAP 축 판별이 실패해야 한다"
 cp -a "$WORK/good" "$WORK/pw"
 sed -i 's|^BINDPW .*|BINDPW WRONG|' "$WORK/pw/etc/openldap/ldap.conf"
 out="$(check "$WORK/pw")"; rc=$?
-if [ "$rc" = "1" ] && printf '%s\n' "$out" | grep -q 'ldap=?'; then
-    ok "bindpw 불일치 → LDAP 축 판별 실패"
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
+    ok "bindpw 불일치 → FAIL 한 줄"
 else
     ng "bindpw 불일치를 잡지 못함 (rc=$rc)" "$out"
 fi
@@ -122,12 +115,10 @@ cp -a "$WORK/good" "$WORK/ord"
 sed -i 's|^URI .*|URI ldap://10.10.1.21/ ldap://10.10.1.20/ ldap://10.10.1.22/|' \
     "$WORK/ord/etc/openldap/ldap.conf"
 out="$(check "$WORK/ord")"; rc=$?
-nfail="$(printf '%s\n' "$out" | grep -c '^FAIL')"
-if [ "$rc" = "1" ] && [ "$nfail" = "1" ] &&
-   printf '%s\n' "$out" | grep '^FAIL' | grep -q 'ldap.conf'; then
-    ok "URI 순서 오류를 ldap.conf 에서만 감지"
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
+    ok "URI 순서 오류 → FAIL 한 줄"
 else
-    ng "URI 순서 검사 오류 (rc=$rc, FAIL=$nfail)" "$out"
+    ng "URI 순서 검사 오류 (rc=$rc)" "$out"
 fi
 
 ###############################################################################
@@ -138,7 +129,7 @@ cp -a "$WORK/good" "$WORK/pool"
 printf '# chrony\npool 2.pool.ntp.org iburst\nserver 10.20.1.10 iburst\nserver 10.20.1.11 iburst\n' \
     > "$WORK/pool/etc/chrony.conf"
 out="$(check "$WORK/pool")"; rc=$?
-if [ "$rc" = "1" ]; then
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
     ok "잔존 pool 줄 감지"
 else
     ng "잔존 pool 줄을 잡지 못함 (rc=$rc)" "$out"
@@ -165,8 +156,7 @@ for S in a1:qwer1:/appl1 a4:qwer4:/appl4; do
     printf '/appl\t-rw,soft,intr\t%s:%s\n' "$store" "$mnt" > "$d/etc/auto.appl"
 
     out="$(check "$d")"; rc=$?
-    if [ "$rc" = "0" ] && printf '%s\n' "$out" | grep -q "auto.appl $site" &&
-       printf '%s\n' "$out" | grep -q '/qwer'; then
+    if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tqwer\t%s' "$site")" ]; then
         ok "qwer/$site (URI 순서가 a1·a4 동일) 판별"
     else
         ng "qwer/$site 판별 실패 (rc=$rc)" "$out"
