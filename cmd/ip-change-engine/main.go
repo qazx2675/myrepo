@@ -71,6 +71,10 @@ func run(confPath, targetPath string, opts remote.Options) error {
 	if cfg.RHEL9Path != "" {
 		fmt.Println(color.Cyan("RHEL9 이상 경로(rhel9_path)=" + cfg.RHEL9Path))
 	}
+	fmt.Println(color.Cyan("작업 대상:"))
+	for _, e := range entries {
+		fmt.Printf("  %-20s -> %s\n", e.Host, e.NewIP)
+	}
 	fmt.Println(strings.Repeat("-", 60))
 
 	script, err := render.ApplyScript(entries, cfg)
@@ -113,12 +117,12 @@ func run(confPath, targetPath string, opts remote.Options) error {
 		}
 
 		line := r.LastLine()
-		fields := strings.Fields(line)
-		if len(fields) == 3 && fields[1] != "FAIL" {
-			fmt.Println(color.Green(line))
+		display, ok := formatResultLine(h, line)
+		if ok {
+			fmt.Println(color.Green(display))
 			okCount++
 		} else {
-			fmt.Println(color.BoldRed(line))
+			fmt.Println(color.BoldRed(display))
 			for _, l := range r.Lines {
 				if l != line {
 					fmt.Println(color.Yellow("    " + l))
@@ -135,6 +139,29 @@ func run(confPath, targetPath string, opts remote.Options) error {
 		os.Exit(2)
 	}
 	return nil
+}
+
+// formatResultLine 은 apply_body.sh 가 찍은 "RESULT|..." 기계용 한 줄을
+// 화면에 보일 "hostname 기존IP -> 변경IP (GW ...)" 형태로 바꿉니다.
+// 두 번째 반환값은 성공(OK) 여부입니다.
+func formatResultLine(host, line string) (string, bool) {
+	fields := strings.Split(line, "|")
+	if len(fields) >= 2 && fields[0] == "RESULT" {
+		switch fields[1] {
+		case "OK":
+			if len(fields) == 6 {
+				h, curIP, newIP, gw := fields[2], fields[3], fields[4], fields[5]
+				return fmt.Sprintf("%-20s %s -> %s   (GW %s)", h, curIP, newIP, gw), true
+			}
+		case "FAIL":
+			if len(fields) >= 4 {
+				h := fields[2]
+				reason := strings.Join(fields[3:], "|")
+				return fmt.Sprintf("%-20s FAIL: %s", h, reason), false
+			}
+		}
+	}
+	return fmt.Sprintf("%-20s 알 수 없는 응답: %s", host, line), false
 }
 
 func indent(s string) string {

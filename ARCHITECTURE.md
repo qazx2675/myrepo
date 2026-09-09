@@ -23,7 +23,8 @@
 | "{user}.txt 형식 변경" | `internal/target/target.go` |
 | "CLI 옵션 추가" | `cmd/ip-change-engine/main.go` |
 | "gossh 호출 방식 변경" | `internal/remote/remote.go` |
-| "출력 색상 변경" | `internal/color/color.go`, `cmd/ip-change-engine/main.go` |
+| "출력 색상/화면 표시 형식 변경" | `internal/color/color.go`, `cmd/ip-change-engine/main.go` 의 `formatResultLine` |
+| "결과 줄에 값 추가(기계용 포맷 변경)" | `internal/render/apply_body.sh` 의 `RESULT|...` 줄 + `cmd/ip-change-engine/main.go` 의 `formatResultLine` 둘 다 |
 | "계정 선택 로직 채우기" | `scripts/run_ip_change.sh` 의 `select_user_context()` |
 
 ## 반드시 지킬 것
@@ -43,7 +44,9 @@
    keyfile(`.nmconnection`, `[ipv4]` 섹션 등) 형식은 다른 파서가 필요하며 미구현입니다.
    실제 RHEL 9+ 환경이 keyfile 방식으로 바뀌면 `apply_body.sh` 의 `set_ifcfg_key` /
    ifcfg 탐색 로직을 통째로 다시 짜야 합니다.
-7. **출력 형식 `hostname ip gateway` 를 깨지 마십시오.** `apply_body.sh` 의 마지막 줄이
-   이 형식이어야 `cmd/ip-change-engine/main.go` 의 파싱(성공/실패 판정)이 맞습니다.
+7. **`apply_body.sh` 의 결과 줄 형식(`RESULT|OK|host|기존IP|변경IP|GW`,
+   `RESULT|FAIL|host|사유`)을 깨지 마십시오.** `cmd/ip-change-engine/main.go` 의
+   `formatResultLine` 이 이 형식을 파싱해 화면의 `hostname 기존IP -> 변경IP` 표시를
+   만듭니다. 필드 개수가 바뀌면 두 곳을 함께 고쳐야 합니다.
 8. **`ROOT` 는 테스트 fixture 전용입니다.** `internal/render/apply_body.sh` 의
    `detect_os_major` 만 이 값을 씁니다. 운영 실행에서는 항상 비어 있어 실제 `/etc` 를 봅니다.
