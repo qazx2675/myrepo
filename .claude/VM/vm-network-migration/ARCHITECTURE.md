@@ -26,6 +26,7 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
 | `cmd/connect/` | **Step 3** NIC 백킹을 신규 포트그룹으로 교체 후 재연결 |
 | `cmd/verify/` | **Step 4** 인벤토리 재조회로 실제 반영 여부 검증 |
 | `cmd/rollback/` | 역순 실행(3-Undo → 1-Undo)으로 원복. `-prune` 으로 대상에서 제외 |
+| `cmd/inventory/` | 진단 전용(`nm-inventory`, `run.sh --debug-inventory`). vCenter 가 보고하는 VM/호스트 이름을 그대로 덤프. 변경 없음, `-user` 불필요 |
 | `internal/cli/` | 공통 플래그·결과 리포트·종료 코드 규약. 모든 바이너리가 공유 |
 | `internal/config/` | 입력 파일 파싱(`vcenter.txt`/`{user}.txt`/`vswitch_{user}.txt`)과 비밀번호 조회 |
 | `internal/state/` | `state_{user}.json` 읽기/원자적 쓰기, 레코드 필터·제외 |
@@ -40,7 +41,7 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
 
 | 파일 | 역할 |
 |---|---|
-| `session.go` | `Connect`/`Fleet`(다중 vCenter), VM·호스트·네트워크 색인, VM 조회(이름/UUID) |
+| `session.go` | `Connect`/`Fleet`(다중 vCenter), VM·호스트·네트워크 색인, VM 조회(이름/UUID). 호스트는 FQDN/short name 양쪽으로 색인(`registerHostName`). `WriteInventory` 로 진단 덤프 |
 | `nic.go` | NIC 상태 읽기, 백킹/연결 상태 변경(`ReconfigVM_Task`), 포트그룹 생성 |
 
 ## 수정 요청별 진입점

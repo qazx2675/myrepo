@@ -103,6 +103,47 @@ func TestTargetForHost(t *testing.T) {
 	}
 }
 
+// vswitch 는 FQDN, vCenter 는 short name 인 경우(또는 그 반대)에도 매칭돼야 합니다.
+func TestTargetForHostFQDNvsShort(t *testing.T) {
+	entries := []WorkEntry{{BMHost: "esxi01.seccae.com", PGName: "PG_A", VlanID: 100}}
+
+	got, err := TargetForHost(entries, "esxi01") // vCenter 가 short name 으로 보고
+	if err != nil {
+		t.Fatalf("short name 매칭 실패: %v", err)
+	}
+	if got.PGName != "PG_A" {
+		t.Errorf("got %q want PG_A", got.PGName)
+	}
+
+	entries2 := []WorkEntry{{BMHost: "esxi01", PGName: "PG_B", VlanID: 200}}
+	if _, err := TargetForHost(entries2, "esxi01.seccae.com"); err != nil {
+		t.Fatalf("FQDN 매칭 실패: %v", err)
+	}
+
+	// 첫 마디가 다르면 매칭되면 안 됩니다.
+	if _, err := TargetForHost(entries, "esxi02.seccae.com"); err == nil {
+		t.Error("다른 호스트인데 매칭됐습니다")
+	}
+}
+
+func TestLoadVMListTakesFirstField(t *testing.T) {
+	// {user}.txt 가 "VM이름 변경될IP" 2열이어도 VM 이름만 읽어야 합니다.
+	p := writeTemp(t, "u.txt", "vm-a 10.1.2.3\nvm-b\n# 주석\nvm-a 10.1.2.9\n")
+	got, err := LoadVMList(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"vm-a", "vm-b"} // 중복 제거됨
+	if len(got) != len(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d] got %q want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestPassword(t *testing.T) {
 	for _, k := range []string{"VC_PASSWORD", "VC_PASS", "VCENTER_PASS"} {
 		t.Setenv(k, "")

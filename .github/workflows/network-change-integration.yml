@@ -1,0 +1,72 @@
+name: network-change-integration CI
+
+on:
+  push:
+    paths:
+      - '.claude/VM/Network_Change_Integration_Script/**'
+      - '.claude/VM/vm-network-migration/**'
+      - '.claude/HPC/ip_change/**'
+      - '.claude/HPC/ldap_setting/**'
+      - '.github/workflows/network-change-integration.yml'
+  pull_request:
+    paths:
+      - '.claude/VM/Network_Change_Integration_Script/**'
+      - '.claude/VM/vm-network-migration/**'
+      - '.claude/HPC/ip_change/**'
+      - '.claude/HPC/ldap_setting/**'
+      - '.github/workflows/network-change-integration.yml'
+
+jobs:
+  integration:
+    name: 통합 스크립트 (bash + 하위 엔진 빌드)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/VM/Network_Change_Integration_Script
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+
+      - name: bash 문법 검사
+        run: bash -n change.sh setup.sh lib/*.sh tests/*.sh
+
+      - name: 전처리 회귀 테스트
+        run: bash tests/test_preprocess.sh
+
+      - name: 오프라인 빌드 (setup.sh)
+        run: ./setup.sh
+
+      - name: 폐쇄망 빌드 재확인 (빈 모듈 캐시 + 프록시 차단)
+        run: |
+          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C ../../HPC/ip_change build ./...
+          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C ../../HPC/ldap_setting build ./...
+          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C ../vm-network-migration build -mod=vendor ./...
+
+      - name: 엔진 출력 계약 확인
+        # lib/stages.sh 의 awk 파서가 의존하는 엔진 출력 형식이 살아 있는지 확인.
+        # 하나라도 깨지면 파서를 함께 고쳐야 합니다.
+        run: |
+          set -e
+          ip=../../HPC/ip_change/cmd/ip-change-engine/main.go
+          ld=../../HPC/ldap_setting/cmd/ldap-config-engine/main.go
+          grep -q '(GW %s)'          "$ip" || { echo "ip OK 줄 형식 변경됨"; exit 1; }
+          grep -q 'FAIL: %s'         "$ip" || { echo "ip FAIL 줄 형식 변경됨"; exit 1; }
+          grep -q 'UNREACHABLE'      "$ip" || { echo "ip UNREACHABLE 줄 사라짐"; exit 1; }
+          grep -q '%-24s %s'         "$ld" || { echo "ldap 호스트 줄 형식 변경됨"; exit 1; }
+          grep -q 'NORESULT'         "$ld" || { echo "ldap NORESULT 상태 사라짐"; exit 1; }
+          echo "엔진 출력 계약 OK"
+
+  subprojects:
+    name: 하위 프로젝트 go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      - name: ip_change
+        run: cd .claude/HPC/ip_change && go vet ./... && go test ./...
+      - name: ldap_setting
+        run: cd .claude/HPC/ldap_setting && go vet ./... && go test ./...
+      - name: vm-network-migration
+        run: cd .claude/VM/vm-network-migration && go vet -mod=vendor ./... && go test -mod=vendor ./...

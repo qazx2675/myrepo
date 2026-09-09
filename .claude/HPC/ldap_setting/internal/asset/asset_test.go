@@ -38,10 +38,40 @@ func TestSpaceSeparatedRejected(t *testing.T) {
 	}
 }
 
-func TestDuplicateHostRejected(t *testing.T) {
-	_, err := Load(write(t, "svr001\ta1\nsvr001\ta2\n"))
-	if err == nil || !strings.Contains(err.Error(), "중복") {
-		t.Fatalf("중복 호스트를 잡지 못했습니다: %v", err)
+// 같은 호스트가 여러 줄 있으면 마지막 줄이 이깁니다 (오류로 막지 않음).
+func TestDuplicateHostLastWins(t *testing.T) {
+	e, err := Load(write(t, "svr001\ta1\nsvr002\ta2\nsvr001\ta3\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e) != 2 {
+		t.Fatalf("중복이 병합되지 않았습니다: %+v", e)
+	}
+	if e[0].Host != "svr001" || e[0].Site != "a3" {
+		t.Fatalf("svr001 의 site 가 마지막 줄(a3)이 아닙니다: %+v", e[0])
+	}
+	if e[1].Host != "svr002" {
+		t.Fatalf("두 번째 항목 순서가 어긋났습니다: %+v", e[1])
+	}
+}
+
+func TestStripEV(t *testing.T) {
+	cases := []struct {
+		in, base string
+		ok       bool
+	}{
+		{"svr001ev01", "svr001", true},
+		{"svr001ev02", "svr001", true},
+		{"svr001ev03", "svr001", true},
+		{"svr001ev04", "", false},
+		{"svr001", "", false},
+		{"ev01", "", false}, // 떼면 빈 문자열 → false
+	}
+	for _, c := range cases {
+		base, ok := StripEV(c.in)
+		if base != c.base || ok != c.ok {
+			t.Errorf("StripEV(%q) = %q,%v; want %q,%v", c.in, base, ok, c.base, c.ok)
+		}
 	}
 }
 
