@@ -242,3 +242,19 @@
   `test_all.sh` 22/22, `ldap_check/test_check.sh` 10/10 통과. 실제 gossh +
   tcsh 로그인 계정으로 `/wappl` 이 설정된 conf 로 DRY-RUN·실제 적용 모두
   정상 처리됨을 확인.
+
+## 2026-09-09 (2차)
+
+### 신규 — `scripts/add_infra_from_ldapconf.sh`
+- conf 에 새 인프라를 추가할 때 매번 `infra.<이름>.uri1~3`/`binddn`/`bindpw` 를
+  손으로 옮겨 적는 게 번거롭다는 요청으로 추가.
+- 사용법: `./add_infra_from_ldapconf.sh <인프라이름> <ldap.conf 경로> [conf 경로]`
+- 기존 `ldap.conf` 에서 URI(최대 3개)/BINDDN/BINDPW 를 읽어
+  `conf/ldap_config.conf` 끝에 `infra.<이름>.*` 블록을 이어붙임.
+- `dns`/`ntp`/`site.*`(storage/mountpoint/wappl_mount)는 ldap.conf 에 없는
+  값이라 자동으로 채울 수 없음 — TODO_ 접두사로 자리만 만들어 두고, 실행
+  결과에 `grep -n 'TODO_' <conf>` 로 찾아 채우라고 안내.
+- 같은 인프라 이름이 이미 있으면 중복 등록 사고를 막기 위해 거부(exit 1).
+- 검증: 임의 ldap.conf 로 블록 생성 → TODO 채운 뒤
+  `ldap-config-engine -print-script` 로 정상 파싱·조립되는지 확인. 중복
+  이름 재등록 시 거부되는지 확인.

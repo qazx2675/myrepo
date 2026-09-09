@@ -31,3 +31,24 @@
 ### 검증
 - `test_check.sh` 10/10 PASS. 기준 fixture(zxcv/a1)에 `/wappl` 줄을 추가하고
   OK 건수 기대값을 7→8 로 갱신.
+
+## 2026-09-09 (2차)
+
+### 변경 — 출력을 파일별 여러 줄에서 한 줄 요약으로 변경
+- 요청: 여러 노드를 gossh 로 한 번에 검사할 때 파일별 OK/FAIL 줄이 뒤섞여
+  읽기 어려우니, 노드당 한 줄만 나오게 해달라는 요청.
+- 정상: `INFO<TAB>LDAP<TAB><infra><TAB><site>` (예: `INFO	LDAP	zxcv	a1`)
+- 실패: `FAIL<TAB>LDAP<TAB>UNDEFINED` (원인은 화면에 안 찍음 — 파일별
+  OK/FAIL, `infra-mismatch` 상세 등 기존에 찍던 줄을 전부 제거. 원인을 봐야
+  하면 이 스크립트를 노드에서 직접 실행해 디버깅)
+- `report()` 는 더 이상 화면에 출력하지 않고 RC 만 조용히 추적. 맨 끝에서
+  RC 로 딱 한 줄만 출력.
+- 종료 코드(0/1/2)는 그대로 유지.
+- 짝 파일 갱신: `../ldap_setting/scripts/deploy_ldap.sh` 의 `OK_CNT`/`NG_CNT`
+  집계 로직도 새 포맷(`INFO<TAB>LDAP`/`FAIL<TAB>LDAP`)에 맞춰 갱신. gossh 는
+  exit code 가 0 이 아니면 그 줄 앞에 `ERROR: ` 를 추가로 붙이므로, 접두사와
+  무관하게 토큰만으로 매칭하도록 함.
+- 검증: `test_check.sh` 전체를 새 포맷 기준으로 갱신, 9/9 통과.
+  `../ldap_setting/test_all.sh` 도 이 스크립트를 호출하므로 함께 갱신, 22/22
+  통과. 실제 gossh + tcsh 계정으로 성공/실패 양쪽 모두 원문 그대로 확인
+  (`INFO	LDAP	zxcv	a1`, `ERROR: FAIL	LDAP	UNDEFINED`).

@@ -255,9 +255,12 @@ cat "$RESULT_FILE"
 
 echo
 echo "----- 요약 -----"
-OK_CNT=$(grep -c "	OK	" "$RESULT_FILE" 2>/dev/null || echo 0)
-NG_CNT=$(grep -c "	FAIL	" "$RESULT_FILE" 2>/dev/null || echo 0)
-NG_HOST=$(grep "	FAIL	" "$RESULT_FILE" 2>/dev/null | cut -d: -f1 | sort -u)
+# ldap_check.sh 는 한 줄 요약만 찍습니다: 정상 "INFO<TAB>LDAP<TAB>..." /
+# 실패 "FAIL<TAB>LDAP<TAB>UNDEFINED". exit code 가 0 이 아니면 gossh 가 그 줄
+# 앞에 "ERROR: " 를 더 붙이므로, 접두사와 무관하게 INFO/FAIL 토큰만 찾습니다.
+OK_CNT=$(grep -c $'INFO	LDAP' "$RESULT_FILE" 2>/dev/null || echo 0)
+NG_CNT=$(grep -c $'FAIL	LDAP' "$RESULT_FILE" 2>/dev/null || echo 0)
+NG_HOST=$(grep $'FAIL	LDAP' "$RESULT_FILE" 2>/dev/null | cut -d: -f1 | sort -u)
 
 echo "OK 항목   : $OK_CNT"
 echo "FAIL 항목 : $NG_CNT"
