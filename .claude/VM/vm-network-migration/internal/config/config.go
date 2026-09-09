@@ -25,7 +25,10 @@ func LoadLines(path string) ([]string, error) {
 	var lines []string
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
+		// 메모장 등에서 "UTF-8"로 저장하면 파일 맨 앞에 BOM(U+FEFF)이 붙습니다.
+		// 그대로 두면 파일 첫 줄의 첫 항목만 이름이 달라져 조회에 실패합니다.
+		line := strings.TrimPrefix(sc.Text(), "\ufeff")
+		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
