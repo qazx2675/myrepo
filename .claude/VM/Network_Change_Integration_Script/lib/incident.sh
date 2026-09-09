@@ -21,6 +21,7 @@ incident_save() {
     echo "created=$(date '+%Y-%m-%d %H:%M:%S')"
     echo "stage_reached=$reached"
     echo "ldap_stamp_hint=${LDAP_STAMP_HINT:-}"
+    echo "ldap_infra=${INFRA:-}"
   } >"$d/meta"
 
   # 결과 목록 사본 (롤백 대상 산정용)
@@ -84,6 +85,7 @@ incident_load() {
   RUN_USER=$(sed -n 's/^user=//p' "$d/meta")
   INC_STAGE_REACHED=$(sed -n 's/^stage_reached=//p' "$d/meta")
   LDAP_STAMP_HINT=$(sed -n 's/^ldap_stamp_hint=//p' "$d/meta")
+  INFRA=$(sed -n 's/^ldap_infra=//p' "$d/meta")
   INC_DIR="$d"
   [ -n "$RUN_USER" ] || die F2 "인시던트 meta 에 user 가 없습니다: $d/meta"
   log F "인시던트 로드: $name (user=$RUN_USER, 남은단계=$INC_STAGE_REACHED)"
@@ -113,17 +115,23 @@ rollback_incident() {
 
   # 2) LDAP
   if [ -s "$d/ldap_ok_${RUN_USER}.txt" ]; then
-    log ROLLBACK "[2/3] LDAP 원복 (ldap-config-engine -rollback)"
-    local rbto=""
-    [ -n "$LDAP_STAMP_HINT" ] && rbto="-rollback-to $LDAP_STAMP_HINT"
-    # shellcheck disable=SC2086
-    NO_COLOR=1 "$(conf_get ldap_bin ./bin/ldap-config-engine)" \
-      -config "$(conf_get ldap_conf)" -assets "$(conf_get ldap_assets)" \
-      -infra "$(conf_get ldap_infra)" -host-file "$d/ldap_ok_${RUN_USER}.txt" \
-      -rollback $rbto \
-      -gossh "$(conf_get gossh gossh)" -u "$SSH_USER" -p "$GOSSH_PW" -P "$SSH_PORT" \
-      | tee -a "$LOG_FILE" \
-      || log ROLLBACK "LDAP 롤백에서 오류 — 로그 확인"
+    if [ -z "${INFRA:-}" ]; then
+      log ROLLBACK "[2/3] 인시던트에 저장된 LDAP 인프라가 없습니다 — 자동 롤백을 건너뜁니다."
+      warn_box "이 인시던트는 --infra 도입 이전에 저장된 것입니다. 아래 명령으로 수동 실행하십시오:" \
+        "  $(conf_get ldap_bin ./bin/ldap-config-engine) -config $(conf_get ldap_conf) -assets $(conf_get ldap_assets) -infra <원래 인프라> -host-file $d/ldap_ok_${RUN_USER}.txt -rollback ${LDAP_STAMP_HINT:+-rollback-to $LDAP_STAMP_HINT} -gossh $(conf_get gossh gossh) -u $SSH_USER -P $SSH_PORT"
+    else
+      log ROLLBACK "[2/3] LDAP 원복 (ldap-config-engine -rollback, 인프라=$INFRA)"
+      local rbto=""
+      [ -n "$LDAP_STAMP_HINT" ] && rbto="-rollback-to $LDAP_STAMP_HINT"
+      # shellcheck disable=SC2086
+      NO_COLOR=1 "$(conf_get ldap_bin ./bin/ldap-config-engine)" \
+        -config "$(conf_get ldap_conf)" -assets "$(conf_get ldap_assets)" \
+        -infra "$INFRA" -host-file "$d/ldap_ok_${RUN_USER}.txt" \
+        -rollback $rbto \
+        -gossh "$(conf_get gossh gossh)" -u "$SSH_USER" -p "$GOSSH_PW" -P "$SSH_PORT" \
+        | tee -a "$LOG_FILE" \
+        || log ROLLBACK "LDAP 롤백에서 오류 — 로그 확인"
+    fi
   else
     log ROLLBACK "[2/3] LDAP 성공 기록 없음 — 건너뜀"
   fi

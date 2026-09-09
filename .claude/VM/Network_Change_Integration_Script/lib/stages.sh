@@ -72,7 +72,7 @@ _run_ldap() {
   NO_COLOR=1 "$bin" \
     -config "$(conf_get ldap_conf)" \
     -assets "$(conf_get ldap_assets)" \
-    -infra "$(conf_get ldap_infra)" \
+    -infra "$INFRA" \
     -host-file "$hostfile" \
     ${ds:+-default-site "$ds"} $dry \
     -gossh "$gossh" -u "$SSH_USER" -p "$GOSSH_PW" -P "$SSH_PORT" \
@@ -201,11 +201,48 @@ stage_ip() {
   [ "$fail" -eq 0 ] && stage_end ok || stage_end fail
 }
 
+# ── LDAP 대상 인프라 선택 (§11.4 보강) ─────────────────────────────────────
+# integration.conf 에 기본값을 두지 않습니다(원본 ldap_setting 규칙 5와 동일한
+# 이유 — 이전 작업의 인프라가 그대로 남아 조용히 다른 인프라에 적용되는 사고를
+# 막기 위함). --infra 로 명시하거나, 대화형으로 매번 고릅니다.
+# 결과: 전역 변수 INFRA
+_ldap_infra_names() {  # <ldap_conf 경로> → 인프라 이름 목록(줄단위, 중복없음)
+  local f="$1"
+  [ -f "$f" ] || return 1
+  grep -oE '^infra\.[^.[:space:]]+\.' "$f" | sed -E 's/^infra\.([^.]+)\.$/\1/' | sort -u
+}
+
+select_ldap_infra() {
+  if [ -n "${INFRA_ARG:-}" ]; then
+    INFRA="$INFRA_ARG"
+    return
+  fi
+
+  local conf; conf="$(conf_get ldap_conf)"
+  local names; names="$(_ldap_infra_names "$conf")"
+  [ -n "$names" ] || die D2 "ldap_conf 에서 infra 목록을 찾을 수 없습니다: $conf"
+
+  if [ -t 0 ]; then
+    echo "대상 LDAP 인프라를 선택하십시오:"
+    local n
+    select n in $names; do
+      [ -n "$n" ] && { INFRA="$n"; break; }
+      echo "다시 선택하십시오."
+    done
+  else
+    die D2 "LDAP 대상 인프라가 지정되지 않았습니다. --infra <이름> 으로 지정하십시오. (사용 가능: $(printf '%s' "$names" | tr '\n' ' '))"
+  fi
+}
+
 # ── D 단계: LDAP ─────────────────────────────────────────────────────────
 # stage_ldap <hosts_file:"host">  → RES_LDAP 채움
 stage_ldap() {
   stage_begin D "LDAP 설정 (ldap_setting)"
-  [ -n "$(conf_get ldap_infra)" ] || die D2 "integration.conf 의 ldap_infra 가 비어 있습니다."
+  select_ldap_infra
+  log D "대상 인프라: $INFRA"
+  if [ "${DRY_RUN:-0}" -ne 1 ]; then
+    ask_yes "LDAP 설정을 인프라 '$INFRA' 에 적용합니다. 계속하시겠습니까?" || die B1 "사용자가 중단했습니다."
+  fi
   RES_LDAP="$WORK/res_ldap_${RUN_USER}.tsv"
   _stage_run ldap "$1" "$RES_LDAP"
   local ok fail
