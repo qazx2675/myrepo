@@ -1,0 +1,33 @@
+name: ip-change CI
+
+on:
+  push:
+    paths:
+      - '.claude/HPC/ip_change/**'
+      - '.github/workflows/ip-change.yml'
+  pull_request:
+    paths:
+      - '.claude/HPC/ip_change/**'
+      - '.github/workflows/ip-change.yml'
+
+jobs:
+  ip-change:
+    name: ip_change (Go 빌드·테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/ip_change
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      - name: 오프라인 빌드
+        run: CGO_ENABLED=0 go build ./...
+      - name: go vet
+        run: go vet ./...
+      - name: 단위 테스트 (왕복 end-to-end 포함)
+        run: go test ./...
+      - name: bash 문법 검사
+        run: bash -n setup.sh scripts/run_ip_change.sh
+      - name: 오프라인 빌드 스크립트 확인
+        run: ./setup.sh
