@@ -32,6 +32,20 @@ func TestLoadLinesSkipsBlankAndComments(t *testing.T) {
 	}
 }
 
+func TestLoadLinesStripsBOM(t *testing.T) {
+	// 메모장 등에서 "UTF-8"로 저장하면 파일 맨 앞에 BOM(U+FEFF)이 붙는다.
+	// 첫 줄 첫 항목만 이름이 달라져 조회에 실패하던 문제의 회귀 테스트.
+	p := writeTemp(t, "list.txt", "\ufeffvm-a\nvm-b\n")
+	got, err := LoadLines(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"vm-a", "vm-b"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("BOM 제거 실패: got %q want %q", got, want)
+	}
+}
+
 func TestLoadWorklist(t *testing.T) {
 	p := writeTemp(t, "w.txt", "# c\nhost-a  PG_A  100\nhost-b  PG_B  0\n")
 	got, err := LoadWorklist(p)

@@ -156,3 +156,26 @@ Step 제목에 정확히 찍히는지, `NO_COLOR=1` 로는 꺼지는지 확인. 
 환경에만 있는 로컬 코드이고 이 저장소로 가져올 수 없어 세부 사항은 기록하지
 않았습니다. 이 저장소의 `run.sh`/`vswitch_{user}.txt` 형식(3컬럼: BM호스트/
 포트그룹명/VLAN)은 이전과 동일합니다 — 동작 변경 없음, 문서만 갱신.
+
+## 2026-09-09 — BOM 이 파일 첫 줄을 깨는 버그 수정
+
+`{user}.txt` / `vswitch_{user}.txt` / `vcenter.txt` 를 메모장 등에서 "UTF-8"로
+저장하면 파일 맨 앞에 BOM(U+FEFF, 3바이트 `EF BB BF`)이 붙는데, 이를 제거하지
+않고 있었습니다. 그 결과 **파일 첫 줄의 첫 항목에만** `\ufeffhostname` 처럼 보이지
+않는 문자가 붙어 조회에 실패했습니다 — 실제 증상: `{user}.txt` 1번째 줄의 VM 은
+"VM 을 찾을 수 없습니다", `vswitch_{user}.txt` 1번째 줄의 BM 호스트는 "항목이
+worklist 에 없습니다"로 각각 실패. 파일 내용을 정상으로 봐도(눈에 안 보이는 문자라)
+원인을 알기 어려웠던 문제입니다.
+
+- `internal/config.LoadLines` 에서 매 줄 `strings.TrimSpace` 전에
+  `strings.TrimPrefix(line, "\ufeff")` 를 추가했습니다. BOM 은 파일 맨 앞에만
+  올 수 있으므로 사실상 첫 줄에만 영향을 주지만, 매 줄에 걸어도 나머지 줄에는
+  아무 영향이 없어 별도의 "첫 줄 판별" 로직 없이 간단하게 처리했습니다.
+- `vcenter.txt` / `{user}.txt` / `vswitch_{user}.txt` 모두 `LoadLines` 를 거치므로
+  세 파일 전부 한 번에 고쳐집니다.
+
+**검증**: 회귀 테스트 `TestLoadLinesStripsBOM` 추가. gofmt / `go vet` / `go test`
+통과. 실 랩에서 BOM + CRLF 를 실제로 붙인 `{user}.txt`/`vswitch_{user}.txt` 로
+백업 → 생성 → 해제 → 연결 → 검증 → 롤백 전 과정이 정상 동작함을 확인(수정 전
+이었다면 1번째 줄 VM/호스트에서 각각 실패했을 조건). 랩은 원상복구, 테스트
+포트그룹도 삭제했습니다.
