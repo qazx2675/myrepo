@@ -61,7 +61,7 @@ infra.zxcv.bindpw = CHANGE_ME_zxcv
 #   storage     : /etc/auto.appl 의 storage 이름. 인프라 안에서 고유해야 함(사이트 판별 키)
 #   mountpoint  : /etc/auto.appl 의 /appl 원격 경로
 #   wappl_mount : /etc/auto.appl 의 /wappl 원격 경로. 이 사이트에 /wappl 이 없으면
-#                 아예 비워두거나 줄 자체를 생략하면 됩니다(그러면 검사도 건너뜀)
+#                 아예 비워두거나 줄 자체를 생략하면 됩니다(그러면 /wappl 줄을 만들지 않음)
 
 infra.zxcv.site.a1.uri_order   = uri1,uri2,uri3
 infra.zxcv.site.a1.storage     = asdf1
