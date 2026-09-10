@@ -20,3 +20,8 @@ vcenter.txt
 !work/.gitkeep
 !results/.gitkeep
 !incidents/.gitkeep
+
+# projects/ 아래 vendor/ 는 서드파티 원본이므로 위 *.txt 차단에서 제외합니다.
+# (예: vendor/modules.txt, vendor/.../LICENSE.txt — 이게 빠지면 -mod=vendor
+#  빌드가 "inconsistent vendoring" 오류로 실패합니다.)
+!projects/**/vendor/**
