@@ -31,6 +31,8 @@
   회귀 없음 확인). `select_ldap_infra` 를 `ldap_config.conf.sample` 로 단위
   실행: `--infra zxcv` 지정 시 그대로 사용, 미지정+비대화형(`</dev/null`) 시
   사용 가능한 이름 목록과 함께 D2 로 정상 중단되는 것 확인.
+- **배포**: 2026-09-10, 사용자 요청으로 PR 없이 `claude/ldap-single-config-infra-select-ii8uzm`
+  → `master`(기본 브랜치) fast-forward 로 직접 반영 (커밋 `46bbe3d`).
 
 ## 2026-09-09 — 최초 구현 (nci-v0.1.0)
 
