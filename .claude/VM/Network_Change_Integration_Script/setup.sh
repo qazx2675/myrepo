@@ -35,7 +35,7 @@ echo "   (nm-* 바이너리는 $NM_DIR/bin 에 그대로 두고 run.sh 가 씁�
 echo
 echo "빌드 완료. 다음으로 진행하십시오:"
 echo "  1) integration.conf.sample → integration.conf 복사 후 값 채우기"
-echo "     (특히 ldap_infra, ldap_conf, ldap_assets, vc_id)"
+echo "     (특히 ldap_conf, ldap_assets, vc_id — ldap_infra 는 실행 시 --infra 로 지정)"
 echo "  2) conf/ip_change.conf 는 실행 시 자동 렌더링됩니다 (직접 안 만들어도 됨)"
 echo "  3) lib/common.sh 의 user선택() 함수 채우기 (또는 항상 -u 로 지정)"
 echo "  4) <계정>.txt (내용: 'VM이름 변경될IP'), vswitch_<계정>.txt 준비"
