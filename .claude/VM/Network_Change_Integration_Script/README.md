@@ -42,17 +42,34 @@ cd myrepo/.claude/VM/Network_Change_Integration_Script
 
 | 프로젝트 | 위치 | 빌드 방식 |
 |---|---|---|
-| `ip_change` | `./projects/ip_change` | 표준 라이브러리만 사용, `CGO_ENABLED=0` 정적 빌드 |
-| `ldap_setting` | `./projects/ldap_setting` | 표준 라이브러리만 사용, 정적 빌드 |
-| `vm-network-migration` | `./projects/vm-network-migration` | `vendor/`(govmomi) 사용, `-mod=vendor GOPROXY=off` |
+| `ip_change` | `./projects/ip_change` | 표준 라이브러리만 사용, `CGO_ENABLED=0` 정적 빌드 (Go 1.20+) |
+| `ldap_setting` | `./projects/ldap_setting` | 표준 라이브러리만 사용, 정적 빌드 (Go 1.20+) |
+| `vm-network-migration` | `./projects/vm-network-migration` | `vendor/`(govmomi) 사용, `-mod=vendor GOPROXY=off` (Go 1.25.0+) |
 
 빌드 결과:
 - `bin/ip-change-engine`, `bin/ldap-config-engine` — 이 폴더로 복사됨
 - `nm-*` (7종) — `projects/vm-network-migration/bin/` 에 그대로 (이 스크립트가 `run.sh` 를 통해 씀)
 
-Go 1.25.0 이상이면 됩니다(`go.mod` 요구사항, `govmomi` 의 실제 최소 버전에
-맞춤). 폐쇄망 빌드 호스트에 정확히 특정 패치버전이 없어도, 툴체인 자동
-다운로드(`GOTOOLCHAIN`)를 시도하지 않고 그대로 빌드됩니다.
+`setup.sh` 를 돌리는 호스트는 `vm-network-migration`(`govmomi`) 요구사항인
+**Go 1.25.0 이상**이면 세 프로젝트 모두 빌드됩니다. 정확히 특정 패치버전이
+없어도, 툴체인 자동 다운로드(`GOTOOLCHAIN`)를 시도하지 않고 그대로
+빌드됩니다.
+
+> **OS6(RHEL/CentOS 6) 대상용 바이너리는 별도로 미리 빌드해 `bin_os6/`
+> 에 커밋해 뒀습니다** (`ip-change-engine`, `ldap-config-engine` — Go 1.20,
+> `CGO_ENABLED=0` 정적 링크). `setup.sh` 가 만드는 `bin/` 과는 다른, OS6
+> 대상 호스트로 이 통합 스크립트를 직접 실행할 때(§3.4 `os6_bin_dir`)
+> 쓰는 것으로, `setup.sh` 는 이걸 재생성하지 않습니다. 소스가 바뀌어
+> 재빌드해야 하면 Go 1.20 툴체인으로 직접 다시 빌드하십시오:
+> ```bash
+> cd projects/ip_change   && GOTOOLCHAIN=local CGO_ENABLED=0 GOPROXY=off /opt/go1.20/bin/go build -o ../../bin_os6/ip-change-engine   ./cmd/ip-change-engine
+> cd projects/ldap_setting && GOTOOLCHAIN=local CGO_ENABLED=0 GOPROXY=off /opt/go1.20/bin/go build -o ../../bin_os6/ldap-config-engine ./cmd/ldap-config-engine
+> ```
+> (`/opt/go1.20/bin/go` 자리는 실제 Go 1.20 설치 경로로 바꾸십시오 — `.claude/공통/gossh` 의
+> `gossh_os6` 와 같은 이유·같은 방식입니다.) `ip_change`/`ldap_setting` 은
+> 표준 라이브러리만 써서(서드파티 의존성 없음) 일반 빌드와 OS6 빌드가
+> **같은 `go.mod`(`go 1.20`)를 공유**합니다 — Go 1.20 이상 아무 툴체인으로
+> 빌드해도 됩니다.
 
 > `projects/` 아래 세 프로젝트는 원본(`.claude/HPC/ip_change`,
 > `.claude/HPC/ldap_setting`, `.claude/VM/vm-network-migration`)의 **스냅샷
@@ -224,6 +241,11 @@ rollback 명령이 없음) 대상 VM 목록을 출력하고 각 노드에서
 `integration.conf` 의 `os6_hostgroup` 에 나열된 호스트는 `os6_gossh` /
 `os6_bin_dir` 경로를 씁니다. 한 실행에 OS6/일반이 섞여 있으면 **gossh 를 그룹별로
 나눠 2회 호출**합니다.
+
+`os6_bin_dir` 기본값(`./bin_os6`)은 이 저장소에 미리 빌드해 커밋해 둔
+`ip-change-engine`/`ldap-config-engine`(Go 1.20 정적 빌드, 1.1절 참고)을
+가리킵니다. `os6_hostgroup` 을 비워두면(기본값) 전혀 쓰이지 않으므로,
+OS6 대상이 없는 배포에서는 아무 영향이 없습니다.
 
 ### 3.5 2패스 타임아웃 (§8.2)
 

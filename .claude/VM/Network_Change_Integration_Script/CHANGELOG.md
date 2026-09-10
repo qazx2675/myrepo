@@ -2,6 +2,48 @@
 
 날짜순(최신이 위).
 
+## 2026-09-10 — OS6(RHEL/CentOS 6) 대상용 사전 빌드 바이너리 추가
+
+- **사유**: 사용자 환경 Go 는 1.26.5. `.claude/공통/gossh/v2` 프로젝트가
+  이미 같은 문제(RHEL/CentOS 6은 커널·glibc가 오래돼 최신 Go 툴체인
+  산출물이 못 도는 경우가 있어, Go 1.20 으로 별도 빌드해 `gossh_os6` 를
+  커밋해 둠)를 갖고 있는 것과 동일하게, `ip-change-engine`/
+  `ldap-config-engine` 도 OS6 대상용 사전 빌드본이 필요하다는 요청.
+  기존에 이미 `integration.conf` 의 `os6_bin_dir` 설정 자리는 있었지만
+  실제 바이너리가 없었음.
+- **`projects/ip_change/go.mod`, `projects/ldap_setting/go.mod`**: `go
+  1.25.0`(직전 항목) → `go 1.20` 으로 재조정. 두 프로젝트 모두 서드파티
+  의존성이 전혀 없는 표준 라이브러리 전용이라(`govmomi` 를 쓰는
+  `vm-network-migration` 과 달리 1.25 제약이 없음), **일반 빌드와 OS6
+  빌드가 완전히 같은 `go.mod` 를 공유**하도록 낮춘 것 — `gossh` v2 가
+  x/crypto 버전을 고정해 "같은 go.mod/vendor 공유"를 달성한 것과 같은
+  전략을, 의존성이 아예 없는 이 두 프로젝트에서는 `go` 지시자만 낮추는
+  것으로 더 간단히 달성.
+- **`bin_os6/ip-change-engine`, `bin_os6/ldap-config-engine`** 신규 —
+  실제 Go 1.20 툴체인(`GOTOOLCHAIN=go1.20`로 확보)으로
+  `CGO_ENABLED=0 GOPROXY=off` 정적 빌드해 커밋. `os6_bin_dir` 이 기대하는
+  대로 원래 바이너리와 **동일한 파일명**(`gossh_os6` 처럼 이름을 바꾸는
+  방식이 아니라, `lib/stages.sh` 의 `bin_os6="$os6dir/$(basename
+  "$bin_std")"` 규칙에 맞춰 별도 디렉터리에 같은 이름으로 배치).
+- **`integration.conf.sample`**: `os6_bin_dir` 기본값을 빈 값 →
+  `./bin_os6` 로 설정(단, `os6_hostgroup` 이 비어 있으면 전혀 쓰이지 않아
+  OS6 대상이 없는 배포엔 영향 없음). 관련 주석 추가.
+- **`README.md`**: 1.1 절에 OS6 바이너리 안내(재빌드 방법 포함) 추가,
+  3.4 절에 `os6_bin_dir` 기본값 설명 추가, 프로젝트별 최소 Go 버전을
+  정확히 구분해 표기(`ip_change`/`ldap_setting` 1.20+, `vm-network-migration`
+  1.25.0+).
+- **`setup.sh`**: 완료 안내에 `bin_os6/` 존재를 알리는 안내 한 줄 추가
+  (자동으로 재빌드하지는 않음 — `gossh_os6` 와 동일하게 수동 재빌드 대상).
+- **검증**: 클린 `GOPATH`/`GOCACHE`로 Go 1.20 실제 빌드 성공(`file` 로
+  정적 링크 확인, `-h` 로 정상 동작 확인), 두 프로젝트 `go vet`/`go test
+  ./...` 를 Go 1.20 에서도 전부 통과. `go.mod` 를 1.20 으로 낮춘 뒤에도
+  전체 `setup.sh` 가 Go 1.25.1 로 처음부터 끝까지(9개 바이너리) 정상
+  재확인. `git check-ignore` 로 `bin_os6/*` 가 `.gitignore` 의 `bin/`
+  패턴에 안 걸리고 정상 추적됨을 확인.
+- **영향 범위**: `projects/ip_change/go.mod`, `projects/ldap_setting/go.mod`,
+  `bin_os6/ip-change-engine`(신규), `bin_os6/ldap-config-engine`(신규),
+  `integration.conf.sample`, `README.md`, `setup.sh`.
+
 ## 2026-09-10 — `go.mod` 의 과도한 버전 요구로 인한 폐쇄망 빌드 실패 수정
 
 - **증상**: 사용자가 이관 준비 중 `./setup.sh` 를 돌렸더니
