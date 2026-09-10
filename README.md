@@ -54,17 +54,28 @@ Go 툴체인만 있으면 됩니다. 랩 기준 `go1.26.5`.
 ```bash
 cp integration.conf.sample integration.conf
 $EDITOR integration.conf        # 아래 값은 반드시 채웁니다
+
+cp conf/ldap_config.conf.sample conf/ldap_config.conf
+cp conf/assets.txt.sample       conf/assets.txt
+$EDITOR conf/ldap_config.conf conf/assets.txt   # 실제 LDAP 설정·자산현황 값 채우기
 ```
 
 | 키 | 설명 |
 |---|---|
-| `ldap_conf` / `ldap_assets` | 운영자가 관리하는 실제 LDAP 설정·자산현황 파일 경로 |
+| `ldap_conf` / `ldap_assets` | LDAP 설정·자산현황 파일 경로 (기본 `./conf/ldap_config.conf` / `./conf/assets.txt`) |
 | `vc_id` | vCenter 로그인 계정 (포트그룹 단계) |
 | `bm_domain` | BM 호스트에 붙일 도메인 (기본 `seccae.com`) |
 | `default_site` | 자산현황에 없는 호스트에 적용할 site (비우면 그런 호스트는 건너뜀) |
 
 `conf/ip_change.conf` 는 실행 시 `integration.conf` 의 `ipchange.*` 키에서
 **자동 렌더링**되므로 직접 만들지 않습니다.
+
+> **`conf/ldap_config.conf` / `conf/assets.txt` 는 이 프로젝트가 자체
+> 보관하는 사본입니다.** 이 폴더가 다른 부서로 단독 이관될 수 있어, 원본
+> `ldap_setting`(`../../HPC/ldap_setting/conf/...`)을 상대경로로 참조하지
+> 않고 `conf/` 안에 따로 둡니다. 둘 다 `.gitignore` 로 커밋 차단됩니다.
+> **원본 `ldap_setting` 쪽 설정이 바뀌면 이 사본도 함께 수동으로 갱신해야
+> 합니다 — 자동 동기화되지 않습니다.**
 
 > **LDAP 대상 인프라는 `integration.conf` 에 두지 않습니다.** 원본
 > `ldap_setting` 이 `-infra` 에 기본값을 두지 않는 것과 같은 이유로, 이전
