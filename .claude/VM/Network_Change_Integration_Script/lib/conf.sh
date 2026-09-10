@@ -14,7 +14,7 @@ render_confs() {
     printf 'network_scripts_dir=%s\n' \
       "$(conf_get ipchange.network_scripts_dir /etc/sysconfig/network-scripts)"
     local r9; r9="$(conf_get ipchange.rhel9_path)"
-    [ -n "$r9" ] && printf 'rhel9_path=%s\n' "$r9"
+    if [ -n "$r9" ]; then printf 'rhel9_path=%s\n' "$r9"; fi
   } >"$dst" || die G2 "conf 렌더링 실패: $dst"
   dlog 1 "렌더링 완료: $dst"
 }
