@@ -48,3 +48,7 @@ echo "  5) <계정>.txt (내용: 'VM이름 변경될IP'), vswitch_<계정>.txt �
 echo "  6) vcenter.txt 준비 (포트그룹 단계용, 한 줄에 vCenter 주소 하나)"
 echo "  7) export GOSSH_PW=...  ;  export VC_PASSWORD=..."
 echo "  8) ./change.sh <계정>"
+echo
+echo "참고: OS6(RHEL/CentOS 6) 대상이 있다면 bin_os6/ 에 Go 1.20 으로 미리"
+echo "      빌드해 둔 ip-change-engine/ldap-config-engine 이 있습니다"
+echo "      (integration.conf 의 os6_hostgroup 채우면 사용, README 3.4 참고)."
