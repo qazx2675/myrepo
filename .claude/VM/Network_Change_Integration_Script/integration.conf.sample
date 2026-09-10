@@ -49,8 +49,15 @@ ipchange.rhel9_path          =
 ldap_bin  = ./bin/ldap-config-engine
 
 # 운영자가 관리하는 실제 설정/자산 파일 (통합은 이 파일을 고치지 않고 읽기만 함)
-ldap_conf   = ../../HPC/ldap_setting/conf/ldap_config.conf
-ldap_assets = ../../HPC/ldap_setting/conf/assets.txt
+#
+# ★ 이 폴더는 다른 부서로 단독 이관될 수 있어, myrepo 의 ../../HPC/ldap_setting
+#   를 상대경로로 참조하지 않고 이 프로젝트 conf/ 안에 자체 보관합니다.
+#   conf/ldap_config.conf.sample, conf/assets.txt.sample 을 conf/ldap_config.conf,
+#   conf/assets.txt 로 복사해 값을 채우십시오(둘 다 .gitignore 로 커밋 차단).
+#   원본(HPC/ldap_setting)과는 별도 사본이므로, 그쪽 설정이 바뀌면 이 파일도
+#   함께 갱신해야 합니다 — 자동 동기화되지 않습니다.
+ldap_conf   = ./conf/ldap_config.conf
+ldap_assets = ./conf/assets.txt
 
 # 대상 인프라 이름 (ldap_config.conf 의 infra.<이름>)
 # ★ 여기서는 지정하지 않습니다. 이전 작업의 값이 그대로 남아 다음 실행에서

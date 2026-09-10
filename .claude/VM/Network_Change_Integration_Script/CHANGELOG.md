@@ -2,6 +2,34 @@
 
 날짜순(최신이 위).
 
+## 2026-09-10 — LDAP 설정 참조를 `conf/` 자체 보관으로 전환 (타 부서 이관 대비)
+
+- **사유**: 이 폴더가 조만간 다른 부서로 **단독 이관**될 예정. 기존
+  `ldap_conf`/`ldap_assets` 기본값이 `../../HPC/ldap_setting/conf/...` 상대
+  경로로 원본을 참조하고 있었는데, `Network_Change_Integration_Script` 폴더만
+  떼어 이관하면 그 경로가 깨짐.
+- **`integration.conf.sample`**: `ldap_conf`/`ldap_assets` 기본값을
+  `./conf/ldap_config.conf` / `./conf/assets.txt` 로 변경. 원본과는 별개
+  사본이며 자동 동기화되지 않는다는 점을 주석으로 명시.
+- **`conf/ldap_config.conf.sample`, `conf/assets.txt.sample`** 신규 추가 —
+  `HPC/ldap_setting/conf/`의 동일 샘플을 그대로 복사해 이 프로젝트 안에
+  자체 보관(둘 다 `.gitignore`로 실 파일 커밋은 차단됨, `.sample`만 추적).
+- **`setup.sh`**: 완료 안내에 `conf/ldap_config.conf.sample` →
+  `conf/ldap_config.conf`, `conf/assets.txt.sample` → `conf/assets.txt` 복사
+  단계 추가 (번호 재정렬).
+- **`README.md`**: 1.2 설정 섹션에 `conf/` 사본 복사 명령 추가, 설정 표의
+  `ldap_conf`/`ldap_assets` 설명과 자체 보관 이유를 명시.
+- **범위 밖(의도적으로 안 건드림)**: `setup.sh`의 빌드 소스 의존(`../../HPC/*`,
+  `../vm-network-migration`)과 포트그룹(E) 단계가 런타임에 위임하는
+  `nm_dir = ../vm-network-migration` 은 이번에 손대지 않음 — 사용자가
+  "이 폴더만 독립 이관, 빌드/포트그룹 쪽은 그대로 둬도 됨"으로 범위를
+  한정함. **다만 포트그룹 단계까지 함께 이관한다면 `nm_dir`도 같은 문제가
+  생기므로 별도로 짚어야 함** (README/작업기록에 안내만 남김, 코드 변경 없음).
+- **영향 범위**: `integration.conf.sample`, `conf/ldap_config.conf.sample`(신규),
+  `conf/assets.txt.sample`(신규), `setup.sh`, `README.md`.
+- **검증**: `bash -n change.sh lib/*.sh setup.sh` 전체 통과. `git status` 로
+  샘플 파일이 `.gitignore`에 걸리지 않고 정상 추적됨을 확인.
+
 ## 2026-09-09 — LDAP 대상 인프라를 매 실행 필수 선택으로 변경
 
 - **`change.sh`**: `--infra <이름>` 옵션 추가 (usage 에 반영, `usage()` 의

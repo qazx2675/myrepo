@@ -1,0 +1,117 @@
+# ldap_config.conf — LDAP 자동화 통합 설정 파일
+#
+# 형식: key = value  (한 줄에 하나, '#' 로 시작하면 주석)
+#   - 대상 노드에 jq 가 없어도 되도록 JSON 대신 평문 key=value 를 씁니다.
+#   - Go 설정 엔진과 bash 체크 스크립트가 같은 파일을 읽습니다.
+#   - 여러 값을 넣을 때는 쉼표(,) 로 구분합니다. 공백은 무시됩니다.
+#
+# ★ 이 파일은 .sample 입니다. 실제 운영값(특히 bindpw)이 들어간
+#   ldap_config.conf 는 절대 git 에 커밋하지 마십시오(.gitignore 등록됨).
+
+
+###############################################################################
+# default_site — 자산현황(assets.txt)에서 못 찾은 호스트에 적용할 site
+#
+#   자산현황에는 물리 호스트(BM)만 있고 그 위 VM 은 없을 수 있습니다.
+#   VM 이름으로 조회가 안 되면 ev01~ev03 접미사를 떼고 BM 을 다시 찾고,
+#   그래도 없으면 이 값을 site 로 씁니다. 비워두면 못 찾은 호스트는 건너뜁니다.
+#
+#   ★ 여기 적는 값은 아래 infra.<이름>.site.<site> 중 하나여야 합니다.
+#     (실행 시 검증 — 없는 site 면 한 대도 건드리기 전에 중단)
+###############################################################################
+
+# default_site =
+
+
+###############################################################################
+# s4 호스트명 예외 규칙
+#
+#   hostname 이 s4.prefix 로 시작하면 RHEL 8 이상이라도 아래 서비스를 강제합니다.
+#     nslcd -> sssd 대신 nslcd 사용 (/etc/nslcd.conf 작성)
+#     ntp   -> chrony 대신 ntp 사용  (/etc/ntp.conf 작성)
+#
+#   s4.enabled = false 로 두면 이 규칙 전체가 꺼집니다.
+###############################################################################
+
+s4.enabled  = true
+s4.prefix   = s4
+s4.services = nslcd,ntp
+
+
+###############################################################################
+# INFRA 1 : zxcv
+#
+#   dns / ntp 는 1차 인프라 판별 키입니다. (순서 무관, 집합 비교)
+#   uri1~3 / binddn / bindpw 는 이 인프라의 LDAP 값입니다.
+#   uri3 = NONE 으로 두면 uri3 은 설정과 검사에서 완전히 제외됩니다.
+###############################################################################
+
+infra.zxcv.dns    = 10.10.1.10, 10.10.1.11
+infra.zxcv.ntp    = 10.20.1.10, 10.20.1.11
+
+infra.zxcv.uri1   = ldap://10.10.1.20/
+infra.zxcv.uri2   = ldap://10.10.1.21/
+infra.zxcv.uri3   = ldap://10.10.1.22/
+
+infra.zxcv.binddn = uid=svcaccount,ou=user,ou=system,dc=example,dc=com
+infra.zxcv.bindpw = CHANGE_ME_zxcv
+
+# --- 사이트별 규칙 ---
+#   uri_order   : ldap.conf / autofs.conf 에 기록할 URI 순서 (검사도 이 순서로 엄격 비교)
+#   storage     : /etc/auto.appl 의 storage 이름. 인프라 안에서 고유해야 함(사이트 판별 키)
+#   mountpoint  : /etc/auto.appl 의 /appl 원격 경로
+#   wappl_mount : /etc/auto.appl 의 /wappl 원격 경로. 이 사이트에 /wappl 이 없으면
+#                 아예 비워두거나 줄 자체를 생략하면 됩니다(그러면 /wappl 줄을 만들지 않음)
+
+infra.zxcv.site.a1.uri_order   = uri1,uri2,uri3
+infra.zxcv.site.a1.storage     = asdf1
+infra.zxcv.site.a1.mountpoint  = /appl1
+infra.zxcv.site.a1.wappl_mount = /wappl1
+
+infra.zxcv.site.a2.uri_order  = uri2,uri1,uri3
+infra.zxcv.site.a2.storage    = asdf2
+infra.zxcv.site.a2.mountpoint = /appl2
+
+infra.zxcv.site.a3.uri_order  = uri2,uri3,uri1
+infra.zxcv.site.a3.storage    = asdf3
+infra.zxcv.site.a3.mountpoint = /appl3
+
+infra.zxcv.site.a4.uri_order  = uri3,uri1,uri2
+infra.zxcv.site.a4.storage    = asdf4
+infra.zxcv.site.a4.mountpoint = /appl4
+
+
+###############################################################################
+# INFRA 2 : qwer
+###############################################################################
+
+infra.qwer.dns    = 10.10.2.10, 10.10.2.11
+infra.qwer.ntp    = 10.20.2.10, 10.20.2.11
+
+infra.qwer.uri1   = ldap://10.10.2.20/
+infra.qwer.uri2   = ldap://10.10.2.21/
+infra.qwer.uri3   = NONE
+
+infra.qwer.binddn = uid=svcaccount,ou=user,ou=system,dc=example,dc=com
+infra.qwer.bindpw = CHANGE_ME_qwer
+
+infra.qwer.site.a1.uri_order  = uri1,uri2,uri3
+infra.qwer.site.a1.storage    = qwer1
+infra.qwer.site.a1.mountpoint = /appl1
+
+infra.qwer.site.a2.uri_order  = uri2,uri1,uri3
+infra.qwer.site.a2.storage    = qwer2
+infra.qwer.site.a2.mountpoint = /appl2
+
+infra.qwer.site.a3.uri_order  = uri2,uri3,uri1
+infra.qwer.site.a3.storage    = qwer3
+infra.qwer.site.a3.mountpoint = /appl3
+
+infra.qwer.site.a4.uri_order  = uri3,uri1,uri2
+infra.qwer.site.a4.storage    = qwer4
+infra.qwer.site.a4.mountpoint = /appl4
+
+
+###############################################################################
+# INFRA 3 이후는 위와 같은 형식으로 계속 추가하면 됩니다.
+###############################################################################
