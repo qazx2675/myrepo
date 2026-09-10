@@ -2,6 +2,47 @@
 
 날짜순(최신이 위).
 
+## 2026-09-10 — 3개 하위 프로젝트 소스를 `projects/`에 자체 보관 (완전 독립 이관)
+
+- **사유**: "다른 폴더와 연관 없이 이 폴더에서 독립적으로만 작동하면 된다"는
+  요구 확인. 앞선 `conf/` 자체 보관(같은 날짜, 아래 항목)만으로는 부족했음
+  — `setup.sh`의 빌드 소스(`../../HPC/ip_change`, `../../HPC/ldap_setting`)와
+  포트그룹(E) 단계가 런타임에 위임하는 `nm_dir`(`../vm-network-migration`)이
+  여전히 외부 폴더를 상대경로로 참조하고 있었음. 사용자에게 빌드까지 이
+  폴더 안에서 끝나야 하는지, 포트그룹 단계도 포함해야 하는지 확인 후(둘 다
+  예) 세 프로젝트 소스 전체를 vendoring.
+- **`projects/ip_change`, `projects/ldap_setting`, `projects/vm-network-migration`**
+  신규 — 각각 `.claude/HPC/ip_change`, `.claude/HPC/ldap_setting`,
+  `.claude/VM/vm-network-migration` 의 전체 소스 스냅샷 복사(빌드 스크립트·
+  `internal/`·`cmd/`·`vendor/`·자체 `README.md`/`CHANGELOG.md`/`.gitignore`
+  포함). 세 프로젝트 모두 자체 스크립트가 `cd "$(dirname "$0")"` 로 시작해
+  상대경로에 의존하지 않아, 그대로 옮겨도 수정 없이 동작함을 확인.
+- **`setup.sh`**: `IP_DIR`/`LDAP_DIR`/`NM_DIR` 을 `../../HPC/...`,
+  `../vm-network-migration` → `./projects/ip_change`, `./projects/ldap_setting`,
+  `./projects/vm-network-migration` 로 변경. 헤더 주석·완료 안내 문구도 갱신.
+- **`integration.conf.sample`**: `nm_dir` 기본값을 `../vm-network-migration`
+  → `./projects/vm-network-migration` 로 변경.
+- **`change.sh`, `lib/incident.sh`**: `conf_get nm_dir <기본값>` 4곳을 동일하게
+  변경 (`run_portgroup`, `--debug-inventory`, `incident_save`, `rollback_incident`).
+- **`README.md`**: 1.1 빌드 섹션 전면 갱신("이 폴더 하나만 있으면 됨"),
+  프로젝트 위치 표, `nm-*` 바이너리 경로, 에러코드 E9 대처 갱신. `projects/`
+  가 원본의 스냅샷이며 자동 동기화되지 않는다는 안내 추가.
+- **`ARCHITECTURE.md`**: 흐름도의 `../vm-network-migration/run.sh` →
+  `projects/vm-network-migration/run.sh`.
+- **`Network_Change_Integration_Plan.md`**: §11.6 신규 — vendoring 배경과
+  "원본이 갱신돼도 자동 동기화 안 됨, 이관 전 diff 확인 필요" 트레이드오프 명시.
+- **영향 범위**: `setup.sh`, `integration.conf.sample`, `change.sh`,
+  `lib/incident.sh`, `README.md`, `ARCHITECTURE.md`,
+  `Network_Change_Integration_Plan.md`, `projects/*`(신규 디렉터리 3개).
+- **검증**: `bash -n change.sh setup.sh lib/*.sh` 전체 통과.
+  `tests/test_preprocess.sh` 통과(회귀 없음). `GOMODCACHE=$(mktemp -d)
+  GOPROXY=off ./setup.sh` 실행 — `./projects/ip_change` 로 정상 진입해
+  빌드를 시도하는 것까지 확인(경로 배선 정상). 이 샌드박스는 `go1.24.7`,
+  세 프로젝트 `go.mod` 는 `go 1.26.5` 요구라 툴체인 다운로드가 막혀
+  실제 컴파일은 이 환경에서 끝까지 못 돌림 — 원본(`HPC/ip_change`)도
+  동일한 제약이라 이번 변경과 무관한 환경 제약임을 확인(`go.mod` 비교).
+  실제 배포 환경(Go 1.26.5 보유)에서 `./setup.sh` 로 재검증 필요.
+
 ## 2026-09-10 — LDAP 설정 참조를 `conf/` 자체 보관으로 전환 (타 부서 이관 대비)
 
 - **사유**: 이 폴더가 조만간 다른 부서로 **단독 이관**될 예정. 기존

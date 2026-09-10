@@ -1,0 +1,6 @@
+# {user}.txt 예시 — "hostname 변경될ip" 공백 구분, 한 줄에 하나.
+# 실제 사용 시 scripts/run_ip_change.sh 의 select_user_context() 에서 고른
+# RUN_USER 값으로 conf/${RUN_USER}.txt 를 찾습니다. 이 샘플을 복사해
+# conf/<RUN_USER>.txt 로 만드십시오 (예: conf/testuser.txt).
+hostname1 3.3.3.3
+hostname2 2.2.2.2
