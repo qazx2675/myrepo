@@ -2,6 +2,43 @@
 
 날짜순(최신이 위).
 
+## 2026-09-10 — [실제 원인] `vendor/*.txt` 가 `.gitignore` 에 걸려 커밋에서 누락된 버그 수정
+
+- **증상**: 사용자가 Go 1.26.5(요구사항 이상)인데도 `vm-network-migration`
+  에서만 여전히 "vmware/govmomi ... is explicitly required in go.mod,
+  but not marked as explicit in vendor/modules.txt" (inconsistent
+  vendoring) 재현 보고. 직전 두 항목(과도한 `go` 버전 요구 수정, OS6
+  바이너리 추가)은 원인이 아니었음이 이번에 드러남.
+- **진단**: `git archive HEAD` 로 실제 커밋된 내용만 뽑아보니
+  `projects/vm-network-migration/vendor/modules.txt` 가 **아예 없었음**
+  (`git cat-file -p HEAD:...`도 "exists on disk, but not in 'HEAD'").
+  `git check-ignore -v` 로 추적: 최상위 `.gitignore` 의 `*.txt` 규칙(운영자
+  대상목록 파일 `<계정>.txt`/`vswitch_<계정>.txt` 차단용)이 하위 디렉터리
+  깊이와 무관하게 재귀 적용되어, `vendor/modules.txt` 와
+  `vendor/.../govmomi/LICENSE.txt` 까지 실수로 차단하고 있었음. 이전
+  "완전 독립 이관"(vendoring) 커밋 때 `git add` 가 이 두 파일을 조용히
+  건너뛰었는데, 로컬 샌드박스 검증은 **작업트리에 물리적으로 남아 있는
+  파일**로 빌드 테스트를 해서 통과했던 것 — git 추적 여부까지는 그때
+  확인하지 못해 놓쳤음. `git clone`/코드로드 ZIP 다운로드는 git이 추적한
+  내용만 받으므로, 사용자 환경에서만 재현되는 게 당연했음(로컬 샌드박스는
+  파일이 이미 디스크에 있어 재현 불가) — "vm-network-migration 만
+  발생"하는 것도 그 프로젝트만 `vendor/` 에 `.txt` 확장자 파일을 갖고
+  있어서(`ip_change`/`ldap_setting` 은 서드파티 의존성이 없어 `vendor/`
+  자체가 없음) 정확히 들어맞음.
+- **조치**: `.gitignore` 에 `!projects/**/vendor/**` 예외 추가해 `vendor/`
+  전체를 `*.txt` 차단에서 제외. 누락돼 있던
+  `vendor/modules.txt`, `vendor/github.com/vmware/govmomi/LICENSE.txt`
+  두 파일을 커밋.
+- **검증**: `git archive HEAD` 로 실제 커밋 내용만 뽑아 `/tmp` 에 풀고,
+  그 사본만으로(원본 작업트리 전혀 참조하지 않고) `GOPROXY=off
+  GOMODCACHE=<임시> ./setup.sh` 를 Go 1.26.5(사용자와 동일 버전)로 처음부터
+  끝까지 실행해 **9개 바이너리 전부 정상 생성** 확인. 이번에는 "로컬
+  작업트리에서 됐다"가 아니라 **git이 실제로 추적하는 내용만으로 재현**
+  검증까지 마쳤음.
+- **영향 범위**: `.gitignore`,
+  `projects/vm-network-migration/vendor/modules.txt`(신규 커밋),
+  `projects/vm-network-migration/vendor/github.com/vmware/govmomi/LICENSE.txt`(신규 커밋).
+
 ## 2026-09-10 — OS6(RHEL/CentOS 6) 대상용 사전 빌드 바이너리 추가
 
 - **사유**: 사용자 환경 Go 는 1.26.5. `.claude/공통/gossh/v2` 프로젝트가
