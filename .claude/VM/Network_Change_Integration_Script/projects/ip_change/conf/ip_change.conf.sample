@@ -1,0 +1,12 @@
+# ip_change.conf — 평문 key=value. 비워두면 기본값으로 동작합니다.
+
+# RHEL 8 이하(및 현재의 RHEL 9)에서 ifcfg-* 를 찾을 경로. 기본값은
+# /etc/sysconfig/network-scripts 이므로 대부분은 이 파일 자체가 필요 없습니다.
+network_scripts_dir=/etc/sysconfig/network-scripts
+
+# 추후 RHEL 9 이상에서 기본 네트워크 설정 경로 방식이 바뀔 경우를 대비한 자리입니다.
+# 비워두면(주석 처리) 무시하고 network_scripts_dir 를 그대로 씁니다.
+# 값을 채우면, 노드의 OS 메이저 버전이 9 이상일 때만 이 경로를 대신 씁니다.
+# 이 경로 아래에서도 기존 ifcfg(KEY=VALUE) 형식 파일을 찾는다고 가정합니다 —
+# NetworkManager keyfile(.nmconnection) 형식은 지원하지 않습니다.
+# rhel9_path=

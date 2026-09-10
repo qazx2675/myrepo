@@ -121,7 +121,7 @@ confirm_targets() { # §13 — IP 단계는 적용 전 대상표를 반드시 �
 # ── 포트그룹 단계 (vm-network-migration 에 위임) ──────────────────────────
 run_portgroup() {
   stage_begin E "포트그룹 (vm-network-migration)"
-  local nm_dir; nm_dir="$(conf_get nm_dir ../vm-network-migration)"
+  local nm_dir; nm_dir="$(conf_get nm_dir ./projects/vm-network-migration)"
   [ -x "$nm_dir/run.sh" ] || die G2 "nm/run.sh 를 찾을 수 없습니다: $nm_dir (setup.sh 실행)"
 
   local vsw="$WORK/vswitch_${RUN_USER}.std.txt"
@@ -167,7 +167,7 @@ run_portgroup() {
 # 서브커맨드: --debug-inventory
 # ═══════════════════════════════════════════════════════════════════════════
 if [ "$DEBUG_INVENTORY" -eq 1 ]; then
-  nm_dir="$(conf_get nm_dir ../vm-network-migration)"
+  nm_dir="$(conf_get nm_dir ./projects/vm-network-migration)"
   [ -x "$nm_dir/run.sh" ] || die G2 "nm/run.sh 없음: $nm_dir"
   cp -p "$(conf_get vcenter_file ./vcenter.txt)" "$nm_dir/vcenter.txt" \
     || die G3 "vcenter.txt 없음"

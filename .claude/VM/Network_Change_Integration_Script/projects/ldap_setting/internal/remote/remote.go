@@ -1,0 +1,191 @@
+// Package remote 는 gossh 를 호출해 원격 노드에 스크립트를 밀어넣고 실행합니다.
+//
+// gossh 에는 파일 전송 옵션이 없기 때문에, 스크립트를 base64 로 인코딩해
+// 원격 셸에서 복원합니다. base64 는 [A-Za-z0-9+/=] 만 쓰므로 따옴표·개행·
+// 특수문자로 명령이 깨지는 사고가 원천적으로 없습니다.
+package remote
+
+import (
+	"bufio"
+	"encoding/base64"
+	"fmt"
+	"os"
+	"os/exec"
+	"sort"
+	"strings"
+)
+
+// Options 는 gossh 호출 옵션입니다.
+type Options struct {
+	GosshPath   string // 기본 "gossh"
+	User        string
+	Password    string
+	KeyPath     string
+	Port        string
+	Concurrency int
+	TimeoutSec  int
+	RemotePath  string // 원격에 떨어뜨릴 스크립트 경로
+	Root        string // apply 스크립트의 ROOT 환경변수
+	DryRun      bool
+}
+
+// Result 는 노드 한 대의 실행 결과입니다.
+type Result struct {
+	Host  string
+	Lines []string
+}
+
+// WriteHostFile 은 호스트 목록을 임시 파일로 떨궈 gossh -w 에 넘길 경로를 돌려줍니다.
+func WriteHostFile(hosts []string) (string, func(), error) {
+	f, err := os.CreateTemp("", "ldap-hosts-*.txt")
+	if err != nil {
+		return "", func() {}, err
+	}
+	for _, h := range hosts {
+		fmt.Fprintln(f, h)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", func() {}, err
+	}
+	return f.Name(), func() { os.Remove(f.Name()) }, nil
+}
+
+// BuildCommand 는 gossh 에 넘길 원격 명령 한 줄을 만듭니다.
+//
+// 스크립트에 bindpw 가 들어 있으므로 퍼미션을 600 으로 만들고,
+// 실행이 끝나면 성공/실패와 무관하게 지웁니다.
+//
+// 대상 계정의 로그인 셸이 csh/tcsh 이면 "VAR=값 명령", "rc=$?" 같은 bash
+// 문법을 그 셸이 직접 해석하려다 "Command not found" / "Undefined variable"
+// 로 깨집니다. bash -c '...' 로 감싸 봤지만, gossh 가 명령 전체를 다시
+// 자기 쪽에서 따옴표로 감싸 ssh 에 넘기는 경우 우리가 심은 작은따옴표가
+// 그 바깥 따옴표와 부딪혀 tcsh 에서 "Unmatched '''" 로 또 깨졌습니다.
+//
+// 그래서 명령 자체(umask/env/bash 호출 등)까지 통째로 base64 로 한 번 더
+// 감싸, 전송되는 명령줄에 따옴표를 아예 하나도 남기지 않습니다.
+// "echo <b64> | base64 -d | bash" 는 로그인 셸이 bash 든 csh/tcsh 든
+// 동일하게 해석되고, 어떤 셸도 명령 안쪽 문법을 직접 파싱할 일이 없습니다.
+//
+// gossh 는 명령 문자열에 "reboot"/"halt"/"ddc" 등이 섞여 있으면 위험 작업으로
+// 보고 실행을 막고 그 명령을 그대로 화면에 찍습니다(안전장치, 정상 동작).
+// base64 는 사실상 무작위 문자열이라 스크립트가 길어질수록 그 안에 이런
+// 짧은 단어가 우연히 섞여 나올 확률이 생기고, 실제로 재현됐습니다(스크립트가
+// 길어지자 재현). base64 문자열에 두 글자마다 공백을 끼워 넣으면 세 글자
+// 이상 이어진 조각이 아예 생기지 않아 이 우연한 일치를 원천 차단할 수
+// 있습니다. 원격에서는 pipe 로 공백만 지운 뒤 그대로 복호화합니다 —
+// 공백은 base64 원문에 없는 문자라 안전하게 구분자로 쓸 수 있습니다.
+func BuildCommand(script string, o Options) string {
+	b64 := base64.StdEncoding.EncodeToString([]byte(script))
+	path := o.RemotePath
+	if path == "" {
+		path = "/root/ldap_apply.sh"
+	}
+
+	env := ""
+	if o.Root != "" {
+		env += fmt.Sprintf("ROOT=%s ", o.Root)
+	}
+	if o.DryRun {
+		env += "DRYRUN=1 "
+	}
+
+	inner := fmt.Sprintf(
+		"umask 077; echo %s | base64 -d > %s && chmod 600 %s && %sbash %s; rc=$?; rm -f %s; exit $rc",
+		b64, path, path, env, path, path)
+	innerB64 := base64.StdEncoding.EncodeToString([]byte(inner))
+	return fmt.Sprintf("echo %s | tr -d ' ' | base64 -d | bash", spaceOut(innerB64))
+}
+
+// spaceOut 은 base64 문자열을 두 글자씩 끊어 공백으로 이어붙입니다.
+// gossh 의 위험 작업 키워드 검사(reboot/halt/ddc 등, 최소 3글자)를 우연히
+// 건드리지 않도록, 전송되는 텍스트에 세 글자 이상 이어진 조각이 남지
+// 않게 합니다. base64 원문에는 공백이 없으므로 원격에서 "tr -d ' '" 로
+// 지우기만 하면 원래 문자열이 그대로 복원됩니다.
+func spaceOut(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) * 3 / 2)
+	for i, r := range s {
+		if i > 0 && i%2 == 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// Run 은 gossh 를 실행하고 호스트별 출력 줄을 모아 돌려줍니다.
+//
+// gossh 는 pdsh 스타일로 "<host>: <내용>" 형태로 출력합니다.
+func Run(hostFile, command string, o Options) ([]Result, string, error) {
+	bin := o.GosshPath
+	if bin == "" {
+		bin = "gossh"
+	}
+
+	args := []string{"-script", "-w", hostFile}
+	if o.User != "" {
+		args = append(args, "-u", o.User)
+	}
+	if o.Password != "" {
+		args = append(args, "-p", o.Password)
+	}
+	if o.KeyPath != "" {
+		args = append(args, "-i", o.KeyPath)
+	}
+	if o.Port != "" {
+		args = append(args, "-P", o.Port)
+	}
+	if o.Concurrency > 0 {
+		args = append(args, "-c", fmt.Sprint(o.Concurrency))
+	}
+	if o.TimeoutSec > 0 {
+		args = append(args, "-t", fmt.Sprint(o.TimeoutSec))
+	}
+	args = append(args, command)
+
+	cmd := exec.Command(bin, args...)
+	out, err := cmd.CombinedOutput()
+	raw := string(out)
+	// gossh 는 일부 노드가 실패해도 0 이 아닐 수 있으므로, 출력은 항상 파싱합니다.
+	return parse(raw), raw, err
+}
+
+func parse(raw string) []Result {
+	byHost := map[string][]string{}
+	sc := bufio.NewScanner(strings.NewReader(raw))
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		line := sc.Text()
+		host, body, ok := strings.Cut(line, ": ")
+		if !ok || strings.ContainsAny(host, " \t") {
+			continue // gossh 자체 안내 문구 등은 건너뜁니다.
+		}
+		byHost[host] = append(byHost[host], body)
+	}
+
+	hosts := make([]string, 0, len(byHost))
+	for h := range byHost {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+
+	out := make([]Result, 0, len(hosts))
+	for _, h := range hosts {
+		out = append(out, Result{Host: h, Lines: byHost[h]})
+	}
+	return out
+}
+
+// Summary 는 결과 줄에서 "RESULT|host|상태|..." 를 찾아 상태만 뽑습니다.
+func (r Result) Summary() string {
+	for _, l := range r.Lines {
+		if strings.HasPrefix(l, "RESULT|") {
+			f := strings.Split(l, "|")
+			if len(f) >= 3 {
+				return f[2]
+			}
+		}
+	}
+	return "NORESULT"
+}

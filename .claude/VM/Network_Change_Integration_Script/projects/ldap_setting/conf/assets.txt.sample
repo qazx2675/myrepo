@@ -1,0 +1,4 @@
+# 자산현황 파일 — hostname<TAB>site, 한 줄에 하나
+# site 이름은 ldap_config.conf 의 infra.<이름>.site.<site> 와 같아야 합니다.
+svr001	a1
+svr002	a3

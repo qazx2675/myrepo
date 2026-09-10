@@ -413,6 +413,35 @@ change.sh --debug-inventory # vCenter 인벤토리 덤프 (§9.3)
 
 ---
 
+## 11.6 타 부서 단독 이관을 위한 소스 자체 보관(vendoring) `[2026-09-10 추가]`
+
+이 폴더(`Network_Change_Integration_Script`)가 조만간 다른 부서로 **단독
+이관**될 예정. myrepo 의 다른 위치(`.claude/HPC/ip_change`,
+`.claude/HPC/ldap_setting`, `.claude/VM/vm-network-migration`)를 상대경로로
+참조하던 구조라, 이 폴더만 떼어내면 빌드도 실행(포트그룹 단계)도 깨지는
+문제가 있었음. 사용자 확인 결과 "다른 폴더와 연관 없이 이 폴더 안에서
+독립적으로 작동"해야 한다는 요구로, 아래와 같이 세 프로젝트의 **소스
+전체를 `projects/` 아래에 스냅샷 복사**해 자체 보관하도록 전환:
+
+- `projects/ip_change`, `projects/ldap_setting`, `projects/vm-network-migration`
+  — 각각 원본 위치의 전체 소스(빌드 스크립트·`internal/`·`cmd/`·`vendor/`
+  포함) 복사본. 세 프로젝트 모두 자체 스크립트가 `cd "$(dirname "$0")"` 로
+  시작해 상대경로에 의존하지 않으므로, 통째로 옮겨도 별도 수정 없이 동작.
+- `setup.sh` 의 `IP_DIR`/`LDAP_DIR`/`NM_DIR` 을 `../../HPC/...`, `../vm-network-migration`
+  에서 `./projects/...` 로 변경.
+- `integration.conf.sample` 의 `nm_dir` 기본값을 `../vm-network-migration`
+  → `./projects/vm-network-migration` 로 변경. (`ldap_conf`/`ldap_assets`
+  자체 보관은 §1.2/CHANGELOG 2026-09-10 항목에서 먼저 처리됨.)
+- `change.sh`, `lib/incident.sh` 의 `conf_get nm_dir <기본값>` 도 동일하게 변경.
+
+**트레이드오프(운영자가 알아야 할 것)**: `projects/` 는 원본의 **스냅샷**이라
+자동 동기화되지 않습니다. 원본(`HPC/ip_change` 등)에 버그 수정이나 기능
+추가가 있으면, 이 폴더의 `projects/` 사본에도 수동으로 반영해야 실제
+이관본에 그 수정이 들어갑니다. 이관 직전에는 반드시 원본과 diff 를 확인해
+최신화하십시오.
+
+---
+
 ## 12. `base64` / gossh 위험키워드 — 이미 해결됨
 
 `gossh` 는 명령 문자열에 `reboot`/`poweroff`/`shutdown`/`halt`/`ddc` 같은 위험

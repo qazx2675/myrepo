@@ -1,0 +1,24 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/VM/vm-network-migration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      - name: gofmt
+        run: test -z "$(gofmt -l ./cmd ./internal)" || { gofmt -l ./cmd ./internal; exit 1; }
+      - run: go build -mod=vendor ./...
+      - run: go vet -mod=vendor ./...
+      - run: go test -mod=vendor ./...
+      - name: 폐쇄망 빌드 확인 (빈 모듈 캐시 + 프록시 차단)
+        run: GOMODCACHE=$(mktemp -d) GOPROXY=off go build -mod=vendor ./...
+      # 랩(Rocky 8)에 shellcheck 를 설치할 수 없어 로컬 검증을 못 했습니다.
+      # 처음 몇 번은 참고용으로만 두고, 결과를 확인한 뒤 blocking 으로 바꾸십시오.
+      - name: shellcheck (참고용)
+        continue-on-error: true
+        run: sudo apt-get install -y shellcheck && shellcheck -S warning run.sh setup.sh

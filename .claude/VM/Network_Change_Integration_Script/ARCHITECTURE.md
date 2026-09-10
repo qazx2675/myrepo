@@ -10,7 +10,7 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
                             ──> bin/ldap-config-engine   ─(gossh)─> 노드
           ──> lib/results.sh ─(집계)─> results/*.txt
           ──> lib/incident.sh ─(저장/롤백)─> incidents/<name>/
-          ──> (포트그룹) ../vm-network-migration/run.sh ─(govmomi)─> vCenter
+          ──> (포트그룹) projects/vm-network-migration/run.sh ─(govmomi)─> vCenter
 ```
 
 ## 파일별 역할
