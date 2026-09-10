@@ -26,12 +26,15 @@ IP 변경 · LDAP 설정 · 포트그룹(VLAN) 이관을 **한 번의 실행**�
 
 ### 1.1 폐쇄망(오프라인) 빌드
 
-이 프로젝트는 `myrepo` 저장소의 일부입니다. **저장소를 통째로 clone**
-(또는 통째로 복사) 하면 3개 하위 프로젝트가 모두 포함되어, 인터넷 없이 빌드됩니다.
+**이 폴더(`Network_Change_Integration_Script`) 하나만 있으면 됩니다.**
+`myrepo` 의 다른 위치(원본 `ip_change`/`ldap_setting`/`vm-network-migration`)를
+상대경로로 참조하지 않고, 세 프로젝트의 소스를 `projects/` 아래에 자체
+보관합니다 — 다른 부서로 이 폴더만 단독 이관돼도 그대로 빌드·실행됩니다.
 
 ```bash
-git clone <myrepo-url>
+# myrepo 전체를 내려받았다면:
 cd myrepo/.claude/VM/Network_Change_Integration_Script
+# 이 폴더만 통째로 복사/이관받았다면, 그 폴더 안에서:
 ./setup.sh
 ```
 
@@ -39,15 +42,22 @@ cd myrepo/.claude/VM/Network_Change_Integration_Script
 
 | 프로젝트 | 위치 | 빌드 방식 |
 |---|---|---|
-| `ip_change` | `../../HPC/ip_change` | 표준 라이브러리만 사용, `CGO_ENABLED=0` 정적 빌드 |
-| `ldap_setting` | `../../HPC/ldap_setting` | 표준 라이브러리만 사용, 정적 빌드 |
-| `vm-network-migration` | `../vm-network-migration` | `vendor/`(govmomi) 사용, `-mod=vendor GOPROXY=off` |
+| `ip_change` | `./projects/ip_change` | 표준 라이브러리만 사용, `CGO_ENABLED=0` 정적 빌드 |
+| `ldap_setting` | `./projects/ldap_setting` | 표준 라이브러리만 사용, 정적 빌드 |
+| `vm-network-migration` | `./projects/vm-network-migration` | `vendor/`(govmomi) 사용, `-mod=vendor GOPROXY=off` |
 
 빌드 결과:
 - `bin/ip-change-engine`, `bin/ldap-config-engine` — 이 폴더로 복사됨
-- `nm-*` (7종) — `../vm-network-migration/bin/` 에 그대로 (이 스크립트가 `run.sh` 를 통해 씀)
+- `nm-*` (7종) — `projects/vm-network-migration/bin/` 에 그대로 (이 스크립트가 `run.sh` 를 통해 씀)
 
 Go 툴체인만 있으면 됩니다. 랩 기준 `go1.26.5`.
+
+> `projects/` 아래 세 프로젝트는 원본(`.claude/HPC/ip_change`,
+> `.claude/HPC/ldap_setting`, `.claude/VM/vm-network-migration`)의 **스냅샷
+> 사본**입니다. 이관 전 원본이 갱신됐다면 이관 직전에 한 번 더 동기화하고,
+> 이관 후에는 각자 독립적으로 관리됩니다(자동 동기화 없음). 이 세
+> 프로젝트 각각의 `README.md`/`CHANGELOG.md`도 `projects/<이름>/` 안에
+> 그대로 들어 있습니다.
 
 ### 1.2 설정
 
@@ -264,7 +274,7 @@ IP 가 실패한 VM 이 새 VLAN 으로 옮겨져 "옛 IP + 새 VLAN" 으로 고
 | **E2** | 포트그룹: 동명 VM 이 여러 개 | vCenter 에서 정리 후 재시도 |
 | **E3** | 포트그룹: ESXi 호스트를 vCenter 에서 못 찾음 | vswitch 1열 표기 ↔ vCenter 등록 이름 대조 (`--debug-inventory`) |
 | **E5** | 포트그룹: BM 호스트에 대응하는 worklist 항목 없음 | vCenter 가 보고한 호스트 이름과 vswitch 1열이 (FQDN/short 무시하고) 같은지 확인 |
-| **E9** | 포트그룹: `nm run.sh` 가 실패 (기타) | `logs/` 및 `../vm-network-migration/` 의 nm 출력 확인 |
+| **E9** | 포트그룹: `nm run.sh` 가 실패 (기타) | `logs/` 및 `projects/vm-network-migration/` 의 nm 출력 확인 |
 | **F1** | 인시던트: 디렉터리 생성 실패 | `incidents/` 권한 확인 |
 | **F2** | 인시던트: meta/상태 파일 손상 | `incidents/<이름>/meta` 직접 확인 |
 | **F3** | 인시던트/재시도: 대상이 없음 | 이름 오타, 또는 실패 목록이 비었는지 확인 |

@@ -74,7 +74,7 @@ default_site =
 # 포트그룹 (E 단계) — vm-network-migration 에 위임
 ###############################################################################
 
-nm_dir       = ../vm-network-migration
+nm_dir       = ./projects/vm-network-migration
 vcenter_file = ./vcenter.txt
 vc_id        = lscsystems@vsphere.local
 concurrency  = 8

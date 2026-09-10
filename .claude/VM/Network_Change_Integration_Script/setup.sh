@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # setup.sh — 통합 스크립트 준비 (폐쇄망 오프라인 빌드)
 #
-# 세 프로젝트를 각자의 위치에서 빌드하고, 나온 바이너리를 bin/ 으로 모읍니다.
-# 세 프로젝트는 같은 저장소(myrepo) 안에 있으므로, 저장소를 통째로 내려받았다면
-# 인터넷 없이 빌드됩니다.
+# 세 프로젝트(ip_change / ldap_setting / vm-network-migration)의 소스를
+# ./projects/ 아래에 자체 보관합니다(다른 부서로 이 폴더만 단독 이관되므로
+# myrepo 의 다른 위치를 상대경로로 참조하지 않음). 각자의 위치에서 빌드하고,
+# 나온 바이너리를 bin/ 으로 모읍니다. 이 폴더 하나만 있으면 인터넷 없이
+# 빌드됩니다.
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
 
 command -v go >/dev/null 2>&1 || { echo "오류: go 가 없습니다. Go 툴체인을 설치하세요." >&2; exit 2; }
 
-IP_DIR="../../HPC/ip_change"
-LDAP_DIR="../../HPC/ldap_setting"
-NM_DIR="../vm-network-migration"
+IP_DIR="./projects/ip_change"
+LDAP_DIR="./projects/ldap_setting"
+NM_DIR="./projects/vm-network-migration"
 
 for d in "$IP_DIR" "$LDAP_DIR" "$NM_DIR"; do
-  [ -d "$d" ] || { echo "오류: $d 가 없습니다. myrepo 를 통째로 내려받았는지 확인하세요." >&2; exit 2; }
+  [ -d "$d" ] || { echo "오류: $d 가 없습니다. 이 폴더(Network_Change_Integration_Script) 를 통째로 내려받았는지 확인하세요." >&2; exit 2; }
 done
 
 mkdir -p bin

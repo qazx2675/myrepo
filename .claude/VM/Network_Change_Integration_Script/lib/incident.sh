@@ -58,8 +58,8 @@ incident_save() {
 EOF
 
   # 포트그룹까지 갔다면 상태 파일도 보관
-  [ -f "$(conf_get nm_dir ../vm-network-migration)/state_${RUN_USER}.json" ] && \
-    cp -p "$(conf_get nm_dir ../vm-network-migration)/state_${RUN_USER}.json" "$d/" 2>/dev/null || true
+  [ -f "$(conf_get nm_dir ./projects/vm-network-migration)/state_${RUN_USER}.json" ] && \
+    cp -p "$(conf_get nm_dir ./projects/vm-network-migration)/state_${RUN_USER}.json" "$d/" 2>/dev/null || true
 
   log F "인시던트 저장: $d"
 }
@@ -95,7 +95,7 @@ incident_load() {
 rollback_incident() {
   incident_load "$1"
   local d="$INC_DIR"
-  local nm_dir; nm_dir="$(conf_get nm_dir ../vm-network-migration)"
+  local nm_dir; nm_dir="$(conf_get nm_dir ./projects/vm-network-migration)"
 
   log ROLLBACK "== 인시던트 $1 롤백 시작 (역순) =="
 
