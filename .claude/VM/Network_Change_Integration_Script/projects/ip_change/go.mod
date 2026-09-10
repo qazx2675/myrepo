@@ -1,3 +1,3 @@
 module ip-change
 
-go 1.26.5
+go 1.25.0

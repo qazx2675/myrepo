@@ -2,6 +2,37 @@
 
 날짜순(최신이 위).
 
+## 2026-09-10 — `go.mod` 의 과도한 버전 요구로 인한 폐쇄망 빌드 실패 수정
+
+- **증상**: 사용자가 이관 준비 중 `./setup.sh` 를 돌렸더니
+  `vm-network-migration` 단계에서 실패("vendor 문제인 것 같다"고 보고).
+- **원인 조사**: `projects/vm-network-migration` 의 `vendor/`, `go.mod`,
+  `go.sum` 을 원본과 `diff -rq` 해 바이트 단위로 동일함을 먼저 확인 —
+  vendoring(직전 항목) 자체가 원인이 아님. 실제 원인은 세 프로젝트
+  `go.mod` 가 모두 `go 1.26.5` 를 요구하는데, `govmomi v0.55.1`(vendor 안
+  실제 서드파티 코드)의 진짜 최소 요구는 `go 1.25.0` 뿐이라는 것. `go
+  1.26.5` 요구는 필요 이상으로 높게 박혀 있었고, 이 버전의 Go 가 없는
+  폐쇄망 빌드 호스트에서는 `GOTOOLCHAIN` 이 자동 다운로드를 시도하다
+  네트워크가 없어 실패 — 이게 `-mod=vendor` 와 맞물리면 vendor 관련
+  오류처럼 보이는 메시지로 나타날 수 있음.
+- **검증**: 네트워크가 되는 이 세션에서 실제 `go1.26.5` 를 내려받아
+  `go mod tidy && go mod vendor` 로 재생성해봤더니 기존 커밋된
+  `vendor/`·`go.sum` 과 **완전히 동일**(diff 없음) — 즉 vendor 트리 자체는
+  100% 정상이었음. 이어서 `go.mod` 의 `go` 지시자를 실제 최소 요구치인
+  `1.25.0` 으로 낮추고, `go1.25.1` 로 `GOPROXY=off`(폐쇄망 시뮬레이션)
+  전체 빌드·`go vet`·`go test ./...` 를 세 프로젝트 모두 돌려 전부 통과
+  확인(변경 없이도 `vendor/`·`go.sum` 그대로 재사용 가능했음).
+- **조치**: `projects/ip_change/go.mod`, `projects/ldap_setting/go.mod`,
+  `projects/vm-network-migration/go.mod` 의 `go 1.26.5` → `go 1.25.0` 로
+  낮춤(코드 변경 없음, 실제 필요한 최소 버전에 맞춘 것뿐). `README.md`
+  1.1 절의 "랩 기준 go1.26.5" 안내를 "Go 1.25.0 이상이면 됨" 으로 갱신.
+- **최종 검증**: `GOMODCACHE=$(mktemp -d) GOPROXY=off ./setup.sh` 를
+  `go1.25.1` 로 이 저장소에서 **끝까지 실행해 9개 바이너리(엔진 2개 +
+  `nm-*` 7개) 전부 정상 생성** 확인 — 지난 항목에서 "환경 제약으로 끝까지
+  못 돌렸다"고 남긴 재검증이 이번에 완료됨.
+- **영향 범위**: `projects/ip_change/go.mod`, `projects/ldap_setting/go.mod`,
+  `projects/vm-network-migration/go.mod`, `README.md`.
+
 ## 2026-09-10 — 3개 하위 프로젝트 소스를 `projects/`에 자체 보관 (완전 독립 이관)
 
 - **사유**: "다른 폴더와 연관 없이 이 폴더에서 독립적으로만 작동하면 된다"는

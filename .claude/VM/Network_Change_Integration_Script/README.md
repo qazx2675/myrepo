@@ -50,7 +50,9 @@ cd myrepo/.claude/VM/Network_Change_Integration_Script
 - `bin/ip-change-engine`, `bin/ldap-config-engine` — 이 폴더로 복사됨
 - `nm-*` (7종) — `projects/vm-network-migration/bin/` 에 그대로 (이 스크립트가 `run.sh` 를 통해 씀)
 
-Go 툴체인만 있으면 됩니다. 랩 기준 `go1.26.5`.
+Go 1.25.0 이상이면 됩니다(`go.mod` 요구사항, `govmomi` 의 실제 최소 버전에
+맞춤). 폐쇄망 빌드 호스트에 정확히 특정 패치버전이 없어도, 툴체인 자동
+다운로드(`GOTOOLCHAIN`)를 시도하지 않고 그대로 빌드됩니다.
 
 > `projects/` 아래 세 프로젝트는 원본(`.claude/HPC/ip_change`,
 > `.claude/HPC/ldap_setting`, `.claude/VM/vm-network-migration`)의 **스냅샷
