@@ -120,6 +120,21 @@ $EDITOR conf/ldap_config.conf conf/assets.txt   # 실제 LDAP 설정·자산현�
 지정합니다. 통합 스크립트는 계정을 **딱 한 곳(여기)에서만** 고르고, 하위
 프로젝트의 빈 선택 함수는 호출하지 않습니다.
 
+### 1.4 폐쇄망 증분 업데이트 (`update.sh`)
+
+새 버전이 나오면, 기존에 `change.sh` 를 실행하던 **배포 폴더에서**:
+
+```bash
+bash update.sh <새 버전 Network_Change_Integration_Script 경로>
+```
+
+- `projects/` 아래 하위 3프로젝트 소스를 포함해 이 폴더 전체를 새 버전으로 동기화합니다.
+- 보존(건드리지 않음): `integration.conf`, `conf/*.conf`, `vcenter.txt`,
+  루트의 `<계정>.txt` / `vswitch_<계정>.txt`, `bin/`, `projects/*/bin/`,
+  `logs/ work/ results/ incidents/` 내용.
+- **자동 롤백 없음** — 실행 전 배포 폴더를 통째로 백업해 두십시오.
+- 갱신 후 반드시 `./setup.sh` 로 재빌드하십시오.
+
 ---
 
 ## 2. 사용 방법
@@ -174,10 +189,14 @@ read -rsp 'vCenter PW: ' VC_PASSWORD; export VC_PASSWORD; echo  # 포트그룹 �
 ./change.sh rollback <인시던트>    # 역순 원복 (포트그룹 → LDAP → IP)
 ```
 
-`rollback` 은 포트그룹(`nm run.sh --rollback`)과 LDAP(`ldap-config-engine
--rollback`)을 자동으로 되돌립니다. **IP 변경은 자동 롤백이 없어**(`ip_change` 에
-rollback 명령이 없음) 대상 VM 목록을 출력하고 각 노드에서
-`<ifcfg>.bak.<STAMP>` 를 수동 복원하도록 안내합니다.
+`rollback` 은 역순으로 세 단계를 모두 자동 원복합니다:
+
+1. 포트그룹 — `nm run.sh --rollback` (state 파일 기준)
+2. LDAP — `ldap-config-engine -rollback` (최근 백업, 인시던트에 저장된 인프라로)
+3. IP — `ip-change-engine -rollback` (각 노드의 최근 `<ifcfg>.bak.<STAMP>` 복원)
+
+IP 단계에서 엔진 실행이 실패하면 대상 VM 목록을 출력하고 수동 복원(`<ifcfg>.bak.<STAMP>`)을
+안내합니다. 백업 파일은 복원 후에도 남습니다.
 
 ### 2.5 진단
 
@@ -238,14 +257,18 @@ rollback 명령이 없음) 대상 VM 목록을 출력하고 각 노드에서
 
 ### 3.4 OS 6 분기 (§8.1)
 
-`integration.conf` 의 `os6_hostgroup` 에 나열된 호스트는 `os6_gossh` /
-`os6_bin_dir` 경로를 씁니다. 한 실행에 OS6/일반이 섞여 있으면 **gossh 를 그룹별로
-나눠 2회 호출**합니다.
+판정 기준은 **이 `change.sh` 를 실행하는 관리서버의 OS** 입니다(작업 대상 VM 이
+아닙니다). RHEL/CentOS 6 관리서버는 커널·glibc 가 낮아 최신 Go 빌드가 실행되지
+않으므로 gossh·엔진을 6버전용 빌드로 바꿔 써야 합니다.
+
+`integration.conf` 의 `os6_hostgroup` 은 **쉼표구분 관리서버 hostname 목록**(파일
+아님)입니다. 이 서버의 hostname(short/FQDN)이 목록에 있으면 이번 실행 전체가
+`os6_gossh` / `os6_bin_dir` 를 씁니다. 없으면 일반 경로(RHEL 8 관리서버 = 기존 동작).
 
 `os6_bin_dir` 기본값(`./bin_os6`)은 이 저장소에 미리 빌드해 커밋해 둔
 `ip-change-engine`/`ldap-config-engine`(Go 1.20 정적 빌드, 1.1절 참고)을
 가리킵니다. `os6_hostgroup` 을 비워두면(기본값) 전혀 쓰이지 않으므로,
-OS6 대상이 없는 배포에서는 아무 영향이 없습니다.
+RHEL 6 관리서버가 없는 배포에서는 아무 영향이 없습니다.
 
 ### 3.5 2패스 타임아웃 (§8.2)
 

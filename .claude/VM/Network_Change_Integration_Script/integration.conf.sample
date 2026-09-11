@@ -85,13 +85,20 @@ nm_vswitch   = vSwitch0
 # OS 6 분기 (§8.1)
 ###############################################################################
 
-# 이 파일에 나열된(한 줄에 hostname 하나) 호스트는 OS 6 전용 경로를 씁니다.
-# 비우면 전부 일반 경로. 대상이 섞여 있으면 gossh 를 그룹별로 나눠 2회 호출합니다.
+# 판정 기준은 "이 change.sh 를 실행하는 관리서버의 OS" 입니다(작업 대상 VM 아님).
+# RHEL/CentOS 6 관리서버는 커널·glibc 가 낮아 최신 Go 빌드가 실행되지 않으므로
+# gossh·엔진을 6버전용 빌드로 바꿔 써야 합니다.
+#
+#   os6_hostgroup : 6버전용 빌드로 실행해야 하는 관리서버 hostname 목록.
+#                   쉼표(,)로 여러 대 지정. short/FQDN 둘 다 인식.
+#                   이 서버 hostname 이 목록에 있으면 이번 실행 전체가
+#                   os6_gossh / os6_bin_dir 를 씁니다. 없으면 일반 경로(기존 동작).
+#   os6_gossh     : 6버전용 gossh 실행 파일 경로 (비우면 일반 gossh 사용)
+#   os6_bin_dir   : 6버전용 엔진 바이너리 디렉토리
 #
 # ★ bin_os6/ip-change-engine, bin_os6/ldap-config-engine 는 Go 1.20 으로
-#   미리 빌드해 저장소에 커밋해 둔 정적 바이너리입니다(RHEL/CentOS 6은
-#   커널·glibc가 오래돼 최신 Go 툴체인 산출물이 못 도는 경우가 있음 —
-#   README 1.1/3.4 참고). os6_hostgroup 을 채워야만 실제로 쓰입니다.
+#   미리 빌드해 저장소에 커밋해 둔 정적 바이너리입니다(README 1.1/3.4 참고).
+#   os6_hostgroup 을 채워야만 실제로 쓰입니다.
 os6_hostgroup =
 os6_gossh     =
 os6_bin_dir   = ./bin_os6

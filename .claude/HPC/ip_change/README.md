@@ -129,6 +129,12 @@ hostname2             192.168.1.11 -> 2.2.2.2   (GW 2.2.2.1)
 | `-c` | `0`(gossh 기본값) | gossh 동시 접속 수 |
 | `-t` | `0`(gossh 기본값) | gossh 접속 타임아웃(초) |
 | `-remote-path` | `/root/ip_change_apply.sh` | 원격에 떨어뜨릴 스크립트 경로 (실행 후 삭제됨) |
+| `-rollback` | `false` | IP 변경을 되돌립니다. 각 노드에서 `<ifcfg>.bak.<STAMP>` 를 복원 |
+| `-rollback-to` | (없음) | 되돌릴 백업 STAMP 지정. 미지정 시 가장 최근 백업 |
+
+> `-rollback` 시 `-targets` 파일은 `hostname` 한 컬럼만 있어도 됩니다(변경 IP 불필요).
+> 최신 STAMP 백업을 가진 ifcfg 가 노드에 둘 이상이면 `-rollback-to` 로 지정하십시오.
+> 백업 파일(`.bak.*`)은 복원 후에도 지우지 않고 남깁니다.
 
 ### `conf/ip_change.conf`
 

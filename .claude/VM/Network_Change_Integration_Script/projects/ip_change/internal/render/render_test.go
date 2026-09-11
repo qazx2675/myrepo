@@ -199,6 +199,105 @@ func TestApplyScriptEndToEndUnknownHost(t *testing.T) {
 	}
 }
 
+// TestRollbackScriptEndToEnd 는 최근 .bak.<STAMP> 를 되돌리는 왕복을 검증합니다.
+func TestRollbackScriptEndToEnd(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash 가 없는 환경이라 건너뜁니다")
+	}
+
+	work := t.TempDir()
+	fixtureDir := filepath.Join(work, "network-scripts")
+	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ifcfg := filepath.Join(fixtureDir, "ifcfg-eth0")
+	// 현재 상태 = IP 변경이 이미 적용된 모습
+	if err := os.WriteFile(ifcfg, []byte("DEVICE=eth0\nBOOTPROTO=none\nIPADDR=192.168.1.99\nGATEWAY=192.168.1.1\nONBOOT=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 변경 전 백업
+	bak := ifcfg + ".bak.20260101120000"
+	if err := os.WriteFile(bak, []byte("DEVICE=eth0\nBOOTPROTO=none\nIPADDR=192.168.1.50\nGATEWAY=192.168.1.1\nONBOOT=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fakebin := filepath.Join(work, "fakebin")
+	if err := os.MkdirAll(fakebin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFakeHostname(t, fakebin, "testnode", "192.168.1.99")
+
+	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
+	script, err := RollbackScript(cfg, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(work, "rollback.sh")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script failed: %v\noutput:\n%s", err, out)
+	}
+
+	got := strings.TrimSpace(string(out))
+	want := "RESULT|OK|testnode|" + ifcfg + "|20260101120000|192.168.1.50"
+	if got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+
+	restored, err := os.ReadFile(ifcfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(restored), "IPADDR=192.168.1.50\n") {
+		t.Errorf("IPADDR not restored:\n%s", restored)
+	}
+}
+
+// TestRollbackScriptNoBackup 은 백업이 없으면 FAIL 을 내는지 봅니다.
+func TestRollbackScriptNoBackup(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash 가 없는 환경이라 건너뜁니다")
+	}
+
+	work := t.TempDir()
+	fixtureDir := filepath.Join(work, "network-scripts")
+	if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixtureDir, "ifcfg-eth0"), []byte("IPADDR=192.168.1.99\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fakebin := filepath.Join(work, "fakebin")
+	if err := os.MkdirAll(fakebin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFakeHostname(t, fakebin, "testnode", "192.168.1.99")
+
+	cfg := &config.Config{NetworkScriptsDir: fixtureDir}
+	script, _ := RollbackScript(cfg, "")
+	scriptPath := filepath.Join(work, "rollback.sh")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Env = append(os.Environ(), "PATH="+fakebin+":"+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("want non-zero exit when no backup exists, output:\n%s", out)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(string(out)), "RESULT|FAIL|testnode|") {
+		t.Fatalf("output = %q, want FAIL", out)
+	}
+}
+
 func writeFake(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {

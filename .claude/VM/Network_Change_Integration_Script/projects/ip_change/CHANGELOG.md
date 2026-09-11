@@ -1,5 +1,14 @@
 # CHANGELOG.md — ip_change
 
+## 2026-09-11
+
+- `-rollback` 서브모드 추가 — 각 대상 노드에서 `<ifcfg>.bak.<STAMP>` 를 되돌립니다
+  (`ldap-config-engine -rollback` 과 대칭). `-rollback-to <STAMP>` 로 시점 지정 가능.
+  - 새 임베드 스크립트 `internal/render/rollback_body.sh` + `render.RollbackScript`
+  - `-rollback` 시 대상 파일은 `hostname` 한 컬럼만 있어도 됩니다 (`target.LoadHosts`)
+  - 최신 STAMP 백업을 가진 ifcfg 가 둘 이상이면 실패 → `-rollback-to` 로 지정
+  - 통합 스크립트(`Network_Change_Integration_Script`) 의 `change.sh rollback` 이 이걸 호출합니다
+
 ## 2026-09-09
 
 - 최초 작성. `hostname 변경될ip` 목록으로 RHEL 대상 노드의 `ifcfg-*` 내 `IPADDR`/`GATEWAY`
