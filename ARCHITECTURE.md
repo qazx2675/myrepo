@@ -45,6 +45,7 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | "포트그룹 OS6 바이너리 경로" | `lib/stages.sh` 의 `_nm_bin_dir` (`NM_BIN_DIR` 로 `run.sh` 에 전달) |
 | "증분 업데이트 보존 규칙" | `update.sh` 의 `KEEP_FILES` / rsync `--exclude` |
 | "포트그룹 위임 방식" | `change.sh` 의 `run_portgroup` |
+| "포트그룹 상태 파일 충돌 처리" | `change.sh` 의 `run_portgroup` 앞부분 (`nm_state` 삭제 확인) |
 | "인시던트/롤백" | `lib/incident.sh` |
 | "계정 선택 로직 채우기" | `lib/common.sh` 의 `user선택()` |
 | "IP+LDAP 확인 통합 로직" | `change.sh` 메인 흐름의 "2+3. C+D" 블록 + `lib/stages.sh` 의 `SKIP_LDAP_CONFIRM` |

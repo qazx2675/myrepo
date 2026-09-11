@@ -344,7 +344,7 @@ IP 가 실패한 VM 이 새 VLAN 으로 옮겨져 "옛 IP + 새 VLAN" 으로 고
 | **E2** | 포트그룹: 동명 VM 이 여러 개 | vCenter 에서 정리 후 재시도 |
 | **E3** | 포트그룹: ESXi 호스트를 vCenter 에서 못 찾음 | vswitch 1열 표기 ↔ vCenter 등록 이름 대조 (`--debug-inventory`) |
 | **E5** | 포트그룹: BM 호스트에 대응하는 worklist 항목 없음 | vCenter 가 보고한 호스트 이름과 vswitch 1열이 (FQDN/short 무시하고) 같은지 확인 |
-| **E9** | 포트그룹: `nm run.sh` 가 실패 (기타) | `logs/` 및 `projects/vm-network-migration/` 의 nm 출력 확인 |
+| **E9** | 포트그룹: 남은 상태 파일 삭제를 거부함 / `nm run.sh` 가 실패 (기타) | 삭제 확인 프롬프트에 `y` 로 답하거나, `logs/` 및 `projects/vm-network-migration/` 의 nm 출력 확인 |
 | **F1** | 인시던트: 디렉터리 생성 실패 | `incidents/` 권한 확인 |
 | **F2** | 인시던트: meta/상태 파일 손상 | `incidents/<이름>/meta` 직접 확인 |
 | **F3** | 인시던트/재시도: 대상이 없음 | 이름 오타, 또는 실패 목록이 비었는지 확인 |
