@@ -2,6 +2,34 @@
 
 날짜순(최신이 위).
 
+## 2026-09-11 — OS6 판정 관리서버 기준으로 전환 · IP 자동 롤백 · update.sh
+
+### 변경
+
+- **OS 6 분기 (§8.1) 재정의** — 판정 기준을 "작업 대상 VM" 에서 **"이 스크립트를
+  실행하는 관리서버"** 로 바꿨습니다. 관리서버가 RHEL 6/8 두 대이고, 6에서
+  실행할 때만 6버전용 빌드(`bin_os6/`)를 써야 하는 운영 환경에 맞춤.
+  - `os6_hostgroup` — 파일 경로 → **쉼표구분 관리서버 hostname 목록 문자열**.
+    이 서버 hostname(short/FQDN)이 목록에 있으면 이번 실행 전체가 `os6_gossh` /
+    `os6_bin_dir` 사용. 없으면 일반 경로(RHEL 8 = 기존 동작 그대로).
+  - `lib/stages.sh` — per-target `_load_os6`/`_in_os6` 제거, `_mgmt_is_os6` 로 대체.
+    `_stage_run` 의 그룹 분할이 실행당 1회 판정으로 단순화(2패스 로직은 그대로).
+    `bin_os6/` 사전빌드 바이너리는 그대로 사용.
+- **`change.sh rollback` 의 IP 단계 자동 원복** (`lib/incident.sh`) — 기존엔 수동
+  안내만 했으나, 이제 `ip-change-engine -rollback` 을 호출해 각 노드의 최근
+  `<ifcfg>.bak.<STAMP>` 를 복원합니다(포트그룹·LDAP 원복은 그대로). 엔진 실행
+  실패 시에만 대상 목록 출력 + 수동 안내.
+  - `projects/ip_change` (및 원본 `.claude/HPC/ip_change`) 에 `-rollback` /
+    `-rollback-to` 서브모드 추가.
+
+### 신규
+
+- **`update.sh`** — 폐쇄망 증분 업데이트. 배포 폴더에서
+  `bash update.sh <새버전경로>` — 운영값 파일(`integration.conf`, `conf/*.conf`,
+  `vcenter.txt`, 워크리스트, `bin/`, 상태 디렉토리) 백업 → `projects/` 포함
+  전체 코드 동기화 → 운영값 복원. `projects/ldap_setting/update.sh` 와 같은 패턴.
+  자동 롤백 없음(사전 백업 권장).
+
 ## 2026-09-10 — `render_confs()` 가 `rhel9_path` 미설정 시 항상 G2 로 실패하는 버그 수정
 
 - **증상**: 빌드는 정상, `bash change.sh` 실행 시 "오류 코드: G2 / conf

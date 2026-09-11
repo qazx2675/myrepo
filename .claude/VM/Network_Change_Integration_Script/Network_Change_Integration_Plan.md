@@ -61,8 +61,8 @@ VM/Network_Change_Integration_Script/
 | `bm_domain` | BM 호스트에 붙일 도메인. **기본값 `seccae.com`** |
 | `result_dir` | 결과 목록 파일 출력 경로 (→ §6) |
 | `default_site` | 자산현황에서 못 찾은 호스트에 적용할 site (→ §11) |
-| `os6_hostgroup` | RHEL 6 전용 바이너리를 쓸 호스트 그룹 |
-| `os6_bin_dir` / `os6_gossh` | OS 6 전용 바이너리·gossh 경로 |
+| `os6_hostgroup` | 6버전용 빌드로 실행해야 하는 **관리서버** hostname 목록(쉼표구분). 이 서버가 해당되면 실행 전체가 os6 경로 (→ §8.1) |
+| `os6_bin_dir` / `os6_gossh` | OS 6 전용 바이너리 디렉토리·gossh 경로 |
 | `bin_dir` / `gossh` | 일반 바이너리·gossh 경로 |
 
 ### 2.3 `user선택` 함수
@@ -228,18 +228,30 @@ IP·LDAP 변경 후, 결과를 `integration.conf` 의 `result_dir` 에 목록 �
 change.sh rollback <incident>
 ```
 인시던트에 기록된 백업 인덱스를 읽어 **역순**(포트그룹 → LDAP → IP)으로
-각 프로젝트의 기존 롤백 명령을 호출합니다.
+각 프로젝트의 롤백 명령을 호출합니다. 세 단계 모두 자동입니다:
+
+- 포트그룹 — `nm run.sh --rollback`
+- LDAP — `ldap-config-engine -rollback`
+- IP — `ip-change-engine -rollback` (각 노드의 최근 `<ifcfg>.bak.<STAMP>` 복원)
+  `[2026-09-11 추가]` 이전엔 수동 안내만 했으나 ip_change 에 `-rollback` 을 추가해 자동화.
+  엔진 실행 실패 시에만 대상 목록 출력 + 수동 복원 안내.
 
 ---
 
 ## 8. OS 분기 및 지연 VM 처리
 
-### 8.1 OS 6 바이너리 분기 `[v1 보강]`
+### 8.1 OS 6 바이너리 분기 `[2026-09-11 재정의]`
 
-- `conf` 의 `os6_hostgroup` 에 속한 호스트는 OS 6 전용 바이너리·gossh 경로 사용
-- 그 외는 일반 바이너리
-- **한 실행에 OS6 그룹과 일반 그룹이 섞여 있으면 호스트 파일을 나눠 gossh 를
-  2회 호출**해야 합니다. (v1 누락)
+판정 기준은 **작업 대상 VM 이 아니라, 이 `change.sh` 를 실행하는 관리서버의 OS**
+입니다. 대상 노드에는 Go 바이너리가 올라가지 않고(base64 bash 주입) gossh·엔진은
+관리서버에서만 돕니다. 관리서버가 RHEL 6/8 두 대이고, RHEL 6 에서 실행할 때만
+커널/glibc 제약으로 6버전용 빌드가 필요합니다.
+
+- `conf` 의 `os6_hostgroup` = **쉼표구분 관리서버 hostname 목록 문자열** (파일 아님)
+- 이 서버의 hostname(short/FQDN)이 목록에 있으면 **이번 실행 전체**가
+  `os6_gossh` / `os6_bin_dir`(기본 `./bin_os6` 사전빌드) 사용
+- 없으면 일반 경로 (RHEL 8 관리서버 = 기존 동작 그대로)
+- per-target 분할·gossh 2회 호출은 폐기 (한 실행은 항상 한 관리서버에서 돎)
 
 ### 8.2 지연·고부하 VM 타임아웃 `[v1 수정]`
 
@@ -517,8 +529,8 @@ change.sh --debug-inventory # vCenter 인벤토리 덤프 (§9.3)
 | 작업 순서 | "새 IP + 옛 VLAN" 전제 문서화 (§5.2) | [ ] |
 | 인시던트 | 보류·재개·`change.sh port`, **접속 IP 기록** (§5.3) | [ ] |
 | **결과 리다이렉션** | `on_off` / `ip_ok` / `ldap_ok` / `failed` 5종 + `--retry` (§6) | [ ] |
-| 백업·롤백 | 자체 백업 금지, 인덱싱만 + `change.sh rollback` (§7) | [ ] |
-| OS 분기 | OS6 전용 경로 + **gossh 2회 분할 호출** (§8.1) | [ ] |
+| 백업·롤백 | 자체 백업 금지, 인덱싱만 + `change.sh rollback` (3단계 자동, §7) | [ ] |
+| OS 분기 | **관리서버 hostname 기준** os6 경로 전환 (§8.1) | [ ] |
 | 타임아웃 | ping 선검사 기반 **2패스** (§8.2) | [ ] |
 | **상위폴더** | 폴더 경로 색인(병렬 유지) + 이름 정규화 + 진단 모드 (§9.3) | [ ] |
 | **디버그** | `-d1`~`-d3`, `--only`/`--from`, 에러코드 A~G (§10) | [ ] |

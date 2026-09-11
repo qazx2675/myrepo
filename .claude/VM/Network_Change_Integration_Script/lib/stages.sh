@@ -1,7 +1,9 @@
 # lib/stages.sh — IP 변경(C) / LDAP(D) 단계 실행
 #
 # 공통 처리:
-#   - OS 6 분기 (§8.1): os6_hostgroup 에 속한 호스트는 별도 gossh 로 나눠 호출
+#   - OS 6 분기 (§8.1): 이 스크립트를 실행하는 "관리서버" 의 hostname 이
+#     integration.conf 의 os6_hostgroup(쉼표구분 목록)에 있으면, 이번 실행 전체를
+#     os6_gossh / os6_bin_dir 로 수행. 없으면 일반 경로(기존 동작 그대로).
 #   - 2패스 타임아웃 (§8.2): 1차(짧게) → 타임아웃/실패 호스트 중 ping 되는 것만
 #     2차(길게) 재실행
 #   - 엔진 stdout 을 파싱해 호스트별 OK/FAIL 을 <work>/res_*.tsv 로 남김
@@ -12,24 +14,33 @@
 #
 # change.sh 가 source 합니다.
 
-# ── 호스트 그룹 판정 ────────────────────────────────────────────────────────
-# _in_os6 <hostname>  → os6_hostgroup 파일에 있으면 0
-_OS6_LOADED=0
-declare -A _OS6_SET
-_load_os6() {
-  [ "$_OS6_LOADED" -eq 1 ] && return
-  _OS6_LOADED=1
-  local f; f="$(conf_get os6_hostgroup)"
-  [ -n "$f" ] && [ -f "$f" ] || return
-  local h
-  while IFS= read -r h || [ -n "$h" ]; do
-    h="${h%%$'\r'}"; h="${h//[[:space:]]/}"
-    case "$h" in ''|'#'*) continue ;; esac
-    _OS6_SET["$h"]=1
-  done <"$f"
-  dlog 1 "OS6 호스트그룹 ${#_OS6_SET[@]}건 로드"
+# ── 관리서버 OS6 판정 ──────────────────────────────────────────────────────
+# _mgmt_is_os6  → 이 서버(hostname)가 os6_hostgroup 목록에 있으면 0
+#   os6_hostgroup 은 쉼표구분 관리서버 hostname 목록 문자열입니다(파일 아님).
+#   short/FQDN 둘 다 대조합니다.
+_MGMT_OS6=-1
+_mgmt_is_os6() {
+  if [ "$_MGMT_OS6" -lt 0 ]; then
+    local list me_s me_f h
+    list="$(conf_get os6_hostgroup)"
+    me_s="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo)"
+    me_f="$(hostname 2>/dev/null || echo "$me_s")"
+    _MGMT_OS6=1   # 기본: 아님
+    local old_ifs="$IFS"; IFS=','
+    for h in $list; do
+      h="${h//[[:space:]]/}"
+      [ -n "$h" ] || continue
+      if [ "$h" = "$me_s" ] || [ "$h" = "$me_f" ]; then _MGMT_OS6=0; break; fi
+    done
+    IFS="$old_ifs"
+    if [ "$_MGMT_OS6" -eq 0 ]; then
+      dlog 1 "관리서버 '$me_s' 가 os6_hostgroup 에 포함 — os6 빌드로 실행"
+    else
+      dlog 1 "관리서버 '$me_s' 는 os6_hostgroup 에 없음 — 일반 빌드로 실행"
+    fi
+  fi
+  return "$_MGMT_OS6"
 }
-_in_os6() { _load_os6; [ -n "${_OS6_SET[$1]+x}" ]; }
 
 # _ping_ok <host> — 1회 ping (2초)
 _ping_ok() { ping -c1 -W2 "$1" >/dev/null 2>&1; }
@@ -119,14 +130,14 @@ _stage_run() {
   t1="$(conf_get timeout_pass1 60)"
   t2="$(conf_get timeout_pass2 600)"
 
-  # 대상을 일반/OS6 로 분할
-  local all_std all_os6 line h
+  # 관리서버 OS 에 따라 이번 실행 전체를 한 그룹으로 (§8.1)
+  local all_std all_os6 line dest h
   all_std="$(mktemp)"; all_os6="$(mktemp)"
+  if _mgmt_is_os6; then dest="$all_os6"; else dest="$all_std"; fi
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%%$'\r'}"
     case "$line" in ''|'#'*) continue ;; esac
-    h="${line%% *}"
-    if _in_os6 "$h"; then echo "$line" >>"$all_os6"; else echo "$line" >>"$all_std"; fi
+    echo "$line" >>"$dest"
   done <"$targets"
 
   local grp bin gossh tf

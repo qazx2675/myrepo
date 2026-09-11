@@ -29,7 +29,7 @@ jobs:
         with: { go-version: '1.26.5' }
 
       - name: bash 문법 검사
-        run: bash -n change.sh setup.sh lib/*.sh tests/*.sh
+        run: bash -n change.sh setup.sh update.sh lib/*.sh tests/*.sh
 
       - name: 전처리 회귀 테스트
         run: bash tests/test_preprocess.sh
@@ -39,20 +39,21 @@ jobs:
 
       - name: 폐쇄망 빌드 재확인 (빈 모듈 캐시 + 프록시 차단)
         run: |
-          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C ../../HPC/ip_change build ./...
-          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C ../../HPC/ldap_setting build ./...
-          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C ../vm-network-migration build -mod=vendor ./...
+          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C projects/ip_change build ./...
+          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C projects/ldap_setting build ./...
+          GOMODCACHE=$(mktemp -d) GOPROXY=off go -C projects/vm-network-migration build -mod=vendor ./...
 
       - name: 엔진 출력 계약 확인
         # lib/stages.sh 의 awk 파서가 의존하는 엔진 출력 형식이 살아 있는지 확인.
         # 하나라도 깨지면 파서를 함께 고쳐야 합니다.
         run: |
           set -e
-          ip=../../HPC/ip_change/cmd/ip-change-engine/main.go
-          ld=../../HPC/ldap_setting/cmd/ldap-config-engine/main.go
+          ip=projects/ip_change/cmd/ip-change-engine/main.go
+          ld=projects/ldap_setting/cmd/ldap-config-engine/main.go
           grep -q '(GW %s)'          "$ip" || { echo "ip OK 줄 형식 변경됨"; exit 1; }
           grep -q 'FAIL: %s'         "$ip" || { echo "ip FAIL 줄 형식 변경됨"; exit 1; }
           grep -q 'UNREACHABLE'      "$ip" || { echo "ip UNREACHABLE 줄 사라짐"; exit 1; }
+          grep -q 'rollback'         "$ip" || { echo "ip -rollback 플래그 사라짐 (incident.sh 가 의존)"; exit 1; }
           grep -q '%-24s %s'         "$ld" || { echo "ldap 호스트 줄 형식 변경됨"; exit 1; }
           grep -q 'NORESULT'         "$ld" || { echo "ldap NORESULT 상태 사라짐"; exit 1; }
           echo "엔진 출력 계약 OK"
@@ -64,9 +65,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: '1.26.5' }
-      - name: ip_change
+      - name: ip_change (원본)
         run: cd .claude/HPC/ip_change && go vet ./... && go test ./...
-      - name: ldap_setting
+      - name: ldap_setting (원본)
         run: cd .claude/HPC/ldap_setting && go vet ./... && go test ./...
-      - name: vm-network-migration
+      - name: vm-network-migration (원본)
         run: cd .claude/VM/vm-network-migration && go vet -mod=vendor ./... && go test -mod=vendor ./...
+      - name: projects/ (통합 자체 보관본)
+        run: |
+          cd .claude/VM/Network_Change_Integration_Script
+          ( cd projects/ip_change      && go vet ./... && go test ./... )
+          ( cd projects/ldap_setting   && go vet ./... && go test ./... )
+          ( cd projects/vm-network-migration && go vet -mod=vendor ./... && go test -mod=vendor ./... )
