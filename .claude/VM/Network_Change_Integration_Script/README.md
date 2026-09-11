@@ -183,7 +183,9 @@ read -rsp 'vCenter PW: ' VC_PASSWORD; export VC_PASSWORD; echo  # 포트그룹 �
   → 결과 파일 기록 (§6)
   → 포트그룹 진행할까요?
        y → [E] vm-network-migration run.sh 에 위임
-       n → 인시던트 이름 입력 → 저장 (나중에 ./change.sh port <이름>)
+       n → 자동 인시던트 저장 (나중에 ./change.sh port <이름>)
+  → 실행 종료 시 성공/실패 여부와 무관하게 인시던트 자동 저장
+     (→ 항상 ./change.sh rollback <이름> 으로 되돌릴 수 있음)
 ```
 
 IP·LDAP 는 한 세트로 취급해 **확인은 한 번만** 물어봅니다(`--only C`/`--only D`
@@ -191,12 +193,24 @@ IP·LDAP 는 한 세트로 취급해 **확인은 한 번만** 물어봅니다(`-
 
 ### 2.4 나중에 이어서 / 재시도 / 롤백
 
+`change.sh`(전체 흐름) · `port` · `--retry` 는 성공/실패와 무관하게 실행이
+끝나면 항상 `incidents/incident_<타임스탬프>/` 를 자동 저장하고, 콘솔에
+`롤백하려면: ./change.sh rollback <이름>` (또는 포트그룹이 남았으면
+`포트그룹은 나중에 진행: ./change.sh port <이름>`) 을 출력합니다. 이름을
+직접 적어둘 필요 없이 그 줄을 그대로 복사해 쓰면 됩니다.
+
 ```bash
 ./change.sh port <인시던트>       # 저장해 둔 인시던트의 포트그룹만 진행
 ./change.sh --retry ip web        # IP 단계에서 실패한 VM 만 다시
 ./change.sh --retry ldap web      # LDAP 단계에서 실패한 VM 만 다시
 ./change.sh rollback <인시던트>    # 역순 원복 (포트그룹 → LDAP → IP)
 ```
+
+실행할 때마다 인시던트가 하나씩 쌓여 `incidents/` 가 지저분해질 수 있습니다.
+실행 시작 시 "이전에 중단된 작업이 있습니다" 프롬프트에서 인시던트 이름 대신
+`dd` 를 입력하면 저장된 인시던트를 **한 번의 확인 후 전부 삭제**합니다(각
+엔진이 노드/vCenter 에 남긴 실제 백업은 지워지지 않고, 통합 스크립트가
+관리하는 인덱스만 삭제됩니다).
 
 `rollback` 은 역순으로 세 단계를 모두 자동 원복합니다:
 

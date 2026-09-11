@@ -26,7 +26,7 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | `lib/preprocess.sh` | `vswitch_<계정>.txt` Case 1/2/3 표준화 (§4). 출력은 정확히 3열 |
 | `lib/stages.sh` | C(IP)·D(LDAP) 단계 실행. OS6 분기(§8.1, 관리서버 hostname 기준), 2패스 타임아웃(§8.2), **엔진 stdout 파싱** |
 | `lib/results.sh` | 결과 5종 파일 기록(§6), `.bak` 백업, `--retry` 대상 산정 |
-| `lib/incident.sh` | 인시던트 저장/로드(§5.3), 백업 위치 인덱싱, 역순 롤백(§7) |
+| `lib/incident.sh` | 인시던트 저장/로드(§5.3), 백업 위치 인덱싱, 역순 롤백(§7), 전체 삭제(`incident_purge_all`) |
 | `conf/` | 렌더링된 프로젝트 conf (gitignore) |
 | `work/` | 전처리 결과·중간 산출물 (gitignore, `-d2` 로 보존) |
 | `results/` | 결과 목록 파일 (gitignore) |
@@ -47,6 +47,8 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | "포트그룹 위임 방식" | `change.sh` 의 `run_portgroup` |
 | "포트그룹 상태 파일 충돌 처리" | `change.sh` 의 `run_portgroup` 앞부분 (`nm_state` 삭제 확인) |
 | "인시던트/롤백" | `lib/incident.sh` |
+| "인시던트 자동 저장 시점/이름 규칙" | `change.sh` 의 `auto_save_incident` (전체 흐름·`port`·`--retry` 종료 시 호출) |
+| "인시던트 전체 삭제(dd)" | `lib/incident.sh` 의 `incident_purge_all` (재개 확인 프롬프트에서 `dd` 입력 시 호출) |
 | "계정 선택 로직 채우기" | `lib/common.sh` 의 `user선택()` |
 | "IP+LDAP 확인 통합 로직" | `change.sh` 메인 흐름의 "2+3. C+D" 블록 + `lib/stages.sh` 의 `SKIP_LDAP_CONFIRM` |
 | "색상 추가/변경" | `lib/common.sh` 상단 `C_*` 변수 + `log`/`die`/`warn_box`, `change.sh` 의 `confirm_targets`/`ask_yes` |
