@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-11 — OS6(RHEL/CentOS 6) 관리서버용 빌드 추가
+
+- **`build_os6.sh` 신규.** vendor 한 govmomi v0.55.1 은 Go 1.21+ 표준 라이브러리
+  (`slices`, 빌트인 `min`, `reflect.TypeFor`)를 써서, ip_change/ldap_setting 처럼
+  go.mod 만 낮추는 걸로는 Go 1.20(RHEL 6 이 뜨는 마지막 툴체인) 빌드가 안 됩니다.
+  이 스크립트는 전체 모듈을 임시 사본으로 복사해 vendor 안 딱 3곳만 Go 1.20 호환
+  코드로 치환한 뒤(원본 grep 대조 후 치환 — 대상 문구가 없으면 실패) go.mod/
+  vendor/modules.txt 의 go 버전을 낮춰 Go 1.20 으로 nm-* 7종을 빌드합니다.
+  결과는 `../../bin_os6/` 에 (통합 스크립트 배치 기준).
+- `run.sh` 가 `NM_BIN_DIR` 환경변수로 바이너리 디렉터리를 바꿀 수 있게 함
+  (`BIN="${NM_BIN_DIR:-$(pwd)/bin}"`). 통합 스크립트가 관리서버 OS6 판정 시
+  자동으로 `bin_os6/` 를 넘겨줍니다(`lib/stages.sh` 의 `_nm_bin_dir`).
+- 검증: Go 1.20.14 로 `go build ./...` · `go vet ./...` · `go test ./...` 모두
+  통과, 실제 7개 바이너리 생성 확인.
+
+---
+
 ## 2026-09-09 — 통합 스크립트(Network_Change_Integration_Script) 연동
 
 - `{user}.txt` 를 `VM이름 변경될IP` 2열로 써도 되도록, `LoadVMList` 가 각 줄의

@@ -106,7 +106,9 @@ rollback_incident() {
     cp -p "$d/state_${RUN_USER}.json" "$nm_dir/state_${RUN_USER}.json"
     cp -p "$d/vswitch_${RUN_USER}.std.txt" "$nm_dir/vswitch_${RUN_USER}.txt" 2>/dev/null || true
     cp -p "$(conf_get vcenter_file ./vcenter.txt)" "$nm_dir/vcenter.txt" 2>/dev/null || true
-    ( cd "$nm_dir" && VC_PASSWORD="${VC_PASSWORD:-}" ./run.sh --rollback -y \
+    local nm_bin_dir; nm_bin_dir="$(_nm_bin_dir)" \
+      || die G2 "os6_bin_dir 를 찾을 수 없습니다: $(conf_get os6_bin_dir ./bin_os6) (nm-* OS6 바이너리를 준비하세요)"
+    ( cd "$nm_dir" && VC_PASSWORD="${VC_PASSWORD:-}" NM_BIN_DIR="$nm_bin_dir" ./run.sh --rollback -y \
         -u "$RUN_USER" --id "$(conf_get vc_id lscsystems@vsphere.local)" ) \
       || log ROLLBACK "포트그룹 롤백에서 오류 — nm 로그 확인"
     rm -f "$nm_dir/vswitch_${RUN_USER}.txt" "$nm_dir/vcenter.txt"

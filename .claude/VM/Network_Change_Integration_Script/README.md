@@ -115,9 +115,10 @@ $EDITOR conf/ldap_config.conf conf/assets.txt   # 실제 LDAP 설정·자산현�
 
 ### 1.3 사용자 커스텀 영역 (선택)
 
-`lib/common.sh` 의 `user선택()` 함수는 **의도적으로 비어 있습니다.** 사이트마다
-작업 계정을 정하는 방법이 달라서, 여기에 로직을 채우거나 항상 `-u <계정>` 으로
-지정합니다. 통합 스크립트는 계정을 **딱 한 곳(여기)에서만** 고르고, 하위
+`lib/common.sh` 의 `user선택()` 함수는 기본으로 **단순 텍스트 입력**(계정명을
+직접 타이핑)만 합니다. 사이트마다 계정을 정하는 방법이 다르면(목록에서 선택,
+LDAP 조회 등) 이 함수만 고쳐 쓰거나, 항상 `-u <계정>` 으로 지정해 아예 호출을
+건너뛰십시오. 통합 스크립트는 계정을 **딱 한 곳(여기)에서만** 고르고, 하위
 프로젝트의 빈 선택 함수는 호출하지 않습니다.
 
 ### 1.4 폐쇄망 증분 업데이트 (`update.sh`)
@@ -160,6 +161,9 @@ read -rsp 'SSH PW: ' GOSSH_PW;   export GOSSH_PW;   echo    # IP/LDAP 단계
 read -rsp 'vCenter PW: ' VC_PASSWORD; export VC_PASSWORD; echo  # 포트그룹 단계
 ```
 
+매번 치기 번거로우면 `change.sh` **맨 위**의 "비밀번호 환경변수" 블록 주석을 풀고
+직접 값을 채워도 됩니다. ⚠️ 채운 채로 커밋하지 마십시오.
+
 ### 2.3 실행
 
 ```bash
@@ -172,13 +176,18 @@ read -rsp 'vCenter PW: ' VC_PASSWORD; export VC_PASSWORD; echo  # 포트그룹 �
 
 ```
 전처리(vswitch 표준화)
-  → [C] IP 변경        대상표 출력 → 확인 → ip-change-engine
-  → [D] LDAP 설정      대상 인프라 선택(--infra 또는 대화형) → 확인 → ldap-config-engine (site 는 자산현황/기본값)
+  → LDAP 대상 인프라 선택(--infra 또는 대화형)
+  → 대상표 출력 → 확인 (IP+LDAP 한 번만 — §13)
+  → [C] IP 변경        ip-change-engine
+  → [D] LDAP 설정      ldap-config-engine (site 는 자산현황/기본값)
   → 결과 파일 기록 (§6)
   → 포트그룹 진행할까요?
        y → [E] vm-network-migration run.sh 에 위임
        n → 인시던트 이름 입력 → 저장 (나중에 ./change.sh port <이름>)
 ```
+
+IP·LDAP 는 한 세트로 취급해 **확인은 한 번만** 물어봅니다(`--only C`/`--only D`
+로 하나만 돌릴 때는 그 하나만).
 
 ### 2.4 나중에 이어서 / 재시도 / 롤백
 
@@ -207,6 +216,16 @@ IP 단계에서 엔진 실행이 실패하면 대상 VM 목록을 출력하고 �
 "상위폴더가 둘 이상인 환경에서 일부 VM/호스트를 못 찾는다" 는 증상이 나오면,
 먼저 이걸로 vCenter 가 실제로 뭐라고 부르는지 확인한 뒤 `<계정>.txt` /
 `vswitch_<계정>.txt` 의 표기와 대조합니다.
+
+### 2.6 출력 색상
+
+로그 레벨, OK(녹색)/FAIL(빨강), 오류·경고 박스, 대상 확인 헤더에 색이 붙습니다.
+화면이 tty 가 아니면(파이프/리다이렉트) 자동으로 꺼지고, `NO_COLOR=1` 로도 끌 수
+있습니다. **로그 파일(`logs/*.log`)에는 색상 코드가 절대 들어가지 않습니다.**
+
+```bash
+NO_COLOR=1 ./change.sh web
+```
 
 ---
 
@@ -266,9 +285,13 @@ IP 단계에서 엔진 실행이 실패하면 대상 VM 목록을 출력하고 �
 `os6_gossh` / `os6_bin_dir` 를 씁니다. 없으면 일반 경로(RHEL 8 관리서버 = 기존 동작).
 
 `os6_bin_dir` 기본값(`./bin_os6`)은 이 저장소에 미리 빌드해 커밋해 둔
-`ip-change-engine`/`ldap-config-engine`(Go 1.20 정적 빌드, 1.1절 참고)을
+`ip-change-engine`/`ldap-config-engine`/`nm-*`(Go 1.20 빌드, 1.1절 참고)을
 가리킵니다. `os6_hostgroup` 을 비워두면(기본값) 전혀 쓰이지 않으므로,
 RHEL 6 관리서버가 없는 배포에서는 아무 영향이 없습니다.
+
+**포트그룹(E 단계)도 OS6 을 탑니다.** `run_portgroup`/`--debug-inventory`/
+인시던트 포트그룹 롤백 모두 관리서버가 os6 면 `vm-network-migration/run.sh` 를
+`NM_BIN_DIR=<os6_bin_dir>` 로 호출해 `bin_os6/nm-*` 를 씁니다.
 
 ### 3.5 2패스 타임아웃 (§8.2)
 

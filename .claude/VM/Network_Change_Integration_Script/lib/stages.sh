@@ -42,6 +42,16 @@ _mgmt_is_os6() {
   return "$_MGMT_OS6"
 }
 
+# _nm_bin_dir  → 관리서버가 os6 면 os6_bin_dir 절대경로를 stdout 에, 아니면
+#   아무것도 출력하지 않고 0으로 반환(= 포트그룹 단계는 일반 bin/ 사용).
+#   os6 인데 디렉터리가 없으면 1을 반환(호출부에서 die).
+_nm_bin_dir() {
+  _mgmt_is_os6 || return 0
+  local d; d="$(conf_get os6_bin_dir ./bin_os6)"
+  [ -d "$d" ] || return 1
+  ( cd "$d" && pwd )
+}
+
 # _ping_ok <host> — 1회 ping (2초)
 _ping_ok() { ping -c1 -W2 "$1" >/dev/null 2>&1; }
 
@@ -224,6 +234,7 @@ _ldap_infra_names() {  # <ldap_conf 경로> → 인프라 이름 목록(줄단�
 }
 
 select_ldap_infra() {
+  [ -n "${INFRA:-}" ] && return   # 이미 정해져 있으면(위에서 미리 물어봄) 재선택 안 함
   if [ -n "${INFRA_ARG:-}" ]; then
     INFRA="$INFRA_ARG"
     return
@@ -251,7 +262,7 @@ stage_ldap() {
   stage_begin D "LDAP 설정 (ldap_setting)"
   select_ldap_infra
   log D "대상 인프라: $INFRA"
-  if [ "${DRY_RUN:-0}" -ne 1 ]; then
+  if [ "${DRY_RUN:-0}" -ne 1 ] && [ "${SKIP_LDAP_CONFIRM:-0}" -ne 1 ]; then
     ask_yes "LDAP 설정을 인프라 '$INFRA' 에 적용합니다. 계속하시겠습니까?" || die B1 "사용자가 중단했습니다."
   fi
   RES_LDAP="$WORK/res_ldap_${RUN_USER}.tsv"

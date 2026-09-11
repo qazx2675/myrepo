@@ -252,6 +252,12 @@ change.sh rollback <incident>
   `os6_gossh` / `os6_bin_dir`(기본 `./bin_os6` 사전빌드) 사용
 - 없으면 일반 경로 (RHEL 8 관리서버 = 기존 동작 그대로)
 - per-target 분할·gossh 2회 호출은 폐기 (한 실행은 항상 한 관리서버에서 돎)
+- `[2026-09-11 추가]` 포트그룹(E 단계)도 대상: `bin_os6/nm-*` 를 `projects/
+  vm-network-migration/build_os6.sh` 로 빌드해 커밋. `run.sh` 는 `NM_BIN_DIR`
+  환경변수로 바이너리 경로를 바꿀 수 있고, `_nm_bin_dir` 이 관리서버가 os6 일 때
+  자동으로 넘겨줌. vendor 한 govmomi 가 Go 1.21+ 표준 라이브러리를 써서
+  go.mod 만 낮추는 걸론 부족 — vendor 안 3곳만 Go 1.20 호환 코드로 치환한 임시
+  사본에서 빌드(원본 vendor/ 는 그대로).
 
 ### 8.2 지연·고부하 VM 타임아웃 `[v1 수정]`
 

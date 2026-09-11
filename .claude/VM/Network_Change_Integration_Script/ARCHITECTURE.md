@@ -21,7 +21,7 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | `setup.sh` | 폐쇄망 오프라인 빌드. `projects/` 아래 3개 프로젝트를 빌드하고 엔진 바이너리를 `bin/` 으로 모음 |
 | `update.sh` | 폐쇄망 증분 업데이트. 배포 폴더에서 `bash update.sh <새버전경로>` — 운영값 파일 백업 → 코드 동기화 → 복원. `projects/` 포함 |
 | `integration.conf.sample` | 중앙 설정 예시. 운영자는 `integration.conf` 하나만 편집 |
-| `lib/common.sh` | 설정 로드(`load_conf`/`conf_get`), 로그(`log`/`dlog`), 디버그 레벨, 에러코드 출력(`die`), **`user선택()` 스켈레톤(비어 있음)** |
+| `lib/common.sh` | 설정 로드(`load_conf`/`conf_get`), 로그(`log`/`dlog`), 디버그 레벨, 에러코드 출력(`die`), **`user선택()`(기본: 텍스트 입력, 사이트별로 교체 가능)** |
 | `lib/conf.sh` | `integration.conf` → `conf/ip_change.conf` 렌더링 (§2.2). ldap/nm 은 플래그로 받아 렌더링 없음 |
 | `lib/preprocess.sh` | `vswitch_<계정>.txt` Case 1/2/3 표준화 (§4). 출력은 정확히 3열 |
 | `lib/stages.sh` | C(IP)·D(LDAP) 단계 실행. OS6 분기(§8.1, 관리서버 hostname 기준), 2패스 타임아웃(§8.2), **엔진 stdout 파싱** |
@@ -42,10 +42,13 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | "결과 파일 형식 변경" | `lib/results.sh` 의 `write_results` |
 | "2패스/타임아웃 로직" | `lib/stages.sh` 의 `_stage_run` |
 | "OS6 분기 규칙" | `lib/stages.sh` 의 `_mgmt_is_os6` / `_stage_run` |
+| "포트그룹 OS6 바이너리 경로" | `lib/stages.sh` 의 `_nm_bin_dir` (`NM_BIN_DIR` 로 `run.sh` 에 전달) |
 | "증분 업데이트 보존 규칙" | `update.sh` 의 `KEEP_FILES` / rsync `--exclude` |
 | "포트그룹 위임 방식" | `change.sh` 의 `run_portgroup` |
 | "인시던트/롤백" | `lib/incident.sh` |
 | "계정 선택 로직 채우기" | `lib/common.sh` 의 `user선택()` |
+| "IP+LDAP 확인 통합 로직" | `change.sh` 메인 흐름의 "2+3. C+D" 블록 + `lib/stages.sh` 의 `SKIP_LDAP_CONFIRM` |
+| "색상 추가/변경" | `lib/common.sh` 상단 `C_*` 변수 + `log`/`die`/`warn_box`, `change.sh` 의 `confirm_targets`/`ask_yes` |
 | "conf 키 추가" | `integration.conf.sample` + `lib/common.sh`(읽기) + 필요 시 `lib/conf.sh`(렌더링) |
 
 ## 설계상 지켜야 할 규칙
@@ -79,6 +82,11 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 6. **`user선택()` 은 통합에서 단 한 번.** 하위 프로젝트 래퍼의 빈 선택 함수는
    호출하지 않습니다.
 
+7. **로그 파일에는 색상 코드를 절대 넣지 않습니다.** `lib/common.sh` 의
+   `log`/`die`/`warn_box` 는 파일에 쓰는 줄과 화면에 찍는 줄을 따로 만듭니다
+   (색은 화면용에만). 이후 로그 출력에 색을 추가할 때도 이 분리를 유지하십시오
+   — `grep`/자동화가 로그를 파싱하는 경우가 있습니다.
+
 ## 하위 프로젝트에 반영된 변경
 
 이 통합을 위해 원본 프로젝트에도 넣은 변경 (자세한 내용은 각 `CHANGELOG.md`):
@@ -86,7 +94,7 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | 프로젝트 | 변경 | 이유 |
 |---|---|---|
 | `ldap_setting` | 자산현황 중복 → 마지막 줄 우선 / `default_site` conf 키·`-default-site` 플래그 / `ev01~03` 접미사 fallback / 롤백 시 미매칭 호스트 유지 | 자산현황에 VM 이 없어 site 판정 실패하는 문제 (§11) |
-| `vm-network-migration` | `LoadVMList` 첫 필드만 / 호스트 이름 FQDN↔short 매칭 / `nm-inventory`(`--debug-inventory`) / 오류 메시지에 후보 목록 | `{user}.txt` 2열 공유, 상위폴더 다중 환경 진단 (§3.3, §9) |
+| `vm-network-migration` | `LoadVMList` 첫 필드만 / 호스트 이름 FQDN↔short 매칭 / `nm-inventory`(`--debug-inventory`) / 오류 메시지에 후보 목록 / `run.sh` 의 `NM_BIN_DIR` 오버라이드 / `build_os6.sh`(OS6 빌드) | `{user}.txt` 2열 공유, 상위폴더 다중 환경 진단 (§3.3, §9), 포트그룹 OS6 지원 |
 | `ip_change` | `-rollback` / `-rollback-to` 서브모드 (`<ifcfg>.bak.<STAMP>` 복원), `target.LoadHosts` | `change.sh rollback` 의 IP 단계 자동 원복 (§7) |
 
 > 이 변경들은 원본에도 반영했습니다. 통합본과 원본이 갈라지면 두 코드가 서로

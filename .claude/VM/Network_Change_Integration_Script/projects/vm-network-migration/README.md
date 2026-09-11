@@ -51,6 +51,23 @@ bin/nm-backup  bin/nm-pgcreate  bin/nm-disconnect
 bin/nm-connect bin/nm-verify    bin/nm-rollback
 ```
 
+#### OS6(RHEL/CentOS 6) 관리서버용 빌드
+
+RHEL 6 는 커널이 낮아 Go 1.21+ 툴체인이 만든 바이너리가 뜨지 않습니다. 이 프로젝트가
+vendor 한 govmomi v0.55.1 은 Go 1.21+ 표준 라이브러리(`slices`, 빌트인 `min`,
+`reflect.TypeFor`)를 쓰므로, go.mod 만 낮추는 걸로는(ip_change/ldap_setting 과 달리)
+부족합니다. `build_os6.sh` 가 vendor 안의 해당 3곳만 Go 1.20 호환 코드로 치환한
+**임시 사본**에서 빌드합니다(원본 `vendor/`는 그대로 최신 문법을 씁니다):
+
+```bash
+./build_os6.sh [Go1.20 실행파일 경로]   # 생략 시 /opt/go1.20/bin/go, 없으면 GOTOOLCHAIN 자동 다운로드
+```
+
+결과는 (통합 스크립트를 쓴다면) `../../bin_os6/nm-*` 에 생깁니다. `run.sh` 는
+`NM_BIN_DIR` 환경변수가 있으면 `bin/` 대신 그 경로의 바이너리를 씁니다
+(`Network_Change_Integration_Script/lib/stages.sh` 의 `_nm_bin_dir` 이 관리서버가
+OS6 일 때만 자동으로 설정합니다).
+
 ### 1.3 입력 파일 준비
 
 저장소에는 `*.example` 파일만 들어 있습니다. 확장자를 떼고 실제 값으로 채우십시오.
