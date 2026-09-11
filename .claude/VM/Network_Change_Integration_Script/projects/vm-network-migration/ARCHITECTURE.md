@@ -20,6 +20,7 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
 |---|---|
 | `run.sh` | 사용자 진입점. 단계 순서 제어, 종료 코드 확인, 자동 롤백, 대화형 프롬프트. 일부 폐쇄망 배포는 이걸 `portgroup_change.sh` 로 이름 바꾸고 로컬 편의 기능을 추가해 씀(README §2.8, 이 저장소에는 그 코드 없음) |
 | `setup.sh` | 폐쇄망 오프라인 빌드 (`-mod=vendor`, `GOPROXY=off`) |
+| `build_os6.sh` | OS6(RHEL/CentOS 6) 관리서버용 빌드. vendor 임시 사본에서 Go 1.21+ 전용 부분 3곳만 패치 후 Go 1.20 으로 nm-* 빌드 → `../../bin_os6/` |
 | `cmd/backup/` | **Step 0** 현재 NIC 상태를 읽어 상태 파일 생성. 목표 포트그룹 확정 |
 | `cmd/pgcreate/` | **Step 2** BM 호스트 vSwitch 에 포트그룹 생성 (worklist 기준) |
 | `cmd/disconnect/` | **Step 1** 대상 VM NIC 연결 해제 |

@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-09-11 — `run.sh` 가 `NM_BIN_DIR` 환경변수로 바이너리 경로를 바꿀 수 있게 함
+
+- `BIN="$(pwd)/bin"` → `BIN="${NM_BIN_DIR:-$(pwd)/bin}"`. 다른 바이너리(예: OS6
+  관리서버용 사전빌드본)를 가리키고 싶을 때 코드를 고치지 않고 환경변수로 지정.
+  통합 스크립트(`Network_Change_Integration_Script/projects/vm-network-migration/
+  build_os6.sh`)가 만드는 OS6 빌드가 이 옵션을 씁니다. 미지정 시 기존 동작과 동일.
+
+---
+
 ## 2026-09-09 — 통합 스크립트(Network_Change_Integration_Script) 연동
 
 - `{user}.txt` 를 `VM이름 변경될IP` 2열로 써도 되도록, `LoadVMList` 가 각 줄의

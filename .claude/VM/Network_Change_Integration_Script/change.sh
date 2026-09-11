@@ -22,10 +22,25 @@
 #                        integration.conf 에는 기본값을 두지 않습니다.
 #
 # 환경변수:
-#   GOSSH_PW      대상 노드 SSH 비밀번호 (IP/LDAP 단계)
-#   VC_PASSWORD   vCenter 비밀번호 (포트그룹 단계)
+#   GOSSH_PW      대상 노드 SSH 비밀번호 (IP/LDAP 단계) — 아래 "비밀번호
+#                  환경변수" 블록에서 직접 채울 수도 있습니다.
+#   VC_PASSWORD   vCenter 비밀번호 (포트그룹 단계) — 위와 동일
 #   INTEGRATION_CONF  설정 파일 경로 (기본 ./integration.conf)
 ###############################################################################
+
+# ── 비밀번호 환경변수 (선택) ─────────────────────────────────────────────────
+# 매번 `export GOSSH_PW=...` 를 치기 번거로우면, 아래 주석을 풀고 여기에
+# 직접 값을 채우십시오. 셸에서 미리 export 해 뒀다면 이 값은 아래 `:=` 때문에
+# 덮어쓰지 않습니다.
+#
+# ⚠️ 값을 채운 채로 git 에 커밋하지 마십시오. `git status`/`git diff` 로 확인한
+#    뒤 커밋하거나, 공유 저장소에 올리기 전에 값을 다시 비우십시오.
+#
+# export GOSSH_PW="여기에_대상노드_SSH_비밀번호"     # IP/LDAP 단계
+# export VC_PASSWORD="여기에_vCenter_비밀번호"        # 포트그룹 단계
+: "${GOSSH_PW:=}"
+: "${VC_PASSWORD:=}"
+
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -44,7 +59,7 @@ usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
 # ── 인자 파싱 ──────────────────────────────────────────────────────────────
 SUBCMD=""; RETRY=""; RUN_USER=""; DRY_RUN=0; DEBUG_LEVEL=0
 DEBUG_INVENTORY=0; PP_FOLDER=""; PP_TAG_OVERRIDE=""; ONLY=""; FROM=""
-INCIDENT_ARG=""; ASSUME_YES=0; INFRA_ARG=""; INFRA=""
+INCIDENT_ARG=""; ASSUME_YES=0; INFRA_ARG=""; INFRA=""; SKIP_LDAP_CONFIRM=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -85,7 +100,6 @@ LOG_FILE="$LOG_DIR/change_$(date +%Y%m%d_%H%M%S).log"
 load_conf "$CONF_FILE"
 SSH_USER="$(conf_get ssh_user root)"
 SSH_PORT="$(conf_get ssh_port 22)"
-GOSSH_PW="${GOSSH_PW:-}"
 RESULT_DIR="$(conf_get result_dir ./results)"
 PP_DOMAIN="$(conf_get bm_domain seccae.com)"
 PP_TAG="${PP_TAG_OVERRIDE:-$(conf_get preprocess_tag cae)}"
@@ -105,16 +119,16 @@ stage_enabled() {
 ask_yes() {
   [ "$ASSUME_YES" -eq 1 ] && return 0
   [ -t 0 ] || return 1
-  local a; read -r -p "$1 (y/N): " a
+  local a; read -r -p "${C_BOLD}$1 (y/N): ${C_RESET}" a
   [ "$a" = y ] || [ "$a" = Y ]
 }
 
 confirm_targets() { # §13 — IP 단계는 적용 전 대상표를 반드시 출력
   local label="$1" file="$2"
-  echo; echo "── $label 대상 ($(grep -cve '^[[:space:]]*$' -e '^[[:space:]]*#' "$file")건) ──"
+  echo; echo "${C_CYAN}${C_BOLD}── $label 대상 ($(grep -cve '^[[:space:]]*$' -e '^[[:space:]]*#' "$file")건) ──${C_RESET}"
   grep -vE '^[[:space:]]*(#|$)' "$file" | nl -ba | sed 's/^/  /'
   echo
-  [ "$DRY_RUN" -eq 1 ] && { echo "(dry-run — 실제 변경 없음)"; return 0; }
+  [ "$DRY_RUN" -eq 1 ] && { echo "${C_YELLOW}(dry-run — 실제 변경 없음)${C_RESET}"; return 0; }
   ask_yes "위 대상에 $label 를 적용합니다. 계속하시겠습니까?" || die B1 "사용자가 중단했습니다."
 }
 
@@ -146,9 +160,12 @@ run_portgroup() {
   cp -p "$(conf_get vcenter_file ./vcenter.txt)" "$nm_dir/vcenter.txt" \
     || die G3 "vcenter.txt 가 없습니다: $(conf_get vcenter_file ./vcenter.txt)"
 
+  local nm_bin_dir; nm_bin_dir="$(_nm_bin_dir)" \
+    || die G2 "os6_bin_dir 를 찾을 수 없습니다: $(conf_get os6_bin_dir ./bin_os6) (nm-* OS6 바이너리를 준비하세요)"
+
   local dry=""; [ "$DRY_RUN" -eq 1 ] && dry="--dry-run"
   # shellcheck disable=SC2086
-  ( cd "$nm_dir" && VC_PASSWORD="${VC_PASSWORD:-}" ./run.sh -y -u "$RUN_USER" \
+  ( cd "$nm_dir" && VC_PASSWORD="${VC_PASSWORD:-}" NM_BIN_DIR="$nm_bin_dir" ./run.sh -y -u "$RUN_USER" \
       --id "$(conf_get vc_id lscsystems@vsphere.local)" \
       -c "$(conf_get concurrency 8)" --vswitch "$(conf_get nm_vswitch vSwitch0)" $dry ) \
     2>&1 | tee -a "$LOG_FILE"
@@ -171,7 +188,9 @@ if [ "$DEBUG_INVENTORY" -eq 1 ]; then
   [ -x "$nm_dir/run.sh" ] || die G2 "nm/run.sh 없음: $nm_dir"
   cp -p "$(conf_get vcenter_file ./vcenter.txt)" "$nm_dir/vcenter.txt" \
     || die G3 "vcenter.txt 없음"
-  ( cd "$nm_dir" && VC_PASSWORD="${VC_PASSWORD:-}" ./run.sh --debug-inventory \
+  nm_bin_dir="$(_nm_bin_dir)" \
+    || die G2 "os6_bin_dir 를 찾을 수 없습니다: $(conf_get os6_bin_dir ./bin_os6) (nm-* OS6 바이너리를 준비하세요)"
+  ( cd "$nm_dir" && VC_PASSWORD="${VC_PASSWORD:-}" NM_BIN_DIR="$nm_bin_dir" ./run.sh --debug-inventory \
       --id "$(conf_get vc_id lscsystems@vsphere.local)" -c "$(conf_get concurrency 8)" )
   rc=$?
   rm -f "$nm_dir/vcenter.txt"
@@ -269,16 +288,27 @@ fi
 [ -f "$VMFILE" ] || die B1 "$VMFILE 가 없습니다."
 _hosts_of "$VMFILE" >"$HOSTS_FILE"
 
-# 2. C: IP 변경
-if stage_enabled C; then
+# 2+3. C(IP 변경) + D(LDAP) — 한 세트이므로 확인은 한 번만 받습니다.
+if stage_enabled C || stage_enabled D; then
   [ -n "$GOSSH_PW" ] || die G4 "환경변수 GOSSH_PW (대상 노드 SSH 비밀번호) 를 설정하세요."
+fi
+if stage_enabled D; then
+  select_ldap_infra
+  log MAIN "대상 LDAP 인프라: $INFRA"
+fi
+if stage_enabled C && stage_enabled D; then
+  confirm_targets "IP 변경 + LDAP 설정(인프라 '$INFRA')" "$VMFILE"
+elif stage_enabled C; then
   confirm_targets "IP 변경" "$VMFILE"
+elif stage_enabled D; then
+  confirm_targets "LDAP 설정(인프라 '$INFRA')" "$VMFILE"
+fi
+SKIP_LDAP_CONFIRM=1   # 위에서 이미 물었으므로 stage_ldap 내부 재확인은 건너뜁니다.
+
+if stage_enabled C; then
   stage_ip "$VMFILE"
 fi
-
-# 3. D: LDAP
 if stage_enabled D; then
-  [ -n "$GOSSH_PW" ] || die G4 "환경변수 GOSSH_PW 를 설정하세요."
   LDAP_STAMP_HINT="$(date +%Y%m%d%H%M%S)"
   stage_ldap "$HOSTS_FILE"
 fi

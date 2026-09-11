@@ -9,7 +9,8 @@
 set -uo pipefail
 
 cd "$(dirname "$0")"
-BIN="$(pwd)/bin"
+# NM_BIN_DIR 이 설정돼 있으면 그쪽 바이너리를 씁니다 (예: OS6 관리서버용 bin_os6/).
+BIN="${NM_BIN_DIR:-$(pwd)/bin}"
 
 USER_TOKEN=""
 CONCURRENCY=8
