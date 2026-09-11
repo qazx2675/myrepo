@@ -138,6 +138,18 @@ run_portgroup() {
   local nm_dir; nm_dir="$(conf_get nm_dir ./projects/vm-network-migration)"
   [ -x "$nm_dir/run.sh" ] || die G2 "nm/run.sh 를 찾을 수 없습니다: $nm_dir (setup.sh 실행)"
 
+  # 이전 포트그룹 실행이 중간에 끊겨 상태 파일이 남아있으면 nm/run.sh 가
+  # -y 상태에서 무조건 중단합니다(원본 백업을 실수로 덮어쓰지 않기 위한
+  # 안전장치). 여기서 먼저 물어보고, 삭제에 동의해야 진행합니다.
+  local nm_state="$nm_dir/state_${RUN_USER}.json"
+  if [ -f "$nm_state" ]; then
+    if ask_yes "이전 포트그룹 상태 파일이 남아 있습니다 ($nm_state). 삭제하고 새로 진행하시겠습니까?"; then
+      rm -f "$nm_state"
+    else
+      die E9 "포트그룹 상태 파일이 남아 있어 중단합니다: $nm_state (직접 확인 후 재시도하세요)"
+    fi
+  fi
+
   local vsw="$WORK/vswitch_${RUN_USER}.std.txt"
   [ -s "$vsw" ] || { [ -n "${INC_DIR:-}" ] && vsw="$INC_DIR/vswitch_${RUN_USER}.std.txt"; }
   [ -s "$vsw" ] || die B2 "표준화된 vswitch 파일이 없습니다. 전처리를 먼저 실행하세요."
