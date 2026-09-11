@@ -65,6 +65,22 @@ EOF
   log F "인시던트 저장: $d"
 }
 
+# incident_purge_all — 저장된 인시던트를 모두 삭제 (재개 프롬프트에서 "dd" 입력 시)
+#   통합 스크립트가 자체적으로 만든 인덱스(incidents/<이름>/)만 지웁니다.
+#   각 엔진이 대상 노드/vCenter 에 남긴 실제 백업(<ifcfg>.bak.<STAMP>,
+#   state_*.json 등)은 건드리지 않습니다 — 그건 각 엔진이 알아서 관리합니다.
+incident_purge_all() {
+  [ -d "$INC_DIR_BASE" ] || { log F "삭제할 인시던트가 없습니다."; return; }
+  local n; n=$(incident_list | grep -c .)
+  [ "$n" -gt 0 ] || { log F "삭제할 인시던트가 없습니다."; return; }
+  if ask_yes "저장된 인시던트 ${n}건을 모두 삭제합니다(각 엔진이 대상에 남긴 실제 백업은 지워지지 않습니다). 계속하시겠습니까?"; then
+    rm -rf "${INC_DIR_BASE:?}"/*
+    log F "인시던트 전체 삭제 완료 (${n}건)."
+  else
+    log F "인시던트 삭제를 취소했습니다."
+  fi
+}
+
 incident_list() {
   local d
   [ -d "$INC_DIR_BASE" ] || return

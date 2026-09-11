@@ -123,6 +123,19 @@ ask_yes() {
   [ "$a" = y ] || [ "$a" = Y ]
 }
 
+# 실행이 끝나면 성공/실패와 무관하게 인시던트를 자동 저장해 항상
+# `./change.sh rollback <이름>` 으로 되돌릴 수 있게 합니다.
+auto_save_incident() { # <stage_reached: portgroup|done>
+  [ "$DRY_RUN" -eq 0 ] || return 0
+  local reached="$1" inc; inc="incident_$(date +%Y%m%d_%H%M%S)"
+  incident_save "$inc" "$reached"
+  if [ "$reached" = portgroup ]; then
+    log MAIN "포트그룹은 나중에 진행:  ./change.sh port $inc"
+  else
+    log MAIN "롤백하려면:  ./change.sh rollback $inc"
+  fi
+}
+
 confirm_targets() { # §13 — IP 단계는 적용 전 대상표를 반드시 출력
   local label="$1" file="$2"
   echo; echo "${C_CYAN}${C_BOLD}── $label 대상 ($(grep -cve '^[[:space:]]*$' -e '^[[:space:]]*#' "$file")건) ──${C_RESET}"
@@ -261,6 +274,7 @@ if [ -n "$RETRY" ]; then
     stage_ldap "$WORK/retry_ldap_${RUN_USER}.txt"
   fi
   write_results
+  auto_save_incident done
   log RETRY "재시도 완료. 결과: $RESULT_DIR"
   exit 0
 fi
@@ -270,6 +284,7 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════
 if [ "$SUBCMD" = port ]; then
   run_portgroup
+  auto_save_incident done
   log MAIN "포트그룹 단계 완료."
   exit 0
 fi
@@ -283,10 +298,13 @@ if [ -z "$ONLY" ] && [ -z "$FROM" ] && [ -n "$(incident_list 2>/dev/null)" ]; th
   echo "이전에 중단된 작업이 있습니다:"
   incident_list
   if [ "$ASSUME_YES" -eq 0 ] && [ -t 0 ]; then
-    read -r -p "재개할 인시던트 이름 (엔터 = 새로 시작): " _r
-    if [ -n "$_r" ]; then
+    read -r -p "재개할 인시던트 이름 (엔터 = 새로 시작, dd = 전체 삭제): " _r
+    if [ "$_r" = dd ]; then
+      incident_purge_all
+    elif [ -n "$_r" ]; then
       incident_load "$_r"
       run_portgroup
+      auto_save_incident done
       exit 0
     fi
   fi
@@ -331,16 +349,20 @@ if [ "$DRY_RUN" -eq 0 ] && { stage_enabled C || stage_enabled D; }; then
 fi
 
 # 5. 포트그룹 질의
+_pg_pending=0
 if stage_enabled E; then
   if [ "$DRY_RUN" -eq 1 ] || ask_yes "포트그룹(2차) 작업을 지금 진행하시겠습니까?"; then
     run_portgroup
   else
-    _inc=""
-    [ -t 0 ] && read -r -p "인시던트 이름 (엔터 = 자동): " _inc
-    [ -n "$_inc" ] || _inc="incident_$(date +%Y%m%d_%H%M%S)"
-    incident_save "$_inc" "portgroup"
-    log MAIN "포트그룹은 나중에 진행:  ./change.sh port $_inc"
+    _pg_pending=1
   fi
+fi
+
+# 6. 인시던트 자동 저장 — 성공 여부와 무관하게 항상 남겨 두어 롤백 가능하게 함
+if [ "$_pg_pending" -eq 1 ]; then
+  auto_save_incident portgroup
+else
+  auto_save_incident done
 fi
 
 log MAIN "완료. 로그: $LOG_FILE"
