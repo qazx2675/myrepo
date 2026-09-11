@@ -61,6 +61,31 @@ func TestLoadRejectsEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadHosts(t *testing.T) {
+	// "hostname" 한 컬럼과 "hostname 변경될ip" 두 컬럼을 섞어도 hostname 만 뽑아야 합니다.
+	p := write(t, "hostname1 3.3.3.3\nhostname2\n\n# comment\nhostname3 4.4.4.4\n")
+	hosts, err := LoadHosts(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"hostname1", "hostname2", "hostname3"}
+	if len(hosts) != len(want) {
+		t.Fatalf("want %v, got %v", want, hosts)
+	}
+	for i := range want {
+		if hosts[i] != want[i] {
+			t.Fatalf("want %v, got %v", want, hosts)
+		}
+	}
+}
+
+func TestLoadHostsRejectsDuplicate(t *testing.T) {
+	p := write(t, "hostname1 3.3.3.3\nhostname1\n")
+	if _, err := LoadHosts(p); err == nil {
+		t.Fatal("want error for duplicate host")
+	}
+}
+
 func TestGateway(t *testing.T) {
 	cases := map[string]string{
 		"3.3.3.3":    "3.3.3.1",

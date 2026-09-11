@@ -18,6 +18,9 @@ import (
 //go:embed apply_body.sh
 var applyBody string
 
+//go:embed rollback_body.sh
+var rollbackBody string
+
 const hostMapPlaceholder = "__HOST_MAP__"
 
 // ApplyScript 는 대상 목록 전체에 대한 apply 스크립트 전문을 만듭니다.
@@ -42,6 +45,25 @@ func ApplyScript(entries []target.Entry, cfg *config.Config) (string, error) {
 	fmt.Fprintf(&b, "RHEL9_PATH=%s\n\n", shQuote(cfg.RHEL9Path))
 
 	b.WriteString(body)
+	return b.String(), nil
+}
+
+// RollbackScript 는 대상 노드에서 최근(또는 지정 STAMP) ifcfg 백업을 되돌리는
+// 스크립트 전문을 만듭니다. 대상별로 값이 다르지 않으므로 host map 은 없습니다 —
+// 어느 노드에 뿌릴지는 gossh 의 호스트 목록이 결정합니다.
+//
+// stampTo 가 빈 문자열이면 가장 최근 백업을 되돌립니다.
+func RollbackScript(cfg *config.Config, stampTo string) (string, error) {
+	var b strings.Builder
+	b.WriteString("#!/bin/bash\n")
+	b.WriteString("# ip-change-engine 이 자동 생성한 파일입니다. 직접 편집하지 마십시오.\n")
+	b.WriteString("set -u\n\n")
+
+	fmt.Fprintf(&b, "NETWORK_SCRIPTS_DIR=%s\n", shQuote(cfg.NetworkScriptsDir))
+	fmt.Fprintf(&b, "RHEL9_PATH=%s\n", shQuote(cfg.RHEL9Path))
+	fmt.Fprintf(&b, "ROLLBACK_TO=%s\n\n", shQuote(stampTo))
+
+	b.WriteString(rollbackBody)
 	return b.String(), nil
 }
 

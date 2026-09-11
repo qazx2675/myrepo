@@ -8,6 +8,7 @@
 | `internal/config/config.go` | `ip_change.conf`(평문 key=value) 파싱. 파일이 없어도 기본값으로 동작 |
 | `internal/render/render.go` | 대상 전체를 담은 apply 스크립트 한 벌 조립. `apply_body.sh` 를 `go:embed` 하고 헤더에 `NETWORK_SCRIPTS_DIR`/`RHEL9_PATH`/호스트→IP 표를 삽입 |
 | `internal/render/apply_body.sh` | **실제 IP/GATEWAY 를 바꾸는 본체.** 노드에서 자기 hostname 으로 호스트→IP 표에서 자기 행을 찾고, `hostname -I`(호스트 해석이 아니라 실제 인터페이스 주소)로 현재 IPv4 확인, ifcfg 탐색·백업·갱신·검증 |
+| `internal/render/rollback_body.sh` | **롤백 본체.** `<ifcfg>.bak.<STAMP>`(최근 또는 `ROLLBACK_TO`) 를 원래 ifcfg 로 복원·검증. `render.RollbackScript` 가 임베드 |
 | `internal/remote/remote.go` | gossh 호출. base64(spaceOut 포함)로 인코딩해 원격 주입하고 `<host>: <내용>` 출력을 파싱 |
 | `internal/color/color.go` | 관리 노드 출력 전용 ANSI 색상. 대상 노드로 전송되는 스크립트에는 관여하지 않음 |
 | `scripts/run_ip_change.sh` | 관리자용 래퍼. 계정 선택(`select_user_context`, 의도적으로 빈 자리) → 엔진 실행 |
@@ -22,6 +23,7 @@
 | "conf 스키마에 키 추가" | `internal/config/config.go`, `conf/ip_change.conf.sample`, 필요 시 `internal/render/render.go` (헤더 변수 추가) |
 | "{user}.txt 형식 변경" | `internal/target/target.go` |
 | "CLI 옵션 추가" | `cmd/ip-change-engine/main.go` |
+| "롤백 로직 변경" | `internal/render/rollback_body.sh` + `cmd/ip-change-engine/main.go` 의 `runRollback`/`formatRollbackLine` |
 | "gossh 호출 방식 변경" | `internal/remote/remote.go` |
 | "출력 색상/화면 표시 형식 변경" | `internal/color/color.go`, `cmd/ip-change-engine/main.go` 의 `formatResultLine` |
 | "결과 줄에 값 추가(기계용 포맷 변경)" | `internal/render/apply_body.sh` 의 `RESULT|...` 줄 + `cmd/ip-change-engine/main.go` 의 `formatResultLine` 둘 다 |
