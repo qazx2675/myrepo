@@ -42,7 +42,8 @@ incident_save() {
 [ip_change]
 대상            : ip_ok_${RUN_USER}.txt 의 VM 들
 원격 백업       : 각 노드의 <ifcfg>.bak.<STAMP>  (apply_body.sh 가 생성)
-자동 롤백       : 없음 (ip_change 에 rollback 서브커맨드 없음)
+자동 롤백       : ip-change-engine -rollback  (가장 최근 <ifcfg>.bak.<STAMP> 복원)
+시점 지정       : ip-change-engine -rollback -rollback-to <STAMP>
 수동 롤백       : 각 노드에서 <ifcfg>.bak.<STAMP> 를 원래 이름으로 복원
 
 [ldap_setting]
@@ -136,10 +137,24 @@ rollback_incident() {
     log ROLLBACK "[2/3] LDAP 성공 기록 없음 — 건너뜀"
   fi
 
-  # 3) IP — 자동 롤백 없음
+  # 3) IP — ip-change-engine -rollback (각 노드의 최근 <ifcfg>.bak.<STAMP> 복원)
   if [ -s "$d/ip_ok_${RUN_USER}.txt" ]; then
-    warn_box "IP 변경은 자동 롤백이 없습니다. 아래 VM 들은 각 노드에서 <ifcfg>.bak.<STAMP> 를 수동 복원하십시오:"
-    sed 's/^/    /' "$d/ip_ok_${RUN_USER}.txt" | tee -a "$LOG_FILE"
+    log ROLLBACK "[3/3] IP 원복 (ip-change-engine -rollback)"
+    render_confs
+    local ip_bin; ip_bin="$(conf_get ipchange_bin ./bin/ip-change-engine)"
+    if [ -x "$ip_bin" ]; then
+      NO_COLOR=1 "$ip_bin" \
+        -config "$(conf_get ipchange_conf ./conf/ip_change.conf)" \
+        -targets "$d/ip_ok_${RUN_USER}.txt" -rollback \
+        -gossh "$(conf_get gossh gossh)" -u "$SSH_USER" -p "$GOSSH_PW" -P "$SSH_PORT" \
+        -c "$(conf_get concurrency 8)" \
+        | tee -a "$LOG_FILE" \
+        || { log ROLLBACK "IP 롤백에서 오류 — 아래 VM 은 각 노드에서 <ifcfg>.bak.<STAMP> 수동 복원 필요"; \
+             sed 's/^/    /' "$d/ip_ok_${RUN_USER}.txt" | tee -a "$LOG_FILE"; }
+    else
+      warn_box "ip-change-engine 바이너리가 없어 IP 자동 롤백 불가. 아래 VM 들은 각 노드에서 <ifcfg>.bak.<STAMP> 를 수동 복원하십시오:"
+      sed 's/^/    /' "$d/ip_ok_${RUN_USER}.txt" | tee -a "$LOG_FILE"
+    fi
   else
     log ROLLBACK "[3/3] IP 변경 성공 기록 없음 — 건너뜀"
   fi
