@@ -43,7 +43,7 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 
 | 폴더 | 설명 |
 |---|---|
-| [`gossh`](./공통/gossh/) | `pdsh` 스타일 병렬 SSH 실행 도구. `esxi-log-check`, `OS 환경설정 체크`, `ip_change`, `조사` 등 여러 도구가 서브프로세스로 호출하는 기반 바이너리. 위험 명령(재부팅/전원종료 등) 이중 확인 가드 포함. |
+| [`gossh`](./공통/gossh/) | `pdsh` 스타일 고속 병렬 SSH 실행 도구. 실시간 진행률 표시, 표준출력/에러 분리, SSH 키 우선 인증, `-b` 그룹 출력, autofs 마운트 스톰 방지(동시 350 안전가드 및 `-cf` 옵션), 위험 명령(재부팅 등) 가드 및 OS6 정적 바이너리(`gossh_os6`) 내장. `esxi-log-check`, `OS 환경설정 체크`, `ip_change`, `조사` 등 다수 도구의 기반 바이너리 (구버전은 `old/`에 보존). |
 
 ## 디렉토리 구조
 
@@ -71,7 +71,7 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 │   ├── 조사                             # RHEL 서버 자산대장 항목 자동 수집 도구 (survey)
 │   └── GPU 체크스크립트                  # GPU power capping 점검 스크립트 (목록 제외, 실제 디렉터리 유지)
 ├── 공통/                                 # 여러 도구가 같이 쓰는 기반 도구 (gossh 등)
-│   └── gossh                            # pdsh 스타일 병렬 SSH 실행 도구
+│   └── gossh                            # pdsh 스타일 병렬 SSH 실행 도구 (v2 통합, old/ 아카이브)
 ├── LDAP 인프라 선택 방식 전환/             # Network_Change_Integration_Script 작업기록 문서
 ├── update_readme.py                     # 하위 폴더 README.md들의 빌드 안내 문구를 일괄 치환하는 보조 스크립트
 ├── 바이너리셋업.sh                         # VM/ 하위 Go 도구들을 빌드해서 지정 경로(기본 /usr/local/bin)에 한 번에 설치하는 스크립트
