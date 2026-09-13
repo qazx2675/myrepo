@@ -183,7 +183,7 @@ Rocky Linux release 8.10 (Green Obsidian)
 | `-b` | `false` | clush 스타일 동일 결과 그룹 출력 (접속불가 호스트 별도 그룹화). |
 | `-script` | `false`* | 작업 요약 및 ANSI 색상을 끄고 순수 호스트 결과만 출력 (`*`실행 파일명이 `pdsh`일 때는 기본값이 `true`로 동작). |
 | `-t <초>` | `15` | SSH 연결 타임아웃(초). |
-| `-pm` | `false` | `~/.profile` 내 anaconda 감지 시 "OS 설치중" 제외 및 `/user/svrauto` 접근 점검. |
+| `-pm` | `false` | `~/.profile` 내 anaconda 감지 시 "OS 설치중" 제외 및 특정 autofs 계정 접근 점검. |
 | `-dnlgjawkrdjqghkrdls` | `false` | 위험 명령(재부팅, 종료 등) 강제 실행 승인 플래그. |
 
 ---
@@ -197,7 +197,7 @@ Rocky Linux release 8.10 (Green Obsidian)
 | `<hostfile>_res_off` | 연결 타임아웃 및 네트워크 불가 호스트 (연속 호스트명 자동 압축 표기) |
 | `<hostfile>_res_refsed` | Connection Refused (포트 닫힘) 호스트 |
 | `<hostfile>_os_install` | `-pm` 옵션 사용 시 OS 설치 중으로 분류된 호스트 |
-| `<hostfile>_nosvrauto` | `-pm` 옵션 사용 시 `/user/svrauto` 미마운트 호스트 |
+| `<hostfile>_nosvrauto` | `-pm` 옵션 사용 시 특정 autofs 계정 미마운트 호스트 |
 
 생성된 파일은 압축 표기(`esxi[0001-0020]`)가 되어 있어, 실패한 호스트만 그대로 `./gossh -w <hostfile>_res_off "명령어"` 형태로 재실행할 수 있습니다.
 
