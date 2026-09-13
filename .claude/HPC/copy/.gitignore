@@ -1,0 +1,6 @@
+# 실제 운영값(AWX 접속 정보 포함)이 들어가는 파일은 절대 커밋하지 않습니다.
+conf/copy_setting.conf
+*_copy.txt
+
+bin/
+dist/

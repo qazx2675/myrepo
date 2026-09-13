@@ -1,0 +1,46 @@
+name: copy-bridge CI
+
+on:
+  push:
+    paths:
+      - '.claude/HPC/copy/**'
+      - '.github/workflows/copy-bridge.yml'
+  pull_request:
+    paths:
+      - '.claude/HPC/copy/**'
+      - '.github/workflows/copy-bridge.yml'
+
+jobs:
+  copy:
+    name: copy (Go 빌드·테스트, Linux)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/copy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.27.0' }
+      - name: 오프라인 빌드 (copy-send + copy-widget 스텁)
+        run: CGO_ENABLED=0 go build ./...
+      - name: go vet
+        run: go vet ./...
+      - name: 단위 테스트
+        run: go test ./...
+      - name: bash 문법 검사
+        run: bash -n setup.sh send.sh
+
+  copy-widget-windows:
+    name: copy-widget (Windows 크로스 컴파일 확인)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/copy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.27.0' }
+      # go vet은 여기서 돌리지 않는다: GlobalLock 클립보드 코드에서 known false-positive인
+      # "possible misuse of unsafe.Pointer" 가 뜬다 (ARCHITECTURE.md 5번). 빌드만 확인한다.
+      - name: Windows 대상 빌드 확인
+        run: GOOS=windows GOARCH=amd64 go build -o /tmp/copy-widget.exe ./cmd/copy-widget
