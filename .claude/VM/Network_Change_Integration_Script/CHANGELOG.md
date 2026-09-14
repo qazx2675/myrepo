@@ -2,6 +2,37 @@
 
 날짜순(최신이 위).
 
+## 2026-09-14 — gossh v2 진행률 표시와 충돌해 IP/LDAP 이 전부 FAIL 나던 버그 수정
+
+### 버그 수정
+
+- **원인**: `ip-change-engine`/`ldap-config-engine` 의 `internal/remote.Run()` 이
+  `cmd.CombinedOutput()` 으로 gossh 의 표준출력·표준에러를 합쳐서 파싱하고
+  있었음. gossh v2 에 "진행률 표시" 기능(`9527793`, 1초 갱신, 표준에러로
+  출력)이 추가되면서, 결과가 나오는 도중 계속 표준에러에 개행 없는 진행률
+  조각(`\r진행: N/M (P%)`)이 끼어들었고, 이게 두 스트림이 합쳐지는 시점에
+  따라 다음 호스트의 결과 줄 **앞에 붙어버려** 그 줄이 `<host>: <내용>`
+  형식이 아니게 되고 파싱에서 통째로 유실됨 → 해당 호스트는 항상
+  "gossh 응답 없음(UNREACHABLE)"/FAIL 로 집계됨. gossh 자체는 이미
+  상태/진행 메시지를 표준에러로 분리해 두었는데(`a2c1a0d`), 정작 이
+  두 엔진이 그걸 다시 합쳐서 읽고 있었던 게 근본 원인.
+- **재현**: 가짜 gossh(동시에 표준출력에 호스트 결과, 표준에러에 진행률을
+  겹쳐 씀)로 30회 반복 시 `CombinedOutput` 경로는 150건 중 120건(80%)의
+  호스트 결과가 유실됨을 확인. 실제 gossh 로 로컬 12개 호스트 대상
+  15회 반복 실행 시에도 `CombinedOutput` 경로는 매 실행마다 진행률 조각이
+  섞인 오염된 줄이 하나씩 나옴(15회 중 15회 모두 bogus 줄 발생).
+- **수정**: `ip_change`/`ldap_setting` 양쪽(`.claude/HPC/` 원본과
+  `.claude/VM/Network_Change_Integration_Script/projects/` 자체보관 사본
+  전부) 의 `internal/remote/remote.go` 의 `Run()` 이 표준출력만 별도
+  버퍼로 받아 파싱하도록 변경(`cmd.Stdout` 만 지정, `cmd.Stderr = nil`).
+  같은 실제 gossh 로 15회 반복 검증 결과 오염 줄 0건. 남은 실패는 전부
+  sshd 동시접속 제한 등 진짜 SSH 실패였고, 그 경우는 gossh 가 표준에러에
+  `ERROR: ...` 로 정확히 남겨서 확인 가능했음.
+- **영향받는 바이너리**: `bin_os6/ip-change-engine`, `bin_os6/ldap-config-engine`
+  재빌드해 커밋(같은 `go.mod` 이므로 Go 1.20 빌드 그대로). 일반 빌드
+  (`bin/`)는 gitignore 대상이라 `git pull` 후 `./setup.sh` 재실행으로
+  다시 빌드하면 자동 반영됨.
+
 ## 2026-09-11 (추가3) — 성공한 실행도 항상 롤백 가능하도록 인시던트 자동 저장 · 전체 삭제(dd)
 
 ### 신규
