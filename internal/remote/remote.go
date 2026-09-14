@@ -7,6 +7,7 @@ package remote
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -122,8 +123,12 @@ func Run(hostFile, command string, o Options) ([]Result, string, error) {
 	args = append(args, command)
 
 	cmd := exec.Command(bin, args...)
-	out, err := cmd.CombinedOutput()
-	raw := string(out)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = nil // gossh v2 는 진행률/상태 메시지를 표준에러로 보냅니다.
+	// 여기 합치면 결과 줄 중간에 끼어들어 파싱이 깨지므로 버립니다.
+	err := cmd.Run()
+	raw := stdout.String()
 	// gossh 는 일부 노드가 실패해도 0 이 아닐 수 있으므로, 출력은 항상 파싱합니다.
 	return parse(raw), raw, err
 }
