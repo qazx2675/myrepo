@@ -123,14 +123,22 @@ func Run(hostFile, command string, o Options) ([]Result, string, error) {
 	args = append(args, command)
 
 	cmd := exec.Command(bin, args...)
-	var stdout bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
-	cmd.Stderr = nil // gossh v2 는 진행률/상태 메시지를 표준에러로 보냅니다.
-	// 여기 합치면 결과 줄 중간에 끼어들어 파싱이 깨지므로 버립니다.
+	cmd.Stderr = &stderr
+	// gossh v2 는 진행률/상태(ERROR 포함) 메시지를 표준에러로 보냅니다. 파싱에
+	// 합치면 결과 줄 중간에 끼어들어 깨지므로 파싱은 표준출력만 사용하되,
+	// 실패 사유는 화면에 보여야 하므로 raw(표시용)에는 표준에러도 붙입니다.
 	err := cmd.Run()
 	raw := stdout.String()
+	if s := strings.TrimSpace(stderr.String()); s != "" {
+		if raw != "" {
+			raw += "\n"
+		}
+		raw += s
+	}
 	// gossh 는 일부 노드가 실패해도 0 이 아닐 수 있으므로, 출력은 항상 파싱합니다.
-	return parse(raw), raw, err
+	return parse(stdout.String()), raw, err
 }
 
 func parse(raw string) []Result {
