@@ -145,7 +145,5 @@ conf_get() {
 # 다르면(LDAP 조회, 목록에서 선택 등) 이 함수만 고쳐 쓰십시오.
 user선택() {
   [ -t 0 ] || return 1
-  local u
-  read -r -p "작업 계정을 입력하십시오: " u
-  [ -n "$u" ] && RUN_USER="$u"
+  read -p "user 선택 : " RUN_USER
 }
