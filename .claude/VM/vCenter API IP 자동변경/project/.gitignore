@@ -1,0 +1,4 @@
+# 실제 작업 대상(vCenter 주소/hostname/IP)이 들어가는 파일은 절대 커밋하지 않습니다.
+vcenter.txt
+list.txt
+bin/

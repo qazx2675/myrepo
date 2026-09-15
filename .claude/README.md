@@ -17,6 +17,7 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | [`lpage_search`](./VM/lpage_search/) | ESXi 호스트 총 메모리, ev01 VM에 기할당된 메모리, vCPU 수를 기반으로 ev02 VM에 안전하게 할당 가능한 메모리(2MB Large Page 정렬, ESXi High-State 유지 버퍼 포함) 크기를 계산해 주는 순수 Go 계산 도구(외부 의존성 및 네트워크 접속 불필요). |
 | [`VM_setup`](./VM/VM_setup/) | VM/ESXi/vCenter의 개별 설정(affinity, lpage/HugePage, 전원정책, 태그, vSwitch, 라이선스 할당, VM 생성 등)을 적용하는 도구 소스 및 바이너리 모음 폴더. (오케스트레이터인 `vm-param-fix/`는 `vm-param-check-usability-improvement`로 통합 대체됨). |
 | [`esxi-log-check`](./VM/esxi-log-check/) | 다중 ESXi 호스트 로그를 패턴 레지스트리로 매칭해서 CRITICAL/HIGH 하드웨어 장애 이벤트를 뽑아내는 도구(`esxi-log-check`). |
+| [`vCenter API IP 자동변경`](./VM/vCenter%20API%20IP%20자동변경/) | IP 오할당으로 네트워크 접속이 끊긴 RHEL 8.10 VM 을, SSH가 아니라 **vCenter Guest Operations API**(VMware Tools 채널)로 게스트 내부에서 `nmcli` 를 실행해 IP/게이트웨이를 재설정하는 Go 도구(`vm-ip-change`). `vcenter.txt`(대상 vCenter 목록) + `list.txt`(호스트네임/새IP)를 입력으로 받으며, 네트워크로 접속 불가능한 VM 전용이라는 점에서 `ip_change`(gossh/SSH 기반)와 다릅니다. |
 | ~~[`powershell`](./VM/powershell/)~~ | 폐쇄망 환경에서 일반 업무용 PowerShell 7 바이너리 및 VMware PowerCLI 모듈(`.nupkg`)을 오프라인으로 자동 설치·배치하는 스크립트(`setup_폐쇄망pwsh.sh`). 자동완성 및 순차조회 권고 등 실습용 오버헤드 프로필을 제외한 순수 업무용 구성. |
 | ~~[`vm-network-migration`](./VM/vm-network-migration/)~~ | `Network_Change_Integration_Script`에 통합되어 있으므로 별도 내용 작성 제외 (`Network_Change_Integration_Script/projects/vm-network-migration`에 포함). |
 | ~~[`vm-param-setting-check`](./VM/vm-param-setting-check/)~~ | `vm-param-check-usability-improvement` 통합폴더에 존재 (레거시, 기록 보존용으로 유지). |
