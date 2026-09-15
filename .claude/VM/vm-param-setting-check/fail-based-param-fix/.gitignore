@@ -13,3 +13,5 @@ vcenter_recheck.txt
 
 # 테스트용 임시 디렉토리(mock 스크립트, 로컬 실행 산출물)
 testrun/
+
+vendor

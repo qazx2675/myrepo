@@ -5,6 +5,10 @@
 # 를 먼저 실행해 vendor/를 만들고, 그걸 이 폴더와 함께 폐쇄망으로 옮겨야 한다.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# 공통 govendor 로 이동한 의존성을 이 디렉터리 이름의 vendor/ 로 연결한다
+# (실제 파일은 ../../공통/govendor/govmomi-0.39.0 에 있음; 여러 프로젝트가 동일 govmomi 버전을 공유)
+rm -rf vendor 2>/dev/null; ln -s "../../공통/govendor/govmomi-0.39.0" vendor
 if [ ! -d vendor ]; then
   echo "vendor/ 없음 — 인터넷 되는 PC에서 'go mod vendor' 실행 후 vendor/를 이 폴더로 옮기세요." >&2
   exit 1

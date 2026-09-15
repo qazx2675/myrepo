@@ -7,5 +7,9 @@
 # ../lpage_setting-source/ 의 setup.sh로 별도 빌드해야 한다.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# 공통 govendor 로 이동한 의존성을 이 디렉터리 이름의 vendor/ 로 연결한다
+# (실제 파일은 ../../../공통/govendor/govmomi-0.39.0 에 있음; 여러 프로젝트가 동일 govmomi 버전을 공유)
+rm -rf vendor 2>/dev/null; ln -s "../../../공통/govendor/govmomi-0.39.0" vendor
 go build -mod=vendor -o vm-param-fix .
 echo "빌드 완료: $(pwd)/vm-param-fix"

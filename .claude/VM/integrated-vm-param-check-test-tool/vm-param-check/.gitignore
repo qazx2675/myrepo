@@ -15,3 +15,5 @@ real_test_out/
 
 # 컴파일된 레이스 디텍터 바이너리(개발용, 커밋 대상 아님)
 vm-param-check-race
+
+vendor
