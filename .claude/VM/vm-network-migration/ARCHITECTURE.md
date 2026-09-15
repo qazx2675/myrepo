@@ -42,7 +42,7 @@ run.sh  ──(종료 코드로 분기)──>  bin/nm-*  ──(govmomi)──>
 | 파일 | 역할 |
 |---|---|
 | `session.go` | `Connect`/`Fleet`(다중 vCenter), VM·호스트·네트워크 색인, VM 조회(이름/UUID). 호스트는 FQDN/short name 양쪽으로 색인(`registerHostName`). `WriteInventory` 로 진단 덤프 |
-| `nic.go` | NIC 상태 읽기, 백킹/연결 상태 변경(`ReconfigVM_Task`), "연결됨" 반영 확인(`EnsureConnected`), 포트그룹 생성 |
+| `nic.go` | NIC 상태 읽기, 백킹/연결 상태 변경(`ReconfigVM_Task`), "연결됨"/"전원을 켤 때 연결" 반영 확인(`EnsureConnectState`), 포트그룹 생성 |
 
 ## 수정 요청별 진입점
 

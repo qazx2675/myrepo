@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-09-15 (추가) — `nm-connect` 가 "연결됨" + "전원을 켤 때 연결" 을 항상 체크하도록 변경
+
+이전 항목(바로 아래)의 `EnsureConnected` 는 **원래 연결돼 있던 NIC** 만 연결
+상태를 다시 확인했습니다. 그런데 실사용 흐름은 vSphere 편집 설정에서
+**네트워크 어댑터 1 → (vswitch_{user}.txt 기준) 포트그룹 선택 → 연결됨 체크 →
+전원을 켤 때 연결 체크** 를 그대로 자동화하는 것이 목적이라, 백업 시점에
+꺼져 있던 NIC 도 이관 후에는 항상 두 체크박스가 켜져 있어야 합니다.
+(백업 당시 VM 전원이 꺼져 있었을 때가 많아 `orig_connected`/
+`orig_start_connected` 가 둘 다 false 로 기록되는 경우, 이전 로직은
+`EnsureConnected` 를 아예 호출하지 않아 두 체크박스가 계속 꺼진 채로
+남았습니다.)
+
+- `vsphere.EnsureConnected` → **`vsphere.EnsureConnectState(ctx, info, index,
+  key, wantConnected, wantStartConnected)`** 로 일반화. "연결됨" 뿐 아니라
+  "전원을 켤 때 연결(StartConnected)" 도 원하는 값대로 반영됐는지 같이
+  확인하고, 아니면 연결 상태만 담은 Reconfigure 를 다시 보냅니다(최대 5회 /
+  2초 간격). 전원이 꺼진 VM 은 "연결됨" 이 항상 false 이므로
+  `wantConnected` 는 비교하지 않고 "전원을 켤 때 연결" 만 확인합니다
+  (`nm-verify` 와 동일한 기준).
+- **`nm-connect`(Step 3)** 는 백업 시점 값(`orig_connected`/
+  `orig_start_connected`)을 더는 따르지 않고, **항상**
+  `EnsureConnectState(..., true, true)` 로 "연결됨" 과 "전원을 켤 때 연결"
+  을 둘 다 켠 상태로 맞춥니다. `SetPortgroup` 호출도 목표 연결 상태를
+  `true, true` 로 직접 넘깁니다.
+- **`nm-rollback`** 은 반대로 백업에 기록된 원본 값 그대로
+  (`rec.OrigConnected`, `rec.OrigStartConnected`) 복원해야 진짜 원복이므로
+  그 값을 그대로 `EnsureConnectState` 에 넘깁니다(동작 변경 없음, 함수명만
+  갱신).
+
 ## 2026-09-15 — 신규 포트그룹 연결 후 "연결됨(Connected)" 실제 반영 확인
 
 - `nm-connect` / `nm-rollback` 이 백킹 교체 뒤에 **NIC 의 "연결됨" 상태를 다시 읽어

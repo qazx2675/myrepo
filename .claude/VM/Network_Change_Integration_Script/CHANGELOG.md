@@ -2,6 +2,24 @@
 
 날짜순(최신이 위).
 
+## 2026-09-15 (추가) — 포트그룹 단계가 "전원을 켤 때 연결"까지 항상 체크하도록 수정
+
+- 직전 항목(바로 아래)의 수정은 **원래 연결돼 있던 NIC** 만 "연결됨" 을 다시
+  확인했다. 하지만 백업 당시 VM 전원이 꺼져 있는 경우가 많아, 그때는
+  "연결됨"/"전원을 켤 때 연결" 이 둘 다 기록상 false 라 재확인 자체가
+  걸리지 않아 실제로는 여전히 체크가 안 되는 문제가 남아 있었다.
+- `projects/vm-network-migration` 을 다시 갱신. `nm-connect`(Step 3) 는
+  이제 백업 시점 값을 따르지 않고 **네트워크 어댑터 1 → (vswitch_{user}.txt
+  기준) 포트그룹 선택 → 연결됨 체크 → 전원을 켤 때 연결 체크** 순서를 그대로
+  자동화해, 항상 두 체크박스를 켠 상태로 맞추고 실제 반영까지 확인한다
+  (`vsphere.EnsureConnectState`). 롤백은 반대로 백업에 기록된 원본 값
+  그대로 복원한다(동작 변경 없음).
+- 상세는 `projects/vm-network-migration/CHANGELOG.md` 2026-09-15(추가) 항목
+  참고.
+- **OS6 관리서버 반영 절차:** 여전히 `projects/vm-network-migration/
+  build_os6.sh` 를 다시 돌려 `bin_os6/nm-connect`, `bin_os6/nm-rollback` 을
+  재생성해야 한다(이 커밋에도 소스만 포함).
+
 ## 2026-09-15 — 포트그룹 단계가 NIC "연결됨(Connected)" 까지 확인하도록 갱신
 
 - `projects/vm-network-migration` 갱신. 신규 포트그룹으로 백킹을 교체한 뒤

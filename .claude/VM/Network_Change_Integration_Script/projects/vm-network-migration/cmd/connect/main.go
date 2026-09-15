@@ -1,10 +1,9 @@
 // nm-connect — Step 3: 신규 포트그룹 연결
 //
-// 상태 파일에 기록된 목표 포트그룹으로 NIC 백킹을 교체하고 다시 연결합니다.
-// 이미 목표 포트그룹에 연결돼 있으면 아무것도 하지 않습니다(멱등).
-//
-// 연결 상태는 백업 시점의 원래 값을 따릅니다. 원래 꺼져 있던 NIC 를 이 작업 때문에
-// 새로 켜 버리면 이관이 아니라 설정 변경이 되기 때문입니다.
+// 상태 파일에 기록된 목표 포트그룹으로 NIC 백킹을 교체하고, vSphere 편집
+// 설정 화면에서 수동으로 하는 것과 동일하게 "연결됨" 과 "전원을 켤 때 연결"
+// 을 모두 체크한 상태로 맞춥니다(전원이 꺼진 VM 은 "연결됨" 이 항상 false 라
+// "전원을 켤 때 연결" 만 확인합니다). 이미 그 상태면 아무것도 하지 않습니다(멱등).
 package main
 
 import (
@@ -47,23 +46,24 @@ func run() int {
 				return cli.StatusDryRun,
 					fmt.Sprintf("%s -> %s 연결 예정", rec.OrigPG, rec.TargetPG), nil
 			}
-			// 원래 연결돼 있던 NIC 만 다시 연결합니다.
+			// 신규 포트그룹으로 옮긴 NIC 는 항상 "연결됨" + "전원을 켤 때 연결"
+			// 을 켠 상태로 맞춥니다. 원래 꺼져 있던 NIC 라도 이관 후에는 새
+			// 네트워크로 정상 통신해야 하므로, 백업 시점 값(OrigConnected 등)
+			// 을 그대로 따르지 않고 vSphere 편집 설정에서 수동으로 체크하는
+			// 것과 동일한 목표 상태를 씁니다.
 			changed, err := s.SetPortgroup(ctx, info, sf.NicIndex, rec.NicKey,
-				rec.TargetPG, rec.OrigConnected, rec.OrigStartConnected)
+				rec.TargetPG, true, true)
 			if err != nil {
 				return "", "", err
 			}
 
-			// 백킹 교체만으로는 "연결됨" 체크가 켜지지 않는 경우가 있어,
-			// 원래 연결돼 있던 NIC 는 연결 상태까지 실제로 확인하고 맞춥니다.
-			// 백업 당시 전원이 꺼져 있었으면 OrigConnected 는 항상 false 로
-			// 기록되므로, 부팅 시 연결(StartConnected)도 함께 봅니다.
-			fixed := false
-			if rec.OrigConnected || rec.OrigStartConnected {
-				fixed, err = s.EnsureConnected(ctx, info, sf.NicIndex, rec.NicKey)
-				if err != nil {
-					return "", "", err
-				}
+			// 백킹 교체와 연결 상태 변경을 한 Reconfigure 로 같이 보내면
+			// vCenter 가 백킹만 반영하고 "연결됨"/"전원을 켤 때 연결" 은 반영을
+			// 놓치는 경우가 있어, 실제로 반영됐는지 API 로 다시 읽어 확인하고
+			// 아니면 연결 상태만 따로 한 번 더 보냅니다.
+			fixed, err := s.EnsureConnectState(ctx, info, sf.NicIndex, rec.NicKey, true, true)
+			if err != nil {
+				return "", "", err
 			}
 
 			if !changed && !fixed {
