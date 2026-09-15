@@ -9,3 +9,5 @@ vcenter.txt
 
 # 대상 목록은 예시 파일(*.example)만 저장소에 둡니다
 !*.example
+
+vendor
