@@ -124,7 +124,7 @@ nm-backup -user=hong
 | 1 | Step 0 | `nm-backup` | 현재 NIC 상태를 `state_{user}.json` 에 백업 |
 | 2 | Step 2 | `nm-pgcreate` | 각 BM 호스트 vSwitch 에 신규 포트그룹 생성 |
 | 3 | Step 1 | `nm-disconnect` | 대상 VM 의 NIC 연결 해제 |
-| 4 | Step 3 | `nm-connect` | 신규 포트그룹으로 NIC 백킹 교체 후 재연결 |
+| 4 | Step 3 | `nm-connect` | 신규 포트그룹으로 NIC 백킹 교체 후 재연결 (**"연결됨" 이 실제로 켜졌는지 다시 읽어 확인**) |
 | 5 | Step 4 | `nm-verify` | 인벤토리를 다시 읽어 실제 반영 여부 검증 |
 | — | 롤백 | `nm-rollback` | 실패 시 (3-Undo → 1-Undo) 순으로 원복 |
 

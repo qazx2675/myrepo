@@ -100,7 +100,18 @@ func run() int {
 			if err != nil {
 				return "", "", fmt.Errorf("원본 포트그룹 재연결(1-Undo) 실패: %w", err)
 			}
-			if !changed {
+
+			// 원복도 "연결됨" 까지 되돌아야 완료입니다. 백킹만 바뀌고 연결이
+			// 끊긴 채로 남으면 원래 통신되던 VM 이 원복 후에 죽습니다.
+			fixed := false
+			if rec.OrigConnected || rec.OrigStartConnected {
+				fixed, err = s.EnsureConnected(ctx, info, sf.NicIndex, rec.NicKey)
+				if err != nil {
+					return "", "", fmt.Errorf("원본 포트그룹 연결 상태 복원 실패: %w", err)
+				}
+			}
+
+			if !changed && !fixed {
 				return cli.StatusSkipped, fmt.Sprintf("이미 %s 상태", rec.OrigPG), nil
 			}
 			return cli.StatusOK, fmt.Sprintf("%s -> %s 원복", rec.TargetPG, rec.OrigPG), nil

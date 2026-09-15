@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
@@ -171,6 +172,64 @@ func (s *Session) SetPortgroup(ctx context.Context, info *VMInfo, index int, key
 		card.Connectable.StartConnected = startConnected
 		return true
 	})
+}
+
+// connectAttempts / connectPollInterval 은 "연결됨" 이 실제로 켜질 때까지
+// 재시도하는 횟수와 간격입니다. vCenter 가 런타임 연결 상태를 반영하는 데
+// 잠깐 시간이 걸리므로, 한 번 읽어보고 실패로 단정하지 않습니다.
+const (
+	connectAttempts     = 5
+	connectPollInterval = 2 * time.Second
+)
+
+// EnsureConnected 는 NIC 의 "연결됨(Connected)" 체크가 실제로 켜졌는지 확인하고,
+// 꺼져 있으면 연결 상태만 담은 Reconfigure 를 다시 보냅니다.
+//
+// 전원이 켜진 VM 에서 백킹 교체와 연결 상태 변경을 한 번의 Reconfigure 로 같이
+// 보내면, vCenter 가 백킹은 반영하면서 런타임 연결은 끊긴 채로 두는 경우가
+// 있습니다(편집 설정 화면에서 "전원을 켤 때 연결"만 켜지고 "연결됨"은 빠진 상태).
+// 그래서 백킹이 바뀐 뒤에 연결 상태만 따로 한 번 더 반영하고, 실제로 Connected
+// 가 되었는지 API 로 다시 읽어 확인합니다.
+//
+// 전원이 꺼진 VM 은 Connected 가 항상 false 이므로 아무것도 하지 않습니다.
+// 돌려주는 fixed 는 "다시 연결해서 고쳤다"는 뜻입니다(이미 연결돼 있었으면 false).
+func (s *Session) EnsureConnected(ctx context.Context, info *VMInfo, index int, key int32) (fixed bool, err error) {
+	if info.PowerState != types.VirtualMachinePowerStatePoweredOn {
+		return false, nil
+	}
+
+	st, err := s.NIC(ctx, info, index, key)
+	if err != nil {
+		return false, err
+	}
+	if st.Connected {
+		return false, nil
+	}
+
+	for i := 0; i < connectAttempts; i++ {
+		if _, err := s.reconfigureNIC(ctx, info, index, key, func(card *types.VirtualEthernetCard) bool {
+			card.Connectable.Connected = true
+			return true
+		}); err != nil {
+			return false, fmt.Errorf("연결됨 상태 반영 실패: %w", err)
+		}
+
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(connectPollInterval):
+		}
+
+		st, err := s.NIC(ctx, info, index, key)
+		if err != nil {
+			return false, err
+		}
+		if st.Connected {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("NIC 가 포트그룹에는 붙었지만 %d회 재시도 후에도 '연결됨' 이 되지 않았습니다"+
+		"(게스트에서 NIC 를 내렸거나 포트그룹에 빈 포트가 없는지 확인하세요)", connectAttempts)
 }
 
 // AddPortGroup 은 호스트의 표준 vSwitch 에 포트그룹을 만듭니다. (Step 2)

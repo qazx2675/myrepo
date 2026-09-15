@@ -2,6 +2,21 @@
 
 날짜순(최신이 위).
 
+## 2026-09-15 — 포트그룹 단계가 NIC "연결됨(Connected)" 까지 확인하도록 갱신
+
+- `projects/vm-network-migration` 갱신. 신규 포트그룹으로 백킹을 교체한 뒤
+  NIC 의 **"연결됨" 상태를 API 로 다시 읽어 확인**하고, 꺼져 있으면 연결
+  상태만 담은 Reconfigure 를 한 번 더 보냅니다(최대 5회 / 2초 간격).
+  전원이 켜진 VM 에서 백킹 교체와 연결 상태 변경을 한 번의 Reconfigure 로
+  같이 보내면 vCenter 가 백킹만 반영하고 런타임 연결은 끊긴 채로 두는
+  경우가 있어, `change.sh port` 로 포트그룹을 바꾸면 "전원을 켤 때 연결"만
+  켜지고 "연결됨" 체크는 빠진 채 끝나던 문제.
+- 롤백(`nm-rollback`)도 동일하게 원래 연결 상태까지 복원됐는지 확인합니다.
+- 상세는 `projects/vm-network-migration/CHANGELOG.md` 2026-09-15 항목 참고.
+- **OS6 관리서버 반영 절차:** `projects/vm-network-migration/build_os6.sh` 를
+  다시 돌려 `bin_os6/nm-connect`, `bin_os6/nm-rollback` 을 재생성해야 합니다
+  (이 커밋에는 소스만 포함).
+
 ## 2026-09-14 (추가2) — gossh 표준에러를 완전히 버려서 IP 실패 사유가 안 보이던 문제 수정
 
 - 직전 항목(추가)에서 `cmd.Stderr = nil` 로 gossh 표준에러를 버려 결과 줄

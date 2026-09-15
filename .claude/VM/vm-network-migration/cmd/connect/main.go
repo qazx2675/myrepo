@@ -53,8 +53,24 @@ func run() int {
 			if err != nil {
 				return "", "", err
 			}
-			if !changed {
+
+			// 백킹 교체만으로는 "연결됨" 체크가 켜지지 않는 경우가 있어,
+			// 원래 연결돼 있던 NIC 는 연결 상태까지 실제로 확인하고 맞춥니다.
+			// 백업 당시 전원이 꺼져 있었으면 OrigConnected 는 항상 false 로
+			// 기록되므로, 부팅 시 연결(StartConnected)도 함께 봅니다.
+			fixed := false
+			if rec.OrigConnected || rec.OrigStartConnected {
+				fixed, err = s.EnsureConnected(ctx, info, sf.NicIndex, rec.NicKey)
+				if err != nil {
+					return "", "", err
+				}
+			}
+
+			if !changed && !fixed {
 				return cli.StatusSkipped, fmt.Sprintf("이미 %s 에 연결됨", rec.TargetPG), nil
+			}
+			if fixed {
+				return cli.StatusOK, fmt.Sprintf("%s -> %s (연결됨 재설정)", rec.OrigPG, rec.TargetPG), nil
 			}
 			return cli.StatusOK, fmt.Sprintf("%s -> %s", rec.OrigPG, rec.TargetPG), nil
 		})

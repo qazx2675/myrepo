@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-15 — 신규 포트그룹 연결 후 "연결됨(Connected)" 실제 반영 확인
+
+- `nm-connect` / `nm-rollback` 이 백킹 교체 뒤에 **NIC 의 "연결됨" 상태를 다시 읽어
+  확인**하고, 꺼져 있으면 연결 상태만 담은 Reconfigure 를 한 번 더 보내도록 함
+  (`vsphere.EnsureConnected`). 전원이 켜진 VM 에서 백킹 교체와 연결 상태 변경을
+  한 번의 Reconfigure 로 같이 보내면, vCenter 가 백킹만 반영하고 런타임 연결은
+  끊긴 채로 두는 경우가 있어(편집 설정에서 "전원을 켤 때 연결"만 켜지고 "연결됨"
+  체크는 빠진 상태) `nm-verify` 가 `connected=false` 로 실패하던 문제.
+  최대 5회, 2초 간격으로 재확인하고 그래도 안 되면 실패로 보고합니다.
+- 연결 대상 판정에 `orig_start_connected` 를 함께 봅니다. 백업 당시 VM 전원이
+  꺼져 있었으면 `orig_connected` 는 항상 false 로 기록되어, 그 사이 전원이 켜진
+  VM 은 재연결 대상에서 빠지면서 `nm-verify` 와 판정이 어긋나 있었습니다.
+- 전원이 꺼진 VM 은 `Connected` 가 항상 false 이므로 대상에서 제외합니다
+  (기존대로 `start_connected` 만 확인).
+
+---
+
 ## 2026-09-11 — `run.sh` 가 `NM_BIN_DIR` 환경변수로 바이너리 경로를 바꿀 수 있게 함
 
 - `BIN="$(pwd)/bin"` → `BIN="${NM_BIN_DIR:-$(pwd)/bin}"`. 다른 바이너리(예: OS6
