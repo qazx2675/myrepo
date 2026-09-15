@@ -60,6 +60,22 @@ func Gateway(ip string) string {
 	return ip[:i+1] + "1"
 }
 
+// SanitizeID 는 호스트네임을 게스트 안 임시 파일 이름(vsphere.CheckConnection 등이
+// 연결 이름/되돌리기 스크립트를 저장하는 경로)으로 안전하게 쓸 수 있는 문자열로
+// 바꿉니다. 영문/숫자/-/_ 이외의 문자는 모두 '_' 로 치환합니다.
+func SanitizeID(hostname string) string {
+	var b strings.Builder
+	for _, r := range hostname {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
 func readLines(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {

@@ -55,3 +55,17 @@ func TestGateway(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizeID(t *testing.T) {
+	cases := map[string]string{
+		"web01":     "web01",
+		"web-01_a":  "web-01_a",
+		"db.prod01": "db_prod01",
+		"서버01":      "__01",
+	}
+	for in, want := range cases {
+		if got := SanitizeID(in); got != want {
+			t.Errorf("SanitizeID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
