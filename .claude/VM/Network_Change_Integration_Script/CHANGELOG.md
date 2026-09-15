@@ -2,6 +2,26 @@
 
 날짜순(최신이 위).
 
+## 2026-09-15 (추가2) — 위 두 항목 실제 vCenter 검증 + OS6 바이너리 재생성
+
+- 랩 vCenter(192.168.0.50)/ESXi(192.168.0.59)의 `192ev01`으로 실제
+  마이그레이션 왕복 실행해 아래를 vCenter API 로 직접(도구 자체 보고가
+  아니라) 재조회해 확인:
+  - **전원 꺼진 VM**: `test_hostgroup_123 -> PG_Pipeline` 이관 후
+    `startConnected=true`, `connected=false`(설계대로 — 꺼진 VM 은 항상
+    false), backing 이 PG_Pipeline 으로 정확히 반영됨.
+  - **전원 켜진 VM**: `PG_Pipeline -> test_hostgroup_123` 이관(Step1 해제
+    → Step3 연결 전체 사이클) 후 `connected=true`, `startConnected=true`
+    모두 반영됨. 테스트 종료 후 VM 을 원래 포트그룹/전원 꺼짐 상태로
+    정확히 복원.
+  - concurrency(`-c`/`-concurrency`, 기본 8): `cli.Flags.Concurrency` →
+    `steps.Run` → `pool.Run` 세마포어 크기로, `ConnectFleet` 의 vCenter
+    idle 커넥션 수로도 동일 값이 그대로 쓰임을 코드로 확인(설정값이 곧
+    실제 동시실행 수 — 의도된 세마포어 방식이며 "무제한 병렬"은 아님).
+- `projects/vm-network-migration/build_os6.sh` 재실행해 `bin_os6/nm-*`
+  7종 전체 재생성(EnsureConnectState 포함). go build/vet/test 통과,
+  `nm-connect -h` 정상 동작 확인.
+
 ## 2026-09-15 (추가) — 포트그룹 단계가 "전원을 켤 때 연결"까지 항상 체크하도록 수정
 
 - 직전 항목(바로 아래)의 수정은 **원래 연결돼 있던 NIC** 만 "연결됨" 을 다시

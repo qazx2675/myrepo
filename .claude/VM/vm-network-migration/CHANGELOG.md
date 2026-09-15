@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-09-15 (추가2) — 실제 vCenter 로 "연결됨"/"전원을 켤 때 연결" 검증
+
+아래 두 항목(EnsureConnectState 도입)은 커밋 시점엔 미검증이었음. 랩
+vCenter(192.168.0.50)/ESXi(192.168.0.59)의 `192ev01` 로 왕복 마이그레이션을
+실행해 vCenter API 로 직접 재조회, 두 케이스 모두 확인:
+
+- 전원 꺼진 VM: 이관 후 `startConnected=true` / `connected=false`(설계대로),
+  backing 정확히 반영.
+- 전원 켜진 VM: Step1(해제) → Step3(연결) 전체 사이클 후 `connected=true` /
+  `startConnected=true` 모두 반영.
+
+테스트 후 VM 을 원래 포트그룹·전원 꺼짐 상태로 정확히 복원함.
+
+---
+
 ## 2026-09-15 (추가) — `nm-connect` 가 "연결됨" + "전원을 켤 때 연결" 을 항상 체크하도록 변경
 
 이전 항목(바로 아래)의 `EnsureConnected` 는 **원래 연결돼 있던 NIC** 만 연결
