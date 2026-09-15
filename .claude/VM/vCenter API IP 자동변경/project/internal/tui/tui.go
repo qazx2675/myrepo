@@ -11,6 +11,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -145,28 +146,30 @@ func renderList(t *status.Tracker, interactive bool, selected int) {
 		return
 	}
 
-	fmt.Print("\x1b[H\x1b[2J")
-	fmt.Printf("=== vm-ip-change 진행 중 === 경과 %s\n", fmtDuration(time.Since(t.Start)))
-	fmt.Printf("완료 %d/%d (%d%%)\n\n", done, total, pct)
-	fmt.Println("  ↑/↓ 로 선택, Enter 로 상세보기")
-	fmt.Println()
+	var b strings.Builder
+	b.WriteString("\x1b[H\x1b[2J")
+	fmt.Fprintf(&b, "=== vm-ip-change 진행 중 === 경과 %s\r\n", fmtDuration(time.Since(t.Start)))
+	fmt.Fprintf(&b, "완료 %d/%d (%d%%)\r\n\r\n", done, total, pct)
+	b.WriteString("  ↑/↓ 로 선택, Enter 로 상세보기\r\n\r\n")
 	for i, v := range t.VMs {
 		snap := v.Snapshot()
 		marker := "  "
 		if i == selected {
 			marker = "> "
 		}
-		fmt.Printf("%s%-24s %-12s %s\n", marker, v.Hostname, v.Label(), fmtDuration(snap.Elapsed))
+		fmt.Fprintf(&b, "%s%-24s %-12s %s\r\n", marker, v.Hostname, v.Label(), fmtDuration(snap.Elapsed))
 	}
+	fmt.Print(b.String())
 }
 
 func renderDetail(v *status.VM) {
 	snap := v.Snapshot()
 
-	fmt.Print("\x1b[H\x1b[2J")
-	fmt.Printf("=== %s 상세 ===\n", v.Hostname)
-	fmt.Printf("새 IP: %s (GW %s)\n", v.NewIP, v.Gateway)
-	fmt.Printf("경과: %s\n\n", fmtDuration(snap.Elapsed))
+	var b strings.Builder
+	b.WriteString("\x1b[H\x1b[2J")
+	fmt.Fprintf(&b, "=== %s 상세 ===\r\n", v.Hostname)
+	fmt.Fprintf(&b, "새 IP: %s (GW %s)\r\n", v.NewIP, v.Gateway)
+	fmt.Fprintf(&b, "경과: %s\r\n\r\n", fmtDuration(snap.Elapsed))
 
 	steps := []struct {
 		phase status.Phase
@@ -188,14 +191,15 @@ func renderDetail(v *status.VM) {
 				mark = "[>]" // 지금 이 단계 진행 중
 			}
 		}
-		fmt.Printf("  %s %s\n", mark, step.label)
+		fmt.Fprintf(&b, "  %s %s\r\n", mark, step.label)
 	}
 
-	fmt.Printf("\n상태: %s\n", v.Label())
+	fmt.Fprintf(&b, "\r\n상태: %s\r\n", v.Label())
 	if snap.Err != nil {
-		fmt.Printf("오류: %v\n", snap.Err)
+		fmt.Fprintf(&b, "오류: %v\r\n", snap.Err)
 	}
-	fmt.Println("\n(아무 키나 누르면 목록으로 돌아갑니다)")
+	b.WriteString("\r\n(아무 키나 누르면 목록으로 돌아갑니다)\r\n")
+	fmt.Print(b.String())
 }
 
 func renderFinal(t *status.Tracker) {
