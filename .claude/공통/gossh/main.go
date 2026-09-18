@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -355,7 +357,7 @@ func isAnacondaRunning(client *ssh.Client) bool {
 	return lastLine == "1"
 }
 
-func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, bunchMode bool, bunchOutputs map[string]string, wg *sync.WaitGroup, sem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex, completed *int64) {
+func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, bunchMode bool, bunchOutputs map[string]string, wg *sync.WaitGroup, sem chan struct{}, dnsSem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex, completed *int64) {
 	defer wg.Done()
 	defer atomic.AddInt64(completed, 1) // ★ 진행률 카운트 — 성공/실패 어떤 경로로 끝나든 항상 1 증가
 	sem <- struct{}{}
@@ -364,6 +366,16 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	target := host
 	if !strings.Contains(target, ":") {
 		target = host + ":" + port
+	}
+
+	// 0. ★ DNS 조회 선행 — 대량 동시 실행 시 리졸버 혼잡으로 간헐적 실패가 나는 걸 짧은 재시도로
+	// 흡수한다. 여기서 최종 실패하면 ssh.Dial까지 갈 필요 없이 바로 접속불가로 분류한다.
+	if err := lookupHostWithRetry(dnsSem, host); err != nil {
+		printPdshStyle(host, "", fmt.Errorf("DNS 조회 실패: %v", err))
+		mu.Lock()
+		*failedHosts = append(*failedHosts, host)
+		mu.Unlock()
+		return
 	}
 
 	config := &ssh.ClientConfig{
@@ -458,6 +470,40 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 // "echo 'user'" 처럼 단어 중간에 user가 들어간 경우는 대상이 아니고,
 // 반드시 "/user/" 형태의 경로여야만 감지된다.
 const autofsSafeConcurrency = 350
+
+// ★ DNS 조회 전용 동시성 제한. SSH 접속 동시성(-c, 최대 350)과 별개로 훨씬 낮게 잡아서,
+// 대량 호스트를 한꺼번에 처리할 때 리졸버/DNS 서버에 걸리는 순간 부하를 줄인다.
+const dnsLookupConcurrency = 50
+
+// lookupHostWithRetry는 SSH 접속(ssh.Dial) 전에 이름 해석만 먼저 수행한다. 대량 동시 실행 시
+// 간헐적으로 DNS 조회가 실패/타임아웃되는 경우가 있어(리졸버 혼잡), 실제 접속 타임아웃(-t, 기본
+// 15초)만큼 기다리는 대신 250ms 간격으로 최대 2회만 짧게 재시도한다 — 진짜 접속불가 호스트에는
+// 영향이 없고(어차피 이후 ssh.Dial에서 -t 타임아웃으로 판정), DNS 혼잡으로 인한 오분류만 줄인다.
+func lookupHostWithRetry(dnsSem chan struct{}, host string) error {
+	hostOnly := host
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		hostOnly = host[:idx]
+	}
+	if net.ParseIP(hostOnly) != nil {
+		return nil // IP는 이름 해석이 필요 없음
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		dnsSem <- struct{}{}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_, lastErr = net.DefaultResolver.LookupHost(ctx, hostOnly)
+		cancel()
+		<-dnsSem
+		if lastErr == nil {
+			return nil
+		}
+		if attempt < 2 {
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
+	return lastErr
+}
 
 func isAutofsUserPath(command string) bool {
 	return autofsUserPathRegex.MatchString(command)
@@ -598,8 +644,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "\n승인되었습니다. 작업을 시작합니다...")
 	}
 
+	// ★ glibc 리졸버는 대량 동시 조회 시 내부 스레드풀 제약으로 간헐적 실패/지연이 날 수 있어,
+	// Go 자체 순수 구현 리졸버를 쓰도록 강제한다(시스템 리졸버 스레드풀 병목 회피).
+	net.DefaultResolver = &net.Resolver{PreferGo: true}
+
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, effectiveConcurrency)
+	dnsSem := make(chan struct{}, dnsLookupConcurrency)
 	timeout := time.Duration(*timeoutSec) * time.Second
 
 	var mu sync.Mutex
@@ -651,7 +702,7 @@ func main() {
 
 	for _, host := range hosts {
 		wg.Add(1)
-		go runSSHCommand(host, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &wg, sem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu, &completed)
+		go runSSHCommand(host, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &wg, sem, dnsSem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu, &completed)
 	}
 
 	wg.Wait()
