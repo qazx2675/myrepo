@@ -164,7 +164,75 @@ func compressHosts(hosts []string) []string {
 			i = j + 1
 		}
 	}
+	out = mergeRangeTokens(out)
 	out = append(out, singles...)
+	return out
+}
+
+// 접힌 토큰 "prefix[lo-hi]"에서 prefix 안의 마지막 숫자 덩어리(N)를 분리하기 위한 패턴.
+// 예: "hostname0001ev[01-03]" -> A="hostname", N="0001", B="ev", lo="01", hi="03"
+var foldedTokenRegex = regexp.MustCompile(`^(.*?)(\d+)(\D*)\[(\d+)-(\d+)\]$`)
+
+// mergeRangeTokens는 범위가 같고 접두어 안의 숫자만 연속으로 다른 토큰들을 다차원으로 합친다.
+// "hostname0001ev[01-03]", "hostname0002ev[01-03]" -> "hostname[0001-0002]ev[01-03]"
+// 기존 1차원 압축 결과는 그대로 두고, 합칠 수 있는 범위 토큰끼리만 추가로 접는다.
+func mergeRangeTokens(tokens []string) []string {
+	type key struct {
+		a, b, lo, hi string
+		width        int
+	}
+	type member struct {
+		n     int
+		token string
+	}
+	groups := map[key][]member{}
+	var order []key
+	for _, t := range tokens {
+		m := foldedTokenRegex.FindStringSubmatch(t)
+		if m == nil {
+			continue
+		}
+		n, err := strconv.Atoi(m[2])
+		if err != nil {
+			continue
+		}
+		k := key{a: m[1], b: m[3], lo: m[4], hi: m[5], width: len(m[2])}
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], member{n: n, token: t})
+	}
+
+	replace := map[string]string{} // 원본 토큰 -> 합친 토큰(첫 멤버) 또는 "" (삭제)
+	for _, k := range order {
+		ms := groups[k]
+		sort.Slice(ms, func(i, j int) bool { return ms[i].n < ms[j].n })
+		i := 0
+		for i < len(ms) {
+			j := i
+			for j+1 < len(ms) && ms[j+1].n == ms[j].n+1 {
+				j++
+			}
+			if j > i {
+				replace[ms[i].token] = fmt.Sprintf("%s[%0*d-%0*d]%s[%s-%s]", k.a, k.width, ms[i].n, k.width, ms[j].n, k.b, k.lo, k.hi)
+				for x := i + 1; x <= j; x++ {
+					replace[ms[x].token] = ""
+				}
+			}
+			i = j + 1
+		}
+	}
+
+	var out []string
+	for _, t := range tokens {
+		if r, ok := replace[t]; ok {
+			if r != "" {
+				out = append(out, r)
+			}
+			continue
+		}
+		out = append(out, t)
+	}
 	return out
 }
 
@@ -486,6 +554,10 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 			checkPmCmd := `sh -c 'if [ -d /user/svrauto ]; then echo 1; else echo 0; fi'`
 			out2, _ := sess2.CombinedOutput(checkPmCmd)
 			sess2.Close()
+			if ctl.wasCanceled() {
+				pmCanceled(host, mu, successCount)
+				return
+			}
 
 			outStr2 := strings.TrimSpace(string(out2))
 			lines := strings.Split(outStr2, "\n")
@@ -501,11 +573,24 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 				mu.Unlock()
 			}
 		} else {
+			if ctl.wasCanceled() {
+				pmCanceled(host, mu, successCount)
+				return
+			}
 			mu.Lock()
 			*noSvrAutoHosts = append(*noSvrAutoHosts, host)
 			mu.Unlock()
 		}
 	}
+}
+
+// pmCanceled는 -pm 추가 점검 단계에서 사용자가 취소한 호스트를 취소 목록으로 돌린다.
+// 본 명령은 이미 성공으로 집계됐으므로 카운트가 이중으로 잡히지 않게 되돌린다.
+func pmCanceled(host string, mu *sync.Mutex, successCount *int) {
+	mu.Lock()
+	*successCount--
+	mu.Unlock()
+	handleCanceled(host)
 }
 
 // ★ autofs 안전장치: 명령어에 "/user/..." 로 시작하는 경로가 포함되어 있으면 true.
