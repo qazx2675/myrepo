@@ -47,6 +47,37 @@ func colorize(color, s string) string {
 	return color + s + colorReset
 }
 
+// ★ 진행률 줄 고정 표시: 진행 중에는 맨 아래 줄에 진행률을 두고, 결과/메시지 줄이 찍힐 때마다
+// 그 줄을 지우고 → 메시지 출력 → 진행률을 다시 그린다(줄바꿈 없이 제자리 갱신).
+// 진행률은 stderr가 터미널일 때만 켜지므로 파일로 리다이렉션하면 저장되지 않는다.
+var (
+	outMu        sync.Mutex
+	progressOn   bool
+	progressText string
+)
+
+func drawProgressLocked() {
+	fmt.Fprint(os.Stderr, "\r\033[K"+progressText)
+}
+
+// emit은 s(끝에 개행 포함)를 w에 출력하되 진행률 줄과 섞이지 않게 한다.
+func emit(w *os.File, s string) {
+	outMu.Lock()
+	defer outMu.Unlock()
+	if progressOn {
+		fmt.Fprint(os.Stderr, "\r\033[K")
+	}
+	fmt.Fprint(w, s)
+	if progressOn {
+		drawProgressLocked()
+	}
+}
+
+func stderrIsTerminal() bool {
+	fi, err := os.Stderr.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
 // ★ pdsh 스타일 "플래그+값 붙여쓰기"를 -w에 한해 지원한다.
 // "-w^file", "-wfile" 처럼 공백/등호 없이 붙어 있는 경우를 Go flag 패키지가 이해하는
 // "-w" "값" 두 토큰으로 분리한다. "-w=value"(Go 관용 표기)와 "-w" 단독, "-w ^file"
@@ -350,12 +381,12 @@ func printPdshStyle(host string, output string, err error) {
 	}
 	if err != nil {
 		for _, line := range strings.Split(text, "\n") {
-			fmt.Fprintln(os.Stderr, colorize(colorRed, fmt.Sprintf("%s: %s", host, line)))
+			emit(os.Stderr, colorize(colorRed, fmt.Sprintf("%s: %s", host, line))+"\n")
 		}
 		return
 	}
 	for _, line := range strings.Split(text, "\n") {
-		fmt.Println(colorize(colorGreen, fmt.Sprintf("%s: %s", host, line)))
+		emit(os.Stdout, colorize(colorGreen, fmt.Sprintf("%s: %s", host, line))+"\n")
 	}
 }
 
@@ -510,7 +541,7 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 
 	// 2. ★ [수정] -pm 옵션이 있을 때만 ~/.profile 기반으로 OS 설치 중인지 검사
 	if pmMode && isAnacondaRunning(client) {
-		fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: OS 설치중 (~/.profile anaconda 감지)", host)))
+		emit(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: OS 설치중 (~/.profile anaconda 감지)", host))+"\n")
 		mu.Lock()
 		*osInstallHosts = append(*osInstallHosts, host)
 		mu.Unlock()
@@ -729,7 +760,7 @@ func abortAll() {
 }
 
 func handleCanceled(host string) {
-	fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: 사용자 취소", host)))
+	emit(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: 사용자 취소", host))+"\n")
 	canceledMu.Lock()
 	canceledHosts = append(canceledHosts, host)
 	canceledMu.Unlock()
@@ -757,13 +788,12 @@ func startInterruptHandler() {
 				}
 				activeMu.Unlock()
 				sort.Strings(names)
-				fmt.Fprintf(os.Stderr, "\n[Ctrl+C] 진행 중 %d대: %s\n", len(names), strings.Join(compressHosts(names), ","))
-				fmt.Fprintln(os.Stderr, "         1초 내 한 번 더: 현재 걸린 호스트 취소 후 계속 / 그 뒤 1초 내 한 번 더: 전체 중단")
+				emit(os.Stderr, fmt.Sprintf("\n[Ctrl+C] 진행 중 %d대: %s\n         1초 내 한 번 더: 현재 걸린 호스트 취소 후 계속 / 그 뒤 1초 내 한 번 더: 전체 중단\n", len(names), strings.Join(compressHosts(names), ",")))
 			case count == 2:
 				n := cancelActiveHosts()
-				fmt.Fprintf(os.Stderr, "\n[Ctrl+C x2] 현재 진행 중인 %d대를 취소하고 다음 호스트를 계속 진행합니다.\n", n)
+				emit(os.Stderr, fmt.Sprintf("\n[Ctrl+C x2] 현재 진행 중인 %d대를 취소하고 다음 호스트를 계속 진행합니다.\n", n))
 			case count == 3:
-				fmt.Fprintln(os.Stderr, "\n[Ctrl+C x3] 전체 작업을 중단합니다. 지금까지의 결과로 마무리합니다.")
+				emit(os.Stderr, "\n[Ctrl+C x3] 전체 작업을 중단합니다. 지금까지의 결과로 마무리합니다.\n")
 				abortAll()
 			default:
 				os.Exit(130)
@@ -940,15 +970,23 @@ func main() {
 	var progressWG sync.WaitGroup
 	progressStop := make(chan struct{})
 	total := int64(len(hosts))
-	if !isPdshName {
+	progressEnabled := !isPdshName && stderrIsTerminal()
+	if progressEnabled {
 		printProgress := func() {
 			c := atomic.LoadInt64(&completed)
 			pct := int64(0)
 			if total > 0 {
 				pct = c * 100 / total
 			}
-			fmt.Fprintf(os.Stderr, "\r진행: %d/%d (%d%%)", c, total, pct)
+			outMu.Lock()
+			progressText = fmt.Sprintf("진행: %d/%d (%d%%)", c, total, pct)
+			drawProgressLocked()
+			outMu.Unlock()
 		}
+		outMu.Lock()
+		progressOn = true
+		outMu.Unlock()
+		printProgress()
 		progressWG.Add(1)
 		go func() {
 			defer progressWG.Done()
@@ -960,7 +998,10 @@ func main() {
 					printProgress()
 				case <-progressStop:
 					printProgress()
+					outMu.Lock()
+					progressOn = false
 					fmt.Fprintln(os.Stderr)
+					outMu.Unlock()
 					return
 				}
 			}
@@ -976,7 +1017,7 @@ func main() {
 
 	wg.Wait()
 
-	if !isPdshName {
+	if progressEnabled {
 		close(progressStop)
 		progressWG.Wait()
 	}
