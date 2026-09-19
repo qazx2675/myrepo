@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -360,8 +361,19 @@ func isAnacondaRunning(client *ssh.Client) bool {
 func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, bunchMode bool, bunchOutputs map[string]string, wg *sync.WaitGroup, sem chan struct{}, dnsSem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex, completed *int64) {
 	defer wg.Done()
 	defer atomic.AddInt64(completed, 1) // ★ 진행률 카운트 — 성공/실패 어떤 경로로 끝나든 항상 1 증가
-	sem <- struct{}{}
+	select {
+	case sem <- struct{}{}:
+	case <-abortCh:
+		atomic.AddInt64(&notRunCount, 1)
+		return
+	}
 	defer func() { <-sem }()
+	if atomic.LoadInt32(&aborted) == 1 {
+		atomic.AddInt64(&notRunCount, 1)
+		return
+	}
+	ctl := registerHost(host)
+	defer unregisterHost(host, ctl)
 
 	target := host
 	if !strings.Contains(target, ":") {
@@ -370,7 +382,11 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 
 	// 0. ★ DNS 조회 선행 — 대량 동시 실행 시 리졸버 혼잡으로 간헐적 실패가 나는 걸 짧은 재시도로
 	// 흡수한다. 여기서 최종 실패하면 ssh.Dial까지 갈 필요 없이 바로 접속불가로 분류한다.
-	if err := lookupHostWithRetry(dnsSem, host); err != nil {
+	if err := lookupHostWithRetry(ctl.ctx, dnsSem, host); err != nil {
+		if ctl.wasCanceled() {
+			handleCanceled(host)
+			return
+		}
 		printPdshStyle(host, "", fmt.Errorf("DNS 조회 실패: %v", err))
 		mu.Lock()
 		*failedHosts = append(*failedHosts, host)
@@ -386,8 +402,26 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	}
 
 	// 1. SSH 접속 시도
-	client, err := ssh.Dial("tcp", target, config)
+	// ssh.Dial과 동일한 동작(TCP 접속 후 SSH 핸드셰이크)이지만, Ctrl+C로 걸린 접속을 끊을 수
+	// 있도록 컨텍스트/연결을 직접 다룬다.
+	var client *ssh.Client
+	dialer := net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(ctl.ctx, "tcp", target)
+	if err == nil {
+		ctl.setConn(conn)
+		c, chans, reqs, herr := ssh.NewClientConn(conn, target, config)
+		if herr != nil {
+			conn.Close()
+			err = herr
+		} else {
+			client = ssh.NewClient(c, chans, reqs)
+		}
+	}
 	if err != nil {
+		if ctl.wasCanceled() {
+			handleCanceled(host)
+			return
+		}
 		printPdshStyle(host, "", fmt.Errorf("SSH 접속 실패: %v", err))
 		mu.Lock()
 		if strings.Contains(strings.ToLower(err.Error()), "connection refused") {
@@ -412,6 +446,10 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	// 3. 메인 명령어 실행용 세션 생성
 	session, err := client.NewSession()
 	if err != nil {
+		if ctl.wasCanceled() {
+			handleCanceled(host)
+			return
+		}
 		printPdshStyle(host, "", fmt.Errorf("세션 생성 실패: %v", err))
 		mu.Lock()
 		*failedHosts = append(*failedHosts, host)
@@ -421,6 +459,10 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	defer session.Close()
 
 	output, err := session.CombinedOutput(command)
+	if err != nil && ctl.wasCanceled() {
+		handleCanceled(host)
+		return
+	}
 	// ★ 명령어 실행 에러(err != nil, 예: 오타로 인한 "command not found")는 -b 여부와
 	// 무관하게 항상 즉시 printPdshStyle로 보낸다 — 표준에러로 나가야 하므로 그룹 묶음
 	// 대상(성공한 결과만 묶는 bunchOutputs)에는 넣지 않는다.
@@ -479,7 +521,7 @@ const dnsLookupConcurrency = 50
 // 간헐적으로 DNS 조회가 실패/타임아웃되는 경우가 있어(리졸버 혼잡), 실제 접속 타임아웃(-t, 기본
 // 15초)만큼 기다리는 대신 250ms 간격으로 최대 2회만 짧게 재시도한다 — 진짜 접속불가 호스트에는
 // 영향이 없고(어차피 이후 ssh.Dial에서 -t 타임아웃으로 판정), DNS 혼잡으로 인한 오분류만 줄인다.
-func lookupHostWithRetry(dnsSem chan struct{}, host string) error {
+func lookupHostWithRetry(ctx context.Context, dnsSem chan struct{}, host string) error {
 	hostOnly := host
 	if idx := strings.LastIndex(host, ":"); idx != -1 {
 		hostOnly = host[:idx]
@@ -490,19 +532,153 @@ func lookupHostWithRetry(dnsSem chan struct{}, host string) error {
 
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		dnsSem <- struct{}{}
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_, lastErr = net.DefaultResolver.LookupHost(ctx, hostOnly)
+		select {
+		case dnsSem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		lctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		_, lastErr = net.DefaultResolver.LookupHost(lctx, hostOnly)
 		cancel()
 		<-dnsSem
 		if lastErr == nil {
 			return nil
 		}
 		if attempt < 2 {
-			time.Sleep(250 * time.Millisecond)
+			select {
+			case <-time.After(250 * time.Millisecond):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 	}
 	return lastErr
+}
+
+// ★ Ctrl+C 처리(pdsh 방식): 1회=진행 중 호스트 목록 표시, 1초 내 2회=현재 걸린 호스트 취소 후
+// 나머지 계속, 1초 내 3회=전체 중단(지금까지 결과로 요약/결과파일 저장). 호스트별로 취소 가능한
+// 컨텍스트와 연결(conn)을 들고 있어야 걸려있는 접속/명령 실행을 끊을 수 있다.
+type hostCtl struct {
+	ctx      context.Context
+	cancelFn context.CancelFunc
+	mu       sync.Mutex
+	conn     net.Conn
+	canceled bool
+}
+
+func (c *hostCtl) cancel() {
+	c.mu.Lock()
+	c.canceled = true
+	conn := c.conn
+	c.mu.Unlock()
+	c.cancelFn()
+	if conn != nil {
+		conn.Close()
+	}
+}
+
+func (c *hostCtl) wasCanceled() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.canceled
+}
+
+func (c *hostCtl) setConn(conn net.Conn) {
+	c.mu.Lock()
+	c.conn = conn
+	canceled := c.canceled
+	c.mu.Unlock()
+	if canceled {
+		conn.Close()
+	}
+}
+
+var (
+	activeMu      sync.Mutex
+	activeHosts   = map[string]*hostCtl{}
+	abortCh       = make(chan struct{})
+	abortOnce     sync.Once
+	aborted       int32
+	notRunCount   int64
+	canceledMu    sync.Mutex
+	canceledHosts []string
+)
+
+func registerHost(host string) *hostCtl {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &hostCtl{ctx: ctx, cancelFn: cancel}
+	activeMu.Lock()
+	activeHosts[host] = c
+	activeMu.Unlock()
+	return c
+}
+
+func unregisterHost(host string, c *hostCtl) {
+	activeMu.Lock()
+	delete(activeHosts, host)
+	activeMu.Unlock()
+	c.cancelFn()
+}
+
+func cancelActiveHosts() int {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	for _, c := range activeHosts {
+		c.cancel()
+	}
+	return len(activeHosts)
+}
+
+func abortAll() {
+	abortOnce.Do(func() {
+		atomic.StoreInt32(&aborted, 1)
+		close(abortCh)
+	})
+	cancelActiveHosts()
+}
+
+func handleCanceled(host string) {
+	fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: 사용자 취소", host)))
+	canceledMu.Lock()
+	canceledHosts = append(canceledHosts, host)
+	canceledMu.Unlock()
+}
+
+func startInterruptHandler() {
+	sigCh := make(chan os.Signal, 8)
+	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		count := 0
+		var last time.Time
+		for range sigCh {
+			now := time.Now()
+			if count > 0 && now.Sub(last) > time.Second {
+				count = 0
+			}
+			count++
+			last = now
+			switch {
+			case count == 1:
+				activeMu.Lock()
+				var names []string
+				for h := range activeHosts {
+					names = append(names, h)
+				}
+				activeMu.Unlock()
+				sort.Strings(names)
+				fmt.Fprintf(os.Stderr, "\n[Ctrl+C] 진행 중 %d대: %s\n", len(names), strings.Join(compressHosts(names), ","))
+				fmt.Fprintln(os.Stderr, "         1초 내 한 번 더: 현재 걸린 호스트 취소 후 계속 / 그 뒤 1초 내 한 번 더: 전체 중단")
+			case count == 2:
+				n := cancelActiveHosts()
+				fmt.Fprintf(os.Stderr, "\n[Ctrl+C x2] 현재 진행 중인 %d대를 취소하고 다음 호스트를 계속 진행합니다.\n", n)
+			case count == 3:
+				fmt.Fprintln(os.Stderr, "\n[Ctrl+C x3] 전체 작업을 중단합니다. 지금까지의 결과로 마무리합니다.")
+				abortAll()
+			default:
+				os.Exit(130)
+			}
+		}
+	}()
 }
 
 func isAutofsUserPath(command string) bool {
@@ -700,6 +876,8 @@ func main() {
 		}()
 	}
 
+	startInterruptHandler()
+
 	for _, host := range hosts {
 		wg.Add(1)
 		go runSSHCommand(host, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &wg, sem, dnsSem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu, &completed)
@@ -727,6 +905,8 @@ func main() {
 	writeHostsToFile(refusedFilename, refusedHosts)
 	writeHostsToFile(osInstallFilename, osInstallHosts)
 	writeHostsToFile(noSvrAutoFilename, noSvrAutoHosts)
+	cancelFilename := cleanHostFile + "_res_cancel"
+	writeHostsToFile(cancelFilename, canceledHosts)
 
 	// -script 옵션이 없을 때만 요약 출력. 표준에러로 보낸다 — 이 블록은 데이터가 아니라
 	// 상태 요약이라, "gossh -w a cmd > res" 같은 단순 리다이렉션에서 res에 섞이면 안 된다.
@@ -765,6 +945,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", refusedFilename)
 		} else {
 			fmt.Fprintln(os.Stderr, refusedLine)
+		}
+		if len(canceledHosts) > 0 {
+			fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" 사용자 취소(Ctrl+C) : %d 대", len(canceledHosts))))
+			fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", cancelFilename)
+		}
+		if atomic.LoadInt32(&aborted) == 1 {
+			fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" 전체 중단됨 : 미실행 %d 대", atomic.LoadInt64(&notRunCount))))
 		}
 		fmt.Fprintln(os.Stderr, colorize(colorCyanB, "============================================="))
 	}
