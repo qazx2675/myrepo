@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -190,6 +191,11 @@ func mergeRangeTokens(tokens []string) []string {
 	for _, t := range tokens {
 		m := foldedTokenRegex.FindStringSubmatch(t)
 		if m == nil {
+			continue
+		}
+		// 숫자 바로 뒤에 범위가 붙거나(node1[01-03]) 구분 기호만 있는 경우(node1-[01-03])는
+		// 합치면 헷갈리므로 합치지 않는다. 숫자 사이에 글자가 끼어 있을 때만(ev 등) 다차원으로 접는다.
+		if !hasLetter(m[3]) {
 			continue
 		}
 		n, err := strconv.Atoi(m[2])
@@ -1040,4 +1046,13 @@ func main() {
 		}
 		fmt.Fprintln(os.Stderr, colorize(colorCyanB, "============================================="))
 	}
+}
+
+func hasLetter(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			return true
+		}
+	}
+	return false
 }
