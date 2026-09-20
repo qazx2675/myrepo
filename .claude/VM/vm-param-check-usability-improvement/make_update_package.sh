@@ -2,15 +2,15 @@
 # make_update_package.sh — 폐쇄망으로 가져갈 "업데이트 패키지"를 만든다.
 # 인터넷이 되는 빌드 서버(Go 설치됨)에서, 이 저장소를 받은 상태로 실행한다.
 #
-# 결과: dist/vm-param-check-update-YYYYMMDD.tar.gz
+# 결과: dist/vm-param-check-update-YYYYMMDD-HHMM.tar.gz
 #   update.sh        폐쇄망 서버에서 실행하는 업데이트 스크립트
 #   payload/         바뀐 파일만 (지금은 vm-param-check 실행파일)
 #   SHA256SUMS       전송 중 깨졌는지 확인용
 #   VERSION.txt      어느 소스로 언제 만든 빌드인지
 #
 # 폐쇄망 서버에서는:
-#   tar xzf vm-param-check-update-YYYYMMDD.tar.gz
-#   cd vm-param-check-update-YYYYMMDD
+#   tar xzf vm-param-check-update-YYYYMMDD-HHMM.tar.gz
+#   cd vm-param-check-update-YYYYMMDD-HHMM
 #   bash update.sh "/내가/사용중인/디렉토리"
 #
 # 실행파일은 정적 빌드(CGO_ENABLED=0, linux/amd64)라서 서버의 glibc 버전이 달라도 돌아간다.
@@ -32,7 +32,8 @@ command -v go >/dev/null 2>&1 || die "go 가 없습니다. 빌드 서버에서 �
 [ -f update.sh ] || die "update.sh 가 없습니다."
 
 TARGET_ARCH="${GOARCH:-amd64}"
-NAME="vm-param-check-update-$(date +%Y%m%d)"
+# 같은 날 여러 번 만들어도 이름이 겹치지 않도록 시각까지 붙인다
+NAME="vm-param-check-update-$(date +%Y%m%d-%H%M)"
 STAGE="dist/$NAME"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/payload"

@@ -81,11 +81,11 @@ mkdir -p ./SPEC_DIR
 
 ```bash
 # [인터넷 되는 빌드 서버 — Go 필요] 패키지 만들기
-bash make_update_package.sh          # -> dist/vm-param-check-update-YYYYMMDD.tar.gz (정적 빌드, linux/amd64)
+bash make_update_package.sh          # -> dist/vm-param-check-update-YYYYMMDD-HHMM.tar.gz (정적 빌드, linux/amd64)
 
 # [폐쇄망 서버] 패키지를 가져가서 압축을 풀고
-tar xzf vm-param-check-update-YYYYMMDD.tar.gz
-cd vm-param-check-update-YYYYMMDD
+tar xzf vm-param-check-update-YYYYMMDD-HHMM.tar.gz
+cd vm-param-check-update-YYYYMMDD-HHMM
 bash update.sh -n "/내가/사용중인/디렉토리"   # 미리보기(아무것도 안 바꿈)
 bash update.sh "/내가/사용중인/디렉토리"      # 실제 교체
 ```

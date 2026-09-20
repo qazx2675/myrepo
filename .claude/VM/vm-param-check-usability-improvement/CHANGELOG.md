@@ -4,11 +4,18 @@
 
 ---
 
+## 2026-09-20 — `-fix` 게이트: ev01/ev02 짝(VM 대수)이 안 맞아도 막지 않고 경고만 출력
+
+- **변경**: ev01/ev02/ev03 그룹의 VM 대수가 서로 다르면 교정을 중단하던 조건을 게이트에서 뺐다. 대신 다르면 `[경고] 그룹별 VM 대수가 다릅니다(PASS/FAIL 무관, 조회된 VM 전부 기준): ev01=2대, ev02=1대 — 짝이 맞지 않지만 교정은 그대로 진행합니다`를 출력하고 계속 진행한다. 대수는 PASS/FAIL과 무관하게 조회한 VM 전부로 세고, 접미사가 없는 VM("기타")과 비교할 그룹이 하나뿐인 경우는 경고도 없다.
+- **코드**: `fixer/gates.go` — 게이트(`CheckGates`)에서 대수 검사를 제거하고, 같은 로직을 경고 문구를 돌려주는 `GroupCountWarning(vms)`로 분리(`checkHomogeneity`는 그룹 내 스펙 비교만 남음). `main.go`의 `runFix`가 게이트 직전에 이 문구를 출력만 한다. 그룹 내 스펙 비교(코어/소켓·NUMA 제외), 전원 OFF 게이트, 실제 변경 전 y/N 확인은 그대로.
+- **영향 범위**: `fixer/gates.go`, `main.go`(경고 출력 4줄), `fixer/gates_test.go`(대수 관련 테스트를 "막지 않고 경고"로 재작성), `fixer/plan_test.go`(`TestGateGroupCount`를 같은 방향으로 수정), 도구 `README.md`("게이트" 설명), `make_update_package.sh`(패키지 이름에 시각 추가: `YYYYMMDD-HHMM`, 같은 날 여러 번 만들어도 겹치지 않게). **이 변경은 Go 코드뿐이라 빌드된 `vm-param-check` 실행파일만 교체하면 반영된다**(`update.sh`로 충분, 스크립트/템플릿/`SPEC_DIR` 변경 없음).
+- **검증(록키 192.168.0.58)**: `go build`/`go vet`/`go test ./...` 통과. 같은 테스트 하나를 옛/새 `gates.go`에 돌려 옛 코드는 `[동질성 검증 실패] 그룹별 VM 대수가 다릅니다…ev01=2대, ev02=1대`로 막고 새 코드는 통과함을 확인. **호출부 연결은 vcsim으로 실행 확인**: `aaev01`/`bbev01`/`aaev02`(2:1, 전부 전원 OFF)에 `-fix`(stdin 비움)를 돌려 `[경고] … ev01=2대, ev02=1대 …`가 출력되고 → 동질성·전원 OFF 게이트 통과 → 확인 프롬프트까지 진행됨(설정 변경 없음). **한계**: 실 vCenter(192.168.0.50)에는 ev 그룹 VM이 1:1로 두 대뿐이라 짝이 안 맞는 구성을 실 인벤토리로는 만들 수 없어 vcsim으로 확인했다.
+
 ## 2026-09-20 — 폐쇄망용 `update.sh` + 업데이트 패키지 빌더 `make_update_package.sh`
 
 - **문제**: `update_deploy.sh`는 서버가 GitHub에 접속할 수 있다는 전제(`git clone`)로 만들어서, 폐쇄망 서버에서는 애초에 실행할 수 없었다.
 - **`update.sh`(신규)**: `bash update.sh "사용중인디렉토리"`. `git`/`go`/인터넷 없이 bash와 기본 명령만으로 동작. 패키지의 `payload/`에 들어 있는 **바뀐 파일만** 반영하고 나머지는 건드리지 않는다. 교체 전에 ① `SHA256SUMS`로 패키지 손상 확인 ② 새 실행파일을 이 서버에서 먼저 시험(`-demo`, vCenter 접속 안 함, 결과는 임시 폴더) — 실행이 안 되면 아무것도 바꾸지 않고 중단 ③ 이전 파일을 `<디렉토리>.update_backup.<시각>/`에 백업. `-n` 미리보기, 이미 최신이면 종료. `01.*`, `vcenter.txt`, `SPEC_DIR/`, `*.csv`, `*.log`는 payload에 같은 이름이 있어도 건너뜀. 공백·한글 경로 지원.
-- **`make_update_package.sh`(신규)**: 인터넷 되는 빌드 서버(Go 필요)에서 `vm-param-check/setup.sh`로 **정적 빌드**(`CGO_ENABLED=0`, linux/amd64 — 서버 glibc 버전이 달라도 실행)하고 `dist/vm-param-check-update-YYYYMMDD.tar.gz`(update.sh + payload + SHA256SUMS + VERSION.txt)를 만든다. 바뀐 파일이 더 있으면 `payload/`에 같은 상대경로로 넣으면 된다.
+- **`make_update_package.sh`(신규)**: 인터넷 되는 빌드 서버(Go 필요)에서 `vm-param-check/setup.sh`로 **정적 빌드**(`CGO_ENABLED=0`, linux/amd64 — 서버 glibc 버전이 달라도 실행)하고 `dist/vm-param-check-update-YYYYMMDD-HHMM.tar.gz`(update.sh + payload + SHA256SUMS + VERSION.txt)를 만든다. 바뀐 파일이 더 있으면 `payload/`에 같은 상대경로로 넣으면 된다.
 - **영향 범위**: `update.sh`, `make_update_package.sh`, `.gitignore`(`dist/`) 신규, `README.md`(폐쇄망 절 신설·디렉토리 트리). 도구 코드와 `update_deploy.sh`(인터넷 되는 서버용)는 변경 없음. 독립 브랜치 `vm-param-check-standalone`에는 이번 항목을 반영하지 않았다(브랜치 재조립 필요 시 `.claude/동질성-게이트-완화-및-배포-갱신-스크립트-개선/작업기록.md` 참고).
 - **검증(록키 192.168.0.58, 시나리오 35건 전부 통과)**: **네트워크를 끊은 상태(`unshare -n`)** 에서 실행. ① 공백·한글이 든 경로에서 사용자 파일 다수(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR` 5개 파일, csv, log, 템플릿, 소스)의 해시가 실행파일 외 전부 동일 ② 실행파일이 새 것으로 교체(sha256 == payload)·755·동작 ③ 백업에는 옛 실행파일만 ④ 재실행 "이미 최신"·끝에 `/` 붙은 경로 ⑤ `-n` 미리보기는 전체 해시 동일 ⑥ 전송 중 깨진 패키지 → 중단·무변경 ⑦ 이 서버에서 실행 안 되는 실행파일 → 중단·무변경·백업 없음 ⑧ 잘못된 디렉토리/인자 거부 ⑨ payload에 사용자 파일 이름이 섞여도 건너뜀. 정적 빌드 실행파일을 실 vCenter(192.168.0.50)에 실행해 체크·`-fix`(stdin 비움) 결과가 기존과 동일하고 설정이 바뀌지 않음을 확인.
 
