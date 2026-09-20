@@ -73,6 +73,31 @@ mkdir -p ./SPEC_DIR
 
 **폐쇄망(오프라인) 서버에 옮겨서 쓰려면** 1~2번 대신, 인터넷 되는 곳에서 이 폴더 전체를 압축해 USB/scp로 옮긴 뒤 그 서버에서 `bash setup.sh`만 실행하면 됩니다 — 더 자세한 절차와 각 옵션의 의미는 아래 "사용법" 절의 하위 문서를 참고하세요.
 
+> **주의 — master에서는 이 폴더만 떼어가면 빌드가 안 됩니다.** master는 의존성(`vendor/`)을 `.claude/공통/govendor/`에 공유해 두고 `setup.sh`가 심볼릭 링크를 거는 구조라서, 이 폴더만 옮기면 링크 대상이 없습니다. 폴더만 옮겨 쓸 때는 vendor가 실제 파일로 들어 있는 **독립 브랜치 `vm-param-check-standalone`** 을 받으세요(아래 "이미 쓰고 있는 서버 갱신하기" 절).
+
+### 이미 쓰고 있는 서버 갱신하기 (`update_deploy.sh`)
+
+수정 사항을 회사 서버에 반영할 때 씁니다. **배포 경로에 있는 사용자 파일(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 `*.txt`, 결과 `*.csv` 등)은 건드리지 않고**, 새 버전에 들어 있는 소스·실행파일만 그 자리에서 갱신합니다.
+
+```bash
+# 1) 서버에서 이 스크립트를 실행 (한 번 받아두면 됨 — 독립 브랜치의 루트에 있음)
+git clone --depth 1 --branch vm-param-check-standalone https://github.com/qazx2675/myrepo.git /tmp/vpc-update
+cd /tmp/vpc-update
+
+# 2) 먼저 무엇이 바뀔지만 확인 (아무것도 안 바꿈)
+bash update_deploy.sh -n /실제/배포/경로/vm-param-check
+
+# 3) 문제 없으면 실제 갱신
+bash update_deploy.sh /실제/배포/경로/vm-param-check
+```
+
+- **배포 경로는 도구 폴더 자체**(`go.mod`와 `vm-param-check` 실행파일이 있는 곳)를 지정합니다. 안 주면 `/root/vm-param-check-usability-improvement/vm-param-check`.
+- **빌드가 성공한 뒤에만** 배포 경로를 바꿉니다(임시 폴더에서 먼저 빌드). 실패하면 아무것도 안 바뀐 채 중단합니다.
+- **덮어쓰는 파일은 백업**합니다: `<배포경로>.update_backup.<시각>/`. 되돌리려면 그 안의 파일을 같은 경로로 복사하면 됩니다.
+- **직접 값을 채워 쓰는 템플릿**(`vm_setting_check_insert.sh`, `folder_setup.sh`, `testfiles/*`)은 배포본과 다르면 덮어쓰지 않고 `<이름>.new`로 새 버전만 옆에 둡니다. 필요하면 `diff`로 비교해서 직접 반영하세요.
+- `01.*`, `vcenter.txt`, `SPEC_DIR/`, `*.csv`, `*.log`는 저장소에 같은 이름의 파일이 생겨도 절대 덮어쓰지 않습니다.
+- **GitHub에 접속이 안 되는 서버**는 인터넷 되는 곳에서 `git clone --branch vm-param-check-standalone`으로 받은 폴더를 nfs/USB로 옮기고, 그 폴더를 소스로 지정하면 됩니다: `REPO_URL=file:///옮긴/폴더 bash update_deploy.sh /실제/배포/경로/vm-param-check`. (사내 미러 주소도 `REPO_URL`로 지정 가능, 브랜치를 바꾸려면 `REPO_BRANCH`.) 빌드는 `vendor/`만 쓰므로 오프라인으로 됩니다.
+
 ## 이 프로젝트에서 무엇이 바뀌었나
 
 | 문제 | 해결 |
@@ -109,7 +134,7 @@ vm-param-check-usability-improvement/
 ├── README.md                    # 이 문서
 ├── CHANGELOG.md                 # 날짜별 변경 이력
 ├── 계획서.md                      # 설계 배경/검증 근거 문서
-├── update_deploy.sh             # 원격 서버(/root/vm-param-check-usability-improvement/vm-param-check)에 최신 소스를 배포/재빌드하는 스크립트
+├── update_deploy.sh             # 이미 쓰고 있는 배포 경로를 사용자 파일은 그대로 두고 제자리 갱신 + 재빌드(독립 브랜치 vm-param-check-standalone에서 받음)
 └── vm-param-check/              # 실제 도구 소스코드 (스펙 자동매칭, 2단계 조회 등 개선사항 포함), 상세는 하위 README 참고
     ├── README.md                 # 하위 도구 사용법 문서 (옵션 설명, 튜토리얼)
     ├── 계획서.md                   # 하위 도구 자체의 별도 설계 메모
