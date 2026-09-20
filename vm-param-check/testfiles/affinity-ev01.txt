@@ -1,0 +1,4 @@
+# --affinity-ev01 테스트용: 자동계산(HT on 페어)과 다르게 일부러 단일 코어 핀으로 지정
+# -> 실제값(0,1 / 2,3)과 달라서 FAIL이 나야 "파일이 자동계산 대신 실제로 쓰였다"는 걸 확인 가능
+sched.vcpu0.affinity = 0
+sched.vcpu1.affinity = 1
