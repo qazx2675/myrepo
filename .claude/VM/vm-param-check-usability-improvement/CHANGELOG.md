@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-20 — 폐쇄망용 `update.sh` + 업데이트 패키지 빌더 `make_update_package.sh`
+
+- **문제**: `update_deploy.sh`는 서버가 GitHub에 접속할 수 있다는 전제(`git clone`)로 만들어서, 폐쇄망 서버에서는 애초에 실행할 수 없었다.
+- **`update.sh`(신규)**: `bash update.sh "사용중인디렉토리"`. `git`/`go`/인터넷 없이 bash와 기본 명령만으로 동작. 패키지의 `payload/`에 들어 있는 **바뀐 파일만** 반영하고 나머지는 건드리지 않는다. 교체 전에 ① `SHA256SUMS`로 패키지 손상 확인 ② 새 실행파일을 이 서버에서 먼저 시험(`-demo`, vCenter 접속 안 함, 결과는 임시 폴더) — 실행이 안 되면 아무것도 바꾸지 않고 중단 ③ 이전 파일을 `<디렉토리>.update_backup.<시각>/`에 백업. `-n` 미리보기, 이미 최신이면 종료. `01.*`, `vcenter.txt`, `SPEC_DIR/`, `*.csv`, `*.log`는 payload에 같은 이름이 있어도 건너뜀. 공백·한글 경로 지원.
+- **`make_update_package.sh`(신규)**: 인터넷 되는 빌드 서버(Go 필요)에서 `vm-param-check/setup.sh`로 **정적 빌드**(`CGO_ENABLED=0`, linux/amd64 — 서버 glibc 버전이 달라도 실행)하고 `dist/vm-param-check-update-YYYYMMDD.tar.gz`(update.sh + payload + SHA256SUMS + VERSION.txt)를 만든다. 바뀐 파일이 더 있으면 `payload/`에 같은 상대경로로 넣으면 된다.
+- **영향 범위**: `update.sh`, `make_update_package.sh`, `.gitignore`(`dist/`) 신규, `README.md`(폐쇄망 절 신설·디렉토리 트리). 도구 코드와 `update_deploy.sh`(인터넷 되는 서버용)는 변경 없음. 독립 브랜치 `vm-param-check-standalone`에는 이번 항목을 반영하지 않았다(브랜치 재조립 필요 시 `.claude/동질성-게이트-완화-및-배포-갱신-스크립트-개선/작업기록.md` 참고).
+- **검증(록키 192.168.0.58, 시나리오 35건 전부 통과)**: **네트워크를 끊은 상태(`unshare -n`)** 에서 실행. ① 공백·한글이 든 경로에서 사용자 파일 다수(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR` 5개 파일, csv, log, 템플릿, 소스)의 해시가 실행파일 외 전부 동일 ② 실행파일이 새 것으로 교체(sha256 == payload)·755·동작 ③ 백업에는 옛 실행파일만 ④ 재실행 "이미 최신"·끝에 `/` 붙은 경로 ⑤ `-n` 미리보기는 전체 해시 동일 ⑥ 전송 중 깨진 패키지 → 중단·무변경 ⑦ 이 서버에서 실행 안 되는 실행파일 → 중단·무변경·백업 없음 ⑧ 잘못된 디렉토리/인자 거부 ⑨ payload에 사용자 파일 이름이 섞여도 건너뜀. 정적 빌드 실행파일을 실 vCenter(192.168.0.50)에 실행해 체크·`-fix`(stdin 비움) 결과가 기존과 동일하고 설정이 바뀌지 않음을 확인.
+
 ## 2026-09-20 — `update_deploy.sh`를 사용자 파일을 보존하는 제자리 갱신으로 재작성 + 독립 배포 브랜치 `vm-param-check-standalone`
 
 - **문제 1 — 사용자 파일이 사라짐(`update_deploy.sh`)**: 기존 스크립트는 배포 폴더를 통째로 `<경로>.bak.<시각>`으로 옮기고 새로 복사했다. 그래서 배포 경로에 같이 놓여 있던 `01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 `*.txt`, 결과 `*.csv`가 배포 경로에서 전부 사라졌다(백업 폴더에만 남음).

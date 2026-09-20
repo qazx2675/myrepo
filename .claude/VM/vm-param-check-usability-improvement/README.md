@@ -73,11 +73,32 @@ mkdir -p ./SPEC_DIR
 
 **폐쇄망(오프라인) 서버에 옮겨서 쓰려면** 1~2번 대신, 인터넷 되는 곳에서 이 폴더 전체를 압축해 USB/scp로 옮긴 뒤 그 서버에서 `bash setup.sh`만 실행하면 됩니다 — 더 자세한 절차와 각 옵션의 의미는 아래 "사용법" 절의 하위 문서를 참고하세요.
 
-> **주의 — master에서는 이 폴더만 떼어가면 빌드가 안 됩니다.** master는 의존성(`vendor/`)을 `.claude/공통/govendor/`에 공유해 두고 `setup.sh`가 심볼릭 링크를 거는 구조라서, 이 폴더만 옮기면 링크 대상이 없습니다. 폴더만 옮겨 쓸 때는 vendor가 실제 파일로 들어 있는 **독립 브랜치 `vm-param-check-standalone`** 을 받으세요(아래 "이미 쓰고 있는 서버 갱신하기" 절).
+> **주의 — master에서는 이 폴더만 떼어가면 빌드가 안 됩니다.** master는 의존성(`vendor/`)을 `.claude/공통/govendor/`에 공유해 두고 `setup.sh`가 심볼릭 링크를 거는 구조라서, 이 폴더만 옮기면 링크 대상이 없습니다. 폴더만 옮겨 쓸 때는 vendor가 실제 파일로 들어 있는 **독립 브랜치 `vm-param-check-standalone`** 을 받으세요(아래 "인터넷이 되는 서버 갱신하기" 절). 폐쇄망에서 실행파일만 갱신하려면 그 위의 `update.sh` 절을 보세요.
 
-### 이미 쓰고 있는 서버 갱신하기 (`update_deploy.sh`)
+### 폐쇄망 서버 갱신하기 (`update.sh`) — 실행파일만 교체
 
-수정 사항을 회사 서버에 반영할 때 씁니다. **배포 경로에 있는 사용자 파일(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 `*.txt`, 결과 `*.csv` 등)은 건드리지 않고**, 새 버전에 들어 있는 소스·실행파일만 그 자리에서 갱신합니다.
+폐쇄망 서버는 GitHub에 접속할 수 없으므로, 인터넷이 되는 빌드 서버에서 **업데이트 패키지**를 만들어 USB/nfs로 가져가고 폐쇄망 서버에서는 `update.sh`만 실행합니다. `git`, `go`, 인터넷이 필요 없습니다. 바뀐 파일(지금은 `vm-param-check` 실행파일)만 교체하고, 사용 중인 디렉토리의 나머지(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 등)는 하나도 건드리지 않습니다.
+
+```bash
+# [인터넷 되는 빌드 서버 — Go 필요] 패키지 만들기
+bash make_update_package.sh          # -> dist/vm-param-check-update-YYYYMMDD.tar.gz (정적 빌드, linux/amd64)
+
+# [폐쇄망 서버] 패키지를 가져가서 압축을 풀고
+tar xzf vm-param-check-update-YYYYMMDD.tar.gz
+cd vm-param-check-update-YYYYMMDD
+bash update.sh -n "/내가/사용중인/디렉토리"   # 미리보기(아무것도 안 바꿈)
+bash update.sh "/내가/사용중인/디렉토리"      # 실제 교체
+```
+
+- **사용 중인 디렉토리** = `./vm-param-check` 실행파일이 있는 디렉토리입니다. 경로에 공백/한글이 있어도 됩니다.
+- **교체 전에 확인**합니다: 패키지가 깨지지 않았는지(`SHA256SUMS`), 새 실행파일이 이 서버에서 실제로 실행되는지(`-demo`, vCenter 접속 안 함). 실행이 안 되면 아무것도 바꾸지 않고 중단합니다.
+- **이전 실행파일은 백업**합니다: `<디렉토리>.update_backup.<시각>/`. 되돌리려면 그 안의 `vm-param-check`를 다시 복사하면 됩니다.
+- `01.*`, `vcenter.txt`, `SPEC_DIR/`, `*.csv`, `*.log`는 패키지에 같은 이름이 들어 있어도 건너뜁니다. 바뀐 게 없으면 "이미 최신"으로 끝납니다.
+- 실행파일은 정적 빌드라서 서버의 glibc 버전이 달라도 돌아갑니다. x86_64가 아니면 `GOARCH=arm64 bash make_update_package.sh`처럼 바꿔서 만드세요.
+
+### 인터넷이 되는 서버 갱신하기 (`update_deploy.sh`)
+
+인터넷(GitHub)이 되는 서버에서 소스 전체를 받아 갱신할 때 씁니다(폐쇄망에서는 위 `update.sh`를 쓰세요). **배포 경로에 있는 사용자 파일(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 `*.txt`, 결과 `*.csv` 등)은 건드리지 않고**, 새 버전에 들어 있는 소스·실행파일만 그 자리에서 갱신합니다.
 
 ```bash
 # 1) 서버에서 이 스크립트를 실행 (한 번 받아두면 됨 — 독립 브랜치의 루트에 있음)
@@ -134,7 +155,9 @@ vm-param-check-usability-improvement/
 ├── README.md                    # 이 문서
 ├── CHANGELOG.md                 # 날짜별 변경 이력
 ├── 계획서.md                      # 설계 배경/검증 근거 문서
-├── update_deploy.sh             # 이미 쓰고 있는 배포 경로를 사용자 파일은 그대로 두고 제자리 갱신 + 재빌드(독립 브랜치 vm-param-check-standalone에서 받음)
+├── update.sh                    # [폐쇄망] 업데이트 패키지의 바뀐 파일(실행파일)만 사용 중인 디렉토리에 반영. 나머지는 건드리지 않음
+├── make_update_package.sh       # 폐쇄망으로 가져갈 업데이트 패키지(update.sh + 실행파일 + 체크섬)를 빌드 서버에서 만듦
+├── update_deploy.sh             # [인터넷 되는 서버] 배포 경로를 사용자 파일은 그대로 두고 제자리 갱신 + 재빌드(독립 브랜치 vm-param-check-standalone에서 받음)
 └── vm-param-check/              # 실제 도구 소스코드 (스펙 자동매칭, 2단계 조회 등 개선사항 포함), 상세는 하위 README 참고
     ├── README.md                 # 하위 도구 사용법 문서 (옵션 설명, 튜토리얼)
     ├── 계획서.md                   # 하위 도구 자체의 별도 설계 메모
