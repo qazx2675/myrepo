@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-09-20 — `update_deploy.sh`를 사용자 파일을 보존하는 제자리 갱신으로 재작성 + 독립 배포 브랜치 `vm-param-check-standalone`
+
+- **문제 1 — 사용자 파일이 사라짐(`update_deploy.sh`)**: 기존 스크립트는 배포 폴더를 통째로 `<경로>.bak.<시각>`으로 옮기고 새로 복사했다. 그래서 배포 경로에 같이 놓여 있던 `01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 `*.txt`, 결과 `*.csv`가 배포 경로에서 전부 사라졌다(백업 폴더에만 남음).
+- **문제 2 — 갱신 후 빌드 실패(vendor 공유화의 부작용)**: 9/18 커밋(`f8a2e7e`)으로 이 도구의 `vendor/`가 저장소에서 빠지고 `.claude/공통/govendor/govmomi-0.39.0`을 가리키는 심볼릭 링크(`setup.sh`가 생성)로 바뀌었다. 평평한 배포 경로에는 그 상대경로가 없어서 기존 `update_deploy.sh`의 `go build -mod=vendor`가 `inconsistent vendoring`으로 실패하고, 1번 때문에 이미 옮겨진 뒤라 **실행파일조차 없는 상태**로 끝났다. 록키(192.168.0.58)에서 사용자 파일을 심어둔 배포 경로로 그대로 재현 확인.
+- **스크립트(`update_deploy.sh`, 전면 재작성)**:
+  - 새 버전에 있는 파일만 그 자리에서 덮어쓰고, 배포 경로에만 있는 파일은 옮기지도 지우지도 않는다.
+  - 임시 폴더에서 **먼저 빌드**하고 성공했을 때만 배포 경로를 바꾼다. 실패하면 아무것도 안 바뀐 채 중단.
+  - 덮어쓰는 파일과 이전 실행파일은 `<배포경로>.update_backup.<시각>/`에 백업.
+  - `01.*`, `vcenter.txt`, `SPEC_DIR/`, `*.csv`, `*.log`는 저장소에 같은 이름이 생겨도 덮어쓰지 않음. `vm_setting_check_insert.sh`/`folder_setup.sh`/`testfiles/*`는 배포본과 다르면 덮어쓰지 않고 `<이름>.new`로 옆에 저장. `vendor`가 심볼릭 링크인 배포본은 링크 너머를 건드리지 않음.
+  - 도구가 없는 비어 있지 않은 폴더를 배포 경로로 잘못 지정하면 거부. `-n/--dry-run`, `REPO_URL`/`REPO_BRANCH` 환경변수 지원. 바뀔 게 없으면 "이미 최신"으로 종료.
+- **독립 브랜치(`vm-param-check-standalone`)**: 루트가 이 프로젝트 폴더(`vm-param-check-usability-improvement/`)인 독립 히스토리 브랜치(기존 `gossh-standalone`과 같은 방식). master와 달리 `vm-param-check/vendor/`를 **실제 파일로** 포함하고(공유 govendor와 git 트리 해시가 동일함을 확인한 그 내용), `setup.sh`는 링크를 걸지 않는 버전, `.gitignore`는 `vendor` 줄을 뺀 버전이다. 폴더만 떼어가도 오프라인 빌드가 된다. `update_deploy.sh`가 소스를 여기서 받는다.
+- **영향 범위**: `update_deploy.sh`, `README.md`(프로젝트 — 배포 갱신 절 신설, 폐쇄망 안내에 master는 폴더만 떼어가면 빌드 불가 주의 추가, 디렉토리 트리 설명), 신규 브랜치 `vm-param-check-standalone`. 도구 코드(`vm-param-check/`)는 이 항목에서 바뀐 것 없음.
+- **검증(록키 192.168.0.58, 시나리오 36건 + 이름 충돌 1건 전부 통과)**: ① 배포 경로 없음 → 신규 설치·`-demo` 동작 ② 사용자 파일 6종이 있는 옛 배포본 갱신 → 사용자 파일 sha256 전부 동일, 편집한 템플릿은 `.new`로 분리, 소스 갱신·백업·새 실행파일 동작 ③ 즉시 재실행 → "이미 최신" ④ `--dry-run` → 배포 트리 해시 동일·백업 없음 ⑤ 새 버전 빌드 실패 → 종료코드≠0, 배포 트리 해시 동일 ⑥ 도구 없는 폴더 지정 → 거부 ⑦ vendor 링크 → 링크 너머 내용 그대로 ⑧ 브랜치를 받아 `setup.sh`로 오프라인 빌드(`GOPROXY=off`) ⑨ 저장소에 `01.vm_setting_check_insert.sh`와 같은 이름의 파일이 생긴 최악의 경우에도 사용자 파일 그대로.
+
+## 2026-09-20 — `-fix` 동질성 게이트: 코어/소켓·NUMA 비교 제외, 그룹 대수는 PASS 포함 전체 기준
+
+- **문제 1 — 고치려는 불일치 때문에 교정이 막힘**: 게이트가 같은 그룹 안의 VM끼리 코어/소켓(`hardware.numCoresPerSocket`), NUMA(`numa.vcpu.maxPerVirtualNode`) 등이 같은지 비교했는데, 이 둘은 `-fix`가 기대값으로 직접 고치는 항목이다. FAIL인 VM은 값이 다를 수밖에 없어서 `동질성 검증 실패: ev01 그룹 내 스펙 불일치 … 코어/소켓 X≠Y`로 정상적인 교정이 중단됐다. (참고: 코어/소켓은 NUMA에서 파생되는 값이 아니라 vCenter의 별도 설정이며, 둘 다 고칠 수 있는 항목이라는 점에서 같은 부류다.)
+- **문제 2 — PASS VM이 있으면 그룹 대수가 틀리게 계산됨**: 그룹 간 VM 대수를 교정 대상(`targets`)으로 세서, PASS인 VM(교정 대상에서 빠짐)이 있으면 실제 구성과 무관하게 대수가 달라 보였다. 예) ev01 PASS 1 + FAIL 1 / ev02 FAIL 2 = 실제 2:2인데 ev01=1대, ev02=2대로 계산돼 `그룹별 VM 대수가 다릅니다`로 중단.
+- **게이트(`fixer/gates.go`)**:
+  - `diffSpec`에서 코어/소켓과 NUMA 비교를 제거. vCPU·메모리·디스크·CPU Shares·HT는 계속 비교(메모리/디스크/Shares는 이 도구가 못 고치는 수동조치 항목이라 다르면 진짜로 다른 스펙). 근거를 함수 주석에 명시.
+  - `checkHomogeneity`가 그룹 대수는 `CheckGates`에 이미 넘어오던 조회 VM 전부(`allVMs`, PASS 포함)로 세고, 그룹 내 스펙 비교만 교정 대상끼리 한다. 에러 문구에 `(PASS/FAIL 무관, 조회된 VM 전부 기준)` 표기.
+  - `describeSpec`은 실제로 비교하는 값만 보여주도록 코어/소켓·NUMA를 뺐다(비교하지 않는 값이 에러 문구에 나오면 그게 원인처럼 오해됨).
+- **영향 범위**: `fixer/gates.go`(위 3곳), `fixer/gates_test.go`(신규), `vm-param-check/README.md`("게이트" 설명). 전원 OFF 게이트, `BuildPlan`/`fixable` 분류, 체크 로직은 변경 없음. `-fix`의 확인 프롬프트(실제 변경 전 y/N)도 그대로다. 다른 도구 폴더(`vm-param-setting-check`, `integrated-vm-param-check-test-tool`, `VM_setup/vm-param-fix`)의 동일 이름 `gates.go`는 이번에 건드리지 않았다.
+- **의도적으로 남긴 것**: NUMA·코어/소켓 외에 vCPU와 HT도 `-fix`가 고치는 항목이라 같은 논리가 적용될 수 있으나, 요청 범위(코어/소켓+NUMA)를 넘지 않도록 비교를 유지했다. 이 둘이 FAIL인 VM이 섞여 게이트에 막히면 같은 방식으로 뺄 수 있다.
+- **검증(록키 192.168.0.58, Go 1.26.5, 오프라인)**: `go build`/`go vet`/`go test ./...` 통과. 신규 테스트 11건(새 규칙 5 + 기존 동작 유지 6: 여전히 비교하는 항목 5, 그룹이 하나뿐이면 대수 비교 생략 1)을 **옛 `gates.go`에 돌리면 새 규칙 5개가 정확히 FAIL**로 잡히는 것 확인(2:2 PASS 혼합 구성, 코어/소켓·NUMA만 다른 경우, 전체 기준 2:3 불일치, 대상이 한 그룹뿐인 경우, 에러 문구 등). 기존 동작 유지 6건은 옛 코드에서도 통과한다. 실 vCenter(192.168.0.50)의 `192ev01`(PASS)/`192ev02`(FAIL)에 `-fix`(stdin 비움 → 설정 변경 없음)를 옛/새 바이너리로 돌려 게이트 흐름이 동일하게 동작하고 아무것도 바뀌지 않음을 확인. **한계**: 실 vCenter에는 ev 그룹 VM이 1:1로 2대뿐이라, PASS 혼합 2:2 구성의 옛 버그 재현은 실 인벤토리가 아니라 단위 테스트로 확인했다.
+
 ## 2026-08-25 — `-shares-ev01/02/03` 쉼표 다중값 + `normal` 혼합 지원
 
 - **파싱(`main.go`)**: 세 플래그 모두 기존엔 ev01만 "ratio 숫자 하나 또는 normal 하나"를 받고 ev02/ev03는 정수 하나만 받았는데, 이제 `-disk`처럼 쉼표로 여러 값을 나열할 수 있고 ratio 숫자와 `normal`을 섞어도 된다(예: `-shares-ev01=4000,normal`). 새 헬퍼 `parseSharesListFlag`가 파싱을 전담(`parseIntListFlag`와 동일한 패턴).
