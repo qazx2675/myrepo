@@ -1,7 +1,9 @@
 // gates.go: 실제 설정을 바꾸기 전에 반드시 통과해야 하는 두 안전장치.
-//   - 그룹 동질성: ev01끼리, ev02끼리, ev03끼리 스펙이 같아야 하고(교정 대상끼리 비교),
-//     그룹 간 대수도 같아야 함(PASS/FAIL 무관, 조회한 VM 전부 기준)
+//   - 그룹 동질성: ev01끼리, ev02끼리, ev03끼리 스펙이 같아야 함(교정 대상끼리 비교)
 //   - 전원 OFF: 대상 VM이 전부 꺼져 있어야 함 (CPU 토폴로지를 직접 바꾸기 때문)
+//
+// ev01/ev02/ev03 그룹 간 VM 대수가 맞는지(짝이 맞는지)는 게이트가 아니다. 다르면
+// GroupCountWarning이 경고 문구만 돌려주고 교정은 그대로 진행한다.
 //
 // 검증에 필요한 값은 체크 단계에서 이미 조회한 model.VMInfo에 전부 들어있어서
 // vCenter를 다시 조회하지 않는다.
@@ -30,7 +32,7 @@ func CheckGates(targets []string, vms []model.VMInfo) error {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		homogErr = checkHomogeneity(targets, vms, infoByName)
+		homogErr = checkHomogeneity(targets, infoByName)
 	}()
 	go func() {
 		defer wg.Done()
@@ -47,22 +49,8 @@ func CheckGates(targets []string, vms []model.VMInfo) error {
 	return nil
 }
 
-// checkHomogeneity는 두 가지를 확인한다.
-//
-//  1. 그룹 간 VM 대수가 서로 같은지(1:1:1 구성인지). 이건 교정 대상(targets)이 아니라
-//     조회한 VM 전부(vms) 기준이다 — PASS인 VM은 교정 대상에서 빠지므로 targets로 세면
-//     "ev01은 FAIL 1대뿐, ev02는 FAIL 2대"처럼 실제 구성과 무관하게 대수가 달라 보인다.
-//  2. 같은 그룹 안의 교정 대상끼리 스펙이 같은지(diffSpec 참고).
-func checkHomogeneity(targets []string, vms []model.VMInfo, infoByName map[string]model.VMInfo) error {
-	allGroups := map[string][]model.VMInfo{}
-	for _, vm := range vms {
-		grp := GroupOf(vm.Name)
-		allGroups[grp] = append(allGroups[grp], vm)
-	}
-	if err := checkGroupCounts(allGroups, sortedGroupNames(allGroups)); err != nil {
-		return err
-	}
-
+// checkHomogeneity는 같은 그룹 안의 교정 대상끼리 스펙이 같은지 확인한다(diffSpec 참고).
+func checkHomogeneity(targets []string, infoByName map[string]model.VMInfo) error {
 	groups := map[string][]model.VMInfo{}
 	for _, name := range targets {
 		info, ok := infoByName[name]
@@ -96,31 +84,40 @@ func sortedGroupNames(groups map[string][]model.VMInfo) []string {
 	return names
 }
 
-// checkGroupCounts는 ev01/ev02/ev03 그룹이 둘 이상 섞여 있을 때 각 그룹의 VM 대수가
-// 서로 같은지 확인한다("기타"는 접미사가 없는 VM이라 대수 비교 대상에서 제외).
-func checkGroupCounts(groups map[string][]model.VMInfo, groupNames []string) error {
+// GroupCountWarning은 ev01/ev02/ev03 그룹이 둘 이상 섞여 있을 때 각 그룹의 VM 대수가
+// 서로 다르면 경고 문구를 돌려준다(같거나 비교할 그룹이 하나뿐이면 "").
+//
+// 예전에는 이게 게이트라서 대수가 다르면 교정이 막혔다. 하지만 짝이 안 맞는다고 교정이
+// 잘못되는 건 아니라서, 지금은 호출부가 이 문구를 출력만 하고 그대로 진행한다.
+// 대수는 교정 대상이 아니라 PASS/FAIL 무관하게 조회한 VM 전부로 센다. "기타"(접미사가
+// 없는 VM)는 비교 대상이 아니다.
+func GroupCountWarning(vms []model.VMInfo) string {
+	counts := map[string]int{}
+	for _, vm := range vms {
+		counts[GroupOf(vm.Name)]++
+	}
 	var known []string
-	for _, g := range groupNames {
-		if g == "ev01" || g == "ev02" || g == "ev03" {
+	for _, g := range []string{"ev01", "ev02", "ev03"} {
+		if counts[g] > 0 {
 			known = append(known, g)
 		}
 	}
 	if len(known) < 2 {
-		return nil
+		return ""
 	}
-	baseCount := len(groups[known[0]])
 	var parts []string
 	mismatch := false
 	for _, g := range known {
-		parts = append(parts, fmt.Sprintf("%s=%d대", g, len(groups[g])))
-		if len(groups[g]) != baseCount {
+		parts = append(parts, fmt.Sprintf("%s=%d대", g, counts[g]))
+		if counts[g] != counts[known[0]] {
 			mismatch = true
 		}
 	}
-	if mismatch {
-		return fmt.Errorf("그룹별 VM 대수가 다릅니다(PASS/FAIL 무관, 조회된 VM 전부 기준): %s", strings.Join(parts, ", "))
+	if !mismatch {
+		return ""
 	}
-	return nil
+	return fmt.Sprintf("그룹별 VM 대수가 다릅니다(PASS/FAIL 무관, 조회된 VM 전부 기준): %s — 짝이 맞지 않지만 교정은 그대로 진행합니다",
+		strings.Join(parts, ", "))
 }
 
 // diffSpec은 두 VM의 스펙 차이를 돌려준다(같으면 빈 문자열).

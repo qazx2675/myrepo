@@ -54,25 +54,9 @@ func TestDiffSpecStillDetects(t *testing.T) {
 	}
 }
 
-// PASS인 VM은 교정 대상(targets)에서 빠지지만, 그룹 대수는 PASS 포함 전부로 세야 한다.
-// ev01: PASS 1 + FAIL 1 / ev02: FAIL 2 -> 실제 구성은 2:2라서 통과해야 한다.
-// (예전에는 targets만 세서 ev01=1대, ev02=2대로 잘못 막혔다.)
-func TestGateGroupCountIncludesPass(t *testing.T) {
-	vms := []model.VMInfo{
-		vmInfo("aaev01", false, nil), // PASS라서 교정 대상 아님
-		vmInfo("bbev01", false, nil), // FAIL
-		vmInfo("aaev02", false, nil), // FAIL
-		vmInfo("bbev02", false, nil), // FAIL
-	}
-	targets := []string{"bbev01", "aaev02", "bbev02"}
-
-	if err := CheckGates(targets, vms); err != nil {
-		t.Fatalf("PASS 포함 2:2 구성인데 게이트가 막았다: %v", err)
-	}
-}
-
-// 조회한 전체 기준으로도 대수가 다르면 여전히 막아야 한다(PASS 여부와 무관).
-func TestGateGroupCountMismatchWithPass(t *testing.T) {
+// ev01/ev02 짝(VM 대수)이 안 맞아도 게이트는 막지 않는다 — 경고 문구만 나온다.
+// ev01: PASS 1 + FAIL 1 / ev02: FAIL 3 (전체 2:3)
+func TestGateDoesNotBlockOnGroupCountMismatch(t *testing.T) {
 	vms := []model.VMInfo{
 		vmInfo("aaev01", false, nil), // PASS
 		vmInfo("bbev01", false, nil),
@@ -80,31 +64,76 @@ func TestGateGroupCountMismatchWithPass(t *testing.T) {
 		vmInfo("bbev02", false, nil),
 		vmInfo("ccev02", false, nil),
 	}
-	// 교정 대상만 보면 ev01=1, ev02=3 이지만 전체는 ev01=2, ev02=3 — 어느 쪽이든 불일치.
-	err := CheckGates([]string{"bbev01", "aaev02", "bbev02", "ccev02"}, vms)
-	if err == nil || !strings.Contains(err.Error(), "ev01=2대, ev02=3대") {
-		t.Fatalf("전체 기준 대수 불일치(2:3)를 막지 못했거나 표기가 다르다: %v", err)
+	targets := []string{"bbev01", "aaev02", "bbev02", "ccev02"}
+
+	if err := CheckGates(targets, vms); err != nil {
+		t.Fatalf("대수가 달라도 게이트는 막으면 안 된다(경고만): %v", err)
+	}
+	w := GroupCountWarning(vms)
+	if !strings.Contains(w, "ev01=2대, ev02=3대") {
+		t.Errorf("경고에 전체 기준 대수(2:3)가 없다: %q", w)
+	}
+	if !strings.Contains(w, "교정은 그대로 진행") {
+		t.Errorf("경고에 계속 진행한다는 안내가 없다: %q", w)
 	}
 }
 
-// 교정 대상이 한 그룹뿐이어도, 조회한 전체에 다른 그룹이 있으면 대수는 전체 기준으로 비교한다.
-func TestGateGroupCountUsesAllEvenIfTargetsOneGroup(t *testing.T) {
+// PASS인 VM은 교정 대상(targets)에서 빠지지만, 대수는 PASS 포함 전부로 센다.
+// ev01: PASS 1 + FAIL 1 / ev02: FAIL 2 -> 실제 구성은 2:2라서 경고도 없어야 한다.
+func TestGroupCountWarningIncludesPass(t *testing.T) {
+	vms := []model.VMInfo{
+		vmInfo("aaev01", false, nil), // PASS라서 교정 대상 아님
+		vmInfo("bbev01", false, nil), // FAIL
+		vmInfo("aaev02", false, nil), // FAIL
+		vmInfo("bbev02", false, nil), // FAIL
+	}
+	if w := GroupCountWarning(vms); w != "" {
+		t.Errorf("PASS 포함 2:2 구성인데 경고가 나왔다: %q", w)
+	}
+	if err := CheckGates([]string{"bbev01", "aaev02", "bbev02"}, vms); err != nil {
+		t.Fatalf("게이트가 막았다: %v", err)
+	}
+}
+
+// 교정 대상이 한 그룹뿐이어도 대수는 조회한 전체 기준으로 비교한다.
+func TestGroupCountWarningUsesAllVMs(t *testing.T) {
 	vms := []model.VMInfo{
 		vmInfo("aaev01", false, nil),
 		vmInfo("bbev01", false, nil),
-		vmInfo("aaev02", false, nil), // ev02는 1대뿐 — 2:1 불일치
+		vmInfo("aaev02", false, nil), // ev02는 1대뿐 — 2:1
 	}
-	err := CheckGates([]string{"aaev01", "bbev01"}, vms) // 대상은 ev01뿐
-	if err == nil || !strings.Contains(err.Error(), "대수가 다릅니다") {
-		t.Fatalf("대상이 한 그룹이어도 전체 구성 불일치는 막아야 한다: %v", err)
+	if w := GroupCountWarning(vms); !strings.Contains(w, "ev01=2대, ev02=1대") {
+		t.Errorf("전체 기준 2:1 경고가 없다: %q", w)
+	}
+	if err := CheckGates([]string{"aaev01", "bbev01"}, vms); err != nil { // 대상은 ev01뿐
+		t.Fatalf("게이트가 막았다: %v", err)
 	}
 }
 
-// 그룹이 하나뿐이면(ev01만 있음) 대수 비교 자체가 없다 — 기존 동작 유지.
-func TestGateGroupCountSingleGroupSkipped(t *testing.T) {
-	vms := []model.VMInfo{vmInfo("aaev01", false, nil), vmInfo("bbev01", false, nil), vmInfo("ccev01", false, nil)}
-	if err := CheckGates([]string{"aaev01", "bbev01"}, vms); err != nil {
-		t.Fatalf("ev01 한 그룹뿐인데 게이트가 막았다: %v", err)
+// 비교할 그룹이 하나뿐이거나 접미사 없는 VM("기타")만 섞여 있으면 경고 자체가 없다.
+func TestGroupCountWarningSkipped(t *testing.T) {
+	onlyEV01 := []model.VMInfo{vmInfo("aaev01", false, nil), vmInfo("bbev01", false, nil), vmInfo("ccev01", false, nil)}
+	if w := GroupCountWarning(onlyEV01); w != "" {
+		t.Errorf("ev01 한 그룹뿐인데 경고가 나왔다: %q", w)
+	}
+	withOther := []model.VMInfo{vmInfo("aaev01", false, nil), vmInfo("plainhost", false, nil), vmInfo("plainhost2", false, nil)}
+	if w := GroupCountWarning(withOther); w != "" {
+		t.Errorf("기타 그룹은 대수 비교 대상이 아닌데 경고가 나왔다: %q", w)
+	}
+	if w := GroupCountWarning(nil); w != "" {
+		t.Errorf("VM이 없는데 경고가 나왔다: %q", w)
+	}
+}
+
+// ev03까지 세 그룹이면 세 그룹의 대수가 모두 표기된다.
+func TestGroupCountWarningThreeGroups(t *testing.T) {
+	vms := []model.VMInfo{
+		vmInfo("aaev01", false, nil), vmInfo("bbev01", false, nil),
+		vmInfo("aaev02", false, nil), vmInfo("bbev02", false, nil),
+		vmInfo("aaev03", false, nil),
+	}
+	if w := GroupCountWarning(vms); !strings.Contains(w, "ev01=2대, ev02=2대, ev03=1대") {
+		t.Errorf("세 그룹 대수 표기가 다르다: %q", w)
 	}
 }
 

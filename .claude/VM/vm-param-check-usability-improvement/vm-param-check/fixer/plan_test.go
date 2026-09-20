@@ -179,16 +179,18 @@ func TestGateHomogeneity(t *testing.T) {
 	}
 }
 
-// ev01/ev02 대수가 다르면 막아야 한다.
+// ev01/ev02 대수가 달라도 게이트는 막지 않는다 — 경고만 한다(GroupCountWarning).
 func TestGateGroupCount(t *testing.T) {
 	vms := []model.VMInfo{
 		vmInfo("aaev01", false, nil),
 		vmInfo("bbev01", false, nil),
 		vmInfo("aaev02", false, nil),
 	}
-	err := CheckGates([]string{"aaev01", "bbev01", "aaev02"}, vms)
-	if err == nil || !strings.Contains(err.Error(), "대수가 다릅니다") {
-		t.Fatalf("그룹 대수 불일치를 막지 못했다: %v", err)
+	if err := CheckGates([]string{"aaev01", "bbev01", "aaev02"}, vms); err != nil {
+		t.Fatalf("대수가 달라도 게이트는 막으면 안 된다: %v", err)
+	}
+	if w := GroupCountWarning(vms); !strings.Contains(w, "대수가 다릅니다") {
+		t.Fatalf("그룹 대수 불일치 경고가 없다: %q", w)
 	}
 }
 

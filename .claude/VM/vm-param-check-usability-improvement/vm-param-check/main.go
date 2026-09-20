@@ -522,6 +522,11 @@ func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVM
 		return
 	}
 
+	// ev01/ev02/ev03 짝(VM 대수)이 안 맞아도 교정은 막지 않는다 — 경고만 하고 진행한다.
+	if w := fixer.GroupCountWarning(allVMs); w != "" {
+		fmt.Printf("\n[경고] %s\n", w)
+	}
+
 	targets := plan.TargetVMs()
 	if err := fixer.CheckGates(targets, allVMs); err != nil {
 		log.Fatalf("%v", err)
