@@ -8,6 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 SPEC_DIR="./SPEC_DIR"
+# V2 배치: 이 폴더 안에 SPEC_DIR 이 없고 나란히 있는 공유 SPEC_DIR(../../SPEC_DIR)이 있으면 그쪽에 만든다.
+[ -d "$SPEC_DIR" ] || { [ -d ../../SPEC_DIR ] && SPEC_DIR="../../SPEC_DIR"; }
 
 if [ ! -x ./vm-param-check ]; then
   echo "vm-param-check 바이너리가 없어 먼저 빌드합니다..."

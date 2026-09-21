@@ -13,6 +13,9 @@ VC_USER='administrator@vsphere.local'
 VC_PASS='...'
 VCENTER_LIST='vcenter.txt'
 SPEC_ROOT='./SPEC_DIR'
+# V2 배치(/home/SPEC_DIR, /home/vm-param-check-usability-improvement/vm-param-check): 이 폴더 안에 SPEC_DIR 이
+# 없고 나란히 있는 공유 SPEC_DIR 이 있으면 그쪽을 쓴다 (VMsetup/vm_setup.sh 와 같은 스펙 폴더를 공유).
+[ -d "$SPEC_ROOT" ] || { [ -d ../../SPEC_DIR ] && SPEC_ROOT='../../SPEC_DIR'; }
 
 # ===== user 변수 지정 (직접 채우세요) =====
 # 이 값으로 "<user>.txt"(대상 VM hostname 목록)를 읽고 "result_<user>.csv"를 만든다.
