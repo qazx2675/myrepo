@@ -102,6 +102,7 @@ VMsetup/
 
 - `lpage_setting`은 NUMA 노드당 코어 수를 스펙 numa 값에 맞추지만 `numa.vcpu.maxPerVirtualNode`는 기존 동작(코어 수)대로 씁니다 — `vm-param-check` 결과에서 FAIL이 나오면 `-fix`로 교정하세요.
 - 전원이 켜진 VM의 "연결됨" 체크는 vcsim에서 재현되지 않아 실제 vCenter(home-test)에서만 확인할 수 있습니다.
+- `vm-param-check/folder_setup.sh`는 ev01~ev03까지만 묻습니다. ev04~ev10 스펙은 `vm_setup.sh`의 vim 입력(스펙 수동 입력)으로 만들거나 `_spec.txt`를 직접 편집하세요.
 - 포트그룹을 새로 만들면서 VM에 붙이는 것(vim에서 VLAN 입력)은 지원하지 않습니다. 새 포트그룹은 `vswitch_<user>.txt`에 적어 `vswitch_setting`으로 만드세요.
 
 ## 5. 전역 명령어로 사용하기 (선택 사항)
