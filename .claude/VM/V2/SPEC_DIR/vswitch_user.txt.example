@@ -1,0 +1,10 @@
+# vswitch_${user}.txt — BM에 만들 포트그룹 (VMsetup/vm_setup.sh 가 읽는다)
+# 형식: <BM호스트명>  <포트그룹명>  <VLAN ID>
+#
+# 한 BM에 여러 줄을 적으면 포트그룹이 여러 개 만들어진다.
+# 포트그룹 이름을 "<CAE폴더명>-cae-a-b-c-d" 로 지으면 vm_setup.sh 가 그 폴더명으로 SPEC_DIR 스펙을 자동 할당한다.
+#
+# 주의: vm-network-migration 의 vswitch_{user}.txt 는 "BM당 한 줄" 규칙이라 이 파일과 같이 쓰면 안 된다.
+esxi-node-001.domain  TST-CAE001-SAMP48c-QRST-cae-10-1-2-3  100
+esxi-node-001.domain  TST-CAE001-SAMP48c-QRST-cae-10-1-3-3  200
+esxi-node-002.domain  TST-CAE001-SAMP48c-QRST-cae-10-1-2-3  100
