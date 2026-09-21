@@ -3,6 +3,7 @@
 | 폴더/파일 | 역할 |
 |---|---|
 | `README.md` | V2 전체 소개, 빌드/배치/사용 순서 |
+| `setup.sh` | **전체 오프라인 빌드** — 각 도구의 setup.sh 를 한 번에 돌리고 요약 (`-l` 목록, `-c` 정리, 도구 이름으로 일부만) |
 | `govendor/govmomi-0.55.1-standard/` | VMsetup 도구들이 공유하는 오프라인 의존성 (각 `setup.sh`가 `vendor`로 링크) |
 | `govendor/govmomi-0.39.0/` | vm-param-check 의존성 |
 | `SPEC_DIR/` | **공유 스펙** — `vswitch_<user>.txt`(BM 포트그룹 VLAN) + `<CAE폴더명>/<CAE폴더명>_spec.txt`(+affinity 파일). git에는 예시만 |

@@ -4,7 +4,7 @@ V2(VMsetup + vm-param-check + SPEC_DIR)를 배포하거나 수정하기 전 확�
 
 ## 빌드 / 정적 분석
 
-- [ ] 폐쇄망 기준 빌드 성공 — 각 도구 `bash setup.sh` (`-mod=vendor`, `../../govendor` 링크), V2 폴더만 복사한 곳에서도 확인
+- [ ] 폐쇄망 기준 빌드 성공 — V2 루트 `bash setup.sh` (11개 전부 OK), V2 폴더만 복사한 곳에서도 확인 (`unshare -rn bash setup.sh` 로 네트워크를 끊고도 성공)
 - [ ] `gofmt -l` 출력 없음 (변경한 Go 파일)
 - [ ] `go vet -mod=vendor ./...` 통과
 - [ ] 테스트 통과 — `vm-param-check`: `go test -mod=vendor ./...`, `nic_assign-source`: `go test -mod=vendor .`

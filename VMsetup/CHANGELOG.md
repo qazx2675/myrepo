@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-09-22 — V2: 루트 `setup.sh` 신설 (전체 오프라인 빌드)
+
+- **`V2/setup.sh`(신규)**: 11개 도구의 `setup.sh`를 한 번에 돌려 빌드하고 성공/실패를 요약한다(`bash setup.sh`, 도구 이름으로 일부만, `-l` 목록, `-c` 정리). `GOPROXY=off`, `GOFLAGS=-mod=vendor`, `GOTOOLCHAIN=local`, `GOSUMDB=off`를 강제해서 모듈·새 Go 툴체인을 내려받지 않는다. Go 없음/버전 낮음(1.26.5 미만)/`govendor` 없음은 빌드 전에 원인을 알리고 멈춘다. 각 도구의 `setup.sh`는 그대로라 도구 하나만 직접 빌드해도 된다.
+- **검증(록키, 새로 받은 V2 브랜치)**: `unshare -rn`으로 네트워크를 끊은 상태에서 11개 전부 성공, 도구 지정/`-l`/`-c` 동작, 알 수 없는 도구·Go 없음·Go 1.20·govendor 없음은 원인 메시지와 종료코드 1, 소스를 일부러 깨뜨리면 그 도구만 실패로 요약하고 나머지는 계속 빌드.
+
 ## 2026-09-22 — V2: `vm_setup.sh` 신설 (스펙·포트그룹 자동 할당 → y/n → 수동 선택 → vim) + home-test 실환경 검증
 
 - **`vm_setup.sh`(신규)**: `VMsetup/<user>.txt`(BM 목록) + `SPEC_DIR/vswitch_<user>.txt`(BM 포트그룹 VLAN)로 스펙 결정 → 포트그룹 결정 → `vswitch_setting` → 스펙별 `vm_create` → `affinity_setting` → `lpage_setting`을 한 번에 실행한다. 사용법은 README "2. 사용 방법" 참고.
