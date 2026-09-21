@@ -10,20 +10,29 @@
 
 ## 1. 빌드 및 설치 방법
 
-의존성(govmomi)은 `govendor/`에 들어 있어 **이 V2 폴더만 내려받으면 인터넷 없이 빌드**됩니다.
-각 도구의 `setup.sh`가 `../../govendor/<버전>`을 `vendor`로 링크하고 `-mod=vendor`로 빌드합니다.
+의존성(govmomi)은 `govendor/`에 들어 있어 **이 V2 폴더만 내려받으면 인터넷 없이 빌드**됩니다. 필요한 것은 **Go 1.26.5 이상과 bash 뿐**입니다(모듈 프록시·git·인터넷 불필요).
 
 ```bash
-# 서버 배치: V2 안의 폴더를 /home 아래에 그대로 둔다
-#   /home/SPEC_DIR  /home/VMsetup  /home/vm-param-check-usability-improvement  /home/govendor
-cp -r V2/* /home/
+# 서버 배치: 네 폴더를 같은 부모 폴더 아래에 나란히 둔다 (README.md 등은 복사하지 않아도 됨)
+#   /home/govendor  /home/SPEC_DIR  /home/VMsetup  /home/vm-param-check-usability-improvement
+cp -r V2/govendor V2/SPEC_DIR V2/VMsetup V2/vm-param-check-usability-improvement V2/setup.sh /home/
 
-cd /home/VMsetup
-for d in *-source; do (cd "$d" && bash setup.sh); done
-cd /home/vm-param-check-usability-improvement/vm-param-check && bash setup.sh
+# 전체 바이너리 빌드 (오프라인)
+cd /home && bash setup.sh
 ```
 
-요구사항: Go 1.26.5 이상(VMsetup), Linux(Rocky Linux 8에서 검증).
+`setup.sh` 사용법:
+
+| 명령 | 동작 |
+|---|---|
+| `bash setup.sh` | 11개 도구 전체 빌드 후 성공/실패 요약 (하나라도 실패하면 종료코드 1) |
+| `bash setup.sh vm_create nic_assign` | 지정한 도구만 빌드 |
+| `bash setup.sh -l` | 빌드 대상과 실행파일 경로 목록 |
+| `bash setup.sh -c` | 빌드된 실행파일과 vendor 링크 정리 |
+
+오프라인 보장: `GOPROXY=off`, `GOFLAGS=-mod=vendor`, `GOTOOLCHAIN=local`, `GOSUMDB=off`를 강제하므로 모듈이나 새 Go 툴체인을 내려받으려 시도하지 않습니다. Go가 없거나 버전이 낮거나 `govendor/`가 없으면 빌드 전에 이유를 알려주고 멈춥니다. 각 도구의 `setup.sh`(`*-source/setup.sh`, `vm-param-check/setup.sh`)는 그대로 있어서 도구 하나만 직접 빌드할 수도 있습니다.
+
+요구사항: Go 1.26.5 이상, Linux(Rocky Linux 8에서 검증).
 
 ## 2. 사용 방법
 

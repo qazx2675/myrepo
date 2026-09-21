@@ -15,7 +15,7 @@
 
 ```bash
 cd VMsetup
-for d in *-source; do (cd "$d" && bash setup.sh); done   # 각 폴더에 실행파일 생성
+bash ../setup.sh                          # V2 루트의 전체 빌드 스크립트 (도구 하나만: cd <도구>-source && bash setup.sh)
 ```
 
 요구사항: Go 1.26.5 이상, Linux(Rocky Linux 8에서 검증).
