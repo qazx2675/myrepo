@@ -45,7 +45,7 @@ bash config_check.sh
 | 순서 | 화면 | 입력 |
 |---|---|---|
 | 1 | user 목록 출력 | 번호 입력 |
-| 2 | 대상 리스트(30행 단위 열 출력) + prefix별 수량 + 총 N EA | - |
+| 2 | 대상 리스트(30행 단위 열 출력, 공백으로 열 맞춤) + prefix별 수량 + 총 N EA | - |
 | 3 | `작업을 진행하시겠습니까? (y/n)` | `y` / `n` (`uptime_enable_user`의 user는 y 후 uptime 출력) |
 | 4 | 체크 결과: FAIL만(없으면 `NO FAIL`) → LDAP 요약 → 상태줄 | - |
 | 5 | `환경설정을 수정하시겠습니까? (y/n/set)` | `y` / `n` / `set` |
@@ -103,7 +103,7 @@ nosvrauto / os_install / pingO_sshx 호스트의 체크 결과는 FAIL·LDAP·us
 | 항목 | 조건 | 내용 |
 |---|---|---|
 | AI GPU 서버 | 대상에 `ai_server_list` 호스트가 있음 | OK 호스트에서 `ai_server_script` 실행 + 노란색 안내 |
-| 벤더 코멘트 | 벤더별 조건 | D(`^c ^h ^sh ^s2h ^s3h ^s4h`), L(`^p`), J(`^l`), T(`^d`), W(`^m`) |
+| 벤더 코멘트 | 벤더별 조건 | D(`^c ^h ^sh ^s2h ^s3h ^s4h`), S(D 규칙을 제외한 `^s`, L과 같은 코멘트), L(`^p`), J(`^l`), T(`^d`), W(`^m`) |
 | 공통 코멘트 | 전체 대상이 모두 OK | `@대 OS 설치 완료하였습니다.` (D 코멘트와 함께 출력) |
 | DHCP 정보 | pingX 호스트가 있음 | 접속불가 목록을 DHCP 서버로 보내 `/root/a.sh` 실행 결과를 바로 출력 (로컬/원격에 파일이 남지 않음) |
 | 기타 상태 서버 | pingO_sshx / nosvrauto / os_install 서버가 있음 | 상태별 대수와 호스트 |

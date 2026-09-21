@@ -1,5 +1,7 @@
 # CHANGELOG
 
+
+
 ## 2026-09-21 (변경 요청 반영)
 
 - run.sh 실행 인자 변경: `bash run.sh` → `bash run.sh pd` (FAIL이 없으면 `OK`만 출력하고, `pd`를 주면 OK가 아닌 결과값을 출력하는 방식으로 바뀜).

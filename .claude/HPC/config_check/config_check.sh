@@ -52,6 +52,7 @@ lines() { awk 'END{print NR}' "$1" 2>/dev/null; }
 # 벤더 판별 (호스트 시작 일치). awk 함수 원문.
 VENDOR_AWK='function vendor(h) {
     if (h ~ /^(c|h|sh|s2h|s3h|s4h)/) return "D"
+    if (h ~ /^s/) return "S"
     if (h ~ /^p/) return "L"
     if (h ~ /^l/) return "J"
     if (h ~ /^d/) return "T"
@@ -90,10 +91,10 @@ tr -d '\r' < "${user}.txt" | tr -s '[:space:]' '\n' | awk 'NF && !seen[$0]++' > 
 TOTAL=$(lines "$HOSTS")
 
 echo "[$user] 작업 대상"
-awk -v rows=30 '{h[NR]=$0} END{
+awk -v rows=30 '{h[NR]=$0; if (length($0) > w) w = length($0)} END{
     for (r = 1; r <= rows && r <= NR; r++) {
         line = ""
-        for (i = r; i <= NR; i += rows) line = line (i == r ? "" : "\t") h[i]
+        for (i = r; i <= NR; i += rows) line = line (i == r ? "" : "  ") (i + rows <= NR ? sprintf("%-" w "s", h[i]) : h[i])
         print line
     }
 }' "$HOSTS"
@@ -304,7 +305,7 @@ awk -F'\t' -v P="$TMP/V_" "$VENDOR_AWK"'
       else if ($2 == "OFF") print $1 > (P v ".off") }' "$FINAL"
 horiz() { [ -s "$1" ] && paste -sd' ' "$1"; }
 
-for v in D L J T W; do
+for v in D S L J T W; do
     ok="$TMP/V_$v.ok"; off="$TMP/V_$v.off"
     n_ok=$(lines "$ok"); n_off=$(lines "$off")
     if [ "$v" = D ]; then
