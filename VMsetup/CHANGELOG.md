@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-09-22 — V2: `vm_setup.sh` 신설 (스펙·포트그룹 자동 할당 → y/n → 수동 선택 → vim) + home-test 실환경 검증
+
+- **`vm_setup.sh`(신규)**: `VMsetup/<user>.txt`(BM 목록) + `SPEC_DIR/vswitch_<user>.txt`(BM 포트그룹 VLAN)로 스펙 결정 → 포트그룹 결정 → `vswitch_setting` → 스펙별 `vm_create` → `affinity_setting` → `lpage_setting`을 한 번에 실행한다. 사용법은 README "2. 사용 방법" 참고.
+  - **스펙 자동 할당**: 포트그룹 이름 `<폴더명>-cae-a-b-c-d`에서 폴더명을 뽑아 `vm-param-check -specExport`로 SPEC_DIR 스펙을 찾는다(차수만 다른 폴더는 같은 스펙). BM→스펙 표를 보여주고 `(y/n)`. `n`이거나 자동으로 못 정한 BM은 목록에서 번호 선택(Enter=직전 선택), 목록에 없으면 `0`으로 vim.
+  - **vim 스펙 입력**: 모든 항목이 `키=""` + 주석 설명. 저장하면 `SPEC_DIR/<folder>/`가 새로 생긴다(`folder`가 비었거나 CAE 규칙 위반이거나 같은 스펙이 이미 있으면 오류 안내 후 다시 편집, 검증은 `-initFolder`/`-specExport`를 그대로 재사용). 이어서 값이 있는 ev마다 **affinity를 자동 / 기존 파일 선택 / vim 입력** 중에서 고른다(vim 템플릿은 vCPU 수만큼 `sched.vcpuN.affinity=""` 줄).
+  - **포트그룹(네트워크 어댑터 1) 할당**: BM에 포트그룹이 1개면 그 BM의 모든 VM, 여러 개면 스펙 폴더명과 이름이 맞는 것이 하나일 때 자동. VM→포트그룹 표를 `(y/n)`, 자동으로 못 정한 VM/`n`이면 번호 선택(**`a<번호>` = 그 BM의 VM 전체에 적용**), 목록에 없으면 vim(`hostname=""`, `portgroup=""`). 포트그룹 신규 생성(VLAN 입력)은 지원하지 않는다.
+  - 실제 vCenter를 바꾸는 단계 직전에 실행 계획을 보여주고 한 번 더 확인한다. `-n`이면 계획까지만 보이고 종료(vCenter 접속 없음).
+  - 스펙 값 → 도구 옵션: `cpu/mem/disk/shares-evNN` → `vm_create`(disk·shares 쉼표 목록은 첫 값), `ht` → `affinity_setting -ht`, `affinity-evNN` → `-affinityFileNN`, `cores`(소켓당)/`numa`(노드당 vCPU) → `lpage_setting` 총 코어(=cpu)/소켓 수/NUMA 노드 수.
+  - **`affinity_setting`/`lpage_setting`에는 짧은 이름 목록(`vmbase_<k>.txt`)을 넘긴다**: 두 도구는 worklist 문자열을 그대로 VM 이름 접두어로 쓰고, `vm_create`는 BM 이름의 `.` 앞부분만 쓴다. `esxi-node-001.domain` 같은 BM이면 VM 이름은 `esxi-node-001ev01`인데 두 도구가 `esxi-node-001.domainev01`을 찾아 VM을 못 찾는다(실환경 `192.168.0.59` → `192ev03`에서 발견, vcsim에 도메인 붙은 호스트를 추가해 회귀 시험 추가).
+- **`tag_setting`은 포함하지 않았다**: 스펙에 DEPT_NAME/PURPOSE/VM_TYPE 값이 없어서 단독 실행한다.
+- **검증 — vcsim(록키)**: `검증/vmsetup_test.sh` 21건 PASS — 자동 할당 실행(4대 생성/포트그룹/affinity/lpage/shares), 스펙 후보 2개 모호 → 수동 선택 + 포트그룹 2개는 스펙 폴더명으로 자동 선택, vim 경로(잘못된 폴더명 → 다시 편집 → 저장, ev01 자동/ev02 vim affinity, 포트그룹 수동/vim), `n` 전체 수동, `a<번호>`, 도메인이 붙은 BM(`bm1.example.com` → `bm1ev01`), `-n`이 vCenter를 바꾸지 않음. vim은 가짜 편집기(`VM_SETUP_EDITOR`)로 템플릿을 채워 시험했고 **실제 vim 화면은 확인하지 않았다**.
+- **검증 — home-test 실환경(vCenter 192.168.0.50, ESXi 192.168.0.59)**: 테스트용 데이터센터 `V2TEST-DC`를 하나 더 만들어 데이터센터 2개 상태에서 진행했고, 끝나고 VM·포트그룹·데이터센터를 전부 지워 원래 인벤토리와 같음을 확인했다(기존 `192ev01`/`192ev02`도 테스트 전후 설정 덤프 동일).
+  - **수정 전 도구 재현**: `vm_create`는 `데이터센터가 2개 존재하여 자동 선택이 불가합니다`로 종료, `lpage_setting`은 `please specify a datacenter`로 실패.
+  - `vswitch_setting`: 같은 BM에 포트그룹 2개(VLAN 3901/3902) 생성.
+  - `vm_create`(`-datacenter` 없이, ev01~ev10): 이미 있는 `192ev01`/`192ev02`는 건너뛰고 ev03~ev10 **8대를 3.7초**에 생성, `-mapFile` VM 키로 ev05만 다른 포트그룹.
+  - `lpage_setting`: ev03~ev10 8대 성공(기존 두 VM은 대상에서 제외).
+  - `nic_assign`: 전원 꺼진 VM은 `conn=false/start=true`(전원 켤 때 연결 체크), **전원을 켠 VM(`192ev04`)에서 포트그룹을 바꿔도 `conn=true/start=true`**, 재실행은 "이미 적용됨".
+  - `vm-param-check -specRoot`: VM 폴더가 CAE 규칙이 아니라서 포트그룹 이름으로 스펙 폴더를 유추해 ev03~ev10 스펙(`-cpu-ev10` 등)이 적용되고 핵심 항목이 전부 OK.
+  - **실환경에서는 `vm_setup.sh`를 끝까지 돌리지 않았다**: 랩 호스트 이름이 `192.168.0.59`라 VM 이름 접두어가 `192`가 되어, 이미 있는 `192ev01`/`192ev02`에 `affinity_setting`(ev01부터 적용)이 적용되기 때문이다. 대신 `vm_setup.sh -n`으로 실행 계획을 뽑아 그 계획의 도구·옵션을 그대로 실행했다. `vm_setup.sh`의 실행 흐름 자체는 vcsim에서 시험했다.
+
 ## 2026-09-22 — V2: 호스트당 VM 1~10대, 데이터센터 여러 개 대응, vswitch 병렬화, nic_assign 신설
 
 V2(`.claude/VM/V2/VMsetup`)는 `.claude/VM/VM_setup` 복사본에서 시작했다. 원본 폴더는 수정하지 않았다(`vm-param-fix`는 V2에서 제외).

@@ -33,7 +33,8 @@ type ExportLine struct {
 //   - ev02~ev10은 값이 하나라도 있으면 "정의된 그룹"이고, 그러면 cpu/mem/disk/shares가 전부 있어야 한다
 //   - 정의된 그룹은 ev01부터 연속이어야 한다(예: ev02 없이 ev03만 있으면 에러)
 //
-// 반환값의 첫 줄은 "groups=<정의된 그룹 수>"이고, affinity 상대경로는 스펙 폴더 기준 절대경로로 바꾼다.
+// 반환값의 첫 줄은 "groups=<정의된 그룹 수>", 둘째 줄은 "specdir=<매칭된 스펙 폴더 절대경로>"이고,
+// affinity 상대경로는 스펙 폴더 기준 절대경로로 바꾼다.
 func ExportSpec(m *SpecMatch) ([]ExportLine, error) {
 	values := map[string]string{}
 	var order []string
@@ -88,7 +89,11 @@ func ExportSpec(m *SpecMatch) ([]ExportLine, error) {
 		return nil, fmt.Errorf("%s: ev01 값(cpu/mem/disk/shares-ev01)이 없습니다 — ev01은 필수입니다", m.SpecFile)
 	}
 
-	out := []ExportLine{{Name: "groups", Value: fmt.Sprint(groups)}}
+	specDirAbs, err := filepath.Abs(m.SpecDir)
+	if err != nil {
+		return nil, err
+	}
+	out := []ExportLine{{Name: "groups", Value: fmt.Sprint(groups)}, {Name: "specdir", Value: specDirAbs}}
 	for _, name := range order {
 		out = append(out, ExportLine{Name: name, Value: values[name]})
 	}

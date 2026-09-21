@@ -1,0 +1,4 @@
+# <user>.txt — vm_setup.sh 가 만들 VM 의 대상 BM 목록 (한 줄에 하나)
+# SPEC_DIR/vswitch_<user>.txt 의 BM 이름과 같아야 한다.
+esxi-node-001.domain
+esxi-node-002.domain
