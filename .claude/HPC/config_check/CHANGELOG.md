@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-09-21 (변경 요청 반영)
+
+- run.sh 실행 인자 변경: `bash run.sh` → `bash run.sh pd` (FAIL이 없으면 `OK`만 출력하고, `pd`를 주면 OK가 아닌 결과값을 출력하는 방식으로 바뀜).
+- LDAP: 정상 `INFO<TAB>ldap<TAB>infra`, 미정의 `FAIL<TAB>ldap<TAB>Undefined configuration` 모두 값으로 집계(`ldap` 대소문자 무관). 2종류 이상이면 `infra(N ea) / Undefined configuration(N ea)` 형식.
+- INFO 요약 추가: `INFO`와 `KERNEL`이 함께 있는 결과 줄의 탭 뒤 문자열을 상태줄 끝에 표시. 2종류 이상이면 LDAP과 같은 규칙(값별 대수 + 소수 값 호스트).
+- 상태줄: 항목 사이 구분을 탭으로 변경, `total`/`OK`를 제외하고 0인 항목은 숨김, `total`이 각 항목의 합과 같으면 초록·다르면 빨간색 깜빡임.
+- 체크 결과가 한 줄도 없는 호스트를 `no_output`으로 분리(OK로 세지 않음, 설정 적용 대상 제외, 기타 상태 서버에 표시). `total` 불일치를 실제로 감지하기 위함.
+- 검증: .58(Rocky 8.10) + gossh v2, 가짜 run.sh(`pd` 인자 처리)로 LDAP Undefined 혼재, INFO 2종, 무응답 호스트(total 빨간 깜빡임), 전체 정상(total 초록)을 확인. 시험 환경은 원복.
+
 ## 2026-09-21
 
 ### 추가

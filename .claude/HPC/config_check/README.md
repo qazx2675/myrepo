@@ -66,25 +66,37 @@ bash config_check.sh
 
 ### 상태줄
 
-`total=Nea OK=Nea pingX=Nea pingO_sshx=Nea nosvrauto=Nea os_install=Nea`
+`total=Nea<TAB>OK=Nea<TAB>pingX=Nea<TAB>pingO_sshx=Nea<TAB>nosvrauto=Nea<TAB>os_install=Nea<TAB>INFO=값`
+
+- 항목 사이는 **탭**으로 구분합니다.
+- `total`, `OK`를 제외한 항목은 **1 이상일 때만** 표시합니다.
+- `total`은 OK + pingX + pingO_sshx + nosvrauto + os_install 과 같으면 초록, 다르면 **빨간색 깜빡임**입니다. 다르면 접속은 됐지만 체크 결과가 한 줄도 없는 호스트가 있다는 뜻이며, 그 호스트는 "기타 상태 서버"의 `no_output`으로 표시됩니다.
 
 | 항목 | 의미 | 색 |
 |---|---|---|
-| OK | 위 4종에 해당하지 않는 호스트 | 초록 |
+| OK | 접속되고 체크 결과가 있는 호스트 | 초록 |
 | pingX | gossh 접속 타임아웃 / DNS 실패 (`_res_off`) 및 Ctrl+C로 취소된 호스트 | 빨강 |
 | pingO_sshx | 22번 포트 refused 등 (`_res_refsed`) | 노랑 |
 | nosvrauto | 접속은 되나 `/user/svrauto` 없음 (`_nosvrauto`) | 노랑 |
 | os_install | OS 설치 중 (`~/.profile`에 anaconda) (`_os_install`) | 노랑 |
+| INFO | 체크 결과 중 `INFO`와 `KERNEL`이 함께 있는 줄에서 탭 뒤의 문자열 (아래 참고) | 노랑 |
 
 nosvrauto / os_install / pingO_sshx 호스트의 체크 결과는 FAIL·LDAP·usb0 집계에서 제외됩니다(어차피 정상 동작하지 않는 대상).
 
 ### LDAP 요약 (상태줄 바로 위)
 
 - 모두 같은 값: `LDAP : infra`
-- 2종류 이상: 노란색 `[경고] LDAP infra가 2개 이상입니다` + `LDAP : infra(1980ea) / infra2(20ea)` + 소수 값의 호스트 목록
+- 2종류 이상: 노란색 `[경고] LDAP infra가 2개 이상입니다` + `LDAP : infra(1980ea) / Undefined configuration(20ea)` + 소수 값의 호스트 목록
 - LDAP 줄이 없는 OK 호스트가 있으면 `LDAP 미확인 N대 : 호스트...` (노란색)
 
-체크 스크립트는 `hostname: INFO<TAB>LDAP<TAB>infra` 형식의 줄을 출력해야 합니다.
+체크 스크립트는 정상이면 `hostname: INFO<TAB>ldap<TAB>infra`, 정의되지 않았으면 `hostname: FAIL<TAB>ldap<TAB>Undefined configuration` 형식의 줄을 출력해야 합니다(`ldap` 대소문자 무관). 값 부분이 그대로 요약에 쓰입니다.
+
+### INFO 요약 (상태줄 맨 끝)
+
+체크 결과에서 `INFO`와 `KERNEL`이 함께 들어 있는 줄(`hostname: INFO<TAB>Std 26Year asdf KERNEL RHEL1`)의 **탭 뒤 문자열**을 모아 상태줄 끝에 `INFO=Std 26Year asdf KERNEL RHEL1`로 표시합니다.
+
+- 값이 하나면 그대로 표시합니다.
+- 2종류 이상이면 LDAP과 같은 규칙입니다. 상태줄에는 `INFO=값A(6ea) / 값B(2ea)`, 그 위에 노란색 경고와 소수 값의 호스트 목록을 출력합니다.
 
 ### 6단계 출력
 
@@ -121,7 +133,8 @@ sudo cp config_check.sh /usr/local/bin/config_check
 
 ## 6. 동작상 알아둘 점
 
-- 체크는 대상 전체에 `gossh -pm -script -w 목록 "bash run.sh; :"` **1회**만 실행합니다. `; :`는 run.sh가 0이 아닌 값으로 끝나도 gossh가 결과를 stderr로 보내지 않게 하기 위한 것입니다.
+- 체크는 대상 전체에 `gossh -pm -script -w 목록 "bash run.sh pd; :"` **1회**만 실행합니다. `run.sh`는 FAIL이 없으면 `OK`만 출력하고, `pd` 인자를 주면 OK가 아닌 결과값(LDAP, INFO 등)까지 출력하므로 스크립트가 `pd`를 붙여 실행합니다. `; :`는 run.sh가 0이 아닌 값으로 끝나도 gossh가 결과를 stderr로 보내지 않게 하기 위한 것입니다.
+- 접속은 됐지만 체크 결과가 한 줄도 없는 호스트는 OK로 세지 않고(`no_output`), 설정 적용 대상에서도 제외됩니다.
 - 명령에 `/user/` 경로가 있어 gossh가 동시 접속을 350으로 자동 제한합니다(autofs 보호). 스크립트는 이를 우회하지 않습니다.
 - 결과 원본은 실행 디렉토리의 `check.res_${user}`에 남습니다(재체크하면 덮어씀). 그 외 중간 파일은 `/tmp/config_check.XXXXXX`에 만들고 종료 시(Ctrl+C 포함) 삭제합니다.
 - gossh 실행 중 Ctrl+C는 gossh 동작을 따릅니다(1회 진행 호스트 표시, 2회 걸린 호스트 취소, 3회 중단). 3회 중단하면 그때까지의 결과로 계속 진행합니다.

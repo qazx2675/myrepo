@@ -120,13 +120,14 @@ fi
 
 ########################## 체크 함수 ##########################
 # run_check <대상파일> <이름> : gossh 1회 실행 후 $TMP/<이름>.{out,state,fail,usb0,ldap} 생성
-#   state : 호스트<TAB>OK|OFF|REF|NOSV|INST
+#   state : 호스트<TAB>OK|OFF|REF|NOSV|INST|NONE  (NONE = 접속은 됐으나 체크 결과가 한 줄도 없음)
 run_check() {
     local t=$1 n=$2
     rm -f "${t}_res_off" "${t}_res_refsed" "${t}_os_install" "${t}_nosvrauto" "${t}_res_cancel"
-    # -pm 은 반드시 -w 보다 앞에 둔다. "; :" 는 run.sh가 0이 아닌 값으로 끝나도
-    # gossh가 출력 전체를 stderr(ERROR:)로 보내지 않고 stdout으로 내보내게 하기 위한 것
-    gsh -pm -script -w "$t" "bash $check_script; :" > "$TMP/$n.out" 2> "$TMP/$n.err"
+    # -pm 은 반드시 -w 보다 앞에 둔다. run.sh 의 "pd" 인자는 OK 가 아닌 결과값(INFO 등)까지 출력하게 한다.
+    # "; :" 는 run.sh가 0이 아닌 값으로 끝나도 gossh가 출력 전체를 stderr(ERROR:)로 보내지 않고
+    # stdout으로 내보내게 하기 위한 것
+    gsh -pm -script -w "$t" "bash $check_script pd; :" > "$TMP/$n.out" 2> "$TMP/$n.err"
 
     { for m in _res_off:OFF _res_cancel:OFF _res_refsed:REF _os_install:INST _nosvrauto:NOSV; do
           [ -s "${t}${m%%:*}" ] && sed "s/^/${m##*:}\t/" "${t}${m%%:*}"
@@ -136,24 +137,39 @@ run_check() {
 
     # gossh 출력은 병렬이라 순서가 섞여 있으므로 호스트명 기준으로 정렬(호스트 내 줄 순서는 유지)
     LC_ALL=C sort -s -t: -k1,1 "$TMP/$n.out" -o "$TMP/$n.out"
-    : > "$TMP/$n.fail"; : > "$TMP/$n.usb0"; : > "$TMP/$n.ldap"
+    : > "$TMP/$n.fail"; : > "$TMP/$n.usb0"; : > "$TMP/$n.ldap"; : > "$TMP/$n.info"
+    # 결과: .fail(FAIL 줄) .usb0 .ldap(INFO/FAIL ldap 값) .info(INFO 줄 중 KERNEL 포함, 값=INFO 뒤 문자열)
+    # OK 이지만 결과가 한 줄도 없는 호스트는 NONE 으로 바꿔 .state 를 다시 쓴다
     awk -F'\t' -v P="$TMP/$n" '
-        FILENAME == ARGV[1] { st[$1] = $2; next }
+        FILENAME == ARGV[1] { st[$1] = $2; order[++no] = $1; next }
         {
             line = $0; sub(/\r$/, "", line)
             i = index(line, ": "); if (!i) next
             h = substr(line, 1, i - 1); b = substr(line, i + 2)
             if (st[h] != "OK") next
+            has[h] = 1
             m = split(b, f, "\t")
             s = f[1]; gsub(/^ +| +$/, "", s)
             if (s == "FAIL") {
                 print line > (P ".fail")
                 if (b ~ /usb0/ && b ~ /interface/ && !(h in usb)) { usb[h] = 1; print h > (P ".usb0") }
-            } else if (s == "INFO") {
+            }
+            if (s == "INFO" || s == "FAIL") {
                 k = f[2]; gsub(/^ +| +$/, "", k)
-                if (k == "LDAP" && !(h in lv)) { v = f[3]; gsub(/^ +| +$/, "", v); lv[h] = v; print h "\t" v > (P ".ldap") }
+                if (tolower(k) == "ldap" && !(h in lv)) { v = f[3]; gsub(/^ +| +$/, "", v); lv[h] = v; print h "\t" v > (P ".ldap") }
+            }
+            if (s == "INFO" && b ~ /KERNEL/ && !(h in iv)) {
+                v = f[2]; gsub(/^ +| +$/, "", v); iv[h] = v; print h "\t" v > (P ".info")
+            }
+        }
+        END {
+            for (i = 1; i <= no; i++) {
+                h = order[i]; s = st[h]
+                if (s == "OK" && !(h in has)) s = "NONE"
+                print h "\t" s > (P ".state.new")
             }
         }' "$TMP/$n.state" "$TMP/$n.out"
+    mv "$TMP/$n.state.new" "$TMP/$n.state"
     cp "$TMP/$n.out" "check.res_${user}"
 }
 
@@ -165,42 +181,70 @@ report_fail() {   # $1=이름
     fi
 }
 
-report_ldap() {   # $1=LDAP 조사 이름  $2=state 파일
-    awk -F'\t' -v Y="$Y" -v N="$N" '
+# report_multi <값파일> <state 파일> <모드> <요약파일>
+#   값파일: 호스트<TAB>값. 값이 하나면 그대로, 2종류 이상이면 값별 대수 + 소수 값 호스트를 노란색으로 출력.
+#   모드 ldap : "LDAP : 값" 한 줄로 출력 (+ LDAP 값이 없는 OK 호스트를 미확인으로 표시)
+#   모드 info : 값 요약을 <요약파일>에 써서 상태줄(report_status)이 붙이게 함
+report_multi() {
+    awk -F'\t' -v Y="$Y" -v N="$N" -v mode="$3" -v sumf="$4" '
         FILENAME == ARGV[1] { if ($2 == "OK") { ord_h[++nh] = $1 } ; next }
         { cnt[$2]++; hs[$2] = hs[$2] " " $1; got[$1] = 1; if (!($2 in seen)) { seen[$2] = 1; ord[++k] = $2 } }
         END {
             for (i = 2; i <= k; i++) { x = ord[i]; j = i - 1; while (j >= 1 && cnt[ord[j]] < cnt[x]) { ord[j + 1] = ord[j]; j-- } ord[j + 1] = x }
-            miss = ""; nm = 0
-            for (i = 1; i <= nh; i++) if (!(ord_h[i] in got)) { nm++; miss = miss " " ord_h[i] }
-            if (k == 0) { print Y "LDAP : 정보 없음" N; exit }
-            if (k == 1) print "LDAP : " ord[1]
-            else {
-                line = ""
-                for (i = 1; i <= k; i++) line = line (i > 1 ? " / " : "") ord[i] "(" cnt[ord[i]] "ea)"
-                print Y "[경고] LDAP infra가 2개 이상입니다" N
-                print Y "LDAP : " line N
-                for (i = 2; i <= k; i++) print Y "  " ord[i] " :" hs[ord[i]] N
+            if (mode == "ldap") {
+                miss = ""; nm = 0
+                for (i = 1; i <= nh; i++) if (!(ord_h[i] in got)) { nm++; miss = miss " " ord_h[i] }
+                if (k == 0) { print Y "LDAP : 정보 없음" N; exit }
+                if (k == 1) print "LDAP : " ord[1]
+                else {
+                    line = ""
+                    for (i = 1; i <= k; i++) line = line (i > 1 ? " / " : "") ord[i] "(" cnt[ord[i]] "ea)"
+                    print Y "[경고] LDAP infra가 2개 이상입니다" N
+                    print Y "LDAP : " line N
+                    for (i = 2; i <= k; i++) print Y "  " ord[i] " :" hs[ord[i]] N
+                }
+                if (nm > 0) print Y "  LDAP 미확인 " nm "대 :" miss N
+            } else {
+                if (k == 0) exit
+                if (k == 1) print ord[1] > sumf
+                else {
+                    line = ""
+                    for (i = 1; i <= k; i++) line = line (i > 1 ? " / " : "") ord[i] "(" cnt[ord[i]] "ea)"
+                    print line > sumf
+                    print Y "[경고] INFO 값이 2개 이상입니다" N
+                    for (i = 2; i <= k; i++) print Y "  " ord[i] " :" hs[ord[i]] N
+                }
             }
-            if (nm > 0) print Y "  LDAP 미확인 " nm "대 :" miss N
-        }' "$2" "$TMP/$1.ldap"
+        }' "$2" "$1"
 }
 
-report_status() {   # $1=state 파일
-    awk -F'\t' -v G="$G" -v R="$R" -v Y="$Y" -v N="$N" '{ c[$2]++; t++ } END {
-        printf "total=%dea %sOK=%dea%s %spingX=%dea%s %spingO_sshx=%dea%s %snosvrauto=%dea%s %sos_install=%dea%s\n",
-            t, G, c["OK"], N, R, c["OFF"], N, Y, c["REF"], N, Y, c["NOSV"], N, Y, c["INST"], N
+# report_status <state 파일> [INFO 요약파일]
+#   total : 각 항목의 합과 같으면 초록, 다르면 빨간색 깜빡임. OK 와 total 을 제외하고 0 인 항목은 숨김. 탭 구분.
+report_status() {
+    local info=""
+    [ -n "$2" ] && [ -s "$2" ] && info=$(cat "$2")
+    awk -F'\t' -v G="$G" -v R="$R" -v Y="$Y" -v B="$B" -v N="$N" -v info="$info" '{ c[$2]++; t++ } END {
+        sum = c["OK"] + c["OFF"] + c["REF"] + c["NOSV"] + c["INST"]
+        out = (sum == t ? G : B) "total=" t "ea" N "\t" G "OK=" c["OK"] + 0 "ea" N
+        if (c["OFF"])  out = out "\t" R "pingX=" c["OFF"] "ea" N
+        if (c["REF"])  out = out "\t" Y "pingO_sshx=" c["REF"] "ea" N
+        if (c["NOSV"]) out = out "\t" Y "nosvrauto=" c["NOSV"] "ea" N
+        if (c["INST"]) out = out "\t" Y "os_install=" c["INST"] "ea" N
+        if (info != "") out = out "\t" Y "INFO=" info N
+        print out
     }' "$1"
 }
 
-do_check() {   # $1=대상파일 $2=이름 $3=최종 state 파일
+do_check() {   # $1=대상파일 $2=이름
     local t0=$SECONDS
     echo "[체크 실행 중] gossh -pm ($(lines "$1")대)..."
     run_check "$1" "$2"
     echo "(소요 $((SECONDS - t0))초)"
     report_fail "$2"
-    report_ldap "$2" "$TMP/$2.state"
-    report_status "$TMP/$2.state"
+    rm -f "$TMP/$2.infosum"
+    report_multi "$TMP/$2.ldap" "$TMP/$2.state" ldap
+    report_multi "$TMP/$2.info" "$TMP/$2.state" info "$TMP/$2.infosum"
+    report_status "$TMP/$2.state" "$TMP/$2.infosum"
 }
 
 ########################## 4. 체크 ##########################
@@ -230,7 +274,7 @@ case "$ans" in
             FINAL="$TMP/final.state"
             CUR=recheck
             echo "[최종 상태]"
-            report_status "$FINAL"
+            report_status "$FINAL" "$TMP/recheck.infosum"
         else
             yellow "설정을 적용할 OK 대상이 없습니다."
         fi
@@ -324,11 +368,12 @@ fi
 
 # 기타 상태 서버 요약
 awk -F'\t' '$2 != "OK" && $2 != "OFF" { l[$2] = l[$2] " " $1; c[$2]++ } END {
-    if (c["REF"] + c["NOSV"] + c["INST"] > 0) {
+    if (c["REF"] + c["NOSV"] + c["INST"] + c["NONE"] > 0) {
         print "[기타 상태 서버]"
         if (c["REF"])  printf "pingO_sshx(%d대) :%s\n", c["REF"],  l["REF"]
         if (c["NOSV"]) printf "nosvrauto(%d대) :%s\n",  c["NOSV"], l["NOSV"]
         if (c["INST"]) printf "os_install(%d대) :%s\n", c["INST"], l["INST"]
+        if (c["NONE"]) printf "no_output(%d대) :%s\n", c["NONE"], l["NONE"]
         print "END"
     }
 }' "$FINAL" | while IFS= read -r l; do
