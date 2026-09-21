@@ -14,6 +14,8 @@ V2(`.claude/VM/V2/vm-param-check-usability-improvement`)는 원본 복사본에�
 - **`-specExport=<폴더명>`**(신규): vCenter에 연결하지 않고 `-specRoot` 아래 스펙을 VMsetup(`vm_setup.sh`)이 VM 생성에 쓸 수 있게 `이름=값` 줄로 출력한다. 첫 줄 `groups=<ev 개수>`, ev01의 이름 없는 키(`cpu` 등)는 `cpu-ev01`로 정규화, affinity 상대경로는 스펙 폴더 기준 절대경로로 바꾼다. **ev01 필수, 값이 있는 ev는 cpu/mem/disk/shares가 모두 있어야 하고, ev 번호는 연속이어야 한다**(어기면 stderr + 종료코드 1). 체크 동작(`-specRoot`)에는 이 규칙을 적용하지 않는다(기존 스펙이 막히지 않도록).
 - **스펙 파일 `키=""`**: vim 수동 입력 템플릿용으로 값의 양끝 큰따옴표를 뗀다. **따옴표째 비워 둔 값(`cpu=""`)은 "지정 안 함"으로 건너뛴다.** 따옴표 없는 `cpu=`는 예전처럼 빈 값 옵션으로 남긴다(`-initFolder` 빈 틀 동작 유지 — 이걸 건너뛰게 했더니 기존 `TestInitFolderBlank`가 깨져서 범위를 좁혔다).
 - **`-initFolder` 빈 틀**: ev03 주석 블록을 "ev03~ev10은 ev02와 같은 이름 규칙" 안내로 바꿨다.
+- **`-specExport` 출력에 `specdir=<매칭된 스펙 폴더 절대경로>` 줄 추가**(둘째 줄): `VMsetup/vm_setup.sh`가 폴더명(차수만 다른 이름 포함)으로 실제 어느 스펙 폴더가 매칭됐는지 알기 위해서다.
+- **실환경(home-test) 확인**: `-specRoot`로 VM 폴더가 CAE 규칙이 아닌 VM 8대(`192ev03`~`192ev10`)를 체크 → 포트그룹 이름에서 스펙 폴더를 유추해 ev03~ev10 스펙(`-cpu-ev10`, `-shares-ev10` 등)이 적용되고 vCPU/메모리/디스크/Shares/코어/NUMA 항목이 전부 OK.
 - **영향 범위**: `main.go`(플래그 등록/기대값 조립/`evaluateVM` affinity 분기/`specSettableFlags`/`-specExport`), `model/group.go`(신규), `checker/hardware.go`, `checker/topology.go`, `config/spec.go`, `config/export.go`(신규), `config/init.go`, `fixer/plan.go`(`GroupOf`), `fixer/gates.go`(대수 경고 그룹 목록, 안 쓰게 된 `containsFold` 제거), `report/csv.go`, `demo.go`/`scaletest.go`(구조체 리터럴), 테스트 `model/group_test.go`·`config/export_test.go`·`checker/groups_test.go`(신규), `setup.sh`(vendor 링크 경로 `../../govendor/govmomi-0.39.0`).
 - **검증(록키 192.168.0.58)**: `go build`/`go vet`/`go test ./...` 통과(기존 테스트 전부 + 신규). **회귀**: 수정 전/후 바이너리의 `-demo`, `-scale 300` 출력(콘솔·상세 CSV 6,121줄·요약 CSV)이 **바이트 단위로 동일**.
 

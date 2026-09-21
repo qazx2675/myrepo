@@ -1,81 +1,114 @@
-# VM_setup — VM 설정 적용 스크립트 모음
+# VMsetup — VM 생성·설정 도구 모음 (V2)
 
-VM/ESXi/vCenter의 개별 설정(affinity, lpage/HugePage, 전원정책, 태그, vSwitch, 라이선스 할당, VM 생성 등)을
-적용하는 도구들을 모아둔 폴더입니다. 각 도구는 독립적인 소스+`vendor/`를 갖춰서 개별 빌드가 가능합니다.
+호스트(BM)당 VM을 **1~10대(ev01~ev10)** 만들고 affinity/lpage/포트그룹까지 설정하는 도구들입니다.
+스펙은 `../SPEC_DIR`(vm-param-check와 공유)에서 읽는 `vm_setup.sh`가 전체 과정을 묶어 주고,
+각 도구(`*-source/`)는 단독으로도 쓸 수 있습니다. 모든 도구는 내부적으로 병렬(워커풀) 처리합니다.
 
-이 중 `vm-param-fix/`(체크 CSV 기반 오케스트레이터)는 같은 기능을 자체 내장한
-`../vm-param-check-usability-improvement/vm-param-check/`(`-fix` 옵션, 외부 도구 불필요)로 대체되었으니
-새로 시작하는 경우 그쪽을 쓰는 걸 권장합니다. 나머지 개별 도구(affinity/lpage/tag/vswitch/license/vm 생성 등)는
-그대로 사용 가능합니다.
+> V1(`.claude/VM/VM_setup`)에서 달라진 점은 [CHANGELOG.md](CHANGELOG.md) 참고. V1의 `vm-param-fix/`(대체된 구버전 오케스트레이터)는 V2에 넣지 않았습니다.
 
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.
 
 ## 1. 빌드 및 설치 방법
 
-### 빌드
-- `vm-param-fix/` — vm-param-check가 낸 CSV를 태그(affinity/lpage/power)별로 분류해서 아래 3개 외부 바이너리를 호출하는 오케스트레이터. 소스+vendor/ 포함, `setup.sh`로 빌드 가능.
-- `affinity_setting-source/` — affinity 태그 담당 외부 도구의 실제 소스(원래 `/root/affinity-test/main.go`). 소스+vendor/ 포함, `setup.sh`로 빌드 가능.
-- `lpage_setting-source/` — lpage(HugePage/CPU 토폴로지) 태그 담당 외부 도구의 실제 소스 (원래 `/root/lpage-test/main.go`). 소스+vendor/ 포함, `setup.sh`로 빌드 가능.
-- `vm-param-fix/power_setting` — **호스트 고성능 전원정책 자동교정 도구, 컴파일된 바이너리만 존재**. 아래 "문서별 고유 설명" 참고.
+의존성은 `../govendor/`에 들어 있어 **V2 폴더만 받아도 인터넷 없이 빌드**됩니다(`setup.sh`가 `../../govendor/<버전>`을 `vendor`로 링크하고 `-mod=vendor`로 빌드). `vm_setup.sh`는 실행파일이 없으면 스스로 빌드합니다.
 
 ```bash
-cd "affinity_setting-source" && ./setup.sh   # -> affinity_setting 바이너리 생성
-cd "../lpage_setting-source" && ./setup.sh   # -> lpage_setting 바이너리 생성
-cd "../vm-param-fix" && ./setup.sh           # -> vm-param-fix 바이너리 생성 (power_setting은 이미 포함되어 있음)
+cd VMsetup
+for d in *-source; do (cd "$d" && bash setup.sh); done   # 각 폴더에 실행파일 생성
 ```
 
-### 전역 명령어로 사용하기 (선택 사항)
-빌드된 실행 파일을 PATH 환경 변수에 포함된 디렉터리로 이동하거나, 실행 파일이 있는 경로를 PATH에 추가하면 어디서든 명령어처럼 사용할 수 있습니다.
+요구사항: Go 1.26.5 이상, Linux(Rocky Linux 8에서 검증).
 
-예시 (실행 파일을 `/usr/local/bin`으로 복사):
-```bash
-sudo cp affinity_setting-source/affinity_setting lpage_setting-source/lpage_setting vm-param-fix/vm-param-fix /usr/local/bin/
-# 이후 어느 위치에서나 명령어처럼 실행 가능
-```
+배치(서버): `/home/SPEC_DIR`, `/home/VMsetup`, `/home/vm-param-check-usability-improvement`, `/home/govendor` 가 나란히 있어야 합니다(V2 폴더 내용을 그대로 `/home`에 복사).
 
 ## 2. 사용 방법
 
-### 사용법 (참고용 — 새 프로젝트에는 비권장)
-세 도구를 vm-param-fix와 같은 디렉토리에 모아두고 실행:
+### 한 번에: `vm_setup.sh`
+
+준비물 2개:
+
+| 파일 | 내용 |
+|---|---|
+| `VMsetup/<user>.txt` | 대상 BM 목록 (한 줄에 하나) |
+| `SPEC_DIR/vswitch_<user>.txt` | `BM  포트그룹  VLAN` (BM당 여러 줄 가능 — 포트그룹이 여러 개 만들어짐) |
+
 ```bash
-VC_PASSWORD='<비밀번호>' ./vm-param-fix -checkResult=<체크CSV> -vcTargetIP=<vCenter> -id=<계정> \
-  -affinityTool=./affinity_setting -lpageTool=./lpage_setting -powerTool=./power_setting \
-  -recheckTool=<vm-param-check 경로>
+export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
+./vm_setup.sh -u hong -v 192.168.0.50     # -n 을 붙이면 vCenter 변경 없이 계획까지만 확인
 ```
 
+진행 순서:
+
+1. **스펙 할당** — 포트그룹 이름이 `<폴더명>-cae-a-b-c-d` 형식이면 그 폴더명으로 `SPEC_DIR` 스펙을 자동 매칭(차수만 다른 폴더는 같은 스펙). BM→스펙 표를 보여주고 `(y/n)`으로 확인.
+   - `n`이거나 자동으로 못 정한 BM은 **SPEC_DIR 목록에서 번호 선택** (Enter = 직전 선택).
+   - 목록에 없으면 `0`을 골라 **vim으로 새 스펙 입력**. 모든 항목이 `키=""` 상태이고 설명은 주석이다. 저장하면 `SPEC_DIR/<folder>/`에 새 스펙 폴더가 생긴다(`folder`가 규칙에 안 맞거나 같은 스펙이 있으면 오류 안내 후 다시 편집). 이어서 **ev별 affinity**를 (1 자동 / 2 기존 파일 / 3 vim 입력) 중에서 고른다.
+2. **포트그룹 할당(네트워크 어댑터 1)** — BM에 포트그룹이 1개면 그 BM의 모든 VM에, 여러 개면 스펙 폴더명과 이름이 맞는 것을 자동 선택. VM→포트그룹 표를 `(y/n)`으로 확인, 자동으로 못 정한 VM/`n`이면 **번호 선택**, 목록에 없으면 `0`으로 **vim**(`hostname=""`, `portgroup=""`)에서 지정.
+3. **실행 계획 확인 후 실행**(한 번 더 y) — `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting`.
+
+`tag_setting`(사용자 지정 특성)은 스펙에 값이 없어 `vm_setup.sh`에 포함하지 않았습니다. 필요하면 단독으로 실행하세요.
+
+### 단독 실행
+
+각 도구의 옵션은 `*-source/README.md`(또는 `-h`)를 참고하세요. 공통 규칙:
+
+- 접속: `-vcTargetIP`, `-id`, 비밀번호는 환경변수 `VC_PASSWORD`
+- 대상 호스트 목록: `-worklistFile`(실행 폴더 기준 상대경로)
+- **ev 규칙**: ev01 필수, ev 번호는 ev01부터 연속, **값이 없는 ev는 만들지 않음**
+
+| 도구 | 하는 일 | ev 범위 |
+|---|---|---|
+| `vm_create-source` | 호스트별 VM 생성(+CPU/메모리 예약/Shares/부트순서). `-mapFile`에 VM 이름 키로 포트그룹 지정 가능 | `-vmCount` 1~10, `-ev01Cpu`~`-ev10Share` |
+| `affinity_setting-source` | affinity 일괄 적용 | `-vm_cnt` 1~10, `-affinityFile01~10` |
+| `lpage_setting-source` | HugePage/CPU 토폴로지 | `-ev01Cores/Sockets/Numa`~`-ev10...` |
+| `tag_setting-source` | 사용자 지정 특성 | `-vmCount` 1~10 |
+| `vswitch_setting-source` | BM vSwitch에 포트그룹 생성(호스트 병렬, `-concurrency`) | — |
+| `nic_assign-source` | 만들어진 VM의 네트워크 어댑터 1 포트그룹 교체 + **연결됨/전원을 켤 때 연결** 체크 | — |
+| `numa_preferht_setting-source` | `numa.vcpu.preferHT` 일괄 적용 | — |
+| `license_assign-source`, `mac_info-source`, `main_conn-source` | 라이선스 할당 / MAC 정보 / vCenter 접속 확인 | — |
+
+데이터센터가 2개 이상이거나 폴더가 여러 단계여도 동작합니다(`vm_create`는 호스트가 속한 데이터센터를 자동으로 찾음, `-datacenter`로 한정 가능).
+
 ## 3. 옵션별 상세 설명
-(별도 옵션 설명은 하위 디렉토리의 README.md를 참조하세요.)
+
+`vm_setup.sh` 옵션:
+
+| 옵션 | 설명 |
+|---|---|
+| `-u <user>` | (필수) 작업 이름 — `<user>.txt`, `SPEC_DIR/vswitch_<user>.txt` |
+| `-v <ip>` | vCenter IP (환경변수 `VC_IP`도 가능) |
+| `-i <id>` | vCenter 계정 (기본 `administrator@vsphere.local`) |
+| `-s <dir>` | SPEC_DIR 경로 (기본 `../SPEC_DIR`) |
+| `-w <vswitch>` | 포트그룹을 만들 가상 스위치 (기본 `vSwitch0`) |
+| `-c <n>` | vswitch/affinity/lpage 동시 처리 수 |
+| `-n` | 확인만 — 스펙·포트그룹 할당과 실행 계획까지 보이고 종료(vCenter 변경 없음) |
+
+환경변수 `VM_SETUP_EDITOR`로 vim 대신 다른 편집기를 쓸 수 있습니다.
+
+스펙 값이 각 도구 옵션으로 바뀌는 규칙: `cpu/mem/disk/shares-evNN` → `vm_create -evNNCpu/Mem/Disk/Share`(disk·shares에 쉼표 목록이 있으면 첫 값), `ht` → `affinity_setting -ht`, `affinity-evNN` → `-affinityFileNN`, `cores`(소켓당 코어 수)·`numa`(NUMA 노드당 vCPU 수) → `lpage_setting`의 총 코어(=cpu)/소켓 수/NUMA 노드 수.
 
 ## 4. 문서별 고유 설명
 
-### 4.1 디렉토리 구조
-
 ```
-VM_setup/
-├── README.md                    # 이 문서
-├── vm-param-fix/                # 체크 CSV를 태그별로 분류해 아래 외부 도구들을 호출하는 오케스트레이터 (power_setting 바이너리 포함)
-├── affinity_setting-source/     # affinity 태그 담당 외부 도구 소스
-├── lpage_setting-source/        # lpage(HugePage/CPU 토폴로지) 태그 담당 외부 도구 소스
-├── license_assign-source/       # 라이선스 할당 도구 소스 (하위 README 참고)
-├── mac_info-source/             # MAC 주소 정보 조회 도구 소스 (하위 README 참고)
-├── main_conn-source/            # vCenter/ESXi 접속 확인 도구 소스 (하위 README 참고)
-├── tag_setting-source/          # VM 태그 설정 도구 소스 (하위 README 참고)
-├── vm_create-source/            # VM 생성 도구 소스 (하위 README 참고)
-├── vswitch_setting-source/      # 가상 스위치 설정 도구 소스 (하위 README 참고)
-└── numa_preferht_setting-source/ # numa.vcpu.preferHT=TRUE 일괄 적용 도구 소스, 병렬(워커풀), 전원OFF 조건 (하위 README 참고)
+VMsetup/
+├── vm_setup.sh                 # 전체 과정(스펙·포트그룹 할당 → 생성 → 설정) 실행 스크립트
+├── README.md / CHANGELOG.md    # 이 문서 / 변경 이력
+├── <user>.txt                  # (사용자 파일, git 제외) BM 목록
+├── run_<user>/                 # (자동 생성, git 제외) 이번 실행의 worklist/hostgroup/vswitch 입력 사본
+└── *-source/                   # 도구별 Go 소스 + setup.sh (+ README.md)
 ```
 
-### 4.2 power_setting에 대한 중요 안내
+알려진 한계:
 
-`power_setting`의 **Go 소스 코드를 Rocky Linux 어디에서도 확실하게 찾지 못했습니다.**
-로컬 파일 여러 개(`/root/pro/main.go` 등)를 대조해봤지만, 실행 바이너리의 플래그 구성
-(`-vcTargetIP`, `-worklistFile`, `-worklistBmFile`(default) 등)과 정확히 일치하는 소스를
-확정하지 못했습니다. 그래서 **컴파일된 바이너리(`vm-param-fix/power_setting`)만** 이 폴더에
-보관했습니다 — 소스 없이 바이너리만 있으므로 재빌드는 불가능하고, 이 바이너리 파일 자체가
-유일한 사본입니다. 삭제하지 마세요.
+- `lpage_setting`은 NUMA 노드당 코어 수를 스펙 numa 값에 맞추지만 `numa.vcpu.maxPerVirtualNode`는 기존 동작(코어 수)대로 씁니다 — `vm-param-check` 결과에서 FAIL이 나오면 `-fix`로 교정하세요.
+- 전원이 켜진 VM의 "연결됨" 체크는 vcsim에서 재현되지 않아 실제 vCenter(home-test)에서만 확인할 수 있습니다.
+- 포트그룹을 새로 만들면서 VM에 붙이는 것(vim에서 VLAN 입력)은 지원하지 않습니다. 새 포트그룹은 `vswitch_<user>.txt`에 적어 `vswitch_setting`으로 만드세요.
 
-같은 이유로, 새 통합 도구(`vm-param-check`)는 **호스트 전원정책 자동교정
-기능이 없습니다**(체크만 함, README의 "알려진 한계" 참고) — 이 기능이 다시 필요해지면
-`power_setting` 바이너리를 그대로 재사용하거나(vm-param-fix 오케스트레이터를 통해),
-같은 로직을 처음부터 새로 작성해야 합니다.
+## 5. 전역 명령어로 사용하기 (선택 사항)
+
+빌드된 실행 파일을 PATH에 포함된 디렉터리로 복사하거나, 실행 파일이 있는 경로를 PATH에 추가하면 어디서든 명령어처럼 사용할 수 있습니다.
+
+```bash
+sudo cp vm_create-source/vm_create nic_assign-source/nic_assign /usr/local/bin/
+# vm_setup.sh 는 같은 폴더의 *-source/ 실행파일과 ../SPEC_DIR 를 기준으로 동작하므로 PATH 로 옮기지 말고 그대로 실행한다
+```

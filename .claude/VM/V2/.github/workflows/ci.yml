@@ -1,0 +1,44 @@
+# V2 폴더가 저장소 루트인 V2 브랜치에서 동작한다. (master 에서는 .claude/VM/V2 아래라 실행되지 않고,
+# master 용 워크플로는 저장소 루트 .github/workflows/vm-v2.yml 이다.)
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  vm-param-check:
+    name: vm-param-check (빌드·정적분석·테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vm-param-check-usability-improvement/vm-param-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.27.0' }
+      - name: 오프라인 빌드 (govendor 링크)
+        run: GOPROXY=off bash setup.sh
+      - run: GOPROXY=off go vet -mod=vendor ./...
+      - run: GOPROXY=off go test -mod=vendor ./...
+
+  vmsetup:
+    name: VMsetup 도구 (빌드·정적분석·테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: VMsetup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.27.0' }
+      - name: 도구별 오프라인 빌드 + vet
+        run: |
+          set -e
+          export GOPROXY=off
+          for d in *-source; do
+            echo "== $d"
+            (cd "$d" && bash setup.sh && go vet -mod=vendor ./...)
+          done
+      - name: nic_assign 단위 테스트
+        run: cd nic_assign-source && GOPROXY=off go test -mod=vendor ./...
+      - name: bash 문법 검사
+        run: bash -n vm_setup.sh

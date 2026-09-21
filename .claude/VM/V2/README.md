@@ -4,9 +4,6 @@
 도구(`vm-param-check-usability-improvement`)가 **스펙 폴더 `SPEC_DIR` 하나를 같이 쓰는** 구성입니다.
 `.claude/VM/VM_setup`, `.claude/VM/vm-param-check-usability-improvement`(V1)는 그대로 두고 여기서 새로 구성했습니다.
 
-> **진행 상태 (2026-09-22)**: Go 도구 변경(ev01~ev10, 데이터센터 여러 개, vswitch 병렬화, `nic_assign`, `-specExport`)과
-> vcsim 검증까지 완료. **남은 작업**: `VMsetup/vm_setup.sh`(스펙·포트그룹 자동 할당 → y/n → 수동 선택 → vim),
-> home-test 실환경 검증, 문서 보강(ARCHITECTURE.md / PR_CHECKLIST.md / CI). 계획서: `.claude/VM-10대-확장-및-SPEC_DIR-공유/계획서.md`
 
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.

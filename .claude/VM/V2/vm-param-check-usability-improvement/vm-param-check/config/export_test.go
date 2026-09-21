@@ -48,6 +48,9 @@ func TestExportSpecNormalizesAndCounts(t *testing.T) {
 	if lines[0].Name != "groups" || got["groups"] != "3" {
 		t.Errorf("groups = %q, want 3 (첫 줄이어야 함)", got["groups"])
 	}
+	if !filepath.IsAbs(got["specdir"]) || !strings.HasSuffix(got["specdir"], "TST-CAE001-SAMP48c-QRST") {
+		t.Errorf("specdir 이 매칭된 스펙 폴더의 절대경로가 아닙니다: %q", got["specdir"])
+	}
 	for k, want := range map[string]string{"cpu-ev01": "4", "disk-ev01": "100", "shares-ev01": "normal", "cores-ev01": "4", "cpu-ev03": "1", "shares-ev03": "normal", "ht": "on"} {
 		if got[k] != want {
 			t.Errorf("%s = %q, want %q", k, got[k], want)

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/vmware/govmomi"
@@ -27,6 +28,7 @@ func main() {
 	clusterHost := flag.Int("clusterHost", 2, "클러스터당 호스트 수")
 	host := flag.Int("host", 1, "데이터센터당 독립 호스트 수")
 	machine := flag.Int("machine", 0, "호스트(리소스풀)당 기본 VM 수")
+	fqdn := flag.String("fqdnHosts", "", "쉼표로 구분한 이름의 독립 호스트를 첫 데이터센터에 추가 (예: bm1.example.com,bm2.example.com)")
 	nest := flag.Int("nest", 0, "호스트/클러스터와 VM을 이 깊이만큼 중첩 폴더(N1/N2/...) 안으로 옮김")
 	addr := flag.String("addr", "127.0.0.1:0", "listen 주소")
 	flag.Parse()
@@ -48,6 +50,45 @@ func main() {
 	defer s.Close()
 
 	ctx := context.Background()
+	if *fqdn != "" {
+		c, err := govmomi.NewClient(ctx, s.URL, true)
+		if err != nil {
+			log.Fatal(err)
+		}
+		f := find.NewFinder(c.Client, true)
+		dcs, err := f.DatacenterList(ctx, "*")
+		if err != nil {
+			log.Fatal(err)
+		}
+		f.SetDatacenter(dcs[0])
+		folders, err := dcs[0].Folders(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, name := range strings.Split(*fqdn, ",") {
+			spec := types.HostConnectSpec{HostName: name, UserName: "user", Password: "pass", Force: true}
+			task, err := folders.HostFolder.AddStandaloneHost(ctx, spec, true, nil, nil)
+			if err == nil {
+				err = task.Wait(ctx)
+			}
+			if err != nil {
+				log.Fatalf("호스트 추가 실패 %s: %v", name, err)
+			}
+			// 추가한 호스트에는 데이터스토어가 없어 vm_create 가 건너뛰므로 로컬 데이터스토어를 붙인다.
+			h, err := f.HostSystem(ctx, name)
+			if err != nil {
+				log.Fatal(err)
+			}
+			dss, err := h.ConfigManager().DatastoreSystem(ctx)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if _, err := dss.CreateLocalDatastore(ctx, "ds-"+strings.Split(name, ".")[0], os.TempDir()); err != nil {
+				log.Fatalf("데이터스토어 추가 실패 %s: %v", name, err)
+			}
+		}
+		_ = c.Logout(ctx)
+	}
 	if *nest > 0 {
 		c, err := govmomi.NewClient(ctx, s.URL, true)
 		if err != nil {
