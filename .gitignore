@@ -1,0 +1,22 @@
+# 빌드 산출물 (각 setup.sh 로 다시 만든다)
+VMsetup/*-source/vendor
+!VMsetup/license_assign-source/vendor
+VMsetup/affinity_setting-source/affinity_setting
+VMsetup/license_assign-source/license_assign
+VMsetup/lpage_setting-source/lpage_setting
+VMsetup/mac_info-source/mac_info
+VMsetup/main_conn-source/main_conn
+VMsetup/nic_assign-source/nic_assign
+VMsetup/numa_preferht_setting-source/numa_preferht_setting
+VMsetup/tag_setting-source/tag_setting
+VMsetup/vm_create-source/vm_create
+VMsetup/vswitch_setting-source/vswitch_setting
+VMsetup/bin/
+
+# 실제 사용자 입력/결과 파일 (인프라 정보 — 저장소에 올리지 않음). 예시(*.example)와 예시 스펙 1개만 올린다.
+VMsetup/*.txt
+!VMsetup/*.txt.example
+SPEC_DIR/*
+!SPEC_DIR/README.md
+!SPEC_DIR/*.example
+!SPEC_DIR/TST-CAE001-SAMP48c-QRST/

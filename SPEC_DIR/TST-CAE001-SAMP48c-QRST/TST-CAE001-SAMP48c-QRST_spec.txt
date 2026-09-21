@@ -1,0 +1,29 @@
+# TST-CAE001-SAMP48c-QRST 스펙 정의 파일 (예시)
+# vm-param-check(체크)와 VMsetup/vm_setup.sh(VM 생성·설정)가 같이 읽는다.
+# 형식: 이름=값 (하이픈은 있어도 없어도 됨), '#' 뒤는 주석. 값을 따옴표째 비워 두면(cpu-ev04="") 지정 안 함.
+
+# --- 공통 ---
+ht=on
+
+# --- ev01 (필수) ---
+cpu=4
+mem=8
+disk=100
+shares-ev01=normal
+cores=4
+numa=4
+affinity-ev01=affinity_ev01.txt
+
+# --- ev02 (선택) ---
+cpu-ev02=2
+mem-ev02=4
+disk-ev02=50
+shares-ev02=4000
+cores-ev02=2
+numa-ev02=2
+
+# --- ev03~ev10 (선택, ev01부터 연속으로) ---
+# cpu-ev03=
+# mem-ev03=
+# disk-ev03=
+# shares-ev03=

@@ -1,0 +1,4 @@
+sched.vcpu0.affinity=0,1
+sched.vcpu1.affinity=2,3
+sched.vcpu2.affinity=4,5
+sched.vcpu3.affinity=6,7
