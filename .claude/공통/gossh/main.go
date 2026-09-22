@@ -1248,6 +1248,109 @@ func startTerminalGuard() {
 	}()
 }
 
+// ★ 옵션 도움말(그냥 실행하거나 -h). 맨 위에 옵션별 한 줄 요약, 그 아래에 한글 상세 설명.
+type optionDoc struct {
+	flag, arg, summary string
+	detail             []string
+}
+
+var optionDocs = []optionDoc{
+	{"w", "<파일>", "호스트 목록 파일 (필수)", []string{
+		"한 줄에 호스트 하나, 또는 쉼표/공백으로 여러 개를 나열할 수 있습니다. # 으로 시작하는 줄은 주석입니다.",
+		"범위 표기를 지원합니다: esxi[0001-0020], qwer[2660,2671,2826-2829], hostname[0001-0002]ev[01-03]",
+		"중복 호스트는 자동으로 제거됩니다. -w 파일, -w=파일, -w^파일, -w파일 형태 모두 가능합니다.",
+	}},
+	{"u", "<계정>", "SSH 접속 계정 (기본 root)", nil},
+	{"p", "<비밀번호>", "SSH 비밀번호 (키 인증 실패 시에만 사용)", []string{
+		"SSH 키 인증을 항상 먼저 시도하고, 키로 접속되지 않는 호스트에만 이 비밀번호를 사용합니다.",
+	}},
+	{"i", "<키파일>", "SSH 개인키 경로 (미지정 시 자동 탐색)", []string{
+		"지정하지 않으면 ~/.ssh/id_ed25519 → id_ecdsa → id_rsa 순서로 찾습니다.",
+	}},
+	{"P", "<포트>", "SSH 포트 (기본 22)", []string{
+		"호스트 파일에 host:포트 형태로 적은 호스트는 그 포트를 우선 사용합니다.",
+	}},
+	{"c", "<N>", "동시 접속 수 (기본 1000)", []string{
+		fmt.Sprintf("명령어에 /user/ 경로가 들어 있으면 autofs 보호를 위해 자동으로 %d으로 제한됩니다.", autofsSafeConcurrency),
+	}},
+	{"cf", "<N>", "동시 접속 수 강제 지정 (/user/ 자동 제한 무시)", []string{
+		"/user/ 경로 감지로 인한 자동 제한을 무시하고 이 값으로 병렬 실행합니다.",
+	}},
+	{"t", "<초>", "접속 제한시간 (기본 15초, 명령 실행 시간엔 미적용)", []string{
+		"TCP 연결 + SSH 핸드셰이크 + 인증(로그인)까지만 적용됩니다. 로그인한 뒤 명령 실행 시간에는 제한이 없어서",
+		"10분 이상 걸리는 드라이버 설치 같은 작업도 끊기지 않습니다.",
+		"1차 실행 후 접속불가로 분류된 호스트는 낮은 동시성과 최대 8초 제한으로 한 번 더 재검증합니다.",
+	}},
+	{"b", "", "결과가 같은 호스트끼리 묶어서 출력 (clush -b 방식)", []string{
+		"결과 본문이 같은 호스트를 esxi[0001-0010] 같은 요약 표기로 묶어 한 번만 출력합니다.",
+		"접속불가 호스트는 별도 그룹으로 표시됩니다. -script와 같이 쓰면 무시되고 호스트별로 출력합니다.",
+	}},
+	{"m", "", "행리스트보기 (오래 걸리는 호스트 확인)", []string{
+		fmt.Sprintf("실행 중 Enter를 누르면 %d초 이상 실행 중이거나 실행했던 호스트와 진행시간을 보여줍니다.", int(hangThreshold.Seconds())),
+		"도중에 끝난 호스트는 끝난 시각에서 시간이 멈춥니다. 다시 Enter를 누르면 원래 화면으로 돌아갑니다.",
+		"터미널에서 실행한 경우에만 동작합니다.",
+	}},
+	{"pm", "", "OS 설치중 감지 + 특정 autofs 계정 경로 접근 점검", []string{
+		"~/.profile에 anaconda가 있으면 OS 설치중으로 보고 명령을 실행하지 않습니다(<호스트파일>_os_install).",
+		"특정 autofs 계정 경로에 접근할 수 없는 호스트는 <호스트파일>_nosvrauto에 기록합니다.",
+		fmt.Sprintf("점검은 본 명령 전에 한 번 실행하며 점검에만 %d초 제한이 있습니다(본 명령은 제한 없음).", int(pmCheckTimeout.Seconds())),
+	}},
+	{"script", "", "요약·색상 없이 호스트별 결과만 출력", []string{
+		"작업 요약 블록, 색상, 재검증 안내를 출력하지 않습니다. 다른 스크립트에서 결과를 읽을 때 사용합니다.",
+		"실행 파일 이름이 pdsh이면 기본으로 켜집니다(-script=false로 끌 수 있음).",
+	}},
+	{"dnlgjawkrdjqghkrdls", "", "위험 명령 실행 허용 (재부팅/종료 등)", []string{
+		"reboot, poweroff, shutdown, halt, init 0, init 6, ddc 가 들어간 명령은 기본적으로 실행을 거부합니다.",
+		"이 옵션을 주면 대상 호스트 목록을 보여주고 y/N 확인을 받은 뒤 실행합니다.",
+	}},
+}
+
+func printUsage() {
+	name := filepath.Base(os.Args[0])
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s - 여러 서버에 동시에 SSH 명령을 실행합니다 (pdsh 방식 출력: 호스트명: 결과)\n\n", name)
+	fmt.Fprintf(&b, "사용법: %s -w <호스트파일> [옵션] \"명령어\"\n", name)
+	fmt.Fprintf(&b, "  예) %s -w hosts.txt \"cat /etc/os-release\"\n\n", name)
+
+	label := func(d optionDoc) string {
+		if d.arg == "" {
+			return "-" + d.flag
+		}
+		return "-" + d.flag + " " + d.arg
+	}
+	b.WriteString("[옵션 요약]\n")
+	width := 0
+	for _, d := range optionDocs {
+		if w := displayWidth(label(d)); w > width {
+			width = w
+		}
+	}
+	for _, d := range optionDocs {
+		fmt.Fprintf(&b, "  %s  %s\n", padRight(label(d), width), d.summary)
+	}
+
+	b.WriteString("\n[옵션 상세]\n")
+	for _, d := range optionDocs {
+		fmt.Fprintf(&b, "  %s\n", label(d))
+		fmt.Fprintf(&b, "      %s\n", d.summary)
+		for _, line := range d.detail {
+			fmt.Fprintf(&b, "      %s\n", line)
+		}
+	}
+
+	// 설명표에 빠진 옵션이 새로 생겨도 도움말에서 누락되지 않게 한다.
+	documented := map[string]bool{}
+	for _, d := range optionDocs {
+		documented[d.flag] = true
+	}
+	flag.VisitAll(func(f *flag.Flag) {
+		if !documented[f.Name] {
+			fmt.Fprintf(&b, "  -%s\n      %s\n", f.Name, f.Usage)
+		}
+	})
+	fmt.Fprint(os.Stderr, b.String())
+}
+
 func isAutofsUserPath(command string) bool {
 	return autofsUserPathRegex.MatchString(command)
 }
@@ -1265,11 +1368,12 @@ func main() {
 	// ★ 실행 파일 이름이 pdsh면 -script 기본값을 true로 (필요하면 -script=false로 명시적 해제 가능)
 	isPdshName := filepath.Base(os.Args[0]) == "pdsh"
 	scriptMode := flag.Bool("script", isPdshName, "작업 요약 출력 숨김 (순수 결과만 출력). 실행 파일 이름이 pdsh면 기본값 true")
-	pmMode := flag.Bool("pm", false, "/user/svrauto 마운트 상태 추가 점검 및 OS설치중 감지")
+	pmMode := flag.Bool("pm", false, "OS 설치중 감지 + 특정 autofs 계정 경로 접근 점검")
 	bMode := flag.Bool("b", false, "clush 스타일: 결과가 동일한 호스트끼리 묶어서 출력 (-script와 함께 쓰면 무시되고 호스트별로 출력)")
 	mMode := flag.Bool("m", false, "행리스트보기: 실행 중 Enter를 누르면 60초 이상 실행 중인(또는 실행했던) 호스트와 진행시간을 보여줌, 다시 Enter로 복귀")
 
 	// ★ pdsh 스타일 "-w^file"/"-wfile" 붙여쓰기 지원을 위해 flag.Parse() 대신 전처리한 인자로 파싱
+	flag.Usage = printUsage
 	flag.CommandLine.Parse(preprocessArgs(os.Args[1:]))
 
 	stdoutTTY = isCharDevice(os.Stdout)
@@ -1279,7 +1383,7 @@ func main() {
 
 	args := flag.Args()
 	if *hostFile == "" || len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "사용법: ./gossh -w kdh.txt cat /etc/os-release")
+		printUsage()
 		os.Exit(1)
 	}
 
