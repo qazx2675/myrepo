@@ -1091,6 +1091,38 @@ func main() {
 		progressWG.Wait()
 	}
 
+	// ★ 재검증: 대량 동시 실행 시 DNS/접속 혼잡으로 실제로는 접속 가능한데 "접속불가"로
+	// 오분류되는 경우가 있어, 1차 실행이 끝난 뒤 접속불가(failedHosts+refusedHosts)로 분류된
+	// 호스트만 훨씬 낮은 동시성으로 한 번 더 시도한다(명령어까지 실제로 재실행). 이미 성공한
+	// 호스트는 건드리지 않으므로, 실패 대상이 적은 일반적인 경우엔 전체 속도에 미치는 영향이
+	// 거의 없다(실패 대상이 원래부터 많다면 그만큼 재검증에도 시간이 걸릴 수 있음 — 애초에
+	// 실제로 다운된 호스트가 많다는 뜻이라 이 경우는 불가피함).
+	if atomic.LoadInt32(&aborted) != 1 {
+		retryHosts := append(append([]string{}, failedHosts...), refusedHosts...)
+		if len(retryHosts) > 0 {
+			if !*scriptMode {
+				fmt.Fprintf(os.Stderr, "재검증 중(%d대, 낮은 동시성으로 재시도)...\n", len(retryHosts))
+			}
+			failedHosts = nil
+			refusedHosts = nil
+			successBefore := successCount
+			retryConcurrency := effectiveConcurrency
+			if retryConcurrency > 50 {
+				retryConcurrency = 50
+			}
+			retrySem := make(chan struct{}, retryConcurrency)
+			var retryWG sync.WaitGroup
+			for _, h := range retryHosts {
+				retryWG.Add(1)
+				go runSSHCommand(h, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &retryWG, retrySem, dnsSem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu, &completed)
+			}
+			retryWG.Wait()
+			if recovered := successCount - successBefore; recovered > 0 && !*scriptMode {
+				fmt.Fprintf(os.Stderr, "재검증 결과: %d대는 실제로 접속/실행 가능(최초엔 일시적 혼잡 등으로 오분류됨).\n", recovered)
+			}
+		}
+	}
+
 	if bunchMode {
 		printBunched(hosts, bunchOutputs)
 		printUnreachableGroup(failedHosts, refusedHosts)
