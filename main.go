@@ -349,10 +349,10 @@ func writeHostsToFile(filename string, hosts []string) {
 		return
 	}
 	defer file.Close()
-	// ★ 연속된 호스트명은 esxi[0001-0003] 형태로 압축해서 저장한다. -w로 그대로
-	// 다시 읽어도 expandHostLine이 풀어주므로 재실행 가능하다.
-	for _, token := range compressHosts(hosts) {
-		file.WriteString(token + "\n")
+	// ★ 결과 파일은 요약(압축) 표기가 아니라 호스트 이름을 줄바꿈으로 하나씩 그대로 기록한다.
+	// -w로 그대로 다시 읽어도 동작한다(압축 표기는 화면 요약/-b 출력에서만 사용).
+	for _, h := range hosts {
+		file.WriteString(h + "\n")
 	}
 }
 
