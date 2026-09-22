@@ -699,9 +699,9 @@ func pmCanceled(host string, mu *sync.Mutex, successCount *int) {
 // ★ autofs 안전장치: 명령어에 "/user/..." 로 시작하는 경로가 포함되어 있으면 true.
 // "echo 'user'" 처럼 단어 중간에 user가 들어간 경우는 대상이 아니고,
 // 반드시 "/user/" 형태의 경로여야만 감지된다.
-const autofsSafeConcurrency = 350
+const autofsSafeConcurrency = 450
 
-// ★ DNS 조회 전용 동시성 제한. SSH 접속 동시성(-c, 최대 350)과 별개로 훨씬 낮게 잡아서,
+// ★ DNS 조회 전용 동시성 제한. SSH 접속 동시성(-c, 최대 450)과 별개로 훨씬 낮게 잡아서,
 // 대량 호스트를 한꺼번에 처리할 때 리졸버/DNS 서버에 걸리는 순간 부하를 줄인다.
 const dnsLookupConcurrency = 50
 
@@ -913,7 +913,7 @@ func main() {
 	// `cat test |grep 'asdf`로 깨짐). 쉘이 넘겨준 인자에는 이미 실제 따옴표가 없으므로
 	// 이 처리 자체가 불필요해서 제거했다.
 
-	// ★ autofs 안전장치: /user/ 경로가 명령어에 포함되어 있으면 병렬 수를 350으로 강제.
+	// ★ autofs 안전장치: /user/ 경로가 명령어에 포함되어 있으면 병렬 수를 450으로 강제.
 	// -cf 로 명시적으로 병렬 수를 지정한 경우에만 이 제한을 무시하고 지정값을 그대로 쓴다.
 	effectiveConcurrency := *concurrency
 	if *forceConcurrency > 0 {
