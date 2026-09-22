@@ -5,11 +5,12 @@
 #   1) ${user}.txt(BM 목록) + SPEC_DIR/vswitch_${user}.txt(BM 포트그룹 VLAN) 읽기
 #   2) BM별 스펙 자동 할당(포트그룹 이름의 <폴더명>-cae-a-b-c-d 에서 폴더명 추출) → 표 확인(y/n)
 #      → n 이거나 미할당이면 SPEC_DIR 목록에서 선택, 목록에 없으면 vim으로 새 스펙 입력(+ev별 affinity)
-#   3) vswitch_setting  : BM에 포트그룹 생성 (호스트 병렬)
-#   4) VM(evNN)별 포트그룹(네트워크 어댑터 1) 자동 할당 → 표 확인(y/n) → 수동 선택 → 목록에 없으면 vim
-#   5) vm_create → affinity_setting → lpage_setting (스펙별로, 도구 안에서 병렬)
+#   3) VM(evNN)별 포트그룹(네트워크 어댑터 1) 자동 할당 → 표 확인(y/n) → 수동 선택 → 목록에 없으면 vim
+#   4) vCenter 선택 (-v 가 없으면 vcenter.txt 목록에서 번호로, Enter = 이 user 의 이전 실행 vCenter)
+#   5) vswitch_setting(BM에 포트그룹 생성, 호스트 병렬) → vm_create → affinity_setting → lpage_setting (스펙별로, 도구 안에서 병렬)
 #
-# 실제 vCenter를 변경하는 단계(3~5) 직전에 요약을 보여주고 한 번 더 확인받는다. -n 이면 여기서 멈춘다.
+# 실제 vCenter를 변경하는 단계(5) 직전에 요약을 보여주고 한 번 더 확인받는다. -n 이면 여기서 멈춘다.
+# 도구가 실패하면(종료코드 0 이 아니면) 그 자리에서 멈춘다. 이미 있는 포트그룹/VM 은 실패가 아니다.
 # 스펙 해석은 vm-param-check -specExport 가 맡는다(체크와 같은 파서 — 파서를 두 벌 만들지 않음).
 set -o pipefail
 
@@ -23,7 +24,8 @@ usage() {
 사용법: $0 -u <user> -v <vCenter IP> [옵션]
 
   -u <user>     작업 이름. ${HERE}/<user>.txt (BM 목록), SPEC_DIR/vswitch_<user>.txt 를 읽는다 (필수)
-  -v <ip>       vCenter 접속 IP (환경변수 VC_IP 도 가능)
+  -v <ip>       vCenter 접속 IP (환경변수 VC_IP 도 가능). 없으면 vcenter.txt 목록에서 번호로 고른다
+                (V2 폴더의 vcenter.txt, 없으면 vm-param-check 폴더의 것. Enter = 이 user 의 이전 실행 vCenter)
   -i <id>       vCenter 계정 (기본: ${VC_ID}). 비밀번호는 환경변수 VC_PASSWORD, 없으면 물어본다
   -s <dir>      SPEC_DIR 경로 (기본: ${HERE}/../SPEC_DIR)
   -w <vswitch>  포트그룹을 만들 가상 스위치 (기본: vswitch_setting 기본값 vSwitch0)
@@ -108,6 +110,43 @@ for bm in "${BMS[@]}"; do
   [ -n "${BM_PGS[$bm]:-}" ] || warn "$bm 는 vswitch 파일에 포트그룹이 없습니다 — 스펙은 수동 선택, 어댑터 없이 생성될 수 있습니다."
 done
 
+# ---------- vCenter: vcenter.txt 에서 번호로 선택 + user 별 이전 실행 기억 ----------
+# vcenter.txt 는 V2 폴더(/home/vcenter.txt)를 먼저 보고, 없으면 vm-param-check 폴더의 것을 쓴다(한 줄에 하나, # 주석).
+VC_LIST_FILE=""
+for f in "$HERE/../vcenter.txt" "$CHECK_DIR/vcenter.txt"; do
+  [ -f "$f" ] && { VC_LIST_FILE="$(cd "$(dirname "$f")" && pwd)/vcenter.txt"; break; }
+done
+LAST_VC_FILE="$HERE/run_${USER_TAG}/last_vcenter"   # "<vCenter> <날짜 시각>" 한 줄
+LAST_VC=""; LAST_VC_AT=""
+[ -f "$LAST_VC_FILE" ] && read -r LAST_VC LAST_VC_AT < "$LAST_VC_FILE"
+[ -n "$LAST_VC" ] && say "[INFO] $USER_TAG 이전 실행 vCenter: $LAST_VC ($LAST_VC_AT)"
+
+# select_vcenter — VC_IP 를 채운다. Enter = 이전 실행 vCenter.
+select_vcenter() {
+  local -a vcs=(); local i ans mark
+  [ -n "$VC_LIST_FILE" ] && mapfile -t vcs < <(read_list "$VC_LIST_FILE" | awk '{print $1}')
+  while :; do
+    if [ "${#vcs[@]}" -gt 0 ]; then
+      printf '\n=== vCenter 선택 (%s) ===\n' "$VC_LIST_FILE" >&2
+      for i in "${!vcs[@]}"; do
+        mark=""; [ "${vcs[$i]}" = "$LAST_VC" ] && mark="   <- 이전 실행"
+        printf '  %d) %s%s\n' "$((i + 1))" "${vcs[$i]}" "$mark" >&2
+      done
+      printf '  0) 목록에 없음 — 직접 입력\n' >&2
+      prompt ans "번호${LAST_VC:+ (Enter = 이전 실행: $LAST_VC)}: "
+    else
+      prompt ans "vCenter 접속 IP${LAST_VC:+ (Enter = 이전 실행: $LAST_VC)}: "
+      [ -n "$ans" ] && { VC_IP="$ans"; return 0; }
+    fi
+    if [ -z "$ans" ]; then [ -n "$LAST_VC" ] && { VC_IP="$LAST_VC"; return 0; }; continue; fi
+    [[ "$ans" =~ ^[0-9]+$ ]] || continue
+    if [ "$ans" -eq 0 ]; then
+      prompt ans "vCenter 접속 IP: "; [ -n "$ans" ] && { VC_IP="$ans"; return 0; }; continue
+    fi
+    [ "$ans" -le "${#vcs[@]}" ] && { VC_IP="${vcs[$((ans - 1))]}"; return 0; }
+  done
+}
+
 # ---------- 스펙 조회 (vm-param-check -specExport) ----------
 declare -A EXPORT_TEXT=()   # 스펙 폴더 절대경로 -> 내보낸 값 전체
 LOOKUP_DIR=""; LOOKUP_ERR=""
@@ -130,17 +169,15 @@ folder_of_pg() { printf '%s' "$1" | sed -nE 's/^(.+)-[cC][aA][eE]-[0-9]{1,3}-[0-
 is_uint() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -gt 0 ]; }
 vm_name() { printf '%sev%02d' "${1%%.*}" "$2"; }
 
-# build_flags <스펙 폴더> — 스펙 값을 각 도구 옵션으로 바꿔 CREATE_ARGS/AFF_ARGS/LP_ARGS 에 담는다. 잘못된 값이면 FLAG_ERR 를 채우고 실패.
+# build_flags <스펙 폴더> [noaff] — 스펙 값을 각 도구 옵션으로 바꿔 CREATE_ARGS/AFF_ARGS/LP_ARGS 에 담는다. 잘못된 값이면 FLAG_ERR 를 채우고 실패.
+# affinity 는 ev 마다 파일이 있어야 한다(자동 계산은 삭제). 여러 ev 가 같은 파일을 가리켜도 된다.
+# noaff: vim 으로 새 스펙을 만드는 중(affinity 는 저장 뒤에 고름)이라 affinity 가 없어도 통과시킨다.
 CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); FLAG_ERR=""
 build_flags() {
-  local d="$1" g n nn cpu mem disk sh aff cps numa ht v
+  local d="$1" noaff="${2:-}" g n nn cpu mem disk sh aff cps numa v
   CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); FLAG_ERR=""
   g="$(exp_get "$d" groups)"; is_uint "$g" || { FLAG_ERR="스펙에서 ev 개수를 읽지 못했습니다"; return 1; }
   CREATE_ARGS+=("-vmCount=$g"); AFF_ARGS+=("-vm_cnt=$g")
-  ht="$(exp_get "$d" ht)"
-  if [ -n "$ht" ]; then
-    case "${ht,,}" in on) AFF_ARGS+=("-ht=ON") ;; off) AFF_ARGS+=("-ht=OFF") ;; *) FLAG_ERR="ht 는 on 또는 off 여야 합니다: $ht"; return 1 ;; esac
-  fi
   for n in $(seq 1 "$g"); do
     nn="$(printf '%02d' "$n")"
     cpu="$(exp_get "$d" "cpu-ev$nn")"; mem="$(exp_get "$d" "mem-ev$nn")"
@@ -156,6 +193,8 @@ build_flags() {
     if [ -n "$aff" ]; then
       [ -f "$aff" ] || { FLAG_ERR="affinity-ev$nn 파일이 없습니다: $aff"; return 1; }
       AFF_ARGS+=("-affinityFile$nn=$aff")
+    elif [ -z "$noaff" ]; then
+      FLAG_ERR="affinity-ev$nn 이 스펙에 없습니다 (자동 계산은 삭제됨 — 스펙에 affinity-ev$nn=<파일> 을 적어주세요. 여러 ev 가 같은 파일을 써도 됩니다)"; return 1
     fi
 
     # 스펙의 cores = 소켓당 코어 수, numa = NUMA 노드당 vCPU 수. lpage 는 총 코어/소켓 수/NUMA 노드 수를 받는다.
@@ -194,10 +233,10 @@ write_spec_template() {
     echo "# ev01 은 필수이고, ev02~ev10 은 값을 하나라도 적으면 그 ev 를 만든다."
     echo "#   - 값을 적은 ev 는 cpu/mem/disk/shares 를 모두 적어야 한다"
     echo "#   - ev 번호는 ev01 부터 빠짐없이 이어져야 한다 (ev02 를 비우고 ev03 을 적으면 오류)"
-    echo "# affinity 파일은 여기서 적지 않는다 — 저장한 뒤 ev 별로 (자동 / 기존 파일 / vim 입력) 중에서 고른다."
+    echo "# affinity 파일은 여기서 적지 않는다 — 저장한 뒤 ev 별로 (직전 ev 와 같은 파일 / 기존 파일 / vim 입력) 중에서 고른다."
     echo
     echo 'folder=""        # [필수] 새로 만들 스펙 폴더 이름. 예: TST-CAE001-SAMP48c-QRST (SPEC_DIR 아래 이 이름으로 저장됨)'
-    echo 'ht=""            # [필수] 하이퍼스레딩 on 또는 off (affinity 자동 계산에 사용)'
+    echo 'ht=""            # [필수] 하이퍼스레딩 on 또는 off (vm-param-check 가 이 스펙으로 체크할 때 사용)'
     for n in $(seq 1 10); do
       echo
       if [ "$n" -eq 1 ]; then echo "# --- ev01 (필수) ---"; else echo "# --- ev$(printf '%02d' "$n") (선택) ---"; fi
@@ -262,7 +301,7 @@ create_spec_via_vim() {
           done; done
         } > "$spec_file"
         if ! spec_lookup "$folder"; then err="$LOOKUP_ERR"
-        elif ! build_flags "$LOOKUP_DIR"; then err="$FLAG_ERR"; fi
+        elif ! build_flags "$LOOKUP_DIR" noaff; then err="$FLAG_ERR"; fi
         [ -n "$err" ] && rm -rf "$dir"
       else
         err="$(printf '%s' "$err" | sed 's/^[0-9/: ]\{19,\} //')"
@@ -276,33 +315,41 @@ create_spec_via_vim() {
   done
   rm -f "$tmp"
 
-  # ev 별 affinity: 자동(-ht 로 1:1) / 기존 파일 / vim 직접 입력
+  # ev 별 affinity: 직전 ev 와 같은 파일 / 기존 파일 / vim 직접 입력 (자동 계산은 삭제 — ev 마다 반드시 고른다)
   g="$(exp_get "$LOOKUP_DIR" groups)"; dir="$LOOKUP_DIR"; spec_file="$dir/$(basename "$dir")_spec.txt"
+  AFF_REL=""
   for n in $(seq 1 "$g"); do
     nn="$(printf '%02d' "$n")"; cpu="$(exp_get "$dir" "cpu-ev$nn")"
-    pick_affinity "$dir" "$nn" "$cpu" && echo "affinity-ev$nn=affinity_ev$nn.txt" >> "$spec_file"
+    pick_affinity "$dir" "$nn" "$cpu"
+    echo "affinity-ev$nn=$AFF_REL" >> "$spec_file"
   done
   spec_lookup "$(basename "$dir")" || { warn "저장한 스펙을 다시 읽지 못했습니다: $LOOKUP_ERR"; return 1; }
   NEW_SPEC_DIR="$LOOKUP_DIR"
   say "[INFO] 새 스펙 저장 완료: $NEW_SPEC_DIR"
 }
 
-# pick_affinity <스펙폴더> <NN> <vCPU 수> — 성공(파일을 만들었음)이면 0, 자동(파일 없음)이면 1.
+# pick_affinity <스펙폴더> <NN> <vCPU 수> — ev 의 affinity 파일을 정해 AFF_REL(스펙 폴더 기준 파일 이름)에 담는다.
+# 들어올 때 AFF_REL 은 직전 ev 의 파일이다(1번 "같은 파일 사용"). 자동 계산은 삭제했으므로 반드시 하나를 고른다.
 pick_affinity() {
-  local dir="$1" nn="$2" cpu="$3" ans i f tmp err k line val out="$1/affinity_ev$2.txt"
+  local dir="$1" nn="$2" cpu="$3" ans i f tmp err k line val out_tmp out="$1/affinity_ev$2.txt" prev="$AFF_REL"
   local -a found
   while :; do
-    printf '\n[ev%s] affinity 지정 방법 (vCPU %s개)\n  1) 자동 — -ht 기준으로 1:1 계산 (파일 없음)\n  2) SPEC_DIR 의 기존 affinity 파일 선택\n  3) vim 으로 직접 입력\n' "$nn" "$cpu" >&2
-    prompt ans "선택 [1]: "; ans="${ans:-1}"
+    printf '\n[ev%s] affinity 지정 방법 (vCPU %s개)\n' "$nn" "$cpu" >&2
+    [ -n "$prev" ] && printf '  1) 직전 ev 와 같은 파일 사용: %s\n' "$prev" >&2
+    printf '  2) SPEC_DIR 의 기존 affinity 파일 선택\n  3) vim 으로 직접 입력\n' >&2
+    if [ -n "$prev" ]; then prompt ans "선택 [1]: "; ans="${ans:-1}"; else prompt ans "선택 (2/3): "; fi
     case "$ans" in
-      1) return 1 ;;
+      1) [ -n "$prev" ] || continue; AFF_REL="$prev"; return 0 ;;
       2)
         mapfile -t found < <(find "$SPEC_DIR" -type f -name 'affinity*.txt' | sort)
         if [ "${#found[@]}" -eq 0 ]; then warn "SPEC_DIR 에 affinity*.txt 가 없습니다."; continue; fi
         for i in "${!found[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${found[$i]#$SPEC_DIR/}" >&2; done
         prompt ans "번호 (0=뒤로): "
         [[ "$ans" =~ ^[0-9]+$ ]] && [ "$ans" -ge 1 ] && [ "$ans" -le "${#found[@]}" ] || continue
-        cp "${found[$((ans - 1))]}" "$out" && return 0 ;;
+        f="${found[$((ans - 1))]}"
+        # 이 스펙 폴더 안의 파일이면 그대로 가리키고(여러 ev 가 같은 파일), 다른 폴더 것이면 복사해서 폴더를 자기완결로 둔다
+        if [ "$(dirname "$f")" = "$dir" ]; then AFF_REL="$(basename "$f")"; return 0; fi
+        cp "$f" "$out" && { AFF_REL="affinity_ev$nn.txt"; return 0; } ;;
       3)
         tmp="$(mktemp)"
         {
@@ -319,7 +366,7 @@ pick_affinity() {
             [[ "$val" =~ ^[0-9]+(,[0-9]+)*$ ]] || { err="sched.vcpu$k.affinity 값 형식 오류(숫자와 쉼표만): '$val'"; break; }
             out_tmp+="sched.vcpu$k.affinity=$val"$'\n'
           done
-          if [ -z "$err" ]; then printf '%s' "$out_tmp" > "$out"; rm -f "$tmp"; return 0; fi
+          if [ -z "$err" ]; then printf '%s' "$out_tmp" > "$out"; rm -f "$tmp"; AFF_REL="affinity_ev$nn.txt"; return 0; fi
           printf '\n[오류] %s\n' "$err" >&2
           ask_yn "다시 편집할까요? (n 이면 방법 선택으로 돌아감)" || break
           put_error "$tmp" "$err"
@@ -349,7 +396,10 @@ auto_assign_specs() {
       for d in "${cands[@]}"; do [ "$d" = "$LOOKUP_DIR" ] && continue 2; done
       cands+=("$LOOKUP_DIR")
     done
-    [ "${#cands[@]}" -eq 1 ] && SPEC_OF[$bm]="${cands[0]}"
+    [ "${#cands[@]}" -eq 1 ] || continue
+    # VM 생성에 못 쓰는 스펙(예: affinity 파일 없음)은 자동 할당하지 않고 이유를 알린다
+    if build_flags "${cands[0]}"; then SPEC_OF[$bm]="${cands[0]}"
+    else warn "$bm: 자동 매칭된 스펙 $(basename "${cands[0]}") 을(를) 쓸 수 없습니다 — $FLAG_ERR"; fi
   done
 }
 
@@ -555,6 +605,9 @@ for bm in "${BMS[@]}"; do
   for pg in ${BM_PGS[$bm]:-}; do echo "$bm $pg ${PG_VLAN["$bm|$pg"]}" >> "$RUN_DIR/vswitch.txt"; done
 done
 
+# vCenter 는 실행 계획에 보이도록 계획 출력 전에 고른다(-n 은 vCenter 에 접속하지 않으므로 묻지 않음)
+[ "$DRY_RUN" -eq 1 ] || [ -n "$VC_IP" ] || select_vcenter
+
 printf '\n=== 실행 계획 (실행 폴더: %s) ===\n' "$RUN_DIR"
 say "vCenter        : ${VC_IP:-(미지정)} / 계정 $VC_ID"
 say "포트그룹 생성   : $(wc -l < "$RUN_DIR/vswitch.txt")건 (vswitch_setting${TARGET_VSWITCH:+, 스위치 $TARGET_VSWITCH})"
@@ -574,16 +627,16 @@ say "어댑터 매핑     : $RUN_DIR/hostgroup.txt ($(wc -l < "$RUN_DIR/hostgrou
 
 if [ "$DRY_RUN" -eq 1 ]; then say; say "[INFO] -n 지정 — vCenter 를 변경하지 않고 여기서 종료합니다."; exit 0; fi
 
-[ -n "$VC_IP" ] || prompt VC_IP "vCenter 접속 IP: "
 if [ -z "${VC_PASSWORD:-}" ]; then
   printf '%s 비밀번호: ' "$VC_ID" >&2; IFS= read -r -s VC_PASSWORD || die "입력이 끝났습니다."; echo >&2
 fi
 export VC_PASSWORD
 printf '\n'
 ask_yn "실제 vCenter($VC_IP)에 포트그룹/VM 을 생성·변경합니다. 진행할까요?" || { say "취소했습니다. vCenter 는 변경하지 않았습니다."; exit 0; }
+printf '%s %s\n' "$VC_IP" "$(date '+%F %T')" > "$LAST_VC_FILE"   # 다음 실행에서 이전 실행 vCenter 로 보여준다
 
 # ---------- 4) 실행 ----------
-run() { say; say "\$ $*"; "$@" || die "실패: $1 (종료코드 $?)"; }
+run() { say; say "\$ $*"; "$@" || die "실패: $1 (종료코드 $?) — 원인을 고친 뒤 다시 실행하면 이미 만든 포트그룹/VM 은 건너뜁니다."; }
 cd "$RUN_DIR" || die "실행 폴더로 이동하지 못했습니다: $RUN_DIR"
 CONC_ARG=(); [ -n "$CONC" ] && CONC_ARG=("-concurrency=$CONC")
 VSW_ARG=(); [ -n "$TARGET_VSWITCH" ] && VSW_ARG=("-targetVSwitch=$TARGET_VSWITCH")

@@ -360,18 +360,26 @@ func main() {
 		allHosts = append(allHosts, inv.hosts...)
 	}
 
-	// worklist의 항목이 FQDN이든 짧은 이름이든 조회되도록 둘 다 키로 등록한다.
-	// 같은 이름의 호스트가 서로 다른 데이터센터에 있으면 어느 쪽인지 정할 수 없으므로
-	// 그 이름은 따로 표시해 두고 사전조사 단계에서 그 호스트만 건너뛴다.
-	hostByName := make(map[string]mo.HostSystem, len(allHosts)*2)
-	ambiguousHost := make(map[string]bool)
+	// worklist의 항목과 vCenter 등록 이름이 각각 FQDN이든 짧은 이름이든 조회되도록 한다
+	// (lookupHost: 정확한 이름 → 없으면 짧은 이름끼리 비교).
+	// 같은 이름의 호스트가 여러 개면(예: 서로 다른 데이터센터) 어느 쪽인지 정할 수 없으므로
+	// 사전조사 단계에서 그 호스트만 건너뛴다.
+	hostByName := make(map[string][]mo.HostSystem, len(allHosts))
+	hostByShort := make(map[string][]mo.HostSystem, len(allHosts))
 	for _, h := range allHosts {
-		for _, key := range []string{h.Name, strings.Split(h.Name, ".")[0]} {
-			if prev, dup := hostByName[key]; dup && prev.Self != h.Self {
-				ambiguousHost[key] = true
-			}
-			hostByName[key] = h
+		hostByName[h.Name] = append(hostByName[h.Name], h)
+		short := shortName(h.Name)
+		hostByShort[short] = append(hostByShort[short], h)
+	}
+	lookupHost := func(bm string) (mo.HostSystem, int) {
+		cands := hostByName[bm]
+		if len(cands) == 0 {
+			cands = hostByShort[shortName(bm)]
 		}
+		if len(cands) == 1 {
+			return cands[0], 1
+		}
+		return mo.HostSystem{}, len(cands)
 	}
 
 	pc := property.DefaultCollector(client.Client)
@@ -457,6 +465,7 @@ func main() {
 	// (기존처럼 Logs에 모았다가 wgPrep.Wait() 이후 한꺼번에 출력하지 않음)
 	total := len(serverList)
 	var doneCount int32
+	var prepFailCount int32 // 호스트를 못 찾음/데이터스토어 없음 등으로 건너뛴 호스트 수 (끝에서 종료코드 1)
 	progressLogger := log.New(os.Stdout, "", 0)
 
 	for idx, bmHost := range serverList {
@@ -474,13 +483,22 @@ func main() {
 			p := hostPrep{Index: idx, BMHost: bmHost}
 			p.BaseName = strings.Split(bmHost, ".")[0]
 
-			if ambiguousHost[bmHost] {
-				progressLogger.Printf("[오류] [%s] 같은 이름의 호스트가 여러 데이터센터에 있어 어느 쪽인지 정할 수 없습니다 — 건너뜁니다 (FQDN으로 적거나 -datacenter로 지정하세요)", bmHost)
+			host, n := lookupHost(bmHost)
+			if n > 1 {
+				progressLogger.Printf("[오류] [%s] 같은 이름의 호스트가 %d대 있어 어느 쪽인지 정할 수 없습니다 — 건너뜁니다 (vCenter에 보이는 이름 그대로 적거나 -datacenter로 지정하세요)", bmHost, n)
+				atomic.AddInt32(&prepFailCount, 1)
 				preps[idx] = p
 				return
 			}
-			host, found := hostByName[bmHost]
-			if !found || len(host.Datastore) == 0 {
+			if n == 0 {
+				progressLogger.Printf("[오류] [%s] vCenter에서 호스트를 찾을 수 없습니다 — 건너뜁니다", bmHost)
+				atomic.AddInt32(&prepFailCount, 1)
+				preps[idx] = p
+				return
+			}
+			if len(host.Datastore) == 0 {
+				progressLogger.Printf("[오류] [%s] 호스트에 데이터스토어가 없습니다 — 건너뜁니다", bmHost)
+				atomic.AddInt32(&prepFailCount, 1)
 				preps[idx] = p
 				return
 			}
@@ -502,6 +520,8 @@ func main() {
 				}
 			}
 			if maxFreeSpace == -1 {
+				progressLogger.Printf("[오류] [%s] 데이터스토어 정보를 읽지 못했습니다 — 건너뜁니다", bmHost)
+				atomic.AddInt32(&prepFailCount, 1)
 				preps[idx] = p
 				return
 			}
@@ -838,4 +858,17 @@ func main() {
 	} else {
 		fmt.Println("[INFO] 새로 생성할 VM이 없거나 이미 모두 생성되어 있습니다.")
 	}
+
+	// 이미 있는 VM을 건너뛴 것은 정상이다. 호스트를 건너뛰었거나 생성에 실패한 경우만 종료코드 1로 알린다.
+	prepFail, createFail := atomic.LoadInt32(&prepFailCount), atomic.LoadInt32(&createFailCount)
+	if prepFail > 0 || createFail > 0 {
+		fmt.Printf("[오류] 건너뛴 호스트 %d대, 생성 실패 VM %d대 — 위 [오류] 줄을 확인하세요.\n", prepFail, createFail)
+		client.Logout(ctx) // os.Exit 는 defer 를 건너뛴다
+		os.Exit(1)
+	}
+}
+
+// shortName은 호스트 이름의 첫 '.' 앞부분이다(FQDN이 아니면 그대로).
+func shortName(name string) string {
+	return strings.Split(name, ".")[0]
 }

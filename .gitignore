@@ -21,3 +21,6 @@ SPEC_DIR/*
 !SPEC_DIR/README.md
 !SPEC_DIR/*.example
 !SPEC_DIR/TST-CAE001-SAMP48c-QRST/
+
+# vm_setup.sh 가 번호로 고르는 vCenter 목록 (인프라 정보 — 예시만 올린다)
+/vcenter.txt

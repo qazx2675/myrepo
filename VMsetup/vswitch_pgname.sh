@@ -4,6 +4,7 @@
 # 각 줄이 이미 "BM  <폴더명>-cae-a-b-c-d  VLAN" 형식(vm_setup.sh 가 알아보는 형식)이면 그대로 둔다.
 # 그게 아니면 2번째 컬럼을 IP(a.b.c.d, 항상 /24 가정)로 보고 폴더명을 입력받아
 # "<폴더명>-cae-<a>-<b>-<c>-0" 으로 바꾼다(마지막 옥텟은 /24 이므로 항상 0).
+# 폴더명을 물을 때 Enter 만 누르면 직전에 입력한 폴더명을 그대로 쓴다.
 # IP도 아니면 판단할 수 없으므로 그대로 두고 경고만 낸다.
 #
 # 인라인 주석이 있는 줄을 변환하면 그 주석은 사라진다(변환된 줄에는 주석을 다시 붙이지 않는다).
@@ -24,6 +25,7 @@ is_octet() { [[ "$1" =~ ^[0-9]{1,3}$ ]] && [ "$1" -le 255 ]; }
 TMP="$(mktemp)"
 lineno=0
 changed=0
+last_folder=""   # 직전에 입력한 폴더명 (다음 줄에서 Enter 면 그대로 쓴다)
 # 파일을 fd 3 으로 읽는다 — stdin(fd 0)을 그대로 두면 대화형 폴더명 입력(read -p)과
 # 입력 파일 읽기가 서로 stdin 을 두고 충돌한다(둘 다 fd 0 을 읽으면 파일 내용이 폴더명으로 잘못 들어간다).
 exec 3< "$FILE"
@@ -56,12 +58,14 @@ while IFS= read -r raw <&3 || [ -n "$raw" ]; do
       printf '%s\n' "$raw" >> "$TMP"
       continue
     fi
-    read -r -p "${lineno}번째 줄 ($bm $pg $vlan) — 폴더명을 입력하세요: " folder
+    read -r -p "${lineno}번째 줄 ($bm $pg $vlan) — 폴더명을 입력하세요${last_folder:+ (Enter = $last_folder)}: " folder
+    folder="${folder:-$last_folder}"
     if [ -z "$folder" ]; then
       echo "[오류] 폴더명이 비어 있어 ${lineno}번째 줄을 그대로 둡니다: $raw" >&2
       printf '%s\n' "$raw" >> "$TMP"
       continue
     fi
+    last_folder="$folder"
     newpg="${folder}-cae-${o1}-${o2}-${o3}-0"
     printf '%s  %s  %s\n' "$bm" "$newpg" "$vlan" >> "$TMP"
     changed=$((changed + 1))

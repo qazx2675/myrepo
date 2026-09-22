@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/object"
@@ -124,11 +125,31 @@ func main() {
 	}
 
 	hostByName := make(map[string]*mo.HostSystem, len(allHosts))
+	hostByShort := make(map[string][]*mo.HostSystem, len(allHosts))
 	for i := range allHosts {
 		if _, dup := hostByName[allHosts[i].Name]; !dup {
 			hostByName[allHosts[i].Name] = &allHosts[i] // 예전 순차 탐색과 같이 먼저 나온 호스트를 쓴다
 		}
+		short := strings.Split(allHosts[i].Name, ".")[0]
+		hostByShort[short] = append(hostByShort[short], &allHosts[i])
 	}
+	// 파일의 이름과 vCenter 등록 이름이 각각 FQDN이든 짧은 이름이든 찾는다:
+	// 정확한 이름이 있으면 그것, 없으면 짧은 이름(첫 '.' 앞)끼리 비교해서 하나뿐일 때만 쓴다.
+	lookupHost := func(bm string) (*mo.HostSystem, string) {
+		if h := hostByName[bm]; h != nil {
+			return h, ""
+		}
+		cands := hostByShort[strings.Split(bm, ".")[0]]
+		switch len(cands) {
+		case 0:
+			return nil, fmt.Sprintf("[에러] 호스트 '%s' 를 vCenter 전체 인벤토리에서 찾을 수 없습니다.\n", bm)
+		case 1:
+			return cands[0], ""
+		default:
+			return nil, fmt.Sprintf("[에러] 호스트 '%s' 와 짧은 이름이 같은 호스트가 %d대 있어 어느 쪽인지 정할 수 없습니다 (vCenter에 보이는 이름 그대로 적어주세요).\n", bm, len(cands))
+		}
+	}
+	var failCount int32 // 호스트 못 찾음/포트그룹 생성 실패 (이미 있는 포트그룹은 정상)
 
 	// 호스트끼리는 서로 독립이라 워커풀로 동시에 처리한다(예전에는 호스트를 하나씩 순차 처리).
 	// 한 호스트의 포트그룹 여러 개는 같은 HostNetworkSystem을 건드리므로 호스트 안에서는 순서대로 만든다.
@@ -149,15 +170,17 @@ func main() {
 				printMu.Unlock()
 			}()
 
-			targetHs := hostByName[bmHost]
+			targetHs, lookupErr := lookupHost(bmHost)
 			if targetHs == nil {
-				fmt.Fprintf(&out, "[에러] 호스트 '%s' 를 vCenter 전체 인벤토리에서 찾을 수 없습니다.\n", bmHost)
+				fmt.Fprint(&out, lookupErr)
+				atomic.AddInt32(&failCount, 1)
 				return
 			}
 
 			// 구조체 값에 대한 nil 검사 제거, 하위 포인터 속성만 검사
 			if targetHs.ConfigManager.NetworkSystem == nil {
 				fmt.Fprintf(&out, "[에러] 호스트 '%s' 네트워크 시스템(vSwitch)을 구성할 수 없습니다.\n", bmHost)
+				atomic.AddInt32(&failCount, 1)
 				return
 			}
 
@@ -174,10 +197,12 @@ func main() {
 
 					err := netSys.AddPortGroup(ctx, spec)
 					if err != nil {
-						if strings.Contains(err.Error(), "AlreadyExists") {
+						// 실제 ESXi 는 AlreadyExists, vcsim 은 DuplicateName 으로 돌려준다 — 둘 다 "이미 있음"(정상)
+						if strings.Contains(err.Error(), "AlreadyExists") || strings.Contains(err.Error(), "DuplicateName") {
 							fmt.Fprintf(&out, "  -> [%s] 스킵: 포트그룹(%s) 이미 존재\n", bmHost, cfg.PGName)
 						} else {
 							fmt.Fprintf(&out, "  -> [%s] 실패: 포트그룹(%s) 생성 에러: %v\n", bmHost, cfg.PGName, err)
+							atomic.AddInt32(&failCount, 1)
 						}
 					} else {
 						fmt.Fprintf(&out, "  -> [%s] 성공: 포트그룹(%s) / VLAN(%d) 생성 완료\n", bmHost, cfg.PGName, cfg.VlanId)
@@ -189,5 +214,12 @@ func main() {
 	wg.Wait()
 
 	fmt.Println("\n[INFO] 포트 그룹 생성 작업 완료")
+	if n := atomic.LoadInt32(&failCount); n > 0 {
+		// defer 가 os.Exit 로 건너뛰어지므로 세션 종료를 여기서 직접 한다.
+		v.Destroy(ctx)
+		client.Logout(ctx)
+		fmt.Printf("[에러] 실패 %d건 — 위 [에러]/실패 줄을 확인하세요. (이미 있는 포트그룹은 정상으로 봅니다)\n", n)
+		os.Exit(1)
+	}
 	fmt.Println("vCenter 세션을 안전하게 종료했습니다.")
 }

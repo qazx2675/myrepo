@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-23 — FQDN/짧은 이름 교차 매칭, 실패 시 종료코드, affinity 자동 계산 삭제, vCenter 번호 선택
+
+- **호스트 이름 매칭(`vm_create`, `vswitch_setting`)**: 파일의 BM 이름과 vCenter 등록 이름이 각각 FQDN이든 짧은 이름이든 찾는다 — 정확히 같은 이름이 있으면 그것, 없으면 첫 `.` 앞부분끼리 비교해서 **하나뿐일 때만** 쓴다(여러 대면 오류). 예전에는 `vm_create`만 "vCenter가 FQDN이고 파일이 짧은 이름"을 찾았고, `vswitch_setting`은 정확히 같은 이름만 찾아서 짧은 이름으로 적으면 **포트그룹만 안 만들어지고 VM은 만들어지는** 어긋남이 있었다.
+- **실패하면 종료코드 1 (동작 변경)**:
+  - `vm_create`: 호스트를 못 찾음/같은 이름 여러 대/데이터스토어 없음을 `[오류]`로 출력하고(예전에는 **메시지 없이** 건너뜀), 이런 호스트나 VM 생성 실패가 있으면 끝에 요약 후 종료코드 1.
+  - `vswitch_setting`: 호스트를 못 찾음/포트그룹 생성 실패가 있으면 종료코드 1.
+  - **이미 있는 VM/포트그룹은 정상**(종료코드 0). vcsim은 이미 있는 포트그룹을 `DuplicateName`으로 돌려줘서 `AlreadyExists`와 함께 "이미 존재"로 처리한다.
+  - 그래서 `vm_setup.sh`가 실패한 단계에서 멈춘다(예전에는 계속 진행해 `[완료]`까지 출력). 원인을 고치고 다시 실행하면 이미 만든 것은 건너뛴다.
+- **affinity 자동 계산 삭제 (동작 변경)**: `affinity_setting`은 `-vm_cnt` 범위의 ev마다 `-affinityFileNN`이 **필수**다. 예전에는 파일이 없으면 `-ht`로 CPU 0번부터 1:1 계산해서 **ev01~ev10이 같은 물리 CPU에 겹쳐 고정**됐다. 파일 내용 `AUTO`도 오류. `-ht`는 예전 명령줄이 깨지지 않도록 받아서 안내 후 무시한다.
+  - **여러 ev에 같은 파일 지정 가능**(`-affinityFile01=affinity_ev01.txt -affinityFile02=affinity_ev01.txt ...`, 스펙에서는 `affinity-ev02=affinity_ev01.txt`).
+  - `vm_setup.sh`: 스펙에 `affinity-evNN`이 없는 ev가 있으면 그 스펙은 자동 할당하지 않고 이유를 알린다. vim 스펙 입력 후 ev별 affinity는 **1) 직전 ev와 같은 파일(ev02부터, Enter) / 2) 기존 파일 / 3) vim 입력**. 2번에서 같은 스펙 폴더의 파일을 고르면 복사하지 않고 그대로 가리킨다.
+  - 예시 스펙(`SPEC_DIR/TST-CAE001-SAMP48c-QRST`)에 `affinity-ev02`와 `affinity_ev02.txt`를 추가했다.
+  - vm-param-check의 체크(ev01 affinity 파일이 없을 때 `-ht` 기반 기대값 계산)는 체크 기능이라 그대로 두었다.
+- **`vm_setup.sh` vCenter 선택**: `-v`가 없으면 `vcenter.txt`(V2 폴더 → 없으면 vm-param-check 폴더) 목록을 번호로 보여주고 고른다(`0` 직접 입력). user별 마지막 실행 vCenter를 `run_<user>/last_vcenter`에 기억해서 시작할 때 출력하고 목록에 `<- 이전 실행`으로 표시, Enter = 이전 실행. `-n`은 vCenter를 묻지 않는다. `vcenter.txt.example` 추가, V2 루트 `vcenter.txt`는 git 제외.
+- **`vswitch_pgname.sh`**: 폴더명을 물을 때 Enter = 직전에 입력한 폴더명.
+- **검증(록키, vcsim)**: `검증/scenarios.sh` 32건 PASS — 회귀 비교(수정 전/후 바이너리, ev01~ev03에 **같은 affinity 파일** 지정)에서 VM 12대 덤프·출력 차이 0건. 추가 S5: 파일 없는 ev/`AUTO` 파일 오류 종료, `bm1`→`bm1.example.com`·`DC0_H0.example.com`→`DC0_H0` 교차 매칭(vswitch/vm_create), 없는 호스트·짧은 이름 중복(`dup.a.com`/`dup.b.com`) 오류 + 종료코드 1, 재실행(이미 있음) 종료코드 0. `검증/vmsetup_test.sh` 34건 PASS — 추가: 재실행 정상 완료, 짧은 이름 파일 + FQDN 호스트 전 과정, vCenter 번호 선택/기억/Enter/`-n`/대체 경로, affinity 2번(다른 폴더 복사·같은 폴더 참조), affinity 없는 스펙 경고, 없는 호스트에서 중단. 실환경(home-test)에서는 이번 변경을 돌리지 않았다.
+
 ## 2026-09-22 — `vswitch_pgname.sh` 신설 (IP → `-cae-a-b-c-0` 포트그룹명 변환)
 
 - **`VMsetup/vswitch_pgname.sh`(신규)**: `vswitch_${user}.txt`의 2번째 컬럼이 이미 `<폴더명>-cae-a-b-c-d` 형식이면 그대로 두고, IP(`a.b.c.d`)면 폴더명을 입력받아 `<폴더명>-cae-<a>-<b>-<c>-0`으로 바꾼다(**항상 `/24` 가정, 마지막 옥텟은 0 고정**). 둘 다 아니면 경고만 내고 그대로 둔다. 파일을 그 자리에서 바꾸고 원본은 `<파일>.bak`로 남긴다. 인라인 주석이 있던 줄을 변환하면 그 주석은 사라진다(문서화된 동작).

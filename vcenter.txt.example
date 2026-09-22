@@ -1,0 +1,5 @@
+# vcenter.txt — vCenter 주소 목록 (한 줄에 하나, '#' 주석)
+# VMsetup/vm_setup.sh 가 -v 없이 실행되면 이 목록을 번호로 보여준다(Enter = 그 user 의 이전 실행 vCenter).
+# V2 폴더(/home/vcenter.txt)에 두고, 없으면 vm-param-check 폴더의 vcenter.txt 를 쓴다.
+192.168.0.50
+192.168.0.51
