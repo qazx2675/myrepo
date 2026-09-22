@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -51,10 +53,19 @@ func stripANSI(s string) string {
 	return ansiEscRegex.ReplaceAllString(s, "")
 }
 
-var colorEnabled bool
+// ★ 색상은 해당 출력이 터미널일 때만 쓴다. "> res", "2> err"처럼 파일로 저장하면 색상 코드가
+// 들어가지 않는다(colorEnabled=표준에러용, colorOutEnabled=표준출력용).
+var colorEnabled, colorOutEnabled bool
 
 func colorize(color, s string) string {
 	if !colorEnabled {
+		return s
+	}
+	return color + s + colorReset
+}
+
+func colorizeOut(color, s string) string {
+	if !colorOutEnabled {
 		return s
 	}
 	return color + s + colorReset
@@ -752,7 +763,7 @@ func printPdshStyle(host string, output string, err error) {
 		return
 	}
 	for _, line := range strings.Split(text, "\n") {
-		emit(os.Stdout, colorize(colorGreen, fmt.Sprintf("%s: %s", host, line))+"\n")
+		emit(os.Stdout, colorizeOut(colorGreen, fmt.Sprintf("%s: %s", host, line))+"\n")
 	}
 }
 
@@ -782,9 +793,9 @@ func printBunched(hosts []string, outputs map[string]string) {
 
 	divider := strings.Repeat("-", 20)
 	for _, g := range groups {
-		fmt.Println(colorize(colorCyanB, divider))
-		fmt.Println(colorize(colorCyanB, strings.Join(compressHosts(g.hosts), ",")))
-		fmt.Println(colorize(colorCyanB, divider))
+		fmt.Println(colorizeOut(colorCyanB, divider))
+		fmt.Println(colorizeOut(colorCyanB, strings.Join(compressHosts(g.hosts), ",")))
+		fmt.Println(colorizeOut(colorCyanB, divider))
 		fmt.Println(g.text)
 	}
 }
@@ -805,28 +816,96 @@ func printUnreachableGroup(failedHosts, refusedHosts []string) {
 	fmt.Fprintln(os.Stderr, colorize(colorRed, "접속불가 (Timeout/Refused)"))
 }
 
-// ★ [수정] ~/.profile 파일 내에 anaconda 문자열이 있는지 확인
-func isAnacondaRunning(client *ssh.Client) bool {
+// printCommandResult는 pdsh와 같은 방식으로 명령 결과를 나눠서 출력한다.
+//   - 원격 표준출력: 종료코드와 상관없이 항상 표준출력(> res 로 저장됨). -b면 그룹 묶음 대상.
+//   - 원격 표준에러: 표준에러(화면에만, 저장 안 됨). "No such file or directory",
+//     "command not found" 같은 메시지가 여기에 해당한다.
+//   - 종료코드가 0이 아니면 표준에러에 "ERROR: 종료코드 N" 한 줄을 추가로 알린다.
+func printCommandResult(host, stdout, stderr string, runErr error, bunchMode bool, bunchOutputs map[string]string, mu *sync.Mutex) {
+	if outText := renderResultLines(stdout, nil); outText != "" {
+		if bunchMode {
+			mu.Lock()
+			bunchOutputs[host] = outText
+			mu.Unlock()
+		} else {
+			for _, line := range strings.Split(outText, "\n") {
+				emit(os.Stdout, colorizeOut(colorGreen, fmt.Sprintf("%s: %s", host, line))+"\n")
+			}
+		}
+	}
+	if errText := renderResultLines(stderr, nil); errText != "" {
+		for _, line := range strings.Split(errText, "\n") {
+			emit(os.Stderr, colorize(colorRed, fmt.Sprintf("%s: %s", host, line))+"\n")
+		}
+	}
+	if runErr != nil {
+		msg := runErr.Error()
+		var exitErr *ssh.ExitError
+		if errors.As(runErr, &exitErr) {
+			msg = fmt.Sprintf("종료코드 %d", exitErr.ExitStatus())
+		}
+		emit(os.Stderr, colorize(colorRed, fmt.Sprintf("%s: ERROR: %s", host, msg))+"\n")
+	}
+}
+
+// ★ -pm 점검(anaconda 확인 + 특정 autofs 계정 경로 확인)은 세션 하나로 합쳐서 본 명령 전에 한 번만
+// 실행한다(예전엔 세션을 2개 더 열어서 호스트당 약 +48% 느렸음). 이 점검은 autofs가 멈추면 끝나지
+// 않을 수 있어서 점검에만 제한시간을 둔다 — 본 명령에는 제한시간이 없다(별도 세션).
+const pmCheckTimeout = 10 * time.Second
+
+// runPmCheck는 점검 결과를 돌려준다. 제한시간 안에 받은 줄까지만 반영하고, 못 받은 항목은
+// "해당 없음/미접근"으로 본다(예: autofs 경로 확인이 멈추면 svrautoOK=false).
+func runPmCheck(ctx context.Context, client *ssh.Client) (osInstall, svrautoOK bool) {
 	sess, err := client.NewSession()
 	if err != nil {
-		return false
+		return false, false
 	}
 	defer sess.Close()
-
-	// ~/.profile 에 anaconda 가 있으면 1, 없거나 파일이 없으면 0 출력
-	checkCmd := `sh -c 'if grep -q anaconda ~/.profile 2>/dev/null; then echo 1; else echo 0; fi'`
-	out, _ := sess.CombinedOutput(checkCmd)
-
-	outStr := strings.TrimSpace(string(out))
-	if outStr == "" {
-		return false
+	out, err := sess.StdoutPipe()
+	if err != nil {
+		return false, false
+	}
+	// 줄마다 고유한 표시를 붙여서 MOTD 등 다른 출력과 섞여도 정확히 구분한다.
+	checkCmd := `sh -c 'if grep -q anaconda ~/.profile 2>/dev/null; then echo GOSSH_PM_OS=1; else echo GOSSH_PM_OS=0; fi; if [ -d /user/svrauto ]; then echo GOSSH_PM_SVR=1; else echo GOSSH_PM_SVR=0; fi'`
+	if err := sess.Start(checkCmd); err != nil {
+		return false, false
 	}
 
-	// SSH 로그인 배너(MOTD)를 무시하고 무조건 마지막 줄의 '1' 또는 '0'만 추출
-	lines := strings.Split(outStr, "\n")
-	lastLine := strings.TrimSpace(lines[len(lines)-1])
+	lines := make(chan string)
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		defer close(lines)
+		sc := bufio.NewScanner(out)
+		for sc.Scan() {
+			select {
+			case lines <- strings.TrimSpace(sc.Text()):
+			case <-done:
+				return
+			}
+		}
+	}()
 
-	return lastLine == "1"
+	timer := time.NewTimer(pmCheckTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case l, ok := <-lines:
+			if !ok {
+				return
+			}
+			switch l {
+			case "GOSSH_PM_OS=1":
+				osInstall = true
+			case "GOSSH_PM_SVR=1":
+				svrautoOK = true
+			}
+		case <-timer.C:
+			return // autofs 멈춤으로 판단 — 세션은 defer Close로 끊고 받은 결과까지만 사용
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func runSSHCommand(host string, command string, user string, authMethods []ssh.AuthMethod, port string, timeout time.Duration, pmMode bool, bunchMode bool, bunchOutputs map[string]string, wg *sync.WaitGroup, sem chan struct{}, dnsSem chan struct{}, successCount *int, failedHosts *[]string, refusedHosts *[]string, osInstallHosts *[]string, noSvrAutoHosts *[]string, mu *sync.Mutex, completed *int64) {
@@ -882,11 +961,16 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	conn, err := dialer.DialContext(ctl.ctx, "tcp", target)
 	if err == nil {
 		ctl.setConn(conn)
+		// ★ -t는 로그인(핸드셰이크+인증) 완료까지만 적용한다. TCP만 받고 SSH 응답이 없는 서버(멈춘
+		// sshd, 인증 지연 등)에서 무한 대기하던 문제 수정. 로그인에 성공하면 제한을 바로 해제하므로
+		// 그 뒤 실행하는 명령(드라이버 설치처럼 10분 이상 걸리는 작업 포함)에는 영향이 없다.
+		conn.SetDeadline(time.Now().Add(timeout))
 		c, chans, reqs, herr := ssh.NewClientConn(conn, target, config)
 		if herr != nil {
 			conn.Close()
 			err = herr
 		} else {
+			conn.SetDeadline(time.Time{})
 			client = ssh.NewClient(c, chans, reqs)
 		}
 	}
@@ -907,13 +991,22 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	}
 	defer client.Close()
 
-	// 2. ★ [수정] -pm 옵션이 있을 때만 ~/.profile 기반으로 OS 설치 중인지 검사
-	if pmMode && isAnacondaRunning(client) {
-		emit(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: OS 설치중 (~/.profile anaconda 감지)", host))+"\n")
-		mu.Lock()
-		*osInstallHosts = append(*osInstallHosts, host)
-		mu.Unlock()
-		return // 설치 중이면 명령 실행하지 않고 종료
+	// 2. ★ -pm: OS 설치 중 여부 + 특정 autofs 계정 경로 접근 여부를 세션 하나로 한 번에 점검
+	pmNoSvrAuto := false
+	if pmMode {
+		osInstall, svrautoOK := runPmCheck(ctl.ctx, client)
+		if ctl.wasCanceled() {
+			handleCanceled(host)
+			return
+		}
+		if osInstall {
+			emit(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: OS 설치중 (~/.profile anaconda 감지)", host))+"\n")
+			mu.Lock()
+			*osInstallHosts = append(*osInstallHosts, host)
+			mu.Unlock()
+			return // 설치 중이면 명령 실행하지 않고 종료
+		}
+		pmNoSvrAuto = !svrautoOK
 	}
 
 	// 3. 메인 명령어 실행용 세션 생성
@@ -931,71 +1024,24 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	}
 	defer session.Close()
 
-	output, err := session.CombinedOutput(command)
+	// ★ 원격 표준출력/표준에러를 따로 받는다(pdsh 방식). 종료코드가 0이 아니어도 표준출력은
+	// 결과로 저장되고, 표준에러(No such file or directory, command not found 등)는 화면에만 나간다.
+	var stdoutBuf, stderrBuf bytes.Buffer
+	session.Stdout = &stdoutBuf
+	session.Stderr = &stderrBuf
+	err = session.Run(command)
 	if err != nil && ctl.wasCanceled() {
 		handleCanceled(host)
 		return
 	}
-	// ★ 명령어 실행 에러(err != nil, 예: 오타로 인한 "command not found")는 -b 여부와
-	// 무관하게 항상 즉시 printPdshStyle로 보낸다 — 표준에러로 나가야 하므로 그룹 묶음
-	// 대상(성공한 결과만 묶는 bunchOutputs)에는 넣지 않는다.
-	if bunchMode && err == nil {
-		text := renderResultLines(string(output), err)
-		mu.Lock()
-		bunchOutputs[host] = text
-		mu.Unlock()
-	} else {
-		printPdshStyle(host, string(output), err)
-	}
+	printCommandResult(host, stdoutBuf.String(), stderrBuf.String(), err, bunchMode, bunchOutputs, mu)
 
 	mu.Lock()
 	*successCount++
-	mu.Unlock()
-
-	// ★ -pm 옵션: svrauto 디렉토리 마운트(존재) 여부 체크
-	if pmMode {
-		sess2, err := client.NewSession()
-		if err == nil {
-			checkPmCmd := `sh -c 'if [ -d /user/svrauto ]; then echo 1; else echo 0; fi'`
-			out2, _ := sess2.CombinedOutput(checkPmCmd)
-			sess2.Close()
-			if ctl.wasCanceled() {
-				pmCanceled(host, mu, successCount)
-				return
-			}
-
-			outStr2 := strings.TrimSpace(string(out2))
-			lines := strings.Split(outStr2, "\n")
-			lastLine := ""
-			if len(lines) > 0 {
-				lastLine = strings.TrimSpace(lines[len(lines)-1])
-			}
-
-			// 디렉토리가 없어서 0이 나오면 목록에 추가
-			if lastLine != "1" {
-				mu.Lock()
-				*noSvrAutoHosts = append(*noSvrAutoHosts, host)
-				mu.Unlock()
-			}
-		} else {
-			if ctl.wasCanceled() {
-				pmCanceled(host, mu, successCount)
-				return
-			}
-			mu.Lock()
-			*noSvrAutoHosts = append(*noSvrAutoHosts, host)
-			mu.Unlock()
-		}
+	if pmNoSvrAuto {
+		*noSvrAutoHosts = append(*noSvrAutoHosts, host)
 	}
-}
-
-// pmCanceled는 -pm 추가 점검 단계에서 사용자가 취소한 호스트를 취소 목록으로 돌린다.
-// 본 명령은 이미 성공으로 집계됐으므로 카운트가 이중으로 잡히지 않게 되돌린다.
-func pmCanceled(host string, mu *sync.Mutex, successCount *int) {
-	mu.Lock()
-	*successCount--
 	mu.Unlock()
-	handleCanceled(host)
 }
 
 // ★ autofs 안전장치: 명령어에 "/user/..." 로 시작하는 경로가 포함되어 있으면 true.
@@ -1006,6 +1052,9 @@ const autofsSafeConcurrency = 450
 // ★ DNS 조회 전용 동시성 제한. SSH 접속 동시성(-c, 최대 450)과 별개로 훨씬 낮게 잡아서,
 // 대량 호스트를 한꺼번에 처리할 때 리졸버/DNS 서버에 걸리는 순간 부하를 줄인다.
 const dnsLookupConcurrency = 50
+
+// 재검증 단계의 접속(로그인) 제한시간 상한.
+const retryConnectTimeout = 8 * time.Second
 
 // lookupHostWithRetry는 SSH 접속(ssh.Dial) 전에 이름 해석만 먼저 수행한다. 대량 동시 실행 시
 // 간헐적으로 DNS 조회가 실패/타임아웃되는 경우가 있어(리졸버 혼잡), 실제 접속 타임아웃(-t, 기본
@@ -1223,7 +1272,10 @@ func main() {
 	// ★ pdsh 스타일 "-w^file"/"-wfile" 붙여쓰기 지원을 위해 flag.Parse() 대신 전처리한 인자로 파싱
 	flag.CommandLine.Parse(preprocessArgs(os.Args[1:]))
 
-	colorEnabled = !*scriptMode
+	stdoutTTY = isCharDevice(os.Stdout)
+	stderrTTY = isCharDevice(os.Stderr)
+	colorEnabled = !*scriptMode && stderrTTY
+	colorOutEnabled = !*scriptMode && stdoutTTY
 
 	args := flag.Args()
 	if *hostFile == "" || len(args) == 0 {
@@ -1391,8 +1443,6 @@ func main() {
 	var progressWG sync.WaitGroup
 	progressStop := make(chan struct{})
 	total := int64(len(hosts))
-	stdoutTTY = isCharDevice(os.Stdout)
-	stderrTTY = isCharDevice(os.Stderr)
 
 	// ★ -m(행리스트보기)는 키 입력(Enter)을 받아야 하므로 입력/표준에러가 모두 터미널일 때만 켠다.
 	// -m은 사용자가 명시적으로 준 옵션이라 pdsh 이름이어도 동작한다.
@@ -1499,10 +1549,17 @@ func main() {
 				retryConcurrency = 50
 			}
 			retrySem := make(chan struct{}, retryConcurrency)
+			// ★ 재검증은 1차 실행의 혼잡이 풀린 뒤라 정상 호스트는 금방 접속된다. 접속(로그인) 제한시간을
+			// 최대 8초로 줄여서 응답 없는 호스트 때문에 늘어나는 시간을 줄인다(-t가 더 짧으면 -t 사용).
+			// 본 명령 실행 시간에는 제한이 없다.
+			retryTimeout := timeout
+			if retryTimeout > retryConnectTimeout {
+				retryTimeout = retryConnectTimeout
+			}
 			var retryWG sync.WaitGroup
 			for _, h := range retryHosts {
 				retryWG.Add(1)
-				go runSSHCommand(h, command, *user, authMethods, *port, timeout, *pmMode, bunchMode, bunchOutputs, &retryWG, retrySem, dnsSem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu, &completed)
+				go runSSHCommand(h, command, *user, authMethods, *port, retryTimeout, *pmMode, bunchMode, bunchOutputs, &retryWG, retrySem, dnsSem, &successCount, &failedHosts, &refusedHosts, &osInstallHosts, &noSvrAutoHosts, &mu, &completed)
 			}
 			retryWG.Wait()
 			if recovered := successCount - successBefore; recovered > 0 && !*scriptMode {
