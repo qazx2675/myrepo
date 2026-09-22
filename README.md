@@ -54,6 +54,23 @@ sudo cp gossh /usr/local/bin/
 sudo ln -sf /usr/local/bin/gossh /usr/local/bin/pdsh
 ```
 
+### 1.4 `update.sh`로 배포하기
+
+특정 서버(대상서버) 위에서 직접 실행해서, 그 서버 환경 기준으로 새로 빌드한 일반 빌드와 저장소에
+포함된 OS6용 사전 빌드 바이너리(`gossh_os6`)를 시스템 경로 여러 곳에 한 번에 배포하는 스크립트입니다.
+
+```bash
+# update.sh 상단의 TARGET_SERVER/DEST1/DEST2/DEST3 값을 먼저 채운 뒤 실행
+./update.sh
+```
+
+- `TARGET_SERVER`(대상서버)와 다른 서버에서 실행하면 즉시 거부됩니다(호스트명/IP로 확인).
+- `DEST1`(복사될위치1): OS6 사전 빌드 바이너리를 `gossh`라는 이름으로 복사.
+- `DEST2`(복사될위치2, 기본 `/usr/local/bin`): 이 서버 환경 기준 일반 빌드를 `gossh`라는 이름으로 복사.
+- `DEST3`(복사될위치3, 기본 `/usr/bin/`): 같은 일반 빌드를 `pdsh`라는 이름으로 복사.
+- 모두 강제 복사(기존 파일 삭제 후 새로 복사)라서, 이미 실행 중인 바이너리를 덮어써도 실행 중이던
+  프로세스에는 영향이 없습니다.
+
 ---
 
 ## 2. 기본 사용 방법
