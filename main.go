@@ -22,8 +22,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ★ pdsh 스타일의 [숫자-숫자] 패턴을 찾는 정규표현식
-var hostRangeRegex = regexp.MustCompile(`(.*?)\[(\d+)-(\d+)\](.*)`)
+// ★ pdsh/clush 스타일의 "[콤마+범위 목록]" 패턴을 찾는 정규표현식(괄호 안 내용은 그대로 캡처해서
+// expandHostLine에서 콤마로 나눠 각각 처리한다)
+var hostRangeRegex = regexp.MustCompile(`(.*?)\[([^\]]+)\](.*)`)
 
 // ★ /user/ 로 시작하는 경로(autofs 마운트 경로)가 명령어에 포함되어 있는지 확인
 var autofsUserPathRegex = regexp.MustCompile(`(^|[\s"'])/user/`)
@@ -37,6 +38,17 @@ const (
 	colorYellow = "\033[33m"
 	colorCyanB  = "\033[1;36m"
 )
+
+// ★ 원격 명령 출력에 섞여 있을 수 있는 ANSI/OSC 이스케이프 시퀀스를 제거한다. 원격 서버가
+// 색상이 있는 MOTD/프롬프트/도구 출력(예: 컬러 ls, 커스텀 테마)을 그대로 돌려주면, 그 안에
+// 이스케이프 코드가 완전히 닫히지 않았거나(팔레트 재정의 OSC 등) 우리 쪽 colorGreen/colorReset
+// 감싸기로도 되돌릴 수 없는 상태를 만들어 터미널 전체 색이 바뀌어 버리는 문제가 있었다.
+// 원격 출력은 항상 이 필터를 거친 뒤에만 우리 자체 색으로 감싼다.
+var ansiEscRegex = regexp.MustCompile(`\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][A-Za-z0-9]|[^\[\]()])`)
+
+func stripANSI(s string) string {
+	return ansiEscRegex.ReplaceAllString(s, "")
+}
 
 var colorEnabled bool
 
@@ -94,7 +106,9 @@ func preprocessArgs(args []string) []string {
 	return out
 }
 
-// ★ esxi[0001-0020] 패턴을 자동으로 확장해 주는 함수
+// ★ esxi[0001-0020] 및 clush(NodeSet) 스타일 콤마+범위 혼합 표기(예: qwer[2660,2671,2676,2826-2829])를
+// 자동으로 확장해 주는 함수. 괄호가 여러 번 나오면(예: hostname[0001-0002]ev[01-03]) 재귀적으로
+// 전부 풀어준다.
 func expandHostLine(line string) []string {
 	matches := hostRangeRegex.FindStringSubmatch(line)
 	if matches == nil {
@@ -102,33 +116,48 @@ func expandHostLine(line string) []string {
 	}
 
 	prefix := matches[1]
-	startStr := matches[2]
-	endStr := matches[3]
-	suffix := matches[4]
-
-	start, _ := strconv.Atoi(startStr)
-	end, _ := strconv.Atoi(endStr)
-
-	if start > end {
-		start, end = end, start
-	}
-
-	padLen := 0
-	if strings.HasPrefix(startStr, "0") {
-		padLen = len(startStr)
-	}
-
-	formatStr := "%s%d%s"
-	if padLen > 0 {
-		formatStr = fmt.Sprintf("%%s%%0%dd%%s", padLen)
-	}
+	content := matches[2]
+	suffix := matches[3]
 
 	var results []string
-	for i := start; i <= end; i++ {
-		hostPart := fmt.Sprintf(formatStr, prefix, i, suffix)
-		results = append(results, expandHostLine(hostPart)...)
+	for _, item := range strings.Split(content, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if idx := strings.Index(item, "-"); idx > 0 {
+			startStr := item[:idx]
+			endStr := item[idx+1:]
+			start, err1 := strconv.Atoi(startStr)
+			end, err2 := strconv.Atoi(endStr)
+			if err1 != nil || err2 != nil {
+				results = append(results, expandHostLine(prefix+item+suffix)...)
+				continue
+			}
+			if start > end {
+				start, end = end, start
+			}
+			padLen := 0
+			if len(startStr) > 1 && startStr[0] == '0' {
+				padLen = len(startStr)
+			}
+			for i := start; i <= end; i++ {
+				results = append(results, expandHostLine(prefix+formatNum(i, padLen)+suffix)...)
+			}
+			continue
+		}
+		// 콤마로 구분된 단일 값(범위가 아님)은 원래 자릿수 그대로 사용
+		results = append(results, expandHostLine(prefix+item+suffix)...)
 	}
 	return results
+}
+
+// formatNum은 width>0이면 0-padding을 적용해 숫자를 문자열로 만든다.
+func formatNum(n, width int) string {
+	if width > 0 {
+		return fmt.Sprintf("%0*d", width, n)
+	}
+	return strconv.Itoa(n)
 }
 
 // splitTrailingDigits는 호스트명 끝의 연속된 숫자(있다면)와 그 앞부분을 나눈다.
@@ -144,19 +173,61 @@ func splitTrailingDigits(host string) (prefix string, numStr string, ok bool) {
 	return host[:i], host[i:], true
 }
 
-// compressHosts는 expandHostLine의 역방향이다: "esxi0001", "esxi0002", "esxi0003"처럼
-// 접두어+자릿수가 같고 번호가 연속인 호스트들을 "esxi[0001-0003]" 하나로 압축한다.
+// dedupeSortedInts는 정렬 후 중복을 제거한다.
+func dedupeSortedInts(nums []int) []int {
+	sort.Ints(nums)
+	out := nums[:0]
+	for i, n := range nums {
+		if i == 0 || n != out[len(out)-1] {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// foldRangeSet은 정렬/중복제거된 정수 목록을 clush(ClusterShell NodeSet)와 동일한 콤마+범위
+// 표기로 접는다: 연속 3개 이상이면 "lo-hi", 아니면 낱개 숫자, 그 외엔 콤마로 나열.
+// 예) [2660,2671,2676,2826,2827,2828,2829] -> "2660,2671,2676,2826-2829"
+func foldRangeSet(nums []int, width int) string {
+	var parts []string
+	i := 0
+	for i < len(nums) {
+		j := i
+		for j+1 < len(nums) && nums[j+1] == nums[j]+1 {
+			j++
+		}
+		if j > i {
+			parts = append(parts, formatNum(nums[i], width)+"-"+formatNum(nums[j], width))
+		} else {
+			parts = append(parts, formatNum(nums[i], width))
+		}
+		i = j + 1
+	}
+	return strings.Join(parts, ",")
+}
+
+// foldRangeSetBracketed는 clush와 동일하게, 값이 하나뿐이면 괄호 없이 그대로, 여러 개면
+// "[콤마+범위]"로 감싼다.
+func foldRangeSetBracketed(nums []int, width int) string {
+	nums = dedupeSortedInts(nums)
+	if len(nums) == 1 {
+		return formatNum(nums[0], width)
+	}
+	return "[" + foldRangeSet(nums, width) + "]"
+}
+
+// compressHosts는 expandHostLine의 역방향이다: 접두어가 같은 호스트들의 끝자리 숫자를
+// clush(ClusterShell NodeSet)와 동일한 표기로 압축한다(예: "qwer[2660,2671,2676,2826-2829]").
 // 결과 토큰은 expandHostLine이 그대로 다시 풀 수 있는 형태라, 이 함수의 출력을 그대로
 // 파일에 저장해서 -w로 다시 넣어도 동작한다.
 func compressHosts(hosts []string) []string {
-	type groupKey struct {
-		prefix string
-		width  int
+	type group struct {
+		nums  []int
+		width int // 0-padding이 필요한 멤버가 있으면 그 폭(가장 넓은 것), 없으면 0
 	}
 
-	groups := map[groupKey][]int{}
-	var groupOrder []groupKey
-	seenGroup := map[groupKey]bool{}
+	groups := map[string]*group{}
+	var order []string
 	var singles []string
 
 	for _, h := range hosts {
@@ -170,52 +241,46 @@ func compressHosts(hosts []string) []string {
 			singles = append(singles, h)
 			continue
 		}
-		key := groupKey{prefix: prefix, width: len(numStr)}
-		if !seenGroup[key] {
-			seenGroup[key] = true
-			groupOrder = append(groupOrder, key)
+		g, exists := groups[prefix]
+		if !exists {
+			g = &group{}
+			groups[prefix] = g
+			order = append(order, prefix)
 		}
-		groups[key] = append(groups[key], n)
+		g.nums = append(g.nums, n)
+		// ★ clush와 동일하게: 0-padding이 필요한 멤버(선행 0)가 하나라도 있으면 그 폭으로
+		// 통일해서 패딩하고, 전부 패딩이 없으면(자연수 그대로) 자릿수가 달라도 그냥 합친다
+		// (예: a9,a10,a11 -> a[9-11]).
+		if len(numStr) > 1 && numStr[0] == '0' && len(numStr) > g.width {
+			g.width = len(numStr)
+		}
 	}
 
 	var out []string
-	for _, key := range groupOrder {
-		nums := groups[key]
-		sort.Ints(nums)
-		i := 0
-		for i < len(nums) {
-			j := i
-			for j+1 < len(nums) && nums[j+1] == nums[j]+1 {
-				j++
-			}
-			if j > i {
-				out = append(out, fmt.Sprintf("%s[%0*d-%0*d]", key.prefix, key.width, nums[i], key.width, nums[j]))
-			} else {
-				out = append(out, fmt.Sprintf("%s%0*d", key.prefix, key.width, nums[i]))
-			}
-			i = j + 1
-		}
+	for _, prefix := range order {
+		g := groups[prefix]
+		out = append(out, prefix+foldRangeSetBracketed(g.nums, g.width))
 	}
 	out = mergeRangeTokens(out)
 	out = append(out, singles...)
 	return out
 }
 
-// 접힌 토큰 "prefix[lo-hi]"에서 prefix 안의 마지막 숫자 덩어리(N)를 분리하기 위한 패턴.
-// 예: "hostname0001ev[01-03]" -> A="hostname", N="0001", B="ev", lo="01", hi="03"
-var foldedTokenRegex = regexp.MustCompile(`^(.*?)(\d+)(\D*)\[(\d+)-(\d+)\]$`)
+// 접힌 토큰 "A<숫자>B[콤마+범위]"에서 A/숫자/B/괄호 안 내용을 분리하기 위한 패턴.
+// 예: "hostname0001ev[01-03]" -> A="hostname", N="0001", B="ev", bracket="01-03"
+var foldedTokenRegex = regexp.MustCompile(`^(.*?)(\d+)(\D*)\[([^\]]+)\]$`)
 
-// mergeRangeTokens는 범위가 같고 접두어 안의 숫자만 연속으로 다른 토큰들을 다차원으로 합친다.
+// mergeRangeTokens는 괄호 앞의 접두어 안에 있는 숫자 덩어리(첫 번째 축)가 다른 토큰들을,
+// 괄호 안 내용(두 번째 축)이 완전히 같을 때만 다차원으로 합친다.
 // "hostname0001ev[01-03]", "hostname0002ev[01-03]" -> "hostname[0001-0002]ev[01-03]"
-// 기존 1차원 압축 결과는 그대로 두고, 합칠 수 있는 범위 토큰끼리만 추가로 접는다.
 func mergeRangeTokens(tokens []string) []string {
 	type key struct {
-		a, b, lo, hi string
-		width        int
+		a, b, bracket string
 	}
 	type member struct {
-		n     int
-		token string
+		n      int
+		numStr string
+		token  string
 	}
 	groups := map[key][]member{}
 	var order []key
@@ -233,31 +298,32 @@ func mergeRangeTokens(tokens []string) []string {
 		if err != nil {
 			continue
 		}
-		k := key{a: m[1], b: m[3], lo: m[4], hi: m[5], width: len(m[2])}
+		k := key{a: m[1], b: m[3], bracket: m[4]}
 		if _, ok := groups[k]; !ok {
 			order = append(order, k)
 		}
-		groups[k] = append(groups[k], member{n: n, token: t})
+		groups[k] = append(groups[k], member{n: n, numStr: m[2], token: t})
 	}
 
 	replace := map[string]string{} // 원본 토큰 -> 합친 토큰(첫 멤버) 또는 "" (삭제)
 	for _, k := range order {
 		ms := groups[k]
-		sort.Slice(ms, func(i, j int) bool { return ms[i].n < ms[j].n })
-		i := 0
-		for i < len(ms) {
-			j := i
-			for j+1 < len(ms) && ms[j+1].n == ms[j].n+1 {
-				j++
-			}
-			if j > i {
-				replace[ms[i].token] = fmt.Sprintf("%s[%0*d-%0*d]%s[%s-%s]", k.a, k.width, ms[i].n, k.width, ms[j].n, k.b, k.lo, k.hi)
-				for x := i + 1; x <= j; x++ {
-					replace[ms[x].token] = ""
-				}
-			}
-			i = j + 1
+		if len(ms) < 2 {
+			continue // 합칠 상대가 없으면 그대로 둔다
 		}
+		width := 0
+		nums := make([]int, len(ms))
+		for i, m := range ms {
+			nums[i] = m.n
+			if len(m.numStr) > 1 && m.numStr[0] == '0' && len(m.numStr) > width {
+				width = len(m.numStr)
+			}
+		}
+		merged := k.a + foldRangeSetBracketed(nums, width) + k.b + "[" + k.bracket + "]"
+		for _, m := range ms {
+			replace[m.token] = ""
+		}
+		replace[ms[0].token] = merged
 	}
 
 	var out []string
@@ -346,7 +412,7 @@ func getAuthMethods(keyPath string, password string) ([]ssh.AuthMethod, error) {
 // renderResultLines는 printPdshStyle이 host 접두어 없이 찍을 본문 줄들을 그대로 만들어준다.
 // -b(묶어 출력) 모드에서 호스트별 결과를 비교하기 위해 printPdshStyle과 별도로 필요하다.
 func renderResultLines(output string, err error) string {
-	output = strings.TrimSpace(output)
+	output = stripANSI(strings.TrimSpace(output))
 
 	if err != nil {
 		if output != "" {
@@ -892,8 +958,11 @@ func main() {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" && !strings.HasPrefix(line, "#") {
-			for _, token := range strings.Split(line, ",") {
-				token = strings.TrimSpace(token)
+			// ★ 한 줄에 "hostname1 hostname2 hostname3"처럼 공백(가로)으로 나열된 경우도
+			// 쉼표와 동일하게 각각 별도 호스트로 인식한다(쉼표+공백 혼용도 가능).
+			for _, token := range strings.FieldsFunc(line, func(r rune) bool {
+				return r == ',' || unicode.IsSpace(r)
+			}) {
 				if token != "" {
 					expanded := expandHostLine(token)
 					hosts = append(hosts, expanded...)
