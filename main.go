@@ -906,6 +906,20 @@ func main() {
 
 	cleanHostFile := strings.TrimPrefix(*hostFile, "^")
 
+	// ★ 같은 위치에서 다시 실행하면, 이전 실행이 남긴 결과 파일이 이번 실행 결과와 안 맞게
+	// 그대로 남아있을 수 있다(예: 이전엔 실패 호스트가 있었지만 이번엔 하나도 없는 경우 —
+	// writeHostsToFile은 대상이 없으면 파일을 만들지 않으므로 옛 파일이 그대로 남는다).
+	// 실행 시작 시점에 이번 실행이 만들 수 있는 5개 결과 파일명과 정확히 일치하는 파일만
+	// (와일드카드 없이 완전일치로) 미리 지운다.
+	offFilename := cleanHostFile + "_res_off"
+	refusedFilename := cleanHostFile + "_res_refsed"
+	osInstallFilename := cleanHostFile + "_os_install"
+	noSvrAutoFilename := cleanHostFile + "_nosvrauto"
+	cancelFilename := cleanHostFile + "_res_cancel"
+	for _, f := range []string{offFilename, refusedFilename, osInstallFilename, noSvrAutoFilename, cancelFilename} {
+		os.Remove(f)
+	}
+
 	command := strings.Join(args, " ")
 	// ★ [버그 수정] 예전에는 여기서 strings.Trim(command, "\"'")로 앞뒤 따옴표를 무조건
 	// 제거했는데, 이러면 명령어 끝이 실제로 따옴표로 끝나는 경우(예: grep 'asdf')까지
@@ -1128,17 +1142,11 @@ func main() {
 		printUnreachableGroup(failedHosts, refusedHosts)
 	}
 
-	// 결과 파일 생성 및 저장
-	offFilename := cleanHostFile + "_res_off"
-	refusedFilename := cleanHostFile + "_res_refsed"
-	osInstallFilename := cleanHostFile + "_os_install"
-	noSvrAutoFilename := cleanHostFile + "_nosvrauto"
-
+	// 결과 파일 생성 및 저장 (파일명은 실행 시작 시점에 이미 계산해 둠)
 	writeHostsToFile(offFilename, failedHosts)
 	writeHostsToFile(refusedFilename, refusedHosts)
 	writeHostsToFile(osInstallFilename, osInstallHosts)
 	writeHostsToFile(noSvrAutoFilename, noSvrAutoHosts)
-	cancelFilename := cleanHostFile + "_res_cancel"
 	writeHostsToFile(cancelFilename, canceledHosts)
 
 	// -script 옵션이 없을 때만 요약 출력. 표준에러로 보낸다 — 이 블록은 데이터가 아니라
