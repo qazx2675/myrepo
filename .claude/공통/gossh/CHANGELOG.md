@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-09-22 — 결과 파일은 압축 없이 줄바꿈 나열로 변경
+
+- **변경(`main.go`)**: `writeHostsToFile()`에서 `compressHosts()` 압축을 제거하고, 호스트명을
+  줄바꿈으로 하나씩 그대로 기록하도록 변경(`_res_off`/`_res_refsed`/`_os_install`/`_nosvrauto`/
+  `_res_cancel` 전부 해당). 화면 요약/`-b` 그룹 출력의 clush 스타일 압축 표기는 그대로 유지.
+- **영향 범위**: `.claude/공통/gossh/main.go`, `gossh_os6`(재빌드), README 3.4.
+- **검증**: 192.168.0.58에서 `_res_off`가 압축 없이 줄바꿈 나열로 기록되는 것 확인.
+
 ## 2026-09-22 — autofs 안전장치 병렬 제한값 350 -> 450
 
 - **변경(`main.go`)**: `autofsSafeConcurrency` 350 -> 450. `/user/` 경로 감지 시 자동 제한값 및 관련 안내 메시지/README 문구 전부 갱신.
