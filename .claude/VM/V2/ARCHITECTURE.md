@@ -8,6 +8,7 @@
 | `govendor/govmomi-0.39.0/` | vm-param-check 의존성 |
 | `SPEC_DIR/` | **공유 스펙** — `vswitch_<user>.txt`(BM 포트그룹 VLAN) + `<CAE폴더명>/<CAE폴더명>_spec.txt`(+affinity 파일). git에는 예시만 |
 | `VMsetup/vm_setup.sh` | 전체 실행 스크립트: 스펙·포트그룹 자동 할당 → y/n → 수동 선택 → vim → vswitch/vm_create/affinity/lpage 호출 |
+| `VMsetup/vswitch_pgname.sh` | `vswitch_<user>.txt`의 포트그룹 컬럼이 IP면 폴더명을 물어봐 `<폴더명>-cae-a-b-c-0`으로 변환(`/24` 가정). `vm_setup.sh` 실행 전 별도 단계 |
 | `VMsetup/vm_create-source/main.go` | VM 생성(ev01~ev10, 데이터센터 여러 개, `-mapFile` VM 키) |
 | `VMsetup/affinity_setting-source/main.go` | affinity 일괄 적용(`-vm_cnt` 1~10) |
 | `VMsetup/lpage_setting-source/main.go` | HugePage/CPU 토폴로지(ev01~ev10) |

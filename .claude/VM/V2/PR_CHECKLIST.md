@@ -8,7 +8,7 @@ V2(VMsetup + vm-param-check + SPEC_DIR)를 배포하거나 수정하기 전 확�
 - [ ] `gofmt -l` 출력 없음 (변경한 Go 파일)
 - [ ] `go vet -mod=vendor ./...` 통과
 - [ ] 테스트 통과 — `vm-param-check`: `go test -mod=vendor ./...`, `nic_assign-source`: `go test -mod=vendor .`
-- [ ] `bash -n VMsetup/vm_setup.sh` 통과
+- [ ] `bash -n VMsetup/vm_setup.sh`, `bash -n VMsetup/vswitch_pgname.sh` 통과
 - [ ] 의존성을 추가/변경했다면 `govendor/`를 갱신하고 사용하는 모든 도구를 다시 빌드
 
 ## 동작 검증 (최소 1개 시나리오)

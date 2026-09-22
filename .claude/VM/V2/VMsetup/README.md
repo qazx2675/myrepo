@@ -33,6 +33,12 @@ bash ../setup.sh                          # V2 루트의 전체 빌드 스크립
 | `VMsetup/<user>.txt` | 대상 BM 목록 (한 줄에 하나) |
 | `SPEC_DIR/vswitch_<user>.txt` | `BM  포트그룹  VLAN` (BM당 여러 줄 가능 — 포트그룹이 여러 개 만들어짐) |
 
+`vswitch_<user>.txt`의 포트그룹 컬럼에 `<폴더명>-cae-a-b-c-d` 대신 IP를 적어뒀다면, 먼저 변환한다(`/24` 가정, 마지막 옥텟 고정 0):
+
+```bash
+bash vswitch_pgname.sh ../SPEC_DIR/vswitch_<user>.txt   # 형식이 아닌 줄만 폴더명을 물어보고 변환, 원본은 .bak로 보존
+```
+
 ```bash
 export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
 ./vm_setup.sh -u hong -v 192.168.0.50     # -n 을 붙이면 vCenter 변경 없이 계획까지만 확인
@@ -93,6 +99,7 @@ export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
 VMsetup/
 ├── vm_setup.sh                 # 전체 과정(스펙·포트그룹 할당 → 생성 → 설정) 실행 스크립트
 ├── README.md / CHANGELOG.md    # 이 문서 / 변경 이력
+├── vswitch_pgname.sh            # vswitch_<user>.txt 의 IP 포트그룹명을 <폴더명>-cae-a-b-c-0 으로 변환
 ├── <user>.txt                  # (사용자 파일, git 제외) BM 목록
 ├── run_<user>/                 # (자동 생성, git 제외) 이번 실행의 worklist/hostgroup/vswitch 입력 사본
 └── *-source/                   # 도구별 Go 소스 + setup.sh (+ README.md)
