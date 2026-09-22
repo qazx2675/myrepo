@@ -32,25 +32,34 @@ bash ../setup.sh                          # V2 루트의 전체 빌드 스크립
 |---|---|
 | `VMsetup/<user>.txt` | 대상 BM 목록 (한 줄에 하나) |
 | `SPEC_DIR/vswitch_<user>.txt` | `BM  포트그룹  VLAN` (BM당 여러 줄 가능 — 포트그룹이 여러 개 만들어짐) |
+| `vcenter.txt` (선택) | vCenter 주소 목록, 한 줄에 하나. V2 폴더(`/home/vcenter.txt`)에 두고, 없으면 vm-param-check 폴더의 `vcenter.txt`를 쓴다. 예시: `../vcenter.txt.example` |
+
+BM 이름은 FQDN(`esxi01.domain`)이든 짧은 이름(`esxi01`)이든 됩니다. vCenter에 어느 쪽으로 등록돼 있어도 찾습니다(정확히 같은 이름 → 없으면 첫 `.` 앞부분끼리 비교). 짧은 이름이 같은 호스트가 여러 대면 어느 쪽인지 알 수 없어 오류로 알립니다. 두 파일의 BM 이름은 서로 같게 적어주세요.
 
 `vswitch_<user>.txt`의 포트그룹 컬럼에 `<폴더명>-cae-a-b-c-d` 대신 IP를 적어뒀다면, 먼저 변환한다(`/24` 가정, 마지막 옥텟 고정 0):
 
 ```bash
-bash vswitch_pgname.sh ../SPEC_DIR/vswitch_<user>.txt   # 형식이 아닌 줄만 폴더명을 물어보고 변환, 원본은 .bak로 보존
+bash vswitch_pgname.sh ../SPEC_DIR/vswitch_<user>.txt   # 형식이 아닌 줄만 폴더명을 물어보고 변환(Enter = 직전 폴더명), 원본은 .bak로 보존
 ```
 
 ```bash
 export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
-./vm_setup.sh -u hong -v 192.168.0.50     # -n 을 붙이면 vCenter 변경 없이 계획까지만 확인
+./vm_setup.sh -u hong                     # vCenter 는 vcenter.txt 목록에서 번호로 선택 (Enter = hong 의 이전 실행 vCenter)
+./vm_setup.sh -u hong -v 192.168.0.50     # vCenter 를 직접 지정. -n 을 붙이면 vCenter 변경 없이 계획까지만 확인
 ```
+
+user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 기억해서, 다음 실행 때 `[INFO] hong 이전 실행 vCenter: ...`로 보여주고 목록에서 표시합니다.
 
 진행 순서:
 
 1. **스펙 할당** — 포트그룹 이름이 `<폴더명>-cae-a-b-c-d` 형식이면 그 폴더명으로 `SPEC_DIR` 스펙을 자동 매칭(차수만 다른 폴더는 같은 스펙). BM→스펙 표를 보여주고 `(y/n)`으로 확인.
    - `n`이거나 자동으로 못 정한 BM은 **SPEC_DIR 목록에서 번호 선택** (Enter = 직전 선택).
-   - 목록에 없으면 `0`을 골라 **vim으로 새 스펙 입력**. 모든 항목이 `키=""` 상태이고 설명은 주석이다. 저장하면 `SPEC_DIR/<folder>/`에 새 스펙 폴더가 생긴다(`folder`가 규칙에 안 맞거나 같은 스펙이 있으면 오류 안내 후 다시 편집). 이어서 **ev별 affinity**를 (1 자동 / 2 기존 파일 / 3 vim 입력) 중에서 고른다.
+   - 목록에 없으면 `0`을 골라 **vim으로 새 스펙 입력**. 모든 항목이 `키=""` 상태이고 설명은 주석이다. 저장하면 `SPEC_DIR/<folder>/`에 새 스펙 폴더가 생긴다(`folder`가 규칙에 안 맞거나 같은 스펙이 있으면 오류 안내 후 다시 편집). 이어서 **ev별 affinity**를 (1 직전 ev와 같은 파일 / 2 기존 파일 / 3 vim 입력) 중에서 고른다. ev01은 2·3만 가능하고, ev02부터는 Enter가 1번이다.
+   - **affinity는 ev마다 필수**입니다(자동 계산은 삭제). 스펙에 `affinity-evNN`이 없는 ev가 있으면 그 스펙은 자동 할당하지 않고 이유를 알려줍니다. 여러 ev가 같은 파일을 써도 됩니다(`affinity-ev02=affinity_ev01.txt`).
 2. **포트그룹 할당(네트워크 어댑터 1)** — BM에 포트그룹이 1개면 그 BM의 모든 VM에, 여러 개면 스펙 폴더명과 이름이 맞는 것을 자동 선택. VM→포트그룹 표를 `(y/n)`으로 확인, 자동으로 못 정한 VM/`n`이면 **번호 선택**, 목록에 없으면 `0`으로 **vim**(`hostname=""`, `portgroup=""`)에서 지정.
-3. **실행 계획 확인 후 실행**(한 번 더 y) — `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting`.
+3. **vCenter 선택**(`-v`가 없을 때) — `vcenter.txt` 목록에서 번호로 고른다. `0`은 직접 입력, Enter는 이 user의 이전 실행 vCenter.
+4. **실행 계획 확인 후 실행**(한 번 더 y) — `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting`.
+   - 호스트를 못 찾거나 포트그룹/VM 생성에 실패하면 **그 단계에서 멈추고** `[완료]`를 출력하지 않습니다. 이미 있는 포트그룹/VM은 실패가 아니라 건너뜁니다 — 원인을 고친 뒤 다시 실행하면 이어서 진행됩니다.
 
 `tag_setting`(사용자 지정 특성)은 스펙에 값이 없어 `vm_setup.sh`에 포함하지 않았습니다. 필요하면 단독으로 실행하세요.
 
@@ -65,7 +74,7 @@ export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
 | 도구 | 하는 일 | ev 범위 |
 |---|---|---|
 | `vm_create-source` | 호스트별 VM 생성(+CPU/메모리 예약/Shares/부트순서). `-mapFile`에 VM 이름 키로 포트그룹 지정 가능 | `-vmCount` 1~10, `-ev01Cpu`~`-ev10Share` |
-| `affinity_setting-source` | affinity 일괄 적용 | `-vm_cnt` 1~10, `-affinityFile01~10` |
+| `affinity_setting-source` | affinity 일괄 적용. `-vm_cnt` 범위의 ev마다 파일 필수(자동 계산 삭제, `-ht`는 받아서 무시), 여러 ev에 같은 파일 지정 가능 | `-vm_cnt` 1~10, `-affinityFile01~10` |
 | `lpage_setting-source` | HugePage/CPU 토폴로지 | `-ev01Cores/Sockets/Numa`~`-ev10...` |
 | `tag_setting-source` | 사용자 지정 특성 | `-vmCount` 1~10 |
 | `vswitch_setting-source` | BM vSwitch에 포트그룹 생성(호스트 병렬, `-concurrency`) | — |
@@ -82,7 +91,7 @@ export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
 | 옵션 | 설명 |
 |---|---|
 | `-u <user>` | (필수) 작업 이름 — `<user>.txt`, `SPEC_DIR/vswitch_<user>.txt` |
-| `-v <ip>` | vCenter IP (환경변수 `VC_IP`도 가능) |
+| `-v <ip>` | vCenter IP (환경변수 `VC_IP`도 가능). 없으면 `vcenter.txt` 목록에서 번호 선택(Enter = 이전 실행) |
 | `-i <id>` | vCenter 계정 (기본 `administrator@vsphere.local`) |
 | `-s <dir>` | SPEC_DIR 경로 (기본 `../SPEC_DIR`) |
 | `-w <vswitch>` | 포트그룹을 만들 가상 스위치 (기본 `vSwitch0`) |
@@ -91,7 +100,7 @@ export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
 
 환경변수 `VM_SETUP_EDITOR`로 vim 대신 다른 편집기를 쓸 수 있습니다.
 
-스펙 값이 각 도구 옵션으로 바뀌는 규칙: `cpu/mem/disk/shares-evNN` → `vm_create -evNNCpu/Mem/Disk/Share`(disk·shares에 쉼표 목록이 있으면 첫 값), `ht` → `affinity_setting -ht`, `affinity-evNN` → `-affinityFileNN`, `cores`(소켓당 코어 수)·`numa`(NUMA 노드당 vCPU 수) → `lpage_setting`의 총 코어(=cpu)/소켓 수/NUMA 노드 수.
+스펙 값이 각 도구 옵션으로 바뀌는 규칙: `cpu/mem/disk/shares-evNN` → `vm_create -evNNCpu/Mem/Disk/Share`(disk·shares에 쉼표 목록이 있으면 첫 값), `affinity-evNN` → `-affinityFileNN`(ev마다 필수), `ht`는 VM 생성에 쓰지 않음(vm-param-check 체크용), `cores`(소켓당 코어 수)·`numa`(NUMA 노드당 vCPU 수) → `lpage_setting`의 총 코어(=cpu)/소켓 수/NUMA 노드 수.
 
 ## 4. 문서별 고유 설명
 
@@ -101,7 +110,7 @@ VMsetup/
 ├── README.md / CHANGELOG.md    # 이 문서 / 변경 이력
 ├── vswitch_pgname.sh            # vswitch_<user>.txt 의 IP 포트그룹명을 <폴더명>-cae-a-b-c-0 으로 변환
 ├── <user>.txt                  # (사용자 파일, git 제외) BM 목록
-├── run_<user>/                 # (자동 생성, git 제외) 이번 실행의 worklist/hostgroup/vswitch 입력 사본
+├── run_<user>/                 # (자동 생성, git 제외) 이번 실행의 worklist/hostgroup/vswitch 입력 사본 + last_vcenter(이전 실행 vCenter)
 └── *-source/                   # 도구별 Go 소스 + setup.sh (+ README.md)
 ```
 

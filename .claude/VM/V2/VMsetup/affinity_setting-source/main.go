@@ -35,7 +35,6 @@ type optionPair struct {
 // affinitySpec: affinity 설정 파일 1개를 파싱한 결과
 type affinitySpec struct {
 	fileName string
-	auto     bool // AUTO 모드: vCPU 수 기준 1:1 매핑을 코드가 생성 (-ht 반영)
 	pairs    []optionPair
 }
 
@@ -44,7 +43,6 @@ type vmJob struct {
 	vmName string
 	vm     *object.VirtualMachine
 	specI  *affinitySpec
-	numCPU int
 }
 
 // vmResult: 워커풀 처리 결과 (성공/실패/스킵 집계 및 재조회 검증용)
@@ -95,7 +93,7 @@ func stripQuotes(s string) string {
 	return s
 }
 
-// loadAffinitySpec: key=value 형식 파싱. 파일 내용이 "AUTO" 한 줄이면 1:1 자동 생성 모드
+// loadAffinitySpec: key=value 형식 파싱. 같은 파일을 여러 ev 에 지정해도 ev 마다 따로 읽으므로 문제없다.
 func loadAffinitySpec(path string) (*affinitySpec, error) {
 	lines, err := readLines(path)
 	if err != nil {
@@ -108,8 +106,7 @@ func loadAffinitySpec(path string) (*affinitySpec, error) {
 	spec := &affinitySpec{fileName: filepath.Base(path)}
 
 	if len(lines) == 1 && strings.EqualFold(lines[0], "AUTO") {
-		spec.auto = true
-		return spec, nil
+		return nil, fmt.Errorf("AUTO(1:1 자동 계산)는 삭제된 기능입니다 — sched.vcpuN.affinity=값 줄로 적어주세요")
 	}
 
 	for i, line := range lines {
@@ -131,31 +128,13 @@ func loadAffinitySpec(path string) (*affinitySpec, error) {
 	return spec, nil
 }
 
-// buildExtraConfig: spec 을 vCenter ExtraConfig 로 변환. AUTO 모드는 numCPU 기준 1:1 매핑 생성
-func buildExtraConfig(spec *affinitySpec, numCPU int, htOn bool) ([]types.BaseOptionValue, error) {
+// buildExtraConfig: spec 을 vCenter ExtraConfig 로 변환 (파일 순서 그대로)
+func buildExtraConfig(spec *affinitySpec) []types.BaseOptionValue {
 	var extraConfig []types.BaseOptionValue
-
-	if spec.auto {
-		if numCPU <= 0 {
-			return nil, fmt.Errorf("AUTO 모드인데 vCPU 수를 확인할 수 없습니다")
-		}
-		for i := 0; i < numCPU; i++ {
-			key := fmt.Sprintf("sched.vcpu%d.affinity", i)
-			var val string
-			if htOn {
-				val = fmt.Sprintf("%d,%d", i*2, i*2+1)
-			} else {
-				val = fmt.Sprintf("%d", i)
-			}
-			extraConfig = append(extraConfig, &types.OptionValue{Key: key, Value: val})
-		}
-		return extraConfig, nil
-	}
-
 	for _, p := range spec.pairs {
 		extraConfig = append(extraConfig, &types.OptionValue{Key: p.Key, Value: p.Value})
 	}
-	return extraConfig, nil
+	return extraConfig
 }
 
 // resolvePath: 절대경로면 그대로, 상대경로면 baseDir 기준
@@ -179,10 +158,11 @@ func main() {
 		suffixes[i] = fmt.Sprintf("ev%02d", i+1)
 		name := fmt.Sprintf("affinityFile%02d", i+1)
 		flagNames[i] = "-" + name
-		filePtrs[i] = flag.String(name, "", suffixes[i]+" affinity 설정 파일 (미지정 시 -ht로 1:1 자동계산, 지정 시 파일 내용이 -ht보다 우선)")
+		filePtrs[i] = flag.String(name, "", suffixes[i]+" affinity 설정 파일 (-vm_cnt 범위의 ev 는 필수. 여러 ev 에 같은 파일을 지정해도 된다)")
 	}
 	affinityLegacy := flag.String("affinityFile", "", "[구버전 호환] -affinityFile02 미지정 시 ev02 설정 파일로 사용")
-	htMode := flag.String("ht", "ON", "Hyper-Threading 모드 (설정 파일 내용이 AUTO 인 경우에만 사용 / ON: 0=0,1 / OFF: 0=0)")
+	// -ht 는 AUTO(1:1 자동 계산)에만 쓰였다. 기능을 삭제했지만 예전 명령줄이 깨지지 않도록 받아서 무시한다.
+	htMode := flag.String("ht", "", "[사용 안 함] AUTO 자동 계산 삭제로 무시된다 (예전 명령줄 호환용)")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (VM 목록 조회 / Reconfigure 전송+대기 전 구간에 적용)")
 
 	flag.Parse()
@@ -199,14 +179,8 @@ func main() {
 		log.Fatalf("-concurrency 값이 올바르지 않습니다: %d (1 이상)", *concurrency)
 	}
 
-	htOn := true
-	switch strings.ToUpper(strings.TrimSpace(*htMode)) {
-	case "ON":
-		htOn = true
-	case "OFF":
-		htOn = false
-	default:
-		log.Fatalf("-ht 값이 올바르지 않습니다: %s (ON 또는 OFF만 허용)", *htMode)
+	if *htMode != "" {
+		fmt.Println("알림: -ht 는 AUTO(1:1 자동 계산) 삭제로 더 이상 쓰지 않습니다 — 무시합니다.")
 	}
 
 	vcPassword := os.Getenv("VC_PASSWORD")
@@ -233,10 +207,8 @@ func main() {
 	specs := make([]*affinitySpec, *vmCnt)
 	for i := 0; i < *vmCnt; i++ {
 		if strings.TrimSpace(fileFlags[i]) == "" {
-			// 파일 미지정 시 AUTO 모드와 동일하게 -ht 값으로 1:1 자동계산한다.
-			// 파일이 주어지면 그 내용이 -ht보다 우선한다(buildExtraConfig는 spec.auto일 때만 htOn을 본다).
-			specs[i] = &affinitySpec{auto: true}
-			continue
+			// 예전에는 파일이 없으면 -ht 로 1:1 자동 계산했지만, ev 마다 CPU 0번부터 잡혀 VM 끼리 겹치므로 삭제했다.
+			log.Fatalf("%s affinity 파일이 필요합니다 (%s). 자동 계산은 삭제됐습니다 — 여러 ev 에 같은 파일을 지정해도 됩니다.", suffixes[i], flagNames[i])
 		}
 
 		path := resolvePath(baseDir, fileFlags[i])
@@ -272,29 +244,13 @@ func main() {
 		log.Fatalf("%s 에 작업 대상 호스트가 없습니다.", *worklistFile)
 	}
 
-	htLabel := "ON"
-	if !htOn {
-		htLabel = "OFF"
-	}
-
-	needCPUInfo := false
-	for _, s := range specs {
-		if s != nil && s.auto {
-			needCPUInfo = true
-		}
-	}
-
 	fmt.Printf("병렬(워커풀) 방식 어피니티 일괄 할당을 시작합니다. (동시 처리 제한: %d)\n", *concurrency)
 	fmt.Printf("  접속 계정 : %s\n", *vcId)
 	fmt.Printf("  vCenter   : %s\n", *vcTargetIP)
 	fmt.Printf("  대상 호스트: %d대 / VM 개수: %d (%s)\n",
 		len(hostlistLines), *vmCnt, strings.Join(suffixes[:*vmCnt], ", "))
 	for i := 0; i < *vmCnt; i++ {
-		mode := fmt.Sprintf("%d개 항목", len(specs[i].pairs))
-		if specs[i].auto {
-			mode = fmt.Sprintf("AUTO 1:1 (HT=%s)", htLabel)
-		}
-		fmt.Printf("  %s 설정  : %s [%s]\n", suffixes[i], specs[i].fileName, mode)
+		fmt.Printf("  %s 설정  : %s [%d개 항목]\n", suffixes[i], specs[i].fileName, len(specs[i].pairs))
 	}
 	fmt.Println()
 
@@ -370,26 +326,6 @@ func main() {
 		log.Fatal("worklist 와 매칭되는 VM 을 vCenter 에서 찾지 못했습니다.")
 	}
 
-	// ---- AUTO 모드가 있을 때만 numCPU 배치 조회 (property.Collector, 이미 단일 배치 호출) ----
-	cpuMap := make(map[string]int, len(targetVmMap))
-	if needCPUInfo {
-		refs := make([]types.ManagedObjectReference, 0, len(targetVmMap))
-		for _, vm := range targetVmMap {
-			refs = append(refs, vm.Reference())
-		}
-
-		pc := property.DefaultCollector(client.Client)
-		var vmProps []mo.VirtualMachine
-		if retErr := pc.Retrieve(ctx, refs, []string{"name", "config.hardware.numCPU"}, &vmProps); retErr != nil {
-			log.Fatalf("vCPU 정보 배치 조회 실패: %v", retErr)
-		}
-		for i := range vmProps {
-			if vmProps[i].Config != nil {
-				cpuMap[vmProps[i].Name] = int(vmProps[i].Config.Hardware.NumCPU)
-			}
-		}
-	}
-
 	// ---- 작업 목록 구성 (호스트 x vm_cnt 매트릭스를 평탄화) ----
 	var jobs []vmJob
 	var preSkipped int
@@ -406,7 +342,7 @@ func main() {
 				preSkipped++
 				continue
 			}
-			jobs = append(jobs, vmJob{vmName: vmName, vm: vm, specI: specs[i], numCPU: cpuMap[vmName]})
+			jobs = append(jobs, vmJob{vmName: vmName, vm: vm, specI: specs[i]})
 		}
 	}
 
@@ -432,12 +368,7 @@ func main() {
 			defer jobWg.Done()
 			defer func() { <-sem }()
 
-			extraConfig, buildErr := buildExtraConfig(j.specI, j.numCPU, htOn)
-			if buildErr != nil {
-				safePrintf("[%s] 설정 생성 실패: %v (PASS)\n", j.vmName, buildErr)
-				results <- vmResult{vmName: j.vmName, skipped: true}
-				return
-			}
+			extraConfig := buildExtraConfig(j.specI)
 
 			expectedPairs := make([]optionPair, 0, len(extraConfig))
 			for _, ov := range extraConfig {
@@ -455,13 +386,8 @@ func main() {
 				return
 			}
 
-			if j.specI.auto {
-				safePrintf("[%s] AUTO 1:1 코어 병렬 설정 명령 전송 완료 (HT=%s, vCPU=%d)\n",
-					j.vmName, htLabel, j.numCPU)
-			} else {
-				safePrintf("[%s] %s 기반 병렬 설정 명령 전송 완료 (%d개 항목)\n",
-					j.vmName, j.specI.fileName, len(j.specI.pairs))
-			}
+			safePrintf("[%s] %s 기반 병렬 설정 명령 전송 완료 (%d개 항목)\n",
+				j.vmName, j.specI.fileName, len(j.specI.pairs))
 
 			if waitErr := task.Wait(ctx); waitErr != nil {
 				safePrintf("[%s] 작업 실패: %v\n", j.vmName, waitErr)
