@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -63,31 +64,330 @@ func colorize(color, s string) string {
 // 그 줄을 지우고 → 메시지 출력 → 진행률을 다시 그린다(줄바꿈 없이 제자리 갱신).
 // 진행률은 stderr가 터미널일 때만 켜지므로 파일로 리다이렉션하면 저장되지 않는다.
 var (
-	outMu        sync.Mutex
-	progressOn   bool
-	progressText string
+	outMu         sync.Mutex
+	progressOn    bool
+	progressText  string
+	progressDrawn string // 마지막으로 실제 화면에 그린 진행률(같으면 다시 그리지 않음 — 깜빡임 방지)
+	stdoutTTY     bool
+	stderrTTY     bool
+
+	// -m 행리스트 화면(대체 화면 버퍼)을 보고 있는 동안에는 터미널로 가는 결과 출력을 모아뒀다가
+	// 원래 화면으로 돌아올 때 한꺼번에 찍는다(대체 화면에 찍으면 돌아올 때 사라지기 때문).
+	monitorOn  bool
+	listActive bool
+	pendingOut []pendingWrite
 )
 
-func drawProgressLocked() {
-	fmt.Fprint(os.Stderr, "\r\033[K"+progressText)
+type pendingWrite struct {
+	w *os.File
+	s string
+}
+
+func isTTYFile(w *os.File) bool {
+	if w == os.Stdout {
+		return stdoutTTY
+	}
+	if w == os.Stderr {
+		return stderrTTY
+	}
+	return false
+}
+
+func isCharDevice(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// fitWidth는 한 줄이 터미널 폭을 넘어 다음 줄로 넘어가지 않게 자른다. 줄이 넘어가면 "\r"이
+// 마지막 줄 맨 앞으로만 돌아가서 진행률 줄이 계속 새 줄로 쌓여 보이게 된다. 한글 등 전각 문자는
+// 2칸으로 계산한다.
+func fitWidth(s string, cols int) string {
+	if cols <= 1 {
+		return s
+	}
+	limit := cols - 1
+	w := 0
+	for i, r := range s {
+		rw := 1
+		if isWideRune(r) {
+			rw = 2
+		}
+		if w+rw > limit {
+			return s[:i]
+		}
+		w += rw
+	}
+	return s
+}
+
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		if isWideRune(r) {
+			w += 2
+		} else {
+			w++
+		}
+	}
+	return w
+}
+
+// padRight는 화면 폭(한글 2칸) 기준으로 오른쪽을 공백으로 채운다.
+func padRight(s string, width int) string {
+	if d := width - displayWidth(s); d > 0 {
+		return s + strings.Repeat(" ", d)
+	}
+	return s
+}
+
+func isWideRune(r rune) bool {
+	return (r >= 0x1100 && r <= 0x115F) || (r >= 0x2E80 && r <= 0xA4CF) ||
+		(r >= 0xAC00 && r <= 0xD7A3) || (r >= 0xF900 && r <= 0xFAFF) ||
+		(r >= 0xFE30 && r <= 0xFE4F) || (r >= 0xFF00 && r <= 0xFF60) || (r >= 0xFFE0 && r <= 0xFFE6)
+}
+
+func progressLineLocked() string {
+	cols, _ := terminalSize(int(os.Stderr.Fd()))
+	return fitWidth(progressText, cols)
+}
+
+// drawProgressLocked는 진행률 줄을 제자리에서 덮어쓴다. 예전처럼 줄을 먼저 지우고(\033[K) 다시
+// 쓰면 지워진 빈 줄이 순간적으로 보여서 깜빡이므로, 글자를 먼저 덮어쓰고 남는 오른쪽만 지운다.
+// 내용이 바뀌지 않았으면 아예 다시 그리지 않는다.
+func drawProgressLocked(force bool) {
+	line := progressLineLocked()
+	if !force && line == progressDrawn {
+		return
+	}
+	fmt.Fprint(os.Stderr, "\r"+line+"\033[K")
+	progressDrawn = line
 }
 
 // emit은 s(끝에 개행 포함)를 w에 출력하되 진행률 줄과 섞이지 않게 한다.
 func emit(w *os.File, s string) {
 	outMu.Lock()
 	defer outMu.Unlock()
-	if progressOn {
-		fmt.Fprint(os.Stderr, "\r\033[K")
+	emitLocked(w, s)
+}
+
+func emitLocked(w *os.File, s string) {
+	if listActive && isTTYFile(w) {
+		pendingOut = append(pendingOut, pendingWrite{w, s})
+		return
 	}
+	if progressOn && !listActive && isTTYFile(w) {
+		// 진행률 줄 위치에 결과 줄을 덮어쓰고(남는 부분만 지움) 다음 줄에 진행률을 다시 그리는 것을
+		// 한 번의 write로 처리한다 — 지웠다가 다시 쓰는 깜빡임이 없다.
+		body := strings.ReplaceAll(strings.TrimSuffix(s, "\n"), "\n", "\033[K\n")
+		line := progressLineLocked()
+		fmt.Fprint(w, "\r"+body+"\033[K\n"+line+"\033[K")
+		progressDrawn = line
+		return
+	}
+	// 파일/파이프로 리다이렉션된 출력은 화면(진행률 줄)과 무관하므로 그대로 쓴다.
 	fmt.Fprint(w, s)
+}
+
+// ★ -m 행리스트: 실행 시작(동시 실행 슬롯을 잡은 시점)과 종료 시각을 호스트별로 기록한다.
+// 끝난 호스트는 종료 시각에서 멈춘 시간을 보여준다.
+const hangThreshold = 60 * time.Second
+
+type hostTiming struct {
+	start, end time.Time
+}
+
+var (
+	timingMu  sync.Mutex
+	hostTimes = map[string]*hostTiming{}
+)
+
+type hangRow struct {
+	host    string
+	elapsed time.Duration
+	done    bool
+}
+
+func collectHangRows() (rows []hangRow, running int) {
+	now := time.Now()
+	timingMu.Lock()
+	for h, t := range hostTimes {
+		if t.end.IsZero() {
+			if d := now.Sub(t.start); d >= hangThreshold {
+				rows = append(rows, hangRow{h, d, false})
+				running++
+			}
+		} else if d := t.end.Sub(t.start); d >= hangThreshold {
+			rows = append(rows, hangRow{h, d, true})
+		}
+	}
+	timingMu.Unlock()
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].done != rows[j].done {
+			return !rows[i].done // 실행 중인 호스트를 위에
+		}
+		if rows[i].elapsed != rows[j].elapsed {
+			return rows[i].elapsed > rows[j].elapsed
+		}
+		return rows[i].host < rows[j].host
+	})
+	return rows, running
+}
+
+func countHangRunning() int {
+	now := time.Now()
+	n := 0
+	timingMu.Lock()
+	for _, t := range hostTimes {
+		if t.end.IsZero() && now.Sub(t.start) >= hangThreshold {
+			n++
+		}
+	}
+	timingMu.Unlock()
+	return n
+}
+
+func fmtDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	h := d / time.Hour
+	d -= h * time.Hour
+	m := d / time.Minute
+	d -= m * time.Minute
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, d/time.Second)
+}
+
+var monitorStart time.Time
+
+// renderHangListLocked는 대체 화면 버퍼에 행리스트를 그린다. 화면 전체를 지우지 않고 맨 위로
+// 이동해서 줄마다 덮어쓰고(남는 부분만 지움) 마지막에 아래쪽 나머지를 지워서 깜빡이지 않는다.
+func renderHangListLocked() {
+	cols, lines := terminalSize(int(os.Stderr.Fd()))
+	if lines <= 0 {
+		lines = 24
+	}
+	rows, running := collectHangRows()
+
+	hostW := displayWidth("호스트명")
+	for _, r := range rows {
+		if w := displayWidth(r.host); w > hostW {
+			hostW = w
+		}
+	}
+	if hostW > 40 {
+		hostW = 40
+	}
+
+	var b strings.Builder
+	b.WriteString("\033[H")
+	put := func(s string) { b.WriteString(fitWidth(s, cols) + "\033[K\n") }
+	put(fmt.Sprintf("=== 행리스트: %d초 이상 실행 중이거나 실행했던 호스트 ===  경과 %s", int(hangThreshold.Seconds()), fmtDuration(time.Since(monitorStart))))
+	put(fmt.Sprintf("%s   실행 중 %d대 / 끝남 %d대", progressText, running, len(rows)-running))
+	put("")
+	if len(rows) == 0 {
+		put(fmt.Sprintf("  (%d초 이상 걸린 호스트가 아직 없습니다)", int(hangThreshold.Seconds())))
+	} else {
+		put("  " + padRight("호스트명", hostW) + "  " + padRight("상태", 6) + "  진행시간")
+		// 제목 3줄 + 헤더 1줄 + 안내 1줄 + "외 N대" 1줄을 빼고 남는 만큼만 보여준다.
+		maxRows := lines - 6
+		if maxRows < 1 {
+			maxRows = 1
+		}
+		shown := rows
+		if len(shown) > maxRows {
+			shown = shown[:maxRows]
+		}
+		for _, r := range shown {
+			state := "실행중"
+			if r.done {
+				state = "끝남"
+			}
+			put("  " + padRight(r.host, hostW) + "  " + padRight(state, 6) + "  " + fmtDuration(r.elapsed))
+		}
+		if len(rows) > len(shown) {
+			put(fmt.Sprintf("  ... 외 %d대 (화면 높이만큼만 표시)", len(rows)-len(shown)))
+		}
+	}
+	b.WriteString(fitWidth("(Enter: 원래 화면으로 돌아가기)", cols) + "\033[K\033[J")
+	fmt.Fprint(os.Stderr, b.String())
+}
+
+func enterListLocked() {
+	listActive = true
+	fmt.Fprint(os.Stderr, "\033[?1049h") // 대체 화면 버퍼 — 원래 화면/스크롤백을 건드리지 않는다
+	renderHangListLocked()
+}
+
+func leaveListLocked() {
+	if !listActive {
+		return
+	}
+	fmt.Fprint(os.Stderr, "\033[?1049l") // 원래 화면으로 복귀(커서 위치도 복원됨)
+	listActive = false
+	queued := pendingOut
+	pendingOut = nil
+	for _, p := range queued {
+		emitLocked(p.w, p.s)
+	}
 	if progressOn {
-		drawProgressLocked()
+		drawProgressLocked(true)
 	}
 }
 
-func stderrIsTerminal() bool {
-	fi, err := os.Stderr.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+func leaveListIfActive() {
+	outMu.Lock()
+	leaveListLocked()
+	outMu.Unlock()
+}
+
+// startMonitorKeys는 Enter 키로 원래 화면 <-> 행리스트 화면을 오간다.
+func startMonitorKeys() {
+	go func() {
+		buf := make([]byte, 1)
+		for {
+			n, err := os.Stdin.Read(buf)
+			if err != nil || n == 0 {
+				return
+			}
+			if buf[0] != '\n' && buf[0] != '\r' {
+				continue
+			}
+			outMu.Lock()
+			if !monitorOn {
+				outMu.Unlock()
+				return
+			}
+			if listActive {
+				leaveListLocked()
+			} else {
+				enterListLocked()
+			}
+			outMu.Unlock()
+		}
+	}()
+}
+
+var (
+	cbreakRestore func()
+	cursorHidden  bool
+)
+
+// restoreTerminal은 행리스트 화면/커서 숨김/입력 모드를 원래대로 돌린다. 정상 종료뿐 아니라
+// Ctrl+C 4회 강제 종료, SIGTERM/SIGHUP 종료 때도 호출해서 터미널이 이상한 상태로 남지 않게 한다.
+func restoreTerminal() {
+	outMu.Lock()
+	defer outMu.Unlock()
+	monitorOn = false
+	if listActive {
+		fmt.Fprint(os.Stderr, "\033[?1049l")
+		listActive = false
+	}
+	if cursorHidden {
+		fmt.Fprint(os.Stderr, "\033[?25h")
+		cursorHidden = false
+	}
+	if cbreakRestore != nil {
+		cbreakRestore()
+		cbreakRestore = nil
+	}
 }
 
 // ★ pdsh 스타일 "플래그+값 붙여쓰기"를 -w에 한해 지원한다.
@@ -546,9 +846,11 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 	ctl := registerHost(host)
 	defer unregisterHost(host, ctl)
 
+	// ★ "host:port" 표기는 그대로 쓰고, 그 외(일반 호스트명/IPv4/IPv6 주소)는 -P 포트를 붙인다.
+	// IPv6 주소(예: fe80::1)는 콜론이 들어있어도 포트 표기가 아니므로 [주소]:포트로 만든다.
 	target := host
-	if !strings.Contains(target, ":") {
-		target = host + ":" + port
+	if net.ParseIP(host) != nil || !strings.Contains(host, ":") {
+		target = net.JoinHostPort(host, port)
 	}
 
 	// 0. ★ DNS 조회 선행 — 대량 동시 실행 시 리졸버 혼잡으로 간헐적 실패가 나는 걸 짧은 재시도로
@@ -710,9 +1012,12 @@ const dnsLookupConcurrency = 50
 // 15초)만큼 기다리는 대신 250ms 간격으로 최대 2회만 짧게 재시도한다 — 진짜 접속불가 호스트에는
 // 영향이 없고(어차피 이후 ssh.Dial에서 -t 타임아웃으로 판정), DNS 혼잡으로 인한 오분류만 줄인다.
 func lookupHostWithRetry(ctx context.Context, dnsSem chan struct{}, host string) error {
+	if net.ParseIP(host) != nil {
+		return nil // IPv4/IPv6 주소는 이름 해석이 필요 없음
+	}
 	hostOnly := host
-	if idx := strings.LastIndex(host, ":"); idx != -1 {
-		hostOnly = host[:idx]
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostOnly = h
 	}
 	if net.ParseIP(hostOnly) != nil {
 		return nil // IP는 이름 해석이 필요 없음
@@ -798,10 +1103,18 @@ func registerHost(host string) *hostCtl {
 	activeMu.Lock()
 	activeHosts[host] = c
 	activeMu.Unlock()
+	timingMu.Lock()
+	hostTimes[host] = &hostTiming{start: time.Now()}
+	timingMu.Unlock()
 	return c
 }
 
 func unregisterHost(host string, c *hostCtl) {
+	timingMu.Lock()
+	if t := hostTimes[host]; t != nil {
+		t.end = time.Now()
+	}
+	timingMu.Unlock()
 	activeMu.Lock()
 	delete(activeHosts, host)
 	activeMu.Unlock()
@@ -845,6 +1158,8 @@ func startInterruptHandler() {
 			}
 			count++
 			last = now
+			// 행리스트 화면을 보고 있었다면 원래 화면으로 돌아온 뒤 안내를 찍는다(안 그러면 안내가 안 보임).
+			leaveListIfActive()
 			switch {
 			case count == 1:
 				activeMu.Lock()
@@ -862,9 +1177,25 @@ func startInterruptHandler() {
 				emit(os.Stderr, "\n[Ctrl+C x3] 전체 작업을 중단합니다. 지금까지의 결과로 마무리합니다.\n")
 				abortAll()
 			default:
+				restoreTerminal()
 				os.Exit(130)
 			}
 		}
+	}()
+}
+
+// startTerminalGuard는 진행률(커서 숨김)이나 -m(입력 모드 변경)을 쓰는 동안 SIGTERM/SIGHUP으로
+// 종료돼도 터미널을 원래 상태로 되돌리고 종료한다.
+func startTerminalGuard() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGTERM, syscall.SIGHUP)
+	go func() {
+		s := <-ch
+		restoreTerminal()
+		if s == syscall.SIGHUP {
+			os.Exit(129)
+		}
+		os.Exit(143)
 	}()
 }
 
@@ -887,6 +1218,7 @@ func main() {
 	scriptMode := flag.Bool("script", isPdshName, "작업 요약 출력 숨김 (순수 결과만 출력). 실행 파일 이름이 pdsh면 기본값 true")
 	pmMode := flag.Bool("pm", false, "/user/svrauto 마운트 상태 추가 점검 및 OS설치중 감지")
 	bMode := flag.Bool("b", false, "clush 스타일: 결과가 동일한 호스트끼리 묶어서 출력 (-script와 함께 쓰면 무시되고 호스트별로 출력)")
+	mMode := flag.Bool("m", false, "행리스트보기: 실행 중 Enter를 누르면 60초 이상 실행 중인(또는 실행했던) 호스트와 진행시간을 보여줌, 다시 Enter로 복귀")
 
 	// ★ pdsh 스타일 "-w^file"/"-wfile" 붙여쓰기 지원을 위해 flag.Parse() 대신 전처리한 인자로 파싱
 	flag.CommandLine.Parse(preprocessArgs(os.Args[1:]))
@@ -969,6 +1301,9 @@ func main() {
 
 	var hosts []string
 	scanner := bufio.NewScanner(file)
+	// ★ 기본 한 줄 최대 길이(64KB)를 넘는 줄(호스트를 한 줄에 수천 대 가로로 나열한 경우)이 있으면
+	// 스캐너가 조용히 멈춰서 호스트가 통째로 누락됐다. 최대 64MB까지 허용하고 오류는 알린다.
+	scanner.Buffer(make([]byte, 64*1024), 64*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" && !strings.HasPrefix(line, "#") {
@@ -983,6 +1318,9 @@ func main() {
 				}
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("호스트 파일을 읽는 중 오류가 발생했습니다: %v\n", err)
 	}
 
 	if len(hosts) == 0 {
@@ -1053,23 +1391,57 @@ func main() {
 	var progressWG sync.WaitGroup
 	progressStop := make(chan struct{})
 	total := int64(len(hosts))
-	progressEnabled := !isPdshName && stderrIsTerminal()
+	stdoutTTY = isCharDevice(os.Stdout)
+	stderrTTY = isCharDevice(os.Stderr)
+
+	// ★ -m(행리스트보기)는 키 입력(Enter)을 받아야 하므로 입력/표준에러가 모두 터미널일 때만 켠다.
+	// -m은 사용자가 명시적으로 준 옵션이라 pdsh 이름이어도 동작한다.
+	if *mMode {
+		if !stderrTTY || !isCharDevice(os.Stdin) {
+			fmt.Fprintln(os.Stderr, "[-m] 터미널에서 실행한 경우에만 행리스트보기를 쓸 수 있어 무시합니다.")
+		} else if restore, err := enableCbreak(int(os.Stdin.Fd())); err != nil {
+			fmt.Fprintf(os.Stderr, "[-m] 키 입력 모드를 설정할 수 없어 무시합니다: %v\n", err)
+		} else {
+			cbreakRestore = restore
+			monitorOn = true
+		}
+	}
+
+	// ★ 진행률 표시(카운트, 1초 갱신). 표준에러로 출력하고(데이터 아님, 리다이렉션에 안 섞이게),
+	// pdsh 이름일 때는 아예 찍지 않는다(pdsh에 없는 gossh 전용 출력이 섞이면 안 되기 때문). 단 -m을
+	// 명시한 경우엔 행리스트 안내가 진행률 줄에 붙으므로 켠다.
+	progressEnabled := stderrTTY && (!isPdshName || monitorOn)
 	if progressEnabled {
+		monitorStart = startTime
+		startTerminalGuard()
 		printProgress := func() {
 			c := atomic.LoadInt64(&completed)
 			pct := int64(0)
 			if total > 0 {
 				pct = c * 100 / total
 			}
+			text := fmt.Sprintf("진행: %d/%d (%d%%)", c, total, pct)
+			if monitorOn {
+				text += fmt.Sprintf("  [Enter: 행리스트보기 - %d초 이상 실행 중 %d대]", int(hangThreshold.Seconds()), countHangRunning())
+			}
 			outMu.Lock()
-			progressText = fmt.Sprintf("진행: %d/%d (%d%%)", c, total, pct)
-			drawProgressLocked()
+			progressText = text
+			if listActive {
+				renderHangListLocked()
+			} else {
+				drawProgressLocked(false)
+			}
 			outMu.Unlock()
 		}
 		outMu.Lock()
 		progressOn = true
+		cursorHidden = true
+		fmt.Fprint(os.Stderr, "\033[?25l") // 진행 중 커서 숨김(줄 맨 앞에서 커서가 깜빡이는 것 방지)
 		outMu.Unlock()
 		printProgress()
+		if monitorOn {
+			startMonitorKeys()
+		}
 		progressWG.Add(1)
 		go func() {
 			defer progressWG.Done()
@@ -1080,11 +1452,13 @@ func main() {
 				case <-ticker.C:
 					printProgress()
 				case <-progressStop:
+					leaveListIfActive()
 					printProgress()
 					outMu.Lock()
 					progressOn = false
 					fmt.Fprintln(os.Stderr)
 					outMu.Unlock()
+					restoreTerminal()
 					return
 				}
 			}
