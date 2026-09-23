@@ -3,7 +3,8 @@
 # change.sh — 통합 VM 망변경 스크립트 (전처리 → IP 변경 → LDAP → 포트그룹)
 #
 #   ./change.sh [옵션] [계정]        전체 흐름
-#   ./change.sh port [계정|인시던트]  포트그룹(2차)만
+#   ./change.sh port -u 계정|인시던트 포트그룹(2차)만 (-u 없이 쓴 이름은 인시던트)
+#   ./change.sh --only E [계정]       포트그룹만 (전처리부터 새로)
 #   ./change.sh rollback <인시던트>   인시던트 역순 원복 (§7)
 #   ./change.sh --retry ip|ldap [계정] 해당 단계 실패분만 재시도
 #   ./change.sh --debug-inventory     vCenter 인벤토리 덤프 (§9)
@@ -54,7 +55,7 @@ cd "$(dirname "$0")"
 CONF_FILE="${INTEGRATION_CONF:-./integration.conf}"
 WORK="./work"; LOG_DIR="./logs"; CONF_DIR="./conf"
 
-usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # ── 인자 파싱 ──────────────────────────────────────────────────────────────
 SUBCMD=""; RETRY=""; RUN_USER=""; DRY_RUN=0; DEBUG_LEVEL=0

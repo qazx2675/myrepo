@@ -10,10 +10,14 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
 	"strings"
+	"sync"
+
+	"ldap-automation/internal/monitor"
 )
 
 // Options 는 gossh 호출 옵션입니다.
@@ -28,6 +32,10 @@ type Options struct {
 	RemotePath  string // 원격에 떨어뜨릴 스크립트 경로
 	Root        string // apply 스크립트의 ROOT 환경변수
 	DryRun      bool
+
+	// Monitor 가 있으면 gossh 출력을 줄 단위로 넘겨 진행 화면에 반영하고,
+	// gossh 를 별도 프로세스 그룹으로 띄웁니다(Ctrl+C 3회 규칙). nil 이면 기존과 동일.
+	Monitor *monitor.Monitor
 }
 
 // Result 는 노드 한 대의 실행 결과입니다.
@@ -146,13 +154,32 @@ func Run(hostFile, command string, o Options) ([]Result, string, error) {
 	args = append(args, command)
 
 	cmd := exec.Command(bin, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
 	// gossh v2 는 진행률/상태(ERROR 포함) 메시지를 표준에러로 보냅니다. 파싱에
 	// 합치면 결과 줄 중간에 끼어들어 깨지므로 파싱은 표준출력만 사용하되,
 	// 실패 사유는 화면에 보여야 하므로 raw(표시용)에는 표준에러도 붙입니다.
-	err := cmd.Run()
+	// 두 출력은 끝까지 그대로 모으면서, 모니터가 있으면 호스트별 줄을 바로 넘깁니다.
+	o.Monitor.Prepare(cmd)
+	outPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, "", err
+	}
+	errPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, "", err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, "", err
+	}
+	o.Monitor.Track(cmd.Process.Pid)
+	var stdout, stderr bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); scanHostLines(outPipe, &stdout, o.Monitor.HostLine) }()
+	go func() { defer wg.Done(); scanHostLines(errPipe, &stderr, o.Monitor.HostError) }()
+	wg.Wait()
+	err = cmd.Wait()
+	o.Monitor.Untrack(cmd.Process.Pid)
+
 	raw := stdout.String()
 	if s := strings.TrimSpace(stderr.String()); s != "" {
 		if raw != "" {
@@ -164,14 +191,37 @@ func Run(hostFile, command string, o Options) ([]Result, string, error) {
 	return parse(stdout.String()), raw, err
 }
 
+// scanHostLines 는 r 을 끝까지 읽어 buf 에 그대로 모으면서, "<host>: <내용>"
+// 줄마다 fn 을 부릅니다.
+func scanHostLines(r io.Reader, buf *bytes.Buffer, fn func(host, body string)) {
+	sc := bufio.NewScanner(io.TeeReader(r, buf))
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		if host, body, ok := splitHostLine(sc.Text()); ok {
+			fn(host, body)
+		}
+	}
+	// 너무 긴 줄 등으로 스캐너가 멈췄어도 나머지는 raw 에 남기고 파이프를 비웁니다.
+	_, _ = io.Copy(buf, r)
+}
+
+// splitHostLine 은 gossh 의 "<host>: <내용>" 줄을 나눕니다. gossh 자체 안내
+// 문구 등(호스트 자리에 공백이 있는 줄)은 false.
+func splitHostLine(line string) (host, body string, ok bool) {
+	host, body, ok = strings.Cut(line, ": ")
+	if !ok || strings.ContainsAny(host, " \t") {
+		return "", "", false
+	}
+	return host, body, true
+}
+
 func parse(raw string) []Result {
 	byHost := map[string][]string{}
 	sc := bufio.NewScanner(strings.NewReader(raw))
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
-		line := sc.Text()
-		host, body, ok := strings.Cut(line, ": ")
-		if !ok || strings.ContainsAny(host, " \t") {
+		host, body, ok := splitHostLine(sc.Text())
+		if !ok {
 			continue // gossh 자체 안내 문구 등은 건너뜁니다.
 		}
 		byHost[host] = append(byHost[host], body)

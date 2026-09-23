@@ -24,7 +24,7 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | `lib/common.sh` | 설정 로드(`load_conf`/`conf_get`), 로그(`log`/`dlog`), 디버그 레벨, 에러코드 출력(`die`), **`user선택()`(기본: 텍스트 입력, 사이트별로 교체 가능)** |
 | `lib/conf.sh` | `integration.conf` → `conf/ip_change.conf` 렌더링 (§2.2). ldap/nm 은 플래그로 받아 렌더링 없음 |
 | `lib/preprocess.sh` | `vswitch_<계정>.txt` Case 1/2/3 표준화 (§4). 출력은 정확히 3열 |
-| `lib/stages.sh` | C(IP)·D(LDAP) 단계 실행. OS6 분기(§8.1, 관리서버 hostname 기준), 2패스 타임아웃(§8.2), **엔진 stdout 파싱** |
+| `lib/stages.sh` | C(IP)·D(LDAP) 단계 실행. OS6 분기(§8.1, 관리서버 hostname 기준), 2패스 타임아웃(§8.2, 2차 기본 48시간), **엔진 stdout 파싱**, 엔진을 `-monitor` 로 호출(60초 넘으면 /dev/tty 진행 화면) |
 | `lib/results.sh` | 결과 5종 파일 기록(§6), `.bak` 백업, `--retry` 대상 산정 |
 | `lib/incident.sh` | 인시던트 저장/로드(§5.3), 백업 위치 인덱싱, 역순 롤백(§7), 전체 삭제(`incident_purge_all`) |
 | `conf/` | 렌더링된 프로젝트 conf (gitignore) |
@@ -41,6 +41,8 @@ change.sh ──> lib/preprocess.sh ─(표준화)─> work/vswitch_*.std.txt
 | "에러코드 추가" | `lib/*.sh` 의 `die` 호출 + `README.md` 대응표 |
 | "결과 파일 형식 변경" | `lib/results.sh` 의 `write_results` |
 | "2패스/타임아웃 로직" | `lib/stages.sh` 의 `_stage_run` |
+| "IP/LDAP 진행 화면·Ctrl+C 3회" | `projects/{ip_change,ldap_setting}/internal/monitor/` (두 곳 동일 파일 — `.claude/HPC/` 원본에도 같은 사본), 엔진 `-monitor` 플래그, `internal/remote.Run` 의 줄 단위 전달 |
+| "Ctrl+C 3회 중단 뒤 처리" | `lib/stages.sh` 의 `_engine_aborted` (엔진 종료코드 130 → B1) |
 | "OS6 분기 규칙" | `lib/stages.sh` 의 `_mgmt_is_os6` / `_stage_run` |
 | "포트그룹 OS6 바이너리 경로" | `lib/stages.sh` 의 `_nm_bin_dir` (`NM_BIN_DIR` 로 `run.sh` 에 전달) |
 | "증분 업데이트 보존 규칙" | `update.sh` 의 `KEEP_FILES` / rsync `--exclude` |
