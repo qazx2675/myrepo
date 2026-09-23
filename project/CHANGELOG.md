@@ -11,6 +11,10 @@
 - `cmd/fake-vcenter`: VM 이름을 `test-vm0001..` 대신 `host0001ev01`/`host0001ev02..` 로
   변경(짝 명명 규칙과 동일). BM(가짜 ESXi 호스트, `-cores`)과 `-busy-ev01`(짝 우선순위
   확인 시나리오용, 부하 고정) 옵션 추가.
+- `cmd/fake-vcenter`: `-pair-mode both/ev02-only/ev01-only` 추가 — list.txt(변경
+  대상)에 짝 중 무엇을 넣을지 선택(ev02 짝 우선순위 확인이 list.txt 구성에 따라
+  다른 코드 경로를 타므로: 짝을 list.txt 안에서 찾는지, vCenter 인벤토리에서만
+  찾는지, 애초에 짝이 없는지). `e2e-test.sh` 가 세 구성을 모두 돌리도록 변경.
 
 ## 2026-09-23 — 시험 환경 (v1.1.0)
 - 추가: `cmd/fake-vcenter` + `fake-vcenter.sh` — vcsim 기반 가짜 vCenter. VM 수, 느린 VM,
