@@ -14,6 +14,7 @@ import (
 
 	"ip-change/internal/color"
 	"ip-change/internal/config"
+	"ip-change/internal/monitor"
 	"ip-change/internal/remote"
 	"ip-change/internal/render"
 	"ip-change/internal/target"
@@ -35,6 +36,8 @@ func main() {
 
 		rollback   = flag.Bool("rollback", false, "IP 변경을 되돌립니다 (각 노드의 최근 <ifcfg>.bak.<STAMP> 복원)")
 		rollbackTo = flag.String("rollback-to", "", "되돌릴 백업 STAMP 지정 (미지정 시 가장 최근)")
+
+		withMonitor = flag.Bool("monitor", false, "60초가 지나도 안 끝나면 /dev/tty 에 호스트별 진행 화면을 띄우고, Ctrl+C 는 5초 안에 3번 눌러야 종료 (통합 스크립트가 켬)")
 	)
 	flag.Parse()
 
@@ -43,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(*confPath, *targetPath, *rollback, *rollbackTo, remote.Options{
+	if err := run(*confPath, *targetPath, *rollback, *rollbackTo, *withMonitor, remote.Options{
 		GosshPath: *gosshPath, User: *user, Password: *password,
 		KeyPath: *keyPath, Port: *port, Concurrency: *concurrency,
 		TimeoutSec: *timeoutSec, RemotePath: *remotePath,
@@ -53,7 +56,7 @@ func main() {
 	}
 }
 
-func run(confPath, targetPath string, rollback bool, rollbackTo string, opts remote.Options) error {
+func run(confPath, targetPath string, rollback bool, rollbackTo string, withMonitor bool, opts remote.Options) error {
 	cfg, err := config.Load(confPath)
 	if err != nil {
 		return fmt.Errorf("설정 파일: %w", err)
@@ -96,7 +99,12 @@ func run(confPath, targetPath string, rollback bool, rollbackTo string, opts rem
 	defer cleanup()
 
 	cmdline := remote.BuildCommand(script, opts)
+	if withMonitor {
+		opts.Monitor = monitor.New("IP 변경", hosts, ipMonitorLabel, os.Stdout)
+		opts.Monitor.Start()
+	}
 	results, raw, runErr := remote.Run(hostFile, cmdline, opts)
+	opts.Monitor.Stop() // 아래에서 os.Exit 할 수 있으므로 defer 가 아니라 여기서 화면 원복
 
 	if len(results) == 0 {
 		fmt.Println(color.BoldRed("gossh 출력이 비어 있습니다."))
@@ -223,6 +231,14 @@ func runRollback(cfg *config.Config, targetPath, rollbackTo string, opts remote.
 		os.Exit(2)
 	}
 	return nil
+}
+
+// ipMonitorLabel 은 진행 화면에 보일 호스트 상태입니다(마지막 줄 = apply_body.sh 결과 줄).
+func ipMonitorLabel(lines []string) (string, bool) {
+	if _, ok := formatResultLine("", lines[len(lines)-1]); ok {
+		return "완료(OK)", false
+	}
+	return "실패", true
 }
 
 // formatRollbackLine 은 rollback_body.sh 의 "RESULT|..." 한 줄을 화면용으로 바꿉니다.

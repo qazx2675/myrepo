@@ -133,6 +133,7 @@ hostname2             192.168.1.11 -> 2.2.2.2   (GW 2.2.2.1)
 | `-remote-path` | `/root/ip_change_apply.sh` | 원격에 떨어뜨릴 스크립트 경로 (실행 후 삭제됨) |
 | `-rollback` | `false` | IP 변경을 되돌립니다. 각 노드에서 `<ifcfg>.bak.<STAMP>` 를 복원 |
 | `-rollback-to` | (없음) | 되돌릴 백업 STAMP 지정. 미지정 시 가장 최근 백업 |
+| `-monitor` | `false` | 60초가 지나도 안 끝나면 제어 터미널(`/dev/tty`)에 호스트별 진행 화면(↑/↓·←/→·Enter)을 띄우고, Ctrl+C 는 5초 안에 3번 눌러야 종료(종료코드 130, 되돌리기 없음). 표준출력 형식은 그대로. 통합 스크립트(`change.sh`)가 켭니다 |
 
 > `-rollback` 시 `-targets` 파일은 `hostname` 한 컬럼만 있어도 됩니다(변경 IP 불필요).
 > 최신 STAMP 백업을 가진 ifcfg 가 노드에 둘 이상이면 `-rollback-to` 로 지정하십시오.
