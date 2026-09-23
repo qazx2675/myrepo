@@ -9,11 +9,10 @@
 // 이미 다른 VM 을 막지 않으므로, 여기서 포기시키는 것보다 실제로 끝날 때까지
 // 기다려 정상 처리하는 쪽을 선택했습니다.
 //
-// Ctrl+C(SIGINT) 를 누르면 아직 시작하지 않은 대상은 취소하고, 이미 IP 를
-// 바꿨지만 아직 완료(연결 재기동)되지 않은 대상은 원래 설정으로 되돌립니다.
-// 이미 [OK] 로 끝난 대상은 그대로 둡니다. 이 처리 중에도 각 게스트 명령은
-// 끝까지 기다리므로(위와 동일한 이유), 즉시 강제 종료하려면 별도 터미널에서
-// pkill 로 이 프로세스를 종료하십시오(SIGTERM은 가로채지 않으므로 즉시 종료됨).
+// Ctrl+C 는 5초 안에 3번 눌러야 즉시 종료됩니다(1~2번은 안내만 표시 — 실수로
+// 한 번 눌러 작업이 끊기지 않게). 종료 시 되돌리기는 하지 않으며, IP 를 바꾸던
+// 중이던 대상과 수동 복구용 게스트 스크립트 경로를 출력합니다(internal/tui).
+// SIGTERM(pkill)은 가로채지 않으므로 그대로 즉시 종료됩니다.
 package main
 
 import (
@@ -24,7 +23,6 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 
 	"github.com/vmware/govmomi"
@@ -143,21 +141,16 @@ func main() {
 
 	tracker := status.NewTracker(trackedVMs)
 
-	// Ctrl+C: 새 작업은 막고, 이미 설정을 바꾼 뒤 아직 끝나지 않은 작업만
-	// 되돌린다. SIGTERM 은 가로채지 않으므로 pkill 로는 즉시 종료된다.
-	var cancelRequested atomic.Bool
+	// Ctrl+C 는 tui 가 센다(5초 안에 3번이면 즉시 종료). raw 모드(60초 이후)에서는
+	// Ctrl+C 가 시그널이 아니라 키 입력으로 들어오므로 그쪽도 tui 가 같이 처리한다.
+	// SIGTERM 은 가로채지 않으므로 pkill 로는 즉시 종료된다.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT)
-	go func() {
-		<-sigCh
-		cancelRequested.Store(true)
-		fmt.Fprintln(os.Stderr, "\nCtrl+C 감지: 새 작업 시작을 멈추고, 이미 IP 를 바꾼 뒤 아직 끝나지 않은 작업만 원래대로 되돌립니다. 즉시 종료하려면 다른 터미널에서 pkill 로 강제 종료하세요.")
-	}()
 
 	done := make(chan struct{})
 	renderDone := make(chan struct{})
 	go func() {
-		tui.Run(tracker, done)
+		tui.Run(tracker, done, sigCh)
 		close(renderDone)
 	}()
 
@@ -173,7 +166,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			runOne(ctx, loc.client, loc.vm, e, guestUser, guestPass, sv, &cancelRequested)
+			runOne(ctx, loc.client, loc.vm, e, guestUser, guestPass, sv)
 		}()
 	}
 	wg.Wait()
@@ -192,26 +185,14 @@ func main() {
 }
 
 // runOne 은 한 VM 의 3단계(연결 확인 -> IP 설정 적용 -> 연결 재기동)를 순서대로
-// 실행하며 각 단계 사이에서 cancelRequested 를 확인합니다. 이미 설정을 바꾼
-// 뒤 취소가 감지되면 되돌리기(vsphere.Revert)를 실행합니다.
-func runOne(ctx context.Context, c *govmomi.Client, vm mo.VirtualMachine, e target.Entry, guestUser, guestPass string, sv *status.VM, cancelRequested *atomic.Bool) {
+// 실행합니다.
+func runOne(ctx context.Context, c *govmomi.Client, vm mo.VirtualMachine, e target.Entry, guestUser, guestPass string, sv *status.VM) {
 	id := target.SanitizeID(e.Hostname)
 	gw := target.Gateway(e.NewIP)
-
-	if cancelRequested.Load() {
-		sv.Finish(status.OutcomeCancelled, nil)
-		return
-	}
 
 	sv.SetPhase(status.PhaseChecking)
 	if err := vsphere.CheckConnection(ctx, c, vm.Reference(), guestUser, guestPass, id); err != nil {
 		sv.Finish(status.OutcomeFailed, err)
-		return
-	}
-
-	if cancelRequested.Load() {
-		// 아직 게스트 설정을 바꾸지 않았으므로 되돌릴 것이 없다.
-		sv.Finish(status.OutcomeCancelled, nil)
 		return
 	}
 
@@ -221,27 +202,11 @@ func runOne(ctx context.Context, c *govmomi.Client, vm mo.VirtualMachine, e targ
 		return
 	}
 
-	if cancelRequested.Load() {
-		revertAndFinish(ctx, c, vm, guestUser, guestPass, id, sv)
-		return
-	}
-
 	sv.SetPhase(status.PhaseRestarting)
 	if err := vsphere.RestartConnection(ctx, c, vm.Reference(), guestUser, guestPass, id); err != nil {
 		sv.Finish(status.OutcomeFailed, err)
 		return
 	}
 
-	// RestartConnection 이 성공하면 그 안에서 되돌리기 스크립트도 함께 지워지므로
-	// (vsphere.go 참고) 이 시점부터는 취소돼도 되돌릴 수 없다 — 완료로 처리한다.
 	sv.Finish(status.OutcomeDone, nil)
-}
-
-func revertAndFinish(ctx context.Context, c *govmomi.Client, vm mo.VirtualMachine, guestUser, guestPass, id string, sv *status.VM) {
-	sv.SetPhase(status.PhaseReverting)
-	if err := vsphere.Revert(ctx, c, vm.Reference(), guestUser, guestPass, id); err != nil {
-		sv.Finish(status.OutcomeFailed, fmt.Errorf("되돌리기 실패(수동 확인 필요): %w", err))
-		return
-	}
-	sv.Finish(status.OutcomeRolledBack, nil)
 }
