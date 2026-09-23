@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-./setup.sh >/dev/null
+bash setup.sh >/dev/null
 
 out=testrun-e2e
 port=${PORT:-18444}
