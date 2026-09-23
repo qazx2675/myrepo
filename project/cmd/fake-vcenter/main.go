@@ -13,10 +13,13 @@
 // VM 은 물리서버(BM) 하나를 공유하는 두 대씩 짝지어 "host0001ev01"/
 // "host0001ev02" 로 이름 붙입니다(실제 명명 규칙과 동일). BM 은 같은 이름
 // ("host0001")의 ESXi 호스트(HostSystem)로 만들고 -cores 개 물리 코어를 줍니다.
-// -busy-ev01 %: 그 중 일부 짝의 ev01 이 항상 BM 물리 코어 이상의 load average 를
-// 쓰는 것으로 흉내 냅니다 — vm-ip-change 가 그 짝의 ev02 대상을 후순위로 미루고
-// 2분마다 재확인하는지 보는 시나리오용입니다(부하가 고정이라 절대 안 풀립니다 —
-// 도중에 상태를 보려면 vm-ip-change 목록 화면에서 's' 로 저장하거나 Ctrl+C 로 중단).
+// -busy-ev01 %: 그 중 일부 짝의 ev01 이 BM 물리 코어 이상의 load average 를 쓰는
+// 것으로 흉내 냅니다 — vm-ip-change 가 그 짝의 ev02 대상을 후순위로 미루고 2분마다
+// 재확인하는지 보는 시나리오용입니다. -busy-ev01-for 를 0(기본값)으로 두면 부하가
+// 고정이라 절대 안 풀립니다(도중에 상태를 보려면 vm-ip-change 목록 화면에서 's' 로
+// 저장하거나 Ctrl+C 로 중단). 양수를 주면 그 시간이 지난 뒤 부하가 내려가므로,
+// 다음 2분 재확인에서 그 ev02 대상의 우선순위가 다시 올라가 처리되는 것까지
+// 실제로 볼 수 있습니다.
 //
 // 시작하면 -out 폴더에 vcenter.txt/list.txt 를 만들고, 종료(Ctrl+C) 시 각 VM
 // 에 실제로 어떤 IP 가 적용됐는지 검증 결과를 출력하고 report.txt 로 저장합니다.
@@ -69,6 +72,7 @@ func main() {
 	seed := flag.Int64("seed", 1, "난수 시드(같은 값이면 같은 VM 이 느림/실패로 뽑힘)")
 	cores := flag.Int("cores", 8, "BM(ESXi 호스트) 물리 코어 수")
 	busyPct := flag.Int("busy-ev01", 0, "ev01 이 짝의 BM 물리 코어 이상을 쓰는 것으로 흉내 낼 짝 비율(%) — 해당 ev02 대상은 계속 후순위로 밀림")
+	busyFor := flag.Duration("busy-ev01-for", 0, "그 ev01 들이 과점유 상태로 있을 시간(0 이면 영원히 — 기본값). 지나면 부하가 내려가 다음 재확인(2분 주기)에서 그 ev02 짝의 우선순위가 다시 올라가는 걸 볼 수 있음")
 	pairMode := flag.String("pair-mode", "both", `list.txt 에 짝(ev01/ev02) 중 어느 쪽을 넣을지: "both"(둘 다, 기본값) / "ev02-only"(ev02 만 — ev01 은 vCenter 에는 있지만 변경 대상 아님) / "ev01-only"(ev01 만 — ev02 자체가 없음)`)
 	flag.Parse()
 
@@ -103,7 +107,8 @@ func main() {
 	defer m.Remove()
 
 	st := &state{procs: map[int64]*proc{}, vms: map[string]*vmState{}, rnd: rnd,
-		minD: *minD, maxD: *maxD, slowD: *slowD, cores: *cores}
+		minD: *minD, maxD: *maxD, slowD: *slowD, cores: *cores,
+		bootedAt: time.Now(), busyFor: *busyFor}
 
 	// VM 이름을 test-vm0001.. 대신 host0001ev01/host0001ev02.. 로 바꾼다(짝 VM 이
 	// BM 하나를 공유하는 실제 명명 규칙과 동일). 시나리오(느림/실패/전원꺼짐)도
@@ -278,6 +283,9 @@ type state struct {
 	rnd               *rand.Rand
 	minD, maxD, slowD time.Duration
 	cores             int
+
+	bootedAt time.Time // 이 값 기준으로 busyFor 가 지났는지 판단(0 이면 영원히 과점유)
+	busyFor  time.Duration
 }
 
 var ipRe = regexp.MustCompile(`ipv4\.addresses ([0-9.]+)/24`)
@@ -335,16 +343,17 @@ func (s *state) start(vmRef, script string) int64 {
 
 // serveLoadAverage 는 vm-ip-change 의 LoadAverage1 이 내려받는 "uptime" 결과
 // 파일을 가짜로 돌려준다. vm-ip-change 가 실제로 파일을 만들지 않으므로(게스트
-// 명령 자체를 실행하지 않음), 요청받은 VM 의 vs.busy 여부만 보고 즉석에서
-// load average 문자열을 만든다.
+// 명령 자체를 실행하지 않음), 요청받은 VM 의 vs.busy 여부(+ busyFor 로 정한
+// 과점유 지속시간)만 보고 즉석에서 load average 문자열을 만든다.
 func (s *state) serveLoadAverage(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	vs := s.vms[r.URL.Query().Get("vm")]
 	cores := s.cores
+	busyNow := vs != nil && vs.busy && (s.busyFor <= 0 || time.Since(s.bootedAt) < s.busyFor)
 	s.mu.Unlock()
 
 	load := 0.10
-	if vs != nil && vs.busy {
+	if busyNow {
 		load = float64(cores) * 2 // 물리 코어의 두 배 — 항상 "과점유"로 판정되게
 	}
 	fmt.Fprintf(w, " 12:00:00 up 1 day,  1 user,  load average: %.2f, %.2f, %.2f\n", load, load, load)
