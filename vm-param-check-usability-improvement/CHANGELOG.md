@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-23 — saccae 검증 환경에서 찾은 버그 3건
+
+- **vcenter.txt 줄 끝 주석으로 panic**: `vcsim.saccae.com   # 설명`처럼 줄 끝에 주석이 있으면 주석까지 주소로 읽어 접속 URL이 깨지고 panic이 났다. `vm_setup.sh`는 같은 vcenter.txt를 줄 끝 주석을 빼고 읽는다. `config.LoadLines`가 `#` 뒤를 버리고 첫 단어만 쓰게 했다(`-f` 대상 파일도 같음). 테스트 `TestLoadLinesInlineComment`.
+- **`-fix` 동질성 게이트가 스펙을 구분하지 않음**: `-specRoot`로 VM마다 다른 스펙을 쓰면 ev01끼리도 값이 다른 게 정상인데, 게이트가 스펙 구분 없이 전체 ev01을 비교해서 **스펙이 둘 이상 섞인 교정은 항상** `[동질성 검증 실패]`로 막혔다. 이제 같은 스펙의 같은 그룹끼리만 비교한다(`fixer.CheckGatesBySpec`, `applyFolderSpecs`가 VM별 스펙 파일도 돌려줌). `-specRoot` 없이 쓰면 예전과 같다. 테스트 `TestGateBySpec`.
+- **재검증 출력이 `-noColor`를 무시**: `-fix` 재검증 화면은 색이 항상 켜져 있었다. `-noColor`를 따르게 했다.
+- 같은 코드를 쓰는 복사본에도 적용: `.claude/VM/vm-param-check-usability-improvement`(3건 모두), `vm-param-setting-check`(LoadLines), `integrated-vm-param-check-test-tool`(LoadLines, `-noColor`).
+- 확인: vcsim BM 100대·VM 1080대(스펙 3개)에서 체크 5초, `-fix` 17초 — 게이트 통과 후 preferHT/1GB 페이지/코어 토폴로지 교정, 재검증에 남은 것은 vcsim이 흉내 내지 않는 `coresPerNumaNode`뿐. `go test` 통과.
+
 ## 2026-09-23 — ev01~ev99 그룹
 
 - `model.MaxGroup` 10 → 99. 그룹 옵션(`-cpu-evNN` 등, `-affinity-evNN`)이 ev99까지 등록되고, `-specExport`도 ev99까지 읽는다. 규칙은 그대로다.

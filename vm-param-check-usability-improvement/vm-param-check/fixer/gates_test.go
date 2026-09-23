@@ -23,6 +23,29 @@ func TestGateIgnoresCoresPerSocketAndNuma(t *testing.T) {
 	}
 }
 
+// -specRoot 로 VM마다 스펙이 다르면 동질성은 같은 스펙의 같은 그룹끼리만 본다.
+func TestGateBySpec(t *testing.T) {
+	a := vmInfo("aaev01", false, nil)
+	a.NumCPU = 8
+	b := vmInfo("bbev01", false, nil)
+	b.NumCPU = 2
+	c := vmInfo("ccev01", false, nil)
+	c.NumCPU = 4
+	vms := []model.VMInfo{a, b, c}
+	targets := []string{"aaev01", "bbev01"}
+
+	if err := CheckGates(targets, vms); err == nil {
+		t.Fatal("스펙 구분이 없으면 vCPU 가 다른 ev01 은 막아야 한다")
+	}
+	if err := CheckGatesBySpec(targets, vms, map[string]string{"aaev01": "A_spec.txt", "bbev01": "B_spec.txt"}); err != nil {
+		t.Fatalf("스펙이 다른 ev01 끼리는 비교하지 않아야 한다: %v", err)
+	}
+	err := CheckGatesBySpec([]string{"aaev01", "ccev01"}, vms, map[string]string{"aaev01": "A_spec.txt", "ccev01": "A_spec.txt"})
+	if err == nil || !strings.Contains(err.Error(), "A_spec.txt ev01") {
+		t.Fatalf("같은 스펙 안에서 vCPU 가 다르면 막아야 한다: %v", err)
+	}
+}
+
 // 고칠 수 없는(수동조치) 항목과 vCPU/HT는 여전히 비교해서 막아야 한다.
 func TestDiffSpecStillDetects(t *testing.T) {
 	base := vmInfo("aaev01", false, nil)

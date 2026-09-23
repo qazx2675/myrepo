@@ -295,8 +295,9 @@ func main() {
 	// 기대값은 VM마다 다를 수 있다 — -specRoot를 쓰면 VM이 속한 폴더의 스펙을 따르기 때문에,
 	// 대상이 여러 vCenter/여러 폴더에 걸쳐 서로 다른 스펙이어도 각자 자기 스펙으로 체크된다.
 	var expectByVM map[string]expectSet
+	var specByVM map[string]string // VM -> 스펙 파일 (-specRoot 일 때만. -fix 동질성 게이트를 스펙별로 나눈다)
 	if *specRoot != "" {
-		expectByVM = applyFolderSpecs(*specRoot, allVMs, setFlags, baseFlagValues, *yes, buildExpect)
+		expectByVM, specByVM = applyFolderSpecs(*specRoot, allVMs, setFlags, baseFlagValues, *yes, buildExpect)
 	} else {
 		e := buildExpect()
 		expectByVM = map[string]expectSet{}
@@ -363,7 +364,7 @@ func main() {
 		return
 	}
 
-	runFix(ctx, clientsByAddr, allVMs, fixSourceFindings, detailPath, *fixOut, *fixConcurrency, expectByVM)
+	runFix(ctx, clientsByAddr, allVMs, fixSourceFindings, detailPath, *fixOut, *fixConcurrency, !*noColor, expectByVM, specByVM)
 
 	// 교정/재검증 로그가 길어서 위쪽 경고가 묻히기 쉬우므로 맨 끝에 한 번 더 알린다.
 	warnMissing()
@@ -458,8 +459,8 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 
 // runFix는 통합 파이프라인의 [4]~[7] 단계 — 게이트 검증 -> dry-run -> 확인 -> 적용 -> 재검증.
 func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVMs []model.VMInfo, findings []model.Finding,
-	originalDetailPath, fixOutFlag string, concurrency int,
-	expectByVM map[string]expectSet) {
+	originalDetailPath, fixOutFlag string, concurrency int, color bool,
+	expectByVM map[string]expectSet, specByVM map[string]string) {
 
 	plan, err := fixer.BuildPlan(findings, allVMs)
 	if err != nil {
@@ -480,7 +481,7 @@ func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVM
 	}
 
 	targets := plan.TargetVMs()
-	if err := fixer.CheckGates(targets, allVMs); err != nil {
+	if err := fixer.CheckGatesBySpec(targets, allVMs, specByVM); err != nil {
 		log.Fatalf("%v", err)
 	}
 	fmt.Println("\n[OK] 그룹 동질성 검증 통과 — 대상 VM 전부 동일 스펙")
@@ -523,7 +524,7 @@ func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVM
 		log.Fatalf("재검증 실패: %v", err)
 	}
 
-	report.PrintConsole(os.Stdout, recheckFindings, recheckFindings, true, true)
+	report.PrintConsole(os.Stdout, recheckFindings, recheckFindings, color, true) // -noColor 를 재검증 출력에도 따른다
 
 	recheckDetail, recheckSummary := deriveRecheckPaths(originalDetailPath, fixOutFlag)
 	if err := report.WriteSummaryCSV(recheckSummary, recheckFindings); err != nil {
@@ -660,7 +661,7 @@ type folderResolution struct {
 // 사용자가 직접 준 플래그는 어느 스펙에서도 덮어쓰지 않는다(수동 우선).
 // 무엇이 적용될지 전부 보여준 뒤 확인을 받고, 아니라고 하면 아무것도 하지 않고 종료한다.
 func applyFolderSpecs(specRoot string, vms []model.VMInfo, setFlags map[string]bool,
-	baseFlagValues map[string]string, autoYes bool, buildExpect func() expectSet) map[string]expectSet {
+	baseFlagValues map[string]string, autoYes bool, buildExpect func() expectSet) (map[string]expectSet, map[string]string) {
 
 	resolutions := resolveVMFolders(specRoot, vms, autoYes)
 
@@ -720,11 +721,13 @@ func applyFolderSpecs(specRoot string, vms []model.VMInfo, setFlags map[string]b
 	}
 
 	expectByVM := map[string]expectSet{}
+	specByVM := map[string]string{}
 	for _, vm := range vms {
 		specFile := matchByResolved[resolutions[vm.Name].Resolved].SpecFile
 		expectByVM[vm.Name] = expectBySpec[specFile]
+		specByVM[vm.Name] = specFile
 	}
-	return expectByVM
+	return expectByVM, specByVM
 }
 
 // printResolutionGroups는 한 스펙으로 모인 VM들을, 실제 vCenter 폴더별로 묶어서 보여준다.
