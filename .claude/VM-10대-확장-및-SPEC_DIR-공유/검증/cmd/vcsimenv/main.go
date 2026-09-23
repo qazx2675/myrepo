@@ -31,6 +31,7 @@ func main() {
 	fqdn := flag.String("fqdnHosts", "", "쉼표로 구분한 이름의 독립 호스트를 첫 데이터센터에 추가 (예: bm1.example.com,bm2.example.com)")
 	nest := flag.Int("nest", 0, "호스트/클러스터와 VM을 이 깊이만큼 중첩 폴더(N1/N2/...) 안으로 옮김")
 	addr := flag.String("addr", "127.0.0.1:0", "listen 주소")
+	staticPower := flag.Bool("staticPower", false, "모든 호스트의 전원 정책을 High Performance(static)로 둔다 (vcsim 기본은 Balanced(dynamic))")
 	flag.Parse()
 
 	m := simulator.VPX()
@@ -140,6 +141,17 @@ func main() {
 			}
 		}
 		_ = c.Logout(ctx)
+	}
+
+	if *staticPower {
+		// vcsim 은 HostPowerSystem 을 구현하지 않아 API 로 바꿀 수 없다 — 시뮬레이터 객체를 직접 고친다(READY 전, 클라이언트 접속 전).
+		for _, e := range m.Map().All("HostSystem") {
+			h := e.(*simulator.HostSystem)
+			cfg := *h.Config // 호스트끼리 기본 설정을 공유할 수 있어 복사본을 고친다
+			cfg.PowerSystemInfo = &types.PowerSystemInfo{CurrentPolicy: types.HostPowerPolicy{
+				Key: 1, Name: "PowerPolicy.static.name", ShortName: "static", Description: "PowerPolicy.static.description"}}
+			h.Config = &cfg
+		}
 	}
 
 	fmt.Printf("READY %s\n", s.URL.Host)

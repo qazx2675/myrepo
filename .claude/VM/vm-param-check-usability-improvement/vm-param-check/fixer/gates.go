@@ -22,6 +22,13 @@ import (
 // CheckGates는 두 게이트를 동시에 돌리고, 하나라도 실패하면 에러를 돌려준다.
 // 서로 독립적인 검사라 병렬로 실행한다.
 func CheckGates(targets []string, vms []model.VMInfo) error {
+	return CheckGatesBySpec(targets, vms, nil)
+}
+
+// CheckGatesBySpec은 CheckGates와 같지만, 동질성을 "같은 스펙의 같은 그룹"끼리만 비교한다.
+// specOf는 VM 이름 -> 스펙 파일(-specRoot 로 VM마다 다른 스펙을 쓸 때). nil 이면 전부 한 스펙으로 본다.
+// 스펙이 다르면 ev01끼리도 값이 다른 게 정상이라, 스펙을 구분하지 않으면 여러 스펙이 섞인 교정이 항상 막힌다.
+func CheckGatesBySpec(targets []string, vms []model.VMInfo, specOf map[string]string) error {
 	infoByName := map[string]model.VMInfo{}
 	for _, vm := range vms {
 		infoByName[vm.Name] = vm
@@ -32,7 +39,7 @@ func CheckGates(targets []string, vms []model.VMInfo) error {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		homogErr = checkHomogeneity(targets, infoByName)
+		homogErr = checkHomogeneity(targets, infoByName, specOf)
 	}()
 	go func() {
 		defer wg.Done()
@@ -50,7 +57,8 @@ func CheckGates(targets []string, vms []model.VMInfo) error {
 }
 
 // checkHomogeneity는 같은 그룹 안의 교정 대상끼리 스펙이 같은지 확인한다(diffSpec 참고).
-func checkHomogeneity(targets []string, infoByName map[string]model.VMInfo) error {
+// specOf 가 있으면 스펙 파일별로 따로 묶는다(그룹 이름 앞에 "<스펙 파일> " 을 붙여 구분).
+func checkHomogeneity(targets []string, infoByName map[string]model.VMInfo, specOf map[string]string) error {
 	groups := map[string][]model.VMInfo{}
 	for _, name := range targets {
 		info, ok := infoByName[name]
@@ -58,6 +66,9 @@ func checkHomogeneity(targets []string, infoByName map[string]model.VMInfo) erro
 			return fmt.Errorf("VM %q의 조회 정보가 없습니다", name)
 		}
 		grp := GroupOf(name)
+		if s := specOf[name]; s != "" {
+			grp = s + " " + grp
+		}
 		groups[grp] = append(groups[grp], info)
 	}
 	groupNames := sortedGroupNames(groups)

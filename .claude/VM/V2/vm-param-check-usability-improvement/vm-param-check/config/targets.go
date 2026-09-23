@@ -8,8 +8,10 @@ import (
 	"strings"
 )
 
-// LoadLines는 '#' 주석과 빈 줄을 무시하고 트림된 라인 목록을 반환한다.
+// LoadLines는 '#' 주석과 빈 줄을 무시하고 줄마다 첫 단어를 반환한다.
 // vcenter.txt, targets 파일 등 "한 줄에 하나" 포맷 전부에 재사용한다.
+// 줄 끝 주석("vcenter.saccae.com  # 설명")도 무시한다 — vm_setup.sh 가 같은 vcenter.txt 를
+// 이렇게 읽으므로, 예전처럼 주석까지 주소로 읽으면 접속 URL 이 깨져 panic 이 났다.
 func LoadLines(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -20,11 +22,12 @@ func LoadLines(path string) ([]string, error) {
 	var lines []string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		line, _, _ := strings.Cut(scanner.Text(), "#")
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
 			continue
 		}
-		lines = append(lines, line)
+		lines = append(lines, fields[0])
 	}
 	return lines, scanner.Err()
 }

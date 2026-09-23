@@ -1,0 +1,66 @@
+# SAC-CAE102-VM08-GPU — BM 당 VM 8대 (saccae 검증용 임의 스펙)
+# 쓰는 옵션: ht=off, 따옴표 형식(키="값"), disk 허용값 여러 개, shares 숫자/normal 섞기,
+#            cores 만 주고 numa 생략, lpage 없는 ev(cores 생략), affinity(ev01 전용 + ev02~ev08 공통 파일)
+
+# --- 공통 ---
+ht="off"
+
+# --- ev01 ---
+cpu="8"
+mem="64"
+disk="1024,1026"
+shares-ev01="normal"
+cores="4"
+numa="4"
+affinity-ev01="affinity_ev01.txt"
+
+# --- ev02~ev08 ---
+cpu-ev02="4"
+mem-ev02="16"
+disk-ev02="100"
+shares-ev02="2000"
+cores-ev02="2"
+numa-ev02="2"
+affinity-ev02="affinity_ev02.txt"
+
+cpu-ev03="4"
+mem-ev03="16"
+disk-ev03="100"
+shares-ev03="normal"
+cores-ev03="2"
+numa-ev03="2"
+affinity-ev03="affinity_ev02.txt"
+
+cpu-ev04="4"
+mem-ev04="16"
+disk-ev04="100"
+shares-ev04="2000"
+cores-ev04="4"
+affinity-ev04="affinity_ev02.txt"
+
+cpu-ev05="4"
+mem-ev05="16"
+disk-ev05="100"
+shares-ev05="normal"
+cores-ev05="4"
+affinity-ev05="affinity_ev02.txt"
+
+# ev06~ev08 은 cores 를 비워서 lpage(토폴로지) 설정을 하지 않는다
+cpu-ev06="4"
+mem-ev06="8"
+disk-ev06="50"
+shares-ev06="1000"
+cores-ev06=""
+affinity-ev06="affinity_ev02.txt"
+
+cpu-ev07="4"
+mem-ev07="8"
+disk-ev07="50"
+shares-ev07="1000"
+affinity-ev07="affinity_ev02.txt"
+
+cpu-ev08="4"
+mem-ev08="8"
+disk-ev08="50"
+shares-ev08="normal"
+affinity-ev08="affinity_ev02.txt"

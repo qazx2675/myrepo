@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-23 — V2 에서 찾은 버그 3건 동일 적용
+
+- **vcenter.txt 줄 끝 주석으로 panic**: `vcsim.saccae.com   # 설명`처럼 줄 끝에 주석이 있으면 주석까지 주소로 읽어 접속 URL이 깨지고 panic이 났다. `vm_setup.sh`는 같은 vcenter.txt를 줄 끝 주석을 빼고 읽는다. `config.LoadLines`가 `#` 뒤를 버리고 첫 단어만 쓰게 했다(`-f` 대상 파일도 같음). 테스트 `TestLoadLinesInlineComment`.
+- **`-fix` 동질성 게이트가 스펙을 구분하지 않음**: `-specRoot`로 VM마다 다른 스펙을 쓰면 ev01끼리도 값이 다른 게 정상인데, 게이트가 스펙 구분 없이 전체 ev01을 비교해서 **스펙이 둘 이상 섞인 교정은 항상** `[동질성 검증 실패]`로 막혔다. 이제 같은 스펙의 같은 그룹끼리만 비교한다(`fixer.CheckGatesBySpec`, `applyFolderSpecs`가 VM별 스펙 파일도 돌려줌). `-specRoot` 없이 쓰면 예전과 같다. 테스트 `TestGateBySpec`.
+- **재검증 출력이 `-noColor`를 무시**: `-fix` 재검증 화면은 색이 항상 켜져 있었다. `-noColor`를 따르게 했다.
+- V2(`.claude/VM/V2/vm-param-check-usability-improvement`)와 같은 수정. 다른 복사본: `vm-param-setting-check`(LoadLines), `integrated-vm-param-check-test-tool`(LoadLines, `-noColor`).
+- 확인: vcsim BM 100대·VM 1080대(스펙 3개)에서 체크 5초, `-fix` 17초 — 게이트 통과 후 preferHT/1GB 페이지/코어 토폴로지 교정, 재검증에 남은 것은 vcsim이 흉내 내지 않는 `coresPerNumaNode`뿐. `go test` 통과.
+
 ## 2026-09-20 — `-fix` 게이트: ev01/ev02 짝(VM 대수)이 안 맞아도 막지 않고 경고만 출력
 
 - **변경**: ev01/ev02/ev03 그룹의 VM 대수가 서로 다르면 교정을 중단하던 조건을 게이트에서 뺐다. 대신 다르면 `[경고] 그룹별 VM 대수가 다릅니다(PASS/FAIL 무관, 조회된 VM 전부 기준): ev01=2대, ev02=1대 — 짝이 맞지 않지만 교정은 그대로 진행합니다`를 출력하고 계속 진행한다. 대수는 PASS/FAIL과 무관하게 조회한 VM 전부로 세고, 접미사가 없는 VM("기타")과 비교할 그룹이 하나뿐인 경우는 경고도 없다.

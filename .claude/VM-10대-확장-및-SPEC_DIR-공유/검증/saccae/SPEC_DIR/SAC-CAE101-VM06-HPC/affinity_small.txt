@@ -1,0 +1,8 @@
+sched.vcpu0.affinity=32,33
+sched.vcpu1.affinity=34,35
+sched.vcpu2.affinity=36,37
+sched.vcpu3.affinity=38,39
+sched.vcpu4.affinity=40,41
+sched.vcpu5.affinity=42,43
+sched.vcpu6.affinity=44,45
+sched.vcpu7.affinity=46,47

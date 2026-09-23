@@ -1,0 +1,176 @@
+# SAC-CAE103-VM20-BATCH — BM 당 VM 20대 (saccae 검증용 임의 스펙)
+# 쓰는 옵션: ht=on, ev11~ev20 (vim 템플릿 틀 밖 번호), affinity 파일 2개를 홀수/짝수 ev 가 나눠 씀,
+#            ev01~ev10 은 cores+numa, ev11~ev20 은 cores 만 (2소켓 x 1코어)
+
+# --- 공통 ---
+ht=on
+
+# --- ev01 ---
+cpu=2
+mem=4
+disk=40
+shares-ev01=1000
+cores=2
+numa=2
+affinity-ev01=affinity_odd.txt
+
+# --- ev02 ---
+cpu-ev02=2
+mem-ev02=4
+disk-ev02=40
+shares-ev02=normal
+cores-ev02=2
+numa-ev02=2
+affinity-ev02=affinity_even.txt
+
+# --- ev03 ---
+cpu-ev03=2
+mem-ev03=4
+disk-ev03=40
+shares-ev03=1000
+cores-ev03=2
+numa-ev03=2
+affinity-ev03=affinity_odd.txt
+
+# --- ev04 ---
+cpu-ev04=2
+mem-ev04=4
+disk-ev04=40
+shares-ev04=normal
+cores-ev04=2
+numa-ev04=2
+affinity-ev04=affinity_even.txt
+
+# --- ev05 ---
+cpu-ev05=2
+mem-ev05=4
+disk-ev05=40
+shares-ev05=1000
+cores-ev05=2
+numa-ev05=2
+affinity-ev05=affinity_odd.txt
+
+# --- ev06 ---
+cpu-ev06=2
+mem-ev06=4
+disk-ev06=40
+shares-ev06=normal
+cores-ev06=2
+numa-ev06=2
+affinity-ev06=affinity_even.txt
+
+# --- ev07 ---
+cpu-ev07=2
+mem-ev07=4
+disk-ev07=40
+shares-ev07=1000
+cores-ev07=2
+numa-ev07=2
+affinity-ev07=affinity_odd.txt
+
+# --- ev08 ---
+cpu-ev08=2
+mem-ev08=4
+disk-ev08=40
+shares-ev08=normal
+cores-ev08=2
+numa-ev08=2
+affinity-ev08=affinity_even.txt
+
+# --- ev09 ---
+cpu-ev09=2
+mem-ev09=4
+disk-ev09=40
+shares-ev09=1000
+cores-ev09=2
+numa-ev09=2
+affinity-ev09=affinity_odd.txt
+
+# --- ev10 ---
+cpu-ev10=2
+mem-ev10=4
+disk-ev10=40
+shares-ev10=normal
+cores-ev10=2
+numa-ev10=2
+affinity-ev10=affinity_even.txt
+
+# --- ev11 ---
+cpu-ev11=2
+mem-ev11=4
+disk-ev11=40
+shares-ev11=1000
+cores-ev11=1
+affinity-ev11=affinity_odd.txt
+
+# --- ev12 ---
+cpu-ev12=2
+mem-ev12=4
+disk-ev12=40
+shares-ev12=normal
+cores-ev12=1
+affinity-ev12=affinity_even.txt
+
+# --- ev13 ---
+cpu-ev13=2
+mem-ev13=4
+disk-ev13=40
+shares-ev13=1000
+cores-ev13=1
+affinity-ev13=affinity_odd.txt
+
+# --- ev14 ---
+cpu-ev14=2
+mem-ev14=4
+disk-ev14=40
+shares-ev14=normal
+cores-ev14=1
+affinity-ev14=affinity_even.txt
+
+# --- ev15 ---
+cpu-ev15=2
+mem-ev15=4
+disk-ev15=40
+shares-ev15=1000
+cores-ev15=1
+affinity-ev15=affinity_odd.txt
+
+# --- ev16 ---
+cpu-ev16=2
+mem-ev16=4
+disk-ev16=40
+shares-ev16=normal
+cores-ev16=1
+affinity-ev16=affinity_even.txt
+
+# --- ev17 ---
+cpu-ev17=2
+mem-ev17=4
+disk-ev17=40
+shares-ev17=1000
+cores-ev17=1
+affinity-ev17=affinity_odd.txt
+
+# --- ev18 ---
+cpu-ev18=2
+mem-ev18=4
+disk-ev18=40
+shares-ev18=normal
+cores-ev18=1
+affinity-ev18=affinity_even.txt
+
+# --- ev19 ---
+cpu-ev19=2
+mem-ev19=4
+disk-ev19=40
+shares-ev19=1000
+cores-ev19=1
+affinity-ev19=affinity_odd.txt
+
+# --- ev20 ---
+cpu-ev20=2
+mem-ev20=4
+disk-ev20=40
+shares-ev20=normal
+cores-ev20=1
+affinity-ev20=affinity_even.txt

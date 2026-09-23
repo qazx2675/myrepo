@@ -1,0 +1,5 @@
+# >>> saccae 검증 환경 (install.sh 가 관리 — 다시 설치하면 이 블록만 새로 써진다)
+192.168.0.50  vcenter.saccae.com vcenter
+192.168.0.59  esxi01.saccae.com esxi01
+192.168.0.58  rocky.saccae.com rocky vcsim.saccae.com vcsim
+# <<< saccae 검증 환경

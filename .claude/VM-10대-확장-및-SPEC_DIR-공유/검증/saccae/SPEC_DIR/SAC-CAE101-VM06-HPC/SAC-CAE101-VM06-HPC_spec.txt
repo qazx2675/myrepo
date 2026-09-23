@@ -1,0 +1,53 @@
+# SAC-CAE101-VM06-HPC — BM 당 VM 6대 (saccae 검증용 임의 스펙)
+# 쓰는 옵션: ht=on, preferHT, disk 허용값 여러 개, shares 숫자/normal, cores/numa, affinity(ev01 전용 + ev02~ev06 공통 파일)
+
+# --- 공통 ---
+ht=on
+preferHT=TRUE
+
+# --- ev01 (큰 VM 1대) ---
+cpu=16
+mem=64
+disk=500
+shares-ev01=8000
+cores=8
+numa=8
+affinity-ev01=affinity_ev01.txt
+
+# --- ev02 ---
+cpu-ev02=8
+mem-ev02=32
+disk-ev02=200,202
+shares-ev02=4000
+cores-ev02=4
+numa-ev02=4
+affinity-ev02=affinity_small.txt
+
+# --- ev03~ev06 (같은 모양, numa 는 비워서 NUMA 설정 생략) ---
+cpu-ev03=8
+mem-ev03=32
+disk-ev03=200
+shares-ev03=normal
+cores-ev03=8
+affinity-ev03=affinity_small.txt
+
+cpu-ev04=8
+mem-ev04=32
+disk-ev04=200
+shares-ev04=normal
+cores-ev04=8
+affinity-ev04=affinity_small.txt
+
+cpu-ev05=8
+mem-ev05=32
+disk-ev05=200
+shares-ev05=normal
+cores-ev05=8
+affinity-ev05=affinity_small.txt
+
+cpu-ev06=8
+mem-ev06=32
+disk-ev06=200
+shares-ev06=normal
+cores-ev06=8
+affinity-ev06=affinity_small.txt

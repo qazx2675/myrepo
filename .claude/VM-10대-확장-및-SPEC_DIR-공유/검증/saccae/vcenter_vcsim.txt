@@ -1,0 +1,2 @@
+# vm-param-check 용 — 가상 vCenter(vcsim)만. 실제 vCenter 의 192ev01/02 는 스펙이 없어 -yes 모드에서 멈춘다.
+vcsim.saccae.com

@@ -328,7 +328,7 @@ func main() {
 		return
 	}
 
-	runFix(ctx, clientsByAddr, allVMs, fixSourceFindings, detailPath, *fixOut, *yes, *fixConcurrency,
+	runFix(ctx, clientsByAddr, allVMs, fixSourceFindings, detailPath, *fixOut, *yes, *fixConcurrency, !*noColor,
 		coresExpect, numaExpect, cpuExpect, memExpect, diskExpect, shares, affinityEV01, affinityEV02, affinityEV03, htOn)
 }
 
@@ -371,7 +371,7 @@ func evaluateVM(vm model.VMInfo, coresExpect checker.CoresExpect, numaExpect che
 
 // runFix는 통합 파이프라인의 [4]~[7] 단계 — 게이트 검증 -> dry-run -> 확인 -> 적용 -> 재검증.
 func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVMs []model.VMInfo, findings []model.Finding,
-	originalDetailPath, fixOutFlag string, autoYes bool, concurrency int,
+	originalDetailPath, fixOutFlag string, autoYes bool, concurrency int, color bool,
 	coresExpect checker.CoresExpect, numaExpect checker.NumaExpect, cpuExpect checker.CPUExpect,
 	memExpect checker.MemExpect, diskExpect checker.DiskExpect, shares checker.SharesExpect,
 	affinityEV01, affinityEV02, affinityEV03 map[string]string, htOn bool) {
@@ -433,7 +433,7 @@ func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVM
 		log.Fatalf("재검증 실패: %v", err)
 	}
 
-	report.PrintConsole(os.Stdout, recheckFindings, true, true)
+	report.PrintConsole(os.Stdout, recheckFindings, color, true) // -noColor 를 재검증 출력에도 따른다
 
 	recheckDetail, recheckSummary := deriveRecheckPaths(originalDetailPath, fixOutFlag)
 	if err := report.WriteSummaryCSV(recheckSummary, recheckFindings); err != nil {

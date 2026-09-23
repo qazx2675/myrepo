@@ -1,0 +1,3 @@
+# vCenter 목록 — vm_setup.sh 가 번호로 보여주고, vm-param-check -vcenterList 도 이 파일을 읽는다.
+vcsim.saccae.com      # 가상 vCenter(vcsim, .58:443) — BM hostname0000~0099.saccae.com 100대
+vcenter.saccae.com    # 실제 home-test vCenter(.50) — BM 은 192.168.0.59 한 대뿐이라 hostname 목록으로 VM 을 만들 수 없다

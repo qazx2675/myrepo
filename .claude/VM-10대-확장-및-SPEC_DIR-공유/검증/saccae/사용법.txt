@@ -1,0 +1,78 @@
+saccae 검증 환경 사용법 (192.168.0.58 에 root 로 접속해서 실행)
+=====================================================================
+
+환경 요약
+  - 가상 vCenter : vcsim.saccae.com  (BM hostname0000 ~ hostname0099.saccae.com 100대, 계정/비밀번호는 아무 값이나 통과)
+  - 실제 vCenter : vcenter.saccae.com (192.168.0.50)  / ESXi esxi01.saccae.com (192.168.0.59)
+  - 코드         : /home/saccae  (V2 브랜치, 빌드 완료)
+  - 스펙(SPEC_DIR): /home/saccae/SPEC_DIR
+      SAC-CAE101-VM06-HPC   : hostname0000~0039 (40대) x VM 6대  = 240대
+      SAC-CAE102-VM08-GPU   : hostname0040~0069 (30대) x VM 8대  = 240대
+      SAC-CAE103-VM20-BATCH : hostname0070~0099 (30대) x VM 20대 = 600대
+  - 사용자(-u)   : vm06 / vm08 / vm20 (스펙별), saccae (100대 전체 = VM 1080대)
+  - 가상 vCenter 는 메모리에만 있다 — restart 하면 만든 VM·포트그룹이 모두 지워지고 빈 BM 100대로 돌아간다.
+
+
+1. 가상 vCenter 상태 / 시작 / 초기화
+---------------------------------------------------------------------
+/home/saccae/testenv/vcsim.sh status
+/home/saccae/testenv/vcsim.sh start
+/home/saccae/testenv/vcsim.sh restart
+
+getent hosts vcsim.saccae.com vcenter.saccae.com
+
+
+2. 비밀번호 (새 터미널마다 한 번)
+---------------------------------------------------------------------
+export VC_PASSWORD=x
+export VC_USER=administrator@vsphere.local VC_PASS=x
+
+
+3. VM 만들기 (vm_setup.sh)
+---------------------------------------------------------------------
+cd /home/saccae/VMsetup
+
+# 계획만 보기 (스펙 표 y → 포트그룹 표 y. -n 은 vCenter 를 묻지 않는다)
+./vm_setup.sh -u vm20 -n
+
+# 실제 실행 (스펙 표 y → 포트그룹 표 y → vCenter 번호 1 = vcsim.saccae.com → 실행 확인 y)
+# 두 번째부터는 vCenter 번호에서 Enter = 이 user 가 지난번에 쓴 vCenter
+./vm_setup.sh -u vm20
+./vm_setup.sh -u vm08
+./vm_setup.sh -u vm06
+
+# 100대 전체를 한 번에 (VM 1080대, 약 1~2분)
+./vm_setup.sh -u saccae
+
+# 같은 명령을 다시 실행하면 이미 있는 포트그룹/VM 은 건너뛰고 정상 종료한다
+./vm_setup.sh -u vm20
+
+
+4. 만든 VM 확인 (govc)
+---------------------------------------------------------------------
+export GOVC_URL=vcsim.saccae.com GOVC_USERNAME=x GOVC_PASSWORD=x GOVC_INSECURE=1
+govc find / -type m -name 'hostname*' | wc -l
+govc vm.info -e hostname0099ev20
+govc vm.info -e hostname0000ev01
+
+
+5. 스펙대로 됐는지 체크 / 교정 (vm-param-check)
+---------------------------------------------------------------------
+cd /home/saccae/vm-param-check-usability-improvement/vm-param-check
+
+./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -specRoot /home/saccae/SPEC_DIR -yes -onlyFail -out /tmp/check.csv
+
+# 교정까지 (마지막에 y 로 확인)
+./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -specRoot /home/saccae/SPEC_DIR -yes -onlyFail -out /tmp/check.csv -fix
+
+# vm_setup.sh 로 1080대를 만든 직후 체크에서 나오는 항목 (가상 vCenter 기준)
+#   numa.vcpu.preferHT FAIL 240          : VM06 스펙의 preferHT=TRUE 는 vm_setup.sh 가 설정하지 않는다        → -fix 로 교정됨
+#   sched.mem.lpage.enable1GPage 설정없음 90 : VM08 스펙 ev06~ev08 은 cores 를 비워서 lpage 단계를 건너뜀     → -fix 로 교정됨
+#   cpuid.coresPerSocket 설정없음 990     : vcsim 이 lpage 의 소켓당 코어 수를 이 값으로 보여주지 않음        → -fix 로 채워짐
+#   config.numaInfo.coresPerNumaNode 설정없음 470 : vcsim 이 흉내 내지 않는 값 — -fix 뒤에도 남는다(실제 vCenter 에서는 채워짐)
+
+
+6. 환경을 새로 설치 / 갱신 (코드가 바뀌었을 때)
+---------------------------------------------------------------------
+cd /root/myrepo && git pull
+bash ".claude/VM-10대-확장-및-SPEC_DIR-공유/검증/saccae/install.sh"
