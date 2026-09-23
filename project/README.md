@@ -34,7 +34,8 @@ cd "myrepo/.claude/VM/vCenter API IP 자동변경/project"
 ```
 
 `setup.sh` 는 `GOPROXY=off` + `-mod=vendor` 로, 인터넷 접속 없이 저장소 안의
-`vendor/`(govmomi, google/uuid) 만으로 `bin/vm-ip-change` 를 만듭니다.
+`vendor/`(govmomi, google/uuid, golang.org/x/term·sys) 만으로 `bin/vm-ip-change` 와
+시험용 `bin/fake-vcenter`(5장) 를 만듭니다.
 
 수동 빌드:
 
@@ -182,3 +183,53 @@ export GUEST_PASSWORD='********'   # 대상 VM 게스트 OS(RHEL) 로그인
   모드로 바꿔 화살표 키를 직접 읽습니다. 이 때문에 `vendor/` 에
   `golang.org/x/term`, `golang.org/x/sys` 가 추가됐습니다(둘 다 기존과 동일하게
   폐쇄망에서 `-mod=vendor`로 빌드됩니다).
+
+---
+
+## 5. 시험 환경 (실제 vCenter 없이)
+
+`cmd/fake-vcenter`(래퍼 `fake-vcenter.sh`)는 govmomi 의 vCenter 시뮬레이터(vcsim)로
+가짜 vCenter 와 VM 을 원하는 수만큼 띄우고, 게스트 명령 실행(Guest Operations)만
+직접 흉내 냅니다. 실제 VM·도커·네트워크 변경 없이 병렬 처리, 느린 VM, 실패, 60초 이후
+진행 화면(페이지), Ctrl+C 3회 종료를 모두 재현할 수 있습니다. `./setup.sh` 가 함께
+빌드하며, 같은 `vendor/` 만 쓰므로 폐쇄망에서도 됩니다.
+
+명령만 순서대로 모은 것은 상위 폴더의 **`사용법.txt`** 를 보십시오.
+
+### 자동 시험 — `./e2e-test.sh`
+
+VM 20대(실패·전원꺼짐·없는 호스트 섞음)로 vm-ip-change 를 끝까지 돌리고, 도구가
+`[OK]` 로 보고한 수와 가짜 vCenter 가 실제로 IP 가 바뀐 것을 확인한 수가 같은지,
+엉뚱한 IP·반쯤 바뀐 VM 이 없는지 검사합니다. 약 20초, 마지막 줄이 `PASS`/`FAIL`.
+CI(`.github/workflows`)도 같은 스크립트를 돌립니다.
+
+### 수동 시험 — `./fake-vcenter.sh`
+
+터미널 A 에서 가짜 vCenter 를 띄우면 `testrun/vcenter.txt`, `testrun/list.txt` 를 만들고
+터미널 B 에서 붙여넣을 명령을 출력합니다. 시험이 끝나면 터미널 A 에서 Ctrl+C →
+VM 별 실제 적용 결과(정상 / 기대와 다른 IP / 반쯤 변경 / 실패 / 변경 없음)를 출력하고
+`testrun/report.txt` 로 저장합니다.
+
+| 옵션 | 기본값 | 설명 |
+|---|---|---|
+| `-vms` | 50 | 가짜 VM 수 (이름 `test-vm0001`~) |
+| `-min` / `-max` | 1s / 4s | 보통 VM 의 게스트 명령 1개 소요시간 범위 |
+| `-slow` | 10 | 느린 VM 비율(%) — CPU 과점유로 느려진 VM 흉내 |
+| `-slow-delay` | 40s | 느린 VM 의 게스트 명령 1개 소요시간 (3단계라 약 2분) |
+| `-fail` | 5 | "IP 설정 적용" 단계에서 exit 1 로 실패하는 VM 비율(%) |
+| `-off` | 0 | 전원 꺼진 VM 비율(%) |
+| `-missing` | 0 | list.txt 에만 있고 vCenter 에 없는 호스트 수 |
+| `-seed` | 1 | 난수 시드 — 같은 값이면 같은 VM 이 느림/실패로 뽑힘 |
+| `-addr` | 127.0.0.1:18443 | 가짜 vCenter 주소 |
+| `-out` | testrun | 입력/결과 파일 폴더 |
+
+가짜 vCenter 계정은 `administrator@vsphere.local` / `VMware1!`, 게스트 계정은
+`root` / `guestpass` 입니다(틀리면 실제처럼 로그인 실패가 납니다). VM 1000대는
+뜨는 데 수 초가 걸리니 `가짜 vCenter 실행 중` 이 출력된 뒤 vm-ip-change 를 실행하십시오.
+
+알아둘 점:
+- 게스트 명령은 vm-ip-change 가 종료돼도 게스트 안에서 끝까지 실행되므로(실제 VM
+  과 동일), Ctrl+C 3회 직후 "IP 설정 적용 중 중단"이던 VM 은 검증 결과에서
+  "반쯤 변경"으로, "연결 확인 중 중단"이던 VM 은 "변경 없음"으로 나와야 정상입니다.
+- 실제 `nmcli` 동작(연결 이름 찾기, 원래 설정 캡처, 되돌리기 스크립트 내용)은 흉내 내지
+  않습니다 — 이 부분은 실제 VM 몇 대로 확인해야 합니다.

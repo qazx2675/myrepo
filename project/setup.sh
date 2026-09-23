@@ -13,9 +13,11 @@ export GOPROXY=off
 export GOFLAGS=-mod=vendor
 
 mkdir -p bin
-printf '  빌드: vm-ip-change ... '
-go build -o bin/vm-ip-change ./cmd/vm-ip-change
-echo '-> bin/vm-ip-change'
+for b in vm-ip-change fake-vcenter; do
+  printf '  빌드: %-13s ... ' "$b"
+  go build -o "bin/$b" "./cmd/$b"
+  echo "-> bin/$b"
+done
 
 echo
 echo '완료. 다음으로 진행하십시오:'
@@ -23,3 +25,5 @@ echo '  1) vcenter.txt.example 을 vcenter.txt 로 복사해 대상 vCenter 주�
 echo '  2) list.txt.example 을 list.txt 로 복사해 "호스트네임 새IP" 목록 채우기'
 echo '  3) 환경변수 VC_USER / VC_PASSWORD / GUEST_USER / GUEST_PASSWORD 설정'
 echo '  4) ./bin/vm-ip-change'
+echo
+echo '실제 vCenter 없이 시험하려면: ./fake-vcenter.sh -h  (사용법.txt 참고)'

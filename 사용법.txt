@@ -1,0 +1,26 @@
+[1] 받기 + 빌드 (관리서버, 한 번만)
+git clone -b vm-ip-change-standalone https://github.com/qazx2675/myrepo.git vm-ip-change
+cd vm-ip-change/project
+./setup.sh
+
+[2] 자동 시험 (약 20초, 마지막 줄 PASS 확인)
+./e2e-test.sh
+
+[3] 수동 시험 - 터미널 A (가짜 vCenter, VM 1000대, 느린 VM 10%, 실패 2%)
+cd vm-ip-change/project
+./fake-vcenter.sh -vms 1000 -slow 10 -slow-delay 40s -fail 2
+(“가짜 vCenter 실행 중” 출력될 때까지 대기)
+
+[4] 수동 시험 - 터미널 B
+cd vm-ip-change/project
+export VC_USER='administrator@vsphere.local' VC_PASSWORD='VMware1!' GUEST_USER='root' GUEST_PASSWORD='guestpass'
+./bin/vm-ip-change -vcenter testrun/vcenter.txt -list testrun/list.txt
+(60초 뒤 목록 화면: ↑ ↓ / ← → / PgUp PgDn / Enter / 아무 키)
+(Ctrl+C 1번 → 안내만 / 5초 안에 3번 → 즉시 종료)
+
+[5] 터미널 A 에서 결과 검증
+Ctrl+C
+cat testrun/report.txt
+
+[6] 정리
+rm -rf testrun testrun-e2e testrun-e2e.*.log
