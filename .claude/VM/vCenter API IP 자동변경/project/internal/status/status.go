@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Phase is which of the (up to) four guest-side steps a VM is currently on
+// Phase is which of the three guest-side steps a VM is currently on
 // or last attempted. It says nothing about success/failure — see Outcome.
 type Phase int
 
@@ -17,7 +17,6 @@ const (
 	PhaseChecking                // 연결 확인
 	PhaseApplying                // IP 설정 적용
 	PhaseRestarting              // 연결 재기동
-	PhaseReverting               // 되돌리는 중 (Ctrl+C 취소로 인한 되돌리기)
 )
 
 func (p Phase) Label() string {
@@ -30,8 +29,6 @@ func (p Phase) Label() string {
 		return "IP 설정 적용"
 	case PhaseRestarting:
 		return "연결 재기동"
-	case PhaseReverting:
-		return "되돌리는 중"
 	default:
 		return "?"
 	}
@@ -42,11 +39,9 @@ func (p Phase) Label() string {
 type Outcome int
 
 const (
-	OutcomeNone       Outcome = iota
-	OutcomeDone               // 완료(OK)
-	OutcomeFailed             // 실패
-	OutcomeCancelled          // 취소됨 (설정 변경 전에 취소되어 되돌릴 것이 없음)
-	OutcomeRolledBack         // 롤백됨 (Ctrl+C 취소로 원래 설정으로 되돌림)
+	OutcomeNone   Outcome = iota
+	OutcomeDone           // 완료(OK)
+	OutcomeFailed         // 실패
 )
 
 func (o Outcome) Label() string {
@@ -55,10 +50,6 @@ func (o Outcome) Label() string {
 		return "완료(OK)"
 	case OutcomeFailed:
 		return "실패"
-	case OutcomeCancelled:
-		return "취소됨"
-	case OutcomeRolledBack:
-		return "롤백됨"
 	default:
 		return ""
 	}
@@ -71,11 +62,12 @@ type VM struct {
 	NewIP    string
 	Gateway  string
 
-	mu        sync.Mutex
-	phase     Phase
-	outcome   Outcome
-	startedAt time.Time
-	err       error
+	mu         sync.Mutex
+	phase      Phase
+	outcome    Outcome
+	startedAt  time.Time
+	finishedAt time.Time
+	err        error
 }
 
 // SetPhase records which step the VM is currently attempting and starts its
@@ -97,6 +89,9 @@ func (v *VM) Finish(o Outcome, err error) {
 	defer v.mu.Unlock()
 	v.outcome = o
 	v.err = err
+	if v.finishedAt.IsZero() {
+		v.finishedAt = time.Now()
+	}
 }
 
 // Label is the short Korean string shown in the progress list: the outcome
@@ -122,7 +117,11 @@ func (v *VM) Snapshot() Snapshot {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	var elapsed time.Duration
-	if !v.startedAt.IsZero() {
+	switch {
+	case v.startedAt.IsZero():
+	case !v.finishedAt.IsZero():
+		elapsed = v.finishedAt.Sub(v.startedAt) // 끝난 대상은 끝난 시점에서 시간이 멈춘다
+	default:
 		elapsed = time.Since(v.startedAt)
 	}
 	return Snapshot{Phase: v.phase, Outcome: v.outcome, Elapsed: elapsed, Err: v.err}

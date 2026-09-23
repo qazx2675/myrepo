@@ -7,11 +7,10 @@
 //
 // IP 변경은 3단계로 나눠 각각 별도의 게스트 명령으로 실행합니다(CheckConnection ->
 // ApplyIP -> RestartConnection). 단계를 나눈 이유는 각 단계 사이에서 오케스트레이터
-// (cmd/vm-ip-change)가 현재 진행 상태를 기록해 진행률 화면에 보여주고, Ctrl+C 로
-// 취소됐을 때 "아직 설정을 바꾸지 않았으면 그냥 중단, 이미 바꿨으면 되돌리기"를
-// 판단할 수 있게 하기 위해서입니다. CheckConnection 이 캡처해 둔 원래 설정은
-// 게스트 안 되돌리기 스크립트(Revert 가 실행)로 보관되며, RestartConnection 이
-// 성공적으로 끝나면 더 이상 되돌릴 수 없도록 그 스크립트를 지웁니다.
+// (cmd/vm-ip-change)가 현재 진행 상태를 기록해 진행률 화면에 보여주기 위해서입니다.
+// CheckConnection 이 캡처해 둔 원래 설정은 게스트 안 되돌리기 스크립트
+// (/tmp/vm-ip-change/<id>.revert.sh)로 보관되며, RestartConnection 이 성공하면
+// 지웁니다. 도중에 강제 종료되면 이 스크립트가 남아 있어 수동 복구에 쓸 수 있습니다.
 package vsphere
 
 import (
@@ -126,10 +125,7 @@ nmcli con mod "$CONN" ipv4.method manual ipv4.addresses %s/24 ipv4.gateway %s
 
 // RestartConnection 은 3단계("연결 재기동")입니다. ApplyIP 가 설정한 내용을
 // nmcli con up 으로 반영하고(서비스 전체 재시작 아님), 게스트에 남겨둔 임시
-// 파일(연결 이름/되돌리기 스크립트)을 지웁니다. 이 단계가 성공하면 더 이상
-// Revert 로 되돌릴 수 없습니다(되돌리기 스크립트가 이미 삭제됨) — Ctrl+C 취소가
-// 이 단계 실행 중에 들어와도 이미 시작된 게스트 명령은 끝까지 실행되며, 끝나면
-// 그대로 완료(OK) 처리됩니다.
+// 파일(연결 이름/되돌리기 스크립트)을 지웁니다.
 func RestartConnection(ctx context.Context, c *govmomi.Client, vmRef types.ManagedObjectReference, guestUser, guestPass, id string) error {
 	script := fmt.Sprintf(`set -e
 CONN=$(cat %s)
@@ -140,20 +136,8 @@ rm -f %s %s
 	return runGuestScript(ctx, c, vmRef, guestAuth(guestUser, guestPass), script)
 }
 
-// Revert 는 CheckConnection 이 저장해 둔 되돌리기 스크립트를 실행해 원래
-// ipv4 설정으로 복원합니다. ApplyIP 이후 ~ RestartConnection 이 끝나기 전에
-// Ctrl+C 로 취소된 VM 에 대해서만 호출합니다. 되돌리기 스크립트가 없으면
-// (아직 CheckConnection 도 끝나지 않은 상태) 아무 것도 하지 않습니다.
-func Revert(ctx context.Context, c *govmomi.Client, vmRef types.ManagedObjectReference, guestUser, guestPass, id string) error {
-	script := fmt.Sprintf(`set -e
-if [ -f %s ]; then
-  bash %s
-fi
-rm -f %s %s
-`, revertFile(id), revertFile(id), connFile(id), revertFile(id))
-
-	return runGuestScript(ctx, c, vmRef, guestAuth(guestUser, guestPass), script)
-}
+// RevertScriptPath 는 게스트 안 되돌리기 스크립트 경로입니다(강제 종료 후 수동 복구 안내용).
+func RevertScriptPath(id string) string { return revertFile(id) }
 
 // runGuestScript 는 게스트 안에서 /bin/bash -c script 를 실행하고 끝날 때까지
 // 2초 간격으로 폴링합니다. 의도적으로 자체 타임아웃이 없습니다 — 물리 코어를
