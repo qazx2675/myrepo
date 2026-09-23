@@ -29,6 +29,12 @@ flowchart TD
     M --> O
 ```
 
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>
+
 ## 시험 흐름 (실제 vCenter 없이)
 
 ```mermaid
@@ -39,3 +45,9 @@ flowchart LR
     D --> E["터미널 B: 출력된 명령으로 vm-ip-change 실행"]
     E --> F["터미널 A: Ctrl+C → testrun/report.txt"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow-test.svg)</summary>
+
+![작업 흐름도](workflow-test.svg)
+
+</details>
