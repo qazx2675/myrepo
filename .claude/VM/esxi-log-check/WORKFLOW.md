@@ -24,3 +24,9 @@ flowchart TD
     M --> O
     N --> O
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

@@ -48,3 +48,9 @@ flowchart TD
     Q -- 예 --> R["exit 1<br/>DHCP/네트워크 설정 수정 후 재실행"]
     Q -- 아니오 --> S["exit 0 → 파워온 · OS 설치 진행"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

@@ -20,3 +20,9 @@ flowchart TD
     F --> I
     I --> J["FAIL 호스트만 추출 → ldap_setting 으로 재적용"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

@@ -56,3 +56,9 @@ flowchart TD
     K["ESXi 있으면 VM 2차 조사"] --> L["result_YYYYMMDD_HHMM.tsv<br/>(+ _sdc_ / _vm_)"]
     L --> M["전체 복사 → 엑셀 붙여넣기"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

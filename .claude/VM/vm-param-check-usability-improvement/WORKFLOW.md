@@ -31,6 +31,12 @@ flowchart TD
     M --> N["무작위 VM 몇 대 직접 확인"]
 ```
 
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>
+
 ## 배포·갱신 흐름
 
 ```mermaid
@@ -44,6 +50,12 @@ flowchart LR
     end
     P1 -- "USB / nfs" --> P2
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow-deploy.svg)</summary>
+
+![작업 흐름도](workflow-deploy.svg)
+
+</details>
 
 ## 단계 설명
 

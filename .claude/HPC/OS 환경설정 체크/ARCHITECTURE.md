@@ -41,3 +41,9 @@ flowchart TD
     I --> J["report_setting_check_fail<br/>재점검 결과에서 FAIL 만 출력"]
     J --> K["무작위 서버 몇 대 직접 확인"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

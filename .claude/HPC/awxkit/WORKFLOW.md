@@ -17,3 +17,9 @@ flowchart TD
     I --> J["s4_inventory 호스트 수 리포트"]
     J --> K["무작위 대상 몇 대 DHCP/PXE 등록 직접 확인"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

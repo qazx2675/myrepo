@@ -49,3 +49,9 @@ flowchart TD
     L --> O["콘솔로 무작위 VM 몇 대 접속해 IP 확인"]
     M --> O
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

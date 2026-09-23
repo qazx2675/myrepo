@@ -50,3 +50,9 @@ flowchart TD
     G --> I["무작위 VM/호스트 몇 대 직접 확인"]
     H3 --> I
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

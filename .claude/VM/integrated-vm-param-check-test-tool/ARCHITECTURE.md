@@ -45,3 +45,9 @@ flowchart TD
     K -- 예 --> L["vm-param-check 를 실 vCenter 대상으로 직접 실행<br/>(-fix 후 무작위 VM 확인)"]
     K -- 아니오 --> M["끝"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

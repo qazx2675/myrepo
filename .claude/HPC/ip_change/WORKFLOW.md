@@ -18,3 +18,9 @@ flowchart TD
     K --> L["관리 노드: 결과 파싱 → 한 줄씩 출력<br/>성공 초록 · 실패 굵은 빨강"]
     L --> M["무작위 노드 몇 대 직접 확인"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

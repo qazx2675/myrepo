@@ -29,6 +29,12 @@ flowchart TD
     Q -- 아니오 --> S["exit 0 → 파워온 · OS 설치 진행"]
 ```
 
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>
+
 ## 단계 설명
 
 | 단계 | 패키지 | 설명 |

@@ -29,3 +29,9 @@ flowchart TD
     G --> H["사람이 vSphere Client 등으로 실제 설정"]
     H --> I["무작위 호스트 몇 대의 minFree / Large Page 상태 확인"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

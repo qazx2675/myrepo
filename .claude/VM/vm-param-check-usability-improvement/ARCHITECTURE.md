@@ -57,3 +57,9 @@ flowchart TD
     L --> M["교정된 VM만 재조회 → 같은 판정으로 재검증<br/>_recheck_시각.csv"]
     M --> N["무작위 VM 몇 대 직접 확인"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>

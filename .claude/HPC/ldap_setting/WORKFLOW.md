@@ -20,3 +20,9 @@ flowchart TD
     L --> M["ldap_check.sh 로 3중 교차 검증<br/>(4) 나중에 -check-only 로 재검증)"]
     M --> N["무작위 노드 몇 대 직접 확인"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>
