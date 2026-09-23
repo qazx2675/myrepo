@@ -1,4 +1,4 @@
-// vm_affinity_bulk: worklist 기반으로 ev01~ev10 VM에 affinity 설정 파일을 일괄(병렬 워커풀) 적용. -vm_cnt 로 대상 VM 개수, -concurrency 로 동시 처리 개수 제어
+// vm_affinity_bulk: worklist 기반으로 ev01~ev99 VM에 affinity 설정 파일을 일괄(병렬 워커풀) 적용. -vm_cnt 로 대상 VM 개수, -concurrency 로 동시 처리 개수 제어
 
 package main
 
@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -23,7 +24,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 )
 
-const maxVMCount = 10
+const maxVMCount = 99 // ev01~ev99 (VM 이름이 ev%02d 두 자리)
 const defaultConcurrency = 20
 
 // optionPair: 파일 순서를 보존하기 위해 map 대신 slice 사용 (로그 재현성 확보)
@@ -149,8 +150,8 @@ func main() {
 	vcId := flag.String("id", "lscsystems@vsphere.local", "vCenter 로그인 계정 ID")
 	vcTargetIP := flag.String("vcTargetIP", "", "vCenter 접속 IP (필수)")
 	worklistFile := flag.String("worklistFile", "worklist.txt", "작업 대상 호스트 목록 파일")
-	vmCnt := flag.Int("vm_cnt", 2, "호스트당 대상 VM 개수 (1=ev01, 2=ev01~ev02, ... 10=ev01~ev10)")
-	// -affinityFile01 ~ -affinityFile10: 이름 규칙이 같아서 반복문으로 등록한다(기존 01~03 이름 그대로).
+	vmCnt := flag.Int("vm_cnt", 2, "호스트당 대상 VM 개수 (1=ev01, 2=ev01~ev02, ... 99=ev01~ev99)")
+	// -affinityFile01 ~ -affinityFile99: 이름 규칙이 같아서 반복문으로 등록한다(기존 01~03 이름 그대로).
 	suffixes := make([]string, maxVMCount)
 	flagNames := make([]string, maxVMCount)
 	filePtrs := make([]*string, maxVMCount)
@@ -164,6 +165,7 @@ func main() {
 	// -ht 는 AUTO(1:1 자동 계산)에만 쓰였다. 기능을 삭제했지만 예전 명령줄이 깨지지 않도록 받아서 무시한다.
 	htMode := flag.String("ht", "", "[사용 안 함] AUTO 자동 계산 삭제로 무시된다 (예전 명령줄 호환용)")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (VM 목록 조회 / Reconfigure 전송+대기 전 구간에 적용)")
+	collapseEvUsage(regexp.MustCompile(`^affinityFile(\d{2})$`))
 
 	flag.Parse()
 
@@ -478,4 +480,31 @@ func main() {
 		os.Exit(2)
 	}
 	fmt.Println("모든 VM 의 어피니티 설정이 정상 적용되었습니다 (재조회로 검증 완료).")
+}
+
+// collapseEvUsage: ev02~ev99 옵션은 번호만 다르고 내용이 같아서, 도움말(-h)에는 02 하나를
+// "02~99"로 바꿔 보여주고 03~99는 생략한다. re 의 첫 캡처 그룹이 ev 번호(두 자리)다.
+func collapseEvUsage(re *regexp.Regexp) {
+	flag.Usage = func() {
+		out := flag.CommandLine.Output()
+		fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+		fs.SetOutput(out)
+		flag.VisitAll(func(f *flag.Flag) {
+			name, usage := f.Name, f.Usage
+			if m := re.FindStringSubmatchIndex(name); m != nil {
+				n, _ := strconv.Atoi(name[m[2]:m[3]])
+				if n > 2 {
+					return
+				}
+				if n == 2 {
+					name = name[:m[2]] + "02~99" + name[m[3]:]
+					usage = strings.NewReplacer("ev02", "ev02~ev99", "EV02", "EV02~EV99").Replace(usage)
+				}
+			}
+			fs.Var(f.Value, name, usage)
+			fs.Lookup(name).DefValue = f.DefValue
+		})
+		fmt.Fprintf(out, "Usage of %s:\n", os.Args[0])
+		fs.PrintDefaults()
+	}
 }

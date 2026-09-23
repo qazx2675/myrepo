@@ -24,7 +24,7 @@ numa-ev02=2
 # affinity 는 ev 마다 필수(자동 계산 없음). 여러 ev 가 같은 파일을 써도 된다 — 예: affinity-ev02=affinity_ev01.txt
 affinity-ev02=affinity_ev02.txt
 
-# --- ev03~ev10 (선택, ev01부터 연속으로) ---
+# --- ev03~ev99 (선택, ev01부터 연속으로) ---
 # cpu-ev03=
 # mem-ev03=
 # disk-ev03=

@@ -62,8 +62,8 @@ func main() {
 	if *vcTargetIP == "" {
 		log.Fatal("필수 파라미터(-vcTargetIP)가 누락되었습니다.")
 	}
-	if *vmCount < 1 || *vmCount > 10 {
-		log.Fatal("-vmCount는 1~10 이어야 합니다. (ev01~ev10)")
+	if *vmCount < 1 || *vmCount > 99 {
+		log.Fatal("-vmCount는 1~99 이어야 합니다. (ev01~ev99)")
 	}
 
 	// splitList는 콤마로 구분된 값을 잘라 순번(1,2,3...)별 값으로 매핑한다.

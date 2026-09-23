@@ -3,7 +3,7 @@
 // VMsetup의 vm_setup.sh가 SPEC_DIR 스펙으로 vm_create/affinity/lpage 등을 호출할 때,
 // 스펙 파서를 bash로 다시 만들지 않고 이 도구(-specExport)가 이미 검증된 파서로 읽은 값을
 // "이름=값" 줄로 넘겨준다. ev01의 이름 없는 키(cpu/mem/disk/cores/numa)는 -ev01을 붙여
-// ev01~ev10이 같은 모양이 되도록 정규화한다.
+// ev01~ev99이 같은 모양이 되도록 정규화한다.
 package config
 
 import (
@@ -30,7 +30,7 @@ type ExportLine struct {
 //
 // 규칙(계획서 D4/D5):
 //   - ev01은 필수이고 cpu/mem/disk/shares가 전부 있어야 한다
-//   - ev02~ev10은 값이 하나라도 있으면 "정의된 그룹"이고, 그러면 cpu/mem/disk/shares가 전부 있어야 한다
+//   - ev02~ev99은 값이 하나라도 있으면 "정의된 그룹"이고, 그러면 cpu/mem/disk/shares가 전부 있어야 한다
 //   - 정의된 그룹은 ev01부터 연속이어야 한다(예: ev02 없이 ev03만 있으면 에러)
 //
 // 반환값의 첫 줄은 "groups=<정의된 그룹 수>", 둘째 줄은 "specdir=<매칭된 스펙 폴더 절대경로>"이고,

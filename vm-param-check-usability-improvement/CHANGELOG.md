@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-09-23 — ev01~ev99 그룹
+
+- `model.MaxGroup` 10 → 99. 그룹 옵션(`-cpu-evNN` 등, `-affinity-evNN`)이 ev99까지 등록되고, `-specExport`도 ev99까지 읽는다. 규칙은 그대로다.
+- `-h`에서는 ev02~ev99 옵션을 `-cpu-ev02~99`처럼 한 줄로 묶어 보여준다(실제 옵션 이름은 그대로).
+- 이름이 `ev%02d` 두 자리라 99가 상한이다(`ev100`은 `ev10`을 포함해 판정이 깨진다).
+- `go test` 통과(`model` 테스트에 ev11/ev99 판정 추가).
+
 ## 2026-09-22 — V2: ev01~ev10 그룹, `-specExport`, 스펙 `키=""` 형식
 
 V2(`.claude/VM/V2/vm-param-check-usability-improvement`)는 원본 복사본에서 시작했다. 원본 폴더는 수정하지 않았다.

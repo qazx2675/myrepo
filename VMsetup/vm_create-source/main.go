@@ -56,8 +56,8 @@ type hostPrep struct {
 
 var bomPrefix = string(rune(0xFEFF))
 
-// maxVMCount는 호스트 1대당 만들 수 있는 VM(ev01~ev10) 최대 개수다.
-const maxVMCount = 10
+// maxVMCount는 호스트 1대당 만들 수 있는 VM(ev01~ev99) 최대 개수다. VM 이름이 ev%02d 두 자리라 99가 상한.
+const maxVMCount = 99
 
 func readLines(path string) ([]string, error) {
 	file, err := os.Open(path)
@@ -126,7 +126,7 @@ func main() {
 	vcId := flag.String("id", "lscsystems@vsphere.local", "vCenter 로그인 계정 ID")
 	vcTargetIP := flag.String("vcTargetIP", "", "vCenter 접속 IP (필수)")
 	worklistFile := flag.String("worklistFile", "worklist.txt", "작업 대상 호스트 목록 파일")
-	vmCount := flag.Int("vmCount", 2, "생성할 VM 개수 (1~10). 값(-evNNCpu 등)이 없는 evNN은 만들지 않는다")
+	vmCount := flag.Int("vmCount", 2, "생성할 VM 개수 (1~99). 값(-evNNCpu 등)이 없는 evNN은 만들지 않는다")
 	mapFile := flag.String("mapFile", "hostgroup.txt", "\"BM hostgroup이름\" 형식의 네트워크 매핑 파일 (다른 이름 지정 가능)")
 	firmware := flag.String("firmware", "efi", "펌웨어 타입 (bios 또는 efi) - 정상 부팅되는 서버가 EFI(권장) 확인됨")
 	guestId := flag.String("guestId", "rhel8_64Guest", "게스트 OS 식별자 (미지정 시 rhel8_64Guest). 예: rhel9_64Guest, rhel7_64Guest, centos8_64Guest. 유효한 값인지는 vCenter가 판정하므로, 대상 vSphere 버전이 지원하는 식별자를 넣어야 한다")
@@ -135,7 +135,7 @@ func main() {
 	prepConc := flag.Int("prepConcurrency", 16, "호스트 사전 조사 동시 처리 수 (500대 규모 권장: 12~24)")
 	taskConc := flag.Int("taskConcurrency", 24, "vCenter 작업(Task) 동시 실행 수 (500대 규모 권장: 16~32)")
 
-	// -ev01Cpu ~ -ev10Share: 이름 규칙이 같아서 반복문으로 등록한다(기존 ev01~ev03 이름 그대로).
+	// -ev01Cpu ~ -ev99Share: 이름 규칙이 같아서 반복문으로 등록한다(기존 ev01~ev03 이름 그대로).
 	// Cpu가 0인 evNN은 "값 없음"이라 만들지 않는다(예전 ev03 기본값 1/1/20/1000은 없앴다).
 	type evFlags struct {
 		Cpu, Mem, Disk *int
@@ -152,6 +152,7 @@ func main() {
 			Share: flag.String(name+"Share", "0", tag+" Share (숫자 또는 'nomal')"),
 		}
 	}
+	collapseEvUsage(regexp.MustCompile(`^ev(\d{2})`))
 
 	flag.Parse()
 
@@ -871,4 +872,31 @@ func main() {
 // shortName은 호스트 이름의 첫 '.' 앞부분이다(FQDN이 아니면 그대로).
 func shortName(name string) string {
 	return strings.Split(name, ".")[0]
+}
+
+// collapseEvUsage: ev02~ev99 옵션은 번호만 다르고 내용이 같아서, 도움말(-h)에는 02 하나를
+// "02~99"로 바꿔 보여주고 03~99는 생략한다. re 의 첫 캡처 그룹이 ev 번호(두 자리)다.
+func collapseEvUsage(re *regexp.Regexp) {
+	flag.Usage = func() {
+		out := flag.CommandLine.Output()
+		fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+		fs.SetOutput(out)
+		flag.VisitAll(func(f *flag.Flag) {
+			name, usage := f.Name, f.Usage
+			if m := re.FindStringSubmatchIndex(name); m != nil {
+				n, _ := strconv.Atoi(name[m[2]:m[3]])
+				if n > 2 {
+					return
+				}
+				if n == 2 {
+					name = name[:m[2]] + "02~99" + name[m[3]:]
+					usage = strings.NewReplacer("ev02", "ev02~ev99", "EV02", "EV02~EV99").Replace(usage)
+				}
+			}
+			fs.Var(f.Value, name, usage)
+			fs.Lookup(name).DefValue = f.DefValue
+		})
+		fmt.Fprintf(out, "Usage of %s:\n", os.Args[0])
+		fs.PrintDefaults()
+	}
 }

@@ -1,5 +1,5 @@
-// vm_lpage_bulk: worklist 기반으로 ev01~ev10 VM에 HugePage/CPU 토폴로지(소켓당 코어/NUMA) 설정을
-// 병렬(워커풀) 적용. ev01~ev10은 전부 선택사항이며, Cores를 지정한 그룹만 처리한다.
+// vm_lpage_bulk: worklist 기반으로 ev01~ev99 VM에 HugePage/CPU 토폴로지(소켓당 코어/NUMA) 설정을
+// 병렬(워커풀) 적용. ev01~ev99는 전부 선택사항이며, Cores를 지정한 그룹만 처리한다.
 // -concurrency 로 동시 처리 개수 제어
 
 package main
@@ -27,12 +27,12 @@ import (
 
 const defaultConcurrency = 20
 
-// maxGroup은 처리할 수 있는 ev 그룹 수(ev01~ev10)다.
-const maxGroup = 10
+// maxGroup은 처리할 수 있는 ev 그룹 수(ev01~ev99)다.
+const maxGroup = 99
 
-// evGroup: ev01~ev10 그룹 하나의 설정. cores==0이면 이 그룹은 아예 처리하지 않는다(선택사항).
+// evGroup: ev01~ev99 그룹 하나의 설정. cores==0이면 이 그룹은 아예 처리하지 않는다(선택사항).
 type evGroup struct {
-	suffix           string // "ev01" ~ "ev10"
+	suffix           string // "ev01" ~ "ev99"
 	cores            int
 	sockets          int
 	numa             int
@@ -81,7 +81,7 @@ func main() {
 	vcTargetIP := flag.String("vcTargetIP", "", "vCenter 접속 IP (필수)")
 	worklistFile := flag.String("worklistFile", "worklist.txt", "작업 대상 호스트 목록 파일")
 
-	// -ev01Cores ~ -ev10Numa: 이름 규칙이 같아서 반복문으로 등록한다(기존 ev01~ev03 이름 그대로).
+	// -ev01Cores ~ -ev99Numa: 이름 규칙이 같아서 반복문으로 등록한다(기존 ev01~ev03 이름 그대로).
 	type groupFlags struct{ cores, sockets, numa *int }
 	flagsByGroup := make([]groupFlags, maxGroup)
 	for i := range flagsByGroup {
@@ -95,6 +95,7 @@ func main() {
 
 	applyTopology := flag.Bool("applyTopology", true, "설정 편집 > CPU 토폴로지(소켓당 코어 수/NUMA 노드) 적용 여부")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (Reconfigure 전송+대기 전 구간에 적용)")
+	collapseEvUsage(regexp.MustCompile(`^ev(\d{2})`))
 
 	flag.Parse()
 
@@ -110,7 +111,7 @@ func main() {
 		rawGroups[i] = evGroup{suffix: fmt.Sprintf("ev%02d", i+1), cores: *f.cores, sockets: *f.sockets, numa: *f.numa}
 	}
 
-	// ev01~ev10 전부 선택사항 — Cores를 안 주면 그 그룹은 통째로 건너뛴다(필수 입력값 아님).
+	// ev01~ev99 전부 선택사항 — Cores를 안 주면 그 그룹은 통째로 건너뛴다(필수 입력값 아님).
 	var groups []evGroup
 	for _, g := range rawGroups {
 		if g.cores == 0 {
@@ -133,7 +134,7 @@ func main() {
 	}
 
 	if len(groups) == 0 {
-		log.Fatal("최소 하나의 그룹은 지정해야 합니다 (-ev01Cores ~ -ev10Cores 중 하나 이상 + 대응하는 Sockets).")
+		log.Fatal("최소 하나의 그룹은 지정해야 합니다 (-ev01Cores ~ -ev99Cores 중 하나 이상 + 대응하는 Sockets).")
 	}
 
 	vcPassword := os.Getenv("VC_PASSWORD")
@@ -323,4 +324,31 @@ func main() {
 		os.Exit(2)
 	}
 	fmt.Println("모든 VM의 VMX 성능 파라미터가 완벽하게 주입되었습니다!")
+}
+
+// collapseEvUsage: ev02~ev99 옵션은 번호만 다르고 내용이 같아서, 도움말(-h)에는 02 하나를
+// "02~99"로 바꿔 보여주고 03~99는 생략한다. re 의 첫 캡처 그룹이 ev 번호(두 자리)다.
+func collapseEvUsage(re *regexp.Regexp) {
+	flag.Usage = func() {
+		out := flag.CommandLine.Output()
+		fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+		fs.SetOutput(out)
+		flag.VisitAll(func(f *flag.Flag) {
+			name, usage := f.Name, f.Usage
+			if m := re.FindStringSubmatchIndex(name); m != nil {
+				n, _ := strconv.Atoi(name[m[2]:m[3]])
+				if n > 2 {
+					return
+				}
+				if n == 2 {
+					name = name[:m[2]] + "02~99" + name[m[3]:]
+					usage = strings.NewReplacer("ev02", "ev02~ev99", "EV02", "EV02~EV99").Replace(usage)
+				}
+			}
+			fs.Var(f.Value, name, usage)
+			fs.Lookup(name).DefValue = f.DefValue
+		})
+		fmt.Fprintf(out, "Usage of %s:\n", os.Args[0])
+		fs.PrintDefaults()
+	}
 }

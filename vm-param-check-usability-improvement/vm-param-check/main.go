@@ -21,6 +21,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -50,7 +51,7 @@ func main() {
 	mem := flag.Int("mem", 0, "기대값: 메모리 GB — ev01 및 미분류 VM에 적용 (필수)")
 	diskStr := flag.String("disk", "", "기대값: 디스크 총량 GB — ev01 및 미분류 VM에 적용 (필수). 쉼표로 여러 개를 주면 그 중 하나와 맞으면 OK (예: -disk=1024,1026)")
 
-	// ev02~ev10 그룹 옵션(-cores-evNN/-numa-evNN/-cpu-evNN/-mem-evNN/-disk-evNN/-shares-evNN)은
+	// ev02~ev99 그룹 옵션(-cores-evNN/-numa-evNN/-cpu-evNN/-mem-evNN/-disk-evNN/-shares-evNN)은
 	// 이름 규칙이 같아서 반복문으로 등록한다. 값을 안 주면 그 그룹의 해당 항목 체크는 스킵.
 	groupFlags := registerGroupFlags()
 
@@ -72,10 +73,11 @@ func main() {
 
 	initFolder := flag.String("initFolder", "", "vCenter에 연결하지 않고, -specRoot 아래에 이 이름의 스펙 디렉터리와 '<이름>_spec.txt' 스캐폴드를 만들고 종료한다. 이름은 CAE 폴더 규칙(레코드 4개, 2번째가 CAE<숫자> 또는 LSI<숫자>)을 따라야 한다. -template을 같이 주면 그 스펙의 옵션 값을 그대로 복사해서 채운다(안 주면 빈 틀만 생성)")
 	template := flag.String("template", "", "-initFolder와 함께 사용: 값을 그대로 복사해올 기존 vCenter 폴더 이름(또는 그 폴더가 매칭되는 스펙)")
-	specExport := flag.String("specExport", "", "vCenter에 연결하지 않고, -specRoot 아래에서 이 폴더명에 매칭되는 스펙을 VM 생성용(VMsetup/vm_setup.sh)으로 정규화해 '이름=값' 줄로 출력하고 종료한다. 첫 줄은 groups=<ev 개수>. ev01 필수, ev02~ev10은 값이 있는 것만, ev 번호는 연속이어야 한다")
+	specExport := flag.String("specExport", "", "vCenter에 연결하지 않고, -specRoot 아래에서 이 폴더명에 매칭되는 스펙을 VM 생성용(VMsetup/vm_setup.sh)으로 정규화해 '이름=값' 줄로 출력하고 종료한다. 첫 줄은 groups=<ev 개수>. ev01 필수, ev02~ev99는 값이 있는 것만, ev 번호는 연속이어야 한다")
 
 	demo := flag.Bool("demo", false, "vCenter에 연결하지 않고, affinity 항목이 많은 8~16vCPU급 가짜 VM 3대(OK/FAIL/개수불일치 케이스)로 콘솔+CSV 출력을 보여주는 데모 모드. 실제 인프라를 전혀 건드리지 않음. 이 모드에서는 다른 모든 플래그를 무시하고 고정된 데모 기대값을 사용함")
 	scale := flag.Int("scale", 0, "테스트용: vCenter 연결 없이 N대 규모의 합성 VM으로 콘솔+CSV 출력이 대량 환경에서 어떻게 보이는지 시뮬레이션 (가독성 테스트 전용, -demo와 별개, 실제 인프라 미접속)")
+	collapseEvUsage(regexp.MustCompile(`-ev(\d{2})$`))
 
 	flag.Parse()
 
@@ -238,7 +240,7 @@ func main() {
 	buildExpect := func() expectSet {
 		requireExpectFlags()
 
-		// shares-ev01~ev10은 쉼표로 여러 개(ratio 숫자 또는 'normal' 혼합) 허용.
+		// shares-ev01~ev99는 쉼표로 여러 개(ratio 숫자 또는 'normal' 혼합) 허용.
 		sharesEV01, err := parseSharesListFlag("shares-ev01", *sharesEV01Str)
 		if err != nil {
 			log.Fatal(err)
@@ -305,7 +307,7 @@ func main() {
 
 	singleVMMode := len(allVMs) == 1
 	if singleVMMode {
-		fmt.Println("조사 대상이 VM 1개뿐입니다 — 계획서 3-0 규칙에 따라 ev02~ev10 관련 체크(affinity/shares)는 옵션이 있어도 스킵합니다.")
+		fmt.Println("조사 대상이 VM 1개뿐입니다 — 계획서 3-0 규칙에 따라 ev02~ev99 관련 체크(affinity/shares)는 옵션이 있어도 스킵합니다.")
 	}
 
 	// VM별 체크는 서로 데이터를 공유하지 않는 순수 함수 호출이라 워커풀로 동시에 처리한다.
@@ -377,8 +379,8 @@ type expectSet struct {
 	Disk   checker.DiskExpect
 	Shares checker.SharesExpect
 
-	// Affinity는 그룹("ev01"~"ev10")별 기대 affinity 파일 내용이다. ev01은 없으면 자동계산,
-	// ev02~ev10은 없으면 그 그룹의 affinity 체크를 스킵한다.
+	// Affinity는 그룹("ev01"~"ev99")별 기대 affinity 파일 내용이다. ev01은 없으면 자동계산,
+	// ev02~ev99는 없으면 그 그룹의 affinity 체크를 스킵한다.
 	Affinity map[string]map[string]string
 
 	HTOn bool
@@ -417,7 +419,7 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 	memExpect, diskExpect, shares := e.Mem, e.Disk, e.Shares
 	htOn := e.HTOn
 
-	// ev01~ev10 그룹은 vCenter에 등록된 VM 이름(vm.Name) 기준으로 정한다. 게스트 OS가
+	// ev01~ev99 그룹은 vCenter에 등록된 VM 이름(vm.Name) 기준으로 정한다. 게스트 OS가
 	// 보고하는 hostname(vm.Hostname)은 클론/구성 실수로 vCenter 이름과 어긋날 수 있어(예:
 	// 두 VM의 내부 hostname이 서로 바뀌어 설정됨) 그룹 판정 기준으로 쓰면 엉뚱한 스펙으로
 	// 체크되는 사고가 난다 — 대상 지정(-f)도 vm.Name 기준이라 일관성도 맞는다.
@@ -446,7 +448,7 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 			expected := checker.GenerateExpectedAffinityEV01(vm.NumCPU, htOn)
 			f = append(f, checker.CheckAffinity(vm, expected, "ev01")...)
 		}
-	default: // ev02~ev10
+	default: // ev02~ev99
 		if a := e.Affinity[group]; !singleVMMode && a != nil {
 			f = append(f, checker.CheckAffinity(vm, a, group)...)
 		}
@@ -472,7 +474,7 @@ func runFix(ctx context.Context, clientsByAddr map[string]*govmomi.Client, allVM
 		return
 	}
 
-	// ev01~ev10 짝(VM 대수)이 안 맞아도 교정은 막지 않는다 — 경고만 하고 진행한다.
+	// ev01~ev99 짝(VM 대수)이 안 맞아도 교정은 막지 않는다 — 경고만 하고 진행한다.
 	if w := fixer.GroupCountWarning(allVMs); w != "" {
 		fmt.Printf("\n[경고] %s\n", w)
 	}
@@ -572,7 +574,7 @@ func recheckVMs(ctx context.Context, clientsByAddr map[string]*govmomi.Client, v
 		recheckedVMs = append(recheckedVMs, vms...)
 	}
 
-	// 재검증 대상은 곧 교정된 VM 전체이므로, "VM 1개뿐이면 ev02~ev10 스킵" 규칙도
+	// 재검증 대상은 곧 교정된 VM 전체이므로, "VM 1개뿐이면 ev02~ev99 스킵" 규칙도
 	// 최초 체크와 동일하게 재검증 시점의 대상 수 기준으로 다시 판단한다.
 	singleVMMode := len(recheckedVMs) == 1
 
@@ -603,7 +605,7 @@ var specSettableFlags = func() map[string]bool {
 	return m
 }()
 
-// groupFlagKinds는 ev02~ev10 그룹마다 "<kind>-evNN" 이름으로 등록되는 옵션 종류다.
+// groupFlagKinds는 ev02~ev99 그룹마다 "<kind>-evNN" 이름으로 등록되는 옵션 종류다.
 var groupFlagKinds = []struct{ kind, desc string }{
 	{"cores", "소켓당 코어 수"},
 	{"numa", "NUMA 노드당 최대 vCPU 수"},
@@ -613,7 +615,7 @@ var groupFlagKinds = []struct{ kind, desc string }{
 	{"shares", "CPU Shares. -shares-ev01과 동일하게 ratio 숫자/'normal'을 쉼표로 여러 개 허용"},
 }
 
-// registerGroupFlags는 ev02~ev10 그룹 옵션 플래그를 등록하고 kind -> 그룹 -> 값 포인터 맵을 돌려준다.
+// registerGroupFlags는 ev02~ev99 그룹 옵션 플래그를 등록하고 kind -> 그룹 -> 값 포인터 맵을 돌려준다.
 func registerGroupFlags() map[string]map[string]*string {
 	out := map[string]map[string]*string{}
 	for _, k := range groupFlagKinds {
@@ -626,7 +628,7 @@ func registerGroupFlags() map[string]map[string]*string {
 	return out
 }
 
-// registerAffinityFlags는 -affinity-ev01~ev10 플래그를 등록한다.
+// registerAffinityFlags는 -affinity-ev01~ev99 플래그를 등록한다.
 func registerAffinityFlags() map[string]*string {
 	out := map[string]*string{}
 	for _, g := range model.GroupNames() {
@@ -994,7 +996,7 @@ func withUserSuffix(base, user string) string {
 }
 
 // classifyGroup은 3-0 규칙대로 hostname에 포함된 문자열로 그룹을 정한다.
-// 여러 문자열이 동시에 포함될 일은 없다고 가정하고 ev01 -> ev10 순으로 첫 매치를 채택한다.
+// 여러 문자열이 동시에 포함될 일은 없다고 가정하고 ev01 -> ev99 순으로 첫 매치를 채택한다.
 func classifyGroup(hostname string) string {
 	return model.ClassifyGroup(hostname)
 }
@@ -1066,4 +1068,31 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// collapseEvUsage: ev02~ev99 옵션은 번호만 다르고 내용이 같아서, 도움말(-h)에는 02 하나를
+// "02~99"로 바꿔 보여주고 03~99는 생략한다. re 의 첫 캡처 그룹이 ev 번호(두 자리)다.
+func collapseEvUsage(re *regexp.Regexp) {
+	flag.Usage = func() {
+		out := flag.CommandLine.Output()
+		fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+		fs.SetOutput(out)
+		flag.VisitAll(func(f *flag.Flag) {
+			name, usage := f.Name, f.Usage
+			if m := re.FindStringSubmatchIndex(name); m != nil {
+				n, _ := strconv.Atoi(name[m[2]:m[3]])
+				if n > 2 {
+					return
+				}
+				if n == 2 {
+					name = name[:m[2]] + "02~99" + name[m[3]:]
+					usage = strings.NewReplacer("ev02", "ev02~ev99", "EV02", "EV02~EV99").Replace(usage)
+				}
+			}
+			fs.Var(f.Value, name, usage)
+			fs.Lookup(name).DefValue = f.DefValue
+		})
+		fmt.Fprintf(out, "Usage of %s:\n", os.Args[0])
+		fs.PrintDefaults()
+	}
 }

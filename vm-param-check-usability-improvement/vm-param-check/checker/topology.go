@@ -10,7 +10,7 @@ import (
 const numaKey = "numa.vcpu.maxPerVirtualNode"
 const coresKey = "cpuid.coresPerSocket"
 
-// CoresExpect/NumaExpect는 그룹별(ev01/미분류는 Base 필수, ev02~ev10은 옵션) 기대값이다.
+// CoresExpect/NumaExpect는 그룹별(ev01/미분류는 Base 필수, ev02~ev99은 옵션) 기대값이다.
 // SharesExpect와 동일한 패턴 — Groups[그룹]이 nil이면 "해당 그룹 옵션이 아예 주어지지 않음".
 type CoresExpect struct {
 	Base   int
@@ -23,9 +23,9 @@ type NumaExpect struct {
 }
 
 // CheckTopology는 3-3 CPU 토폴로지 체크(코어수/NUMA 각 2곳 비교)를 수행한다.
-// group/singleVMMode로 ev02~ev10 그룹 옵션 유무에 따라 스킵 여부를 정한다
+// group/singleVMMode로 ev02~ev99 그룹 옵션 유무에 따라 스킵 여부를 정한다
 // (checkShares와 동일한 3-0/3-5 규칙 — ev01/미분류는 Base로 항상 체크,
-// ev02~ev10은 해당 옵션이 있고 singleVMMode가 아닐 때만 체크).
+// ev02~ev99은 해당 옵션이 있고 singleVMMode가 아닐 때만 체크).
 // isVcsim이 true이면 vcsim에서 지원하지 않는 필드를 "[미지원]"으로 표시한다.
 //
 // NUMA "UI 값"에 대한 참고: govmomi vim25 타입 조사 결과, vSphere Client의

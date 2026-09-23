@@ -24,8 +24,8 @@ func RatioShares(ratio int) []SharesItem {
 	return []SharesItem{{Ratio: ratio}}
 }
 
-// SharesExpect는 그룹별(ev01 필수/ev02~ev10 옵션) 기대 CPU Shares 허용값 목록이다.
-// Groups는 "ev02"~"ev10" 키로 조회하며, 키가 없거나 빈 슬라이스면 "해당 그룹 옵션이
+// SharesExpect는 그룹별(ev01 필수/ev02~ev99 옵션) 기대 CPU Shares 허용값 목록이다.
+// Groups는 "ev02"~"ev99" 키로 조회하며, 키가 없거나 빈 슬라이스면 "해당 그룹 옵션이
 // 아예 주어지지 않음"을 의미한다.
 type SharesExpect struct {
 	EV01   []SharesItem
@@ -33,7 +33,7 @@ type SharesExpect struct {
 }
 
 // CPUExpect/MemExpect/DiskExpect는 SharesExpect와 동일한 패턴 — Base는 ev01/미분류
-// VM에 적용되는 필수값, Groups["ev02"~"ev10"]는 옵션(없으면 해당 그룹 체크 스킵).
+// VM에 적용되는 필수값, Groups["ev02"~"ev99"]는 옵션(없으면 해당 그룹 체크 스킵).
 type CPUExpect struct {
 	Base   int
 	Groups map[string]*int
@@ -52,9 +52,9 @@ type DiskExpect struct {
 	Groups map[string][]int
 }
 
-// resolveGroupExpect는 그룹(ev01~ev10/미분류)에 따라 기대값을 정한다.
+// resolveGroupExpect는 그룹(ev01~ev99/미분류)에 따라 기대값을 정한다.
 // ev01과 미분류("")는 항상 base를 그대로 쓴다(기존 동작 유지, 필수).
-// ev02~ev10은 override가 있고 singleVMMode가 아닐 때만 쓰고, 없으면 ok=false로
+// ev02~ev99은 override가 있고 singleVMMode가 아닐 때만 쓰고, 없으면 ok=false로
 // "이 항목은 체크 자체를 스킵"을 알린다 — checkShares/checkAffinity와 동일한 3-0/3-5 규칙.
 func resolveGroupExpect(base int, groups map[string]*int, group string, singleVMMode bool) (int, bool) {
 	if group == "" || group == "ev01" {
@@ -68,7 +68,7 @@ func resolveGroupExpect(base int, groups map[string]*int, group string, singleVM
 }
 
 // resolveGroupExpectList는 resolveGroupExpect와 같은 규칙의 슬라이스 버전이다(디스크 전용).
-// ev02~ev10은 "옵션 없음"을 nil이 아니라 빈 슬라이스로도 표현할 수 있어서 len으로 판단한다.
+// ev02~ev99은 "옵션 없음"을 nil이 아니라 빈 슬라이스로도 표현할 수 있어서 len으로 판단한다.
 func resolveGroupExpectList(base []int, groups map[string][]int, group string, singleVMMode bool) ([]int, bool) {
 	if group == "" || group == "ev01" {
 		return base, true
@@ -100,9 +100,9 @@ func containsInt(values []int, want int) bool {
 }
 
 // CheckHardware는 3-4 가상 하드웨어 체크(vCPU/메모리/디스크/메모리예약/Shares)를 수행한다.
-// group은 3-0 분류 결과("ev01"~"ev10"|""), singleVMMode는 이번 실행의 조사 대상이
-// 총 1개인지 여부 — 계획서 3-0/3-4/3-5의 "VM이 1개뿐이면 ev02~ev10은 옵션이 있어도 스킵" 규칙 적용용.
-// cpu/mem/disk도 shares와 동일하게 ev02~ev10 옵션이 없으면 그 항목만 스킵한다(있으면 체크, 없으면 패스).
+// group은 3-0 분류 결과("ev01"~"ev99"|""), singleVMMode는 이번 실행의 조사 대상이
+// 총 1개인지 여부 — 계획서 3-0/3-4/3-5의 "VM이 1개뿐이면 ev02~ev99은 옵션이 있어도 스킵" 규칙 적용용.
+// cpu/mem/disk도 shares와 동일하게 ev02~ev99 옵션이 없으면 그 항목만 스킵한다(있으면 체크, 없으면 패스).
 // isVcsim이 true이면 vcsim에서 지원하지 않는 필드를 "[미지원]"으로 표시한다.
 func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpect, shares SharesExpect, group string, singleVMMode bool, isVcsim bool) []model.Finding {
 	var findings []model.Finding
@@ -159,7 +159,7 @@ func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpec
 	}
 	findings = append(findings, f)
 
-	// Shares (Ratio) — CPU/Memory 둘 다, 그룹별. ev01은 항상 필수, ev02~ev10은 해당 그룹
+	// Shares (Ratio) — CPU/Memory 둘 다, 그룹별. ev01은 항상 필수, ev02~ev99은 해당 그룹
 	// 옵션이 주어지고 singleVMMode가 아닐 때만 체크(계획서 3-0/3-5의 단일 VM 예외 규칙을 여기도 동일 적용).
 	// 계획서가 CPU/메모리 Shares를 구분하지 않아서, --shares-evNN 값 하나를 두 항목(CPU/메모리)에
 	// 동일한 기대값으로 적용한다 — 서로 다른 기대값이 필요하면 알려달라고 별도 보고.
@@ -169,11 +169,11 @@ func CheckHardware(vm model.VMInfo, cpu CPUExpect, mem MemExpect, disk DiskExpec
 }
 
 // resolveGroupExpectShares는 checkShares 전용 그룹 분기다. 기존 동작을 그대로 유지해
-// group이 ev01~ev10이 아니면(미분류 "") shares는 아예 체크하지 않는다.
+// group이 ev01~ev99이 아니면(미분류 "") shares는 아예 체크하지 않는다.
 func resolveGroupExpectShares(ev01 []SharesItem, groups map[string][]SharesItem, group string, singleVMMode bool) ([]SharesItem, bool) {
 	switch group {
 	case "":
-		return nil, false // ev01~ev10 어디에도 속하지 않는 VM은 shares 비교 대상 아님
+		return nil, false // ev01~ev99 어디에도 속하지 않는 VM은 shares 비교 대상 아님
 	case "ev01":
 		return ev01, true
 	}
