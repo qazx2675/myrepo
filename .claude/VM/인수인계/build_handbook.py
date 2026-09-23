@@ -9,6 +9,9 @@
 #
 # 파이썬 표준 라이브러리만 사용합니다 (폐쇄망에서도 그대로 동작).
 # 외부 마크다운 라이브러리를 쓰지 않으므로 pip install 이 필요 없습니다.
+#
+# ```mermaid 코드블록은 흐름도로 렌더합니다. 렌더러(vendor/mermaid.min.js)를 HTML 안에
+# 그대로 넣으므로(CDN 미사용) 폐쇄망에서도 흐름도가 보입니다.
 
 import html
 import os
@@ -18,32 +21,27 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "VM_인수인계_핸드북.html")
+MERMAID_JS = os.path.join(HERE, "vendor", "mermaid.min.js")
 
 # 문서를 이 순서로 붙입니다. 여기에 없는 .md 는 파일명 순서로 뒤에 붙습니다.
 ORDER = [
     "README.md",
-    "00_시작하기.md",
+    "00_빠른시작.md",
     "01_기초지식.md",
     "02_공통_실행환경.md",
-    "10_VM_setup.md",
-    "11_vm-param-check-usability-improvement.md",
+    "10_V2.md",
+    "11_vm-param-check.md",
     "12_vm_verifier.md",
     "13_lpage_search.md",
-    "14_vm-network-migration.md",
-    "15_esxi-log-check.md",
-    "16_vm-param-setting-check.md",
-    "17_vm-setting-go-lang.md",
-    "18_vcenter-test-env-vcsim.md",
-    "19_integrated-vm-param-check-test-tool.md",
-    "20_gemini_vcsim-pipeline-test.md",
-    "21_powershell.md",
+    "14_Network_Change_Integration_Script.md",
+    "15_vCenter_API_IP_자동변경.md",
+    "17_VM_setup_잔여도구.md",
     "30_유지보수_AI_활용가이드.md",
     "31_변경요청서_양식.md",
     "40_폴더구조.md",
     "90_용어집.md",
     "91_트러블슈팅_FAQ.md",
     "99_인수인계_체크리스트.md",
-    "계획서.md",
 ]
 
 
@@ -150,6 +148,9 @@ def render(md, docslug, counter, toc):
                 buf.append(lines[i])
                 i += 1
             i += 1
+            if lang == "mermaid":
+                out.append('<div class="mermaid">%s</div>' % html.escape("\n".join(buf), quote=False))
+                continue
             out.append('<pre class="lang-%s"><code>%s</code></pre>'
                        % (html.escape(lang, quote=True), html.escape("\n".join(buf), quote=False)))
             continue
@@ -339,6 +340,10 @@ summary{cursor:pointer;font-weight:600}
 .doc:first-of-type{border-top:none;margin-top:0;padding-top:0}
 .docmeta{font-size:11.5px;color:var(--muted);margin:-.4em 0 1.2em}
 mark{background:var(--mark);color:inherit}
+.mermaid{margin:1em 0;padding:14px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);overflow-x:auto;text-align:center;white-space:pre}
+.mermaid[data-done]{white-space:normal}
+.mermaid svg{max-width:100%;height:auto}
 
 /* 상단 바 (모바일) */
 #topbar{display:none;position:sticky;top:0;z-index:10;background:var(--side);
@@ -393,6 +398,7 @@ JS = """
     var v=cur(); var nx = v==='' ? 'light' : (v==='light' ? 'dark' : '');
     try{localStorage.setItem('hb-theme',nx);}catch(e){}
     apply(nx);
+    if(window.renderMermaid) window.renderMermaid();
   };
 
   // 목차 검색
@@ -429,8 +435,32 @@ JS = """
 """
 
 
+MERMAID_INIT = """
+(function(){
+  var els=[].slice.call(document.querySelectorAll('.mermaid'));
+  els.forEach(function(el){ el.setAttribute('data-src', el.textContent); });
+  function dark(){
+    var t=document.documentElement.getAttribute('data-theme');
+    if(t) return t==='dark';
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+  window.renderMermaid=function(){
+    els.forEach(function(el){
+      el.removeAttribute('data-processed'); el.removeAttribute('data-done');
+      el.textContent=el.getAttribute('data-src');
+    });
+    mermaid.initialize({startOnLoad:false, theme: dark() ? 'dark' : 'default', securityLevel:'strict'});
+    mermaid.run({nodes: els}).then(function(){
+      els.forEach(function(el){ el.setAttribute('data-done','1'); });
+    }).catch(function(e){ if(window.console) console.error(e); });
+  };
+  window.renderMermaid();
+})();
+"""
+
+
 def main():
-    files = [f for f in os.listdir(HERE) if f.endswith(".md")]
+    files =[f for f in os.listdir(HERE) if f.endswith(".md")]
     ordered = [f for f in ORDER if f in files] + sorted(f for f in files if f not in ORDER)
     if not ordered:
         print("[!] .md 파일이 없습니다.", file=sys.stderr)
@@ -441,7 +471,7 @@ def main():
     toc_html = []
     groups = {
         "README.md": "시작",
-        "10_VM_setup.md": "도구별 문서",
+        "10_V2.md": "도구별 문서",
         "30_유지보수_AI_활용가이드.md": "유지보수",
         "40_폴더구조.md": "찾아보기",
     }
@@ -468,6 +498,18 @@ def main():
             toc_html.append('<li><a class="lv2" href="#%s">%s</a></li>' % (hid, html.escape(text, quote=False)))
 
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    mermaid_html = ""
+    if any('class="mermaid"' in b for b in body):
+        if not os.path.exists(MERMAID_JS):
+            print("[!] %s 가 없습니다. 흐름도를 렌더할 수 없습니다." % MERMAID_JS, file=sys.stderr)
+            return 1
+        with open(MERMAID_JS, encoding="utf-8") as fp:
+            mjs = fp.read()
+        if "</script" in mjs.lower():
+            print("[!] mermaid.min.js 에 </script 가 있어 인라인할 수 없습니다.", file=sys.stderr)
+            return 1
+        mermaid_html = "<script>%s</script>\n<script>%s</script>" % (mjs, MERMAID_INIT)
     page = """<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -489,9 +531,10 @@ def main():
 <button id="top">↑ 맨 위</button>
 <button id="theme">🖥 시스템</button>
 <script>%s</script>
+%s
 </body>
 </html>
-""" % (CSS, stamp, "\n".join(toc_html), "\n".join(body), JS)
+""" % (CSS, stamp, "\n".join(toc_html), "\n".join(body), JS, mermaid_html)
 
     with open(OUT, "w", encoding="utf-8") as fp:
         fp.write(page)
