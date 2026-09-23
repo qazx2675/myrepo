@@ -10,7 +10,8 @@
   - 99가 상한인 이유: VM 이름이 `ev%02d` 두 자리라서. 100번째(`ev100`)는 vm-param-check 그룹 판정에서 `ev10`으로 잘못 잡힌다.
 - **도움말 정리**: ev02~ev99 옵션은 번호만 다르므로 `-h`에서 `-ev02~99Cpu`, `-affinityFile02~99`처럼 한 줄씩만 보인다(vm-param-check `-h`도 `-cpu-ev02~99` 등). 실제로 쓰는 옵션 이름은 바뀌지 않았다.
 - **`vm_setup.sh` vim 스펙 템플릿**: 빈 틀은 예전처럼 ev10까지만 두고(99개를 다 넣으면 수백 줄), ev11~ev99는 같은 규칙으로 줄을 직접 추가하라는 안내를 넣었다. 저장 시에는 ev99까지 읽는다.
-- **검증 (vcsim)**: `scenarios.sh` 39/39 PASS — 새 S6: 호스트 2대 × 99대 = 198대 생성, affinity(ev01~ev99 같은 파일)/lpage ev99 적용, 100은 `vm_create`/`affinity_setting`/`tag_setting` 모두 거부, ev01+ev99만 주면 연속 규칙 오류, `-h` 묶음 표시, vm-param-check `-specExport` `groups=99`. `vmsetup_test.sh` 36/36 PASS — 새 V11: 템플릿 밖 ev11/ev12를 넣은 스펙을 `vm_setup.sh`로 실행해 24대 생성 + ev12 affinity/lpage 적용. 실환경(home-test)에서는 돌리지 않았다.
+- **검증 (vcsim)**: `scenarios.sh` 39/39 PASS — 새 S6: 호스트 2대 × 99대 = 198대 생성, affinity(ev01~ev99 같은 파일)/lpage ev99 적용, 100은 `vm_create`/`affinity_setting`/`tag_setting` 모두 거부, ev01+ev99만 주면 연속 규칙 오류, `-h` 묶음 표시, vm-param-check `-specExport` `groups=99`. `vmsetup_test.sh` 36/36 PASS — 새 V11: 템플릿 밖 ev11/ev12를 넣은 스펙을 `vm_setup.sh`로 실행해 24대 생성 + ev12 affinity/lpage 적용.
+- **실환경(home-test, vCenter 192.168.0.50 / ESXi 192.168.0.59)**: `-vmCount=99` → 기존 `192ev01`/`192ev02`는 건너뛰고 `192ev03`~`192ev99` **97대를 22초**에 생성(rc=0). `affinity_setting -vm_cnt=99`(ev01~ev99 같은 파일) 99대 성공·재조회 일치 **7초**, `lpage_setting` ev03~ev99 97대 **5초**. 97대 모두 cpu/Shares/affinity/1GB 페이지 확인. 기존 두 VM은 이미 가진 affinity 값과 같은 파일을 써서 실행 전후 덤프 차이 없음. `vm-param-check`가 `192ev57`/`192ev99`를 ev57/ev99 그룹으로 판정(`-cpu-ev57=4`는 의도대로 FAIL, ev99 항목은 OK). 매핑 파일을 비워서 어댑터는 없음(`portgroup` 설정없음).
 
 ## 2026-09-23 — FQDN/짧은 이름 교차 매칭, 실패 시 종료코드, affinity 자동 계산 삭제, vCenter 번호 선택
 

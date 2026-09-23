@@ -19,7 +19,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 )
 
-var allowedVM = regexp.MustCompile(`^192ev(0[3-9]|10)$`) // 이번 테스트가 만드는 VM 이름만
+var allowedVM = regexp.MustCompile(`^192ev(0[3-9]|[1-9][0-9])$`) // 테스트가 만드는 VM 이름만 (192ev03~192ev99, 192ev01/02 제외)
 
 func main() {
 	if len(os.Args) < 3 {
