@@ -2,3 +2,9 @@
 vcenter.txt
 list.txt
 bin/
+
+# fake-vcenter 가 만드는 시험용 입력/결과 파일
+testrun/
+testrun-e2e/
+testrun-e2e.*.log
+fake.log

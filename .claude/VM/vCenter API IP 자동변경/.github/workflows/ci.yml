@@ -1,0 +1,24 @@
+# vm-ip-change 브랜치(이 폴더가 저장소 루트)에서 동작한다. master 에서는
+# .claude/VM/vCenter API IP 자동변경 아래라 실행되지 않고, master 용 워크플로는
+# 저장소 루트 .github/workflows/vm-ip-change.yml 이다.
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  vm-ip-change:
+    name: vm-ip-change (빌드·정적분석·테스트·가짜 vCenter 시험)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: project/go.mod }
+      - name: 오프라인 빌드 (vendor)
+        run: GOPROXY=off bash setup.sh
+      - run: GOPROXY=off go vet -mod=vendor ./...
+      - run: GOPROXY=off go test -mod=vendor ./...
+      - name: 가짜 vCenter 로 끝까지 실행해 결과 검증
+        run: GOPROXY=off bash e2e-test.sh
