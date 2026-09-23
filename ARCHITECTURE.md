@@ -32,3 +32,32 @@
 - **"VM 생성 옵션을 추가해달라"** → `vm_create-source/main.go`
 - **"다른 vCenter 구조(데이터센터/폴더)에서 안 된다"** → 해당 도구의 데이터센터 조회 부분(`ContainerView`로 RootFolder부터 조회하는지 확인)
 - **"호스트를 못 찾는다(FQDN/짧은 이름)"** → `vm_create`의 `lookupHost`, `vswitch_setting`의 `lookupHost` (정확한 이름 → 짧은 이름 비교, 두 도구가 같은 규칙)
+
+## 작업 흐름도
+
+단계별 설명은 [WORKFLOW.md](WORKFLOW.md)를 참고하세요.
+
+```mermaid
+flowchart TD
+    A["V2 폴더를 /home 에 배치<br/>govendor · SPEC_DIR · VMsetup · vm-param-check"] --> B["bash setup.sh<br/>11개 도구 오프라인 빌드"]
+    B --> C{"vswitch_{user}.txt 포트그룹 칸이 IP?"}
+    C -- 예 --> C1["vswitch_pgname.sh<br/>IP → 폴더명-cae-a-b-c-0 변환"] --> D
+    C -- 아니오 --> D["./vm_setup.sh -u {user}"]
+    D --> E["1. 스펙 할당<br/>포트그룹 폴더명 → SPEC_DIR 자동 매칭<br/>(n → 번호 선택 / 0 → vim 새 스펙)"]
+    E --> F["2. 포트그룹 할당(네트워크 어댑터 1)<br/>자동 선택 → y/n → 번호 선택 / vim"]
+    F --> G["3. vCenter 선택<br/>vcenter.txt 목록, Enter = 이전 실행"]
+    G --> H{"4. 실행 계획 확인 (y/n)<br/>-n 이면 여기서 종료"}
+    H -- n --> Z1["종료 (vCenter 변경 없음)"]
+    H -- y --> I["vswitch_setting<br/>BM 포트그룹 생성 (호스트 병렬)"]
+    I --> J["vm_create<br/>스펙별 VM 생성 ev01~ev99"]
+    J --> K["affinity_setting<br/>ev별 affinity 파일 적용"]
+    K --> L["lpage_setting<br/>HugePage / CPU 토폴로지"]
+    L --> M{"단계 실패?"}
+    M -- 예 --> M1["그 단계에서 멈춤<br/>원인 수정 후 재실행 → 이미 있는 것은 건너뜀"] --> D
+    M -- 아니오 --> N["[완료]"]
+    N --> O["vm-param-check -specRoot=../../SPEC_DIR<br/>같은 스펙으로 체크 → CSV"]
+    O --> P{"FAIL 있음?"}
+    P -- 아니오 --> Q["끝"]
+    P -- 예 --> R["-fix: 게이트(동질성·전원 OFF) → dry-run → y/N → 적용 → 재검증"]
+    R --> S["무작위 VM 몇 대 직접 확인"]
+```
