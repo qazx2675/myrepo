@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -37,6 +38,10 @@ import (
 // maxConcurrent 는 동시에 처리할 VM 수입니다. vCenter/ESXi 에 걸리는 API 부하를
 // 감안해 고정값으로 둡니다.
 const maxConcurrent = 16
+
+// pairRecheckInterval 은 ev02 대상이 짝(ev01)의 부하 때문에 후순위로 밀렸을 때,
+// 다시 부하를 확인하는 주기입니다.
+const pairRecheckInterval = 2 * time.Minute
 
 // located 는 대상 VM 이 어느 vCenter 접속(client)의 어느 VM 인지를 담습니다.
 type located struct {
@@ -86,6 +91,27 @@ func main() {
 		remaining[e.Hostname] = true
 	}
 
+	// ev02 대상은 짝(ev01)의 부하를 봐서 후순위로 미룰 수 있다(아래 pairOf/bmOf).
+	// ev01 은 위치(client+vm, uptime 을 돌릴 곳)를, BM(ESXi 호스트) 이름은 물리
+	// 코어 수를 얻는 데 쓴다. hostname 규칙상 BM "hostname01" 의 두 VM 은 항상
+	// "hostname01ev01"/"hostname01ev02" 이므로 짝과 BM 이름은 문자열만으로 정해진다.
+	pairOf := make(map[string]string) // ev02 hostname -> ev01 hostname
+	bmOf := make(map[string]string)   // ev02 hostname -> BM(ESXi 호스트) 이름
+	for _, e := range entries {
+		if pair, ok := target.PairHostname(e.Hostname); ok {
+			pairOf[e.Hostname] = pair
+			remaining[pair] = true
+		}
+		if bm, ok := target.BareMetalName(e.Hostname); ok {
+			bmOf[e.Hostname] = bm
+		}
+	}
+	bmRemaining := make(map[string]bool, len(bmOf))
+	for _, bm := range bmOf {
+		bmRemaining[bm] = true
+	}
+	bmHosts := make(map[string]mo.HostSystem, len(bmRemaining))
+
 	locations := make(map[string]located, len(entries))
 	var clients []*govmomi.Client
 	defer func() {
@@ -95,7 +121,7 @@ func main() {
 	}()
 
 	for _, addr := range vcenters {
-		if len(remaining) == 0 {
+		if len(remaining) == 0 && len(bmRemaining) == 0 {
 			break
 		}
 		c, err := vsphere.Connect(ctx, addr, vcUser, vcPass)
@@ -105,14 +131,36 @@ func main() {
 		}
 		clients = append(clients, c)
 
-		vms, err := vsphere.FindVMs(ctx, c, remaining)
-		if err != nil {
-			fmt.Printf("[FAIL] %s: %v\n", addr, err)
-			continue
+		if len(remaining) > 0 {
+			vms, err := vsphere.FindVMs(ctx, c, remaining)
+			if err != nil {
+				fmt.Printf("[FAIL] %s: %v\n", addr, err)
+			} else {
+				for host, vm := range vms {
+					locations[host] = located{client: c, vm: vm}
+					delete(remaining, host)
+				}
+			}
 		}
-		for host, vm := range vms {
-			locations[host] = located{client: c, vm: vm}
-			delete(remaining, host)
+		if len(bmRemaining) > 0 {
+			hosts, err := vsphere.FindHosts(ctx, c, bmRemaining)
+			if err != nil {
+				fmt.Printf("[FAIL] %s: %v\n", addr, err)
+			} else {
+				for name, h := range hosts {
+					bmHosts[name] = h
+					delete(bmRemaining, name)
+				}
+			}
+		}
+	}
+
+	// ev02 hostname -> 짝(ev01)이 확인해야 할 BM 물리 코어 수. 못 찾았으면 0 —
+	// waitForPairIdle 이 이 경우 미루지 않고 바로 진행한다.
+	pairCoreCount := make(map[string]int, len(bmOf))
+	for host, bm := range bmOf {
+		if h, ok := bmHosts[bm]; ok {
+			pairCoreCount[host] = vsphere.PhysicalCoreCount(h)
 		}
 	}
 
@@ -160,11 +208,16 @@ func main() {
 		e := e
 		loc := locations[e.Hostname]
 		sv := vmStatus[e.Hostname]
+		pairHost, hasPair := pairOf[e.Hostname]
+		coreCount := pairCoreCount[e.Hostname]
 
 		wg.Add(1)
-		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
+			// ev02 대상만 대상: 짝(ev01)이 BM 물리 코어 이상을 쓰는 동안은
+			// 워커 슬롯을 잡지 않고 기다린다(아래 참고).
+			waitForPairIdle(ctx, locations, pairHost, hasPair, coreCount, guestUser, guestPass)
+			sem <- struct{}{}
 			defer func() { <-sem }()
 			runOne(ctx, loc.client, loc.vm, e, guestUser, guestPass, sv)
 		}()
@@ -181,6 +234,34 @@ func main() {
 	}
 	if failCount > 0 {
 		os.Exit(1)
+	}
+}
+
+// waitForPairIdle 은 ev02 대상이 워커 슬롯을 배정받기 직전, 짝(ev01)의 부하를
+// 딱 한 번 확인합니다. ev01 이 BM 물리 코어 이상의 load average 를 쓰고 있으면
+// 워커 슬롯을 잡지 않은 채(다른 대상이 그 슬롯을 바로 쓸 수 있게) 2분 뒤 다시
+// 확인하고, 그 재확인이 곧 "배정 직전 확인"이 되어 통과하면 바로 워커를 잡는다.
+// 짝을 못 찾았거나 BM 물리 코어 수를 못 읽었으면(coreCount<=0) 미루지 않고
+// 그냥 진행한다 — 이 스케줄링은 성능 최적화일 뿐이라, 알 수 없는 상태 때문에
+// 대상 처리 자체를 막지는 않는다.
+func waitForPairIdle(ctx context.Context, locations map[string]located, pairHost string, hasPair bool, coreCount int, guestUser, guestPass string) {
+	if !hasPair || coreCount <= 0 {
+		return
+	}
+	pairLoc, ok := locations[pairHost]
+	if !ok {
+		return
+	}
+	for {
+		load, err := vsphere.LoadAverage1(ctx, pairLoc.client, pairLoc.vm.Reference(), guestUser, guestPass)
+		if err != nil || load < float64(coreCount) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(pairRecheckInterval):
+		}
 	}
 }
 

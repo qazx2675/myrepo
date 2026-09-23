@@ -10,6 +10,14 @@
 //   - 실패 VM(-fail %): "IP 설정 적용" 단계 명령이 exit 1 로 끝남
 //   - 전원 꺼진 VM(-off %), vCenter 에 없는 호스트(-missing 개)
 //
+// VM 은 물리서버(BM) 하나를 공유하는 두 대씩 짝지어 "host0001ev01"/
+// "host0001ev02" 로 이름 붙입니다(실제 명명 규칙과 동일). BM 은 같은 이름
+// ("host0001")의 ESXi 호스트(HostSystem)로 만들고 -cores 개 물리 코어를 줍니다.
+// -busy-ev01 %: 그 중 일부 짝의 ev01 이 항상 BM 물리 코어 이상의 load average 를
+// 쓰는 것으로 흉내 냅니다 — vm-ip-change 가 그 짝의 ev02 대상을 후순위로 미루고
+// 2분마다 재확인하는지 보는 시나리오용입니다(부하가 고정이라 절대 안 풀립니다 —
+// 도중에 상태를 보려면 vm-ip-change 목록 화면에서 's' 로 저장하거나 Ctrl+C 로 중단).
+//
 // 시작하면 -out 폴더에 vcenter.txt/list.txt 를 만들고, 종료(Ctrl+C) 시 각 VM
 // 에 실제로 어떤 IP 가 적용됐는지 검증 결과를 출력하고 report.txt 로 저장합니다.
 package main
@@ -20,6 +28,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -58,6 +67,8 @@ func main() {
 	offPct := flag.Int("off", 0, "전원 꺼진 VM 비율(%)")
 	missing := flag.Int("missing", 0, "list.txt 에만 넣고 vCenter 에는 없는 호스트 수")
 	seed := flag.Int64("seed", 1, "난수 시드(같은 값이면 같은 VM 이 느림/실패로 뽑힘)")
+	cores := flag.Int("cores", 8, "BM(ESXi 호스트) 물리 코어 수")
+	busyPct := flag.Int("busy-ev01", 0, "ev01 이 짝의 BM 물리 코어 이상을 쓰는 것으로 흉내 낼 짝 비율(%) — 해당 ev02 대상은 계속 후순위로 밀림")
 	flag.Parse()
 
 	if *n < 1 || *minD > *maxD {
@@ -65,11 +76,13 @@ func main() {
 	}
 	rnd := rand.New(rand.NewSource(*seed))
 
+	numPairs := (*n + 1) / 2
+
 	m := simulator.VPX()
 	m.Datacenter = 1
 	m.Host = 0
 	m.Cluster = 1
-	m.ClusterHost = 1
+	m.ClusterHost = numPairs
 	m.Machine = *n
 	if err := m.Create(); err != nil {
 		log.Fatalf("시뮬레이터 생성 실패: %v", err)
@@ -77,9 +90,11 @@ func main() {
 	defer m.Remove()
 
 	st := &state{procs: map[int64]*proc{}, vms: map[string]*vmState{}, rnd: rnd,
-		minD: *minD, maxD: *maxD, slowD: *slowD}
+		minD: *minD, maxD: *maxD, slowD: *slowD, cores: *cores}
 
-	// VM 이름을 test-vm0001.. 로 바꾸고 시나리오(느림/실패/전원꺼짐)를 배정한다.
+	// VM 이름을 test-vm0001.. 대신 host0001ev01/host0001ev02.. 로 바꾼다(짝 VM 이
+	// BM 하나를 공유하는 실제 명명 규칙과 동일). 시나리오(느림/실패/전원꺼짐)도
+	// 여기서 배정한다.
 	reg := m.Map()
 	var vms []*simulator.VirtualMachine
 	for _, e := range reg.All("VirtualMachine") {
@@ -87,9 +102,21 @@ func main() {
 	}
 	sort.Slice(vms, func(i, j int) bool { return vmIndex(vms[i].Name) < vmIndex(vms[j].Name) })
 
+	var hosts []*simulator.HostSystem
+	for _, e := range reg.All("HostSystem") {
+		hosts = append(hosts, e.(*simulator.HostSystem))
+	}
+	sort.Slice(hosts, func(i, j int) bool { return hosts[i].Name < hosts[j].Name })
+
 	var list []string
 	for i, vm := range vms {
-		name := fmt.Sprintf("test-vm%04d", i+1)
+		pair := i / 2
+		bmName := fmt.Sprintf("host%04d", pair+1)
+		suffix := "ev01"
+		if i%2 == 1 {
+			suffix = "ev02"
+		}
+		name := bmName + suffix
 		vm.Name = name
 		if vm.Config != nil {
 			vm.Config.Name = name
@@ -111,11 +138,28 @@ func main() {
 		case r < *offPct+*failPct+*slowPct:
 			vs.slow = true
 		}
+		if suffix == "ev01" && rnd.Intn(100) < *busyPct {
+			vs.busy = true
+		}
 		st.vms[vm.Reference().Value] = vs
 		list = append(list, name+" "+vs.expect)
 	}
 	for i := 0; i < *missing; i++ {
 		list = append(list, fmt.Sprintf("missing-vm%02d 10.99.0.%d", i+1, i+2))
+	}
+
+	// BM(ESXi 호스트)도 같은 이름 규칙("host0001")으로 바꾸고 물리 코어 수를 준다.
+	// vm-ip-change 는 실행 중인 호스트가 아니라 이름으로만 BM 을 찾으므로(실제
+	// 배치와 무관), VM 과 이름만 맞으면 된다.
+	for i, h := range hosts {
+		if i >= numPairs {
+			break
+		}
+		h.Name = fmt.Sprintf("host%04d", i+1)
+		if h.Summary.Hardware == nil {
+			h.Summary.Hardware = new(types.HostHardwareSummary)
+		}
+		h.Summary.Hardware.NumCpuCores = int16(*cores)
 	}
 
 	// 게스트 명령 실행기를 가짜로 바꿔 끼운다(원래는 docker exec 로 동작).
@@ -125,8 +169,18 @@ func main() {
 	}
 	reg.Put(&procMgr{GuestProcessManager: mo.GuestProcessManager{Self: pmRef}, st: st})
 
+	// uptime 결과(부하평균) 다운로드도 가짜로 처리한다: InitiateFileTransferFromGuest 는
+	// 실제 파일 대신 /fake-loadavg 로 리다이렉트하고, 그 경로는 아래에서 대상 VM 의
+	// vs.busy 여부만 보고 load average 문자열을 즉석에서 만들어 돌려준다.
+	fmRef := types.ManagedObjectReference{Type: "GuestFileManager", Value: "guestOperationsFileManager"}
+	if reg.Get(fmRef) == nil {
+		log.Fatal("시뮬레이터에 GuestFileManager 가 없습니다")
+	}
+	reg.Put(&fileMgr{GuestFileManager: mo.GuestFileManager{Self: fmRef}, st: st, addr: *addr})
+
 	m.Service.Listen = &url.URL{Host: *addr, User: url.UserPassword(vcUser, vcPass)}
 	m.Service.TLS = new(tls.Config)
+	m.Service.HandleFunc("/fake-loadavg", st.serveLoadAverage)
 	s := m.Service.NewServer()
 	defer s.Close()
 
@@ -136,11 +190,12 @@ func main() {
 	writeFile(filepath.Join(*out, "vcenter.txt"), s.URL.Host+"\n")
 	writeFile(filepath.Join(*out, "list.txt"), strings.Join(list, "\n")+"\n")
 
-	fmt.Printf("가짜 vCenter 실행 중: https://%s/sdk  (VM %d대)\n", s.URL.Host, len(vms))
-	fmt.Printf("  느린 VM %d대(명령당 %s), 실패 VM %d대, 전원꺼짐 %d대, 없는 호스트 %d개\n",
+	fmt.Printf("가짜 vCenter 실행 중: https://%s/sdk  (VM %d대, BM %d대, BM당 물리코어 %d)\n", s.URL.Host, len(vms), numPairs, *cores)
+	fmt.Printf("  느린 VM %d대(명령당 %s), 실패 VM %d대, 전원꺼짐 %d대, 없는 호스트 %d개, 부하 과점유 ev01 %d대\n",
 		st.count(func(v *vmState) bool { return v.slow }), *slowD,
 		st.count(func(v *vmState) bool { return v.fail }),
-		st.count(func(v *vmState) bool { return v.off }), *missing)
+		st.count(func(v *vmState) bool { return v.off }), *missing,
+		st.count(func(v *vmState) bool { return v.busy }))
 	fmt.Printf("  입력 파일: %s, %s\n", filepath.Join(*out, "vcenter.txt"), filepath.Join(*out, "list.txt"))
 	fmt.Println("\n다른 터미널에서 아래를 붙여넣고 vm-ip-change 를 실행하세요:")
 	fmt.Printf("  export VC_USER='%s' VC_PASSWORD='%s' GUEST_USER='%s' GUEST_PASSWORD='%s'\n",
@@ -178,11 +233,11 @@ func writeFile(path, s string) {
 // ---- 가짜 게스트 명령 실행기 ----
 
 type vmState struct {
-	name, expect     string
-	slow, fail, off  bool
-	applied          string // "IP 설정 적용"으로 설정된 IP
-	up               bool   // "연결 재기동"까지 끝났는지
-	calls, failCalls int
+	name, expect          string
+	slow, fail, off, busy bool
+	applied               string // "IP 설정 적용"으로 설정된 IP
+	up                    bool   // "연결 재기동"까지 끝났는지
+	calls, failCalls      int
 }
 
 type proc struct {
@@ -203,6 +258,7 @@ type state struct {
 
 	rnd               *rand.Rand
 	minD, maxD, slowD time.Duration
+	cores             int
 }
 
 var ipRe = regexp.MustCompile(`ipv4\.addresses ([0-9.]+)/24`)
@@ -212,6 +268,8 @@ var ipRe = regexp.MustCompile(`ipv4\.addresses ([0-9.]+)/24`)
 // 가장 먼저 걸러야 한다.
 func stageOf(script string) string {
 	switch {
+	case strings.Contains(script, "uptime >"):
+		return "uptime"
 	case strings.Contains(script, "con show --active"):
 		return "check"
 	case strings.Contains(script, "ipv4.method manual"):
@@ -227,6 +285,7 @@ func (s *state) start(vmRef, script string) int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	vs := s.vms[vmRef]
+	stage := stageOf(script)
 	d := s.minD
 	if s.maxD > s.minD {
 		d += time.Duration(s.rnd.Int63n(int64(s.maxD - s.minD)))
@@ -234,20 +293,42 @@ func (s *state) start(vmRef, script string) int64 {
 	if vs != nil && vs.slow {
 		d = s.slowD
 	}
-	p := &proc{vm: vmRef, stage: stageOf(script), start: time.Now()}
+	if stage == "uptime" {
+		d = 200 * time.Millisecond // uptime 자체는 가볍다 — 느린 VM 시나리오와 무관
+	}
+	p := &proc{vm: vmRef, stage: stage, start: time.Now()}
 	p.end = p.start.Add(d)
 	if m := ipRe.FindStringSubmatch(script); m != nil {
 		p.ip = m[1]
 	}
 	if vs != nil {
-		vs.calls++
-		if vs.fail && p.stage == "apply" {
+		if stage != "uptime" {
+			vs.calls++ // uptime 폴링은 이 VM 자신의 IP 변경 진행 여부와 무관하므로 계산에서 뺀다
+		}
+		if vs.fail && stage == "apply" {
 			p.exit = 1
 		}
 	}
 	s.next++
 	s.procs[s.next] = p
 	return s.next
+}
+
+// serveLoadAverage 는 vm-ip-change 의 LoadAverage1 이 내려받는 "uptime" 결과
+// 파일을 가짜로 돌려준다. vm-ip-change 가 실제로 파일을 만들지 않으므로(게스트
+// 명령 자체를 실행하지 않음), 요청받은 VM 의 vs.busy 여부만 보고 즉석에서
+// load average 문자열을 만든다.
+func (s *state) serveLoadAverage(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	vs := s.vms[r.URL.Query().Get("vm")]
+	cores := s.cores
+	s.mu.Unlock()
+
+	load := 0.10
+	if vs != nil && vs.busy {
+		load = float64(cores) * 2 // 물리 코어의 두 배 — 항상 "과점유"로 판정되게
+	}
+	fmt.Fprintf(w, " 12:00:00 up 1 day,  1 user,  load average: %.2f, %.2f, %.2f\n", load, load, load)
 }
 
 // commit 은 끝난 게스트 명령의 효과(IP 설정/연결 재기동)를 VM 상태에 반영합니다.
@@ -374,6 +455,26 @@ func (m *procMgr) ListProcessesInGuest(ctx *simulator.Context, req *types.ListPr
 			info.ExitCode = p.exit
 		}
 		body.Res.Returnval = append(body.Res.Returnval, info)
+	}
+	return body
+}
+
+// fileMgr 는 GuestFileManager 를 가짜로 바꿔 끼운 것입니다. LoadAverage1 이 uptime
+// 결과를 내려받으려고 부르는 InitiateFileTransferFromGuest 만 처리하면 되므로,
+// 실제 게스트 파일시스템 대신 /fake-loadavg(state.serveLoadAverage) 로 보낸다.
+type fileMgr struct {
+	mo.GuestFileManager
+	st   *state
+	addr string
+}
+
+func (m *fileMgr) InitiateFileTransferFromGuest(ctx *simulator.Context, req *types.InitiateFileTransferFromGuest) soap.HasFault {
+	body := &methods.InitiateFileTransferFromGuestBody{
+		Res: &types.InitiateFileTransferFromGuestResponse{
+			Returnval: types.FileTransferInformation{
+				Url: fmt.Sprintf("https://%s/fake-loadavg?vm=%s", m.addr, req.Vm.Value),
+			},
+		},
 	}
 	return body
 }

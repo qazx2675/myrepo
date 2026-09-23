@@ -56,6 +56,27 @@ func TestGateway(t *testing.T) {
 	}
 }
 
+func TestPairHostname(t *testing.T) {
+	if pair, ok := PairHostname("host0001ev02"); !ok || pair != "host0001ev01" {
+		t.Errorf("PairHostname(host0001ev02) = %q, %v, want host0001ev01, true", pair, ok)
+	}
+	if _, ok := PairHostname("host0001ev01"); ok {
+		t.Error("PairHostname(host0001ev01) 은 ev02 가 아니므로 ok=false 여야 합니다")
+	}
+	if _, ok := PairHostname("web01"); ok {
+		t.Error("PairHostname(web01) 은 ev02 가 아니므로 ok=false 여야 합니다")
+	}
+}
+
+func TestBareMetalName(t *testing.T) {
+	if bm, ok := BareMetalName("host0001ev02"); !ok || bm != "host0001" {
+		t.Errorf("BareMetalName(host0001ev02) = %q, %v, want host0001, true", bm, ok)
+	}
+	if _, ok := BareMetalName("host0001ev01"); ok {
+		t.Error("BareMetalName(host0001ev01) 은 ev02 가 아니므로 ok=false 여야 합니다")
+	}
+}
+
 func TestSanitizeID(t *testing.T) {
 	cases := map[string]string{
 		"web01":     "web01",

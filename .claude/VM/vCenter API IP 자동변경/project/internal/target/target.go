@@ -53,6 +53,31 @@ func LoadEntries(path string) ([]Entry, error) {
 	return entries, nil
 }
 
+// evSuffix 는 한 물리서버(BM)에 동거하는 두 VM(ev01/ev02)의 이름 규칙입니다:
+// VM 이름은 항상 "<BM이름>ev01" / "<BM이름>ev02" 형태입니다.
+const (
+	ev01Suffix = "ev01"
+	ev02Suffix = "ev02"
+)
+
+// PairHostname 은 ev02 대상 hostname 에서 같은 BM 을 쓰는 ev01 대상의
+// hostname 을 계산합니다. hostname 이 ev02 로 끝나지 않으면 ok=false 입니다.
+func PairHostname(hostname string) (pair string, ok bool) {
+	if !strings.HasSuffix(hostname, ev02Suffix) {
+		return "", false
+	}
+	return strings.TrimSuffix(hostname, ev02Suffix) + ev01Suffix, true
+}
+
+// BareMetalName 은 ev02 대상 hostname 에서 BM(물리서버) 이름을 계산합니다.
+// vCenter 인벤토리에 이 이름의 HostSystem(ESXi 호스트)이 있다고 전제합니다.
+func BareMetalName(hostname string) (bm string, ok bool) {
+	if !strings.HasSuffix(hostname, ev02Suffix) {
+		return "", false
+	}
+	return strings.TrimSuffix(hostname, ev02Suffix), true
+}
+
 // Gateway 는 새 IP 의 마지막 옥텟을 1 로 바꾼 게이트웨이 주소를 계산합니다.
 // (서브넷마스크는 255.255.255.0 / prefix 24 고정 전제)
 func Gateway(ip string) string {

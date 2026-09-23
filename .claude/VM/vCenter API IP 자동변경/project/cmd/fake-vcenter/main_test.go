@@ -15,6 +15,8 @@ REVERTEOF`
 		`nmcli con mod "$CONN" ipv4.method manual ipv4.addresses 10.10.0.2/24 ipv4.gateway 10.10.0.1`: "apply",
 		`CONN=$(cat /tmp/vm-ip-change/x.conn)
 nmcli con up "$CONN"`: "up",
+		`mkdir -p /tmp/vm-ip-change
+uptime > /tmp/vm-ip-change/loadavg 2>&1`: "uptime",
 	}
 	for script, want := range cases {
 		if got := stageOf(script); got != want {
