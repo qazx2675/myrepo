@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-09-23 — ev02 짝 우선순위, 목록 저장('s')
+- 추가: 대상 호스트네임이 `...ev02` 로 끝나면(BM 하나를 `ev01`/`ev02` 가 공유하는
+  명명 규칙), 워커 배정 직전 짝(`ev01`)의 `uptime` 1분 부하평균을 확인해 BM
+  물리 코어 이상이면 워커 슬롯을 잡지 않고 뒤로 미루고 2분마다 재확인(`internal/target`
+  PairHostname/BareMetalName, `internal/vsphere` FindHosts/PhysicalCoreCount/LoadAverage1,
+  `cmd/vm-ip-change` waitForPairIdle).
+- 추가: 목록 화면에서 `s` 를 누르면 그 시점의 완료/실패/진행중 전체 목록을
+  `vm-ip-change-snapshot-<시각>.txt` 로 저장(`internal/tui` saveSnapshot).
+- `cmd/fake-vcenter`: VM 이름을 `test-vm0001..` 대신 `host0001ev01`/`host0001ev02..` 로
+  변경(짝 명명 규칙과 동일). BM(가짜 ESXi 호스트, `-cores`)과 `-busy-ev01`(짝 우선순위
+  확인 시나리오용, 부하 고정) 옵션 추가.
+
 ## 2026-09-23 — 시험 환경 (v1.1.0)
 - 추가: `cmd/fake-vcenter` + `fake-vcenter.sh` — vcsim 기반 가짜 vCenter. VM 수, 느린 VM,
   실패 VM, 전원꺼짐, 없는 호스트를 옵션으로 만들고 종료 시 VM 별 실제 적용 결과를 검증.

@@ -16,7 +16,9 @@ package vsphere
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/vmware/govmomi/guest"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/soap"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -66,6 +69,121 @@ func FindVMs(ctx context.Context, c *govmomi.Client, want map[string]bool) (map[
 		}
 	}
 	return found, nil
+}
+
+// FindHosts 는 FindVMs 와 같은 방식으로, 이 vCenter 인벤토리에서 want 에 있는
+// 이름과 일치하는 ESXi 호스트(HostSystem)를 찾습니다. ev02 대상과 물리서버(BM)를
+// 공유하는 ev01 대상의 부하를 미루기 위해 BM 의 물리 코어 수를 읽는 데 씁니다.
+func FindHosts(ctx context.Context, c *govmomi.Client, want map[string]bool) (map[string]mo.HostSystem, error) {
+	m := view.NewManager(c.Client)
+	cv, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+	if err != nil {
+		return nil, fmt.Errorf("ESXi 호스트 컨테이너 뷰 생성 실패: %w", err)
+	}
+	defer cv.Destroy(ctx)
+
+	var hosts []mo.HostSystem
+	if err := cv.Retrieve(ctx, []string{"HostSystem"}, []string{"name", "summary.hardware"}, &hosts); err != nil {
+		return nil, fmt.Errorf("ESXi 호스트 목록 조회 실패: %w", err)
+	}
+
+	found := make(map[string]mo.HostSystem)
+	for _, h := range hosts {
+		if want[h.Name] {
+			found[h.Name] = h
+		}
+	}
+	return found, nil
+}
+
+// PhysicalCoreCount 는 HostSystem(BM)의 물리 코어 수입니다. 하드웨어 정보를
+// 못 읽었으면 0 을 돌려줍니다.
+func PhysicalCoreCount(h mo.HostSystem) int {
+	if h.Summary.Hardware == nil {
+		return 0
+	}
+	return int(h.Summary.Hardware.NumCpuCores)
+}
+
+// LoadAverage1 은 게스트 안에서 "uptime" 을 실행해 1분 부하평균(load average)을
+// 읽어옵니다. ev02 대상을 처리하기 전, 같은 BM 을 쓰는 ev01 대상이 물리 코어를
+// 과점유 중인지 확인하는 데 씁니다.
+func LoadAverage1(ctx context.Context, c *govmomi.Client, vmRef types.ManagedObjectReference, guestUser, guestPass string) (float64, error) {
+	auth := guestAuth(guestUser, guestPass)
+	opMgr := guest.NewOperationsManager(c.Client, vmRef)
+	procMgr, err := opMgr.ProcessManager(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("ProcessManager 조회 실패: %w", err)
+	}
+	fileMgr, err := opMgr.FileManager(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("FileManager 조회 실패: %w", err)
+	}
+
+	outFile := fmt.Sprintf("%s/loadavg", tmpDir)
+	script := fmt.Sprintf("mkdir -p %s\nuptime > %s 2>&1\n", tmpDir, outFile)
+	spec := &types.GuestProgramSpec{ProgramPath: "/bin/bash", Arguments: "-c " + shellQuote(script)}
+
+	pid, err := procMgr.StartProgram(ctx, auth, spec)
+	if err != nil {
+		return 0, fmt.Errorf("uptime 실행 실패: %w", err)
+	}
+	for {
+		procs, err := procMgr.ListProcesses(ctx, auth, []int64{pid})
+		if err != nil {
+			return 0, fmt.Errorf("uptime 상태 조회 실패: %w", err)
+		}
+		if len(procs) == 0 {
+			return 0, fmt.Errorf("uptime 명령(pid=%d)을 찾을 수 없습니다", pid)
+		}
+		if procs[0].EndTime != nil {
+			if procs[0].ExitCode != 0 {
+				return 0, fmt.Errorf("uptime 명령이 실패했습니다(exit=%d)", procs[0].ExitCode)
+			}
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+
+	info, err := fileMgr.InitiateFileTransferFromGuest(ctx, auth, outFile)
+	if err != nil {
+		return 0, fmt.Errorf("uptime 결과 전송 준비 실패: %w", err)
+	}
+	u, err := fileMgr.TransferURL(ctx, info.Url)
+	if err != nil {
+		return 0, fmt.Errorf("uptime 결과 URL 확인 실패: %w", err)
+	}
+	rc, _, err := c.Download(ctx, u, &soap.DefaultDownload)
+	if err != nil {
+		return 0, fmt.Errorf("uptime 결과 다운로드 실패: %w", err)
+	}
+	defer rc.Close()
+	body, err := io.ReadAll(rc)
+	if err != nil {
+		return 0, fmt.Errorf("uptime 결과 읽기 실패: %w", err)
+	}
+
+	return parseLoadAverage1(string(body))
+}
+
+// parseLoadAverage1 은 "uptime" 출력에서 1분 load average 값을 뽑습니다.
+// 예: " 12:00:00 up 3 days,  2:14,  1 user,  load average: 0.52, 0.58, 0.59"
+func parseLoadAverage1(out string) (float64, error) {
+	idx := strings.Index(out, "load average:")
+	if idx < 0 {
+		return 0, fmt.Errorf("uptime 출력에서 load average 를 찾지 못했습니다: %q", strings.TrimSpace(out))
+	}
+	rest := out[idx+len("load average:"):]
+	first := strings.TrimSpace(strings.SplitN(rest, ",", 2)[0])
+	v, err := strconv.ParseFloat(first, 64)
+	if err != nil {
+		return 0, fmt.Errorf("load average 값 파싱 실패: %q: %w", first, err)
+	}
+	return v, nil
 }
 
 // IsReady 는 Guest Operations 를 쓸 수 있는 상태인지(전원 켜짐 + VMware Tools

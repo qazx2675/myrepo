@@ -15,12 +15,19 @@ cd vm-ip-change/project
 cd vm-ip-change/project
 export VC_USER='administrator@vsphere.local' VC_PASSWORD='VMware1!' GUEST_USER='root' GUEST_PASSWORD='guestpass'
 ./bin/vm-ip-change -vcenter testrun/vcenter.txt -list testrun/list.txt
-(60초 뒤 목록 화면: ↑ ↓ / ← → / PgUp PgDn / Enter / 아무 키)
+(60초 뒤 목록 화면: ↑ ↓ / ← → / PgUp PgDn / Enter 상세 / s 목록 저장 / 아무 키)
 (Ctrl+C 1번 → 안내만 / 5초 안에 3번 → 즉시 종료)
 
 [5] 터미널 A 에서 결과 검증
 Ctrl+C
 cat testrun/report.txt
 
-[6] 정리
-rm -rf testrun testrun-e2e testrun-e2e.*.log
+[6] 수동 시험 - ev02 우선순위 확인 (짝 ev01 이 과점유 중이면 ev02 대상이 계속 후순위로 밀리는지)
+터미널 A: ./fake-vcenter.sh -vms 20 -busy-ev01 30 -out testrun-ev
+터미널 B: ./bin/vm-ip-change -vcenter testrun-ev/vcenter.txt -list testrun-ev/list.txt
+(짝(ev01)이 과점유로 뽑힌 ev02 대상만 "대기중"에 계속 머무는지 목록 화면에서 확인)
+(s 로 현재 목록 저장 후 Ctrl+C 3회로 중단)
+cat testrun-ev/report.txt   (과점유 ev01 의 ev02 짝만 "시작 안 함"으로 나와야 정상)
+
+[7] 정리
+rm -rf testrun testrun-ev testrun-e2e testrun-e2e.*.log

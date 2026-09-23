@@ -216,8 +216,16 @@ func Run(t *status.Tracker, done <-chan struct{}, sigint <-chan os.Signal) {
 			}
 
 			if len(esc) == 0 && b != 0x1b {
-				if b == '\r' || b == '\n' {
+				switch b {
+				case '\r', '\n':
 					inDetail = true
+				case 's', 'S':
+					if path, err := saveSnapshot(t); err != nil {
+						notice = fmt.Sprintf("!! 저장 실패: %v", err)
+					} else {
+						notice = fmt.Sprintf("저장됨: %s", path)
+					}
+					noticeUntil = time.Now().Add(interruptWindow)
 				}
 				render()
 				continue
@@ -323,7 +331,7 @@ func listLines(t *status.Tracker, selected, pageSize int, notice string) []strin
 		fmt.Sprintf("=== vm-ip-change 진행 중 === 경과 %s", fmtDuration(time.Since(t.Start))),
 		fmt.Sprintf("완료 %d/%d (%d%%)  진행중 %d  대기 %d  실패 %d",
 			c.done, c.total, pct, c.running, c.pending, c.failed),
-		fmt.Sprintf("↑/↓ 선택  ←/→ 또는 PgUp/PgDn 페이지  Enter 상세   [페이지 %d/%d]", page+1, pages),
+		fmt.Sprintf("↑/↓ 선택  ←/→ 또는 PgUp/PgDn 페이지  Enter 상세  s 목록 저장   [페이지 %d/%d]", page+1, pages),
 		notice,
 	)
 	for i := start; i < end; i++ {
@@ -379,6 +387,26 @@ func detailLines(v *status.VM, notice string) []string {
 		lines = append(lines, "", notice)
 	}
 	return lines
+}
+
+// saveSnapshot 은 목록 화면에서 's' 를 누르면 그 시점의 완료/실패/진행중 전체
+// 목록을 파일로 저장합니다(작업 도중 현황을 따로 보관하고 싶을 때 사용).
+func saveSnapshot(t *status.Tracker) (string, error) {
+	path := fmt.Sprintf("vm-ip-change-snapshot-%s.txt", time.Now().Format("20060102-150405"))
+	f, err := os.Create(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	c := countAll(t)
+	fmt.Fprintf(f, "=== vm-ip-change 진행 상황 (%s, 경과 %s) ===\n",
+		time.Now().Format("2006-01-02 15:04:05"), fmtDuration(time.Since(t.Start)))
+	fmt.Fprintf(f, "완료 %d/%d  진행중 %d  대기 %d  실패 %d\n\n", c.done, c.total, c.running, c.pending, c.failed)
+	for _, v := range t.VMs {
+		fmt.Fprintf(f, "%-24s %-12s %s\n", v.Hostname, v.Label(), fmtDuration(v.Snapshot().Elapsed))
+	}
+	return path, nil
 }
 
 func renderFinal(t *status.Tracker) {
