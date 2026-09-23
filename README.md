@@ -63,7 +63,7 @@ cd /home/vm-param-check-usability-improvement/vm-param-check
 ```
 V2/
 ├── README.md                              # 이 문서
-├── WORKFLOW.md                            # 전체 작업 흐름도
+├── WORKFLOW.md / workflow.svg             # 전체 작업 흐름도 (mermaid / SVG)
 ├── ARCHITECTURE.md / PR_CHECKLIST.md      # 폴더별 역할 / 수정·배포 전 체크리스트
 ├── setup.sh                               # 전체 오프라인 빌드 스크립트
 ├── govendor/                              # 공유 의존성 (govmomi 0.55.1 = VMsetup, 0.39.0 = vm-param-check)

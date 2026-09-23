@@ -28,6 +28,12 @@ flowchart TD
     R --> S["무작위 VM 몇 대 직접 확인"]
 ```
 
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>
+
 ## 단계 설명
 
 | 단계 | 도구 | 설명 |

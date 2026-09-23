@@ -61,3 +61,9 @@ flowchart TD
     P -- 예 --> R["-fix: 게이트(동질성·전원 OFF) → dry-run → y/N → 적용 → 재검증"]
     R --> S["무작위 VM 몇 대 직접 확인"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>
