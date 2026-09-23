@@ -87,3 +87,25 @@
     전송되는 텍스트에 3글자 이상 이어진 조각 자체가 없어져 이 우연한 일치를
     원천 차단합니다. 원격에서는 `tr -d ' '` 로 공백만 지우고 그대로
     복호화합니다(base64 원문에는 공백이 없으므로 안전).
+
+## 작업 흐름도
+
+단계별 설명은 [WORKFLOW.md](WORKFLOW.md)를 참고하세요.
+
+```mermaid
+flowchart TD
+    A["준비<br/>conf/ldap_config.conf · conf/assets.txt (hostname TAB site)"] --> B["1) deploy_ldap.sh -infra X -dry-run<br/>무엇이 바뀔지 확인 (파일 변경 없음)"]
+    B --> C["2) ldap-config-engine -host 소수노드<br/>로그인 · id · ls /appl 확인"]
+    C --> D{"문제 없음?"}
+    D -- 아니오 --> R["rollback (.bak.시각 복원) · 원인 수정"] --> B
+    D -- 예 --> E["3) deploy_ldap.sh -infra X<br/>전체 적용 + 검증"]
+    E --> F["엔진: 자산현황을 사이트별로 묶음"]
+    F --> G["사이트별 적용 스크립트 1개 생성<br/>(노드별 아님 → gossh 호출은 사이트 수만큼)"]
+    G --> H["base64 파이프로 gossh 전송 · 실행"]
+    H --> I["노드 현장 판정<br/>RHEL 버전 · hostname s4 예외"]
+    I --> J["7개 파일 키 단위 갱신<br/>ldap.conf · autofs_ldap_auth.conf · autofs.conf<br/>nslcd/sssd · resolv.conf · ntp/chrony · auto.appl"]
+    J --> K["변경 전 원본 .bak.시각 백업<br/>바뀐 게 없으면 NOCHANGE"]
+    K --> L["바뀐 파일에 대응하는 서비스만 재시작<br/>nslcd · sssd · autofs · ntpd · chronyd"]
+    L --> M["ldap_check.sh 로 3중 교차 검증<br/>(4) 나중에 -check-only 로 재검증)"]
+    M --> N["무작위 노드 몇 대 직접 확인"]
+```

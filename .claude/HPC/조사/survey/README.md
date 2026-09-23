@@ -3,6 +3,8 @@
 리눅스(RHEL) 서버의 자산대장(표2) 항목을 `gossh` 병렬 접속으로 수집해
 **엑셀에 바로 붙여넣을 수 있는 탭 구분 결과 파일**로 저장하는 도구.
 
+> 작업 흐름은 [WORKFLOW.md](WORKFLOW.md), 폴더·파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
+
 조사 대상은 **표1(자산양식) 텍스트의 hostname 열 전체**다. 별도 목록 파일을 손으로 만들지 않는다.
 
 설정은 **`conf/conf.toml` 하나만** 사용한다(실행 파일 옆 `conf/` 디렉터리). 옵션으로 경로를 지정하지 않는다.
@@ -126,7 +128,7 @@ A 서버(공용, 일부 대상망 전용)에서 1회 재조사해 결과를 합�
 
 1. 공유 디렉토리에 B 것과 함께 **RHEL 6 정적 빌드** 바이너리를 `[server_a].bin`
    이름(예: `survey-rhel6`)으로 둔다. `conf/`·`scripts/` 는 B 것을 공유한다.
-   `dir` 은 **바이너리와 `conf/` 가 들어있는 폴더**(= `run_survey.sh` 위치)를 가리켜야 한다.
+   `dir` 은 **바이너리와 `conf/` 가 들어 있는 폴더**(= `run_survey.sh` 위치)를 가리켜야 한다.
    예: `/user/autofs1/조사/survey` (그 아래에 `survey-rhel6`, `conf/conf.toml`)
 2. `conf/conf.toml` 의 `[server_a]` 를 채우고 `enabled = true`.
 3. B→A 는 `[server_a].user`(기본 `root`) 로 **패스워드리스 SSH** 가 돼야 한다(scp 는 불필요).

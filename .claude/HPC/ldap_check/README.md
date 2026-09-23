@@ -3,6 +3,8 @@
 노드의 **LDAP · DNS · NTP · autofs 설정 정합성을 검사**하는 단독 bash 스크립트입니다.
 아무것도 바꾸지 않고 읽기만 합니다.
 
+> 작업 흐름은 [WORKFLOW.md](WORKFLOW.md), 폴더·파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
+
 `gossh` 로 전 노드에 뿌려 일괄 점검하는 용도이며, 설정을 실제로 바꾸는 쪽은
 같은 저장소의 [`../ldap_setting/`](../ldap_setting/) 입니다.
 

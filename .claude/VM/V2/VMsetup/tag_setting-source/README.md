@@ -10,9 +10,12 @@ Attribute)** — `DEPT_NAME`, `PURPOSE`, `VM_TYPE` — 을 순번(ev01, ev02, ..
 > 사전 생성 필요 — 정의되어 있지 않으면 `SetCustomValue` 호출이 에러를 반환할 수
 > 있습니다.)
 
+⚠️ **주의사항 (Disclaimer)**
+본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정 변경 후 무작위로 서버 몇 대를 골라 실제로 변경되었는지 직접 확인하는 절차가 반드시 필요합니다.
+
 ## 1. 빌드 방법
 
-`vendor/`를 포함하고 있어 폐쇄망에서도 오프라인 빌드가 됩니다.
+`setup.sh`가 V2 공유 의존성(`../../govendor/govmomi-0.55.1-standard`)을 `vendor`로 링크해서 빌드하므로 폐쇄망에서도 오프라인 빌드가 됩니다.
 
 ```bash
 cd "myrepo/.claude/VM/VM_setup/tag_setting-source"
@@ -80,18 +83,6 @@ export VC_PASSWORD='실제_비밀번호'
 5. 모든 goroutine 완료 후, 실패 목록이 있으면 `[일부 실패]`로 요약 출력, 없으면
    `[성공]` 메시지 출력.
 
-## 6. 디렉토리 구조
-
-```
-tag_setting-source/
-├── README.md      # 이 문서
-├── main.go        # Custom Attribute(DEPT_NAME/PURPOSE/VM_TYPE) 병렬 일괄 설정 로직 전체
-├── go.mod / go.sum  # Go 모듈 정의 파일
-├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
-├── tag_setting    # setup.sh로 빌드된 실행 바이너리
-└── vendor/        # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
-```
-
 ## 5. 알려진 한계
 
 - 대상 VM마다 **동시성 제한 없이** goroutine을 하나씩 띄웁니다(다른 도구들과 달리
@@ -102,3 +93,15 @@ tag_setting-source/
   키만 실패 목록에 기록됨).
 - 동일 이름의 VM이 여러 데이터센터/폴더에 중복 존재하면 모호함으로 판단해
   건너뜁니다(어느 것을 바꿀지 자동으로 결정하지 않음).
+
+## 6. 디렉토리 구조
+
+```
+tag_setting-source/
+├── README.md      # 이 문서
+├── main.go        # Custom Attribute(DEPT_NAME/PURPOSE/VM_TYPE) 병렬 일괄 설정 로직 전체
+├── go.mod / go.sum  # Go 모듈 정의 파일
+├── setup.sh       # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
+├── tag_setting    # setup.sh로 빌드된 실행 바이너리
+└── vendor        # setup.sh가 만드는 링크 (../../govendor/govmomi-0.55.1-standard, git 제외)
+```

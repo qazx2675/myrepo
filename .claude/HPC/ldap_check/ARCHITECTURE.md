@@ -47,3 +47,25 @@
    같아집니다. 판별은 auto.appl storage 로만 합니다.
 4. **jq 를 도입하지 마십시오.** 대상 노드에 없습니다.
 5. **아무것도 쓰지 않는 스크립트입니다.** 파일을 수정하는 코드를 넣지 마십시오.
+
+## 작업 흐름도
+
+단계별 설명은 [WORKFLOW.md](WORKFLOW.md)를 참고하세요.
+
+```mermaid
+flowchart TD
+    A["gossh 로 전 노드에 ldap_check.sh 실행<br/>(또는 노드 한 대에서 직접)"] --> B["ldap_config.conf 로딩 (평문 key = value)"]
+    B --> C["OS 분기<br/>RHEL 7 이하 → nslcd/ntp · RHEL 8 이상 → sssd/chrony<br/>hostname s4* → nslcd/ntp"]
+    C --> D1["infra_dnsntp<br/>resolv.conf nameserver + chrony/ntp server"]
+    C --> D2["infra_ldap<br/>ldap.conf URI · BINDDN · BINDPW"]
+    C --> D3["infra_appl<br/>auto.appl storage"]
+    D1 --> E{"세 축이 같은 인프라?"}
+    D2 --> E
+    D3 --> E
+    E -- 아니오 --> F["인프라 혼재 → 전 항목 FAIL"]
+    E -- 예 --> G["사이트 결정 (auto.appl storage 기준)"]
+    G --> H["사이트 기대값과 7개 파일 비교<br/>URI 순서는 검증에만 사용"]
+    H --> I["탭 구분 OK/FAIL 출력 + 종료 코드"]
+    F --> I
+    I --> J["FAIL 호스트만 추출 → ldap_setting 으로 재적용"]
+```

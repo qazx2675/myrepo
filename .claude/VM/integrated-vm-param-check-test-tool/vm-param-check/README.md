@@ -14,15 +14,16 @@ Shares, 호스트 전원정책 등)을 만족하는지 자동으로 점검하고
 ```
 
 ⚠️ **주의사항 (Disclaimer)**
-본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.
+본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정 변경 후 무작위로 서버 몇 대를 골라 실제로 변경되었는지 직접 확인하는 절차가 반드시 필요합니다.
 
 ## 1. 빌드 및 설치 방법
 
 ### 1.1 필요 환경
 
 - Go 1.21 이상 (Rocky Linux에서 Go 1.26.5 기준으로 빌드·검증 완료)
-- **인터넷 불필요** — `vendor/`에 의존성(`github.com/vmware/govmomi` 등)이 전부 포함되어 있어서
-  이 폴더 하나만 옮기면 폐쇄망에서도 바로 빌드됩니다.
+- **인터넷 불필요** — 의존성(`github.com/vmware/govmomi` 등)은 저장소 공통 폴더 `.claude/공통/govendor/govmomi-0.39.0`에 있고,
+  `setup.sh`가 이를 `vendor`로 링크해서 빌드합니다. 폐쇄망으로 옮길 때는 이 공통 폴더도 같은 상대 위치로 함께 옮겨야 합니다
+  (상위 [README](../README.md)의 "1.1 폐쇄망으로 옮기기" 참고).
 - vCenter 접속 계정 (Reconfigure 권한 필요 — `-fix`로 실제 설정을 바꾸려면)
 
 ### 1.2 다운로드
@@ -30,20 +31,20 @@ Shares, 호스트 전원정책 등)을 만족하는지 자동으로 점검하고
 **저장소 전체를 받는 경우:**
 ```bash
 git clone <이 저장소 주소> myrepo
-cd "myrepo/.claude/VM/vm-param-check"
+cd "myrepo/.claude/VM/integrated-vm-param-check-test-tool/vm-param-check"
 ```
 
 **이 폴더만 필요한 경우** (예: 폐쇄망으로 옮기기 전에 이 폴더만 압축):
 ```bash
 # 인터넷 되는 곳에서, 저장소를 받은 뒤
 cd myrepo
-tar czf vm-param-check.tar.gz ".claude/VM/vm-param-check"
+tar czf vm-param-check.tar.gz ".claude/VM/integrated-vm-param-check-test-tool/vm-param-check" ".claude/공통/govendor/govmomi-0.39.0"
 ```
 
-### 1.3 빌드 (인터넷 여부와 무관 — vendor/ 포함되어 있음)
+### 1.3 빌드 (인터넷 여부와 무관 — 공통 govendor를 vendor로 링크)
 
 ```bash
-cd ".claude/VM/vm-param-check"
+cd ".claude/VM/integrated-vm-param-check-test-tool/vm-param-check"
 bash setup.sh
 ```
 
@@ -57,20 +58,20 @@ go build -o vm-param-check .
 
 ### 1.4 폐쇄망(오프라인 서버)으로 이관
 
-인터넷이 되는 환경에서 이 폴더를 통째로 압축해서 그대로 옮기면 됩니다 — `go.mod`/`go.sum`/`vendor/`가
-전부 포함되어 있어서 부분 복사 없이 폴더 전체를 옮기는 게 핵심입니다.
+인터넷이 되는 환경에서 이 폴더와 공통 의존성 폴더(`.claude/공통/govendor/govmomi-0.39.0`)를 함께 압축해 옮깁니다.
+두 폴더의 상대 위치가 유지되어야 `setup.sh`의 vendor 링크가 동작합니다.
 
 ```bash
 # 1) 인터넷 되는 곳에서
 cd myrepo
-tar czf vm-param-check.tar.gz ".claude/VM/vm-param-check"
+tar czf vm-param-check.tar.gz ".claude/VM/integrated-vm-param-check-test-tool/vm-param-check" ".claude/공통/govendor/govmomi-0.39.0"
 
 # 2) USB/scp 등으로 폐쇄망 서버로 파일 복사
 scp vm-param-check.tar.gz user@폐쇄망서버:/path/to/dest/
 
 # 3) 폐쇄망 서버에서 압축 해제 후 빌드
 tar xzf vm-param-check.tar.gz
-cd ".claude/VM/vm-param-check"
+cd ".claude/VM/integrated-vm-param-check-test-tool/vm-param-check"
 bash setup.sh
 ```
 
@@ -79,6 +80,7 @@ Go 배포 바이너리(예: `go1.26.5.linux-amd64.tar.gz`)를 미리 받아서 `
 `PATH`에 `/usr/local/go/bin`을 추가하면 됩니다(이 단계도 인터넷 불필요, tar.gz 파일만 있으면 됨).
 
 ### 1.5 전역 명령어로 사용하기 (선택 사항)
+
 빌드된 실행 파일을 PATH 환경 변수에 포함된 디렉터리로 이동하거나, 실행 파일이 있는 경로를 PATH에 추가하면 어디서든 명령어처럼 사용할 수 있습니다.
 
 예시 (실행 파일을 `/usr/local/bin`으로 복사):
@@ -111,9 +113,40 @@ export VCENTER_PASS='...'
 ./vm-param-check -demo
 ```
 
-## 3. 옵션별 상세 설명
+### 2.3 사용 예시
 
-### 옵션 전체 목록
+**예시 1. 기본 체크만 (기존과 동일):**
+```bash
+./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --shares-ev02=1000 --shares-ev03=1000 \
+  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt --affinity-ev03=ev03.txt \
+  --out=result.csv --user=kdh
+```
+→ `result_kdh.csv`, `result_kdh_summary.csv` 생성.
+
+**예시 2. 체크 후 바로 교정까지 (대화형 확인):**
+```bash
+./vm-param-check -f kdh.txt --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --out=result.csv --user=kdh --fix
+```
+→ 체크 → CSV 저장 → 게이트 검증 → **변경 예정 내역을 전부 화면에 출력** → `(y/N)` 입력 대기.
+`y`를 입력해야 실제로 vCenter 설정이 바뀝니다. `n`이나 그 외 입력은 취소(아무 것도 안 바뀜).
+
+**예시 3. 자동화 파이프라인(스크립트)에서 확인 없이 바로 적용:**
+```bash
+./vm-param-check -f kdh.txt --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --out=result.csv --fix --yes
+```
+**주의**: `-yes`는 프롬프트를 생략하므로 실제 인프라를 건드리기 전에 반드시 `-fix` 없이(체크만) 또는
+`-yes` 없이 한 번 먼저 돌려서 dry-run 결과를 눈으로 확인하는 걸 권장합니다.
+
+**예시 4. 대수 많을 때 문제 있는 VM만 보기:**
+```bash
+./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
+  --shares-ev01=2000 --onlyFail --out=result.csv
+```
+
+## 3. 옵션별 상세 설명
 
 ### 체크 관련 (기존과 동일)
 
@@ -146,44 +179,11 @@ export VCENTER_PASS='...'
 | `-fixConcurrency <N>` | `20` | `-fix` 적용 시 동시 Reconfigure 처리 개수 |
 | `-fixOut <path>` | 원본 CSV 이름 기준 자동생성 | 재검증 CSV 경로 (`_recheck_<타임스탬프>` 접미사) |
 
-### 2.3 사용 예시
-
-**8-1. 기본 체크만 (기존과 동일):**
-```bash
-./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --shares-ev02=1000 --shares-ev03=1000 \
-  --affinity-ev01=ev01.txt --affinity-ev02=ev02.txt --affinity-ev03=ev03.txt \
-  --out=result.csv --user=kdh
-```
-→ `result_kdh.csv`, `result_kdh_summary.csv` 생성.
-
-**8-2. 체크 후 바로 교정까지 (대화형 확인):**
-```bash
-./vm-param-check -f kdh.txt --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --out=result.csv --user=kdh --fix
-```
-→ 체크 → CSV 저장 → 게이트 검증 → **변경 예정 내역을 전부 화면에 출력** → `(y/N)` 입력 대기.
-`y`를 입력해야 실제로 vCenter 설정이 바뀝니다. `n`이나 그 외 입력은 취소(아무 것도 안 바뀜).
-
-**8-3. 자동화 파이프라인(스크립트)에서 확인 없이 바로 적용:**
-```bash
-./vm-param-check -f kdh.txt --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --out=result.csv --fix --yes
-```
-**주의**: `-yes`는 프롬프트를 생략하므로 실제 인프라를 건드리기 전에 반드시 `-fix` 없이(체크만) 또는
-`-yes` 없이 한 번 먼저 돌려서 dry-run 결과를 눈으로 확인하는 걸 권장합니다.
-
-**8-4. 대수 많을 때 문제 있는 VM만 보기:**
-```bash
-./vm-param-check --ht=on --cores=8 --numa=8 --cpu=16 --mem=64 --disk=500 \
-  --shares-ev01=2000 --onlyFail --out=result.csv
-```
-
 ## 4. 문서별 고유 설명
 
 ### 4.1 `-fix` 파이프라인 상세
 
-### 9-1. 게이트 (실제 변경 전 안전장치)
+#### 4.1.1 게이트 (실제 변경 전 안전장치)
 
 두 검증을 통과해야만 dry-run 확인 단계로 넘어갑니다. 하나라도 실패하면 **아무것도 바꾸지 않고
 즉시 중단**합니다.
@@ -192,7 +192,7 @@ export VCENTER_PASS='...'
   전부 같아야 하고, ev01/ev02/ev03 그룹 간 VM 대수도 서로 같아야 함
 - **전원 OFF**: 교정 대상 VM이 전부 꺼져 있어야 함 (CPU 토폴로지를 하드웨어 레벨로 직접 바꾸기 때문)
 
-### 9-2. 자동교정 대상 vs 수동조치 대상
+#### 4.1.2 자동교정 대상 vs 수동조치 대상
 
 | 자동교정 (fixable) | 수동조치 (manual — 이 도구가 다루지 않음) |
 |---|---|
@@ -211,12 +211,12 @@ export VCENTER_PASS='...'
 VM 1대당 vCenter `Reconfigure`를 **정확히 한 번만** 호출합니다 — Advanced Config, CPU 토폴로지,
 affinity를 전부 하나의 요청에 담아서 보냅니다.
 
-### 9-3. dry-run + 확인
+#### 4.1.3 dry-run + 확인
 
 적용 전에 VM별로 "무엇을 어떤 값에서 어떤 값으로 바꿀지"를 전부 출력하고, 수동조치 대상 항목은
-따로 개수만 요약해서 보여줍니다. `-yes`가 없으면 `y`를 입력해야 다음 단계로 진행됩니다.
+따로 개수만 요약해서 보여 줍니다. `-yes`가 없으면 `y`를 입력해야 다음 단계로 진행됩니다.
 
-### 9-4. 재검증
+#### 4.1.4 재검증
 
 적용이 끝나면 교정된 VM만 골라 vCenter에서 다시 조회해서 **최초 체크와 동일한 판정 로직**으로
 다시 검사하고, 결과를 콘솔 + CSV(`_recheck_<타임스탬프>`)로 남깁니다. 남은 FAIL/설정없음이 있으면
@@ -224,8 +224,8 @@ affinity를 전부 하나의 요청에 담아서 보냅니다.
 
 ### 4.2 콘솔 출력 / 출력 파일 형식
 
-콘솔은 항상 `[1] VM별 요약 표`를 먼저 보여주고 `[2]` 상세 섹션이 이어집니다. `-onlyFail`이면
-FAIL이 있는 VM만, 그 안에서도 FAIL/설정없음/미지원 항목만 보여줍니다.
+콘솔은 항상 `[1] VM별 요약 표`를 먼저 보여 주고 `[2]` 상세 섹션이 이어집니다. `-onlyFail`이면
+FAIL이 있는 VM만, 그 안에서도 FAIL/설정없음/미지원 항목만 보여 줍니다.
 
 CSV 2종(상세/요약)이 생성됩니다.
 - **상세 CSV**: `VM명, 소스, 항목Key, 기대값, 실제값, 결과, 비고` — OK 포함, 필터링 없음(`-onlyFail`

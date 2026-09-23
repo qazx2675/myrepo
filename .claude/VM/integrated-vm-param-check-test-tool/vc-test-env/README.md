@@ -5,67 +5,67 @@
 > **상태**: Rocky Linux(192.168.0.58, govmomi v0.55.1)에서 실 vCenter(192.168.0.50)를 대상으로 `extract`/`tree`/`build`(vcsim 재생성)/`diff`/PowerCLI 접속까지 전부 실제로 빌드·실행해서 검증 완료. 아래 "알려진 한계" 항목만 남아 있음.
 
 ⚠️ **주의사항 (Disclaimer)**
-본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우에는 설정변경후 랜덤한 서버 몇개를 확인해서 실제로 변경되었는지 확인하는 절차가 반드시 필요합니다.
+본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정 변경 후 무작위로 서버 몇 대를 골라 실제로 변경되었는지 직접 확인하는 절차가 반드시 필요합니다.
 
 ## 1. 빌드 및 설치 방법
 
 ### 1.1 필요 환경
 
-
 - Go 1.21 이상 (Rocky Linux 7.6.4에서 govmomi v0.55.1 기준으로 빌드·검증 완료)
 - 최종 실행 대상: RHEL 8.10(폐쇄망), PowerCLI 설치되어 있음
-- **인터넷은 필요 없습니다** — `vendor/` 디렉터리에 의존성(govmomi 등)이 이미 통째로 포함되어 있어서, 이 폴더만 옮기면 바로 오프라인 빌드가 됩니다.
+- **인터넷은 필요 없습니다** — 의존성(govmomi 등)은 저장소 공통 폴더 `.claude/공통/govendor/govmomi-0.55.1-vcsim`에 있고, `setup.sh`가 이를 `vendor`로 링크해서 빌드합니다. 폐쇄망으로 옮길 때는 이 공통 폴더도 같은 상대 위치로 함께 옮기세요.
 
 ### 1.2 다운로드
 
-이 도구는 저장소 안의 `.claude/VM/vcenter-test-env-vcsim/` 폴더 하나에 전부 들어 있습니다.
+이 도구는 저장소 안의 `.claude/VM/integrated-vm-param-check-test-tool/vc-test-env/` 폴더에 들어 있고, 의존성은 `.claude/공통/govendor/govmomi-0.55.1-vcsim`를 씁니다.
 
 **저장소 전체를 받는 경우:**
 ```bash
 git clone <이 저장소 주소> myrepo
-cd myrepo/.claude/VM/vcenter-test-env-vcsim/
+cd "myrepo/.claude/VM/integrated-vm-param-check-test-tool/vc-test-env/"
 ```
 
 **이 폴더만 필요한 경우** (예: 폐쇄망으로 옮기기 전에 이 폴더만 압축):
 ```bash
 # 인터넷 되는 곳에서, 저장소를 받은 뒤
 cd myrepo
-tar czf vc-test-env.tar.gz ".claude/VM/vcenter-test-env-vcsim"
+tar czf vc-test-env.tar.gz ".claude/VM/integrated-vm-param-check-test-tool/vc-test-env" ".claude/공통/govendor/govmomi-0.55.1-vcsim"
 ```
 
-### 1.3 빌드 (인터넷 여부와 무관 — vendor/ 포함되어 있음)
+### 1.3 빌드 (인터넷 여부와 무관 — 공통 govendor를 vendor로 링크)
 
-폴더 안으로 들어가서 바로 빌드합니다:
+폴더 안으로 들어가 `setup.sh`로 빌드합니다.
 
 ```bash
-cd ".claude/VM/vcenter-test-env-vcsim"
-GOFLAGS=-mod=vendor go build -o vc-test-env .
+cd ".claude/VM/integrated-vm-param-check-test-tool/vc-test-env"
+bash setup.sh   # 공통 govendor를 vendor로 링크한 뒤 go build -mod=vendor
 ```
 
-`-mod=vendor`가 핵심입니다 — 인터넷에서 새로 받으려 하지 않고 `vendor/` 안의 소스만 그대로 씁니다. 빌드가 끝나면 이 폴더 안에 `vc-test-env` 실행파일이 생깁니다.
+`-mod=vendor`가 핵심입니다. 인터넷에서 새로 받으려 하지 않고 `vendor`(공통 govendor 링크) 안의 소스만 씁니다. 빌드가 끝나면 이 폴더 안에 `vc-test-env` 실행 파일이 생깁니다.
 
 (의존성을 최신화하고 싶을 때만, 인터넷 되는 환경에서 `go mod tidy && go mod vendor`로 `vendor/`를 다시 채우면 됩니다 — 평소엔 필요 없습니다.)
 
 ### 1.4 폐쇄망(RHEL 8.10)으로 이관
 
-인터넷이 되는 환경에서 받은 뒤, `vendor/`가 포함된 이 폴더 전체를 압축해서 그대로 옮기면 됩니다.
+인터넷이 되는 환경에서 받은 뒤, 이 폴더와 공통 의존성 폴더를 함께 압축해 옮깁니다.
 
 ```bash
 # 1) 인터넷 되는 곳에서 (예: Rocky Linux)
 cd myrepo
-tar czf vc-test-env.tar.gz ".claude/VM/vcenter-test-env-vcsim"
+tar czf vc-test-env.tar.gz ".claude/VM/integrated-vm-param-check-test-tool/vc-test-env" ".claude/공통/govendor/govmomi-0.55.1-vcsim"
 
 # 2) USB/scp 등으로 폐쇄망 RHEL 8.10 서버로 파일 복사
 
 # 3) 폐쇄망 서버에서 압축 해제 후 빌드
 tar xzf vc-test-env.tar.gz
-cd ".claude/VM/vcenter-test-env-vcsim"
-GOFLAGS=-mod=vendor go build -o vc-test-env .
+cd ".claude/VM/integrated-vm-param-check-test-tool/vc-test-env"
+bash setup.sh   # 공통 govendor를 vendor로 링크한 뒤 go build -mod=vendor
 ```
 
-이 3단계만 하면 폐쇄망에서 인터넷 연결 없이 바로 빌드·실행됩니다. `go.mod`/`go.sum`/`vendor/`를 전부 그대로 가져가는 게 핵심이라, 이 폴더를 통째로(부분 복사 없이) 옮겨야 합니다.
+이 3단계만 하면 폐쇄망에서 인터넷 연결 없이 바로 빌드·실행됩니다. 이 폴더와 공통 govendor 폴더의 상대 위치를 유지한 채 통째로(부분 복사 없이) 옮기는 것이 핵심입니다.
 
 ### 1.5 전역 명령어로 사용하기 (선택 사항)
+
 빌드된 실행 파일을 PATH 환경 변수에 포함된 디렉터리로 이동하거나, 실행 파일이 있는 경로를 PATH에 추가하면 어디서든 명령어처럼 사용할 수 있습니다.
 
 예시 (실행 파일을 `/usr/local/bin`으로 복사):

@@ -6,9 +6,12 @@
 표준 가상 스위치(`vSwitch0`)에 포트그룹을 일괄 생성하는 도구입니다.
 (`HostNetworkSystem.AddPortGroup`)
 
+⚠️ **주의사항 (Disclaimer)**
+본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정 변경 후 무작위로 서버 몇 대를 골라 실제로 변경되었는지 직접 확인하는 절차가 반드시 필요합니다.
+
 ## 1. 빌드 방법
 
-`vendor/`를 포함하고 있어 폐쇄망에서도 오프라인 빌드가 됩니다.
+`setup.sh`가 V2 공유 의존성(`../../govendor/govmomi-0.55.1-standard`)을 `vendor`로 링크해서 빌드하므로 폐쇄망에서도 오프라인 빌드가 됩니다.
 
 ```bash
 cd "myrepo/.claude/VM/VM_setup/vswitch_setting-source"
@@ -44,6 +47,7 @@ esxi-node-002.local  PG-APP-100  100
 | `-id` | `lscsystems@vsphere.local` | vCenter 로그인 계정 ID. |
 | `-worklistFile` | `worklist.txt` | vSwitch/포트그룹 설정 파일. 실행 디렉토리 기준 상대 경로. |
 | `-targetVSwitch` | `vSwitch0` | 포트그룹을 생성할 대상 표준 가상 스위치. |
+| `-concurrency` | `20` | 동시에 처리할 호스트 수. 같은 호스트의 포트그룹 여러 개는 그 호스트 안에서 순서대로 생성합니다. |
 
 비밀번호는 플래그가 아니라 환경변수 `VC_PASSWORD`로 전달합니다. 미설정 시 실행 중단.
 
@@ -53,7 +57,7 @@ esxi-node-002.local  PG-APP-100  100
 2. `-vcTargetIP`로 vCenter 접속.
 3. `HostSystem` 컨테이너 뷰로 전체 호스트의 `name`, `configManager.networkSystem`을
    1회 일괄 수집.
-4. 고유 호스트별로 `HostNetworkSystem.AddPortGroup`을 호출해 해당 호스트의 항목을
+4. 고유 호스트를 `-concurrency`개씩 병렬로 처리하며, 호스트마다 `HostNetworkSystem.AddPortGroup`으로 항목을
    순차 생성. 이미 존재하면(`AlreadyExists`) 스킵, 그 외 에러는 출력 후 계속 진행.
 5. 완료 메시지 출력.
 
@@ -75,5 +79,5 @@ vswitch_setting-source/
 ├── go.mod / go.sum     # Go 모듈 정의 파일
 ├── setup.sh          # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
 ├── vswitch_setting   # setup.sh로 빌드된 실행 바이너리 (빌드 후 생성)
-└── vendor/           # 빌드에 필요한 Go 의존성 패키지 모음 (서드파티, 문서화 대상 제외)
+└── vendor           # setup.sh가 만드는 링크 (../../govendor/govmomi-0.55.1-standard, git 제외)
 ```

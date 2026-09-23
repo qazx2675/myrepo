@@ -2,6 +2,8 @@
 
 대상 노드들의 **LDAP · DNS · NTP · autofs 설정을 일괄 적용**하는 도구입니다.
 
+> 작업 흐름은 [WORKFLOW.md](WORKFLOW.md), 폴더·파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
+
 관리 노드에서 Go 바이너리를 실행하면, 사이트별 적용 스크립트를 만들어 `gossh` 로
 대상 노드에 밀어 넣고 실행합니다. 적용 후 정합성 검사는 같은 저장소의
 [`../ldap_check/`](../ldap_check/) 가 담당합니다.

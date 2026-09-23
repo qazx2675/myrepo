@@ -2,10 +2,12 @@
 
 `vm-param-check`를 현업에서 쓸 때 겪던 두 가지 문제 — ① 매번 옵션을 손으로 다 입력해야 하는 번거로움, ② 대상 VM이 몇 대뿐이어도 초기 조회가 느린 문제 — 를 해결한 개선 프로젝트입니다. 실제 도구(소스코드)는 이 폴더 바로 아래 [`vm-param-check/`](./vm-param-check/)에 그대로 있습니다.
 
+> 체크 → 교정 → 재검증 흐름은 [WORKFLOW.md](WORKFLOW.md), 폴더·파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md)에 정리해 두었습니다.
+
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정을 변경한 후 반드시 랜덤하게 몇 개의 서버를 직접 접속·확인하여 실제로 설정이 제대로 반영되었는지 교차 검증을 진행하십시오.
 
-## 빠른 시작 (지금 바로 실행해보기)
+## 빠른 시작 (지금 바로 실행해 보기)
 
 ```bash
 # 1) 저장소를 받고 실제 도구 폴더로 이동 (인터넷 필요, 딱 이번 한 번만)
@@ -19,7 +21,7 @@ bash setup.sh
 ./vm-param-check -demo
 ```
 
-여기까지 되면 빌드는 끝났습니다. 이제 실제 vCenter를 체크하려면:
+여기까지 되면 빌드는 끝났습니다. 이제 실제 vCenter를 체크하려면 다음과 같이 합니다.
 
 ```bash
 # 4) vCenter 인증 정보
@@ -37,7 +39,7 @@ printf '1번VM\n2번VM\n' > targets.txt
 ./vm-param-check -vcenterList=vcenter.txt -f=targets.txt -specRoot=./SPEC_DIR -out=result.csv
 ```
 
-**스펙이 아직 없다면** (`-specRoot` 아래 디렉터리가 비어있다면) 먼저 만들어야 합니다 — VM이 속한 vCenter 폴더 이름(예: `TST-CAE001-SAMP48c-QRST`)과 똑같은 이름으로:
+**스펙이 아직 없다면**(`-specRoot` 아래 디렉터리가 비어 있다면) 먼저 만들어야 합니다. 이름은 VM이 속한 vCenter 폴더 이름(예: `TST-CAE001-SAMP48c-QRST`)과 똑같이 맞춥니다.
 
 ```bash
 # 8) 스펙 디렉터리+틀 생성 (vCenter 연결 안 함)
@@ -52,18 +54,18 @@ mkdir -p ./SPEC_DIR
 
 위 4~9번을 매번 손으로 치는 대신, 이 폴더(도구 폴더)에 있는 보조 스크립트 두 개를 쓸 수 있습니다.
 
-- **`folder_setup.sh`** — 위 8~9번을 대신합니다. `SPEC_DIR`(스크립트와 같은 위치에 만들어지는 로컬 폴더) 아래에 새 스펙을 만들 때, 폴더 이름과 필수 값(ht/cores/numa/cpu/mem/disk/shares-ev01)을 대화형으로 물어보고, 필요하면 ev02/ev03 값도 이어서 물어봅니다(비워두면 스킵). 폴더명 규칙 검사와 중복 거부는 `vm-param-check -initFolder`가 그대로 해줍니다.
+- **`folder_setup.sh`** — 위 8~9번을 대신합니다. `SPEC_DIR`(스크립트와 같은 위치에 만들어지는 로컬 폴더) 아래에 새 스펙을 만들 때, 폴더 이름과 필수 값(ht/cores/numa/cpu/mem/disk/shares-ev01)을 대화형으로 물어보고, 필요하면 ev02/ev03 값도 이어서 물어봅니다(비워 두면 건너뜀). 폴더명 규칙 검사와 중복 거부는 `vm-param-check -initFolder`가 그대로 해 줍니다.
   ```bash
   bash folder_setup.sh
   ```
   이렇게 만든 스펙은 팀이 함께 쓰도록 **git에 커밋하는 것을 권장**합니다(인증정보 같은 민감정보가 아니라 CAE 스펙 정의값이라서).
 
-- **`vm_setting_check_insert.sh`** — 위 4~7번을 대신합니다. 스크립트 상단의 `VC_USER`/`VC_PASS`/`VCENTER_LIST`/`SPEC_ROOT` 변수와, `set_user()` 함수 안의 `user` 값(예: `user="kdh"`)을 채워두면, `-f "<user>.txt"`로 대상 목록을 읽고 `result_<user>.csv`로 결과를 저장합니다. 실행하면 "실제로 설정을 변경(-fix)하시겠습니까?"를 먼저 물어보고, `y`를 답해도 `vm-param-check` 자체의 최종 변경 확인을 한 번 더 거칩니다(이중 확인).
+- **`vm_setting_check_insert.sh`** — 위 4~7번을 대신합니다. 스크립트 상단의 `VC_USER`/`VC_PASS`/`VCENTER_LIST`/`SPEC_ROOT` 변수와, `set_user()` 함수 안의 `user` 값(예: `user="kdh"`)을 채워 두면, `-f "<user>.txt"`로 대상 목록을 읽고 `result_<user>.csv`로 결과를 저장합니다. 실행하면 "실제로 설정을 변경(-fix)하시겠습니까?"를 먼저 물어보고, `y`를 답해도 `vm-param-check` 자체의 최종 변경 확인을 한 번 더 거칩니다(이중 확인).
   ```bash
   bash vm_setting_check_insert.sh
   ```
 
-옵션을 매번 직접 지정하고 싶다면(스펙 자동매칭 없이) 이렇게도 됩니다:
+스펙 자동매칭 없이 옵션을 매번 직접 지정하려면 다음과 같이 실행합니다.
 
 ```bash
 ./vm-param-check -vcenterList=vcenter.txt -f=targets.txt \
@@ -73,11 +75,11 @@ mkdir -p ./SPEC_DIR
 
 **폐쇄망(오프라인) 서버에 옮겨서 쓰려면** 1~2번 대신, 인터넷 되는 곳에서 이 폴더 전체를 압축해 USB/scp로 옮긴 뒤 그 서버에서 `bash setup.sh`만 실행하면 됩니다 — 더 자세한 절차와 각 옵션의 의미는 아래 "사용법" 절의 하위 문서를 참고하세요.
 
-> **주의 — master에서는 이 폴더만 떼어가면 빌드가 안 됩니다.** master는 의존성(`vendor/`)을 `.claude/공통/govendor/`에 공유해 두고 `setup.sh`가 심볼릭 링크를 거는 구조라서, 이 폴더만 옮기면 링크 대상이 없습니다. 폴더만 옮겨 쓸 때는 vendor가 실제 파일로 들어 있는 **독립 브랜치 `vm-param-check-standalone`** 을 받으세요(아래 "인터넷이 되는 서버 갱신하기" 절). 폐쇄망에서 실행파일만 갱신하려면 그 위의 `update.sh` 절을 보세요.
+> **주의 — master에서는 이 폴더만 떼어가면 빌드가 안 됩니다.** master는 의존성(`vendor/`)을 `.claude/공통/govendor/`에 공유해 두고 `setup.sh`가 심볼릭 링크를 거는 구조라서, 이 폴더만 옮기면 링크 대상이 없습니다. 폴더만 옮겨 쓸 때는 vendor가 실제 파일로 들어 있는 **독립 브랜치 `vm-param-check-standalone`** 을 받으세요(아래 "인터넷이 되는 서버 갱신하기" 절). 폐쇄망에서 실행 파일만 갱신하려면 그 위의 `update.sh` 절을 보세요.
 
-### 폐쇄망 서버 갱신하기 (`update.sh`) — 실행파일만 교체
+### 폐쇄망 서버 갱신하기 (`update.sh`) — 실행 파일만 교체
 
-폐쇄망 서버는 GitHub에 접속할 수 없으므로, 인터넷이 되는 빌드 서버에서 **업데이트 패키지**를 만들어 USB/nfs로 가져가고 폐쇄망 서버에서는 `update.sh`만 실행합니다. `git`, `go`, 인터넷이 필요 없습니다. 바뀐 파일(지금은 `vm-param-check` 실행파일)만 교체하고, 사용 중인 디렉토리의 나머지(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 등)는 하나도 건드리지 않습니다.
+폐쇄망 서버는 GitHub에 접속할 수 없으므로, 인터넷이 되는 빌드 서버에서 **업데이트 패키지**를 만들어 USB/nfs로 가져가고 폐쇄망 서버에서는 `update.sh`만 실행합니다. `git`, `go`, 인터넷이 필요 없습니다. 바뀐 파일(지금은 `vm-param-check` 실행 파일)만 교체하고, 사용 중인 디렉토리의 나머지(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 등)는 하나도 건드리지 않습니다.
 
 ```bash
 # [인터넷 되는 빌드 서버 — Go 필요] 패키지 만들기
@@ -90,15 +92,15 @@ bash update.sh -n "/내가/사용중인/디렉토리"   # 미리보기(아무것
 bash update.sh "/내가/사용중인/디렉토리"      # 실제 교체
 ```
 
-- **사용 중인 디렉토리** = `./vm-param-check` 실행파일이 있는 디렉토리입니다. 경로에 공백/한글이 있어도 됩니다.
-- **교체 전에 확인**합니다: 패키지가 깨지지 않았는지(`SHA256SUMS`), 새 실행파일이 이 서버에서 실제로 실행되는지(`-demo`, vCenter 접속 안 함). 실행이 안 되면 아무것도 바꾸지 않고 중단합니다.
-- **이전 실행파일은 백업**합니다: `<디렉토리>.update_backup.<시각>/`. 되돌리려면 그 안의 `vm-param-check`를 다시 복사하면 됩니다.
+- **사용 중인 디렉토리** = `./vm-param-check` 실행 파일이 있는 디렉토리입니다. 경로에 공백/한글이 있어도 됩니다.
+- **교체 전에 확인**합니다: 패키지가 깨지지 않았는지(`SHA256SUMS`), 새 실행 파일이 이 서버에서 실제로 실행되는지(`-demo`, vCenter 접속 안 함). 실행이 안 되면 아무것도 바꾸지 않고 중단합니다.
+- **이전 실행 파일은 백업**합니다: `<디렉토리>.update_backup.<시각>/`. 되돌리려면 그 안의 `vm-param-check`를 다시 복사하면 됩니다.
 - `01.*`, `vcenter.txt`, `SPEC_DIR/`, `*.csv`, `*.log`는 패키지에 같은 이름이 들어 있어도 건너뜁니다. 바뀐 게 없으면 "이미 최신"으로 끝납니다.
-- 실행파일은 정적 빌드라서 서버의 glibc 버전이 달라도 돌아갑니다. x86_64가 아니면 `GOARCH=arm64 bash make_update_package.sh`처럼 바꿔서 만드세요.
+- 실행 파일은 정적 빌드라서 서버의 glibc 버전이 달라도 돌아갑니다. x86_64가 아니면 `GOARCH=arm64 bash make_update_package.sh`처럼 바꿔서 만드세요.
 
 ### 인터넷이 되는 서버 갱신하기 (`update_deploy.sh`)
 
-인터넷(GitHub)이 되는 서버에서 소스 전체를 받아 갱신할 때 씁니다(폐쇄망에서는 위 `update.sh`를 쓰세요). **배포 경로에 있는 사용자 파일(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 `*.txt`, 결과 `*.csv` 등)은 건드리지 않고**, 새 버전에 들어 있는 소스·실행파일만 그 자리에서 갱신합니다.
+인터넷(GitHub)이 되는 서버에서 소스 전체를 받아 갱신할 때 씁니다(폐쇄망에서는 위 `update.sh`를 쓰세요). **배포 경로에 있는 사용자 파일(`01.vm_setting_check_insert.sh`, `vcenter.txt`, `SPEC_DIR/`, 대상 목록 `*.txt`, 결과 `*.csv` 등)은 건드리지 않고**, 새 버전에 들어 있는 소스·실행 파일만 그 자리에서 갱신합니다.
 
 ```bash
 # 1) 서버에서 이 스크립트를 실행 (한 번 받아두면 됨 — 독립 브랜치의 루트에 있음)
@@ -112,7 +114,7 @@ bash update_deploy.sh -n /실제/배포/경로/vm-param-check
 bash update_deploy.sh /실제/배포/경로/vm-param-check
 ```
 
-- **배포 경로는 도구 폴더 자체**(`go.mod`와 `vm-param-check` 실행파일이 있는 곳)를 지정합니다. 안 주면 `/root/vm-param-check-usability-improvement/vm-param-check`.
+- **배포 경로는 도구 폴더 자체**(`go.mod`와 `vm-param-check` 실행 파일이 있는 곳)를 지정합니다. 안 주면 `/root/vm-param-check-usability-improvement/vm-param-check`.
 - **빌드가 성공한 뒤에만** 배포 경로를 바꿉니다(임시 폴더에서 먼저 빌드). 실패하면 아무것도 안 바뀐 채 중단합니다.
 - **덮어쓰는 파일은 백업**합니다: `<배포경로>.update_backup.<시각>/`. 되돌리려면 그 안의 파일을 같은 경로로 복사하면 됩니다.
 - **직접 값을 채워 쓰는 템플릿**(`vm_setting_check_insert.sh`, `folder_setup.sh`, `testfiles/*`)은 배포본과 다르면 덮어쓰지 않고 `<이름>.new`로 새 버전만 옆에 둡니다. 필요하면 `diff`로 비교해서 직접 반영하세요.
@@ -132,7 +134,7 @@ bash update_deploy.sh /실제/배포/경로/vm-param-check
 
 ## 사용법
 
-전부 하위 [`vm-param-check/README.md`](./vm-param-check/README.md)에 있습니다. 특히 처음 `-specRoot`를 써보신다면 그 문서의 **"2-4. 폴더명 기반 스펙 자동매칭"** 절이 처음부터 끝까지 예시 명령어로 따라할 수 있게 구성되어 있습니다.
+전부 하위 [`vm-param-check/README.md`](./vm-param-check/README.md)에 있습니다. 특히 처음 `-specRoot`를 써보신다면 그 문서의 **"2-4. 폴더명 기반 스펙 자동매칭"** 절이 처음부터 끝까지 예시 명령어로 따라 할 수 있게 구성되어 있습니다.
 
 빌드·설치(폐쇄망 오프라인 빌드 절차 포함)도 같은 문서의 "1. 빌드 및 설치 방법"을 참고하세요 — `vendor/`에 의존성이 전부 포함되어 있어 이번 개선으로 새로 추가된 의존성 없이 그대로 오프라인 빌드됩니다.
 
@@ -146,7 +148,7 @@ bash update_deploy.sh /실제/배포/경로/vm-param-check
 
 ## 기존 개별 도구와의 관계
 
-저장소의 `vm-param-setting-check/`(체크 전용, 구세대)와 `VM_setup/`는 삭제하지 않고 그대로 남겨뒀습니다. 이 프로젝트는 하위의 통합 도구(`vm-param-check`) 위에 사용성 개선을 얹은 것으로, 새로 시작하는 경우 이 폴더 아래의 도구만 쓰면 됩니다.
+저장소의 `vm-param-setting-check/`(체크 전용, 구세대)와 `VM_setup/`는 삭제하지 않고 그대로 남겨 두었습니다. 이 프로젝트는 하위의 통합 도구(`vm-param-check`) 위에 사용성 개선을 얹은 것으로, 새로 시작하는 경우 이 폴더 아래의 도구만 쓰면 됩니다.
 
 ## 디렉토리 구조
 
@@ -155,8 +157,8 @@ vm-param-check-usability-improvement/
 ├── README.md                    # 이 문서
 ├── CHANGELOG.md                 # 날짜별 변경 이력
 ├── 계획서.md                      # 설계 배경/검증 근거 문서
-├── update.sh                    # [폐쇄망] 업데이트 패키지의 바뀐 파일(실행파일)만 사용 중인 디렉토리에 반영. 나머지는 건드리지 않음
-├── make_update_package.sh       # 폐쇄망으로 가져갈 업데이트 패키지(update.sh + 실행파일 + 체크섬)를 빌드 서버에서 만듦
+├── update.sh                    # [폐쇄망] 업데이트 패키지의 바뀐 파일(실행 파일)만 사용 중인 디렉토리에 반영. 나머지는 건드리지 않음
+├── make_update_package.sh       # 폐쇄망으로 가져갈 업데이트 패키지(update.sh + 실행 파일 + 체크섬)를 빌드 서버에서 만듦
 ├── update_deploy.sh             # [인터넷 되는 서버] 배포 경로를 사용자 파일은 그대로 두고 제자리 갱신 + 재빌드(독립 브랜치 vm-param-check-standalone에서 받음)
 └── vm-param-check/              # 실제 도구 소스코드 (스펙 자동매칭, 2단계 조회 등 개선사항 포함), 상세는 하위 README 참고
     ├── README.md                 # 하위 도구 사용법 문서 (옵션 설명, 튜토리얼)

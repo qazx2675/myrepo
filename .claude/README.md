@@ -2,7 +2,7 @@
 
 vCenter/ESXi/VM 인프라 자동화 도구 모음. 폴더별로 독립된 Go 모듈(자체 `go.mod`/`vendor/`)이거나
 독립 셸 스크립트라서, 필요한 폴더 하나만 떼어가도 그대로 빌드·실행됩니다. 각 폴더의 상세 사용법은
-그 폴더 안의 `README.md`(필요하면 `PLAN.md`/`계획서.md`)를 참고하세요.
+그 폴더 안의 `README.md`(필요하면 `PLAN.md`/`계획서.md`)를, 작업 흐름은 `WORKFLOW.md`를 참고하세요.
 
 ## VM/
 
@@ -11,11 +11,12 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | 폴더 | 설명 |
 |---|---|
 | [`vm-param-check-usability-improvement`](./VM/vm-param-check-usability-improvement/) | vCenter VM의 CPU/메모리/NUMA 토폴로지, vCPU affinity, Shares, 호스트 전원정책 등 고성능(High Performance) 설정 기준 점검 + FAIL 항목 자동교정(게이트·dry-run·재검증 포함)까지 단일 바이너리로 처리하는 **최신 통합 도구**(`vm-param-check/` 하위)에, 폴더명 기반 스펙 자동매칭·대상 VM만 조회하는 성능 개선·Task 폴더 예외 처리를 얹은 프로젝트. 새로 쓸 때는 이 폴더만 있으면 됩니다. |
+| [`V2`](./VM/V2/) | 호스트(BM)당 VM을 **1~99대(ev01~ev99)** 만들고 affinity/lpage/포트그룹까지 설정하는 `VMsetup`과, 그 설정을 체크·교정하는 `vm-param-check-usability-improvement`가 **스펙 폴더 `SPEC_DIR` 하나를 함께 쓰도록** 묶은 차세대 구성. `VMsetup/vm_setup.sh` 한 번으로 스펙·포트그룹 자동 할당 → vSwitch 포트그룹 생성 → VM 생성 → affinity/lpage 적용까지 진행하며, 의존성(`govendor/`)을 포함해 V2 폴더만으로 오프라인 빌드(`setup.sh`). 원본 `VM_setup`, `vm-param-check-usability-improvement`(V1)는 그대로 유지. |
 | [`Network_Change_Integration_Script`](./VM/Network_Change_Integration_Script/) | IP 변경(`ip_change`) · LDAP 설정(`ldap_setting`) · 포트그룹(VLAN) 이관(`vm-network-migration`)을 **한 번의 실행**으로 순차 처리하는 통합 VM 망변경 스크립트(`change.sh`). 전처리, 결과 집계, 인시던트 관리 및 자동 롤백 기능을 포함하며, 세 프로젝트 소스를 내장하여 오프라인에서도 단독 빌드·실행 가능. |
 | [`vm_verifier`](./VM/vm_verifier/) | VM 생성 직후(OS 설치/파워온 전) vCenter API가 인식한 vNIC MAC 주소와 DHCP 정적 예약 MAC을 대조하여 DHCP MAC 오기입 및 형제 VM 간 **교차 설치(역설치)**를 사전 탐지하는 에이전트리스 고속 병렬 검증 CLI 도구(`vm-verifier`). |
 | [`integrated-vm-param-check-test-tool`](./VM/integrated-vm-param-check-test-tool/) | `vm-param-check`(체크+자동교정)와 `vc-test-env`(vcsim 시뮬레이터 환경 복제)를 한 폴더로 묶어, 인터넷이 차단된 폐쇄망 서버로 그대로 옮겨 빌드부터 테스트까지 원스톱으로 수행할 수 있도록 구성한 통합 테스트 패키지. |
 | [`lpage_search`](./VM/lpage_search/) | ESXi 호스트 총 메모리, ev01 VM에 기할당된 메모리, vCPU 수를 기반으로 ev02 VM에 안전하게 할당 가능한 메모리(2MB Large Page 정렬, ESXi High-State 유지 버퍼 포함) 크기를 계산해 주는 순수 Go 계산 도구(외부 의존성 및 네트워크 접속 불필요). |
-| [`VM_setup`](./VM/VM_setup/) | VM/ESXi/vCenter의 개별 설정(affinity, lpage/HugePage, 전원정책, 태그, vSwitch, 라이선스 할당, VM 생성 등)을 적용하는 도구 소스 및 바이너리 모음 폴더. (오케스트레이터인 `vm-param-fix/`는 `vm-param-check-usability-improvement`로 통합 대체됨). |
+| [`VM_setup`](./VM/VM_setup/) | VM/ESXi/vCenter의 개별 설정(affinity, lpage/HugePage, 전원정책, 태그, vSwitch, 라이선스 할당, VM 생성 등)을 적용하는 도구 소스 및 바이너리 모음 폴더. (오케스트레이터인 `vm-param-fix/`는 `vm-param-check-usability-improvement`로 통합 대체됨). ev01~ev99 확장판은 [`V2/VMsetup`](./VM/V2/VMsetup/)에 있습니다. |
 | [`esxi-log-check`](./VM/esxi-log-check/) | 다중 ESXi 호스트 로그를 패턴 레지스트리로 매칭해서 CRITICAL/HIGH 하드웨어 장애 이벤트를 뽑아내는 도구(`esxi-log-check`). |
 | [`vCenter API IP 자동변경`](./VM/vCenter%20API%20IP%20자동변경/) | IP 오할당으로 네트워크 접속이 끊긴 RHEL 8.10 VM 을, SSH가 아니라 **vCenter Guest Operations API**(VMware Tools 채널)로 게스트 내부에서 `nmcli` 를 실행해 IP/게이트웨이를 재설정하는 Go 도구(`vm-ip-change`). `vcenter.txt`(대상 vCenter 목록) + `list.txt`(호스트네임/새IP)를 입력으로 받으며, 네트워크로 접속 불가능한 VM 전용이라는 점에서 `ip_change`(gossh/SSH 기반)와 다릅니다. |
 | ~~[`powershell`](./VM/powershell/)~~ | 폐쇄망 환경에서 일반 업무용 PowerShell 7 바이너리 및 VMware PowerCLI 모듈(`.nupkg`)을 오프라인으로 자동 설치·배치하는 스크립트(`setup_폐쇄망pwsh.sh`). 자동완성 및 순차조회 권고 등 실습용 오버헤드 프로필을 제외한 순수 업무용 구성. |
@@ -51,12 +52,17 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 ```
 .claude/
 ├── VM/                                  # vCenter/ESXi VM 점검·설정·테스트 도구 모음 (위 표 참고)
+│   ├── V2                               # VM 생성·설정(VMsetup, ev01~ev99) + 체크·교정, SPEC_DIR 공유
+│   │   ├── VMsetup                      # vm_setup.sh 전체 실행 + 도구별 소스(vm_create, nic_assign ...)
+│   │   ├── vm-param-check-usability-improvement # 체크·교정 도구 (V2 사본, -specRoot/-specExport)
+│   │   ├── SPEC_DIR                     # 공유 스펙 (git에는 예시만)
+│   │   └── govendor                     # 오프라인 빌드용 공유 의존성
 │   ├── Network_Change_Integration_Script # 통합 VM 망변경 스크립트 (IP/LDAP/포트그룹 원스톱 이관)
 │   ├── vm-param-check-usability-improvement # vCenter VM 고성능 점검 + 자동교정 통합 도구
 │   ├── vm_verifier                      # VM vNIC MAC vs DHCP 정적 MAC 대조 교차설치 사전 검증 도구
 │   ├── integrated-vm-param-check-test-tool # vm-param-check + vc-test-env 오프라인 통합 테스트 패키지
 │   ├── lpage_search                     # ESXi Large Page(2MB) 메모리 사이징 계산기
-│   ├── VM_setup                         # VM/ESXi 개별 설정 도구 및 소스 모음
+│   ├── VM_setup                         # VM/ESXi 개별 설정 도구 및 소스 모음 (V1, 확장판은 V2/VMsetup)
 │   ├── esxi-log-check                   # ESXi 호스트 로그 장애 이벤트 분석 도구
 │   ├── powershell                       # 폐쇄망 업무용 PowerShell 7 / PowerCLI 설치 스크립트
 │   ├── vm-network-migration             # VM 네트워크 포트그룹 이관 도구 (Network_Change_Integration_Script에 내장)

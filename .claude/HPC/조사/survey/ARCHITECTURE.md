@@ -34,3 +34,25 @@
 | "VM 이름 규칙 / 개수 바꿔줘" | `cmd/survey/vm.go` — `vmName`, `vmPerEsxi` |
 | "출력 컬럼 추가/순서 변경" | `cmd/survey/output.go` — `tsvHeader`, `cmd/survey/main.go` 의 행 조립 |
 | "표1 양식이 달라 (구분자/컬럼)" | `cmd/survey/asset.go` — `LoadAsset` (현재 탭 구분) |
+
+## 작업 흐름도
+
+단계별 설명은 [WORKFLOW.md](WORKFLOW.md)를 참고하세요.
+
+```mermaid
+flowchart TD
+    A["표1(자산양식) 텍스트 저장<br/>자산ID TAB hostname TAB 상태 TAB 위치"] --> B["conf/conf.toml 의 asset_file 지정"]
+    B --> C["./run_survey.sh"]
+    C --> D["hostname 열 전체를 조사 대상으로 (헤더 자동 스킵)"]
+    D --> E["B 서버: survey → gossh 병렬 조사"]
+    E --> F["판정 규칙 적용<br/>위치 · 상태 · 설정값 · 인프라망 · appl 설정유무 · 특이사항"]
+    F --> G{"[server_a] enabled 이고<br/>타임아웃/접속불가 있음?"}
+    G -- 아니오 --> K
+    G -- 예 --> H["공유 dir 아래 .resurvey.XXXXXX/ 생성<br/>재조사 목록 + conf 사본"]
+    H --> I["ssh A 'cd .resurvey && ./survey-rhel6'<br/>A 에서 1회 재조사"]
+    I --> J{"A 실행 성공?"}
+    J -- 예 --> J1["결과 병합 · 임시 폴더 삭제"] --> K
+    J -- 아니오 --> J2["경고만 출력, B 결과로 진행"] --> K
+    K["ESXi 있으면 VM 2차 조사"] --> L["result_YYYYMMDD_HHMM.tsv<br/>(+ _sdc_ / _vm_)"]
+    L --> M["전체 복사 → 엑셀 붙여넣기"]
+```

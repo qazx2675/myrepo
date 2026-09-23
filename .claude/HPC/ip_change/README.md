@@ -2,6 +2,8 @@
 
 Red Hat Enterprise Linux 대상 노드들의 **IP·게이트웨이 설정을 일괄 변경**하는 도구입니다.
 
+> 작업 흐름은 [WORKFLOW.md](WORKFLOW.md), 폴더·파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
+
 관리 노드에서 Go 바이너리를 실행하면, 대상 전체를 담은 apply 스크립트 하나를 만들어
 `gossh` 로 대상 노드에 밀어 넣고 실행합니다. 네트워크 서비스는 재시작하지 않습니다
 (설정 파일 변경에만 집중).
