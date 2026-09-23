@@ -277,6 +277,7 @@ ROOT=/tmp/fixture bash ../ldap_check/ldap_check.sh
 | `-list-backups` | `false` | 각 노드에 남아 있는 백업 시점 목록만 조회. 아무것도 바꾸지 않음 |
 | `-rollback` | `false` | 가장 최근 백업 시점으로 되돌리기 |
 | `-rollback-to` | *(없음)* | 지정한 백업 시점(숫자 14자리)으로 되돌리기 |
+| `-monitor` | `false` | 60초가 지나도 안 끝나면 제어 터미널(`/dev/tty`)에 호스트별 진행 화면(↑/↓·←/→·Enter)을 띄우고, Ctrl+C 는 5초 안에 3번 눌러야 종료(종료코드 130, 되돌리기 없음). 표준출력 형식은 그대로. 통합 스크립트(`change.sh`)가 켭니다 |
 
 종료 코드: `0` 정상 / `1` 설정·인자 오류 / `2` 일부 노드 FAIL·응답 없음.
 

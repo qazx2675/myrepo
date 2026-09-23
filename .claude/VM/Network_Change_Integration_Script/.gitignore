@@ -13,6 +13,7 @@ vcenter.txt
 *.txt
 !*.sample
 !*.md
+!사용법.txt
 !.gitkeep
 
 # 디렉터리는 유지

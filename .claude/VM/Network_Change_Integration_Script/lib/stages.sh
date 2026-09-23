@@ -52,8 +52,17 @@ _nm_bin_dir() {
   ( cd "$d" && pwd )
 }
 
-# _ping_ok <host> — 1회 ping (2초)
-_ping_ok() { ping -c1 -W2 "$1" >/dev/null 2>&1; }
+# _ping_ok <host> — ping 3회 중 한 번이라도 응답하면 OK (각 3초 대기).
+#   CPU 를 거의 못 받는 VM(다른 VM 이 코어를 과점유, shares 1:10000 등)은 응답이
+#   늦어 1회·2초로는 살아 있는데도 죽은 것으로 판정되는 일이 있었습니다.
+_ping_ok() { ping -c3 -W3 "$1" >/dev/null 2>&1; }
+
+# _engine_aborted <rc> <단계명> — 엔진이 Ctrl+C 3회로 중단됐으면(종료코드 130) 멈춥니다.
+#   엔진이 끝난/안 끝난 호스트 요약을 로그에 이미 남겼습니다.
+_engine_aborted() {
+  [ "$1" -eq 130 ] || return 0
+  die B1 "$2 단계를 Ctrl+C 3회로 중단했습니다(되돌리기 없음). 끝난/안 끝난 호스트는 로그 끝부분을 확인하십시오: $LOG_FILE"
+}
 
 # ── ip-change-engine 한 번 실행 ─────────────────────────────────────────────
 # _run_ip <targets:"vm ip"> <timeout> <gossh> <bin> <result.tsv(append)>
@@ -65,10 +74,11 @@ _run_ip() {
     -config "$(conf_get ipchange_conf ./conf/ip_change.conf)" \
     -targets "$targets" \
     -gossh "$gossh" -u "$SSH_USER" -p "$GOSSH_PW" -P "$SSH_PORT" \
-    -c "$(conf_get concurrency 8)" -t "$timeout" \
+    -c "$(conf_get concurrency 8)" -t "$timeout" -monitor \
     >"$raw" 2>&1 || rc=$?
   cat "$raw" >>"$LOG_FILE" 2>/dev/null || true
   [ "$DEBUG_LEVEL" -ge 3 ] && { echo "--- ip-change-engine raw ---"; cat "$raw"; echo "---"; }
+  _engine_aborted "$rc" "IP 변경"
   if [ "$rc" -eq 1 ]; then
     cat "$raw" >&2
     die C1 "ip-change-engine 실행 실패 (exit 1). 로그: $LOG_FILE"
@@ -97,18 +107,23 @@ _run_ldap() {
     -host-file "$hostfile" \
     ${ds:+-default-site "$ds"} $dry \
     -gossh "$gossh" -u "$SSH_USER" -p "$GOSSH_PW" -P "$SSH_PORT" \
-    -c "$(conf_get concurrency 8)" -t "$timeout" \
+    -c "$(conf_get concurrency 8)" -t "$timeout" -monitor \
     >"$raw" 2>&1 || rc=$?
   cat "$raw" >>"$LOG_FILE" 2>/dev/null || true
   [ "$DEBUG_LEVEL" -ge 3 ] && { echo "--- ldap-config-engine raw ---"; cat "$raw"; echo "---"; }
+  _engine_aborted "$rc" "LDAP 설정"
   if [ "$rc" -eq 1 ]; then
     cat "$raw" >&2
     # 자산현황·기본값 모두로 site 판정이 안 된 경우도 여기로 옵니다.
     grep -q "default_site\|사이트\|자산현황" "$raw" && die D1 "LDAP site 판정 실패. 로그: $LOG_FILE"
     die D2 "ldap-config-engine 실행 실패 (exit 1). 로그: $LOG_FILE"
   fi
+  # NOCHANGE = 이미 원하는 설정이라 바꾼 게 없음 → 실패가 아니지만, 이번에 바꾼 게
+  # 없으므로 ldap_ok(롤백 대상)에는 넣지 않습니다(lib/results.sh). 예전에는 어느
+  # 패턴에도 안 걸려 "결과 없음 → FAIL" 로 잘못 확정됐습니다.
   awk '
     /^ +[^ ]+ +OK([[:space:]]|$)/        { print $1 "\tOK";   next }
+    /^ +[^ ]+ +NOCHANGE([[:space:]]|$)/  { print $1 "\tNOCHANGE"; next }
     /^ +[^ ]+ +(FAIL|NORESULT|UNREACHABLE)([[:space:]]|$)/ { print $1 "\tFAIL"; next }
   ' "$raw" >>"$out"
   rm -f "$raw"
@@ -138,7 +153,10 @@ _stage_run() {
 
   local t1 t2
   t1="$(conf_get timeout_pass1 60)"
-  t2="$(conf_get timeout_pass2 600)"
+  # 2차 기본 172800초(48시간): CPU 를 거의 못 받는 VM 은 로그인만 수 시간이 걸릴 수
+  # 있어, 살아 있는(ping 되는) 호스트는 최대 이틀까지 기다립니다. gossh 의 -t 는
+  # 로그인까지만 적용되고, 로그인 뒤 명령 실행에는 원래 제한이 없습니다.
+  t2="$(conf_get timeout_pass2 172800)"
 
   # 관리서버 OS 에 따라 이번 실행 전체를 한 그룹으로 (§8.1)
   local all_std all_os6 line dest h
@@ -161,42 +179,58 @@ _stage_run() {
     log "${kind^^}" "[$grp] 1차 실행 ($(grep -c . "$tf")대, timeout ${t1}s)"
     "$runner" "$tf" "$t1" "$gossh" "$bin" "$result"
 
-    # 2차: 1차에서 FAIL 이고 ping 되는 호스트만
+    # 2차: 1차에서 FAIL 이고 ping 되는 호스트만.
+    # 호스트 이름은 정규식이 아니라 문자열로 정확히 비교합니다(예전 grep -E 는
+    # FQDN 의 '.' 이 아무 글자와 일치했음). 대상 수만큼 grep 을 띄우지 않고 awk 한 번.
     local retry; retry="$(mktemp)"
-    local fh
-    while IFS= read -r fh; do
-      # targets_file 에서 그 host 로 시작하는 원본 줄을 되살림
-      grep -E "^${fh}([[:space:]]|$)" "$tf" | head -1
-    done < <(awk -F'\t' '$2=="FAIL"{print $1}' "$result" | sort -u) >"$retry.cand"
+    awk -v rf="$result" '
+      BEGIN { while ((getline l < rf) > 0) { split(l, a, "\t"); if (a[2] == "FAIL") fail[a[1]] = 1 }
+              close(rf) }
+      { n = split($0, f, " "); if (n && (f[1] in fail) && !seen[f[1]]++) print }
+    ' "$tf" >"$retry.cand"
+
+    # ping 은 동시에(최대 200개씩) — 예전엔 한 대씩 순서대로라 죽은 호스트가
+    # 많으면 그만큼(대당 2초) 2차 시작이 늦어졌습니다. 로그 순서는 대상 순서 그대로.
     : >"$retry"
+    local pdir; pdir="$(mktemp -d)"
+    local i=0 n=0
     while IFS= read -r line || [ -n "$line" ]; do
       [ -n "$line" ] || continue
-      h="${line%% *}"
-      if _ping_ok "$h"; then echo "$line" >>"$retry"
+      n=$((n + 1))
+      h="${line%%[[:space:]]*}"
+      ( if _ping_ok "$h"; then : >"$pdir/$n.ok"; fi ) &
+      [ $((n % 200)) -eq 0 ] && wait
+    done <"$retry.cand"
+    wait
+    while IFS= read -r line || [ -n "$line" ]; do
+      [ -n "$line" ] || continue
+      i=$((i + 1))
+      h="${line%%[[:space:]]*}"
+      if [ -e "$pdir/$i.ok" ]; then echo "$line" >>"$retry"
       else log "${kind^^}" "[$grp] $h — ping 실패, 2차 재시도 안 함 (즉시 실패 확정)"; fi
     done <"$retry.cand"
+    rm -rf "$pdir"
 
     if [ -s "$retry" ]; then
-      log "${kind^^}" "[$grp] 2차 재실행 ($(grep -c . "$retry")대, timeout ${t2}s)"
+      log "${kind^^}" "[$grp] 2차 재실행 ($(grep -c . "$retry")대, 로그인 대기 최대 ${t2}s — 60초 넘으면 진행 화면)"
       local r2; r2="$(mktemp)"
       "$runner" "$retry" "$t2" "$gossh" "$bin" "$r2"
-      # 2차 결과가 있는 호스트는 1차 결과를 덮어씀
-      local rh rs
-      while IFS=$'\t' read -r rh rs; do
-        grep -v -P "^${rh}\t" "$result" >"$result.tmp" || true
-        mv "$result.tmp" "$result"
-        printf '%s\t%s\n' "$rh" "$rs" >>"$result"
-      done <"$r2"
+      # 2차 결과가 있는 호스트는 1차 결과를 덮어씀(같은 호스트가 여러 줄이면 마지막 줄)
+      awk -F'\t' -v nf="$r2" '
+        BEGIN { while ((getline l < nf) > 0) { split(l, a, "\t"); nw[a[1]] = l } close(nf) }
+        !($1 in nw) { print }
+        END { for (h in nw) print nw[h] }
+      ' "$result" >"$result.tmp" && mv "$result.tmp" "$result"
       rm -f "$r2"
     fi
     rm -f "$retry" "$retry.cand"
   done
 
   # targets 에 있는데 결과에 안 나온 호스트는 FAIL 로 확정
-  local seen
-  for h in $(_hosts_of "$targets"); do
-    grep -qP "^${h}\t" "$result" || printf '%s\tFAIL\n' "$h" >>"$result"
-  done
+  _hosts_of "$targets" | awk -v rf="$result" '
+    BEGIN { while ((getline l < rf) > 0) { split(l, a, "\t"); seen[a[1]] = 1 } close(rf) }
+    !($1 in seen) && !dup[$1]++ { print $1 "\tFAIL" }
+  ' >>"$result"
 
   rm -f "$all_std" "$all_os6"
   sort -u -o "$result" "$result"
@@ -267,9 +301,10 @@ stage_ldap() {
   fi
   RES_LDAP="$WORK/res_ldap_${RUN_USER}.tsv"
   _stage_run ldap "$1" "$RES_LDAP"
-  local ok fail
+  local ok fail same
   ok=$(awk -F'\t' '$2=="OK"' "$RES_LDAP" | wc -l)
+  same=$(awk -F'\t' '$2=="NOCHANGE"' "$RES_LDAP" | wc -l)
   fail=$(awk -F'\t' '$2=="FAIL"' "$RES_LDAP" | wc -l)
-  log D "LDAP 결과 — OK ${ok} / FAIL ${fail}"
+  log D "LDAP 결과 — OK ${ok} / 변경없음 ${same} / FAIL ${fail}"
   [ "$fail" -eq 0 ] && stage_end ok || stage_end fail
 }

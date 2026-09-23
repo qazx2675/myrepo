@@ -1,0 +1,36 @@
+# 사용법 — 실행할 명령만 순서대로
+# (<기존폴더> = 지금 change.sh 를 쓰는 폴더, <계정> = 작업 계정, <인프라> = LDAP 인프라 이름)
+
+# 1. 새 버전 받기 (이 폴더만 들어 있는 브랜치)
+git clone -b network-change-standalone https://github.com/qazx2675/myrepo.git /tmp/nci_new
+
+# 2. 기존 폴더 백업 후 업데이트
+cp -a <기존폴더> <기존폴더>.bak.$(date +%Y%m%d)
+cd <기존폴더>
+bash update.sh /tmp/nci_new
+./setup.sh
+
+# 3. 느린 VM 48시간 대기 설정 (update.sh 가 "4)" 로 안내했을 때만)
+sed -i 's/^timeout_pass2 *= *600 *$/timeout_pass2 = 172800/' integration.conf
+grep timeout_pass2 integration.conf
+
+# 4. 비밀번호
+read -rsp 'SSH PW: ' GOSSH_PW; export GOSSH_PW; echo
+read -rsp 'vCenter PW: ' VC_PASSWORD; export VC_PASSWORD; echo
+
+# 5. 전체 실행 (IP → LDAP → 포트그룹)
+./change.sh -u <계정> --infra <인프라>
+#    60초 넘으면 진행 화면: ↑/↓ 선택, ←/→ 페이지, Enter 상세, 아무 키 = 목록
+#    중단: Ctrl+C 를 5초 안에 3번
+
+# 6. 포트그룹만 변경
+./change.sh --only E -u <계정>
+
+# 7. 실패분만 재시도
+./change.sh --retry ip -u <계정>
+./change.sh --retry ldap -u <계정> --infra <인프라>
+
+# 8. 되돌리기 (실행 끝에 찍힌 "롤백하려면: ..." 줄 그대로)
+./change.sh rollback <인시던트이름>
+
+# 9. 쌓인 인시던트 정리: ./change.sh -u <계정> 실행 → "재개할 인시던트 이름" 에서 dd 입력 → y

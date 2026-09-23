@@ -10,9 +10,11 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	"ldap-automation/internal/asset"
 	"ldap-automation/internal/config"
+	"ldap-automation/internal/monitor"
 	"ldap-automation/internal/remote"
 	"ldap-automation/internal/render"
 )
@@ -29,6 +31,7 @@ func main() {
 		printScript  = flag.Bool("print-script", false, "apply 스크립트만 표준출력으로 찍고 종료 (-site 필요)")
 		root         = flag.String("root", "", "원격에서 기록할 루트 (테스트용. 비우면 실제 /etc)")
 		defaultSite  = flag.String("default-site", "", "자산현황에서 못 찾은 호스트에 적용할 site (conf 의 default_site 를 덮어씀)")
+		withMonitor  = flag.Bool("monitor", false, "60초가 지나도 안 끝나면 /dev/tty 에 호스트별 진행 화면을 띄우고, Ctrl+C 는 5초 안에 3번 눌러야 종료 (통합 스크립트가 켬)")
 
 		listBackups = flag.Bool("list-backups", false, "각 노드에 남아 있는 백업 시점 목록만 조회 (변경 없음)")
 		rollback    = flag.Bool("rollback", false, "가장 최근 백업 시점으로 되돌리기")
@@ -65,7 +68,7 @@ func main() {
 	if err := run(opts{
 		confPath: *confPath, assetPath: *assetPath, infraName: *infraName,
 		onlySite: *onlySite, onlyHost: *onlyHost, hostListPath: *hostListPath, dryRun: *dryRun,
-		printScript: *printScript, root: *root, defaultSite: *defaultSite,
+		printScript: *printScript, root: *root, defaultSite: *defaultSite, monitor: *withMonitor,
 		rbMode: rbMode, rbStamp: *rollbackTo,
 		remote: remote.Options{
 			GosshPath: *gosshPath, User: *user, Password: *password,
@@ -90,6 +93,7 @@ type opts struct {
 	printScript  bool
 	root         string
 	defaultSite  string
+	monitor      bool
 	rbMode       render.RollbackMode
 	rbStamp      string
 	remote       remote.Options
@@ -175,25 +179,66 @@ func run(o opts) error {
 	}
 	fmt.Println(strings.Repeat("-", 70))
 
-	totals := map[string]int{}
+	// 사이트별 스크립트를 먼저 전부 만든 뒤(하나라도 실패하면 아무것도 안 건드림),
+	// 사이트들을 동시에 실행합니다. 예전에는 사이트를 하나씩 순서대로 돌려서, 한
+	// 사이트에 CPU 를 거의 못 받는 VM 이 있으면(몇 시간~며칠 걸릴 수 있음) 다른
+	// 사이트는 시작조차 못 했습니다. 결과 출력은 예전과 같은 사이트 순서로 합니다.
+	type siteRun struct {
+		site     string
+		hosts    []string
+		hostFile string
+		cleanup  func()
+		cmdline  string
+		results  []remote.Result
+		raw      string
+		runErr   error
+	}
+	runs := make([]*siteRun, 0, len(sites))
+	var allHosts []string
 	for _, site := range sites {
 		hosts := bySite[site]
 		sort.Strings(hosts)
 
 		script, err := render.ApplyScript(in, cfg.S4, site)
 		if err != nil {
+			for _, r := range runs {
+				r.cleanup()
+			}
 			return err
 		}
 
 		hostFile, cleanup, err := remote.WriteHostFile(hosts)
 		if err != nil {
+			for _, r := range runs {
+				r.cleanup()
+			}
 			return fmt.Errorf("호스트 목록 임시파일: %w", err)
 		}
+		runs = append(runs, &siteRun{site: site, hosts: hosts, hostFile: hostFile,
+			cleanup: cleanup, cmdline: remote.BuildCommand(script, o.remote)})
+		allHosts = append(allHosts, hosts...)
+	}
 
-		fmt.Printf("[%s] %d대 → gossh 전송\n", site, len(hosts))
-		cmdline := remote.BuildCommand(script, o.remote)
-		results, raw, runErr := remote.Run(hostFile, cmdline, o.remote)
-		cleanup()
+	if o.monitor {
+		o.remote.Monitor = monitor.New("LDAP 설정", allHosts, ldapMonitorLabel, os.Stdout)
+		o.remote.Monitor.Start()
+	}
+	var wg sync.WaitGroup
+	for _, r := range runs {
+		fmt.Printf("[%s] %d대 → gossh 전송\n", r.site, len(r.hosts))
+		wg.Add(1)
+		go func(r *siteRun) {
+			defer wg.Done()
+			r.results, r.raw, r.runErr = remote.Run(r.hostFile, r.cmdline, o.remote)
+			r.cleanup()
+		}(r)
+	}
+	wg.Wait()
+	o.remote.Monitor.Stop() // 아래에서 os.Exit 할 수 있으므로 여기서 화면 원복
+
+	totals := map[string]int{}
+	for _, sr := range runs {
+		site, hosts, results, raw, runErr := sr.site, sr.hosts, sr.results, sr.raw, sr.runErr
 
 		if len(results) == 0 {
 			fmt.Printf("[%s] gossh 출력이 비어 있습니다.\n", site)
@@ -247,6 +292,18 @@ func run(o opts) error {
 		os.Exit(2)
 	}
 	return nil
+}
+
+// ldapMonitorLabel 은 진행 화면에 보일 호스트 상태입니다(apply_body.sh 의 RESULT 줄 기준).
+func ldapMonitorLabel(lines []string) (string, bool) {
+	switch st := (remote.Result{Lines: lines}).Summary(); st {
+	case "OK":
+		return "완료(OK)", false
+	case "NOCHANGE":
+		return "완료(변경없음)", false
+	default:
+		return "실패(" + st + ")", true
+	}
 }
 
 // loadTargets 는 자산현황(-assets)을 유일한 사이트 판정 기준으로 읽고,

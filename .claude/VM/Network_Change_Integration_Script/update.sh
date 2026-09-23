@@ -143,4 +143,10 @@ echo " 다음을 확인하십시오:"
 echo "   1) ./setup.sh 로 바이너리 재빌드 (필수 — 안 하면 새 코드가 반영 안 됨)"
 echo "   2) diff integration.conf.sample integration.conf  → 새 키가 있으면 채워 넣기"
 echo "   3) CHANGELOG.md 로 이번 버전 변경 내용 확인"
+# 2026-09-23: 느린 VM 을 최대 48시간 기다리도록 2차 대기 기본값이 600 → 172800 으로
+# 바뀌었습니다. 운영값 파일은 건드리지 않으므로, 예전 값이 남아 있으면 알려줍니다.
+if grep -Eq '^[[:space:]]*timeout_pass2[[:space:]]*=[[:space:]]*600[[:space:]]*$' integration.conf 2>/dev/null; then
+    echo "   4) integration.conf 의 timeout_pass2 가 예전 기본값(600초)입니다."
+    echo "      느린 VM 을 최대 48시간 기다리려면 timeout_pass2 = 172800 으로 바꾸십시오."
+fi
 echo "=============================================================="
