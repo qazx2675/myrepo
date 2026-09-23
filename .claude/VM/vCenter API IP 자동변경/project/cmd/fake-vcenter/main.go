@@ -69,14 +69,27 @@ func main() {
 	seed := flag.Int64("seed", 1, "난수 시드(같은 값이면 같은 VM 이 느림/실패로 뽑힘)")
 	cores := flag.Int("cores", 8, "BM(ESXi 호스트) 물리 코어 수")
 	busyPct := flag.Int("busy-ev01", 0, "ev01 이 짝의 BM 물리 코어 이상을 쓰는 것으로 흉내 낼 짝 비율(%) — 해당 ev02 대상은 계속 후순위로 밀림")
+	pairMode := flag.String("pair-mode", "both", `list.txt 에 짝(ev01/ev02) 중 어느 쪽을 넣을지: "both"(둘 다, 기본값) / "ev02-only"(ev02 만 — ev01 은 vCenter 에는 있지만 변경 대상 아님) / "ev01-only"(ev01 만 — ev02 자체가 없음)`)
 	flag.Parse()
 
 	if *n < 1 || *minD > *maxD {
 		log.Fatal("-vms 는 1 이상, -min 은 -max 이하여야 합니다")
 	}
+	switch *pairMode {
+	case "both", "ev02-only", "ev01-only":
+	default:
+		log.Fatalf("-pair-mode 는 both/ev02-only/ev01-only 중 하나여야 합니다: %q", *pairMode)
+	}
 	rnd := rand.New(rand.NewSource(*seed))
 
-	numPairs := (*n + 1) / 2
+	// "ev01-only" 는 ev02 짝 자체가 없는 시나리오라 VM 마다 BM 하나를 혼자 쓴다.
+	// 그 외("both"/"ev02-only")는 ev01+ev02 가 BM 하나를 공유한다(list.txt 에
+	// 어느 쪽을 넣을지만 다르다 — 아래 참고).
+	perBM := 2
+	if *pairMode == "ev01-only" {
+		perBM = 1
+	}
+	numPairs := (*n + perBM - 1) / perBM
 
 	m := simulator.VPX()
 	m.Datacenter = 1
@@ -110,10 +123,10 @@ func main() {
 
 	var list []string
 	for i, vm := range vms {
-		pair := i / 2
+		pair := i / perBM
 		bmName := fmt.Sprintf("host%04d", pair+1)
 		suffix := "ev01"
-		if i%2 == 1 {
+		if perBM == 2 && i%perBM == 1 {
 			suffix = "ev02"
 		}
 		name := bmName + suffix
@@ -138,11 +151,17 @@ func main() {
 		case r < *offPct+*failPct+*slowPct:
 			vs.slow = true
 		}
-		if suffix == "ev01" && rnd.Intn(100) < *busyPct {
+		if suffix == "ev01" && perBM == 2 && rnd.Intn(100) < *busyPct {
 			vs.busy = true
 		}
 		st.vms[vm.Reference().Value] = vs
-		list = append(list, name+" "+vs.expect)
+
+		// "ev02-only" 는 list.txt(변경 대상)에 ev02 만 넣는다 — ev01 은 vCenter
+		// 인벤토리엔 있지만(짝 부하 확인용) 그 자신은 변경 대상이 아닌, 실제로
+		// 가장 흔한 사용 형태다.
+		if *pairMode != "ev02-only" || suffix == "ev02" {
+			list = append(list, name+" "+vs.expect)
+		}
 	}
 	for i := 0; i < *missing; i++ {
 		list = append(list, fmt.Sprintf("missing-vm%02d 10.99.0.%d", i+1, i+2))
@@ -190,7 +209,7 @@ func main() {
 	writeFile(filepath.Join(*out, "vcenter.txt"), s.URL.Host+"\n")
 	writeFile(filepath.Join(*out, "list.txt"), strings.Join(list, "\n")+"\n")
 
-	fmt.Printf("가짜 vCenter 실행 중: https://%s/sdk  (VM %d대, BM %d대, BM당 물리코어 %d)\n", s.URL.Host, len(vms), numPairs, *cores)
+	fmt.Printf("가짜 vCenter 실행 중: https://%s/sdk  (VM %d대, BM %d대, BM당 물리코어 %d, pair-mode %s)\n", s.URL.Host, len(vms), numPairs, *cores, *pairMode)
 	fmt.Printf("  느린 VM %d대(명령당 %s), 실패 VM %d대, 전원꺼짐 %d대, 없는 호스트 %d개, 부하 과점유 ev01 %d대\n",
 		st.count(func(v *vmState) bool { return v.slow }), *slowD,
 		st.count(func(v *vmState) bool { return v.fail }),

@@ -3,7 +3,7 @@ git clone -b vm-ip-change-standalone https://github.com/qazx2675/myrepo.git vm-i
 cd vm-ip-change/project
 ./setup.sh
 
-[2] 자동 시험 (약 20초, 마지막 줄 PASS 확인)
+[2] 자동 시험 (list.txt 구성 both/ev02-only/ev01-only 3가지 x 약 20초, 마지막 줄 PASS 확인)
 ./e2e-test.sh
 
 [3] 수동 시험 - 터미널 A (가짜 vCenter, VM 1000대, 느린 VM 10%, 실패 2%)
@@ -23,11 +23,15 @@ Ctrl+C
 cat testrun/report.txt
 
 [6] 수동 시험 - ev02 우선순위 확인 (짝 ev01 이 과점유 중이면 ev02 대상이 계속 후순위로 밀리는지)
-터미널 A: ./fake-vcenter.sh -vms 20 -busy-ev01 30 -out testrun-ev
+(list.txt 엔 ev02 만 있고 짝 ev01 은 부하 확인용으로만 조회되는, 가장 흔한 실제 형태)
+터미널 A: ./fake-vcenter.sh -vms 20 -pair-mode ev02-only -busy-ev01 30 -out testrun-ev
 터미널 B: ./bin/vm-ip-change -vcenter testrun-ev/vcenter.txt -list testrun-ev/list.txt
 (짝(ev01)이 과점유로 뽑힌 ev02 대상만 "대기중"에 계속 머무는지 목록 화면에서 확인)
 (s 로 현재 목록 저장 후 Ctrl+C 3회로 중단)
 cat testrun-ev/report.txt   (과점유 ev01 의 ev02 짝만 "시작 안 함"으로 나와야 정상)
 
+[6-1] (선택) 짝 ev01 자신도 동시에 변경 대상인 경우 — -pair-mode both 로 교체해 반복
+./fake-vcenter.sh -vms 20 -pair-mode both -busy-ev01 30 -out testrun-ev2
+
 [7] 정리
-rm -rf testrun testrun-ev testrun-e2e testrun-e2e.*.log
+rm -rf testrun testrun-ev testrun-ev2 testrun-e2e-* testrun-e2e-*.*.log
