@@ -134,4 +134,32 @@ $NEW/vm_create-source/vm_create -vcTargetIP=$A -id=user -vmCount=1 -ev01Cpu=1 -e
 [ $rc -eq 0 ] && grep -q "이미 모두" s5_c3.txt && ok "vm_create 재실행: 이미 있는 VM 만 → 정상 종료(rc=0)" || { ng "vm_create 중복 rc=$rc"; cat s5_c3.txt; }
 $H/stop.sh
 
+echo "== S6 호스트당 99대 (ev01~ev99) / 100 은 거부 / 도움말은 ev02~99 한 줄"
+A=$($H/sim.sh s6 -dc 1 -cluster 0 -host 2)
+printf "DC0_H0\nDC0_H1\n" > worklist.txt; : > hostgroup.txt
+EV99=""; AFF99=""; L99=""
+for i in $(seq 1 99); do n=$(printf %02d $i); EV99="$EV99 -ev${n}Cpu=1 -ev${n}Mem=1 -ev${n}Disk=1 -ev${n}Share=normal"; AFF99="$AFF99 -affinityFile$n=aff1.txt"; L99="$L99 -ev${n}Cores=1 -ev${n}Sockets=1"; done
+$NEW/vm_create-source/vm_create -vcTargetIP=$A -id=user -vmCount=99 $EV99 > s6_create.txt 2>&1; rc=$?
+n=$($H/bin/vmdump -vc $A -match 'ev[0-9][0-9]$' | wc -l); [ $rc -eq 0 ] && [ "$n" = 198 ] && ok "2호스트 x 99대 = 198대 생성" || { ng "생성 rc=$rc 대수 $n"; tail -5 s6_create.txt; }
+$NEW/affinity_setting-source/affinity_setting -vcTargetIP=$A -id=user -vm_cnt=99 $AFF99 > s6_aff.txt 2>&1
+$H/bin/vmdump -vc $A -match 'DC0_H1ev99$' | grep -q "sched.vcpu0.affinity=0" && ok "affinity ev99 적용 (ev01~ev99 같은 파일)" || { ng "affinity ev99"; tail -5 s6_aff.txt; }
+$NEW/lpage_setting-source/lpage_setting -vcTargetIP=$A -id=user $L99 > s6_lp.txt 2>&1
+grep -q "198" s6_lp.txt && $H/bin/vmdump -vc $A -match 'DC0_H0ev99$' | grep -q "lpage" && ok "lpage ev01~ev99 198대 대상" || { ng "lpage ev99"; tail -5 s6_lp.txt; }
+$NEW/vm_create-source/vm_create -vcTargetIP=$A -id=user -vmCount=100 $EV3 > s6_100.txt 2>&1; rc1=$?
+$NEW/affinity_setting-source/affinity_setting -vcTargetIP=$A -id=user -vm_cnt=100 > s6_100a.txt 2>&1; rc2=$?
+$NEW/tag_setting-source/tag_setting -vcTargetIP=$A -vmCount=100 > s6_100t.txt 2>&1; rc3=$?
+[ $rc1 -ne 0 ] && grep -q "1~99대" s6_100.txt && [ $rc2 -ne 0 ] && grep -q "1~99" s6_100a.txt && [ $rc3 -ne 0 ] && grep -q "1~99" s6_100t.txt && ok "100 은 vm_create/affinity/tag 모두 거부" || { ng "100 거부 $rc1/$rc2/$rc3"; cat s6_100.txt s6_100a.txt s6_100t.txt | head; }
+$NEW/vm_create-source/vm_create -ev01Cpu=1 -ev01Mem=1 -ev01Disk=1 -ev99Cpu=1 -ev99Mem=1 -ev99Disk=1 -vcTargetIP=$A -id=user -vmCount=99 > s6_gap.txt 2>&1
+grep -q "ev99Cpu 값이 있는데 -ev02Cpu" s6_gap.txt && ok "ev01 + ev99 (중간 없음) → 연속 규칙 에러" || { ng "연속 규칙"; cat s6_gap.txt; }
+hc=0
+for t in vm_create affinity_setting lpage_setting; do $NEW/$t-source/$t -h > s6_h_$t.txt 2>&1; done
+$NEW/../vm-param-check-usability-improvement/vm-param-check/vm-param-check -h > s6_h_check.txt 2>&1
+grep -q -- '-ev02~99Cpu' s6_h_vm_create.txt && grep -q -- '-affinityFile02~99 ' s6_h_affinity_setting.txt && grep -q -- '-ev02~99Cores' s6_h_lpage_setting.txt && grep -q -- '-cpu-ev02~99 ' s6_h_check.txt && hc=1
+! grep -qE -- '-(ev|affinityFile|[a-z]+-ev)(0[3-9]|[1-9][0-9])' s6_h_*.txt && [ $hc = 1 ] && ok "도움말: ev02~99 는 한 줄씩만 (ev03 이상 개별 줄 없음)" || { ng "도움말"; grep -hE -- '-(ev|affinityFile|[a-z]+-ev)[0-9]' s6_h_*.txt | head; }
+mkdir -p spec99/TST-CAE001-S99-QRST; { echo ht=off; echo cpu=1; echo mem=1; echo disk=1; echo shares-ev01=normal
+  for i in $(seq 2 99); do n=$(printf %02d $i); echo "cpu-ev$n=1"; echo "mem-ev$n=1"; echo "disk-ev$n=1"; echo "shares-ev$n=normal"; done; } > spec99/TST-CAE001-S99-QRST/TST-CAE001-S99-QRST_spec.txt
+$NEW/../vm-param-check-usability-improvement/vm-param-check/vm-param-check -specRoot=$W/spec99 -specExport=TST-CAE001-S99-QRST > s6_export.txt 2>&1
+grep -qx 'groups=99' s6_export.txt && grep -q '^cpu-ev99=1' s6_export.txt && ok "vm-param-check -specExport: groups=99" || { ng "specExport"; head -5 s6_export.txt; }
+$H/stop.sh
+
 echo; echo "결과: PASS=$pass FAIL=$fail"

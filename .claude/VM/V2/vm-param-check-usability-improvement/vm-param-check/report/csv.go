@@ -14,7 +14,7 @@ var csvHeader = []string{"VM명", "소스", "항목Key", "기대값", "실제값
 var summaryCSVHeader = []string{"VM명", "전체결과", "OK", "FAIL", "설정없음", "미지원", "정보"}
 
 // sourceRank는 CSV 정렬 시 소스 컬럼의 노출 순서를 고정한다.
-// 사람이 스프레드시트로 훑을 때 "공통설정 -> 호스트 -> ev01 -> ... -> ev10 -> 네트워크" 순으로
+// 사람이 스프레드시트로 훑을 때 "공통설정 -> 호스트 -> ev01 -> ... -> ev99 -> 네트워크" 순으로
 // 읽히는 게 자연스러워서 이 순서로 정렬한다.
 var sourceRank = func() map[string]int {
 	m := map[string]int{"-": 0, "host": 1}

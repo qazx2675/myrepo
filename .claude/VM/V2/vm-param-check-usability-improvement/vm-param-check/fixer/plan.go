@@ -279,7 +279,7 @@ func intExpect(vmName string, exp map[string]string, key string) (int, error) {
 	return n, nil
 }
 
-// GroupOf는 VM 이름으로 ev01~ev10 그룹을 판정한다 (vm-param-check의 classifyGroup과 동일 규칙).
+// GroupOf는 VM 이름으로 ev01~ev99 그룹을 판정한다 (vm-param-check의 classifyGroup과 동일 규칙).
 // 어느 그룹에도 안 맞으면 "기타".
 func GroupOf(vmName string) string {
 	if g := model.ClassifyGroup(vmName); g != "" {

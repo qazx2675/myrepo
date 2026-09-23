@@ -9,7 +9,9 @@ func TestClassifyGroup(t *testing.T) {
 		"host01ev04":  "ev04",
 		"host01ev10":  "ev10",
 		"host01":      "",
-		"host01ev11":  "", // ev11은 지원 범위(ev01~ev10) 밖
+		"host01ev11":  "ev11",
+		"host01ev99":  "ev99",
+		"host01ev00":  "", // ev00은 없는 번호
 		"bm-ev09.lab": "ev09",
 	}
 	for name, want := range cases {
@@ -21,7 +23,7 @@ func TestClassifyGroup(t *testing.T) {
 
 func TestGroupNames(t *testing.T) {
 	names := GroupNames()
-	if len(names) != MaxGroup || names[0] != "ev01" || names[MaxGroup-1] != "ev10" {
+	if len(names) != MaxGroup || names[0] != "ev01" || names[MaxGroup-1] != "ev99" {
 		t.Errorf("GroupNames() = %v", names)
 	}
 }

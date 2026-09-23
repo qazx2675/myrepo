@@ -37,10 +37,10 @@ shares-ev01=          # ratio 숫자(예: 4000) 또는 normal
 # disk-ev02=
 # shares-ev02=
 
-# --- 선택: ev03~ev10 그룹 (ev02와 같은 이름 규칙, 예: cpu-ev03= ... shares-ev10=) ---
+# --- 선택: ev03~ev99 그룹 (ev02와 같은 이름 규칙, 예: cpu-ev03= ... shares-ev99=) ---
 # ev 번호는 ev01부터 연속으로 채운다 (VMsetup이 이 스펙으로 VM을 만들 때 빈 번호가 있으면 에러)
 
-# --- 선택: affinity 파일 (이 스펙 디렉터리 기준 상대경로 권장, ev01~ev10) ---
+# --- 선택: affinity 파일 (이 스펙 디렉터리 기준 상대경로 권장, ev01~ev99) ---
 # affinity-ev01=
 # affinity-ev02=
 `

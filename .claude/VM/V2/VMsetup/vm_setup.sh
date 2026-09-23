@@ -218,7 +218,7 @@ AFF_MARK='# [affinity 수동 입력]'
 NIC_MARK='# [네트워크 어댑터 수동 지정]'
 declare -A PARSED=()
 
-# spec_key_list <n> — 그룹 n(1~10)의 스펙 키 이름들. ev01 은 접미사 없는 키(cpu/mem/...)를 쓴다.
+# spec_key_list <n> — 그룹 n(1~99)의 스펙 키 이름들. ev01 은 접미사 없는 키(cpu/mem/...)를 쓴다.
 spec_key_list() {
   local n="$1" nn; nn="$(printf '%02d' "$1")"
   if [ "$n" -eq 1 ]; then echo "cpu mem disk shares-ev01 cores numa"
@@ -230,14 +230,15 @@ write_spec_template() {
   {
     echo "$SPEC_MARK"
     echo "# 값을 큰따옴표 안에 적는다. 비워 둔 항목은 '지정 안 함'이다."
-    echo "# ev01 은 필수이고, ev02~ev10 은 값을 하나라도 적으면 그 ev 를 만든다."
+    echo "# ev01 은 필수이고, ev02~ev99 는 값을 하나라도 적으면 그 ev 를 만든다."
+    echo "#   - 아래에는 ev10 까지만 틀이 있다. ev11~ev99 는 같은 규칙으로 줄을 직접 추가한다 (예: cpu-ev11=\"4\")"
     echo "#   - 값을 적은 ev 는 cpu/mem/disk/shares 를 모두 적어야 한다"
     echo "#   - ev 번호는 ev01 부터 빠짐없이 이어져야 한다 (ev02 를 비우고 ev03 을 적으면 오류)"
     echo "# affinity 파일은 여기서 적지 않는다 — 저장한 뒤 ev 별로 (직전 ev 와 같은 파일 / 기존 파일 / vim 입력) 중에서 고른다."
     echo
     echo 'folder=""        # [필수] 새로 만들 스펙 폴더 이름. 예: TST-CAE001-SAMP48c-QRST (SPEC_DIR 아래 이 이름으로 저장됨)'
     echo 'ht=""            # [필수] 하이퍼스레딩 on 또는 off (vm-param-check 가 이 스펙으로 체크할 때 사용)'
-    for n in $(seq 1 10); do
+    for n in $(seq 1 10); do   # 틀은 ev10 까지만 (ev11~ev99 는 직접 추가)
       echo
       if [ "$n" -eq 1 ]; then echo "# --- ev01 (필수) ---"; else echo "# --- ev$(printf '%02d' "$n") (선택) ---"; fi
       for k in $(spec_key_list "$n"); do
@@ -296,7 +297,7 @@ create_spec_via_vim() {
         {
           echo "# $folder 스펙 정의 파일 (vm_setup.sh 의 vim 입력으로 생성 — $(date +%F))"
           echo "ht=${ht,,}"
-          for n in $(seq 1 10); do for k in $(spec_key_list "$n"); do
+          for n in $(seq 1 99); do for k in $(spec_key_list "$n"); do
             [ -n "${PARSED[$k]:-}" ] && echo "$k=${PARSED[$k]}"
           done; done
         } > "$spec_file"

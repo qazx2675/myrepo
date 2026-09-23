@@ -191,4 +191,17 @@ printf '1\ny\ny\ny\n' | run_setup $SD $A > $T/v10.out 2>&1; rc=$?
 [ $rc -ne 0 ] && grep -q '\[DC0_H9\] vCenter에서 호스트를 찾을 수 없습니다' $T/v10.out && grep -q '실패: .*vm_create' $T/v10.out && ! grep -q '\[완료\]' $T/v10.out && ! grep -q 'affinity_setting-source/affinity_setting -vc' $T/v10.out && ok "없는 호스트 → vm_create 종료코드 1 → vm_setup 중단" || { ng "중단 rc=$rc"; tail -20 $T/v10.out; }
 [ "$($H/bin/vmdump -vc $A -match '^DC0_H0ev0' | wc -l)" = 2 ] && ok "찾은 호스트(DC0_H0)의 VM 은 만들어짐 — 고친 뒤 재실행하면 건너뜀" || ng "H0 VM"
 
+echo "== V11 ev01~ev12 스펙(템플릿 틀 밖 ev11/ev12 포함, 모두 같은 affinity 파일) → 실행"
+A=$($H/sim.sh v11 -dc 1 -cluster 0 -host 2)
+SD=$T/SPEC11; mkspec $SD TST-CAE001-AAA-QRST
+S11=$SD/TST-CAE001-AAA-QRST/TST-CAE001-AAA-QRST_spec.txt
+for i in $(seq 3 12); do n=$(printf %02d $i); printf 'cpu-ev%s=2\nmem-ev%s=1\ndisk-ev%s=1\nshares-ev%s=normal\ncores-ev%s=2\naffinity-ev%s=affinity_ev01.txt\n' $n $n $n $n $n $n >> $S11; done
+printf 'DC0_H0\nDC0_H1\n' > $V/tt.txt
+printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\nDC0_H1 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\n' > $SD/vswitch_tt.txt
+printf 'y\ny\ny\n' | run_setup $SD $A > $T/v11.out 2>&1; rc=$?
+$H/bin/vmdump -vc $A -match 'ev[0-9][0-9]$' > $T/v11.dump
+[ $rc -eq 0 ] && [ "$(wc -l < $T/v11.dump)" = 24 ] && grep -q '\[완료\]' $T/v11.out && ok "BM 2대 x ev 12개 = 24대 생성 + 완료" || { ng "ev12 rc=$rc $(wc -l < $T/v11.dump)대"; tail -20 $T/v11.out; }
+grep -q 'DC0_H1ev12 .*sched.vcpu1.affinity=2,3' $T/v11.dump && grep -q 'DC0_H1ev12 .*lpage' $T/v11.dump && ok "ev12 에 affinity(ev01 과 같은 파일)/lpage 적용" || { ng "ev12 설정"; grep ev12 $T/v11.dump; }
+$H/stop.sh
+
 echo; echo "결과: PASS=$pass FAIL=$fail"

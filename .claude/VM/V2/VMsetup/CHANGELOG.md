@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-23 — 호스트당 VM 1~99대 (ev01~ev99)
+
+- **상한 10 → 99 (`vm_create`, `affinity_setting`, `lpage_setting`, `tag_setting`, `vm_setup.sh`, vm-param-check)**: 방식은 그대로이고 개수만 늘었다. `-vmCount`/`-vm_cnt` 1~99, `-ev01Cpu`~`-ev99Share`, `-affinityFile01`~`99`, `-ev01Cores`~`-ev99Numa`. ev01 필수·연속 규칙·값 없는 ev 제외·affinity 파일 필수(같은 파일 공유 가능)도 그대로다.
+  - 99가 상한인 이유: VM 이름이 `ev%02d` 두 자리라서. 100번째(`ev100`)는 vm-param-check 그룹 판정에서 `ev10`으로 잘못 잡힌다.
+- **도움말 정리**: ev02~ev99 옵션은 번호만 다르므로 `-h`에서 `-ev02~99Cpu`, `-affinityFile02~99`처럼 한 줄씩만 보인다(vm-param-check `-h`도 `-cpu-ev02~99` 등). 실제로 쓰는 옵션 이름은 바뀌지 않았다.
+- **`vm_setup.sh` vim 스펙 템플릿**: 빈 틀은 예전처럼 ev10까지만 두고(99개를 다 넣으면 수백 줄), ev11~ev99는 같은 규칙으로 줄을 직접 추가하라는 안내를 넣었다. 저장 시에는 ev99까지 읽는다.
+- **검증 (vcsim)**: `scenarios.sh` 39/39 PASS — 새 S6: 호스트 2대 × 99대 = 198대 생성, affinity(ev01~ev99 같은 파일)/lpage ev99 적용, 100은 `vm_create`/`affinity_setting`/`tag_setting` 모두 거부, ev01+ev99만 주면 연속 규칙 오류, `-h` 묶음 표시, vm-param-check `-specExport` `groups=99`. `vmsetup_test.sh` 36/36 PASS — 새 V11: 템플릿 밖 ev11/ev12를 넣은 스펙을 `vm_setup.sh`로 실행해 24대 생성 + ev12 affinity/lpage 적용. 실환경(home-test)에서는 돌리지 않았다.
+
 ## 2026-09-23 — FQDN/짧은 이름 교차 매칭, 실패 시 종료코드, affinity 자동 계산 삭제, vCenter 번호 선택
 
 - **호스트 이름 매칭(`vm_create`, `vswitch_setting`)**: 파일의 BM 이름과 vCenter 등록 이름이 각각 FQDN이든 짧은 이름이든 찾는다 — 정확히 같은 이름이 있으면 그것, 없으면 첫 `.` 앞부분끼리 비교해서 **하나뿐일 때만** 쓴다(여러 대면 오류). 예전에는 `vm_create`만 "vCenter가 FQDN이고 파일이 짧은 이름"을 찾았고, `vswitch_setting`은 정확히 같은 이름만 찾아서 짧은 이름으로 적으면 **포트그룹만 안 만들어지고 VM은 만들어지는** 어긋남이 있었다.

@@ -1,6 +1,6 @@
 # V2 — VM 생성·설정(VMsetup) + 체크(vm-param-check), SPEC_DIR 공유
 
-호스트(BM)당 VM을 **1~10대(ev01~ev10)** 만들고 설정하는 도구(`VMsetup`)와, 설정이 맞는지 체크·교정하는
+호스트(BM)당 VM을 **1~99대(ev01~ev99)** 만들고 설정하는 도구(`VMsetup`)와, 설정이 맞는지 체크·교정하는
 도구(`vm-param-check-usability-improvement`)가 **스펙 폴더 `SPEC_DIR` 하나를 같이 쓰는** 구성입니다.
 `.claude/VM/VM_setup`, `.claude/VM/vm-param-check-usability-improvement`(V1)는 그대로 두고 여기서 새로 구성했습니다.
 
@@ -39,7 +39,7 @@ cd /home && bash setup.sh
 각 도구의 사용법은 하위 README를 참고하세요. 공통 준비물:
 
 - `SPEC_DIR/vswitch_${user}.txt` — `BM 포트그룹 VLAN` (BM당 여러 줄 가능, 예시: `SPEC_DIR/vswitch_user.txt.example`)
-- `SPEC_DIR/<CAE폴더명>/<CAE폴더명>_spec.txt` — ev01~ev10 스펙 (예시: `SPEC_DIR/TST-CAE001-SAMP48c-QRST/`)
+- `SPEC_DIR/<CAE폴더명>/<CAE폴더명>_spec.txt` — ev01~ev99 스펙 (예시: `SPEC_DIR/TST-CAE001-SAMP48c-QRST/`)
 - `VMsetup/${user}.txt` — BM 목록 (한 줄에 하나)
 
 스펙을 VM 생성용 값으로 확인하려면:

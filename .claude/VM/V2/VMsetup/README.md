@@ -1,6 +1,6 @@
 # VMsetup — VM 생성·설정 도구 모음 (V2)
 
-호스트(BM)당 VM을 **1~10대(ev01~ev10)** 만들고 affinity/lpage/포트그룹까지 설정하는 도구들입니다.
+호스트(BM)당 VM을 **1~99대(ev01~ev99)** 만들고 affinity/lpage/포트그룹까지 설정하는 도구들입니다.
 스펙은 `../SPEC_DIR`(vm-param-check와 공유)에서 읽는 `vm_setup.sh`가 전체 과정을 묶어 주고,
 각 도구(`*-source/`)는 단독으로도 쓸 수 있습니다. 모든 도구는 내부적으로 병렬(워커풀) 처리합니다.
 
@@ -73,10 +73,10 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 
 | 도구 | 하는 일 | ev 범위 |
 |---|---|---|
-| `vm_create-source` | 호스트별 VM 생성(+CPU/메모리 예약/Shares/부트순서). `-mapFile`에 VM 이름 키로 포트그룹 지정 가능 | `-vmCount` 1~10, `-ev01Cpu`~`-ev10Share` |
-| `affinity_setting-source` | affinity 일괄 적용. `-vm_cnt` 범위의 ev마다 파일 필수(자동 계산 삭제, `-ht`는 받아서 무시), 여러 ev에 같은 파일 지정 가능 | `-vm_cnt` 1~10, `-affinityFile01~10` |
-| `lpage_setting-source` | HugePage/CPU 토폴로지 | `-ev01Cores/Sockets/Numa`~`-ev10...` |
-| `tag_setting-source` | 사용자 지정 특성 | `-vmCount` 1~10 |
+| `vm_create-source` | 호스트별 VM 생성(+CPU/메모리 예약/Shares/부트순서). `-mapFile`에 VM 이름 키로 포트그룹 지정 가능 | `-vmCount` 1~99, `-ev01Cpu`~`-ev99Share` |
+| `affinity_setting-source` | affinity 일괄 적용. `-vm_cnt` 범위의 ev마다 파일 필수(자동 계산 삭제, `-ht`는 받아서 무시), 여러 ev에 같은 파일 지정 가능 | `-vm_cnt` 1~99, `-affinityFile01~99` |
+| `lpage_setting-source` | HugePage/CPU 토폴로지 | `-ev01Cores/Sockets/Numa`~`-ev99...` |
+| `tag_setting-source` | 사용자 지정 특성 | `-vmCount` 1~99 |
 | `vswitch_setting-source` | BM vSwitch에 포트그룹 생성(호스트 병렬, `-concurrency`) | — |
 | `nic_assign-source` | 만들어진 VM의 네트워크 어댑터 1 포트그룹 교체 + **연결됨/전원을 켤 때 연결** 체크 | — |
 | `numa_preferht_setting-source` | `numa.vcpu.preferHT` 일괄 적용 | — |
@@ -118,7 +118,9 @@ VMsetup/
 
 - `lpage_setting`은 NUMA 노드당 코어 수를 스펙 numa 값에 맞추지만 `numa.vcpu.maxPerVirtualNode`는 기존 동작(코어 수)대로 씁니다 — `vm-param-check` 결과에서 FAIL이 나오면 `-fix`로 교정하세요.
 - 전원이 켜진 VM의 "연결됨" 체크는 vcsim에서 재현되지 않아 실제 vCenter(home-test)에서만 확인할 수 있습니다.
-- `vm-param-check/folder_setup.sh`는 ev01~ev03까지만 묻습니다. ev04~ev10 스펙은 `vm_setup.sh`의 vim 입력(스펙 수동 입력)으로 만들거나 `_spec.txt`를 직접 편집하세요.
+- `vm-param-check/folder_setup.sh`는 ev01~ev03까지만 묻습니다. ev04~ev99 스펙은 `vm_setup.sh`의 vim 입력(스펙 수동 입력)으로 만들거나 `_spec.txt`를 직접 편집하세요.
+- `vm_setup.sh`의 vim 스펙 템플릿은 ev10까지만 빈 틀이 있습니다. ev11~ev99는 같은 규칙의 줄(`cpu-ev11="4"` 등)을 직접 추가하면 저장됩니다.
+- 각 도구의 `-h` 도움말은 ev02~ev99 옵션을 `-ev02~99Cpu`처럼 한 줄로 묶어 보여줍니다(실제 옵션 이름은 `-ev02Cpu`, `-ev57Cpu` … 그대로).
 - 포트그룹을 새로 만들면서 VM에 붙이는 것(vim에서 VLAN 입력)은 지원하지 않습니다. 새 포트그룹은 `vswitch_<user>.txt`에 적어 `vswitch_setting`으로 만드세요.
 
 ## 5. 전역 명령어로 사용하기 (선택 사항)

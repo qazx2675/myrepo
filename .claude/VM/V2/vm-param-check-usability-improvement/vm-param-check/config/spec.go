@@ -130,7 +130,7 @@ func ParseSpecFile(path string) ([]SpecOption, error) {
 				return nil, fmt.Errorf("%s:%d 형식 오류 (이름=값 형태가 아님): %q", path, lineNo+1, token)
 			}
 			// vim 수동입력 템플릿은 `cpu=""`처럼 값을 따옴표로 감싸서 준다. 따옴표는 떼고,
-			// 따옴표째 비워 둔 값은 "지정 안 함"으로 보고 건너뛴다(비워 둔 ev02~ev10은 실행하지 않는 규칙).
+			// 따옴표째 비워 둔 값은 "지정 안 함"으로 보고 건너뛴다(비워 둔 ev02~ev99은 실행하지 않는 규칙).
 			// 따옴표 없는 `cpu=`는 예전처럼 빈 값 옵션으로 남긴다(-initFolder 빈 틀 동작 유지).
 			if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
 				value = value[1 : len(value)-1]
