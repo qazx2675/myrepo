@@ -25,3 +25,9 @@ flowchart TD
     N --> O["결과 파일을 -w 로 넘겨 재실행 가능"]
     F -.->|Ctrl+C 1·2·3회| P["pdsh 방식 중단 처리"]
 ```
+
+<details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
+
+![작업 흐름도](workflow.svg)
+
+</details>
