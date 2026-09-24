@@ -11,6 +11,7 @@
 #   bash setup.sh -l           # 빌드 대상 목록 보기
 #   bash setup.sh -c           # 빌드된 실행파일 지우기 (vendor 링크도 함께 정리)
 #   bash setup.sh --os6        # OS6 용 실행파일(bin_os6/*.gz)을 제자리에 풀기 (OS6 서버에서는 자동)
+#   OS6_hostname="a|b" bash setup.sh   # 이 목록의 호스트 이름이면 자동 판단과 무관하게 OS6 취급
 #
 # OS6(RHEL/CentOS 6, 커널 2.6.32)에서는 이 폴더의 Go 로 빌드한 실행파일이 뜨지 않고 빌드용 Go 도 설치할 수 없어,
 # Go 1.20 으로 미리 빌드해 둔 bin_os6/<이름>.gz 를 풀어서 같은 자리에 놓는다(빌드 서버에서 bash build_os6.sh 로 만든다).
@@ -40,15 +41,22 @@ MIN_GO="1.26.5"   # VMsetup 도구들의 go.mod 기준 (vm-param-check 는 더 �
 
 die() { printf '[오류] %s\n' "$*" >&2; exit 1; }
 
-# OS6 판단: --os6 옵션, VMSETUP_OS6=1, 커널 2.6.x, 또는 /etc/redhat-release 가 release 6
+# OS6 판단: --os6 옵션, VMSETUP_OS6=1, 커널 2.6.x, /etc/redhat-release 가 release 6, 또는
+# 이 호스트 이름이 OS6_hostname 에 있음(자동 판단이 안 통하는 경우 대비 — "|"로 여러 대 지정 가능,
+# 예: OS6_hostname="old-node01|old-node02").
+OS6_hostname="${OS6_hostname:-}"
 OS6=0
 [ "${1:-}" = "--os6" ] && { OS6=1; shift; }
 [ "${VMSETUP_OS6:-}" = 1 ] && OS6=1
 case "$(uname -r)" in 2.6.*) OS6=1 ;; esac
 grep -qs 'release 6\.' /etc/redhat-release && OS6=1
+if [ -n "$OS6_hostname" ]; then
+  IFS='|' read -ra _os6_hosts <<< "$OS6_hostname"
+  for _h in "${_os6_hosts[@]}"; do [ "$_h" = "$(hostname)" ] && OS6=1; done
+fi
 
 case "${1:-}" in
-  -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   -l|--list)
     for t in "${TARGETS[@]}"; do IFS=: read -r name dir bin <<< "$t"; printf '%-22s %s/%s\n' "$name" "$dir" "$bin"; done
     exit 0 ;;
