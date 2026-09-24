@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"vm-param-check/model"
 )
@@ -22,6 +23,35 @@ func colorize(s, code string, color bool) string {
 		return s
 	}
 	return code + s + ansiReset
+}
+
+// dispWidth는 터미널에서 실제로 차지하는 폭을 센다 — 한글(및 기타 동아시아 넓은 문자)은
+// 2칸을 차지하는데 Go의 %-Ns/%Ns 는 룬 개수로만 폭을 계산해서, "전체결과" 같은 한글 헤더와
+// 그 아래 숫자/영문 값이 안 맞는 정렬 문제가 생긴다. padRight/padLeft 는 이 폭 기준으로 맞춘다.
+func dispWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		if r >= 0x1100 {
+			w += 2
+		} else {
+			w++
+		}
+	}
+	return w
+}
+
+func padRight(s string, width int) string {
+	if w := dispWidth(s); w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+	return s
+}
+
+func padLeft(s string, width int) string {
+	if w := dispWidth(s); w < width {
+		return strings.Repeat(" ", width-w) + s
+	}
+	return s
 }
 
 // PrintConsole은 [1] 상세 섹션 + [2] VM별 요약 표를 출력한다.
@@ -76,7 +106,9 @@ func PrintConsole(w io.Writer, findings, allFindings []model.Finding, color bool
 // printSummaryTable은 VM별 요약 표를 출력한다.
 func printSummaryTable(w io.Writer, statuses []VMStatus, color bool) {
 	fmt.Fprintln(w, "=== [2] VM별 요약 ===")
-	fmt.Fprintf(w, "%-30s %-8s %6s %6s %8s %8s %6s\n", "VM", "전체결과", "OK", "FAIL", "설정없음", "미지원", "정보")
+	fmt.Fprintf(w, "%s %s %s %s %s %s %s\n",
+		padRight("VM", 30), padRight("전체결과", 8), padLeft("OK", 6), padLeft("FAIL", 6),
+		padLeft("설정없음", 8), padLeft("미지원", 8), padLeft("정보", 6))
 	fmt.Fprintln(w, "-----------------------------------------------------------------------")
 	pass := 0
 	for _, s := range statuses {
