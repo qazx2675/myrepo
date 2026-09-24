@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-09-24 — vm_create/lpage_setting 실행 계획도 ev 범위로 묶어 표시
+
+- **`vm_setup.sh`**: `affinity_setting`이 이미 하던 그룹핑(`[ev01]`/`[ev02~ev06]`, 값이 같은 ev를 `ev_ranges`로 범위 표시)을 `vm_create`/`lpage_setting`에도 적용했다. `print_ev_kv` 함수 추가. 전에는 `-ev01Cpu=16 -ev02Cpu=8 ...` 식으로 ev마다 다 나열해서 값이 같은 ev를 눈으로 비교하기 번거로웠다.
+- **영향 범위**: `VMsetup/vm_setup.sh`.
+- **검증**: `.58`에서 `TST-CAE002-GROUPCHECK-DEMO` 스펙(검증/saccae/SPEC_DIR)으로 `ev01: Cpu=16 Mem=64 Disk=500 Share=8000` / `ev02~ev06: Cpu=8 Mem=32 Disk=200 Share=nomal`, `lpage_setting`도 `ev01`/`ev02`/`ev03~ev06`로 정확히 묶여 출력되는 것 확인.
+
 ## 2026-09-24 — `setup.sh`에 `OS6_hostname` 추가 (호스트 이름으로 OS6 강제 지정)
 
 - **`setup.sh`**: 커널/배포판 자동 판단으로 OS6 여부를 못 잡는 경우를 위해 `OS6_hostname="host1|host2"`(파이프로 여러 대) 환경변수를 추가했다. 이 목록에 현재 호스트 이름(`hostname`)이 있으면 다른 조건과 무관하게 OS6 취급(`bin_os6/*.gz` 설치).
