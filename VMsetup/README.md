@@ -32,7 +32,7 @@ bash ../setup.sh                          # V2 루트의 전체 빌드 스크립
 | 파일 | 내용 |
 |---|---|
 | `VMsetup/<user>.txt` | 대상 BM 목록 (한 줄에 하나) |
-| `SPEC_DIR/vswitch_<user>.txt` | `BM  포트그룹  VLAN` (BM당 여러 줄 가능 — 적은 만큼 포트그룹이 만들어짐) |
+| `VMsetup/vswitch_<user>.txt` | `BM  포트그룹  VLAN` (BM당 여러 줄 가능 — 적은 만큼 포트그룹이 만들어짐) |
 | `vcenter.txt` (선택) | vCenter 주소 목록, 한 줄에 하나. V2 폴더(`/home/vcenter.txt`)에 두며, 없으면 vm-param-check 폴더의 `vcenter.txt`를 씁니다. 예시: `../vcenter.txt.example` |
 
 BM 이름은 FQDN(`esxi01.domain`)과 짧은 이름(`esxi01`) 모두 쓸 수 있습니다. vCenter에 어느 쪽으로 등록되어 있든 찾아냅니다(먼저 이름이 정확히 같은 호스트를 찾고, 없으면 첫 `.` 앞부분끼리 비교). 짧은 이름이 같은 호스트가 여러 대이면 어느 쪽인지 판단할 수 없으므로 오류로 알립니다. 두 파일의 BM 이름은 서로 같게 적어 주세요.
@@ -40,12 +40,12 @@ BM 이름은 FQDN(`esxi01.domain`)과 짧은 이름(`esxi01`) 모두 쓸 수 있
 `vswitch_<user>.txt`의 포트그룹 컬럼에 `<폴더명>-cae-a-b-c-d` 대신 IP를 적어 두었다면 먼저 변환합니다(`/24` 가정, 마지막 옥텟은 0으로 고정).
 
 ```bash
-bash vswitch_pgname.sh ../SPEC_DIR/vswitch_<user>.txt   # 형식이 아닌 줄만 폴더명을 물어보고 변환(Enter = 직전 폴더명), 원본은 .bak로 보존
+bash vswitch_pgname.sh vswitch_<user>.txt   # 형식이 아닌 줄만 폴더명을 물어보고 변환(Enter = 직전 폴더명), 원본은 .bak로 보존
 ```
 
 ```bash
 ../passwd_update.sh                       # 처음 한 번: vCenter 비밀번호를 암호 파일로 등록 (계정 lscsystems@vsphere.local)
-./vm_setup.sh                             # user 를 번호로 선택 (0) list = 각 user 의 BM 목록), vCenter 도 번호로 선택
+./vm_setup.sh                             # user 를 번호로 선택 (0) 직접 선택 = user 이름 직접 입력), vCenter 도 번호로 선택
 ./vm_setup.sh -u hong                     # user 지정 (Enter = hong 의 이전 실행 vCenter)
 ./vm_setup.sh -u hong -v 192.168.0.50     # vCenter 를 직접 지정. -n 을 붙이면 vCenter 변경 없이 계획까지만 확인
 ./vm_setup.sh -u hong -id other@vsphere.local
@@ -57,7 +57,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 
 진행 순서:
 
-1. **user 선택**(`-u`가 없을 때) — 이 폴더의 `<user>.txt` 를 번호로 보여준다. `0) list` 는 각 user 의 BM 목록과 포트그룹 파일 유무를 보여주고 다시 묻는다.
+1. **user 선택**(`-u`가 없을 때) — 자주 쓰는 user(`lsh`/`ljh`/`dhk`)를 번호로 보여준다. `0) 직접 선택` 은 목록에 없는 user 이름을 직접 입력한다.
 2. **스펙 할당** — 포트그룹 이름이 `<폴더명>-cae-a-b-c-d` 형식이면 그 폴더명으로 `SPEC_DIR` 스펙을 자동 매칭한다. **CAE 번호는 빼고 비교**하므로 `SAC-CAE001`로 등록된 스펙을 `SAC-CAE100` 포트그룹으로 실행해도 같은 스펙을 쓴다. 따로 확인 표는 없고(VM 표의 스펙 열로 확인), 자동으로 못 정한 BM만 **SPEC_DIR 목록에서 번호 선택**(Enter = 직전 선택).
    - 목록에 없으면 `0`을 골라 **vim으로 새 스펙 입력**. 모든 항목이 `키=""` 상태이고 설명은 주석이다. 저장하면 `SPEC_DIR/<folder>/`에 새 스펙 폴더가 생긴다(`folder`가 규칙에 안 맞거나 같은 스펙이 있으면 오류 안내 후 다시 편집). 이어서 **ev별 affinity**를 (1 직전 ev와 같은 파일 / 2 기존 파일 / 3 vim 입력) 중에서 고른다. ev01은 2·3만 가능하고, ev02부터는 Enter가 1번이다.
    - **affinity는 ev마다 필수**입니다(자동 계산은 삭제). 스펙에 `affinity-evNN`이 없으면(예전 vm-param-check 스펙) "지금 ev 별 affinity 를 골라 이 스펙에 추가할까요?"라고 묻고, y 면 위와 같은 방법으로 골라 스펙 파일에 추가한다. n 이면 그 스펙은 쓰지 않고 이유를 알려준다. 여러 ev가 같은 파일을 써도 됩니다(`affinity-ev02=affinity_ev01.txt`).
@@ -97,7 +97,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 
 | 옵션 | 설명 |
 |---|---|
-| `-u <user>` | 작업 이름 — `<user>.txt`, `SPEC_DIR/vswitch_<user>.txt`. 없으면 번호로 선택 |
+| `-u <user>` | 작업 이름 — `<user>.txt`, `vswitch_<user>.txt`(둘 다 VMsetup 폴더). 없으면 번호로 선택 |
 | `-v <ip>` | vCenter 주소 (환경변수 `VC_IP`도 가능). 없으면 `vcenter.txt` 목록에서 번호 선택(Enter = 이전 실행) |
 | `-id <계정>` | vCenter 계정 (기본 `lscsystems@vsphere.local`, `-i` 도 같음). 비밀번호는 `VC_PASSWORD` → 암호 파일 → 입력 |
 | `-s <dir>` | SPEC_DIR 경로 (기본: `vm-param-check/SPEC_DIR` 가 있으면 그것, 없으면 `../SPEC_DIR`) |

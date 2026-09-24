@@ -29,6 +29,6 @@ V2(VMsetup + vm-param-check + SPEC_DIR)를 배포하거나 수정하기 전 확�
 
 ## 저장소
 
-- [ ] 사용자 파일(`SPEC_DIR/vswitch_*.txt`, 실제 스펙 폴더, `<user>.txt`, `run_*/`)과 빌드 산출 실행파일이 커밋에 없다
+- [ ] 사용자 파일(`VMsetup/vswitch_*.txt`, 실제 스펙 폴더, `<user>.txt`, `run_*/`)과 빌드 산출 실행파일이 커밋에 없다
 - [ ] `master`의 `.claude/VM/V2` 변경을 `V2` 브랜치에도 반영했다 (`git subtree split --prefix=.claude/VM/V2 -b V2` 후 push)
 - [ ] 배포 시점에 태그를 남겼다: `git tag -a v2.x.y -m "<변경 요약> (CHANGELOG YYYY-MM-DD 항목)"`

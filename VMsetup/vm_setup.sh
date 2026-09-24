@@ -2,7 +2,7 @@
 # vm_setup.sh — SPEC_DIR 스펙으로 VM을 만들고 설정하는 실행 편의 스크립트.
 #
 # 흐름:
-#   1) user 선택(-u 가 없으면 이 폴더의 <user>.txt 목록에서 번호로) → ${user}.txt(BM 목록) + SPEC_DIR/vswitch_${user}.txt 읽기
+#   1) user 선택(-u 가 없으면 이 폴더의 <user>.txt 목록에서 번호로) → ${user}.txt(BM 목록) + ${HERE}/vswitch_${user}.txt 읽기
 #   2) BM별 스펙 자동 할당(포트그룹 이름의 <폴더명>-cae-a-b-c-d 에서 폴더명 추출, CAE 번호는 무시하고 매칭)
 #      → 못 정한 BM 만 SPEC_DIR 목록에서 선택, 목록에 없으면 vim으로 새 스펙 입력(+ev별 affinity)
 #   3) VM(evNN)별 포트그룹(네트워크 어댑터 1) 자동 할당 → VM 표 확인(y/n) → 수동 선택 → 목록에 없으면 vim
@@ -27,8 +27,8 @@ usage() {
   cat <<EOF
 사용법: $0 [-u <user>] [-v <vCenter>] [옵션]
 
-  -u <user>     작업 이름. ${HERE}/<user>.txt (BM 목록), SPEC_DIR/vswitch_<user>.txt 를 읽는다
-                (없으면 ${HERE} 의 <user>.txt 목록에서 번호로 고른다. 0) list = 각 user 의 BM 목록 보기)
+  -u <user>     작업 이름. ${HERE}/<user>.txt (BM 목록), ${HERE}/vswitch_<user>.txt 를 읽는다
+                (없으면 번호 메뉴에서 고른다. 0) 직접 선택 = user 이름을 직접 입력)
   -v <vCenter>  vCenter 주소 (환경변수 VC_IP 도 가능). 없으면 vcenter.txt 목록에서 번호로 고른다
                 (V2 폴더의 vcenter.txt, 없으면 vm-param-check 폴더의 것. Enter = 이 user 의 이전 실행 vCenter)
   -id <계정>    vCenter 계정 (기본: lscsystems@vsphere.local, -i 도 같음)
@@ -106,29 +106,20 @@ SPEC_DIR="$(cd "$SPEC_DIR" && pwd)"
 
 read_list() { sed -e 's/\r$//' -e '1s/^\xef\xbb\xbf//' -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" | awk 'NF'; }
 
-# select_user — -u 가 없을 때 이 폴더의 <user>.txt 로 번호 메뉴를 보여주고 USER_TAG 를 채운다.
+# select_user — -u 가 없을 때 번호 메뉴(자주 쓰는 user 또는 직접 입력)를 보여주고 USER_TAG 를 채운다.
 select_user() {
-  local -a users=(); local f u i ans n
-  for f in "$HERE"/*.txt; do
-    [ -f "$f" ] || continue; u="$(basename "$f" .txt)"
-    [[ "$u" =~ ^[A-Za-z0-9._-]+$ ]] && users+=("$u")
-  done
-  [ "${#users[@]}" -gt 0 ] || die "$HERE 에 <user>.txt(BM 목록) 가 없습니다 — 파일을 만들거나 -u <user> 로 지정하세요."
+  local -a users=(lsh ljh dhk); local i ans
   while :; do
     hdr "user 선택 ($HERE)"
-    printf '  0) list\n' >&2
+    printf '  0) 직접 선택\n' >&2
     for i in "${!users[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${users[$i]}" >&2; done
     prompt ans "번호: "
-    [[ "$ans" =~ ^[0-9]+$ ]] || continue
-    if [ "$ans" -eq 0 ]; then
-      for u in "${users[@]}"; do
-        n="$(read_list "$HERE/$u.txt" | wc -l)"
-        printf '\n%s%s%s  (BM %s대, 포트그룹 파일 %s)\n' "$C_BLD" "$u" "$C_RST" "$n" \
-          "$( [ -f "$SPEC_DIR/vswitch_$u.txt" ] && echo "vswitch_$u.txt" || echo "${C_YEL}없음${C_RST}")" >&2
-        read_list "$HERE/$u.txt" | awk '{print $1}' | paste -sd' ' | fold -s -w 110 | sed 's/^/    /' >&2
-      done
+    if [ "$ans" = "0" ]; then
+      prompt USER_TAG "user 이름 입력: "
+      [ -n "$USER_TAG" ] && return 0
       continue
     fi
+    [[ "$ans" =~ ^[0-9]+$ ]] || continue
     [ "$ans" -ge 1 ] && [ "$ans" -le "${#users[@]}" ] && { USER_TAG="${users[$((ans - 1))]}"; return 0; }
   done
 }
@@ -136,7 +127,7 @@ select_user() {
 [[ "$USER_TAG" =~ ^[A-Za-z0-9._-]+$ ]] || die "user 에는 영문/숫자/._- 만 쓸 수 있습니다: $USER_TAG"
 
 BM_FILE="$HERE/${USER_TAG}.txt"
-VSW_FILE="$SPEC_DIR/vswitch_${USER_TAG}.txt"
+VSW_FILE="$HERE/vswitch_${USER_TAG}.txt"
 [ -f "$BM_FILE" ]  || die "BM 목록 파일이 없습니다: $BM_FILE (한 줄에 BM 하나)"
 [ -f "$VSW_FILE" ] || die "포트그룹 파일이 없습니다: $VSW_FILE (BM 포트그룹 VLAN)"
 
