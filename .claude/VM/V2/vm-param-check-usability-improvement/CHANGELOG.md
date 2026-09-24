@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-09-24 — `vm_setting_check_insert.sh` user 선택(번호 메뉴/`-u`)
+
+- **`vm_setting_check_insert.sh`**: `set_user()` 함수를 직접 편집하던 방식 대신 `-u <user>` 옵션이나, 그냥 실행하면 번호 메뉴(`0) 직접 선택` `1) lsh` `2) ljh` `3) dhk`)에서 고르는 방식으로 바꿨다(`VMsetup/vm_setup.sh`와 같은 양식). 대상 목록 파일(`<user>.txt`)이 없으면 기존과 동일하게 안내 후 종료.
+- **영향 범위**: `vm-param-check-usability-improvement/vm-param-check/vm_setting_check_insert.sh`, `vm-param-check-usability-improvement/vm-param-check/README.md`.
+
 ## 2026-09-24 — `-specFolder`, 래퍼 계정/암호 파일
 
 - **`-specFolder <폴더명>`** (`-specRoot` 와 함께): VM 폴더/포트그룹으로 스펙을 찾지 않고 대상 VM 전부에 이 스펙을 적용한다(CAE 번호는 무시하고 매칭). VMsetup/vm_setup.sh 가 방금 만든 VM 을 실행한 스펙으로 체크할 때 쓴다. `-specRoot` 없이 주면 오류.
