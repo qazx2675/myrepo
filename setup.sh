@@ -10,6 +10,10 @@
 #   bash setup.sh vm_create    # 지정한 도구만 (여러 개 가능: bash setup.sh vm_create nic_assign)
 #   bash setup.sh -l           # 빌드 대상 목록 보기
 #   bash setup.sh -c           # 빌드된 실행파일 지우기 (vendor 링크도 함께 정리)
+#   bash setup.sh --os6        # OS6 용 실행파일(bin_os6/*.gz)을 제자리에 풀기 (OS6 서버에서는 자동)
+#
+# OS6(RHEL/CentOS 6, 커널 2.6.32)에서는 이 폴더의 Go 로 빌드한 실행파일이 뜨지 않고 빌드용 Go 도 설치할 수 없어,
+# Go 1.20 으로 미리 빌드해 둔 bin_os6/<이름>.gz 를 풀어서 같은 자리에 놓는다(빌드 서버에서 bash build_os6.sh 로 만든다).
 #
 # 만들어지는 실행파일:
 #   VMsetup/<이름>-source/<이름>                     (vm_create, affinity_setting, lpage_setting, ...)
@@ -35,6 +39,13 @@ TARGETS=(
 MIN_GO="1.26.5"   # VMsetup 도구들의 go.mod 기준 (vm-param-check 는 더 낮아도 되지만 한 버전으로 통일)
 
 die() { printf '[오류] %s\n' "$*" >&2; exit 1; }
+
+# OS6 판단: --os6 옵션, VMSETUP_OS6=1, 커널 2.6.x, 또는 /etc/redhat-release 가 release 6
+OS6=0
+[ "${1:-}" = "--os6" ] && { OS6=1; shift; }
+[ "${VMSETUP_OS6:-}" = 1 ] && OS6=1
+case "$(uname -r)" in 2.6.*) OS6=1 ;; esac
+grep -qs 'release 6\.' /etc/redhat-release && OS6=1
 
 case "${1:-}" in
   -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -65,6 +76,26 @@ else
     done
     [ -n "$found" ] || die "알 수 없는 도구: $want (목록: bash setup.sh -l)"
   done
+fi
+
+# ---- OS6: 빌드하지 않고 bin_os6/*.gz 를 제자리에 푼다 ----
+if [ "$OS6" -eq 1 ]; then
+  echo "[INFO] OS6 모드 — bin_os6/ 의 미리 빌드한 실행파일(Go 1.20, 정적 링크)을 설치합니다"
+  ok=0; fail=0
+  for t in "${SELECTED[@]}"; do
+    IFS=: read -r name dir bin <<< "$t"
+    printf '%-22s ' "$name"
+    if [ -f "$ROOT/bin_os6/$bin.gz" ] && gzip -dc "$ROOT/bin_os6/$bin.gz" > "$ROOT/$dir/$bin.tmp" \
+       && chmod +x "$ROOT/$dir/$bin.tmp" && mv -f "$ROOT/$dir/$bin.tmp" "$ROOT/$dir/$bin"; then
+      echo "OK   $dir/$bin"; ok=$((ok + 1))
+    else
+      rm -f "$ROOT/$dir/$bin.tmp"; echo "실패 (bin_os6/$bin.gz 없음 — 빌드 서버에서 bash build_os6.sh)"; fail=$((fail + 1))
+    fi
+  done
+  chmod +x "$ROOT/VMsetup/vm_setup.sh" "$ROOT"/*.sh 2>/dev/null
+  echo; echo "[결과] 성공 $ok / 실패 $fail"
+  [ "$fail" -eq 0 ] || exit 1
+  exit 0
 fi
 
 # ---- 사전 점검 ----

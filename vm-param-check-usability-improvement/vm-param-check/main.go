@@ -61,6 +61,8 @@ func main() {
 
 	specRoot := flag.String("specRoot", "", "스펙 정의 파일들이 모여 있는 루트 경로. 지정하면 체크 대상 VM이 속한 vCenter 인벤토리 폴더 이름을 조회해서, 같은 스펙으로 간주되는 하위 디렉터리의 '<디렉터리명>_spec.txt'를 찾아 기대값 옵션(-cpu/-cores/-numa/...)을 자동으로 채운다. 직접 준 옵션이 항상 우선하며, 적용 전에 확인을 한 번 받는다")
 
+	specFolder := flag.String("specFolder", "", "-specRoot 와 함께: VM 폴더/포트그룹으로 스펙을 찾지 않고, 대상 VM 전부에 이 폴더명(CAE 번호는 무시하고 매칭)의 스펙을 적용한다 — VMsetup/vm_setup.sh 가 방금 만든 VM 을 그 스펙으로 체크할 때 쓴다")
+
 	out := flag.String("out", "", "상세 CSV 출력 경로 (미지정 시 vm-param-check_<타임스탬프>.csv 자동 생성). 같은 이름에 _summary가 붙은 요약 CSV가 하나 더 생성됨")
 	user := flag.String("user", "", "CSV 파일명에 붙일 접미사 (예: -out=result.csv -user=kdh -> result_kdh.csv, result_kdh_summary.csv). 여러 사람이 동시에 실행할 때 파일명 충돌 방지용")
 	onlyFail := flag.Bool("onlyFail", false, "PASS(문제 없음)인 VM은 '상세'와 상세 CSV에서 제외하고, FAIL/설정없음이 있는 VM만 출력 (대수 많을 때 가독성용). VM별 요약(화면/요약 CSV)에는 PASS 서버도 그대로 나온다")
@@ -122,6 +124,9 @@ func main() {
 		}
 	}
 	if *specRoot == "" {
+		if *specFolder != "" {
+			log.Fatal("-specFolder 는 -specRoot 와 함께 써야 합니다")
+		}
 		requireExpectFlags()
 	}
 
@@ -297,7 +302,7 @@ func main() {
 	var expectByVM map[string]expectSet
 	var specByVM map[string]string // VM -> 스펙 파일 (-specRoot 일 때만. -fix 동질성 게이트를 스펙별로 나눈다)
 	if *specRoot != "" {
-		expectByVM, specByVM = applyFolderSpecs(*specRoot, allVMs, setFlags, baseFlagValues, *yes, buildExpect)
+		expectByVM, specByVM = applyFolderSpecs(*specRoot, *specFolder, allVMs, setFlags, baseFlagValues, *yes, buildExpect)
 	} else {
 		e := buildExpect()
 		expectByVM = map[string]expectSet{}
@@ -660,10 +665,10 @@ type folderResolution struct {
 //
 // 사용자가 직접 준 플래그는 어느 스펙에서도 덮어쓰지 않는다(수동 우선).
 // 무엇이 적용될지 전부 보여준 뒤 확인을 받고, 아니라고 하면 아무것도 하지 않고 종료한다.
-func applyFolderSpecs(specRoot string, vms []model.VMInfo, setFlags map[string]bool,
+func applyFolderSpecs(specRoot, specFolder string, vms []model.VMInfo, setFlags map[string]bool,
 	baseFlagValues map[string]string, autoYes bool, buildExpect func() expectSet) (map[string]expectSet, map[string]string) {
 
-	resolutions := resolveVMFolders(specRoot, vms, autoYes)
+	resolutions := resolveVMFolders(specRoot, specFolder, vms, autoYes)
 
 	vmsByResolved := map[string][]string{}
 	for _, vm := range vms {
@@ -761,8 +766,14 @@ func printResolutionGroups(resolutions map[string]folderResolution, vms []model.
 // resolveVMFolders는 VM별로 실제 스펙 매칭에 쓸 폴더명을 정한다.
 // vm.Folder가 CAE 규칙을 만족하면 그대로 쓰고, 아니면(Task 폴더 등) 포트그룹명 파싱을
 // 시도하고, 그래도 안 되면 사람에게 물어본다(-yes면 물어볼 수 없으므로 바로 중단).
-func resolveVMFolders(specRoot string, vms []model.VMInfo, autoYes bool) map[string]folderResolution {
+func resolveVMFolders(specRoot, specFolder string, vms []model.VMInfo, autoYes bool) map[string]folderResolution {
 	result := map[string]folderResolution{}
+	if specFolder != "" { // -specFolder: 폴더/포트그룹을 보지 않고 전부 이 스펙
+		for _, vm := range vms {
+			result[vm.Name] = folderResolution{Actual: vm.Folder, Resolved: specFolder, Source: "-specFolder 지정"}
+		}
+		return result
+	}
 	var noFolder []string
 	for _, vm := range vms {
 		if vm.Folder == "" {

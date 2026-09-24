@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-24 — user 메뉴, CAE 번호 변경, 색상, 생성 후 스펙 체크, 비밀번호 암호화, OS6 실행파일
+
+- **user 선택(`vm_setup.sh`)**: `-u` 는 그대로. 없으면 이 폴더의 `<user>.txt` 를 번호로 보여준다(`0) list` = 각 user 의 BM 목록·포트그룹 파일 유무).
+- **CAE 번호**: 스펙 매칭은 원래 CAE/LSI 뒤 숫자를 빼고 비교한다(vm-param-check `NormalizeFolderName`) — `SAC-CAE001` 스펙을 `SAC-CAE100` 포트그룹으로 실행해도 같은 스펙(시험으로 확인). 새로 **VM 표 확인 뒤 "CAE 번호를 바꾸시겠습니까? (y/N)"** — y 면 폴더별 새 번호를 받아 이번에 만드는 포트그룹 이름(BM 포트그룹·VM 어댑터 1)에 반영. `# 숫자변경기능` 주석 아래 `ask_cae_number` 한 줄을 주석처리하면 꺼진다.
+- **색상**: 머리글(청록)·`[INFO]`(초록)·`[경고]`(노랑)·`[오류]`(빨강)·질문(굵게). 터미널일 때만 켜고 파일/파이프로 돌리면 끈다. `NO_COLOR=1`/`VMSETUP_COLOR=never|always`.
+- **BM→스펙 확인 단계 삭제 (동작 변경)**: 표와 y/n 을 없애고 VM 표에 스펙 열을 넣었다("위 스펙·포트그룹 할당이 맞습니까?"). 자동으로 못 정한 BM 만 번호로 고른다. 수동 선택할 VM 이 없으면 VM 표를 한 번만 보여준다.
+- **affinity 설정값 출력**: 실행 계획에 스펙별 affinity 파일 내용을 보여준다. 내용이 같으면(이름이 달라도) 한 번만, 쓰는 ev 는 `[ev01~ev99]`, `[ev01,ev03,...]` 로.
+- **생성 후 스펙 체크**: 실행이 끝나면 만든 VM 만 실행한 스펙으로 vm-param-check(`-specFolder`, 새 옵션)를 돌려 `[일치]`/`[차이]`와 항목별 개수를 보여준다. 로그·CSV 는 `run_<user>/check_<번호>.*`. 차이가 있어도 중단하지 않고 `-fix` 명령을 안내. ev01 cores/numa 가 없는 스펙은 체크할 수 없어 계획 단계에서 경고하고 건너뛴다.
+- **계정·비밀번호**: 기본 계정 `lscsystems@vsphere.local`, `-id <계정>`(기존 `-i` 도 됨). 비밀번호는 `VC_PASSWORD` → `../secret/` 암호 파일 → 입력. `../passwd_update.sh` 로 vCenter/ESXi 비밀번호를 등록·갱신(별도 키 파일 `secret/key`, `openssl enc -aes-256-cbc -md sha256 -salt -a` — OS6 openssl 1.0.1e ↔ OS8 1.1.1k 양방향으로 풀리는 것 확인). 키와 함께 `secret/` 을 복사하면 다른 서버에서도 쓴다.
+- **기존 vm-param-check 파일 연동**: SPEC_DIR 은 `-s` → `vm-param-check/SPEC_DIR`(있으면) → `../SPEC_DIR` 순(vm_setting_check_insert.sh 와 같은 순서). affinity 줄이 없는 예전 스펙이면 "지금 ev 별 affinity 를 골라 이 스펙에 추가할까요?" — y 면 골라서 스펙 파일에 추가.
+- **OS6**: 실행파일이 없을 때 도구별 setup.sh 대신 V2 의 `setup.sh <이름>` 을 부른다(OS6 면 `bin_os6/` 에서 설치).
+- **버그 수정**:
+  - `run()` 실패 메시지의 종료코드가 항상 0 으로 찍히던 것(이번 변경 중 생긴 것, 시험에서 발견).
+  - `vm_create`: 여유공간 -1 을 "데이터스토어를 못 찾음" 표시로 겸해 써서, 여유공간이 -1 보다 작게 보고되면(vcsim 과할당) **만들 VM 이 없는 재실행도** 모든 호스트가 "데이터스토어 정보를 읽지 못했습니다"로 실패했다 → 찾았는지를 따로 기록. 같은 코드의 `.claude/VM/VM_setup/vm_create-source`, `.claude/VM/vm-setting-go-lang/main_vm_create.go` 에도 적용.
+- **영향 범위**: `vm_setup.sh`, `vm_create-source/main.go`, `../setup.sh`, `../build_os6.sh`(새), `../bin_os6/`(새), `../passwd_update.sh`·`../secret_lib.sh`(새), `../.gitignore`, `vm-param-check/main.go`(`-specFolder`), `vm-param-check/vm_setting_check_insert.sh`, 검증 환경(`검증/saccae`, `검증/cmd/vcsimenv` `-username/-password/-noDsHosts`)
+- **검증**: `vmsetup_test.sh` 48/48(새 V12~V17: user 메뉴, CAE 번호 무시 매칭·변경·주석처리로 끄기, affinity 출력·생성 후 체크, SPEC_DIR 연동, affinity 추가, `-id`+암호 파일/틀린 비밀번호), `scenarios.sh` 39/39, `go test` 통과. saccae 환경(vcsim): ev99 BM 5대 495대 생성 43초, 실패 케이스 11개(`실패테스트사용법.txt`), 회사 이전 모의(V2 + 예전 vcenter.txt·SPEC_DIR 복원 → affinity 추가 → 생성·체크). CentOS 6.10 컨테이너(bash 4.1.2, openssl 1.0.1e)에서 `setup.sh` 자동 OS6 설치 → 암호 파일 → VM 240대 생성·체크까지 성공(컨테이너라 커널은 4.18 — 실제 2.6.32 커널에서는 돌려보지 못함).
+
 ## 2026-09-23 — 호스트당 VM 1~99대 (ev01~ev99)
 
 - **상한 10 → 99 (`vm_create`, `affinity_setting`, `lpage_setting`, `tag_setting`, `vm_setup.sh`, vm-param-check)**: 방식은 그대로이고 개수만 늘었다. `-vmCount`/`-vm_cnt` 1~99, `-ev01Cpu`~`-ev99Share`, `-affinityFile01`~`99`, `-ev01Cores`~`-ev99Numa`. ev01 필수·연속 규칙·값 없는 ev 제외·affinity 파일 필수(같은 파일 공유 가능)도 그대로다.

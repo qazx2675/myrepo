@@ -8,9 +8,26 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# ===== 환경 설정 (직접 채우세요) =====
-VC_USER='administrator@vsphere.local'
-VC_PASS='...'
+# ===== 환경 설정 =====
+# 계정: 기본 lscsystems@vsphere.local, 다른 계정은 -id <계정> (또는 환경변수 VC_USER)
+# 비밀번호: 환경변수 VC_PASS → V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력
+VC_USER="${VC_USER:-lscsystems@vsphere.local}"
+VC_PASS="${VC_PASS:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -id) shift; VC_USER="${1:-}" ;;
+    -id=*) VC_USER="${1#-id=}" ;;
+    *) echo "알 수 없는 옵션: $1 (사용법: $0 [-id <계정>])" >&2; exit 2 ;;
+  esac
+  shift
+done
+if [ -z "$VC_PASS" ] && [ -f ../../secret_lib.sh ]; then
+  . ../../secret_lib.sh
+  VC_PASS="$(secret_get vcenter "$VC_USER")" && [ -n "$VC_PASS" ] && echo "$VC_USER 비밀번호: 암호 파일에서 읽었습니다" || VC_PASS=""
+fi
+if [ -z "$VC_PASS" ]; then
+  read -r -s -p "$VC_USER 비밀번호: " VC_PASS; echo
+fi
 VCENTER_LIST='vcenter.txt'
 SPEC_ROOT='./SPEC_DIR'
 # V2 배치(/home/SPEC_DIR, /home/vm-param-check-usability-improvement/vm-param-check): 이 폴더 안에 SPEC_DIR 이

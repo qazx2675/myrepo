@@ -21,7 +21,7 @@ bash ../setup.sh                          # V2 루트의 전체 빌드 스크립
 
 요구사항: Go 1.26.5 이상, Linux(Rocky Linux 8에서 검증).
 
-서버 배치: `/home/SPEC_DIR`, `/home/VMsetup`, `/home/vm-param-check-usability-improvement`, `/home/govendor`가 나란히 있어야 합니다(V2 폴더 내용을 그대로 `/home`에 복사).
+서버 배치: V2 폴더를 통째로 둡니다(예: `/home/V2`). `vm_setup.sh`는 폴더 안의 상대 위치(`../SPEC_DIR`, `../setup.sh`, `../secret_lib.sh`, `../vm-param-check-usability-improvement`)로 나머지를 찾습니다. OS6 서버에서는 `bash ../setup.sh`가 빌드 대신 `../bin_os6/` 실행파일을 설치합니다.
 
 ## 2. 사용 방법
 
@@ -44,23 +44,29 @@ bash vswitch_pgname.sh ../SPEC_DIR/vswitch_<user>.txt   # 형식이 아닌 줄�
 ```
 
 ```bash
-export VC_PASSWORD='...'                  # 없으면 실행 중에 물어봄
-./vm_setup.sh -u hong                     # vCenter는 vcenter.txt 목록에서 번호로 선택 (Enter = hong의 이전 실행 vCenter)
-./vm_setup.sh -u hong -v 192.168.0.50     # vCenter를 직접 지정. -n을 붙이면 vCenter 변경 없이 계획까지만 확인
+../passwd_update.sh                       # 처음 한 번: vCenter 비밀번호를 암호 파일로 등록 (계정 lscsystems@vsphere.local)
+./vm_setup.sh                             # user 를 번호로 선택 (0) list = 각 user 의 BM 목록), vCenter 도 번호로 선택
+./vm_setup.sh -u hong                     # user 지정 (Enter = hong 의 이전 실행 vCenter)
+./vm_setup.sh -u hong -v 192.168.0.50     # vCenter 를 직접 지정. -n 을 붙이면 vCenter 변경 없이 계획까지만 확인
+./vm_setup.sh -u hong -id other@vsphere.local
 ```
 
-user별로 마지막에 실행한 vCenter를 `run_<user>/last_vcenter`에 기억해 두었다가, 다음 실행 때 `[INFO] hong 이전 실행 vCenter: ...`로 보여 주고 목록에도 표시합니다.
+비밀번호는 환경변수 `VC_PASSWORD` → `../secret/` 의 암호 파일(`../passwd_update.sh`) → 직접 입력 순으로 얻습니다.
+user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 기억해서, 다음 실행 때 `[INFO] hong 이전 실행 vCenter: ...`로 보여주고 목록에서 표시합니다.
+터미널에서는 색으로 구분해 보여줍니다(`NO_COLOR=1` 또는 `VMSETUP_COLOR=never` 로 끄고 `always` 로 강제).
 
 진행 순서:
 
-1. **스펙 할당** — 포트그룹 이름이 `<폴더명>-cae-a-b-c-d` 형식이면 그 폴더명으로 `SPEC_DIR` 스펙을 자동 매칭합니다(차수만 다른 폴더는 같은 스펙). BM→스펙 표를 보여 주고 `(y/n)`으로 확인합니다.
-   - `n`을 고르거나 자동으로 정하지 못한 BM은 **SPEC_DIR 목록에서 번호로 선택**합니다(Enter = 직전 선택).
-   - 목록에 없으면 `0`을 골라 **vim으로 새 스펙을 입력**합니다. 모든 항목이 `키=""` 상태로 열리고 설명은 주석으로 달려 있습니다. 저장하면 `SPEC_DIR/<folder>/`에 새 스펙 폴더가 생깁니다(`folder`가 규칙에 맞지 않거나 같은 스펙이 이미 있으면 오류를 안내하고 다시 편집). 이어서 **ev별 affinity**를 (1 직전 ev와 같은 파일 / 2 기존 파일 / 3 vim 입력) 중에서 고릅니다. ev01은 2·3만 고를 수 있고, ev02부터는 Enter가 1번입니다.
-   - **affinity는 ev마다 필수**입니다(자동 계산 기능은 삭제됨). 스펙에 `affinity-evNN`이 없는 ev가 있으면 그 스펙은 자동 할당하지 않고 이유를 알려 줍니다. 여러 ev가 같은 파일을 써도 됩니다(`affinity-ev02=affinity_ev01.txt`).
-2. **포트그룹 할당(네트워크 어댑터 1)** — BM에 포트그룹이 1개면 그 BM의 모든 VM에 붙이고, 여러 개면 스펙 폴더명과 이름이 맞는 것을 자동 선택합니다. VM→포트그룹 표를 `(y/n)`으로 확인하며, 자동으로 정하지 못한 VM이나 `n`을 고른 경우는 **번호로 선택**하고, 목록에 없으면 `0`을 골라 **vim**(`hostname=""`, `portgroup=""`)에서 지정합니다.
-3. **vCenter 선택**(`-v`가 없을 때) — `vcenter.txt` 목록에서 번호로 고릅니다. `0`은 직접 입력, Enter는 이 user의 이전 실행 vCenter입니다.
-4. **실행 계획 확인 후 실행**(한 번 더 y) — `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting` 순서로 실행합니다.
-   - 호스트를 찾지 못하거나 포트그룹/VM 생성에 실패하면 **그 단계에서 멈추고** `[완료]`를 출력하지 않습니다. 이미 있는 포트그룹/VM은 실패로 보지 않고 건너뛰므로, 원인을 고친 뒤 다시 실행하면 이어서 진행됩니다.
+1. **user 선택**(`-u`가 없을 때) — 이 폴더의 `<user>.txt` 를 번호로 보여준다. `0) list` 는 각 user 의 BM 목록과 포트그룹 파일 유무를 보여주고 다시 묻는다.
+2. **스펙 할당** — 포트그룹 이름이 `<폴더명>-cae-a-b-c-d` 형식이면 그 폴더명으로 `SPEC_DIR` 스펙을 자동 매칭한다. **CAE 번호는 빼고 비교**하므로 `SAC-CAE001`로 등록된 스펙을 `SAC-CAE100` 포트그룹으로 실행해도 같은 스펙을 쓴다. 따로 확인 표는 없고(VM 표의 스펙 열로 확인), 자동으로 못 정한 BM만 **SPEC_DIR 목록에서 번호 선택**(Enter = 직전 선택).
+   - 목록에 없으면 `0`을 골라 **vim으로 새 스펙 입력**. 모든 항목이 `키=""` 상태이고 설명은 주석이다. 저장하면 `SPEC_DIR/<folder>/`에 새 스펙 폴더가 생긴다(`folder`가 규칙에 안 맞거나 같은 스펙이 있으면 오류 안내 후 다시 편집). 이어서 **ev별 affinity**를 (1 직전 ev와 같은 파일 / 2 기존 파일 / 3 vim 입력) 중에서 고른다. ev01은 2·3만 가능하고, ev02부터는 Enter가 1번이다.
+   - **affinity는 ev마다 필수**입니다(자동 계산은 삭제). 스펙에 `affinity-evNN`이 없으면(예전 vm-param-check 스펙) "지금 ev 별 affinity 를 골라 이 스펙에 추가할까요?"라고 묻고, y 면 위와 같은 방법으로 골라 스펙 파일에 추가한다. n 이면 그 스펙은 쓰지 않고 이유를 알려준다. 여러 ev가 같은 파일을 써도 됩니다(`affinity-ev02=affinity_ev01.txt`).
+3. **포트그룹 할당(네트워크 어댑터 1)** — BM에 포트그룹이 1개면 그 BM의 모든 VM에, 여러 개면 스펙 폴더명과 이름이 맞는 것을 자동 선택. **VM → 스펙 / 포트그룹 표**를 `(y/n)`으로 확인, 자동으로 못 정한 VM/`n`이면 **번호 선택**, 목록에 없으면 `0`으로 **vim**(`hostname=""`, `portgroup=""`)에서 지정.
+4. **CAE 번호 변경**(숫자변경기능) — "CAE 번호를 바꾸시겠습니까? (y/N)". y 면 포트그룹 이름의 폴더별로 새 번호를 받아, 이번에 BM 에 만들 포트그룹과 VM 어댑터 1 의 포트그룹 이름에 반영한다(스펙은 그대로). 이 기능이 필요 없으면 `vm_setup.sh` 의 `# 숫자변경기능` 주석 아래 `ask_cae_number` 한 줄을 주석처리한다.
+5. **vCenter 선택**(`-v`가 없을 때) — `vcenter.txt` 목록에서 번호로 고른다. `0`은 직접 입력, Enter는 이 user의 이전 실행 vCenter.
+6. **실행 계획 확인 후 실행**(한 번 더 y) — 계획에는 스펙별 **affinity 설정값**도 나온다(내용이 같은 파일은 이름이 달라도 한 번만, 쓰는 ev 를 `[ev01~ev20]` 식으로). `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting`.
+   - 호스트를 못 찾거나 포트그룹/VM 생성에 실패하면 **그 단계에서 멈추고** `[완료]`를 출력하지 않습니다. 이미 있는 포트그룹/VM은 실패가 아니라 건너뜁니다 — 원인을 고친 뒤 다시 실행하면 이어서 진행됩니다.
+7. **스펙 체크** — 만든 VM 만, 실행한 스펙으로 `vm-param-check -specFolder` 를 돌려 `[일치]` / `[차이]`(항목별 개수)를 보여준다. 자세한 결과는 `run_<user>/check_<번호>.log`, `.csv`. 차이가 있어도 VM 은 이미 만들어졌으므로 중단하지 않고, 교정 명령(`-fix`)을 안내한다. 스펙에 ev01 `cores`/`numa` 가 없으면 vm-param-check 로 체크할 수 없어 건너뛴다.
 
 `tag_setting`(사용자 지정 특성)은 스펙에 값이 없어 `vm_setup.sh`에 포함하지 않았습니다. 필요하면 단독으로 실행하세요.
 
@@ -68,7 +74,7 @@ user별로 마지막에 실행한 vCenter를 `run_<user>/last_vcenter`에 기억
 
 도구별 옵션은 `*-source/README.md`(또는 `-h`)를 참고하세요. 공통 규칙은 다음과 같습니다.
 
-- 접속: `-vcTargetIP`, `-id`, 비밀번호는 환경변수 `VC_PASSWORD`
+- 접속: `-vcTargetIP`, `-id`(기본 `lscsystems@vsphere.local`), 비밀번호는 환경변수 `VC_PASSWORD` (암호 파일에서 꺼내 쓰려면 `export VC_PASSWORD="$(. ../secret_lib.sh; secret_get vcenter lscsystems@vsphere.local)"`)
 - 대상 호스트 목록: `-worklistFile`(실행 폴더 기준 상대경로)
 - **ev 규칙**: ev01 필수, ev 번호는 ev01부터 연속, **값이 없는 ev는 만들지 않음**
 
@@ -91,10 +97,10 @@ user별로 마지막에 실행한 vCenter를 `run_<user>/last_vcenter`에 기억
 
 | 옵션 | 설명 |
 |---|---|
-| `-u <user>` | (필수) 작업 이름 — `<user>.txt`, `SPEC_DIR/vswitch_<user>.txt`를 찾는 데 사용 |
-| `-v <ip>` | vCenter IP (환경변수 `VC_IP`도 가능). 없으면 `vcenter.txt` 목록에서 번호로 선택(Enter = 이전 실행) |
-| `-i <id>` | vCenter 계정 (기본 `administrator@vsphere.local`) |
-| `-s <dir>` | SPEC_DIR 경로 (기본 `../SPEC_DIR`) |
+| `-u <user>` | 작업 이름 — `<user>.txt`, `SPEC_DIR/vswitch_<user>.txt`. 없으면 번호로 선택 |
+| `-v <ip>` | vCenter 주소 (환경변수 `VC_IP`도 가능). 없으면 `vcenter.txt` 목록에서 번호 선택(Enter = 이전 실행) |
+| `-id <계정>` | vCenter 계정 (기본 `lscsystems@vsphere.local`, `-i` 도 같음). 비밀번호는 `VC_PASSWORD` → 암호 파일 → 입력 |
+| `-s <dir>` | SPEC_DIR 경로 (기본: `vm-param-check/SPEC_DIR` 가 있으면 그것, 없으면 `../SPEC_DIR`) |
 | `-w <vswitch>` | 포트그룹을 만들 가상 스위치 (기본 `vSwitch0`) |
 | `-c <n>` | vswitch/affinity/lpage 동시 처리 수 |
 | `-n` | 확인만 — 스펙·포트그룹 할당과 실행 계획까지 보여 주고 종료(vCenter 변경 없음) |
