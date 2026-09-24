@@ -2,7 +2,7 @@
 # install.sh — 192.168.0.58(록키)에 saccae 검증 환경을 만든다. root 로 실행, 여러 번 실행해도 된다.
 #   1) /etc/hosts 에 *.saccae.com 이름 등록 (hosts.saccae 블록)
 #   2) V2 브랜치를 $DEST(/home/saccae) 에 받아 오프라인 빌드 (이미 있으면 git pull)
-#   3) 검증용 SPEC_DIR 스펙 + BM 목록(saccae/vm06/vm08/vm20/vm99, fail_*) + vcenter.txt + 사용법 복사 (같은 이름 파일은 덮어씀)
+#   3) 검증용 SPEC_DIR 스펙 + BM 목록(saccae/lsh/ljh/dhk/vm99, fail_*) + vcenter.txt + 사용법 복사 (같은 이름 파일은 덮어씀)
 #   4) 가상 vCenter(vcsim) 빌드 후 (재)시작 — 호스트 hostname0000~0099.saccae.com, 계정 lscsystems@vsphere.local
 #   5) 가상 vCenter 비밀번호를 암호 파일로 등록(passwd_update.sh) — 이미 등록돼 있으면 그대로
 set -euo pipefail

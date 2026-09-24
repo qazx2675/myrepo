@@ -16,7 +16,7 @@ F1. vCenter 에 없는 BM 이 섞임 — 포트그룹 단계(vswitch_setting)에
 ./vm_setup.sh -u fail_nohost              # VM 표 y → CAE Enter → vCenter 1 → 실행 y
   기대: [에러] 호스트 'hostname0100' 를 vCenter 전체 인벤토리에서 찾을 수 없습니다.
         [오류] 실패: vswitch_setting (종료코드 1)  — VM 은 하나도 만들지 않음 (hostname0000 포트그룹만 생김)
-  복구: fail_nohost.txt 와 ../SPEC_DIR/vswitch_fail_nohost.txt 에서 hostname0100 줄을 지우고 다시 실행 → [완료]
+  복구: fail_nohost.txt 와 vswitch_fail_nohost.txt(같은 VMsetup 폴더) 에서 hostname0100 줄을 지우고 다시 실행 → [완료]
 
 
 F2. affinity 줄이 없는 스펙 (예전 vm-param-check 스펙) — 실행 전에 묻는다
@@ -38,7 +38,7 @@ F3. 값이 잘못된 스펙 (cpu 6 이 cores 4 로 안 나누어짐) — 자동 
 
 F4. 비밀번호가 틀림 — 로그인 실패로 첫 단계에서 중단
 ---------------------------------------------------------------------
-VC_PASSWORD=wrong ./vm_setup.sh -u vm06
+VC_PASSWORD=wrong ./vm_setup.sh -u lsh
   기대: vCenter 접속 실패: ServerFaultCode: Login failure
         [오류] 실패: vswitch_setting (종료코드 1)
   (암호 파일 쪽을 틀리게 하려면: /home/saccae/passwd_update.sh 로 다른 비밀번호 등록 → 실행 → 다시 Saccae1! 로 등록)
@@ -46,15 +46,15 @@ VC_PASSWORD=wrong ./vm_setup.sh -u vm06
 
 F5. vCenter 에 접속할 수 없음
 ---------------------------------------------------------------------
-./vm_setup.sh -u vm06 -v 192.168.0.58:8443      # VM 표 y → CAE Enter → 실행 y
+./vm_setup.sh -u lsh -v 192.168.0.58:8443      # VM 표 y → CAE Enter → 실행 y
   기대: vCenter 접속 실패: ... connect: connection refused
         [오류] 실패: vswitch_setting (종료코드 1)
-  (또는 /home/saccae/testenv/vcsim.sh stop 후 ./vm_setup.sh -u vm06)
+  (또는 /home/saccae/testenv/vcsim.sh stop 후 ./vm_setup.sh -u lsh)
 
 
 F6. 없는 가상 스위치 — 포트그룹 생성 실패
 ---------------------------------------------------------------------
-./vm_setup.sh -u vm06 -w vSwitch9
+./vm_setup.sh -u lsh -w vSwitch9
   기대: -> [hostname00xx] 실패: 포트그룹(...) 생성 에러: ServerFaultCode: NotFound  (40건)
         [에러] 실패 40건 ... / [오류] 실패: vswitch_setting (종료코드 1)
 
@@ -79,9 +79,9 @@ F8. affinity 파일 내용 오류 — VM 은 만들어지고 affinity 단계에�
 
 F9. 스펙과 다른 VM — 끝의 스펙 체크에서 [차이]
 ---------------------------------------------------------------------
-./vm_setup.sh -u vm06                                       # 먼저 정상 생성
+./vm_setup.sh -u lsh                                       # 먼저 정상 생성
 /home/saccae/testenv/fail_inject.sh mem hostname0000ev02 4096
-./vm_setup.sh -u vm06                                       # 재실행 (VM 표 y → CAE Enter → vCenter Enter(=이전) → 실행 y)
+./vm_setup.sh -u lsh                                       # 재실행 (VM 표 y → CAE Enter → vCenter Enter(=이전) → 실행 y)
   기대: 새로 생성할 VM 없음 → 스펙 체크
         [차이] 스펙 1 SAC-CAE101-VM06-HPC — VM 240대 중 ... FAIL ...
              1   [FAIL]        config.hardware.memoryMB (GB 환산)
@@ -90,7 +90,7 @@ F9. 스펙과 다른 VM — 끝의 스펙 체크에서 [차이]
 
 F10. 전원이 켜진 VM 이 있을 때 -fix — 전원 OFF 게이트에서 중단
 ---------------------------------------------------------------------
-/home/saccae/testenv/vcsim.sh restart && ./vm_setup.sh -u vm06
+/home/saccae/testenv/vcsim.sh restart && ./vm_setup.sh -u lsh
 /home/saccae/testenv/fail_inject.sh poweron hostname0000ev01
 cd /home/saccae/vm-param-check-usability-improvement/vm-param-check
 export VC_USER=lscsystems@vsphere.local VC_PASS="$(. /home/saccae/secret_lib.sh; secret_get vcenter lscsystems@vsphere.local)"

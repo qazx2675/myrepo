@@ -7,9 +7,9 @@ saccae 검증 환경 사용법 (192.168.0.58 에 root 로 접속해서 실행)
   - 실제 vCenter : vcenter.saccae.com (192.168.0.50)  / ESXi esxi01.saccae.com (192.168.0.59)
   - 코드         : /home/saccae  (V2 브랜치, 빌드 완료)
   - 스펙(SPEC_DIR): /home/saccae/SPEC_DIR
-      SAC-CAE101-VM06-HPC   : hostname0000~0039 (40대) x VM 6대  = 240대   (user vm06)
-      SAC-CAE102-VM08-GPU   : hostname0040~0069 (30대) x VM 8대  = 240대   (user vm08)
-      SAC-CAE103-VM20-BATCH : hostname0070~0094 (25대) x VM 20대 = 500대   (user vm20)
+      SAC-CAE101-VM06-HPC   : hostname0000~0039 (40대) x VM 6대  = 240대   (user lsh)
+      SAC-CAE102-VM08-GPU   : hostname0040~0069 (30대) x VM 8대  = 240대   (user ljh)
+      SAC-CAE103-VM20-BATCH : hostname0070~0094 (25대) x VM 20대 = 500대   (user dhk)
       SAC-CAE001-VM99-MAX   : hostname0095~0099 ( 5대) x VM 99대 = 495대   (user vm99, 포트그룹은 SAC-CAE100 — CAE 번호를 빼고 매칭)
       user saccae = BM 100대 전체 (VM 1475대)
   - fail_* user 와 SAC-CAE105~107 스펙은 실패 테스트용 (실패테스트사용법.txt)
@@ -37,18 +37,18 @@ getent hosts vcsim.saccae.com vcenter.saccae.com
 ---------------------------------------------------------------------
 cd /home/saccae/VMsetup
 
-# user 를 번호로 고르기 (0 = list: 각 user 의 BM 목록)
+# user 를 번호로 고르기 (0 = 직접 선택: user 이름 직접 입력, 1~3 = lsh/ljh/dhk)
 ./vm_setup.sh
 
 # user 지정 / 계획만 보기 (-n 은 vCenter 를 묻지 않는다)
-./vm_setup.sh -u vm20 -n
+./vm_setup.sh -u dhk -n
 
 # 실제 실행: VM 표 y → CAE 번호 변경 Enter(=아니오) → vCenter 번호 1 → 실행 확인 y
 #            두 번째부터는 vCenter 번호에서 Enter = 이 user 가 지난번에 쓴 vCenter
-./vm_setup.sh -u vm06
-./vm_setup.sh -u vm08
-./vm_setup.sh -u vm20
-./vm_setup.sh -u vm99          # ev01~ev99, BM 5대 x 99대
+./vm_setup.sh -u lsh
+./vm_setup.sh -u ljh
+./vm_setup.sh -u dhk
+./vm_setup.sh -u vm99          # ev01~ev99, BM 5대 x 99대 (번호 메뉴엔 없음 — -u 로 지정)
 
 # 100대 전체를 한 번에 (VM 1475대)
 ./vm_setup.sh -u saccae
@@ -57,19 +57,19 @@ cd /home/saccae/VMsetup
 ./vm_setup.sh -u vm99 -n
 
 # 계정 지정
-./vm_setup.sh -u vm20 -id lscsystems@vsphere.local
+./vm_setup.sh -u dhk -id lscsystems@vsphere.local
 
 # 같은 명령을 다시 실행하면 이미 있는 포트그룹/VM 은 건너뛰고 정상 종료한다
-./vm_setup.sh -u vm20
+./vm_setup.sh -u dhk
 
 # 색을 끄고 싶으면
-NO_COLOR=1 ./vm_setup.sh -u vm20 -n
+NO_COLOR=1 ./vm_setup.sh -u dhk -n
 
 실행이 끝나면 마지막에 "스펙 체크" 가 나온다 ([일치] / [차이] + 항목별 개수, 자세한 내용은 run_<user>/check_<번호>.log).
 가상 vCenter 에서는 아래 항목이 [차이] 로 나오는 것이 정상이다:
   cpuid.coresPerSocket / config.numaInfo.coresPerNumaNode 설정없음  : vcsim 이 채우지 않는 값 (실제 vCenter 에서는 채워짐)
-  numa.vcpu.preferHT FAIL (vm06)                                     : 스펙의 preferHT 는 vm_setup.sh 가 설정하지 않는다 → -fix
-  sched.mem.lpage.enable1GPage 설정없음 (vm08 ev06~ev08)             : 스펙에서 cores 를 비워 lpage 단계를 건너뜀 → -fix
+  numa.vcpu.preferHT FAIL (lsh)                                      : 스펙의 preferHT 는 vm_setup.sh 가 설정하지 않는다 → -fix
+  sched.mem.lpage.enable1GPage 설정없음 (ljh ev06~ev08)              : 스펙에서 cores 를 비워 lpage 단계를 건너뜀 → -fix
 
 
 4. 만든 VM 확인 (govc)
@@ -96,7 +96,7 @@ export VC_USER=lscsystems@vsphere.local VC_PASS="$(. /home/saccae/secret_lib.sh;
 ./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -specRoot /home/saccae/SPEC_DIR -yes -onlyFail -out /tmp/check.csv -fix
 
 # 한 스펙으로 특정 VM 만 (vm_setup.sh 가 끝에 하는 체크와 같은 방식)
-./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -f /home/saccae/VMsetup/run_vm20/check_targets_1.txt \
+./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -f /home/saccae/VMsetup/run_dhk/check_targets_1.txt \
   -specRoot /home/saccae/SPEC_DIR -specFolder SAC-CAE103-VM20-BATCH -yes -onlyFail -out /tmp/check.csv
 
 
