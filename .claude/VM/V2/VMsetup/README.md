@@ -51,7 +51,7 @@ bash vswitch_pgname.sh vswitch_<user>.txt   # 형식이 아닌 줄만 폴더명�
 ./vm_setup.sh -u hong -id other@vsphere.local
 ```
 
-비밀번호는 환경변수 `VC_PASSWORD` → `../secret/` 의 암호 파일(`../passwd_update.sh`) → 직접 입력 순으로 얻습니다.
+비밀번호는 `../secret/` 의 암호 파일(`../passwd_update.sh`) → 직접 입력 순으로 얻습니다. 실행할 때마다 셸의 `VC_PASSWORD`/`VC_PASS`는 지우고 시작하므로, 이전에 다른 값으로 export 해 둔 게 남아 있어도 그걸 쓰지 않습니다(암호 파일을 건너뛰고 로그인 실패가 나던 문제 방지).
 user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 기억해서, 다음 실행 때 `[INFO] hong 이전 실행 vCenter: ...`로 보여주고 목록에서 표시합니다.
 터미널에서는 색으로 구분해 보여줍니다(`NO_COLOR=1` 또는 `VMSETUP_COLOR=never` 로 끄고 `always` 로 강제).
 

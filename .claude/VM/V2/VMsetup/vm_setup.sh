@@ -13,8 +13,13 @@
 # 실제 vCenter를 변경하는 단계(5) 직전에 요약을 보여주고 한 번 더 확인받는다. -n 이면 여기서 멈춘다.
 # 도구가 실패하면(종료코드 0 이 아니면) 그 자리에서 멈춘다. 이미 있는 포트그룹/VM 은 실패가 아니다.
 # 스펙 해석은 vm-param-check -specExport 가 맡는다(체크와 같은 파서 — 파서를 두 벌 만들지 않음).
-# 비밀번호: 환경변수 VC_PASSWORD → V2/secret 의 암호 파일(passwd_update.sh 로 등록) → 직접 입력 순.
+# 비밀번호: 항상 V2/secret 의 암호 파일(passwd_update.sh 로 등록) → 직접 입력 순으로 받는다.
+# (예전엔 환경변수 VC_PASSWORD 를 먼저 봤는데, 이전 실행에서 잘못된 값으로 export 해 둔 게
+#  셸에 남아 있으면 암호 파일을 건너뛰고 그 값으로 로그인 실패가 나는 사고가 반복돼서,
+#  실행할 때마다 지우고 시작한다.)
 set -o pipefail
+
+unset VC_PASSWORD VC_PASS VCENTER_PASS
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 USER_TAG=""; VC_IP="${VC_IP:-}"; VC_ID="${VC_ID:-lscsystems@vsphere.local}"
@@ -32,7 +37,8 @@ usage() {
   -v <vCenter>  vCenter 주소 (환경변수 VC_IP 도 가능). 없으면 vcenter.txt 목록에서 번호로 고른다
                 (V2 폴더의 vcenter.txt, 없으면 vm-param-check 폴더의 것. Enter = 이 user 의 이전 실행 vCenter)
   -id <계정>    vCenter 계정 (기본: lscsystems@vsphere.local, -i 도 같음)
-                비밀번호: 환경변수 VC_PASSWORD → ../secret 의 암호 파일(../passwd_update.sh 로 등록) → 직접 입력
+                비밀번호: ../secret 의 암호 파일(../passwd_update.sh 로 등록) → 직접 입력 (실행할 때마다
+                셸의 VC_PASSWORD/VC_PASS 는 지우고 시작하므로 남아있는 값을 쓰지 않는다)
   -s <dir>      SPEC_DIR 경로 (기본: vm-param-check 폴더에 SPEC_DIR 이 있으면 그것, 없으면 ${HERE}/../SPEC_DIR)
   -w <vswitch>  포트그룹을 만들 가상 스위치 (기본: vswitch_setting 기본값 vSwitch0)
   -c <n>        vswitch/affinity/lpage 동시 처리 수 (기본: 각 도구 기본값)
