@@ -9,8 +9,9 @@
 | `govendor/govmomi-0.55.1-standard/` | VMsetup 도구들이 공유하는 오프라인 의존성 (각 `setup.sh`가 `vendor`로 링크) |
 | `govendor/govmomi-0.39.0/` | vm-param-check 의존성 |
 | `vcenter.txt` (git 제외, 예시 `vcenter.txt.example`) | vCenter 목록 — `vm_setup.sh`가 번호로 고르게 보여준다(없으면 vm-param-check 폴더의 `vcenter.txt`) |
-| `SPEC_DIR/` | **공유 스펙** — `vswitch_<user>.txt`(BM 포트그룹 VLAN) + `<CAE폴더명>/<CAE폴더명>_spec.txt`(+affinity 파일). git에는 예시만 |
+| `SPEC_DIR/` | **공유 스펙** — `<CAE폴더명>/<CAE폴더명>_spec.txt`(+affinity 파일). git에는 예시만 |
 | `VMsetup/vm_setup.sh` | 전체 실행 스크립트: user 선택 → 스펙·포트그룹 자동 할당 → VM 표 y/n → 수동 선택 → vim → CAE 번호 변경(`ask_cae_number`) → vswitch/vm_create/affinity/lpage → vm-param-check `-specFolder` 체크 |
+| `VMsetup/vswitch_<user>.txt` | BM 포트그룹 VLAN (`vm_setup.sh`와 같은 폴더). git에는 예시만 |
 | `VMsetup/vswitch_pgname.sh` | `vswitch_<user>.txt`의 포트그룹 컬럼이 IP면 폴더명을 물어봐 `<폴더명>-cae-a-b-c-0`으로 변환(`/24` 가정). `vm_setup.sh` 실행 전 별도 단계 |
 | `VMsetup/vm_create-source/main.go` | VM 생성(ev01~ev99, 데이터센터 여러 개, `-mapFile` VM 키) |
 | `VMsetup/affinity_setting-source/main.go` | affinity 일괄 적용(`-vm_cnt` 1~99, ev마다 파일 필수 — 자동 계산 없음) |

@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-09-24 — user 메뉴 고정 목록·직접 입력, vswitch_<user>.txt 위치를 VMsetup 으로 이동
+
+- **user 선택(`vm_setup.sh`)**: `0) list`(각 user BM 목록 미리보기) 대신 `0) 직접 선택`(user 이름을 그 자리에서 입력)으로 바뀌었다. 번호 목록(`1~3`)은 이 폴더의 `*.txt` 를 훑는 대신 자주 쓰는 user(`lsh`/`ljh`/`dhk`)를 고정으로 보여준다. `-u <user>` 로 목록에 없는 user(예: 실패 테스트용 `fail_*`)를 쓰는 것은 그대로 된다.
+- **`vswitch_<user>.txt` 위치 변경**: `SPEC_DIR/vswitch_<user>.txt` → `VMsetup/vswitch_<user>.txt`(`vm_setup.sh`, `<user>.txt` 와 같은 폴더). `SPEC_DIR` 은 이제 스펙 폴더(`<CAE폴더명>/`)만 담당한다. `vswitch_pgname.sh` 로 IP→포트그룹명 변환할 때도 같은 폴더의 파일을 가리키면 된다.
+- **영향 범위**: `VMsetup/vm_setup.sh`(`VSW_FILE` 경로, `select_user()`), `VMsetup/README.md`, `README.md`, `ARCHITECTURE.md`, `PR_CHECKLIST.md`, `VMsetup/user.txt.example`, `SPEC_DIR/vswitch_user.txt.example` → `VMsetup/vswitch_user.txt.example` (파일 이동).
+- **검증**: `.58` 검증 환경(vcsim)에서 `bash vm_setup.sh` → 번호 선택 → `VMsetup/vswitch_<user>.txt` 를 읽어 포트그룹 생성부터 VM 생성·affinity·lpage 까지 정상 완료 확인(495대, 성공 495/실패 0).
+
 ## 2026-09-24 — user 메뉴, CAE 번호 변경, 색상, 생성 후 스펙 체크, 비밀번호 암호화, OS6 실행파일
 
 - **user 선택(`vm_setup.sh`)**: `-u` 는 그대로. 없으면 이 폴더의 `<user>.txt` 를 번호로 보여준다(`0) list` = 각 user 의 BM 목록·포트그룹 파일 유무).

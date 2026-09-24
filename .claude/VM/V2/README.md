@@ -55,7 +55,7 @@ RHEL 6 커널(2.6.32)은 Go 1.21+ 실행파일을 못 띄워서, govmomi vendor 
 예전 vm-param-check 배포 폴더의 `vcenter.txt`, `SPEC_DIR/` 를 `V2/vm-param-check-usability-improvement/vm-param-check/` 에 그대로 복원하면
 체크(vm-param-check)는 바로 되고, VM 생성(vm_setup.sh)도 그 두 파일을 찾아 쓴다. 추가로 필요한 것:
 
-1. `VMsetup/<user>.txt` (BM 목록), `SPEC_DIR/vswitch_<user>.txt` (BM 포트그룹 VLAN) — V2 에서 새로 생긴 파일
+1. `VMsetup/<user>.txt` (BM 목록), `VMsetup/vswitch_<user>.txt` (BM 포트그룹 VLAN) — V2 에서 새로 생긴 파일
 2. `./passwd_update.sh` 로 비밀번호 등록 (안 하면 실행할 때 물어본다)
 3. 예전 스펙에는 `affinity-evNN` 줄이 없다(ev01 affinity 는 자동 계산이었음) — vm_setup.sh 가 처음 쓸 때 "지금 ev 별 affinity 를 골라
    이 스펙에 추가할까요?" 라고 묻고, 고른 파일을 스펙에 적어 둔다 (한 번만)
@@ -68,7 +68,7 @@ SPEC_DIR 을 찾는 순서: `-s` → `vm-param-check/SPEC_DIR` (있으면) → `
 
 | 파일 | 내용 |
 |---|---|
-| `SPEC_DIR/vswitch_${user}.txt` | `BM 포트그룹 VLAN` (BM당 여러 줄 가능, 예시: `SPEC_DIR/vswitch_user.txt.example`) |
+| `VMsetup/vswitch_${user}.txt` | `BM 포트그룹 VLAN` (BM당 여러 줄 가능, 예시: `VMsetup/vswitch_user.txt.example`) |
 | `SPEC_DIR/<CAE폴더명>/<CAE폴더명>_spec.txt` | ev01~ev99 스펙 (예시: `SPEC_DIR/TST-CAE001-SAMP48c-QRST/`). CAE 번호는 빼고 매칭한다(`SAC-CAE001` 스펙을 `SAC-CAE100` 포트그룹으로 실행해도 같은 스펙) |
 | `VMsetup/${user}.txt` | BM 목록 (한 줄에 하나). `vm_setup.sh` 를 `-u` 없이 실행하면 이 파일들을 번호로 보여준다 |
 
