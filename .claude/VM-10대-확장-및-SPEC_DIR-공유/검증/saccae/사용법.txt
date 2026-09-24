@@ -108,5 +108,6 @@ cd <V2 폴더> && bash setup.sh        # OS6 를 알아서 판단해 bin_os6/*.g
 
 7. 환경을 새로 설치 / 갱신 (코드가 바뀌었을 때)
 ---------------------------------------------------------------------
-cd /root/myrepo && git pull
+# 저장소(qazx2675/myrepo, master)를 받아 둔 폴더에서 (install.sh 가 V2 브랜치를 /home/saccae 로 갱신한다)
+git pull
 bash ".claude/VM-10대-확장-및-SPEC_DIR-공유/검증/saccae/install.sh"
