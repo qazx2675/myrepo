@@ -9,28 +9,31 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# ===== 환경 설정 =====
-# 계정: 기본 lscsystems@vsphere.local, 다른 계정은 -id <계정> (또는 환경변수 VC_USER)
-# 비밀번호: 환경변수 VC_PASS → V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력
-VC_USER="${VC_USER:-lscsystems@vsphere.local}"
-VC_PASS="${VC_PASS:-}"
+# ===== 환경 설정 (vm_setup.sh 와 동일한 -id / 암호 파일 방식) =====
+# 계정: 기본 lscsystems@vsphere.local, 다른 계정은 -id <계정> (또는 환경변수 VC_ID)
+# 비밀번호: 환경변수 VC_PASSWORD → V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력
+VC_ID="${VC_ID:-lscsystems@vsphere.local}"
 user=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    -id) shift; VC_USER="${1:-}" ;;
-    -id=*) VC_USER="${1#-id=}" ;;
+    -id) shift; VC_ID="${1:-}" ;;
+    -id=*) VC_ID="${1#-id=}" ;;
     -u) shift; user="${1:-}" ;;
     -u=*) user="${1#-u=}" ;;
     *) echo "알 수 없는 옵션: $1 (사용법: $0 [-u <user>] [-id <계정>])" >&2; exit 2 ;;
   esac
   shift
 done
-if [ -z "$VC_PASS" ] && [ -f ../../secret_lib.sh ]; then
+if [ -z "${VC_PASSWORD:-}" ] && [ -f ../../secret_lib.sh ]; then
   . ../../secret_lib.sh
-  VC_PASS="$(secret_get vcenter "$VC_USER")" && [ -n "$VC_PASS" ] && echo "$VC_USER 비밀번호: 암호 파일에서 읽었습니다" || VC_PASS=""
+  if VC_PASSWORD="$(secret_get vcenter "$VC_ID")" && [ -n "$VC_PASSWORD" ]; then
+    echo "$VC_ID 비밀번호: 암호 파일에서 읽었습니다 ($(secret_file vcenter "$VC_ID"))"
+  else
+    VC_PASSWORD=""
+  fi
 fi
-if [ -z "$VC_PASS" ]; then
-  read -r -s -p "$VC_USER 비밀번호: " VC_PASS; echo
+if [ -z "${VC_PASSWORD:-}" ]; then
+  read -r -s -p "$VC_ID 비밀번호: " VC_PASSWORD; echo
 fi
 VCENTER_LIST='vcenter.txt'
 SPEC_ROOT='./SPEC_DIR'
@@ -72,7 +75,8 @@ if [ ! -f "$target_file" ]; then
   exit 1
 fi
 
-export VC_USER VC_PASS
+# vm-param-check 바이너리는 VC_USER/VC_PASS 환경변수를 읽는다 — 위에서 받은 VC_ID/VC_PASSWORD 를 그대로 넘긴다.
+export VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD"
 
 fix_args=()
 read -r -p "체크 후 실제로 설정을 변경(-fix)하시겠습니까? (y/N): " do_fix
