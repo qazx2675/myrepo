@@ -1,0 +1,13 @@
+# SAC-CAE105-NOAFF-TEST — 실패 테스트용: affinity-evNN 줄이 없는 스펙 (예전 vm-param-check 스펙처럼)
+ht=on
+cpu=2
+mem=2
+disk=20
+shares-ev01=normal
+cores=2
+numa=2
+cpu-ev02=2
+mem-ev02=2
+disk-ev02=20
+shares-ev02=normal
+cores-ev02=2

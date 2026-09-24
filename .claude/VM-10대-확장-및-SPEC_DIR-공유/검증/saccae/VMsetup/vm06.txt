@@ -1,4 +1,4 @@
-# 6대 스펙 BM 40대 (hostname0000~0039) — saccae 검증 환경용 BM 목록 (vm_setup.sh -u vm06). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
+# 6대 스펙 BM 40대 (hostname0000~0039) — saccae 검증 환경 BM 목록 (vm_setup.sh -u vm06). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
 hostname0000
 hostname0001
 hostname0002

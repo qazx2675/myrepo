@@ -1,0 +1,2 @@
+# vswitch_fail_badaff.txt — 실패 테스트: affinity 파일 내용 오류 — VM 은 만들어지고 affinity 단계에서 멈춤
+hostname0004 SAC-CAE107-BADAFF-TEST-cae-10-107-1-0 107

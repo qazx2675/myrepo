@@ -1,0 +1,6 @@
+# 99대 스펙 BM 5대 (hostname0095~0099) — 스펙 폴더는 SAC-CAE001, 포트그룹은 SAC-CAE100 (CAE 번호를 빼고 매칭) — saccae 검증 환경 BM 목록 (vm_setup.sh -u vm99). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
+hostname0095
+hostname0096
+hostname0097
+hostname0098
+hostname0099

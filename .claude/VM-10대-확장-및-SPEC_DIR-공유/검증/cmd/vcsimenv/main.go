@@ -29,8 +29,11 @@ func main() {
 	host := flag.Int("host", 1, "데이터센터당 독립 호스트 수")
 	machine := flag.Int("machine", 0, "호스트(리소스풀)당 기본 VM 수")
 	fqdn := flag.String("fqdnHosts", "", "쉼표로 구분한 이름의 독립 호스트를 첫 데이터센터에 추가 (예: bm1.example.com,bm2.example.com)")
+	noDS := flag.String("noDsHosts", "", "-fqdnHosts 중 데이터스토어를 붙이지 않을 호스트 (쉼표 구분, 실패 테스트용)")
 	nest := flag.Int("nest", 0, "호스트/클러스터와 VM을 이 깊이만큼 중첩 폴더(N1/N2/...) 안으로 옮김")
 	addr := flag.String("addr", "127.0.0.1:0", "listen 주소")
+	username := flag.String("username", "", "이 계정만 로그인 허용 (-password 와 함께. 비우면 아무 계정/비밀번호나 통과)")
+	password := flag.String("password", "", "-username 의 비밀번호")
 	staticPower := flag.Bool("staticPower", false, "모든 호스트의 전원 정책을 High Performance(static)로 둔다 (vcsim 기본은 Balanced(dynamic))")
 	flag.Parse()
 
@@ -46,6 +49,10 @@ func main() {
 		log.Fatal(err)
 	}
 	m.Service.Listen = &url.URL{Host: *addr}
+	if *username != "" {
+		// 서버 URL 에 계정을 넣으면 vcsim 이 그 계정/비밀번호만 받는다(틀리면 InvalidLogin)
+		m.Service.Listen.User = url.UserPassword(*username, *password)
+	}
 	m.Service.TLS = new(tls.Config)
 	s := m.Service.NewServer()
 	defer s.Close()
@@ -74,6 +81,9 @@ func main() {
 			}
 			if err != nil {
 				log.Fatalf("호스트 추가 실패 %s: %v", name, err)
+			}
+			if strings.Contains(","+*noDS+",", ","+name+",") {
+				continue // 실패 테스트용: 데이터스토어 없는 호스트
 			}
 			// 추가한 호스트에는 데이터스토어가 없어 vm_create 가 건너뛰므로 로컬 데이터스토어를 붙인다.
 			h, err := f.HostSystem(ctx, name)

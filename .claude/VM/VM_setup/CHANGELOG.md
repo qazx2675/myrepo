@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-09-24 — `vm_create-source`: 데이터스토어 선택 판정 수정 (V2 와 같은 수정)
+
+- **버그**: 여유공간이 가장 큰 데이터스토어를 고를 때 `-1` 을 "못 찾음" 표시로 겸해 써서, 여유공간이 -1 보다 작게 보고되면(과할당, vcsim 에서 재현) 데이터스토어를 찾았는데도 그 호스트를 건너뛰었다. 찾았는지를 따로 기록하도록 고쳤다.
+- **영향 범위**: `vm_create-source/main.go` 데이터스토어 선택 부분만. (같은 코드: `.claude/VM/V2/VMsetup/vm_create-source`, `.claude/VM/vm-setting-go-lang/main_vm_create.go`)
+- **검증**: `go vet`/`go build` 통과. V2 쪽에서 vcsim 재실행 시나리오로 확인.
+
 ## 2026-09-02 — `vswitch_setting-source` 코드 교체 (HostGroup 매핑 → vSwitch 포트그룹 생성)
 
 - 메일(`go lang 모음 V2`)의 `main_vs.txt`로 `main.go` 전체를 교체했다. 기존 코드는 폴더명과 달리 클러스터 HostGroup(DRS 그룹)을 매핑하는 도구였는데, 새 코드는 폴더명 그대로 **`worklist.txt`의 (호스트, 포트그룹, VLAN)을 읽어 각 호스트 `vSwitch0`에 포트그룹을 일괄 생성**한다(`HostNetworkSystem.AddPortGroup`).

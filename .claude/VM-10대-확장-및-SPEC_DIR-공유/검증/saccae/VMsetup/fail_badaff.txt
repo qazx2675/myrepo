@@ -1,0 +1,2 @@
+# fail_badaff — 실패 테스트: affinity 파일 내용 오류 — VM 은 만들어지고 affinity 단계에서 멈춤
+hostname0004

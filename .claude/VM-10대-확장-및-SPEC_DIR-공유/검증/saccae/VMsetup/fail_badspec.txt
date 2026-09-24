@@ -1,0 +1,2 @@
+# fail_badspec — 실패 테스트: 값이 잘못된 스펙
+hostname0002

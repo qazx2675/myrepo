@@ -1,0 +1,15 @@
+# SAC-CAE106-BADSPEC-TEST — 실패 테스트용: cpu(6)가 cores(4)로 나누어떨어지지 않는 스펙
+ht=on
+cpu=6
+mem=2
+disk=20
+shares-ev01=normal
+cores=4
+numa=2
+cpu-ev02=6
+mem-ev02=2
+disk-ev02=20
+shares-ev02=normal
+cores-ev02=4
+affinity-ev01=affinity_ev01.txt
+affinity-ev02=affinity_ev01.txt

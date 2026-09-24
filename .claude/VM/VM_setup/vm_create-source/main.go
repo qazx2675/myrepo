@@ -421,18 +421,20 @@ func main() {
 			// 데이터스토어/리소스풀 모두 위에서 배치 조회해둔 맵을 참조하므로
 			// 이 goroutine 안에서는 vCenter 왕복이 발생하지 않는다.
 			var bestDs mo.Datastore
-			maxFreeSpace := int64(-1)
+			// 여유공간이 가장 큰 데이터스토어. 예전에는 -1 을 "못 찾음" 표시로 겸해 써서, 여유공간이
+			// -1 보다 작게 보고되면(vcsim 처럼 과할당된 경우) 찾았는데도 못 찾은 것으로 처리했다.
+			haveDs := false
 			for _, dsRef := range host.Datastore {
 				d, found := dsByRef[dsRef]
 				if !found {
 					continue
 				}
-				if d.Summary.FreeSpace > maxFreeSpace {
-					maxFreeSpace = d.Summary.FreeSpace
+				if !haveDs || d.Summary.FreeSpace > bestDs.Summary.FreeSpace {
 					bestDs = d
+					haveDs = true
 				}
 			}
-			if maxFreeSpace == -1 {
+			if !haveDs {
 				preps[idx] = p
 				return
 			}

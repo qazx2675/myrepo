@@ -1,0 +1,2 @@
+# fail_nods — 실패 테스트: 데이터스토어가 없는 BM (가상 vCenter 의 실패 전용 호스트 hostname9000)
+hostname9000

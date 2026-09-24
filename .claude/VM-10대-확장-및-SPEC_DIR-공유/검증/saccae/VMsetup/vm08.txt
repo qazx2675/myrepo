@@ -1,4 +1,4 @@
-# 8대 스펙 BM 30대 (hostname0040~0069) — saccae 검증 환경용 BM 목록 (vm_setup.sh -u vm08). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
+# 8대 스펙 BM 30대 (hostname0040~0069) — saccae 검증 환경 BM 목록 (vm_setup.sh -u vm08). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
 hostname0040
 hostname0041
 hostname0042

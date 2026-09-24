@@ -1,0 +1,3 @@
+# vswitch_fail_nohost.txt — 실패 테스트: vCenter 에 없는 BM(hostname0100) 이 섞임
+hostname0000 SAC-CAE101-VM06-HPC-cae-10-101-1-0 101
+hostname0100 SAC-CAE101-VM06-HPC-cae-10-101-1-0 101

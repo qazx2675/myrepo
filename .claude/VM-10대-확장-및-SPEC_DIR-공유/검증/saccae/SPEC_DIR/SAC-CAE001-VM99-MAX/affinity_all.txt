@@ -1,0 +1,1 @@
+sched.vcpu0.affinity=0

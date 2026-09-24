@@ -1,4 +1,4 @@
-# 20대 스펙 BM 30대 (hostname0070~0099) — saccae 검증 환경용 BM 목록 (vm_setup.sh -u vm20). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
+# 20대 스펙 BM 25대 (hostname0070~0094) — saccae 검증 환경 BM 목록 (vm_setup.sh -u vm20). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
 hostname0070
 hostname0071
 hostname0072
@@ -24,8 +24,3 @@ hostname0091
 hostname0092
 hostname0093
 hostname0094
-hostname0095
-hostname0096
-hostname0097
-hostname0098
-hostname0099

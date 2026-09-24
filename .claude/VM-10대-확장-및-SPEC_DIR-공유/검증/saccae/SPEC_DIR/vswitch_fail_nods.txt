@@ -1,0 +1,2 @@
+# vswitch_fail_nods.txt — 실패 테스트: 데이터스토어가 없는 BM
+hostname9000 SAC-CAE101-VM06-HPC-cae-10-101-1-0 101

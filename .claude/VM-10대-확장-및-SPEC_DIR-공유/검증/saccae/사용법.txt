@@ -2,15 +2,18 @@ saccae 검증 환경 사용법 (192.168.0.58 에 root 로 접속해서 실행)
 =====================================================================
 
 환경 요약
-  - 가상 vCenter : vcsim.saccae.com  (BM hostname0000 ~ hostname0099.saccae.com 100대, 계정/비밀번호는 아무 값이나 통과)
+  - 가상 vCenter : vcsim.saccae.com  (BM hostname0000 ~ hostname0099.saccae.com 100대)
+                   계정 lscsystems@vsphere.local / 비밀번호 Saccae1!  (암호 파일로 이미 등록돼 있음 — 환경변수 필요 없음)
   - 실제 vCenter : vcenter.saccae.com (192.168.0.50)  / ESXi esxi01.saccae.com (192.168.0.59)
   - 코드         : /home/saccae  (V2 브랜치, 빌드 완료)
   - 스펙(SPEC_DIR): /home/saccae/SPEC_DIR
-      SAC-CAE101-VM06-HPC   : hostname0000~0039 (40대) x VM 6대  = 240대
-      SAC-CAE102-VM08-GPU   : hostname0040~0069 (30대) x VM 8대  = 240대
-      SAC-CAE103-VM20-BATCH : hostname0070~0099 (30대) x VM 20대 = 600대
-  - 사용자(-u)   : vm06 / vm08 / vm20 (스펙별), saccae (100대 전체 = VM 1080대)
-  - 가상 vCenter 는 메모리에만 있다 — restart 하면 만든 VM·포트그룹이 모두 지워지고 빈 BM 100대로 돌아간다.
+      SAC-CAE101-VM06-HPC   : hostname0000~0039 (40대) x VM 6대  = 240대   (user vm06)
+      SAC-CAE102-VM08-GPU   : hostname0040~0069 (30대) x VM 8대  = 240대   (user vm08)
+      SAC-CAE103-VM20-BATCH : hostname0070~0094 (25대) x VM 20대 = 500대   (user vm20)
+      SAC-CAE001-VM99-MAX   : hostname0095~0099 ( 5대) x VM 99대 = 495대   (user vm99, 포트그룹은 SAC-CAE100 — CAE 번호를 빼고 매칭)
+      user saccae = BM 100대 전체 (VM 1475대)
+  - fail_* user 와 SAC-CAE105~107 스펙은 실패 테스트용 (실패테스트사용법.txt)
+  - 가상 vCenter 는 메모리에만 있다 — restart 하면 만든 VM·포트그룹이 모두 지워지고 빈 BM 으로 돌아간다.
 
 
 1. 가상 vCenter 상태 / 시작 / 초기화
@@ -22,37 +25,59 @@ saccae 검증 환경 사용법 (192.168.0.58 에 root 로 접속해서 실행)
 getent hosts vcsim.saccae.com vcenter.saccae.com
 
 
-2. 비밀번호 (새 터미널마다 한 번)
+2. 비밀번호 (암호 파일)
 ---------------------------------------------------------------------
-export VC_PASSWORD=x
-export VC_USER=administrator@vsphere.local VC_PASS=x
+/home/saccae/passwd_update.sh -list                       # 등록된 항목과 풀리는지
+/home/saccae/passwd_update.sh                             # vCenter 비밀번호 변경 (lscsystems@vsphere.local)
+/home/saccae/passwd_update.sh -id other@vsphere.local     # 다른 계정
+/home/saccae/passwd_update.sh -esxi                       # ESXi root
 
 
 3. VM 만들기 (vm_setup.sh)
 ---------------------------------------------------------------------
 cd /home/saccae/VMsetup
 
-# 계획만 보기 (스펙 표 y → 포트그룹 표 y. -n 은 vCenter 를 묻지 않는다)
+# user 를 번호로 고르기 (0 = list: 각 user 의 BM 목록)
+./vm_setup.sh
+
+# user 지정 / 계획만 보기 (-n 은 vCenter 를 묻지 않는다)
 ./vm_setup.sh -u vm20 -n
 
-# 실제 실행 (스펙 표 y → 포트그룹 표 y → vCenter 번호 1 = vcsim.saccae.com → 실행 확인 y)
-# 두 번째부터는 vCenter 번호에서 Enter = 이 user 가 지난번에 쓴 vCenter
-./vm_setup.sh -u vm20
-./vm_setup.sh -u vm08
+# 실제 실행: VM 표 y → CAE 번호 변경 Enter(=아니오) → vCenter 번호 1 → 실행 확인 y
+#            두 번째부터는 vCenter 번호에서 Enter = 이 user 가 지난번에 쓴 vCenter
 ./vm_setup.sh -u vm06
+./vm_setup.sh -u vm08
+./vm_setup.sh -u vm20
+./vm_setup.sh -u vm99          # ev01~ev99, BM 5대 x 99대
 
-# 100대 전체를 한 번에 (VM 1080대, 약 1~2분)
+# 100대 전체를 한 번에 (VM 1475대)
 ./vm_setup.sh -u saccae
+
+# CAE 번호 바꿔 보기: CAE 질문에 y → 새 번호 입력 (포트그룹 이름만 바뀌고 스펙은 그대로)
+./vm_setup.sh -u vm99 -n
+
+# 계정 지정
+./vm_setup.sh -u vm20 -id lscsystems@vsphere.local
 
 # 같은 명령을 다시 실행하면 이미 있는 포트그룹/VM 은 건너뛰고 정상 종료한다
 ./vm_setup.sh -u vm20
 
+# 색을 끄고 싶으면
+NO_COLOR=1 ./vm_setup.sh -u vm20 -n
+
+실행이 끝나면 마지막에 "스펙 체크" 가 나온다 ([일치] / [차이] + 항목별 개수, 자세한 내용은 run_<user>/check_<번호>.log).
+가상 vCenter 에서는 아래 항목이 [차이] 로 나오는 것이 정상이다:
+  cpuid.coresPerSocket / config.numaInfo.coresPerNumaNode 설정없음  : vcsim 이 채우지 않는 값 (실제 vCenter 에서는 채워짐)
+  numa.vcpu.preferHT FAIL (vm06)                                     : 스펙의 preferHT 는 vm_setup.sh 가 설정하지 않는다 → -fix
+  sched.mem.lpage.enable1GPage 설정없음 (vm08 ev06~ev08)             : 스펙에서 cores 를 비워 lpage 단계를 건너뜀 → -fix
+
 
 4. 만든 VM 확인 (govc)
 ---------------------------------------------------------------------
-export GOVC_URL=vcsim.saccae.com GOVC_USERNAME=x GOVC_PASSWORD=x GOVC_INSECURE=1
+. /home/saccae/secret_lib.sh
+export GOVC_URL=vcsim.saccae.com GOVC_INSECURE=1 GOVC_USERNAME=lscsystems@vsphere.local GOVC_PASSWORD="$(secret_get vcenter lscsystems@vsphere.local)"
 govc find / -type m -name 'hostname*' | wc -l
-govc vm.info -e hostname0099ev20
+govc vm.info -e hostname0099ev99
 govc vm.info -e hostname0000ev01
 
 
@@ -60,19 +85,28 @@ govc vm.info -e hostname0000ev01
 ---------------------------------------------------------------------
 cd /home/saccae/vm-param-check-usability-improvement/vm-param-check
 
+# 래퍼 (계정 lscsystems, 비밀번호는 암호 파일) — set_user() 안의 user 를 채우고 <user>.txt(VM 이름 목록) 를 만들어 쓴다
+./vm_setting_check_insert.sh
+
+# 직접 실행 (vcsim 만 대상으로)
+export VC_USER=lscsystems@vsphere.local VC_PASS="$(. /home/saccae/secret_lib.sh; secret_get vcenter lscsystems@vsphere.local)"
 ./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -specRoot /home/saccae/SPEC_DIR -yes -onlyFail -out /tmp/check.csv
 
 # 교정까지 (마지막에 y 로 확인)
 ./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -specRoot /home/saccae/SPEC_DIR -yes -onlyFail -out /tmp/check.csv -fix
 
-# vm_setup.sh 로 1080대를 만든 직후 체크에서 나오는 항목 (가상 vCenter 기준)
-#   numa.vcpu.preferHT FAIL 240          : VM06 스펙의 preferHT=TRUE 는 vm_setup.sh 가 설정하지 않는다        → -fix 로 교정됨
-#   sched.mem.lpage.enable1GPage 설정없음 90 : VM08 스펙 ev06~ev08 은 cores 를 비워서 lpage 단계를 건너뜀     → -fix 로 교정됨
-#   cpuid.coresPerSocket 설정없음 990     : vcsim 이 lpage 의 소켓당 코어 수를 이 값으로 보여주지 않음        → -fix 로 채워짐
-#   config.numaInfo.coresPerNumaNode 설정없음 470 : vcsim 이 흉내 내지 않는 값 — -fix 뒤에도 남는다(실제 vCenter 에서는 채워짐)
+# 한 스펙으로 특정 VM 만 (vm_setup.sh 가 끝에 하는 체크와 같은 방식)
+./vm-param-check -vcenterList /home/saccae/vcenter_vcsim.txt -f /home/saccae/VMsetup/run_vm20/check_targets_1.txt \
+  -specRoot /home/saccae/SPEC_DIR -specFolder SAC-CAE103-VM20-BATCH -yes -onlyFail -out /tmp/check.csv
 
 
-6. 환경을 새로 설치 / 갱신 (코드가 바뀌었을 때)
+6. OS6 에서 (RHEL/CentOS 6 서버로 V2 폴더를 가져갔을 때)
+---------------------------------------------------------------------
+cd <V2 폴더> && bash setup.sh        # OS6 를 알아서 판단해 bin_os6/*.gz 를 설치 (Go 필요 없음)
+./passwd_update.sh -list            # secret/ 을 같이 복사했다면 그대로 풀린다
+
+
+7. 환경을 새로 설치 / 갱신 (코드가 바뀌었을 때)
 ---------------------------------------------------------------------
 cd /root/myrepo && git pull
 bash ".claude/VM-10대-확장-및-SPEC_DIR-공유/검증/saccae/install.sh"

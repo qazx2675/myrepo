@@ -1,0 +1,2 @@
+# vswitch_fail_badspec.txt — 실패 테스트: 값이 잘못된 스펙
+hostname0002 SAC-CAE106-BADSPEC-TEST-cae-10-106-1-0 106

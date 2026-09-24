@@ -1,4 +1,4 @@
-# BM 100대 전체 — saccae 검증 환경용 BM 목록 (vm_setup.sh -u saccae). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
+# BM 100대 전체 — saccae 검증 환경 BM 목록 (vm_setup.sh -u saccae). 짧은 이름으로 적어도 vCenter 의 FQDN(hostnameNNNN.saccae.com)과 매칭된다.
 hostname0000
 hostname0001
 hostname0002

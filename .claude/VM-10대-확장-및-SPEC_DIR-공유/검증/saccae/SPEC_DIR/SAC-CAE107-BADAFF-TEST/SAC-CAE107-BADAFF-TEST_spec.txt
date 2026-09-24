@@ -1,0 +1,15 @@
+# SAC-CAE107-BADAFF-TEST — 실패 테스트용: affinity 파일 내용이 잘못됨(AUTO) — VM 생성 뒤 affinity 단계에서 실패
+ht=on
+cpu=2
+mem=2
+disk=20
+shares-ev01=normal
+cores=2
+numa=2
+cpu-ev02=2
+mem-ev02=2
+disk-ev02=20
+shares-ev02=normal
+cores-ev02=2
+affinity-ev01=affinity_bad.txt
+affinity-ev02=affinity_bad.txt

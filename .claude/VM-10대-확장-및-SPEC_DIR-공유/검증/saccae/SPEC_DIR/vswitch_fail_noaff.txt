@@ -1,0 +1,2 @@
+# vswitch_fail_noaff.txt — 실패 테스트: affinity 없는 스펙
+hostname0001 SAC-CAE105-NOAFF-TEST-cae-10-105-1-0 105

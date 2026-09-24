@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-24 — `-specFolder`, 래퍼 계정/암호 파일
+
+- **`-specFolder <폴더명>`** (`-specRoot` 와 함께): VM 폴더/포트그룹으로 스펙을 찾지 않고 대상 VM 전부에 이 스펙을 적용한다(CAE 번호는 무시하고 매칭). VMsetup/vm_setup.sh 가 방금 만든 VM 을 실행한 스펙으로 체크할 때 쓴다. `-specRoot` 없이 주면 오류.
+- **`vm_setting_check_insert.sh`**: 계정 기본 `lscsystems@vsphere.local`, `-id <계정>`. 비밀번호는 `VC_PASS` → V2 의 `secret/` 암호 파일(`../../passwd_update.sh`) → 입력(예전에는 스크립트 안에 평문으로 적었다).
+- 필수값 참고: 체크는 ev01 의 cores/numa 가 필수라, 이 값이 없는 스펙(VM 생성은 가능)은 체크할 수 없다 — vm_setup.sh 가 미리 경고한다.
+- **OS6 실행파일**: V2 의 `build_os6.sh` 로 Go 1.20 정적 빌드(`bin_os6/vm-param-check.gz`), OS6 서버에서는 `setup.sh` 가 설치.
+- **검증**: `go vet`/`go test` 통과, saccae 환경에서 `-specFolder` 로 VM 240/495/500대 체크.
+
 ## 2026-09-23 — saccae 검증 환경에서 찾은 버그 3건
 
 - **vcenter.txt 줄 끝 주석으로 panic**: `vcsim.saccae.com   # 설명`처럼 줄 끝에 주석이 있으면 주석까지 주소로 읽어 접속 URL이 깨지고 panic이 났다. `vm_setup.sh`는 같은 vcenter.txt를 줄 끝 주석을 빼고 읽는다. `config.LoadLines`가 `#` 뒤를 버리고 첫 단어만 쓰게 했다(`-f` 대상 파일도 같음). 테스트 `TestLoadLinesInlineComment`.

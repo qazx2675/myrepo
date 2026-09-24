@@ -24,3 +24,6 @@ SPEC_DIR/*
 
 # vm_setup.sh 가 번호로 고르는 vCenter 목록 (인프라 정보 — 예시만 올린다)
 /vcenter.txt
+
+# 암호화한 비밀번호와 키 (passwd_update.sh 가 만든다 — 저장소에 올리지 않는다)
+/secret/

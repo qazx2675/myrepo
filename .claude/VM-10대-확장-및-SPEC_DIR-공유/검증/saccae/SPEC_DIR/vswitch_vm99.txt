@@ -1,0 +1,6 @@
+# vswitch_vm99.txt — <BM> <포트그룹> <VLAN>. 포트그룹 이름의 <스펙 폴더명>-cae-... 로 스펙이 자동 할당된다(CAE 번호는 무시).
+hostname0095 SAC-CAE100-VM99-MAX-cae-10-104-1-0 104
+hostname0096 SAC-CAE100-VM99-MAX-cae-10-104-1-0 104
+hostname0097 SAC-CAE100-VM99-MAX-cae-10-104-1-0 104
+hostname0098 SAC-CAE100-VM99-MAX-cae-10-104-1-0 104
+hostname0099 SAC-CAE100-VM99-MAX-cae-10-104-1-0 104
