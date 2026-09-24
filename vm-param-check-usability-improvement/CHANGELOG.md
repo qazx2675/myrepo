@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-09-24 — 실행할 때마다 셸의 비밀번호 export 지우고 시작
+
+- **`vm_setting_check_insert.sh`**: 시작하자마자 `unset VC_PASSWORD VC_PASS VCENTER_PASS`. `vm_setup.sh`와 같은 이유(셸에 남은 다른 값 때문에 암호 파일을 건너뛰어 로그인 실패가 나던 문제) — 이제 항상 암호 파일 → 직접 입력 순으로만 받는다.
+- **영향 범위**: `vm-param-check-usability-improvement/vm-param-check/vm_setting_check_insert.sh`.
+
 ## 2026-09-24 — 콘솔 요약 표 헤더 정렬 수정
 
 - **`report/console.go`**: `printSummaryTable`의 헤더(`전체결과`/`설정없음`/`미지원`/`정보`)가 한글이라 Go `%-Ns`의 룬 개수 기준 폭과 터미널 표시폭(한글 2칸)이 달라 값 컬럼과 어긋나던 문제를 고쳤다. 표시폭 기준 `padRight`/`padLeft` 헬퍼를 추가해 헤더를 맞춤.

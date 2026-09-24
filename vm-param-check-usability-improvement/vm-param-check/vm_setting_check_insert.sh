@@ -9,9 +9,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# 이전 실행에서 잘못된 값으로 export 해 둔 비밀번호가 셸에 남아 있으면 암호 파일을 건너뛰고
+# 그 값으로 로그인 실패가 나는 사고가 반복돼서, 실행할 때마다 지우고 시작한다.
+unset VC_PASSWORD VC_PASS VCENTER_PASS
+
 # ===== 환경 설정 (vm_setup.sh 와 동일한 -id / 암호 파일 방식) =====
 # 계정: 기본 lscsystems@vsphere.local, 다른 계정은 -id <계정> (또는 환경변수 VC_ID)
-# 비밀번호: 환경변수 VC_PASSWORD → V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력
+# 비밀번호: 항상 V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력 순.
 VC_ID="${VC_ID:-lscsystems@vsphere.local}"
 user=""
 while [ $# -gt 0 ]; do

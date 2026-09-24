@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-09-24 — 실행할 때마다 셸의 비밀번호 export 지우고 시작
+
+- **`vm_setup.sh`**: 시작하자마자 `unset VC_PASSWORD VC_PASS VCENTER_PASS`. 이전 실행(또는 다른 도구 테스트)에서 다른 값으로 export 해 둔 비밀번호가 셸에 남아 있으면, 암호 파일을 건너뛰고 그 값으로 로그인을 시도해 "Login failure"가 나는 사고가 반복돼서 방지책으로 넣었다. 암호는 이제 항상 암호 파일 → 직접 입력 순으로만 받는다(환경변수로 미리 주입하는 경로는 없앰).
+- **영향 범위**: `VMsetup/vm_setup.sh`, `VMsetup/README.md`.
+
 ## 2026-09-24 — user 메뉴 고정 목록·직접 입력, vswitch_<user>.txt 위치를 VMsetup 으로 이동
 
 - **user 선택(`vm_setup.sh`)**: `0) list`(각 user BM 목록 미리보기) 대신 `0) 직접 선택`(user 이름을 그 자리에서 입력)으로 바뀌었다. 번호 목록(`1~3`)은 이 폴더의 `*.txt` 를 훑는 대신 자주 쓰는 user(`lsh`/`ljh`/`dhk`)를 고정으로 보여준다. `-u <user>` 로 목록에 없는 user(예: 실패 테스트용 `fail_*`)를 쓰는 것은 그대로 된다.
