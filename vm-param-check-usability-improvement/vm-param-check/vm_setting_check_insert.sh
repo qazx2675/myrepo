@@ -2,6 +2,7 @@
 # vm_setting_check_insert.sh — 폴더명 기반 스펙 자동매칭(-specRoot)으로 체크를 실행하는
 # 보조 스크립트. README.md "빠른 시작" 4~7번을 한 번에 실행하는 셸이다.
 #
+# user: -u <user> 로 지정. 없으면 그냥 실행 시 번호 메뉴에서 고른다(vm_setup.sh 와 같은 양식: 0) 직접 선택).
 # user 값에 따라 대상 목록 파일과 출력 CSV 이름이 정해진다:
 #   -f "${user}.txt"  →  같은 폴더에 "<user>.txt"(한 줄에 VM hostname 하나씩)가 있어야 함
 #   -out "result_${user}.csv"
@@ -13,11 +14,14 @@ cd "$(dirname "$0")"
 # 비밀번호: 환경변수 VC_PASS → V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력
 VC_USER="${VC_USER:-lscsystems@vsphere.local}"
 VC_PASS="${VC_PASS:-}"
+user=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -id) shift; VC_USER="${1:-}" ;;
     -id=*) VC_USER="${1#-id=}" ;;
-    *) echo "알 수 없는 옵션: $1 (사용법: $0 [-id <계정>])" >&2; exit 2 ;;
+    -u) shift; user="${1:-}" ;;
+    -u=*) user="${1#-u=}" ;;
+    *) echo "알 수 없는 옵션: $1 (사용법: $0 [-u <user>] [-id <계정>])" >&2; exit 2 ;;
   esac
   shift
 done
@@ -34,17 +38,25 @@ SPEC_ROOT='./SPEC_DIR'
 # 없고 나란히 있는 공유 SPEC_DIR 이 있으면 그쪽을 쓴다 (VMsetup/vm_setup.sh 와 같은 스펙 폴더를 공유).
 [ -d "$SPEC_ROOT" ] || { [ -d ../../SPEC_DIR ] && SPEC_ROOT='../../SPEC_DIR'; }
 
-# ===== user 변수 지정 (직접 채우세요) =====
+# ===== user 선택 =====
+# -u <user> 로 바로 지정. 없으면 번호 메뉴에서 고른다(vm_setup.sh 와 같은 양식: 0) 직접 선택).
 # 이 값으로 "<user>.txt"(대상 VM hostname 목록)를 읽고 "result_<user>.csv"를 만든다.
-set_user() {
-  user=""   # 예: user="kdh"
-}
-
-set_user
-
-if [ -z "${user:-}" ]; then
-  echo "set_user() 함수 안의 user 변수를 채워주세요 (예: user=\"kdh\")." >&2
-  exit 1
+if [ -z "$user" ]; then
+  users=(lsh ljh dhk)
+  while :; do
+    echo >&2
+    echo "=== user 선택 ($(pwd)) ===" >&2
+    echo "  0) 직접 선택" >&2
+    for i in "${!users[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${users[$i]}" >&2; done
+    read -r -p "번호: " ans
+    if [ "$ans" = "0" ]; then
+      read -r -p "user 이름 입력: " user
+      [ -n "$user" ] && break
+      continue
+    fi
+    [[ "$ans" =~ ^[0-9]+$ ]] || continue
+    [ "$ans" -ge 1 ] && [ "$ans" -le "${#users[@]}" ] && { user="${users[$((ans - 1))]}"; break; }
+  done
 fi
 
 if [ ! -x ./vm-param-check ]; then
