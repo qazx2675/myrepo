@@ -750,6 +750,31 @@ print_affinity() {
   done
 }
 
+# print_ev_kv <머리말> <-evNNKey=Val ...> — vm_create/lpage_setting 처럼 ev별로 여러 키=값을 갖는
+# 인자 배열을, 값이 같은 ev 는 ev_ranges 로 묶어서 "ev01: Key=Val Key=Val" 식으로 보여준다
+# (affinity 설정값을 파일 내용으로 묶어 보여주는 것과 같은 목적 — ev 가 많을 때 한눈에 비교하려고).
+print_ev_kv() {
+  local label="$1"; shift
+  local a nn key
+  local -A kv_of=() evs_of=(); local -a nns=() order=()
+  for a in "$@"; do
+    [[ "$a" =~ ^-ev([0-9]+)([A-Za-z]+)=(.*)$ ]] || continue
+    nn="${BASH_REMATCH[1]}"
+    [ -n "${kv_of[$nn]:-}" ] || nns+=("$nn")
+    kv_of[$nn]+="${kv_of[$nn]:+ }${BASH_REMATCH[2]}=${BASH_REMATCH[3]}"
+  done
+  IFS=$'\n' nns=($(printf '%s\n' "${nns[@]}" | sort -n)); unset IFS
+  for nn in "${nns[@]}"; do
+    key="${kv_of[$nn]}"
+    [ -n "${evs_of[$key]:-}" ] || order+=("$key")
+    evs_of[$key]+=" $nn"
+  done
+  say "   $label"
+  for key in "${order[@]}"; do
+    printf '     %s: %s\n' "$(ev_ranges "${evs_of[$key]}")" "$key"
+  done
+}
+
 hdr "실행 계획 (실행 폴더: $RUN_DIR)" 2>&1
 say "vCenter        : ${VC_IP:-(미지정)} / 계정 $VC_ID"
 say "포트그룹 생성   : $(wc -l < "$RUN_DIR/vswitch.txt")건 (vswitch_setting${TARGET_VSWITCH:+, 스위치 $TARGET_VSWITCH})"
@@ -761,9 +786,9 @@ for d in "${SPEC_ORDER[@]}"; do
   awk -F. '{print $1}' "$RUN_DIR/worklist_$k.txt" > "$RUN_DIR/vmbase_$k.txt"
   spec_lookup "$(basename "$d")" && build_flags "$LOOKUP_DIR" || die "${LOOKUP_ERR:-$FLAG_ERR}"
   say "${C_BLD}스펙 $k        : $(basename "$d") — BM $(grep -c . "$RUN_DIR/worklist_$k.txt")대 × VM ${CREATE_ARGS[0]#-vmCount=}대${C_RST}"
-  say "   vm_create ${CREATE_ARGS[*]}"
+  print_ev_kv "vm_create" "${CREATE_ARGS[@]}"
   say "   affinity_setting ${AFF_ARGS[*]}"
-  [ "${#LP_ARGS[@]}" -gt 0 ] && say "   lpage_setting ${LP_ARGS[*]}" || say "   lpage_setting: 스펙에 cores 가 없어 건너뜀"
+  [ "${#LP_ARGS[@]}" -gt 0 ] && print_ev_kv "lpage_setting" "${LP_ARGS[@]}" || say "   lpage_setting: 스펙에 cores 가 없어 건너뜀"
   # vm-param-check 는 ev01 의 cores/numa 가 필수라, 없으면 생성 뒤 스펙 체크(6단계)를 할 수 없다
   [ -n "$(exp_get "$LOOKUP_DIR" cores-ev01)" ] && [ -n "$(exp_get "$LOOKUP_DIR" numa-ev01)" ] \
     || warn "스펙 $(basename "$d") 에 ev01 cores/numa 가 없어 생성 뒤 vm-param-check 스펙 체크는 건너뜁니다 (VM 생성은 진행)."
