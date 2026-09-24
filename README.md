@@ -39,6 +39,8 @@ bash setup.sh
 
 요구사항: OS8(Rocky/RHEL 8) — Go 1.26.5 이상 + bash. OS6(RHEL/CentOS 6) — Go 불필요(`bin_os6/`, Go 1.20 정적 빌드), bash 4.1, openssl.
 
+OS6 판단은 `--os6` 옵션, `VMSETUP_OS6=1`, 커널 2.6.x, `/etc/redhat-release`가 자동으로 되지만, 이걸로 못 잡는 호스트가 있으면 `OS6_hostname="host1|host2"` (파이프로 여러 대)로 호스트 이름을 지정해도 된다: `OS6_hostname="old-node01|old-node02" bash setup.sh`.
+
 **OS6 실행파일 다시 만들기** (소스가 바뀌었을 때, Go 1.20 이 있는 빌드 서버에서): `bash build_os6.sh [/opt/go1.20/bin/go]` → `bin_os6/<이름>.gz`.
 RHEL 6 커널(2.6.32)은 Go 1.21+ 실행파일을 못 띄워서, govmomi vendor 사본을 Go 1.20 호환으로 고쳐 빌드한다(원본 `govendor/` 는 그대로).
 

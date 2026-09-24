@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-09-24 — `setup.sh`에 `OS6_hostname` 추가 (호스트 이름으로 OS6 강제 지정)
+
+- **`setup.sh`**: 커널/배포판 자동 판단으로 OS6 여부를 못 잡는 경우를 위해 `OS6_hostname="host1|host2"`(파이프로 여러 대) 환경변수를 추가했다. 이 목록에 현재 호스트 이름(`hostname`)이 있으면 다른 조건과 무관하게 OS6 취급(`bin_os6/*.gz` 설치).
+- **영향 범위**: `setup.sh`, `README.md`.
+- **검증**: `.58`(hostname=`test-server`)에서 `OS6_hostname="test-server|other-host"`로 판단 로직이 `OS6=1`을 내는 것 확인.
+
 ## 2026-09-24 — 실행할 때마다 셸의 비밀번호 export 지우고 시작
 
 - **`vm_setup.sh`**: 시작하자마자 `unset VC_PASSWORD VC_PASS VCENTER_PASS`. 이전 실행(또는 다른 도구 테스트)에서 다른 값으로 export 해 둔 비밀번호가 셸에 남아 있으면, 암호 파일을 건너뛰고 그 값으로 로그인을 시도해 "Login failure"가 나는 사고가 반복돼서 방지책으로 넣었다. 암호는 이제 항상 암호 파일 → 직접 입력 순으로만 받는다(환경변수로 미리 주입하는 경로는 없앰).
