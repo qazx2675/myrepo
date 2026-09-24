@@ -23,8 +23,14 @@ if [ -t 1 ] && { [ -z "${TERM:-}" ] || [ "$TERM" = dumb ]; }; then export TERM=x
 EOF
 
 echo "== 2) V2 코드 ($DEST, $BRANCH 브랜치)"
-if [ -d "$DEST/.git" ]; then git -C "$DEST" pull --ff-only
-else git clone -b "$BRANCH" --single-branch "$REPO" "$DEST"; fi
+# V2 브랜치는 배포용으로 테스트 파일을 뺀 뒤 강제 푸시될 수 있어(subtree split 재적용) 일반
+# fast-forward가 안 될 수 있다 — 안 되면 fetch 후 그 커밋으로 맞춘다(로컬에 손으로 고친 게
+# 있었다면 사라지니, $DEST 는 이 스크립트가 관리하는 배포 전용 폴더로만 쓸 것).
+if [ -d "$DEST/.git" ]; then
+  git -C "$DEST" pull --ff-only || { git -C "$DEST" fetch origin "$BRANCH" && git -C "$DEST" reset --hard "origin/$BRANCH"; }
+else
+  git clone -b "$BRANCH" --single-branch "$REPO" "$DEST"
+fi
 (cd "$DEST" && ./setup.sh)
 
 echo "== 3) 검증 데이터"
