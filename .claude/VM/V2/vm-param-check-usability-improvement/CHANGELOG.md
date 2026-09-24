@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-09-24 — 콘솔 요약 표 헤더 정렬 수정
+
+- **`report/console.go`**: `printSummaryTable`의 헤더(`전체결과`/`설정없음`/`미지원`/`정보`)가 한글이라 Go `%-Ns`의 룬 개수 기준 폭과 터미널 표시폭(한글 2칸)이 달라 값 컬럼과 어긋나던 문제를 고쳤다. 표시폭 기준 `padRight`/`padLeft` 헬퍼를 추가해 헤더를 맞춤.
+- **영향 범위**: `vm-param-check-usability-improvement/vm-param-check/report/console.go`.
+- **검증**: `go build ./report/...` 통과, `gofmt` 적용, `-demo -noColor`로 콘솔 출력 육안 확인.
+
 ## 2026-09-24 — `vm_setting_check_insert.sh` user 선택(번호 메뉴/`-u`)
 
 - **`vm_setting_check_insert.sh`**: `set_user()` 함수를 직접 편집하던 방식 대신 `-u <user>` 옵션이나, 그냥 실행하면 번호 메뉴(`0) 직접 선택` `1) lsh` `2) ljh` `3) dhk`)에서 고르는 방식으로 바꿨다(`VMsetup/vm_setup.sh`와 같은 양식). 대상 목록 파일(`<user>.txt`)이 없으면 기존과 동일하게 안내 후 종료.
