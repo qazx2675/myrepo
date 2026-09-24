@@ -1,0 +1,58 @@
+# TST-CAE002-GROUPCHECK-DEMO 스펙 정의 파일 (테스트용 — ev01만 다르고 ev02~06은 같은 값으로 만들어서,
+# vm_setup.sh 실행 계획(vm_create/affinity_setting/lpage_setting)에 ev 값이 정확히 반영되는지
+# 한눈에 확인하기 위한 예시 스펙이다. 실제 인프라와 무관.)
+#
+# 의도한 값:
+#   vm_create      ev01: Cpu=16 Mem=64 Disk=500 Share=8000 / ev02-06: Cpu=8 Mem=32 Disk=200 Share=normal
+#   affinity_setting  ev01: affinity_ev01.txt / ev02-06: affinity_small.txt
+#   lpage_setting  ev01: Cores=16 Sockets=2 Numa=2 / ev02: Cores=8 Sockets=2 Numa=2 / ev03-06: Cores=8 Sockets=1
+
+groups=6
+ht=on
+
+# --- ev01 ---
+cpu=16
+mem=64
+disk=500
+shares-ev01=8000
+cores=8
+numa=8
+affinity-ev01=affinity_ev01.txt
+
+# --- ev02 (lpage 값이 ev03~06과 달라 따로 지정) ---
+cpu-ev02=8
+mem-ev02=32
+disk-ev02=200
+shares-ev02=normal
+cores-ev02=4
+numa-ev02=4
+affinity-ev02=affinity_small.txt
+
+# --- ev03~ev06 (vm_create 값은 ev02와 같고, lpage numa는 지정하지 않음) ---
+cpu-ev03=8
+mem-ev03=32
+disk-ev03=200
+shares-ev03=normal
+cores-ev03=8
+affinity-ev03=affinity_small.txt
+
+cpu-ev04=8
+mem-ev04=32
+disk-ev04=200
+shares-ev04=normal
+cores-ev04=8
+affinity-ev04=affinity_small.txt
+
+cpu-ev05=8
+mem-ev05=32
+disk-ev05=200
+shares-ev05=normal
+cores-ev05=8
+affinity-ev05=affinity_small.txt
+
+cpu-ev06=8
+mem-ev06=32
+disk-ev06=200
+shares-ev06=normal
+cores-ev06=8
+affinity-ev06=affinity_small.txt

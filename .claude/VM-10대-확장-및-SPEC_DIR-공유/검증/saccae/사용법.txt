@@ -13,6 +13,9 @@ saccae 검증 환경 사용법 (192.168.0.58 에 root 로 접속해서 실행)
       SAC-CAE001-VM99-MAX   : hostname0095~0099 ( 5대) x VM 99대 = 495대   (user vm99, 포트그룹은 SAC-CAE100 — CAE 번호를 빼고 매칭)
       user saccae = BM 100대 전체 (VM 1475대)
   - fail_* user 와 SAC-CAE105~107 스펙은 실패 테스트용 (실패테스트사용법.txt)
+  - TST-CAE002-GROUPCHECK-DEMO 스펙: ev01(Cpu16/Mem64/Disk500/Share8000)만 다르고 ev02~06(Cpu8/Mem32/Disk200/Share normal)은
+    같게 만든 예시 — vm_create/lpage_setting 실행 계획에 ev 값이 정확히 반영되는지 눈으로 확인용. -u 목록엔 없어서
+    "적용할 스펙을 고르세요"에서 번호로 직접 골라야 한다(아래 사용법 예시).
   - 가상 vCenter 는 메모리에만 있다 — restart 하면 만든 VM·포트그룹이 모두 지워지고 빈 BM 으로 돌아간다.
 
 
@@ -64,6 +67,11 @@ cd /home/saccae/VMsetup
 
 # 색을 끄고 싶으면
 NO_COLOR=1 ./vm_setup.sh -u dhk -n
+
+# TST-CAE002-GROUPCHECK-DEMO 로 vm_create/lpage_setting 실행 계획 확인 (BM 이름은 아무거나 — -n 이라 vCenter 는 안 건드림)
+printf 'demo-bm\n' > demo.txt; printf 'demo-bm  DEMO-PG-1  999\n' > vswitch_demo.txt
+./vm_setup.sh -u demo -n   # "적용할 스펙을 고르세요"에서 TST-CAE002-GROUPCHECK-DEMO 번호 선택 → y
+rm -f demo.txt vswitch_demo.txt; rm -rf run_demo   # 확인 끝나면 정리
 
 실행이 끝나면 마지막에 "스펙 체크" 가 나온다 ([일치] / [차이] + 항목별 개수, 자세한 내용은 run_<user>/check_<번호>.log).
 가상 vCenter 에서는 아래 항목이 [차이] 로 나오는 것이 정상이다:
