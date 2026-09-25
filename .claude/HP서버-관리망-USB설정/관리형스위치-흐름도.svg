@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1150" width="960" height="1150" font-family="'Malgun Gothic','Noto Sans KR','Apple SD Gothic Neo',sans-serif">
+  <!-- 노트북 + 관리형 스위치 방식 — 포트 위치 = 할당 순서 -->
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .box{fill:#ffffff;stroke:#334155;stroke-width:1.6}
+      .srv{fill:#f1f5f9;stroke:#334155;stroke-width:1.4}
+      .sw{fill:#e0f2fe;stroke:#0369a1;stroke-width:1.8}
+      .nb{fill:#ede9fe;stroke:#6d28d9;stroke-width:1.8}
+      .ilo{fill:#dcfce7;stroke:#15803d;stroke-width:1.6}
+      .dec{fill:#fef9c3;stroke:#a16207;stroke-width:1.6}
+      .warn{fill:#fee2e2;stroke:#b91c1c;stroke-width:1.6}
+      .tb{font-size:15px;fill:#0f172a;text-anchor:middle;font-weight:700}
+      .s{font-size:12.5px;fill:#334155;text-anchor:middle}
+      .l{font-size:12.5px;fill:#475569}
+      .ln{stroke:#475569;stroke-width:1.6;fill:none;marker-end:url(#a)}
+      .cab{stroke:#0369a1;stroke-width:2;fill:none}
+      .num{font-size:13px;fill:#ffffff;text-anchor:middle;font-weight:700}
+      .mono{font-family:Consolas,'D2Coding',monospace;font-size:12px;fill:#0f172a}
+    </style>
+  </defs>
+  <rect width="960" height="1150" fill="#f8fafc"/>
+  <text x="480" y="38" class="tb" style="font-size:21px">노트북 + 관리형 스위치 — 포트 위치 = 할당 순서</text>
+  <text x="480" y="62" class="s">서버 전원 ON 불필요 (전원 코드만) · 랙 순서대로 스위치 포트에 한꺼번에 연결 · 노트북에서 한 번 실행</text>
+
+  <!-- ===== 구성도 ===== -->
+  <text x="40" y="96" class="l" style="font-weight:700;fill:#0f172a;font-size:14px">① 구성</text>
+
+  <!-- 랙 서버 -->
+  <rect x="40" y="108" width="190" height="236" rx="10" fill="none" stroke="#94a3b8" stroke-dasharray="5 4"/>
+  <text x="135" y="126" class="s" style="font-weight:700">랙 R01</text>
+  <rect x="56" y="136" width="158" height="40" rx="6" class="srv"/><text x="135" y="154" class="s" style="font-weight:700">U40 서버</text><text x="135" y="169" class="s" style="font-size:11px">iLO 전용포트</text>
+  <rect x="56" y="186" width="158" height="40" rx="6" class="srv"/><text x="135" y="204" class="s" style="font-weight:700">U38 서버</text><text x="135" y="219" class="s" style="font-size:11px">iLO 전용포트</text>
+  <rect x="56" y="236" width="158" height="40" rx="6" class="srv"/><text x="135" y="254" class="s" style="font-weight:700">U36 서버</text><text x="135" y="269" class="s" style="font-size:11px">iLO 전용포트</text>
+  <text x="135" y="300" class="s">⋮</text>
+  <text x="135" y="326" class="s" style="font-size:11.5px">전원 코드만 연결</text>
+
+  <!-- 케이블 -->
+  <path d="M214,156 H300 V170 H330" class="cab"/>
+  <path d="M214,206 H300 V200 H330" class="cab"/>
+  <path d="M214,256 H300 V230 H330" class="cab"/>
+
+  <!-- 스위치 -->
+  <rect x="330" y="130" width="300" height="190" rx="10" class="sw"/>
+  <text x="480" y="152" class="tb">관리형 스위치</text>
+  <g font-size="12" fill="#0f172a">
+    <rect x="344" y="162" width="46" height="18" rx="3" fill="#ffffff" stroke="#0369a1"/><text x="367" y="175" text-anchor="middle">포트1</text>
+    <rect x="344" y="192" width="46" height="18" rx="3" fill="#ffffff" stroke="#0369a1"/><text x="367" y="205" text-anchor="middle">포트2</text>
+    <rect x="344" y="222" width="46" height="18" rx="3" fill="#ffffff" stroke="#0369a1"/><text x="367" y="235" text-anchor="middle">포트3</text>
+    <rect x="562" y="222" width="56" height="18" rx="3" fill="#ffffff" stroke="#6d28d9"/><text x="590" y="235" text-anchor="middle">포트24</text>
+  </g>
+  <text x="496" y="178" class="l">서버 포트: untagged VLAN1</text>
+  <text x="496" y="196" class="l">   + tagged VLAN100</text>
+  <text x="400" y="266" class="l">SNMP 읽기 → MAC ↔ 포트 표</text>
+  <text x="400" y="284" class="l">관리 IP 192.168.100.2</text>
+  <text x="400" y="304" class="l" style="font-size:11.5px">(VLAN 태그 미지원이어도 할당은 가능)</text>
+
+  <!-- 노트북 -->
+  <path d="M618,231 H690" class="cab" style="stroke:#6d28d9"/>
+  <rect x="690" y="130" width="230" height="214" rx="10" class="nb"/>
+  <text x="805" y="152" class="tb">노트북</text>
+  <text x="706" y="176" class="l">• dnsmasq: 임시 IP 배포</text>
+  <text x="718" y="193" class="l" style="font-size:11.5px">192.168.100.100~199</text>
+  <text x="706" y="215" class="l">• snmpwalk: 포트 조회</text>
+  <text x="706" y="237" class="l">• curl: iLO Redfish 설정</text>
+  <text x="706" y="259" class="l">• eth0.100: 최종 IP 검증</text>
+  <text x="706" y="281" class="l">• pool.csv / cred.csv</text>
+  <text x="706" y="303" class="l">• ilonet.sh run</text>
+  <text x="706" y="330" class="l" style="font-size:11.5px">IP 192.168.100.1</text>
+
+  <!-- ===== 매핑 ===== -->
+  <text x="40" y="382" class="l" style="font-weight:700;fill:#0f172a;font-size:14px">② 포트 번호로 pool.csv 행 결정</text>
+  <rect x="40" y="394" width="880" height="118" rx="10" class="box"/>
+  <text x="60" y="418" class="l" style="font-weight:700">DHCP 임대</text>
+  <text x="60" y="438" class="mono">94:40:c9:aa:00:02</text>
+  <text x="60" y="456" class="mono">→ 192.168.100.112</text>
+  <path d="M220,440 H262" class="ln"/>
+  <text x="274" y="418" class="l" style="font-weight:700">스위치 MAC 표 (SNMP)</text>
+  <text x="274" y="438" class="mono">94:40:c9:aa:00:02</text>
+  <text x="274" y="456" class="mono">→ 포트 2</text>
+  <path d="M440,440 H482" class="ln"/>
+  <text x="494" y="418" class="l" style="font-weight:700">pool.csv</text>
+  <text x="494" y="438" class="mono">port=2  R01-U38</text>
+  <text x="494" y="456" class="mono">10.10.1.12 / VLAN 100</text>
+  <path d="M676,440 H718" class="ln"/>
+  <text x="730" y="418" class="l" style="font-weight:700">결과</text>
+  <text x="730" y="438" class="mono">USED + MAC</text>
+  <text x="730" y="456" class="mono">+ 시리얼 + 시각</text>
+  <text x="60" y="494" class="l">케이블 위치만 랙 순서대로 맞으면 꽂는 순서·시간과 무관하게 항상 같은 결과 · 전부 한 번에 꽂고 병렬 처리</text>
+
+  <!-- ===== 흐름 ===== -->
+  <text x="40" y="550" class="l" style="font-weight:700;fill:#0f172a;font-size:14px">③ 서버(MAC)마다 자동 처리 — 여러 대 병렬</text>
+
+  <rect x="330" y="562" width="300" height="48" rx="10" class="nb"/>
+  <circle cx="346" cy="578" r="11" fill="#6d28d9"/><text x="346" y="583" class="num">1</text>
+  <text x="480" y="591" class="tb">새 DHCP 임대 감지 (MAC·임시IP)</text>
+  <line x1="480" y1="610" x2="480" y2="632" class="ln"/>
+
+  <rect x="330" y="634" width="300" height="48" rx="10" class="nb"/>
+  <circle cx="346" cy="650" r="11" fill="#6d28d9"/><text x="346" y="655" class="num">2</text>
+  <text x="480" y="663" class="tb">SNMP로 포트 번호 → pool 행</text>
+  <line x1="480" y1="682" x2="480" y2="704" class="ln"/>
+
+  <polygon points="480,706 610,746 480,786 350,746" class="dec"/>
+  <text x="480" y="742" class="tb">그 행 상태?</text>
+  <text x="480" y="762" class="s">FREE / USED</text>
+
+  <path d="M610,746 H700" class="ln"/>
+  <text x="618" y="724" class="l">USED ·</text>
+  <text x="618" y="740" class="l">다른 MAC</text>
+  <rect x="702" y="716" width="218" height="62" rx="10" class="warn"/>
+  <text x="811" y="740" class="tb">충돌 → 해당 포트 중단</text>
+  <text x="811" y="760" class="s">케이블 바꿔 꽂음 의심</text>
+  <text x="811" y="774" class="s" style="font-size:11.5px">blink / reuse --port N 로 판단</text>
+
+  <path d="M350,746 H150 V820 H328" class="ln"/>
+  <text x="170" y="738" class="l">USED·같은 MAC</text>
+  <text x="170" y="756" class="l">→ 같은 값 재적용</text>
+  <line x1="480" y1="786" x2="480" y2="808" class="ln"/>
+  <text x="488" y="802" class="l">FREE</text>
+
+  <rect x="330" y="810" width="300" height="48" rx="10" class="ilo"/>
+  <circle cx="346" cy="826" r="11" fill="#15803d"/><text x="346" y="831" class="num">3</text>
+  <text x="480" y="839" class="tb">iLO 로그인 → 시리얼 읽기</text>
+  <line x1="480" y1="858" x2="480" y2="880" class="ln"/>
+  <path d="M630,834 H700" class="ln"/>
+  <rect x="702" y="810" width="218" height="48" rx="10" class="box"/>
+  <text x="811" y="831" class="s" style="font-weight:700">비밀번호: cred.csv</text>
+  <text x="811" y="849" class="s">없으면 서버마다 입력</text>
+
+  <rect x="330" y="882" width="300" height="48" rx="10" class="nb"/>
+  <circle cx="346" cy="898" r="11" fill="#6d28d9"/><text x="346" y="903" class="num">4</text>
+  <text x="480" y="911" class="tb">pool.csv 먼저 USED 기록</text>
+  <line x1="480" y1="930" x2="480" y2="952" class="ln"/>
+
+  <rect x="330" y="954" width="300" height="56" rx="10" class="ilo"/>
+  <circle cx="346" cy="970" r="11" fill="#15803d"/><text x="346" y="975" class="num">5</text>
+  <text x="488" y="977" class="tb">고정 IP + VLAN 설정 → iLO 리셋</text>
+  <text x="480" y="997" class="s">Redfish · DHCP 끔 · IP/마스크/GW · VLAN ID</text>
+  <line x1="480" y1="1010" x2="480" y2="1032" class="ln"/>
+
+  <rect x="330" y="1034" width="300" height="56" rx="10" class="ilo"/>
+  <circle cx="346" cy="1050" r="11" fill="#15803d"/><text x="346" y="1055" class="num">6</text>
+  <text x="480" y="1057" class="tb">60~90초 후 최종 IP 검증</text>
+  <text x="480" y="1077" class="s">eth0.100(VLAN100)에서 ping + Redfish 재조회</text>
+
+  <rect x="40" y="954" width="260" height="136" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="56" y="978" class="l" style="font-weight:700;fill:#0f172a">위치 확인 / 되돌리기</text>
+  <text x="56" y="1000" class="l">• blink N: 포트 N 서버 UID 켜기</text>
+  <text x="56" y="1020" class="l">• list: 포트·시리얼·IP 표</text>
+  <text x="56" y="1040" class="l">• undo / reuse --port N</text>
+  <text x="56" y="1060" class="l">• fix --port N: 최종 IP로 재설정</text>
+  <text x="56" y="1080" class="l">• 기록은 삭제 없이 VOID 처리</text>
+
+  <text x="480" y="1128" class="s">실패 시 해당 포트만 표에 오류 표시 · 다른 포트는 계속 진행</text>
+</svg>
