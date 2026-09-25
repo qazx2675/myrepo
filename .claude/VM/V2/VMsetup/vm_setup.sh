@@ -29,7 +29,7 @@ CHECK_DIR="$HERE/../vm-param-check-usability-improvement/vm-param-check"
 CHECK_BIN="$CHECK_DIR/vm-param-check"
 # mac_info(MAC 수집) — 생성한 VM 의 MAC 으로 만든 Provisioning List 를 이 경로에 <user>.txt 로 복사한다.
 # 비워 두면 복사하지 않고 실행 폴더(run_<user>/)에만 남긴다.
-awx_route=""
+awx_route="${awx_route:-}"
 # mac_info 출력 줄에 들어가는 값 (VM VM <arg1> <VM> <IP> <MAC> eth0 sda sda5 <argInt> <argStr> uefi).
 # arg1/argStr 이 비어 있으면 mac_info 단계는 경고만 하고 건너뛴다.
 MAC_ARG1="${MAC_ARG1:-}"; MAC_ARGINT="${MAC_ARGINT:-0}"; MAC_ARGSTR="${MAC_ARGSTR:-}"
