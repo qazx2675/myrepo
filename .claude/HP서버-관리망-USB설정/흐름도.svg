@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1180" width="960" height="1180" font-family="'Malgun Gothic','Noto Sans KR','Apple SD Gothic Neo',sans-serif">
+  <!-- HP 서버 관리망(iLO) USB 자동설정 흐름도 -->
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .box{fill:#ffffff;stroke:#334155;stroke-width:1.6}
+      .usb{fill:#e0f2fe;stroke:#0369a1;stroke-width:1.6}
+      .ilo{fill:#dcfce7;stroke:#15803d;stroke-width:1.6}
+      .dec{fill:#fef9c3;stroke:#a16207;stroke-width:1.6}
+      .warn{fill:#fee2e2;stroke:#b91c1c;stroke-width:1.6}
+      .menu{fill:#ede9fe;stroke:#6d28d9;stroke-width:1.6}
+      .t{font-size:15px;fill:#0f172a;text-anchor:middle}
+      .tb{font-size:15px;fill:#0f172a;text-anchor:middle;font-weight:700}
+      .s{font-size:12.5px;fill:#334155;text-anchor:middle}
+      .l{font-size:12.5px;fill:#475569}
+      .ln{stroke:#475569;stroke-width:1.6;fill:none;marker-end:url(#a)}
+      .num{font-size:13px;fill:#ffffff;text-anchor:middle;font-weight:700}
+    </style>
+  </defs>
+  <rect width="960" height="1180" fill="#f8fafc"/>
+  <text x="480" y="38" class="tb" style="font-size:21px">HP 서버 관리망(iLO) IP·VLAN — USB 자동설정 흐름</text>
+  <text x="480" y="62" class="s">부팅 USB + 인밴드(hponcfg / ilorest) 방식 · 사전 정의 순서대로 할당 · 사용 기록 보존</text>
+
+  <!-- 범례 -->
+  <g transform="translate(40,82)">
+    <rect x="0" y="0" width="16" height="12" class="usb"/><text x="22" y="11" class="l">USB 데이터 읽기/쓰기</text>
+    <rect x="170" y="0" width="16" height="12" class="ilo"/><text x="192" y="11" class="l">iLO 설정 적용</text>
+    <rect x="300" y="0" width="16" height="12" class="dec"/><text x="322" y="11" class="l">판단</text>
+    <rect x="370" y="0" width="16" height="12" class="menu"/><text x="392" y="11" class="l">작업자 메뉴</text>
+    <rect x="480" y="0" width="16" height="12" class="warn"/><text x="502" y="11" class="l">중단/경고</text>
+  </g>
+
+  <!-- 1 -->
+  <rect x="330" y="112" width="300" height="56" rx="10" class="box"/>
+  <circle cx="346" cy="128" r="11" fill="#334155"/><text x="346" y="133" class="num">1</text>
+  <text x="480" y="137" class="tb">USB 꽂고 부팅 (F11 원타임 부트)</text>
+  <text x="480" y="157" class="s">경량 리눅스 기동 → ilocfg.sh 자동 실행</text>
+  <line x1="480" y1="168" x2="480" y2="196" class="ln"/>
+
+  <!-- 2 -->
+  <rect x="330" y="198" width="300" height="56" rx="10" class="usb"/>
+  <circle cx="346" cy="214" r="11" fill="#0369a1"/><text x="346" y="219" class="num">2</text>
+  <text x="480" y="223" class="tb">서버 식별 + pool.csv 로드</text>
+  <text x="480" y="243" class="s">dmidecode 시리얼 · 형식/중복 IP 검사</text>
+  <line x1="480" y1="254" x2="480" y2="284" class="ln"/>
+
+  <!-- 3 decision: 이미 할당된 시리얼? -->
+  <polygon points="480,286 610,336 480,386 350,336" class="dec"/>
+  <text x="480" y="332" class="tb">이 시리얼이</text>
+  <text x="480" y="351" class="tb">이미 USED?</text>
+  <path d="M610,336 H760 V372" class="ln"/>
+  <text x="640" y="328" class="l">예</text>
+  <rect x="660" y="374" width="250" height="60" rx="10" class="menu"/>
+  <text x="785" y="398" class="tb">같은 값 재적용? [Y/n]</text>
+  <text x="785" y="418" class="s">순번 낭비 없이 기존 IP 재설정</text>
+  <path d="M785,434 V700 H632" class="ln"/>
+  <text x="792" y="560" class="l">Y → 6단계</text>
+  <line x1="480" y1="386" x2="480" y2="418" class="ln"/>
+  <text x="488" y="406" class="l">아니오</text>
+
+  <!-- 4 -->
+  <rect x="330" y="420" width="300" height="56" rx="10" class="usb"/>
+  <circle cx="346" cy="436" r="11" fill="#0369a1"/><text x="346" y="441" class="num">4</text>
+  <text x="480" y="445" class="tb">다음 FREE 항목 선택</text>
+  <text x="480" y="465" class="s">state.json pointer 이후 첫 FREE 행</text>
+  <line x1="480" y1="476" x2="480" y2="506" class="ln"/>
+
+  <!-- FREE 없음 -->
+  <path d="M330,448 H150 V480" class="ln"/>
+  <text x="200" y="440" class="l">FREE 없음</text>
+  <rect x="50" y="482" width="200" height="52" rx="10" class="warn"/>
+  <text x="150" y="505" class="tb">풀 소진 → 중단</text>
+  <text x="150" y="524" class="s">pool.csv 추가 후 재시도</text>
+
+  <!-- 5 menu -->
+  <rect x="290" y="508" width="380" height="96" rx="10" class="menu"/>
+  <circle cx="306" cy="524" r="11" fill="#6d28d9"/><text x="306" y="529" class="num">5</text>
+  <text x="480" y="532" class="tb">확인 화면 (10초 후 자동 진행)</text>
+  <text x="480" y="555" class="s">SGH123ABE → #3  10.10.1.13 / VLAN 100</text>
+  <text x="480" y="578" class="s">[Enter] 진행  [G] 순번 이동  [U] 직전 취소</text>
+  <text x="480" y="596" class="s">[L] 목록  [Q] 중단</text>
+  <!-- G/U 루프 -->
+  <path d="M290,580 H270 V466 H328" class="ln" style="stroke-dasharray:5 4"/>
+  <text x="150" y="600" class="l">G / U : 되돌리기 후</text>
+  <text x="150" y="617" class="l">다시 4단계로</text>
+  <line x1="480" y1="604" x2="480" y2="670" class="ln"/>
+  <text x="488" y="640" class="l">Enter</text>
+
+  <!-- 6 -->
+  <rect x="330" y="672" width="300" height="62" rx="10" class="ilo"/>
+  <circle cx="346" cy="688" r="11" fill="#15803d"/><text x="346" y="693" class="num">6</text>
+  <text x="480" y="697" class="tb">iLO에 IP·VLAN 기록</text>
+  <text x="480" y="717" class="s">hponcfg (MOD_NETWORK_SETTINGS)</text>
+  <text x="480" y="731" class="s" style="font-size:11.5px">또는 ilorest EthernetInterface</text>
+  <line x1="480" y1="734" x2="480" y2="764" class="ln"/>
+
+  <!-- 적용 실패 -->
+  <path d="M330,703 H150 V744" class="ln"/>
+  <text x="190" y="695" class="l">실패</text>
+  <rect x="50" y="746" width="200" height="52" rx="10" class="warn"/>
+  <text x="150" y="769" class="tb">USED 확정 안 함</text>
+  <text x="150" y="788" class="s">pointer 유지 · 로그 기록</text>
+
+  <!-- 7 -->
+  <rect x="330" y="766" width="300" height="62" rx="10" class="usb"/>
+  <circle cx="346" cy="782" r="11" fill="#0369a1"/><text x="346" y="787" class="num">7</text>
+  <text x="480" y="791" class="tb">pool.csv 기록 (삭제 안 함)</text>
+  <text x="480" y="811" class="s">행 → USED + 시리얼 + 시각 · pointer+1</text>
+  <text x="480" y="825" class="s" style="font-size:11.5px">history.log 추가 · .bak 백업 · sync</text>
+  <line x1="480" y1="828" x2="480" y2="858" class="ln"/>
+
+  <!-- 8 -->
+  <rect x="330" y="860" width="300" height="56" rx="10" class="ilo"/>
+  <circle cx="346" cy="876" r="11" fill="#15803d"/><text x="346" y="881" class="num">8</text>
+  <text x="480" y="885" class="tb">iLO 리셋 → 값 재조회 검증</text>
+  <text x="480" y="905" class="s">IP / VLAN 일치 여부 확인</text>
+  <line x1="480" y1="916" x2="480" y2="946" class="ln"/>
+
+  <!-- 검증 불일치 -->
+  <path d="M630,888 H780 V946" class="ln"/>
+  <text x="660" y="880" class="l">불일치</text>
+  <rect x="680" y="948" width="220" height="52" rx="10" class="warn"/>
+  <text x="790" y="971" class="tb">경고 표시 + 로그</text>
+  <text x="790" y="990" class="s">[U]로 취소 후 재시도 가능</text>
+
+  <!-- 9 -->
+  <rect x="330" y="948" width="300" height="56" rx="10" class="box"/>
+  <circle cx="346" cy="964" r="11" fill="#334155"/><text x="346" y="969" class="num">9</text>
+  <text x="480" y="973" class="tb">USB 제거 안내 → 서버 재부팅</text>
+  <text x="480" y="993" class="s">다음 서버에 USB 꽂기</text>
+
+  <!-- 하단 요약 -->
+  <rect x="40" y="1036" width="880" height="118" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="60" y="1062" class="l" style="font-weight:700;fill:#0f172a;font-size:14px">핵심 원칙</text>
+  <text x="60" y="1086" class="l">• RBSU 메뉴를 키 입력으로 조작하지 않고, 같은 설정값을 부팅 USB에서 iLO에 직접 기록 (결과는 메뉴 설정과 동일)</text>
+  <text x="60" y="1108" class="l">• 사용한 항목은 지우지 않고 USED로 표시 → 재할당 불가, 되돌리기는 상태값 변경 + history.log 기록으로만 처리</text>
+  <text x="60" y="1130" class="l">• 이미 할당된 서버를 다시 꽂으면 새 순번을 소모하지 않고 기존 값을 재적용 (순서 실수 방지)</text>
+</svg>

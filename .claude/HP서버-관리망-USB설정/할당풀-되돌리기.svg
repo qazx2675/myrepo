@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 800" width="960" height="800" font-family="'Malgun Gothic','Noto Sans KR','Apple SD Gothic Neo',sans-serif">
+  <!-- HP 서버 관리망 USB 설정 — 할당 풀 상태와 순번 되돌리기 -->
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .h{font-size:12.5px;fill:#ffffff;font-weight:700}
+      .c{font-size:12.5px;fill:#0f172a}
+      .t{font-size:15px;fill:#0f172a;font-weight:700}
+      .s{font-size:12.5px;fill:#334155}
+      .used{fill:#fee2e2}
+      .free{fill:#dcfce7}
+      .void{fill:#e2e8f0}
+      .ln{stroke:#475569;stroke-width:1.8;fill:none;marker-end:url(#a)}
+      .ptr{fill:#6d28d9;font-size:13px;font-weight:700}
+    </style>
+  </defs>
+  <rect width="960" height="800" fill="#f8fafc"/>
+  <text x="480" y="36" text-anchor="middle" class="t" style="font-size:21px">할당 풀(pool.csv) 상태와 순번 되돌리기</text>
+  <text x="480" y="60" text-anchor="middle" class="s">행은 절대 삭제하지 않음 · 상태만 변경 · 모든 변경은 history.log에 기록</text>
+
+  <!-- 범례 -->
+  <g transform="translate(300,76)">
+    <rect width="16" height="12" class="free" stroke="#15803d"/><text x="22" y="11" class="s">FREE 할당 가능</text>
+    <rect x="130" width="16" height="12" class="used" stroke="#b91c1c"/><text x="152" y="11" class="s">USED 할당됨</text>
+    <rect x="250" width="16" height="12" class="void" stroke="#64748b"/><text x="272" y="11" class="s">VOID 무효(기록만)</text>
+  </g>
+
+  <!-- ===== 시나리오 1: 정상 + 순서 착오 발견 ===== -->
+  <text x="40" y="126" class="t">① 현재 상태 — 서버 C에 #3을 줘야 했는데 서버 D를 먼저 꽂아 D가 #3을 받음</text>
+  <g transform="translate(40,140)">
+    <rect width="380" height="26" fill="#334155"/>
+    <text x="12" y="18" class="h">seq</text><text x="60" y="18" class="h">IP / VLAN</text><text x="220" y="18" class="h">status</text><text x="300" y="18" class="h">serial</text>
+    <rect y="26" width="380" height="26" class="used"/><text x="12" y="44" class="c">1</text><text x="60" y="44" class="c">10.10.1.11 / 100</text><text x="220" y="44" class="c">USED</text><text x="300" y="44" class="c">서버 A</text>
+    <rect y="52" width="380" height="26" class="used"/><text x="12" y="70" class="c">2</text><text x="60" y="70" class="c">10.10.1.12 / 100</text><text x="220" y="70" class="c">USED</text><text x="300" y="70" class="c">서버 B</text>
+    <rect y="78" width="380" height="26" class="used" stroke="#b91c1c" stroke-width="2"/><text x="12" y="96" class="c">3</text><text x="60" y="96" class="c">10.10.1.13 / 100</text><text x="220" y="96" class="c">USED</text><text x="300" y="96" class="c" style="font-weight:700;fill:#b91c1c">서버 D ✗</text>
+    <rect y="104" width="380" height="26" class="free"/><text x="12" y="122" class="c">4</text><text x="60" y="122" class="c">10.10.1.14 / 100</text><text x="220" y="122" class="c">FREE</text>
+    <rect y="130" width="380" height="26" class="free"/><text x="12" y="148" class="c">5</text><text x="60" y="148" class="c">10.10.1.15 / 100</text><text x="220" y="148" class="c">FREE</text>
+    <text x="386" y="122" class="ptr">◀ pointer</text>
+  </g>
+
+  <!-- 화살표 + 명령 -->
+  <path d="M498,220 H520" class="ln"/>
+  <rect x="524" y="170" width="396" height="116" rx="10" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.6"/>
+  <text x="540" y="194" class="t">[U] 직전 할당 취소  (ilocfg.sh undo)</text>
+  <text x="540" y="218" class="s">• #3(서버 D) → VOID 로 표시 (기록 보존)</text>
+  <text x="540" y="238" class="s">• 같은 값으로 #3' 을 FREE 로 되살림</text>
+  <text x="540" y="258" class="s">• pointer → #3'</text>
+  <text x="540" y="278" class="s">※ 여러 건이 틀렸으면 [G] 순번 이동 사용</text>
+
+  <text x="40" y="340" class="t">② 되돌리기 후 — 서버 C 를 꽂으면 #3' 할당, 서버 D 는 다시 꽂으면 #4 할당</text>
+  <g transform="translate(40,354)">
+    <rect width="380" height="26" fill="#334155"/>
+    <text x="12" y="18" class="h">seq</text><text x="60" y="18" class="h">IP / VLAN</text><text x="220" y="18" class="h">status</text><text x="300" y="18" class="h">serial</text>
+    <rect y="26" width="380" height="26" class="used"/><text x="12" y="44" class="c">1</text><text x="60" y="44" class="c">10.10.1.11 / 100</text><text x="220" y="44" class="c">USED</text><text x="300" y="44" class="c">서버 A</text>
+    <rect y="52" width="380" height="26" class="used"/><text x="12" y="70" class="c">2</text><text x="60" y="70" class="c">10.10.1.12 / 100</text><text x="220" y="70" class="c">USED</text><text x="300" y="70" class="c">서버 B</text>
+    <rect y="78" width="380" height="26" class="void"/><text x="12" y="96" class="c" style="fill:#64748b">3</text><text x="60" y="96" class="c" style="fill:#64748b;text-decoration:line-through">10.10.1.13 / 100</text><text x="220" y="96" class="c" style="fill:#64748b">VOID</text><text x="300" y="96" class="c" style="fill:#64748b">서버 D (취소)</text>
+    <rect y="104" width="380" height="26" class="free" stroke="#15803d" stroke-width="2"/><text x="12" y="122" class="c">3'</text><text x="60" y="122" class="c">10.10.1.13 / 100</text><text x="220" y="122" class="c">FREE</text>
+    <rect y="130" width="380" height="26" class="free"/><text x="12" y="148" class="c">4</text><text x="60" y="148" class="c">10.10.1.14 / 100</text><text x="220" y="148" class="c">FREE</text>
+    <rect y="156" width="380" height="26" class="free"/><text x="12" y="174" class="c">5</text><text x="60" y="174" class="c">10.10.1.15 / 100</text><text x="220" y="174" class="c">FREE</text>
+    <text x="386" y="122" class="ptr">◀ pointer</text>
+  </g>
+
+  <!-- goto 설명 -->
+  <rect x="524" y="360" width="396" height="176" rx="10" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+  <text x="540" y="384" class="t">[G] N 특정 순번으로 이동  (ilocfg.sh goto N)</text>
+  <text x="540" y="408" class="s">1. pointer 를 N 으로 설정</text>
+  <text x="540" y="428" class="s">2. N 이후 USED 행이 있으면 목록 표시</text>
+  <text x="540" y="448" class="s">3. "VOID 처리 후 재사용?" 확인 [y/N]</text>
+  <text x="540" y="468" class="s">  → y: 해당 행 VOID + 같은 값 FREE 행 생성</text>
+  <text x="540" y="488" class="s">  → N: 그 행들은 건너뛰고 N 이후 FREE 부터</text>
+  <text x="540" y="512" class="t" style="font-size:13.5px">ilocfg.sh reuse N</text>
+  <text x="540" y="530" class="s">특정 한 행만 FREE 로 되돌림</text>
+
+  <!-- 하단: 재설정 안내 -->
+  <rect x="40" y="570" width="880" height="200" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="60" y="598" class="t">되돌린 서버 처리</text>
+  <text x="60" y="624" class="s">• 서버 D 의 iLO 에는 이미 10.10.1.13 이 들어가 있음 → USB 를 다시 꽂아 올바른 값(#4)으로 재설정</text>
+  <text x="60" y="646" class="s">• 이때 "이 시리얼이 이미 USED?" 검사: D 의 기록은 VOID 이므로 새 항목 할당으로 진행</text>
+  <text x="60" y="668" class="s">• 재설정 전까지 IP 충돌 가능 → 서버 C 설정 전에 서버 D 를 먼저 재설정하거나 D 의 관리망 케이블을 분리</text>
+  <text x="60" y="702" class="t">history.log 예시</text>
+  <text x="60" y="726" class="s" style="font-family:Consolas,'D2Coding',monospace">2026-09-25T10:15:03  ASSIGN  #3  10.10.1.13 vlan100  serial=SGH123ABD(D)</text>
+  <text x="60" y="746" class="s" style="font-family:Consolas,'D2Coding',monospace">2026-09-25T10:17:41  UNDO    #3  → VOID, #3' FREE 생성, pointer=#3'</text>
+</svg>
