@@ -2,7 +2,7 @@
 
 `vm-param-check`를 현업에서 쓸 때 겪던 두 가지 문제 — ① 매번 옵션을 손으로 다 입력해야 하는 번거로움, ② 대상 VM이 몇 대뿐이어도 초기 조회가 느린 문제 — 를 해결한 개선 프로젝트입니다. 실제 도구(소스코드)는 이 폴더 바로 아래 [`vm-param-check/`](./vm-param-check/)에 그대로 있습니다.
 
-> 체크 → 교정 → 재검증 흐름은 [../WORKFLOW.md](../WORKFLOW.md), 폴더·파일별 역할은 [../ARCHITECTURE.md](../ARCHITECTURE.md)(V2 전체 기준)에 정리해 두었습니다.
+> 체크 → 교정 → 재검증 흐름은 [../WORKFLOW.md](../WORKFLOW.md), 폴더·파일별 역할은 [../ARCHITECTURE.md](../ARCHITECTURE.md)(V2 전체 기준)에 정리해 두었습니다. 흐름도 SVG: 체크·교정 [workflow.svg](workflow.svg), 배포·갱신 [workflow-deploy.svg](workflow-deploy.svg)
 
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정을 변경한 후 반드시 랜덤하게 몇 개의 서버를 직접 접속·확인하여 실제로 설정이 제대로 반영되었는지 교차 검증을 진행하십시오.
