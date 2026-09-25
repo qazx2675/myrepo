@@ -72,6 +72,10 @@ flowchart TD
     G -.->|"Ctrl+C 5초 안에 3번"| X["즉시 종료 130, 되돌리기 없음<br/>끊긴 대상 목록 + revert.sh 안내"]
     S1 --> V["콘솔로 무작위 VM 몇 대 확인"]
     S0 --> V
+    class A input
+    class G1,G2,G3 change
+    class F1,H,X,S1 warn
+    class OK,S0,V safe
 ```
 
 ---

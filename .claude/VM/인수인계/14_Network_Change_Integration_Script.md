@@ -81,6 +81,11 @@ flowchart TD
     N -- 실패분 --> O["--retry ip / --retry ldap"]
     N -- 원복 --> P["rollback: 포트그룹 → LDAP → IP 역순"]
     N -- 없음 --> Q["무작위 서버 몇 대 직접 확인"]
+    class A input
+    class F,G,K,P change
+    class E,I gate
+    class Z0,M warn
+    class Q safe
 ```
 
 ---
@@ -121,7 +126,7 @@ cp conf/assets.txt.sample       conf/assets.txt  # 실제 LDAP 설정·자산현
 
 예: `web01 svc 10.20.30.11 30` → `web01.seccae.com  svc-cae-10-20-30-0  30`
 
-> V2 `vm_setup.sh`의 `SPEC_DIR/vswitch_<작업이름>.txt`(BM당 여러 줄)와는 **다른 파일**입니다.
+> V2 `vm_setup.sh`의 `VMsetup/vswitch_<작업이름>.txt`(BM당 여러 줄)와는 **다른 파일**입니다.
 
 ### `integration.conf` 주요 키
 

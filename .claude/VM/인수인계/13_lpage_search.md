@@ -41,6 +41,8 @@ flowchart TD
     D --> E["ev02 자체 오버헤드 차감"]
     E --> F["짝수 GB 로 내림 (2MB 페이지 정렬)"]
     F --> G["Recommended ev02 Size 출력"]
+    class A input
+    class G safe
 ```
 
 ---

@@ -30,7 +30,7 @@ vi worklist_bm.txt
 ./power_setting -vcTargetIP=<vCenter IP> -id=<vCenter 계정> -worklistFile=worklist_bm.txt
 
 # 4) 적용 후 다시 점검 (host 행이 OK 인지) → 11번 문서
-cd /home/vm-param-check-usability-improvement/vm-param-check
+cd /home/V2/vm-param-check-usability-improvement/vm-param-check
 ./vm-param-check -vcenterList=vcenter.txt -f=targets.txt -specRoot=../../SPEC_DIR -out=result.csv
 ```
 
@@ -54,6 +54,11 @@ flowchart TD
     F --> K["vm-param-check 로 재점검"]
     I --> K
     J --> K
+    class A input
+    class C cmd
+    class G change
+    class J warn
+    class F,I,K safe
 ```
 
 ---

@@ -344,6 +344,10 @@ mark{background:var(--mark);color:inherit}
   background:var(--bg);overflow-x:auto;text-align:center;white-space:pre}
 .mermaid[data-done]{white-space:normal}
 .mermaid svg{max-width:100%;height:auto}
+.mermaid .node rect,.mermaid .node polygon{rx:8px;ry:8px;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.14))}
+.mermaid .cluster rect{rx:12px;ry:12px;stroke-dasharray:5 4}
+.mermaid .cluster-label,.mermaid .cluster .nodeLabel{font-weight:700;font-size:15px}
+.mermaid .edgeLabel{font-size:12.5px}
 
 /* 상단 바 (모바일) */
 #topbar{display:none;position:sticky;top:0;z-index:10;background:var(--side);
@@ -449,7 +453,34 @@ MERMAID_INIT = """
       el.removeAttribute('data-processed'); el.removeAttribute('data-done');
       el.textContent=el.getAttribute('data-src');
     });
-    mermaid.initialize({startOnLoad:false, theme: dark() ? 'dark' : 'default', securityLevel:'strict'});
+    var d=dark();
+    // 문서 안에서 ":::이름" / "class X 이름" 으로 쓰는 공통 색 (밝게/어둡게 따로)
+    var C = d ? {
+      input:'#1c2a45,#5b8def', cmd:'#133236,#3fb6b0', change:'#3a2a14,#f0a04b',
+      gate:'#2a2145,#a38bf0', warn:'#3d1d1d,#ef6b6b', safe:'#173019,#5cc25c', fg:'#e5e7eb'
+    } : {
+      input:'#e8f0fe,#3b6fd8', cmd:'#e3f5f4,#26918b', change:'#fff1e0,#dd8a2a',
+      gate:'#f1ecff,#7c5cd6', warn:'#fdeaea,#c94242', safe:'#e8f6e8,#3c9a3c', fg:'#1f2937'
+    };
+    var defs=Object.keys(C).filter(function(k){return k!=='fg';}).map(function(k){
+      var p=C[k].split(',');
+      return '    classDef '+k+' fill:'+p[0]+',stroke:'+p[1]+',stroke-width:1.5px,color:'+C.fg;
+    }).join('\\n');
+    els.forEach(function(el){
+      if(/^\\s*(flowchart|graph)\\b/.test(el.textContent)) el.textContent += '\\n'+defs;
+    });
+    mermaid.initialize({startOnLoad:false, securityLevel:'strict', theme:'base',
+      fontFamily:'inherit',
+      flowchart:{curve:'basis', nodeSpacing:36, rankSpacing:46, padding:14, htmlLabels:true},
+      themeVariables: d ? {
+        primaryColor:'#1e293b', primaryBorderColor:'#475569', primaryTextColor:'#e5e7eb',
+        lineColor:'#94a3b8', textColor:'#e5e7eb', fontSize:'14px',
+        clusterBkg:'#111a2e', clusterBorder:'#334155', edgeLabelBackground:'#0f172a'
+      } : {
+        primaryColor:'#f6f8fb', primaryBorderColor:'#94a3b8', primaryTextColor:'#1f2937',
+        lineColor:'#64748b', textColor:'#1f2937', fontSize:'14px',
+        clusterBkg:'#f8fafc', clusterBorder:'#cbd5e1', edgeLabelBackground:'#ffffff'
+      }});
     mermaid.run({nodes: els}).then(function(){
       els.forEach(function(el){ el.setAttribute('data-done','1'); });
     }).catch(function(e){ if(window.console) console.error(e); });

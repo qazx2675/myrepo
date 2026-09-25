@@ -57,6 +57,9 @@ flowchart TD
     L --> M
     M -- 예 --> N["종료코드 1 → DHCP 등록 수정 후 재실행"]
     M -- 아니오 --> O["종료코드 0 → 파워온 진행"]
+    class A input
+    class J,K,N warn
+    class H,O safe
 ```
 
 ---

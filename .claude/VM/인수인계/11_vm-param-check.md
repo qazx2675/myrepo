@@ -5,22 +5,25 @@
 | 항목 | 값 |
 |---|---|
 | **위험도** | 🟢 점검만 할 때 / 🔴 **`-fix`를 붙이면 실제 vCenter 설정을 바꿉니다** |
-| 폴더 | `.claude/VM/V2/vm-param-check-usability-improvement/vm-param-check/` (서버: `/home/vm-param-check-usability-improvement/vm-param-check/`) |
+| 폴더 | `.claude/VM/V2/vm-param-check-usability-improvement/vm-param-check/` (서버: `/home/V2/vm-param-check-usability-improvement/vm-param-check/`) |
 | 바이너리 | `vm-param-check` |
 | 하는 일 | VM들이 스펙(CPU/메모리/디스크/NUMA/affinity/Shares/preferHT/호스트 전원정책)에 맞는지 점검하고, `-fix`면 게이트 → 확인 → 교정 → 재검증까지 |
-| 인증 | `VC_USER` / `VC_PASS` (환경변수) |
-| 기준 버전 | **V2** (ev01~ev99, `-specExport`). V1 폴더 `.claude/VM/vm-param-check-usability-improvement/`는 구버전 |
+| 인증 | 바이너리: `VC_USER` / `VC_PASS` (환경변수) / 보조 스크립트 `vm_setting_check_insert.sh`: V2 암호 파일 → 직접 입력 (계정 `-id`, 기본 `lscsystems@vsphere.local`) |
+| 기준 버전 | **V2** (ev01~ev99, `-specExport`, `-specFolder`). V1 폴더 `.claude/VM/vm-param-check-usability-improvement/`는 구버전 |
 
 ---
 
 ## 1. 바로 쓰는 명령어
 
 ```bash
-cd /home/vm-param-check-usability-improvement/vm-param-check
+cd /home/V2/vm-param-check-usability-improvement/vm-param-check
 
-# 1) 인증 (세션마다 1회)
-export VC_USER='<계정>'
-read -rsp 'vCenter 비밀번호: ' VC_PASS; export VC_PASS; echo
+# 0) 가장 간단한 방법 — 보조 스크립트 (user 번호 메뉴, 암호 파일 사용, -fix 여부를 물어봄)
+bash vm_setting_check_insert.sh -u <작업이름>        # <작업이름>.txt(VM 이름 목록) → result_<작업이름>.csv
+
+# 1) 바이너리 직접 실행 시 인증 (세션마다 1회) — 암호 파일에서 꺼내거나 직접 입력
+export VC_USER='lscsystems@vsphere.local'
+export VC_PASS="$(. ../../secret_lib.sh; secret_get vcenter "$VC_USER")"   # 또는: read -rsp 'vCenter 비밀번호: ' VC_PASS; export VC_PASS; echo
 
 # 2) 설정 점검 — 정기 점검, VM 생성 직후 (스펙은 VM 이 속한 vCenter 폴더 이름으로 자동 매칭)
 ./vm-param-check -vcenterList=vcenter.txt -f=targets.txt -specRoot=../../SPEC_DIR -out=result.csv -user=<이름>
@@ -37,7 +40,10 @@ read -rsp 'vCenter 비밀번호: ' VC_PASS; export VC_PASS; echo
 # 6) 스펙이 VM 생성 옵션으로 어떻게 바뀌는지 보기 (vCenter 접속 없음)
 ./vm-param-check -specRoot=../../SPEC_DIR -specExport=<CAE폴더명>
 
-# 7) 스펙 파일 없이 기대값을 직접 줘서 점검
+# 7) 폴더/포트그룹과 상관없이 대상 VM 전부를 한 스펙으로 점검 (vm_setup.sh 의 생성 후 체크와 같은 방식)
+./vm-param-check -vcenterList=vcenter.txt -f=targets.txt -specRoot=../../SPEC_DIR -specFolder=<CAE폴더명> -out=result.csv
+
+# 8) 스펙 파일 없이 기대값을 직접 줘서 점검
 ./vm-param-check -vcenterList=vcenter.txt -f=targets.txt \
   -ht=on -cores=8 -numa=8 -cpu=16 -mem=64 -disk=500 -shares-ev01=2000 -out=result.csv
 ```
@@ -52,7 +58,9 @@ read -rsp 'vCenter 비밀번호: ' VC_PASS; export VC_PASS; echo
 flowchart TD
     A["입력<br/>vcenter.txt · targets.txt(-f)<br/>기대값: -specRoot 자동매칭 또는 직접 옵션"] --> B["vCenter 접속<br/>이름 목록 조회 → 대상만 상세 조회"]
     B --> C{"-specRoot?"}
-    C -- 예 --> D["VM 의 vCenter 폴더명 → SPEC_DIR 스펙 매칭<br/>(Task 폴더는 포트그룹명으로 유추 / 못 정하면 입력)"]
+    C -- 예 --> C1{"-specFolder?"}
+    C1 -- 예 --> D4["대상 VM 전부에 그 스펙 적용<br/>(CAE 번호 무시 매칭)"] --> D1
+    C1 -- 아니오 --> D["VM 의 vCenter 폴더명 → SPEC_DIR 스펙 매칭<br/>(Task 폴더는 포트그룹명으로 유추 / 못 정하면 입력)"]
     D --> D1{"스펙 적용 확인 y/N<br/>-yes 면 생략"}
     D1 -- N --> Z0["종료"]
     D1 -- y --> E
@@ -71,13 +79,18 @@ flowchart TD
     M -- 예 --> N["수동조치 항목 (메모리/디스크/Shares/전원정책 등)<br/>전원정책은 power_setting (17번)"]
     M -- 아니오 --> O["무작위 VM 몇 대 직접 확인"]
     N --> O
+    class A input
+    class K,L change
+    class D1,H,J gate
+    class Z2,N warn
+    class Z0,Z1,Z3,O safe
 ```
 
 ---
 
 ## 3. 준비물
 
-1. **빌드된 바이너리** — V2 전체 빌드(`cd /home && bash setup.sh`) 또는 이 폴더에서 `bash setup.sh`
+1. **빌드된 바이너리** — V2 전체 빌드(`cd /home/V2 && bash setup.sh`, OS6 면 `bin_os6/vm-param-check.gz` 설치) 또는 이 폴더에서 `bash setup.sh`
 2. **vCenter 계정** — 점검만 하면 읽기 전용, `-fix`는 **Reconfigure 권한**
 3. **`vcenter.txt`** — vCenter 주소 목록 (한 줄에 하나, 줄 끝 `#` 주석 가능)
 4. **`targets.txt`** — 점검할 **VM 이름** 목록 (`-f`). 안 주면 **인벤토리 전체**가 대상
@@ -118,6 +131,7 @@ VM 이름에 들어 있는 `ev01`~`ev99` 중 **첫 번째 일치**가 그 VM의 
 | `-vcenterList` | `vcenter.txt` | | vCenter 주소 목록 파일 |
 | `-f` | — | | 점검할 VM 이름 목록. **안 주면 인벤토리 전체** |
 | `-specRoot` | — | | 스펙 루트 경로 (V2 서버 배치: `../../SPEC_DIR`) |
+| `-specFolder` | — | | `-specRoot`와 함께: 폴더/포트그룹으로 찾지 않고 **대상 VM 전부에 이 스펙**을 적용 (CAE 번호 무시 매칭). `-specRoot` 없이 주면 오류 |
 | `-yes` | `false` | | 스펙 자동매칭 확인만 생략. **`-fix`의 실제 변경 확인은 생략하지 않음** |
 
 ### 4-2. 출력
@@ -251,7 +265,7 @@ vCPU 수와 소켓당 코어 수가 나누어떨어지지 않는 조합이면 �
 | 스크립트 | 하는 일 | 사용법 |
 |---|---|---|
 | `folder_setup.sh` | 스펙 폴더·틀 생성을 대화형으로 | `bash folder_setup.sh` |
-| `vm_setting_check_insert.sh` | 점검/교정 실행을 변수 설정만으로. `-fix` 여부를 먼저 묻고 도구 자체 확인을 한 번 더 거침(이중 확인) | 상단 `VC_USER`/`VC_PASS`/`VCENTER_LIST`/`SPEC_ROOT`와 `set_user()`의 `user`를 채운 뒤 `bash vm_setting_check_insert.sh` |
+| `vm_setting_check_insert.sh` | `<작업이름>.txt`를 대상으로 `-specRoot` 점검/교정. `-fix` 여부를 먼저 묻고 도구 자체 확인을 한 번 더 거침(이중 확인). 시작할 때 셸의 `VC_PASSWORD`/`VC_PASS`를 지우고 V2 암호 파일(`../../passwd_update.sh`) → 직접 입력 순으로 비밀번호를 받음. SPEC_DIR 은 이 폴더의 `SPEC_DIR`, 없으면 `../../SPEC_DIR` | `bash vm_setting_check_insert.sh [-u <작업이름>] [-id <계정>]` — `-u` 없으면 번호 메뉴(`0) 직접 선택` `1) lsh` `2) ljh` `3) dhk`) |
 | `../make_update_package.sh`, `../update.sh` | 폐쇄망 증분 업데이트 | [02번 2절](./02_공통_실행환경.md) |
 | `../update_deploy.sh` | 인터넷 되는 배포 서버에서 제자리 갱신 (사용자 파일 보존, 빌드 성공 후 교체) | 스크립트 상단 주석 |
 

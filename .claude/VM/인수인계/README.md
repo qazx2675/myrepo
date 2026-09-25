@@ -19,24 +19,40 @@
 
 ## 전체 작업 흐름
 
-신규 서버 구축부터 네트워크 변경까지 도구가 쓰이는 순서입니다. 🔴는 실제 설정을 바꾸는 단계입니다.
+도구가 쓰이는 순서를 두 단계로 나눴습니다. **① VM setup 단계**는 호스트 등록부터 VM 인도까지, **② 망/인프라 변경 단계**는 이미 쓰고 있는 VM 의 IP·LDAP·포트그룹을 바꾸는 작업입니다. 🔴는 실제 설정을 바꾸는 단계입니다.
+
+색 구분: 주황 = 설정 변경 · 파랑 = 입력/준비 · 청록 = 조회·계산 · 보라 = 판정/확인 · 빨강 = 실패·중단 · 초록 = 완료
 
 ```mermaid
 flowchart TD
-    A["ESXi 호스트를 vCenter 에 등록<br/>V2 main_conn 🔴 · license_assign 🔴"] --> B["메모리 사이징<br/>lpage_search 🟢"]
-    B --> C["스펙 작성<br/>SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
-    C --> D["VM 생성·설정<br/>V2 vm_setup.sh 🔴<br/>vswitch → vm_create → affinity → lpage"]
-    D --> E["MAC 목록 추출 → DHCP 등록<br/>V2 mac_info 🟢"]
-    E --> F["파워온 전 MAC 대조<br/>vm_verifier 🟢"]
-    F -- FAIL --> F1["DHCP 등록 수정 후 재검증"] --> F
-    F -- PASS --> G["파워온 · OS 설치"]
-    G --> H["설정 점검<br/>vm-param-check 🟢"]
-    H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 은 power_setting 🔴"] --> H
-    H -- PASS --> I["운영"]
-    I --> J["망변경 (IP → LDAP → 포트그룹)<br/>Network_Change_Integration_Script 🔴"]
-    J -- "IP 가 잘못 들어가 접속 불가한 VM" --> K["vCenter API 로 IP 재설정<br/>vm-ip-change 🔴"]
-    J --> L["무작위 표본 몇 대 직접 확인"]
-    K --> L
+    subgraph S1["① VM setup 단계"]
+        direction TB
+        A["ESXi 호스트를 vCenter 에 등록<br/>V2 main_conn 🔴 · license_assign 🔴"] --> B["메모리 사이징<br/>lpage_search 🟢"]
+        B --> C["스펙 작성<br/>SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
+        C --> D["VM 생성·설정<br/>V2 vm_setup.sh 🔴<br/>vswitch → vm_create → affinity → lpage → 스펙 체크"]
+        D --> E["MAC 목록 추출 → DHCP 등록<br/>V2 mac_info 🟢"]
+        E --> F["파워온 전 MAC 대조<br/>vm_verifier 🟢"]
+        F -- FAIL --> F1["DHCP 등록 수정 후 재검증"] --> F
+        F -- PASS --> G["파워온 · OS 설치"]
+        G --> H["설정 점검<br/>vm-param-check 🟢"]
+        H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 은 power_setting 🔴"] --> H
+        H -- PASS --> I["VM 인도 · 사용 시작"]
+    end
+    subgraph S2["② 망/인프라 변경 단계"]
+        direction TB
+        J["망변경 (IP → LDAP → 포트그룹)<br/>Network_Change_Integration_Script 🔴"]
+        J -- "IP 가 잘못 들어가 접속 불가한 VM" --> K["vCenter API 로 IP 재설정<br/>vm-ip-change 🔴"]
+        J --> L["무작위 표본 몇 대 직접 확인"]
+        K --> L
+        L -. "설정이 스펙과 맞는지 다시 볼 때" .-> M["vm-param-check 🟢 (11번)"]
+    end
+    S1 ==>|"VM 운영 중 망·인프라가 바뀔 때"| S2
+    class A,D,H1,J,K change
+    class B,E,M cmd
+    class C input
+    class F,H gate
+    class F1 warn
+    class I,L safe
 ```
 
 ---
@@ -95,4 +111,5 @@ python3 build_handbook.py
 | V2 `VMsetup/*-source` 6종 (license_assign, mac_info, main_conn, tag_setting, vm_create, vswitch_setting) | 빌드 예시 경로가 `.claude/VM/VM_setup/<도구>-source` (V1 경로) | V2 는 `.claude/VM/V2/VMsetup/<도구>-source`, `setup.sh`가 `../../govendor`를 링크 | V1 경로에서 빌드하면 V1 소스가 빌드됨. [10번](./10_V2.md)은 V2 경로로 적음 |
 | V2 `VMsetup/README.md` "공통 규칙" | 접속은 `-vcTargetIP`, 대상은 `-worklistFile` | `numa_preferht_setting`은 `-vc`/`-f`, `tag_setting`은 `-hostListFile`, `nic_assign`은 `-mapFile`만 | [10번 옵션표](./10_V2.md)에 도구별로 적음 |
 | `Network_Change_Integration_Script/integration.conf.sample` | `preprocess_tag` 주석에 "실행 시 `-tag`로 덮어쓸 수 있음" | `change.sh`는 `--tag`만 받음 | `-tag`로 주면 인식 안 됨 |
+| V2 `README.md` "비밀번호" 절 | `vm_setup.sh`, `vm_setting_check_insert.sh`가 "환경변수 → 암호 파일 → 직접 입력" 순 | 두 스크립트 모두 시작할 때 `unset VC_PASSWORD VC_PASS VCENTER_PASS` → 암호 파일 → 입력 | `export`로 비밀번호를 넣어도 쓰이지 않음. [10번](./10_V2.md)은 소스 기준으로 적음 |
 | `vm_verifier/setup.sh` 주석 | "`vendor/`가 없으면 `go mod vendor` 후 옮길 것" | 실제로는 `../../공통/govendor/govmomi-0.39.0`을 `vendor`로 링크 | 반출 시 `.claude/공통/govendor/`를 함께 옮겨야 함 (README는 맞게 적혀 있음) |

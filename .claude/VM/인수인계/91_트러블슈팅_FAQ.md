@@ -57,7 +57,7 @@ export VC_PASS="$P" VC_PASSWORD="$P"; unset P
 
 ### 인증은 맞는데 로그인이 안 됨
 
-1. **계정** — V2 개별 도구·power_setting의 `-id` 기본값은 `lscsystems@vsphere.local`, `vm_setup.sh -i` 기본값은 `administrator@vsphere.local`입니다. 다르면 명시하세요.
+1. **계정** — V2 개별 도구·`vm_setup.sh`·power_setting의 `-id` 기본값은 모두 `lscsystems@vsphere.local`입니다. 다르면 명시하세요. `vm_setup.sh`·`vm_setting_check_insert.sh`는 셸의 비밀번호 변수를 지우고 암호 파일을 쓰므로, 비밀번호가 바뀌었으면 `cd /home/V2 && ./passwd_update.sh`로 다시 등록하세요.
 2. **네트워크** — `curl -k -I https://<vCenter IP>`
 3. **특수문자** — 작은따옴표로 감싸서 export
 
