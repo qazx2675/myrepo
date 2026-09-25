@@ -367,7 +367,10 @@ mark{background:var(--mark);color:inherit}
 .mermaid .node rect,.mermaid .node polygon{rx:8px;ry:8px;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.14))}
 .mermaid .cluster rect{rx:12px;ry:12px;stroke-dasharray:5 4}
 .mermaid .cluster-label,.mermaid .cluster .nodeLabel{font-weight:700;font-size:15px}
-.mermaid .edgeLabel{font-size:12.5px}
+.mermaid .edgeLabel{font-size:13.5px}
+.mermaid .edgeLabel .label,.mermaid .edgeLabel span,.mermaid .edgeLabel p{
+  font-weight:700!important;padding:2px 6px!important;border-radius:4px!important;
+  box-shadow:0 1px 3px rgba(0,0,0,.22)!important}
 
 /* 상단 바 (모바일) */
 #topbar{display:none;position:sticky;top:0;z-index:10;background:var(--side);

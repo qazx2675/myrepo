@@ -27,15 +27,17 @@
 flowchart TD
     subgraph S1["① VM setup 단계"]
         direction TB
-        A["ESXi 호스트를 vCenter 에 등록<br/>V2 main_conn 🔴 · license_assign 🔴"] --> B["메모리 사이징<br/>lpage_search 🟢"]
-        B --> C["스펙 작성<br/>SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
+        A["ESXi 호스트를 vCenter 에 등록<br/>V2 main_conn 🔴"] --> B["메모리 사이징<br/>lpage_search 🟢"]
+        B --> B1["평가판 라이선스 호스트에 라이선스 할당<br/>V2 license_assign 🔴"]
+        B1 --> C["스펙 작성<br/>SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
         C --> D["VM 생성·설정<br/>V2 vm_setup.sh 🔴<br/>vswitch → vm_create → affinity → lpage → 스펙 체크"]
         D --> E["MAC 목록 추출 → DHCP 등록<br/>V2 mac_info 🟢"]
-        E --> F["파워온 전 MAC 대조<br/>vm_verifier 🟢"]
+        E --> E1["호스트 전원정책 High Performance 적용<br/>power_setting 🔴 (17번)"]
+        E1 --> F["파워온 전 MAC 대조<br/>vm_verifier 🟢"]
         F -- FAIL --> F1["DHCP 등록 수정 후 재검증"] --> F
         F -- PASS --> G["파워온 · OS 설치"]
         G --> H["설정 점검<br/>vm-param-check 🟢"]
-        H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 은 power_setting 🔴"] --> H
+        H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴 재실행"] --> H
         H -- PASS --> I["VM 인도 · 사용 시작"]
     end
     subgraph S2["② 망/인프라 변경 단계"]
@@ -47,7 +49,7 @@ flowchart TD
         L -. "설정이 스펙과 맞는지 다시 볼 때" .-> M["vm-param-check 🟢 (11번)"]
     end
     S1 ==>|"VM 운영 중 망·인프라가 바뀔 때"| S2
-    class A,D,H1,J,K change
+    class A,D,B1,E1,H1,J,K change
     class B,E,M cmd
     class C input
     class F,H gate

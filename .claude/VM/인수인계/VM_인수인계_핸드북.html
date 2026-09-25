@@ -109,7 +109,10 @@ mark{background:var(--mark);color:inherit}
 .mermaid .node rect,.mermaid .node polygon{rx:8px;ry:8px;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.14))}
 .mermaid .cluster rect{rx:12px;ry:12px;stroke-dasharray:5 4}
 .mermaid .cluster-label,.mermaid .cluster .nodeLabel{font-weight:700;font-size:15px}
-.mermaid .edgeLabel{font-size:12.5px}
+.mermaid .edgeLabel{font-size:13.5px}
+.mermaid .edgeLabel .label,.mermaid .edgeLabel span,.mermaid .edgeLabel p{
+  font-weight:700!important;padding:2px 6px!important;border-radius:4px!important;
+  box-shadow:0 1px 3px rgba(0,0,0,.22)!important}
 
 /* 상단 바 (모바일) */
 #topbar{display:none;position:sticky;top:0;z-index:10;background:var(--side);
@@ -146,7 +149,7 @@ mark{background:var(--mark);color:inherit}
 <div id="topbar"><button id="menu">☰ 목차</button><b>VM 인수인계 핸드북</b></div>
 <div class="layout">
   <nav id="side">
-    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-25 19:19</span></div>
+    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-25 19:31</span></div>
     <input id="q" type="search" placeholder="목차 검색 (Esc 초기화)" autocomplete="off">
     <ul id="toc"><li class="grp">시작</li>
 <li><a class="doc" href="#doc-README">VM 자동화 도구 인수인계 문서</a></li>
@@ -319,15 +322,17 @@ mark{background:var(--mark);color:inherit}
 <div class="mermaid">flowchart TD
     subgraph S1["① VM setup 단계"]
         direction TB
-        A["ESXi 호스트를 vCenter 에 등록&lt;br/&gt;V2 main_conn 🔴 · license_assign 🔴"] --&gt; B["메모리 사이징&lt;br/&gt;lpage_search 🟢"]
-        B --&gt; C["스펙 작성&lt;br/&gt;SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
+        A["ESXi 호스트를 vCenter 에 등록&lt;br/&gt;V2 main_conn 🔴"] --&gt; B["메모리 사이징&lt;br/&gt;lpage_search 🟢"]
+        B --&gt; B1["평가판 라이선스 호스트에 라이선스 할당&lt;br/&gt;V2 license_assign 🔴"]
+        B1 --&gt; C["스펙 작성&lt;br/&gt;SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
         C --&gt; D["VM 생성·설정&lt;br/&gt;V2 vm_setup.sh 🔴&lt;br/&gt;vswitch → vm_create → affinity → lpage → 스펙 체크"]
         D --&gt; E["MAC 목록 추출 → DHCP 등록&lt;br/&gt;V2 mac_info 🟢"]
-        E --&gt; F["파워온 전 MAC 대조&lt;br/&gt;vm_verifier 🟢"]
+        E --&gt; E1["호스트 전원정책 High Performance 적용&lt;br/&gt;power_setting 🔴 (17번)"]
+        E1 --&gt; F["파워온 전 MAC 대조&lt;br/&gt;vm_verifier 🟢"]
         F -- FAIL --&gt; F1["DHCP 등록 수정 후 재검증"] --&gt; F
         F -- PASS --&gt; G["파워온 · OS 설치"]
         G --&gt; H["설정 점검&lt;br/&gt;vm-param-check 🟢"]
-        H -- FAIL --&gt; H1["VM 전원 OFF → -fix 🔴&lt;br/&gt;호스트 전원정책 FAIL 은 power_setting 🔴"] --&gt; H
+        H -- FAIL --&gt; H1["VM 전원 OFF → -fix 🔴&lt;br/&gt;호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴 재실행"] --&gt; H
         H -- PASS --&gt; I["VM 인도 · 사용 시작"]
     end
     subgraph S2["② 망/인프라 변경 단계"]
@@ -339,7 +344,7 @@ mark{background:var(--mark);color:inherit}
         L -. "설정이 스펙과 맞는지 다시 볼 때" .-&gt; M["vm-param-check 🟢 (11번)"]
     end
     S1 ==&gt;|"VM 운영 중 망·인프라가 바뀔 때"| S2
-    class A,D,H1,J,K change
+    class A,D,B1,E1,H1,J,K change
     class B,E,M cmd
     class C input
     class F,H gate
@@ -1477,6 +1482,7 @@ bash /tmp/vm-ip-change/&lt;호스트네임&gt;.revert.sh</code></pre>
 <h3 id="doc-17_VM_setup_잔여도구--한눈에-보기">한눈에 보기</h3>
 <div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🔴 <strong>ESXi 호스트의 전원 정책을 실제로 바꿉니다</strong></td></tr><tr><td>파일</td><td><code>.claude/VM/VM_setup/vm-param-fix/power_setting</code> (컴파일된 바이너리, 약 19MB)</td></tr><tr><td>하는 일</td><td>목록의 호스트(BM)에 <strong>고성능(High Performance) 전원 정책</strong>을 일괄 적용. 이미 적용된 호스트는 건너뜀</td></tr><tr><td>인증</td><td><code>VC_PASSWORD</code> (계정은 <code>-id</code>)</td></tr><tr><td>남아 있는 이유</td><td>V2에 대체 기능이 없습니다. <code>vm-param-check</code>는 호스트 전원정책을 <strong>점검만</strong> 하고 교정하지 않습니다</td></tr></tbody></table></div>
 <blockquote><p><strong>소스가 없는 유일한 사본입니다. 삭제·이동하지 마세요.</strong> Go 소스를 확정하지 못해 재빌드할 수 없습니다. <code>VM_setup</code>의 나머지 도구는 모두 <a href="#doc-10_V2">10. V2</a>로 대체되었습니다.</p></blockquote>
+<p><strong>언제 실행하나요?</strong> <a href="#doc-README">전체 작업 흐름</a>에서는 MAC 목록 추출(<code>mac_info</code>) 다음, 파워온 전 MAC 대조(<code>vm_verifier</code>) 전에 한 번 실행해 두는 것을 표준 순서로 둡니다 — 새 호스트의 전원 정책을 미리 맞춰 두면 이후 <code>vm-param-check</code>의 host 전원정책 점검이 항상 통과합니다. 이미 지나쳤거나 나중에 FAIL이 나오면 아래 명령으로 다시 실행해도 됩니다(멱등 — 이미 적용된 호스트는 건너뜀).</p>
 <hr>
 <h3 id="doc-17_VM_setup_잔여도구--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</h3>
 <pre class="lang-bash"><code>cd &lt;저장소&gt;/.claude/VM/VM_setup/vm-param-fix
