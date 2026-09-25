@@ -8,6 +8,7 @@ VMsetup/mac_info-source/mac_info
 VMsetup/main_conn-source/main_conn
 VMsetup/nic_assign-source/nic_assign
 VMsetup/numa_preferht_setting-source/numa_preferht_setting
+VMsetup/power_setting-source/power_setting
 VMsetup/tag_setting-source/tag_setting
 VMsetup/vm_create-source/vm_create
 VMsetup/vswitch_setting-source/vswitch_setting

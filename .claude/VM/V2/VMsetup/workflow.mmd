@@ -20,6 +20,7 @@ flowchart TD
     M -- 예 --> M1["그 단계에서 멈춤 ([완료] 없음)<br/>원인 수정 후 재실행 → 이미 있는 것은 건너뜀"] --> C
     M -- 아니오 --> N["6. 스펙 체크<br/>vm-param-check -specFolder (만든 VM 만)<br/>[일치] / [차이] → run_{user}/check_번호.log, .csv"]
     N --> P{"차이 있음?"}
-    P -- 아니오 --> Q["[완료]"]
-    P -- 예 --> R["교정 명령 안내<br/>vm-param-check -fix"]
+    P -- 아니오 --> MC
+    P -- 예 --> R["교정 명령 안내<br/>vm-param-check -fix"] --> MC
+    MC["7. MAC 수집 — mac_info<br/>(MAC_ARG1/MAC_ARGSTR 비면 건너뜀)<br/>awx_route 있으면 → awx_route/{user}.txt 복사"] --> Q["[완료]"]
     R --> S["무작위 VM 몇 대 직접 확인"]

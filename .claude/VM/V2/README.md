@@ -29,7 +29,7 @@ bash setup.sh
 
 | 명령 | 동작 |
 |---|---|
-| `bash setup.sh` | 11개 도구 전체 빌드 후 성공/실패 요약 (하나라도 실패하면 종료코드 1). OS6 면 빌드 대신 `bin_os6/*.gz` 를 푼다 |
+| `bash setup.sh` | 12개 도구 전체 빌드 후 성공/실패 요약 (하나라도 실패하면 종료코드 1). OS6 면 빌드 대신 `bin_os6/*.gz` 를 푼다 |
 | `bash setup.sh vm_create nic_assign` | 지정한 도구만 |
 | `bash setup.sh --os6` | OS 와 상관없이 `bin_os6/` 실행파일을 설치 |
 | `bash setup.sh -l` | 빌드 대상과 실행파일 경로 목록 |

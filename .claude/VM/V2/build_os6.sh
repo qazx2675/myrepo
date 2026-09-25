@@ -30,6 +30,7 @@ TARGETS=(
   "tag_setting:VMsetup/tag_setting-source:tag_setting"
   "numa_preferht_setting:VMsetup/numa_preferht_setting-source:numa_preferht_setting"
   "license_assign:VMsetup/license_assign-source:license_assign"
+  "power_setting:VMsetup/power_setting-source:power_setting"
   "mac_info:VMsetup/mac_info-source:mac_info"
   "main_conn:VMsetup/main_conn-source:main_conn"
   "vm-param-check:vm-param-check-usability-improvement/vm-param-check:vm-param-check"

@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-25 — `power_setting`(BM 전원 고성능) 추가, `vm_setup.sh`에 MAC 수집 + `awx_route`
+
+- **`power_setting-source` (신규)**: BM(ESXi 호스트) 전원 관리 정책을 고성능(`static` / `High Performance`)으로 설정. 입력은 vCenter 주소와 BM 목록 파일(`<user>.txt` 그대로)뿐. 호스트 병렬(`-concurrency`, 기본 20), 기본 계정 `lscsystems@vsphere.local`, 이미 고성능이면 스킵. 목록에 도메인 없이 hostname 만 적어도 `vswitch_setting`과 같은 규칙(정확한 이름 → 짧은 이름, 둘 이상이면 에러)으로 찾는다. vm-param-check 의 `host power policy`(기대값 `High Performance`)와 같은 정책을 맞춘다.
+- **`vm_setup.sh`**: 스펙 체크 뒤 7단계로 `mac_info` 실행. `MAC_ARG1`/`MAC_ARGINT`/`MAC_ARGSTR`(스크립트 위쪽 변수 또는 환경변수)이 비면 건너뜀. `awx_route=""` 를 채우면 결과를 `awx_route/<user>.txt` 로 복사. 실행파일 확인 목록에 `mac_info` 추가, 실행 계획에 MAC 수집 줄 추가.
+- **`setup.sh`/`.gitignore`**: 빌드 대상에 `power_setting` 추가.
+- **영향 범위**: `VMsetup/power_setting-source/`(신규), `VMsetup/vm_setup.sh`, `setup.sh`, `.gitignore`, `README.md`/`ARCHITECTURE.md`/`VMsetup/README.md`/`VMsetup/workflow.mmd`.
+- **검증**: vcsim(govmomi v0.46)에서 `vm_setup.sh -u <test>` 전 과정 → mac_info 출력이 `awx_route/<test>.txt` 로 복사되는 것 확인. `power_setting`은 hostname 조회·없는 호스트 에러·종료코드 1 확인. vcsim 에 `HostPowerSystem` 이 없어 **정책 변경 자체는 실제 ESXi 에서 확인 필요**.
+
 ## 2026-09-24 — vm_create/lpage_setting 실행 계획도 ev 범위로 묶어 표시
 
 - **`vm_setup.sh`**: `affinity_setting`이 이미 하던 그룹핑(`[ev01]`/`[ev02~ev06]`, 값이 같은 ev를 `ev_ranges`로 범위 표시)을 `vm_create`/`lpage_setting`에도 적용했다. `print_ev_kv` 함수 추가. 전에는 `-ev01Cpu=16 -ev02Cpu=8 ...` 식으로 ev마다 다 나열해서 값이 같은 ev를 눈으로 비교하기 번거로웠다.

@@ -17,8 +17,9 @@
 | `VMsetup/affinity_setting-source/main.go` | affinity 일괄 적용(`-vm_cnt` 1~99, ev마다 파일 필수 — 자동 계산 없음) |
 | `VMsetup/lpage_setting-source/main.go` | HugePage/CPU 토폴로지(ev01~ev99) |
 | `VMsetup/vswitch_setting-source/main.go` | BM 포트그룹 생성(호스트 병렬) |
+| `VMsetup/power_setting-source/main.go` | BM 전원 정책 고성능(`HostPowerSystem.ConfigurePowerPolicy`, 호스트 병렬, hostname 만으로도 조회 — `vswitch_setting`과 같은 `lookupHost`) |
 | `VMsetup/nic_assign-source/main.go` | 네트워크 어댑터 1 포트그룹 교체 + 연결 체크 |
-| `VMsetup/tag_setting-source`, `numa_preferht_setting-source`, `license_assign-source`, `mac_info-source`, `main_conn-source` | 그 밖의 단독 도구 |
+| `VMsetup/tag_setting-source`, `numa_preferht_setting-source`, `license_assign-source`, `mac_info-source`, `main_conn-source` | 그 밖의 단독 도구 (`mac_info`는 `vm_setup.sh` 마지막 단계에서도 실행 → `awx_route`/`<user>.txt` 복사) |
 | `vm-param-check-usability-improvement/vm-param-check/main.go` | 체크/`-fix` CLI 진입점, 플래그 등록(ev01~ev99, `-h`에는 ev02~99를 한 줄로 묶어 표시), `-specRoot`, `-specExport`, `-specFolder`(대상 전부에 한 스펙) |
 | `.../vm-param-check/model/group.go` | ev 그룹 판정(`ClassifyGroup`)과 최대 개수(`MaxGroup=99`) — 이름이 `ev%02d` 두 자리라 99가 상한(ev100은 `ev10`을 포함해 판정이 깨짐) |
 | `.../vm-param-check/config/spec.go` | 스펙 파일 파싱(`키="값"` 지원), 폴더명 정규화·매칭 |
@@ -44,7 +45,7 @@
 
 ```mermaid
 flowchart TD
-    A["V2 폴더를 /home 에 배치<br/>govendor · SPEC_DIR · VMsetup · vm-param-check"] --> B["bash setup.sh<br/>11개 도구 오프라인 빌드"]
+    A["V2 폴더를 /home 에 배치<br/>govendor · SPEC_DIR · VMsetup · vm-param-check"] --> B["bash setup.sh<br/>12개 도구 오프라인 빌드"]
     B --> C{"vswitch_{user}.txt 포트그룹 칸이 IP?"}
     C -- 예 --> C1["vswitch_pgname.sh<br/>IP → 폴더명-cae-a-b-c-0 변환"] --> D
     C -- 아니오 --> D["./vm_setup.sh -u {user}"]

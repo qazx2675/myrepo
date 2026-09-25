@@ -5,7 +5,7 @@ V2 폴더를 서버에 배치한 뒤 **빌드 → VM 생성·설정(`vm_setup.sh
 
 ```mermaid
 flowchart TD
-    A["V2 폴더를 서버에 배치 (예: /home/V2)"] --> B["bash setup.sh<br/>OS8: 11개 도구 오프라인 빌드<br/>OS6: bin_os6 실행파일 설치"]
+    A["V2 폴더를 서버에 배치 (예: /home/V2)"] --> B["bash setup.sh<br/>OS8: 12개 도구 오프라인 빌드<br/>OS6: bin_os6 실행파일 설치"]
     B --> B2["./passwd_update.sh<br/>vCenter 비밀번호 암호화 등록 (처음 한 번)"]
     B2 --> C{"vswitch_{user}.txt 포트그룹 칸이 IP?"}
     C -- 예 --> C1["vswitch_pgname.sh<br/>IP → 폴더명-cae-a-b-c-0 변환"] --> D
@@ -39,7 +39,7 @@ flowchart TD
 
 | 단계 | 도구 | 설명 |
 |---|---|---|
-| 배치·빌드 | `setup.sh` | OS8: `GOPROXY=off`, `-mod=vendor`로 11개 도구를 오프라인 빌드. OS6: `bin_os6/*.gz`(Go 1.20 빌드)를 제자리에 설치. `-l` 목록, `-c` 정리 |
+| 배치·빌드 | `setup.sh` | OS8: `GOPROXY=off`, `-mod=vendor`로 12개 도구를 오프라인 빌드. OS6: `bin_os6/*.gz`(Go 1.20 빌드)를 제자리에 설치. `-l` 목록, `-c` 정리 |
 | 비밀번호 | `passwd_update.sh` | vCenter/ESXi 비밀번호를 `secret/key`로 암호화 저장. 이후 환경변수 없이 실행. 비밀번호가 바뀌면 다시 실행 |
 | 포트그룹명 변환 (선택) | `VMsetup/vswitch_pgname.sh` | `vswitch_<user>.txt`의 포트그룹 칸이 IP이면 `<폴더명>-cae-a-b-c-0`으로 변환, 원본은 `.bak` |
 | 스펙·포트그룹 할당 | `VMsetup/vm_setup.sh` | user 선택 → 스펙 자동 매칭(CAE 번호 무시) → VM 표(스펙·포트그룹) y/n. 못 정한 것은 번호 선택 또는 vim 입력. CAE 번호 변경 질문 |
