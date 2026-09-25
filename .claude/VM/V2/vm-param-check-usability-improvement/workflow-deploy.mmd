@@ -1,0 +1,9 @@
+flowchart TD
+    subgraph S1["폐쇄망 서버"]
+        direction TB
+        P1["make_update_package.sh<br/>정적 빌드 + SHA256SUMS"] -- "USB / nfs" --> P2["tar xzf 패키지"] --> P3["update.sh -n → update.sh<br/>체크섬·-demo 확인 후 실행 파일만 교체, 백업"]
+    end
+    subgraph S2["인터넷 되는 서버"]
+        direction TB
+        U1["git clone --branch vm-param-check-standalone"] --> U2["update_deploy.sh -n → update_deploy.sh<br/>빌드 성공 후에만 교체, 사용자 파일 보존"]
+    end
