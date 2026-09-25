@@ -82,10 +82,14 @@ summary{cursor:pointer;font-weight:600}
 .doc:first-of-type{border-top:none;margin-top:0;padding-top:0}
 .docmeta{font-size:11.5px;color:var(--muted);margin:-.4em 0 1.2em}
 mark{background:var(--mark);color:inherit}
-.mermaid{margin:1em 0;padding:14px;border:1px solid var(--line);border-radius:8px;
+.mermaid{position:relative;margin:1em 0;padding:14px;border:1px solid var(--line);border-radius:8px;
   background:var(--bg);overflow-x:auto;text-align:center;white-space:pre}
 .mermaid[data-done]{white-space:normal}
 .mermaid svg{max-width:100%;height:auto}
+.hb-legend{position:absolute;top:6px;left:10px;z-index:1;display:flex;flex-wrap:wrap;
+  gap:2px 8px;font-size:10px;line-height:1.5;color:var(--muted);background:var(--bg);
+  opacity:.85;padding:1px 4px;border-radius:4px;pointer-events:none;white-space:nowrap}
+@media print{.hb-legend{display:none}}
 .mermaid .node rect,.mermaid .node polygon{rx:8px;ry:8px;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.14))}
 .mermaid .cluster rect{rx:12px;ry:12px;stroke-dasharray:5 4}
 .mermaid .cluster-label,.mermaid .cluster .nodeLabel{font-weight:700;font-size:15px}
@@ -126,7 +130,7 @@ mark{background:var(--mark);color:inherit}
 <div id="topbar"><button id="menu">☰ 목차</button><b>VM 인수인계 핸드북</b></div>
 <div class="layout">
   <nav id="side">
-    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-25 18:52</span></div>
+    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-25 19:14</span></div>
     <input id="q" type="search" placeholder="목차 검색 (Esc 초기화)" autocomplete="off">
     <ul id="toc"><li class="grp">시작</li>
 <li><a class="doc" href="#doc-README">VM 자동화 도구 인수인계 문서</a></li>
@@ -4436,9 +4440,26 @@ Expecting `+Qe.join(", ")+", got '"+(this.terminals_[Ne]||Ne)+"'":Dt="Parse erro
         clusterBkg:'#f8fafc', clusterBorder:'#cbd5e1', edgeLabelBackground:'#ffffff'
       }});
     mermaid.run({nodes: els}).then(function(){
-      els.forEach(function(el){ el.setAttribute('data-done','1'); });
+      els.forEach(function(el){ el.setAttribute('data-done','1'); addLegend(el); });
     }).catch(function(e){ if(window.console) console.error(e); });
   };
+  // 흐름도마다 실제로 쓰인 기호만 골라 11시 방향에 작게 범례 표시
+  function addLegend(el){
+    var old=el.querySelector('.hb-legend'); if(old) old.remove();
+    var src=el.getAttribute('data-src')||'';
+    var items=[];
+    if(/\[\(/.test(src) || /\(\(/.test(src)) items.push(['\u2b2d','\uc2dc\uc791/\uc885\ub8cc']);
+    if(/\{"/.test(src)) items.push(['\u25c7','\uc608/\uc544\ub2c8\uc624']);
+    items.push(['\u25ad','\ucc98\ub9ac']);
+    if(/-\.->/.test(src)) items.push(['\u21e2','\ucc38\uace0/\uc0dd\ub7b5 \uac00\ub2a5']);
+    if(/==>/.test(src)) items.push(['\u21d2','\ub2e8\uacc4 \uc804\ud658']);
+    else items.push(['\u2192','\ub2e4\uc74c \ub2e8\uacc4']);
+    if(/subgraph/.test(src)) items.push(['\u2b1a','\ub2e8\uacc4 \ubb36\uc74c']);
+    var leg=document.createElement('div');
+    leg.className='hb-legend';
+    leg.innerHTML=items.map(function(it){return '<span>'+it[0]+' '+it[1]+'</span>';}).join('');
+    el.insertBefore(leg, el.firstChild);
+  }
   window.renderMermaid();
 })();
 </script>
