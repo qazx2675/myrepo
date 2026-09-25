@@ -344,9 +344,25 @@ mark{background:var(--mark);color:inherit}
   background:var(--bg);overflow-x:auto;text-align:center;white-space:pre}
 .mermaid[data-done]{white-space:normal}
 .mermaid svg{max-width:100%;height:auto}
-.hb-legend{position:absolute;top:6px;left:10px;z-index:1;display:flex;flex-wrap:wrap;
-  gap:2px 8px;font-size:10px;line-height:1.5;color:var(--muted);background:var(--bg);
-  opacity:.85;padding:1px 4px;border-radius:4px;pointer-events:none;white-space:nowrap}
+.hb-legend{position:absolute;top:10px;left:12px;z-index:2;display:flex;flex-direction:column;
+  gap:6px;font-size:15px;font-weight:700;line-height:1;color:var(--fg);
+  background:var(--side);border:1.5px solid var(--fg);opacity:1;padding:8px 12px;
+  border-radius:7px;pointer-events:none;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.28)}
+.hb-legend span{display:flex;align-items:center;gap:8px}
+.hb-legend .ic{display:inline-block;flex:none;box-sizing:border-box}
+.hb-legend .ic.rect{width:21px;height:15px;border:3px solid currentColor;border-radius:3px}
+.hb-legend .ic.stadium{width:21px;height:15px;border:3px solid currentColor;border-radius:8px}
+.hb-legend .ic.dashedbox{width:21px;height:15px;border:2.5px dashed currentColor;border-radius:3px}
+.hb-legend .ic.diamond{width:15px;height:15px;border:3px solid currentColor;
+  transform:rotate(45deg);margin:0 3px}
+.hb-legend .ic.arrow,.hb-legend .ic.thickarrow,.hb-legend .ic.dashedarrow{
+  width:22px;height:3px;background:currentColor;position:relative;margin-right:6px}
+.hb-legend .ic.arrow::after,.hb-legend .ic.thickarrow::after,.hb-legend .ic.dashedarrow::after{
+  content:'';position:absolute;right:-1px;top:-4px;
+  border-left:8px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent}
+.hb-legend .ic.thickarrow{height:5px}
+.hb-legend .ic.thickarrow::after{top:-6px;border-left-width:10px;border-top-width:7px;border-bottom-width:7px}
+.hb-legend .ic.dashedarrow{background:repeating-linear-gradient(90deg,currentColor 0 5px,transparent 5px 9px)}
 @media print{.hb-legend{display:none}}
 .mermaid .node rect,.mermaid .node polygon{rx:8px;ry:8px;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.14))}
 .mermaid .cluster rect{rx:12px;ry:12px;stroke-dasharray:5 4}
@@ -489,21 +505,25 @@ MERMAID_INIT = """
       els.forEach(function(el){ el.setAttribute('data-done','1'); addLegend(el); });
     }).catch(function(e){ if(window.console) console.error(e); });
   };
-  // 흐름도마다 실제로 쓰인 기호만 골라 11시 방향에 작게 범례 표시
+  // 흐름도마다 실제로 쓰인 기호만 골라 11시 방향에 크고 또렷하게 범례 표시.
+  // 유니코드 도형 문자는 글꼴에 따라 네모(tofu)로 깨지므로, 실제 모양과 같은
+  // 작은 아이콘을 CSS로 직접 그린다(border/diamond/dashed box/화살표).
   function addLegend(el){
     var old=el.querySelector('.hb-legend'); if(old) old.remove();
     var src=el.getAttribute('data-src')||'';
     var items=[];
-    if(/\\[\\(/.test(src) || /\\(\\(/.test(src)) items.push(['\\u2b2d','\\uc2dc\\uc791/\\uc885\\ub8cc']);
-    if(/\\{"/.test(src)) items.push(['\\u25c7','\\uc608/\\uc544\\ub2c8\\uc624']);
-    items.push(['\\u25ad','\\ucc98\\ub9ac']);
-    if(/-\\.->/.test(src)) items.push(['\\u21e2','\\ucc38\\uace0/\\uc0dd\\ub7b5 \\uac00\\ub2a5']);
-    if(/==>/.test(src)) items.push(['\\u21d2','\\ub2e8\\uacc4 \\uc804\\ud658']);
-    else items.push(['\\u2192','\\ub2e4\\uc74c \\ub2e8\\uacc4']);
-    if(/subgraph/.test(src)) items.push(['\\u2b1a','\\ub2e8\\uacc4 \\ubb36\\uc74c']);
+    if(/\\[\\(/.test(src) || /\\(\\(/.test(src)) items.push(['stadium','\\uc2dc\\uc791/\\uc885\\ub8cc']);
+    if(/\\{"/.test(src)) items.push(['diamond','\\uc608/\\uc544\\ub2c8\\uc624']);
+    items.push(['rect','\\ucc98\\ub9ac']);
+    if(/-\\.->/.test(src)) items.push(['dashedarrow','\\ucc38\\uace0/\\uc0dd\\ub7b5 \\uac00\\ub2a5']);
+    if(/==>/.test(src)) items.push(['thickarrow','\\ub2e8\\uacc4 \\uc804\\ud658']);
+    else items.push(['arrow','\\ub2e4\\uc74c \\ub2e8\\uacc4']);
+    if(/subgraph/.test(src)) items.push(['dashedbox','\\ub2e8\\uacc4 \\ubb36\\uc74c']);
     var leg=document.createElement('div');
     leg.className='hb-legend';
-    leg.innerHTML=items.map(function(it){return '<span>'+it[0]+' '+it[1]+'</span>';}).join('');
+    leg.innerHTML=items.map(function(it){
+      return '<span><i class="ic '+it[0]+'"></i>'+it[1]+'</span>';
+    }).join('');
     el.insertBefore(leg, el.firstChild);
   }
   window.renderMermaid();
