@@ -5,7 +5,7 @@
 각 도구(`*-source/`)는 단독으로도 쓸 수 있습니다. 모든 도구는 내부적으로 병렬(워커풀) 처리합니다.
 
 > V1(`.claude/VM/VM_setup`)에서 달라진 점은 [CHANGELOG.md](CHANGELOG.md)를 참고하세요. V1의 `vm-param-fix/`(대체된 구버전 오케스트레이터)는 V2에 넣지 않았습니다.
-> 전체 작업 흐름은 [../WORKFLOW.md](../WORKFLOW.md)에 그려 두었습니다.
+> 전체 작업 흐름은 [../WORKFLOW.md](../WORKFLOW.md)에 그려 두었습니다. `vm_setup.sh` 흐름도: [workflow.svg](workflow.svg)
 
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정 변경 후 무작위로 서버 몇 대를 골라 실제로 변경되었는지 직접 확인하는 절차가 반드시 필요합니다.
