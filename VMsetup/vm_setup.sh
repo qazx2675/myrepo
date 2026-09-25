@@ -27,6 +27,12 @@ SPEC_DIR=""; CONC=""; TARGET_VSWITCH=""; DRY_RUN=0
 EDITOR_CMD="${VM_SETUP_EDITOR:-vim}"
 CHECK_DIR="$HERE/../vm-param-check-usability-improvement/vm-param-check"
 CHECK_BIN="$CHECK_DIR/vm-param-check"
+# mac_info(MAC 수집) — 생성한 VM 의 MAC 으로 만든 Provisioning List 를 이 경로에 <user>.txt 로 복사한다.
+# 비워 두면 복사하지 않고 실행 폴더(run_<user>/)에만 남긴다.
+awx_route=""
+# mac_info 출력 줄에 들어가는 값 (VM VM <arg1> <VM> <IP> <MAC> eth0 sda sda5 <argInt> <argStr> uefi).
+# arg1/argStr 이 비어 있으면 mac_info 단계는 경고만 하고 건너뛴다.
+MAC_ARG1="${MAC_ARG1:-}"; MAC_ARGINT="${MAC_ARGINT:-0}"; MAC_ARGSTR="${MAC_ARGSTR:-}"
 
 usage() {
   cat <<EOF
@@ -146,7 +152,7 @@ ensure_bin() {
   bash "$HERE/../setup.sh" "$name" >/dev/null || die "준비 실패: $name — bash $HERE/../setup.sh $name 로 확인하세요"
 }
 ensure_bin "$CHECK_BIN" vm-param-check
-for t in vm_create vswitch_setting affinity_setting lpage_setting nic_assign; do
+for t in vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info; do
   ensure_bin "$HERE/${t}-source/$t" "$t"
 done
 
@@ -795,6 +801,11 @@ for d in "${SPEC_ORDER[@]}"; do
   print_affinity
 done
 say "어댑터 매핑     : $RUN_DIR/hostgroup.txt ($(wc -l < "$RUN_DIR/hostgroup.txt")건)"
+if [ -n "$MAC_ARG1" ] && [ -n "$MAC_ARGSTR" ]; then
+  say "MAC 수집       : mac_info -arg1=$MAC_ARG1 -argInt=$MAC_ARGINT -argStr=$MAC_ARGSTR → ${awx_route:-(awx_route 비어 있음 — 복사 안 함)}${awx_route:+/${USER_TAG}.txt}"
+else
+  say "MAC 수집       : 건너뜀 (vm_setup.sh 의 MAC_ARG1/MAC_ARGSTR 이 비어 있음)"
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then say; info "-n 지정 — vCenter 를 변경하지 않고 여기서 종료합니다."; exit 0; fi
 
@@ -876,6 +887,24 @@ for d in "${SPEC_ORDER[@]}"; do
     grep -h '\[FAIL\]\|\[설정없음\]' "check_$k.log" | sed 's/: 기대값.*//' | sort | uniq -c | sort -rn | head -8 | sed 's/^/      /'
   fi
 done
+
+# ---------- 7) MAC 수집 (mac_info) → awx_route 로 <user>.txt 복사 ----------
+if [ -n "$MAC_ARG1" ] && [ -n "$MAC_ARGSTR" ]; then
+  hdr "MAC 수집 — mac_info" 2>&1
+  printf '%s\n' "${BMS[@]}" > macinfo_bm.txt
+  run "$HERE/mac_info-source/mac_info" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=macinfo_bm.txt \
+    -arg1="$MAC_ARG1" -argInt="$MAC_ARGINT" -argStr="$MAC_ARGSTR"
+  MAC_OUT="$RUN_DIR/Provisioning_List_${VC_IP//./_}.txt"
+  if [ -z "$awx_route" ]; then
+    info "awx_route 가 비어 있어 복사하지 않습니다: $MAC_OUT"
+  elif mkdir -p "$awx_route" && cp "$MAC_OUT" "$awx_route/${USER_TAG}.txt"; then
+    info "MAC 목록 복사: $MAC_OUT → $awx_route/${USER_TAG}.txt"
+  else
+    die "MAC 목록 복사 실패: $MAC_OUT → $awx_route/${USER_TAG}.txt"
+  fi
+else
+  warn "MAC_ARG1/MAC_ARGSTR 이 비어 있어 mac_info(MAC 수집)는 건너뜁니다."
+fi
 
 printf '\n%s[완료]%s VM 생성·설정을 마쳤습니다.\n' "$C_GRN$C_BLD" "$C_RST"
 if [ "$CHECK_FAIL" -eq 1 ]; then

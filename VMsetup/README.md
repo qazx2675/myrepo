@@ -86,8 +86,11 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 | `tag_setting-source` | 사용자 지정 특성 | `-vmCount` 1~99 |
 | `vswitch_setting-source` | BM vSwitch에 포트그룹 생성(호스트 병렬, `-concurrency`) | — |
 | `nic_assign-source` | 만들어진 VM의 네트워크 어댑터 1 포트그룹 교체 + **연결됨/전원을 켤 때 연결** 체크 | — |
+| `power_setting-source` | **BM(호스트) 전원 정책을 고성능으로** 설정(호스트 병렬, 이미 고성능이면 스킵). vCenter 주소 + BM 목록 파일만 있으면 되고, 목록에 도메인 없이 hostname 만 적어도 찾는다 | — |
 | `numa_preferht_setting-source` | `numa.vcpu.preferHT` 일괄 적용 | — |
 | `license_assign-source`, `mac_info-source`, `main_conn-source` | 라이선스 할당 / MAC 정보(프로비저닝 목록) / ESXi 호스트를 vCenter에 병렬 등록 | — |
+
+**MAC 수집(`vm_setup.sh` 마지막 단계)**: `vm_setup.sh` 위쪽의 `MAC_ARG1`/`MAC_ARGINT`/`MAC_ARGSTR`(환경변수로도 가능)을 채우면 스펙 체크 뒤 `mac_info` 로 만든 VM 의 MAC 목록(`run_<user>/Provisioning_List_<vCenter>.txt`)을 만들고, `awx_route="..."` 가 있으면 그 폴더에 **`<user>.txt`** 로 복사한다. `MAC_ARG1`/`MAC_ARGSTR` 이 비어 있으면 경고만 하고 건너뛴다.
 
 데이터센터가 2개 이상이거나 폴더가 여러 단계여도 동작합니다(`vm_create`는 호스트가 속한 데이터센터를 자동으로 찾으며, `-datacenter`로 한정할 수 있음).
 
