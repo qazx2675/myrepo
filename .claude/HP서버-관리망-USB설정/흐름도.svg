@@ -78,7 +78,7 @@
   <rect x="290" y="508" width="380" height="96" rx="10" class="menu"/>
   <circle cx="306" cy="524" r="11" fill="#6d28d9"/><text x="306" y="529" class="num">5</text>
   <text x="480" y="532" class="tb">확인 화면 (10초 후 자동 진행)</text>
-  <text x="480" y="555" class="s">SGH123ABE → #3  10.10.1.13 / VLAN 100</text>
+  <text x="480" y="555" class="s" style="font-weight:700">랙 위치 R01-U36 맞습니까? → #3  10.10.1.13 / VLAN 100</text>
   <text x="480" y="578" class="s">[Enter] 진행  [G] 순번 이동  [U] 직전 취소</text>
   <text x="480" y="596" class="s">[L] 목록  [Q] 중단</text>
   <!-- G/U 루프 -->
