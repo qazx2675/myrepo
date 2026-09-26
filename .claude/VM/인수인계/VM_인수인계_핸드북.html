@@ -149,7 +149,7 @@ mark{background:var(--mark);color:inherit}
 <div id="topbar"><button id="menu">☰ 목차</button><b>VM 인수인계 핸드북</b></div>
 <div class="layout">
   <nav id="side">
-    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-25 19:31</span></div>
+    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-26 07:27</span></div>
     <input id="q" type="search" placeholder="목차 검색 (Esc 초기화)" autocomplete="off">
     <ul id="toc"><li class="grp">시작</li>
 <li><a class="doc" href="#doc-README">VM 자동화 도구 인수인계 문서</a></li>
@@ -731,6 +731,7 @@ cd /home/V2/VMsetup/license_assign-source
 <div class="tw"><table><thead><tr><th>V1 <code>VM_setup/</code></th><th>V2</th><th>비고</th></tr></thead><tbody><tr><td><code>vm_create-source</code></td><td><code>VMsetup/vm_create-source</code></td><td>ev01~ev99, FQDN/짧은 이름 매칭, 실패 시 종료코드 1</td></tr><tr><td><code>affinity_setting-source</code></td><td><code>VMsetup/affinity_setting-source</code></td><td>ev마다 파일 필수, 자동 계산(<code>-ht</code>/<code>AUTO</code>) 삭제</td></tr><tr><td><code>lpage_setting-source</code></td><td><code>VMsetup/lpage_setting-source</code></td><td>ev01~ev99</td></tr><tr><td><code>tag_setting-source</code></td><td><code>VMsetup/tag_setting-source</code></td><td>ev01~ev99</td></tr><tr><td><code>vswitch_setting-source</code></td><td><code>VMsetup/vswitch_setting-source</code></td><td>호스트 병렬, FQDN/짧은 이름 매칭</td></tr><tr><td><code>numa_preferht_setting-source</code></td><td><code>VMsetup/numa_preferht_setting-source</code></td><td>동일</td></tr><tr><td><code>license_assign-source</code></td><td><code>VMsetup/license_assign-source</code></td><td>동일</td></tr><tr><td><code>mac_info-source</code></td><td><code>VMsetup/mac_info-source</code></td><td>동일</td></tr><tr><td><code>main_conn-source</code></td><td><code>VMsetup/main_conn-source</code></td><td>동일 (옵션 없음, 소스 수정 후 빌드)</td></tr><tr><td>(없음)</td><td><code>VMsetup/nic_assign-source</code></td><td>신규: 네트워크 어댑터 1 포트그룹 교체</td></tr><tr><td>(없음)</td><td><code>VMsetup/vm_setup.sh</code>, <code>vswitch_pgname.sh</code></td><td>신규: 전체 과정 실행, 포트그룹명 변환</td></tr><tr><td>(없음)</td><td><code>passwd_update.sh</code>, <code>secret_lib.sh</code></td><td>신규: 비밀번호 암호 파일 등록·풀기</td></tr><tr><td>(없음)</td><td><code>build_os6.sh</code>, <code>bin_os6/</code></td><td>신규: OS6(RHEL/CentOS 6)용 미리 빌드한 실행파일</td></tr><tr><td><code>vm-param-fix</code> (오케스트레이터)</td><td><code>vm-param-check -fix</code></td><td>V2에 넣지 않음 (대체됨)</td></tr><tr><td><code>vm-param-fix/power_setting</code></td><td><strong>대체 없음</strong></td><td>V1 폴더에 유지 → <a href="#doc-17_VM_setup_잔여도구">17번</a></td></tr><tr><td>V1 <code>vm-param-check-usability-improvement</code></td><td><code>V2/vm-param-check-usability-improvement</code></td><td>ev01~ev99, <code>-specExport</code> 추가 → <a href="#doc-11_vm-param-check">11번</a></td></tr></tbody></table></div>
 <hr>
 <h3 id="doc-10_V2--3-흐름도">3. 흐름도</h3>
+<p>실선은 <code>vm_setup.sh</code>가 실제로 호출하는 순서(vswitch → vm_create → affinity → lpage)이고, <code>mac_info</code>·<code>power_setting</code>·<code>license_assign</code>은 스크립트가 부르지 않는 <strong>별도 후속 도구</strong>입니다(1절 8·10번, <a href="#doc-17_VM_setup_잔여도구">17번</a>). 아래 흐름도는 이 도구들을 실무에서 쓰는 표준 위치 — VM 생성 직후(affinity·lpage 전) MAC 수집·전원정책 적용, 그리고 lpage 이후(신규 호스트만) 라이선스 할당 — 에 이어 붙인 것입니다.</p>
 <div class="mermaid">flowchart TD
     A["준비&lt;br/&gt;VMsetup/작업이름.txt (BM 목록)&lt;br/&gt;VMsetup/vswitch_작업이름.txt (BM 포트그룹 VLAN)&lt;br/&gt;vcenter.txt · passwd_update.sh 암호 파일"]:::input --&gt; B{"포트그룹 칸이 IP?"}
     B -- 예 --&gt; B1["vswitch_pgname.sh&lt;br/&gt;IP → 폴더명-cae-a-b-c-0, 원본 .bak"] --&gt; C
@@ -750,11 +751,14 @@ cd /home/V2/VMsetup/license_assign-source
     G -- n --&gt; Z["종료 (변경 없음)"]:::safe
     G -- y --&gt; H["vswitch_setting (호스트 병렬)"]:::change
     H --&gt; I["vm_create (스펙별)"]:::change
-    I --&gt; J["affinity_setting"]:::change
+    I --&gt; P["MAC 목록 추출 → DHCP 등록&lt;br/&gt;V2 mac_info 🟢 (1절 8번)"]:::cmd
+    P --&gt; P1["호스트 전원정책 High Performance 적용&lt;br/&gt;power_setting 🔴 (17번)"]:::change
+    P1 --&gt; J["affinity_setting"]:::change
     J --&gt; K["lpage_setting"]:::change
     K --&gt; L{"단계 실패?"}
     L -- 예 --&gt; L1["그 단계에서 멈춤, [완료] 없음&lt;br/&gt;원인 수정 후 재실행 → 이미 있는 포트그룹/VM 은 건너뜀"]:::warn --&gt; C
-    L -- 아니오 --&gt; N["7. 스펙 체크 (만든 VM 만, vm-param-check -specFolder)&lt;br/&gt;[일치] / [차이] → run_작업이름/check_번호.*"]
+    L -- 아니오 --&gt; K1["평가판 라이선스 호스트에 라이선스 할당&lt;br/&gt;V2 license_assign 🔴 (신규 호스트만, 1절 10번)"]:::change
+    K1 --&gt; N["7. 스펙 체크 (만든 VM 만, vm-param-check -specFolder)&lt;br/&gt;[일치] / [차이] → run_작업이름/check_번호.*"]
     N --&gt; M["[완료]"]:::safe
     M --&gt; O["차이가 있으면 안내된 -fix 명령 (11번)&lt;br/&gt;무작위 VM 몇 대 직접 확인"]
     class G,Q gate</div>
