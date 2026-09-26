@@ -146,11 +146,11 @@ VSW_FILE="$HERE/vswitch_${USER_TAG}.txt"
 [ -f "$VSW_FILE" ] || die "포트그룹 파일이 없습니다: $VSW_FILE (BM 포트그룹 VLAN)"
 
 # ---------- 설치 정보 (OS 버전 / 인프라) — 시작 전에 받아 MAC 목록(mac_info)에 넣는다 ----------
-# 환경변수로 이미 있으면(비대화식 실행) 묻지 않는다.
+# 환경변수로 이미 있으면(비대화식 실행) 묻지 않는다. read -p 로 직접 받는다(EOF면 중단).
 if [ -z "$MAC_ARGSTR" ]; then
   hdr "설치 정보"
   while :; do
-    prompt MAC_ARGSTR "OS 버전 (예: 8.10): "
+    read -r -p "OS 버전 (예: 8.10): " MAC_ARGSTR || die "입력이 끝났습니다(stdin EOF) — 대화형으로 실행하세요."
     [[ "$MAC_ARGSTR" =~ ^[0-9]+(\.[0-9]+)*$ ]] && break
     warn "OS 버전 형식이 올바르지 않습니다 (숫자와 점만, 예: 8.10)."
     MAC_ARGSTR=""
@@ -158,7 +158,7 @@ if [ -z "$MAC_ARGSTR" ]; then
 fi
 if [ -z "$MAC_ARG1" ]; then
   while :; do
-    prompt MAC_ARG1 "인프라 입력 : "
+    read -r -p "인프라 입력 : " MAC_ARG1 || die "입력이 끝났습니다(stdin EOF) — 대화형으로 실행하세요."
     [[ -n "$MAC_ARG1" && "$MAC_ARG1" != *[[:space:]]* ]] && break
     warn "인프라 값은 비어 있지 않아야 하고 공백을 포함할 수 없습니다."
     MAC_ARG1=""
