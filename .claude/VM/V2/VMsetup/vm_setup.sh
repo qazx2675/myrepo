@@ -1071,10 +1071,22 @@ fmt_dur() { # <초> — mm:ss (1시간 이상이면 h:mm:ss)
   else printf '%02d:%02d' $(($1 / 60)) $(($1 % 60)); fi
 }
 strip_ansi() { sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g' "$@"; }
-# last_line <로그> — 요약으로 쓸 마지막 의미 있는 줄(빈 줄, "$ 명령" 줄 제외)
+# last_line <로그> — 요약으로 쓸 마지막 의미 있는 줄(빈 줄, "$ 명령" 줄, 도구가 끝에 찍는 인사말·구분선 제외)
 last_line() {
   [ -f "$1" ] || return 0
-  tail -n 40 "$1" | strip_ansi | grep -v '^\$ ' | awk 'NF' | tail -1 | sed 's/^[[:space:]]*//'
+  tail -n 40 "$1" | strip_ansi | grep -v -e '^\$ ' -e '세션을 안전하게 종료' -e '완벽하게 주입되었습니다' -e '^[=-]*$' \
+    | awk 'NF' | tail -1 | sed 's/^[[:space:]]*//'
+}
+# step_summary <번호> — 단계 요약. 포트그룹 생성은 호스트별 줄을 세어 "성공 / 스킵 / 실패" 로(접속 실패면 그 줄).
+step_summary() {
+  local log="${STEP_LOG[$1]}" s k f
+  if [ "${STEP_FN[$1]}" = step_vswitch ] && [ -f "$log" ]; then
+    # 호스트별 줄 "  -> [호스트] 성공:/스킵:", 실패 수는 도구가 끝에 찍는 "[에러] 실패 N건"(없는 호스트 등 포함)
+    s=$(grep -c '^ *-> \[.*\] 성공:' "$log"); k=$(grep -c '^ *-> \[.*\] 스킵:' "$log")
+    f=$(sed -n 's/^\[에러\] 실패 \([0-9]*\)건.*/\1/p' "$log" | tail -1)
+    [ $((s + k + ${f:-0})) -gt 0 ] && { printf '성공 %s / 스킵 %s / 실패 %s' "$s" "$k" "${f:-0}"; return; }
+  fi
+  last_line "$log"
 }
 step_begin() {
   STEP_STATE[$1]=run; STEP_T0[$1]=$SECONDS
@@ -1089,7 +1101,7 @@ step_end() { # <번호> <종료코드> — 상태·걸린 시간·요약을 정�
   elif [ "$rc" -ne 0 ]; then STEP_STATE[$i]=fail; FAIL_IDX=$i
   elif [ "${v#skip:}" != "$v" ]; then STEP_STATE[$i]=skip; v="${v#skip:}"
   else STEP_STATE[$i]=done; fi
-  [ -n "$v" ] || v="$(last_line "${STEP_LOG[$i]}")"
+  [ -n "$v" ] || v="$(step_summary "$i")"
   STEP_SUM[$i]="${v#\[오류\] }"
   cat "${STEP_LOG[$i]}" >> run.log 2>/dev/null
 }
@@ -1114,11 +1126,14 @@ run_steps_plain() {
 
 # ---------- 모니터 모드 ----------
 # 선례(.claude/HPC/ip_change/internal/monitor)와 같은 방식: /dev/tty(fd 5)에 대체 화면으로 그리고, 끝나면 원래 화면으로
-# 돌아간다(스크롤백 오염 없음). raw 에 가깝게(-icanon -echo -isig) 두어 Ctrl+C 는 시그널이 아니라 0x03 키로 받는다
-# → 실수로 한 번 눌러 도구가 죽지 않고, 5초 안에 3번 눌러야 실행 중인 도구를 끝내고 종료(종료코드 130).
+# 돌아간다(스크롤백 오염 없음). Ctrl+C 는 0x03 키로도, 시그널(SIGINT)로도 올 수 있다 — bash 의 read -n 은 키를 기다리는
+# 동안 터미널의 ISIG 를 다시 켜기 때문. 그래서 INT 를 trap 해서 키와 똑같이 센다. 백그라운드 단계는 set -m 으로 자기
+# 프로세스 그룹에서 돌려 터미널의 SIGINT 가 도구에 가지 않게 한다(trap 때문에 서브셸의 SIGINT 가 기본 동작으로
+# 돌아가서, 그냥 & 로 띄우면 한 번에 도구가 죽는 것을 시험에서 확인) → 5초 안에 3번 눌러야
+# 실행 중인 도구(프로세스 그룹)를 끝내고 종료(종료코드 130).
 E=$'\033'
 MON_ON=0; BG_PID=""; MON_STTY=""; MON_CUR=0; MON_TOP=0; MON_VIEW=-1; MON_VTOP=0; MON_VFOLLOW=1; MON_H=10
-MON_FOLLOW=1; MON_DONE=0; MON_CONFIRM=0; MON_MSG=""; MON_MSG_T=0; MON_CC=(); MON_LAST=""
+MON_FOLLOW=1; MON_DONE=0; MON_CONFIRM=0; MON_MSG=""; MON_MSG_T=0; MON_CC=(); MON_LAST=""; MON_SIGINT=0
 
 mon_enter() {
   stty -echo -icanon -isig min 1 time 0 <&5
@@ -1131,9 +1146,9 @@ mon_leave() {
   stty "$MON_STTY" <&5
   MON_ON=0
 }
-tree_pids() { local c; echo "$1"; for c in $(ps -o pid= --ppid "$1" 2>/dev/null); do tree_pids "$c"; done; }
+bg_kill() { [ -n "$BG_PID" ] && kill -TERM -- "-$BG_PID" 2>/dev/null; }   # 백그라운드 단계의 프로세스 그룹 전체
 mon_cleanup() {
-  [ -n "$BG_PID" ] && kill $(tree_pids "$BG_PID") 2>/dev/null
+  bg_kill
   mon_leave
 }
 
@@ -1155,7 +1170,7 @@ mon_row() {
   esac
   sum="${STEP_SUM[$i]}"
   case "${STEP_STATE[$i]}" in
-    run) t="$(fmt_dur $((SECONDS - STEP_T0[$i])))"; sum="$(last_line "${STEP_LOG[$i]}")" ;;
+    run) t="$(fmt_dur $((SECONDS - STEP_T0[$i])))"; sum="$(step_summary "$i")" ;;
     wait) [ "${STEP_TTY[$i]}" = 1 ] && sum="(선택이 필요하면 모니터가 잠시 꺼집니다)" ;;
     abort) ;;
     *) t="$(fmt_dur "${STEP_DUR[$i]}")" ;;
@@ -1169,7 +1184,7 @@ mon_draw_home() { # <줄 수> — 목록(커서를 따라 스크롤)
   [ "$MON_CUR" -lt "$MON_TOP" ] && MON_TOP=$MON_CUR
   [ "$MON_CUR" -ge $((MON_TOP + h)) ] && MON_TOP=$((MON_CUR - h + 1))
   for ((i = MON_TOP; i < MON_TOP + h; i++)); do
-    [ "$i" -lt "$n" ] && { mon_row "$i"; out+="$MON_LINE"; }
+    [ "$i" -lt "$n" ] && { mon_row "$i"; out+="${E}[2K$MON_LINE"; }
     out+="${E}[K"$'\n'
   done
   MON_BODY="$out"
@@ -1181,7 +1196,7 @@ mon_draw_view() { # <줄 수> — 선택한 단계의 로그(처음엔 맨 끝, 
   local -a lines=()
   [ "$h" -lt 1 ] && h=1
   MON_H=$h
-  mon_row "$i"; out="$MON_LINE${E}[K"$'\n'
+  mon_row "$i"; out="${E}[2K$MON_LINE${E}[K"$'\n'
   if [ -n "$log" ] && [ -f "$log" ]; then
     total=$(wc -l < "$log")
     maxtop=$((total - h)); [ "$maxtop" -lt 0 ] && maxtop=0
@@ -1205,7 +1220,7 @@ mon_draw() {
   [ -n "$MON_MSG" ] && [ $((SECONDS - MON_MSG_T)) -ge 5 ] && MON_MSG=""
   if [ "$MON_VIEW" -ge 0 ]; then mon_draw_view $((rows - 5)); else mon_draw_home $((rows - 5)); fi
   el="$(fmt_dur $((${END_T:-$SECONDS} - RUN_T0)))"
-  frame="${E}[H ${C_BLD}vm_setup — $USER_TAG @ $VC_IP${C_RST}   OS $MAC_ARGSTR / 인프라 $MAC_ARG1${E}[$((cols - 12))G경과 $el${E}[K"$'\n'
+  frame="${E}[H${E}[2K ${C_BLD}vm_setup — $USER_TAG @ $VC_IP${C_RST}   OS $MAC_ARGSTR / 인프라 $MAC_ARG1${E}[$((cols - 12))G경과 $el${E}[K"$'\n'
   frame+="$bar${E}[K"$'\n'"$MON_BODY$bar${E}[K"$'\n'" $MON_FOOT${E}[K"$'\n'" ${C_YEL}$MON_MSG${C_RST}${E}[K"
   [ "$frame" = "$MON_LAST" ] && return 0   # 바뀐 게 없으면 다시 그리지 않는다
   printf '%s' "$frame" >&5; MON_LAST="$frame"
@@ -1216,7 +1231,11 @@ mon_draw() {
 mon_key() {
   local c="" c2="" c3="" c4=""
   MON_KEY=""
-  IFS= read -rsn1 -d '' -t "$1" c <&5 || return 0
+  [ "$MON_SIGINT" = 1 ] && { MON_SIGINT=0; MON_KEY=ctrlc; return 0; }
+  if ! IFS= read -rsn1 -d '' -t "$1" c <&5; then
+    [ "$MON_SIGINT" = 1 ] && { MON_SIGINT=0; MON_KEY=ctrlc; }
+    return 0
+  fi
   case "$c" in
     $'\n'|$'\r') MON_KEY=enter ;;
     $'\x03') MON_KEY=ctrlc ;;
@@ -1256,7 +1275,7 @@ mon_ctrlc() {
 # mon_abort — Ctrl+C 3번: 실행 중인 도구를 끝내고 터미널을 복원한 뒤 요약을 남기고 종료코드 130.
 mon_abort() {
   local i
-  if [ -n "$BG_PID" ]; then kill $(tree_pids "$BG_PID") 2>/dev/null; wait "$BG_PID" 2>/dev/null; BG_PID=""; fi
+  if [ -n "$BG_PID" ]; then bg_kill; wait "$BG_PID" 2>/dev/null; BG_PID=""; fi
   for i in "${!STEP_KIND[@]}"; do
     [ "${STEP_KIND[$i]}" = run ] || continue
     case "${STEP_STATE[$i]}" in
@@ -1309,6 +1328,7 @@ run_steps_monitor() {
   MON_STTY="$(stty -g <&5)"
   trap mon_cleanup EXIT
   trap 'exit 143' TERM HUP
+  trap 'MON_SIGINT=1' INT
   mon_enter
   for i in "${!STEP_KIND[@]}"; do
     [ "${STEP_KIND[$i]}" = run ] || continue
@@ -1321,13 +1341,17 @@ run_steps_monitor() {
       step_begin "$i"
       LIC_INT=0; trap 'LIC_INT=1' INT
       "${STEP_FN[$i]}" "${STEP_ARG[$i]}" 2>&1 | tee "${STEP_LOG[$i]}"; rc=${PIPESTATUS[0]}
-      trap - INT
+      trap 'MON_SIGINT=1' INT
       step_end "$i" "$rc"
       mon_enter
     else
       step_begin "$i"
-      "${STEP_FN[$i]}" "${STEP_ARG[$i]}" > "${STEP_LOG[$i]}" 2>&1 < /dev/null &
+      # 자기 프로세스 그룹으로 띄운다(위 설명) — 비대화형이라 작업 알림은 찍히지 않는다.
+      # 안에서는 바로 set +m: 도구가 또 다른 그룹으로 갈라지지 않아야 bg_kill 한 번에 같이 끝난다.
+      set -m
+      { set +m; "${STEP_FN[$i]}" "${STEP_ARG[$i]}"; } > "${STEP_LOG[$i]}" 2>&1 < /dev/null &
       BG_PID=$!
+      set +m
       while kill -0 "$BG_PID" 2>/dev/null; do mon_tick; done
       wait "$BG_PID"; rc=$?; BG_PID=""
       step_end "$i" "$rc"

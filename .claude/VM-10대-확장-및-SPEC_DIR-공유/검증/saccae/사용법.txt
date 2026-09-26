@@ -76,6 +76,16 @@ printf 'demo-bm\n' > demo.txt; printf 'demo-bm  DEMO-PG-1  999\n' > vswitch_demo
 ./vm_setup.sh -u demo -n   # "적용할 스펙을 고르세요"에서 TST-CAE002-GROUPCHECK-DEMO 번호 선택 → y
 rm -f demo.txt vswitch_demo.txt; rm -rf run_demo   # 확인 끝나면 정리
 
+실행 확인 y 뒤에는 진행 모니터 화면이 뜬다 (터미널에서 실행했을 때만):
+  ↑/↓ 단계 이동, Enter = 그 단계 실행 결과(로그) 보기 → ↑↓/PgUp/PgDn 스크롤, Enter = 목록으로
+  라이선스 할당 단계에서는 모니터가 잠시 꺼지고 라이선스 번호를 묻는다 (vcsim 은 Evaluation Mode 뿐이라 q 로 취소)
+  → 끝나면 모니터로 돌아옴. 다 끝나면 커서가 [종료] 에 있으니 Enter 두 번 → 원래 화면에 최종 요약
+  Ctrl+C 는 5초 안에 3번 눌러야 종료(실행 중인 도구도 끝냄, 종료코드 130)
+  로그: run_<user>/logs/ (단계별), run_<user>/run.log (전체), run_<user>/plan.txt (실행 계획)
+
+# 모니터 없이 예전처럼 줄줄이 보고 싶으면
+VMSETUP_MONITOR=0 ./vm_setup.sh -u lsh
+
 실행이 끝나면 마지막에 "스펙 체크" 가 나온다 ([일치] / [차이] + 항목별 개수, 자세한 내용은 run_<user>/check_<번호>.log).
 가상 vCenter 에서는 아래 항목이 [차이] 로 나오는 것이 정상이다:
   cpuid.coresPerSocket / config.numaInfo.coresPerNumaNode 설정없음  : vcsim 이 채우지 않는 값 (실제 vCenter 에서는 채워짐)
