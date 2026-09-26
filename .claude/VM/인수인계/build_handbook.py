@@ -31,10 +31,10 @@ ORDER = [
     "02_공통_실행환경.md",
     "10_V2.md",
     "11_vm-param-check.md",
-    "12_vm_verifier.md",
-    "13_lpage_search.md",
     "14_Network_Change_Integration_Script.md",
     "15_vCenter_API_IP_자동변경.md",
+    "12_vm_verifier.md",
+    "13_lpage_search.md",
     "17_VM_setup_잔여도구.md",
     "30_유지보수_AI_활용가이드.md",
     "31_변경요청서_양식.md",
@@ -546,7 +546,9 @@ def main():
     toc_html = []
     groups = {
         "README.md": "시작",
-        "10_V2.md": "도구별 문서",
+        "10_V2.md": "VM setup 및 설정 체크",
+        "14_Network_Change_Integration_Script.md": "망변경",
+        "12_vm_verifier.md": "그 외 도구",
         "30_유지보수_AI_활용가이드.md": "유지보수",
         "40_폴더구조.md": "찾아보기",
     }

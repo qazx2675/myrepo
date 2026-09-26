@@ -28,16 +28,13 @@ flowchart TD
     subgraph S1["① VM setup 단계"]
         direction TB
         A["ESXi 호스트를 vCenter 에 등록<br/>V2 main_conn 🔴"] --> B["메모리 사이징<br/>lpage_search 🟢"]
-        B --> B1["평가판 라이선스 호스트에 라이선스 할당<br/>V2 license_assign 🔴"]
-        B1 --> C["스펙 작성<br/>SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
-        C --> D["VM 생성·설정<br/>V2 vm_setup.sh 🔴<br/>vswitch → vm_create → affinity → lpage → 스펙 체크"]
-        D --> E["MAC 목록 추출 → DHCP 등록<br/>V2 mac_info 🟢"]
-        E --> E1["호스트 전원정책 High Performance 적용<br/>power_setting 🔴 (17번)"]
-        E1 --> F["파워온 전 MAC 대조<br/>vm_verifier 🟢"]
+        B --> C["스펙 작성<br/>SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
+        C --> D["VM 생성·설정<br/>V2 vm_setup.sh 🔴 — 스펙마다 vswitch → vm_create → mac_info →<br/>power_setting → affinity → lpage, 끝나면 license_assign(전체) → 스펙 체크<br/>(터미널이면 진행 모니터로 표시, 10번 3절)"]
+        D --> F["파워온 전 MAC 대조<br/>vm_verifier 🟢 (MAC 목록: run_user/mac_all.txt 또는 awx_route)"]
         F -- FAIL --> F1["DHCP 등록 수정 후 재검증"] --> F
         F -- PASS --> G["파워온 · OS 설치"]
         G --> H["설정 점검<br/>vm-param-check 🟢"]
-        H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴 재실행"] --> H
+        H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴 재실행 (17번)"] --> H
         H -- PASS --> I["VM 인도 · 사용 시작"]
     end
     subgraph S2["② 망/인프라 변경 단계"]
@@ -49,8 +46,8 @@ flowchart TD
         L -. "설정이 스펙과 맞는지 다시 볼 때" .-> M["vm-param-check 🟢 (11번)"]
     end
     S1 ==>|"VM 운영 중 망·인프라가 바뀔 때"| S2
-    class A,D,B1,E1,H1,J,K change
-    class B,E,M cmd
+    class A,D,H1,J,K change
+    class B,M cmd
     class C input
     class F,H gate
     class F1 warn
@@ -61,15 +58,27 @@ flowchart TD
 
 ## 도구별 문서
 
+### VM setup 및 설정 체크
+
 | 문서 | 폴더 (`.claude/VM/` 기준) | 하는 일 | 위험도 |
 |---|---|---|---|
-| [10. V2](./10_V2.md) | `V2/` | VM 생성·설정(`VMsetup`) + 설정 점검·교정(`vm-param-check`)이 `SPEC_DIR`를 공유하는 현행 구성 | 🔴 |
+| [10. V2 (VMsetup)](./10_V2.md) | `V2/VMsetup/` | VM 생성·설정. `SPEC_DIR`를 vm-param-check와 공유하는 현행 구성 | 🔴 |
 | [11. vm-param-check](./11_vm-param-check.md) | `V2/vm-param-check-usability-improvement/vm-param-check/` | VM 설정이 스펙과 맞는지 점검, `-fix`로 자동 교정 (주력) | 🟢 점검 / 🔴 `-fix` |
-| [12. vm_verifier](./12_vm_verifier.md) | `vm_verifier/` | 파워온 전 vNIC MAC ↔ DHCP 예약 MAC 대조, 교차설치 탐지 | 🟢 |
-| [13. lpage_search](./13_lpage_search.md) | `lpage_search/` | Large Page 기준 ev02 메모리 크기 계산 (접속 없음) | 🟢 |
+
+### 망변경
+
+| 문서 | 폴더 (`.claude/VM/` 기준) | 하는 일 | 위험도 |
+|---|---|---|---|
 | [14. Network_Change_Integration_Script](./14_Network_Change_Integration_Script.md) | `Network_Change_Integration_Script/` | IP 변경 → LDAP 설정 → 포트그룹(VLAN) 이관을 한 번에, 롤백 포함 | 🔴 |
 | [15. vCenter API IP 자동변경](./15_vCenter_API_IP_자동변경.md) | `"vCenter API IP 자동변경/project"` | 네트워크로 접속 못 하는 VM 의 IP 를 VMware Tools 경로로 재설정 | 🔴 |
-| [17. VM_setup 잔여 도구](./17_VM_setup_잔여도구.md) | `VM_setup/vm-param-fix/power_setting` | 호스트 전원정책 High Performance 적용 (소스 없는 바이너리) | 🔴 |
+
+### 그 외 도구
+
+| 문서 | 폴더 (`.claude/VM/` 기준) | 하는 일 | 위험도 |
+|---|---|---|---|
+| [12. vm_verifier](./12_vm_verifier.md) | `vm_verifier/` | 파워온 전 vNIC MAC ↔ DHCP 예약 MAC 대조, 교차설치 탐지 | 🟢 |
+| [13. lpage_search](./13_lpage_search.md) | `lpage_search/` | Large Page 기준 ev02 메모리 크기 계산 (접속 없음) | 🟢 |
+| [17. VM_setup 잔여 도구](./17_VM_setup_잔여도구.md) | `VM_setup/vm-param-fix/power_setting` | 호스트 전원정책 High Performance 적용 (V1 바이너리, 소스 없음). **V2 는 자체 대체 도구를 이미 씀** → [10번 5-9절](./10_V2.md) | 🔴 |
 
 > 제외·통합된 폴더(`VM_setup`의 나머지 도구, V1 `vm-param-check-usability-improvement`, `vm-network-migration`, `integrated-vm-param-check-test-tool` 등)는 [40_폴더구조](./40_폴더구조.md)에 한 줄씩 안내되어 있습니다.
 

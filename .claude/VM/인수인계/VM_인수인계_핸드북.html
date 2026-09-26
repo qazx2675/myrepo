@@ -149,7 +149,7 @@ mark{background:var(--mark);color:inherit}
 <div id="topbar"><button id="menu">☰ 목차</button><b>VM 인수인계 핸드북</b></div>
 <div class="layout">
   <nav id="side">
-    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-26 07:27</span></div>
+    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-09-26 20:37</span></div>
     <input id="q" type="search" placeholder="목차 검색 (Esc 초기화)" autocomplete="off">
     <ul id="toc"><li class="grp">시작</li>
 <li><a class="doc" href="#doc-README">VM 자동화 도구 인수인계 문서</a></li>
@@ -181,7 +181,7 @@ mark{background:var(--mark);color:inherit}
 <li><a class="lv2" href="#doc-02_공통_실행환경--5-공통-옵션-규칙">5. 공통 옵션 규칙</a></li>
 <li><a class="lv2" href="#doc-02_공통_실행환경--6-실행-전-체크리스트-설정변경-도구">6. 실행 전 체크리스트 (🔴 설정변경 도구)</a></li>
 <li><a class="lv2" href="#doc-02_공통_실행환경--7-결과물이-남는-위치">7. 결과물이 남는 위치</a></li>
-<li class="grp">도구별 문서</li>
+<li class="grp">VM setup 및 설정 체크</li>
 <li><a class="doc" href="#doc-10_V2">10. V2 — VM 생성·설정(VMsetup) + 점검·교정(vm-param-check), SPEC_DIR 공유</a></li>
 <li><a class="lv2" href="#doc-10_V2--한눈에-보기">한눈에 보기</a></li>
 <li><a class="lv2" href="#doc-10_V2--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</a></li>
@@ -204,26 +204,7 @@ mark{background:var(--mark);color:inherit}
 <li><a class="lv2" href="#doc-11_vm-param-check--7-주의사항과-한계">7. 주의사항과 한계</a></li>
 <li><a class="lv2" href="#doc-11_vm-param-check--8-보조-스크립트">8. 보조 스크립트</a></li>
 <li><a class="lv2" href="#doc-11_vm-param-check--9-파일-구조">9. 파일 구조</a></li>
-<li><a class="doc" href="#doc-12_vm_verifier">12. vm_verifier — 파워온 전 MAC 대조 (교차 설치 탐지)</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--한눈에-보기">한눈에 보기</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--2-흐름도">2. 흐름도</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--3-준비물">3. 준비물</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: `main.go`)</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--5-결과-확인-방법">5. 결과 확인 방법</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--7-주의사항과-한계">7. 주의사항과 한계</a></li>
-<li><a class="lv2" href="#doc-12_vm_verifier--8-파일-구조">8. 파일 구조</a></li>
-<li><a class="doc" href="#doc-13_lpage_search">13. lpage_search — Large Page 메모리 사이징 계산기</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--한눈에-보기">한눈에 보기</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--2-흐름도">2. 흐름도</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--3-준비물">3. 준비물</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: `main.go`)</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--5-결과-확인-방법">5. 결과 확인 방법</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--7-주의사항과-한계">7. 주의사항과 한계</a></li>
-<li><a class="lv2" href="#doc-13_lpage_search--8-파일-구조">8. 파일 구조</a></li>
+<li class="grp">망변경</li>
 <li><a class="doc" href="#doc-14_Network_Change_Integration_Script">14. Network_Change_Integration_Script — 통합 VM 망변경 (IP → LDAP → 포트그룹)</a></li>
 <li><a class="lv2" href="#doc-14_Network_Change_Integration_Script--한눈에-보기">한눈에 보기</a></li>
 <li><a class="lv2" href="#doc-14_Network_Change_Integration_Script--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</a></li>
@@ -244,6 +225,27 @@ mark{background:var(--mark);color:inherit}
 <li><a class="lv2" href="#doc-15_vCenter_API_IP_자동변경--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</a></li>
 <li><a class="lv2" href="#doc-15_vCenter_API_IP_자동변경--7-주의사항과-한계">7. 주의사항과 한계</a></li>
 <li><a class="lv2" href="#doc-15_vCenter_API_IP_자동변경--8-파일-구조">8. 파일 구조</a></li>
+<li class="grp">그 외 도구</li>
+<li><a class="doc" href="#doc-12_vm_verifier">12. vm_verifier — 파워온 전 MAC 대조 (교차 설치 탐지)</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--한눈에-보기">한눈에 보기</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--2-흐름도">2. 흐름도</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--3-준비물">3. 준비물</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: `main.go`)</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--5-결과-확인-방법">5. 결과 확인 방법</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--7-주의사항과-한계">7. 주의사항과 한계</a></li>
+<li><a class="lv2" href="#doc-12_vm_verifier--8-파일-구조">8. 파일 구조</a></li>
+<li><a class="doc" href="#doc-13_lpage_search">13. lpage_search — Large Page 메모리 사이징 계산기</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--한눈에-보기">한눈에 보기</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--2-흐름도">2. 흐름도</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--3-준비물">3. 준비물</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: `main.go`)</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--5-결과-확인-방법">5. 결과 확인 방법</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--7-주의사항과-한계">7. 주의사항과 한계</a></li>
+<li><a class="lv2" href="#doc-13_lpage_search--8-파일-구조">8. 파일 구조</a></li>
 <li><a class="doc" href="#doc-17_VM_setup_잔여도구">17. VM_setup 잔여 도구 — power_setting (호스트 전원정책)</a></li>
 <li><a class="lv2" href="#doc-17_VM_setup_잔여도구--한눈에-보기">한눈에 보기</a></li>
 <li><a class="lv2" href="#doc-17_VM_setup_잔여도구--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</a></li>
@@ -323,16 +325,13 @@ mark{background:var(--mark);color:inherit}
     subgraph S1["① VM setup 단계"]
         direction TB
         A["ESXi 호스트를 vCenter 에 등록&lt;br/&gt;V2 main_conn 🔴"] --&gt; B["메모리 사이징&lt;br/&gt;lpage_search 🟢"]
-        B --&gt; B1["평가판 라이선스 호스트에 라이선스 할당&lt;br/&gt;V2 license_assign 🔴"]
-        B1 --&gt; C["스펙 작성&lt;br/&gt;SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
-        C --&gt; D["VM 생성·설정&lt;br/&gt;V2 vm_setup.sh 🔴&lt;br/&gt;vswitch → vm_create → affinity → lpage → 스펙 체크"]
-        D --&gt; E["MAC 목록 추출 → DHCP 등록&lt;br/&gt;V2 mac_info 🟢"]
-        E --&gt; E1["호스트 전원정책 High Performance 적용&lt;br/&gt;power_setting 🔴 (17번)"]
-        E1 --&gt; F["파워온 전 MAC 대조&lt;br/&gt;vm_verifier 🟢"]
+        B --&gt; C["스펙 작성&lt;br/&gt;SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
+        C --&gt; D["VM 생성·설정&lt;br/&gt;V2 vm_setup.sh 🔴 — 스펙마다 vswitch → vm_create → mac_info →&lt;br/&gt;power_setting → affinity → lpage, 끝나면 license_assign(전체) → 스펙 체크&lt;br/&gt;(터미널이면 진행 모니터로 표시, 10번 3절)"]
+        D --&gt; F["파워온 전 MAC 대조&lt;br/&gt;vm_verifier 🟢 (MAC 목록: run_user/mac_all.txt 또는 awx_route)"]
         F -- FAIL --&gt; F1["DHCP 등록 수정 후 재검증"] --&gt; F
         F -- PASS --&gt; G["파워온 · OS 설치"]
         G --&gt; H["설정 점검&lt;br/&gt;vm-param-check 🟢"]
-        H -- FAIL --&gt; H1["VM 전원 OFF → -fix 🔴&lt;br/&gt;호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴 재실행"] --&gt; H
+        H -- FAIL --&gt; H1["VM 전원 OFF → -fix 🔴&lt;br/&gt;호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴 재실행 (17번)"] --&gt; H
         H -- PASS --&gt; I["VM 인도 · 사용 시작"]
     end
     subgraph S2["② 망/인프라 변경 단계"]
@@ -344,15 +343,20 @@ mark{background:var(--mark);color:inherit}
         L -. "설정이 스펙과 맞는지 다시 볼 때" .-&gt; M["vm-param-check 🟢 (11번)"]
     end
     S1 ==&gt;|"VM 운영 중 망·인프라가 바뀔 때"| S2
-    class A,D,B1,E1,H1,J,K change
-    class B,E,M cmd
+    class A,D,H1,J,K change
+    class B,M cmd
     class C input
     class F,H gate
     class F1 warn
     class I,L safe</div>
 <hr>
 <h3 id="doc-README--도구별-문서">도구별 문서</h3>
-<div class="tw"><table><thead><tr><th>문서</th><th>폴더 (<code>.claude/VM/</code> 기준)</th><th>하는 일</th><th>위험도</th></tr></thead><tbody><tr><td><a href="#doc-10_V2">10. V2</a></td><td><code>V2/</code></td><td>VM 생성·설정(<code>VMsetup</code>) + 설정 점검·교정(<code>vm-param-check</code>)이 <code>SPEC_DIR</code>를 공유하는 현행 구성</td><td>🔴</td></tr><tr><td><a href="#doc-11_vm-param-check">11. vm-param-check</a></td><td><code>V2/vm-param-check-usability-improvement/vm-param-check/</code></td><td>VM 설정이 스펙과 맞는지 점검, <code>-fix</code>로 자동 교정 (주력)</td><td>🟢 점검 / 🔴 <code>-fix</code></td></tr><tr><td><a href="#doc-12_vm_verifier">12. vm_verifier</a></td><td><code>vm_verifier/</code></td><td>파워온 전 vNIC MAC ↔ DHCP 예약 MAC 대조, 교차설치 탐지</td><td>🟢</td></tr><tr><td><a href="#doc-13_lpage_search">13. lpage_search</a></td><td><code>lpage_search/</code></td><td>Large Page 기준 ev02 메모리 크기 계산 (접속 없음)</td><td>🟢</td></tr><tr><td><a href="#doc-14_Network_Change_Integration_Script">14. Network_Change_Integration_Script</a></td><td><code>Network_Change_Integration_Script/</code></td><td>IP 변경 → LDAP 설정 → 포트그룹(VLAN) 이관을 한 번에, 롤백 포함</td><td>🔴</td></tr><tr><td><a href="#doc-15_vCenter_API_IP_자동변경">15. vCenter API IP 자동변경</a></td><td><code>"vCenter API IP 자동변경/project"</code></td><td>네트워크로 접속 못 하는 VM 의 IP 를 VMware Tools 경로로 재설정</td><td>🔴</td></tr><tr><td><a href="#doc-17_VM_setup_잔여도구">17. VM_setup 잔여 도구</a></td><td><code>VM_setup/vm-param-fix/power_setting</code></td><td>호스트 전원정책 High Performance 적용 (소스 없는 바이너리)</td><td>🔴</td></tr></tbody></table></div>
+<h4 id="doc-README--vm-setup-및-설정-체크">VM setup 및 설정 체크</h4>
+<div class="tw"><table><thead><tr><th>문서</th><th>폴더 (<code>.claude/VM/</code> 기준)</th><th>하는 일</th><th>위험도</th></tr></thead><tbody><tr><td><a href="#doc-10_V2">10. V2 (VMsetup)</a></td><td><code>V2/VMsetup/</code></td><td>VM 생성·설정. <code>SPEC_DIR</code>를 vm-param-check와 공유하는 현행 구성</td><td>🔴</td></tr><tr><td><a href="#doc-11_vm-param-check">11. vm-param-check</a></td><td><code>V2/vm-param-check-usability-improvement/vm-param-check/</code></td><td>VM 설정이 스펙과 맞는지 점검, <code>-fix</code>로 자동 교정 (주력)</td><td>🟢 점검 / 🔴 <code>-fix</code></td></tr></tbody></table></div>
+<h4 id="doc-README--망변경">망변경</h4>
+<div class="tw"><table><thead><tr><th>문서</th><th>폴더 (<code>.claude/VM/</code> 기준)</th><th>하는 일</th><th>위험도</th></tr></thead><tbody><tr><td><a href="#doc-14_Network_Change_Integration_Script">14. Network_Change_Integration_Script</a></td><td><code>Network_Change_Integration_Script/</code></td><td>IP 변경 → LDAP 설정 → 포트그룹(VLAN) 이관을 한 번에, 롤백 포함</td><td>🔴</td></tr><tr><td><a href="#doc-15_vCenter_API_IP_자동변경">15. vCenter API IP 자동변경</a></td><td><code>"vCenter API IP 자동변경/project"</code></td><td>네트워크로 접속 못 하는 VM 의 IP 를 VMware Tools 경로로 재설정</td><td>🔴</td></tr></tbody></table></div>
+<h4 id="doc-README--그-외-도구">그 외 도구</h4>
+<div class="tw"><table><thead><tr><th>문서</th><th>폴더 (<code>.claude/VM/</code> 기준)</th><th>하는 일</th><th>위험도</th></tr></thead><tbody><tr><td><a href="#doc-12_vm_verifier">12. vm_verifier</a></td><td><code>vm_verifier/</code></td><td>파워온 전 vNIC MAC ↔ DHCP 예약 MAC 대조, 교차설치 탐지</td><td>🟢</td></tr><tr><td><a href="#doc-13_lpage_search">13. lpage_search</a></td><td><code>lpage_search/</code></td><td>Large Page 기준 ev02 메모리 크기 계산 (접속 없음)</td><td>🟢</td></tr><tr><td><a href="#doc-17_VM_setup_잔여도구">17. VM_setup 잔여 도구</a></td><td><code>VM_setup/vm-param-fix/power_setting</code></td><td>호스트 전원정책 High Performance 적용 (V1 바이너리, 소스 없음). <strong>V2 는 자체 대체 도구를 이미 씀</strong> → <a href="#doc-10_V2">10번 5-9절</a></td><td>🔴</td></tr></tbody></table></div>
 <blockquote><p>제외·통합된 폴더(<code>VM_setup</code>의 나머지 도구, V1 <code>vm-param-check-usability-improvement</code>, <code>vm-network-migration</code>, <code>integrated-vm-param-check-test-tool</code> 등)는 <a href="#doc-40_폴더구조">40_폴더구조</a>에 한 줄씩 안내되어 있습니다.</p></blockquote>
 <hr>
 <h3 id="doc-README--유지보수-찾아보기">유지보수 · 찾아보기</h3>
@@ -389,7 +393,7 @@ tar czf vm-tools.tar.gz .claude/VM/V2 .claude/VM/vm_verifier .claude/VM/lpage_se
 <pre class="lang-bash"><code>go version        # V2 전체 빌드는 1.26.5 이상 필요</code></pre>
 <p>Go가 없으면 <a href="#doc-02_공통_실행환경">02번 1절</a>의 오프라인 설치를 따릅니다.</p>
 <h3 id="doc-00_빠른시작--3-빌드">3. 빌드</h3>
-<pre class="lang-bash"><code># V2 (VMsetup 10종 + vm-param-check) — V2 폴더를 통째로 배치 (OS6 서버면 bin_os6/ 실행파일을 자동 설치)
+<pre class="lang-bash"><code># V2 (VMsetup 11종 + vm-param-check = 12종) — V2 폴더를 통째로 배치 (OS6 서버면 bin_os6/ 실행파일을 자동 설치)
 cp -r V2 /home/V2 &amp;&amp; cd /home/V2 &amp;&amp; bash setup.sh
 ./passwd_update.sh          # vCenter 비밀번호를 암호 파일로 등록 (vm_setup.sh, vm_setting_check_insert.sh 가 사용)
 
@@ -594,7 +598,7 @@ go version   # go version go1.26.5 linux/amd64</code></pre>
 <h3 id="doc-02_공통_실행환경--2-빌드-방법">2. 빌드 방법</h3>
 <h4 id="doc-02_공통_실행환경--기본-setup-sh-실행">기본: <code>setup.sh</code> 실행</h4>
 <p>모든 도구 폴더에 <code>setup.sh</code>가 있습니다. <strong>이걸 쓰세요.</strong> 직접 <code>go build</code>를 치면 <code>-mod=vendor</code>를 빼먹기 쉽고, 그러면 폐쇄망에서 실패합니다.</p>
-<div class="tw"><table><thead><tr><th>도구</th><th>빌드 명령</th><th>의존성 위치</th></tr></thead><tbody><tr><td>V2 (11종 전체)</td><td><code>cd /home/V2 &amp;&amp; bash setup.sh</code> (<code>-l</code> 목록, <code>-c</code> 정리, <code>bash setup.sh vm_create</code> 하나만, OS6 는 <code>bin_os6/</code> 설치 — <a href="#doc-10_V2">10번 4절</a>)</td><td><code>V2/govendor/</code> → 각 도구 <code>vendor</code>로 링크</td></tr><tr><td>vm_verifier</td><td><code>bash setup.sh</code></td><td><code>.claude/공통/govendor/govmomi-0.39.0</code> → <code>vendor</code>로 링크</td></tr><tr><td>lpage_search</td><td><code>bash setup.sh</code></td><td>없음 (표준 라이브러리만)</td></tr><tr><td>Network_Change_Integration_Script</td><td><code>./setup.sh</code></td><td><code>projects/*/</code> 안에 자체 보관</td></tr><tr><td>vm-ip-change</td><td><code>./setup.sh</code></td><td><code>project/vendor/</code></td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>도구</th><th>빌드 명령</th><th>의존성 위치</th></tr></thead><tbody><tr><td>V2 (12종 전체)</td><td><code>cd /home/V2 &amp;&amp; bash setup.sh</code> (<code>-l</code> 목록, <code>-c</code> 정리, <code>bash setup.sh vm_create</code> 하나만, OS6 는 <code>bin_os6/</code> 설치 — <a href="#doc-10_V2">10번 4절</a>)</td><td><code>V2/govendor/</code> → 각 도구 <code>vendor</code>로 링크</td></tr><tr><td>vm_verifier</td><td><code>bash setup.sh</code></td><td><code>.claude/공통/govendor/govmomi-0.39.0</code> → <code>vendor</code>로 링크</td></tr><tr><td>lpage_search</td><td><code>bash setup.sh</code></td><td>없음 (표준 라이브러리만)</td></tr><tr><td>Network_Change_Integration_Script</td><td><code>./setup.sh</code></td><td><code>projects/*/</code> 안에 자체 보관</td></tr><tr><td>vm-ip-change</td><td><code>./setup.sh</code></td><td><code>project/vendor/</code></td></tr></tbody></table></div>
 <p><code>setup.sh</code>는 공통으로 <code>GOPROXY=off</code>, <code>-mod=vendor</code>로 빌드하므로 <strong>인터넷에서 라이브러리를 받으려 하지 않습니다.</strong></p>
 <h4 id="doc-02_공통_실행환경--폐쇄망으로-옮기기">폐쇄망으로 옮기기</h4>
 <pre class="lang-bash"><code># 1) 인터넷 되는 곳에서 — 필요한 폴더를 통째로 압축
@@ -681,7 +685,7 @@ sched.vcpu2.affinity=4,5</code></pre>
 <div class="docmeta">10_V2.md</div>
 <h2 id="doc-10_V2--10-v2-vm-생성-설정-vmsetup-점검-교정-vm-param-check-spec-dir-공유">10. V2 — VM 생성·설정(VMsetup) + 점검·교정(vm-param-check), SPEC_DIR 공유</h2>
 <h3 id="doc-10_V2--한눈에-보기">한눈에 보기</h3>
-<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🔴 <strong>VM 생성·포트그룹 생성·affinity/lpage 적용 등 실제 vCenter를 바꿉니다</strong> (<code>-n</code>은 변경 없음)</td></tr><tr><td>폴더</td><td><code>.claude/VM/V2/</code> (서버에는 V2 폴더를 통째로, 예: <code>/home/V2</code>)</td></tr><tr><td>진입점</td><td><code>VMsetup/vm_setup.sh</code> (전체 과정), <code>VMsetup/*-source/&lt;도구&gt;</code> (개별 도구 10종)</td></tr><tr><td>하는 일</td><td>호스트(BM)당 VM 1~99대(<code>ev01</code>~<code>ev99</code>)를 스펙 폴더 <code>SPEC_DIR</code> 기준으로 만들고 설정. 점검·교정은 같은 <code>SPEC_DIR</code>를 읽는 <a href="#doc-11_vm-param-check">11. vm-param-check</a></td></tr><tr><td>인증</td><td><code>vm_setup.sh</code>: <code>passwd_update.sh</code>로 등록한 암호 파일 → 직접 입력 (계정 <code>-id</code>, 기본 <code>lscsystems@vsphere.local</code>) / 개별 도구: <code>VC_PASSWORD</code></td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🔴 <strong>VM 생성·포트그룹 생성·affinity/lpage 적용 등 실제 vCenter를 바꿉니다</strong> (<code>-n</code>은 변경 없음)</td></tr><tr><td>폴더</td><td><code>.claude/VM/V2/</code> (서버에는 V2 폴더를 통째로, 예: <code>/home/V2</code>)</td></tr><tr><td>진입점</td><td><code>VMsetup/vm_setup.sh</code> (전체 과정), <code>VMsetup/*-source/&lt;도구&gt;</code> (개별 도구 11종)</td></tr><tr><td>하는 일</td><td>호스트(BM)당 VM 1~99대(<code>ev01</code>~<code>ev99</code>)를 스펙 폴더 <code>SPEC_DIR</code> 기준으로 만들고 설정(MAC 수집·전원정책·라이선스까지 자동, 터미널이면 진행 모니터로 표시). 점검·교정은 같은 <code>SPEC_DIR</code>를 읽는 <a href="#doc-11_vm-param-check">11. vm-param-check</a></td></tr><tr><td>인증</td><td><code>vm_setup.sh</code>: <code>passwd_update.sh</code>로 등록한 암호 파일 → 직접 입력 (계정 <code>-id</code>, 기본 <code>lscsystems@vsphere.local</code>) / 개별 도구: <code>VC_PASSWORD</code></td></tr></tbody></table></div>
 <hr>
 <h3 id="doc-10_V2--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</h3>
 <pre class="lang-bash"><code># 1) 비밀번호 암호 파일 등록 (처음 한 번, 비밀번호가 바뀌면 다시)
@@ -728,16 +732,17 @@ cd /home/V2/VMsetup/license_assign-source
 <hr>
 <h3 id="doc-10_V2--2-v1-vm-setup-대체-범위">2. V1(<code>VM_setup</code>) 대체 범위</h3>
 <p>V2가 V1 <code>VM_setup</code>의 도구를 모두 포함합니다. <strong>V1 폴더에서 계속 쓰는 것은 <code>power_setting</code> 바이너리 하나뿐</strong>입니다(<a href="#doc-17_VM_setup_잔여도구">17번</a>).</p>
-<div class="tw"><table><thead><tr><th>V1 <code>VM_setup/</code></th><th>V2</th><th>비고</th></tr></thead><tbody><tr><td><code>vm_create-source</code></td><td><code>VMsetup/vm_create-source</code></td><td>ev01~ev99, FQDN/짧은 이름 매칭, 실패 시 종료코드 1</td></tr><tr><td><code>affinity_setting-source</code></td><td><code>VMsetup/affinity_setting-source</code></td><td>ev마다 파일 필수, 자동 계산(<code>-ht</code>/<code>AUTO</code>) 삭제</td></tr><tr><td><code>lpage_setting-source</code></td><td><code>VMsetup/lpage_setting-source</code></td><td>ev01~ev99</td></tr><tr><td><code>tag_setting-source</code></td><td><code>VMsetup/tag_setting-source</code></td><td>ev01~ev99</td></tr><tr><td><code>vswitch_setting-source</code></td><td><code>VMsetup/vswitch_setting-source</code></td><td>호스트 병렬, FQDN/짧은 이름 매칭</td></tr><tr><td><code>numa_preferht_setting-source</code></td><td><code>VMsetup/numa_preferht_setting-source</code></td><td>동일</td></tr><tr><td><code>license_assign-source</code></td><td><code>VMsetup/license_assign-source</code></td><td>동일</td></tr><tr><td><code>mac_info-source</code></td><td><code>VMsetup/mac_info-source</code></td><td>동일</td></tr><tr><td><code>main_conn-source</code></td><td><code>VMsetup/main_conn-source</code></td><td>동일 (옵션 없음, 소스 수정 후 빌드)</td></tr><tr><td>(없음)</td><td><code>VMsetup/nic_assign-source</code></td><td>신규: 네트워크 어댑터 1 포트그룹 교체</td></tr><tr><td>(없음)</td><td><code>VMsetup/vm_setup.sh</code>, <code>vswitch_pgname.sh</code></td><td>신규: 전체 과정 실행, 포트그룹명 변환</td></tr><tr><td>(없음)</td><td><code>passwd_update.sh</code>, <code>secret_lib.sh</code></td><td>신규: 비밀번호 암호 파일 등록·풀기</td></tr><tr><td>(없음)</td><td><code>build_os6.sh</code>, <code>bin_os6/</code></td><td>신규: OS6(RHEL/CentOS 6)용 미리 빌드한 실행파일</td></tr><tr><td><code>vm-param-fix</code> (오케스트레이터)</td><td><code>vm-param-check -fix</code></td><td>V2에 넣지 않음 (대체됨)</td></tr><tr><td><code>vm-param-fix/power_setting</code></td><td><strong>대체 없음</strong></td><td>V1 폴더에 유지 → <a href="#doc-17_VM_setup_잔여도구">17번</a></td></tr><tr><td>V1 <code>vm-param-check-usability-improvement</code></td><td><code>V2/vm-param-check-usability-improvement</code></td><td>ev01~ev99, <code>-specExport</code> 추가 → <a href="#doc-11_vm-param-check">11번</a></td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>V1 <code>VM_setup/</code></th><th>V2</th><th>비고</th></tr></thead><tbody><tr><td><code>vm_create-source</code></td><td><code>VMsetup/vm_create-source</code></td><td>ev01~ev99, FQDN/짧은 이름 매칭, 실패 시 종료코드 1</td></tr><tr><td><code>affinity_setting-source</code></td><td><code>VMsetup/affinity_setting-source</code></td><td>ev마다 파일 필수, 자동 계산(<code>-ht</code>/<code>AUTO</code>) 삭제</td></tr><tr><td><code>lpage_setting-source</code></td><td><code>VMsetup/lpage_setting-source</code></td><td>ev01~ev99</td></tr><tr><td><code>tag_setting-source</code></td><td><code>VMsetup/tag_setting-source</code></td><td>ev01~ev99</td></tr><tr><td><code>vswitch_setting-source</code></td><td><code>VMsetup/vswitch_setting-source</code></td><td>호스트 병렬, FQDN/짧은 이름 매칭</td></tr><tr><td><code>numa_preferht_setting-source</code></td><td><code>VMsetup/numa_preferht_setting-source</code></td><td>동일</td></tr><tr><td><code>license_assign-source</code></td><td><code>VMsetup/license_assign-source</code></td><td>동일. <code>vm_setup.sh</code>가 스펙이 모두 끝난 뒤 BM 전체 대상 1회 호출</td></tr><tr><td><code>mac_info-source</code></td><td><code>VMsetup/mac_info-source</code></td><td>동일. <code>vm_setup.sh</code>가 스펙마다 <code>vm_create</code> 직후 호출(설치 정보 값 자동 전달, 디스크 값 자동매칭)</td></tr><tr><td>(없음)</td><td><code>VMsetup/power_setting-source</code></td><td>신규(소스 있음): BM 전원정책 고성능 설정. <code>vm_setup.sh</code>가 스펙마다 <code>mac_info</code> 다음 자동 호출</td></tr><tr><td><code>main_conn-source</code></td><td><code>VMsetup/main_conn-source</code></td><td>동일 (옵션 없음, 소스 수정 후 빌드)</td></tr><tr><td>(없음)</td><td><code>VMsetup/nic_assign-source</code></td><td>신규: 네트워크 어댑터 1 포트그룹 교체</td></tr><tr><td>(없음)</td><td><code>VMsetup/vm_setup.sh</code>, <code>vswitch_pgname.sh</code></td><td>신규: 전체 과정 실행, 포트그룹명 변환</td></tr><tr><td>(없음)</td><td><code>passwd_update.sh</code>, <code>secret_lib.sh</code></td><td>신규: 비밀번호 암호 파일 등록·풀기</td></tr><tr><td>(없음)</td><td><code>build_os6.sh</code>, <code>bin_os6/</code></td><td>신규: OS6(RHEL/CentOS 6)용 미리 빌드한 실행파일</td></tr><tr><td><code>vm-param-fix</code> (오케스트레이터)</td><td><code>vm-param-check -fix</code></td><td>V2에 넣지 않음 (대체됨)</td></tr><tr><td><code>vm-param-fix/power_setting</code></td><td><code>VMsetup/power_setting-source</code> (신규, 소스 있음)</td><td>호스트 전원정책 고성능 설정. <strong><code>vm_setup.sh</code>가 스펙마다 자동 호출</strong>하므로 새로 작업할 때는 V1 바이너리가 필요 없음 → <a href="#doc-17_VM_setup_잔여도구">17번</a></td></tr><tr><td>V1 <code>vm-param-check-usability-improvement</code></td><td><code>V2/vm-param-check-usability-improvement</code></td><td>ev01~ev99, <code>-specExport</code> 추가 → <a href="#doc-11_vm-param-check">11번</a></td></tr></tbody></table></div>
 <hr>
 <h3 id="doc-10_V2--3-흐름도">3. 흐름도</h3>
-<p>실선은 <code>vm_setup.sh</code>가 실제로 호출하는 순서(vswitch → vm_create → affinity → lpage)이고, <code>mac_info</code>·<code>power_setting</code>·<code>license_assign</code>은 스크립트가 부르지 않는 <strong>별도 후속 도구</strong>입니다(1절 8·10번, <a href="#doc-17_VM_setup_잔여도구">17번</a>). 아래 흐름도는 이 도구들을 실무에서 쓰는 표준 위치 — VM 생성 직후(affinity·lpage 전) MAC 수집·전원정책 적용, 그리고 lpage 이후(신규 호스트만) 라이선스 할당 — 에 이어 붙인 것입니다.</p>
+<p><code>vm_setup.sh</code>는 <strong>스펙마다</strong> <code>vm_create</code> → <code>mac_info</code> → <code>power_setting</code> → <code>affinity_setting</code> → <code>lpage_setting</code>을 실행하고, 모든 스펙이 끝나면 <strong>BM 전체를 대상으로 <code>license_assign</code>을 1회</strong> 실행합니다(모두 실제로 호출하는 내부 단계입니다 — 별도 후속 도구가 아닙니다). 실행 계획을 확인(y)한 뒤 이 단계들은 터미널이면 <strong>진행 모니터</strong>(아래 표)로 보여줍니다.</p>
 <div class="mermaid">flowchart TD
     A["준비&lt;br/&gt;VMsetup/작업이름.txt (BM 목록)&lt;br/&gt;VMsetup/vswitch_작업이름.txt (BM 포트그룹 VLAN)&lt;br/&gt;vcenter.txt · passwd_update.sh 암호 파일"]:::input --&gt; B{"포트그룹 칸이 IP?"}
     B -- 예 --&gt; B1["vswitch_pgname.sh&lt;br/&gt;IP → 폴더명-cae-a-b-c-0, 원본 .bak"] --&gt; C
     B -- 아니오 --&gt; C["./vm_setup.sh"]:::cmd
     C --&gt; U["1. user 선택 (-u 없을 때)&lt;br/&gt;0 직접 선택 · 1 lsh · 2 ljh · 3 dhk"]
-    U --&gt; D["2. 스펙 할당&lt;br/&gt;포트그룹 폴더명 → SPEC_DIR 자동 매칭 (CAE 번호 무시)"]
+    U --&gt; U0["설치 정보 — OS 버전 / 인프라 입력&lt;br/&gt;매번 물어봄 (건너뛰는 환경변수 없음)"]
+    U0 --&gt; D["2. 스펙 할당&lt;br/&gt;포트그룹 폴더명 → SPEC_DIR 자동 매칭 (CAE 번호 무시)"]
     D --&gt; D0{"스펙에 affinity-evNN 없음?"}
     D0 -- 예 --&gt; D3["ev별 affinity 골라 스펙에 추가? y/N"] --&gt; D1
     D0 -- 아니오 --&gt; D1{"자동 매칭 실패 BM?"}
@@ -747,30 +752,48 @@ cd /home/V2/VMsetup/license_assign-source
     E -- y --&gt; Q{"4. CAE 번호를 바꾸시겠습니까? y/N"}
     Q -- y --&gt; Q1["폴더별 새 번호 → 만들 포트그룹·어댑터 1 이름에 반영"] --&gt; F
     Q -- N --&gt; F["5. vCenter 선택 (-v 없을 때)&lt;br/&gt;Enter = 이 user 의 직전 실행"]
-    F --&gt; G{"6. 실행 계획 확인 y/n&lt;br/&gt;ev 값이 같은 것끼리 범위로 묶어 표시&lt;br/&gt;-n 이면 여기서 종료"}
+    F --&gt; G{"6. 실행 계획 확인 y/n&lt;br/&gt;vm_create/MAC 디스크 자동매칭/affinity 값 포함&lt;br/&gt;-n 이면 여기서 종료"}
     G -- n --&gt; Z["종료 (변경 없음)"]:::safe
-    G -- y --&gt; H["vswitch_setting (호스트 병렬)"]:::change
+    G -- "y (터미널이면 진행 모니터로 표시)" --&gt; H["vswitch_setting (호스트 병렬)"]:::change
     H --&gt; I["vm_create (스펙별)"]:::change
-    I --&gt; P["MAC 목록 추출 → DHCP 등록&lt;br/&gt;V2 mac_info 🟢 (1절 8번)"]:::cmd
-    P --&gt; P1["호스트 전원정책 High Performance 적용&lt;br/&gt;power_setting 🔴 (17번)"]:::change
+    I --&gt; P["mac_info&lt;br/&gt;MAC/IP 조사, 설치 정보 값 자동 전달&lt;br/&gt;디스크(sda5)는 스펙 disk 값으로 자동매칭"]:::change
+    P --&gt; P1["power_setting&lt;br/&gt;그 스펙 BM 전원정책 고성능 (이미 고성능이면 스킵)"]:::change
     P1 --&gt; J["affinity_setting"]:::change
     J --&gt; K["lpage_setting"]:::change
-    K --&gt; L{"단계 실패?"}
-    L -- 예 --&gt; L1["그 단계에서 멈춤, [완료] 없음&lt;br/&gt;원인 수정 후 재실행 → 이미 있는 포트그룹/VM 은 건너뜀"]:::warn --&gt; C
-    L -- 아니오 --&gt; K1["평가판 라이선스 호스트에 라이선스 할당&lt;br/&gt;V2 license_assign 🔴 (신규 호스트만, 1절 10번)"]:::change
-    K1 --&gt; N["7. 스펙 체크 (만든 VM 만, vm-param-check -specFolder)&lt;br/&gt;[일치] / [차이] → run_작업이름/check_번호.*"]
-    N --&gt; M["[완료]"]:::safe
-    M --&gt; O["차이가 있으면 안내된 -fix 명령 (11번)&lt;br/&gt;무작위 VM 몇 대 직접 확인"]
+    K --&gt; K1["license_assign (스펙이 모두 끝난 뒤 BM 전체 1회)&lt;br/&gt;평가판 호스트만 — 라이선스 번호 선택 (모니터 잠시 닫힘)&lt;br/&gt;q = 취소하고 다음 단계로"]:::change
+    K1 --&gt; L{"단계 실패?"}
+    L -- 예 --&gt; L1["그 단계에서 멈춤, [완료] 없음&lt;br/&gt;원인 수정 후 재실행 → 이미 있는 것 / 이미 고성능인 호스트는 건너뜀"]:::warn --&gt; C
+    L -- 아니오 --&gt; N["7. 스펙 체크 (만든 VM 만, vm-param-check -specFolder)&lt;br/&gt;[일치] / [차이] → run_작업이름/check_번호.*"]
+    N --&gt; P2{"차이 있음?"}
+    P2 -- 예 --&gt; R["교정 명령 안내 (-fix, 11번)"] --&gt; MC
+    P2 -- 아니오 --&gt; MC["MAC 목록 합본 복사&lt;br/&gt;스펙마다 모은 run_작업이름/mac_all.txt →&lt;br/&gt;awx_route 있으면 awx_route/작업이름.txt 로 복사"]
+    MC --&gt; M["[완료]"]:::safe
+    M --&gt; O["무작위 VM 몇 대 직접 확인"]
     class G,Q gate</div>
+<h4 id="doc-10_V2--진행-모니터-6-7번-터미널일-때">진행 모니터 (6~7번, 터미널일 때)</h4>
+<p>실행 확인(y) 이후 단계를 도구 출력을 그대로 흘리는 대신 <strong>단계별 요약 화면</strong>으로 보여줍니다(대체 화면 — 끝나면 원래 화면으로 복원).</p>
+<pre class="lang-"><code> vm_setup — lsh @ vcsim.saccae.com   OS 8.10 / 인프라 test-infra              경과 00:17
+  [완료]   00:00  작업 시작         (계획: 스펙 1개, BM 40대, VM 240대)
+  [완료]   00:00  포트그룹 생성     성공 1 / 스킵 39 / 실패 0
+   ── 스펙 1/1: SAC-CAE101-VM06-HPC ──
+  [완료]   00:04  VM 생성           [INFO] VM 생성 및 리소스 설정이 완료되었습니다!
+&gt; [진행]   00:02  MAC 조사          ...
+  [대기]          라이선스 할당     (선택이 필요하면 모니터가 잠시 꺼집니다)</code></pre>
+<div class="tw"><table><thead><tr><th>키</th><th>동작</th></tr></thead><tbody><tr><td>↑/↓ (k/j)</td><td>단계 이동 (구분선은 건너뜀)</td></tr><tr><td>Enter</td><td>그 단계의 실행 결과(로그) 보기 → ↑↓·PgUp/PgDn 스크롤(진행 중이면 새 줄을 따라감), Enter 로 목록</td></tr><tr><td><code>[종료]</code> 줄에서 Enter 두 번</td><td>모니터 종료 → 최종 요약(단계별 걸린 시간, 스펙 체크, MAC 목록, 로그 경로)</td></tr><tr><td>Ctrl+C 3번(5초 안)</td><td>실행 중인 도구를 끝내고 종료(종료코드 130). 1·2번째는 안내만</td></tr></tbody></table></div>
+<ul>
+<li>상태: <code>[대기]</code> <code>[진행]</code> <code>[완료]</code> <code>[실패]</code> <code>[건너뜀]</code> <code>[중단]</code>(앞 단계 실패/Ctrl+C 로 실행 안 함) <code>[취소]</code>(라이선스 <code>q</code>).</li>
+<li>켜지는 조건: 표준입력·표준에러가 둘 다 터미널이고 <code>VMSETUP_MONITOR=0</code>이 아닐 때. 파이프 입력·nohup·cron은 예전처럼 줄줄이 출력합니다(같은 단계 목록·같은 로직).</li>
+<li>로그: 단계별 <code>run_&lt;작업이름&gt;/logs/NN_&lt;단계&gt;.log</code>, 전체 <code>run_&lt;작업이름&gt;/run.log</code>, 실행 계획 <code>run_&lt;작업이름&gt;/plan.txt</code>.</li>
+</ul>
 <hr>
 <h3 id="doc-10_V2--4-준비물">4. 준비물</h3>
 <h4 id="doc-10_V2--서버-배치와-빌드">서버 배치와 빌드</h4>
 <pre class="lang-bash"><code>cp -r V2 /home/V2 &amp;&amp; cd /home/V2          # 폴더 안의 상대 위치로 서로를 찾음
 cp vcenter.txt.example vcenter.txt         # vCenter 주소로 수정
-bash setup.sh                              # OS8: Go 1.26.5 이상으로 11종 오프라인 빌드 / OS6: bin_os6/*.gz 설치 (자동 판단)
+bash setup.sh                              # OS8: Go 1.26.5 이상으로 12종 오프라인 빌드 / OS6: bin_os6/*.gz 설치 (자동 판단)
 ./passwd_update.sh                         # vCenter 비밀번호 암호 파일 등록</code></pre>
 <p><code>vm_setup.sh</code>는 실행 파일이 없으면 V2의 <code>setup.sh &lt;이름&gt;</code>을 불러 준비합니다.</p>
-<div class="tw"><table><thead><tr><th><code>setup.sh</code> 명령</th><th>동작</th></tr></thead><tbody><tr><td><code>bash setup.sh</code></td><td>11종 전체. OS6 면 빌드 대신 <code>bin_os6/*.gz</code>를 푼다</td></tr><tr><td><code>bash setup.sh vm_create nic_assign</code></td><td>지정한 도구만</td></tr><tr><td><code>bash setup.sh --os6</code></td><td>OS 와 상관없이 <code>bin_os6/</code> 설치</td></tr><tr><td><code>OS6_hostname="host1|host2" bash setup.sh</code></td><td>이 목록에 현재 <code>hostname</code>이 있으면 OS6 취급 (자동 판단이 안 통할 때)</td></tr><tr><td><code>bash setup.sh -l</code> / <code>-c</code></td><td>대상 목록 / 빌드 결과 정리</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th><code>setup.sh</code> 명령</th><th>동작</th></tr></thead><tbody><tr><td><code>bash setup.sh</code></td><td>12종 전체. OS6 면 빌드 대신 <code>bin_os6/*.gz</code>를 푼다</td></tr><tr><td><code>bash setup.sh vm_create nic_assign</code></td><td>지정한 도구만</td></tr><tr><td><code>bash setup.sh --os6</code></td><td>OS 와 상관없이 <code>bin_os6/</code> 설치</td></tr><tr><td><code>OS6_hostname="host1|host2" bash setup.sh</code></td><td>이 목록에 현재 <code>hostname</code>이 있으면 OS6 취급 (자동 판단이 안 통할 때)</td></tr><tr><td><code>bash setup.sh -l</code> / <code>-c</code></td><td>대상 목록 / 빌드 결과 정리</td></tr></tbody></table></div>
 <p>OS6 판단: <code>--os6</code>, <code>VMSETUP_OS6=1</code>, 커널 2.6.x, <code>/etc/redhat-release</code> release 6, <code>OS6_hostname</code> 중 하나. OS6 는 Go 가 필요 없습니다(Go 1.20 정적 빌드, bash 4.1·openssl 필요). 소스가 바뀌면 Go 1.20 이 있는 서버에서 <code>bash build_os6.sh [go 경로]</code>로 <code>bin_os6/</code>를 다시 만듭니다.</p>
 <h4 id="doc-10_V2--비밀번호-암호-파일">비밀번호 (암호 파일)</h4>
 <div class="tw"><table><thead><tr><th>명령</th><th>동작</th></tr></thead><tbody><tr><td><code>./passwd_update.sh</code></td><td>vCenter 비밀번호 등록·갱신 (계정 <code>lscsystems@vsphere.local</code>)</td></tr><tr><td><code>./passwd_update.sh -id &lt;계정&gt;</code></td><td>다른 vCenter 계정</td></tr><tr><td><code>./passwd_update.sh -esxi [-id &lt;계정&gt;]</code></td><td>ESXi 비밀번호 (기본 <code>root</code>)</td></tr><tr><td><code>./passwd_update.sh -list</code></td><td>저장된 항목과 풀리는지 확인 (비밀번호는 표시 안 함)</td></tr></tbody></table></div>
@@ -809,13 +832,16 @@ affinity-ev02=affinity_ev02.txt     # 여러 ev 가 같은 파일을 써도 됨<
 <p>스펙이 생성 옵션으로 어떻게 바뀌는지 미리 보려면:</p>
 <pre class="lang-bash"><code>cd /home/V2/vm-param-check-usability-improvement/vm-param-check
 ./vm-param-check -specRoot=../../SPEC_DIR -specExport=&lt;CAE폴더명&gt;</code></pre>
+<h4 id="doc-10_V2--설치-정보-mac-목록-내보내기-awx-route">설치 정보 · MAC 목록 내보내기 (<code>awx_route</code>)</h4>
+<p><code>vm_setup.sh</code>는 user 선택 다음 <strong>매번</strong> OS 버전과 인프라를 물어봅니다(<code>read -p</code>, 형식은 숫자만 — <code>8.10</code>처럼). 값을 건너뛰는 환경변수는 없습니다(비밀번호와 같은 이유로 시작할 때 항상 지웁니다). 이 값은 스펙마다 <code>mac_info -argStr=&lt;OS 버전&gt; -arg1=&lt;인프라&gt;</code>로 그대로 전달됩니다.</p>
+<p>스펙마다 모은 <code>mac_info</code> 결과를 <code>run_&lt;작업이름&gt;/mac_all.txt</code>에 이어붙이고, 스크립트 상단의 <code>awx_route="..."</code>(또는 환경변수)를 채우면 전 스펙이 끝난 뒤 <code>awx_route/&lt;작업이름&gt;.txt</code>로 한 번에 복사합니다. 비워 두면 복사하지 않고 <code>run_&lt;작업이름&gt;/</code> 안에만 남습니다.</p>
 <h4 id="doc-10_V2--권한">권한</h4>
 <p>VM 생성, Reconfigure, 호스트 Network configuration. 라이선스 할당은 Global &gt; Licenses, 호스트 등록은 Host &gt; Inventory.</p>
 <hr>
 <h3 id="doc-10_V2--5-옵션-상세표">5. 옵션 상세표</h3>
 <h4 id="doc-10_V2--5-1-vm-setup-sh-소스-getopts-u-v-i-s-w-c-nh-id-는-i-로-바꿔-넘김">5-1. <code>vm_setup.sh</code> (소스: <code>getopts "u:v:i:s:w:c:nh"</code>, <code>-id</code>는 <code>-i</code>로 바꿔 넘김)</h4>
 <div class="tw"><table><thead><tr><th>옵션</th><th>기본값</th><th>필수</th><th>설명</th></tr></thead><tbody><tr><td><code>-u &lt;작업이름&gt;</code></td><td>번호 메뉴</td><td></td><td><code>VMsetup/&lt;작업이름&gt;.txt</code>, <code>VMsetup/vswitch_&lt;작업이름&gt;.txt</code>를 찾는 이름. 영문/숫자/<code>._-</code>만. 없으면 메뉴(<code>0) 직접 선택</code> <code>1) lsh</code> <code>2) ljh</code> <code>3) dhk</code>)</td></tr><tr><td><code>-n</code></td><td>—</td><td></td><td>스펙·포트그룹 할당과 실행 계획까지만 보여 주고 종료 (vCenter 변경 없음)</td></tr><tr><td><code>-v &lt;ip&gt;</code></td><td>환경변수 <code>VC_IP</code></td><td></td><td>vCenter IP. 없으면 <code>vcenter.txt</code> 목록에서 번호 선택 (<code>0</code> 직접 입력, Enter 직전 실행)</td></tr><tr><td><code>-id &lt;계정&gt;</code> (<code>-i</code>)</td><td><code>lscsystems@vsphere.local</code></td><td></td><td>vCenter 계정. 비밀번호는 암호 파일 → 입력</td></tr><tr><td><code>-s &lt;dir&gt;</code></td><td><code>vm-param-check/SPEC_DIR</code>(있으면), 없으면 <code>../SPEC_DIR</code></td><td></td><td>SPEC_DIR 경로</td></tr><tr><td><code>-w &lt;vswitch&gt;</code></td><td><code>vSwitch0</code></td><td></td><td>포트그룹을 만들 가상 스위치</td></tr><tr><td><code>-c &lt;n&gt;</code></td><td>각 도구 기본값</td><td></td><td>vswitch/affinity/lpage 동시 처리 수</td></tr><tr><td><code>-h</code></td><td>—</td><td></td><td>도움말</td></tr></tbody></table></div>
-<p>환경변수 <code>VM_SETUP_EDITOR</code>로 vim 대신 다른 편집기를 쓸 수 있습니다. 터미널에서는 색으로 구분해 보여 줍니다(<code>NO_COLOR=1</code> 또는 <code>VMSETUP_COLOR=never</code>로 끄고 <code>always</code>로 강제).</p>
+<p>환경변수 <code>VM_SETUP_EDITOR</code>로 vim 대신 다른 편집기를 쓸 수 있습니다. 터미널에서는 색으로 구분해 보여 줍니다(<code>NO_COLOR=1</code> 또는 <code>VMSETUP_COLOR=never</code>로 끄고 <code>always</code>로 강제). 6~7번 단계의 진행 모니터는 <code>VMSETUP_MONITOR=0</code>으로 끄면 예전처럼 줄줄이 출력합니다(파이프 입력·nohup·cron은 자동으로 꺼짐).</p>
 <p><strong>CAE 번호 변경 끄기</strong>: 필요 없으면 <code>vm_setup.sh</code>의 <code># 숫자변경기능</code> 주석 아래 <code>ask_cae_number</code> 한 줄을 주석처리합니다.</p>
 <h4 id="doc-10_V2--5-2-vm-create-vm-생성">5-2. <code>vm_create</code> (VM 생성)</h4>
 <div class="tw"><table><thead><tr><th>플래그</th><th>기본값</th><th>설명</th></tr></thead><tbody><tr><td><code>-vcTargetIP</code></td><td>— (필수)</td><td>vCenter IP</td></tr><tr><td><code>-id</code></td><td><code>lscsystems@vsphere.local</code></td><td>계정</td></tr><tr><td><code>-worklistFile</code></td><td><code>worklist.txt</code></td><td>BM 목록</td></tr><tr><td><code>-vmCount</code></td><td><code>2</code></td><td>호스트당 VM 수 1~99. 값(<code>-evNNCpu</code>)이 없는 evNN은 만들지 않음</td></tr><tr><td><code>-ev01Cpu</code> ~ <code>-ev99Cpu</code> / <code>Mem</code> / <code>Disk</code></td><td><code>0</code></td><td>ev별 vCPU / 메모리 GB / 디스크 GB</td></tr><tr><td><code>-ev01Share</code> ~ <code>-ev99Share</code></td><td><code>0</code></td><td>숫자 또는 <code>nomal</code>/<code>normal</code></td></tr><tr><td><code>-mapFile</code></td><td><code>hostgroup.txt</code></td><td><code>BM 포트그룹</code> 매핑 (VM 이름을 키로도 가능)</td></tr><tr><td><code>-firmware</code></td><td><code>efi</code></td><td><code>bios</code> 또는 <code>efi</code></td></tr><tr><td><code>-guestId</code></td><td><code>rhel8_64Guest</code></td><td>게스트 OS 식별자</td></tr><tr><td><code>-datacenter</code></td><td>—</td><td>데이터센터가 여러 개면 필수</td></tr><tr><td><code>-prepConcurrency</code></td><td><code>16</code></td><td>호스트 사전 조사 동시 수</td></tr><tr><td><code>-taskConcurrency</code></td><td><code>24</code></td><td>vCenter Task 동시 수</td></tr></tbody></table></div>
@@ -832,14 +858,15 @@ affinity-ev02=affinity_ev02.txt     # 여러 ev 가 같은 파일을 써도 됨<
 <div class="tw"><table><thead><tr><th>플래그</th><th>기본값</th><th>설명</th></tr></thead><tbody><tr><td><code>-vc</code></td><td>— (필수)</td><td>vCenter IP (다른 도구와 이름이 다름)</td></tr><tr><td><code>-id</code></td><td><code>lscsystems@vsphere.local</code></td><td></td></tr><tr><td><code>-f</code></td><td>— (필수)</td><td>대상 <strong>VM 이름</strong> 목록</td></tr><tr><td><code>-concurrency</code></td><td><code>20</code></td><td></td></tr></tbody></table></div>
 <h4 id="doc-10_V2--5-8-tag-setting-사용자-지정-특성-vm-setup-sh-에는-포함되지-않음">5-8. <code>tag_setting</code> (사용자 지정 특성, <code>vm_setup.sh</code>에는 포함되지 않음)</h4>
 <div class="tw"><table><thead><tr><th>플래그</th><th>기본값</th><th>설명</th></tr></thead><tbody><tr><td><code>-vcTargetIP</code> / <code>-id</code></td><td>—, <code>lscsystems@vsphere.local</code></td><td></td></tr><tr><td><code>-hostListFile</code></td><td><code>hostlist.txt</code></td><td>BM 목록</td></tr><tr><td><code>-vmCount</code></td><td><code>1</code></td><td>호스트당 VM 수 (ev01부터)</td></tr><tr><td><code>-deptNames</code> / <code>-purposes</code> / <code>-vmTypes</code></td><td>—</td><td>ev 순번별 <code>DEPT_NAME</code> / <code>PURPOSE</code> / <code>VM_TYPE</code> 값 (콤마 구분)</td></tr></tbody></table></div>
-<h4 id="doc-10_V2--5-9-mac-info-license-assign-main-conn">5-9. <code>mac_info</code> 🟢 / <code>license_assign</code> 🔴 / <code>main_conn</code> 🔴</h4>
-<div class="tw"><table><thead><tr><th>도구</th><th>플래그</th></tr></thead><tbody><tr><td><code>mac_info</code></td><td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-arg1</code>(필수), <code>-argInt</code>(<code>0</code>), <code>-argStr</code>(필수)</td></tr><tr><td><code>license_assign</code></td><td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>). 실행 중 라이선스 번호를 입력 받음 — 무인 실행 불가</td></tr><tr><td><code>main_conn</code></td><td><strong>플래그 없음.</strong> <code>main.go</code> 상단의 vCenter URL·클러스터 이름·호스트 목록을 고친 뒤 <code>bash setup.sh</code>로 재빌드</td></tr></tbody></table></div>
+<h4 id="doc-10_V2--5-9-mac-info-power-setting-license-assign-main-conn">5-9. <code>mac_info</code> 🟢 / <code>power_setting</code> 🔴 / <code>license_assign</code> 🔴 / <code>main_conn</code> 🔴</h4>
+<div class="tw"><table><thead><tr><th>도구</th><th>플래그</th></tr></thead><tbody><tr><td><code>mac_info</code></td><td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-arg1</code>(필수), <code>-argInt</code>(<code>0</code>), <code>-argStr</code>(필수)</td></tr><tr><td><code>power_setting</code></td><td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-concurrency</code>(<code>20</code>). 도메인 없이 hostname만 적어도 찾음(짧은 이름 중복이면 오류), 이미 고성능이면 스킵</td></tr><tr><td><code>license_assign</code></td><td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>). 실행 중 라이선스 번호를 입력 받음 — 무인 실행 불가</td></tr><tr><td><code>main_conn</code></td><td><strong>플래그 없음.</strong> <code>main.go</code> 상단의 vCenter URL·클러스터 이름·호스트 목록을 고친 뒤 <code>bash setup.sh</code>로 재빌드</td></tr></tbody></table></div>
+<p><code>vm_setup.sh</code> 안에서는 이 값들을 직접 넘길 필요가 없습니다 — <code>mac_info</code>의 <code>arg1</code>/<code>argStr</code>은 설치 정보 입력값을, <code>power_setting</code>·<code>license_assign</code>의 대상은 그 스펙(또는 전체) BM 목록을 자동으로 씁니다. 위 플래그는 <strong>단독 실행</strong>할 때만 필요합니다.</p>
 <hr>
 <h3 id="doc-10_V2--6-결과-확인-방법">6. 결과 확인 방법</h3>
-<div class="tw"><table><thead><tr><th>도구</th><th>확인</th></tr></thead><tbody><tr><td><code>vm_setup.sh</code></td><td>마지막에 <code>[완료]</code>가 나와야 성공. 실패 단계에서 멈추면 <code>[완료]</code> 없음</td></tr><tr><td><code>vm_setup.sh</code> 스펙 체크</td><td>만든 VM 만 실행한 스펙으로 체크해 <code>[일치]</code> / <code>[차이]</code>(항목별 개수). 자세한 결과 <code>run_&lt;작업이름&gt;/check_&lt;번호&gt;.log</code>, <code>.csv</code>. 차이가 있으면 안내된 <code>-fix</code> 명령으로 교정</td></tr><tr><td><code>vm_create</code>, <code>vswitch_setting</code></td><td>호스트 못 찾음/생성 실패 시 <code>[오류]</code> 출력 + 종료코드 1. 이미 있는 VM/포트그룹은 성공(0)</td></tr><tr><td><code>affinity_setting</code>, <code>numa_preferht_setting</code>, <code>nic_assign</code></td><td>적용 후 재조회해서 실제 값 확인</td></tr><tr><td><code>mac_info</code></td><td><code>Provisioning_List_&lt;vCenterIP의 .을 _로&gt;.txt</code></td></tr><tr><td>전체</td><td><code>vm-param-check -specRoot=../../SPEC_DIR</code>로 점검 → <a href="#doc-11_vm-param-check">11번</a></td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>도구</th><th>확인</th></tr></thead><tbody><tr><td><code>vm_setup.sh</code></td><td>마지막에 <code>[완료]</code>가 나와야 성공. 실패 단계에서 멈추면 <code>[완료]</code> 없음</td></tr><tr><td><code>vm_setup.sh</code> 스펙 체크</td><td>만든 VM 만 실행한 스펙으로 체크해 <code>[일치]</code> / <code>[차이]</code>(항목별 개수). 자세한 결과 <code>run_&lt;작업이름&gt;/check_&lt;번호&gt;.log</code>, <code>.csv</code>. 차이가 있으면 안내된 <code>-fix</code> 명령으로 교정</td></tr><tr><td><code>vm_setup.sh</code> 진행 모니터</td><td>단계별 로그 <code>run_&lt;작업이름&gt;/logs/NN_&lt;단계&gt;.log</code>, 전체 <code>run_&lt;작업이름&gt;/run.log</code>, 실행 계획 <code>run_&lt;작업이름&gt;/plan.txt</code></td></tr><tr><td><code>vm_create</code>, <code>vswitch_setting</code></td><td>호스트 못 찾음/생성 실패 시 <code>[오류]</code> 출력 + 종료코드 1. 이미 있는 VM/포트그룹은 성공(0)</td></tr><tr><td><code>affinity_setting</code>, <code>numa_preferht_setting</code>, <code>nic_assign</code>, <code>power_setting</code></td><td>적용 후 재조회해서 실제 값 확인</td></tr><tr><td><code>mac_info</code> (단독 실행)</td><td><code>Provisioning_List_&lt;vCenterIP의 .을 _로&gt;.txt</code>. <code>vm_setup.sh</code> 안에서는 <code>run_&lt;작업이름&gt;/mac_all.txt</code>(+ <code>awx_route</code> 설정 시 그 폴더)</td></tr><tr><td>전체</td><td><code>vm-param-check -specRoot=../../SPEC_DIR</code>로 점검 → <a href="#doc-11_vm-param-check">11번</a></td></tr></tbody></table></div>
 <hr>
 <h3 id="doc-10_V2--7-자주-나는-오류와-해결">7. 자주 나는 오류와 해결</h3>
-<div class="tw"><table><thead><tr><th>증상</th><th>원인</th><th>해결</th></tr></thead><tbody><tr><td><code>SPEC_DIR 를 찾을 수 없습니다</code></td><td><code>V2/SPEC_DIR</code>·<code>vm-param-check/SPEC_DIR</code> 모두 없음</td><td>V2 폴더를 통째로 배치하거나 <code>-s</code> 지정</td></tr><tr><td><code>Login failure</code></td><td>암호 파일의 비밀번호가 바뀌었거나 계정이 다름</td><td><code>./passwd_update.sh [-id &lt;계정&gt;]</code>로 다시 등록 (셸의 <code>export</code>는 무시됨)</td></tr><tr><td>스펙 체크를 건너뛴다는 경고</td><td>스펙에 ev01 <code>cores</code>/<code>numa</code>가 없음 (VM 생성은 가능)</td><td>스펙에 <code>cores</code>, <code>numa</code> 추가 후 vm-param-check 로 체크</td></tr><tr><td>스펙이 자동 할당되지 않고 이유가 출력됨</td><td>스펙에 <code>affinity-evNN</code>이 없고 추가 질문에 n</td><td>다시 실행해 y 로 추가하거나 스펙에 ev마다 affinity 파일 지정</td></tr><tr><td>호스트를 못 찾음 / 같은 이름 여러 대</td><td>짧은 이름이 같은 호스트가 여러 대</td><td><code>&lt;작업이름&gt;.txt</code>와 <code>vswitch_*.txt</code>에 FQDN으로 적기</td></tr><tr><td><code>Go 버전이 낮습니다</code></td><td>Go 1.26.5 미만</td><td>서버 Go 업그레이드 (폐쇄망은 자동 다운로드 안 함)</td></tr><tr><td><code>govendor/ 가 없습니다</code></td><td><code>V2/govendor</code> 누락</td><td>V2 폴더 전체 복사</td></tr><tr><td><code>VC_PASSWORD 환경 변수가 설정되지 않았습니다</code></td><td>개별 도구 실행 시 비밀번호 없음</td><td><code>export VC_PASSWORD</code> (암호 파일에서 꺼내는 명령은 1절)</td></tr><tr><td>OS6 서버에서 실행파일이 안 뜸</td><td>OS8 용(Go 1.26) 실행파일이 설치됨</td><td><code>bash setup.sh --os6</code> 또는 <code>OS6_hostname="&lt;호스트&gt;" bash setup.sh</code></td></tr><tr><td><code>please specify a datacenter</code></td><td>데이터센터가 여러 개</td><td><code>vm_create -datacenter &lt;이름&gt;</code></td></tr><tr><td>affinity 파일 <code>AUTO</code> 오류</td><td>자동 계산 삭제됨</td><td>실제 CPU 목록 파일 작성</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th>증상</th><th>원인</th><th>해결</th></tr></thead><tbody><tr><td><code>SPEC_DIR 를 찾을 수 없습니다</code></td><td><code>V2/SPEC_DIR</code>·<code>vm-param-check/SPEC_DIR</code> 모두 없음</td><td>V2 폴더를 통째로 배치하거나 <code>-s</code> 지정</td></tr><tr><td><code>Login failure</code></td><td>암호 파일의 비밀번호가 바뀌었거나 계정이 다름</td><td><code>./passwd_update.sh [-id &lt;계정&gt;]</code>로 다시 등록 (셸의 <code>export</code>는 무시됨)</td></tr><tr><td>스펙 체크를 건너뛴다는 경고</td><td>스펙에 ev01 <code>cores</code>/<code>numa</code>가 없음 (VM 생성은 가능)</td><td>스펙에 <code>cores</code>, <code>numa</code> 추가 후 vm-param-check 로 체크</td></tr><tr><td>스펙이 자동 할당되지 않고 이유가 출력됨</td><td>스펙에 <code>affinity-evNN</code>이 없고 추가 질문에 n</td><td>다시 실행해 y 로 추가하거나 스펙에 ev마다 affinity 파일 지정</td></tr><tr><td>호스트를 못 찾음 / 같은 이름 여러 대</td><td>짧은 이름이 같은 호스트가 여러 대</td><td><code>&lt;작업이름&gt;.txt</code>와 <code>vswitch_*.txt</code>에 FQDN으로 적기</td></tr><tr><td><code>Go 버전이 낮습니다</code></td><td>Go 1.26.5 미만</td><td>서버 Go 업그레이드 (폐쇄망은 자동 다운로드 안 함)</td></tr><tr><td><code>govendor/ 가 없습니다</code></td><td><code>V2/govendor</code> 누락</td><td>V2 폴더 전체 복사</td></tr><tr><td><code>VC_PASSWORD 환경 변수가 설정되지 않았습니다</code></td><td>개별 도구 실행 시 비밀번호 없음</td><td><code>export VC_PASSWORD</code> (암호 파일에서 꺼내는 명령은 1절)</td></tr><tr><td>OS6 서버에서 실행파일이 안 뜸</td><td>OS8 용(Go 1.26) 실행파일이 설치됨</td><td><code>bash setup.sh --os6</code> 또는 <code>OS6_hostname="&lt;호스트&gt;" bash setup.sh</code></td></tr><tr><td><code>please specify a datacenter</code></td><td>데이터센터가 여러 개</td><td><code>vm_create -datacenter &lt;이름&gt;</code></td></tr><tr><td>affinity 파일 <code>AUTO</code> 오류</td><td>자동 계산 삭제됨</td><td>실제 CPU 목록 파일 작성</td></tr><tr><td>OS 버전을 계속 다시 물어봄</td><td>숫자·점 형식(<code>8.10</code>)이 아닌 값을 입력</td><td>형식에 맞게 다시 입력 (건너뛰는 환경변수 없음)</td></tr><tr><td>진행 모니터가 안 뜨고 예전처럼 줄줄이 출력됨</td><td>표준입력/표준에러가 터미널이 아니거나(파이프·nohup) <code>VMSETUP_MONITOR=0</code></td><td>의도한 동작이면 무시. 터미널에서 보려면 <code>VMSETUP_MONITOR</code> 를 지우고 대화형으로 실행</td></tr><tr><td>라이선스 할당에서 응답이 없어 보임</td><td>모니터가 잠시 닫히고 <code>license_assign</code> 선택 화면으로 전환됨(정상)</td><td>화면의 번호 안내를 보고 선택하거나 <code>q</code> 로 취소</td></tr></tbody></table></div>
 <hr>
 <h3 id="doc-10_V2--8-주의사항과-한계">8. 주의사항과 한계</h3>
 <ul>
@@ -856,7 +883,7 @@ affinity-ev02=affinity_ev02.txt     # 여러 ev 가 같은 파일을 써도 됨<
 <hr>
 <h3 id="doc-10_V2--9-파일-구조">9. 파일 구조</h3>
 <pre class="lang-"><code>V2/
-├── setup.sh                     # 11종 오프라인 전체 빌드 (-l 목록, -c 정리, OS6 면 bin_os6/ 설치)
+├── setup.sh                     # 12종 오프라인 전체 빌드 (-l 목록, -c 정리, OS6 면 bin_os6/ 설치)
 ├── build_os6.sh / bin_os6/      # OS6 용 실행파일 빌드 스크립트 / 미리 빌드한 실행파일(.gz)
 ├── passwd_update.sh / secret_lib.sh   # 비밀번호 암호 파일 등록 / 풀기 함수
 ├── secret/                      # (생성됨, git 제외) key + *.enc
@@ -869,8 +896,9 @@ affinity-ev02=affinity_ev02.txt     # 여러 ev 가 같은 파일을 써도 됨<
 │   ├── vswitch_pgname.sh        # 포트그룹명 IP → 폴더명-cae-a-b-c-0 변환
 │   ├── user.txt.example / vswitch_user.txt.example
 │   ├── CHANGELOG.md
-│   ├── run_&lt;user&gt;/              # (자동 생성) 입력 사본, last_vcenter, check_&lt;번호&gt;.log/.csv
-│   └── &lt;도구&gt;-source/           # main.go + setup.sh (+README.md) × 10
+│   ├── run_&lt;user&gt;/              # (자동 생성) 입력 사본, last_vcenter, check_&lt;번호&gt;.log/.csv,
+│   │                             #   mac_all.txt, plan.txt, run.log, logs/NN_&lt;단계&gt;.log
+│   └── &lt;도구&gt;-source/           # main.go + setup.sh (+README.md) × 11
 ├── vm-param-check-usability-improvement/   # → 11번 문서
 ├── README.md / WORKFLOW.md / ARCHITECTURE.md / PR_CHECKLIST.md
 └── workflow.svg</code></pre>
@@ -1033,178 +1061,6 @@ export VC_PASS="$(. ../../secret_lib.sh; secret_get vcenter "$VC_USER")"   # 또
     ├── report/                   # 콘솔/CSV 출력
     └── vcenter/client.go         # vCenter 조회 (이름 목록 → 대상만 상세)</code></pre>
 <p>관련 문서: 1차 자료 <code>vm-param-check/README.md</code>, 변경 이력 <code>../CHANGELOG.md</code>, 스펙 형식 <a href="#doc-10_V2">10. V2</a>, 수정 요청 <a href="#doc-31_변경요청서_양식">31번 B-1</a>.</p>
-</section>
-<section class="doc" id="doc-12_vm_verifier">
-<div class="docmeta">12_vm_verifier.md</div>
-<h2 id="doc-12_vm_verifier--12-vm-verifier-파워온-전-mac-대조-교차-설치-탐지">12. vm_verifier — 파워온 전 MAC 대조 (교차 설치 탐지)</h2>
-<h3 id="doc-12_vm_verifier--한눈에-보기">한눈에 보기</h3>
-<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🟢 <strong>읽기 전용.</strong> 조회만 하고 아무것도 바꾸지 않습니다</td></tr><tr><td>폴더</td><td><code>.claude/VM/vm_verifier/</code></td></tr><tr><td>바이너리</td><td><code>vm-verifier</code></td></tr><tr><td>하는 일</td><td>VM 생성 직후(파워온 전) vCenter가 아는 vNIC MAC과 DHCP 예약 MAC을 대조해 <strong>교차 설치(역설치)</strong> 를 탐지</td></tr><tr><td>인증</td><td><code>VC_USER</code> / <code>VC_PASS</code> (환경변수)</td></tr><tr><td>종료 코드</td><td>불일치가 하나라도 있으면 <strong>1</strong></td></tr></tbody></table></div>
-<hr>
-<h3 id="doc-12_vm_verifier--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</h3>
-<pre class="lang-bash"><code>cd &lt;저장소&gt;/.claude/VM/vm_verifier
-
-# 1) 인증 (세션마다 1회)
-export VC_USER='&lt;계정&gt;'
-read -rsp 'vCenter 비밀번호: ' VC_PASS; export VC_PASS; echo
-
-# 2) VM 생성 직후, 파워온 전 — 이상 있는 것만 보기
-./vm-verifier -vcenterList vcenter.txt -f targets.txt -failonly
-
-# 3) 전수 출력 (PASS 포함)
-./vm-verifier -vcenterList vcenter.txt -f targets.txt
-
-# 4) DHCP 파일 경로가 기본(/user/caedhcp)과 다를 때
-./vm-verifier -vcenterList vcenter.txt -f targets.txt -dhcp-root &lt;DHCP 파일 루트&gt; -failonly
-
-# 5) 옵션을 하나씩 물어보는 대화형 실행 (바이너리가 없으면 빌드부터)
-bash run.sh</code></pre>
-<hr>
-<h3 id="doc-12_vm_verifier--2-흐름도">2. 흐름도</h3>
-<div class="mermaid">flowchart TD
-    A["입력&lt;br/&gt;vcenter.txt · targets.txt (BM 접두어 또는 VM 이름)"] --&gt; B["targets 정규화&lt;br/&gt;VM 이름 → BM 접두어, 중복 제거·정렬"]
-    B --&gt; C["모든 vCenter 병렬 조회&lt;br/&gt;이름만 먼저 → 접두어+evNN 인 VM 만 장치 정보 조회"]
-    C --&gt; D["VM 별 vNIC MAC 추출"]
-    D --&gt; E["hostname DNS 조회 → IP 앞 3옥텟"]
-    E --&gt; F["-dhcp-root/앞3옥텟 파일에서 예약 MAC 조회&lt;br/&gt;(대역당 1회 읽고 캐시)"]
-    F --&gt; G{"vNIC MAC = 예약 MAC?"}
-    G -- 예 --&gt; H["PASS"]
-    G -- 아니오 --&gt; I{"같은 BM 의 다른 evNN 예약 MAC 과 일치?"}
-    I -- 예 --&gt; J["FAIL: 교차 설치(역설치) 의심"]
-    I -- 아니오 --&gt; K["FAIL: 불일치"]
-    J --&gt; L["LOG/vm-verifier-YYYYMMDD.log 에 append"]
-    K --&gt; L
-    H --&gt; M{"FAIL 있음?"}
-    L --&gt; M
-    M -- 예 --&gt; N["종료코드 1 → DHCP 등록 수정 후 재실행"]
-    M -- 아니오 --&gt; O["종료코드 0 → 파워온 진행"]
-    class A input
-    class J,K,N warn
-    class H,O safe</div>
-<hr>
-<h3 id="doc-12_vm_verifier--3-준비물">3. 준비물</h3>
-<h4 id="doc-12_vm_verifier--빌드">빌드</h4>
-<pre class="lang-bash"><code>cd .claude/VM/vm_verifier
-bash setup.sh      # ../../공통/govendor/govmomi-0.39.0 을 vendor 로 링크 후 -mod=vendor 빌드</code></pre>
-<p>폐쇄망으로 옮길 때는 <code>.claude/공통/govendor/</code>를 <strong>함께</strong> 옮겨야 합니다.</p>
-<h4 id="doc-12_vm_verifier--입력-파일">입력 파일</h4>
-<p><strong><code>vcenter.txt</code></strong> — vCenter 주소, 한 줄에 하나. 전부 병렬로 조회합니다.</p>
-<p><strong><code>targets.txt</code></strong> (<code>-f</code>, 필수) — BM 접두어, 한 줄에 하나 (<code>#</code> 주석 가능).</p>
-<pre class="lang-"><code>svr01
-svr02</code></pre>
-<p>각 접두어에 대해 vCenter에 있는 <code>{접두어}ev숫자</code> VM을 <strong>개수 제한 없이 전부</strong> 찾아 검증합니다. VM 이름(<code>svr01ev01</code>)을 적어도 접두어로 자동 변환하고 중복을 없앤 뒤 이름순으로 진행합니다(<code>[INFO] 대상 목록 정리: ...</code>). <code>ev</code>+숫자로 끝나지 않는 줄은 그대로 접두어로 씁니다.</p>
-<h4 id="doc-12_vm_verifier--dhcp-파일-접근">DHCP 파일 접근</h4>
-<ol>
-<li>각 hostname을 <strong>DNS로 조회</strong>해 IP를 얻고</li>
-<li>IP <strong>앞 3옥텟</strong>으로 <code>-dhcp-root</code> 아래 파일명을 만들어 (<code>10.10.10.15</code> → <code>10.10.10</code>)</li>
-<li>그 파일 하나만 읽습니다</li>
-</ol>
-<p>따라서 실행 서버에서 <strong>DNS 조회가 되고 <code>/user/caedhcp</code>를 읽을 수 있어야</strong> 합니다.</p>
-<h4 id="doc-12_vm_verifier--권한">권한</h4>
-<p>vCenter 읽기 전용이면 충분합니다.</p>
-<hr>
-<h3 id="doc-12_vm_verifier--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: <code>main.go</code>)</h3>
-<div class="tw"><table><thead><tr><th>플래그</th><th>기본값</th><th>필수</th><th>설명</th></tr></thead><tbody><tr><td><code>-f</code></td><td>—</td><td>✅</td><td>BM 접두어 목록 파일 (VM 이름도 자동 변환)</td></tr><tr><td><code>-failonly</code></td><td><code>false</code></td><td></td><td>FAIL만 출력. 전부 PASS면 요약 한 줄</td></tr><tr><td><code>-vcenterList</code></td><td><code>vcenter.txt</code></td><td></td><td>vCenter 주소 목록</td></tr><tr><td><code>-dhcp-root</code></td><td><code>/user/caedhcp</code></td><td></td><td>DHCP 설정 파일 루트</td></tr><tr><td><code>-concurrency</code></td><td><code>32</code></td><td></td><td>DNS/DHCP 조회·검증 동시 수. I/O 대기 위주라 CPU 수보다 크게 잡아도 됨</td></tr></tbody></table></div>
-<p><code>run.sh</code>는 위 옵션 중 <code>-vcenterList</code>, <code>-f</code>, <code>-dhcp-root</code>, <code>-failonly</code>를 물어보고, <code>VC_USER</code>/<code>VC_PASS</code>가 없으면 입력받습니다.</p>
-<hr>
-<h3 id="doc-12_vm_verifier--5-결과-확인-방법">5. 결과 확인 방법</h3>
-<div class="tw"><table><thead><tr><th>결과</th><th>의미</th></tr></thead><tbody><tr><td><code>검증 완료 — 이상 없음 (VM N대, ...)</code></td><td>전부 일치 (<code>-failonly</code>일 때 요약 한 줄)</td></tr><tr><td>FAIL + "교차 설치(역설치) 의심"</td><td>이 VM의 MAC이 같은 BM의 <strong>다른 evNN</strong> 예약 MAC과 일치 — DHCP에 서로 뒤바뀌어 등록됨</td></tr><tr><td>FAIL (그 외)</td><td>예약 MAC과 다름 또는 DHCP 항목 없음</td></tr><tr><td>종료코드 <code>0</code> / <code>1</code></td><td>전부 일치 / 불일치 있음</td></tr><tr><td><code>LOG/vm-verifier-YYYYMMDD.log</code></td><td>FAIL hostname만 append (<code>-failonly</code>와 무관)</td></tr></tbody></table></div>
-<p>자동 조치는 하지 않습니다. FAIL이 나오면 DHCP 등록을 고치고 다시 실행합니다.</p>
-<hr>
-<h3 id="doc-12_vm_verifier--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</h3>
-<div class="tw"><table><thead><tr><th>증상</th><th>원인</th><th>해결</th></tr></thead><tbody><tr><td><code>-f</code>가 필수라는 오류</td><td>대상 목록 미지정</td><td><code>-f targets.txt</code></td></tr><tr><td>인증 실패</td><td><code>VC_PASSWORD</code>만 설정함</td><td>이 도구는 <strong><code>VC_PASS</code></strong></td></tr><tr><td>DHCP 파일을 못 찾음</td><td>DNS 실패 또는 <code>-dhcp-root</code> 다름</td><td><code>nslookup &lt;hostname&gt;</code>, <code>ls /user/caedhcp</code></td></tr><tr><td>DHCP 파일명이 <code>10.10.10.0</code>이라 못 읽음</td><td>도구는 3옥텟(<code>10.10.10</code>)만 찾음</td><td>파일명 규칙 확인. 다르면 코드 수정 필요</td></tr><tr><td>빨간 깜빡임 경고</td><td>같은 VM 이름이 여러 vCenter에 있음</td><td>아래 한계 참고</td></tr><tr><td>빌드 시 <code>vendor/ 없음</code></td><td><code>.claude/공통/govendor/</code>가 함께 안 옮겨짐</td><td>저장소 구조대로 <code>공통/govendor</code>를 두 단계 위에 배치</td></tr></tbody></table></div>
-<hr>
-<h3 id="doc-12_vm_verifier--7-주의사항과-한계">7. 주의사항과 한계</h3>
-<ul>
-<li>같은 VM 이름이 여러 vCenter에 있으면 마지막 조회 값으로 덮어쓰고 <strong>빨간 깜빡임 경고</strong>를 출력합니다.</li>
-<li>작업자 수동 실행만 지원합니다(이벤트 자동 트리거 없음).</li>
-<li>MAC 스왑 탐지 목적에만 집중합니다 — hostname/IP/PTR/UUID 이력 대조는 하지 않습니다.</li>
-<li><code>vcenter.txt</code>/<code>targets.txt</code>는 <code>.gitignore</code> 대상입니다.</li>
-</ul>
-<hr>
-<h3 id="doc-12_vm_verifier--8-파일-구조">8. 파일 구조</h3>
-<pre class="lang-"><code>vm_verifier/
-├── README.md / PLAN.md / CHANGELOG.md / ARCHITECTURE.md / WORKFLOW.md
-├── main.go          # 옵션 파싱, 대상 정규화, 병렬 조회
-├── run.sh           # 대화형 실행
-├── setup.sh         # 오프라인 빌드 (공통 govendor 링크)
-├── vc/              # vCenter 조회 (vc.go, devices.go)
-├── dhcp/dhcp.go     # 대역 파일 파싱 + 캐시
-├── verify/verify.go # 판정 로직 ← "무엇을 FAIL로 볼지"
-└── auditlog/        # LOG/ 기록</code></pre>
-<p>관련 문서: 1차 자료 <code>vm_verifier/README.md</code>, MAC 목록 추출은 <a href="#doc-10_V2">10. V2</a>의 <code>mac_info</code>.</p>
-</section>
-<section class="doc" id="doc-13_lpage_search">
-<div class="docmeta">13_lpage_search.md</div>
-<h2 id="doc-13_lpage_search--13-lpage-search-large-page-메모리-사이징-계산기">13. lpage_search — Large Page 메모리 사이징 계산기</h2>
-<h3 id="doc-13_lpage_search--한눈에-보기">한눈에 보기</h3>
-<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🟢 vCenter/ESXi에 <strong>접속하지 않는</strong> 순수 계산기</td></tr><tr><td>폴더</td><td><code>.claude/VM/lpage_search/</code></td></tr><tr><td>바이너리</td><td><code>lpage_search</code></td></tr><tr><td>하는 일</td><td>호스트 총 메모리와 ev01 할당량을 넣으면 <strong>ev02에 줄 수 있는 메모리 크기</strong>를 계산</td></tr><tr><td>인증</td><td>불필요</td></tr></tbody></table></div>
-<hr>
-<h3 id="doc-13_lpage_search--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</h3>
-<pre class="lang-bash"><code>cd &lt;저장소&gt;/.claude/VM/lpage_search
-
-# 1) 신규 서버 스펙 정할 때 — ev02 메모리 계산 (-hm 은 항상 실제 값으로)
-./lpage_search -h &lt;호스트명&gt; -v1 &lt;ev01 메모리GB&gt; -hm &lt;호스트 총메모리GB&gt; -vcpu1 &lt;ev01 vCPU&gt; -vcpu2 &lt;ev02 vCPU&gt;
-
-# 예
-./lpage_search -h esxi01 -v1 240 -hm 512 -vcpu1 32 -vcpu2 32
-
-# 2) 빌드 없이 바로 계산
-go run main.go -h &lt;호스트명&gt; -v1 &lt;ev01 메모리GB&gt; -hm &lt;호스트 총메모리GB&gt;</code></pre>
-<p>출력의 <strong><code>&gt;&gt; Recommended ev02 Size</code></strong> 가 답입니다. 이 값을 스펙 파일의 <code>mem-ev02</code>에 넣습니다(<a href="#doc-10_V2">10. V2</a>).</p>
-<hr>
-<h3 id="doc-13_lpage_search--2-흐름도">2. 흐름도</h3>
-<div class="mermaid">flowchart TD
-    A["입력&lt;br/&gt;-hm 호스트 총메모리 · -v1 ev01 메모리 · -vcpu1 · -vcpu2"] --&gt; B["High-State 버퍼&lt;br/&gt;(총메모리 × 2%) × 3 + 4096MB"]
-    B --&gt; C["ev01 오버헤드&lt;br/&gt;ev01 메모리 × 1.2% + vCPU × 64MB"]
-    C --&gt; D["ev02 가용량&lt;br/&gt;총메모리 − 버퍼 − (ev01 + ev01 오버헤드)"]
-    D --&gt; E["ev02 자체 오버헤드 차감"]
-    E --&gt; F["짝수 GB 로 내림 (2MB 페이지 정렬)"]
-    F --&gt; G["Recommended ev02 Size 출력"]
-    class A input
-    class G safe</div>
-<hr>
-<h3 id="doc-13_lpage_search--3-준비물">3. 준비물</h3>
-<pre class="lang-bash"><code>cd .claude/VM/lpage_search
-bash setup.sh          # go build -o lpage_search main.go (외부 의존성 없음)</code></pre>
-<p>Windows에서도 됩니다: <code>go build -o lpage_search.exe main.go</code></p>
-<p>필요한 값: 호스트 총 메모리(GB), ev01 메모리(GB), ev01/ev02 vCPU 수.</p>
-<hr>
-<h3 id="doc-13_lpage_search--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: <code>main.go</code>)</h3>
-<div class="tw"><table><thead><tr><th>플래그</th><th>기본값</th><th>필수</th><th>설명</th></tr></thead><tbody><tr><td><code>-h</code></td><td>—</td><td>✅</td><td>호스트명/IP. <strong>출력 라벨일 뿐</strong> 접속하지 않음</td></tr><tr><td><code>-v1</code></td><td><code>0</code></td><td>✅</td><td>ev01 메모리 GB (0 이하면 사용법 출력 후 종료)</td></tr><tr><td><code>-hm</code></td><td><code>512</code></td><td></td><td>호스트 총 메모리 GB. <strong>자동 조회되지 않으므로 반드시 직접 입력</strong></td></tr><tr><td><code>-vcpu1</code></td><td><code>32</code></td><td></td><td>ev01 vCPU 수 (오버헤드 계산)</td></tr><tr><td><code>-vcpu2</code></td><td><code>32</code></td><td></td><td>ev02 vCPU 수 (오버헤드 계산)</td></tr></tbody></table></div>
-<blockquote><p><code>-hm</code>을 생략하면 무조건 512GB로 계산합니다. 실제 호스트가 1TB면 결과가 틀립니다.</p></blockquote>
-<hr>
-<h3 id="doc-13_lpage_search--5-결과-확인-방법">5. 결과 확인 방법</h3>
-<pre class="lang-"><code>==================================================
-[ESXi Large Page (2MB) Memory Sizing Tool]
-Target Host           : esxi01 (512 GB)
-Configured ev01       : 240 GB (245760 MB)
---------------------------------------------------
-ESXi High-State Buffer: 35471 MB (3x minFree + Base)
-ev01 VM Overhead      : 4998 MB
-ev02 Est. Overhead    : 2698 MB
---------------------------------------------------
-&gt;&gt; Recommended ev02 Size: 226 GB (231424 MB)
-   (Total 2MB LPage Mappings: 115712 pages)
-==================================================</code></pre>
-<div class="tw"><table><thead><tr><th>줄</th><th>의미</th></tr></thead><tbody><tr><td><code>ESXi High-State Buffer</code></td><td>Large Page 유지를 위해 남겨야 하는 여유 메모리</td></tr><tr><td><code>ev01 VM Overhead</code> / <code>ev02 Est. Overhead</code></td><td>VM 오버헤드 추정치</td></tr><tr><td><code>Recommended ev02 Size</code></td><td>ev02에 할당할 메모리</td></tr></tbody></table></div>
-<hr>
-<h3 id="doc-13_lpage_search--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</h3>
-<div class="tw"><table><thead><tr><th>증상</th><th>원인</th><th>해결</th></tr></thead><tbody><tr><td><code>Usage: go run main.go -h &lt;Host&gt; -v1 ...</code>만 출력</td><td><code>-h</code> 또는 <code>-v1</code> 누락</td><td>두 옵션 지정</td></tr><tr><td>결과가 비정상적으로 작거나 음수</td><td><code>-hm</code> 생략(512 고정) 또는 ev01이 너무 큼</td><td><code>-hm</code> 실제 값 입력</td></tr></tbody></table></div>
-<hr>
-<h3 id="doc-13_lpage_search--7-주의사항과-한계">7. 주의사항과 한계</h3>
-<ul>
-<li>오버헤드 계수(minFree 2%, 1.2%, vCPU당 64MB)는 경험적 근사치입니다. 결과는 시작점으로 쓰고 vSphere Client에서 실제 여유 메모리 상태를 함께 확인하세요.</li>
-<li>계산만 하고 설정은 바꾸지 않습니다. 값을 적용하는 것은 V2 <code>vm_create</code>/<code>vm_setup.sh</code>, 점검은 <code>vm-param-check</code>입니다.</li>
-<li>ev01/ev02 두 VM 기준 계산입니다. ev03 이상은 계산하지 않습니다.</li>
-</ul>
-<hr>
-<h3 id="doc-13_lpage_search--8-파일-구조">8. 파일 구조</h3>
-<pre class="lang-"><code>lpage_search/
-├── README.md / ARCHITECTURE.md / WORKFLOW.md / PR_CHECKLIST.md
-├── main.go     # 계산 로직 + 옵션 (calculateHostReservedMB, calculateVmOverheadMB)
-├── go.mod      # 외부 의존성 없음
-└── setup.sh</code></pre>
-<p>계수를 바꾸려면 <code>main.go</code>의 두 함수만 보면 됩니다.</p>
 </section>
 <section class="doc" id="doc-14_Network_Change_Integration_Script">
 <div class="docmeta">14_Network_Change_Integration_Script.md</div>
@@ -1480,13 +1336,185 @@ bash /tmp/vm-ip-change/&lt;호스트네임&gt;.revert.sh</code></pre>
     └── bin/                     # 빌드 결과</code></pre>
 <p>관련 문서: 1차 자료 <code>project/README.md</code>, 흐름 <code>project/WORKFLOW.md</code>.</p>
 </section>
+<section class="doc" id="doc-12_vm_verifier">
+<div class="docmeta">12_vm_verifier.md</div>
+<h2 id="doc-12_vm_verifier--12-vm-verifier-파워온-전-mac-대조-교차-설치-탐지">12. vm_verifier — 파워온 전 MAC 대조 (교차 설치 탐지)</h2>
+<h3 id="doc-12_vm_verifier--한눈에-보기">한눈에 보기</h3>
+<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🟢 <strong>읽기 전용.</strong> 조회만 하고 아무것도 바꾸지 않습니다</td></tr><tr><td>폴더</td><td><code>.claude/VM/vm_verifier/</code></td></tr><tr><td>바이너리</td><td><code>vm-verifier</code></td></tr><tr><td>하는 일</td><td>VM 생성 직후(파워온 전) vCenter가 아는 vNIC MAC과 DHCP 예약 MAC을 대조해 <strong>교차 설치(역설치)</strong> 를 탐지</td></tr><tr><td>인증</td><td><code>VC_USER</code> / <code>VC_PASS</code> (환경변수)</td></tr><tr><td>종료 코드</td><td>불일치가 하나라도 있으면 <strong>1</strong></td></tr></tbody></table></div>
+<hr>
+<h3 id="doc-12_vm_verifier--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</h3>
+<pre class="lang-bash"><code>cd &lt;저장소&gt;/.claude/VM/vm_verifier
+
+# 1) 인증 (세션마다 1회)
+export VC_USER='&lt;계정&gt;'
+read -rsp 'vCenter 비밀번호: ' VC_PASS; export VC_PASS; echo
+
+# 2) VM 생성 직후, 파워온 전 — 이상 있는 것만 보기
+./vm-verifier -vcenterList vcenter.txt -f targets.txt -failonly
+
+# 3) 전수 출력 (PASS 포함)
+./vm-verifier -vcenterList vcenter.txt -f targets.txt
+
+# 4) DHCP 파일 경로가 기본(/user/caedhcp)과 다를 때
+./vm-verifier -vcenterList vcenter.txt -f targets.txt -dhcp-root &lt;DHCP 파일 루트&gt; -failonly
+
+# 5) 옵션을 하나씩 물어보는 대화형 실행 (바이너리가 없으면 빌드부터)
+bash run.sh</code></pre>
+<hr>
+<h3 id="doc-12_vm_verifier--2-흐름도">2. 흐름도</h3>
+<div class="mermaid">flowchart TD
+    A["입력&lt;br/&gt;vcenter.txt · targets.txt (BM 접두어 또는 VM 이름)"] --&gt; B["targets 정규화&lt;br/&gt;VM 이름 → BM 접두어, 중복 제거·정렬"]
+    B --&gt; C["모든 vCenter 병렬 조회&lt;br/&gt;이름만 먼저 → 접두어+evNN 인 VM 만 장치 정보 조회"]
+    C --&gt; D["VM 별 vNIC MAC 추출"]
+    D --&gt; E["hostname DNS 조회 → IP 앞 3옥텟"]
+    E --&gt; F["-dhcp-root/앞3옥텟 파일에서 예약 MAC 조회&lt;br/&gt;(대역당 1회 읽고 캐시)"]
+    F --&gt; G{"vNIC MAC = 예약 MAC?"}
+    G -- 예 --&gt; H["PASS"]
+    G -- 아니오 --&gt; I{"같은 BM 의 다른 evNN 예약 MAC 과 일치?"}
+    I -- 예 --&gt; J["FAIL: 교차 설치(역설치) 의심"]
+    I -- 아니오 --&gt; K["FAIL: 불일치"]
+    J --&gt; L["LOG/vm-verifier-YYYYMMDD.log 에 append"]
+    K --&gt; L
+    H --&gt; M{"FAIL 있음?"}
+    L --&gt; M
+    M -- 예 --&gt; N["종료코드 1 → DHCP 등록 수정 후 재실행"]
+    M -- 아니오 --&gt; O["종료코드 0 → 파워온 진행"]
+    class A input
+    class J,K,N warn
+    class H,O safe</div>
+<hr>
+<h3 id="doc-12_vm_verifier--3-준비물">3. 준비물</h3>
+<h4 id="doc-12_vm_verifier--빌드">빌드</h4>
+<pre class="lang-bash"><code>cd .claude/VM/vm_verifier
+bash setup.sh      # ../../공통/govendor/govmomi-0.39.0 을 vendor 로 링크 후 -mod=vendor 빌드</code></pre>
+<p>폐쇄망으로 옮길 때는 <code>.claude/공통/govendor/</code>를 <strong>함께</strong> 옮겨야 합니다.</p>
+<h4 id="doc-12_vm_verifier--입력-파일">입력 파일</h4>
+<p><strong><code>vcenter.txt</code></strong> — vCenter 주소, 한 줄에 하나. 전부 병렬로 조회합니다.</p>
+<p><strong><code>targets.txt</code></strong> (<code>-f</code>, 필수) — BM 접두어, 한 줄에 하나 (<code>#</code> 주석 가능).</p>
+<pre class="lang-"><code>svr01
+svr02</code></pre>
+<p>각 접두어에 대해 vCenter에 있는 <code>{접두어}ev숫자</code> VM을 <strong>개수 제한 없이 전부</strong> 찾아 검증합니다. VM 이름(<code>svr01ev01</code>)을 적어도 접두어로 자동 변환하고 중복을 없앤 뒤 이름순으로 진행합니다(<code>[INFO] 대상 목록 정리: ...</code>). <code>ev</code>+숫자로 끝나지 않는 줄은 그대로 접두어로 씁니다.</p>
+<h4 id="doc-12_vm_verifier--dhcp-파일-접근">DHCP 파일 접근</h4>
+<ol>
+<li>각 hostname을 <strong>DNS로 조회</strong>해 IP를 얻고</li>
+<li>IP <strong>앞 3옥텟</strong>으로 <code>-dhcp-root</code> 아래 파일명을 만들어 (<code>10.10.10.15</code> → <code>10.10.10</code>)</li>
+<li>그 파일 하나만 읽습니다</li>
+</ol>
+<p>따라서 실행 서버에서 <strong>DNS 조회가 되고 <code>/user/caedhcp</code>를 읽을 수 있어야</strong> 합니다.</p>
+<h4 id="doc-12_vm_verifier--권한">권한</h4>
+<p>vCenter 읽기 전용이면 충분합니다.</p>
+<hr>
+<h3 id="doc-12_vm_verifier--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: <code>main.go</code>)</h3>
+<div class="tw"><table><thead><tr><th>플래그</th><th>기본값</th><th>필수</th><th>설명</th></tr></thead><tbody><tr><td><code>-f</code></td><td>—</td><td>✅</td><td>BM 접두어 목록 파일 (VM 이름도 자동 변환)</td></tr><tr><td><code>-failonly</code></td><td><code>false</code></td><td></td><td>FAIL만 출력. 전부 PASS면 요약 한 줄</td></tr><tr><td><code>-vcenterList</code></td><td><code>vcenter.txt</code></td><td></td><td>vCenter 주소 목록</td></tr><tr><td><code>-dhcp-root</code></td><td><code>/user/caedhcp</code></td><td></td><td>DHCP 설정 파일 루트</td></tr><tr><td><code>-concurrency</code></td><td><code>32</code></td><td></td><td>DNS/DHCP 조회·검증 동시 수. I/O 대기 위주라 CPU 수보다 크게 잡아도 됨</td></tr></tbody></table></div>
+<p><code>run.sh</code>는 위 옵션 중 <code>-vcenterList</code>, <code>-f</code>, <code>-dhcp-root</code>, <code>-failonly</code>를 물어보고, <code>VC_USER</code>/<code>VC_PASS</code>가 없으면 입력받습니다.</p>
+<hr>
+<h3 id="doc-12_vm_verifier--5-결과-확인-방법">5. 결과 확인 방법</h3>
+<div class="tw"><table><thead><tr><th>결과</th><th>의미</th></tr></thead><tbody><tr><td><code>검증 완료 — 이상 없음 (VM N대, ...)</code></td><td>전부 일치 (<code>-failonly</code>일 때 요약 한 줄)</td></tr><tr><td>FAIL + "교차 설치(역설치) 의심"</td><td>이 VM의 MAC이 같은 BM의 <strong>다른 evNN</strong> 예약 MAC과 일치 — DHCP에 서로 뒤바뀌어 등록됨</td></tr><tr><td>FAIL (그 외)</td><td>예약 MAC과 다름 또는 DHCP 항목 없음</td></tr><tr><td>종료코드 <code>0</code> / <code>1</code></td><td>전부 일치 / 불일치 있음</td></tr><tr><td><code>LOG/vm-verifier-YYYYMMDD.log</code></td><td>FAIL hostname만 append (<code>-failonly</code>와 무관)</td></tr></tbody></table></div>
+<p>자동 조치는 하지 않습니다. FAIL이 나오면 DHCP 등록을 고치고 다시 실행합니다.</p>
+<hr>
+<h3 id="doc-12_vm_verifier--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</h3>
+<div class="tw"><table><thead><tr><th>증상</th><th>원인</th><th>해결</th></tr></thead><tbody><tr><td><code>-f</code>가 필수라는 오류</td><td>대상 목록 미지정</td><td><code>-f targets.txt</code></td></tr><tr><td>인증 실패</td><td><code>VC_PASSWORD</code>만 설정함</td><td>이 도구는 <strong><code>VC_PASS</code></strong></td></tr><tr><td>DHCP 파일을 못 찾음</td><td>DNS 실패 또는 <code>-dhcp-root</code> 다름</td><td><code>nslookup &lt;hostname&gt;</code>, <code>ls /user/caedhcp</code></td></tr><tr><td>DHCP 파일명이 <code>10.10.10.0</code>이라 못 읽음</td><td>도구는 3옥텟(<code>10.10.10</code>)만 찾음</td><td>파일명 규칙 확인. 다르면 코드 수정 필요</td></tr><tr><td>빨간 깜빡임 경고</td><td>같은 VM 이름이 여러 vCenter에 있음</td><td>아래 한계 참고</td></tr><tr><td>빌드 시 <code>vendor/ 없음</code></td><td><code>.claude/공통/govendor/</code>가 함께 안 옮겨짐</td><td>저장소 구조대로 <code>공통/govendor</code>를 두 단계 위에 배치</td></tr></tbody></table></div>
+<hr>
+<h3 id="doc-12_vm_verifier--7-주의사항과-한계">7. 주의사항과 한계</h3>
+<ul>
+<li>같은 VM 이름이 여러 vCenter에 있으면 마지막 조회 값으로 덮어쓰고 <strong>빨간 깜빡임 경고</strong>를 출력합니다.</li>
+<li>작업자 수동 실행만 지원합니다(이벤트 자동 트리거 없음).</li>
+<li>MAC 스왑 탐지 목적에만 집중합니다 — hostname/IP/PTR/UUID 이력 대조는 하지 않습니다.</li>
+<li><code>vcenter.txt</code>/<code>targets.txt</code>는 <code>.gitignore</code> 대상입니다.</li>
+</ul>
+<hr>
+<h3 id="doc-12_vm_verifier--8-파일-구조">8. 파일 구조</h3>
+<pre class="lang-"><code>vm_verifier/
+├── README.md / PLAN.md / CHANGELOG.md / ARCHITECTURE.md / WORKFLOW.md
+├── main.go          # 옵션 파싱, 대상 정규화, 병렬 조회
+├── run.sh           # 대화형 실행
+├── setup.sh         # 오프라인 빌드 (공통 govendor 링크)
+├── vc/              # vCenter 조회 (vc.go, devices.go)
+├── dhcp/dhcp.go     # 대역 파일 파싱 + 캐시
+├── verify/verify.go # 판정 로직 ← "무엇을 FAIL로 볼지"
+└── auditlog/        # LOG/ 기록</code></pre>
+<p>관련 문서: 1차 자료 <code>vm_verifier/README.md</code>, MAC 목록 추출은 <a href="#doc-10_V2">10. V2</a>의 <code>mac_info</code>.</p>
+</section>
+<section class="doc" id="doc-13_lpage_search">
+<div class="docmeta">13_lpage_search.md</div>
+<h2 id="doc-13_lpage_search--13-lpage-search-large-page-메모리-사이징-계산기">13. lpage_search — Large Page 메모리 사이징 계산기</h2>
+<h3 id="doc-13_lpage_search--한눈에-보기">한눈에 보기</h3>
+<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🟢 vCenter/ESXi에 <strong>접속하지 않는</strong> 순수 계산기</td></tr><tr><td>폴더</td><td><code>.claude/VM/lpage_search/</code></td></tr><tr><td>바이너리</td><td><code>lpage_search</code></td></tr><tr><td>하는 일</td><td>호스트 총 메모리와 ev01 할당량을 넣으면 <strong>ev02에 줄 수 있는 메모리 크기</strong>를 계산</td></tr><tr><td>인증</td><td>불필요</td></tr></tbody></table></div>
+<hr>
+<h3 id="doc-13_lpage_search--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</h3>
+<pre class="lang-bash"><code>cd &lt;저장소&gt;/.claude/VM/lpage_search
+
+# 1) 신규 서버 스펙 정할 때 — ev02 메모리 계산 (-hm 은 항상 실제 값으로)
+./lpage_search -h &lt;호스트명&gt; -v1 &lt;ev01 메모리GB&gt; -hm &lt;호스트 총메모리GB&gt; -vcpu1 &lt;ev01 vCPU&gt; -vcpu2 &lt;ev02 vCPU&gt;
+
+# 예
+./lpage_search -h esxi01 -v1 240 -hm 512 -vcpu1 32 -vcpu2 32
+
+# 2) 빌드 없이 바로 계산
+go run main.go -h &lt;호스트명&gt; -v1 &lt;ev01 메모리GB&gt; -hm &lt;호스트 총메모리GB&gt;</code></pre>
+<p>출력의 <strong><code>&gt;&gt; Recommended ev02 Size</code></strong> 가 답입니다. 이 값을 스펙 파일의 <code>mem-ev02</code>에 넣습니다(<a href="#doc-10_V2">10. V2</a>).</p>
+<hr>
+<h3 id="doc-13_lpage_search--2-흐름도">2. 흐름도</h3>
+<div class="mermaid">flowchart TD
+    A["입력&lt;br/&gt;-hm 호스트 총메모리 · -v1 ev01 메모리 · -vcpu1 · -vcpu2"] --&gt; B["High-State 버퍼&lt;br/&gt;(총메모리 × 2%) × 3 + 4096MB"]
+    B --&gt; C["ev01 오버헤드&lt;br/&gt;ev01 메모리 × 1.2% + vCPU × 64MB"]
+    C --&gt; D["ev02 가용량&lt;br/&gt;총메모리 − 버퍼 − (ev01 + ev01 오버헤드)"]
+    D --&gt; E["ev02 자체 오버헤드 차감"]
+    E --&gt; F["짝수 GB 로 내림 (2MB 페이지 정렬)"]
+    F --&gt; G["Recommended ev02 Size 출력"]
+    class A input
+    class G safe</div>
+<hr>
+<h3 id="doc-13_lpage_search--3-준비물">3. 준비물</h3>
+<pre class="lang-bash"><code>cd .claude/VM/lpage_search
+bash setup.sh          # go build -o lpage_search main.go (외부 의존성 없음)</code></pre>
+<p>Windows에서도 됩니다: <code>go build -o lpage_search.exe main.go</code></p>
+<p>필요한 값: 호스트 총 메모리(GB), ev01 메모리(GB), ev01/ev02 vCPU 수.</p>
+<hr>
+<h3 id="doc-13_lpage_search--4-옵션-상세표-소스-main-go">4. 옵션 상세표 (소스: <code>main.go</code>)</h3>
+<div class="tw"><table><thead><tr><th>플래그</th><th>기본값</th><th>필수</th><th>설명</th></tr></thead><tbody><tr><td><code>-h</code></td><td>—</td><td>✅</td><td>호스트명/IP. <strong>출력 라벨일 뿐</strong> 접속하지 않음</td></tr><tr><td><code>-v1</code></td><td><code>0</code></td><td>✅</td><td>ev01 메모리 GB (0 이하면 사용법 출력 후 종료)</td></tr><tr><td><code>-hm</code></td><td><code>512</code></td><td></td><td>호스트 총 메모리 GB. <strong>자동 조회되지 않으므로 반드시 직접 입력</strong></td></tr><tr><td><code>-vcpu1</code></td><td><code>32</code></td><td></td><td>ev01 vCPU 수 (오버헤드 계산)</td></tr><tr><td><code>-vcpu2</code></td><td><code>32</code></td><td></td><td>ev02 vCPU 수 (오버헤드 계산)</td></tr></tbody></table></div>
+<blockquote><p><code>-hm</code>을 생략하면 무조건 512GB로 계산합니다. 실제 호스트가 1TB면 결과가 틀립니다.</p></blockquote>
+<hr>
+<h3 id="doc-13_lpage_search--5-결과-확인-방법">5. 결과 확인 방법</h3>
+<pre class="lang-"><code>==================================================
+[ESXi Large Page (2MB) Memory Sizing Tool]
+Target Host           : esxi01 (512 GB)
+Configured ev01       : 240 GB (245760 MB)
+--------------------------------------------------
+ESXi High-State Buffer: 35471 MB (3x minFree + Base)
+ev01 VM Overhead      : 4998 MB
+ev02 Est. Overhead    : 2698 MB
+--------------------------------------------------
+&gt;&gt; Recommended ev02 Size: 226 GB (231424 MB)
+   (Total 2MB LPage Mappings: 115712 pages)
+==================================================</code></pre>
+<div class="tw"><table><thead><tr><th>줄</th><th>의미</th></tr></thead><tbody><tr><td><code>ESXi High-State Buffer</code></td><td>Large Page 유지를 위해 남겨야 하는 여유 메모리</td></tr><tr><td><code>ev01 VM Overhead</code> / <code>ev02 Est. Overhead</code></td><td>VM 오버헤드 추정치</td></tr><tr><td><code>Recommended ev02 Size</code></td><td>ev02에 할당할 메모리</td></tr></tbody></table></div>
+<hr>
+<h3 id="doc-13_lpage_search--6-자주-나는-오류와-해결">6. 자주 나는 오류와 해결</h3>
+<div class="tw"><table><thead><tr><th>증상</th><th>원인</th><th>해결</th></tr></thead><tbody><tr><td><code>Usage: go run main.go -h &lt;Host&gt; -v1 ...</code>만 출력</td><td><code>-h</code> 또는 <code>-v1</code> 누락</td><td>두 옵션 지정</td></tr><tr><td>결과가 비정상적으로 작거나 음수</td><td><code>-hm</code> 생략(512 고정) 또는 ev01이 너무 큼</td><td><code>-hm</code> 실제 값 입력</td></tr></tbody></table></div>
+<hr>
+<h3 id="doc-13_lpage_search--7-주의사항과-한계">7. 주의사항과 한계</h3>
+<ul>
+<li>오버헤드 계수(minFree 2%, 1.2%, vCPU당 64MB)는 경험적 근사치입니다. 결과는 시작점으로 쓰고 vSphere Client에서 실제 여유 메모리 상태를 함께 확인하세요.</li>
+<li>계산만 하고 설정은 바꾸지 않습니다. 값을 적용하는 것은 V2 <code>vm_create</code>/<code>vm_setup.sh</code>, 점검은 <code>vm-param-check</code>입니다.</li>
+<li>ev01/ev02 두 VM 기준 계산입니다. ev03 이상은 계산하지 않습니다.</li>
+</ul>
+<hr>
+<h3 id="doc-13_lpage_search--8-파일-구조">8. 파일 구조</h3>
+<pre class="lang-"><code>lpage_search/
+├── README.md / ARCHITECTURE.md / WORKFLOW.md / PR_CHECKLIST.md
+├── main.go     # 계산 로직 + 옵션 (calculateHostReservedMB, calculateVmOverheadMB)
+├── go.mod      # 외부 의존성 없음
+└── setup.sh</code></pre>
+<p>계수를 바꾸려면 <code>main.go</code>의 두 함수만 보면 됩니다.</p>
+</section>
 <section class="doc" id="doc-17_VM_setup_잔여도구">
 <div class="docmeta">17_VM_setup_잔여도구.md</div>
 <h2 id="doc-17_VM_setup_잔여도구--17-vm-setup-잔여-도구-power-setting-호스트-전원정책">17. VM_setup 잔여 도구 — power_setting (호스트 전원정책)</h2>
 <h3 id="doc-17_VM_setup_잔여도구--한눈에-보기">한눈에 보기</h3>
-<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🔴 <strong>ESXi 호스트의 전원 정책을 실제로 바꿉니다</strong></td></tr><tr><td>파일</td><td><code>.claude/VM/VM_setup/vm-param-fix/power_setting</code> (컴파일된 바이너리, 약 19MB)</td></tr><tr><td>하는 일</td><td>목록의 호스트(BM)에 <strong>고성능(High Performance) 전원 정책</strong>을 일괄 적용. 이미 적용된 호스트는 건너뜀</td></tr><tr><td>인증</td><td><code>VC_PASSWORD</code> (계정은 <code>-id</code>)</td></tr><tr><td>남아 있는 이유</td><td>V2에 대체 기능이 없습니다. <code>vm-param-check</code>는 호스트 전원정책을 <strong>점검만</strong> 하고 교정하지 않습니다</td></tr></tbody></table></div>
-<blockquote><p><strong>소스가 없는 유일한 사본입니다. 삭제·이동하지 마세요.</strong> Go 소스를 확정하지 못해 재빌드할 수 없습니다. <code>VM_setup</code>의 나머지 도구는 모두 <a href="#doc-10_V2">10. V2</a>로 대체되었습니다.</p></blockquote>
-<p><strong>언제 실행하나요?</strong> <a href="#doc-README">전체 작업 흐름</a>에서는 MAC 목록 추출(<code>mac_info</code>) 다음, 파워온 전 MAC 대조(<code>vm_verifier</code>) 전에 한 번 실행해 두는 것을 표준 순서로 둡니다 — 새 호스트의 전원 정책을 미리 맞춰 두면 이후 <code>vm-param-check</code>의 host 전원정책 점검이 항상 통과합니다. 이미 지나쳤거나 나중에 FAIL이 나오면 아래 명령으로 다시 실행해도 됩니다(멱등 — 이미 적용된 호스트는 건너뜀).</p>
+<div class="tw"><table><thead><tr><th>항목</th><th>값</th></tr></thead><tbody><tr><td><strong>위험도</strong></td><td>🔴 <strong>ESXi 호스트의 전원 정책을 실제로 바꿉니다</strong></td></tr><tr><td>파일</td><td><code>.claude/VM/VM_setup/vm-param-fix/power_setting</code> (컴파일된 바이너리, 약 19MB)</td></tr><tr><td>하는 일</td><td>목록의 호스트(BM)에 <strong>고성능(High Performance) 전원 정책</strong>을 일괄 적용. 이미 적용된 호스트는 건너뜀</td></tr><tr><td>인증</td><td><code>VC_PASSWORD</code> (계정은 <code>-id</code>)</td></tr><tr><td>남아 있는 이유</td><td>참고·구버전(V1) 호환용. <strong>V2에는 소스가 있는 대체 도구 <code>VMsetup/power_setting-source</code>가 이미 있고</strong>, <code>vm_setup.sh</code>가 스펙마다 자동으로 호출합니다 → <a href="#doc-10_V2">10번 5-9절</a></td></tr></tbody></table></div>
+<blockquote><p>⚠️ <strong>새로 작업할 때는 이 V1 바이너리 대신 V2의 <code>VMsetup/power_setting-source</code>를 쓰세요</strong> (소스 있음, <code>vm_setup.sh</code>가 이미 자동 호출). 이 문서는 V2를 아직 배치하지 않은 곳이나 옛 기록을 볼 때만 참고하세요. 소스가 없는 바이너리이므로 <strong>삭제·이동은 하지 마세요</strong>(Go 소스를 확정하지 못해 재빌드 불가). <code>VM_setup</code>의 나머지 도구는 모두 <a href="#doc-10_V2">10. V2</a>로 대체되었습니다.</p></blockquote>
+<p><strong>언제 실행하나요?</strong> V2 없이 V1만 쓰는 환경에서는, <a href="#doc-README">전체 작업 흐름</a>의 MAC 목록 추출(<code>mac_info</code>) 다음·파워온 전 MAC 대조(<code>vm_verifier</code>) 전에 한 번 실행해 두는 것을 표준 순서로 둡니다. 이미 지나쳤거나 나중에 FAIL이 나오면 아래 명령으로 다시 실행해도 됩니다(멱등 — 이미 적용된 호스트는 건너뜀).</p>
 <hr>
 <h3 id="doc-17_VM_setup_잔여도구--1-바로-쓰는-명령어">1. 바로 쓰는 명령어</h3>
 <pre class="lang-bash"><code>cd &lt;저장소&gt;/.claude/VM/VM_setup/vm-param-fix
@@ -2006,7 +2034,7 @@ python3 build_handbook.py</code></pre>
 │
 ├── ── 운영 도구 ─────────────────────────────────────────────
 ├── V2/                                    # VM 생성·설정 + 점검·교정, SPEC_DIR 공유      [10번]
-│   ├── VMsetup/                           #   vm_setup.sh + 개별 도구 10종
+│   ├── VMsetup/                           #   vm_setup.sh + 개별 도구 11종
 │   ├── vm-param-check-usability-improvement/vm-param-check/   # ★ 주력 점검·교정 [11번]
 │   ├── SPEC_DIR/  govendor/  setup.sh
 ├── vm_verifier/                           # 파워온 전 MAC 대조                         [12번]
@@ -2241,7 +2269,7 @@ python3 build_handbook.py</code></pre>
 </ul>
 <li><span class="cb">☐</span> Go 1.26.5 이상이 설치되어 있다 (<code>go version</code>)</li>
 <li><span class="cb">☐</span> 그 서버에서 vCenter로 443 포트가 열려 있다 (<code>curl -k -I https://&lt;vCenter IP&gt;</code>)</li>
-<li><span class="cb">☐</span> V2 폴더를 통째로(<code>/home/V2</code>) 배치하고 <code>bash setup.sh</code>로 11종 빌드에 성공했다 (OS6 서버면 <code>bin_os6/</code> 설치 확인)</li>
+<li><span class="cb">☐</span> V2 폴더를 통째로(<code>/home/V2</code>) 배치하고 <code>bash setup.sh</code>로 12종 빌드에 성공했다 (OS6 서버면 <code>bin_os6/</code> 설치 확인)</li>
 <li><span class="cb">☐</span> <code>./passwd_update.sh</code>로 vCenter 비밀번호를 암호 파일에 등록하고 <code>-list</code>로 확인했다</li>
 <li><span class="cb">☐</span> <code>vm_verifier</code>, <code>lpage_search</code>, <code>Network_Change_Integration_Script</code>, <code>vm-ip-change</code>를 각각 <code>setup.sh</code>로 빌드했다</li>
 <li><span class="cb">☐</span> <code>power_setting</code> 바이너리 위치(<code>VM_setup/vm-param-fix/</code>)를 확인했다</li>
