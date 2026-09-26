@@ -5,6 +5,8 @@ set -uo pipefail
 H=/root/v2work/harness
 V=/root/v2work/V2/VMsetup
 export VC_PASSWORD=x
+# vm_setup.sh 가 시작할 때 묻는 "설치 정보"(OS 버전/인프라) — 환경변수로 채워 테스트 입력에 영향 없게 한다.
+export MAC_ARGSTR=8.10 MAC_ARG1=vmsetup-test
 T=/tmp/vs; rm -rf $T; mkdir -p $T
 pass=0; fail=0
 ok() { echo "  [PASS] $*"; pass=$((pass+1)); }

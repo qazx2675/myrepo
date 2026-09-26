@@ -17,6 +17,8 @@ saccae 검증 환경 사용법 (192.168.0.58 에 root 로 접속해서 실행)
     같게 만든 예시 — vm_create/lpage_setting 실행 계획에 ev 값이 정확히 반영되는지 눈으로 확인용. -u 목록엔 없어서
     "적용할 스펙을 고르세요"에서 번호로 직접 골라야 한다(아래 사용법 예시).
   - 가상 vCenter 는 메모리에만 있다 — restart 하면 만든 VM·포트그룹이 모두 지워지고 빈 BM 으로 돌아간다.
+  - vm_setup.sh 는 시작할 때 "설치 정보"(OS 버전 / 인프라)를 묻고, 스펙마다 vm_create 다음에 mac_info(MAC 조사) →
+    power_setting(BM 전원 고성능)을 실행한다(둘 다 환경변수 MAC_ARGSTR/MAC_ARG1 로 미리 채우면 묻지 않는다).
 
 
 1. 가상 vCenter 상태 / 시작 / 초기화
@@ -46,8 +48,9 @@ cd /home/saccae/VMsetup
 # user 지정 / 계획만 보기 (-n 은 vCenter 를 묻지 않는다)
 ./vm_setup.sh -u dhk -n
 
-# 실제 실행: VM 표 y → CAE 번호 변경 Enter(=아니오) → vCenter 번호 1 → 실행 확인 y
+# 실제 실행: VM 표 y → CAE 번호 변경 Enter(=아니오) → OS 버전 8.10 → 인프라 입력 <값> → vCenter 번호 1 → 실행 확인 y
 #            두 번째부터는 vCenter 번호에서 Enter = 이 user 가 지난번에 쓴 vCenter
+#            MAC_ARGSTR/MAC_ARG1 환경변수를 미리 주면 이 두 질문은 건너뛴다 (아래 6번 참고)
 ./vm_setup.sh -u lsh
 ./vm_setup.sh -u ljh
 ./vm_setup.sh -u dhk
@@ -79,6 +82,9 @@ rm -f demo.txt vswitch_demo.txt; rm -rf run_demo   # 확인 끝나면 정리
   numa.vcpu.preferHT FAIL (lsh)                                      : 스펙의 preferHT 는 vm_setup.sh 가 설정하지 않는다 → -fix
   sched.mem.lpage.enable1GPage 설정없음 (ljh ev06~ev08)              : 스펙에서 cores 를 비워 lpage 단계를 건너뜀 → -fix
 
+power_setting 단계에서 "스킵: 이미 고성능(static)" 이 나오는 것도 정상이다 — vcsim 의 호스트는 기본값이 고성능이라
+다시 실행해도 항상 스킵일 뿐, 실패가 아니다(실제 ESXi 에서 처음 적용될 때만 "성공"으로 나온다).
+
 
 4. 만든 VM 확인 (govc)
 ---------------------------------------------------------------------
@@ -108,13 +114,35 @@ export VC_USER=lscsystems@vsphere.local VC_PASS="$(. /home/saccae/secret_lib.sh;
   -specRoot /home/saccae/SPEC_DIR -specFolder SAC-CAE103-VM20-BATCH -yes -onlyFail -out /tmp/check.csv
 
 
-6. OS6 에서 (RHEL/CentOS 6 서버로 V2 폴더를 가져갔을 때)
+6. MAC 조사(mac_info) / 전원 고성능(power_setting)
+---------------------------------------------------------------------
+cd /home/saccae/VMsetup
+
+# vm_setup.sh 안에서: 스펙마다 vm_create 다음 mac_info → power_setting → affinity_setting 순으로 자동 실행된다.
+# "설치 정보" 질문(OS 버전/인프라)을 건너뛰려면 미리 환경변수로 채운다:
+export MAC_ARGSTR=8.10 MAC_ARG1=<인프라 값>
+./vm_setup.sh -u lsh
+
+# MAC 목록 복사 위치(awx_route, 기본은 비어 있어 run_<user>/mac_all.txt 에만 남음). 테스트는 임의 경로로:
+export awx_route=/tmp/awx_test
+./vm_setup.sh -u lsh
+cat /tmp/awx_test/lsh.txt   # "VM VM <인프라> <VM이름> <IP> <MAC> eth0 sda sda5 <디스크> <OS버전> uefi"
+
+# sda5 다음 디스크 값은 스펙의 disk-evNN 을 고정 용량 480/600/960/1200/1900/7600 중 가장 가까운 값으로 자동 변환한다
+# (거리가 같으면 큰 값. 예: disk=500 → 480, disk=800 → 960)
+
+# power_setting 만 따로 실행하려면(호스트 전원 정책만, VM 은 안 건드림):
+export VC_PASSWORD='Saccae1!'
+./power_setting-source/power_setting -vcTargetIP=vcsim.saccae.com -worklistFile=lsh.txt
+
+
+7. OS6 에서 (RHEL/CentOS 6 서버로 V2 폴더를 가져갔을 때)
 ---------------------------------------------------------------------
 cd <V2 폴더> && bash setup.sh        # OS6 를 알아서 판단해 bin_os6/*.gz 를 설치 (Go 필요 없음)
 ./passwd_update.sh -list            # secret/ 을 같이 복사했다면 그대로 풀린다
 
 
-7. 환경을 새로 설치 / 갱신 (코드가 바뀌었을 때)
+8. 환경을 새로 설치 / 갱신 (코드가 바뀌었을 때)
 ---------------------------------------------------------------------
 # 저장소(qazx2675/myrepo, master)를 받아 둔 폴더에서 (install.sh 가 V2 브랜치를 /home/saccae 로 갱신한다)
 git pull
