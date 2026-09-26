@@ -90,7 +90,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 | `numa_preferht_setting-source` | `numa.vcpu.preferHT` 일괄 적용 | — |
 | `license_assign-source`, `mac_info-source`, `main_conn-source` | 라이선스 할당 / MAC 정보(프로비저닝 목록) / ESXi 호스트를 vCenter에 병렬 등록 | — |
 
-**설치 정보 / MAC 수집·전원 고성능(`vm_setup.sh`, 스펙마다 `vm_create` 다음)**: 시작할 때 OS 버전(`MAC_ARGSTR`)과 인프라(`MAC_ARG1`)를 묻는다(환경변수로 이미 있으면 묻지 않음 — 비대화식 실행용). 스펙마다 `vm_create` 직후 `mac_info`(MAC/IP 조사, `arg1`=인프라·`argStr`=OS 버전, `sda5` 다음 디스크 값은 그 ev 의 스펙 `disk` 값을 고정 용량 `480/600/960/1200/1900/7600` 중 가장 가까운 값으로 자동 변환 — 거리가 같으면 큰 값) → `power_setting`(그 스펙 BM 의 전원 정책을 고성능으로, 이미 고성능이면 스킵) → `affinity_setting` 순으로 실행한다. 스펙마다 모은 MAC 목록을 `run_<user>/mac_all.txt` 에 합치고, `awx_route="..."` 가 있으면 그 폴더에 **`<user>.txt`** 로 복사한다.
+**설치 정보 / MAC 수집·전원 고성능(`vm_setup.sh`, 스펙마다 `vm_create` 다음)**: 시작할 때 OS 버전(`MAC_ARGSTR`)과 인프라(`MAC_ARG1`)를 `read -p`로 매번 묻는다(비밀번호와 같은 이유로 스크립트 시작 시 항상 `unset`하므로 환경변수로 건너뛰는 경로는 없다). 스펙마다 `vm_create` 직후 `mac_info`(MAC/IP 조사, `arg1`=인프라·`argStr`=OS 버전, `sda5` 다음 디스크 값은 그 ev 의 스펙 `disk` 값을 고정 용량 `480/600/960/1200/1900/7600` 중 가장 가까운 값으로 자동 변환 — 거리가 같으면 큰 값) → `power_setting`(그 스펙 BM 의 전원 정책을 고성능으로, 이미 고성능이면 스킵) → `affinity_setting` 순으로 실행한다. 스펙마다 모은 MAC 목록을 `run_<user>/mac_all.txt` 에 합치고, `awx_route="..."` 가 있으면 그 폴더에 **`<user>.txt`** 로 복사한다.
 
 데이터센터가 2개 이상이거나 폴더가 여러 단계여도 동작합니다(`vm_create`는 호스트가 속한 데이터센터를 자동으로 찾으며, `-datacenter`로 한정할 수 있음).
 
