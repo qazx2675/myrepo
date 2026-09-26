@@ -8,7 +8,10 @@
 #   3) VM(evNN)별 포트그룹(네트워크 어댑터 1) 자동 할당 → VM 표 확인(y/n) → 수동 선택 → 목록에 없으면 vim
 #   4) CAE 번호 변경 질문(숫자변경기능) → vCenter 선택 (-v 가 없으면 vcenter.txt 번호, Enter = 이 user 의 이전 실행 vCenter)
 #   5) vswitch_setting(BM에 포트그룹 생성, 호스트 병렬) → vm_create → affinity_setting → lpage_setting (스펙별로, 도구 안에서 병렬)
-#   6) vm-param-check 로 만든 VM 이 스펙과 같은지 체크
+#   6) license_assign(평가판 호스트에 라이선스 — 선택 입력) → vm-param-check 로 만든 VM 이 스펙과 같은지 체크
+#
+# 5)~6) 실행 단계는 터미널이면 단계별 진행 모니터(↑↓ 이동, Enter 실행 결과 보기, 끝나면 Enter 두 번 종료)로 보여준다.
+# 파이프 입력·nohup·cron 이거나 VMSETUP_MONITOR=0 이면 지금처럼 줄줄이 출력한다. 로그는 run_<user>/logs/, run.log.
 #
 # 실제 vCenter를 변경하는 단계(5) 직전에 요약을 보여주고 한 번 더 확인받는다. -n 이면 여기서 멈춘다.
 # 도구가 실패하면(종료코드 0 이 아니면) 그 자리에서 멈춘다. 이미 있는 포트그룹/VM 은 실패가 아니다.
@@ -59,6 +62,8 @@ usage() {
 환경변수 VM_SETUP_EDITOR 로 vim 대신 다른 편집기를 쓸 수 있다.
 색상: 터미널이면 자동으로 켜진다. NO_COLOR=1 또는 VMSETUP_COLOR=never 로 끄고, VMSETUP_COLOR=always 로 강제.
 시작할 때 OS 버전/인프라를 매번 물어본다(환경변수로 건너뛰는 경로 없음 — 이전 실행의 값이 남아 헷갈리는 것을 방지).
+실행 단계는 터미널이면 진행 모니터로 보여준다(↑↓ 이동, Enter 실행 결과 보기/목록, 끝나면 Enter 두 번 종료,
+Ctrl+C 는 5초 안에 3번). VMSETUP_MONITOR=0 이면 끄고 예전처럼 줄줄이 출력한다.
 EOF
 }
 
@@ -172,7 +177,7 @@ ensure_bin() {
   bash "$HERE/../setup.sh" "$name" >/dev/null || die "준비 실패: $name — bash $HERE/../setup.sh $name 로 확인하세요"
 }
 ensure_bin "$CHECK_BIN" vm-param-check
-for t in vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info power_setting; do
+for t in vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info power_setting license_assign; do
   ensure_bin "$HERE/${t}-source/$t" "$t"
 done
 
@@ -739,6 +744,8 @@ for vm in "${VMS[@]}"; do [ -n "${NIC_OF[$vm]:-}" ] && echo "$vm ${NIC_OF[$vm]}"
 for bm in "${BMS[@]}"; do
   for pg in ${BM_PGS[$bm]:-}; do echo "$bm $pg ${PG_VLAN["$bm|$pg"]}" >> "$RUN_DIR/vswitch.txt"; done
 done
+# license_assign 은 스펙과 상관없이 이 실행의 BM 전체를 한 번에 본다
+printf '%s\n' "${BMS[@]}" > "$RUN_DIR/license_worklist.txt"
 
 # vCenter 는 실행 계획에 보이도록 계획 출력 전에 고른다(-n 은 vCenter 에 접속하지 않으므로 묻지 않음)
 [ "$DRY_RUN" -eq 1 ] || [ -n "$VC_IP" ] || select_vcenter
@@ -845,6 +852,9 @@ mac_apply_disk() {
   rm -f "$raw"
 }
 
+# 실행 계획 — 화면에 보여주면서 run_<user>/plan.txt 에도 남긴다(모니터의 "작업 시작" 줄에서 Enter 로 다시 본다).
+# 파이프(서브셸) 안에서 돌므로 여기서 정한 변수는 밖으로 안 나온다 — 실행 단계에서 스펙마다 다시 계산한다.
+print_plan() {
 hdr "실행 계획 (실행 폴더: $RUN_DIR)" 2>&1
 say "vCenter        : ${VC_IP:-(미지정)} / 계정 $VC_ID"
 say "설치 정보       : OS 버전 $MAC_ARGSTR / 인프라 $MAC_ARG1"
@@ -870,6 +880,9 @@ for d in "${SPEC_ORDER[@]}"; do
 done
 say "어댑터 매핑     : $RUN_DIR/hostgroup.txt ($(wc -l < "$RUN_DIR/hostgroup.txt")건)"
 say "MAC 수집       : mac_info -arg1=$MAC_ARG1 -argStr=$MAC_ARGSTR (디스크는 위 표대로 자동매칭) → ${awx_route:-(awx_route 비어 있음 — 복사 안 함)}${awx_route:+/${USER_TAG}.txt}"
+say "라이선스 할당   : license_assign (BM ${#BMS[@]}대, 평가판 호스트만 — 선택이 필요하면 입력)"
+}
+print_plan 2>&1 | tee "$RUN_DIR/plan.txt" || exit 1
 
 if [ "$DRY_RUN" -eq 1 ]; then say; info "-n 지정 — vCenter 를 변경하지 않고 여기서 종료합니다."; exit 0; fi
 
@@ -891,94 +904,499 @@ ask_yn "실제 vCenter($VC_IP)에 포트그룹/VM 을 생성·변경합니다. �
 printf '%s %s\n' "$VC_IP" "$(date '+%F %T')" > "$LAST_VC_FILE"   # 다음 실행에서 이전 실행 vCenter 로 보여준다
 
 # ---------- 4) 실행 ----------
+# 실행할 단계를 목록(STEP_*)으로 먼저 만들고, 모니터 모드와 기존(줄줄이) 모드가 같은 목록·같은 단계 함수를 쓴다.
+# 단계 함수는 서브셸(백그라운드 또는 tee 파이프)에서 돌아 부모로 변수를 못 돌려주므로 파일로 넘긴다:
+#   $STEP_NOTE — 그 단계의 요약 한 줄(없으면 로그 마지막 줄을 쓴다). "skip:<이유>" 면 [건너뜀].
+#   check_fail / check_summary.txt — 스펙 체크 결과.
+# 단계 출력은 run_<user>/logs/NN_<단계>.log, 전체는 run_<user>/run.log 에 순서대로 이어붙인다.
 run() {
   local rc
   say; say "${C_DIM}\$ $*${C_RST}"
   "$@"; rc=$?
-  [ "$rc" -eq 0 ] || die "실패: $(basename "$1") (종료코드 $rc) — 원인을 고친 뒤 다시 실행하면 이미 만든 포트그룹/VM 은 건너뜁니다."
+  [ "$rc" -eq 0 ] && return 0
+  printf '%s[오류] 실패: %s (종료코드 %s) — 원인을 고친 뒤 다시 실행하면 이미 만든 포트그룹/VM 은 건너뜁니다.%s\n' "$C_RED" "$(basename "$1")" "$rc" "$C_RST" >&2
+  return 1
 }
 cd "$RUN_DIR" || die "실행 폴더로 이동하지 못했습니다: $RUN_DIR"
 CONC_ARG=(); [ -n "$CONC" ] && CONC_ARG=("-concurrency=$CONC")
 VSW_ARG=(); [ -n "$TARGET_VSWITCH" ] && VSW_ARG=("-targetVSwitch=$TARGET_VSWITCH")
 MAC_ALL="mac_all.txt"; : > "$MAC_ALL"
+rm -rf logs; mkdir -p logs; : > run.log; rm -f check_fail check_summary.txt
+STEP_NOTE="/dev/null"
 
-if [ -s vswitch.txt ]; then
+note() { printf '%s\n' "$1" > "$STEP_NOTE"; }
+# spec_flags <k> — k번째 스펙으로 CREATE_ARGS/AFF_ARGS/LP_ARGS 를 채운다
+spec_flags() {
+  local d="${SPEC_ORDER[$(($1 - 1))]}"
+  spec_lookup "$(basename "$d")" && build_flags "$LOOKUP_DIR" && return 0
+  printf '%s[오류] %s%s\n' "$C_RED" "${LOOKUP_ERR:-$FLAG_ERR}" "$C_RST" >&2; return 1
+}
+
+# ---------- 단계 함수 ----------
+step_vswitch() {
+  [ -s vswitch.txt ] || { say "만들 포트그룹이 없어 건너뜁니다."; note "skip:만들 포트그룹 없음"; return 0; }
   run "$HERE/vswitch_setting-source/vswitch_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=vswitch.txt "${VSW_ARG[@]}" "${CONC_ARG[@]}"
-fi
-k=0
-for d in "${SPEC_ORDER[@]}"; do
-  k=$((k + 1))
-  spec_lookup "$(basename "$d")" && build_flags "$LOOKUP_DIR" || die "$FLAG_ERR"
-  hdr "스펙 $k/${#SPEC_ORDER[@]}: $(basename "$d")" 2>&1
-  run "$HERE/vm_create-source/vm_create" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$k.txt" -mapFile=hostgroup.txt "${CREATE_ARGS[@]}"
+}
+step_vm_create() {
+  spec_flags "$1" || return 1
+  run "$HERE/vm_create-source/vm_create" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$1.txt" -mapFile=hostgroup.txt "${CREATE_ARGS[@]}"
+}
+step_mac_info() {
+  spec_flags "$1" || return 1
   build_mac_disk_args "${CREATE_ARGS[@]}"
-  run "$HERE/mac_info-source/mac_info" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$k.txt" -arg1="$MAC_ARG1" -argInt=0 -argStr="$MAC_ARGSTR"
+  run "$HERE/mac_info-source/mac_info" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$1.txt" -arg1="$MAC_ARG1" -argInt=0 -argStr="$MAC_ARGSTR" || return 1
   mac_apply_disk
-  run "$HERE/power_setting-source/power_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$k.txt" "${CONC_ARG[@]}"
-  run "$HERE/affinity_setting-source/affinity_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$k.txt" "${AFF_ARGS[@]}" "${CONC_ARG[@]}"
-  if [ "${#LP_ARGS[@]}" -gt 0 ]; then
-    run "$HERE/lpage_setting-source/lpage_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$k.txt" "${LP_ARGS[@]}" "${CONC_ARG[@]}"
-  fi
-done
-
-# ---------- 5) 스펙 체크 (vm-param-check) ----------
-# 방금 만든 VM 만, 이번에 쓴 스펙(-specFolder)으로 체크한다. 결과가 달라도 VM 은 이미 만들어졌으므로 중단하지 않는다.
-hdr "스펙 체크 — vm-param-check (실행한 스펙과 같은지)" 2>&1
-printf '%s\n' "$VC_IP" > vcenter_check.txt
-CHECK_FAIL=0; k=0
-for d in "${SPEC_ORDER[@]}"; do
-  k=$((k + 1))
-  spec_lookup "$(basename "$d")" || die "$LOOKUP_ERR"
-  if [ -z "$(exp_get "$LOOKUP_DIR" cores-ev01)" ] || [ -z "$(exp_get "$LOOKUP_DIR" numa-ev01)" ]; then
-    printf '  %s[건너뜀]%s 스펙 %s %s — ev01 cores/numa 가 없어 vm-param-check 로 체크할 수 없습니다\n' "$C_YEL" "$C_RST" "$k" "$(basename "$d")"
-    continue
-  fi
-  g="$(exp_get "$LOOKUP_DIR" groups)"
-  : > "check_targets_$k.txt"
-  while read -r bm; do
-    [ -n "$bm" ] || continue
-    for n in $(seq 1 "$g"); do vm_name "$bm" "$n" >> "check_targets_$k.txt"; echo >> "check_targets_$k.txt"; done
-  done < "worklist_$k.txt"
-  VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD" "$CHECK_BIN" -noColor -vcenterList=vcenter_check.txt -f="check_targets_$k.txt" \
-    -specRoot="$SPEC_DIR" -specFolder="$(basename "$d")" -yes -onlyFail -out="check_$k.csv" > "check_$k.log" 2>&1 < /dev/null
-  rc=$?
-  total="$(sed -n 's/^총 \([0-9]*\)대 중 PASS \([0-9]*\)대, FAIL \([0-9]*\)대.*/\1 \2 \3/p' "check_$k.log" | tail -1)"
-  if [ "$rc" -ne 0 ] || [ -z "$total" ]; then
-    CHECK_FAIL=1; warn "스펙 $k $(basename "$d"): 체크를 끝내지 못했습니다 (종료코드 $rc) — $RUN_DIR/check_$k.log"
-    tail -3 "check_$k.log" | sed 's/^/     /' >&2; continue
-  fi
-  set -- $total
-  if [ "$3" -eq 0 ]; then
-    printf '  %s[일치]%s 스펙 %s %s — VM %s대 모두 PASS\n' "$C_GRN" "$C_RST" "$k" "$(basename "$d")" "$1"
+}
+step_power() {
+  run "$HERE/power_setting-source/power_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$1.txt" "${CONC_ARG[@]}"
+}
+step_affinity() {
+  spec_flags "$1" || return 1
+  run "$HERE/affinity_setting-source/affinity_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${AFF_ARGS[@]}" "${CONC_ARG[@]}"
+}
+step_lpage() {
+  spec_flags "$1" || return 1
+  [ "${#LP_ARGS[@]}" -gt 0 ] || { say "스펙에 cores 가 없어 lpage_setting 을 건너뜁니다."; note "skip:스펙에 cores 가 없음"; return 0; }
+  run "$HERE/lpage_setting-source/lpage_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${LP_ARGS[@]}" "${CONC_ARG[@]}"
+}
+# step_license — 모든 BM 대상 1회. 평가판 호스트가 있으면 license_assign 이 라이선스 번호를 표준입력으로 묻는다
+# (라이선스가 1개여도 묻는다. q = 취소, 종료코드 0). 평가판 호스트가 없으면 묻지 않고 끝난다.
+step_license() {
+  local lic="$HERE/license_assign-source/license_assign"
+  if [ -t 0 ]; then
+    run "$lic" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=license_worklist.txt
   else
-    CHECK_FAIL=1
-    printf '  %s[차이]%s 스펙 %s %s — VM %s대 중 PASS %s / FAIL %s\n' "$C_YEL" "$C_RST" "$k" "$(basename "$d")" "$1" "$2" "$3"
-    grep -h '\[FAIL\]\|\[설정없음\]' "check_$k.log" | sed 's/: 기대값.*//' | sort | uniq -c | sort -rn | head -8 | sed 's/^/      /'
+    # 파이프·nohup 처럼 표준입력이 터미널이 아니면, 입력이 끝났을 때 license_assign 이 빈 입력을 "잘못된 번호"로
+    # 보고 끝없이 다시 묻는다. 남은 입력 뒤에 q 를 붙여 취소로 끝나게 한다.
+    { cat; printf 'q\n'; } | run "$lic" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=license_worklist.txt
   fi
-done
-
-# ---------- 7) MAC 목록 합본 → awx_route 로 <user>.txt 복사 ----------
-# mac_info 는 스펙마다(4단계에서) 실행했고, mac_apply_disk 가 디스크를 바꿔 MAC_ALL 에 이어붙였다.
-if [ -s "$MAC_ALL" ]; then
+}
+# ---------- 스펙 체크 (vm-param-check) ----------
+# 방금 만든 VM 만, 이번에 쓴 스펙(-specFolder)으로 체크한다. 결과가 달라도 VM 은 이미 만들어졌으므로 실패로 치지 않는다.
+chk() { # <색> <태그> <내용> — 화면(로그)과 check_summary.txt 에 한 줄
+  printf '  %s[%s]%s %s\n' "$1" "$2" "$C_RST" "$3"
+  printf '[%s] %s\n' "$2" "$3" >> check_summary.txt
+}
+step_check() {
+  local k=0 d g bm n rc total fail=0
+  hdr "스펙 체크 — vm-param-check (실행한 스펙과 같은지)" 2>&1
+  printf '%s\n' "$VC_IP" > vcenter_check.txt
+  : > check_summary.txt
+  for d in "${SPEC_ORDER[@]}"; do
+    k=$((k + 1))
+    spec_lookup "$(basename "$d")" || { printf '%s[오류] %s%s\n' "$C_RED" "$LOOKUP_ERR" "$C_RST" >&2; return 1; }
+    if [ -z "$(exp_get "$LOOKUP_DIR" cores-ev01)" ] || [ -z "$(exp_get "$LOOKUP_DIR" numa-ev01)" ]; then
+      chk "$C_YEL" 건너뜀 "스펙 $k $(basename "$d") — ev01 cores/numa 가 없어 vm-param-check 로 체크할 수 없습니다"
+      continue
+    fi
+    g="$(exp_get "$LOOKUP_DIR" groups)"
+    : > "check_targets_$k.txt"
+    while read -r bm; do
+      [ -n "$bm" ] || continue
+      for n in $(seq 1 "$g"); do vm_name "$bm" "$n" >> "check_targets_$k.txt"; echo >> "check_targets_$k.txt"; done
+    done < "worklist_$k.txt"
+    VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD" "$CHECK_BIN" -noColor -vcenterList=vcenter_check.txt -f="check_targets_$k.txt" \
+      -specRoot="$SPEC_DIR" -specFolder="$(basename "$d")" -yes -onlyFail -out="check_$k.csv" > "check_$k.log" 2>&1 < /dev/null
+    rc=$?
+    total="$(sed -n 's/^총 \([0-9]*\)대 중 PASS \([0-9]*\)대, FAIL \([0-9]*\)대.*/\1 \2 \3/p' "check_$k.log" | tail -1)"
+    if [ "$rc" -ne 0 ] || [ -z "$total" ]; then
+      fail=1; warn "스펙 $k $(basename "$d"): 체크를 끝내지 못했습니다 (종료코드 $rc) — $RUN_DIR/check_$k.log"
+      tail -3 "check_$k.log" | sed 's/^/     /' >&2
+      printf '[미완료] 스펙 %s %s — 체크를 끝내지 못했습니다 (check_%s.log)\n' "$k" "$(basename "$d")" "$k" >> check_summary.txt
+      continue
+    fi
+    set -- $total
+    if [ "$3" -eq 0 ]; then
+      chk "$C_GRN" 일치 "스펙 $k $(basename "$d") — VM $1대 모두 PASS"
+    else
+      fail=1
+      chk "$C_YEL" 차이 "스펙 $k $(basename "$d") — VM $1대 중 PASS $2 / FAIL $3"
+      grep -h '\[FAIL\]\|\[설정없음\]' "check_$k.log" | sed 's/: 기대값.*//' | sort | uniq -c | sort -rn | head -8 | sed 's/^/      /'
+    fi
+  done
+  echo "$fail" > check_fail
+  note "$(awk 'NR > 1 { printf " / " } { printf "%s", $0 }' check_summary.txt)"
+}
+# ---------- MAC 목록 합본 → awx_route 로 <user>.txt 복사 ----------
+# mac_info 는 스펙마다(MAC 조사 단계에서) 실행했고, mac_apply_disk 가 디스크를 바꿔 MAC_ALL 에 이어붙였다.
+step_mac_copy() {
+  [ -s "$MAC_ALL" ] || { say "모은 MAC 목록이 없어 건너뜁니다."; note "skip:모은 MAC 목록 없음"; return 0; }
   hdr "MAC 수집 결과" 2>&1
   if [ -z "$awx_route" ]; then
     info "awx_route 가 비어 있어 복사하지 않습니다: $RUN_DIR/$MAC_ALL"
+    note "복사 안 함(awx_route 비어 있음) — $RUN_DIR/$MAC_ALL"
   elif mkdir -p "$awx_route" && cp "$MAC_ALL" "$awx_route/${USER_TAG}.txt"; then
     info "MAC 목록 복사: $RUN_DIR/$MAC_ALL → $awx_route/${USER_TAG}.txt"
+    note "$awx_route/${USER_TAG}.txt ($(grep -c . "$MAC_ALL")줄)"
   else
-    die "MAC 목록 복사 실패: $RUN_DIR/$MAC_ALL → $awx_route/${USER_TAG}.txt"
+    printf '%s[오류] MAC 목록 복사 실패: %s → %s%s\n' "$C_RED" "$RUN_DIR/$MAC_ALL" "$awx_route/${USER_TAG}.txt" "$C_RST" >&2
+    return 1
   fi
-fi
+}
 
-printf '\n%s[완료]%s VM 생성·설정을 마쳤습니다.\n' "$C_GRN$C_BLD" "$C_RST"
-if [ "$CHECK_FAIL" -eq 1 ]; then
-  cat <<EOF
+# ---------- 단계 목록 ----------
+# STEP_KIND: start(작업 시작 — 실행 계획) / sep(구분선) / run(단계 함수 실행)
+# STEP_TTY=1: 사용자 입력이 필요한 단계 — 모니터를 잠시 닫고 전경에서 실행한다.
+# STEP_STATE: wait 대기 / run 진행 / done 완료 / fail 실패 / skip 건너뜀 / abort 중단 / cancel 취소
+STEP_KIND=(); STEP_LABEL=(); STEP_FN=(); STEP_ARG=(); STEP_TTY=(); STEP_LOG=()
+STEP_STATE=(); STEP_T0=(); STEP_DUR=(); STEP_SUM=()
+add_step() { # <종류> <이름> [함수] [인자] [입력 필요=1]
+  local i=${#STEP_KIND[@]}
+  STEP_KIND[$i]="$1"; STEP_LABEL[$i]="$2"; STEP_FN[$i]="${3:-}"; STEP_ARG[$i]="${4:-}"; STEP_TTY[$i]="${5:-0}"
+  STEP_STATE[$i]=wait; STEP_T0[$i]=0; STEP_DUR[$i]=0; STEP_SUM[$i]=""; STEP_LOG[$i]=""
+  [ "$1" = run ] && STEP_LOG[$i]="logs/$(printf '%02d' "$i")_${3#step_}${4:+_$4}.log"
+}
+add_step start "작업 시작"
+add_step run "포트그룹 생성" step_vswitch
+k=0
+for d in "${SPEC_ORDER[@]}"; do
+  k=$((k + 1))
+  add_step sep "스펙 $k/${#SPEC_ORDER[@]}: $(basename "$d")"
+  add_step run "VM 생성" step_vm_create "$k"
+  add_step run "MAC 조사" step_mac_info "$k"
+  add_step run "전원 고성능" step_power "$k"
+  add_step run "affinity" step_affinity "$k"
+  add_step run "lpage" step_lpage "$k"
+done
+add_step sep ""
+add_step run "라이선스 할당" step_license "" 1
+add_step run "스펙 체크" step_check
+add_step run "MAC 목록 복사" step_mac_copy
+STEP_LOG[0]="plan.txt"; STEP_STATE[0]=done
+STEP_SUM[0]="(계획: 스펙 ${#SPEC_ORDER[@]}개, BM ${#BMS[@]}대, VM ${#VMS[@]}대)"
+RUN_T0=$SECONDS; END_T=""; RESULT=""; FAIL_IDX=""; LIC_INT=0
+
+fmt_dur() { # <초> — mm:ss (1시간 이상이면 h:mm:ss)
+  if [ "$1" -ge 3600 ]; then printf '%d:%02d:%02d' $(($1 / 3600)) $(($1 % 3600 / 60)) $(($1 % 60))
+  else printf '%02d:%02d' $(($1 / 60)) $(($1 % 60)); fi
+}
+strip_ansi() { sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g' "$@"; }
+# last_line <로그> — 요약으로 쓸 마지막 의미 있는 줄(빈 줄, "$ 명령" 줄 제외)
+last_line() {
+  [ -f "$1" ] || return 0
+  tail -n 40 "$1" | strip_ansi | grep -v '^\$ ' | awk 'NF' | tail -1 | sed 's/^[[:space:]]*//'
+}
+step_begin() {
+  STEP_STATE[$1]=run; STEP_T0[$1]=$SECONDS
+  STEP_NOTE="$RUN_DIR/${STEP_LOG[$1]%.log}.note"; rm -f "$STEP_NOTE"
+}
+step_end() { # <번호> <종료코드> — 상태·걸린 시간·요약을 정하고 로그를 run.log 에 이어붙인다
+  local i=$1 rc=$2 v=""
+  STEP_DUR[$i]=$((SECONDS - STEP_T0[$i]))
+  [ -f "$STEP_NOTE" ] && v="$(head -1 "$STEP_NOTE")"
+  if [ "${STEP_FN[$i]}" = step_license ] && { [ "$LIC_INT" = 1 ] || { [ "$rc" -eq 0 ] && grep -q '라이선스 할당 작업을 중단합니다' "${STEP_LOG[$i]}"; }; }; then
+    STEP_STATE[$i]=cancel; v="취소 — 라이선스를 할당하지 않고 다음 단계로 넘어감"
+  elif [ "$rc" -ne 0 ]; then STEP_STATE[$i]=fail; FAIL_IDX=$i
+  elif [ "${v#skip:}" != "$v" ]; then STEP_STATE[$i]=skip; v="${v#skip:}"
+  else STEP_STATE[$i]=done; fi
+  [ -n "$v" ] || v="$(last_line "${STEP_LOG[$i]}")"
+  STEP_SUM[$i]="${v#\[오류\] }"
+  cat "${STEP_LOG[$i]}" >> run.log 2>/dev/null
+}
+
+# ---------- 기존(줄줄이) 모드 — 파이프 입력·nohup·cron 또는 VMSETUP_MONITOR=0 ----------
+run_steps_plain() {
+  local i rc
+  for i in "${!STEP_KIND[@]}"; do
+    case "${STEP_KIND[$i]}" in
+      sep) [ -n "${STEP_LABEL[$i]}" ] && hdr "${STEP_LABEL[$i]}" 2>&1; continue ;;
+      run) ;;
+      *) continue ;;
+    esac
+    [ "${STEP_TTY[$i]}" = 1 ] && hdr "${STEP_LABEL[$i]}" 2>&1
+    step_begin "$i"
+    "${STEP_FN[$i]}" "${STEP_ARG[$i]}" 2>&1 | tee "${STEP_LOG[$i]}"; rc=${PIPESTATUS[0]}
+    step_end "$i" "$rc"
+    [ "${STEP_STATE[$i]}" = fail ] && return 1
+  done
+  return 0
+}
+
+# ---------- 모니터 모드 ----------
+# 선례(.claude/HPC/ip_change/internal/monitor)와 같은 방식: /dev/tty(fd 5)에 대체 화면으로 그리고, 끝나면 원래 화면으로
+# 돌아간다(스크롤백 오염 없음). raw 에 가깝게(-icanon -echo -isig) 두어 Ctrl+C 는 시그널이 아니라 0x03 키로 받는다
+# → 실수로 한 번 눌러 도구가 죽지 않고, 5초 안에 3번 눌러야 실행 중인 도구를 끝내고 종료(종료코드 130).
+E=$'\033'
+MON_ON=0; BG_PID=""; MON_STTY=""; MON_CUR=0; MON_TOP=0; MON_VIEW=-1; MON_VTOP=0; MON_VFOLLOW=1; MON_H=10
+MON_FOLLOW=1; MON_DONE=0; MON_CONFIRM=0; MON_MSG=""; MON_MSG_T=0; MON_CC=(); MON_LAST=""
+
+mon_enter() {
+  stty -echo -icanon -isig min 1 time 0 <&5
+  tput smcup >&5; tput civis >&5; printf '%s[?7l%s[H%s[2J' "$E" "$E" "$E" >&5   # 줄 자동 넘김 끔 → 긴 줄은 잘림
+  MON_ON=1; MON_LAST=""
+}
+mon_leave() {
+  [ "$MON_ON" = 1 ] || return 0
+  printf '%s[?7h' "$E" >&5; tput cnorm >&5; tput rmcup >&5
+  stty "$MON_STTY" <&5
+  MON_ON=0
+}
+tree_pids() { local c; echo "$1"; for c in $(ps -o pid= --ppid "$1" 2>/dev/null); do tree_pids "$c"; done; }
+mon_cleanup() {
+  [ -n "$BG_PID" ] && kill $(tree_pids "$BG_PID") 2>/dev/null
+  mon_leave
+}
+
+# mon_row <번호> — 홈 화면 한 줄을 MON_LINE 에. 고정폭(상태·시간) 칸을 앞에 두고 한글 이름·요약은 열 이동(CSI n G)으로 맞춘다.
+mon_row() {
+  local i=$1 mark=" " tag col t="" sum
+  [ "$i" = "$MON_CUR" ] && mark="${C_BLD}>${C_RST}"
+  if [ "$i" -ge "${#STEP_KIND[@]}" ]; then
+    if [ "$MON_CONFIRM" = 1 ]; then sum="한 번 더 Enter 하면 종료합니다"; else sum="Enter 두 번 누르면 종료"; fi
+    MON_LINE="$mark ${C_BLD}[종료]${C_RST}${E}[12G$sum"; return
+  fi
+  if [ "${STEP_KIND[$i]}" = sep ]; then
+    MON_LINE="   ${C_DIM}──${STEP_LABEL[$i]:+ ${STEP_LABEL[$i]} ──}${C_RST}"; return
+  fi
+  case "${STEP_STATE[$i]}" in
+    wait) tag=대기; col="$C_DIM" ;;  run) tag=진행; col="$C_CYN" ;;   done) tag=완료; col="$C_GRN" ;;
+    fail) tag=실패; col="$C_RED" ;;  skip) tag=건너뜀; col="$C_YEL" ;; abort) tag=중단; col="$C_DIM" ;;
+    cancel) tag=취소; col="$C_YEL" ;;
+  esac
+  sum="${STEP_SUM[$i]}"
+  case "${STEP_STATE[$i]}" in
+    run) t="$(fmt_dur $((SECONDS - STEP_T0[$i])))"; sum="$(last_line "${STEP_LOG[$i]}")" ;;
+    wait) [ "${STEP_TTY[$i]}" = 1 ] && sum="(선택이 필요하면 모니터가 잠시 꺼집니다)" ;;
+    abort) ;;
+    *) t="$(fmt_dur "${STEP_DUR[$i]}")" ;;
+  esac
+  MON_LINE="$mark ${col}[$tag]${C_RST}${E}[12G$t${E}[19G${STEP_LABEL[$i]}${E}[37G$sum"
+}
+
+mon_draw_home() { # <줄 수> — 목록(커서를 따라 스크롤)
+  local h=$1 n i out=""
+  n=${#STEP_KIND[@]}; [ "$MON_DONE" = 1 ] && n=$((n + 1))
+  [ "$MON_CUR" -lt "$MON_TOP" ] && MON_TOP=$MON_CUR
+  [ "$MON_CUR" -ge $((MON_TOP + h)) ] && MON_TOP=$((MON_CUR - h + 1))
+  for ((i = MON_TOP; i < MON_TOP + h; i++)); do
+    [ "$i" -lt "$n" ] && { mon_row "$i"; out+="$MON_LINE"; }
+    out+="${E}[K"$'\n'
+  done
+  MON_BODY="$out"
+  MON_FOOT="↑↓ 이동   Enter 실행 결과 보기   Ctrl+C 3번(5초 안) 강제 종료"
+}
+
+mon_draw_view() { # <줄 수> — 선택한 단계의 로그(처음엔 맨 끝, 진행 중이면 계속 따라감)
+  local h=$(($1 - 1)) i=$MON_VIEW log="${STEP_LOG[$MON_VIEW]}" total=0 maxtop out j
+  local -a lines=()
+  [ "$h" -lt 1 ] && h=1
+  MON_H=$h
+  mon_row "$i"; out="$MON_LINE${E}[K"$'\n'
+  if [ -n "$log" ] && [ -f "$log" ]; then
+    total=$(wc -l < "$log")
+    maxtop=$((total - h)); [ "$maxtop" -lt 0 ] && maxtop=0
+    if [ "$MON_VFOLLOW" = 1 ] || [ "$MON_VTOP" -ge "$maxtop" ]; then MON_VTOP=$maxtop; MON_VFOLLOW=1; fi
+    [ "$MON_VTOP" -lt 0 ] && MON_VTOP=0
+    mapfile -t lines < <(sed -n "$((MON_VTOP + 1)),$((MON_VTOP + h))p" "$log" | strip_ansi)
+  else
+    lines=("  (아직 실행하지 않았습니다)")
+  fi
+  for ((j = 0; j < h; j++)); do out+="${lines[$j]:-}${E}[K"$'\n'; done
+  MON_BODY="$out"
+  MON_FOOT="↑↓ PgUp/PgDn 스크롤   Enter 목록으로   ${log:-로그 없음} ($((total == 0 ? 0 : MON_VTOP + 1))-$((MON_VTOP + ${#lines[@]} < total ? MON_VTOP + ${#lines[@]} : total))/${total}줄)"
+}
+
+mon_draw() {
+  local size rows cols bar el frame
+  size="$(stty size <&5 2>/dev/null)"; rows=${size% *}; cols=${size#* }
+  [[ "$rows" =~ ^[0-9]+$ ]] && [ "$rows" -ge 8 ] || rows=24
+  [[ "$cols" =~ ^[0-9]+$ ]] && [ "$cols" -ge 40 ] || cols=80
+  printf -v bar '%*s' $((cols - 2)) ''; bar=" ${bar// /─}"
+  [ -n "$MON_MSG" ] && [ $((SECONDS - MON_MSG_T)) -ge 5 ] && MON_MSG=""
+  if [ "$MON_VIEW" -ge 0 ]; then mon_draw_view $((rows - 5)); else mon_draw_home $((rows - 5)); fi
+  el="$(fmt_dur $((${END_T:-$SECONDS} - RUN_T0)))"
+  frame="${E}[H ${C_BLD}vm_setup — $USER_TAG @ $VC_IP${C_RST}   OS $MAC_ARGSTR / 인프라 $MAC_ARG1${E}[$((cols - 12))G경과 $el${E}[K"$'\n'
+  frame+="$bar${E}[K"$'\n'"$MON_BODY$bar${E}[K"$'\n'" $MON_FOOT${E}[K"$'\n'" ${C_YEL}$MON_MSG${C_RST}${E}[K"
+  [ "$frame" = "$MON_LAST" ] && return 0   # 바뀐 게 없으면 다시 그리지 않는다
+  printf '%s' "$frame" >&5; MON_LAST="$frame"
+}
+
+# mon_key <대기 초> — 키 하나를 MON_KEY 에(up/down/pgup/pgdn/enter/ctrlc/other). 시간이 지나면 빈 값.
+# 방향키는 ESC [ A/B (또는 ESC O A/B), PgUp/PgDn 은 ESC [ 5~ / 6~ 를 짧은 타임아웃으로 조립한다(bash 4.1 호환).
+mon_key() {
+  local c="" c2="" c3="" c4=""
+  MON_KEY=""
+  IFS= read -rsn1 -d '' -t "$1" c <&5 || return 0
+  case "$c" in
+    $'\n'|$'\r') MON_KEY=enter ;;
+    $'\x03') MON_KEY=ctrlc ;;
+    k) MON_KEY=up ;;
+    j) MON_KEY=down ;;
+    $'\x1b')
+      IFS= read -rsn1 -d '' -t 0.05 c2 <&5; IFS= read -rsn1 -d '' -t 0.05 c3 <&5
+      case "$c2$c3" in
+        '[A'|OA) MON_KEY=up ;;
+        '[B'|OB) MON_KEY=down ;;
+        '[5') IFS= read -rsn1 -d '' -t 0.05 c4 <&5; MON_KEY=pgup ;;
+        '[6') IFS= read -rsn1 -d '' -t 0.05 c4 <&5; MON_KEY=pgdn ;;
+        *) MON_KEY=other ;;
+      esac ;;
+    *) MON_KEY=other ;;
+  esac
+}
+
+mon_move() { # <+1|-1> — 구분선 줄은 건너뛴다
+  local i=$MON_CUR n=${#STEP_KIND[@]}
+  [ "$MON_DONE" = 1 ] && n=$((n + 1))
+  while :; do
+    i=$((i + $1))
+    { [ "$i" -lt 0 ] || [ "$i" -ge "$n" ]; } && return
+    [ "${STEP_KIND[$i]:-end}" != sep ] && { MON_CUR=$i; return; }
+  done
+}
+
+mon_ctrlc() {
+  local t; local -a keep=()
+  for t in "${MON_CC[@]}"; do [ $((SECONDS - t)) -lt 5 ] && keep+=("$t"); done
+  keep+=("$SECONDS"); MON_CC=("${keep[@]}")
+  [ "${#MON_CC[@]}" -ge 3 ] && mon_abort
+  MON_MSG="Ctrl+C ${#MON_CC[@]}번 — 5초 안에 $((3 - ${#MON_CC[@]}))번 더 누르면 실행 중인 작업을 끝내고 종료합니다"; MON_MSG_T=$SECONDS
+}
+
+# mon_abort — Ctrl+C 3번: 실행 중인 도구를 끝내고 터미널을 복원한 뒤 요약을 남기고 종료코드 130.
+mon_abort() {
+  local i
+  if [ -n "$BG_PID" ]; then kill $(tree_pids "$BG_PID") 2>/dev/null; wait "$BG_PID" 2>/dev/null; BG_PID=""; fi
+  for i in "${!STEP_KIND[@]}"; do
+    [ "${STEP_KIND[$i]}" = run ] || continue
+    case "${STEP_STATE[$i]}" in
+      run) STEP_STATE[$i]=abort; STEP_DUR[$i]=$((SECONDS - STEP_T0[$i])); STEP_SUM[$i]="Ctrl+C 로 중단"
+           cat "${STEP_LOG[$i]}" >> run.log 2>/dev/null ;;
+      wait) STEP_STATE[$i]=abort ;;
+    esac
+  done
+  END_T=$SECONDS; RESULT=abort
+  mon_leave
+  print_final
+  exit 130
+}
+
+# mon_handle — 방금 받은 키 처리. 반환 1 = [종료] 줄에서 Enter 두 번(모니터 끝)
+mon_handle() {
+  case "$MON_KEY" in
+    "") return 0 ;;
+    ctrlc) mon_ctrlc; return 0 ;;
+  esac
+  if [ "$MON_VIEW" -ge 0 ]; then
+    case "$MON_KEY" in
+      up)    MON_VFOLLOW=0; MON_VTOP=$((MON_VTOP - 1)) ;;
+      down)  MON_VTOP=$((MON_VTOP + 1)) ;;
+      pgup)  MON_VFOLLOW=0; MON_VTOP=$((MON_VTOP - MON_H)) ;;
+      pgdn)  MON_VTOP=$((MON_VTOP + MON_H)) ;;
+      enter) MON_VIEW=-1 ;;
+    esac
+    [ "$MON_VTOP" -lt 0 ] && MON_VTOP=0
+    return 0
+  fi
+  case "$MON_KEY" in
+    up|pgup)     MON_FOLLOW=0; MON_CONFIRM=0; mon_move -1 ;;
+    down|pgdn)   MON_FOLLOW=0; MON_CONFIRM=0; mon_move 1 ;;
+    enter)
+      if [ "$MON_CUR" -ge "${#STEP_KIND[@]}" ]; then
+        [ "$MON_CONFIRM" = 1 ] && return 1
+        MON_CONFIRM=1
+      else
+        MON_VIEW=$MON_CUR; MON_VTOP=0; MON_VFOLLOW=1
+      fi ;;
+  esac
+  return 0
+}
+mon_tick() { mon_draw; mon_key 0.5; mon_handle; }
+
+run_steps_monitor() {
+  local i j rc
+  exec 5<>/dev/tty
+  MON_STTY="$(stty -g <&5)"
+  trap mon_cleanup EXIT
+  trap 'exit 143' TERM HUP
+  mon_enter
+  for i in "${!STEP_KIND[@]}"; do
+    [ "${STEP_KIND[$i]}" = run ] || continue
+    [ "$MON_FOLLOW" = 1 ] && MON_CUR=$i
+    if [ "${STEP_TTY[$i]}" = 1 ]; then
+      # 입력이 필요한 단계(라이선스): 모니터를 닫고 평소처럼 전경에서 실행 → 끝나면 모니터로 돌아간다.
+      # 여기서는 터미널이 원래 모드라 Ctrl+C 가 시그널로 온다 — 도구만 끝내고 [취소]로 표시한 뒤 다음 단계로.
+      mon_leave
+      hdr "${STEP_LABEL[$i]} (모니터를 잠시 끕니다 — 끝나면 돌아갑니다)"
+      step_begin "$i"
+      LIC_INT=0; trap 'LIC_INT=1' INT
+      "${STEP_FN[$i]}" "${STEP_ARG[$i]}" 2>&1 | tee "${STEP_LOG[$i]}"; rc=${PIPESTATUS[0]}
+      trap - INT
+      step_end "$i" "$rc"
+      mon_enter
+    else
+      step_begin "$i"
+      "${STEP_FN[$i]}" "${STEP_ARG[$i]}" > "${STEP_LOG[$i]}" 2>&1 < /dev/null &
+      BG_PID=$!
+      while kill -0 "$BG_PID" 2>/dev/null; do mon_tick; done
+      wait "$BG_PID"; rc=$?; BG_PID=""
+      step_end "$i" "$rc"
+    fi
+    if [ "${STEP_STATE[$i]}" = fail ]; then
+      for ((j = i + 1; j < ${#STEP_KIND[@]}; j++)); do [ "${STEP_KIND[$j]}" = run ] && STEP_STATE[$j]=abort; done
+      MON_CUR=$i
+      break
+    fi
+  done
+  END_T=$SECONDS; MON_DONE=1
+  if [ -n "$FAIL_IDX" ]; then RESULT=fail; else RESULT=done; MON_CUR=${#STEP_KIND[@]}; fi
+  while mon_tick; do :; done
+  mon_leave
+}
+
+# ---------- 최종 요약 (원래 화면 / 스크롤백에 남는 것) ----------
+print_final() {
+  local i lbl parts="" mac=""
+  for i in "${!STEP_KIND[@]}"; do
+    [ "${STEP_KIND[$i]}" = run ] || continue
+    lbl="${STEP_LABEL[$i]}"; [ "${#SPEC_ORDER[@]}" -gt 1 ] && [ -n "${STEP_ARG[$i]}" ] && lbl+="[${STEP_ARG[$i]}]"
+    case "${STEP_STATE[$i]}" in
+      done)   parts+="${parts:+ / }$lbl $(fmt_dur "${STEP_DUR[$i]}")" ;;
+      skip)   parts+="${parts:+ / }$lbl 건너뜀" ;;
+      cancel) parts+="${parts:+ / }$lbl 취소" ;;
+      fail)   parts+="${parts:+ / }$lbl 실패" ;;
+      abort)  [ "$RESULT" = abort ] && [ "${STEP_DUR[$i]}" -gt 0 ] && parts+="${parts:+ / }$lbl 중단" ;;
+    esac
+    [ "${STEP_FN[$i]}" = step_mac_copy ] && [ "${STEP_STATE[$i]}" = done ] && mac="${STEP_SUM[$i]}"
+  done
+  case "$RESULT" in
+    done)
+      printf '\n%s[완료]%s VM 생성·설정을 마쳤습니다. (총 %s)\n' "$C_GRN$C_BLD" "$C_RST" "$(fmt_dur $((END_T - RUN_T0)))" ;;
+    fail)
+      i=$FAIL_IDX
+      if [ "${MON_MODE:-0}" = 1 ]; then   # 기존 모드는 실패 메시지가 이미 화면에 있다
+        printf '\n%s[오류] 실패: %s — 원인을 고친 뒤 다시 실행하면 이미 만든 포트그룹/VM 은 건너뜁니다.%s\n' "$C_RED" "${STEP_LABEL[$i]}" "$C_RST"
+        strip_ansi "${STEP_LOG[$i]}" | awk 'NF' | tail -5 | sed 's/^/     /'
+      fi ;;
+    abort)
+      printf '\n%s[중단]%s Ctrl+C 로 강제 종료했습니다 — 실행 중이던 도구를 끝냈습니다. (총 %s)\n' "$C_YEL$C_BLD" "$C_RST" "$(fmt_dur $((END_T - RUN_T0)))" ;;
+  esac
+  [ -n "$parts" ] && printf '  %s\n' "$parts"
+  [ -s check_summary.txt ] && sed 's/^/  스펙 체크: /' check_summary.txt
+  [ -n "$mac" ] && printf '  MAC 목록: %s\n' "$mac"
+  printf '  단계별 로그: %s/logs/   전체 로그: %s/run.log\n' "$RUN_DIR" "$RUN_DIR"
+  [ "$RESULT" = done ] || return 0
+  if [ "$(cat check_fail 2>/dev/null)" = 1 ]; then
+    cat <<EOF
   - 스펙과 다른 항목이 있습니다. 자세한 내용: $RUN_DIR/check_<번호>.log, check_<번호>.csv
     교정: cd $CHECK_DIR && VC_USER=$VC_ID ./vm-param-check -vcenterList=$RUN_DIR/vcenter_check.txt \\
           -f=$RUN_DIR/check_targets_<번호>.txt -specRoot=$SPEC_DIR -specFolder=<스펙 폴더> -yes -fix
     (lpage_setting 은 numa.vcpu.maxPerVirtualNode 를 기존 동작대로 쓰고, 스펙의 preferHT 는 vm_setup 이 설정하지 않으므로 -fix 로 맞춘다.)
 EOF
-fi
-cat <<EOF
+  fi
+  cat <<EOF
   - 만든 VM 의 포트그룹만 바꾸려면 nic_assign: $HERE/nic_assign-source/nic_assign -vcTargetIP=$VC_IP -mapFile=<VM 이름 포트그룹 목록>
 EOF
+}
+
+# 모니터: 표준입력·표준에러가 둘 다 터미널이고 VMSETUP_MONITOR=0 이 아닐 때만. 아니면 지금처럼 줄줄이 출력한다.
+MON_MODE=0
+if [ -t 0 ] && [ -t 2 ] && [ "${VMSETUP_MONITOR:-1}" != 0 ] && command -v tput >/dev/null 2>&1 && { : <>/dev/tty; } 2>/dev/null; then
+  MON_MODE=1
+  run_steps_monitor
+else
+  if run_steps_plain; then RESULT=done; else RESULT=fail; fi
+  END_T=$SECONDS
+fi
+print_final
+[ "$RESULT" = done ] || exit 1
