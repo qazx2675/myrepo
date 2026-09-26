@@ -20,6 +20,9 @@
 set -o pipefail
 
 unset VC_PASSWORD VC_PASS VCENTER_PASS
+# MAC_ARGSTR/MAC_ARG1 도 같은 이유로 지운다 — 이전 실행(또는 테스트)에서 export 해 둔 값이 남아 있으면
+# "설치 정보" 단계를 건너뛰고 그 값을 그대로 써버려서, 매번 새로 물어보는 것처럼 안 보이는 사고가 났다.
+unset MAC_ARGSTR MAC_ARG1
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 USER_TAG=""; VC_IP="${VC_IP:-}"; VC_ID="${VC_ID:-lscsystems@vsphere.local}"
@@ -31,9 +34,10 @@ CHECK_BIN="$CHECK_DIR/vm-param-check"
 # 비워 두면 복사하지 않고 실행 폴더(run_<user>/)에만 남긴다.
 awx_route="${awx_route:-}"
 # mac_info 출력 줄에 들어가는 값 (VM VM <arg1=인프라> <VM> <IP> <MAC> eth0 sda sda5 <디스크(자동)> <argStr=OS버전> uefi).
-# 환경변수로 없으면 시작할 때 물어본다("설치 정보" 단계). sda5 다음 정수(디스크)는 고정값이 아니라
-# ev 스펙의 disk 값에서 자동으로 계산한다(고정 용량 480/600/960/1200/1900/7600 중 가장 가까운 값).
-MAC_ARG1="${MAC_ARG1:-}"; MAC_ARGSTR="${MAC_ARGSTR:-}"
+# 매번 시작할 때 물어본다("설치 정보" 단계, 위의 unset 참고 — 환경변수로 건너뛰는 경로는 없다).
+# sda5 다음 정수(디스크)는 고정값이 아니라 ev 스펙의 disk 값에서 자동으로 계산한다
+# (고정 용량 480/600/960/1200/1900/7600 중 가장 가까운 값).
+MAC_ARG1=""; MAC_ARGSTR=""
 
 usage() {
   cat <<EOF
@@ -54,7 +58,7 @@ usage() {
 
 환경변수 VM_SETUP_EDITOR 로 vim 대신 다른 편집기를 쓸 수 있다.
 색상: 터미널이면 자동으로 켜진다. NO_COLOR=1 또는 VMSETUP_COLOR=never 로 끄고, VMSETUP_COLOR=always 로 강제.
-환경변수 MAC_ARGSTR(OS 버전)/MAC_ARG1(인프라) 이 있으면 시작할 때 묻지 않고 그 값을 쓴다(비대화식 실행용).
+시작할 때 OS 버전/인프라를 매번 물어본다(환경변수로 건너뛰는 경로 없음 — 이전 실행의 값이 남아 헷갈리는 것을 방지).
 EOF
 }
 
@@ -146,24 +150,18 @@ VSW_FILE="$HERE/vswitch_${USER_TAG}.txt"
 [ -f "$VSW_FILE" ] || die "포트그룹 파일이 없습니다: $VSW_FILE (BM 포트그룹 VLAN)"
 
 # ---------- 설치 정보 (OS 버전 / 인프라) — 시작 전에 받아 MAC 목록(mac_info)에 넣는다 ----------
-# 환경변수로 이미 있으면(비대화식 실행) 묻지 않는다. read -p 로 직접 받는다(EOF면 중단).
-if [ -z "$MAC_ARGSTR" ]; then
-  hdr "설치 정보"
-  while :; do
-    read -r -p "OS 버전 (예: 8.10): " MAC_ARGSTR || die "입력이 끝났습니다(stdin EOF) — 대화형으로 실행하세요."
-    [[ "$MAC_ARGSTR" =~ ^[0-9]+(\.[0-9]+)*$ ]] && break
-    warn "OS 버전 형식이 올바르지 않습니다 (숫자와 점만, 예: 8.10)."
-    MAC_ARGSTR=""
-  done
-fi
-if [ -z "$MAC_ARG1" ]; then
-  while :; do
-    read -r -p "인프라 입력 : " MAC_ARG1 || die "입력이 끝났습니다(stdin EOF) — 대화형으로 실행하세요."
-    [[ -n "$MAC_ARG1" && "$MAC_ARG1" != *[[:space:]]* ]] && break
-    warn "인프라 값은 비어 있지 않아야 하고 공백을 포함할 수 없습니다."
-    MAC_ARG1=""
-  done
-fi
+# 위쪽의 unset 때문에 매번 새로 물어본다(환경변수로 건너뛰는 경로 없음). read -p 로 직접 받는다(EOF면 중단).
+hdr "설치 정보"
+while :; do
+  read -r -p "OS 버전 (예: 8.10): " MAC_ARGSTR || die "입력이 끝났습니다(stdin EOF) — 대화형으로 실행하세요."
+  [[ "$MAC_ARGSTR" =~ ^[0-9]+(\.[0-9]+)*$ ]] && break
+  warn "OS 버전 형식이 올바르지 않습니다 (숫자와 점만, 예: 8.10)."
+done
+while :; do
+  read -r -p "인프라 입력 : " MAC_ARG1 || die "입력이 끝났습니다(stdin EOF) — 대화형으로 실행하세요."
+  [[ -n "$MAC_ARG1" && "$MAC_ARG1" != *[[:space:]]* ]] && break
+  warn "인프라 값은 비어 있지 않아야 하고 공백을 포함할 수 없습니다."
+done
 
 # ---------- 필요한 실행파일 (없으면 vendor 로 오프라인 빌드) ----------
 # V2 의 setup.sh 로 만든다 — OS6 이면 빌드 대신 bin_os6/ 의 실행파일을 제자리에 복사한다.

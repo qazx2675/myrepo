@@ -5,8 +5,9 @@ set -uo pipefail
 H=/root/v2work/harness
 V=/root/v2work/V2/VMsetup
 export VC_PASSWORD=x
-# vm_setup.sh 가 시작할 때 묻는 "설치 정보"(OS 버전/인프라) — 환경변수로 채워 테스트 입력에 영향 없게 한다.
-export MAC_ARGSTR=8.10 MAC_ARG1=vmsetup-test
+# vm_setup.sh 가 시작할 때 매번 물어보는 "설치 정보"(OS 버전/인프라, 환경변수로는 못 건너뜀) —
+# 아래 모든 입력 앞에 이 두 줄(INSTALL_ANS)을 붙여서 표준입력으로 넣는다.
+INSTALL_ANS=$'8.10\nvmsetup-test\n'
 T=/tmp/vs; rm -rf $T; mkdir -p $T
 pass=0; fail=0
 ok() { echo "  [PASS] $*"; pass=$((pass+1)); }
@@ -40,9 +41,9 @@ mkspec() { # <SPEC_DIR> <폴더명> [noaff] — ev01/ev02 두 개짜리 스펙. 
   printf 'sched.vcpu0.affinity=0,1\nsched.vcpu1.affinity=2,3\n' > "$1/$2/affinity_ev01.txt"
   printf 'affinity-ev01=affinity_ev01.txt\naffinity-ev02=affinity_ev01.txt\n' >> "$1/$2/$2_spec.txt"
 }
-run_setup() { # <SPEC_DIR> <vc주소> <추가옵션...>  (표준입력 = 답변)
+run_setup() { # <SPEC_DIR> <vc주소> <추가옵션...>  (표준입력 = 답변, INSTALL_ANS 는 자동으로 앞에 붙는다)
   local sd=$1 vc=$2; shift 2
-  $V/vm_setup.sh -u tt -v "$vc" -s "$sd" "$@"
+  { printf '%s' "$INSTALL_ANS"; cat; } | $V/vm_setup.sh -u tt -v "$vc" -s "$sd" "$@"
 }
 
 echo "== V1 자동 할당(스펙·포트그룹) → 확인 y → 실행"
@@ -146,20 +147,20 @@ printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\n' > $SD/vswitch_tt.txt
 rm -rf $V/run_tt
 printf '# 주석 줄\n10.9.9.9\n%s\n' "$A" > $V/../vcenter.txt
 # VM 표 y → CAE 번호 Enter → vCenter 2번 → 실행 y
-printf 'y\n\n2\ny\n' | $V/vm_setup.sh -u tt -s $SD > $T/v7.out 2>&1
+printf '%sy\n\n2\ny\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -s $SD > $T/v7.out 2>&1
 grep -q '=== vCenter 선택' $T/v7.out && grep -q "  2) $A" $T/v7.out && grep -q "vCenter        : $A" $T/v7.out && ok "vcenter.txt 목록(주석 제외)에서 번호로 선택 → 실행 계획에 표시" || { ng "vCenter 번호 선택"; grep -n 'vCenter' $T/v7.out; }
 [ "$(awk '{print $1}' $V/run_tt/last_vcenter 2>/dev/null)" = "$A" ] && [ "$($H/bin/vmdump -vc $A -match ev0 | wc -l)" = 2 ] && ok "실행 후 run_tt/last_vcenter 에 기억 + VM 생성" || { ng "기억/생성"; cat $V/run_tt/last_vcenter; tail -10 $T/v7.out; }
 # 두 번째 실행: 이전 실행이 출력되고 Enter 로 그대로 선택 → 마지막 확인 n(취소)
-printf 'y\n\n\nn\n' | $V/vm_setup.sh -u tt -s $SD > $T/v7b.out 2>&1
+printf '%sy\n\n\nn\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -s $SD > $T/v7b.out 2>&1
 grep -q "\[INFO\] tt 이전 실행 vCenter: $A (" $T/v7b.out && grep -q "  2) $A   <- 이전 실행" $T/v7b.out && grep -q "vCenter        : $A" $T/v7b.out && grep -q '취소했습니다' $T/v7b.out && ok "재실행: 이전 실행 vCenter 출력 + 목록 표시 + Enter = 이전 실행" || { ng "이전 실행 기억"; grep -n 'vCenter\|이전' $T/v7b.out; }
 # -n 은 vCenter 를 묻지 않는다
-printf 'y\n\n' | $V/vm_setup.sh -u tt -s $SD -n > $T/v7c.out 2>&1
+printf '%sy\n\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -s $SD -n > $T/v7c.out 2>&1
 ! grep -q '=== vCenter 선택' $T/v7c.out && grep -q '\-n 지정' $T/v7c.out && ok "-n 은 vCenter 선택을 묻지 않음" || { ng "-n vCenter"; tail -10 $T/v7c.out; }
 # V2 폴더에 vcenter.txt 가 없으면 vm-param-check 폴더의 것을 쓴다(원래 파일이 있으면 건드리지 않음)
 CV=$V/../vm-param-check-usability-improvement/vm-param-check/vcenter.txt
 if [ ! -e $CV ]; then
   rm -f $V/../vcenter.txt; printf '%s\n' "$A" > $CV
-  printf 'y\n\n1\nn\n' | $V/vm_setup.sh -u tt -s $SD > $T/v7d.out 2>&1
+  printf '%sy\n\n1\nn\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -s $SD > $T/v7d.out 2>&1
   grep -q "vm-param-check/vcenter.txt" $T/v7d.out && grep -q "vCenter        : $A" $T/v7d.out && ok "V2 폴더에 없으면 vm-param-check 폴더의 vcenter.txt 사용" || { ng "vcenter.txt 대체 경로"; grep -n 'vCenter' $T/v7d.out; }
   rm -f $CV
 fi
@@ -171,7 +172,7 @@ printf 'DC0_H0\n' > $V/tt.txt
 printf 'DC0_H0 PG-P 100\n' > $SD/vswitch_tt.txt
 export VM_SETUP_EDITOR=$T/fake_editor.sh
 # 스펙 0(vim) → ev01: 2 → 1번(AAA/affinity_ev01.txt, 복사) → ev02: 2 → 2번(새 폴더의 affinity_ev01.txt, 참조) → VM 표 y
-printf '0\n2\n1\n2\n2\ny\n' | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v8.out 2>&1
+printf '%s0\n2\n1\n2\n2\ny\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v8.out 2>&1
 unset VM_SETUP_EDITOR
 NS=$SD/TST-CAE002-NEW-QRST
 cmp -s $NS/affinity_ev01.txt $SD/TST-CAE001-AAA-QRST/affinity_ev01.txt && grep -q '^affinity-ev01=affinity_ev01.txt' $NS/*_spec.txt && grep -q '^affinity-ev02=affinity_ev01.txt' $NS/*_spec.txt && [ ! -e $NS/affinity_ev02.txt ] && ok "다른 폴더 파일 → 새 폴더로 복사, 같은 폴더 파일 → 복사 없이 공통 사용" || { ng "기존 파일 선택"; ls $NS; cat $NS/*_spec.txt; tail -20 $T/v8.out; }
@@ -180,7 +181,7 @@ grep -q '\-affinityFile01=.*affinity_ev01.txt -affinityFile02=.*affinity_ev01.tx
 echo "== V9 affinity 가 없는 스펙: 지금 추가할지 묻고, n 이면 자동 할당하지 않고 이유를 알린다"
 SD=$T/SPEC9; mkspec $SD TST-CAE001-AAA-QRST noaff
 printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\n' > $SD/vswitch_tt.txt
-printf 'n\n' | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v9.out 2>&1
+printf '%sn\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v9.out 2>&1
 grep -q '지금 ev 별 affinity 를 골라 이 스펙에 추가할까요' $T/v9.out && grep -q '자동 매칭된 스펙 TST-CAE001-AAA-QRST 을(를) 쓸 수 없습니다 — affinity-ev01 이 스펙에 없습니다' $T/v9.out && ok "affinity-ev01 없음 → 경고 후 미할당" || { ng "affinity 없는 스펙"; head -20 $T/v9.out; }
 
 echo "== V10 vm_create 가 호스트를 못 찾으면 vm_setup 이 멈춘다([완료] 없음, affinity 실행 안 함)"
@@ -213,18 +214,18 @@ printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\nDC0_H1 TST-CAE001-AAA-QRST-
 printf '0\n' | $V/vm_setup.sh -v 127.0.0.1:1 -s $SD -n > $T/v12.out 2>&1   # 0 → 목록 → 다시 메뉴 → 입력 끝
 grep -q '=== user 선택' $T/v12.out && grep -q '  0) list' $T/v12.out && grep -Eq '^  [0-9]+\) tt$' $T/v12.out && grep -q 'tt  (BM 2대, 포트그룹 파일 vswitch_tt.txt)' $T/v12.out && grep -q 'DC0_H0 DC0_H1' $T/v12.out && ok "user 메뉴 + 0) list 로 BM 목록 보기" || { ng "user 메뉴"; head -20 $T/v12.out; }
 n=$(grep -E '^  [0-9]+\) tt$' $T/v12.out | head -1 | sed 's/^ *\([0-9]*\)).*/\1/')
-printf '%s\ny\n\n' "$n" | $V/vm_setup.sh -v 127.0.0.1:1 -s $SD -n > $T/v12b.out 2>&1
+printf '%s\n%sy\n\n' "$n" "$INSTALL_ANS" | $V/vm_setup.sh -v 127.0.0.1:1 -s $SD -n > $T/v12b.out 2>&1
 grep -q '\[INFO\] user tt — BM 2대' $T/v12b.out && grep -q '\-n 지정' $T/v12b.out && ok "번호로 user 선택 → 계획까지" || { ng "user 번호 선택"; tail -10 $T/v12b.out; }
 
 echo "== V13 CAE 번호: 번호를 빼고 스펙 매칭 + 실행 중 번호 변경(포트그룹 이름) + 주석처리하면 꺼짐 (-n)"
 SD=$T/SPEC13; mkspec $SD TST-CAE001-AAA-QRST
 printf 'DC0_H0\n' > $V/tt.txt
 printf 'DC0_H0 TST-CAE050-AAA-QRST-cae-10-1-1-1 100\n' > $SD/vswitch_tt.txt
-printf 'y\ny\n777\n' | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v13.out 2>&1
+printf '%sy\ny\n777\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v13.out 2>&1
 grep -q 'DC0_H0ev01 *DC0_H0 *TST-CAE001-AAA-QRST ' $T/v13.out && ok "포트그룹 TST-CAE050 → 스펙 TST-CAE001 (번호 무시 매칭)" || { ng "번호 무시 매칭"; head -20 $T/v13.out; }
 grep -q '^DC0_H0 TST-CAE777-AAA-QRST-cae-10-1-1-1 100$' $V/run_tt/vswitch.txt && grep -q '^DC0_H0ev02 TST-CAE777-AAA-QRST-cae-10-1-1-1$' $V/run_tt/hostgroup.txt && ok "CAE 번호 777 로 변경 → BM 포트그룹·VM 어댑터 이름에 반영" || { ng "번호 변경"; cat $V/run_tt/vswitch.txt $V/run_tt/hostgroup.txt; }
 grep -q '^# 숫자변경기능' $V/vm_setup.sh && sed 's/^ask_cae_number$/# ask_cae_number/' $V/vm_setup.sh > $V/vm_setup_nocae.sh && chmod +x $V/vm_setup_nocae.sh
-printf 'y\n' | $V/vm_setup_nocae.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v13b.out 2>&1
+printf '%sy\n' "$INSTALL_ANS" | $V/vm_setup_nocae.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v13b.out 2>&1
 ! grep -q 'CAE 번호를 바꾸시겠습니까' $T/v13b.out && grep -q '\-n 지정' $T/v13b.out && ok "'숫자변경기능' 아래 호출을 주석처리하면 질문 없이 진행" || { ng "기능 끄기"; tail -8 $T/v13b.out; }
 rm -f $V/vm_setup_nocae.sh
 
@@ -234,7 +235,7 @@ SD=$T/SPEC14; mkspec $SD TST-CAE001-AAA-QRST
 cp $SD/TST-CAE001-AAA-QRST/affinity_ev01.txt $SD/TST-CAE001-AAA-QRST/affinity_copy.txt
 sed -i 's/^affinity-ev02=.*/affinity-ev02=affinity_copy.txt/' $SD/TST-CAE001-AAA-QRST/TST-CAE001-AAA-QRST_spec.txt
 printf 'DC0_H0\n' > $V/tt.txt; printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\n' > $SD/vswitch_tt.txt
-printf 'y\n\n' | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v14.out 2>&1
+printf '%sy\n\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n > $T/v14.out 2>&1
 grep -q '^     \[ev01~ev02\] affinity_ev01.txt, affinity_copy.txt$' $T/v14.out && ok "이름이 달라도 내용이 같으면 한 항목으로" || { ng "내용 기준 묶기"; grep -n -A4 'affinity 설정값' $T/v14.out; }
 grep -q '=== 스펙 체크 — vm-param-check' $T/v1.out && grep -Eq '\[(일치|차이)\] 스펙 1 TST-CAE001-SAMP48c-QRST — VM 4대' $T/v1.out && ok "생성 뒤 만든 VM 4대를 실행한 스펙으로 체크" || { ng "스펙 체크"; sed -n '/스펙 체크/,$p' $T/v1.out | head; }
 
@@ -242,7 +243,7 @@ echo "== V15 기존 vm-param-check 폴더에 SPEC_DIR 을 복원해 두면 그�
 CS=$V/../vm-param-check-usability-improvement/vm-param-check/SPEC_DIR
 if [ ! -e $CS ]; then
   mkspec $CS TST-CAE001-AAA-QRST; printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\n' > $CS/vswitch_tt.txt
-  printf 'y\n\n' | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -n > $T/v15.out 2>&1
+  printf '%sy\n\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -n > $T/v15.out 2>&1
   grep -q 'SPEC_DIR=.*vm-param-check/SPEC_DIR' $T/v15.out && grep -q '스펙 1 *: TST-CAE001-AAA-QRST' $T/v15.out && ok "-s 없으면 vm-param-check/SPEC_DIR 을 먼저 사용" || { ng "SPEC_DIR 연동"; head -5 $T/v15.out; }
   rm -rf $CS
 fi
@@ -250,7 +251,7 @@ fi
 echo "== V16 affinity 없는 스펙에 지금 추가 (y → ev01 vim, ev02 같은 파일) (-n)"
 SD=$T/SPEC16; mkspec $SD TST-CAE001-AAA-QRST noaff
 printf 'DC0_H0\n' > $V/tt.txt; printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\n' > $SD/vswitch_tt.txt
-: > $T/fake_count; VM_SETUP_EDITOR=$T/fake_editor.sh bash -c "printf 'y\n3\n\ny\n\n' | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n" > $T/v16.out 2>&1
+: > $T/fake_count; VM_SETUP_EDITOR=$T/fake_editor.sh INSTALL_ANS="$INSTALL_ANS" bash -c "printf '%sy\n3\n\ny\n\n' \"\$INSTALL_ANS\" | $V/vm_setup.sh -u tt -v 127.0.0.1:1 -s $SD -n" > $T/v16.out 2>&1
 F16=$SD/TST-CAE001-AAA-QRST/TST-CAE001-AAA-QRST_spec.txt
 grep -q '^affinity-ev01=affinity_ev01.txt$' $F16 && grep -q '^affinity-ev02=affinity_ev01.txt$' $F16 && grep -q 'affinity 를 추가했습니다' $T/v16.out && grep -q '\-n 지정' $T/v16.out && ok "스펙 파일에 affinity-ev01/02 추가 후 그대로 진행" || { ng "affinity 추가"; cat $F16; tail -10 $T/v16.out; }
 
@@ -260,10 +261,10 @@ SD=$T/SPEC17; mkspec $SD TST-CAE001-AAA-QRST
 printf 'DC0_H0\n' > $V/tt.txt; printf 'DC0_H0 TST-CAE001-AAA-QRST-cae-10-1-1-1 100\n' > $SD/vswitch_tt.txt
 export VMSETUP_SECRET_DIR=$T/secret
 bash -c ". $V/../secret_lib.sh && secret_put vcenter tester@vsphere.local 'S3cret!'"
-( unset VC_PASSWORD; printf 'y\n\ny\n' | $V/vm_setup.sh -u tt -v $A -s $SD -id tester@vsphere.local ) > $T/v17.out 2>&1; rc=$?
+( unset VC_PASSWORD; printf '%sy\n\ny\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -v $A -s $SD -id tester@vsphere.local ) > $T/v17.out 2>&1; rc=$?
 [ $rc -eq 0 ] && grep -q 'tester@vsphere.local 비밀번호: 암호 파일에서 읽었습니다' $T/v17.out && [ "$(VC_PASSWORD='S3cret!' $H/bin/vmdump -vc $A -id tester@vsphere.local -match ev0 | wc -l)" = 2 ] && ok "-id 계정 + 암호 파일로 로그인해 VM 2대 생성" || { ng "암호 파일 로그인 rc=$rc"; tail -15 $T/v17.out; }
 bash -c ". $V/../secret_lib.sh && secret_put vcenter tester@vsphere.local 'wrong'"
-( unset VC_PASSWORD; printf 'y\n\ny\n' | $V/vm_setup.sh -u tt -v $A -s $SD -id tester@vsphere.local ) > $T/v17b.out 2>&1; rc=$?
+( unset VC_PASSWORD; printf '%sy\n\ny\n' "$INSTALL_ANS" | $V/vm_setup.sh -u tt -v $A -s $SD -id tester@vsphere.local ) > $T/v17b.out 2>&1; rc=$?
 [ $rc -ne 0 ] && grep -q 'Login failure' $T/v17b.out && grep -q '실패: vswitch_setting (종료코드 1)' $T/v17b.out && ok "틀린 비밀번호 → 로그인 실패, 종료코드 1 로 중단" || { ng "틀린 비밀번호 rc=$rc"; tail -8 $T/v17b.out; }
 unset VMSETUP_SECRET_DIR
 $H/stop.sh
