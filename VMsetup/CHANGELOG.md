@@ -11,7 +11,7 @@
 - **실행 계획 표시**: `설치 정보` 줄, 스펙별 `MAC 디스크(sda5, 자동매칭)` 표(`print_ev_kv` 재사용), `power_setting` 줄 추가.
 - `setup.sh`/`build_os6.sh` 대상에는 `power_setting` 이 이미 있었고, 이번에 `bin_os6/power_setting.gz` 를 실제로 만들어 추가(다른 도구와 동일하게 OS6 서버에서 동작).
 - **영향 범위**: `VMsetup/vm_setup.sh`, `bin_os6/power_setting.gz`(신규), `VM-10대-확장-및-SPEC_DIR-공유/검증/vmsetup_test.sh`(`MAC_ARGSTR`/`MAC_ARG1` 환경변수로 새 질문 우회), `VM-10대-확장-및-SPEC_DIR-공유/검증/saccae/사용법.txt`, `VMsetup/README.md`, `VMsetup/workflow.mmd`.
-- **검증**: (작업 중 — 아래 채움)
+- **검증** (.58, vcsim): `bash setup.sh` 8개 대상 빌드 성공. `vm_setup.sh -u lsh` 전 과정(OS 버전 `abc` 오류 재입력 → `8.10` 정상 입력, 인프라 입력, vswitch → vm_create → mac_info → power_setting → affinity → lpage → 스펙 체크)이 종료코드 0. `awx_route/lsh.txt` 240줄, 3번째 칸=인프라, 11번째 칸=OS 버전, 10번째 칸=480(ev01 disk 500, ev02~06 disk 200). 경계값(`TST-CAE002-GROUPCHECK-DEMO`에 disk 400/540/800/10000 임시 적용): 480/600/960/7600 확인(540→600 동률 규칙 포함) 후 원복. 재실행 시 포트그룹/VM/전원 정책 모두 스킵(정상), 종료코드 0. `MAC_ARGSTR`/`MAC_ARG1` 환경변수가 있으면 질문을 건너뛰는 것 확인. OS6: 빌드 서버(.60, `/opt/go1.20`)에서 `build_os6.sh` 12개 전부 성공 → `bin_os6/power_setting.gz`(신규) → .58의 CentOS 6 podman 컨테이너에서 `setup.sh --os6` 12개 전부 설치 성공, `power_setting -h` 정상 실행 확인.
 
 ## 2026-09-25 — `power_setting`(BM 전원 고성능) 추가, `vm_setup.sh`에 MAC 수집 + `awx_route`
 
