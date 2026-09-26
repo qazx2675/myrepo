@@ -30,9 +30,10 @@ CHECK_BIN="$CHECK_DIR/vm-param-check"
 # mac_info(MAC 수집) — 생성한 VM 의 MAC 으로 만든 Provisioning List 를 이 경로에 <user>.txt 로 복사한다.
 # 비워 두면 복사하지 않고 실행 폴더(run_<user>/)에만 남긴다.
 awx_route="${awx_route:-}"
-# mac_info 출력 줄에 들어가는 값 (VM VM <arg1> <VM> <IP> <MAC> eth0 sda sda5 <argInt> <argStr> uefi).
-# arg1/argStr 이 비어 있으면 mac_info 단계는 경고만 하고 건너뛴다.
-MAC_ARG1="${MAC_ARG1:-}"; MAC_ARGINT="${MAC_ARGINT:-0}"; MAC_ARGSTR="${MAC_ARGSTR:-}"
+# mac_info 출력 줄에 들어가는 값 (VM VM <arg1=인프라> <VM> <IP> <MAC> eth0 sda sda5 <디스크(자동)> <argStr=OS버전> uefi).
+# 환경변수로 없으면 시작할 때 물어본다("설치 정보" 단계). sda5 다음 정수(디스크)는 고정값이 아니라
+# ev 스펙의 disk 값에서 자동으로 계산한다(고정 용량 480/600/960/1200/1900/7600 중 가장 가까운 값).
+MAC_ARG1="${MAC_ARG1:-}"; MAC_ARGSTR="${MAC_ARGSTR:-}"
 
 usage() {
   cat <<EOF
@@ -53,6 +54,7 @@ usage() {
 
 환경변수 VM_SETUP_EDITOR 로 vim 대신 다른 편집기를 쓸 수 있다.
 색상: 터미널이면 자동으로 켜진다. NO_COLOR=1 또는 VMSETUP_COLOR=never 로 끄고, VMSETUP_COLOR=always 로 강제.
+환경변수 MAC_ARGSTR(OS 버전)/MAC_ARG1(인프라) 이 있으면 시작할 때 묻지 않고 그 값을 쓴다(비대화식 실행용).
 EOF
 }
 
@@ -143,6 +145,26 @@ VSW_FILE="$HERE/vswitch_${USER_TAG}.txt"
 [ -f "$BM_FILE" ]  || die "BM 목록 파일이 없습니다: $BM_FILE (한 줄에 BM 하나)"
 [ -f "$VSW_FILE" ] || die "포트그룹 파일이 없습니다: $VSW_FILE (BM 포트그룹 VLAN)"
 
+# ---------- 설치 정보 (OS 버전 / 인프라) — 시작 전에 받아 MAC 목록(mac_info)에 넣는다 ----------
+# 환경변수로 이미 있으면(비대화식 실행) 묻지 않는다.
+if [ -z "$MAC_ARGSTR" ]; then
+  hdr "설치 정보"
+  while :; do
+    prompt MAC_ARGSTR "OS 버전 (예: 8.10): "
+    [[ "$MAC_ARGSTR" =~ ^[0-9]+(\.[0-9]+)*$ ]] && break
+    warn "OS 버전 형식이 올바르지 않습니다 (숫자와 점만, 예: 8.10)."
+    MAC_ARGSTR=""
+  done
+fi
+if [ -z "$MAC_ARG1" ]; then
+  while :; do
+    prompt MAC_ARG1 "인프라 입력 : "
+    [[ -n "$MAC_ARG1" && "$MAC_ARG1" != *[[:space:]]* ]] && break
+    warn "인프라 값은 비어 있지 않아야 하고 공백을 포함할 수 없습니다."
+    MAC_ARG1=""
+  done
+fi
+
 # ---------- 필요한 실행파일 (없으면 vendor 로 오프라인 빌드) ----------
 # V2 의 setup.sh 로 만든다 — OS6 이면 빌드 대신 bin_os6/ 의 실행파일을 제자리에 복사한다.
 ensure_bin() {
@@ -152,7 +174,7 @@ ensure_bin() {
   bash "$HERE/../setup.sh" "$name" >/dev/null || die "준비 실패: $name — bash $HERE/../setup.sh $name 로 확인하세요"
 }
 ensure_bin "$CHECK_BIN" vm-param-check
-for t in vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info; do
+for t in vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info power_setting; do
   ensure_bin "$HERE/${t}-source/$t" "$t"
 done
 
@@ -781,8 +803,53 @@ print_ev_kv() {
   done
 }
 
+# nearest_disk_cap <스펙 Disk 값> — 고정 용량(480/600/960/1200/1900/7600) 중 가장 가까운 값.
+# 거리가 같으면 큰 값(예: 540 은 480 과 600 이 둘 다 60 차이 → 600).
+nearest_disk_cap() {
+  local disk="$1"; local -a caps=(480 600 960 1200 1900 7600); local best="" bestdiff="" c diff
+  for c in "${caps[@]}"; do
+    diff=$((disk > c ? disk - c : c - disk))
+    if [ -z "$best" ] || [ "$diff" -lt "$bestdiff" ] || { [ "$diff" -eq "$bestdiff" ] && [ "$c" -gt "$best" ]; }; then
+      best="$c"; bestdiff="$diff"
+    fi
+  done
+  printf '%s' "$best"
+}
+
+# build_mac_disk_args <CREATE_ARGS...> — -evNNDisk=<스펙값> 들을 nearest_disk_cap 으로 바꿔
+# MAC_DISK_ARGS(print_ev_kv 로 보여줄 용도)와 MAC_DISK_OF[nn]=cap(mac_apply_disk 가 쓸 맵)을 채운다.
+MAC_DISK_ARGS=(); declare -A MAC_DISK_OF=()
+build_mac_disk_args() {
+  MAC_DISK_ARGS=(); MAC_DISK_OF=()
+  local a nn disk cap
+  for a in "$@"; do
+    [[ "$a" =~ ^-ev([0-9]+)Disk=([0-9]+)$ ]] || continue
+    nn="${BASH_REMATCH[1]}"; disk="${BASH_REMATCH[2]}"
+    cap="$(nearest_disk_cap "$disk")"
+    MAC_DISK_OF[$nn]="$cap"
+    MAC_DISK_ARGS+=("-ev${nn}Disk=$cap")
+  done
+}
+
+# mac_apply_disk — 방금 만든 mac_info 출력(Provisioning_List_<vCenter>.txt, 실행 폴더 기준 상대경로)을
+# 읽어 VM 이름 끝의 evNN 으로 MAC_DISK_OF[nn] 값을 찾아 10번째 칸(디스크)을 바꾼 뒤 MAC_ALL 에 이어붙인다.
+mac_apply_disk() {
+  local raw="Provisioning_List_${VC_IP//./_}.txt" line vmname nn cap
+  [ -f "$raw" ] || { warn "MAC 목록 파일을 찾지 못했습니다: $RUN_DIR/$raw"; return; }
+  while IFS= read -r line || [ -n "$line" ]; do
+    vmname="$(awk '{print $4}' <<< "$line")"
+    if [[ "$vmname" =~ ev([0-9]+)$ ]]; then
+      nn="${BASH_REMATCH[1]}"; cap="${MAC_DISK_OF[$nn]:-}"
+      [ -n "$cap" ] && line="$(awk -v cap="$cap" '{$10=cap}1' <<< "$line")"
+    fi
+    printf '%s\n' "$line" >> "$MAC_ALL"
+  done < "$raw"
+  rm -f "$raw"
+}
+
 hdr "실행 계획 (실행 폴더: $RUN_DIR)" 2>&1
 say "vCenter        : ${VC_IP:-(미지정)} / 계정 $VC_ID"
+say "설치 정보       : OS 버전 $MAC_ARGSTR / 인프라 $MAC_ARG1"
 say "포트그룹 생성   : $(wc -l < "$RUN_DIR/vswitch.txt")건 (vswitch_setting${TARGET_VSWITCH:+, 스위치 $TARGET_VSWITCH})"
 k=0
 for d in "${SPEC_ORDER[@]}"; do
@@ -793,6 +860,9 @@ for d in "${SPEC_ORDER[@]}"; do
   spec_lookup "$(basename "$d")" && build_flags "$LOOKUP_DIR" || die "${LOOKUP_ERR:-$FLAG_ERR}"
   say "${C_BLD}스펙 $k        : $(basename "$d") — BM $(grep -c . "$RUN_DIR/worklist_$k.txt")대 × VM ${CREATE_ARGS[0]#-vmCount=}대${C_RST}"
   print_ev_kv "vm_create" "${CREATE_ARGS[@]}"
+  build_mac_disk_args "${CREATE_ARGS[@]}"
+  print_ev_kv "MAC 디스크(sda5, 자동매칭)" "${MAC_DISK_ARGS[@]}"
+  say "   power_setting    BM $(grep -c . "$RUN_DIR/worklist_$k.txt")대 → 고성능 전원 정책(이미 고성능이면 스킵)"
   say "   affinity_setting ${AFF_ARGS[*]}"
   [ "${#LP_ARGS[@]}" -gt 0 ] && print_ev_kv "lpage_setting" "${LP_ARGS[@]}" || say "   lpage_setting: 스펙에 cores 가 없어 건너뜀"
   # vm-param-check 는 ev01 의 cores/numa 가 필수라, 없으면 생성 뒤 스펙 체크(6단계)를 할 수 없다
@@ -801,11 +871,7 @@ for d in "${SPEC_ORDER[@]}"; do
   print_affinity
 done
 say "어댑터 매핑     : $RUN_DIR/hostgroup.txt ($(wc -l < "$RUN_DIR/hostgroup.txt")건)"
-if [ -n "$MAC_ARG1" ] && [ -n "$MAC_ARGSTR" ]; then
-  say "MAC 수집       : mac_info -arg1=$MAC_ARG1 -argInt=$MAC_ARGINT -argStr=$MAC_ARGSTR → ${awx_route:-(awx_route 비어 있음 — 복사 안 함)}${awx_route:+/${USER_TAG}.txt}"
-else
-  say "MAC 수집       : 건너뜀 (vm_setup.sh 의 MAC_ARG1/MAC_ARGSTR 이 비어 있음)"
-fi
+say "MAC 수집       : mac_info -arg1=$MAC_ARG1 -argStr=$MAC_ARGSTR (디스크는 위 표대로 자동매칭) → ${awx_route:-(awx_route 비어 있음 — 복사 안 함)}${awx_route:+/${USER_TAG}.txt}"
 
 if [ "$DRY_RUN" -eq 1 ]; then say; info "-n 지정 — vCenter 를 변경하지 않고 여기서 종료합니다."; exit 0; fi
 
@@ -836,6 +902,7 @@ run() {
 cd "$RUN_DIR" || die "실행 폴더로 이동하지 못했습니다: $RUN_DIR"
 CONC_ARG=(); [ -n "$CONC" ] && CONC_ARG=("-concurrency=$CONC")
 VSW_ARG=(); [ -n "$TARGET_VSWITCH" ] && VSW_ARG=("-targetVSwitch=$TARGET_VSWITCH")
+MAC_ALL="mac_all.txt"; : > "$MAC_ALL"
 
 if [ -s vswitch.txt ]; then
   run "$HERE/vswitch_setting-source/vswitch_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=vswitch.txt "${VSW_ARG[@]}" "${CONC_ARG[@]}"
@@ -846,6 +913,10 @@ for d in "${SPEC_ORDER[@]}"; do
   spec_lookup "$(basename "$d")" && build_flags "$LOOKUP_DIR" || die "$FLAG_ERR"
   hdr "스펙 $k/${#SPEC_ORDER[@]}: $(basename "$d")" 2>&1
   run "$HERE/vm_create-source/vm_create" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$k.txt" -mapFile=hostgroup.txt "${CREATE_ARGS[@]}"
+  build_mac_disk_args "${CREATE_ARGS[@]}"
+  run "$HERE/mac_info-source/mac_info" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$k.txt" -arg1="$MAC_ARG1" -argInt=0 -argStr="$MAC_ARGSTR"
+  mac_apply_disk
+  run "$HERE/power_setting-source/power_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$k.txt" "${CONC_ARG[@]}"
   run "$HERE/affinity_setting-source/affinity_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$k.txt" "${AFF_ARGS[@]}" "${CONC_ARG[@]}"
   if [ "${#LP_ARGS[@]}" -gt 0 ]; then
     run "$HERE/lpage_setting-source/lpage_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$k.txt" "${LP_ARGS[@]}" "${CONC_ARG[@]}"
@@ -888,22 +959,17 @@ for d in "${SPEC_ORDER[@]}"; do
   fi
 done
 
-# ---------- 7) MAC 수집 (mac_info) → awx_route 로 <user>.txt 복사 ----------
-if [ -n "$MAC_ARG1" ] && [ -n "$MAC_ARGSTR" ]; then
-  hdr "MAC 수집 — mac_info" 2>&1
-  printf '%s\n' "${BMS[@]}" > macinfo_bm.txt
-  run "$HERE/mac_info-source/mac_info" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=macinfo_bm.txt \
-    -arg1="$MAC_ARG1" -argInt="$MAC_ARGINT" -argStr="$MAC_ARGSTR"
-  MAC_OUT="$RUN_DIR/Provisioning_List_${VC_IP//./_}.txt"
+# ---------- 7) MAC 목록 합본 → awx_route 로 <user>.txt 복사 ----------
+# mac_info 는 스펙마다(4단계에서) 실행했고, mac_apply_disk 가 디스크를 바꿔 MAC_ALL 에 이어붙였다.
+if [ -s "$MAC_ALL" ]; then
+  hdr "MAC 수집 결과" 2>&1
   if [ -z "$awx_route" ]; then
-    info "awx_route 가 비어 있어 복사하지 않습니다: $MAC_OUT"
-  elif mkdir -p "$awx_route" && cp "$MAC_OUT" "$awx_route/${USER_TAG}.txt"; then
-    info "MAC 목록 복사: $MAC_OUT → $awx_route/${USER_TAG}.txt"
+    info "awx_route 가 비어 있어 복사하지 않습니다: $RUN_DIR/$MAC_ALL"
+  elif mkdir -p "$awx_route" && cp "$MAC_ALL" "$awx_route/${USER_TAG}.txt"; then
+    info "MAC 목록 복사: $RUN_DIR/$MAC_ALL → $awx_route/${USER_TAG}.txt"
   else
-    die "MAC 목록 복사 실패: $MAC_OUT → $awx_route/${USER_TAG}.txt"
+    die "MAC 목록 복사 실패: $RUN_DIR/$MAC_ALL → $awx_route/${USER_TAG}.txt"
   fi
-else
-  warn "MAC_ARG1/MAC_ARGSTR 이 비어 있어 mac_info(MAC 수집)는 건너뜁니다."
 fi
 
 printf '\n%s[완료]%s VM 생성·설정을 마쳤습니다.\n' "$C_GRN$C_BLD" "$C_RST"

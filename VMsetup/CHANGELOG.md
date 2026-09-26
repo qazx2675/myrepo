@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-09-26 — `power_setting`/`mac_info` 실행 순서에 편입, OS 버전·인프라 입력, MAC 디스크 자동매칭
+
+- **`vm_setup.sh`**: 시작할 때 "설치 정보"로 OS 버전(`MAC_ARGSTR`)/인프라(`MAC_ARG1`)를 묻는다(환경변수로 이미 있으면 생략). 전에는 파이프라인 맨 끝에서 BM 전체를 대상으로 한 번만 돌던 `mac_info`를 **스펙마다 `vm_create` 직후**로 옮기고, 그 뒤에 **`power_setting`(신규 편입)** → `affinity_setting` → `lpage_setting` 순으로 실행한다(`workflow.mmd`가 가리키던 순서에 코드를 맞춤). `power_setting` 실패는 다른 도구처럼 그 자리에서 중단, 이미 고성능인 호스트는 스킵(정상).
+- **MAC 목록 디스크(`sda5` 다음 정수) 자동매칭**: 고정값을 그대로 쓰던 것을, 그 ev 의 스펙 `disk-evNN` 값을 고정 용량 `480/600/960/1200/1900/7600` 중 **가장 가까운 값**(거리가 같으면 큰 값)으로 자동 변환하도록 바꿨다. `mac_info`(Go) 는 그대로 두고 `vm_setup.sh` 가 출력 줄의 10번째 칸을 바꿔치기한다(OS6용 `mac_info.gz` 재빌드 불필요). 스펙마다 결과를 `run_<user>/mac_all.txt` 에 이어붙이고, 전 스펙이 끝난 뒤 `awx_route` 로 한 번에 복사한다.
+- **실행 계획 표시**: `설치 정보` 줄, 스펙별 `MAC 디스크(sda5, 자동매칭)` 표(`print_ev_kv` 재사용), `power_setting` 줄 추가.
+- `setup.sh`/`build_os6.sh` 대상에는 `power_setting` 이 이미 있었고, 이번에 `bin_os6/power_setting.gz` 를 실제로 만들어 추가(다른 도구와 동일하게 OS6 서버에서 동작).
+- **영향 범위**: `VMsetup/vm_setup.sh`, `bin_os6/power_setting.gz`(신규), `VM-10대-확장-및-SPEC_DIR-공유/검증/vmsetup_test.sh`(`MAC_ARGSTR`/`MAC_ARG1` 환경변수로 새 질문 우회), `VM-10대-확장-및-SPEC_DIR-공유/검증/saccae/사용법.txt`, `VMsetup/README.md`, `VMsetup/workflow.mmd`.
+- **검증**: (작업 중 — 아래 채움)
+
 ## 2026-09-25 — `power_setting`(BM 전원 고성능) 추가, `vm_setup.sh`에 MAC 수집 + `awx_route`
 
 - **`power_setting-source` (신규)**: BM(ESXi 호스트) 전원 관리 정책을 고성능(`static` / `High Performance`)으로 설정. 입력은 vCenter 주소와 BM 목록 파일(`<user>.txt` 그대로)뿐. 호스트 병렬(`-concurrency`, 기본 20), 기본 계정 `lscsystems@vsphere.local`, 이미 고성능이면 스킵. 목록에 도메인 없이 hostname 만 적어도 `vswitch_setting`과 같은 규칙(정확한 이름 → 짧은 이름, 둘 이상이면 에러)으로 찾는다. vm-param-check 의 `host power policy`(기대값 `High Performance`)와 같은 정책을 맞춘다.
