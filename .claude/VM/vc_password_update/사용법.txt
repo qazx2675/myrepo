@@ -1,0 +1,62 @@
+# 사용법.txt — vc_password_update 수동 테스트용 명령어 모음
+# 각 명령 위 주석을 읽고 그대로 복사해서 실행하면 됩니다.
+# 랩 환경 기준(Rocky Linux 192.168.0.58 에서 빌드/실행, 대상 vCenter 192.168.0.50)으로
+# 작성했으며, 실제로 이 순서대로 실행해 검증했습니다.
+
+# 0) 이 폴더로 이동 (저장소를 통째로 내려받았다는 전제)
+cd .claude/VM/vc_password_update
+
+# 1) 폐쇄망 오프라인 빌드 (vendor/ 심볼릭 링크 생성 + go build -mod=vendor)
+bash setup.sh
+
+# 2) vCenter 목록 준비 (실제 값으로 채우기)
+cp vcenter.txt.example vcenter.txt
+# vim vcenter.txt   # 필요하면 직접 편집
+
+# 3) 대상 계정(lscsystems@vsphere.local) 비밀번호가 저장된 secret 폴더 준비
+#    이미 .claude/VM/V2/passwd_update.sh 로 저장해 둔 폴더가 있다면 3-A, 없다면 3-B.
+
+# 3-A) 기존 secret 폴더를 그대로 사용 (경로만 맞게 바꾸세요)
+#      예: /home/V2/secret 에 key, vcenter_lscsystems@vsphere.local.enc 가 있는 경우
+export VC_DIR=/home/V2/secret
+
+# 3-B) 테스트용으로 새로 만들 경우 (실제 운영에는 쓰지 마세요 — 테스트 전용)
+mkdir -p testsecret
+umask 077
+openssl rand -base64 48 | tr -d '\n' > testsecret/key
+echo >> testsecret/key
+printf '%s' '테스트할비밀번호' | openssl enc -aes-256-cbc -md sha256 -salt -a \
+  -pass file:testsecret/key -out 'testsecret/vcenter_lscsystems@vsphere.local.enc'
+export VC_DIR=testsecret
+
+# 4) admin 비밀번호를 입력받아 1회 수동 실행 (run.sh 가 물어봄)
+./run.sh -dir "$VC_DIR" -vc vcenter.txt
+
+# 4-1) 비대화형으로 실행하고 싶으면 환경변수로 미리 넘기기
+ADMIN_PASSWORD='admin 비밀번호' ./run.sh -dir "$VC_DIR" -vc vcenter.txt
+
+# 5) Go 바이너리를 직접 실행 (run.sh 없이, -timeout 을 짧게 줘서 접속 확인만 빠르게)
+ADMIN_PASSWORD='admin 비밀번호' ./vc_password_update -dir "$VC_DIR" -vc vcenter.txt -timeout 10
+
+# 6) 응답 없는 vCenter가 섞여도 나머지는 계속 처리되는지 확인
+printf '10.255.255.1\n192.168.0.50\n' > vcenter_multi.txt
+ADMIN_PASSWORD='admin 비밀번호' ./vc_password_update -dir "$VC_DIR" -vc vcenter_multi.txt -timeout 8
+
+# 7) crontab 등록 전, cron_wrapper.sh 를 수동으로 먼저 검증
+echo 'admin 비밀번호' > admin_password.secret
+chmod 600 admin_password.secret
+VC_SECRET_DIR="$VC_DIR" VC_LIST_FILE=./vcenter.txt ./cron_wrapper.sh
+# 바로 다시 실행하면 "85일 안 지났다"며 스킵되는 것을 확인 (정상 동작)
+VC_SECRET_DIR="$VC_DIR" VC_LIST_FILE=./vcenter.txt ./cron_wrapper.sh
+
+# 8) 실제 crontab 등록 (경로를 실제 배치 위치로 바꾸세요)
+crontab -e
+# 아래 한 줄 추가:
+# 0 3 * * * VC_SECRET_DIR=/home/V2/secret /home/vc_password_update/cron_wrapper.sh >> /home/vc_password_update/cron.log 2>&1
+
+# 9) 갱신이 실제로 반영됐는지 랜덤 확인 (README 주의사항 — 자동 성공만 믿지 말 것)
+#    아래는 SSO 관리 콘솔 대신, 방금 설정한 값으로 다시 로그인되는지 vCenter API 로 간단히 확인하는 예시입니다.
+#    (govc 등 별도 CLI가 있다면 그걸로 확인해도 됩니다)
+curl -sk -u 'lscsystems@vsphere.local:테스트할비밀번호' \
+  -X POST 'https://192.168.0.50/rest/com/vmware/cis/session' -o /dev/null -w '%{http_code}\n'
+# 200 이면 그 비밀번호로 로그인 성공 = 갱신 반영 확인

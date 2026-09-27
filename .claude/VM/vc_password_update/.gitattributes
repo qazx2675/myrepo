@@ -1,0 +1,15 @@
+# 이 도구는 Linux(폐쇄망 서버)에서 실행됩니다.
+# Windows 에서 clone/archive 하더라도 스크립트와 소스는 반드시 LF 로 나와야 합니다.
+# CRLF 로 체크아웃되면 bash 가 "set: pipefail: invalid option name" 같은 오류를 냅니다.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.go   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.txt  text eol=lf
+*.example text eol=lf
+
+# vendor/ 는 서드파티 원본이므로 Git 의 자동 변환 대상에서 제외합니다.
+vendor/** -text

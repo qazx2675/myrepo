@@ -1,0 +1,24 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/VM/vc_password_update
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      - name: vendor 심볼릭 링크 생성 (setup.sh 와 동일)
+        run: rm -rf vendor && ln -s "../../공통/govendor/govmomi-0.55.1-vc-password-update" vendor
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go build -mod=vendor ./...
+      - run: go vet -mod=vendor ./...
+      - run: go test -mod=vendor ./...
+      - name: 폐쇄망 빌드 확인 (빈 모듈 캐시 + 프록시 차단)
+        run: GOMODCACHE=$(mktemp -d) GOPROXY=off go build -mod=vendor ./...
+      - name: shellcheck (참고용)
+        continue-on-error: true
+        run: sudo apt-get install -y shellcheck && shellcheck -S warning run.sh setup.sh cron_wrapper.sh

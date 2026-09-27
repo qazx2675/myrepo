@@ -1,0 +1,15 @@
+# 빌드 산출물
+vc_password_update
+
+# 공유 govendor 로의 심볼릭 링크 (setup.sh 가 생성)
+vendor
+
+# 실행 중 생성되는 운영 데이터 (자격증명/스케줄 상태 — 사이트마다 다름)
+admin_password.secret
+.last_success
+cron.log
+secret/
+
+# 대상 목록은 예시 파일(*.example)만 저장소에 둡니다
+vcenter.txt
+!*.example
