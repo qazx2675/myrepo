@@ -6,6 +6,7 @@
 | `go.mod` / `go.sum` | 의존성 선언 (`github.com/vmware/govmomi` v0.55.1) |
 | `vendor/` | `../../공통/govendor/govmomi-0.55.1-vc-password-update` 심볼릭 링크 (git 비대상, `setup.sh`가 생성) |
 | `run.sh` | 실행 편의 — 바이너리 없으면 `setup.sh` 자동 호출, 인자 전달, `ADMIN_PASSWORD` 없고 대화형이면 프롬프트 |
+| `passwd_update.sh` / `secret_lib.sh` | 동봉된 `.claude/VM/V2` 원본 사본 — 대상 계정 비밀번호를 암호화해 `secret/`에 저장(`-dir`이 가리키는 폴더를 이 스크립트가 만듦). 폴더 통째 다운로드만으로 준비까지 가능하게 함 |
 | `cron_wrapper.sh` | crontab 진입점 — 85일 경과 체크(`.last_success` 스탬프 파일), `admin_password.secret` 파일에서 비대화형으로 비밀번호 로딩 |
 | `setup.sh` | 폐쇄망 오프라인 빌드 (`vendor/` 심볼릭 링크 생성 + `-mod=vendor go build`) |
 | `vcenter.txt.example` | vCenter 목록 서식 예시 (`vcenter.txt`는 git 비대상) |

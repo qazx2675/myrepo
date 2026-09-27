@@ -63,18 +63,22 @@ cp vcenter.txt.example vcenter.txt
 ```
 
 대상 계정(기본 `lscsystems@vsphere.local`)의 비밀번호는 **직접 이 저장소에 두지 않고**,
-기존 `passwd_update.sh`(`.claude/VM/V2/passwd_update.sh`)로 만든 `secret/` 폴더를
-그대로 가리킵니다.
+`passwd_update.sh`(이 폴더에 동봉— `.claude/VM/V2/passwd_update.sh`와 동일)로 만든
+`secret/` 폴더를 그대로 가리킵니다. 이 폴더만 통째로 다운로드해도 바로 실행할 수
+있도록 `passwd_update.sh`와 그 의존 파일 `secret_lib.sh`를 함께 넣어 두었습니다.
 
 ```bash
-# 예: 이미 passwd_update.sh 로 저장해 둔 폴더가 /home/V2/secret 이라면
-./run.sh -dir /home/V2/secret -vc vcenter.txt
+# 이 폴더에 아직 secret/ 이 없다면 먼저 저장(최초 1회, 이후 비밀번호가 바뀔 때마다)
+./passwd_update.sh
+
+# 이미 다른 곳(예: V2/secret)에 저장해 둔 폴더가 있다면 그 경로를 -dir 로 지정
+./run.sh -dir ./secret -vc vcenter.txt
 ```
 
 `-dir`에 지정한 폴더 안에서 `key`(암호화 키)와
 `vcenter_<계정, '@'/'./'는 그대로>.enc`(예: `vcenter_lscsystems@vsphere.local.enc`)
 파일을 찾습니다 — `passwd_update.sh`가 만드는 파일 그대로입니다. 이 대상 계정의
-비밀번호가 아직 저장되어 있지 않다면 먼저 `passwd_update.sh`를 실행해 저장하십시오.
+비밀번호가 아직 저장되어 있지 않다면 먼저 `./passwd_update.sh`를 실행해 저장하십시오.
 
 ### 1.4 admin 계정 비밀번호
 
@@ -83,7 +87,7 @@ admin(`Administrator@vsphere.local`) 비밀번호는 `.enc` 파일로 저장하�
 
 ```bash
 read -rsp 'admin 계정 비밀번호: ' ADMIN_PASSWORD; export ADMIN_PASSWORD; echo
-./run.sh -dir /home/V2/secret -vc vcenter.txt
+./run.sh -dir ./secret -vc vcenter.txt
 ```
 
 `run.sh`는 `ADMIN_PASSWORD`가 비어 있고 터미널이 연결되어 있으면 직접 물어봅니다. 크론
@@ -110,7 +114,7 @@ sudo cp vc_password_update /usr/local/bin/
 ### 2.1 수동 1회 실행 (권장 진입점)
 
 ```bash
-./run.sh -dir /home/V2/secret -vc vcenter.txt
+./run.sh -dir ./secret -vc vcenter.txt
 ```
 
 바이너리가 없으면 `run.sh`가 자동으로 `setup.sh`를 호출해 빌드합니다.
@@ -119,7 +123,7 @@ sudo cp vc_password_update /usr/local/bin/
 
 ```bash
 export ADMIN_PASSWORD='...'
-./vc_password_update -dir /home/V2/secret -vc vcenter.txt
+./vc_password_update -dir ./secret -vc vcenter.txt
 ```
 
 ### 2.3 crontab 등록 (85일 주기)
@@ -138,15 +142,15 @@ chmod 600 admin_password.secret
 cp vcenter.txt.example vcenter.txt   # 실제 값으로 채움
 
 # 3) VC_SECRET_DIR 환경변수로 passwd_update.sh 의 secret/ 폴더 경로를 알려준다
-#    (crontab -e 에서 직접 등록)
-0 3 * * * VC_SECRET_DIR=/home/V2/secret /경로/vc_password_update/cron_wrapper.sh >> /경로/vc_password_update/cron.log 2>&1
+#    (crontab -e 에서 직접 등록, 기본값은 이 폴더의 ./secret)
+0 3 * * * VC_SECRET_DIR=/경로/vc_password_update/secret /경로/vc_password_update/cron_wrapper.sh >> /경로/vc_password_update/cron.log 2>&1
 ```
 
 `cron_wrapper.sh`가 참고하는 환경변수:
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
-| `VC_SECRET_DIR` | `./secret` | `-dir`로 전달할 경로 (passwd_update.sh 의 secret 폴더) |
+| `VC_SECRET_DIR` | `./secret` | `-dir`로 전달할 경로 (passwd_update.sh 가 만드는 secret 폴더, 이 폴더에 동봉된 것을 사용해도 됨) |
 | `VC_LIST_FILE` | `./vcenter.txt` | `-vc`로 전달할 경로 |
 
 ### 2.4 실행 후 확인

@@ -14,13 +14,18 @@ cp vcenter.txt.example vcenter.txt
 # vim vcenter.txt   # 필요하면 직접 편집
 
 # 3) 대상 계정(lscsystems@vsphere.local) 비밀번호가 저장된 secret 폴더 준비
-#    이미 .claude/VM/V2/passwd_update.sh 로 저장해 둔 폴더가 있다면 3-A, 없다면 3-B.
+#    이 폴더에 passwd_update.sh 가 동봉되어 있으므로 바로 실행해 저장할 수 있습니다(3-A).
+#    이미 다른 곳에 저장해 둔 secret 폴더가 있다면 그 경로를 쓰세요(3-B).
 
-# 3-A) 기존 secret 폴더를 그대로 사용 (경로만 맞게 바꾸세요)
+# 3-A) 이 폴더의 passwd_update.sh 로 새로 저장 (최초 실행 시 secret/ 이 생성됨)
+./passwd_update.sh
+export VC_DIR=./secret
+
+# 3-B) 기존 secret 폴더를 그대로 사용 (경로만 맞게 바꾸세요)
 #      예: /home/V2/secret 에 key, vcenter_lscsystems@vsphere.local.enc 가 있는 경우
 export VC_DIR=/home/V2/secret
 
-# 3-B) 테스트용으로 새로 만들 경우 (실제 운영에는 쓰지 마세요 — 테스트 전용)
+# 3-C) 테스트용으로 새로 만들 경우 (실제 운영에는 쓰지 마세요 — 테스트 전용)
 mkdir -p testsecret
 umask 077
 openssl rand -base64 48 | tr -d '\n' > testsecret/key
