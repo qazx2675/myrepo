@@ -41,6 +41,61 @@
 
 ---
 
+## 0. 빠른 시작 (단계별)
+
+> 공유폴더에 가져갈 것은 빌드 결과인 **`dist\vc-portal` 폴더 하나**입니다.
+> 빌드(1단계)에만 이 프로젝트 폴더 전체(`vendor\` 포함)가 필요합니다.
+
+**1단계. 빌드** — Go 1.26.5 가 설치된 Windows PC
+
+```powershell
+go version
+cd <내려받은 폴더>\.claude\VM\vcenter-통합관리
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+**2단계. 공유폴더에 복사**
+
+```powershell
+xcopy /E /I /Y dist\vc-portal \\fileserver\share\vc-portal
+```
+
+**3단계. 설정 파일 작성**
+
+```powershell
+copy \\fileserver\share\vc-portal\config\vcportal.conf.example \\fileserver\share\vc-portal\config\vcportal.conf
+notepad \\fileserver\share\vc-portal\config\vcportal.conf
+```
+
+- `output_dir` = `\\fileserver\share\vc-portal`
+- `work_dir`, `log_dir` = 수집 서버 로컬 폴더
+- `[account]` `user` / `password` = 공용 계정
+- `[vcenters]` = `id = 주소` 한 줄씩
+
+**4단계. 수집 서버 — 점검 → 1회 수집 → 매일 12:00 등록**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\collector\run-collector.ps1 -Check
+powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\collector\run-collector.ps1
+powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\collector\run-collector.ps1 -RegisterTask
+```
+
+**5단계. 사용자 PC — 사람마다 1회**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\launcher\install-launcher.ps1
+```
+
+**6단계. 사용** — 바탕화면 **`vCenter 포털`** 실행 → 검색/트리 → **[vCenter에서 열기]**
+
+**업데이트할 때** — 1단계 빌드 후 `dist\vc-portal` 에서 `config\` 와 `data\` 를 **제외하고** 공유폴더에 덮어쓰기
+
+```powershell
+robocopy dist\vc-portal \\fileserver\share\vc-portal /E /XD config data
+```
+
+---
+
 ## 1. 빌드 및 설치 방법
 
 ### 1.1 요구사항
