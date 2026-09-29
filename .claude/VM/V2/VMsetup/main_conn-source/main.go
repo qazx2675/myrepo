@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,6 +18,8 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/task"
+	"github.com/vmware/govmomi/view"
+	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -207,36 +210,19 @@ func main() {
 	}
 
 	// =========================================================================
-	// 5. 이미 등록된 호스트인지 병렬로 확인
+	// 5. 이미 등록된 호스트인지 확인 — 이 데이터센터의 호스트 이름을 한 번에 가져와 비교한다.
+	// worklist 에 짧은 이름(esxi01)을 적어도 vCenter 에 FQDN(esxi01.domain)으로 등록돼 있으면
+	// 같은 호스트로 본다(이름이 정확히 같거나, 첫 '.' 앞부분이 같으면). 못 알아보면 이미 있는
+	// 호스트를 다시 등록하려 들어 중복이 생긴다.
 	// =========================================================================
-	// existsResults는 serverLines와 같은 순서/길이로 미리 슬롯을 만들어 두고
-	// 고루틴이 자신의 인덱스에만 쓰도록 해서 인덱스 슬라이스 쓰기 충돌을 없앤다.
-	// (map을 여러 고루틴이 동시에 쓰면 레이스가 나지만, 인덱스가 겹치지 않는
-	// 슬라이스 쓰기는 안전하다.)
-	existsResults := make([]bool, len(serverLines))
-
-	var wgCheck sync.WaitGroup
-	semCheck := make(chan struct{}, *concurrency)
-
-	for i, host := range serverLines {
-		wgCheck.Add(1)
-		semCheck <- struct{}{}
-
-		go func(i int, host string) {
-			defer wgCheck.Done()
-			defer func() { <-semCheck }()
-
-			// finder는 고루틴마다 새로 만든다 — find.Finder는 동시 사용에
-			// 안전하다고 문서화되어 있지 않고, 내부적으로 폴더/데이터센터
-			// 캐시를 갖고 있어 공유 시 레이스 위험이 있기 때문이다.
-			// SetDatacenter도 반드시 각자 다시 호출해야 한다 (finder 인스턴스별 상태).
-			f := find.NewFinder(client.Client, true)
-			f.SetDatacenter(selectedDC)
-			_, hostErr := f.HostSystem(ctx, host)
-			existsResults[i] = hostErr == nil
-		}(i, host)
+	registered, regErr := registeredHostNames(ctx, client, selectedDC)
+	if regErr != nil {
+		log.Fatalf("등록된 호스트 목록 조회 실패: %v", regErr)
 	}
-	wgCheck.Wait()
+	existsResults := make([]bool, len(serverLines))
+	for i, host := range serverLines {
+		existsResults[i] = registered[host] || registered[shortName(host)]
+	}
 
 	// 등록 여부 확인이 다 끝난 뒤, worklist 순서 그대로 출력 + targets 구성.
 	// (고루틴 안에서 바로 출력하면 완료 순서대로 뒤섞여 나오므로, 순서를
@@ -303,4 +289,32 @@ func main() {
 	}
 
 	fmt.Println("vCenter 세션을 안전하게 종료했습니다.")
+}
+
+// shortName은 호스트 이름의 첫 '.' 앞부분을 돌려준다(IP 주소는 그대로).
+func shortName(host string) string {
+	if net.ParseIP(host) != nil {
+		return host
+	}
+	return strings.SplitN(host, ".", 2)[0]
+}
+
+// registeredHostNames는 데이터센터에 등록된 모든 호스트의 이름과 짧은 이름을 모은다.
+func registeredHostNames(ctx context.Context, client *govmomi.Client, dc *object.Datacenter) (map[string]bool, error) {
+	m := view.NewManager(client.Client)
+	v, err := m.CreateContainerView(ctx, dc.Reference(), []string{"HostSystem"}, true)
+	if err != nil {
+		return nil, err
+	}
+	defer v.Destroy(ctx)
+	var hosts []mo.HostSystem
+	if err := v.Retrieve(ctx, []string{"HostSystem"}, []string{"name"}, &hosts); err != nil {
+		return nil, err
+	}
+	names := make(map[string]bool, len(hosts)*2)
+	for _, h := range hosts {
+		names[h.Name] = true
+		names[shortName(h.Name)] = true
+	}
+	return names, nil
 }
