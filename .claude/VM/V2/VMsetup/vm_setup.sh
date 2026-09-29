@@ -183,6 +183,15 @@ for t in main_conn vm_create vswitch_setting affinity_setting lpage_setting nic_
   ensure_bin "$HERE/${t}-source/$t" "$t"
 done
 
+# ---------- vswitch 파일의 IP 포트그룹명 자동 변환 ----------
+# 2번째 칸이 <폴더명>-cae-a-b-c-d 형식이 아니라 IP(a.b.c.d)인 줄이 있으면 vswitch_pgname.sh 로 먼저 바꾼다
+# (폴더명을 물어본다. 원본은 <파일>.bak). IP 도 CAE 형식도 아닌 줄은 건드리지 않고 그대로 둔다.
+if read_list "$VSW_FILE" | awk '$2 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { f = 1 } END { exit !f }'; then
+  hdr "포트그룹 이름 변환 (IP → <폴더명>-cae-a-b-c-0)"
+  info "$(basename "$VSW_FILE") 에 IP 로 적힌 포트그룹이 있어 vswitch_pgname.sh 로 변환합니다."
+  bash "$HERE/vswitch_pgname.sh" "$VSW_FILE" || die "포트그룹 이름 변환에 실패했습니다: $VSW_FILE"
+fi
+
 # ---------- 입력 읽기 ----------
 mapfile -t BMS < <(read_list "$BM_FILE" | awk '{print $1}')
 [ "${#BMS[@]}" -gt 0 ] || die "$BM_FILE 에 BM 이 없습니다."
