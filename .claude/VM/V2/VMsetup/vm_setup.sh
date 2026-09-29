@@ -22,7 +22,7 @@
 #  실행할 때마다 지우고 시작한다.)
 set -o pipefail
 
-unset VC_PASSWORD VC_PASS VCENTER_PASS
+unset VC_PASSWORD VC_PASS VCENTER_PASS ESXI_PASSWORD
 # MAC_ARGSTR/MAC_ARG1 도 같은 이유로 지운다 — 이전 실행(또는 테스트)에서 export 해 둔 값이 남아 있으면
 # "설치 정보" 단계를 건너뛰고 그 값을 그대로 써버려서, 매번 새로 물어보는 것처럼 안 보이는 사고가 났다.
 unset MAC_ARGSTR MAC_ARG1
@@ -30,6 +30,8 @@ unset MAC_ARGSTR MAC_ARG1
 HERE="$(cd "$(dirname "$0")" && pwd)"
 USER_TAG=""; VC_IP="${VC_IP:-}"; VC_ID="${VC_ID:-lscsystems@vsphere.local}"
 SPEC_DIR=""; CONC=""; TARGET_VSWITCH=""; DRY_RUN=0
+# ESXi(BM)를 vCenter 에 등록할 대상(호스트 및 클러스터 트리의 폴더/클러스터 이름)과 ESXi 계정
+ESXI_FOLDER="${ESXI_FOLDER:-Task}"; ESXI_ID="${ESXI_ID:-root}"
 EDITOR_CMD="${VM_SETUP_EDITOR:-vim}"
 CHECK_DIR="$HERE/../vm-param-check-usability-improvement/vm-param-check"
 CHECK_BIN="$CHECK_DIR/vm-param-check"
@@ -177,7 +179,7 @@ ensure_bin() {
   bash "$HERE/../setup.sh" "$name" >/dev/null || die "준비 실패: $name — bash $HERE/../setup.sh $name 로 확인하세요"
 }
 ensure_bin "$CHECK_BIN" vm-param-check
-for t in vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info power_setting license_assign; do
+for t in main_conn vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info power_setting license_assign; do
   ensure_bin "$HERE/${t}-source/$t" "$t"
 done
 
@@ -858,6 +860,7 @@ print_plan() {
 hdr "실행 계획 (실행 폴더: $RUN_DIR)" 2>&1
 say "vCenter        : ${VC_IP:-(미지정)} / 계정 $VC_ID"
 say "설치 정보       : OS 버전 $MAC_ARGSTR / 인프라 $MAC_ARG1"
+say "호스트 등록     : main_conn -folderName=$ESXI_FOLDER (BM ${#BMS[@]}대 → vCenter '$ESXI_FOLDER' 위치, 이미 등록된 호스트는 통과)"
 say "포트그룹 생성   : $(wc -l < "$RUN_DIR/vswitch.txt")건 (vswitch_setting${TARGET_VSWITCH:+, 스위치 $TARGET_VSWITCH})"
 k=0
 for d in "${SPEC_ORDER[@]}"; do
@@ -899,8 +902,20 @@ if [ -z "${VC_PASSWORD:-}" ]; then
   printf '%s 비밀번호: ' "$VC_ID" >&2; IFS= read -r -s VC_PASSWORD || die "입력이 끝났습니다."; echo >&2
 fi
 export VC_PASSWORD
+if [ -f "$HERE/../secret_lib.sh" ]; then
+  . "$HERE/../secret_lib.sh"
+  if ESXI_PASSWORD="$(secret_get esxi "$ESXI_ID")" && [ -n "$ESXI_PASSWORD" ]; then
+    info "ESXi $ESXI_ID 비밀번호: 암호 파일에서 읽었습니다 ($(secret_file esxi "$ESXI_ID"))"
+  else
+    ESXI_PASSWORD=""
+  fi
+fi
+if [ -z "${ESXI_PASSWORD:-}" ]; then
+  printf 'ESXi %s 비밀번호 (BM 을 vCenter 에 등록할 때 사용): ' "$ESXI_ID" >&2; IFS= read -r -s ESXI_PASSWORD || die "입력이 끝났습니다."; echo >&2
+fi
+export ESXI_PASSWORD
 printf '\n'
-ask_yn "실제 vCenter($VC_IP)에 포트그룹/VM 을 생성·변경합니다. 진행할까요?" || { say "취소했습니다. vCenter 는 변경하지 않았습니다."; exit 0; }
+ask_yn "실제 vCenter($VC_IP)에 BM 등록/포트그룹/VM 을 생성·변경합니다. 진행할까요?" || { say "취소했습니다. vCenter 는 변경하지 않았습니다."; exit 0; }
 printf '%s %s\n' "$VC_IP" "$(date '+%F %T')" > "$LAST_VC_FILE"   # 다음 실행에서 이전 실행 vCenter 로 보여준다
 
 # ---------- 4) 실행 ----------
@@ -933,6 +948,10 @@ spec_flags() {
 }
 
 # ---------- 단계 함수 ----------
+step_bm_register() {
+  printf '%s\n' "${BMS[@]}" > bm_all.txt
+  run "$HERE/main_conn-source/main_conn" -vcTargetIP="$VC_IP" -id="$VC_ID" -folderName="$ESXI_FOLDER" -worklistFile=bm_all.txt "${CONC_ARG[@]}"
+}
 step_vswitch() {
   [ -s vswitch.txt ] || { say "만들 포트그룹이 없어 건너뜁니다."; note "skip:만들 포트그룹 없음"; return 0; }
   run "$HERE/vswitch_setting-source/vswitch_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=vswitch.txt "${VSW_ARG[@]}" "${CONC_ARG[@]}"
@@ -1047,6 +1066,7 @@ add_step() { # <종류> <이름> [함수] [인자] [입력 필요=1]
   [ "$1" = run ] && STEP_LOG[$i]="logs/$(printf '%02d' "$i")_${3#step_}${4:+_$4}.log"
 }
 add_step start "작업 시작"
+add_step run "호스트 등록" step_bm_register
 add_step run "포트그룹 생성" step_vswitch
 k=0
 for d in "${SPEC_ORDER[@]}"; do
