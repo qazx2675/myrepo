@@ -4,9 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# 공통 govendor 로 이동한 의존성을 이 디렉터리 이름의 vendor/ 로 연결한다
+# vendor/ 는 이 폴더 안에 함께 들어 있습니다(폴더만 따로 내려받아도 빌드됨).
+# 없을 때만(저장소 전체를 받은 경우) 공통 govendor 로 연결합니다.
 # (실제 파일은 ../../../../공통/govendor/govmomi-0.55.1-network-migration 에 있음; 여러 프로젝트가 동일 govmomi 버전을 공유)
-rm -rf vendor 2>/dev/null; ln -s "../../../../공통/govendor/govmomi-0.55.1-network-migration" vendor
+[ -d vendor ] || ln -s "../../../../공통/govendor/govmomi-0.55.1-network-migration" vendor 2>/dev/null
 
 if ! command -v go >/dev/null 2>&1; then
   echo "오류: go 를 찾을 수 없습니다. Go 툴체인을 먼저 설치하세요." >&2

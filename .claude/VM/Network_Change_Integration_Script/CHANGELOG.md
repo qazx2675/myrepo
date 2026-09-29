@@ -8,6 +8,7 @@
 - `auto.appl` 새 내용은 노드의 `/etc/auto.appl.bak` 에 대기, 네트워크 설정이 끝난 뒤
   노드에서 `/root/auto_appl_restore.sh` 실행으로 `auto.appl` 원복(`사용법.txt` 10번).
 - `bin_os6/ldap-config-engine` 재빌드. 자세한 내용은 `projects/ldap_setting/CHANGELOG.md`.
+- `projects/vm-network-migration/vendor/`(govmomi 0.55.1)를 이 폴더에 포함하고 `setup.sh` 는 vendor 가 없을 때만 공통 govendor 로 연결. standalone 브랜치(이 폴더만)에서 "vendor 디렉토리가 없다" 로 빌드 실패하던 문제 수정.
 
 ## 2026-09-23 — IP/LDAP 진행 화면 · Ctrl+C 3회 종료 · 느린 VM 48시간 대기 · 지연/버그 점검
 
