@@ -73,6 +73,8 @@ printf '#!/bin/sh\necho s4node01\n' > "$FAKEBIN/hostname"
 chmod +x "$FAKEBIN/hostname"
 
 apply()   { ROOT="$1" bash "$2" >/dev/null 2>&1; }
+# 대기 중인 auto.appl.bak 을 원복(=/root/auto_appl_restore.sh). 경로만 fixture 로 바꿔 실행합니다.
+activate() { sed "s#/etc/#$1/etc/#g" "$1/root/auto_appl_restore.sh" | bash >/dev/null 2>&1; }
 check()   { LDAP_CONFIG="$CONF" ROOT="$1" bash "$CHECK" 2>&1; }
 
 ###############################################################################
@@ -83,6 +85,7 @@ for S in a1 a2 a3 a4; do
     "$ENGINE" -config "$CONF" -infra zxcv -site "$S" -print-script > "$WORK/ap_$S.sh" 2>/dev/null
     make_fixture "$WORK/f_$S" 8
     apply "$WORK/f_$S" "$WORK/ap_$S.sh"
+    activate "$WORK/f_$S"
     out="$(check "$WORK/f_$S")"; rc=$?
     if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tzxcv\t%s' "$S")" ]; then
         ok "zxcv/$S 라운드트립"
@@ -108,6 +111,7 @@ echo "[3] RHEL 7 : nslcd + ntp 를 쓰고 sssd/chrony 는 건드리지 않아야
 
 make_fixture "$WORK/f7" 7
 apply "$WORK/f7" "$WORK/ap_a1.sh"
+activate "$WORK/f7"
 if grep -q "^binddn uid=svcaccount" "$WORK/f7/etc/nslcd.conf" 2>/dev/null &&
    grep -q "^server 10.20.1.10 iburst" "$WORK/f7/etc/ntp.conf" 2>/dev/null &&
    [ ! -f "$WORK/f7/etc/sssd/sssd.conf" ]; then
@@ -172,6 +176,7 @@ for S in a1 a4; do
     "$ENGINE" -config "$CONF" -infra qwer -site "$S" -print-script > "$WORK/q_$S.sh" 2>/dev/null
     make_fixture "$WORK/fq_$S" 8
     apply "$WORK/fq_$S" "$WORK/q_$S.sh"
+    activate "$WORK/fq_$S"
     out="$(check "$WORK/fq_$S")"; rc=$?
     if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tqwer\t%s' "$S")" ]; then
         ok "qwer/$S (uri3=NONE) 판별"
@@ -215,12 +220,12 @@ out="$(ROOT="$WORK/rb" bash "$WORK/rb_latest.sh" 2>&1)"; rc=$?
 
 # 백업 파일과, 적용이 새로 만들어 되돌릴 수 없는 파일은 비교에서 뺍니다.
 if [ "$rc" = "0" ] &&
-   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' \
+   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' --exclude='auto.appl.bak' --exclude='root' \
         "$WORK/rb_orig" "$WORK/rb" >/dev/null 2>&1; then
     ok "롤백 후 원본과 완전히 일치"
 else
     ng "롤백 결과가 원본과 다름 (rc=$rc)" \
-       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' "$WORK/rb_orig" "$WORK/rb" 2>&1 | head -20)"
+       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' --exclude='auto.appl.bak' --exclude='root' "$WORK/rb_orig" "$WORK/rb" 2>&1 | head -20)"
 fi
 
 # 여러 번 고치는 파일(ldap.conf 는 URI/BINDDN/BINDPW 3회)이 제대로 돌아왔는지 콕 집어 확인.
@@ -296,12 +301,12 @@ fi
 "$ENGINE" -rollback-to "$first_stamp" -print-script > "$WORK/rb_first.sh" 2>/dev/null
 out="$(ROOT="$WORK/rb2" bash "$WORK/rb_first.sh" 2>&1)"; rc=$?
 if [ "$rc" = "0" ] &&
-   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' \
+   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' --exclude='auto.appl.bak' --exclude='root' \
         "$WORK/rb2_orig" "$WORK/rb2" >/dev/null 2>&1; then
     ok "-rollback-to $first_stamp 로 최초 상태 복원"
 else
     ng "지정 시점 복원 실패 (rc=$rc)" \
-       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' "$WORK/rb2_orig" "$WORK/rb2" 2>&1 | head -20)"
+       "$(diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' --exclude='auto.appl.bak' --exclude='root' "$WORK/rb2_orig" "$WORK/rb2" 2>&1 | head -20)"
 fi
 
 ###############################################################################
@@ -314,6 +319,39 @@ if [ "$rc" = "0" ] && printf '%s\n' "$out" | grep -q 'NOBACKUP'; then
     ok "백업 없음 → NOBACKUP, exit 0"
 else
     ng "NOBACKUP 처리 오류 (rc=$rc)" "$out"
+fi
+
+###############################################################################
+echo "[15] auto.appl 은 .bak 으로 대기하고, 서비스는 재시작하지 않고, /root 스크립트로 원복돼야 한다"
+###############################################################################
+
+make_fixture "$WORK/aa" 8
+out="$(ROOT="$WORK/aa" bash "$WORK/ap_a1.sh" 2>&1)"
+if [ ! -f "$WORK/aa/etc/auto.appl" ] && grep -q "^/appl" "$WORK/aa/etc/auto.appl.bak" 2>/dev/null &&
+   ! grep -q "oldstore" "$WORK/aa/etc/auto.appl.bak" 2>/dev/null &&
+   [ -x "$WORK/aa/root/auto_appl_restore.sh" ] &&
+   grep -q "oldstore" "$WORK"/aa/etc/auto.appl.bak.* 2>/dev/null; then
+    ok "auto.appl → .bak 대기(새 내용), 기존은 .bak.STAMP, /root 원복 스크립트 생성"
+else
+    ng "auto.appl 대기 처리 오류" "$out"
+fi
+if ! printf '%s\n' "$out" | grep -Eq 'RESTARTED|WOULD-RESTART|SKIP-RESTART'; then
+    ok "서비스 재시작 없음"
+else
+    ng "apply 가 서비스 재시작을 시도함" "$out"
+fi
+out="$(ROOT="$WORK/aa" bash "$WORK/ap_a1.sh" 2>&1)"
+if printf '%s' "$out" | grep -q "NOCHANGE"; then
+    ok "대기 상태에서 재실행해도 NOCHANGE"
+else
+    ng "대기 상태 재실행이 멱등하지 않음" "$out"
+fi
+activate "$WORK/aa"
+if [ -f "$WORK/aa/etc/auto.appl" ] && [ ! -f "$WORK/aa/etc/auto.appl.bak" ] &&
+   [ "$(check "$WORK/aa")" = "$(printf 'INFO\tLDAP\tzxcv\ta1')" ]; then
+    ok "원복 스크립트 실행 후 auto.appl 복원, 검증 OK"
+else
+    ng "원복 스크립트 동작 오류"
 fi
 
 ###############################################################################

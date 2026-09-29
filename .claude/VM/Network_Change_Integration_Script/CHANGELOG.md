@@ -2,6 +2,13 @@
 
 날짜순(최신이 위).
 
+## 2026-09-29 — LDAP 적용에서 데몬 재시작 제거 · auto.appl 은 .bak 대기 후 원복
+
+- LDAP 적용(`ldap-config-engine`)이 서비스를 재시작하지 않음(autofs 행 방지). 롤백은 그대로.
+- `auto.appl` 새 내용은 노드의 `/etc/auto.appl.bak` 에 대기, 네트워크 설정이 끝난 뒤
+  노드에서 `/root/auto_appl_restore.sh` 실행으로 `auto.appl` 원복(`사용법.txt` 10번).
+- `bin_os6/ldap-config-engine` 재빌드. 자세한 내용은 `projects/ldap_setting/CHANGELOG.md`.
+
 ## 2026-09-23 — IP/LDAP 진행 화면 · Ctrl+C 3회 종료 · 느린 VM 48시간 대기 · 지연/버그 점검
 
 ### 신규

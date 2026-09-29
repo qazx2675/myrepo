@@ -1,5 +1,18 @@
 # CHANGELOG — ldap_setting
 
+## 2026-09-29 — 적용 시 데몬 재시작 제거 · auto.appl 은 .bak 대기 후 /root 스크립트로 원복
+
+- `apply_body.sh`: 적용이 더 이상 서비스(nslcd/sssd/autofs/ntpd/chronyd)를 재시작하지
+  않음(autofs 가 `auto.appl` 때문에 행 걸릴 수 있음). 롤백은 기존과 같이 되돌린 파일의
+  서비스만 재시작(`lib_common.sh` 의 `restart_for_changed` 는 그대로).
+- `auto.appl`: 새 내용을 `/etc/auto.appl.bak` 에 대기시키고 기존 `/etc/auto.appl` 은
+  `auto.appl.bak.<STAMP>`(rollback 용)·`auto.appl_back` 으로 남긴 뒤 치움. 노드의
+  `/root/auto_appl_restore.sh` 를 실행하면 `.bak` → `auto.appl` 원복(autofs 재시작 없음,
+  기존 `/etc/auto.appl` 이 있으면 `.before_restore.<시각>` 으로 보관).
+- 원복 전에는 `ldap_check` 가 auto.appl 을 못 읽어 FAIL 로 나옴(원복 후 정상).
+- `test_all.sh`: 원복 헬퍼(`activate`)·롤백 비교 제외 항목·[15] 시험 추가(26/26 통과).
+  `render_test.go`: apply 가 `restart_for_changed` 를 호출하지 않는지 확인.
+
 ## 2026-09-23 — `-monitor` 진행 화면 · Ctrl+C 3회 종료 · 사이트 동시 실행
 
 - `-monitor` 플래그 추가(기본 꺼짐 — 끄면 화면은 기존과 동일). 켜면 60초가 지나도
