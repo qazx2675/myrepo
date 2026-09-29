@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -78,6 +80,70 @@ func TestFrameCostWith1000VMs(t *testing.T) {
 	}
 	if per > 10*time.Millisecond {
 		t.Errorf("프레임 생성이 너무 느림: %v", per)
+	}
+}
+
+func TestSaveLines(t *testing.T) {
+	tr := newTracker(5)
+	tr.VMs[0].SetPhase(status.PhaseChecking)
+	tr.VMs[0].Finish(status.OutcomeDone, nil)
+	tr.VMs[1].SetPhase(status.PhaseApplying)
+	tr.VMs[1].Finish(status.OutcomeFailed, errors.New("line1\nline2"))
+	tr.VMs[2].SetPhase(status.PhaseApplying)
+	tr.VMs[3].SetPhase(status.PhaseChecking)
+	// VMs[4] 는 대기
+
+	tests := []struct {
+		name string
+		cat  saveCategory
+		want []string
+	}{
+		{"done", saveDone, []string{"host0000 10.0.0.1 00:00:00"}},
+		{"failed", saveFailed, []string{"host0001 10.0.0.1 # line1 line2"}},
+		{"running", saveRunning, []string{
+			"host0002 10.0.0.1 # " + status.PhaseApplying.Label() + " 00:00:00",
+			"host0003 10.0.0.1 # " + status.PhaseChecking.Label() + " 00:00:00",
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := saveLines(tr, tc.cat)
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+			for _, l := range got {
+				f := strings.Fields(l)
+				if len(f) < 2 || !strings.HasPrefix(f[0], "host") || f[1] != "10.0.0.1" {
+					t.Errorf("첫 두 열이 hostname ip 가 아님: %q", l)
+				}
+			}
+		})
+	}
+}
+
+func TestSaveLinesEmptyAndUnknownErr(t *testing.T) {
+	tr := newTracker(2)
+	for _, c := range []saveCategory{saveDone, saveFailed, saveRunning} {
+		if got := saveLines(tr, c); len(got) != 0 {
+			t.Errorf("category %d: got %q, want empty", c, got)
+		}
+	}
+	tr.VMs[0].SetPhase(status.PhaseChecking)
+	tr.VMs[0].Finish(status.OutcomeFailed, nil)
+	if got := saveLines(tr, saveFailed); len(got) != 1 || got[0] != "host0000 10.0.0.1 # 알 수 없음" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestSaveListEmptyFile(t *testing.T) {
+	t.Chdir(t.TempDir())
+	name, n, err := saveList(newTracker(2), saveDone)
+	if err != nil || n != 0 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	b, err := os.ReadFile(name)
+	if err != nil || len(b) != 0 {
+		t.Fatalf("파일 내용 = %q err=%v", b, err)
 	}
 }
 

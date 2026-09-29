@@ -15,7 +15,7 @@ cd vm-ip-change/project
 cd vm-ip-change/project
 export VC_USER='administrator@vsphere.local' VC_PASSWORD='VMware1!' GUEST_USER='root' GUEST_PASSWORD='guestpass'
 ./bin/vm-ip-change -vcenter testrun/vcenter.txt -list testrun/list.txt
-(60초 뒤 목록 화면: ↑ ↓ / ← → / PgUp PgDn / Enter 상세 / s 목록 저장 / 아무 키)
+(60초 뒤 목록 화면: ↑ ↓ / ← → / PgUp PgDn / Enter 상세 / s 완료 / f 실패 / l 진행중 목록 저장 / 아무 키)
 (Ctrl+C 1번 → 안내만 / 5초 안에 3번 → 즉시 종료)
 
 [5] 터미널 A 에서 결과 검증
@@ -30,7 +30,7 @@ cat testrun/report.txt
 (60초 뒤 목록 화면에서: 짝(ev01)이 과점유로 뽑힌 ev02 대상 약 30개는 "대기중"에 계속
  머물고, 나머지 약 30개는 금방 "완료(OK)"로 바뀌는 걸 확인 — 이게 우선순위가 바뀐
  모습입니다: 뒤로 밀린 대상은 워커를 안 잡고 대기만 하므로 앞선 대상이 먼저 끝남)
-(s 로 현재 목록 저장 후 Ctrl+C 3회로 중단)
+(l 로 진행중, s 로 완료 목록 저장 후 Ctrl+C 3회로 중단)
 cat testrun-ev/report.txt   (과점유 ev01 의 ev02 짝만 "시작 안 함"으로 나와야 정상)
 
 [6-1] 수동 시험 - ev02 우선순위 확인, 다시 풀리는 경우 (짝 ev01 부하가 90초 뒤 내려감)
