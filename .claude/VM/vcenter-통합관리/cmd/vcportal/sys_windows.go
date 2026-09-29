@@ -25,6 +25,21 @@ func showMessage(title, text string, isErr bool) {
 	windows.MessageBox(0, t, c, flags)
 }
 
+var singleton windows.Handle // 프로세스가 끝날 때까지 유지(닫히면 뮤텍스 해제)
+
+// acquireSingleton 은 이름 있는 뮤텍스로 같은 사용자 세션의 포털 모드 중복 실행을 막는다.
+// 이미 다른 프로세스가 가지고 있으면 false.
+func acquireSingleton(name string) bool {
+	n, _ := windows.UTF16PtrFromString(`Local\` + name)
+	h, err := windows.CreateMutex(nil, false, n)
+	if err == windows.ERROR_ALREADY_EXISTS {
+		windows.CloseHandle(h)
+		return false
+	}
+	singleton = h
+	return true
+}
+
 // findBrowser 는 설치된 Edge/Chrome 실행 파일을 찾는다.
 func findBrowser(kind string) (string, error) {
 	rel := `Microsoft\Edge\Application\msedge.exe`

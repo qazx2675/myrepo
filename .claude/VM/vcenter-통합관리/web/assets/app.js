@@ -543,6 +543,14 @@
       var o = $('bottom').classList.toggle('open');
       $('bb-panel').hidden = !o;
     };
+    // 런처 포털 모드(vcportal.exe 로 연 경우)에서는 window.vcpOpen 이 연결되어 있다.
+    // 그때는 vcportal:// 프로토콜(Edge 확인 창) 대신 런처에 딥링크를 직접 전달한다.
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href^="vcportal:"]');
+      if (!a || typeof window.vcpOpen !== 'function') return;
+      e.preventDefault();
+      window.vcpOpen(new URL(a.href).searchParams.get('url'));
+    }, true);
   }
 
   // ───────────────────────── 시작 ─────────────────────────

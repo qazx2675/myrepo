@@ -25,8 +25,8 @@
 
 ### 알려진 제한 사항
 
-- **Edge 확인 창**: 포털(`file://` 로 연 페이지)에서 "vCenter에서 열기"를 누르면 Edge 가
-  "vcportal 을(를) 열려고 합니다" 확인 창을 띄웁니다. 매번 **[열기]** 를 눌러야 합니다.
+- **Edge 확인 창**: `index.html` 을 탐색기에서 직접 연 경우 "vCenter에서 열기"를 누르면 Edge 가
+  "vcportal 을(를) 열려고 합니다" 확인 창을 띄웁니다(매번 **[열기]** 필요). 바탕화면 `vCenter 포털` 바로가기(포털 모드)로 열면 확인 창이 없습니다.
   (없애려면 Edge 정책 `AutoLaunchProtocolsFromOrigins` 를 GPO/Intune 으로 배포해야 하며, 이 도구는 설정하지 않습니다.)
 - **인증서 오류 무시**: 사내 vCenter 가 자체 서명 인증서라 런처가 띄우는 **전용 프로필 브라우저에서만**
   `--ignore-certificate-errors` 를 사용합니다. 평소 쓰는 Edge 프로필에는 영향이 없습니다.
@@ -125,16 +125,23 @@ powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\collector\
 powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\launcher\install-launcher.ps1
 ```
 
-이후 포털에서 "vCenter에서 열기"를 누르면 Edge 가 "이 사이트에서 vcportal 을(를) 열려고 합니다" 확인 창을 띄웁니다.
-**[열기]** 를 누르면 런처가 실행됩니다. (알려진 제한 사항 참고)
+스크립트는 두 가지를 합니다.
+- **바탕화면에 `vCenter 포털` 바로가기 생성** (공유폴더의 `launcher\vcportal.exe` 를 인자 없이 실행 = 포털 모드)
+- `vcportal://` 프로토콜 등록 (`index.html` 을 탐색기에서 직접 연 경우용)
 
-해제하려면 `install-launcher.ps1 -Uninstall` 을 실행합니다.
+**포털은 바탕화면의 `vCenter 포털` 바로가기로 여는 것을 권장합니다.** 이렇게 열면 "vCenter에서 열기"가
+Edge 확인 창 없이 바로 자동 로그인 탭을 엽니다. `index.html` 을 직접 연 경우에는 Edge 가
+"이 사이트에서 vcportal 을(를) 열려고 합니다" 확인 창을 띄우므로 **[열기]** 를 눌러야 합니다.
+
+해제하려면 `install-launcher.ps1 -Uninstall` 을 실행합니다(바로가기와 프로토콜 등록 모두 제거).
 
 ---
 
 ## 2. 사용 방법
 
-1. 탐색기에서 `\\fileserver\share\vc-portal\index.html` 을 더블클릭해 Edge 로 엽니다(웹 서버 불필요).
+1. 바탕화면의 **`vCenter 포털`** 바로가기를 실행합니다(1.5 에서 생성). 전용 Edge 창에 포털이 열립니다.
+   이미 열려 있으면 같은 창에 포털 탭이 하나 더 열립니다. (탐색기에서 `index.html` 을 직접 열어도 되지만,
+   그때는 "vCenter에서 열기" 마다 Edge 확인 창의 [열기] 가 필요합니다.)
 2. **검색**: 상단 검색창에 호스트명 / VM 이름 / IP / guest 호스트명 일부를 입력하면 전체 vCenter 에서 즉시 검색됩니다.
    결과를 클릭하면 해당 객체의 Summary 로 이동합니다.
 3. **트리**: 좌측 Navigator 는 `vCenter > Datacenter > (Folder) > Cluster > Host > VM` 구조(Hosts and Clusters 기준)입니다.
@@ -142,7 +149,8 @@ powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\launcher\i
 4. **Summary**: Host(모델, ESXi 버전/빌드, 상태, CPU·메모리 사용량, 가동 시간, VM 목록, 데이터스토어, 네트워크),
    VM(게스트 OS, IP, 하드웨어, 디스크, NIC), Cluster, Datacenter, vCenter 화면을 볼 수 있습니다.
 5. **vCenter에서 열기 vs 직접 열기**
-   - **vCenter에서 열기**: `vcportal://` 링크로 로그인 런처를 실행해, 전용 Edge 프로필에서 **자동 로그인한 뒤** 해당 객체의 vSphere Client 화면을 엽니다.
+   - **vCenter에서 열기**: 로그인 런처가 전용 Edge 창에 새 탭을 열고 **자동 로그인한 뒤** 해당 객체의 vSphere Client 화면을 엽니다.
+     바로가기로 연 포털에서는 확인 창 없이 바로 동작하고, `index.html` 을 직접 연 경우에는 `vcportal://` 확인 창을 거칩니다.
      (사전에 1.5 의 `install-launcher.ps1` 실행 필요)
    - **직접 열기**: 런처 없이 일반 브라우저 새 탭에서 vCenter 딥링크를 엽니다. 로그인은 직접 해야 합니다(런처가 동작하지 않을 때의 대안).
 6. **수집 상태**: 화면 상단의 수집 상태 표시줄에서 마지막 수집 시각과 vCenter 별 성공/실패를 볼 수 있습니다.
@@ -211,21 +219,23 @@ bash 환경(랩)에서는 `scripts/run-collector.sh` 가 같은 역할을 합니
 
 | 파라미터 | 기본값 | 설명 |
 |---|---|---|
-| `-ExePath <경로>` | 스크립트와 같은 폴더의 `vcportal.exe` | 프로토콜 핸들러로 등록할 런처 exe |
-| `-Uninstall` | 끔 | `vcportal://` 등록 해제 (`HKCU:\Software\Classes\vcportal` 삭제) |
+| `-ExePath <경로>` | 스크립트와 같은 폴더의 `vcportal.exe` | 바로가기 대상이자 프로토콜 핸들러로 등록할 런처 exe |
+| `-Uninstall` | 끔 | 바탕화면 `vCenter 포털.lnk` 삭제 + `vcportal://` 등록 해제 (`HKCU:\Software\Classes\vcportal` 삭제) |
 
 관리자 권한 불필요(HKCU). 네트워크 드라이브로 실행하면 UNC 사용 권장 경고를 표시합니다.
 
 ### 3.5 로그인 런처 `vcportal.exe`
 
 ```
-vcportal.exe "vcportal://open?url=<인코딩된 딥링크>"
+vcportal.exe [--conf <vcportal.conf 경로>]                       포털 모드 (바탕화면 바로가기)
+vcportal.exe "vcportal://open?url=<인코딩된 딥링크>"              프로토콜 링크 (index.html 직접 연 경우)
 vcportal.exe --url <딥링크> [--conf <vcportal.conf 경로>]
 ```
 
 | 인자 | 기본값 | 설명 |
 |---|---|---|
-| (위치 인자) | - | `vcportal://open?url=...` 링크. 포털 버튼이 이 형식으로 호출 |
+| (없음) | - | **포털 모드**. 전용 Edge 에 `<exe 폴더>\..\index.html` 을 열고 브라우저가 닫힐 때까지 대기. 전용 Edge 의 `file://` 탭마다 `window.vcpOpen` 을 연결해 두어, "vCenter에서 열기"를 확인 창 없이 처리. 이미 포털 모드가 실행 중이면 새 포털 탭만 열고 종료 |
+| (위치 인자) | - | `vcportal://open?url=...` 링크. `index.html` 을 직접 연 포털의 버튼이 이 형식으로 호출 |
 | `--url` | - | 열 vCenter 딥링크(https). 위치 인자 대신 직접 지정 |
 | `--conf` | `<exe 폴더>\..\config\vcportal.conf` | 설정 파일 경로 |
 

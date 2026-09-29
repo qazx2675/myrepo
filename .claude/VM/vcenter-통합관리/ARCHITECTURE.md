@@ -11,7 +11,8 @@
 | `cmd/vcportal-collector/publish.go` | `work_dir` 캐시 저장/읽기, `data\*.js` (상세/index/manifest) 작성, `output_dir` 로 임시 이름 복사 후 rename(원자적 교체) |
 | `cmd/vcportal-collector/check.go` | `--check` 구현: conf 출력, 드라이브 경로/쓰기 권한/폴더 생성/vCenter 로그인 점검 |
 | `cmd/vcportal/main.go` | 로그인 런처. `vcportal://` 파싱, 딥링크 검증(https + conf 호스트 + `/ui/`), 전용 프로필 브라우저 기동, chromedp 로 SSO 자동 로그인. **로그인 화면 선택자 상수(`selUsername`, `selPassword`, `selSubmit`, `selLoginErr`, `selLoggedIn`, `ssoPathMark`)와 디버그 포트/제한 시간 상수가 파일 상단에 있음** |
-| `cmd/vcportal/sys_windows.go`, `sys_other.go` | OS 별 구현: 메시지 창, 브라우저 exe 탐색, 분리 실행(런처 종료 후에도 브라우저 유지) |
+| `cmd/vcportal/sys_windows.go`, `sys_other.go` | OS 별 구현: 메시지 창, 브라우저 exe 탐색, 분리 실행(런처 종료 후에도 브라우저 유지), 포털 모드 중복 실행 방지 뮤텍스 |
+| `cmd/vcportal/portal.go` | 포털 모드(인자 없이 실행): 전용 브라우저에 `index.html` 을 열고, `file://` 탭마다 `window.vcpOpen` 바인딩(CDP `Runtime.addBinding`)을 붙여 "vCenter에서 열기"를 확인 창 없이 처리. 이름 있는 뮤텍스로 중복 실행 시 새 탭만 연다 |
 | `internal/conf` | 수집기·런처 공용 conf(INI) 파서. 경로 정리(`CleanPath`), UTF-8/CP949 디코딩, 검증, 드라이브 문자(네트워크 드라이브) 차단(`drive_windows.go`) |
 | `internal/collect` | govmomi PropertyCollector 로 vCenter 1대를 수집해 트리 객체 맵(`objects`)·인덱스·카운트 생성. **트리 구성 규칙(Hosts and Clusters 기준, VM 부모 = `runtime.host`, 단독 호스트는 ComputeResource 생략)과 필드 추출은 여기** |
 | `web/index.html`, `web/assets/` | 정적 웹 UI. `app.js`(라우팅/트리/검색/상태 배너), `summary.js`(Summary 화면), `helpers.js`(링크·포맷·스크립트 로더), `render.js`, `style.css`, `summary.css` |

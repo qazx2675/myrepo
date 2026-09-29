@@ -1,8 +1,13 @@
 ﻿<#
 .SYNOPSIS
-  vcportal:// 프로토콜을 현재 사용자(HKCU)에 등록/해제한다. 관리자 권한 불필요.
+  바탕화면에 "vCenter 포털" 바로가기를 만들고, vcportal:// 프로토콜을 현재 사용자(HKCU)에 등록한다.
+  -Uninstall 은 둘 다 제거한다. 관리자 권한 불필요.
 
 .DESCRIPTION
+  [권장] 바탕화면 "vCenter 포털" 바로가기 = 공유폴더의 vcportal.exe(인자 없음, 포털 모드).
+  이 바로가기로 포털을 열면 [vCenter에서 열기] 가 Edge 확인 창 없이 바로 자동 로그인 탭을 연다.
+
+  [보조] index.html 을 탐색기에서 직접 연 경우를 위해 vcportal:// 프로토콜도 등록한다.
   포털의 [vCenter에서 열기] 링크(vcportal://open?url=...)를 누르면 공유폴더의
   vcportal.exe(로그인 런처)가 실행되도록 HKCU:\Software\Classes\vcportal 을 만든다.
   exe 는 공유폴더에서 직접 실행하므로 UNC 전체 경로로 등록된다.
@@ -31,8 +36,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $key = 'HKCU:\Software\Classes\vcportal'
+$lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'vCenter 포털.lnk'
 
 if ($Uninstall) {
+    if (Test-Path -LiteralPath $lnk) {
+        Remove-Item -LiteralPath $lnk -Force
+        Write-Host "바탕화면 바로가기를 삭제했습니다: $lnk"
+    }
     if (Test-Path $key) {
         Remove-Item -Path $key -Recurse -Force
         Write-Host "vcportal:// 프로토콜 등록을 해제했습니다."
@@ -63,7 +73,16 @@ Set-ItemProperty -Path $key -Name '(default)' -Value 'URL:vCenter Portal Launche
 Set-ItemProperty -Path $key -Name 'URL Protocol' -Value ''
 Set-ItemProperty -Path "$key\shell\open\command" -Name '(default)' -Value ('"{0}" "%1"' -f $full)
 
-Write-Host "vcportal:// 프로토콜을 등록했습니다."
+# 바탕화면 바로가기: 런처를 인자 없이 실행(포털 모드)
+$ws = New-Object -ComObject WScript.Shell
+$sc = $ws.CreateShortcut($lnk)
+$sc.TargetPath = $full
+$sc.WorkingDirectory = Split-Path $full
+$sc.Description = 'vCenter 통합 포털 (vCenter에서 열기 확인 창 없음)'
+$sc.Save()
+
+Write-Host "바탕화면에 바로가기를 만들었습니다: $lnk"
+Write-Host "  -> 이 바로가기로 포털을 열면 [vCenter에서 열기] 가 확인 창 없이 바로 열립니다."
+Write-Host "vcportal:// 프로토콜을 등록했습니다(index.html 을 직접 연 경우용, Edge 확인 창에서 [열기])."
 Write-Host "  실행 파일: $full"
-Write-Host "포털에서 [vCenter에서 열기] 를 누르고 Edge 확인 창이 뜨면 [열기] 를 선택하세요."
 exit 0

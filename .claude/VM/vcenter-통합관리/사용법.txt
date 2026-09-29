@@ -116,13 +116,16 @@ schtasks /Run /TN vcportal-collector
 # [수집 서버] 등록 작업 삭제 (테스트 후 정리)
 schtasks /Delete /TN vcportal-collector /F
 
-# [사용자 PC] vcportal:// 프로토콜 등록 (사용자당 1회, 관리자 권한 불필요)
+# [사용자 PC] 바탕화면 "vCenter 포털" 바로가기 생성 + vcportal:// 프로토콜 등록 (사용자당 1회, 관리자 권한 불필요)
 powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\launcher\install-launcher.ps1
 
-# [사용자 PC] 프로토콜 등록 해제
+# [사용자 PC] 바로가기 삭제 + 프로토콜 등록 해제
 powershell -ExecutionPolicy Bypass -File \\fileserver\share\vc-portal\launcher\install-launcher.ps1 -Uninstall
 
-# [사용자 PC] 포털 열기 (탐색기에서 더블클릭해도 됨). 특정 VM 화면으로 바로 이동하려면 # 뒤에 /<vcId>/<moref>/summary
+# [사용자 PC] 포털 열기 (권장, 바탕화면 "vCenter 포털" 과 같음): 전용 Edge 에 포털 → [vCenter에서 열기] 확인 창 없음
+\\fileserver\share\vc-portal\launcher\vcportal.exe
+
+# [사용자 PC] index.html 직접 열기 (이 경우 [vCenter에서 열기] 마다 Edge 확인 창에서 [열기] 필요)
 start msedge "file://fileserver/share/vc-portal/index.html"
 
 # [사용자 PC] 런처 단독 테스트 (conf 에 등록된 vCenter 의 /ui/ 주소여야 함)

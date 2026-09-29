@@ -1,9 +1,10 @@
-// vcportal 은 포털의 "vCenter에서 열기" 링크(vcportal://open?url=<딥링크>)를 받아
+// vcportal 은 포털의 "vCenter에서 열기" 요청을 받아
 // 전용 프로필 Edge/Chrome 에서 vCenter 에 자동 로그인한 뒤 딥링크 화면을 연다.
 //
 // 사용법:
 //
-//	vcportal.exe "vcportal://open?url=<인코딩된 딥링크>"
+//	vcportal.exe                                        포털 모드(권장): 전용 브라우저에 포털을 띄우고, 확인 창 없이 열기 요청을 처리
+//	vcportal.exe "vcportal://open?url=<인코딩된 딥링크>"  프로토콜 링크(index.html 을 직접 연 경우, Edge [열기] 확인 필요)
 //	vcportal.exe --url <딥링크> [--conf <vcportal.conf 경로>]
 //
 // conf 기본 위치: <exe 폴더>\..\config\vcportal.conf
@@ -69,19 +70,20 @@ func run(args []string) error {
 		}
 		*deep = v
 	}
-	if *deep == "" {
-		return errors.New("열 주소가 없습니다.\n사용법: vcportal.exe \"vcportal://open?url=<딥링크>\" 또는 vcportal.exe --url <딥링크>")
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("실행 파일 위치를 알 수 없습니다: %v", err)
 	}
 	if *confPath == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("실행 파일 위치를 알 수 없습니다: %v", err)
-		}
 		*confPath = filepath.Join(filepath.Dir(exe), "..", "config", "vcportal.conf")
 	}
 	cfg, err := conf.Load(*confPath)
 	if err != nil {
 		return fmt.Errorf("%v\n(conf: %s)", err, *confPath)
+	}
+	if *deep == "" {
+		// 인자 없이 실행: 포털 모드 (포털은 <exe 폴더>\..\index.html)
+		return portalMode(cfg, filepath.Join(filepath.Dir(exe), "..", "index.html"))
 	}
 	target, err := checkTarget(cfg, *deep)
 	if err != nil {

@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-29 — 런처 포털 모드 (Edge 확인 창 제거)
+
+### 추가
+- `vcportal.exe` 를 인자 없이 실행하면 **포털 모드**: 전용 Edge 에 포털을 열고, `file://` 탭에 `window.vcpOpen`
+  바인딩을 연결해 "vCenter에서 열기"를 `vcportal://` 확인 창 없이 처리. 중복 실행 시 새 포털 탭만 연다.
+- `install-launcher.ps1`: 바탕화면 `vCenter 포털` 바로가기 생성(`-Uninstall` 시 삭제).
+- 웹 UI: `window.vcpOpen` 이 있으면 `vcportal:` 링크 클릭을 가로채 런처로 직접 전달(없으면 기존 프로토콜 링크).
+
+### 변경
+- 런처를 `-H windowsgui` 로 빌드(`build.ps1`/`build.sh`) — 이전 빌드는 콘솔 창이 함께 떴음.
+
+### 검증
+- 이 PC(Edge)에서 포털 모드 → 링크 클릭 시 확인 창 없이 `요청(포털)` → vSphere 탭 열림, 포털 새로고침 후에도 바인딩 유지,
+  두 번째 실행 시 새 탭만 열고 종료, `install-launcher.ps1` 바로가기 생성 확인.
+
+---
+
 ## 2026-09-29 — 최초 릴리스
 
 ### 추가

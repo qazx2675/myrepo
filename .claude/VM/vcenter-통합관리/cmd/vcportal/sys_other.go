@@ -13,6 +13,8 @@ func showMessage(title, text string, isErr bool) {
 	fmt.Fprintf(os.Stderr, "[%s] %s\n", title, text)
 }
 
+func acquireSingleton(name string) bool { return true }
+
 func findBrowser(kind string) (string, error) {
 	names := []string{"microsoft-edge", "microsoft-edge-stable"}
 	if kind == "chrome" {
