@@ -345,9 +345,16 @@ RHEL 버전과 hostname(s4) 판정은 노드 현장에서 이뤄지므로, 같�
 함께 들어 있습니다. 해당 키만 바꾸고 없으면 추가하며, 변경 전 원본은
 `<파일명>.bak.<타임스탬프>` 로 백업합니다. 두 번 실행하면 두 번째는 `NOCHANGE` 입니다.
 
-**바뀐 파일에 대응하는 서비스만 재시작.**
+**적용(apply)은 서비스를 재시작하지 않습니다.** `auto.appl` 때문에 autofs 가 행 걸릴 수 있어서,
+적용은 파일만 바꾸고 데몬은 그대로 둡니다(필요하면 운영자가 직접 재시작). 또한 `auto.appl` 은
+`/etc/auto.appl` 에 바로 쓰지 않고 **새 내용을 `/etc/auto.appl.bak` 에 대기**시킵니다(기존
+`/etc/auto.appl` 은 `auto.appl.bak.<타임스탬프>` 로 백업 후 치움). 네트워크 설정이 모두 끝나면
+노드에서 `/root/auto_appl_restore.sh` 를 실행해 `.bak` 을 `auto.appl` 로 원복하십시오(autofs
+재시작은 하지 않음). 원복 전에는 `ldap_check` 의 auto.appl 기반 인프라 판별이 FAIL 로 나옵니다.
 
-| 바뀐 파일 | 재시작 |
+**롤백(rollback)은 되돌린 파일에 대응하는 서비스만 재시작합니다.**
+
+| 되돌린 파일 | 재시작 |
 |---|---|
 | `ldap.conf`, `resolv.conf` | 없음 |
 | `nslcd.conf` | `nslcd` |
@@ -366,7 +373,7 @@ RHEL 버전과 hostname(s4) 판정은 노드 현장에서 이뤄지므로, 같�
 | 4 | `/etc/nslcd.conf` 또는 `/etc/sssd/sssd.conf` | OS·s4 규칙에 따라 분기. 퍼미션 600 |
 | 5 | `/etc/resolv.conf` | `nameserver` 줄 |
 | 6 | `/etc/ntp.conf` 또는 `/etc/chrony.conf` | `server` 줄 (`pool` 줄은 제거) |
-| 7 | `/etc/auto.appl` | `/appl` 줄의 storage·mountpoint |
+| 7 | `/etc/auto.appl.bak` (원복 후 `/etc/auto.appl`) | `/appl` 줄의 storage·mountpoint. 원복은 `/root/auto_appl_restore.sh` |
 
 ---
 

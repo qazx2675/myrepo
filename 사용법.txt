@@ -34,3 +34,6 @@ read -rsp 'vCenter PW: ' VC_PASSWORD; export VC_PASSWORD; echo
 ./change.sh rollback <인시던트이름>
 
 # 9. 쌓인 인시던트 정리: ./change.sh -u <계정> 실행 → "재개할 인시던트 이름" 에서 dd 입력 → y
+
+# 10. 네트워크 설정이 모두 끝난 뒤, 각 노드에서 auto.appl 원복 (LDAP 적용은 auto.appl 을 /etc/auto.appl.bak 에 대기시키고 데몬을 재시작하지 않음)
+/root/auto_appl_restore.sh

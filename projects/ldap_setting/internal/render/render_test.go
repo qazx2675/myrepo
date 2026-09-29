@@ -113,13 +113,20 @@ func TestRollbackUnknownMode(t *testing.T) {
 	}
 }
 
-// apply 스크립트도 공용 라이브러리를 포함해야 합니다.
+// apply 스크립트도 공용 라이브러리를 포함해야 합니다. 단 apply 는 서비스를
+// 재시작하지 않으므로(autofs 행 방지) restart_for_changed 를 호출하면 안 됩니다.
 func TestApplyScriptIncludesLib(t *testing.T) {
 	s, err := ApplyScript(infra(), config.S4Rule{}, "a1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(s, "restart_for_changed()") || !strings.Contains(s, "restart_for_changed\n") {
-		t.Error("apply 스크립트에 공용 라이브러리 또는 호출이 없습니다")
+	if !strings.Contains(s, "restart_for_changed()") {
+		t.Error("apply 스크립트에 공용 라이브러리가 없습니다")
+	}
+	if strings.Contains(s, "restart_for_changed\n") {
+		t.Error("apply 스크립트가 서비스 재시작을 호출합니다")
+	}
+	if !strings.Contains(s, "/root/auto_appl_restore.sh") {
+		t.Error("apply 스크립트에 auto.appl 원복 스크립트 생성이 없습니다")
 	}
 }

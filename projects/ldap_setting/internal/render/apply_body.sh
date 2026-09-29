@@ -4,7 +4,9 @@
 # 동작
 #   1. 이 노드의 RHEL 메이저 버전과 hostname 으로 nslcd/sssd, ntp/chrony 를 결정
 #   2. 대상 파일의 '해당 키만' 갱신 (전체 덮어쓰기 아님). 바뀌면 .bak.<STAMP> 백업
-#   3. 실제로 내용이 바뀐 파일에 대응하는 서비스만 재시작
+#   3. 서비스(데몬)는 재시작하지 않습니다. autofs 가 /etc/auto.appl 때문에 행이 걸릴 수
+#      있어서, auto.appl 은 /etc/auto.appl.bak 으로 대기시키고 /root/auto_appl_restore.sh
+#      로 네트워크 설정이 끝난 뒤 원복합니다(아래 7번).
 #
 # 한 번의 실행이 남기는 백업은 전부 같은 STAMP 를 씁니다.
 # rollback 은 이 STAMP 를 복원 단위로 사용합니다.
@@ -403,23 +405,79 @@ apply_auto_appl()
         fi
     } > "$tmp"
 
-    # 덮어쓰기 전, 기존 파일이 있으면 고정 이름으로도 한 벌 남깁니다.
-    # (아래 commit_file 이 만드는 .bak.$STAMP 백업과는 별개로, 요청에 따라
-    #  항상 같은 이름 하나로 최근 이전 내용을 바로 찾아볼 수 있게 합니다.
-    #  되돌리기(rollback)는 여전히 .bak.$STAMP 를 씁니다 — 이 파일은 참고용입니다.)
-    if [ -f "$real" ] && [ "$DRYRUN" != "1" ]; then
-        cp -p "$real" "${ROOT}/etc/auto.appl_back" || { fail "백업 실패: /etc/auto.appl_back"; rm -f "$tmp"; return 1; }
+    # 새 내용은 /etc/auto.appl 에 바로 쓰지 않고 /etc/auto.appl.bak 에 대기시킵니다.
+    # autofs 는 auto.appl 이 없으면 그 맵을 읽지 않아 행이 걸리지 않습니다.
+    # 네트워크 설정이 끝난 뒤 /root/auto_appl_restore.sh 가 .bak 을 auto.appl 로 원복합니다.
+    # 기존 /etc/auto.appl 은 rollback 용 .bak.$STAMP 로 옮깁니다.
+    local staged="$real.bak"
+
+    if [ ! -f "$real" ] && [ -f "$staged" ] && cmp -s "$staged" "$tmp"; then
+        rm -f "$tmp"
+        log SAME "$logical (대기 중: /etc/auto.appl.bak)"
+        return 0
+    fi
+    if [ -f "$real" ] && cmp -s "$real" "$tmp"; then
+        rm -f "$tmp"
+        log SAME "$logical"
+        return 0
     fi
 
-    commit_file "$logical" "$tmp"
+    if [ "$DRYRUN" = "1" ]; then
+        log WOULD-CHANGE "$logical (새 내용은 /etc/auto.appl.bak 에 대기)"
+        rm -f "$tmp"
+        mark_changed "$logical"
+        return 0
+    fi
+
+    mkdir -p "$ROOT/etc" "$ROOT/root" || { fail "디렉터리 생성 실패: /etc, /root"; rm -f "$tmp"; return 1; }
+
+    # 기존 파일은 이 실행의 STAMP 로 백업(rollback 이 이 백업을 씁니다)한 뒤 auto.appl 자리에서 치웁니다.
+    if [ -f "$real" ]; then
+        if [ ! -f "$real.bak.$STAMP" ]; then
+            cp -p "$real" "$real.bak.$STAMP" || { fail "백업 실패: $logical"; rm -f "$tmp"; return 1; }
+        fi
+        # 고정 이름 사본도 그대로 남깁니다(기존 동작 유지, 참고용).
+        cp -p "$real" "${ROOT}/etc/auto.appl_back" || { fail "백업 실패: /etc/auto.appl_back"; rm -f "$tmp"; return 1; }
+        rm -f "$real" || { fail "기존 auto.appl 을 치우지 못했습니다: $logical"; rm -f "$tmp"; return 1; }
+    fi
+    mv "$tmp" "$staged" || { fail "쓰기 실패: $logical.bak"; return 1; }
+
+    write_auto_appl_restore
+    mark_changed "$logical"
+    log CHANGED "$logical (새 내용은 /etc/auto.appl.bak 에 대기, 원복: /root/auto_appl_restore.sh)"
+    return 0
+}
+
+# /root/auto_appl_restore.sh : 대기 중인 /etc/auto.appl.bak 을 /etc/auto.appl 로 원복합니다.
+# 서비스는 재시작하지 않습니다(필요하면 운영자가 직접).
+write_auto_appl_restore()
+{
+    local f="$ROOT/root/auto_appl_restore.sh"
+    cat > "$f" <<'RESTORE_EOF' || { fail "원복 스크립트 쓰기 실패: /root/auto_appl_restore.sh"; return 1; }
+#!/bin/bash
+# ldap 설정 적용이 만든 /etc/auto.appl.bak 을 /etc/auto.appl 로 원복합니다.
+# 네트워크 설정이 모두 끝난 뒤에 실행하십시오. autofs 는 재시작하지 않습니다.
+SRC=/etc/auto.appl.bak
+DST=/etc/auto.appl
+if [ ! -f "$SRC" ]; then
+    echo "원복할 파일이 없습니다: $SRC"
+    exit 1
+fi
+if [ -f "$DST" ]; then
+    cp -p "$DST" "$DST.before_restore.$(date +%Y%m%d%H%M%S)" || { echo "기존 $DST 백업 실패"; exit 1; }
+fi
+mv -f "$SRC" "$DST" || { echo "원복 실패: $SRC -> $DST"; exit 1; }
+echo "원복 완료: $DST"
+RESTORE_EOF
+    chmod 700 "$f" 2>/dev/null
 }
 apply_auto_appl
 
 ###############################################################################
-# 8. 바뀐 파일에 대응하는 서비스만 재시작 (표는 lib_common.sh 에 있습니다)
+# 8. 서비스 재시작은 하지 않습니다 (autofs 행 방지). rollback 은 lib_common.sh 의 표를 그대로 씁니다.
 ###############################################################################
 
-restart_for_changed
+log INFO "서비스 재시작 안 함. auto.appl 원복은 /root/auto_appl_restore.sh"
 
 ###############################################################################
 # 9. 결과 한 줄 요약
