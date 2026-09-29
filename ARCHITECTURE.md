@@ -3,6 +3,7 @@
 | 폴더/파일 | 역할 |
 |---|---|
 | `main.go` | gossh v2 전체: `-w` 파싱·범위 확장, 워커풀, DNS 선행 조회, SSH(키 우선), stdout/stderr 분리, 진행률, `-b` 그룹, 위험 명령 가드, autofs 가드, 재검증, 결과 파일 |
+| `tmplimit.go` | `-tmp`/`-limit`/`-tl`: 질문 수집, 비교서버 파일 읽기·가드, 원격 스크립트(base64) 생성 |
 | `term_linux.go` | 터미널 크기 조회·키 입력 모드(`-m`) — Linux 전용 |
 | `term_other.go` | Linux 외 OS용 대체 구현(`-m` 미지원, 빌드만 가능) |
 | `setup.sh` | 오프라인 빌드 (`vendor/`) |

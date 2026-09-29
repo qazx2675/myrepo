@@ -1303,6 +1303,21 @@ var optionDocs = []optionDoc{
 		"reboot, poweroff, shutdown, halt, init 0, init 6, ddc 가 들어간 명령은 기본적으로 실행을 거부합니다.",
 		"이 옵션을 주면 대상 호스트 목록을 보여주고 y/N 확인을 받은 뒤 실행합니다.",
 	}},
+	{"tmp", "", "/tmp 자동정리 시간 변경/삭제 (custom-tmp.conf)", []string{
+		"대상 서버의 /etc/tmpfiles.d/custom-tmp.conf 에서 \"q /tmp 1777 root root @@h\" 줄을 수정합니다. 명령어는 쓰지 않습니다.",
+		"\"변경할 설정값 (시간 또는 d (삭제))\" 를 물어봅니다. 숫자를 넣으면 그 시간(h)으로 바꾸고, d 를 넣으면 그 줄을 삭제합니다.",
+		"해당 줄이 없는데 변경하려는 경우에는 파일의 1번째 줄에 추가합니다. 변경 후의 줄을 출력하며, 결과가 같은 서버는 하나로 묶어 보여줍니다.",
+	}},
+	{"limit", "", "비교서버의 limits.conf 를 대상 서버에 복사", []string{
+		"비교서버의 /etc/security/limits.conf 를 읽어 대상 서버들에 그대로 복사합니다. 명령어는 쓰지 않습니다.",
+		"\"비교서버 입력\" 과 \"복사 진행 (y,n)\" 을 물어봅니다. 비교서버 파일이 비어 있거나 너무 크면 복사하지 않습니다(가드).",
+		"대상 서버의 기존 파일은 limits.conf.bak 으로 백업하며, 이미 있는 .bak 은 덮어씁니다.",
+		"복사 후 대상 서버의 sha256 이 비교서버와 같은지 확인하고, 결과가 같은 서버는 하나로 묶어 요약합니다.",
+	}},
+	{"tl", "", "-tmp 와 -limit 을 질문 한 번에 받아 함께 진행", []string{
+		"두 작업의 질문(설정값, 비교서버, 복사 여부)을 한꺼번에 먼저 물어본 뒤, 서버마다 두 작업을 이어서 진행합니다.",
+		"복사 여부에 n 을 답하면 limits.conf 복사만 건너뛰고 -tmp 작업은 진행합니다.",
+	}},
 }
 
 func printUsage() {
@@ -1371,6 +1386,9 @@ func main() {
 	pmMode := flag.Bool("pm", false, "OS 설치중 감지 + 특정 autofs 계정 경로 접근 점검")
 	bMode := flag.Bool("b", false, "clush 스타일: 결과가 동일한 호스트끼리 묶어서 출력 (-script와 함께 쓰면 무시되고 호스트별로 출력)")
 	mMode := flag.Bool("m", false, "행리스트보기: 실행 중 Enter를 누르면 60초 이상 실행 중인(또는 실행했던) 호스트와 진행시간을 보여줌, 다시 Enter로 복귀")
+	tmpMode := flag.Bool("tmp", false, "대상 서버의 /etc/tmpfiles.d/custom-tmp.conf 의 /tmp 정리 시간을 변경/삭제")
+	limitMode := flag.Bool("limit", false, "비교서버의 /etc/security/limits.conf 를 대상 서버로 복사(.bak 백업, 동일 확인)")
+	tlMode := flag.Bool("tl", false, "-tmp 와 -limit 을 질문 한 번에 받아 함께 진행")
 
 	// ★ pdsh 스타일 "-w^file"/"-wfile" 붙여쓰기 지원을 위해 flag.Parse() 대신 전처리한 인자로 파싱
 	flag.Usage = printUsage
@@ -1382,8 +1400,15 @@ func main() {
 	colorOutEnabled = !*scriptMode && stdoutTTY
 
 	args := flag.Args()
-	if *hostFile == "" || len(args) == 0 {
+	doTmp := *tmpMode || *tlMode
+	doLimit := *limitMode || *tlMode
+	special := doTmp || doLimit
+	if *hostFile == "" || (!special && len(args) == 0) {
 		printUsage()
+		os.Exit(1)
+	}
+	if special && len(args) > 0 {
+		fmt.Fprintln(os.Stderr, "-tmp/-limit/-tl 옵션은 명령어와 함께 쓸 수 없습니다.")
 		os.Exit(1)
 	}
 
@@ -1507,8 +1532,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, " 작업대상이 맞는지 다시한번더 확인하세요. 실수를 하게되면 회사 전체직원의 100만원이 증발됩니다.")
 		fmt.Fprint(os.Stderr, "정말로 위 서버들에 명령을 실행하시겠습니까? (y/N): ")
 
-		reader := bufio.NewReader(os.Stdin)
-		response, _ := reader.ReadString('\n')
+		response, _ := stdinReader.ReadString('\n')
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		if response != "y" && response != "yes" {
@@ -1521,6 +1545,11 @@ func main() {
 	// ★ glibc 리졸버는 대량 동시 조회 시 내부 스레드풀 제약으로 간헐적 실패/지연이 날 수 있어,
 	// Go 자체 순수 구현 리졸버를 쓰도록 강제한다(시스템 리졸버 스레드풀 병목 회피).
 	net.DefaultResolver = &net.Resolver{PreferGo: true}
+
+	// ★ -tmp/-limit/-tl: 질문을 한 번에 모두 받은 뒤, 원격에서 실행할 스크립트를 명령어로 삼는다.
+	if special {
+		command = planSpecial(doTmp, doLimit, *user, authMethods, *port, time.Duration(*timeoutSec)*time.Second)
+	}
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, effectiveConcurrency)
@@ -1536,7 +1565,7 @@ func main() {
 
 	// ★ -b는 -script와 같이 오면 무시한다(순수 결과 모드에서는 묶어 보여주는 요약형 출력이
 	// 목적과 안 맞음). bunchMode가 false면 기존과 동일하게 즉시 호스트별로 출력한다.
-	bunchMode := *bMode && !*scriptMode
+	bunchMode := (*bMode || special) && !*scriptMode
 	bunchOutputs := map[string]string{}
 
 	startTime := time.Now()

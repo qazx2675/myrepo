@@ -280,6 +280,40 @@ Rocky Linux release 8.10 (Green Obsidian)
 - 입력/표준에러가 터미널이 아니면(파이프, `</dev/null` 등) 안내를 한 줄 출력하고 `-m` 없이 동작합니다. 실행 파일 이름이 `pdsh`여도 `-m`을 주면 동작합니다.
 - 1차 실행 동안만 동작하며, 이후 재검증 단계와 요약 출력 전에 자동으로 원래 화면으로 돌아오고 터미널 입력 모드도 원래대로 복원됩니다(Ctrl+C 4회, SIGTERM/SIGHUP 종료 시에도 복원).
 
+### 3.12 `-tmp` / `-limit` / `-tl` 옵션: 설정 파일 일괄 변경
+
+명령어 없이 질문에 답하면 대상 서버들의 설정 파일을 바꿉니다(명령어와 같이 쓸 수 없음). 결과가 같은 서버는
+`-b`처럼 한 그룹으로 묶어 요약해서 보여줍니다(실행 파일 이름이 `pdsh`이거나 `-script`면 호스트별로 출력).
+
+```bash
+./gossh -w hosts.txt -tmp      # /tmp 자동정리 시간 변경/삭제
+./gossh -w hosts.txt -limit    # 비교서버의 limits.conf 복사
+./gossh -w hosts.txt -tl       # 두 작업의 질문을 한 번에 받고 함께 진행
+```
+
+**`-tmp`** — 대상 서버의 `/etc/tmpfiles.d/custom-tmp.conf` 에서 `q /tmp 1777 root root @@h` 줄을 수정합니다.
+
+```text
+변경할 설정값 (시간 또는 d (삭제)) : 12
+```
+
+- 숫자 입력: 그 시간(h)으로 변경(`12` → `q /tmp 1777 root root 12h`). 해당 줄이 없으면 파일의 **1번째 줄에 추가**하고, 파일이 없으면 새로 만듭니다.
+- `d` 입력: 해당 줄 삭제. 줄이 없으면 "해당 줄 없음 (변경 없음)".
+- 변경 후의 줄을 출력합니다. 모든 대상의 결과가 같으면 하나로 요약됩니다. 즉시 적용(`systemd-tmpfiles`)은 하지 않습니다.
+
+**`-limit`** — 비교서버의 `/etc/security/limits.conf` 를 대상 서버들에 그대로 복사합니다.
+
+```text
+비교서버 입력 ( /etc/security/limits.conf) : node0001
+비교서버의 /etc/security/limits.conf를 대상서버로 복사 진행 (y,n) : y
+```
+
+- 대상 서버의 기존 파일은 `limits.conf.bak` 으로 백업합니다(이미 있는 `.bak` 은 덮어씀).
+- 복사 후 대상 서버의 sha256 이 비교서버와 같은지 확인해 "동일" 여부를 요약으로 보여줍니다.
+- **가드**: 비교서버 파일이 비어 있거나 60000바이트를 넘으면 아무것도 복사하지 않고 중단합니다.
+
+**`-tl`** — 위 두 작업의 질문(설정값 → 비교서버 → 복사 여부)을 먼저 모두 받고, 서버마다 두 작업을 이어서 진행합니다. 복사 여부에 `n` 을 답하면 `-tmp` 만 진행합니다. `-tmp -limit` 을 같이 써도 같은 동작입니다.
+
 ---
 
 ## 4. 옵션 전체 목록
@@ -302,6 +336,9 @@ Rocky Linux release 8.10 (Green Obsidian)
 | `-t <초>` | `15` | SSH 접속(TCP 연결 + 핸드셰이크 + 인증) 제한시간(초). 로그인에 성공하면 해제되어, 명령 실행 시간(10분 이상 걸리는 드라이버 설치 등)에는 적용되지 않음. |
 | `-pm` | `false` | `~/.profile` 내 anaconda 감지 시 "OS 설치중" 제외 및 특정 autofs 계정 접근 점검. 두 점검을 본 명령 전에 세션 하나로 실행하며, 점검에만 10초 제한(autofs가 멈추면 미접근으로 분류하고 본 명령은 그대로 실행). |
 | `-dnlgjawkrdjqghkrdls` | `false` | 위험 명령(재부팅, 종료 등) 강제 실행 승인 플래그. |
+| `-tmp` | `false` | 대상 서버의 `/etc/tmpfiles.d/custom-tmp.conf` 의 `/tmp` 정리 시간 변경/삭제 (3.12 참고). 명령어 없이 사용. |
+| `-limit` | `false` | 비교서버의 `/etc/security/limits.conf` 를 대상 서버로 복사(`.bak` 백업, sha256 동일 확인) (3.12 참고). 명령어 없이 사용. |
+| `-tl` | `false` | `-tmp` 와 `-limit` 을 질문 한 번에 받아 함께 진행 (3.12 참고). |
 
 ---
 
@@ -333,6 +370,7 @@ gossh/
 ├── PLAN.md            # 개발 및 기능 개선 계획 문서
 ├── CHANGELOG.md       # 버전별 상세 변경 이력 (v2 개발 히스토리 포함)
 ├── main.go            # gossh v2 메인 소스코드 (진행률/stdout 분리/키 우선/autofs 가드 내장)
+├── tmplimit.go        # -tmp/-limit/-tl (질문 수집, 원격 스크립트 생성, 비교서버 파일 읽기)
 ├── term_linux.go      # 터미널 크기 조회·키 입력 모드(-m) — Linux 전용
 ├── term_other.go      # Linux 외 OS용 대체 구현(-m 미지원, 빌드만 가능하게)
 ├── go.mod / go.sum      # Go 모듈 정의 (Go 1.20 호환)
