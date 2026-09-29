@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>vSphere Client - 통합 포털</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/summary.css">
+</head>
+<body>
+
+<!-- 아이콘 스프라이트 (인라인 SVG, 외부 리소스 없음). 16x16 viewBox, stroke=currentColor -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-vcenter" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="8.5" rx="1"/><path d="M5.5 14h5M8 11v3"/><circle cx="8" cy="6.7" r="1.6"/></symbol>
+    <symbol id="i-datacenter" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12"/><path d="M5.8 5h1M9.2 5h1M5.8 8h1M9.2 8h1M7 14v-3h2v3"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 3.5h4.2l1.4 1.6H14v7.4H2z"/></symbol>
+    <symbol id="i-cluster" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M8 3v10M2 8h12"/></symbol>
+    <symbol id="i-host" viewBox="0 0 16 16"><rect x="3" y="1.8" width="10" height="12.4" rx="1"/><path d="M5.5 5h5M5.5 7.6h5"/><circle cx="6.2" cy="11.4" r=".7"/></symbol>
+    <symbol id="i-vm" viewBox="0 0 16 16"><rect x="2.5" y="6" width="8" height="7.5"/><path d="M5.5 6V2.5h8V9.5h-3"/></symbol>
+    <symbol id="i-navvm" viewBox="0 0 16 16"><rect x="2" y="5" width="9" height="8"/><path d="M5 5V2.5h9V10h-3"/><path d="M4.5 8.5h4"/></symbol>
+    <symbol id="i-navds" viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5.2" ry="2"/><path d="M2.8 4v8c0 1.1 2.3 2 5.2 2s5.2-.9 5.2-2V4M2.8 8c0 1.1 2.3 2 5.2 2s5.2-.9 5.2-2"/></symbol>
+    <symbol id="i-navnet" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2.4 2-2.4 10 0 12M8 2c2.4 2 2.4 10 0 12"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.8-4.1"/><path d="M13.6 2v3.2h-3.2"/></symbol>
+    <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.8"/><path d="M2.5 14c.4-3 2.6-4.6 5.5-4.6s5.100 1.600 5.500 4.600z"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+    <symbol id="i-chevl" viewBox="0 0 16 16"><path d="M10 3.500L5.500 8l4.500 4.500"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2L1.500 13.500h13z"/><path d="M8 6.500v3.500M8 11.700v.6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 16 16"><path d="M3.500 3.500l9 9M12.500 3.500l-9 9"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 16 16"><path d="M9 2.500h4.500V7M13.500 2.500L7 9M11.500 9.500v4h-9v-9h4"/></symbol>
+    <symbol id="i-up" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></symbol>
+  </defs>
+</svg>
+
+<div id="app">
+  <div id="banner" class="banner" hidden></div>
+
+  <header id="hdr">
+    <button id="hdr-menu" class="hbtn" title="탐색기 접기/펼치기"><svg class="svg"><use href="#i-menu"/></svg></button>
+    <a class="brand" href="#/">vSphere Client<span class="badge-int">통합</span></a>
+    <div class="search" id="search">
+      <svg class="svg s-ico"><use href="#i-search"/></svg>
+      <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="전체 vCenter 검색 (호스트, VM, IP)">
+      <div id="sr-drop" class="sr-drop" hidden></div>
+    </div>
+    <div class="hdr-right">
+      <button id="hdr-refresh" class="hbtn hbtn-sep" title="새로고침 (페이지 다시 불러오기)"><svg class="svg lg"><use href="#i-refresh"/></svg></button>
+      <div class="hdr-user" title="공유폴더 권한으로 접근하는 조회 전용 포털입니다"><svg class="svg"><use href="#i-user"/></svg><span>공용 계정 (읽기 전용)</span></div>
+    </div>
+  </header>
+
+  <div id="main">
+    <aside id="nav">
+      <div class="nav-top"><button id="nav-collapse" title="접기"><svg class="svg"><use href="#i-chevl"/></svg></button></div>
+      <div class="nav-tabs">
+        <button class="nt active" title="Hosts and Clusters"><svg class="svg xl"><use href="#i-cluster"/></svg></button>
+        <button class="nt" disabled title="VMs and Templates (미지원)"><svg class="svg xl"><use href="#i-navvm"/></svg></button>
+        <button class="nt" disabled title="Storage (미지원)"><svg class="svg xl"><use href="#i-navds"/></svg></button>
+        <button class="nt" disabled title="Networking (미지원)"><svg class="svg xl"><use href="#i-navnet"/></svg></button>
+      </div>
+      <div id="tree" tabindex="0" role="tree" aria-label="Hosts and Clusters"></div>
+    </aside>
+    <div id="split" title="드래그하여 폭 조절"></div>
+    <section id="content">
+      <div id="objhdr"></div>
+      <div id="tabs" role="tablist"></div>
+      <div id="body"></div>
+    </section>
+  </div>
+
+  <footer id="bottom">
+    <div class="bb-bar">
+      <button id="bb-toggle" title="펼치기/접기"><svg class="svg"><use href="#i-up"/></svg></button>
+      <span class="bb-tab">수집 상태</span>
+      <span id="bb-sum"></span>
+    </div>
+    <div id="bb-panel" hidden></div>
+  </footer>
+</div>
+
+<noscript>이 페이지는 JavaScript 가 필요합니다.</noscript>
+
+<!-- 로드 순서: helpers -> render(기본 렌더러) -> [Step 4 렌더러 파일을 여기에 추가] -> app -->
+<script src="assets/helpers.js"></script>
+<script src="assets/render.js"></script>
+<script src="assets/summary.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+/* summary.css - Step 4: vSphere 8 스타일 Summary 카드 / 목록 탭 */
+.cgrid { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; max-width: 1500px; }
+.vcard { flex: 1 1 330px; max-width: 100%; background: #fff; border: 1px solid var(--border); box-shadow: 0 1px 0 rgba(0,0,0,.08); position: relative; min-width: 0; }
+.vcard.w2 { flex: 2 1 680px; }
+.vcard .vc-h { padding: 16px 40px 8px 16px; font-size: 18px; font-weight: 400; color: #333; }
+.vcard .vc-h small { display: block; font-size: 12px; color: #565656; margin-top: 6px; }
+.vcard .vc-grip { position: absolute; right: 14px; top: 16px; width: 10px; height: 14px; opacity: .55;
+  background-image: radial-gradient(circle, #555 1.3px, transparent 1.6px); background-size: 5px 5px; }
+.vcard .vc-b { padding: 8px 16px 16px; }
+.vcard .vc-f { border-top: 1px solid var(--border-2); padding: 14px 16px; font-size: 12px; letter-spacing: .4px; font-weight: 600; text-transform: uppercase; }
+.vcard .vc-f a { color: var(--link); }
+.vcard table.kv2 { border-collapse: collapse; width: 100%; }
+.vcard table.kv2 th { text-align: left; font-weight: 600; font-size: 13px; padding: 7px 14px 7px 0; vertical-align: top; width: 150px; color: #222; }
+.vcard table.kv2 td { padding: 7px 0; color: #565656; vertical-align: top; word-break: break-word; }
+.vcard table.kv2 td .ico { vertical-align: -3px; margin-right: 6px; }
+.vcard .sub { font-size: 12px; color: #777; }
+.vd-wrap { display: flex; gap: 20px; align-items: flex-start; }
+.vd-wrap .vd-img { flex: none; width: 70px; padding-top: 24px; }
+.vd-wrap .vd-img svg { width: 70px; height: 70px; }
+.vd-wrap table { flex: 1; }
+.guest-body { display: flex; flex-direction: column; align-items: center; padding: 14px 16px 18px; gap: 10px; }
+.guest-screen { width: 100%; max-width: 250px; aspect-ratio: 3 / 2; border: 1px solid #666; background: #f6f8f9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #565656; }
+.guest-screen svg { width: 56px; height: 56px; }
+.guest-os-name { font-size: 13px; text-align: center; color: #333; }
+.btn { display: inline-block; border: 1px solid var(--link); color: var(--link); padding: 5px 14px; font-size: 12px; letter-spacing: .5px; font-weight: 600; text-transform: uppercase; border-radius: 2px; background: #fff; cursor: pointer; text-align: center; }
+.btn:hover { background: #eaf4f9; text-decoration: none; }
+.btn.pri { background: var(--link); color: #fff; }
+.btn.pri:hover { background: #005f88; }
+.btn.block { display: block; width: 100%; max-width: 250px; }
+.lnk-small { font-size: 12px; color: var(--link); }
+.use-lbl { font-size: 13px; font-weight: 600; color: #222; margin-top: 12px; }
+.use-big { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.use-big svg { width: 30px; height: 30px; fill: none; stroke: #333; stroke-width: 1.2; }
+.use-big b { font-size: 26px; font-weight: 300; color: #333; }
+.use-big span { font-size: 12px; color: #565656; align-self: flex-end; margin-bottom: 4px; }
+.rel-h { font-size: 13px; font-weight: 600; margin-top: 10px; color: #222; }
+.rel-i { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.rel-i .none { color: #888; }
+.bars .bar-row { margin: 10px 0 14px; }
+.bars .bar-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.bars .bar-top b { font-weight: 600; }
+.bars .bar-big { font-size: 22px; font-weight: 300; color: #333; margin: 2px 0 4px; }
+.bars .bar-big small { font-size: 12px; color: #565656; }
+.bar { height: 8px; background: #e4e9ec; border-radius: 1px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: #0072a3; }
+.bar i.warn { background: #f2a900; }
+.bar i.crit { background: #e62700; }
+.bar-sub { font-size: 12px; color: #777; margin-top: 3px; display: flex; justify-content: space-between; }
+.ico-big { display: inline-flex; }
+.st-on { color: var(--ok); } .st-off { color: #777; } .st-warn { color: #b26b00; } .st-err { color: var(--err); }
+.notes-t { white-space: pre-wrap; color: #565656; font-size: 13px; }
+.tbl-bar { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; flex-wrap: wrap; }
+.tbl-bar input { height: 28px; width: 260px; padding: 0 8px; border: 1px solid var(--border); font: inherit; border-radius: 2px; }
+.tbl-bar .cnt { color: #666; font-size: 13px; }
+.tbl-bar .btn { margin-left: auto; }
+table.grid th.srt { cursor: pointer; user-select: none; }
+table.grid th.srt:hover { background: #e8eef2; }
+table.grid th .ar { color: var(--link); font-size: 10px; margin-left: 4px; }
+table.grid td.num { text-align: right; }
+table.grid th.num { text-align: right; }
+.morebar { text-align: center; margin: 12px 0; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #999; }
+.dot.green { background: #60b515; } .dot.yellow { background: #f2a900; } .dot.red { background: #e62700; } .dot.gray { background: #999; }
+#objhdr .act.sub { margin-left: 8px; padding-left: 0; border-left: 0; font-weight: 400; }

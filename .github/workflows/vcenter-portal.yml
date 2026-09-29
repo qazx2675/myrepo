@@ -1,0 +1,30 @@
+# master 용: .claude/VM/vcenter-통합관리 변경 시 실행된다.
+name: vcenter-portal CI
+
+on:
+  push:
+    paths:
+      - '.claude/VM/vcenter-통합관리/**'
+      - '.github/workflows/vcenter-portal.yml'
+  pull_request:
+    paths:
+      - '.claude/VM/vcenter-통합관리/**'
+      - '.github/workflows/vcenter-portal.yml'
+
+jobs:
+  vcenter-portal:
+    name: vcenter-portal (정적분석·테스트·Windows 빌드·JS 문법)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ".claude/VM/vcenter-통합관리"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: ".claude/VM/vcenter-통합관리/go.mod" }
+      - run: GOPROXY=off go vet -mod=vendor ./...
+      - run: GOPROXY=off go test -mod=vendor ./...
+      - name: Windows 크로스 빌드 (오프라인 vendor)
+        run: GOPROXY=off GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -mod=vendor ./cmd/...
+      - name: 웹 UI JS 문법 검사
+        run: for f in web/assets/*.js; do node --check "$f"; done

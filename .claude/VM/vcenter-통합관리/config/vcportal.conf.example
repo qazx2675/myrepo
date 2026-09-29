@@ -1,0 +1,35 @@
+﻿# vcportal.conf - 수집기(vcportal-collector)와 로그인 런처(vcportal)가 함께 쓰는 설정 파일
+#
+# - 경로는 탐색기 주소창에서 복사한 그대로 붙여넣으면 됩니다.
+#   (역슬래시 이스케이프 불필요, 앞뒤 따옴표/공백/끝의 \ 는 자동으로 무시, 공백/한글 폴더명 가능)
+# - 주석은 줄 맨 앞의 # 또는 ; 만 인정합니다. 값 뒤에 주석을 붙이지 마세요(비밀번호에 # 이 들어갈 수 있음).
+# - 드라이브 문자(Z:\) 는 네트워크 드라이브일 수 있으므로 공유폴더는 UNC 경로(\\서버\공유\...)로 쓰세요.
+# - 저장 형식: UTF-8(BOM 포함) 또는 ANSI(CP949) 모두 가능합니다.
+
+[paths]
+# 포털 배포 폴더 (공유폴더). 이 아래에 data\ 가 생성됩니다.
+output_dir = \\fileserver\share\vc-portal
+# 수집 중간 파일 작업 폴더 (수집 서버 로컬 디스크). 생략하면 임시 폴더 사용.
+work_dir   = D:\vcportal\work
+# 로그 폴더. 생략하면 파일 로그를 남기지 않습니다.
+log_dir    = D:\vcportal\logs
+
+[collect]
+# 동시에 수집할 vCenter 수
+parallel = 5
+# vCenter 1대당 제한 시간(초)
+timeout  = 300
+
+[account]
+# 모든 vCenter 에서 공통으로 쓰는 조회 전용 계정
+user     = lscsystems@vsphere.local
+password = P@ssw0rd!
+
+[browser]
+# edge 또는 chrome
+type = edge
+
+[vcenters]
+# id = 주소   (id 는 영문/숫자/_/- 만 가능, 파일 이름으로 쓰입니다)
+vc01 = https://vc01.corp.local
+vc02 = https://vc02.corp.local
