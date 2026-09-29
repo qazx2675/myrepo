@@ -26,10 +26,10 @@ dir dist\vc-portal -Recurse
 git push
 
 # [랩 .58] 최신 코드를 받는다. .58 저장소는 cone 모드 sparse-checkout 이라 새 경로는 add 가 필요하다
-cd /root/myrepo && git fetch && git reset --hard origin/master && git sparse-checkout add ".claude/VM/vcenter-통합관리"
+cd /root/saccae-src && git fetch && git reset --hard origin/master && git sparse-checkout add ".claude/VM/vcenter-통합관리"
 
 # [랩 .58] 프로젝트 폴더로 이동
-cd /root/myrepo/.claude/VM/vcenter-통합관리
+cd /root/saccae-src/.claude/VM/vcenter-통합관리
 
 
 A. 빌드 / 정적 검사 (랩 .58)
