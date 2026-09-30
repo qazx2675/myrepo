@@ -70,13 +70,12 @@ done
 [ "${#LP_ARGS[@]}" -gt 0 ] || die "스펙에 cores 가 없어 적용할 토폴로지가 없습니다"
 
 # ---- 대상: BM 이름의 . 앞부분 (lpage_setting 은 이 문자열 + ev01.. 을 VM 이름으로 쓴다) ----
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
-sed -e 's/\r$//' -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$wl" | awk 'NF {split($1,a,"."); print a[1]}' > "$work/vmbase.txt"
-[ -s "$work/vmbase.txt" ] || die "BM 목록이 비어 있습니다: $wl"
+sed -e 's/\r$//' -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$wl" | awk 'NF {split($1,a,"."); print a[1]}' > vmbase.txt
+[ -s vmbase.txt ] || die "BM 목록이 비어 있습니다: $wl"
 
 CONC_ARG=(); [ -n "$conc" ] && CONC_ARG=("-concurrency=$conc")
 cmd=("$LP_BIN" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=vmbase.txt "${LP_ARGS[@]}" -del_lpage ${CONC_ARG[@]+"${CONC_ARG[@]}"})
-echo "스펙 $(basename "$(get specdir)") — BM $(wc -l < "$work/vmbase.txt")대 × VM ${g}대"
+echo "스펙 $(basename "$(get specdir)") — BM $(wc -l < vmbase.txt)대 × VM ${g}대"
 printf '$ %s\n' "${cmd[*]}"
 [ "$dry" = 1 ] && exit 0
 
@@ -86,4 +85,4 @@ if [ -z "${VC_PASSWORD:-}" ] && [ -f "$HERE/../secret_lib.sh" ]; then
 fi
 [ -n "${VC_PASSWORD:-}" ] || { read -r -s -p "$VC_ID 비밀번호: " VC_PASSWORD; echo; }
 export VC_PASSWORD
-(cd "$work" && "${cmd[@]}")   # lpage_setting 은 worklist 를 실행 위치 기준 상대경로로 읽는다
+"${cmd[@]}"
