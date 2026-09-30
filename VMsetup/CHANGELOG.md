@@ -11,6 +11,7 @@
 - **`vm_setup.sh` IP 포트그룹 자동 변환**: `vswitch_<user>.txt` 2번째 칸이 IP 인 줄이 있으면 시작할 때 `vswitch_pgname.sh` 를 불러 `<폴더명>-cae-a-b-c-0` 으로 바꾼다(폴더명은 한 번만 물어 일괄 적용, 원본 `.bak`). 이미 CAE 형식이면 아무것도 하지 않는다.
 - **도메인 없는 BM 이름**: `main_conn` 은 등록할 때 이름에 `.` 이 없으면 먼저 이 서버에서 FQDN 을 조회(이름→IP→역조회로 첫 라벨이 같은 이름, `/etc/hosts` 포함)하고, 못 찾으면 `-domain`(기본 `saccae.com`, `vm_setup.sh` 는 `ESXI_DOMAIN`, 빈 값이면 안 붙임)을 붙여 등록한다. 등록 이름과 방법은 로그에 나온다. 이미 등록됐는지는 짧은 이름↔FQDN 어느 쪽이든 같은 호스트로 본다. FQDN/IP 로 적은 이름은 그대로 쓴다.
 - **IPv4 만 조회**: 이 환경은 IPv6 를 쓰지 않으므로 `main_conn` 의 FQDN 조회는 IPv4 주소만 본다.
+- **`vswitch_pgname.sh` 폴더명 일괄 적용**: 줄마다 폴더명을 묻던 것을 처음 한 번만 묻고 IP 로 적힌 모든 줄에 같은 폴더명을 쓴다(빈 입력은 다시 물음, CAE 형식 줄은 그대로). 검증: IP 3줄 + CAE 형식 1줄 파일에 폴더명 한 번 입력 → IP 3줄만 변환.
 - **OS6**: `bin_os6/main_conn.gz` 를 새 소스로 다시 빌드(Go 1.20, .60).
 - **영향 범위**: `VMsetup/main_conn-source/{main.go,README.md}`, `VMsetup/vm_setup.sh`, `VMsetup/README.md`, `bin_os6/main_conn.gz`.
 - **검증** (.58 vcsim, 새 컨테이너 없이 OS6 는 빌드만):
