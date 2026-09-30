@@ -116,8 +116,8 @@ func main() {
 	// 기대값(정상값)이 다 들어왔는지 검사. -specRoot를 쓰면 vCenter에서 폴더명을 읽어와야
 	// 값이 정해지므로, 그때는 스펙을 적용한 뒤에 같은 검사를 한다(아래 참고).
 	requireExpectFlags := func() {
-		if *ht != "on" && *ht != "off" {
-			log.Fatal("-ht=on 또는 -ht=off 필수")
+		if *ht != "on" && *ht != "off" && *affinityPaths["ev01"] == "" {
+			log.Fatal("-ht=on 또는 -ht=off 필수 (-affinity-ev01 파일이 있으면 생략 가능)")
 		}
 		if *cores == 0 || *numa == 0 || *cpu == 0 || *mem == 0 || *diskStr == "" || *sharesEV01Str == "" {
 			log.Fatal("-cores/-numa/-cpu/-mem/-disk/-shares-ev01 은 모두 필수입니다 (-specRoot로 자동으로 채울 수도 있습니다)")
