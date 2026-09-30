@@ -135,6 +135,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 | `-w <vswitch>` | 포트그룹을 만들 가상 스위치 (기본 `vSwitch0`) |
 | `-c <n>` | vswitch/affinity/lpage 동시 처리 수 |
 | `-del_affinity` | affinity 단계를 설정 대신 삭제로 실행 — VM 의 affinity 설정값을 모두 지움(affinity 파일과 무관) |
+| `-del_lpage` | lpage 단계를 설정 대신 삭제로 실행 — VM 의 HugePage 설정값 6개를 지움(CPU 토폴로지는 그대로) |
 | `-n` | 확인만 — 스펙·포트그룹 할당과 실행 계획까지 보여 주고 종료(vCenter 변경 없음) |
 
 환경변수 `VM_SETUP_EDITOR`로 vim 대신 다른 편집기를 쓸 수 있습니다.
