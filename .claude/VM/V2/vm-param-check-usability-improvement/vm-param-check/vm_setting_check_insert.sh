@@ -18,7 +18,7 @@ unset VC_PASSWORD VC_PASS VCENTER_PASS
 # 계정: 기본 lscsystems@vsphere.local, 다른 계정은 -id <계정> (또는 환경변수 VC_ID)
 # 비밀번호: 항상 V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력 순.
 VC_ID="${VC_ID:-lscsystems@vsphere.local}"
-user=""; want_fix=0
+user=""; want_fix=0; spec_arg=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -id) shift; VC_ID="${1:-}" ;;
@@ -26,7 +26,9 @@ while [ $# -gt 0 ]; do
     -u) shift; user="${1:-}" ;;
     -u=*) user="${1#-u=}" ;;
     -fix) want_fix=1 ;;
-    *) echo "알 수 없는 옵션: $1 (사용법: $0 [-u <user>] [-id <계정>] [-fix])" >&2; exit 2 ;;
+    -specFolder) shift; spec_arg="${1:-}" ;;
+    -specFolder=*) spec_arg="${1#-specFolder=}" ;;
+    *) echo "알 수 없는 옵션: $1 (사용법: $0 [-u <user>] [-id <계정>] [-specFolder <스펙 폴더명>] [-fix])" >&2; exit 2 ;;
   esac
   shift
 done
@@ -78,7 +80,7 @@ fi
 # -specFolder + -yes 로 체크한다(스펙 폴더·대상 목록·vCenter 모두 그 실행 기준이라 추가 입력이 없다).
 # 설정 변경(-fix)은 하지 않고 체크만 한다. 고치려면 이 스크립트에 -fix 를 붙인다(변경 직전 확인은 vm-param-check 가 한다).
 RUN_SPECS="../../VMsetup/run_${user}/check_specs.txt"
-if [ -s "$RUN_SPECS" ]; then
+if [ -z "$spec_arg" ] && [ -s "$RUN_SPECS" ]; then
   export VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD"
   auto_fix=(); [ "$want_fix" = 1 ] && auto_fix=(-fix)
   echo "=== vm_setup.sh 실행(run_${user})의 스펙 폴더로 자동 체크합니다 — 추가 입력 없음 ==="
@@ -108,8 +110,10 @@ export VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD"
 # 스펙 폴더명을 한 번만 물어 모든 대상 VM 에 적용한다. VM 이 CAE 규칙에 안 맞는 vCenter 폴더(예: Task)에 있고
 # 포트그룹명으로도 스펙을 못 정하면 vm-param-check 가 VM 마다 폴더명을 물어 무인으로는 진행이 안 되기 때문이다.
 # 비워 두면 예전처럼 vCenter 폴더/포트그룹으로 자동매칭하고 확인 질문(y/N)을 받는다.
+# -specFolder <이름> 을 주면 질문 없이 그 스펙을 쓴다(run_<user> 기록이 있어도 이 옵션이 우선).
 spec_args=()
-read -r -p "스펙 폴더명 (모든 VM 에 이 스펙 적용, Enter = 자동매칭): " spec_folder
+spec_folder="$spec_arg"
+[ -n "$spec_folder" ] || read -r -p "스펙 폴더명 (모든 VM 에 이 스펙 적용, Enter = 자동매칭): " spec_folder
 if [ -n "$spec_folder" ]; then
   spec_args=(-specFolder="$spec_folder" -yes)
 fi
