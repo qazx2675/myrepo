@@ -18,6 +18,7 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/soap"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -198,7 +199,7 @@ func main() {
 					err := netSys.AddPortGroup(ctx, spec)
 					if err != nil {
 						// 실제 ESXi 는 AlreadyExists, vcsim 은 DuplicateName 으로 돌려준다 — 둘 다 "이미 있음"(정상)
-						if strings.Contains(err.Error(), "AlreadyExists") || strings.Contains(err.Error(), "DuplicateName") {
+						if isAlreadyExists(err) {
 							fmt.Fprintf(&out, "  -> [%s] 스킵: 포트그룹(%s) 이미 존재\n", bmHost, cfg.PGName)
 						} else {
 							fmt.Fprintf(&out, "  -> [%s] 실패: 포트그룹(%s) 생성 에러: %v\n", bmHost, cfg.PGName, err)
@@ -222,4 +223,22 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("vCenter 세션을 안전하게 종료했습니다.")
+}
+
+// isAlreadyExists: 포트그룹이 이미 있어서 난 오류인지 본다(정상으로 취급해 다음으로 넘어간다).
+// 실제 ESXi 는 AlreadyExists 결함을 "The specified key, name, or identifier '...' already exists." 라는
+// 현지화된 메시지로 돌려주므로 결함 종류를 먼저 보고, 메시지 글자도 대소문자 구분 없이 함께 본다.
+func isAlreadyExists(err error) bool {
+	if err == nil {
+		return false
+	}
+	if soap.IsVimFault(err) {
+		switch soap.ToVimFault(err).(type) {
+		case *types.AlreadyExists, *types.DuplicateName:
+			return true
+		}
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "alreadyexists") || strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "duplicatename") || strings.Contains(msg, "duplicate name")
 }

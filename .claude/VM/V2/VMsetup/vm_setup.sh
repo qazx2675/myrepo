@@ -60,6 +60,7 @@ usage() {
   -s <dir>      SPEC_DIR 경로 (기본: vm-param-check 폴더에 SPEC_DIR 이 있으면 그것, 없으면 ${HERE}/../SPEC_DIR)
   -w <vswitch>  포트그룹을 만들 가상 스위치 (기본: vswitch_setting 기본값 vSwitch0)
   -c <n>        vswitch/affinity/lpage 동시 처리 수 (기본: 각 도구 기본값)
+  -del_affinity affinity 단계를 "설정" 대신 "삭제"로 실행 (스펙의 affinity 파일에 적힌 항목을 VM 에서 지움)
   -n            확인만: 스펙·포트그룹 할당까지 정하고 실행 계획을 보여준 뒤 vCenter는 변경하지 않고 종료
   -h            도움말
 
@@ -104,9 +105,9 @@ ask_yn() {
 }
 
 # -id <계정> / -id=<계정> 은 getopts 가 못 읽으므로 -i 로 바꿔 넘긴다
-ARGS=()
+ARGS=(); DEL_AFFINITY=0
 while [ $# -gt 0 ]; do
-  case "$1" in -id) ARGS+=(-i) ;; -id=*) ARGS+=(-i "${1#-id=}") ;; *) ARGS+=("$1") ;; esac
+  case "$1" in -id) ARGS+=(-i) ;; -id=*) ARGS+=(-i "${1#-id=}") ;; -del_affinity) DEL_AFFINITY=1 ;; *) ARGS+=("$1") ;; esac
   shift
 done
 set -- "${ARGS[@]}"
@@ -945,6 +946,7 @@ run() {
 }
 cd "$RUN_DIR" || die "실행 폴더로 이동하지 못했습니다: $RUN_DIR"
 CONC_ARG=(); [ -n "$CONC" ] && CONC_ARG=("-concurrency=$CONC")
+DEL_AFF_ARG=(); [ "$DEL_AFFINITY" = 1 ] && DEL_AFF_ARG=(-del_affinity)
 VSW_ARG=(); [ -n "$TARGET_VSWITCH" ] && VSW_ARG=("-targetVSwitch=$TARGET_VSWITCH")
 MAC_ALL="mac_all.txt"; : > "$MAC_ALL"
 rm -rf logs; mkdir -p logs; : > run.log; rm -f check_fail check_summary.txt
@@ -982,7 +984,7 @@ step_power() {
 }
 step_affinity() {
   spec_flags "$1" || return 1
-  run "$HERE/affinity_setting-source/affinity_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${AFF_ARGS[@]}" "${CONC_ARG[@]}"
+  run "$HERE/affinity_setting-source/affinity_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${AFF_ARGS[@]}" "${DEL_AFF_ARG[@]}" "${CONC_ARG[@]}"
 }
 step_lpage() {
   spec_flags "$1" || return 1
