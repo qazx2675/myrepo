@@ -61,6 +61,7 @@ usage() {
   -w <vswitch>  포트그룹을 만들 가상 스위치 (기본: vswitch_setting 기본값 vSwitch0)
   -c <n>        vswitch/affinity/lpage 동시 처리 수 (기본: 각 도구 기본값)
   -del_affinity affinity 단계를 "설정" 대신 "삭제"로 실행 (VM 의 affinity 설정값을 모두 지움 — affinity 파일과 무관)
+  -del_lpage    lpage 단계를 "설정" 대신 "삭제"로 실행 (VM 의 HugePage 설정값 6개를 지움 — CPU 토폴로지는 그대로)
   -n            확인만: 스펙·포트그룹 할당까지 정하고 실행 계획을 보여준 뒤 vCenter는 변경하지 않고 종료
   -h            도움말
 
@@ -105,9 +106,9 @@ ask_yn() {
 }
 
 # -id <계정> / -id=<계정> 은 getopts 가 못 읽으므로 -i 로 바꿔 넘긴다
-ARGS=(); DEL_AFFINITY=0
+ARGS=(); DEL_AFFINITY=0; DEL_LPAGE=0
 while [ $# -gt 0 ]; do
-  case "$1" in -id) ARGS+=(-i) ;; -id=*) ARGS+=(-i "${1#-id=}") ;; -del_affinity) DEL_AFFINITY=1 ;; *) ARGS+=("$1") ;; esac
+  case "$1" in -id) ARGS+=(-i) ;; -id=*) ARGS+=(-i "${1#-id=}") ;; -del_affinity) DEL_AFFINITY=1 ;; -del_lpage) DEL_LPAGE=1 ;; *) ARGS+=("$1") ;; esac
   shift
 done
 set -- "${ARGS[@]}"
@@ -947,6 +948,7 @@ run() {
 cd "$RUN_DIR" || die "실행 폴더로 이동하지 못했습니다: $RUN_DIR"
 CONC_ARG=(); [ -n "$CONC" ] && CONC_ARG=("-concurrency=$CONC")
 DEL_AFF_ARG=(); [ "$DEL_AFFINITY" = 1 ] && DEL_AFF_ARG=(-del_affinity)
+DEL_LP_ARG=(); [ "$DEL_LPAGE" = 1 ] && DEL_LP_ARG=(-del_lpage)
 VSW_ARG=(); [ -n "$TARGET_VSWITCH" ] && VSW_ARG=("-targetVSwitch=$TARGET_VSWITCH")
 MAC_ALL="mac_all.txt"; : > "$MAC_ALL"
 rm -rf logs; mkdir -p logs; : > run.log; rm -f check_fail check_summary.txt
@@ -989,7 +991,7 @@ step_affinity() {
 step_lpage() {
   spec_flags "$1" || return 1
   [ "${#LP_ARGS[@]}" -gt 0 ] || { say "스펙에 cores 가 없어 lpage_setting 을 건너뜁니다."; note "skip:스펙에 cores 가 없음"; return 0; }
-  run "$HERE/lpage_setting-source/lpage_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${LP_ARGS[@]}" "${CONC_ARG[@]}"
+  run "$HERE/lpage_setting-source/lpage_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${LP_ARGS[@]}" "${DEL_LP_ARG[@]}" "${CONC_ARG[@]}"
 }
 # step_license — 모든 BM 대상 1회. 평가판 호스트가 있으면 license_assign 이 라이선스 번호를 표준입력으로 묻는다
 # (라이선스가 1개여도 묻는다. q = 취소, 종료코드 0). 평가판 호스트가 없으면 묻지 않고 끝난다.

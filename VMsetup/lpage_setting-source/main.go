@@ -95,6 +95,7 @@ func main() {
 
 	applyTopology := flag.Bool("applyTopology", true, "설정 편집 > CPU 토폴로지(소켓당 코어 수/NUMA 노드) 적용 여부")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (Reconfigure 전송+대기 전 구간에 적용)")
+	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값을 설정하지 않고 삭제한다 (sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled / numa.vcpu.maxPerVirtualNode). ev 그룹을 안 주면 ev01~ev99 전부, CPU 토폴로지는 건드리지 않는다
 	collapseEvUsage(regexp.MustCompile(`^ev(\d{2})`))
 
 	flag.Parse()
@@ -117,6 +118,10 @@ func main() {
 		if g.cores == 0 {
 			continue
 		}
+		if *delLpage { // 삭제 모드: 코어/소켓 값은 쓰지 않는다(대상 ev 를 고르는 데만 쓴다)
+			groups = append(groups, evGroup{suffix: g.suffix})
+			continue
+		}
 		if g.sockets == 0 {
 			log.Fatalf("[%s] -%sCores를 지정했으면 -%sSockets도 필요합니다.", g.suffix, g.suffix, g.suffix)
 		}
@@ -133,6 +138,11 @@ func main() {
 		groups = append(groups, g)
 	}
 
+	if *delLpage && len(groups) == 0 { // 그룹을 안 주면 ev01~ev99 전부가 삭제 대상
+		for _, g := range rawGroups {
+			groups = append(groups, evGroup{suffix: g.suffix})
+		}
+	}
 	if len(groups) == 0 {
 		log.Fatal("최소 하나의 그룹은 지정해야 합니다 (-ev01Cores ~ -ev99Cores 중 하나 이상 + 대응하는 Sockets).")
 	}
@@ -158,8 +168,12 @@ func main() {
 	for i, g := range groups {
 		groupNames[i] = g.suffix
 	}
-	fmt.Printf("병렬(워커풀) 방식 성능 최적화(VMX) 파라미터 주입을 시작합니다. (접속 계정: %s, 대상 그룹: %s, 동시 처리 제한: %d)\n",
-		*vcId, strings.Join(groupNames, ","), *concurrency)
+	if *delLpage {
+		fmt.Printf("HugePage 설정값 삭제(-del_lpage)를 시작합니다. (접속 계정: %s, 대상 그룹: %d개, 동시 처리 제한: %d)\n", *vcId, len(groupNames), *concurrency)
+	} else {
+		fmt.Printf("병렬(워커풀) 방식 성능 최적화(VMX) 파라미터 주입을 시작합니다. (접속 계정: %s, 대상 그룹: %s, 동시 처리 제한: %d)\n",
+			*vcId, strings.Join(groupNames, ","), *concurrency)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -203,16 +217,30 @@ func main() {
 		log.Fatalf("VM 목록 조회 중 오류 발생: %v", err)
 	}
 	var allVms []mo.VirtualMachine
-	err = vmView.Retrieve(ctx, []string{"VirtualMachine"}, []string{"name"}, &allVms)
+	vmProps := []string{"name"}
+	if *delLpage {
+		vmProps = append(vmProps, "config.extraConfig") // 지울 항목이 실제로 있는지 알아야 한다
+	}
+	err = vmView.Retrieve(ctx, []string{"VirtualMachine"}, vmProps, &allVms)
 	_ = vmView.Destroy(ctx)
 	if err != nil {
 		log.Fatalf("VM 목록 조회 중 오류 발생: %v", err)
 	}
 
 	targetVmMap := make(map[string]*object.VirtualMachine)
+	currentKeys := make(map[string]map[string]bool) // 삭제 모드: VM 이름 -> 지금 들어 있는 extraConfig 키
 	for _, vm := range allVms {
 		if regexMatcher.MatchString(vm.Name) {
 			targetVmMap[vm.Name] = object.NewVirtualMachine(client.Client, vm.Self)
+			if *delLpage && vm.Config != nil {
+				ks := map[string]bool{}
+				for _, ov := range vm.Config.ExtraConfig {
+					if opt, ok := ov.(*types.OptionValue); ok && fmt.Sprintf("%v", opt.Value) != "" {
+						ks[opt.Key] = true
+					}
+				}
+				currentKeys[vm.Name] = ks
+			}
 		}
 	}
 
@@ -254,7 +282,7 @@ func main() {
 	sem := make(chan struct{}, *concurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var succeeded, failedCnt int
+	var succeeded, failedCnt, noopCnt int
 
 	for _, j := range jobs {
 		wg.Add(1)
@@ -262,6 +290,38 @@ func main() {
 		go func(j vmJob) {
 			defer wg.Done()
 			defer func() { <-sem }()
+
+			if *delLpage {
+				// 값을 빈 문자열로 보내면 vCenter 가 그 항목을 VM 설정에서 지운다(CPU 토폴로지는 건드리지 않는다).
+				var del []types.BaseOptionValue
+				for _, key := range lpageKeys {
+					if currentKeys[j.vmName][key] {
+						del = append(del, &types.OptionValue{Key: key, Value: ""})
+					}
+				}
+				if len(del) == 0 {
+					safePrintf("[%s] 지울 HugePage 항목이 없습니다 (이미 없음, PASS)\n", j.vmName)
+					mu.Lock()
+					noopCnt++
+					mu.Unlock()
+					return
+				}
+				task, taskErr := j.vm.Reconfigure(ctx, types.VirtualMachineConfigSpec{ExtraConfig: del})
+				if taskErr == nil {
+					safePrintf("[%s] HugePage 항목 삭제 요청 전송 완료 (%d개)\n", j.vmName, len(del))
+					taskErr = task.Wait(ctx)
+				}
+				mu.Lock()
+				if taskErr != nil {
+					failedCnt++
+					safePrintf("[%s] 삭제 실패: %v\n", j.vmName, taskErr)
+				} else {
+					succeeded++
+					safePrintf("[%s] 완료 확인됨\n", j.vmName)
+				}
+				mu.Unlock()
+				return
+			}
 
 			spec := types.VirtualMachineConfigSpec{}
 			coresStr := strconv.Itoa(j.coresPerSocket)
@@ -319,9 +379,13 @@ func main() {
 
 	wg.Wait()
 
-	fmt.Printf("\n완료: 성공 %d / 실패 %d\n", succeeded, failedCnt)
+	fmt.Printf("\n완료: 성공 %d / 이미 없음 %d / 실패 %d\n", succeeded, noopCnt, failedCnt)
 	if failedCnt > 0 {
 		os.Exit(2)
+	}
+	if *delLpage {
+		fmt.Println("모든 VM의 HugePage 설정값 삭제가 끝났습니다.")
+		return
 	}
 	fmt.Println("모든 VM의 VMX 성능 파라미터가 완벽하게 주입되었습니다!")
 }
@@ -351,4 +415,14 @@ func collapseEvUsage(re *regexp.Regexp) {
 		fmt.Fprintf(out, "Usage of %s:\n", os.Args[0])
 		fs.PrintDefaults()
 	}
+}
+
+// lpageKeys: lpage_setting 이 넣는 VMX 항목. -del_lpage 는 이 항목들을 지운다.
+var lpageKeys = []string{
+	"sched.mem.lpage.enable1GPage",
+	"sched.mem.pin",
+	"sched.mem.prealloc",
+	"sched.mem.prealloc.pinnedMainMem",
+	"sched.swap.vmxSwapEnabled",
+	"numa.vcpu.maxPerVirtualNode",
 }
