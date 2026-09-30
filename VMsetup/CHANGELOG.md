@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-09-30 — BM 호스트 등록(`main_conn`) 첫 단계 편입, IP 포트그룹명 자동 변환
+
+- **`main_conn-source`**: 소스에 값이 박힌 샘플이던 도구를 `vm-setting-go-lang/main_connect.go` 와 같은 옵션 기반 도구로 교체(`-vcTargetIP -id -folderName -worklistFile -datacenter -concurrency`, 비밀번호는 환경변수 `VC_PASSWORD`/`ESXI_PASSWORD`). 등록 여부 확인은 데이터센터의 호스트 이름을 한 번에 가져와 **짧은 이름↔FQDN 을 같은 호스트로** 본다(예전 `HostSystem` 이름 검색은 짧은 이름으로 적으면 FQDN 등록 호스트를 못 찾아 중복 등록을 시도했다).
+- **`vm_setup.sh`**: 첫 실행 단계 "호스트 등록"(`main_conn -folderName=Task`) 추가 — 폴더는 `ESXI_FOLDER`(기본 `Task`), ESXi 계정은 `ESXI_ID`(기본 `root`)로 바꾼다. ESXi 비밀번호는 `../secret` 암호 파일(`passwd_update.sh` 의 esxi) → 직접 입력 순이며, 실행마다 `ESXI_PASSWORD` 를 `unset` 하고 시작한다. 폴더는 vCenter 에 미리 있어야 한다.
+- **`vm_setup.sh` IP 포트그룹 자동 변환**: `vswitch_<user>.txt` 2번째 칸이 IP 인 줄이 있으면 시작할 때 `vswitch_pgname.sh` 를 불러 `<폴더명>-cae-a-b-c-0` 으로 바꾼다(폴더명 질문, Enter = 직전 폴더명, 원본 `.bak`). 이미 CAE 형식이면 아무것도 하지 않는다.
+- **OS6**: `bin_os6/main_conn.gz` 를 새 소스로 다시 빌드(Go 1.20, .60).
+- **영향 범위**: `VMsetup/main_conn-source/{main.go,README.md}`, `VMsetup/vm_setup.sh`, `VMsetup/README.md`, `bin_os6/main_conn.gz`.
+- **검증** (.58 vcsim, 새 컨테이너 없이 OS6 는 빌드만):
+  - `main_conn` 단독: 없는 호스트 2대 `등록 완료`, 재실행 `이미 등록됨 (PASS)`, 없는 폴더는 `위치를 찾을 수 없습니다`.
+  - `vm_setup.sh -u lsh`(BM 40, 이미 FQDN 으로 등록됨, 짧은 이름 목록): 40대 모두 `이미 등록됨`, 종료코드 0, 2회 연속 실행도 동일.
+  - 변환: `vswitch_iptest.txt`(IP 2줄) → `SAC-VM06-HPC-cae-10-20-30-0` 2줄, `.bak` 생성, 다시 실행하면 변환 안 함.
+  - 미확인: 실제 vCenter 에서 `Task` 폴더 등록(vcsim 은 폴더를 미리 만들어 시험), OS6 실행(빌드만 확인).
+
 ## 2026-09-26 — 실행 단계 진행 모니터, `license_assign` 편입
 
 - **`vm_setup.sh` 진행 모니터**: 실행 확인(y) 이후 단계를 도구 출력을 흘려보내는 대신 단계별 요약 화면으로 보여준다(선례 `.claude/HPC/ip_change/internal/monitor` 방식 — `/dev/tty` 대체 화면, 끝나면 원래 화면 복원). ↑/↓(k/j) 이동, Enter 로 그 단계 로그 보기(PgUp/PgDn, 진행 중이면 새 줄을 따라감)·Enter 로 목록, 끝나면 커서가 `[종료]`로 가서 Enter 두 번이면 종료 후 최종 요약(단계별 걸린 시간, 스펙 체크, MAC 목록, 로그 경로). Ctrl+C 는 5초 안에 3번(1·2번째 안내만, 3번째 실행 중인 도구를 끝내고 종료코드 130). 단계 실패 시 `[실패]`/남은 단계 `[중단]`, 종료코드 1.
