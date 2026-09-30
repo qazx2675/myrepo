@@ -42,6 +42,15 @@ fi
 
 export VC_USER VC_PASS
 
+# 스펙 폴더명을 한 번만 물어 모든 대상 VM 에 적용한다. VM 이 CAE 규칙에 안 맞는 vCenter 폴더(예: Task)에 있고
+# 포트그룹명으로도 스펙을 못 정하면 vm-param-check 가 VM 마다 폴더명을 물어 무인으로는 진행이 안 되기 때문이다.
+# 비워 두면 예전처럼 vCenter 폴더/포트그룹으로 자동매칭하고 확인 질문(y/N)을 받는다.
+spec_args=()
+read -r -p "스펙 폴더명 (모든 VM 에 이 스펙 적용, Enter = 자동매칭): " spec_folder
+if [ -n "$spec_folder" ]; then
+  spec_args=(-specFolder="$spec_folder" -yes)
+fi
+
 fix_args=()
 read -r -p "체크 후 실제로 설정을 변경(-fix)하시겠습니까? (y/N): " do_fix
 if [[ "$do_fix" == "y" || "$do_fix" == "Y" ]]; then
@@ -58,4 +67,5 @@ echo "=== 체크 실행: 대상=${target_file}, 출력=${out_file} ==="
   -f="$target_file" \
   -specRoot="$SPEC_ROOT" \
   -out="$out_file" \
+  ${spec_args[@]+"${spec_args[@]}"} \
   "${fix_args[@]}"

@@ -830,7 +830,12 @@ func promptFolderName(specRoot string, vm model.VMInfo) (string, string) {
 	reader := bufio.NewReader(os.Stdin)
 	for attempt := 1; attempt <= 3; attempt++ {
 		fmt.Print("  이 VM에 적용할 스펙의 vCenter 폴더명을 입력하세요 (목록을 보려면 ? 입력): ")
-		line, _ := reader.ReadString('\n')
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil && line == "" {
+			fmt.Println()
+			log.Fatalf("%s: 입력을 받을 수 없어(터미널이 아니거나 입력이 끝남) 스펙을 정하지 못했습니다 — "+
+				"-specFolder=<스펙 폴더명> 으로 지정해서 다시 실행하세요 (vm_setting_check_insert.sh 는 시작할 때 스펙 폴더명을 한 번 물어봅니다)", vm.Name)
+		}
 		line = strings.TrimSpace(line)
 		if line == "?" {
 			printAvailableSpecs(specRoot)
