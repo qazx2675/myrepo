@@ -75,7 +75,7 @@ sed -e 's/\r$//' -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$w
 [ -s "$work/vmbase.txt" ] || die "BM 목록이 비어 있습니다: $wl"
 
 CONC_ARG=(); [ -n "$conc" ] && CONC_ARG=("-concurrency=$conc")
-cmd=("$LP_BIN" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="$work/vmbase.txt" "${LP_ARGS[@]}" -del_lpage ${CONC_ARG[@]+"${CONC_ARG[@]}"})
+cmd=("$LP_BIN" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile=vmbase.txt "${LP_ARGS[@]}" -del_lpage ${CONC_ARG[@]+"${CONC_ARG[@]}"})
 echo "스펙 $(basename "$(get specdir)") — BM $(wc -l < "$work/vmbase.txt")대 × VM ${g}대"
 printf '$ %s\n' "${cmd[*]}"
 [ "$dry" = 1 ] && exit 0
@@ -86,4 +86,4 @@ if [ -z "${VC_PASSWORD:-}" ] && [ -f "$HERE/../secret_lib.sh" ]; then
 fi
 [ -n "${VC_PASSWORD:-}" ] || { read -r -s -p "$VC_ID 비밀번호: " VC_PASSWORD; echo; }
 export VC_PASSWORD
-"${cmd[@]}"
+(cd "$work" && "${cmd[@]}")   # lpage_setting 은 worklist 를 실행 위치 기준 상대경로로 읽는다
