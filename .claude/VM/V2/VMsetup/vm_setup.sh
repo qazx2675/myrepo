@@ -1012,15 +1012,16 @@ chk() { # <색> <태그> <내용> — 화면(로그)과 check_summary.txt 에 �
   printf '[%s] %s\n' "$2" "$3" >> check_summary.txt
 }
 step_check() {
-  local k=0 d g bm n rc total fail=0
+  local k=0 d g bm n rc total fail=0 sumvm=0 sumfail=0 unfinished=0 skipped=0
   hdr "스펙 체크 — vm-param-check (실행한 스펙과 같은지)" 2>&1
   printf '%s\n' "$VC_IP" > vcenter_check.txt
-  : > check_summary.txt
+  : > check_summary.txt; : > check_specs.txt
   for d in "${SPEC_ORDER[@]}"; do
     k=$((k + 1))
     spec_lookup "$(basename "$d")" || { printf '%s[오류] %s%s\n' "$C_RED" "$LOOKUP_ERR" "$C_RST" >&2; return 1; }
     if [ -z "$(exp_get "$LOOKUP_DIR" cores-ev01)" ] || [ -z "$(exp_get "$LOOKUP_DIR" numa-ev01)" ]; then
       chk "$C_YEL" 건너뜀 "스펙 $k $(basename "$d") — ev01 cores/numa 가 없어 vm-param-check 로 체크할 수 없습니다"
+      skipped=$((skipped + 1))
       continue
     fi
     g="$(exp_get "$LOOKUP_DIR" groups)"
@@ -1029,27 +1030,39 @@ step_check() {
       [ -n "$bm" ] || continue
       for n in $(seq 1 "$g"); do vm_name "$bm" "$n" >> "check_targets_$k.txt"; echo >> "check_targets_$k.txt"; done
     done < "worklist_$k.txt"
+    # 이번에 쓴 스펙 폴더와 그 대상 VM 목록을 남긴다 — vm_setting_check_insert.sh 가 물어보지 않고 그대로 가져다 쓴다.
+    printf '%s\t%s\n' "$(basename "$d")" "$RUN_DIR/check_targets_$k.txt" >> check_specs.txt
     VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD" "$CHECK_BIN" -noColor -vcenterList=vcenter_check.txt -f="check_targets_$k.txt" \
       -specRoot="$SPEC_DIR" -specFolder="$(basename "$d")" -yes -onlyFail -out="check_$k.csv" > "check_$k.log" 2>&1 < /dev/null
     rc=$?
     total="$(sed -n 's/^총 \([0-9]*\)대 중 PASS \([0-9]*\)대, FAIL \([0-9]*\)대.*/\1 \2 \3/p' "check_$k.log" | tail -1)"
     if [ "$rc" -ne 0 ] || [ -z "$total" ]; then
-      fail=1; warn "스펙 $k $(basename "$d"): 체크를 끝내지 못했습니다 (종료코드 $rc) — $RUN_DIR/check_$k.log"
+      fail=1; unfinished=$((unfinished + 1)); warn "스펙 $k $(basename "$d"): 체크를 끝내지 못했습니다 (종료코드 $rc) — $RUN_DIR/check_$k.log"
       tail -3 "check_$k.log" | sed 's/^/     /' >&2
       printf '[미완료] 스펙 %s %s — 체크를 끝내지 못했습니다 (check_%s.log)\n' "$k" "$(basename "$d")" "$k" >> check_summary.txt
       continue
     fi
     set -- $total
+    sumvm=$((sumvm + $1)); sumfail=$((sumfail + $3))
     if [ "$3" -eq 0 ]; then
-      chk "$C_GRN" 일치 "스펙 $k $(basename "$d") — VM $1대 모두 PASS"
+      chk "$C_GRN" OK "스펙 $k $(basename "$d") — VM $1대 모두 설정값이 스펙과 동일"
     else
       fail=1
-      chk "$C_YEL" 차이 "스펙 $k $(basename "$d") — VM $1대 중 PASS $2 / FAIL $3"
+      chk "$C_YEL" FAIL "스펙 $k $(basename "$d") — 설정값이 스펙과 다른 VM $3대 (VM $1대 중 PASS $2 / FAIL $3)"
       grep -h '\[FAIL\]\|\[설정없음\]' "check_$k.log" | sed 's/: 기대값.*//' | sort | uniq -c | sort -rn | head -8 | sed 's/^/      /'
     fi
   done
   echo "$fail" > check_fail
-  note "$(awk 'NR > 1 { printf " / " } { printf "%s", $0 }' check_summary.txt)"
+  # 모니터 요약: FAIL 이 있으면 설정값에 FAIL 이 있다고, 전부 같으면 OK 로 보여준다.
+  if [ "$unfinished" -gt 0 ]; then
+    note "체크 미완료 ${unfinished}건 — check_<번호>.log 확인"
+  elif [ "$sumfail" -gt 0 ]; then
+    note "FAIL 있음 — 설정값이 스펙과 다른 VM ${sumfail}대 / 전체 ${sumvm}대 (check_<번호>.log)"
+  elif [ "$sumvm" -gt 0 ]; then
+    note "OK — 모든 VM ${sumvm}대의 설정값이 스펙과 동일"
+  else
+    note "skip:체크할 스펙 없음(${skipped}건 건너뜀)"
+  fi
 }
 # ---------- MAC 목록 합본 → awx_route 로 <user>.txt 복사 ----------
 # mac_info 는 스펙마다(MAC 조사 단계에서) 실행했고, mac_apply_disk 가 디스크를 바꿔 MAC_ALL 에 이어붙였다.
