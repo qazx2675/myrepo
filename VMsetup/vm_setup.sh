@@ -31,7 +31,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 USER_TAG=""; VC_IP="${VC_IP:-}"; VC_ID="${VC_ID:-lscsystems@vsphere.local}"
 SPEC_DIR=""; CONC=""; TARGET_VSWITCH=""; DRY_RUN=0
 # ESXi(BM)를 vCenter 에 등록할 대상(호스트 및 클러스터 트리의 폴더/클러스터 이름)과 ESXi 계정
-ESXI_FOLDER="${ESXI_FOLDER:-Task}"; ESXI_ID="${ESXI_ID:-root}"
+ESXI_FOLDER="${ESXI_FOLDER:-Task}"; ESXI_ID="${ESXI_ID:-root}"; ESXI_DOMAIN="${ESXI_DOMAIN-saccae.com}"
 EDITOR_CMD="${VM_SETUP_EDITOR:-vim}"
 CHECK_DIR="$HERE/../vm-param-check-usability-improvement/vm-param-check"
 CHECK_BIN="$CHECK_DIR/vm-param-check"
@@ -869,7 +869,7 @@ print_plan() {
 hdr "실행 계획 (실행 폴더: $RUN_DIR)" 2>&1
 say "vCenter        : ${VC_IP:-(미지정)} / 계정 $VC_ID"
 say "설치 정보       : OS 버전 $MAC_ARGSTR / 인프라 $MAC_ARG1"
-say "호스트 등록     : main_conn -folderName=$ESXI_FOLDER (BM ${#BMS[@]}대 → vCenter '$ESXI_FOLDER' 위치, 이미 등록된 호스트는 통과)"
+say "호스트 등록     : main_conn -folderName=$ESXI_FOLDER (BM ${#BMS[@]}대 → vCenter '$ESXI_FOLDER' 위치, 이미 등록된 호스트는 통과, 도메인 없는 이름은 FQDN 조회 → 안 되면 .${ESXI_DOMAIN:-(없음)} 붙임)"
 say "포트그룹 생성   : $(wc -l < "$RUN_DIR/vswitch.txt")건 (vswitch_setting${TARGET_VSWITCH:+, 스위치 $TARGET_VSWITCH})"
 k=0
 for d in "${SPEC_ORDER[@]}"; do
@@ -959,7 +959,7 @@ spec_flags() {
 # ---------- 단계 함수 ----------
 step_bm_register() {
   printf '%s\n' "${BMS[@]}" > bm_all.txt
-  run "$HERE/main_conn-source/main_conn" -vcTargetIP="$VC_IP" -id="$VC_ID" -folderName="$ESXI_FOLDER" -worklistFile=bm_all.txt "${CONC_ARG[@]}"
+  run "$HERE/main_conn-source/main_conn" -vcTargetIP="$VC_IP" -id="$VC_ID" -folderName="$ESXI_FOLDER" -domain="$ESXI_DOMAIN" -worklistFile=bm_all.txt "${CONC_ARG[@]}"
 }
 step_vswitch() {
   [ -s vswitch.txt ] || { say "만들 포트그룹이 없어 건너뜁니다."; note "skip:만들 포트그룹 없음"; return 0; }

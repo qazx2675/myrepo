@@ -109,6 +109,7 @@ func main() {
 	datacenterName := flag.String("datacenter", "", "데이터센터 이름 (데이터센터가 여러 개면 필수, 1개뿐이면 생략 가능)")
 	worklistFile := flag.String("worklistFile", "worklist.txt", "VM 대상 목록 파일")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (등록 여부 확인 + 호스트 등록 전송+대기 전 구간에 적용)")
+	domain := flag.String("domain", "saccae.com", "도메인 없이 적힌 호스트 이름을 FQDN 으로 조회하지 못할 때 뒤에 붙일 도메인 (빈 값이면 붙이지 않음)")
 	flag.Parse()
 
 	if *vcTargetIP == "" || *folderName == "" {
@@ -260,11 +261,12 @@ func main() {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			safePrintf("  -> [%s] 등록 Task 발급 중...\n", host)
+			fqdn, how := registrationName(host, *domain)
+			safePrintf("  -> [%s] 등록 Task 발급 중... (등록 이름 %s — %s)\n", host, fqdn, how)
 			// spec은 고루틴 로컬 변수 — 각 호출마다 독립된 값이라
 			// 여러 고루틴이 동시에 등록을 진행해도 서로의 spec을 건드리지 않는다.
 			spec := types.HostConnectSpec{
-				HostName: host,
+				HostName: fqdn,
 				UserName: "root",
 				Password: esxiPassword,
 				Force:    true,
@@ -317,4 +319,31 @@ func registeredHostNames(ctx context.Context, client *govmomi.Client, dc *object
 		names[shortName(h.Name)] = true
 	}
 	return names, nil
+}
+
+// registrationName은 vCenter 에 등록할 때 쓸 호스트 이름을 정한다.
+// 이미 FQDN 이거나 IP 이면 그대로 쓴다. 도메인 없는 이름이면 먼저 이 서버에서 FQDN 을 조회하고
+// (이름 → IP → 역조회로 첫 라벨이 같은 이름), 조회하지 못하면 -domain 을 붙인다.
+func registrationName(host, domain string) (string, string) {
+	if net.ParseIP(host) != nil || strings.Contains(host, ".") {
+		return host, "입력한 이름 그대로"
+	}
+	if addrs, err := net.LookupHost(host); err == nil {
+		for _, a := range addrs {
+			names, err := net.LookupAddr(a)
+			if err != nil {
+				continue
+			}
+			for _, n := range names {
+				n = strings.TrimSuffix(n, ".")
+				if strings.Contains(n, ".") && strings.EqualFold(strings.SplitN(n, ".", 2)[0], host) {
+					return n, "FQDN 조회"
+				}
+			}
+		}
+	}
+	if domain != "" {
+		return host + "." + strings.TrimPrefix(domain, "."), "도메인 " + domain + " 붙임"
+	}
+	return host, "도메인 없이 등록"
 }
