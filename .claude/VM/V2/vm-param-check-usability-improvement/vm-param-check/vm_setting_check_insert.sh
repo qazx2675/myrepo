@@ -119,12 +119,17 @@ if [ -n "$spec_folder" ]; then
 fi
 
 fix_args=()
+if [ -n "$spec_arg" ]; then
+  # -specFolder 로 지정했으면 추가 질문 없이 진행한다: 체크만 하고, 고치려면 -fix 를 붙인다.
+  if [ "$want_fix" = 1 ]; then fix_args=(-fix); echo "-fix를 포함해서 실행합니다. (변경 직전 확인은 vm-param-check 가 한다)"; else echo "체크만 수행합니다 (-fix 없음)."; fi
+else
 read -r -p "체크 후 실제로 설정을 변경(-fix)하시겠습니까? (y/N): " do_fix
 if [[ "$do_fix" == "y" || "$do_fix" == "Y" ]]; then
   echo "-fix를 포함해서 실행합니다. (실제 변경 여부는 vm-param-check 자체에서 다시 한 번 확인받습니다 — 이중 확인)"
   fix_args=(-fix)
 else
   echo "체크만 수행합니다 (-fix 없음)."
+fi
 fi
 
 echo
