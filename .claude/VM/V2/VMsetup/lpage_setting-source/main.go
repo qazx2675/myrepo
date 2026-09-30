@@ -95,7 +95,7 @@ func main() {
 
 	applyTopology := flag.Bool("applyTopology", true, "설정 편집 > CPU 토폴로지(소켓당 코어 수/NUMA 노드) 적용 여부")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (Reconfigure 전송+대기 전 구간에 적용)")
-	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값(sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled / numa.vcpu.maxPerVirtualNode)만 넣지 않고 삭제한다. -evNNCores/Sockets/Numa 를 주면 CPU 토폴로지는 평소처럼 적용, 코어 값 없이 주면 ev01~ev99 의 HugePage 항목만 지운다")
+	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값(sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled)만 넣지 않고 삭제한다(numa.vcpu.maxPerVirtualNode·cpuid.coresPerSocket 은 지우지 않음). -evNNCores/Sockets/Numa 를 주면 CPU 토폴로지는 평소처럼 적용, 코어 값 없이 주면 ev01~ev99 의 HugePage 항목만 지운다")
 	collapseEvUsage(regexp.MustCompile(`^ev(\d{2})`))
 
 	flag.Parse()
@@ -335,7 +335,8 @@ func main() {
 			if *delLpage {
 				// 코어 값이 있으면 평소처럼 CPU 토폴로지(소켓당 코어 수 / NUMA 노드)는 적용하고,
 				// HugePage 항목만 넣지 않고 지운다 — 사용자가 뺀 설정값만 빠지게 한다.
-				spec.ExtraConfig = del
+				// numa.vcpu.maxPerVirtualNode 는 CPU 토폴로지와 함께 쓰는 값이라 지우지 않고 평소처럼 넣는다.
+				spec.ExtraConfig = append(del, &types.OptionValue{Key: "numa.vcpu.maxPerVirtualNode", Value: coresStr})
 			}
 
 			topoMsg := ""
@@ -428,5 +429,4 @@ var lpageKeys = []string{
 	"sched.mem.prealloc",
 	"sched.mem.prealloc.pinnedMainMem",
 	"sched.swap.vmxSwapEnabled",
-	"numa.vcpu.maxPerVirtualNode",
 }
