@@ -60,7 +60,7 @@ usage() {
   -s <dir>      SPEC_DIR 경로 (기본: vm-param-check 폴더에 SPEC_DIR 이 있으면 그것, 없으면 ${HERE}/../SPEC_DIR)
   -w <vswitch>  포트그룹을 만들 가상 스위치 (기본: vswitch_setting 기본값 vSwitch0)
   -c <n>        vswitch/affinity/lpage 동시 처리 수 (기본: 각 도구 기본값)
-  -del_affinity affinity 단계를 "설정" 대신 "삭제"로 실행 (스펙의 affinity 파일에 적힌 항목을 VM 에서 지움)
+  -del_affinity affinity 단계를 "설정" 대신 "삭제"로 실행 (VM 의 affinity 설정값을 모두 지움 — affinity 파일과 무관)
   -n            확인만: 스펙·포트그룹 할당까지 정하고 실행 계획을 보여준 뒤 vCenter는 변경하지 않고 종료
   -h            도움말
 
