@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ type vmResult struct {
 	vmName   string
 	expected []optionPair
 	skipped  bool
+	noop     bool // 삭제 모드에서 지울 항목이 이미 없음(정상)
 	failed   bool
 	message  string
 }
@@ -165,6 +167,7 @@ func main() {
 	// -ht 는 AUTO(1:1 자동 계산)에만 쓰였다. 기능을 삭제했지만 예전 명령줄이 깨지지 않도록 받아서 무시한다.
 	htMode := flag.String("ht", "", "[사용 안 함] AUTO 자동 계산 삭제로 무시된다 (예전 명령줄 호환용)")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (VM 목록 조회 / Reconfigure 전송+대기 전 구간에 적용)")
+	delAffinity := flag.Bool("del_affinity", false, "설정하지 않고 삭제한다: affinity 파일을 준 ev 는 그 파일에 적힌 항목(key)을, 파일을 안 준 ev 는 VM 에 있는 sched.cpu.affinity / sched.vcpuN.affinity 를 모두 지운다")
 	collapseEvUsage(regexp.MustCompile(`^affinityFile(\d{2})$`))
 
 	flag.Parse()
@@ -208,6 +211,9 @@ func main() {
 
 	specs := make([]*affinitySpec, *vmCnt)
 	for i := 0; i < *vmCnt; i++ {
+		if *delAffinity && strings.TrimSpace(fileFlags[i]) == "" {
+			continue // 삭제 모드: 파일이 없으면 VM 에 있는 affinity 항목을 전부 지운다(specs[i] == nil)
+		}
 		if strings.TrimSpace(fileFlags[i]) == "" {
 			// 예전에는 파일이 없으면 -ht 로 1:1 자동 계산했지만, ev 마다 CPU 0번부터 잡혀 VM 끼리 겹치므로 삭제했다.
 			log.Fatalf("%s affinity 파일이 필요합니다 (%s). 자동 계산은 삭제됐습니다 — 여러 ev 에 같은 파일을 지정해도 됩니다.", suffixes[i], flagNames[i])
@@ -251,8 +257,15 @@ func main() {
 	fmt.Printf("  vCenter   : %s\n", *vcTargetIP)
 	fmt.Printf("  대상 호스트: %d대 / VM 개수: %d (%s)\n",
 		len(hostlistLines), *vmCnt, strings.Join(suffixes[:*vmCnt], ", "))
+	if *delAffinity {
+		fmt.Println("  모드      : affinity 삭제 (-del_affinity) — 설정을 넣지 않고 지웁니다")
+	}
 	for i := 0; i < *vmCnt; i++ {
-		fmt.Printf("  %s 설정  : %s [%d개 항목]\n", suffixes[i], specs[i].fileName, len(specs[i].pairs))
+		if specs[i] == nil {
+			fmt.Printf("  %s 설정  : (파일 없음) VM 의 affinity 항목 전부 삭제\n", suffixes[i])
+			continue
+		}
+		fmt.Printf("  %s 설정  : %s [%d개 항목]%s\n", suffixes[i], specs[i].fileName, len(specs[i].pairs), map[bool]string{true: " 삭제", false: ""}[*delAffinity])
 	}
 	fmt.Println()
 
@@ -358,6 +371,30 @@ func main() {
 
 	fmt.Printf("\n총 %d개의 설정 작업을 동시 %d개 제한으로 처리합니다 (전송+완료대기를 워커 단위로 병렬 수행).\n", len(jobs), *concurrency)
 
+	// 삭제 모드: 지금 VM 에 들어 있는 extraConfig 를 한 번에 읽어 둔다(어떤 항목이 실제로 있는지 알아야 지울 수 있다).
+	currentExtra := map[string]map[string]string{}
+	if *delAffinity {
+		refs := make([]types.ManagedObjectReference, 0, len(jobs))
+		for _, j := range jobs {
+			refs = append(refs, j.vm.Reference())
+		}
+		var cur []mo.VirtualMachine
+		if retErr := property.DefaultCollector(client.Client).Retrieve(ctx, refs, []string{"name", "config.extraConfig"}, &cur); retErr != nil {
+			log.Fatalf("VM 의 현재 설정 조회 실패: %v", retErr)
+		}
+		for _, vp := range cur {
+			m := map[string]string{}
+			if vp.Config != nil {
+				for _, ov := range vp.Config.ExtraConfig {
+					if opt, ok := ov.(*types.OptionValue); ok {
+						m[opt.Key] = fmt.Sprintf("%v", opt.Value)
+					}
+				}
+			}
+			currentExtra[vp.Name] = m
+		}
+	}
+
 	// ---- 워커풀: 각 워커가 Reconfigure 전송 + Wait 완료까지 한 VM 단위로 전부 처리 ----
 	sem := make(chan struct{}, *concurrency)
 	results := make(chan vmResult, len(jobs))
@@ -370,7 +407,20 @@ func main() {
 			defer jobWg.Done()
 			defer func() { <-sem }()
 
-			extraConfig := buildExtraConfig(j.specI)
+			var extraConfig []types.BaseOptionValue
+			if *delAffinity {
+				// 값을 빈 문자열로 보내면 vCenter 가 그 항목을 VM 설정에서 지운다.
+				for _, key := range affinityKeysToDelete(j.specI, currentExtra[j.vmName]) {
+					extraConfig = append(extraConfig, &types.OptionValue{Key: key, Value: ""})
+				}
+				if len(extraConfig) == 0 {
+					safePrintf("[%s] 지울 affinity 항목이 없습니다 (이미 없음, PASS)\n", j.vmName)
+					results <- vmResult{vmName: j.vmName, noop: true}
+					return
+				}
+			} else {
+				extraConfig = buildExtraConfig(j.specI)
+			}
 
 			expectedPairs := make([]optionPair, 0, len(extraConfig))
 			for _, ov := range extraConfig {
@@ -388,8 +438,12 @@ func main() {
 				return
 			}
 
-			safePrintf("[%s] %s 기반 병렬 설정 명령 전송 완료 (%d개 항목)\n",
-				j.vmName, j.specI.fileName, len(j.specI.pairs))
+			if *delAffinity {
+				safePrintf("[%s] affinity 삭제 명령 전송 완료 (%d개 항목)\n", j.vmName, len(extraConfig))
+			} else {
+				safePrintf("[%s] %s 기반 병렬 설정 명령 전송 완료 (%d개 항목)\n",
+					j.vmName, j.specI.fileName, len(j.specI.pairs))
+			}
 
 			if waitErr := task.Wait(ctx); waitErr != nil {
 				safePrintf("[%s] 작업 실패: %v\n", j.vmName, waitErr)
@@ -404,11 +458,13 @@ func main() {
 	jobWg.Wait()
 	close(results)
 
-	var failed, skipped int
+	var failed, skipped, noop int
 	successVmNames := make([]string, 0, len(jobs))
 	expectedByName := make(map[string][]optionPair, len(jobs))
 	for r := range results {
 		switch {
+		case r.noop:
+			noop++
 		case r.skipped:
 			skipped++
 		case r.failed:
@@ -474,10 +530,14 @@ func main() {
 		}
 	}
 
-	fmt.Printf("\n완료: 성공 %d / 실패 %d / 스킵 %d / 적용불일치 %d\n",
-		len(successVmNames)-mismatched, failed, skipped, mismatched)
+	fmt.Printf("\n완료: 성공 %d / 이미 없음 %d / 실패 %d / 스킵 %d / 적용불일치 %d\n",
+		len(successVmNames)-mismatched, noop, failed, skipped, mismatched)
 	if failed > 0 || skipped > 0 || mismatched > 0 {
 		os.Exit(2)
+	}
+	if *delAffinity {
+		fmt.Println("모든 VM 의 affinity 삭제가 끝났습니다 (재조회로 검증 완료).")
+		return
 	}
 	fmt.Println("모든 VM 의 어피니티 설정이 정상 적용되었습니다 (재조회로 검증 완료).")
 }
@@ -507,4 +567,28 @@ func collapseEvUsage(re *regexp.Regexp) {
 		fmt.Fprintf(out, "Usage of %s:\n", os.Args[0])
 		fs.PrintDefaults()
 	}
+}
+
+// affinityRe: 삭제 대상으로 보는 affinity 항목 (sched.cpu.affinity, sched.vcpuN.affinity)
+var affinityRe = regexp.MustCompile(`^sched\.(cpu|vcpu\d+)\.affinity$`)
+
+// affinityKeysToDelete: 파일(spec)이 있으면 그 파일에 적힌 항목 중 VM 에 실제로 있는 것,
+// 파일이 없으면 VM 에 있는 affinity 항목 전부. 정렬해서 돌려준다.
+func affinityKeysToDelete(spec *affinitySpec, current map[string]string) []string {
+	var keys []string
+	if spec != nil {
+		for _, p := range spec.pairs {
+			if v, ok := current[p.Key]; ok && v != "" {
+				keys = append(keys, p.Key)
+			}
+		}
+	} else {
+		for k, v := range current {
+			if affinityRe.MatchString(k) && v != "" {
+				keys = append(keys, k)
+			}
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
