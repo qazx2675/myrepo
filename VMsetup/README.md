@@ -40,7 +40,7 @@ BM 이름은 FQDN(`esxi01.domain`)과 짧은 이름(`esxi01`) 모두 쓸 수 있
 `vswitch_<user>.txt`의 포트그룹 컬럼에 `<폴더명>-cae-a-b-c-d` 대신 IP를 적어 두었다면(`BM  IP  VLAN`) **`vm_setup.sh` 가 시작할 때 자동으로 `vswitch_pgname.sh` 를 불러 변환**합니다(폴더명을 물어봄, `/24` 가정·마지막 옥텟 0). 손으로 미리 바꾸려면 아래처럼 직접 실행해도 됩니다.
 
 ```bash
-bash vswitch_pgname.sh vswitch_<user>.txt   # 형식이 아닌 줄만 폴더명을 물어보고 변환(Enter = 직전 폴더명), 원본은 .bak로 보존
+bash vswitch_pgname.sh vswitch_<user>.txt   # 폴더명을 한 번만 물어보고 IP 로 적힌 모든 줄에 일괄 적용, 원본은 .bak로 보존
 ```
 
 ```bash
