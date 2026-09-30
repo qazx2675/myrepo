@@ -1314,6 +1314,12 @@ var optionDocs = []optionDoc{
 		"대상 서버의 기존 파일은 limits.conf.bak 으로 백업하며, 이미 있는 .bak 은 덮어씁니다.",
 		"복사 후 대상 서버의 sha256 이 비교서버와 같은지 확인하고, 결과가 같은 서버는 하나로 묶어 요약합니다.",
 	}},
+	{"rpm", "", "비교서버와 설치 rpm 패키지 비교 (버전 무시, 보고서 저장)", []string{
+		"비교서버를 물어본 뒤, 대상 서버들의 설치 rpm 을 \"이름.아키텍처\" 로만 비교합니다(버전·릴리스 무시, gpg-pubkey 제외). 명령어는 쓰지 않습니다.",
+		"a.x86_64 와 a.i686 은 서로 다른 패키지로 봅니다. 결과가 같은 서버는 하나로 묶어 보고서에 정리합니다.",
+		"화면에는 한 줄 요약만 나오고 <호스트파일>_rpm_report.txt(보고서), <호스트파일>_rpm_tab.txt(탭 구분, 엑셀용),",
+		"<호스트파일>_rpm_diff(차이 호스트 목록, -w 로 재실행 가능)를 저장합니다. 같은 이름의 이전 파일은 시작할 때 지웁니다.",
+	}},
 	{"tl", "", "-tmp 와 -limit 을 질문 한 번에 받아 함께 진행", []string{
 		"두 작업의 질문(설정값, 비교서버, 복사 여부)을 한꺼번에 먼저 물어본 뒤, 서버마다 두 작업을 이어서 진행합니다.",
 		"복사 여부에 n 을 답하면 limits.conf 복사만 건너뛰고 -tmp 작업은 진행합니다.",
@@ -1389,6 +1395,7 @@ func main() {
 	tmpMode := flag.Bool("tmp", false, "대상 서버의 /etc/tmpfiles.d/custom-tmp.conf 의 /tmp 정리 시간을 변경/삭제")
 	limitMode := flag.Bool("limit", false, "비교서버의 /etc/security/limits.conf 를 대상 서버로 복사(.bak 백업, 동일 확인)")
 	tlMode := flag.Bool("tl", false, "-tmp 와 -limit 을 질문 한 번에 받아 함께 진행")
+	rpmMode := flag.Bool("rpm", false, "비교서버와 설치된 rpm 패키지(이름.아키텍처, 버전 무시) 비교 후 보고서 저장")
 
 	// ★ pdsh 스타일 "-w^file"/"-wfile" 붙여쓰기 지원을 위해 flag.Parse() 대신 전처리한 인자로 파싱
 	flag.Usage = printUsage
@@ -1403,12 +1410,16 @@ func main() {
 	doTmp := *tmpMode || *tlMode
 	doLimit := *limitMode || *tlMode
 	special := doTmp || doLimit
-	if *hostFile == "" || (!special && len(args) == 0) {
+	if *hostFile == "" || (!special && !*rpmMode && len(args) == 0) {
 		printUsage()
 		os.Exit(1)
 	}
-	if special && len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "-tmp/-limit/-tl 옵션은 명령어와 함께 쓸 수 없습니다.")
+	if (special || *rpmMode) && len(args) > 0 {
+		fmt.Fprintln(os.Stderr, "-tmp/-limit/-tl/-rpm 옵션은 명령어와 함께 쓸 수 없습니다.")
+		os.Exit(1)
+	}
+	if special && *rpmMode {
+		fmt.Fprintln(os.Stderr, "-rpm 옵션은 -tmp/-limit/-tl 과 함께 쓸 수 없습니다.")
 		os.Exit(1)
 	}
 
@@ -1429,8 +1440,16 @@ func main() {
 	osInstallFilename := cleanHostFile + "_os_install"
 	noSvrAutoFilename := cleanHostFile + "_nosvrauto"
 	cancelFilename := cleanHostFile + "_res_cancel"
+	rpmReportFilename := cleanHostFile + "_rpm_report.txt"
+	rpmTabFilename := cleanHostFile + "_rpm_tab.txt"
+	rpmDiffFilename := cleanHostFile + "_rpm_diff"
 	for _, f := range []string{offFilename, refusedFilename, osInstallFilename, noSvrAutoFilename, cancelFilename} {
 		os.Remove(f)
+	}
+	if *rpmMode {
+		for _, f := range []string{rpmReportFilename, rpmTabFilename, rpmDiffFilename} {
+			os.Remove(f)
+		}
 	}
 
 	command := strings.Join(args, " ")
@@ -1551,6 +1570,13 @@ func main() {
 		command = planSpecial(doTmp, doLimit, *user, authMethods, *port, time.Duration(*timeoutSec)*time.Second)
 	}
 
+	// ★ -rpm: 비교서버 목록을 읽고, 대상 서버에서는 같은 방식으로 목록만 뽑는다.
+	var rpmRefHost string
+	var rpmRef map[string]bool
+	if *rpmMode {
+		command, rpmRefHost, rpmRef = planRPM(*user, authMethods, *port, time.Duration(*timeoutSec)*time.Second)
+	}
+
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, effectiveConcurrency)
 	dnsSem := make(chan struct{}, dnsLookupConcurrency)
@@ -1565,7 +1591,7 @@ func main() {
 
 	// ★ -b는 -script와 같이 오면 무시한다(순수 결과 모드에서는 묶어 보여주는 요약형 출력이
 	// 목적과 안 맞음). bunchMode가 false면 기존과 동일하게 즉시 호스트별로 출력한다.
-	bunchMode := (*bMode || special) && !*scriptMode
+	bunchMode := ((*bMode || special) && !*scriptMode) || *rpmMode // -rpm 은 결과를 모아 비교해야 하므로 항상 수집
 	bunchOutputs := map[string]string{}
 
 	startTime := time.Now()
@@ -1701,7 +1727,10 @@ func main() {
 		}
 	}
 
-	if bunchMode {
+	if *rpmMode {
+		unreachable := append(append([]string{}, failedHosts...), refusedHosts...)
+		writeRPMReport(rpmRefHost, rpmRef, hosts, bunchOutputs, unreachable, rpmReportFilename, rpmTabFilename, rpmDiffFilename, startTime)
+	} else if bunchMode {
 		printBunched(hosts, bunchOutputs)
 		printUnreachableGroup(failedHosts, refusedHosts)
 	}

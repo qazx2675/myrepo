@@ -89,6 +89,11 @@ func buildLimitScript(content []byte) string {
 
 // fetchRemoteFile은 비교서버에 접속해 파일 내용을 그대로 읽어온다.
 func fetchRemoteFile(host, path, user string, auth []ssh.AuthMethod, port string, timeout time.Duration) ([]byte, error) {
+	return fetchRemoteCmd(host, "cat "+path, user, auth, port, timeout)
+}
+
+// fetchRemoteCmd는 비교서버에 접속해 명령을 실행하고 표준출력을 돌려준다.
+func fetchRemoteCmd(host, cmd, user string, auth []ssh.AuthMethod, port string, timeout time.Duration) ([]byte, error) {
 	target := host
 	if net.ParseIP(host) != nil || !strings.Contains(host, ":") {
 		target = net.JoinHostPort(host, port)
@@ -115,7 +120,7 @@ func fetchRemoteFile(host, path, user string, auth []ssh.AuthMethod, port string
 	var out, errb bytes.Buffer
 	sess.Stdout = &out
 	sess.Stderr = &errb
-	if err := sess.Run("cat " + path); err != nil {
+	if err := sess.Run(cmd); err != nil {
 		return nil, fmt.Errorf("%v %s", err, strings.TrimSpace(errb.String()))
 	}
 	return out.Bytes(), nil
