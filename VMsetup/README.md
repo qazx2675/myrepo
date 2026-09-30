@@ -134,6 +134,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 | `-s <dir>` | SPEC_DIR 경로 (기본: `vm-param-check/SPEC_DIR` 가 있으면 그것, 없으면 `../SPEC_DIR`) |
 | `-w <vswitch>` | 포트그룹을 만들 가상 스위치 (기본 `vSwitch0`) |
 | `-c <n>` | vswitch/affinity/lpage 동시 처리 수 |
+| `-del_affinity` | affinity 단계를 설정 대신 삭제로 실행(스펙 affinity 파일에 적힌 항목을 VM 에서 지움) |
 | `-n` | 확인만 — 스펙·포트그룹 할당과 실행 계획까지 보여 주고 종료(vCenter 변경 없음) |
 
 환경변수 `VM_SETUP_EDITOR`로 vim 대신 다른 편집기를 쓸 수 있습니다.
