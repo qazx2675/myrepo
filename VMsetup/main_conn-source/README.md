@@ -30,6 +30,7 @@ export VC_PASSWORD='...' ESXI_PASSWORD='...'      # vCenter 계정 / ESXi root �
 | `-id` | vCenter 계정 (기본 `lscsystems@vsphere.local`) |
 | `-datacenter` | 데이터센터가 2개 이상일 때 지정 |
 | `-concurrency` | 동시 처리 수 (기본 20) |
+| `-domain` | 도메인 없는 이름을 FQDN 으로 조회하지 못할 때 붙일 도메인 (기본 `saccae.com`, 빈 값이면 안 붙임) |
 
 - 폴더는 **미리 vCenter 에 만들어 두어야** 합니다. 없으면 "위치(클러스터/폴더)를 찾을 수 없습니다" 로 끝납니다.
 - 호스트 이름은 worklist 에 적은 그대로 vCenter 에 등록하고, 등록 여부도 같은 이름으로 찾습니다.
