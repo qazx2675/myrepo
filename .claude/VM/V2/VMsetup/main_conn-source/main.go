@@ -328,8 +328,10 @@ func registrationName(host, domain string) (string, string) {
 	if net.ParseIP(host) != nil || strings.Contains(host, ".") {
 		return host, "입력한 이름 그대로"
 	}
-	if addrs, err := net.LookupHost(host); err == nil {
-		for _, a := range addrs {
+	// IPv6 는 쓰지 않는 환경이라 IPv4 주소만 조회한다(AAAA 응답이 섞여 엉뚱한 이름이 나오는 것 방지).
+	if ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip4", host); err == nil {
+		for _, ip := range ips {
+			a := ip.String()
 			names, err := net.LookupAddr(a)
 			if err != nil {
 				continue
