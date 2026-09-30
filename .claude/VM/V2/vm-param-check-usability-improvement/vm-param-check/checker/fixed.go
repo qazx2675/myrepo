@@ -18,9 +18,16 @@ var fixedExpect = []struct {
 	{"sched.swap.vmxSwapEnabled", "FALSE"},
 }
 
+// SkipLpage 가 true 면 HugePage 계열 4개 키(lpage/prealloc/pinnedMainMem/vmxSwapEnabled)는 체크하지 않는다.
+// vm_setup.sh 를 -del_lpage 로 실행해 일부러 지운 경우에 쓴다(-skipLpage).
+var SkipLpage bool
+
 // CheckFixed는 3-2 고정값 체크를 수행한다.
 func CheckFixed(vm model.VMInfo) []model.Finding {
 	var findings []model.Finding
+	if SkipLpage {
+		return nil
+	}
 	for _, f := range fixedExpect {
 		actual, exists := vm.ExtraConfig[f.Key]
 		finding := model.Finding{VM: vm.Name, Source: "-", Key: f.Key, Expected: f.Expected}
