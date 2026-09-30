@@ -1,0 +1,8 @@
+# 실제 대상 목록·비밀번호·키·결과가 들어가는 파일은 절대 커밋하지 않습니다.
+list.txt
+old_password.txt
+newpass.enc
+key.bin
+result.csv
+!*.example
+bin/
