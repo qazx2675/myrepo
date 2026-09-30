@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-09-30 — -rpm 옵션 추가
+
+- **신규(`-rpm`)**: 비교서버를 물어본 뒤 대상 서버들의 설치 rpm 을 `이름.아키텍처` 로만 비교(버전·릴리스 무시, `gpg-pubkey` 제외). 화면에는 한 줄 요약만 출력하고 `<hostfile>_rpm_report.txt`(보고서, 같은 결과 호스트끼리 묶음), `<hostfile>_rpm_tab.txt`(탭 구분·UTF-8 BOM, 엑셀용), `<hostfile>_rpm_diff`(차이 호스트 목록)를 저장. 시작할 때 같은 이름의 이전 파일은 완전일치로 삭제.
+- **참고**: 명령어·`-tmp/-limit/-tl` 과 동시 사용 불가. 비교서버 목록이 비면 중단(가드). 원격 root 쉘이 csh 계열이어도 되도록 `LC_ALL=` 같은 sh 전용 문법은 쓰지 않음. `fetchRemoteFile` 은 `fetchRemoteCmd` 를 부르도록 정리.
+- **영향 범위**: `rpmcmp.go`(신규), `tmplimit.go`(`fetchRemoteCmd` 분리), `main.go`, `gossh_os6`(재빌드), README 3.13/4·5·6장, ARCHITECTURE.md.
+- **검증**: 192.168.0.58/60에서 동일·차이(부족)·접속불가 조합, 비교서버 미입력·접속불가 가드, 명령어/다른 옵션과 동시 사용 거부 확인. 같은 결과 묶음·추가 패키지·확인불가는 합성 데이터 단위 테스트로 확인. OS6 빌드.
+
 ## 2026-09-29 — -tmp / -limit / -tl 옵션 추가
 
 - **신규(`-tmp`)**: `/etc/tmpfiles.d/custom-tmp.conf` 의 `q /tmp 1777 root root @@h` 줄을 질문("변경할 설정값 (시간 또는 d (삭제))")에 따라 변경/삭제. 줄이 없으면 1번째 줄에 추가. 변경 후 줄을 출력하고 결과가 같으면 하나로 요약.
