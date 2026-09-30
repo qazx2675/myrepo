@@ -1016,6 +1016,9 @@ step_check() {
   hdr "스펙 체크 — vm-param-check (실행한 스펙과 같은지)" 2>&1
   printf '%s\n' "$VC_IP" > vcenter_check.txt
   : > check_summary.txt; : > check_specs.txt
+  # -del_lpage 로 HugePage 설정을 일부러 지웠으면 체크에서도 그 항목은 제외한다(단독 체크 스크립트도 이 표시를 읽는다).
+  local skip_lp=(); rm -f check_skip_lpage
+  if [ "$DEL_LPAGE" = 1 ]; then skip_lp=(-skipLpage); : > check_skip_lpage; fi
   for d in "${SPEC_ORDER[@]}"; do
     k=$((k + 1))
     spec_lookup "$(basename "$d")" || { printf '%s[오류] %s%s\n' "$C_RED" "$LOOKUP_ERR" "$C_RST" >&2; return 1; }
@@ -1033,7 +1036,7 @@ step_check() {
     # 이번에 쓴 스펙 폴더와 그 대상 VM 목록을 남긴다 — vm_setting_check_insert.sh 가 물어보지 않고 그대로 가져다 쓴다.
     printf '%s\t%s\n' "$(basename "$d")" "$RUN_DIR/check_targets_$k.txt" >> check_specs.txt
     VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD" "$CHECK_BIN" -noColor -vcenterList=vcenter_check.txt -f="check_targets_$k.txt" \
-      -specRoot="$SPEC_DIR" -specFolder="$(basename "$d")" -yes -onlyFail -out="check_$k.csv" > "check_$k.log" 2>&1 < /dev/null
+      -specRoot="$SPEC_DIR" -specFolder="$(basename "$d")" -yes -onlyFail ${skip_lp[@]+"${skip_lp[@]}"} -out="check_$k.csv" > "check_$k.log" 2>&1 < /dev/null
     rc=$?
     total="$(sed -n 's/^총 \([0-9]*\)대 중 PASS \([0-9]*\)대, FAIL \([0-9]*\)대.*/\1 \2 \3/p' "check_$k.log" | tail -1)"
     if [ "$rc" -ne 0 ] || [ -z "$total" ]; then
