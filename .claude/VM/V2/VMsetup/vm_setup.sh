@@ -38,6 +38,8 @@ CHECK_BIN="$CHECK_DIR/vm-param-check"
 # mac_info(MAC 수집) — 생성한 VM 의 MAC 으로 만든 Provisioning List 를 이 경로에 <user>.txt 로 복사한다.
 # 비워 두면 복사하지 않고 실행 폴더(run_<user>/)에만 남긴다.
 awx_route="${awx_route:-}"
+# MAC 목록의 IP 칸을 채울 때 VM 이름을 DNS 로 못 찾으면 "<VM이름>.<이 도메인>" 으로 한 번 더 찾는다(빈 값이면 안 붙임).
+MAC_DOMAIN="${MAC_DOMAIN-${ESXI_DOMAIN-saccae.com}}"
 # mac_info 출력 줄에 들어가는 값 (VM VM <arg1=인프라> <VM> <IP> <MAC> eth0 sda sda5 <디스크(자동)> <argStr=OS버전> uefi).
 # 매번 시작할 때 물어본다("설치 정보" 단계, 위의 unset 참고 — 환경변수로 건너뛰는 경로는 없다).
 # sda5 다음 정수(디스크)는 고정값이 아니라 ev 스펙의 disk 값에서 자동으로 계산한다
@@ -891,7 +893,7 @@ for d in "${SPEC_ORDER[@]}"; do
   print_affinity
 done
 say "어댑터 매핑     : $RUN_DIR/hostgroup.txt ($(wc -l < "$RUN_DIR/hostgroup.txt")건)"
-say "MAC 수집       : mac_info -arg1=$MAC_ARG1 -argStr=$MAC_ARGSTR (디스크는 위 표대로 자동매칭) → ${awx_route:-(awx_route 비어 있음 — 복사 안 함)}${awx_route:+/${USER_TAG}.txt}"
+say "MAC 수집       : mac_info -arg1=$MAC_ARG1 -argStr=$MAC_ARGSTR (디스크는 위 표대로 자동매칭, IP 는 VM 이름을 DNS 로 조회해 채움 — 안 되면 .${MAC_DOMAIN:-(없음)} 붙여 재조회) → ${awx_route:-(awx_route 비어 있음 — 복사 안 함)}${awx_route:+/${USER_TAG}.txt}"
 say "라이선스 할당   : license_assign (BM ${#BMS[@]}대, 평가판 호스트만 — 선택이 필요하면 입력)"
 }
 print_plan 2>&1 | tee "$RUN_DIR/plan.txt" || exit 1
@@ -1047,9 +1049,30 @@ step_check() {
 }
 # ---------- MAC 목록 합본 → awx_route 로 <user>.txt 복사 ----------
 # mac_info 는 스펙마다(MAC 조사 단계에서) 실행했고, mac_apply_disk 가 디스크를 바꿔 MAC_ALL 에 이어붙였다.
+# resolve_mac_ips <파일> [도메인] — mac_info 목록의 IP 칸 "<VM이름>_DNS_AND_TOOLS_NOT_FOUND" 를 DNS·/etc/hosts(IPv4)로
+# 조회한 IP 로 바꾼다. 이름 그대로 못 찾으면 "<VM이름>.<도메인>" 으로 한 번 더 찾고, 그래도 없으면 그 줄은 그대로 둔다.
+# 결과는 전역 RESOLVED / UNRESOLVED 에 담는다. (같은 동작의 단독 실행판: mac_ip_resolve.sh)
+resolve_mac_ips() {
+  local f="$1" dom="${2-}" tmp line vm ip n=0 miss=0
+  tmp="$(mktemp)"
+  while IFS= read -r line || [ -n "$line" ]; do
+    vm="$(awk '{print $4}' <<< "$line")"
+    if [ -n "$vm" ] && [ "$(awk '{print $5}' <<< "$line")" = "${vm}_DNS_AND_TOOLS_NOT_FOUND" ]; then
+      ip="$(getent ahostsv4 "$vm" 2>/dev/null | awk 'NR==1{print $1}')"
+      [ -z "$ip" ] && [ -n "$dom" ] && ip="$(getent ahostsv4 "$vm.${dom#.}" 2>/dev/null | awk 'NR==1{print $1}')"
+      if [ -n "$ip" ]; then line="$(awk -v ip="$ip" '{$5=ip}1' <<< "$line")"; n=$((n + 1)); else miss=$((miss + 1)); fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$f"
+  cat "$tmp" > "$f"; rm -f "$tmp"
+  RESOLVED=$n; UNRESOLVED=$miss
+}
 step_mac_copy() {
   [ -s "$MAC_ALL" ] || { say "모은 MAC 목록이 없어 건너뜁니다."; note "skip:모은 MAC 목록 없음"; return 0; }
   hdr "MAC 수집 결과" 2>&1
+  resolve_mac_ips "$MAC_ALL" "$MAC_DOMAIN"
+  info "IP 조회: 변환 ${RESOLVED}줄 / 못 찾음 ${UNRESOLVED}줄 (못 찾은 줄은 ..._DNS_AND_TOOLS_NOT_FOUND 그대로)"
+  [ "$UNRESOLVED" -gt 0 ] && warn "IP 를 못 찾은 VM ${UNRESOLVED}대 — DNS/hosts 에 VM 이름을 등록하거나 MAC_DOMAIN 을 확인하세요."
   if [ -z "$awx_route" ]; then
     info "awx_route 가 비어 있어 복사하지 않습니다: $RUN_DIR/$MAC_ALL"
     note "복사 안 함(awx_route 비어 있음) — $RUN_DIR/$MAC_ALL"
