@@ -9,6 +9,7 @@
 - **`main_conn-source`**: 소스에 값이 박힌 샘플이던 도구를 `vm-setting-go-lang/main_connect.go` 와 같은 옵션 기반 도구로 교체(`-vcTargetIP -id -folderName -worklistFile -datacenter -concurrency`, 비밀번호는 환경변수 `VC_PASSWORD`/`ESXI_PASSWORD`). 등록 여부 확인은 데이터센터의 호스트 이름을 한 번에 가져와 **짧은 이름↔FQDN 을 같은 호스트로** 본다(예전 `HostSystem` 이름 검색은 짧은 이름으로 적으면 FQDN 등록 호스트를 못 찾아 중복 등록을 시도했다).
 - **`vm_setup.sh`**: 첫 실행 단계 "호스트 등록"(`main_conn -folderName=Task`) 추가 — 폴더는 `ESXI_FOLDER`(기본 `Task`), ESXi 계정은 `ESXI_ID`(기본 `root`)로 바꾼다. ESXi 비밀번호는 `../secret` 암호 파일(`passwd_update.sh` 의 esxi) → 직접 입력 순이며, 실행마다 `ESXI_PASSWORD` 를 `unset` 하고 시작한다. 폴더는 vCenter 에 미리 있어야 한다.
 - **`vm_setup.sh` IP 포트그룹 자동 변환**: `vswitch_<user>.txt` 2번째 칸이 IP 인 줄이 있으면 시작할 때 `vswitch_pgname.sh` 를 불러 `<폴더명>-cae-a-b-c-0` 으로 바꾼다(폴더명 질문, Enter = 직전 폴더명, 원본 `.bak`). 이미 CAE 형식이면 아무것도 하지 않는다.
+- **도메인 없는 BM 이름**: `main_conn` 은 등록할 때 이름에 `.` 이 없으면 먼저 이 서버에서 FQDN 을 조회(이름→IP→역조회로 첫 라벨이 같은 이름, `/etc/hosts` 포함)하고, 못 찾으면 `-domain`(기본 `saccae.com`, `vm_setup.sh` 는 `ESXI_DOMAIN`, 빈 값이면 안 붙임)을 붙여 등록한다. 등록 이름과 방법은 로그에 나온다. 이미 등록됐는지는 짧은 이름↔FQDN 어느 쪽이든 같은 호스트로 본다. FQDN/IP 로 적은 이름은 그대로 쓴다.
 - **OS6**: `bin_os6/main_conn.gz` 를 새 소스로 다시 빌드(Go 1.20, .60).
 - **영향 범위**: `VMsetup/main_conn-source/{main.go,README.md}`, `VMsetup/vm_setup.sh`, `VMsetup/README.md`, `bin_os6/main_conn.gz`.
 - **검증** (.58 vcsim, 새 컨테이너 없이 OS6 는 빌드만):
