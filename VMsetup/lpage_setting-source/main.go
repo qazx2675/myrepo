@@ -95,7 +95,7 @@ func main() {
 
 	applyTopology := flag.Bool("applyTopology", true, "설정 편집 > CPU 토폴로지(소켓당 코어 수/NUMA 노드) 적용 여부")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (Reconfigure 전송+대기 전 구간에 적용)")
-	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값을 설정하지 않고 삭제한다 (sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled / numa.vcpu.maxPerVirtualNode). ev 그룹을 안 주면 ev01~ev99 전부, CPU 토폴로지는 건드리지 않는다
+	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값을 설정하지 않고 삭제한다 (sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled / numa.vcpu.maxPerVirtualNode). ev 그룹을 안 주면 ev01~ev99 전부, CPU 토폴로지는 건드리지 않는다")
 	collapseEvUsage(regexp.MustCompile(`^ev(\d{2})`))
 
 	flag.Parse()
