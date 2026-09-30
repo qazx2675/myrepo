@@ -1,136 +1,320 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"errors"
+	"flag"
 	"fmt"
+	"log"
+	"net"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
-	"github.com/vmware/govmomi/vim25/methods"
-	"github.com/vmware/govmomi/vim25/soap"
+	"github.com/vmware/govmomi/task"
+	"github.com/vmware/govmomi/view"
+	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
-type HostTarget struct {
-	IP       string
-	Username string
-	Password string
+const defaultConcurrency = 20
+
+// printMu: 여러 고루틴이 동시에 fmt.Printf 를 호출할 때 줄이 섞이지 않도록 보호
+var printMu sync.Mutex
+
+func safePrintf(format string, a ...interface{}) {
+	printMu.Lock()
+	defer printMu.Unlock()
+	fmt.Printf(format, a...)
+}
+
+// 파일의 각 줄을 읽어 배열로 반환
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" && !strings.HasPrefix(line, "#") {
+			lines = append(lines, line)
+		}
+	}
+	return lines, scanner.Err()
+}
+
+// addHost는 지정된 위치(클러스터 또는 폴더)에 호스트 하나를 등록한다.
+// 자가서명 인증서(폐쇄망 환경) 때문에 SSLVerifyFault가 나면,
+// 에러에 담긴 실제 thumbprint를 꺼내 spec에 채운 뒤 자동으로 한 번 재시도한다.
+//
+// spec은 값(value)으로 전달받는다 — 함수 내부에서 spec.SslThumbprint를 채워도
+// 호출자(고루틴)가 들고 있는 원본에는 영향이 없고, 각 고루틴은 자신만의 spec
+// 복사본을 갖게 되어 동시 호출 간 데이터 레이스가 없다.
+func addHost(ctx context.Context, host string, spec types.HostConnectSpec, targetCluster *object.ClusterComputeResource, targetFolder *object.Folder) error {
+	runOnce := func(s types.HostConnectSpec) (*object.Task, error) {
+		if targetCluster != nil {
+			return targetCluster.AddHost(ctx, s, true, nil, nil)
+		}
+		return targetFolder.AddStandaloneHost(ctx, s, true, nil, nil)
+	}
+
+	t, err := runOnce(spec)
+	if err != nil {
+		return fmt.Errorf("task 발급 실패: %w", err)
+	}
+
+	_, waitErr := t.WaitForResult(ctx, nil)
+	if waitErr == nil {
+		return nil
+	}
+
+	// SSLVerifyFault인지 확인 (인증서 미신뢰로 인한 등록 실패)
+	var taskErr task.Error
+	if errors.As(waitErr, &taskErr) {
+		if sslFault, ok := taskErr.Fault().(*types.SSLVerifyFault); ok {
+			safePrintf("  -> [%s] SSL 인증서 미신뢰 감지, thumbprint(%s) 적용 후 재시도\n", host, sslFault.Thumbprint)
+
+			spec.SslThumbprint = sslFault.Thumbprint
+
+			t2, err2 := runOnce(spec)
+			if err2 != nil {
+				return fmt.Errorf("재시도 task 발급 실패: %w", err2)
+			}
+			if _, waitErr2 := t2.WaitForResult(ctx, nil); waitErr2 != nil {
+				return fmt.Errorf("재시도 실패: %w", waitErr2)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("등록 실패: %w", waitErr)
 }
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// =========================================================================
+	// 1. 파라미터(Flag) 설정
+	// =========================================================================
+	vcId := flag.String("id", "lscsystems@vsphere.local", "vCenter 로그인 계정 ID")
+	vcTargetIP := flag.String("vcTargetIP", "", "vCenter 접속 IP")
+	folderName := flag.String("folderName", "", "데이터센터 내 대상 폴더 또는 클러스터 이름 (데이터센터 자체를 대상으로 하려면 -datacenter와 동일한 값을 지정하거나 비워두면 해당 데이터센터의 기본 HostFolder 사용)")
+	datacenterName := flag.String("datacenter", "", "데이터센터 이름 (데이터센터가 여러 개면 필수, 1개뿐이면 생략 가능)")
+	worklistFile := flag.String("worklistFile", "worklist.txt", "VM 대상 목록 파일")
+	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (등록 여부 확인 + 호스트 등록 전송+대기 전 구간에 적용)")
+	flag.Parse()
+
+	if *vcTargetIP == "" || *folderName == "" {
+		log.Fatal("필수 파라미터(-vcTargetIP, -folderName)가 누락되었습니다.")
+	}
+
+	if *concurrency < 1 {
+		log.Fatalf("-concurrency 값이 올바르지 않습니다: %d (1 이상)", *concurrency)
+	}
+
+	// 환경 변수에서 비밀번호 로드 (보안)
+	vcPassword := os.Getenv("VC_PASSWORD")
+	esxiPassword := os.Getenv("ESXI_PASSWORD")
+
+	if vcPassword == "" || esxiPassword == "" {
+		log.Fatal("환경변수 'VC_PASSWORD' 또는 'ESXI_PASSWORD'가 설정되지 않았습니다.")
+	}
+
+	baseDir, _ := os.Getwd()
+	serverLines, err := readLines(filepath.Join(baseDir, *worklistFile))
+	if err != nil {
+		log.Fatalf("파일 로드 실패 (%s): %v", *worklistFile, err)
+	}
+
+	fmt.Printf("\n[INFO] 단독 실행: ESXi 호스트 병렬 등록 (Phase 1) 시작 (접속 계정: %s, 동시 처리 제한: %d)\n", *vcId, *concurrency)
+
+	// =========================================================================
+	// 2. vCenter 접속
+	// =========================================================================
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	vcenterURL := "https://administrator@vsphere.local:YourPassword@vcenter.example.local/sdk"
-	clusterName := "Production-Cluster"
+	u := &url.URL{Scheme: "https", Host: *vcTargetIP, Path: "/sdk"}
+	u.User = url.UserPassword(*vcId, vcPassword)
 
-	u, err := soap.ParseURL(vcenterURL)
-	if err != nil {
-		panic(err)
-	}
-
-	// vCenter 클라이언트 생성 (Insecure 옵션 활성화)
 	client, err := govmomi.NewClient(ctx, u, true)
 	if err != nil {
-		panic(err)
+		log.Fatalf("vCenter 접속 실패: %v", err)
 	}
 	defer client.Logout(ctx)
+	finder := find.NewFinder(client.Client, true)
 
-	// 예전에는 DefaultDatacenter()라서 데이터센터가 2개 이상이면 여기서 종료했다.
-	// 데이터센터를 전부 돌며 같은 이름의 클러스터를 찾는다(여러 곳에 있으면 모호하므로 중단).
-	finder := find.NewFinder(client.Client, false)
-	dcs, err := finder.DatacenterList(ctx, "*")
-	if err != nil {
-		panic(err)
+	// =========================================================================
+	// 3. 데이터센터 선택 (버그 수정: ClusterComputeResource/Folder/HostSystem
+	// 검색은 내부적으로 데이터센터 컨텍스트(f.dc)가 반드시 필요하다. 이 컨텍스트를
+	// 먼저 확정하고 SetDatacenter로 지정해야, 이후의 클러스터/폴더/호스트 검색이
+	// "please specify a datacenter" 에러 없이 정상적으로 동작한다.
+	// (기존 버전은 SetDatacenter를 한 번도 호출하지 않아 -folderName에 클러스터나
+	// 폴더 이름을 넣으면 실제로 존재해도 항상 "위치를 찾을 수 없습니다"로 실패했고,
+	// 이미 등록된 호스트 여부 확인도 항상 실패로 판정되는 문제가 있었다.)
+	// =========================================================================
+	var selectedDC *object.Datacenter
+	if *datacenterName != "" {
+		dc, dcErr := finder.Datacenter(ctx, *datacenterName)
+		if dcErr != nil {
+			log.Fatalf("데이터센터 '%s'를 찾을 수 없습니다: %v", *datacenterName, dcErr)
+		}
+		selectedDC = dc
+	} else {
+		dcs, dcErr := finder.DatacenterList(ctx, "*")
+		if dcErr != nil || len(dcs) == 0 {
+			log.Fatalf("데이터센터 목록 조회 실패: %v", dcErr)
+		}
+		if len(dcs) == 1 {
+			selectedDC = dcs[0]
+		} else {
+			var names []string
+			for _, dc := range dcs {
+				names = append(names, dc.Name())
+			}
+			log.Fatalf("데이터센터가 %d개 존재하여 자동 선택이 불가합니다. -datacenter 옵션으로 지정하세요. (목록: %s)", len(dcs), strings.Join(names, ", "))
+		}
 	}
-	var cluster *object.ClusterComputeResource
-	for _, dc := range dcs {
-		finder.SetDatacenter(dc)
-		c, findErr := finder.ClusterComputeResource(ctx, clusterName)
-		if findErr != nil {
+	finder.SetDatacenter(selectedDC)
+	fmt.Printf("[INFO] 데이터센터 [%s] 사용\n", selectedDC.Name())
+
+	// =========================================================================
+	// 4. 대상 위치(Location) 자동 탐색 — 이제 데이터센터 컨텍스트가 설정된
+	// 상태이므로 클러스터/폴더 검색이 정상적으로 동작한다.
+	// =========================================================================
+	var targetFolder *object.Folder
+	var targetCluster *object.ClusterComputeResource
+
+	if cluster, err := finder.ClusterComputeResource(ctx, *folderName); err == nil {
+		targetCluster = cluster
+		fmt.Printf("[INFO] 대상 감지 완료: 클러스터 [%s]\n", cluster.Name())
+	} else if folder, err := finder.Folder(ctx, *folderName); err == nil {
+		targetFolder = folder
+		fmt.Printf("[INFO] 대상 감지 완료: 폴더 [%s]\n", folder.Name())
+	} else if strings.EqualFold(*folderName, selectedDC.Name()) {
+		folders, foldersErr := selectedDC.Folders(ctx)
+		if foldersErr != nil {
+			log.Fatalf("데이터센터 [%s]의 폴더 조회 실패: %v", selectedDC.Name(), foldersErr)
+		}
+		targetFolder = folders.HostFolder
+		fmt.Printf("[INFO] 대상 감지 완료: 데이터센터 [%s] (내부 HostFolder 사용)\n", selectedDC.Name())
+	} else {
+		log.Fatalf("[오류] 데이터센터 '%s' 내에서 '%s' 위치(클러스터/폴더)를 찾을 수 없습니다.", selectedDC.Name(), *folderName)
+	}
+
+	// =========================================================================
+	// 5. 이미 등록된 호스트인지 확인 — 이 데이터센터의 호스트 이름을 한 번에 가져와 비교한다.
+	// worklist 에 짧은 이름(esxi01)을 적어도 vCenter 에 FQDN(esxi01.domain)으로 등록돼 있으면
+	// 같은 호스트로 본다(이름이 정확히 같거나, 첫 '.' 앞부분이 같으면). 못 알아보면 이미 있는
+	// 호스트를 다시 등록하려 들어 중복이 생긴다.
+	// =========================================================================
+	registered, regErr := registeredHostNames(ctx, client, selectedDC)
+	if regErr != nil {
+		log.Fatalf("등록된 호스트 목록 조회 실패: %v", regErr)
+	}
+	existsResults := make([]bool, len(serverLines))
+	for i, host := range serverLines {
+		existsResults[i] = registered[host] || registered[shortName(host)]
+	}
+
+	// 등록 여부 확인이 다 끝난 뒤, worklist 순서 그대로 출력 + targets 구성.
+	// (고루틴 안에서 바로 출력하면 완료 순서대로 뒤섞여 나오므로, 순서를
+	// 보존하기 위해 여기서 한 번에 정리한다.)
+	var targets []string
+	for i, host := range serverLines {
+		if existsResults[i] {
+			fmt.Printf("  -> [%s] 이미 등록됨 (PASS)\n", host)
 			continue
 		}
-		if cluster != nil {
-			panic(fmt.Sprintf("클러스터 %q가 여러 데이터센터에 있어 어느 쪽인지 정할 수 없습니다", clusterName))
-		}
-		cluster = c
-	}
-	if cluster == nil {
-		panic(fmt.Sprintf("클러스터 %q를 어느 데이터센터에서도 찾지 못했습니다", clusterName))
+		targets = append(targets, host)
 	}
 
-	// 등록 대상 Bare Metal (ESXi) 호스트 목록
-	hosts := []HostTarget{
-		{"192.168.10.101", "root", "HostPass1!"},
-		{"192.168.10.102", "root", "HostPass2!"},
-		{"192.168.10.103", "root", "HostPass3!"},
+	if len(targets) == 0 {
+		fmt.Println("\n[안내] 새로 등록할 호스트가 없습니다.")
+		fmt.Println("vCenter 세션을 안전하게 종료했습니다.")
+		return
 	}
+
+	// =========================================================================
+	// 6. 호스트 병렬 등록 (thumbprint 자동 재시도 포함, 동시성 제한 적용)
+	// =========================================================================
+	fmt.Printf("\n[INFO] 등록 대상 호스트 %d대 — 동시 %d개 제한으로 등록을 시작합니다.\n", len(targets), *concurrency)
 
 	var wg sync.WaitGroup
-	// 병렬 처리 워커 수 제어 (동시 5대)
-	semaphore := make(chan struct{}, 5)
+	var mu sync.Mutex
+	var failed []string
+	sem := make(chan struct{}, *concurrency)
 
-	for _, h := range hosts {
+	for _, host := range targets {
 		wg.Add(1)
-		go func(target HostTarget) {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
+		sem <- struct{}{}
 
-			if err := addHostWithSSLAutoTrust(ctx, client, cluster, target); err != nil {
-				fmt.Printf("[FAIL] 호스트 %s 등록 실패: %v\n", target.IP, err)
-			} else {
-				fmt.Printf("[SUCCESS] 호스트 %s 병렬 등록 완료\n", target.IP)
+		go func(host string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			safePrintf("  -> [%s] 등록 Task 발급 중...\n", host)
+			// spec은 고루틴 로컬 변수 — 각 호출마다 독립된 값이라
+			// 여러 고루틴이 동시에 등록을 진행해도 서로의 spec을 건드리지 않는다.
+			spec := types.HostConnectSpec{
+				HostName: host,
+				UserName: "root",
+				Password: esxiPassword,
+				Force:    true,
 			}
-		}(h)
+
+			if err := addHost(ctx, host, spec, targetCluster, targetFolder); err != nil {
+				safePrintf("  -> [%s] 등록 실패: %v\n", host, err)
+				mu.Lock()
+				failed = append(failed, host)
+				mu.Unlock()
+				return
+			}
+			safePrintf("  -> [%s] 등록 완료\n", host)
+		}(host)
+	}
+	wg.Wait()
+
+	if len(failed) > 0 {
+		fmt.Printf("\n[일부 실패] 등록 실패 호스트: %s\n", strings.Join(failed, ", "))
+	} else {
+		fmt.Println("\n[성공] 호스트 등록이 완료되었습니다.")
 	}
 
-	wg.Wait()
-	fmt.Println("모든 호스트 병렬 등록 작업이 완료되었습니다.")
+	fmt.Println("vCenter 세션을 안전하게 종료했습니다.")
 }
 
-func addHostWithSSLAutoTrust(ctx context.Context, client *govmomi.Client, cluster *object.ClusterComputeResource, target HostTarget) error {
-	spec := types.HostConnectSpec{
-		HostName: target.IP,
-		UserName: target.Username,
-		Password: target.Password,
-		Force:    true,
+// shortName은 호스트 이름의 첫 '.' 앞부분을 돌려준다(IP 주소는 그대로).
+func shortName(host string) string {
+	if net.ParseIP(host) != nil {
+		return host
 	}
+	return strings.SplitN(host, ".", 2)[0]
+}
 
-	// 1차 등록 시도
-	req := types.AddHost_Task{
-		This: cluster.Reference(),
-		Spec: spec,
-	}
-
-	res, err := methods.AddHost_Task(ctx, client.Client, &req)
+// registeredHostNames는 데이터센터에 등록된 모든 호스트의 이름과 짧은 이름을 모은다.
+func registeredHostNames(ctx context.Context, client *govmomi.Client, dc *object.Datacenter) (map[string]bool, error) {
+	m := view.NewManager(client.Client)
+	v, err := m.CreateContainerView(ctx, dc.Reference(), []string{"HostSystem"}, true)
 	if err != nil {
-		// SSL 미신뢰 오류(SSLVerifyFault) 감지
-		if soap.IsSoapFault(err) {
-			fault := soap.ToSoapFault(err)
-			if sslFault, ok := fault.Detail.Fault.(*types.SSLVerifyFault); ok {
-				fmt.Printf("[WARN] %s: 미신뢰 SSL 감지 (Thumbprint: %s). 지문 주입 후 재시도합니다.\n", target.IP, sslFault.Thumbprint)
-
-				// 감지된 SSL Thumbprint 주입 후 2차 재시도
-				spec.SslThumbprint = sslFault.Thumbprint
-				req.Spec = spec
-
-				res, err = methods.AddHost_Task(ctx, client.Client, &req)
-				if err != nil {
-					return fmt.Errorf("SSL 지문 주입 후 재시도 실패: %w", err)
-				}
-			} else {
-				return fmt.Errorf("SOAP 오류 발생: %w", err)
-			}
-		} else {
-			return fmt.Errorf("연결 초기 오류: %w", err)
-		}
+		return nil, err
 	}
-
-	// Task 완료 대기
-	task := object.NewTask(client.Client, res.Returnval)
-	return task.Wait(ctx)
+	defer v.Destroy(ctx)
+	var hosts []mo.HostSystem
+	if err := v.Retrieve(ctx, []string{"HostSystem"}, []string{"name"}, &hosts); err != nil {
+		return nil, err
+	}
+	names := make(map[string]bool, len(hosts)*2)
+	for _, h := range hosts {
+		names[h.Name] = true
+		names[shortName(h.Name)] = true
+	}
+	return names, nil
 }
