@@ -95,7 +95,7 @@ func main() {
 
 	applyTopology := flag.Bool("applyTopology", true, "설정 편집 > CPU 토폴로지(소켓당 코어 수/NUMA 노드) 적용 여부")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (Reconfigure 전송+대기 전 구간에 적용)")
-	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값을 설정하지 않고 삭제한다 (sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled / numa.vcpu.maxPerVirtualNode). ev 그룹을 안 주면 ev01~ev99 전부, CPU 토폴로지는 건드리지 않는다")
+	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값(sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled / numa.vcpu.maxPerVirtualNode)만 넣지 않고 삭제한다. -evNNCores/Sockets/Numa 를 주면 CPU 토폴로지는 평소처럼 적용, 코어 값 없이 주면 ev01~ev99 의 HugePage 항목만 지운다")
 	collapseEvUsage(regexp.MustCompile(`^ev(\d{2})`))
 
 	flag.Parse()
@@ -118,10 +118,6 @@ func main() {
 		if g.cores == 0 {
 			continue
 		}
-		if *delLpage { // 삭제 모드: 코어/소켓 값은 쓰지 않는다(대상 ev 를 고르는 데만 쓴다)
-			groups = append(groups, evGroup{suffix: g.suffix})
-			continue
-		}
 		if g.sockets == 0 {
 			log.Fatalf("[%s] -%sCores를 지정했으면 -%sSockets도 필요합니다.", g.suffix, g.suffix, g.suffix)
 		}
@@ -138,7 +134,7 @@ func main() {
 		groups = append(groups, g)
 	}
 
-	if *delLpage && len(groups) == 0 { // 그룹을 안 주면 ev01~ev99 전부가 삭제 대상
+	if *delLpage && len(groups) == 0 { // 그룹을 안 주면 ev01~ev99 전부가 삭제 대상(코어 값이 없으니 토폴로지는 안 건드림)
 		for _, g := range rawGroups {
 			groups = append(groups, evGroup{suffix: g.suffix})
 		}
@@ -291,14 +287,17 @@ func main() {
 			defer wg.Done()
 			defer func() { <-sem }()
 
+			// 삭제 모드: HugePage 항목만 값을 빈 문자열로 보내 지운다(vCenter 가 항목을 제거).
+			var del []types.BaseOptionValue
 			if *delLpage {
-				// 값을 빈 문자열로 보내면 vCenter 가 그 항목을 VM 설정에서 지운다(CPU 토폴로지는 건드리지 않는다).
-				var del []types.BaseOptionValue
 				for _, key := range lpageKeys {
 					if currentKeys[j.vmName][key] {
 						del = append(del, &types.OptionValue{Key: key, Value: ""})
 					}
 				}
+			}
+			// 코어 값 없이 -del_lpage 만 준 경우: HugePage 항목만 지우고 끝낸다.
+			if *delLpage && j.cores == 0 {
 				if len(del) == 0 {
 					safePrintf("[%s] 지울 HugePage 항목이 없습니다 (이미 없음, PASS)\n", j.vmName)
 					mu.Lock()
@@ -332,6 +331,11 @@ func main() {
 				&types.OptionValue{Key: "sched.mem.prealloc.pinnedMainMem", Value: "TRUE"},
 				&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
 				&types.OptionValue{Key: "numa.vcpu.maxPerVirtualNode", Value: coresStr},
+			}
+			if *delLpage {
+				// 코어 값이 있으면 평소처럼 CPU 토폴로지(소켓당 코어 수 / NUMA 노드)는 적용하고,
+				// HugePage 항목만 넣지 않고 지운다 — 사용자가 뺀 설정값만 빠지게 한다.
+				spec.ExtraConfig = del
 			}
 
 			topoMsg := ""
