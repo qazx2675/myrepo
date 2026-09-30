@@ -12,6 +12,8 @@
 - **도메인 없는 BM 이름**: `main_conn` 은 등록할 때 이름에 `.` 이 없으면 먼저 이 서버에서 FQDN 을 조회(이름→IP→역조회로 첫 라벨이 같은 이름, `/etc/hosts` 포함)하고, 못 찾으면 `-domain`(기본 `saccae.com`, `vm_setup.sh` 는 `ESXI_DOMAIN`, 빈 값이면 안 붙임)을 붙여 등록한다. 등록 이름과 방법은 로그에 나온다. 이미 등록됐는지는 짧은 이름↔FQDN 어느 쪽이든 같은 호스트로 본다. FQDN/IP 로 적은 이름은 그대로 쓴다.
 - **IPv4 만 조회**: 이 환경은 IPv6 를 쓰지 않으므로 `main_conn` 의 FQDN 조회는 IPv4 주소만 본다.
 - **`vswitch_pgname.sh` 폴더명 일괄 적용**: 줄마다 폴더명을 묻던 것을 처음 한 번만 묻고 IP 로 적힌 모든 줄에 같은 폴더명을 쓴다(빈 입력은 다시 물음, CAE 형식 줄은 그대로). 검증: IP 3줄 + CAE 형식 1줄 파일에 폴더명 한 번 입력 → IP 3줄만 변환.
+- **`affinity_setting -del_affinity`**: affinity 를 넣는 대신 지운다. affinity 파일을 준 ev 는 그 파일에 적힌 항목(key)을, 파일을 안 준 ev 는 VM 의 `sched.cpu.affinity`/`sched.vcpuN.affinity` 를 모두 지운다(값을 빈 문자열로 보내 vCenter 가 항목을 제거). 이미 없으면 `이미 없음`(정상), 지운 뒤 재조회로 검증. `vm_setup.sh -del_affinity` 는 affinity 단계만 삭제로 바꿔 부른다.
+- **`vswitch_setting` 중복 포트그룹**: 이미 있는 포트그룹은 실패가 아니라 스킵으로 넘어간다. 실제 ESXi 는 이미 있음 오류를 현지화된 메시지("...already exists.")로 돌려줘서 예전의 "AlreadyExists" 글자 비교로는 놓칠 수 있었다 — 결함 종류(AlreadyExists/DuplicateName)를 먼저 보고 메시지도 대소문자 구분 없이 함께 본다.
 - **OS6**: `bin_os6/main_conn.gz` 를 새 소스로 다시 빌드(Go 1.20, .60).
 - **영향 범위**: `VMsetup/main_conn-source/{main.go,README.md}`, `VMsetup/vm_setup.sh`, `VMsetup/README.md`, `bin_os6/main_conn.gz`.
 - **검증** (.58 vcsim, 새 컨테이너 없이 OS6 는 빌드만):
