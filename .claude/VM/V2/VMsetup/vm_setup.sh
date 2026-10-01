@@ -1005,7 +1005,11 @@ step_tag() { # 라이선스 할당 다음에 스펙마다 실행 — VM 사용�
   spec_flags "$1" || return 1
   [ "${#TAG_ARGS[@]}" -gt 0 ] || { say "스펙에 tag-* 가 없어 태그 설정을 건너뜁니다."; note "skip:스펙에 tag-* 가 없음"; return 0; }
   [ -x "$HERE/tag_setting-source/tag_setting" ] || ensure_bin "$HERE/tag_setting-source/tag_setting" tag_setting
-  run "$HERE/tag_setting-source/tag_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -hostListFile="vmbase_$1.txt" "${CREATE_ARGS[0]}" "${TAG_ARGS[@]}"
+  run "$HERE/tag_setting-source/tag_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -hostListFile="vmbase_$1.txt" "${CREATE_ARGS[0]}" "${TAG_ARGS[@]}" && return 0
+  # VM 은 이미 만들어졌으므로 태그 실패(대개 vCenter 에 사용자 지정 특성이 정의돼 있지 않음)는 경고만 하고 다음 단계로 간다.
+  warn "태그 설정 일부 실패 — vCenter 에 사용자 지정 특성(DEPT_NAME/PURPOSE/VM_TYPE)이 정의돼 있는지 확인하세요 (로그 참고). 이후 단계는 계속합니다."
+  note "일부 실패(경고) — 사용자 지정 특성 정의 확인, 로그 참고"
+  return 0
 }
 step_lpage() {
   spec_flags "$1" || return 1
