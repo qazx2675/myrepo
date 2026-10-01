@@ -18,7 +18,7 @@ unset VC_PASSWORD VC_PASS VCENTER_PASS
 # 계정: 기본 lscsystems@vsphere.local, 다른 계정은 -id <계정> (또는 환경변수 VC_ID)
 # 비밀번호: 항상 V2 폴더 secret/ 의 암호 파일(../../passwd_update.sh 로 등록) → 직접 입력 순.
 VC_ID="${VC_ID:-lscsystems@vsphere.local}"
-user=""; want_fix=0; spec_arg=""; skip_lpage=0
+user=""; want_fix=0; spec_arg=""; exp_lpage=0; exp_aff=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -id) shift; VC_ID="${1:-}" ;;
@@ -26,10 +26,11 @@ while [ $# -gt 0 ]; do
     -u) shift; user="${1:-}" ;;
     -u=*) user="${1#-u=}" ;;
     -fix) want_fix=1 ;;
-    -skipLpage) skip_lpage=1 ;;
+    -expectNoLpage) exp_lpage=1 ;;
+    -expectNoAffinity) exp_aff=1 ;;
     -specFolder) shift; spec_arg="${1:-}" ;;
     -specFolder=*) spec_arg="${1#-specFolder=}" ;;
-    *) echo "알 수 없는 옵션: $1 (사용법: $0 [-u <user>] [-id <계정>] [-specFolder <스펙 폴더명>] [-skipLpage] [-fix])" >&2; exit 2 ;;
+    *) echo "알 수 없는 옵션: $1 (사용법: $0 [-u <user>] [-id <계정>] [-specFolder <스펙 폴더명>] [-expectNoLpage] [-expectNoAffinity] [-fix])" >&2; exit 2 ;;
   esac
   shift
 done
@@ -81,9 +82,14 @@ fi
 # -specFolder + -yes 로 체크한다(스펙 폴더·대상 목록·vCenter 모두 그 실행 기준이라 추가 입력이 없다).
 # 설정 변경(-fix)은 하지 않고 체크만 한다. 고치려면 이 스크립트에 -fix 를 붙인다(변경 직전 확인은 vm-param-check 가 한다).
 RUN_SPECS="../../VMsetup/run_${user}/check_specs.txt"
-# vm_setup.sh -del_lpage 로 만든 기록이면 HugePage 항목은 체크에서 제외한다(단독 실행에서 지정하려면 -skipLpage).
-if [ -z "$spec_arg" ] && [ -e "../../VMsetup/run_${user}/check_skip_lpage" ]; then skip_lpage=1; fi
-skip_args=(); [ "$skip_lpage" = 1 ] && { skip_args=(-skipLpage); echo "HugePage(lpage) 설정은 체크에서 제외합니다."; }
+# vm_setup.sh 의 -del_lpage / -del_affinity 기록이 있으면 그 항목은 "값이 정말 없는지"를 체크한다(단독 실행은 -expectNoLpage / -expectNoAffinity).
+if [ -z "$spec_arg" ]; then
+  [ -e "../../VMsetup/run_${user}/check_del_lpage" ] && exp_lpage=1
+  [ -e "../../VMsetup/run_${user}/check_del_affinity" ] && exp_aff=1
+fi
+exp_args=()
+[ "$exp_lpage" = 1 ] && { exp_args+=(-expectNoLpage); echo "HugePage(lpage): 삭제돼 있어야 정상으로 체크합니다."; }
+[ "$exp_aff" = 1 ] && { exp_args+=(-expectNoAffinity); echo "affinity: 삭제돼 있어야 정상으로 체크합니다."; }
 if [ -z "$spec_arg" ] && [ -s "$RUN_SPECS" ]; then
   export VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD"
   auto_fix=(); [ "$want_fix" = 1 ] && auto_fix=(-fix)
@@ -94,7 +100,7 @@ if [ -z "$spec_arg" ] && [ -s "$RUN_SPECS" ]; then
     n=$((n + 1))
     echo "--- 스펙 ${n}: ${sf} (대상 ${tf}) ---"
     ./vm-param-check -vcenterList="../../VMsetup/run_${user}/vcenter_check.txt" -f="$tf" -specRoot="$SPEC_ROOT" \
-      -specFolder="$sf" -yes ${skip_args[@]+"${skip_args[@]}"} -out="result_${user}_${n}.csv" ${auto_fix[@]+"${auto_fix[@]}"} || bad=1
+      -specFolder="$sf" -yes ${exp_args[@]+"${exp_args[@]}"} -out="result_${user}_${n}.csv" ${auto_fix[@]+"${auto_fix[@]}"} || bad=1
   done < "$RUN_SPECS"
   [ "$n" -gt 0 ] || { echo "run_${user}/check_specs.txt 에 쓸 수 있는 스펙이 없습니다." >&2; exit 1; }
   exit "$bad"
@@ -144,5 +150,5 @@ echo "=== 체크 실행: 대상=${target_file}, 출력=${out_file} ==="
   -specRoot="$SPEC_ROOT" \
   -out="$out_file" \
   ${spec_args[@]+"${spec_args[@]}"} \
-  ${skip_args[@]+"${skip_args[@]}"} \
+  ${exp_args[@]+"${exp_args[@]}"} \
   "${fix_args[@]}"

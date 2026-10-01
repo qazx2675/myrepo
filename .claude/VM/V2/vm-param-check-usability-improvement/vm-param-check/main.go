@@ -63,7 +63,8 @@ func main() {
 
 	specFolder := flag.String("specFolder", "", "-specRoot 와 함께: VM 폴더/포트그룹으로 스펙을 찾지 않고, 대상 VM 전부에 이 폴더명(CAE 번호는 무시하고 매칭)의 스펙을 적용한다 — VMsetup/vm_setup.sh 가 방금 만든 VM 을 그 스펙으로 체크할 때 쓴다")
 
-	skipLpage := flag.Bool("skipLpage", false, "HugePage 고정값(sched.mem.lpage.enable1GPage / prealloc / prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled) 체크를 제외한다 — vm_setup.sh -del_lpage 로 일부러 지운 VM 용. CPU 토폴로지·numa.vcpu.maxPerVirtualNode 등 나머지는 그대로 체크")
+	expectNoLpage := flag.Bool("expectNoLpage", false, "HugePage 고정값(sched.mem.lpage.enable1GPage / prealloc / prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled)이 삭제돼 있어야 정상으로 본다 — vm_setup.sh -del_lpage 로 일부러 지운 VM 용. 값이 남아 있으면 FAIL. CPU 토폴로지·numa.vcpu.maxPerVirtualNode 등 나머지는 평소대로 체크")
+	expectNoAffinity := flag.Bool("expectNoAffinity", false, "affinity 값(sched.cpu.affinity / sched.vcpuN.affinity)이 하나도 없어야 정상으로 본다 — vm_setup.sh -del_affinity 로 지운 VM 용. 남아 있으면 FAIL, 스펙의 affinity 기대값은 비교하지 않는다. 나머지는 평소대로 체크")
 	out := flag.String("out", "", "상세 CSV 출력 경로 (미지정 시 vm-param-check_<타임스탬프>.csv 자동 생성). 같은 이름에 _summary가 붙은 요약 CSV가 하나 더 생성됨")
 	user := flag.String("user", "", "CSV 파일명에 붙일 접미사 (예: -out=result.csv -user=kdh -> result_kdh.csv, result_kdh_summary.csv). 여러 사람이 동시에 실행할 때 파일명 충돌 방지용")
 	onlyFail := flag.Bool("onlyFail", false, "PASS(문제 없음)인 VM은 '상세'와 상세 CSV에서 제외하고, FAIL/설정없음이 있는 VM만 출력 (대수 많을 때 가독성용). VM별 요약(화면/요약 CSV)에는 PASS 서버도 그대로 나온다")
@@ -94,7 +95,8 @@ func main() {
 	baseFlagValues := map[string]string{}
 	flag.VisitAll(func(f *flag.Flag) { baseFlagValues[f.Name] = f.Value.String() })
 
-	checker.SkipLpage = *skipLpage
+	checker.ExpectNoLpage = *expectNoLpage
+	checker.ExpectNoAffinity = *expectNoAffinity
 
 	if *initFolder != "" {
 		runInitFolder(*specRoot, *initFolder, *template)
@@ -447,6 +449,12 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 	f = append(f, checker.CheckHostPower(vm))
 	f = append(f, checker.CheckNetwork(vm)...)
 
+	if checker.ExpectNoAffinity {
+		if group != "" {
+			f = append(f, checker.CheckAffinityAbsent(vm, group)...)
+		}
+		return f
+	}
 	switch group {
 	case "":
 		// 미분류 VM은 affinity 체크 대상이 아니다(기존 동작).
