@@ -14,12 +14,28 @@ type AssetRow struct {
 	Location string
 }
 
+// splitSpaceCols 는 공백 구분 줄을 최대 n 개 열로 나눈다. 마지막 열(위치)은
+// 나머지 전체를 담는다. 위치에 공백이 있어도("/a/b c/d e") 잘리지 않게 하기 위함.
+func splitSpaceCols(s string, n int) []string {
+	var cols []string
+	rest := strings.TrimSpace(s)
+	for len(cols) < n-1 {
+		i := strings.IndexAny(rest, " \t")
+		if i < 0 {
+			break
+		}
+		cols = append(cols, rest[:i])
+		rest = strings.TrimLeft(rest[i:], " \t")
+	}
+	return append(cols, rest)
+}
+
 // LoadAsset 은 표1 텍스트를 읽어 조사 대상 hostname 순서 목록과
 // hostname -> (상태, 위치) 매핑을 돌려준다.
 //
 // 기대 양식: 자산ID <TAB> hostname <TAB> 상태 <TAB> 위치
 //   - 탭(\t) 구분. 상태·위치에 공백이 들어갈 수 있으므로 탭이 있으면 탭으로만 나눈다.
-//   - 탭이 없는 줄은 공백으로 나눈다(구식 파일 대비).
+//   - 탭이 없는 줄은 공백으로 나눈다(구식 파일 대비). 4번째 열(위치)은 줄 끝까지 전부다.
 //   - 헤더 행(2번째 필드가 "hostname")과 빈 줄, '#' 주석은 건너뛴다.
 //   - 필드가 2개 미만이거나 hostname 이 비면 건너뛰고 stderr 에 경고한다.
 func LoadAsset(path string) (order []string, rows map[string]AssetRow, err error) {
@@ -42,7 +58,7 @@ func LoadAsset(path string) (order []string, rows map[string]AssetRow, err error
 		if strings.Contains(raw, "\t") {
 			fields = strings.Split(raw, "\t")
 		} else {
-			fields = strings.Fields(raw)
+			fields = splitSpaceCols(raw, 4)
 		}
 		for i := range fields {
 			fields[i] = strings.TrimSpace(fields[i])

@@ -20,6 +20,12 @@
 - `update.sh` 보존 목록에 `survey-rhel6` 추가 (A용 바이너리가 덮이지 않도록).
 
 ### Fixed
+- **표1 위치에 공백이 있으면 잘리던 문제** (예: `/asdf/qwer/z xcv/g h jk`). 탭이 없는
+  (공백 구분) 줄을 `strings.Fields` 로 쪼개 4번째 토큰만 위치로 써서 `/asdf/qwer/z` 만
+  남았고, conf `[[mountpoint]].location` 과 달라 `appl설정유무` 가 `X` 가 됐다.
+  이제 공백 구분 줄은 **4번째 열부터 줄 끝까지 전부**를 위치로 쓴다 (`splitSpaceCols`).
+  위치 비교(`ApplStatus`)도 앞뒤·내부 연속 공백 개수 차이는 무시한다.
+  탭 구분 파일은 원래 정상이었고 동작 변경 없음.
 - **gossh `-script` 인자가 따옴표 문자(`'`/`"`)로 끝나면** 원격 bash 가
   `unexpected EOF while looking for matching '` 로 죽던 문제. 기본 `config_value`
   (`... | grep -w '/appl'`)가 `'` 로 끝나 **모든 호스트가 `gossh 실행 실패`/설정값 공란**이

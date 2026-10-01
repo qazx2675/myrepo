@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"regexp"
 	"testing"
 )
@@ -60,6 +61,67 @@ func TestApplStatus(t *testing.T) {
 		m, n := ApplStatus(mounts, c.cv, c.loc)
 		if m != c.mark || n != c.note {
 			t.Errorf("ApplStatus(%q,%q) = (%q,%q), want (%q,%q)", c.cv, c.loc, m, n, c.mark, c.note)
+		}
+	}
+}
+
+func TestApplStatusLocationWithSpaces(t *testing.T) {
+	mounts := []MountRule{{Name: "nas-a", Location: "/asdf/qwer/z xcv/g h jk"}}
+	cases := []struct {
+		loc  string
+		mark string
+	}{
+		{"/asdf/qwer/z xcv/g h jk", "O"},
+		{"  /asdf/qwer/z  xcv/g h jk ", "O"}, // 내부/앞뒤 공백 개수 차이는 무시
+		{"/asdf/qwer/z", "X"},                // 위치가 잘린 경우
+	}
+	for _, c := range cases {
+		if m, _ := ApplStatus(mounts, "nas-a:/appl2/appl2", c.loc); m != c.mark {
+			t.Errorf("ApplStatus(loc=%q) = %q, want %q", c.loc, m, c.mark)
+		}
+	}
+}
+
+func TestSplitSpaceCols(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"A001 web01 운영 /asdf/qwer/z xcv/g h jk", []string{"A001", "web01", "운영", "/asdf/qwer/z xcv/g h jk"}},
+		{"A002  web02   운영   /asdf/qw er/g h h", []string{"A002", "web02", "운영", "/asdf/qw er/g h h"}},
+		{"A003 web03", []string{"A003", "web03"}},
+		{"A004 web04 운영", []string{"A004", "web04", "운영"}},
+	}
+	for _, c := range cases {
+		got := splitSpaceCols(c.in, 4)
+		if len(got) != len(c.want) {
+			t.Errorf("splitSpaceCols(%q) = %q, want %q", c.in, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("splitSpaceCols(%q)[%d] = %q, want %q", c.in, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+func TestLoadAssetLocationWithSpaces(t *testing.T) {
+	// 공백 구분(탭 없음) 줄과 탭 구분 줄 모두 위치의 공백이 보존돼야 한다
+	p := t.TempDir() + "/asset.txt"
+	data := "A001 web01 운영 /asdf/qwer/z xcv/g h jk\n" +
+		"A002\tweb02\t운영\t/asdf/qw er/g h h\n"
+	if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, rows, err := LoadAsset(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"web01": "/asdf/qwer/z xcv/g h jk", "web02": "/asdf/qw er/g h h"}
+	for h, loc := range want {
+		if got := rows[h].Location; got != loc {
+			t.Errorf("%s 위치 = %q, want %q", h, got, loc)
 		}
 	}
 }

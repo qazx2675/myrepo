@@ -59,6 +59,11 @@ func applyInfraRegex(re *regexp.Regexp, out string) string {
 	return strings.TrimSpace(m[0])
 }
 
+// squashSpace 는 앞뒤 공백을 지우고 내부 연속 공백을 한 칸으로 줄인다 (위치 비교용).
+func squashSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // ApplStatus 는 설정값(비어있지 않음)의 mountpoint 이름을 conf 정상 위치와 대조하고,
 // 그 정상 위치가 표1의 위치와 같은지로 O/X 를 판정한다.
 // 설정값이 비어 있는 경우의 처리는 호출부(main)에서 한다.
@@ -73,7 +78,7 @@ func ApplStatus(mounts []MountRule, configValue, assetLocation string) (mark, no
 	mp = strings.TrimSpace(mp)
 	for _, m := range mounts {
 		if strings.TrimSpace(m.Name) == mp {
-			if strings.TrimSpace(m.Location) == strings.TrimSpace(assetLocation) {
+			if squashSpace(m.Location) == squashSpace(assetLocation) {
 				return "O", ""
 			}
 			return "X", ""
