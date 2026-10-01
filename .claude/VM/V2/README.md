@@ -79,7 +79,11 @@ cd /home/V2/VMsetup
 ./vm_setup.sh                 # user 번호 선택 → VM 표 확인 → (CAE 번호 변경) → vCenter 선택 → 실행 → 스펙 체크
 ./vm_setup.sh -u lsh -n       # 계획만 확인
 ./vm_setup.sh -u lsh -id other@vsphere.local
+./vm_setup.sh -del_affinity     # affinity 값을 모두 삭제 (체크도 "값이 없어야 OK")
+./vm_setup.sh -del_lpage        # HugePage 값만 삭제, 토폴로지는 평소처럼 (체크도 "값이 없어야 OK")
 ```
+
+스펙 파일 맨 아래에 `tag-DEPT_NAME` / `tag-PURPOSE` / `tag-VM_TYPE` 줄을 쓰면 라이선스 할당 다음에 VM 사용자 지정 특성이 설정됩니다(체크에는 영향 없음). 형식은 [VMsetup/README.md](VMsetup/README.md)의 "태그 설정" 참고.
 
 스펙이 VM 생성용 값으로 어떻게 바뀌는지 미리 확인하려면:
 

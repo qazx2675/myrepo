@@ -67,7 +67,8 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 6. **실행 계획 확인 후 실행**(한 번 더 y) — 계획에는 스펙별 **affinity 설정값**도 나온다(내용이 같은 파일은 이름이 달라도 한 번만, 쓰는 ev 를 `[ev01~ev20]` 식으로). `main_conn`(BM 을 vCenter 의 `Task` 위치에 등록 — `ESXI_FOLDER` 로 바꿈, 이미 등록된 호스트는 통과, ESXi root 비밀번호를 한 번 더 물음) → `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting`.
    - 호스트를 못 찾거나 포트그룹/VM 생성에 실패하면 **그 단계에서 멈추고** `[완료]`를 출력하지 않습니다. 이미 있는 포트그룹/VM은 실패가 아니라 건너뜁니다 — 원인을 고친 뒤 다시 실행하면 이어서 진행됩니다.
    - 스펙별 단계가 모두 끝나면 **`license_assign`을 BM 전체 대상으로 1회** 실행한다. 평가판 호스트가 있으면 라이선스 번호를 묻고(라이선스가 1개여도 묻는다), `q`면 할당하지 않고 다음 단계로 넘어간다. 평가판 호스트가 없으면 묻지 않고 끝난다.
-7. **스펙 체크** — 만든 VM 만, 실행한 스펙으로 `vm-param-check -specFolder` 를 돌려 `[일치]` / `[차이]`(항목별 개수)를 보여준다. 자세한 결과는 `run_<user>/check_<번호>.log`, `.csv`. 차이가 있어도 VM 은 이미 만들어졌으므로 중단하지 않고, 교정 명령(`-fix`)을 안내한다. 스펙에 ev01 `cores`/`numa` 가 없으면 vm-param-check 로 체크할 수 없어 건너뛴다.
+   - 이어서 스펙마다 **`tag_setting`(태그 설정)** 을 실행한다. 스펙에 `tag-*` 줄이 없으면 건너뛰고, 실패해도(대개 vCenter 에 사용자 지정 특성이 없음) 경고만 하고 다음 단계로 간다. 아래 "태그 설정(`tag-*`)" 참고.
+7. **스펙 체크** — 만든 VM 만, 실행한 스펙으로 `vm-param-check -specFolder` 를 돌려 `[일치]` / `[차이]`(항목별 개수)를 보여준다. 자세한 결과는 `run_<user>/check_<번호>.log`, `.csv`. `-del_affinity` / `-del_lpage` 로 실행했으면 체크도 `-expectNoAffinity` / `-expectNoLpage` 가 자동으로 붙어, 지운 항목은 **값이 없어야 OK**(남아 있으면 FAIL)이고 나머지는 평소처럼 스펙과 비교한다. 태그(`tag-*`)는 체크하지 않는다. 차이가 있어도 VM 은 이미 만들어졌으므로 중단하지 않고, 교정 명령(`-fix`)을 안내한다. 스펙에 ev01 `cores`/`numa` 가 없으면 vm-param-check 로 체크할 수 없어 건너뛴다.
 
 #### 실행 단계 진행 모니터
 
@@ -81,6 +82,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
   [완료]   00:04  VM 생성           [INFO] VM 생성 및 리소스 설정이 완료되었습니다!
 > [진행]   00:02  MAC 조사          ...
   [대기]          라이선스 할당     (선택이 필요하면 모니터가 잠시 꺼집니다)
+  [대기]          태그 설정 (스펙 1)
 ```
 
 | 키 | 동작 |
@@ -96,7 +98,21 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 - 로그: 단계별 `run_<user>/logs/NN_<단계>.log`, 전체 `run_<user>/run.log`, 실행 계획 `run_<user>/plan.txt`("작업 시작" 줄에서 Enter).
 - 표준입력이 파이프이거나(nohup·cron·자동 시험) `VMSETUP_MONITOR=0` 이면 모니터 없이 예전처럼 줄줄이 출력합니다. 이때 표준입력이 터미널이 아니면 라이선스 선택은 남은 입력을 쓰고, 입력이 끝나면 `q`(취소)로 처리합니다.
 
-`tag_setting`(사용자 지정 특성)은 스펙에 값이 없어 `vm_setup.sh`에 포함하지 않았습니다. 필요하면 단독으로 실행하세요.
+#### 태그 설정(`tag-*`)
+
+스펙 파일(`SPEC_DIR/<폴더>/<폴더>_spec.txt`) 맨 아래에 태그당 한 줄로 적습니다. 태그는 vCenter 사용자 지정 특성 `DEPT_NAME` / `PURPOSE` / `VM_TYPE` 입니다.
+
+```
+tag-DEPT_NAME=영업팀                           # 값만 쓰면 모든 ev 에 적용
+tag-PURPOSE=ev01:DB, ev02-ev03:WAS, ev06:TEST   # evNN:값 또는 evNN-evMM:값 (콤마로 나열)
+tag-VM_TYPE=가상서버
+```
+
+- 뒤에 쓴 항목이 앞 항목을 덮어씁니다(예: `tag-PURPOSE=WAS, ev06:테스트`). 줄을 쓰지 않은 태그, 값이 없는 ev 는 건드리지 않습니다.
+- 값에는 공백·콤마·`:` 를 쓸 수 없습니다(공백은 `_`). ev 개수보다 큰 번호나 알 수 없는 태그 이름은 오류입니다.
+- 실행 위치는 라이선스 할당 다음, 스펙 체크 앞입니다. 체크(`vm-param-check`)는 `tag-*` 를 읽되 검사하지 않습니다.
+- vCenter 에 사용자 지정 특성이 미리 정의돼 있어야 합니다. 없으면 `tag_setting` 이 실패하고 `vm_setup.sh` 는 경고 후 계속합니다.
+- `tag_setting` 단독 실행: `-hostListFile`(BM 이름 앞부분), `-vmCount`, `-deptNames` / `-purposes` / `-vmTypes`(ev01,ev02.. 콤마 목록, 빈 칸은 그 ev 건너뜀).
 
 ### 단독 실행
 
@@ -111,7 +127,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 | `vm_create-source` | 호스트별 VM 생성(+CPU/메모리 예약/Shares/부트 순서). `-mapFile`에 VM 이름을 키로 포트그룹 지정 가능 | `-vmCount` 1~99, `-ev01Cpu`~`-ev99Share` |
 | `affinity_setting-source` | affinity 일괄 적용. `-vm_cnt` 범위의 ev마다 파일 필수(자동 계산 삭제, `-ht`는 받기만 하고 무시), 여러 ev에 같은 파일 지정 가능 | `-vm_cnt` 1~99, `-affinityFile01~99` |
 | `lpage_setting-source` | HugePage/CPU 토폴로지 | `-ev01Cores/Sockets/Numa`~`-ev99...` |
-| `tag_setting-source` | 사용자 지정 특성 | `-vmCount` 1~99 |
+| `tag_setting-source` | 사용자 지정 특성(DEPT_NAME/PURPOSE/VM_TYPE). 지정하지 않은 태그·빈 칸은 건너뛰고 일부 실패하면 종료코드 1 | `-vmCount` 1~99 |
 | `vswitch_setting-source` | BM vSwitch에 포트그룹 생성(호스트 병렬, `-concurrency`) | — |
 | `nic_assign-source` | 만들어진 VM의 네트워크 어댑터 1 포트그룹 교체 + **연결됨/전원을 켤 때 연결** 체크 | — |
 | `power_setting-source` | **BM(호스트) 전원 정책을 고성능으로** 설정(호스트 병렬, 이미 고성능이면 스킵). vCenter 주소 + BM 목록 파일만 있으면 되고, 목록에 도메인 없이 hostname 만 적어도 찾는다 | — |
@@ -134,8 +150,8 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 | `-s <dir>` | SPEC_DIR 경로 (기본: `vm-param-check/SPEC_DIR` 가 있으면 그것, 없으면 `../SPEC_DIR`) |
 | `-w <vswitch>` | 포트그룹을 만들 가상 스위치 (기본 `vSwitch0`) |
 | `-c <n>` | vswitch/affinity/lpage 동시 처리 수 |
-| `-del_affinity` | affinity 단계를 설정 대신 삭제로 실행 — VM 의 affinity 설정값을 모두 지움(affinity 파일과 무관) |
-| `-del_lpage` | lpage 단계를 설정 대신 삭제로 실행 — HugePage 설정값 5개만 빼고(numa.vcpu.maxPerVirtualNode 는 유지) CPU 토폴로지(소켓당 코어·NUMA)는 평소처럼 적용 |
+| `-del_affinity` | affinity 단계를 설정 대신 삭제로 실행 — VM 의 affinity 설정값을 모두 지움(affinity 파일과 무관). 스펙 체크는 `-expectNoAffinity` 로 "값이 없어야 OK" |
+| `-del_lpage` | lpage 단계를 설정 대신 삭제로 실행 — HugePage 설정값 5개만 빼고(numa.vcpu.maxPerVirtualNode 는 유지) CPU 토폴로지(소켓당 코어·NUMA)는 평소처럼 적용. 스펙 체크는 `-expectNoLpage` 로 "HugePage 값이 없어야 OK" |
 | `-n` | 확인만 — 스펙·포트그룹 할당과 실행 계획까지 보여 주고 종료(vCenter 변경 없음) |
 
 환경변수 `VM_SETUP_EDITOR`로 vim 대신 다른 편집기를 쓸 수 있습니다.
@@ -147,6 +163,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 | `cpu/mem/disk/shares-evNN` | `vm_create -evNNCpu/Mem/Disk/Share` (disk·shares에 쉼표 목록이 있으면 첫 값) |
 | `affinity-evNN` | `-affinityFileNN` (ev마다 필수) |
 | `ht` | VM 생성에는 쓰지 않음 (vm-param-check 체크용) |
+| `tag-DEPT_NAME` / `tag-PURPOSE` / `tag-VM_TYPE` | `tag_setting -deptNames/-purposes/-vmTypes` (ev 별로 펼쳐 ev01,ev02.. 콤마 목록). 체크에는 쓰지 않음 |
 | `cores`(소켓당 코어 수), `numa`(NUMA 노드당 vCPU 수) | `lpage_setting`의 총 코어(=cpu)/소켓 수/NUMA 노드 수 |
 
 ## 4. 문서별 고유 설명
@@ -156,6 +173,8 @@ VMsetup/
 ├── vm_setup.sh                 # 전체 과정(스펙·포트그룹 할당 → 생성 → 설정) 실행 스크립트
 ├── README.md / CHANGELOG.md    # 이 문서 / 변경 이력
 ├── vswitch_pgname.sh           # vswitch_<user>.txt의 IP 포트그룹명을 <폴더명>-cae-a-b-c-0으로 변환
+├── lpage_from_spec.sh          # SPEC_DIR 스펙으로 lpage_setting -del_lpage 만 단독 실행 (-spec <폴더> -w <BM 목록> -vc <IP> [-n])
+├── mac_ip_resolve.sh           # mac_all.txt 의 _DNS_AND_TOOLS_NOT_FOUND 를 DNS 조회 IP 로 변환
 ├── <user>.txt                  # (사용자 파일, git 제외) BM 목록
 ├── run_<user>/                 # (자동 생성, git 제외) 이번 실행의 worklist/hostgroup/vswitch 입력 사본 + last_vcenter(이전 실행 vCenter)
 └── *-source/                   # 도구별 Go 소스 + setup.sh (+ README.md)

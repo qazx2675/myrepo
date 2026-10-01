@@ -23,6 +23,8 @@
 | `vm-param-check-usability-improvement/vm-param-check/main.go` | 체크/`-fix` CLI 진입점, 플래그 등록(ev01~ev99, `-h`에는 ev02~99를 한 줄로 묶어 표시), `-specRoot`, `-specExport`, `-specFolder`(대상 전부에 한 스펙) |
 | `.../vm-param-check/model/group.go` | ev 그룹 판정(`ClassifyGroup`)과 최대 개수(`MaxGroup=99`) — 이름이 `ev%02d` 두 자리라 99가 상한(ev100은 `ev10`을 포함해 판정이 깨짐) |
 | `.../vm-param-check/config/spec.go` | 스펙 파일 파싱(`키="값"` 지원), 폴더명 정규화·매칭 |
+| `.../vm-param-check/config/tags.go` | 스펙의 `tag-*` 줄(`값` / `evNN:값` / `evNN-evMM:값`)을 ev 별 값으로 펼침(`ExpandTag`). `export.go` 가 `tag-<이름>-evNN` 으로 내보내고, 체크는 `tag-*` 를 무시(`applySpecOptions`) |
+| `.../vm-param-check/checker/fixed.go` | HugePage 고정값 체크 + `-expectNoLpage`(없어야 OK), `CheckAffinityAbsent`(`-expectNoAffinity`) |
 | `.../vm-param-check/config/export.go` | `-specExport`: 스펙을 VM 생성용 `이름=값`으로 정규화하고 규칙(ev01 필수/연속/필수값) 검사 |
 | `.../vm-param-check/checker/` | 항목별 체크(하드웨어/토폴로지/affinity/전원…) |
 | `.../vm-param-check/fixer/` | `-fix` 계획·게이트·적용 |
@@ -31,6 +33,7 @@
 수정 요청별로 볼 곳:
 
 - **"ev 개수를 늘려달라"** → `vm-param-check/model/group.go`(MaxGroup) + 각 도구의 `maxVMCount`/`maxGroup` 상수 + `tag_setting`의 `-vmCount` 검사 + `vm_setup.sh`의 `seq 1 99`(스펙 저장). 99를 넘기려면 VM 이름을 세 자리로 바꾸고 `ClassifyGroup`을 긴 이름 우선으로 고쳐야 한다
+- **"태그 값을 더 넣거나 문법을 바꿔달라"** → `config/tags.go`(문법·검증) + `config/export.go`(내보내기) + `vm_setup.sh`의 `build_flags`(TAG_ARGS)·`step_tag` + `tag_setting-source/main.go`
 - **"스펙 키를 추가해달라"** → `config/export.go`(내보내기 규칙) + `vm_setup.sh`의 `build_flags`/`spec_key_list`
 - **"vm_setup.sh 질문 흐름을 바꿔달라"** → `VMsetup/vm_setup.sh` 한 파일 (검증: `검증/vmsetup_test.sh`)
 - **"VM 생성 옵션을 추가해달라"** → `vm_create-source/main.go`
