@@ -75,3 +75,7 @@ type Finding struct {
 	Result   string // "OK" | "FAIL" | "설정없음" | "정보"
 	Note     string
 }
+
+// ExpectNone은 -expectNoLpage / -expectNoAffinity 로 "값이 없어야 정상"인 항목의 기대값 표시다.
+// 자동교정(-fix)은 이 기대값의 FAIL 을 되살리지 않고 수동 조치로만 알린다.
+const ExpectNone = "(없음)"

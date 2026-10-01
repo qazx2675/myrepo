@@ -142,6 +142,10 @@ func BuildPlan(findings []model.Finding, vms []model.VMInfo) (*Plan, error) {
 		if f.Result != "FAIL" && f.Result != "설정없음" {
 			continue
 		}
+			if f.Expected == model.ExpectNone { // 지워야 하는 항목이 남은 것 — 값을 되살리는 교정은 하지 않는다
+				plan.Manual = append(plan.Manual, f)
+				continue
+			}
 		if fixable(f.Key) {
 			broken[f.VM][f.Key] = true
 		} else {
