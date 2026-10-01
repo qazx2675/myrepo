@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-10-01 — 체크 스크립트: 지운 항목은 "정말 없는지" 확인 (-expectNoLpage / -expectNoAffinity)
+
+- **`vm-param-check`**: `-expectNoLpage`(HugePage 4개 키가 없거나 빈 값이면 OK, 값이 남으면 FAIL), `-expectNoAffinity`(`sched.cpu.affinity`/`sched.vcpuN.affinity` 가 하나도 없으면 OK, 남은 키마다 FAIL, 스펙의 affinity 기대값은 비교 안 함). 옵션을 안 주면 기존 동작 그대로. `sched.mem.pin` 은 지금처럼 체크하지 않는다. 남은 값은 `-fix` 가 되살리지 않고 수동 조치로만 알린다.
+- **`vm_setup.sh`**: `-del_lpage` / `-del_affinity` 로 실행하면 스펙 체크 단계가 위 옵션을 붙이고 `run_<user>/check_del_lpage`, `check_del_affinity` 표시 파일을 남긴다.
+- **`vm_setting_check_insert.sh`**: 표시 파일이 있으면 자동으로 같은 옵션을 붙인다. 단독 실행은 `-expectNoLpage` / `-expectNoAffinity` 로 직접 지정.
+- **검증**: 단위 테스트(체커). vcsim 40 BM×240 VM: 값이 남은 상태에서 옵션을 주면 FAIL 240건, `vm_setup.sh -del_lpage -del_affinity` 후 체크 단계에서 lpage/affinity 항목이 FAIL 목록에서 사라짐, 단독 자동 모드가 입력 없이 같은 옵션을 붙임. (vcsim 은 `cpuid.coresPerSocket` 을 기록하지 않아 그 항목이 [설정없음]으로 남는데, 이번 변경과 무관.)
+
 ## 2026-09-30 — BM 호스트 등록(`main_conn`) 첫 단계 편입, IP 포트그룹명 자동 변환
 
 - **`main_conn-source`**: 소스에 값이 박힌 샘플이던 도구를 `vm-setting-go-lang/main_connect.go` 와 같은 옵션 기반 도구로 교체(`-vcTargetIP -id -folderName -worklistFile -datacenter -concurrency`, 비밀번호는 환경변수 `VC_PASSWORD`/`ESXI_PASSWORD`). 등록 여부 확인은 데이터센터의 호스트 이름을 한 번에 가져와 **짧은 이름↔FQDN 을 같은 호스트로** 본다(예전 `HostSystem` 이름 검색은 짧은 이름으로 적으면 FQDN 등록 호스트를 못 찾아 중복 등록을 시도했다).
