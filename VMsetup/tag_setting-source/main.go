@@ -83,14 +83,19 @@ func main() {
 	vmTypeList := splitList(*vmTypes)
 
 	// vmCount만큼만 필수로 존재하는지 검증 (그 이후 순번은 필요 없으므로 검사하지 않음)
+	// 지정하지 않은 태그(플래그 자체가 비어 있음)는 건드리지 않는다. 지정했으면 ev 개수만큼 필요하고,
+	// 목록 안의 빈 칸(a,,c)은 그 ev 만 건너뛴다.
 	validateList := func(name string, list []string) {
-		if len(list) < *vmCount {
+		if list != nil && len(list) < *vmCount {
 			log.Fatalf("-%s 값이 부족합니다. vmCount=%d 이면 최소 %d개의 값이 필요합니다 (현재 %d개).", name, *vmCount, *vmCount, len(list))
 		}
 	}
 	validateList("deptNames", deptList)
 	validateList("purposes", purposeList)
 	validateList("vmTypes", vmTypeList)
+	if deptList == nil && purposeList == nil && vmTypeList == nil {
+		log.Fatal("-deptNames / -purposes / -vmTypes 중 하나 이상을 지정하세요.")
+	}
 
 	vcPassword := os.Getenv("VC_PASSWORD")
 	if vcPassword == "" {
@@ -193,10 +198,15 @@ func main() {
 			vm := object.NewVirtualMachine(client.Client, matches[0].Self)
 
 			// 순번(idx)에 해당하는 값 사용 (ev01 -> 리스트의 1번째 값)
-			values := map[string]string{
-				"DEPT_NAME": deptList[target.idx-1],
-				"PURPOSE":   purposeList[target.idx-1],
-				"VM_TYPE":   vmTypeList[target.idx-1],
+			values := map[string]string{}
+			for key, list := range map[string][]string{"DEPT_NAME": deptList, "PURPOSE": purposeList, "VM_TYPE": vmTypeList} {
+				if list != nil && list[target.idx-1] != "" {
+					values[key] = list[target.idx-1]
+				}
+			}
+			if len(values) == 0 {
+				fmt.Printf("  -> [%s] 설정할 태그 값이 없어 건너뜀\n", target.name)
+				return
 			}
 
 			// 사용자 지정 특성(Custom Attribute)이 vCenter에 미리 정의되어 있어야 함
@@ -217,6 +227,8 @@ func main() {
 
 	if len(failed) > 0 {
 		fmt.Printf("\n[일부 실패] %s\n", strings.Join(failed, ", "))
+		client.Logout(ctx)
+		os.Exit(1)
 	} else {
 		fmt.Println("\n[성공] 모든 VM에 사용자 지정 특성 설정이 완료되었습니다.")
 	}

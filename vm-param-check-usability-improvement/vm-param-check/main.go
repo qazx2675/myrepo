@@ -906,6 +906,9 @@ func restoreFlags(baseFlagValues map[string]string) {
 // applySpecOptions는 스펙 파일의 옵션을 플래그에 적용한다. 사용자가 직접 준 플래그는 건너뛴다.
 func applySpecOptions(match *config.SpecMatch, setFlags map[string]bool) {
 	for _, opt := range match.Options {
+		if config.IsTagOption(opt.Name) { // 태그는 vm_setup.sh 의 태그 설정용 — 체크에는 쓰지 않는다
+			continue
+		}
 		f := flag.Lookup(opt.Name)
 		if f == nil {
 			log.Fatalf("%s 에 알 수 없는 옵션 이름이 있습니다: %q", match.SpecFile, opt.Name)

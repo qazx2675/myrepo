@@ -123,6 +123,15 @@ func ParseSpecFile(path string) ([]SpecOption, error) {
 		if i := strings.Index(line, "#"); i >= 0 {
 			line = line[:i]
 		}
+		// tag-* 줄은 한 줄이 통째로 하나의 값이다(콤마 뒤 공백을 허용). 값 안의 공백은 모두 없앤다.
+		if t := strings.TrimLeft(strings.TrimSpace(line), "-"); strings.HasPrefix(t, "tag-") {
+			name, value, found := strings.Cut(t, "=")
+			if !found || strings.TrimSpace(value) == "" {
+				return nil, fmt.Errorf("%s:%d 형식 오류 (이름=값 형태가 아님): %q", path, lineNo+1, t)
+			}
+			options = append(options, SpecOption{Name: name, Value: strings.Join(strings.Fields(value), "")})
+			continue
+		}
 		for _, token := range strings.Fields(line) {
 			token = strings.TrimLeft(token, "-")
 			name, value, found := strings.Cut(token, "=")
