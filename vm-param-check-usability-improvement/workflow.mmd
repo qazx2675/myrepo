@@ -10,7 +10,7 @@ flowchart TD
     D4 --> E["2단계 조회<br/>① 전체 VM 이름만 가볍게 → ② 대상 VM만 무거운 속성"]
     E --> E1{"못 찾은 대상 / 접속 실패 vCenter?"}
     E1 -- 예 --> E2["경고 출력 (시작·끝 양쪽)"] --> F
-    E1 -- 아니오 --> F["항목별 체크 (ev01~ev99 그룹)<br/>하드웨어 · 토폴로지 · affinity · 전원정책 · preferHT"]
+    E1 -- 아니오 --> F["항목별 체크 (ev01~ev99 그룹)<br/>하드웨어 · 토폴로지 · affinity · 전원정책 · preferHT<br/>-expectNoLpage / -expectNoAffinity 면 그 항목은 값이 없어야 OK<br/>(스펙의 tag-* 는 체크하지 않음)"]
     F --> G["콘솔 요약 + CSV 2종<br/>상세 / _summary (-user 접미사)"]
     G --> H{"-fix ?"}
     H -- 아니오 --> Z["끝"]

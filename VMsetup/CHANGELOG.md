@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-10-01 — 태그 설정 단계 추가 (스펙 tag-*), 문서·흐름도 갱신
+
+- **`vm_setup.sh`**: 라이선스 할당 다음, 스펙 체크 앞에 스펙별 "태그 설정" 단계(`step_tag`). 스펙의 `tag-DEPT_NAME` / `tag-PURPOSE` / `tag-VM_TYPE` 를 `tag_setting -deptNames/-purposes/-vmTypes` 로 전달한다. `tag-*` 가 없으면 건너뛰고, 실패하면 경고만 하고 다음 단계로 간다. 실행 계획·모니터 표시에도 반영.
+- **스펙 형식**: 태그당 한 줄. 값만 쓰면 모든 ev, `evNN:값` / `evNN-evMM:값` 을 콤마로 나열(뒤 항목이 덮어씀, 콤마 뒤 공백 허용). 값에 공백·콤마·`:` 불가, ev 개수 초과·알 수 없는 태그는 오류.
+- **`vm-param-check`**: `config/tags.go`(`ExpandTag`), `-specExport` 가 `tag-<이름>-evNN` 으로 내보냄, 체크는 `tag-*` 를 무시(결과 동일).
+- **`tag_setting`**: 지정하지 않은 태그·빈 칸은 건너뜀, 일부 실패 시 종료코드 1.
+- **`lpage_from_spec.sh`** 추가: 스펙으로 `lpage_setting -del_lpage` 만 단독 실행.
+- **문서/흐름도**: README(V2·VMsetup·vm-param-check), ARCHITECTURE, `workflow.svg` 3종(V2 / VMsetup / vm-param-check)과 mermaid 원본 갱신 — 태그 단계, `-del_*` 체크 규칙, `passwd_update.sh -esxi`, vcenter.txt 선택.
+- **영향 범위**: `VMsetup/vm_setup.sh`, `tag_setting-source/main.go`, `vm-param-check/{config/tags.go,config/export.go,config/spec.go,main.go}`, `bin_os6/{tag_setting,vm-param-check}.gz`.
+- **검증**: 단위 테스트(ExpandTag, ExportSpec 태그/오류). vcsim 40 BM×240 VM: 태그 값 적용 확인(값이 없는 ev 는 해당 태그 생략), 사용자 지정 특성 미정의 시 경고 후 계속, 태그 있는 스펙의 체크 결과가 없는 스펙과 동일.
+
 ## 2026-10-01 — 체크 스크립트: 지운 항목은 "정말 없는지" 확인 (-expectNoLpage / -expectNoAffinity)
 
 - **`vm-param-check`**: `-expectNoLpage`(HugePage 4개 키가 없거나 빈 값이면 OK, 값이 남으면 FAIL), `-expectNoAffinity`(`sched.cpu.affinity`/`sched.vcpuN.affinity` 가 하나도 없으면 OK, 남은 키마다 FAIL, 스펙의 affinity 기대값은 비교 안 함). 옵션을 안 주면 기존 동작 그대로. `sched.mem.pin` 은 지금처럼 체크하지 않는다. 남은 값은 `-fix` 가 되살리지 않고 수동 조치로만 알린다.

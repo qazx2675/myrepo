@@ -10,19 +10,19 @@ flowchart TD
     D1 -- 예 --> E["2. VM → 스펙 / 포트그룹 표 (y/n)<br/>n / 미정 → 번호 선택, 0 → vim"]
     E --> F["3. CAE 번호 변경? (숫자변경기능)<br/>y → 포트그룹 이름에 새 번호"]
     F --> G["4. vCenter 선택<br/>vcenter.txt 목록, Enter = 이전 실행 (run_{user}/last_vcenter)"]
-    G --> G1["비밀번호: ../secret 암호 파일 → 직접 입력"]
+    G --> G1["비밀번호: ../secret 암호 파일 → 직접 입력<br/>(passwd_update.sh = vCenter, passwd_update.sh -esxi = ESXi POC 암호, 바뀌면 다시 등록)"]
     G1 --> H{"5. 실행 계획 확인 (y/n)<br/>vm_create/MAC 디스크 자동매칭/affinity 값 포함, -n 이면 여기서 종료"}
     H -- "y (터미널이면 진행 모니터: ↑↓ 이동, Enter 로그, 끝나면 Enter 두 번)" --> I["vswitch_setting<br/>BM 포트그룹 생성 (호스트 병렬)"]
     H -- n --> Z1["종료 (vCenter 변경 없음)"]
     I --> J["vm_create<br/>스펙별 VM 생성 ev01~ev99"]
     J --> J1["mac_info<br/>MAC/IP 조사 → arg1=인프라, argStr=OS 버전<br/>디스크(sda5)는 ev 스펙 disk 값을 고정 용량(480~7600)으로 자동매칭"]
     J1 --> J2["power_setting<br/>BM 전원 정책 고성능 적용 (이미 고성능이면 스킵)"]
-    J2 --> K["affinity_setting<br/>ev별 affinity 파일 적용"]
-    K --> L["lpage_setting<br/>HugePage / CPU 토폴로지"]
+    J2 --> K["affinity_setting<br/>ev별 affinity 파일 적용<br/>-del_affinity 면 affinity 값을 모두 삭제 (파일 무관)"]
+    K --> L["lpage_setting<br/>HugePage / CPU 토폴로지<br/>-del_lpage 면 HugePage 값만 삭제 (토폴로지·numa·cpuid 는 평소처럼 적용)"]
     L --> LA["license_assign (스펙이 모두 끝난 뒤 BM 전체 1회)<br/>평가판 호스트만 — 라이선스 번호 선택 (모니터를 잠시 닫음)<br/>q = 취소하고 다음 단계로"]
-    LA --> M{"단계 실패?"}
+    LA --> LT["태그 설정 (스펙마다, 라이선스 다음)<br/>스펙 tag-DEPT_NAME / tag-PURPOSE / tag-VM_TYPE → tag_setting<br/>tag-* 없으면 건너뜀, 실패해도 경고 후 계속"] --> M{"단계 실패?"}
     M -- 예 --> M1["그 단계에서 멈춤 ([완료] 없음)<br/>원인 수정 후 재실행 → 이미 있는 것/이미 고성능인 호스트는 건너뜀"] --> C
-    M -- 아니오 --> N["6. 스펙 체크<br/>vm-param-check -specFolder (만든 VM 만)<br/>[일치] / [차이] → run_{user}/check_번호.log, .csv"]
+    M -- 아니오 --> N["6. 스펙 체크<br/>vm-param-check -specFolder (만든 VM 만, 태그는 체크 안 함)<br/>-del_* 를 썼으면 -expectNoLpage / -expectNoAffinity 자동 적용<br/>(지운 항목은 값이 없어야 OK)<br/>[일치] / [차이] → run_{user}/check_번호.log, .csv"]
     N --> P{"차이 있음?"}
     P -- 아니오 --> MC
     P -- 예 --> R["교정 명령 안내<br/>vm-param-check -fix"] --> MC

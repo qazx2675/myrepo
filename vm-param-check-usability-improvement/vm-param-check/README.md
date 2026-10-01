@@ -316,6 +316,8 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 
 | 플래그 | 기본값 | 설명 |
 |---|---|---|
+| `-expectNoLpage` | (꺼짐) | HugePage 4개 키(`sched.mem.lpage.enable1GPage` / `prealloc` / `prealloc.pinnedMainMem` / `sched.swap.vmxSwapEnabled`)가 **없거나 빈 값이면 OK**, 값이 남아 있으면 FAIL. `vm_setup.sh -del_lpage` 로 지운 VM 용. 나머지 항목은 평소대로. `-fix` 는 이 FAIL 을 되살리지 않고 수동 조치로만 표시 |
+| `-expectNoAffinity` | (꺼짐) | affinity 키(`sched.cpu.affinity` / `sched.vcpuN.affinity`)가 하나도 없으면 OK, 남은 키마다 FAIL. 스펙의 affinity 기대값은 비교하지 않음. `vm_setup.sh -del_affinity` 용. `vm_setting_check_insert.sh` 는 `vm_setup.sh` 실행 기록(`check_del_*`)이 있으면 자동으로 붙이고, 단독으로는 같은 이름의 옵션을 받음 |
 | `-specRoot <path>` | (없음) | 스펙 정의 파일들이 모여 있는 로컬 루트 경로. 지정하면 체크 대상 VM이 속한 vCenter 인벤토리 폴더 이름을 조회해서, 같은 스펙으로 간주되는 하위 디렉터리의 `<디렉터리명>_spec.txt`를 찾아 기대값 옵션을 자동으로 채운다. **직접 준 옵션이 항상 우선**하며, 적용 전에 확인을 한 번 받는다(단, 이 확인은 `-yes`로 생략 가능 — 아래 `-fix` 관련 표의 `-yes` 설명 참고) |
 | `-initFolder <폴더명>` | (없음) | **vCenter에 연결하지 않고** `-specRoot` 아래에 이 이름의 스펙 디렉터리와 `<이름>_spec.txt` 스캐폴드를 만들고 종료한다. 이름은 CAE 폴더 규칙(하이픈 4개 레코드, 2번째가 `CAE<숫자>` 또는 `LSI<숫자>`)을 따라야 한다. 이미 같은 스펙(차수만 달라도)이 있으면 덮어쓰지 않고 에러로 중단 |
 | `-template <폴더명>` | (없음) | `-initFolder`와 함께 사용: 값을 그대로 복사해올 기존 스펙의 vCenter 폴더 이름. 안 주면 값이 비어 있는 빈 틀만 생성 |
