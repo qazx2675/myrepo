@@ -105,3 +105,38 @@ func TestExportSpecTenGroups(t *testing.T) {
 		t.Errorf("groups = %q, want 10", got)
 	}
 }
+
+// tag-* 는 ev 별로 펼쳐져 나오고(공백 허용), 다른 값에는 영향이 없어야 한다.
+func TestExportSpecTags(t *testing.T) {
+	base := "ht=on cpu=4 mem=8 disk=100 shares-ev01=normal cores=4 numa=4\n" +
+		"cpu-ev02=2 mem-ev02=4 disk-ev02=50 shares-ev02=1000\n"
+	plain, err := ExportSpec(writeSpec(t, base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := writeSpec(t, base+"tag-DEPT_NAME=영업팀\ntag-PURPOSE=ev01:DB, ev02:WAS  # 주석\n")
+	lines, err := ExportSpec(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := exportMap(lines)
+	if got["tag-DEPT_NAME-ev01"] != "영업팀" || got["tag-DEPT_NAME-ev02"] != "영업팀" ||
+		got["tag-PURPOSE-ev01"] != "DB" || got["tag-PURPOSE-ev02"] != "WAS" {
+		t.Errorf("태그 펼침 결과: %v", got)
+	}
+	// 태그 줄을 빼면 태그가 없는 스펙과 같아야 한다
+	n := 0
+	for _, l := range lines {
+		if !strings.HasPrefix(l.Name, "tag-") {
+			n++
+		}
+	}
+	if n != len(plain) {
+		t.Errorf("태그 외 항목 수 %d != %d", n, len(plain))
+	}
+	for _, bad := range []string{"tag-PURPOSE=ev03:X\n", "tag-FOO=1\n", "tag-PURPOSE=ev01:\n"} {
+		if _, err := ExportSpec(writeSpec(t, base+bad)); err == nil {
+			t.Errorf("%q 는 오류여야 함", bad)
+		}
+	}
+}

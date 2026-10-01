@@ -273,10 +273,10 @@ vm_name() { printf '%sev%02d' "${1%%.*}" "$2"; }
 # build_flags <스펙 폴더> [noaff] — 스펙 값을 각 도구 옵션으로 바꿔 CREATE_ARGS/AFF_ARGS/LP_ARGS 에 담는다. 잘못된 값이면 FLAG_ERR 를 채우고 실패.
 # affinity 는 ev 마다 파일이 있어야 한다(자동 계산은 삭제). 여러 ev 가 같은 파일을 가리켜도 된다.
 # noaff: vim 으로 새 스펙을 만드는 중(affinity 는 저장 뒤에 고름)이라 affinity 가 없어도 통과시킨다.
-CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); FLAG_ERR=""
+CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
 build_flags() {
-  local d="$1" noaff="${2:-}" g n nn cpu mem disk sh aff cps numa v
-  CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); FLAG_ERR=""
+  local d="$1" noaff="${2:-}" g n nn cpu mem disk sh aff cps numa v t flag list any
+  CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
   g="$(exp_get "$d" groups)"; is_uint "$g" || { FLAG_ERR="스펙에서 ev 개수를 읽지 못했습니다"; return 1; }
   CREATE_ARGS+=("-vmCount=$g"); AFF_ARGS+=("-vm_cnt=$g")
   for n in $(seq 1 "$g"); do
@@ -311,6 +311,18 @@ build_flags() {
       fi
     fi
   done
+  # 태그(사용자 지정 특성): 스펙의 tag-<이름> 줄을 vm-param-check 가 ev 별로 펼쳐 준다 → tag_setting 의 ev01,ev02.. 콤마 목록으로.
+  # 값이 없는 ev 는 빈 칸으로 두면 tag_setting 이 그 ev 만 건너뛴다. 체크(vm-param-check)는 태그를 보지 않는다.
+  for t in DEPT_NAME:deptNames PURPOSE:purposes VM_TYPE:vmTypes; do
+    flag="${t#*:}"; list=""; any=0
+    for n in $(seq 1 "$g"); do
+      v="$(exp_get "$d" "tag-${t%%:*}-ev$(printf '%02d' "$n")")"
+      [ -n "$v" ] && any=1
+      list+="${list:+,}$v"
+    done
+    [ "$any" = 1 ] && TAG_ARGS+=("-$flag=$list")
+  done
+  return 0
 }
 
 # ---------- vim 편집 (템플릿의 모든 옵션은 키="" 상태 + 설명은 주석) ----------
@@ -892,6 +904,7 @@ for d in "${SPEC_ORDER[@]}"; do
   # vm-param-check 는 ev01 의 cores/numa 가 필수라, 없으면 생성 뒤 스펙 체크(6단계)를 할 수 없다
   [ -n "$(exp_get "$LOOKUP_DIR" cores-ev01)" ] && [ -n "$(exp_get "$LOOKUP_DIR" numa-ev01)" ] \
     || warn "스펙 $(basename "$d") 에 ev01 cores/numa 가 없어 생성 뒤 vm-param-check 스펙 체크는 건너뜁니다 (VM 생성은 진행)."
+  if [ "${#TAG_ARGS[@]}" -gt 0 ]; then say "   태그 설정(라이선스 다음): ${TAG_ARGS[*]}"; else say "   태그 설정: 스펙에 tag-* 없음 — 건너뜀"; fi
   print_affinity
 done
 say "어댑터 매핑     : $RUN_DIR/hostgroup.txt ($(wc -l < "$RUN_DIR/hostgroup.txt")건)"
@@ -987,6 +1000,12 @@ step_power() {
 step_affinity() {
   spec_flags "$1" || return 1
   run "$HERE/affinity_setting-source/affinity_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${AFF_ARGS[@]}" "${DEL_AFF_ARG[@]}" "${CONC_ARG[@]}"
+}
+step_tag() { # 라이선스 할당 다음에 스펙마다 실행 — VM 사용자 지정 특성(DEPT_NAME/PURPOSE/VM_TYPE)
+  spec_flags "$1" || return 1
+  [ "${#TAG_ARGS[@]}" -gt 0 ] || { say "스펙에 tag-* 가 없어 태그 설정을 건너뜁니다."; note "skip:스펙에 tag-* 가 없음"; return 0; }
+  [ -x "$HERE/tag_setting-source/tag_setting" ] || ensure_bin "$HERE/tag_setting-source/tag_setting" tag_setting
+  run "$HERE/tag_setting-source/tag_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -hostListFile="vmbase_$1.txt" "${CREATE_ARGS[0]}" "${TAG_ARGS[@]}"
 }
 step_lpage() {
   spec_flags "$1" || return 1
@@ -1133,6 +1152,11 @@ for d in "${SPEC_ORDER[@]}"; do
 done
 add_step sep ""
 add_step run "라이선스 할당" step_license "" 1
+k=0
+for d in "${SPEC_ORDER[@]}"; do
+  k=$((k + 1))
+  add_step run "태그 설정 (스펙 $k)" step_tag "$k"
+done
 add_step run "스펙 체크" step_check
 add_step run "MAC 목록 복사" step_mac_copy
 STEP_LOG[0]="plan.txt"; STEP_STATE[0]=done

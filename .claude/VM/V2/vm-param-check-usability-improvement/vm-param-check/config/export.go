@@ -38,8 +38,20 @@ type ExportLine struct {
 func ExportSpec(m *SpecMatch) ([]ExportLine, error) {
 	values := map[string]string{}
 	var order []string
+	tagRaw := map[string]string{}
+	var tagOrder []string
 	for _, opt := range m.Options {
 		name := opt.Name
+		if IsTagOption(name) {
+			if !TagNames[strings.TrimPrefix(name, "tag-")] {
+				return nil, fmt.Errorf("%s: 알 수 없는 태그 %q (DEPT_NAME / PURPOSE / VM_TYPE 만 쓸 수 있습니다)", m.SpecFile, name)
+			}
+			if _, dup := tagRaw[name]; !dup {
+				tagOrder = append(tagOrder, name)
+			}
+			tagRaw[name] = opt.Value
+			continue
+		}
 		if ev01BareKeys[name] {
 			name += "-ev01"
 		}
@@ -96,6 +108,18 @@ func ExportSpec(m *SpecMatch) ([]ExportLine, error) {
 	out := []ExportLine{{Name: "groups", Value: fmt.Sprint(groups)}, {Name: "specdir", Value: specDirAbs}}
 	for _, name := range order {
 		out = append(out, ExportLine{Name: name, Value: values[name]})
+	}
+	// tag-* 는 ev 별로 펼쳐서 "tag-<이름>-evNN=값" 으로 내보낸다(값이 있는 ev 만). 체크는 이 값을 쓰지 않는다.
+	for _, name := range tagOrder {
+		vals, err := ExpandTag(tagRaw[name], groups)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %s %v", m.SpecFile, name, err)
+		}
+		for i, v := range vals {
+			if v != "" {
+				out = append(out, ExportLine{Name: fmt.Sprintf("%s-ev%02d", name, i+1), Value: v})
+			}
+		}
 	}
 	return out, nil
 }
