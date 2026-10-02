@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
+### 변경
+- 02: `dhcp_infra_alias` / `pxe_infra_alias` 추가 — dhcp·pxe 호출 시 infra 이름을 각각 치환(`표시infra:넘길값`), 치환 내역 출력
+- test: 7k 추가 (랩 44 PASS)
+
 ## [0.2.1] - 2026-10-02
 
 ### 변경

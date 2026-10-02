@@ -718,6 +718,18 @@ case7() {
 	t_has "전체 invsync 실패 항목" "$S/out.txt" '^실패 \(전체 invsync\) : ALL_inv-9_3ea\.yml$'
 	case_end
 
+	# 7k: dhcp/pxe 별 infra 치환 (02 상단 변수)
+	case_begin "7k" "02: dhcp_infra_alias / pxe_infra_alias — dhcp 와 pxe 에 각각 다른 infra 이름 전달"
+	setup_case
+	sed -i -e 's#^dhcp_infra_alias=""#dhcp_infra_alias="i1:dhcpA"#' -e 's#^pxe_infra_alias=""#pxe_infra_alias="i1:pxeA,I2:pxeB"#' "$W/$F02"
+	run02 '1\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1 B_inv-2_1ea.yml=I2,O2,B2,S2 C_inv-3_1ea.yml=I3,O3,B3,S3
+	t_rc "02 종료코드" "$RC" 0
+	t_eq "dhcp -infra (i1→dhcpA, 나머지 그대로)" "$(grep '^dhcp ' "$CALLS" | sed 's/.*-infra //' | LC_ALL=C sort | paste -sd' ')" "dhcpA i2 i3"
+	t_eq "pxe -infra (i1→pxeA, I2→pxeB 대소문자 무시, i3 그대로)" "$(grep '^pxe ' "$CALLS" | sed 's/.*-infra \([^ ]*\) .*/\1/' | LC_ALL=C sort | paste -sd' ')" "i3 pxeA pxeB"
+	t_has "치환 안내(dhcp)" "$S/out.txt" '^\[infra 치환\] dhcp -infra i1 -> dhcpA$'
+	t_has "치환 안내(pxe)" "$S/out.txt" '^\[infra 치환\] pxe -infra i2 -> pxeB$'
+	case_end
+
 	# 7e: 인자 없이 02 단독(대화형)
 	case_begin "7e" "02 단독 실행(대화형) 호환: 인자 없음 / user 만 있음"
 	setup_case
