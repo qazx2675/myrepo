@@ -92,7 +92,7 @@ setup_case() {
 	CALLS=$STUBLOG/calls.log; OUT=$S/out.txt
 	: > "$CALLS"
 	export STUBLOG SVR_DIR REMOTE_DIR
-	unset FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO
+	unset STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO
 	export GOSSH_SCENARIO=same
 	export PATH="$S/bin:$ORIG_PATH"
 
@@ -155,6 +155,9 @@ STUB
 name=$(basename "$0" .sh)
 line="$name $*"
 echo "$line" >> "$STUBLOG/calls.log"
+echo "start $name" >> "$STUBLOG/events.log"
+[[ -n $STUB_SLEEP && $name != invsync ]] && sleep "$STUB_SLEEP"
+echo "end $name" >> "$STUBLOG/events.log"
 if [[ -n $FAIL_CALL && $line =~ $FAIL_CALL ]]; then
 	if [[ -z $FAIL_ONCE_FILE ]]; then echo "stub $name: 강제 실패" >&2; exit 1
 	elif [[ -f $FAIL_ONCE_FILE ]]; then rm -f "$FAIL_ONCE_FILE"; echo "stub $name: 1회 강제 실패" >&2; exit 1
@@ -359,6 +362,7 @@ declare -A EXP_INFRA EXP_OS EXP_BOOT EXP_SPL
 verify_chain() {   # desc [skip-yml-prefix...]  (실패 호출로 건너뛴 단계는 호출자가 별도 검증)
 	local desc=$1 types line p y n=0
 	types=$(grep -E '^(invsync|dhcp|pxe) ' "$CALLS" | awk '{print $1}' | paste -sd' ')
+	types=${types//pxe dhcp/dhcp pxe}   # dhcp/pxe 는 동시 실행이라 기록 순서 무관
 	local expect_seq=""
 	for p in "${!EXP_INFRA[@]}"; do expect_seq+="${expect_seq:+ }invsync dhcp pxe"; done
 	t_eq "$desc: 호출 순서 invsync→dhcp→pxe 반복" "$types" "$expect_seq"
@@ -460,16 +464,16 @@ case34() {
 	t_eq "custom_inventory.sh ssh 호출 11회" "$(grep -c '^ssh repo.lab bash /root/Inventory/custom_inventory.sh /root/Inventory/' "$CALLS")" 11
 	t_eq "마지막 custom_inventory 호출은 all" "$(grep 'custom_inventory.sh' "$CALLS" | tail -1 | awk '{print $NF}')" "/root/Inventory/${TU}_all.yaml"
 	pxe_exp=$(printf '%s\n' \
-		"-infra INFRA-A -os RHEL8 -boot BIOS -splunk On-premise" \
-		"-infra INFRA-A -os RHEL8 -boot legacy -splunk On-premise" \
-		"-infra INFRA-A -os RHEL8 -boot UEFI -splunk Cloud" \
-		"-infra INFRA-A -os RHEL8 -boot UEFI -splunk no" \
-		"-infra INFRA-A -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra INFRA-A -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra INFRA-A -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra INFRA-A -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra INFRA-A -os RHEL9 -boot UEFI -splunk On-premise" \
-		"-infra INFRA-B -os RHEL8 -boot UEFI -splunk On-premise" | LC_ALL=C sort)
+		"-infra infra-a -os RHEL8 -boot BIOS -splunk On-premise" \
+		"-infra infra-a -os RHEL8 -boot legacy -splunk On-premise" \
+		"-infra infra-a -os RHEL8 -boot UEFI -splunk Cloud" \
+		"-infra infra-a -os RHEL8 -boot UEFI -splunk no" \
+		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os RHEL9 -boot UEFI -splunk On-premise" \
+		"-infra infra-b -os RHEL8 -boot UEFI -splunk On-premise" | LC_ALL=C sort)
 	t_eq "pxe 옵션 10건(ev→no, s→Cloud, 레거시→legacy)" "$(grep '^pxe ' "$CALLS" | sed "s/^pxe -user $TU //" | LC_ALL=C sort)" "$pxe_exp"
 	t_no "pxe 에 한글 레거시 원문 미전달" "$CALLS" '^pxe .*레거시'
 	t_eq "02 가 그룹 yml 만큼 invsync 10회" "$(grep -c '^invsync ' "$CALLS")" 10
@@ -583,7 +587,7 @@ case7() {
 	case_begin "7a" "02: 그룹 yml 수만큼 invsync→dhcp→pxe, 올바른 -infra/-os/-boot/-splunk"
 	setup_case
 	seed_raw D7
-	EXP_INFRA=([IA]=IA [IB]=IB [IC]=IC); EXP_OS=([IA]=RHEL8 [IB]=RHEL9 [IC]=RHEL8)
+	EXP_INFRA=([IA]=ia [IB]=ib [IC]=ic); EXP_OS=([IA]=RHEL8 [IB]=RHEL9 [IC]=RHEL8)
 	EXP_BOOT=([IA]=UEFI [IB]=BIOS [IC]=legacy); EXP_SPL=([IA]=On-premise [IB]=no [IC]=Cloud)
 	run01 'N\nY\nls\nsu\nY\n'
 	t_rc "01 종료코드" "$RC" 0
@@ -591,7 +595,7 @@ case7() {
 	t_eq "invsync 3회(all 제외)" "$(grep -c '^invsync ' "$CALLS")" 3
 	t_eq "invsync -file 의 _Nea (IA=2,IB=1,IC=1)" "$(grep '^invsync ' "$CALLS" | sed 's/.*-file \(I.\)_inventory-[0-9]*_\([0-9]*\)ea.yml/\1=\2/' | paste -sd' ')" "IA=2 IB=1 IC=1"
 	t_has "확인표 헤더" "$OUT" '^번호 \| yml \| infra \| os \| boot \| splunk \| 호스트 수$'
-	t_has "확인표 IC 행" "$OUT" '^3 \| IC_inventory-[0-9]+_1ea\.yml \| IC \| RHEL8 \| legacy \| Cloud \| 1$'
+	t_has "확인표 IC 행(infra 소문자화)" "$OUT" '^3 \| IC_inventory-[0-9]+_1ea\.yml \| ic \| RHEL8 \| legacy \| Cloud \| 1$'
 	t_has "요약" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
 	t_notmp
 	case_end
@@ -600,13 +604,13 @@ case7() {
 	case_begin "7b" "02: 확인표 N → 수동 값 반영(Enter=유지)"
 	setup_case
 	seed_raw D7
-	EXP_INFRA=([IA]=IA [IB]=IBX [IC]=IC); EXP_OS=([IA]=RHEL7 [IB]=RHEL9 [IC]=RHEL8)
+	EXP_INFRA=([IA]=ia [IB]=IBX [IC]=ic); EXP_OS=([IA]=RHEL7 [IB]=RHEL9 [IC]=RHEL8)
 	EXP_BOOT=([IA]=UEFI [IB]=UEFI [IC]=legacy); EXP_SPL=([IA]=On-premise [IB]=Cloud [IC]=Cloud)
 	run01 'N\nY\nls\nsu\nN\n''\nRHEL7\n\n\n''IBX\n\nUEFI\nCloud\n''\n\n\n\n'
 	t_rc "01 종료코드" "$RC" 0
 	verify_chain "7b"
 	t_has "옵션 확정 출력" "$OUT" '^옵션 확정$'
-	t_has "확정표 IA 행(수동 os)" "$OUT" '^1 \| IA_inventory-[0-9]+_2ea\.yml \| IA \| RHEL7 \| UEFI \| On-premise \| 2$'
+	t_has "확정표 IA 행(수동 os)" "$OUT" '^1 \| IA_inventory-[0-9]+_2ea\.yml \| ia \| RHEL7 \| UEFI \| On-premise \| 2$'
 	t_has "확정표 IB 행(수동 infra/boot/splunk)" "$OUT" '^2 \| IB_inventory-[0-9]+_1ea\.yml \| IBX \| RHEL9 \| UEFI \| Cloud \| 1$'
 	t_notmp
 	case_end
@@ -615,13 +619,13 @@ case7() {
 	case_begin "7c" "02 중간 실패(IB dhcp): 요약 + 나머지 yml 진행, 01 재시도 N → exit 1"
 	setup_case
 	seed_raw D7
-	export FAIL_CALL="^dhcp -user $TU -infra IB\$"
+	export FAIL_CALL="^dhcp -user $TU -infra ib$"
 	run01 'N\nY\nls\nsu\nY\nN\n'
 	t_rc "01 종료코드 1" "$RC" 1
 	t_has "요약 줄" "$OUT" '요약 : 전체 3 / 성공 2 / 실패 1'
 	t_has "실패 항목" "$OUT" '^실패 \(dhcp\) : IB_inventory-[0-9]+_1ea\.yml$'
-	t_eq "IB pxe 건너뜀" "$(grep -c '^pxe .*-infra IB ' "$CALLS")" 0
-	t_has "IC 는 계속 진행(pxe)" "$CALLS" '^pxe -user testuser -infra IC '
+	t_eq "IB pxe 는 dhcp 실패와 무관하게 동시 실행됨" "$(grep -c '^pxe .*-infra ib ' "$CALLS")" 1
+	t_has "IC 는 계속 진행(pxe)" "$CALLS" '^pxe -user testuser -infra ic '
 	t_eq "invsync 3회(재시도 없음)" "$(grep -c '^invsync ' "$CALLS")" 3
 	t_notmp
 	case_end
@@ -630,7 +634,7 @@ case7() {
 	case_begin "7f" "02 1회 실패 후 01 재시도 Y → 전체 성공, exit 0"
 	setup_case
 	seed_raw D7
-	export FAIL_CALL="^dhcp -user $TU -infra IB\$" FAIL_ONCE_FILE=$S/failonce
+	export FAIL_CALL="^dhcp -user $TU -infra ib$" FAIL_ONCE_FILE=$S/failonce
 	: > "$S/failonce"
 	run01 'N\nY\nls\nsu\nY\nY\nY\n'
 	t_rc "01 종료코드" "$RC" 0
@@ -649,8 +653,20 @@ case7() {
 	t_has "요약 줄" "$S/out.txt" '요약 : 전체 2 / 성공 1 / 실패 1'
 	t_has "실패 invsync 항목" "$S/out.txt" '^실패 \(invsync\) : X_inv-1_1ea\.yml$'
 	t_has "성공 항목" "$S/out.txt" '^성공 : Y_inv-2_1ea\.yml$'
-	t_eq "X 의 dhcp/pxe 건너뜀" "$(grep -cE '^(dhcp|pxe) .*-infra I1' "$CALLS")" 0
-	t_eq "Y 의 pxe 호출" "$(grep '^pxe ' "$CALLS")" "pxe -user $TU -infra I2 -os O2 -boot B2 -splunk S2"
+	t_eq "X 의 dhcp/pxe 건너뜀" "$(grep -cE '^(dhcp|pxe) .*-infra i1' "$CALLS")" 0
+	t_eq "Y 의 pxe 호출" "$(grep '^pxe ' "$CALLS")" "pxe -user $TU -infra i2 -os O2 -boot B2 -splunk S2"
+	case_end
+
+	# 7h: dhcp/pxe 동시 실행 + 둘 다 끝나야 다음 yml
+	case_begin "7h" "02: dhcp·pxe 동시 실행, 둘 다 끝난 뒤에 다음 yml 진행"
+	setup_case
+	export STUB_SLEEP=1
+	run02 'Y\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1 B_inv-2_1ea.yml=I2,O2,B2,S2 C_inv-3_1ea.yml=I3,O3,B3,S3
+	t_rc "02 종료코드" "$RC" 0
+	# invsync=I, dhcp/pxe 시작=S, 종료=E.  동시 실행이면 yml 마다 "I S S E E" (순차였다면 "I S E S E")
+	t_eq "이벤트 순서(yml 3개)" "$(awk '$1=="start"&&$2=="invsync"{printf "I "} $1=="start"&&$2!="invsync"{printf "S "} $1=="end"&&$2!="invsync"{printf "E "}' "$STUBLOG/events.log" | sed 's/ $//')" "I S S E E I S S E E I S S E E"
+	t_has "요약" "$S/out.txt" '요약 : 전체 3 / 성공 3 / 실패 0'
+	t_eq "dhcp/pxe 둘 다 실패 시 한 항목으로 요약" "$(unset STUB_SLEEP; : > "$CALLS"; export FAIL_CALL='^(dhcp|pxe) '; run02 'Y\n' "$TU" Z_inv-1_1ea.yml=I1,O1,B1,S1 >/dev/null 2>&1; grep -c '^실패 (dhcp, pxe) : Z_inv-1_1ea.yml$' "$S/out.txt")" 1
 	case_end
 
 	# 7e: 인자 없이 02 단독(대화형)

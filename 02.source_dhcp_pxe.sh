@@ -27,7 +27,7 @@ for spec in "$@"; do
 	fi
 	ymls+=("${spec%%=*}")
 	IFS=, read -r f_infra f_os f_boot f_splunk <<< "${spec#*=}"
-	infras+=("$f_infra"); oss+=("$f_os"); boots+=("$f_boot"); splunks+=("$f_splunk")
+	infras+=("${f_infra,,}"); oss+=("$f_os"); boots+=("$f_boot"); splunks+=("$f_splunk")
 done
 total=${#ymls[@]}
 
@@ -61,18 +61,34 @@ if [[ $ok == [Nn] ]]; then
 	print_table
 fi
 
-# yml 별 순차 실행 (한 단계 실패 시 해당 yml 의 나머지는 건너뛰고 다음 yml 진행)
+# yml 별 순차 실행: invsync 후 dhcp 와 pxe 는 동시 실행하고, 둘 다 끝나야 다음 yml 로 진행
+# (한 단계 실패 시 해당 yml 의 나머지는 건너뛰고 다음 yml 진행)
 results=(); fail_cnt=0
+outdir=$(mktemp -d)
+trap 'rm -rf "$outdir"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 for ((i=0; i<total; i++)); do
 	yml=${ymls[i]}; infra=${infras[i]}; os=${oss[i]}; boot=${boots[i]}; splunk=${splunks[i]}
 	echo "===== [$((i+1))/$total] $yml ====="
 	if ! bash "$awxdir/invsync.sh" -user "${user}" -file "$yml"; then
 		results+=("실패 (invsync) : $yml"); ((fail_cnt++)); continue
 	fi
-	if ! bash "$awxdir/dhcp.sh" -user "${user}" -infra "$infra"; then
+	# 동시 실행이라 프롬프트를 받을 수 없으므로 stdin 을 닫고, 출력은 끝난 뒤 순서대로 보여 줌
+	bash "$awxdir/dhcp.sh" -user "${user}" -infra "$infra" < /dev/null > "$outdir/dhcp.out" 2>&1 &
+	dhcp_pid=$!
+	bash "$awxdir/pxe.sh" -user "${user}" -infra "$infra" -os "$os" -boot "$boot" -splunk "$splunk" < /dev/null > "$outdir/pxe.out" 2>&1 &
+	pxe_pid=$!
+	dhcp_rc=0; pxe_rc=0
+	wait "$dhcp_pid" || dhcp_rc=$?
+	wait "$pxe_pid" || pxe_rc=$?
+	echo "--- dhcp ---"; cat "$outdir/dhcp.out"
+	echo "--- pxe ---"; cat "$outdir/pxe.out"
+	if [[ $dhcp_rc -ne 0 && $pxe_rc -ne 0 ]]; then
+		results+=("실패 (dhcp, pxe) : $yml"); ((fail_cnt++)); continue
+	elif [[ $dhcp_rc -ne 0 ]]; then
 		results+=("실패 (dhcp) : $yml"); ((fail_cnt++)); continue
-	fi
-	if ! bash "$awxdir/pxe.sh" -user "${user}" -infra "$infra" -os "$os" -boot "$boot" -splunk "$splunk"; then
+	elif [[ $pxe_rc -ne 0 ]]; then
 		results+=("실패 (pxe) : $yml"); ((fail_cnt++)); continue
 	fi
 	results+=("성공 : $yml")

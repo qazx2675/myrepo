@@ -187,6 +187,9 @@ bash 02.source_dhcp_pxe.sh testuser \
 | boot | 부트 방식 | `UEFI`, `legacy`, `BIOS` |
 | splunk | Splunk 설치 여부 선택값 | `On-premise`, `Cloud`, `no` |
 
+
+- **infra 는 소문자로 변환해 전달**합니다(`INFRA-A` → `infra-a`). awxkit 은 conf 의 `*_choices` 와 **대소문자까지 정확히 일치**해야 하고(번호 또는 값 그대로 사용 가능), os/boot/splunk 는 변환하지 않습니다. 확인표에서 `N` 으로 직접 입력한 값도 그대로 전달됩니다.
+- **실행 순서**: yml 마다 `invsync` 를 먼저 실행한 뒤 `dhcp` 와 `pxe` 를 **동시에** 실행하고, 둘 다 끝나야 다음 yml 로 넘어갑니다. 동시 실행이라 프롬프트를 받을 수 없어 stdin 을 닫으며(옵션 값이 비면 대화형 대신 오류), 출력은 둘 다 끝난 뒤 `--- dhcp ---`, `--- pxe ---` 순으로 보여 줍니다. 한쪽만 실패해도 다른 쪽은 끝까지 실행됩니다.
 #### 옵션 확인표 및 수동 수정
 
 ```
