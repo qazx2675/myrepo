@@ -31,7 +31,7 @@ bash awxkit/setup.sh
 
 # ===== Step 2. 현장 값 채우기 =====
 
-# 최상단 빈 변수 6개(repohost, svr_dir, ai_server_list, ldap_check_script, lacp_comment, inventory_delete_host)와
+# 최상단 빈 변수 7개(repohost, svr_dir, ai_server_list, ldap_check_script, lacp_comment, inventory_delete_host, infra_alias[선택])와
 # user(){ } 본문(현장 코드: $user 를 설정)을 편집. 이 값은 커밋하지 말 것
 vi 01.AWX_nodeinfo_V2.sh
 

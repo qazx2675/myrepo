@@ -6,6 +6,7 @@ ai_server_list=""            # 예: "host01|host02"  (호스트명 정확 일치
 ldap_check_script=""
 lacp_comment=""
 inventory_delete_host=""     # 원문은 함수 안 → 최상단으로 이동
+infra_alias=""               # 등록되지 않은 infra 이름 치환 "adjfg:infra1 foo:infra2" (공백/쉼표 구분, 비워 두면 치환 없음)
 svr_idr="$svr_dir"           # git 블록 원문($svr_idr 오타)을 그대로 쓰기 위한 별칭
 
 # ==== [0] 공통: 시작 경로 · 임시물 정리 · 로그 ====
@@ -46,6 +47,7 @@ require_var() {
 # 단계 간 공유 변수
 yaml=""                      # 생성된 yml 파일명 전체(공백 구분, 전체 파일 포함)
 group_yml=""                 # 그룹(분할) yml 파일명만(공백 구분, 전체 파일 제외)
+all_yml=""                   # 전체(_all) yml 파일명 (그룹 yml 이 2개 이상일 때 02 가 마지막에 invsync 만 수행)
 declare -A yml_opt           # yml 파일명 → "infra os boot splunk"
 declare -A yml_boot          # yml 파일명 → boot (ls 표시용)
 hostfile=$(mktemp)           # 호스트명 목록(gossh -w / 작업 리스트 출력용)
@@ -98,6 +100,17 @@ parse_msg() {
 		err "[X] ${user}.txt 는 12필드 형식(msg 값 또는 vendor model infra hostname ip mac nic disk part 용량 os boot)이어야 합니다"
 		exit 1
 	}
+}
+
+# [3-1] 등록되지 않은 infra 이름 치환 (infra_alias="from:to ..."), 3번째 필드
+apply_infra_alias() {
+	[[ -n $infra_alias ]] || return 0
+	local content
+	content=$(awk -v map="$infra_alias" '
+	BEGIN { n = split(map, p, /[ ,]+/); for (i = 1; i <= n; i++) { k = index(p[i], ":"); if (k > 1) m[substr(p[i], 1, k-1)] = substr(p[i], k+1) } }
+	($3 in m) { cnt[$3]++; $3 = m[$3] }
+	{ print }
+	END { for (k in cnt) print "[infra 치환] " k " -> " m[k] " : " cnt[k] "건" > "/dev/stderr" }' "${user}.txt") && printf '%s\n' "$content" > "${user}.txt"
 }
 
 # [4] MAC 짝수 보정
@@ -193,6 +206,8 @@ gen_inventory() {
 			group_yml="${group_yml:+$group_yml }$new"
 			yml_opt[$new]="${g_infra[$num]} ${g_os[$num]} ${g_boot[$num]} ${g_splunk[$num]}"
 			yml_boot[$new]="${g_boot[$num]}"
+		else
+			all_yml=$new
 		fi
 		log "yml 생성: $new ($f)"
 		sleep 1
@@ -276,6 +291,8 @@ log "[2] download_txt"
 download_txt
 log "[3] parse_msg"
 parse_msg
+log "[3-1] apply_infra_alias"
+apply_infra_alias
 log "[4] fix_mac"
 fix_mac
 log "[5] show_targets"
@@ -325,9 +342,35 @@ for ((;;)); do
 	echo "${BOLD}작업 리스트${RST}"
 	paste -sd'|' "$hostfile"
 	args=(); for f in $group_yml; do args+=("$f=${yml_opt[$f]// /,}"); done   # yml=infra,os,boot,splunk
+	[[ -n $all_yml ]] && args+=("--all=$all_yml")   # 그룹 yml 이 여러 개면 02 가 마지막에 전체 yml 로 invsync 만 수행
 	log "[14] 02.source_dhcp_pxe.sh ${user}"
 	bash 02.source_dhcp_pxe.sh ${user} "${args[@]}" && break
 	read -r -p "${YELLOW}02 실패 — 재시도 (Y|N) : ${RST}" r
 	[[ $r == [Yy] ]] || exit 1
 done
+# [15] 등록 후 확인: 붙여넣은 서버가 모두 이번 등록 대상에 있는지 검사
+verify_hosts() {
+	local pasted="" line pf missing extra n
+	echo "${BOLD}등록 후 확인${RST} : 작업 대상 서버 목록을 붙여넣으세요 (공백/쉼표/| 구분 가능, 입력을 마치려면 빈 줄 / 건너뛰려면 바로 빈 줄)"
+	while IFS= read -r line; do
+		[[ -z ${line//[[:space:]]/} ]] && break
+		pasted+="$line"$'\n'
+	done
+	if [[ -z $pasted ]]; then log "대상 확인 생략"; return 0; fi
+	pf=$(mktemp); add_tmp "$pf"
+	printf '%s' "$pasted" | tr ',|' '  ' | tr -s '[:space:]' '\n' | grep . | LC_ALL=C sort -u > "$pf"
+	n=$(wc -l < "$pf")
+	missing=$(LC_ALL=C comm -23 "$pf" <(LC_ALL=C sort -u "$hostfile"))
+	extra=$(LC_ALL=C comm -13 "$pf" <(LC_ALL=C sort -u "$hostfile"))
+	if [[ -n $extra ]]; then
+		warn "[!] 붙여넣지 않은 등록 대상 ($(printf '%s\n' "$extra" | grep -c .)대) : $(printf '%s\n' "$extra" | paste -sd' ' -)"
+	fi
+	if [[ -n $missing ]]; then
+		err "[X] 등록 대상에 없는 서버 ($(printf '%s\n' "$missing" | grep -c .)대) : $(printf '%s\n' "$missing" | paste -sd' ' -)"
+		return 1
+	fi
+	echo "${GREEN}붙여넣은 대상 서버 ${n}대가 모두 존재함${RST}"
+}
+log "[15] verify_hosts"
+verify_hosts || exit 1
 log "${GREEN}완료${RST}"

@@ -43,7 +43,7 @@ AWX 노드정보 V2 스크립트 풀리퀘스트 검증 항목. 모든 항목을
 - [ ] **CHANGELOG.md**: 2026-10-02 항목에 변경 사항 반영
   - 신규 기능, 보정사항, 주의사항 기재
 - [ ] **README.md**: 
-  - 최상단 변수 6개 설명 및 샘플값 포함
+  - 최상단 변수 7개 설명 및 샘플값 포함
   - 사용 방법 단계별 예 포함
   - 옵션 상세 설명 갱신
   - user() 함수 내용 변경 시 수정
@@ -54,7 +54,7 @@ AWX 노드정보 V2 스크립트 풀리퀘스트 검증 항목. 모든 항목을
 
 ## 코드 규칙
 
-- [ ] **01 최상단 변수** 6개 검증:
+- [ ] **01 최상단 변수** 7개 검증:
   ```bash
   repohost=""
   svr_dir=""
@@ -62,6 +62,7 @@ AWX 노드정보 V2 스크립트 풀리퀘스트 검증 항목. 모든 항목을
   ldap_check_script=""
   lacp_comment=""
   inventory_delete_host=""
+  infra_alias=""
   ```
   - 모두 `=""` 상태 (테스트값 포함 금지)
   
@@ -131,7 +132,7 @@ sed -n '/^user() {/,/^}$/p' 01.AWX_nodeinfo_V2.sh  # 확인: 본문이 :
 
 # 5. git 커밋
 git status  # 변경 파일 확인
-git diff 01.AWX_nodeinfo_V2.sh  # 최상단 변수 6개 + user() 빈 본문만 확인
+git diff 01.AWX_nodeinfo_V2.sh  # 최상단 변수 7개 + user() 빈 본문만 확인
 git add .
 git commit -m "feat(awx-nodeinfo): …"
 git push origin master

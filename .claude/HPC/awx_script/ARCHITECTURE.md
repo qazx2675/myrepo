@@ -29,6 +29,7 @@
 | [1] | `user()` | (현장 코드) | `$user` 설정, 로그 파일 열기 |
 | [2] | `download_txt()` | 프롬프트 Y/N | `${user}.txt` (12필드 또는 nodeinfo YAML) |
 | [3] | `parse_msg()` | `${user}.txt` | msg 행 파싱, 12필드 검증 또는 종료 |
+| [3-1] | `apply_infra_alias()` | `${user}.txt`, `infra_alias` | 3번째 필드(infra)의 미등록 이름을 치환하고 건수 출력 |
 | [4] | `fix_mac()` | `${user}.txt` | MAC 짝수 보정 (spice/pice/dspr/pspr + ev 미포함) |
 | [5] | `show_targets()` | `${user}.txt` | 호스트명 20개씩 세로 다단 출력 + 총 대수 |
 | [6] | (메인 루프) | 프롬프트 Y/N | N → 종료, Y → 계속 |
@@ -39,7 +40,8 @@
 | [11] | `git_upload()` | `$yaml` 목록 | git 블록 원문 실행 + `cd "$now_pwd"` |
 | [12] | `check_servers()` | `${user}.txt` | LDAP/LACP/응답없음 점검, `tmp/all_${user}` 생성 |
 | [13] | (메뉴 루프) | 프롬프트 | su/exit/ls/파일명 명령 처리 |
-| [14] | (02 호출) | `$group_yml` + 옵션 | `bash 02.source_dhcp_pxe.sh` 실행 후 break 또는 재시도 |
+| [14] | (02 호출) | `$group_yml` + 옵션 + `--all=$all_yml` | `bash 02.source_dhcp_pxe.sh` 실행 후 break 또는 재시도 (02: OS 선택 → 그룹 yml 등록 → 그룹 2개 이상이면 전체 yml invsync → 최종 수량) |
+| [15] | `verify_hosts()` | 붙여넣은 서버 목록 | 등록 대상(`$hostfile`)과 비교해 "모두 존재함" 또는 없는 서버 보고(exit 1) |
 
 ## 02.source_dhcp_pxe.sh 처리 흐름
 

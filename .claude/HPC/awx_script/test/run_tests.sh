@@ -79,6 +79,7 @@ setup_case() {
 	cfg_ldap_check_script=/opt/ldap_check.sh
 	cfg_lacp_comment=LACP-COMMENT-SENTINEL
 	cfg_inventory_delete_host=delhost.lab
+	cfg_infra_alias=""
 	cfg_raw=0; cfg_user=1
 	S=$(TMPDIR=/tmp mktemp -d); SCRATCHES+=("$S")
 	W=$S/work
@@ -107,6 +108,7 @@ setup_case() {
 			-e "s#^ldap_check_script=\"\"#ldap_check_script=\"$cfg_ldap_check_script\"#" \
 			-e "s#^lacp_comment=\"\"#lacp_comment=\"$cfg_lacp_comment\"#" \
 			-e "s#^inventory_delete_host=\"\"#inventory_delete_host=\"$cfg_inventory_delete_host\"#" \
+			-e "s#^infra_alias=\"\"#infra_alias=\"$cfg_infra_alias\"#" \
 			-e "s#/root/user/#$S/root_user/#g" \
 			"$W/$F01"
 		if [[ $cfg_user == 1 ]]; then
@@ -114,7 +116,7 @@ setup_case() {
 		fi
 		# 무결성: 복사본과 원본의 차이는 최상단 변수/user 본문/git 경로 줄뿐이어야 한다
 		local bad
-		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|ldap_check_script|lacp_comment|inventory_delete_host)=|^> '$'\t''user=testuser$|root_user')
+		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|ldap_check_script|lacp_comment|inventory_delete_host|infra_alias)=|^> '$'\t''user=testuser$|root_user')
 		if [[ -n $bad ]]; then echo "[HARNESS ERROR] 복사본 sed 가 예상 외 줄을 변경: $bad"; exit 2; fi
 		if [[ $cfg_user == 1 ]] && ! grep -q $'^\tuser=testuser$' "$W/$F01"; then
 			echo "[HARNESS ERROR] user() 본문 치환 실패"; exit 2; fi
@@ -365,7 +367,8 @@ verify_chain() {   # desc [skip-yml-prefix...]  (실패 호출로 건너뛴 단�
 	types=${types//pxe dhcp/dhcp pxe}   # dhcp/pxe 는 동시 실행이라 기록 순서 무관
 	local expect_seq=""
 	for p in "${!EXP_INFRA[@]}"; do expect_seq+="${expect_seq:+ }invsync dhcp pxe"; done
-	t_eq "$desc: 호출 순서 invsync→dhcp→pxe 반복" "$types" "$expect_seq"
+	(( ${#EXP_INFRA[@]} > 1 )) && expect_seq+=" invsync"   # 그룹 2개 이상이면 마지막에 전체 yml invsync
+	t_eq "$desc: 호출 순서 invsync→dhcp→pxe 반복 (+ 전체 invsync)" "$types" "$expect_seq"
 	while read -r line; do
 		[[ $line =~ ^invsync\ -user\ $TU\ -file\ (([A-Za-z0-9]+)_inventory-[0-9]+_([0-9]+)ea\.yml)$ ]] || { CFAILS+=("$desc: invsync 형식 오류 [$line]"); continue; }
 		y=${BASH_REMATCH[1]}; p=${BASH_REMATCH[2]}; n=${BASH_REMATCH[3]}
@@ -476,8 +479,9 @@ case34() {
 		"-infra infra-b -os 2026-ECAD_TCAD -boot UEFI -splunk On-premise" | LC_ALL=C sort)
 	t_eq "pxe 옵션 10건(ev→no, s→Cloud, 레거시→legacy)" "$(grep '^pxe ' "$CALLS" | sed "s/^pxe -user $TU //" | LC_ALL=C sort)" "$pxe_exp"
 	t_no "pxe 에 한글 레거시 원문 미전달" "$CALLS" '^pxe .*레거시'
-	t_eq "02 가 그룹 yml 만큼 invsync 10회" "$(grep -c '^invsync ' "$CALLS")" 10
-	t_eq "all yml 은 02 대상 제외(14ea invsync 0)" "$(grep -c '^invsync .*_14ea\.yml' "$CALLS")" 0
+	t_eq "02 invsync = 그룹 10 + 전체 1" "$(grep -c '^invsync ' "$CALLS")" 11
+	t_eq "all yml(14ea) invsync 는 마지막 1회뿐" "$(grep '^invsync ' "$CALLS" | grep -c '_14ea\.yml')|$(grep '^invsync ' "$CALLS" | tail -1 | grep -c '_14ea\.yml')" "1|1"
+	t_eq "dhcp/pxe 는 그룹 yml 만 (10회씩)" "$(grep -c '^dhcp ' "$CALLS")|$(grep -c '^pxe ' "$CALLS")" "10|10"
 	t_notmp
 	case_end
 
@@ -592,8 +596,13 @@ case7() {
 	run01 'N\nY\nls\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	verify_chain "7a"
-	t_eq "invsync 3회(all 제외)" "$(grep -c '^invsync ' "$CALLS")" 3
-	t_eq "invsync -file 의 _Nea (IA=2,IB=1,IC=1)" "$(grep '^invsync ' "$CALLS" | sed 's/.*-file \(I.\)_inventory-[0-9]*_\([0-9]*\)ea.yml/\1=\2/' | paste -sd' ')" "IA=2 IB=1 IC=1"
+	t_eq "invsync 3회 + 전체 1회" "$(grep -c '^invsync ' "$CALLS")" 4
+	t_eq "전체 yml invsync 는 마지막, dhcp/pxe 는 3회뿐" "$(grep '^invsync ' "$CALLS" | tail -1 | grep -c '_4ea\.yml')|$(grep -c '^dhcp ' "$CALLS")|$(grep -c '^pxe ' "$CALLS")" "1|3|3"
+	t_has "최종 수량 HPC(On-premise)" "$OUT" '^HPC ia 2026-ECAD_TCAD : 2대$'
+	t_has "최종 수량 SDS(Cloud)" "$OUT" '^SDS ic 2026-ECAD_TCAD : 1대$'
+	t_has "최종 수량 no(ev)" "$OUT" '^no ib 2026-ECAD_TCAD : 1대$'
+	t_has "최종 수량 합계" "$OUT" '^합계 : 4대$'
+	t_eq "invsync -file 의 _Nea (IA=2,IB=1,IC=1, 전체 IA=4)" "$(grep '^invsync ' "$CALLS" | sed 's/.*-file \(I.\)_inventory-[0-9]*_\([0-9]*\)ea.yml/\1=\2/' | paste -sd' ')" "IA=2 IB=1 IC=1 IA=4"
 	t_has "확인표 헤더" "$OUT" '^번호 \| yml \| infra \| os \| boot \| splunk \| 호스트 수$'
 	t_has "확인표 IC 행(infra 소문자화)" "$OUT" '^3 \| IC_inventory-[0-9]+_1ea\.yml \| ic \| 2026-ECAD_TCAD \| legacy \| Cloud \| 1$'
 	t_has "요약" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
@@ -626,7 +635,8 @@ case7() {
 	t_has "실패 항목" "$OUT" '^실패 \(dhcp\) : IB_inventory-[0-9]+_1ea\.yml$'
 	t_eq "IB pxe 는 dhcp 실패와 무관하게 동시 실행됨" "$(grep -c '^pxe .*-infra ib ' "$CALLS")" 1
 	t_has "IC 는 계속 진행(pxe)" "$CALLS" '^pxe -user testuser -infra ic '
-	t_eq "invsync 3회(재시도 없음)" "$(grep -c '^invsync ' "$CALLS")" 3
+	t_eq "invsync 3회(재시도 없음, 전체 yml invsync 생략)" "$(grep -c '^invsync ' "$CALLS")" 3
+	t_has "전체 yml 갱신 생략 경고" "$OUT" '전체 yml\(.*\) 인벤토리 소스 갱신은 건너뜁니다'
 	t_notmp
 	case_end
 
@@ -639,7 +649,7 @@ case7() {
 	run01 'N\nY\nls\nsu\n1\nY\nY\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_eq "작업 리스트 2회 출력" "$(grep -c '^작업 리스트$' "$OUT")" 2
-	t_eq "invsync 6회(재시도 포함)" "$(grep -c '^invsync ' "$CALLS")" 6
+	t_eq "invsync 7회(1차 3 + 재시도 3 + 전체 1)" "$(grep -c '^invsync ' "$CALLS")" 7
 	t_has "최종 요약 성공" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
 	t_notmp
 	case_end
@@ -680,6 +690,28 @@ case7() {
 	t_has "확인표에 선택 반영" "$S/out.txt" '^2 \| .*B_inv-2_1ea\.yml.* \| i2 \| 2026-OPC_MDP \| B2 \| S2 \| 1$'
 	t_has "OS 질문이 옵션 확인표보다 먼저" "$S/out.txt" 'OS 버전 선택'
 	t_eq "os 선택 질문이 확인표 헤더보다 앞" "$(grep -n 'OS 버전 선택\|^번호 | yml' "$S/out.txt" | head -2 | cut -d: -f2 | cut -c1-8 | paste -sd'|')" "OS 버전 선택|번호 | yml"
+	case_end
+
+	# 7j: 전체 yml(--all) invsync — 그룹 2개 이상일 때만, 모두 성공했을 때만
+	case_begin "7j" "02: --all 전체 yml 은 그룹 2개 이상·전부 성공 시 마지막 invsync 만 수행(1개면 생략, 실패 시 exit 1)"
+	setup_case
+	run02 '1\nY\n' "$TU" A_inv-1_2ea.yml=I1,O1,B1,On-premise B_inv-2_1ea.yml=I2,O2,B2,Cloud --all=ALL_inv-9_3ea.yml
+	t_rc "그룹 2개: 종료코드" "$RC" 0
+	t_eq "그룹 2개: invsync 순서(A,B,전체)" "$(grep '^invsync ' "$CALLS" | sed 's/.*-file //' | paste -sd' ')" "A_inv-1_2ea.yml B_inv-2_1ea.yml ALL_inv-9_3ea.yml"
+	t_eq "그룹 2개: 전체 yml 은 dhcp/pxe 없음" "$(grep -c '^dhcp ' "$CALLS")|$(grep -c '^pxe ' "$CALLS")" "2|2"
+	t_has "그룹 2개: 요약에 전체 invsync" "$S/out.txt" '^성공 \(전체 invsync\) : ALL_inv-9_3ea\.yml$'
+	t_has "최종 수량 HPC" "$S/out.txt" '^HPC i1 2026-ECAD_TCAD : 2대$'
+	t_has "최종 수량 SDS" "$S/out.txt" '^SDS i2 2026-ECAD_TCAD : 1대$'
+	t_has "최종 수량 합계" "$S/out.txt" '^합계 : 3대$'
+	: > "$CALLS"
+	run02 '1\nY\n' "$TU" A_inv-1_2ea.yml=I1,O1,B1,On-premise --all=ALL_inv-9_2ea.yml
+	t_rc "그룹 1개: 종료코드" "$RC" 0
+	t_eq "그룹 1개: 전체 invsync 생략(invsync 1회)" "$(grep -c '^invsync ' "$CALLS")" 1
+	: > "$CALLS"
+	export FAIL_CALL='^invsync .*-file ALL_inv'
+	run02 '1\nY\n' "$TU" A_inv-1_2ea.yml=I1,O1,B1,On-premise B_inv-2_1ea.yml=I2,O2,B2,Cloud --all=ALL_inv-9_3ea.yml
+	t_rc "전체 invsync 실패: 종료코드 1" "$RC" 1
+	t_has "전체 invsync 실패 항목" "$S/out.txt" '^실패 \(전체 invsync\) : ALL_inv-9_3ea\.yml$'
 	case_end
 
 	# 7e: 인자 없이 02 단독(대화형)
@@ -877,6 +909,67 @@ color_cases() {
 	case_end
 }
 
+# ===================== infra 치환 · 등록 후 대상 확인 =====================
+D12() {   # 미등록 infra(adjfg) 2대 + 정상 1대
+	IPC=0
+	mkln adjfg hostZ1 eth0 sda sda5 1.1T RHEL8 UEFI
+	mkln adjfg hostZ2 eth0 sda sda5 1.1T RHEL8 UEFI
+	mkln IA hostA1 eth0 sda sda5 1.1T RHEL8 UEFI
+}
+feature_cases() {
+	case_begin "12a" "infra_alias: adjfg → INFRA-X 치환이 ${TU}.txt·yml·pxe 에 반영, 치환 건수 출력"
+	setup_case infra_alias='adjfg:INFRA-X zzz:INFRA-Y'
+	seed_raw D12
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "${TU}.txt 의 infra 필드" "$(awk '{print $3}' "$W/$TU.txt" | paste -sd' ')" "INFRA-X INFRA-X IA"
+	t_has "치환 건수 메시지" "$OUT" '^\[infra 치환\] adjfg -> INFRA-X : 2건$'
+	t_eq "pxe -infra (치환 후 소문자)" "$(grep '^pxe ' "$CALLS" | sed 's/.*-infra \([^ ]*\) .*/\1/' | LC_ALL=C sort | paste -sd' ')" "ia infra-x"
+	t_no "미등록 이름 adjfg 가 어디에도 전달되지 않음" "$CALLS" 'adjfg'
+	case_end
+
+	case_begin "12b" "infra_alias 비어 있으면(기본) 치환 없음"
+	setup_case
+	seed_raw D12
+	run01 'N\nN\n'
+	t_eq "${TU}.txt 의 infra 필드 그대로" "$(awk '{print $3}' "$W/$TU.txt" | paste -sd' ')" "adjfg adjfg IA"
+	t_no "치환 메시지 없음" "$OUT" 'infra 치환'
+	case_end
+
+	local tail_in
+	case_begin "13a" "등록 후 확인: 붙여넣은 서버가 모두 존재 → '모두 존재함'"
+	setup_case
+	seed_raw D6
+	run01 'N\nY\nsu\n1\nY\nhost01 host02,host03\n\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "모두 존재함" "$OUT" '붙여넣은 대상 서버 3대가 모두 존재함'
+	case_end
+
+	case_begin "13b" "등록 후 확인: 등록 대상에 없는 서버가 있으면 오류(exit 1), 붙여넣지 않은 대상은 경고"
+	setup_case
+	seed_raw D6
+	run01 'N\nY\nsu\n1\nY\nhost01\nhost09|host01\n\n'
+	t_rc "01 종료코드 1" "$RC" 1
+	t_has "없는 서버 보고" "$OUT" '^\[X\] 등록 대상에 없는 서버 \(1대\) : host09$'
+	t_has "붙여넣지 않은 대상 경고" "$OUT" '^\[!\] 붙여넣지 않은 등록 대상 \(2대\) : host02 host03$'
+	t_no "'모두 존재함' 출력 없음" "$OUT" '모두 존재함'
+	case_end
+
+	case_begin "13c" "등록 후 확인: 바로 빈 줄 또는 입력 종료(EOF)면 건너뜀"
+	setup_case
+	seed_raw D6
+	run01 'N\nY\nsu\n1\nY\n\n'
+	t_rc "빈 줄: 종료코드" "$RC" 0
+	t_has "빈 줄: 확인 생략" "$OUT" '대상 확인 생략'
+	setup_case
+	seed_raw D6
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "EOF: 종료코드" "$RC" 0
+	t_has "EOF: 확인 생략" "$OUT" '대상 확인 생략'
+	t_notmp
+	case_end
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -892,6 +985,7 @@ case8
 case9
 eof_cases
 color_cases
+feature_cases
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="
