@@ -2,7 +2,7 @@
 
 | 폴더/파일 | 역할 |
 |---|---|
-| `os_check_final_annotated.sh` | 스크립트 본체: gossh `-pm` 접속 분류 → OS 점검 → LDAP/SPLUNK/LACP 리포트 → 환경설정 적용 → 재점검 |
+| `os_check_final_annotated.sh` | 스크립트 본체: gossh `-pm` 접속 분류 → OS 점검 → LDAP/SPLUNK/LACP 리포트 → 환경설정 적용 → 재점검. 비대화형 옵션 `-auto <user> <목록파일>` 지원 |
 | `README.md` | 사전 준비, 실행 방법, 결과 파일, 함수 목록 |
 | `WORKFLOW.md` | 작업 흐름도 |
 | `PLAN.md` | 개발/변경 계획 메모 |

@@ -100,6 +100,10 @@
 #      같이 찍어서 check.res_*/PM_RAW 등 파싱 대상 파일이 오염되는 문제가 있었음.
 #      run_os_check/run_check_script/run_info_check/run_kernel_check의 gossh
 #      결과를 파일에 저장하기 전에 이 문구를 egrep -v로 걸러내도록 수정.
+#  31) main() : 비대화형 "-auto <user> <호스트목록파일>" 옵션 추가. -auto 일 때만 select_user/
+#      read 프롬프트 대신 user·목록을 인자로 받고, OS 체크는 y, 환경설정은 목록에 p/d 로
+#      시작하는 호스트가 있으면 set 아니면 y 로 자동 진행("... : y (-auto)" 에코).
+#      인자 없이 실행하면 기존 동작과 동일.
 
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
@@ -981,7 +985,16 @@ cleanup() {
 trap cleanup EXIT
 
 main() {
+    AUTO_MODE=""   # 환경변수로 -auto 가 새어 들어오는 것 방지 (인자 없는 실행은 기존과 동일)
+    if [ "${1:-}" == "-auto" ]; then
+        AUTO_MODE=1; user="${2:-}"; AUTO_LIST="${3:-}"
+        if [ "$#" -ne 3 ] || [ -z "${user}" ] || [ ! -f "${AUTO_LIST}" ]; then
+            red "[ERROR] -auto <user> <호스트목록파일> : 목록 파일이 없습니다"
+            exit 1
+        fi
+    else
     select_user   # [수정필요] select_user 본문을 채우기 전엔 아래 공백 체크에서 바로 종료됩니다.
+    fi
 
     if [ -z "${user}" ]; then
         red "[ERROR] user 값이 비어 있습니다."
@@ -989,6 +1002,7 @@ main() {
     fi
 
     TARGET_LIST="${user}.txt"
+    if [ -n "${AUTO_MODE:-}" ]; then TARGET_LIST="${AUTO_LIST}"; fi
     CHECK_RES_FILE="check.res_${user}"
     INFO_CHECK_FILE="check.res_${user}_info"
     KERNEL_CHECK_FILE="check.res_${user}_kernel"
@@ -1019,7 +1033,11 @@ main() {
     # [수정됨] LDAP/SPLUNK 실제 값은 check.res_${user}로는 안 나와서(정상이면 OK만
     # 찍힘), run_info_check로 INFO_CHECK_SH를 따로 실행해 INFO_CHECK_FILE을 만들고
     # report_ldap_info/report_splunk_info가 그 파일을 보도록 함.
+    if [ -n "${AUTO_MODE:-}" ]; then
+        ans_check=y; echo "OS 체크를 진행하시겠습니까? (y/n) : y (-auto)"
+    else
     read -rp "OS 체크를 진행하시겠습니까? (y/n) : " ans_check
+    fi
     case "${ans_check}" in
         y|Y)
             run_os_check
@@ -1047,7 +1065,13 @@ main() {
     # [수정됨] apply_os_setting/apply_extra_setting 직후 run_post_apply_check로
     # 재점검하고, 그 결과 파일을 report_setting_check_fail에 넘겨서 FAIL만 출력.
     # (기존에는 이 블록에 설정 적용만 있었고 재점검/FAIL 리포트가 없었습니다.)
+    if [ -n "${AUTO_MODE:-}" ]; then
+        # -auto : 대상에 p/d 로 시작하는 호스트가 하나 이상이면 set, 아니면 y
+        if grep -qiE '^[[:space:]]*[pd]' "${TARGET_LIST}"; then ans_set="set"; else ans_set="y"; fi
+        echo "OS 환경설정을 수정하시겠습니까? (y/n/set) : ${ans_set} (-auto)"
+    else
     read -rp "OS 환경설정을 수정하시겠습니까? (y/n/set) : " ans_set
+    fi
     case "${ans_set}" in
         y|Y)
             if filter_svrauto_targets; then
