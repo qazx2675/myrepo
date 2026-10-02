@@ -20,3 +20,6 @@
 - [ ] `CHANGELOG.md` 갱신
 - [ ] `README.md` 표(변수, 출력 항목)와 `ARCHITECTURE.md` 표가 코드와 일치
 - [ ] 설정 블록의 값(호스트명, 경로, 서버 주소)이 비어 있거나 예시 값임 (실제 값을 커밋하지 않음)
+- [ ] 모든 호스트가 접속불가일 때 `NO FAIL`·LDAP·정보 요약이 나오지 않고 상태줄만 나옴
+- [ ] Splunk/LDAP/OS 값이 2종류 이상일 때 줄이 섞이지 않고, 값별 호스트가 20대 이상이면 `check.info_${user}`가 생성됨
+- [ ] CRLF 확인: Windows에서 `git checkout` 후 작업 사본이 CRLF일 수 있으므로 리눅스로 옮기거나 메일로 보낼 때 `tr -d '\r'` 처리

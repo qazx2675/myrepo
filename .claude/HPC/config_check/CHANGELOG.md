@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-10-02 — 버그 수정(전부 접속불가 시 NO FAIL, INFO 줄바꿈) 및 Splunk·LDAP·OS 조합 요약 추가
+
+- **NO FAIL(`config_check.sh` `report_fail`)**: 모든 호스트가 접속불가일 때도 `NO FAIL`이 출력되던 문제 수정. 체크된(OK) 호스트가 1대 이상일 때만 `NO FAIL`·LDAP·정보 요약을 출력한다.
+- **INFO 줄바꿈(`report_status`/`report_values`)**: INFO 값을 상태줄 끝에 붙이던 방식을 없애고(`total=13ea OK=13ea OS ... / OS ...`처럼 한 줄에 섞이던 문제), 2종류 이상이면 경고·대수·값별 호스트를 줄을 나눠 출력한다.
+- **정보 요약 추가(`report_combo`)**: 상태줄 아래에 Splunk·LDAP·대수·OS를 조합이 같은 호스트끼리 한 줄로 출력한다(값 정규화, 없으면 `-`).
+  - Splunk: `INFO` 줄에서 `Splunk` 키워드 다음 토큰 / LDAP: `LDAP` 키워드 다음 토큰(`FAIL ldap Undefined configuration`도 `undefined`로 집계) / OS: `INFO` 줄 중 `std` 포함 줄의 `INFO` 뒤 문자열.
+  - 줄은 공백·탭 모두 구분자로 토큰화한다. 값은 연속 공백을 1개로 줄이고 `Undefined...`는 `undefined`로 통일한다.
+- **LDAP 요약(`report_values`)**: 2종류 이상이면 값별 호스트를 모두 출력하고, 값별 호스트가 20대 이상이면 `check.info_${user}`에 저장한다(화면에는 대수와 파일 안내). `LDAP 미확인`도 20대 이상이면 파일로 저장.
+- **영향 범위**: `config_check.sh`(`run_check` 파서, `report_fail`, `report_values`(구 `report_multi`), `report_combo`(신규), `report_status`, `do_check`, `INFO_FILE` 변수), `README.md`(상태줄·LDAP·정보 요약 섹션), `ARCHITECTURE.md`(함수/임시 파일 표).
+- **알아둘 점**: Splunk은 요청대로 `INFO` 줄만 읽는다(`FAIL Splunk ...` 줄은 읽지 않음). OS는 `KERNEL`이 아니라 `std` 포함 여부로 찾는다(이전 `INFO`+`KERNEL` 규칙 대체).
+- **검증**: .58(Rocky 8.10) + 최신 `gossh-standalone` 빌드, 가짜 run.sh(`pd` 처리)로 5개 시나리오 확인. 전부 접속불가(NO FAIL·LDAP 미출력), Splunk 3종·LDAP 2종·OS 2종 혼합 28대(조합 5줄, 대수 합 27, LDAP infra 23대·OS 25대는 요약 파일 저장, 50줄), 모두 1종류, INFO 없음(`LDAP : 정보 없음`, 조합 없음), 설정 적용(y) 후 재체크 경로. 종료 후 임시 디렉터리·랩 임시 파일 모두 삭제 확인. 실제 운영 run.sh로는 검증하지 못했다.
+
 ## 2026-09-21 (추가 변경)
 
 - 대상 리스트 출력: 탭 대신 공백으로 열을 맞춤(대수가 많을 때 탭 정렬이 깨져 보이던 문제).

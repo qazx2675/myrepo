@@ -14,7 +14,7 @@
 | 2. 리스트 확인 | 목록 파싱(공백/줄바꿈, 중복 제거), 30행 단위 열 출력, prefix 집계 | 출력 형식 변경 |
 | 3. 작업 진행 | y/n, uptime | |
 | `run_check` | gossh `-pm` 1회 실행 → 상태 분류(`.state`) → FAIL/usb0/LDAP 추출 | 체크 결과 형식(OK/FAIL/INFO) 변경 |
-| `report_fail` / `report_multi` / `report_status` | FAIL, LDAP·INFO 값 요약(`report_multi`), 상태줄 출력 | 출력 문구·색 변경 |
+| `report_fail` / `report_values` / `report_status` / `report_combo` | FAIL(OK 호스트가 있을 때만 `NO FAIL`), LDAP·Splunk·OS 값 요약(`report_values`, 20대 이상은 `check.info_${user}`), 상태줄, Splunk·LDAP·OS 조합 요약(`report_combo`) | 출력 문구·색·20대 기준(`LIM`) 변경 |
 | `do_check` | run_check + 세 리포트를 묶은 것 (최초 체크/재체크 공용) | |
 | 5. 환경설정 | y/n/set → OK 호스트에 `;`로 묶은 스크립트를 gossh 1회로 실행 → 재체크 → 상태 병합 | 설정 스크립트 목록 변경 |
 | 6. 마무리 | AI 서버, 벤더/공통 코멘트, DHCP, 기타 상태, usb0, VWP | 코멘트 문구 변경 |
@@ -27,7 +27,8 @@
 | `<이름>.out` / `.err` | gossh stdout(정렬됨) / stderr (`이름` = `first`, `recheck`) |
 | `<이름>.set` | gossh 결과 파일을 푼 `호스트<TAB>태그` |
 | `<이름>.state` | `호스트<TAB>OK\|OFF\|REF\|NOSV\|INST` (모든 대상) |
-| `<이름>.fail` / `.usb0` / `.ldap` | OK 호스트의 FAIL 줄 / usb0 호스트 / LDAP 값 |
+| `<이름>.fail` / `.usb0` | OK 호스트의 FAIL 줄 / usb0 호스트 |
+| `<이름>.ldap` / `.splunk` / `.os` | OK 호스트의 `호스트<TAB>정규화된 값` (호스트당 첫 값) |
 | `final.state` | 재체크 결과를 첫 체크 상태 위에 덮은 최종 상태 (y/set일 때만) |
 | `V_<벤더>.ok` / `.off` | 벤더별 코멘트용 목록 |
 

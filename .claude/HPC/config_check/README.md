@@ -47,7 +47,7 @@ bash config_check.sh
 | 1 | user 목록 출력 | 번호 입력 |
 | 2 | 대상 리스트(30행 단위 열 출력, 공백으로 열 맞춤) + prefix별 수량 + 총 N EA | - |
 | 3 | `작업을 진행하시겠습니까? (y/n)` | `y` / `n` (`uptime_enable_user`의 user는 y 후 uptime 출력) |
-| 4 | 체크 결과: FAIL만(없으면 `NO FAIL`) → LDAP 요약 → 상태줄 | - |
+| 4 | 체크 결과: FAIL만(없으면 `NO FAIL`) → LDAP 요약 → 상태줄 → Splunk·LDAP·OS 조합 요약 | - |
 | 5 | `환경설정을 수정하시겠습니까? (y/n/set)` | `y` / `n` / `set` |
 | 6 | (y/set이면 적용 → 재체크) AI 서버 점검, 벤더 코멘트, DHCP, 기타 상태 서버, usb0, VWP | - |
 
@@ -66,7 +66,7 @@ bash config_check.sh
 
 ### 상태줄
 
-`total=Nea<TAB>OK=Nea<TAB>pingX=Nea<TAB>pingO_sshx=Nea<TAB>nosvrauto=Nea<TAB>os_install=Nea<TAB>INFO=값`
+`total=Nea<TAB>OK=Nea<TAB>pingX=Nea<TAB>pingO_sshx=Nea<TAB>nosvrauto=Nea<TAB>os_install=Nea`
 
 - 항목 사이는 **탭**으로 구분합니다.
 - `total`, `OK`를 제외한 항목은 **1 이상일 때만** 표시합니다.
@@ -79,24 +79,42 @@ bash config_check.sh
 | pingO_sshx | 22번 포트 refused 등 (`_res_refsed`) | 노랑 |
 | nosvrauto | 접속은 되나 `/user/svrauto` 없음 (`_nosvrauto`) | 노랑 |
 | os_install | OS 설치 중 (`~/.profile`에 anaconda) (`_os_install`) | 노랑 |
-| INFO | 체크 결과 중 `INFO`와 `KERNEL`이 함께 있는 줄에서 탭 뒤의 문자열 (아래 참고) | 노랑 |
 
 nosvrauto / os_install / pingO_sshx 호스트의 체크 결과는 FAIL·LDAP·usb0 집계에서 제외됩니다(어차피 정상 동작하지 않는 대상).
+
+### NO FAIL / 체크된 호스트가 없을 때
+
+`NO FAIL`과 LDAP·정보 요약은 **체크된(OK) 호스트가 1대 이상일 때만** 출력합니다. 모든 호스트가 접속불가이면 상태줄만 나옵니다.
 
 ### LDAP 요약 (상태줄 바로 위)
 
 - 모두 같은 값: `LDAP : infra`
-- 2종류 이상: 노란색 `[경고] LDAP infra가 2개 이상입니다` + `LDAP : infra(1980ea) / Undefined configuration(20ea)` + 소수 값의 호스트 목록
-- LDAP 줄이 없는 OK 호스트가 있으면 `LDAP 미확인 N대 : 호스트...` (노란색)
+- 2종류 이상: 노란색 `[경고] LDAP infra가 2개 이상입니다` + `LDAP : infra(23ea) / undefined(4ea)` + **값별 호스트 목록**
+- 값별 호스트가 **20대 이상**이면 화면에는 `infra : 23대 (요약 파일 참조)`만 표시하고 호스트 목록은 요약 파일 `check.info_${user}`에 저장합니다.
+- LDAP 줄이 없는 OK 호스트가 있으면 `LDAP 미확인 N대 : 호스트...` (노란색, 20대 이상이면 요약 파일)
 
-체크 스크립트는 정상이면 `hostname: INFO<TAB>ldap<TAB>infra`, 정의되지 않았으면 `hostname: FAIL<TAB>ldap<TAB>Undefined configuration` 형식의 줄을 출력해야 합니다(`ldap` 대소문자 무관). 값 부분이 그대로 요약에 쓰입니다.
+체크 스크립트는 정상이면 `hostname: INFO<TAB>LDAP<TAB>infra`, 정의되지 않았으면 `hostname: FAIL<TAB>ldap<TAB>Undefined configuration` 형식의 줄을 출력해야 합니다(`ldap` 대소문자 무관). 값은 `LDAP` 키워드 바로 다음 토큰이며, `Undefined...`로 시작하면 `undefined`로 정규화합니다.
 
-### INFO 요약 (상태줄 맨 끝)
+### 정보 요약 (상태줄 바로 아래)
 
-체크 결과에서 `INFO`와 `KERNEL`이 함께 들어 있는 줄(`hostname: INFO<TAB>Std 26Year asdf KERNEL RHEL1`)의 **탭 뒤 문자열**을 모아 상태줄 끝에 `INFO=Std 26Year asdf KERNEL RHEL1`로 표시합니다.
+`Splunk`, `LDAP`, `OS` 값을 호스트별로 모아 **조합이 같은 호스트끼리 한 줄**로 출력합니다. 값이 없으면 `-`입니다.
 
-- 값이 하나면 그대로 표시합니다.
-- 2종류 이상이면 LDAP과 같은 규칙입니다. 상태줄에는 `INFO=값A(6ea) / 값B(2ea)`, 그 위에 노란색 경고와 소수 값의 호스트 목록을 출력합니다.
+```
+a1         infra       10ea Std 26Year asdf KERNEL RHEL1
+b2         infra       10ea Std 26Year asdf KERNEL RHEL1
+undefined  undefined    2ea Std 27Year asdf KERNEL RHEL2
+```
+
+| 항목 | 값을 읽는 방법 |
+|---|---|
+| Splunk | `INFO` 줄에서 `Splunk` 키워드 바로 다음 토큰 (예: `INFO<TAB>Splunk<TAB>a1`, `INFO<TAB>HPC Splunk<TAB>b2`) |
+| LDAP | 위 LDAP 규칙과 동일 |
+| OS | `INFO` 줄 중 `std`(대소문자 무관)가 있는 줄에서 `INFO` 뒤 문자열 (예: `INFO<TAB>Std 26Year asdf KERNEL RHEL1`) |
+
+- 값은 모두 정규화합니다(연속 공백·탭 → 공백 1개, 앞뒤 공백 제거).
+- 호스트당 항목별로 처음 나온 값 하나만 사용합니다.
+- Splunk은 2종류 이상이면 상태줄·조합 아래에 노란 경고와 `Splunk : a1(10ea) / b2(10ea) / undefined(7ea)`를, OS는 2종류 이상이면 경고와 값별 호스트(`OS : 값A(25ea) / 값B(2ea)` 아래 `  값B : c25 p01`)를 줄을 나눠 출력합니다. OS도 값별 호스트가 20대 이상이면 요약 파일에 저장합니다.
+- 요약 파일은 필요할 때만 만들어지며(`[LDAP] 값 (N대)` 다음 줄부터 한 줄에 호스트 하나), 재체크를 하면 최신 결과로 다시 만들거나 삭제됩니다. 저장되면 `호스트가 많아 화면 대신 저장한 목록: 경로`가 출력됩니다.
 
 ### 6단계 출력
 
@@ -136,6 +154,6 @@ sudo cp config_check.sh /usr/local/bin/config_check
 - 체크는 대상 전체에 `gossh -pm -script -w 목록 "bash run.sh pd; :"` **1회**만 실행합니다. `run.sh`는 FAIL이 없으면 `OK`만 출력하고, `pd` 인자를 주면 OK가 아닌 결과값(LDAP, INFO 등)까지 출력하므로 스크립트가 `pd`를 붙여 실행합니다. `; :`는 run.sh가 0이 아닌 값으로 끝나도 gossh가 결과를 stderr로 보내지 않게 하기 위한 것입니다.
 - 접속은 됐지만 체크 결과가 한 줄도 없는 호스트는 OK로 세지 않고(`no_output`), 설정 적용 대상에서도 제외됩니다.
 - 명령에 `/user/` 경로가 있어 gossh가 동시 접속을 350으로 자동 제한합니다(autofs 보호). 스크립트는 이를 우회하지 않습니다.
-- 결과 원본은 실행 디렉토리의 `check.res_${user}`에 남습니다(재체크하면 덮어씀). 그 외 중간 파일은 `/tmp/config_check.XXXXXX`에 만들고 종료 시(Ctrl+C 포함) 삭제합니다.
+- 결과 원본은 실행 디렉토리의 `check.res_${user}`에 남습니다(재체크하면 덮어씀). 값별 호스트가 20대 이상일 때만 `check.info_${user}`도 남습니다. 그 외 중간 파일은 `/tmp/config_check.XXXXXX`에 만들고 종료 시(Ctrl+C 포함) 삭제합니다.
 - gossh 실행 중 Ctrl+C는 gossh 동작을 따릅니다(1회 진행 호스트 표시, 2회 걸린 호스트 취소, 3회 중단). 3회 중단하면 그때까지의 결과로 계속 진행합니다.
 - 최종 확인은 수동으로: 설정 적용 후 무작위 서버 몇 대에 접속해 실제 반영 여부를 확인하세요.

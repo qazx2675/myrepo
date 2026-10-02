@@ -83,6 +83,7 @@ read -r -p "input Number: " user_choice || exit 1
 user=$(bash "$user_info_output" "$user_choice" | tr -d '\r' | awk 'NF{print $1; exit}')
 [ -z "$user" ] && { echo "user를 확인할 수 없습니다."; exit 1; }
 [ -f "${user}.txt" ] || { echo "대상 목록 파일이 없습니다: $(pwd)/${user}.txt"; exit 1; }
+INFO_FILE="check.info_${user}"   # LDAP/OS 값별 호스트가 20대 이상일 때만 만들어지는 요약 파일
 
 ########################## 2. 리스트 확인 ##########################
 HOSTS="$TMP/hosts"
@@ -138,29 +139,36 @@ run_check() {
 
     # gossh 출력은 병렬이라 순서가 섞여 있으므로 호스트명 기준으로 정렬(호스트 내 줄 순서는 유지)
     LC_ALL=C sort -s -t: -k1,1 "$TMP/$n.out" -o "$TMP/$n.out"
-    : > "$TMP/$n.fail"; : > "$TMP/$n.usb0"; : > "$TMP/$n.ldap"; : > "$TMP/$n.info"
-    # 결과: .fail(FAIL 줄) .usb0 .ldap(INFO/FAIL ldap 값) .info(INFO 줄 중 KERNEL 포함, 값=INFO 뒤 문자열)
+    : > "$TMP/$n.fail"; : > "$TMP/$n.usb0"; : > "$TMP/$n.ldap"; : > "$TMP/$n.splunk"; : > "$TMP/$n.os"
+    # 결과: .fail(FAIL 줄) .usb0 .ldap/.splunk(호스트<TAB>정규화된 값) .os(INFO 줄 중 std 포함, INFO 뒤 문자열)
+    # 줄은 공백/탭 모두를 구분자로 토큰화하고, Splunk/LDAP 은 키워드 바로 다음 토큰을 값으로 쓴다.
     # OK 이지만 결과가 한 줄도 없는 호스트는 NONE 으로 바꿔 .state 를 다시 쓴다
     awk -F'\t' -v P="$TMP/$n" '
+        function norm(v) {
+            gsub(/[ \t\r]+/, " ", v); sub(/^ /, "", v); sub(/ $/, "", v)
+            if (tolower(v) ~ /^undefined/) v = "undefined"
+            return (v == "" ? "-" : v)
+        }
         FILENAME == ARGV[1] { st[$1] = $2; order[++no] = $1; next }
         {
             line = $0; sub(/\r$/, "", line)
             i = index(line, ": "); if (!i) next
-            h = substr(line, 1, i - 1); b = substr(line, i + 2)
+            h = substr(line, 1, i - 1); b = substr(line, i + 2); sub(/^[ \t]+/, "", b)
             if (st[h] != "OK") next
             has[h] = 1
-            m = split(b, f, "\t")
-            s = f[1]; gsub(/^ +| +$/, "", s)
+            nt = split(b, tk, /[ \t]+/)
+            s = tk[1]
             if (s == "FAIL") {
                 print line > (P ".fail")
                 if (b ~ /usb0/ && b ~ /interface/ && !(h in usb)) { usb[h] = 1; print h > (P ".usb0") }
             }
-            if (s == "INFO" || s == "FAIL") {
-                k = f[2]; gsub(/^ +| +$/, "", k)
-                if (tolower(k) == "ldap" && !(h in lv)) { v = f[3]; gsub(/^ +| +$/, "", v); lv[h] = v; print h "\t" v > (P ".ldap") }
+            for (j = 2; j < nt + 1; j++) {
+                k = tolower(tk[j])
+                if (k == "ldap" && (s == "INFO" || s == "FAIL") && !(h in lv)) { lv[h] = 1; print h "\t" norm(tk[j + 1]) > (P ".ldap") }
+                if (k == "splunk" && s == "INFO" && !(h in sv)) { sv[h] = 1; print h "\t" norm(tk[j + 1]) > (P ".splunk") }
             }
-            if (s == "INFO" && b ~ /KERNEL/ && !(h in iv)) {
-                v = f[2]; gsub(/^ +| +$/, "", v); iv[h] = v; print h "\t" v > (P ".info")
+            if (s == "INFO" && tolower(b) ~ /std/ && !(h in ov)) {
+                v = b; sub(/^INFO/, "", v); ov[h] = 1; print h "\t" norm(v) > (P ".os")
             }
         }
         END {
@@ -175,6 +183,8 @@ run_check() {
 }
 
 report_fail() {   # $1=이름
+    # 체크된(OK) 호스트가 1대도 없으면 NO FAIL 을 포함해 아무것도 출력하지 않는다
+    awk -F'\t' '$2 == "OK" { f = 1; exit } END { exit !f }' "$TMP/$1.state" || return 0
     if [ -s "$TMP/$1.fail" ]; then
         while IFS= read -r l; do red "$l"; done < "$TMP/$1.fail"
     else
@@ -182,56 +192,83 @@ report_fail() {   # $1=이름
     fi
 }
 
-# report_multi <값파일> <state 파일> <모드> <요약파일>
-#   값파일: 호스트<TAB>값. 값이 하나면 그대로, 2종류 이상이면 값별 대수 + 소수 값 호스트를 노란색으로 출력.
-#   모드 ldap : "LDAP : 값" 한 줄로 출력 (+ LDAP 값이 없는 OK 호스트를 미확인으로 표시)
-#   모드 info : 값 요약을 <요약파일>에 써서 상태줄(report_status)이 붙이게 함
-report_multi() {
-    awk -F'\t' -v Y="$Y" -v N="$N" -v mode="$3" -v sumf="$4" '
-        FILENAME == ARGV[1] { if ($2 == "OK") { ord_h[++nh] = $1 } ; next }
-        { cnt[$2]++; hs[$2] = hs[$2] " " $1; got[$1] = 1; if (!($2 in seen)) { seen[$2] = 1; ord[++k] = $2 } }
+# report_values <값파일> <state 파일> <ldap|splunk|os> <요약파일>
+#   값파일: 호스트<TAB>정규화된 값. 체크된(OK) 호스트가 없으면 아무것도 출력하지 않는다.
+#   ldap   : 값이 1종류면 "LDAP : 값" 한 줄. 2종류 이상이면 노란 경고 + 값별 대수 + 값별 호스트 + LDAP 미확인 호스트
+#   splunk : 2종류 이상일 때만 경고 + 값별 대수
+#   os     : 2종류 이상일 때만 경고 + 값별 대수 + 값별 호스트
+#   값별 호스트가 LIM(20)대 이상이면 화면 대신 <요약파일>에 (한 줄에 호스트 하나) 저장하고 대수만 표시
+report_values() {
+    awk -F'\t' -v Y="$Y" -v N="$N" -v mode="$3" -v sumf="$4" -v LIM=20 '
+        FILENAME == ARGV[1] { if ($2 == "OK") { okh[++nh] = $1 } ; next }
+        { cnt[$2]++; hs[$2] = hs[$2] " " $1; hl[$2] = hl[$2] $1 "\n"; got[$1] = 1; if (!($2 in seen)) { seen[$2] = 1; ord[++k] = $2 } }
         END {
+            if (nh == 0) exit
+            label = (mode == "ldap" ? "LDAP" : (mode == "splunk" ? "Splunk" : "OS"))
             for (i = 2; i <= k; i++) { x = ord[i]; j = i - 1; while (j >= 1 && cnt[ord[j]] < cnt[x]) { ord[j + 1] = ord[j]; j-- } ord[j + 1] = x }
+            if (k == 0) { if (mode == "ldap") print Y "LDAP : 정보 없음" N; exit }
+            if (k == 1) { if (mode == "ldap") print "LDAP : " ord[1] }
+            else {
+                line = ""
+                for (i = 1; i <= k; i++) line = line (i > 1 ? " / " : "") ord[i] "(" cnt[ord[i]] "ea)"
+                print Y "[경고] " (mode == "ldap" ? "LDAP infra가 2개 이상입니다" : label " 값이 2종류 이상입니다") N
+                print Y label " : " line N
+                if (mode != "splunk") for (i = 1; i <= k; i++) {
+                    v = ord[i]
+                    if (cnt[v] < LIM) print Y "  " v " :" hs[v] N
+                    else { print Y "  " v " : " cnt[v] "대 (요약 파일 참조)" N; printf "[%s] %s (%d대)\n%s", label, v, cnt[v], hl[v] >> sumf }
+                }
+            }
             if (mode == "ldap") {
-                miss = ""; nm = 0
-                for (i = 1; i <= nh; i++) if (!(ord_h[i] in got)) { nm++; miss = miss " " ord_h[i] }
-                if (k == 0) { print Y "LDAP : 정보 없음" N; exit }
-                if (k == 1) print "LDAP : " ord[1]
-                else {
-                    line = ""
-                    for (i = 1; i <= k; i++) line = line (i > 1 ? " / " : "") ord[i] "(" cnt[ord[i]] "ea)"
-                    print Y "[경고] LDAP infra가 2개 이상입니다" N
-                    print Y "LDAP : " line N
-                    for (i = 2; i <= k; i++) print Y "  " ord[i] " :" hs[ord[i]] N
-                }
-                if (nm > 0) print Y "  LDAP 미확인 " nm "대 :" miss N
-            } else {
-                if (k == 0) exit
-                if (k == 1) print ord[1] > sumf
-                else {
-                    line = ""
-                    for (i = 1; i <= k; i++) line = line (i > 1 ? " / " : "") ord[i] "(" cnt[ord[i]] "ea)"
-                    print line > sumf
-                    print Y "[경고] INFO 값이 2개 이상입니다" N
-                    for (i = 2; i <= k; i++) print Y "  " ord[i] " :" hs[ord[i]] N
-                }
+                nm = 0; miss = ""; missl = ""
+                for (i = 1; i <= nh; i++) if (!(okh[i] in got)) { nm++; miss = miss " " okh[i]; missl = missl okh[i] "\n" }
+                if (nm > 0 && nm < LIM) print Y "  LDAP 미확인 " nm "대 :" miss N
+                if (nm >= LIM) { print Y "  LDAP 미확인 " nm "대 (요약 파일 참조)" N; printf "[LDAP 미확인] (%d대)\n%s", nm, missl >> sumf }
             }
         }' "$2" "$1"
 }
 
-# report_status <state 파일> [INFO 요약파일]
+# report_combo <이름> : Splunk / LDAP / 대수 / OS 조합별 한 줄 (값은 정규화, 없으면 -)
+report_combo() {
+    awk -F'\t' '
+        FILENAME == ARGV[1] { if ($2 == "OK") okh[++nh] = $1; next }
+        FILENAME == ARGV[2] { sp[$1] = $2; next }
+        FILENAME == ARGV[3] { ld[$1] = $2; next }
+        FILENAME == ARGV[4] { os[$1] = $2; next }
+        END {
+            for (i = 1; i <= nh; i++) {
+                h = okh[i]
+                a = (h in sp) ? sp[h] : "-"; b = (h in ld) ? ld[h] : "-"; c = (h in os) ? os[h] : "-"
+                if (a != "-" || b != "-" || c != "-") any = 1
+                key = a "\t" b "\t" c
+                if (!(key in cnt)) ord[++k] = key
+                cnt[key]++
+            }
+            if (!any) exit
+            for (i = 2; i <= k; i++) { x = ord[i]; j = i - 1; while (j >= 1 && cnt[ord[j]] < cnt[x]) { ord[j + 1] = ord[j]; j-- } ord[j + 1] = x }
+            for (i = 1; i <= k; i++) {
+                split(ord[i], p, "\t")
+                if (length(p[1]) > w1) w1 = length(p[1])
+                if (length(p[2]) > w2) w2 = length(p[2])
+                n = cnt[ord[i]] "ea"; if (length(n) > w3) w3 = length(n)
+            }
+            for (i = 1; i <= k; i++) {
+                split(ord[i], p, "\t")
+                printf "%-" w1 "s %-" w2 "s %" w3 "s %s\n", p[1], p[2], cnt[ord[i]] "ea", p[3]
+            }
+        }' "$TMP/$1.state" "$TMP/$1.splunk" "$TMP/$1.ldap" "$TMP/$1.os"
+}
+
+# report_status <state 파일>
 #   total : 각 항목의 합과 같으면 초록, 다르면 빨간색 깜빡임. OK 와 total 을 제외하고 0 인 항목은 숨김. 탭 구분.
 report_status() {
-    local info=""
-    [ -n "$2" ] && [ -s "$2" ] && info=$(cat "$2")
-    awk -F'\t' -v G="$G" -v R="$R" -v Y="$Y" -v B="$B" -v N="$N" -v info="$info" '{ c[$2]++; t++ } END {
+    awk -F'\t' -v G="$G" -v R="$R" -v Y="$Y" -v B="$B" -v N="$N" '{ c[$2]++; t++ } END {
         sum = c["OK"] + c["OFF"] + c["REF"] + c["NOSV"] + c["INST"]
         out = (sum == t ? G : B) "total=" t "ea" N "\t" G "OK=" c["OK"] + 0 "ea" N
         if (c["OFF"])  out = out "\t" R "pingX=" c["OFF"] "ea" N
         if (c["REF"])  out = out "\t" Y "pingO_sshx=" c["REF"] "ea" N
         if (c["NOSV"]) out = out "\t" Y "nosvrauto=" c["NOSV"] "ea" N
         if (c["INST"]) out = out "\t" Y "os_install=" c["INST"] "ea" N
-        if (info != "") out = out "\t" Y "INFO=" info N
         print out
     }' "$1"
 }
@@ -241,11 +278,15 @@ do_check() {   # $1=대상파일 $2=이름
     echo "[체크 실행 중] gossh -pm ($(lines "$1")대)..."
     run_check "$1" "$2"
     echo "(소요 $((SECONDS - t0))초)"
+    rm -f "$INFO_FILE"
     report_fail "$2"
-    rm -f "$TMP/$2.infosum"
-    report_multi "$TMP/$2.ldap" "$TMP/$2.state" ldap
-    report_multi "$TMP/$2.info" "$TMP/$2.state" info "$TMP/$2.infosum"
-    report_status "$TMP/$2.state" "$TMP/$2.infosum"
+    report_values "$TMP/$2.ldap" "$TMP/$2.state" ldap "$INFO_FILE"
+    report_status "$TMP/$2.state"
+    report_combo "$2"
+    report_values "$TMP/$2.splunk" "$TMP/$2.state" splunk "$INFO_FILE"
+    report_values "$TMP/$2.os" "$TMP/$2.state" os "$INFO_FILE"
+    [ -s "$INFO_FILE" ] && yellow "호스트가 많아 화면 대신 저장한 목록: $(pwd)/$INFO_FILE"
+    return 0
 }
 
 ########################## 4. 체크 ##########################
@@ -275,7 +316,7 @@ case "$ans" in
             FINAL="$TMP/final.state"
             CUR=recheck
             echo "[최종 상태]"
-            report_status "$FINAL" "$TMP/recheck.infosum"
+            report_status "$FINAL"
         else
             yellow "설정을 적용할 OK 대상이 없습니다."
         fi
