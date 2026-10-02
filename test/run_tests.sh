@@ -69,14 +69,14 @@ t_notmp() { local n; n=$(find "$S/tmp" -mindepth 1 2>/dev/null | wc -l); t_eq "m
 
 # ===================== 스크래치 · 스텁 =====================
 # setup_case [변수명=값 ...]
-#   키: repohost svr_dir ai_server_list ldap_check_script lacp_comment inventory_delete_host  (복사본 최상단 빈 변수에 채울 값)
+#   키: repohost svr_dir ai_server_list day_print lacp_comment inventory_delete_host  (복사본 최상단 빈 변수에 채울 값)
 #       raw=1 → 복사만(sed 없음), user=0 → user() 본문 미치환
 setup_case() {
 	local kv k v
 	cfg_repohost=repo.lab
 	cfg_svr_dir=""             # 아래에서 $W/svr_dir 로 설정
 	cfg_ai_server_list=""
-	cfg_ldap_check_script=/opt/ldap_check.sh
+	cfg_day_print=""
 	cfg_lacp_comment=LACP-COMMENT-SENTINEL
 	cfg_inventory_delete_host=delhost.lab
 	cfg_infra_alias=""
@@ -105,7 +105,7 @@ setup_case() {
 			-e "s#^repohost=\"\"#repohost=\"$cfg_repohost\"#" \
 			-e "s#^svr_dir=\"\"#svr_dir=\"$cfg_svr_dir\"#" \
 			-e "s#^ai_server_list=\"\"#ai_server_list=\"$cfg_ai_server_list\"#" \
-			-e "s#^ldap_check_script=\"\"#ldap_check_script=\"$cfg_ldap_check_script\"#" \
+			-e "s#^day_print=\"\"#day_print=\"$cfg_day_print\"#" \
 			-e "s#^lacp_comment=\"\"#lacp_comment=\"$cfg_lacp_comment\"#" \
 			-e "s#^inventory_delete_host=\"\"#inventory_delete_host=\"$cfg_inventory_delete_host\"#" \
 			-e "s#^infra_alias=\"\"#infra_alias=\"$cfg_infra_alias\"#" \
@@ -120,7 +120,7 @@ user(){\
 		fi
 		# 무결성: 복사본과 원본의 차이는 최상단 변수/user 본문/git 경로 줄뿐이어야 한다
 		local bad
-		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|ldap_check_script|lacp_comment|inventory_delete_host|infra_alias)=|^> '$'\t''user=testuser$|root_user')
+		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|day_print|lacp_comment|inventory_delete_host|infra_alias)=|^> '$'\t''user=testuser$|root_user')
 		if [[ -n $bad ]]; then echo "[HARNESS ERROR] 복사본 sed 가 예상 외 줄을 변경: $bad"; exit 2; fi
 		if [[ $cfg_user == 1 ]] && ! grep -q $'^\tuser=testuser$' "$W/$F01"; then
 			echo "[HARNESS ERROR] user() 본문 치환 실패"; exit 2; fi
@@ -199,7 +199,8 @@ exit 0
 STUB
 	cat > "$S/bin/gossh" <<'STUB'
 #!/bin/bash
-echo "gossh $*" >> "$STUBLOG/calls.log"
+cmd=${@: -1}
+if [[ $cmd == *lsblk* ]]; then echo "gossh-lsblk $*" >> "$STUBLOG/calls.log"; else echo "gossh $*" >> "$STUBLOG/calls.log"; fi
 hf=""
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -207,9 +208,30 @@ while [[ $# -gt 0 ]]; do
 		*) shift ;;
 	esac
 done
-cp "$hf" "$STUBLOG/gossh_hosts.txt"
 mapfile -t hs < <(grep . "$hf")
 n=${#hs[@]}
+if [[ $cmd == *lsblk* ]]; then
+	# lsblk -nl -o NAME,TYPE,SIZE,MOUNTPOINT 흉내 (LSBLK_SCENARIO: std | bad | sdb | nvme)
+	row() { printf '%s: %s\n' "$h" "$*"; }
+	std() {   # disk part-prefix boot-mount
+		row "$1 disk 500G"; row "${1}${2}1 part 500M ${3:-/boot/efi}"; row "${1}${2}2 part 30G /"
+		row "${1}${2}3 part 20G /var"; row "${1}${2}4 part 8G [SWAP]"; row "${1}${2}5 part 441.5G /tmp"
+	}
+	for ((i = 0; i < n; i++)); do
+		h=${hs[i]}
+		case ${LSBLK_SCENARIO:-std}.$i in
+			bad.1) row "sda disk 500G"; row "sda1 part 500M /boot"; row "sda2 part 100G"
+			       row "rhel-root lvm 30G /"; row "rhel-var lvm 20G /var" ;;
+			bad.2) row "sda disk 500G"; row "sda1 part 500M /boot"; row "sda2 part 30G /"; row "sda3 part 25G /var"
+			       row "sda4 part 8G [SWAP]"; row "sda5 part 100G /home" ;;
+			sdb.*) std sdb "" /boot ;;
+			nvme.*) std nvme0n1 p /boot/efi ;;
+			*) std sda "" /boot ;;
+		esac
+	done
+	exit 0
+fi
+cp "$hf" "$STUBLOG/gossh_hosts.txt"
 for ((i = 0; i < n; i++)); do
 	h=${hs[i]}
 	v=$'INFO\tLDAP\tINFRA1\tSITE1'; mode="fault-tolerance (active-backup)"
@@ -542,7 +564,7 @@ case6() {
 	t_has ".power_limit_setting.txt 내용 출력" "$OUT" '^POWERLIMIT_SENTINEL$'
 	t_no "LACP 문구 없음" "$OUT" 'LACP-COMMENT-SENTINEL'
 	t_no "응답 없음 없음" "$OUT" '^응답 없음'
-	t_eq "gossh 인자" "$(grep '^gossh ' "$CALLS" | sed 's#-w [^ ]* #-w HOSTFILE #')" "gossh -script -w HOSTFILE bash /opt/ldap_check.sh;cat /proc/net/bonding/bond0 |grep -i mod"
+	t_eq "gossh 인자" "$(grep '^gossh ' "$CALLS" | sed 's#-w [^ ]* #-w HOSTFILE #')" "gossh -script -w HOSTFILE cat /etc/openldap/ldap.conf |grep -v '#' |grep -i uri |awk -F= '{print \$2}' |awk -F',' '{print \$1}';cat /proc/net/bonding/bond0 |grep -i mod"
 	t_eq "gossh -w 호스트파일 내용" "$(cat "$STUBLOG/gossh_hosts.txt")" "$(printf 'host01\nhost02\nhost03')"
 	t_has "tmp/all_${TU} 보존" "$W/tmp/all_${TU}" '^host01: INFO'
 	t_has "02 작업 리스트(| 가로)" "$OUT" '^host01\|host02\|host03$'
@@ -811,7 +833,7 @@ case8() {
 	t_rc "원본 그대로: 종료코드≠0" "$RC" nz
 	t_has "user 비어 있음 오류" "$OUT" '^\[X\] user 값이 없습니다'
 	t_eq "ssh/scp 미호출" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
-	setup_case repohost= svr_dir= ai_server_list= ldap_check_script= lacp_comment= inventory_delete_host=
+	setup_case repohost= svr_dir= ai_server_list= lacp_comment= inventory_delete_host=
 	seed_raw D6
 	run01 'N\nY\n'
 	t_rc "user 만 채움 + 나머지 빈 변수: 종료코드≠0" "$RC" nz
@@ -821,7 +843,7 @@ case8() {
 	case_end
 
 	case_begin "8e" "변수 하나씩만 비움 → 해당 변수 [X] 오류, delhost 미호출"
-	for v in inventory_delete_host repohost svr_dir ldap_check_script lacp_comment; do
+	for v in inventory_delete_host repohost svr_dir lacp_comment; do
 		setup_case "$v="
 		seed_raw D6
 		run01 'N\nY\n'
@@ -986,6 +1008,62 @@ feature_cases() {
 	case_end
 }
 
+# ===================== day_print · OS 번호 변환 · 파티션 표준 =====================
+ext_cases() {
+	case_begin "14a" "day_print 에 user 가 있으면 작업 대상을 '날짜 tmp tmp infra hostname ...' 로 출력"
+	setup_case day_print="other,${TU}"
+	seed_raw D6
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "날짜 형식 줄 수(3)" "$(grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2} tmp tmp [^ ]+ host0[123] ' "$OUT")" 3
+	t_eq "날짜는 오늘" "$(grep -E ' tmp tmp [^ ]+ host01 ' "$OUT" | cut -d' ' -f1)" "$(date +%F)"
+	t_has "첫 줄 전체(vendor model 대신 tmp tmp)" "$OUT" '^[0-9-]{10} tmp tmp INFRA-A host01 10\.9\.0\.1 aa:bb:cc:dd:ee:01 eth0 sda sda5 1200 RHEL8 UEFI$'
+	t_has "총 대수" "$OUT" '^총 3대$'
+	case_end
+
+	case_begin "14b" "day_print 에 user 가 없으면 기존 출력(호스트명만)"
+	setup_case day_print="other x"
+	seed_raw D6
+	run01 'N\nN\n'
+	t_has "호스트명만 출력" "$OUT" '^host01 host02 host03$|^host01$'
+	t_eq "날짜 형식 줄 없음" "$(grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2} tmp tmp' "$OUT")" 0
+	case_end
+
+	case_begin "7l" "02: 숫자 OS 값(2025 등)은 conf s4_osver_choices 의 순번으로 pxe -os 에 전달"
+	setup_case
+	mkdir -p "$W/awxkit/conf"
+	printf 's4_osver_choices = 2024, 2025, 2026, 2026-OPC_MDP, 2026-ECAD_TCAD   # 주석\n' > "$W/awxkit/conf/${TU}_setting.conf"
+	run02 '2\n2\n3\n4\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1 B_inv-2_1ea.yml=I2,O2,B2,S2 C_inv-3_1ea.yml=I3,O3,B3,S3
+	t_rc "02 종료코드" "$RC" 0
+	t_eq "pxe -os (2025→2, 2026→3, 2026-OPC_MDP 그대로)" "$(grep '^pxe ' "$CALLS" | sed 's/.*-os \([^ ]*\) .*/\1/' | paste -sd' ')" "2 3 2026-OPC_MDP"
+	t_has "번호 변환 안내" "$S/out.txt" '^\[os 번호 변환\] pxe -os 2025 -> 2 '
+	t_has "확인표에는 원래 OS 값" "$S/out.txt" '^1 \| .*A_inv-1_1ea\.yml.* \| i1 \| 2025 \| B1 \| S1 \| 1$'
+	case_end
+
+	local sc
+	for sc in std nvme bad sdb; do
+		case_begin "15-$sc" "02: 파티션 표준 확인 (LSBLK_SCENARIO=$sc)"
+		setup_case
+		seed_raw D6
+		export LSBLK_SCENARIO=$sc
+		run02 '1\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1
+		t_rc "02 종료코드(정보 출력만이라 0)" "$RC" 0
+		t_has "단계 제목" "$S/out.txt" '파티션 표준 확인'
+		t_eq "lsblk 는 gossh 로 1회 호출" "$(grep -c '^gossh-lsblk ' "$CALLS")" 1
+		case $sc in
+			std|nvme) t_has "모두 표준" "$S/out.txt" '^모든 호스트\(3대\)가 표준 파티션입니다$' ;;
+			bad)
+				t_has "다른 파티션 있음(2대)" "$S/out.txt" '^표준과 다른 파티션이 있습니다 \(2대 / 전체 3대\)$'
+				t_has "host02 LVM" "$S/out.txt" '^host02 : LVM/논리 볼륨 rhel-root; LVM/논리 볼륨 rhel-var; / 가 물리 파티션이 아님$'
+				t_has "host03 var/home/tmp" "$S/out.txt" '^host03 : /var 25G\(20G 아님\); 표준 외 /home\(100G\); /tmp 없음$'
+				t_no "host01 은 표준" "$S/out.txt" '^host01 :' ;;
+			sdb) t_has "OS 디스크 sdb" "$S/out.txt" '^host01 : OS 설치 디스크가 sda/nvme0n1 이 아님\(sdb\)$' ;;
+		esac
+		unset LSBLK_SCENARIO
+		case_end
+	done
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -1002,6 +1080,7 @@ case9
 eof_cases
 color_cases
 feature_cases
+ext_cases
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="

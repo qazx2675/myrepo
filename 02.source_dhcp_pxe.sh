@@ -13,6 +13,23 @@ map_infra() {
 	echo "$2"
 }
 
+# pxe -os 값 변환: awxkit 은 숫자만으로 된 값(2024 등)을 "선택지 번호"로 해석하므로,
+# conf 의 s4_osver_choices 에서 해당 값의 순번을 찾아 번호로 넘긴다 (숫자가 아니거나 conf/선택지가 없으면 그대로)
+os_arg() {
+	local v=$1 conf="" cand line item idx=0
+	[[ $v =~ ^[0-9]+$ ]] || { echo "$v"; return; }
+	for cand in "$awxdir/conf/${user}_setting.conf" "$HOME/.awxkit/${user}_setting.conf"; do
+		[[ -f $cand ]] && { conf=$cand; break; }
+	done
+	[[ -n $conf ]] || { echo "$v"; return; }
+	line=$(awk -F= '$1 ~ /^[[:space:]]*s4_osver_choices[[:space:]]*$/ { sub(/^[^=]*=/, ""); sub(/#.*/, ""); print; exit }' "$conf")
+	for item in ${line//,/ }; do
+		idx=$((idx + 1))
+		if [[ $item == "$v" ]]; then echo "$idx"; return; fi
+	done
+	echo "$v"
+}
+
 # 색상: 터미널이거나 01 이 AWX_COLOR=1 로 넘겼을 때만 사용 (NO_COLOR 가 있으면 끔)
 if [[ ( -t 1 && -z $NO_COLOR ) || $AWX_COLOR == 1 ]]; then
 	ESC=$'\033'
@@ -131,10 +148,12 @@ for ((i=0; i<total; i++)); do
 	dhcp_infra=$(map_infra "$dhcp_infra_alias" "$infra"); pxe_infra=$(map_infra "$pxe_infra_alias" "$infra")
 	[[ $dhcp_infra == "$infra" ]] || echo "${YELLOW}[infra 치환] dhcp -infra $infra -> $dhcp_infra${RST}"
 	[[ $pxe_infra == "$infra" ]] || echo "${YELLOW}[infra 치환] pxe -infra $infra -> $pxe_infra${RST}"
+	pxe_os=$(os_arg "$os")
+	[[ $pxe_os == "$os" ]] || echo "${YELLOW}[os 번호 변환] pxe -os $os -> $pxe_os (conf s4_osver_choices 순번)${RST}"
 	# 동시 실행이라 프롬프트를 받을 수 없으므로 stdin 을 닫고, 출력은 끝난 뒤 순서대로 보여 줌
 	bash "$awxdir/dhcp.sh" -user "${user}" -infra "$dhcp_infra" < /dev/null > "$outdir/dhcp.out" 2>&1 &
 	dhcp_pid=$!
-	bash "$awxdir/pxe.sh" -user "${user}" -infra "$pxe_infra" -os "$os" -boot "$boot" -splunk "$splunk" < /dev/null > "$outdir/pxe.out" 2>&1 &
+	bash "$awxdir/pxe.sh" -user "${user}" -infra "$pxe_infra" -os "$pxe_os" -boot "$boot" -splunk "$splunk" < /dev/null > "$outdir/pxe.out" 2>&1 &
 	pxe_pid=$!
 	dhcp_rc=0; pxe_rc=0
 	wait "$dhcp_pid" || dhcp_rc=$?
@@ -192,6 +211,67 @@ if [[ ${#qty[@]} -gt 0 ]]; then
 	while IFS= read -r key; do echo "$key : ${qty[$key]}대"; done < <(printf '%s\n' "${!qty[@]}" | LC_ALL=C sort)
 	echo "합계 : ${sum}대"
 fi
+
+
+# 파티션 표준 확인: ${user}.txt 의 호스트에서 lsblk 를 읽어 표준 여부를 판정한다 (정보 출력만, 종료코드에 영향 없음)
+#  표준 = 물리 파티션(LVM 아님), OS 디스크는 sda 또는 nvme0n1, /boot 또는 /boot/efi 500~512M, / 30G, /var 20G, swap 존재, /tmp(나머지)
+#  이외의 마운트·파티션이 있으면 표준과 다른 파티션으로 보고한다 (용량은 lsblk 표시값 기준)
+check_partitions() {
+	echo "${BOLD}===== 파티션 표준 확인 =====${RST}"
+	if [[ ! -f ${user}.txt ]]; then warn "[!] ${user}.txt 가 없어 파티션 확인을 건너뜁니다"; return 0; fi
+	if ! command -v gossh >/dev/null 2>&1; then warn "[!] gossh 가 없어 파티션 확인을 건너뜁니다"; return 0; fi
+	awk '{print $4}' "${user}.txt" | grep . | LC_ALL=C sort -u > "$outdir/hosts"
+	gossh -script -w "$outdir/hosts" "lsblk -nl -o NAME,TYPE,SIZE,MOUNTPOINT" < /dev/null > "$outdir/lsblk"
+	awk -v red="$RED" -v grn="$GREEN" -v rst="$RST" '
+	function mib(s,   n, u) { n = s + 0; u = substr(s, length(s), 1); if (u == "K") return n / 1024; if (u == "M") return n; if (u == "G") return n * 1024; if (u == "T") return n * 1048576; return n / 1048576 }
+	function diskof(nm) { if (nm ~ /^nvme/) sub(/p[0-9]+$/, "", nm); else sub(/[0-9]+$/, "", nm); return nm }
+	{
+		i = index($0, ": "); if (i < 2) next
+		h = substr($0, 1, i - 1); n = split(substr($0, i + 2), f, /[ \t]+/)
+		if (n < 3) next
+		if (!(h in seen)) { seen[h] = 1; ord[++nh] = h }
+		k = ++cnt[h]; nm[h, k] = f[1]; ty[h, k] = f[2]; sz[h, k] = f[3]; mp[h, k] = (n >= 4 ? f[4] : "")
+	}
+	END {
+		for (x = 1; x <= nh; x++) {
+			h = ord[x]; p = ""; rootdisk = ""; boot = 0; rootok = 0; varok = 0; swap = 0; tmp = 0
+			for (k = 1; k <= cnt[h]; k++) {
+				if (ty[h, k] !~ /^(disk|part|rom|loop)$/) p = p "; LVM/논리 볼륨 " nm[h, k]
+				if (mp[h, k] == "/" && ty[h, k] == "part") rootdisk = diskof(nm[h, k])
+			}
+			if (rootdisk == "") p = p "; / 가 물리 파티션이 아님"
+			else if (rootdisk !~ /^(sda|nvme0n1)$/) p = p "; OS 설치 디스크가 sda/nvme0n1 이 아님(" rootdisk ")"
+			if (rootdisk != "") for (k = 1; k <= cnt[h]; k++) {
+				if (ty[h, k] != "part" || diskof(nm[h, k]) != rootdisk) continue
+				m = mp[h, k]; s = sz[h, k]
+				if (m == "") { if (mib(s) > 2) p = p "; 마운트 없는 파티션 " nm[h, k] "(" s ")" }
+				else if (m == "/boot" || m == "/boot/efi") { boot = 1; if (mib(s) < 500 || mib(s) > 512) p = p "; " m " " s "(500~512M 아님)" }
+				else if (m == "/") { rootok = 1; if (s != "30G") p = p "; / " s "(30G 아님)" }
+				else if (m == "/var") { varok = 1; if (s != "20G") p = p "; /var " s "(20G 아님)" }
+				else if (m == "[SWAP]") swap = 1
+				else if (m == "/tmp") tmp = 1
+				else p = p "; 표준 외 " m "(" s ")"
+			}
+			if (rootdisk != "") {
+				if (!boot) p = p "; /boot 또는 /boot/efi 없음"
+				if (!varok) p = p "; /var 없음"
+				if (!swap) p = p "; swap 없음"
+				if (!tmp) p = p "; /tmp 없음"
+			}
+			if (p == "") std++; else { bad++; badline[bad] = h " : " substr(p, 3) }
+		}
+		if (nh == 0) { print "[!] lsblk 결과가 없어 확인하지 못했습니다"; exit }
+		if (bad == 0) print grn "모든 호스트(" nh "대)가 표준 파티션입니다" rst
+		else {
+			print red "표준과 다른 파티션이 있습니다 (" bad "대 / 전체 " nh "대)" rst
+			for (y = 1; y <= bad; y++) print red badline[y] rst
+		}
+	}' "$outdir/lsblk"
+	local noresp
+	noresp=$(LC_ALL=C comm -23 "$outdir/hosts" <(sed -n 's/^\([^ :]*\): .*/\1/p' "$outdir/lsblk" | LC_ALL=C sort -u))
+	[[ -z $noresp ]] || warn "[!] lsblk 응답 없음(확인 불가) : $(printf '%s\n' "$noresp" | paste -sd' ' -)"
+}
+check_partitions
 
 [[ $fail_cnt -eq 0 && $all_fail -eq 0 ]] || exit 1
 exit 0
