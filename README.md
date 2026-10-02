@@ -183,7 +183,7 @@ bash 02.source_dhcp_pxe.sh testuser \
 |---|---|---|
 | yml | 파일명 (필수) | `INFRA-A_inventory-1234_5ea.yml` |
 | infra | 인프라 코드 | `INFRA-A`, `INFRA-B` |
-| os | 운영체제 | `RHEL8`, `RHEL9` |
+| os | 인자로 받지만 **02 가 무시하고** 아래 "OS 버전 선택"으로 정함 | (아무 값) |
 | boot | 부트 방식 | `UEFI`, `legacy`, `BIOS` |
 | splunk | Splunk 설치 여부 선택값 | `On-premise`, `Cloud`, `no` |
 
@@ -191,12 +191,13 @@ bash 02.source_dhcp_pxe.sh testuser \
 - **infra 는 소문자로 변환해 전달**합니다(`INFRA-A` → `infra-a`). awxkit 은 conf 의 `*_choices` 와 **대소문자까지 정확히 일치**해야 하고(번호 또는 값 그대로 사용 가능), os/boot/splunk 는 변환하지 않습니다. 확인표에서 `N` 으로 직접 입력한 infra 도 소문자로 변환됩니다.
 - **실행 순서**: yml 마다 `invsync` 를 먼저 실행한 뒤 `dhcp` 와 `pxe` 를 **동시에** 실행하고, 둘 다 끝나야 다음 yml 로 넘어갑니다. 동시 실행이라 프롬프트를 받을 수 없어 stdin 을 닫으며(옵션 값이 비면 대화형 대신 오류), 출력은 둘 다 끝난 뒤 `--- dhcp ---`, `--- pxe ---` 순으로 보여 줍니다. 한쪽만 실패해도 다른 쪽은 끝까지 실행됩니다.
 #### 색상 출력터미널에서 실행할 때만 색을 입힙니다(리다이렉트·파이프·`NO_COLOR=1` 이면 꺼짐, `AWX_COLOR=1` 로 강제 가능). 로그(`LOG/${user}.log`)에는 색 코드가 들어가지 않습니다.| 대상 | 색 ||---|---|| 오류 `[X]`, 응답 없음, 메뉴 `exit`, 02 실패 항목 | 빨강 || LDAP 동일 요약의 LDAP 값, 메뉴 `su`, 완료·옵션 확정·02 성공 항목 | 초록 || 경고 `[!]`, 작업진행·재시도·옵션 확인 프롬프트, AI power limit·LACP 안내, LDAP 상이 값 | 노랑 || 타임스탬프, 메뉴 `ls`·yml 파일명, 02 단계 구분선 | 청록 || 등록 대상 총 대수, 작업 리스트, 02 확인표 헤더·요약 | 굵게 |
+#### OS 버전 선택 (02, 옵션 확인표 출력 전)02 는 확인표보다 먼저 OS 버전을 묻습니다. 선택지는 `1) 2024  2) 2025  3) 2026  4) 2026-OPC_MDP  5) 2026-ECAD_TCAD` 입니다.```OS 버전 선택  1) 기본값 (2026-ECAD_TCAD) — 모든 yml 동일  2) yml 별로 직접 선택번호 : 2  1) 2024  2) 2025  3) 2026  4) 2026-OPC_MDP  5) 2026-ECAD_TCAD   (실제로는 한 줄씩 출력)a.yml에 사용할 버전 : 3        → pxe -os 2026b.yml에 사용할 버전 : 4        → pxe -os 2026-OPC_MDP```- 1번: 모든 yml 이 `2026-ECAD_TCAD`. 2번: yml 마다 번호(1~5)를 입력하며, 범위 밖이면 다시 묻습니다.- 01 이 넘기는 nodeinfo 의 os 값은 사용하지 않습니다. 선택값은 conf 의 `s4_osver_choices` 와 **대소문자까지 같아야** 하며(변환 없음), 확인표에서 `N` 으로 한 번 더 고칠 수 있습니다.
 #### 옵션 확인표 및 수동 수정
 
 ```
 번호 | yml | infra | os | boot | splunk | 호스트 수
-1 | INFRA-A_inventory-1234_5ea.yml | INFRA-A | RHEL8 | UEFI | On-premise | 5
-2 | INFRA-B_inventory-1234_3ea.yml | INFRA-B | RHEL9 | legacy | Cloud | 3
+1 | INFRA-A_inventory-1234_5ea.yml | INFRA-A | 2026-ECAD_TCAD | UEFI | On-premise | 5
+2 | INFRA-B_inventory-1234_3ea.yml | INFRA-B | 2026-OPC_MDP | legacy | Cloud | 3
 옵션이 맞습니까 (Y|N) : n
 ```
 
@@ -205,7 +206,7 @@ bash 02.source_dhcp_pxe.sh testuser \
 ```
 [1/2] INFRA-A_inventory-1234_5ea.yml
   infra [INFRA-A] : INFRA-X
-  os [RHEL8] :              (Enter = RHEL8 유지)
+  os [2026-ECAD_TCAD] :     (Enter = 현재값 유지)
   boot [UEFI] :
   splunk [On-premise] :
 ```
@@ -220,7 +221,7 @@ yml 파일은 다음 조합으로 분할됩니다. 같은 조합의 호스트는
 | nic | eth0, eth1, bond0 |
 | disk | sda, nvme0n1 |
 | 용량 | 1200, 7600 (nodeinfo 의 1.1T/7T 는 sed 로 치환된 뒤의 값) |
-| os | RHEL8, RHEL9 |
+| os | 분할 키에는 포함되나, 02 의 OS 버전은 별도 선택 |
 | boot | UEFI, legacy, BIOS |
 | splunk | On-premise, Cloud, no |
 
