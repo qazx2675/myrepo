@@ -1,0 +1,5 @@
+host01: OK
+host02: OK
+host02: FAIL selinux enforcing
+host02: FAIL ntp not synced
+host03 : OK
