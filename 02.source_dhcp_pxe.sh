@@ -18,6 +18,13 @@ fi
 
 awxdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/awxkit"
 
+# --all=<yml> : 전체 호스트 yml. 그룹 yml 이 2개 이상이고 모두 성공했을 때 마지막에 invsync 만 수행
+all_yml=""; specs=()
+for a in "$@"; do
+	if [[ $a == --all=* ]]; then all_yml=${a#--all=}; else specs+=("$a"); fi
+done
+set -- "${specs[@]}"
+
 # 인자가 없으면 기존 방식(대화형 1개)으로 단독 실행
 if [[ $# -eq 0 ]]; then
 	ls -1 *.yml 2>/dev/null
@@ -97,7 +104,7 @@ fi
 
 # yml 별 순차 실행: invsync 후 dhcp 와 pxe 는 동시 실행하고, 둘 다 끝나야 다음 yml 로 진행
 # (한 단계 실패 시 해당 yml 의 나머지는 건너뛰고 다음 yml 진행)
-results=(); fail_cnt=0
+results=(); fail_cnt=0; ok=()
 outdir=$(mktemp -d)
 trap 'rm -rf "$outdir"' EXIT
 trap 'exit 130' INT
@@ -125,12 +132,50 @@ for ((i=0; i<total; i++)); do
 	elif [[ $pxe_rc -ne 0 ]]; then
 		results+=("실패 (pxe) : $yml"); ((fail_cnt++)); continue
 	fi
-	results+=("성공 : $yml")
+	results+=("성공 : $yml"); ok[i]=1
 done
+
+# 그룹 yml 이 여러 개면, 모두 등록된 뒤 전체 yml 을 AWX 인벤토리 소스(1단계, invsync)까지만 적용해
+# 인벤토리 호스트를 전체 대상으로 갱신한다 (그룹 yml 이 1개면 생략)
+all_fail=0
+if [[ -n $all_yml && $total -gt 1 ]]; then
+	if [[ $fail_cnt -eq 0 ]]; then
+		echo "${BOLD}${CYAN}===== 전체 호스트 인벤토리 소스 갱신 (invsync) : $all_yml =====${RST}"
+		if bash "$awxdir/invsync.sh" -user "${user}" -file "$all_yml"; then
+			results+=("성공 (전체 invsync) : $all_yml")
+		else
+			results+=("실패 (전체 invsync) : $all_yml"); all_fail=1
+		fi
+	else
+		warn "[!] 실패한 yml 이 있어 전체 yml($all_yml) 인벤토리 소스 갱신은 건너뜁니다"
+	fi
+fi
 
 echo "${BOLD}===== 요약 : 전체 $total / 성공 $((total - fail_cnt)) / 실패 $fail_cnt =====${RST}"
 for r in "${results[@]}"; do
 	if [[ $r == 성공* ]]; then echo "${GREEN}${r}${RST}"; else echo "${RED}${r}${RST}"; fi
 done
-[[ $fail_cnt -eq 0 ]] || exit 1
+
+# 최종 수량: On-premise=HPC, Cloud=SDS 로 표시하고 "구분 infra OS버전" 별로 합산 (성공한 yml 기준, 대수는 yml 이름의 <N>ea)
+declare -A qty
+sum=0
+for ((i=0; i<total; i++)); do
+	[[ -n ${ok[i]} ]] || continue
+	[[ ${ymls[i]} =~ _([0-9]+)ea(\.|$) ]] || continue
+	cnt=${BASH_REMATCH[1]}
+	case ${splunks[i]} in
+		On-premise) kind=HPC ;;
+		Cloud) kind=SDS ;;
+		*) kind=${splunks[i]} ;;
+	esac
+	key="$kind ${infras[i]} ${oss[i]}"
+	qty[$key]=$(( ${qty[$key]:-0} + cnt )); sum=$((sum + cnt))
+done
+if [[ ${#qty[@]} -gt 0 ]]; then
+	echo "${BOLD}===== 최종 수량 =====${RST}"
+	while IFS= read -r key; do echo "$key : ${qty[$key]}대"; done < <(printf '%s\n' "${!qty[@]}" | LC_ALL=C sort)
+	echo "합계 : ${sum}대"
+fi
+
+[[ $fail_cnt -eq 0 && $all_fail -eq 0 ]] || exit 1
 exit 0

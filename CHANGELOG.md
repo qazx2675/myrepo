@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
+### 변경
+- 01: `infra_alias` 추가(nodeinfo 의 미등록 infra 이름 치환, `adjfg:infra1`), 최상단 변수 7개
+- 02: 그룹 yml 2개 이상이고 모두 성공하면 마지막에 전체 yml 로 invsync(AWX 소스 1단계)만 실행, 1개면 생략. 01 이 `--all=<yml>` 전달
+- 02: 최종 수량 출력(On-premise=HPC, Cloud=SDS, `구분 infra OS버전 : N대` + 합계)
+- 01: 마지막에 등록 후 확인(붙여넣은 서버가 모두 등록 대상에 있는지) 추가
+- test: 7j·12a·12b·13a-c 추가, 전체 invsync 반영
+
 ## [0.1.3] - 2026-10-02
 
 ### 변경
