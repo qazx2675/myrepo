@@ -55,9 +55,11 @@ splitdir=$(mktemp -d)        # 분할/전체 입력 파일 임시 디렉터리
 add_tmp "$hostfile" "$splitdir"
 
 # ==== [1] user ====
-user() {
-	# 현장 코드로 교체: 이 함수가 $user 를 설정한다
-	:
+user(){
+user_route=""
+bash $user_route/info_mn.sh
+read -p "Input Number: " user_choice
+user=`bash $user_route/info.sh $user_choice`
 }
 
 user
