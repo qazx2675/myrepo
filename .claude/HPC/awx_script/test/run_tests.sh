@@ -450,7 +450,7 @@ case34() {
 	setup_case
 	seed_raw D3
 	cp "$W/$TU.txt" "$S/orig_input.txt"
-	run01 'N\nY\n\nls\nnofile.yml\nsu\nY\n'
+	run01 'N\nY\n\nls\nnofile.yml\nsu\n1\nY\n'
 
 	case_begin "3" "그룹 수=고유 조합 수(10), ev/s/그 외 분리, 레거시→legacy (D3: 14대)"
 	t_rc "01 종료코드" "$RC" 0
@@ -464,16 +464,16 @@ case34() {
 	t_eq "custom_inventory.sh ssh 호출 11회" "$(grep -c '^ssh repo.lab bash /root/Inventory/custom_inventory.sh /root/Inventory/' "$CALLS")" 11
 	t_eq "마지막 custom_inventory 호출은 all" "$(grep 'custom_inventory.sh' "$CALLS" | tail -1 | awk '{print $NF}')" "/root/Inventory/${TU}_all.yaml"
 	pxe_exp=$(printf '%s\n' \
-		"-infra infra-a -os RHEL8 -boot BIOS -splunk On-premise" \
-		"-infra infra-a -os RHEL8 -boot legacy -splunk On-premise" \
-		"-infra infra-a -os RHEL8 -boot UEFI -splunk Cloud" \
-		"-infra infra-a -os RHEL8 -boot UEFI -splunk no" \
-		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra infra-a -os RHEL8 -boot UEFI -splunk On-premise" \
-		"-infra infra-a -os RHEL9 -boot UEFI -splunk On-premise" \
-		"-infra infra-b -os RHEL8 -boot UEFI -splunk On-premise" | LC_ALL=C sort)
+		"-infra infra-a -os 2026-ECAD_TCAD -boot BIOS -splunk On-premise" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot legacy -splunk On-premise" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot UEFI -splunk Cloud" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot UEFI -splunk no" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot UEFI -splunk On-premise" \
+		"-infra infra-a -os 2026-ECAD_TCAD -boot UEFI -splunk On-premise" \
+		"-infra infra-b -os 2026-ECAD_TCAD -boot UEFI -splunk On-premise" | LC_ALL=C sort)
 	t_eq "pxe 옵션 10건(ev→no, s→Cloud, 레거시→legacy)" "$(grep '^pxe ' "$CALLS" | sed "s/^pxe -user $TU //" | LC_ALL=C sort)" "$pxe_exp"
 	t_no "pxe 에 한글 레거시 원문 미전달" "$CALLS" '^pxe .*레거시'
 	t_eq "02 가 그룹 yml 만큼 invsync 10회" "$(grep -c '^invsync ' "$CALLS")" 10
@@ -511,10 +511,10 @@ case5() {
 	exp=$(printf '%s\n' \
 		"tmp tmp SEC spice01 10.5.0.1 aa:bb:cc:dd:ee:00 eth0 sda sda5 960 7.9" \
 		"tmp tmp SEC host02 10.5.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 960 7.9")
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "1회차 종료코드" "$RC" 0
 	t_eq "1회차 dhcp_pool 내용(MAC 보정 반영)" "$(cat "$W/dhcp_pool/dhcp_pool_delete_info.txt")" "$exp"
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "2회차 종료코드" "$RC" 0
 	t_eq "2회차 누적(4줄 = 기존+동일 2줄)" "$(cat "$W/dhcp_pool/dhcp_pool_delete_info.txt")" "$exp"$'\n'"$exp"
 	t_notmp
@@ -527,7 +527,7 @@ case6() {
 	case_begin "6-same" "LDAP 동일 한 줄 요약 + ai_server_list 일치(host02) → power limit 안내"
 	setup_case ai_server_list='host02|zz99'
 	seed_raw D6; export GOSSH_SCENARIO=same
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_has "LDAP 동일 요약" "$OUT" '^모든 호스트의 LDAP이 INFO LDAP INFRA1 SITE1으로 동일함$'
 	t_has "AI power limit 안내" "$OUT" '^AI GPU서버는 power limit설정이 필요합니다'
@@ -545,7 +545,7 @@ case6() {
 	case_begin "6-diff" "LDAP 상이 → 값별 호스트 나열, ai_server_list 비일치 → 안내 없음"
 	setup_case ai_server_list='zzz01|zzz02'
 	seed_raw D6; export GOSSH_SCENARIO=diff
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_has "값1: host01" "$OUT" '^INFO LDAP INFRA1 SITE1 : host01$'
 	t_has "값2: host02 host03" "$OUT" '^INFO LDAP INFRA9 SITE9 : host02 host03$'
@@ -558,7 +558,7 @@ case6() {
 	case_begin "6-lacp" "LACP 혼재 → 호스트 나열 + lacp_comment, ai_server_list 빈 값도 오류 없이 진행"
 	setup_case ai_server_list=''
 	seed_raw D6; export GOSSH_SCENARIO=lacp
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_eq "LACP 호스트 줄 + 코멘트 줄" "$(grep -A1 -x 'host01 host02' "$OUT" | paste -sd'/')" "host01 host02/LACP-COMMENT-SENTINEL"
 	t_has "LDAP 동일 요약 병행" "$OUT" '^모든 호스트의 LDAP이 .*동일함$'
@@ -571,7 +571,7 @@ case6() {
 	case_begin "6-noresp" "응답 없음 호스트 보고, ai_server_list 접두어(host0) 는 정확 일치 아님 → 안내 없음"
 	setup_case ai_server_list='host0'
 	seed_raw D6; export GOSSH_SCENARIO=noresp
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_has "응답 없음 : host03" "$OUT" '^응답 없음 : host03$'
 	t_no "AI 안내 없음(접두어 불일치)" "$OUT" 'AI GPU서버'
@@ -587,15 +587,15 @@ case7() {
 	case_begin "7a" "02: 그룹 yml 수만큼 invsync→dhcp→pxe, 올바른 -infra/-os/-boot/-splunk"
 	setup_case
 	seed_raw D7
-	EXP_INFRA=([IA]=ia [IB]=ib [IC]=ic); EXP_OS=([IA]=RHEL8 [IB]=RHEL9 [IC]=RHEL8)
+	EXP_INFRA=([IA]=ia [IB]=ib [IC]=ic); EXP_OS=([IA]=2026-ECAD_TCAD [IB]=2026-ECAD_TCAD [IC]=2026-ECAD_TCAD)
 	EXP_BOOT=([IA]=UEFI [IB]=BIOS [IC]=legacy); EXP_SPL=([IA]=On-premise [IB]=no [IC]=Cloud)
-	run01 'N\nY\nls\nsu\nY\n'
+	run01 'N\nY\nls\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	verify_chain "7a"
 	t_eq "invsync 3회(all 제외)" "$(grep -c '^invsync ' "$CALLS")" 3
 	t_eq "invsync -file 의 _Nea (IA=2,IB=1,IC=1)" "$(grep '^invsync ' "$CALLS" | sed 's/.*-file \(I.\)_inventory-[0-9]*_\([0-9]*\)ea.yml/\1=\2/' | paste -sd' ')" "IA=2 IB=1 IC=1"
 	t_has "확인표 헤더" "$OUT" '^번호 \| yml \| infra \| os \| boot \| splunk \| 호스트 수$'
-	t_has "확인표 IC 행(infra 소문자화)" "$OUT" '^3 \| IC_inventory-[0-9]+_1ea\.yml \| ic \| RHEL8 \| legacy \| Cloud \| 1$'
+	t_has "확인표 IC 행(infra 소문자화)" "$OUT" '^3 \| IC_inventory-[0-9]+_1ea\.yml \| ic \| 2026-ECAD_TCAD \| legacy \| Cloud \| 1$'
 	t_has "요약" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
 	t_notmp
 	case_end
@@ -604,14 +604,14 @@ case7() {
 	case_begin "7b" "02: 확인표 N → 수동 값 반영(Enter=유지)"
 	setup_case
 	seed_raw D7
-	EXP_INFRA=([IA]=ia [IB]=ibx [IC]=ic); EXP_OS=([IA]=RHEL7 [IB]=RHEL9 [IC]=RHEL8)
+	EXP_INFRA=([IA]=ia [IB]=ibx [IC]=ic); EXP_OS=([IA]=RHEL7 [IB]=2026-ECAD_TCAD [IC]=2026-ECAD_TCAD)
 	EXP_BOOT=([IA]=UEFI [IB]=UEFI [IC]=legacy); EXP_SPL=([IA]=On-premise [IB]=Cloud [IC]=Cloud)
-	run01 'N\nY\nls\nsu\nN\n''\nRHEL7\n\n\n''IBX\n\nUEFI\nCloud\n''\n\n\n\n'
+	run01 'N\nY\nls\nsu\n1\nN\n''\nRHEL7\n\n\n''IBX\n\nUEFI\nCloud\n''\n\n\n\n'
 	t_rc "01 종료코드" "$RC" 0
 	verify_chain "7b"
 	t_has "옵션 확정 출력" "$OUT" '^옵션 확정$'
 	t_has "확정표 IA 행(수동 os)" "$OUT" '^1 \| IA_inventory-[0-9]+_2ea\.yml \| ia \| RHEL7 \| UEFI \| On-premise \| 2$'
-	t_has "확정표 IB 행(수동 infra/boot/splunk)" "$OUT" '^2 \| IB_inventory-[0-9]+_1ea\.yml \| ibx \| RHEL9 \| UEFI \| Cloud \| 1$'
+	t_has "확정표 IB 행(수동 infra/boot/splunk)" "$OUT" '^2 \| IB_inventory-[0-9]+_1ea\.yml \| ibx \| 2026-ECAD_TCAD \| UEFI \| Cloud \| 1$'
 	t_notmp
 	case_end
 
@@ -620,7 +620,7 @@ case7() {
 	setup_case
 	seed_raw D7
 	export FAIL_CALL="^dhcp -user $TU -infra ib$"
-	run01 'N\nY\nls\nsu\nY\nN\n'
+	run01 'N\nY\nls\nsu\n1\nY\nN\n'
 	t_rc "01 종료코드 1" "$RC" 1
 	t_has "요약 줄" "$OUT" '요약 : 전체 3 / 성공 2 / 실패 1'
 	t_has "실패 항목" "$OUT" '^실패 \(dhcp\) : IB_inventory-[0-9]+_1ea\.yml$'
@@ -636,7 +636,7 @@ case7() {
 	seed_raw D7
 	export FAIL_CALL="^dhcp -user $TU -infra ib$" FAIL_ONCE_FILE=$S/failonce
 	: > "$S/failonce"
-	run01 'N\nY\nls\nsu\nY\nY\nY\n'
+	run01 'N\nY\nls\nsu\n1\nY\nY\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_eq "작업 리스트 2회 출력" "$(grep -c '^작업 리스트$' "$OUT")" 2
 	t_eq "invsync 6회(재시도 포함)" "$(grep -c '^invsync ' "$CALLS")" 6
@@ -648,25 +648,38 @@ case7() {
 	case_begin "7d" "02 직접 실행: 첫 yml invsync 실패 → 다음 yml 진행 + 요약 + exit 1"
 	setup_case
 	export FAIL_CALL='^invsync .*-file X_inv-1_1ea\.yml$'
-	run02 'Y\n' "$TU" X_inv-1_1ea.yml=I1,O1,B1,S1 Y_inv-2_1ea.yml=I2,O2,B2,S2
+	run02 '1\nY\n' "$TU" X_inv-1_1ea.yml=I1,O1,B1,S1 Y_inv-2_1ea.yml=I2,O2,B2,S2
 	t_rc "02 종료코드 1" "$RC" 1
 	t_has "요약 줄" "$S/out.txt" '요약 : 전체 2 / 성공 1 / 실패 1'
 	t_has "실패 invsync 항목" "$S/out.txt" '^실패 \(invsync\) : X_inv-1_1ea\.yml$'
 	t_has "성공 항목" "$S/out.txt" '^성공 : Y_inv-2_1ea\.yml$'
 	t_eq "X 의 dhcp/pxe 건너뜀" "$(grep -cE '^(dhcp|pxe) .*-infra i1' "$CALLS")" 0
-	t_eq "Y 의 pxe 호출" "$(grep '^pxe ' "$CALLS")" "pxe -user $TU -infra i2 -os O2 -boot B2 -splunk S2"
+	t_eq "Y 의 pxe 호출" "$(grep '^pxe ' "$CALLS")" "pxe -user $TU -infra i2 -os 2026-ECAD_TCAD -boot B2 -splunk S2"
 	case_end
 
 	# 7h: dhcp/pxe 동시 실행 + 둘 다 끝나야 다음 yml
 	case_begin "7h" "02: dhcp·pxe 동시 실행, 둘 다 끝난 뒤에 다음 yml 진행"
 	setup_case
 	export STUB_SLEEP=1
-	run02 'Y\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1 B_inv-2_1ea.yml=I2,O2,B2,S2 C_inv-3_1ea.yml=I3,O3,B3,S3
+	run02 '1\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1 B_inv-2_1ea.yml=I2,O2,B2,S2 C_inv-3_1ea.yml=I3,O3,B3,S3
 	t_rc "02 종료코드" "$RC" 0
 	# invsync=I, dhcp/pxe 시작=S, 종료=E.  동시 실행이면 yml 마다 "I S S E E" (순차였다면 "I S E S E")
 	t_eq "이벤트 순서(yml 3개)" "$(awk '$1=="start"&&$2=="invsync"{printf "I "} $1=="start"&&$2!="invsync"{printf "S "} $1=="end"&&$2!="invsync"{printf "E "}' "$STUBLOG/events.log" | sed 's/ $//')" "I S S E E I S S E E I S S E E"
 	t_has "요약" "$S/out.txt" '요약 : 전체 3 / 성공 3 / 실패 0'
-	t_eq "dhcp/pxe 둘 다 실패 시 한 항목으로 요약" "$(unset STUB_SLEEP; : > "$CALLS"; export FAIL_CALL='^(dhcp|pxe) '; run02 'Y\n' "$TU" Z_inv-1_1ea.yml=I1,O1,B1,S1 >/dev/null 2>&1; grep -c '^실패 (dhcp, pxe) : Z_inv-1_1ea.yml$' "$S/out.txt")" 1
+	t_eq "dhcp/pxe 둘 다 실패 시 한 항목으로 요약" "$(unset STUB_SLEEP; : > "$CALLS"; export FAIL_CALL='^(dhcp|pxe) '; run02 '1\nY\n' "$TU" Z_inv-1_1ea.yml=I1,O1,B1,S1 >/dev/null 2>&1; grep -c '^실패 (dhcp, pxe) : Z_inv-1_1ea.yml$' "$S/out.txt")" 1
+	case_end
+
+	# 7i: OS 버전 선택 — 2번(yml 별 선택)
+	case_begin "7i" "02: OS 버전 2번 선택 → yml 별 번호가 pxe -os 에 반영, 잘못된 번호는 재질문"
+	setup_case
+	run02 '2\n3\n9\n4\n5\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1 B_inv-2_1ea.yml=I2,O2,B2,S2 C_inv-3_1ea.yml=I3,O3,B3,S3
+	t_rc "02 종료코드" "$RC" 0
+	t_has "선택지 목록 출력" "$S/out.txt" '^  4\) 2026-OPC_MDP$'
+	t_has "잘못된 번호(9) 재질문" "$S/out.txt" '^\[!\] 1~5 중에서 선택하세요$'
+	t_eq "pxe -os (A=3 B=4 C=5)" "$(grep '^pxe ' "$CALLS" | sed 's/.*-os \([^ ]*\) .*/\1/' | paste -sd' ')" "2026 2026-OPC_MDP 2026-ECAD_TCAD"
+	t_has "확인표에 선택 반영" "$S/out.txt" '^2 \| .*B_inv-2_1ea\.yml.* \| i2 \| 2026-OPC_MDP \| B2 \| S2 \| 1$'
+	t_has "OS 질문이 옵션 확인표보다 먼저" "$S/out.txt" 'OS 버전 선택'
+	t_eq "os 선택 질문이 확인표 헤더보다 앞" "$(grep -n 'OS 버전 선택\|^번호 | yml' "$S/out.txt" | head -2 | cut -d: -f2 | cut -c1-8 | paste -sd'|')" "OS 버전 선택|번호 | yml"
 	case_end
 
 	# 7e: 인자 없이 02 단독(대화형)
@@ -734,7 +747,7 @@ case8() {
 	fifo_wait '총 3대' 15
 	sleep 0.5
 	t_eq "Y 입력 전 ssh/scp 호출 0" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
-	printf 'Y\nsu\nY\n' >&9
+	printf 'Y\nsu\n1\nY\n' >&9
 	fifo_finish 90
 	t_eq "프로세스 정상 종료" "$FRC/$FSTUCK" "0/0"
 	t_eq "Y 이후 첫 ssh = delhost" "$(grep -m1 '^ssh ' "$CALLS")" "ssh delhost.lab bash /root/server/delhost_$TU"
@@ -779,7 +792,7 @@ case9() {
 	setup_case
 	seed_nodeinfo D6; export NODEINFO_MODE=msg
 	touch "$S/marker"; sleep 1
-	run01 'Y\nY\nls\nsu\nY\n'
+	run01 'Y\nY\nls\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	left=$(cd "$W" && find . -newer "$S/marker" -type f | LC_ALL=C sort)
 	allowed_ok=""
@@ -845,7 +858,7 @@ color_cases() {
 	case_begin "11a" "AWX_COLOR=1: LDAP 값 초록·총 대수 굵게·02 요약 초록, LOG 에는 색 코드 없음"
 	setup_case
 	seed_raw D6; export GOSSH_SCENARIO=same AWX_COLOR=1
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_has "LDAP 값만 초록" "$OUT" "^모든 호스트의 LDAP이 ${E}\[32mINFO LDAP INFRA1 SITE1${E}\[0m으로 동일함$"
 	t_has "총 대수 굵게" "$OUT" "^${E}\[1m총 [0-9]+대${E}\[0m$"
@@ -858,7 +871,7 @@ color_cases() {
 	case_begin "11b" "기본(비터미널): 색 코드 없음, NO_COLOR 면 AWX_COLOR=1 이어도 터미널 판정만 끔"
 	setup_case
 	seed_raw D6; export GOSSH_SCENARIO=same
-	run01 'N\nY\nsu\nY\n'
+	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
 	t_eq "출력에 색 코드 없음" "$(grep -c "$E" "$OUT")" 0
 	case_end

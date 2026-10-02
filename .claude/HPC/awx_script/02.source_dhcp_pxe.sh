@@ -52,6 +52,30 @@ print_table(){
 	done
 }
 
+# OS 버전 선택: 01 이 넘긴 os 값은 쓰지 않고 아래 선택지로 정한다 (옵션 확인표 출력 전에 질문)
+os_choices=(2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD)
+default_os="2026-ECAD_TCAD"
+while true; do
+	echo "${BOLD}OS 버전 선택${RST}"
+	echo "  ${CYAN}1${RST}) 기본값 (${default_os}) — 모든 yml 동일"
+	echo "  ${CYAN}2${RST}) yml 별로 직접 선택"
+	read -r -p "${YELLOW}번호 : ${RST}" os_mode || { err "[X] 입력이 끝났습니다"; exit 1; }
+	[[ $os_mode == [12] ]] && break
+done
+if [[ $os_mode == 1 ]]; then
+	for ((i=0; i<total; i++)); do oss[i]=$default_os; done
+else
+	for ((j=0; j<${#os_choices[@]}; j++)); do echo "  ${CYAN}$((j+1))${RST}) ${os_choices[j]}"; done
+	for ((i=0; i<total; i++)); do
+		while true; do
+			read -r -p "${YELLOW}${ymls[i]}에 사용할 버전 : ${RST}" n || { err "[X] 입력이 끝났습니다"; exit 1; }
+			[[ $n =~ ^[1-5]$ ]] && break
+			warn "[!] 1~${#os_choices[@]} 중에서 선택하세요"
+		done
+		oss[i]=${os_choices[n-1]}
+	done
+fi
+
 print_table
 while true; do
 	read -r -p "${YELLOW}옵션이 맞습니까 (Y|N) : ${RST}" ok || { err "[X] 입력이 끝났습니다"; exit 1; }
