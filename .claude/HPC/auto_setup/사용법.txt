@@ -1,0 +1,105 @@
+# auto_setup - 직접 칠 명령어 모음 (각 명령 위에 설명)
+
+# ===== 1. 빌드 · 설치 =====
+
+# 작업 폴더로 이동 (저장소 안의 auto_setup 폴더)
+cd /root/saccae-src/.claude/HPC/auto_setup
+
+# 빌드만 (현재 폴더에 ./auto_setup 생성, go 가 PATH 에 있어야 함)
+go build -o auto_setup .
+
+# 빌드 + /usr/local/bin 설치 + cron(매분 ensure) 등록 + tmpfiles 정리 제외 등록 (root, 여러 번 실행해도 안전)
+bash setup.sh
+
+# ===== 2. 단계별 점검 (설명 → 실행 → 확인할 것 → Enter) =====
+
+# 기본 점검 (데이터는 /tmp/auto_setup_manual 만 사용, 운영 /tmp/auto_setup 은 건드리지 않음)
+bash test/manual_check.sh
+
+# Enter 대기 없이 전 단계 연속 실행 (wall·설치 단계는 건너뜀)
+bash test/manual_check.sh -y
+
+# 5단계부터 다시 시작
+bash test/manual_check.sh -s 5
+
+# 4단계 실제 ICMP 점검에 쓸 주소 지정 (응답하는 IP / 응답 없는 IP, root 필요)
+PING_UP=192.168.0.59 PING_DOWN=192.168.0.250 bash test/manual_check.sh -s 4
+
+# 9단계 설치 점검까지 포함 (setup.sh 실행 전에 yes 확인을 받음)
+bash test/manual_check.sh --install
+
+# ===== 3. 자동 테스트 =====
+
+# Go 단위 테스트
+go test ./...
+
+# 정적 점검
+go vet ./... && gofmt -l .
+
+# 목업 E2E (가짜 gossh/ssh/wall, 스크래치 사용, root 필요, 약 1분)
+bash test/run_e2e.sh
+
+# E2E 스크래치를 지우지 않고 남겨서 로그를 보고 싶을 때
+KEEP_SCRATCH=1 bash test/run_e2e.sh
+
+# ===== 4. 운영 중 확인 · 제어 =====
+
+# 데몬이 떠 있는지 (cron 이 매분 ensure 로 살려 둠)
+pgrep -af 'auto_setup daemon'
+
+# 작업별 진행 상태 (대기/설치중/READY/처리완료, 남은 호스트)
+auto_setup status
+
+# 완료 메시지(wall)에 나온 4자리 code 의 결과 코멘트 출력
+auto_setup code 4821
+
+# 무기한 감시 중인 작업 종료 (status 에 나온 jobid)
+auto_setup cancel 20261002-153000-user1
+
+# 로그 보기 (상태 변화·실행·오류만 기록됨)
+tail -f /tmp/auto_setup/auto_setup.log
+
+# 데몬을 수동으로 한 번 기동 (보통은 cron 이 대신 해 줌)
+auto_setup ensure
+
+# ===== 5. os6_mgmt(RHEL6) 용 빌드 · 배치 =====
+
+# [Go 1.20 서버(.60)] 정적 빌드 → auto_setup_os6 생성
+bash build_os6.sh
+
+# [Go 1.20 서버] os6_mgmt 의 os6_autosetup 경로로 'auto_setup' 이름으로 복사 (경로·호스트는 환경에 맞게)
+scp auto_setup_os6 root@<os6_mgmt>:<os6_autosetup 경로>/auto_setup
+
+# [os6_mgmt] 실행 권한 부여
+ssh root@<os6_mgmt> "chmod 755 <os6_autosetup 경로>/auto_setup"
+
+# 배치 확인 (stdin 목록을 ping 해서 'host up|down' 이 나오면 정상)
+echo 127.0.0.1 | ssh root@<os6_mgmt> "<os6_autosetup 경로>/auto_setup probe"
+
+# ===== 6. 빈 변수 채우기 (테스트 때만, 소스 수정·커밋 금지) =====
+
+# 소스(main.go)는 건드리지 않고 빌드할 때만 값을 주입 (경로는 환경에 맞게)
+go build -ldflags "-X main.os_check_sh=/절대경로/os_check_final_annotated.sh -X main.os6_mgmt=<os6_mgmt 호스트> -X main.os6_gossh=<os6_mgmt 의 gossh 전체경로> -X main.os6_autosetup=<os6_mgmt 의 auto_setup 디렉터리>" -o auto_setup .
+
+# main.go 최상단 빈 변수 4개가 비어 있는지 확인 (커밋 전, 4줄 모두 = "" 여야 함)
+grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh)\s+=' main.go
+
+# 실수로 main.go 를 고쳤다면 되돌리기
+git checkout -- main.go
+
+# ===== 7. 제거 =====
+
+# 데몬 종료
+pkill -f 'auto_setup daemon'
+
+# cron 의 ensure 줄만 제거
+crontab -l | grep -vF '/usr/local/bin/auto_setup ensure' | crontab -
+
+# 설치 파일 · tmpfiles 설정 제거
+rm -f /usr/local/bin/auto_setup /etc/tmpfiles.d/auto_setup.conf
+
+# 데이터(작업 상태·code·로그) 제거 — 진행 중 작업이 사라지므로 주의
+rm -rf /tmp/auto_setup
+
+# 점검용 데이터 제거 (manual_check.sh 를 중간에 끊었을 때)
+pkill -f 'auto_setup daemon'; rm -rf /tmp/auto_setup_manual
