@@ -50,7 +50,7 @@
 | (파싱) | `<yml>=<infra>,<os>,<boot>,<splunk>` | `"$@"` | 배열: `ymls`, `infras`, `oss`, `boots`, `splunks` |
 | (표) | `print_table` | 배열 | 옵션 확인표 출력 (Y/N 프롬프트) |
 | (수정) | N → 값 재입력 | 프롬프트 Enter/입력 | 배열 갱신 (Enter = 유지) |
-| (실행) | yml별 invsync→dhcp→pxe | 배열 순회 | 호출 기록, 실패 여부 누적 |
+| (실행) | yml별 invsync → (dhcp ∥ pxe 동시) | 배열 순회, 임시 디렉터리에 출력 보관 | dhcp·pxe 가 모두 끝나야 다음 yml, 실패 여부 누적 |
 | (요약) | 성공/실패 카운트 | 배열 | "요약 : 전체 X / 성공 Y / 실패 Z" + exit 코드 |
 
 ## 흐름도
