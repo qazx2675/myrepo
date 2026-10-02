@@ -112,7 +112,11 @@ setup_case() {
 			-e "s#/root/user/#$S/root_user/#g" \
 			"$W/$F01"
 		if [[ $cfg_user == 1 ]]; then
-			sed -i -e '/^user() {/,/^}/ s/^\t:$/\tuser=testuser/' "$W/$F01"
+			# 복사본의 user(){...} 본문(현장 코드)을 테스트 user 설정으로 통째로 대체
+			sed -i -e '/^user(){/,/^}/c\
+user(){\
+\tuser=testuser\
+}' "$W/$F01"
 		fi
 		# 무결성: 복사본과 원본의 차이는 최상단 변수/user 본문/git 경로 줄뿐이어야 한다
 		local bad

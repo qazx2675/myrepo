@@ -54,18 +54,20 @@ infra_alias=""               # ← (선택) 등록되지 않은 infra 이름 치
 
 `ai_server_list`·`infra_alias` 외 5개는 필수이며, 작업진행 Y 직후(원격 삭제 전)에 비어 있으면 `[X] <변수> 가 비어 있습니다` 로 종료합니다. 값은 현장 값으로 직접 채우십시오(저장소에는 모두 빈 값으로 둡니다).
 
-### user() 함수에 현장 코드 붙이기
+### user() 함수 (사용자 선택)
 
-`user()` 함수는 빈 함수로 두고, 현장 환경에 맞는 코드를 직접 삽입합니다. 이 함수는 변수 `$user` 를 설정해야 합니다.
+`user()` 는 아래 현장 코드를 그대로 사용합니다. `user_route` 는 `info_mn.sh`·`info.sh` 가 있는 경로로 현장에서 채우십시오(저장소에는 빈 값).
 
 ```bash
-user() {
-	# 현장 코드로 교체: 이 함수가 $user 를 설정한다
-	:
+user(){
+user_route=""
+bash $user_route/info_mn.sh
+read -p "Input Number: " user_choice
+user=`bash $user_route/info.sh $user_choice`
 }
 ```
 
-현장 코드는 어떤 방식이든 마지막에 `user` 변수만 채우면 됩니다. 호출 후 `$user` 가 비어 있으면 `[X] user 값이 없습니다 (user 함수 확인)` 로 종료하며, 별도 입력 프롬프트는 없습니다.
+이 함수가 `user` 변수를 설정합니다. 호출 후 `$user` 가 비어 있으면 `[X] user 값이 없습니다 (user 함수 확인)` 로 종료하며, 별도 입력 프롬프트는 없습니다.
 
 ## 사용 방법
 

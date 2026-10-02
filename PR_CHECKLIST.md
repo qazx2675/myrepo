@@ -66,14 +66,16 @@ AWX 노드정보 V2 스크립트 풀리퀘스트 검증 항목. 모든 항목을
   ```
   - 모두 `=""` 상태 (테스트값 포함 금지)
   
-- [ ] **user() 함수** 빈 본문 확인:
+- [ ] **user() 함수** 확인:
   ```bash
-  user() {
-  	# 현장 코드로 교체: 이 함수가 $user 를 설정한다
-  	:
+  user(){
+  user_route=""
+  bash $user_route/info_mn.sh
+  read -p "Input Number: " user_choice
+  user=`bash $user_route/info.sh $user_choice`
   }
   ```
-  - `:` 만 있음 (테스트 값 포함 금지)
+  - `user_route=""` 가 비어 있음 (테스트 값 포함 금지)
 
 - [ ] **sed 3줄** 원문 유지:
   ```bash
@@ -128,11 +130,11 @@ grep -n '^repohost=""' 01.AWX_nodeinfo_V2.sh  # 확인: 모두 비어 있음
 grep -n '^svr_dir=""' 01.AWX_nodeinfo_V2.sh
 
 # 4. user() 함수 확인
-sed -n '/^user() {/,/^}$/p' 01.AWX_nodeinfo_V2.sh  # 확인: 본문이 :
+sed -n '/^user() {/,/^}$/p' 01.AWX_nodeinfo_V2.sh  # 확인: user_route="" 인지
 
 # 5. git 커밋
 git status  # 변경 파일 확인
-git diff 01.AWX_nodeinfo_V2.sh  # 최상단 변수 7개 + user() 빈 본문만 확인
+git diff 01.AWX_nodeinfo_V2.sh  # 최상단 변수 7개 + user() 만 확인
 git add .
 git commit -m "feat(awx-nodeinfo): …"
 git push origin master
