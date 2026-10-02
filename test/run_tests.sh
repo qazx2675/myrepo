@@ -604,14 +604,14 @@ case7() {
 	case_begin "7b" "02: 확인표 N → 수동 값 반영(Enter=유지)"
 	setup_case
 	seed_raw D7
-	EXP_INFRA=([IA]=ia [IB]=IBX [IC]=ic); EXP_OS=([IA]=RHEL7 [IB]=RHEL9 [IC]=RHEL8)
+	EXP_INFRA=([IA]=ia [IB]=ibx [IC]=ic); EXP_OS=([IA]=RHEL7 [IB]=RHEL9 [IC]=RHEL8)
 	EXP_BOOT=([IA]=UEFI [IB]=UEFI [IC]=legacy); EXP_SPL=([IA]=On-premise [IB]=Cloud [IC]=Cloud)
 	run01 'N\nY\nls\nsu\nN\n''\nRHEL7\n\n\n''IBX\n\nUEFI\nCloud\n''\n\n\n\n'
 	t_rc "01 종료코드" "$RC" 0
 	verify_chain "7b"
 	t_has "옵션 확정 출력" "$OUT" '^옵션 확정$'
 	t_has "확정표 IA 행(수동 os)" "$OUT" '^1 \| IA_inventory-[0-9]+_2ea\.yml \| ia \| RHEL7 \| UEFI \| On-premise \| 2$'
-	t_has "확정표 IB 행(수동 infra/boot/splunk)" "$OUT" '^2 \| IB_inventory-[0-9]+_1ea\.yml \| IBX \| RHEL9 \| UEFI \| Cloud \| 1$'
+	t_has "확정표 IB 행(수동 infra/boot/splunk)" "$OUT" '^2 \| IB_inventory-[0-9]+_1ea\.yml \| ibx \| RHEL9 \| UEFI \| Cloud \| 1$'
 	t_notmp
 	case_end
 
