@@ -1,5 +1,18 @@
 #!/bin/bash
 # AWX 인벤토리 소스 등록 / DHCP / PXE - yml 별 자동 반복 (인자: <yml>=<infra>,<os>,<boot>,<splunk> ...)
+# dhcp / pxe 가 서로 다른 infra 이름을 쓰는 경우의 치환: "표시infra:넘길값" (공백/쉼표 구분, 표시infra 는 대소문자 무시). 비우면 치환 없음
+dhcp_infra_alias=""          # 예: "infra1:asdf"   → dhcp -infra asdf
+pxe_infra_alias=""           # 예: "infra1:asdfl"  → pxe  -infra asdfl
+# 치환 목록에서 infra 에 해당하는 값을 찾는다 (없으면 infra 그대로): map_infra "<목록>" "<infra>"
+map_infra() {
+	local p k v=${2,,}
+	for p in ${1//,/ }; do
+		k=${p%%:*}
+		if [[ ${k,,} == "$v" && $p == *:* ]]; then echo "${p#*:}"; return; fi
+	done
+	echo "$2"
+}
+
 # 색상: 터미널이거나 01 이 AWX_COLOR=1 로 넘겼을 때만 사용 (NO_COLOR 가 있으면 끔)
 if [[ ( -t 1 && -z $NO_COLOR ) || $AWX_COLOR == 1 ]]; then
 	ESC=$'\033'
@@ -115,10 +128,13 @@ for ((i=0; i<total; i++)); do
 	if ! bash "$awxdir/invsync.sh" -user "${user}" -file "$yml"; then
 		results+=("실패 (invsync) : $yml"); ((fail_cnt++)); continue
 	fi
+	dhcp_infra=$(map_infra "$dhcp_infra_alias" "$infra"); pxe_infra=$(map_infra "$pxe_infra_alias" "$infra")
+	[[ $dhcp_infra == "$infra" ]] || echo "${YELLOW}[infra 치환] dhcp -infra $infra -> $dhcp_infra${RST}"
+	[[ $pxe_infra == "$infra" ]] || echo "${YELLOW}[infra 치환] pxe -infra $infra -> $pxe_infra${RST}"
 	# 동시 실행이라 프롬프트를 받을 수 없으므로 stdin 을 닫고, 출력은 끝난 뒤 순서대로 보여 줌
-	bash "$awxdir/dhcp.sh" -user "${user}" -infra "$infra" < /dev/null > "$outdir/dhcp.out" 2>&1 &
+	bash "$awxdir/dhcp.sh" -user "${user}" -infra "$dhcp_infra" < /dev/null > "$outdir/dhcp.out" 2>&1 &
 	dhcp_pid=$!
-	bash "$awxdir/pxe.sh" -user "${user}" -infra "$infra" -os "$os" -boot "$boot" -splunk "$splunk" < /dev/null > "$outdir/pxe.out" 2>&1 &
+	bash "$awxdir/pxe.sh" -user "${user}" -infra "$pxe_infra" -os "$os" -boot "$boot" -splunk "$splunk" < /dev/null > "$outdir/pxe.out" 2>&1 &
 	pxe_pid=$!
 	dhcp_rc=0; pxe_rc=0
 	wait "$dhcp_pid" || dhcp_rc=$?

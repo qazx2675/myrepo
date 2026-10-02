@@ -139,3 +139,6 @@ git add .
 git commit -m "feat(awx-nodeinfo): …"
 git push origin master
 ```
+
+
+- [ ] **02 상단 변수 2개** `dhcp_infra_alias=""`, `pxe_infra_alias=""` 가 비어 있는지 확인 (현장 값 커밋 금지)
