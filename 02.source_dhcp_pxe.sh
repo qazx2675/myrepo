@@ -1,5 +1,15 @@
 #!/bin/bash
 # AWX 인벤토리 소스 등록 / DHCP / PXE - yml 별 자동 반복 (인자: <yml>=<infra>,<os>,<boot>,<splunk> ...)
+# 색상: 터미널이거나 01 이 AWX_COLOR=1 로 넘겼을 때만 사용 (NO_COLOR 가 있으면 끔)
+if [[ ( -t 1 && -z $NO_COLOR ) || $AWX_COLOR == 1 ]]; then
+	ESC=$'\033'
+	RED=$ESC'[31m'; GREEN=$ESC'[32m'; YELLOW=$ESC'[33m'; CYAN=$ESC'[36m'; BOLD=$ESC'[1m'; RST=$ESC'[0m'
+else
+	RED=""; GREEN=""; YELLOW=""; CYAN=""; BOLD=""; RST=""
+fi
+err() { echo "${RED}$*${RST}"; }
+warn() { echo "${YELLOW}$*${RST}"; }
+
 user=$1
 [[ $# -gt 0 ]] && shift
 if [[ -z $user ]]; then
@@ -22,7 +32,7 @@ fi
 ymls=(); infras=(); oss=(); boots=(); splunks=()
 for spec in "$@"; do
 	if [[ $spec != *=* ]]; then
-		echo "[X] 인자 형식 오류(<yml>=<infra>,<os>,<boot>,<splunk>): $spec"
+		err "[X] 인자 형식 오류(<yml>=<infra>,<os>,<boot>,<splunk>): $spec"
 		exit 1
 	fi
 	ymls+=("${spec%%=*}")
@@ -34,17 +44,17 @@ total=${#ymls[@]}
 # 옵션 확인표 (호스트 수는 yml 이름의 <N>ea 에서 추출)
 print_table(){
 	local i cnt
-	echo "번호 | yml | infra | os | boot | splunk | 호스트 수"
+	echo "${BOLD}번호 | yml | infra | os | boot | splunk | 호스트 수${RST}"
 	for ((i=0; i<total; i++)); do
 		cnt="-"
 		[[ ${ymls[i]} =~ _([0-9]+)ea(\.|$) ]] && cnt=${BASH_REMATCH[1]}
-		echo "$((i+1)) | ${ymls[i]} | ${infras[i]} | ${oss[i]} | ${boots[i]} | ${splunks[i]} | $cnt"
+		echo "$((i+1)) | ${CYAN}${ymls[i]}${RST} | ${infras[i]} | ${oss[i]} | ${boots[i]} | ${splunks[i]} | $cnt"
 	done
 }
 
 print_table
 while true; do
-	read -r -p "옵션이 맞습니까 (Y|N) : " ok || { echo "[X] 입력이 끝났습니다"; exit 1; }
+	read -r -p "${YELLOW}옵션이 맞습니까 (Y|N) : ${RST}" ok || { err "[X] 입력이 끝났습니다"; exit 1; }
 	[[ $ok == [YyNn] ]] && break
 done
 
@@ -57,7 +67,7 @@ if [[ $ok == [Nn] ]]; then
 		read -r -p "  boot [${boots[i]}] : " v; [[ -n $v ]] && boots[i]=$v
 		read -r -p "  splunk [${splunks[i]}] : " v; [[ -n $v ]] && splunks[i]=$v
 	done
-	echo "옵션 확정"
+	echo "${GREEN}옵션 확정${RST}"
 	print_table
 fi
 
@@ -70,7 +80,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 for ((i=0; i<total; i++)); do
 	yml=${ymls[i]}; infra=${infras[i]}; os=${oss[i]}; boot=${boots[i]}; splunk=${splunks[i]}
-	echo "===== [$((i+1))/$total] $yml ====="
+	echo "${BOLD}${CYAN}===== [$((i+1))/$total] $yml =====${RST}"
 	if ! bash "$awxdir/invsync.sh" -user "${user}" -file "$yml"; then
 		results+=("실패 (invsync) : $yml"); ((fail_cnt++)); continue
 	fi
@@ -82,8 +92,8 @@ for ((i=0; i<total; i++)); do
 	dhcp_rc=0; pxe_rc=0
 	wait "$dhcp_pid" || dhcp_rc=$?
 	wait "$pxe_pid" || pxe_rc=$?
-	echo "--- dhcp ---"; cat "$outdir/dhcp.out"
-	echo "--- pxe ---"; cat "$outdir/pxe.out"
+	echo "${CYAN}--- dhcp ---${RST}"; cat "$outdir/dhcp.out"
+	echo "${CYAN}--- pxe ---${RST}"; cat "$outdir/pxe.out"
 	if [[ $dhcp_rc -ne 0 && $pxe_rc -ne 0 ]]; then
 		results+=("실패 (dhcp, pxe) : $yml"); ((fail_cnt++)); continue
 	elif [[ $dhcp_rc -ne 0 ]]; then
@@ -94,7 +104,9 @@ for ((i=0; i<total; i++)); do
 	results+=("성공 : $yml")
 done
 
-echo "===== 요약 : 전체 $total / 성공 $((total - fail_cnt)) / 실패 $fail_cnt ====="
-printf '%s\n' "${results[@]}"
+echo "${BOLD}===== 요약 : 전체 $total / 성공 $((total - fail_cnt)) / 실패 $fail_cnt =====${RST}"
+for r in "${results[@]}"; do
+	if [[ $r == 성공* ]]; then echo "${GREEN}${r}${RST}"; else echo "${RED}${r}${RST}"; fi
+done
 [[ $fail_cnt -eq 0 ]] || exit 1
 exit 0

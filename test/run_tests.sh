@@ -92,7 +92,7 @@ setup_case() {
 	CALLS=$STUBLOG/calls.log; OUT=$S/out.txt
 	: > "$CALLS"
 	export STUBLOG SVR_DIR REMOTE_DIR
-	unset STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO
+	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO
 	export GOSSH_SCENARIO=same
 	export PATH="$S/bin:$ORIG_PATH"
 
@@ -839,6 +839,31 @@ eof_cases() {
 	case_end
 }
 
+# ===================== 색상 =====================
+color_cases() {
+	local E=$'\033'
+	case_begin "11a" "AWX_COLOR=1: LDAP 값 초록·총 대수 굵게·02 요약 초록, LOG 에는 색 코드 없음"
+	setup_case
+	seed_raw D6; export GOSSH_SCENARIO=same AWX_COLOR=1
+	run01 'N\nY\nsu\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "LDAP 값만 초록" "$OUT" "^모든 호스트의 LDAP이 ${E}\[32mINFO LDAP INFRA1 SITE1${E}\[0m으로 동일함$"
+	t_has "총 대수 굵게" "$OUT" "^${E}\[1m총 [0-9]+대${E}\[0m$"
+	t_has "02 성공 줄 초록(02 에 색 전달)" "$OUT" "${E}\[32m성공 : "
+	t_eq "LOG 에 색 코드 없음" "$(grep -c "$E" "$W/LOG/$TU.log")" 0
+	t_has "LOG 에 평문 기록" "$W/LOG/$TU.log" '^모든 호스트의 LDAP이 INFO LDAP INFRA1 SITE1으로 동일함$'
+	t_notmp
+	case_end
+
+	case_begin "11b" "기본(비터미널): 색 코드 없음, NO_COLOR 면 AWX_COLOR=1 이어도 터미널 판정만 끔"
+	setup_case
+	seed_raw D6; export GOSSH_SCENARIO=same
+	run01 'N\nY\nsu\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "출력에 색 코드 없음" "$(grep -c "$E" "$OUT")" 0
+	case_end
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -853,6 +878,7 @@ case7
 case8
 case9
 eof_cases
+color_cases
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="
