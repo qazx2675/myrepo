@@ -52,7 +52,7 @@ done
 if [[ $ok == [Nn] ]]; then
 	for ((i=0; i<total; i++)); do
 		echo "[$((i+1))/$total] ${ymls[i]}"
-		read -r -p "  infra [${infras[i]}] : " v; [[ -n $v ]] && infras[i]=$v
+		read -r -p "  infra [${infras[i]}] : " v; [[ -n $v ]] && infras[i]=${v,,}
 		read -r -p "  os [${oss[i]}] : " v; [[ -n $v ]] && oss[i]=$v
 		read -r -p "  boot [${boots[i]}] : " v; [[ -n $v ]] && boots[i]=$v
 		read -r -p "  splunk [${splunks[i]}] : " v; [[ -n $v ]] && splunks[i]=$v
