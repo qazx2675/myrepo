@@ -1,0 +1,316 @@
+#!/bin/bash
+# AWX nodeinfo V2 - HPC 서버 등록 전처리 및 인벤토리/DHCP/PXE 등록
+repohost=""
+svr_dir=""                   # custom_inventory.sh 가 yml 을 쓰는 경로(로컬에서 보이는 공유 경로)
+ai_server_list=""            # 예: "host01|host02"  (호스트명 정확 일치)
+ldap_check_script=""
+lacp_comment=""
+inventory_delete_host=""     # 원문은 함수 안 → 최상단으로 이동
+svr_idr="$svr_dir"           # git 블록 원문($svr_idr 오타)을 그대로 쓰기 위한 별칭
+
+# ==== [0] 공통: 시작 경로 · 임시물 정리 · 로그 ====
+start_pwd=$(pwd)
+
+tmp_paths=()
+add_tmp() { tmp_paths+=("$@"); }
+cleanup() {
+	[[ ${#tmp_paths[@]} -gt 0 ]] && rm -rf "${tmp_paths[@]}"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+log() { echo "[$(date '+%F %T')] $*"; }
+
+# 비어 있으면 안 되는 최상단 변수 검사: require_var 변수명...
+require_var() {
+	local n
+	for n in "$@"; do
+		[[ -n ${!n} ]] || { echo "[X] $n 가 비어 있습니다"; exit 1; }
+	done
+}
+
+# 단계 간 공유 변수
+yaml=""                      # 생성된 yml 파일명 전체(공백 구분, 전체 파일 포함)
+group_yml=""                 # 그룹(분할) yml 파일명만(공백 구분, 전체 파일 제외)
+declare -A yml_opt           # yml 파일명 → "infra os boot splunk"
+declare -A yml_boot          # yml 파일명 → boot (ls 표시용)
+hostfile=$(mktemp)           # 호스트명 목록(gossh -w / 작업 리스트 출력용)
+splitdir=$(mktemp -d)        # 분할/전체 입력 파일 임시 디렉터리
+add_tmp "$hostfile" "$splitdir"
+
+# ==== [1] user ====
+user() {
+	# 현장 코드로 교체: 이 함수가 $user 를 설정한다
+	:
+}
+
+user
+[[ -z $user ]] && { echo "[X] user 값이 없습니다 (user 함수 확인)"; exit 1; }
+
+mkdir -p LOG
+exec > >(tee -a "LOG/${user}.log") 2>&1
+log "시작 user=${user}"
+
+# ==== 함수 정의 ====
+
+# [2] ${user}.txt 준비
+download_txt() {
+read -r -p " awx nodeinfo 사용여부 Y|N : " awx_yn
+	if [[ $awx_yn == [Yy] ]]; then
+		# nodeinfo 실패 시 ${user}.txt(입력 호스트 목록)를 덮어쓰지 않고 종료
+		bash awxkit/nodeinfo.sh -user ${user} -hosts "${start_pwd}/${user}.txt" || { echo "[X] nodeinfo 실행 실패 (${user}.txt 는 변경하지 않음)"; exit 1; }
+		[[ -f awxkit/output/${user}_nodeinfo.yaml ]] || { echo "[X] awxkit/output/${user}_nodeinfo.yaml 없음"; exit 1; }
+		cat awxkit/output/${user}_nodeinfo.yaml > ${user}.txt
+	fi
+
+	[[ -f ${user}.txt ]] || { echo "[X] ${user}.txt 없음"; exit 1; }
+	sed -i 's/1.1T/1200/g' ${user}.txt
+	sed -i 's/7T/7600/g' ${user}.txt
+	sed -i 's/test1234/offchip/g' ${user}.txt
+}
+
+# [3] msg 파싱 / 12필드 검사
+parse_msg() {
+	if grep -q 'msg' "${user}.txt"; then
+		sed -i -n 's/^.*"msg"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "${user}.txt"
+	fi
+	[[ -s ${user}.txt ]] || { echo "[X] ${user}.txt 에 유효한 내용이 없습니다"; exit 1; }
+	# 모든 줄이 12필드(vendor model infra hostname ip mac nic disk part 용량 os boot)여야 함
+	awk 'NF != 12 { bad=1; print "[X] 12필드 아님: " NR ": " $0 } END { exit bad }' "${user}.txt" || {
+		echo "[X] ${user}.txt 는 12필드 형식(msg 값 또는 vendor model infra hostname ip mac nic disk part 용량 os boot)이어야 합니다"
+		exit 1
+	}
+}
+
+# [4] MAC 짝수 보정
+fix_mac() {
+	local content
+	content=$(awk '
+	($4 ~ /^(spice|pice|dspr|pspr)/) && ($4 !~ /ev/) {
+		c = substr($6, length($6), 1); i = index("13579bdfBDF", c)
+		if (i) $6 = substr($6, 1, length($6)-1) substr("02468aceACE", i, 1)
+	}
+	{ print }' "${user}.txt") && printf '%s\n' "$content" > "${user}.txt"
+}
+
+# [5] 등록 대상 20개씩 세로 다단 출력
+show_targets() {
+	awk '{print $4}' "${user}.txt" | awk '
+	{ a[NR]=$0; if (length($0)>w) w=length($0) }
+	END{
+		rows = (NR<20 ? NR : 20); cols = int((NR+19)/20)
+		for (r=1; r<=rows; r++) {
+			line = ""
+			for (c=0; c<cols; c++) { i = c*20 + r; if (i<=NR) line = line sprintf("%-" w "s ", a[i]) }
+			sub(/ +$/, "", line); print line
+		}
+		print "총 " NR "대"
+	}'
+}
+
+# [7] 인벤토리 삭제 (작업진행 Y 이후)
+inventory_delete() {
+	require_var inventory_delete_host
+	ssh $inventory_delete_host "bash /root/server/delhost_${user}" || { echo "[X] inventory_delete 실패"; exit 1; }
+}
+
+# [8] 분할 파일 + 전체 파일 생성: $splitdir 안에만
+split_files() {
+	# groups: 번호|infra|nic|disk|용량|os|boot|splunk  (D 단계가 yml_opt/yml_boot 구성에 사용)
+	awk -v d="$splitdir" -v u="$user" '
+	function splunk(h) { if (h ~ /ev/) return "no"; if (h ~ /^s/) return "Cloud"; return "On-premise" }
+	{
+		b = ($12 == "레거시") ? "legacy" : $12
+		key = $3 "|" $7 "|" $8 "|" $10 "|" $11 "|" b "|" splunk($4)
+		if (!(key in n)) { n[key] = ++g; print n[key] "|" key > (d "/groups") }
+		print > (d "/" u "_" n[key] ".yaml")
+	}' "${user}.txt"
+	cp "${user}.txt" "$splitdir/${user}_all.yaml"
+}
+
+# [9] dhcp_pool/dhcp_pool_delete_info.txt 기록
+dhcp_info() {
+	mkdir -p dhcp_pool
+	awk '{print "tmp tmp SEC", $4, $5, $6, "eth0 sda sda5 960 7.9"}' "${user}.txt" >> dhcp_pool/dhcp_pool_delete_info.txt
+}
+
+# [10] scp → custom_inventory.sh → svr_dir 신규 yml 수집 → yaml/group_yml/yml_opt/yml_boot
+gen_inventory() {
+	require_var repohost svr_dir
+	local -a files=()
+	local -A g_infra g_os g_boot g_splunk
+	local num infra os boot splunk f before after new lines n
+
+	# groups: 번호|infra|nic|disk|용량|os|boot|splunk → 번호별 옵션 (파일은 번호순으로 이미 기록됨)
+	while IFS='|' read -r num infra _ _ _ os boot splunk; do
+		[[ -n $num ]] || continue
+		g_infra[$num]=$infra; g_os[$num]=$os; g_boot[$num]=$boot; g_splunk[$num]=$splunk
+		files+=("${user}_${num}.yaml")
+	done < "$splitdir/groups"
+	files+=("${user}_all.yaml")
+
+	# 입력 파일 전체를 한 번에 repohost 로 복사
+	scp "$splitdir"/*.yaml "$repohost:/root/Inventory/" || { echo "[X] scp 실패"; exit 1; }
+
+	for f in "${files[@]}"; do
+		before=$(ls "$svr_dir"/*.yml 2>/dev/null | sed 's#.*/##' | LC_ALL=C sort)
+		ssh "$repohost" "bash /root/Inventory/custom_inventory.sh /root/Inventory/$f" || { echo "[X] custom_inventory.sh 실패: $f"; exit 1; }
+		after=$(ls "$svr_dir"/*.yml 2>/dev/null | sed 's#.*/##' | LC_ALL=C sort)
+		new=$(LC_ALL=C comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))
+		n=$(printf '%s\n' "$new" | grep -c .)
+		if [[ $n -ne 1 ]]; then
+			echo "[X] $f: $svr_dir 에 새로 생긴 yml 이 ${n}개입니다 (1개여야 함)"
+			printf '%s\n' "$new"
+			exit 1
+		fi
+
+		lines=$(wc -l < "$splitdir/$f")
+		if [[ $new =~ _([0-9]+)ea\.yml$ ]] && [[ ${BASH_REMATCH[1]} -ne $lines ]]; then
+			echo "[!] 경고: $new 의 대수(${BASH_REMATCH[1]}ea)가 입력 줄 수(${lines})와 다릅니다"
+		fi
+
+		yaml="${yaml:+$yaml }$new"
+		if [[ $f != "${user}_all.yaml" ]]; then
+			num=${f#"${user}_"}; num=${num%.yaml}
+			group_yml="${group_yml:+$group_yml }$new"
+			yml_opt[$new]="${g_infra[$num]} ${g_os[$num]} ${g_boot[$num]} ${g_splunk[$num]}"
+			yml_boot[$new]="${g_boot[$num]}"
+		fi
+		log "yml 생성: $new ($f)"
+		sleep 1
+	done
+
+	rm -rf "$splitdir"            # 로컬 분할 파일 삭제 (trap 에도 등록됨)
+}
+
+# [11] git 업로드 (원문 블록을 그대로 사용하고 마지막에 cd "$now_pwd")
+# 아래 함수 본문의 블록은 원문 그대로 보존 (백틱·$svr_idr·미인용 변수 포함)
+# shellcheck disable=SC2006,SC2086,SC2116,SC2154,SC2164
+git_upload() {
+	require_var svr_dir
+	now_pwd=`pwd`
+	for x in `echo $yaml`
+	do
+		cd /root/user/${user}/myrepo
+		cp $svr_idr/$x /root/user/${user}/myrepo/$x
+		bash .git_upload.sh ${user} $x
+	done
+	cd "$now_pwd"
+}
+
+# [12] AI 서버 안내 · LDAP/LACP 점검, hostfile 채움
+check_servers() {
+	require_var ldap_check_script lacp_comment
+	local out="tmp/all_${user}" lacp_hosts noresp
+
+	awk '{print $4}' "${user}.txt" > "$hostfile"
+
+	# AI GPU 서버(호스트명 정확 일치) 안내
+	if [[ -n $ai_server_list ]] && grep -Eqx "($ai_server_list)" "$hostfile"; then
+		echo "AI GPU서버는 power limit설정이 필요합니다. cat .power_limit_setting.txt를 참고하세요."
+		if [[ -f .power_limit_setting.txt ]]; then
+			cat .power_limit_setting.txt
+		else
+			echo "[!] .power_limit_setting.txt 없음"
+		fi
+	fi
+
+	# gossh -script 출력(stdout)은 "호스트명: 줄" 형식. 접속불가/ERROR 는 stderr 라 파일에 없음
+	mkdir -p tmp
+	gossh -script -w "$hostfile" "bash $ldap_check_script;cat /proc/net/bonding/bond0 |grep -i mod" > "$out"
+
+	# LACP(802.3ad) 호스트 한 줄 나열
+	lacp_hosts=$(grep -i 'Bonding Mode' "$out" | grep -i '802\.3ad' | cut -d: -f1 | LC_ALL=C sort -u)
+	if [[ -n $lacp_hosts ]]; then
+		printf '%s\n' "$lacp_hosts" | paste -sd' ' -
+		echo "$lacp_comment"
+	fi
+
+	# LDAP: Bonding Mode 줄 제외, 호스트별 값(여러 줄이면 합침)의 고유값 비교 (ldap_check 출력 형식에 비의존)
+	LC_ALL=C sort -u "$out" | awk '
+	tolower($0) ~ /bonding mode/ { next }
+	{
+		i = index($0, ": "); if (i < 2) next
+		h = substr($0, 1, i-1); v = substr($0, i+2); gsub(/\t/, " ", v)
+		if (!(h in hv)) ord[++nh] = h
+		hv[h] = (h in hv) ? hv[h] " / " v : v
+	}
+	END {
+		for (k = 1; k <= nh; k++) {
+			v = hv[ord[k]]
+			if (!(v in hs)) vord[++nv] = v
+			hs[v] = (v in hs) ? hs[v] " " ord[k] : ord[k]
+		}
+		if (nv == 1) print "모든 호스트의 LDAP이 " vord[1] "으로 동일함"
+		else for (k = 1; k <= nv; k++) print vord[k] " : " hs[vord[k]]
+	}'
+
+	# 응답 없는 호스트: hostfile 과 결과의 호스트 목록 비교
+	noresp=$(LC_ALL=C comm -23 <(LC_ALL=C sort -u "$hostfile" | grep .) \
+		<(sed -n 's/^\([^ :]*\): .*/\1/p' "$out" | LC_ALL=C sort -u))
+	if [[ -n $noresp ]]; then
+		echo "응답 없음 : $(printf '%s\n' "$noresp" | paste -sd' ' -)"
+	fi
+}
+
+# ==== [2]~[5] 입력 준비 ====
+log "[2] download_txt"
+download_txt
+log "[3] parse_msg"
+parse_msg
+log "[4] fix_mac"
+fix_mac
+log "[5] show_targets"
+show_targets
+
+# ==== [6] 작업진행여부 ====
+read -r -p "작업진행여부 (Y|N) : " go
+[[ $go == [Yy] ]] || { log "작업 취소"; exit 0; }
+echo "작업진행.."
+# 원격 삭제(inventory_delete) 이후에 빈 변수 오류가 나지 않도록 미리 검사
+require_var inventory_delete_host repohost svr_dir ldap_check_script lacp_comment
+[[ -d $svr_dir ]] || { echo "[X] svr_dir 경로가 없습니다: $svr_dir"; exit 1; }
+
+# ==== [7] inventory_delete ====
+log "[7] inventory_delete"
+inventory_delete
+
+# ==== [8]~[11] 분할 · dhcp 기록 · 인벤토리 생성 · git ====
+log "[8] split_files"
+split_files
+log "[9] dhcp_info"
+dhcp_info
+log "[10] gen_inventory"
+gen_inventory
+log "[11] git_upload"
+git_upload
+
+# ==== [12] AI/LDAP/LACP 점검 ====
+log "[12] check_servers"
+check_servers
+
+# ==== [13] 메뉴 ====
+require_var svr_dir
+while true; do
+	read -r -p "AWX 인벤토리 소스 : su exit : 종료 ls : yaml 파일출력 : " sel || { echo "[X] 입력이 끝났습니다"; exit 1; }
+	case $sel in
+		su)   break ;;
+		exit) exit 0 ;;
+		ls)   for i in $yaml; do echo "$i [${yml_boot[$i]:-all}]"; done ;;
+		"")   ;;
+		*)    if [[ -f $svr_dir/$sel ]]; then cat "$svr_dir/$sel"; else echo "[!] $sel 없음"; fi ;;
+	esac
+done
+
+# ==== [14] 02 호출 ====
+for ((;;)); do
+	echo "작업 리스트"
+	paste -sd'|' "$hostfile"
+	args=(); for f in $group_yml; do args+=("$f=${yml_opt[$f]// /,}"); done   # yml=infra,os,boot,splunk
+	log "[14] 02.source_dhcp_pxe.sh ${user}"
+	bash 02.source_dhcp_pxe.sh ${user} "${args[@]}" && break
+	read -r -p "02 실패 — 재시도 (Y|N) : " r
+	[[ $r == [Yy] ]] || exit 1
+done
+log "완료"

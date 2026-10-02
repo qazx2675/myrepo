@@ -1,0 +1,40 @@
+name: AWX Script CI
+
+on:
+  push:
+    paths:
+      - '.claude/HPC/awx_script/**'
+      - '.github/workflows/awx-script.yml'
+  pull_request:
+    paths:
+      - '.claude/HPC/awx_script/**'
+      - '.github/workflows/awx-script.yml'
+
+defaults:
+  run:
+    working-directory: .claude/HPC/awx_script
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck gawk
+
+      - name: Bash syntax check
+        run: |
+          bash -n 01.AWX_nodeinfo_V2.sh
+          bash -n 02.source_dhcp_pxe.sh
+          bash -n test/run_tests.sh
+
+      - name: ShellCheck lint
+        run: |
+          shellcheck -S warning 01.AWX_nodeinfo_V2.sh 02.source_dhcp_pxe.sh
+
+      - name: Test suite
+        run: |
+          bash test/run_tests.sh
