@@ -95,6 +95,7 @@ setup_case() {
 	export STUBLOG SVR_DIR REMOTE_DIR
 	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO
 	export GOSSH_SCENARIO=same
+	export AUTO_SETUP_DIR="$S/as"   # 01 [14-1] auto_setup 전달 위치(스크래치)
 	export PATH="$S/bin:$ORIG_PATH"
 
 	cp "$SRC/$F01" "$SRC/$F02" "$W/"
@@ -663,6 +664,8 @@ case7() {
 	t_has "IC 는 계속 진행(pxe)" "$CALLS" '^pxe -user testuser -infra ic '
 	t_eq "invsync 3회(재시도 없음, 전체 yml invsync 생략)" "$(grep -c '^invsync ' "$CALLS")" 3
 	t_has "전체 yml 갱신 생략 경고" "$OUT" '전체 yml\(.*\) 인벤토리 소스 갱신은 건너뜁니다'
+	t_eq "02 실패 → auto_setup queue 파일 없음" "$(find "$S/as/queue" -name '*.job' 2>/dev/null | wc -l)" 0
+	t_no "02 실패 → 전달 로그 없음" "$OUT" 'auto_setup 전달'
 	t_notmp
 	case_end
 
@@ -677,6 +680,28 @@ case7() {
 	t_eq "작업 리스트 2회 출력" "$(grep -c '^작업 리스트$' "$OUT")" 2
 	t_eq "invsync 7회(1차 3 + 재시도 3 + 전체 1)" "$(grep -c '^invsync ' "$CALLS")" 7
 	t_has "최종 요약 성공" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
+	local qf; qf=$(find "$S/as/queue" -name '*.job' 2>/dev/null)
+	t_eq "auto_setup queue 파일 1개(재시도해도 성공 시 1회만)" "$(grep -c . <<< "$qf")" 1
+	basename "$qf" > "$S/qname"; sed -n 1p "$qf" > "$S/q1"; sed -n 2p "$qf" > "$S/q2"
+	t_has "queue 파일명 <epoch>_<user>_<pid>.job" "$S/qname" "^[0-9]+_${TU}_[0-9]+\\.job$"
+	t_eq "queue 파일 1행 user=" "$(cat "$S/q1")" "user=$TU"
+	t_has "queue 파일 2행 time=<epoch>" "$S/q2" '^time=[0-9]+$'
+	t_eq "queue 파일 호스트명 줄(정렬)" "$(sed -n '3,$p' "$qf" | LC_ALL=C sort | paste -sd' ')" "evB1 hostA1 hostA2 srvC1"
+	t_eq "queue .tmp 잔여 없음" "$(find "$S/as/queue" -name '*.tmp' | wc -l)" 0
+	t_has "전달 로그 1줄(4대)" "$OUT" 'auto_setup 전달 : 4대 \('
+	t_notmp
+	case_end
+
+	# 7m: queue 디렉터리 생성 불가 → 경고만, 진행·종료코드 영향 없음
+	case_begin "7m" "auto_setup queue 생성 불가 → 경고 1줄만, 01 은 정상 완료(exit 0)"
+	setup_case
+	seed_raw D7
+	: > "$S/as"   # 일반 파일이라 $S/as/queue 생성 불가
+	run01 'N\nY\nls\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "전달 실패 경고" "$OUT" '^\[!\] auto_setup 전달 실패 \(.*/as/queue 생성 불가\)$'
+	t_has "02 성공 후 등록 후 확인 단계 진행" "$OUT" '\[15\] verify_hosts'
+	t_has "완료 출력" "$OUT" '완료'
 	t_notmp
 	case_end
 

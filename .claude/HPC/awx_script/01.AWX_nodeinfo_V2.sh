@@ -357,6 +357,16 @@ for ((;;)); do
 	read -r -p "${YELLOW}02 실패 — 재시도 (Y|N) : ${RST}" r
 	[[ $r == [Yy] ]] || exit 1
 done
+# [14-1] auto_setup 전달: 02 성공 직후 호스트 목록(4번째 필드)을 auto_setup queue 에 남김 (실패해도 진행에 영향 없음)
+auto_setup_queue="${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue"
+if mkdir -p "$auto_setup_queue" 2>/dev/null; then
+	q="$auto_setup_queue/$(date +%s)_${user}_$$.job"
+	{ echo "user=${user}"; echo "time=$(date +%s)"; cat "$hostfile"; } > "$q.tmp" 2>/dev/null && mv "$q.tmp" "$q" 2>/dev/null \
+		&& log "auto_setup 전달 : $(grep -c . "$hostfile")대 ($q)" \
+		|| warn "[!] auto_setup 전달 실패 ($q)"
+else
+	warn "[!] auto_setup 전달 실패 ($auto_setup_queue 생성 불가)"
+fi
 # [15] 등록 후 확인: 붙여넣은 서버가 모두 이번 등록 대상에 있는지 검사
 verify_hosts() {
 	local pasted="" line pf missing extra n

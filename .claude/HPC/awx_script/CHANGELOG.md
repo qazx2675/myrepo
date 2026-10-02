@@ -11,7 +11,8 @@
 - 01: LDAP 점검을 `ldap_check_script` 대신 `/etc/openldap/ldap.conf` 의 URI grep 으로 변경(변수 제거)
 - 01: `day_print` 추가 — user 가 포함되면 작업 대상을 `날짜 tmp tmp infra hostname ...` 로 출력
 - 02: 마지막에 파티션 표준 확인 추가(물리 파티션, sda/nvme0n1, /boot 또는 /boot/efi 500~512M, / 30G, /var 20G, swap, /tmp)
-- test: 14a·14b·7l·15-* 추가, lsblk 스텁 (랩 51 PASS)
+- 01: [14-1] auto_setup 전달 — 02 성공 직후 `/tmp/auto_setup/queue/<epoch>_<user>_<pid>.job` 파일 생성 (user=, time=, 호스트줄들), 프롬프트·옵션 없음, 02 실패 시 전달 없음, 디렉터리 생성 실패는 경고만 출력
+- test: 14c·14d·7c·7f·7m 추가, auto_setup queue 생성 확인 (랩 52 PASS)
 
 ## [0.3.0] - 2026-10-02
 
