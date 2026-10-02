@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-02
+
+### 수정
+- 02: pxe `-os` 에 2024/2025 같은 숫자 값이 awxkit 에서 선택지 번호로 해석되어 범위 오류가 나던 문제 수정(conf `s4_osver_choices` 순번으로 변환)
+
+### 변경
+- 01: LDAP 점검을 `ldap_check_script` 대신 `/etc/openldap/ldap.conf` 의 URI grep 으로 변경(변수 제거)
+- 01: `day_print` 추가 — user 가 포함되면 작업 대상을 `날짜 tmp tmp infra hostname ...` 로 출력
+- 02: 마지막에 파티션 표준 확인 추가(물리 파티션, sda/nvme0n1, /boot 또는 /boot/efi 500~512M, / 30G, /var 20G, swap, /tmp)
+- test: 14a·14b·7l·15-* 추가, lsblk 스텁 (랩 51 PASS)
+
 ## [0.3.0] - 2026-10-02
 
 ### 변경

@@ -59,7 +59,7 @@ AWX 노드정보 V2 스크립트 풀리퀘스트 검증 항목. 모든 항목을
   repohost=""
   svr_dir=""
   ai_server_list=""
-  ldap_check_script=""
+  day_print=""
   lacp_comment=""
   inventory_delete_host=""
   infra_alias=""

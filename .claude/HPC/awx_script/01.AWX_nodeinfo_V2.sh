@@ -3,7 +3,7 @@
 repohost=""
 svr_dir=""                   # custom_inventory.sh 가 yml 을 쓰는 경로(로컬에서 보이는 공유 경로)
 ai_server_list=""            # 예: "host01|host02"  (호스트명 정확 일치)
-ldap_check_script=""
+day_print=""                  # 이 변수에 user 가 들어 있으면(공백/쉼표/| 구분) 작업 대상을 "날짜 tmp tmp infra hostname ..." 형식으로 출력
 lacp_comment=""
 inventory_delete_host=""     # 원문은 함수 안 → 최상단으로 이동
 infra_alias=""               # 등록되지 않은 infra 이름 치환 "adjfg:infra1 foo:infra2" (공백/쉼표 구분, 비워 두면 치환 없음)
@@ -128,6 +128,13 @@ fix_mac() {
 
 # [5] 등록 대상 20개씩 세로 다단 출력
 show_targets() {
+	# day_print 에 user 가 있으면 ${user}.txt 를 "날짜 tmp tmp infra hostname ip mac ..." 형식으로 출력
+	if [[ -n $day_print && "|${day_print//[ ,]/|}|" == *"|${user}|"* ]]; then
+		awk -v d="$(date +%F)" -v cbold="$BOLD" -v crst="$RST" '
+		{ printf "%s tmp tmp", d; for (i = 3; i <= NF; i++) printf " %s", $i; printf "\n" }
+		END { print cbold "총 " NR "대" crst }' "${user}.txt"
+		return 0
+	fi
 	awk '{print $4}' "${user}.txt" | awk -v cbold="$BOLD" -v crst="$RST" '
 	{ a[NR]=$0; if (length($0)>w) w=length($0) }
 	END{
@@ -235,7 +242,7 @@ git_upload() {
 
 # [12] AI 서버 안내 · LDAP/LACP 점검, hostfile 채움
 check_servers() {
-	require_var ldap_check_script lacp_comment
+	require_var lacp_comment
 	local out="tmp/all_${user}" lacp_hosts noresp
 
 	awk '{print $4}' "${user}.txt" > "$hostfile"
@@ -252,7 +259,7 @@ check_servers() {
 
 	# gossh -script 출력(stdout)은 "호스트명: 줄" 형식. 접속불가/ERROR 는 stderr 라 파일에 없음
 	mkdir -p tmp
-	gossh -script -w "$hostfile" "bash $ldap_check_script;cat /proc/net/bonding/bond0 |grep -i mod" > "$out"
+	gossh -script -w "$hostfile" "cat /etc/openldap/ldap.conf |grep -v '#' |grep -i uri |awk -F= '{print \$2}' |awk -F',' '{print \$1}';cat /proc/net/bonding/bond0 |grep -i mod" > "$out"
 
 	# LACP(802.3ad) 호스트 한 줄 나열
 	lacp_hosts=$(grep -i 'Bonding Mode' "$out" | grep -i '802\.3ad' | cut -d: -f1 | LC_ALL=C sort -u)
@@ -305,7 +312,7 @@ read -r -p "${YELLOW}작업진행여부 (Y|N) : ${RST}" go
 [[ $go == [Yy] ]] || { log "작업 취소"; exit 0; }
 echo "${BOLD}작업진행..${RST}"
 # 원격 삭제(inventory_delete) 이후에 빈 변수 오류가 나지 않도록 미리 검사
-require_var inventory_delete_host repohost svr_dir ldap_check_script lacp_comment
+require_var inventory_delete_host repohost svr_dir lacp_comment
 [[ -d $svr_dir ]] || { err "[X] svr_dir 경로가 없습니다: $svr_dir"; exit 1; }
 
 # ==== [7] inventory_delete ====

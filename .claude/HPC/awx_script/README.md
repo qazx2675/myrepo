@@ -46,13 +46,13 @@ awx_script/
 repohost=""                  # ← custom_inventory.sh 가 있는 서버. 분할/전체 입력 파일을 scp 로 /root/Inventory/ 에 보내고 ssh 로 실행
 svr_dir=""                   # ← custom_inventory.sh 가 yml 을 쓰는 경로(이 서버에서 보이는 공유 경로)
 ai_server_list=""            # ← AI 서버 호스트명 "host01|host02" (| 구분, 정확 일치). 비워 두면 안내를 건너뜀
-ldap_check_script=""         # ← 대상 호스트에서 실행할 LDAP 점검 스크립트 경로
+day_print=""                  # ← (선택) 이 변수에 user 가 들어 있으면(공백/쉼표/| 구분) 작업 대상을 "날짜 tmp tmp infra hostname ip mac ..." 형식으로 출력
 lacp_comment=""              # ← LACP(802.3ad) 호스트가 있을 때 출력할 안내 문구
 inventory_delete_host=""     # ← 작업진행 Y 후 `ssh <host> "bash /root/server/delhost_${user}"` 를 실행할 서버
 infra_alias=""               # ← (선택) 등록되지 않은 infra 이름 치환 "adjfg:infra1 foo:infra2" (공백/쉼표 구분, `이름:바꿀infra`). 비우면 치환 없음
 ```
 
-`ai_server_list`·`infra_alias` 외 5개는 필수이며, 작업진행 Y 직후(원격 삭제 전)에 비어 있으면 `[X] <변수> 가 비어 있습니다` 로 종료합니다. 값은 현장 값으로 직접 채우십시오(저장소에는 모두 빈 값으로 둡니다).
+`ai_server_list`·`infra_alias`·`day_print` 외는 필수이며, 작업진행 Y 직후(원격 삭제 전)에 비어 있으면 `[X] <변수> 가 비어 있습니다` 로 종료합니다. 값은 현장 값으로 직접 채우십시오(저장소에는 모두 빈 값으로 둡니다).
 
 ### user() 함수 (사용자 선택)
 
@@ -196,6 +196,7 @@ bash 02.source_dhcp_pxe.sh testuser \
 #### 색상 출력터미널에서 실행할 때만 색을 입힙니다(리다이렉트·파이프·`NO_COLOR=1` 이면 꺼짐, `AWX_COLOR=1` 로 강제 가능). 로그(`LOG/${user}.log`)에는 색 코드가 들어가지 않습니다.| 대상 | 색 ||---|---|| 오류 `[X]`, 응답 없음, 메뉴 `exit`, 02 실패 항목 | 빨강 || LDAP 동일 요약의 LDAP 값, 메뉴 `su`, 완료·옵션 확정·02 성공 항목 | 초록 || 경고 `[!]`, 작업진행·재시도·옵션 확인 프롬프트, AI power limit·LACP 안내, LDAP 상이 값 | 노랑 || 타임스탬프, 메뉴 `ls`·yml 파일명, 02 단계 구분선 | 청록 || 등록 대상 총 대수, 작업 리스트, 02 확인표 헤더·요약 | 굵게 |
 #### infra 이름 치환 (`infra_alias`)nodeinfo 결과에 등록되지 않은 infra 이름(예: `adjfg`)이 나오면 `infra_alias="adjfg:infra1 foo:infra2"` 처럼 `이름:바꿀infra` 쌍으로 지정합니다(공백/쉼표 구분). 3번째 필드를 msg 파싱 직후, 분할·yml 생성 전에 치환하므로 이후 모든 단계(yml 이름, dhcp/pxe)에 치환된 값이 쓰이며 `[infra 치환] adjfg -> infra1 : N건` 으로 알려 줍니다. 비워 두면 치환하지 않습니다.
 #### dhcp / pxe 별 infra 치환 (`02` 상단 변수)dhcp 와 pxe 가 같은 infra 를 다른 이름으로 요구하면(예: dhcp 는 `asdf`, pxe 는 `asdfl`) 02 최상단의 두 변수에 `표시infra:넘길값` 을 적습니다(공백/쉼표 구분, 표시infra 는 확인표에 보이는 소문자 값이며 대소문자 무시).```bashdhcp_infra_alias="infra1:asdf"pxe_infra_alias="infra1:asdfl,infra2:xyz"```적용된 건은 `[infra 치환] pxe -infra infra1 -> asdfl` 로 알려 줍니다. 비워 두면 치환하지 않습니다. 01 의 `infra_alias`(nodeinfo 이름 → 등록 infra, yml 이름까지 반영)와 별개로, 이 값은 dhcp/pxe 호출 인자에만 적용됩니다.
+#### 작업 대상 날짜 출력 (`day_print`), LDAP 점검- `day_print="user1,user2"` 처럼 user 를 적어 두면, 해당 user 로 실행할 때 작업 대상을 호스트명 다단 대신 `${user}.txt` 내용으로 출력합니다: `2026-10-02 tmp tmp infra hostname ip mac nic disk part 용량 os boot` (vendor·model 자리는 `tmp tmp`, 앞에 오늘 날짜). 끝에 `총 N대`. 비워 두거나 user 가 없으면 기존 출력입니다.- LDAP 점검은 별도 스크립트 대신 각 서버에서 `cat /etc/openldap/ldap.conf |grep -v '#' |grep -i uri |awk -F= '{print $2}' |awk -F',' '{print $1}'` 결과(와 bonding mode)를 모아 비교합니다. `ldap_check_script` 변수는 없어졌습니다.#### 파티션 표준 확인 (02, 마지막 단계)02 가 끝나면 `${user}.txt` 의 모든 호스트에서 `lsblk -nl -o NAME,TYPE,SIZE,MOUNTPOINT` 를 읽어(gossh) 표준 여부를 보고합니다(정보 출력만, 종료코드에는 영향 없음). 용량은 lsblk 표시값 기준입니다.| 항목 | 표준 ||---|---|| 구성 | LVM 이 아닌 물리 파티션 || OS 설치 디스크 | `/` 가 있는 디스크가 `sda` 또는 `nvme0n1` || `/boot` 또는 `/boot/efi` | 500M ~ 512M || `/` | 30G || `/var` | 20G || swap | 존재 || `/tmp` | 존재(나머지 용량) |이 외의 마운트·마운트 없는 파티션·LVM 이 있으면 `표준과 다른 파티션이 있습니다` 와 호스트별 사유를 빨강으로 출력하고, 응답 없는 호스트는 별도로 알립니다. OS 디스크 이외 디스크의 마운트는 판정 대상이 아닙니다(단 LVM 은 어디에 있든 표준 외).#### OS 번호 변환 (pxe)awxkit 은 `2024`·`2025` 처럼 숫자만 있는 값을 '선택지 번호'로 해석해 `OS 버전 번호가 범위를 벗어났습니다` 오류가 납니다. 02 는 conf(`awxkit/conf/${user}_setting.conf` 또는 `~/.awxkit/`)의 `s4_osver_choices` 에서 해당 값의 순번을 찾아 번호로 넘기고(예: 2025 → 2) `[os 번호 변환]` 으로 알려 줍니다. conf 나 선택지가 없으면 값 그대로 넘깁니다.
 #### OS 버전 선택 (02, 옵션 확인표 출력 전)02 는 확인표보다 먼저 OS 버전을 묻습니다. 선택지는 `1) 2024  2) 2025  3) 2026  4) 2026-OPC_MDP  5) 2026-ECAD_TCAD` 입니다.```OS 버전 선택  1) 기본값 (2026-ECAD_TCAD) — 모든 yml 동일  2) yml 별로 직접 선택번호 : 2  1) 2024  2) 2025  3) 2026  4) 2026-OPC_MDP  5) 2026-ECAD_TCAD   (실제로는 한 줄씩 출력)a.yml에 사용할 버전 : 3        → pxe -os 2026b.yml에 사용할 버전 : 4        → pxe -os 2026-OPC_MDP```- 1번: 모든 yml 이 `2026-ECAD_TCAD`. 2번: yml 마다 번호(1~5)를 입력하며, 범위 밖이면 다시 묻습니다.- 01 이 넘기는 nodeinfo 의 os 값은 사용하지 않습니다. 선택값은 conf 의 `s4_osver_choices` 와 **대소문자까지 같아야** 하며(변환 없음), 확인표에서 `N` 으로 한 번 더 고칠 수 있습니다.
 #### 전체 yml 갱신 · 최종 수량 · 등록 후 확인- **전체 yml(`_all`) 갱신 (02)**: 그룹 yml 이 **2개 이상**이고 **모두 성공**하면, 마지막에 전체 yml 로 `invsync`(AWX 인벤토리 소스 1단계)만 실행해 인벤토리 호스트를 전체 대상으로 갱신합니다(dhcp/pxe 는 실행하지 않음). yml 이 1개이거나 실패한 yml 이 있으면 생략합니다. 01 이 `--all=<yml>` 인자로 전달합니다.- **최종 수량 (02)**: 성공한 yml 기준으로 `구분 infra OS버전 : N대` 로 합산해 출력합니다. `On-premise`=`HPC`, `Cloud`=`SDS`, 그 외(`no`)는 그대로 표시하며 OS 버전은 위에서 고른 값입니다. 끝에 `합계` 를 출력합니다.- **등록 후 확인 (01 마지막)**: 작업 대상 서버를 붙여넣고(공백/쉼표/| 구분, 빈 줄로 종료, 바로 빈 줄이면 생략) 이번 등록 대상과 비교해 `붙여넣은 대상 서버 N대가 모두 존재함` 또는 `등록 대상에 없는 서버`(exit 1)를 보고합니다. 붙여넣지 않은 등록 대상은 경고로 알려 줍니다.
 #### 옵션 확인표 및 수동 수정
@@ -250,7 +251,6 @@ part(9번째 필드)는 분할 키에서 제외됩니다. boot 의 `레거시` �
 - `inventory_delete_host`
 - `repohost`
 - `svr_dir`
-- `ldap_check_script`
 - `lacp_comment`
 
 ## 문서별 설명
