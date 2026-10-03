@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 수정
+- `setup.sh`/`build_os6.sh` — PATH 에 go 가 없어도 `/usr/local/go/bin`, `/opt/go*/bin` 을 찾아 사용(비로그인·csh 셸에서 "go 를 찾을 수 없습니다" 방지). `build_os6.sh` 는 `/opt/go1.20` 이 있으면 우선 사용하고 사용한 go 버전을 출력.
+
 ## [0.2.1] - 2026-10-03
 
 LDAP 비교 기준을 bindpw 해시에서 binddn 의 uid 값으로 바꾸고, 복원 때 bindpw 가 어떤 명령줄(ps)에도 실리지 않게 autofs 공유경로 경유로 변경.
