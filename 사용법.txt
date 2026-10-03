@@ -14,6 +14,7 @@ cd /root/saccae-src/.claude/HPC/auto_setup
 go build -o auto_setup .
 
 # 빌드 + /usr/local/bin 설치 + cron(매분 ensure) 등록 + tmpfiles 정리 제외 등록 (root, 여러 번 실행해도 안전)
+# (go 가 PATH 에 없어도 /usr/local/go/bin, /opt/go*/bin 을 자동으로 찾음)
 bash setup.sh
 
 # ===== 2. 상태 보기 · 데몬 제어 =====

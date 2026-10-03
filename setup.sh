@@ -8,8 +8,18 @@ if [ "$(id -u)" -ne 0 ]; then
 	echo "[X] root 로 실행하세요 (raw ICMP, /usr/local/bin, cron 등록 필요)" >&2
 	exit 1
 fi
+# PATH 에 go 가 없으면 흔한 설치 위치(/usr/local/go, /opt/go*)를 찾아 PATH 에 추가
 if ! command -v go >/dev/null 2>&1; then
-	echo "[X] go 를 찾을 수 없습니다 (PATH 확인)" >&2
+	for d in /usr/local/go/bin /opt/go*/bin /usr/lib/golang/bin; do
+		if [ -x "$d/go" ]; then
+			export PATH="$PATH:$d"
+			echo "[i] go 를 PATH 에서 찾지 못해 $d 를 사용합니다"
+			break
+		fi
+	done
+fi
+if ! command -v go >/dev/null 2>&1; then
+	echo "[X] go 를 찾을 수 없습니다 (PATH 확인, 예: export PATH=\$PATH:/usr/local/go/bin)" >&2
 	exit 1
 fi
 
