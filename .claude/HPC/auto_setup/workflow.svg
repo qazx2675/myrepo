@@ -58,10 +58,10 @@
   <text x="300" y="538" class="t" text-anchor="middle">uptime &lt; 전달 이후 경과시간</text>
   <rect x="90" y="574" width="420" height="52" rx="6" class="ldap"/>
   <text x="300" y="596" class="t tb" text-anchor="middle">LDAP 비교 (stage=ldap, os_check 전)</text>
-  <text x="300" y="612" class="t" text-anchor="middle">새 OS ldap.conf bindpw 해시 vs 백업</text>
+  <text x="300" y="612" class="t" text-anchor="middle">새 OS ldap.conf binddn uid vs 백업</text>
   <rect x="90" y="648" width="420" height="52" rx="6" class="ldap"/>
   <text x="300" y="670" class="t tb" text-anchor="middle">same / 백업 없음 → 생략</text>
-  <text x="300" y="686" class="t" text-anchor="middle">diff → 백업 파일 세트 복원 + 서비스 재시작</text>
+  <text x="300" y="686" class="t" text-anchor="middle">diff → 공유경로 경유 백업 세트 복원 + 서비스 재시작</text>
   <rect x="90" y="722" width="420" height="52" rx="6" class="box"/>
   <text x="300" y="744" class="t tb" text-anchor="middle">스케줄: 전부 READY 면 즉시, 아니면 7분 / 3분 묶음</text>
   <text x="300" y="760" class="t" text-anchor="middle">run 큐 (동시 1개)</text>

@@ -69,6 +69,7 @@ ldap_emul() {
 		*) kind=probe ;;
 	esac
 	echo "ldap-$kind $host" >> "$SCEN/order.log"
+	[[ $kind == restore && -n $E2E_SHARE_DIR ]] && find "$E2E_SHARE_DIR" -mindepth 1 -printf '%m %P\n' >> "$SCEN/share.stat"
 	printf '%s\n' "$script" | sed "s#^R=.*#R='$root'#" > "$SCEN/.ldap_$$.sh"
 	bash "$SCEN/.ldap_$$.sh" < /dev/null 2> /dev/null | sed "s/^/$host: /"
 	rm -f "$SCEN/.ldap_$$.sh"
@@ -290,6 +291,7 @@ e2e_run_oc() {
 #   $S/auto_setup_no6    : os6_mgmt 도 비움 (os6 경유 호스트 없는 시나리오, 2차 체크 비활성)
 #   $S/auto_setup_autofs : os6_mgmt 만 채우고 os6_os_check_sh 는 비움(os_check_sh 로 폴백, autofs 동일 경로) + awx_dir=$S/awx
 #   $S/auto_setup_client : 원격 클라이언트 모드 (os8_mgmt=os8.mgmt, os8_autosetup=서버 쪽 로컬 바이너리 $S/auto_setup)
+#   $S/auto_setup_share  : 기본 빌드 + ldap_share_dir=$S/ldapshare (LDAP 복원이 공유경로를 경유하는 시나리오). 기본 빌드($S/auto_setup)는 ldap_share_dir 비움 = 수동 복원 필요
 e2e_build_variants() {
 	e2e_paths
 	cp "$OC/os_check_final_annotated.sh" "$OS6/os_check_final_annotated.sh"
@@ -307,6 +309,10 @@ e2e_build_variants() {
 	(cd "$S/src" && GOFLAGS=-buildvcs=false go build \
 		-ldflags "-X main.os8_mgmt=os8.mgmt -X main.os8_autosetup=$S/auto_setup" \
 		-o "$S/auto_setup_client" .) || return 1
+	mkdir -p "$S/ldapshare"
+	(cd "$S/src" && GOFLAGS=-buildvcs=false go build \
+		-ldflags "-X main.os_check_sh=$OC/os_check_final_annotated.sh -X main.os6_mgmt=$E2E_MGMT -X main.os6_gossh=$OS6/gossh -X main.os6_autosetup=$OS6 -X main.ldap_share_dir=$S/ldapshare" \
+		-o "$S/auto_setup_share" .) || return 1
 }
 
 # e2e_make_rgossh : 원격 클라이언트 모드용 가짜 gossh ($S/binr/gossh). -w 파일의 호스트마다 명령을 로컬 bash -c 로 실행하고

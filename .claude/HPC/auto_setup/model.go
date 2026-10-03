@@ -412,7 +412,7 @@ func snapHost(name string, h *Host, now int64) SnapHost {
 	return sh
 }
 
-// hostNote: 비고 (고정 순서, ", " 구분). bindpw 값은 다루지 않는다.
+// hostNote: 비고 (고정 순서, ", " 구분). bindpw·binddn 값은 다루지 않는다.
 func hostNote(h *Host) string {
 	var p []string
 	if h.IP == "" && h.Processed == "" {
@@ -436,13 +436,15 @@ func hostNote(h *Host) string {
 		case h.Ldap.Backup != LdapBackupOK:
 			p = append(p, "LDAP 백업없음")
 		case h.Ldap.Bindpw == BindpwSame:
-			p = append(p, "LDAP 동일")
+			p = append(p, "LDAP binddn 동일")
 		case h.Ldap.Bindpw == BindpwDiff && h.Ldap.Applied:
 			p = append(p, "LDAP 복원")
+		case h.Ldap.Bindpw == BindpwDiff && strings.HasPrefix(h.Ldap.Reason, ldapManualPrefix):
+			p = append(p, "LDAP 수동 복원 필요")
 		case h.Ldap.Bindpw == BindpwDiff:
 			p = append(p, "LDAP 적용실패")
 		case h.Ldap.Bindpw == BindpwNA:
-			p = append(p, "LDAP 해당없음")
+			p = append(p, "LDAP binddn 확인불가")
 		}
 	}
 	switch h.Second {

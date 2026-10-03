@@ -26,7 +26,7 @@ auto_setup/
 ├── test/
 │   ├── manual_check.sh   ← 대화형 단계별 점검 (1~17단계)
 │   ├── run_e2e.sh        ← 1차 목업 E2E (85건)
-│   ├── run_e2e2.sh       ← 2차 목업 E2E (a~f, 177건)
+│   ├── run_e2e2.sh       ← 2차 목업 E2E (a~f, 191건)
 │   └── lib_e2e.sh        ← E2E 공용 함수·스텁 (gossh, ssh, wall)
 ├── testdata/             ← TUI 골든 파일, os_check 결과 샘플
 ├── 사용법.txt
@@ -37,7 +37,7 @@ auto_setup/
 
 `main.go` 최상단의 변수들은 **항상 빈 문자열로 둡니다**(저장소 커밋 시, 값은 테스트·운영 빌드 때만 `-ldflags -X` 로 주입). `go build` 전에 소스를 고치지 마십시오.
 
-#### main.go 8개
+#### main.go 9개
 
 | 변수 | 의미 | 비우면 |
 |---|---|---|
@@ -49,6 +49,7 @@ auto_setup/
 | `os8_autosetup` | os8_mgmt 위 auto_setup 경로 | `/usr/local/bin/auto_setup` |
 | `os6_os_check_sh` | os6_mgmt 위 os_check 경로(2차 체크용). `"-"` 면 2차 체크 끄기 | `os6_mgmt` 가 있으면 `os_check_sh` 로 폴백(autofs 동일 경로), `os6_mgmt` 도 비면 2차 체크 생략 |
 | `awx_dir` | `awxkit/dhcp.sh` 가 있는 awx_script 디렉터리 (autofs 동일 경로) | `os_check_sh` 와 같은 디렉터리의 `dhcp.sh` 만 후보 |
+| `ldap_share_dir` | LDAP 복원용 autofs 공유 경로. os8_mgmt·대상 서버가 모두 보는 곳이며 **대상 root 가 읽을 수 있어야 함(no_root_squash)** | 자동 복원 안 함(binddn 이 다르면 `수동 복원 필요` 로 표시) |
 
 #### os_check 2개, 01 1개
 
@@ -71,6 +72,7 @@ var (
 	os8_mgmt        = ""
 	os8_autosetup   = ""
 	os6_os_check_sh = ""
+	ldap_share_dir  = ""
 )
 ```
 
@@ -147,7 +149,7 @@ queue/<epoch>_<user>_<pid>.job 생성 (프롬프트 없음)
     ↓
 자동 감시: ping 상태 판별 → 경로(local/os6) 결정 → 무응답 감지(설치 시작) → 준비확인(7분/3분)
     ↓
-READY → LDAP 비교(bindpw 해시)·복원 (같으면 생략, 다르면 백업 세트 복원)
+READY → LDAP 비교(binddn 의 uid)·복원 (같으면 생략, 다르면 공유경로 경유로 백업 세트 복원)
     ↓
 os_check -auto <user> <목록> 자동 실행 (동시 1개)
     ↓
@@ -233,9 +235,12 @@ os_check 는 정상 종료 시 이번 실행의 `check.res_<user>_postapply` 에
 옛 OS 가 살아 있는 **전달 시점**에 호스트별 LDAP 관련 설정을 백업하고, 설치가 끝난(READY) 뒤 **os_check 실행 전**에 비교·복원합니다. os_check/설정 스크립트는 변경 없음.
 
 1. 전달 시점: job 수거 직후 ping O 이고 아직 seen_down 이 아닌 호스트를 gossh 로 백업(`/tmp/auto_setup/ldapbak/<jobid>/<host>/`, 디렉터리 0700 · 파일 0600). 이미 재설치 중이거나 접속 불가면 `backup:none` → 이후 단계 생략.
-2. READY 후: 새 OS 의 `ldap.conf` **bindpw 해시만** 백업과 비교(원격에서도 sha256 만 회수).
-   - 같으면(`same`) 생략, 다르면(`diff`) **백업 파일 세트를 복원**(원 권한·소유, `restorecon`, 서비스 재시작) 후 결과를 재확인.
+2. READY 후: 새 OS 의 `ldap.conf` 에서 **`binddn` 줄의 `uid=<값>` 의 값만** 뽑아 백업본의 같은 값과 비교합니다. 예: `binddn uid=asdf,ou=user,dc=x` → `asdf`. 원격에서는 **bindpw 를 읽지도 출력하지도 않고** uid 값 한 줄만 회수합니다(키워드 `binddn`/`BINDDN` 대소문자 무관, 따옴표 제거).
+   - 같으면(`same`) 생략, 다르면(`diff`) **백업 파일 세트를 복원**(원 권한·소유, `restorecon`, 서비스 재시작) 후 새 OS 의 binddn uid 가 백업과 같아졌는지 재확인.
+   - 어느 한쪽이라도 binddn uid 를 읽지 못하면(`na`, `binddn 확인불가`) 복원하지 않습니다.
+   - `ldap_share_dir` 이 비어 있으면 diff 여도 자동 복원하지 않고 `수동 복원 필요(ldap_share_dir 미설정, 백업: <경로>)` 로 표시합니다(비고에 `LDAP 수동 복원 필요`).
    - 실패 시 로그·상태에만 남기고 run 은 계속 진행(os_check 가 FAIL 로 보고).
+3. 복원 전송 방식(`ldap_share_dir` 설정 시): os8_mgmt 가 `<ldap_share_dir>/.as_ldap_<랜덤 32자>/<호스트>/` 를 0700, 파일을 0600 으로 만들어 백업 파일을 잠시 두고, gossh 명령에는 **경로·mode·owner·group·서비스명만** 싣습니다. 대상 서버는 그 파일을 `cat` 으로 읽어 제자리에 쓰고(원 mode/owner 로 `mv`), 끝나면 성공·실패와 관계없이 os8_mgmt 가 공유 임시 디렉터리를 **즉시 삭제**합니다. 대상이 공유경로를 못 읽으면 `공유경로 접근 실패` 로 표시하고 아무것도 바꾸지 않습니다.
 
 **대상 파일**
 
@@ -252,10 +257,11 @@ s4 호스트(hostname 접두사 규칙)는 OS 8+ 여도 `services` 에 `nslcd`/`
 | `AUTO_SETUP_LDAP_S4_PREFIX` | (비면 s4 규칙 꺼짐) | s4 호스트명 접두사 |
 | `AUTO_SETUP_LDAP_S4_SERVICES` | `nslcd,ntp` | s4 호스트가 구형 서비스를 쓰는 항목 |
 
-> **bindpw 노출 주의**
-> - 복원할 때 파일 내용(bindpw 포함)이 base64 로 gossh **명령줄**에 실려 대상 서버의 `ps` 에 **잠시(최대 45초, `ldapApplyTimeout`) 보일 수 있습니다.** gossh 에 파일 전송 기능이 없어 `ldap_setting` 과 같은 방식을 쓰며, **os6_mgmt 경유 시 특히 유의**하십시오.
+> **bindpw 취급**
+> - 복원은 공유경로 경유이며 **gossh 명령줄(대상 서버의 `ps` 포함)에 bindpw 가 실리지 않습니다.** 공유경로는 **대상 root 가 읽을 수 있어야 하며(no_root_squash)**, 임시 디렉터리는 사용 후 자동 삭제됩니다. os6_mgmt 경유 호스트도 os6_mgmt 가 같은 공유 경로를 봐야 합니다.
+> - 백업 수집은 gossh 응답(stdout)으로 받으며 명령은 `cat` 뿐입니다. 저장은 0700/0600 입니다.
 > - 백업(`/tmp/auto_setup/ldapbak/<jobid>/`)은 **자동 삭제되지 않습니다.** 작업이 끝나면 수동으로 `rm -rf` 하십시오.
-> - 로그·snapshot·code·wall·TUI 에는 bindpw 가 남지 않습니다(해시만 비교).
+> - 로그·snapshot·code·wall·TUI 에는 bindpw 가 남지 않습니다(비교 기준은 binddn uid, 기본 로그에는 호스트별 same/diff 만 남기고 uid 값도 남기지 않음).
 
 ### 단계별 점검 (테스트)
 
@@ -288,7 +294,7 @@ go vet ./... && gofmt -l .
 # 1차 목업 E2E (스크래치, 스텁 gossh/ssh/wall, root 필요, 약 1분) — 85건
 bash test/run_e2e.sh
 
-# 2차 목업 E2E (a 양방향 동일성 / b 완료기록 / c 요청·TUI / d 데몬 제어 / e LDAP / f 2차 체크) — 177건
+# 2차 목업 E2E (a 양방향 동일성 / b 완료기록 / c 요청·TUI / d 데몬 제어 / e LDAP / f 2차 체크) — 191건
 bash test/run_e2e2.sh          # 전체
 bash test/run_e2e2.sh b e      # 시나리오 지정
 
@@ -439,7 +445,7 @@ bash test/manual_check.sh -y
 # 3단계: 자동 테스트
 go test ./...
 bash test/run_e2e.sh          # 85건
-bash test/run_e2e2.sh         # 177건
+bash test/run_e2e2.sh         # 191건
 bash ../awx_script/test/run_tests.sh   # 54건
 
 # 4단계: 랩 스모크 테스트 (.58)

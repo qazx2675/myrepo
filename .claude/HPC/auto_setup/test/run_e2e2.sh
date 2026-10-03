@@ -480,28 +480,29 @@ sc_d() {
 
 # ============================================================
 sc_e() {
-	echo "== e) LDAP: 전달 시점 백업(0700/0600) → READY 후 bindpw same(생략)/diff(복원) → run, 호출 순서·비밀 문자열 미노출"
+	echo "== e) LDAP: 전달 시점 백업(0700/0600) → READY 후 binddn uid same(생략)/diff(공유경로 복원)/변수 비면 수동 복원 필요 → run, 호출 순서·비밀 문자열 미노출"
 	e2e_scen e
 	export PATH="$STUBPATH"
-	local E="$S/e_state" R="$S/ldaproot" NOW SUB JOBID h pw1="OLDPW_Zq81xV" pw2="OLDPW_k39Lm2" pwn="NEWPW_q7Tt0w" f CODE
+	local E="$S/e_state" E2="$S/e2_state" R="$S/ldaproot" SHR="$S/auto_setup_share" SHD="$S/ldapshare"
+	local NOW SUB JOBID h pw1="OLDPW_Zq81xV" pw2="OLDPW_k39Lm2" pwn="NEWPW_q7Tt0w" pws="NEWPW_s11same" f CODE
 	local DONEJ BAK
 	NOW=$(date +%s); SUB=$((NOW - 120))
-	rm -rf "$E" "$R"; mkdir -p "$E"
-	export E2E_LDAP_ROOT="$R"
-	mk_tree() { # 호스트 bindpw : 가짜 루트 파일 세트 (RHEL8 → sssd + chrony)
+	rm -rf "$E" "$E2" "$R" "$SHD"; mkdir -p "$E" "$SHD"
+	export E2E_LDAP_ROOT="$R" E2E_SHARE_DIR="$SHD"
+	mk_tree() { # 호스트 binddn-uid bindpw resolv-번호 : 가짜 루트 파일 세트 (RHEL8 → sssd + chrony)
 		local d="$R/$1"
 		mkdir -p "$d/etc/openldap" "$d/etc/sssd"
 		echo "Rocky Linux release 8.9 (Green Obsidian)" > "$d/etc/redhat-release"
-		printf 'URI ldap://ldap.lab\nBASE dc=lab\nbindpw %s\n' "$2" > "$d/etc/openldap/ldap.conf"
-		printf 'nameserver 10.0.0.%s\n' "$3" > "$d/etc/resolv.conf"
+		printf 'URI ldap://ldap.lab\nBASE dc=lab\nbinddn uid=%s,ou=user,dc=lab\nbindpw %s\n' "$2" "$3" > "$d/etc/openldap/ldap.conf"
+		printf 'nameserver 10.0.0.%s\n' "$4" > "$d/etc/resolv.conf"
 		printf '[sssd]\nservices = nss\n' > "$d/etc/sssd/sssd.conf"; chmod 600 "$d/etc/sssd/sssd.conf"
 		printf 'server ntp.lab\n' > "$d/etc/chrony.conf"
 	}
-	mk_tree 127.0.0.11 "$pw1" 1
-	mk_tree 127.0.0.12 "$pw2" 2
+	mk_tree 127.0.0.11 svc11 "$pw1" 1
+	mk_tree 127.0.0.12 svc12 "$pw2" 2
 	mkdir -p "$R/127.0.0.13/etc"; echo "Rocky Linux release 8.9" > "$R/127.0.0.13/etc/redhat-release"   # ldap.conf 없음 → 백업 없음
 	qjob "$E" "$SUB" 127.0.0.11 127.0.0.12 127.0.0.13
-	env AUTO_SETUP_DIR="$E" "$BASE" ensure
+	env AUTO_SETUP_DIR="$E" "$SHR" ensure
 	wait_for 30 hasjob "$E"
 	JOBID=$(basename "$(ls "$E"/jobs/*.json | head -1)" .json)
 	if wait_cond 40 '[[ $(grep -c "\"backup\"" "$E"/jobs/*.json) -ge 3 ]]'; then ok "e0 전달 시점 LDAP 백업 수집(3대 판정)"; else bad "e0 백업 수집" "$(tail -4 "$E/auto_setup.log" | paste -sd'|')"; fi
@@ -515,12 +516,13 @@ sc_e() {
 	t_eq "e2 백업 없음 호스트(13)는 디렉터리 없음" "$([[ -e $BAK/127.0.0.13 ]] && echo exists || echo none)" none
 	t_eq "e2 백업 전 비교·복원 호출 없음" "$(grep -cE 'ldap-(probe|restore)' "$E2E_SCEN/order.log")" 0
 
-	# 재설치 흉내: 12 번의 새 OS 는 bindpw·설정이 달라짐, 11 번은 같음 → 재기동(기동 직후 1회 준비확인 → READY)
+	# 재설치 흉내: 12 번의 새 OS 는 binddn uid·bindpw·설정이 달라짐, 11 번은 binddn uid 가 같음(bindpw 는 달라도 같다고 봐야 함)
+	# → 재기동(기동 직후 1회 준비확인 → READY)
 	dkill9 "$E"
-	mk_tree 127.0.0.11 "$pw1" 1
-	mk_tree 127.0.0.12 "$pwn" 9
+	mk_tree 127.0.0.11 svc11 "$pws" 1
+	mk_tree 127.0.0.12 svcnew12 "$pwn" 9
 	printf '[new]\n' > "$R/127.0.0.12/etc/sssd/sssd.conf"
-	env AUTO_SETUP_DIR="$E" "$BASE" ensure
+	env AUTO_SETUP_DIR="$E" "$SHR" ensure
 	if wait_for 90 hasdone "$E"; then ok "e3 READY → LDAP 확인 → run → job 종료"; else bad "e3 LDAP→run 흐름" "$(tail -6 "$E/auto_setup.log" | paste -sd'|')"; fi
 	sleep 1
 	DONEJ="$E/jobs/done/$JOBID.json"
@@ -530,15 +532,18 @@ sc_e() {
 	t_eq "e4 probe 는 11·12 두 대(13 은 백업 없음 → 생략)" "$(grep '^ldap-probe' "$E2E_SCEN/order.log" | awk '{print $2}' | sort | paste -sd' ')" "127.0.0.11 127.0.0.12"
 	t_eq "e4 restore 는 12(diff) 에만 1회, 11(same) 은 적용 생략" "$(grep '^ldap-restore' "$E2E_SCEN/order.log" | paste -sd' ')" "ldap-restore 127.0.0.12"
 	t_has "e4 run 호출 시점에 LDAP 단계 완료(run 대상 3대)" "$E2E_SCEN/order.log" '^run hosts=127.0.0.11 127.0.0.12 127.0.0.13$'
-	t_eq "e5 11: bindpw same / 적용 안 함" "$(jfield "$DONEJ" 127.0.0.11 '"(bindpw|applied)":')" '"bindpw":"same""applied":false'
-	t_eq "e5 12: bindpw diff / 적용 완료" "$(jfield "$DONEJ" 127.0.0.12 '"(bindpw|applied)":')" '"bindpw":"diff""applied":true'
-	t_hasF "e5 로그: 12 LDAP 복원" "$E/auto_setup.log" "LDAP 확인: 127.0.0.12 (job $JOBID) bindpw=diff applied=true"
-	t_hasF "e5 로그: 11 동일(생략)" "$E/auto_setup.log" "LDAP 확인: 127.0.0.11 (job $JOBID) bindpw=same applied=false"
-	t_eq "e6 복원 결과: 12 의 ldap.conf bindpw 가 백업값으로 돌아옴" "$(grep -c "^bindpw $pw2\$" "$R/127.0.0.12/etc/openldap/ldap.conf")|$(grep -c "$pwn" "$R/127.0.0.12/etc/openldap/ldap.conf")" "1|0"
+	t_eq "e5 11: binddn 동일(same) / 적용 안 함" "$(jfield "$DONEJ" 127.0.0.11 '"(bindpw|applied)":')" '"bindpw":"same""applied":false'
+	t_eq "e5 12: binddn 상이(diff) / 적용 완료" "$(jfield "$DONEJ" 127.0.0.12 '"(bindpw|applied)":')" '"bindpw":"diff""applied":true'
+	t_hasF "e5 로그: 12 LDAP 복원" "$E/auto_setup.log" "LDAP 확인: 127.0.0.12 (job $JOBID) binddn=diff applied=true"
+	t_hasF "e5 로그: 11 동일(생략)" "$E/auto_setup.log" "LDAP 확인: 127.0.0.11 (job $JOBID) binddn=same applied=false"
+	t_eq "e6 복원 결과: 12 의 ldap.conf 가 백업본으로 돌아옴(binddn uid·bindpw)" "$(grep -c "^bindpw $pw2\$" "$R/127.0.0.12/etc/openldap/ldap.conf")|$(grep -c "$pwn" "$R/127.0.0.12/etc/openldap/ldap.conf")|$(grep -c '^binddn uid=svc12,' "$R/127.0.0.12/etc/openldap/ldap.conf")" "1|0|1"
 	t_eq "e6 복원 파일 권한 유지(sssd.conf 600)" "$(stat -c %a "$R/127.0.0.12/etc/sssd/sssd.conf")" 600
 	t_eq "e6 복원 시 서비스 재시작: sssd·chronyd" "$(grep '^restart' "$R/127.0.0.12/restart.log" | sort | paste -sd' ')" "restart chronyd restart sssd"
 	t_hasF "e6 restorecon 호출" "$R/127.0.0.12/restart.log" "restorecon /etc/openldap/ldap.conf"
-	t_eq "e6 same 호스트(11)는 건드리지 않음(restart.log 없음)" "$([[ -e $R/127.0.0.11/restart.log ]] && echo touched || echo untouched)" untouched
+	t_eq "e6 same 호스트(11)는 건드리지 않음(restart.log 없음, bindpw 는 새 OS 값 그대로)" "$([[ -e $R/127.0.0.11/restart.log ]] && echo touched || echo untouched)|$(grep -c "$pws" "$R/127.0.0.11/etc/openldap/ldap.conf")" "untouched|1"
+	# 공유경로: 복원 호출 시점에 디렉터리 0700·파일 0600(4개), 끝난 뒤 흔적 없음
+	t_eq "e6s 공유경로 관찰: 디렉터리 2개 700 · 파일 4개 600" "$(awk '{ n = gsub(/\//, "/", $2); if (n == 2) { fl++; if ($1 != 600) b++ } else { d++; if ($1 != 700) b++ } } END { print d + 0 "|" fl + 0 "|" b + 0 }' "$E2E_SCEN/share.stat")" "2|4|0"
+	t_eq "e6s 복원 뒤 공유경로 비어 있음(임시 디렉터리 즉시 삭제)" "$(find "$SHD" -mindepth 1 | wc -l)" 0
 	CODE=$(ls "$E/codes" | head -1 | sed 's/\.txt$//')
 
 	# 비밀 문자열 미노출: 로그·codes·runs·job JSON·wall·CLI 출력·gossh 호출 기록 어디에도 없어야 한다
@@ -554,11 +559,48 @@ sc_e() {
 		leaks=$((leaks + 1)); bad "e7 비밀 문자열 노출(codes/runs/jobs)" "$(grep -rlE 'OLDPW_|NEWPW_' "$E/codes" "$E/runs" "$E/jobs" 2> /dev/null | head -3 | paste -sd' ')"
 	fi
 	[[ $leaks -eq 0 ]] && ok "e7 비밀 문자열(bindpw 값)이 로그·codes·runs·jobs·wall·status·snapshot·리포트·code·gossh 기록 어디에도 없음"
+	# binddn uid 값도 기본 로그에는 남기지 않는다(호스트별 same/diff 만)
+	t_no "e7 기본 로그에 binddn uid 값 없음" "$E/auto_setup.log" 'svc11|svc12|svcnew12'
+	# gossh 호출 기록에는 gossh 인자(명령줄)가 전부 있다: 파일 내용·bindpw·bindpw 단어가 없고 공유경로의 base64 본문도 없다
+	t_no "e7 gossh 명령줄 기록에 bindpw 단어·파일 내용 없음" "$E2E_SCEN/gossh.log" 'bindpw|BINDPW|authtok'
 	t_eq "e7 (대조) 백업 파일(0600) 에는 원본이 있어 grep 이 동작함" "$(grep -rlE 'OLDPW_' "$E/ldapbak" | wc -l)" 2
-	unset E2E_LDAP_ROOT
+
+	# ---- 변수 ldap_share_dir 가 비어 있는 빌드(BASE): diff 호스트는 복원하지 않고 "수동 복원 필요" 표시 ----
+	: > "$E2E_SCEN/order.log"; : > "$E2E_SCEN/gossh.log"; : > "$E2E_SCEN/share.stat"
+	rm -rf "$R/127.0.0.12/restart.log" "$R/127.0.0.11/restart.log"
+	mk_tree 127.0.0.11 svc11 "$pw1" 1
+	mk_tree 127.0.0.12 svc12 "$pw2" 2
+	NOW=$(date +%s); SUB=$((NOW - 120))
+	mkdir -p "$E2"
+	qjob "$E2" "$SUB" 127.0.0.11 127.0.0.12
+	env AUTO_SETUP_DIR="$E2" "$BASE" ensure
+	wait_for 30 hasjob "$E2"
+	JOBID=$(basename "$(ls "$E2"/jobs/*.json | head -1)" .json)
+	if wait_cond 40 '[[ $(grep -c "\"backup\"" "$E2"/jobs/*.json) -ge 2 ]]'; then ok "e8 (변수 비움) 전달 시점 LDAP 백업 수집"; else bad "e8 백업 수집" "$(tail -4 "$E2/auto_setup.log" | paste -sd'|')"; fi
+	dkill9 "$E2"
+	mk_tree 127.0.0.12 svcnew12 "$pwn" 9
+	env AUTO_SETUP_DIR="$E2" "$BASE" ensure
+	if wait_for 90 hasdone "$E2"; then ok "e8 (변수 비움) READY → LDAP 확인 → run → job 종료"; else bad "e8 흐름" "$(tail -6 "$E2/auto_setup.log" | paste -sd'|')"; fi
+	sleep 1
+	DONEJ="$E2/jobs/done/$JOBID.json"
+	t_eq "e8 12: diff / 적용 안 함(applied=false)" "$(jfield "$DONEJ" 127.0.0.12 '"(bindpw|applied)":')" '"bindpw":"diff""applied":false'
+	t_hasF "e8 12: 사유 = 수동 복원 필요(ldap_share_dir 미설정) + 백업 경로" "$DONEJ" "수동 복원 필요(ldap_share_dir 미설정, 백업: $E2/ldapbak/$JOBID/127.0.0.12)"
+	t_hasF "e8 로그: 12 수동 복원 필요" "$E2/auto_setup.log" "LDAP 확인: 127.0.0.12 (job $JOBID) binddn=diff applied=false (수동 복원 필요(ldap_share_dir 미설정"
+	t_eq "e8 복원 호출 없음: probe 만 (restore 0회)" "$(grep -c '^ldap-restore' "$E2E_SCEN/order.log")|$(grep -c '^ldap-probe' "$E2E_SCEN/order.log")" "0|2"
+	t_eq "e8 12 의 ldap.conf 는 새 OS 값 그대로(복원 안 함)" "$(grep -c "$pwn" "$R/127.0.0.12/etc/openldap/ldap.conf")|$([[ -e $R/127.0.0.12/restart.log ]] && echo touched || echo untouched)" "1|untouched"
+	lcl "$E2" --plain > "$S/e2.plain" 2>&1
+	lcl "$E2" snapshot > "$S/e2.snap" 2>&1
+	t_hasF "e8 snapshot 비고에 LDAP 수동 복원 필요" "$S/e2.snap" "LDAP 수동 복원 필요"
+	t_eq "e8 공유경로는 쓰지 않음(빈 채)" "$(find "$SHD" -mindepth 1 | wc -l)" 0
+	leaks=0
+	for x in "$E2/auto_setup.log" "$S/e2.plain" "$S/e2.snap" "$DONEJ" "$E2E_SCEN/gossh.log" "$E2E_SCEN/order.log"; do
+		if grep -qE 'OLDPW_|NEWPW_' "$x" 2> /dev/null; then leaks=$((leaks + 1)); bad "e8 비밀 문자열 노출: $x"; fi
+	done
+	[[ $leaks -eq 0 ]] && ok "e8 (변수 비움) 비밀 문자열이 로그·job·snapshot·plain·gossh 기록에 없음"
+	unset E2E_LDAP_ROOT E2E_SHARE_DIR
 	kill_all
 	sleep 1
-	t_eq "e8 데몬 정리" "$(dcount)" 0
+	t_eq "e9 데몬 정리" "$(dcount)" 0
 }
 
 # ============================================================

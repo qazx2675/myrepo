@@ -543,11 +543,11 @@ fi
 # ============================================================
 if step 15 "LDAP 백업/복원 (스텁 gossh)"; then
 	ensure_binary
-	say "무엇을 하나: 전달 시점 백업(디렉터리 0700·파일 0600) → READY 후 bindpw same(생략)/diff(백업본 복원) → os_check run 순서를 스텁으로 검증하고,"
+	say "무엇을 하나: 전달 시점 백업(디렉터리 0700·파일 0600) → READY 후 binddn uid same(생략)/diff(공유경로 경유 복원)/변수 비면 수동 복원 필요 → os_check run 순서를 스텁으로 검증하고,"
 	say "  테스트용 비밀 문자열이 로그·codes·job·wall·status·snapshot·리포트·gossh 기록 어디에도 없는지 grep 합니다."
 	e2e2_step e
-	checkpoint "e2 권한 700/600 · e4 호출 순서 collect→probe→restore→run · e5 same/diff · e7 비밀 문자열 미노출 PASS"
-	e2e2_result "LDAP 백업/복원 흐름·bindpw 미노출"
+	checkpoint "e2 권한 700/600 · e4 호출 순서 collect→probe→restore→run · e5 same/diff · e6s 공유경로 700/600·삭제 · e7 비밀 문자열 미노출 · e8 수동 복원 필요 PASS"
+	e2e2_result "LDAP 백업/복원 흐름(binddn uid 비교·공유경로)·bindpw 미노출"
 	pause
 fi
 

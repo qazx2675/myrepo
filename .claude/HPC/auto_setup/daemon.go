@@ -543,7 +543,7 @@ func (d *Daemon) ldapApply(j *Job, name string, t int64) {
 	}
 	h.Ldap = &st
 	d.dirty[j.ID] = true
-	msg := fmt.Sprintf("LDAP 확인: %s (job %s) bindpw=%s applied=%v", name, j.ID, st.Bindpw, st.Applied)
+	msg := fmt.Sprintf("LDAP 확인: %s (job %s) binddn=%s applied=%v", name, j.ID, st.Bindpw, st.Applied)
 	if st.Reason != "" {
 		msg += " (" + st.Reason + ")"
 	}

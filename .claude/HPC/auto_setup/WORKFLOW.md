@@ -22,10 +22,10 @@ flowchart TD
     J --> L["[루프 ②] 준비확인 30초 (후보만)<br/>gossh -pm cat /proc/uptime"]
     L --> N{"READY?<br/>응답 · anaconda 아님 ·<br/>uptime < 경과시간"}
     N -->|No| L
-    N -->|Yes| LD["LDAP 비교 (stage=ldap)<br/>새 OS ldap.conf bindpw 해시 vs 백업"]
+    N -->|Yes| LD["LDAP 비교 (stage=ldap)<br/>새 OS ldap.conf binddn uid vs 백업"]
     LD --> LDQ{"같은가?"}
     LDQ -->|"same / 백업 없음"| O
-    LDQ -->|diff| LR["백업 파일 세트 복원<br/>+ 서비스 재시작"]
+    LDQ -->|diff| LR["공유경로(ldap_share_dir) 경유로<br/>백업 파일 세트 복원 + 서비스 재시작<br/>(변수 비면 수동 복원 필요)"]
     LR --> O["[루프 ③] 스케줄 7분/3분<br/>전부 READY 면 즉시"]
 
     O --> R["[run] os_check -auto user targets.txt<br/>동시 1개, runs/<code>/"]
@@ -106,8 +106,8 @@ jobs/<jobid>.json 생성
 ### 6단계: LDAP 비교·복원 (READY 직후, os_check 전)
 
 ```bash
-# 백업 보유 호스트: 새 OS 의 ldap.conf bindpw 해시만 백업과 비교
-# same → 생략 / diff → 백업 파일 세트 복원(권한·소유, restorecon, sssd|nslcd·chronyd|ntpd 재시작)
+# 백업 보유 호스트: 새 OS 의 ldap.conf binddn 줄의 uid=<값> 의 값만 백업과 비교 (bindpw 는 읽지 않음)
+# same → 생략 / diff → 공유경로(ldap_share_dir) 경유로 백업 파일 세트 복원(명령줄엔 경로만, 권한·소유, restorecon, sssd|nslcd·chronyd|ntpd 재시작, 끝나면 공유 임시 디렉터리 삭제) / ldap_share_dir 비면 "수동 복원 필요" 표시
 # 실패해도 run 진행 (os_check 가 FAIL 로 보고). os_check·설정 스크립트는 변경 없음
 ```
 

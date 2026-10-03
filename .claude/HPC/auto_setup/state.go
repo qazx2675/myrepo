@@ -35,10 +35,10 @@ type Host struct {
 	DoneSrc string     `json:"done_src,omitempty"` // 완료 출처: run | external | manual
 }
 
-// LdapState: 호스트별 LDAP 백업·비교 상태. bindpw 값 자체는 어디에도 저장·출력하지 않는다.
+// LdapState: 호스트별 LDAP 백업·비교 상태. 비교 기준은 binddn 의 uid 값이며 bindpw·uid 값 자체는 저장·출력하지 않는다.
 type LdapState struct {
 	Backup  string `json:"backup"`           // "none" | "ok"
-	Bindpw  string `json:"bindpw,omitempty"` // "" (미비교) | "same" | "diff" | "na"
+	Bindpw  string `json:"bindpw,omitempty"` // binddn uid 비교(키 이름은 호환 유지): "" (미비교) | "same" | "diff" | "na"(binddn 확인불가)
 	Applied bool   `json:"applied"`          // diff 일 때 백업본 적용 성공
 	Reason  string `json:"reason,omitempty"` // 사유 (백업 없음·적용 실패 등, 비밀값 금지)
 }

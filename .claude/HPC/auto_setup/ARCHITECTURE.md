@@ -4,7 +4,7 @@
 
 | 파일/폴더 | 역할 | 비고 |
 |---|---|---|
-| `main.go` | 최상단 빈 변수 8개 + CLI 분기(무인자 리포트·--start/--stop/--restart·snapshot·done·request 포함) + 상수(주기/대기/정체 시간) | 실행 대상 |
+| `main.go` | 최상단 빈 변수 9개 + CLI 분기(무인자 리포트·--start/--stop/--restart·snapshot·done·request 포함) + 상수(주기/대기/정체 시간) | 실행 대상 |
 | `daemon.go` | 데몬 루프: queue 수거·경로 판별·ping 감시·준비확인·스케줄·run 큐 | 상태기계 중추 |
 | `state.go` | Job/Host 구조체, JSON 원자 저장/복원 (재기동 후 이어하기) | 상태 영속화 |
 | `icmp.go` | raw 소켓 ping (echo id+seq 로 호스트 매핑) | local 경로 |
@@ -23,7 +23,7 @@
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |
 | `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel), 수동 run 스케줄 | 2차 |
-| `ldapbk.go` | LDAP 백업(전달 시점)·bindpw 해시 비교·백업 세트 복원 | 2차 |
+| `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교·공유경로(`ldap_share_dir`) 경유 백업 세트 복원 | 2차 |
 | `second.go` | 2차(이중) 체크: os6_mgmt 실행·결과 회수·code 섹션 병합 | 2차 |
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
 | `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths), TUI 골든 파일 | 검증 |
@@ -152,7 +152,7 @@
 ### LDAP 백업/복원 (ldapbk.go, daemon.go `ldapBackup`/`ldapApply`)
 
 - 백업: job 수거 직후 ping O·seen_down 아님 호스트에 gossh 로 파일 수집 → `ldapbak/<jobid>/<host>/`(0700/0600). 대상은 `lbFilePaths` 표(ldap.conf·resolv.conf·nslcd.conf·sssd.conf·ntp.conf·chrony.conf), OS·s4 분기는 `detectScript()`.
-- 복원: READY 직후 os_check 전에 새 OS 의 bindpw sha256 만 비교 → `same` 생략 / `diff` 면 백업 세트를 `restoreScript()` 로 복원(권한·소유 유지, restorecon, 서비스 재시작). 복원 파일 내용이 base64 로 gossh 명령줄에 실린다(`ldapApplyTimeout` 45초). bindpw 는 로그·상태·반환값·meta.json 어디에도 남기지 않는다.
+- 복원: READY 직후 os_check 전에 새 OS `ldap.conf` 의 `binddn` 줄에서 `uid=<값>` 의 값만 뽑아(`binddnSnippet` awk = Go `binddnUID`, bindpw 는 원격에서 읽지·출력하지 않음) 백업본과 비교 → `same` 생략 / `diff` 면 `ldap_share_dir` 가 있을 때 `stageShare()` 가 `<ldap_share_dir>/.as_ldap_<crypto/rand 16바이트 hex>/<호스트>/` (0700, 파일 0600)에 백업 세트를 두고, gossh 명령(`restoreScript()`)에는 경로·mode·owner·group·서비스명만 실어 대상이 `cat` 으로 읽어 쓴다(restorecon, 서비스 재시작, 복원 후 binddn uid 재확인). 끝나면 성공·실패 모두 `defer os.RemoveAll` 로 공유 임시 디렉터리 즉시 삭제. 대상이 공유경로를 못 읽으면 `공유경로 접근 실패`(스크립트가 `==SHARE err` 로 종료, 아무것도 안 바꿈). `ldap_share_dir` 가 비면 복원하지 않고 `수동 복원 필요(ldap_share_dir 미설정, 백업: <경로>)`. binddn uid 를 한쪽이라도 못 읽으면 `na`(`binddn 확인불가`). 명령줄·로그·상태·meta.json 어디에도 bindpw 가 없다(`ldapApplyTimeout` 45초).
 
 ### 2차(이중) 체크 (second.go, daemon.go `selectSecondTargets`)
 
@@ -166,7 +166,7 @@
 
 | 요청 | 확인 대상 | 참고 |
 |---|---|---|
-| 빈 변수 변경 (main.go 8개 / os_check 2개 / 01 1개) | `main.go`·os_check·01 최상단, README 빈 변수 표 | 커밋 시 빈 값 유지 |
+| 빈 변수 변경 (main.go 9개 / os_check 2개 / 01 1개) | `main.go`·os_check·01 최상단, README 빈 변수 표 | 커밋 시 빈 값 유지 |
 | 주기/대기 시간 변경 | `main.go` 상수 (`pingInterval` 등) | daemon 루프에 반영됨 |
 | ping 방식 변경 | `icmp.go` (현재: raw 소켓) | 성능·권한 영향 |
 | 준비확인 로직 변경 | `check.go` (현재: uptime + anaconda) | §9-2 테스트 수정 필요 |
@@ -179,7 +179,7 @@
 | os6 빌드 호환성 | `build_os6.sh`, Go 1.20 (.60) | CGO_ENABLED=0 유지 |
 | 정체 기준 변경 | `main.go` `installStuck`, `model.go` `effectiveStage` | 골든·단위 테스트 수정 |
 | 완료기록 인정 규칙 변경 | `done.go` `judgeDoneRecord`, os_check `auto_record_done` | 위조·시각 규칙 테스트 필수 |
-| LDAP 대상 파일·OS 분기 변경 | `ldapbk.go` `lbFilePaths`/`detectScript` | `ldap_check.sh` 와 동기화, bindpw 미노출 확인 |
+| LDAP 대상 파일·OS 분기 변경 | `ldapbk.go` `lbFilePaths`/`detectScript` | `ldap_check.sh` 와 동기화, bindpw 미노출·binddn 파서(Go/awk) 일치 확인 |
 | 2차 체크 대상·병합 변경 | `daemon.go` `selectSecondTargets`, `second.go` | code 섹션 포맷 |
 | TUI 화면·키 변경 | `render.go`(순수 함수), `tui.go`(키) | 골든 파일 갱신 (`testdata/tui_*.golden`) |
 | 요청 종류 추가 | `requests.go` `collectRequests`, `ctl.go` `requestArgsOK` | 원격 중계 인자 검증도 함께 |
@@ -195,7 +195,7 @@
 | `Runner` | `fakeRunner` | os_check 실행 결과(코드·호스트·abnormal) 시뮬레이션 |
 | `Notifier` | `fakeNotifier` | wall 메시지 캡처 |
 | `Clock` | `fakeClock` | 시간 진행(타이머 테스트: 7분/3분) |
-| `LdapBackup` | 가짜 gossh/ssh(PATH 스텁) 또는 fake 구현 | LDAP same/diff/백업없음·bindpw 미노출 |
+| `LdapBackup` | 가짜 gossh/ssh(PATH 스텁) 또는 fake 구현 | LDAP same/diff/na/수동 복원 필요/공유경로 접근 실패·bindpw 미노출 |
 | `Second` | 가짜 구현 / PATH 의 ssh 스텁 | 2차 대상 선별·병합 |
 | `tuiEnv` | 가짜 In/Out/Size/Tick/Now | 키 시퀀스·골든 렌더 |
 
