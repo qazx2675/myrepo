@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-03
+
+LDAP 비교 기준을 bindpw 해시에서 binddn 의 uid 값으로 바꾸고, 복원 때 bindpw 가 어떤 명령줄(ps)에도 실리지 않게 autofs 공유경로 경유로 변경.
+
+### 변경
+- `ldapbk.go` — 비교: 새 OS `ldap.conf` 의 `binddn uid=<값>,…` 에서 uid 값만 추출(키워드 대소문자 무관·공백/탭·따옴표 제거·여러 binddn 줄은 uid 가 있는 첫 줄)해 백업본의 같은 값과 비교. 원격 확인 명령은 uid 한 줄만 출력하며 bindpw 를 읽지도 출력하지도 않음(sha256 해시 비교 코드 제거). 같으면 `same`(생략), 다르면 `diff`(복원), 한쪽이라도 읽지 못하면 `na`(`binddn 확인불가`, 복원 안 함)
+- `ldapbk.go` — 복원: 2중 base64 명령줄 전송 제거. `ldap_share_dir` 가 있으면 `<ldap_share_dir>/.as_ldap_<랜덤 hex>/<호스트>/` 를 0700·파일 0600 으로 만들어 백업 세트를 두고, gossh 명령에는 경로·mode·owner·group·서비스명만 실음(대상이 `cat` 으로 읽어 원 mode/owner 로 `mv`, `restorecon`, 서비스 재시작). 먼저 `[ -r ]` 로 접근 확인(실패 시 `공유경로 접근 실패`), 복원 후 binddn uid 재확인(`복원 후 binddn 불일치`), 성공·실패 모두 공유 임시 디렉터리 즉시 삭제. 복원 크기 상한(`ldapMaxRestoreBytes`) 제거
+- `ldap_share_dir` 가 비어 있으면 자동 복원 안 함: `Applied=false`, `Reason="수동 복원 필요(ldap_share_dir 미설정, 백업: <경로>)"`, 비고 `LDAP 수동 복원 필요`
+- 표시 문구: 비고 `LDAP binddn 동일` / `LDAP 복원` / `LDAP 수동 복원 필요` / `LDAP 적용실패` / `LDAP binddn 확인불가`, 데몬 로그 `LDAP 확인: <host> (job <id>) binddn=same|diff|na applied=…` (uid 값은 로그에 남기지 않음). JSON 키 `bindpw` 는 호환을 위해 유지(값 의미만 binddn 비교 결과)
+- 새 빈 변수 `ldap_share_dir`(main.go 는 9개). 테스트: `ldapbk_test.go` 갱신(uid 파서 표·awk/Go 동일성·공유경로 0700/0600·삭제·수동 복원 필요·접근 실패·비밀 미노출), `test/run_e2e2.sh e` 갱신(same/diff/변수 비움/비밀 grep 0건), `test/lib_e2e.sh` 변형 빌드 `auto_setup_share`
+
+### 주의사항
+- `ldap_share_dir` 는 os8_mgmt·대상 서버(·os6_mgmt)가 같은 경로로 보는 autofs 이고 대상 root 가 읽을 수 있어야 함(no_root_squash). 사용 후 자동 삭제되며 명령줄(ps)에는 bindpw 가 실리지 않음. 백업(`ldapbak/`)은 여전히 자동 삭제되지 않으므로 수동 `rm -rf`
+
 ## [0.2.0] - 2026-10-03
 
 양방향 동일 실행(os8_mgmt 단일 원본) · 완료기록 · LDAP 백업/복원 · 이중체크 · 상태 TUI. 1차(0.1.0) 동작·하위명령은 그대로 유지.
@@ -16,7 +30,7 @@
 - `requests.go` — 요청 채널 `requests/<epoch>_<kind>.req`(manual-run / cancel), 5초 주기 수거, `active/`·`rejected/`(reason= 줄)
 - `ldapbk.go` — LDAP 백업(전달 시점, `ldapbak/<jobid>/<host>/` 0700/0600)·READY 후 bindpw 해시 비교·백업 세트 복원. OS7 이하 nslcd.conf+ntp.conf / OS8+ sssd.conf+chrony.conf / 공통 ldap.conf·resolv.conf, s4 규칙 환경변수 `AUTO_SETUP_LDAP_S4_PREFIX`·`AUTO_SETUP_LDAP_S4_SERVICES`
 - `second.go` — 2차(이중) 체크: 1차 후 route=local 의 접속불가·FAIL 호스트만 os6_mgmt 에서 `os_check -auto` 1회, 결과 tar 회수 → `runs/<code>/second/`, code 에 `### 2차 체크 (os6_mgmt)` 섹션(최종 판정 = 1차 OK 또는 2차 OK)
-- 테스트: `*_test.go`(client·ctl·done·ldapbk·model·render·requests·second·tui·paths·daemon2), `testdata/tui_*.golden`, `test/run_e2e2.sh`(a 양방향 동일성 / b 완료기록 / c 요청·TUI / d 데몬 제어 / e LDAP / f 2차 체크, 177건), `test/lib_e2e.sh`
+- 테스트: `*_test.go`(client·ctl·done·ldapbk·model·render·requests·second·tui·paths·daemon2), `testdata/tui_*.golden`, `test/run_e2e2.sh`(a 양방향 동일성 / b 완료기록 / c 요청·TUI / d 데몬 제어 / e LDAP / f 2차 체크, 191건), `test/lib_e2e.sh`
 - 최상단 빈 변수(커밋엔 빈 값): `main.go` `os8_mgmt`·`os8_autosetup`·`os6_os_check_sh`·`awx_dir`(main.go 는 1차 4개 + 2차 4개 = 8개), os_check `auto_done_dir`·`auto_done_host`, 01 `auto_setup_host`
 
 ### 변경
@@ -29,7 +43,7 @@
 ### 주의사항
 - 데몬·상태는 os8_mgmt 에만 둔다. os6_mgmt 에서 데몬 명령(`--start/--stop/--restart/daemon/ensure`)은 거부된다
 - autofs 로 os_check 를 공유하면 `auto_done_dir` 은 비우고 `auto_done_host` 만 채울 것(os6_mgmt 에서 `auto_done_dir` 이 채워져 있으면 os6 로컬에 기록되어 데몬이 못 봄)
-- LDAP 복원 때 파일 내용(bindpw 포함)이 base64 로 gossh 명령줄에 실려 대상 서버 `ps` 에 최대 45초 보일 수 있음. 백업(`ldapbak/`)은 자동 삭제되지 않으므로 수동 `rm -rf`. 로그·snapshot·code·wall·TUI 에는 bindpw 가 남지 않음
+- (0.2.0 당시. 0.2.1 에서 공유경로 경유로 변경되어 명령줄 노출 없음) LDAP 복원 때 파일 내용(bindpw 포함)이 base64 로 gossh 명령줄에 실렸음. 백업(`ldapbak/`)은 자동 삭제되지 않으므로 수동 `rm -rf`. 로그·snapshot·code·wall·TUI 에는 bindpw 가 남지 않음
 - 2차 체크는 설정(set)을 한 번 더 적용하는 부작용이 있음 → 끄려면 `os6_os_check_sh="-"`
 - 알려진 제한: `/tmp/auto_setup` 소유자 검증 없음, LDAP Apply 직렬 처리, 정리 정책 없는 디렉터리(ldapbak, requests/rejected, jobs/done, runs/*/second), `AUTO_SETUP_NOW` 는 테스트 전용, 원격 모드 gossh 시간 제한 없음
 - 설정 변경 스크립트이므로 실행 후 랜덤한 서버 몇 대를 확인해 실제로 변경되었는지 검증 필수

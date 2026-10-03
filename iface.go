@@ -49,12 +49,12 @@ type Notifier interface{ Wall(msg string) }
 // ---- 2차(§14-5) LDAP 백업/복원 훅 — 실제 구현은 ldapbk.go(단계 O) ----
 //
 // 데몬이 메인 루프에서 직렬로 호출한다 → 구현 안에서 시간 제한 필수(호출 1회 수십 초 이내 반환).
-// LdapState 에는 bindpw 값 자체를 절대 넣지 않는다(same/diff/na 만).
+// LdapState 에는 bindpw·binddn uid 값 자체를 절대 넣지 않는다(binddn uid 비교 결과 same/diff/na 만).
 //
 //	Backup: job 수거 후 첫 ping 에서 응답(ping O)한, 아직 seen_down 아닌 호스트 목록으로 job 당 1회.
 //	        반환 map 에 없는 호스트·Backup=="" 은 데몬이 {backup:none} 으로 기록(이후 LDAP 단계 생략).
 //	        이미 seen_down 인 호스트는 호출 없이 {backup:none}.
-//	Apply : READY 판정 직후(os_check run 전), backup=ok 이고 아직 비교 안 한(bindpw=="") 호스트마다 1회.
+//	Apply : READY 판정 직후(os_check run 전), backup=ok 이고 아직 비교 안 한(Bindpw=="") 호스트마다 1회.
 //	        반환값이 host.ldap 이 된다(Backup 이 비어 있으면 기존 "ok" 유지). 실패는 Reason 에 사유, run 은 진행.
 //
 // 구현 연결: ldapbk.go 에 `func init() { newLdap = func() LdapBackup { return NewRealLdapBackup() } }`.

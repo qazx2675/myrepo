@@ -135,11 +135,11 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 ## 2차 항목 (v0.2.0)
 
 - [ ] **빈 변수 전수 grep (커밋 전, 모두 `= ""`)**
-  - main.go 8개 (os6_mgmt, os6_gossh, os6_autosetup, os_check_sh, awx_dir, os8_mgmt, os8_autosetup, os6_os_check_sh)
+  - main.go 9개 (os6_mgmt, os6_gossh, os6_autosetup, os_check_sh, awx_dir, os8_mgmt, os8_autosetup, os6_os_check_sh, ldap_share_dir)
     ```bash
-    grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh|awx_dir|os8_mgmt|os8_autosetup|os6_os_check_sh)\s+=' main.go
+    grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh|awx_dir|os8_mgmt|os8_autosetup|os6_os_check_sh|ldap_share_dir)\s+=' main.go
     ```
-    결과: 8줄 모두 `= ""`
+    결과: 9줄 모두 `= ""`
   - os_check 2개 (auto_done_dir, auto_done_host), 01 1개 (auto_setup_host)
     ```bash
     grep -nE '^(auto_done_dir|auto_done_host|auto_setup_host)=' "../OS 환경설정 체크/os_check_final_annotated.sh" ../awx_script/01.AWX_nodeinfo_V2.sh
@@ -150,7 +150,7 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 - [ ] **양방향 동일성 diff 0**: 같은 상태 디렉터리에서 `status` / `snapshot` / `code N` 의 로컬 실행 출력 = 원격 클라이언트 모드(스텁 gossh 가 로컬 바이너리 호출) 출력 (`bash test/run_e2e2.sh a`)
   - os6_mgmt 에서의 01 전달(복사본에 `auto_setup_host` 채움, 스텁 gossh)이 os8 queue 에서 로컬 전달과 같은 결과인지
 
-- [ ] **bindpw 미노출 grep**: LDAP 시나리오(`bash test/run_e2e2.sh e`)의 로그·`jobs/*.json`·`snapshot`·code·wall·TUI/plain 출력에 테스트 bindpw 값이 없을 것
+- [ ] **bindpw 미노출 grep**: LDAP 시나리오(`bash test/run_e2e2.sh e`)의 로그·`jobs/*.json`·`snapshot`·code·wall·TUI/plain 출력·gossh 명령줄 기록에 테스트 bindpw 값이 없을 것(비교 기준은 binddn 의 uid 값이며 기본 로그에도 uid 값은 남기지 않음). 복원은 공유경로(`ldap_share_dir`) 경유라 명령줄에 비밀이 없고, 복원 뒤 공유 임시 디렉터리는 비어 있을 것(0700/0600 관찰·삭제 확인 포함)
   ```bash
   grep -rF '<테스트 bindpw 값>' "$SCRATCH"/auto_setup/auto_setup.log "$SCRATCH"/auto_setup/jobs "$SCRATCH"/auto_setup/codes   # 결과 없음
   ```
@@ -160,8 +160,8 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 - [ ] **2차(이중) 체크**: 대상 = route=local 접속불가·FAIL 만(route=os6 제외), 최종 = 1차 OK 또는 2차 OK, `os6_os_check_sh="-"` 면 생략 (`run_e2e2.sh f`)
 - [ ] **요청·데몬 제어**: manual-run 은 그룹 전체 완료일 때만 수락(거부는 `requests/rejected/` reason=), `--start/--stop/--restart` pid 정리, 원격 클라이언트에서 데몬 명령 거부 (`run_e2e2.sh c d`)
 - [ ] **TUI**: 키 시퀀스 테스트(화면 1 → Enter 화면 2 → `c` y/n → 요청 파일 생성), 골든 렌더(색 on/off, 폭 80/120), 비 tty·`--plain` 텍스트 출력 (`go test ./...`, `manual_check.sh` 11단계)
-- [ ] **직접 테스트 건수**: `bash test/run_e2e.sh` 85건, `bash test/run_e2e2.sh` 177건, awx `run_tests.sh` 54건 모두 PASS
-- [ ] **README 순서·주의사항**: 빌드·설치 → 사용 방법 → 옵션별 상세 → 문서별 설명 → 주의사항(Disclaimer) → 전역 명령어, LDAP 복원 시 gossh 명령줄 노출(ps 최대 45초)·`ldapbak/` 수동 삭제 안내 포함
+- [ ] **직접 테스트 건수**: `bash test/run_e2e.sh` 85건, `bash test/run_e2e2.sh` 191건, awx `run_tests.sh` 54건 모두 PASS
+- [ ] **README 순서·주의사항**: 빌드·설치 → 사용 방법 → 옵션별 상세 → 문서별 설명 → 주의사항(Disclaimer) → 전역 명령어, LDAP LDAP 복원은 공유경로 경유(명령줄에 비밀 없음, `ldap_share_dir` 는 대상 root 읽기 가능해야 함, 사용 후 자동 삭제)·`ldapbak/` 수동 삭제 안내 포함
 - [ ] **버전 태그**: `git tag -a auto_setup-v0.2.0 -m "양방향 동일 실행·완료기록·LDAP 백업/복원·TUI (CHANGELOG 2026-10-03 항목)"`
 
 ## 기존 사용법 불변 확인
@@ -200,11 +200,11 @@ go test ./...
 
 # 3. 목업 E2E (root 필요)
 sudo bash test/run_e2e.sh      # 85건
-sudo bash test/run_e2e2.sh     # 177건
+sudo bash test/run_e2e2.sh     # 191건
 bash ../awx_script/test/run_tests.sh   # 54건
 
 # 4. 빈 변수 확인 (main.go 8개 / os_check 2개 + 01 1개, 모두 "")
-grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh|awx_dir|os8_mgmt|os8_autosetup|os6_os_check_sh)\s+=' main.go
+grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh|awx_dir|os8_mgmt|os8_autosetup|os6_os_check_sh|ldap_share_dir)\s+=' main.go
 grep -nE '^(auto_done_dir|auto_done_host|auto_setup_host)=' "../OS 환경설정 체크/os_check_final_annotated.sh" ../awx_script/01.AWX_nodeinfo_V2.sh
 
 # 5. git 상태 확인

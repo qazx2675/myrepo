@@ -1,10 +1,10 @@
-// ldapbk.go - LDAP 백업/복원 (§14-5): 전달 시점 설정 수집(Backup), READY 직후 bindpw 비교·백업본 적용(Apply)
+// ldapbk.go - LDAP 백업/복원 (§14-5): 전달 시점 설정 수집(Backup), READY 직후 binddn uid 비교·백업본 적용(Apply)
 package main
 
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -29,9 +29,11 @@ import (
 // s4 규칙(hostname 접두사)은 ldap_config.conf 의 s4.prefix / s4.services 값이며, auto_setup 은 그 파일을 읽지 않으므로
 // 환경변수 AUTO_SETUP_LDAP_S4_PREFIX (비면 s4 규칙 꺼짐), AUTO_SETUP_LDAP_S4_SERVICES (기본 "nslcd,ntp") 로 받는다.
 //
-// bindpw 는 로그·상태·반환값·meta.json·에러 문자열 어디에도 남기지 않는다(sha256 해시만 비교, 원격에서도 해시만 회수).
-// 단 백업 파일 자체(0600)에는 원본 설정이 들어 있고, 복원 때 파일 내용이 base64(2중) 로 gossh 명령줄에 실린다
-// (ldap_setting 과 같은 방식).
+// 비교 기준은 ldap.conf 의 binddn 줄에서 뽑은 uid 값뿐이다(예: "binddn uid=asdf,ou=user,..." → asdf).
+// bindpw 는 원격에서 읽지도 출력하지도 않으며(확인 명령은 uid 한 줄만 출력), 로그·상태·반환값·meta.json·에러 문자열에도 남기지 않는다.
+// 복원은 gossh 명령줄에 파일 내용을 싣지 않는다: os8_mgmt 가 autofs 공유경로(ldap_share_dir)에 백업 파일을 0600 으로 잠시 두고,
+// 대상 서버는 명령줄로 받은 "경로·mode·owner·group" 만으로 그 파일을 cat 해서 제자리에 쓴다(끝나면 즉시 삭제).
+// 백업 파일 수집은 gossh 응답(stdout)으로 받으며 명령(cat)에는 비밀이 없고, 저장은 0700/0600 이다.
 
 const (
 	ldapConfPath = "/etc/openldap/ldap.conf"
@@ -43,9 +45,8 @@ var (
 	// 비어 있지 않으면 서비스 재시작·restorecon 을 실제로 하지 않고 $ROOT/restart.log 에 기록만 한다.
 	ldapRoot = ""
 
-	ldapBackupTimeout   = 90 * time.Second // Backup 호출 1회(전체 호스트 배치) 상한
-	ldapApplyTimeout    = 45 * time.Second // Apply 의 gossh 호출 1회 상한
-	ldapMaxRestoreBytes = 48 * 1024        // 복원 파일 세트 크기 상한(명령줄 길이 제한)
+	ldapBackupTimeout = 90 * time.Second // Backup 호출 1회(전체 호스트 배치) 상한
+	ldapApplyTimeout  = 45 * time.Second // Apply 의 gossh 호출 1회 상한
 )
 
 func init() { newLdap = func() LdapBackup { return NewRealLdapBackup() } }
@@ -145,10 +146,11 @@ echo "==KIND $AK $TK"
 `
 }
 
-// bindpwSnippet: 현재 ldap.conf 의 bindpw 해시만 출력 (값은 변수에만 존재, 출력 안 함)
-const bindpwSnippet = `BV=$(awk 'tolower($1)=="bindpw"{$1="";sub(/^[ \t]+/,"");print;exit}' "$R` + ldapConfPath + `" 2>/dev/null)
-if [ -n "$BV" ]; then echo "==BINDPW $(printf '%s\n' "$BV" | sha256sum | cut -d' ' -f1)"; else echo "==BINDPW none"; fi
-BV=
+// binddnSnippet: 현재 ldap.conf 의 binddn uid 값만 한 줄 출력 (bindpw 는 읽지 않음). 규칙은 Go 의 binddnUID 와 같다:
+// 첫 번째로 uid= 를 가진 binddn 줄(키워드 대소문자 무관), 따옴표 제거, uid= 뒤 ',' 앞까지.
+const binddnSnippet = `BU=$(awk 'tolower($1)=="binddn"{s=$0;sub(/^[ \t]*[^ \t]+[ \t]+/,"",s);gsub(/\r/,"",s);q=sprintf("%c",39);gsub("[\"" q "]","",s);n=split(s,a,",");for(i=1;i<=n;i++){x=a[i];sub(/^[ \t]+/,"",x);if(tolower(substr(x,1,4))=="uid="){v=substr(x,5);sub(/[ \t]+$/,"",v);if(v!=""){print v;exit}}}}' "$R` + ldapConfPath + `" 2>/dev/null | head -n1)
+if [ -n "$BU" ]; then echo "==BINDDN v $BU"; else echo "==BINDDN none"; fi
+BU=
 `
 
 func collectScript() string {
@@ -161,20 +163,30 @@ done
 `
 }
 
-func probeScript() string { return detectScript() + bindpwSnippet }
+func probeScript() string { return detectScript() + binddnSnippet }
 
 type lbEntry struct {
 	Name, Mode, Owner, Group string
 	Data                     []byte
 }
 
-func restoreScript(entries []lbEntry) string {
+// restoreScript: 공유경로(shareDir/<파일명>)의 백업 파일을 대상에 복원하는 스크립트. 파일 내용은 들어 있지 않고
+// 경로·mode·owner·group·서비스명만 있다(= 명령줄에 비밀이 없다).
+func restoreScript(shareDir string, entries []lbEntry) string {
 	var sb strings.Builder
 	sb.WriteString(detectScript())
-	sb.WriteString(`umask 077
+	sb.WriteString("for s in")
+	for _, e := range entries {
+		sb.WriteString(" " + shq(shareDir+"/"+e.Name))
+	}
+	sb.WriteString(`; do
+  [ -r "$s" ] || { echo "==SHARE err"; exit 3; }
+done
+echo "==SHARE ok"
+umask 077
 put() {
   p="$R$2"; t="$p.as_ldap.$$"
-  printf '%s' "$6" | base64 -d > "$t" 2>/dev/null && chmod "$3" "$t" 2>/dev/null && chown "$4:$5" "$t" 2>/dev/null && mv -f "$t" "$p" 2>/dev/null || { rm -f "$t"; echo "==PUT $1 err"; return 1; }
+  cat "$6" > "$t" 2>/dev/null && chmod "$3" "$t" 2>/dev/null && chown "$4:$5" "$t" 2>/dev/null && mv -f "$t" "$p" 2>/dev/null || { rm -f "$t"; echo "==PUT $1 err"; return 1; }
   if [ -n "$R" ]; then echo "restorecon $2" >> "$R/restart.log"; else command -v restorecon >/dev/null 2>&1 && restorecon "$p" >/dev/null 2>&1; fi
   echo "==PUT $1 ok"
 }
@@ -185,7 +197,7 @@ svc() {
 `)
 	for _, e := range entries {
 		fmt.Fprintf(&sb, "put %s %s %s %s %s %s", e.Name, shq(lbFilePaths[e.Name]), e.Mode, e.Owner, e.Group,
-			shq(base64.StdEncoding.EncodeToString(e.Data)))
+			shq(shareDir+"/"+e.Name))
 		switch c, _ := kindOfName(e.Name); c {
 		case "auth":
 			sb.WriteString(" && A=1")
@@ -197,7 +209,7 @@ svc() {
 	sb.WriteString(`if [ "$A" = 1 ]; then svc "$AK"; fi
 if [ "$T" = 1 ]; then if [ "$TK" = ntp ]; then svc ntpd; else svc chronyd; fi; fi
 `)
-	sb.WriteString(bindpwSnippet)
+	sb.WriteString(binddnSnippet)
 	return "A=0; T=0\n" + sb.String()
 }
 
@@ -275,8 +287,9 @@ type lbInfo struct {
 	OS        int
 	Auth      string
 	Time      string
-	BindpwSet bool   // ==BINDPW 줄 존재
-	Bindpw    string // sha256 hex, "" = 없음
+	BindSet   bool   // ==BINDDN 줄 존재
+	BindUID   string // binddn 의 uid 값, "" = 없음/파싱 실패
+	Share     string // ==SHARE ok|err (복원 스크립트의 공유경로 읽기 확인)
 	Put       map[string]bool
 	Svc       map[string]bool
 	Files     []lbEntry
@@ -302,12 +315,13 @@ func parseInfo(lines []string) lbInfo {
 			if len(f) == 2 && (f[0] == "sssd" || f[0] == "nslcd") && (f[1] == "chrony" || f[1] == "ntp") {
 				in.Auth, in.Time = f[0], f[1]
 			}
-		case strings.HasPrefix(l, "==BINDPW "):
-			v := strings.TrimSpace(l[9:])
-			in.BindpwSet = true
-			if len(v) == 64 {
-				in.Bindpw = v
+		case strings.HasPrefix(l, "==BINDDN "):
+			in.BindSet = true
+			if v, ok := strings.CutPrefix(l[9:], "v "); ok {
+				in.BindUID = strings.TrimSpace(v)
 			}
+		case strings.HasPrefix(l, "==SHARE "):
+			in.Share = strings.TrimSpace(l[8:])
 		case strings.HasPrefix(l, "==PUT "):
 			f := strings.Fields(l[6:])
 			if len(f) == 2 {
@@ -353,18 +367,24 @@ func parseFileLine(s string) (lbEntry, bool) {
 	return e, true
 }
 
-// bindpwHash: ldap.conf 내용의 bindpw 해시 (awk 규칙과 동일: 첫 BINDPW 줄, 필드를 공백 하나로 이어붙임). 값이 없으면 ("", false).
-func bindpwHash(conf []byte) (string, bool) {
+// binddnUID: ldap.conf 내용에서 binddn 의 uid 값 (binddnSnippet 의 awk 규칙과 동일).
+// "binddn uid=asdf,ou=user,dc=x" → asdf. 키워드 대소문자 무관, 따옴표 제거, 첫 uid= 구성요소, 없으면 ("", false).
+func binddnUID(conf []byte) (string, bool) {
+	rp := strings.NewReplacer("\r", "", "\"", "", "'", "")
 	for _, l := range strings.Split(string(conf), "\n") {
-		f := strings.Fields(l)
-		if len(f) == 0 || strings.ToLower(f[0]) != "bindpw" {
+		l = strings.TrimLeft(l, " \t")
+		i := strings.IndexAny(l, " \t")
+		if i < 0 || !strings.EqualFold(l[:i], "binddn") {
 			continue
 		}
-		if len(f) == 1 {
-			return "", false
+		for _, x := range strings.Split(rp.Replace(strings.TrimLeft(l[i:], " \t")), ",") {
+			x = strings.TrimLeft(x, " \t")
+			if len(x) >= 4 && strings.EqualFold(x[:4], "uid=") {
+				if v := strings.TrimRight(x[4:], " \t"); v != "" {
+					return v, true
+				}
+			}
 		}
-		sum := sha256.Sum256([]byte(strings.Join(f[1:], " ") + "\n"))
-		return hex.EncodeToString(sum[:]), true
 	}
 	return "", false
 }
@@ -563,6 +583,37 @@ func applyFail(reason string) LdapState {
 	return LdapState{Backup: LdapBackupOK, Bindpw: BindpwDiff, Reason: reason}
 }
 
+// ldapManualPrefix: 자동 복원을 못 해 사람이 해야 하는 경우 Reason 의 머리말 (model.go 비고가 이 값으로 구분)
+const ldapManualPrefix = "수동 복원 필요"
+
+// stageShare: 백업 파일 세트를 공유경로(<ldap_share_dir>/.as_ldap_<랜덤>/<호스트>/)에 0700/0600 으로 쓴다.
+// root 는 호출자가 사용 후 지워야 하는 임시 디렉터리, dir 은 파일이 있는 호스트 디렉터리.
+func stageShare(host string, entries []lbEntry) (root, dir string, err error) {
+	var rb [16]byte
+	if _, err = rand.Read(rb[:]); err != nil {
+		return "", "", errors.New("임시 경로 생성 실패")
+	}
+	root = filepath.Join(ldap_share_dir, ".as_ldap_"+hex.EncodeToString(rb[:]))
+	if err = os.Mkdir(root, 0700); err != nil {
+		return "", "", errors.New("공유경로 쓰기 실패")
+	}
+	dir = filepath.Join(root, host)
+	if err = os.Chmod(root, 0700); err == nil {
+		if err = os.Mkdir(dir, 0700); err == nil {
+			err = os.Chmod(dir, 0700)
+		}
+	}
+	if err != nil {
+		return root, "", errors.New("공유경로 쓰기 실패")
+	}
+	for _, e := range entries {
+		if err = writeFile0600(filepath.Join(dir, e.Name), e.Data); err != nil {
+			return root, "", errors.New("공유경로 쓰기 실패")
+		}
+	}
+	return root, dir, nil
+}
+
 func (realLdapBackup) Apply(job *Job, host string) LdapState {
 	jobID := ""
 	if job != nil {
@@ -572,15 +623,15 @@ func (realLdapBackup) Apply(job *Job, host string) LdapState {
 	if err != nil || !hasFile(entries, "ldap.conf") {
 		return noneState("백업 없음")
 	}
-	var oldHash string
-	oldSet := false
+	var oldUID string
+	oldOK := false
 	for _, e := range entries {
 		if e.Name == "ldap.conf" {
-			oldHash, oldSet = bindpwHash(e.Data)
+			oldUID, oldOK = binddnUID(e.Data)
 		}
 	}
-	if !oldSet {
-		return LdapState{Backup: LdapBackupOK, Bindpw: BindpwNA, Reason: "백업에 bindpw 없음"}
+	if !oldOK {
+		return LdapState{Backup: LdapBackupOK, Bindpw: BindpwNA, Reason: "binddn 확인불가"}
 	}
 
 	route := routeOf(job, host)
@@ -589,34 +640,52 @@ func (realLdapBackup) Apply(job *Job, host string) LdapState {
 		return applyFail("확인 호출 실패(수동 확인)")
 	}
 	in := parseInfo(out[host])
-	if !in.Seen || !in.BindpwSet {
+	if !in.Seen || !in.BindSet {
 		return applyFail("새 OS 무응답(수동 확인)")
 	}
-	if in.Bindpw == oldHash {
+	if in.BindUID == "" {
+		return LdapState{Backup: LdapBackupOK, Bindpw: BindpwNA, Reason: "binddn 확인불가"}
+	}
+	if in.BindUID == oldUID {
 		return LdapState{Backup: LdapBackupOK, Bindpw: BindpwSame}
 	}
 
-	// 다름 → OS 분기 확인(새 OS 기준). 백업에 있는 auth/time 파일 종류가 새 OS 와 다르면 건드리지 않는다.
+	// 다름 → 공유경로가 없으면 자동 복원 안 함(백업 위치만 안내)
+	if ldap_share_dir == "" {
+		dir, _ := ldapHostDir(jobID, host)
+		return applyFail(ldapManualPrefix + "(ldap_share_dir 미설정, 백업: " + dir + ")")
+	}
+	if !filepath.IsAbs(ldap_share_dir) || strings.ContainsAny(ldap_share_dir, "\r\n") {
+		return applyFail("ldap_share_dir 경로 오류(수동 확인)")
+	}
+
+	// OS 분기 확인(새 OS 기준). 백업에 있는 auth/time 파일 종류가 새 OS 와 다르면 건드리지 않는다.
 	if in.OS == 0 || in.Auth == "" {
 		return applyFail("OS 판별 불가(수동 확인)")
 	}
-	total := 0
 	for _, e := range entries {
-		total += len(e.Data)
 		if c, k := kindOfName(e.Name); (c == "auth" && k != in.Auth) || (c == "time" && k != in.Time) {
 			return applyFail("OS 분기 불일치(수동 확인)")
 		}
 	}
-	if total > ldapMaxRestoreBytes {
-		return applyFail("백업 크기 초과(수동 확인)")
+
+	root, dir, err := stageShare(host, entries)
+	if root != "" {
+		defer os.RemoveAll(root) // 성공·실패 모두 공유 임시 디렉터리 즉시 삭제
 	}
-	out, err = gosshBatch(route, []string{host}, buildRemoteCmd(restoreScript(entries)), ldapApplyTimeout)
+	if err != nil {
+		return applyFail(err.Error() + "(수동 확인)")
+	}
+	out, err = gosshBatch(route, []string{host}, buildRemoteCmd(restoreScript(dir, entries)), ldapApplyTimeout)
 	if err != nil {
 		return applyFail("복원 호출 실패(수동 확인)")
 	}
 	r := parseInfo(out[host])
 	if !r.Seen {
 		return applyFail("복원 무응답(수동 확인)")
+	}
+	if r.Share != "ok" {
+		return applyFail("공유경로 접근 실패(수동 확인)")
 	}
 	var failed []string
 	for _, e := range entries {
@@ -628,8 +697,8 @@ func (realLdapBackup) Apply(job *Job, host string) LdapState {
 		sort.Strings(failed)
 		return applyFail("복원 실패: " + strings.Join(failed, ","))
 	}
-	if r.Bindpw != oldHash {
-		return applyFail("복원 후 bindpw 불일치(수동 확인)")
+	if r.BindUID != oldUID {
+		return applyFail("복원 후 binddn 불일치(수동 확인)")
 	}
 	st := LdapState{Backup: LdapBackupOK, Bindpw: BindpwDiff, Applied: true}
 	var svcFail []string

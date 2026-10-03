@@ -21,6 +21,7 @@ var (
 	os8_mgmt        = "" // 비어 있지 않으면 원격 클라이언트 모드 (os6 빌드 때 -ldflags -X 로 채움)
 	os8_autosetup   = "" // os8_mgmt 위 auto_setup 경로 (비면 /usr/local/bin/auto_setup)
 	os6_os_check_sh = "" // os6_mgmt 위 os_check 경로 (2차 체크용). 비우면 os_check_sh 와 같은 경로(autofs 공유)로 간주, os6_mgmt 도 비면 2차 체크 생략, "-" 면 2차 체크 끄기
+	ldap_share_dir  = "" // LDAP 복원용 autofs 공유 경로: os8_mgmt·대상 서버가 모두 보는 곳, 비우면 자동 복원 안 함(수동 복원 안내). 대상 root 가 읽을 수 있어야 함(no_root_squash)
 )
 
 // 조정 가능한 값 (빈 변수 아님)

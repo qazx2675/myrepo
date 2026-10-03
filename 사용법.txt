@@ -2,7 +2,7 @@
 #
 # 구성: os8_mgmt(RHEL8) 에만 데몬·상태(/tmp/auto_setup)가 있고, os6_mgmt(RHEL6) 에서는 같은 명령이 "원격 클라이언트 모드" 로
 #       os8_mgmt 에 요청해서 어디서 실행해도 결과가 같다. 아래 [os8] 표시는 데몬이 있는 서버, [os6] 는 RHEL6 관리 서버.
-# 주의: 소스·스크립트 최상단의 빈 변수(main.go: os6_mgmt os6_gossh os6_autosetup os_check_sh awx_dir os8_mgmt os8_autosetup os6_os_check_sh /
+# 주의: 소스·스크립트 최상단의 빈 변수(main.go: os6_mgmt os6_gossh os6_autosetup os_check_sh awx_dir os8_mgmt os8_autosetup os6_os_check_sh ldap_share_dir /
 #       os_check: auto_done_dir auto_done_host / 01: auto_setup_host)는 "테스트 때만" 채우고 커밋하지 않는다 (7절 참고).
 
 # ===== 1. 빌드 · 설치 [os8] =====
@@ -138,6 +138,11 @@ go build -ldflags "-X main.os_check_sh=<이 서버의 os_check 전체경로> -X 
 # awx_dir(awxkit/dhcp.sh 등이 있는 awx_script 디렉터리)를 채우면 dhcp.sh 를 그 경로에서 링크 (테스트·운영 빌드 때만 주입, 소스 커밋 금지)
 go build -ldflags "-X main.os_check_sh=<autofs 공유 os_check 전체경로> -X main.awx_dir=<autofs 공유 awx_script 디렉터리> -X main.os6_mgmt=<os6_mgmt 호스트> -X main.os6_gossh=<os6_mgmt 의 gossh 전체경로> -X main.os6_autosetup=<os6_mgmt 의 auto_setup 디렉터리>" -o auto_setup .
 
+# LDAP 복원(새 OS 의 binddn uid 가 백업과 다를 때)을 자동으로 하려면 ldap_share_dir(os8_mgmt·대상 서버·os6_mgmt 가 모두 보는 autofs 공유 경로)를 같이 주입.
+# 비밀(bindpw)은 gossh 명령줄에 실리지 않고 이 공유경로에 0700/0600 으로 잠시 놓였다가 복원 직후 삭제된다. 대상 root 가 읽을 수 있어야 함(no_root_squash).
+# 비워 두면 자동 복원은 하지 않고 "수동 복원 필요" 로 표시한다 (테스트·운영 빌드 때만 주입, 소스 커밋 금지)
+go build -ldflags "-X main.os_check_sh=<os_check 전체경로> -X main.ldap_share_dir=<autofs 공유 디렉터리>" -o auto_setup .
+
 # [os6] 01 을 os6_mgmt 에서 실행해도 전달이 os8_mgmt 에 되게 하려면: 01 복사본 최상단 auto_setup_host 를 채운다 (소스에는 커밋 금지)
 sed -i 's|^auto_setup_host=""|auto_setup_host="<os8_mgmt 호스트>"|' 01.AWX_nodeinfo_V2.sh
 
@@ -152,8 +157,8 @@ sed -i 's|^auto_done_host=""|auto_done_host="<os8_mgmt 호스트>"|' os_check_fi
 # 소스(main.go)는 건드리지 않고 빌드할 때만 값을 주입 (경로는 환경에 맞게)
 go build -ldflags "-X main.os_check_sh=/절대경로/os_check_final_annotated.sh -X main.os6_mgmt=<os6_mgmt 호스트> -X main.os6_gossh=<os6_mgmt 의 gossh 전체경로> -X main.os6_autosetup=<os6_mgmt 의 auto_setup 디렉터리>" -o auto_setup .
 
-# main.go 최상단 빈 변수 8개가 비어 있는지 확인 (커밋 전, 8줄 모두 = "" 여야 함)
-grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh|awx_dir|os8_mgmt|os8_autosetup|os6_os_check_sh)\s+=' main.go
+# main.go 최상단 빈 변수 9개가 비어 있는지 확인 (커밋 전, 9줄 모두 = "" 여야 함)
+grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh|awx_dir|os8_mgmt|os8_autosetup|os6_os_check_sh|ldap_share_dir)\s+=' main.go
 
 # os_check·01 의 새 빈 변수 3개도 커밋 전에 비어 있는지 확인 (3줄 모두 = "" 여야 함)
 grep -nE '^(auto_done_dir|auto_done_host|auto_setup_host)=' "../OS 환경설정 체크/os_check_final_annotated.sh" ../awx_script/01.AWX_nodeinfo_V2.sh
