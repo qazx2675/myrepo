@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
+양방향 동일 실행(os8_mgmt 단일 원본) · 완료기록 · LDAP 백업/복원 · 이중체크 · 상태 TUI. 1차(0.1.0) 동작·하위명령은 그대로 유지.
+
+### 신규
+- `client.go` — 원격 클라이언트 모드: `os8_mgmt` 가 채워진 빌드는 status/snapshot/code/cancel/done/request·리포트를 gossh 원샷(`gossh -pm -script -w`)으로 os8_mgmt 에서 실행하고 stdout/stderr/종료코드를 로컬 실행과 같게 복원(원격에서 base64 로 실어 gossh 의 줄 다듬기 영향 제거). `SnapshotSource`(로컬/원격) 인터페이스
+- `ctl.go` — `--start|--stop|--restart`(`start|stop|restart` 도 허용), `snapshot`·`done`·`request` 명령, 색 메시지(`[O]/[!]/[X]`, `NO_COLOR` 존중). 원격 클라이언트에서 데몬 명령은 `[X] 데몬은 os8_mgmt 에서만 실행합니다` 로 거부
+- `paths.go` — `os6_os_check_sh` 해석(명시값 > `os6_mgmt` 가 있으면 `os_check_sh` 폴백 > 없음, `"-"` 면 2차 체크 끔), `awx_dir`/os_check 옆 `dhcp.sh` 링크 후보
+- `model.go` — 호스트 단계(대기·배포중·설치중·부팅확인·READY·LDAP확인·체크중·2차체크·완료·정체·실패), 정체 판정(`installStuck` 60분), 그룹(yml) 집합, `Snapshot`/`BuildSnapshot`
+- `tui.go` / `render.go` / `tty_linux.go` / `tty_other.go` / `tui_hook.go` — 무인자 `auto_setup` TUI(↑↓ 이동, ←→ job 전환/복귀, Enter 세부, `f` 정체·실패 필터, `c` 수동 OS 체크 y/n, `r`, `?`, `q`/Esc), 순수 렌더 함수 + 골든 테스트(색 on/off, 폭 80/120), `--plain`, 색 규칙(`NO_COLOR`·비 tty 자동 off), 로컬 2초/원격 5초 갱신
+- `done.go` — 완료기록(`done/<host>`, 한 줄 `epoch user sha256 source`) 인정 규칙(전달 이후·마지막 부팅 이후, 미래 +5분 초과 거부), `done/applied/` 이동, 수동 `auto_setup done`
+- `requests.go` — 요청 채널 `requests/<epoch>_<kind>.req`(manual-run / cancel), 5초 주기 수거, `active/`·`rejected/`(reason= 줄)
+- `ldapbk.go` — LDAP 백업(전달 시점, `ldapbak/<jobid>/<host>/` 0700/0600)·READY 후 bindpw 해시 비교·백업 세트 복원. OS7 이하 nslcd.conf+ntp.conf / OS8+ sssd.conf+chrony.conf / 공통 ldap.conf·resolv.conf, s4 규칙 환경변수 `AUTO_SETUP_LDAP_S4_PREFIX`·`AUTO_SETUP_LDAP_S4_SERVICES`
+- `second.go` — 2차(이중) 체크: 1차 후 route=local 의 접속불가·FAIL 호스트만 os6_mgmt 에서 `os_check -auto` 1회, 결과 tar 회수 → `runs/<code>/second/`, code 에 `### 2차 체크 (os6_mgmt)` 섹션(최종 판정 = 1차 OK 또는 2차 OK)
+- 테스트: `*_test.go`(client·ctl·done·ldapbk·model·render·requests·second·tui·paths·daemon2), `testdata/tui_*.golden`, `test/run_e2e2.sh`(a 양방향 동일성 / b 완료기록 / c 요청·TUI / d 데몬 제어 / e LDAP / f 2차 체크, 177건), `test/lib_e2e.sh`
+- 최상단 빈 변수(커밋엔 빈 값): `main.go` `os8_mgmt`·`os8_autosetup`·`os6_os_check_sh`·`awx_dir`(main.go 는 1차 4개 + 2차 4개 = 8개), os_check `auto_done_dir`·`auto_done_host`, 01 `auto_setup_host`
+
+### 변경
+- `main.go` — CLI 확장(무인자 리포트, `--plain`, `-h`, `--start|--stop|--restart`, `snapshot`, `done`, `request`), 상수 `installStuck`
+- `state.go` / `daemon.go` — queue 그룹 줄(`yml= infra= os= boot= splunk= hosts=`, `all=`) 파싱(그룹 줄 없는 구버전 01 은 `(all)` 단일 그룹), Job JSON 확장(`groups`, `all_yml`, 호스트 `stage`/`ldap`/`second`/`done_src` 등, 기존 키 유지), pid 파일(`auto_setup.pid`), LDAP·2차·완료기록·요청 단계 연동
+- `runner.go` — dhcp.sh 링크 후보를 `paths.go` 의 `dhcpCandidates` 로 해석
+- `test/manual_check.sh` — 11~17단계 추가(상태 TUI·--plain, 데몬 제어, 양방향 동일성, 완료기록, LDAP, 2차 체크, 정리), `test/run_e2e.sh` 85건
+- `사용법.txt` — 원격 클라이언트·완료기록·TUI 명령 추가
+
+### 주의사항
+- 데몬·상태는 os8_mgmt 에만 둔다. os6_mgmt 에서 데몬 명령(`--start/--stop/--restart/daemon/ensure`)은 거부된다
+- autofs 로 os_check 를 공유하면 `auto_done_dir` 은 비우고 `auto_done_host` 만 채울 것(os6_mgmt 에서 `auto_done_dir` 이 채워져 있으면 os6 로컬에 기록되어 데몬이 못 봄)
+- LDAP 복원 때 파일 내용(bindpw 포함)이 base64 로 gossh 명령줄에 실려 대상 서버 `ps` 에 최대 45초 보일 수 있음. 백업(`ldapbak/`)은 자동 삭제되지 않으므로 수동 `rm -rf`. 로그·snapshot·code·wall·TUI 에는 bindpw 가 남지 않음
+- 2차 체크는 설정(set)을 한 번 더 적용하는 부작용이 있음 → 끄려면 `os6_os_check_sh="-"`
+- 알려진 제한: `/tmp/auto_setup` 소유자 검증 없음, LDAP Apply 직렬 처리, 정리 정책 없는 디렉터리(ldapbak, requests/rejected, jobs/done, runs/*/second), `AUTO_SETUP_NOW` 는 테스트 전용, 원격 모드 gossh 시간 제한 없음
+- 설정 변경 스크립트이므로 실행 후 랜덤한 서버 몇 대를 확인해 실제로 변경되었는지 검증 필수
+- 기존 01·os_check 사용법 불변(빈 변수면 100% 동일)
+
 ## [0.1.0] - 2026-10-02
 
 ### 신규
