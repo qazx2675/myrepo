@@ -3,7 +3,7 @@
 #
 # 사용: bash test/manual_check.sh [-y] [-s N] [--install] [PING_UP [PING_DOWN]]
 #   -y         Enter 대기 없이 연속 실행 (wall/설치처럼 사용자 확인이 필요한 단계는 여전히 묻고, 답이 없으면 건너뜀)
-#   -s N       N 단계부터 시작 (1~10)
+#   -s N       N 단계부터 시작 (1~17)
 #   --install  9단계(설치 점검: setup.sh 실행)를 수행 (그래도 실행 전 yes 확인을 받음)
 #   PING_UP / PING_DOWN : 4단계 실제 ICMP 점검에 쓸 "항상 응답하는 / 응답하지 않는" 주소.
 #                         인자 또는 환경변수로 지정. 기본 127.0.0.1(up) / 192.0.2.1(down, TEST-NET)
@@ -11,6 +11,8 @@
 #       /usr/local/bin · cron · tmpfiles 는 --install 일 때만, 확인(yes) 후에만 건드린다.
 # 단계: 1 빌드·vet·gofmt·단위테스트  2 CLI  3 ensure·kill 후 재기동  4 실제 ICMP  5 01→queue→jobs
 #       6 os_check -auto  7 목업 전체 흐름(run_e2e.sh)  8 wall 수신(선택)  9 설치 점검(--install)  10 정리
+#       (2차) 11 상태 TUI·--plain 리포트·요청  12 데몬 --start/--restart/--stop  13 양방향 동일성(원격 클라이언트·스텁 gossh)
+#             14 완료기록  15 LDAP 백업/복원(스텁)  16 2차 체크  17 정리
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 # shellcheck source=lib_e2e.sh
@@ -24,12 +26,12 @@ while [[ $# -gt 0 ]]; do
 		-y) YES=1; shift ;;
 		-s) START=$2; shift 2 ;;
 		--install) INSTALL=1; shift ;;
-		-h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h|--help) sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		*) break ;;
 	esac
 done
-if ! [[ $START =~ ^[0-9]+$ ]] || [[ $START -lt 1 || $START -gt 10 ]]; then
-	echo "[X] -s 는 1~10 사이 숫자여야 합니다"; exit 1
+if ! [[ $START =~ ^[0-9]+$ ]] || [[ $START -lt 1 || $START -gt 17 ]]; then
+	echo "[X] -s 는 1~17 사이 숫자여야 합니다"; exit 1
 fi
 PING_UP=${1:-${PING_UP:-127.0.0.1}}
 PING_DOWN=${2:-${PING_DOWN:-192.0.2.1}}
@@ -80,7 +82,7 @@ step() { # 번호 제목 : 이 단계를 실행해야 하면 0, 건너뛰면 1
 	CUR=$1; CUR_TITLE=$2
 	if (( CUR < START )); then return 1; fi
 	echo
-	echo "${C_B}-------- [${CUR}/10] ${CUR_TITLE} --------${C_0}"
+	echo "${C_B}-------- [${CUR}/17] ${CUR_TITLE} --------${C_0}"
 	return 0
 }
 say() { printf '  %s\n' "$*"; }
@@ -170,14 +172,15 @@ fi
 # ============================================================
 if step 2 "CLI 사용법 · code 없음 · status"; then
 	ensure_binary
-	say "무엇을 하나: 데몬 없이 되는 CLI 의 오류 처리를 확인합니다 (인자 없음 / 없는 code / status)."
+	say "무엇을 하나: 데몬 없이 되는 CLI 를 확인합니다 (인자 없음=상태 리포트 / -h / 잘못된 명령·인자 / 없는 code / status)."
 	RC_STEP=0
-	cli 1 "사용법: auto_setup"
+	cli 0 "auto_setup 상태 리포트"
+	cli 0 "사용법: auto_setup" -h
 	cli 1 "사용법: auto_setup" code
 	cli 1 "사용법: auto_setup" bogus
 	cli 1 "[X] code 없음" code 0000
 	cli 0 "" status
-	checkpoint "인자 없음/잘못된 명령은 '사용법' 출력 + exit=1, code 0000 은 '[X] code 없음', status 는 exit=0"
+	checkpoint "인자 없음(비 tty)은 '상태 리포트' 텍스트 표 exit=0, -h 는 '사용법' exit=0, 잘못된 명령/인자는 '사용법' exit=1, code 0000 은 '[X] code 없음', status 는 exit=0"
 	if [[ $RC_STEP -eq 0 ]]; then result PASS "CLI 오류 처리·종료코드 정상"; else result FAIL "기대와 다른 출력/종료코드 (위 '기대' 줄 참고)"; fi
 	pause
 fi
@@ -408,6 +411,175 @@ if step 10 "정리"; then
 	if [[ -e $AS ]]; then rc=1; fi
 	if ls -d /tmp/as_manual.* > /dev/null 2>&1; then rc=1; fi
 	checkpoint "점검용 데몬 0개, $AS 없음, /tmp/as_manual.* 없음 (./auto_setup 바이너리는 남겨 둠)"
+	if [[ $rc -eq 0 ]]; then result PASS "정리 완료 (잔여 프로세스·디렉터리 없음)"; else result FAIL "정리 후에도 남은 것이 있음"; fi
+fi
+
+# ============================================================
+# 2차 단계 (11~17): 기존 1~10 번호·동작은 그대로 두고 뒤에 추가
+# ============================================================
+
+# e2e2_step 시나리오글자 : test/run_e2e2.sh <글자> 실행 → 결과 줄 표시, E2E2_RC=0|skip|<rc>, E2E2_SUM="PASS=N FAIL=M"
+e2e2_step() {
+	local l=$1 out="$AS/e2e2_$1.out"
+	mkdir -p "$AS"
+	printf '  $ bash test/run_e2e2.sh %s\n' "$l"
+	bash "$ROOT/test/run_e2e2.sh" "$l" > "$out" 2>&1
+	E2E2_RC=$?
+	grep -E '^  \[(PASS|FAIL|SKIP)\]' "$out" | head -80 | sed 's/^/    /'
+	grep -E 'E2E2 결과' "$out" | sed 's/^/    /'
+	E2E2_SUM=$(grep -o 'PASS=[0-9]* FAIL=[0-9]*' "$out" | tail -1)
+	if grep -q '^\[SKIP\]' "$out"; then E2E2_RC=skip; fi
+}
+e2e2_result() { # 통과 메시지
+	if [[ $E2E2_RC == skip ]]; then result CHECK "root 가 아니어서 건너뜀 - root 로 다시 실행"
+	elif [[ $E2E2_RC -eq 0 ]]; then result PASS "$1 ($E2E2_SUM)"
+	else result FAIL "$1 실패 ($E2E2_SUM) - bash test/run_e2e2.sh 로 직접 확인"; fi
+}
+
+# ============================================================
+if step 11 "상태 TUI · --plain 리포트 · 요청 (샘플 상태)"; then
+	ensure_binary
+	SD="$AS/sample"
+	rm -rf "$SD"
+	e2e_sample_state "$SD" "$(date +%s)"
+	say "무엇을 하나: 모든 단계가 보이는 가짜 상태를 만들어 'auto_setup'(상태 리포트)를 확인합니다. 데몬 없이 상태 파일만 읽습니다."
+	say "  샘플 위치: $SD   (작업 3개: alice=gpu.yml·cpu.yml 2그룹, bob=그룹 줄 없는 구버전, carol=종료된 작업 ok.yml·bad.yml)"
+	rc=0
+	printf '  $ AUTO_SETUP_DIR=%s auto_setup --plain\n' "$SD"
+	out=$(AUTO_SETUP_DIR="$SD" "$BIN_AS" --plain 2>&1) || rc=1
+	printf '%s\n' "$out" | sed 's/^/    /'
+	for k in 'gpu.yml' 'cpu.yml' '\(all\)' 'ok.yml' 'bad.yml' '정체 1 +실패 1'; do
+		grep -qE "$k" <<< "$out" || { printf '    (기대: 출력에 "%s")\n' "$k"; rc=1; }
+	done
+	checkpoint "상단: 전체 N 완료 N 진행 N 정체 1 실패 1 + 갱신 시각 + 데몬 중지 / 표: 그룹별 호스트 수·단계별 건수·최장경과 (gpu.yml 정체, cpu.yml 실패 포함, carol 은 '(종료)')"
+	if [[ -z $YES ]]; then
+		say "이제 TUI 를 직접 엽니다. (다른 터미널에서 직접 열려면:  AUTO_SETUP_DIR=$SD $BIN_AS )"
+		say "  화면1: 상단 총계 · 그룹 행(이름·infra/os/boot/splunk·호스트 수·단계 막대·최장 경과)"
+		say "  화면2(Enter): 호스트별 표 - g3 는 1시간을 넘어 빨간 '정체', c2 는 실패, ok.yml 에서는 하단 [c] 수동 실행이 활성"
+		say "  키: ↑↓ 행 · Enter 상세 · ←→ 작업 전환/돌아가기 · f 정체·실패만 · c 수동 실행(y/n, 데몬이 없으니 요청 파일만 남음) · r 새로고침 · ? 도움말 · Esc/q 돌아가기·종료"
+		checkpoint "↑↓ ←→ Enter c q 를 눌러 보고, 색(완료 초록·진행 청록·대기 회색·경고 노랑·정체/실패 빨강, 끄기: NO_COLOR=1)이 맞는지"
+		ans=""
+		read -r -p "  >> Enter: 이 터미널에서 TUI 열기 (q 로 닫으면 돌아옴, s: 건너뛰기) " ans || ans=s
+		if [[ $ans != s ]]; then
+			AUTO_SETUP_DIR="$SD" "$BIN_AS"
+			ans2=""
+			read -r -p "  TUI 화면이 위 '확인할 것' 대로였나요? (y/n) " ans2 || ans2=""
+			[[ $ans2 == y ]] || rc=1
+		else
+			say "(TUI 직접 확인 건너뜀)"
+		fi
+	else
+		say "-y 모드: TUI 는 사람이 직접 봐야 하므로 --plain 만 자동 확인합니다. (직접 점검: bash test/manual_check.sh -s 11)"
+	fi
+	say "자동 스모크: manual-run 요청 거부/수락 → 수동 run → code, 원격 request, pty 로 TUI 화면1→Enter→q (run_e2e2.sh c)"
+	e2e2_step c
+	[[ $E2E2_RC == 0 || $E2E2_RC == skip ]] || rc=1
+	if [[ $rc -ne 0 ]]; then result FAIL "리포트/TUI/요청 확인 실패 (위 출력 참고)"
+	elif [[ $E2E2_RC == skip ]]; then result CHECK "리포트 확인 통과, 요청·TUI 자동 스모크는 root 가 아니어서 건너뜀"
+	else result PASS "--plain 리포트 + 요청/TUI 스모크 통과 ($E2E2_SUM)"; fi
+	pause
+fi
+
+# ============================================================
+if step 12 "데몬 --start / --restart / --stop"; then
+	ensure_binary
+	ensure_scratch
+	CD="$AS/ctl"
+	rm -rf "$CD"; mkdir -p "$CD"
+	say "무엇을 하나: 별도 데이터 디렉터리($CD)에서 데몬을 --start(중복 안내) → --restart(pid 변경) → --stop(pid 파일 정리) 합니다."
+	say "  원격 클라이언트 빌드(-X main.os8_mgmt)는 --start/--stop/--restart 를 거부해야 합니다."
+	CTL_OUT=""; CTL_RC=0
+	ctl() { printf '  $ auto_setup %s\n' "$*"; CTL_OUT=$(AUTO_SETUP_DIR="$CD" "$BIN_AS" "$@" 2>&1); CTL_RC=$?; printf '%s\n' "$CTL_OUT" | sed 's/^/    /'; }
+	cpid() { head -1 "$CD/auto_setup.pid" 2> /dev/null | awk '{print $1}'; }
+	calive() { local p; p=$(cpid); [[ -n $p ]] && kill -0 "$p" 2> /dev/null; }
+	rc=0
+	ctl --start; p1=$(cpid)
+	[[ $CTL_RC -eq 0 && $CTL_OUT == *"데몬 기동"* ]] && calive || { rc=1; echo "    (기대: 기동 + pid 파일 + 프로세스 생존)"; }
+	ctl --start
+	[[ $CTL_RC -eq 0 && $CTL_OUT == *"이미 실행 중"* && $(cpid) == "$p1" ]] || { rc=1; echo "    (기대: '이미 실행 중' 안내, pid 불변)"; }
+	ctl --restart; p2=$(cpid)
+	[[ $CTL_RC -eq 0 && -n $p2 && $p2 != "$p1" ]] && calive || { rc=1; echo "    (기대: pid 변경 + 생존)"; }
+	ctl --stop
+	if [[ $CTL_RC -ne 0 ]] || calive || [[ -e $CD/auto_setup.pid ]]; then rc=1; echo "    (기대: 프로세스 종료 + pid 파일 삭제)"; fi
+	ctl --stop
+	[[ $CTL_RC -eq 0 && $CTL_OUT == *"실행 중이 아닙니다"* ]] || { rc=1; echo "    (기대: '실행 중이 아닙니다' 안내, rc 0)"; }
+	if (cd "$ROOT" && go build -ldflags "-X main.os8_mgmt=os8.mgmt" -o "$S/auto_setup_client" .); then
+		for a in --start --stop --restart; do
+			printf '  $ (원격 클라이언트 빌드) auto_setup %s\n' "$a"
+			o=$(AUTO_SETUP_DIR="$CD" "$S/auto_setup_client" "$a" 2>&1); r=$?
+			printf '%s\n' "$o" | sed 's/^/    /'
+			[[ $r -eq 1 && $o == *"os8_mgmt 에서만"* ]] || { rc=1; echo "    (기대: rc=1 + '데몬은 os8_mgmt 에서만')"; }
+		done
+	else
+		rc=1; echo "    (원격 클라이언트 빌드 실패)"
+	fi
+	checkpoint "--start 두 번째는 '이미 실행 중 (pid N)', --restart 후 pid 가 바뀜, --stop 후 pid 파일이 사라짐, 원격 빌드는 거부"
+	if [[ $rc -eq 0 ]]; then result PASS "--start/--restart/--stop·원격 거부 정상"; else result FAIL "데몬 제어 결과가 기대와 다름"; fi
+	pause
+fi
+
+# ============================================================
+if step 13 "양방향 동일성 (원격 클라이언트 모드 · 스텁 gossh)"; then
+	ensure_binary
+	say "무엇을 하나: 같은 상태 디렉터리에 대해 status/snapshot/code/리포트를 (1) 로컬로, (2) 원격 클라이언트 모드(os8_mgmt 채운 빌드 + 스텁 gossh 가"
+	say "  로컬 바이너리를 호출)로 실행해 stdout/stderr/종료코드가 같은지 비교합니다. 01 의 os8_mgmt 전달도 로컬 전달과 같은 queue 인지 봅니다."
+	e2e2_step a
+	checkpoint "a1~a6(status·snapshot·code·리포트) 가 모두 PASS(= 로컬과 원격 출력 diff 0), a15 01 원샷 전달, a16 데몬 수거 PASS"
+	e2e2_result "양방향 동일성·요청/완료/취소·01 전달"
+	pause
+fi
+
+# ============================================================
+if step 14 "완료기록 (os_check 기록 → 데몬 인정·제외)"; then
+	ensure_binary
+	say "무엇을 하나: os_check 복사본(auto_done_dir/auto_done_host 채움)이 정상 종료 시 남긴 완료기록을 데몬이 인정해 run 에서 제외하고 done/applied/ 로"
+	say "  옮기는지, 전달 이전·부팅 이전 기록은 거부하는지(로그 1회), auto_setup done <host> 수동 완료가 되는지 봅니다."
+	e2e2_step b
+	checkpoint "b2 오래된 기록 거부(로그 1회) · b4 인정+applied 이동 · b6 수동 완료 · b7 run 대상 4대(2·4·7 제외, run 1회)"
+	e2e2_result "완료기록 인정/거부/수동 완료"
+	pause
+fi
+
+# ============================================================
+if step 15 "LDAP 백업/복원 (스텁 gossh)"; then
+	ensure_binary
+	say "무엇을 하나: 전달 시점 백업(디렉터리 0700·파일 0600) → READY 후 bindpw same(생략)/diff(백업본 복원) → os_check run 순서를 스텁으로 검증하고,"
+	say "  테스트용 비밀 문자열이 로그·codes·job·wall·status·snapshot·리포트·gossh 기록 어디에도 없는지 grep 합니다."
+	e2e2_step e
+	checkpoint "e2 권한 700/600 · e4 호출 순서 collect→probe→restore→run · e5 same/diff · e7 비밀 문자열 미노출 PASS"
+	e2e2_result "LDAP 백업/복원 흐름·bindpw 미노출"
+	pause
+fi
+
+# ============================================================
+if step 16 "2차 체크 (os6_mgmt, 스텁 ssh)"; then
+	ensure_binary
+	say "무엇을 하나: os6_mgmt/os6_os_check_sh 를 채운 빌드로 1차 FAIL·접속불가 호스트(route=local)만 2차 체크가 되어 code 에"
+	say "  '### 2차 체크 (os6_mgmt)' 섹션과 최종 판정이 붙는지, 변수를 비운 빌드는 code 가 1차와 같은지 봅니다."
+	e2e2_step f
+	checkpoint "f1 2차 대상 3대 · f2 code 2차 섹션과 최종 판정(FAIL/NO FAIL) · f5 변수 비운 빌드는 2차 섹션 없음"
+	e2e2_result "2차 체크 대상 선별·code 병합·변수 비움 동일"
+	pause
+fi
+
+# ============================================================
+if step 17 "정리 (2차 단계 포함)"; then
+	say "무엇을 하나: 점검용 데몬을 종료하고, 점검 데이터($AS 아래 sample·ctl 포함)와 임시 스크래치를 삭제합니다. (운영 /tmp/auto_setup 은 건드리지 않음)"
+	pkill -KILL -f "^$BIN_AS daemon$" 2> /dev/null
+	sleep 1
+	if [[ -n $S && -d $S ]]; then
+		pkill -KILL -f "$S/" 2> /dev/null
+		rm -rf "$S"
+	fi
+	S=""
+	rm -rf "$AS"
+	rc=0
+	n=$(daemon_count)
+	printf '  점검용 데몬 수: %s\n' "$n"
+	[[ $n -eq 0 ]] || rc=1
+	if [[ -e $AS ]]; then rc=1; fi
+	if ls -d /tmp/as_manual.* /tmp/as_e2e2.* > /dev/null 2>&1; then rc=1; fi
+	checkpoint "점검용 데몬 0개, $AS 없음, /tmp/as_manual.*·/tmp/as_e2e2.* 없음 (./auto_setup 바이너리는 남겨 둠)"
 	if [[ $rc -eq 0 ]]; then result PASS "정리 완료 (잔여 프로세스·디렉터리 없음)"; else result FAIL "정리 후에도 남은 것이 있음"; fi
 fi
 

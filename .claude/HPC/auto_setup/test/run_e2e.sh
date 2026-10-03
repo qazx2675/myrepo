@@ -81,9 +81,15 @@ AUTOSETUP="$S/auto_setup"
 echo "== 0) 소스 무결성 · 빌드"
 n=$(grep -cE '^[[:space:]]+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh)[[:space:]]+= ""' "$ROOT/main.go")
 t_eq "소스 main.go 의 빈 변수 4개는 빈 값 그대로" "$n" 4
-rc=0; "$AUTOSETUP" > /dev/null 2>&1 || rc=$?
-t_eq "인자 없이 실행 → 사용법 출력 후 exit 1" "$rc" 1
-t_has "인자 없이 실행 → 사용법 출력" <("$AUTOSETUP" 2>&1) '^사용법: auto_setup'
+rc=0; "$AUTOSETUP" > /dev/null 2>&1 < /dev/null || rc=$?
+t_eq "인자 없이 실행 → 상태 리포트(비 tty 면 plain), exit 0" "$rc" 0
+t_has "인자 없이 실행 → 사용법이 아니라 리포트 출력" <("$AUTOSETUP" 2>&1 < /dev/null) '^ auto_setup 상태 리포트'
+rc=0; "$AUTOSETUP" -h > /dev/null 2>&1 || rc=$?
+t_eq "-h → 사용법 출력 exit 0" "$rc" 0
+t_has "-h → 사용법 출력" <("$AUTOSETUP" -h 2>&1) '^사용법: auto_setup'
+rc=0; "$AUTOSETUP" bogus > /dev/null 2>&1 || rc=$?
+t_eq "잘못된 인자 → 사용법 출력 후 exit 1" "$rc" 1
+t_has "잘못된 인자 → 사용법 출력(stderr)" <("$AUTOSETUP" bogus 2>&1) '^사용법: auto_setup'
 
 # ============================================================
 echo "== c) os_check 복사본 -auto : 프롬프트 없이 끝까지, p/d → set / 아니면 y"
@@ -195,6 +201,9 @@ code : $CODE   →  auto_setup code $CODE"
 t_eq "wall 전체 내용(완료 호스트 가로 + 대수 + code)" "$(cat "$WALL" 2> /dev/null)" "$EXP_WALL"
 t_eq "codes/ 에 파일 1개, 이름=wall 의 code" "$(ls "$AS/codes" 2> /dev/null)" "$CODE.txt"
 CF=$AS/codes/$CODE.txt
+# os6_mgmt 만 채워도 autofs 폴백(os6OSCheckPath)으로 2차 체크가 켜지므로, 1차 구성 검사는 2차 섹션을 뗀 사본으로 한다 (2차는 run_e2e2.sh)
+sed -e '/^### 2차 체크/,$d' "$CF" | sed -e '/./,$!d' | tac | sed -e '/./,$!d' | tac > "$S/code_first.txt"
+CF1=$S/code_first.txt
 t_eq "done json: 3대 모두 processed=code" "$(grep -c "\"processed\": \"$CODE\"" "$DONE")" 3
 t_eq "done json: run 1건(1차=전체 3대)" "$(grep -c '"code"' "$DONE")" 1
 
@@ -213,13 +222,13 @@ for v in "$L_REPORT" "$L_SET" "$L_LDAP" "$L_SPL" "$L_KER" "$L_INF" "$L_SRC"; do
 done
 t_eq "code 파일 구성 순서: 결과리포트→설정체크→LDAP→SPLUNK→커널→infra커널→원본" "$ORDER_OK" 1
 t_eq "code 파일 첫 줄 = 결과 리포트 머리줄" "$(sed -n 1p "$CF")" "############### 결과 리포트 ###############"
-t_eq "code 파일 마지막 줄 = 원본 경로" "$(tail -1 "$CF")" "원본 : $AS/runs/$CODE/os_check.log"
+t_eq "code 파일 마지막 줄 = 원본 경로" "$(tail -1 "$CF1")" "원본 : $AS/runs/$CODE/os_check.log"
 t_hasF "담당자 문구(전원 설치 완료)" "$CF" "3대 OS 설치 완료하였습니다."
 t_hasF "담당자 문구: 호스트 가로 나열" "$CF" "127.0.0.1 127.0.0.2 192.0.2.1"
 EXP_SET="설정체크 (설정 수정 후 재점검)
 127.0.0.2: FAIL selinux enforcing
 NO FAIL : 127.0.0.1 192.0.2.1 (2대)"
-t_eq "설정체크 블록: FAIL 줄 + NO FAIL 한 줄" "$(sed -n '/^설정체크 (설정 수정 후 재점검)$/,/^$/p' "$CF" | sed '/^$/d')" "$EXP_SET"
+t_eq "설정체크 블록: FAIL 줄 + NO FAIL 한 줄" "$(sed -n '/^설정체크 (설정 수정 후 재점검)$/,/^$/p' "$CF1" | sed '/^$/d')" "$EXP_SET"
 t_hasF "LDAP 요약" "$CF" "INFO ldap infra1"
 t_hasF "SPLUNK 요약(대수 포함)" "$CF" "INFO SDS Splunk typeA (3대)"
 t_hasF "커널 요약" "$CF" "INFO kernel 5.14.0-1 (전체 동일)"

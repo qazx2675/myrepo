@@ -51,7 +51,7 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 		return RunResult{}, err
 	}
 	// os_check 가 현재 디렉터리의 dhcp.sh 를 쓰므로 원본 위치로 링크 (없으면 생략)
-	if src := filepath.Join(filepath.Dir(os_check_sh), "dhcp.sh"); fileExists(src) {
+	if src := firstExisting(dhcpCandidates(os_check_sh)); src != "" {
 		_ = os.Symlink(src, filepath.Join(dir, "dhcp.sh"))
 	}
 
@@ -93,7 +93,7 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	if abnormal {
 		logf("[!] os_check 비정상 종료(결과 리포트 없음): code=%s", code)
 	}
-	return RunResult{Processed: processed, Abnormal: abnormal, Code: code}, nil
+	return RunResult{Processed: processed, Abnormal: abnormal, Code: code, Failed: parsePostapplyFailed(string(post), hosts)}, nil
 }
 
 // postRunHook: run 전/후 단계 확장 지점(GPU 드라이버 등). 현재는 아무 것도 하지 않는다.
@@ -230,6 +230,58 @@ func parsePostapplyHosts(post string, hosts []string) []string {
 	return out
 }
 
+// postapplyFailLines: postapply 의 FAIL 포함 줄과 FAIL 이 있는 호스트 집합
+func postapplyFailLines(post string) ([]string, map[string]bool) {
+	failHosts := map[string]bool{}
+	var failLines []string
+	for _, l := range splitLines(post) {
+		if !strings.Contains(strings.ToUpper(l), "FAIL") {
+			continue
+		}
+		failLines = append(failLines, l)
+		if h := lineHost(l); h != "" {
+			failHosts[h] = true
+		}
+	}
+	return failLines, failHosts
+}
+
+// parsePostapplyFailed: postapply 에 FAIL 줄이 있는 호스트 (등장 순서, 요청 호스트로 한정)
+func parsePostapplyFailed(post string, hosts []string) []string {
+	_, failHosts := postapplyFailLines(post)
+	var out []string
+	for _, h := range parsePostapplyHosts(post, hosts) {
+		if failHosts[h] {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// settingCheckText: "설정체크 (설정 수정 후 재점검)" 섹션 (FAIL 줄 / NO FAIL 한 줄)
+func settingCheckText(post string, havePost bool, hosts []string) string {
+	var sb strings.Builder
+	sb.WriteString("설정체크 (설정 수정 후 재점검)")
+	if !havePost {
+		sb.WriteString("\n(재점검 결과 없음)")
+		return sb.String()
+	}
+	failLines, failHosts := postapplyFailLines(post)
+	var noFail []string
+	for _, h := range parsePostapplyHosts(post, hosts) {
+		if !failHosts[h] {
+			noFail = append(noFail, h)
+		}
+	}
+	for _, l := range failLines {
+		sb.WriteString("\n" + l)
+	}
+	if len(noFail) > 0 {
+		fmt.Fprintf(&sb, "\nNO FAIL : %s (%d대)", strings.Join(noFail, " "), len(noFail))
+	}
+	return sb.String()
+}
+
 // buildCodeText: codes/<code>.txt 본문과 비정상 여부(결과 리포트 블록이 없거나 불완전)
 func buildCodeText(logText, post string, havePost bool, hosts []string, logFile string) (string, bool) {
 	var parts []string
@@ -239,36 +291,7 @@ func buildCodeText(logText, post string, havePost bool, hosts []string, logFile 
 		parts = append(parts, report)
 	}
 
-	var sb strings.Builder
-	sb.WriteString("설정체크 (설정 수정 후 재점검)")
-	if !havePost {
-		sb.WriteString("\n(재점검 결과 없음)")
-	} else {
-		failHosts := map[string]bool{}
-		var failLines []string
-		for _, l := range splitLines(post) {
-			if !strings.Contains(strings.ToUpper(l), "FAIL") {
-				continue
-			}
-			failLines = append(failLines, l)
-			if h := lineHost(l); h != "" {
-				failHosts[h] = true
-			}
-		}
-		var noFail []string
-		for _, h := range parsePostapplyHosts(post, hosts) {
-			if !failHosts[h] {
-				noFail = append(noFail, h)
-			}
-		}
-		for _, l := range failLines {
-			sb.WriteString("\n" + l)
-		}
-		if len(noFail) > 0 {
-			fmt.Fprintf(&sb, "\nNO FAIL : %s (%d대)", strings.Join(noFail, " "), len(noFail))
-		}
-	}
-	parts = append(parts, sb.String())
+	parts = append(parts, settingCheckText(post, havePost, hosts))
 
 	parts = append(parts, extractSummaries(splitLines(logText))...)
 	parts = append(parts, "원본 : "+logFile)
