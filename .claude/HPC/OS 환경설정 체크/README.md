@@ -65,6 +65,11 @@ chmod +x os_check_final_annotated.sh
 - OS 체크는 `y`, 환경설정은 목록에 `p`/`d` 로 시작하는 호스트(앞 공백·대소문자 무시)가 하나라도 있으면 `set`, 없으면 `y` 로 자동 선택합니다.
 - 인자 개수가 다르거나 user 가 비었거나 목록 파일이 없으면 `[ERROR] -auto <user> <호스트목록파일> : 목록 파일이 없습니다` 후 exit 1.
 
+### 2.3 auto_setup 완료기록 (최상단 빈 변수 2개)
+
+- `auto_done_dir=""`(로컬 디렉터리, os8_mgmt 에서 채움), `auto_done_host=""`(os8_mgmt 호스트명, 다른 서버에서 채움). **둘 다 비어 있으면(기본) 출력·종료코드·파일이 변하지 않습니다.**
+- 채워진 경우 결과 리포트 출력 뒤(종료 직전)에 이번 실행의 `check.res_<user>_postapply` 에 에러 없이 나온 호스트마다 `epoch user sha256 os_check` 한 줄을 `<host>` 파일로 기록합니다(`sha256` = 그 호스트의 postapply 줄들의 해시). `auto_done_dir` 은 임시파일→mv 원자 기록, `auto_done_host` 는 `gossh` 원샷(`${AUTO_SETUP_DIR:-/tmp/auto_setup}/done/`, 500대 단위 1회). 실패는 경고 1줄만 출력하며 결과·종료코드는 불변입니다.
+
 ## 3. 옵션별 상세 설명
 
 이 스크립트는 명령줄 옵션(플래그) 대신 스크립트 실행 후 나오는 프롬프트 입력을 통해 옵션을 선택합니다.

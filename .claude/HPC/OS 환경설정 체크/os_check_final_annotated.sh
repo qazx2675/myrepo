@@ -105,6 +105,9 @@
 #      시작하는 호스트가 있으면 set 아니면 y 로 자동 진행("... : y (-auto)" 에코).
 #      인자 없이 실행하면 기존 동작과 동일.
 
+auto_done_dir=""    # (auto_setup) 완료기록을 쓸 로컬 디렉터리(os8_mgmt 에서 채움). 둘 다 비면 아무 동작 없음
+auto_done_host=""   # (auto_setup) os8_mgmt 호스트명(다른 서버에서 채움) — gossh 로 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/done 에 기록
+
 RUN_SH_DIR="/path/to/check"
 SETTING_DIR="/path/to/setting"
 RCLOCAL_SH="/path/to/setting/rclocal.sh"
@@ -984,6 +987,91 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# [신규] auto_setup 완료기록: 이번 실행의 postapply 결과(check.res_${user}_postapply)에 에러 없이 나온 호스트마다
+# "epoch user sha256 os_check" 한 줄을 남긴다 (sha256 = 그 호스트의 postapply 줄들, 줄 앞이 "호스트:" 인 원본 줄).
+# auto_done_dir 이면 로컬 디렉터리에 <host> 파일을 임시파일→mv 로 원자 기록, auto_done_host 이면 gossh 로 그 서버에
+# 같은 기록(호스트 500대 단위 1회 호출). 둘 다 비어 있으면 즉시 반환(출력·파일 없음). 실패는 경고 1줄만, 종료코드 불변.
+auto_record_done() {
+    [ -n "${auto_done_dir}${auto_done_host}" ] || return 0
+    [ -n "${POST_APPLY_CHECK_FILE}" ] && [ -f "${POST_APPLY_CHECK_FILE}" ] || return 0
+    [ -n "${SETTING_TARGET_LIST}" ] && [ -f "${SETTING_TARGET_LIST}" ] || return 0
+
+    local now recs h sum n=0 fail=0
+    now=$(date +%s)
+    recs=$(mktemp 2>/dev/null) || { yellow "[WARN] auto_setup 완료기록 실패 (임시파일 생성 불가)"; return 0; }
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        yellow "[WARN] auto_setup 완료기록 실패 (sha256sum 없음)"; rm -f "${recs}"; return 0
+    fi
+
+    # 정상 호스트 = 대상 목록에 있고, 결과 파일에 "호스트: ..." 줄이 있으며 ERROR 줄이 없는 호스트
+    while IFS= read -r h; do
+        [ -n "${h}" ] || continue
+        [[ "${h}" =~ ^[A-Za-z0-9._-]+$ ]] || continue
+        sum=$(awk -v p="${h}:" 'index($0, p) == 1' "${POST_APPLY_CHECK_FILE}" | sha256sum | cut -d' ' -f1)
+        printf '%s %s %s %s %s\n' "${h}" "${now}" "${user}" "${sum}" "os_check" >> "${recs}"
+        n=$((n + 1))
+    done < <(awk '
+        NR == FNR { t = $1; sub(/\r$/, "", t); if (t != "") want[t] = 1; next }
+        /^[[:space:]]*$/ { next }
+        /^ERROR/ { split($0, a, " "); e = a[2]; sub(/:$/, "", e); bad[e] = 1; next }
+        { i = index($0, ":"); if (i < 2) next
+          h = substr($0, 1, i - 1); if (h ~ /[[:space:]]/ || !(h in want)) next
+          st = substr($0, i + 1); sub(/^[[:space:]]+/, "", st)
+          if (st ~ /^ERROR/) { bad[h] = 1; next }
+          if (!(h in seen)) { seen[h] = 1; ord[++k] = h } }
+        END { for (j = 1; j <= k; j++) if (!(ord[j] in bad)) print ord[j] }' "${SETTING_TARGET_LIST}" "${POST_APPLY_CHECK_FILE}")
+
+    if [ "${n}" -gt 0 ]; then
+        if [ -n "${auto_done_dir}" ]; then
+            if mkdir -p "${auto_done_dir}" 2>/dev/null; then
+                local rest
+                while read -r h rest; do
+                    { printf '%s\n' "${rest}" > "${auto_done_dir}/.${h}.tmp.$$" \
+                        && mv -f "${auto_done_dir}/.${h}.tmp.$$" "${auto_done_dir}/${h}"; } 2>/dev/null || fail=$((fail + 1))
+                done < "${recs}"
+                rm -f "${auto_done_dir}"/.*.tmp.$$ 2>/dev/null
+            else
+                fail=${n}
+            fi
+            if [ "${fail}" -gt 0 ]; then
+                yellow "[WARN] auto_setup 완료기록 실패 (${fail}/${n}대 → ${auto_done_dir})"
+            else
+                green "[INFO] auto_setup 완료기록 : ${n}대 → ${auto_done_dir}"
+            fi
+        fi
+        if [ -n "${auto_done_host}" ]; then
+            if auto_record_done_remote "${recs}" "${n}"; then
+                green "[INFO] auto_setup 완료기록 : ${n}대 → ${auto_done_host}"
+            else
+                yellow "[WARN] auto_setup 완료기록 실패 (${auto_done_host})"
+            fi
+        fi
+    fi
+    rm -f "${recs}"
+    return 0
+}
+
+# auto_record_done 보조: "host epoch user sha256 source" 줄 파일($1)을 gossh 원샷으로 auto_done_host 의 done/ 에 기록.
+# 원격 명령에 base64 로 포함(stdin 사용 안 함), 500대 단위로 나눠 호출. 모든 호출에서 AUTO_DONE_OK 가 와야 성공.
+auto_record_done_remote() {
+    local recs="$1" total="$2" hl chunk b64 out ok=0 start=1
+    command -v gossh >/dev/null 2>&1 || return 1
+    hl=$(mktemp 2>/dev/null) || return 1
+    printf '%s\n' "${auto_done_host}" > "${hl}"
+    chunk=$(mktemp 2>/dev/null) || { rm -f "${hl}"; return 1; }
+    while [ "${start}" -le "${total}" ]; do
+        sed -n "${start},$((start + 499))p" "${recs}" > "${chunk}"
+        # 두 글자마다 '.' 삽입: base64 가 우연히 gossh 위험어(ddc/halt/reboot 등, 대소문자 무시)를 만들면 실행 거부되므로
+        b64=$(base64 -w0 < "${chunk}" 2>/dev/null | sed 's/../&./g')
+        [ -n "${b64}" ] || { ok=1; break; }
+        out=$(gossh -script -w "${hl}" "bash -c 'd=\"\${AUTO_SETUP_DIR:-/tmp/auto_setup}/done\"; mkdir -p \"\$d\" && echo ${b64} | tr -d . | base64 -d | while read -r h rest; do printf \"%s\\n\" \"\$rest\" > \"\$d/.\$h.tmp\" && mv -f \"\$d/.\$h.tmp\" \"\$d/\$h\" || exit 1; done && echo AUTO_DONE_OK'" 2>/dev/null)
+        case "${out}" in *AUTO_DONE_OK*) ;; *) ok=1; break ;; esac
+        start=$((start + 500))
+    done
+    rm -f "${hl}" "${chunk}"
+    return "${ok}"
+}
+
 main() {
     AUTO_MODE=""   # 환경변수로 -auto 가 새어 들어오는 것 방지 (인자 없는 실행은 기존과 동일)
     if [ "${1:-}" == "-auto" ]; then
@@ -1106,6 +1194,7 @@ main() {
     check_pice_bios
     report_ev_hosts
     echo "###########################################"
+    auto_record_done   # [신규] 빈 변수면 아무 동작 없음, 항상 return 0
 }
 
 main "$@"

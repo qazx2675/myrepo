@@ -4,6 +4,7 @@
 |---|---|
 | `os_check_final_annotated.sh` | 스크립트 본체: gossh `-pm` 접속 분류 → OS 점검 → LDAP/SPLUNK/LACP 리포트 → 환경설정 적용 → 재점검. 비대화형 옵션 `-auto <user> <목록파일>` 지원 |
 | `README.md` | 사전 준비, 실행 방법, 결과 파일, 함수 목록 |
+| (훅) `auto_record_done` | 최상단 빈 변수 `auto_done_dir`/`auto_done_host` 가 채워진 경우에만, 정상 종료 직전 postapply 결과에 나온 호스트마다 auto_setup 완료기록(`epoch user sha256 os_check`)을 남김. 둘 다 비면 아무 동작 없음 |
 | `WORKFLOW.md` | 작업 흐름도 |
 | `PLAN.md` | 개발/변경 계획 메모 |
 
