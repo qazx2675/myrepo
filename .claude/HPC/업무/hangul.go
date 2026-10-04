@@ -164,8 +164,9 @@ func ConvertEngToHangul(eng string) string {
 func ConvertTokens(s string, protected map[string]bool) string {
 	toks := strings.Fields(s)
 	for k, t := range toks {
-		if !protected[strings.ToLower(t)] {
-			toks[k] = ConvertEngToHangul(t)
+		core, trail := splitTrail(t)
+		if !protected[strings.ToLower(core)] {
+			toks[k] = ConvertEngToHangul(core) + trail
 		}
 	}
 	return strings.Join(toks, " ")
@@ -201,8 +202,9 @@ func AutoConvert(s string, protected map[string]bool) (string, bool) {
 	toks := strings.Fields(s)
 	changed := false
 	for k, t := range toks {
-		if IsConvertibleToken(t, protected) {
-			toks[k] = ConvertEngToHangul(t)
+		core, trail := splitTrail(t)
+		if IsConvertibleToken(core, protected) {
+			toks[k] = ConvertEngToHangul(core) + trail
 			changed = true
 		}
 	}
@@ -210,4 +212,11 @@ func AutoConvert(s string, protected map[string]bool) (string, bool) {
 		return s, false
 	}
 	return strings.Join(toks, " "), true
+}
+
+// splitTrail separates trailing sentence punctuation (?!.,~) from a token
+// so that "dlrpehlfRk?" is judged and converted as "dlrpehlfRk" + "?".
+func splitTrail(tok string) (core, trail string) {
+	core = strings.TrimRight(tok, "?!.,~")
+	return core, tok[len(core):]
 }

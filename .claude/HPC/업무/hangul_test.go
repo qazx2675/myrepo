@@ -57,3 +57,19 @@ func TestHangulTokens(t *testing.T) {
 	// sssd is not protected here: check its behavior
 	t.Logf("sssd -> %q convertible=%v", ConvertEngToHangul("sssd"), IsConvertibleToken("sssd", nil))
 }
+
+func TestAutoConvertTrailingPunct(t *testing.T) {
+	prot := map[string]bool{"gpu": true}
+	if got, ch := AutoConvert("dlrpehlfRk?", prot); got != "이게될까?" || !ch {
+		t.Errorf("AutoConvert = %q,%v", got, ch)
+	}
+	if got, ch := AutoConvert("gpu tjfcl.", prot); got != "gpu 설치." || !ch {
+		t.Errorf("AutoConvert = %q,%v", got, ch)
+	}
+	if got, ch := AutoConvert("gpu?", prot); got != "gpu?" || ch {
+		t.Errorf("AutoConvert protected = %q,%v", got, ch)
+	}
+	if got := ConvertTokens("gpu? emfkdlqj", prot); got != "gpu? 드라이버" {
+		t.Errorf("ConvertTokens = %q", got)
+	}
+}
