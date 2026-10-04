@@ -56,6 +56,7 @@ const usageText = `사용법: auto_setup [명령]
 
 func main() {
 	runtime.GOMAXPROCS(1)
+	loadConf(confPaths())
 	os.Exit(run(os.Args[1:]))
 }
 

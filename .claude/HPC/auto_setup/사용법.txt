@@ -183,3 +183,12 @@ rm -rf /tmp/auto_setup
 
 # 점검용 데이터 제거 (manual_check.sh 를 중간에 끊었을 때)
 pkill -f 'auto_setup daemon'; rm -rf /tmp/auto_setup_manual
+
+# ---- 설정 파일로 빈 변수 채우기 (빌드 불필요, 0.3.0~) ----
+# 예시 파일을 복사해 값을 채운다 (키=값, 키 이름 = main.go 변수 이름)
+cp conf/auto_setup.conf.example conf/auto_setup.conf
+vi conf/auto_setup.conf
+# setup.sh 로 설치하면 /etc/auto_setup/auto_setup.conf 로 복사됨 (바이너리 옆 conf/ 도 인식)
+bash setup.sh
+# 다른 디렉터리의 설정을 임시로 쓰려면
+AUTO_SETUP_CONF=/경로 auto_setup --plain

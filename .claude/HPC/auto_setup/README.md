@@ -23,6 +23,7 @@ auto_setup/
 ├── main.go / daemon.go / state.go / ... (Go 소스, 파일별 역할은 ARCHITECTURE.md)
 ├── setup.sh              ← 빌드 + 설치 + cron + tmpfiles 등록
 ├── build_os6.sh          ← os6 용 정적 빌드 (Go 1.20 서버에서)
+├── conf/auto_setup.conf.example ← 빈 변수 설정 파일 예시 (복사해 auto_setup.conf 로 사용)
 ├── test/
 │   ├── manual_check.sh   ← 대화형 단계별 점검 (1~17단계)
 │   ├── run_e2e.sh        ← 1차 목업 E2E (85건)
@@ -36,6 +37,20 @@ auto_setup/
 ### 최상단 빈 변수
 
 `main.go` 최상단의 변수들은 **항상 빈 문자열로 둡니다**(저장소 커밋 시, 값은 테스트·운영 빌드 때만 `-ldflags -X` 로 주입). `go build` 전에 소스를 고치지 마십시오.
+
+#### 설정 파일로 채우기 (빌드 불필요)
+
+빌드가 불가능한 환경(Go 없음)에서는 아래 변수들을 **`conf/auto_setup.conf`** 로 채웁니다. `conf/auto_setup.conf.example` 을 복사해 `키=값` 으로 작성합니다(키 이름 = 아래 변수 이름, `#` 주석, 값의 따옴표는 선택).
+
+```bash
+cp conf/auto_setup.conf.example conf/auto_setup.conf
+vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
+```
+
+- 설정 파일 위치(먼저 발견된 **하나만** 사용): ① `$AUTO_SETUP_CONF/auto_setup.conf` ② `<auto_setup 실행 파일 디렉터리>/conf/auto_setup.conf` ③ `/etc/auto_setup/auto_setup.conf` (`setup.sh` 가 `conf/auto_setup.conf` 를 여기에 설치, 0600)
+- **빌드 때 `-ldflags -X` 로 넣은 값이 있으면 그 값이 우선**하고, 설정 파일은 비어 있는 변수만 채웁니다. 알 수 없는 키·형식이 틀린 줄은 무시합니다.
+- 예) 저장소의 빌드 완료 `auto_setup_os6` 를 os6_mgmt 에 두고 같은 디렉터리의 `conf/auto_setup.conf` 에 `os8_mgmt=<호스트>` 만 적으면 원격 클라이언트로 동작합니다.
+- 실제 `conf/auto_setup.conf` 는 `.gitignore` 로 커밋에서 제외됩니다(예시 파일만 커밋). 01·os_check 쪽 빈 변수(`auto_done_dir` 등)는 쉘 스크립트이므로 기존 방식대로 채웁니다.
 
 #### main.go 9개
 
@@ -110,6 +125,7 @@ bash setup.sh
 # 4. os6 용 빌드 (Go 1.20 서버 .60 에서, 정적 바이너리)
 bash build_os6.sh
 # → auto_setup_os6 생성 (os6_mgmt 의 os6_autosetup 경로에 'auto_setup' 이름으로 배치, probe 용)
+# (Go 가 없는 회사 환경은 빌드 불필요: 저장소에 빌드 완료된 auto_setup_os6 (go1.20 정적, 변수 빈 값) 가 있으니 probe 용으로 그대로 배치)
 ```
 
 ### setup.sh 수행 내용
@@ -328,6 +344,7 @@ bash ../awx_script/test/run_tests.sh
 | 이름 | 기본값 | 설명 |
 |---|---|---|
 | `AUTO_SETUP_DIR` | `/tmp/auto_setup` | 작업 데이터 위치 (테스트만 오버라이드) |
+| `AUTO_SETUP_CONF` | (없음) | 설정 파일 디렉터리 (`<디렉터리>/auto_setup.conf`, 최우선 탐색) |
 | `AUTO_SETUP_LDAP_S4_PREFIX` | (없음) | LDAP s4 규칙: 호스트명 접두사 |
 | `AUTO_SETUP_LDAP_S4_SERVICES` | `nslcd,ntp` | LDAP s4 규칙: 대상 서비스 |
 | `AUTO_SETUP_NOW` | (없음) | **테스트 전용** snapshot 기준 시각(epoch 초). **운영에서 설정 금지** |
@@ -340,6 +357,7 @@ bash ../awx_script/test/run_tests.sh
 |---|---|
 | `main.go` | 최상단 빈 변수 8개 + CLI 분기 + 상수 정의 |
 | `paths.go` | os6 os_check 경로 해석, dhcp.sh 후보 (autofs 동일 경로 포함) |
+| `conf.go` | 설정 파일 로더 (빈 변수 채우기) |
 | `daemon.go` | queue 수거·경로 판별·ping 감시·7분/3분 스케줄·run 큐·LDAP/2차 단계 연동 (상태기계) |
 | `state.go` | Job/Host 구조체, queue 그룹 줄 파싱, JSON 원자 저장·복원 |
 | `model.go` | 호스트 단계(Stage)·정체 판정, Snapshot 구조체와 BuildSnapshot (CLI·TUI·원격 공용) |

@@ -15,6 +15,7 @@
 | `log.go` | /tmp/auto_setup/auto_setup.log 관리 (10MB 롤오버) | 로깅 |
 | `notify.go` | wall 알림 발송 | 결과 공유 |
 | `paths.go` | `os6_os_check_sh`·`awx_dir` 해석, dhcp.sh 링크 후보 (autofs 동일 경로 포함) | 2차 |
+| `conf.go` · `conf/auto_setup.conf.example` | 빈 변수를 설정 파일(`conf/auto_setup.conf`)로 채움 (빌드 변수가 우선) | 0.3.0 |
 | `model.go` | 호스트 단계(Stage)·한글 라벨·정체 판정, 그룹(yml) 집합, Snapshot 구조체·BuildSnapshot (CLI·TUI·원격 공용) | 2차 |
 | `client.go` | SnapshotSource(로컬/원격), gossh 원샷 전송·출력 복원 = 원격 클라이언트 모드 | 2차 |
 | `ctl.go` | `--start/--stop/--restart`, snapshot/done/request 명령, 색 메시지 | 2차 |
