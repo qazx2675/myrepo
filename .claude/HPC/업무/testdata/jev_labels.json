@@ -1,0 +1,785 @@
+[
+ {
+  "id": "q001",
+  "q": "서버 OS 새로 깔아달라는 요청이 들어왔는데 뭐부터 확인해야 하나요?",
+  "expect": "os_install",
+  "jev": "os_install",
+  "jev_prob": 0.87,
+  "match": true
+ },
+ {
+  "id": "q002",
+  "q": "OS 설치 끝난 서버 환경설정 점검은 어떤 순서로 하나요?",
+  "expect": "os_config_check",
+  "jev": "os_config_check",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q003",
+  "q": "VWP 장비랑 라이선스 서버는 OS 설치를 일반 서버랑 다르게 해야 하나요?",
+  "expect": "os_install_type",
+  "jev": "os_install_type",
+  "jev_prob": 0.83,
+  "match": true
+ },
+ {
+  "id": "q004",
+  "q": "psky 장비에 OS 올릴 때 주의할 점이 있나요?",
+  "expect": "os_install_caution",
+  "jev": "os_install_caution",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q005",
+  "q": "RHEL 8.6 서버를 8.10으로 올리려고 하는데 패치는 어떻게 진행하나요?",
+  "expect": "os_patch",
+  "jev": "os_patch",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q006",
+  "q": "OS 설치 후 GPU 드라이버도 깔아야 하나요?",
+  "expect": "gpu_driver",
+  "jev": "gpu_driver",
+  "jev_prob": 0.93,
+  "match": true
+ },
+ {
+  "id": "q007",
+  "q": "사용자가 그래픽카드 드라이버 버전 변경을 요청했는데 원하는 버전 파일이 서버에 없어요",
+  "expect": "gpu_driver_incident",
+  "jev": "gpu_driver",
+  "jev_prob": 0.78,
+  "match": true
+ },
+ {
+  "id": "q008",
+  "q": "GPU를 Exclusive Process 모드로 바꿔달라는 요청은 어떻게 처리해요?",
+  "expect": "gpu_mode",
+  "jev": "gpu_mode",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q009",
+  "q": "CF가 무엇의 약자인가요?",
+  "expect": "term_cf",
+  "jev": "term_cf",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q010",
+  "q": "VWP는 무슨 의미예요?",
+  "expect": "term_vwp",
+  "jev": "term_vwp",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q011",
+  "q": "AWX는 무엇인가요",
+  "expect": "term_awx",
+  "jev": "term_awx",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q012",
+  "q": "svr 계정이란 무엇인가요?",
+  "expect": "term_svr",
+  "jev": "term_svr",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q013",
+  "q": "사업부에서 직접 구매한 서버도 저희가 작업 지원해야 하나요?",
+  "expect": "support_scope",
+  "jev": "support_scope",
+  "jev_prob": 0.98,
+  "match": true
+ },
+ {
+  "id": "q014",
+  "q": "컴퓨트 서버 재부팅 전에 누구 승인을 받아야 하나요?",
+  "expect": "approval",
+  "jev": "approval",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q015",
+  "q": "작업 들어가기 전에 이 서버가 컴퓨트용인지 일반 서버인지 어떻게 구분하죠?",
+  "expect": "server_usage",
+  "jev": "server_usage",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q016",
+  "q": "보안 취약점 점검 결과 나온 서버들 조치는 어떤 절차로 하나요?",
+  "expect": "ssi",
+  "jev": "ssi",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q017",
+  "q": "USB 막는 차단 블록은 어디서 수령하고 어디에 보관해요?",
+  "expect": "usb_block",
+  "jev": "usb_block",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q018",
+  "q": "신규 서버 자산 등록할 때 CPU FLOPS 값은 어떤 기준으로 적나요?",
+  "expect": "asset_register",
+  "jev": "asset_register",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q019",
+  "q": "사용자가 직접 올린 애플리케이션에서 장애가 나면 우리는 어디까지 봐줘야 하나요?",
+  "expect": "sw_support_scope",
+  "jev": "support_scope",
+  "jev_prob": 0.53,
+  "match": false
+ },
+ {
+  "id": "q020",
+  "q": "지금 서버에 어떤 사용자들이 접속해 있는지 확인하려면 어떻게 해요?",
+  "expect": "login_users",
+  "jev": "login_users",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q021",
+  "q": "cgroup delegation 설정해 달라는 요청은 누구한테 넘기나요?",
+  "expect": "cgroup",
+  "jev": "cgroup",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q022",
+  "q": "/tmp 파일이 너무 빨리 지워진다고 삭제 주기를 늘려달래요",
+  "expect": "tmp_clean",
+  "jev": "tmp_clean",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q023",
+  "q": "서버가 자꾸 느려진다고 점검 요청이 왔는데 하드웨어는 누가 봐요?",
+  "expect": "server_inspect",
+  "jev": "server_inspect",
+  "jev_prob": 0.86,
+  "match": true
+ },
+ {
+  "id": "q024",
+  "q": "컴퓨트 서버에 텔넷 설치해 달라는 요청이 왔습니다",
+  "expect": "telnet",
+  "jev": "telnet",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q025",
+  "q": "DS Cloud VM 세팅할 때 SSH 포트가 몇 번이에요?",
+  "expect": "dscloud",
+  "jev": "dscloud",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q026",
+  "q": "HPC 자산이 아닌 장비에 디스크 교체 같은 물리 작업을 해달라는데 어떻게 답하죠?",
+  "expect": "physical_work",
+  "jev": "physical_work",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q027",
+  "q": "점프 서버 접속이 안 된다는 문의는 어디로 넘겨요?",
+  "expect": "jump_server",
+  "jev": "jump_server",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q028",
+  "q": "RHEL 8 쓰는 서버를 7로 다운그레이드 해달라는 요청은 받아줘야 하나요?",
+  "expect": "os_downgrade",
+  "jev": "os_downgrade",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q029",
+  "q": "Smart D\u0026E 서버 작업 요청이 오면 누구에게 할당하나요?",
+  "expect": "smart_de",
+  "jev": "smart_de",
+  "jev_prob": 0.93,
+  "match": true
+ },
+ {
+  "id": "q030",
+  "q": "사업부가 직접 투자한 서버를 폐기하고 싶다는데 어떻게 처리하나요?",
+  "expect": "bu_disposal",
+  "jev": "bu_disposal",
+  "jev_prob": 0.91,
+  "match": true
+ },
+ {
+  "id": "q031",
+  "q": "표준 구성에 없는 OS 설정을 추가하거나 빼달라는 요청은 어떻게 처리해요?",
+  "expect": "os_std_change",
+  "jev": "os_std_change",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q032",
+  "q": "에뮬레이터 서버 설정 바꿔달라는 요청 처리 방법이 궁금합니다",
+  "expect": "emulator",
+  "jev": "emulator",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q033",
+  "q": "유지보수 기간이 끝난 서버에서 하드웨어 장애가 나면 어떻게 하나요?",
+  "expect": "maint_expired",
+  "jev": "maint_expired",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q034",
+  "q": "DNS 서버 헬스체크는 하루에 언제 돌려야 하나요?",
+  "expect": "dns_check",
+  "jev": "dns_check",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q035",
+  "q": "루트 패스워드 만료 알림 메일이 왔는데 어떻게 처리하나요?",
+  "expect": "splunk_pw_expire",
+  "jev": "splunk_pw_expire",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q036",
+  "q": "스플렁크에서 장기간 다운된 서버 목록 메일이 왔어요",
+  "expect": "splunk_long_down",
+  "jev": "splunk_long_down",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q037",
+  "q": "재부팅됐다고 장애 조치 및 점검 서버 리스트 메일이 왔는데 뭘 확인해야 해요?",
+  "expect": "splunk_long_incident",
+  "jev": "splunk_long_incident",
+  "jev_prob": 0.97,
+  "match": true
+ },
+ {
+  "id": "q038",
+  "q": "매달 하는 USB 차단 블록 육안 점검은 어떻게 진행해요?",
+  "expect": "usb_monthly",
+  "jev": "usb_monthly",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q039",
+  "q": "스플렁크 알람 NA로 동보가 뜨면 뭐부터 확인해야 하나요?",
+  "expect": "dongbo_splunk_na",
+  "jev": "dongbo_splunk_na",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q040",
+  "q": "신규 서버가 입고돼서 가동까지 어떤 과정을 거치나요?",
+  "expect": "server_intake",
+  "jev": "server_intake",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q041",
+  "q": "데이터센터 서버 실사 나가서 위치 확인하는 건 어떻게 하나요?",
+  "expect": "dc_survey",
+  "jev": "dc_survey",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q042",
+  "q": "서버가 DHCP를 못 받아와서 설치가 진행이 안 되는데 뭘 봐야 하나요?",
+  "expect": "dhcp_fail",
+  "jev": "dhcp_fail",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q043",
+  "q": "OS 설치하고 부팅하니까 Emergency Shell로 빠져버려요",
+  "expect": "dracut",
+  "jev": "dracut",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q044",
+  "q": "DHCP 데몬이 재시작하면 바로 죽는데 설정 파일 어디를 봐야 하나요?",
+  "expect": "dhcpd_fail",
+  "jev": "dhcpd_fail",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q045",
+  "q": "새로 들어온 메모리랑 SSD 입고 처리는 어떻게 하나요?",
+  "expect": "parts_intake",
+  "jev": "parts_intake",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q046",
+  "q": "OS 재설치 해줘야 됨",
+  "expect": "os_install",
+  "jev": "os_install",
+  "jev_prob": 0.87,
+  "match": true
+ },
+ {
+  "id": "q047",
+  "q": "GPU 설치",
+  "expect": "gpu_driver",
+  "jev": "gpu_driver",
+  "jev_prob": 0.95,
+  "match": true
+ },
+ {
+  "id": "q048",
+  "q": "nvidia 드라이버 재설치",
+  "expect": "gpu_driver",
+  "jev": "gpu_driver",
+  "jev_prob": 0.65,
+  "match": true
+ },
+ {
+  "id": "q049",
+  "q": "드라이버 설치하고 재부팅해야 해?",
+  "expect": "gpu_driver",
+  "jev": "gpu_driver",
+  "jev_prob": 0.91,
+  "match": true
+ },
+ {
+  "id": "q050",
+  "q": "cuda 깔아줘",
+  "expect": "cuda",
+  "jev": "cuda",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q051",
+  "q": "ITOM이 뭐야?",
+  "expect": "term_itom",
+  "jev": "term_itom",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q052",
+  "q": "드림아이가 무슨 뜻이야",
+  "expect": "term_dreami",
+  "jev": "term_dreami",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q053",
+  "q": "일반 사용자가 요청한 건데 그냥 해줘도 돼?",
+  "expect": "requester",
+  "jev": "requester",
+  "jev_prob": 0.55,
+  "match": true
+ },
+ {
+  "id": "q054",
+  "q": "sudo 권한 좀 줘라",
+  "expect": "sudo",
+  "jev": "sudo",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q055",
+  "q": "rsh 깔아달래는데 해줘도 됨?",
+  "expect": "rsh",
+  "jev": "rsh",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q056",
+  "q": "인피니밴드 깔아달라는데 누가 함?",
+  "expect": "ib",
+  "jev": "ib",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q057",
+  "q": "so파일 링크 걸어달라는데",
+  "expect": "so_link",
+  "jev": "so_link",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q058",
+  "q": "외부 repo 추가해줄 수 잇어?",
+  "expect": "repo",
+  "jev": "repo",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q059",
+  "q": "서버 다른 데로 옮겨달래",
+  "expect": "server_move",
+  "jev": "server_move",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q060",
+  "q": "파티션 좀 늘려주라",
+  "expect": "partition",
+  "jev": "partition",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q061",
+  "q": "업무일지 어케 써?",
+  "expect": "worklog",
+  "jev": "worklog",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q062",
+  "q": "LED 점검 어떻게함",
+  "expect": "led",
+  "jev": "led",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q063",
+  "q": "PXE 설치 안됨",
+  "expect": "pxe_fail",
+  "jev": "pxe_fail",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q064",
+  "q": "패스워드 바꾸는데 token manipulation error 뜸",
+  "expect": "passwd_disk_full",
+  "jev": "password_quarterly",
+  "jev_prob": 0.71,
+  "match": false
+ },
+ {
+  "id": "q065",
+  "q": "자가소비 가이드 어딨어",
+  "expect": "parts_guide",
+  "jev": "parts_guide",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q066",
+  "q": "gpu driver 설치 절차",
+  "expect": "gpu_driver",
+  "jev": "gpu_driver",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q067",
+  "q": "nvidia driver 버전 바꿔야 하는데 run 파일 없으면 어디서 받아?",
+  "expect": "gpu_driver_incident",
+  "jev": "gpu_driver",
+  "jev_prob": 0.83,
+  "match": true
+ },
+ {
+  "id": "q068",
+  "q": "fabric manager 설치 순서",
+  "expect": "fabric_manager",
+  "jev": "fabric_manager",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q069",
+  "q": "cuda toolkit install 요청 처리 기준",
+  "expect": "cuda",
+  "jev": "cuda",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q070",
+  "q": "splunk install script 경로 HPC랑 SDS 다른가요",
+  "expect": "splunk_install",
+  "jev": "splunk_install",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q071",
+  "q": "Hyper-Threading off 요청은 누가 작업해?",
+  "expect": "ht",
+  "jev": "ht",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q072",
+  "q": "ulimit open files 값 늘려달라는 요청",
+  "expect": "limit",
+  "jev": "limit",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q073",
+  "q": "docker install 요청 들어오면 어떻게 처리?",
+  "expect": "docker",
+  "jev": "docker",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q074",
+  "q": "Redhat 공식 아닌 package install 가능 여부",
+  "expect": "non_redhat_pkg",
+  "jev": "non_redhat_pkg",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q075",
+  "q": "DR appl setting 월초 check 방법",
+  "expect": "dr_appl",
+  "jev": "dr_appl",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q076",
+  "q": "ssh key exchange failed 뜨는 서버 조치",
+  "expect": "ssh_kex",
+  "jev": "ssh_kex",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q077",
+  "q": "rmfovlr emfkdlqj tjfcl",
+  "expect": "gpu_driver",
+  "jev": "gpu_driver",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q078",
+  "q": "OS wotjfclgkaus usb0 skdhk",
+  "expect": "usb0_cdc",
+  "jev": "usb0_cdc",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q079",
+  "q": "wktks vPrl wjfck",
+  "expect": "asset_disposal",
+  "jev": "asset_disposal",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q080",
+  "q": "tjqjaud qusrudgksms qkdqjq",
+  "expect": "hostname_change",
+  "jev": "hostname_change",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q081",
+  "q": "whaql vmfhtptm wjdfl",
+  "expect": "zombie",
+  "jev": "zombie",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q082",
+  "q": "tjqj tlrkseo qusrud",
+  "expect": "timezone",
+  "jev": "timezone",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q083",
+  "q": "qnsrlquf votmdnjem qusrud",
+  "expect": "password_quarterly",
+  "jev": "password_quarterly",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q084",
+  "q": "ehdqh wktks ghkrdls",
+  "expect": "dongbo_itom",
+  "jev": "dongbo_itom",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q085",
+  "q": "/h OS tjfcl wjfck",
+  "expect": "os_install",
+  "jev": "os_install",
+  "jev_prob": 0.99,
+  "match": true
+ },
+ {
+  "id": "q086",
+  "q": "/h gpu ahem qusrud",
+  "expect": "gpu_mode",
+  "jev": "gpu_mode",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q087",
+  "q": "/h dlswmdtj wjrdyd qkdqjq",
+  "expect": "cert",
+  "jev": "cert",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q088",
+  "q": "/h akd qusrud dycjd cjfl",
+  "expect": "network_change",
+  "jev": "network_change",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q089",
+  "q": "/h rPwjddmfh wjqthr dksehla",
+  "expect": "account_login",
+  "jev": "account_login",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q090",
+  "q": "/h crontab tjfwjd gn wotlwkr",
+  "expect": "crontab",
+  "jev": "crontab",
+  "jev_prob": 1,
+  "match": true
+ },
+ {
+  "id": "q091",
+  "q": "설치 방법 알려줘",
+  "expect_any": [
+   "os_install",
+   "gpu_driver",
+   "fabric_manager",
+   "splunk_install"
+  ],
+  "jev": "os_install",
+  "jev_prob": 0.58,
+  "match": true
+ },
+ {
+  "id": "q092",
+  "q": "재부팅 해야 하는데",
+  "expect_any": [
+   "approval",
+   "gpu_driver",
+   "usb0_cdc",
+   "network_change"
+  ],
+  "jev": "os_patch",
+  "jev_prob": 0.24,
+  "match": false
+ },
+ {
+  "id": "q093",
+  "q": "변경 요청 왔어",
+  "expect_any": [
+   "network_change",
+   "hostname_change",
+   "gpu_mode",
+   "limit"
+  ],
+  "jev": "approval",
+  "jev_prob": 0.32,
+  "match": false
+ },
+ {
+  "id": "q094",
+  "q": "드라이버 쪽 이슈 있어요",
+  "expect_any": [
+   "gpu_driver",
+   "dracut",
+   "dhcp_fail"
+  ],
+  "jev": "gpu_driver_incident",
+  "jev_prob": 0.78,
+  "match": false
+ },
+ {
+  "id": "q095",
+  "q": "폐기하려고 하는데",
+  "expect_any": [
+   "asset_disposal",
+   "bu_disposal",
+   "maint_expired"
+  ],
+  "jev": "asset_disposal",
+  "jev_prob": 0.99,
+  "match": true
+ }
+]

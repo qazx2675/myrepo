@@ -1,1 +1,2699 @@
-{"version":1,"intents":[],"keywords":{}}
+{
+ "version": 1,
+ "thresholds": {
+  "min_score": 0.5,
+  "ambig_ratio": 0.8,
+  "cand_ratio": 0.5
+ },
+ "stopwords": [
+  "방법",
+  "알려줘",
+  "알려",
+  "어떻게",
+  "해줘",
+  "해주세요",
+  "주세요",
+  "요청",
+  "확인",
+  "문의",
+  "좀",
+  "뭐야",
+  "하는법",
+  "절차",
+  "가이드",
+  "부탁",
+  "하려면",
+  "싶어"
+ ],
+ "groups": {
+  "asset": "네트워크·자산 관리: 망 변경 (IP/Network 설정 변경); 자산 폐기 절차; 자산 등록; 서버명 수정",
+  "dongbo": "동보 대응: Splunk 알람 NA 발생 시; 동보 대응 (ITOM 자산 확인)",
+  "field": "현장 지원: 서버 입고~가동 과정; Data Center 서버 실사 및 위치 확인",
+  "gpu": "GPU 드라이버·Fabric Manager·GPU 모드: GPU 드라이버 설치; GPU 드라이버 상세 설치 (인시던트 대응); Fabric Manager 설치; GPU Mode 변경",
+  "incident": "인시던트 처리: 계정으로 서버 접속 불가; 서버 내 접속 중인 사용자 확인; sudo 권한 부여; 과점유, 좀비 프로세스 확인 및 정리; cgroup, delegation 설정; crontab 설정; HT (Hyper-Threading) on/off; limit 값 변경; timezone 변경; tmp 삭제 주기 설정; 서버 점검 요청; rsh 설치 요청; telnet 설치 요청; IB 설치 요청; DS Cloud VM 업무",
+  "os": "OS 설치·재설치·패치·설치 후 설정: OS 설치 공통 프로세스; OS 설치 후 환경설정 체크; OS 재설치 후 usb0 출력 조치; 유형별 OS 설치 가이드; OS 설치 주의사항; OS 패치 (Update)",
+  "parts": "자가소비 부품 관리: 신규 메모리/SSD 입고; 자가소비 가이드",
+  "reject": "요청 가이드 (반려/이관/협의): *.so 파일 및 link 설정 요청; CUDA Toolkit 설치; Docker 설치; HPC 자산 외 물리 작업; Jump Server 접근 불가; OS Downgrade 요청; Repo 설정; Smart D\u0026E 서버 작업; 사업부 직투 서버 폐기; 서버 이전 요청; OS 표준 외 추가/변경/삭제; Redhat 제품군 외 패키지 설치; 에뮬레이터 서버 설정 변경; 유지보수 만료 서버 장애; 파티션 조정 요청",
+  "routine": "업무 가이드·정기 점검: HPC 분기별 패스워드 변경; 업무 일지; DNS Server Health Check; LED 점검; Password Expire 알림; 장기간 Down 서버 리스트; 장기간 장애 조치 및 점검 서버 리스트; USB 차단 블록 육안 점검; 재해복구 SW 서버(appl) 설정 점검",
+  "rule": "공통 원칙·지원 범위: 지원 대상 판별; 승인 및 협의 프로세스; 서버 용도 확인; 요청자 자격 확인",
+  "security": "보안·취약점 조치: SSI 취약점 조치 프로세스; USB 차단 블록; 인증서 적용",
+  "sw": "소프트웨어 설치·지원 범위: Splunk 설치; 지원 범위 정의 (소프트웨어)",
+  "term": "용어 사전: ITOM; CF; VWP; SSI; AWX; MDP; LSC; DCM; EDM; SDS; svr 계정; 드림아이",
+  "ts": "트러블슈팅: DHCP를 못 가져오는 경우; DHCP는 가져오나 PXE에서 안 되는 경우; current password 오류 (디스크 풀); SSH key exchange failed; OS 설치 후 dracut → Emergency Shell; DHCP 데몬 fail"
+ },
+ "intents": [
+  {
+   "id": "term_itom",
+   "title": "ITOM",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "ITOM"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "itom",
+    "아이톰",
+    "아이티오엠",
+    "자산관리시스템",
+    "자산관리",
+    "자산 시스템"
+   ]
+  },
+  {
+   "id": "term_cf",
+   "title": "CF",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "CF"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "cf",
+    "씨에프",
+    "compute farm",
+    "컴퓨트팜",
+    "cf 담당자",
+    "컴퓨트 farm"
+   ]
+  },
+  {
+   "id": "term_vwp",
+   "title": "VWP",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "VWP"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "vwp",
+    "virtual workstation",
+    "가상 워크스테이션",
+    "시각화 장비",
+    "시각화",
+    "브이더블유피"
+   ]
+  },
+  {
+   "id": "term_ssi",
+   "title": "SSI",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "SSI"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "ssi",
+    "server security inspection",
+    "서버 보안 점검",
+    "보안 취약점 점검",
+    "에스에스아이"
+   ]
+  },
+  {
+   "id": "term_awx",
+   "title": "AWX",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "AWX"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "awx",
+    "ansible",
+    "앤서블",
+    "자동화 배포",
+    "설정 관리 도구",
+    "에이더블유엑스"
+   ]
+  },
+  {
+   "id": "term_mdp",
+   "title": "MDP",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "MDP"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "mdp",
+    "엠디피",
+    "ldap",
+    "엘답",
+    "인프라 구분",
+    "별도 패스워드"
+   ]
+  },
+  {
+   "id": "term_lsc",
+   "title": "LSC",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "LSC"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "lsc",
+    "엘에스씨",
+    "외부 협력사",
+    "협력사",
+    "lsc 엔지니어",
+    "smart d\u0026e"
+   ]
+  },
+  {
+   "id": "term_dcm",
+   "title": "DCM",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "DCM"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "dcm",
+    "디씨엠",
+    "관리 범위 코드",
+    "관리범위",
+    "범위 코드",
+    "dcm관리"
+   ]
+  },
+  {
+   "id": "term_edm",
+   "title": "EDM",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "EDM"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "edm",
+    "이디엠",
+    "내부 공유 문서",
+    "공유 문서 시스템",
+    "문서 시스템"
+   ]
+  },
+  {
+   "id": "term_sds",
+   "title": "SDS",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "SDS"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "sds",
+    "에스디에스",
+    "인프라 조직",
+    "부서 단위",
+    "sds 인프라"
+   ]
+  },
+  {
+   "id": "term_svr",
+   "title": "svr 계정",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "svr 계정"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "svr",
+    "svr 계정",
+    "서버 관리 계정",
+    "관리 계정",
+    "에스브이알",
+    "svr account"
+   ]
+  },
+  {
+   "id": "term_dreami",
+   "title": "드림아이",
+   "group": "term",
+   "anchor": {
+    "table": "1",
+    "row": "드림아이"
+   },
+   "require_any": [
+    "뜻",
+    "뭐",
+    "무엇",
+    "의미",
+    "약어",
+    "약자",
+    "이란"
+   ],
+   "keywords": [
+    "드림아이",
+    "dreami",
+    "dreameye",
+    "os 점검 벤더",
+    "외부 벤더",
+    "드림아이 담당자"
+   ]
+  },
+  {
+   "id": "support_scope",
+   "title": "지원 대상 판별",
+   "group": "rule",
+   "anchor": {
+    "h": "2.1"
+   },
+   "keywords": [
+    "지원 대상",
+    "지원 가능",
+    "지원 불가",
+    "지원 여부",
+    "지원범위",
+    "비관리 서버",
+    "사업부 직접 구매",
+    "직접 구매 서버",
+    "itom 미등록",
+    "미등록 장비",
+    "관리 서버"
+   ]
+  },
+  {
+   "id": "approval",
+   "title": "승인 및 협의 프로세스",
+   "group": "rule",
+   "anchor": {
+    "h": "2.2"
+   },
+   "keywords": [
+    "승인",
+    "승인자",
+    "승인 필요",
+    "누구 승인",
+    "작업 승인",
+    "협의 프로세스",
+    "cf 담당자",
+    "재부팅 주의",
+    "재부팅 전",
+    "reboot",
+    "재부팅",
+    "보안 요청"
+   ]
+  },
+  {
+   "id": "server_usage",
+   "title": "서버 용도 확인",
+   "group": "rule",
+   "anchor": {
+    "h": "2.3"
+   },
+   "keywords": [
+    "서버 용도",
+    "용도",
+    "용도 확인",
+    "컴퓨트 서버",
+    "일반 서버",
+    "ol4_c0",
+    "ol4_g0",
+    "서버명 규칙",
+    "네이밍 규칙",
+    "naming"
+   ]
+  },
+  {
+   "id": "requester",
+   "title": "요청자 자격 확인",
+   "group": "rule",
+   "anchor": {
+    "h": "2.4"
+   },
+   "keywords": [
+    "요청자",
+    "요청자 자격",
+    "자격",
+    "누가 요청",
+    "서비스 담당자",
+    "관리자 요청",
+    "담당자와 협의",
+    "협의됨",
+    "개발 서버",
+    "운영 서버"
+   ]
+  },
+  {
+   "id": "os_install",
+   "title": "OS 설치 공통 프로세스",
+   "group": "os",
+   "anchor": {
+    "h": "3.1"
+   },
+   "keywords": [
+    "os",
+    "os 설치",
+    "os 재설치",
+    "운영체제",
+    "운영체제 설치",
+    "리눅스 설치",
+    "rhel 설치",
+    "설치",
+    "재설치",
+    "nodeinfo",
+    "크로스 체크",
+    "카카오톡",
+    "작업 메시지",
+    "dd",
+    "작업방"
+   ]
+  },
+  {
+   "id": "os_config_check",
+   "title": "OS 설치 후 환경설정 체크",
+   "group": "os",
+   "anchor": {
+    "h": "3.2"
+   },
+   "keywords": [
+    "환경설정",
+    "환경설정 체크",
+    "설치 후 설정",
+    "설치 후 체크",
+    "config_check",
+    "config_check.sh",
+    "os_config_check",
+    "이니셜",
+    "fail 항목",
+    "설정 체크"
+   ]
+  },
+  {
+   "id": "usb0_cdc",
+   "title": "OS 재설치 후 usb0 출력 조치",
+   "group": "os",
+   "anchor": {
+    "h": "3.3"
+   },
+   "keywords": [
+    "usb0",
+    "cdc",
+    "cdc_ether",
+    "cdc_blacklist",
+    "cdc_blacklist.conf",
+    "modprobe",
+    "modprobe.d",
+    "lsmod",
+    "blacklist",
+    "usb0 출력"
+   ]
+  },
+  {
+   "id": "os_install_type",
+   "title": "유형별 OS 설치 가이드",
+   "group": "os",
+   "anchor": {
+    "h": "3.4"
+   },
+   "keywords": [
+    "유형별",
+    "설치 유형",
+    "vwp 설치",
+    "license 서버",
+    "라이선스 서버",
+    "라이센스 서버",
+    "public cloud",
+    "퍼블릭 클라우드",
+    "dmidecode",
+    "zfk",
+    "vm 여부",
+    "통 파티션"
+   ]
+  },
+  {
+   "id": "os_install_caution",
+   "title": "OS 설치 주의사항",
+   "group": "os",
+   "anchor": {
+    "h": "3.5"
+   },
+   "keywords": [
+    "주의사항",
+    "os 설치 주의",
+    "psky",
+    "soft raid",
+    "레이드",
+    "lacp",
+    "bonding",
+    "본딩",
+    "bond",
+    "mac 주소 짝수",
+    "eth1",
+    "miimon",
+    "lacp_rate",
+    "dell 에뮬레이터",
+    "node_info"
+   ]
+  },
+  {
+   "id": "os_patch",
+   "title": "OS 패치 (Update)",
+   "group": "os",
+   "anchor": {
+    "h": "3.6"
+   },
+   "keywords": [
+    "패치",
+    "os 패치",
+    "update",
+    "업데이트",
+    "yum update",
+    "os 업데이트",
+    "마이너 버전",
+    "메이저 버전",
+    "버전 업",
+    "업그레이드",
+    "커널 업데이트"
+   ]
+  },
+  {
+   "id": "ssi",
+   "title": "SSI 취약점 조치 프로세스",
+   "group": "security",
+   "anchor": {
+    "h": "4.1"
+   },
+   "keywords": [
+    "ssi",
+    "취약점",
+    "취약점 조치",
+    "보안 취약점",
+    "보안 점검",
+    "보안 조치",
+    "change_ssi",
+    "change_ssi.sh",
+    "신규 코드",
+    "hostname code"
+   ]
+  },
+  {
+   "id": "usb_block",
+   "title": "USB 차단 블록",
+   "group": "security",
+   "anchor": {
+    "h4": "USB 차단 블록"
+   },
+   "keywords": [
+    "usb",
+    "usb 차단",
+    "차단 블록",
+    "usb 블록",
+    "usb 차단 블록",
+    "보안센터",
+    "mr1동",
+    "불출",
+    "잔량 반납",
+    "메모리 창고",
+    "미장착"
+   ]
+  },
+  {
+   "id": "cert",
+   "title": "인증서 적용",
+   "group": "security",
+   "anchor": {
+    "h4": "인증서 적용"
+   },
+   "keywords": [
+    "인증서",
+    "인증서 적용",
+    "인증서 설치",
+    "인증서 다운로드",
+    "certificate",
+    "cert",
+    "ca",
+    "update-ca-trust",
+    "ca-trust",
+    "ssl",
+    "edm"
+   ]
+  },
+  {
+   "id": "network_change",
+   "title": "망 변경 (IP/Network 설정 변경)",
+   "group": "asset",
+   "anchor": {
+    "h": "5.1"
+   },
+   "keywords": [
+    "망 변경",
+    "ip 변경",
+    "ip",
+    "아이피",
+    "네트워크 변경",
+    "network",
+    "ip 할당",
+    "ldap 변경",
+    "nscd",
+    "nscd reload",
+    "대역 변경",
+    "변경"
+   ]
+  },
+  {
+   "id": "asset_disposal",
+   "title": "자산 폐기 절차",
+   "group": "asset",
+   "anchor": {
+    "h": "5.2"
+   },
+   "keywords": [
+    "폐기",
+    "자산 폐기",
+    "서버 폐기",
+    "장비 폐기",
+    "폐기 예정",
+    "폐기 프로세스",
+    "케이블 제거",
+    "dns 삭제",
+    "불용"
+   ]
+  },
+  {
+   "id": "asset_register",
+   "title": "자산 등록",
+   "group": "asset",
+   "anchor": {
+    "h": "5.3"
+   },
+   "keywords": [
+    "자산 등록",
+    "신규 자산",
+    "등록 양식",
+    "itom 등록",
+    "cpu 정보",
+    "flops",
+    "flops per cycle",
+    "clock",
+    "코어수",
+    "avx",
+    "avx2",
+    "avx-512",
+    "sse4.2"
+   ]
+  },
+  {
+   "id": "hostname_change",
+   "title": "서버명 수정",
+   "group": "asset",
+   "anchor": {
+    "h": "5.4"
+   },
+   "keywords": [
+    "서버명",
+    "서버명 수정",
+    "서버명 변경",
+    "호스트명",
+    "호스트네임",
+    "hostname",
+    "hostname 변경",
+    "hostnamectl",
+    "set-hostname",
+    "dns 변경",
+    "이름 변경"
+   ]
+  },
+  {
+   "id": "gpu_driver",
+   "title": "GPU 드라이버 설치",
+   "group": "gpu",
+   "anchor": {
+    "h": "6.1"
+   },
+   "keywords": [
+    "gpu",
+    "그래픽",
+    "그래픽카드",
+    "nvidia",
+    "엔비디아",
+    "드라이버",
+    "driver",
+    "gpu 드라이버",
+    "드라이버 설치",
+    "드라이버 교체",
+    "nvidia-uninstall",
+    ".run",
+    "rc.local",
+    "17.gpu",
+    "설치"
+   ]
+  },
+  {
+   "id": "gpu_driver_incident",
+   "title": "GPU 드라이버 상세 설치 (인시던트 대응)",
+   "group": "gpu",
+   "anchor": {
+    "h": "6.2"
+   },
+   "keywords": [
+    "드라이버 버전",
+    "특정 버전",
+    "버전 요청",
+    "nvidia-smi",
+    "드라이버 다운로드",
+    "nvidia 홈페이지",
+    "smartftp",
+    "linux 64-bit",
+    "인시던트",
+    "드라이버 업그레이드",
+    "드라이버 재설치",
+    "재설치"
+   ]
+  },
+  {
+   "id": "fabric_manager",
+   "title": "Fabric Manager 설치",
+   "group": "gpu",
+   "anchor": {
+    "h": "6.3"
+   },
+   "keywords": [
+    "fabric manager",
+    "fabric",
+    "패브릭",
+    "패브릭 매니저",
+    "nvidia-fabricmanager",
+    "nvswitch",
+    "엔브이스위치",
+    "lspci",
+    "dnf module reset",
+    "module install",
+    "nvidia-driver",
+    "rpm"
+   ]
+  },
+  {
+   "id": "gpu_mode",
+   "title": "GPU Mode 변경",
+   "group": "gpu",
+   "anchor": {
+    "h": "6.4"
+   },
+   "keywords": [
+    "gpu mode",
+    "gpu 모드",
+    "모드 변경",
+    "mode",
+    "모드",
+    "exclusive",
+    "exclusive process",
+    "default mode",
+    "nvidia-smi -c",
+    "compute mode",
+    "컴퓨트 모드",
+    "익스클루시브"
+   ]
+  },
+  {
+   "id": "splunk_install",
+   "title": "Splunk 설치",
+   "group": "sw",
+   "anchor": {
+    "h": "6.5"
+   },
+   "keywords": [
+    "splunk",
+    "스플렁크",
+    "splunk 설치",
+    "스플렁크 설치",
+    "install.sh",
+    "install_cloud_splunk",
+    "splunk agent",
+    "forwarder",
+    "포워더",
+    "포트번호",
+    "설치"
+   ]
+  },
+  {
+   "id": "sw_support_scope",
+   "title": "지원 범위 정의 (소프트웨어)",
+   "group": "sw",
+   "anchor": {
+    "h": "6.6"
+   },
+   "keywords": [
+    "지원 범위",
+    "패키지 지원",
+    "rhel 공식",
+    "공식 패키지",
+    "미지원",
+    "사용자 직접 설치",
+    "application 장애",
+    "어플리케이션 장애",
+    "앱 장애",
+    "벤더 이관",
+    "sw 지원",
+    "소프트웨어 지원"
+   ]
+  },
+  {
+   "id": "account_login",
+   "title": "계정으로 서버 접속 불가",
+   "group": "incident",
+   "anchor": {
+    "h4": "계정으로 서버 접속 불가"
+   },
+   "keywords": [
+    "접속 불가",
+    "로그인 불가",
+    "로그인 안됨",
+    "접속 안됨",
+    "접속이 안돼",
+    "로그인",
+    "login",
+    "계정 접속",
+    "계정으로 접속",
+    "sssd",
+    "watchdog",
+    "ldap 로그인"
+   ]
+  },
+  {
+   "id": "login_users",
+   "title": "서버 내 접속 중인 사용자 확인",
+   "group": "incident",
+   "anchor": {
+    "h4": "서버 내 접속 중인 사용자 확인"
+   },
+   "keywords": [
+    "접속 중인 사용자",
+    "접속자",
+    "접속 사용자",
+    "누가 접속",
+    "로그인 사용자",
+    "접속 이력",
+    "/var/log/secure",
+    "secure 로그",
+    "who",
+    "last"
+   ]
+  },
+  {
+   "id": "sudo",
+   "title": "sudo 권한 부여",
+   "group": "incident",
+   "anchor": {
+    "h4": "sudo 권한 부여"
+   },
+   "keywords": [
+    "sudo",
+    "sudo 권한",
+    "sudoers",
+    "슈도",
+    "수도 권한",
+    "관리자 권한",
+    "root 권한",
+    "권한 부여",
+    "권한"
+   ]
+  },
+  {
+   "id": "zombie",
+   "title": "과점유, 좀비 프로세스 확인 및 정리",
+   "group": "incident",
+   "anchor": {
+    "h4": "과점유, 좀비 프로세스 확인 및 정리"
+   },
+   "keywords": [
+    "좀비",
+    "좀비 프로세스",
+    "zombie",
+    "과점유",
+    "cpu 과점유",
+    "프로세스 정리",
+    "프로세스 종료",
+    "프로세스 kill",
+    "kill",
+    "kill -9",
+    "pid",
+    "ps -ef"
+   ]
+  },
+  {
+   "id": "cgroup",
+   "title": "cgroup, delegation 설정",
+   "group": "incident",
+   "anchor": {
+    "h4": "cgroup, delegation 설정"
+   },
+   "keywords": [
+    "cgroup",
+    "cgroups",
+    "씨그룹",
+    "delegation",
+    "델리게이션",
+    "cgroup 설정",
+    "리소스 제한"
+   ]
+  },
+  {
+   "id": "crontab",
+   "title": "crontab 설정",
+   "group": "incident",
+   "anchor": {
+    "h4": "crontab 설정"
+   },
+   "keywords": [
+    "crontab",
+    "cron",
+    "crond",
+    "크론",
+    "크론탭",
+    "crontab 설정",
+    "스케줄 작업",
+    "예약 작업"
+   ]
+  },
+  {
+   "id": "ht",
+   "title": "HT (Hyper-Threading) on/off",
+   "group": "incident",
+   "anchor": {
+    "h4": "HT (Hyper-Threading) on/off"
+   },
+   "keywords": [
+    "ht",
+    "hyper-threading",
+    "hyperthreading",
+    "하이퍼스레딩",
+    "하이퍼쓰레딩",
+    "ht on",
+    "ht off",
+    "smt",
+    "스레드"
+   ]
+  },
+  {
+   "id": "limit",
+   "title": "limit 값 변경",
+   "group": "incident",
+   "anchor": {
+    "h4": "limit 값 변경"
+   },
+   "keywords": [
+    "limit",
+    "ulimit",
+    "리밋",
+    "limits.conf",
+    "limits.d",
+    "nofile",
+    "nofile.conf",
+    "open files",
+    "soft limit",
+    "hard limit",
+    "파일 개수 제한"
+   ]
+  },
+  {
+   "id": "timezone",
+   "title": "timezone 변경",
+   "group": "incident",
+   "anchor": {
+    "h4": "timezone 변경"
+   },
+   "keywords": [
+    "timezone",
+    "타임존",
+    "시간대",
+    "kst",
+    "utc",
+    "timedatectl",
+    "localtime",
+    "asia/seoul",
+    "시간 변경",
+    "시간 설정",
+    "표준시"
+   ]
+  },
+  {
+   "id": "tmp_clean",
+   "title": "tmp 삭제 주기 설정",
+   "group": "incident",
+   "anchor": {
+    "h4": "tmp 삭제 주기 설정"
+   },
+   "keywords": [
+    "tmp",
+    "/tmp",
+    "tmp 삭제",
+    "tmp 삭제 주기",
+    "삭제 주기",
+    "tmpfiles",
+    "tmpfiles.d",
+    "custom-tmp",
+    "임시 파일",
+    "임시파일 삭제",
+    "tmp@server"
+   ]
+  },
+  {
+   "id": "server_inspect",
+   "title": "서버 점검 요청",
+   "group": "incident",
+   "anchor": {
+    "h": "7.4"
+   },
+   "keywords": [
+    "서버 점검",
+    "점검 요청",
+    "하드웨어 점검",
+    "hw 점검",
+    "os 점검",
+    "사용량 확인",
+    "sar",
+    "sar -r",
+    "서버 느림",
+    "느려",
+    "성능 저하",
+    "리소스 사용량"
+   ]
+  },
+  {
+   "id": "rsh",
+   "title": "rsh 설치 요청",
+   "group": "incident",
+   "anchor": {
+    "h4": "rsh 설치 요청"
+   },
+   "keywords": [
+    "rsh",
+    "rsh 설치",
+    "rsh-server",
+    "rlogin",
+    "remote shell",
+    "알에스에이치"
+   ]
+  },
+  {
+   "id": "telnet",
+   "title": "telnet 설치 요청",
+   "group": "incident",
+   "anchor": {
+    "h4": "telnet 설치 요청"
+   },
+   "keywords": [
+    "telnet",
+    "텔넷",
+    "telnet 설치",
+    "텔넷 설치",
+    "telnet-server",
+    "23번 포트"
+   ]
+  },
+  {
+   "id": "ib",
+   "title": "IB 설치 요청",
+   "group": "incident",
+   "anchor": {
+    "h4": "IB 설치 요청"
+   },
+   "keywords": [
+    "ib",
+    "infiniband",
+    "인피니밴드",
+    "ib 설치",
+    "ib 드라이버",
+    "ofed",
+    "mlnx",
+    "mellanox",
+    "멜라녹스"
+   ]
+  },
+  {
+   "id": "dscloud",
+   "title": "DS Cloud VM 업무",
+   "group": "incident",
+   "anchor": {
+    "h": "7.6"
+   },
+   "keywords": [
+    "ds cloud",
+    "디에스 클라우드",
+    "ds cloud vm",
+    "ds_cloud",
+    "ds_cloud_setting",
+    "ds_cloud_vm_setting",
+    "cae",
+    "8022",
+    "클라우드 vm",
+    "vm 세팅",
+    "vm 설정"
+   ]
+  },
+  {
+   "id": "so_link",
+   "title": "*.so 파일 및 link 설정 요청",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "*.so 파일"
+   },
+   "keywords": [
+    "*.so",
+    ".so",
+    "so 파일",
+    "link 설정",
+    "링크 설정",
+    "심볼릭 링크",
+    "symbolic link",
+    "ln -s",
+    "라이브러리 링크",
+    "공유 라이브러리",
+    "ldconfig"
+   ]
+  },
+  {
+   "id": "cuda",
+   "title": "CUDA Toolkit 설치",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "CUDA Toolkit 설치"
+   },
+   "keywords": [
+    "cuda",
+    "쿠다",
+    "cuda toolkit",
+    "toolkit",
+    "툴킷",
+    "cuda 설치",
+    "쿠다 설치",
+    "nvcc",
+    "cudnn"
+   ]
+  },
+  {
+   "id": "docker",
+   "title": "Docker 설치",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "Docker 설치"
+   },
+   "keywords": [
+    "docker",
+    "도커",
+    "docker 설치",
+    "도커 설치",
+    "docker-ce",
+    "컨테이너",
+    "container",
+    "podman"
+   ]
+  },
+  {
+   "id": "physical_work",
+   "title": "HPC 자산 외 물리 작업",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "HPC 자산 외 물리 작업"
+   },
+   "keywords": [
+    "물리 작업",
+    "물리적 작업",
+    "hpc 자산 외",
+    "자산 외 장비",
+    "공급업체",
+    "납품 업체",
+    "랙 작업",
+    "랙 실장",
+    "케이블링"
+   ]
+  },
+  {
+   "id": "jump_server",
+   "title": "Jump Server 접근 불가",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "Jump Server 접근 불가"
+   },
+   "keywords": [
+    "jump server",
+    "jump",
+    "jump 서버",
+    "점프 서버",
+    "점프",
+    "접근 불가",
+    "bastion",
+    "게이트웨이 서버"
+   ]
+  },
+  {
+   "id": "os_downgrade",
+   "title": "OS Downgrade 요청",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "OS Downgrade 요청"
+   },
+   "keywords": [
+    "downgrade",
+    "다운그레이드",
+    "os downgrade",
+    "os 다운그레이드",
+    "버전 다운",
+    "하위 버전",
+    "예전 버전",
+    "보안 예외"
+   ]
+  },
+  {
+   "id": "repo",
+   "title": "Repo 설정",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "Repo 설정"
+   },
+   "keywords": [
+    "repo",
+    "repository",
+    "레포",
+    "리포",
+    "리포지토리",
+    "repo 설정",
+    "yum repo",
+    "yum.repos.d",
+    "외부 repo",
+    "epel",
+    "저장소"
+   ]
+  },
+  {
+   "id": "smart_de",
+   "title": "Smart D\u0026E 서버 작업",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "Smart D\u0026E 서버 작업"
+   },
+   "keywords": [
+    "smart d\u0026e",
+    "스마트 d\u0026e",
+    "스마트디앤이",
+    "smart de",
+    "d\u0026e",
+    "lsc",
+    "smart d\u0026e 서버"
+   ]
+  },
+  {
+   "id": "bu_disposal",
+   "title": "사업부 직투 서버 폐기",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "사업부 직투 서버 폐기"
+   },
+   "keywords": [
+    "사업부 직투",
+    "직투 서버",
+    "직투 서버 폐기",
+    "사업부 서버 폐기",
+    "사업부 폐기",
+    "ams",
+    "ams 시스템",
+    "직접 구매 폐기"
+   ]
+  },
+  {
+   "id": "server_move",
+   "title": "서버 이전 요청",
+   "group": "reject",
+   "anchor": {
+    "table": "8.1",
+    "row": "서버 이전 요청"
+   },
+   "keywords": [
+    "서버 이전",
+    "이전 요청",
+    "서버 이동",
+    "장비 이전",
+    "장비 이동",
+    "위치 이동",
+    "이설",
+    "랙 이동",
+    "센터 이전",
+    "재배치"
+   ]
+  },
+  {
+   "id": "os_std_change",
+   "title": "OS 표준 외 추가/변경/삭제",
+   "group": "reject",
+   "anchor": {
+    "table": "8.2",
+    "row": "OS 표준 외"
+   },
+   "keywords": [
+    "os 표준 외",
+    "표준 외",
+    "os 표준",
+    "표준 변경",
+    "비표준",
+    "표준 설정",
+    "추가/변경/삭제",
+    "커스텀 설정",
+    "설정 변경 요청"
+   ]
+  },
+  {
+   "id": "non_redhat_pkg",
+   "title": "Redhat 제품군 외 패키지 설치",
+   "group": "reject",
+   "anchor": {
+    "table": "8.2",
+    "row": "Redhat 제품군 외"
+   },
+   "keywords": [
+    "패키지",
+    "패키지 설치",
+    "yum install",
+    "dnf install",
+    "rpm 설치",
+    "redhat 외",
+    "레드햇 외",
+    "외부 패키지",
+    "프로그램 설치",
+    "설치"
+   ]
+  },
+  {
+   "id": "emulator",
+   "title": "에뮬레이터 서버 설정 변경",
+   "group": "reject",
+   "anchor": {
+    "h": "8.3"
+   },
+   "keywords": [
+    "에뮬레이터",
+    "emulator",
+    "에뮬",
+    "에뮬레이터 서버",
+    "에뮬레이터 설정",
+    "에뮬레이터 설정 변경",
+    "emul"
+   ]
+  },
+  {
+   "id": "maint_expired",
+   "title": "유지보수 만료 서버 장애",
+   "group": "reject",
+   "anchor": {
+    "h": "8.4"
+   },
+   "keywords": [
+    "유지보수 만료",
+    "유지보수",
+    "보증 만료",
+    "ma 만료",
+    "만료 서버",
+    "eos",
+    "eol",
+    "유지보수 끝",
+    "hw 장애",
+    "하드웨어 장애"
+   ]
+  },
+  {
+   "id": "partition",
+   "title": "파티션 조정 요청",
+   "group": "reject",
+   "anchor": {
+    "h": "8.5"
+   },
+   "keywords": [
+    "파티션",
+    "partition",
+    "파티션 조정",
+    "파티션 변경",
+    "파티션 확장",
+    "디스크 확장",
+    "lvm",
+    "fdisk",
+    "볼륨",
+    "용량 늘려"
+   ]
+  },
+  {
+   "id": "password_quarterly",
+   "title": "HPC 분기별 패스워드 변경",
+   "group": "routine",
+   "anchor": {
+    "h": "9.1"
+   },
+   "keywords": [
+    "패스워드",
+    "비밀번호",
+    "password",
+    "패스워드 변경",
+    "비밀번호 변경",
+    "암호 변경",
+    "분기별",
+    "분기",
+    "root 패스워드",
+    "shc",
+    "change_config_new",
+    "passwd --stdin"
+   ]
+  },
+  {
+   "id": "worklog",
+   "title": "업무 일지",
+   "group": "routine",
+   "anchor": {
+    "h": "9.2"
+   },
+   "keywords": [
+    "업무 일지",
+    "일지",
+    "작업 일지",
+    "업무 보고",
+    "일일 보고",
+    "업무일지 가이드",
+    "데일리 리포트",
+    "daily report"
+   ]
+  },
+  {
+   "id": "dns_check",
+   "title": "DNS Server Health Check",
+   "group": "routine",
+   "anchor": {
+    "h": "10.1"
+   },
+   "keywords": [
+    "dns",
+    "dns 점검",
+    "dns 체크",
+    "dns 서버",
+    "dns server",
+    "health check",
+    "헬스체크",
+    "dnscheck",
+    "dnscheck_new",
+    "출근",
+    "퇴근"
+   ]
+  },
+  {
+   "id": "led",
+   "title": "LED 점검",
+   "group": "routine",
+   "anchor": {
+    "h": "10.2"
+   },
+   "keywords": [
+    "led",
+    "led 점검",
+    "led 확인",
+    "엘이디",
+    "램프",
+    "에러 램프",
+    "경고등",
+    "표시등",
+    "주황불"
+   ]
+  },
+  {
+   "id": "splunk_pw_expire",
+   "title": "Password Expire 알림",
+   "group": "routine",
+   "anchor": {
+    "h4": "Password Expire 알림"
+   },
+   "keywords": [
+    "password expire",
+    "expire",
+    "패스워드 만료",
+    "비밀번호 만료",
+    "만료일",
+    "만료 알림",
+    "root password",
+    "루트 패스워드",
+    "splunk alert",
+    "스플렁크 알림"
+   ]
+  },
+  {
+   "id": "splunk_long_down",
+   "title": "장기간 Down 서버 리스트",
+   "group": "routine",
+   "anchor": {
+    "h4": "장기간 Down 서버 리스트"
+   },
+   "keywords": [
+    "장기간 down",
+    "장기간 다운",
+    "장기 다운",
+    "down 서버",
+    "다운 서버",
+    "서버 다운",
+    "down",
+    "hang",
+    "행 걸림",
+    "응답 없음"
+   ]
+  },
+  {
+   "id": "splunk_long_incident",
+   "title": "장기간 장애 조치 및 점검 서버 리스트",
+   "group": "routine",
+   "anchor": {
+    "h4": "장기간 장애 조치 및 점검 서버 리스트"
+   },
+   "keywords": [
+    "장기간 장애",
+    "장기 장애",
+    "장애 조치",
+    "장애 서버",
+    "장애 리스트",
+    "점검 서버 리스트",
+    "재부팅 메일",
+    "재부팅 알림",
+    "리부팅 메일"
+   ]
+  },
+  {
+   "id": "usb_monthly",
+   "title": "USB 차단 블록 육안 점검",
+   "group": "routine",
+   "anchor": {
+    "h": "10.4"
+   },
+   "keywords": [
+    "육안 점검",
+    "육안",
+    "usb 육안 점검",
+    "usb 점검",
+    "usb 월간 점검",
+    "usb 정기 점검",
+    "월간 점검",
+    "매월",
+    "차단 블록 점검"
+   ]
+  },
+  {
+   "id": "dr_appl",
+   "title": "재해복구 SW 서버(appl) 설정 점검",
+   "group": "routine",
+   "anchor": {
+    "h": "10.5"
+   },
+   "keywords": [
+    "재해복구",
+    "재해 복구 점검",
+    "dr",
+    "dr 점검",
+    "appl",
+    "appl 점검",
+    "dr_run",
+    "dr_run.sh",
+    "worklist",
+    "run_res",
+    "dsr-c",
+    "월초"
+   ]
+  },
+  {
+   "id": "dongbo_splunk_na",
+   "title": "Splunk 알람 NA 발생 시",
+   "group": "dongbo",
+   "anchor": {
+    "h": "11.1"
+   },
+   "keywords": [
+    "동보",
+    "na",
+    "na 알람",
+    "na 발생",
+    "splunk na",
+    "스플렁크 na",
+    "알람",
+    "hpc_server.csv",
+    "예외 리스트",
+    "0보",
+    "1보"
+   ]
+  },
+  {
+   "id": "dongbo_itom",
+   "title": "동보 대응 (ITOM 자산 확인)",
+   "group": "dongbo",
+   "anchor": {
+    "h": "11.2"
+   },
+   "keywords": [
+    "동보 대응",
+    "itom 자산",
+    "자산 확인",
+    "hpc 자산",
+    "hpc 자산 정의",
+    "자산 구분",
+    "ds-hpc",
+    "sdc-hpc",
+    "직투",
+    "임대",
+    "none 등록"
+   ]
+  },
+  {
+   "id": "server_intake",
+   "title": "서버 입고~가동 과정",
+   "group": "field",
+   "anchor": {
+    "h": "12.1"
+   },
+   "keywords": [
+    "서버 입고",
+    "입고",
+    "가동",
+    "입고 가동",
+    "신규 서버",
+    "신규 장비",
+    "서버 세팅",
+    "서버 셋업",
+    "입고 절차"
+   ]
+  },
+  {
+   "id": "dc_survey",
+   "title": "Data Center 서버 실사 및 위치 확인",
+   "group": "field",
+   "anchor": {
+    "h": "12.2"
+   },
+   "keywords": [
+    "실사",
+    "서버 실사",
+    "dc 실사",
+    "data center",
+    "데이터센터",
+    "dc",
+    "서버 위치",
+    "위치 확인",
+    "랙 위치",
+    "어디에 있"
+   ]
+  },
+  {
+   "id": "dhcp_fail",
+   "title": "DHCP를 못 가져오는 경우",
+   "group": "ts",
+   "anchor": {
+    "h": "13.1"
+   },
+   "keywords": [
+    "dhcp",
+    "dhcp 안됨",
+    "dhcp 실패",
+    "dhcp 미수신",
+    "ip 못 받음",
+    "ip 안 받아",
+    "dhcp 릴레이",
+    "relay",
+    "맥주소",
+    "mac 주소",
+    "홀수",
+    "신규 대역",
+    "방화벽"
+   ]
+  },
+  {
+   "id": "pxe_fail",
+   "title": "DHCP는 가져오나 PXE에서 안 되는 경우",
+   "group": "ts",
+   "anchor": {
+    "h": "13.2"
+   },
+   "keywords": [
+    "pxe",
+    "pxe 부팅",
+    "pxe 안됨",
+    "pxe 실패",
+    "uefi",
+    "legacy",
+    "bios",
+    "bios 모드",
+    "무한 재부팅",
+    "킥스타트",
+    "kickstart",
+    "디스크 타입",
+    "레노버",
+    "lenovo",
+    "펌웨어"
+   ]
+  },
+  {
+   "id": "passwd_disk_full",
+   "title": "current password 오류 (디스크 풀)",
+   "group": "ts",
+   "anchor": {
+    "table": "13.3",
+    "row": "current password"
+   },
+   "keywords": [
+    "current password",
+    "authentication token manipulation",
+    "authentication token",
+    "token manipulation",
+    "디스크 풀",
+    "disk full",
+    "용량 부족",
+    "패스워드 변경 안됨",
+    "비밀번호 변경 실패",
+    "passwd 오류"
+   ]
+  },
+  {
+   "id": "ssh_kex",
+   "title": "SSH key exchange failed",
+   "group": "ts",
+   "anchor": {
+    "table": "13.3",
+    "row": "SSH key exchange failed"
+   },
+   "keywords": [
+    "key exchange",
+    "key exchange failed",
+    "키 교환",
+    "kex",
+    "ssh",
+    "ssh 접속 불가",
+    "ssh 오류",
+    "ssh 에러",
+    "커널 패닉",
+    "kernel panic"
+   ]
+  },
+  {
+   "id": "dracut",
+   "title": "OS 설치 후 dracut → Emergency Shell",
+   "group": "ts",
+   "anchor": {
+    "table": "13.3",
+    "row": "OS 설치 후 dracut"
+   },
+   "keywords": [
+    "dracut",
+    "드라컷",
+    "드라큣",
+    "dracut 메시지",
+    "emergency shell",
+    "emergency",
+    "이머전시",
+    "nic 드라이버",
+    "nic 카드",
+    "비호환"
+   ]
+  },
+  {
+   "id": "dhcpd_fail",
+   "title": "DHCP 데몬 fail",
+   "group": "ts",
+   "anchor": {
+    "table": "13.3",
+    "row": "DHCP 데몬 fail"
+   },
+   "keywords": [
+    "dhcpd",
+    "dhcp 데몬",
+    "dhcp 데몬 실패",
+    "dhcpd fail",
+    "dhcpd 재시작",
+    "dhcpd.conf",
+    "데몬 fail",
+    "dhcp 서버",
+    "콜론"
+   ]
+  },
+  {
+   "id": "parts_intake",
+   "title": "신규 메모리/SSD 입고",
+   "group": "parts",
+   "anchor": {
+    "h": "14.1"
+   },
+   "keywords": [
+    "메모리 입고",
+    "ssd 입고",
+    "부품 입고",
+    "디스크 입고",
+    "신규 메모리",
+    "신규 ssd",
+    "메모리",
+    "ssd",
+    "부품",
+    "dimm"
+   ]
+  },
+  {
+   "id": "parts_guide",
+   "title": "자가소비 가이드",
+   "group": "parts",
+   "anchor": {
+    "h": "14.2"
+   },
+   "keywords": [
+    "자가소비",
+    "자가소비 가이드",
+    "자가소비 부품",
+    "소모품",
+    "부품 사용",
+    "부품 출고",
+    "부품 관리",
+    "예비 부품",
+    "스페어"
+   ]
+  }
+ ],
+ "keywords": {
+  "*.so": {"so_link":1},
+  ".run": {"crontab":0.09,"docker":0.02,"dracut":0.02,"os_config_check":0.02,"os_install":0.06,"server_intake":0.17,"server_usage":0.11,"sudo":0.03,"support_scope":0.04,"term_awx":0.05,"term_cf":0.02,"term_svr":0.02,"worklog":0.12,"zombie":0.02},
+  ".so": {"so_link":0.97,"support_scope":0.02},
+  "/tmp": {"tmp_clean":0.99},
+  "/var/log/secure": {"account_login":0.2,"login_users":0.12,"os_config_check":0.16,"server_inspect":0.28,"server_usage":0.03,"ssh_kex":0.04,"sudo":0.02,"support_scope":0.04,"worklog":0.04},
+  "0보": {"dongbo_itom":0.13,"dongbo_splunk_na":0.02,"os_install":0.05,"server_intake":0.04,"server_usage":0.02,"support_scope":0.07,"term_itom":0.03,"usb0_cdc":0.11,"worklog":0.32},
+  "17.gpu": {"asset_register":0.02,"gpu_driver":0.64,"gpu_driver_incident":0.05,"gpu_mode":0.14,"server_intake":0.03,"server_usage":0.04,"support_scope":0.03},
+  "1보": {"approval":0.02,"dongbo_itom":0.06,"os_install":0.16,"requester":0.02,"server_intake":0.07,"server_usage":0.02,"support_scope":0.11,"term_awx":0.03,"term_svr":0.04,"worklog":0.33},
+  "23번포트": {"dc_survey":0.07,"network_change":0.59,"physical_work":0.03,"server_inspect":0.03,"server_intake":0.03,"server_usage":0.05,"telnet":0.03,"term_svr":0.02,"term_vwp":0.02,"worklog":0.03},
+  "8022": {"network_change":0.02,"os_install":0.02,"os_std_change":0.04,"physical_work":0.02,"server_inspect":0.02,"server_intake":0.03,"server_usage":0.07,"splunk_long_incident":0.02,"ssi":0.02,"support_scope":0.11,"term_svr":0.03,"worklog":0.24},
+  "ams": {"approval":0.02,"dhcp_fail":0.02,"dongbo_splunk_na":0.03,"os_install":0.02,"server_intake":0.02,"server_usage":0.05,"ssi":0.02,"support_scope":0.11,"sw_support_scope":0.02,"term_awx":0.06,"term_cf":0.02,"term_dcm":0.02,"term_itom":0.04,"term_mdp":0.02,"term_ssi":0.02,"term_svr":0.08,"worklog":0.1},
+  "ams시스템": {"dhcp_fail":0.02,"dongbo_itom":0.04,"dr_appl":0.02,"os_install":0.02,"os_std_change":0.02,"server_usage":0.02,"support_scope":0.1,"sw_support_scope":0.11,"term_awx":0.02,"term_cf":0.04,"term_dcm":0.04,"term_edm":0.02,"term_itom":0.14,"term_mdp":0.02,"term_sds":0.04,"term_ssi":0.06,"term_svr":0.05,"worklog":0.03},
+  "ansible": {"fabric_manager":0.03,"os_config_check":0.03,"os_patch":0.03,"os_std_change":0.08,"sw_support_scope":0.03,"term_awx":0.66,"term_cf":0.04},
+  "appl": {"approval":0.1,"dr_appl":0.83,"server_usage":0.03,"support_scope":0.02,"sw_support_scope":0.02},
+  "application장애": {"dr_appl":0.4,"maint_expired":0.06,"splunk_long_down":0.03,"splunk_long_incident":0.17,"support_scope":0.1,"sw_support_scope":0.15,"zombie":0.02},
+  "appl점검": {"dr_appl":0.88,"server_inspect":0.1},
+  "asia/seoul": {"timezone":0.99},
+  "authenticationtoken": {"account_login":0.33,"cert":0.2,"requester":0.29,"ssh_kex":0.03,"term_ssi":0.03,"term_svr":0.03},
+  "authenticationtokenmanipulation": {"account_login":0.34,"cert":0.09,"requester":0.11,"ssh_kex":0.05,"ssi":0.18,"support_scope":0.04,"term_ssi":0.03,"term_svr":0.03,"worklog":0.02},
+  "avx": {"ht":0.02,"os_config_check":0.03,"term_awx":0.94},
+  "avx-512": {"ht":0.09,"os_config_check":0.16,"os_std_change":0.09,"server_inspect":0.12,"server_usage":0.11,"support_scope":0.05,"sw_support_scope":0.02,"term_awx":0.02,"term_cf":0.06,"term_dcm":0.02,"term_mdp":0.02,"term_ssi":0.02,"term_svr":0.03},
+  "avx2": {"ht":0.08,"os_config_check":0.21,"os_install":0.02,"os_install_caution":0.02,"os_std_change":0.07,"server_inspect":0.13,"server_usage":0.08,"support_scope":0.06,"sw_support_scope":0.03,"term_awx":0.04,"term_cf":0.05,"term_mdp":0.03},
+  "awx": {"term_awx":1},
+  "bastion": {"jump_server":0.74,"ssi":0.02,"support_scope":0.02,"term_awx":0.02,"term_cf":0.03,"term_dcm":0.02,"term_edm":0.02,"term_ssi":0.02,"term_svr":0.06,"term_vwp":0.02},
+  "bios": {"ht":0.04,"os_config_check":0.11,"os_install":0.06,"os_std_change":0.1,"physical_work":0.07,"server_inspect":0.16,"server_intake":0.14,"server_usage":0.02,"support_scope":0.03,"term_cf":0.04,"term_svr":0.03},
+  "bios모드": {"gpu_mode":0.09,"ht":0.07,"os_config_check":0.14,"os_install":0.09,"os_std_change":0.04,"physical_work":0.1,"server_inspect":0.18,"server_intake":0.16,"server_usage":0.04,"support_scope":0.03},
+  "blacklist": {"account_login":0.06,"approval":0.03,"jump_server":0.02,"limit":0.06,"repo":0.04,"requester":0.04,"splunk_long_down":0.1,"splunk_long_incident":0.07,"support_scope":0.15,"term_awx":0.02,"term_cf":0.05,"term_dcm":0.02,"term_svr":0.05,"usb_block":0.15},
+  "bond": {"approval":0.07,"asset_register":0.02,"cert":0.03,"dongbo_itom":0.06,"ib":0.04,"network_change":0.06,"physical_work":0.02,"so_link":0.08,"ssh_kex":0.06,"support_scope":0.05,"term_awx":0.02,"term_cf":0.07,"term_dcm":0.06,"term_edm":0.02,"term_ssi":0.02,"term_svr":0.02,"worklog":0.08},
+  "bonding": {"approval":0.13,"cert":0.05,"dongbo_itom":0.05,"ib":0.02,"network_change":0.03,"os_install":0.02,"physical_work":0.07,"so_link":0.07,"ssh_kex":0.1,"support_scope":0.03,"term_awx":0.02,"term_cf":0.02,"term_dcm":0.05,"term_edm":0.02,"term_ssi":0.02,"worklog":0.06},
+  "ca": {"approval":0.05,"cert":0.32,"cgroup":0.03,"cuda":0.02,"os_install":0.02,"server_usage":0.03,"support_scope":0.08,"sw_support_scope":0.02,"term_awx":0.02,"term_cf":0.07,"term_dcm":0.02,"term_svr":0.05,"worklog":0.05},
+  "ca-trust": {"cert":0.95},
+  "cae": {"approval":0.02,"cert":0.25,"cgroup":0.02,"dscloud":0.02,"os_install":0.04,"os_install_type":0.02,"server_usage":0.02,"support_scope":0.06,"term_cf":0.07,"term_dcm":0.03,"term_ssi":0.02,"term_svr":0.05,"worklog":0.07},
+  "cdc": {"cert":0.03,"dc_survey":0.12,"support_scope":0.04,"term_cf":0.03,"term_dcm":0.06,"term_svr":0.02,"usb0_cdc":0.56,"usb_block":0.03,"usb_monthly":0.02,"worklog":0.02},
+  "cdc_blacklist": {"bu_disposal":0.02,"cuda":0.02,"repo":0.07,"splunk_long_down":0.04,"splunk_long_incident":0.04,"support_scope":0.15,"sw_support_scope":0.04,"term_dcm":0.03,"usb0_cdc":0.19,"usb_block":0.25},
+  "cdc_blacklist.conf": {"limit":0.02,"network_change":0.02,"os_config_check":0.06,"os_std_change":0.08,"repo":0.04,"splunk_long_down":0.02,"splunk_long_incident":0.02,"ssi":0.02,"support_scope":0.05,"sw_support_scope":0.03,"term_dcm":0.02,"usb0_cdc":0.18,"usb_block":0.39,"usb_monthly":0.03},
+  "cdc_ether": {"dhcp_fail":0.06,"dhcpd_fail":0.03,"network_change":0.21,"os_config_check":0.03,"so_link":0.02,"support_scope":0.02,"term_dcm":0.03,"usb0_cdc":0.52,"usb_block":0.02,"worklog":0.02},
+  "cert": {"cert":1},
+  "certificate": {"cert":1},
+  "cf": {"term_cf":1},
+  "cf담당자": {"requester":0.02,"support_scope":0.03,"term_cf":0.94},
+  "cgroup": {"cgroup":1},
+  "cgroups": {"cgroup":1},
+  "cgroup설정": {"cgroup":1},
+  "change_config_new": {"limit":0.02,"network_change":0.11,"os_config_check":0.06,"os_std_change":0.78},
+  "change_ssi": {"os_std_change":0.04,"ssi":0.79,"term_ssi":0.16},
+  "change_ssi.sh": {"os_std_change":0.04,"ssi":0.79,"term_ssi":0.16},
+  "clock": {"asset_register":0.04,"crontab":0.08,"parts_guide":0.02,"physical_work":0.12,"server_usage":0.02,"support_scope":0.02,"term_cf":0.02,"term_svr":0.02,"timezone":0.58,"worklog":0.07},
+  "computefarm": {"password_quarterly":0.04,"physical_work":0.03,"server_intake":0.03,"server_usage":0.07,"support_scope":0.03,"term_cf":0.78},
+  "computemode": {"gpu_mode":0.93,"server_usage":0.03,"term_dcm":0.02},
+  "config_check": {"os_config_check":0.97,"server_inspect":0.03},
+  "config_check.sh": {"os_config_check":0.96,"server_inspect":0.04},
+  "container": {"cgroup":0.1,"docker":0.59,"physical_work":0.04,"server_intake":0.03,"support_scope":0.04,"term_cf":0.04,"term_dcm":0.03,"term_svr":0.03},
+  "cpu과점유": {"zombie":0.97},
+  "cpu정보": {"asset_register":0.02,"ht":0.2,"os_config_check":0.03,"server_inspect":0.55,"server_usage":0.09},
+  "cron": {"crontab":1},
+  "crond": {"crontab":1},
+  "crontab": {"crontab":1},
+  "crontab설정": {"crontab":1},
+  "cuda": {"cuda":1},
+  "cudatoolkit": {"cuda":1},
+  "cuda설치": {"cuda":1},
+  "cudnn": {"cuda":0.79,"gpu_driver":0.07,"gpu_driver_incident":0.02,"non_redhat_pkg":0.07,"sw_support_scope":0.02},
+  "currentpassword": {"account_login":0.12,"passwd_disk_full":0.64,"password_quarterly":0.2,"splunk_pw_expire":0.04},
+  "custom-tmp": {"os_std_change":0.05,"server_usage":0.02,"support_scope":0.02,"term_cf":0.02,"tmp_clean":0.84,"worklog":0.04},
+  "d\u0026e": {"smart_de":0.88,"support_scope":0.02,"term_dreami":0.02,"term_edm":0.03,"worklog":0.02},
+  "dailyreport": {"worklog":1},
+  "datacenter": {"dc_survey":0.91,"support_scope":0.03,"term_dcm":0.05},
+  "dc": {"dc_survey":0.55,"dhcp_fail":0.02,"server_usage":0.02,"support_scope":0.03,"term_cf":0.02,"term_dcm":0.29,"usb0_cdc":0.02},
+  "dcm": {"term_dcm":1},
+  "dcm관리": {"term_dcm":0.99},
+  "dc실사": {"dc_survey":1},
+  "dd": {"dracut":0.02,"os_install":0.05,"partition":0.04,"passwd_disk_full":0.02,"server_usage":0.04,"smart_de":0.03,"support_scope":0.06,"term_cf":0.03,"term_dcm":0.04,"term_dreami":0.05,"term_edm":0.04,"term_sds":0.03,"term_svr":0.03,"worklog":0.19},
+  "defaultmode": {"gpu_mode":0.16,"os_config_check":0.05,"os_install":0.04,"os_install_type":0.02,"os_std_change":0.02,"server_usage":0.06,"support_scope":0.04,"term_dcm":0.1,"term_edm":0.03,"term_mdp":0.31,"term_svr":0.03},
+  "delegation": {"cgroup":0.97,"sudo":0.02},
+  "dell에뮬레이터": {"emulator":1},
+  "dhcp": {"dhcp_fail":0.69,"dhcpd_fail":0.1,"network_change":0.18,"support_scope":0.02},
+  "dhcpd": {"dhcp_fail":0.13,"dhcpd_fail":0.82,"network_change":0.04},
+  "dhcpd.conf": {"dhcp_fail":0.19,"dhcpd_fail":0.4,"network_change":0.37,"os_config_check":0.03},
+  "dhcpdfail": {"dhcpd_fail":0.99},
+  "dhcpd재시작": {"dhcp_fail":0.16,"dhcpd_fail":0.81,"network_change":0.02},
+  "dhcp데몬": {"dhcp_fail":0.04,"dhcpd_fail":0.95},
+  "dhcp데몬실패": {"dhcp_fail":0.03,"dhcpd_fail":0.97},
+  "dhcp릴레이": {"dhcp_fail":0.42,"dhcpd_fail":0.26,"network_change":0.31},
+  "dhcp미수신": {"dhcp_fail":1},
+  "dhcp서버": {"dhcp_fail":0.16,"dhcpd_fail":0.47,"network_change":0.1,"server_usage":0.22,"support_scope":0.02},
+  "dhcp실패": {"dhcp_fail":1},
+  "dhcp안됨": {"dhcp_fail":1},
+  "dimm": {"led":0.28,"limit":0.05,"physical_work":0.02,"support_scope":0.02,"term_cf":0.02,"term_dcm":0.04,"term_dreami":0.23,"term_edm":0.04,"term_itom":0.03,"term_svr":0.03,"worklog":0.03},
+  "diskfull": {"partition":0.16,"passwd_disk_full":0.81},
+  "dmidecode": {"dc_survey":0.05,"server_inspect":0.84,"term_cf":0.02,"term_dcm":0.02,"term_mdp":0.02},
+  "dnfinstall": {"non_redhat_pkg":0.22,"os_install":0.13,"os_install_type":0.02,"os_patch":0.09,"os_std_change":0.38,"repo":0.03,"splunk_install":0.05},
+  "dnfmodulereset": {"non_redhat_pkg":0.04,"os_config_check":0.11,"os_install":0.02,"os_patch":0.06,"os_std_change":0.32,"repo":0.35,"support_scope":0.02,"sw_support_scope":0.02,"term_itom":0.02,"term_mdp":0.02},
+  "dns": {"dns_check":1},
+  "dnscheck": {"dns_check":1},
+  "dnscheck_new": {"dns_check":1},
+  "dnsserver": {"dns_check":0.95,"server_usage":0.05},
+  "dns변경": {"dns_check":0.2,"network_change":0.8},
+  "dns삭제": {"dns_check":0.37,"network_change":0.51,"os_std_change":0.12},
+  "dns서버": {"dns_check":0.97,"server_usage":0.03},
+  "dns점검": {"dns_check":1},
+  "dns체크": {"dns_check":1},
+  "docker": {"docker":1},
+  "docker-ce": {"docker":1},
+  "docker설치": {"docker":1},
+  "down": {"os_downgrade":0.12,"server_inspect":0.02,"server_usage":0.02,"splunk_long_down":0.68,"splunk_long_incident":0.04,"support_scope":0.03,"term_cf":0.02,"worklog":0.03},
+  "downgrade": {"os_downgrade":1},
+  "down서버": {"server_inspect":0.05,"server_usage":0.02,"splunk_long_down":0.81,"splunk_long_incident":0.04,"term_svr":0.02},
+  "dr": {"dr_appl":0.73,"dracut":0.06,"support_scope":0.03,"term_dreami":0.04,"term_svr":0.03,"term_vwp":0.02,"worklog":0.03},
+  "dr_run": {"dr_appl":0.59,"dracut":0.06,"server_inspect":0.02,"server_intake":0.11,"server_usage":0.03,"support_scope":0.02,"term_dreami":0.08,"term_svr":0.02,"worklog":0.03},
+  "dr_run.sh": {"dr_appl":0.48,"dracut":0.14,"rsh":0.03,"server_intake":0.04,"server_usage":0.04,"support_scope":0.03,"term_dreami":0.06,"usb0_cdc":0.02,"worklog":0.05},
+  "dracut": {"dracut":1},
+  "dracut메시지": {"dracut":1},
+  "dreameye": {"term_dreami":1},
+  "dreami": {"term_dreami":1},
+  "driver": {"gpu_driver":0.75,"gpu_driver_incident":0.06,"server_usage":0.02,"support_scope":0.03,"term_dreami":0.02,"term_svr":0.02,"worklog":0.02},
+  "dr점검": {"dr_appl":0.68,"server_inspect":0.32},
+  "ds-hpc": {"dscloud":0.14,"ht":0.02,"password_quarterly":0.32,"physical_work":0.09,"server_intake":0.03,"server_usage":0.1,"support_scope":0.13,"term_sds":0.07},
+  "ds_cloud": {"dscloud":1},
+  "ds_cloud_setting": {"dscloud":1},
+  "ds_cloud_vm_setting": {"dscloud":1},
+  "dscloud": {"dscloud":1},
+  "dscloudvm": {"dscloud":1},
+  "dsr-c": {"dc_survey":0.13,"dr_appl":0.19,"dracut":0.21,"dscloud":0.08,"os_config_check":0.03,"os_install_type":0.04,"server_usage":0.03,"smart_de":0.03,"support_scope":0.05,"term_dcm":0.03,"term_edm":0.02,"term_sds":0.03,"term_svr":0.02,"term_vwp":0.02,"worklog":0.02},
+  "edm": {"term_edm":1},
+  "emergency": {"dongbo_itom":0.05,"dracut":0.68,"gpu_driver_incident":0.06,"splunk_long_incident":0.07,"ssi":0.02,"support_scope":0.06,"worklog":0.02},
+  "emergencyshell": {"dracut":1},
+  "emul": {"emulator":0.99},
+  "emulator": {"emulator":1},
+  "eol": {"asset_disposal":0.02,"led":0.02,"maint_expired":0.08,"os_config_check":0.02,"os_install":0.02,"os_std_change":0.04,"support_scope":0.05,"sw_support_scope":0.02,"term_awx":0.04,"term_cf":0.05,"term_dcm":0.05,"term_edm":0.04,"term_itom":0.04,"term_lsc":0.03,"term_ssi":0.03,"term_svr":0.05,"worklog":0.22},
+  "eos": {"dracut":0.12,"os_config_check":0.03,"os_install":0.1,"os_install_type":0.22,"os_std_change":0.03,"server_usage":0.02,"support_scope":0.07,"term_awx":0.02,"term_cf":0.03,"term_edm":0.04,"term_itom":0.04,"term_ssi":0.02,"term_svr":0.04,"term_vwp":0.02},
+  "epel": {"non_redhat_pkg":0.35,"os_install_type":0.03,"os_std_change":0.03,"repo":0.45,"sw_support_scope":0.02,"term_cf":0.02,"term_edm":0.02,"term_itom":0.02,"term_svr":0.02},
+  "eth1": {"dhcp_fail":0.05,"network_change":0.39,"os_install":0.02,"server_usage":0.03,"support_scope":0.04,"term_edm":0.05,"term_svr":0.08,"usb0_cdc":0.07,"worklog":0.06},
+  "exclusive": {"approval":0.04,"limit":0.06,"requester":0.04,"support_scope":0.55,"sw_support_scope":0.12,"term_awx":0.03,"term_cf":0.03,"term_dcm":0.03,"term_svr":0.02,"zombie":0.02},
+  "exclusiveprocess": {"approval":0.39,"cgroup":0.1,"limit":0.02,"os_install":0.07,"requester":0.02,"ssi":0.1,"support_scope":0.06,"zombie":0.13},
+  "expire": {"maint_expired":0.29,"splunk_pw_expire":0.69},
+  "fabric": {"fabric_manager":0.85,"ib":0.03,"network_change":0.02,"physical_work":0.04,"support_scope":0.03,"term_cf":0.02},
+  "fabricmanager": {"fabric_manager":1},
+  "fail항목": {"bu_disposal":0.04,"dhcp_fail":0.27,"dhcpd_fail":0.14,"pxe_fail":0.1,"server_intake":0.03,"ssh_kex":0.04,"support_scope":0.05,"term_cf":0.03,"worklog":0.09},
+  "fdisk": {"partition":1},
+  "flops": {"cuda":0.25,"dhcp_fail":0.03,"dhcpd_fail":0.05,"physical_work":0.04,"support_scope":0.07,"term_cf":0.08,"term_dcm":0.03,"term_svr":0.03,"worklog":0.17},
+  "flopspercycle": {"cuda":0.06,"gpu_driver":0.02,"gpu_mode":0.02,"ht":0.02,"password_quarterly":0.02,"physical_work":0.02,"server_inspect":0.04,"server_usage":0.1,"term_awx":0.02,"term_cf":0.31,"term_dcm":0.05,"term_lsc":0.05,"term_mdp":0.02,"term_sds":0.02,"term_ssi":0.05,"term_svr":0.03,"term_vwp":0.02,"worklog":0.02},
+  "forwarder": {"approval":0.09,"crontab":0.02,"requester":0.12,"support_scope":0.17,"term_awx":0.02,"term_cf":0.1,"term_dcm":0.05,"term_edm":0.02,"term_itom":0.04,"term_lsc":0.02,"term_mdp":0.03,"term_ssi":0.03,"term_svr":0.05,"worklog":0.06},
+  "gpu": {"asset_register":0.03,"gpu_driver":0.66,"gpu_driver_incident":0.03,"gpu_mode":0.13,"server_usage":0.06,"support_scope":0.05},
+  "gpumode": {"gpu_mode":1},
+  "gpu드라이버": {"gpu_driver":0.99},
+  "gpu모드": {"gpu_mode":1},
+  "hang": {"ht":0.03,"login_users":0.03,"physical_work":0.06,"server_usage":0.04,"splunk_long_down":0.08,"splunk_long_incident":0.06,"ssi":0.02,"support_scope":0.03,"term_awx":0.02,"term_cf":0.03,"term_dcm":0.02,"term_svr":0.02,"worklog":0.09,"zombie":0.32},
+  "hardlimit": {"limit":0.98},
+  "healthcheck": {"dns_check":0.4,"server_inspect":0.59},
+  "hostname": {"dns_check":0.02,"hostname_change":0.96,"os_config_check":0.02},
+  "hostnamecode": {"hostname_change":0.97},
+  "hostnamectl": {"hostname_change":1},
+  "hostname변경": {"hostname_change":1},
+  "hpc_server.csv": {"asset_register":0.07,"dc_survey":0.02,"password_quarterly":0.3,"server_inspect":0.02,"server_intake":0.12,"server_usage":0.27,"splunk_long_incident":0.05,"support_scope":0.04,"term_svr":0.02,"worklog":0.05},
+  "hpc자산": {"asset_register":0.25,"dongbo_itom":0.17,"password_quarterly":0.23,"physical_work":0.17,"server_intake":0.04,"server_usage":0.05,"support_scope":0.06},
+  "hpc자산외": {"asset_register":0.02,"physical_work":0.84,"support_scope":0.12},
+  "hpc자산정의": {"asset_register":0.39,"dongbo_itom":0.02,"password_quarterly":0.08,"physical_work":0.03,"server_usage":0.02,"support_scope":0.08,"sw_support_scope":0.03,"term_awx":0.04,"term_cf":0.04,"term_dcm":0.05,"term_itom":0.05,"term_lsc":0.02,"term_sds":0.02,"term_ssi":0.02,"term_svr":0.06},
+  "ht": {"ht":1},
+  "htoff": {"ht":1},
+  "hton": {"ht":1},
+  "hw장애": {"ht":0.07,"maint_expired":0.07,"parts_intake":0.03,"physical_work":0.46,"server_inspect":0.1,"splunk_long_incident":0.09,"support_scope":0.07},
+  "hw점검": {"led":0.02,"physical_work":0.04,"server_inspect":0.93},
+  "hyper-threading": {"ht":1},
+  "hyperthreading": {"ht":1},
+  "ib": {"ib":1},
+  "ib드라이버": {"ib":0.99},
+  "ib설치": {"ib":1},
+  "infiniband": {"ib":0.97,"network_change":0.02},
+  "install.sh": {"docker":0.02,"gpu_driver":0.03,"non_redhat_pkg":0.04,"os_install":0.52,"os_install_type":0.04,"os_std_change":0.03,"splunk_install":0.23},
+  "install_cloud_splunk": {"splunk_install":0.99},
+  "ip": {"network_change":0.92,"support_scope":0.02,"term_itom":0.03},
+  "ip못받음": {"dhcp_fail":0.85,"ib":0.02,"network_change":0.12},
+  "ip변경": {"network_change":1},
+  "ip안받아": {"dhcp_fail":0.69,"network_change":0.23,"server_intake":0.02,"support_scope":0.02},
+  "ip할당": {"network_change":1},
+  "itom": {"dongbo_itom":0.04,"term_itom":0.96},
+  "itom등록": {"asset_register":0.51,"dongbo_itom":0.17,"term_itom":0.31},
+  "itom미등록": {"asset_register":0.22,"dongbo_itom":0.44,"term_itom":0.34},
+  "itom자산": {"asset_register":0.02,"dongbo_itom":0.8,"term_itom":0.17},
+  "jump": {"jump_server":0.95,"physical_work":0.02,"worklog":0.02},
+  "jumpserver": {"jump_server":0.98,"server_usage":0.02},
+  "jump서버": {"jump_server":0.98,"server_usage":0.02},
+  "kernelpanic": {"dhcpd_fail":0.02,"dongbo_splunk_na":0.02,"dracut":0.25,"gpu_driver_incident":0.04,"maint_expired":0.05,"passwd_disk_full":0.06,"server_inspect":0.11,"splunk_long_down":0.02,"splunk_long_incident":0.16,"support_scope":0.05,"term_cf":0.02,"term_dcm":0.02,"term_svr":0.02,"usb0_cdc":0.02,"worklog":0.02,"zombie":0.02},
+  "kex": {"ssh_kex":0.95,"support_scope":0.02,"term_cf":0.02},
+  "keyexchange": {"ssh_kex":1},
+  "keyexchangefailed": {"ssh_kex":1},
+  "kickstart": {"dracut":0.07,"os_install":0.15,"os_install_type":0.06,"pxe_fail":0.02,"server_intake":0.36,"term_awx":0.05,"term_cf":0.04,"term_svr":0.03,"usb0_cdc":0.03,"worklog":0.03},
+  "kill": {"asset_disposal":0.03,"bu_disposal":0.03,"cgroup":0.04,"os_std_change":0.02,"server_usage":0.02,"support_scope":0.02,"term_awx":0.02,"term_cf":0.02,"term_itom":0.02,"term_svr":0.05,"worklog":0.04,"zombie":0.64},
+  "kill-9": {"os_std_change":0.02,"term_svr":0.02,"worklog":0.02,"zombie":0.91},
+  "kst": {"cuda":0.02,"ht":0.02,"os_config_check":0.02,"os_install":0.03,"os_std_change":0.02,"server_usage":0.06,"ssh_kex":0.02,"support_scope":0.07,"term_awx":0.03,"term_cf":0.05,"term_dcm":0.04,"term_itom":0.04,"term_ssi":0.02,"term_svr":0.09,"timezone":0.02,"worklog":0.12},
+  "lacp": {"ib":0.02,"network_change":0.88,"term_cf":0.02,"term_lsc":0.07},
+  "lacp_rate": {"ib":0.02,"limit":0.02,"network_change":0.85,"os_config_check":0.03,"server_inspect":0.03,"term_lsc":0.04},
+  "last": {"approval":0.03,"limit":0.08,"os_install":0.04,"support_scope":0.03,"term_awx":0.04,"term_cf":0.05,"term_svr":0.03,"worklog":0.41,"zombie":0.02},
+  "ldap": {"account_login":0.35,"dns_check":0.08,"dscloud":0.02,"os_config_check":0.05,"password_quarterly":0.02,"requester":0.04,"support_scope":0.05,"sw_support_scope":0.02,"term_cf":0.02,"term_lsc":0.07,"term_svr":0.13},
+  "ldap로그인": {"account_login":0.98},
+  "ldap변경": {"account_login":0.09,"hostname_change":0.02,"network_change":0.18,"os_config_check":0.03,"os_std_change":0.42,"password_quarterly":0.1,"term_lsc":0.03,"term_svr":0.04},
+  "ldconfig": {"os_config_check":0.06,"so_link":0.92},
+  "led": {"led":1},
+  "led점검": {"led":1},
+  "led확인": {"led":1},
+  "legacy": {"asset_disposal":0.02,"maint_expired":0.06,"os_downgrade":0.06,"os_install_type":0.04,"os_std_change":0.02,"support_scope":0.08,"sw_support_scope":0.02,"term_awx":0.05,"term_cf":0.1,"term_dcm":0.04,"term_edm":0.04,"term_itom":0.06,"term_lsc":0.04,"term_mdp":0.02,"term_ssi":0.02,"term_svr":0.07,"term_vwp":0.02,"worklog":0.12},
+  "lenovo": {"asset_register":0.22,"dongbo_itom":0.03,"physical_work":0.08,"server_inspect":0.03,"server_intake":0.1,"server_usage":0.03,"support_scope":0.33,"term_cf":0.03,"term_lsc":0.03,"worklog":0.02},
+  "license서버": {"os_std_change":0.02,"server_inspect":0.02,"server_intake":0.03,"server_usage":0.23,"sw_support_scope":0.05,"term_lsc":0.6,"term_svr":0.03},
+  "limit": {"limit":1},
+  "limits.conf": {"limit":1},
+  "limits.d": {"limit":1},
+  "link설정": {"so_link":1},
+  "linux64-bit": {"os_config_check":0.04,"os_install":0.05,"os_install_type":0.71,"server_intake":0.02,"server_usage":0.03,"support_scope":0.14},
+  "ln-s": {"os_std_change":0.04,"so_link":0.95},
+  "localtime": {"timezone":0.97,"worklog":0.02},
+  "login": {"account_login":0.94,"login_users":0.04},
+  "lsc": {"term_lsc":1},
+  "lsc엔지니어": {"requester":0.02,"support_scope":0.04,"term_lsc":0.93},
+  "lsmod": {"gpu_driver":0.03,"os_config_check":0.34,"os_std_change":0.03,"server_inspect":0.51,"term_lsc":0.03},
+  "lspci": {"gpu_driver":0.02,"os_config_check":0.06,"server_inspect":0.41,"server_usage":0.02,"term_lsc":0.48},
+  "lvm": {"dscloud":0.02,"os_config_check":0.03,"os_install":0.02,"os_std_change":0.06,"partition":0.75,"term_cf":0.02,"term_lsc":0.02,"term_sds":0.02,"term_svr":0.03},
+  "mac주소": {"asset_register":0.11,"dhcp_fail":0.09,"network_change":0.72,"term_dcm":0.02},
+  "mac주소짝수": {"asset_register":0.05,"dhcp_fail":0.09,"network_change":0.67,"pxe_fail":0.05,"support_scope":0.02,"usb0_cdc":0.02},
+  "ma만료": {"maint_expired":0.98,"splunk_pw_expire":0.02},
+  "mdp": {"term_mdp":1},
+  "mellanox": {"fabric_manager":0.08,"ib":0.74,"network_change":0.03,"parts_guide":0.02,"parts_intake":0.02,"physical_work":0.03,"support_scope":0.05},
+  "miimon": {"dhcp_fail":0.06,"led":0.02,"network_change":0.19,"server_inspect":0.02,"server_usage":0.02,"support_scope":0.03,"term_awx":0.02,"term_cf":0.03,"term_dreami":0.1,"term_itom":0.03,"term_mdp":0.03,"term_ssi":0.02,"term_svr":0.08,"worklog":0.06},
+  "mlnx": {"dongbo_splunk_na":0.02,"fabric_manager":0.02,"ib":0.19,"network_change":0.02,"os_install":0.02,"os_install_type":0.02,"server_usage":0.03,"support_scope":0.07,"term_cf":0.03,"term_dcm":0.02,"term_lsc":0.03,"term_mdp":0.05,"term_svr":0.07,"worklog":0.1},
+  "mode": {"gpu_mode":0.59,"os_install":0.02,"os_install_type":0.02,"server_usage":0.08,"support_scope":0.05,"term_cf":0.03,"term_dcm":0.03,"term_edm":0.03,"term_mdp":0.03},
+  "modprobe": {"dracut":0.04,"gpu_driver":0.25,"gpu_driver_incident":0.04,"os_config_check":0.14,"os_std_change":0.41,"usb0_cdc":0.03,"usb_block":0.02},
+  "modprobe.d": {"dracut":0.02,"gpu_driver":0.1,"gpu_driver_incident":0.02,"os_config_check":0.34,"os_install":0.02,"os_std_change":0.44,"term_mdp":0.03,"usb_block":0.02},
+  "moduleinstall": {"docker":0.02,"fabric_manager":0.04,"gpu_driver":0.11,"non_redhat_pkg":0.17,"os_install":0.37,"os_install_type":0.02,"os_std_change":0.08,"splunk_install":0.12,"telnet":0.02},
+  "mr1동": {"dc_survey":0.07,"dongbo_itom":0.11,"hostname_change":0.06,"requester":0.02,"server_intake":0.03,"server_usage":0.05,"support_scope":0.09,"term_awx":0.03,"term_cf":0.04,"term_dcm":0.02,"term_itom":0.04,"term_mdp":0.02,"term_svr":0.1,"term_vwp":0.02,"worklog":0.1},
+  "na": {"dongbo_splunk_na":0.75,"requester":0.02,"server_usage":0.02,"support_scope":0.08,"worklog":0.08},
+  "naming": {"asset_register":0.03,"hostname_change":0.91,"term_cf":0.02,"term_svr":0.02},
+  "na발생": {"dongbo_splunk_na":0.98},
+  "na알람": {"dongbo_splunk_na":1},
+  "network": {"network_change":0.97,"support_scope":0.02},
+  "nic드라이버": {"gpu_driver":0.28,"ib":0.03,"network_change":0.48,"non_redhat_pkg":0.03,"os_config_check":0.05,"os_std_change":0.07,"sw_support_scope":0.02},
+  "nic카드": {"ib":0.08,"network_change":0.57,"parts_intake":0.04,"physical_work":0.06,"requester":0.03,"server_intake":0.03,"support_scope":0.03,"term_dreami":0.02,"term_svr":0.03,"worklog":0.02},
+  "node_info": {"asset_register":0.02,"dc_survey":0.03,"dongbo_itom":0.11,"server_inspect":0.22,"server_intake":0.03,"server_usage":0.09,"support_scope":0.05,"term_cf":0.05,"term_dcm":0.02,"term_itom":0.11,"term_ssi":0.03,"term_svr":0.05,"worklog":0.04},
+  "nodeinfo": {"dc_survey":0.02,"dongbo_itom":0.05,"login_users":0.02,"os_config_check":0.04,"server_inspect":0.35,"server_intake":0.02,"server_usage":0.13,"support_scope":0.04,"term_cf":0.04,"term_dcm":0.02,"term_itom":0.06,"term_ssi":0.03,"term_svr":0.03,"worklog":0.03},
+  "nofile": {"bu_disposal":0.05,"cuda":0.02,"dongbo_splunk_na":0.03,"limit":0.03,"physical_work":0.04,"server_usage":0.05,"so_link":0.02,"support_scope":0.19,"term_cf":0.04,"term_svr":0.02,"worklog":0.23},
+  "nofile.conf": {"cgroup":0.02,"crontab":0.02,"dhcp_fail":0.02,"dongbo_splunk_na":0.02,"dracut":0.02,"limit":0.09,"os_config_check":0.16,"os_install":0.02,"os_std_change":0.15,"passwd_disk_full":0.02,"server_usage":0.03,"support_scope":0.07,"term_cf":0.06,"worklog":0.03},
+  "none등록": {"asset_register":0.63,"bu_disposal":0.02,"dongbo_splunk_na":0.03,"physical_work":0.02,"server_intake":0.02,"support_scope":0.04,"worklog":0.22},
+  "nscd": {"account_login":0.07,"dns_check":0.16,"non_redhat_pkg":0.03,"os_config_check":0.24,"os_std_change":0.24,"term_cf":0.03,"term_sds":0.03,"term_svr":0.05,"worklog":0.02},
+  "nscdreload": {"account_login":0.03,"dns_check":0.18,"network_change":0.14,"os_config_check":0.19,"os_std_change":0.27,"server_inspect":0.05,"ssh_kex":0.02,"sw_support_scope":0.02,"term_svr":0.02,"worklog":0.03},
+  "nvcc": {"cuda":0.99},
+  "nvidia": {"cuda":0.11,"gpu_driver":0.72,"gpu_driver_incident":0.04,"non_redhat_pkg":0.02,"server_usage":0.02,"support_scope":0.06,"sw_support_scope":0.02},
+  "nvidia-driver": {"gpu_driver":0.98,"gpu_driver_incident":0.02},
+  "nvidia-fabricmanager": {"fabric_manager":0.99},
+  "nvidia-smi": {"cuda":0.03,"gpu_driver":0.35,"gpu_driver_incident":0.05,"gpu_mode":0.16,"server_inspect":0.34,"server_usage":0.05},
+  "nvidia-smi-c": {"gpu_driver":0.03,"gpu_mode":0.82,"server_inspect":0.11},
+  "nvidia-uninstall": {"gpu_driver":0.78,"gpu_driver_incident":0.13,"os_std_change":0.08},
+  "nvidia홈페이지": {"cuda":0.08,"gpu_driver":0.5,"gpu_driver_incident":0.02,"parts_guide":0.06,"so_link":0.06,"support_scope":0.12,"sw_support_scope":0.04,"worklog":0.02},
+  "nvswitch": {"cuda":0.04,"fabric_manager":0.06,"gpu_driver":0.29,"gpu_driver_incident":0.12,"gpu_mode":0.12,"ib":0.04,"network_change":0.05,"non_redhat_pkg":0.04,"support_scope":0.04,"sw_support_scope":0.04,"term_svr":0.02},
+  "ofed": {"dracut":0.12,"non_redhat_pkg":0.02,"os_config_check":0.02,"os_install":0.05,"os_install_type":0.05,"os_std_change":0.03,"server_usage":0.02,"support_scope":0.04,"term_awx":0.02,"term_cf":0.05,"term_dcm":0.02,"term_edm":0.03,"term_itom":0.02,"term_ssi":0.02,"term_svr":0.07,"usb0_cdc":0.03,"worklog":0.03},
+  "ol4_c0": {"os_config_check":0.07,"os_install":0.15,"os_install_type":0.09,"os_patch":0.03,"server_intake":0.04,"server_usage":0.05,"support_scope":0.08,"term_ssi":0.02,"term_svr":0.03,"term_vwp":0.02,"usb0_cdc":0.07,"worklog":0.12},
+  "ol4_g0": {"os_config_check":0.06,"os_install":0.13,"os_install_type":0.08,"os_patch":0.02,"server_intake":0.04,"server_usage":0.06,"support_scope":0.11,"term_svr":0.02,"usb0_cdc":0.05,"worklog":0.14},
+  "openfiles": {"approval":0.06,"limit":0.02,"login_users":0.03,"os_config_check":0.02,"passwd_disk_full":0.05,"server_inspect":0.05,"server_usage":0.05,"so_link":0.02,"splunk_long_incident":0.02,"support_scope":0.02,"worklog":0.35,"zombie":0.19},
+  "os": {"os_config_check":0.06,"os_install":0.53,"os_patch":0.03,"os_std_change":0.03,"server_usage":0.05,"support_scope":0.12,"term_ssi":0.02,"term_svr":0.02,"usb0_cdc":0.03,"worklog":0.03},
+  "os_config_check": {"os_config_check":1},
+  "osdowngrade": {"os_downgrade":1},
+  "os다운그레이드": {"os_downgrade":1},
+  "os설치": {"os_install":1},
+  "os설치주의": {"os_install_caution":1},
+  "os업데이트": {"os_patch":1},
+  "os재설치": {"os_install":0.72,"os_install_type":0.03,"usb0_cdc":0.24},
+  "os점검": {"os_config_check":0.56,"os_patch":0.06,"server_inspect":0.37},
+  "os점검벤더": {"os_config_check":0.25,"server_inspect":0.57,"ssi":0.03,"support_scope":0.06,"sw_support_scope":0.02,"term_vwp":0.03},
+  "os패치": {"os_patch":1},
+  "os표준": {"os_config_check":0.07,"os_install":0.03,"os_std_change":0.88},
+  "os표준외": {"os_std_change":0.98,"support_scope":0.02},
+  "partition": {"partition":1},
+  "passwd--stdin": {"account_login":0.12,"os_config_check":0.03,"os_std_change":0.03,"passwd_disk_full":0.07,"password_quarterly":0.61,"splunk_pw_expire":0.11,"term_svr":0.03},
+  "passwd오류": {"account_login":0.39,"passwd_disk_full":0.55,"password_quarterly":0.03,"splunk_pw_expire":0.02},
+  "password": {"account_login":0.17,"passwd_disk_full":0.06,"password_quarterly":0.54,"splunk_pw_expire":0.19,"term_svr":0.02},
+  "passwordexpire": {"splunk_pw_expire":0.99},
+  "pid": {"approval":0.03,"cgroup":0.03,"server_usage":0.04,"term_cf":0.03,"term_mdp":0.05,"term_svr":0.04,"term_vwp":0.02,"worklog":0.03,"zombie":0.56},
+  "podman": {"cgroup":0.03,"docker":0.68,"non_redhat_pkg":0.08,"os_std_change":0.1,"support_scope":0.03,"sw_support_scope":0.05},
+  "ps-ef": {"login_users":0.19,"server_inspect":0.25,"server_usage":0.06,"zombie":0.48},
+  "psky": {"dhcp_fail":0.02,"dns_check":0.02,"dscloud":0.09,"network_change":0.02,"os_install":0.02,"password_quarterly":0.02,"pxe_fail":0.04,"server_usage":0.05,"support_scope":0.07,"term_awx":0.02,"term_cf":0.04,"term_dcm":0.02,"term_edm":0.02,"term_ssi":0.02,"term_svr":0.08,"term_vwp":0.03,"worklog":0.08},
+  "publiccloud": {"dscloud":0.58,"server_usage":0.05,"support_scope":0.21,"term_cf":0.04,"term_svr":0.02,"term_vwp":0.03},
+  "pxe": {"dhcp_fail":0.02,"os_install":0.07,"os_install_type":0.06,"pxe_fail":0.85},
+  "pxe부팅": {"os_install":0.14,"os_install_type":0.19,"pxe_fail":0.64,"server_intake":0.02},
+  "pxe실패": {"pxe_fail":1},
+  "pxe안됨": {"pxe_fail":1},
+  "rc.local": {"crontab":0.13,"os_config_check":0.27,"os_install":0.02,"os_std_change":0.56},
+  "reboot": {"dracut":0.1,"ht":0.02,"os_config_check":0.03,"os_install":0.02,"os_patch":0.09,"os_std_change":0.06,"passwd_disk_full":0.02,"server_inspect":0.08,"server_intake":0.08,"server_usage":0.05,"splunk_long_down":0.03,"support_scope":0.03,"term_cf":0.03,"term_dcm":0.02,"term_svr":0.04,"usb0_cdc":0.05,"worklog":0.06,"zombie":0.02},
+  "redhat외": {"non_redhat_pkg":0.85,"os_install_type":0.06,"os_std_change":0.02,"support_scope":0.05},
+  "relay": {"approval":0.02,"dhcp_fail":0.02,"led":0.02,"network_change":0.21,"physical_work":0.07,"server_usage":0.02,"support_scope":0.05,"term_awx":0.04,"term_cf":0.08,"term_dcm":0.05,"term_edm":0.02,"term_itom":0.05,"term_svr":0.02,"term_vwp":0.02,"worklog":0.09},
+  "remoteshell": {"dracut":0.05,"rsh":0.9,"term_svr":0.03},
+  "repo": {"repo":1},
+  "repository": {"repo":1},
+  "repo설정": {"repo":1},
+  "rhel공식": {"os_config_check":0.03,"os_install":0.05,"os_install_type":0.24,"os_patch":0.05,"os_std_change":0.03,"repo":0.27,"support_scope":0.12,"sw_support_scope":0.08},
+  "rhel설치": {"os_install":0.63,"os_install_type":0.36},
+  "rlogin": {"account_login":0.26,"jump_server":0.02,"rsh":0.52,"telnet":0.08,"term_svr":0.06},
+  "rootpassword": {"account_login":0.28,"passwd_disk_full":0.06,"password_quarterly":0.48,"splunk_pw_expire":0.06,"sudo":0.04,"term_svr":0.06},
+  "root권한": {"account_login":0.02,"requester":0.02,"sudo":0.87,"support_scope":0.02,"term_svr":0.07},
+  "root패스워드": {"account_login":0.32,"os_config_check":0.02,"passwd_disk_full":0.06,"password_quarterly":0.4,"splunk_pw_expire":0.08,"sudo":0.05,"term_svr":0.06},
+  "rpm": {"crontab":0.02,"limit":0.03,"non_redhat_pkg":0.29,"os_install":0.07,"os_patch":0.07,"os_std_change":0.05,"repo":0.06,"server_usage":0.03,"support_scope":0.04,"sw_support_scope":0.03,"term_cf":0.03,"term_itom":0.03,"term_svr":0.03,"worklog":0.04,"zombie":0.03},
+  "rpm설치": {"non_redhat_pkg":0.16,"os_install":0.07,"os_install_type":0.03,"os_patch":0.09,"os_std_change":0.54,"repo":0.02,"splunk_install":0.03},
+  "rsh": {"rsh":1},
+  "rsh-server": {"rsh":0.99},
+  "rsh설치": {"rsh":1},
+  "run_res": {"crontab":0.08,"dr_appl":0.02,"os_config_check":0.02,"os_install":0.04,"server_inspect":0.04,"server_intake":0.16,"server_usage":0.09,"splunk_long_incident":0.02,"support_scope":0.03,"term_awx":0.06,"worklog":0.13,"zombie":0.06},
+  "sar": {"requester":0.03,"server_intake":0.03,"server_usage":0.06,"ssi":0.03,"support_scope":0.07,"term_awx":0.02,"term_cf":0.02,"term_dcm":0.02,"term_edm":0.02,"term_sds":0.02,"term_ssi":0.03,"term_svr":0.52,"term_vwp":0.02,"worklog":0.04},
+  "sar-r": {"crontab":0.02,"login_users":0.05,"os_patch":0.03,"os_std_change":0.03,"server_inspect":0.08,"server_intake":0.03,"server_usage":0.09,"support_scope":0.04,"term_svr":0.28,"worklog":0.03,"zombie":0.07},
+  "sdc-hpc": {"dc_survey":0.02,"dscloud":0.02,"ib":0.02,"os_install_type":0.03,"password_quarterly":0.33,"physical_work":0.05,"server_intake":0.03,"server_usage":0.13,"smart_de":0.05,"support_scope":0.17,"term_sds":0.08},
+  "sds": {"term_sds":1},
+  "sds인프라": {"support_scope":0.02,"term_sds":0.98},
+  "secure로그": {"account_login":0.41,"dongbo_splunk_na":0.02,"login_users":0.12,"ssh_kex":0.03,"ssi":0.03,"term_svr":0.03,"worklog":0.27},
+  "serversecurityinspection": {"server_inspect":0.93,"ssi":0.07},
+  "set-hostname": {"hostname_change":1},
+  "shc": {"dracut":0.06,"ht":0.06,"os_config_check":0.02,"os_std_change":0.05,"server_usage":0.05,"splunk_install":0.02,"ssi":0.04,"sudo":0.02,"support_scope":0.09,"term_cf":0.02,"term_lsc":0.12,"term_svr":0.08,"worklog":0.05},
+  "smartd\u0026e": {"smart_de":1},
+  "smartd\u0026e서버": {"smart_de":1},
+  "smartde": {"smart_de":1},
+  "smartftp": {"account_login":0.03,"non_redhat_pkg":0.12,"os_std_change":0.04,"smart_de":0.42,"ssh_kex":0.03,"support_scope":0.05,"sw_support_scope":0.06,"telnet":0.07,"term_itom":0.02,"term_ssi":0.02,"term_svr":0.04,"worklog":0.03},
+  "smt": {"ht":0.02,"os_install":0.04,"physical_work":0.06,"server_intake":0.02,"server_usage":0.02,"smart_de":0.22,"splunk_install":0.04,"ssi":0.04,"support_scope":0.05,"term_awx":0.02,"term_cf":0.04,"term_itom":0.08,"term_ssi":0.05,"term_svr":0.02,"tmp_clean":0.02,"worklog":0.04},
+  "softlimit": {"limit":0.98},
+  "softraid": {"dr_appl":0.02,"dracut":0.02,"os_config_check":0.02,"os_install":0.06,"os_install_type":0.23,"os_std_change":0.04,"partition":0.18,"support_scope":0.04,"sw_support_scope":0.04,"term_awx":0.02,"term_cf":0.04,"term_sds":0.07},
+  "so파일": {"so_link":1},
+  "splunk": {"dongbo_splunk_na":0.1,"splunk_install":0.86,"support_scope":0.02},
+  "splunkagent": {"dongbo_splunk_na":0.03,"splunk_install":0.97},
+  "splunkalert": {"dongbo_splunk_na":1},
+  "splunkna": {"dongbo_splunk_na":1},
+  "splunk설치": {"splunk_install":1},
+  "ssd": {"parts_intake":0.84,"term_sds":0.14},
+  "ssd입고": {"parts_intake":0.99},
+  "sse4.2": {"ht":0.05,"os_config_check":0.24,"os_install":0.03,"os_install_caution":0.03,"os_std_change":0.03,"server_inspect":0.24,"server_intake":0.02,"server_usage":0.05,"ssi":0.03,"support_scope":0.06,"sw_support_scope":0.02,"term_lsc":0.02,"term_ssi":0.05},
+  "ssh": {"account_login":0.07,"jump_server":0.04,"rsh":0.04,"server_usage":0.02,"ssh_kex":0.74,"support_scope":0.02,"term_svr":0.03},
+  "ssh에러": {"account_login":0.08,"ssh_kex":0.91},
+  "ssh오류": {"account_login":0.05,"ssh_kex":0.93},
+  "ssh접속불가": {"account_login":0.61,"jump_server":0.05,"ssh_kex":0.34},
+  "ssi": {"ssi":0.82,"term_ssi":0.17},
+  "ssl": {"cert":0.91,"ssi":0.05,"term_ssi":0.02},
+  "sssd": {"account_login":0.03,"os_std_change":0.03,"splunk_install":0.05,"ssi":0.21,"sudo":0.05,"support_scope":0.02,"term_sds":0.38,"term_ssi":0.12,"term_svr":0.02,"worklog":0.02},
+  "sudo": {"sudo":1},
+  "sudoers": {"sudo":1},
+  "sudo권한": {"sudo":1},
+  "svr": {"server_usage":0.03,"term_svr":0.97},
+  "svraccount": {"term_svr":1},
+  "svr계정": {"term_svr":1},
+  "sw지원": {"support_scope":0.07,"sw_support_scope":0.93},
+  "symboliclink": {"os_std_change":0.02,"so_link":0.96},
+  "telnet": {"telnet":1},
+  "telnet-server": {"telnet":1},
+  "telnet설치": {"telnet":1},
+  "timedatectl": {"timezone":0.99},
+  "timezone": {"timezone":1},
+  "tmp": {"support_scope":0.02,"tmp_clean":0.94,"worklog":0.03},
+  "tmp@server": {"hostname_change":0.06,"server_usage":0.04,"term_svr":0.62,"tmp_clean":0.22,"worklog":0.02},
+  "tmpfiles": {"os_std_change":0.02,"tmp_clean":0.97},
+  "tmpfiles.d": {"os_config_check":0.02,"os_std_change":0.03,"tmp_clean":0.95},
+  "tmp삭제": {"tmp_clean":1},
+  "tmp삭제주기": {"tmp_clean":1},
+  "tokenmanipulation": {"account_login":0.11,"approval":0.04,"cert":0.06,"dscloud":0.02,"limit":0.04,"os_std_change":0.02,"password_quarterly":0.04,"requester":0.06,"splunk_pw_expire":0.02,"ssh_kex":0.03,"ssi":0.05,"sudo":0.05,"support_scope":0.03,"term_awx":0.02,"term_cf":0.06,"term_dcm":0.05,"term_edm":0.02,"term_mdp":0.02,"term_ssi":0.06,"term_svr":0.03,"worklog":0.03,"zombie":0.02},
+  "toolkit": {"cuda":0.81,"parts_guide":0.02,"support_scope":0.02,"term_awx":0.02,"term_cf":0.03,"term_dcm":0.02,"term_itom":0.02,"term_lsc":0.02},
+  "uefi": {"os_config_check":0.08,"os_install":0.14,"os_install_caution":0.06,"os_install_type":0.21,"pxe_fail":0.07,"server_inspect":0.05,"server_intake":0.13,"support_scope":0.03,"term_cf":0.03,"term_edm":0.04,"term_svr":0.02,"term_vwp":0.03},
+  "ulimit": {"limit":1},
+  "update": {"os_patch":1},
+  "update-ca-trust": {"cert":0.97},
+  "usb": {"server_usage":0.02,"support_scope":0.02,"usb0_cdc":0.17,"usb_block":0.52,"usb_monthly":0.23,"worklog":0.02},
+  "usb0": {"usb0_cdc":0.98,"usb_block":0.02},
+  "usb0출력": {"usb0_cdc":1},
+  "usb블록": {"usb_block":0.98,"usb_monthly":0.02},
+  "usb월간점검": {"usb_monthly":1},
+  "usb육안점검": {"usb_monthly":1},
+  "usb점검": {"server_inspect":0.09,"usb0_cdc":0.03,"usb_block":0.05,"usb_monthly":0.82},
+  "usb정기점검": {"server_inspect":0.07,"usb_block":0.02,"usb_monthly":0.91},
+  "usb차단": {"usb_block":0.99},
+  "usb차단블록": {"usb_block":0.99},
+  "utc": {"timezone":0.97},
+  "virtualworkstation": {"dscloud":0.13,"os_install_type":0.02,"server_usage":0.03,"support_scope":0.02,"term_vwp":0.79},
+  "vm설정": {"dscloud":0.88,"os_config_check":0.03,"term_vwp":0.05},
+  "vm세팅": {"dscloud":0.83,"os_config_check":0.04,"os_std_change":0.02,"server_intake":0.02,"term_vwp":0.05},
+  "vm여부": {"dscloud":0.42,"os_install_type":0.03,"server_inspect":0.09,"server_intake":0.02,"server_usage":0.32,"support_scope":0.04,"term_vwp":0.08},
+  "vwp": {"term_vwp":1},
+  "vwp설치": {"splunk_install":0.04,"term_vwp":0.93},
+  "watchdog": {"crontab":0.03,"dns_check":0.07,"dongbo_itom":0.03,"dongbo_splunk_na":0.02,"os_config_check":0.02,"server_inspect":0.09,"server_usage":0.03,"splunk_long_down":0.03,"splunk_long_incident":0.05,"support_scope":0.02,"term_awx":0.02,"term_cf":0.05,"term_itom":0.07,"term_svr":0.02,"worklog":0.04,"zombie":0.24},
+  "who": {"login_users":0.05,"requester":0.76,"server_usage":0.02,"support_scope":0.11,"term_svr":0.03,"worklog":0.02},
+  "worklist": {"approval":0.02,"splunk_long_incident":0.03,"term_awx":0.03,"term_cf":0.02,"worklog":0.89},
+  "yum.repos.d": {"repo":1},
+  "yuminstall": {"non_redhat_pkg":0.06,"os_install":0.23,"os_install_type":0.02,"os_patch":0.18,"os_std_change":0.38,"splunk_install":0.04,"telnet":0.02},
+  "yumrepo": {"repo":1},
+  "yumupdate": {"os_patch":1},
+  "zfk": {"parts_guide":0.05,"requester":0.02,"server_usage":0.06,"support_scope":0.08,"term_cf":0.05,"term_dcm":0.02,"term_itom":0.02,"term_svr":0.05,"worklog":0.09,"zombie":0.2},
+  "zombie": {"zombie":1},
+  "가동": {"server_intake":0.99},
+  "가상워크스테이션": {"dscloud":0.17,"os_install":0.02,"os_install_type":0.02,"server_usage":0.03,"support_scope":0.02,"term_vwp":0.73},
+  "개발서버": {"server_intake":0.03,"server_usage":0.91,"term_svr":0.02},
+  "게이트웨이서버": {"jump_server":0.13,"network_change":0.06,"server_inspect":0.03,"server_intake":0.05,"server_usage":0.4,"support_scope":0.05,"term_cf":0.03,"term_svr":0.12},
+  "경고등": {"dongbo_itom":0.04,"dongbo_splunk_na":0.16,"os_install_caution":0.16,"splunk_pw_expire":0.09,"support_scope":0.06,"term_cf":0.04,"term_edm":0.02,"term_itom":0.02,"term_svr":0.03,"worklog":0.06},
+  "계정으로접속": {"account_login":0.98},
+  "계정접속": {"account_login":1},
+  "공급업체": {"approval":0.12,"parts_intake":0.13,"requester":0.08,"server_intake":0.04,"support_scope":0.25,"term_awx":0.02,"term_cf":0.03,"term_dcm":0.05,"term_edm":0.06,"term_lsc":0.02,"term_mdp":0.02,"term_sds":0.02,"term_ssi":0.02},
+  "공식패키지": {"approval":0.04,"non_redhat_pkg":0.3,"os_install":0.11,"os_install_type":0.04,"os_patch":0.04,"os_std_change":0.17,"server_intake":0.02,"support_scope":0.06,"sw_support_scope":0.07},
+  "공유라이브러리": {"os_std_change":0.03,"repo":0.05,"so_link":0.73,"sw_support_scope":0.03,"term_itom":0.02,"term_lsc":0.04,"term_sds":0.02,"term_ssi":0.02,"worklog":0.02},
+  "공유문서시스템": {"approval":0.06,"dscloud":0.11,"server_usage":0.05,"support_scope":0.07,"sw_support_scope":0.03,"term_dcm":0.09,"term_edm":0.08,"term_sds":0.3,"term_ssi":0.03,"worklog":0.11},
+  "과점유": {"zombie":0.99},
+  "관리계정": {"account_login":0.14,"requester":0.03,"server_usage":0.02,"sudo":0.12,"support_scope":0.02,"term_dcm":0.03,"term_ssi":0.02,"term_svr":0.59},
+  "관리범위": {"support_scope":0.65,"sw_support_scope":0.34},
+  "관리범위코드": {"cgroup":0.03,"support_scope":0.61,"sw_support_scope":0.29,"term_dcm":0.06},
+  "관리서버": {"fabric_manager":0.03,"server_inspect":0.03,"server_intake":0.03,"server_usage":0.43,"support_scope":0.03,"term_awx":0.03,"term_cf":0.02,"term_dcm":0.03,"term_itom":0.04,"term_mdp":0.02,"term_svr":0.26,"worklog":0.02},
+  "관리자권한": {"requester":0.03,"sudo":0.95},
+  "관리자요청": {"approval":0.41,"requester":0.45,"server_usage":0.02,"sudo":0.04,"support_scope":0.05,"worklog":0.02},
+  "권한": {"approval":0.04,"requester":0.07,"sudo":0.88},
+  "권한부여": {"sudo":0.98},
+  "그래픽": {"gpu_driver":0.31,"gpu_driver_incident":0.02,"gpu_mode":0.06,"server_usage":0.02,"support_scope":0.14,"sw_support_scope":0.02,"term_cf":0.05,"term_dcm":0.03,"term_dreami":0.03,"term_edm":0.03,"worklog":0.13},
+  "그래픽카드": {"asset_register":0.06,"gpu_driver":0.53,"gpu_mode":0.05,"parts_guide":0.05,"parts_intake":0.17,"physical_work":0.08,"support_scope":0.02},
+  "납품업체": {"approval":0.08,"parts_intake":0.26,"physical_work":0.04,"requester":0.09,"server_intake":0.13,"support_scope":0.15,"term_cf":0.03,"term_dcm":0.03,"term_edm":0.03,"term_lsc":0.03,"term_svr":0.02,"worklog":0.04},
+  "내부공유문서": {"approval":0.14,"parts_guide":0.02,"requester":0.02,"support_scope":0.08,"term_dcm":0.04,"term_edm":0.03,"term_sds":0.03,"term_ssi":0.03,"worklog":0.49},
+  "네이밍규칙": {"approval":0.03,"hostname_change":0.75,"os_std_change":0.03,"parts_guide":0.05,"term_cf":0.03,"worklog":0.02},
+  "네트워크변경": {"network_change":1},
+  "누가요청": {"requester":1},
+  "누가접속": {"login_users":1},
+  "누구승인": {"approval":0.98,"requester":0.02},
+  "느려": {"approval":0.07,"dhcp_fail":0.04,"dns_check":0.02,"ht":0.02,"limit":0.03,"network_change":0.04,"server_intake":0.02,"server_usage":0.04,"splunk_long_down":0.06,"splunk_long_incident":0.04,"support_scope":0.04,"term_cf":0.05,"worklog":0.26,"zombie":0.03},
+  "다운그레이드": {"os_downgrade":1},
+  "다운서버": {"dns_check":0.02,"server_inspect":0.04,"server_usage":0.03,"splunk_long_down":0.78,"splunk_long_incident":0.06,"term_svr":0.03},
+  "담당자와협의": {"approval":0.98},
+  "대역변경": {"network_change":0.97},
+  "데몬fail": {"dhcpd_fail":0.98},
+  "데이터센터": {"dc_survey":0.92,"term_dcm":0.05},
+  "데일리리포트": {"worklog":1},
+  "델리게이션": {"approval":0.02,"cgroup":0.97},
+  "도커": {"docker":1},
+  "도커설치": {"docker":1},
+  "동보": {"dongbo_itom":0.96,"worklog":0.02},
+  "동보대응": {"dongbo_itom":1},
+  "드라이버": {"gpu_driver":0.78,"gpu_driver_incident":0.06,"support_scope":0.02,"term_cf":0.02,"term_dreami":0.02,"term_svr":0.02,"worklog":0.02},
+  "드라이버교체": {"gpu_driver":0.47,"gpu_driver_incident":0.16,"os_std_change":0.04,"parts_guide":0.02,"parts_intake":0.02,"physical_work":0.26},
+  "드라이버다운로드": {"gpu_driver":0.95,"gpu_driver_incident":0.03,"os_patch":0.02},
+  "드라이버버전": {"gpu_driver":0.82,"gpu_driver_incident":0.09,"os_patch":0.04,"worklog":0.02},
+  "드라이버설치": {"gpu_driver":0.98,"os_std_change":0.02},
+  "드라이버업그레이드": {"gpu_driver":0.72,"gpu_driver_incident":0.03,"os_patch":0.23,"os_std_change":0.02},
+  "드라이버재설치": {"gpu_driver":0.66,"gpu_driver_incident":0.28,"os_std_change":0.03},
+  "드라컷": {"dracut":1},
+  "드라큣": {"dracut":1},
+  "드림아이": {"term_dreami":1},
+  "드림아이담당자": {"requester":0.02,"support_scope":0.02,"term_dreami":0.96},
+  "등록양식": {"asset_register":0.97},
+  "디스크입고": {"parts_intake":0.96,"server_intake":0.03},
+  "디스크타입": {"asset_register":0.02,"os_install":0.02,"os_install_type":0.5,"partition":0.1,"parts_intake":0.08,"passwd_disk_full":0.07,"physical_work":0.02,"server_usage":0.03,"term_sds":0.04},
+  "디스크풀": {"partition":0.04,"passwd_disk_full":0.95},
+  "디스크확장": {"partition":0.98},
+  "디씨엠": {"term_dcm":1},
+  "디에스클라우드": {"dscloud":1},
+  "라이브러리링크": {"so_link":0.99},
+  "라이선스서버": {"dr_appl":0.02,"server_inspect":0.02,"server_intake":0.02,"server_usage":0.26,"support_scope":0.02,"sw_support_scope":0.03,"term_lsc":0.57,"term_svr":0.04},
+  "라이센스서버": {"dr_appl":0.02,"server_inspect":0.02,"server_intake":0.02,"server_usage":0.26,"support_scope":0.02,"sw_support_scope":0.03,"term_lsc":0.57,"term_svr":0.04},
+  "랙실장": {"asset_register":0.04,"dc_survey":0.21,"physical_work":0.54,"server_intake":0.1,"server_move":0.04,"term_lsc":0.02,"worklog":0.02},
+  "랙위치": {"dc_survey":0.99},
+  "랙이동": {"dc_survey":0.04,"physical_work":0.26,"server_move":0.7},
+  "랙작업": {"dc_survey":0.06,"physical_work":0.69,"server_inspect":0.02,"server_intake":0.09,"server_move":0.02,"worklog":0.1},
+  "램프": {"asset_register":0.04,"led":0.59,"parts_guide":0.02,"physical_work":0.26,"support_scope":0.02,"term_cf":0.02,"term_lsc":0.02,"worklog":0.02},
+  "레노버": {"asset_register":0.14,"dongbo_itom":0.02,"physical_work":0.07,"requester":0.02,"server_inspect":0.02,"server_intake":0.12,"server_usage":0.03,"support_scope":0.34,"term_cf":0.03,"term_lsc":0.03,"term_svr":0.03,"worklog":0.03},
+  "레드햇외": {"non_redhat_pkg":0.9,"os_install_type":0.03,"support_scope":0.05},
+  "레이드": {"dc_survey":0.03,"dracut":0.02,"led":0.03,"os_install":0.02,"os_install_type":0.02,"physical_work":0.05,"server_inspect":0.03,"server_intake":0.02,"server_usage":0.03,"ssi":0.03,"support_scope":0.02,"term_awx":0.1,"term_cf":0.05,"term_dcm":0.02,"term_edm":0.02,"term_itom":0.02,"term_svr":0.06,"worklog":0.11,"zombie":0.02},
+  "레포": {"repo":1},
+  "로그인": {"account_login":0.96,"login_users":0.03},
+  "로그인불가": {"account_login":1},
+  "로그인사용자": {"login_users":1},
+  "로그인안됨": {"account_login":1},
+  "루트패스워드": {"account_login":0.28,"passwd_disk_full":0.06,"password_quarterly":0.44,"splunk_pw_expire":0.07,"sudo":0.05,"term_svr":0.08},
+  "리눅스설치": {"os_install":0.84,"os_install_type":0.15},
+  "리밋": {"limit":0.98,"support_scope":0.02},
+  "리부팅메일": {"account_login":0.03,"approval":0.02,"dongbo_itom":0.05,"os_install":0.06,"requester":0.02,"server_inspect":0.02,"server_intake":0.03,"server_usage":0.03,"splunk_pw_expire":0.05,"support_scope":0.04,"term_svr":0.02,"usb0_cdc":0.1,"worklog":0.25,"zombie":0.04},
+  "리소스사용량": {"cgroup":0.06,"ht":0.02,"limit":0.04,"server_inspect":0.09,"server_usage":0.68,"worklog":0.02,"zombie":0.05},
+  "리소스제한": {"cgroup":0.22,"limit":0.78},
+  "리포": {"repo":0.93,"worklog":0.05},
+  "리포지토리": {"repo":1},
+  "링크설정": {"so_link":1},
+  "마이너버전": {"os_downgrade":0.18,"os_patch":0.48,"support_scope":0.05,"sw_support_scope":0.06,"term_awx":0.02,"term_cf":0.04,"term_mdp":0.03,"term_ssi":0.03},
+  "만료서버": {"maint_expired":1},
+  "만료알림": {"cert":0.02,"maint_expired":0.43,"splunk_pw_expire":0.54},
+  "만료일": {"cert":0.04,"maint_expired":0.8,"splunk_pw_expire":0.15},
+  "망변경": {"network_change":1},
+  "매월": {"crontab":0.24,"os_patch":0.05,"password_quarterly":0.05,"splunk_pw_expire":0.02,"tmp_clean":0.03,"usb_monthly":0.53,"worklog":0.06},
+  "맥주소": {"account_login":0.04,"dhcp_fail":0.05,"hostname_change":0.02,"network_change":0.39,"requester":0.02,"server_usage":0.05,"support_scope":0.02,"term_cf":0.02,"term_mdp":0.02,"term_svr":0.11,"worklog":0.04},
+  "메모리": {"parts_intake":0.79,"physical_work":0.02,"server_inspect":0.02,"server_usage":0.02,"support_scope":0.02,"term_cf":0.02,"term_svr":0.02,"worklog":0.06},
+  "메모리입고": {"parts_intake":1},
+  "메모리창고": {"asset_register":0.04,"dc_survey":0.03,"parts_intake":0.48,"physical_work":0.04,"term_cf":0.03,"term_dcm":0.03,"term_lsc":0.03,"term_sds":0.03,"tmp_clean":0.02,"worklog":0.12},
+  "메이저버전": {"os_downgrade":0.04,"os_install":0.05,"os_patch":0.23,"os_std_change":0.04,"support_scope":0.07,"sw_support_scope":0.1,"term_awx":0.04,"term_cf":0.09,"term_dcm":0.06,"term_edm":0.04,"term_itom":0.02,"term_mdp":0.06,"term_sds":0.02,"term_ssi":0.05,"term_svr":0.02,"term_vwp":0.02},
+  "멜라녹스": {"asset_register":0.02,"dongbo_splunk_na":0.02,"gpu_driver_incident":0.02,"hostname_change":0.03,"ib":0.06,"non_redhat_pkg":0.03,"physical_work":0.02,"server_inspect":0.02,"server_intake":0.02,"server_usage":0.02,"splunk_install":0.06,"ssi":0.02,"support_scope":0.08,"term_awx":0.03,"term_cf":0.06,"term_dcm":0.02,"term_edm":0.02,"term_itom":0.02,"term_mdp":0.03,"term_sds":0.02,"term_ssi":0.02,"term_svr":0.06,"term_vwp":0.02,"worklog":0.02},
+  "모드": {"gpu_mode":0.73,"server_usage":0.03,"support_scope":0.03,"term_edm":0.03,"term_itom":0.02,"term_mdp":0.03,"term_svr":0.02,"worklog":0.02},
+  "모드변경": {"gpu_mode":0.98,"os_std_change":0.02},
+  "무한재부팅": {"dhcp_fail":0.03,"dhcpd_fail":0.05,"dracut":0.22,"os_config_check":0.02,"passwd_disk_full":0.06,"pxe_fail":0.06,"server_inspect":0.03,"splunk_long_down":0.05,"splunk_long_incident":0.14,"support_scope":0.02,"usb0_cdc":0.05,"worklog":0.05,"zombie":0.06},
+  "문서시스템": {"approval":0.04,"dscloud":0.1,"support_scope":0.06,"term_cf":0.02,"term_dcm":0.07,"term_edm":0.06,"term_mdp":0.02,"term_sds":0.34,"worklog":0.24},
+  "물리작업": {"physical_work":1},
+  "물리적작업": {"physical_work":1},
+  "미등록장비": {"asset_register":0.75,"dongbo_itom":0.06,"physical_work":0.06,"server_intake":0.02,"support_scope":0.09},
+  "미장착": {"asset_register":0.03,"cert":0.02,"cuda":0.02,"gpu_driver":0.02,"os_config_check":0.06,"os_install":0.11,"os_install_caution":0.03,"os_install_type":0.03,"physical_work":0.07,"pxe_fail":0.02,"server_intake":0.16,"splunk_install":0.05,"term_cf":0.02,"worklog":0.02},
+  "미지원": {"approval":0.02,"dongbo_splunk_na":0.03,"maint_expired":0.02,"requester":0.02,"support_scope":0.8,"sw_support_scope":0.04,"worklog":0.04},
+  "방화벽": {"network_change":0.79,"os_config_check":0.05,"os_std_change":0.04,"ssi":0.04,"sw_support_scope":0.02,"term_cf":0.02},
+  "버전다운": {"os_downgrade":0.99},
+  "버전업": {"os_patch":0.94,"os_std_change":0.02,"worklog":0.02},
+  "버전요청": {"approval":0.04,"os_downgrade":0.22,"os_patch":0.24,"os_std_change":0.11,"requester":0.22,"support_scope":0.05,"sw_support_scope":0.03,"term_vwp":0.02,"worklog":0.02},
+  "범위코드": {"support_scope":0.47,"sw_support_scope":0.51},
+  "벤더이관": {"approval":0.24,"dc_survey":0.02,"physical_work":0.04,"server_intake":0.09,"server_move":0.24,"support_scope":0.11,"sw_support_scope":0.04,"term_dcm":0.03,"term_edm":0.03,"worklog":0.05},
+  "변경": {"approval":0.02,"hostname_change":0.07,"limit":0.03,"network_change":0.4,"os_std_change":0.37,"timezone":0.03,"worklog":0.03},
+  "별도패스워드": {"account_login":0.13,"passwd_disk_full":0.06,"password_quarterly":0.6,"splunk_pw_expire":0.11,"sudo":0.05,"term_mdp":0.02,"term_svr":0.02},
+  "보안센터": {"approval":0.03,"cert":0.03,"requester":0.06,"server_inspect":0.04,"ssi":0.56,"support_scope":0.14,"term_ssi":0.03},
+  "보안예외": {"approval":0.21,"cert":0.02,"limit":0.02,"os_config_check":0.02,"os_std_change":0.12,"ssh_kex":0.02,"ssi":0.21,"sudo":0.03,"support_scope":0.11,"sw_support_scope":0.07,"term_ssi":0.04,"usb_block":0.02},
+  "보안요청": {"account_login":0.02,"approval":0.14,"cert":0.03,"requester":0.34,"server_usage":0.03,"ssi":0.26,"sudo":0.05,"support_scope":0.06},
+  "보안점검": {"os_config_check":0.03,"server_inspect":0.49,"ssi":0.46,"usb_monthly":0.02},
+  "보안조치": {"os_config_check":0.02,"password_quarterly":0.07,"requester":0.02,"ssi":0.78,"usb_block":0.04,"usb_monthly":0.03},
+  "보안취약점": {"ssi":1},
+  "보안취약점점검": {"server_inspect":0.06,"ssi":0.94},
+  "보증만료": {"maint_expired":0.98},
+  "본딩": {"approval":0.06,"dongbo_itom":0.17,"dongbo_splunk_na":0.03,"os_install":0.03,"physical_work":0.1,"server_intake":0.03,"so_link":0.1,"ssh_kex":0.04,"support_scope":0.03,"term_cf":0.06,"term_dcm":0.04,"term_vwp":0.02,"usb0_cdc":0.02,"worklog":0.05},
+  "볼륨": {"limit":0.09,"partition":0.18,"parts_intake":0.02,"passwd_disk_full":0.1,"server_inspect":0.03,"server_usage":0.14,"term_cf":0.03,"term_vwp":0.11,"worklog":0.05},
+  "부서단위": {"approval":0.09,"bu_disposal":0.12,"cgroup":0.02,"requester":0.08,"server_usage":0.02,"support_scope":0.38,"sw_support_scope":0.03,"term_awx":0.02,"term_cf":0.02,"term_dcm":0.04,"worklog":0.05},
+  "부품": {"parts_guide":0.13,"parts_intake":0.72,"physical_work":0.04,"support_scope":0.02,"term_cf":0.02,"term_edm":0.02,"term_mdp":0.02},
+  "부품관리": {"asset_register":0.06,"parts_guide":0.17,"parts_intake":0.7,"physical_work":0.03,"server_intake":0.02},
+  "부품사용": {"parts_guide":0.78,"parts_intake":0.12,"physical_work":0.06,"server_usage":0.02},
+  "부품입고": {"parts_intake":1},
+  "부품출고": {"asset_disposal":0.11,"asset_register":0.02,"parts_guide":0.17,"parts_intake":0.37,"physical_work":0.22,"server_intake":0.06,"worklog":0.04},
+  "분기": {"partition":0.03,"password_quarterly":0.91,"term_awx":0.02,"worklog":0.02},
+  "분기별": {"password_quarterly":1},
+  "불용": {"approval":0.25,"bu_disposal":0.08,"cuda":0.02,"jump_server":0.02,"os_downgrade":0.03,"physical_work":0.03,"server_usage":0.03,"support_scope":0.25,"term_awx":0.03,"term_cf":0.06,"term_dcm":0.03,"worklog":0.04},
+  "불출": {"approval":0.07,"asset_disposal":0.05,"bu_disposal":0.08,"physical_work":0.04,"requester":0.02,"server_intake":0.03,"server_usage":0.04,"support_scope":0.09,"term_cf":0.04,"term_dcm":0.03,"term_svr":0.03,"usb0_cdc":0.14,"worklog":0.07},
+  "브이더블유피": {"term_vwp":1},
+  "비관리서버": {"maint_expired":0.23,"server_usage":0.03,"support_scope":0.64,"term_dcm":0.02,"term_svr":0.04},
+  "비밀번호": {"account_login":0.16,"passwd_disk_full":0.06,"password_quarterly":0.57,"splunk_pw_expire":0.18,"term_svr":0.02},
+  "비밀번호만료": {"password_quarterly":0.02,"splunk_pw_expire":0.98},
+  "비밀번호변경": {"password_quarterly":0.93,"splunk_pw_expire":0.05},
+  "비밀번호변경실패": {"account_login":0.13,"passwd_disk_full":0.11,"password_quarterly":0.72,"splunk_pw_expire":0.04},
+  "비표준": {"non_redhat_pkg":0.05,"os_install_type":0.02,"os_std_change":0.7,"physical_work":0.02,"support_scope":0.07,"sw_support_scope":0.02,"term_awx":0.02,"term_cf":0.03,"term_dcm":0.02,"term_edm":0.02,"worklog":0.02},
+  "비호환": {"approval":0.03,"bu_disposal":0.03,"cuda":0.08,"docker":0.04,"os_downgrade":0.04,"os_std_change":0.03,"ssh_kex":0.03,"support_scope":0.32,"sw_support_scope":0.06,"term_awx":0.03,"term_cf":0.08,"term_dcm":0.06,"worklog":0.02},
+  "사업부서버폐기": {"asset_disposal":0.1,"bu_disposal":0.9},
+  "사업부직접구매": {"approval":0.22,"bu_disposal":0.13,"parts_guide":0.08,"parts_intake":0.11,"physical_work":0.03,"requester":0.1,"server_intake":0.06,"support_scope":0.14,"term_mdp":0.06},
+  "사업부직투": {"bu_disposal":0.7,"requester":0.05,"server_usage":0.03,"sudo":0.02,"support_scope":0.09,"term_cf":0.02,"term_svr":0.02,"worklog":0.04},
+  "사업부폐기": {"asset_disposal":0.05,"bu_disposal":0.95},
+  "사용량확인": {"server_usage":0.95,"zombie":0.02},
+  "사용자직접설치": {"os_install":0.07,"os_install_caution":0.02,"os_install_type":0.75,"parts_guide":0.04,"splunk_install":0.03,"support_scope":0.02},
+  "삭제주기": {"tmp_clean":0.99},
+  "서버관리계정": {"account_login":0.03,"term_svr":0.97},
+  "서버느림": {"network_change":0.02,"server_inspect":0.76,"server_usage":0.07,"splunk_long_incident":0.03,"zombie":0.06},
+  "서버다운": {"maint_expired":0.04,"server_inspect":0.08,"splunk_long_down":0.63,"splunk_long_incident":0.16,"support_scope":0.02,"term_svr":0.02,"worklog":0.02},
+  "서버명": {"hostname_change":0.93,"term_svr":0.03},
+  "서버명규칙": {"hostname_change":0.97,"server_intake":0.02},
+  "서버명변경": {"hostname_change":1},
+  "서버명수정": {"hostname_change":1},
+  "서버보안점검": {"server_inspect":0.96,"ssi":0.04},
+  "서버세팅": {"os_config_check":0.1,"server_intake":0.82,"server_usage":0.02},
+  "서버셋업": {"os_install":0.03,"server_intake":0.95},
+  "서버실사": {"dc_survey":0.9,"server_inspect":0.1},
+  "서버용도": {"server_usage":1},
+  "서버위치": {"dc_survey":1},
+  "서버이동": {"server_move":1},
+  "서버이전": {"server_move":1},
+  "서버입고": {"server_intake":1},
+  "서버점검": {"server_inspect":1},
+  "서버폐기": {"asset_disposal":0.9,"bu_disposal":0.1},
+  "서비스담당자": {"requester":0.11,"support_scope":0.78,"term_svr":0.02,"worklog":0.04},
+  "설정관리도구": {"cgroup":0.03,"crontab":0.03,"dr_appl":0.03,"fabric_manager":0.04,"network_change":0.03,"os_config_check":0.19,"os_std_change":0.11,"repo":0.04,"term_awx":0.1,"term_dcm":0.18,"term_edm":0.03,"term_itom":0.05,"term_mdp":0.04,"term_sds":0.03},
+  "설정변경요청": {"approval":0.03,"limit":0.02,"network_change":0.16,"os_config_check":0.05,"os_std_change":0.66,"requester":0.03,"timezone":0.02},
+  "설정체크": {"os_config_check":0.96,"server_inspect":0.03},
+  "설치": {"os_install":0.82,"os_install_type":0.03,"server_intake":0.03,"splunk_install":0.06,"support_scope":0.02,"telnet":0.02},
+  "설치유형": {"os_install_type":0.99},
+  "설치후설정": {"os_config_check":0.99},
+  "설치후체크": {"os_config_check":0.98,"os_install":0.02},
+  "성능저하": {"gpu_driver_incident":0.02,"ht":0.05,"limit":0.02,"passwd_disk_full":0.03,"server_inspect":0.42,"server_usage":0.07,"splunk_long_incident":0.06,"support_scope":0.04,"worklog":0.04,"zombie":0.16},
+  "센터이전": {"dc_survey":0.11,"server_move":0.88},
+  "소모품": {"asset_disposal":0.08,"asset_register":0.02,"parts_guide":0.5,"parts_intake":0.1,"physical_work":0.05,"support_scope":0.05,"term_cf":0.04,"term_dcm":0.03,"term_lsc":0.03,"worklog":0.03},
+  "소프트웨어지원": {"support_scope":0.1,"sw_support_scope":0.9},
+  "수도권한": {"sudo":1},
+  "슈도": {"sudo":0.96},
+  "스레드": {"cgroup":0.05,"ht":0.44,"support_scope":0.03,"term_awx":0.03,"term_cf":0.03,"term_sds":0.02,"term_ssi":0.02,"term_svr":0.04,"worklog":0.17,"zombie":0.04},
+  "스마트d\u0026e": {"smart_de":1},
+  "스마트디앤이": {"smart_de":0.99},
+  "스케줄작업": {"crontab":0.93,"worklog":0.04},
+  "스페어": {"asset_register":0.03,"parts_guide":0.07,"parts_intake":0.13,"physical_work":0.08,"server_intake":0.02,"server_usage":0.04,"support_scope":0.07,"term_awx":0.04,"term_cf":0.04,"term_dcm":0.02,"term_sds":0.02,"term_svr":0.09,"worklog":0.16},
+  "스플렁크": {"dongbo_splunk_na":0.11,"splunk_install":0.81,"splunk_long_incident":0.02,"support_scope":0.03},
+  "스플렁크na": {"dongbo_splunk_na":1},
+  "스플렁크설치": {"splunk_install":1},
+  "스플렁크알림": {"dongbo_splunk_na":1},
+  "승인": {"approval":1},
+  "승인자": {"approval":0.99},
+  "승인필요": {"approval":1},
+  "시각화": {"dc_survey":0.04,"dongbo_splunk_na":0.04,"led":0.02,"server_inspect":0.04,"splunk_install":0.02,"term_cf":0.02,"term_dcm":0.02,"term_dreami":0.04,"term_edm":0.05,"term_itom":0.05,"term_vwp":0.34,"usb_monthly":0.02,"worklog":0.12},
+  "시각화장비": {"asset_register":0.27,"led":0.08,"physical_work":0.17,"server_usage":0.02,"splunk_install":0.05,"support_scope":0.05,"term_lsc":0.02,"term_vwp":0.2},
+  "시간대": {"timezone":1},
+  "시간변경": {"timezone":0.99},
+  "시간설정": {"crontab":0.1,"timezone":0.89},
+  "신규ssd": {"parts_intake":1},
+  "신규대역": {"network_change":0.95,"server_intake":0.03},
+  "신규메모리": {"parts_intake":1},
+  "신규서버": {"server_intake":0.98},
+  "신규자산": {"asset_register":0.81,"parts_intake":0.12,"server_intake":0.06},
+  "신규장비": {"asset_register":0.24,"parts_intake":0.18,"physical_work":0.02,"server_intake":0.55},
+  "신규코드": {"approval":0.06,"asset_register":0.07,"os_install":0.05,"os_std_change":0.08,"server_intake":0.17,"server_usage":0.02,"support_scope":0.12,"term_awx":0.03,"term_cf":0.03,"term_svr":0.04,"worklog":0.17},
+  "실사": {"dc_survey":0.97,"server_inspect":0.02},
+  "심볼릭링크": {"os_std_change":0.03,"so_link":0.95},
+  "씨그룹": {"cgroup":0.98,"support_scope":0.02},
+  "씨에프": {"term_cf":1},
+  "아이톰": {"dongbo_itom":0.05,"term_itom":0.95},
+  "아이티오엠": {"dongbo_itom":0.05,"term_itom":0.95},
+  "아이피": {"dhcp_fail":0.03,"network_change":0.89,"term_itom":0.03,"worklog":0.02},
+  "알람": {"dongbo_itom":0.03,"dongbo_splunk_na":0.89,"splunk_pw_expire":0.06},
+  "알에스에이치": {"ht":0.02,"non_redhat_pkg":0.04,"os_install":0.02,"os_std_change":0.02,"password_quarterly":0.04,"physical_work":0.04,"rsh":0.15,"server_usage":0.05,"ssi":0.08,"support_scope":0.13,"sw_support_scope":0.03,"term_awx":0.02,"term_ssi":0.07,"term_svr":0.06},
+  "암호변경": {"password_quarterly":0.95,"splunk_pw_expire":0.04},
+  "앤서블": {"approval":0.02,"cgroup":0.02,"dscloud":0.02,"os_install":0.02,"os_std_change":0.02,"support_scope":0.07,"sw_support_scope":0.05,"term_awx":0.06,"term_cf":0.07,"term_dcm":0.04,"term_dreami":0.02,"term_edm":0.05,"term_itom":0.05,"term_lsc":0.02,"term_mdp":0.02,"term_sds":0.04,"term_ssi":0.04,"term_svr":0.08,"term_vwp":0.04,"worklog":0.06},
+  "앱장애": {"dr_appl":0.31,"maint_expired":0.05,"splunk_long_down":0.03,"splunk_long_incident":0.2,"support_scope":0.15,"sw_support_scope":0.18,"zombie":0.02},
+  "어디에있": {"dc_survey":0.94},
+  "어플리케이션장애": {"dr_appl":0.31,"maint_expired":0.05,"splunk_long_incident":0.28,"support_scope":0.1,"sw_support_scope":0.16,"zombie":0.02},
+  "업그레이드": {"os_downgrade":0.02,"os_patch":0.95,"os_std_change":0.03},
+  "업데이트": {"os_patch":0.99},
+  "업무보고": {"worklog":1},
+  "업무일지": {"worklog":1},
+  "업무일지가이드": {"worklog":1},
+  "에러램프": {"led":0.94,"physical_work":0.02,"server_inspect":0.02},
+  "에뮬": {"emulator":1},
+  "에뮬레이터": {"emulator":1},
+  "에뮬레이터서버": {"emulator":0.98,"server_usage":0.02},
+  "에뮬레이터설정": {"emulator":1},
+  "에뮬레이터설정변경": {"emulator":1},
+  "에스디에스": {"term_sds":1},
+  "에스브이알": {"os_install":0.02,"os_install_type":0.02,"server_usage":0.02,"splunk_install":0.02,"ssi":0.02,"support_scope":0.03,"sw_support_scope":0.02,"term_cf":0.02,"term_itom":0.02,"term_sds":0.03,"term_ssi":0.02,"term_svr":0.73,"term_vwp":0.02},
+  "에스에스아이": {"ssi":0.57,"term_ssi":0.42},
+  "에이더블유엑스": {"term_awx":1},
+  "엔브이스위치": {"ht":0.1,"led":0.03,"network_change":0.09,"os_install":0.02,"os_std_change":0.05,"physical_work":0.06,"support_scope":0.03,"sw_support_scope":0.05,"term_cf":0.03,"term_dcm":0.02,"term_dreami":0.02,"term_edm":0.03,"term_itom":0.02,"term_ssi":0.06,"term_svr":0.03,"term_vwp":0.07},
+  "엔비디아": {"cuda":0.15,"gpu_driver":0.53,"gpu_driver_incident":0.04,"server_usage":0.03,"support_scope":0.12},
+  "엘답": {"account_login":0.02,"approval":0.02,"dracut":0.02,"led":0.02,"os_install":0.02,"os_install_type":0.02,"requester":0.02,"server_usage":0.02,"support_scope":0.07,"term_awx":0.04,"term_cf":0.04,"term_dcm":0.02,"term_dreami":0.04,"term_edm":0.08,"term_itom":0.02,"term_lsc":0.05,"term_mdp":0.02,"term_sds":0.02,"term_ssi":0.03,"term_svr":0.12,"worklog":0.05},
+  "엘에스씨": {"term_lsc":1},
+  "엘이디": {"led":1},
+  "엠디피": {"term_mdp":0.99},
+  "예비부품": {"asset_register":0.02,"parts_guide":0.17,"parts_intake":0.71,"physical_work":0.05,"server_inspect":0.02,"support_scope":0.02},
+  "예약작업": {"approval":0.07,"crontab":0.45,"requester":0.03,"term_awx":0.06,"term_edm":0.02,"worklog":0.29},
+  "예외리스트": {"approval":0.02,"limit":0.09,"non_redhat_pkg":0.02,"os_std_change":0.07,"splunk_long_down":0.07,"splunk_long_incident":0.08,"ssi":0.03,"support_scope":0.33,"sw_support_scope":0.12,"worklog":0.03},
+  "예전버전": {"os_downgrade":0.53,"os_patch":0.04,"os_std_change":0.03,"support_scope":0.06,"sw_support_scope":0.03,"term_ssi":0.02,"term_vwp":0.02,"worklog":0.18},
+  "외부repo": {"repo":1},
+  "외부벤더": {"approval":0.11,"requester":0.17,"support_scope":0.54,"sw_support_scope":0.03,"term_awx":0.03,"term_cf":0.03},
+  "외부패키지": {"non_redhat_pkg":0.91,"os_std_change":0.03,"support_scope":0.02,"sw_support_scope":0.02},
+  "외부협력사": {"approval":0.35,"requester":0.09,"support_scope":0.43,"term_cf":0.05,"term_lsc":0.02,"worklog":0.02},
+  "요청자": {"requester":1},
+  "요청자자격": {"requester":1},
+  "용도": {"server_usage":1},
+  "용도확인": {"server_usage":1},
+  "용량늘려": {"dscloud":0.02,"limit":0.47,"partition":0.44,"parts_intake":0.04},
+  "용량부족": {"limit":0.09,"partition":0.52,"parts_intake":0.04,"passwd_disk_full":0.32,"server_usage":0.02},
+  "운영서버": {"server_inspect":0.02,"server_intake":0.05,"server_usage":0.75,"support_scope":0.06,"term_svr":0.1,"worklog":0.02},
+  "운영체제": {"os_config_check":0.05,"os_install":0.49,"os_install_type":0.04,"os_patch":0.04,"os_std_change":0.05,"server_usage":0.05,"support_scope":0.12,"sw_support_scope":0.05,"term_awx":0.02},
+  "운영체제설치": {"os_install":1},
+  "월간점검": {"led":0.02,"server_inspect":0.8,"usb_monthly":0.13,"worklog":0.02},
+  "월초": {"crontab":0.08,"password_quarterly":0.05,"splunk_pw_expire":0.03,"support_scope":0.03,"term_awx":0.03,"term_cf":0.03,"tmp_clean":0.03,"usb_monthly":0.1,"worklog":0.44},
+  "위치이동": {"dc_survey":0.03,"server_move":0.96},
+  "위치확인": {"dc_survey":1},
+  "유지보수": {"maint_expired":0.75,"os_patch":0.1,"physical_work":0.02,"server_inspect":0.04,"support_scope":0.03,"worklog":0.04},
+  "유지보수끝": {"maint_expired":0.51,"os_patch":0.02,"support_scope":0.02,"worklog":0.45},
+  "유지보수만료": {"maint_expired":1},
+  "유형별": {"os_install_type":0.99},
+  "육안": {"dc_survey":0.03,"led":0.02,"physical_work":0.02,"server_inspect":0.03,"term_awx":0.02,"term_cf":0.02,"term_svr":0.02,"usb_monthly":0.83},
+  "육안점검": {"led":0.04,"server_inspect":0.14,"usb_monthly":0.79},
+  "응답없음": {"approval":0.02,"dhcp_fail":0.02,"dongbo_splunk_na":0.23,"requester":0.04,"server_usage":0.04,"support_scope":0.16,"worklog":0.45},
+  "이니셜": {"approval":0.09,"hostname_change":0.04,"requester":0.12,"ssi":0.04,"support_scope":0.04,"term_awx":0.06,"term_cf":0.09,"term_dcm":0.02,"term_edm":0.03,"term_itom":0.03,"term_mdp":0.03,"term_ssi":0.11,"term_svr":0.1,"worklog":0.07},
+  "이디엠": {"dongbo_itom":0.02,"term_edm":0.88,"term_itom":0.09},
+  "이름변경": {"hostname_change":1},
+  "이머전시": {"dracut":0.83,"gpu_driver_incident":0.03,"term_edm":0.02,"term_itom":0.02,"term_svr":0.02,"worklog":0.02},
+  "이설": {"approval":0.02,"dracut":0.04,"os_install":0.11,"os_install_type":0.03,"os_std_change":0.02,"server_move":0.02,"server_usage":0.02,"support_scope":0.04,"term_awx":0.02,"term_cf":0.05,"term_edm":0.02,"term_sds":0.02,"term_ssi":0.03,"term_svr":0.02,"term_vwp":0.02,"usb0_cdc":0.02,"worklog":0.18},
+  "이전요청": {"approval":0.03,"requester":0.13,"server_move":0.51,"server_usage":0.02,"support_scope":0.05,"worklog":0.25},
+  "익스클루시브": {"approval":0.03,"cgroup":0.02,"limit":0.03,"requester":0.07,"support_scope":0.4,"sw_support_scope":0.06,"term_awx":0.04,"term_cf":0.06,"term_dcm":0.04,"term_edm":0.02,"term_ssi":0.04,"term_svr":0.06},
+  "인시던트": {"gpu_driver_incident":0.67,"splunk_long_incident":0.15,"support_scope":0.03,"worklog":0.05},
+  "인증서": {"cert":1},
+  "인증서다운로드": {"cert":1},
+  "인증서설치": {"cert":1},
+  "인증서적용": {"cert":1},
+  "인프라구분": {"server_usage":0.07,"support_scope":0.71,"sw_support_scope":0.06,"term_dcm":0.03,"term_itom":0.02,"term_sds":0.02},
+  "인프라조직": {"dc_survey":0.02,"network_change":0.02,"requester":0.06,"server_intake":0.05,"server_usage":0.03,"support_scope":0.62,"term_dcm":0.03,"term_itom":0.03,"worklog":0.04},
+  "인피니밴드": {"ib":0.97,"network_change":0.02},
+  "일반서버": {"os_install_type":0.03,"server_inspect":0.02,"server_intake":0.07,"server_usage":0.59,"support_scope":0.12,"term_svr":0.16},
+  "일일보고": {"worklog":1},
+  "일지": {"worklog":1},
+  "임대": {"approval":0.05,"asset_disposal":0.1,"asset_register":0.13,"dscloud":0.06,"physical_work":0.03,"server_intake":0.06,"server_usage":0.18,"support_scope":0.09,"term_cf":0.03,"term_dcm":0.02,"term_edm":0.02,"term_lsc":0.02,"term_svr":0.02,"worklog":0.05},
+  "임시파일": {"term_cf":0.02,"tmp_clean":0.93,"worklog":0.03},
+  "임시파일삭제": {"tmp_clean":1},
+  "입고": {"parts_intake":0.29,"server_intake":0.71},
+  "입고가동": {"server_intake":1},
+  "입고절차": {"parts_intake":0.16,"server_intake":0.84},
+  "자가소비": {"parts_guide":0.99},
+  "자가소비가이드": {"parts_guide":1},
+  "자가소비부품": {"parts_guide":0.96,"parts_intake":0.03},
+  "자격": {"requester":0.99},
+  "자동화배포": {"approval":0.02,"docker":0.02,"dscloud":0.04,"fabric_manager":0.02,"os_install":0.04,"os_patch":0.02,"server_intake":0.02,"term_awx":0.63,"term_cf":0.05,"term_mdp":0.05,"worklog":0.03},
+  "자산관리": {"asset_disposal":0.12,"asset_register":0.71,"dongbo_itom":0.13,"term_dcm":0.02,"term_itom":0.02},
+  "자산관리시스템": {"asset_disposal":0.04,"asset_register":0.68,"dongbo_itom":0.16,"term_itom":0.07},
+  "자산구분": {"asset_disposal":0.06,"asset_register":0.72,"dongbo_itom":0.07,"server_usage":0.03,"support_scope":0.09,"term_dcm":0.02},
+  "자산등록": {"asset_register":1},
+  "자산시스템": {"asset_disposal":0.04,"asset_register":0.8,"dongbo_itom":0.14},
+  "자산외장비": {"asset_disposal":0.02,"asset_register":0.05,"physical_work":0.81,"support_scope":0.09},
+  "자산폐기": {"asset_disposal":1},
+  "자산확인": {"asset_register":0.1,"dongbo_itom":0.89},
+  "작업메시지": {"server_usage":0.02,"support_scope":0.03,"worklog":0.93},
+  "작업방": {"os_install":0.02,"physical_work":0.1,"server_intake":0.02,"server_move":0.02,"server_usage":0.05,"support_scope":0.02,"term_awx":0.02,"term_cf":0.02,"term_dcm":0.02,"term_svr":0.02,"term_vwp":0.02,"worklog":0.66},
+  "작업승인": {"approval":1},
+  "작업일지": {"worklog":1},
+  "잔량반납": {"approval":0.04,"asset_disposal":0.45,"asset_register":0.06,"bu_disposal":0.05,"dscloud":0.04,"physical_work":0.06,"server_intake":0.07,"server_usage":0.03,"term_edm":0.02,"term_lsc":0.02,"worklog":0.09,"zombie":0.02},
+  "장기간down": {"splunk_long_down":0.94,"splunk_long_incident":0.05},
+  "장기간다운": {"splunk_long_down":0.91,"splunk_long_incident":0.09},
+  "장기간장애": {"splunk_long_down":0.02,"splunk_long_incident":0.98},
+  "장기다운": {"splunk_long_down":0.91,"splunk_long_incident":0.08},
+  "장기장애": {"splunk_long_down":0.02,"splunk_long_incident":0.97},
+  "장비이동": {"physical_work":0.12,"server_move":0.87},
+  "장비이전": {"server_move":0.99},
+  "장비폐기": {"asset_disposal":0.99},
+  "장애리스트": {"splunk_long_down":0.12,"splunk_long_incident":0.79,"support_scope":0.04,"worklog":0.02},
+  "장애서버": {"maint_expired":0.23,"server_inspect":0.05,"server_usage":0.05,"splunk_long_down":0.07,"splunk_long_incident":0.46,"support_scope":0.04,"term_svr":0.03},
+  "장애조치": {"maint_expired":0.02,"splunk_long_down":0.02,"splunk_long_incident":0.79,"ssi":0.1,"support_scope":0.02},
+  "재배치": {"server_move":0.97},
+  "재부팅": {"dhcpd_fail":0.02,"dongbo_itom":0.02,"dracut":0.07,"ht":0.02,"maint_expired":0.02,"os_config_check":0.04,"os_install":0.02,"os_patch":0.09,"os_std_change":0.04,"passwd_disk_full":0.02,"physical_work":0.02,"server_inspect":0.07,"server_intake":0.06,"server_usage":0.05,"splunk_long_down":0.02,"splunk_long_incident":0.03,"support_scope":0.04,"term_dcm":0.03,"usb0_cdc":0.06,"worklog":0.12,"zombie":0.03},
+  "재부팅메일": {"account_login":0.08,"dhcp_fail":0.02,"dongbo_itom":0.04,"dracut":0.02,"ht":0.02,"login_users":0.02,"os_config_check":0.02,"os_patch":0.02,"passwd_disk_full":0.02,"server_inspect":0.07,"server_intake":0.03,"server_usage":0.04,"splunk_long_down":0.02,"splunk_long_incident":0.02,"splunk_pw_expire":0.02,"support_scope":0.05,"term_svr":0.02,"usb0_cdc":0.05,"worklog":0.25,"zombie":0.02},
+  "재부팅알림": {"dongbo_itom":0.08,"dongbo_splunk_na":0.12,"maint_expired":0.02,"os_config_check":0.04,"os_patch":0.49,"server_inspect":0.02,"splunk_pw_expire":0.05,"support_scope":0.02,"worklog":0.04},
+  "재부팅전": {"dracut":0.02,"ht":0.02,"login_users":0.08,"os_config_check":0.04,"os_patch":0.04,"server_inspect":0.05,"server_intake":0.02,"server_usage":0.04,"splunk_long_incident":0.02,"support_scope":0.03,"worklog":0.42,"zombie":0.03},
+  "재부팅주의": {"os_config_check":0.03,"os_install":0.03,"os_install_caution":0.64,"os_patch":0.13,"server_intake":0.03,"usb0_cdc":0.02,"worklog":0.03},
+  "재설치": {"os_install":0.3,"os_install_caution":0.02,"os_install_type":0.07,"usb0_cdc":0.6},
+  "재해복구": {"dr_appl":1},
+  "재해복구점검": {"dr_appl":0.95,"server_inspect":0.04},
+  "저장소": {"asset_register":0.02,"partition":0.02,"parts_intake":0.03,"repo":0.86,"server_intake":0.02,"term_sds":0.03},
+  "점검서버리스트": {"server_inspect":0.37,"splunk_long_down":0.02,"splunk_long_incident":0.61},
+  "점검요청": {"server_inspect":1},
+  "점프": {"jump_server":0.94,"worklog":0.02},
+  "점프서버": {"jump_server":0.99},
+  "접근불가": {"account_login":0.25,"jump_server":0.66,"support_scope":0.05},
+  "접속불가": {"account_login":0.77,"jump_server":0.22},
+  "접속사용자": {"login_users":1},
+  "접속안됨": {"account_login":0.83,"jump_server":0.14},
+  "접속이력": {"account_login":0.17,"ht":0.04,"jump_server":0.03,"login_users":0.37,"server_usage":0.04,"term_dcm":0.02,"term_svr":0.03,"worklog":0.27},
+  "접속이안돼": {"account_login":0.83,"jump_server":0.11,"support_scope":0.02},
+  "접속자": {"account_login":0.17,"jump_server":0.08,"login_users":0.2,"requester":0.3,"support_scope":0.03,"term_edm":0.02,"term_ssi":0.02,"term_svr":0.08},
+  "접속중인사용자": {"login_users":1},
+  "좀비": {"zombie":1},
+  "좀비프로세스": {"zombie":1},
+  "주의사항": {"os_install_caution":1},
+  "주황불": {"approval":0.03,"dongbo_itom":0.03,"dongbo_splunk_na":0.09,"led":0.46,"os_install_caution":0.03,"splunk_long_incident":0.03,"support_scope":0.06,"term_cf":0.03,"term_svr":0.04,"worklog":0.03},
+  "지원가능": {"support_scope":0.98,"sw_support_scope":0.02},
+  "지원대상": {"support_scope":1},
+  "지원범위": {"support_scope":0.8,"sw_support_scope":0.2},
+  "지원불가": {"support_scope":0.94,"sw_support_scope":0.03},
+  "지원여부": {"support_scope":1},
+  "직접구매서버": {"bu_disposal":0.02,"parts_guide":0.05,"server_intake":0.31,"server_usage":0.11,"support_scope":0.04,"term_mdp":0.23,"term_svr":0.1},
+  "직접구매폐기": {"asset_disposal":0.72,"bu_disposal":0.27},
+  "직투": {"approval":0.03,"bu_disposal":0.31,"os_install":0.04,"os_install_type":0.03,"physical_work":0.05,"server_intake":0.05,"server_usage":0.04,"support_scope":0.07,"term_awx":0.04,"term_cf":0.05,"term_mdp":0.02,"term_ssi":0.02,"term_svr":0.07,"term_vwp":0.02,"worklog":0.05},
+  "직투서버": {"bu_disposal":0.33,"jump_server":0.03,"server_inspect":0.02,"server_intake":0.1,"server_usage":0.25,"support_scope":0.05,"term_cf":0.02,"term_svr":0.13,"term_vwp":0.02,"worklog":0.02},
+  "직투서버폐기": {"asset_disposal":0.06,"bu_disposal":0.94},
+  "차단블록": {"network_change":0.02,"usb_block":0.6,"usb_monthly":0.33},
+  "차단블록점검": {"usb_block":0.05,"usb_monthly":0.95},
+  "추가/변경/삭제": {"os_std_change":1},
+  "출근": {"account_login":0.02,"login_users":0.02,"physical_work":0.02,"support_scope":0.02,"term_svr":0.02,"worklog":0.89},
+  "취약점": {"ssi":1},
+  "취약점조치": {"ssi":1},
+  "카카오톡": {"account_login":0.03,"requester":0.07,"server_usage":0.03,"splunk_pw_expire":0.03,"support_scope":0.43,"sw_support_scope":0.11,"term_cf":0.03,"term_svr":0.03,"worklog":0.15},
+  "커널업데이트": {"os_patch":1},
+  "커널패닉": {"dracut":0.3,"gpu_driver_incident":0.05,"maint_expired":0.06,"passwd_disk_full":0.06,"server_inspect":0.13,"splunk_long_incident":0.11,"support_scope":0.04,"term_cf":0.04,"usb0_cdc":0.03,"worklog":0.03},
+  "커스텀설정": {"cgroup":0.03,"os_config_check":0.18,"os_std_change":0.61,"server_usage":0.02,"support_scope":0.02,"sw_support_scope":0.02,"term_cf":0.03,"timezone":0.02},
+  "컨테이너": {"cgroup":0.1,"docker":0.73,"physical_work":0.03,"server_intake":0.02,"support_scope":0.02,"term_cf":0.04,"term_dcm":0.02,"term_lsc":0.02},
+  "컴퓨트farm": {"dscloud":0.02,"password_quarterly":0.06,"physical_work":0.04,"server_intake":0.03,"server_usage":0.1,"support_scope":0.04,"term_cf":0.68,"term_svr":0.02},
+  "컴퓨트모드": {"gpu_mode":0.58,"os_install_type":0.03,"server_usage":0.16,"term_awx":0.02,"term_cf":0.04,"term_dcm":0.06,"term_mdp":0.02,"term_svr":0.02},
+  "컴퓨트서버": {"os_install_type":0.03,"server_intake":0.06,"server_usage":0.73,"support_scope":0.04,"term_cf":0.02,"term_svr":0.09},
+  "컴퓨트팜": {"server_usage":0.03,"support_scope":0.04,"term_cf":0.89,"term_svr":0.02},
+  "케이블링": {"dc_survey":0.03,"network_change":0.08,"physical_work":0.88},
+  "케이블제거": {"asset_disposal":0.02,"network_change":0.08,"physical_work":0.89},
+  "코어수": {"cgroup":0.02,"dhcp_fail":0.02,"dracut":0.02,"login_users":0.02,"os_config_check":0.02,"os_install":0.05,"os_install_type":0.02,"server_usage":0.07,"support_scope":0.08,"term_awx":0.04,"term_cf":0.04,"term_dcm":0.04,"term_itom":0.02,"term_sds":0.02,"term_ssi":0.05,"term_svr":0.15,"worklog":0.04,"zombie":0.02},
+  "콜론": {"crontab":0.02,"dhcp_fail":0.02,"os_config_check":0.02,"partition":0.07,"server_usage":0.03,"support_scope":0.05,"term_awx":0.03,"term_cf":0.08,"term_dcm":0.04,"term_edm":0.02,"term_itom":0.02,"term_lsc":0.02,"term_sds":0.02,"term_ssi":0.02,"term_svr":0.08,"timezone":0.02,"worklog":0.08},
+  "쿠다": {"cuda":0.96,"sudo":0.02},
+  "쿠다설치": {"cuda":0.96,"gpu_driver":0.03},
+  "크로스체크": {"approval":0.18,"dc_survey":0.03,"dns_check":0.13,"dongbo_itom":0.03,"os_config_check":0.12,"requester":0.03,"server_inspect":0.09,"support_scope":0.08,"term_awx":0.03,"term_cf":0.06,"term_dcm":0.04,"term_ssi":0.03,"worklog":0.05},
+  "크론": {"cgroup":0.02,"crontab":0.82,"os_install":0.02,"support_scope":0.02,"term_awx":0.02,"term_cf":0.02,"term_dcm":0.02,"term_itom":0.02,"term_svr":0.02},
+  "크론탭": {"crontab":1},
+  "클라우드vm": {"dscloud":1},
+  "키교환": {"ssh_kex":0.99},
+  "킥스타트": {"approval":0.02,"dracut":0.07,"os_install":0.07,"physical_work":0.02,"server_intake":0.39,"term_awx":0.05,"term_cf":0.05,"term_dcm":0.02,"term_svr":0.02,"usb0_cdc":0.03,"worklog":0.04},
+  "타임존": {"timezone":1},
+  "텔넷": {"telnet":1},
+  "텔넷설치": {"telnet":1},
+  "통파티션": {"partition":0.99},
+  "퇴근": {"physical_work":0.02,"support_scope":0.02,"term_cf":0.02,"term_svr":0.02,"worklog":0.88},
+  "툴킷": {"cuda":0.76,"term_awx":0.03,"term_cf":0.04,"term_sds":0.02,"term_ssi":0.02,"worklog":0.02},
+  "특정버전": {"os_downgrade":0.06,"os_install":0.04,"os_install_type":0.02,"os_patch":0.31,"os_std_change":0.08,"support_scope":0.2,"sw_support_scope":0.1,"worklog":0.02},
+  "파일개수제한": {"limit":0.99},
+  "파티션": {"partition":1},
+  "파티션변경": {"partition":1},
+  "파티션조정": {"partition":1},
+  "파티션확장": {"partition":1},
+  "패브릭": {"fabric_manager":0.88,"ib":0.02,"physical_work":0.03,"support_scope":0.03,"term_cf":0.02},
+  "패브릭매니저": {"fabric_manager":1},
+  "패스워드": {"account_login":0.11,"passwd_disk_full":0.06,"password_quarterly":0.58,"splunk_pw_expire":0.23,"term_svr":0.02},
+  "패스워드만료": {"password_quarterly":0.02,"splunk_pw_expire":0.98},
+  "패스워드변경": {"password_quarterly":0.96,"splunk_pw_expire":0.03},
+  "패스워드변경안됨": {"account_login":0.11,"passwd_disk_full":0.11,"password_quarterly":0.7,"splunk_pw_expire":0.08},
+  "패치": {"os_patch":1},
+  "패키지": {"non_redhat_pkg":0.62,"os_install":0.03,"os_patch":0.04,"os_std_change":0.08,"repo":0.03,"support_scope":0.03,"sw_support_scope":0.03,"term_cf":0.02,"term_itom":0.02,"worklog":0.02},
+  "패키지설치": {"gpu_driver":0.04,"non_redhat_pkg":0.51,"os_install":0.07,"os_std_change":0.27,"splunk_install":0.04,"telnet":0.02},
+  "패키지지원": {"non_redhat_pkg":0.13,"os_std_change":0.02,"repo":0.02,"support_scope":0.54,"sw_support_scope":0.28},
+  "퍼블릭클라우드": {"dscloud":0.56,"server_usage":0.04,"support_scope":0.16,"term_cf":0.1,"term_dcm":0.03,"term_sds":0.02,"term_vwp":0.03},
+  "펌웨어": {"gpu_driver":0.03,"os_patch":0.09,"os_std_change":0.02,"physical_work":0.04,"server_inspect":0.02,"server_intake":0.04,"support_scope":0.08,"sw_support_scope":0.38,"term_cf":0.06,"term_dcm":0.04},
+  "폐기": {"asset_disposal":0.99},
+  "폐기예정": {"asset_disposal":0.99},
+  "폐기프로세스": {"asset_disposal":1},
+  "포워더": {"approval":0.03,"crontab":0.05,"docker":0.04,"requester":0.03,"server_intake":0.04,"splunk_install":0.02,"support_scope":0.05,"term_awx":0.06,"term_cf":0.07,"term_dcm":0.02,"term_edm":0.02,"term_itom":0.03,"term_lsc":0.02,"term_mdp":0.03,"term_sds":0.02,"term_svr":0.06,"term_vwp":0.02,"worklog":0.07},
+  "포트번호": {"network_change":0.85,"os_std_change":0.02,"server_inspect":0.03,"server_usage":0.02,"term_cf":0.02,"term_dcm":0.02,"worklog":0.02},
+  "표시등": {"led":1},
+  "표준변경": {"os_std_change":0.99},
+  "표준설정": {"limit":0.02,"os_config_check":0.3,"os_install":0.04,"os_install_type":0.02,"os_std_change":0.5,"server_intake":0.02,"server_usage":0.02,"support_scope":0.02,"sw_support_scope":0.03},
+  "표준시": {"os_config_check":0.02,"os_std_change":0.07,"term_cf":0.02,"timezone":0.89},
+  "표준외": {"os_std_change":0.99},
+  "프로그램설치": {"docker":0.03,"fabric_manager":0.05,"gpu_driver":0.12,"non_redhat_pkg":0.16,"os_install":0.17,"os_std_change":0.12,"splunk_install":0.17,"sw_support_scope":0.11,"telnet":0.02},
+  "프로세스kill": {"os_std_change":0.02,"zombie":0.94},
+  "프로세스정리": {"approval":0.05,"ssi":0.03,"worklog":0.02,"zombie":0.88},
+  "프로세스종료": {"approval":0.04,"asset_disposal":0.03,"ssi":0.02,"term_awx":0.02,"term_svr":0.03,"worklog":0.03,"zombie":0.78},
+  "하드웨어장애": {"maint_expired":0.09,"parts_intake":0.05,"physical_work":0.36,"server_inspect":0.2,"splunk_long_incident":0.13,"support_scope":0.07,"worklog":0.02},
+  "하드웨어점검": {"led":0.05,"physical_work":0.06,"server_inspect":0.87},
+  "하위버전": {"os_downgrade":0.56,"os_install_type":0.09,"os_patch":0.03,"support_scope":0.09,"sw_support_scope":0.05,"term_awx":0.03,"term_vwp":0.02,"worklog":0.02},
+  "하이퍼스레딩": {"ht":1},
+  "하이퍼쓰레딩": {"ht":1},
+  "행걸림": {"account_login":0.02,"approval":0.35,"dhcp_fail":0.04,"network_change":0.04,"physical_work":0.03,"server_intake":0.06,"server_usage":0.04,"support_scope":0.03,"usb_block":0.03,"worklog":0.08,"zombie":0.04},
+  "헬스체크": {"dns_check":0.37,"os_config_check":0.02,"server_inspect":0.61},
+  "협력사": {"approval":0.28,"requester":0.06,"support_scope":0.25,"term_awx":0.02,"term_cf":0.11,"term_dcm":0.02,"term_edm":0.02,"term_lsc":0.07,"term_mdp":0.02,"term_ssi":0.04,"worklog":0.03},
+  "협의됨": {"approval":0.96,"os_std_change":0.03},
+  "협의프로세스": {"approval":1},
+  "호스트네임": {"hostname_change":0.96,"term_svr":0.02},
+  "호스트명": {"hostname_change":0.94,"term_svr":0.02},
+  "홀수": {"approval":0.02,"crontab":0.02,"ht":0.02,"limit":0.02,"server_usage":0.04,"support_scope":0.1,"term_awx":0.07,"term_cf":0.13,"term_dcm":0.04,"term_edm":0.02,"term_itom":0.04,"term_mdp":0.03,"term_ssi":0.03,"term_svr":0.05,"worklog":0.19},
+  "환경설정": {"network_change":0.02,"os_config_check":0.95,"os_std_change":0.02},
+  "환경설정체크": {"os_config_check":1}
+ },
+ "generated": "2026-10-04T14:12:59Z mode=single"
+}
