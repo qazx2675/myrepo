@@ -1,3 +1,4 @@
+// hpcbot — 영타→한글(2벌식) 변환
 package main
 
 import (
@@ -21,10 +22,22 @@ var jongMap = map[string]int{
 	"t": 19, "T": 20, "d": 21, "w": 22, "c": 23, "z": 24, "x": 25, "v": 26, "g": 27,
 }
 
+// choCompat maps a choseong index (0..18) to its compatibility jamo.
+var choCompat = []rune{
+	0x3131, 0x3132, 0x3134, 0x3137, 0x3138, 0x3139, 0x3141, 0x3142, 0x3143, 0x3145,
+	0x3146, 0x3147, 0x3148, 0x3149, 0x314A, 0x314B, 0x314C, 0x314D, 0x314E,
+}
+
 // ConvertEngToHangul converts QWERTY english string to Hangul.
 func ConvertEngToHangul(eng string) string {
 	var result strings.Builder
 	runes := []rune(eng)
+	// Uppercase other than Q W E R T O P is typed without Shift: treat as lowercase.
+	for k, c := range runes {
+		if c >= 'A' && c <= 'Z' && !strings.ContainsRune("QWERTOP", c) {
+			runes[k] = c + 32
+		}
+	}
 	i := 0
 
 	for i < len(runes) {
@@ -40,7 +53,18 @@ func ConvertEngToHangul(eng string) string {
 		// Try to read Choseong
 		choVal, hasCho := choMap[r]
 		if !hasCho {
-			// If it's a vowel alone or something else
+			// Standalone vowel (compat jamo U+314F + jungseong index)
+			if v, ok := jungMap[string(r)]; ok {
+				i++
+				if i < len(runes) {
+					if v2, ok2 := jungMap[string(r)+string(runes[i])]; ok2 {
+						v = v2
+						i++
+					}
+				}
+				result.WriteRune(rune(0x314F + v))
+				continue
+			}
 			result.WriteRune(r)
 			i++
 			continue
@@ -72,9 +96,8 @@ func ConvertEngToHangul(eng string) string {
 		}
 
 		if !hasJung {
-			// Print standalone Choseong (compatibility jamo)
-			// Actually we can map to compat jamo, but for simplicity we skip or print raw
-			result.WriteRune(rune(0x3131 + choVal)) // Very rough mapping to compat jamo
+			// Standalone Choseong (compatibility jamo)
+			result.WriteRune(choCompat[choVal])
 			continue
 		}
 
@@ -134,4 +157,57 @@ func ConvertEngToHangul(eng string) string {
 	}
 	
 	return result.String()
+}
+
+// ConvertTokens converts every whitespace-separated token not in protected
+// (lowercased lookup). Tokens are joined with a single space.
+func ConvertTokens(s string, protected map[string]bool) string {
+	toks := strings.Fields(s)
+	for k, t := range toks {
+		if !protected[strings.ToLower(t)] {
+			toks[k] = ConvertEngToHangul(t)
+		}
+	}
+	return strings.Join(toks, " ")
+}
+
+// IsConvertibleToken reports whether tok is a candidate for auto conversion:
+// not protected, letters only, result has no Latin letters and has at least
+// one complete Hangul syllable.
+func IsConvertibleToken(tok string, protected map[string]bool) bool {
+	if tok == "" || protected[strings.ToLower(tok)] {
+		return false
+	}
+	for _, c := range tok {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+			return false
+		}
+	}
+	out := ConvertEngToHangul(tok)
+	syl := false
+	for _, c := range out {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+			return false
+		}
+		if c >= 0xAC00 && c <= 0xD7A3 {
+			syl = true
+		}
+	}
+	return syl
+}
+
+// AutoConvert converts only convertible tokens and reports whether anything changed.
+func AutoConvert(s string, protected map[string]bool) (string, bool) {
+	toks := strings.Fields(s)
+	changed := false
+	for k, t := range toks {
+		if IsConvertibleToken(t, protected) {
+			toks[k] = ConvertEngToHangul(t)
+			changed = true
+		}
+	}
+	if !changed {
+		return s, false
+	}
+	return strings.Join(toks, " "), true
 }
