@@ -76,7 +76,7 @@ flowchart TD
     J -- y --> K["VM 1대당 Reconfigure 1회, 병렬 적용"]
     K --> L["교정한 VM 재조회 → 같은 로직으로 재검증<br/>_recheck_시각 CSV"]
     L --> M{"남은 FAIL?"}
-    M -- 예 --> N["수동조치 항목 (메모리/디스크/Shares/전원정책 등)<br/>전원정책은 power_setting (17번)"]
+    M -- 예 --> N["수동조치 항목 (메모리/디스크/Shares/전원정책 등)<br/>전원정책은 power_setting (10번)"]
     M -- 아니오 --> O["무작위 VM 몇 대 직접 확인"]
     N --> O
     class A input
@@ -221,7 +221,7 @@ VM 이름에 들어 있는 `ev01`~`ev99` 중 **첫 번째 일치**가 그 VM의 
 | `sched.mem.lpage.enable1GPage`, `sched.mem.prealloc`, `sched.mem.prealloc.pinnedMainMem`, `sched.swap.vmxSwapEnabled` | 메모리 크기 |
 | `cpuid.coresPerSocket`, CPU 토폴로지(소켓당 코어) | 디스크 용량 |
 | `numa.vcpu.maxPerVirtualNode`, `config.numaInfo.coresPerNumaNode` | CPU/메모리 Shares |
-| `numa.vcpu.preferHT` (`-preferHT` 지정 시) | **호스트 전원정책** → [17번 power_setting](./17_VM_setup_잔여도구.md) |
+| `numa.vcpu.preferHT` (`-preferHT` 지정 시) | **호스트 전원정책** → V2 `power_setting-source` ([10번](./10_V2.md)) |
 | `sched.vcpuN.affinity` | "모든 게스트 메모리 예약" |
 | vCPU 수 (코어 수와 조합) | 네트워크 포트그룹 |
 
@@ -251,7 +251,7 @@ vCPU 수와 소켓당 코어 수가 나누어떨어지지 않는 조합이면 �
 - 🔴 `-fix` 후 무작위 VM 몇 대를 vSphere Client에서 직접 확인하세요.
 - `-f`를 안 주면 인벤토리 전체가 대상입니다. 처음에는 `-f`로 2~3대만.
 - `-fix -yes`여도 실제 변경 확인은 항상 물어봅니다. 무인 실행에서 답이 없으면 **아무것도 바꾸지 않고 종료**합니다.
-- **호스트 전원정책은 점검만** 합니다. 교정은 [17번 power_setting](./17_VM_setup_잔여도구.md).
+- **호스트 전원정책은 점검만** 합니다. 교정은 V2 `power_setting-source`([10번](./10_V2.md))로 합니다.
 - `config.numaInfo.coresPerNumaNode`는 vSphere API 8.0.0.1 이상에서만 조회·교정됩니다.
 - Shares는 `-shares-evNN` 값 하나를 CPU/메모리 양쪽에 적용합니다.
 - 같은 이름의 VM이 서로 다른 vCenter에 있으면 지원 범위 밖입니다.
@@ -271,23 +271,6 @@ vCPU 수와 소켓당 코어 수가 나누어떨어지지 않는 조합이면 �
 
 ---
 
-## 9. 파일 구조
+## 9. 관련 문서
 
-```
-V2/vm-param-check-usability-improvement/
-├── README.md / CHANGELOG.md / 계획서.md
-├── make_update_package.sh / update.sh / update_deploy.sh
-└── vm-param-check/
-    ├── README.md                 # 1차 자료
-    ├── main.go                   # 옵션 파싱, -specRoot 병합, 실행 흐름
-    ├── setup.sh                  # 오프라인 빌드 (../../govendor/govmomi-0.39.0 링크)
-    ├── folder_setup.sh / vm_setting_check_insert.sh
-    ├── checker/                  # 판정 기준 (hardware, topology, affinity, power, preferht)
-    ├── config/                   # 스펙 매칭 (spec.go caeRecord, init.go, export.go, portgroup.go, targets.go)
-    ├── fixer/                    # -fix (plan, apply, gates, describe)
-    ├── model/                    # 공용 모델, group.go (ev01~ev99 판정)
-    ├── report/                   # 콘솔/CSV 출력
-    └── vcenter/client.go         # vCenter 조회 (이름 목록 → 대상만 상세)
-```
-
-관련 문서: 1차 자료 `vm-param-check/README.md`, 변경 이력 `../CHANGELOG.md`, 스펙 형식 [10. V2](./10_V2.md), 수정 요청 [31번 B-1](./31_변경요청서_양식.md).
+관련 문서: 1차 자료 `vm-param-check/README.md`, 변경 이력 `../CHANGELOG.md`, 스펙 형식 [10. V2](./10_V2.md), 구조 `V2/ARCHITECTURE.md`.

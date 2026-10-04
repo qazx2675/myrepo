@@ -1,15 +1,8 @@
 # 12. vm_verifier — 파워온 전 MAC 대조 (교차 설치 탐지)
 
-## 한눈에 보기
+> 🟢 **읽기 전용**(조회만 하고 아무것도 바꾸지 않음) · 폴더 `.claude/VM/vm_verifier/` · 바이너리 `vm-verifier` · 인증 `VC_USER`/`VC_PASS`(환경변수) · 불일치가 하나라도 있으면 종료코드 **1**
 
-| 항목 | 값 |
-|---|---|
-| **위험도** | 🟢 **읽기 전용.** 조회만 하고 아무것도 바꾸지 않습니다 |
-| 폴더 | `.claude/VM/vm_verifier/` |
-| 바이너리 | `vm-verifier` |
-| 하는 일 | VM 생성 직후(파워온 전) vCenter가 아는 vNIC MAC과 DHCP 예약 MAC을 대조해 **교차 설치(역설치)** 를 탐지 |
-| 인증 | `VC_USER` / `VC_PASS` (환경변수) |
-| 종료 코드 | 불일치가 하나라도 있으면 **1** |
+VM 생성 직후(파워온 전) vCenter가 아는 vNIC MAC과 DHCP 예약 MAC을 대조해 **교차 설치(역설치)** 를 탐지합니다.
 
 ---
 
@@ -152,18 +145,6 @@ vCenter 읽기 전용이면 충분합니다.
 
 ---
 
-## 8. 파일 구조
+## 8. 관련 문서
 
-```
-vm_verifier/
-├── README.md / PLAN.md / CHANGELOG.md / ARCHITECTURE.md / WORKFLOW.md
-├── main.go          # 옵션 파싱, 대상 정규화, 병렬 조회
-├── run.sh           # 대화형 실행
-├── setup.sh         # 오프라인 빌드 (공통 govendor 링크)
-├── vc/              # vCenter 조회 (vc.go, devices.go)
-├── dhcp/dhcp.go     # 대역 파일 파싱 + 캐시
-├── verify/verify.go # 판정 로직 ← "무엇을 FAIL로 볼지"
-└── auditlog/        # LOG/ 기록
-```
-
-관련 문서: 1차 자료 `vm_verifier/README.md`, MAC 목록 추출은 [10. V2](./10_V2.md)의 `mac_info`.
+관련 문서: 1차 자료 `vm_verifier/README.md`, MAC 목록 추출은 [10. V2](./10_V2.md)의 `mac_info`. "무엇을 FAIL로 볼지"는 `verify/verify.go`의 판정 로직입니다.

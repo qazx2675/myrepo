@@ -45,7 +45,7 @@ chmod +x <바이너리>
 | 도구 | 계정 | 비밀번호 |
 |---|---|---|
 | vm-param-check, vm_verifier | `VC_USER` | **`VC_PASS`** |
-| V2 VMsetup, power_setting, 망변경 포트그룹 | `-id` / `-i` / `vc_id` | **`VC_PASSWORD`** |
+| V2 VMsetup, 망변경 포트그룹 | `-id` / `-i` / `vc_id` | **`VC_PASSWORD`** |
 | vm-ip-change | `VC_USER` + `GUEST_USER` | **`VC_PASSWORD`** + `GUEST_PASSWORD` |
 | 망변경 IP·LDAP | — | `GOSSH_PW` |
 
@@ -57,7 +57,7 @@ export VC_PASS="$P" VC_PASSWORD="$P"; unset P
 
 ### 인증은 맞는데 로그인이 안 됨
 
-1. **계정** — V2 개별 도구·`vm_setup.sh`·power_setting의 `-id` 기본값은 모두 `lscsystems@vsphere.local`입니다. 다르면 명시하세요. `vm_setup.sh`·`vm_setting_check_insert.sh`는 셸의 비밀번호 변수를 지우고 암호 파일을 쓰므로, 비밀번호가 바뀌었으면 `cd /home/V2 && ./passwd_update.sh`로 다시 등록하세요.
+1. **계정** — V2 개별 도구·`vm_setup.sh`의 `-id` 기본값은 모두 `lscsystems@vsphere.local`입니다. 다르면 명시하세요. `vm_setup.sh`·`vm_setting_check_insert.sh`는 셸의 비밀번호 변수를 지우고 암호 파일을 쓰므로, 비밀번호가 바뀌었으면 `cd /home/V2 && ./passwd_update.sh`로 다시 등록하세요.
 2. **네트워크** — `curl -k -I https://<vCenter IP>`
 3. **특수문자** — 작은따옴표로 감싸서 export
 
@@ -115,7 +115,7 @@ CPU 토폴로지는 VM이 켜져 있으면 바꿀 수 없습니다. 대상 VM을
 
 ### `-fix` 후에도 FAIL이 남음
 
-수동조치 항목입니다: 메모리, 디스크 용량, Shares, "모든 게스트 메모리 예약", 네트워크 포트그룹 → vSphere Client에서 변경. **호스트 전원정책**은 [17번 power_setting](./17_VM_setup_잔여도구.md).
+수동조치 항목입니다: 메모리, 디스크 용량, Shares, "모든 게스트 메모리 예약", 네트워크 포트그룹 → vSphere Client에서 변경. **호스트 전원정책**은 V2 `power_setting-source`([10번](./10_V2.md))로 교정합니다.
 
 ### 코어/소켓/NUMA가 나누어떨어지지 않는다는 오류
 
@@ -235,7 +235,7 @@ IP 변경 직후는 "새 IP 설정 + 옛 VLAN" 상태입니다. 포트그룹 변
 
 ### Q. `VM_setup`과 `V2`는 뭐가 다른가요?
 
-V2가 V1 `VM_setup`의 도구를 모두 포함하고 ev01~ev99, `vm_setup.sh` 전체 실행, `SPEC_DIR` 공유를 더했습니다. V1에서 계속 쓰는 것은 `power_setting` 바이너리뿐입니다([10번 2절](./10_V2.md)).
+V2가 V1 `VM_setup`의 도구를 모두 포함하고 ev01~ev99, `vm_setup.sh` 전체 실행, `SPEC_DIR` 공유를 더했습니다. V1 폴더는 따로 쓸 필요가 없습니다([10번 2절](./10_V2.md)).
 
 ### Q. `vm-network-migration`은 어디 갔나요?
 
@@ -245,13 +245,9 @@ V2가 V1 `VM_setup`의 도구를 모두 포함하고 ev01~ev99, `vm_setup.sh` �
 
 보조 도구로 쓰세요. 설정 변경 후에는 **무작위 서버 몇 대를 직접 확인**하는 절차가 필요합니다.
 
-### Q. `power_setting`은 왜 소스가 없나요?
-
-Go 소스를 확정하지 못했습니다. **유일한 사본이므로 삭제하지 마세요.** [17번](./17_VM_setup_잔여도구.md).
-
 ### Q. 코드를 고치려면 Go를 알아야 하나요?
 
-아니요. [30_유지보수_AI_활용가이드](./30_유지보수_AI_활용가이드.md)와 [31_변경요청서_양식](./31_변경요청서_양식.md)을 보세요.
+아니요. [30_유지보수_AI_활용가이드](./30_유지보수_AI_활용가이드.md)의 "프로젝트 폴더 + 참조 문서" 방식으로 AI에게 요청하세요.
 
 ### Q. README에 있는 옵션을 줬는데 `flag provided but not defined`
 
@@ -274,4 +270,4 @@ python3 build_handbook.py
 1. 해당 도구 문서의 "자주 나는 오류"
 2. 도구 폴더의 `README.md`, `CHANGELOG.md`
 3. 소스의 `flag` 정의
-4. [31_변경요청서_양식](./31_변경요청서_양식.md)으로 AI에게 조사·수정 요청
+4. [30번](./30_유지보수_AI_활용가이드.md)의 방식(프로젝트 폴더 + 유지보수 폴더의 참조 문서)으로 AI에게 조사·수정 요청

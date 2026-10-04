@@ -248,28 +248,6 @@ LDAP 대상 인프라는 conf에 두지 않습니다. 실행마다 `--infra`로 
 
 ---
 
-## 8. 파일 구조
+## 8. 관련 문서
 
-```
-Network_Change_Integration_Script/
-├── change.sh                    # 진입점: 인자 파싱, 단계 제어, 포트그룹 위임
-├── setup.sh / update.sh         # 오프라인 빌드 / 증분 업데이트
-├── integration.conf.sample      # 중앙 설정 예시
-├── 사용법.txt                    # 명령만 순서대로
-├── lib/
-│   ├── common.sh                # conf 로드, 로그, die, user선택()
-│   ├── conf.sh                  # integration.conf → conf/ip_change.conf
-│   ├── preprocess.sh            # vswitch 표준화
-│   ├── stages.sh                # C·D 단계, OS6 분기, 2패스 타임아웃, 엔진 출력 파싱
-│   ├── results.sh               # 결과 파일, --retry 대상
-│   └── incident.sh              # 인시던트 저장/로드/롤백/전체 삭제
-├── projects/
-│   ├── ip_change/               # IP 엔진 (표준 라이브러리만)
-│   ├── ldap_setting/            # LDAP 엔진 (표준 라이브러리만)
-│   └── vm-network-migration/    # 포트그룹 이관 (govmomi vendor), run.sh + nm-* 7종
-├── bin/ · bin_os6/              # 빌드 결과 / OS6용 사전 빌드
-├── conf/ · work/ · results/ · incidents/ · logs/   # 운영 데이터 (gitignore)
-└── README.md / ARCHITECTURE.md / CHANGELOG.md / PR_CHECKLIST.md / Network_Change_Integration_Plan.md
-```
-
-관련 문서: 1차 자료 `README.md`, 수정 진입점 `ARCHITECTURE.md`의 "수정 요청별 진입점" 표.
+관련 문서: 1차 자료 `README.md`, 수정 진입점 `ARCHITECTURE.md`의 "수정 요청별 진입점" 표. 엔진 출력 파싱은 `lib/stages.sh`, 설정 변환은 `lib/conf.sh`, 롤백은 `lib/incident.sh`.

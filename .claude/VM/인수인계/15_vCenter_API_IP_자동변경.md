@@ -103,12 +103,6 @@ cd "<저장소>/.claude/VM/vCenter API IP 자동변경/project"
 - RHEL 8.10, NetworkManager(`nmcli`) 사용
 - **전원 ON + VMware Tools 실행 중** (Guest Operations 전제조건)
 
-### 권한
-
-vCenter: Virtual machine > Guest operations (+ 조회). 게스트: IP를 바꿀 수 있는 계정(보통 `root`).
-
----
-
 ## 4. 옵션 상세표 (소스: `cmd/vm-ip-change/main.go`)
 
 | 플래그 | 기본값 | 설명 |
@@ -178,23 +172,6 @@ vCenter: Virtual machine > Guest operations (+ 조회). 게스트: IP를 바꿀 
 
 ---
 
-## 8. 파일 구조
+## 8. 관련 문서
 
-```
-vCenter API IP 자동변경/
-├── 계획서.md
-└── project/
-    ├── README.md / ARCHITECTURE.md / WORKFLOW.md / CHANGELOG.md / PR_CHECKLIST.md
-    ├── setup.sh                 # 오프라인 빌드
-    ├── vcenter.txt.example / list.txt.example
-    ├── cmd/vm-ip-change/        # 진입점 (옵션, 환경변수)
-    ├── internal/
-    │   ├── vsphere/             # vCenter 접속, Guest Operations
-    │   ├── target/              # list.txt 파싱
-    │   ├── status/              # 대상별 진행 상태
-    │   └── tui/                 # 진행 화면
-    ├── vendor/                  # govmomi, google/uuid, golang.org/x/term·sys
-    └── bin/                     # 빌드 결과
-```
-
-관련 문서: 1차 자료 `project/README.md`, 흐름 `project/WORKFLOW.md`.
+관련 문서: 1차 자료 `project/README.md`, 흐름 `project/WORKFLOW.md`, 구조 `project/ARCHITECTURE.md`.

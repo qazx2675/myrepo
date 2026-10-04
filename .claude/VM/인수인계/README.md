@@ -13,13 +13,13 @@
 | 2 | [01_기초지식](./01_기초지식.md) | vCenter/ESXi/NUMA/lpage/affinity 개념 |
 | 3 | [02_공통_실행환경](./02_공통_실행환경.md) | Go 설치, 폐쇄망 빌드, 도구별 비밀번호 환경변수, 공통 입력 파일 |
 | 4 | 아래 "도구별 문서" | 도구마다 첫 절이 **바로 쓰는 명령어** |
-| 5 | [30_유지보수_AI_활용가이드](./30_유지보수_AI_활용가이드.md) | 코드를 고쳐야 할 때 AI에게 시키는 방법 |
+| 5 | [30_유지보수_AI_활용가이드](./30_유지보수_AI_활용가이드.md) | 코드를 고쳐야 할 때 요청하는 방법 (공유 `유지보수` 폴더 참조) |
 
 ---
 
 ## 전체 작업 흐름
 
-도구가 쓰이는 순서를 두 단계로 나눴습니다. **① VM setup 단계**는 호스트 등록부터 VM 인도까지, **② 망/인프라 변경 단계**는 이미 쓰고 있는 VM 의 IP·LDAP·포트그룹을 바꾸는 작업입니다. 🔴는 실제 설정을 바꾸는 단계입니다.
+도구가 쓰이는 순서를 두 단계로 나눴습니다. **① VM setup 단계**는 메모리 사이징부터 VM 인도까지(호스트 등록도 `vm_setup.sh`가 첫 단계로 실행), **② 망/인프라 변경 단계**는 이미 쓰고 있는 VM 의 IP·LDAP·포트그룹을 바꾸는 작업입니다. 🔴는 실제 설정을 바꾸는 단계입니다.
 
 색 구분: 주황 = 설정 변경 · 파랑 = 입력/준비 · 청록 = 조회·계산 · 보라 = 판정/확인 · 빨강 = 실패·중단 · 초록 = 완료
 
@@ -27,14 +27,14 @@
 flowchart TD
     subgraph S1["① VM setup 단계"]
         direction TB
-        A["ESXi 호스트를 vCenter 에 등록<br/>V2 main_conn 🔴"] --> B["메모리 사이징<br/>lpage_search 🟢"]
+        B["메모리 사이징<br/>lpage_search 🟢"]
         B --> C["스펙 작성<br/>SPEC_DIR/CAE폴더명/CAE폴더명_spec.txt + affinity 파일"]
-        C --> D["VM 생성·설정<br/>V2 vm_setup.sh 🔴 — 스펙마다 vswitch → vm_create → mac_info →<br/>power_setting → affinity → lpage, 끝나면 license_assign(전체) → 스펙 체크<br/>(터미널이면 진행 모니터로 표시, 10번 3절)"]
+        C --> D["VM 생성·설정<br/>V2 vm_setup.sh 🔴 — 호스트 등록(main_conn) → vswitch → 스펙마다 vm_create → mac_info →<br/>power_setting → affinity → lpage, 끝나면 license_assign(전체) → 태그 설정(tag_setting) → 스펙 체크<br/>(터미널이면 진행 모니터로 표시, 10번 3절)"]
         D --> F["파워온 전 MAC 대조<br/>vm_verifier 🟢 (MAC 목록: run_user/mac_all.txt 또는 awx_route)"]
         F -- FAIL --> F1["DHCP 등록 수정 후 재검증"] --> F
         F -- PASS --> G["파워온 · OS 설치"]
         G --> H["설정 점검<br/>vm-param-check 🟢"]
-        H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴 재실행 (17번)"] --> H
+        H -- FAIL --> H1["VM 전원 OFF → -fix 🔴<br/>호스트 전원정책 FAIL 이 남아 있으면 power_setting 🔴재실행 (10번)"] --> H
         H -- PASS --> I["VM 인도 · 사용 시작"]
     end
     subgraph S2["② 망/인프라 변경 단계"]
@@ -78,7 +78,6 @@ flowchart TD
 |---|---|---|---|
 | [12. vm_verifier](./12_vm_verifier.md) | `vm_verifier/` | 파워온 전 vNIC MAC ↔ DHCP 예약 MAC 대조, 교차설치 탐지 | 🟢 |
 | [13. lpage_search](./13_lpage_search.md) | `lpage_search/` | Large Page 기준 ev02 메모리 크기 계산 (접속 없음) | 🟢 |
-| [17. VM_setup 잔여 도구](./17_VM_setup_잔여도구.md) | `VM_setup/vm-param-fix/power_setting` | 호스트 전원정책 High Performance 적용 (V1 바이너리, 소스 없음). **V2 는 자체 대체 도구를 이미 씀** → [10번 5-9절](./10_V2.md) | 🔴 |
 
 > 제외·통합된 폴더(`VM_setup`의 나머지 도구, V1 `vm-param-check-usability-improvement`, `vm-network-migration`, `integrated-vm-param-check-test-tool` 등)는 [40_폴더구조](./40_폴더구조.md)에 한 줄씩 안내되어 있습니다.
 
@@ -88,12 +87,10 @@ flowchart TD
 
 | 문서 | 내용 |
 |---|---|
-| [30_유지보수_AI_활용가이드](./30_유지보수_AI_활용가이드.md) | AI에게 수정을 시키는 표준 절차, 절대 없애면 안 되는 안전장치 |
-| [31_변경요청서_양식](./31_변경요청서_양식.md) | 복사해서 채우는 도구별 양식 |
+| [30_유지보수_AI_활용가이드](./30_유지보수_AI_활용가이드.md) | 수정 요청 방법: 변경할 프로젝트 폴더 + 공유 `유지보수` 폴더의 참조 문서(ARCHITECTURE·PR_CHECKLIST·CHANGELOG·README) |
 | [40_폴더구조](./40_폴더구조.md) | 폴더 트리, 제외·통합 폴더 안내, 같은 이름의 사본 구분 |
 | [90_용어집](./90_용어집.md) | vSphere 용어와 이 저장소 고유 용어 |
 | [91_트러블슈팅_FAQ](./91_트러블슈팅_FAQ.md) | 오류 메시지별 원인과 해결 |
-| [99_인수인계_체크리스트](./99_인수인계_체크리스트.md) | 인수 완료 판정 기준 |
 
 ---
 

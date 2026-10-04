@@ -1,14 +1,8 @@
 # 13. lpage_search — Large Page 메모리 사이징 계산기
 
-## 한눈에 보기
+> 🟢 vCenter/ESXi에 **접속하지 않는** 순수 계산기 · 폴더 `.claude/VM/lpage_search/` · 바이너리 `lpage_search` · 인증 불필요
 
-| 항목 | 값 |
-|---|---|
-| **위험도** | 🟢 vCenter/ESXi에 **접속하지 않는** 순수 계산기 |
-| 폴더 | `.claude/VM/lpage_search/` |
-| 바이너리 | `lpage_search` |
-| 하는 일 | 호스트 총 메모리와 ev01 할당량을 넣으면 **ev02에 줄 수 있는 메모리 크기**를 계산 |
-| 인증 | 불필요 |
+호스트 총 메모리와 ev01 할당량을 넣으면 **ev02에 줄 수 있는 메모리 크기**를 계산합니다. 결과의 `Recommended ev02 Size`가 ev02에 할당할 메모리입니다.
 
 ---
 
@@ -74,31 +68,6 @@ Windows에서도 됩니다: `go build -o lpage_search.exe main.go`
 
 ---
 
-## 5. 결과 확인 방법
-
-```
-==================================================
-[ESXi Large Page (2MB) Memory Sizing Tool]
-Target Host           : esxi01 (512 GB)
-Configured ev01       : 240 GB (245760 MB)
---------------------------------------------------
-ESXi High-State Buffer: 35471 MB (3x minFree + Base)
-ev01 VM Overhead      : 4998 MB
-ev02 Est. Overhead    : 2698 MB
---------------------------------------------------
->> Recommended ev02 Size: 226 GB (231424 MB)
-   (Total 2MB LPage Mappings: 115712 pages)
-==================================================
-```
-
-| 줄 | 의미 |
-|---|---|
-| `ESXi High-State Buffer` | Large Page 유지를 위해 남겨야 하는 여유 메모리 |
-| `ev01 VM Overhead` / `ev02 Est. Overhead` | VM 오버헤드 추정치 |
-| `Recommended ev02 Size` | ev02에 할당할 메모리 |
-
----
-
 ## 6. 자주 나는 오류와 해결
 
 | 증상 | 원인 | 해결 |
@@ -116,14 +85,6 @@ ev02 Est. Overhead    : 2698 MB
 
 ---
 
-## 8. 파일 구조
+## 8. 관련 문서
 
-```
-lpage_search/
-├── README.md / ARCHITECTURE.md / WORKFLOW.md / PR_CHECKLIST.md
-├── main.go     # 계산 로직 + 옵션 (calculateHostReservedMB, calculateVmOverheadMB)
-├── go.mod      # 외부 의존성 없음
-└── setup.sh
-```
-
-계수를 바꾸려면 `main.go`의 두 함수만 보면 됩니다.
+관련 문서: 1차 자료 `lpage_search/README.md`. 계수를 바꾸려면 `main.go`의 `calculateHostReservedMB`, `calculateVmOverheadMB` 두 함수만 보면 됩니다.

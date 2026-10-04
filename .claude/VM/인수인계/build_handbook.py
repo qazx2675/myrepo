@@ -35,13 +35,10 @@ ORDER = [
     "15_vCenter_API_IP_자동변경.md",
     "12_vm_verifier.md",
     "13_lpage_search.md",
-    "17_VM_setup_잔여도구.md",
     "30_유지보수_AI_활용가이드.md",
-    "31_변경요청서_양식.md",
     "40_폴더구조.md",
     "90_용어집.md",
     "91_트러블슈팅_FAQ.md",
-    "99_인수인계_체크리스트.md",
 ]
 
 
