@@ -1,8 +1,9 @@
 # CHANGELOG
 
-## [Unreleased]
-- Initial Chatbot skeleton and CLI REPL implementation
-- English-to-Hangul logic (`/h`) implemented purely in Go
-- JEV API integration for standard operational intents mapping
-- Local keyword-based fallback logic
-- Offline build support (vendor) and documentation (README, ARCHITECTURE, CI, PR_CHECKLIST) added
+## 2026-10-04
+- hpcbot 재설계: 9개 분류 + 손으로 쓴 요약문 방식을 삭제하고, 매뉴얼 86개 블록 원문을 답하는 키워드 점수 엔진으로 교체.
+- 점수는 Jev 로 빌드 시 생성(`tools/kbgen`, `data/kb.json`). 운영은 오프라인, `--jev` 는 선택.
+- 수정: "GPU 드라이버 설치"가 OS 설치로 답변되던 문제(일반어 "설치" 쏠림), 영타 변환의 단독 자음·모음·대문자 오류, 문장부호가 붙은 영타 토큰 미변환.
+- 질문마다 4자리 code 부여, `/tmp/hpcbot/query.log` 에 질문·답변 전문 기록(flock, 10MB 회전).
+- 정확도: train 97.1%, holdout 93.3% (기준 95% 미달, 상세는 test_report.md).
+- build.sh(정적 빌드), Rocky 8.10 스모크(root·일반 사용자 공용 로그, 처리 시간 <10ms) 확인.

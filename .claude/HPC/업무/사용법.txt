@@ -1,0 +1,38 @@
+# hpcbot 사용법 (테스트용 명령 목록, 각 명령 위에 설명)
+
+# 0. 대상 서버(.58 등)에 코드 가져오기 — 작성 PC 에서 push 한 뒤 대상 서버에서 실행
+git fetch && git reset --hard origin/claude/tender-cori-d50osx
+# sparse-checkout 서버라면 새 폴더 경로를 추가
+git sparse-checkout add ".claude/HPC/업무"
+cd .claude/HPC/업무
+
+# 1. 매뉴얼 원문 복사 (공개 저장소에 없으므로 직접 복사, 파일명은 data/manual.md)
+cp /경로/server_operations_manual.md data/manual.md
+
+# 2. 빌드 (테스트 포함, 결과: dist/hpcbot)
+./build.sh
+
+# 3. 한 줄 실행 (종료 코드 0=답변, 2=후보, 1=미매칭)
+dist/hpcbot "gpu 드라이버 설치"
+
+# 4. 영타 자동 감지 / 강제 변환
+dist/hpcbot "emfkdlqj tjfcl"
+dist/hpcbot /h rmfovlr emfkdlqj tjfcl
+
+# 5. 후보 모드 → 번호 선택 (설치 → 2번)
+printf '설치\n2\nexit\n' | dist/hpcbot
+
+# 6. 대화형 실행 (종료: exit 또는 quit)
+dist/hpcbot
+
+# 7. 데이터 출처·상위 3개 점수 표시
+dist/hpcbot -v "OS 설치"
+
+# 8. 로컬 판정이 애매할 때만 Jev 1회 호출 (키: JEV_API_KEY 또는 ~/.jev-claude.env)
+dist/hpcbot --jev "설치"
+
+# 9. code 로 질문·답변 찾기 (모든 사용자가 같은 파일에 기록)
+grep '"code":"4821"' /tmp/hpcbot/query.log
+
+# 10. 정확도 리포트 다시 만들기
+GOTOOLCHAIN=go1.26.5 HPCBOT_REPORT=1 go test -run TestAccuracy .
