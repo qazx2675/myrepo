@@ -5,6 +5,14 @@
 ### 수정
 - `setup.sh`/`build_os6.sh` — PATH 에 go 가 없어도 `/usr/local/go/bin`, `/opt/go*/bin` 을 찾아 사용(비로그인·csh 셸에서 "go 를 찾을 수 없습니다" 방지). `build_os6.sh` 는 `/opt/go1.20` 이 있으면 우선 사용하고 사용한 go 버전을 출력.
 
+## [0.3.0] - 2026-10-04
+
+### 신규
+- `conf.go`, `conf/auto_setup.conf.example` — main.go 의 빈 변수 9개를 **설정 파일**(`키=값`)로 채움. 위치(먼저 발견된 하나): `$AUTO_SETUP_CONF/auto_setup.conf` → `<실행 파일 디렉터리>/conf/auto_setup.conf` → `/etc/auto_setup/auto_setup.conf`. 빌드 때 `-X` 로 넣은 값이 우선하고 설정 파일은 빈 변수만 채움(알 수 없는 키·잘못된 줄 무시). 빌드가 불가능한 환경에서 빌드 완료 바이너리(`auto_setup_os6`)를 설정 파일만으로 원격 클라이언트로 쓸 수 있음
+- `setup.sh` — `conf/auto_setup.conf` 가 있으면 `/etc/auto_setup/auto_setup.conf` 로 설치(0600)
+- 저장소에 빌드 완료 `auto_setup_os6`(go1.20 정적, 변수 빈 값) 포함, 실제 `conf/auto_setup.conf` 는 `.gitignore` 제외
+- 테스트: `conf_test.go`
+
 ## [0.2.1] - 2026-10-03
 
 LDAP 비교 기준을 bindpw 해시에서 binddn 의 uid 값으로 바꾸고, 복원 때 bindpw 가 어떤 명령줄(ps)에도 실리지 않게 autofs 공유경로 경유로 변경.

@@ -28,6 +28,11 @@ go build -o auto_setup .
 
 echo "[2/4] /usr/local/bin/auto_setup 설치"
 install -m 0755 auto_setup /usr/local/bin/auto_setup
+if [ -f conf/auto_setup.conf ]; then
+	mkdir -p /etc/auto_setup
+	install -m 0600 conf/auto_setup.conf /etc/auto_setup/auto_setup.conf
+	echo "    conf/auto_setup.conf → /etc/auto_setup/auto_setup.conf"
+fi
 
 echo "[3/4] cron 등록 (매분 ensure)"
 cron_line='* * * * * /usr/local/bin/auto_setup ensure >/dev/null 2>&1'
