@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 )
@@ -164,6 +165,15 @@ func (a *app) repl(in io.Reader) {
 	fmt.Fprintln(a.out, "=====================================================")
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	// Ctrl+C 로는 종료되지 않는다: 안내만 출력하고 계속 입력을 받는다
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt)
+	defer signal.Stop(sigs)
+	go func() {
+		for range sigs {
+			fmt.Fprintln(a.out, "\n[안내] Ctrl+C 로는 종료되지 않습니다. 종료하려면 'quit' 또는 'exit' 를 입력하세요.")
+		}
+	}()
 	for {
 		if len(a.pending) > 0 {
 			fmt.Fprint(a.out, "번호 > ")

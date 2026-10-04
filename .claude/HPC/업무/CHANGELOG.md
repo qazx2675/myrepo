@@ -7,3 +7,6 @@
 - 질문마다 4자리 code 부여, `/tmp/hpcbot/query.log` 에 질문·답변 전문 기록(flock, 10MB 회전).
 - 정확도: train 97.1%, holdout 93.3% (기준 95% 미달, 상세는 test_report.md).
 - build.sh(정적 빌드), Rocky 8.10 스모크(root·일반 사용자 공용 로그, 처리 시간 <10ms) 확인.
+
+## 2026-10-05
+- REPL 에서 Ctrl+C 로 종료되지 않도록 변경: 누르면 "quit 또는 exit 를 입력하세요" 안내만 출력한다.
