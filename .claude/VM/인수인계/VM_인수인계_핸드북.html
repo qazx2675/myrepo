@@ -149,7 +149,7 @@ mark{background:var(--mark);color:inherit}
 <div id="topbar"><button id="menu">☰ 목차</button><b>VM 인수인계 핸드북</b></div>
 <div class="layout">
   <nav id="side">
-    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-10-04 15:44</span></div>
+    <div class="brand"><b>VM 인수인계 핸드북</b><span>생성: 2026-10-04 15:47</span></div>
     <input id="q" type="search" placeholder="목차 검색 (Esc 초기화)" autocomplete="off">
     <ul id="toc"><li class="grp">시작</li>
 <li><a class="doc" href="#doc-README">VM 자동화 도구 인수인계 문서</a></li>
@@ -248,8 +248,9 @@ mark{background:var(--mark);color:inherit}
 <li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--이-문서의-전제">이 문서의 전제</a></li>
 <li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--1-요청-방법-프로젝트-폴더-참조-문서">1. 요청 방법 — 프로젝트 폴더 + 참조 문서</a></li>
 <li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--2-공유-폴더-구성">2. 공유 폴더 구성</a></li>
-<li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--3-수정이-끝난-뒤-갱신할-것">3. 수정이 끝난 뒤 갱신할 것</a></li>
-<li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--4-확인">4. 확인</a></li>
+<li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--3-건드리면-안-되는-것-안전장치">3. 건드리면 안 되는 것 (안전장치)</a></li>
+<li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--4-수정이-끝난-뒤-갱신할-것">4. 수정이 끝난 뒤 갱신할 것</a></li>
+<li><a class="lv2" href="#doc-30_유지보수_AI_활용가이드--5-확인">5. 확인</a></li>
 <li class="grp">찾아보기</li>
 <li><a class="doc" href="#doc-40_폴더구조">40. 폴더 구조 — 무엇이 어디에 있나</a></li>
 <li><a class="lv2" href="#doc-40_폴더구조--1-저장소-위치">1. 저장소 위치</a></li>
@@ -1400,7 +1401,7 @@ bash setup.sh          # go build -o lpage_search main.go (외부 의존성 없�
 [참조 문서] 유지보수/1_VM_setup_및_설정체크/ 의 V2_공통/ARCHITECTURE.md, V2_공통/PR_CHECKLIST.md,
             VMsetup/CHANGELOG.md, VMsetup/tag_setting-source_README.md
 [요청 내용] ...
-[유지할 것] 요청하지 않은 파일·동작은 바꾸지 말 것. 오프라인(vendor) 빌드 유지.
+[유지할 것] 요청하지 않은 파일·동작은 바꾸지 말 것. 오프라인(vendor) 빌드 유지. (아래 3절의 해당 안전장치 명시)
 [완료 기준] PR_CHECKLIST.md 항목 확인, CHANGELOG.md 추가, 옵션이 바뀌면 README 갱신</code></pre>
 <p>참조 문서를 먼저 읽게 하고, 범위가 커지면(다른 파일까지 건드려야 하면) 진행 전에 알려 달라고 덧붙이면 엉뚱한 파일을 건드리는 것을 막을 수 있습니다.</p>
 <h4 id="doc-30_유지보수_AI_활용가이드--참조-문서-종류">참조 문서 종류</h4>
@@ -1412,12 +1413,16 @@ bash setup.sh          # go build -o lpage_search main.go (외부 의존성 없�
 <h4 id="doc-30_유지보수_AI_활용가이드--도구별로-같이-첨부할-문서">도구별로 같이 첨부할 문서</h4>
 <div class="tw"><table><thead><tr><th>바꾸려는 것</th><th>변경할 프로젝트 폴더</th><th>첨부할 참조 문서</th></tr></thead><tbody><tr><td>VMsetup (<code>vm_setup.sh</code>, <code>*-source</code>)</td><td><code>.claude/VM/V2/VMsetup/</code></td><td><code>V2_공통</code>의 ARCHITECTURE·PR_CHECKLIST, <code>VMsetup</code>의 CHANGELOG, 해당 도구의 <code>*-source_README.md</code></td></tr><tr><td>vm-param-check</td><td><code>.claude/VM/V2/vm-param-check-usability-improvement/</code></td><td><code>V2_공통</code>의 ARCHITECTURE·PR_CHECKLIST, <code>vm-param-check</code>의 CHANGELOG·README</td></tr><tr><td>망변경 통합 스크립트</td><td><code>.claude/VM/Network_Change_Integration_Script/</code></td><td>해당 폴더의 ARCHITECTURE·PR_CHECKLIST·CHANGELOG (하위 프로젝트면 <code>projects_*</code> 문서도)</td></tr><tr><td>vCenter API IP 자동변경</td><td><code>.claude/VM/vCenter API IP 자동변경/project/</code></td><td>해당 폴더의 ARCHITECTURE·PR_CHECKLIST·CHANGELOG·WORKFLOW</td></tr><tr><td>vm_verifier / lpage_search</td><td><code>.claude/VM/vm_verifier/</code>, <code>.claude/VM/lpage_search/</code></td><td>해당 폴더의 ARCHITECTURE·PR_CHECKLIST (·CHANGELOG)</td></tr></tbody></table></div>
 <hr>
-<h3 id="doc-30_유지보수_AI_활용가이드--3-수정이-끝난-뒤-갱신할-것">3. 수정이 끝난 뒤 갱신할 것</h3>
+<h3 id="doc-30_유지보수_AI_활용가이드--3-건드리면-안-되는-것-안전장치">3. 건드리면 안 되는 것 (안전장치)</h3>
+<p>이 저장소에는 <strong>없애면 사고가 나는 안전장치</strong>가 있습니다. AI는 요청하지 않은 것도 "개선"이라고 판단해 건드릴 수 있으므로, 수정 요청의 <strong>[유지할 것]</strong> 칸에 해당 항목을 반드시 적습니다.</p>
+<div class="tw"><table><thead><tr><th>안전장치</th><th>어느 도구</th><th>없애면</th></tr></thead><tbody><tr><td><code>-fix</code>의 <strong>게이트</strong>(그룹 동질성 + 전원 OFF 확인)</td><td>vm-param-check</td><td>켜져 있는 VM의 CPU 토폴로지를 바꾸려다 실패하거나, 스펙이 다른 VM에 잘못된 값이 들어감</td></tr><tr><td><strong><code>-yes</code>가 실제 변경 확인을 생략하지 않는 것</strong></td><td>vm-param-check</td><td>무인 실행에서 설정이 통째로 바뀜</td></tr><tr><td><strong>옵션 미지정 시 스킵</strong> 동작</td><td>vm-param-check</td><td>안 준 옵션까지 체크되어 대량 FAIL</td></tr><tr><td><strong>인시던트 자동 저장 + 역순 롤백</strong>, 엔진 백업만 인덱싱(자체 백업 금지)</td><td>Network_Change_Integration_Script</td><td>롤백이 원본으로 돌아가지 않음</td></tr><tr><td><strong>포트그룹 대상 = <code>ip_ok</code> 목록</strong></td><td>Network_Change_Integration_Script</td><td>IP 실패 VM이 새 VLAN으로 옮겨져 고립</td></tr><tr><td><strong>엔진 출력 파싱 계약</strong> (<code>lib/stages.sh</code>의 awk 패턴)</td><td>Network_Change_Integration_Script</td><td>성공/실패 집계가 틀어짐</td></tr><tr><td><strong>gossh를 직접 호출하지 않고 항상 엔진 경유</strong></td><td>Network_Change_Integration_Script</td><td>엔진의 타임아웃·결과 집계를 우회</td></tr><tr><td><strong>Ctrl+C 5초 안에 3번</strong> 종료</td><td>망변경 엔진, vm-ip-change, vm_setup.sh 진행 모니터</td><td>실수 한 번에 작업이 끊김</td></tr><tr><td><strong>실패 시 종료코드 1, 그 단계에서 멈춤</strong></td><td>V2 <code>vm_create</code>/<code>vswitch_setting</code>/<code>vm_setup.sh</code></td><td>실패를 모른 채 다음 단계 진행</td></tr><tr><td><strong>affinity 파일 필수</strong>(자동 계산 없음)</td><td>V2 <code>affinity_setting</code></td><td>ev들이 같은 물리 CPU에 겹쳐 고정</td></tr><tr><td><strong>전원 OFF 스킵</strong></td><td>V2 <code>numa_preferht_setting</code></td><td>켜진 VM에 적용 시도 → 실패</td></tr><tr><td><strong>이미 있는 것·이미 고성능인 호스트는 건너뜀(재실행 안전)</strong></td><td>V2 <code>vm_setup.sh</code>, <code>power_setting</code></td><td>재실행할 때마다 중복 생성·재적용</td></tr><tr><td><strong>비밀번호를 환경변수·암호 파일로만 받는 것</strong> (명령줄 인자 금지)</td><td>전부</td><td>셸 히스토리/<code>ps</code>에 비밀번호 노출</td></tr><tr><td><strong><code>vendor/</code> 기반 오프라인 빌드</strong> (새 외부 의존성 금지)</td><td>전부</td><td><strong>폐쇄망에서 빌드 불가능</strong></td></tr><tr><td><strong>로그 파일에 색상 코드 금지</strong></td><td>망변경</td><td>로그 분석·검색이 깨짐</td></tr></tbody></table></div>
+<hr>
+<h3 id="doc-30_유지보수_AI_활용가이드--4-수정이-끝난-뒤-갱신할-것">4. 수정이 끝난 뒤 갱신할 것</h3>
 <div class="tw"><table><thead><tr><th>바뀐 것</th><th>갱신할 문서</th></tr></thead><tbody><tr><td>모든 수정</td><td>도구 폴더의 <code>CHANGELOG.md</code>에 오늘 날짜로 항목 추가(맨 위)</td></tr><tr><td>옵션·환경변수·입력 파일 형식</td><td>도구의 <code>README.md</code> 옵션표, 이 핸드북의 해당 도구 문서(10·11·12·13·14·15번)의 옵션표</td></tr><tr><td>실행 흐름·단계 순서</td><td><code>WORKFLOW.md</code>와 <code>workflow.svg</code>(<code>.mmd</code>가 있으면 원본부터), 핸드북의 흐름도</td></tr><tr><td>구조·설계 결정</td><td><code>ARCHITECTURE.md</code></td></tr><tr><td>위 문서를 고쳤을 때</td><td>공유 <code>유지보수</code> 폴더의 사본도 같은 파일로 교체</td></tr></tbody></table></div>
 <p>핸드북(HTML)은 인수인계 폴더의 <code>build_handbook.py</code>로 다시 만듭니다(오프라인 — 외부 CDN 없이 mermaid를 내장합니다).</p>
 <pre class="lang-bash"><code>python build_handbook.py</code></pre>
 <hr>
-<h3 id="doc-30_유지보수_AI_활용가이드--4-확인">4. 확인</h3>
+<h3 id="doc-30_유지보수_AI_활용가이드--5-확인">5. 확인</h3>
 <ul>
 <li>빌드·테스트는 요청한 도구의 <code>PR_CHECKLIST.md</code> 항목을 기준으로 합니다.</li>
 <li>결과를 받으면 <strong>요청한 파일만 바뀌었는지 diff</strong>를 확인하고, 설정을 바꾸는 도구라면 무작위 VM·호스트 몇 대에서 실제 반영을 직접 확인합니다.</li>
