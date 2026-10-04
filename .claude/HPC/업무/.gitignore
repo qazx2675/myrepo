@@ -1,0 +1,5 @@
+# 업무 챗봇(hpcbot) — 커밋 제외 목록
+# 매뉴얼 원문은 공개 저장소에 올리지 않는다 (로컬에서 직접 복사)
+data/manual.md
+dist/
+hpcbot
