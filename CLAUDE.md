@@ -31,3 +31,10 @@ LLM 코딩 실수를 줄이기 위한 행동 지침입니다.
 ---
 
 이 지침들은 불필요한 변경 감소, 과도한 복잡성 재작성 방지, 실수 전 질문을 통해 효과를 발휘합니다.
+
+## 5. Jev API (TypeSafe System One)
+
+- 키는 환경변수가 아니라 `~/.jev-claude.env`(없으면 `~/.jev-router.env`)의 `JEV_API_KEY`. 값은 출력·커밋 금지
+- `POST https://api.typesafe.ai/v1/systemone` (`model: jev-latest`, `state`, `questions` noul/choice) — 상세는 메모리 `reference_jev_api.md`
+- Windows `python3`는 스토어 스텁 → `C:/Users/qazx2/AppData/Local/Programs/Python/Python311/python.exe` 사용
+- 저장소 판정·분류는 현재 브랜치가 아니라 `origin/master` 기준으로 읽는다

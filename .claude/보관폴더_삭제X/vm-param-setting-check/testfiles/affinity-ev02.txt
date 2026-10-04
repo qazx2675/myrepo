@@ -1,0 +1,3 @@
+# --affinity-ev02 테스트용: 192ev02의 실제 설정값과 일치하도록 지정 -> OK가 나와야 정상
+sched.vcpu0.affinity = 0,1
+sched.vcpu1.affinity = 2,3
