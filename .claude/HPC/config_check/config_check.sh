@@ -3,6 +3,11 @@
 #
 # 사용: bash config_check.sh   (user 번호 선택 → 작업 진행 y/n → 환경설정 수정 y/n/set)
 # 대상 목록: 실행한 디렉토리의 ${user}.txt (공백/줄바꿈 구분, 혼용 가능)
+# 비대화형: bash config_check.sh -auto <user> <호스트목록파일>   (auto_setup 연계용)
+#   user 선택·y/n 질문 없이 진행: 작업 y, 환경설정은 목록에 p/d 로 시작하는 호스트가 있으면 set 아니면 y.
+#   결과 리포트는 "############### 결과 리포트 ###############" ~ "####…" 블록으로 감싸고,
+#   설정 적용 후 재체크 결과를 check.res_<user>_postapply 로 저장한다.
+#   auto_done_dir / auto_done_host 가 채워져 있으면 완료기록을 남긴다 (둘 다 비면 아무 동작 없음).
 # 상세: README.md / 계획서.md
 
 ############################ 설정 ############################
@@ -21,6 +26,8 @@ uptime_enable_user=""  # uptime 확인 대상 user (예: user1|user2)
 ai_server_list=""      # AI GPU 서버 hostname (예: host1|host2, 완전 일치)
 ai_server_script=""    # AI GPU 서버에서 실행할 스크립트
 dhcp_server=""         # DHCP 정보 조회 서버
+auto_done_dir=""       # (auto_setup) 완료기록을 쓸 로컬 디렉터리 (os8_mgmt 에서 채움). 둘 다 비면 아무 동작 없음
+auto_done_host=""      # (auto_setup) os8_mgmt 호스트명 (다른 서버에서 채움) — gossh 로 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/done 에 기록
 ###############################################################
 
 R=$'\033[31m'; G=$'\033[32m'; Y=$'\033[33m'; B=$'\033[5;31m'; N=$'\033[0m'
@@ -78,16 +85,26 @@ EXPAND_AWK='function expand(tok, tag,   p, q, pre, body, post, d, lo, hi, w, i) 
 }'
 
 ########################## 1. user 선택 ##########################
-bash "$user_info_mn"
-read -r -p "input Number: " user_choice || exit 1
-user=$(bash "$user_info_output" "$user_choice" | tr -d '\r' | awk 'NF{print $1; exit}')
-[ -z "$user" ] && { echo "user를 확인할 수 없습니다."; exit 1; }
-[ -f "${user}.txt" ] || { echo "대상 목록 파일이 없습니다: $(pwd)/${user}.txt"; exit 1; }
+AUTO_MODE=""   # 환경변수로 -auto 가 새어 들어오는 것 방지 (인자 없는 실행은 기존과 동일)
+if [ "${1:-}" = "-auto" ]; then
+    AUTO_MODE=1; user="${2:-}"; LIST_FILE="${3:-}"
+    if [ "$#" -ne 3 ] || [ -z "$user" ] || [ ! -f "$LIST_FILE" ]; then
+        echo "-auto <user> <호스트목록파일> : 목록 파일이 없습니다"
+        exit 1
+    fi
+else
+    bash "$user_info_mn"
+    read -r -p "input Number: " user_choice || exit 1
+    user=$(bash "$user_info_output" "$user_choice" | tr -d '\r' | awk 'NF{print $1; exit}')
+    [ -z "$user" ] && { echo "user를 확인할 수 없습니다."; exit 1; }
+    LIST_FILE="${user}.txt"
+    [ -f "$LIST_FILE" ] || { echo "대상 목록 파일이 없습니다: $(pwd)/${user}.txt"; exit 1; }
+fi
 INFO_FILE="check.info_${user}"   # LDAP/OS 값별 호스트가 20대 이상일 때만 만들어지는 요약 파일
 
 ########################## 2. 리스트 확인 ##########################
 HOSTS="$TMP/hosts"
-tr -d '\r' < "${user}.txt" | tr -s '[:space:]' '\n' | awk 'NF && !seen[$0]++' > "$HOSTS"
+tr -d '\r' < "$LIST_FILE" | tr -s '[:space:]' '\n' | awk 'NF && !seen[$0]++' > "$HOSTS"
 [ -s "$HOSTS" ] || { echo "대상 호스트가 없습니다."; exit 1; }
 TOTAL=$(lines "$HOSTS")
 
@@ -111,10 +128,14 @@ awk '{
 echo
 
 ########################## 3. 작업 진행 여부 ##########################
-while :; do
-    read -r -p "작업을 진행하시겠습니까? (y/n): " ans || exit 1
-    case "$ans" in y|Y) break ;; n|N) exit 0 ;; esac
-done
+if [ -n "$AUTO_MODE" ]; then
+    echo "작업을 진행하시겠습니까? (y/n): y (-auto)"
+else
+    while :; do
+        read -r -p "작업을 진행하시겠습니까? (y/n): " ans || exit 1
+        case "$ans" in y|Y) break ;; n|N) exit 0 ;; esac
+    done
+fi
 if [ -n "$uptime_enable_user" ] && [[ "$user" =~ ^($uptime_enable_user)$ ]]; then
     gsh -script -w "$HOSTS" "uptime"
     echo
@@ -289,16 +310,98 @@ do_check() {   # $1=대상파일 $2=이름
     return 0
 }
 
+# auto_setup 완료기록 (-auto 일 때만 호출): 설정 적용 후 재체크 결과(check.res_<user>_postapply)에 에러 없이 나온
+# 호스트마다 "호스트 epoch user sha256 config_check" 를 기록한다 (sha256 = 그 호스트의 postapply 줄들).
+# auto_done_dir 이면 로컬 디렉터리에 <host> 파일을 임시파일→mv 로 원자 기록, auto_done_host 이면 gossh 로 그 서버에
+# 같은 기록(500대 단위). 둘 다 비면 즉시 반환. 실패는 경고 1줄만, 종료코드 불변.
+auto_record_done() {
+    [ -n "${auto_done_dir}${auto_done_host}" ] || return 0
+    local post="check.res_${user}_postapply"
+    [ -f "$post" ] && [ -f "$TMP/ok.txt" ] || return 0
+    command -v sha256sum >/dev/null 2>&1 || { yellow "[WARN] auto_setup 완료기록 실패 (sha256sum 없음)"; return 0; }
+
+    local now recs h sum rest n=0 fail=0
+    now=$(date +%s)
+    recs="$TMP/done.recs"; : > "$recs"
+    # 정상 호스트 = 적용 대상 목록에 있고, 결과 파일에 "호스트: ..." 줄이 있으며 ERROR 줄이 없는 호스트
+    while IFS= read -r h; do
+        [[ "$h" =~ ^[A-Za-z0-9._-]+$ ]] || continue
+        sum=$(awk -v p="${h}:" 'index($0, p) == 1' "$post" | sha256sum | cut -d' ' -f1)
+        printf '%s %s %s %s %s\n' "$h" "$now" "$user" "$sum" "config_check" >> "$recs"
+        n=$((n + 1))
+    done < <(awk '
+        NR == FNR { t = $1; sub(/\r$/, "", t); if (t != "") want[t] = 1; next }
+        /^[[:space:]]*$/ { next }
+        /^ERROR/ { split($0, a, " "); e = a[2]; sub(/:$/, "", e); bad[e] = 1; next }
+        { i = index($0, ":"); if (i < 2) next
+          h = substr($0, 1, i - 1); if (h ~ /[[:space:]]/ || !(h in want)) next
+          st = substr($0, i + 1); sub(/^[[:space:]]+/, "", st)
+          if (st ~ /^ERROR/) { bad[h] = 1; next }
+          if (!(h in seen)) { seen[h] = 1; ord[++k] = h } }
+        END { for (j = 1; j <= k; j++) if (!(ord[j] in bad)) print ord[j] }' "$TMP/ok.txt" "$post")
+    [ "$n" -gt 0 ] || return 0
+
+    if [ -n "$auto_done_dir" ]; then
+        if mkdir -p "$auto_done_dir" 2>/dev/null; then
+            while read -r h rest; do
+                { printf '%s\n' "$rest" > "$auto_done_dir/.${h}.tmp.$$" \
+                    && mv -f "$auto_done_dir/.${h}.tmp.$$" "$auto_done_dir/$h"; } 2>/dev/null || fail=$((fail + 1))
+            done < "$recs"
+            rm -f "$auto_done_dir"/.*.tmp.$$ 2>/dev/null
+        else
+            fail=$n
+        fi
+        if [ "$fail" -gt 0 ]; then
+            yellow "[WARN] auto_setup 완료기록 실패 (${fail}/${n}대 → ${auto_done_dir})"
+        else
+            green "[INFO] auto_setup 완료기록 : ${n}대 → ${auto_done_dir}"
+        fi
+    fi
+    if [ -n "$auto_done_host" ]; then
+        if auto_record_done_remote "$recs" "$n"; then
+            green "[INFO] auto_setup 완료기록 : ${n}대 → ${auto_done_host}"
+        else
+            yellow "[WARN] auto_setup 완료기록 실패 (${auto_done_host})"
+        fi
+    fi
+    return 0
+}
+
+# auto_record_done 보조: "host epoch user sha256 source" 줄 파일($1)을 gossh 원샷으로 auto_done_host 의 done/ 에 기록.
+# 원격 명령에 base64 로 포함(stdin 사용 안 함), 500대 단위 호출. 모든 호출에서 AUTO_DONE_OK 가 와야 성공.
+auto_record_done_remote() {
+    local recs="$1" total="$2" hl chunk b64 out ok=0 start=1
+    command -v gossh >/dev/null 2>&1 || return 1
+    hl="$TMP/done.host"; chunk="$TMP/done.chunk"
+    printf '%s\n' "$auto_done_host" > "$hl"
+    while [ "$start" -le "$total" ]; do
+        sed -n "${start},$((start + 499))p" "$recs" > "$chunk"
+        # 두 글자마다 '.' 삽입: base64 가 우연히 gossh 위험어(ddc/halt/reboot 등)를 만들면 실행 거부되므로
+        b64=$(base64 -w0 < "$chunk" 2>/dev/null | sed 's/../&./g')
+        [ -n "$b64" ] || { ok=1; break; }
+        out=$(gossh -script -w "$hl" "bash -c 'd=\"\${AUTO_SETUP_DIR:-/tmp/auto_setup}/done\"; mkdir -p \"\$d\" && echo ${b64} | tr -d . | base64 -d | while read -r h rest; do printf \"%s\\n\" \"\$rest\" > \"\$d/.\$h.tmp\" && mv -f \"\$d/.\$h.tmp\" \"\$d/\$h\" || exit 1; done && echo AUTO_DONE_OK'" 2>/dev/null)
+        case "$out" in *AUTO_DONE_OK*) ;; *) ok=1; break ;; esac
+        start=$((start + 500))
+    done
+    return "$ok"
+}
+
 ########################## 4. 체크 ##########################
 do_check "$HOSTS" first
 CUR=first
 FINAL="$TMP/first.state"
 
 ########################## 5. 환경설정 수정 여부 ##########################
-while :; do
-    read -r -p "환경설정을 수정하시겠습니까? (y/n/set): " ans || exit 1
-    case "$ans" in y|Y|n|N|set|SET) break ;; esac
-done
+if [ -n "$AUTO_MODE" ]; then
+    # -auto : 대상에 p/d 로 시작하는 호스트가 하나 이상이면 set, 아니면 y
+    if grep -qiE '^[[:space:]]*[pd]' "$HOSTS"; then ans=set; else ans=y; fi
+    echo "환경설정을 수정하시겠습니까? (y/n/set): $ans (-auto)"
+else
+    while :; do
+        read -r -p "환경설정을 수정하시겠습니까? (y/n/set): " ans || exit 1
+        case "$ans" in y|Y|n|N|set|SET) break ;; esac
+    done
+fi
 case "$ans" in
     y|Y|set|SET)
         awk -F'\t' '$2 == "OK" { print $1 }' "$FINAL" > "$TMP/ok.txt"
@@ -311,6 +414,7 @@ case "$ans" in
             echo
             echo "[재체크]"
             do_check "$TMP/ok.txt" recheck
+            [ -n "$AUTO_MODE" ] && tr -d '\r' < "$TMP/recheck.out" > "check.res_${user}_postapply"
             awk -F'\t' 'FILENAME == ARGV[1] { r[$1] = $2; next }
                         { print $1 "\t" (($1 in r) ? r[$1] : $2) }' "$TMP/recheck.state" "$TMP/first.state" > "$TMP/final.state"
             FINAL="$TMP/final.state"
@@ -325,6 +429,10 @@ esac
 
 ########################## 6. 마무리 ##########################
 echo
+if [ -n "$AUTO_MODE" ]; then
+    echo "############### 결과 리포트 ###############"
+    echo
+fi
 
 # AI GPU 서버
 if [ -n "$ai_server_list" ]; then
@@ -443,5 +551,9 @@ if [ -s "$TMP/ev.list" ]; then
     else
         yellow "VM inventory 파일을 읽을 수 없어 VWP 확인 생략: $vm_inventory"
     fi
+fi
+if [ -n "$AUTO_MODE" ]; then
+    echo "###########################################"
+    auto_record_done
 fi
 exit 0

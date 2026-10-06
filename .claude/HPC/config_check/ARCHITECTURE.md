@@ -6,11 +6,11 @@
 
 | 위치 (스크립트 내) | 역할 | 바꿀 일이 생기면 |
 |---|---|---|
-| `설정` 블록 | 고정 경로, os6_host / uptime_enable_user / ai_server_* / dhcp_server | 환경이 바뀔 때 여기만 수정 |
+| `설정` 블록 | 고정 경로, os6_host / uptime_enable_user / ai_server_* / dhcp_server / auto_done_dir / auto_done_host | 환경이 바뀔 때 여기만 수정 |
 | `gsh()` | gossh 실행 래퍼. 실행 구간에서만 INT 무시(gossh의 Ctrl+C 동작 보존) | gossh 호출은 항상 `gsh`로 |
 | `VENDOR_AWK` | 호스트 접두사 → 벤더(D/L/J/T/W/X) | 벤더 접두사 추가/변경 |
 | `EXPAND_AWK` | gossh 결과 파일의 압축 표기(`host[01-03]`, 다차원 포함)를 풀어 `호스트<TAB>태그`로 출력 | gossh 결과 파일 형식이 바뀔 때 |
-| 1. user 선택 | `info_mn.sh` 출력 → 번호 입력 → `info.sh`로 user 확정 | |
+| 1. user 선택 | `info_mn.sh` 출력 → 번호 입력 → `info.sh`로 user 확정. `-auto <user> <목록파일>` 이면 선택·질문 생략 | |
 | 2. 리스트 확인 | 목록 파싱(공백/줄바꿈, 중복 제거), 30행 단위 열 출력, prefix 집계 | 출력 형식 변경 |
 | 3. 작업 진행 | y/n, uptime | |
 | `run_check` | gossh `-pm` 1회 실행 → 상태 분류(`.state`) → FAIL/usb0/LDAP 추출 | 체크 결과 형식(OK/FAIL/INFO) 변경 |

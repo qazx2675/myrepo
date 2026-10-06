@@ -51,6 +51,20 @@ bash config_check.sh
 | 5 | `환경설정을 수정하시겠습니까? (y/n/set)` | `y` / `n` / `set` |
 | 6 | (y/set이면 적용 → 재체크) AI 서버 점검, 벤더 코멘트, DHCP, 기타 상태 서버, usb0, VWP | - |
 
+### 비대화형 실행 `-auto` (auto_setup 연계)
+
+```bash
+bash config_check.sh -auto <user> <호스트목록파일>
+```
+
+user 선택·y/n 질문 없이 진행합니다(`... : y (-auto)` 에코). `작업 진행`은 `y`, 환경설정은 **목록에 `p`/`d` 로 시작하는 호스트가 있으면 `set`, 없으면 `y`** 입니다. 인자 없이 실행하면 기존과 완전히 동일합니다.
+
+- **결과 리포트 블록**: 6단계 출력(벤더 코멘트·DHCP·usb0·VWP 등)을 `############### 결과 리포트 ###############` ~ `###########################################` 줄로 감쌉니다 (auto_setup 이 이 블록을 code 파일로 발췌).
+- **`check.res_<user>_postapply`**: 설정 적용 후 재체크 결과를 현재 디렉터리에 저장합니다(적용 대상 OK 호스트가 없으면 만들지 않음).
+- **완료기록**: 설정 상단 `auto_done_dir`(로컬 디렉터리) 또는 `auto_done_host`(os8_mgmt 호스트명, gossh 원샷)가 채워져 있으면 재체크 결과에 에러 없이 나온 호스트마다 `<호스트> 파일에 "epoch user sha256 config_check"` 한 줄을 기록합니다. 둘 다 비면 아무 동작 없음(커밋 기본값은 빈 값). 한 파일을 autofs 로 os8_mgmt·os6_mgmt 가 공유하면 `auto_done_host` 만 채웁니다.
+- auto_setup 에서는 `os_check_sh` 에 이 스크립트의 경로를 지정하면 됩니다.
+- 테스트: `bash test/run_auto_test.sh` (gossh 스텁, 18건)
+
 ## 3. 옵션별 상세 설명
 
 ### 환경설정 수정 (y / n / set)
@@ -136,6 +150,7 @@ undefined  undefined    2ea Std 27Year asdf KERNEL RHEL2
 | 파일 | 설명 |
 |---|---|
 | `config_check.sh` | 스크립트 본체 |
+| `test/run_auto_test.sh` | `-auto`·완료기록 테스트 (gossh 스텁) |
 | `계획서.md` | 요구사항·설계 결정·검증 계획 |
 | `ARCHITECTURE.md` | 함수/파일 → 역할 표 |
 | `PR_CHECKLIST.md` | 수정 후 확인 체크리스트 |
