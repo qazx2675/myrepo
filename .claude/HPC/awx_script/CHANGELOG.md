@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 추가
+- 01: 최상단 빈 변수 `auto_setup_gossh_pw` 추가 — 채우면 `auto_setup_host` 로의 gossh 전송에 `-p <비밀번호>` 를 붙임(os8_mgmt 에 키 인증이 안 될 때 "전달 실패" 해결). 비우면 기존과 동일. 테스트 7p, `test/run_tests.sh` PASS=55
+
 ## [0.5.0] - 2026-10-03
 
 ### 변경
