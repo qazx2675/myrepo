@@ -52,6 +52,10 @@ inventory_delete_host=""     # ← 작업진행 Y 후 `ssh <host> "bash /root/se
 infra_alias=""               # ← (선택) 등록되지 않은 infra 이름 치환 "adjfg:infra1 foo:infra2" (공백/쉼표 구분, `이름:바꿀infra`). 비우면 치환 없음
 ```
 
+(참고) 이 7개 외에 auto_setup 연계용 빈 변수 `auto_setup_host=""` 가 하나 더 있습니다(선택, 아래 "auto_setup 전달" 참고 — 비워 두면 기존과 동일, 필수 검증 대상 아님).
+
+(참고) `auto_setup_gossh_pw=""` (선택): os8_mgmt 에 gossh 키 인증이 안 되는 서버에서 `auto_setup_host` 전송 시 쓰는 SSH 비밀번호입니다. 채우면 전송 gossh 호출에 `-p <비밀번호>` 가 붙고(키 인증 실패 시에만 사용됨), 비우면 `-p` 없이 호출합니다. 커밋에는 항상 빈 값으로 두고 현장 사본에서만 채웁니다.
+
 `ai_server_list`·`infra_alias`·`day_print` 외는 필수이며, 작업진행 Y 직후(원격 삭제 전)에 비어 있으면 `[X] <변수> 가 비어 있습니다` 로 종료합니다. 값은 현장 값으로 직접 채우십시오(저장소에는 모두 빈 값으로 둡니다).
 
 ### user() 함수 (사용자 선택)
@@ -199,6 +203,11 @@ bash 02.source_dhcp_pxe.sh testuser \
 #### 작업 대상 날짜 출력 (`day_print`), LDAP 점검- `day_print="user1,user2"` 처럼 user 를 적어 두면, 해당 user 로 실행할 때 작업 대상을 호스트명 다단 대신 `${user}.txt` 내용으로 출력합니다: `2026-10-02 tmp tmp infra hostname ip mac nic disk part 용량 os boot` (vendor·model 자리는 `tmp tmp`, 앞에 오늘 날짜). 끝에 `총 N대`. 비워 두거나 user 가 없으면 기존 출력입니다.- LDAP 점검은 별도 스크립트 대신 각 서버에서 `cat /etc/openldap/ldap.conf |grep -v '#' |grep -i uri |awk -F= '{print $2}' |awk -F',' '{print $1}'` 결과(와 bonding mode)를 모아 비교합니다. `ldap_check_script` 변수는 없어졌습니다.#### 파티션 표준 확인 (02, 마지막 단계)02 가 끝나면 `${user}.txt` 의 모든 호스트에서 `lsblk -nl -o NAME,TYPE,SIZE,MOUNTPOINT` 를 읽어(gossh) 표준 여부를 보고합니다(정보 출력만, 종료코드에는 영향 없음). 용량은 lsblk 표시값 기준입니다.| 항목 | 표준 ||---|---|| 구성 | LVM 이 아닌 물리 파티션 || OS 설치 디스크 | `/` 가 있는 디스크가 `sda` 또는 `nvme0n1` || `/boot` 또는 `/boot/efi` | 500M ~ 512M || `/` | 30G || `/var` | 20G || swap | 존재 || `/tmp` | 존재(나머지 용량) |이 외의 마운트·마운트 없는 파티션·LVM 이 있으면 `표준과 다른 파티션이 있습니다` 와 호스트별 사유를 빨강으로 출력하고, 응답 없는 호스트는 별도로 알립니다. OS 디스크 이외 디스크의 마운트는 판정 대상이 아닙니다(단 LVM 은 어디에 있든 표준 외).#### OS 번호 변환 (pxe)awxkit 은 `2024`·`2025` 처럼 숫자만 있는 값을 '선택지 번호'로 해석해 `OS 버전 번호가 범위를 벗어났습니다` 오류가 납니다. 02 는 conf(`awxkit/conf/${user}_setting.conf` 또는 `~/.awxkit/`)의 `s4_osver_choices` 에서 해당 값의 순번을 찾아 번호로 넘기고(예: 2025 → 2) `[os 번호 변환]` 으로 알려 줍니다. conf 나 선택지가 없으면 값 그대로 넘깁니다.
 #### OS 버전 선택 (02, 옵션 확인표 출력 전)02 는 확인표보다 먼저 OS 버전을 묻습니다. 선택지는 `1) 2024  2) 2025  3) 2026  4) 2026-OPC_MDP  5) 2026-ECAD_TCAD` 입니다.```OS 버전 선택  1) 기본값 (2026-ECAD_TCAD) — 모든 yml 동일  2) yml 별로 직접 선택번호 : 2  1) 2024  2) 2025  3) 2026  4) 2026-OPC_MDP  5) 2026-ECAD_TCAD   (실제로는 한 줄씩 출력)a.yml에 사용할 버전 : 3        → pxe -os 2026b.yml에 사용할 버전 : 4        → pxe -os 2026-OPC_MDP```- 1번: 모든 yml 이 `2026-ECAD_TCAD`. 2번: yml 마다 번호(1~5)를 입력하며, 범위 밖이면 다시 묻습니다.- 01 이 넘기는 nodeinfo 의 os 값은 사용하지 않습니다. 선택값은 conf 의 `s4_osver_choices` 와 **대소문자까지 같아야** 하며(변환 없음), 확인표에서 `N` 으로 한 번 더 고칠 수 있습니다.
 #### 전체 yml 갱신 · 최종 수량 · 등록 후 확인- **전체 yml(`_all`) 갱신 (02)**: 그룹 yml 이 **2개 이상**이고 **모두 성공**하면, 마지막에 전체 yml 로 `invsync`(AWX 인벤토리 소스 1단계)만 실행해 인벤토리 호스트를 전체 대상으로 갱신합니다(dhcp/pxe 는 실행하지 않음). yml 이 1개이거나 실패한 yml 이 있으면 생략합니다. 01 이 `--all=<yml>` 인자로 전달합니다.- **최종 수량 (02)**: 성공한 yml 기준으로 `구분 infra OS버전 : N대` 로 합산해 출력합니다. `On-premise`=`HPC`, `Cloud`=`SDS`, 그 외(`no`)는 그대로 표시하며 OS 버전은 위에서 고른 값입니다. 끝에 `합계` 를 출력합니다.- **등록 후 확인 (01 마지막)**: 작업 대상 서버를 붙여넣고(공백/쉼표/| 구분, 빈 줄로 종료, 바로 빈 줄이면 생략) 이번 등록 대상과 비교해 `붙여넣은 대상 서버 N대가 모두 존재함` 또는 `등록 대상에 없는 서버`(exit 1)를 보고합니다. 붙여넣지 않은 등록 대상은 경고로 알려 줍니다.
+#### auto_setup 전달 (01 [14-1], 02 성공 직후)
+02 가 성공하면 01 은 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue/<epoch>_<user>_<pid>.job` 에 작업 파일(`user=`, `time=`, 호스트명 줄들)을 항상 남기고 `auto_setup 전달 : N대` 한 줄만 로그로 출력합니다(프롬프트·옵션 없음). 02 실패(재시도 N → exit 1) 시에는 전달하지 않으며, 디렉터리를 만들 수 없거나 쓰기에 실패하면 경고 한 줄만 출력하고 등록 진행·종료코드에는 영향을 주지 않습니다.
+
+2차: `.job` 에는 호스트 줄 뒤에 그룹 줄이 추가됩니다(그룹 yml 이 2개 이상일 때만) — `yml=<파일명> infra=<> os=<> boot=<> splunk=<> hosts=<h1,h2,…>` 그룹별 한 줄과 전체 yml 의 `all=<파일명>`. 최상단 빈 변수 `auto_setup_host`(os8_mgmt 호스트명, os6_mgmt 등에서 채움)가 채워져 있으면 로컬 queue 대신 `gossh` 로 그 서버의 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue/` 에 같은 내용을 원자 전송(원격에서 tmp 후 mv)하고 `auto_setup 전달 : N대 → <host>` 를 출력하며, 실패하면 경고 한 줄만 냅니다. 비어 있으면 기존과 동일합니다.
+
 #### 옵션 확인표 및 수동 수정
 
 ```

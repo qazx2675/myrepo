@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### 추가
+- 01: 최상단 빈 변수 `auto_setup_gossh_pw` 추가 — 채우면 `auto_setup_host` 로의 gossh 전송에 `-p <비밀번호>` 를 붙임(os8_mgmt 에 키 인증이 안 될 때 "전달 실패" 해결). 비우면 기존과 동일. 테스트 7p, `test/run_tests.sh` PASS=55
+
+## [0.5.0] - 2026-10-03
+
+### 변경
+- 01: [14-1] `.job` 에 그룹 줄 추가(`as_group_lines`) — 그룹 yml 이 2개 이상일 때 `yml=<파일명> infra= os= boot= splunk= hosts=<h1,h2,…>` 그룹별 한 줄 + `all=<전체 yml>` (기존 줄·순서 불변, 추가분만)
+- 01: 최상단 빈 변수 `auto_setup_host` 추가 — 비어 있으면 기존과 100% 동일(로컬 queue), 채워진 서버(os6_mgmt 등)에서는 로컬 queue 를 만들지 않고 gossh 로 os8_mgmt 의 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue/` 에 원자 전송(원격에서 tmp 로 쓰고 mv), 실패해도 경고 1줄만
+- 01: os8 gossh 전송 시 base64 를 두 글자마다 `.` 로 나눠 보내고 원격에서 `tr -d .` 로 복원 — base64 가 우연히 gossh 위험어를 만들어 실행 거부되는 것을 회피
+- test: 7n(`auto_setup_host` 채움 → 스텁 gossh 로 원격 queue 전송, 로컬 queue 없음, 내용 동일)·7o(전송 실패 → 경고 1줄, 01 정상 종료) 등 추가 (awx 테스트 54건)
+
 ## [0.4.0] - 2026-10-02
 
 ### 수정
@@ -11,7 +22,8 @@
 - 01: LDAP 점검을 `ldap_check_script` 대신 `/etc/openldap/ldap.conf` 의 URI grep 으로 변경(변수 제거)
 - 01: `day_print` 추가 — user 가 포함되면 작업 대상을 `날짜 tmp tmp infra hostname ...` 로 출력
 - 02: 마지막에 파티션 표준 확인 추가(물리 파티션, sda/nvme0n1, /boot 또는 /boot/efi 500~512M, / 30G, /var 20G, swap, /tmp)
-- test: 14a·14b·7l·15-* 추가, lsblk 스텁 (랩 51 PASS)
+- 01: [14-1] auto_setup 전달 — 02 성공 직후 `/tmp/auto_setup/queue/<epoch>_<user>_<pid>.job` 파일 생성 (user=, time=, 호스트줄들), 프롬프트·옵션 없음, 02 실패 시 전달 없음, 디렉터리 생성 실패는 경고만 출력
+- test: 14c·14d·7c·7f·7m 추가, auto_setup queue 생성 확인 (랩 52 PASS)
 
 ## [0.3.0] - 2026-10-02
 

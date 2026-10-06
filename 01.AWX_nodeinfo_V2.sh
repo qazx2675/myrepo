@@ -7,6 +7,8 @@ day_print=""                  # 이 변수에 user 가 들어 있으면(공백/�
 lacp_comment=""
 inventory_delete_host=""     # 원문은 함수 안 → 최상단으로 이동
 infra_alias=""               # 등록되지 않은 infra 이름 치환 "adjfg:infra1 foo:infra2" (공백/쉼표 구분, 비워 두면 치환 없음)
+auto_setup_host=""           # (auto_setup) os8_mgmt 호스트명(os6_mgmt 등 다른 서버에서 채움): 비어 있으면 로컬 queue, 있으면 gossh 로 그 서버 queue 에 전송
+auto_setup_gossh_pw=""       # (auto_setup) os8_mgmt 에 gossh 키 인증이 안 될 때 쓰는 SSH 비밀번호(gossh -p). 비우면 -p 없이 호출. 커밋에는 항상 빈 값
 svr_idr="$svr_dir"           # git 블록 원문($svr_idr 오타)을 그대로 쓰기 위한 별칭
 
 # ==== [0] 공통: 시작 경로 · 임시물 정리 · 로그 ====
@@ -50,6 +52,7 @@ group_yml=""                 # 그룹(분할) yml 파일명만(공백 구분, �
 all_yml=""                   # 전체(_all) yml 파일명 (그룹 yml 이 2개 이상일 때 02 가 마지막에 invsync 만 수행)
 declare -A yml_opt           # yml 파일명 → "infra os boot splunk"
 declare -A yml_boot          # yml 파일명 → boot (ls 표시용)
+declare -A yml_hosts         # yml 파일명 → 호스트 목록(쉼표 구분, .job 그룹 줄용)
 hostfile=$(mktemp)           # 호스트명 목록(gossh -w / 작업 리스트 출력용)
 splitdir=$(mktemp -d)        # 분할/전체 입력 파일 임시 디렉터리
 add_tmp "$hostfile" "$splitdir"
@@ -215,6 +218,7 @@ gen_inventory() {
 			group_yml="${group_yml:+$group_yml }$new"
 			yml_opt[$new]="${g_infra[$num]} ${g_os[$num]} ${g_boot[$num]} ${g_splunk[$num]}"
 			yml_boot[$new]="${g_boot[$num]}"
+			yml_hosts[$new]=$(awk 'NF { print $4 }' "$splitdir/$f" | paste -sd, -)
 		else
 			all_yml=$new
 		fi
@@ -357,6 +361,45 @@ for ((;;)); do
 	read -r -p "${YELLOW}02 실패 — 재시도 (Y|N) : ${RST}" r
 	[[ $r == [Yy] ]] || exit 1
 done
+# [14-1] auto_setup 전달: 02 성공 직후 호스트 목록(4번째 필드)을 auto_setup queue 에 남김 (실패해도 진행에 영향 없음)
+# .job 그룹 줄(호스트 줄 뒤): yml=<파일명> infra= os= boot= splunk= hosts=<h1,h2,..> 그룹별 한 줄 + all=<전체 yml>. 그룹이 2개 미만이면 생략
+as_group_lines() {
+	local f i o b s
+	(( $(wc -w <<< "$group_yml") >= 2 )) || return 0
+	for f in $group_yml; do
+		read -r i o b s <<< "${yml_opt[$f]}"
+		echo "yml=$f infra=$i os=$o boot=$b splunk=$s hosts=${yml_hosts[$f]}"
+	done
+	[[ -n $all_yml ]] && echo "all=$all_yml"
+	return 0
+}
+if [[ -n $auto_setup_host ]]; then
+	# 원격 전달: 로컬 queue 는 만들지 않고 gossh 로 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue/ 에 원자 기록(원격에서 tmp 로 쓰고 mv)
+	as_job=$(mktemp); as_hl=$(mktemp); add_tmp "$as_job" "$as_hl"
+	as_name="$(date +%s)_${user}_$$.job"
+	{ echo "user=${user}"; echo "time=$(date +%s)"; cat "$hostfile"; as_group_lines; } > "$as_job"
+	echo "$auto_setup_host" > "$as_hl"
+	as_b64=$(base64 -w0 < "$as_job" 2>/dev/null | sed 's/../&./g')   # 두 글자마다 '.': base64 가 gossh 위험어(ddc/halt 등)를 우연히 만들지 않게
+	as_out=""
+	if command -v gossh >/dev/null 2>&1 && [[ -n $as_b64 ]]; then
+		as_out=$(gossh ${auto_setup_gossh_pw:+-p "$auto_setup_gossh_pw"} -script -w "$as_hl" "bash -c 'd=\"\${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue\"; mkdir -p \"\$d\" && echo ${as_b64} | tr -d . | base64 -d > \"\$d/.${as_name}.tmp\" && mv -f \"\$d/.${as_name}.tmp\" \"\$d/${as_name}\" && echo AUTO_SETUP_OK'" 2>/dev/null)
+	fi
+	if [[ $as_out == *AUTO_SETUP_OK* ]]; then
+		log "auto_setup 전달 : $(grep -c . "$hostfile")대 → ${auto_setup_host}"
+	else
+		warn "[!] auto_setup 전달 실패 (${auto_setup_host})"
+	fi
+else
+auto_setup_queue="${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue"
+if mkdir -p "$auto_setup_queue" 2>/dev/null; then
+	q="$auto_setup_queue/$(date +%s)_${user}_$$.job"
+	{ echo "user=${user}"; echo "time=$(date +%s)"; cat "$hostfile"; as_group_lines; } > "$q.tmp" 2>/dev/null && mv "$q.tmp" "$q" 2>/dev/null \
+		&& log "auto_setup 전달 : $(grep -c . "$hostfile")대 ($q)" \
+		|| warn "[!] auto_setup 전달 실패 ($q)"
+else
+	warn "[!] auto_setup 전달 실패 ($auto_setup_queue 생성 불가)"
+fi
+fi   # auto_setup_host
 # [15] 등록 후 확인: 붙여넣은 서버가 모두 이번 등록 대상에 있는지 검사
 verify_hosts() {
 	local pasted="" line pf missing extra n

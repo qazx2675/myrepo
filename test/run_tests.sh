@@ -95,6 +95,7 @@ setup_case() {
 	export STUBLOG SVR_DIR REMOTE_DIR
 	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO
 	export GOSSH_SCENARIO=same
+	export AUTO_SETUP_DIR="$S/as"   # 01 [14-1] auto_setup 전달 위치(스크래치)
 	export PATH="$S/bin:$ORIG_PATH"
 
 	cp "$SRC/$F01" "$SRC/$F02" "$W/"
@@ -663,6 +664,8 @@ case7() {
 	t_has "IC 는 계속 진행(pxe)" "$CALLS" '^pxe -user testuser -infra ic '
 	t_eq "invsync 3회(재시도 없음, 전체 yml invsync 생략)" "$(grep -c '^invsync ' "$CALLS")" 3
 	t_has "전체 yml 갱신 생략 경고" "$OUT" '전체 yml\(.*\) 인벤토리 소스 갱신은 건너뜁니다'
+	t_eq "02 실패 → auto_setup queue 파일 없음" "$(find "$S/as/queue" -name '*.job' 2>/dev/null | wc -l)" 0
+	t_no "02 실패 → 전달 로그 없음" "$OUT" 'auto_setup 전달'
 	t_notmp
 	case_end
 
@@ -677,9 +680,116 @@ case7() {
 	t_eq "작업 리스트 2회 출력" "$(grep -c '^작업 리스트$' "$OUT")" 2
 	t_eq "invsync 7회(1차 3 + 재시도 3 + 전체 1)" "$(grep -c '^invsync ' "$CALLS")" 7
 	t_has "최종 요약 성공" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
+	local qf; qf=$(find "$S/as/queue" -name '*.job' 2>/dev/null)
+	t_eq "auto_setup queue 파일 1개(재시도해도 성공 시 1회만)" "$(grep -c . <<< "$qf")" 1
+	basename "$qf" > "$S/qname"; sed -n 1p "$qf" > "$S/q1"; sed -n 2p "$qf" > "$S/q2"
+	t_has "queue 파일명 <epoch>_<user>_<pid>.job" "$S/qname" "^[0-9]+_${TU}_[0-9]+\\.job$"
+	t_eq "queue 파일 1행 user=" "$(cat "$S/q1")" "user=$TU"
+	t_has "queue 파일 2행 time=<epoch>" "$S/q2" '^time=[0-9]+$'
+	t_eq "queue 파일 호스트명 줄(정렬)" "$(sed -n '3,$p' "$qf" | grep -v '=' | LC_ALL=C sort | paste -sd' ')" "evB1 hostA1 hostA2 srvC1"
+	t_eq "queue .tmp 잔여 없음" "$(find "$S/as/queue" -name '*.tmp' | wc -l)" 0
+	t_has "전달 로그 1줄(4대)" "$OUT" 'auto_setup 전달 : 4대 \('
+	# --- 2차: 그룹 줄 (호스트 줄 뒤에 추가, 기존 줄·순서 불변) ---
+	t_eq "그룹 줄 수(yml= 3 + all= 1)" "$(grep -c '^yml=' "$qf")|$(grep -c '^all=' "$qf")" "3|1"
+	t_eq "그룹 줄은 호스트 줄 뒤(1~2행 user/time, 3~6행 호스트, 7행~ 그룹)" "$(sed -n '3,6p' "$qf" | grep -c '=')|$(sed -n '7,$p' "$qf" | grep -vc '=')" "0|0"
+	t_has "그룹 IA 줄(infra/os/boot/splunk/hosts)" "$qf" '^yml=IA_inventory-[0-9]+_2ea\.yml infra=IA os=RHEL8 boot=UEFI splunk=On-premise hosts=hostA1,hostA2$'
+	t_has "그룹 IB 줄" "$qf" '^yml=IB_inventory-[0-9]+_1ea\.yml infra=IB os=RHEL9 boot=BIOS splunk=no hosts=evB1$'
+	t_has "그룹 IC 줄(레거시→legacy)" "$qf" '^yml=IC_inventory-[0-9]+_1ea\.yml infra=IC os=RHEL8 boot=legacy splunk=Cloud hosts=srvC1$'
+	t_has "all= 전체 yml(4대)" "$qf" '^all=IA_inventory-[0-9]+_4ea\.yml$'
+	t_eq "그룹 hosts= 합집합 == 호스트 줄" "$(grep '^yml=' "$qf" | sed 's/.* hosts=//' | tr ',' '\n' | LC_ALL=C sort | paste -sd' ')" "$(sed -n '3,6p' "$qf" | LC_ALL=C sort | paste -sd' ')"
 	t_notmp
 	case_end
 
+	# 7m: queue 디렉터리 생성 불가 → 경고만, 진행·종료코드 영향 없음
+	case_begin "7m" "auto_setup queue 생성 불가 → 경고 1줄만, 01 은 정상 완료(exit 0)"
+	setup_case
+	seed_raw D7
+	: > "$S/as"   # 일반 파일이라 $S/as/queue 생성 불가
+	run01 'N\nY\nls\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "전달 실패 경고" "$OUT" '^\[!\] auto_setup 전달 실패 \(.*/as/queue 생성 불가\)$'
+	t_has "02 성공 후 등록 후 확인 단계 진행" "$OUT" '\[15\] verify_hosts'
+	t_has "완료 출력" "$OUT" '완료'
+	t_notmp
+	case_end
+
+	# 7n/7o: auto_setup_host 채움(복사본 sed) + 스텁 gossh → 원격 queue 전송 (로컬 queue 없음, 실패 시 경고만)
+	remote_stub() {   # 원본 스텁 gossh 는 유지하고 AUTO_SETUP_OK 명령만 가로채 "원격"($S/rq)에서 실제로 실행
+		mv "$S/bin/gossh" "$S/bin/gossh.orig"
+		cat > "$S/bin/gossh" <<'STUB'
+#!/bin/bash
+cmd=${@: -1}
+if [[ $cmd == *AUTO_SETUP_OK* ]]; then
+	hf=""; a=("$@")
+	for ((i = 0; i < ${#a[@]}; i++)); do [[ ${a[i]} == -w ]] && hf=${a[i+1]}; done
+	echo "gossh-autosetup host=$(grep . "$hf") $*" >> "$STUBLOG/calls.log"
+	[[ -n $RSTUB_FAIL ]] && { echo "ERROR $(grep . "$hf"): connect timeout" >&2; exit 1; }
+	out=$(AUTO_SETUP_DIR="$RSTUB_DIR" bash -c "$cmd") && printf '%s: %s\n' "$(grep . "$hf")" "$out"
+	exit 0
+fi
+exec "$(dirname "$0")/gossh.orig" "$@"
+STUB
+		chmod +x "$S/bin/gossh"
+		export RSTUB_DIR=$S/remote_as
+	}
+	case_begin "7n" "auto_setup_host 채움: gossh 로 원격 queue 에 원자 전송(로컬 queue 없음), 내용은 로컬 전달과 동일, 로그 1줄"
+	setup_case
+	seed_raw D7
+	run01 'N\nY\nls\nsu\n1\nY\n'     # 로컬 전달(기준)
+	local lq; lq=$(find "$S/as/queue" -name '*.job' 2>/dev/null)
+	setup_case
+	seed_raw D7
+	sed -i 's#^auto_setup_host=""#auto_setup_host="os8.lab"#' "$W/$F01"
+	t_eq "복사본 주입 1건" "$(grep -c "^auto_setup_host=\"os8.lab\"" "$W/$F01")" 1
+	remote_stub
+	run01 'N\nY\nls\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "로컬 queue 없음" "$(find "$S/as" -name '*.job' 2>/dev/null | wc -l)" 0
+	local rf; rf=$(find "$S/remote_as/queue" -name '*.job' 2>/dev/null)
+	t_eq "원격 queue 파일 1개" "$(grep -c . <<< "$rf")" 1
+	basename "$rf" > "$S/qname"
+	t_has "원격 파일명 <epoch>_<user>_<pid>.job" "$S/qname" "^[0-9]+_${TU}_[0-9]+\.job$"
+	t_eq "원격 .tmp 잔여 없음" "$(find "$S/remote_as/queue" -name '.*' -type f | wc -l)" 0
+	t_eq "원격 내용 == 로컬 전달 내용(time=·yml 파일명 epoch 제외)" "$(grep -v '^time=' "$rf" | sed 's/inventory-[0-9]*/inventory-N/g')" "$(grep -v '^time=' "$lq" | sed 's/inventory-[0-9]*/inventory-N/g')"
+	t_has "원격 time=<epoch>" "$rf" '^time=[0-9]+$'
+	t_eq "gossh 전송 호출 1회, 대상 os8.lab" "$(grep -c '^gossh-autosetup host=os8.lab ' "$CALLS")" 1
+	t_eq "비밀번호 변수 비면 -p 없음" "$(grep -c "^gossh-autosetup host=os8.lab -script " "$CALLS")" 1
+	t_has "전달 로그(4대 → 호스트)" "$OUT" 'auto_setup 전달 : 4대 → os8\.lab$'
+	t_no "경고 없음" "$OUT" 'auto_setup 전달 실패'
+	t_notmp
+	case_end
+
+	case_begin "7o" "auto_setup_host 채움 + gossh 전송 실패 → 경고 1줄만, 01 은 정상 완료(exit 0), 로컬 queue 없음"
+	setup_case
+	seed_raw D7
+	sed -i 's#^auto_setup_host=""#auto_setup_host="os8.lab"#' "$W/$F01"
+	t_eq "복사본 주입 1건" "$(grep -c "^auto_setup_host=\"os8.lab\"" "$W/$F01")" 1
+	remote_stub
+	export RSTUB_FAIL=1
+	run01 'N\nY\nls\nsu\n1\nY\n'
+	unset RSTUB_FAIL
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "전달 실패 경고 1줄" "$(grep -c '^\[!\] auto_setup 전달 실패 (os8\.lab)$' "$OUT")" 1
+	t_no "성공 로그 없음" "$OUT" 'auto_setup 전달 :'
+	t_eq "로컬·원격 queue 모두 없음" "$(find "$S/as" "$S/remote_as" -name '*.job' 2>/dev/null | wc -l)" 0
+	t_has "이후 등록 후 확인 단계 진행" "$OUT" '\[15\] verify_hosts'
+	t_notmp
+	case_end
+
+
+	case_begin "7p" "auto_setup_gossh_pw 채움 → gossh 전송에 -p <비밀번호> 전달(비우면 -p 없음), 전송 성공"
+	setup_case
+	seed_raw D7
+	sed -i -e 's#^auto_setup_host=""#auto_setup_host="os8.lab"#' -e 's#^auto_setup_gossh_pw=""#auto_setup_gossh_pw="pw 1!x"#' "$W/$F01"
+	t_eq "복사본 주입 1건" "$(grep -c '^auto_setup_gossh_pw="pw 1!x"' "$W/$F01")" 1
+	remote_stub
+	run01 'N\nY\nls\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "gossh 전송 호출에 -p 'pw 1!x' (공백·특수문자 포함 한 인자)" "$(grep -c '^gossh-autosetup host=os8.lab -p pw 1!x -script ' "$CALLS")" 1
+	t_has "전달 로그" "$OUT" 'auto_setup 전달 : 4대 → os8\.lab$'
+	t_no "경고 없음" "$OUT" 'auto_setup 전달 실패'
+	t_eq "비밀번호가 로그·화면에 출력되지 않음" "$(grep -c 'pw 1!x' "$OUT")" 0
+	case_end
 	# 7d: 02 직접 실행 + 실패
 	case_begin "7d" "02 직접 실행: 첫 yml invsync 실패 → 다음 yml 진행 + 요약 + exit 1"
 	setup_case
