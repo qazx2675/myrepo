@@ -1,0 +1,8 @@
+# 실행 권한 부여
+chmod +x ping_tool.sh
+
+# 점검 실행
+bash ping_tool.sh
+
+# (선택) 전역 명령어로 등록
+sudo cp ping_tool.sh /usr/local/bin/ping_tool
