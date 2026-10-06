@@ -17,6 +17,11 @@ tr -d '\r' < "$PATCH"  > "$W/p"
 cp "$W/orig" "$W/new"
 if ! patch -s "$W/new" < "$W/p" >"$W/patch.out" 2>&1; then
     cat "$W/patch.out" >&2
+    if [ -s "$W/new.rej" ]; then
+        echo "---- 적용 못 한 부분 (회사 사본과 저장소 사본이 다른 곳; 이 내용을 알려주세요) ----" >&2
+        cat "$W/new.rej" >&2
+        echo "-------------------------------------------------------------------------" >&2
+    fi
     echo "[X] 패치 적용 실패 — $TARGET 은 변경하지 않았습니다 (회사 사본의 해당 부분이 저장소와 다름)" >&2
     exit 1
 fi
