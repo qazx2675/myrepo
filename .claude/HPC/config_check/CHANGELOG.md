@@ -4,6 +4,7 @@
 
 - **`-auto <user> <호스트목록파일>`**: user 선택·y/n 질문 없이 진행. 작업 y, 환경설정은 목록에 p/d 로 시작하는 호스트가 있으면 set, 없으면 y. 결과 리포트 블록(시작/끝 마커)과 `check.res_<user>_postapply` 출력. 인자 없는 실행은 기존과 동일
 - **완료기록(`auto_record_done`)**: 설정 `auto_done_dir`/`auto_done_host`(빈 값 기본)가 채워지면 재체크 결과에 에러 없이 나온 호스트마다 `epoch user sha256 config_check` 기록(로컬 원자 기록 또는 gossh 원샷, 500대 단위). 둘 다 비면 동작 없음
+- **패치**: `auto_mode.patch` (회사 사본 반영용)
 - **영향 범위**: `config_check.sh`(설정 블록, 1·3·5·6단계, 완료기록 함수), 테스트 `test/run_auto_test.sh`(18건)
 - **알아둘 점**: 이 스크립트에는 os_check 의 `===== LDAP 정보` 형태 요약 블록이 없어 auto_setup code 파일에는 리포트 블록과 설정체크 섹션만 실립니다. 실제 운영 run.sh·gossh·auto_setup 데몬 연동은 스텁 테스트만 했습니다
 

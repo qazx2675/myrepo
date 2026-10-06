@@ -65,6 +65,18 @@ user 선택·y/n 질문 없이 진행합니다(`... : y (-auto)` 에코). `작�
 - auto_setup 에서는 `os_check_sh` 에 이 스크립트의 경로를 지정하면 됩니다.
 - 테스트: `bash test/run_auto_test.sh` (gossh 스텁, 18건)
 
+#### 회사 사본에 반영하기 (`auto_mode.patch`)
+
+회사 사본은 벤더 문자열 등을 직접 수정해 쓰므로 **덮어쓰지 말고 패치만 적용**합니다 (`-auto`·완료기록 변경분만 담긴 diff).
+
+```bash
+cp config_check.sh config_check.sh.bak          # 백업
+patch config_check.sh < auto_mode.patch         # 적용 (실패한 hunk 는 config_check.sh.rej)
+bash -n config_check.sh && echo OK              # 문법 확인
+```
+
+그다음 상단 `auto_done_dir`(os8_mgmt 로컬) 또는 `auto_done_host`(autofs 공유 시 이것만)를 채우고, auto_setup 의 `conf/auto_setup.conf` 에 `os_check_sh=<config_check.sh 전체 경로>` 를 적습니다.
+
 ## 3. 옵션별 상세 설명
 
 ### 환경설정 수정 (y / n / set)
@@ -151,6 +163,7 @@ undefined  undefined    2ea Std 27Year asdf KERNEL RHEL2
 |---|---|
 | `config_check.sh` | 스크립트 본체 |
 | `test/run_auto_test.sh` | `-auto`·완료기록 테스트 (gossh 스텁) |
+| `auto_mode.patch` | `-auto`·완료기록 변경분만 담은 패치 (회사 사본에 `patch` 로 적용) |
 | `계획서.md` | 요구사항·설계 결정·검증 계획 |
 | `ARCHITECTURE.md` | 함수/파일 → 역할 표 |
 | `PR_CHECKLIST.md` | 수정 후 확인 체크리스트 |
