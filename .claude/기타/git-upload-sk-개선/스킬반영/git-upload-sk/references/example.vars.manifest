@@ -1,0 +1,27 @@
+# config_check vars.manifest — config_check.sh 상단 설정 구역의 "빈 변수" 7개 (git-upload-sk 파일럿)
+#
+# 형식: name|target|kind|role|group|required|desc|example|check|since|renamed_from  (| 구분 11필드)
+#   - 설명 안 줄바꿈은 \n, 값에 세로선(파이프) 문자를 쓸 수 없다 → 여러 값을 세로선으로 구분하는 변수는 설명에 말로 풀어 쓴다.
+#   - target 은 프로젝트 루트(setup/ 의 상위) 기준 상대경로.
+#   - 역할: os8 = os8_mgmt(auto_setup 데몬이 있는 서버), os6 = os6_mgmt. common 은 어느 역할에서나 질문.
+#   - config_check 는 setup.sh 가 없으므로 #@meta setup 을 두지 않는다 (가이드가 설치 단계를 건너뜀).
+#
+#@meta project=config_check
+#@meta version=1.1.0
+#
+# 마스킹 판정 키워드 (기본: # 주석 줄, 담당자, 감사합니다, 점검부탁) + 이 스크립트의 벤더 코멘트 문구
+#@guard 담당자|감사합니다|점검부탁
+#@guard 하기서버|OS 설치 완료|배포이후|올라오지 않는
+#
+# 완료기록 택일: 어느 서버에서 실행하느냐에 따라 둘 중 하나만 채운다 (요구사항 2-1)
+#@xor done|이 스크립트는 어느 서버에서 실행됩니까?|auto_done_dir:auto_setup 데몬이 있는 서버(os8_mgmt)에서 실행 - 이 서버의 로컬 done 디렉터리에 직접 기록|auto_done_host:다른 서버(os6_mgmt 등)에서 실행하거나 autofs 로 os8_mgmt·os6_mgmt 가 이 스크립트를 공유 - gossh 로 os8_mgmt 에 접속해 대신 기록
+#
+# ---- 기존 변수 (이 업데이트 이전부터 있던 것: since 1.0.0 → 업데이트 시 묻지 않음) ----
+os6_host|sh:config_check.sh|host|common|-|n|이 서버의 hostname 이 이 값과 같으면 OS6 용 gossh(/user/siy/gossh/OS6)를 PATH 앞에 추가한다.\nOS6 관리 서버의 hostname(짧은 이름 또는 전체 이름)을 넣는다. 비워 두면 PATH 를 바꾸지 않는다.|os6mgmt01|host|1.0.0|-
+uptime_enable_user|sh:config_check.sh|text|common|-|n|uptime 을 함께 확인할 user 이름. 여러 user 는 세로선(파이프) 문자로 이어 쓴다 (예: user1 과 user2 를 세로선으로 연결).\n목록의 user 가 이 값과 완전히 일치할 때만 작업 진행 직후 gossh 로 uptime 을 실행한다. 비워 두면 uptime 확인을 하지 않는다.|user1|none|1.0.0|-
+ai_server_list|sh:config_check.sh|text|common|-|n|AI GPU 서버의 hostname. 여러 대는 세로선(파이프) 문자로 이어 쓴다 (완전 일치, 정규식 아님).\n점검 대상 목록에 이 서버가 있으면 마무리에서 ai_server_script 를 실행하고 "AI GPU 서버있음" 안내를 출력한다. 비워 두면 이 단계를 건너뛴다.|gpuhost01|none|1.0.0|-
+ai_server_script|sh:config_check.sh|path|common|dep:ai_server_list|n|AI GPU 서버에서 gossh 로 실행할 스크립트의 경로 (해당 서버 기준 경로; 이 서버에 없어도 된다).\nai_server_list 가 채워진 경우에만 필요하며, 비워 두면 안내 문구만 출력하고 스크립트는 실행하지 않는다.|/user/svrauto/SA/check/ai_check.sh|none|1.0.0|-
+dhcp_server|sh:config_check.sh|host|common|-|n|접속불가(pingX) 호스트의 DHCP 정보를 조회할 서버. ssh 로 접속해 off_server_list_<user> 를 올리고 /root/a.sh 를 실행한다 (user@host 형식 가능).\n비워 두면 "dhcp_server 미설정 - DHCP 정보 생략" 안내만 출력한다.|root@dhcpmgmt01|probe|1.0.0|-
+# ---- 이번 업데이트(1.1.0)에서 추가된 변수: auto_setup 완료기록 (택일 그룹 done) ----
+auto_done_dir|sh:config_check.sh|path|os8|xor:done|n|완료기록 = 호스트별 파일 1개에 한 줄 "epoch user sha256 source" (source 예: config_check). auto_setup 데몬이 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/done/<호스트> 를 읽어 "체크 스크립트가 끝낸 호스트"로 인정한다.\n[누가 기록] 스크립트가 자기 서버의 로컬 디렉터리에 직접 기록한다 (임시파일을 만들어 mv 로 원자 기록).\n[어디에] <auto_done_dir>/<호스트> — 데몬이 읽는 done/ 디렉터리와 같은 경로여야 한다 (보통 os8_mgmt 에서 /tmp/auto_setup/done).\n[언제 채우나] 이 스크립트가 데몬이 있는 서버(os8_mgmt)에서 실행될 때.\n[주의] 이 값을 채운 채 os6_mgmt 에서 실행하면 os6 로컬에 기록되어 데몬이 못 본다. autofs 로 한 스크립트를 os8_mgmt·os6_mgmt 가 공유하면 서버별로 값을 다르게 못 채우므로 이 변수는 비우고 auto_done_host 만 채운다.\n[기록 대상] 설정 적용 후 재체크 결과에 에러 없이 나온 호스트만 (ERROR·접속불가 호스트는 기록하지 않음). 입력값은 이미 있는 디렉터리인지 점검한다 (오타로 엉뚱한 디렉터리가 새로 만들어져 데몬이 못 보는 것을 막기 위함; 없으면 건너뛰고 나중에 직접 채운다). 이 변수와 auto_done_host 는 하나만 채우며, 둘 다 비면 아무 동작도 하지 않는다 (출력·파일 없음).|/tmp/auto_setup/done|dir|1.1.0|-
+auto_done_host|sh:config_check.sh|host|os8,os6|xor:done|n|완료기록 = 호스트별 파일 1개에 한 줄 "epoch user sha256 source" (source 예: config_check). auto_setup 데몬이 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/done/<호스트> 를 읽어 "체크 스크립트가 끝낸 호스트"로 인정한다.\n[누가 기록] 스크립트가 gossh 로 이 서버(데몬이 있는 서버)에 접속해 대신 기록한다.\n[어디에] 이 서버의 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/done/<호스트>.\n[언제 채우나] 이 스크립트가 다른 서버(os6_mgmt 등)에서 실행되어 데몬 서버로 기록을 보내야 할 때. autofs 로 os8_mgmt·os6_mgmt 가 한 스크립트를 공유하는 경우에도 이 변수만 채운다 (os8_mgmt 에서 실행돼도 자기 자신에게 gossh 접속).\n[기록 대상] 설정 적용 후 재체크 결과에 에러 없이 나온 호스트만 (ERROR·접속불가 호스트는 기록하지 않음). gossh 인증이 키로 안 되면 auto_setup 쪽 auto_setup_gossh_pw (gossh -p) 도 필요하다. 이 변수와 auto_done_dir 는 하나만 채우며, 둘 다 비면 아무 동작도 하지 않는다 (출력·파일 없음).|os8mgmt01|probe|1.1.0|-
