@@ -8,6 +8,7 @@ lacp_comment=""
 inventory_delete_host=""     # 원문은 함수 안 → 최상단으로 이동
 infra_alias=""               # 등록되지 않은 infra 이름 치환 "adjfg:infra1 foo:infra2" (공백/쉼표 구분, 비워 두면 치환 없음)
 auto_setup_host=""           # (auto_setup) os8_mgmt 호스트명(os6_mgmt 등 다른 서버에서 채움): 비어 있으면 로컬 queue, 있으면 gossh 로 그 서버 queue 에 전송
+auto_setup_gossh_pw=""       # (auto_setup) os8_mgmt 에 gossh 키 인증이 안 될 때 쓰는 SSH 비밀번호(gossh -p). 비우면 -p 없이 호출. 커밋에는 항상 빈 값
 svr_idr="$svr_dir"           # git 블록 원문($svr_idr 오타)을 그대로 쓰기 위한 별칭
 
 # ==== [0] 공통: 시작 경로 · 임시물 정리 · 로그 ====
@@ -381,7 +382,7 @@ if [[ -n $auto_setup_host ]]; then
 	as_b64=$(base64 -w0 < "$as_job" 2>/dev/null | sed 's/../&./g')   # 두 글자마다 '.': base64 가 gossh 위험어(ddc/halt 등)를 우연히 만들지 않게
 	as_out=""
 	if command -v gossh >/dev/null 2>&1 && [[ -n $as_b64 ]]; then
-		as_out=$(gossh -script -w "$as_hl" "bash -c 'd=\"\${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue\"; mkdir -p \"\$d\" && echo ${as_b64} | tr -d . | base64 -d > \"\$d/.${as_name}.tmp\" && mv -f \"\$d/.${as_name}.tmp\" \"\$d/${as_name}\" && echo AUTO_SETUP_OK'" 2>/dev/null)
+		as_out=$(gossh ${auto_setup_gossh_pw:+-p "$auto_setup_gossh_pw"} -script -w "$as_hl" "bash -c 'd=\"\${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue\"; mkdir -p \"\$d\" && echo ${as_b64} | tr -d . | base64 -d > \"\$d/.${as_name}.tmp\" && mv -f \"\$d/.${as_name}.tmp\" \"\$d/${as_name}\" && echo AUTO_SETUP_OK'" 2>/dev/null)
 	fi
 	if [[ $as_out == *AUTO_SETUP_OK* ]]; then
 		log "auto_setup 전달 : $(grep -c . "$hostfile")대 → ${auto_setup_host}"

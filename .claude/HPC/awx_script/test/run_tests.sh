@@ -753,6 +753,7 @@ STUB
 	t_eq "원격 내용 == 로컬 전달 내용(time=·yml 파일명 epoch 제외)" "$(grep -v '^time=' "$rf" | sed 's/inventory-[0-9]*/inventory-N/g')" "$(grep -v '^time=' "$lq" | sed 's/inventory-[0-9]*/inventory-N/g')"
 	t_has "원격 time=<epoch>" "$rf" '^time=[0-9]+$'
 	t_eq "gossh 전송 호출 1회, 대상 os8.lab" "$(grep -c '^gossh-autosetup host=os8.lab ' "$CALLS")" 1
+	t_eq "비밀번호 변수 비면 -p 없음" "$(grep -c "^gossh-autosetup host=os8.lab -script " "$CALLS")" 1
 	t_has "전달 로그(4대 → 호스트)" "$OUT" 'auto_setup 전달 : 4대 → os8\.lab$'
 	t_no "경고 없음" "$OUT" 'auto_setup 전달 실패'
 	t_notmp
@@ -775,6 +776,20 @@ STUB
 	t_notmp
 	case_end
 
+
+	case_begin "7p" "auto_setup_gossh_pw 채움 → gossh 전송에 -p <비밀번호> 전달(비우면 -p 없음), 전송 성공"
+	setup_case
+	seed_raw D7
+	sed -i -e 's#^auto_setup_host=""#auto_setup_host="os8.lab"#' -e 's#^auto_setup_gossh_pw=""#auto_setup_gossh_pw="pw 1!x"#' "$W/$F01"
+	t_eq "복사본 주입 1건" "$(grep -c '^auto_setup_gossh_pw="pw 1!x"' "$W/$F01")" 1
+	remote_stub
+	run01 'N\nY\nls\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "gossh 전송 호출에 -p 'pw 1!x' (공백·특수문자 포함 한 인자)" "$(grep -c '^gossh-autosetup host=os8.lab -p pw 1!x -script ' "$CALLS")" 1
+	t_has "전달 로그" "$OUT" 'auto_setup 전달 : 4대 → os8\.lab$'
+	t_no "경고 없음" "$OUT" 'auto_setup 전달 실패'
+	t_eq "비밀번호가 로그·화면에 출력되지 않음" "$(grep -c 'pw 1!x' "$OUT")" 0
+	case_end
 	# 7d: 02 직접 실행 + 실패
 	case_begin "7d" "02 직접 실행: 첫 yml invsync 실패 → 다음 yml 진행 + 요약 + exit 1"
 	setup_case
