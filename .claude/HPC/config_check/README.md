@@ -161,6 +161,7 @@ undefined  undefined    2ea Std 27Year asdf KERNEL RHEL2
 | 파일 | 설명 |
 |---|---|
 | `config_check.sh` | 스크립트 본체 |
+| `workflow.svg` | 처리 흐름도 |
 | `test/run_auto_test.sh` | `-auto`·완료기록 테스트 (gossh 스텁) |
 | `auto_mode.patch` | `-auto`·완료기록 변경분만 담은 패치(주석·코멘트 줄 불변) |
 | `apply_auto_mode.sh` | 회사 사본에 패치 적용 + 주석·코멘트 변경 검사 + 백업 |
