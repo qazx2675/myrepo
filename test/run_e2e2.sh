@@ -306,7 +306,7 @@ sc_b() {
 
 # ============================================================
 sc_c() {
-	echo "== c) 요청 채널·TUI: manual-run 거부(완료 전)/수락(완료 후) → 데몬 수동 run → code·snapshot, 원격 request, pty TUI 스모크"
+	echo "== c) 요청 채널·TUI: manual-run 완료 여부와 무관하게 수락(미완료 그룹은 접속불가 알림) → 데몬 수동 run → code·snapshot, 원격 request, pty TUI 스모크"
 	e2e_scen c
 	export PATH="$STUBPATH"
 	local C="$S/c_state" J=$E2E_CLOSED_JOB CODE F N
@@ -316,15 +316,14 @@ sc_c() {
 	# 사용법 검사
 	env AUTO_SETUP_DIR="$C" "$BASE" request manual-run only-one > /dev/null 2> "$S/c.err"
 	t_eq "c0 인자 부족 request → 사용법, rc=1" "$?|$(grep -c '^사용법: auto_setup' "$S/c.err")" "1|1"
-	# 완료 전 그룹(bad.yml: 실패 호스트 포함) → 거부
+	# 미완료 그룹(bad.yml: 실패 호스트 포함)도 수락 → 수동 run → 응답 없는 호스트는 wall 에 접속불가로 알림
 	env AUTO_SETUP_DIR="$C" "$BASE" request manual-run "$J" bad.yml > "$S/c.out" 2>&1
 	t_eq "c1 request(bad.yml) 등록 rc" "$?" 0
 	t_has "c1 출력: 요청 등록" "$S/c.out" '\[O\] 요청 등록: [0-9]+_manual-run\.req'
-	wait_cond 20 '[[ -n $(ls "$C/requests/rejected" 2> /dev/null) ]]'
-	F=$(ls "$C"/requests/rejected/*.req 2> /dev/null | head -1)
-	t_has "c1 거부: requests/rejected 에 원문 + reason(완료 전 호스트)" "$F" '^reason=완료 전 호스트 1대 \(dk3\)$'
-	t_hasF "c1 거부 로그 1회" "$C/auto_setup.log" "요청 거부"
-	t_eq "c1 거부된 요청은 run 을 만들지 않음(codes 0)" "$(ls "$C/codes" | wc -l)" 0
+	if wait_cond 40 '[[ $(ls "$C/codes" 2> /dev/null | wc -l) -ge 1 ]]'; then ok "c1 미완료 그룹 수락 → 수동 run 실행"; else bad "c1 미완료 그룹 수동 run" "$(tail -4 "$C/auto_setup.log" | paste -sd'|')"; fi
+	wait_for 20 grep -q '수동 run 완료' "$C/auto_setup.log"
+	t_eq "c1 미완료 그룹은 거부되지 않음(rejected 0)" "$(ls "$C/requests/rejected" 2> /dev/null | wc -l)" 0
+	t_hasF "c1 wall: 미완료 그룹 수동 run 알림(스텁은 dk3 처리됨)" "$E2E_SCEN/wall.log" "dk3 (1대)"
 	t_eq "c1 requests/ 큐 비움" "$(find "$C/requests" -maxdepth 1 -name '*.req' | wc -l)" 0
 	# 알 수 없는 job → 거부
 	env AUTO_SETUP_DIR="$C" "$BASE" request manual-run no-such-job x.yml > /dev/null 2>&1
@@ -332,9 +331,9 @@ sc_c() {
 	t_has "c2 없는 job → reason=job 없음" <(cat "$C"/requests/rejected/*.req) '^reason=job 없음$'
 	# 완료된 그룹(ok.yml) → 수락 → 수동 run
 	env AUTO_SETUP_DIR="$C" "$BASE" request manual-run "$J" ok.yml > /dev/null 2>&1
-	if wait_cond 40 '[[ -n $(ls "$C/codes" 2> /dev/null) ]]'; then ok "c3 수락 → 데몬 수동 run 실행(스텁 os_check) → code 생성"; else bad "c3 수동 run" "$(tail -4 "$C/auto_setup.log" | paste -sd'|')"; fi
-	wait_for 20 grep -q '수동 run 완료' "$C/auto_setup.log"
-	CODE=$(ls "$C/codes" | head -1 | sed 's/\.txt$//')
+	if wait_cond 40 '[[ $(ls "$C/codes" 2> /dev/null | wc -l) -ge 2 ]]'; then ok "c3 수락 → 데몬 수동 run 실행(스텁 os_check) → code 생성"; else bad "c3 수동 run" "$(tail -4 "$C/auto_setup.log" | paste -sd'|')"; fi
+	wait_cond 20 '[[ $(grep -c "수동 run 완료" "$C/auto_setup.log") -ge 2 ]]'
+	CODE=$(ls -t "$C/codes" | head -1 | sed 's/\.txt$//')
 	t_hasF "c3 로그: 요청 수락·수동 run 시작·완료" "$C/auto_setup.log" "요청 수락:"
 	t_has "c3 수동 run 시작 로그(그룹 ok.yml 2대)" "$C/auto_setup.log" "수동 run 시작: job $J 그룹 ok.yml 2대"
 	t_eq "c3 수동 run targets = 그룹 호스트 전체" "$(paste -sd' ' "$C/runs/$CODE/targets.txt")" "dk1 dk2"

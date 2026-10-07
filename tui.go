@@ -382,12 +382,10 @@ func (st *tuiState) handleDetail(ev keyEv) {
 	}
 }
 
-// startManual: c — 그룹 전체가 complete 일 때만 확인(y/n) 단계로
+// startManual: c — 완료 여부와 상관없이 확인(y/n) 단계로 (이미 대기·진행 중이면 안내)
 func (st *tuiState) startManual(g *SnapGroup) {
 	j, _ := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 	switch {
-	case !g.Complete:
-		st.sel.Msg = fmt.Sprintf("수동 실행 불가: 그룹 전체가 완료여야 합니다 (완료 %d/%d)", g.Counts.Done, g.Counts.Total)
 	case j != nil && hasManual(j, g.Yml):
 		st.sel.Msg = "이미 이 그룹의 수동 run 이 대기·진행 중입니다"
 	case st.recentlyRequested():

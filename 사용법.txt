@@ -55,10 +55,10 @@ auto_setup cancel 20261002-153000-user1
 # 다른 경로(수동 작업 등)로 이미 끝난 호스트를 완료 처리 — 부팅 시각 검증이 없으니 정말 끝난 호스트에만 (여러 대 가능)
 auto_setup done web01 web02
 
-# 수동 OS 체크 실행 요청: 해당 그룹(yml) 의 모든 호스트가 완료된 뒤에만 수락, 데몬 run 큐에서 실행됨 (TUI 의 c 키와 같음)
+# 수동 OS 체크 실행 요청: 완료 여부와 상관없이 그룹(yml) 전체를 시도, 접속불가 호스트는 wall 에 표시, 데몬 run 큐에서 실행됨 (TUI 의 c 키와 같음)
 auto_setup request manual-run 20261002-153000-user1 gpu.yml
 
-# 요청이 거부됐는지 확인 (마지막 줄 reason= 에 사유: 완료 전 호스트/job 없음 등)
+# 요청이 거부됐는지 확인 (마지막 줄 reason= 에 사유: job/그룹 없음, 같은 그룹 중복 등)
 cat /tmp/auto_setup/requests/rejected/*.req
 
 # 로그 보기 (상태 변화·실행·오류만 기록됨, 비밀번호 값은 남지 않음)

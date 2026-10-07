@@ -15,7 +15,7 @@ import (
 
 // 요청 종류 (payload 는 key=value 줄)
 const (
-	ReqManualRun = "manual-run" // payload: jobid=<id> yml=<그룹>  → 그룹 호스트 전체가 완료일 때만 수락, 데몬 run 큐에 수동 run
+	ReqManualRun = "manual-run" // payload: jobid=<id> yml=<그룹>  → 완료 여부와 상관없이 수락, 그룹 호스트 전체를 데몬 run 큐에서 수동 run (접속불가는 wall 에 표시)
 	ReqCancel    = "cancel"     // payload: jobid=<id>            → auto_setup cancel 과 동일
 	ReqRefresh   = "refresh"    // payload: 없음                  → 다음 step 에서 ping·준비확인 즉시 수행 (TUI r 키)
 )
@@ -182,15 +182,7 @@ func (d *Daemon) acceptManualRun(pl map[string]string) string {
 	if !ok || len(hosts) == 0 {
 		return "그룹 없음"
 	}
-	var notDone []string
-	for _, h := range hosts {
-		if j.Hosts[h].Processed == "" {
-			notDone = append(notDone, h)
-		}
-	}
-	if len(notDone) > 0 {
-		return fmt.Sprintf("완료 전 호스트 %d대 (%s)", len(notDone), strings.Join(notDone, " "))
-	}
+	// 완료 여부와 상관없이 그룹 전체를 시도한다 (접속불가 호스트는 수동 run 결과 wall 에 따로 알림)
 	for _, name := range listReqFiles(reqActiveDir()) {
 		b, _ := os.ReadFile(filepath.Join(reqActiveDir(), name))
 		if q := parseRequest(b); q["jobid"] == id && q["yml"] == yml {

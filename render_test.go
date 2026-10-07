@@ -314,9 +314,9 @@ func TestRenderContent(t *testing.T) {
 	if !strings.Contains(renderOverview(sampleNoJob(), selection{}, 80, 24, false), "○ 데몬 중지") {
 		t.Error("데몬 정지 표시")
 	}
-	// 화면 2: 미완료 그룹은 회색 비활성 안내, 완료 그룹은 활성
+	// 화면 2: 완료 여부와 상관없이 수동 실행 활성 (미완료 그룹도 비활성 안내 없음)
 	d := renderDetail(s, selection{Detail: true, JobID: "J1", Yml: "web.yml"}, 120, 24, false)
-	if !strings.Contains(d, "비활성") || !strings.Contains(d, "LDAP 적용실패") || !strings.Contains(d, "정체") {
+	if strings.Contains(d, "비활성") || !strings.Contains(d, "[c] OS 체크 수동 실행(이중체크)") || !strings.Contains(d, "LDAP 적용실패") || !strings.Contains(d, "정체") {
 		t.Errorf("화면 2:\n%s", d)
 	}
 	a := sampleAllDone()
