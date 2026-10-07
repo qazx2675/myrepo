@@ -3,6 +3,8 @@
 # dhcp / pxe 가 서로 다른 infra 이름을 쓰는 경우의 치환: "표시infra:넘길값" (공백/쉼표 구분, 표시infra 는 대소문자 무시). 비우면 치환 없음
 dhcp_infra_alias=""          # 예: "infra1:asdf"   → dhcp -infra asdf
 pxe_infra_alias=""           # 예: "infra1:asdfl"  → pxe  -infra asdfl
+# (os6 재조사) 01 이 export 한 값을 쓴다. 02 단독 실행 때만 직접 채움. 하나라도 비면 재조사 생략 (파티션 확인에서 os8_mgmt 접속 불가 호스트를 os6_mgmt 에서 다시 확인)
+os6_host=${os6_host:-}; os6_user=${os6_user:-}; os6_dir=${os6_dir:-}; os6_gossh=${os6_gossh:-}
 # 치환 목록에서 infra 에 해당하는 값을 찾는다 (없으면 infra 그대로): map_infra "<목록>" "<infra>"
 map_infra() {
 	local p k v=${2,,}
@@ -136,7 +138,8 @@ fi
 # (한 단계 실패 시 해당 yml 의 나머지는 건너뛰고 다음 yml 진행)
 results=(); fail_cnt=0; ok=()
 outdir=$(mktemp -d)
-trap 'rm -rf "$outdir"' EXIT
+os6_tmp=()                   # os6 재조사용으로 공유 디렉터리에 만든 임시 파일 (종료 시 삭제)
+trap 'rm -rf "$outdir" "${os6_tmp[@]}"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 for ((i=0; i<total; i++)); do
@@ -216,12 +219,49 @@ fi
 # 파티션 표준 확인: ${user}.txt 의 호스트에서 lsblk 를 읽어 표준 여부를 판정한다 (정보 출력만, 종료코드에 영향 없음)
 #  표준 = 물리 파티션(LVM 아님), OS 디스크는 sda 또는 nvme0n1, /boot 또는 /boot/efi 500~512M, / 30G, /var 20G, swap 존재, /tmp(나머지)
 #  이외의 마운트·파티션이 있으면 표준과 다른 파티션으로 보고한다 (용량은 lsblk 표시값 기준)
+# os6_mgmt 재조사 공통 (01 의 같은 이름 함수와 동일 — 수정 시 01 도 함께 수정)
+os6_enabled() { [[ -n $os6_host && -n $os6_user && -n $os6_dir && -n $os6_gossh ]]; }
+os6_run() {   # <호스트목록파일> <gossh 명령> <stdout 저장파일> <stderr 저장파일>
+	local hf=$1 cmd=$2 so=$3 se=$4 rh rr
+	[[ -d $os6_dir ]] || { warn "[!] os6_dir 경로가 없습니다: $os6_dir"; return 1; }
+	rh=$(mktemp "$os6_dir/.os6_hosts.XXXXXX") || return 1
+	rr=$(mktemp "$os6_dir/.os6_run.XXXXXX") || { rm -f "$rh"; return 1; }
+	os6_tmp+=("$rh" "$rr")
+	cp "$hf" "$rh"
+	printf '%q -script -w %q %q\n' "$os6_gossh" "$rh" "$cmd" > "$rr"
+	chmod 644 "$rh" "$rr"
+	ssh -o BatchMode=yes -o ConnectTimeout=10 "${os6_user}@${os6_host}" "bash $(printf '%q' "$rr")" < /dev/null > "$so" 2> "$se"
+}
+os6_failed() {   # <호스트목록파일> <stdout파일> <stderr파일> : stderr 에 나온 호스트 중 stdout 에 한 줄도 없는 호스트
+	LC_ALL=C comm -23 \
+		<(sed $'s/\033\\[[0-9;]*m//g' "$3" | sed -n 's/^\([^ :]*\): .*/\1/p' | LC_ALL=C sort -u | LC_ALL=C comm -12 - <(LC_ALL=C sort -u "$1")) \
+		<(sed -n 's/^\([^ :]*\): .*/\1/p' "$2" | LC_ALL=C sort -u)
+}
+
 check_partitions() {
 	echo "${BOLD}===== 파티션 표준 확인 =====${RST}"
 	if [[ ! -f ${user}.txt ]]; then warn "[!] ${user}.txt 가 없어 파티션 확인을 건너뜁니다"; return 0; fi
 	if ! command -v gossh >/dev/null 2>&1; then warn "[!] gossh 가 없어 파티션 확인을 건너뜁니다"; return 0; fi
 	awk '{print $4}' "${user}.txt" | grep . | LC_ALL=C sort -u > "$outdir/hosts"
-	gossh -script -w "$outdir/hosts" "lsblk -nl -o NAME,TYPE,SIZE,MOUNTPOINT" < /dev/null > "$outdir/lsblk"
+	local cmd="lsblk -nl -o NAME,TYPE,SIZE,MOUNTPOINT" retry n6 noresp_label="lsblk 응답 없음(확인 불가)"
+	gossh -script -w "$outdir/hosts" "$cmd" < /dev/null > "$outdir/lsblk" 2> "$outdir/lsblk.err"
+	cat "$outdir/lsblk.err" >&2
+	# os8_mgmt 에서 접속 불가인 호스트는 os6_mgmt 에서 다시 확인하고 그 호스트의 결과를 os6 값으로 교체
+	retry=$(os6_failed "$outdir/hosts" "$outdir/lsblk" "$outdir/lsblk.err")
+	if [[ -n $retry ]] && os6_enabled; then
+		echo "os8_mgmt 접속 불가 $(printf '%s\n' "$retry" | grep -c .)대 → os6_mgmt(${os6_host}) 재조사"
+		printf '%s\n' "$retry" > "$outdir/retry"
+		if os6_run "$outdir/retry" "$cmd" "$outdir/lsblk6" "$outdir/lsblk6.err"; then
+			cat "$outdir/lsblk6.err" >&2
+			awk 'NR == FNR { h[$1] = 1; next } { i = index($0, ": "); if (i < 2 || !(substr($0, 1, i-1) in h)) print }' "$outdir/retry" "$outdir/lsblk" > "$outdir/lsblk.new" \
+				&& cat "$outdir/lsblk6" >> "$outdir/lsblk.new" && mv "$outdir/lsblk.new" "$outdir/lsblk"
+			n6=$(printf '%s\n' "$retry" | LC_ALL=C comm -12 - <(sed -n 's/^\([^ :]*\): .*/\1/p' "$outdir/lsblk6" | LC_ALL=C sort -u) | grep -c .)
+			(( n6 > 0 )) && echo "${GREEN}os6_mgmt 재조사 결과 반영 : ${n6}대${RST}"
+		else
+			warn "[!] os6_mgmt 재조사 실행 실패 (ssh/gossh 확인) — os8_mgmt 결과만 사용"
+		fi
+		noresp_label="os8/os6 모두 접속 불가(확인 불가)"
+	fi
 	awk -v red="$RED" -v grn="$GREEN" -v rst="$RST" '
 	function mib(s,   n, u) { n = s + 0; u = substr(s, length(s), 1); if (u == "K") return n / 1024; if (u == "M") return n; if (u == "G") return n * 1024; if (u == "T") return n * 1048576; return n / 1048576 }
 	function diskof(nm) { if (nm ~ /^nvme/) sub(/p[0-9]+$/, "", nm); else sub(/[0-9]+$/, "", nm); return nm }
@@ -269,7 +309,7 @@ check_partitions() {
 	}' "$outdir/lsblk"
 	local noresp
 	noresp=$(LC_ALL=C comm -23 "$outdir/hosts" <(sed -n 's/^\([^ :]*\): .*/\1/p' "$outdir/lsblk" | LC_ALL=C sort -u))
-	[[ -z $noresp ]] || warn "[!] lsblk 응답 없음(확인 불가) : $(printf '%s\n' "$noresp" | paste -sd' ' -)"
+	[[ -z $noresp ]] || warn "[!] ${noresp_label} : $(printf '%s\n' "$noresp" | paste -sd' ' -)"
 }
 check_partitions
 

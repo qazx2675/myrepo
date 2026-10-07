@@ -80,20 +80,23 @@ setup_case() {
 	cfg_lacp_comment=LACP-COMMENT-SENTINEL
 	cfg_inventory_delete_host=delhost.lab
 	cfg_infra_alias=""
+	cfg_os6_host=""; cfg_os6_user=""; cfg_os6_dir=""; cfg_os6_gossh=""
 	cfg_raw=0; cfg_user=1
 	S=$(TMPDIR=/tmp mktemp -d); SCRATCHES+=("$S")
 	W=$S/work
 	mkdir -p "$W/awxkit" "$W/.stublog" "$W/svr_dir" "$S/tmp" "$S/bin" "$S/remote/Inventory" "$S/root_user/$TU/myrepo"
 	cfg_svr_dir=$W/svr_dir
+	mkdir -p "$S/os6share"
 	for kv in "$@"; do
 		k=${kv%%=*}; v=${kv#*=}
 		printf -v "cfg_$k" '%s' "$v"
 	done
+	cfg_os6_dir=${cfg_os6_dir//@S@/$S}; cfg_os6_gossh=${cfg_os6_gossh//@S@/$S}
 	STUBLOG=$W/.stublog; SVR_DIR=$W/svr_dir; REMOTE_DIR=$S/remote/Inventory
 	CALLS=$STUBLOG/calls.log; OUT=$S/out.txt
 	: > "$CALLS"
 	export STUBLOG SVR_DIR REMOTE_DIR
-	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO
+	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL
 	export GOSSH_SCENARIO=same
 	export AUTO_SETUP_DIR="$S/as"   # 01 [14-1] auto_setup 전달 위치(스크래치)
 	export PATH="$S/bin:$ORIG_PATH"
@@ -110,6 +113,10 @@ setup_case() {
 			-e "s#^lacp_comment=\"\"#lacp_comment=\"$cfg_lacp_comment\"#" \
 			-e "s#^inventory_delete_host=\"\"#inventory_delete_host=\"$cfg_inventory_delete_host\"#" \
 			-e "s#^infra_alias=\"\"#infra_alias=\"$cfg_infra_alias\"#" \
+			-e "s#^os6_host=\"\"#os6_host=\"$cfg_os6_host\"#" \
+			-e "s#^os6_user=\"\"#os6_user=\"$cfg_os6_user\"#" \
+			-e "s#^os6_dir=\"\"#os6_dir=\"$cfg_os6_dir\"#" \
+			-e "s#^os6_gossh=\"\"#os6_gossh=\"$cfg_os6_gossh\"#" \
 			-e "s#/root/user/#$S/root_user/#g" \
 			"$W/$F01"
 		if [[ $cfg_user == 1 ]]; then
@@ -121,7 +128,7 @@ user(){\
 		fi
 		# 무결성: 복사본과 원본의 차이는 최상단 변수/user 본문/git 경로 줄뿐이어야 한다
 		local bad
-		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|day_print|lacp_comment|inventory_delete_host|infra_alias)=|^> '$'\t''user=testuser$|root_user')
+		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|day_print|lacp_comment|inventory_delete_host|infra_alias|os6_host|os6_user|os6_dir|os6_gossh)=|^> '$'\t''user=testuser$|root_user')
 		if [[ -n $bad ]]; then echo "[HARNESS ERROR] 복사본 sed 가 예상 외 줄을 변경: $bad"; exit 2; fi
 		if [[ $cfg_user == 1 ]] && ! grep -q $'^\tuser=testuser$' "$W/$F01"; then
 			echo "[HARNESS ERROR] user() 본문 치환 실패"; exit 2; fi
@@ -187,6 +194,13 @@ if [[ $cmd =~ custom_inventory\.sh[[:space:]]+([^[:space:]]+) ]]; then
 	infra=$(awk 'NR==1 {print $3}' "$f")
 	{ echo "# generated on $host from $(basename "$f")"; cat "$f"; } > "$SVR_DIR/${infra}_inventory-$(date +%s)_${n}ea.yml"
 fi
+# os6 재조사: 스크립트가 공유 디렉터리에 만든 실행 파일(.os6_run.*)을 "os6_mgmt 에서" 실행하는 흉내 (OS6_SCENARIO / OS6_LSBLK_SCENARIO 로 gossh 스텁 제어)
+if [[ $cmd =~ bash[[:space:]]+([^[:space:]]*\.os6_run\.[^[:space:]]+) ]]; then
+	echo "os6-ssh $*" >> "$STUBLOG/calls.log"
+	[[ -n $OS6_SSH_FAIL ]] && { echo "stub ssh: os6 접속 실패" >&2; exit 255; }
+	GOSSH_SCENARIO=${OS6_SCENARIO:-same} LSBLK_SCENARIO=${OS6_LSBLK_SCENARIO:-std} bash "${BASH_REMATCH[1]}"
+	exit $?
+fi
 exit 0
 STUB
 	cat > "$S/bin/scp" <<'STUB'
@@ -201,7 +215,8 @@ STUB
 	cat > "$S/bin/gossh" <<'STUB'
 #!/bin/bash
 cmd=${@: -1}
-if [[ $cmd == *lsblk* ]]; then echo "gossh-lsblk $*" >> "$STUBLOG/calls.log"; else echo "gossh $*" >> "$STUBLOG/calls.log"; fi
+tag=""; [[ $* == *.os6_hosts.* ]] && tag="os6-"
+if [[ $cmd == *lsblk* ]]; then echo "${tag}gossh-lsblk $*" >> "$STUBLOG/calls.log"; else echo "${tag}gossh $*" >> "$STUBLOG/calls.log"; fi
 hf=""
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -220,6 +235,7 @@ if [[ $cmd == *lsblk* ]]; then
 	}
 	for ((i = 0; i < n; i++)); do
 		h=${hs[i]}
+		if [[ ${LSBLK_SCENARIO:-std} == down ]] && (( i == n - 1 )); then echo "$h: 접속불가 (Timeout)" >&2; continue; fi
 		case ${LSBLK_SCENARIO:-std}.$i in
 			bad.1) row "sda disk 500G"; row "sda1 part 500M /boot"; row "sda2 part 100G"
 			       row "rhel-root lvm 30G /"; row "rhel-var lvm 20G /var" ;;
@@ -239,7 +255,7 @@ for ((i = 0; i < n; i++)); do
 	case $GOSSH_SCENARIO in
 		diff)   (( i > 0 )) && v=$'INFO\tLDAP\tINFRA9\tSITE9' ;;
 		lacp)   (( i < 2 )) && mode="IEEE 802.3ad Dynamic link aggregation" ;;
-		noresp) if (( i == n - 1 )); then echo "ERROR $h: connect timeout" >&2; continue; fi ;;
+		noresp) if (( i == n - 1 )); then echo "$h: 접속불가 (Timeout)" >&2; continue; fi ;;
 	esac
 	printf '%s: %s\n' "$h" "$v"
 	printf '%s: Bonding Mode: %s\n' "$h" "$mode"
@@ -1174,6 +1190,99 @@ ext_cases() {
 	done
 }
 
+# ===================== 케이스 16/17: os6_mgmt 재조사 =====================
+os6_cases() {
+	local os6args=('os6_host=os6.lab' 'os6_user=root' 'os6_dir=@S@/os6share' 'os6_gossh=@S@/bin/gossh')
+
+	case_begin "16a" "01: os8 접속불가 host03 → os6 재조사 성공 → 응답없음 없음, 호스트 목록은 host03 만 전달, 공유 dir 잔여 0"
+	setup_case ai_server_list='' "${os6args[@]}"
+	seed_raw D6; export GOSSH_SCENARIO=noresp OS6_SCENARIO=same
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "os6 ssh 1회" "$(grep -c '^os6-ssh ' "$CALLS")" 1
+	t_eq "os6 로 넘긴 호스트 = host03 만" "$(cat "$STUBLOG/gossh_hosts.txt")" "host03"
+	t_has "재조사 안내" "$OUT" 'os8_mgmt 접속 불가 1대 → os6_mgmt\(os6\.lab\) 재조사'
+	t_has "반영 안내" "$OUT" 'os6_mgmt 재조사 결과 반영 : 1대'
+	t_no "응답 없음 줄 없음" "$OUT" '(응답 없음|모두 접속 불가) :'
+	t_has "LDAP 전체 동일(os6 값 합침)" "$OUT" '^모든 호스트의 LDAP이 .*동일함$'
+	t_eq "공유 dir 임시파일 잔여 0" "$(find "$S/os6share" -mindepth 1 | wc -l)" 0
+	t_notmp
+	case_end
+
+	case_begin "16b" "01: os6 에서도 접속불가 → 'os8/os6 모두 접속 불가' 목록만 경고, 진행은 계속(rc 0)"
+	setup_case "${os6args[@]}"
+	seed_raw D6; export GOSSH_SCENARIO=noresp OS6_SCENARIO=noresp
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "모두 접속 불가 : host03" "$OUT" '^os8/os6 모두 접속 불가 : host03$'
+	t_no "반영 안내 없음" "$OUT" 'os6_mgmt 재조사 결과 반영'
+	t_eq "공유 dir 임시파일 잔여 0" "$(find "$S/os6share" -mindepth 1 | wc -l)" 0
+	case_end
+
+	case_begin "16c" "01: os6 변수가 비어 있으면 재조사 생략(기존 '응답 없음' 그대로, os6 호출 0)"
+	setup_case
+	seed_raw D6; export GOSSH_SCENARIO=noresp
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "응답 없음 : host03" "$OUT" '^응답 없음 : host03$'
+	t_eq "os6 ssh 0회" "$(grep -c '^os6-ssh ' "$CALLS")" 0
+	case_end
+
+	case_begin "16d" "01: os6 ssh 실패 → 경고 후 os8 결과만으로 진행(rc 0)"
+	setup_case "${os6args[@]}"
+	seed_raw D6; export GOSSH_SCENARIO=noresp OS6_SSH_FAIL=1
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "재조사 실행 실패 경고" "$OUT" '^\[!\] os6_mgmt 재조사 실행 실패'
+	t_has "모두 접속 불가 : host03" "$OUT" '^os8/os6 모두 접속 불가 : host03$'
+	t_eq "공유 dir 임시파일 잔여 0" "$(find "$S/os6share" -mindepth 1 | wc -l)" 0
+	case_end
+
+	case_begin "16e" "01: os6 결과로 교체된 호스트가 LACP 판정에 반영된다"
+	setup_case "${os6args[@]}"
+	seed_raw D6; export GOSSH_SCENARIO=noresp OS6_SCENARIO=lacp
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "LACP 호스트 줄 + 코멘트 줄" "$(grep -B1 'LACP-COMMENT-SENTINEL' "$OUT" | paste -sd'/')" "host03/LACP-COMMENT-SENTINEL"
+	case_end
+
+	case_begin "17a" "02: 파티션 확인에서 host03 접속불가 → os6 재조사로 표준 판정 (os6 호출 1회)"
+	setup_case "${os6args[@]}"
+	seed_raw D6
+	export os6_host=$cfg_os6_host os6_user=$cfg_os6_user os6_dir=$cfg_os6_dir os6_gossh=$cfg_os6_gossh
+	export LSBLK_SCENARIO=down OS6_LSBLK_SCENARIO=std
+	run02 '1\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1
+	t_rc "02 종료코드" "$RC" 0
+	t_has "재조사 안내" "$S/out.txt" '^os8_mgmt 접속 불가 1대 → os6_mgmt\(os6\.lab\) 재조사$'
+	t_has "모두 표준(3대)" "$S/out.txt" '^모든 호스트\(3대\)가 표준 파티션입니다$'
+	t_eq "os6 lsblk 호출 1회" "$(grep -c '^os6-gossh-lsblk ' "$CALLS")" 1
+	t_eq "공유 dir 임시파일 잔여 0" "$(find "$S/os6share" -mindepth 1 | wc -l)" 0
+	unset os6_host os6_user os6_dir os6_gossh LSBLK_SCENARIO OS6_LSBLK_SCENARIO
+	case_end
+
+	case_begin "17b" "02: os6 에서도 접속불가 → 'os8/os6 모두 접속 불가(확인 불가)' 경고, rc 0"
+	setup_case "${os6args[@]}"
+	seed_raw D6
+	export os6_host=$cfg_os6_host os6_user=$cfg_os6_user os6_dir=$cfg_os6_dir os6_gossh=$cfg_os6_gossh
+	export LSBLK_SCENARIO=down OS6_LSBLK_SCENARIO=down
+	run02 '1\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1
+	t_rc "02 종료코드" "$RC" 0
+	t_has "모두 접속 불가 경고" "$S/out.txt" '^\[!\] os8/os6 모두 접속 불가\(확인 불가\) : host03$'
+	unset os6_host os6_user os6_dir os6_gossh LSBLK_SCENARIO OS6_LSBLK_SCENARIO
+	case_end
+
+	case_begin "17c" "02: os6 변수가 비어 있으면 재조사 생략(기존 'lsblk 응답 없음' 그대로)"
+	setup_case
+	seed_raw D6
+	export LSBLK_SCENARIO=down
+	run02 '1\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1
+	t_rc "02 종료코드" "$RC" 0
+	t_has "lsblk 응답 없음" "$S/out.txt" '^\[!\] lsblk 응답 없음\(확인 불가\) : host03$'
+	t_eq "os6 호출 0회" "$(grep -c '^os6-' "$CALLS")" 0
+	unset LSBLK_SCENARIO
+	case_end
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -1191,6 +1300,7 @@ eof_cases
 color_cases
 feature_cases
 ext_cases
+os6_cases
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="

@@ -9,6 +9,11 @@ inventory_delete_host=""     # 원문은 함수 안 → 최상단으로 이동
 infra_alias=""               # 등록되지 않은 infra 이름 치환 "adjfg:infra1 foo:infra2" (공백/쉼표 구분, 비워 두면 치환 없음)
 auto_setup_host=""           # (auto_setup) os8_mgmt 호스트명(os6_mgmt 등 다른 서버에서 채움): 비어 있으면 로컬 queue, 있으면 gossh 로 그 서버 queue 에 전송
 auto_setup_gossh_pw=""       # (auto_setup) os8_mgmt 에 gossh 키 인증이 안 될 때 쓰는 SSH 비밀번호(gossh -p). 비우면 -p 없이 호출. 커밋에는 항상 빈 값
+os6_host=""                  # (os6 재조사) os6_mgmt 호스트명. os8_mgmt 에서 접속 불가인 호스트를 os6_mgmt 에서 다시 확인. 네 변수 중 하나라도 비면 재조사 생략
+os6_user=""                  # (os6 재조사) os6_mgmt ssh 계정 (키 인증, 예: root)
+os6_dir=""                   # (os6 재조사) os8/os6 가 같은 절대경로로 공유(auto mount)하는 디렉터리. 호스트 목록·실행 파일을 임시로 둠
+os6_gossh=""                 # (os6 재조사) os6_mgmt 의 gossh 절대경로
+export os6_host os6_user os6_dir os6_gossh   # 02 의 파티션 확인에서도 사용
 svr_idr="$svr_dir"           # git 블록 원문($svr_idr 오타)을 그대로 쓰기 위한 별칭
 
 # ==== [0] 공통: 시작 경로 · 임시물 정리 · 로그 ====
@@ -244,10 +249,32 @@ git_upload() {
 	cd "$now_pwd"
 }
 
+# [12-0] os6_mgmt 재조사 공통 (02 의 파티션 확인과 같은 함수를 쓰므로 수정 시 02 도 함께 수정)
+# 네 변수가 모두 채워져 있어야 동작. os8_mgmt 에서 접속 불가인 호스트를 os6_mgmt 의 gossh 로 다시 조사한다
+os6_enabled() { [[ -n $os6_host && -n $os6_user && -n $os6_dir && -n $os6_gossh ]]; }
+# os6_run <호스트목록파일> <gossh 명령> <stdout 저장파일> <stderr 저장파일> : 공유 디렉터리에 목록·실행 파일을 만들고 ssh 로 실행만 한다
+os6_run() {
+	local hf=$1 cmd=$2 so=$3 se=$4 rh rr
+	[[ -d $os6_dir ]] || { warn "[!] os6_dir 경로가 없습니다: $os6_dir"; return 1; }
+	rh=$(mktemp "$os6_dir/.os6_hosts.XXXXXX") || return 1
+	rr=$(mktemp "$os6_dir/.os6_run.XXXXXX") || { rm -f "$rh"; return 1; }
+	add_tmp "$rh" "$rr"
+	cp "$hf" "$rh"
+	printf '%q -script -w %q %q\n' "$os6_gossh" "$rh" "$cmd" > "$rr"
+	chmod 644 "$rh" "$rr"
+	ssh -o BatchMode=yes -o ConnectTimeout=10 "${os6_user}@${os6_host}" "bash $(printf '%q' "$rr")" < /dev/null > "$so" 2> "$se"
+}
+# os6_failed <호스트목록파일> <stdout파일> <stderr파일> : stderr 에 나온 호스트 중 stdout 에 한 줄도 없는 호스트(목록 안의 호스트만)
+os6_failed() {
+	LC_ALL=C comm -23 \
+		<(sed $'s/\033\\[[0-9;]*m//g' "$3" | sed -n 's/^\([^ :]*\): .*/\1/p' | LC_ALL=C sort -u | LC_ALL=C comm -12 - <(LC_ALL=C sort -u "$1")) \
+		<(sed -n 's/^\([^ :]*\): .*/\1/p' "$2" | LC_ALL=C sort -u)
+}
+
 # [12] AI 서버 안내 · LDAP/LACP 점검, hostfile 채움
 check_servers() {
 	require_var lacp_comment
-	local out="tmp/all_${user}" lacp_hosts noresp
+	local out="tmp/all_${user}" lacp_hosts noresp cmd err_f retry rl o6 e6 n6 noresp_label="응답 없음"
 
 	awk '{print $4}' "${user}.txt" > "$hostfile"
 
@@ -263,7 +290,27 @@ check_servers() {
 
 	# gossh -script 출력(stdout)은 "호스트명: 줄" 형식. 접속불가/ERROR 는 stderr 라 파일에 없음
 	mkdir -p tmp
-	gossh -script -w "$hostfile" "cat /etc/openldap/ldap.conf |grep -v '#' |grep -i uri |awk -F= '{print \$2}' |awk -F',' '{print \$1}';cat /proc/net/bonding/bond0 |grep -i mod" > "$out"
+	cmd="cat /etc/openldap/ldap.conf |grep -v '#' |grep -i uri |awk -F= '{print \$2}' |awk -F',' '{print \$1}';cat /proc/net/bonding/bond0 |grep -i mod"
+	err_f=$(mktemp); add_tmp "$err_f"
+	gossh -script -w "$hostfile" "$cmd" > "$out" 2> "$err_f"
+	cat "$err_f" >&2
+
+	# os8_mgmt 에서 접속 불가(stderr 에 나온 호스트 중 응답 없음)인 호스트는 os6_mgmt 에서 다시 조사하고, 그 호스트의 결과를 os6 값으로 교체
+	retry=$(os6_failed "$hostfile" "$out" "$err_f")
+	if [[ -n $retry ]] && os6_enabled; then
+		log "os8_mgmt 접속 불가 $(printf '%s\n' "$retry" | grep -c .)대 → os6_mgmt(${os6_host}) 재조사"
+		rl=$(mktemp); o6=$(mktemp); e6=$(mktemp); add_tmp "$rl" "$o6" "$e6" "$out.new"
+		printf '%s\n' "$retry" > "$rl"
+		if os6_run "$rl" "$cmd" "$o6" "$e6"; then
+			cat "$e6" >&2
+			awk 'NR == FNR { h[$1] = 1; next } { i = index($0, ": "); if (i < 2 || !(substr($0, 1, i-1) in h)) print }' "$rl" "$out" > "$out.new" && cat "$o6" >> "$out.new" && mv "$out.new" "$out"
+			n6=$(printf '%s\n' "$retry" | LC_ALL=C comm -12 - <(sed -n 's/^\([^ :]*\): .*/\1/p' "$o6" | LC_ALL=C sort -u) | grep -c .)
+			(( n6 > 0 )) && echo "${GREEN}os6_mgmt 재조사 결과 반영 : ${n6}대${RST}"
+		else
+			warn "[!] os6_mgmt 재조사 실행 실패 (ssh/gossh 확인) — os8_mgmt 결과만 사용"
+		fi
+		noresp_label="os8/os6 모두 접속 불가"
+	fi
 
 	# LACP(802.3ad) 호스트 한 줄 나열
 	lacp_hosts=$(grep -i 'Bonding Mode' "$out" | grep -i '802\.3ad' | cut -d: -f1 | LC_ALL=C sort -u)
@@ -295,7 +342,7 @@ check_servers() {
 	noresp=$(LC_ALL=C comm -23 <(LC_ALL=C sort -u "$hostfile" | grep .) \
 		<(sed -n 's/^\([^ :]*\): .*/\1/p' "$out" | LC_ALL=C sort -u))
 	if [[ -n $noresp ]]; then
-		echo "${RED}응답 없음 : $(printf '%s\n' "$noresp" | paste -sd' ' -)${RST}"
+		echo "${RED}${noresp_label} : $(printf '%s\n' "$noresp" | paste -sd' ' -)${RST}"
 	fi
 }
 
