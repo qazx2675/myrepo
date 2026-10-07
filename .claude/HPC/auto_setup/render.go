@@ -251,6 +251,12 @@ func findGroup(s Snapshot, jobID, yml string) (*SnapJob, *SnapGroup) {
 		if s.Jobs[ji].ID != jobID {
 			continue
 		}
+		if yml == allView {
+			if g := mergedGroup(&s.Jobs[ji]); g != nil {
+				return &s.Jobs[ji], g
+			}
+			return nil, nil
+		}
 		for gi := range s.Jobs[ji].Groups {
 			if s.Jobs[ji].Groups[gi].Yml == yml {
 				return &s.Jobs[ji], &s.Jobs[ji].Groups[gi]
@@ -490,7 +496,7 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 	}
 	return finish(head, body, cursor, height, width, color, []string{
 		msgLine(sel, width, color),
-		segLine(color, width, seg{" ↑↓ 이동  ←→ 작업 전환  Enter 상세  r 새로고침  ? 도움말  q 종료", stGray}),
+		segLine(color, width, seg{" ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료", stGray}),
 	})
 }
 
@@ -540,8 +546,26 @@ func hostTable(hosts []SnapHost, host int, now int64, width int, color bool) (st
 		hostW = rMax(hostW, rMin(strWidth(cleanText(h.Host)), 28))
 	}
 	const stageW, elapsedW = 8, 7
+	ymlW := 0 // 전체 보기(호스트에 Yml 이 있음)면 그룹 yml 열을 추가
+	for _, h := range hosts {
+		if h.Yml != "" {
+			ymlW = rMax(ymlW, rMin(strWidth(cleanText(h.Yml)), 22))
+		}
+	}
+	if ymlW > 0 {
+		ymlW = rMax(ymlW, 9)
+	}
+	ymlCol := func(y string) string {
+		if ymlW == 0 {
+			return ""
+		}
+		return padR(truncW(y, ymlW), ymlW) + "  "
+	}
 	noteW := rMax(width-2-hostW-2-stageW-2-elapsedW-2, 0)
-	hdr := segLine(color, width, seg{"  " + padR("호스트", hostW) + "  " + padR("단계", stageW) + "  " +
+	if ymlW > 0 {
+		noteW = rMax(noteW-ymlW-2, 0)
+	}
+	hdr := segLine(color, width, seg{"  " + padR("호스트", hostW) + "  " + ymlCol("그룹(yml)") + padR("단계", stageW) + "  " +
 		padL("경과", elapsedW) + "  " + padR("비고", noteW), stBold})
 	var lines []string
 	cursor := 0
@@ -558,7 +582,7 @@ func hostTable(hosts []SnapHost, host int, now int64, width int, color bool) (st
 		if label == "" {
 			label = h.Stage.Label()
 		}
-		segs := []seg{{mark, ""}, {padR(h.Host, hostW), ""}, {"  ", ""}, {padR(label, stageW), stageStyle(h.Stage)},
+		segs := []seg{{mark, ""}, {padR(h.Host, hostW), ""}, {"  ", ""}, {ymlCol(h.Yml), stGray}, {padR(label, stageW), stageStyle(h.Stage)},
 			{"  ", ""}, {padL(el, elapsedW), ""}, {"  ", ""}, {padR(hostNoteText(h, now), noteW), noteStyle(h)}}
 		if i == host {
 			cursor = len(lines)
@@ -582,10 +606,11 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 	if j.Closed {
 		state = " [종료된 작업]"
 	}
-	head := []string{
-		segLine(color, width, seg{fmt.Sprintf(" job %s / %s  (%s)  완료 %d/%d%s", j.ID, g.Yml, specText(*g),
-			g.Counts.Done, g.Counts.Total, state), stBold}),
+	title := fmt.Sprintf(" job %s / %s  (%s)  완료 %d/%d%s", j.ID, g.Yml, specText(*g), g.Counts.Done, g.Counts.Total, state)
+	if sel.Yml == allView {
+		title = fmt.Sprintf(" job %s / 전체 호스트 (그룹 %d개)  완료 %d/%d%s", j.ID, len(j.Groups), g.Counts.Done, g.Counts.Total, state)
 	}
+	head := []string{segLine(color, width, seg{title, stBold})}
 	cs := []seg{{" ", ""}}
 	for _, st := range StageOrder {
 		if n := g.Counts.Get(st); n > 0 {
@@ -617,7 +642,10 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 
 	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
 		msgLine(sel, width, color)}
-	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 수동 실행  r 새로고침  ? 도움말  q 복귀"
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 수동 실행  a 전체 그룹  r 새로고침  ? 도움말  q 복귀"
+	if sel.Yml == allView {
+		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀"
+	}
 	foot = append(foot, segLine(color, width, seg{hint, stGray}))
 	if height <= 0 {
 		return strings.Join(append(head, body...), "\n")
@@ -627,6 +655,9 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 
 // runInfoLine: 이 그룹의 수동 run 대기·진행 / 최근 결과 code
 func runInfoLine(s Snapshot, j *SnapJob, g *SnapGroup, width int, color bool) string {
+	if g.Yml == allView {
+		return ""
+	}
 	for _, m := range j.Manual {
 		if m.Yml != g.Yml {
 			continue
@@ -648,6 +679,9 @@ func runInfoLine(s Snapshot, j *SnapJob, g *SnapGroup, width int, color bool) st
 
 // manualLine: [c] OS 체크 수동 실행 — 완료 여부와 상관없이 활성(그룹 전체 시도, 접속불가는 wall 에 표시), 확인 중이면 y/n 질문
 func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
+	if g.Yml == allView {
+		return segLine(color, width, seg{" 전체 보기 - 수동 실행(c)은 그룹별 화면에서 하세요 (a 로 돌아가 그룹 선택)", stGray})
+	}
 	if sel.Confirm {
 		extra := ""
 		if n := g.Counts.Total - g.Counts.Done; n > 0 {
@@ -669,6 +703,7 @@ func renderHelp(width, height int, color bool) string {
 		"   ↑ ↓ (k j)   그룹 행 이동",
 		"   ← →         이전/다음 작업(job) 으로 이동",
 		"   Enter       선택한 그룹의 호스트표(화면 2)",
+		"   a           선택한 job 의 모든 그룹(yml) 호스트를 한 표로 (그룹 열 표시)",
 		"   r           바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동: 로컬 2초, 원격 5초)",
 		"   q / Esc     종료",
 		" 화면 2 (호스트표)",
@@ -717,4 +752,30 @@ func renderPlain(s Snapshot, width int) string {
 		}
 	}
 	return sb.String()
+}
+
+// allView: 화면 2 의 특수 그룹 이름 — 한 job 의 모든 그룹(yml) 호스트를 한 표로 본다 (TUI a 키)
+const allView = "*"
+
+// mergedGroup: job 의 모든 그룹 호스트를 그룹 순서대로 이어 붙인 가상 그룹 (그룹이 없으면 nil).
+// 호스트마다 Yml 을 채워 표에 yml 열이 나온다. 수동 실행 대상이 아니다(그룹별로 실행).
+func mergedGroup(j *SnapJob) *SnapGroup {
+	if len(j.Groups) == 0 {
+		return nil
+	}
+	m := &SnapGroup{Yml: allView, Hosts: []SnapHost{}, Complete: true}
+	for _, g := range j.Groups {
+		m.Counts.merge(g.Counts)
+		if g.MaxElapsed > m.MaxElapsed {
+			m.MaxElapsed = g.MaxElapsed
+		}
+		if !g.Complete {
+			m.Complete = false
+		}
+		for _, h := range g.Hosts {
+			h.Yml = g.Yml
+			m.Hosts = append(m.Hosts, h)
+		}
+	}
+	return m
 }

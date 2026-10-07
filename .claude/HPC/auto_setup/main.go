@@ -47,6 +47,7 @@ const usageText = `사용법: auto_setup [명령]
   code NNNN           code 에 해당하는 결과 코멘트 출력
   cancel <jobid>      무기한 감시 중인 작업 종료
   done <host...>      호스트를 수동 완료 처리 (부팅 시각 검증 없음)
+  done --job <jobid> [--yml <그룹>]  job(또는 그 그룹)의 미완료 호스트 전부를 수동 완료 처리
   request manual-run <jobid> <yml>   수동 OS 체크 실행 요청
   request cancel <jobid>             작업 종료 요청
   request refresh                    즉시 ping·준비확인 요청 (TUI r 키와 같음)

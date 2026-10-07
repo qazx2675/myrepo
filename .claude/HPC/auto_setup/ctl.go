@@ -2,10 +2,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -95,8 +98,15 @@ func cmdSnapshot() int {
 	return 0
 }
 
-// cmdDone: auto_setup done <host...> (출처 manual)
+// cmdDone: auto_setup done <host...> | done --job <jobid> [--yml <그룹>] (출처 manual)
 func cmdDone(hosts []string) int {
+	if len(hosts) > 0 && hosts[0] == "--job" {
+		var err error
+		if hosts, err = jobPendingHosts(hosts[1:]); err != nil {
+			msgErr("%v", err)
+			return 1
+		}
+	}
 	if err := markDone(hosts, DoneSrcManual); err != nil {
 		msgErr("%v", err)
 		return 1
@@ -189,4 +199,44 @@ func cmdDaemonCtl(name string) int {
 		return rc
 	}
 	return startDaemon()
+}
+
+// jobPendingHosts: done --job <jobid> [--yml <그룹>] 의 대상 — 진행 중 job(jobs/<id>.json)에서 아직 완료(processed)가 아닌 호스트.
+// --yml 이 있으면 그 그룹의 호스트만. 이미 완료된 호스트는 건드리지 않는다. 읽기만 하며 job 파일은 바꾸지 않는다.
+func jobPendingHosts(a []string) ([]string, error) {
+	if len(a) != 1 && !(len(a) == 3 && a[1] == "--yml") {
+		return nil, errors.New("사용법: auto_setup done --job <jobid> [--yml <그룹>]")
+	}
+	id := a[0]
+	if !validID(id) {
+		return nil, fmt.Errorf("잘못된 jobid: %q", id)
+	}
+	j, err := loadJobFile(jobFile(id))
+	if err != nil {
+		return nil, fmt.Errorf("진행 중인 job 이 없습니다: %s (auto_setup status 로 jobid 확인)", id)
+	}
+	names := make([]string, 0, len(j.Hosts))
+	if len(a) == 3 {
+		hs, ok := groupHosts(j, a[2])
+		if !ok {
+			return nil, fmt.Errorf("job %s 에 그룹 %q 이(가) 없습니다", id, a[2])
+		}
+		names = hs
+	} else {
+		for n := range j.Hosts {
+			names = append(names, n)
+		}
+	}
+	var out []string
+	for _, n := range uniq(names) {
+		if h := j.Hosts[n]; h != nil && h.Processed == "" {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil, fmt.Errorf("job %s 에 완료 처리할 미완료 호스트가 없습니다", id)
+	}
+	msgOK("job %s 미완료 호스트 %d대: %s", id, len(out), strings.Join(out, " "))
+	return out, nil
 }
