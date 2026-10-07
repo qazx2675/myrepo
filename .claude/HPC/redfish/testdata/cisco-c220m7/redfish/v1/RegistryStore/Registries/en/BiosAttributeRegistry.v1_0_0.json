@@ -1,0 +1,300 @@
+{
+  "@odata.id": "/redfish/v1/RegistryStore/Registries/en/BiosAttributeRegistry.v1_0_0",
+  "@odata.type": "#AttributeRegistry.v1_3_5.AttributeRegistry",
+  "Id": "BiosAttributeRegistry.v1_0_0",
+  "Name": "BIOS Attribute Registry (mock)",
+  "Language": "en",
+  "RegistryVersion": "1.0.0",
+  "OwningEntity": "Cisco",
+  "RegistryEntries": {
+    "Attributes": [
+      {
+        "AttributeName": "CPUPerformance",
+        "DisplayName": "CPUPerformance",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enterprise",
+            "ValueDisplayName": "Enterprise"
+          },
+          {
+            "ValueName": "HighThroughput",
+            "ValueDisplayName": "HighThroughput"
+          },
+          {
+            "ValueName": "HPC",
+            "ValueDisplayName": "HPC"
+          },
+          {
+            "ValueName": "Custom",
+            "ValueDisplayName": "Custom"
+          }
+        ]
+      },
+      {
+        "AttributeName": "IntelHyperThread",
+        "DisplayName": "IntelHyperThread",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "LLCPrefetch",
+        "DisplayName": "LLCPrefetch",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SNC",
+        "DisplayName": "SNC",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "CPUPowerManagement",
+        "DisplayName": "CPUPowerManagement",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Performance",
+            "ValueDisplayName": "Performance"
+          },
+          {
+            "ValueName": "Energy-Efficient",
+            "ValueDisplayName": "Energy-Efficient"
+          },
+          {
+            "ValueName": "Custom",
+            "ValueDisplayName": "Custom"
+          }
+        ]
+      },
+      {
+        "AttributeName": "EnhancedIntelSpeedStep",
+        "DisplayName": "EnhancedIntelSpeedStep",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "IntelTurboBoostTech",
+        "DisplayName": "IntelTurboBoostTech",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcessorCState",
+        "DisplayName": "ProcessorCState",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "IntelVirtualizationTechnology",
+        "DisplayName": "IntelVirtualizationTechnology",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SRIOV",
+        "DisplayName": "SRIOV",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "NUMA",
+        "DisplayName": "NUMA",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "OSBootWatchdogTimer",
+        "DisplayName": "OSBootWatchdogTimer",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "MemoryRefreshRate",
+        "DisplayName": "MemoryRefreshRate",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "1x",
+            "ValueDisplayName": "1x"
+          },
+          {
+            "ValueName": "2x",
+            "ValueDisplayName": "2x"
+          }
+        ]
+      },
+      {
+        "AttributeName": "PCIeASPM",
+        "DisplayName": "PCIeASPM",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "enabled",
+            "ValueDisplayName": "enabled"
+          },
+          {
+            "ValueName": "disabled",
+            "ValueDisplayName": "disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "AssetTag",
+        "DisplayName": "AssetTag",
+        "Type": "String",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      },
+      {
+        "AttributeName": "SerialNumber",
+        "DisplayName": "SerialNumber",
+        "Type": "String",
+        "ReadOnly": true,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      }
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

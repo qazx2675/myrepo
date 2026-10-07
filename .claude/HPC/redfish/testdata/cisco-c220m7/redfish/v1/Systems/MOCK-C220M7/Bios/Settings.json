@@ -1,0 +1,11 @@
+{
+  "@odata.id": "/redfish/v1/Systems/MOCK-C220M7/Bios/Settings",
+  "@odata.type": "#Bios.v1_0_5.Bios",
+  "Id": "Settings",
+  "Name": "BIOS Pending Settings",
+  "AttributeRegistry": "BiosAttributeRegistry.v1_0_0",
+  "Attributes": {},
+  "Oem": {
+    "MockData": true
+  }
+}

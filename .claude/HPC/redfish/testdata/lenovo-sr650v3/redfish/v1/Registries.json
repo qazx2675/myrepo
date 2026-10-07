@@ -1,0 +1,14 @@
+{
+  "@odata.id": "/redfish/v1/Registries",
+  "@odata.type": "#MessageRegistryFileCollection.MessageRegistryFileCollection",
+  "Name": "Registry File Collection",
+  "Members@odata.count": 1,
+  "Members": [
+    {
+      "@odata.id": "/redfish/v1/Registries/BiosAttributeRegistry.v1_0_0"
+    }
+  ],
+  "Oem": {
+    "MockData": true
+  }
+}

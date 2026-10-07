@@ -1,0 +1,14 @@
+{
+  "@odata.id": "/redfish/v1/systems/1/logservices/",
+  "@odata.type": "#LogServiceCollection.LogServiceCollection",
+  "Name": "Log Service Collection",
+  "Members@odata.count": 1,
+  "Members": [
+    {
+      "@odata.id": "/redfish/v1/systems/1/logservices/iml/"
+    }
+  ],
+  "Oem": {
+    "MockData": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/systems/1/logservices/iml/",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "IML",
+  "Name": "IML (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/systems/1/logservices/iml/entries/"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/systems/1/logservices/iml/actions/logservice.clearlog/"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

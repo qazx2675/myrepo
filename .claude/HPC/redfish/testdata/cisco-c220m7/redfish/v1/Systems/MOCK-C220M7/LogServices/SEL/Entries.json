@@ -1,0 +1,14 @@
+{
+  "@odata.id": "/redfish/v1/Systems/MOCK-C220M7/LogServices/SEL/Entries",
+  "@odata.type": "#LogEntryCollection.LogEntryCollection",
+  "Name": "Log Entry Collection",
+  "Members@odata.count": 1,
+  "Members": [
+    {
+      "@odata.id": "/redfish/v1/Systems/MOCK-C220M7/LogServices/SEL/Entries/1"
+    }
+  ],
+  "Oem": {
+    "MockData": true
+  }
+}

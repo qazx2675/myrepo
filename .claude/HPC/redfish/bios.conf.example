@@ -1,0 +1,31 @@
+# 레드피시 BIOS 점검 도구 설정 — 복사해서 사용: cp bios.conf.example bios.conf
+# 형식: key=value (# 로 시작하는 줄·빈 줄 무시, 줄 끝 주석은 불가)
+# 비밀번호는 여기에 적지 않습니다 -> bash encrypt.sh 로 pass.enc 생성
+
+# BMC 계정 ID (필수, 전 벤더 공통 계정 1개)
+user=admin
+
+# 암호화된 비밀번호 파일 / AES-256 키 파일 (encrypt.sh 가 0600 으로 생성)
+pass_file=pass.enc
+key_file=key.bin
+
+# 동시에 접속할 호스트 수
+concurrency=100
+
+# 요청 1건당 타임아웃(초)
+timeout=20
+
+# true: BMC 자체서명 인증서 검증 생략 / false: 검증
+insecure=true
+
+# 일시 오류(UNREACHABLE/TIMEOUT/5xx) 자동 재시도 횟수. 인증 실패(401)는 재시도하지 않음
+retries=2
+
+# 계정 잠금 방지: AUTH_FAIL(401) 호스트가 이 수에 이르면 새 호스트 시작을 멈추고 나머지는 SKIPPED_AUTH_STOP (retry.txt 로 재실행).
+# 처음 이 수만큼은 한 대씩(직렬) 접속해 로그인이 한 번이라도 성공하면 그때부터 동시 접속(concurrency)으로 전환합니다. 0 이면 끔.
+auth_fail_stop=3
+
+# 결과 TSV / 사전조사 덤프 / 프로파일 디렉터리
+result_dir=results
+dump_dir=dumps
+profile_dir=profiles

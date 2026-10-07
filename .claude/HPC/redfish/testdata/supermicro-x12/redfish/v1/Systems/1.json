@@ -1,0 +1,46 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1",
+  "@odata.type": "#ComputerSystem.v1_13_0.ComputerSystem",
+  "Id": "1",
+  "Name": "System",
+  "Manufacturer": "Supermicro",
+  "Model": "X12DPi-N6",
+  "SKU": "MOCK-SMC-X12",
+  "SerialNumber": "MOCK-SN-SMC-0001",
+  "PartNumber": "MOCK-PN",
+  "UUID": "00000000-0000-4000-8000-000000000105",
+  "BiosVersion": "2.0 (mock)",
+  "PowerState": "On",
+  "SystemType": "Physical",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Bios": {
+    "@odata.id": "/redfish/v1/Systems/1/Bios"
+  },
+  "Links": {
+    "ManagedBy": [
+      {
+        "@odata.id": "/redfish/v1/Managers/1"
+      }
+    ]
+  },
+  "Actions": {
+    "#ComputerSystem.Reset": {
+      "target": "/redfish/v1/Systems/1/Actions/ComputerSystem.Reset",
+      "ResetType@Redfish.AllowableValues": [
+        "On",
+        "ForceOff",
+        "GracefulRestart",
+        "ForceRestart"
+      ]
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/Systems/1/LogServices"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

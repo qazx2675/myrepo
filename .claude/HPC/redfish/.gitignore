@@ -1,0 +1,14 @@
+# 실제 대상 목록·접속 설정·비밀번호·키·결과물은 절대 커밋하지 않습니다.
+user.txt
+bios.conf
+pass.enc
+key.bin
+/results/
+/dumps/
+# bin/ 은 제외하지 않습니다: 회사 환경에는 Go 가 없어 빌드 완료 바이너리를 커밋합니다.
+# 개발·검증용 mock BMC 서버 바이너리(mockbmc.sh 가 필요할 때 빌드). 배포 대상이 아니므로 커밋하지 않습니다.
+/bin/mockbmc
+
+# 점검 결과·비교 목록은 실제 호스트 이름이 들어가므로 커밋하지 않습니다 (예시는 *.example).
+diff.txt
+ignore_attrs.txt

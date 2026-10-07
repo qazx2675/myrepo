@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/Managers/CIMC/LogServices/CIMCLog",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "CIMCLog",
+  "Name": "CIMCLog (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/Managers/CIMC/LogServices/CIMCLog/Entries"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/Managers/CIMC/LogServices/CIMCLog/Actions/LogService.ClearLog"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

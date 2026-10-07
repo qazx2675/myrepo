@@ -1,0 +1,311 @@
+{
+  "@odata.id": "/redfish/v1/RegistryStore/Registries/en/BiosAttributeRegistry.v1_0_0",
+  "@odata.type": "#AttributeRegistry.v1_3_5.AttributeRegistry",
+  "Id": "BiosAttributeRegistry.v1_0_0",
+  "Name": "BIOS Attribute Registry (mock)",
+  "Language": "en",
+  "RegistryVersion": "1.0.0",
+  "OwningEntity": "Lenovo",
+  "RegistryEntries": {
+    "Attributes": [
+      {
+        "AttributeName": "OperatingModes_ChooseOperatingMode",
+        "DisplayName": "OperatingModes_ChooseOperatingMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "MaximumEfficiency",
+            "ValueDisplayName": "MaximumEfficiency"
+          },
+          {
+            "ValueName": "MaximumPerformance",
+            "ValueDisplayName": "MaximumPerformance"
+          },
+          {
+            "ValueName": "CustomMode",
+            "ValueDisplayName": "CustomMode"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Processors_HyperThreading",
+        "DisplayName": "Processors_HyperThreading",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          },
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Processors_LLCPrefetch",
+        "DisplayName": "Processors_LLCPrefetch",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          },
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Processors_SNC",
+        "DisplayName": "Processors_SNC",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Processors_TurboMode",
+        "DisplayName": "Processors_TurboMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          },
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Processors_CStates",
+        "DisplayName": "Processors_CStates",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          },
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Processors_CPUPstateControl",
+        "DisplayName": "Processors_CPUPstateControl",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "None",
+            "ValueDisplayName": "None"
+          },
+          {
+            "ValueName": "Legacy",
+            "ValueDisplayName": "Legacy"
+          },
+          {
+            "ValueName": "Autonomous",
+            "ValueDisplayName": "Autonomous"
+          },
+          {
+            "ValueName": "Cooperative",
+            "ValueDisplayName": "Cooperative"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Processors_VirtualizationTechnology",
+        "DisplayName": "Processors_VirtualizationTechnology",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          },
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Memory_MemoryPowerManagement",
+        "DisplayName": "Memory_MemoryPowerManagement",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Automatic",
+            "ValueDisplayName": "Automatic"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Power_PowerPerformanceBias",
+        "DisplayName": "Power_PowerPerformanceBias",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Platform",
+            "ValueDisplayName": "Platform"
+          },
+          {
+            "ValueName": "OS",
+            "ValueDisplayName": "OS"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Power_WorkloadConfiguration",
+        "DisplayName": "Power_WorkloadConfiguration",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Balanced",
+            "ValueDisplayName": "Balanced"
+          },
+          {
+            "ValueName": "IOSensitive",
+            "ValueDisplayName": "IOSensitive"
+          }
+        ]
+      },
+      {
+        "AttributeName": "BootModes_SystemBootMode",
+        "DisplayName": "BootModes_SystemBootMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "UEFIMode",
+            "ValueDisplayName": "UEFIMode"
+          },
+          {
+            "ValueName": "LegacyMode",
+            "ValueDisplayName": "LegacyMode"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Devices_SRIOV",
+        "DisplayName": "Devices_SRIOV",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          },
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SystemRecovery_POSTWatchdogTimer",
+        "DisplayName": "SystemRecovery_POSTWatchdogTimer",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SystemRecovery_POSTWatchdogTimerValue",
+        "DisplayName": "SystemRecovery_POSTWatchdogTimerValue",
+        "Type": "Integer",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "LowerBound": 1,
+        "UpperBound": 20,
+        "ScalarIncrement": 1
+      },
+      {
+        "AttributeName": "SystemInfo_AssetTag",
+        "DisplayName": "SystemInfo_AssetTag",
+        "Type": "String",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      },
+      {
+        "AttributeName": "SystemInfo_SystemSerialNumber",
+        "DisplayName": "SystemInfo_SystemSerialNumber",
+        "Type": "String",
+        "ReadOnly": true,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      }
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

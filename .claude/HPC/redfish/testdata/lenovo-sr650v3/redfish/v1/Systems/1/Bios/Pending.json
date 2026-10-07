@@ -1,0 +1,11 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1/Bios/Pending",
+  "@odata.type": "#Bios.v1_0_5.Bios",
+  "Id": "Pending",
+  "Name": "BIOS Pending Settings",
+  "AttributeRegistry": "BiosAttributeRegistry.v1_0_0",
+  "Attributes": {},
+  "Oem": {
+    "MockData": true
+  }
+}

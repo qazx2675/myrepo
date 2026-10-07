@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/Systems/System.Embedded.1/LogServices/Sel",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "Sel",
+  "Name": "Sel (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/Systems/System.Embedded.1/LogServices/Sel/Entries"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/Systems/System.Embedded.1/LogServices/Sel/Actions/LogService.ClearLog"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "@odata.id": "/redfish/v1/systems/1/",
+  "@odata.type": "#ComputerSystem.v1_13_0.ComputerSystem",
+  "Id": "1",
+  "Name": "System",
+  "Manufacturer": "HPE",
+  "Model": "ProLiant DL360 Gen11",
+  "SKU": "MOCKHPE11-B21",
+  "SerialNumber": "MOCKHPE11SN",
+  "PartNumber": "MOCK-PN",
+  "UUID": "00000000-0000-4000-8000-000000000101",
+  "BiosVersion": "U54 v1.40 (01/15/2025)",
+  "PowerState": "On",
+  "SystemType": "Physical",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Bios": {
+    "@odata.id": "/redfish/v1/systems/1/bios/"
+  },
+  "Links": {
+    "ManagedBy": [
+      {
+        "@odata.id": "/redfish/v1/managers/1/"
+      }
+    ]
+  },
+  "Actions": {
+    "#ComputerSystem.Reset": {
+      "target": "/redfish/v1/systems/1/actions/computersystem.reset/",
+      "ResetType@Redfish.AllowableValues": [
+        "On",
+        "ForceOff",
+        "GracefulRestart",
+        "ForceRestart"
+      ]
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/systems/1/logservices/"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

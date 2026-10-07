@@ -1,0 +1,42 @@
+# .claude/HPC/redfish (biostool) 용 CI — 이 폴더가 바뀔 때만 실행된다.
+# 외부 의존성이 없는 프로젝트(go.mod 에 require 없음)라 vendor/ 가 없고, 인터넷 접속 없이(GOPROXY=off) 빌드·검증한다.
+# 이 폴더 자체가 저장소 루트가 되면 defaults.run.working-directory 블록을 제거한다.
+name: redfish CI
+
+on:
+  push:
+    paths:
+      - '.claude/HPC/redfish/**'
+      - '.github/workflows/redfish-ci.yml'
+  pull_request:
+    paths:
+      - '.claude/HPC/redfish/**'
+      - '.github/workflows/redfish-ci.yml'
+
+env:
+  GOPROXY: 'off'
+
+jobs:
+  build-test:
+    name: biostool (빌드·정적분석·테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/redfish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.20' }
+      - name: 오프라인 빌드 (setup.sh)
+        run: bash setup.sh
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+      - name: bash 문법 검사 (RHEL6 의 bash 4.1 에서도 돌아야 하는 래퍼들)
+        run: |
+          for f in *.sh; do bash -n "$f"; done
+      - name: 커밋된 빌드 완료 바이너리 확인 (회사 환경에는 Go 가 없음)
+        run: |
+          test -s bin/biostool
+          test -s bin/biostool_os6
+          file bin/biostool bin/biostool_os6

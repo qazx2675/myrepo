@@ -1,0 +1,37 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1/Bios",
+  "@odata.type": "#Bios.v1_0_5.Bios",
+  "Id": "Bios",
+  "Name": "BIOS Configuration Current Settings",
+  "AttributeRegistry": "BiosAttributeRegistry",
+  "Attributes": {
+    "PowerTechnology": "Custom",
+    "Hyper-Threading[ALL]": "Enable",
+    "LLCPrefetch": "Enable",
+    "SNC": "Disable",
+    "EIST": "Enable",
+    "TurboMode": "Enable",
+    "CStates": "Enable",
+    "VMXEnable": "Enable",
+    "SRIOVSupport": "Disable",
+    "BootMode": "UEFI",
+    "QuietBoot": "Disable",
+    "SerialPortConsoleRedirection": "Disable",
+    "WatchDogTimer": "Disable",
+    "ASPM": "Disable",
+    "MemoryPowerSaving": "Disable",
+    "AssetTag": "MOCK-SMC-ASSET-0001",
+    "SerialNumber": "MOCK-SN-SMC-0001"
+  },
+  "Actions": {
+    "#Bios.ResetBios": {
+      "target": "/redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios"
+    },
+    "#Bios.ChangePassword": {
+      "target": "/redfish/v1/Systems/1/Bios/Actions/Bios.ChangePassword"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

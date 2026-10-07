@@ -1,0 +1,46 @@
+{
+  "@odata.id": "/redfish/v1/Systems/MOCK-C220M7",
+  "@odata.type": "#ComputerSystem.v1_13_0.ComputerSystem",
+  "Id": "MOCK-C220M7",
+  "Name": "System",
+  "Manufacturer": "Cisco Systems Inc",
+  "Model": "UCSC-C220-M7S",
+  "SKU": "MOCK-CSC-C220M7",
+  "SerialNumber": "MOCK-SN-CSC-0001",
+  "PartNumber": "MOCK-PN",
+  "UUID": "00000000-0000-4000-8000-000000000104",
+  "BiosVersion": "C220M7.4.3.2 (mock)",
+  "PowerState": "On",
+  "SystemType": "Physical",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Bios": {
+    "@odata.id": "/redfish/v1/Systems/MOCK-C220M7/Bios"
+  },
+  "Links": {
+    "ManagedBy": [
+      {
+        "@odata.id": "/redfish/v1/Managers/CIMC"
+      }
+    ]
+  },
+  "Actions": {
+    "#ComputerSystem.Reset": {
+      "target": "/redfish/v1/Systems/MOCK-C220M7/Actions/ComputerSystem.Reset",
+      "ResetType@Redfish.AllowableValues": [
+        "On",
+        "ForceOff",
+        "GracefulRestart",
+        "ForceRestart"
+      ]
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/Systems/MOCK-C220M7/LogServices"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

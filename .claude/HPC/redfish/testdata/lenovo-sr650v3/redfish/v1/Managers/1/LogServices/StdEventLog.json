@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/Managers/1/LogServices/StdEventLog",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "StdEventLog",
+  "Name": "StdEventLog (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/Managers/1/LogServices/StdEventLog/Entries"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/Managers/1/LogServices/StdEventLog/Actions/LogService.ClearLog"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

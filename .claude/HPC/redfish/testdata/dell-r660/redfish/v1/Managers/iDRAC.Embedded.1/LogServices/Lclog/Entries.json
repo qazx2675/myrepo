@@ -1,0 +1,14 @@
+{
+  "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Lclog/Entries",
+  "@odata.type": "#LogEntryCollection.LogEntryCollection",
+  "Name": "Log Entry Collection",
+  "Members@odata.count": 1,
+  "Members": [
+    {
+      "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Lclog/Entries/1"
+    }
+  ],
+  "Oem": {
+    "MockData": true
+  }
+}

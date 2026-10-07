@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1/LogServices/Log1",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "Log1",
+  "Name": "Log1 (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/Systems/1/LogServices/Log1/Entries"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/Systems/1/LogServices/Log1/Actions/LogService.ClearLog"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

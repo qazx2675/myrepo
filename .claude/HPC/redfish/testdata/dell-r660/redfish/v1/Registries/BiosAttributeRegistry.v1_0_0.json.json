@@ -1,0 +1,380 @@
+{
+  "@odata.id": "/redfish/v1/Registries/BiosAttributeRegistry.v1_0_0.json",
+  "@odata.type": "#AttributeRegistry.v1_3_5.AttributeRegistry",
+  "Id": "BiosAttributeRegistry.v1_0_0",
+  "Name": "BIOS Attribute Registry (mock)",
+  "Language": "en",
+  "RegistryVersion": "1.0.0",
+  "OwningEntity": "Dell",
+  "RegistryEntries": {
+    "Attributes": [
+      {
+        "AttributeName": "SysProfile",
+        "DisplayName": "SysProfile",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "PerfPerWattOptimizedDapc",
+            "ValueDisplayName": "PerfPerWattOptimizedDapc"
+          },
+          {
+            "ValueName": "PerfPerWattOptimizedOs",
+            "ValueDisplayName": "PerfPerWattOptimizedOs"
+          },
+          {
+            "ValueName": "PerfOptimized",
+            "ValueDisplayName": "PerfOptimized"
+          },
+          {
+            "ValueName": "Custom",
+            "ValueDisplayName": "Custom"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcPwrPerf",
+        "DisplayName": "ProcPwrPerf",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "SysDbpm",
+            "ValueDisplayName": "SysDbpm"
+          },
+          {
+            "ValueName": "OsDbpm",
+            "ValueDisplayName": "OsDbpm"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcCStates",
+        "DisplayName": "ProcCStates",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcTurboMode",
+        "DisplayName": "ProcTurboMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "LogicalProc",
+        "DisplayName": "LogicalProc",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "LlcPrefetch",
+        "DisplayName": "LlcPrefetch",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SubNumaCluster",
+        "DisplayName": "SubNumaCluster",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcVirtualization",
+        "DisplayName": "ProcVirtualization",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcX2Apic",
+        "DisplayName": "ProcX2Apic",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "NodeInterleave",
+        "DisplayName": "NodeInterleave",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "MemTest",
+        "DisplayName": "MemTest",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SriovGlobalEnable",
+        "DisplayName": "SriovGlobalEnable",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "PcieAspmL1",
+        "DisplayName": "PcieAspmL1",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "UncoreFrequency",
+        "DisplayName": "UncoreFrequency",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "DynamicUFS",
+            "ValueDisplayName": "DynamicUFS"
+          },
+          {
+            "ValueName": "MaxUFS",
+            "ValueDisplayName": "MaxUFS"
+          }
+        ]
+      },
+      {
+        "AttributeName": "BootMode",
+        "DisplayName": "BootMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Bios",
+            "ValueDisplayName": "Bios"
+          },
+          {
+            "ValueName": "Uefi",
+            "ValueDisplayName": "Uefi"
+          }
+        ]
+      },
+      {
+        "AttributeName": "OsWatchdogTimer",
+        "DisplayName": "OsWatchdogTimer",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "BiosBootSeq",
+        "DisplayName": "BiosBootSeq",
+        "Type": "String",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      },
+      {
+        "AttributeName": "AssetTag",
+        "DisplayName": "AssetTag",
+        "Type": "String",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      },
+      {
+        "AttributeName": "ServiceTag",
+        "DisplayName": "ServiceTag",
+        "Type": "String",
+        "ReadOnly": true,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      }
+    ],
+    "Dependencies": [
+      {
+        "Dependency": {
+          "MapFrom": [
+            {
+              "MapFromAttribute": "SysProfile",
+              "MapFromCondition": "NEQ",
+              "MapFromProperty": "CurrentValue",
+              "MapFromValue": "Custom"
+            }
+          ],
+          "MapTerms": "AND",
+          "MapToAttribute": "ProcCStates",
+          "MapToProperty": "ReadOnly",
+          "MapToValue": true
+        },
+        "DependencyFor": "ProcCStates",
+        "Type": "Map"
+      },
+      {
+        "Dependency": {
+          "MapFrom": [
+            {
+              "MapFromAttribute": "SysProfile",
+              "MapFromCondition": "NEQ",
+              "MapFromProperty": "CurrentValue",
+              "MapFromValue": "Custom"
+            }
+          ],
+          "MapTerms": "AND",
+          "MapToAttribute": "ProcTurboMode",
+          "MapToProperty": "ReadOnly",
+          "MapToValue": true
+        },
+        "DependencyFor": "ProcTurboMode",
+        "Type": "Map"
+      }
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

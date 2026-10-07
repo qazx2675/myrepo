@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1/LogServices/ActiveLog",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "ActiveLog",
+  "Name": "ActiveLog (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/Systems/1/LogServices/ActiveLog/Entries"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/Systems/1/LogServices/ActiveLog/Actions/LogService.ClearLog"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

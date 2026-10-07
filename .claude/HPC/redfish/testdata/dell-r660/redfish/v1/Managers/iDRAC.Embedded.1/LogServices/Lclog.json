@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Lclog",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "Lclog",
+  "Name": "Lclog (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Lclog/Entries"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/Managers/iDRAC.Embedded.1/LogServices/Lclog/Actions/LogService.ClearLog"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

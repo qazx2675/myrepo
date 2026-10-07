@@ -1,0 +1,12 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1/LogServices/ActiveLog/Entries/1",
+  "@odata.type": "#LogEntry.v1_4_0.LogEntry",
+  "Id": "1",
+  "Name": "Log Entry 1 (mock)",
+  "EntryType": "Event",
+  "Severity": "OK",
+  "Message": "Mock log entry. A client must never read this.",
+  "Oem": {
+    "MockData": true
+  }
+}

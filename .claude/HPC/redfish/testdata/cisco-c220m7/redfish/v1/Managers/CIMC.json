@@ -1,0 +1,32 @@
+{
+  "@odata.id": "/redfish/v1/Managers/CIMC",
+  "@odata.type": "#Manager.v1_5_1.Manager",
+  "Id": "CIMC",
+  "Name": "Manager",
+  "ManagerType": "BMC",
+  "Model": "CIMC (mock)",
+  "FirmwareVersion": "4.3(2) (mock)",
+  "UUID": "00000000-0000-4000-8000-000000000204",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Links": {
+    "ManagerForServers": [
+      {
+        "@odata.id": "/redfish/v1/Systems/MOCK-C220M7"
+      }
+    ]
+  },
+  "Actions": {
+    "#Manager.Reset": {
+      "target": "/redfish/v1/Managers/CIMC/Actions/Manager.Reset"
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/Managers/CIMC/LogServices"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

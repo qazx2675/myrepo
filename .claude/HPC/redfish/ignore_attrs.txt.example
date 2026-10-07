@@ -1,0 +1,27 @@
+# 비교에서 제외할 BIOS 속성 — 복사해서 사용: cp ignore_attrs.txt.example ignore_attrs.txt
+# 호스트마다 값이 달라야 정상인 속성(서비스태그, 부팅순서, MAC 등)을 적습니다.
+# 한 줄에 패턴 하나, # 주석, 대소문자 무시, * 는 0글자 이상 와일드카드.
+# 이 파일이 없으면 아래 내용과 같은 내장 기본 목록을 씁니다. 파일이 있으면 이 파일만 씁니다.
+# 제외된 속성은 비교하지 않고 호스트별 개수(ignored)만 summary.tsv 에 남습니다.
+#
+# 첫 실장비 결과(all_diff.tsv)에서 호스트마다 다르게 나오는 속성이 보이면 여기에 추가하십시오.
+# 패턴을 너무 넓게(예: *Mac*) 쓰면 MachineCheck 같은 실제 설정까지 가려지니 주의하십시오.
+ServiceTag
+SystemServiceTag
+AssetTag
+ServerAssetTag
+SerialNumber
+ServerName
+SysMfrContactInfo
+UefiBootSeq
+BootSeq*
+*Uuid*
+*UUID*
+*MacAddr*
+SystemTime
+SystemDate
+Time
+Date
+*DateTime*
+RtcTime
+RtcDate

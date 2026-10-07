@@ -1,0 +1,45 @@
+{
+  "@odata.id": "/redfish/v1/Systems/MOCK-C220M7/Bios",
+  "@odata.type": "#Bios.v1_0_5.Bios",
+  "Id": "Bios",
+  "Name": "BIOS Configuration Current Settings",
+  "AttributeRegistry": "BiosAttributeRegistry.v1_0_0",
+  "Attributes": {
+    "CPUPerformance": "Enterprise",
+    "IntelHyperThread": "enabled",
+    "LLCPrefetch": "enabled",
+    "SNC": "disabled",
+    "CPUPowerManagement": "Performance",
+    "EnhancedIntelSpeedStep": "enabled",
+    "IntelTurboBoostTech": "enabled",
+    "ProcessorCState": "enabled",
+    "IntelVirtualizationTechnology": "enabled",
+    "SRIOV": "enabled",
+    "NUMA": "enabled",
+    "OSBootWatchdogTimer": "disabled",
+    "MemoryRefreshRate": "1x",
+    "PCIeASPM": "disabled",
+    "AssetTag": "MOCK-CSC-ASSET-0001",
+    "SerialNumber": "MOCK-SN-CSC-0001"
+  },
+  "Actions": {
+    "#Bios.ResetBios": {
+      "target": "/redfish/v1/Systems/MOCK-C220M7/Bios/Actions/Bios.ResetBios"
+    },
+    "#Bios.ChangePassword": {
+      "target": "/redfish/v1/Systems/MOCK-C220M7/Bios/Actions/Bios.ChangePassword"
+    }
+  },
+  "@Redfish.Settings": {
+    "@odata.type": "#Settings.v1_3_0.Settings",
+    "SettingsObject": {
+      "@odata.id": "/redfish/v1/Systems/MOCK-C220M7/Bios/Settings"
+    },
+    "SupportedApplyTimes": [
+      "OnReset"
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1/Bios",
+  "@odata.type": "#Bios.v1_0_5.Bios",
+  "Id": "Bios",
+  "Name": "BIOS Configuration Current Settings",
+  "AttributeRegistry": "BiosAttributeRegistry.v1_0_0",
+  "Attributes": {
+    "OperatingModes_ChooseOperatingMode": "MaximumPerformance",
+    "Processors_HyperThreading": "Enable",
+    "Processors_LLCPrefetch": "Enable",
+    "Processors_SNC": "Disable",
+    "Processors_TurboMode": "Enable",
+    "Processors_CStates": "Enable",
+    "Processors_CPUPstateControl": "Cooperative",
+    "Processors_VirtualizationTechnology": "Enable",
+    "Memory_MemoryPowerManagement": "Disable",
+    "Power_PowerPerformanceBias": "Platform",
+    "Power_WorkloadConfiguration": "Balanced",
+    "BootModes_SystemBootMode": "UEFIMode",
+    "Devices_SRIOV": "Enable",
+    "SystemRecovery_POSTWatchdogTimer": "Disable",
+    "SystemRecovery_POSTWatchdogTimerValue": 5,
+    "SystemInfo_AssetTag": "MOCK-LNV-ASSET-0001",
+    "SystemInfo_SystemSerialNumber": "MOCK-SN-LNV-0001"
+  },
+  "Actions": {
+    "#Bios.ResetBios": {
+      "target": "/redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios"
+    },
+    "#Bios.ChangePassword": {
+      "target": "/redfish/v1/Systems/1/Bios/Actions/Bios.ChangePassword"
+    }
+  },
+  "@Redfish.Settings": {
+    "@odata.type": "#Settings.v1_3_0.Settings",
+    "SettingsObject": {
+      "@odata.id": "/redfish/v1/Systems/1/Bios/Pending"
+    },
+    "SupportedApplyTimes": [
+      "OnReset"
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

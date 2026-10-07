@@ -1,0 +1,46 @@
+{
+  "@odata.id": "/redfish/v1/Systems/1",
+  "@odata.type": "#ComputerSystem.v1_13_0.ComputerSystem",
+  "Id": "1",
+  "Name": "System",
+  "Manufacturer": "Lenovo",
+  "Model": "ThinkSystem SR650 V3",
+  "SKU": "MOCK-LNV-7D76",
+  "SerialNumber": "MOCK-SN-LNV-0001",
+  "PartNumber": "MOCK-PN",
+  "UUID": "00000000-0000-4000-8000-000000000103",
+  "BiosVersion": "ESE105F-1.10 (mock)",
+  "PowerState": "On",
+  "SystemType": "Physical",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Bios": {
+    "@odata.id": "/redfish/v1/Systems/1/Bios"
+  },
+  "Links": {
+    "ManagedBy": [
+      {
+        "@odata.id": "/redfish/v1/Managers/1"
+      }
+    ]
+  },
+  "Actions": {
+    "#ComputerSystem.Reset": {
+      "target": "/redfish/v1/Systems/1/Actions/ComputerSystem.Reset",
+      "ResetType@Redfish.AllowableValues": [
+        "On",
+        "ForceOff",
+        "GracefulRestart",
+        "ForceRestart"
+      ]
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/Systems/1/LogServices"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

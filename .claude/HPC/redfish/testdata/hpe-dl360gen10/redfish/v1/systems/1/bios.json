@@ -1,0 +1,45 @@
+{
+  "@odata.id": "/redfish/v1/systems/1/bios/",
+  "@odata.type": "#Bios.v1_0_5.Bios",
+  "Id": "Bios",
+  "Name": "BIOS Configuration Current Settings",
+  "AttributeRegistry": "BiosAttributeRegistryU32.v1_2_0",
+  "Attributes": {
+    "WorkloadProfile": "GeneralPeakFrequencyCompute",
+    "ProcHyperthreading": "Enabled",
+    "SubNumaClustering": "Disabled",
+    "EnergyPerfBias": "MaximumPerformance",
+    "AdvancedMemProtection": "AdvancedEcc",
+    "ServerName": "mock-hpe-10",
+    "SerialNumber": "MOCKHPE10SN",
+    "PowerRegulator": "StaticHighPerf",
+    "MinProcIdlePower": "NoCStates",
+    "ProcTurbo": "Enabled",
+    "ProcVirtualization": "Enabled",
+    "ProcX2Apic": "Enabled",
+    "NumaGroupSizeOpt": "Clustered",
+    "BootMode": "Uefi",
+    "Sriov": "Enabled",
+    "ThermalConfig": "OptimalCooling"
+  },
+  "Actions": {
+    "#Bios.ResetBios": {
+      "target": "/redfish/v1/systems/1/bios/actions/bios.resetbios/"
+    },
+    "#Bios.ChangePassword": {
+      "target": "/redfish/v1/systems/1/bios/actions/bios.changepassword/"
+    }
+  },
+  "@Redfish.Settings": {
+    "@odata.type": "#Settings.v1_3_0.Settings",
+    "SettingsObject": {
+      "@odata.id": "/redfish/v1/systems/1/bios/settings/"
+    },
+    "SupportedApplyTimes": [
+      "OnReset"
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "@odata.id": "/redfish/v1/managers/1/logservices/iel/",
+  "@odata.type": "#LogService.v1_1_0.LogService",
+  "Id": "IEL",
+  "Name": "IEL (mock)",
+  "MaxNumberOfRecords": 512,
+  "OverWritePolicy": "WrapsWhenFull",
+  "LogEntryType": "Multiple",
+  "Entries": {
+    "@odata.id": "/redfish/v1/managers/1/logservices/iel/entries/"
+  },
+  "Actions": {
+    "#LogService.ClearLog": {
+      "target": "/redfish/v1/managers/1/logservices/iel/actions/logservice.clearlog/"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

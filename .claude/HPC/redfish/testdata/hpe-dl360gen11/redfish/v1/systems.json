@@ -1,0 +1,14 @@
+{
+  "@odata.id": "/redfish/v1/systems/",
+  "@odata.type": "#ComputerSystemCollection.ComputerSystemCollection",
+  "Name": "Computer System Collection",
+  "Members@odata.count": 1,
+  "Members": [
+    {
+      "@odata.id": "/redfish/v1/systems/1/"
+    }
+  ],
+  "Oem": {
+    "MockData": true
+  }
+}

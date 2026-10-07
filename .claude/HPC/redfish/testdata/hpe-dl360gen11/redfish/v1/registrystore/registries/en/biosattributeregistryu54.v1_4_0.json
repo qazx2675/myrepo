@@ -1,0 +1,396 @@
+{
+  "@odata.id": "/redfish/v1/registrystore/registries/en/biosattributeregistryu54.v1_4_0/",
+  "@odata.type": "#AttributeRegistry.v1_3_5.AttributeRegistry",
+  "Id": "BiosAttributeRegistryU54.v1_4_0",
+  "Name": "BIOS Attribute Registry (mock)",
+  "Language": "en",
+  "RegistryVersion": "1.0.0",
+  "OwningEntity": "HPE",
+  "RegistryEntries": {
+    "Attributes": [
+      {
+        "AttributeName": "WorkloadProfile",
+        "DisplayName": "WorkloadProfile",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "GeneralPowerEfficientCompute",
+            "ValueDisplayName": "GeneralPowerEfficientCompute"
+          },
+          {
+            "ValueName": "GeneralPeakFrequencyCompute",
+            "ValueDisplayName": "GeneralPeakFrequencyCompute"
+          },
+          {
+            "ValueName": "GeneralThroughputCompute",
+            "ValueDisplayName": "GeneralThroughputCompute"
+          },
+          {
+            "ValueName": "Virtualization-PowerEfficient",
+            "ValueDisplayName": "Virtualization-PowerEfficient"
+          },
+          {
+            "ValueName": "Virtualization-MaxPerformance",
+            "ValueDisplayName": "Virtualization-MaxPerformance"
+          },
+          {
+            "ValueName": "LowLatency",
+            "ValueDisplayName": "LowLatency"
+          },
+          {
+            "ValueName": "MissionCritical",
+            "ValueDisplayName": "MissionCritical"
+          },
+          {
+            "ValueName": "TransactionalApplicationProcessing",
+            "ValueDisplayName": "TransactionalApplicationProcessing"
+          },
+          {
+            "ValueName": "HighPerformanceCompute",
+            "ValueDisplayName": "HighPerformanceCompute"
+          },
+          {
+            "ValueName": "DecisionSupport",
+            "ValueDisplayName": "DecisionSupport"
+          },
+          {
+            "ValueName": "GraphicProcessing",
+            "ValueDisplayName": "GraphicProcessing"
+          },
+          {
+            "ValueName": "I/OThroughput",
+            "ValueDisplayName": "I/OThroughput"
+          },
+          {
+            "ValueName": "Custom",
+            "ValueDisplayName": "Custom"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcHyperthreading",
+        "DisplayName": "ProcHyperthreading",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "LlcPrefetch",
+        "DisplayName": "LlcPrefetch",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SubNumaClustering",
+        "DisplayName": "SubNumaClustering",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "EnergyPerfBias",
+        "DisplayName": "EnergyPerfBias",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "MaximumPerformance",
+            "ValueDisplayName": "MaximumPerformance"
+          },
+          {
+            "ValueName": "BalancedPerformance",
+            "ValueDisplayName": "BalancedPerformance"
+          },
+          {
+            "ValueName": "BalancedPower",
+            "ValueDisplayName": "BalancedPower"
+          },
+          {
+            "ValueName": "PowerSavingsMode",
+            "ValueDisplayName": "PowerSavingsMode"
+          }
+        ]
+      },
+      {
+        "AttributeName": "TpmState",
+        "DisplayName": "TpmState",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "NotPresent",
+            "ValueDisplayName": "NotPresent"
+          },
+          {
+            "ValueName": "PresentDisabled",
+            "ValueDisplayName": "PresentDisabled"
+          },
+          {
+            "ValueName": "PresentEnabled",
+            "ValueDisplayName": "PresentEnabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SecureBootStatus",
+        "DisplayName": "SecureBootStatus",
+        "Type": "Enumeration",
+        "ReadOnly": true,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ServerName",
+        "DisplayName": "ServerName",
+        "Type": "String",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      },
+      {
+        "AttributeName": "SerialNumber",
+        "DisplayName": "SerialNumber",
+        "Type": "String",
+        "ReadOnly": true,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      },
+      {
+        "AttributeName": "PowerRegulator",
+        "DisplayName": "PowerRegulator",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "DynamicPowerSavings",
+            "ValueDisplayName": "DynamicPowerSavings"
+          },
+          {
+            "ValueName": "StaticHighPerf",
+            "ValueDisplayName": "StaticHighPerf"
+          },
+          {
+            "ValueName": "StaticLowPower",
+            "ValueDisplayName": "StaticLowPower"
+          },
+          {
+            "ValueName": "OsControl",
+            "ValueDisplayName": "OsControl"
+          }
+        ]
+      },
+      {
+        "AttributeName": "MinProcIdlePower",
+        "DisplayName": "MinProcIdlePower",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "C6",
+            "ValueDisplayName": "C6"
+          },
+          {
+            "ValueName": "C1E",
+            "ValueDisplayName": "C1E"
+          },
+          {
+            "ValueName": "NoCStates",
+            "ValueDisplayName": "NoCStates"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcTurbo",
+        "DisplayName": "ProcTurbo",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcVirtualization",
+        "DisplayName": "ProcVirtualization",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ProcX2Apic",
+        "DisplayName": "ProcX2Apic",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "NumaGroupSizeOpt",
+        "DisplayName": "NumaGroupSizeOpt",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Clustered",
+            "ValueDisplayName": "Clustered"
+          },
+          {
+            "ValueName": "Flat",
+            "ValueDisplayName": "Flat"
+          }
+        ]
+      },
+      {
+        "AttributeName": "BootMode",
+        "DisplayName": "BootMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Uefi",
+            "ValueDisplayName": "Uefi"
+          },
+          {
+            "ValueName": "LegacyBios",
+            "ValueDisplayName": "LegacyBios"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Sriov",
+        "DisplayName": "Sriov",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Enabled",
+            "ValueDisplayName": "Enabled"
+          },
+          {
+            "ValueName": "Disabled",
+            "ValueDisplayName": "Disabled"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ThermalConfig",
+        "DisplayName": "ThermalConfig",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "OptimalCooling",
+            "ValueDisplayName": "OptimalCooling"
+          },
+          {
+            "ValueName": "IncreasedCooling",
+            "ValueDisplayName": "IncreasedCooling"
+          },
+          {
+            "ValueName": "MaximumCooling",
+            "ValueDisplayName": "MaximumCooling"
+          }
+        ]
+      }
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

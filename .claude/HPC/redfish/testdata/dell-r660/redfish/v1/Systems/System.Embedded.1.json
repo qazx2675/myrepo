@@ -1,0 +1,46 @@
+{
+  "@odata.id": "/redfish/v1/Systems/System.Embedded.1",
+  "@odata.type": "#ComputerSystem.v1_13_0.ComputerSystem",
+  "Id": "System.Embedded.1",
+  "Name": "System",
+  "Manufacturer": "Dell Inc.",
+  "Model": "PowerEdge R660",
+  "SKU": "MOCKSV1",
+  "SerialNumber": "MOCK-SN-DELL-0001",
+  "PartNumber": "MOCK-PN",
+  "UUID": "00000000-0000-4000-8000-000000000100",
+  "BiosVersion": "1.8.2",
+  "PowerState": "On",
+  "SystemType": "Physical",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Bios": {
+    "@odata.id": "/redfish/v1/Systems/System.Embedded.1/Bios"
+  },
+  "Links": {
+    "ManagedBy": [
+      {
+        "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1"
+      }
+    ]
+  },
+  "Actions": {
+    "#ComputerSystem.Reset": {
+      "target": "/redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset",
+      "ResetType@Redfish.AllowableValues": [
+        "On",
+        "ForceOff",
+        "GracefulRestart",
+        "ForceRestart"
+      ]
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/Systems/System.Embedded.1/LogServices"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

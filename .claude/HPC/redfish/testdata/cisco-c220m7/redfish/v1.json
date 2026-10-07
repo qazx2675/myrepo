@@ -1,0 +1,29 @@
+{
+  "@odata.id": "/redfish/v1",
+  "@odata.type": "#ServiceRoot.v1_5_0.ServiceRoot",
+  "Id": "RootService",
+  "Name": "Root Service",
+  "RedfishVersion": "1.15.0",
+  "UUID": "00000000-0000-4000-8000-000000000005",
+  "Vendor": "Cisco",
+  "Systems": {
+    "@odata.id": "/redfish/v1/Systems"
+  },
+  "Managers": {
+    "@odata.id": "/redfish/v1/Managers"
+  },
+  "SessionService": {
+    "@odata.id": "/redfish/v1/SessionService"
+  },
+  "Registries": {
+    "@odata.id": "/redfish/v1/Registries"
+  },
+  "Links": {
+    "Sessions": {
+      "@odata.id": "/redfish/v1/SessionService/Sessions"
+    }
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

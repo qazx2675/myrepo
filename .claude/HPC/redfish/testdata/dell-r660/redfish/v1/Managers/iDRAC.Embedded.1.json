@@ -1,0 +1,37 @@
+{
+  "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1",
+  "@odata.type": "#Manager.v1_5_1.Manager",
+  "Id": "iDRAC.Embedded.1",
+  "Name": "Manager",
+  "ManagerType": "BMC",
+  "Model": "iDRAC9 (mock)",
+  "FirmwareVersion": "7.00.00.00",
+  "UUID": "00000000-0000-4000-8000-000000000200",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Links": {
+    "ManagerForServers": [
+      {
+        "@odata.id": "/redfish/v1/Systems/System.Embedded.1"
+      }
+    ]
+  },
+  "Actions": {
+    "#Manager.Reset": {
+      "target": "/redfish/v1/Managers/iDRAC.Embedded.1/Actions/Manager.Reset"
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/LogServices"
+  },
+  "Oem": {
+    "MockData": true,
+    "Dell": {
+      "Jobs": {
+        "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/Jobs"
+      }
+    }
+  }
+}

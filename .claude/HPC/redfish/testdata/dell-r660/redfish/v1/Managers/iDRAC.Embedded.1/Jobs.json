@@ -1,0 +1,10 @@
+{
+  "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/Jobs",
+  "@odata.type": "#JobCollection.JobCollection",
+  "Name": "Job Collection",
+  "Members@odata.count": 0,
+  "Members": [],
+  "Oem": {
+    "MockData": true
+  }
+}

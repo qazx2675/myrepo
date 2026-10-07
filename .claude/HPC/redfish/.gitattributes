@@ -1,0 +1,6 @@
+# bash 래퍼는 RHEL 에서 실행되므로 반드시 LF 로 체크아웃합니다.
+*.sh text eol=lf
+*.tsv text eol=lf
+*.example text eol=lf
+bin/* binary
+*.json text eol=lf

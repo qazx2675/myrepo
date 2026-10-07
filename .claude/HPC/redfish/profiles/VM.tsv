@@ -1,0 +1,5 @@
+vendor	model	std_name	attribute	value	verified
+DELL	R660	system_profile	SysProfile	PerfOptimized	N
+DELL	R660	hyper_threading	LogicalProc	Enabled	N
+DELL	*	llc_prefetch	LlcPrefetch	Enabled	N
+HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N

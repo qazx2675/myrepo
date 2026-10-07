@@ -1,0 +1,32 @@
+{
+  "@odata.id": "/redfish/v1/Managers/1",
+  "@odata.type": "#Manager.v1_5_1.Manager",
+  "Id": "1",
+  "Name": "Manager",
+  "ManagerType": "BMC",
+  "Model": "XCC (mock)",
+  "FirmwareVersion": "TGBT99B-9.00 (mock)",
+  "UUID": "00000000-0000-4000-8000-000000000203",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Links": {
+    "ManagerForServers": [
+      {
+        "@odata.id": "/redfish/v1/Systems/1"
+      }
+    ]
+  },
+  "Actions": {
+    "#Manager.Reset": {
+      "target": "/redfish/v1/Managers/1/Actions/Manager.Reset"
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/Managers/1/LogServices"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

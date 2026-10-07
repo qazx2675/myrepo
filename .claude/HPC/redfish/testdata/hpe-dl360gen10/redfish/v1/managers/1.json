@@ -1,0 +1,32 @@
+{
+  "@odata.id": "/redfish/v1/managers/1/",
+  "@odata.type": "#Manager.v1_5_1.Manager",
+  "Id": "1",
+  "Name": "Manager",
+  "ManagerType": "BMC",
+  "Model": "iLO 5 (mock)",
+  "FirmwareVersion": "iLO 5 v2.90 (mock)",
+  "UUID": "00000000-0000-4000-8000-000000000202",
+  "Status": {
+    "State": "Enabled",
+    "Health": "OK"
+  },
+  "Links": {
+    "ManagerForServers": [
+      {
+        "@odata.id": "/redfish/v1/systems/1/"
+      }
+    ]
+  },
+  "Actions": {
+    "#Manager.Reset": {
+      "target": "/redfish/v1/managers/1/actions/manager.reset/"
+    }
+  },
+  "LogServices": {
+    "@odata.id": "/redfish/v1/managers/1/logservices/"
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

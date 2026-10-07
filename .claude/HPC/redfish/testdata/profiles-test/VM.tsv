@@ -1,0 +1,38 @@
+# 테스트용 프로파일 (합성). testdata 의 mock 트리 6종의 속성명/값에 맞춘 것이며 실제 표준값이 아닙니다.
+# 구성 의도:
+#  - DELL R660: 같은 std_name 에 정확 일치 행이 있으면 model=* 행(system_profile Custom)은 무시되어야 함
+#  - DELL R660 hyper_threading: 후보 2개 (Hyperthreading 이 없으면 LogicalProc 을 씀, 우선순위 시험)
+#  - model=* 행은 점검 비교용이라 항상 verified=N (verified=Y 는 모델을 지정한 행에만 허용 — 로드 오류)
+#  - HPE DL360 Gen10: llc_prefetch·sub_numa_cluster·virtualization 은 HPE * 행으로만 정의 (모델 * 폴백 시험, 불일치면 UNVERIFIED)
+#  - sub_numa_cluster(DELL) 와 Cisco/Supermicro 전체는 verified=N (UNVERIFIED 시험)
+#  - HPE DL360 Gen11 system_profile: A|B 허용값
+#  - Lenovo: 행이 하나도 없음 (MAPPING_MISSING 시험)
+#  - virtualization: 표준 4항목 밖의 추가 항목 (Lenovo 에는 행 없음)
+vendor	model	std_name	attribute	value	verified
+DELL	R660	system_profile	SysProfile	PerfOptimized	Y
+DELL	*	system_profile	SysProfile	Custom	N
+DELL	R660	hyper_threading	Hyperthreading	Enabled	Y
+DELL	R660	hyper_threading	LogicalProc	Enabled	Y
+DELL	R660	llc_prefetch	LlcPrefetch	Enabled	Y
+DELL	R660	sub_numa_cluster	SubNumaCluster	Disabled	N
+DELL	*	virtualization	ProcVirtualization	Enabled	N
+HPE	DL360 Gen11	system_profile	WorkloadProfile	GeneralPowerEfficientCompute|GeneralThroughputCompute	Y
+HPE	DL360 Gen10	system_profile	WorkloadProfile	GeneralPeakFrequencyCompute	Y
+HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	Y
+HPE	DL360 Gen10	hyper_threading	ProcHyperthreading	Enabled	Y
+HPE	DL360 Gen11	llc_prefetch	LlcPrefetch	Enabled	Y
+HPE	DL360 Gen11	sub_numa_cluster	SubNumaClustering	Disabled	Y
+HPE	DL360 Gen11	virtualization	ProcVirtualization	Enabled	Y
+HPE	*	llc_prefetch	LlcPrefetch	Enabled	N
+HPE	*	sub_numa_cluster	SubNumaClustering	Disabled	N
+HPE	*	virtualization	ProcVirtualization	Enabled	N
+Cisco	UCSC-C220-M7S	system_profile	CPUPerformance	Enterprise	N
+Cisco	UCSC-C220-M7S	hyper_threading	IntelHyperThread	enabled	N
+Cisco	UCSC-C220-M7S	llc_prefetch	LLCPrefetch	enabled	N
+Cisco	UCSC-C220-M7S	sub_numa_cluster	SNC	disabled	N
+Cisco	UCSC-C220-M7S	virtualization	IntelVirtualizationTechnology	enabled	N
+Supermicro	X12DPi-N6	system_profile	PowerTechnology	Custom	N
+Supermicro	X12DPi-N6	hyper_threading	Hyper-Threading[ALL]	Enable	N
+Supermicro	X12DPi-N6	llc_prefetch	LLCPrefetch	Enable	N
+Supermicro	X12DPi-N6	sub_numa_cluster	SNC	Disable	N
+Supermicro	X12DPi-N6	virtualization	VMXEnable	Enable	N

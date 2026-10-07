@@ -1,0 +1,310 @@
+{
+  "@odata.id": "/redfish/v1/RegistryStore/Registries/en/BiosAttributeRegistry",
+  "@odata.type": "#AttributeRegistry.v1_3_5.AttributeRegistry",
+  "Id": "BiosAttributeRegistry",
+  "Name": "BIOS Attribute Registry (mock)",
+  "Language": "en",
+  "RegistryVersion": "1.0.0",
+  "OwningEntity": "Supermicro",
+  "RegistryEntries": {
+    "Attributes": [
+      {
+        "AttributeName": "PowerTechnology",
+        "DisplayName": "PowerTechnology",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "EnergyEfficient",
+            "ValueDisplayName": "EnergyEfficient"
+          },
+          {
+            "ValueName": "Custom",
+            "ValueDisplayName": "Custom"
+          }
+        ]
+      },
+      {
+        "AttributeName": "Hyper-Threading[ALL]",
+        "DisplayName": "Hyper-Threading[ALL]",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "LLCPrefetch",
+        "DisplayName": "LLCPrefetch",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SNC",
+        "DisplayName": "SNC",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "EIST",
+        "DisplayName": "EIST",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "TurboMode",
+        "DisplayName": "TurboMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "CStates",
+        "DisplayName": "CStates",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "VMXEnable",
+        "DisplayName": "VMXEnable",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SRIOVSupport",
+        "DisplayName": "SRIOVSupport",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "BootMode",
+        "DisplayName": "BootMode",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "UEFI",
+            "ValueDisplayName": "UEFI"
+          },
+          {
+            "ValueName": "Legacy",
+            "ValueDisplayName": "Legacy"
+          }
+        ]
+      },
+      {
+        "AttributeName": "QuietBoot",
+        "DisplayName": "QuietBoot",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "SerialPortConsoleRedirection",
+        "DisplayName": "SerialPortConsoleRedirection",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "WatchDogTimer",
+        "DisplayName": "WatchDogTimer",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "ASPM",
+        "DisplayName": "ASPM",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "MemoryPowerSaving",
+        "DisplayName": "MemoryPowerSaving",
+        "Type": "Enumeration",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "Value": [
+          {
+            "ValueName": "Disable",
+            "ValueDisplayName": "Disable"
+          },
+          {
+            "ValueName": "Enable",
+            "ValueDisplayName": "Enable"
+          }
+        ]
+      },
+      {
+        "AttributeName": "AssetTag",
+        "DisplayName": "AssetTag",
+        "Type": "String",
+        "ReadOnly": false,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      },
+      {
+        "AttributeName": "SerialNumber",
+        "DisplayName": "SerialNumber",
+        "Type": "String",
+        "ReadOnly": true,
+        "Hidden": false,
+        "MenuPath": "./Mock",
+        "MinLength": 0,
+        "MaxLength": 64
+      }
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

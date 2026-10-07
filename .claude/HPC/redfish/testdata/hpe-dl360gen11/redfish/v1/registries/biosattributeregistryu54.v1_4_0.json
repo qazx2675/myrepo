@@ -1,0 +1,19 @@
+{
+  "@odata.id": "/redfish/v1/registries/biosattributeregistryu54.v1_4_0/",
+  "@odata.type": "#MessageRegistryFile.v1_1_0.MessageRegistryFile",
+  "Id": "BiosAttributeRegistryU54.v1_4_0",
+  "Name": "BIOS Attribute Registry File",
+  "Registry": "BiosAttributeRegistryU54.v1_4_0",
+  "Languages": [
+    "en"
+  ],
+  "Location": [
+    {
+      "Language": "en",
+      "Uri": "/redfish/v1/registrystore/registries/en/biosattributeregistryu54.v1_4_0/"
+    }
+  ],
+  "Oem": {
+    "MockData": true
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "@odata.id": "/redfish/v1/Systems/System.Embedded.1/Bios",
+  "@odata.type": "#Bios.v1_0_5.Bios",
+  "Id": "Bios",
+  "Name": "BIOS Configuration Current Settings",
+  "AttributeRegistry": "BiosAttributeRegistry.v1_0_0",
+  "Attributes": {
+    "SysProfile": "PerfOptimized",
+    "ProcPwrPerf": "SysDbpm",
+    "ProcCStates": "Enabled",
+    "ProcTurboMode": "Enabled",
+    "LogicalProc": "Enabled",
+    "LlcPrefetch": "Enabled",
+    "SubNumaCluster": "Disabled",
+    "ProcVirtualization": "Enabled",
+    "ProcX2Apic": "Enabled",
+    "NodeInterleave": "Disabled",
+    "MemTest": "Disabled",
+    "SriovGlobalEnable": "Disabled",
+    "PcieAspmL1": "Disabled",
+    "UncoreFrequency": "DynamicUFS",
+    "BootMode": "Uefi",
+    "OsWatchdogTimer": "Disabled",
+    "BiosBootSeq": "MockDisk.Bay.0, MockNic.Slot.1",
+    "AssetTag": "MOCK-ASSET-0001",
+    "ServiceTag": "MOCKSV1"
+  },
+  "Actions": {
+    "#Bios.ResetBios": {
+      "target": "/redfish/v1/Systems/System.Embedded.1/Bios/Actions/Bios.ResetBios"
+    },
+    "#Bios.ChangePassword": {
+      "target": "/redfish/v1/Systems/System.Embedded.1/Bios/Actions/Bios.ChangePassword"
+    }
+  },
+  "@Redfish.Settings": {
+    "@odata.type": "#Settings.v1_3_0.Settings",
+    "SettingsObject": {
+      "@odata.id": "/redfish/v1/Systems/System.Embedded.1/Bios/Settings"
+    },
+    "SupportedApplyTimes": [
+      "OnReset"
+    ]
+  },
+  "Oem": {
+    "MockData": true
+  }
+}

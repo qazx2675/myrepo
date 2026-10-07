@@ -1,0 +1,14 @@
+{
+  "@odata.id": "/redfish/v1/managers/1/logservices/iel/entries/",
+  "@odata.type": "#LogEntryCollection.LogEntryCollection",
+  "Name": "Log Entry Collection",
+  "Members@odata.count": 1,
+  "Members": [
+    {
+      "@odata.id": "/redfish/v1/managers/1/logservices/iel/entries/1/"
+    }
+  ],
+  "Oem": {
+    "MockData": true
+  }
+}

@@ -1,0 +1,256 @@
+# redfish (biostool) 사용법 — 수동으로 시험할 때 내가 쓰는 명령만 모았습니다.
+# 각 명령 위의 # 줄이 설명입니다. 비밀번호·실제 IP 는 적지 않았습니다 (<...> 는 직접 채울 자리).
+# 자세한 설명: README.md / 첫 실장비 절차: FIRST_RUN.md / 흐름도: WORKFLOW.md
+# 스크립트에 실행 권한이 없어도 되도록 모두 `bash 스크립트` 형태로 적었습니다.
+
+
+########################################################################
+# 0. 코드를 대상 서버에 가져오기 (새로 만든 폴더는 push -> pull -> sparse-checkout add 를 해야 서버에 생깁니다)
+########################################################################
+
+# (작성 PC) 이 폴더와 CI 파일을 커밋해서 올린다 (브랜치 이름은 <브랜치>)
+git add .claude/HPC/redfish .github/workflows/redfish-ci.yml
+git commit -m "feat(HPC/redfish): BIOS 표준값 점검·설정 도구 v0.1.0"
+git push origin <브랜치>
+
+# (대상 서버) 최신 소스를 받는다 (폐쇄망이면 이 대신 ZIP 을 옮겨 압축을 풀어도 된다)
+cd <저장소 경로>
+git fetch && git reset --hard origin/<브랜치>
+
+# (sparse-checkout 을 쓰는 서버만) 새 폴더를 추가한다 — 안 하면 push 해도 폴더가 안 보인다
+git sparse-checkout add ".claude/HPC/redfish"
+
+# 프로젝트 폴더로 이동 (이후 모든 명령은 이 폴더에서)
+cd .claude/HPC/redfish
+
+
+########################################################################
+# 1. 빌드 / 설치
+########################################################################
+
+# 바이너리와 스크립트에 실행 권한을 준다 (ZIP·Windows 에서 받으면 빠져 있을 수 있음. 없어도 아래처럼 bash 로 실행하면 됨)
+chmod +x bin/biostool bin/biostool_os6 *.sh
+
+# 빌드 완료 바이너리가 이미 들어 있으므로 Go 없이 바로 쓸 수 있다. 바이너리가 실행되는지 확인 (RHEL6 은 bin/biostool_os6)
+bin/biostool help
+
+# (Go 가 있는 PC·랩만) 오프라인 빌드: GOPROXY=off, 인터넷 접속 없음 -> bin/biostool
+bash setup.sh
+
+# (RHEL6 용이 필요할 때만, /opt/go1.20/bin 의 Go 1.20.x 필요) -> bin/biostool_os6
+bash build_os6.sh
+
+# (Go 가 있는 곳만) 정적 분석 + 전체 테스트. 실제 BMC 에는 접속하지 않는다
+go vet ./... && go test ./...
+
+# 소스를 고쳤다면 sha256 을 확인하고 두 바이너리를 함께 커밋한다 (회사에는 Go 가 없음)
+sha256sum bin/biostool bin/biostool_os6
+
+
+########################################################################
+# 2. 처음 한 번 준비 (설정 파일, 비밀번호 암호화, 대상 목록)
+########################################################################
+
+# 설정 파일을 만들고 user= 에 BMC 계정 ID 를 적는다 (나머지는 기본값으로 시작)
+cp bios.conf.example bios.conf
+vi bios.conf
+
+# BMC 비밀번호를 암호화한다: 화면에 안 보이게 2번 입력 -> pass.enc + key.bin (권한 600, git 에 올리지 말 것)
+bash encrypt.sh
+
+# 점검할 대상을 한 줄에 하나씩 적는다: IP / hostname-m / hostname (뒤에 :포트 가능). hostname 은 /etc/hosts 의 hostname-m 으로 찾는다
+cp user.txt.example user.txt
+vi user.txt
+
+# (all_bios_check.sh 용) 정상 설정값을 가진 대표(기준) 호스트를 한 줄에 hostname 하나씩. 모델은 BMC 에서 자동 조회
+cp diff.txt.example diff.txt
+vi diff.txt
+
+# (선택) 비교에서 뺄 속성 목록. 없으면 내장 기본 목록을 쓴다
+cp ignore_attrs.txt.example ignore_attrs.txt
+
+
+########################################################################
+# 3. 사전조사 (처음 만나는 모델) — GET 만 보낸다
+########################################################################
+
+# 대상을 직접 지정해서 덤프를 저장하고 짧은 요약을 출력한다 (요약을 읽어 전달한다. 파일은 반출하지 않는다)
+bash xml.sh <BMC 주소 또는 hostname-m>
+
+# user.txt 의 전체 대상을 호스트당 1줄 요약으로
+bash xml.sh --compact
+
+# 저장된 덤프 목록과 폴더 구조
+cat dumps/index.tsv
+find dumps -maxdepth 4 -type d
+
+
+########################################################################
+# 4. 점검 (읽기 전용) / dry-run / 설정(Y) / 재점검
+########################################################################
+
+# 점검: 프로파일을 번호 메뉴로 고른다. FAIL 이 있으면 마지막에 설정하시겠습니까? (Y/N) 을 묻는다 (직접 입력, N 이면 아무것도 안 함)
+bash bios_check.sh
+
+# 프로파일을 지정해서 점검 (메뉴 생략)
+bash bios_check.sh --profile VM
+
+# 설정 없이 미리 보기: 호스트별로 Y 를 누르면 보낼 PATCH 경로·본문을 출력만 한다 (BMC 에 쓰지 않고 Y/N 도 안 묻는다)
+bash bios_check.sh --profile VM -dry-run
+
+# 묻지 않고 결과만 본다 (재점검할 때 편함)
+bash bios_check.sh --profile VM -no-prompt
+
+# Y 적용은 프롬프트에서 직접 Y 를 입력한다. 재부팅은 하지 않고 BMC 의 Pending 까지만 설정된다 (다음 재부팅 때 반영)
+bash bios_check.sh --profile VM
+
+# 설정 후 재점검: 적용한 항목은 재부팅 전까지 PENDING_OK ([OK] 에 "(재부팅 대기)"), 재부팅 후에는 OK
+bash bios_check.sh --profile VM -no-prompt
+
+# 설정 후에는 랜덤한 서버 몇 대를 BMC 화면/BIOS Setup 에서 직접 열어 실제로 바뀌었는지 눈으로 확인한다 (Disclaimer)
+
+# (자동화 전용) 표준입력이 파이프·파일이어도 Y/N 을 읽는다. 기본은 비대화형 입력을 N 으로 처리한다. 실제로 설정되므로 주의
+printf 'Y\n' | bash bios_check.sh --profile VM -stdin-ok
+
+
+########################################################################
+# 5. 실패한 건만 다시 (재시도)
+########################################################################
+
+# 일시 오류(UNREACHABLE/TIMEOUT/BMC_ERROR)·SKIPPED_AUTH_STOP 대상이 모인 목록 확인 (AUTH_FAIL 은 들어가지 않음)
+cat results/<일시>/retry.txt
+
+# 이전 결과 폴더의 retry.txt 대상만 다시 점검하고 이전 결과와 병합한다 (폴더 대신 retry.txt 경로도 가능)
+bash bios_check.sh --profile VM -retry-from results/<일시>/
+
+# 병합 결과(재시도해도 남은 대상은 merged_retry.txt)
+cat results/<일시>/merged_run_info.txt
+cat results/<일시>/merged_retry.txt
+
+
+########################################################################
+# 6. 모델별 BIOS 전체 비교 (읽기 전용)
+########################################################################
+
+# diff.txt(기준) 와 user.txt(대상) 를 같은 모델끼리 BIOS Attribute 전체로 비교한다
+bash all_bios_check.sh
+
+# 호스트당 터미널에 보일 차이 속성 수를 줄인다 (나머지는 all_diff.tsv)
+bash all_bios_check.sh -diff-max 10
+
+# 다른 목록 파일로
+bash all_bios_check.sh -user <대상목록 파일> -diff <기준목록 파일> -ignore <제외속성 파일>
+
+# 재시도: 이전 결과 폴더(..._all)의 retry.txt 대상만 다시 비교
+bash all_bios_check.sh -retry-from results/<일시>_all/
+
+# 차이 전체를 표로 본다 (모델, 기준 호스트, 호스트, BIOS 버전들, 속성, 기준값, 대상값, 상태)
+column -t -s$'\t' results/<일시>_all/all_diff.tsv | less -S
+
+
+########################################################################
+# 7. 접속 없이 덤프로 시험 (-from-dump)
+########################################################################
+
+# 대상 전체의 덤프를 먼저 저장한다 (BMC 접속은 이때 한 번)
+bash xml.sh
+
+# 저장한 덤프로 점검 / dry-run (BMC 접속 안 함, 비밀번호 불필요, 설정은 불가)
+bash bios_check.sh --profile VM -from-dump dumps
+bash bios_check.sh --profile VM -from-dump dumps -dry-run
+
+# 저장한 덤프끼리 전체 비교 (diff.txt 와 user.txt 의 모든 호스트 덤프가 있어야 함)
+bash all_bios_check.sh -from-dump dumps
+
+
+########################################################################
+# 8. mock 으로 연습하기 — 실서버가 아니라 합성 데이터(testdata)로 만든 가짜 BMC 입니다 (Go 필요)
+########################################################################
+
+# 연습용 임시 폴더와 mock 이 쓸 임의 비밀번호(실제 비밀번호를 쓰지 말 것)
+export PRACTICE=/tmp/redfish_practice
+rm -rf $PRACTICE
+mkdir -p $PRACTICE/td
+export MOCKBMC_PASS='<연습용-임의-문자열>'
+
+# testdata 의 합성 트리를 복사해 한 대는 일부러 틀리게 만든다 (hyper_threading, llc_prefetch 를 Disabled 로)
+cp -r testdata/dell-r660 $PRACTICE/td/dell-bad
+sed -i 's/"LogicalProc": "Enabled"/"LogicalProc": "Disabled"/; s/"LlcPrefetch": "Enabled"/"LlcPrefetch": "Disabled"/' $PRACTICE/td/dell-bad/redfish/v1/Systems/System.Embedded.1/Bios.json
+cp -r testdata/hpe-dl360gen11 $PRACTICE/td/hpe-ok
+
+# mock BMC 두 대를 백그라운드로 기동한다 (127.0.0.1:18441, 18442). 처음엔 bin/mockbmc 를 빌드하므로 첫 번째를 띄우고 잠깐 기다린다
+bash mockbmc.sh -dir $PRACTICE/td/dell-bad -listen 127.0.0.1:18441 -user admin >$PRACTICE/mock1.out 2>&1 &
+echo $! >> $PRACTICE/pids
+sleep 8
+bash mockbmc.sh -dir $PRACTICE/td/hpe-ok -listen 127.0.0.1:18442 -user admin >$PRACTICE/mock2.out 2>&1 &
+echo $! >> $PRACTICE/pids
+sleep 2
+
+# 연습용 설정 (진짜 bios.conf 는 건드리지 않는다). 프로파일은 verified=Y 가 들어 있는 테스트용을 쓴다
+printf '%s\n' "user=admin" "pass_file=$PRACTICE/pass.enc" "key_file=$PRACTICE/key.bin" "result_dir=$PRACTICE/results" "dump_dir=$PRACTICE/dumps" "profile_dir=testdata/profiles-test" "concurrency=4" > $PRACTICE/bios.conf
+
+# 연습용 비밀번호 암호화 (mock 과 같은 값). RHEL6 이면 bin/biostool 대신 bin/biostool_os6
+printf '%s' "$MOCKBMC_PASS" | bin/biostool encrypt -key $PRACTICE/key.bin -out $PRACTICE/pass.enc
+
+# 연습용 대상 목록 (mock 두 대)
+printf '%s\n' 127.0.0.1:18441 127.0.0.1:18442 > $PRACTICE/user.txt
+
+# 연습 1: dry-run — 보낼 요청만 확인 (연습용 conf/목록을 -conf, -user 로 지정)
+bash bios_check.sh --profile VM -conf $PRACTICE/bios.conf -user $PRACTICE/user.txt -dry-run
+
+# 연습 2: 점검 후 프롬프트에서 Y 를 직접 입력해 Pending 설정까지 해 본다
+bash bios_check.sh --profile VM -conf $PRACTICE/bios.conf -user $PRACTICE/user.txt
+
+# 연습 3: 재점검 — 적용한 항목이 PENDING_OK 로 바뀐다
+bash bios_check.sh --profile VM -conf $PRACTICE/bios.conf -user $PRACTICE/user.txt -no-prompt
+
+# 연습 4: 전체 비교 — 기준은 hpe 한 대뿐이라 dell 쪽은 NO_REFERENCE, 기준 자신은 REFERENCE 로 나온다
+# (참고: xml.sh 는 -conf 를 받지 않고 항상 ./bios.conf 를 쓰므로 연습에서는 쓰지 않는다)
+printf '%s\n' 127.0.0.1:18442 > $PRACTICE/diff.txt
+bash all_bios_check.sh -conf $PRACTICE/bios.conf -user $PRACTICE/user.txt -diff $PRACTICE/diff.txt
+
+# mock 종료 (종료할 때 집계 한 줄 MOCKBMC_SUMMARY 가 mock?.out 에 남는다: 세션 생성=삭제, log_hits=0, writes=PATCH·Job 수)
+kill $(cat $PRACTICE/pids)
+sleep 1
+grep MOCKBMC_SUMMARY $PRACTICE/mock1.out $PRACTICE/mock2.out
+
+# 연습 파일 정리
+rm -rf $PRACTICE
+
+
+########################################################################
+# 9. 결과 파일 보는 법 (results/<일시>/ 는 실행할 때마다 새로 생긴다)
+########################################################################
+
+# 결과 폴더 목록 (같은 초에 또 실행하면 _2, _3 이 붙는다)
+ls -l results/
+
+# 이번 실행 요약: 프로파일·모드·대상 수·상태별 집계·BMC 호출 수(세션 생성 N, GET N)
+cat results/<일시>/run_info.txt
+
+# 전부 OK(또는 PENDING_OK) 인 호스트 이름
+cat results/<일시>/ok.txt
+
+# FAIL·설정 불가 항목만 표로 (열: hostname ip profile vendor model bios_version std_name attribute expected current pending result)
+column -t -s$'\t' results/<일시>/fail.tsv | less -S
+
+# 전체 결과에서 호스트, 모델, 항목, 속성, 기대값, 현재값, 상태만 보기
+cut -f1,5,7,8,9,10,12 results/<일시>/result.tsv | column -t -s$'\t' | less -S
+
+# 상태가 FAIL 인 행만
+awk -F'\t' '$12=="FAIL"' results/<일시>/result.tsv
+
+# 호스트 단위 오류(접속 실패 등)는 std_name 이 - 인 행으로 남는다
+awk -F'\t' '$7=="-"' results/<일시>/result.tsv
+
+# (설정 Y 를 했다면) Pending 반영을 확인한 호스트 / 실패·미확인 대상 / 보낸 요청과 결과 / 항목별 결과
+cat results/<일시>/applied.txt
+cat results/<일시>/apply_failed.txt
+cat results/<일시>/apply_requests.txt
+column -t -s$'\t' results/<일시>/apply_result.tsv | less -S
+
+# 매핑이 없는 모델이면 덤프와 요약이 자동 저장된다 (요약을 읽고 profiles/*.tsv 에 행을 추가한다)
+cat results/<일시>/mapping_missing/summary.txt
+
+# 파일 권한 확인 (모두 600, 비밀번호는 들어 있지 않다)
+ls -l results/<일시>/
