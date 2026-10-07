@@ -29,7 +29,7 @@ chmod +x bin/biostool bin/biostool_os6 *.sh    # 실행 권한이 없을 때 (�
 | 파일 | 대상 | 비고 |
 |---|---|---|
 | `bin/biostool` | RHEL8 등 커널 3.x 이상 | 정적 링크(CGO 없음). Go 1.25 로 빌드 |
-| `bin/biostool_os6` | **RHEL6**(커널 2.6.32) | 정적 링크. **Go 1.20.x** 로 빌드(RHEL6 커널에서는 Go 1.24 이상 바이너리가 동작하지 않음) |
+| `bin/biostool_os6` | **RHEL6**(커널 2.6.32) | 정적 링크. **Go 1.20.x** 로 빌드(RHEL6 커널에서는 Go 1.24 이상 바이너리가 동작하지 않음). **RHEL6 에서는 빌드하지 않고 이 파일을 그대로 씁니다.** `setup.sh` 는 os8 만 만들고, RHEL6 용은 저장소에 빌드 완료 상태로 커밋되어 있습니다 |
 
 `bios_check.sh`·`xml.sh`·`all_bios_check.sh`·`encrypt.sh` 는 `uname -r` 의 커널 메이저 버전이 3 미만이면 `bin/biostool_os6`, 아니면 `bin/biostool` 을 **자동 선택**합니다(선택한 바이너리에 실행 권한이 없으면 `chmod +x` 를 시도합니다). 바이너리가 없고 `go` 도 없으면 안내 후 종료합니다(종료코드 2). 스크립트는 RHEL6 의 bash 4.1 에서도 돌아가도록 썼습니다.
 
@@ -39,14 +39,14 @@ chmod +x bin/biostool bin/biostool_os6 *.sh    # 실행 권한이 없을 때 (�
 
 | 방법 | 설명 |
 |---|---|
-| `bash setup.sh` | **권장.** 오프라인(폐쇄망) 빌드. `GOPROXY=off`, 인터넷 접속 시도 없음. `bin/biostool` 을 만듭니다. go 가 없으면 안내 후 종료코드 2 |
+| `bash setup.sh` | Go 가 있는 **랩·PC 전용**. `GOPROXY=off`, 인터넷 접속 시도 없음. os8 용 `bin/biostool` 만 만듭니다. go 가 없으면 안내 후 종료코드 2. **회사 폐쇄망(Go 없음)과 RHEL6 에서는 실행하지 않습니다** |
 | `bash build.sh` | os8 용 `bin/biostool` (`setup.sh` 와 같은 결과) |
-| `bash build_os6.sh` | os6 용 `bin/biostool_os6`. `/opt/go1.20/bin` 의 **Go 1.20.x** 를 씁니다(없으면 경고) |
+| `bash build_os6.sh` | **관리자용.** 소스를 고친 뒤 RHEL6 용 `bin/biostool_os6` 를 **다시 만들 때만** 사용합니다(`/opt/go1.20/bin` 의 Go 1.20.x 필요). 일반 사용자는 실행하지 않고 커밋된 파일을 씁니다 |
 | `go vet ./... && go test ./...` | 정적 분석 + 전체 테스트(약 10초). 실제 BMC 에는 접속하지 않습니다 |
 
 ```bash
-bash setup.sh          # 오프라인 빌드 → bin/biostool
-bash build_os6.sh      # (RHEL6 용이 필요할 때만, Go 1.20.x 필요)
+bash setup.sh          # (Go 가 있는 랩·PC 에서만) os8 바이너리 bin/biostool 생성
+bash build_os6.sh      # (관리자가 소스를 고쳤을 때만) RHEL6 바이너리 bin/biostool_os6 재생성, Go 1.20.x 필요
 ```
 
 **vendor/ 가 없는 이유.** 이 프로젝트는 외부 의존성이 **하나도 없습니다**(`go.mod` 에 `require` 가 없고 표준 라이브러리만 사용, `module biostool`, `go 1.20`). 그래서 `go mod vendor` 로 모을 것이 없고 `vendor/` 디렉터리가 필요 없습니다. `setup.sh` 는 다른 프로젝트와 같은 틀(`GOFLAGS=-mod=vendor`, `go build -mod=vendor`)을 그대로 쓰는데, 의존성이 없으면 vendor 디렉터리가 없어도 이 옵션이 정상 동작합니다(랩의 Go 1.25.10 과 Go 1.20.14 에서 둘 다 `setup.sh` 성공을 확인했습니다). 나중에 외부 모듈을 쓰게 되면 `go mod vendor` 로 `vendor/` 를 만들어 커밋해야 폐쇄망 빌드가 유지됩니다.

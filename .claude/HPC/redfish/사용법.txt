@@ -34,10 +34,10 @@ chmod +x bin/biostool bin/biostool_os6 *.sh
 # 빌드 완료 바이너리가 이미 들어 있으므로 Go 없이 바로 쓸 수 있다. 바이너리가 실행되는지 확인 (RHEL6 은 bin/biostool_os6)
 bin/biostool help
 
-# (Go 가 있는 PC·랩만) 오프라인 빌드: GOPROXY=off, 인터넷 접속 없음 -> bin/biostool
+# (Go 가 있는 랩·PC 에서만, 회사 폐쇄망에서는 실행하지 않음) os8 바이너리 bin/biostool 을 다시 만든다
 bash setup.sh
 
-# (RHEL6 용이 필요할 때만, /opt/go1.20/bin 의 Go 1.20.x 필요) -> bin/biostool_os6
+# (관리자가 소스를 고쳤을 때만, Go 1.20.x 필요) RHEL6 바이너리 bin/biostool_os6 를 다시 만든다. 일반 사용자는 실행하지 않는다
 bash build_os6.sh
 
 # (Go 가 있는 곳만) 정적 분석 + 전체 테스트. 실제 BMC 에는 접속하지 않는다
