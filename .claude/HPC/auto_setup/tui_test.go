@@ -176,14 +176,14 @@ func TestKeySequenceManualRun(t *testing.T) {
 	}
 }
 
-func TestKeySequenceIncompleteGroupNoRequest(t *testing.T) {
+func TestKeySequenceIncompleteGroupAllowed(t *testing.T) {
 	src := &fakeSrc{snap: twoGroupSnap(), local: true}
-	r := runKeys(t, src, "\rcy") // a.yml (미완료): c → 불가, y 는 무시
-	if len(src.reqs) != 0 {
-		t.Fatalf("미완료 그룹에서 요청됨: %+v", src.reqs)
+	r := runKeys(t, src, "\rcy") // a.yml (미완료): c → 확인(미완료 포함 안내) → y → 요청
+	if len(src.reqs) != 1 || src.reqs[0].kind != ReqManualRun || src.reqs[0].payload["yml"] != "a.yml" {
+		t.Fatalf("미완료 그룹도 요청되어야 함: %+v", src.reqs)
 	}
-	if !strings.Contains(r.out.String(), "수동 실행 불가") || strings.Contains(r.out.String(), "[y/n]") {
-		t.Errorf("불가 안내만 있어야 함")
+	if strings.Contains(r.out.String(), "수동 실행 불가") || !strings.Contains(r.out.String(), "미완료") || !strings.Contains(r.out.String(), "[y/n]") {
+		t.Errorf("확인 질문에 미완료 포함 안내가 있어야 함")
 	}
 	assertRestored(t, r)
 }

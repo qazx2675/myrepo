@@ -646,16 +646,16 @@ func runInfoLine(s Snapshot, j *SnapJob, g *SnapGroup, width int, color bool) st
 	return ""
 }
 
-// manualLine: [c] OS 체크 수동 실행 — 그룹이 complete 면 활성, 아니면 회색 비활성 안내, 확인 중이면 y/n 질문
+// manualLine: [c] OS 체크 수동 실행 — 완료 여부와 상관없이 활성(그룹 전체 시도, 접속불가는 wall 에 표시), 확인 중이면 y/n 질문
 func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
-	if g.Complete {
-		if sel.Confirm {
-			return segLine(color, width, seg{fmt.Sprintf(" %s (%d대)에 OS 체크(이중체크)를 실행합니다. 계속할까요? [y/n]", g.Yml, g.Counts.Total), stYellow})
+	if sel.Confirm {
+		extra := ""
+		if n := g.Counts.Total - g.Counts.Done; n > 0 {
+			extra = fmt.Sprintf(", 미완료 %d대 포함", n)
 		}
-		return segLine(color, width, seg{" [c] OS 체크 수동 실행(이중체크)", "1;32"})
+		return segLine(color, width, seg{fmt.Sprintf(" %s (%d대%s)에 OS 체크(이중체크)를 실행합니다. 계속할까요? [y/n]", g.Yml, g.Counts.Total, extra), stYellow})
 	}
-	return segLine(color, width, seg{fmt.Sprintf(" [c] OS 체크 수동 실행(이중체크) - 비활성: 완료 %d/%d (모든 호스트 완료 시 활성)",
-		g.Counts.Done, g.Counts.Total), stGray})
+	return segLine(color, width, seg{" [c] OS 체크 수동 실행(이중체크) - 미완료 호스트도 시도, 접속불가는 알림", "1;32"})
 }
 
 // ---- 도움말 ----
@@ -675,7 +675,7 @@ func renderHelp(width, height int, color bool) string {
 		"   ↑ ↓ (k j)   호스트 행 이동",
 		"   ← / Esc / q 화면 1 로 복귀",
 		"   f           정체·실패 호스트만 보기 (토글)",
-		"   c           OS 체크 수동 실행(이중체크) - 그룹 전체가 완료일 때만, y/n 확인",
+		"   c           OS 체크 수동 실행(이중체크) - 완료 여부와 상관없이 그룹 전체 시도, 접속불가는 알림, y/n 확인",
 		" 색: 완료 초록 / 진행 청록 / 대기 회색 / 경고 노랑 / 정체·실패 빨강. NO_COLOR 설정 시 색 없음",
 		" 막대: # 완료  + 진행  . 대기  ! 정체·실패",
 		" %: 완료 대수 / 전체 (배포중·설치중·부팅확인·체크중은 + 로만 보이고 % 는 완료될 때 오름)",

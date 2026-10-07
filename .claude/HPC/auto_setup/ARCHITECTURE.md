@@ -144,7 +144,7 @@
 
 ### 요청 채널 (requests.go)
 
-`writeRequest()` 가 `requests/<epoch>_<kind>.req`(key=value 줄)를 임시파일 → link 로 원자 기록 → 데몬이 `collectRequests()` 로 수거. `manual-run` 은 그룹 전체가 완료일 때만 수락(→ `requests/active/`, run 큐에서 `scheduleManual()` 이 자동 run 이 없을 때 실행), 거부는 `requests/rejected/<같은 이름>` + 마지막 `reason=` 줄. `cancel` 은 `auto_setup cancel` 과 동일.
+`writeRequest()` 가 `requests/<epoch>_<kind>.req`(key=value 줄)를 임시파일 → link 로 원자 기록 → 데몬이 `collectRequests()` 로 수거. `manual-run` 은 완료 여부와 상관없이 수락(접속불가는 wall 에 표시)(→ `requests/active/`, run 큐에서 `scheduleManual()` 이 자동 run 이 없을 때 실행), 거부는 `requests/rejected/<같은 이름>` + 마지막 `reason=` 줄. `cancel` 은 `auto_setup cancel` 과 동일.
 
 ### 완료기록 (done.go ↔ os_check)
 

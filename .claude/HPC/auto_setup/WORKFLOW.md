@@ -178,7 +178,7 @@ codes/<code>.txt
 
 ```bash
 # requests/<epoch>_<kind>.req (manual-run | cancel) → 데몬 5초 주기 수거
-# manual-run 은 그룹 전체가 완료일 때만 수락 → 데몬 run 큐에서 실행(동시 1개), code·wall 동일
+# manual-run 은 완료 여부와 상관없이 수락(접속불가는 wall 에 표시) → 데몬 run 큐에서 실행(동시 1개), code·wall 동일
 ```
 
 ## 흐름도 보조 자료

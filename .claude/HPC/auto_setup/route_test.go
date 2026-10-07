@@ -182,3 +182,37 @@ func TestRequestRefreshArgs(t *testing.T) {
 		t.Fatal("relayArgsOK refresh")
 	}
 }
+
+// wall 로케일: C 로케일(cron 데몬)이면 ko_KR.UTF-8 로 강제, 이미 UTF-8 이면 유지
+func TestWallLocale(t *testing.T) {
+	get := func(env []string, k string) string { return envValue(env, k) }
+	c := wallLocale([]string{"PATH=/bin", "LANG=C", "LC_ALL=POSIX"})
+	if get(c, "LANG") != "ko_KR.UTF-8" || get(c, "LC_ALL") != "ko_KR.UTF-8" || get(c, "PATH") != "/bin" {
+		t.Fatalf("C 로케일 → ko_KR.UTF-8: %v", c)
+	}
+	if e := wallLocale([]string{"PATH=/bin"}); get(e, "LC_ALL") != "ko_KR.UTF-8" {
+		t.Fatalf("LANG 없음: %v", e)
+	}
+	u := wallLocale([]string{"LANG=en_US.UTF-8"})
+	if get(u, "LC_ALL") != "en_US.UTF-8" || get(u, "LANG") != "en_US.UTF-8" {
+		t.Fatalf("UTF-8 유지: %v", u)
+	}
+	n := 0
+	for _, e := range wallLocale([]string{"LANG=C", "LC_CTYPE=C"}) {
+		if strings.HasPrefix(e, "LANG=") || strings.HasPrefix(e, "LC_ALL=") || strings.HasPrefix(e, "LC_CTYPE=") {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("중복 로케일 변수: %d", n)
+	}
+}
+
+func TestUnreachableLine(t *testing.T) {
+	if unreachableLine(nil) != "" {
+		t.Fatal("없으면 빈 문자열")
+	}
+	if got := unreachableLine([]string{"a", "b"}); got != "[!] 접속불가·미응답 2대: a b\n" {
+		t.Fatalf("%q", got)
+	}
+}

@@ -1118,8 +1118,30 @@ func (d *Daemon) finishManual(c *inflight, r runDone, now time.Time) {
 	if res.Abnormal {
 		note = " (os_check 비정상 종료)"
 	}
-	logf("수동 run 완료: job %s 그룹 %s code %s %d대%s", c.jobID, c.yml, res.Code, len(done), note)
-	d.Notifier.Wall(wallMessage(c.user, done, res.Code, res.Abnormal))
+	// 처리(체크 결과가 나온) 호스트가 아닌 것 = 접속불가·미응답 → 따로 알림
+	got := map[string]bool{}
+	for _, n := range done {
+		got[n] = true
+	}
+	var unreachable []string
+	if !res.Abnormal {
+		for _, n := range uniq(c.hosts) {
+			if !got[n] {
+				unreachable = append(unreachable, n)
+			}
+		}
+		sort.Strings(unreachable)
+	}
+	logf("수동 run 완료: job %s 그룹 %s code %s %d대%s 접속불가 %d대", c.jobID, c.yml, res.Code, len(done), note, len(unreachable))
+	d.Notifier.Wall(wallMessage(c.user, done, res.Code, res.Abnormal) + unreachableLine(unreachable))
+}
+
+// unreachableLine: 수동 run 에서 체크 결과가 없는(접속불가·미응답) 호스트 안내 줄 (없으면 빈 문자열)
+func unreachableLine(hosts []string) string {
+	if len(hosts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("[!] 접속불가·미응답 %d대: %s\n", len(hosts), strings.Join(hosts, " "))
 }
 
 func wallMessage(user string, hosts []string, code string, abnormal bool) string {

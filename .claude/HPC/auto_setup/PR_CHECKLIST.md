@@ -158,7 +158,7 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 
 - [ ] **완료기록 규칙**: 부팅 이전·전달 이전 기록 거부, 미래 +5분 초과 거부, 인정 후 `done/applied/` 이동·중복 run 없음 (`run_e2e2.sh b`), os_check 빈 변수일 때 출력·종료코드 변화 0
 - [ ] **2차(이중) 체크**: 대상 = route=local 접속불가·FAIL 만(route=os6 제외), 최종 = 1차 OK 또는 2차 OK, `os6_os_check_sh="-"` 면 생략 (`run_e2e2.sh f`)
-- [ ] **요청·데몬 제어**: manual-run 은 그룹 전체 완료일 때만 수락(거부는 `requests/rejected/` reason=), `--start/--stop/--restart` pid 정리, 원격 클라이언트에서 데몬 명령 거부 (`run_e2e2.sh c d`)
+- [ ] **요청·데몬 제어**: manual-run 은 완료 여부와 상관없이 수락(거부는 job·그룹 없음/중복, `requests/rejected/` reason=), `--start/--stop/--restart` pid 정리, 원격 클라이언트에서 데몬 명령 거부 (`run_e2e2.sh c d`)
 - [ ] **TUI**: 키 시퀀스 테스트(화면 1 → Enter 화면 2 → `c` y/n → 요청 파일 생성), 골든 렌더(색 on/off, 폭 80/120), 비 tty·`--plain` 텍스트 출력 (`go test ./...`, `manual_check.sh` 11단계)
 - [ ] **직접 테스트 건수**: `bash test/run_e2e.sh` 85건, `bash test/run_e2e2.sh` 191건, awx `run_tests.sh` 54건 모두 PASS
 - [ ] **README 순서·주의사항**: 빌드·설치 → 사용 방법 → 옵션별 상세 → 문서별 설명 → 주의사항(Disclaimer) → 전역 명령어, LDAP LDAP 복원은 공유경로 경유(명령줄에 비밀 없음, `ldap_share_dir` 는 대상 root 읽기 가능해야 함, 사용 후 자동 삭제)·`ldapbak/` 수동 삭제 안내 포함
