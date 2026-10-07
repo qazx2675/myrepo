@@ -1,9 +1,32 @@
 # CHANGELOG
 
-## [Unreleased]
+## [0.4.0] - 2026-10-07
+
+os8_mgmt 에서 접속이 안 되는 호스트가 `배포중` 에서 멈추던 문제 — 일반 호스트와 같은 흐름(부팅확인·설치중 → READY → 체크 → 완료)으로 진행하도록 os6 경유 자동 전환. 폐쇄망 설정 가이드·업데이트 스크립트 추가.
+
+### 변경
+- `daemon.go` `ping()` — route=local 인데 os8 로컬 ping 무응답이면 다음 ping 부터 `both`(로컬 ICMP + os6 probe) 로 확인, os6 가 응답하면 route=os6 로 전환(로그 `경로 전환: <호스트> local → os6`). 종전에는 첫 ping 에서만 경로를 정해 설치 중 os8 에서 안 보이게 된 호스트·`os6_mgmt` 를 나중에 채운 경우 계속 `배포중` 이었음. 전환은 local → os6 한 방향
+- `daemon.go` `check()` — os8 준비확인(gossh) 무응답인 local 호스트는 같은 주기에 os6_mgmt 경유로 다시 확인, 응답하면 route=os6 (`os6_mgmt`·`os6_gossh` 둘 다 있을 때). os_check run 도 os6 경로로 실행
+- `icmp.go` — Pinger 경로 `both`, 결과에 `Via`(local/os6). 로컬 응답 우선, 없으면 os6 정보, os6 정보도 없으면 로컬 무응답
+- TUI `r` 키 — 화면 다시 읽기 + 데몬에 **즉시 ping·준비확인 요청**(새 요청 종류 `refresh`, 5초에 1회). 원격 클라이언트(os6_mgmt)에서도 동일. CLI `auto_setup request refresh`
+- 비고 `ping 정보없음` / `ping 정보없음(os6 probe 확인)` — ping 정보가 1분 이상 없을 때(os6 probe 세션 접속 실패 등) 단계가 멈춘 이유 표시. 호스트 JSON 에 `no_ping`(omitempty) 추가
+- 도움말 — `%` 는 완료 대수/전체(설치 중 0% 는 정상) 설명 추가
+
+### 신규
+- `conf/setup_guide.sh` — 빈 변수 9개 입력 가이드(역할 os8/os6 선택 → 설명·예시·현재값 → 검증 → `conf/auto_setup.conf` 기록 → os8 이면 setup.sh 이어서 실행). git-upload-sk 틀로 생성
+- `conf/update_v0.4.0.sh` — 현장 사본 `conf/auto_setup.conf` 업데이트(현장 값·주석 보존, 앵커 불일치 시 중단·파일 불변, CRLF 자동 처리, `--dry`/`--undo`). 이번 버전 변경은 `os6_mgmt` 위 안내 주석 1줄, 신규 변수 없음
+- `conf/vars.manifest` — 가이드·업데이트 공용 변수 목록(설명·예시·역할·검증)
+- `test/run_setup_scripts.sh` — 가이드·업데이트 스텁 검증 25건 (Rocky 8 / CentOS 6 bash 4.1)
+- 테스트: `route_test.go` (local→os6 ping 전환, os6 없으면 종전 동작, 준비확인 대체, refresh 즉시 수행, mergeBoth, no_ping, TUI r 요청)
 
 ### 수정
 - `setup.sh`/`build_os6.sh` — PATH 에 go 가 없어도 `/usr/local/go/bin`, `/opt/go*/bin` 을 찾아 사용(비로그인·csh 셸에서 "go 를 찾을 수 없습니다" 방지). `build_os6.sh` 는 `/opt/go1.20` 이 있으면 우선 사용하고 사용한 go 버전을 출력.
+- `auto_setup_os6` 재빌드(go1.20.14 정적, 변수 빈 값), git 실행 권한(+x) 기록
+- `.gitignore` — 업데이트 백업 `conf/auto_setup.conf.bak.*`, `conf/.update_journal` 제외
+
+### 주의사항
+- 설치된 데몬은 옛 바이너리이므로 업데이트 후 `bash setup.sh` + `auto_setup --restart` 필요. os6_mgmt 의 `auto_setup` 도 새 `auto_setup_os6` 로 교체
+- os6 경로는 os8_mgmt → os6_mgmt `ssh -o BatchMode=yes`(키 인증) 가 되어야 동작
 
 ## [0.3.0] - 2026-10-04
 

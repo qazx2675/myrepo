@@ -103,11 +103,12 @@ type tuiEnv struct {
 }
 
 const (
-	enterScreen  = "\x1b[?1049h\x1b[?25l" // 대체 화면 + 커서 숨김
-	leaveScreen  = "\x1b[?25h\x1b[?1049l"
-	reqHold      = 20 * time.Second // 수동 실행 요청 후 같은 그룹 재요청 차단 시간
-	refreshLocal = 2 * time.Second
-	refreshAway  = 5 * time.Second
+	enterScreen    = "\x1b[?1049h\x1b[?25l" // 대체 화면 + 커서 숨김
+	leaveScreen    = "\x1b[?25h\x1b[?1049l"
+	reqHold        = 20 * time.Second // 수동 실행 요청 후 같은 그룹 재요청 차단 시간
+	refreshLocal   = 2 * time.Second
+	refreshAway    = 5 * time.Second
+	refreshReqHold = 5 * time.Second // r 키 즉시 갱신 요청 최소 간격 (데몬 step 주기와 같음)
 )
 
 // runTUI: 무인자 `auto_setup` 진입점. tty 가 아니거나 plain 이면 색 없는 텍스트를 한 번 출력하고 끝낸다.
@@ -161,6 +162,7 @@ type tuiState struct {
 	sel     selection
 	help    bool
 	pending map[string]time.Time // 수동 실행 요청 시각 (jobid\x00yml)
+	lastReq time.Time            // 마지막 즉시 갱신(refresh) 요청 시각
 }
 
 // runTUILoop: raw 모드 진입 → 그리기·키·tick 루프 → (정상·패닉·시그널 어느 경로든) 화면·termios 복원
@@ -295,6 +297,7 @@ func (st *tuiState) handle(ev keyEv) bool {
 		return false
 	}
 	if ev.k == kRune && (ev.r == 'r' || ev.r == 'R') {
+		st.requestRefresh()
 		st.refresh()
 		return false
 	}
@@ -408,6 +411,19 @@ func (st *tuiState) pendKey() string { return st.sel.JobID + "\x00" + st.sel.Yml
 func (st *tuiState) recentlyRequested() bool {
 	t, ok := st.pending[st.pendKey()]
 	return ok && st.env.Now().Sub(t) < reqHold
+}
+
+// requestRefresh: r 키 — 데몬에 즉시 ping·준비확인 요청 (os8 무응답 호스트는 데몬이 os6_mgmt 경유로 확인).
+// 연타로 요청이 쌓이지 않게 refreshReqHold 안의 재요청은 생략, 결과는 다음 자동 갱신에 보인다.
+func (st *tuiState) requestRefresh() {
+	now := st.env.Now()
+	if !st.lastReq.IsZero() && now.Sub(st.lastReq) < refreshReqHold {
+		return
+	}
+	st.lastReq = now
+	if err := st.src.Request(ReqRefresh, nil); err != nil {
+		st.sel.Msg = "[X] 즉시 갱신 요청 실패: " + err.Error()
+	}
 }
 
 // requestManual: y 확인 후 manual-run 요청 (요청 파일만 남김 — 데몬이 5초 주기로 수거)

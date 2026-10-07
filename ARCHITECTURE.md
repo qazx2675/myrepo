@@ -16,6 +16,7 @@
 | `notify.go` | wall 알림 발송 | 결과 공유 |
 | `paths.go` | `os6_os_check_sh`·`awx_dir` 해석, dhcp.sh 링크 후보 (autofs 동일 경로 포함) | 2차 |
 | `conf.go` · `conf/auto_setup.conf.example` | 빈 변수를 설정 파일(`conf/auto_setup.conf`)로 채움 (빌드 변수가 우선) | 0.3.0 |
+| `conf/setup_guide.sh` · `conf/update_v*.sh` · `conf/vars.manifest` | 빈 변수 입력 가이드·현장 사본 업데이트(git-upload-sk 틀로 **생성**, 직접 고치지 말고 manifest 수정 후 재생성) · 변수 목록 | 0.4.0 |
 | `model.go` | 호스트 단계(Stage)·한글 라벨·정체 판정, 그룹(yml) 집합, Snapshot 구조체·BuildSnapshot (CLI·TUI·원격 공용) | 2차 |
 | `client.go` | SnapshotSource(로컬/원격), gossh 원샷 전송·출력 복원 = 원격 클라이언트 모드 | 2차 |
 | `ctl.go` | `--start/--stop/--restart`, snapshot/done/request 명령, 색 메시지 | 2차 |
@@ -23,11 +24,11 @@
 | `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙 | 2차, 골든 테스트 |
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |
-| `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel), 수동 run 스케줄 | 2차 |
+| `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel / refresh), 수동 run 스케줄 | 2차 |
 | `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교·공유경로(`ldap_share_dir`) 경유 백업 세트 복원 | 2차 |
 | `second.go` | 2차(이중) 체크: os6_mgmt 실행·결과 회수·code 섹션 병합 | 2차 |
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
-| `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths), TUI 골든 파일 | 검증 |
+| `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route), TUI 골든 파일 | 검증 |
 | `setup.sh` | 빌드 + /usr/local/bin 설치 + cron + tmpfiles 등록 (멱등) | 설치 도구 |
 | `build_os6.sh` | Go 1.20 정적 빌드 → auto_setup_os6 (CGO_ENABLED=0) | os6 빌드 |
 | `test/` | 대화형 점검(manual_check.sh 1~17단계), 목업 E2E(run_e2e.sh 85건, run_e2e2.sh 177건), 공용(lib_e2e.sh), 스텁(gossh/ssh/wall) | 검증 하네스 |
@@ -88,9 +89,9 @@
 |---|---|---|---|---|
 | ① | `doPoll()` | queue 디렉터리(5초 주기) | Job 로드 또는 생성 | 새 작업 수거, 중복 호스트는 기존 job 에서 제거 |
 | ② | `doLookup()` | 호스트명 목록 | host → ip 매핑(net.LookupHost, 동시 32) | DNS 조회(job 수거 시 1회) |
-| ③ | `selectRoute()` | 로컬 ping 결과 | host → route 배정(local/os6) | 로컬 ping 실패 → os6 경로 |
+| ③ | `ping()` 경로 판별 | 로컬 ping 결과 | host → route 배정(local/os6) | 첫 ping 로컬 실패 → os6. route=local 인데 로컬 무응답이면 다음 ping 은 `both`(로컬+os6 probe), os6 응답 → route=os6 전환 (0.4.0) |
 | ④ | `doPing()` | 10초 주기 | host 의 up/down 판정, seen_down 설정 | raw ICMP 송수신, 미스 카운트 → down |
-| ⑤ | `doCheck()` | 30초 주기(후보만) | READY 호스트 판정 | gossh -pm uptime && anaconda 아님 && uptime < 경과시간 |
+| ⑤ | `check()` | 30초 주기(후보만) | READY 호스트 판정 | gossh -pm uptime && anaconda 아님 && uptime < 경과시간. local 무응답 호스트는 같은 주기에 os6 경유 재확인, 응답 → route=os6 (0.4.0, `os6_gossh` 필요) |
 | ⑥ | `scheduleRun()` | READY 변화 | run 이름 및 호스트 결정(7분/3분) | 첫 READY + 7분 또는 전부 READY 시 즉시 실행 |
 | ⑦ | `doRun()` | run 큐 | os_check 호출, code 생성, wall 발송 | 동시에 1개 run만 실행, 실패해도 다음 run 진행 |
 | ⑧ | (감시 계속) | | | 완료 호스트 제외 후 무기한 감시(cancel 까지) |

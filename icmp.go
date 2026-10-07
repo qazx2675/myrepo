@@ -206,7 +206,7 @@ func (p *icmpPinger) ping(targets []PingTarget) (map[string]PingResult, error) {
 	return out, nil
 }
 
-// realPinger: Route=="os6" 는 os6 세션의 마지막 상태, 그 외(local)는 직접 ICMP
+// realPinger: Route=="os6" 는 os6 세션의 마지막 상태, "both" 는 직접 ICMP + os6 세션(로컬 응답 우선), 그 외(local)는 직접 ICMP
 type realPinger struct {
 	local *icmpPinger
 	os6   *os6Sessions
@@ -219,10 +219,16 @@ func NewRealPinger() Pinger {
 
 func (r *realPinger) Ping(targets []PingTarget) map[string]PingResult {
 	var loc, o6 []PingTarget
+	both := map[string]bool{}
 	for _, t := range targets {
-		if t.Route == "os6" {
+		switch t.Route {
+		case "os6":
 			o6 = append(o6, t)
-		} else {
+		case "both":
+			both[t.Host] = true
+			loc = append(loc, t)
+			o6 = append(o6, t)
+		default:
 			loc = append(loc, t)
 		}
 	}
@@ -234,7 +240,23 @@ func (r *realPinger) Ping(targets []PingTarget) map[string]PingResult {
 	}
 	// os6 대상이 없어도 호출: 집합이 비면 세션을 종료한다
 	for h, v := range r.os6.Ping(o6) {
+		if both[h] {
+			out[h] = mergeBoth(out[h], v)
+			continue
+		}
 		out[h] = v
 	}
 	return out
+}
+
+// mergeBoth: Route="both" 결과 — 로컬 응답 → local, 아니면 os6 정보(있으면) → os6, 없으면 로컬 결과
+func mergeBoth(loc, o6 PingResult) PingResult {
+	switch {
+	case loc.Known && loc.Up:
+		return PingResult{Up: true, Known: true, Via: "local"}
+	case o6.Known:
+		return PingResult{Up: o6.Up, Known: true, Via: "os6"}
+	}
+	loc.Via = "local"
+	return loc
 }

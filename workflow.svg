@@ -46,7 +46,7 @@
   <text x="300" y="242" class="t" text-anchor="middle">5초 주기, jobs/&lt;jobid&gt;.json</text>
   <rect x="90" y="278" width="420" height="52" rx="6" class="box"/>
   <text x="300" y="300" class="t tb" text-anchor="middle">DNS 조회 · 경로 판별</text>
-  <text x="300" y="316" class="t" text-anchor="middle">로컬 ping 실패 → route=os6, 나머지 local</text>
+  <text x="300" y="316" class="t" text-anchor="middle">로컬 ping 실패 → os6 (설치 중 os8 무응답·os6 응답 → os6 전환)</text>
   <rect x="90" y="352" width="420" height="52" rx="6" class="ldap"/>
   <text x="300" y="374" class="t tb" text-anchor="middle">전달 시점 LDAP 백업 (ping O 호스트만)</text>
   <text x="300" y="390" class="t" text-anchor="middle">ldapbak/&lt;jobid&gt;/&lt;host&gt;/ (0700 / 0600)</text>

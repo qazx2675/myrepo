@@ -9,11 +9,15 @@ type realClock struct{}
 
 func (realClock) Now() time.Time { return time.Now() }
 
-// Route: "local" | "os6"
+// Route: "local" | "os6" | "both" (로컬 ICMP + os6 세션 둘 다 — 로컬 경로인데 로컬 무응답인 호스트)
 type PingTarget struct{ Host, IP, Route string }
 
 // Known=false: 정보 없음(os6 세션 끊김 등) → 상태 불변
-type PingResult struct{ Up, Known bool }
+// Via: 결과를 본 경로 ("local" | "os6", Route="both" 일 때만 채움 — 로컬 응답 우선, 없으면 os6, os6 정보가 없으면 로컬 무응답)
+type PingResult struct {
+	Up, Known bool
+	Via       string
+}
 
 // 키=Host. 호출 1회=ping 주기 1회(블록, 수초 내 반환)
 type Pinger interface {
