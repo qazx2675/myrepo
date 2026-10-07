@@ -1,0 +1,23 @@
+# auto_setup vars.manifest — conf/auto_setup.conf 의 빈 변수 9개 (git-upload-sk 가이드·업데이트 공용)
+#
+# 형식: name|target|kind|role|group|required|desc|example|check|since|renamed_from  (| 구분 11필드)
+#   - target 은 프로젝트 루트(conf/ 의 상위) 기준 상대경로. 값은 conf/auto_setup.conf 의 "키=값" 줄에 들어간다.
+#   - 역할: os8 = os8_mgmt (auto_setup 데몬이 도는 서버), os6 = os6_mgmt (빌드 완료 auto_setup_os6 로 원격 클라이언트).
+#   - 다른 서버 위 경로(os6_mgmt·os8_mgmt 쪽 경로)는 이 서버에서 존재를 확인할 수 없어 check=none.
+#   - setup.sh 는 Go 빌드·설치·cron 등록 (os8_mgmt 전용). os6 역할에서는 "이어서 실행" 에 n.
+#
+#@meta project=auto_setup
+#@meta version=0.4.0
+#@meta setup=setup.sh
+#
+# ---- os8_mgmt (데몬 서버) ----
+os6_mgmt|conf:conf/auto_setup.conf|host|os8|-|n|모든 대역에 접근 가능한 os6_mgmt 서버 (ssh 로 접속할 이름, user@host 가능).\n데몬이 os8 에서 ping·준비확인이 안 되는 호스트를 이 서버 경유로 감시·체크한다 (os6 경로, v0.4.0 부터 설치 중 os8 무응답이면 자동 전환).\n비워 두면 os6 경로와 2차 체크를 쓰지 않는다 (os8 에서 안 보이는 호스트는 배포중에서 멈춘 뒤 정체로 표시).|os6mgmt01|host|0.3.0|-
+os6_gossh|conf:conf/auto_setup.conf|path|os8|dep:os6_mgmt|n|os6_mgmt 위 gossh 실행 파일의 전체 경로 (os6_mgmt 기준 경로, 이 서버에 없어도 된다).\nos6 경로 호스트의 준비확인(uptime)과, os8 에서 준비확인이 안 되는 호스트의 대체 확인에 쓴다. 비우면 os6 준비확인을 하지 않는다.|/user/siy/gossh/OS6/gossh|none|0.3.0|-
+os6_autosetup|conf:conf/auto_setup.conf|path|os8|dep:os6_mgmt|n|os6_mgmt 위에 빌드 완료 auto_setup_os6 를 "auto_setup" 이름으로 둔 디렉터리 (os6_mgmt 기준 경로).\n데몬이 ssh 로 "<이 디렉터리>/auto_setup probe" 를 실행해 os6 경로 호스트의 ping 을 받는다.|/user/svrauto/auto_setup|none|0.3.0|-
+os_check_sh|conf:conf/auto_setup.conf|path|os8|-|y|이 서버에서 실행할 OS 설정 체크 스크립트의 전체 경로 (-auto 모드를 지원해야 한다; config_check.sh 등).\nREADY 가 된 호스트를 "bash <이 경로> -auto <user> <목록>" 으로 실행한다. autofs 공유 경로면 os8_mgmt·os6_mgmt 에서 같은 경로.|/path/config_check.sh|file|0.3.0|-
+awx_dir|conf:conf/auto_setup.conf|path|os8|-|n|awxkit/dhcp.sh 가 있는 awx_script 디렉터리 (autofs 동일 경로).\n비우면 os_check_sh 와 같은 디렉터리의 dhcp.sh 만 찾는다.|/path/awx_script|dir|0.3.0|-
+os6_os_check_sh|conf:conf/auto_setup.conf|path|os8|dep:os6_mgmt|n|os6_mgmt 위 체크 스크립트 경로 (2차 체크용, os6_mgmt 기준 경로).\n비우면 os_check_sh 와 같은 경로를 쓰고(autofs 동일 경로), 하이픈 한 글자(-)를 넣으면 2차 체크를 끈다.|/path/config_check.sh|none|0.3.0|-
+ldap_share_dir|conf:conf/auto_setup.conf|path|os8|-|n|LDAP 복원용 autofs 공유 디렉터리. os8_mgmt 와 대상 서버가 모두 보는 곳이며 대상 서버의 root 가 읽을 수 있어야 한다 (no_root_squash).\n비우면 자동 복원을 하지 않는다 (binddn 이 다르면 "LDAP 수동 복원 필요" 로 표시).|/share/auto_setup_ldap|dir|0.3.0|-
+# ---- os6_mgmt (원격 클라이언트) ----
+os8_mgmt|conf:conf/auto_setup.conf|host|os6|-|y|auto_setup 데몬이 도는 os8_mgmt 서버. 이 값이 있으면 이 서버의 auto_setup 은 원격 클라이언트로 동작한다 (status·TUI 를 gossh 로 os8_mgmt 에서 가져옴).\nos8_mgmt 자신의 설정에서는 반드시 비워 둔다 (채우면 데몬 서버가 아니게 된다).|os8mgmt01|host|0.3.0|-
+os8_autosetup|conf:conf/auto_setup.conf|path|os6|dep:os8_mgmt|n|os8_mgmt 위 auto_setup 실행 파일 경로 (os8_mgmt 기준 경로).\n비우면 /usr/local/bin/auto_setup (setup.sh 설치 위치).|/usr/local/bin/auto_setup|none|0.3.0|-

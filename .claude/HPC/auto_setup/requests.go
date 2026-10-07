@@ -17,6 +17,7 @@ import (
 const (
 	ReqManualRun = "manual-run" // payload: jobid=<id> yml=<그룹>  → 그룹 호스트 전체가 완료일 때만 수락, 데몬 run 큐에 수동 run
 	ReqCancel    = "cancel"     // payload: jobid=<id>            → auto_setup cancel 과 동일
+	ReqRefresh   = "refresh"    // payload: 없음                  → 다음 step 에서 ping·준비확인 즉시 수행 (TUI r 키)
 )
 
 // 디렉터리: requests/ (새 요청) → active/ (수락된 manual-run, 끝나면 삭제) | rejected/ (거부, 끝에 reason= 줄)
@@ -144,6 +145,9 @@ func (d *Daemon) collectRequests(now time.Time) {
 			d.removeJob(id)
 			os.Remove(p)
 			logf("요청 수락: %s → cancel %s", name, id)
+		case ReqRefresh:
+			d.lastPing, d.lastCheck = time.Time{}, time.Time{} // 이번 step 에서 바로 ping·준비확인
+			os.Remove(p)
 		default:
 			rejectRequest(p, name, b, "알 수 없는 요청 종류")
 		}

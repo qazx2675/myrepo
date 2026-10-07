@@ -33,6 +33,7 @@ type Host struct {
 	Ldap    *LdapState `json:"ldap,omitempty"`     // LDAP 백업/비교 상태 (nil = 미수집)
 	Second  string     `json:"second,omitempty"`   // 2차 체크: "" | running | ok | fail
 	DoneSrc string     `json:"done_src,omitempty"` // 완료 출처: run | external | manual
+	NoPing  int64      `json:"no_ping,omitempty"`  // ping 정보 없음(Known=false)이 시작된 시각, 정보가 오면 0 — 비고 표시용
 }
 
 // LdapState: 호스트별 LDAP 백업·비교 상태. 비교 기준은 binddn 의 uid 값이며 bindpw·uid 값 자체는 저장·출력하지 않는다.

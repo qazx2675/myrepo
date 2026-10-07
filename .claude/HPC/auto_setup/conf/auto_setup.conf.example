@@ -8,6 +8,7 @@
 #   3) /etc/auto_setup/auto_setup.conf   (setup.sh 가 conf/auto_setup.conf 를 여기에 설치)
 
 # 모든 대역 접근 가능한 서버 (비우면 os6 경로 미사용)
+# (v0.4.0) os8 에서 ping·준비확인이 안 되는 호스트는 설치 중에도 이 서버 경유로 자동 전환
 os6_mgmt=
 # os6_mgmt 위 gossh 실행 파일 전체 경로
 os6_gossh=

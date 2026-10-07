@@ -172,6 +172,9 @@ var closedKeep = 24 * time.Hour
 
 const snapTimeLayout = "2006-01-02 15:04:05"
 
+// noPingNote: ping 정보 없음이 이 시간 이상 이어지면 비고에 표시
+var noPingNote = time.Minute
+
 // StageCounts: 단계별 대수 (Total = 호스트 수)
 type StageCounts struct {
 	Total      int `json:"total"`
@@ -404,6 +407,17 @@ func snapHost(name string, h *Host, now int64) SnapHost {
 		Route: h.Route, Done: h.Processed, Note: hostNote(h), Second: h.Second, DoneSrc: h.DoneSrc}
 	if h.StageAt > 0 && now > h.StageAt {
 		sh.Elapsed = now - h.StageAt
+	}
+	// ping 정보가 noPingNote 이상 없음 → 단계가 멈춰 보이는 이유 표시 (os6 경로면 probe 세션 문제)
+	if h.NoPing > 0 && h.Processed == "" && now-h.NoPing >= secs(noPingNote) {
+		n := "ping 정보없음"
+		if h.Route == "os6" {
+			n += "(os6 probe 확인)"
+		}
+		if sh.Note != "" {
+			n = sh.Note + ", " + n
+		}
+		sh.Note = n
 	}
 	if h.Ldap != nil {
 		l := *h.Ldap

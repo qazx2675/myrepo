@@ -192,3 +192,48 @@ vi conf/auto_setup.conf
 bash setup.sh
 # 다른 디렉터리의 설정을 임시로 쓰려면
 AUTO_SETUP_CONF=/경로 auto_setup --plain
+
+# ===== 9. 폐쇄망 설정 가이드 · 현장 업데이트 (0.4.0~) =====
+
+# [처음 설치] 설정 파일이 없으면 예시를 복사 (이미 있으면 덮어쓰지 않음)
+cp -n conf/auto_setup.conf.example conf/auto_setup.conf
+
+# [처음 설치] 빈 변수 입력 가이드: 역할(os8=데몬 서버 / os6=원격 클라이언트) 선택 → 변수마다 설명·예시를 보고 입력 → 검증 → 기록
+# os8 이면 마지막 "setup.sh 를 이어서 실행" 에 y, os6 이면 n
+bash conf/setup_guide.sh
+
+# [처음 설치] 역할을 바로 지정해서 실행 (os6_mgmt 에서 원격 클라이언트용 값만 입력, setup.sh 는 건너뜀)
+bash conf/setup_guide.sh --role os6 --no-setup
+
+# [업데이트] 새 버전 폴더를 기존 폴더 위에 덮어 푼 뒤, 설정 파일 변경을 미리보기 (파일은 바뀌지 않음)
+bash conf/update_v0.4.0.sh --dry
+
+# [업데이트] 설정 파일 업데이트 적용: 현장 값·주석은 그대로, 이번 버전 변경만 반영 (앵커가 다르면 중단하고 파일 불변)
+bash conf/update_v0.4.0.sh
+
+# [업데이트, os8] 재빌드·설치 후 데몬 재기동 (실행 중인 데몬은 옛 바이너리라 재기동해야 새 동작 적용)
+bash setup.sh
+auto_setup --restart
+
+# [업데이트, os6] 새 os6 바이너리를 os6_autosetup 경로에 다시 배치 (경로는 환경에 맞게)
+cp auto_setup_os6 <os6_autosetup 경로>/auto_setup && chmod 755 <os6_autosetup 경로>/auto_setup
+
+# [업데이트] 설정 파일 되돌리기 (가장 최근 백업 conf/auto_setup.conf.bak.<시각> 으로)
+bash conf/update_v0.4.0.sh --undo
+
+# 가이드·업데이트 스텁 검증 (임시 사본에서만 실행, 실제 setup.sh·설정 파일은 건드리지 않음)
+bash test/run_setup_scripts.sh
+
+# ===== 10. os8 에서 접속 안 되는 호스트 확인 (0.4.0~) =====
+
+# TUI 에서 r: 화면 새로고침 + 데몬에 즉시 ping·준비확인 요청 (os8 무응답 호스트는 os6_mgmt 경유로 확인). 명령으로는
+auto_setup request refresh
+
+# 경로 판별·전환·os6 probe 세션 상태 확인 (배포중에서 멈춰 있을 때)
+grep -E '경로 판별|경로 전환|os6 probe|준비확인 실패' /tmp/auto_setup/auto_setup.log | tail -20
+
+# os8_mgmt → os6_mgmt ssh 키 인증 확인 (os6 경로는 BatchMode ssh 를 씀, 비밀번호를 물으면 실패)
+ssh -o BatchMode=yes <os6_mgmt> hostname
+
+# 호스트별 경로(route)·비고 확인 ("os6경유", "ping 정보없음(os6 probe 확인)")
+auto_setup snapshot | grep -E '"host"|"route"|"note"'

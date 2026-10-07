@@ -41,6 +41,7 @@ type simHost struct {
 	downs                 [][2]int64 // 추가 down 구간
 	remote                bool       // 로컬 ICMP 불가 (os6 경로로만 보임)
 	unknown               bool       // 항상 Known=false
+	noLocalSSH            bool       // 로컬 준비확인(gossh) 무응답 (ping 은 됨, os6 경유로만 응답)
 }
 
 func oldOS() *simHost { return &simHost{dd: never, ana: never, reboot: never, boot: never} }
@@ -107,6 +108,13 @@ func (w *world) Ping(ts []PingTarget) map[string]PingResult {
 			out[t.Host] = PingResult{}
 		case s.remote && t.Route == "local":
 			out[t.Host] = PingResult{Known: true}
+		case t.Route == "both": // realPinger.mergeBoth 와 같은 규칙 (os6 세션은 항상 응답)
+			up := s.up(w.off())
+			if !s.remote && up {
+				out[t.Host] = PingResult{Up: true, Known: true, Via: "local"}
+			} else {
+				out[t.Host] = PingResult{Up: up, Known: true, Via: "os6"}
+			}
 		default:
 			out[t.Host] = PingResult{Up: s.up(w.off()), Known: true}
 		}
@@ -120,6 +128,10 @@ func (w *world) Check(route string, hosts []string) (map[string]CheckResult, err
 	w.checks = append(w.checks, fmt.Sprintf("%d %s %s", w.off(), route, strings.Join(hosts, ",")))
 	out := map[string]CheckResult{}
 	for _, h := range hosts {
+		if s := w.hosts[h]; route == "local" && (s.noLocalSSH || s.remote) {
+			out[h] = CheckResult{}
+			continue
+		}
 		out[h] = w.hosts[h].check(w.off())
 	}
 	return out, nil

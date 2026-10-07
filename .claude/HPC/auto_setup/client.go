@@ -15,7 +15,7 @@ import (
 // SnapshotSource: 리포트/TUI 가 상태를 읽고 요청을 남기는 통로.
 //
 //	Snapshot: 현재 스냅샷 (호출 1회 = 로컬 파일 읽기 또는 gossh 1회)
-//	Request : 요청 파일 생성. kind=ReqManualRun{jobid,yml} | ReqCancel{jobid}
+//	Request : 요청 파일 생성. kind=ReqManualRun{jobid,yml} | ReqCancel{jobid} | ReqRefresh{}
 //	Code    : codes/NNNN.txt 내용
 //	Local   : 이 프로세스가 상태 디렉터리를 직접 읽으면 true (원격이면 false)
 type SnapshotSource interface {
@@ -119,6 +119,8 @@ func requestArgs(kind string, payload map[string]string) ([]string, error) {
 		return []string{"request", ReqManualRun, payload["jobid"], payload["yml"]}, nil
 	case ReqCancel:
 		return []string{"request", ReqCancel, payload["jobid"]}, nil
+	case ReqRefresh:
+		return []string{"request", ReqRefresh}, nil
 	}
 	return nil, fmt.Errorf("지원하지 않는 요청 종류: %q", kind)
 }

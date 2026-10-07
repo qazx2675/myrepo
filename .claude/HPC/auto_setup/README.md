@@ -23,8 +23,13 @@ auto_setup/
 ├── main.go / daemon.go / state.go / ... (Go 소스, 파일별 역할은 ARCHITECTURE.md)
 ├── setup.sh              ← 빌드 + 설치 + cron + tmpfiles 등록
 ├── build_os6.sh          ← os6 용 정적 빌드 (Go 1.20 서버에서)
-├── conf/auto_setup.conf.example ← 빈 변수 설정 파일 예시 (복사해 auto_setup.conf 로 사용)
+├── conf/
+│   ├── auto_setup.conf.example ← 빈 변수 설정 파일 예시 (복사해 auto_setup.conf 로 사용)
+│   ├── setup_guide.sh    ← 빈 변수 입력 가이드 (역할 선택 → 변수별 설명·예시·검증 → setup.sh 이어서 실행)
+│   ├── update_v0.4.0.sh  ← 현장 사본 업데이트 (현장 값·주석 보존, 신규 변수만 질문, --undo)
+│   └── vars.manifest     ← 가이드·업데이트가 쓰는 변수 목록 (설명·예시·역할·검증)
 ├── test/
+│   ├── run_setup_scripts.sh ← 가이드·업데이트 스텁 검증 (25건)
 │   ├── manual_check.sh   ← 대화형 단계별 점검 (1~17단계)
 │   ├── run_e2e.sh        ← 1차 목업 E2E (85건)
 │   ├── run_e2e2.sh       ← 2차 목업 E2E (a~f, 191건)
@@ -41,6 +46,19 @@ auto_setup/
 #### 설정 파일로 채우기 (빌드 불필요)
 
 빌드가 불가능한 환경(Go 없음)에서는 아래 변수들을 **`conf/auto_setup.conf`** 로 채웁니다. `conf/auto_setup.conf.example` 을 복사해 `키=값` 으로 작성합니다(키 이름 = 아래 변수 이름, `#` 주석, 값의 따옴표는 선택).
+
+**가이드로 채우기 (권장)** — 변수마다 설명·예시를 보여 주고 `read` 로 값을 받아 검증한 뒤 기록합니다. 역할(os8 = 데몬 서버 / os6 = 원격 클라이언트)을 고르면 그 역할의 변수만 묻습니다.
+
+```bash
+cp -n conf/auto_setup.conf.example conf/auto_setup.conf   # 처음 한 번 (이미 있으면 그대로 둠)
+bash conf/setup_guide.sh                                  # 역할 선택 → 변수 입력 → (os8) setup.sh 이어서 실행 y
+```
+
+- 현재값이 표시되고 Enter 면 유지, 경로 변수는 이 서버에 실제로 있는지 확인합니다(다른 서버 위 경로는 확인하지 않음). 잘못된 값은 다시 입력하거나 `s` 로 건너뜁니다.
+- os6 역할에서 `setup.sh 를 이어서 실행하시겠습니까?` 는 **n** (setup.sh 는 Go 빌드·cron 등록용, os8_mgmt 전용).
+- 옵션: `--role os8|os6`, `--no-setup`, `--dir <프로젝트 루트>`.
+
+**직접 채우기**
 
 ```bash
 cp conf/auto_setup.conf.example conf/auto_setup.conf
@@ -128,6 +146,27 @@ bash build_os6.sh
 # (Go 가 없는 회사 환경은 빌드 불필요: 저장소에 빌드 완료된 auto_setup_os6 (go1.20 정적, 변수 빈 값) 가 있으니 probe 용으로 그대로 배치)
 ```
 
+### 폐쇄망 현장 사본 업데이트
+
+새 버전 폴더를 **기존 폴더 위에 덮어 풀면** `conf/auto_setup.conf`(커밋 제외 파일)는 그대로 남습니다. 그다음 업데이트 스크립트로 설정 파일의 바뀐 부분만 반영합니다.
+
+```bash
+# 1. 새 버전 폴더를 기존 폴더 위에 덮어쓰기 (conf/auto_setup.conf 는 저장소에 없으므로 보존됨)
+# 2. 설정 파일 업데이트 — 현장 값·주석은 건드리지 않고 이번 버전 변경만 반영, 신규 변수만 질문
+bash conf/update_v0.4.0.sh --dry     # 미리보기 (파일 불변)
+bash conf/update_v0.4.0.sh
+# 3. (os8_mgmt) 재빌드·설치 후 데몬 재기동 — 실행 중인 데몬은 옛 바이너리이므로 재기동해야 새 동작이 적용됨
+bash setup.sh
+auto_setup --restart
+# 4. (os6_mgmt) 새 auto_setup_os6 를 os6_autosetup 경로에 'auto_setup' 이름으로 다시 복사
+# 되돌리기 (설정 파일만, 가장 최근 백업)
+bash conf/update_v0.4.0.sh --undo
+```
+
+- 업데이트는 앵커(코드 줄) 기준으로 삽입합니다. 앵커 줄이 현장에서 바뀌었거나 지워졌으면 **파일을 건드리지 않고 중단**하고 위치를 알려 줍니다. CRLF 사본도 자동으로 LF 로 처리합니다.
+- 백업은 `conf/auto_setup.conf.bak.<시각>`, 되돌리기 기록은 `conf/.update_journal` 에 남습니다(커밋 제외).
+- v0.4.0 의 설정 파일 변경은 `os6_mgmt` 위 안내 주석 1줄뿐이고 신규 변수는 없습니다. 동작 변경은 바이너리에 있으므로 3·4 단계가 필수입니다.
+
 ### setup.sh 수행 내용
 
 1. `go build -o auto_setup .` (main.go 포함 전체 빌드)
@@ -191,6 +230,7 @@ wall + codes/<code>.txt 생성 (호스트 현황, 4자리 code) / 완료기록·
 | `done <host...>` | 호스트를 수동 완료 처리 (출처 manual, 부팅 시각 검증 없음) |
 | `request manual-run <jobid> <yml>` | 수동 OS 체크 실행 요청 (그룹 전체가 완료일 때만 수락) |
 | `request cancel <jobid>` | 작업 종료 요청 |
+| `request refresh` | 데몬에 즉시 ping·준비확인 요청 (TUI `r` 키와 같음, 5초 안에 수거) |
 | `daemon` | 포그라운드 데몬 루프 (보통 ensure 가 백그라운드로 기동) — os8_mgmt 에서만 |
 | `ensure` | 데몬이 없으면 백그라운드 기동 (cron 매분) — os8_mgmt 에서만 |
 | `probe [-i 10s]` | (os6_mgmt 쪽) stdin 호스트 목록을 받고 ping 상태 출력 (`host up\|down`) |
@@ -218,7 +258,7 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 | 2 | ← / Esc / q | 화면 1 로 복귀 |
 | 2 | f | 정체·실패 호스트만 보기 (토글) |
 | 2 | c | OS 체크 수동 실행(이중체크). **그룹 전체가 완료일 때만**, y/n 확인 후 요청 |
-| 공통 | r | 바로 새로고침 (자동: 로컬 2초, 원격 5초) |
+| 공통 | r | 바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동 갱신: 로컬 2초, 원격 5초. 연타는 5초에 1회만 요청) |
 | 공통 | ? | 도움말 (아무 키나 누르면 닫힘) |
 
 - 집합(행 단위) = 01 이 전달한 **그룹 yml** 입니다. 그룹 줄이 없는(구버전 01 또는 그룹 1개) 작업은 `(all)` 한 행이며, 어느 그룹에도 없는 호스트는 `(기타)` 로 모읍니다. 전체 yml(`all=`)은 작업 제목에 표시됩니다. 화면 상단에 진행 중 작업 합계(총계)가 나옵니다.
@@ -226,6 +266,26 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 - **정체 기준**: seen_down(설치 시작) 후 **60분까지는 "설치중"**(RHEL7 은 1시간 걸림), 그 이후에도 READY 가 안 되면 빨간 "정체"(`installStuck` = 60분, 경계값은 아직 설치중). 화면 표시만 하며 wall 알림은 없습니다.
 - os6_mgmt 에서도 동일하게 열리며 gossh 로 snapshot 을 5초 간격으로 폴링합니다. 키 입력(수동 실행)은 요청 파일을 os8_mgmt 에 남깁니다(데몬이 5초 주기로 수거).
 - 수동 실행은 데몬 run 큐에서 실행됩니다(동시 1개 유지, code·wall 동일). 거부되면 `requests/rejected/<파일>` 의 마지막 `reason=` 줄에 사유가 남습니다.
+- **% (진행률) = 완료 대수 / 전체** 입니다. 배포중·설치중·부팅확인·체크중 호스트는 막대의 `+`(청록)와 `진행 N` 으로만 보이고 % 는 0% 그대로이다가, 호스트가 **완료**될 때 오릅니다. 설치 중 0% 는 정상입니다.
+
+### os8_mgmt 에서 접속이 안 되는 호스트 (os6 경유 자동 전환, v0.4.0)
+
+정상 흐름: `대기 → (ping X) 배포중 → (ping O) 부팅확인 / (anaconda 확인) 설치중 → (재부팅 후 ping O, uptime 짧음) READY → 체크중 → 완료`.
+anaconda 단계에서 sshd 가 없어 22 포트가 거부되면 준비확인이 응답하지 않으므로 ping 이 되는 동안은 **부팅확인**으로 보입니다(정상).
+
+os8_mgmt 에서 ping·ssh 가 안 되는 호스트도 위와 같은 흐름이 되도록, `os6_mgmt` 가 설정돼 있으면 데몬이 경로를 자동으로 바꿉니다.
+
+| 상황 | 데몬 동작 |
+|---|---|
+| 첫 ping 에서 os8 무응답 | 처음부터 route=os6 (종전과 같음) |
+| route=local 인데 os8 ping 무응답 (설치 중 망 변경, os6_mgmt 를 나중에 채움 등) | 다음 ping 부터 os6 probe 에도 물어 os6 가 응답하면 **route=os6 로 전환** (로그 `경로 전환: <호스트> local → os6`) |
+| ping 은 되는데 os8 에서 준비확인(gossh) 무응답 | 같은 주기에 os6_mgmt 경유로 다시 확인, 응답하면 route=os6 로 전환 (`os6_gossh` 필요) |
+| os6 probe 세션이 응답이 없음 (ssh 키 미설정 등) | 상태는 그대로 두고 1분 뒤 비고에 `ping 정보없음(os6 probe 확인)` 표시 |
+
+- 전환은 local → os6 한 방향뿐입니다(되돌아가며 흔들리지 않음). route=os6 호스트의 os_check run 은 os6 경로로 실행됩니다.
+- `r` 키(또는 `auto_setup request refresh`)는 화면만 다시 읽는 것이 아니라 데몬에 **즉시 ping·준비확인**을 요청합니다. 데몬이 os8 에서 안 보이는 호스트는 위 규칙대로 os6_mgmt 에서 정보를 가져옵니다.
+- 배포중에서 멈춰 있으면 데몬 로그에서 `경로 판별`·`경로 전환`·`os6 probe 세션`·`준비확인 실패` 줄을 확인하십시오. os6 경로는 데몬이 `ssh -o BatchMode=yes <os6_mgmt>` 로 접속하므로 os8_mgmt → os6_mgmt **ssh 키 인증**이 되어 있어야 합니다.
+- 설정 파일(`os6_mgmt` 등)을 바꾼 뒤에는 `auto_setup --restart` 가 필요합니다(설정은 데몬 기동 때 한 번 읽음).
 
 ### 완료기록 (타 경로에서 먼저 체크 끝난 호스트)
 

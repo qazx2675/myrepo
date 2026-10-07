@@ -14,7 +14,7 @@ flowchart TD
     D1 --> E
     D2 --> E["[데몬] queue 수거 5초 주기"]
 
-    E --> F["호스트명 → IP (DNS, 동시 32)<br/>경로 판별: 로컬 ping 실패 → route=os6"]
+    E --> F["호스트명 → IP (DNS, 동시 32)<br/>경로 판별: 로컬 ping 실패 → route=os6<br/>(설치 중 os8 무응답·os6 응답 → os6 전환)"]
     F --> I["jobs/<jobid>.json 저장"]
     I --> BK["전달 시점 LDAP 백업<br/>ping O 인 호스트만, ldapbak/<jobid>/<host>/"]
 
@@ -91,6 +91,7 @@ jobs/<jobid>.json 생성
 
 ```bash
 # 10초마다: local 은 raw ICMP, os6 는 probe 세션에서 변화 수신
+# route=local 인데 로컬 무응답 → 다음 주기는 로컬+os6 probe(both), os6 가 응답하면 route=os6 로 전환 (0.4.0)
 # 무응답 2회 연속 → seen_down=true (설치 시작 간주)
 # stage: queued → deploying → installing → booting; seen_down 후 60분 넘기면 stuck(화면 표시만)
 ```
@@ -101,6 +102,7 @@ jobs/<jobid>.json 생성
 # 후보: (미처리 && ping up && seen_down) || (기동 후 1회)
 # gossh -pm -script -w <list> "cat /proc/uptime"
 # READY = 응답 있음 && anaconda 아님 && uptime < (지금 − submitted)
+# route=local 무응답 호스트는 같은 주기에 os6_mgmt 경유 재확인 → 응답하면 route=os6 (os6_gossh 필요, 0.4.0)
 ```
 
 ### 6단계: LDAP 비교·복원 (READY 직후, os_check 전)

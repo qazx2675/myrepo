@@ -78,6 +78,8 @@ func requestArgsOK(a []string) bool {
 		return len(a) == 3
 	case ReqCancel:
 		return len(a) == 2
+	case ReqRefresh:
+		return len(a) == 1
 	}
 	return false
 }
@@ -104,7 +106,7 @@ func cmdDone(hosts []string) int {
 	return 0
 }
 
-// cmdRequest: auto_setup request manual-run <jobid> <yml> | cancel <jobid>
+// cmdRequest: auto_setup request manual-run <jobid> <yml> | cancel <jobid> | refresh
 func cmdRequest(a []string) int {
 	var payload map[string]string
 	switch a[0] {

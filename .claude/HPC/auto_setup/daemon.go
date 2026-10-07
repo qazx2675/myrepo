@@ -60,6 +60,7 @@ type Daemon struct {
 
 type hostRT struct {
 	up            bool // 마지막 ping 응답
+	localDown     bool // route=local 인데 마지막 로컬 ping 무응답 → 다음 ping 은 os6 에도 확인(both)
 	startCheck    bool // 기동 직후 1회 준비확인
 	resolveLogged bool
 }
@@ -640,6 +641,8 @@ func (d *Daemon) ping(now time.Time) {
 			route, probe := h.Route, h.Route == ""
 			if probe {
 				route = "local"
+			} else if r := d.rt[name]; route == "local" && os6_mgmt != "" && r != nil && r.localDown {
+				route = "both" // 로컬 무응답 중이면 os6 에도 물어 os8 에서 안 보이는 호스트를 놓치지 않음
 			}
 			targets = append(targets, PingTarget{Host: name, IP: h.IP, Route: route})
 			refs[name] = ref{j, h, probe}
@@ -654,10 +657,18 @@ func (d *Daemon) ping(now time.Time) {
 	for _, t := range targets {
 		r := refs[t.Host]
 		pr, ok := res[t.Host]
+		h, name := r.h, t.Host
 		if !ok || !pr.Known {
+			if h.NoPing == 0 {
+				h.NoPing = ts
+				d.dirty[r.j.ID] = true
+			}
 			continue // 정보 없음 → 상태 불변
 		}
-		h, name := r.h, t.Host
+		if h.NoPing != 0 {
+			h.NoPing = 0
+			d.dirty[r.j.ID] = true
+		}
 		if r.probe {
 			d.dirty[r.j.ID] = true
 			if !pr.Up && os6_mgmt != "" {
@@ -668,7 +679,13 @@ func (d *Daemon) ping(now time.Time) {
 			h.Route = "local"
 			nLocal++
 		}
+		if t.Route == "both" && pr.Via == "os6" && pr.Up {
+			h.Route = "os6"
+			d.dirty[r.j.ID] = true
+			logf("경로 전환: %s local → os6 (os8 ping 무응답, os6_mgmt 응답, job %s)", name, r.j.ID)
+		}
 		rt := d.hrt(name)
+		rt.localDown = h.Route == "local" && !pr.Up
 		if pr.Up {
 			rt.up = true
 			if h.Miss != 0 {
@@ -730,58 +747,95 @@ func (d *Daemon) check(now time.Time) {
 		routes = append(routes, route)
 	}
 	sort.Strings(routes)
+	// os8 에서 준비확인 무응답인 local 호스트는 같은 주기에 os6_mgmt 경유로 다시 확인 (응답하면 route=os6 로 전환)
+	fallback := os6_mgmt != "" && os6_gossh != ""
+	t := now.Unix()
 	for _, route := range routes {
 		hosts := groups[route]
 		sort.Strings(hosts)
-		res, err := d.Checker.Check(route, hosts)
-		if err != nil {
-			if msg := err.Error(); msg != d.checkErr[route] {
-				d.checkErr[route] = msg
-				logf("[X] 준비확인 실패(%s): %v", route, err)
-			}
+		res, ok := d.checkRoute(route, route, hosts)
+		if !ok {
 			continue // 기동 직후 플래그 유지 → 다음 주기 재시도
 		}
-		d.checkErr[route] = ""
-		t := now.Unix()
+		var retry []string
 		for _, name := range hosts {
 			d.hrt(name).startCheck = false
 			cr, ok := res[name]
-			j := owner[name]
-			h := j.Hosts[name]
+			if !ok || !cr.Responded {
+				if route == "local" && fallback {
+					retry = append(retry, name)
+				}
+				continue
+			}
+			d.applyCheck(owner[name], name, cr, t)
+		}
+		if len(retry) == 0 {
+			continue
+		}
+		res, ok = d.checkRoute("os6(대체)", "os6", retry)
+		if !ok {
+			continue
+		}
+		for _, name := range retry {
+			cr, ok := res[name]
 			if !ok || !cr.Responded {
 				continue
 			}
-			if cr.Anaconda {
-				if h.SeenDown {
-					d.setStage(j, name, StageInstalling, t)
-				}
-				continue
-			}
-			// 마지막 부팅 시각 (완료기록 인정 규칙용). 반올림 흔들림(±2초)은 저장하지 않음.
-			if boot := t - int64(cr.Uptime); boot-h.BootAt > 2 || h.BootAt-boot > 2 {
-				h.BootAt = boot
-				d.dirty[j.ID] = true
-			}
-			if cr.Uptime >= float64(t-j.Submitted) {
-				if h.SeenDown {
-					d.setStage(j, name, StageBooting, t)
-				}
-				continue
-			}
-			h.ReadyAt = t
+			j := owner[name]
+			j.Hosts[name].Route = "os6"
 			d.dirty[j.ID] = true
-			logf("READY: %s (job %s, uptime %.0fs)", name, j.ID, cr.Uptime)
-			if !j.FirstRunDone {
-				if j.FirstReady == 0 {
-					j.FirstReady = t
-				}
-			} else if j.LateFirstReady == 0 && (d.cur == nil || d.cur.jobID != j.ID) {
-				j.LateFirstReady = t
-			}
-			d.ldapApply(j, name, t)
-			d.setStage(j, name, StageReady, t)
+			logf("경로 전환: %s local → os6 (os8 준비확인 무응답, os6_mgmt 응답, job %s)", name, j.ID)
+			d.applyCheck(j, name, cr, t)
 		}
 	}
+}
+
+// checkRoute: Checker 호출 1회. 실패는 key 별로 같은 메시지를 한 번만 로그하고 ok=false.
+func (d *Daemon) checkRoute(key, route string, hosts []string) (map[string]CheckResult, bool) {
+	res, err := d.Checker.Check(route, hosts)
+	if err != nil {
+		if msg := err.Error(); msg != d.checkErr[key] {
+			d.checkErr[key] = msg
+			logf("[X] 준비확인 실패(%s): %v", key, err)
+		}
+		return nil, false
+	}
+	d.checkErr[key] = ""
+	return res, true
+}
+
+// applyCheck: 응답한 호스트 1대의 준비확인 결과 반영 (설치중 / 부팅확인 / READY)
+func (d *Daemon) applyCheck(j *Job, name string, cr CheckResult, t int64) {
+	h := j.Hosts[name]
+	if cr.Anaconda {
+		if h.SeenDown {
+			d.setStage(j, name, StageInstalling, t)
+		}
+		return
+	}
+	// 마지막 부팅 시각 (완료기록 인정 규칙용). 반올림 흔들림(±2초)은 저장하지 않음.
+	if boot := t - int64(cr.Uptime); boot-h.BootAt > 2 || h.BootAt-boot > 2 {
+		h.BootAt = boot
+		d.dirty[j.ID] = true
+	}
+	if cr.Uptime >= float64(t-j.Submitted) {
+		if h.SeenDown {
+			d.setStage(j, name, StageBooting, t)
+		}
+		return
+	}
+	h.ReadyAt = t
+	d.dirty[j.ID] = true
+	logf("READY: %s (job %s, uptime %.0fs)", name, j.ID, cr.Uptime)
+	if !j.FirstRunDone {
+		if j.FirstReady == 0 {
+			j.FirstReady = t
+		}
+	} else if j.LateFirstReady == 0 && (d.cur == nil || d.cur.jobID != j.ID) {
+		j.LateFirstReady = t
+	}
+	d.ldapApply(j, name, t)
+	d.setStage(j, name, StageReady, t)
 }
 
 // schedule: run 이 없을 때만 다음 run 을 결정 (직렬). 1차: 전부 READY 또는 첫 READY+bootWait,
