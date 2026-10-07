@@ -323,6 +323,12 @@ func (st *tuiState) handleOverview(ev keyEv) bool {
 			st.sel.Detail, st.sel.JobID, st.sel.Yml = true, j.ID, j.Groups[refs[st.sel.Row].Grp].Yml
 			st.sel.Host, st.sel.Filter = 0, false
 		}
+	case ev.k == kRune && (ev.r == 'a' || ev.r == 'A'):
+		if st.sel.Row < len(refs) {
+			j := st.snap.Jobs[refs[st.sel.Row].Job]
+			st.sel.Detail, st.sel.JobID, st.sel.Yml = true, j.ID, allView
+			st.sel.Host, st.sel.Filter = 0, false
+		}
 	case ev.k == kEsc || (ev.k == kRune && ev.r == 'q'):
 		return true
 	}
@@ -377,6 +383,13 @@ func (st *tuiState) handleDetail(ev keyEv) {
 	case ev.k == kRune && (ev.r == 'f' || ev.r == 'F'):
 		st.sel.Filter = !st.sel.Filter
 		st.sel.Host = 0
+	case ev.k == kRune && (ev.r == 'a' || ev.r == 'A'): // 그룹별 ↔ 전체 보기
+		if st.sel.Yml == allView {
+			st.sel.Detail = false
+		} else {
+			st.sel.Yml = allView
+			st.sel.Host, st.sel.Filter = 0, false
+		}
 	case ev.k == kRune && (ev.r == 'c' || ev.r == 'C'):
 		st.startManual(g)
 	}
@@ -384,6 +397,10 @@ func (st *tuiState) handleDetail(ev keyEv) {
 
 // startManual: c — 완료 여부와 상관없이 확인(y/n) 단계로 (이미 대기·진행 중이면 안내)
 func (st *tuiState) startManual(g *SnapGroup) {
+	if g.Yml == allView {
+		st.sel.Msg = "전체 보기에서는 수동 실행을 할 수 없습니다 - a 로 그룹별 화면으로 가서 c 를 누르세요"
+		return
+	}
 	j, _ := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 	switch {
 	case j != nil && hasManual(j, g.Yml):

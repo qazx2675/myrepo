@@ -19,7 +19,7 @@ bash setup.sh
 
 # ===== 2. 상태 보기 · 데몬 제어 =====
 
-# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, Enter 상세, ←→ 작업 전환, f 정체·실패만, c 수동 OS 체크, r 새로고침, ? 도움말, q 종료)
+# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, Enter 상세, a 전체 그룹 한 표로, ←→ 작업 전환, f 정체·실패만, c 수동 OS 체크, r 새로고침, ? 도움말, q 종료)
 auto_setup
 
 # TUI 가 아니라 텍스트 표로 보기 (파이프·로그용, 색 없음)
@@ -54,6 +54,12 @@ auto_setup cancel 20261002-153000-user1
 
 # 다른 경로(수동 작업 등)로 이미 끝난 호스트를 완료 처리 — 부팅 시각 검증이 없으니 정말 끝난 호스트에만 (여러 대 가능)
 auto_setup done web01 web02
+
+# job 의 미완료 호스트를 한 번에 완료 처리 (jobid 는 status 에서 확인, 실행 전에 대상 호스트 목록이 출력됨)
+auto_setup done --job 20261002-153000-user1
+
+# 그 job 의 특정 그룹(yml)만
+auto_setup done --job 20261002-153000-user1 --yml gpu.yml
 
 # 수동 OS 체크 실행 요청: 완료 여부와 상관없이 그룹(yml) 전체를 시도, 접속불가 호스트는 wall 에 표시, 데몬 run 큐에서 실행됨 (TUI 의 c 키와 같음)
 auto_setup request manual-run 20261002-153000-user1 gpu.yml

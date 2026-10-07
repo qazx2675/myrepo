@@ -295,6 +295,7 @@ type SnapHost struct {
 	Ldap    *LdapState `json:"ldap,omitempty"`
 	Second  string     `json:"second"`
 	DoneSrc string     `json:"done_src"`
+	Yml     string     `json:"-"` // 전체 보기(allView)에서만 채움: 이 호스트가 속한 그룹 yml
 }
 
 type SnapManual struct {
