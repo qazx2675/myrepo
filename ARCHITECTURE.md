@@ -38,7 +38,7 @@
 | [9] | `dhcp_info()` | `${user}.txt` | `dhcp_pool/dhcp_pool_delete_info.txt` 누적 |
 | [10] | `gen_inventory()` | 임시 yaml | scp → custom_inventory.sh → `svr_dir` yml 수집 |
 | [11] | `git_upload()` | `$yaml` 목록 | git 블록 원문 실행 + `cd "$now_pwd"` |
-| [12] | `check_servers()` | `${user}.txt` | LDAP(ldap.conf URI)·LACP·응답없음 점검, `tmp/all_${user}` 생성 |
+| [12] | `check_servers()` (+ `os6_enabled/os6_run/os6_failed`) | `${user}.txt` | LDAP(ldap.conf URI)·LACP·응답없음 점검, `tmp/all_${user}` 생성. os8_mgmt 접속 불가 호스트는 os6_mgmt 재조사로 교체(02 `check_partitions` 도 동일 함수 사용) |
 | [13] | (메뉴 루프) | 프롬프트 | su/exit/ls/파일명 명령 처리 |
 | [14] | (02 호출) | `$group_yml` + 옵션 + `--all=$all_yml` | `bash 02.source_dhcp_pxe.sh` 실행 후 break 또는 재시도 (02: OS 선택 → 그룹 yml 등록 → 그룹 2개 이상이면 전체 yml invsync → 최종 수량) |
 | [15] | `verify_hosts()` | 붙여넣은 서버 목록 | 등록 대상(`$hostfile`)과 비교해 "모두 존재함" 또는 없는 서버 보고(exit 1) |

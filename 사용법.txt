@@ -32,6 +32,7 @@ bash awxkit/setup.sh
 # ===== Step 2. 현장 값 채우기 =====
 
 # 최상단 빈 변수 7개(repohost, svr_dir, ai_server_list, day_print[선택], lacp_comment, inventory_delete_host, infra_alias[선택])와
+# (선택) os6_mgmt 재조사: os6_host/os6_user/os6_dir/os6_gossh 네 개를 모두 채우면 os8_mgmt 접속 불가 호스트를 os6_mgmt 에서 다시 확인(os6_dir 은 두 서버 공유 경로, ssh 키 인증 필요). 비우면 생략
 # user(){ } 는 info_mn.sh/info.sh 를 쓰는 현장 코드가 들어 있음: user_route="" 에 경로를 채움
 vi 01.AWX_nodeinfo_V2.sh
 

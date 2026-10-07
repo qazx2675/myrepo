@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### 추가
+- 01/02: os6_mgmt 재조사 — 최상단 빈 변수 `os6_host`/`os6_user`/`os6_dir`/`os6_gossh`(01 이 02 로 export, 하나라도 비면 생략). os8_mgmt gossh 가 stderr 로 보고하고 결과가 없는 호스트만 공유 디렉터리(`os6_dir`) 경유 ssh 로 os6_mgmt 의 gossh 에서 다시 조사해 해당 호스트 결과를 교체(01 [12] LDAP/LACP, 02 파티션 확인). os6 에서도 실패하면 `os8/os6 모두 접속 불가` 경고만(진행 계속). 임시 파일은 종료 시 삭제. 테스트 16a~e·17a~c, `test/run_tests.sh` PASS=63
 - 01: 최상단 빈 변수 `auto_setup_gossh_pw` 추가 — 채우면 `auto_setup_host` 로의 gossh 전송에 `-p <비밀번호>` 를 붙임(os8_mgmt 에 키 인증이 안 될 때 "전달 실패" 해결). 비우면 기존과 동일. 테스트 7p, `test/run_tests.sh` PASS=55
 
 ## [0.5.0] - 2026-10-03
