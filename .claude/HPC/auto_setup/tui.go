@@ -164,6 +164,7 @@ type tuiState struct {
 	pending     map[string]time.Time // 수동 실행 요청 시각 (jobid\x00yml)
 	lastReq     time.Time            // 마지막 즉시 갱신(refresh) 요청 시각
 	lastRecheck time.Time            // 마지막 재확인(g) 요청 시각
+	view        *viewState           // 전체 화면 보기 (수동 실행 결과·재확인 진행), nil = 없음
 }
 
 // runTUILoop: raw 모드 진입 → 그리기·키·tick 루프 → (정상·패닉·시그널 어느 경로든) 화면·termios 복원
@@ -236,6 +237,7 @@ func (st *tuiState) refresh() {
 		st.snap, st.err = s, ""
 	}
 	st.clamp()
+	st.updateView()
 }
 
 // clamp: 새 스냅샷에 맞춰 선택 위치 보정 (그룹이 사라지면 화면 1 로)
@@ -258,6 +260,8 @@ func (st *tuiState) draw() {
 	w, h := st.env.Size()
 	var s string
 	switch {
+	case st.view != nil:
+		s = renderView(st.view, w, h, st.env.Color)
 	case st.help:
 		s = renderHelp(w, h, st.env.Color)
 	case st.sel.Detail:
@@ -281,6 +285,10 @@ func (st *tuiState) withErr() selection {
 func (st *tuiState) handle(ev keyEv) bool {
 	if ev.k == kRune && ev.r == runeCtrlC {
 		return true
+	}
+	if st.view != nil {
+		st.handleView(ev)
+		return false
 	}
 	if st.help {
 		st.help = false
@@ -403,7 +411,11 @@ func (st *tuiState) handleDetail(ev keyEv) {
 			st.sel.Host, st.sel.Filter = 0, false
 		}
 	case ev.k == kRune && (ev.r == 'c' || ev.r == 'C'):
-		st.startManual(g)
+		st.startManual(g, "")
+	case ev.k == kRune && (ev.r == 't' || ev.r == 'T'):
+		st.startManual(g, ModeCheck)
+	case ev.k == kRune && (ev.r == 'v' || ev.r == 'V'):
+		st.openLatestResult()
 	case ev.k == kRune && (ev.r == 'g' || ev.r == 'G'):
 		st.requestRecheck()
 	}
@@ -421,11 +433,11 @@ func (st *tuiState) requestRecheck() {
 		st.sel.Msg = "[X] 재확인 요청 실패: " + err.Error()
 		return
 	}
-	st.sel.Msg = "재확인 요청됨 — 데몬이 os8 → os6_mgmt 순으로 확인합니다 (접속불가는 auto_setup.log 에 기록)"
+	st.openRecheckView()
 }
 
-// startManual: c — 완료 여부와 상관없이 확인(y/n) 단계로 (이미 대기·진행 중이면 안내)
-func (st *tuiState) startManual(g *SnapGroup) {
+// startManual: c(설정체크 + 설정수정) / t(설정체크만) — 완료 여부와 상관없이 확인(y/n) 단계로 (이미 대기·진행 중이면 안내)
+func (st *tuiState) startManual(g *SnapGroup, mode string) {
 	if g.Yml == allView {
 		st.sel.Msg = "전체 보기에서는 수동 실행을 할 수 없습니다 - a 로 그룹별 화면으로 가서 c 를 누르세요"
 		return
@@ -437,7 +449,7 @@ func (st *tuiState) startManual(g *SnapGroup) {
 	case st.recentlyRequested():
 		st.sel.Msg = "방금 요청했습니다 — 데몬이 수거할 때까지 기다려 주세요"
 	default:
-		st.sel.Confirm = true
+		st.sel.Confirm, st.sel.Mode = true, mode
 	}
 }
 
@@ -472,13 +484,17 @@ func (st *tuiState) requestRefresh() {
 
 // requestManual: y 확인 후 manual-run 요청 (요청 파일만 남김 — 데몬이 5초 주기로 수거)
 func (st *tuiState) requestManual() {
-	err := st.src.Request(ReqManualRun, map[string]string{"jobid": st.sel.JobID, "yml": st.sel.Yml})
+	payload := map[string]string{"jobid": st.sel.JobID, "yml": st.sel.Yml}
+	if st.sel.Mode != "" {
+		payload["mode"] = st.sel.Mode
+	}
+	err := st.src.Request(ReqManualRun, payload)
 	if err != nil {
 		st.sel.Msg = "[X] 요청 실패: " + err.Error()
 		return
 	}
 	st.pending[st.pendKey()] = st.env.Now()
-	st.sel.Msg = "요청됨 — 데몬이 수거하면 상태가 '체크중' 으로 바뀝니다"
+	st.openRunView(st.sel.Mode)
 }
 
 func init() { runReport = runTUI }

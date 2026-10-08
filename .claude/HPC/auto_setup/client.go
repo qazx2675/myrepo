@@ -116,7 +116,11 @@ func remoteFail(what string, r remoteResult) error {
 func requestArgs(kind string, payload map[string]string) ([]string, error) {
 	switch kind {
 	case ReqManualRun:
-		return []string{"request", ReqManualRun, payload["jobid"], payload["yml"]}, nil
+		args := []string{"request", ReqManualRun, payload["jobid"], payload["yml"]}
+		if payload["mode"] != "" {
+			args = append(args, payload["mode"])
+		}
+		return args, nil
 	case ReqRecheck:
 		return []string{"request", ReqRecheck, payload["jobid"], payload["yml"]}, nil
 	case ReqCancel:

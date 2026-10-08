@@ -78,6 +78,7 @@ type inflight struct {
 	reqPath string // 수동 run 의 requests/active 파일 (끝나면 삭제)
 	yml     string // 수동 run 그룹
 	closed  bool   // 수동 run 대상이 jobs/done 의 종료된 job
+	mode    string // 수동 run 모드: ModeCheck = 설정체크만 (job·호스트 상태를 바꾸지 않음), 비면 설정체크 + 설정수정
 }
 
 type runDone struct {
@@ -931,6 +932,7 @@ func (d *Daemon) startRun(j *Job, hosts, ready []string, first bool, t int64) {
 func (d *Daemon) launch(c *inflight, j *Job, hasOS6 bool) {
 	d.cur = c
 	snap := cloneJob(j)
+	snap.RunMode = c.mode
 	hosts := c.hosts
 	ready := make([]string, 0, len(c.ready))
 	for n := range c.ready {
@@ -941,7 +943,7 @@ func (d *Daemon) launch(c *inflight, j *Job, hasOS6 bool) {
 	go func() {
 		res, err := r.Run(snap, hosts, hasOS6)
 		out := runDone{res: res, err: err}
-		if err == nil && sec != nil {
+		if err == nil && sec != nil && snap.RunMode != ModeCheck { // 설정체크만 실행은 2차 체크를 하지 않음
 			routes := map[string]string{}
 			for n, h := range snap.Hosts {
 				routes[n] = h.Route
@@ -1098,8 +1100,10 @@ func (d *Daemon) finishManual(c *inflight, r runDone, now time.Time) {
 		j = d.jobs[c.jobID]
 	}
 	if j != nil {
-		d.applySecond(j, r)
-		j.Runs = append(j.Runs, Run{Code: res.Code, Hosts: c.hosts, At: c.at, Manual: true, Yml: c.yml})
+		if c.mode != ModeCheck {
+			d.applySecond(j, r)
+		}
+		j.Runs = append(j.Runs, Run{Code: res.Code, Hosts: c.hosts, At: c.at, Manual: true, Yml: c.yml, Mode: c.mode})
 		if c.closed {
 			if _, err := writeJobFile(filepath.Join(doneDir(), c.jobID+".json"), j); err != nil {
 				logf("[X] job 저장 실패(%s): %v", c.jobID, err)
@@ -1129,7 +1133,7 @@ func (d *Daemon) finishManual(c *inflight, r runDone, now time.Time) {
 	}
 	sort.Strings(done)
 	// 수동 run 이 정상 실행되어 체크 결과가 나온 호스트는 현재 단계(정체·설치중 등)와 상관없이 완료 처리한다
-	if j != nil && !res.Abnormal {
+	if j != nil && !res.Abnormal && c.mode != ModeCheck { // 설정체크만 실행은 완료 처리하지 않는다
 		marked := 0
 		for _, n := range done {
 			if h := j.Hosts[n]; h != nil && h.Processed == "" {
@@ -1169,7 +1173,7 @@ func (d *Daemon) finishManual(c *inflight, r runDone, now time.Time) {
 		}
 		sort.Strings(unreachable)
 	}
-	logf("수동 run 완료: job %s 그룹 %s code %s %d대%s 접속불가 %d대", c.jobID, c.yml, res.Code, len(done), note, len(unreachable))
+	logf("수동 run 완료: job %s 그룹 %s code %s %d대%s 접속불가 %d대 (%s)", c.jobID, c.yml, res.Code, len(done), note, len(unreachable), modeLabel(c.mode))
 	if len(unreachable) > 0 {
 		logf("[!] 수동 run 접속불가·미응답 %d대 (job %s 그룹 %s code %s): %s", len(unreachable), c.jobID, c.yml, res.Code, strings.Join(unreachable, " "))
 	}

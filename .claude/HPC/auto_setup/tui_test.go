@@ -27,6 +27,7 @@ type fakeSrc struct {
 	calls    int
 	panicOn  int // N 번째 Snapshot 호출에서 panic (0 = 안 함)
 	nextSnap func(n int) Snapshot
+	codes    map[string]string // Code(n) 응답
 }
 
 func (f *fakeSrc) Snapshot() (Snapshot, error) {
@@ -49,8 +50,13 @@ func (f *fakeSrc) Request(kind string, payload map[string]string) error {
 	return f.reqErr
 }
 
-func (f *fakeSrc) Code(n string) (string, error) { return "", errors.New("미사용") }
-func (f *fakeSrc) Local() bool                   { return f.local }
+func (f *fakeSrc) Code(n string) (string, error) {
+	if t, ok := f.codes[n]; ok {
+		return t, nil
+	}
+	return "", errors.New("미사용")
+}
+func (f *fakeSrc) Local() bool { return f.local }
 
 type rig struct {
 	out      bytes.Buffer
@@ -168,7 +174,7 @@ func TestKeySequenceManualRun(t *testing.T) {
 	if got.kind != "manual-run" || len(got.payload) != 2 || got.payload["jobid"] != "J1" || got.payload["yml"] != "b.yml" {
 		t.Errorf("요청 인자: %+v", got)
 	}
-	if !strings.Contains(r.out.String(), "요청됨 — 데몬이 수거하면 상태가 '체크중' 으로 바뀝니다") {
+	if !strings.Contains(r.out.String(), "수동 실행 [설정체크 + 설정수정] - b.yml") {
 		t.Errorf("요청됨 안내 없음")
 	}
 	if !strings.Contains(r.out.String(), "[y/n]") {
@@ -199,7 +205,7 @@ func TestKeySequenceCancelAndRepeat(t *testing.T) {
 		t.Fatalf("화면 1 에서 요청됨")
 	}
 	src2 := &fakeSrc{snap: twoGroupSnap(), local: true}
-	r := runKeys(t, src2, "\x1b[B\rcycy") // 두 번째 c 는 재요청 차단
+	r := runKeys(t, src2, "\x1b[B\rcyqc") // 두 번째 c 는 재요청 차단
 	if len(src2.reqs) != 1 || !strings.Contains(r.out.String(), "방금 요청했습니다") {
 		t.Fatalf("중복 요청 차단: %d 건", len(src2.reqs))
 	}

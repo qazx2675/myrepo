@@ -229,7 +229,7 @@ codes/<code>.txt 생성 (wall 알림은 v0.4.3 부터 끔 — 결과는 TUI·`au
 | `cancel <jobid>` | 무기한 감시 중인 작업 종료 (status 에서 확인) |
 | `done <host...>` | 호스트를 수동 완료 처리 (출처 manual, 부팅 시각 검증 없음) |
 | `done --job <jobid> [--yml <그룹>]` | job(또는 그 그룹)의 미완료 호스트 전부를 수동 완료 처리 (완료된 호스트는 건드리지 않음, 진행 중 job 만) |
-| `request manual-run <jobid> <yml>` | 수동 OS 체크 실행 요청 (완료 여부와 상관없이 그룹 전체를 시도, 접속불가 호스트는 wall 에 표시) |
+| `request manual-run <jobid> <yml> [check]` | 수동 실행 요청 (완료 여부와 상관없이 그룹 전체를 시도, 접속불가 호스트는 로그에 기록). 기본 = 설정체크 + 설정수정(TUI c), `check` = 설정체크만·환경설정 수정 안 함(TUI t) |
 | `request cancel <jobid>` | 작업 종료 요청 |
 | `request refresh` | 데몬에 즉시 ping·준비확인 요청 (TUI `r` 키와 같음, 5초 안에 수거) |
 | `request recheck <jobid> <yml 또는 *>` | 완료 제외 호스트를 os8_mgmt → 안 되면 os6_mgmt 순으로 직접 재확인 (TUI `g` 키와 같음, 5초 안에 수거) |
@@ -274,6 +274,33 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 - **수동 실행 후 완료 처리**: 수동 실행이 정상 종료되어 결과가 나온 호스트는 현재 단계(정체·설치중 등)와 상관없이 완료로 바뀝니다.
 - **수동 실행 전 경로 재확인**: 수동 실행 직전에 호스트를 한 번 확인해, os8 에서 직접 응답하면 local, os8 무응답이고 os6_mgmt 경유로만 응답하면 os6 로 맞춘 뒤 실행합니다 (`os6_mgmt`·`os6_gossh` 설정 시).
 - **% (진행률) = 완료 대수 / 전체** 입니다. 배포중·설치중·부팅확인·체크중 호스트는 막대의 `+`(청록)와 `진행 N` 으로만 보이고 % 는 0% 그대로이다가, 호스트가 **완료**될 때 오릅니다. 설치 중 0% 는 정상입니다.
+
+### 실행 모드: 설정체크 + 설정수정 / 설정체크만 (v0.5.0)
+
+| 구분 | 키 / 명령 | 환경설정 수정 | 호스트 완료 처리 | os_check 호출 |
+|---|---|---|---|---|
+| **배포 → 완료 자동 흐름** | (자동) | **수정함** (체크 → 수정 → 재점검) | 함 | `-auto` |
+| 수동 **설정체크 + 설정수정** | `c` / `request manual-run <jobid> <yml>` | **수정함** | 함 (정상 실행된 호스트는 단계 무관) | `-auto` |
+| 수동 **설정체크만** | `t` / `request manual-run <jobid> <yml> check` | **수정 안 함** (점검 결과만) | 안 함 (단계·실패 횟수·2차 체크도 그대로) | `-auto-check` |
+
+- 배포 → 완료까지의 자동 흐름은 **항상** 설정체크 + 설정수정입니다. 설정체크만은 수동 `t` 로만 실행됩니다.
+- `c`/`t` 는 확인(y/n) 문구에 어느 모드인지 적혀 있고, 결과 code 본문 첫 줄에도 `작업 : 설정체크 + 설정수정` / `작업 : 설정체크만 (설정 수정 안 함)` 으로 남습니다.
+- **결과 창**: `y` 를 누르면 전체 화면 결과 창이 열려 요청 전달 → 대기 → 실행 중을 보여 주다가, 끝나면 그 창에 결과(결과 리포트·FAIL 줄·NO FAIL·LDAP/SPLUNK/커널 요약)를 그대로 출력합니다. `↑↓` 스크롤, `Space`/`b` 쪽 이동, `r` 새로고침, `q`/`Esc` 닫기(닫아도 데몬은 계속 진행). 호스트표에서 `v` 로 그 그룹의 가장 최근 수동 실행 결과를 다시 봅니다.
+- **`g` 진행 창**: `재확인 시작 → 1/3 os8_mgmt 확인 → 2/3 os6_mgmt 경유 확인 → 3/3 최종 결과` 가 실시간으로 나오고, 끝나면 호스트별 결과표(`os8 응답` / `os6 경유` / `접속불가` 와 어디서 안 됐는지, 응답 호스트는 현재 단계)가 표시됩니다. 창에서 `g` 로 다시 재확인.
+- **`-auto-check` 지원 필요**: `OS 환경설정 체크/os_check_final_annotated.sh`(변경 항목 32)에 `-auto-check <user> <목록>` 옵션을 추가했습니다 (`-auto` 와 같되 환경설정 수정 질문에 n). **현장에서 쓰는 os_check/config_check 사본에도 같은 변경이 필요**하며, 없으면 `t` 는 비정상 종료로 기록됩니다 (`c`·자동 흐름은 영향 없음).
+
+#### 모의 테스트 (운영 데이터·실서버 미사용)
+
+root 로 실행합니다 (raw ICMP). 스텁 gossh/ssh + 복사본 os_check 로 데몬이 실제와 같은 흐름을 돕니다.
+
+```bash
+bash test/demo_flow.sh              # 빌드 + 가짜 작업(오늘/어제) + 스텁 + 데몬 기동, 사용법 출력
+source /tmp/as_demo_flow/env.sh     # 이 셸에 AUTO_SETUP_DIR·PATH·auto_setup 별칭 설정
+auto_setup                          # 화면: 오늘 그룹 A/B 에서 Enter → t / c / g / v
+bash test/demo_flow.sh --stop       # 데몬 종료 + 정리
+```
+
+시나리오: 그룹 A(127.0.0.11 정상 / .12 설정체크 FAIL / .13 이미 완료 / .14 접속불가) 에서 `t` → FAIL·접속불가가 결과 창에 나오고 호스트는 완료 처리되지 않음, `c` → 정상 호스트가 완료 처리됨. 그룹 B(.21 os8 무응답·os6 경유 응답 / .22 어디서도 무응답 / .23 os8 응답) 에서 `g` → 진행 창. 화면만 보려면 `bash test/make_demo_jobs.sh` 후 `AUTO_SETUP_DIR=/tmp/as_demo auto_setup` (데몬 없이 파일만 읽음).
 
 ### os8_mgmt 에서 접속이 안 되는 호스트 (os6 경유 자동 전환, v0.4.0)
 
@@ -502,7 +529,8 @@ auto_setup cancel 20261002-153000-user1
 
 # 수동 완료 처리 / 수동 OS 체크 요청
 auto_setup done web01 web02
-auto_setup request manual-run 20261002-153000-user1 gpu.yml
+auto_setup request manual-run 20261002-153000-user1 gpu.yml          # 설정체크 + 설정수정 (c)
+auto_setup request manual-run 20261002-153000-user1 gpu.yml check    # 설정체크만, 환경설정 수정 안 함 (t)
 ```
 
 ## 버전 관리 및 태그
