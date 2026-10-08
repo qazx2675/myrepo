@@ -60,6 +60,8 @@ type oneoffState struct {
 	user      string
 	hosts     []string
 	mode      string
+	awx       bool        // w(AWX 실행) 흐름: user → 대상 목록 → 01 실행 (모드 선택·결과 창 없음)
+	awxProf   *AwxProfile // w 흐름에서 고른 auto 프로파일 (nil = 일반 실행)
 	proc      oneoffProc
 	started   time.Time
 	cancelAsk bool
@@ -204,7 +206,12 @@ func (st *tuiState) startOneoff() {
 		st.sel.Msg = "os_check_sh 가 비어 있어 실행할 수 없습니다 (/etc/auto_setup/auto_setup.conf)"
 		return
 	}
-	o := &oneoffState{step: ooUser}
+	st.oo = st.newUserStep(false, nil)
+}
+
+// newUserStep: user 선택 단계 상태 (x 와 w 가 공유). 01 의 user_route 메뉴를 읽을 수 있으면 번호 선택, 아니면 이름 직접 입력.
+func (st *tuiState) newUserStep(awx bool, p *AwxProfile) *oneoffState {
+	o := &oneoffState{step: ooUser, awx: awx, awxProf: p}
 	if awx_dir != "" {
 		if route := parseUserRoute(filepath.Join(awx_dir, "01.AWX_nodeinfo_V2.sh")); route != "" {
 			if !filepath.IsAbs(route) {
@@ -218,7 +225,61 @@ func (st *tuiState) startOneoff() {
 	if o.menu == nil {
 		o.msg = "user 메뉴를 찾을 수 없습니다 (awx_dir 의 01 user_route 확인) — user 이름을 직접 입력하세요"
 	}
-	st.oo = o
+	return o
+}
+
+// parseAwxList: AWX 대상 목록 입력 → (<user>.txt 에 쓸 줄, 대상 호스트명).
+// 12필드(공백 구분) 줄은 그대로 한 줄로 유지하고 호스트명은 4번째 필드, 그 밖의 줄은 공백·쉼표·| 로 나눠 호스트명 한 줄씩. 중복 제거(순서 유지).
+func parseAwxList(raw string) (lines, hosts []string) {
+	seenL, seenH := map[string]bool{}, map[string]bool{}
+	addH := func(h string) {
+		if !seenH[h] {
+			seenH[h] = true
+			hosts = append(hosts, h)
+		}
+	}
+	for _, ln := range strings.Split(strings.ReplaceAll(raw, "\r", ""), "\n") {
+		if f := strings.Fields(ln); len(f) == 12 {
+			l := strings.Join(f, " ")
+			if !seenL[l] {
+				seenL[l] = true
+				lines = append(lines, l)
+			}
+			addH(f[3])
+			continue
+		}
+		for _, h := range normalizeHosts(ln) {
+			if !seenL[h] {
+				seenL[h] = true
+				lines = append(lines, h)
+			}
+			addH(h)
+		}
+	}
+	return
+}
+
+// awxLaunch: w 흐름의 마지막 — 입력한 목록을 awx_dir/<user>.txt 에 쓰고(덮어씀) 대상 확인용 파일을 만든 뒤 01 을 실행한다.
+func (st *tuiState) awxLaunch(lines, hosts []string) {
+	o := st.oo
+	verify := ""
+	if len(lines) > 0 {
+		if err := os.WriteFile(filepath.Join(awx_dir, o.user+".txt"), []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+			o.msg = "[X] " + o.user + ".txt 쓰기 실패: " + err.Error()
+			return
+		}
+		if f, err := os.CreateTemp("", "as_awx_verify_"); err == nil {
+			f.WriteString(strings.Join(hosts, "\n") + "\n")
+			f.Close()
+			verify = f.Name()
+		}
+	}
+	p, user := o.awxProf, o.user
+	st.oo = nil
+	st.runAwx(p, user, verify)
+	if verify != "" {
+		os.Remove(verify)
+	}
 }
 
 func (st *tuiState) handleOneoff(ev keyEv) {
@@ -286,6 +347,10 @@ func (st *tuiState) ooHostsKey(ev keyEv) {
 	switch {
 	case ev.k == kEsc || (ev.k == kRune && ev.r == 'q' && len(o.in) == 0):
 		st.ooCancel()
+	case ev.k == kRune && ev.r == runeCtrlD && o.awx:
+		// AWX: 목록 없이 Ctrl+D 면 건너뜀 (기존 <user>.txt 사용, 대상 확인 생략)
+		lines, hosts := parseAwxList(string(o.in))
+		st.awxLaunch(lines, hosts)
 	case ev.k == kRune && ev.r == runeCtrlD:
 		hosts := normalizeHosts(string(o.in))
 		if len(hosts) == 0 {
@@ -418,7 +483,7 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 	var hint string
 	switch o.step {
 	case ooUser:
-		title = "체크스크립트 단독 실행 - user 선택"
+		title = o.name() + " - user 선택"
 		if o.menu != nil {
 			body = append(body, o.menu...)
 			body = append(body, "", "번호 입력 > "+string(o.in)+"_")
@@ -428,10 +493,18 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 			hint = " Enter 확인  Esc 취소 (입력이 비었을 때 q 도 취소)"
 		}
 	case ooHosts:
-		title = "체크스크립트 단독 실행 - user " + o.user + " - 호스트 입력"
+		title = o.name() + " - user " + o.user + " - " + map[bool]string{true: "작업 대상 서버 목록", false: "호스트 입력"}[o.awx]
 		// 한 문장이지만 80칸 터미널에서 잘리지 않게 두 줄로 나눠 보여 준다
-		body = append(body, "호스트를 입력하거나 붙여넣은 뒤 Ctrl+D 를 누르세요", "(공백·쉼표·탭·| 는 줄바꿈으로 바뀝니다, Esc 취소)", "")
-		hs := normalizeHosts(string(o.in))
+		var hs []string
+		if o.awx {
+			body = append(body, "작업 대상 서버 목록을 붙여넣은 뒤 Ctrl+D 를 누르세요 (호스트명 또는 12필드 줄)",
+				"(공백·쉼표·| 구분 가능, Esc 취소) — 비워 두고 Ctrl+D 면 건너뜁니다",
+				"※ 입력하면 "+filepath.Join(awx_dir, o.user+".txt")+" 를 덮어쓰고, 01 의 '등록 후 확인' 에도 자동 입력됩니다", "")
+			_, hs = parseAwxList(string(o.in))
+		} else {
+			body = append(body, "호스트를 입력하거나 붙여넣은 뒤 Ctrl+D 를 누르세요", "(공백·쉼표·탭·| 는 줄바꿈으로 바뀝니다, Esc 취소)", "")
+			hs = normalizeHosts(string(o.in))
+		}
 		body = append(body, fmt.Sprintf("입력된 호스트 %d대:", len(hs)))
 		room := rMax(height-9, 3)
 		line := ""
@@ -460,6 +533,9 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 		}
 		body[len(body)-1] += cur + "_"
 		hint = " Enter 줄바꿈  Ctrl+D 입력 완료  Esc 취소 (입력이 비었을 때 q 도 취소)"
+		if o.awx {
+			hint = " Enter 줄바꿈  Ctrl+D 입력 완료 (비었으면 건너뜀)  Esc 취소"
+		}
 	case ooMode:
 		title = "체크스크립트 단독 실행 - 모드 선택"
 		body = []string{fmt.Sprintf("user %s   호스트 %d대", o.user, len(o.hosts)), "",
@@ -492,7 +568,7 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 	if o.msg != "" {
 		foot = append(foot, segLine(color, width, seg{" " + o.msg, stYellow}))
 	}
-	foot = append(foot, segLine(color, width, seg{hint, stBold}))
+	foot = append(foot, segLine(color, width, hintSegs(hint)...))
 	if height > 0 {
 		for len(out) < height-len(foot) {
 			out = append(out, "")
@@ -502,4 +578,12 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 		}
 	}
 	return strings.Join(append(out, foot...), "\n")
+}
+
+// name: 화면 제목 머리말
+func (o *oneoffState) name() string {
+	if o.awx {
+		return "AWX 실행"
+	}
+	return "체크스크립트 단독 실행"
 }

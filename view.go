@@ -243,7 +243,7 @@ func renderView(v *viewState, width, height int, color bool) string {
 	case !v.done:
 		hint += "  (닫아도 데몬은 계속 진행합니다. 결과는 v 로 다시 볼 수 있습니다)"
 	}
-	foot := []string{sepLine(width), segLine(color, width, seg{hint, stBold})}
+	foot := []string{sepLine(width), segLine(color, width, hintSegs(hint)...)}
 	avail := rMax(height-len(head)-len(foot), 1)
 	if height <= 0 {
 		avail = len(v.lines)
