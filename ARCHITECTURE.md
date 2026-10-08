@@ -22,6 +22,9 @@
 | `ctl.go` | `--start/--stop/--restart`, snapshot/done/request 명령, 색 메시지 | 2차 |
 | `tui.go` | TUI 루프: raw tty, 키 파싱, 화면 전환, 자동 갱신, 수동 OS 체크 요청 (입출력·시계 주입) | 2차 |
 | `view.go` | TUI 전체 화면 보기: 수동 실행(c/t) 결과, g 재확인 진행, v 최근 결과 (데몬 기록·code 본문을 읽어 실시간 표시) | 단위 테스트 `mode_test.go` |
+| `awxprofile.go` | conf 의 `awx_profile_1`~`9` 파싱 (`nodeinfo(y/n)\|OS값\|설명`, OS 값 검증, 무효 프로파일은 사유와 함께 제외) | 0.6.0, `awxprofile_test.go` |
+| `oneoff.go` | `x` 키: 체크스크립트 단독 실행 (user 선택 → 호스트 입력 → t/c → 임시 디렉터리에서 os_check 실행 → 결과 창, 기록 안 남김) | 0.6.0, `oneoff_test.go`, `oneoffExec` 등 주입 |
+| `awxrun.go` | `w` 키: awx_dir 의 01 을 TUI 밖 터미널에서 실행 (auto 프로파일 선택, `AWX_AUTO*` 환경변수, Ctrl+X 즉시 취소, 끝나면 복귀) | 0.6.0, `awxrun_test.go`, `awxExec` 주입 |
 | `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙 | 2차, 골든 테스트 |
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |

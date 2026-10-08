@@ -614,9 +614,9 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 			idx++
 		}
 	}
-	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료"
+	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 종료"
 	if sel.DateFilter {
-		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료"
+		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 종료"
 	}
 	return finish(head, body, cursor, height, width, color, []string{
 		msgLine(sel, width, color),
@@ -766,9 +766,9 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 
 	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
 		msgLine(sel, width, color)}
-	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 체크+수정  t 체크만  g 재확인  v 결과  a 전체 그룹  r 새로고침  ? 도움말  q 복귀"
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 체크+수정  t 체크만  g 재확인  v 결과  a 전체 그룹  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 복귀"
 	if sel.Yml == allView {
-		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  g 재확인  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀"
+		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  g 재확인  a 그룹별 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 복귀"
 	}
 	foot = append(foot, segLine(color, width, seg{hint, stBold}))
 	if height <= 0 {
@@ -859,6 +859,8 @@ func renderHelp(width, height int, color bool) string {
 		"   a           선택한 job 의 모든 그룹(yml) 호스트를 한 표로 (그룹 열 표시)",
 		"   r           바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동: 로컬 2초, 원격 5초)",
 		"               정체 호스트는 ping 상태와 상관없이 즉시 다시 확인(수동 재시도)",
+		"   x           체크스크립트 단독 실행 (화면 1·2 어디서나) - user·호스트 입력 → t/c 선택 → 결과 보기, 기록 안 남김 (취소: Ctrl+X)",
+		"   w           AWX 실행 (화면 1·2 어디서나) - awx_dir 의 01.AWX_nodeinfo_V2.sh 를 이 터미널에서 실행, awx_profile_N 이 있으면 auto 여부·번호 선택 (취소: Ctrl+X 즉시)",
 		"   q / Esc     종료",
 		" 화면 2 (호스트표)",
 		"   ↑ ↓ (k j)   호스트 행 이동",

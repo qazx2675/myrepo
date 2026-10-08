@@ -273,3 +273,28 @@ bash test/demo_flow.sh --stop
 # 화면만 확인 (데몬 없이 파일만 읽음)
 bash test/make_demo_jobs.sh
 AUTO_SETUP_DIR=/tmp/as_demo auto_setup
+
+# ===== 12. 체크스크립트 단독 실행(x) · AWX 실행(w) (0.6.0~) =====
+# 화면에서: x = 체크스크립트 단독 실행 (user 선택 → 호스트 붙여넣고 Ctrl+D → t 설정체크만 / c 설정체크+설정수정, 실행 중 Ctrl+X → y 취소, 기록 안 남김)
+#           w = AWX 실행 (awx_dir 의 01 을 이 화면을 내려놓고 실행, auto 여부·프로파일 선택, Ctrl+X 즉시 취소, 끝나면 복귀)
+#           Ctrl+C / Ctrl+Z 는 무시 (종료는 q)
+#           q / Esc 는 체크스크립트 실행 중에는 무시 (결과 창에서 q/Esc 로 닫기)
+
+# conf/auto_setup.conf 에 AWX 프로파일 추가 예 (형식 nodeinfo(y/n)|OS값|설명, OS 값: 2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD default)
+# awx_profile_1=y|2025|nodeinfo 사용, 모든 yml 을 OS 2025 로
+# awx_profile_2=n|2026-OPC_MDP|nodeinfo 미사용, OPC_MDP
+
+# 모의 환경 준비 (root, 운영 데이터 미사용) — 데모 conf 에 awx_profile_1·2 가 들어 있음
+bash test/demo_flow.sh
+
+# 이 셸에 환경 설정 후 화면 실행 → x 로 127.0.0.11/12/14 붙여넣고 t 또는 c, w 로 auto y → 프로파일 1, Ctrl+X 취소도 눌러 보기
+source /tmp/as_demo_flow/env.sh
+auto_setup
+
+# 정리
+bash test/demo_flow.sh --stop
+
+# [업데이트] 현장 사본 conf 업데이트 미리보기 → 적용 → 되돌리기 (0.6.0 신규 변수는 awx_profile_1~9, 선택)
+bash conf/update_v0.6.0.sh --dry
+bash conf/update_v0.6.0.sh
+bash conf/update_v0.6.0.sh --undo

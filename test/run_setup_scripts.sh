@@ -5,7 +5,8 @@
 set -u
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
-UPD=${1:-$(ls conf/update_v*.sh 2>/dev/null | sort -V | tail -1)}
+UPD=${1:-conf/update_v0.4.0.sh}        # 4~6절: v0.4.0 업데이트 (기존 케이스 유지)
+UPD6=${2:-conf/update_v0.6.0.sh}       # 7절: v0.6.0 업데이트 (awx_profile_1~9 주석·빈 변수 추가)
 export NO_COLOR=1
 PASS=0 FAIL=0
 ok()   { PASS=$((PASS + 1)); echo "  [O] $*"; }
@@ -25,7 +26,7 @@ echo "== 1. 신규: os8 역할 가이드 (빈 conf → 값 입력 → setup.sh �
 P=$TMP/p1; newproj "$P"
 mkdir -p "$TMP/awx" "$TMP/share"; : > "$TMP/check.sh"
 cp "$P/conf/auto_setup.conf.example" "$P/conf/auto_setup.conf"
-printf '%s\n' os6mgmt01 "$TMP/check.sh" "$TMP/awx" "$TMP/share" /user/gossh /user/as - \
+printf '%s\n' os6mgmt01 "$TMP/check.sh" "$TMP/awx" "$TMP/share" '' '' '' '' '' '' '' '' '' /user/gossh /user/as - \
 	| bash "$P/conf/setup_guide.sh" --role os8 --yes > "$TMP/o1" 2>&1
 rc=$?
 chk "종료코드 0" "[ $rc -eq 0 ]"
@@ -97,6 +98,25 @@ rc=$?
 chk "종료코드 0 아님" "[ $rc -ne 0 ]"
 chk "파일 불변" "cmp -s $F $TMP/orig6"
 chk "앵커 위치 안내" "grep -q 'os6_mgmt' $TMP/o6"
+
+echo "== 7. v0.6.0 업데이트: v0.4.0 시기 conf(현장 값·CRLF) → awx_profile 블록만 삽입, 값 보존 =="
+[ -f "$UPD6" ] || { ng "v0.6.0 업데이트 스크립트 없음: $UPD6"; echo "PASS=$PASS FAIL=$FAIL"; exit 1; }
+P=$TMP/p7; newproj "$P"; cp "$UPD6" "$P/conf/"
+U=$P/conf/$(basename "$UPD6"); F=$P/conf/auto_setup.conf
+sed '/^# (v0.6.0)/,/^awx_profile_9=$/d' conf/auto_setup.conf.example \
+	| sed -e 's/^os6_mgmt=$/os6_mgmt=OO-mgmt/' -e 's|^awx_dir=$|awx_dir=/OO/awx|' \
+	      -e 's/^# 비어 있지 않으면 원격.*/# 원격 클라이언트 (현장 메모: 담당자 OO)/' \
+	| sed 's/$/\r/' > "$F"
+before_vals=$(tr -d '\r' < "$F" | grep -v '^#' | grep '=')
+printf '\n\n\n\n\n\n\n\n\n' | bash "$U" --dir "$P" --yes > "$TMP/o7" 2>&1   # 새 변수 awx_profile_1~9 는 빈 값(Enter)
+rc=$?
+chk "종료코드 0" "[ $rc -eq 0 ]"
+chk "awx_profile_1~9 빈 변수 9개 삽입" "[ \$(grep -c '^awx_profile_[1-9]=\$' $F) -eq 9 ]"
+chk "설명 주석(v0.6.0) 삽입" "grep -q '^# (v0.6.0) AWX 실행 프로파일' $F"
+chk "기존 값 줄 전부 보존" "[ \"\$(grep -v '^#' $F | grep '=' | grep -v '^awx_profile_')\" = \"\$before_vals\" ]"
+chk "현장 주석 보존" "grep -q '현장 메모: 담당자 OO' $F"
+printf '\n\n\n\n\n\n\n\n\n' | bash "$U" --dir "$P" --yes > "$TMP/o7b" 2>&1
+chk "재실행은 변경 없음(멱등)" "[ \$(grep -c '^awx_profile_1=' $F) -eq 1 ]"
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"

@@ -6,6 +6,8 @@ package main
 import (
 	"errors"
 	"os"
+	"syscall"
+	"time"
 )
 
 func isTTY(f *os.File) bool { return false }
@@ -13,5 +15,13 @@ func isTTY(f *os.File) bool { return false }
 func makeRaw(f *os.File) (func(), error) {
 	return nil, errors.New("raw tty 는 linux 에서만 지원")
 }
+
+func withAwxTermios(f *os.File) (func(), error) { return func() {}, nil }
+
+func waitReadable(f *os.File, d time.Duration) bool { return true }
+
+func oneoffSysProcAttr() *syscall.SysProcAttr { return nil }
+
+func killGroup(pid int, sig syscall.Signal) {}
 
 func ttySize(f *os.File) (int, int) { return 80, 24 }

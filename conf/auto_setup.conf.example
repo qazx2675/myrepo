@@ -19,6 +19,21 @@ os_check_sh=
 # awx 스크립트 경로 (awxkit/dhcp.sh 등이 있는 awx_script 디렉터리)
 awx_dir=
 
+# (v0.6.0) AWX 실행 프로파일 (선택, 최대 9개) — TUI 에서 w 로 AWX 를 실행할 때 고르는 미리 정한 답변 묶음
+# 형식: awx_profile_N=nodeinfo(y/n)|OS값|설명   (설명은 비워도 되고 공백이 들어가도 된다)
+# OS값: 2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD default   (형식이 틀린 프로파일은 목록에서 빠지고 사유가 표시됨)
+#   예) awx_profile_1=y|2025|nodeinfo 사용, 모든 yml 을 OS 2025 로
+#   예) awx_profile_2=n|2026-OPC_MDP|nodeinfo 미사용, OPC_MDP
+awx_profile_1=
+awx_profile_2=
+awx_profile_3=
+awx_profile_4=
+awx_profile_5=
+awx_profile_6=
+awx_profile_7=
+awx_profile_8=
+awx_profile_9=
+
 # 비어 있지 않으면 원격 클라이언트 모드 (os6_mgmt 에서 채움)
 os8_mgmt=
 # os8_mgmt 위 auto_setup 경로 (비면 /usr/local/bin/auto_setup)

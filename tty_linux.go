@@ -6,8 +6,12 @@ package main
 import (
 	"os"
 	"syscall"
+	"time"
 	"unsafe"
 )
+
+// tcsetsf: TCSETSF(0x5412, x86·arm 공통) - syscall 패키지에 상수가 없다. 출력 대기 후 적용하며 입력 버퍼를 버린다
+const tcsetsf = 0x5412
 
 func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
 	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, req, uintptr(arg)); e != 0 {
@@ -43,6 +47,47 @@ func makeRaw(f *os.File) (func(), error) {
 	}
 	return func() { _ = ioctl(fd, syscall.TCSETS, unsafe.Pointer(&old)) }, nil
 }
+
+// withAwxTermios: AWX(01) 실행용 터미널 설정 — 현재 termios 를 저장하고 cooked(ISIG|ICANON|ECHO …) 로 바꾼 뒤
+// intr=Ctrl+X(0x18), susp=비활성(_POSIX_VDISABLE=0) 로 설정한다. 돌려주는 함수가 저장해 둔 termios 로 되돌린다
+// (입력 버퍼에 남은 키는 버림 - TCSETSF).
+func withAwxTermios(f *os.File) (func(), error) {
+	fd := f.Fd()
+	var old syscall.Termios
+	if err := ioctl(fd, syscall.TCGETS, unsafe.Pointer(&old)); err != nil {
+		return nil, err
+	}
+	t := old
+	t.Iflag |= syscall.ICRNL | syscall.IXON
+	t.Oflag |= syscall.OPOST | syscall.ONLCR
+	t.Lflag |= syscall.ISIG | syscall.ICANON | syscall.ECHO | syscall.ECHOE | syscall.ECHOK | syscall.IEXTEN
+	t.Cc[syscall.VINTR] = 0x18
+	t.Cc[syscall.VSUSP] = 0
+	if err := ioctl(fd, syscall.TCSETS, unsafe.Pointer(&t)); err != nil {
+		return nil, err
+	}
+	return func() { _ = ioctl(fd, tcsetsf, unsafe.Pointer(&old)) }, nil
+}
+
+// waitReadable: d 안에 f 에서 읽을 수 있는 데이터(또는 EOF)가 생기면 true (select). EINTR 등 오류는 false.
+func waitReadable(f *os.File, d time.Duration) bool {
+	fd := int(f.Fd())
+	var fds syscall.FdSet
+	bits := uint(unsafe.Sizeof(fds.Bits[0]) * 8)
+	if fd < 0 || fd >= len(fds.Bits)*int(bits) {
+		return true // 범위 밖이면 그냥 Read 로 넘긴다
+	}
+	fds.Bits[uint(fd)/bits] |= 1 << (uint(fd) % bits)
+	tv := syscall.NsecToTimeval(int64(d))
+	n, err := syscall.Select(fd+1, &fds, nil, nil, &tv)
+	return err == nil && n > 0
+}
+
+// oneoffSysProcAttr: 단독 실행 프로세스를 새 프로세스 그룹으로
+func oneoffSysProcAttr() *syscall.SysProcAttr { return &syscall.SysProcAttr{Setpgid: true} }
+
+// killGroup: 프로세스 그룹 전체에 시그널
+func killGroup(pid int, sig syscall.Signal) { _ = syscall.Kill(-pid, sig) }
 
 // ttySize: 터미널 칸 수 (실패하면 80x24)
 func ttySize(f *os.File) (int, int) {
