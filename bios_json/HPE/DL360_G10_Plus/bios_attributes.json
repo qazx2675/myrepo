@@ -1,0 +1,4163 @@
+{
+ "_meta": {
+  "source": "HPE iLO 5 v3.09 Bios resource definitions (https://servermanagementportal.ext.hpe.com/docs/redfishservices/ilos/ilo5/ilo5_309/ilo5_bios_resourcedefns309)",
+  "scope": "HPE 문서의 iLO 5 Intel 플랫폼 레지스트리 샘플(속성 401개). 모델별 레지스트리(BiosAttributeRegistryU32/U34/U45/U46)와 일치함이 문서에 명시되지 않음 -> 실제 장비 속성은 모델/ROM 에 따라 일부 다를 수 있음",
+  "default": "null = 문서에 기본값 없음(장비의 Bios/BaseConfigs 또는 레지스트리 DefaultValue 필요)",
+  "count": 401
+ },
+ "AcpiHpet": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "High Precision Event Timer (HPET) ACPI Support"
+ },
+ "AcpiRootBridgePxm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Proximity Reporting for I/O"
+ },
+ "AcpiSlit": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "ACPI SLIT"
+ },
+ "AdjSecPrefetch": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Adjacent Sector Prefetch"
+ },
+ "AdminEmail": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Administrator E-mail Address"
+ },
+ "AdminName": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Administrator Name"
+ },
+ "AdminOtherInfo": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Administrator Other Information"
+ },
+ "AdminPhone": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Administrator Phone Number"
+ },
+ "AdvCrashDumpMode": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Advanced Crash Dump Mode"
+ },
+ "AdvancedMemProtection": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "FastFaultTolerantADDDC",
+   "AdvancedEcc",
+   "OnlineSpareAdvancedEcc",
+   "MirroredAdvancedEcc"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Advanced Memory Protection"
+ },
+ "AsrStatus": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "ASR Status"
+ },
+ "AsrTimeoutMinutes": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Timeout10",
+   "Timeout15",
+   "Timeout20",
+   "Timeout30",
+   "Timeout5"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "ASR Timeout"
+ },
+ "AssetTagProtection": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Locked",
+   "Unlocked"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Asset Tag Protection"
+ },
+ "AutoPowerOn": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AlwaysPowerOn",
+   "AlwaysPowerOff",
+   "RestoreLastState"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Automatic Power-On"
+ },
+ "BootMode": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Uefi",
+   "LegacyBios"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Boot Mode"
+ },
+ "BootOrderPolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "RetryIndefinitely",
+   "AttemptOnce",
+   "ResetAfterFailed"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Boot Order Policy"
+ },
+ "ChannelInterleaving": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Channel Interleaving"
+ },
+ "CollabPowerControl": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Collaborative Power Control"
+ },
+ "ConsistentDevNaming": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "LomsAndSlots",
+   "LomsOnly",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Consistent Device Naming"
+ },
+ "CoreBoosting": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Core Boosting"
+ },
+ "CustomPostMessage": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Custom POST Message"
+ },
+ "DaylightSavingsTime": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Daylight Savings Time"
+ },
+ "DcuIpPrefetcher": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "DCU IP Prefetcher"
+ },
+ "DcuStreamPrefetcher": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "DCU Stream Prefetcher"
+ },
+ "Dhcpv4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "DHCPv4"
+ },
+ "DirectToUpi": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Direct To UPI (D2K)"
+ },
+ "DynamicPowerCapping": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Dynamic Power Capping Functionality"
+ },
+ "EmbNicAspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "EmbNicEnable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "EmbNicLinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "EmbNicPCIeOptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "EmbSas1Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "EmbSas1Boot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded SAS Controller 1"
+ },
+ "EmbSas1Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "EmbSas1LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "EmbSas1PcieOptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "EmbSata1Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "SATA Power Management(SALP)"
+ },
+ "EmbSata1Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "SATA Device Disable"
+ },
+ "EmbSata1PCIeOptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "EmbSata2Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "SATA Power Management(SALP)"
+ },
+ "EmbSata2Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "SATA Device Disable"
+ },
+ "EmbSata2PCIeOptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "EmbVideoConnection": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "AlwaysDisabled",
+   "AlwaysEnabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded Video Connection"
+ },
+ "EmbeddedDiagnostics": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded Diagnostics"
+ },
+ "EmbeddedSata": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Ahci",
+   "Raid"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded SATA Configuration"
+ },
+ "EmbeddedSerialPort": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Com1Irq4",
+   "Com2Irq3",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded Serial Port"
+ },
+ "EmbeddedUefiShell": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded UEFI Shell"
+ },
+ "EmsConsole": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Physical",
+   "Virtual"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "EMS Console"
+ },
+ "EnabledCoresPerProc": {
+  "type": "Integer",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Enabled Cores per Processor"
+ },
+ "EnergyEfficientTurbo": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Energy Efficient Turbo"
+ },
+ "EnergyPerfBias": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "MaxPerf",
+   "BalancedPerf",
+   "BalancedPower",
+   "PowerSavingsMode"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Energy/Performance Bias"
+ },
+ "EnhancedProcPerf": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Enhanced Processor Performance"
+ },
+ "EraseUserDefaults": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "No",
+   "Yes"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Erase User Defaults"
+ },
+ "ExtendedAmbientTemp": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "ASHRAE3",
+   "ASHRAE4"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Extended Ambient Temperature Support"
+ },
+ "ExtendedMemTest": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Extended Memory Test"
+ },
+ "F11BootMenu": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "One-Time Boot Menu (F11 Prompt)"
+ },
+ "FCScanPolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "CardConfig"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Fibre Channel/FCoE Scan Policy"
+ },
+ "FanFailPolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Shutdown",
+   "Allow"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Fan Failure Policy"
+ },
+ "FanInstallReq": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "EnableMessaging",
+   "DisableMessaging"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Fan Installation Requirements"
+ },
+ "FlexLom1Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "FlexLom1Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "FlexLom1LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "FlexLom1PCIeOptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "HttpSupport": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "HttpsOnly",
+   "HttpOnly",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "HTTP Support"
+ },
+ "HwPrefetcher": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "HW Prefetcher"
+ },
+ "IntelDmiLinkFreq": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "DmiGen1",
+   "DmiGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel DMI Link Frequency"
+ },
+ "IntelNicDmaChannels": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel NIC DMA Channels (IOAT)"
+ },
+ "IntelPerfMonitoring": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel Performance Monitoring Support"
+ },
+ "IntelProcVtd": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel(R) VT-d"
+ },
+ "IntelSpeedSelect": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Base",
+   "Config1",
+   "Config2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel(R) Speed Select"
+ },
+ "IntelTxt": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel(R) TXT Support"
+ },
+ "IntelUpiFreq": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "MinUpiSpeed"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel UPI Link Frequency"
+ },
+ "IntelUpiLinkEn": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SingleLink"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel UPI Link Enablement"
+ },
+ "IntelUpiPowerManagement": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel UPI Link Power Management"
+ },
+ "IntelligentProvisioning": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intelligent Provisioning (F10 Prompt)"
+ },
+ "InternalSDCardSlot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Internal SD Card Slot"
+ },
+ "Ipv4Address": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv4 Address"
+ },
+ "Ipv4Gateway": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv4 Gateway"
+ },
+ "Ipv4PrimaryDNS": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv4 Primary DNS"
+ },
+ "Ipv4SecondaryDNS": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv4 Secondary DNS"
+ },
+ "Ipv4SubnetMask": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv4 Subnet Mask"
+ },
+ "Ipv6Address": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv6 Address"
+ },
+ "Ipv6ConfigPolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Automatic",
+   "Manual"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "IPv6 Config Policy"
+ },
+ "Ipv6Duid": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "DuidLlt"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "IPv6 DHCP Unique Identifier"
+ },
+ "Ipv6Gateway": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv6 Gateway"
+ },
+ "Ipv6PrimaryDNS": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv6 Primary DNS"
+ },
+ "Ipv6SecondaryDNS": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "IPv6 Secondary DNS"
+ },
+ "LLCDeadLineAllocation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "LLC Dead Line Allocation"
+ },
+ "LlcPrefetch": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "LLC Prefetch"
+ },
+ "LocalRemoteThreshold": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Low",
+   "Medium",
+   "High",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Local/Remote Threshold"
+ },
+ "MaxMemBusFreqMHz": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "MaxMemBusFreq2933",
+   "MaxMemBusFreq2667",
+   "MaxMemBusFreq2400",
+   "MaxMemBusFreq2133",
+   "MaxMemBusFreq1867"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Maximum Memory Bus Frequency"
+ },
+ "MaxPcieSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "PerPortCtrl",
+   "PcieGen1"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Maximum PCI Express Speed"
+ },
+ "MemClearWarmReset": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Clear on Warm Reset"
+ },
+ "MemFastTraining": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Fast Training"
+ },
+ "MemMirrorMode": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Full",
+   "PartialOsConfig",
+   "PartialFirst4GB",
+   "Partial10PercentAbove4GB",
+   "Partial20PercentAbove4GB"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Mirroring Mode"
+ },
+ "MemPatrolScrubbing": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Patrol Scrubbing"
+ },
+ "MemRefreshRate": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Refreshx1",
+   "Refreshx2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Refresh Rate"
+ },
+ "MemoryControllerInterleaving": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Controller Interleaving"
+ },
+ "MemoryRemap": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoAction",
+   "AllMemory"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Memory Remap"
+ },
+ "MinProcIdlePkgState": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "C6Retention",
+   "C6NonRetention",
+   "NoState"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Minimum Processor Idle Power Package C-State"
+ },
+ "MinProcIdlePower": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "C6",
+   "C1E",
+   "NoCStates"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Minimum Processor Idle Power Core C-State"
+ },
+ "MixedPowerSupplyReporting": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Mixed Power Supply Reporting"
+ },
+ "NetworkBootRetry": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Network Boot Retry Support"
+ },
+ "NetworkBootRetryCount": {
+  "type": "Integer",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Network Boot Retry Count"
+ },
+ "NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 1 Boot"
+ },
+ "NicBoot10": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 10 Boot"
+ },
+ "NicBoot11": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 11 Boot"
+ },
+ "NicBoot12": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 12 Boot"
+ },
+ "NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 2 Boot"
+ },
+ "NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 3 Boot"
+ },
+ "NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 4 Boot"
+ },
+ "NicBoot5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 5 Boot"
+ },
+ "NicBoot6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 6 Boot"
+ },
+ "NicBoot7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 7 Boot"
+ },
+ "NicBoot8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 8 Boot"
+ },
+ "NicBoot9": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NIC 9 Boot"
+ },
+ "NodeInterleaving": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Node Interleaving"
+ },
+ "NumaGroupSizeOpt": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Flat",
+   "Clustered"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NUMA Group Size Optimization"
+ },
+ "NvDimmNMemFunctionality": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVDIMM-N Support"
+ },
+ "NvDimmNMemInterleaving": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVDIMM-N Interleaving"
+ },
+ "NvDimmNSanitizePolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "SanitizeAndRebootSystem",
+   "SanitizeAndShutdownSystem",
+   "SanitizeAndBootToFirmwareUI",
+   "SanitizeToFactoryDefaults"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVDIMM-N Sanitize/Erase on Next Reboot Policy"
+ },
+ "NvdimmLabelSupport": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVDIMM-N OS Label Support"
+ },
+ "NvmeFormat1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 1"
+ },
+ "NvmeFormat10": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 10"
+ },
+ "NvmeFormat11": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 11"
+ },
+ "NvmeFormat12": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 12"
+ },
+ "NvmeFormat13": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 13"
+ },
+ "NvmeFormat14": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 14"
+ },
+ "NvmeFormat15": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 15"
+ },
+ "NvmeFormat16": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 16"
+ },
+ "NvmeFormat17": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 17"
+ },
+ "NvmeFormat18": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 18"
+ },
+ "NvmeFormat19": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 19"
+ },
+ "NvmeFormat2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 2"
+ },
+ "NvmeFormat20": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 20"
+ },
+ "NvmeFormat21": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 21"
+ },
+ "NvmeFormat22": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 22"
+ },
+ "NvmeFormat23": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 23"
+ },
+ "NvmeFormat24": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 24"
+ },
+ "NvmeFormat25": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 25"
+ },
+ "NvmeFormat26": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 26"
+ },
+ "NvmeFormat27": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 27"
+ },
+ "NvmeFormat28": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 28"
+ },
+ "NvmeFormat29": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 29"
+ },
+ "NvmeFormat3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 3"
+ },
+ "NvmeFormat30": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 30"
+ },
+ "NvmeFormat31": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 31"
+ },
+ "NvmeFormat32": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 32"
+ },
+ "NvmeFormat33": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 33"
+ },
+ "NvmeFormat34": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 34"
+ },
+ "NvmeFormat35": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 35"
+ },
+ "NvmeFormat36": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 36"
+ },
+ "NvmeFormat37": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 37"
+ },
+ "NvmeFormat38": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 38"
+ },
+ "NvmeFormat39": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 39"
+ },
+ "NvmeFormat4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 4"
+ },
+ "NvmeFormat40": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 40"
+ },
+ "NvmeFormat41": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 41"
+ },
+ "NvmeFormat42": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 42"
+ },
+ "NvmeFormat43": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 43"
+ },
+ "NvmeFormat44": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 44"
+ },
+ "NvmeFormat45": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 45"
+ },
+ "NvmeFormat46": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 46"
+ },
+ "NvmeFormat47": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 47"
+ },
+ "NvmeFormat48": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 48"
+ },
+ "NvmeFormat49": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 49"
+ },
+ "NvmeFormat5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 5"
+ },
+ "NvmeFormat50": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 50"
+ },
+ "NvmeFormat6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 6"
+ },
+ "NvmeFormat7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 7"
+ },
+ "NvmeFormat8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 8"
+ },
+ "NvmeFormat9": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe Drive 9"
+ },
+ "NvmeOptionRom": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Embedded NVM Express Option ROM"
+ },
+ "OpportunisticSelfRefresh": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Opportunistic Self-Refresh"
+ },
+ "PciPeerToPeerSerialization": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCI Peer to Peer Serialization"
+ },
+ "PciResourcePadding": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Normal",
+   "Medium",
+   "High"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "NVMe PCIe Resource Padding"
+ },
+ "PciSlot1Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot1Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 1 Bifurcation"
+ },
+ "PciSlot1Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot1LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot1OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PciSlot2Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot2Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 2 Bifurcation"
+ },
+ "PciSlot2Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot2LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot2OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PciSlot3Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot3Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 3 Bifurcation"
+ },
+ "PciSlot3Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot3LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot3OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PciSlot4Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot4Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 4 Bifurcation"
+ },
+ "PciSlot4Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot4LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot4OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PciSlot5Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot5Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 5 Bifurcation"
+ },
+ "PciSlot5Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot5LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot5OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PciSlot6Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot6Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 6 Bifurcation"
+ },
+ "PciSlot6Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot6LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot6OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PciSlot7Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot7Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 7 Bifurcation"
+ },
+ "PciSlot7Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot7LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot7OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PciSlot8Aspm": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "AspmL1Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Power Management(ASPM)"
+ },
+ "PciSlot8Bifurcation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "SlotBifurcated",
+   "SlotDualBifurcated"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 8 Bifurcation"
+ },
+ "PciSlot8Enable": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Device Disable"
+ },
+ "PciSlot8LinkSpeed": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "PcieGen1",
+   "PcieGen2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Link Speed"
+ },
+ "PciSlot8OptionROM": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Option ROM"
+ },
+ "PersistentMemAddressRangeScrub": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Persistent Memory Address Range Scrub"
+ },
+ "PersistentMemBackupPowerPolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "WaitForBackupPower",
+   "BootWithoutBackupPower",
+   "UseExternalBackupPower"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Persistent Memory Backup Power Policy"
+ },
+ "PersistentMemScanMem": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Persistent Memory Integrity Check"
+ },
+ "PostBootProgress": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Serial",
+   "All"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "POST Verbose Boot Progress"
+ },
+ "PostDiscoveryMode": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "ForceFullDiscovery",
+   "ForceFastDiscovery"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "UEFI POST Discovery Mode"
+ },
+ "PostF1Prompt": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Delayed20Sec",
+   "Delayed2Sec",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "POST F1 Prompt"
+ },
+ "PostVideoSupport": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "DisplayAll",
+   "DisplayEmbeddedOnly"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "POST Video Support"
+ },
+ "PowerButton": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Power Button Mode"
+ },
+ "PowerOnDelay": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoDelay",
+   "Random",
+   "Delay15Sec",
+   "Delay30Sec",
+   "Delay45Sec",
+   "Delay60Sec"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Power-On Delay"
+ },
+ "PowerRegulator": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "DynamicPowerSavings",
+   "StaticLowPower",
+   "StaticHighPerf",
+   "OsControl"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Power Regulator"
+ },
+ "PreBootNetwork": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "EmbNicPort1",
+   "EmbNicPort2",
+   "EmbNicPort3",
+   "EmbNicPort4",
+   "EmbNicPort5",
+   "EmbNicPort6",
+   "EmbNicPort7",
+   "EmbNicPort8",
+   "FlexLom1Port1",
+   "FlexLom1Port2",
+   "FlexLom1Port3",
+   "FlexLom1Port4",
+   "FlexLom1Port5",
+   "FlexLom1Port6",
+   "FlexLom1Port7",
+   "FlexLom1Port8",
+   "Slot1NicPort1",
+   "Slot1NicPort2",
+   "Slot1NicPort3",
+   "Slot1NicPort4",
+   "Slot1NicPort5",
+   "Slot1NicPort6",
+   "Slot1NicPort7",
+   "Slot1NicPort8",
+   "Slot2NicPort1",
+   "Slot2NicPort2",
+   "Slot2NicPort3",
+   "Slot2NicPort4",
+   "Slot2NicPort5",
+   "Slot2NicPort6",
+   "Slot2NicPort7",
+   "Slot2NicPort8",
+   "Slot3NicPort1",
+   "Slot3NicPort2",
+   "Slot3NicPort3",
+   "Slot3NicPort4",
+   "Slot3NicPort5",
+   "Slot3NicPort6",
+   "Slot3NicPort7",
+   "Slot3NicPort8",
+   "Slot4NicPort1",
+   "Slot4NicPort2",
+   "Slot4NicPort3",
+   "Slot4NicPort4",
+   "Slot4NicPort5",
+   "Slot4NicPort6",
+   "Slot4NicPort7",
+   "Slot4NicPort8",
+   "Slot5NicPort1",
+   "Slot5NicPort2",
+   "Slot5NicPort3",
+   "Slot5NicPort4",
+   "Slot5NicPort5",
+   "Slot5NicPort6",
+   "Slot5NicPort7",
+   "Slot5NicPort8",
+   "Slot6NicPort1",
+   "Slot6NicPort2",
+   "Slot6NicPort3",
+   "Slot6NicPort4",
+   "Slot6NicPort5",
+   "Slot6NicPort6",
+   "Slot6NicPort7",
+   "Slot6NicPort8",
+   "Slot7NicPort1",
+   "Slot7NicPort2",
+   "Slot7NicPort3",
+   "Slot7NicPort4",
+   "Slot7NicPort5",
+   "Slot7NicPort6",
+   "Slot7NicPort7",
+   "Slot7NicPort8",
+   "Slot8NicPort1",
+   "Slot8NicPort2",
+   "Slot8NicPort3",
+   "Slot8NicPort4",
+   "Slot8NicPort5",
+   "Slot8NicPort6",
+   "Slot8NicPort7",
+   "Slot8NicPort8"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Pre-Boot Network Interface"
+ },
+ "PrebootNetworkEnvPolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "IPv4",
+   "IPv6"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Pre-Boot Network Environment"
+ },
+ "PrebootNetworkProxy": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Pre-Boot Network Proxy"
+ },
+ "ProcAes": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Processor AES-NI Support"
+ },
+ "ProcHyperthreading": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel(R) Hyper-Threading"
+ },
+ "ProcTurbo": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel(R) Turbo Boost Technology"
+ },
+ "ProcVirtualization": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Intel(R) Virtualization Technology (Intel VT) "
+ },
+ "ProcX2Apic": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "ForceEnabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Processor x2APIC Support"
+ },
+ "ProcessorConfigTDPLevel": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Normal",
+   "Level1",
+   "Level2"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Processor Config TDP Level"
+ },
+ "ProcessorJitterControl": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "Auto-tuned",
+   "Manual-tuned"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Processor Jitter Control"
+ },
+ "ProcessorJitterControlFrequency": {
+  "type": "Integer",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Processor Jitter Control Frequency"
+ },
+ "ProcessorJitterControlOptimization": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "OptimizedForThroughput",
+   "OptimizedForLatency",
+   "ZeroLatency"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Processor Jitter Control Optimization"
+ },
+ "ProductId": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Product ID"
+ },
+ "RedundantPowerSupply": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "BalancedMode",
+   "HighEfficiencyAuto",
+   "HighEfficiencyOddStandby",
+   "HighEfficiencyEvenStandby"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Redundant Power Supply Mode"
+ },
+ "RemovableFlashBootSeq": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "InternalSdCardFirst",
+   "InternalKeysFirst",
+   "ExternalKeysFirst"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Removable Flash Media Boot Sequence"
+ },
+ "RestoreDefaults": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "No",
+   "Yes"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Restore Default System Settings"
+ },
+ "RestoreManufacturingDefaults": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "No",
+   "Yes"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Restore Default Manufacturing Settings"
+ },
+ "RomSelection": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "CurrentRom",
+   "BackupRom"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "ROM Selection"
+ },
+ "SanitizeAllNvDimmN": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase all NVDIMM-N in the System"
+ },
+ "SanitizeProc1Dimm1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 1"
+ },
+ "SanitizeProc1Dimm10": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 10"
+ },
+ "SanitizeProc1Dimm11": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 11"
+ },
+ "SanitizeProc1Dimm12": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 12"
+ },
+ "SanitizeProc1Dimm2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 2"
+ },
+ "SanitizeProc1Dimm3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 3"
+ },
+ "SanitizeProc1Dimm4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 4"
+ },
+ "SanitizeProc1Dimm5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 5"
+ },
+ "SanitizeProc1Dimm6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 6"
+ },
+ "SanitizeProc1Dimm7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 7"
+ },
+ "SanitizeProc1Dimm8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 8"
+ },
+ "SanitizeProc1Dimm9": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 1 DIMM 9"
+ },
+ "SanitizeProc1NvDimmN": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase all NVDIMM-N on Processor 1"
+ },
+ "SanitizeProc2Dimm1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 1"
+ },
+ "SanitizeProc2Dimm10": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 10"
+ },
+ "SanitizeProc2Dimm11": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 11"
+ },
+ "SanitizeProc2Dimm12": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 12"
+ },
+ "SanitizeProc2Dimm2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 2"
+ },
+ "SanitizeProc2Dimm3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 3"
+ },
+ "SanitizeProc2Dimm4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 4"
+ },
+ "SanitizeProc2Dimm5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 5"
+ },
+ "SanitizeProc2Dimm6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 6"
+ },
+ "SanitizeProc2Dimm7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 7"
+ },
+ "SanitizeProc2Dimm8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 8"
+ },
+ "SanitizeProc2Dimm9": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase Processor 2 DIMM 9"
+ },
+ "SanitizeProc2NvDimmN": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sanitize/Erase all NVDIMM-N on Processor 2"
+ },
+ "SataSecureErase": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "SATA Secure Erase"
+ },
+ "SaveUserDefaults": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "No",
+   "Yes"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Save User Defaults"
+ },
+ "SecStartBackupImage": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Backup ROM Image Authentication"
+ },
+ "SecureBootStatus": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Secure Boot Status"
+ },
+ "SerialConsoleBaudRate": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "BaudRate9600",
+   "BaudRate19200",
+   "BaudRate38400",
+   "BaudRate57600",
+   "BaudRate115200"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "BIOS Serial Console Baud Rate"
+ },
+ "SerialConsoleEmulation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Vt100",
+   "Ansi",
+   "Vt100Plus",
+   "VtUtf8"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "BIOS Serial Console Emulation Mode"
+ },
+ "SerialConsolePort": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "Physical",
+   "Virtual"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "BIOS Serial Console Port"
+ },
+ "SerialNumber": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Serial Number"
+ },
+ "ServerAssetTag": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Server Asset Tag"
+ },
+ "ServerConfigLockStatus": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Server Configuration Lock Status"
+ },
+ "ServerName": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Server Name"
+ },
+ "ServerOtherInfo": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Server Other Information"
+ },
+ "ServerPrimaryOs": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Server Primary OS"
+ },
+ "ServiceEmail": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Service Contact E-mail Address"
+ },
+ "ServiceName": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Service Contact Name"
+ },
+ "ServiceOtherInfo": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Service Contact Other Information"
+ },
+ "ServicePhone": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Service Contact Phone Number"
+ },
+ "SetupBrowserSelection": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "GUI",
+   "Text",
+   "Auto"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Setup Browser Selection"
+ },
+ "Slot1NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 1 Boot"
+ },
+ "Slot1NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 2 Boot"
+ },
+ "Slot1NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 3 Boot"
+ },
+ "Slot1NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 4 Boot"
+ },
+ "Slot1NicBoot5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 5 Boot"
+ },
+ "Slot1NicBoot6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 6 Boot"
+ },
+ "Slot1NicBoot7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 7 Boot"
+ },
+ "Slot1NicBoot8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 1 NIC Port 8 Boot"
+ },
+ "Slot1StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 1"
+ },
+ "Slot2NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 1 Boot"
+ },
+ "Slot2NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 2 Boot"
+ },
+ "Slot2NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 3 Boot"
+ },
+ "Slot2NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 4 Boot"
+ },
+ "Slot2NicBoot5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 5 Boot"
+ },
+ "Slot2NicBoot6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 6 Boot"
+ },
+ "Slot2NicBoot7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 7 Boot"
+ },
+ "Slot2NicBoot8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 2 NIC Port 8 Boot"
+ },
+ "Slot2StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 2"
+ },
+ "Slot3NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 1 Boot"
+ },
+ "Slot3NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 2 Boot"
+ },
+ "Slot3NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 3 Boot"
+ },
+ "Slot3NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 4 Boot"
+ },
+ "Slot3NicBoot5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 5 Boot"
+ },
+ "Slot3NicBoot6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 6 Boot"
+ },
+ "Slot3NicBoot7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 7 Boot"
+ },
+ "Slot3NicBoot8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 3 NIC Port 8 Boot"
+ },
+ "Slot3StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 3"
+ },
+ "Slot4NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 1 Boot"
+ },
+ "Slot4NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 2 Boot"
+ },
+ "Slot4NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 3 Boot"
+ },
+ "Slot4NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 4 Boot"
+ },
+ "Slot4NicBoot5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 5 Boot"
+ },
+ "Slot4NicBoot6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 6 Boot"
+ },
+ "Slot4NicBoot7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 7 Boot"
+ },
+ "Slot4NicBoot8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 4 NIC Port 8 Boot"
+ },
+ "Slot4StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 4"
+ },
+ "Slot5NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 1 Boot"
+ },
+ "Slot5NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 2 Boot"
+ },
+ "Slot5NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 3 Boot"
+ },
+ "Slot5NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 4 Boot"
+ },
+ "Slot5NicBoot5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 5 Boot"
+ },
+ "Slot5NicBoot6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 6 Boot"
+ },
+ "Slot5NicBoot7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 7 Boot"
+ },
+ "Slot5NicBoot8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 5 NIC Port 8 Boot"
+ },
+ "Slot5StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 5"
+ },
+ "Slot6NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 1 Boot"
+ },
+ "Slot6NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 2 Boot"
+ },
+ "Slot6NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 3 Boot"
+ },
+ "Slot6NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 4 Boot"
+ },
+ "Slot6NicBoot5": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 5 Boot"
+ },
+ "Slot6NicBoot6": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 6 Boot"
+ },
+ "Slot6NicBoot7": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 7 Boot"
+ },
+ "Slot6NicBoot8": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 6 NIC Port 8 Boot"
+ },
+ "Slot6StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 6"
+ },
+ "Slot7NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 7 NIC Port 1 Boot"
+ },
+ "Slot7NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 7 NIC Port 2 Boot"
+ },
+ "Slot7NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 7 NIC Port 3 Boot"
+ },
+ "Slot7NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 7 NIC Port 4 Boot"
+ },
+ "Slot7StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 7"
+ },
+ "Slot8NicBoot1": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 8 NIC Port 1 Boot"
+ },
+ "Slot8NicBoot2": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 8 NIC Port 2 Boot"
+ },
+ "Slot8NicBoot3": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 8 NIC Port 3 Boot"
+ },
+ "Slot8NicBoot4": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NetworkBoot",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Slot 8 NIC Port 4 Boot"
+ },
+ "Slot8StorageBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "AllTargets",
+   "TwentyFourTargets",
+   "NoTargets"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "PCIe Slot 8"
+ },
+ "Sriov": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "SR-IOV"
+ },
+ "StaleAtoS": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Stale A to S"
+ },
+ "SubNumaClustering": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Sub-NUMA Clustering"
+ },
+ "ThermalConfig": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "OptimalCooling",
+   "IncreasedCooling",
+   "MaxCooling",
+   "EnhancedCPUCooling"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Thermal Configuration"
+ },
+ "ThermalShutdown": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Thermal Shutdown"
+ },
+ "TimeFormat": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Utc",
+   "Local"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Time Format"
+ },
+ "TimeZone": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "UtcM12",
+   "UtcM11",
+   "UtcM10",
+   "UtcM9",
+   "UtcM8",
+   "UtcM7",
+   "UtcM6",
+   "UtcM5",
+   "UtcM430",
+   "UtcM4",
+   "UtcM330",
+   "UtcM3",
+   "UtcM2",
+   "UtcM1",
+   "Utc0",
+   "UtcP1",
+   "UtcP2",
+   "UtcP3",
+   "UtcP330",
+   "UtcP4",
+   "UtcP430",
+   "UtcP5",
+   "UtcP530",
+   "UtcP545",
+   "UtcP6",
+   "UtcP630",
+   "UtcP7",
+   "UtcP8",
+   "UtcP9",
+   "UtcP930",
+   "UtcP10",
+   "UtcP11",
+   "UtcP12",
+   "UtcP13",
+   "UtcP14",
+   "Unspecified"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Time Zone"
+ },
+ "Tpm20SoftwareInterfaceOperation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoAction",
+   "Fifo",
+   "Crb"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "TPM 2.0 Software Interface Operation"
+ },
+ "Tpm20SoftwareInterfaceStatus": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoAction",
+   "Fifo",
+   "Crb"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Current TPM 2.0 Software Interface Status"
+ },
+ "Tpm2Operation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoAction",
+   "Clear"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "TPM 2.0 Operation"
+ },
+ "TpmActivePcrs": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NotSpecified",
+   "Sha1",
+   "Sha256",
+   "Sha1Sha256"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Current TPM 2.0 Active PCRs"
+ },
+ "TpmChipId": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "None",
+   "StMicroGen10",
+   "IntelPttFTpm",
+   "NationzTpm20"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Current TPM Chip ID"
+ },
+ "TpmFips": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NotSpecified",
+   "NonFipsMode",
+   "FipsMode"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Current TPM FIPS mode"
+ },
+ "TpmFipsModeSwitch": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoAction",
+   "RegularMode",
+   "FipsMode"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "TPM FIPS Mode Switch"
+ },
+ "TpmModeSwitchOperation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoAction",
+   "Tpm12",
+   "Tpm20"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "TPM Mode Switch Operation"
+ },
+ "TpmOperation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoAction",
+   "Enable",
+   "Disable",
+   "Clear"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "TPM 1.2 Operation"
+ },
+ "TpmState": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NotPresent",
+   "PresentDisabled",
+   "PresentEnabled"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Current TPM State"
+ },
+ "TpmType": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "NoTpm",
+   "Tpm12",
+   "Tpm20"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "Current TPM Type"
+ },
+ "TpmUefiOpromMeasuring": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "TPM UEFI Option ROM Measurement"
+ },
+ "TpmVisibility": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Hidden",
+   "Visible"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "TPM Visibility"
+ },
+ "UefiOptimizedBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "UEFI Optimized Boot"
+ },
+ "UefiSerialDebugLevel": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Disabled",
+   "ErrorsOnly",
+   "Medium",
+   "Network",
+   "Verbose",
+   "Custom"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "UEFI Serial Debug Message Level"
+ },
+ "UefiShellBootOrder": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Add Embedded UEFI Shell to Boot Order"
+ },
+ "UefiShellScriptVerification": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Shell Script Verification"
+ },
+ "UefiShellStartup": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "UEFI Shell Script Auto-Start"
+ },
+ "UefiShellStartupLocation": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "AttachedMedia",
+   "NetworkLocation"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Shell Auto-Start Script Location"
+ },
+ "UefiShellStartupUrl": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Network Location for Shell Auto-Start Script"
+ },
+ "UefiShellStartupUrlFromDhcp": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Discover Shell Auto-Start Script using DHCP"
+ },
+ "UncoreFreqScaling": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Maximum",
+   "Minimum"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Uncore Frequency Scaling"
+ },
+ "UpiPrefetcher": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "UPI Prefetcher"
+ },
+ "UrlBootFile": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Boot from URL 1"
+ },
+ "UrlBootFile2": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Boot from URL 2"
+ },
+ "UrlBootFile3": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Boot from URL 3"
+ },
+ "UrlBootFile4": {
+  "type": "String",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "Boot from URL 4"
+ },
+ "UsbBoot": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "USB Boot Support"
+ },
+ "UsbControl": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "UsbEnabled",
+   "UsbDisabled",
+   "ExternalUsbDisabled",
+   "InternalUsbDisabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "USB Control"
+ },
+ "UserDefaultsState": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": true,
+  "default": null,
+  "title": "User Defaults"
+ },
+ "UtilityLang": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "English",
+   "Japanese",
+   "Chinese"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Utility Language"
+ },
+ "VideoOptions": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "OptionalVideoOnly",
+   "BothVideoEnabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Video Options"
+ },
+ "VirtualInstallDisk": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Virtual Install Disk"
+ },
+ "VirtualSerialPort": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Com1Irq4",
+   "Com2Irq3",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Virtual Serial Port"
+ },
+ "VlanControl": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "VLAN Control"
+ },
+ "VlanId": {
+  "type": "Integer",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "VLAN ID"
+ },
+ "VlanPriority": {
+  "type": "Integer",
+  "allowed_values": [],
+  "read_only": false,
+  "default": null,
+  "title": "VLAN Priority"
+ },
+ "WakeOnLan": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Wake-On LAN"
+ },
+ "WorkloadProfile": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "GeneralPowerEfficientCompute",
+   "GeneralPeakFrequencyCompute",
+   "GeneralThroughputCompute",
+   "Virtualization-PowerEfficient",
+   "Virtualization-MaxPerformance",
+   "LowLatency",
+   "MissionCritical",
+   "TransactionalApplicationProcessing",
+   "HighPerformanceCompute(HPC)",
+   "DecisionSupport",
+   "GraphicProcessing",
+   "I/OThroughput",
+   "Custom"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "Workload Profile"
+ },
+ "XptPrefetcher": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "Auto",
+   "Enabled",
+   "Disabled"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "XPT Prefetcher"
+ },
+ "iSCSIPolicy": {
+  "type": "Enumeration",
+  "allowed_values": [
+   "SoftwareInitiator",
+   "AdapterInitiator"
+  ],
+  "read_only": false,
+  "default": null,
+  "title": "iSCSI Policy"
+ }
+}

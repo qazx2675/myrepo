@@ -1,0 +1,18 @@
+# 1) 오프라인 빌드 (Go 필요. 바이너리가 있으면 생략)
+bash setup.sh
+
+# 2) 실제조사 JSON 을 out/<일시>/ 에 배치 (hostname.json)
+ls out/
+
+# 3) 대상 입력 (hostname [model], model 은 bios_json 폴더 이름 기준, 생략 가능)
+vi list.txt
+
+# 4) 비교 실행 -> results/<일시>/
+bash 조사.sh
+
+# (선택) 실제조사 폴더 직접 지정
+bash 조사.sh -in out/20261008_155548
+
+# 5) 결과 확인
+cat results/*/summary.txt
+column -t -s$'\t' results/*/mapping.tsv

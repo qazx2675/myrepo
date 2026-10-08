@@ -1,0 +1,15 @@
+# 비교에서 제외할 설정이름 정규식 (한 줄에 하나, 대소문자 무시는 (?i) 로 명시). 파일을 지우면 내장 기본 목록 사용.
+(?i)serial
+(?i)macaddress
+(?i)(^|_)mac(\d|$)
+(?i)uuid
+(?i)servicetag
+(?i)assettag
+(?i)servername
+(?i)serverotherinfo
+(?i)^admin(name|phone|email|other)
+(?i)ipv[46]
+(?i)ipaddress
+(?i)^bootseq
+(?i)bootorder
+(?i)^nic.*(slot|mac)

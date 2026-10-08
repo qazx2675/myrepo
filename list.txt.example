@@ -1,0 +1,5 @@
+# hostname [model]  — model 은 bios_json 폴더 이름 기준(요약 폴더의 일부도 가능). 생략하면 JSON 의 Model 로 자동 판단.
+node001 DL360_G9
+node002 DL360_G10
+node003
+node004 R640
