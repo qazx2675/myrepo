@@ -205,7 +205,7 @@ func renderAwx(a *awxState, width, height int, color bool) string {
 	for _, s := range body {
 		out = append(out, segLine(color, width, s))
 	}
-	foot := []string{sepLine(width), segLine(color, width, hintSegs(hint)...)}
+	foot := append([]string{sepLine(width)}, hintLines(color, width, hint)...)
 	if height > 0 {
 		for len(out) < height-len(foot) {
 			out = append(out, "")

@@ -568,7 +568,7 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 	if o.msg != "" {
 		foot = append(foot, segLine(color, width, seg{" " + o.msg, stYellow}))
 	}
-	foot = append(foot, segLine(color, width, hintSegs(hint)...))
+	foot = append(foot, hintLines(color, width, hint)...)
 	if height > 0 {
 		for len(out) < height-len(foot) {
 			out = append(out, "")
