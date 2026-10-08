@@ -6,6 +6,16 @@
 - 01/02: os6_mgmt 재조사 — 최상단 빈 변수 `os6_host`/`os6_user`/`os6_dir`/`os6_gossh`(01 이 02 로 export, 하나라도 비면 생략). os8_mgmt gossh 가 stderr 로 보고하고 결과가 없는 호스트만 공유 디렉터리(`os6_dir`) 경유 ssh 로 os6_mgmt 의 gossh 에서 다시 조사해 해당 호스트 결과를 교체(01 [12] LDAP/LACP, 02 파티션 확인). os6 에서도 실패하면 `os8/os6 모두 접속 불가` 경고만(진행 계속). 임시 파일은 종료 시 삭제. 테스트 16a~e·17a~c, `test/run_tests.sh` PASS=63
 - 01: 최상단 빈 변수 `auto_setup_gossh_pw` 추가 — 채우면 `auto_setup_host` 로의 gossh 전송에 `-p <비밀번호>` 를 붙임(os8_mgmt 에 키 인증이 안 될 때 "전달 실패" 해결). 비우면 기존과 동일. 테스트 7p, `test/run_tests.sh` PASS=55
 
+## [0.6.1] - 2026-10-09
+
+### 추가
+- 01: **`AWX_USER` 환경변수** — 값이 `^[A-Za-z0-9._-]+$` 이면 user 메뉴(info_mn.sh)와 번호 입력을 건너뛰고 그 값을 user 로 씁니다 (`user : <값> (auto_setup)` 표시). 형식이 틀리면 노란 경고 `[!] AWX_USER 가 올바르지 않아 메뉴로 진행합니다` 후 기존 메뉴로 진행
+- 01: **`AWX_VERIFY_FILE` 환경변수** — 읽을 수 있고 비어 있지 않은 파일이면 `등록 후 확인` 의 붙여넣기 목록을 stdin 대신 그 파일에서 읽습니다 (`붙여넣을 목록: auto_setup 에서 입력한 N대` 표시, 이후 누락/초과 검사는 기존과 동일). 없거나 비어 있으면 기존대로 stdin 입력
+- auto_setup TUI `w` 가 user 와 대상 서버 목록을 두 환경변수로 넘겨, `AWX_AUTO=1` 과 함께 stdin 없이(`< /dev/null`) 끝까지 실행됩니다
+- 두 변수가 없으면 기존과 100% 동일합니다
+- `setup/update_v0.6.1.sh`: 0.6.0 이전 사본도 한 번에 올리는 누적 업데이트(0.6.0 변경 + 0.6.1 변경, 01/02 통합). 0.6.0 을 이미 적용한 사본에는 새 변경만 적용하며 현장 값은 보존. `vars.manifest` 버전 0.6.1(새 변수 없음), `setup_guide.sh` 재생성. `update_v0.6.0.sh` 는 그대로 둡니다
+- 테스트: `test/run_tests.sh` 에 20a–20g 추가 (AWX_USER 유효/잘못됨/없음, AWX_VERIFY_FILE 전부 존재/누락 서버/없는·빈 파일, AWX_AUTO+두 변수 stdin 없이 완료) — PASS=78
+
 ## [0.6.0] - 2026-10-08
 
 ### 추가

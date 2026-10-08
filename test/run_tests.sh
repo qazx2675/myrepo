@@ -96,7 +96,7 @@ setup_case() {
 	CALLS=$STUBLOG/calls.log; OUT=$S/out.txt
 	: > "$CALLS"
 	export STUBLOG SVR_DIR REMOTE_DIR
-	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS
+	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_USER AWX_VERIFY_FILE
 	export GOSSH_SCENARIO=same
 	export AUTO_SETUP_DIR="$S/as"   # 01 [14-1] auto_setup 전달 위치(스크래치)
 	export PATH="$S/bin:$ORIG_PATH"
@@ -125,10 +125,16 @@ setup_case() {
 user(){\
 \tuser=testuser\
 }' "$W/$F01"
+		else
+			# user=0: 실제 user() 를 쓰되 메뉴 스크립트(info_mn.sh/info.sh)만 스텁 경로로 향하게 한다
+			mkdir -p "$S/umenu"
+			printf '%s\n' '#!/bin/bash' 'echo "STUB_USER_MENU"' 'echo usermenu >> "$STUBLOG/calls.log"' > "$S/umenu/info_mn.sh"
+			printf '%s\n' '#!/bin/bash' 'echo testuser' > "$S/umenu/info.sh"
+			sed -i -e "s#^user_route=\"\"#user_route=\"$S/umenu\"#" "$W/$F01"
 		fi
 		# 무결성: 복사본과 원본의 차이는 최상단 변수/user 본문/git 경로 줄뿐이어야 한다
 		local bad
-		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|day_print|lacp_comment|inventory_delete_host|infra_alias|os6_host|os6_user|os6_dir|os6_gossh)=|^> '$'\t''user=testuser$|root_user')
+		bad=$(diff "$SRC/$F01" "$W/$F01" | grep '^>' | grep -vE '^> (repohost|svr_dir|ai_server_list|day_print|lacp_comment|inventory_delete_host|infra_alias|os6_host|os6_user|os6_dir|os6_gossh)=|^> '$'\t''user=testuser$|^> user_route=|root_user')
 		if [[ -n $bad ]]; then echo "[HARNESS ERROR] 복사본 sed 가 예상 외 줄을 변경: $bad"; exit 2; fi
 		if [[ $cfg_user == 1 ]] && ! grep -q $'^\tuser=testuser$' "$W/$F01"; then
 			echo "[HARNESS ERROR] user() 본문 치환 실패"; exit 2; fi
@@ -1389,7 +1395,103 @@ auto_cases() {
 	t_has "pxe -os 2026" "$CALLS" '^pxe .* -os 2026 '
 	t_has "완료" "$OUT" '완료'
 	case_end
-	unset AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_COLOR
+
+	case_begin "20a" "AWX_USER 유효: user 메뉴 생략(스텁 메뉴 미호출), 그 user 로 진행 + 'user : 값 (auto_setup)'"
+	setup_case user=0
+	seed_raw D6
+	export AWX_USER=testuser
+	run01 'N\nY\nsu\n1\nY\n\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "user 에코" "$OUT" '^user : testuser \(auto_setup\)$'
+	t_no "user 메뉴 미출력" "$OUT" 'STUB_USER_MENU|Input Number'
+	t_eq "user 메뉴 호출 0회" "$(grep -c '^usermenu' "$CALLS")" 0
+	t_has "시작 user=testuser" "$W/LOG/$TU.log" '시작 user=testuser'
+	t_has "02 호출까지 완료" "$CALLS" '^pxe '
+	case_end
+
+	case_begin "20b" "AWX_USER 잘못됨(공백/특수문자): 노란 경고 후 기존 user 메뉴로 진행"
+	setup_case user=0
+	seed_raw D6
+	export AWX_USER='bad user;x' AWX_COLOR=1
+	run01 '1\nN\nY\nsu\n1\nY\n\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "노란 경고" "$OUT" "^${E}\[33m\[!\] AWX_USER 가 올바르지 않아 메뉴로 진행합니다${E}\[0m$"
+	t_has "user 메뉴 출력" "$OUT" 'STUB_USER_MENU'
+	t_eq "user 메뉴 호출 1회" "$(grep -c '^usermenu' "$CALLS")" 1
+	t_no "auto_setup 에코 없음" "$OUT" 'user : .*\(auto_setup\)'
+	t_has "메뉴 user 사용" "$OUT" '시작 user=testuser'
+	unset AWX_COLOR
+	case_end
+
+	case_begin "20c" "AWX_USER 없음(user=0): 기존과 동일하게 메뉴 사용, 경고·에코 없음"
+	setup_case user=0
+	seed_raw D6
+	run01 '1\nN\nY\nsu\n1\nY\n\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "user 메뉴 출력" "$OUT" 'STUB_USER_MENU'
+	t_no "경고·에코 없음" "$OUT" 'AWX_USER|\(auto_setup\)'
+	case_end
+
+	case_begin "20d" "AWX_VERIFY_FILE: 목록 전부 등록 대상에 있음 → stdin 없이 '모두 존재함'"
+	setup_case
+	seed_raw D6
+	printf 'host01 host02,host03\n' > "$S/verify.txt"
+	export AWX_VERIFY_FILE=$S/verify.txt
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "프롬프트 줄 유지" "$OUT" '등록 후 확인.*작업 대상 서버 목록을 붙여넣으세요'
+	t_has "auto_setup 입력 에코" "$OUT" '^붙여넣을 목록: auto_setup 에서 입력한 3대$'
+	t_has "모두 존재함" "$OUT" '붙여넣은 대상 서버 3대가 모두 존재함'
+	t_no "생략 아님" "$OUT" '대상 확인 생략'
+	case_end
+
+	case_begin "20e" "AWX_VERIFY_FILE: 등록 대상에 없는 서버 포함 → exit 1 + [X], 빠진 대상은 경고"
+	setup_case
+	seed_raw D6
+	printf 'host01\nhost09|host01\n' > "$S/verify.txt"
+	export AWX_VERIFY_FILE=$S/verify.txt
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드 1" "$RC" 1
+	t_has "없는 서버 보고" "$OUT" '^\[X\] 등록 대상에 없는 서버 \(1대\) : host09$'
+	t_has "붙여넣지 않은 대상 경고" "$OUT" '^\[!\] 붙여넣지 않은 등록 대상 \(2대\) : host02 host03$'
+	t_no "'모두 존재함' 출력 없음" "$OUT" '모두 존재함'
+	case_end
+
+	case_begin "20f" "AWX_VERIFY_FILE 가 없는 파일/빈 파일: 기존대로 stdin 에서 읽음"
+	setup_case
+	seed_raw D6
+	export AWX_VERIFY_FILE=$S/nonexistent.txt
+	run01 'N\nY\nsu\n1\nY\nhost01 host02 host03\n\n'
+	t_rc "없는 파일: 종료코드" "$RC" 0
+	t_no "없는 파일: auto_setup 에코 없음" "$OUT" 'auto_setup 에서 입력한'
+	t_has "없는 파일: stdin 목록 사용" "$OUT" '붙여넣은 대상 서버 3대가 모두 존재함'
+	setup_case
+	seed_raw D6
+	: > "$S/empty.txt"
+	export AWX_VERIFY_FILE=$S/empty.txt
+	run01 'N\nY\nsu\n1\nY\nhost01\n\n'
+	t_rc "빈 파일: 종료코드" "$RC" 0
+	t_no "빈 파일: auto_setup 에코 없음" "$OUT" 'auto_setup 에서 입력한'
+	t_has "빈 파일: stdin 목록 사용" "$OUT" '붙여넣은 대상 서버 1대가 모두 존재함'
+	case_end
+
+	case_begin "20g" "AWX_AUTO=1 + AWX_USER + AWX_VERIFY_FILE: stdin 전혀 없이(< /dev/null) 끝까지 완료"
+	setup_case user=0
+	seed_raw D6
+	printf 'host01 host02 host03\n' > "$S/verify.txt"
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 AWX_USER=testuser AWX_VERIFY_FILE=$S/verify.txt
+	RUN01_COUNT=$((RUN01_COUNT+1))
+	( cd "$W" && TMPDIR="$S/tmp" timeout 180 bash "./$F01" < /dev/null 2>&1 | cat > "$S/out.txt"; echo "${PIPESTATUS[0]}" > "$S/rc" )
+	RC=$(cat "$S/rc")
+	t_rc "01 종료코드" "$RC" 0
+	t_has "user 에코" "$OUT" '^user : testuser \(auto_setup\)$'
+	t_has "pxe -os 2025" "$CALLS" '^pxe .* -os 2025 '
+	t_has "auto_setup 입력 에코" "$OUT" '^붙여넣을 목록: auto_setup 에서 입력한 3대$'
+	t_has "모두 존재함" "$OUT" '붙여넣은 대상 서버 3대가 모두 존재함'
+	t_has "완료" "$OUT" '완료'
+	t_eq "user 메뉴 호출 0회" "$(grep -c '^usermenu' "$CALLS")" 0
+	case_end
+	unset AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_COLOR AWX_USER AWX_VERIFY_FILE
 }
 
 # ===================== 실행 =====================
