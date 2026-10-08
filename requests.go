@@ -147,6 +147,19 @@ func (d *Daemon) collectRequests(now time.Time) {
 			logf("요청 수락: %s → cancel %s", name, id)
 		case ReqRefresh:
 			d.lastPing, d.lastCheck = time.Time{}, time.Time{} // 이번 step 에서 바로 ping·준비확인
+			// 정체 호스트는 ping 정보가 없거나 경로가 틀려 갱신이 멈춘 경우가 있어, 이번 확인에 강제로 포함해 재시도한다
+			nStuck := 0
+			for _, j := range d.jobs {
+				for name, h := range j.Hosts {
+					if active(h) && effectiveStage(h, now.Unix()) == StageStuck {
+						d.forceCheck[name] = true
+						nStuck++
+					}
+				}
+			}
+			if nStuck > 0 {
+				logf("수동 재시도(r): 정체 호스트 %d대를 즉시 재확인", nStuck)
+			}
 			os.Remove(p)
 		default:
 			rejectRequest(p, name, b, "알 수 없는 요청 종류")
@@ -242,6 +255,7 @@ func (d *Daemon) scheduleManual(now time.Time) {
 		_ = os.WriteFile(p+".tmp", append(b, []byte("state=running\n")...), 0644)
 		_ = os.Rename(p+".tmp", p)
 	}
+	d.refreshManualRoutes(j, hosts, closed)
 	hasOS6 := false
 	ready := map[string]bool{}
 	for _, n := range hosts {
@@ -276,4 +290,59 @@ func readActiveRequests(dir string) map[string][]SnapManual {
 		out[pl["jobid"]] = append(out[pl["jobid"]], SnapManual{File: name, Yml: pl["yml"], State: st, Requested: ep})
 	}
 	return out
+}
+
+// refreshManualRoutes: 수동 run 직전 경로 재판별. os8 에서 응답하지 않는 호스트가 os6_mgmt 경유로는 응답하면 route=os6 로 바꿔
+// run 이 os6 gossh 래퍼를 쓰게 한다 (정체 등으로 경로가 틀어진 호스트도 일반 호스트처럼 체크되도록).
+// os6_mgmt·os6_gossh 가 없으면 아무것도 하지 않는다. 종료된 job(closed)은 job 파일을 고치지 않고 이번 run 에만 반영한다.
+func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
+	if os6_mgmt == "" || os6_gossh == "" {
+		return
+	}
+	var cand []string
+	for _, n := range hosts {
+		if h := j.Hosts[n]; h != nil && h.Route != "os6" {
+			cand = append(cand, n)
+		}
+	}
+	if len(cand) == 0 {
+		return
+	}
+	res, err := d.Checker.Check("local", cand)
+	if err != nil {
+		logf("[X] 수동 run 경로 확인 실패(local): %v", err)
+		return
+	}
+	var miss []string
+	for _, n := range cand {
+		if cr, ok := res[n]; ok && cr.Responded {
+			if h := j.Hosts[n]; h.Route == "" {
+				h.Route = "local"
+				d.markRoute(j, closed)
+			}
+			continue
+		}
+		miss = append(miss, n)
+	}
+	if len(miss) == 0 {
+		return
+	}
+	res, err = d.Checker.Check("os6", miss)
+	if err != nil {
+		logf("[X] 수동 run 경로 확인 실패(os6): %v", err)
+		return
+	}
+	for _, n := range miss {
+		if cr, ok := res[n]; ok && cr.Responded {
+			j.Hosts[n].Route = "os6"
+			d.markRoute(j, closed)
+			logf("경로 전환: %s → os6 (수동 run 전 확인: os8 무응답, os6_mgmt 응답, job %s)", n, j.ID)
+		}
+	}
+}
+
+func (d *Daemon) markRoute(j *Job, closed bool) {
+	if !closed {
+		d.dirty[j.ID] = true
+	}
 }

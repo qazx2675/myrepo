@@ -55,6 +55,7 @@ type Daemon struct {
 	runRetry   time.Time        // Runner 오류 후 재시도 가능 시각
 	runErr     string           // 마지막 Runner 오류 (같은 오류 반복 로그 방지)
 	checkErr   map[string]string
+	forceCheck map[string]bool // r 키 수동 재시도: 정체 호스트를 ping 상태와 상관없이 다음 준비확인에 포함 (check 가 소비)
 	doneLogged map[string]bool // 거부한 완료기록(호스트+내용) — 로그 1회
 }
 
@@ -328,6 +329,7 @@ func (d *Daemon) init() {
 	d.doneCh = make(chan runDone, 1)
 	d.progCh = make(chan runProgress, 1)
 	d.checkErr = map[string]string{}
+	d.forceCheck = map[string]bool{}
 	d.doneLogged = map[string]bool{}
 }
 
@@ -732,6 +734,15 @@ func (d *Daemon) check(now time.Time) {
 	for _, j := range d.jobs {
 		for name, h := range j.Hosts {
 			r := d.rt[name]
+			if d.forceCheck[name] && active(h) && h.ReadyAt == 0 { // 수동 재시도(정체 호스트): ping·경로 판별 결과와 무관하게 확인
+				route := h.Route
+				if route == "" {
+					route = "local"
+				}
+				owner[name] = j
+				groups[route] = append(groups[route], name)
+				continue
+			}
 			if !active(h) || h.ReadyAt != 0 || h.Route == "" || r == nil || !r.up {
 				continue
 			}
@@ -746,6 +757,7 @@ func (d *Daemon) check(now time.Time) {
 	for route := range groups {
 		routes = append(routes, route)
 	}
+	d.forceCheck = map[string]bool{} // 수동 재시도 표시는 이번 확인 한 번만 유효
 	sort.Strings(routes)
 	// os8 에서 준비확인 무응답인 local 호스트는 같은 주기에 os6_mgmt 경유로 다시 확인 (응답하면 route=os6 로 전환)
 	fallback := os6_mgmt != "" && os6_gossh != ""
@@ -1114,6 +1126,29 @@ func (d *Daemon) finishManual(c *inflight, r runDone, now time.Time) {
 		}
 	}
 	sort.Strings(done)
+	// 수동 run 이 정상 실행되어 체크 결과가 나온 호스트는 현재 단계(정체·설치중 등)와 상관없이 완료 처리한다
+	if j != nil && !res.Abnormal {
+		marked := 0
+		for _, n := range done {
+			if h := j.Hosts[n]; h != nil && h.Processed == "" {
+				h.Processed, h.DoneSrc, h.Fails = res.Code, DoneSrcRun, 0
+				if !c.closed {
+					d.setStage(j, n, baseStage(h), now.Unix())
+				}
+				marked++
+			}
+		}
+		if marked > 0 {
+			logf("수동 run 으로 완료 처리: job %s 그룹 %s %d대 (code %s)", c.jobID, c.yml, marked, res.Code)
+			if c.closed {
+				if _, err := writeJobFile(filepath.Join(doneDir(), c.jobID+".json"), j); err != nil {
+					logf("[X] job 저장 실패(%s): %v", c.jobID, err)
+				}
+			} else {
+				d.dirty[j.ID] = true
+			}
+		}
+	}
 	note := ""
 	if res.Abnormal {
 		note = " (os_check 비정상 종료)"

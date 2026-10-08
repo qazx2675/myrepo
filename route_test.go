@@ -224,3 +224,44 @@ func TestDefaultNotifierIsNop(t *testing.T) {
 	}
 	newNotifier().Wall("무시됨") // 패닉·부작용 없음
 }
+
+// 수동 run 전 경로 재판별: os8(local) 무응답·os6 응답 호스트는 route=os6 로 바뀌어 run 이 os6 래퍼를 쓴다
+func TestManualRunRedetectsOS6Route(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "mgmt", "/os6/gossh")
+	h1 := install(60, 120, 400, 600)
+	h1.noLocalSSH = true // ping 은 되지만 os8 에서 gossh 무응답 (경로가 local 로 남은 상태)
+	w := newWorld(map[string]*simHost{"h1": h1, "h2": oldOS()})
+	id := submit(t, "u1", 0, "h1", "h2")
+	d := drive(t, w, newTestDaemon(w), 0, 5)
+	if r := d.jobs[id].Hosts["h1"].Route; r != "local" {
+		t.Fatalf("사전 조건: route=local 이어야 함: %q", r)
+	}
+	req(t, ReqManualRun, map[string]string{"jobid": id, "yml": allGroup})
+	d = drive(t, w, d, 10, 20)
+	if len(w.runs) != 1 || !w.runs[0].OS6 {
+		t.Fatalf("수동 run 이 os6 경유로 실행되어야 함: %+v", w.runs)
+	}
+	if r := d.jobs[id].Hosts["h1"].Route; r != "os6" {
+		t.Fatalf("h1 route=os6 로 전환되어야 함: %q", r)
+	}
+	if r := d.jobs[id].Hosts["h2"].Route; r != "local" {
+		t.Fatalf("로컬 응답 호스트는 local 유지: %q", r)
+	}
+}
+
+// os6 설정이 없으면 수동 run 전 확인을 하지 않는다 (기존 동작)
+func TestManualRunNoRedetectWithoutOS6(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "", "")
+	h1 := install(60, 120, 400, 600)
+	w := newWorld(map[string]*simHost{"h1": h1})
+	id := submit(t, "u1", 0, "h1")
+	d := drive(t, w, newTestDaemon(w), 0, 5)
+	n := len(w.checks)
+	req(t, ReqManualRun, map[string]string{"jobid": id, "yml": allGroup})
+	drive(t, w, d, 10, 20)
+	if len(w.runs) != 1 || w.runs[0].OS6 || len(w.checks) != n {
+		t.Fatalf("os6 미설정이면 추가 확인·os6 경유 없음: runs=%+v checks=%v", w.runs, w.checks[n:])
+	}
+}
