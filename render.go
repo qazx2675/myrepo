@@ -811,13 +811,37 @@ func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
 		if n := g.Counts.Total - g.Counts.Done; n > 0 {
 			extra = fmt.Sprintf(", 미완료 %d대 포함", n)
 		}
-		what := "'설정체크 + 설정수정' (환경설정 수정함)"
+		what := []seg{{"'설정체크 + ", stYellow}, {"설정수정 (환경설정 수정함)", stRed}, {"'", stYellow}}
 		if sel.Mode == ModeCheck {
-			what = "'설정체크만' (환경설정 수정 안 함)"
+			what = []seg{{"'설정체크만' (환경설정 수정 안 함)", stYellow}}
 		}
-		return segLine(color, width, seg{fmt.Sprintf(" %s (%d대%s)에 %s 실행. 계속? [y/n]", g.Yml, g.Counts.Total, extra, what), stYellow})
+		segs := []seg{{fmt.Sprintf(" %s (%d대%s)에 ", g.Yml, g.Counts.Total, extra), stYellow}}
+		segs = append(segs, what...)
+		segs = append(segs, seg{" 실행. 계속? [y/n]", stYellow})
+		return segLine(color, width, segs...)
 	}
-	return segLine(color, width, seg{" [c] 설정체크 + 설정수정   [t] 설정체크만(수정 안 함)   [g] 재확인   [v] 최근 결과 - 완료 여부와 상관없이 그룹 전체 시도", "1;32"})
+	return segLine(color, width, seg{" [c] 설정체크 + ", "1;32"}, seg{"설정수정", stRed},
+		seg{"   [t] 설정체크만(수정 안 함)   [g] 재확인   [v] 최근 결과 - 완료 여부와 상관없이 그룹 전체 시도", "1;32"})
+}
+
+// redSegs: text 안의 "설정수정"(환경설정을 실제로 수정하는 모드)을 빨간색 seg 로 분리
+func redSegs(text, style string) []seg {
+	var out []seg
+	for {
+		i := strings.Index(text, "설정수정")
+		if i < 0 {
+			break
+		}
+		if i > 0 {
+			out = append(out, seg{text[:i], style})
+		}
+		out = append(out, seg{"설정수정", stRed})
+		text = text[i+len("설정수정"):]
+	}
+	if text != "" {
+		out = append(out, seg{text, style})
+	}
+	return out
 }
 
 // ---- 도움말 ----

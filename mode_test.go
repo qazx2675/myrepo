@@ -142,7 +142,7 @@ func runSnapJob(runs ...Run) Snapshot {
 func TestTUIManualModesAndResultView(t *testing.T) {
 	src := &fakeSrc{snap: twoGroupSnap(), local: true}
 	r := runKeys(t, src, "\rc")
-	if f := lastFrame(r); !strings.Contains(f, "'설정체크 + 설정수정'") || !strings.Contains(f, "[y/n]") {
+	if f := lastFrame(r); !strings.Contains(f, "설정수정 (환경설정 수정함)") || !strings.Contains(f, "[y/n]") {
 		t.Fatalf("c 확인 문구:\n%s", f)
 	}
 	r = runKeys(t, src, "\rcy")
@@ -222,5 +222,50 @@ func TestTUIRecheckProgressView(t *testing.T) {
 		if !strings.Contains(f, want) {
 			t.Fatalf("진행 화면에 %q 없음:\n%s", want, f)
 		}
+	}
+}
+
+// 색: 설정수정(환경설정을 실제로 수정하는 모드)은 빨강, 설정체크만은 빨강 아님
+func TestSetupModifyIsRed(t *testing.T) {
+	g := &SnapGroup{Yml: "a.yml", Counts: StageCounts{Total: 2}}
+	red := "\x1b[1;31m설정수정"
+	if l := manualLine(selection{}, g, 160, true); !strings.Contains(l, red) {
+		t.Fatalf("하단 줄에서 설정수정이 빨강이어야 함: %q", l)
+	}
+	if l := manualLine(selection{Confirm: true}, g, 160, true); !strings.Contains(l, "\x1b[1;31m설정수정 (환경설정 수정함)") {
+		t.Fatalf("c 확인 문구: %q", l)
+	}
+	if l := manualLine(selection{Confirm: true, Mode: ModeCheck}, g, 160, true); strings.Contains(l, "1;31m") {
+		t.Fatalf("t 확인 문구는 빨강 없음: %q", l)
+	}
+	v := &viewState{kind: viewRun, title: "수동 실행 [설정체크 + 설정수정] - a.yml", lines: []string{"작업 : 설정체크 + 설정수정"}}
+	if o := renderView(v, 100, 12, true); strings.Count(o, red) != 2 {
+		t.Fatalf("결과 창 제목·첫 줄의 설정수정 빨강: %q", o)
+	}
+	// "무응답 0대" 는 빨강 아님, 접속불가 호스트 줄은 빨강
+	if lineStyle("[09:26:06]     os8_mgmt 응답 3대 / 무응답 0대") == stRed || lineStyle("3/3 최종 결과: 응답 3대 (os8 3, os6 경유 0), 접속불가 0대") != stGreen ||
+		lineStyle("127.0.0.14  접속불가  os8 무응답 → os6 무응답") != stRed {
+		t.Fatal("줄 색 규칙")
+	}
+}
+
+// g 진행 창(높이 24 이상): 위 호스트표 + 아래 진행 과정이 한 화면에
+func TestRecheckSplitLayout(t *testing.T) {
+	done := twoGroupSnap()
+	done.Jobs[0].Recheck = &Recheck{Job: "J1", Yml: "a.yml", At: 100, Done: true, Lines: []string{"[10:00:00] 재확인 시작: 2대"},
+		Hosts: []RecheckHost{{Host: "a1", Result: "os8", Detail: "단계 완료"}}}
+	src := &fakeSrc{snap: twoGroupSnap(), local: true}
+	n := 0
+	src.nextSnap = func(int) Snapshot {
+		n++
+		if n < 2 {
+			return twoGroupSnap()
+		}
+		return done
+	}
+	f := lastFrame(runKeys(t, src, "\rgr"))
+	i, j := strings.Index(f, "a2"), strings.Index(f, "서버 상태 재확인 (g)")
+	if i < 0 || j < 0 || i > j || !strings.Contains(f, "재확인 시작: 2대") {
+		t.Fatalf("호스트표(위) + 진행(아래):\n%s", f)
 	}
 }

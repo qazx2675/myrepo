@@ -216,11 +216,13 @@ func (st *tuiState) requestRecheckAgain() {
 }
 
 func lineStyle(l string) string {
+	// "무응답 0대" / "접속불가 0대" 는 문제가 없다는 뜻이므로 빨강으로 보이지 않게 한다
+	clean := strings.NewReplacer("무응답 0대", "", "접속불가 0대", "").Replace(l)
 	switch {
-	case strings.Contains(l, "NO FAIL"), strings.Contains(l, "os8 응답"), strings.Contains(l, "os6 경유"):
-		return stGreen
-	case strings.Contains(l, "FAIL"), strings.Contains(l, "접속불가"), strings.Contains(l, "실패"), strings.Contains(l, "무응답"):
+	case strings.Contains(clean, "FAIL") && !strings.Contains(clean, "NO FAIL :") || strings.Contains(clean, "접속불가") || strings.Contains(clean, "실패") || strings.Contains(clean, "무응답"):
 		return stRed
+	case strings.Contains(l, "NO FAIL"), strings.Contains(l, "os8 응답"), strings.Contains(l, "os6 경유"), strings.Contains(l, "최종 결과"):
+		return stGreen
 	case strings.HasPrefix(l, "=====") || strings.HasPrefix(l, "작업 :"):
 		return stBold
 	}
@@ -229,7 +231,7 @@ func lineStyle(l string) string {
 
 func renderView(v *viewState, width, height int, color bool) string {
 	width = clampWidth(width)
-	head := []string{segLine(color, width, seg{" " + v.title, stBold}),
+	head := []string{segLine(color, width, redSegs(" "+v.title, stBold)...),
 		segLine(color, width, seg{" 상태: " + v.status, map[bool]string{true: stGreen, false: stCyan}[v.done]}),
 		sepLine(width)}
 	hint := " ↑↓ 스크롤  Space/b 쪽 이동  q/Esc 닫기"
@@ -255,10 +257,21 @@ func renderView(v *viewState, width, height int, color bool) string {
 	v.scroll = start
 	body := make([]string, 0, avail)
 	for i := start; i < len(v.lines) && len(body) < avail; i++ {
-		body = append(body, segLine(color, width, seg{" " + v.lines[i], lineStyle(v.lines[i])}))
+		body = append(body, segLine(color, width, redSegs(" "+v.lines[i], lineStyle(v.lines[i]))...))
 	}
 	for len(body) < avail && height > 0 {
 		body = append(body, "")
 	}
 	return strings.Join(append(append(head, body...), foot...), "\n")
+}
+
+// renderRecheckSplit: g 재확인 화면 — 위에는 호스트표(단계가 갱신되는 것을 바로 확인), 아래에는 진행 과정·결과
+func renderRecheckSplit(s Snapshot, sel selection, v *viewState, width, height int, color bool) string {
+	topH := rMin(rMax(height/2, 12), 16)
+	top := strings.Split(renderDetail(s, sel, width, topH, color), "\n")
+	for len(top) < topH {
+		top = append(top, "")
+	}
+	top = top[:topH]
+	return strings.Join(top, "\n") + "\n" + renderView(v, width, height-topH, color)
 }
