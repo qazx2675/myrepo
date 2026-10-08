@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.4.6] - 2026-10-08
+
+### 수정
+- **수동 run 전 경로 재판별을 양방향으로**: 설치 중 `route=os6` 로 붙었다가 이제 os8 에서도 직접 응답하는 호스트는 수동 run 직전에 `route=local` 로 되돌린다. 종전(0.4.5)에는 local → os6 만 바꿔 `os6` 로 남은 호스트가 os6 gossh 래퍼를 거치며 체크 출력이 비는 `no_output`(total=1ea OK=0ea) 이 났다. 로그: `경로 전환: <호스트> os6 → local (수동 run 전 확인: os8 직접 응답 …)`. os8 무응답·os6 응답이면 os6 유지, `os6_mgmt`·`os6_gossh` 미설정이면 기존 동작
+- 테스트: `route_test.go` (os6 로 남은 호스트가 os8 응답 시 local 로 복귀). Go 전체·e2e c,f 통과
+
 ## [0.4.5] - 2026-10-08
 
 ### 변경
