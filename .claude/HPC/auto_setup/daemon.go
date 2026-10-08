@@ -519,6 +519,8 @@ func (d *Daemon) ldapBackup() {
 			}
 			if st.Backup == LdapBackupOK {
 				nOK++
+			} else {
+				logf("[!] LDAP 백업 불가: %s (job %s) - %s", n, j.ID, st.Reason)
 			}
 			s := st
 			j.Hosts[n].Ldap = &s

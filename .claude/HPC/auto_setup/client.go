@@ -117,6 +117,8 @@ func requestArgs(kind string, payload map[string]string) ([]string, error) {
 	switch kind {
 	case ReqManualRun:
 		return []string{"request", ReqManualRun, payload["jobid"], payload["yml"]}, nil
+	case ReqRecheck:
+		return []string{"request", ReqRecheck, payload["jobid"], payload["yml"]}, nil
 	case ReqCancel:
 		return []string{"request", ReqCancel, payload["jobid"]}, nil
 	case ReqRefresh:

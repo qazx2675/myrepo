@@ -155,14 +155,15 @@ func printPlain(src SnapshotSource, out io.Writer) int {
 // ---- 루프 ----
 
 type tuiState struct {
-	src     SnapshotSource
-	env     tuiEnv
-	snap    Snapshot
-	err     string
-	sel     selection
-	help    bool
-	pending map[string]time.Time // 수동 실행 요청 시각 (jobid\x00yml)
-	lastReq time.Time            // 마지막 즉시 갱신(refresh) 요청 시각
+	src         SnapshotSource
+	env         tuiEnv
+	snap        Snapshot
+	err         string
+	sel         selection
+	help        bool
+	pending     map[string]time.Time // 수동 실행 요청 시각 (jobid\x00yml)
+	lastReq     time.Time            // 마지막 즉시 갱신(refresh) 요청 시각
+	lastRecheck time.Time            // 마지막 재확인(g) 요청 시각
 }
 
 // runTUILoop: raw 모드 진입 → 그리기·키·tick 루프 → (정상·패닉·시그널 어느 경로든) 화면·termios 복원
@@ -392,7 +393,24 @@ func (st *tuiState) handleDetail(ev keyEv) {
 		}
 	case ev.k == kRune && (ev.r == 'c' || ev.r == 'C'):
 		st.startManual(g)
+	case ev.k == kRune && (ev.r == 'g' || ev.r == 'G'):
+		st.requestRecheck()
 	}
+}
+
+// requestRecheck: g 키 — 이 그룹(전체 보기면 job 전체)의 완료 제외 호스트를 데몬이 지금 직접 재확인 (os8 → os6_mgmt → 접속불가)
+func (st *tuiState) requestRecheck() {
+	now := st.env.Now()
+	if !st.lastRecheck.IsZero() && now.Sub(st.lastRecheck) < refreshReqHold {
+		st.sel.Msg = "방금 재확인을 요청했습니다 — 잠시 후 다시 눌러 주세요"
+		return
+	}
+	st.lastRecheck = now
+	if err := st.src.Request(ReqRecheck, map[string]string{"jobid": st.sel.JobID, "yml": st.sel.Yml}); err != nil {
+		st.sel.Msg = "[X] 재확인 요청 실패: " + err.Error()
+		return
+	}
+	st.sel.Msg = "재확인 요청됨 — 데몬이 os8 → os6_mgmt 순으로 확인합니다 (접속불가는 auto_setup.log 에 기록)"
 }
 
 // startManual: c — 완료 여부와 상관없이 확인(y/n) 단계로 (이미 대기·진행 중이면 안내)

@@ -44,6 +44,7 @@ cmd=$1
 while read -r h; do
   [ -n "$h" ] || continue
   [ -d "$STUB_HOSTS/$h" ] || continue
+  case " $STUB_NOLOCAL " in *" $h "*) [ -n "$AS_VIA" ] || continue;; esac
   ln -sfn "$STUB_HOSTS/$h" "$STUB_FS"
   AS_HOST=$h bash -c "$cmd" 2>/dev/null | sed "s/^/$h: /"
 done < "$wf"
@@ -52,7 +53,7 @@ done < "$wf"
 	os.WriteFile(filepath.Join(bin, "ssh"), []byte(`#!/bin/bash
 echo "ssh $1" >> "$STUB_LOG"
 shift
-exec bash -c "$1"
+AS_VIA=os6 exec bash -c "$1"
 `), 0755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("STUB_LOG", e.log)
@@ -718,5 +719,59 @@ func TestParseFileLineRejects(t *testing.T) {
 func TestInitWiresNewLdap(t *testing.T) {
 	if _, ok := newLdap().(realLdapBackup); !ok {
 		t.Fatalf("newLdap = %T", newLdap())
+	}
+}
+
+// os8 에서 gossh 가 닿지 않는 호스트(STUB_NOLOCAL)는 os6_mgmt 경유로 다시 수집하고 route=os6 로 바꾼다 (os8 에서 되는 호스트는 그대로)
+func TestBackupFallsBackToOS6(t *testing.T) {
+	e := lbSetup(t)
+	os6_mgmt, os6_gossh = "mgmtx", "gossh"
+	files := map[string]string{"etc/openldap/ldap.conf": lbConf("pw1"), "etc/sssd/sssd.conf": "s\n", "etc/chrony.conf": "c\n"}
+	e.mkHost(t, "a1", "Rocky Linux release 8.9 (x)", files)
+	e.mkHost(t, "b1", "Rocky Linux release 8.9 (x)", files)
+	e.mkHost(t, "gone", "Rocky Linux release 8.9 (x)", files)
+	t.Setenv("STUB_NOLOCAL", "b1 gone")
+	os.RemoveAll(filepath.Join(e.hosts, "gone")) // os6 에서도 무응답
+	j := lbJob("jobfb", "a1", "b1", "gone")
+	res := NewRealLdapBackup().Backup(j, []string{"a1", "b1", "gone"})
+	if res["a1"].Backup != LdapBackupOK || res["b1"].Backup != LdapBackupOK {
+		t.Fatalf("%+v", res)
+	}
+	if res["gone"].Backup != LdapBackupNone || res["gone"].Reason != "무응답" {
+		t.Fatalf("양쪽 무응답은 none: %+v", res["gone"])
+	}
+	if j.Hosts["a1"].Route != "local" || j.Hosts["b1"].Route != "os6" || j.Hosts["gone"].Route != "local" {
+		t.Fatalf("route: a1=%q b1=%q gone=%q", j.Hosts["a1"].Route, j.Hosts["b1"].Route, j.Hosts["gone"].Route)
+	}
+	lg, _ := os.ReadFile(e.log)
+	if strings.Count(string(lg), "ssh mgmtx") != 1 {
+		t.Fatalf("os6 재수집은 한 번의 배치여야 함:\n%s", lg)
+	}
+	// os6 미설정이면 대체 없음 (종전 동작)
+	os6_mgmt, os6_gossh = "", ""
+	j2 := lbJob("jobfb2", "b1")
+	if r := NewRealLdapBackup().Backup(j2, []string{"b1"}); r["b1"].Backup != LdapBackupNone || j2.Hosts["b1"].Route != "local" {
+		t.Fatalf("os6 미설정: %+v route=%q", r["b1"], j2.Hosts["b1"].Route)
+	}
+}
+
+// 새 OS 확인(Apply)도 os8 에서 무응답이면 os6_mgmt 경유로 한 번 더, 같은 경로로 복원까지
+func TestApplyFallsBackToOS6(t *testing.T) {
+	e := lbSetup(t)
+	os6_mgmt, os6_gossh = "mgmtx", "gossh"
+	old := map[string]string{"etc/openldap/ldap.conf": lbConfU("svc_old", "pw1"), "etc/sssd/sssd.conf": "s\n", "etc/chrony.conf": "c\n"}
+	e.mkHost(t, "b1", "Rocky Linux release 8.9 (x)", old)
+	j := lbJob("jobap", "b1")
+	if r := NewRealLdapBackup().Backup(j, []string{"b1"}); r["b1"].Backup != LdapBackupOK {
+		t.Fatalf("%+v", r)
+	}
+	e.mkHost(t, "b1", "Rocky Linux release 9.2 (x)", map[string]string{"etc/openldap/ldap.conf": lbConfU("svc_new", "pw2"), "etc/sssd/sssd.conf": "n\n", "etc/chrony.conf": "n\n"})
+	t.Setenv("STUB_NOLOCAL", "b1")
+	st := NewRealLdapBackup().Apply(j, "b1")
+	if st.Bindpw != BindpwDiff || !st.Applied || j.Hosts["b1"].Route != "os6" {
+		t.Fatalf("os6 경유 복원 기대: %+v route=%q", st, j.Hosts["b1"].Route)
+	}
+	if !strings.Contains(e.read(t, "b1", "etc/openldap/ldap.conf"), "svc_old") {
+		t.Fatal("백업본으로 복원되지 않음")
 	}
 }

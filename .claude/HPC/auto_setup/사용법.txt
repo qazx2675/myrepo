@@ -19,7 +19,7 @@ bash setup.sh
 
 # ===== 2. 상태 보기 · 데몬 제어 =====
 
-# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, Enter 상세, a 전체 그룹 한 표로, ←→ 작업 전환, f 정체·실패만, c 수동 OS 체크, r 새로고침, ? 도움말, q 종료)
+# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, Enter 상세, a 전체 그룹 한 표로, ←→ 작업 전환, f 정체·실패만, c 수동 OS 체크, g 재확인(os8→os6), r 새로고침, ? 도움말, q 종료)
 auto_setup
 
 # TUI 가 아니라 텍스트 표로 보기 (파이프·로그용, 색 없음)
@@ -237,6 +237,12 @@ bash test/run_setup_scripts.sh
 
 # TUI 에서 r: 화면 새로고침 + 데몬에 즉시 ping·준비확인 요청 (os8 무응답 호스트는 os6_mgmt 경유로 확인). 명령으로는
 auto_setup request refresh
+
+# TUI 에서 g: 완료 제외 호스트를 지금 직접 재확인 (1. os8_mgmt → 2. 안 되면 os6_mgmt → 3. 둘 다 안 되면 접속불가). 명령으로는 (* = job 전체)
+auto_setup request recheck <jobid> '*'
+
+# 재확인(g)·LDAP 백업의 경로 전환/접속불가 로그
+grep -E '재확인\(g\)|LDAP 백업|경로 전환' /tmp/auto_setup/auto_setup.log | tail -20
 
 # 경로 판별·전환·os6 probe 세션 상태 확인 (배포중에서 멈춰 있을 때)
 grep -E '경로 판별|경로 전환|os6 probe|준비확인 실패' /tmp/auto_setup/auto_setup.log | tail -20

@@ -642,9 +642,9 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 
 	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
 		msgLine(sel, width, color)}
-	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 수동 실행  a 전체 그룹  r 새로고침  ? 도움말  q 복귀"
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 수동 실행  g 재확인  a 전체 그룹  r 새로고침  ? 도움말  q 복귀"
 	if sel.Yml == allView {
-		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀"
+		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  g 재확인  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀"
 	}
 	foot = append(foot, segLine(color, width, seg{hint, stGray}))
 	if height <= 0 {
@@ -712,6 +712,7 @@ func renderHelp(width, height int, color bool) string {
 		"   ← / Esc / q 화면 1 로 복귀",
 		"   f           정체·실패 호스트만 보기 (토글)",
 		"   c           OS 체크 수동 실행(이중체크) - 완료 여부와 상관없이 그룹 전체 시도, 접속불가는 알림, y/n 확인",
+		"   g           서버 상태 수동 재확인 - 완료 제외 모든 호스트를 os8_mgmt 에서 확인, 안 되면 os6_mgmt 경유, 둘 다 안 되면 접속불가(로그)",
 		" 색: 완료 초록 / 진행 청록 / 대기 회색 / 경고 노랑 / 정체·실패 빨강. NO_COLOR 설정 시 색 없음",
 		" 막대: # 완료  + 진행  . 대기  ! 정체·실패",
 		" %: 완료 대수 / 전체 (배포중·설치중·부팅확인·체크중은 + 로만 보이고 % 는 완료될 때 오름)",

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -281,5 +282,86 @@ func TestManualRunBackToLocalRoute(t *testing.T) {
 	}
 	if r := d.jobs[id].Hosts["h1"].Route; r != "local" {
 		t.Fatalf("route=local 로 되돌아가야 함: %q", r)
+	}
+}
+
+// TUI g: 그룹 호스트표에서 재확인 요청 (연타는 생략), 전체 보기(a)는 yml="*"
+func TestTUIRecheckKeyRequests(t *testing.T) {
+	src := &fakeSrc{snap: twoGroupSnap(), local: true}
+	runKeys(t, src, "\x1b[B\rgg")
+	if len(src.reqs) != 1 || src.reqs[0].kind != ReqRecheck || src.reqs[0].payload["jobid"] != "J1" || src.reqs[0].payload["yml"] != "b.yml" {
+		t.Fatalf("recheck 요청 1회(b.yml)여야 함: %+v", src.reqs)
+	}
+	src = &fakeSrc{snap: twoGroupSnap(), local: true}
+	runKeys(t, src, "\rag")
+	if len(src.reqs) != 1 || src.reqs[0].payload["yml"] != allView {
+		t.Fatalf("전체 보기는 yml=*: %+v", src.reqs)
+	}
+	if a, err := requestArgs(ReqRecheck, map[string]string{"jobid": "J1", "yml": "*"}); err != nil || !reflect.DeepEqual(a, []string{"request", "recheck", "J1", "*"}) {
+		t.Fatalf("requestArgs: %v %v", a, err)
+	}
+	if !relayArgsOK([]string{"request", "recheck", "J1", "*"}) || relayArgsOK([]string{"request", "recheck", "J1"}) {
+		t.Fatal("relayArgsOK recheck")
+	}
+}
+
+// g 재확인: 1) os8 에서 응답하면 route=local(os6 로 붙어 있던 호스트도 복귀), 2) 무응답이면 os6 경유 → route=os6, 3) 둘 다 무응답이면 접속불가 로그
+func TestRecheckRoutes(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "mgmt", "/os6/gossh")
+	h2 := install(60, 120, 400, 600)
+	h2.noLocalSSH = true // os8 ssh 불가, os6 경유로만 응답
+	h3 := install(60, 120, 400, 600)
+	h3.downs = [][2]int64{{0, 1000}} // 어디서도 무응답
+	w := newWorld(map[string]*simHost{"h1": install(60, 120, 400, 600), "h2": h2, "h3": h3})
+	id := submit(t, "u1", 0, "h1", "h2", "h3")
+	d := drive(t, w, newTestDaemon(w), 0, 10)
+	d.jobs[id].Hosts["h1"].Route = "os6" // 설치 중 os6 로 붙었다가 그대로 남은 상태
+	d.jobs[id].Hosts["h2"].Route = "local"
+	w.checks = nil
+	if _, err := writeRequest(ReqRecheck, map[string]string{"jobid": id, "yml": allView}); err != nil {
+		t.Fatal(err)
+	}
+	d = drive(t, w, d, 15, 15)
+	if want := []string{"15 local h1,h2,h3", "15 os6 h2,h3"}; !reflect.DeepEqual(w.checks[:2], want) {
+		t.Fatalf("os8 → 무응답만 os6 순서여야 함: %v", w.checks)
+	}
+	j := d.jobs[id]
+	if j.Hosts["h1"].Route != "local" || j.Hosts["h2"].Route != "os6" {
+		t.Fatalf("route: h1=%q h2=%q", j.Hosts["h1"].Route, j.Hosts["h2"].Route)
+	}
+	lg, _ := os.ReadFile(logPath())
+	for _, want := range []string{"경로 전환: h1 os6 → local (재확인 g", "경로 전환: h2 local → os6 (재확인 g", "접속불가·미응답 1대 (job " + id + "): h3", "응답 2대 (os6 경유 1대), 접속불가 1대"} {
+		if !strings.Contains(string(lg), want) {
+			t.Fatalf("로그에 %q 없음:\n%s", want, lg)
+		}
+	}
+	if fs := listReqFiles(requestsDir()); len(fs) != 0 {
+		t.Fatalf("요청 파일 남음: %v", fs)
+	}
+}
+
+// g 재확인: 없는 job 은 거부, os6 미설정이면 os8 만 확인하고 나머지는 접속불가
+func TestRecheckRejectAndNoOS6(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "", "")
+	h2 := install(60, 120, 400, 600)
+	h2.noLocalSSH = true
+	w := newWorld(map[string]*simHost{"h1": install(60, 120, 400, 600), "h2": h2})
+	id := submit(t, "u1", 0, "h1", "h2")
+	d := drive(t, w, newTestDaemon(w), 0, 10)
+	w.checks = nil
+	writeRequest(ReqRecheck, map[string]string{"jobid": "없는job", "yml": allView})
+	writeRequest(ReqRecheck, map[string]string{"jobid": id, "yml": ""})
+	d = drive(t, w, d, 15, 15)
+	if want := []string{"15 local h1,h2"}; !reflect.DeepEqual(w.checks, want) {
+		t.Fatalf("os6 미설정이면 local 만: %v", w.checks)
+	}
+	if ents, _ := os.ReadDir(reqRejectedDir()); len(ents) != 1 {
+		t.Fatalf("없는 job 은 거부 1건이어야 함: %v", ents)
+	}
+	lg, _ := os.ReadFile(logPath())
+	if !strings.Contains(string(lg), "접속불가·미응답 1대 (job "+id+"): h2") {
+		t.Fatalf("접속불가 로그 없음:\n%s", lg)
 	}
 }
