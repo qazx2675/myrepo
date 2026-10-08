@@ -309,6 +309,7 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 
 - `awx_dir` 이 비었거나 01 이 없으면 안내만 합니다.
 - 유효한 프로파일이 있으면 `AWX auto 실행? [y/n]` 를 묻습니다. 화면의 노란 안내대로 **yml 마다 OS 버전이 다르면 `n`** 을 누르세요. `y` 면 프로파일 번호를 고르고, 유효한 프로파일이 없으면 묻지 않고 일반 실행합니다.
+- **user · 작업 대상 서버 목록 입력 (v0.6.1)**: auto 여부(프로파일)를 정한 뒤 `x` 와 같은 user 메뉴로 user 를 고르고, 이어서 `작업 대상 서버 목록을 붙여넣은 뒤 Ctrl+D` 화면이 나옵니다. 호스트명(공백·쉼표·| 구분) 또는 12필드 줄을 줄 단위로 섞어 붙여넣을 수 있습니다. 입력한 목록은 `awx_dir/<user>.txt` 를 **덮어쓰고**(백업 없음), 01 의 `등록 후 확인 : 작업 대상 서버 목록을 붙여넣으세요` 에도 호스트명이 자동으로 입력됩니다(01 은 `AWX_USER`·`AWX_VERIFY_FILE` 환경변수를 받음). nodeinfo=n 이면 `<user>.txt` 가 12필드여야 하므로 12필드 줄을 붙여넣으세요. 목록을 비우고 Ctrl+D 면 건너뜁니다(기존 `<user>.txt` 사용, 등록 후 확인은 직접 입력).
 - 실행 전에 `[auto_setup] AWX 실행 — 취소: Ctrl+X (즉시), 끝나면 auto_setup 화면으로 돌아갑니다` 한 줄을 출력하고, `awx_dir` 에서 `bash 01.AWX_nodeinfo_V2.sh` 를 실행합니다. auto 를 골랐으면 `AWX_AUTO=1 AWX_AUTO_NODEINFO=<y|n> AWX_AUTO_OS=<값>` 이 추가됩니다(자세한 내용은 awx_script README).
 - 끝나면 TUI 로 돌아와 `AWX 종료 (rc=N)` 또는 `AWX 취소됨 (Ctrl+X)` 을 표시합니다.
 

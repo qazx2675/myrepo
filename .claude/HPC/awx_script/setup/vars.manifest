@@ -6,10 +6,10 @@
 #   - 역할: os8 = os8_mgmt (auto_setup 데몬이 도는 서버, 접속 불가 호스트를 os6_mgmt 에서 재조사하는 쪽),
 #           os6 = os6_mgmt (auto_setup 데몬 서버로 gossh 전달이 필요한 쪽). common 은 어느 역할에서나 질문.
 #   - 다른 서버 위 경로·원격 호스트는 이 서버에서 확인할 수 없어 check=none/host. awx_script 는 setup.sh 가 없으므로 #@meta setup 을 두지 않는다.
-#   - 이 업데이트(0.6.0)에서는 새 변수가 없다. 이미 있던 변수(since < 0.6.0)는 업데이트가 묻지 않고 현장 값을 그대로 둔다.
+#   - 이 업데이트(0.6.1, 0.6.0 변경 포함 누적)에서는 새 변수가 없다. 이미 있던 변수(since < 0.6.0)는 업데이트가 묻지 않고 현장 값을 그대로 둔다.
 #
 #@meta project=awx_script
-#@meta version=0.6.0
+#@meta version=0.6.1
 #
 #
 # ---- 01.AWX_nodeinfo_V2.sh ----

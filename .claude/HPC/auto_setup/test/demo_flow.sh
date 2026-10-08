@@ -126,10 +126,10 @@ done
 # awxkit 스텁: 02 가 부르는 invsync/dhcp/pxe + 01 의 nodeinfo. dhcp.sh 는 x(os_check -auto 의 "dhcp.sh <목록파일>") 용도도 겸한다
 cat > "$AWXD/awxkit/nodeinfo.sh" <<'STUB'
 #!/bin/bash
-# 데모용 nodeinfo: -hosts 파일을 그대로 output/<user>_nodeinfo.yaml 로 복사
+# 데모용 nodeinfo: -hosts 파일을 12필드로 바꿔 output/<user>_nodeinfo.yaml 로 저장 (호스트명 1개짜리 줄만 변환, 12필드 줄은 그대로)
 while [[ $# -gt 0 ]]; do case $1 in -user) u=$2; shift 2 ;; -hosts) h=$2; shift 2 ;; *) shift ;; esac; done
 d=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output
-mkdir -p "$d" && cp "$h" "$d/${u}_nodeinfo.yaml" && echo "nodeinfo stub: $u ($(wc -l < "$h")줄)"
+mkdir -p "$d" && awk 'NF==12 {print; next} NF>=1 {n++; printf "Dell R750 INFRA-A %s 10.9.2.%d aa:bb:cc:dd:ff:%02x eth0 sda sda5 1200 RHEL8 UEFI\n", $1, n, n}' "$h" > "$d/${u}_nodeinfo.yaml" && echo "nodeinfo stub: $u ($(wc -l < "$d/${u}_nodeinfo.yaml")줄)"
 STUB
 for n in invsync pxe; do
 	printf '#!/bin/bash\necho "%s stub: $*"\nexit 0\n' "$n" > "$AWXD/awxkit/$n.sh"
@@ -153,7 +153,7 @@ chmod +x "$AWXD"/awxkit/*.sh
 cat > "$S/conf/auto_setup.conf" <<CONF
 # 데모 conf (AUTO_SETUP_CONF=$S/conf)
 awx_dir=$AWXD
-awx_profile_1="n|2025|데모: nodeinfo 없이 2025"
+awx_profile_1="y|2025|데모: nodeinfo 사용, OS 2025"
 awx_profile_2="n|default|데모: 기본 OS"
 awx_profile_3="y|2099|잘못된 예"
 CONF
@@ -193,7 +193,9 @@ cat <<MSG
     실행 중 Ctrl+X → y 로 취소 (q/Esc 는 결과가 나올 때까지 무시), 결과 화면에서 q 로 닫기
     (127.0.0.12 FAIL, 127.0.0.14 접속불가로 표시)
   w (AWX 실행):
-    auto y → 프로파일 1(nodeinfo=n, OS 2025) 또는 2(OS default) 선택 → user 번호만 입력하면 01/02 가 끝까지 진행 (alice.txt/bob.txt 는 가짜 호스트)
+    auto y → 프로파일 1(nodeinfo=y, OS 2025) 또는 2(nodeinfo=n, OS default) 선택 → user 번호 → 작업 대상 서버 목록 붙여넣기 + Ctrl+D
+      (12필드 줄 또는 호스트명, 예: 127.0.0.41 127.0.0.42 — nodeinfo=y 면 호스트명만으로 충분, 프로파일 2(nodeinfo=n)면 12필드 줄이어야 함; 비우고 Ctrl+D = 기존 <user>.txt 사용)
+      → <user>.txt 를 덮어쓰고 01 의 "등록 후 확인" 목록도 자동 입력되어 01/02 가 끝까지 진행
     auto n → 일반 실행(질문에 직접 답: nodeinfo n, 작업진행 Y, 메뉴 su, 02 OS 선택 …)
     실행 중 Ctrl+X = 즉시 취소, 끝나면 화면으로 돌아옴. 프로파일 3(y|2099) 은 무효로 목록 아래에 회색으로 사유 표시
   정리:

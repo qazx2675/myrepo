@@ -293,19 +293,28 @@ bash /path/to/awx_script/01.AWX_nodeinfo_V2.sh
 - 01: `awx nodeinfo 사용여부` → `AWX_AUTO_NODEINFO`, `작업진행여부` → `Y`, `AWX 인벤토리 소스` → `su`
 - 02: `OS 버전 선택` → `AWX_AUTO_OS` (모든 yml), `옵션이 맞습니까` → `Y`
 
-사람이 답하는 질문: user 메뉴, 02 실패 시 재시도.
+사람이 답하는 질문: user 메뉴, 02 실패 시 재시도. (0.6.1~) 아래 두 변수를 주면 이 둘도 입력 없이 진행합니다 (`AWX_AUTO` 와 무관하게 각각 동작, 없으면 기존과 동일).
+
+| 변수 | 값 | 동작 |
+|---|---|---|
+| `AWX_USER` | `[A-Za-z0-9._-]+` | user 메뉴·번호 입력을 건너뛰고 이 값을 user 로 사용 (`user : 값 (auto_setup)`). 형식이 틀리면 노란 경고 후 메뉴로 진행 |
+| `AWX_VERIFY_FILE` | 파일 경로 | `등록 후 확인` 의 대상 서버 목록(공백/쉼표/\| 구분)을 stdin 대신 이 파일에서 읽음 (`붙여넣을 목록: auto_setup 에서 입력한 N대`). 없거나 빈 파일이면 stdin 에서 읽음 |
+
+auto_setup TUI `w` 가 user 와 대상 서버 목록을 이 두 변수로 넘기므로, 입력 없이 끝까지 실행됩니다.
 
 ```bash
 AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
+# user 와 대상 서버 목록까지 넘기면 stdin 없이 실행 가능
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 AWX_USER=hong AWX_VERIFY_FILE=/tmp/targets.txt bash 01.AWX_nodeinfo_V2.sh < /dev/null
 ```
 
 ### 설정 가이드 · 현장 업데이트
 
 ```bash
 bash setup/setup_guide.sh           # 빈 변수 입력 가이드 (setup/vars.manifest 기준, 생성물이므로 직접 고치지 말 것)
-bash setup/update_v0.6.0.sh --dry   # 현장 사본 업데이트 미리보기 (파일 불변)
-bash setup/update_v0.6.0.sh         # 적용 (현장 값·주석 보존, 0.6.0 신규 변수 없음)
-bash setup/update_v0.6.0.sh --undo  # 되돌리기 (가장 최근 백업)
+bash setup/update_v0.6.1.sh --dry   # 현장 사본 업데이트 미리보기 (파일 불변, 0.6.0 이전 사본도 한 번에 가능한 누적)
+bash setup/update_v0.6.1.sh         # 적용 (현장 값·주석 보존, 신규 변수 없음)
+bash setup/update_v0.6.1.sh --undo  # 되돌리기 (가장 최근 백업)
 ```
 
 - 업데이트 뒤 설정 변경 확인은 아래 「주의사항 (Disclaimer)」 을 따르십시오.
