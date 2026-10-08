@@ -269,3 +269,31 @@ func TestRecheckSplitLayout(t *testing.T) {
 		t.Fatalf("호스트표(위) + 진행(아래):\n%s", f)
 	}
 }
+
+// 종료된(jobs/done) job 에서도 g 가 동작: 경로만 갱신하고 단계는 건드리지 않으며, 없는 job 은 진행 창에 사유가 보인다
+func TestRecheckClosedJobAndMissingJob(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "mgmt", "/os6/gossh")
+	x := newX(map[string]*simHost{"h1": install(60, 125, 400, 600)})
+	id := submit(t, "u1", 0, "h1")
+	d := drive(t, x.world, newXDaemon(x, false, false), 0, 610)
+	j := doneJob(t, id)
+	j.Hosts["h1"].Processed, j.Hosts["h1"].Route, j.Hosts["h1"].Fails = "", "os6", 3 // 미완료·os6 로 남은 호스트
+	if _, err := writeJobFile(filepath.Join(doneDir(), id+".json"), j); err != nil {
+		t.Fatal(err)
+	}
+	writeRequest(ReqRecheck, map[string]string{"jobid": id, "yml": allView})
+	writeRequest(ReqRecheck, map[string]string{"jobid": "20200101-000000-nobody", "yml": allView})
+	drive(t, x.world, d, 615, 615)
+	rc := readRecheck(dataDir(), id)
+	if rc == nil || !rc.Done || len(rc.Hosts) != 1 || rc.Hosts[0].Result != "os8" || !strings.Contains(rc.Hosts[0].Detail, "경로 os6 → local") {
+		t.Fatalf("종료 job 재확인 기록: %+v", rc)
+	}
+	if h := doneJob(t, id).Hosts["h1"]; h.Route != "local" || h.Processed != "" || h.Fails != 3 {
+		t.Fatalf("종료 job 은 경로만 바뀌어야 함: %+v", h)
+	}
+	nb := readRecheck(dataDir(), "20200101-000000-nobody")
+	if nb == nil || !nb.Done || !strings.Contains(strings.Join(nb.Lines, "\n"), "job 을 찾을 수 없습니다") {
+		t.Fatalf("없는 job 기록: %+v", nb)
+	}
+}

@@ -365,9 +365,11 @@ func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
 // yml 이 "" 또는 "*" 이면 job 전체, 아니면 그 그룹만. 진행 과정·실패 지점·최종 결과는 recheck/<jobid>.json 에 단계마다 기록되어
 // 화면(g 진행 보기)에서 실시간으로 보인다. 수락이면 "", 거부면 사유.
 func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
-	j := d.jobs[id]
+	j, closed := d.findJob(id)
 	if j == nil {
-		return "진행 중인 job 없음"
+		writeRecheck(&Recheck{Job: id, Yml: yml, At: now.Unix(), Done: true,
+			Lines: []string{fmt.Sprintf("[%s] job 을 찾을 수 없습니다 (취소되었거나 오래전에 종료됨)", now.Format("15:04:05"))}})
+		return "job 없음"
 	}
 	var names []string
 	if yml == "" || yml == allView {
@@ -424,7 +426,7 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 				continue
 			}
 			nOK++
-			rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "os8", Detail: d.recheckApply(j, n, "local", cr, t)})
+			rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "os8", Detail: d.recheckApply(j, n, "local", cr, t, closed)})
 		}
 		step("    os8_mgmt 응답 %d대 / 무응답 %d대", nOK, len(miss))
 	}
@@ -448,7 +450,7 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 			for _, n := range miss {
 				if cr, ok := res[n]; ok && cr.Responded {
 					nOS6++
-					rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "os6", Detail: d.recheckApply(j, n, "os6", cr, t)})
+					rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "os6", Detail: d.recheckApply(j, n, "os6", cr, t, closed)})
 				} else {
 					detail[n] += " → os6 무응답"
 					left = append(left, n)
@@ -464,6 +466,11 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 	sort.Slice(rc.Hosts, func(a, b int) bool { return rc.Hosts[a].Host < rc.Hosts[b].Host })
 	d.lastPing, d.lastCheck = time.Time{}, time.Time{} // ping 도 바로 갱신
 	step("3/3 최종 결과: 응답 %d대 (os8 %d, os6 경유 %d), 접속불가 %d대", len(cand)-len(miss), len(cand)-len(miss)-nOS6, nOS6, len(miss))
+	if closed { // 종료된 job: 바뀐 경로만 jobs/done 파일에 반영
+		if _, err := writeJobFile(filepath.Join(doneDir(), j.ID+".json"), j); err != nil {
+			logf("[X] job 저장 실패(%s): %v", j.ID, err)
+		}
+	}
 	rc.Done = true
 	writeRecheck(rc)
 	logf("재확인(g): job %s %d대 중 응답 %d대 (os6 경유 %d대), 접속불가 %d대", j.ID, len(cand), len(cand)-len(miss), nOS6, len(miss))
@@ -475,19 +482,19 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 
 // recheckApply: g 재확인에서 응답한 호스트 1대 반영 — 경로 갱신 + (아직 READY 전이면) 준비확인 결과 반영.
 // 반환: 화면에 보일 설명 (경로 변경, 현재 단계)
-func (d *Daemon) recheckApply(j *Job, name, route string, cr CheckResult, t int64) string {
+func (d *Daemon) recheckApply(j *Job, name, route string, cr CheckResult, t int64, closed bool) string {
 	h := j.Hosts[name]
 	var notes []string
 	if h.Route != route {
 		old := h.Route
 		h.Route = route
-		d.dirty[j.ID] = true
+		d.markRoute(j, closed)
 		if old != "" {
 			logf("경로 전환: %s %s → %s (재확인 g, job %s)", name, old, route, j.ID)
 			notes = append(notes, "경로 "+old+" → "+route)
 		}
 	}
-	if active(h) && h.ReadyAt == 0 {
+	if active(h) && h.ReadyAt == 0 && !closed { // 종료된 job 은 경로만 갱신하고 단계는 건드리지 않음
 		d.applyCheck(j, name, cr, t)
 	}
 	notes = append(notes, "단계 "+stageLabels[effectiveStage(h, t)])
