@@ -367,3 +367,36 @@ func TestRenderScrollKeepsCursorVisible(t *testing.T) {
 		t.Errorf("화면 1 스크롤:\n%s", out)
 	}
 }
+
+// hintLines: 한 줄에 들어가면 합치고, 아니면 묶음별로 나누며, 어떤 폭에서도 폭을 넘지 않고 항목을 잃지 않는다
+func TestHintLines(t *testing.T) {
+	hint := " ↑↓ 이동  ← 목록  q 복귀\n c 체크+수정  t 체크만  w AWX"
+	wide := hintLines(false, 120, hint)
+	if len(wide) != 1 || !strings.Contains(wide[0], "q 복귀  c 체크+수정") {
+		t.Fatalf("넓으면 한 줄: %q", wide)
+	}
+	mid := hintLines(false, 40, hint)
+	if len(mid) != 2 || !strings.HasPrefix(mid[1], " c 체크+수정") {
+		t.Fatalf("묶음별 두 줄: %q", mid)
+	}
+	for w := 12; w <= 130; w++ {
+		for _, color := range []bool{false, true} {
+			lines := hintLines(color, w, hint)
+			var plain string
+			for _, l := range lines {
+				p := stripANSI(l)
+				if strWidth(p) > w {
+					t.Fatalf("폭 %d 초과: %q", w, p)
+				}
+				plain += p + " "
+			}
+			if w >= 30 { // 항목이 잘리지 않는 폭에서는 모든 항목이 남는다
+				for _, it := range []string{"↑↓ 이동", "← 목록", "q 복귀", "c 체크+수정", "t 체크만", "w AWX"} {
+					if !strings.Contains(plain, it) {
+						t.Fatalf("폭 %d 에서 %q 사라짐: %q", w, it, plain)
+					}
+				}
+			}
+		}
+	}
+}
