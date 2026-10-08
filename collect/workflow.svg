@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="490" font-family="sans-serif" font-size="13">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker></defs>
+<g fill="#eef3fb" stroke="#4a6fa5">
+<rect x="40" y="10" width="280" height="40" rx="6"/><rect x="40" y="80" width="280" height="40" rx="6"/>
+<rect x="40" y="150" width="280" height="40" rx="6"/><rect x="40" y="220" width="280" height="40" rx="6"/>
+<rect x="40" y="290" width="280" height="40" rx="6"/><rect x="40" y="360" width="280" height="40" rx="6"/>
+<rect x="40" y="430" width="280" height="40" rx="6"/></g>
+<g fill="#222" text-anchor="middle">
+<text x="180" y="35">bash collect.sh</text><text x="180" y="105">바이너리 선택 / list.txt 읽기</text>
+<text x="180" y="175">/etc/hosts 에서 hostname-m IP 조회</text><text x="180" y="245">GET /redfish/v1/Systems</text>
+<text x="180" y="315">시스템별 Bios, Bios/Settings GET</text><text x="180" y="385">out/일시/hostname.json 저장</text>
+<text x="180" y="455">성공/실패 개수 출력 (IP 없음 → [실패])</text></g>
+<g stroke="#555" marker-end="url(#a)"><line x1="180" y1="50" x2="180" y2="80"/><line x1="180" y1="120" x2="180" y2="150"/><line x1="180" y1="190" x2="180" y2="220"/><line x1="180" y1="260" x2="180" y2="290"/><line x1="180" y1="330" x2="180" y2="360"/><line x1="180" y1="400" x2="180" y2="430"/></g>
+</svg>

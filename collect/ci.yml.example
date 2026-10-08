@@ -1,0 +1,20 @@
+# 저장소 루트의 .github/workflows/collect-ci.yml 로 복사하면 커밋마다 빌드/정적분석/테스트가 돈다.
+name: collect-CI
+on:
+  push:
+    paths: ['collect/**']
+  pull_request:
+    paths: ['collect/**']
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: collect
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.20' }
+      - run: go build -mod=vendor ./...
+      - run: go vet -mod=vendor ./...
+      - run: go test -mod=vendor ./...

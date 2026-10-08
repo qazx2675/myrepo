@@ -1,0 +1,17 @@
+# 1) 오프라인 빌드 (Go 설치 필요, 인터넷 불필요)
+bash setup.sh
+
+# 2) BMC 계정 입력 (맨 위 USER_ID / USER_PW 를 평문으로 수정)
+vi collect.sh
+
+# 3) 수집 대상 입력 (hostname 한 줄씩. /etc/hosts 에 "IP hostname-m" 이 있어야 함)
+vi list.txt
+
+# 4) 수집 실행 -> out/<일시>/<hostname>.json
+bash collect.sh
+
+# 5) 결과 확인
+ls out/*/
+
+# (선택) 옵션 직접 실행
+./biosdump -list list.txt -hosts /etc/hosts -suffix -m -out out -user ID -pass PW -p 5
