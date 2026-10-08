@@ -3,6 +3,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -231,9 +232,101 @@ type selection struct {
 	Filter  bool   // 화면 2: 정체·실패만
 	Confirm bool   // 수동 실행 y/n 확인 중
 	Msg     string // 하단 안내 한 줄
+	DateFilter bool   // 화면 1: 날짜별 보기 (TUI 만 켬 — 날짜 줄 표시, 그 날짜의 그룹만)
+	Date       string // 화면 1: 보고 있는 날짜 YYYYMMDD ("" = 가장 최근 날짜를 따라감)
 }
 
 type grpRef struct{ Job, Grp int }
+
+// ---- 날짜별 보기 ----
+
+// yml 이름의 14자리 시각(YYYYMMDDhhmmss) 예: infra_inventory-20261008084159_4ea.yml → 20261008
+var ymlDateRe = regexp.MustCompile(`(?:^|\D)(\d{8})\d{6}(?:\D|$)`)
+
+const dateLayout = "20060102"
+
+// groupDate: 그룹의 날짜(YYYYMMDD) — yml 이름의 시각, 없으면 job 전달일
+func groupDate(s Snapshot, j *SnapJob, g *SnapGroup) string {
+	if m := ymlDateRe.FindStringSubmatch(g.Yml); m != nil {
+		if _, err := time.Parse(dateLayout, m[1]); err == nil {
+			return m[1]
+		}
+	}
+	return fmtClock(s, j.Submitted, dateLayout)
+}
+
+// dateRange: 그룹이 있는 가장 이른/늦은 날짜 (그룹이 없으면 ok=false)
+func dateRange(s Snapshot) (lo, hi string, ok bool) {
+	for ji := range s.Jobs {
+		for gi := range s.Jobs[ji].Groups {
+			d := groupDate(s, &s.Jobs[ji], &s.Jobs[ji].Groups[gi])
+			if !ok || d < lo {
+				lo = d
+			}
+			if !ok || d > hi {
+				hi = d
+			}
+			ok = true
+		}
+	}
+	return
+}
+
+// effDate: 보여줄 날짜 — 지정이 없으면 가장 최근 날짜 (그룹이 없으면 "")
+func effDate(s Snapshot, d string) string {
+	if d != "" {
+		return d
+	}
+	_, hi, _ := dateRange(s)
+	return hi
+}
+
+// shiftDate: 하루 단위 이동, 그룹이 있는 날짜 범위 안으로 제한. 가장 최근 날짜에 닿으면 ""(최근을 따라감).
+func shiftDate(s Snapshot, cur string, delta int) string {
+	lo, hi, ok := dateRange(s)
+	if !ok {
+		return ""
+	}
+	t, err := time.Parse(dateLayout, effDate(s, cur))
+	if err != nil {
+		return ""
+	}
+	n := t.AddDate(0, 0, delta).Format(dateLayout)
+	if n < lo {
+		n = lo
+	}
+	if n >= hi {
+		return ""
+	}
+	return n
+}
+
+// visibleGroups: 화면 1 에서 보이는 그룹 행 (날짜별 보기면 그 날짜의 그룹만)
+func visibleGroups(s Snapshot, sel selection) []grpRef {
+	all := flatGroups(s)
+	if !sel.DateFilter {
+		return all
+	}
+	d := effDate(s, sel.Date)
+	var out []grpRef
+	for _, r := range all {
+		if groupDate(s, &s.Jobs[r.Job], &s.Jobs[r.Job].Groups[r.Grp]) == d {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+var weekdayKo = [...]string{"일", "월", "화", "수", "목", "금", "토"}
+
+// dateRowText: "<    2026-10-08 (목)    >   N개 그룹"
+func dateRowText(d string, n int) string {
+	t, err := time.Parse(dateLayout, d)
+	if err != nil {
+		return "<    ????-??-??    >"
+	}
+	return fmt.Sprintf("<    %s (%s)    >   %d개 그룹", t.Format("2006-01-02"), weekdayKo[t.Weekday()], n)
+}
 
 // flatGroups: 화면 1 의 그룹 행 순서
 func flatGroups(s Snapshot) []grpRef {
@@ -448,6 +541,20 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 	if len(s.Jobs) == 0 {
 		body = append(body, truncW(" 진행 중인 작업 없음 (01 에서 OS 설치를 전달하면 표시됩니다)", width))
 	}
+	date := ""
+	if sel.DateFilter && len(s.Jobs) > 0 {
+		date = effDate(s, sel.Date)
+		segs := []seg{{"  ", ""}, {dateRowText(date, len(visibleGroups(s, sel))), stBold}}
+		if sel.Row == -1 {
+			segs[0].t = "> "
+			body = append(body, selLine(color, width, segs))
+		} else {
+			body = append(body, segLine(color, width, segs...))
+		}
+		if len(visibleGroups(s, sel)) == 0 {
+			body = append(body, segLine(color, width, seg{"  이 날짜에는 작업이 없습니다 (← → 로 날짜 이동)", stGray}))
+		}
+	}
 	// 열 폭: 마커2 + 이름 + 구성 + 대수5 + 막대 + 경과7 + 완료율5 + 공백
 	barW := 12
 	if width >= 110 {
@@ -456,7 +563,16 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 	rest := width - 2 - 5 - barW - 7 - 5 - 6
 	nameW := rest * 55 / 100
 	specW := rest - nameW
-	for _, j := range s.Jobs {
+	for ji, j := range s.Jobs {
+		if date != "" {
+			any := false
+			for gi := range j.Groups {
+				any = any || groupDate(s, &s.Jobs[ji], &s.Jobs[ji].Groups[gi]) == date
+			}
+			if !any {
+				continue
+			}
+		}
 		hs := stBold
 		tag := ""
 		if j.Closed {
@@ -468,7 +584,10 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 			title += "  all=" + j.AllYml
 		}
 		body = append(body, segLine(color, width, seg{" " + title, hs}))
-		for _, g := range j.Groups {
+		for gi, g := range j.Groups {
+			if date != "" && groupDate(s, &s.Jobs[ji], &s.Jobs[ji].Groups[gi]) != date {
+				continue
+			}
 			elapsed := "-"
 			if g.MaxElapsed > 0 {
 				elapsed = fmtDur(g.MaxElapsed)
@@ -494,9 +613,13 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 			idx++
 		}
 	}
+	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료"
+	if sel.DateFilter {
+		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료"
+	}
 	return finish(head, body, cursor, height, width, color, []string{
 		msgLine(sel, width, color),
-		segLine(color, width, seg{" ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료", stGray}),
+		segLine(color, width, seg{hint, stGray}),
 	})
 }
 
@@ -702,6 +825,7 @@ func renderHelp(width, height int, color bool) string {
 		" 화면 1 (작업·그룹 목록)",
 		"   ↑ ↓ (k j)   그룹 행 이동",
 		"   ← →         이전/다음 작업(job) 으로 이동",
+		"   ↑ (맨 위)   날짜 줄 선택 → ← 전날 / → 다음날 (그룹 yml 이름의 시각 기준, 기본은 가장 최근 날짜)",
 		"   Enter       선택한 그룹의 호스트표(화면 2)",
 		"   a           선택한 job 의 모든 그룹(yml) 호스트를 한 표로 (그룹 열 표시)",
 		"   r           바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동: 로컬 2초, 원격 5초)",
