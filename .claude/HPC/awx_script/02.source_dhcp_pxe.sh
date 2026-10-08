@@ -94,7 +94,18 @@ print_table(){
 # OS 버전 선택: 01 이 넘긴 os 값은 쓰지 않고 아래 선택지로 정한다 (옵션 확인표 출력 전에 질문)
 os_choices=(2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD)
 default_os="2026-ECAD_TCAD"
+# auto 모드(AWX_AUTO=1): AWX_AUTO_OS(선택지 중 하나 또는 default) 를 모든 yml 에 적용하고 옵션 확인도 Y 로 답한다. 선택지에 없으면 auto 를 끄고 직접 입력
+auto_on=0
+if [[ $AWX_AUTO == 1 ]]; then
+	auto_os=$AWX_AUTO_OS
+	[[ $auto_os == default ]] && auto_os=$default_os
+	for c in "${os_choices[@]}"; do [[ $c == "$auto_os" ]] && auto_on=1; done
+	if [[ $auto_on == 1 ]]; then default_os=$auto_os
+	else warn "[!] AWX_AUTO_OS 값(${AWX_AUTO_OS})이 선택지(${os_choices[*]} default)에 없어 auto 를 끄고 직접 입력합니다"
+	fi
+fi
 while true; do
+	if [[ $auto_on == 1 ]]; then os_mode=1; echo "${BOLD}OS 버전 선택${RST} : ${default_os} (auto)"; break; fi
 	echo "${BOLD}OS 버전 선택${RST}"
 	echo "  ${CYAN}1${RST}) 기본값 (${default_os}) — 모든 yml 동일"
 	echo "  ${CYAN}2${RST}) yml 별로 직접 선택"
@@ -117,6 +128,7 @@ fi
 
 print_table
 while true; do
+	if [[ $auto_on == 1 ]]; then ok=Y; echo "${YELLOW}옵션이 맞습니까 (Y|N) : ${RST}${ok} (auto)"; break; fi
 	read -r -p "${YELLOW}옵션이 맞습니까 (Y|N) : ${RST}" ok || { err "[X] 입력이 끝났습니다"; exit 1; }
 	[[ $ok == [YyNn] ]] && break
 done

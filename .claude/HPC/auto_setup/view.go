@@ -24,6 +24,8 @@ type viewState struct {
 	follow bool // 끝을 따라감 (사용자가 위로 올리면 해제)
 	done   bool // 더 이상 갱신하지 않음
 
+	cleanup string // 닫을 때 삭제할 임시 디렉터리 (단독 실행 결과)
+
 	baseRuns int   // viewRun: 요청 시점의 job.Runs 개수 (새로 생긴 수동 run 을 찾는 기준)
 	prevAt   int64 // viewRecheck: 요청 시점의 Recheck.At (바뀌면 이번 요청의 기록)
 	prevNone bool  // viewRecheck: 요청 시점에 기록이 없었음
@@ -103,7 +105,7 @@ func recheckTarget(yml string) string {
 // updateView: 새 스냅샷으로 보기 내용 갱신 (refresh 마다)
 func (st *tuiState) updateView() {
 	v := st.view
-	if v == nil || v.done {
+	if v == nil || v.done || v.kind == viewOneoff {
 		return
 	}
 	j := findSnapJob(st.snap, v.jobID)
@@ -187,7 +189,7 @@ func (st *tuiState) handleView(ev keyEv) {
 	page := rMax(h-5, 1)
 	switch {
 	case ev.k == kEsc || ev.k == kLeft || (ev.k == kRune && (ev.r == 'q' || ev.r == 'Q')):
-		st.view = nil
+		st.closeView()
 	case ev.k == kUp || (ev.k == kRune && ev.r == 'k'):
 		v.follow = false
 		v.scroll = rMax(v.scroll-1, 0)

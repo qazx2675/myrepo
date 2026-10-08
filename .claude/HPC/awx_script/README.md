@@ -269,6 +269,47 @@ part(9번째 필드)는 분할 키에서 제외됩니다. boot 의 `레거시` �
 - `svr_dir`
 - `lacp_comment`
 
+## 자동 모드(AWX_AUTO) · 다른 경로 실행 · 설정 가이드 (0.6.0~)
+
+### 다른 경로에서 실행
+
+01 은 시작할 때 자기 파일 위치로 이동하므로(`readlink -f` 기준) 어느 디렉터리에서 실행해도 `awxkit/`·`LOG/`·02 를 같은 자리에서 찾습니다.
+
+```bash
+bash /path/to/awx_script/01.AWX_nodeinfo_V2.sh
+```
+
+### auto 모드 (환경변수)
+
+`AWX_AUTO=1` 일 때만 켜집니다. 환경변수가 없으면 기존과 100% 같습니다(질문을 그대로 묻습니다).
+
+| 변수 | 값 | 동작 |
+|---|---|---|
+| `AWX_AUTO` | `1` | auto 모드 켜기 (다른 값이면 끔) |
+| `AWX_AUTO_NODEINFO` | `y` 또는 `n` | 01 의 `awx nodeinfo 사용여부` 에 자동 답변 (`y`·`n` 이 아니면 직접 묻고 노란 경고) |
+| `AWX_AUTO_OS` | `2024` `2025` `2026` `2026-OPC_MDP` `2026-ECAD_TCAD` `default` | 02 의 `OS 버전 선택` 을 모든 yml 에 적용 (`default` = 02 의 기본값). 선택지에 없으면 auto 를 끄고 직접 묻습니다 |
+
+자동으로 답하는 질문 (답변은 `값 (auto)` 으로 표시):
+- 01: `awx nodeinfo 사용여부` → `AWX_AUTO_NODEINFO`, `작업진행여부` → `Y`, `AWX 인벤토리 소스` → `su`
+- 02: `OS 버전 선택` → `AWX_AUTO_OS` (모든 yml), `옵션이 맞습니까` → `Y`
+
+사람이 답하는 질문: user 메뉴, 02 실패 시 재시도.
+
+```bash
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
+```
+
+### 설정 가이드 · 현장 업데이트
+
+```bash
+bash setup/setup_guide.sh           # 빈 변수 입력 가이드 (setup/vars.manifest 기준, 생성물이므로 직접 고치지 말 것)
+bash setup/update_v0.6.0.sh --dry   # 현장 사본 업데이트 미리보기 (파일 불변)
+bash setup/update_v0.6.0.sh         # 적용 (현장 값·주석 보존, 0.6.0 신규 변수 없음)
+bash setup/update_v0.6.0.sh --undo  # 되돌리기 (가장 최근 백업)
+```
+
+- 업데이트 뒤 설정 변경 확인은 아래 「주의사항 (Disclaimer)」 을 따르십시오.
+
 ## 문서별 설명
 
 | 파일 | 설명 |

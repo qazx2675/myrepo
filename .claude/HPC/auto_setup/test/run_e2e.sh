@@ -130,7 +130,7 @@ t_hasF "c3 대문자 P 도 p/d 로 판정 → set" "$S/c3/out.log" "(y/n/set) : 
 (cd "$S" && env PATH="$BIN:$ORIG_PATH" bash "$OC/os_check_final_annotated.sh" -auto < /dev/null > "$S/c4.log" 2>&1)
 rc=$?
 t_eq "c4 -auto 인자 부족 → exit 1" "$rc" 1
-t_hasF "c4 오류 메시지" "$S/c4.log" "[ERROR] -auto <user> <호스트목록파일>"
+t_hasF "c4 오류 메시지" "$S/c4.log" "[ERROR] -auto/-auto-check <user> <호스트목록파일>"
 
 # ============================================================
 echo "== a) 01 복사본 실행(스텁 02) → queue 파일 → 데몬 수거"
@@ -217,7 +217,8 @@ for v in "$L_REPORT" "$L_SET" "$L_LDAP" "$L_SPL" "$L_KER" "$L_INF" "$L_SRC"; do
 	prev=${v:-0}
 done
 t_eq "code 파일 구성 순서: 결과리포트→설정체크→LDAP→SPLUNK→커널→infra커널→원본" "$ORDER_OK" 1
-t_eq "code 파일 첫 줄 = 결과 리포트 머리줄" "$(sed -n 1p "$CF")" "############### 결과 리포트 ###############"
+t_eq "code 파일 첫 줄 = 작업 모드(설정체크 + 설정수정)" "$(sed -n 1p "$CF")" "작업 : 설정체크 + 설정수정"
+t_eq "code 파일 셋째 줄 = 결과 리포트 머리줄" "$(sed -n 3p "$CF")" "############### 결과 리포트 ###############"
 t_eq "code 파일 마지막 줄 = 원본 경로" "$(tail -1 "$CF1")" "원본 : $AS/runs/$CODE/os_check.log"
 t_hasF "담당자 문구(전원 설치 완료)" "$CF" "3대 OS 설치 완료하였습니다."
 t_hasF "담당자 문구: 호스트 가로 나열" "$CF" "127.0.0.1 127.0.0.2 192.0.2.1"

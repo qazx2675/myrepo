@@ -15,6 +15,7 @@ os6_dir=""                   # (os6 재조사) os8/os6 가 같은 절대경로�
 os6_gossh=""                 # (os6 재조사) os6_mgmt 의 gossh 절대경로
 export os6_host os6_user os6_dir os6_gossh   # 02 의 파티션 확인에서도 사용
 svr_idr="$svr_dir"           # git 블록 원문($svr_idr 오타)을 그대로 쓰기 위한 별칭
+cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || exit 1   # 어느 경로에서 실행해도 awxkit/·LOG/·02 등 상대경로가 이 스크립트 디렉터리 기준이 되도록 이동
 
 # ==== [0] 공통: 시작 경로 · 임시물 정리 · 로그 ====
 start_pwd=$(pwd)
@@ -85,7 +86,14 @@ log "시작 user=${user}"
 
 # [2] ${user}.txt 준비
 download_txt() {
-read -r -p " awx nodeinfo 사용여부 Y|N : " awx_yn
+if [[ $AWX_AUTO == 1 && $AWX_AUTO_NODEINFO == [YyNn] ]]; then
+		# auto 모드: 환경변수 AWX_AUTO_NODEINFO(y|n) 로 자동 답변
+		awx_yn=$AWX_AUTO_NODEINFO
+		echo " awx nodeinfo 사용여부 Y|N : ${awx_yn} (auto)"
+	else
+		[[ $AWX_AUTO == 1 ]] && warn "[!] AWX_AUTO_NODEINFO 가 y|n 이 아니어서 직접 입력합니다"
+		read -r -p " awx nodeinfo 사용여부 Y|N : " awx_yn
+	fi
 	if [[ $awx_yn == [Yy] ]]; then
 		# nodeinfo 실패 시 ${user}.txt(입력 호스트 목록)를 덮어쓰지 않고 종료
 		bash awxkit/nodeinfo.sh -user ${user} -hosts "${start_pwd}/${user}.txt" || { err "[X] nodeinfo 실행 실패 (${user}.txt 는 변경하지 않음)"; exit 1; }
@@ -359,7 +367,12 @@ log "[5] show_targets"
 show_targets
 
 # ==== [6] 작업진행여부 ====
-read -r -p "${YELLOW}작업진행여부 (Y|N) : ${RST}" go
+if [[ $AWX_AUTO == 1 ]]; then
+	go=Y
+	echo "${YELLOW}작업진행여부 (Y|N) : ${RST}${go} (auto)"
+else
+	read -r -p "${YELLOW}작업진행여부 (Y|N) : ${RST}" go
+fi
 [[ $go == [Yy] ]] || { log "작업 취소"; exit 0; }
 echo "${BOLD}작업진행..${RST}"
 # 원격 삭제(inventory_delete) 이후에 빈 변수 오류가 나지 않도록 미리 검사
@@ -387,7 +400,13 @@ check_servers
 # ==== [13] 메뉴 ====
 require_var svr_dir
 while true; do
-	read -r -p "AWX 인벤토리 소스 : ${GREEN}su${RST} ${RED}exit${RST} : 종료 ${CYAN}ls${RST} : yaml 파일출력 : " sel || { err "[X] 입력이 끝났습니다"; exit 1; }
+	menu_prompt="AWX 인벤토리 소스 : ${GREEN}su${RST} ${RED}exit${RST} : 종료 ${CYAN}ls${RST} : yaml 파일출력 : "
+	if [[ $AWX_AUTO == 1 ]]; then
+		sel=su
+		echo "${menu_prompt}${sel} (auto)"
+	else
+		read -r -p "$menu_prompt" sel || { err "[X] 입력이 끝났습니다"; exit 1; }
+	fi
 	case $sel in
 		su)   break ;;
 		exit) exit 0 ;;

@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -33,7 +34,10 @@ type keyEv struct {
 	r rune
 }
 
-const runeCtrlC = 3
+const (
+	runeCtrlC = 3
+	runeCtrlZ = 0x1a
+)
 
 // parseKeys: 터미널에서 한 번에 읽은 바이트를 키 이벤트로 (ESC [ A / ESC O A 방향키, 단독 ESC, CR/LF, Ctrl-C, 일반 문자)
 func parseKeys(b []byte) []keyEv {
@@ -71,8 +75,11 @@ func parseKeys(b []byte) []keyEv {
 			if c == '\r' && i < len(b) && b[i] == '\n' {
 				i++
 			}
-		case c == runeCtrlC:
-			out = append(out, keyEv{k: kRune, r: runeCtrlC})
+		case c == runeCtrlC || c == runeCtrlZ || c == runeCtrlD || c == runeCtrlX || c == '\t':
+			out = append(out, keyEv{k: kRune, r: rune(c)})
+			i++
+		case c == 0x7f || c == 0x08:
+			out = append(out, keyEv{k: kRune, r: runeBackspace})
 			i++
 		case c >= 0x20 && c < 0x7f:
 			out = append(out, keyEv{k: kRune, r: rune(c)})
@@ -100,6 +107,11 @@ type tuiEnv struct {
 	Now     func() time.Time
 	Signals <-chan os.Signal // 없으면 nil
 	Color   bool
+	// InReady: d 안에 In 에서 읽을 입력이 있으면 true (nil = 항상 바로 Read). 키 읽기 goroutine 을
+	// AWX 실행 동안 안전하게 멈추려면 Read 가 오래 막히지 않아야 해서 실제 tty 에서는 poll 방식으로 쓴다.
+	InReady func(d time.Duration) bool
+	// AwxPrep: AWX 실행 직전 호출 — 터미널을 cooked + intr=^X + susp 비활성으로 바꾸고 원복 함수를 돌려준다 (nil = 아무것도 안 함)
+	AwxPrep func() (restore func(), err error)
 }
 
 const (
@@ -107,7 +119,7 @@ const (
 	leaveScreen    = "\x1b[?25h\x1b[?1049l"
 	reqHold        = 20 * time.Second // 수동 실행 요청 후 같은 그룹 재요청 차단 시간
 	refreshLocal   = 2 * time.Second
-	refreshAway    = 5 * time.Second
+	refreshAway    = 10 * time.Second
 	refreshReqHold = 5 * time.Second // r 키 즉시 갱신 요청 최소 간격 (데몬 step 주기와 같음)
 )
 
@@ -121,6 +133,8 @@ func runTUI(src SnapshotSource, plain bool) int {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(sig)
+	signal.Ignore(syscall.SIGTSTP) // Ctrl+Z 로 TUI 가 멈추지 않게
+	defer signal.Reset(syscall.SIGTSTP)
 	env := tuiEnv{
 		In:      in,
 		Out:     out,
@@ -133,6 +147,8 @@ func runTUI(src SnapshotSource, plain bool) int {
 		Now:     time.Now,
 		Signals: sig,
 		Color:   os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb",
+		InReady: func(d time.Duration) bool { return waitReadable(in, d) },
+		AwxPrep: func() (func(), error) { return withAwxTermios(in) },
 	}
 	return runTUILoop(src, env)
 }
@@ -165,6 +181,12 @@ type tuiState struct {
 	lastReq     time.Time            // 마지막 즉시 갱신(refresh) 요청 시각
 	lastRecheck time.Time            // 마지막 재확인(g) 요청 시각
 	view        *viewState           // 전체 화면 보기 (수동 실행 결과·재확인 진행), nil = 없음
+	oo          *oneoffState         // x 체크스크립트 단독 실행 입력·실행 화면, nil = 없음
+	fastTick    <-chan time.Time     // 단독 실행 중 1초 갱신 tick (실행 중에만)
+	fastStop    func()
+	awx         *awxState  // w AWX 실행 확인·프로파일 선택 화면, nil = 없음
+	restore     func()     // 현재 raw 모드를 되돌리는 함수 (AWX 실행 후 raw 재진입 때 교체됨)
+	inMu        sync.Mutex // 키 읽기 goroutine 이 poll+Read 하는 동안 잡고 있음 — AWX 실행 중 Lock 으로 멈춘다
 }
 
 // runTUILoop: raw 모드 진입 → 그리기·키·tick 루프 → (정상·패닉·시그널 어느 경로든) 화면·termios 복원
@@ -174,20 +196,32 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 		return printPlain(src, env.Out)
 	}
 	io.WriteString(env.Out, enterScreen)
+	st := &tuiState{src: src, env: env, pending: map[string]time.Time{}, restore: restore}
 	defer func() { // 패닉 시에도 defer 가 돌아 복원된다
 		io.WriteString(env.Out, leaveScreen)
-		restore()
+		st.restore()
 	}()
 
-	st := &tuiState{src: src, env: env, pending: map[string]time.Time{}}
 	st.sel.DateFilter = true
+	defer st.oneoffShutdown()
 	keys := make(chan keyEv, 64)
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		buf := make([]byte, 256)
 		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			st.inMu.Lock() // AWX 실행 중에는 runAwx 가 이 락을 쥐고 있어 입력을 가로채지 않는다
+			if env.InReady != nil && !env.InReady(inPoll) {
+				st.inMu.Unlock()
+				continue
+			}
 			n, err := env.In.Read(buf)
+			st.inMu.Unlock()
 			for _, ev := range parseKeys(buf[:n]) {
 				select {
 				case keys <- ev:
@@ -222,9 +256,11 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 			}
 		case <-tick:
 			st.refresh()
+		case <-st.fastTick:
 		case <-env.Signals:
 			return 0
 		}
+		st.pollOneoff()
 		st.draw()
 	}
 }
@@ -260,6 +296,10 @@ func (st *tuiState) draw() {
 	w, h := st.env.Size()
 	var s string
 	switch {
+	case st.awx != nil:
+		s = renderAwx(st.awx, w, h, st.env.Color)
+	case st.oo != nil:
+		s = renderOneoff(st.oo, st.env.Now(), w, h, st.env.Color)
 	case st.view != nil:
 		if st.view.kind == viewRecheck && st.sel.Detail && h >= 24 {
 			s = renderRecheckSplit(st.snap, st.withErr(), st.view, w, h, st.env.Color)
@@ -287,8 +327,17 @@ func (st *tuiState) withErr() selection {
 
 // handle: 키 처리. 종료하면 true.
 func (st *tuiState) handle(ev keyEv) bool {
-	if ev.k == kRune && ev.r == runeCtrlC {
-		return true
+	if ev.k == kRune && (ev.r == runeCtrlC || ev.r == runeCtrlZ) {
+		st.sel.Msg = "종료는 q 를 누르세요"
+		return false
+	}
+	if st.awx != nil {
+		st.handleAwx(ev)
+		return false
+	}
+	if st.oo != nil {
+		st.handleOneoff(ev)
+		return false
 	}
 	if st.view != nil {
 		st.handleView(ev)
@@ -315,6 +364,14 @@ func (st *tuiState) handle(ev keyEv) bool {
 	if ev.k == kRune && (ev.r == 'r' || ev.r == 'R') {
 		st.requestRefresh()
 		st.refresh()
+		return false
+	}
+	if ev.k == kRune && (ev.r == 'x' || ev.r == 'X') {
+		st.startOneoff()
+		return false
+	}
+	if ev.k == kRune && (ev.r == 'w' || ev.r == 'W') {
+		st.startAwx()
 		return false
 	}
 	if st.sel.Detail {

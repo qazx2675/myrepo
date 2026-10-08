@@ -17,6 +17,17 @@ var (
 	os_check_sh   = "" // 이 서버의 os_check_final_annotated.sh 전체 경로 (autofs 공유 경로면 os8_mgmt·os6_mgmt 동일)
 	awx_dir       = "" // awx 스크립트 경로: awxkit/dhcp.sh 등이 있는 awx_script 디렉터리 (autofs 로 os8_mgmt·os6_mgmt 동일 경로)
 
+	// AWX 실행 프로파일 (선택): "nodeinfo(y/n)|OS값|설명" — 비우면 미사용 (awxprofile.go)
+	awx_profile_1 = ""
+	awx_profile_2 = ""
+	awx_profile_3 = ""
+	awx_profile_4 = ""
+	awx_profile_5 = ""
+	awx_profile_6 = ""
+	awx_profile_7 = ""
+	awx_profile_8 = ""
+	awx_profile_9 = ""
+
 	// 2차 (§14-1)
 	os8_mgmt        = "" // 비어 있지 않으면 원격 클라이언트 모드 (os6 빌드 때 -ldflags -X 로 채움)
 	os8_autosetup   = "" // os8_mgmt 위 auto_setup 경로 (비면 /usr/local/bin/auto_setup)

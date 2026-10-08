@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [0.6.0] - 2026-10-08
+
+### 추가
+- **`x` 체크스크립트 단독 실행**: 화면 1·2 어디서나 `x` → user 선택(awx_dir 의 01 `user_route` 메뉴 `info_mn.sh`/`info.sh`, 메뉴를 못 찾으면 user 이름 직접 입력) → 호스트를 붙여넣고 `Ctrl+D`(공백·쉼표·탭·`|` 는 줄바꿈, 중복 제거) → `t` 설정체크만 / `c` 설정체크 + 설정수정. 실행 중 `q`/`Esc` 는 무시하고 `Ctrl+X → y` 로 프로세스 그룹을 취소합니다. 결과는 기존 결과 창과 같은 스크롤 화면(↑↓, Space/b, q/Esc 닫기)으로 보입니다.
+  - **기록 안 남김**: auto_setup.log·codes·runs 에 아무것도 남기지 않습니다. 임시 디렉터리에서 실행하고 결과 창을 닫으면 그 디렉터리를 지웁니다 (`oneoff.go`)
+- **`w` AWX 실행**: 화면 1·2 어디서나 `w` → TUI 를 내려놓고 awx_dir 에서 `bash 01.AWX_nodeinfo_V2.sh` 를 이 터미널에서 실행합니다. 유효한 프로파일이 있으면 `AWX auto 실행? [y/n]` 를 묻고, y 면 프로파일 번호를 고릅니다(auto 면 `AWX_AUTO*` 환경변수 전달). `Ctrl+X` 는 AWX 를 **즉시** 취소하며, 끝나면 auto_setup 화면으로 돌아와 `AWX 종료 (rc=N)` / `AWX 취소됨 (Ctrl+X)` 을 표시합니다 (`awxrun.go`, `tty_linux.go` 의 termios 조작)
+- **AWX 프로파일 conf**: `awx_profile_1` ~ `awx_profile_9`, 형식 `nodeinfo(y/n)|OS값|설명` (예: `y|2025|설명`). 허용 OS 값은 `2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD default`. 필드가 부족하거나 nodeinfo·OS 값이 틀리면 그 프로파일은 목록에서 빠지고 사유가 표시됩니다 (`awxprofile.go`)
+
+### 변경
+- **Ctrl+C / Ctrl+Z 무시**: TUI 에서 종료·중단 없이 `종료는 q 를 누르세요` 만 표시합니다. 종료는 q. Ctrl+Z 의 SIGTSTP 도 무시
+- **원격(os6) 화면 자동 갱신 5초 → 10초** (`refreshAway`)
+- **conf**: `auto_setup.conf.example`·`vars.manifest` 에 awx_profile_1~9 추가. `conf/setup_guide.sh` 재생성, `conf/update_v0.6.0.sh` 추가 (이전 = origin/master)
+- **도움말**: `x`·`w` 키 설명 추가 (`render.go` `renderHelp`)
+- 테스트: `awxprofile_test.go`(프로파일 파싱·무효 사유), `oneoff_test.go`(호스트 정규화·user 검증·키 시퀀스, 가짜 실행기), `awxrun_test.go`(AWX 질문·프로파일 선택·환경변수), `tui_test.go`(Ctrl+C 로 종료되지 않음), 모의 테스트 `test/demo_flow.sh` 에 x/w 시나리오 추가
+
 ## [0.5.1] - 2026-10-08
 
 ### 변경

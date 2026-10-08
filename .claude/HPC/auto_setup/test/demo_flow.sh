@@ -14,6 +14,7 @@
 #   c  설정체크+수정  → y → 결과 화면 (정상 호스트는 완료 처리됨)
 #   g  재확인         → 진행 화면: 1/3 os8 확인 → 2/3 os6_mgmt 경유 → 3/3 최종 결과, 호스트별 어디서 안 됐는지
 #   v  가장 최근 수동 실행 결과 다시 보기
+#   x  체크스크립트 단독 실행 (user 메뉴 → 호스트 붙여넣기 → t/c, Ctrl+X 취소)   w  AWX 실행 (conf 의 awx_profile_1~3, Ctrl+X 즉시 취소)
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 S=${DEMO_DIR:-/tmp/as_demo_flow}
@@ -83,10 +84,85 @@ cat > "$D/jobs/$J2.json" <<JSON
 JSON
 printf '작업 : 설정체크 + 설정수정\n\n(샘플 이전 결과)\n원본 : /tmp/none\n' > "$D/codes/4821.txt"
 
+# ---- x(단독 체크)·w(AWX 실행) 용: 가짜 user 메뉴 + awx 사본 + 데모 conf ----
+UR="$S/userroute"
+AWXD="$S/awx"
+mkdir -p "$UR" "$AWXD/awxkit" "$AWXD/.stublog" "$S/svr_dir" "$S/remote" "$S/conf"
+cat > "$UR/info_mn.sh" <<'STUB'
+#!/bin/bash
+echo "1) alice"
+echo "2) bob"
+STUB
+cat > "$UR/info.sh" <<'STUB'
+#!/bin/bash
+case $1 in 1) echo alice ;; 2) echo bob ;; esac
+STUB
+chmod +x "$UR/info_mn.sh" "$UR/info.sh"
+SRC02="$ROOT/../awx_script/02.source_dhcp_pxe.sh"
+[[ -f $SRC01 && -f $SRC02 ]] || { echo "[X] awx_script 01/02 를 찾을 수 없습니다: $SRC01"; exit 1; }
+cp "$SRC01" "$AWXD/01.AWX_nodeinfo_V2.sh"
+cp "$SRC02" "$AWXD/02.source_dhcp_pxe.sh"
+sed -i \
+	-e "s#^repohost=\"\"#repohost=\"repo.lab\"#" \
+	-e "s#^svr_dir=\"\"#svr_dir=\"$S/svr_dir\"#" \
+	-e "s#^lacp_comment=\"\"#lacp_comment=\"LACP-COMMENT\"#" \
+	-e "s#^inventory_delete_host=\"\"#inventory_delete_host=\"delhost.lab\"#" \
+	-e "s#^\([[:space:]]*\)user_route=\"\"#\1user_route=\"$UR\"#" \
+	-e "s#/root/user/#$S/root_user/#g" \
+	"$AWXD/01.AWX_nodeinfo_V2.sh"
+grep -q "user_route=\"$UR\"" "$AWXD/01.AWX_nodeinfo_V2.sh" || { echo "[X] 01 사본의 user_route 치환 실패"; exit 1; }
+# 01 사본은 01 단계 스텁(ssh/scp/gossh)을 PATH 앞에 두고 시작한다 (TUI 의 w 가 어떤 환경에서 띄워도 동작)
+{
+	head -1 "$AWXD/01.AWX_nodeinfo_V2.sh"
+	echo "export PATH=\"$BIN01:\$PATH\" STUBLOG=\"$AWXD/.stublog\" SVR_DIR=\"$S/svr_dir\" REMOTE_DIR=\"$S/remote\" TMPDIR=\"$S/tmp\"   # 데모 스텁"
+	tail -n +2 "$AWXD/01.AWX_nodeinfo_V2.sh"
+} > "$AWXD/01.tmp" && mv "$AWXD/01.tmp" "$AWXD/01.AWX_nodeinfo_V2.sh"
+chmod +x "$AWXD/01.AWX_nodeinfo_V2.sh" "$AWXD/02.source_dhcp_pxe.sh"
+for u in alice bob; do
+	mkdir -p "$S/root_user/$u/myrepo"
+	printf '#!/bin/bash\nexit 0\n' > "$S/root_user/$u/myrepo/.git_upload.sh"
+	chmod +x "$S/root_user/$u/myrepo/.git_upload.sh"
+done
+# awxkit 스텁: 02 가 부르는 invsync/dhcp/pxe + 01 의 nodeinfo. dhcp.sh 는 x(os_check -auto 의 "dhcp.sh <목록파일>") 용도도 겸한다
+cat > "$AWXD/awxkit/nodeinfo.sh" <<'STUB'
+#!/bin/bash
+# 데모용 nodeinfo: -hosts 파일을 그대로 output/<user>_nodeinfo.yaml 로 복사
+while [[ $# -gt 0 ]]; do case $1 in -user) u=$2; shift 2 ;; -hosts) h=$2; shift 2 ;; *) shift ;; esac; done
+d=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/output
+mkdir -p "$d" && cp "$h" "$d/${u}_nodeinfo.yaml" && echo "nodeinfo stub: $u ($(wc -l < "$h")줄)"
+STUB
+for n in invsync pxe; do
+	printf '#!/bin/bash\necho "%s stub: $*"\nexit 0\n' "$n" > "$AWXD/awxkit/$n.sh"
+done
+cat > "$AWXD/awxkit/dhcp.sh" <<'STUB'
+#!/bin/bash
+if [[ $1 == -* ]]; then echo "dhcp stub: $*"; exit 0; fi
+echo "dhcp stub: $(paste -sd' ' "$1")"
+STUB
+chmod +x "$AWXD"/awxkit/*.sh
+# ${user}.txt (12필드): alice = INFRA-A 2대 + INFRA-B 1대(그룹 2개), bob = 2대
+{
+	printf 'Dell R750 INFRA-A 127.0.0.41 10.9.0.41 aa:bb:cc:dd:ee:41 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-A 127.0.0.42 10.9.0.42 aa:bb:cc:dd:ee:42 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-B 127.0.0.43 10.9.0.43 aa:bb:cc:dd:ee:43 eth0 sda sda5 1200 RHEL8 UEFI\n'
+} > "$AWXD/alice.txt"
+{
+	printf 'Dell R750 INFRA-C 127.0.0.51 10.9.1.51 aa:bb:cc:dd:ee:51 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-C 127.0.0.52 10.9.1.52 aa:bb:cc:dd:ee:52 eth0 sda sda5 1200 RHEL8 UEFI\n'
+} > "$AWXD/bob.txt"
+cat > "$S/conf/auto_setup.conf" <<CONF
+# 데모 conf (AUTO_SETUP_CONF=$S/conf)
+awx_dir=$AWXD
+awx_profile_1="n|2025|데모: nodeinfo 없이 2025"
+awx_profile_2="n|default|데모: 기본 OS"
+awx_profile_3="y|2099|잘못된 예"
+CONF
+
 # ---- 환경 파일 ----
 cat > "$S/env.sh" <<ENV
 # source $S/env.sh : 데모 환경 (이 셸에서만 유효)
 export AUTO_SETUP_DIR="$D"
+export AUTO_SETUP_CONF="$S/conf"
 export E2E_SCEN="$E2E_SCEN"
 export PATH="$BIN:\$PATH"
 alias auto_setup='$S/auto_setup'
@@ -94,7 +170,7 @@ echo "데모 환경 설정됨: AUTO_SETUP_DIR=$D  (auto_setup → $S/auto_setup)
 ENV
 
 # ---- 데몬 기동 ----
-env AUTO_SETUP_DIR="$D" E2E_SCEN="$E2E_SCEN" PATH="$BIN:$PATH" "$S/auto_setup" ensure > /dev/null 2>&1
+env AUTO_SETUP_DIR="$D" AUTO_SETUP_CONF="$S/conf" E2E_SCEN="$E2E_SCEN" PATH="$BIN:$PATH" "$S/auto_setup" ensure > /dev/null 2>&1
 sleep 1
 cat <<MSG
 
@@ -112,6 +188,14 @@ cat <<MSG
   시나리오 (오늘 B, g 재확인):
     127.0.0.21 os8 무응답·os6 경유 응답 / 127.0.0.22 어디서도 무응답 / 127.0.0.23 os8 에서 응답
     g → 진행 화면에 1/3 os8 → 2/3 os6_mgmt → 3/3 최종 결과, 호스트별로 어디서 안 됐는지 표시
+  x (체크스크립트 단독 실행, 어느 화면에서나):
+    user 메뉴(1) alice 2) bob) 번호 입력 → 호스트 붙여넣기:  127.0.0.11 127.0.0.12,127.0.0.14  → Ctrl+D → t(체크만) 또는 c(체크+수정)
+    실행 중 Ctrl+X → y 로 취소 (q/Esc 는 결과가 나올 때까지 무시), 결과 화면에서 q 로 닫기
+    (127.0.0.12 FAIL, 127.0.0.14 접속불가로 표시)
+  w (AWX 실행):
+    auto y → 프로파일 1(nodeinfo=n, OS 2025) 또는 2(OS default) 선택 → user 번호만 입력하면 01/02 가 끝까지 진행 (alice.txt/bob.txt 는 가짜 호스트)
+    auto n → 일반 실행(질문에 직접 답: nodeinfo n, 작업진행 Y, 메뉴 su, 02 OS 선택 …)
+    실행 중 Ctrl+X = 즉시 취소, 끝나면 화면으로 돌아옴. 프로파일 3(y|2099) 은 무효로 목록 아래에 회색으로 사유 표시
   정리:
     bash $ROOT/test/demo_flow.sh --stop
 MSG

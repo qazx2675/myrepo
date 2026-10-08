@@ -140,6 +140,7 @@ func TestParseKeys(t *testing.T) {
 		{"\n", []e{{k: kEnter}}},
 		{"jk?", []e{{k: kRune, r: 'j'}, {k: kRune, r: 'k'}, {k: kRune, r: '?'}}},
 		{"\x03", []e{{k: kRune, r: runeCtrlC}}},
+		{"\x1a", []e{{k: kRune, r: runeCtrlZ}}},
 		{"\x1b[1;5A", []e{{k: kUp}}},
 		{"\x1b[3~", nil},
 		{"\x1b[", nil},
@@ -272,9 +273,23 @@ func TestKeyFilterAndHostCursor(t *testing.T) {
 // ---- 복원 보장 ----
 
 func TestRestoreOnQuitKeys(t *testing.T) {
-	for _, in := range []string{"q", "\x1b", "\x03", ""} { // 화면 1 q / Esc / Ctrl-C / 입력 EOF
+	for _, in := range []string{"q", "\x1b", "\x03q", "\x1aq", ""} { // 화면 1 q / Esc / Ctrl-C 후 q / Ctrl-Z 후 q / 입력 EOF
 		src := &fakeSrc{snap: twoGroupSnap(), local: true}
 		assertRestored(t, runKeys(t, src, in))
+	}
+}
+
+// Ctrl+C·Ctrl+Z 는 종료하지 않고 안내만 한다 (종료는 q)
+func TestCtrlCZDoNotQuit(t *testing.T) {
+	for _, k := range []string{"\x03", "\x1a"} {
+		env, r := newRig(strings.NewReader(k + "q"))
+		src := &fakeSrc{snap: twoGroupSnap(), local: true}
+		if code := runTUILoop(src, env); code != 0 {
+			t.Fatalf("exit=%d", code)
+		}
+		if !strings.Contains(r.out.String(), "종료는 q 를 누르세요") {
+			t.Errorf("%q: 안내 문구가 그려져야 함", k)
+		}
 	}
 }
 
@@ -349,7 +364,7 @@ func TestAutoRefreshTickAndInterval(t *testing.T) {
 		pw.Close()
 		want := 2 * time.Second
 		if !local {
-			want = 5 * time.Second
+			want = 10 * time.Second
 		}
 		if len(r.ticks) != 1 || r.ticks[0] != want {
 			t.Errorf("local=%v 갱신 주기 %v want %v", local, r.ticks, want)

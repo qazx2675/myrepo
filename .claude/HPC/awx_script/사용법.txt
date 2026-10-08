@@ -76,3 +76,21 @@ cat dhcp_pool/dhcp_pool_delete_info.txt
 cat tmp/all_<user>
 
 # 설정 변경 후에는 임의의 서버 몇 대에서 실제로 반영되었는지 직접 확인할 것
+
+# ===== Step 6. 다른 경로에서 실행 · auto 모드 · setup/ 가이드·업데이트 (0.6.0~) =====
+
+# 다른 디렉터리에서 실행해도 된다 (01 이 자기 위치로 이동)
+bash /path/to/awx_script/01.AWX_nodeinfo_V2.sh
+
+# auto 모드: 01 의 nodeinfo 사용여부 = n, 02 의 OS 버전 = 2025 를 자동 답변 (AWX_AUTO 가 없으면 기존처럼 직접 묻는다)
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
+# AWX_AUTO_OS 는 2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD default 중 하나 (그 밖의 값이면 auto 를 끄고 직접 묻는다)
+# 자동 답변: 01 nodeinfo 사용여부 / 작업진행 Y / 인벤토리 소스 su, 02 OS 버전 / 옵션 확인 Y. user 메뉴는 직접 답한다
+
+# 빈 변수 입력 가이드 (setup/vars.manifest 기준, 생성물이라 직접 고치지 말 것)
+bash setup/setup_guide.sh
+
+# 현장 사본 업데이트: 미리보기 → 적용 → 되돌리기 (0.6.0 은 신규 변수 없음, 현장 값·주석 보존)
+bash setup/update_v0.6.0.sh --dry
+bash setup/update_v0.6.0.sh
+bash setup/update_v0.6.0.sh --undo
