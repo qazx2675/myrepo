@@ -1,0 +1,859 @@
+{
+ "Legacy USB Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Disabled",
+   "Enabled",
+   "Auto"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "FRB-2 Timer": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "OS Boot Watchdog Timer Policy": {
+  "type": "enum",
+  "allowed_values": [
+   "Power Off",
+   "Reset"
+  ],
+  "default": "Power Off",
+  "since_or_note": "4.0(1a)"
+ },
+ "OS Boot Watchdog Timer Timeout": {
+  "type": "enum",
+  "allowed_values": [
+   "5",
+   "10",
+   "15",
+   "20 minutes"
+  ],
+  "default": "10 minutes",
+  "since_or_note": "4.0(1a)"
+ },
+ "OS Boot Watchdog Timer": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Flow Control": {
+  "type": "enum",
+  "allowed_values": [
+   "None",
+   "RTS-CTS"
+  ],
+  "default": "None",
+  "since_or_note": "4.0(1a)"
+ },
+ "Baud Rate": {
+  "type": "enum",
+  "allowed_values": [
+   "9.6k",
+   "19.2k",
+   "38.4k",
+   "57.6k",
+   "115.2k"
+  ],
+  "default": "115.2k",
+  "since_or_note": "4.0(1a)"
+ },
+ "Terminal Type": {
+  "type": "enum",
+  "allowed_values": [
+   "PC-ANSI",
+   "VT100",
+   "VT100-PLUS",
+   "VT-UTF8"
+  ],
+  "default": "VT100",
+  "since_or_note": "4.0(1a)"
+ },
+ "Console Redirection": {
+  "type": "enum",
+  "allowed_values": [
+   "COM 0",
+   "COM 1",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Number of Retries": {
+  "type": "enum",
+  "allowed_values": [
+   "Infinite",
+   "5",
+   "13"
+  ],
+  "default": "13",
+  "since_or_note": "4.0(1a)"
+ },
+ "Cool Down Time (sec)": {
+  "type": "enum",
+  "allowed_values": [
+   "15",
+   "45",
+   "90"
+  ],
+  "default": "90",
+  "since_or_note": "4.0(1a)"
+ },
+ "Boot Option Retry": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Trusted Platform Module (TPM)": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel Virtualization Technology": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel VT for directed IO": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel Trusted Execution Technology Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Local X2 Apic": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel VTD Coherency Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel VTD ATS Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "UEFI Boot Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "NUMA Optimized": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Select Memory RAS Configuration": {
+  "type": "enum",
+  "allowed_values": [
+   "Mirror Mode 1LM",
+   "Partial Mirror mode 1LM",
+   "Maximum Performance",
+   "ADDDC Sparing"
+  ],
+  "default": "ADDDC Sparing",
+  "since_or_note": "4.0(1a); ADDDC Sparing added 4.0(4a); Partial Mirror mode 1LM listed in 4.1(1a)"
+ },
+ "Select PPR Type": {
+  "type": "enum",
+  "allowed_values": [
+   "Hard PPR",
+   "Disabled"
+  ],
+  "default": "Hard PPR",
+  "since_or_note": "4.1(1a)"
+ },
+ "Memory Mapped IO Above 4GB": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Hardware Prefetcher": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Adjacent Cache Line Prefetcher": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "DCU Streamer Prefetch": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "DCU IP Prefetcher": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Processor C1E": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Processor C6 Report": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Execute Disable Bit": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel Turbo Boost Tech": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "P STATE Coordination (EIST PSD Function)": {
+  "type": "enum",
+  "allowed_values": [
+   "HW ALL",
+   "SW ALL",
+   "SW ANY"
+  ],
+  "default": "HW ALL",
+  "since_or_note": "4.0(1a)"
+ },
+ "Boot Performance Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "Max Performance",
+   "Max Efficient",
+   "Set by Intel NM"
+  ],
+  "default": "Max Performance",
+  "since_or_note": "4.0(1a)"
+ },
+ "Enhanced Intel SpeedStep Tech": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel HyperThreading Tech": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "CPU Performance": {
+  "type": "enum",
+  "allowed_values": [
+   "Enterprise",
+   "HPC",
+   "High Throughput",
+   "Custom"
+  ],
+  "default": "Custom",
+  "since_or_note": "4.0(1a)"
+ },
+ "CDN Control": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.1(1a); 4.0 guide lists default Disabled"
+ },
+ "Processor CMCI": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Adaptive Memory Training": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(2a)"
+ },
+ "OptionROM Launch Optimization": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(2a)"
+ },
+ "BIOS Techlog Level": {
+  "type": "enum",
+  "allowed_values": [
+   "Maximum",
+   "Normal",
+   "Minimum"
+  ],
+  "default": "Minimum",
+  "since_or_note": "4.0(2a)"
+ },
+ "VMD Enable": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "PCIe RAS Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.1(1a)"
+ },
+ "P-SATA mode": {
+  "type": "enum",
+  "allowed_values": [
+   "AHCI",
+   "LSI SW RAID",
+   "Disabled"
+  ],
+  "default": "LSI SW RAID",
+  "since_or_note": "4.0(1a); AHCI listed in 4.1 guide (default AHCI only for S3260 M5)"
+ },
+ "Processor Prefetch Config": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled",
+   "Auto"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.0(4a)"
+ },
+ "Core Multi Processing": {
+  "type": "enum",
+  "allowed_values": [
+   "All",
+   "1 through 28"
+  ],
+  "default": "All",
+  "since_or_note": "4.0(1a)"
+ },
+ "Workload Configuration": {
+  "type": "enum",
+  "allowed_values": [
+   "Balanced",
+   "IO Sensitive"
+  ],
+  "default": "IO Sensitive",
+  "since_or_note": "4.0(1a); 3.2(1) had NUMA/UMA"
+ },
+ "IMC Interleave": {
+  "type": "enum",
+  "allowed_values": [
+   "1-way Interleave",
+   "2-way Interleave",
+   "Auto"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.0(1a)"
+ },
+ "Sub NUMA Clustering": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "KTI Prefetch": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "XPT Prefetch": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Energy Performance Tuning": {
+  "type": "enum",
+  "allowed_values": [
+   "OS",
+   "BIOS"
+  ],
+  "default": "OS",
+  "since_or_note": "4.0(1a)"
+ },
+ "Energy Performance": {
+  "type": "enum",
+  "allowed_values": [
+   "Performance",
+   "Balanced Performance",
+   "Balanced Power",
+   "Power"
+  ],
+  "default": "Balanced Performance",
+  "since_or_note": "4.0(1a)"
+ },
+ "Package C State Limit": {
+  "type": "enum",
+  "allowed_values": [
+   "No Limit",
+   "Auto",
+   "C0 C1 State",
+   "C2",
+   "C6 Non Retention",
+   "C6 Retention"
+  ],
+  "default": "C0 C1 State",
+  "since_or_note": "4.0(1a)"
+ },
+ "LLC Prefetch": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "CPU Hardware Power Management": {
+  "type": "enum",
+  "allowed_values": [
+   "Disabled",
+   "HWPM Native Mode",
+   "HWPM OOB Mode",
+   "Native Mode with no Legacy"
+  ],
+  "default": "HWPM Native Mode",
+  "since_or_note": "4.0(1a)"
+ },
+ "IPV6 PXE Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "IPV4 PXE Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.1(1a)"
+ },
+ "Network Stack": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.1(1a)"
+ },
+ "Energy Efficient Turbo": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Autonomous Core C-state": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "ProcessorEppProfile": {
+  "type": "enum",
+  "allowed_values": [
+   "Performance",
+   "Balanced Performance",
+   "Balanced Power",
+   "Power"
+  ],
+  "default": "Balanced Performance",
+  "since_or_note": "4.0(1a)"
+ },
+ "Patrol Scrub": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "BME DMA Mitigation": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(1a)"
+ },
+ "Intel Speed Select": {
+  "type": "enum",
+  "allowed_values": [
+   "Base",
+   "Option 1",
+   "Option 2"
+  ],
+  "default": "Base",
+  "since_or_note": "4.0(4a)"
+ },
+ "DCPMM Firmware Downgrade": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.0(4a)"
+ },
+ "Partial Memory Mirror Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "Percentage",
+   "Value in GB",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(1a)"
+ },
+ "Partial Mirror percentage": {
+  "type": "range",
+  "allowed_values": [
+   "0.00-50.00 step 0.01"
+  ],
+  "default": "0.00",
+  "since_or_note": "4.1(1a)"
+ },
+ "Partial Mirror1 Size in GB": {
+  "type": "range",
+  "allowed_values": [
+   "0-65535"
+  ],
+  "default": "0",
+  "since_or_note": "4.1(1a)"
+ },
+ "Partial Mirror2 Size in GB": {
+  "type": "range",
+  "allowed_values": [
+   "0-65535"
+  ],
+  "default": "0",
+  "since_or_note": "4.1(1a)"
+ },
+ "Partial Mirror3 Size in GB": {
+  "type": "range",
+  "allowed_values": [
+   "0-65535"
+  ],
+  "default": "0",
+  "since_or_note": "4.1(1a)"
+ },
+ "Partial Mirror4 Size in GB": {
+  "type": "range",
+  "allowed_values": [
+   "0-65535"
+  ],
+  "default": "0",
+  "since_or_note": "4.1(1a)"
+ },
+ "Memory Size Limit in GB": {
+  "type": "range",
+  "allowed_values": [
+   "0-65535"
+  ],
+  "default": "0",
+  "since_or_note": "4.1(1a)"
+ },
+ "Memory Refresh Rate": {
+  "type": "enum",
+  "allowed_values": [
+   "1x Refresh",
+   "2x Refresh"
+  ],
+  "default": "1x Refresh",
+  "since_or_note": "4.1(2) default 2x; changed to 1x in 4.1(3a)"
+ },
+ "Panic and High Watermark": {
+  "type": "enum",
+  "allowed_values": [
+   "High",
+   "Low"
+  ],
+  "default": "Low",
+  "since_or_note": "4.1(2)"
+ },
+ "PCIe PLL SSC": {
+  "type": "enum",
+  "allowed_values": [
+   "Auto",
+   "Disabled",
+   "ZeroPointFive"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(2)"
+ },
+ "Configurable TDP Level": {
+  "type": "enum",
+  "allowed_values": [
+   "Normal",
+   "Level 1",
+   "Level 2"
+  ],
+  "default": "Normal",
+  "since_or_note": "4.1(2)"
+ },
+ "Uncore Frequency Scaling": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.1(2)"
+ },
+ "UPI Link Frequency Select": {
+  "type": "enum",
+  "allowed_values": [
+   "Auto",
+   "9.6GT/s",
+   "10.4GT/s"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.1(2)"
+ },
+ "External SSC Enable": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(2); Disabled for blades"
+ },
+ "CR QoS": {
+  "type": "enum",
+  "allowed_values": [
+   "Recipe 1",
+   "Recipe 2",
+   "Recipe 3",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(2)"
+ },
+ "NVM Performance Setting": {
+  "type": "enum",
+  "allowed_values": [
+   "BW Optimized",
+   "Latency Optimized",
+   "Balanced Profile"
+  ],
+  "default": "BW Optimized",
+  "since_or_note": "4.1(2)"
+ },
+ "CR FastGo Config": {
+  "type": "enum",
+  "allowed_values": [
+   "Default",
+   "Option 1",
+   "Option 2",
+   "Option 3",
+   "Option 4",
+   "Option 5",
+   "Auto"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.1(2)"
+ },
+ "Snoopy mode for 2LM": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(2)"
+ },
+ "Snoopy mode for AD": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(2)"
+ },
+ "Memory Thermal Throttling Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "CLTT with PECI",
+   "Disabled"
+  ],
+  "default": "CLTT with PECI",
+  "since_or_note": "4.1(3a)"
+ },
+ "Advanced Memory Test": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(3a)"
+ },
+ "Burst and Postponed Refresh": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.1(3e)"
+ },
+ "SHA-1 PCR Bank": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.1(3h)"
+ },
+ "SHA-256 PCR Bank": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.1(3h)"
+ }
+}

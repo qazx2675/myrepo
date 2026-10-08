@@ -1,0 +1,2152 @@
+{
+ "_meta": {
+  "source": "HPE iLO 4 RESTful API Data Model Reference - HpBios Attributes (https://hewlettpackard.github.io/ilo-rest-api-docs/ilo4/)",
+  "scope": "iLO 4 데이터모델 전체 HpBios 속성 합집합. 모델(ROM 패밀리)별 실제 노출 속성은 다를 수 있음",
+  "firmware": "iLO 4 2.30+ (Redfish 적합); ROM별 레지스트리는 확보 못함",
+  "default": "문서에 기본값 없음(null)"
+ },
+ "attributes": {
+  "AcpiRootBridgePxm": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "AcpiSlit": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "AdjSecPrefetch": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "AdminEmail": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "AdminName": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "AdminOtherInfo": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "AdminPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "AdminPhone": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "AdvancedMemProtection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AdvancedEcc",
+    "OnlineSpareAdvancedEcc",
+    "MirroredAdvancedEcc"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "AsrStatus": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "AsrTimeoutMinutes": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "10",
+    "15",
+    "20",
+    "30",
+    "5"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "AssetTagProtection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Locked",
+    "Unlocked"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "AutoPowerOn": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AlwaysPowerOn",
+    "AlwaysPowerOff",
+    "RestoreLastState"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "BootMode": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Uefi",
+    "LegacyBios"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "BootOrderPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "RetryIndefinitely",
+    "AttemptOnce",
+    "ResetAfterFailed"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ChannelInterleaving": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "CollabPowerControl": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ConsistentDevNaming": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "LomsOnly",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "CustomPostMessage": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "DaylightSavingsTime": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "DcuIpPrefetcher": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "DcuStreamPrefetcher": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Dhcpv4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "DynamicPowerCapping": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "DynamicPowerResponse": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Fast",
+    "Slow"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbNicEnable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbSas1Boot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbSasEnable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbSata1Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbSata2Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbVideoConnection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "AlwaysDisabled",
+    "AlwaysEnabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbeddedDiagnostics": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbeddedDiagsMode": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "TextConsole"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbeddedSata": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Ahci",
+    "Raid"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbeddedSerialPort": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Com1Irq4",
+    "Com2Irq3",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbeddedUefiShell": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmbeddedUserPartition": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EmsConsole": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "Com1Irq4",
+    "Com2Irq3"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EnergyPerfBias": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "MaxPerf",
+    "BalancedPerf",
+    "BalancedPower",
+    "PowerSavingsMode"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "EraseUserDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ExtendedAmbientTemp": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "ASHRAE3",
+    "ASHRAE4"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ExtendedMemTest": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "F11BootMenu": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "FCScanPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "CardConfig"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "FanFailPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Shutdown",
+    "Allow"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "FanInstallReq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "EnableMessaging",
+    "DisableMessaging"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "FlexLom1Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "HwPrefetcher": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelDmiLinkFreq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "DmiGen1"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelNicDmaChannels": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelPerfMonitoring": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelProcVtd": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelQpiFreq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "MinQpiSpeed"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelQpiLinkEn": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "SingleLink"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelQpiPowerManagement": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelTxt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IntelligentProvisioning": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "InternalSDCardSlot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "IoNonPostedPrefetching": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Ipv4Address": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "Ipv4Gateway": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "Ipv4PrimaryDNS": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "Ipv4SecondaryDNS": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "Ipv4SubnetMask": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "Ipv6Duid": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "DuidLlt"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "MaxMemBusFreqMHz": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "2133",
+    "1867",
+    "1600",
+    "1333"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "MaxPcieSpeed": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "MaxSupported",
+    "PcieGen1"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "MemFastTraining": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "MinProcIdlePkgState": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "C6Retention",
+    "C6NonRetention",
+    "NoState"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "MinProcIdlePower": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "C6",
+    "C3",
+    "C1E",
+    "NoCStates"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "MixedPowerSupplyReporting": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NetworkBootRetry": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot10": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot11": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot12": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NicBoot9": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NmiDebugButton": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NodeInterleaving": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NumaGroupSizeOpt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Clustered",
+    "Flat"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NvDimmNBackupPowerPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "WaitForBackupPower",
+    "BootWithoutBackupPower"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NvDimmNForcedRecovery": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NvDimmNIntegrityChecking": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NvDimmNMemFunctionality": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NvDimmNMemInterleaving": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "NvDimmNSanitizePolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "SanitizeAndRebootSystem",
+    "SanitizeAndShutdownSystem",
+    "SanitizeAndBootToFirmwareUI"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "OldAdminPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "OldPowerOnPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "PciBusPadding": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PciSlot1Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PciSlot2Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PciSlot3Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PciSlot4Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PciSlot5Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PciSlot6Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PcieExpressEcrcSupport": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PostF1Prompt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Delayed20Sec",
+    "Delayed2Sec",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PowerButton": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PowerOnDelay": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "None",
+    "Random",
+    "15Sec",
+    "30Sec",
+    "45Sec",
+    "60Sec"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PowerOnLogo": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PowerOnPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "PowerProfile": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "BalancedPowerPerf",
+    "MinPower",
+    "MaxPerf",
+    "Custom"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PowerRegulator": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "DynamicPowerSavings",
+    "StaticLowPower",
+    "StaticHighPerf",
+    "OsControl"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "PreBootNetwork": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "EmbNic",
+    "FlexLom1",
+    "PciSlot1",
+    "PciSlot2",
+    "PciSlot3",
+    "PciSlot4",
+    "PciSlot5",
+    "PciSlot6"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ProcAes": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ProcCoreDisable": {
+   "type": "Integer",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ProcHyperthreading": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ProcNoExecute": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ProcTurbo": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ProcVirtualization": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ProcX2Apic": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "ForceEnabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ProductId": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "QpiBandwidthOpt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Balanced",
+    "OptimizedForIo"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "QpiHomeSnoopOpt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "DirectoryOsbEnabled",
+    "DirectoryOsbDisabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "QpiSnoopConfig": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Standard",
+    "EarlySnoop",
+    "ClusterOnDie"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "RedundantPowerSupply": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "BalancedMode",
+    "HighEfficiencyAuto",
+    "HighEfficiencyOddStandby",
+    "HighEfficiencyEvenStandby"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "RemovableFlashBootSeq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "InternalSdCardFirst",
+    "InternalKeysFirst",
+    "ExternalKeysFirst"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "RestoreDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "RestoreManufacturingDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "RomSelection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "CurrentRom",
+    "BackupRom"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SanitizeAllNvDimmN": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SanitizeProc1Dimm{n}": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "note": "패턴 속성, n 범위 문서 미확인"
+  },
+  "SanitizeProc1NvDimmN": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SanitizeProc2Dimm{n}": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "note": "패턴 속성, n 범위 문서 미확인"
+  },
+  "SanitizeProc2NvDimmN": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SataSecureErase": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SaveUserDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SecureBootStatus": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": true
+  },
+  "SerialConsoleBaudRate": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "9600",
+    "19200",
+    "38400",
+    "57600",
+    "115200"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SerialConsoleEmulation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Vt100",
+    "Ansi",
+    "Vt100Plus"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SerialConsolePort": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "Disabled",
+    "Physical",
+    "Virtual"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "SerialNumber": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServerAssetTag": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServerName": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServerOtherInfo": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServerPrimaryOs": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServiceEmail": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServiceName": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServiceOtherInfo": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "ServicePhone": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot1StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot2StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot3StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot4StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot5StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Slot6StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Sriov": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ThermalConfig": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "OptimalCooling",
+    "IncreasedCooling",
+    "MaxCooling"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "ThermalShutdown": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TimeFormat": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Utc",
+    "Local"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TimeZone": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "UtcM12",
+    "UtcM11",
+    "UtcM10",
+    "UtcM9",
+    "UtcM8",
+    "UtcM7",
+    "UtcM6",
+    "UtcM5",
+    "UtcM430",
+    "UtcM4",
+    "UtcM330",
+    "UtcM3",
+    "UtcM2",
+    "UtcM1",
+    "Utc0",
+    "UtcP1",
+    "UtcP2",
+    "UtcP3",
+    "UtcP330",
+    "UtcP4",
+    "UtcP430",
+    "UtcP5",
+    "UtcP530",
+    "UtcP545",
+    "UtcP6",
+    "UtcP630",
+    "UtcP7",
+    "UtcP8",
+    "UtcP9",
+    "UtcP930",
+    "UtcP10",
+    "UtcP11",
+    "UtcP12",
+    "UtcP13",
+    "UtcP14",
+    "Unspecified"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TmOperation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoAction",
+    "Enable",
+    "Disable",
+    "Clear"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TmVisibility": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Hidden",
+    "Visible"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Tpm2Operation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoAction",
+    "Clear"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Tpm2Ppi": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "Tpm2Visibility": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Hidden",
+    "Visible"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TpmBinding": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TpmOperation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoAction",
+    "Enable",
+    "Disable",
+    "Clear"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TpmState": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NotPresent",
+    "PresentDisabled",
+    "PresentEnabled"
+   ],
+   "default": null,
+   "read_only": true
+  },
+  "TpmType": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoTpm",
+    "Tpm12",
+    "Tpm20",
+    "Tm10"
+   ],
+   "default": null,
+   "read_only": true
+  },
+  "TpmUefiOpromMeasuring": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "TpmVisibility": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Hidden",
+    "Visible"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UefiOptimizedBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UefiPxeBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "IPv4ThenIPv6",
+    "IPv4",
+    "IPv6",
+    "IPv6ThenIPv4"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UefiShellBootOrder": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UefiShellStartup": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UefiShellStartupLocation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "AttachedMedia",
+    "NetworkLocation"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UefiShellStartupUrl": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "UrlBootFile": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false
+  },
+  "Usb3Mode": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UsbBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UsbControl": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "UsbEnabled",
+    "ExternalUsbDisabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "UtilityLang": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "English",
+    "Japanese",
+    "Chinese"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "VideoOptions": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "OptionalVideoOnly",
+    "BothVideoEnabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "VirtualInstallDisk": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "VirtualSerialPort": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Com1Irq4",
+    "Com2Irq3",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "VlanControl": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  },
+  "VlanId": {
+   "type": "Integer",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "range": [
+    0,
+    4094
+   ]
+  },
+  "VlanPriority": {
+   "type": "Integer",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "range": [
+    0,
+    7
+   ]
+  },
+  "WakeOnLan": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false
+  }
+ }
+}

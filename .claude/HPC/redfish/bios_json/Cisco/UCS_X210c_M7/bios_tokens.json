@@ -1,0 +1,867 @@
+{
+ "PRMRR Size": {
+  "type": "enum",
+  "allowed_values": [
+   "Invalid Config",
+   "Auto",
+   "128M",
+   "256M",
+   "512M",
+   "1G",
+   "2G",
+   "4G",
+   "8G",
+   "16G",
+   "32G",
+   "64G",
+   "128G",
+   "256G",
+   "512G"
+  ],
+  "default": "256M",
+  "since_or_note": "4.3(2b); Auto added 4.3(4a)"
+ },
+ "Optimized Power Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Adaptive Refresh Management Level": {
+  "type": "enum",
+  "allowed_values": [
+   "Default",
+   "Level A",
+   "Level B",
+   "Level C"
+  ],
+  "default": "Default",
+  "since_or_note": "4.3(2b)"
+ },
+ "Rank Margin Tool": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Error Check Scrub": {
+  "type": "enum",
+  "allowed_values": [
+   "Disabled",
+   "Enabled without Result Collection",
+   "Enabled with Result Collection"
+  ],
+  "default": "Enabled without result collection",
+  "since_or_note": "4.3(2b)"
+ },
+ "PCIe PLL SSC Percent": {
+  "type": "range",
+  "allowed_values": [
+   "0-20"
+  ],
+  "default": "255",
+  "since_or_note": "4.3(2b)"
+ },
+ "Above 4G Decoding": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "VMD Enablement": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "PCIe RAS Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "CDN Support for LOM": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "External SSC Enable": {
+  "type": "enum",
+  "allowed_values": [
+   "0P3_Percent",
+   "P5_Percent",
+   "Hardware",
+   "Off"
+  ],
+  "default": "Off",
+  "since_or_note": "4.3(2b)"
+ },
+ "CDN Control": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Intel VT for directed IO": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Intel VTD Coherency Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "USB Port Front": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "USB Port KVM": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "USB Port:M.2 Storage": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "NTB Test Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "NTB Device Type": {
+  "type": "enum",
+  "allowed_values": [
+   "Upstream",
+   "Downstream"
+  ],
+  "default": "Upstream",
+  "since_or_note": "4.3(2b)"
+ },
+ "C1 Auto Demotion": {
+  "type": "enum",
+  "allowed_values": [
+   "Auto",
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.3(2b); values changed 4.3(3a)"
+ },
+ "C1 Auto UnDemotion": {
+  "type": "enum",
+  "allowed_values": [
+   "Auto",
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.3(3a)"
+ },
+ "FRB 2 Timer": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "OS Watchdog Timer Policy": {
+  "type": "enum",
+  "allowed_values": [
+   "Reset",
+   "Power Off"
+  ],
+  "default": "Power Off",
+  "since_or_note": "4.3(2b)"
+ },
+ "OS Watchdog Timer Timeout": {
+  "type": "enum",
+  "allowed_values": [
+   "5",
+   "10",
+   "15",
+   "20 minutes"
+  ],
+  "default": "10 minutes",
+  "since_or_note": "4.3(2b)"
+ },
+ "OS Watchdog timer": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Flow Control": {
+  "type": "enum",
+  "allowed_values": [
+   "None",
+   "RTS-CTS"
+  ],
+  "default": "None",
+  "since_or_note": "4.3(2b)"
+ },
+ "Baud Rate": {
+  "type": "enum",
+  "allowed_values": [
+   "9.6k",
+   "19.2k",
+   "38.4k",
+   "57.6k",
+   "115.2k"
+  ],
+  "default": "115.2k",
+  "since_or_note": "4.3(2b)"
+ },
+ "Terminal Type": {
+  "type": "enum",
+  "allowed_values": [
+   "PC-ANSI",
+   "VT100",
+   "VT100-PLUS",
+   "VT-UTF8"
+  ],
+  "default": "VT100",
+  "since_or_note": "4.3(2b)"
+ },
+ "Console Redirection": {
+  "type": "enum",
+  "allowed_values": [
+   "PC-ANSI",
+   "VT100",
+   "VT100-PLUS",
+   "VT-UTF8"
+  ],
+  "default": "VT100",
+  "since_or_note": "4.3(2b); values as printed in guide (likely a doc error; 6.0 guide default Disabled)"
+ },
+ "Adaptive Memory Training": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "OptionROM Launch Optimization": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "BIOS Techlog level": {
+  "type": "enum",
+  "allowed_values": [
+   "Maximum",
+   "Minimum",
+   "Normal"
+  ],
+  "default": "Minimum",
+  "since_or_note": "4.3(2b)"
+ },
+ "IPV6 PXE support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Network stack": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "IPv4 PXE Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "IPv4 HTTP Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "IPv6 HTTP Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Security Device Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Trusted Platform Module State": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SHA-1 PCR Bank": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SHA-256 PCR Bank": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SHA384 PCR Bank": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(3a)"
+ },
+ "TPM Pending Operation": {
+  "type": "enum",
+  "allowed_values": [
+   "None",
+   "TpmClear"
+  ],
+  "default": "None",
+  "since_or_note": "4.3(2b)"
+ },
+ "TPM Minimal Physical Presence": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Intel Trusted Execution Technology Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Total Memory Encryption (TME)": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SGX QoS": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SGX write Enable": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "DMA Control Opt-In Flag": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Power on Password": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Multikey Total Memory Encryption": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SW Guard Extensions (SGX)": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SGX Factory Reset": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SGX Pkg info In-Band Access": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Select Owner EPOCH Input Type": {
+  "type": "enum",
+  "allowed_values": [
+   "SGX Owner EPOCH activated",
+   "Change to New Random Owner EPOCHs",
+   "Manual User Defined Owner EPOCHs"
+  ],
+  "default": "Manual User Defined Owner EPOCHs",
+  "since_or_note": "4.3(2b)"
+ },
+ "SGX Auto MP Registration Agent": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "SProcessor Epoch 0": {
+  "type": "range",
+  "allowed_values": [
+   "0-7 (as printed in guide)"
+  ],
+  "default": "0",
+  "since_or_note": "4.3(2b)"
+ },
+ "Pubkey Hash 0": {
+  "type": "range",
+  "allowed_values": [
+   "0-7 (as printed in guide)"
+  ],
+  "default": "0",
+  "since_or_note": "4.3(2b)"
+ },
+ "SGX Pubkey Hash 1": {
+  "type": "range",
+  "allowed_values": [
+   "8-15 (as printed in guide)"
+  ],
+  "default": "0",
+  "since_or_note": "4.3(2b)"
+ },
+ "NUMA": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Select Memory RAS Configuration": {
+  "type": "enum",
+  "allowed_values": [
+   "Mirror Mode 1LM",
+   "Partial Mirror mode 1LM",
+   "Maximum Performance",
+   "ADDDC Sparing"
+  ],
+  "default": "ADDDC Sparing",
+  "since_or_note": "4.3(2b)"
+ },
+ "Select PPR type": {
+  "type": "enum",
+  "allowed_values": [
+   "Disabled",
+   "Hard PPR"
+  ],
+  "default": "Hard PPR",
+  "since_or_note": "4.3(2b)"
+ },
+ "Partial Cache Line Sparing": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "BME DMA Mitigation": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Partial Memory Mirror Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "Percentage",
+   "Value in GB",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Partial Mirror Percentage": {
+  "type": "range",
+  "allowed_values": [
+   "0-50"
+  ],
+  "default": "0",
+  "since_or_note": "4.3(2b)"
+ },
+ "Intel Virtualization Technology": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(2b)"
+ },
+ "Memory size limit in GB": {
+  "type": "range",
+  "allowed_values": [
+   "0-65535"
+  ],
+  "default": "0",
+  "since_or_note": "4.3(2b)"
+ },
+ "Memory refresh rate": {
+  "type": "enum",
+  "allowed_values": [
+   "1x Refresh",
+   "2x Refresh"
+  ],
+  "default": "1x Refresh",
+  "since_or_note": "4.3(2b)"
+ },
+ "Panic and High Watermark": {
+  "type": "enum",
+  "allowed_values": [
+   "High",
+   "Low"
+  ],
+  "default": "Low",
+  "since_or_note": "4.3(2b)"
+ },
+ "CR QoS": {
+  "type": "enum",
+  "allowed_values": [
+   "Profile 1",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b); Deprecated 4.3(4a)"
+ },
+ "NVM Performance Setting": {
+  "type": "enum",
+  "allowed_values": [
+   "BW Optimized",
+   "Balanced Profile"
+  ],
+  "default": "BW Optimized",
+  "since_or_note": "4.3(2b); Deprecated 4.3(4a)"
+ },
+ "CR FastGo Config": {
+  "type": "enum",
+  "allowed_values": [
+   "Enable optimization",
+   "Disable Optimization"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.3(2b); Deprecated 4.3(4a)"
+ },
+ "Snoopy mode for AD": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b); Deprecated 4.3(4a)"
+ },
+ "Snoopy for 2LM": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(2b); Deprecated 4.3(4a)"
+ },
+ "DCPMM Firmware Downgrade": {
+  "type": "enum",
+  "allowed_values": [
+   "Auto",
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "Deprecated 4.3(4a)"
+ },
+ "Volatile Memory Mode": {
+  "type": "enum",
+  "allowed_values": [
+   "1LM",
+   "2LM"
+  ],
+  "default": "1LM",
+  "since_or_note": "Deprecated 4.3(4a)"
+ },
+ "eADR": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled",
+   "Auto"
+  ],
+  "default": "Disabled",
+  "since_or_note": "Deprecated 4.3(4a)"
+ },
+ "Memory Bandwidth Boost": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "Deprecated 4.3(4a)"
+ },
+ "Trust Domain Extension (TDX)": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(3a)"
+ },
+ "TDX Secure Arbitration Mode (SEAM) Loader": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "4.3(3a)"
+ },
+ "QpiLinkSpeed": {
+  "type": "enum",
+  "allowed_values": [
+   "20.0GT/s",
+   "12.8GT/s",
+   "14.4GT/s",
+   "16.0GT/s",
+   "Auto"
+  ],
+  "default": "Auto",
+  "since_or_note": "4.3(3a)"
+ },
+ "MMIO High Granularity Size": {
+  "type": "enum",
+  "allowed_values": [
+   "1G",
+   "4G",
+   "16G",
+   "64G",
+   "256G",
+   "1024G"
+  ],
+  "default": "256G",
+  "since_or_note": "4.3(3c)"
+ },
+ "MMIO High Base": {
+  "type": "enum",
+  "allowed_values": [
+   "512G",
+   "1T",
+   "2T",
+   "4T",
+   "16T",
+   "24T",
+   "32T",
+   "40T",
+   "56T"
+  ],
+  "default": "32T",
+  "since_or_note": "4.3(3c)"
+ },
+ "IOAT Configuration": {
+  "type": "enum",
+  "allowed_values": [
+   "Disabled",
+   "Enabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(3c)"
+ },
+ "DFX OSB": {
+  "type": "enum",
+  "allowed_values": [
+   "Auto",
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(4a)"
+ },
+ "Re-Size BAR Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(5a)"
+ },
+ "UEFI Memory Map Special Purpose Memory Flag": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(5c) changed"
+ },
+ "ACPI SRAT Special Purpose Memory Flag": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Enabled",
+  "since_or_note": "4.3(5c) changed"
+ },
+ "GPU Direct CPU1 and CPU2": {
+  "type": "enum",
+  "allowed_values": [
+   "Enabled",
+   "Disabled"
+  ],
+  "default": "Disabled",
+  "since_or_note": "6.0(2b)"
+ },
+ "IIO eDPC Support": {
+  "type": "enum",
+  "allowed_values": [
+   "Disabled",
+   "On Fatal Error",
+   "On Fatal and Non-Fatal Errors"
+  ],
+  "default": "On Fatal and Non-Fatal Errors",
+  "since_or_note": "6.0(1b)"
+ }
+}

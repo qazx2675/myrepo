@@ -1,0 +1,23 @@
+# UCSM XML API BIOS classes (source: CiscoUcs/ucsmsdk master, ucsmsdk/mometa/bios/). Not model-filtered.
+biosUnit            rn=bios            DN sys/chassis-<id>/blade-<slot>/bios   (parents computeBlade, computeExtBoard, computeRackUnit, computeServerUnit)
+biosSettings        rn=bios-settings   DN sys/chassis-<id>/blade-<slot>/bios/bios-settings  (per-server effective settings; also under capabilityCatalogue/computeDefaults/computePlatform = platform defaults)
+biosVProfile        rn=bios-prof-[name]  DN org-root/bios-prof-<name>   (BIOS policy; parent orgOrg; access admin, ls-compute, ls-config, ls-server, ls-server-policy, pn-policy)
+biosTokenFeatureGroup, biosTokenParam, biosTokenSettings (rn tokn-setng-[settingsMoRn]), biosBOT, biosBootDev, biosBootDevGrp, biosFeatureRef, biosParameterRef, biosRef, biosSettingRef, biosVIdentityParams
+# token classes (children of biosVProfile and biosSettings), 99 in ucsmsdk master:
+biosVfACPI10Support biosVfASPMSupport biosVfAllUSBDevices biosVfAltitude biosVfAssertNMIOnPERR biosVfAssertNMIOnSERR biosVfBMEDMAMitigation biosVfBootOptionRetry
+biosVfCPUHardwarePowerManagement biosVfCPUPerformance biosVfConsistentDeviceNameControl biosVfConsoleRedirection biosVfCoreMultiProcessing biosVfDDR3VoltageSelection
+biosVfDRAMClockThrottling biosVfDirectCacheAccess biosVfDramRefreshRate biosVfEnergyPerformanceTuning biosVfEnhancedIntelSpeedStepTech biosVfEnhancedPowerCappingSupport
+biosVfExecuteDisableBit biosVfFRB2Timer biosVfFrequencyFloorOverride biosVfFrontPanelLockout biosVfIOEMezz1OptionROM biosVfIOENVMe1OptionROM biosVfIOENVMe2OptionROM
+biosVfIOESlot1OptionROM biosVfIOESlot2OptionROM biosVfIntegratedGraphics biosVfIntegratedGraphicsApertureSize biosVfIntelEntrySASRAIDModule biosVfIntelHyperThreadingTech
+biosVfIntelTrustedExecutionTechnology biosVfIntelTurboBoostTech biosVfIntelVTForDirectedIO biosVfIntelVirtualizationTechnology biosVfInterleaveConfiguration biosVfLocalX2Apic
+biosVfLvDIMMSupport biosVfMaxVariableMTRRSetting biosVfMaximumMemoryBelow4GB biosVfMemoryMappedIOAbove4GB biosVfMirroringMode biosVfNUMAOptimized biosVfOSBootWatchdogTimer
+biosVfOSBootWatchdogTimerPolicy biosVfOSBootWatchdogTimerTimeout biosVfOnboardGraphics biosVfOnboardSATAController biosVfOnboardStorage biosVfOptionROMEnable biosVfOptionROMLoad
+biosVfOutOfBandManagement biosVfPCHSATAMode biosVfPCILOMPortsConfiguration biosVfPCIROMCLP biosVfPCISlotLinkSpeed biosVfPCISlotOptionROMEnable biosVfPOSTErrorPause
+biosVfPSTATECoordination biosVfPackageCStateLimit biosVfPanicAndHighWatermark biosVfPreBootDMAProtection biosVfProcessorC1E biosVfProcessorC3Report biosVfProcessorC6Report
+biosVfProcessorC7Report biosVfProcessorCMCI biosVfProcessorCState biosVfProcessorEnergyConfiguration biosVfProcessorPrefetchConfig biosVfQPILinkFrequencySelect biosVfQPISnoopMode
+biosVfQuietBoot biosVfRedirectionAfterBIOSPOST biosVfResumeOnACPowerLoss biosVfSBMezz1OptionROM biosVfSBNVMe1OptionROM biosVfSIOC1OptionROM biosVfSIOC2OptionROM
+biosVfScrubPolicies biosVfSelectMemoryRASConfiguration biosVfSerialPortAEnable biosVfSparingMode biosVfSriovConfig biosVfTPMPendingOperation biosVfTPMSupport
+biosVfTrustedPlatformModule biosVfUCSMBootModeControl biosVfUCSMBootOrderRuleControl biosVfUEFIOSUseLegacyVideo biosVfUSBBootConfig biosVfUSBConfiguration
+biosVfUSBFrontPanelAccessLock biosVfUSBPortConfiguration biosVfUSBSystemIdlePowerOptimizingSetting biosVfVGAPriority biosVfWorkloadConfiguration
+# example: biosVfCPUPerformance rn=CPU-Performance, attr vpCPUPerformance in {custom, enterprise, high-throughput, hpc, platform-default, platform-recommended}
+# Note: ucsmsdk master covers ~UCSM 3.x-4.0 era classes; M5 4.1+/X210c M7 tokens added in newer UCSM (e.g. biosVfSgx*, TDX, GPU Direct) are NOT in this list -> unknown class names.
