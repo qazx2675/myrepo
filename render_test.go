@@ -316,12 +316,12 @@ func TestRenderContent(t *testing.T) {
 	}
 	// 화면 2: 완료 여부와 상관없이 수동 실행 활성 (미완료 그룹도 비활성 안내 없음)
 	d := renderDetail(s, selection{Detail: true, JobID: "J1", Yml: "web.yml"}, 120, 24, false)
-	if strings.Contains(d, "비활성") || !strings.Contains(d, "[c] OS 체크 수동 실행(이중체크)") || !strings.Contains(d, "LDAP 적용실패") || !strings.Contains(d, "정체") {
+	if strings.Contains(d, "비활성") || !strings.Contains(d, "[c] 설정체크 + 설정수정") || !strings.Contains(d, "LDAP 적용실패") || !strings.Contains(d, "정체") {
 		t.Errorf("화면 2:\n%s", d)
 	}
 	a := sampleAllDone()
 	d = renderDetail(a, selection{Detail: true, JobID: "J1", Yml: "gpu.yml"}, 120, 24, false)
-	if strings.Contains(d, "비활성") || !strings.Contains(d, "[c] OS 체크 수동 실행(이중체크)") {
+	if strings.Contains(d, "비활성") || !strings.Contains(d, "[c] 설정체크 + 설정수정") {
 		t.Errorf("완료 그룹 활성:\n%s", d)
 	}
 	d = renderDetail(a, selection{Detail: true, JobID: "J1", Yml: "web.yml", Confirm: true}, 120, 24, false)

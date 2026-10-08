@@ -21,6 +21,7 @@
 | `client.go` | SnapshotSource(로컬/원격), gossh 원샷 전송·출력 복원 = 원격 클라이언트 모드 | 2차 |
 | `ctl.go` | `--start/--stop/--restart`, snapshot/done/request 명령, 색 메시지 | 2차 |
 | `tui.go` | TUI 루프: raw tty, 키 파싱, 화면 전환, 자동 갱신, 수동 OS 체크 요청 (입출력·시계 주입) | 2차 |
+| `view.go` | TUI 전체 화면 보기: 수동 실행(c/t) 결과, g 재확인 진행, v 최근 결과 (데몬 기록·code 본문을 읽어 실시간 표시) | 단위 테스트 `mode_test.go` |
 | `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙 | 2차, 골든 테스트 |
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |

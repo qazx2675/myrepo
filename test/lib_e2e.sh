@@ -76,6 +76,8 @@ ldap_emul() {
 }
 case $cmd in "bash "*run.sh) echo "run hosts=${hs[*]}" >> "$SCEN/order.log" ;; esac
 for h in "${hs[@]}"; do
+	has "$h" silent_hosts && continue                                  # 데모용: 어떤 경로로도 무응답 (접속불가)
+	[[ $tag == local ]] && has "$h" os8silent_hosts && continue       # 데모용: os8_mgmt 에서만 무응답 (os6_mgmt 경유로는 응답)
 	case $cmd in
 		"cat /proc/uptime")
 			if has "$h" bootold_hosts; then echo "$h: 999999.00 1.00"; else echo "$h: 0.50 0.40"; fi ;;

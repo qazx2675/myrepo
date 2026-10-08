@@ -11,6 +11,13 @@ import (
 	"strings"
 )
 
+// 실행 모드: 자동 흐름(배포 → 완료)과 수동 c 는 설정체크 + 설정수정, 수동 t 는 설정체크만 (환경설정 수정 안 함)
+const (
+	ModeCheck      = "check"
+	modeApplyLabel = "설정체크 + 설정수정"
+	modeCheckLabel = "설정체크만 (설정 수정 안 함)"
+)
+
 const (
 	reportStart = "############### 결과 리포트 ###############"
 	reportEnd   = "###########################################"
@@ -68,12 +75,16 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	if err != nil {
 		return RunResult{}, err
 	}
-	cmd := exec.Command("bash", os_check_sh, "-auto", j.User, "targets.txt")
+	flag, resFile := "-auto", "check.res_"+j.User+"_postapply"
+	if j.RunMode == ModeCheck { // 설정체크만: 환경설정 수정·재점검 없음 → 점검 결과 파일을 본다
+		flag, resFile = "-auto-check", "check.res_"+j.User
+	}
+	cmd := exec.Command("bash", os_check_sh, flag, j.User, "targets.txt")
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.Stdout = lf
 	cmd.Stderr = lf
-	logf("os_check 실행: code=%s user=%s %d대 os6=%v", code, j.User, len(hosts), hasOS6)
+	logf("os_check 실행: code=%s user=%s %d대 os6=%v 모드=%s", code, j.User, len(hosts), hasOS6, modeLabel(j.RunMode))
 	if err := cmd.Run(); err != nil {
 		logf("[X] os_check 종료 오류: code=%s: %v", code, err)
 	}
@@ -84,8 +95,8 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	}
 
 	logText, _ := os.ReadFile(logFile)
-	post, postErr := os.ReadFile(filepath.Join(dir, "check.res_"+j.User+"_postapply"))
-	text, abnormal := buildCodeText(string(logText), string(post), postErr == nil, hosts, logFile)
+	post, postErr := os.ReadFile(filepath.Join(dir, resFile))
+	text, abnormal := buildCodeTextMode(j.RunMode, string(logText), string(post), postErr == nil, hosts, logFile)
 	if err := os.WriteFile(codePath(code), []byte(text), 0644); err != nil {
 		return RunResult{Code: code}, err
 	}
@@ -260,8 +271,12 @@ func parsePostapplyFailed(post string, hosts []string) []string {
 
 // settingCheckText: "설정체크 (설정 수정 후 재점검)" 섹션 (FAIL 줄 / NO FAIL 한 줄)
 func settingCheckText(post string, havePost bool, hosts []string) string {
+	return settingCheckTitled("설정체크 (설정 수정 후 재점검)", post, havePost, hosts)
+}
+
+func settingCheckTitled(title, post string, havePost bool, hosts []string) string {
 	var sb strings.Builder
-	sb.WriteString("설정체크 (설정 수정 후 재점검)")
+	sb.WriteString(title)
 	if !havePost {
 		sb.WriteString("\n(재점검 결과 없음)")
 		return sb.String()
@@ -282,16 +297,35 @@ func settingCheckText(post string, havePost bool, hosts []string) string {
 	return sb.String()
 }
 
-// buildCodeText: codes/<code>.txt 본문과 비정상 여부(결과 리포트 블록이 없거나 불완전)
+// modeLabel: 실행 모드 표시 문구
+func modeLabel(mode string) string {
+	if mode == ModeCheck {
+		return modeCheckLabel
+	}
+	return modeApplyLabel
+}
+
+// buildCodeText: 설정체크 + 설정수정 run 의 code 본문 (자동 흐름·수동 c)
 func buildCodeText(logText, post string, havePost bool, hosts []string, logFile string) (string, bool) {
+	return buildCodeTextMode("", logText, post, havePost, hosts, logFile)
+}
+
+// buildCodeTextMode: codes/<code>.txt 본문과 비정상 여부(결과 리포트 블록이 없거나 불완전). 첫 줄에 실행 모드를 밝힌다.
+// mode=ModeCheck(설정체크만)이면 post 는 점검 결과 파일(check.res_<user>)이고 설정 수정·재점검 섹션 대신 "설정체크 (설정 수정 안 함)" 을 쓴다.
+func buildCodeTextMode(mode, logText, post string, havePost bool, hosts []string, logFile string) (string, bool) {
 	var parts []string
+	parts = append(parts, "작업 : "+modeLabel(mode))
 
 	report, ok := extractReport(splitLines(logText))
 	if report != "" {
 		parts = append(parts, report)
 	}
 
-	parts = append(parts, settingCheckText(post, havePost, hosts))
+	if mode == ModeCheck {
+		parts = append(parts, settingCheckTitled("설정체크 (설정 수정 안 함)", post, havePost, hosts))
+	} else {
+		parts = append(parts, settingCheckText(post, havePost, hosts))
+	}
 
 	parts = append(parts, extractSummaries(splitLines(logText))...)
 	parts = append(parts, "원본 : "+logFile)

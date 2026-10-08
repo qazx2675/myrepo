@@ -75,6 +75,7 @@ type runCall struct {
 	At    int64
 	Hosts []string
 	OS6   bool
+	Mode  string // Job.RunMode: ModeCheck = 설정체크만
 }
 
 // world: 가짜 Pinger/Checker/Runner/Notifier + 이름 해석
@@ -141,7 +142,7 @@ func (w *world) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	o := w.off()
-	w.runs = append(w.runs, runCall{At: o, Hosts: append([]string(nil), hosts...), OS6: hasOS6})
+	w.runs = append(w.runs, runCall{At: o, Hosts: append([]string(nil), hosts...), OS6: hasOS6, Mode: j.RunMode})
 	code := fmt.Sprintf("%04d", len(w.runs))
 	if w.runFn != nil {
 		r := w.runFn(len(w.runs), o, hosts)

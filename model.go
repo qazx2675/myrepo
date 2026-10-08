@@ -267,7 +267,8 @@ type SnapJob struct {
 	Counts    StageCounts  `json:"counts"`
 	Groups    []SnapGroup  `json:"groups"`
 	Runs      []Run        `json:"runs"`
-	Manual    []SnapManual `json:"manual"` // 대기·진행 중 수동 run 요청
+	Manual    []SnapManual `json:"manual"`            // 대기·진행 중 수동 run 요청
+	Recheck   *Recheck     `json:"recheck,omitempty"` // 마지막 g(재확인) 진행·결과
 }
 
 type SnapGroup struct {
@@ -299,10 +300,11 @@ type SnapHost struct {
 }
 
 type SnapManual struct {
-	File      string `json:"file"`      // requests/active/ 의 파일명
-	Yml       string `json:"yml"`       // 그룹
-	State     string `json:"state"`     // queued | running
-	Requested int64  `json:"requested"` // 요청 epoch (파일명)
+	File      string `json:"file"`           // requests/active/ 의 파일명
+	Yml       string `json:"yml"`            // 그룹
+	State     string `json:"state"`          // queued | running
+	Requested int64  `json:"requested"`      // 요청 epoch (파일명)
+	Mode      string `json:"mode,omitempty"` // "check" = 설정체크만, 비면 설정체크 + 설정수정
 }
 
 // BuildSnapshot: dir(=AUTO_SETUP_DIR) 의 jobs/*.json(+최근 종료 jobs/done) 과 requests/active 를 읽어 스냅샷 생성.
@@ -316,11 +318,14 @@ func BuildSnapshot(dir string, now time.Time) Snapshot {
 	manual := readActiveRequests(dir)
 	for _, j := range readJobsIn(filepath.Join(dir, "jobs"), time.Time{}) {
 		sj := buildSnapJob(j, t, false, manual[j.ID])
+		sj.Recheck = readRecheck(dir, j.ID)
 		s.Totals.merge(sj.Counts)
 		s.Jobs = append(s.Jobs, sj)
 	}
 	for _, j := range readJobsIn(filepath.Join(dir, "jobs", "done"), now.Add(-closedKeep)) {
-		s.Jobs = append(s.Jobs, buildSnapJob(j, t, true, manual[j.ID]))
+		sj := buildSnapJob(j, t, true, manual[j.ID])
+		sj.Recheck = readRecheck(dir, j.ID)
+		s.Jobs = append(s.Jobs, sj)
 	}
 	return s
 }
@@ -474,4 +479,20 @@ func hostNote(h *Host) string {
 		p = append(p, "실패 "+strconv.Itoa(h.Fails)+"회")
 	}
 	return strings.Join(p, ", ")
+}
+
+// Recheck: g(재확인) 진행 기록 — 단계별 줄, 호스트별 결과(Result: os8 | os6 | fail)
+type Recheck struct {
+	Job   string        `json:"job"`
+	Yml   string        `json:"yml"` // 대상 그룹, "*" = job 전체
+	At    int64         `json:"at"`  // 시작 epoch
+	Done  bool          `json:"done"`
+	Lines []string      `json:"lines"`
+	Hosts []RecheckHost `json:"hosts,omitempty"`
+}
+
+type RecheckHost struct {
+	Host   string `json:"host"`
+	Result string `json:"result"`
+	Detail string `json:"detail,omitempty"`
 }

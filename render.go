@@ -224,14 +224,15 @@ func fmtClock(s Snapshot, t int64, layout string) string {
 
 // selection: 화면 상태 (렌더 입력)
 type selection struct {
-	Row     int    // 화면 1: 그룹 행 번호 (전 job 의 그룹을 이어서 센 번호)
-	Detail  bool   // 화면 2 (호스트표)
-	JobID   string // 화면 2 대상 job
-	Yml     string // 화면 2 대상 그룹
-	Host    int    // 화면 2: (필터 적용된) 호스트 행 번호
-	Filter  bool   // 화면 2: 정체·실패만
-	Confirm bool   // 수동 실행 y/n 확인 중
-	Msg     string // 하단 안내 한 줄
+	Row        int    // 화면 1: 그룹 행 번호 (전 job 의 그룹을 이어서 센 번호)
+	Detail     bool   // 화면 2 (호스트표)
+	JobID      string // 화면 2 대상 job
+	Yml        string // 화면 2 대상 그룹
+	Host       int    // 화면 2: (필터 적용된) 호스트 행 번호
+	Filter     bool   // 화면 2: 정체·실패만
+	Confirm    bool   // 수동 실행 y/n 확인 중
+	Mode       string // 확인 중인 수동 실행 모드: ModeCheck = 설정체크만, 비면 설정체크 + 설정수정
+	Msg        string // 하단 안내 한 줄
 	DateFilter bool   // 화면 1: 날짜별 보기 (TUI 만 켬 — 날짜 줄 표시, 그 날짜의 그룹만)
 	Date       string // 화면 1: 보고 있는 날짜 YYYYMMDD ("" = 가장 최근 날짜를 따라감)
 }
@@ -765,7 +766,7 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 
 	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
 		msgLine(sel, width, color)}
-	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 수동 실행  g 재확인  a 전체 그룹  r 새로고침  ? 도움말  q 복귀"
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 체크+수정  t 체크만  g 재확인  v 결과  a 전체 그룹  r 새로고침  ? 도움말  q 복귀"
 	if sel.Yml == allView {
 		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  g 재확인  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀"
 	}
@@ -810,9 +811,13 @@ func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
 		if n := g.Counts.Total - g.Counts.Done; n > 0 {
 			extra = fmt.Sprintf(", 미완료 %d대 포함", n)
 		}
-		return segLine(color, width, seg{fmt.Sprintf(" %s (%d대%s)에 OS 체크(이중체크)를 실행합니다. 계속할까요? [y/n]", g.Yml, g.Counts.Total, extra), stYellow})
+		what := "'설정체크 + 설정수정' (환경설정 수정함)"
+		if sel.Mode == ModeCheck {
+			what = "'설정체크만' (환경설정 수정 안 함)"
+		}
+		return segLine(color, width, seg{fmt.Sprintf(" %s (%d대%s)에 %s 실행. 계속? [y/n]", g.Yml, g.Counts.Total, extra, what), stYellow})
 	}
-	return segLine(color, width, seg{" [c] OS 체크 수동 실행(이중체크) - 미완료 호스트도 시도, 접속불가는 알림", "1;32"})
+	return segLine(color, width, seg{" [c] 설정체크 + 설정수정   [t] 설정체크만(수정 안 함)   [g] 재확인   [v] 최근 결과 - 완료 여부와 상관없이 그룹 전체 시도", "1;32"})
 }
 
 // ---- 도움말 ----
@@ -835,8 +840,12 @@ func renderHelp(width, height int, color bool) string {
 		"   ↑ ↓ (k j)   호스트 행 이동",
 		"   ← / Esc / q 화면 1 로 복귀",
 		"   f           정체·실패 호스트만 보기 (토글)",
-		"   c           OS 체크 수동 실행(이중체크) - 완료 여부와 상관없이 그룹 전체 시도, 접속불가는 알림, y/n 확인",
-		"   g           서버 상태 수동 재확인 - 완료 제외 모든 호스트를 os8_mgmt 에서 확인, 안 되면 os6_mgmt 경유, 둘 다 안 되면 접속불가(로그)",
+		"   c           수동 실행: 설정체크 + 설정수정 (환경설정을 수정함) - 완료 여부와 상관없이 그룹 전체 시도, y/n 확인",
+		"   t           수동 실행: 설정체크만 (환경설정은 수정하지 않음) - 점검 결과만 보고 싶을 때, y/n 확인",
+		"               c / t 를 누르면 결과 화면이 열리고, 끝나면 그 화면에 결과가 그대로 표시됩니다 (v 로 다시 보기)",
+		"   v           이 그룹의 가장 최근 수동 실행 결과 보기",
+		"   * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
+		"   g           서버 상태 수동 재확인 - 완료 제외 모든 호스트를 os8 → 안 되면 os6_mgmt → 둘 다 안 되면 접속불가. 진행 과정·실패 지점·최종 결과가 화면에 실시간 표시",
 		" 색: 완료 초록 / 진행 청록 / 대기 회색 / 경고 노랑 / 정체·실패 빨강. NO_COLOR 설정 시 색 없음",
 		" 막대: # 완료  + 진행  . 대기  ! 정체·실패",
 		" %: 완료 대수 / 전체 (배포중·설치중·부팅확인·체크중은 + 로만 보이고 % 는 완료될 때 오름)",

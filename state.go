@@ -66,6 +66,7 @@ type Run struct {
 	At     int64    `json:"at"`
 	Manual bool     `json:"manual,omitempty"` // 수동 run (requests manual-run)
 	Yml    string   `json:"yml,omitempty"`    // 수동 run 의 그룹
+	Mode   string   `json:"mode,omitempty"`   // "check" = 설정체크만(수정 없음), 비면 설정체크 + 설정수정
 }
 
 // Group: (all).yaml 을 구성하는 yml 그룹 1개 (.job 의 그룹 줄)
@@ -94,6 +95,7 @@ type Job struct {
 	Runs           []Run             `json:"runs"`
 	Groups         map[string]*Group `json:"groups,omitempty"` // 키 = yml 파일명
 	AllYml         string            `json:"all_yml,omitempty"`
+	RunMode        string            `json:"-"` // Runner 에 넘기는 사본에서만 설정: ModeCheck = 설정체크만
 }
 
 // ---- 경로 ----

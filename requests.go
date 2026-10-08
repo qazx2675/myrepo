@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -194,6 +195,9 @@ func (d *Daemon) acceptManualRun(pl map[string]string) string {
 	if id == "" || yml == "" {
 		return "jobid/yml 없음"
 	}
+	if m := pl["mode"]; m != "" && m != ModeCheck {
+		return "알 수 없는 mode (check 만 허용)"
+	}
 	j, _ := d.findJob(id)
 	if j == nil {
 		return "job 없음"
@@ -272,9 +276,9 @@ func (d *Daemon) scheduleManual(now time.Time) {
 		}
 	}
 	c := &inflight{jobID: j.ID, user: j.User, hosts: hosts, ready: ready, at: now.Unix(),
-		manual: true, reqPath: p, yml: pl["yml"], closed: closed}
+		manual: true, reqPath: p, yml: pl["yml"], closed: closed, mode: pl["mode"]}
 	if d.runErr == "" {
-		logf("수동 run 시작: job %s 그룹 %s %d대 (%s)", j.ID, pl["yml"], len(hosts), name)
+		logf("수동 run 시작: job %s 그룹 %s %d대 (%s) [%s]", j.ID, pl["yml"], len(hosts), name, modeLabel(pl["mode"]))
 	}
 	d.launch(c, j, hasOS6)
 }
@@ -294,7 +298,7 @@ func readActiveRequests(dir string) map[string][]SnapManual {
 			st = "running"
 		}
 		ep, _ := strconv.ParseInt(reqFileRe.FindStringSubmatch(name)[1], 10, 64)
-		out[pl["jobid"]] = append(out[pl["jobid"]], SnapManual{File: name, Yml: pl["yml"], State: st, Requested: ep})
+		out[pl["jobid"]] = append(out[pl["jobid"]], SnapManual{File: name, Yml: pl["yml"], State: st, Requested: ep, Mode: pl["mode"]})
 	}
 	return out
 }
@@ -358,7 +362,8 @@ func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
 // recheckHosts: g 키 — 진행 중 job 의 완료되지 않은 호스트(정체·실패 포함, 단계 무관)를 지금 직접 확인한다.
 // 1) os8_mgmt 에서 준비확인 → 응답하면 route=local, 2) 무응답이면 os6_mgmt 경유 → 응답하면 route=os6,
 // 3) 둘 다 무응답이면 접속불가로 간주(상태 그대로, 로그에 목록). 응답한 호스트는 준비확인 결과를 바로 반영하고 이미 READY 인 호스트는 경로만 갱신.
-// yml 이 "" 또는 "*" 이면 job 전체, 아니면 그 그룹만. 수락이면 "", 거부면 사유.
+// yml 이 "" 또는 "*" 이면 job 전체, 아니면 그 그룹만. 진행 과정·실패 지점·최종 결과는 recheck/<jobid>.json 에 단계마다 기록되어
+// 화면(g 진행 보기)에서 실시간으로 보인다. 수락이면 "", 거부면 사유.
 func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 	j := d.jobs[id]
 	if j == nil {
@@ -381,45 +386,86 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 			cand = append(cand, n)
 		}
 	}
-	if len(cand) == 0 {
-		return ""
-	}
 	sort.Strings(cand)
 	t := now.Unix()
+	rc := &Recheck{Job: j.ID, Yml: yml, At: t}
+	if rc.Yml == "" {
+		rc.Yml = allView
+	}
+	step := func(format string, a ...interface{}) {
+		rc.Lines = append(rc.Lines, fmt.Sprintf("[%s] ", now.Format("15:04:05"))+fmt.Sprintf(format, a...))
+		writeRecheck(rc)
+	}
+	if len(cand) == 0 {
+		step("재확인할 호스트가 없습니다 (모두 완료)")
+		rc.Done = true
+		writeRecheck(rc)
+		return ""
+	}
+	step("재확인 시작: %d대 (완료 제외, 단계 무관)", len(cand))
+	detail := map[string]string{}
 	var miss []string
+
+	step("1/3 os8_mgmt 에서 직접 확인 중 (%d대)…", len(cand))
 	res, err := d.Checker.Check("local", cand)
 	if err != nil {
-		logf("[X] 재확인(g) 실패(local): %v", err)
+		step("    os8_mgmt 확인 호출 실패: %v → 전부 무응답으로 처리하고 다음 단계로", err)
+		for _, n := range cand {
+			detail[n] = "os8 확인 호출 실패"
+		}
 		miss = cand
 	} else {
+		nOK := 0
 		for _, n := range cand {
 			cr, ok := res[n]
 			if !ok || !cr.Responded {
+				detail[n] = "os8 무응답"
 				miss = append(miss, n)
 				continue
 			}
-			d.recheckApply(j, n, "local", cr, t)
+			nOK++
+			rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "os8", Detail: d.recheckApply(j, n, "local", cr, t)})
 		}
+		step("    os8_mgmt 응답 %d대 / 무응답 %d대", nOK, len(miss))
 	}
+
 	nOS6 := 0
-	if len(miss) > 0 && os6_mgmt != "" && os6_gossh != "" {
+	switch {
+	case len(miss) == 0:
+		step("2/3 os6_mgmt 경유 확인: 필요 없음 (전부 os8 에서 응답)")
+	case os6_mgmt == "" || os6_gossh == "":
+		step("2/3 os6_mgmt 경유 확인: 건너뜀 (os6_mgmt/os6_gossh 미설정) — 무응답 %d대는 접속불가", len(miss))
+	default:
+		step("2/3 os6_mgmt 경유로 확인 중 (%d대)…", len(miss))
 		var left []string
 		if res, err = d.Checker.Check("os6", miss); err != nil {
-			logf("[X] 재확인(g) 실패(os6): %v", err)
+			step("    os6_mgmt 확인 호출 실패: %v", err)
+			for _, n := range miss {
+				detail[n] += " → os6 확인 호출 실패"
+			}
 			left = miss
 		} else {
 			for _, n := range miss {
 				if cr, ok := res[n]; ok && cr.Responded {
-					d.recheckApply(j, n, "os6", cr, t)
 					nOS6++
+					rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "os6", Detail: d.recheckApply(j, n, "os6", cr, t)})
 				} else {
+					detail[n] += " → os6 무응답"
 					left = append(left, n)
 				}
 			}
+			step("    os6_mgmt 응답 %d대 / 무응답 %d대", nOS6, len(left))
 		}
 		miss = left
 	}
+	for _, n := range miss {
+		rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "fail", Detail: strings.TrimPrefix(strings.TrimSpace(detail[n]), "→ ")})
+	}
+	sort.Slice(rc.Hosts, func(a, b int) bool { return rc.Hosts[a].Host < rc.Hosts[b].Host })
 	d.lastPing, d.lastCheck = time.Time{}, time.Time{} // ping 도 바로 갱신
+	step("3/3 최종 결과: 응답 %d대 (os8 %d, os6 경유 %d), 접속불가 %d대", len(cand)-len(miss), len(cand)-len(miss)-nOS6, nOS6, len(miss))
+	rc.Done = true
+	writeRecheck(rc)
 	logf("재확인(g): job %s %d대 중 응답 %d대 (os6 경유 %d대), 접속불가 %d대", j.ID, len(cand), len(cand)-len(miss), nOS6, len(miss))
 	if len(miss) > 0 {
 		logf("[!] 재확인(g) 접속불가·미응답 %d대 (job %s): %s", len(miss), j.ID, strings.Join(miss, " "))
@@ -427,20 +473,59 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 	return ""
 }
 
-// recheckApply: g 재확인에서 응답한 호스트 1대 반영 — 경로 갱신 + (아직 READY 전이면) 준비확인 결과 반영
-func (d *Daemon) recheckApply(j *Job, name, route string, cr CheckResult, t int64) {
+// recheckApply: g 재확인에서 응답한 호스트 1대 반영 — 경로 갱신 + (아직 READY 전이면) 준비확인 결과 반영.
+// 반환: 화면에 보일 설명 (경로 변경, 현재 단계)
+func (d *Daemon) recheckApply(j *Job, name, route string, cr CheckResult, t int64) string {
 	h := j.Hosts[name]
+	var notes []string
 	if h.Route != route {
 		old := h.Route
 		h.Route = route
 		d.dirty[j.ID] = true
 		if old != "" {
 			logf("경로 전환: %s %s → %s (재확인 g, job %s)", name, old, route, j.ID)
+			notes = append(notes, "경로 "+old+" → "+route)
 		}
 	}
 	if active(h) && h.ReadyAt == 0 {
 		d.applyCheck(j, name, cr, t)
 	}
+	notes = append(notes, "단계 "+stageLabels[effectiveStage(h, t)])
+	return strings.Join(notes, ", ")
+}
+
+// ---- 재확인(g) 진행 기록: recheck/<jobid>.json (단계마다 갱신 → 화면이 실시간으로 읽음) ----
+
+func recheckDir() string { return filepath.Join(dataDir(), "recheck") }
+
+func writeRecheck(rc *Recheck) {
+	if !validID(rc.Job) {
+		return
+	}
+	if err := os.MkdirAll(recheckDir(), 0755); err != nil {
+		return
+	}
+	b, err := json.MarshalIndent(rc, "", " ")
+	if err != nil {
+		return
+	}
+	p := filepath.Join(recheckDir(), rc.Job+".json")
+	if os.WriteFile(p+".tmp", append(b, '\n'), 0644) == nil {
+		_ = os.Rename(p+".tmp", p)
+	}
+}
+
+// readRecheck: dir/recheck/<jobid>.json (없거나 깨졌으면 nil)
+func readRecheck(dir, jobID string) *Recheck {
+	b, err := os.ReadFile(filepath.Join(dir, "recheck", jobID+".json"))
+	if err != nil {
+		return nil
+	}
+	rc := &Recheck{}
+	if json.Unmarshal(b, rc) != nil {
+		return nil
+	}
+	return rc
 }
 
 func (d *Daemon) markRoute(j *Job, closed bool) {

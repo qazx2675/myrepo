@@ -19,7 +19,7 @@ bash setup.sh
 
 # ===== 2. 상태 보기 · 데몬 제어 =====
 
-# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, Enter 상세, a 전체 그룹 한 표로, ←→ 작업 전환, f 정체·실패만, c 수동 OS 체크, g 재확인(os8→os6), 맨 위에서 ↑ 날짜 줄 → ←전날 →다음날, r 새로고침, ? 도움말, q 종료)
+# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, Enter 상세, a 전체 그룹 한 표로, ←→ 작업 전환, f 정체·실패만, c 설정체크+설정수정, t 설정체크만(수정 안 함), v 최근 수동 결과, g 재확인(os8→os6, 진행 창), 맨 위에서 ↑ 날짜 줄 → ←전날 →다음날, r 새로고침, ? 도움말, q 종료)
 auto_setup
 
 # TUI 가 아니라 텍스트 표로 보기 (파이프·로그용, 색 없음)
@@ -62,6 +62,9 @@ auto_setup done --job 20261002-153000-user1
 auto_setup done --job 20261002-153000-user1 --yml gpu.yml
 
 # 수동 OS 체크 실행 요청: 완료 여부와 상관없이 그룹(yml) 전체를 시도, 접속불가 호스트는 wall 에 표시, 데몬 run 큐에서 실행됨 (TUI 의 c 키와 같음)
+# 설정체크만 (환경설정 수정 안 함, TUI 의 t 키와 같음): 끝에 check
+auto_setup request manual-run 20261002-153000-user1 gpu.yml check
+# 설정체크 + 설정수정 (TUI 의 c 키와 같음)
 auto_setup request manual-run 20261002-153000-user1 gpu.yml
 
 # 요청이 거부됐는지 확인 (마지막 줄 reason= 에 사유: job/그룹 없음, 같은 그룹 중복 등)
@@ -252,3 +255,21 @@ ssh -o BatchMode=yes <os6_mgmt> hostname
 
 # 호스트별 경로(route)·비고 확인 ("os6경유", "ping 정보없음(os6 probe 확인)")
 auto_setup snapshot | grep -E '"host"|"route"|"note"'
+
+# ===== 11. 설정체크만 / 설정체크+설정수정, 결과 창, g 진행 창 모의 테스트 (0.5.0~) =====
+# 화면에서: c = 설정체크 + 설정수정, t = 설정체크만(환경설정 수정 안 함), v = 최근 수동 결과, g = 재확인(os8 → os6_mgmt → 접속불가) 진행 창
+# 배포 → 완료 자동 흐름은 항상 설정체크 + 설정수정
+
+# 모의 환경 준비 (root, 운영 데이터 미사용): 빌드 + 가짜 작업 + 스텁 gossh/ssh + 데몬 기동
+bash test/demo_flow.sh
+
+# 이 셸에 환경 설정 후 화면 실행 (오늘 그룹 A/B 에서 Enter → t / c / g / v 를 눌러 보기)
+source /tmp/as_demo_flow/env.sh
+auto_setup
+
+# 정리
+bash test/demo_flow.sh --stop
+
+# 화면만 확인 (데몬 없이 파일만 읽음)
+bash test/make_demo_jobs.sh
+AUTO_SETUP_DIR=/tmp/as_demo auto_setup
