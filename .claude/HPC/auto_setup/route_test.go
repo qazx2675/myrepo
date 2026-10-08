@@ -365,3 +365,70 @@ func TestRecheckRejectAndNoOS6(t *testing.T) {
 		t.Fatalf("접속불가 로그 없음:\n%s", lg)
 	}
 }
+
+func dateSnap() Snapshot {
+	h := func() SnapHost { return tsHost("x", StageDone, 10, "") }
+	return tsSnap(true, tsJob("J1", "user1", false,
+		tsGroup("infra_inventory-20261007083000_2ea.yml", "ib", "rhel8", "pxe", "y", h()),
+		tsGroup("infra_inventory-20261008084159_4ea.yml", "ib", "rhel8", "pxe", "y", h()),
+		tsGroup("infra_inventory-20261010090000_1ea.yml", "ib", "rhel8", "pxe", "y", h())))
+}
+
+func TestGroupDateAndShift(t *testing.T) {
+	s := dateSnap()
+	j := &s.Jobs[0]
+	if d := groupDate(s, j, &j.Groups[1]); d != "20261008" {
+		t.Fatalf("yml 날짜: %q", d)
+	}
+	if lo, hi, ok := dateRange(s); !ok || lo != "20261007" || hi != "20261010" {
+		t.Fatalf("범위: %s %s %v", lo, hi, ok)
+	}
+	if effDate(s, "") != "20261010" {
+		t.Fatal("기본은 가장 최근 날짜")
+	}
+	if got := shiftDate(s, "", -1); got != "20261009" { // 그룹 없는 날도 하루씩 이동
+		t.Fatalf("전날: %q", got)
+	}
+	if got := shiftDate(s, "20261007", -1); got != "20261007" { // 가장 이른 날짜에서 멈춤
+		t.Fatalf("하한: %q", got)
+	}
+	if got := shiftDate(s, "20261009", 1); got != "" { // 최근 날짜에 닿으면 최근을 따라감
+		t.Fatalf("상한: %q", got)
+	}
+	if got := shiftDate(s, "20261031", 1); got != "" {
+		t.Fatalf("범위 밖: %q", got)
+	}
+	// 이름에 날짜가 없으면 job 전달일
+	g := &SnapGroup{Yml: "a.yml"}
+	if d := groupDate(s, j, g); len(d) != 8 || d != fmtClock(s, j.Submitted, dateLayout) {
+		t.Fatalf("전달일 대체: %q", d)
+	}
+}
+
+// 날짜 줄(맨 위 ↑)에서 ← → 로 전날/다음날, 그 날짜의 그룹만 표시, 날짜 줄에서는 Enter 로 들어가지 않음
+func TestTUIDateNavigation(t *testing.T) {
+	src := &fakeSrc{snap: dateSnap(), local: true}
+	r := runKeys(t, src, "") // 최근 날짜(10-10)
+	if f := lastFrame(r); !strings.Contains(f, "2026-10-10 (토)") || !strings.Contains(f, "20261010090000") || strings.Contains(f, "20261008084159") {
+		t.Fatalf("기본은 최근 날짜만:\n%s", f)
+	}
+	// ↑ 날짜 줄, ← 10-09(없음), ← 10-08
+	r = runKeys(t, src, "\x1b[A\x1b[D\x1b[D")
+	f := lastFrame(r)
+	if !strings.Contains(f, "> ") || !strings.Contains(f, "2026-10-08 (목)") || !strings.Contains(f, "20261008084159") || strings.Contains(f, "20261007083000") {
+		t.Fatalf("전날 이동:\n%s", f)
+	}
+	r = runKeys(t, src, "\x1b[A\x1b[D\x1b[D\x1b[D\x1b[D\x1b[D") // 하한 10-07 에서 멈춤
+	if f := lastFrame(r); !strings.Contains(f, "2026-10-07 (수)") || !strings.Contains(f, "20261007083000") {
+		t.Fatalf("하한:\n%s", f)
+	}
+	r = runKeys(t, src, "\x1b[A\x1b[D\x1b[D\x1b[C") // 다음날 → 10-09 (그룹 없음)
+	if f := lastFrame(r); !strings.Contains(f, "2026-10-09") || !strings.Contains(f, "이 날짜에는 작업이 없습니다") {
+		t.Fatalf("빈 날짜:\n%s", f)
+	}
+	// 날짜 줄에서 Enter 는 무시, ↓ 로 목록에 내려가 Enter 하면 그 날짜 그룹 상세
+	r = runKeys(t, src, "\x1b[A\x1b[D\x1b[D\r\x1b[B\r")
+	if f := lastFrame(r); !strings.Contains(f, "job J1 / infra_inventory-20261008084159_4ea.yml") {
+		t.Fatalf("날짜 선택 후 상세:\n%s", f)
+	}
+}

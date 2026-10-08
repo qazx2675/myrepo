@@ -179,6 +179,7 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 	}()
 
 	st := &tuiState{src: src, env: env, pending: map[string]time.Time{}}
+	st.sel.DateFilter = true
 	keys := make(chan keyEv, 64)
 	done := make(chan struct{})
 	defer close(done)
@@ -239,8 +240,10 @@ func (st *tuiState) refresh() {
 
 // clamp: 새 스냅샷에 맞춰 선택 위치 보정 (그룹이 사라지면 화면 1 로)
 func (st *tuiState) clamp() {
-	n := len(flatGroups(st.snap))
-	st.sel.Row = rMax(rMin(st.sel.Row, n-1), 0)
+	n := len(visibleGroups(st.snap, st.sel))
+	if st.sel.Row >= 0 { // -1 = 날짜 줄
+		st.sel.Row = rMax(rMin(st.sel.Row, n-1), 0)
+	}
 	if st.sel.Detail {
 		_, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 		if g == nil {
@@ -310,22 +313,30 @@ func (st *tuiState) handle(ev keyEv) bool {
 }
 
 func (st *tuiState) handleOverview(ev keyEv) bool {
-	refs := flatGroups(st.snap)
+	refs := visibleGroups(st.snap, st.sel)
 	switch {
 	case ev.k == kUp || (ev.k == kRune && ev.r == 'k'):
-		st.sel.Row = rMax(st.sel.Row-1, 0)
+		if len(st.snap.Jobs) > 0 { // 맨 위에서 한 번 더 ↑ → 날짜 줄
+			st.sel.Row = rMax(st.sel.Row-1, -1)
+		}
 	case ev.k == kDown || (ev.k == kRune && ev.r == 'j'):
 		st.sel.Row = rMax(rMin(st.sel.Row+1, len(refs)-1), 0)
+	case (ev.k == kLeft || ev.k == kRight) && st.sel.Row == -1: // 날짜 줄: ← 전날, → 다음날
+		delta := 1
+		if ev.k == kLeft {
+			delta = -1
+		}
+		st.sel.Date = shiftDate(st.snap, st.sel.Date, delta)
 	case ev.k == kLeft || ev.k == kRight:
 		st.sel.Row = jumpJob(refs, st.sel.Row, ev.k == kRight)
 	case ev.k == kEnter:
-		if st.sel.Row < len(refs) {
+		if st.sel.Row >= 0 && st.sel.Row < len(refs) {
 			j := st.snap.Jobs[refs[st.sel.Row].Job]
 			st.sel.Detail, st.sel.JobID, st.sel.Yml = true, j.ID, j.Groups[refs[st.sel.Row].Grp].Yml
 			st.sel.Host, st.sel.Filter = 0, false
 		}
 	case ev.k == kRune && (ev.r == 'a' || ev.r == 'A'):
-		if st.sel.Row < len(refs) {
+		if st.sel.Row >= 0 && st.sel.Row < len(refs) {
 			j := st.snap.Jobs[refs[st.sel.Row].Job]
 			st.sel.Detail, st.sel.JobID, st.sel.Yml = true, j.ID, allView
 			st.sel.Host, st.sel.Filter = 0, false
