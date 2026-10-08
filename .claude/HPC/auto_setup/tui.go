@@ -261,7 +261,11 @@ func (st *tuiState) draw() {
 	var s string
 	switch {
 	case st.view != nil:
-		s = renderView(st.view, w, h, st.env.Color)
+		if st.view.kind == viewRecheck && st.sel.Detail && h >= 24 {
+			s = renderRecheckSplit(st.snap, st.withErr(), st.view, w, h, st.env.Color)
+		} else {
+			s = renderView(st.view, w, h, st.env.Color)
+		}
 	case st.help:
 		s = renderHelp(w, h, st.env.Color)
 	case st.sel.Detail:
