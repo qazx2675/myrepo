@@ -620,7 +620,7 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 	}
 	return finish(head, body, cursor, height, width, color, []string{
 		msgLine(sel, width, color),
-		segLine(color, width, seg{hint, stGray}),
+		segLine(color, width, seg{hint, stBold}),
 	})
 }
 
@@ -770,7 +770,7 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 	if sel.Yml == allView {
 		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  g 재확인  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀"
 	}
-	foot = append(foot, segLine(color, width, seg{hint, stGray}))
+	foot = append(foot, segLine(color, width, seg{hint, stBold}))
 	if height <= 0 {
 		return strings.Join(append(head, body...), "\n")
 	}
