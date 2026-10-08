@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.4.3] - 2026-10-08
+
+### 변경
+- **wall 알림 끔**: `newNotifier` 기본값을 `nopNotifier`(아무것도 보내지 않음)로 변경. 자동 run·수동 run 완료 시 서버 전체 터미널에 메시지가 뜨지 않는다. 결과는 TUI·`auto_setup code NNNN`·로그(`run 완료: … code NNNN`)로 확인. wall 코드(`notify.go` `wallNotifier`)는 남겨 두었으며 `newNotifier` 한 줄로 되살릴 수 있다
+- 수동 run 에서 체크 결과가 없는 호스트(접속불가·미응답)는 **로그**에 호스트 목록을 남긴다: `[!] 수동 run 접속불가·미응답 N대 (job … 그룹 … code …): 호스트…` (wall 에 표시하던 정보의 대체)
+- 테스트: `route_test.go`·`requests_test.go` 갱신, `run_e2e.sh` d · `run_e2e2.sh` b8·c1·c3·f4 의 wall 확인을 로그 확인으로 변경
+
 ## [0.4.2] - 2026-10-07
 
 ### 신규

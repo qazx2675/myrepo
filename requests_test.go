@@ -105,6 +105,9 @@ func TestManualRunRequest(t *testing.T) {
 	if !strings.Contains(x.walls[2], "\n(0대)\ncode : 0003") || !strings.HasSuffix(x.walls[2], "[!] 접속불가·미응답 1대: h2\n") {
 		t.Fatalf("접속불가 알림 이상: %q", x.walls[2])
 	}
+	if lg, _ := os.ReadFile(logPath()); !strings.Contains(string(lg), "[!] 수동 run 접속불가·미응답 1대 (job "+id+" 그룹 b.yml code 0003): h2") {
+		t.Fatalf("접속불가 로그 없음: %s", lg)
+	}
 	if ents, _ := os.ReadDir(requestsDir()); len(ents) != 2 { // active/, rejected/ 만
 		t.Fatalf("requests/ 에 처리 안 된 파일: %v", ents)
 	}

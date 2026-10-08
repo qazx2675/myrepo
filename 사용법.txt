@@ -46,7 +46,7 @@ auto_setup status
 # 상태 스냅샷(JSON) 출력 (TUI·원격 클라이언트가 쓰는 것과 같은 내용)
 auto_setup snapshot
 
-# 완료 메시지(wall)에 나온 4자리 code 의 결과 코멘트 출력
+# 결과의 4자리 code 로 결과 코멘트 출력 (code 는 로그 "run 완료: … code NNNN" 또는 TUI 의 최근 run 에서 확인; wall 알림은 꺼져 있음)
 auto_setup code 4821
 
 # 무기한 감시 중인 작업 종료 (status 에 나온 jobid)
@@ -66,6 +66,9 @@ auto_setup request manual-run 20261002-153000-user1 gpu.yml
 
 # 요청이 거부됐는지 확인 (마지막 줄 reason= 에 사유: job/그룹 없음, 같은 그룹 중복 등)
 cat /tmp/auto_setup/requests/rejected/*.req
+
+# 수동 run 에서 접속불가·미응답으로 나온 호스트 확인 (wall 대신 로그에 남음)
+grep "접속불가·미응답" /tmp/auto_setup/auto_setup.log | tail
 
 # 로그 보기 (상태 변화·실행·오류만 기록됨, 비밀번호 값은 남지 않음)
 tail -f /tmp/auto_setup/auto_setup.log

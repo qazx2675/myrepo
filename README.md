@@ -210,7 +210,7 @@ os_check -auto <user> <목록> 자동 실행 (동시 1개)
     ↓
 2차(이중) 체크: route=local 의 접속불가·FAIL 호스트만 os6_mgmt 에서 한 번 더 (설정 시)
     ↓
-wall + codes/<code>.txt 생성 (호스트 현황, 4자리 code) / 완료기록·수동 완료는 run 대상에서 제외
+codes/<code>.txt 생성 (wall 알림은 v0.4.3 부터 끔 — 결과는 TUI·`auto_setup code NNNN`·로그로 확인) (호스트 현황, 4자리 code) / 완료기록·수동 완료는 run 대상에서 제외
 ```
 
 ### 명령어
@@ -225,7 +225,7 @@ wall + codes/<code>.txt 생성 (호스트 현황, 4자리 code) / 완료기록·
 | `--restart` \| `restart` | 데몬 재기동 — os8_mgmt 에서만 |
 | `status` | 작업별 진행 상태 (jobid, user, 호스트 상태별 대수, 남은 호스트 가로) |
 | `snapshot` | 상태 스냅샷(JSON) 출력 (TUI·원격 클라이언트가 쓰는 내용) |
-| `code NNNN` | code 에 해당하는 결과 코멘트 출력 (wall 에 나온 4자리) |
+| `code NNNN` | code 에 해당하는 결과 코멘트 출력 (로그 `run 완료: … code NNNN` 또는 TUI 의 최근 run 에 나오는 4자리) |
 | `cancel <jobid>` | 무기한 감시 중인 작업 종료 (status 에서 확인) |
 | `done <host...>` | 호스트를 수동 완료 처리 (출처 manual, 부팅 시각 검증 없음) |
 | `done --job <jobid> [--yml <그룹>]` | job(또는 그 그룹)의 미완료 호스트 전부를 수동 완료 처리 (완료된 호스트는 건드리지 않음, 진행 중 job 만) |
@@ -437,7 +437,7 @@ bash ../awx_script/test/run_tests.sh
 | `check.go` | gossh -pm uptime 준비확인 (local/os6) |
 | `runner.go` | os_check 실행(-auto), os6 gossh 래퍼, code 생성, wall |
 | `ensure.go` | ensure 하위명령: flock + setsid + 데몬 기동 |
-| `log.go` / `notify.go` / `iface.go` | 로그 / wall 알림 / 인터페이스(Pinger·Checker·Runner·Notifier·Clock·LdapBackup·Second) |
+| `log.go` / `notify.go` / `iface.go` | 로그 / 알림(wall 은 기본 꺼짐, 코드는 유지) / 인터페이스(Pinger·Checker·Runner·Notifier·Clock·LdapBackup·Second) |
 | `*_test.go` / `testdata/` | 단위 테스트·TUI 골든 |
 | `test/manual_check.sh` | 대화형 점검 1~17단계 |
 | `test/run_e2e.sh` / `test/run_e2e2.sh` / `test/lib_e2e.sh` | 1차 / 2차 목업 E2E / 공용 함수 |

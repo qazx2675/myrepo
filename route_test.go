@@ -216,3 +216,11 @@ func TestUnreachableLine(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// 기본 알림은 끔 (wall 을 보내지 않음)
+func TestDefaultNotifierIsNop(t *testing.T) {
+	if _, ok := newNotifier().(nopNotifier); !ok {
+		t.Fatalf("기본 Notifier 가 nop 이 아님: %T", newNotifier())
+	}
+	newNotifier().Wall("무시됨") // 패닉·부작용 없음
+}
