@@ -6,6 +6,19 @@
 - 01/02: os6_mgmt 재조사 — 최상단 빈 변수 `os6_host`/`os6_user`/`os6_dir`/`os6_gossh`(01 이 02 로 export, 하나라도 비면 생략). os8_mgmt gossh 가 stderr 로 보고하고 결과가 없는 호스트만 공유 디렉터리(`os6_dir`) 경유 ssh 로 os6_mgmt 의 gossh 에서 다시 조사해 해당 호스트 결과를 교체(01 [12] LDAP/LACP, 02 파티션 확인). os6 에서도 실패하면 `os8/os6 모두 접속 불가` 경고만(진행 계속). 임시 파일은 종료 시 삭제. 테스트 16a~e·17a~c, `test/run_tests.sh` PASS=63
 - 01: 최상단 빈 변수 `auto_setup_gossh_pw` 추가 — 채우면 `auto_setup_host` 로의 gossh 전송에 `-p <비밀번호>` 를 붙임(os8_mgmt 에 키 인증이 안 될 때 "전달 실패" 해결). 비우면 기존과 동일. 테스트 7p, `test/run_tests.sh` PASS=55
 
+## [0.6.0] - 2026-10-08
+
+### 추가
+- 01: **다른 경로에서 실행 가능** — 시작 시 스크립트 자신의 디렉터리로 `cd`(`readlink -f`). 어느 디렉터리에서 실행해도 `awxkit/`·`LOG/`·02 상대 경로가 스크립트 위치 기준으로 동작합니다. 스크립트 디렉터리에서 실행하면 종전과 같습니다
+- 01/02: **`AWX_AUTO` 환경변수 auto 모드**
+  - `AWX_AUTO=1` 일 때만 켜집니다. `AWX_AUTO_NODEINFO`(y|n) → 01 `awx nodeinfo 사용여부`, `AWX_AUTO_OS`(2024·2025·2026·2026-OPC_MDP·2026-ECAD_TCAD·default) → 02 `OS 버전 선택`(모든 yml 에 적용, default 는 02 의 기본값)
+  - 자동 답변: 01 `작업진행여부` → Y, `AWX 인벤토리 소스` → su / 02 `옵션이 맞습니까` → Y. 답변은 프롬프트 줄에 `값 (auto)` 으로 표시
+  - user 메뉴·02 실패 재시도는 사람이 답합니다. `AWX_AUTO_OS` 가 선택지에 없으면 auto 를 끄고 직접 묻습니다(노란 경고)
+  - 환경변수가 없으면 기존과 100% 동일합니다
+  - auto_setup TUI `w` 의 프로파일 실행이 같은 환경변수를 씁니다
+- `setup/`: `vars.manifest`, git-upload-sk 틀로 만든 `setup_guide.sh`(빈 변수 입력 가이드), `update_v0.6.0.sh`(현장 사본 업데이트). 0.6.0 에는 새 변수가 없고, 01/02 의 현장 값·주석은 그대로 둡니다
+- 테스트: `test/run_tests.sh` 에 18a–19c 추가 (auto 모드 환경변수 있음/없음, 다른 디렉터리에서 실행, TUI 형태 실행) — PASS=71
+
 ## [0.5.0] - 2026-10-03
 
 ### 변경

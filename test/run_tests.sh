@@ -96,7 +96,7 @@ setup_case() {
 	CALLS=$STUBLOG/calls.log; OUT=$S/out.txt
 	: > "$CALLS"
 	export STUBLOG SVR_DIR REMOTE_DIR
-	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL
+	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS
 	export GOSSH_SCENARIO=same
 	export AUTO_SETUP_DIR="$S/as"   # 01 [14-1] auto_setup 전달 위치(스크래치)
 	export PATH="$S/bin:$ORIG_PATH"
@@ -1283,6 +1283,115 @@ os6_cases() {
 	case_end
 }
 
+# ===================== 케이스 18/19: auto 모드(AWX_AUTO) · 다른 경로 실행 =====================
+auto_cases() {
+	local E=$'\033'
+	case_begin "18a" "AWX_AUTO=1 (nodeinfo n, OS 2025): 질문 5개가 '(auto)' 로 자동 답변되고 입력 없이 끝까지 진행"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025
+	run01 ''
+	t_rc "01 종료코드" "$RC" 0
+	t_has "nodeinfo 사용여부 자동" "$OUT" '^ awx nodeinfo 사용여부 Y\|N : n \(auto\)$'
+	t_has "작업진행여부 자동" "$OUT" '^작업진행여부 \(Y\|N\) : Y \(auto\)$'
+	t_has "인벤토리 소스 자동 su" "$OUT" '^AWX 인벤토리 소스 : su exit : 종료 ls : yaml 파일출력 : su \(auto\)$'
+	t_has "OS 버전 선택 자동" "$OUT" '^OS 버전 선택 : 2025 \(auto\)$'
+	t_has "옵션 확인 자동" "$OUT" '^옵션이 맞습니까 \(Y\|N\) : Y \(auto\)$'
+	t_eq "nodeinfo 미호출(n)" "$(grep -c '^nodeinfo ' "$CALLS")" 0
+	t_has "pxe -os 2025" "$CALLS" '^pxe .* -os 2025 '
+	t_no "pxe 에 다른 OS 없음" "$CALLS" '^pxe .* -os (2024|2026)'
+	t_no "경고 없음" "$OUT" 'AWX_AUTO'
+	t_notmp
+	case_end
+
+	case_begin "18b" "AWX_AUTO=1 (nodeinfo y, OS default): nodeinfo 호출 + default_os(2026-ECAD_TCAD) 적용"
+	setup_case
+	seed_nodeinfo D6; export NODEINFO_MODE=msg
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=y AWX_AUTO_OS=default
+	run01 ''
+	t_rc "01 종료코드" "$RC" 0
+	t_has "nodeinfo 사용여부 자동 y" "$OUT" '^ awx nodeinfo 사용여부 Y\|N : y \(auto\)$'
+	t_has "nodeinfo -hosts 호출" "$CALLS" "^nodeinfo -user $TU -hosts $W/$TU\.txt$"
+	t_has "OS 버전 선택 자동(default → 값)" "$OUT" '^OS 버전 선택 : 2026-ECAD_TCAD \(auto\)$'
+	t_has "pxe -os 2026-ECAD_TCAD" "$CALLS" '^pxe .* -os 2026-ECAD_TCAD '
+	case_end
+
+	case_begin "18c" "AWX_AUTO=1 + AWX_AUTO_OS 가 선택지에 없음: 노란 경고 후 OS 버전 선택·옵션 확인은 직접 입력"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2099 AWX_COLOR=1
+	run01 '1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "노란 경고" "$OUT" "^${E}\[33m\[!\] AWX_AUTO_OS 값\(2099\)이 선택지\(2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD default\)에 없어 auto 를 끄고 직접 입력합니다${E}\[0m$"
+	t_has "01 의 질문은 그대로 auto" "$OUT" '작업진행여부 \(Y\|N\) : .*Y \(auto\)'
+	t_no "OS 버전 선택 auto 아님" "$OUT" 'OS 버전 선택.*\(auto\)'
+	t_no "옵션 확인 auto 아님" "$OUT" '옵션이 맞습니까.*\(auto\)'
+	t_has "직접 입력한 기본값 1 → default_os" "$CALLS" '^pxe .* -os 2026-ECAD_TCAD '
+	case_end
+
+	case_begin "18d" "AWX_AUTO=1 + AWX_AUTO_NODEINFO 가 y|n 이 아님: 경고 후 nodeinfo 질문만 직접 입력"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=x AWX_AUTO_OS=2024
+	run01 'N\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "경고" "$OUT" '^\[!\] AWX_AUTO_NODEINFO 가 y\|n 이 아니어서 직접 입력합니다$'
+	t_no "nodeinfo 질문 auto 아님" "$OUT" 'nodeinfo 사용여부.*\(auto\)'
+	t_has "나머지는 auto (OS 2024)" "$OUT" '^OS 버전 선택 : 2024 \(auto\)$'
+	case_end
+
+	case_begin "18e" "AWX_AUTO 없이 AWX_AUTO_* 만 있으면 기존과 동일(auto 에코 없음, 입력 그대로 사용)"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO_NODEINFO=y AWX_AUTO_OS=2025
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_no "(auto) 에코 없음" "$OUT" '\(auto\)'
+	t_eq "nodeinfo 미호출(입력 N)" "$(grep -c '^nodeinfo ' "$CALLS")" 0
+	t_has "입력 1 → default_os (AWX_AUTO_OS=2025 무시)" "$CALLS" '^pxe .* -os 2026-ECAD_TCAD '
+	case_end
+
+	case_begin "19a" "다른 디렉터리에서 실행(bash <절대경로>/01...): 스크립트 디렉터리 기준으로 동작"
+	setup_case
+	seed_raw D6
+	RUN01_COUNT=$((RUN01_COUNT+1))
+	( cd "$S" && printf '%b' 'N\nY\nsu\n1\nY\n' | TMPDIR="$S/tmp" timeout 180 bash "$W/$F01" 2>&1 | cat > "$S/out.txt"; echo "${PIPESTATUS[1]}" > "$S/rc" )
+	RC=$(cat "$S/rc")
+	t_rc "01 종료코드" "$RC" 0
+	t_has "02 호출까지 완료" "$CALLS" '^pxe '
+	t_has "LOG 는 스크립트 디렉터리에" "$W/LOG/$TU.log" '시작 user='
+	t_eq "실행 디렉터리($S)에 LOG/ 없음" "$([[ -e $S/LOG ]] && echo yes || echo no)" no
+	t_eq "실행 디렉터리에 dhcp_pool/ 없음" "$([[ -e $S/dhcp_pool ]] && echo yes || echo no)" no
+	t_has "dhcp_pool 은 스크립트 디렉터리에" "$W/dhcp_pool/dhcp_pool_delete_info.txt" 'host01'
+	t_notmp
+	case_end
+
+	case_begin "19b" "다른 디렉터리 + 상대경로 + 심볼릭 링크로 실행해도 동일"
+	setup_case
+	seed_raw D6
+	ln -s "$W/$F01" "$S/link01.sh"
+	RUN01_COUNT=$((RUN01_COUNT+1))
+	( cd "$S/tmp" && printf '%b' 'N\nY\nsu\n1\nY\n' | TMPDIR="$S/tmp" timeout 180 bash ../link01.sh 2>&1 | cat > "$S/out.txt"; echo "${PIPESTATUS[1]}" > "$S/rc" )
+	RC=$(cat "$S/rc")
+	t_rc "01 종료코드" "$RC" 0
+	t_has "02 호출까지 완료" "$CALLS" '^pxe '
+	t_has "LOG 는 원본 스크립트 디렉터리에" "$W/LOG/$TU.log" '시작 user='
+	case_end
+
+	case_begin "19c" "다른 디렉터리 + AWX_AUTO=1 (TUI 에서의 실행 형태): 입력 없이 끝까지"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2026
+	RUN01_COUNT=$((RUN01_COUNT+1))
+	( cd "$S" && printf '' | TMPDIR="$S/tmp" timeout 180 bash "$W/$F01" 2>&1 | cat > "$S/out.txt"; echo "${PIPESTATUS[1]}" > "$S/rc" )
+	RC=$(cat "$S/rc")
+	t_rc "01 종료코드" "$RC" 0
+	t_has "pxe -os 2026" "$CALLS" '^pxe .* -os 2026 '
+	t_has "완료" "$OUT" '완료'
+	case_end
+	unset AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_COLOR
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -1301,6 +1410,7 @@ color_cases
 feature_cases
 ext_cases
 os6_cases
+auto_cases
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="
