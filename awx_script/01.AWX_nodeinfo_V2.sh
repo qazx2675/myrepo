@@ -66,6 +66,13 @@ add_tmp "$hostfile" "$splitdir"
 # ==== [1] user ====
 user(){
 user_route=""
+if [[ -n $AWX_USER && $AWX_USER =~ ^[A-Za-z0-9._-]+$ ]]; then
+	# auto_setup 에서 넘긴 user (메뉴 생략)
+	user=$AWX_USER
+	echo "user : ${user} (auto_setup)"
+	return 0
+fi
+[[ -n $AWX_USER ]] && warn "[!] AWX_USER 가 올바르지 않아 메뉴로 진행합니다"
 bash $user_route/info_mn.sh
 read -p "Input Number: " user_choice
 user=`bash $user_route/info.sh $user_choice`
@@ -470,10 +477,16 @@ fi   # auto_setup_host
 verify_hosts() {
 	local pasted="" line pf missing extra n
 	echo "${BOLD}등록 후 확인${RST} : 작업 대상 서버 목록을 붙여넣으세요 (공백/쉼표/| 구분 가능, 입력을 마치려면 빈 줄 / 건너뛰려면 바로 빈 줄)"
+	if [[ -n $AWX_VERIFY_FILE && -f $AWX_VERIFY_FILE && -r $AWX_VERIFY_FILE && -s $AWX_VERIFY_FILE ]]; then
+		# auto_setup 에서 넘긴 대상 서버 목록 (stdin 입력 생략)
+		pasted=$(cat "$AWX_VERIFY_FILE")$'\n'
+		echo "붙여넣을 목록: auto_setup 에서 입력한 $(printf '%s' "$pasted" | tr ',|' '  ' | tr -s '[:space:]' '\n' | grep -c .)대"
+	else
 	while IFS= read -r line; do
 		[[ -z ${line//[[:space:]]/} ]] && break
 		pasted+="$line"$'\n'
 	done
+	fi
 	if [[ -z $pasted ]]; then log "대상 확인 생략"; return 0; fi
 	pf=$(mktemp); add_tmp "$pf"
 	printf '%s' "$pasted" | tr ',|' '  ' | tr -s '[:space:]' '\n' | grep . | LC_ALL=C sort -u > "$pf"

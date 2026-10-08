@@ -297,3 +297,21 @@ func TestRecheckClosedJobAndMissingJob(t *testing.T) {
 		t.Fatalf("없는 job 기록: %+v", nb)
 	}
 }
+
+// 키 안내 줄: 색이 꺼지면 원문 그대로, 켜지면 항목별 색 (c 빨강, t 초록, g 노랑, x 자홍, w 파랑, 이동 청록)
+func TestHintSegsColors(t *testing.T) {
+	h := " ↑↓ 이동  ← 목록  c 체크+수정  t 체크만  g 재확인  x 단독 체크  w AWX  q 복귀"
+	if got := segLine(false, 200, hintSegs(h)...); got != h {
+		t.Fatalf("색 없음이면 원문 그대로여야 함:\n%q\n%q", got, h)
+	}
+	got := segLine(true, 200, hintSegs(h)...)
+	for _, want := range []string{"\x1b[1;36m↑↓ 이동", "\x1b[1;31mc 체크+수정", "\x1b[1;32mt 체크만", "\x1b[1;33mg 재확인", "\x1b[1;35mx 단독 체크", "\x1b[1;34mw AWX", "\x1b[1mq 복귀"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("색 항목 %q 없음: %q", want, got)
+		}
+	}
+	// 폭이 모자라 잘려도 … 가 반복되지 않는다
+	if s := segLine(false, 20, hintSegs(h)...); strings.Count(s, "…") != 1 {
+		t.Errorf("말줄임표 중복: %q", s)
+	}
+}

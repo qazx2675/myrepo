@@ -162,9 +162,13 @@ func segLine(color bool, width int, segs ...seg) string {
 		if left <= 0 {
 			break
 		}
-		t := truncW(cleanText(s.t), left)
-		left -= strWidth(t)
+		full := cleanText(s.t)
+		t := truncW(full, left)
 		sb.WriteString(paint(color, s.st, t))
+		if t != full { // 잘렸으면 뒤 세그먼트는 버린다 (… 가 반복되지 않게)
+			break
+		}
+		left -= strWidth(t)
 	}
 	return sb.String()
 }
@@ -620,7 +624,7 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 	}
 	return finish(head, body, cursor, height, width, color, []string{
 		msgLine(sel, width, color),
-		segLine(color, width, seg{hint, stBold}),
+		segLine(color, width, hintSegs(hint)...),
 	})
 }
 
@@ -770,7 +774,7 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 	if sel.Yml == allView {
 		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  g 재확인  a 그룹별 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 복귀"
 	}
-	foot = append(foot, segLine(color, width, seg{hint, stBold}))
+	foot = append(foot, segLine(color, width, hintSegs(hint)...))
 	if height <= 0 {
 		return strings.Join(append(head, body...), "\n")
 	}
@@ -860,7 +864,7 @@ func renderHelp(width, height int, color bool) string {
 		"   r           바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동: 로컬 2초, 원격 5초)",
 		"               정체 호스트는 ping 상태와 상관없이 즉시 다시 확인(수동 재시도)",
 		"   x           체크스크립트 단독 실행 (화면 1·2 어디서나) - user·호스트 입력 → t/c 선택 → 결과 보기, 기록 안 남김 (취소: Ctrl+X)",
-		"   w           AWX 실행 (화면 1·2 어디서나) - awx_dir 의 01.AWX_nodeinfo_V2.sh 를 이 터미널에서 실행, awx_profile_N 이 있으면 auto 여부·번호 선택 (취소: Ctrl+X 즉시)",
+		"   w           AWX 실행 (화면 1·2 어디서나) - (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",
 		"   q / Esc     종료",
 		" 화면 2 (호스트표)",
 		"   ↑ ↓ (k j)   호스트 행 이동",
@@ -939,4 +943,35 @@ func mergedGroup(j *SnapJob) *SnapGroup {
 		}
 	}
 	return m
+}
+
+// ---- 키 안내 줄 색 ----
+
+// hintStyles: 키 안내 항목(첫 토큰 = 키)별 색. 이동 = 청록, c(수정 포함) = 빨강, t = 초록, g = 노랑, x = 자홍, w = 파랑, 나머지 = 굵게.
+var hintStyles = map[string]string{
+	"↑↓": "1;36", "←→": "1;36", "←": "1;36", "Enter": "1;36",
+	"c": stRed, "t": "1;32", "g": "1;33", "x": "1;35", "w": "1;34",
+}
+
+// hintSegs: " ↑↓ 이동  ← 목록  c 체크+수정 …" 를 항목(두 칸 간격)별로 나눠 색을 입힌다 (색이 꺼지면 글자만 이어 붙임)
+func hintSegs(hint string) []seg {
+	var out []seg
+	for i, item := range strings.Split(strings.TrimSpace(hint), "  ") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		sep := "  "
+		if i == 0 {
+			sep = " "
+		}
+		style := stBold
+		if f := strings.Fields(item); len(f) > 0 {
+			if s, ok := hintStyles[f[0]]; ok {
+				style = s
+			}
+		}
+		out = append(out, seg{sep, ""}, seg{item, style})
+	}
+	return out
 }

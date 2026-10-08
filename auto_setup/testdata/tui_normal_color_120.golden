@@ -6,7 +6,7 @@
 \e[7m> web.yml                                   ib/rhel8/pxe/y                       6대 #######++++++++++...  25m00s   33% \e[0m
   gpu.yml                                   \e[90meth/rhel7/pxe/n                   \e[0m   3대 \e[36m++++++++++++++++++++\e[0m   2m00s \e[36m   0%\e[0m
 
-\e[1m ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 종료\e[0m
+ \e[1;36m↑↓ 이동\e[0m  \e[1;36m←→ 작업 전환\e[0m  \e[1;36mEnter 상세\e[0m  \e[1ma 전체 보기\e[0m  \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m  \e[1mr 새로고침\e[0m  \e[1m? 도움말\e[0m  \e[1mq 종료\e[0m
 == detail ==
 \e[1m job J1 / web.yml  (ib/rhel8/pxe/y)  완료 2/6\e[0m
  \e[90m대기 1\e[0m  \e[36m배포중 1\e[0m  \e[36m설치중 1\e[0m  \e[36m부팅확인 1\e[0m  \e[32m완료 2\e[0m  
@@ -22,7 +22,7 @@
 
 \e[1;32m [c] 설정체크 + \e[0m\e[1;31m설정수정\e[0m\e[1;32m   [t] 설정체크만(수정 안 함)   [g] 재확인   [v] 최근 결과 - 완료 여부와 상관없이 그룹 전체 시도\e[0m
 
-\e[1m ↑↓ 이동  ← 목록  f 정체·실패만  c 체크+수정  t 체크만  g 재확인  v 결과  a 전체 그룹  x 단독 체크  w AWX  r 새로고침  …\e[0m
+ \e[1;36m↑↓ 이동\e[0m  \e[1;36m← 목록\e[0m  \e[1mf 정체·실패만\e[0m  \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m  \e[1ma 전체 그룹\e[0m  \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m  \e[1mr 새로고침\e[0m  \e[1m…\e[0m
 == detail filter ==
 \e[1m job J1 / web.yml  (ib/rhel8/pxe/y)  완료 2/6\e[0m
  \e[90m대기 1\e[0m  \e[36m배포중 1\e[0m  \e[36m설치중 1\e[0m  \e[36m부팅확인 1\e[0m  \e[32m완료 2\e[0m  \e[33m[필터: 정체·실패만]\e[0m
@@ -32,4 +32,4 @@
 
 \e[1;32m [c] 설정체크 + \e[0m\e[1;31m설정수정\e[0m\e[1;32m   [t] 설정체크만(수정 안 함)   [g] 재확인   [v] 최근 결과 - 완료 여부와 상관없이 그룹 전체 시도\e[0m
 
-\e[1m ↑↓ 이동  ← 목록  f 정체·실패만  c 체크+수정  t 체크만  g 재확인  v 결과  a 전체 그룹  x 단독 체크  w AWX  r 새로고침  …\e[0m
+ \e[1;36m↑↓ 이동\e[0m  \e[1;36m← 목록\e[0m  \e[1mf 정체·실패만\e[0m  \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m  \e[1ma 전체 그룹\e[0m  \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m  \e[1mr 새로고침\e[0m  \e[1m…\e[0m

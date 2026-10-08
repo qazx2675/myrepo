@@ -86,11 +86,14 @@ bash /path/to/awx_script/01.AWX_nodeinfo_V2.sh
 AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
 # AWX_AUTO_OS 는 2024 2025 2026 2026-OPC_MDP 2026-ECAD_TCAD default 중 하나 (그 밖의 값이면 auto 를 끄고 직접 묻는다)
 # 자동 답변: 01 nodeinfo 사용여부 / 작업진행 Y / 인벤토리 소스 su, 02 OS 버전 / 옵션 확인 Y. user 메뉴는 직접 답한다
+# (0.6.1~) AWX_USER=<user> : user 메뉴 생략 (영문/숫자/._- 만, 틀리면 경고 후 메뉴)
+# (0.6.1~) AWX_VERIFY_FILE=<파일> : 등록 후 확인의 대상 서버 목록을 stdin 대신 파일에서 읽음 (없거나 비면 stdin)
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 AWX_USER=hong AWX_VERIFY_FILE=/tmp/targets.txt bash 01.AWX_nodeinfo_V2.sh < /dev/null
 
 # 빈 변수 입력 가이드 (setup/vars.manifest 기준, 생성물이라 직접 고치지 말 것)
 bash setup/setup_guide.sh
 
-# 현장 사본 업데이트: 미리보기 → 적용 → 되돌리기 (0.6.0 은 신규 변수 없음, 현장 값·주석 보존)
-bash setup/update_v0.6.0.sh --dry
-bash setup/update_v0.6.0.sh
-bash setup/update_v0.6.0.sh --undo
+# 현장 사본 업데이트: 미리보기 → 적용 → 되돌리기 (0.6.1 은 0.6.0 변경 포함 누적, 신규 변수 없음, 현장 값·주석 보존)
+bash setup/update_v0.6.1.sh --dry
+bash setup/update_v0.6.1.sh
+bash setup/update_v0.6.1.sh --undo

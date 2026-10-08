@@ -74,7 +74,7 @@ func (st *tuiState) startAwx() {
 	}
 	valid, problems := parseAwxProfiles()
 	if len(valid) == 0 {
-		st.runAwx(nil)
+		st.oo = st.newUserStep(true, nil)
 		return
 	}
 	st.awx = &awxState{step: awxAsk, profiles: valid, problems: problems}
@@ -92,7 +92,7 @@ func (st *tuiState) handleAwx(ev keyEv) {
 			a.step = awxPick
 		case ev.k == kRune && (ev.r == 'n' || ev.r == 'N'):
 			st.awx = nil
-			st.runAwx(nil)
+			st.oo = st.newUserStep(true, nil)
 		}
 	case awxPick:
 		switch {
@@ -103,7 +103,7 @@ func (st *tuiState) handleAwx(ev keyEv) {
 				if a.profiles[i].No == int(ev.r-'0') {
 					p := a.profiles[i]
 					st.awx = nil
-					st.runAwx(&p)
+					st.oo = st.newUserStep(true, &p)
 					return
 				}
 			}
@@ -112,16 +112,22 @@ func (st *tuiState) handleAwx(ev keyEv) {
 }
 
 // awxEnv: 기본 환경 + (auto 프로파일이면) AWX_AUTO 변수
-func awxEnv(p *AwxProfile) []string {
+func awxEnv(p *AwxProfile, user, verify string) []string {
 	env := os.Environ()
 	if p != nil {
 		env = append(env, "AWX_AUTO=1", "AWX_AUTO_NODEINFO="+p.Nodeinfo, "AWX_AUTO_OS="+p.OS)
+	}
+	if user != "" {
+		env = append(env, "AWX_USER="+user) // 01 이 user 메뉴를 건너뜀
+	}
+	if verify != "" {
+		env = append(env, "AWX_VERIFY_FILE="+verify) // 01 의 "등록 후 확인" 에 자동 입력
 	}
 	return env
 }
 
 // runAwx: TUI 를 떠나 01 을 실행하고 돌아온다 (패키지 주석 참고)
-func (st *tuiState) runAwx(p *AwxProfile) {
+func (st *tuiState) runAwx(p *AwxProfile, user, verify string) {
 	out := st.env.Out
 	st.inMu.Lock() // 키 읽기 goroutine 정지 (자식이 끝날 때까지)
 	io.WriteString(out, leaveScreen)
@@ -133,7 +139,7 @@ func (st *tuiState) runAwx(p *AwxProfile) {
 		}
 	}
 	fmt.Fprint(out, awxStartLine+"\n")
-	rc, err := awxExec(awx_dir, awxEnv(p))
+	rc, err := awxExec(awx_dir, awxEnv(p, user, verify))
 	endPrep()
 	// 자식이 받은 ^X 의 SIGINT 가 Notify 채널에 남아 있으면 TUI 가 종료되므로 비운다
 	if st.env.Signals != nil {
@@ -199,7 +205,7 @@ func renderAwx(a *awxState, width, height int, color bool) string {
 	for _, s := range body {
 		out = append(out, segLine(color, width, s))
 	}
-	foot := []string{sepLine(width), segLine(color, width, seg{hint, stBold})}
+	foot := []string{sepLine(width), segLine(color, width, hintSegs(hint)...)}
 	if height > 0 {
 		for len(out) < height-len(foot) {
 			out = append(out, "")
