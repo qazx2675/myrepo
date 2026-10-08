@@ -1,0 +1,108 @@
+# CHANGELOG
+
+## [Unreleased]
+
+### 추가
+- 01/02: os6_mgmt 재조사 — 최상단 빈 변수 `os6_host`/`os6_user`/`os6_dir`/`os6_gossh`(01 이 02 로 export, 하나라도 비면 생략). os8_mgmt gossh 가 stderr 로 보고하고 결과가 없는 호스트만 공유 디렉터리(`os6_dir`) 경유 ssh 로 os6_mgmt 의 gossh 에서 다시 조사해 해당 호스트 결과를 교체(01 [12] LDAP/LACP, 02 파티션 확인). os6 에서도 실패하면 `os8/os6 모두 접속 불가` 경고만(진행 계속). 임시 파일은 종료 시 삭제. 테스트 16a~e·17a~c, `test/run_tests.sh` PASS=63
+- 01: 최상단 빈 변수 `auto_setup_gossh_pw` 추가 — 채우면 `auto_setup_host` 로의 gossh 전송에 `-p <비밀번호>` 를 붙임(os8_mgmt 에 키 인증이 안 될 때 "전달 실패" 해결). 비우면 기존과 동일. 테스트 7p, `test/run_tests.sh` PASS=55
+
+## [0.6.0] - 2026-10-08
+
+### 추가
+- 01: **다른 경로에서 실행 가능** — 시작 시 스크립트 자신의 디렉터리로 `cd`(`readlink -f`). 어느 디렉터리에서 실행해도 `awxkit/`·`LOG/`·02 상대 경로가 스크립트 위치 기준으로 동작합니다. 스크립트 디렉터리에서 실행하면 종전과 같습니다
+- 01/02: **`AWX_AUTO` 환경변수 auto 모드**
+  - `AWX_AUTO=1` 일 때만 켜집니다. `AWX_AUTO_NODEINFO`(y|n) → 01 `awx nodeinfo 사용여부`, `AWX_AUTO_OS`(2024·2025·2026·2026-OPC_MDP·2026-ECAD_TCAD·default) → 02 `OS 버전 선택`(모든 yml 에 적용, default 는 02 의 기본값)
+  - 자동 답변: 01 `작업진행여부` → Y, `AWX 인벤토리 소스` → su / 02 `옵션이 맞습니까` → Y. 답변은 프롬프트 줄에 `값 (auto)` 으로 표시
+  - user 메뉴·02 실패 재시도는 사람이 답합니다. `AWX_AUTO_OS` 가 선택지에 없으면 auto 를 끄고 직접 묻습니다(노란 경고)
+  - 환경변수가 없으면 기존과 100% 동일합니다
+  - auto_setup TUI `w` 의 프로파일 실행이 같은 환경변수를 씁니다
+- `setup/`: `vars.manifest`, git-upload-sk 틀로 만든 `setup_guide.sh`(빈 변수 입력 가이드), `update_v0.6.0.sh`(현장 사본 업데이트). 0.6.0 에는 새 변수가 없고, 01/02 의 현장 값·주석은 그대로 둡니다
+- 테스트: `test/run_tests.sh` 에 18a–19c 추가 (auto 모드 환경변수 있음/없음, 다른 디렉터리에서 실행, TUI 형태 실행) — PASS=71
+
+## [0.5.0] - 2026-10-03
+
+### 변경
+- 01: [14-1] `.job` 에 그룹 줄 추가(`as_group_lines`) — 그룹 yml 이 2개 이상일 때 `yml=<파일명> infra= os= boot= splunk= hosts=<h1,h2,…>` 그룹별 한 줄 + `all=<전체 yml>` (기존 줄·순서 불변, 추가분만)
+- 01: 최상단 빈 변수 `auto_setup_host` 추가 — 비어 있으면 기존과 100% 동일(로컬 queue), 채워진 서버(os6_mgmt 등)에서는 로컬 queue 를 만들지 않고 gossh 로 os8_mgmt 의 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue/` 에 원자 전송(원격에서 tmp 로 쓰고 mv), 실패해도 경고 1줄만
+- 01: os8 gossh 전송 시 base64 를 두 글자마다 `.` 로 나눠 보내고 원격에서 `tr -d .` 로 복원 — base64 가 우연히 gossh 위험어를 만들어 실행 거부되는 것을 회피
+- test: 7n(`auto_setup_host` 채움 → 스텁 gossh 로 원격 queue 전송, 로컬 queue 없음, 내용 동일)·7o(전송 실패 → 경고 1줄, 01 정상 종료) 등 추가 (awx 테스트 54건)
+
+## [0.4.0] - 2026-10-02
+
+### 수정
+- 02: pxe `-os` 에 2024/2025 같은 숫자 값이 awxkit 에서 선택지 번호로 해석되어 범위 오류가 나던 문제 수정(conf `s4_osver_choices` 순번으로 변환)
+
+### 변경
+- 01: LDAP 점검을 `ldap_check_script` 대신 `/etc/openldap/ldap.conf` 의 URI grep 으로 변경(변수 제거)
+- 01: `day_print` 추가 — user 가 포함되면 작업 대상을 `날짜 tmp tmp infra hostname ...` 로 출력
+- 02: 마지막에 파티션 표준 확인 추가(물리 파티션, sda/nvme0n1, /boot 또는 /boot/efi 500~512M, / 30G, /var 20G, swap, /tmp)
+- 01: [14-1] auto_setup 전달 — 02 성공 직후 `/tmp/auto_setup/queue/<epoch>_<user>_<pid>.job` 파일 생성 (user=, time=, 호스트줄들), 프롬프트·옵션 없음, 02 실패 시 전달 없음, 디렉터리 생성 실패는 경고만 출력
+- test: 14c·14d·7c·7f·7m 추가, auto_setup queue 생성 확인 (랩 52 PASS)
+
+## [0.3.0] - 2026-10-02
+
+### 변경
+- 02: `dhcp_infra_alias` / `pxe_infra_alias` 추가 — dhcp·pxe 호출 시 infra 이름을 각각 치환(`표시infra:넘길값`), 치환 내역 출력
+- test: 7k 추가 (랩 44 PASS)
+
+## [0.2.1] - 2026-10-02
+
+### 변경
+- 01: `user()` 를 현장 코드(`info_mn.sh` 선택 메뉴 → `info.sh` 로 user 결정, `user_route` 는 빈 값)로 교체
+
+## [0.2.0] - 2026-10-02
+
+### 변경
+- 01: `infra_alias` 추가(nodeinfo 의 미등록 infra 이름 치환, `adjfg:infra1`), 최상단 변수 7개
+- 02: 그룹 yml 2개 이상이고 모두 성공하면 마지막에 전체 yml 로 invsync(AWX 소스 1단계)만 실행, 1개면 생략. 01 이 `--all=<yml>` 전달
+- 02: 최종 수량 출력(On-premise=HPC, Cloud=SDS, `구분 infra OS버전 : N대` + 합계)
+- 01: 마지막에 등록 후 확인(붙여넣은 서버가 모두 등록 대상에 있는지) 추가
+- test: 7j·12a·12b·13a-c 추가, 전체 invsync 반영
+
+## [0.1.3] - 2026-10-02
+
+### 변경
+- 02: 옵션 확인표 출력 전에 OS 버전 선택 추가(1=기본 2026-ECAD_TCAD, 2=yml 별로 2024/2025/2026/2026-OPC_MDP/2026-ECAD_TCAD 중 선택). 01 이 넘긴 os 값은 사용하지 않음
+- test: 7i 추가, 02 입력에 OS 모드 응답 반영
+
+## [0.1.2] - 2026-10-02
+
+### 변경
+- 01·02: 가독성용 색상 출력 추가(터미널일 때만, NO_COLOR 로 끔, 로그에는 색 코드 제외). LDAP 동일 요약은 LDAP 값만 초록, 메뉴 su=초록 / exit=빨강 / ls=청록
+- test: 11a·11b(색상 켜짐/꺼짐, 로그에 색 코드 없음) 추가
+
+## [0.1.1] - 2026-10-02
+
+### 변경
+- 02: infra 값을 소문자로 변환해 전달(conf `*_choices` 와 대소문자 불일치 방지)
+- 02: dhcp 와 pxe 를 동시 실행하고 둘 다 끝나야 다음 yml 진행(출력은 완료 후 순서대로 표시, 한쪽 실패 시에도 다른 쪽은 완료)
+- test: 7h(동시 실행 이벤트 순서) 추가, 호출 순서·infra 소문자 기대값 갱신
+
+## [0.1.0] - 2026-10-02
+
+### 신규
+- `01.AWX_nodeinfo_V2.sh` — HPC 서버 노드정보 수집·가공·분할·yml 생성·git 업로드 자동화
+- `02.source_dhcp_pxe.sh` — yml 파일별로 인벤토리/DHCP/PXE 자동 반복 등록
+- `test/run_tests.sh` — 계획서 §9 검증 기준을 따르는 실제 실행 기반 하네스
+- 문서: `README.md`, `CHANGELOG.md`, `ARCHITECTURE.md`, `WORKFLOW.md`, `PR_CHECKLIST.md`
+- CI: `.github/workflows/ci.yml` (폴더 안), `.github/workflows/awx-script.yml` (저장소 루트)
+
+### 보정사항 (계획서 §8 결정사항 반영)
+- `download_txt()`: nodeinfo 실패 시 입력 파일(${user}.txt)을 덮어쓰지 않고 종료
+- `parse_msg()` 함수: 빈 파일 검증 추가
+- 입력 EOF 처리: 01 메뉴 / 02 옵션 확인표(Y|N) 에서 stdin 이 끝나면 `[X] 입력이 끝났습니다` 후 exit 1 (무한 루프 방지)
+- `ai_server_list` 는 선택(빈 값이면 AI 안내만 건너뜀). 나머지 5개 변수는 작업진행 Y 직후 원격 삭제 전에 선검사
+- `02 인자 형식 검증`: `<yml>=<infra>,<os>,<boot>,<splunk>` 형식 확인, 잘못된 형식 시 `[X]` + exit 1
+- `inventory_delete 가드`: 작업진행(Y) 전에는 미호출, Y 직후 빈 변수 사전 검사 (`require_var` + `exit 1`)
+- `splitdir/hostfile` 임시 파일: `mktemp`/`mktemp -d` + `trap cleanup EXIT` 로 정리
+- `yml 수집`: `svr_dir` 전후 목록 비교(`comm -13`) 로 정확히 1개 신규 파일 검증
+- 로컬 분할 파일: `mktemp -d` 안에서만 생성, scp 후 자동 삭제 (로컬 잔여 없음)
+- `user()` 함수: 빈 본문 유지 (`:` 또는 주석만), 사용자가 현장 코드 직접 삽입
+- Shellcheck SC2006/SC2086/SC2116/SC2154/SC2164 git 블록 원문 보존 부분에만 disable
+- UTF-8/LF 파일 인코딩 통일
+
+### 주의사항
+- 테스트 값은 스크립트 본체에 들어 있지 않으며, `test/` 하네스가 스크래치 복사본에만 sed 로 주입함
+- 설정 변경 스크립트이므로 실행 후 랜덤한 서버 몇 대를 확인해 실제로 변경되었는지 검증 필수
+- `inventory_delete` 는 원격 삭제 기능이므로 '작업진행 Y' 이후에만 실행되며, 실행 전 최종 확인 권장
+- 계획서 §10 알려진 한계(custom_inventory.sh 덮어쓰기, infra/os 문자열 일치 필요, gossh 색상 꺼짐, sed 7T 부작용) 인식 필요

@@ -1,0 +1,4 @@
+/auto_setup
+/conf/auto_setup.conf
+/conf/auto_setup.conf.bak.*
+/conf/.update_journal

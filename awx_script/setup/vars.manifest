@@ -1,0 +1,32 @@
+# awx_script vars.manifest — 01.AWX_nodeinfo_V2.sh 최상단 빈 변수 14개 + user() 안의 user_route + 02.source_dhcp_pxe.sh 의 빈 변수 2개 (git-upload-sk 가이드·업데이트 공용)
+#
+# 형식: name|target|kind|role|group|required|desc|example|check|since|renamed_from  (| 구분 11필드)
+#   - target 은 프로젝트 루트(setup/ 의 상위 = awx_script) 기준 상대경로. 값은 소스의 name="..." 줄에 들어간다.
+#   - 설명 안 줄바꿈은 \n, 값에 세로선(파이프) 문자를 쓸 수 없다 → 세로선으로 구분하는 변수는 설명에 말로 풀어 쓴다.
+#   - 역할: os8 = os8_mgmt (auto_setup 데몬이 도는 서버, 접속 불가 호스트를 os6_mgmt 에서 재조사하는 쪽),
+#           os6 = os6_mgmt (auto_setup 데몬 서버로 gossh 전달이 필요한 쪽). common 은 어느 역할에서나 질문.
+#   - 다른 서버 위 경로·원격 호스트는 이 서버에서 확인할 수 없어 check=none/host. awx_script 는 setup.sh 가 없으므로 #@meta setup 을 두지 않는다.
+#   - 이 업데이트(0.6.0)에서는 새 변수가 없다. 이미 있던 변수(since < 0.6.0)는 업데이트가 묻지 않고 현장 값을 그대로 둔다.
+#
+#@meta project=awx_script
+#@meta version=0.6.0
+#
+#
+# ---- 01.AWX_nodeinfo_V2.sh ----
+repohost|sh:01.AWX_nodeinfo_V2.sh|host|common|-|y|인벤토리 yml 을 만들어 주는 서버 (ssh/scp 대상). 입력 파일을 scp 로 이 서버의 /root/Inventory/ 에 올리고 ssh 로 custom_inventory.sh 를 실행한다.\n비어 있으면 작업진행 단계에서 "repohost 가 비어 있습니다" 로 중단한다.|repo01|host|0.1.0|-
+svr_dir|sh:01.AWX_nodeinfo_V2.sh|path|common|-|y|custom_inventory.sh 가 만든 yml 이 이 서버에서 보이는 공유 경로 (autofs/NFS 등). 새로 생긴 yml 1개를 찾아 AWX 인벤토리 소스로 쓴다.\n존재하는 디렉터리여야 하며, 비어 있거나 없으면 작업진행 단계에서 중단한다.|/path/svr_dir|dir|0.1.0|-
+ai_server_list|sh:01.AWX_nodeinfo_V2.sh|text|common|-|n|AI GPU 서버의 호스트명 (완전 일치, 정규식 아님). 여러 대는 세로선(파이프) 문자로 이어 쓴다.\n등록 대상에 이 서버가 있으면 "power limit 설정 필요" 안내와 .power_limit_setting.txt 내용을 출력한다. 비워 두면 이 안내를 하지 않는다.|gpuhost01|none|0.1.0|-
+day_print|sh:01.AWX_nodeinfo_V2.sh|text|common|-|n|이 목록에 user 가 들어 있으면 작업 대상을 "날짜 tmp tmp infra hostname ..." 형식으로 출력한다. 여러 user 는 공백·쉼표·세로선 중 하나로 구분한다.\n비워 두면 기존 세로 다단 출력만 사용한다.|user1|none|0.4.0|-
+lacp_comment|sh:01.AWX_nodeinfo_V2.sh|text|common|-|y|LACP(802.3ad) 본딩 호스트가 발견되었을 때 호스트 목록 아래에 노란색으로 함께 출력하는 안내 문구 (담당자에게 확인할 내용 등).\n비어 있으면 작업진행 단계에서 중단한다.|LACP 호스트입니다. 스위치 설정을 확인하세요|none|0.1.0|-
+inventory_delete_host|sh:01.AWX_nodeinfo_V2.sh|host|common|-|y|기존 인벤토리 호스트를 지우는 서버. 작업진행 Y 이후 ssh 로 접속해 "bash /root/server/delhost_<user>" 를 실행한다 (user@host 형식 가능).\n비어 있으면 원격 삭제가 시작되기 전에 미리 검사해 중단한다.|root@awxmgmt01|host|0.1.0|-
+infra_alias|sh:01.AWX_nodeinfo_V2.sh|text|common|-|n|등록되지 않은 infra 이름을 등록된 이름으로 바꾸는 치환 목록. "원래이름:바꿀이름" 형식을 공백 또는 쉼표로 나열한다 (3번째 필드에 적용).\n비워 두면 치환하지 않는다.|adjfg:infra1 foo:infra2|none|0.4.0|-
+auto_setup_host|sh:01.AWX_nodeinfo_V2.sh|host|os6|-|n|auto_setup 데몬이 도는 os8_mgmt 호스트명. os6_mgmt 등 다른 서버에서 01 을 실행할 때만 채운다.\n채우면 02 성공 후 호스트 목록을 gossh 로 그 서버의 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue/ 에 전송하고(로컬 queue 는 만들지 않음), 비우면 이 서버의 로컬 queue 에 직접 기록한다 (os8_mgmt 에서 실행하는 경우).|os8mgmt01|host|0.5.0|-
+auto_setup_gossh_pw|sh:01.AWX_nodeinfo_V2.sh|secret|os6|dep:auto_setup_host|n|auto_setup_host 로 gossh 전송 시 키 인증이 안 될 때 쓰는 SSH 비밀번호 (gossh -p 로 전달). 비우면 -p 없이 호출한다.\n입력은 화면에 표시되지 않고 소스에 평문으로 기록되며 파일 권한이 600 으로 바뀐다. 이 파일은 저장소에 커밋하지 않는다.|(비밀번호 - 입력 시 화면에 표시되지 않음)|none|0.5.1|-
+os6_host|sh:01.AWX_nodeinfo_V2.sh|host|os8|-|n|os6_mgmt 호스트명. os8_mgmt 에서 접속 불가인 호스트를 os6_mgmt 의 gossh 로 다시 조사한다 (01 의 LDAP/LACP 점검, 02 의 파티션 확인).\nos6_host·os6_user·os6_dir·os6_gossh 네 변수가 모두 채워져야 동작하며 하나라도 비면 재조사를 생략한다. 01 이 네 값을 02 로 export 한다.|os6mgmt01|host|0.5.1|-
+os6_user|sh:01.AWX_nodeinfo_V2.sh|text|os8|dep:os6_host|n|os6_mgmt 에 ssh 로 접속할 계정 (키 인증).\n네 변수(os6_host·os6_user·os6_dir·os6_gossh)가 모두 채워져야 재조사가 동작한다.|root|none|0.5.1|-
+os6_dir|sh:01.AWX_nodeinfo_V2.sh|path|os8|dep:os6_host|n|os8_mgmt 와 os6_mgmt 가 같은 절대경로로 공유(autofs)하는 디렉터리. 재조사할 호스트 목록과 실행 파일을 임시로 만들었다가 종료 시 지운다.\n이 서버에 존재하는 디렉터리여야 하며, 네 변수가 모두 채워져야 재조사가 동작한다.|/path/os6_share|dir|0.5.1|-
+os6_gossh|sh:01.AWX_nodeinfo_V2.sh|path|os8|dep:os6_host|n|os6_mgmt 위 gossh 실행 파일의 전체 경로 (os6_mgmt 기준 경로, 이 서버에 없어도 된다).\n네 변수가 모두 채워져야 재조사가 동작한다.|/path/gossh|none|0.5.1|-
+user_route|sh:01.AWX_nodeinfo_V2.sh|path|common|-|y|user() 함수가 쓰는 info_mn.sh(user 선택 메뉴)와 info.sh(번호 → user 이름)가 있는 디렉터리.\n01 은 시작할 때 "bash <user_route>/info_mn.sh" 로 메뉴를 보여 주고 선택한 번호를 "bash <user_route>/info.sh 번호" 에 넘겨 user 를 정한다. 비면 user 값이 없다며 중단한다.|/path/info|dir|0.2.1|-
+# ---- 02.source_dhcp_pxe.sh ----
+dhcp_infra_alias|sh:02.source_dhcp_pxe.sh|text|common|-|n|dhcp 에 넘기는 infra 이름이 yml 의 infra 와 다를 때의 치환 목록. "표시infra:넘길값" 형식을 공백 또는 쉼표로 나열한다 (표시infra 는 대소문자 무시).\n비워 두면 치환 없이 infra 를 그대로 dhcp -infra 로 넘긴다.|infra1:asdf|none|0.3.0|-
+pxe_infra_alias|sh:02.source_dhcp_pxe.sh|text|common|-|n|pxe 에 넘기는 infra 이름이 yml 의 infra 와 다를 때의 치환 목록. "표시infra:넘길값" 형식을 공백 또는 쉼표로 나열한다 (표시infra 는 대소문자 무시).\n비워 두면 치환 없이 infra 를 그대로 pxe -infra 로 넘긴다.|infra1:asdfl|none|0.3.0|-

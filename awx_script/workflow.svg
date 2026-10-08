@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="2000" height="4800" viewBox="0 0 1000 2400" style="background-color: #ffffff" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <style>
+      .box { fill: #fff4e6; stroke: #333; stroke-width: 2; }
+      .diamond { fill: #e8f4f8; stroke: #333; stroke-width: 2; }
+      .error { fill: #ffe6e6; stroke: #c00; stroke-width: 2; }
+      .text { font-family: Arial, sans-serif; font-size: 13px; text-anchor: middle; }
+      .title { font-size: 16px; font-weight: bold; }
+      .line { stroke: #333; stroke-width: 2; fill: none; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333" />
+    </marker>
+  </defs>
+
+  <!-- 배경 -->
+  <rect width="1000" height="2400" fill="#ffffff"/>
+
+  <!-- ===== 01.AWX_nodeinfo_V2.sh ===== -->
+  <text x="500" y="30" class="text title">01.AWX_nodeinfo_V2.sh 실행 흐름</text>
+
+  <!-- [0] 초기화 -->
+  <rect x="350" y="50" width="300" height="60" class="box" rx="5"/>
+  <text x="500" y="75" class="text">[0] 초기화</text>
+  <text x="500" y="95" class="text" font-size="12">trap cleanup, 변수/로그 준비</text>
+
+  <!-- [1] user 호출 -->
+  <path d="M 500 110 L 500 150" class="arrow"/>
+  <rect x="350" y="150" width="300" height="60" class="box" rx="5"/>
+  <text x="500" y="175" class="text">[1] user 호출</text>
+  <text x="500" y="195" class="text" font-size="12">현장 코드로 $user 설정</text>
+
+  <!-- user 검증 -->
+  <path d="M 500 210 L 500 250" class="arrow"/>
+  <polygon points="500,250 470,270 530,270" class="diamond"/>
+  <text x="500" y="270" class="text" font-size="12">user 값?</text>
+
+  <!-- user 오류 -->
+  <path d="M 470 270 L 300 300" class="arrow"/>
+  <rect x="150" y="300" width="300" height="50" class="error" rx="5"/>
+  <text x="300" y="325" class="text">[X] user 오류 → exit 1</text>
+
+  <!-- user 정상 -->
+  <path d="M 530 270 L 650 300" class="arrow"/>
+  <rect x="600" y="300" width="300" height="50" class="box" rx="5"/>
+  <text x="750" y="325" class="text">LOG 파일 열기</text>
+
+  <!-- [2] download_txt -->
+  <path d="M 750 350 L 750 390" class="arrow"/>
+  <rect x="600" y="390" width="300" height="60" class="box" rx="5"/>
+  <text x="750" y="415" class="text">[2] download_txt</text>
+  <text x="750" y="435" class="text" font-size="12">Y: nodeinfo | N: 기존 파일</text>
+
+  <!-- [3] msg 파싱 / [4] MAC / [5] 다단 -->
+  <path d="M 750 450 L 750 490" class="arrow"/>
+  <rect x="600" y="490" width="300" height="80" class="box" rx="5"/>
+  <text x="750" y="515" class="text">[3] msg 파싱</text>
+  <text x="750" y="535" class="text" font-size="12">[4] MAC 짝수 보정</text>
+  <text x="750" y="555" class="text" font-size="12">[5] 등록 대상 다단 출력</text>
+
+  <!-- [6] 작업진행여부 -->
+  <path d="M 750 570 L 750 610" class="arrow"/>
+  <polygon points="750,610 720,630 780,630" class="diamond"/>
+  <text x="750" y="635" class="text" font-size="12">작업진행?</text>
+
+  <!-- N 선택 -->
+  <path d="M 720 630 L 300 660" class="arrow"/>
+  <rect x="150" y="660" width="300" height="50" class="box" rx="5"/>
+  <text x="300" y="685" class="text">작업 취소 → exit 0</text>
+
+  <!-- Y 선택: 변수 검사 -->
+  <path d="M 780 630 L 900 660" class="arrow"/>
+  <rect x="800" y="660" width="200" height="50" class="box" rx="5"/>
+  <text x="900" y="685" class="text" font-size="12">변수 사전 검사</text>
+
+  <!-- [7~12] 메인 작업 -->
+  <path d="M 900 710 L 900 750" class="arrow"/>
+  <rect x="750" y="750" width="300" height="120" class="box" rx="5"/>
+  <text x="900" y="775" class="text">[7] inventory_delete</text>
+  <text x="900" y="795" class="text" font-size="12">[8] 분할 파일 생성</text>
+  <text x="900" y="815" class="text" font-size="12">[9] dhcp_pool 기록</text>
+  <text x="900" y="835" class="text" font-size="12">[10] yml 수집 (scp)</text>
+  <text x="900" y="855" class="text" font-size="12">[11] git 업로드</text>
+
+  <!-- [12] LDAP/LACP -->
+  <path d="M 900 870 L 900 910" class="arrow"/>
+  <rect x="750" y="910" width="300" height="70" class="box" rx="5"/>
+  <text x="900" y="935" class="text">[12] LDAP/LACP 점검</text>
+  <text x="900" y="955" class="text" font-size="12">tmp/all_${user} 생성</text>
+
+  <!-- [13] 메뉴 루프 -->
+  <path d="M 900 980 L 900 1020" class="arrow"/>
+  <rect x="750" y="1020" width="300" height="70" class="box" rx="5"/>
+  <text x="900" y="1045" class="text">[13] 메뉴 루프</text>
+  <text x="900" y="1065" class="text" font-size="12">su/exit/ls/파일명 처리</text>
+
+  <!-- su 선택 -->
+  <path d="M 900 1090 L 900 1130" class="arrow"/>
+  <polygon points="900,1130 870,1150 930,1150" class="diamond"/>
+  <text x="900" y="1155" class="text" font-size="12">su?</text>
+
+  <!-- [14] 02 호출 -->
+  <path d="M 930 1150 L 950 1170 L 950 1220" class="arrow"/>
+  <rect x="800" y="1220" width="300" height="70" class="box" rx="5"/>
+  <text x="950" y="1245" class="text">[14] 02 호출</text>
+  <text x="950" y="1265" class="text" font-size="12">그룹 yml + 옵션 전달</text>
+
+  <!-- 02 성공 여부 -->
+  <path d="M 950 1290 L 950 1330" class="arrow"/>
+  <polygon points="950,1330 920,1350 980,1350" class="diamond"/>
+  <text x="950" y="1355" class="text" font-size="12">성공?</text>
+
+  <!-- 재시도 -->
+  <path d="M 920 1350 L 700 1380 L 700 1300 L 800 1300" class="arrow"/>
+  <text x="750" y="1370" class="text" font-size="11">재시도 Y</text>
+
+  <!-- 성공: 종료 -->
+  <path d="M 980 1350 L 1000 1370 L 1000 1420" class="arrow"/>
+  <rect x="850" y="1420" width="300" height="50" class="box" rx="5"/>
+  <text x="1000" y="1445" class="text">완료 → exit 0</text>
+
+  <!-- ===== 02.source_dhcp_pxe.sh ===== -->
+  <text x="500" y="1550" class="text title">02.source_dhcp_pxe.sh 실행 흐름 (01에서 호출)</text>
+
+  <!-- 인자 파싱 -->
+  <rect x="350" y="1570" width="300" height="60" class="box" rx="5"/>
+  <text x="500" y="1595" class="text">인자 파싱</text>
+  <text x="500" y="1615" class="text" font-size="12">yml=infra,os,boot,splunk</text>
+
+  <!-- 인자 개수 검증 -->
+  <path d="M 500 1630 L 500 1670" class="arrow"/>
+  <polygon points="500,1670 470,1690 530,1690" class="diamond"/>
+  <text x="500" y="1695" class="text" font-size="12">인자 확인</text>
+
+  <!-- 배치 모드 -->
+  <path d="M 530 1690 L 700 1720" class="arrow"/>
+  <rect x="600" y="1720" width="200" height="60" class="box" rx="5"/>
+  <text x="700" y="1745" class="text">배치 모드</text>
+  <text x="700" y="1765" class="text" font-size="11">(1개 이상)</text>
+
+  <!-- 옵션 확인표 -->
+  <path d="M 700 1780 L 700 1820" class="arrow"/>
+  <rect x="600" y="1820" width="200" height="60" class="box" rx="5"/>
+  <text x="700" y="1845" class="text">옵션 확인표</text>
+  <text x="700" y="1865" class="text" font-size="11">번호|yml|infra|os|boot|..</text>
+
+  <!-- 옵션 맞음? -->
+  <path d="M 700 1880 L 700 1920" class="arrow"/>
+  <polygon points="700,1920 670,1940 730,1940" class="diamond"/>
+  <text x="700" y="1945" class="text" font-size="12">맞음?</text>
+
+  <!-- 수동 수정 -->
+  <path d="M 670 1940 L 500 1970 L 500 1880 L 600 1880" class="arrow"/>
+  <text x="580" y="1960" class="text" font-size="11">N: 수정</text>
+
+  <!-- yml별 실행 -->
+  <path d="M 730 1940 L 850 1970" class="arrow"/>
+  <rect x="750" y="1970" width="200" height="100" class="box" rx="5"/>
+  <text x="850" y="1995" class="text" font-size="12">yml별 실행</text>
+  <text x="850" y="2015" class="text" font-size="11">invsync</text>
+  <text x="850" y="2035" class="text" font-size="11">↓ dhcp</text>
+  <text x="850" y="2055" class="text" font-size="11">↓ pxe</text>
+
+  <!-- 요약 -->
+  <path d="M 850 2070 L 850 2110" class="arrow"/>
+  <rect x="750" y="2110" width="200" height="70" class="box" rx="5"/>
+  <text x="850" y="2135" class="text" font-size="12">요약 출력</text>
+  <text x="850" y="2155" class="text" font-size="11">전체/성공/실패</text>
+
+  <!-- exit 코드 -->
+  <path d="M 850 2180 L 850 2220" class="arrow"/>
+  <polygon points="850,2220 820,2240 880,2240" class="diamond"/>
+  <text x="850" y="2250" class="text" font-size="12">실패?</text>
+
+  <!-- exit 0 -->
+  <path d="M 880 2240 L 950 2270 L 950 2320" class="arrow"/>
+  <rect x="850" y="2320" width="200" height="50" class="box" rx="5"/>
+  <text x="950" y="2345" class="text">exit 0 (성공)</text>
+
+  <!-- exit 1 -->
+  <path d="M 820 2240 L 700 2270 L 700 2320" class="arrow"/>
+  <rect x="600" y="2320" width="200" height="50" class="error" rx="5"/>
+  <text x="700" y="2345" class="text">exit 1 (실패)</text>
+
+  <!-- 범례 -->
+  <text x="50" y="2380" class="text" font-size="12" text-anchor="start">범례:</text>
+  <rect x="50" y="2390" width="30" height="20" class="box"/>
+  <text x="95" y="2405" class="text" text-anchor="start" font-size="11">처리</text>
+  <polygon points="170,2400 160,2410 180,2410" class="diamond" transform="scale(0.8)"/>
+  <text x="195" y="2405" class="text" text-anchor="start" font-size="11">분기</text>
+  <rect x="280" y="2390" width="30" height="20" class="error"/>
+  <text x="325" y="2405" class="text" text-anchor="start" font-size="11">오류</text>
+</svg>

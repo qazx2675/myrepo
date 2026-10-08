@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 1300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="auto_setup 2차 실행 흐름">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="1300" class="bg"/>
+  <text x="450" y="30" class="t ttl" text-anchor="middle">auto_setup 실행 흐름 (2차: os8_mgmt 단일 원본)</text>
+
+  <!-- 01 -->
+  <rect x="40" y="52" width="210" height="48" rx="6" class="box"/>
+  <text x="145" y="72" class="t tb" text-anchor="middle">[os6_mgmt] 01 실행</text>
+  <text x="145" y="89" class="t tm" text-anchor="middle">auto_setup_host 채움</text>
+  <rect x="350" y="52" width="210" height="48" rx="6" class="box"/>
+  <text x="455" y="72" class="t tb" text-anchor="middle">[os8_mgmt] 01 실행</text>
+  <text x="455" y="89" class="t tm" text-anchor="middle">로컬 queue 에 기록</text>
+  <path d="M145 100 L145 115 L200 115 L200 128" class="ln"/>
+  <text x="60" y="118" class="t tm">gossh 원샷</text>
+  <path d="M455 100 L455 115 L400 115 L400 128" class="ln"/>
+  <rect x="90" y="130" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="152" class="t tb" text-anchor="middle">os8_mgmt queue/&lt;epoch&gt;_&lt;user&gt;_&lt;pid&gt;.job</text>
+  <text x="300" y="168" class="t" text-anchor="middle">user= time= 호스트줄 + 그룹 줄(yml=… / all=…)</text>
+  <rect x="90" y="204" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="226" class="t tb" text-anchor="middle">데몬 queue 수거 (cron 매분 ensure, os8_mgmt 에서만)</text>
+  <text x="300" y="242" class="t" text-anchor="middle">5초 주기, jobs/&lt;jobid&gt;.json</text>
+  <rect x="90" y="278" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="300" class="t tb" text-anchor="middle">DNS 조회 · 경로 판별</text>
+  <text x="300" y="316" class="t" text-anchor="middle">로컬 ping 실패 → os6 (설치 중 os8 무응답·os6 응답 → os6 전환)</text>
+  <rect x="90" y="352" width="420" height="52" rx="6" class="ldap"/>
+  <text x="300" y="374" class="t tb" text-anchor="middle">전달 시점 LDAP 백업 (ping O 호스트만)</text>
+  <text x="300" y="390" class="t" text-anchor="middle">ldapbak/&lt;jobid&gt;/&lt;host&gt;/ (0700 / 0600)</text>
+  <rect x="90" y="426" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="448" class="t tb" text-anchor="middle">감시: ping 10초 → seen_down(설치 시작)</text>
+  <text x="300" y="464" class="t" text-anchor="middle">준비확인 30초: gossh -pm uptime</text>
+  <rect x="90" y="500" width="420" height="52" rx="6" class="dec"/>
+  <text x="300" y="522" class="t tb" text-anchor="middle">READY ?  응답 · anaconda 아님</text>
+  <text x="300" y="538" class="t" text-anchor="middle">uptime &lt; 전달 이후 경과시간</text>
+  <rect x="90" y="574" width="420" height="52" rx="6" class="ldap"/>
+  <text x="300" y="596" class="t tb" text-anchor="middle">LDAP 비교 (stage=ldap, os_check 전)</text>
+  <text x="300" y="612" class="t" text-anchor="middle">새 OS ldap.conf binddn uid vs 백업</text>
+  <rect x="90" y="648" width="420" height="52" rx="6" class="ldap"/>
+  <text x="300" y="670" class="t tb" text-anchor="middle">same / 백업 없음 → 생략</text>
+  <text x="300" y="686" class="t" text-anchor="middle">diff → 공유경로 경유 백업 세트 복원 + 서비스 재시작</text>
+  <rect x="90" y="722" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="744" class="t tb" text-anchor="middle">스케줄: 전부 READY 면 즉시, 아니면 7분 / 3분 묶음</text>
+  <text x="300" y="760" class="t" text-anchor="middle">run 큐 (동시 1개)</text>
+  <rect x="90" y="796" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="818" class="t tb" text-anchor="middle">os_check -auto &lt;user&gt; &lt;목록&gt;</text>
+  <text x="300" y="834" class="t" text-anchor="middle">runs/&lt;code&gt;/ (os8_mgmt)</text>
+  <rect x="90" y="870" width="420" height="52" rx="6" class="dec"/>
+  <text x="300" y="892" class="t tb" text-anchor="middle">2차 대상 있음 ?</text>
+  <text x="300" y="908" class="t" text-anchor="middle">route=local 의 접속불가 · FAIL (os6 설정 시)</text>
+  <rect x="90" y="944" width="420" height="52" rx="6" class="sec"/>
+  <text x="300" y="966" class="t tb" text-anchor="middle">[2차] os6_mgmt 에서 os_check -auto 1회</text>
+  <text x="300" y="982" class="t" text-anchor="middle">결과 tar 회수 → runs/&lt;code&gt;/second/</text>
+  <rect x="90" y="1018" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="1040" class="t tb" text-anchor="middle">code 파일 생성 codes/&lt;code&gt;.txt</text>
+  <text x="300" y="1056" class="t" text-anchor="middle">리포트 · FAIL/NO FAIL · LDAP·Splunk·커널 · 원본 · 2차 섹션</text>
+  <rect x="90" y="1092" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="1114" class="t tb" text-anchor="middle">wall 발송 + 완료 처리 (processed)</text>
+  <text x="300" y="1130" class="t" text-anchor="middle">최종 판정 = 1차 OK 또는 2차 OK</text>
+  <rect x="90" y="1166" width="420" height="52" rx="6" class="box"/>
+  <text x="300" y="1188" class="t tb" text-anchor="middle">모두 완료 → jobs/done 으로 이동</text>
+  <text x="300" y="1204" class="t" text-anchor="middle">남으면 무기한 감시 (auto_setup cancel 로 종료)</text>
+  <path d="M300 182 L300 204" class="ln"/>
+  <path d="M300 256 L300 278" class="ln"/>
+  <path d="M300 330 L300 352" class="ln"/>
+  <path d="M300 404 L300 426" class="ln"/>
+  <path d="M300 478 L300 500" class="ln"/>
+  <path d="M300 552 L300 574" class="ln"/>
+  <path d="M300 626 L300 648" class="ln"/>
+  <path d="M300 700 L300 722" class="ln"/>
+  <path d="M300 774 L300 796" class="ln"/>
+  <path d="M300 848 L300 870" class="ln"/>
+  <path d="M300 996 L300 1018" class="ln"/>
+  <path d="M300 1070 L300 1092" class="ln"/>
+  <path d="M300 1144 L300 1166" class="ln"/>
+  <path d="M300 922 L300 944" class="ln"/>
+  <path d="M300 996 L300 1018" class="ln"/>
+  <path d="M510 896 L548 896 L548 1044 L512 1044" class="ln"/>
+  <text x="556" y="940" class="t tm">없음</text>
+  <path d="M90 526 L60 526 L60 452 L88 452" class="ln"/>
+  <text x="22" y="492" class="t tm">아니오</text>
+  <text x="300" y="1236" class="t tm" text-anchor="middle">미완료 호스트는 감시 루프로 복귀</text>
+  <rect x="600" y="130" width="280" height="120" rx="6" class="ext"/>
+  <text x="740" y="170" class="t tb" text-anchor="middle">상태 리포트 / TUI</text>
+  <text x="740" y="186" class="t" text-anchor="middle">화면1 그룹(yml) → Enter 화면2 호스트표</text>
+  <text x="740" y="202" class="t" text-anchor="middle">f 정체·실패, c 수동 체크, r, ?, q</text>
+  <text x="740" y="218" class="t" text-anchor="middle">os6_mgmt: gossh 원샷 5초 폴링</text>
+  <rect x="600" y="774" width="280" height="96" rx="6" class="ext"/>
+  <text x="740" y="810" class="t tb" text-anchor="middle">요청 requests/&lt;epoch&gt;_&lt;kind&gt;.req</text>
+  <text x="740" y="826" class="t" text-anchor="middle">TUI c · auto_setup request</text>
+  <text x="740" y="842" class="t" text-anchor="middle">5초 수거, 그룹 전체 완료일 때만 수락</text>
+  <rect x="600" y="1070" width="280" height="96" rx="6" class="ext"/>
+  <text x="740" y="1106" class="t tb" text-anchor="middle">완료기록 done/&lt;host&gt;</text>
+  <text x="740" y="1122" class="t" text-anchor="middle">epoch user sha256 source</text>
+  <text x="740" y="1138" class="t" text-anchor="middle">전달 이후·부팅 이후만 인정</text>
+  <path d="M740 250 L740 772" class="dash"/>
+  <path d="M600 822 L512 822" class="dash"/>
+  <path d="M600 1118 L512 1118" class="dash"/>
+  <text x="750" y="520" class="t tm">요청 파일만 남김</text>
+  <text x="600" y="1186" class="t tm">os_check 정상 종료 시 기록</text>
+  <text x="600" y="1202" class="t tm">수동: auto_setup done (시각 검증 없음)</text>
+  <text x="600" y="890" class="t tm">수동 run: 데몬 run 큐에서 실행</text>
+
+  <!-- 범례 -->
+  <rect x="600" y="1230" width="14" height="14" class="box"/><text x="620" y="1241" class="t tm">데몬 처리</text>
+  <rect x="690" y="1230" width="14" height="14" class="ldap"/><text x="710" y="1241" class="t tm">LDAP</text>
+  <rect x="750" y="1230" width="14" height="14" class="sec"/><text x="770" y="1241" class="t tm">2차 체크</text>
+  <rect x="600" y="1252" width="14" height="14" class="dec"/><text x="620" y="1263" class="t tm">판정</text>
+  <rect x="690" y="1252" width="14" height="14" class="ext"/><text x="710" y="1263" class="t tm">외부 입력/조회 (점선)</text>
+</svg>
