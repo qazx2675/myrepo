@@ -18,6 +18,7 @@ const (
 	ReqManualRun = "manual-run" // payload: jobid=<id> yml=<그룹>  → 완료 여부와 상관없이 수락, 그룹 호스트 전체를 데몬 run 큐에서 수동 run (접속불가는 wall 에 표시)
 	ReqCancel    = "cancel"     // payload: jobid=<id>            → auto_setup cancel 과 동일
 	ReqRefresh   = "refresh"    // payload: 없음                  → 다음 step 에서 ping·준비확인 즉시 수행 (TUI r 키)
+	ReqRecheck   = "recheck"    // payload: jobid=<id> yml=<그룹|*> → 완료 제외 호스트를 os8 → os6_mgmt 순으로 직접 재확인 (TUI g 키)
 )
 
 // 디렉터리: requests/ (새 요청) → active/ (수락된 manual-run, 끝나면 삭제) | rejected/ (거부, 끝에 reason= 줄)
@@ -159,6 +160,12 @@ func (d *Daemon) collectRequests(now time.Time) {
 			}
 			if nStuck > 0 {
 				logf("수동 재시도(r): 정체 호스트 %d대를 즉시 재확인", nStuck)
+			}
+			os.Remove(p)
+		case ReqRecheck:
+			if reason := d.recheckHosts(pl["jobid"], pl["yml"], now); reason != "" {
+				rejectRequest(p, name, b, reason)
+				continue
 			}
 			os.Remove(p)
 		default:
@@ -345,6 +352,94 @@ func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
 				logf("경로 전환: %s → os6 (수동 run 전 확인: os8 무응답, os6_mgmt 응답, job %s)", n, j.ID)
 			}
 		}
+	}
+}
+
+// recheckHosts: g 키 — 진행 중 job 의 완료되지 않은 호스트(정체·실패 포함, 단계 무관)를 지금 직접 확인한다.
+// 1) os8_mgmt 에서 준비확인 → 응답하면 route=local, 2) 무응답이면 os6_mgmt 경유 → 응답하면 route=os6,
+// 3) 둘 다 무응답이면 접속불가로 간주(상태 그대로, 로그에 목록). 응답한 호스트는 준비확인 결과를 바로 반영하고 이미 READY 인 호스트는 경로만 갱신.
+// yml 이 "" 또는 "*" 이면 job 전체, 아니면 그 그룹만. 수락이면 "", 거부면 사유.
+func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
+	j := d.jobs[id]
+	if j == nil {
+		return "진행 중인 job 없음"
+	}
+	var names []string
+	if yml == "" || yml == allView {
+		for n := range j.Hosts {
+			names = append(names, n)
+		}
+	} else {
+		var ok bool
+		if names, ok = groupHosts(j, yml); !ok {
+			return "그룹 없음"
+		}
+	}
+	var cand []string
+	for _, n := range names {
+		if h := j.Hosts[n]; h != nil && h.Processed == "" {
+			cand = append(cand, n)
+		}
+	}
+	if len(cand) == 0 {
+		return ""
+	}
+	sort.Strings(cand)
+	t := now.Unix()
+	var miss []string
+	res, err := d.Checker.Check("local", cand)
+	if err != nil {
+		logf("[X] 재확인(g) 실패(local): %v", err)
+		miss = cand
+	} else {
+		for _, n := range cand {
+			cr, ok := res[n]
+			if !ok || !cr.Responded {
+				miss = append(miss, n)
+				continue
+			}
+			d.recheckApply(j, n, "local", cr, t)
+		}
+	}
+	nOS6 := 0
+	if len(miss) > 0 && os6_mgmt != "" && os6_gossh != "" {
+		var left []string
+		if res, err = d.Checker.Check("os6", miss); err != nil {
+			logf("[X] 재확인(g) 실패(os6): %v", err)
+			left = miss
+		} else {
+			for _, n := range miss {
+				if cr, ok := res[n]; ok && cr.Responded {
+					d.recheckApply(j, n, "os6", cr, t)
+					nOS6++
+				} else {
+					left = append(left, n)
+				}
+			}
+		}
+		miss = left
+	}
+	d.lastPing, d.lastCheck = time.Time{}, time.Time{} // ping 도 바로 갱신
+	logf("재확인(g): job %s %d대 중 응답 %d대 (os6 경유 %d대), 접속불가 %d대", j.ID, len(cand), len(cand)-len(miss), nOS6, len(miss))
+	if len(miss) > 0 {
+		logf("[!] 재확인(g) 접속불가·미응답 %d대 (job %s): %s", len(miss), j.ID, strings.Join(miss, " "))
+	}
+	return ""
+}
+
+// recheckApply: g 재확인에서 응답한 호스트 1대 반영 — 경로 갱신 + (아직 READY 전이면) 준비확인 결과 반영
+func (d *Daemon) recheckApply(j *Job, name, route string, cr CheckResult, t int64) {
+	h := j.Hosts[name]
+	if h.Route != route {
+		old := h.Route
+		h.Route = route
+		d.dirty[j.ID] = true
+		if old != "" {
+			logf("경로 전환: %s %s → %s (재확인 g, job %s)", name, old, route, j.ID)
+		}
+	}
+	if active(h) && h.ReadyAt == 0 {
+		d.applyCheck(j, name, cr, t)
 	}
 }
 

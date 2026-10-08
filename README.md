@@ -232,6 +232,7 @@ codes/<code>.txt 생성 (wall 알림은 v0.4.3 부터 끔 — 결과는 TUI·`au
 | `request manual-run <jobid> <yml>` | 수동 OS 체크 실행 요청 (완료 여부와 상관없이 그룹 전체를 시도, 접속불가 호스트는 wall 에 표시) |
 | `request cancel <jobid>` | 작업 종료 요청 |
 | `request refresh` | 데몬에 즉시 ping·준비확인 요청 (TUI `r` 키와 같음, 5초 안에 수거) |
+| `request recheck <jobid> <yml 또는 *>` | 완료 제외 호스트를 os8_mgmt → 안 되면 os6_mgmt 순으로 직접 재확인 (TUI `g` 키와 같음, 5초 안에 수거) |
 | `daemon` | 포그라운드 데몬 루프 (보통 ensure 가 백그라운드로 기동) — os8_mgmt 에서만 |
 | `ensure` | 데몬이 없으면 백그라운드 기동 (cron 매분) — os8_mgmt 에서만 |
 | `probe [-i 10s]` | (os6_mgmt 쪽) stdin 호스트 목록을 받고 ping 상태 출력 (`host up\|down`) |
@@ -288,7 +289,9 @@ os8_mgmt 에서 ping·ssh 가 안 되는 호스트도 위와 같은 흐름이 �
 | ping 은 되는데 os8 에서 준비확인(gossh) 무응답 | 같은 주기에 os6_mgmt 경유로 다시 확인, 응답하면 route=os6 로 전환 (`os6_gossh` 필요) |
 | os6 probe 세션이 응답이 없음 (ssh 키 미설정 등) | 상태는 그대로 두고 1분 뒤 비고에 `ping 정보없음(os6 probe 확인)` 표시 |
 
-- 전환은 local → os6 한 방향뿐입니다(되돌아가며 흔들리지 않음). route=os6 호스트의 os_check run 은 os6 경로로 실행됩니다.
+- 자동 전환은 local → os6 한 방향뿐입니다(되돌아가며 흔들리지 않음). route=os6 호스트의 os_check run 은 os6 경로로 실행됩니다. 한 번 os6 가 된 호스트는 계속 os6 경유로 감시합니다: **ping 10초, 준비확인 30초 주기**(os6 probe 세션으로 ping, os6_gossh 로 확인). 되돌리려면 `g`(재확인) 또는 수동 실행 `c` — 이때만 os8 에서 다시 응답하는지 확인해 route 를 local 로 복귀시킵니다.
+- **`g` 키 (서버 상태 수동 재확인, v0.4.7)**: 호스트표(그룹/전체 보기)에서 `g` 를 누르면 완료를 제외한 모든 호스트(설치중·정체·실패 포함, 단계 무관)를 데몬이 지금 바로 확인합니다. ① os8_mgmt 에서 확인 → 응답하면 route=local, ② 무응답이면 os6_mgmt 경유 → 응답하면 route=os6, ③ 둘 다 무응답이면 접속불가로 간주(상태는 그대로, 로그에 `[!] 재확인(g) 접속불가·미응답 N대`). 응답한 호스트는 준비확인 결과(설치중·부팅확인·READY)를 즉시 반영합니다. 명령: `auto_setup request recheck <jobid> <그룹.yml 또는 *>`. `os6_mgmt`·`os6_gossh` 가 비면 ① 만 수행.
+- **LDAP 백업도 os6 경유 (v0.4.7)**: 전달 시점 LDAP 설정 수집이 os8 에서 안 되는 호스트(ssh 불가 등)는 같은 호출에서 os6_mgmt 경유로 다시 수집하고 route=os6 로 바꿉니다(로그 `경로 전환: … (LDAP 백업 …)`). 설치 후 binddn 비교·복원(Apply)도 os8 무응답이면 os6_mgmt 경유로 한 번 더 시도합니다. 수집이 안 된 호스트는 사유가 로그에 남습니다(`[!] LDAP 백업 불가: <호스트> … - <사유>`).
 - `r` 키(또는 `auto_setup request refresh`)는 화면만 다시 읽는 것이 아니라 데몬에 **즉시 ping·준비확인**을 요청합니다. 데몬이 os8 에서 안 보이는 호스트는 위 규칙대로 os6_mgmt 에서 정보를 가져옵니다.
 - 배포중에서 멈춰 있으면 데몬 로그에서 `경로 판별`·`경로 전환`·`os6 probe 세션`·`준비확인 실패` 줄을 확인하십시오. os6 경로는 데몬이 `ssh -o BatchMode=yes <os6_mgmt>` 로 접속하므로 os8_mgmt → os6_mgmt **ssh 키 인증**이 되어 있어야 합니다.
 - 설정 파일(`os6_mgmt` 등)을 바꾼 뒤에는 `auto_setup --restart` 가 필요합니다(설정은 데몬 기동 때 한 번 읽음).

@@ -51,6 +51,7 @@ const usageText = `사용법: auto_setup [명령]
   request manual-run <jobid> <yml>   수동 OS 체크 실행 요청
   request cancel <jobid>             작업 종료 요청
   request refresh                    즉시 ping·준비확인 요청 (TUI r 키와 같음)
+  request recheck <jobid> <yml|*>    완료 제외 호스트를 os8 → 안 되면 os6_mgmt 순으로 직접 재확인 (TUI g 키와 같음)
   daemon              포그라운드 데몬 (보통 ensure 가 백그라운드로 기동)
   ensure              데몬이 없으면 백그라운드로 기동 (cron 매분)
   probe [-i 10s]      (os6_mgmt 쪽) stdin 호스트 목록 ping 감시

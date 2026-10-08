@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.4.7] - 2026-10-08
+
+### 추가
+- **TUI `g` / `auto_setup request recheck <jobid> <yml|*>` (서버 상태 수동 재확인)**: 완료를 제외한 모든 호스트(설치중·정체·실패 포함)를 단계와 상관없이 즉시 확인한다. ① os8_mgmt 에서 준비확인 → 응답하면 route=local(os6 로 남아 있던 호스트도 복귀), ② 무응답이면 os6_mgmt 경유 → 응답하면 route=os6, ③ 둘 다 무응답이면 접속불가(상태 불변, 로그 `[!] 재확인(g) 접속불가·미응답 N대 (job …): 호스트…`). 응답한 호스트는 준비확인 결과를 바로 반영(이미 READY 인 호스트는 경로만). 전체 보기(`a`)에서는 job 전체. `os6_mgmt`·`os6_gossh` 미설정이면 ① 만 수행. 요청은 `ReqRecheck`(`requests.go` `recheckHosts`), 화면 힌트·도움말에 `g 재확인` 추가(골든 갱신)
+- **LDAP 백업·확인도 os6_mgmt 경유**: 전달 시점 LDAP 수집이 os8 에서 안 되는 local 호스트(ssh 불가 등)는 같은 호출에서 os6_mgmt 경유로 한 번 더 수집하고 route=os6 로 전환(`경로 전환: … (LDAP 백업 …)`). 설치 후 binddn 확인(Apply)도 os8 무응답이면 os6 로 재시도하고 같은 경로로 복원. 수집 불가 호스트는 사유를 로그로 남긴다 (`[!] LDAP 백업 불가: <호스트> (job …) - <사유>`). `os6_mgmt`·`os6_gossh` 가 없으면 종전과 같음
+- 테스트: `route_test.go`(g 키·요청 인자, 경로 판별 순서, 거부·os6 미설정), `ldapbk_test.go`(os6 재수집·Apply 폴백, 가짜 gossh 에 `STUB_NOLOCAL`). 골든 갱신(힌트 줄)
+
 ## [0.4.6] - 2026-10-08
 
 ### 수정

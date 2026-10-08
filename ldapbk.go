@@ -535,6 +535,31 @@ func (realLdapBackup) Backup(job *Job, hosts []string) map[string]LdapState {
 	}
 	wg.Wait()
 
+	// os8 에서 수집이 안 된 local 호스트(ssh 불가·호출 실패)는 os6_mgmt 경유로 한 번 더 수집한다 (os8 과 같은 결과를 얻도록).
+	// 응답하면 이후 확인·복원도 같은 경로를 쓰도록 route=os6 로 바꾼다.
+	fb := map[string][]string{}
+	if g, ok := got["local"]; ok && os6_mgmt != "" && os6_gossh != "" {
+		var miss []string
+		for _, h := range groups["local"] {
+			if _, seen := g.out[h]; g.err != nil || !seen {
+				miss = append(miss, h)
+			}
+		}
+		if len(miss) > 0 {
+			if o, err := gosshBatch("os6", miss, cmd, ldapBackupTimeout); err == nil {
+				for _, h := range miss {
+					if l, seen := o[h]; seen {
+						fb[h] = l
+						if job != nil && job.Hosts[h] != nil {
+							job.Hosts[h].Route = "os6"
+							logf("경로 전환: %s local → os6 (LDAP 백업 os8 무응답, os6_mgmt 응답, job %s)", h, job.ID)
+						}
+					}
+				}
+			}
+		}
+	}
+
 	jobID := ""
 	if job != nil {
 		jobID = job.ID
@@ -542,11 +567,15 @@ func (realLdapBackup) Backup(job *Job, hosts []string) map[string]LdapState {
 	for r, hs := range groups {
 		g := got[r]
 		for _, h := range hs {
-			if g.err != nil {
-				res[h] = noneState("수집 호출 실패: " + g.err.Error())
+			lines, ok := g.out[h]
+			gerr := g.err
+			if l, viaOS6 := fb[h]; viaOS6 {
+				lines, ok, gerr = l, true, nil
+			}
+			if gerr != nil {
+				res[h] = noneState("수집 호출 실패: " + gerr.Error())
 				continue
 			}
-			lines, ok := g.out[h]
 			if !ok {
 				res[h] = noneState("무응답")
 				continue
@@ -636,6 +665,16 @@ func (realLdapBackup) Apply(job *Job, host string) LdapState {
 
 	route := routeOf(job, host)
 	out, err := gosshBatch(route, []string{host}, buildRemoteCmd(probeScript()), ldapApplyTimeout)
+	if route == "local" && os6_mgmt != "" && os6_gossh != "" && (err != nil || !parseInfo(out[host]).Seen) {
+		// os8 에서 안 닿으면 os6_mgmt 경유로 한 번 더 (응답하면 이후 복원도 같은 경로)
+		if o6, e6 := gosshBatch("os6", []string{host}, buildRemoteCmd(probeScript()), ldapApplyTimeout); e6 == nil && parseInfo(o6[host]).Seen {
+			out, err, route = o6, nil, "os6"
+			if job != nil && job.Hosts[host] != nil {
+				job.Hosts[host].Route = "os6"
+				logf("경로 전환: %s local → os6 (LDAP 확인 os8 무응답, os6_mgmt 응답, job %s)", host, job.ID)
+			}
+		}
+	}
 	if err != nil {
 		return applyFail("확인 호출 실패(수동 확인)")
 	}
