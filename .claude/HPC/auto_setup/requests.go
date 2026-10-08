@@ -292,8 +292,9 @@ func readActiveRequests(dir string) map[string][]SnapManual {
 	return out
 }
 
-// refreshManualRoutes: 수동 run 직전 경로 재판별. os8 에서 응답하지 않는 호스트가 os6_mgmt 경유로는 응답하면 route=os6 로 바꿔
-// run 이 os6 gossh 래퍼를 쓰게 한다 (정체 등으로 경로가 틀어진 호스트도 일반 호스트처럼 체크되도록).
+// refreshManualRoutes: 수동 run 직전 경로 재판별. os8 에서 직접 응답하는 호스트는 route=local 로(설치 중 os6 로 붙은 뒤 그대로 남은
+// 호스트도 포함 — os6 래퍼를 거치면 체크 출력이 비는 경우가 있다), os8 에서 응답하지 않고 os6_mgmt 경유로만 응답하는 호스트는
+// route=os6 로 바꿔 run 이 올바른 gossh 를 쓰게 한다 (정체 등으로 경로가 틀어진 호스트도 일반 호스트처럼 체크되도록).
 // os6_mgmt·os6_gossh 가 없으면 아무것도 하지 않는다. 종료된 job(closed)은 job 파일을 고치지 않고 이번 run 에만 반영한다.
 func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
 	if os6_mgmt == "" || os6_gossh == "" {
@@ -301,7 +302,7 @@ func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
 	}
 	var cand []string
 	for _, n := range hosts {
-		if h := j.Hosts[n]; h != nil && h.Route != "os6" {
+		if h := j.Hosts[n]; h != nil {
 			cand = append(cand, n)
 		}
 	}
@@ -316,9 +317,13 @@ func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
 	var miss []string
 	for _, n := range cand {
 		if cr, ok := res[n]; ok && cr.Responded {
-			if h := j.Hosts[n]; h.Route == "" {
+			if h := j.Hosts[n]; h.Route != "local" {
+				old := h.Route
 				h.Route = "local"
 				d.markRoute(j, closed)
+				if old == "os6" {
+					logf("경로 전환: %s os6 → local (수동 run 전 확인: os8 직접 응답, job %s)", n, j.ID)
+				}
 			}
 			continue
 		}
@@ -334,9 +339,11 @@ func (d *Daemon) refreshManualRoutes(j *Job, hosts []string, closed bool) {
 	}
 	for _, n := range miss {
 		if cr, ok := res[n]; ok && cr.Responded {
-			j.Hosts[n].Route = "os6"
-			d.markRoute(j, closed)
-			logf("경로 전환: %s → os6 (수동 run 전 확인: os8 무응답, os6_mgmt 응답, job %s)", n, j.ID)
+			if j.Hosts[n].Route != "os6" {
+				j.Hosts[n].Route = "os6"
+				d.markRoute(j, closed)
+				logf("경로 전환: %s → os6 (수동 run 전 확인: os8 무응답, os6_mgmt 응답, job %s)", n, j.ID)
+			}
 		}
 	}
 }

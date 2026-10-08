@@ -265,3 +265,21 @@ func TestManualRunNoRedetectWithoutOS6(t *testing.T) {
 		t.Fatalf("os6 미설정이면 추가 확인·os6 경유 없음: runs=%+v checks=%v", w.runs, w.checks[n:])
 	}
 }
+
+// 설치 중 os6 로 붙은 뒤 os8 에서도 직접 응답하는 호스트: 수동 run 전에 route=local 로 되돌려 os6 래퍼를 쓰지 않는다
+func TestManualRunBackToLocalRoute(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "mgmt", "/os6/gossh")
+	w := newWorld(map[string]*simHost{"h1": install(60, 120, 400, 600)})
+	id := submit(t, "u1", 0, "h1")
+	d := drive(t, w, newTestDaemon(w), 0, 5)
+	d.jobs[id].Hosts["h1"].Route = "os6" // 이전에 os6 로 판별되어 남은 상태
+	req(t, ReqManualRun, map[string]string{"jobid": id, "yml": allGroup})
+	d = drive(t, w, d, 10, 20)
+	if len(w.runs) != 1 || w.runs[0].OS6 {
+		t.Fatalf("os8 에서 응답하면 os6 래퍼 없이 실행되어야 함: %+v", w.runs)
+	}
+	if r := d.jobs[id].Hosts["h1"].Route; r != "local" {
+		t.Fatalf("route=local 로 되돌아가야 함: %q", r)
+	}
+}
