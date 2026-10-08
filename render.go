@@ -618,14 +618,11 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 			idx++
 		}
 	}
-	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 종료"
+	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n x 단독 체크  w AWX"
 	if sel.DateFilter {
-		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 종료"
+		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n x 단독 체크  w AWX"
 	}
-	return finish(head, body, cursor, height, width, color, []string{
-		msgLine(sel, width, color),
-		segLine(color, width, hintSegs(hint)...),
-	})
+	return finish(head, body, cursor, height, width, color, append([]string{msgLine(sel, width, color)}, hintLines(color, width, hint)...))
 }
 
 // finish: 머리 + (스크롤된) 본문 + 꼬리 조립. height<=0 이면 꼬리 없이 전체.
@@ -770,11 +767,11 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 
 	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
 		msgLine(sel, width, color)}
-	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  c 체크+수정  t 체크만  g 재확인  v 결과  a 전체 그룹  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 복귀"
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침  ? 도움말  q 복귀\n c 체크+수정  t 체크만  g 재확인  v 결과  x 단독 체크  w AWX"
 	if sel.Yml == allView {
-		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  g 재확인  a 그룹별 보기  x 단독 체크  w AWX  r 새로고침  ? 도움말  q 복귀"
+		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀\n g 재확인  x 단독 체크  w AWX"
 	}
-	foot = append(foot, segLine(color, width, hintSegs(hint)...))
+	foot = append(foot, hintLines(color, width, hint)...)
 	if height <= 0 {
 		return strings.Join(append(head, body...), "\n")
 	}
@@ -974,4 +971,44 @@ func hintSegs(hint string) []seg {
 		out = append(out, seg{sep, ""}, seg{item, style})
 	}
 	return out
+}
+
+// hintLines: 키 안내를 폭에 맞춰 줄로 나눈다.
+// hint 의 "\n" 은 묶음(보기·이동 / 작업) 경계다. 전체가 한 줄에 들어가면 한 줄로 합치고,
+// 아니면 묶음마다 한 줄로 두며, 묶음이 폭보다 길면 항목(두 칸 간격) 단위로 줄바꿈한다.
+func hintLines(color bool, width int, hint string) []string {
+	groups := strings.Split(hint, "\n")
+	flat := strings.Join(groups, "  ")
+	if len(groups) == 1 || strWidth(flat) <= width {
+		return wrapHint(color, width, flat)
+	}
+	var out []string
+	for _, g := range groups {
+		out = append(out, wrapHint(color, width, g)...)
+	}
+	return out
+}
+
+// wrapHint: 항목 단위로 줄바꿈 (이어지는 줄은 한 칸 들여씀)
+func wrapHint(color bool, width int, hint string) []string {
+	items := strings.Split(strings.TrimSpace(hint), "  ")
+	var out []string
+	cur := " "
+	for _, it := range items {
+		it = strings.TrimSpace(it)
+		if it == "" {
+			continue
+		}
+		add := it
+		if strings.TrimSpace(cur) != "" {
+			add = "  " + it
+		}
+		if strWidth(cur+add) > width && strings.TrimSpace(cur) != "" {
+			out = append(out, segLine(color, width, hintSegs(cur)...))
+			cur = " " + it
+			continue
+		}
+		cur += add
+	}
+	return append(out, segLine(color, width, hintSegs(cur)...))
 }
