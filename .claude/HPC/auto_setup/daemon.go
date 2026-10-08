@@ -29,7 +29,7 @@ var (
 	newPinger   = func() Pinger { return NewRealPinger() }
 	newChecker  = func() Checker { return NewRealChecker() }
 	newRunner   = func() Runner { return NewRealRunner() }
-	newNotifier = func() Notifier { return wallNotifier{} }
+	newNotifier = func() Notifier { return nopNotifier{} } // wall 알림은 끔 (되살리려면 wallNotifier{})
 	newLdap     = func() LdapBackup { return nopLdap{} }
 	newSecond   = func() Second { return nopSecond{} }
 )
@@ -1118,7 +1118,7 @@ func (d *Daemon) finishManual(c *inflight, r runDone, now time.Time) {
 	if res.Abnormal {
 		note = " (os_check 비정상 종료)"
 	}
-	// 처리(체크 결과가 나온) 호스트가 아닌 것 = 접속불가·미응답 → 따로 알림
+	// 처리(체크 결과가 나온) 호스트가 아닌 것 = 접속불가·미응답 → 로그에 호스트 목록을 남긴다
 	got := map[string]bool{}
 	for _, n := range done {
 		got[n] = true
@@ -1133,6 +1133,9 @@ func (d *Daemon) finishManual(c *inflight, r runDone, now time.Time) {
 		sort.Strings(unreachable)
 	}
 	logf("수동 run 완료: job %s 그룹 %s code %s %d대%s 접속불가 %d대", c.jobID, c.yml, res.Code, len(done), note, len(unreachable))
+	if len(unreachable) > 0 {
+		logf("[!] 수동 run 접속불가·미응답 %d대 (job %s 그룹 %s code %s): %s", len(unreachable), c.jobID, c.yml, res.Code, strings.Join(unreachable, " "))
+	}
 	d.Notifier.Wall(wallMessage(c.user, done, res.Code, res.Abnormal) + unreachableLine(unreachable))
 }
 

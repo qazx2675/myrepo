@@ -63,3 +63,8 @@ func (wallNotifier) Wall(msg string) {
 		logf("[X] wall 실패: %v %s", err, strings.TrimSpace(string(out)))
 	}
 }
+
+// nopNotifier: 알림을 보내지 않는다 (기본값). 완료 결과는 TUI·`auto_setup code NNNN`·로그로 확인한다.
+type nopNotifier struct{}
+
+func (nopNotifier) Wall(string) {}

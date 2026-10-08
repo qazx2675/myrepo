@@ -189,17 +189,13 @@ DONE=$AS/jobs/done/$JOBID.json
 t_eq "done job id 가 kill 전과 동일(이어하기)" "$(basename "$(ls "$AS"/jobs/done/*.json 2> /dev/null | head -1)" .json)" "$JOBID"
 
 # ============================================================
-echo "== d) code 파일 · wall 내용"
+echo "== d) code 파일 · wall 알림 끔(로그로 확인)"
 WALL=$E2E_SCEN/wall.log
-t_eq "wall 메시지 1회" "$(grep -c '^=====WALL=====$' "$WALL" 2> /dev/null)" 1
-CODE=$(sed -n 's/^code : \([0-9]\{4\}\) .*/\1/p' "$WALL" 2> /dev/null | head -1)
-t_has "wall: 4자리 code" <(echo "$CODE") '^[0-9]{4}$'
-EXP_WALL="=====WALL=====
-[auto_setup] OS 설치 + 설정체크 완료 (user=$E2E_USER)
-127.0.0.1 127.0.0.2 192.0.2.1 (3대)
-code : $CODE   →  auto_setup code $CODE"
-t_eq "wall 전체 내용(완료 호스트 가로 + 대수 + code)" "$(cat "$WALL" 2> /dev/null)" "$EXP_WALL"
-t_eq "codes/ 에 파일 1개, 이름=wall 의 code" "$(ls "$AS/codes" 2> /dev/null)" "$CODE.txt"
+t_eq "wall 알림 끔(wall.log 없음)" "$([[ -s $WALL ]] && echo 있음 || echo 없음)" 없음
+CODE=$(ls "$AS/codes" 2> /dev/null | head -1 | sed 's/.txt$//')
+t_has "code: 4자리" <(echo "$CODE") '^[0-9]{4}$'
+t_has "로그: run 완료 code 와 처리 3대" "$AS/auto_setup.log" "run 완료: job .* code $CODE 처리 3대"
+t_eq "codes/ 에 파일 1개, 이름=로그의 code" "$(ls "$AS/codes" 2> /dev/null)" "$CODE.txt"
 CF=$AS/codes/$CODE.txt
 # os6_mgmt 만 채워도 autofs 폴백(os6OSCheckPath)으로 2차 체크가 켜지므로, 1차 구성 검사는 2차 섹션을 뗀 사본으로 한다 (2차는 run_e2e2.sh)
 sed -e '/^### 2차 체크/,$d' "$CF" | sed -e '/./,$!d' | tac | sed -e '/./,$!d' | tac > "$S/code_first.txt"

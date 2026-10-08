@@ -296,7 +296,8 @@ sc_b() {
 	done
 	t_eq "b8 job: 127.0.0.4 processed=manual, done_src=manual" "$(jfield "$DONEJ" 127.0.0.4 '"(processed|done_src)":')" '"processed":"manual""done_src":"manual"'
 	t_eq "b8 job: run 처리 4대 done_src=run" "$(grep -c '"done_src": "run"' "$DONEJ")" 4
-	t_has "b8 wall: run 처리 호스트만(4대)" "$E2E_SCEN/wall.log" '^127\.0\.0\.1 127\.0\.0\.3 127\.0\.0\.5 127\.0\.0\.6 \(4대\)$'
+	t_eq "b8 wall 알림 끔(wall.log 없음)" "$([[ -s $E2E_SCEN/wall.log ]] && echo 있음 || echo 없음)" 없음
+	t_has "b8 로그: run 처리 4대(완료기록·수동 완료 제외)" "$B/auto_setup.log" 'run 완료: job .* 처리 4대'
 	# 처리 후 거부된 기록은 그대로 남아 있어도 더는 로그가 늘지 않는다
 	t_eq "b9 마지막 데몬: 거부 로그 2건(5·6 각 1회) — run 이 끝난 뒤에도 늘지 않음" "$(lastlog "$B" | grep -c '완료기록 거부')" 2
 	kill_all
@@ -323,7 +324,8 @@ sc_c() {
 	if wait_cond 40 '[[ $(ls "$C/codes" 2> /dev/null | wc -l) -ge 1 ]]'; then ok "c1 미완료 그룹 수락 → 수동 run 실행"; else bad "c1 미완료 그룹 수동 run" "$(tail -4 "$C/auto_setup.log" | paste -sd'|')"; fi
 	wait_for 20 grep -q '수동 run 완료' "$C/auto_setup.log"
 	t_eq "c1 미완료 그룹은 거부되지 않음(rejected 0)" "$(ls "$C/requests/rejected" 2> /dev/null | wc -l)" 0
-	t_hasF "c1 wall: 미완료 그룹 수동 run 알림(스텁은 dk3 처리됨)" "$E2E_SCEN/wall.log" "dk3 (1대)"
+	t_eq "c1 wall 알림 끔(wall.log 없음)" "$([[ -s $E2E_SCEN/wall.log ]] && echo 있음 || echo 없음)" 없음
+	t_has "c1 로그: 미완료 그룹 수동 run 완료(스텁은 dk3 처리됨)" "$C/auto_setup.log" '수동 run 완료: job .* 그룹 bad.yml code [0-9]+ 1대'
 	t_eq "c1 requests/ 큐 비움" "$(find "$C/requests" -maxdepth 1 -name '*.req' | wc -l)" 0
 	# 알 수 없는 job → 거부
 	env AUTO_SETUP_DIR="$C" "$BASE" request manual-run no-such-job x.yml > /dev/null 2>&1
@@ -339,7 +341,7 @@ sc_c() {
 	t_eq "c3 수동 run targets = 그룹 호스트 전체" "$(paste -sd' ' "$C/runs/$CODE/targets.txt")" "dk1 dk2"
 	t_hasF "c3 code 파일: 결과 리포트 머리줄" "$C/codes/$CODE.txt" "############### 결과 리포트 ###############"
 	t_eq "c3 요청 파일(active)은 run 이 끝나면 삭제" "$(ls "$C/requests/active" 2> /dev/null | wc -l)" 0
-	t_eq "c3 wall 1회, 호스트 가로 + 2대" "$(grep -c '^dk1 dk2 (2대)$' "$E2E_SCEN/wall.log")" 1
+	t_has "c3 로그: 수동 run 완료 ok.yml 2대" "$C/auto_setup.log" '수동 run 완료: job .* 그룹 ok.yml code [0-9]+ 2대'
 	t_has "c3 snapshot 반영: runs 에 manual=true, yml=ok.yml, code" <(lcl "$C" snapshot) "\"code\": \"$CODE\""
 	lcl "$C" snapshot > "$S/c.snap"
 	t_hasF "c3 snapshot: manual true" "$S/c.snap" '"manual": true'
@@ -650,7 +652,8 @@ NO FAIL : 127.0.0.21 127.0.0.22 127.0.0.23 (3대)"
 	DONEJ=$(ls "$F1"/jobs/done/*.json 2> /dev/null | head -1)
 	t_eq "f4 job 호스트의 2차 상태: 22·23 ok, 24 fail" "$(grep -oE '"second": "[a-z]+"' "$DONEJ" | sort | uniq -c | awk '{print $1 $3 $4}' | paste -sd' ')" '1"fail" 2"ok"'
 	t_eq "f4 최종 처리: 5대 모두 processed(1차 OK 또는 2차 판정) → job 종료" "$(grep -c '"processed": "[0-9]\{4\}"' "$DONEJ")" 5
-	t_eq "f4 wall 1회" "$(grep -c '^=====WALL=====$' "$E2E_SCEN/wall.log")" 1
+	t_eq "f4 wall 알림 끔(wall.log 없음)" "$([[ -s $E2E_SCEN/wall.log ]] && echo 있음 || echo 없음)" 없음
+	t_has "f4 로그: run 완료 처리 3대(2차 판정 전 1차 결과)" "$F1/auto_setup.log" 'run 완료: job .* 처리 [0-9]+대'
 
 	# os6_mgmt 가 비면(os6 경유 호스트 없음, os6OSCheckPath()="") 2차 체크 없음. (os6_mgmt 만 채우면 autofs 폴백으로 2차 활성 — f7)
 	e2e_scen fbase
