@@ -346,7 +346,7 @@ func TestUcsmModelKey(t *testing.T) {
 		{"UCS X210c M7", "x210cm7"},
 		{"UCSX-210C-M7", "x210cm7"},
 		{"ucsx-210c-m7", "x210cm7"},
-		{"UCSB-B200-M6", "b200m6"},     // 매핑 행이 없으면 MAPPING_MISSING (M5 로 추측하지 않음)
+		{"UCSB-B200-M6", "b200m6"},      // 매핑 행이 없으면 MAPPING_MISSING (M5 로 추측하지 않음)
 		{"UCSC-C220-M5SX", "cc220m5sx"}, // 랙 서버 PID 는 규칙 밖 → 어떤 행과도 맞지 않음
 		{"UCS", ""},
 		{"", ""},
@@ -361,8 +361,12 @@ func TestUcsmMapParse(t *testing.T) {
 	// 저장소의 실제 매핑 파일
 	m, err := loadUcsmMap("../../" + ucsmDefaultMap)
 	must(t, err)
-	if len(m.Rows) != 8 || strings.Join(m.Classes, ",") != "biosVfCPUPerformance,biosVfIntelHyperThreadingTech" || len(m.Unmapped) != 8 {
+	if len(m.Rows) != 12 || strings.Join(m.Classes, ",") != "biosVfCPUPerformance,biosVfIntelHyperThreadingTech,biosVfProcessorEnergyConfiguration" || len(m.Unmapped) != 8 {
 		t.Errorf("실제 매핑: 행 %d, 클래스 %v, UNMAPPED %d", len(m.Rows), m.Classes, len(m.Unmapped))
+	}
+	// system_profile 은 후보 2개(vpCPUPerformance, vpEnergyPerformance)를 각각 점검한다
+	if sp := m.rowsFor(ucsmModelKey("UCSB-B200-M5"), "system_profile"); len(sp) != 2 || sp[0].Attr != "vpCPUPerformance" || sp[1].Attr != "vpEnergyPerformance" {
+		t.Errorf("system_profile 행: %v", sp)
 	}
 	if m.rowFor(ucsmModelKey("UCSB-B200-M5"), "system_profile") == nil || m.rowFor(ucsmModelKey("UCSX-210C-M7"), "hyper_threading") == nil {
 		t.Error("UCSM PID 로 매핑 행을 찾지 못함")

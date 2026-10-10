@@ -239,7 +239,7 @@ func rtStates(t *testing.T, lines []string) map[string][]string {
 	t.Helper()
 	out := map[string][]string{}
 	for _, l := range lines {
-		out[rtCol(l, 0)] = append(out[rtCol(l, 0)], rtCol(l, 11))
+		out[rtCol(l, 0)] = append(out[rtCol(l, 0)], rtCol(l, 13)) // result 열
 	}
 	return out
 }
@@ -284,6 +284,11 @@ func rtWritePrev(t *testing.T, dir string, header []string, rows []string, retry
 }
 
 func rtErrRow(host, status string) string {
+	return strings.Join([]string{host, "127.0.0.1", "VM", "-", "-", "-", "json-redfish", "-", "-", "-", "-", "-", "-", status}, "\t")
+}
+
+// rtErrRowV1 은 protocol·mgmt_version 열이 없던 이전 버전(12열) result.tsv 의 호스트 오류 행입니다.
+func rtErrRowV1(host, status string) string {
 	return strings.Join([]string{host, "127.0.0.1", "VM", "-", "-", "-", "-", "-", "-", "-", "-", status}, "\t")
 }
 
@@ -729,6 +734,69 @@ func TestRetryCheckNoTargetsAndErrors(t *testing.T) {
 		env.noNewDir(before)
 		notContacted("이전 결과 오류")
 	})
+}
+
+// ---- 하위 호환: protocol·mgmt_version 열이 없던 12열 result.tsv 를 -retry-from 으로 이어받기 ----
+
+func TestRetryCheckFromV1Result(t *testing.T) {
+	env := newRTEnv(t, 2, "")
+	srv, in := startAllSrv(t, "dell-r660", nil)
+	nItems := len(testProf(t).Items)
+	if len(resultHeaderV1) != 12 || len(resultHeader) != 14 {
+		t.Fatalf("머리글 열 수: V1 %d, 지금 %d", len(resultHeaderV1), len(resultHeader))
+	}
+	keep := []string{ // 재시도 대상이 아닌 호스트 (옛 형식 항목 행 2개)
+		strings.Join([]string{"oldhost", "10.0.0.9", "VM", "Dell", "PowerEdge R660", "1.2.3", "system_profile", "SysProfile", "PerfOptimized", "PerfOptimized", "-", "OK"}, "\t"),
+		strings.Join([]string{"oldhost", "10.0.0.9", "VM", "Dell", "PowerEdge R660", "1.2.3", "hyper_threading", "LogicalProc", "Enabled", "Disabled", "-", "FAIL"}, "\t"),
+	}
+	keepNew := []string{ // 위 행을 지금 형식으로 바꾼 기대값 (bios_version 뒤에 json-redfish, -)
+		strings.Join([]string{"oldhost", "10.0.0.9", "VM", "Dell", "PowerEdge R660", "1.2.3", "json-redfish", "-", "system_profile", "SysProfile", "PerfOptimized", "PerfOptimized", "-", "OK"}, "\t"),
+		strings.Join([]string{"oldhost", "10.0.0.9", "VM", "Dell", "PowerEdge R660", "1.2.3", "json-redfish", "-", "hyper_threading", "LogicalProc", "Enabled", "Disabled", "-", "FAIL"}, "\t"),
+	}
+	prev := rtWritePrev(t, filepath.Join(env.dir, "prev-v1"), resultHeaderV1,
+		[]string{keep[0], rtErrRowV1(in, StatusUnreachable), keep[1]}, []string{in})
+	snap := rtSnapshot(t, prev)
+
+	before := env.dirs()
+	out, err := env.check("-retry-from", prev)
+	if err != nil {
+		t.Fatalf("옛 형식 이전 결과를 읽지 못함: %v\n%s", err, out)
+	}
+	r := env.newDir(before)
+	rtSameSnapshot(t, "옛 형식 이전 결과", snap, rtSnapshot(t, prev)) // 이전 폴더는 읽기만
+
+	merged := rtLines(t, filepath.Join(r, "merged_result.tsv"))
+	if merged[0] != strings.Join(resultHeader, "\t") {
+		t.Fatalf("merged_result.tsv 머리글 = %q (지금 형식이어야 함)", merged[0])
+	}
+	cur := rtLines(t, filepath.Join(r, "result.tsv"))[1:]
+	if len(cur) != nItems {
+		t.Fatalf("이번 result.tsv %d행, 기대 %d", len(cur), nItems)
+	}
+	// 기대: oldhost 첫 행 → 재시도 호스트 자리(이전 첫 행 위치)에 새 행 전부 → oldhost 둘째 행
+	want := append(append([]string{keepNew[0]}, cur...), keepNew[1])
+	if strings.Join(merged[1:], "\n") != strings.Join(want, "\n") {
+		t.Errorf("병합 결과:\n%s\n--- 기대\n%s", strings.Join(merged[1:], "\n"), strings.Join(want, "\n"))
+	}
+	for _, l := range merged[1:] {
+		if f := strings.Split(l, "\t"); len(f) != len(resultHeader) || f[6] != "json-redfish" {
+			t.Errorf("병합 행 형식: %q", l)
+		}
+	}
+	if st := rtStates(t, merged[1:]); !rtAll(st[in], StatusOK) || len(st[in]) != nItems {
+		t.Errorf("재시도 호스트 = %v, 기대 OK × %d", st[in], nItems)
+	}
+	if srv.Sessions().Created != 1 {
+		t.Errorf("재시도 호스트 세션 %+v", srv.Sessions())
+	}
+
+	// 옛 형식이어도 프로파일 검사는 그대로
+	bad := rtWritePrev(t, filepath.Join(env.dir, "prev-v1-prof"), resultHeaderV1, []string{rtErrRowV1(in, StatusUnreachable)}, []string{in})
+	before = env.dirs()
+	if _, err := env.check("-retry-from", bad, "-profile", "OTHER"); err == nil || !strings.Contains(err.Error(), "프로파일") {
+		t.Errorf("옛 형식 + 다른 프로파일: err = %v", err)
+	}
+	env.noNewDir(before)
 }
 
 // ---- allcheck ----

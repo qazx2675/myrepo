@@ -121,17 +121,35 @@ func loadPrevTable(dir, plain string, header []string) (*tsvTable, error) {
 }
 
 // loadPrevCheck 는 check 의 이전 result.tsv 를 읽고 프로파일이 같은지 확인합니다.
+// protocol·mgmt_version 열이 없던 이전 버전 형식(resultHeaderV1)도 받아, 그 두 열에 json-redfish, "-" 를 채워 지금 형식으로 바꿉니다.
 func loadPrevCheck(dir, profile string) (*tsvTable, error) {
 	t, err := loadPrevTable(dir, "result.tsv", resultHeader)
 	if err != nil {
-		return nil, err
+		old, oerr := loadPrevTable(dir, "result.tsv", resultHeaderV1)
+		if oerr != nil {
+			return nil, err // 지금 형식 기준의 오류를 보여 준다
+		}
+		t = upgradeResultV1(old)
 	}
 	for _, r := range t.Rows {
-		if r[2] != tsvField(profile) {
-			return nil, fmt.Errorf("이전 결과의 프로파일(%s)이 이번 -profile(%s)과 다릅니다. 같은 프로파일로 실행하십시오", r[2], profile)
+		if r[resColProfile] != tsvField(profile) {
+			return nil, fmt.Errorf("이전 결과의 프로파일(%s)이 이번 -profile(%s)과 다릅니다. 같은 프로파일로 실행하십시오", r[resColProfile], profile)
 		}
 	}
 	return t, nil
+}
+
+// upgradeResultV1 은 resultHeaderV1 형식의 행에 protocol(json-redfish)·mgmt_version("-") 열을 bios_version 뒤에 넣습니다.
+func upgradeResultV1(t *tsvTable) *tsvTable {
+	at := colIndex(resultHeaderV1, "bios_version") + 1
+	out := &tsvTable{Rows: make([][]string, len(t.Rows))}
+	for i, r := range t.Rows {
+		row := make([]string, 0, len(resultHeader))
+		row = append(row, r[:at]...)
+		row = append(row, redfishProtocol, "-")
+		out.Rows[i] = append(row, r[at:]...)
+	}
+	return out
 }
 
 // loadPrevAll 은 allcheck 의 이전 summary.tsv 와 all_diff.tsv 를 읽습니다.
@@ -330,8 +348,8 @@ func (r *checkRun) writeMergedResults(cur [][]string) error {
 			m.Other++
 		}
 	}
-	merged := mergeRowsByHost(r.prevResult.Rows, cur, 0, retried)
-	states := hostStates(merged, 0, len(resultHeader)-1, checkRowsState)
+	merged := mergeRowsByHost(r.prevResult.Rows, cur, resColHost, retried)
+	states := hostStates(merged, resColHost, resColResult, checkRowsState)
 	retry := m.tally(states, inputOf, isRetryStatus)
 	var ok []string
 	for _, s := range states {

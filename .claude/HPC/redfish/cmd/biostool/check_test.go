@@ -313,9 +313,9 @@ func TestHostErrorsDoNotStopOthers(t *testing.T) {
 	errRows := 0
 	for _, r := range rows[1:] {
 		f := strings.Split(r, "\t")
-		if f[6] == "-" {
+		if f[8] == "-" { // std_name
 			errRows++
-			if f[7] != "-" || f[8] != "-" || f[9] != "-" || f[10] != "-" || f[11] == "OK" {
+			if f[6] != redfishProtocol || f[7] != "-" || f[9] != "-" || f[10] != "-" || f[11] != "-" || f[12] != "-" || f[13] == "OK" {
 				t.Errorf("호스트 오류 행: %q", r)
 			}
 		}
@@ -349,7 +349,7 @@ func TestResultFilesFormat(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(run.Dir, "result.tsv"))
 	must(t, err)
 	lines := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
-	const header = "hostname\tip\tprofile\tvendor\tmodel\tbios_version\tstd_name\tattribute\texpected\tcurrent\tpending\tresult"
+	const header = "hostname\tip\tprofile\tvendor\tmodel\tbios_version\tprotocol\tmgmt_version\tstd_name\tattribute\texpected\tcurrent\tpending\tresult"
 	if lines[0] != header {
 		t.Errorf("머리글 = %q", lines[0])
 	}
@@ -359,15 +359,19 @@ func TestResultFilesFormat(t *testing.T) {
 	counts := map[string]int{}
 	for _, l := range lines[1:] {
 		f := strings.Split(l, "\t")
-		if len(f) != 12 {
+		if len(f) != 14 {
 			t.Fatalf("열 %d개: %q", len(f), l)
 		}
 		counts[f[0]]++
 		if f[2] != "VM" {
 			t.Errorf("profile 열: %q", l)
 		}
-		if f[6] == "hyper_threading" && f[3] == "Dell" && f[9] != "Dis abled x" {
-			t.Errorf("탭/개행 치환 실패: current = %q", f[9])
+		// 점검이 끝난 호스트는 Manager 리소스를 1회 읽으므로 mock 트리 6개 모두 mgmt_version 이 채워진다 (모르면 "-")
+		if f[6] != "json-redfish" || f[7] == "-" || f[7] == "" || !strings.Contains(f[7], "(mock)") {
+			t.Errorf("protocol/mgmt_version 열: %q", l)
+		}
+		if f[8] == "hyper_threading" && f[3] == "Dell" && f[11] != "Dis abled x" {
+			t.Errorf("탭/개행 치환 실패: current = %q", f[11])
 		}
 	}
 	for h, n := range counts {
@@ -418,8 +422,8 @@ func TestReadOnlyAndSessionCountsAllTrees(t *testing.T) {
 		}
 	}
 	// 매핑이 모두 있는 Dell 은 root, Systems, System, Bios, Registries/<id>, Settings 정도만 읽는다.
-	if g := servers[0].Count("GET", "/"); g > 7 {
-		t.Errorf("Dell GET %d회, 기대 7 이하: %+v", g, servers[0].Calls())
+	if g := servers[0].Count("GET", "/"); g > 8 {
+		t.Errorf("Dell GET %d회, 기대 8 이하 (Manager 1회 포함): %+v", g, servers[0].Calls())
 	}
 	if run.MMModels != 2 { // lenovo(행 없음), gen10(LlcPrefetch 없음)
 		t.Errorf("MMModels = %d, 기대 2", run.MMModels)
@@ -557,6 +561,53 @@ func TestFromDumpMatchesOnline(t *testing.T) {
 	writeReport(&rep, offline, reportOpts{ListMax: 100, FailMax: 200})
 	if !strings.Contains(rep.String(), "덤프 읽기 모드") || !strings.Contains(rep.String(), "NO_DUMP") {
 		t.Errorf("오프라인 리포트:\n%s", rep.String())
+	}
+}
+
+// mgmt_version: 이미 읽은 Manager 응답에서만 만들고(새 GET 없음), 읽지 않았으면 "-".
+// 트리별 기대값은 testdata/<tree>/.../Managers/<id>.json 의 Model·FirmwareVersion 입니다.
+func TestMgmtVersion(t *testing.T) {
+	want := map[string]string{
+		"dell-r660":      "iDRAC9 (mock) 7.00.00.00",
+		"hpe-dl360gen11": "iLO 6 (mock) iLO 6 v1.60 (mock)", // Model 에 "(mock)" 이 붙어 앞부분이 겹치지 않음
+		"hpe-dl360gen10": "iLO 5 (mock) iLO 5 v2.90 (mock)",
+		"lenovo-sr650v3": "XCC (mock) TGBT99B-9.00 (mock)",
+		"cisco-c220m7":   "CIMC (mock) 4.3(2) (mock)",
+		"supermicro-x12": "BMC (mock) 01.02.03 (mock)",
+	}
+	for _, tree := range mockTrees {
+		get, err := newDumpFileGet("../../testdata/" + tree)
+		must(t, err)
+		m := newMemoGet(get)
+		info, err := detectSystemWith(m.fetch)
+		if err != nil || info == nil || info.ManagerPath == "" {
+			t.Fatalf("%s: detect err=%v info=%+v", tree, err, info)
+		}
+		if got := mgmtVersion(m, info); got != "-" {
+			t.Errorf("%s: Manager 를 읽기 전인데 %q (detectSystem 은 Manager 리소스를 읽지 않음)", tree, got)
+		}
+		if _, err := m.fetch(info.ManagerPath); err != nil {
+			t.Fatalf("%s: Manager 읽기: %v", tree, err)
+		}
+		if got := mgmtVersion(m, info); got != want[tree] {
+			t.Errorf("%s: mgmt_version = %q, 기대 %q", tree, got, want[tree])
+		}
+	}
+	if got := mgmtVersion(nil, nil); got != "-" {
+		t.Errorf("nil = %q", got)
+	}
+	for _, c := range []struct{ model, fw, want string }{
+		{"iLO 5", "iLO 5 v2.99", "iLO 5 2.99"},
+		{"iDRAC9", "7.00.00.182", "iDRAC9 7.00.00.182"},
+		{"XCC", "", "XCC"},
+		{"", "1.2", "1.2"},
+		{" ", "", "-"},
+		{"iLO\t6", "iLO\t6 v1.60\n", "iLO 6 1.60"}, // 제어문자는 tsvField 로 치환
+		{"iLO 5", "iLO 5", "iLO 5 iLO 5"},          // 버전 부분이 없으면 자르지 않음
+	} {
+		if got := formatMgmtVersion(c.model, c.fw); got != c.want {
+			t.Errorf("formatMgmtVersion(%q, %q) = %q, 기대 %q", c.model, c.fw, got, c.want)
+		}
 	}
 }
 

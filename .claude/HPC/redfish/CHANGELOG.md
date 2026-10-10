@@ -14,6 +14,8 @@ Cisco UCSM 읽기 전용 점검과 연구용 프로파일을 추가했습니다.
 
 - `VM_research.tsv` 수동 보정 2건: Lenovo 값 `Enabled|Enable`·`Disabled|Disable` 둘 다 허용, SD650 V3 hyper_threading 대체 후보 `Processors_HyperThreading`. `map_bios_attrs.ps1` 로 재생성하면 덮어써집니다.
 - FIRST_RUN 1번(Dell `Performance` ↔ `PerfOptimized`): 조사 데이터의 레지스트리 값이 `PerfOptimized` 이므로 데이터 기준으로 해소했습니다. 실장비 값 대조는 여전히 권장합니다.
+- **Redfish esult.tsv·ail.tsv·merged_result.tsv 에 protocol(항상 `json-redfish`)·mgmt_version 열 추가** (ios_version 바로 뒤, 12열 → 14열). 점검이 끝난 호스트마다 Manager 리소스를 1회 더 GET 합니다(읽기 전용 허용목록 안). 값은 Manager 의 Model·FirmwareVersion 이며 못 읽으면 `-`. v0.1.0 의 12열 결과는 `-retry-from` 이 읽어 새 형식으로 병합합니다(호환 테스트 포함). **열 위치로 `result.tsv` 를 읽는 외부 스크립트·엑셀은 수정해야 합니다.**
+- UCSM system_profile 은 후보 2개(`vpCPUPerformance=hpc`, `vpEnergyPerformance=performance`)를 각각 별도 항목으로 점검합니다(매핑 TSV 에 행 추가, 한 항목에 여러 행 허용).
 - 문서: README(VM_research·UCSM 사용법 2.9절, 서브커맨드·플래그·래퍼 표), `bios_json/standard_map/README.md`(XML 점검기 존재 반영), FIRST_RUN(확인 항목 18~25 추가), ARCHITECTURE(`ucsm` 위치), 사용법.txt(UCSM 절).
 
 ### 검증 (2026-10-10, 랩)
@@ -31,8 +33,8 @@ Cisco UCSM 읽기 전용 점검과 연구용 프로파일을 추가했습니다.
 
 | 파일 | 빌드 | 크기(바이트) | sha256 |
 |---|---|---|---|
-| `bin/biostool` | Go 1.26.5 | 7254178 | `7ede02b5f4d452d1422264c353e7166bee97f3d34d2cb1ec1dc8ee37625ae9a4` |
-| `bin/biostool_os6` | Go 1.20.14 | 5890048 | `505cab676d80d21a1093ea0e92266db9813bf45e93c1d3b0087a0e23b5132bfb` |
+| `bin/biostool` | Go 1.26.5 | 7262370 | `cdbd7e632e7be525ca1f238ef62d78974d97b95861cfcef99dee41783786d4e1` |
+| `bin/biostool_os6` | Go 1.20.14 | 5898240 | `1cd1cdc1894cd70026974bdc1c9577386ae1659c35b8c27238a5688f06dc1464` |
 
 ### 알려진 한계 (UCSM 및 프로파일)
 

@@ -92,17 +92,27 @@ type ucsmMap struct {
 	Classes  []string          // 조회할 서로 다른 xml_class (등장 순)
 }
 
-// rowFor 는 (모델키, 항목) 의 행입니다 (없으면 nil).
+// rowFor 는 (모델키, 항목) 의 첫 행입니다 (없으면 nil).
 func (m *ucsmMap) rowFor(modelKey, std string) *ucsmMapRow {
+	if rows := m.rowsFor(modelKey, std); len(rows) > 0 {
+		return rows[0]
+	}
+	return nil
+}
+
+// rowsFor 는 (모델키, 항목) 의 모든 행을 파일 순서대로 돌려줍니다. 한 항목에 클래스·속성이 다른 행이 여럿이면
+// (예: UCSM system_profile 의 vpCPUPerformance 와 vpEnergyPerformance) 모두 각각 점검합니다.
+func (m *ucsmMap) rowsFor(modelKey, std string) []*ucsmMapRow {
 	if modelKey == "" {
 		return nil
 	}
+	var out []*ucsmMapRow
 	for i := range m.Rows {
 		if m.Rows[i].modelKey == modelKey && m.Rows[i].Std == std {
-			return &m.Rows[i]
+			out = append(out, &m.Rows[i])
 		}
 	}
-	return nil
+	return out
 }
 
 // loadUcsmMap 은 매핑 TSV 파일을 읽습니다.
@@ -122,7 +132,8 @@ func loadUcsmMap(path string) (*ucsmMap, error) {
 // 형식: 탭 구분, 첫 비주석 줄은 머리글 `vendor model std_name xml_class xml_attribute value protocol xml_example verified`.
 // `#` 로 시작하는 줄과 빈 줄은 무시하되, `# UNMAPPED <벤더> <모델> <std_name>: <사유>` 줄은 그 모델·항목의
 // 매핑이 비어 있다는 표시로 읽습니다(→ MAPPING_MISSING 사유). vendor 는 CISCO, protocol 은 xml 만 받습니다.
-// (모델, std_name) 당 행은 1개이며, value 의 `A|B` 는 허용값 여러 개입니다 (대소문자까지 정확히 비교).
+// (모델, std_name, 클래스, 속성) 당 행은 1개이며(한 항목에 클래스·속성이 다른 행이 여럿이면 각각 점검),
+// value 의 `A|B` 는 허용값 여러 개입니다 (대소문자까지 정확히 비교).
 func parseUcsmMap(text, file string) (*ucsmMap, error) {
 	text = strings.TrimPrefix(text, "\ufeff")
 	m := &ucsmMap{Unmapped: map[string]string{}}
@@ -202,9 +213,9 @@ func parseUcsmMap(text, file string) (*ucsmMap, error) {
 		if r.modelKey = ucsmModelKey(r.Model); r.modelKey == "" {
 			return nil, fmt.Errorf("%s:%d: model %q 에서 비교할 글자가 남지 않습니다", file, n, r.Model)
 		}
-		key := r.modelKey + "|" + r.Std
+		key := r.modelKey + "|" + r.Std + "|" + r.Class + "|" + r.Attr
 		if first, dup := seen[key]; dup {
-			return nil, fmt.Errorf("%s:%d: %s %s 행이 %d 줄과 중복입니다 (모델·항목당 1행)", file, n, r.Model, r.Std, first)
+			return nil, fmt.Errorf("%s:%d: %s %s %s %s 행이 %d 줄과 중복입니다 (모델·항목·클래스·속성당 1행)", file, n, r.Model, r.Std, r.Class, r.Attr, first)
 		}
 		seen[key] = n
 		m.Rows = append(m.Rows, r)
@@ -456,9 +467,9 @@ func ucsmJudge(m *ucsmMap, s *ucsmServer, vals map[string]map[string]string, cla
 	mk := ucsmModelKey(s.Model)
 	out := make([]ucsmItem, 0, len(m.Items))
 	for _, std := range m.Items {
-		it := ucsmItem{Std: std, Class: "-", Attr: "-", Expected: "-", Current: "-"}
-		row := m.rowFor(mk, std)
-		if row == nil {
+		rows := m.rowsFor(mk, std)
+		if len(rows) == 0 {
+			it := ucsmItem{Std: std, Class: "-", Attr: "-", Expected: "-", Current: "-"}
 			it.Result = StatusMappingMissing
 			if why, ok := m.Unmapped[mk+"|"+std]; ok && mk != "" {
 				it.Reason = "매핑 TSV 에서 UNMAPPED (" + why + ")"
@@ -468,39 +479,42 @@ func ucsmJudge(m *ucsmMap, s *ucsmServer, vals map[string]map[string]string, cla
 			out = append(out, it)
 			continue
 		}
-		it.Class, it.Attr, it.Expected = row.Class, row.Attr, row.Value
-		attrs, hasInst := vals[row.Class]
-		cur, hasAttr := attrs[row.Attr]
-		why, classBad := classErr[row.Class]
-		switch {
-		case classBad:
-			it.Result = StatusUnsupported
-			it.Reason = "UCSM 이 클래스 조회에 오류를 돌려줌 (" + why + ")"
-		case !hasInst:
-			it.Result = StatusUnsupported
-			it.Reason = "이 서버의 bios-settings 아래에 " + row.Class + " 가 없음"
-		case !hasAttr:
-			it.Result = StatusUnsupported
-			it.Reason = row.Class + " 에 속성 " + row.Attr + " 이(가) 없음"
-		default:
-			it.Current = cur
+		for _, row := range rows {
+			it := ucsmItem{Std: std, Class: "-", Attr: "-", Expected: "-", Current: "-"}
+			it.Class, it.Attr, it.Expected = row.Class, row.Attr, row.Value
+			attrs, hasInst := vals[row.Class]
+			cur, hasAttr := attrs[row.Attr]
+			why, classBad := classErr[row.Class]
 			switch {
-			case ucsmMatch(row.Allowed, cur):
-				it.Result = StatusOK
-			case !row.Verified:
-				it.Result = StatusUnverified
-				it.Reason = "매핑 행이 verified=N"
+			case classBad:
+				it.Result = StatusUnsupported
+				it.Reason = "UCSM 이 클래스 조회에 오류를 돌려줌 (" + why + ")"
+			case !hasInst:
+				it.Result = StatusUnsupported
+				it.Reason = "이 서버의 bios-settings 아래에 " + row.Class + " 가 없음"
+			case !hasAttr:
+				it.Result = StatusUnsupported
+				it.Reason = row.Class + " 에 속성 " + row.Attr + " 이(가) 없음"
 			default:
-				it.Result = StatusFail
-			}
-			if cur == ucsmPlatformDefault && it.Result != StatusOK {
-				if it.Reason != "" {
-					it.Reason += "; "
+				it.Current = cur
+				switch {
+				case ucsmMatch(row.Allowed, cur):
+					it.Result = StatusOK
+				case !row.Verified:
+					it.Result = StatusUnverified
+					it.Reason = "매핑 행이 verified=N"
+				default:
+					it.Result = StatusFail
 				}
-				it.Reason += ucsmPlatformNote
+				if cur == ucsmPlatformDefault && it.Result != StatusOK {
+					if it.Reason != "" {
+						it.Reason += "; "
+					}
+					it.Reason += ucsmPlatformNote
+				}
 			}
+			out = append(out, it)
 		}
-		out = append(out, it)
 	}
 	return out
 }

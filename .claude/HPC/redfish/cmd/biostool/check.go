@@ -67,6 +67,9 @@ type hostCheck struct {
 	Dump    string     // MAPPING_MISSING 덤프 저장 위치(결과 폴더 기준) 또는 사유
 	Stats   CallStats
 	Notes   []string
+
+	// MgmtVersion 은 result.tsv mgmt_version 열입니다 (이미 읽은 Manager 리소스에서, 모르면 "-" 또는 빈 문자열).
+	MgmtVersion string
 }
 
 func (h *hostCheck) setErr(err error) {
@@ -406,6 +409,14 @@ func (e *checkEnv) checkOffline(t Target) *hostCheck {
 func (e *checkEnv) evaluate(h *hostCheck, m *memoGet) {
 	info, err := detectSystemWith(m.fetch)
 	h.Info = info
+	// 점검이 정상으로 끝난 호스트만 Manager 리소스를 1회 더 읽어(읽기 전용 허용목록 안의 경로, 실패해도 무시)
+	// mgmt_version 을 정한다. 오류 호스트는 GET 을 늘리지 않고 이미 읽은 응답만 본다.
+	defer func() {
+		if h.Status == "" && h.Info != nil && h.Info.ManagerPath != "" {
+			_, _ = m.fetch(h.Info.ManagerPath)
+		}
+		h.MgmtVersion = mgmtVersion(m, h.Info)
+	}()
 	if err != nil {
 		h.setErr(err)
 		return
@@ -747,15 +758,73 @@ func newDumpFileGet(hostDir string) (getFunc, error) {
 
 // ---- 결과 파일 ----
 
-var resultHeader = []string{"hostname", "ip", "profile", "vendor", "model", "bios_version", "std_name", "attribute", "expected", "current", "pending", "result"}
+var resultHeader = []string{"hostname", "ip", "profile", "vendor", "model", "bios_version", "protocol", "mgmt_version", "std_name", "attribute", "expected", "current", "pending", "result"}
+
+// resultHeaderV1 은 protocol·mgmt_version 열이 생기기 전의 result.tsv 머리글입니다 (-retry-from 하위 호환용).
+var resultHeaderV1 = []string{"hostname", "ip", "profile", "vendor", "model", "bios_version", "std_name", "attribute", "expected", "current", "pending", "result"}
+
+// redfishProtocol 은 result.tsv protocol 열의 값입니다 (UCSM 의 ucsm_result.tsv 는 xml).
+const redfishProtocol = "json-redfish"
+
+// result.tsv 열 위치 (머리글 이름으로 찾음 — 열을 추가해도 인덱스를 따로 고칠 필요 없게).
+var (
+	resColHost    = colIndex(resultHeader, "hostname")
+	resColProfile = colIndex(resultHeader, "profile")
+	resColResult  = colIndex(resultHeader, "result")
+)
+
+// colIndex 는 머리글에서 이름의 위치입니다. 없으면 프로그래밍 오류이므로 panic 합니다.
+func colIndex(header []string, name string) int {
+	for i, h := range header {
+		if h == name {
+			return i
+		}
+	}
+	panic("머리글에 열이 없습니다: " + name)
+}
+
+// mgmtVersion 은 이미 읽은 Manager 리소스(Model, FirmwareVersion)로 BMC 관리 컨트롤러를 짧게 나타냅니다
+// (예: Model "iLO 5", FirmwareVersion "iLO 5 v2.99" → "iLO 5 2.99"). 새로 GET 하지 않고 memo 에 있는 응답만 봅니다.
+// Manager 를 읽지 않았거나 값이 없으면 "-" 입니다.
+func mgmtVersion(m *memoGet, info *SystemInfo) string {
+	if m == nil || info == nil || info.ManagerPath == "" {
+		return "-"
+	}
+	_, key := pathKey(info.ManagerPath)
+	r, ok := m.m[key]
+	if !ok || r.err != nil {
+		return "-"
+	}
+	var mgr struct{ Model, FirmwareVersion string }
+	if json.Unmarshal(r.b, &mgr) != nil {
+		return "-"
+	}
+	return formatMgmtVersion(mgr.Model, mgr.FirmwareVersion)
+}
+
+// formatMgmtVersion 은 Model 과 FirmwareVersion 을 합칩니다. FirmwareVersion 이 Model 로 시작하면 겹치는 부분과
+// 버전 앞의 "v" 를 떼어 냅니다. 탭·개행은 tsvField 로 치환하고, 둘 다 비면 "-" 입니다.
+func formatMgmtVersion(model, fw string) string {
+	model, fw = strings.TrimSpace(model), strings.TrimSpace(fw)
+	if model != "" && len(fw) > len(model) && strings.EqualFold(fw[:len(model)], model) {
+		fw = strings.TrimSpace(fw[len(model):])
+		if len(fw) > 1 && (fw[0] == 'v' || fw[0] == 'V') && fw[1] >= '0' && fw[1] <= '9' {
+			fw = fw[1:]
+		}
+	}
+	return tsvField(strings.TrimSpace(model + " " + fw))
+}
 
 // rows 는 호스트 1대의 result.tsv 행입니다: 항목마다 1행, 호스트 단위 오류는 std_name "-" 1행.
 func (r *checkRun) rows(h *hostCheck) [][]string {
-	vendor, model, bios := "-", "-", "-"
+	vendor, model, bios, mgmt := "-", "-", "-", "-"
 	if h.Info != nil {
 		vendor, model, bios = tsvField(h.Info.Vendor), tsvField(h.Info.Model), tsvField(h.Info.BiosVersion)
 	}
-	base := []string{tsvField(h.Target.Hostname), tsvField(h.Target.IP), tsvField(r.Profile), vendor, model, bios}
+	if h.MgmtVersion != "" {
+		mgmt = tsvField(h.MgmtVersion)
+	}
+	base := []string{tsvField(h.Target.Hostname), tsvField(h.Target.IP), tsvField(r.Profile), vendor, model, bios, redfishProtocol, mgmt}
 	row := func(tail ...string) []string {
 		out := append([]string(nil), base...)
 		for _, s := range tail {

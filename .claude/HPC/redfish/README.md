@@ -148,6 +148,40 @@ bash bios_check.sh --profile VM -no-prompt     # 재점검 (묻지 않고 결과
 
 설정이 적용되지 않은 항목은 결과 리포트의 `[적용 안 됨 · 사유별]` 에 상태와 안내가 나옵니다(상태 표는 3.6절). 설정 쓰기는 **자동 재시도하지 않습니다**(`SET_ERROR`·`APPLY_UNCONFIRMED` 는 재점검으로 먼저 확인하십시오).
 
+#### 실제 프롬프트 사용 예시 — 조사 데이터 프로파일 `VM_research`
+
+```bash
+bash bios_check.sh                                  # 메뉴에서 VM_research 선택 (또는 --profile VM_research)
+bash bios_check.sh --profile VM_research            # 점검만 됩니다 (전부 verified=N)
+bash bios_check.sh --profile VM_research -from-dump dumps    # 사전조사 덤프로 BMC 접속 없이
+```
+
+아래는 합성 덤프(`testdata`) 6대를 `-from-dump` 로 점검한 실제 출력입니다. Dell R660 은 값이 맞아 `OK`, 값이 다른 HPE 는 `verified=N` 이라 `UNVERIFIED`, 프로파일에 모델 행이 없는 Lenovo SR650 V3·Cisco C220 M7·Supermicro X12 는 `MAPPING_MISSING` 이며 BMC 에서 찾은 **속성 이름 후보와 허용값**을 함께 보여 줍니다(이 값을 확인해 프로파일 행을 추가하는 절차는 [FIRST_RUN.md](FIRST_RUN.md)).
+
+```text
+프로파일: VM_research (profiles/VM_research.tsv)
+모드: 덤프 읽기 (testdata), 접속 안 함
+
+== BIOS 점검 결과 (profile=VM_research, 대상 6 / 2026-10-10 08:15) ==
+OK                     1  → results/20261010_081538/ok.txt (OK·PENDING_OK 호스트 이름)
+PENDING_OK             0
+FAIL                   0
+UNVERIFIED             2
+MAPPING_MISSING        3
+(덤프 읽기 모드: BMC 에 접속하지 않았고, 설정도 할 수 없습니다)
+
+[OK] 1대
+  dell-r660
+
+[설정 불가] 15건 (호스트 5대)
+  hpe-dl360gen11  HPE ProLiant DL360 Gen11  system_profile  WorkloadProfile  UNVERIFIED  기대=HighPerformanceCompute|HighPerformanceCompute(HPC)  현재=GeneralPowerEfficientCompute  (프로파일 행이 verified=N (설정하지 않음))
+  hpe-dl360gen10  HPE ProLiant DL360 Gen10  llc_prefetch    MAPPING_MISSING  (프로파일 후보 속성(LlcPrefetch)이 BMC 에 없음)  후보: 없음
+  lenovo-sr650v3  Lenovo ThinkSystem SR650 V3  hyper_threading  MAPPING_MISSING  (프로파일에 Lenovo ThinkSystem SR650 V3 행이 없음)  후보: Processors_HyperThreading=Enable [허용값 Enable|Disable]
+  ...
+```
+
+> 위 호스트 이름과 모델은 mock 입니다. 실제 장비 값은 아직 확인하지 않았습니다. 실제 BMC 에서 처음 쓸 때는 반드시 `-dry-run` 본문을 사람이 확인한 뒤 `verified` 를 `Y` 로 바꾸십시오.
+
 ### 2.2 설정 없이 미리 보기 — `-dry-run`
 
 ```bash
@@ -311,6 +345,8 @@ OK                     1  → results/20261007_162940/ok.txt (OK·PENDING_OK 호
 | `ip` | 접속한 BMC 주소 |
 | `profile` | 사용한 프로파일 이름 |
 | `vendor` / `model` / `bios_version` | BMC 가 보고한 값(알 수 없으면 `-`) |
+| `protocol` | 항상 `json-redfish` (UCSM 점검의 `ucsm_result.tsv` 와 열 구성을 맞춤) |
+| `mgmt_version` | BMC 관리 컨트롤러 식별: Manager 의 `Model` + `FirmwareVersion`(예 `iLO 5 2.99`). 점검이 끝난 호스트마다 Manager 를 1회 더 읽고, 못 읽으면 `-`. **v0.1.0 의 12열 `result.tsv` 는 `protocol`·`mgmt_version` 이 없는 형식이며 `-retry-from` 이 읽어 새 형식으로 병합합니다** |
 | `std_name` | 표준 항목 이름(`system_profile`, `hyper_threading`, `llc_prefetch`, `sub_numa_cluster` + 프로파일이 추가한 항목) |
 | `attribute` | BMC 의 실제 속성 이름 |
 | `expected` | 프로파일의 기대값(`A\|B` 면 원문 그대로) |
@@ -340,6 +376,48 @@ bash ucsm_check.sh -user ucsm.txt -list-max 50    # 나머지 인자는 biostool
 - 결과는 `results/<일시>/ucsm_result.tsv` 에 쓰며 Redfish 의 `result.tsv` 와 섞지 않습니다. 열: `ucsm_host ip protocol mgmt_version server_dn vendor model std_name xml_class attribute expected current result`. 서버·항목마다 1행이고, 호스트 단위 오류는 `server_dn`·`std_name` 이 `-` 인 1행입니다.
 - 항목 판정: `OK` · `FAIL` · `UNVERIFIED` · `MAPPING_MISSING` · `UNSUPPORTED`. 호스트 오류: `AUTH_FAIL` · `UNREACHABLE` · `TIMEOUT` · `XML_ERROR`. 매핑 TSV 에는 `verified=Y` 행이 없어서 불일치는 모두 `UNVERIFIED` 로 보입니다.
 - `-dry-run`, `-profile`, `-from-dump`, `-retry-from` 과 `retry.txt` 는 없습니다(`ucsm` 이 이 옵션을 거부합니다). 실패한 UCSM 은 `-user` 로 그 주소만 다시 실행하십시오.
+
+실제 프롬프트 사용 예시입니다(합성 mock UCSM 1대, 블레이드 3대를 `bash ucsm_check.sh` 로 점검한 실제 출력이며 호스트가 `127.0.0.1:포트` 로 보이는 것은 mock 이라서입니다). `system_profile` 은 조사 데이터에 후보가 둘(`vpCPUPerformance=hpc`, `vpEnergyPerformance=performance`)이라 **둘 다 각각 별도 항목으로 점검**합니다.
+
+```text
+UCSM XML 매핑: bios_json/standard_map/standard_bios_map_xml.tsv (행 12개, 조회 클래스 3개: biosVfCPUPerformance, biosVfIntelHyperThreadingTech, biosVfProcessorEnergyConfiguration)
+대상은 UCSM(Fabric Interconnect VIP) 주소입니다. 호출: aaaLogin → configResolveClass(읽기) → aaaLogout
+
+== UCSM BIOS 점검 결과 (XML API, 읽기 전용 / 2026-10-10 08:36) ==
+대상 UCSM 1개 (점검 완료 1개, 오류 0개), 서버(블레이드) 3대
+항목 판정:
+  OK                     2
+  FAIL                   0
+  UNVERIFIED             3
+  MAPPING_MISSING        8
+  UNSUPPORTED            1
+
+[UNVERIFIED] 서버 2대 (항목 3건)
+  127.0.0.1:38271  sys/chassis-1/blade-1  UCSB-B200-M5
+    hyper_threading  biosVfIntelHyperThreadingTech.vpIntelHyperThreadingTech  기대=enabled  현재=disabled  (매핑 행이 verified=N)
+  127.0.0.1:38271  sys/chassis-1/blade-2  UCSX-210C-M7
+    system_profile   biosVfCPUPerformance.vpCPUPerformance  기대=hpc  현재=platform-default  (매핑 행이 verified=N; 플랫폼 기본값이라 실제 적용값은 biosPlatformDefaults 확인 필요)
+    system_profile   biosVfProcessorEnergyConfiguration.vpEnergyPerformance  기대=performance  현재=balanced-energy  (매핑 행이 verified=N)
+
+[MAPPING_MISSING] 항목 8건 (모델·항목별)
+  UCSB-B200-M5  llc_prefetch  (매핑 TSV 에서 UNMAPPED (none_of_candidates)) — 서버 1대
+  UCSB-B200-M6  system_profile  (매핑 TSV 에 UCSB-B200-M6 의 system_profile 행이 없음) — 서버 1대
+  ...
+
+[UNSUPPORTED] 항목 1건 (모델·항목별)
+  UCSX-210C-M7  hyper_threading  biosVfIntelHyperThreadingTech.vpIntelHyperThreadingTech  (biosVfIntelHyperThreadingTech 에 속성 vpIntelHyperThreadingTech 이(가) 없음) — 서버 1대
+
+* 결과 파일: results/20261010_083617/ucsm_result.tsv
+```
+
+결과 파일 `ucsm_result.tsv` 의 일부입니다(탭 구분, 열은 위 설명 순서).
+
+```text
+ucsm_host        ip         protocol  mgmt_version  server_dn              vendor  model         std_name        xml_class                           attribute             expected     current           result
+127.0.0.1:38271  127.0.0.1  xml       UCSM          sys/chassis-1/blade-1  Cisco   UCSB-B200-M5  system_profile  biosVfCPUPerformance                vpCPUPerformance      hpc          hpc               OK
+127.0.0.1:38271  127.0.0.1  xml       UCSM          sys/chassis-1/blade-1  Cisco   UCSB-B200-M5  system_profile  biosVfProcessorEnergyConfiguration  vpEnergyPerformance   performance  performance       OK
+127.0.0.1:38271  127.0.0.1  xml       UCSM          sys/chassis-1/blade-1  Cisco   UCSB-B200-M5  hyper_threading biosVfIntelHyperThreadingTech       vpIntelHyperThreadingTech enabled  disabled          UNVERIFIED
+```
 
 한계:
 
