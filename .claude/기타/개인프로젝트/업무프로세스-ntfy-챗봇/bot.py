@@ -410,8 +410,15 @@ def process_question(msg_id, question_text):
             "question": question_text
         })
 
+    # 답변 윗줄에 주의사항 헤더 추가
+    disclaimer = (
+        "**AI 답변은 100% 정확하지 않습니다.**\n"
+        "**자원 관리상 질문의 맥락은 이어지지않게 설정되어있습니다. 질문은 한번에 진행해야합니다.**\n\n"
+    )
+    final_ans = disclaimer + ans
+
     # ntfy 로 전송
-    publish_ntfy(ans, q_id)
+    publish_ntfy(final_ans, q_id)
 
 # 피드백 처리 메인 로직
 def process_feedback(msg_id, fb_text):
