@@ -258,6 +258,100 @@ else
   record 6 "표기 선택" FAIL "dry-run 본문에 Enable 이 없거나 Enabled 가 들어감"
 fi
 
+# ---- 시나리오 7~10: 1순위 계정 생성(create) / 비밀번호 변경 dry-run ----
+DELL_FB_USER="dell_backup"
+DELL_FB_PW="DellBackup-Test-5"
+cat >"$W/rf_acct.conf" <<EOF
+# 계정 생성 시험용 rf.conf (임시 파일)
+hpe_user=$HPE_FB_USER
+hpe_pass=$HPE_FB_PW
+dell_user=$DELL_FB_USER
+dell_pass=$DELL_FB_PW
+EOF
+chmod 600 "$W/rf_acct.conf"
+ACCT_OK=1
+if ! "$MOCK" -h 2>&1 | grep -q -- "-accounts"; then ACCT_OK=0; fi
+if [ -z "$OPEN_FLAG" ]; then ACCT_OK=0; fi
+
+# 한 호스트에 대해 account 명령을 실행하는 도우미: acct_run <파일 접두사> <포트> <추가 인자...> (표준입력은 빈 줄 = 기본 Y)
+acct_run() {
+  local tag="$1" port="$2"
+  shift 2
+  printf '127.0.0.1:%s\n' "$port" >"$W/user_$tag.txt"
+  printf '\n' | "$BIOS" account "$@" -conf "$W/bios.conf" -user "$W/user_$tag.txt" -hosts "$W/hosts" \
+    -rf-conf "$W/rf_acct.conf" >"$W/out_$tag.txt" 2>&1
+  if [ "$VERBOSE" = "1" ]; then sed 's/^/    | /' "$W/out_$tag.txt"; fi
+}
+
+step 7 "account create: hpe(19107) 에 1순위 계정이 없음 -> 기본 Y 로 생성, 이후 점검은 1순위 계정으로 접속"
+if [ "$ACCT_OK" = "0" ]; then
+  record 7 "계정 생성" SKIP "mockbmc 에 -accounts / -open-serviceroot 플래그가 없음"
+else
+  start_mock "$TREES/hpe-dl360gen11" 19107 "$HPE_FB_USER" "$HPE_FB_PW" $OPEN_FLAG -accounts || exit 2
+  acct_run c7 19107 create -stdin-ok
+  AR="$(latest_dir "$W")/account_result.tsv"
+  printf '127.0.0.1:19107\n' >"$W/user7b.txt"
+  "$BIOS" check -profile TC -conf "$W/bios.conf" -user "$W/user7b.txt" -hosts "$W/hosts" -rf-conf "$W/rf_acct.conf" -no-prompt >"$W/out_c7b.txt" 2>&1
+  if grep -q '\[CREATED\]' "$W/out_c7.txt" && grep -qF "CREATED" "$AR" 2>/dev/null \
+    && ! grep -qF "$PRIMARY_PW" "$W/out_c7.txt" "$AR" && ! grep -qF "$HPE_FB_PW" "$W/out_c7.txt" "$AR" \
+    && ! grep -q '2순위 계정(rf.conf)으로 접속' "$W/out_c7b.txt"; then
+    record 7 "계정 생성" PASS "19107 [CREATED], 비밀번호 비노출, 이후 점검이 1순위 계정으로 접속"
+  else
+    record 7 "계정 생성" FAIL "CREATED 가 아니거나 비밀번호가 출력됨 / 점검이 여전히 2순위로 접속"
+  fi
+fi
+
+step 8 "account create: 이미 같은 id 가 있으면 건너뜀 (덮어쓰지 않음)"
+if [ "$ACCT_OK" = "0" ]; then
+  record 8 "중복 건너뜀" SKIP "mockbmc 에 -accounts 플래그가 없음"
+else
+  acct_run c8 19107 create -stdin-ok
+  if grep -qE 'PRIMARY_OK|SKIP_EXISTS|생성할 호스트가 없습니다' "$W/out_c8.txt" && ! grep -q '\[CREATED\]' "$W/out_c8.txt"; then
+    record 8 "중복 건너뜀" PASS "재실행 시 만들지 않음 (1순위 계정으로 이미 접속됨)"
+  else
+    record 8 "중복 건너뜀" FAIL "이미 있는데 다시 만들려 함"
+  fi
+fi
+
+step 9 "account create: 빈 슬롯 방식(Dell, POST 불가) -> 슬롯 PATCH 로 생성"
+if [ "$ACCT_OK" = "0" ]; then
+  record 9 "슬롯 방식" SKIP "mockbmc 에 -accounts 플래그가 없음"
+else
+  start_mock "$TREES/dell-r660" 19108 "$DELL_FB_USER" "$DELL_FB_PW" $OPEN_FLAG -accounts -account-slots 4 -account-slot-style || exit 2
+  acct_run c9 19108 create -stdin-ok
+  AR9="$(latest_dir "$W")/account_result.tsv"
+  if grep -q '\[CREATED\]' "$W/out_c9.txt" && grep -F "127.0.0.1:19108" "$AR9" | grep -qF "PATCH"; then
+    record 9 "슬롯 방식" PASS "19108 가 빈 슬롯 PATCH 로 CREATED"
+  else
+    record 9 "슬롯 방식" FAIL "슬롯 PATCH 로 생성되지 않음"
+  fi
+fi
+
+step 10 "account create: 새 계정 로그인 검증 실패 -> 만든 계정만 롤백 (VERIFY_FAIL_ROLLED_BACK)"
+if [ "$ACCT_OK" = "0" ]; then
+  record 10 "검증 실패 롤백" SKIP "mockbmc 에 -accounts 플래그가 없음"
+else
+  start_mock "$TREES/hpe-dl360gen11" 19109 "$HPE_FB_USER" "$HPE_FB_PW" $OPEN_FLAG -accounts -account-deny-new-login || exit 2
+  acct_run c10 19109 create -stdin-ok
+  if grep -q 'VERIFY_FAIL_ROLLED_BACK' "$W/out_c10.txt" && ! grep -q '\[CREATED\]' "$W/out_c10.txt"; then
+    record 10 "검증 실패 롤백" PASS "19109 가 VERIFY_FAIL_ROLLED_BACK (만든 계정을 되돌림)"
+  else
+    record 10 "검증 실패 롤백" FAIL "롤백 표시가 없음"
+  fi
+fi
+
+step 11 "account change -dry-run: 새 비밀번호 입력 없이 대상·요청 형태만 확인 (쓰기 없음)"
+if [ "$ACCT_OK" = "0" ]; then
+  record 11 "변경 dry-run" SKIP "mockbmc 에 -accounts 플래그가 없음"
+else
+  acct_run c11 19107 change -dry-run
+  if grep -q 'WOULD_CHANGE' "$W/out_c11.txt" && ! grep -qF "$PRIMARY_PW" "$W/out_c11.txt"; then
+    record 11 "변경 dry-run" PASS "19107 WOULD_CHANGE, 비밀번호 비노출 (실제 변경은 터미널에서 직접 입력해야 함)"
+  else
+    record 11 "변경 dry-run" FAIL "WOULD_CHANGE 가 아니거나 비밀번호가 출력됨"
+  fi
+fi
+
 # ---- 결과 표 ----
 echo
 echo "================================================================"

@@ -46,7 +46,10 @@ const (
 	MethodLogin   = "aaaLogin"
 	MethodResolve = "configResolveClass"
 	MethodLogout  = "aaaLogout"
+	MethodConf    = "configConfMo" // 계정 모드(Options.Account)에서만, aaaUser 생성·비밀번호 변경·삭제로 제한
 	BladeClass    = "computeBlade"
+	UserClass     = "aaaUser" // 계정 모드에서만 configResolveClass 로 읽을 수 있음
+	UserRole      = "admin"   // 생성하는 계정에 부여하는 UCSM 역할 (관리자)
 )
 
 const (
@@ -91,6 +94,9 @@ type Options struct {
 	// Classes 는 configResolveClass 로 읽을 추가 classId 입니다. `bios` 로 시작하는 영숫자만 받아들이고
 	// 나머지는 조용히 버립니다 (버린 클래스는 ResolveClass 에서 ErrNotAllowed). computeBlade 는 항상 허용.
 	Classes []string
+	// Account 는 계정 모드입니다 (biostool account -ucsm 만 켠다). 켜면 aaaUser 조회와
+	// configConfMo(sys/user-ext/user-<이름> 의 생성·비밀번호 변경·삭제)만 추가로 허용됩니다.
+	Account bool
 }
 
 // Object 는 configResolveClass 응답의 인스턴스 1개입니다 (속성 이름 → 값).
@@ -114,6 +120,10 @@ type Client struct {
 	allowed   map[string]bool // configResolveClass classId 허용목록
 	loginDone bool
 	loginErr  error
+	account   bool            // 계정 모드 (configConfMo 허용)
+	targets   map[string]bool // 비밀번호 변경이 허용 등록된 사용자 이름
+	created   map[string]bool // 이번 클라이언트가 만든 사용자 (삭제 롤백 허용)
+	extra     []string        // 오류 Detail 에서 지울 추가 비밀 (새 계정 비밀번호)
 }
 
 // New 는 클라이언트를 만듭니다. 접속은 하지 않습니다. BaseURL 오류는 Login 에서 돌려줍니다.
@@ -127,6 +137,12 @@ func New(o Options) *Client {
 		if reBiosClass.MatchString(k) {
 			c.allowed[k] = true
 		}
+	}
+	if o.Account {
+		c.account = true
+		c.allowed[UserClass] = true
+		c.targets = map[string]bool{}
+		c.created = map[string]bool{}
 	}
 	timeout := o.Timeout
 	if timeout <= 0 {
@@ -230,6 +246,120 @@ func (c *Client) ResolveClass(classID string) ([]Object, error) {
 	return out, nil
 }
 
+// ---- 계정 모드 (Options.Account) ----
+
+var errNotAccountMode = errors.New("계정 모드가 아닌 클라이언트입니다")
+
+// AddSecret 은 오류 Detail 에서 지울 비밀 값(새 계정 비밀번호)을 등록합니다.
+func (c *Client) AddSecret(s string) {
+	if s == "" {
+		return
+	}
+	c.mu.Lock()
+	c.extra = append(c.extra, s)
+	c.mu.Unlock()
+}
+
+// ListUsers 는 UCSM 로컬 사용자 이름 목록입니다 (configResolveClass aaaUser, 계정 모드 전용).
+func (c *Client) ListUsers() ([]string, error) {
+	if !c.account {
+		return nil, errNotAccountMode
+	}
+	objs, err := c.ResolveClass(UserClass)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, o := range objs {
+		if n := o.Attrs["name"]; n != "" {
+			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+
+// AllowUserTarget 은 비밀번호 변경을 허용할 사용자 이름을 등록합니다 (계정 모드 전용).
+func (c *Client) AllowUserTarget(name string) error {
+	if !c.account {
+		return errNotAccountMode
+	}
+	if !reUserName.MatchString(name) {
+		return notAllowed(MethodConf, "사용자 이름 형식이 아님")
+	}
+	c.mu.Lock()
+	c.targets[name] = true
+	c.mu.Unlock()
+	return nil
+}
+
+// confBody 는 aaaUser 1개에 대한 configConfMo 요청 본문입니다 (속성 값은 모두 이스케이프).
+func (c *Client) confBody(name, status, inner string, attrs string) []byte {
+	dn := "sys/user-ext/user-" + name
+	return []byte(`<configConfMo cookie="` + esc(c.sec().cookie) + `" dn="` + esc(dn) + `" inHierarchical="false">` +
+		`<inConfig><aaaUser name="` + esc(name) + `" ` + attrs + `dn="` + esc(dn) + `" status="` + status + `">` + inner + `</aaaUser></inConfig></configConfMo>`)
+}
+
+// CreateUser 는 로컬 사용자를 새로 만듭니다 (status="created": 같은 이름이 있으면 UCSM 이 거부, 역할 admin).
+// 성공하면 이 클라이언트가 만든 사용자로 기억해 DeleteUser(롤백)를 허용합니다.
+func (c *Client) CreateUser(name, pwd string) error {
+	if !c.account {
+		return errNotAccountMode
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.baseErr != nil {
+		return c.baseErr
+	}
+	if c.sec().cookie == "" {
+		return ErrNotLoggedIn
+	}
+	c.extra = append(c.extra, pwd)
+	body := c.confBody(name, "created", `<aaaUserRole name="`+UserRole+`" status="created"/>`,
+		`pwd="`+esc(pwd)+`" accountStatus="active" expires="no" firstName="" lastName="" email="" phone="" `)
+	if _, err := c.post(MethodConf, body); err != nil {
+		return err
+	}
+	c.created[name] = true
+	return nil
+}
+
+// SetUserPassword 는 허용 등록된(AllowUserTarget) 사용자의 비밀번호만 바꿉니다 (status="modified").
+func (c *Client) SetUserPassword(name, pwd string) error {
+	if !c.account {
+		return errNotAccountMode
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.baseErr != nil {
+		return c.baseErr
+	}
+	if c.sec().cookie == "" {
+		return ErrNotLoggedIn
+	}
+	c.extra = append(c.extra, pwd)
+	body := c.confBody(name, "modified", "", `pwd="`+esc(pwd)+`" `)
+	_, err := c.post(MethodConf, body)
+	return err
+}
+
+// DeleteUser 는 이 클라이언트가 CreateUser 로 만든 사용자만 삭제합니다 (롤백 전용).
+func (c *Client) DeleteUser(name string) error {
+	if !c.account {
+		return errNotAccountMode
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.baseErr != nil {
+		return c.baseErr
+	}
+	if c.sec().cookie == "" {
+		return ErrNotLoggedIn
+	}
+	body := c.confBody(name, "deleted", "", "")
+	_, err := c.post(MethodConf, body)
+	return err
+}
+
 // Logout 은 자기 쿠키로 aaaLogout 을 보냅니다 (로그인하지 않았으면 아무것도 보내지 않음, 멱등).
 // 끝나면 쿠키·비밀번호를 지우고 유휴 연결을 닫습니다.
 func (c *Client) Logout() error {
@@ -260,92 +390,195 @@ func clip(s string) string {
 	return fmt.Sprintf("%q", s)
 }
 
-// gate 는 전송 직전의 단일 관문입니다. 보낼 본문을 다시 해석해
-//
-//   - 요소가 정확히 1개(자식 요소·두 번째 루트·주석·처리명령·DOCTYPE·네임스페이스 없음)이고
-//   - 루트가 aaaLogin / configResolveClass / aaaLogout 중 하나이며
-//   - 속성이 메서드별 고정 목록과 정확히 같고 (aaaLogin: inName·inPassword,
-//     configResolveClass: cookie·classId·inHierarchical, aaaLogout: inCookie)
-//   - configResolveClass 는 자기 쿠키 · inHierarchical="false" · 허용된 classId,
-//     aaaLogout 은 자기 쿠키일 때만 nil 입니다.
-//
-// 그 밖(configConfMo, configConfMos, configResolveDn, configResolveChildren, 전원·재부팅 계열 등)은 모두 거부합니다.
-// 거부 사유에는 속성 값(비밀번호·쿠키)을 넣지 않습니다.
-func (c *Client) gate(body []byte) error {
+// reqNode 는 gate 가 해석한 요청 XML 의 요소입니다 (속성과 자식 요소만).
+type reqNode struct {
+	name  string
+	attrs map[string]string
+	kids  []*reqNode
+}
+
+// parseRequest 는 요청 본문을 요소 트리로 해석합니다. 루트는 정확히 1개이고, 주석·처리명령·DOCTYPE·
+// 네임스페이스·중복 속성·요소 사이 문자 데이터는 모두 거부합니다.
+func parseRequest(body []byte) (*reqNode, error) {
 	dec := xml.NewDecoder(bytes.NewReader(body))
-	var root *xml.StartElement
-	depth := 0
+	var stack []*reqNode
+	var root *reqNode
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return notAllowed("?", "요청 본문을 XML 로 해석할 수 없음")
+			return nil, notAllowed("?", "요청 본문을 XML 로 해석할 수 없음")
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if root != nil {
-				return notAllowed(t.Name.Local, "요청에는 요소가 정확히 1개만 있어야 함 (자식·두 번째 요소 금지)")
+			if t.Name.Space != "" {
+				return nil, notAllowed(t.Name.Local, "네임스페이스 요소 금지")
 			}
-			s := t.Copy()
-			root = &s
-			depth++
+			n := &reqNode{name: t.Name.Local, attrs: map[string]string{}}
+			for _, a := range t.Attr {
+				if a.Name.Space != "" {
+					return nil, notAllowed(n.name, "네임스페이스 속성 금지")
+				}
+				if _, dup := n.attrs[a.Name.Local]; dup {
+					return nil, notAllowed(n.name, "중복 속성 금지")
+				}
+				n.attrs[a.Name.Local] = a.Value
+			}
+			if len(stack) == 0 {
+				if root != nil {
+					return nil, notAllowed(n.name, "요청에는 루트 요소가 정확히 1개만 있어야 함")
+				}
+				root = n
+			} else {
+				p := stack[len(stack)-1]
+				p.kids = append(p.kids, n)
+			}
+			stack = append(stack, n)
 		case xml.EndElement:
-			depth--
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
 		case xml.CharData:
 			if len(bytes.TrimSpace(t)) != 0 {
-				return notAllowed("?", "요소 밖·안의 문자 데이터 금지")
+				return nil, notAllowed("?", "요소 밖·안의 문자 데이터 금지")
 			}
 		default: // 주석, 처리명령(<?xml ...?>), DOCTYPE 등
-			return notAllowed("?", "주석·처리명령·DOCTYPE 금지")
+			return nil, notAllowed("?", "주석·처리명령·DOCTYPE 금지")
 		}
 	}
-	if root == nil || depth != 0 {
-		return notAllowed("?", "요청 요소가 없거나 닫히지 않음")
+	if root == nil || len(stack) != 0 {
+		return nil, notAllowed("?", "요청 요소가 없거나 닫히지 않음")
 	}
-	method := root.Name.Local
-	if root.Name.Space != "" {
-		return notAllowed(method, "네임스페이스 요소 금지")
+	return root, nil
+}
+
+func (n *reqNode) keysAre(keys ...string) bool {
+	if len(n.attrs) != len(keys) {
+		return false
 	}
-	attrs := map[string]string{}
-	for _, a := range root.Attr {
-		if a.Name.Space != "" {
-			return notAllowed(method, "네임스페이스 속성 금지")
+	for _, k := range keys {
+		if _, ok := n.attrs[k]; !ok {
+			return false
 		}
-		if _, dup := attrs[a.Name.Local]; dup {
-			return notAllowed(method, "중복 속성 금지")
-		}
-		attrs[a.Name.Local] = a.Value
 	}
+	return true
+}
+
+// gate 는 전송 직전의 단일 관문입니다. 보낼 본문을 다시 해석해
+//
+//   - 루트가 aaaLogin / configResolveClass / aaaLogout / configConfMo(계정 모드 한정) 중 하나이고
+//   - 속성이 메서드별 고정 목록과 정확히 같으며 (aaaLogin: inName·inPassword,
+//     configResolveClass: cookie·classId·inHierarchical, aaaLogout: inCookie,
+//     configConfMo: cookie·dn·inHierarchical)
+//   - 앞의 세 메서드는 자식 요소가 없고, configResolveClass 는 자기 쿠키 · inHierarchical="false" ·
+//     허용된 classId, aaaLogout 은 자기 쿠키일 때만 nil 입니다.
+//   - configConfMo 는 계정 모드에서만, sys/user-ext/user-<이름> 의 aaaUser 하나에 대한
+//     생성(created, 역할 admin) · 비밀번호 변경(modified, 허용 등록된 이름만) · 삭제(deleted, 이번에 만든 이름만)로 제한됩니다.
+//
+// 그 밖(configConfMos, configResolveDn, configResolveChildren, 전원·재부팅 계열 등)은 모두 거부합니다.
+// 거부 사유에는 속성 값(비밀번호·쿠키)을 넣지 않습니다.
+func (c *Client) gate(body []byte) error {
+	root, err := parseRequest(body)
+	if err != nil {
+		return err
+	}
+	method := root.name
 	ck := c.sec().cookie
 	switch method {
 	case MethodLogin:
-		if !sameKeys(attrs, "inName", "inPassword") {
-			return notAllowed(method, "속성은 inName·inPassword 뿐이어야 함")
+		if !root.keysAre("inName", "inPassword") || len(root.kids) != 0 {
+			return notAllowed(method, "속성은 inName·inPassword 뿐이고 자식 요소가 없어야 함")
 		}
 	case MethodResolve:
-		if !sameKeys(attrs, "cookie", "classId", "inHierarchical") {
-			return notAllowed(method, "속성은 cookie·classId·inHierarchical 뿐이어야 함")
+		if !root.keysAre("cookie", "classId", "inHierarchical") || len(root.kids) != 0 {
+			return notAllowed(method, "속성은 cookie·classId·inHierarchical 뿐이고 자식 요소가 없어야 함")
 		}
-		if ck == "" || attrs["cookie"] != ck {
+		if ck == "" || root.attrs["cookie"] != ck {
 			return notAllowed(method, "자기 세션 쿠키가 아님")
 		}
-		if attrs["inHierarchical"] != "false" {
+		if root.attrs["inHierarchical"] != "false" {
 			return notAllowed(method, `inHierarchical 은 "false" 만 허용`)
 		}
-		if !c.allowed[attrs["classId"]] {
-			return notAllowed(method, "classId "+clip(attrs["classId"])+" 는 허용목록에 없음")
+		if !c.allowed[root.attrs["classId"]] {
+			return notAllowed(method, "classId "+clip(root.attrs["classId"])+" 는 허용목록에 없음")
 		}
 	case MethodLogout:
-		if !sameKeys(attrs, "inCookie") {
-			return notAllowed(method, "속성은 inCookie 뿐이어야 함")
+		if !root.keysAre("inCookie") || len(root.kids) != 0 {
+			return notAllowed(method, "속성은 inCookie 뿐이고 자식 요소가 없어야 함")
 		}
-		if ck == "" || attrs["inCookie"] != ck {
+		if ck == "" || root.attrs["inCookie"] != ck {
 			return notAllowed(method, "자기 세션 쿠키가 아님")
 		}
+	case MethodConf:
+		return c.gateConf(root, ck)
 	default:
-		return notAllowed(method, "aaaLogin·configResolveClass·aaaLogout 외 메서드 금지 (읽기 전용)")
+		return notAllowed(method, "aaaLogin·configResolveClass·aaaLogout 외 메서드 금지 (계정 모드에서만 configConfMo)")
+	}
+	return nil
+}
+
+// reUserName 은 UCSM 로컬 사용자 이름 형식입니다 (영문 시작, 최대 32자).
+var reUserName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,31}$`)
+
+// gateConf 는 configConfMo 요청을 검사합니다 (계정 모드 한정).
+func (c *Client) gateConf(root *reqNode, ck string) error {
+	const method = MethodConf
+	if !c.account {
+		return notAllowed(method, "계정 모드가 아니면 configConfMo(설정 변경) 금지")
+	}
+	if !root.keysAre("cookie", "dn", "inHierarchical") {
+		return notAllowed(method, "속성은 cookie·dn·inHierarchical 뿐이어야 함")
+	}
+	if ck == "" || root.attrs["cookie"] != ck {
+		return notAllowed(method, "자기 세션 쿠키가 아님")
+	}
+	if root.attrs["inHierarchical"] != "false" {
+		return notAllowed(method, `inHierarchical 은 "false" 만 허용`)
+	}
+	dn := root.attrs["dn"]
+	const prefix = "sys/user-ext/user-"
+	if !strings.HasPrefix(dn, prefix) || !reUserName.MatchString(dn[len(prefix):]) {
+		return notAllowed(method, "dn 은 sys/user-ext/user-<이름> 만 허용")
+	}
+	name := dn[len(prefix):]
+	if len(root.kids) != 1 || root.kids[0].name != "inConfig" || len(root.kids[0].attrs) != 0 || len(root.kids[0].kids) != 1 {
+		return notAllowed(method, "inConfig 안에 aaaUser 하나만 허용")
+	}
+	u := root.kids[0].kids[0]
+	if u.name != "aaaUser" {
+		return notAllowed(method, "aaaUser 외 객체 금지")
+	}
+	if u.attrs["name"] != name || u.attrs["dn"] != dn {
+		return notAllowed(method, "aaaUser 의 name·dn 이 요청 dn 과 다름")
+	}
+	switch u.attrs["status"] {
+	case "created":
+		if !u.keysAre("name", "pwd", "accountStatus", "expires", "firstName", "lastName", "email", "phone", "dn", "status") ||
+			u.attrs["pwd"] == "" || u.attrs["accountStatus"] != "active" || u.attrs["expires"] != "no" {
+			return notAllowed(method, "생성 속성이 허용 형태가 아님")
+		}
+		if len(u.kids) != 1 || u.kids[0].name != "aaaUserRole" || !u.kids[0].keysAre("name", "status") ||
+			u.kids[0].attrs["name"] != UserRole || u.kids[0].attrs["status"] != "created" || len(u.kids[0].kids) != 0 {
+			return notAllowed(method, `생성에는 aaaUserRole name="admin" 하나만 허용`)
+		}
+	case "modified":
+		if !u.keysAre("name", "pwd", "dn", "status") || u.attrs["pwd"] == "" || len(u.kids) != 0 {
+			return notAllowed(method, "변경은 name·pwd·dn·status 뿐이어야 함 (비밀번호만)")
+		}
+		if !c.targets[name] {
+			return notAllowed(method, "허용 등록되지 않은 사용자")
+		}
+	case "deleted":
+		if !u.keysAre("name", "dn", "status") || len(u.kids) != 0 {
+			return notAllowed(method, "삭제 속성이 허용 형태가 아님")
+		}
+		if !c.created[name] {
+			return notAllowed(method, "이번 실행이 만든 사용자만 삭제 가능")
+		}
+	default:
+		return notAllowed(method, "status 는 created / modified / deleted 만 허용")
 	}
 	return nil
 }
@@ -482,7 +715,7 @@ func (c *Client) transportErr(err error) error {
 func (c *Client) newErr(status string, code int, apiCode, detail string) *Error {
 	s := c.sec()
 	var secretForms []string
-	for _, v := range []string{s.pass, s.cookie} {
+	for _, v := range append([]string{s.pass, s.cookie}, c.extra...) {
 		if v != "" {
 			secretForms = append(secretForms, esc(v), escQuot(v), v)
 		}

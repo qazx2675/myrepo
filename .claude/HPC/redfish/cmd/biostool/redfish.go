@@ -59,6 +59,7 @@ type Mode int
 const (
 	ModeReadOnly Mode = iota // 점검/덤프 (기본): GET + 세션 생성/삭제만
 	ModeSet                  // 설정: + BIOS Settings/Pending PATCH, Dell 설정 Job POST
+	ModeAccount              // 계정: + 계정 컬렉션 POST, 허용 등록된 계정 멤버 PATCH/DELETE (account*.go 만 사용)
 )
 
 // ErrNotAllowed 는 허용목록 밖의 호출이라 전송하지 않았음을 뜻합니다 (errors.Is 로 확인).
@@ -86,6 +87,9 @@ var (
 	reBiosSet  = regexp.MustCompile(`^/redfish/v1/systems/[^/]+/bios/(settings|pending)$`)
 	reSession  = regexp.MustCompile(`^/redfish/v1/sessionservice/sessions/[^/]+$`)
 	reJobBiosT = regexp.MustCompile(`^/redfish/v1/systems/[^/]+/bios/settings$`)
+	// 계정 컬렉션(생성 POST)과 멤버(PATCH/DELETE). AccountService/Accounts 와 Dell 의 Managers/<id>/Accounts 만.
+	reAcctColl   = regexp.MustCompile(`^/redfish/v1/(accountservice/accounts|managers/[^/]+/accounts)$`)
+	reAcctMember = regexp.MustCompile(`^/redfish/v1/(accountservice/accounts|managers/[^/]+/accounts)/[^/]+$`)
 )
 
 // GET 거부 세그먼트: 로그 조회는 BMC 부하·기록을 만들 수 있고 Actions 는 조회할 이유가 없다.
@@ -184,10 +188,22 @@ func checkAllowed(method, rawPath string, mode Mode, sessPath string) (string, e
 			}
 			return "", notAllowed(method, rawPath, "읽기 전용 모드에서는 Job 생성 불가")
 		}
-		return "", notAllowed(method, rawPath, "세션 생성·Dell 설정 Job 외 POST(Actions 등) 금지")
+		if reAcctColl.MatchString(lc) {
+			if mode == ModeAccount {
+				return send, nil
+			}
+			return "", notAllowed(method, rawPath, "계정 모드가 아니면 계정 생성 불가")
+		}
+		return "", notAllowed(method, rawPath, "세션 생성·Dell 설정 Job·계정 생성 외 POST(Actions 등) 금지")
 	case http.MethodPatch:
+		if reAcctMember.MatchString(lc) {
+			if mode == ModeAccount {
+				return send, nil
+			}
+			return "", notAllowed(method, rawPath, "계정 모드가 아니면 계정 PATCH 불가")
+		}
 		if !reBiosSet.MatchString(lc) {
-			return "", notAllowed(method, rawPath, "Bios/Settings·Bios/Pending 외 PATCH 금지")
+			return "", notAllowed(method, rawPath, "Bios/Settings·Bios/Pending·계정 멤버 외 PATCH 금지")
 		}
 		if mode != ModeSet {
 			return "", notAllowed(method, rawPath, "읽기 전용 모드에서는 PATCH 불가")
@@ -197,7 +213,10 @@ func checkAllowed(method, rawPath string, mode Mode, sessPath string) (string, e
 		if sessPath != "" && clean == sessPath && reSession.MatchString(lc) {
 			return send, nil
 		}
-		return "", notAllowed(method, rawPath, "자기가 만든 세션 외 DELETE 금지")
+		if reAcctMember.MatchString(lc) && mode == ModeAccount {
+			return send, nil // 이번 실행이 만든 멤버만 보낸다 (Client.do 가 acctOK 로 다시 확인)
+		}
+		return "", notAllowed(method, rawPath, "자기가 만든 세션·계정 외 DELETE 금지")
 	}
 	return "", notAllowed(method, rawPath, "허용되지 않은 메서드")
 }
@@ -250,6 +269,10 @@ func checkAttributes(attrs map[string]json.RawMessage) error {
 func checkBody(method, send string, body []byte) ([]byte, error) {
 	lc := strings.ToLower(path.Clean(send))
 	switch {
+	case method == http.MethodPost && reAcctColl.MatchString(lc):
+		return checkAccountCreateBody(body)
+	case method == http.MethodPatch && reAcctMember.MatchString(lc):
+		return checkAccountPatchBody(body)
 	case method == http.MethodPatch:
 		var m map[string]json.RawMessage
 		if json.Unmarshal(body, &m) != nil || m == nil {
@@ -361,7 +384,9 @@ type Client struct {
 	loginErr  error
 	closed    bool
 	stats     CallStats
-	authMode  string // "session" | "basic" (세션 생성 404/405/501 폴백) | "" (로그인 전). 읽기는 Stats().AuthMode 로만
+	acctOK    map[string]bool // ModeAccount: PATCH/DELETE 해도 되는 계정 멤버 경로 (소문자 정규형). AllowAccountTarget 이나 자기가 만든 POST 로만 채움
+	extra     []string        // 오류 Detail 에서 지울 추가 비밀(새 계정 비밀번호)
+	authMode  string          // "session" | "basic" (세션 생성 404/405/501 폴백) | "" (로그인 전). 읽기는 Stats().AuthMode 로만
 }
 
 // NewClient 는 클라이언트를 만듭니다. 접속은 하지 않습니다.
@@ -481,6 +506,86 @@ func (c *Client) PostJob(p string, body interface{}) (int, http.Header, []byte, 
 	return c.do(http.MethodPost, p, body)
 }
 
+// AddSecret 은 오류 Detail 에서 지울 비밀 값(새 계정 비밀번호)을 등록합니다. 값은 어디에도 출력하지 않는다.
+func (c *Client) AddSecret(s string) {
+	if s == "" {
+		return
+	}
+	c.mu.Lock()
+	c.extra = append(c.extra, s)
+	c.mu.Unlock()
+}
+
+// AllowAccountTarget 은 ModeAccount 에서 PATCH/DELETE 해도 되는 계정 멤버 경로를 등록합니다
+// (호출자가 빈 슬롯·대상 계정임을 확인한 뒤에만 부른다). 멤버 경로가 아니면 오류입니다.
+func (c *Client) AllowAccountTarget(p string) error {
+	clean, _, err := normalizePath(p)
+	lc := strings.ToLower(clean)
+	if err != nil || !reAcctMember.MatchString(lc) {
+		return notAllowed("ALLOW", p, "계정 멤버 경로가 아님")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.rfMode != ModeAccount {
+		return notAllowed("ALLOW", p, "계정 모드가 아님")
+	}
+	if c.acctOK == nil {
+		c.acctOK = map[string]bool{}
+	}
+	c.acctOK[lc] = true
+	return nil
+}
+
+// AccountPost 는 계정 컬렉션에 계정을 만듭니다 (ModeAccount 전용, 재시도 없음).
+// 응답 Location 이 계정 멤버 경로이면 이후 DELETE(롤백)가 가능하도록 자동 등록하고 그 경로를 돌려줍니다.
+func (c *Client) AccountPost(p string, body interface{}) (status int, member string, resp []byte, err error) {
+	clean, _, nerr := normalizePath(p)
+	if nerr != nil || !reAcctColl.MatchString(strings.ToLower(clean)) {
+		return 0, "", nil, notAllowed(http.MethodPost, p, "AccountPost 는 계정 컬렉션 전용")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	st, hdr, b, derr := c.do(http.MethodPost, p, body)
+	if derr != nil {
+		return st, "", b, derr
+	}
+	loc := hdr.Get("Location")
+	if loc == "" {
+		var od struct {
+			ID string `json:"@odata.id"`
+		}
+		_ = json.Unmarshal(b, &od)
+		loc = od.ID
+	}
+	if u, perr := url.Parse(loc); perr == nil {
+		loc = u.EscapedPath()
+	}
+	if cl, _, e := normalizePath(loc); e == nil && reAcctMember.MatchString(strings.ToLower(cl)) {
+		if c.acctOK == nil {
+			c.acctOK = map[string]bool{}
+		}
+		c.acctOK[strings.ToLower(cl)] = true
+		member = cl
+	}
+	return st, member, b, nil
+}
+
+// AccountPatch 는 허용 등록된 계정 멤버를 PATCH 합니다 (ModeAccount 전용, 재시도 없음).
+func (c *Client) AccountPatch(p string, body interface{}) (int, []byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	st, _, b, err := c.do(http.MethodPatch, p, body)
+	return st, b, err
+}
+
+// AccountDelete 는 이번 실행이 만든(등록된) 계정 멤버를 DELETE 합니다 (ModeAccount 전용, 롤백용).
+func (c *Client) AccountDelete(p string) (int, []byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	st, _, b, err := c.do(http.MethodDelete, p, nil)
+	return st, b, err
+}
+
 // Close 는 이 Client 가 만든 세션만 DELETE 합니다 (best-effort, 멱등, 자동 재시도 없음).
 // 이후의 모든 호출은 errClosed 로 거부됩니다 (다시 로그인하지 않음).
 func (c *Client) Close() error {
@@ -584,9 +689,14 @@ func (c *Client) do(method, p string, body interface{}) (int, http.Header, []byt
 	}
 	clean := path.Clean(send)
 	isSession := method == http.MethodPost && strings.EqualFold(clean, sessionsPath)
+	lcClean := strings.ToLower(clean)
+	if c.rfMode == ModeAccount && (method == http.MethodPatch || method == http.MethodDelete) && reAcctMember.MatchString(lcClean) && !c.acctOK[lcClean] {
+		return 0, nil, nil, notAllowed(method, p, "이번 실행이 허용 등록하지 않은 계정 멤버 (빈 슬롯·생성한 계정·대상 계정만)")
+	}
 	// 세션 삭제(DELETE)는 로그인 상태와 무관하게 보낸다: 토큰 인증이라 계정 잠금 위험이 없고,
 	// GET 이 AUTH_FAIL 을 받은 뒤에도 Close 가 만든 세션은 지워야 BMC 세션 슬롯이 새지 않는다.
-	if !isSession && method != http.MethodDelete {
+	// (계정 멤버 DELETE 는 로그인된 세션이 있어야 한다)
+	if !isSession && !(method == http.MethodDelete && reSession.MatchString(lcClean)) {
 		if err := c.ensureLogin(); err != nil {
 			return 0, nil, nil, err
 		}
@@ -801,6 +911,9 @@ func (c *Client) rfErr(status string, code int, detail string) *RFError {
 	}
 	if c.cred().token != "" {
 		secrets = append(secrets, c.cred().token)
+	}
+	for _, x := range c.extra {
+		secrets = append(secrets, passwordForms(x)...)
 	}
 	for _, s := range secrets {
 		detail = strings.ReplaceAll(detail, s, "***")

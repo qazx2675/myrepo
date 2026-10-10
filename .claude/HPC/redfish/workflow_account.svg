@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="812" viewBox="0 0 1020 812" font-family="Malgun Gothic, Noto Sans KR, Noto Sans CJK KR, sans-serif" font-size="15">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<defs><marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker></defs>
+<rect x="20" y="10" width="980" height="62" rx="10" fill="#e8f0fe" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="46" text-anchor="middle" fill="#28253D">시작: bash account_create.sh  (또는 bios_check.sh 끝의 Y/n)</text>
+<line x1="510" y1="72" x2="510" y2="98" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="98" width="980" height="62" rx="10" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="134" text-anchor="middle" fill="#28253D">1. 점검 (읽기 전용): 1순위 계정 로그인 → 거부(401)면 비인증 ServiceRoot 로 벤더 식별 → rf.conf admin 로그인 1회</text>
+<line x1="510" y1="160" x2="510" y2="186" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="186" width="980" height="62" rx="10" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="222" text-anchor="middle" fill="#28253D">PRIMARY_OK = 이미 있음 (끝)   /   NEED_CREATE = 생성 대상   /   AUTH_FAIL·UNREACHABLE = 호스트 오류</text>
+<line x1="510" y1="248" x2="510" y2="274" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="274" width="980" height="62" rx="10" fill="#fff7e0" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="310" text-anchor="middle" fill="#28253D">2. 대상 목록 표시 → [Y/n] 한 번에 (빈 입력 = Y, 비대화형은 -stdin-ok 없이는 N, -dry-run 은 계획만)</text>
+<line x1="510" y1="336" x2="510" y2="362" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="362" width="980" height="62" rx="10" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="398" text-anchor="middle" fill="#28253D">3. 생성: admin 로그인 → 계정 컬렉션 읽기 → 같은 id 가 있으면 SKIP_EXISTS (덮어쓰지 않음)</text>
+<line x1="510" y1="424" x2="510" y2="450" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="450" width="980" height="62" rx="10" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="486" text-anchor="middle" fill="#28253D">없으면 관리자 역할로 생성: Dell iDRAC8/9 빈 슬롯 PATCH · 그 밖 POST (거부 시 빈 슬롯 PATCH) · HPE iLO4 Oem 권한 · UCSM aaaUser created</text>
+<line x1="510" y1="512" x2="510" y2="538" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="538" width="980" height="62" rx="10" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="574" text-anchor="middle" fill="#28253D">4. 검증: 새 계정으로 로그인 1회 (통신 오류면 VERIFY_UNKNOWN, 롤백 안 함)</text>
+<line x1="510" y1="600" x2="510" y2="626" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="626" width="980" height="62" rx="10" fill="#fdecea" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="662" text-anchor="middle" fill="#28253D">5. 인증 거부면 이번 실행이 만든 계정만 삭제(롤백) → VERIFY_FAIL_ROLLED_BACK / 실패하면 ROLLBACK_FAILED</text>
+<line x1="510" y1="688" x2="510" y2="714" stroke="#555" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="20" y="714" width="980" height="62" rx="10" fill="#e6f4ea" stroke="#555" stroke-width="1.5"/>
+<text x="510" y="750" text-anchor="middle" fill="#28253D">결과: account_result.tsv (비밀번호·해시 없음) + 화면 요약 → 랜덤 서버 몇 대 직접 로그인 확인</text>
+</svg>

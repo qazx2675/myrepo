@@ -34,7 +34,7 @@ const (
 )
 
 // fallbackVendors 는 rf.conf 키의 벤더 이름(소문자)입니다. normalizeVendor 결과를 소문자로 바꾼 값과 같습니다.
-var fallbackVendors = []string{"dell", "hpe", "lenovo", "supermicro", "cisco"}
+var fallbackVendors = []string{"dell", "hpe", "lenovo", "supermicro", "cisco", "cray"}
 
 type fallbackAcct struct{ user, pass string }
 
@@ -175,6 +175,9 @@ func fallbackVendorKey(s string) string {
 		return "hpe"
 	}
 	k := strings.ToLower(normalizeVendor(s))
+	if strings.Contains(k, "cray") { // Cray XD2000(AMI 기반) — "Cray Inc." 등
+		return "cray"
+	}
 	for _, v := range fallbackVendors {
 		if k == v {
 			return v

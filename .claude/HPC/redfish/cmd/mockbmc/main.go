@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"biostool/internal/mockbmc"
@@ -26,6 +27,10 @@ func main() {
 	noSess := flag.Bool("no-sessions", false, "세션 서비스 없는 BMC 흉내 (Basic 인증 폴백 시험)")
 	verbose := flag.Bool("v", false, "요청마다 한 줄 출력")
 	openRoot := flag.Bool("open-serviceroot", false, "비인증 ServiceRoot(GET /redfish/v1/)에 응답 (벤더 식별·2순위 계정 시험용)")
+	acctOn := flag.Bool("accounts", false, "계정 서비스(AccountService/Accounts) 켜기 (account create/change 시험용)")
+	acctSlots := flag.Int("account-slots", 0, "(-accounts) 처음 빈 슬롯 개수")
+	acctSlotStyle := flag.Bool("account-slot-style", false, "(-accounts) 컬렉션 POST/DELETE 405, 빈 슬롯 PATCH 로만 생성 (Dell iDRAC8/9 방식)")
+	acctDeny := flag.Bool("account-deny-new-login", false, "(-accounts) API 로 만들거나 바꾼 계정의 로그인을 거부 (롤백 시험)")
 	flag.Parse()
 
 	if *dir == "" {
@@ -40,6 +45,13 @@ func main() {
 		os.Exit(1)
 	}
 	opts := mockbmc.Options{User: *user, Pass: *pass, NoSessions: *noSess, OpenServiceRoot: *openRoot}
+	if *acctOn {
+		ao := &mockbmc.AccountOptions{SlotStyle: *acctSlotStyle, DenyNewLogin: *acctDeny}
+		for i := 0; i < *acctSlots; i++ {
+			ao.Slots = append(ao.Slots, mockbmc.Account{})
+		}
+		opts.Accounts = ao
+	}
 	if *verbose {
 		opts.Logf = func(f string, a ...interface{}) { fmt.Printf(f+"\n", a...) }
 	}
@@ -63,4 +75,13 @@ func main() {
 	ss := srv.Sessions()
 	fmt.Printf("MOCKBMC_SUMMARY calls=%d sessions_created=%d sessions_deleted=%d login_failed=%d log_hits=%d writes=%d\n",
 		len(srv.Calls()), ss.Created, ss.Deleted, ss.LoginFailed, srv.LogHits(), srv.Writes())
+	if *acctOn {
+		var names []string
+		for _, a := range srv.Accounts() {
+			if a.UserName != "" {
+				names = append(names, a.UserName)
+			}
+		}
+		fmt.Printf("MOCKBMC_ACCOUNTS %s\n", strings.Join(names, ","))
+	}
 }

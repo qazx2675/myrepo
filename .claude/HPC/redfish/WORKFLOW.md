@@ -1,8 +1,8 @@
 # 작업 흐름도 — redfish (BIOS 표준값 점검·설정 도구)
 
-명령 한 번이 실행되는 주요 경로 5가지를 그렸습니다. 옵션 전체는 [README.md](README.md), 파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md), 첫 실장비에서 사람이 확인할 것은 [FIRST_RUN.md](FIRST_RUN.md) 를 참고하세요.
+명령 한 번이 실행되는 주요 경로 6가지를 그렸습니다. 옵션 전체는 [README.md](README.md), 파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md), 첫 실장비에서 사람이 확인할 것은 [FIRST_RUN.md](FIRST_RUN.md) 를 참고하세요.
 
-각 흐름은 mermaid 로 그렸고(GitHub 에서 바로 렌더링됩니다), mermaid 를 렌더링한 그림을 같은 폴더에 함께 두었습니다: 1번 [workflow.svg](workflow.svg), 2번 [workflow_set.svg](workflow_set.svg), 3번 [workflow_dump.svg](workflow_dump.svg), 4번 [workflow_allcheck.svg](workflow_allcheck.svg), 5번 [workflow_retry.svg](workflow_retry.svg). mermaid 를 보지 못하는 뷰어에서는 SVG 를 여십시오.
+각 흐름은 mermaid 로 그렸고(GitHub 에서 바로 렌더링됩니다), mermaid 를 렌더링한 그림을 같은 폴더에 함께 두었습니다: 1번 [workflow.svg](workflow.svg), 2번 [workflow_set.svg](workflow_set.svg), 3번 [workflow_dump.svg](workflow_dump.svg), 4번 [workflow_allcheck.svg](workflow_allcheck.svg), 5번 [workflow_retry.svg](workflow_retry.svg), 6번 [workflow_account.svg](workflow_account.svg)(렌더링 도구가 없는 랩에서 같은 구조로 직접 그린 SVG). mermaid 를 보지 못하는 뷰어에서는 SVG 를 여십시오.
 
 공통 약속: 재부팅은 하지 않습니다. 호스트당 로그인은 1회, 끝나면 자기 세션만 삭제합니다. 허용목록 밖 호출(로그 조회·ClearLog·Reset 등)은 전송 전에 코드가 막습니다.
 
@@ -129,3 +129,29 @@ flowchart TD
     LP -->|예| S2(["새 결과 폴더로 다시 -retry-from"])
     LP -->|아니오| DN(["끝"])
 ```
+
+## 6. 계정 생성 — `bash account_create.sh` (또는 `bios_check.sh` 끝의 Y/n), 비밀번호 변경은 `bin/biostool account change`
+
+```mermaid
+flowchart TD
+    S(["bash account_create.sh<br/>또는 bios_check.sh 끝 [Y/n]"]) --> P["1. 점검 (읽기 전용)<br/>1순위 계정 로그인<br/>거부(401)면 비인증 ServiceRoot 로 벤더 식별 후 rf.conf admin 로그인 1회"]
+    P --> C{"결과"}
+    C -->|"1순위로 접속됨"| OK(["PRIMARY_OK<br/>만들 필요 없음"])
+    C -->|"2순위로만 접속됨"| NC["NEED_CREATE 목록"]
+    C -->|"둘 다 거부·접속 불가"| HE(["호스트 오류 상태 (AUTH_FAIL 등)"])
+    NC --> Q{"2. 대상 목록 표시 후<br/>Y/n (빈 입력 = Y)"}
+    Q -->|"n · 비대화형 · -no-prompt"| NO(["만들지 않고 종료<br/>안내만"])
+    Q -->|"-dry-run"| DR(["계획만 출력, 쓰기 없음"])
+    Q -->|"Y"| W["3. admin 로그인 → 계정 컬렉션 읽기"]
+    W --> EX{"같은 id 가 있는가"}
+    EX -->|"예"| SK(["SKIP_EXISTS<br/>덮어쓰지 않음"])
+    EX -->|"아니오"| CR["관리자 역할로 생성<br/>Dell 빈 슬롯 PATCH / 그 밖 POST<br/>UCSM: aaaUser created"]
+    CR --> V{"4. 새 계정으로 로그인 1회"}
+    V -->|"성공"| CD(["CREATED"])
+    V -->|"통신 오류"| VU(["VERIFY_UNKNOWN<br/>롤백 안 함, 수동 확인"])
+    V -->|"인증 거부"| RB["5. 이번 실행이 만든 계정만 삭제 (롤백)"]
+    RB -->|"성공"| RO(["VERIFY_FAIL_ROLLED_BACK"])
+    RB -->|"실패"| RF(["ROLLBACK_FAILED<br/>수동 조치"])
+```
+
+`account change` 는 같은 4~5단계(새 비밀번호를 터미널에서 직접 2번 입력 → y → 변경 → 새 비밀번호 로그인 검증 → 인증 거부면 이전 비밀번호 복원)이며 `pass.enc` 는 자동으로 바꾸지 않고 `cd <폴더>; bash encrypt.sh` 를 안내합니다.

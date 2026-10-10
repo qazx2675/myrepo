@@ -7,6 +7,7 @@
 - 수천 대를 한 번에 처리합니다(동시 접속 기본 100). 일시 오류는 자동 재시도하고, 실패 목록(`retry.txt`)만 다시 돌릴 수 있습니다.
 - BMC 에 남기는 흔적을 줄이려고 호스트당 **로그인 1회**, 허용목록 밖 호출(로그 조회·ClearLog·Reset 등)은 **전송 전에 코드가 차단**합니다.
 - 사전조사(`xml.sh`)로 처음 만나는 모델의 속성 이름을 확인하고, 모델별 BIOS 전체 비교(`all_bios_check.sh`)도 할 수 있습니다.
+- 공용(1순위) 계정이 없는 BMC 는 벤더 admin(rf.conf, 2순위)으로 접속해 **계정을 만들 수 있고**(`account_create.sh`, 기본 Y), 공용 계정의 **비밀번호를 바꿀 수도 있습니다**(`biostool account change`). 2.12절.
 
 > **현재 상태(v0.1.0): 실제 BMC 에 접속해 본 적이 없습니다.** 모든 검증은 합성 데이터로 만든 mock BMC 와 `-from-dump` 로만 했습니다. 같은 이유로 Cisco UCSM 점검(`ucsm_check.sh`, 2.9절)도 실제 UCSM 에 접속해 보지 않았습니다. 모델을 처음 만날 때의 절차와 사람이 확인할 항목은 [FIRST_RUN.md](FIRST_RUN.md) 에 모았습니다. 반드시 먼저 읽으십시오.
 
@@ -448,7 +449,7 @@ hpe_user=...
 hpe_pass=...
 lenovo_user=...
 lenovo_pass=...
-# supermicro_user / supermicro_pass , cisco_user / cisco_pass 도 같은 형식
+# supermicro_user / supermicro_pass , cisco_user / cisco_pass , cray_user / cray_pass 도 같은 형식
 ```
 
 | 항목 | 내용 |
@@ -468,7 +469,7 @@ lenovo_pass=...
 
 **벤더 식별의 한계(위험).** 벤더는 인증 전 ServiceRoot 응답만으로 정합니다. 1순위를 거부하고 `{"Vendor":"Dell"}` 같은 응답을 돌려주는 상대(TLS 검증을 끈 기본 설정에서의 중간자, 침해된 BMC, `user.txt` 에 잘못 들어간 주소)에게는 해당 벤더의 예비 비밀번호가 넘어갈 수 있습니다. 신뢰하는 관리망에서만 쓰고, 벤더별 예비 비밀번호는 서로 다르게 두십시오. 점검 후 Y 적용·dry-run 은 같은 규칙으로 BMC 에 다시 로그인하므로 한 번 실행에 인증 시도가 늘어납니다(위 표의 “횟수”).
 
-> 아직 구현되지 않은 것: **계정이 아예 없는 BMC 에 y/n 으로 계정을 만들어 주는 기능**은 없습니다(설계 메모는 [ARCHITECTURE.md](ARCHITECTURE.md) 의 “추후 확장”).
+> 1순위 계정이 BMC 에 **아예 없을 때** 만들어 주는 기능(점검 끝의 Y/n)과 비밀번호 변경 기능은 2.12절입니다.
 
 ### 2.11 테스트케이스 — `testcase/rf_fallback_case.sh`
 
@@ -488,15 +489,164 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 | 4 | 19104 (아무도 안 들음) | 접속 불가 | `[접속불가]` 에만 표시(계정 오류와 구분) |
 | 5 | 19105 Supermicro X12 | 1순위 정상, 값이 다름(기대 `Performance`/현재 `Custom`, `verified=N`) | 해당 항목 `UNVERIFIED` |
 | 6 | 19106 Lenovo(Hyper-Threading 현재값 `Disable`) | 프로파일 `Enabled\|Enable`, `-dry-run` | 보낼 본문에 `"Processors_HyperThreading":"Enable"`(`Enabled` 아님) |
+| 7 | 19107 HPE (계정 서비스 켠 mock) | 1순위 계정이 없음, 빈 입력 = 기본 Y | `[CREATED]`, 비밀번호 비노출, 이후 점검이 1순위 계정으로 접속 |
+| 8 | 19107 (7 의 뒤) | 같은 id 가 이미 있음 | 다시 만들지 않음 |
+| 9 | 19108 Dell (슬롯 방식, POST 불가) | 빈 슬롯 PATCH | `[CREATED]`, 방식 `PATCH` |
+| 10 | 19109 HPE (새 계정 로그인 거부) | 생성 후 검증 실패 | `[VERIFY_FAIL_ROLLED_BACK]` (만든 계정만 되돌림) |
+| 11 | 19107 | `account change -dry-run` | `[WOULD_CHANGE]` (새 비밀번호 입력 없음, 쓰기 없음) |
 
 > 시나리오 2 는 mock 에 `-open-serviceroot` 플래그를 붙여 실행합니다(스크립트가 자동으로 붙임). mock 은 기본으로 비인증 ServiceRoot 를 401 로 막아 벤더 식별이 안 되기 때문입니다. 자세한 설명은 [testcase/README.md](testcase/README.md).
+> 시나리오 7~11 은 mock 의 `-accounts` 계층(계정 서비스)을 씁니다. 비밀번호 **변경의 실제 입력**(별표 표시·붙여넣기 거부)은 터미널이 필요해 스크립트가 시험하지 않으므로 2.12절 절차로 직접 해 보십시오.
+
+### 2.12 1순위 계정 생성·비밀번호 변경 — `account_create.sh` / `biostool account`
+
+1순위 계정(`bios.conf` 의 `user` + `pass.enc` 의 비밀번호)이 일부 BMC 에 없을 때 **같은 id/pw 의 관리자 계정을 만들고**(create), 필요하면 **비밀번호를 바꿉니다**(change). 확정 사양은 [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md), 벤더별 API 근거는 `id_json/<벤더>/` 입니다.
+
+**준비.** 계정을 만드는 호출은 `rf.conf` 의 벤더 admin(2순위) 계정으로 합니다(2.10절). 만들 계정의 비밀번호는 `bash encrypt.sh` 로 `pass.enc` 에 넣어 둔 값입니다. `rf.conf` 에는 `dell` `hpe` `lenovo` `supermicro` `cisco` `cray` 의 `<vendor>_user` / `<vendor>_pass` 를 쓸 수 있습니다.
+
+#### 만들기 (create)
+
+```bash
+bash account_create.sh -dry-run     # 보낼 계획만 (BMC 에 쓰지 않음)
+bash account_create.sh              # 점검 → 대상 목록 → [Y/n] (빈 입력 = Y) → 생성·검증·롤백
+bash account_create.sh -ucsm        # 대상이 Cisco UCSM(XML API)일 때
+```
+
+실제 실행 화면입니다(mock BMC 4대. 19201 HPE·19202 Dell 슬롯 방식·19203 HPE 인데 새 계정 로그인을 거부하는 시험 장비·19204 는 이미 1순위 계정이 있음):
+
+```text
+$ bash account_create.sh -dry-run
+설정: bios.conf (id=biosadmin, 동시 5, dry-run=true)
+대상: 4개, 결과 폴더: results/20261010_130939
+
+[1/2] 점검 중 (읽기 전용, 1순위 계정 → 안 되면 2순위 계정 1회)
+
+점검 결과: 1순위 계정으로 접속 1대, 2순위로만 접속(생성 대상) 3대, 그 밖 0대
+
+계정 "biosadmin" 를 만들 대상 (3대):
+  127.0.0.1:19201              hpe          ProLiant DL360 Gen11
+  127.0.0.1:19202              dell         PowerEdge R660
+  127.0.0.1:19203              hpe          ProLiant DL360 Gen11
+
+[2/2] dry-run: 보낼 계획만 확인 (쓰기 없음)
+
+[WOULD_CREATE] 3대
+  127.0.0.1:19201  127.0.0.1:19202  127.0.0.1:19203
+※ 경고: Dell 빈 슬롯 PATCH 는 iDRAC8/9 에서 verified, iDRAC10 은 POST 만 verified — 거부되면 POST 로 다시 시도
+
+결과 파일: results/20261010_130939/account_result.tsv
+
+※ dry-run 이므로 BMC 에는 아무것도 쓰지 않았습니다.
+```
+
+```text
+$ bash account_create.sh
+(점검 · 대상 목록은 위와 같음)
+1순위 계정(biosadmin)을 3대에 만들까요? 재부팅·BIOS 변경은 없습니다. [Y/n]:      ← 그냥 Enter
+[2/2] 계정 생성 · 로그인 검증 · 실패 서버 롤백
+
+[CREATED] 2대
+  127.0.0.1:19201  127.0.0.1:19202
+[VERIFY_FAIL_ROLLED_BACK] 1대
+  127.0.0.1:19203
+    - 127.0.0.1:19203: 새 계정 로그인 검증 실패(AUTH_FAIL(HTTP 401)) — 만든 계정을 되돌림
+
+결과 파일: results/20261010_130941/account_result.tsv
+
+※ 주의: 이 도구는 참고용(보조 도구)입니다. 계정을 만든 뒤에는 랜덤한 서버 몇 대를 직접 골라 실제로 로그인되는지 확인하십시오.
+```
+
+| 단계 | 하는 일 |
+|---|---|
+| 1. 점검 | 1순위 계정으로 로그인해 보고, 거부(401)되면 비인증 ServiceRoot 로 벤더를 식별해 rf.conf 의 그 벤더 admin 으로 1회 로그인(읽기 전용). `PRIMARY_OK`(이미 있음) / `NEED_CREATE`(생성 대상) 로 나눔 |
+| 2. 확인 | 대상 목록을 보여 주고 **한 번에** Y/n. 빈 입력은 Y(기본). 터미널이 아니면(`yes \|`, 파일) `-stdin-ok` 없이는 묻지 않고 만들지 않음. 묻기 직전에 점검 중 눌러 둔 Enter 는 버림 |
+| 3. 생성 | admin 계정으로 로그인해 계정 컬렉션을 읽고 **같은 id 가 있으면 건너뜀**(덮어쓰지 않음), 없으면 관리자 역할로 생성. Dell iDRAC8/9 는 빈 슬롯(3~16) PATCH, 그 밖은 컬렉션 POST(거부되면 빈 슬롯 PATCH, HPE iLO4 는 Oem 권한 방식) |
+| 4. 검증 | 새 계정으로 **1회** 로그인. 통신 오류로 확인하지 못하면 롤백하지 않고 `VERIFY_UNKNOWN`(수동 확인) |
+| 5. 롤백 | 로그인이 **인증 거부**된 서버만, **이번 실행이 만든 계정**을 삭제(슬롯 방식은 비활성 후 이름 비우기). 원래 있던 계정은 건드리지 않음. 롤백도 실패하면 `ROLLBACK_FAILED`(수동 조치) |
+
+`bios_check.sh` 도 점검 끝에 같은 질문을 합니다: 1순위 로그인이 거부되어 2순위로 접속한 호스트가 있으면 `1순위 계정(…)을 N대에 만들까요? [Y/n]` 을 묻고(빈 입력 = Y), `-no-prompt` 이거나 터미널이 아니면 `account_create.sh` 안내만 합니다. `-dry-run` 이면 계획만 보여 줍니다.
+
+결과 파일 `results/<일시>/account_result.tsv` (0600, **비밀번호·계정 해시 없음**): `hostname ip vendor model op method result rollback detail warn`.
+
+| result | 뜻 |
+|---|---|
+| `CREATED` | 만들고 새 계정 로그인 검증까지 통과 |
+| `WOULD_CREATE` / `WOULD_CHANGE` | dry-run 계획(전송 없음) |
+| `PRIMARY_OK` | 1순위 계정으로 이미 로그인됨(만들 필요 없음) |
+| `SKIP_EXISTS` | 같은 id 가 이미 있음(덮어쓰지 않음). 비밀번호가 다르면 change 또는 BMC 에서 확인 |
+| `NO_ADMIN` | rf.conf 에 이 벤더 admin 이 없거나 벤더를 식별하지 못함 |
+| `REJECTED` / `NO_FREE_SLOT` | BMC 가 거부(암호 정책·권한 등, 사유가 detail 에) / 빈 슬롯 없음 |
+| `VERIFY_FAIL_ROLLED_BACK` | 검증 로그인 실패 → 만든 계정을 되돌림 |
+| `ROLLBACK_FAILED` | 검증 실패 + 롤백도 실패 → **수동 조치 필요**(detail 에 안내) |
+| `VERIFY_UNKNOWN` | 만들었으나 통신 오류로 검증 못 함(롤백 안 함) → 수동 확인 |
+| `AUTH_FAIL` / `UNREACHABLE` / `TIMEOUT` … | admin 계정 거부, 접속 불가 등 호스트 오류(기존 상태 코드와 같음) |
+| `SKIPPED_WARMUP_FAIL` | 처음 10대에서 실패가 절반 이상이라 나머지는 건너뜀 |
+
+#### 바꾸기 (change) — 바이너리를 직접 씁니다
+
+비밀번호 변경은 바이너리를 직접 실행합니다(래퍼 없음).
+
+```bash
+bin/biostool account change -dry-run      # 대상·요청 형태만 확인 (새 비밀번호 입력 없음)
+bin/biostool account change               # 새 비밀번호 입력 → y → 변경·검증·롤백
+bin/biostool_os6 account change           # RHEL6
+```
+
+실제 화면입니다(터미널에서 입력, 입력한 글자는 `*` 로만 보임):
+
+```text
+$ bin/biostool account change
+설정: bios.conf (id=biosadmin, 동시 5, dry-run=false)
+대상: 1개, 결과 폴더: results/20261010_131119
+
+1대의 계정 "biosadmin" 비밀번호를 바꿉니다. 새 비밀번호를 입력하십시오.
+※ 복사·붙여넣기는 사용할 수 없습니다. 붙여넣지 말고 키보드로 직접 입력하십시오. (붙여넣은 입력은 거부됩니다)
+새 비밀번호:                                  ← 붙여넣어 봄
+거부됨: 붙여넣기로 보이는 입력입니다. 키보드로 직접 입력하십시오.
+새 비밀번호: ************
+새 비밀번호 확인: ************
+
+1대의 biosadmin 비밀번호를 지금 바꿉니다. 계속할까요? [y/N]: y
+
+비밀번호 변경 · 새 비밀번호 로그인 검증 · 실패 서버 롤백
+
+[CHANGED] 1대
+  127.0.0.1:19201
+
+결과 파일: results/20261010_131119/account_result.tsv
+
+※ pass.enc 는 자동으로 바꾸지 않았습니다. 새 비밀번호로 바꾸려면 아래 명령을 복사해 실행하십시오 (csh/tcsh/bash 공통, 비밀번호는 실행 중 직접 입력):
+    cd '/root/biostool-work'; bash encrypt.sh
+```
+
+- **대상:** `bios.conf` 의 1순위 계정을 **1순위 계정으로 로그인된 호스트에서만** 바꿉니다(admin 세션으로 남의 계정 비밀번호를 바꾸지 않음). 로그인이 안 되는 호스트는 `AUTH_FAIL`(계정이 없거나 비밀번호 불일치), 계정 컬렉션에 이름이 없으면 `NO_ACCOUNT`. 이름은 **정확히** 일치해야 합니다.
+- **새 비밀번호:** 터미널에서만 입력받고(파이프·파일은 거부), 인자·환경변수·파일로는 받지 않습니다. `@` `!` `#` `$` `<` `&` `"` 등 특수문자도 그대로 보냅니다.
+- **붙여넣기 거부:** 한 번에 여러 글자가 들어오거나 글자 간격이 너무 짧거나 bracketed paste 이면 거부합니다. 터미널 설정에 따라 감지하지 못하는 붙여넣기는 막을 수 없으니 **직접 입력**하십시오.
+- **y/N:** 변경은 기본이 N 입니다(explicit `y` 필요). `-dry-run` 은 묻지 않습니다.
+- **검증·롤백:** 새 비밀번호로 1회 로그인. 인증 거부면 열려 있는 세션으로 **이전 비밀번호를 되돌림**(`VERIFY_FAIL_ROLLED_BACK`), 되돌리기도 실패하면 `ROLLBACK_FAILED`.
+- **`pass.enc` 는 자동 갱신하지 않습니다.** 위 `cd …; bash encrypt.sh` 를 직접 실행하십시오. 일부 호스트가 변경되지 않았다면 안내문이 알려 줍니다(그 호스트는 이전 비밀번호가 유지되므로, 모두 성공한 뒤에 `pass.enc` 를 바꾸는 것이 안전합니다).
+
+#### Cisco UCSM (`-ucsm`)
+
+대상은 **UCSM 주소**(블레이드 BMC 가 아님)이고 계정은 UCSM 로컬 사용자입니다. `rf.conf` 의 `cisco_user`/`cisco_pass` 로 `aaaLogin` → `configConfMo`(sys/user-ext/user-<id>, 역할 `admin`) → `aaaLogout` 만 보냅니다(`aaaUser` 하나의 생성·비밀번호 변경·삭제 외 호출은 코드가 차단). UCSM 은 대상을 한 대씩 처리합니다.
+
+#### 동시 처리 수 (`-j`)
+
+기본 100, 최대 300. 처음 10대는 한 대씩 처리해 실패가 절반 이상이면 나머지를 건너뜁니다(`SKIPPED_WARMUP_FAIL`). gossh 읽기 작업처럼 수천 병렬을 쓰지 마십시오: 계정 쓰기는 BMC 쪽 지연·세션 한도·잠금 정책이 병목입니다. 값은 실장비에서 첫 실행 로그로 조정합니다(실측 전).
+
+#### 한계 (실장비 미확인)
+
+- 벤더별 생성·변경 방식은 `id_json` 의 문서·공개 스크립트 근거이며 **실제 BMC 로 확인하지 않았습니다**. 사양에 따라 미확인 방식도 Y 로 적용되며 결과의 `warn` 열에 경고가 남습니다. 첫 실장비는 **1대부터** `-dry-run` 으로 본문을 확인하십시오(FIRST_RUN.md).
+- Cray XD2000 의 관리자 역할 이름·`PasswordChangeRequired` 동작, HPE iLO4 의 Oem 권한 방식, UCSM XML 쓰기는 문서 근거만 있습니다.
+- RHEL6 커널에서의 기동과 bash 4.1 에서의 `account_create.sh` 는 확인하지 못했습니다(랩은 EL8).
+
 ---
 
 ## 3. 옵션별 상세 설명
 
 ### 3.1 서브커맨드
 
-`biostool` 은 한 바이너리에 서브커맨드 다섯 개가 있고, bash 래퍼가 파일 확인·바이너리 선택·프로파일 메뉴를 맡습니다. 직접 실행하려면 `bin/biostool help` 를 보십시오.
+`biostool` 은 한 바이너리에 서브커맨드 여섯 개가 있고, bash 래퍼가 파일 확인·바이너리 선택·프로파일 메뉴를 맡습니다. 직접 실행하려면 `bin/biostool help` 를 보십시오.
 
 | 서브커맨드 | 래퍼 | 하는 일 | BMC 쓰기 |
 |---|---|---|---|
@@ -504,6 +654,7 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 | `allcheck` | `all_bios_check.sh` | 모델별 BIOS 전체 Attribute 비교 | 없음 |
 | `dump` | `xml.sh` | 사전조사 덤프(GET 전용) | 없음 |
 | `ucsm` | `ucsm_check.sh` | Cisco UCSM(XML API) 블레이드 BIOS 실효값 점검, 대상은 UCSM 주소 | 없음 |
+| `account` | `account_create.sh` (create 만, change 는 바이너리 직접) | 1순위 계정 생성(`create`) / 비밀번호 변경(`change`). 2.12절 | **계정 경로만**(POST·계정 멤버 PATCH, 이번에 만든 계정만 DELETE, UCSM 은 aaaUser 하나). Y/n 후 |
 | `encrypt` | `encrypt.sh` | 표준입력의 비밀번호를 AES-256-GCM 으로 암호화 | 해당 없음 |
 
 ### 3.2 플래그
@@ -522,7 +673,10 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 | `-no-prompt` | `false` | check | FAIL 이 있어도 묻지 않고 종료(아무것도 설정하지 않음) |
 | `-stdin-ok` | `false` | check | 표준입력이 터미널이 아니어도(파이프·파일) Y/N 을 읽음. 자동화 전용(경고 출력) |
 | `-rf-conf <파일>` | 환경변수 `RF_TOOL_CONF`, 없으면 `/etc/rf_tool/rf.conf` | check allcheck dump | 2순위(예비) 계정 파일. 파일이 없으면 기능 꺼짐. 2.10절 |
-| `-list-max <N>` | check 100 / allcheck 20 / ucsm 20 | check allcheck ucsm | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수. ucsm: FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 |
+| `-ucsm` | `false` | account | 대상이 Cisco UCSM(XML API, 로컬 사용자). 대상은 UCSM 주소. 2.12절 |
+| `-j <N>` | `100` (최대 300) | account | 동시 처리 수. 처음 10대는 한 대씩 처리(웜업) |
+| `-dry-run`·`-no-prompt`·`-stdin-ok` | | account | create: 계획만 / 묻지 않고 목록만 / 터미널이 아닌 입력의 y/n 허용. change 는 `-dry-run` 만 의미 있음(새 비밀번호는 터미널 직접 입력) |
+| `-list-max <N>` | check 100 / allcheck 20 / ucsm 20 / account 20 | check allcheck ucsm account | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수. ucsm: FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 |
 | `-xml-map <파일>` | `bios_json/standard_map/standard_bios_map_xml.tsv` | ucsm | UCSM 기대값 매핑 TSV |
 | `-fail-max <N>` | `200` | check | `[FAIL 상세]`·`[설정 불가]`·`[적용 안 됨]` 에 보여 줄 최대 줄 수(넘으면 `fail.tsv`·`apply_result.tsv` 안내) |
 | `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 모델을 적어도 확인용) |
@@ -544,6 +698,7 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 | `xml.sh` | `[--compact] [대상...]` | 대상 인자를 쉼표로 묶어 `biostool dump -targets …`. 대상이 없으면 `user.txt`. **설정은 항상 `./bios.conf` 를 쓰며 `-conf` 등 다른 옵션은 받지 않습니다**(알 수 없는 옵션은 오류). 일부 호스트가 실패해도 안내를 보여 준 뒤 종료코드를 전달 |
 | `all_bios_check.sh` | `[biostool allcheck 옵션...]` | 파일 확인 후 `biostool allcheck` 실행 |
 | `ucsm_check.sh` | `[-user <파일>] [-xml-map <파일>] [-list-max N] ...` | 파일 확인 후 `biostool ucsm` 실행(읽기 전용). `-h` 도움말. 2.9절 |
+| `account_create.sh` | `[-dry-run] [-ucsm] [-j N] [biostool account create 옵션...]` | 파일(bios.conf·user.txt·pass.enc·rf.conf) 확인 후 `biostool account create`. 2.12절 |
 | `encrypt.sh` | (인자 없음) | 비밀번호를 두 번 입력받아 같을 때만 `pass.enc`·`key.bin`(권한 600) 생성 |
 | `mockbmc.sh` | `<트리이름> [포트]` 또는 `-dir <경로> -listen <주소> -user <ID> [-v]` | mock BMC 기동(개발·검증용). 비밀번호는 환경변수 `MOCKBMC_PASS`. 종료 시 집계 한 줄 출력 |
 | `setup.sh` / `build.sh` / `build_os6.sh` | (인자 없음) | 1.2절 |
@@ -700,6 +855,8 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | [PR_CHECKLIST.md](PR_CHECKLIST.md) | 수정·배포 전 체크리스트(바이너리 재빌드·두 바이너리 커밋·보안 테스트 등) |
 | [CHANGELOG.md](CHANGELOG.md) | 변경 이력(v0.1.0), 버전 태그 안내 |
 | [사용법.txt](사용법.txt) | 수동 시험용 명령만 모은 목록(각 명령 위에 `#` 설명) |
+| [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md) | 계정 생성·비밀번호 변경 확정 사양(인터뷰 결과)과 구현 시 지킬 규칙 |
+| `account_create.sh` · `cmd/biostool/account*.go` | 계정 생성(래퍼)·생성/변경 구현·허용목록 본문 검사·터미널 입력(2.12절) |
 | [계획서.md](계획서.md) | 설계 원본·인터뷰 결정·성공기준 검증 현황·단계 진행표 |
 | `setup.sh`, `build.sh`, `build_os6.sh` | 오프라인 빌드 / os8 빌드 / os6(RHEL6) 빌드 |
 | `bios_check.sh`, `xml.sh`, `all_bios_check.sh`, `encrypt.sh`, `lib.sh` | 실행 래퍼(점검·설정 / 사전조사 / 전체 비교 / 비밀번호 암호화 / 공용 함수) |
@@ -733,6 +890,7 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 - **AUTH_FAIL(401)은 재시도하지 않고, 차단기(`auth_fail_stop`)가 계정 잠금을 막습니다.** 공통 계정이 틀렸을 때 수천 대에 시도하지 않도록 처음 몇 대만 접속하고 멈춥니다. `auth_fail_stop=0` 으로 끄면 계정이 잠길 수 있습니다. 계정 잠금 정책이 있는 환경에서는 비밀번호를 먼저 확인하십시오.
 - **실제 RHEL6 커널(2.6.32)에서의 기동은 확인되지 않았습니다.** `bin/biostool_os6` 는 Go 1.20.14 정적 빌드이고 CentOS 6 userland(bash 4.1.2)에서의 동작은 확인했지만, 랩의 커널은 4.18 입니다. 회사 RHEL6 에서 처음 실행할 때 `bin/biostool_os6 help` 가 뜨는지부터 확인하십시오.
 - 점검·설정 결과(`results/`)에는 호스트 이름·모델·BIOS 설정값이 들어 있고 `pass.enc`·`key.bin` 은 비밀번호와 직결됩니다. 모두 커밋 금지(`.gitignore` 등록)이며 필요 없으면 직접 삭제하십시오. 결과 파일 권한은 0600 입니다.
+- **계정 생성·비밀번호 변경(2.12절) 후에는 랜덤한 서버 몇 대를 직접 골라 실제로 로그인되는지 확인하십시오.** 이 기능의 벤더별 방식은 문서 근거이며 실제 BMC 로 확인하지 않았습니다. 생성은 기본이 Y(빈 입력)이므로 `-dry-run` 으로 대상과 본문을 먼저 확인하십시오. rf.conf 의 admin 비밀번호는 평문이므로 권한 600 을 지키고 저장소에 커밋하지 마십시오.
 - 같은 BMC 를 가리키는 입력이 둘(예: `host` 와 `host-m`)이면 설정은 한 번만 합니다(`DUPLICATE_TARGET`). 입력 목록에 같은 서버를 다른 표기로 중복해 넣지 않는 것이 좋습니다.
 
 ---

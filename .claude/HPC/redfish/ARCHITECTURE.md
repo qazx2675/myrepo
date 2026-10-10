@@ -10,6 +10,11 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 |---|---|
 | `main.go` | CLI 진입점. 서브커맨드(`check`·`allcheck`·`dump`·`encrypt`·`ucsm`)·공통 플래그·`usageText`, `prepare`(conf → 대상 해석 → 비밀번호 복호화), 실행 요약 출력 |
 | `conf.go` | `bios.conf` 파서와 기본값(`Config`). 알 수 없는 키·비밀번호 키는 오류 |
+| `account.go` | `biostool account create|change` 본체: 점검(`probeCreate`)·생성(`createOnHost`)·검증·롤백(`rollbackCreate`)·변경(`changeOnHost`), 벤더별 생성 단계(`planCreate`), 워커풀+웜업(`runAcctPool`), 결과 `account_result.tsv`·요약·Y/n |
+| `account_gate.go` | 계정 쓰기 본문 검사(`checkAccountCreateBody`·`checkAccountPatchBody`): 허용 키·값·형태를 고정 (`redfish.go` `checkBody` 가 호출) |
+| `account_input.go` · `account_tty_linux.go` · `account_tty_other.go` | 새 비밀번호 터미널 입력(`*` 표시·2번 입력·붙여넣기 거부), csh 명령 인용(`cshQuote`), 입력 버퍼 비우기. raw 입력은 리눅스 전용(`syscall` ioctl) |
+| `account_ucsm.go` | Cisco UCSM 사용자 생성·변경(`-ucsm`), `internal/ucsmxml` 계정 모드 사용 |
+| `account_check.go` | `check` 끝에서 2순위로 접속한 호스트에 계정 생성 제안(`offerAccountCreate`, 기본 Y) |
 | `profile.go` | `profiles/<이름>.tsv` 로드·검증(`*` 행의 `verified=Y` 거부, 중복 검사), `rowsFor`(모델 정확 일치 우선 → `*`) |
 | `modelnorm.go` | 모델명 정규화 `normalizeModel`(프로파일의 model 열과 BMC 가 보고한 Model 을 같은 키로 맞추는 **한곳의 규칙**, allcheck 도 사용) |
 | `resolve.go` | 대상 목록 해석: `user.txt` 파싱, `/etc/hosts` 에서 `이름-m` 조회, `:포트`, 재시도 목록(`loadRetryList`), `NO_HOSTS_ENTRY` |
@@ -104,14 +109,18 @@ BMC 에 남는 흔적을 줄이고 운영자의 실수를 코드로 막는 것�
 
 작업 흐름도는 [WORKFLOW.md](WORKFLOW.md) 참고.
 
+## 계정 생성·비밀번호 변경 (구현됨) — 쓰기 경로 규칙
+
+확정 사양은 [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md), 사용법은 README 2.12절, 흐름도는 [WORKFLOW.md](WORKFLOW.md) 6번입니다.
+
+- **쓰기는 `account*.go` 만 합니다.** `redfish.go` 의 `ModeAccount` 에서만 계정 컬렉션 POST·계정 멤버 PATCH/DELETE 가 열리고(`reAcctColl`·`reAcctMember`), PATCH/DELETE 는 이번 실행이 `AllowAccountTarget` 으로 등록했거나(빈 슬롯·대상 계정) 자기가 POST 로 만든 멤버에만 나갑니다. BIOS 점검·설정 모드에서는 계정 경로가 계속 거부됩니다(`TestCheckAllowedAccountPaths`).
+- **본문은 고정 형태만**: 생성(`UserName`·`Password`·관리자 `RoleId`·`Enabled:true`·HPE `Oem` 권한), PATCH 는 비밀번호 / 빈 슬롯 생성 / 롤백 비활성 / 이름 비우기 4가지(`account_gate.go`).
+- **UCSM**: `internal/ucsmxml` 의 계정 모드(`Options.Account`)에서만 `configConfMo` 가 열리고 `aaaUser` 하나의 생성(admin 역할)·비밀번호 변경(등록된 이름)·삭제(이번에 만든 이름)로 제한됩니다(`gateConf`).
+- **비밀번호**: 인자·환경변수·파일로 받지 않고 출력·결과 파일·오류 메시지(`Client.AddSecret` 마스킹)에 싣지 않습니다.
+- **롤백**: 이번 실행이 만든 계정만 지웁니다(원래 있던 계정은 건드리지 않음). 변경 롤백은 열려 있는 1순위 세션으로 이전 비밀번호를 되돌립니다.
+- **수정 가이드**: 새 벤더 생성 방식 → `account.go` 의 `planCreate`(단계 목록)와 `account_gate.go`(허용 형태가 늘면 여기도) → `account_test.go` 에 mock 시험(`mockbmc` 계정 서비스 `internal/mockbmc/accounts.go`).
+
 ## 추후 확장 (아직 구현되지 않음)
 
-### 계정이 아예 없는 BMC 에 y/n 으로 계정 생성·패스워드 설정
-
-현재의 2순위 계정(`fallback.go`)은 **이미 있는 예비 계정으로 로그인만** 합니다. 공용 계정도 예비 계정도 없는 BMC 에 계정을 만들어 주는 기능은 **없습니다**. 필요해지면 아래 설계를 따릅니다(설계 메모일 뿐 코드·테스트 없음).
-
-- **연결 지점:** `fallback.go` 의 `loginWithFallback` 이 최종 `AUTH_FAIL` 을 돌려주는 자리. 이 직후(1순위·2순위가 모두 거부된 호스트)에서 “계정 생성 제안” 단계를 호출합니다. 로그인 자체가 안 되는 BMC 이므로 **계정을 만들려면 관리자 권한 계정이 따로 필요**하고, 그 계정도 rf.conf 에서 읽어야 합니다.
-- **rf.conf 확장:** `<vendor>_create_user`, `<vendor>_create_pass`(만들 계정)처럼 키를 더하고, 관리자 계정은 `<vendor>_admin_user`/`_admin_pass` 등으로 분리합니다. `parseRFConf` 는 알 수 없는 키를 오류로 처리하므로 키 목록 확장이 필요합니다.
-- **벤더별 경로:** 표준 `POST /redfish/v1/AccountService/Accounts`(본문 `UserName`·`Password`·`RoleId`), 비밀번호 변경은 `PATCH …/Accounts/<id>`. 벤더마다 `RoleId`·슬롯 규칙이 달라 첫 실장비에서 확인이 필요합니다.
-- **쓰기이므로 안전 규칙 선행:** (1) `redfish.go` 의 `checkAllowed`/`checkBody` 허용목록에 AccountService 경로를 별도 모드로 추가(기본 모드에서는 계속 거부), (2) 프로파일의 `verified=Y` 에 해당하는 **벤더·모델별 허가 목록**, (3) **y/n 프롬프트**(호스트마다 직접 입력, 비대화형 입력은 N, `-stdin-ok` 와 같은 자동화 예외는 두지 않음), (4) `-dry-run` 에서 보낼 요청만 출력, (5) 로그·결과 파일에 비밀번호를 남기지 않고 생성 사실(호스트·시각)만 기록. 모두 `set.go` 와 같은 “쓰기 경로는 한 곳” 원칙을 따라 별도 파일(예: `account.go`)로 둡니다.
-- **보안 테스트:** `*_security_test.go` 에 “허용목록 밖 계정 경로 거부”, “프롬프트 없이 쓰지 않음”, “비밀번호가 출력에 없음” 을 먼저 추가합니다.
+- **rf.conf 에 admin 도 없는 BMC 에 admin 계정을 만드는 기능**: 로그인 가능한 계정이 하나도 없으면 Redfish 로는 만들 수 없으므로(IPMI·로컬 콘솔 필요) 이 도구의 범위가 아닙니다.
+- **change 의 호스트별 y/n·부분 재실행**: 지금은 `account_result.tsv` 의 실패 호스트만 모아 `-user` 로 다시 실행합니다.

@@ -89,6 +89,10 @@ type Options struct {
 	// 끄면(기본) 다른 경로와 같이 인증이 필요하다.
 	OpenServiceRoot bool
 
+	// Accounts 가 nil 이 아니면 계정 서비스(AccountService/Accounts/Roles)를 동적으로 응답하고
+	// 계정 표로도 로그인을 받는다 (accounts.go).
+	Accounts *AccountOptions
+
 	// Fail 의 키는 "경로" 또는 "METHOD 경로" 이고 대소문자·끝 슬래시를 무시합니다.
 	// 끝에 "*" 를 붙이면 그 문자열로 시작하는 모든 경로에 적용합니다.
 	// "/redfish/v1/Systems/*" 는 하위 경로만, "/redfish/v1/Systems*" 는 Systems 자신도 포함합니다.
@@ -175,6 +179,7 @@ type Host struct {
 	pending   map[string]map[string]interface{} // 소문자 Settings 경로 → 속성
 	jobs      []Job
 	rules     []*faultRule
+	accts     []Account // 계정 서비스 슬롯 (Options.Accounts 가 있을 때)
 }
 
 // Server 는 mock BMC 1대를 단독 서버로 띄우는 래퍼입니다 (기록 조회·상태 변경은 Host 의 메서드).
@@ -199,6 +204,7 @@ func newHost(t *Tree, opts Options, done chan struct{}) *Host {
 	for k, f := range opts.Fail {
 		h.addRule(k, f)
 	}
+	h.initAccounts()
 	return h
 }
 
@@ -666,6 +672,9 @@ func (s *Host) handle(w *statusWriter, r *http.Request, np string, body []byte) 
 		writeErr(w, http.StatusUnauthorized, "NoValidSession", "authentication required")
 		return
 	}
+	if s.acctHandle(w, r, np, body) {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		s.get(w, np)
@@ -740,7 +749,12 @@ func (s *Host) applyFault(w *statusWriter, r *http.Request, np string) bool {
 func (s *Host) checkCreds(user, pass string) bool {
 	u := subtle.ConstantTimeCompare([]byte(user), []byte(s.opts.User))
 	p := subtle.ConstantTimeCompare([]byte(pass), []byte(s.opts.Pass))
-	return u&p == 1
+	if u&p == 1 {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.acctLoginLocked(user, pass)
 }
 
 // authenticated: X-Auth-Token 이 있으면 그것만 본다 (틀리면 Basic 으로 넘어가지 않음).

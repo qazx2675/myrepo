@@ -6,6 +6,13 @@ Cisco UCSM 읽기 전용 점검·연구용 프로파일과 2순위(예비) 계�
 
 ### 추가
 
+- **1순위 계정 생성·비밀번호 변경 `biostool account create|change`** + 래퍼 `account_create.sh` (확정 사양 [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md), 사용법·실제 출력 README 2.12절). 1순위 계정(`bios.conf` user + `pass.enc`)이 BMC 에 없으면 rf.conf 의 벤더 admin(2순위)으로 로그인해 **같은 id/pw 의 관리자 계정을 만들고**(같은 id 가 있으면 덮어쓰지 않고 건너뜀), 새 계정으로 1회 로그인해 검증하며, **인증이 거부된 서버만 이번 실행이 만든 계정을 되돌립니다**(롤백). 점검 끝(`bios_check.sh`)에서도 같은 질문을 하며 기본 응답은 Y(빈 입력)입니다. 터미널이 아니면 `-stdin-ok` 없이는 묻지 않습니다. `change` 는 바이너리를 직접 쓰고(래퍼 없음) 새 비밀번호를 터미널에서 `*` 로 2번 입력받으며 붙여넣기를 거부합니다. `pass.enc` 는 자동 갱신하지 않고 `cd <폴더>; bash encrypt.sh` 를 csh 에서 그대로 복사할 수 있게 안내합니다. 결과 `account_result.tsv`(0600, 비밀번호·해시 없음). 구현 `cmd/biostool/account*.go`.
+- **쓰기 허용목록 `ModeAccount`** (`redfish.go`): 계정 컬렉션 POST·계정 멤버 PATCH/DELETE 만 열고, PATCH/DELETE 는 이번 실행이 등록한(빈 슬롯·만든 계정·대상 계정) 멤버에만 나갑니다. 본문은 고정 형태만 허용(생성 키 집합, 비밀번호 변경, 슬롯 롤백 2단계). BIOS 점검·설정 모드에서는 계정 경로가 계속 거부됩니다.
+- **Cisco UCSM 사용자 생성·변경** (`internal/ucsmxml` 계정 모드): `configConfMo` 로 `sys/user-ext/user-<id>` 의 aaaUser 하나만 생성(`created`, 역할 admin)·비밀번호 변경(`modified`, 허용 등록된 이름)·삭제(`deleted`, 이번에 만든 이름) 합니다. 그 밖의 `configConfMo`·다른 객체·`status="created,modified"` 는 전송 전에 거부됩니다. 읽기 전용 점검기(`biostool ucsm`)는 그대로 쓰기 불가입니다.
+- **rf.conf 에 `cray` 벤더 추가**(`cray_user`/`cray_pass`): 비인증 ServiceRoot 의 `Vendor`/`Oem` 에 `cray` 가 들어 있는 BMC 가 대상.
+- **mock 계정 서비스**: `mockbmc -accounts [-account-slots N] [-account-slot-style] [-account-deny-new-login]` (AccountService/Accounts/Roles 동적 응답, 슬롯 방식·검증 실패 시험).
+- **테스트케이스 시나리오 7~11**: 계정 생성(기본 Y)·중복 건너뜀·슬롯 방식·검증 실패 롤백·변경 dry-run.
+- 보안 리뷰(Jev 분류 `security_review`)에서 확신도 7 이하 지적 3건을 반영: 콘솔 출력의 BMC 값 정리, 기본 Y 질문 전에 터미널 입력 버퍼 비움, `change` 를 1순위 로그인 호스트·정확한 이름 일치로 한정(빈 슬롯은 Id 2 이상).
 - **Cisco UCSM 읽기 전용 점검**: `biostool ucsm` + 래퍼 `ucsm_check.sh`. 대상은 블레이드 BMC 가 아니라 UCSM(Fabric Interconnect VIP) 주소입니다. 호출은 `POST https://<UCSM>/nuova` 의 `aaaLogin` → `configResolveClass` → `aaaLogout` 뿐이며 전송 직전 관문(`internal/ucsmxml`)이 그 밖의 요청을 막습니다. 기대값은 `bios_json/standard_map/standard_bios_map_xml.tsv`(`-xml-map` 으로 변경). 결과는 `results/<일시>/ucsm_result.tsv`. 판정 OK·FAIL·UNVERIFIED·MAPPING_MISSING·UNSUPPORTED, 호스트 오류 AUTH_FAIL·UNREACHABLE·TIMEOUT·XML_ERROR. 쓰기·재부팅·`-retry-from`·`retry.txt` 는 없습니다. 테스트: `cmd/biostool/ucsm_test.go`, `internal/ucsmxml/ucsmxml_test.go`.
 - **연구용 프로파일 `profiles/VM_research.tsv`**: `bios_json/` 조사 데이터에서 만든 Redfish(JSON) 표준값입니다. 모든 행 `verified=N` 이라 점검만 되고 설정은 되지 않습니다. `bash bios_check.sh --profile VM_research`.
 - **프로파일 오프라인 검증**: `bios_json/standard_map/validate_profile.ps1` → `profile_validation.md` (120행: OK 89, 허용값 확인 불가 29, Supermicro UI 이름만 2, 오류 0). 데이터와의 대조일 뿐 실장비 확인이 아닙니다.
@@ -39,18 +46,26 @@ Cisco UCSM 읽기 전용 점검·연구용 프로파일과 2순위(예비) 계�
 
 | 파일 | 빌드 | 크기(바이트) | sha256 |
 |---|---|---|---|
-| `bin/biostool` | Go 1.26.5 | 7295138 | `640f305df3594319271925759ee716a3b06ad12a81f3441a9f6a17cfceae1383` |
-| `bin/biostool_os6` | Go 1.20.14 | 5931008 | `086633f0c6214d18708669eb85374ec3ed474304c39a3fe7079f47e1159559ee` |
-| `bin/mockbmc` | Go 1.26.5 | 7213218 | `5d8858005bef1e5cc5b8726bb46657ca71496a85bc8f5e53f256bc1f5b40c038` |
-| `bin/mockbmc_os6` | Go 1.20.14 | 5660672 | `44eed8cfc8579800d22e90af338b5c87ce02b3870b6fe96918f56ec50f463d48` |
+| `bin/biostool` | Go 1.26.5 | 7475362 | `1f9d439970ec34578b88cdce66746b5b80a9cd459405da07bac9438e5c23e915` |
+| `bin/biostool_os6` | Go 1.20.14 | 6107136 | `39a895e198248d8ac4b262cfa89d265fa78cd95354726b642db2221a39697220` |
+| `bin/mockbmc` | Go 1.26.5 | 7237794 | `41b6b9a69fbcce12e49ddf09d7823a31cfdcf55f26eeb06ee2988693dab45c97` |
+| `bin/mockbmc_os6` | Go 1.20.14 | 5689344 | `8f5e997045fee74b55d71ab88bfa00b2985dcb79561a5235710caacb12c5fc49` |
 
 ### 알려진 한계 (2순위 계정)
 
 - **실제 BMC 에서 확인하지 않았습니다.** 비인증 ServiceRoot 가 벤더(`Vendor`·`Oem`)를 돌려주는지, 보안 강화로 ServiceRoot 가 막힌 BMC, 로그인 실패 횟수와 잠금 정책, Basic 인증 BMC 에서의 동작은 [FIRST_RUN.md](FIRST_RUN.md) 26~29 항목입니다. 레지스트리 허용값의 실제 표기(`Enable` 대 `Enabled`)는 30 항목입니다.
 - 비인증 ServiceRoot 가 막힌 BMC 는 벤더를 식별하지 못해 예비 계정을 시도하지 않고 `AUTH_FAIL` 로 남습니다(다른 벤더 계정을 돌려가며 넣지 않음).
-- 계정이 아예 없는 BMC 에 계정을 만들어 주는 기능은 없습니다(설계 메모: [ARCHITECTURE.md](ARCHITECTURE.md) “추후 확장”).
+- 계정 생성·변경의 한계는 아래 “알려진 한계 (계정 생성·변경)” 입니다.
 - `mockbmc` 에 `-open-serviceroot` 플래그를 추가했습니다(비인증 ServiceRoot 에 응답, 벤더 식별·2순위 계정 시험용). 기본은 꺼짐(401)이며 실제 BMC 의 설정과는 무관한 mock 전용 옵션입니다.
 
+### 알려진 한계 (계정 생성·변경)
+
+- **실제 BMC·UCSM 에서 확인하지 않았습니다.** 벤더별 생성·변경 방식은 `id_json` 의 문서·공개 스크립트 근거입니다(사양상 미확인 방식도 Y 로 적용되며 결과 `warn` 열에 경고). 첫 실장비는 1대부터 `-dry-run` 으로 본문을 확인하십시오. [FIRST_RUN.md](FIRST_RUN.md) 31~37.
+- 관리자 역할 이름은 BMC 의 Roles 컬렉션에서 `Administrator`→`Admin`→`admin` 순으로 고르고, 읽지 못하면 후보를 순서대로 보냅니다. Cray 의 `PasswordChangeRequired` 는 `false` 를 보내지만 실제 동작은 미확인입니다.
+- 비밀번호 정책(길이·복잡도)은 사전 검사하지 않고 BMC 응답(`REJECTED`)으로만 압니다. `$ ? =` 처럼 UCSM 이 금지하는 문자도 마찬가지입니다.
+- 생성 검증은 로그인 1회입니다. BMC 가 새 계정을 잠시 뒤에 활성화하면 거짓 `VERIFY_FAIL_ROLLED_BACK` 이 날 수 있습니다(다시 실행하면 됨).
+- 붙여넣기 거부는 완전하지 않습니다(터미널이 키 입력과 붙여넣기를 구분하지 못하는 환경에서는 안내 문구만 있음).
+- 동시 처리 100(최대 300)은 실측 값이 아니며 첫 실행 로그로 조정합니다. RHEL6 커널(2.6.32)·bash 4.1 에서의 동작은 확인하지 못했습니다.
 ### 알려진 한계 (UCSM 및 프로파일)
 - **실 UCSM 미확인.** 응답 형태(outCookie·errorCode), 블레이드 dn·PID 매칭(`ucsmModelKey`), 실효 설정 위치(`<blade dn>/bios/bios-settings/…`)는 [FIRST_RUN.md](FIRST_RUN.md) 18~20 항목입니다.
 - BIOS 정책(`bios-prof-*`)은 보지 않고 서버에 실제 적용된 값만 봅니다.

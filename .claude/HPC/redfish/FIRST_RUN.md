@@ -65,6 +65,13 @@
 | 29 | **Basic 인증 BMC 에서 예비 계정이 동작하지 않음** — 세션을 지원하지 않아 Basic 으로 폴백하는 BMC 는 로그인 단계가 없어 1순위 거부(401)를 요청 시점에야 알게 됨. 현재 구현은 로그인(`Login`) 실패에서만 예비 계정으로 바꾸므로 이런 BMC 에서는 예비 계정이 시도되지 않음 | 세션 없는 BMC(`-no-sessions` mock 으로 재현 가능)에서 1순위가 틀릴 때 결과가 `AUTH_FAIL` 로만 나오는지 | 필요하면 Basic 폴백 경로에도 예비 계정을 연결(+ 시험), 아니면 README 한계로 유지 | 미확인 |
 | 30 | **레지스트리 허용값의 실제 표기(`Enable` 대 `Enabled`)** — 프로파일 `Enabled\|Enable` 에서 설정(Y)·dry-run 은 BMC 레지스트리가 받는 표기를 골라 보냄. 실제 BMC 레지스트리가 어느 쪽을 쓰는지, 대소문자만 다른 표기(`enabled`)인지, 레지스트리를 못 읽을 때 첫 값으로 가는 것이 맞는지 모름 | dry-run 본문의 값과 요약의 `[허용값: …]`, 레지스트리를 못 읽은 호스트의 `참고: 레지스트리 … 사전검증 없이` 줄 | 프로파일 `value` 의 `A\|B` 순서(레지스트리를 못 읽을 때는 첫 값이 전송됨), `set.go` 의 `pickAllowedValue` | 미확인 |
 
+| 31 | **계정 생성 방식(벤더별)** — 문서 근거만 있음: Dell iDRAC8/9 빈 슬롯(3~16) PATCH, iDRAC10 POST, HPE `RoleId` POST(iLO4 는 Oem 권한), Lenovo POST(Purley 는 슬롯 PATCH), Supermicro POST(X10 `Admin`) | 벤더별 1대에서 `bash account_create.sh -dry-run` 의 본문·방식 → 실제 생성 후 `account_result.tsv` 의 result, BMC 웹 화면의 계정 목록 | `account.go` 의 `planCreate`(단계·역할 후보), `account_gate.go`(허용 형태) | 미확인 |
+| 32 | **새 계정 즉시 로그인 가능 여부** — 검증 로그인 1회가 거짓 실패(`VERIFY_FAIL_ROLLED_BACK`)로 끝나는 BMC 가 있는지(생성 직후 활성화 지연, 첫 로그인 시 비밀번호 변경 요구 `PasswordChangeRequired`) | 생성 직후 같은 계정으로 수동 로그인, 결과의 `VERIFY_FAIL_ROLLED_BACK` 비율 | 지연이 있으면 검증 전 대기 또는 재시도 1회 추가, Cray 는 `PasswordChangeRequired:false` 동작 확인 | 미확인 |
+| 33 | **롤백(삭제) 동작** — 슬롯 방식(Dell)은 비활성→이름 비우기 2단계, 그 밖은 멤버 DELETE. 실제 BMC 가 이를 받아들이는지, 삭제 후 슬롯이 비는지 | 일부러 검증 실패를 만들 수 없으므로 시험용 BMC 에서 수동으로 PATCH/DELETE 확인 | `rollbackCreate` | 미확인 |
+| 34 | **UCSM XML 쓰기** — `configConfMo`(aaaUser created/modified/deleted, 역할 admin) 응답, `errorCode`, 비밀번호 정책(`$ ? =` 금지), `historyCount`/변경 간격에 의한 거부 | UCSM 1대(또는 시험 도메인)에서 `account_create.sh -ucsm -dry-run` 후 실행 | `ucsmxml.go` `gateConf`·`CreateUser`·`SetUserPassword` | 미확인 |
+| 35 | **비밀번호 변경 후 세션** — 변경 직후 기존 세션이 유지되는지(롤백이 같은 세션을 쓰므로 중요), Basic 인증 BMC 에서의 롤백 | 시험용 BMC 에서 변경 후 같은 세션으로 GET 가능한지 | `changeOnHost` 의 롤백 경로(필요하면 새 로그인 후 복원) | 미확인 |
+| 36 | **빈 슬롯 판별** — 빈 슬롯을 `UserName==""` · `Enabled=false` · 숫자 Id ≥ 2(Dell ≥ 3) 로 판별함. 실제 BMC 가 예약 슬롯(익명 IPMI, HostBootstrap 등)을 다르게 표시하는지 | 계정 컬렉션의 각 멤버(Id·UserName·Enabled·RoleId) 전체 | `account.go` 의 `isEmptySlot` | 미확인 |
+| 37 | **동시 처리 수·잠금 정책** — 기본 100(최대 300), 웜업 10대. 계정 쓰기에서 BMC 지연·세션 한도에 걸리는지, 잠금 정책과의 상호작용 | 첫 실행 로그의 `TIMEOUT`·`HTTP 429/503` 비율, 호스트당 소요 시간 | `acctDefaultWorkers`·`acctMaxWorkers`·`acctWarmup` 조정 | 미확인 |
 ## C. 확인 결과를 반영한 뒤 할 일
 
 - [ ] `profiles/VM.tsv` 를 확정값으로 갱신(`verified=Y` 는 모델을 지정한 행만, 사람이 확인한 것만)

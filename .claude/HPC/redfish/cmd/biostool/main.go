@@ -33,6 +33,7 @@ const usageText = `사용법:
   biostool dump    [-targets 대상,...] [-out 디렉터리] [-compact] [공통 옵션]  사전조사 덤프 (GET 전용)
   biostool ucsm    [-xml-map <TSV>] [-list-max N] [-conf] [-user] [-hosts]  Cisco UCSM XML API BIOS 점검 (읽기 전용, 대상=UCSM 주소)
   biostool encrypt [-key key.bin] [-out pass.enc]  표준입력의 비밀번호를 암호화
+  biostool account create|change [옵션]          1순위 계정 생성 / 비밀번호 변경 (biostool account -h)
 
 공통 옵션:
   -conf <파일>        설정 파일 (기본 bios.conf)
@@ -70,6 +71,8 @@ func main() {
 		err = cmdEncrypt(os.Args[2:])
 	case "ucsm":
 		err = cmdUcsm(os.Args[2:])
+	case "account":
+		err = cmdAccount(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usageText)
 		return
@@ -163,6 +166,10 @@ func cmdCheck(args []string) error {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "경고: 결과 파일 기록 중 오류: "+err.Error())
+	}
+	// 1순위 계정이 없어 2순위로 접속한 호스트가 있으면 계정 생성을 제안한다 (기본 Y, 터미널일 때만 묻는다).
+	if aerr := offerAccountCreate(rc, run, o.dryRun, *noPrompt, *stdinOK, os.Stdin, os.Stdout, ropts); aerr != nil {
+		fmt.Fprintln(os.Stderr, "경고: 계정 생성 단계 오류: "+aerr.Error())
 	}
 	if o.dryRun {
 		// dry-run: 보낼 요청만 출력하고 Y/N 을 묻지 않는다 (쓰기 없음).

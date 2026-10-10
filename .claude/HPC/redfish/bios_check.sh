@@ -23,6 +23,10 @@ usage() {
   그 외 인자           그대로 biostool check 에 전달 (-from-dump <디렉터리>, -retry-from <폴더>, -dry-run,
                       -no-prompt, -stdin-ok, -list-max <N>, -fail-max <N>, -conf <파일>, -user <파일>, -hosts <파일>)
 
+1순위 계정이 없는 BMC (2순위 rf.conf 계정으로만 접속된 호스트):
+  점검 끝에 "1순위 계정을 만들까요? [Y/n]" 을 묻습니다 (빈 입력 = Y). 터미널이 아니거나 -no-prompt 이면 묻지 않고
+  `bash account_create.sh` 안내만 합니다. 비밀번호 변경은 `bin/biostool account change` (사용법.txt 참고).
+
 설정(Y/N) 입력:
   Y 는 터미널에서 직접 입력할 때만 받습니다. 표준입력이 파이프·파일이면(`yes |`, `< 답.txt` 등) 묻지 않고 N 으로 처리합니다.
   -stdin-ok          자동화용 예외: 비대화형 입력의 Y 로도 실제 설정합니다 (실행 시 경고 한 줄 출력). 필요할 때만 쓰십시오.

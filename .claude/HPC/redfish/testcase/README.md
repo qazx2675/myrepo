@@ -25,6 +25,13 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 | 4 | 19104 (아무도 듣지 않음) | 연결 거부 | `[접속불가]` 구역에만 있음(`[계정 오류]` 에 없음) |
 | 5 | 19105 `supermicro-x12` | 1순위 정상, 기대 `Performance` ≠ 현재 `Custom`(`verified=N`) | `PowerTechnology` 항목이 `UNVERIFIED` |
 | 6 | 19106 `lenovo-sr650v3` 사본 | Hyper-Threading 현재값 `Disable`, 프로파일 `Enabled\|Enable` `verified=Y`, `-dry-run` | 보낼 본문에 `"Processors_HyperThreading":"Enable"` (`Enabled` 아님) |
+| 7 | 19107 `hpe-dl360gen11` (`-accounts`) | 1순위 계정이 없음, 빈 입력(기본 Y) | `[CREATED]`, 비밀번호가 출력·결과 파일에 없음, 이후 점검은 1순위 계정으로 접속 |
+| 8 | 19107 (7 의 뒤) | 같은 id 가 이미 있음 | 다시 만들지 않음(`PRIMARY_OK`/`SKIP_EXISTS`) |
+| 9 | 19108 `dell-r660` (`-accounts -account-slots 4 -account-slot-style`) | POST 불가, 빈 슬롯 방식 | 슬롯 3 에 PATCH 로 `[CREATED]` |
+| 10 | 19109 `hpe-dl360gen11` (`-account-deny-new-login`) | 만든 뒤 새 계정 로그인 거부 | `[VERIFY_FAIL_ROLLED_BACK]` |
+| 11 | 19107 | `account change -dry-run` | `[WOULD_CHANGE]`, 비밀번호 비노출 |
+
+시나리오 7~11 은 mock 의 계정 서비스(-accounts)를 씁니다. 계정 서비스가 없는 오래된 mockbmc 에서는 SKIP 으로 표시됩니다. **새 비밀번호를 터미널에서 입력하는 ccount change 의 실제 입력은 이 스크립트가 시험하지 않습니다**(터미널이 필요) — README 2.12절 절차로 직접 해 보십시오.
 
 ### 시나리오 2 와 `-open-serviceroot`
 

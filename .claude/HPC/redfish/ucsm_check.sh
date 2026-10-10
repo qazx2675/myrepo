@@ -22,6 +22,8 @@ usage() {
   -list-max <N>        FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 (기본 20)
   -conf <파일>, -hosts <파일>
 
+UCSM 에 1순위 계정이 없어 AUTH_FAIL 이면: bash account_create.sh -ucsm  (rf.conf 의 cisco_user/cisco_pass 로 만듭니다)
+
 처음 한 번 준비할 것:
   cp bios.conf.example bios.conf      # user= 에 UCSM 계정 ID 입력 (읽기 전용 계정 권장)
   bash encrypt.sh                     # UCSM 비밀번호 입력 -> pass.enc + key.bin 생성

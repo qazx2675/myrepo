@@ -39,6 +39,10 @@
 - [ ] 비밀번호·토큰이 출력·로그·TSV·결과 파일·오류 상세에 나오지 않는다 (마스킹 시험 유지)
 - [ ] `profiles/*.tsv` 의 `verified=Y` 승격은 **실장비 dry-run 본문을 사람이 확인한 뒤에만** ([FIRST_RUN.md](FIRST_RUN.md))
 
+### 계정 생성·변경
+
+- [ ] **계정 쓰기(`account*.go`·`ModeAccount`·`ucsmxml` 계정 모드)를 바꿨다면**: 허용 경로·본문 검사 시험(`TestCheckAllowedAccountPaths`·`TestCheckAccountBodies`·`TestAccountClientNeedsRegistration`·`ucsmxml_account_test.go`)이 통과하고, BIOS 점검·설정 모드에서 계정 경로가 계속 거부되며, 롤백이 **이번 실행이 만든 계정만** 지우는지(`TestCreateVerifyFailRollsBackOnlyOurs`), 비밀번호가 출력·결과·오류에 없는지 확인했다
+- [ ] `bash testcase/rf_fallback_case.sh` 와 `RF_FORCE_OS6=1 …` 가 모두 PASS(시나리오 1~11)이고, `bin/biostool account change` 를 **터미널에서 직접** 한 번 실행해 `*` 표시·붙여넣기 거부·결과를 확인했다
 ### 문서·샘플
 
 - [ ] **합성 testdata 를 갱신했다면** `testdata/README.md` 의 “합성 자료이며 실제 덤프가 아님” 경고와 `Oem.MockData` 표식을 유지했다 (실덤프를 넣을 때는 IP·시리얼·MAC·UUID·자산태그를 지우고 별도 이름으로)
