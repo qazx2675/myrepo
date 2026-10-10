@@ -38,3 +38,8 @@ LLM 코딩 실수를 줄이기 위한 행동 지침입니다.
 - `POST https://api.typesafe.ai/v1/systemone` (`model: jev-latest`, `state`, `questions` noul/choice) — 상세는 메모리 `reference_jev_api.md`
 - Windows `python3`는 스토어 스텁 → `C:/Users/qazx2/AppData/Local/Programs/Python/Python311/python.exe` 사용
 - 저장소 판정·분류는 현재 브랜치가 아니라 `origin/master` 기준으로 읽는다
+
+## 5. RHEL6 빌드 산출물
+
+- rhel6(os6)용 빌드가 있는 프로젝트는 빌드 스크립트만 두지 말고 **빌드 완료된 바이너리를 저장소에 함께 커밋**한다 (회사 환경에는 Go 등 빌드 도구가 없음).
+- .gitignore 에서 해당 바이너리를 제외하지 말 것. 소스 변경 시 바이너리도 재빌드해 갱신한다.
