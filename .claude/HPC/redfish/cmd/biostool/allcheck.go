@@ -395,6 +395,7 @@ type allRun struct {
 type allEnv struct {
 	conf     *Config
 	password string
+	fallback *fallbackCreds // rf.conf 2순위 계정 (nil 이면 꺼짐)
 	ign      *ignoreSet
 	offline  bool
 	dumps    map[string]string // 소문자 폴더 이름 → 호스트 덤프 폴더
@@ -428,16 +429,16 @@ func (e *allEnv) fetch(t Target) *biosSnap {
 		}
 		return s
 	}
-	c := NewClient(ClientOpts{
+	c, li, lerr := loginWithFallback(ClientOpts{
 		BaseURL: t.BaseURL(), User: e.conf.User, Pass: e.password, Insecure: e.conf.Insecure,
 		Timeout: e.conf.Timeout, Retries: e.conf.Retries, Mode: ModeReadOnly, Gap: checkClientGap,
-	})
+	}, e.fallback)
 	defer func() {
 		_ = c.Close()
-		s.Stats = c.Stats()
+		s.Stats = li.stats(c)
 	}()
-	if err := c.Login(); err != nil {
-		s.setErr(err)
+	if lerr != nil {
+		s.setErr(lerr)
 		return s
 	}
 	if err := s.read(c.GetRaw); err != nil {
@@ -503,7 +504,7 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 		now = time.Now()
 	}
 	env := &allEnv{
-		conf: rc.Conf, password: rc.Password, ign: o.Ignore, offline: o.FromDump != "",
+		conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, ign: o.Ignore, offline: o.FromDump != "",
 		refByID: map[string]*allRef{}, byKey: map[string][]*allRef{},
 	}
 	var err error

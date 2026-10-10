@@ -70,6 +70,9 @@ type hostCheck struct {
 
 	// MgmtVersion 은 result.tsv mgmt_version 열입니다 (이미 읽은 Manager 리소스에서, 모르면 "-" 또는 빈 문자열).
 	MgmtVersion string
+
+	// CredSource 는 로그인에 성공한 계정 출처입니다: credPrimary / credFallback(rf.conf 2순위) / "" (로그인 안 함·실패).
+	CredSource string
 }
 
 func (h *hostCheck) setErr(err error) {
@@ -235,6 +238,7 @@ type checkRun struct {
 	Hosts        []*hostCheck // 입력 순서
 	MMModels     int          // MAPPING_MISSING 덤프를 저장한 모델 수
 	AuthStop     int          // conf auth_fail_stop (0 이면 차단기 비활성)
+	FallbackOn   bool         // rf.conf 2순위 계정 기능이 켜져 있었는지 (run_info 건수 줄)
 	prof         *Profile     // 점검에 쓴 프로파일 (set 이 항목을 다시 검증할 때 씀)
 	RetryFromDir string       // 단계 7: 이전 결과 폴더 (재시도 모드일 때만)
 	prevResult   *tsvTable    // 단계 7: 이전 결과 (병합 바탕, 읽기만 한다)
@@ -244,6 +248,7 @@ type checkRun struct {
 type checkEnv struct {
 	conf     *Config
 	password string
+	fallback *fallbackCreds // rf.conf 2순위 계정 (nil 이면 꺼짐)
 	prof     *Profile
 	fromDump map[string]string // 소문자 폴더 이름 → 호스트 덤프 폴더
 	offline  bool
@@ -294,10 +299,11 @@ func doCheck(rc *runContext, o checkOpts) (*checkRun, error) {
 		return nil, fmt.Errorf("결과 폴더: %w", err)
 	}
 	env := &checkEnv{
-		conf: rc.Conf, password: rc.Password, prof: o.Profile,
+		conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, prof: o.Profile,
 		regs: &regCache{m: map[string]*regEntry{}},
 	}
-	run := &checkRun{Profile: o.Profile.Name, Now: now, Dir: dir, FromDump: o.FromDump, prof: o.Profile, RetryFromDir: prevDir, prevResult: prev}
+	run := &checkRun{Profile: o.Profile.Name, Now: now, Dir: dir, FromDump: o.FromDump, prof: o.Profile, RetryFromDir: prevDir, prevResult: prev,
+		FallbackOn: rc.Fallback != nil && o.FromDump == ""}
 	if o.FromDump != "" {
 		env.offline = true
 		if env.fromDump, err = indexDumpHosts(o.FromDump); err != nil {
@@ -348,10 +354,10 @@ func (e *checkEnv) checkOnline(t Target) *hostCheck {
 		h.Status = t.Err
 		return h
 	}
-	c := NewClient(ClientOpts{
+	c, li, lerr := loginWithFallback(ClientOpts{
 		BaseURL: t.BaseURL(), User: e.conf.User, Pass: e.password, Insecure: e.conf.Insecure,
 		Timeout: e.conf.Timeout, Retries: e.conf.Retries, Mode: ModeReadOnly, Gap: checkClientGap,
-	})
+	}, e.fallback)
 	closed := false
 	defer func() {
 		if !closed {
@@ -359,12 +365,13 @@ func (e *checkEnv) checkOnline(t Target) *hostCheck {
 				h.Notes = append(h.Notes, "세션 삭제: "+errBrief(err))
 			}
 		}
-		h.Stats = c.Stats()
+		h.Stats = li.stats(c)
 	}()
-	if err := c.Login(); err != nil {
-		h.setErr(err)
+	if lerr != nil {
+		h.setErr(lerr)
 		return h
 	}
+	h.CredSource = li.Source
 	e.evaluate(h, newMemoGet(c.GetRaw))
 
 	// 매핑 없는 모델은 같은 세션으로 덤프를 모델당 1대만 저장한다 (사람이 요약을 보고 프로파일을 채운다).
@@ -904,6 +911,11 @@ func writeResultFiles(r *checkRun) error {
 	if err := writeLines(filepath.Join(r.Dir, "retry.txt"), retry); err != nil {
 		return err
 	}
+	if fb := r.fallbackHosts(); len(fb) > 0 {
+		if err := writeLines(filepath.Join(r.Dir, fallbackLoginFile), fb); err != nil {
+			return err
+		}
+	}
 	if err := os.WriteFile(filepath.Join(r.Dir, "run_info.txt"), []byte(r.runInfo()), 0o600); err != nil {
 		return err
 	}
@@ -968,5 +980,22 @@ func (r *checkRun) runInfo() string {
 	}
 	fmt.Fprintf(&b, "BMC 호출: 세션 생성 %d, GET %d\n", sess, gets)
 	fmt.Fprintf(&b, "MAPPING_MISSING 덤프 저장 모델 수: %d\n", r.MMModels)
+	if r.FallbackOn {
+		fmt.Fprintf(&b, "2순위 계정(rf.conf)으로 접속: %d\n", len(r.fallbackHosts()))
+	}
 	return b.String()
+}
+
+// fallbackLoginFile 은 2순위 계정으로 로그인한 호스트 이름 목록 파일입니다 (해당 호스트가 없으면 만들지 않음).
+const fallbackLoginFile = "fallback_login.txt"
+
+// fallbackHosts 는 2순위 계정(rf.conf)으로 로그인한 호스트 이름입니다 (입력 순서).
+func (r *checkRun) fallbackHosts() []string {
+	var out []string
+	for _, h := range r.Hosts {
+		if h.CredSource == credFallback {
+			out = append(out, h.Target.Hostname)
+		}
+	}
+	return out
 }

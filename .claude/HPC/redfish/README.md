@@ -51,7 +51,7 @@ bash build_os6.sh      # (관리자가 소스를 고쳤을 때만) RHEL6 바이�
 
 **vendor/ 가 없는 이유.** 이 프로젝트는 외부 의존성이 **하나도 없습니다**(`go.mod` 에 `require` 가 없고 표준 라이브러리만 사용, `module biostool`, `go 1.20`). 그래서 `go mod vendor` 로 모을 것이 없고 `vendor/` 디렉터리가 필요 없습니다. `setup.sh` 는 다른 프로젝트와 같은 틀(`GOFLAGS=-mod=vendor`, `go build -mod=vendor`)을 그대로 쓰는데, 의존성이 없으면 vendor 디렉터리가 없어도 이 옵션이 정상 동작합니다(랩의 Go 1.25.10 과 Go 1.20.14 에서 둘 다 `setup.sh` 성공을 확인했습니다). 나중에 외부 모듈을 쓰게 되면 `go mod vendor` 로 `vendor/` 를 만들어 커밋해야 폐쇄망 빌드가 유지됩니다.
 
-**소스를 고쳤다면** 바이너리도 다시 빌드해 **두 파일(`bin/biostool`, `bin/biostool_os6`)을 함께 커밋**해야 합니다. 회사 환경에는 Go 가 없어 저장소의 바이너리가 곧 배포본입니다([PR_CHECKLIST.md](PR_CHECKLIST.md)).
+**소스를 고쳤다면** 바이너리도 다시 빌드해 **두 파일(`bin/biostool`, `bin/biostool_os6`)을 함께 커밋**해야 합니다(mock 서버를 고쳤다면 `bin/mockbmc`, `bin/mockbmc_os6` 도). 회사 환경에는 Go 가 없어 저장소의 바이너리가 곧 배포본입니다([PR_CHECKLIST.md](PR_CHECKLIST.md)).
 
 ### 1.3 처음 한 번 준비할 것
 
@@ -117,11 +117,14 @@ FAIL 3건(호스트 2대)을 Pending 으로 설정하시겠습니까? 재부팅�
 
 | 구역 | 내용 |
 |---|---|
-| 상단 집계 | 호스트 대표 상태별 호스트 수. `OK` 줄 끝에 `ok.txt` 경로. 일시 오류 등은 `기타 오류` 한 줄로 묶음 |
+| 상단 집계 | 호스트 대표 상태별 호스트 수. `OK` 줄 끝에 `ok.txt` 경로. 호스트 오류는 `기타 오류` 한 줄로 묶음(자세한 구분은 아래 구역) |
 | `[OK] N대` | 모든 항목이 OK/PENDING_OK 인 호스트 이름(PENDING_OK 는 `(재부팅 대기)` 표시). `-list-max`(기본 100)대를 넘으면 개수와 `ok.txt` 경로만 |
 | `[FAIL 상세]` | **Y 로 설정할 수 있는** 항목: 호스트·모델·항목·속성·기대값·현재값. `-fail-max`(기본 200)줄을 넘으면 `fail.tsv` 안내 |
 | `[설정 불가]` | UNVERIFIED · PENDING_EXISTS · MAPPING_MISSING · (설정 못 하는) PENDING_NO_JOB 항목과 사유. MAPPING_MISSING 은 속성 이름 후보도 보여 줍니다 |
-| `[기타 오류]` | 상태별 호스트 목록, 재시도 대상 수와 `retry.txt` 경로 |
+| `[2순위 계정(rf.conf)으로 접속] N대` | 공용(1순위) 계정이 거부되어 벤더별 예비 계정으로 접속한 호스트(이름과 벤더만, 계정명 없음). 2.10절 |
+| `[접속불가] N대` | `UNREACHABLE`·`TIMEOUT`·`BMC_ERROR`·`HTTP_ERROR` — 네트워크·포트·TLS·BMC 쪽 문제이며 **계정 문제가 아님** |
+| `[계정 오류 AUTH_FAIL] N대` | 1순위·2순위 계정 모두 실패했거나 예비 계정이 없는 호스트와 사유. 계정 잠금을 막으려고 재시도하지 않음 |
+| `[기타 오류]` | 위에 속하지 않는 호스트 오류(`UNSUPPORTED`·`NO_HOSTS_ENTRY` 등)와 재시도 대상 수·`retry.txt` 경로 |
 
 **Y 를 입력하면** 점검 이후 상태를 다시 읽어 확인한 뒤 호스트당 PATCH 1회로 Pending 만 설정하고, 반영을 재조회로 확인합니다.
 
@@ -360,7 +363,7 @@ OK                     1  → results/20261007_162940/ok.txt (OK·PENDING_OK 호
 
 ### 2.8 mock 서버로 연습하기 (실서버 아님)
 
-`mockbmc.sh` 는 `testdata/` 의 **합성 Redfish 트리**를 BMC 처럼 서빙하는 개발·검증용 서버입니다(Go 필요, `bin/mockbmc` 는 저장소에 없고 필요할 때 빌드). 실제 서버에 쓰기 전에 흐름을 익히는 용도이며 임시 conf 를 따로 쓰는 방법은 [사용법.txt](사용법.txt) 의 “mock 연습” 에 있습니다. testdata 의 설명과 한계는 [testdata/README.md](testdata/README.md) 를 보십시오.
+`mockbmc.sh` 는 `testdata/` 의 **합성 Redfish 트리**를 BMC 처럼 서빙하는 개발·검증용 서버입니다(빌드 완료 `bin/mockbmc`·`bin/mockbmc_os6` 가 저장소에 있어 Go 없이 바로 실행되며, 바이너리가 없을 때만 go 로 빌드). 실제 서버에 쓰기 전에 흐름을 익히는 용도이며 임시 conf 를 따로 쓰는 방법은 [사용법.txt](사용법.txt) 의 “mock 연습” 에 있습니다. testdata 의 설명과 한계는 [testdata/README.md](testdata/README.md) 를 보십시오.
 
 ### 2.9 Cisco UCSM 점검 (읽기 전용) — `ucsm_check.sh`
 
@@ -427,6 +430,66 @@ ucsm_host        ip         protocol  mgmt_version  server_dn              vendo
 - 랙 서버(computeRackUnit)는 대상이 아닙니다.
 - **실제 UCSM 에 접속해 본 적이 없습니다.** 응답 형태, 블레이드 dn·PID 매칭, 실효 설정 위치는 [FIRST_RUN.md](FIRST_RUN.md) 의 확인 항목 18~25 입니다.
 
+### 2.10 2순위 계정 (`/etc/rf_tool/rf.conf`)
+
+공용(1순위) 계정이 일부 BMC 에 아직 없을 때를 위한 **예비 계정**입니다. 파일이 없으면 이 기능은 꺼져 있고 동작은 이전과 완전히 같습니다.
+
+```bash
+sudo mkdir -p /etc/rf_tool
+sudo vi /etc/rf_tool/rf.conf          # 아래 형식으로 작성
+sudo chmod 600 /etc/rf_tool/rf.conf   # root 만 읽기 (그룹/기타에 열려 있으면 경고)
+```
+
+```text
+# /etc/rf_tool/rf.conf — key=value, # 주석. 벤더별 예비 계정 (평문)
+dell_user=...
+dell_pass=...
+hpe_user=...
+hpe_pass=...
+lenovo_user=...
+lenovo_pass=...
+# supermicro_user / supermicro_pass , cisco_user / cisco_pass 도 같은 형식
+```
+
+| 항목 | 내용 |
+|---|---|
+| 키 | `<vendor>_user`, `<vendor>_pass` (`vendor` = `dell` `hpe` `lenovo` `supermicro` `cisco`). 그 밖의 키·`key=value` 가 아닌 줄은 오류. `user` 만 있고 `pass` 가 비면 오류 |
+| 경로 | 기본 `/etc/rf_tool/rf.conf`. `-rf-conf <경로>` 또는 환경변수 `RF_TOOL_CONF` 로 바꿈(플래그가 우선). 명시했는데 파일이 없으면 `알림` 한 줄만 출력하고 기능을 끔 |
+| 시도 조건 | 1순위(`bios.conf` 의 `user` + `pass.enc`) 로그인이 **401 인증 실패일 때만**. 연결 거부·타임아웃·5xx 같은 인증 외 실패에는 시도하지 않음 |
+| 벤더 식별 | 비인증 ServiceRoot(`/redfish/v1`)의 `Vendor` → `Oem` 키 → `Product` → `Name` 순서. 식별하지 못하거나 rf.conf 에 그 벤더 계정이 없으면 시도하지 않음(다른 벤더 계정을 돌려가며 넣지 않음) |
+| 횟수 | 호스트당 예비 계정 **1회**, 재시도 없음. 둘 다 실패면 최종 `AUTH_FAIL`. 한 번 실행(점검+Y 적용)에 같은 BMC 에 인증 시도는 최대 4회(단계마다 2회) — BMC 잠금 정책은 [FIRST_RUN.md](FIRST_RUN.md) 확인 항목 |
+| 차단기 | **웜업(처음 `auth_fail_stop` 대) 동안** 예비 계정으로만 붙는 호스트는 `auth_fail_stop` 집계에서 AUTH_FAIL 처럼 셈 — 공용 계정(비밀번호)이 틀렸는데 예비 계정이 가려 주는 상황을 막기 위함. 웜업 중 1순위로 한 번이라도 성공하면 이후 예비 계정 사용은 세지 않음(일부 BMC 만 공용 계정이 없는 정상 상황) |
+| 결과 | 리포트의 `[2순위 계정(rf.conf)으로 접속] N대` 구역, 결과 폴더의 `fallback_login.txt`(호스트 이름만, 0600), `run_info.txt` 의 `2순위 계정(rf.conf)으로 접속: N` 줄. `result.tsv` 열(14열)은 바뀌지 않음 |
+| 비밀번호 | 어떤 출력·로그·결과 파일에도 싣지 않음. 리포트에는 벤더만 나오고 계정명도 나오지 않음 |
+
+**접속불가와 계정 오류는 다른 구역입니다.** 포트가 닫혔거나 응답이 없는 호스트는 `[접속불가]`, 계정이 거부된 호스트는 `[계정 오류 AUTH_FAIL]` 로 나뉘므로 “계정 문제로 보이지만 사실은 네트워크” 를 구분할 수 있습니다.
+
+**보안 주의.** rf.conf 는 **평문**입니다. `chmod 600`(root 만 읽기)을 지키고, 저장소에 커밋하지 말며(`.gitignore` 와 무관하게 `/etc` 에만 두는 파일), 백업·티켓·메신저에 붙여 넣지 마십시오. 예비 계정은 가능한 한 권한이 낮은(BIOS 설정만 가능한) 계정으로 만들고, 쓰고 나면 해당 BMC 에 공용 계정을 등록해 예비 계정 접속이 사라지게 하십시오.
+
+**벤더 식별의 한계(위험).** 벤더는 인증 전 ServiceRoot 응답만으로 정합니다. 1순위를 거부하고 `{"Vendor":"Dell"}` 같은 응답을 돌려주는 상대(TLS 검증을 끈 기본 설정에서의 중간자, 침해된 BMC, `user.txt` 에 잘못 들어간 주소)에게는 해당 벤더의 예비 비밀번호가 넘어갈 수 있습니다. 신뢰하는 관리망에서만 쓰고, 벤더별 예비 비밀번호는 서로 다르게 두십시오. 점검 후 Y 적용·dry-run 은 같은 규칙으로 BMC 에 다시 로그인하므로 한 번 실행에 인증 시도가 늘어납니다(위 표의 “횟수”).
+
+> 아직 구현되지 않은 것: **계정이 아예 없는 BMC 에 y/n 으로 계정을 만들어 주는 기능**은 없습니다(설계 메모는 [ARCHITECTURE.md](ARCHITECTURE.md) 의 “추후 확장”).
+
+### 2.11 테스트케이스 — `testcase/rf_fallback_case.sh`
+
+2순위 계정·접속불가 구분·설정 표기 선택을 **직접 돌려 볼 수 있는** 시험입니다. 실제 BMC 에는 접속하지 않고 `127.0.0.1` 의 포트 19101~19106 에 mock BMC(`bin/mockbmc`)를 띄우며, Go 가 필요 없습니다(bash 와 기본 coreutils 만). 임시 폴더에 설정을 만들고 `-rf-conf` 로 임시 rf.conf 를 지정하므로 `/etc/rf_tool/rf.conf` 는 건드리지 않고, 끝나면 mock 과 임시 폴더를 정리합니다.
+
+```bash
+bash testcase/rf_fallback_case.sh          # 실행 (시나리오별 PASS/FAIL 과 종합, 실패 시 종료코드 1)
+bash testcase/rf_fallback_case.sh -v       # biostool 출력 전체도 보기
+RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os6 바이너리로 시험
+```
+
+| # | 대상(mock) | 상황 | 기대 결과 |
+|---|---|---|---|
+| 1 | 19101 Dell R660 | 1순위 계정 정상 | 일반 점검(OK), 2순위 목록에 없음 |
+| 2 | 19102 HPE DL360 Gen11 | 1순위는 거부, 예비(`hpe_user`)만 유효 | 점검 진행, `[2순위 계정(rf.conf)으로 접속]` 과 `fallback_login.txt` 에 표시 |
+| 3 | 19103 Lenovo SR650 V3 | 1순위·예비 모두 무효 | `[계정 오류 AUTH_FAIL]` |
+| 4 | 19104 (아무도 안 들음) | 접속 불가 | `[접속불가]` 에만 표시(계정 오류와 구분) |
+| 5 | 19105 Supermicro X12 | 1순위 정상, 값이 다름(기대 `Performance`/현재 `Custom`, `verified=N`) | 해당 항목 `UNVERIFIED` |
+| 6 | 19106 Lenovo(Hyper-Threading 현재값 `Disable`) | 프로파일 `Enabled\|Enable`, `-dry-run` | 보낼 본문에 `"Processors_HyperThreading":"Enable"`(`Enabled` 아님) |
+
+> 시나리오 2 는 mock 에 `-open-serviceroot` 플래그를 붙여 실행합니다(스크립트가 자동으로 붙임). mock 은 기본으로 비인증 ServiceRoot 를 401 로 막아 벤더 식별이 안 되기 때문입니다. 자세한 설명은 [testcase/README.md](testcase/README.md).
 ---
 
 ## 3. 옵션별 상세 설명
@@ -458,6 +521,7 @@ ucsm_host        ip         protocol  mgmt_version  server_dn              vendo
 | `-dry-run` | `false` | check | 설정 없이 보낼 PATCH·Job 만 출력. Y/N 안 묻음. `allcheck` 에는 쓸 수 없음 |
 | `-no-prompt` | `false` | check | FAIL 이 있어도 묻지 않고 종료(아무것도 설정하지 않음) |
 | `-stdin-ok` | `false` | check | 표준입력이 터미널이 아니어도(파이프·파일) Y/N 을 읽음. 자동화 전용(경고 출력) |
+| `-rf-conf <파일>` | 환경변수 `RF_TOOL_CONF`, 없으면 `/etc/rf_tool/rf.conf` | check allcheck dump | 2순위(예비) 계정 파일. 파일이 없으면 기능 꺼짐. 2.10절 |
 | `-list-max <N>` | check 100 / allcheck 20 / ucsm 20 | check allcheck ucsm | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수. ucsm: FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 |
 | `-xml-map <파일>` | `bios_json/standard_map/standard_bios_map_xml.tsv` | ucsm | UCSM 기대값 매핑 TSV |
 | `-fail-max <N>` | `200` | check | `[FAIL 상세]`·`[설정 불가]`·`[적용 안 됨]` 에 보여 줄 최대 줄 수(넘으면 `fail.tsv`·`apply_result.tsv` 안내) |
@@ -531,6 +595,7 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 규칙:
 
 - **모델 선택:** 같은 `std_name` 에서 모델이 정확히 맞는 행이 있으면 그것만 쓰고, 없으면 `*` 행을 씁니다(항목별로 따로 판단).
+- **허용값 `A|B` 와 설정 표기 선택:** `value` 가 `Enabled|Enable` 처럼 여러 표기면 **점검은 어느 쪽이든 OK** 입니다. 설정(Y)·`-dry-run` 은 그중 하나만 보내야 하므로 **BMC 레지스트리가 허용하는 표기**를 고릅니다(여럿이면 파일 순서의 첫 번째). 레지스트리에 정확히 맞는 표기가 없으면 대소문자만 다른 레지스트리 표기를 씁니다. 예: 프로파일 `Enabled|Enable` + Lenovo 레지스트리 `Enable|Disable` → `"Enable"` 을 보냄(`Enabled` 아님). 레지스트리가 없거나 맞는 표기가 하나도 없으면 첫 값을 그대로 쓰고 기존 안전 검사(`INVALID_VALUE`)가 거부합니다. 시험은 2.11절 시나리오 6.
 - **후보 이름:** 한 `std_name` 에 행이 여러 개면 속성 이름 **후보**입니다. 파일 순서가 우선순위이고, 실제 BMC 에 있는 첫 후보의 `value`·`verified` 를 적용합니다.
 - **표준 4항목**(`system_profile`, `hyper_threading`, `llc_prefetch`, `sub_numa_cluster`)은 프로파일에 행이 없어도 항상 점검 대상이며 행이 없으면 `MAPPING_MISSING` 입니다. 그 밖의 `std_name` 행은 추가 점검 항목이 됩니다.
 - **`verified=Y` 는 모델을 지정한 행에만** 쓸 수 있습니다. **`*` 행에 `verified=Y` 를 쓰면 프로파일 로드 오류**입니다(검증하지 않은 모델에도 맞으므로 쓰기 허가를 줄 수 없음). `*` 행은 점검 비교용입니다.
@@ -569,12 +634,14 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `UNREACHABLE` | 연결 거부·no route·DNS | ○ (지수 백오프, conf `retries`) | ○ |
 | `TIMEOUT` | 응답 시간 초과 | ○ | ○ |
 | `BMC_ERROR` | 5xx | ○ | ○ |
-| `AUTH_FAIL` | 401(또는 로그인 403) | **금지**(계정 잠금·로그인 실패 기록 방지) | × (계정부터 고칠 것) |
+| `AUTH_FAIL` | 401(또는 로그인 403). rf.conf 가 있으면 **1순위가 401 일 때만** 벤더 예비 계정으로 1회 더 시도하고, 둘 다 실패해야 `AUTH_FAIL`(2.10절) | **금지**(계정 잠금·로그인 실패 기록 방지) | × (계정부터 고칠 것) |
 | `SKIPPED_AUTH_STOP` | AUTH_FAIL 차단기가 작동해 접속하지 않음 | - | ○ |
 | `UNSUPPORTED` | Redfish 미지원(`/redfish/v1` 404, Bios 리소스 없음·속성 비어 있음 등. Cisco UCSM 관리형, Supermicro X11 이하 등) | × | × |
 | `HTTP_ERROR` | 그 밖의 4xx·3xx·응답 해석 실패 | × | × |
 | `NO_HOSTS_ENTRY` | `/etc/hosts` 에 `이름-m` 이 없음 | × | × |
 | `NO_DUMP` | `-from-dump` 폴더에 그 호스트 덤프가 없음 | × | × |
+
+리포트에서는 `UNREACHABLE`·`TIMEOUT`·`BMC_ERROR`·`HTTP_ERROR` 가 `[접속불가]`, `AUTH_FAIL` 이 `[계정 오류 AUTH_FAIL]`, 나머지 호스트 오류가 `[기타 오류]` 구역에 나뉘어 나옵니다(상태 값과 `result.tsv` 는 그대로).
 
 호스트 대표 상태(상단 집계)는 오류가 있으면 그 상태, 없으면 항목 중 가장 나쁜 것(FAIL → PENDING_NO_JOB → PENDING_EXISTS → UNVERIFIED → MAPPING_MISSING → PENDING_OK → OK)입니다.
 
@@ -636,8 +703,9 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | [계획서.md](계획서.md) | 설계 원본·인터뷰 결정·성공기준 검증 현황·단계 진행표 |
 | `setup.sh`, `build.sh`, `build_os6.sh` | 오프라인 빌드 / os8 빌드 / os6(RHEL6) 빌드 |
 | `bios_check.sh`, `xml.sh`, `all_bios_check.sh`, `encrypt.sh`, `lib.sh` | 실행 래퍼(점검·설정 / 사전조사 / 전체 비교 / 비밀번호 암호화 / 공용 함수) |
-| `mockbmc.sh` | mock BMC 기동(개발·검증용) |
-| `bin/biostool`, `bin/biostool_os6` | 빌드 완료 바이너리(os8 / RHEL6) — 저장소에 **커밋**되어 있음 |
+| `mockbmc.sh` | mock BMC 기동(개발·검증용). 빌드 완료 `bin/mockbmc`(`_os6`)가 있으면 그대로 사용 |
+| `testcase/` | `rf_fallback_case.sh`(2순위 계정·접속불가 구분·표기 선택 시험)와 설명. 2.11절 |
+| `bin/biostool`, `bin/biostool_os6`, `bin/mockbmc`, `bin/mockbmc_os6` | 빌드 완료 바이너리(os8 / RHEL6, mock 서버 포함) — 저장소에 **커밋**되어 있음 |
 | `cmd/biostool/` | Go 소스(점검·설정·덤프·전체 비교·재시도·Redfish 클라이언트)와 테스트 |
 | `cmd/mockbmc/`, `internal/mockbmc/` | mock BMC 서버와 가상 BMC 수천 대를 한 리스너에 올리는 Farm(시험용) |
 | `testdata/` | mock 용 **합성** Redfish 트리 6종(+ 테스트용 프로파일). 실제 덤프가 아님 → [testdata/README.md](testdata/README.md) |

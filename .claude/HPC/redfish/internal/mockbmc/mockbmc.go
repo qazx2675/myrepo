@@ -85,6 +85,10 @@ type Options struct {
 	// NoSessions 는 세션 서비스가 없는 BMC 를 흉내 낸다 (세션 POST → 404, Basic 인증만 가능).
 	NoSessions bool
 
+	// OpenServiceRoot 면 GET ServiceRoot(/redfish/v1)를 인증 없이 응답한다 (실제 BMC 처럼).
+	// 끄면(기본) 다른 경로와 같이 인증이 필요하다.
+	OpenServiceRoot bool
+
 	// Fail 의 키는 "경로" 또는 "METHOD 경로" 이고 대소문자·끝 슬래시를 무시합니다.
 	// 끝에 "*" 를 붙이면 그 문자열로 시작하는 모든 경로에 적용합니다.
 	// "/redfish/v1/Systems/*" 는 하위 경로만, "/redfish/v1/Systems*" 는 Systems 자신도 포함합니다.
@@ -652,6 +656,10 @@ func (s *Host) handle(w *statusWriter, r *http.Request, np string, body []byte) 
 	}
 	if r.Method == http.MethodPost && np == sessionsPath {
 		s.createSession(w, np, body)
+		return
+	}
+	if s.opts.OpenServiceRoot && r.Method == http.MethodGet && np == root {
+		s.get(w, np)
 		return
 	}
 	if !s.authenticated(r) {

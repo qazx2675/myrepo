@@ -13,6 +13,8 @@ import (
 //   - 웜업: 처음 N 개 대상은 한 대씩(직렬) 처리합니다. 그 사이 로그인에 한 번이라도 성공하면
 //     바로 병렬(Concurrency)로 전환합니다. N 개 모두 AUTH_FAIL 이면 즉시 멈춥니다.
 //     (BMC 에 접속하지 않은 대상 — 이름 해석 실패 — 은 웜업 개수에 넣지 않습니다.)
+//   - 웜업 중 1순위 계정이 거부되어 2순위(rf.conf) 계정으로만 로그인한 대상도 AUTH_FAIL 처럼 셉니다.
+//     (공통 비밀번호가 틀렸는데 예비 계정이 가려 주는 상황에서 1순위 실패가 수천 대에 쌓이는 것을 막기 위함)
 //   - 병렬 전환 후에도 AUTH_FAIL 누적이 N 이상이면 새 호스트 시작을 멈춥니다.
 //     이미 진행 중인 호스트는 끝까지 처리하므로, 그 사이 AUTH_FAIL 이 N 을 조금 넘을 수 있습니다.
 //   - 멈춘 뒤 남은 호스트는 접속하지 않고 SKIPPED_AUTH_STOP 으로 기록합니다 (retry.txt 로 재실행).
@@ -27,6 +29,7 @@ const (
 	outNone     hostOutcome = iota // BMC 에 접속하지 않음 (이름 해석 실패 등) — 집계에서 제외
 	outOther                       // 접속했으나 로그인 여부를 알 수 없음 (UNREACHABLE, TIMEOUT 등)
 	outLoggedIn                    // 로그인 성공 (AUTH_FAIL 아님)
+	outFallback                    // 1순위 계정은 거부되고 2순위(rf.conf) 계정으로 로그인 성공
 	outAuthFail                    // AUTH_FAIL
 )
 
@@ -37,6 +40,8 @@ func outcomeOf(status string, st CallStats, contacted bool) hostOutcome {
 		return outAuthFail
 	case !contacted:
 		return outNone
+	case st.Fallback:
+		return outFallback
 	case st.AuthMode != "": // 세션 생성 성공 또는 Basic 폴백까지 진행
 		return outLoggedIn
 	}
@@ -58,7 +63,9 @@ func sweepHosts(n, workers, authStop int, work func(i int) hostOutcome, skip fun
 				continue
 			case outLoggedIn:
 				loggedIn = true
-			case outAuthFail:
+			case outAuthFail, outFallback:
+				// 웜업 중 2순위 계정으로만 붙는 것은 1순위(공통) 계정이 틀렸을 수 있다는 신호이므로 AUTH_FAIL 처럼 센다.
+				// (병렬 단계에서는 일부 BMC 만 1순위 계정이 없는 정상 상황이라 세지 않는다)
 				authFails++
 			}
 			attempts++

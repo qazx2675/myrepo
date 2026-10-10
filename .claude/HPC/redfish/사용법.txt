@@ -167,7 +167,7 @@ bash all_bios_check.sh -from-dump dumps
 
 
 ########################################################################
-# 8. mock 으로 연습하기 — 실서버가 아니라 합성 데이터(testdata)로 만든 가짜 BMC 입니다 (Go 필요)
+# 8. mock 으로 연습하기 — 실서버가 아니라 합성 데이터(testdata)로 만든 가짜 BMC 입니다 (빌드 완료 bin/mockbmc 사용, Go 불필요)
 ########################################################################
 
 # 연습용 임시 폴더와 mock 이 쓸 임의 비밀번호(실제 비밀번호를 쓰지 말 것)
@@ -181,7 +181,7 @@ cp -r testdata/dell-r660 $PRACTICE/td/dell-bad
 sed -i 's/"LogicalProc": "Enabled"/"LogicalProc": "Disabled"/; s/"LlcPrefetch": "Enabled"/"LlcPrefetch": "Disabled"/' $PRACTICE/td/dell-bad/redfish/v1/Systems/System.Embedded.1/Bios.json
 cp -r testdata/hpe-dl360gen11 $PRACTICE/td/hpe-ok
 
-# mock BMC 두 대를 백그라운드로 기동한다 (127.0.0.1:18441, 18442). 처음엔 bin/mockbmc 를 빌드하므로 첫 번째를 띄우고 잠깐 기다린다
+# mock BMC 두 대를 백그라운드로 기동한다 (127.0.0.1:18441, 18442). bin/mockbmc 가 없을 때만 go 로 빌드하므로 첫 번째를 띄우고 잠깐 기다린다
 bash mockbmc.sh -dir $PRACTICE/td/dell-bad -listen 127.0.0.1:18441 -user admin >$PRACTICE/mock1.out 2>&1 &
 echo $! >> $PRACTICE/pids
 sleep 8
@@ -238,13 +238,13 @@ cat results/<일시>/ok.txt
 column -t -s$'\t' results/<일시>/fail.tsv | less -S
 
 # 전체 결과에서 호스트, 모델, 항목, 속성, 기대값, 현재값, 상태만 보기
-cut -f1,5,7,8,9,10,12 results/<일시>/result.tsv | column -t -s$'\t' | less -S
+cut -f1,4,5,9,10,11,12,14 results/<일시>/result.tsv | column -t -s$'\t' | less -S
 
 # 상태가 FAIL 인 행만
-awk -F'\t' '$12=="FAIL"' results/<일시>/result.tsv
+awk -F'\t' '$14=="FAIL"' results/<일시>/result.tsv
 
 # 호스트 단위 오류(접속 실패 등)는 std_name 이 - 인 행으로 남는다
-awk -F'\t' '$7=="-"' results/<일시>/result.tsv
+awk -F'\t' '$9=="-"' results/<일시>/result.tsv
 
 # (설정 Y 를 했다면) Pending 반영을 확인한 호스트 / 실패·미확인 대상 / 보낸 요청과 결과 / 항목별 결과
 cat results/<일시>/applied.txt
@@ -277,3 +277,42 @@ column -t -s$'\t' results/<일시>/ucsm_result.tsv | less -S
 
 # FAIL 행만 본다 (result 는 13번째 열)
 awk -F'\t' '$13=="FAIL"' results/<일시>/ucsm_result.tsv
+
+
+########################################################################
+# 11. 2순위(예비) 계정 — /etc/rf_tool/rf.conf (공용 계정이 없는 BMC 용, 파일이 없으면 기능 꺼짐)
+########################################################################
+
+# rf.conf 를 만든다 (root 만 읽기). 형식: <vendor>_user=..., <vendor>_pass=... (vendor = dell hpe lenovo supermicro cisco), # 주석
+sudo mkdir -p /etc/rf_tool
+sudo vi /etc/rf_tool/rf.conf
+
+# 권한을 600 으로 (그룹/기타에 열려 있으면 실행할 때 경고가 나온다. 평문이므로 git 에 올리지 말 것)
+sudo chmod 600 /etc/rf_tool/rf.conf
+
+# 평소처럼 점검한다. 1순위(bios.conf 의 user + pass.enc)가 401 로 거부된 BMC 만 벤더를 식별해 그 벤더 예비 계정으로 1회 더 시도한다
+bash bios_check.sh --profile VM
+
+# 다른 경로의 rf.conf 를 쓴다 (플래그가 환경변수보다 우선)
+bash bios_check.sh --profile VM -rf-conf <rf.conf 경로>
+RF_TOOL_CONF=<rf.conf 경로> bash bios_check.sh --profile VM
+
+# 예비 계정으로 접속한 호스트 이름 목록 (리포트의 [2순위 계정(rf.conf)으로 접속] 구역과 같은 내용. 있을 때만 생김)
+cat results/<일시>/fallback_login.txt
+
+# 호스트 단위 오류 중 [접속불가](UNREACHABLE/TIMEOUT/BMC_ERROR/HTTP_ERROR)와 [계정 오류 AUTH_FAIL] 을 나눠 센다 (result.tsv 는 14열: std_name 9번째, result 14번째)
+awk -F'\t' '$9=="-"{print $14}' results/<일시>/result.tsv | sort | uniq -c
+
+
+########################################################################
+# 12. 테스트케이스 — 2순위 계정·접속불가 구분·설정 표기 선택을 mock 으로 직접 시험 (Go 불필요, 실제 BMC 접속 없음)
+########################################################################
+
+# 실행한다 (127.0.0.1 포트 19101~19106 에 mock 을 띄우고 끝나면 정리, /etc/rf_tool/rf.conf 는 건드리지 않음). 시나리오별 PASS/FAIL, 실패가 있으면 종료코드 1
+bash testcase/rf_fallback_case.sh
+
+# biostool 출력 전체도 보면서 실행한다
+bash testcase/rf_fallback_case.sh -v
+
+# 커널과 상관없이 RHEL6 용 *_os6 바이너리로 시험한다
+RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh

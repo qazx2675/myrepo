@@ -50,6 +50,7 @@ const usageText = `사용법:
   -diff-max <N>       (allcheck) 호스트당 터미널에 보일 차이 속성 수 (기본 30, 넘으면 all_diff.tsv 안내)
   -list-max <N>       (allcheck) 차이 상세·특이사항·오류에 나열할 호스트 수 (기본 20)
   -hosts <파일>       이름 해석에 쓸 hosts 파일 (기본 /etc/hosts)
+  -rf-conf <파일>     2순위(예비) 계정 파일 (기본: 환경변수 RF_TOOL_CONF, 없으면 /etc/rf_tool/rf.conf; 파일이 없으면 기능 꺼짐)
 `
 
 func main() {
@@ -97,6 +98,7 @@ type commonOpts struct {
 	retryFrom string // 이전 결과 폴더 (단계 7 재시도)
 	hosts     string
 	dryRun    bool
+	rfConf    string // 2순위 계정 파일 (비면 RF_TOOL_CONF → /etc/rf_tool/rf.conf)
 }
 
 func newFlagSet(name string) (*flag.FlagSet, *commonOpts) {
@@ -109,6 +111,7 @@ func newFlagSet(name string) (*flag.FlagSet, *commonOpts) {
 	fs.StringVar(&o.retryFrom, "retry-from", "", "이전 결과 폴더 경로 또는 retry.txt 경로 (재시도 모드)")
 	fs.StringVar(&o.hosts, "hosts", "/etc/hosts", "이름 해석에 쓸 hosts 파일")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "설정하지 않고 보낼 요청만 출력")
+	fs.StringVar(&o.rfConf, "rf-conf", "", "2순위(예비) 계정 파일 (기본: 환경변수 "+envRFConf+", 없으면 "+defaultRFConf+"; 파일이 없으면 기능 꺼짐)")
 	return fs, o
 }
 
@@ -196,7 +199,8 @@ func cmdEncrypt(args []string) error {
 type runContext struct {
 	Conf     *Config
 	Targets  []Target
-	Password string // 메모리에서만 사용. 출력 금지.
+	Password string         // 메모리에서만 사용. 출력 금지.
+	Fallback *fallbackCreds // rf.conf 의 2순위 계정 (nil 이면 기능 꺼짐). 출력 금지.
 }
 
 // prepare 는 conf 로드 → 대상 해석 → 비밀번호 복호화를 수행합니다.
@@ -231,6 +235,18 @@ func prepare(o *commonOpts, targetsArg string, retryFromPath string) (*runContex
 		if rc.Password, err = readPassword(conf.PassFile, conf.KeyFile); err != nil {
 			return nil, err
 		}
+		path, explicit := rfConfPath(o.rfConf)
+		fb, warn, err := loadRFConf(path)
+		if err != nil {
+			return nil, err
+		}
+		if warn != "" {
+			fmt.Fprintln(os.Stderr, "경고: "+warn)
+		}
+		if fb == nil && explicit {
+			fmt.Fprintf(os.Stderr, "알림: 2순위 계정 파일 %s 이(가) 없어 2순위 계정 기능을 쓰지 않습니다\n", path)
+		}
+		rc.Fallback = fb
 	}
 	return rc, nil
 }

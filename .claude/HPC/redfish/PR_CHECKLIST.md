@@ -7,6 +7,7 @@
 - [ ] 빌드 성공 (오프라인 빌드 프로젝트라 `bash setup.sh` 로 확인 — 이 프로젝트는 외부 의존성이 없어 `vendor/` 가 없음. 의존성을 추가했다면 `go mod vendor` 후 `vendor/` 를 커밋했는지)
 - [ ] 테스트 통과 (`go vet ./... && go test ./...`)
 - [ ] 실제 환경 또는 시뮬레이터로 최소 1개 시나리오 검증 (mock BMC: `사용법.txt` 의 “mock 연습” 또는 `mockbmc.sh` + `bios_check.sh -dry-run`)
+- [ ] 테스트케이스 `testcase/rf_fallback_case.sh` 통과 (`bash testcase/rf_fallback_case.sh`, 종합 PASS)
 - [ ] CHANGELOG.md 항목 추가
 - [ ] README.md 관련 표/설명 갱신 필요 여부 확인 (플래그·conf 키·상태 코드·결과 파일 열이 바뀌면 3절 표)
 - [ ] 흐름이 바뀌었으면 WORKFLOW.md / ARCHITECTURE.md 흐름도 갱신 (WORKFLOW.md 의 mermaid 를 고쳤으면 아래 “흐름도 다시 그리기”로 `workflow*.svg` 도 갱신)

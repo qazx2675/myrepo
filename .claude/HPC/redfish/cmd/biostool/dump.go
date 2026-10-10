@@ -309,11 +309,19 @@ func dumpHost(rc *runContext, t Target, opts dumpOpts) *dumpResult {
 	if t.Err != "" {
 		return &dumpResult{Target: t, Status: t.Err}
 	}
-	c := NewClient(ClientOpts{
+	c, li, lerr := loginWithFallback(ClientOpts{
 		BaseURL: t.BaseURL(), User: rc.Conf.User, Pass: rc.Password, Insecure: rc.Conf.Insecure,
 		Timeout: rc.Conf.Timeout, Retries: rc.Conf.Retries, Mode: ModeReadOnly, Gap: dumpClientGap,
-	})
-	return dumpWith(c, t, opts)
+	}, rc.Fallback)
+	if lerr != nil {
+		_ = c.Close()
+		r := &dumpResult{Target: t, Stats: li.stats(c)}
+		r.Status, r.HTTP = errStatus(lerr)
+		return r
+	}
+	r := dumpWith(c, t, opts) // 이미 로그인한 Client 라 세션이 늘지 않는다
+	r.Stats = li.stats(c)
+	return r
 }
 
 // dumpWith 는 이미 만든 읽기 전용 Client 로 호스트 1대를 덤프하고 c 를 닫습니다.

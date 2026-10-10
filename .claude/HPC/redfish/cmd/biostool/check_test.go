@@ -780,7 +780,7 @@ func TestReportLayout(t *testing.T) {
 	for _, w := range []string{
 		"== BIOS 점검 결과 (profile=VM, 대상 4 / 2026-10-07 14:02) ==",
 		"[OK] 1대", "[FAIL 상세] 1건 (호스트 1대)", "Dell PowerEdge R660", "hyper_threading", "LogicalProc", "기대=Enabled", "현재=Disabled",
-		"[설정 불가] 1건 (호스트 1대)", "llc_prefetch", "MAPPING_MISSING", "[기타 오류]", "UNREACHABLE", "retry.txt", "ok.txt", "fail.tsv",
+		"[설정 불가] 1건 (호스트 1대)", "llc_prefetch", "MAPPING_MISSING", "[접속불가] 1대 (네트워크·포트·TLS·타임아웃 — 계정 문제 아님)", "UNREACHABLE", "retry.txt", "ok.txt", "fail.tsv",
 	} {
 		if !strings.Contains(text, w) {
 			t.Errorf("리포트에 %q 없음:\n%s", w, text)

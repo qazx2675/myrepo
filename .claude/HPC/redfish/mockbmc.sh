@@ -8,7 +8,7 @@
 #
 # 첫 인자가 이름이면 -dir testdata/<이름> -listen 127.0.0.1:<포트|8443> 로 바꿔 mockbmc 에 전달하고,
 # -로 시작하면 인자를 그대로 전달합니다. 종료는 Ctrl-C (집계 한 줄 출력).
-# bin/mockbmc 가 없거나 소스가 더 새로우면 go 로 빌드합니다 (검증용이라 저장소에는 커밋하지 않음).
+# 빌드 완료 bin/mockbmc (RHEL6 은 bin/mockbmc_os6) 가 있으면 빌드 없이 그대로 쓰고, 없을 때만 go 로 빌드합니다.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -27,13 +27,13 @@ if [ "$kmajor" -lt 3 ]; then
 fi
 
 BIN=bin/mockbmc
-need=0
-if [ ! -x "$BIN" ]; then
-  need=1
-elif [ -n "$(find cmd/mockbmc internal/mockbmc -name '*.go' -newer "$BIN" 2>/dev/null | head -n 1)" ]; then
-  need=1
+if [ "$kmajor" -lt 3 ]; then
+  BIN=bin/mockbmc_os6
 fi
-if [ "$need" = "1" ]; then
+if [ -f "$BIN" ] && [ ! -x "$BIN" ]; then
+  chmod +x "$BIN" 2>/dev/null || true
+fi
+if [ ! -x "$BIN" ]; then
   if ! command -v go >/dev/null 2>&1; then
     echo "오류: go 를 찾을 수 없어 mockbmc 를 빌드하지 못했습니다." >&2
     exit 2

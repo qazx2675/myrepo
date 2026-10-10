@@ -332,6 +332,7 @@ type CallStats struct {
 	Gets, Posts, Patches, Deletes int
 	Sessions                      int    // 생성에 성공한 세션 수 (호스트당 0 또는 1)
 	AuthMode                      string // "session" | "basic" | "" (로그인 전/실패)
+	Fallback                      bool   // 1순위 계정은 인증 거부되어 2순위(rf.conf) 계정으로 로그인함 (차단기 웜업이 집계)
 }
 
 // credentials 는 클로저 안에만 둔다 (Client.cred). fmt 는 어떤 동사(%v/%+v/%#v/%s/%x …)로
@@ -630,9 +631,38 @@ func (c *Client) do(method, p string, body interface{}) (int, http.Header, []byt
 	}
 }
 
+// ServiceRootNoAuth 는 인증 정보(토큰·Basic) 없이 ServiceRoot(GET /redfish/v1/)를 1회 읽습니다.
+// 로그인 상태와 무관하게 보내며 세션을 만들지 않고 재시도하지 않습니다 (Redfish 규격상 ServiceRoot 는 비인증 허용).
+// 1순위 계정이 AUTH_FAIL 일 때 2순위 계정을 고르려고 벤더만 알아내는 용도입니다 (fallback.go).
+func (c *Client) ServiceRootNoAuth() ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.baseErr != nil {
+		return nil, c.baseErr
+	}
+	if c.closed {
+		return nil, errClosed
+	}
+	send, err := checkAllowed(http.MethodGet, rootPath+"/", c.rfMode, c.sessClean)
+	if err != nil {
+		return nil, err
+	}
+	c.waitGap()
+	status, _, b, _, err := c.roundTrip(http.MethodGet, send, nil, true)
+	c.last = time.Now()
+	if err == nil {
+		err = c.statusErr(status, strings.ToLower(path.Clean(send)), false, b)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
 // roundTrip 은 요청 1건을 실제로 보냅니다. 전송 직전에 허용목록·본문을 다시 검사하고,
 // 검사를 통과한 정규형 경로만 BaseURL 호스트로 보냅니다 (쿼리 없음, 헤더는 아래 고정 목록뿐).
-func (c *Client) roundTrip(method, send string, payload []byte, isSession bool) (status int, hdr http.Header, body []byte, dialFail bool, err error) {
+// noAuth 면 인증 헤더(토큰·Basic)를 싣지 않습니다 (세션 생성 POST, 비인증 ServiceRoot GET).
+func (c *Client) roundTrip(method, send string, payload []byte, noAuth bool) (status int, hdr http.Header, body []byte, dialFail bool, err error) {
 	if send, err = checkAllowed(method, send, c.rfMode, c.sessClean); err != nil {
 		return 0, nil, nil, false, err
 	}
@@ -655,7 +685,7 @@ func (c *Client) roundTrip(method, send string, payload []byte, isSession bool) 
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if !isSession {
+	if !noAuth {
 		if c.authMode == "basic" {
 			req.SetBasicAuth(c.cred().user, c.cred().pass)
 		} else {

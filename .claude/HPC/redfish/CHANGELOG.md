@@ -2,7 +2,7 @@
 
 ## [Unreleased] (v0.2.0 후보) - 2026-10-10
 
-Cisco UCSM 읽기 전용 점검과 연구용 프로파일을 추가했습니다. **실제 BMC·UCSM 에 접속해 본 적은 없습니다**(아래 “알려진 한계”, [FIRST_RUN.md](FIRST_RUN.md) 18~25).
+Cisco UCSM 읽기 전용 점검·연구용 프로파일과 2순위(예비) 계정을 추가했습니다. **실제 BMC·UCSM 에 접속해 본 적은 없습니다**(아래 “알려진 한계”, [FIRST_RUN.md](FIRST_RUN.md) 18~25).
 
 ### 추가
 
@@ -10,21 +10,27 @@ Cisco UCSM 읽기 전용 점검과 연구용 프로파일을 추가했습니다.
 - **연구용 프로파일 `profiles/VM_research.tsv`**: `bios_json/` 조사 데이터에서 만든 Redfish(JSON) 표준값입니다. 모든 행 `verified=N` 이라 점검만 되고 설정은 되지 않습니다. `bash bios_check.sh --profile VM_research`.
 - **프로파일 오프라인 검증**: `bios_json/standard_map/validate_profile.ps1` → `profile_validation.md` (120행: OK 89, 허용값 확인 불가 29, Supermicro UI 이름만 2, 오류 0). 데이터와의 대조일 뿐 실장비 확인이 아닙니다.
 
+- **2순위(예비) 계정 `/etc/rf_tool/rf.conf`**: 평문 `key=value`(`<vendor>_user`·`<vendor>_pass`, vendor = dell hpe lenovo supermicro cisco), 경로는 `-rf-conf <경로>` 또는 환경변수 `RF_TOOL_CONF`, 파일이 없으면 기능 꺼짐, 그룹/기타 권한이 열려 있으면 경고. **1순위(`bios.conf` user + `pass.enc`) 로그인이 401 일 때만** 비인증 ServiceRoot 로 벤더를 식별해 그 벤더 예비 계정으로 **1회** 다시 시도하며, 벤더 식별 불가·예비 계정 없음·인증 외 실패(연결 거부·타임아웃·5xx)에는 시도하지 않습니다. 둘 다 실패하면 최종 `AUTH_FAIL`. 결과는 리포트 `[2순위 계정(rf.conf)으로 접속] N대` 구역, 결과 폴더 `fallback_login.txt`(호스트 이름만, 0600), `run_info.txt` 건수 줄. `result.tsv` 열(14열)은 그대로이고 비밀번호는 어디에도 출력되지 않습니다. 한 번 실행(점검+Y 적용)에 같은 BMC 로 인증 시도가 최대 4회(단계마다 2회)입니다. 구현 `cmd/biostool/fallback.go`.
+- **테스트케이스 `testcase/rf_fallback_case.sh`**: mock BMC(127.0.0.1:19101~19106)로 1순위 정상·예비 계정 접속·둘 다 실패·접속불가·값 불일치·표기 선택 6개 시나리오를 PASS/FAIL 로 판정합니다. Go 불필요, 실제 BMC 접속 없음, `/etc/rf_tool/rf.conf` 를 건드리지 않습니다(`-rf-conf` 로 임시 파일 지정). `RF_FORCE_OS6=1` 로 `*_os6` 바이너리 강제. 설명 `testcase/README.md`. 시나리오 2 는 mockbmc 에 `-open-serviceroot` 플래그가 있을 때만 활성(없으면 SKIP).
+- **mock 서버 바이너리 커밋**: `bin/mockbmc`·`bin/mockbmc_os6`(정적 빌드)를 저장소에 포함해 폐쇄망에서 Go 없이 시험할 수 있습니다(`.gitignore` 의 `/bin/mockbmc` 제외 삭제). `mockbmc.sh` 는 바이너리가 있으면 빌드 없이 그대로 쓰고 없을 때만 go 로 빌드합니다.
+
 ### 변경
 
+- **설정 시 허용값 표기 선택**: 프로파일 `value` 가 `Enabled|Enable` 처럼 여러 표기면 점검은 어느 쪽이든 OK 이고, 설정(Y)·`-dry-run` 은 BMC 레지스트리가 받는 표기를 골라 보냅니다(정확히 있는 첫 표기, 없으면 대소문자만 다른 레지스트리 표기). 예: `Enabled|Enable` + Lenovo 레지스트리 `Enable|Disable` → `Enable`.
+- **리포트의 오류 구역 분리**: 호스트 오류가 `[접속불가]`(UNREACHABLE·TIMEOUT·BMC_ERROR·HTTP_ERROR, 계정 문제 아님) / `[계정 오류 AUTH_FAIL]` / `[기타 오류]` 로 나뉩니다. 상태 값·`result.tsv`·`retry.txt` 규칙은 그대로입니다.
 - `VM_research.tsv` 수동 보정 2건: Lenovo 값 `Enabled|Enable`·`Disabled|Disable` 둘 다 허용, SD650 V3 hyper_threading 대체 후보 `Processors_HyperThreading`. `map_bios_attrs.ps1` 로 재생성하면 덮어써집니다.
 - FIRST_RUN 1번(Dell `Performance` ↔ `PerfOptimized`): 조사 데이터의 레지스트리 값이 `PerfOptimized` 이므로 데이터 기준으로 해소했습니다. 실장비 값 대조는 여전히 권장합니다.
-- **Redfish esult.tsv·ail.tsv·merged_result.tsv 에 protocol(항상 `json-redfish`)·mgmt_version 열 추가** (ios_version 바로 뒤, 12열 → 14열). 점검이 끝난 호스트마다 Manager 리소스를 1회 더 GET 합니다(읽기 전용 허용목록 안). 값은 Manager 의 Model·FirmwareVersion 이며 못 읽으면 `-`. v0.1.0 의 12열 결과는 `-retry-from` 이 읽어 새 형식으로 병합합니다(호환 테스트 포함). **열 위치로 `result.tsv` 를 읽는 외부 스크립트·엑셀은 수정해야 합니다.**
+- **Redfish `result.tsv`·`fail.tsv`·`merged_result.tsv` 에 `protocol`(항상 `json-redfish`)·`mgmt_version` 열 추가** (`bios_version` 바로 뒤, 12열 → 14열). 점검이 끝난 호스트마다 Manager 리소스를 1회 더 GET 합니다(읽기 전용 허용목록 안). 값은 Manager 의 Model·FirmwareVersion 이며 못 읽으면 `-`. v0.1.0 의 12열 결과는 `-retry-from` 이 읽어 새 형식으로 병합합니다(호환 테스트 포함). **열 위치로 `result.tsv` 를 읽는 외부 스크립트·엑셀은 수정해야 합니다.**
 - UCSM system_profile 은 후보 2개(`vpCPUPerformance=hpc`, `vpEnergyPerformance=performance`)를 각각 별도 항목으로 점검합니다(매핑 TSV 에 행 추가, 한 항목에 여러 행 허용).
-- 문서: README(VM_research·UCSM 사용법 2.9절, 서브커맨드·플래그·래퍼 표), `bios_json/standard_map/README.md`(XML 점검기 존재 반영), FIRST_RUN(확인 항목 18~25 추가), ARCHITECTURE(`ucsm` 위치), 사용법.txt(UCSM 절).
+- 문서: README(VM_research·UCSM 사용법 2.9절, 2순위 계정 2.10절, 테스트케이스 2.11절, 서브커맨드·플래그·래퍼 표), `bios_json/standard_map/README.md`(XML 점검기 존재 반영), FIRST_RUN(확인 항목 18~25, 26~30 추가), ARCHITECTURE(`ucsm` 위치, `fallback.go`, “추후 확장”: 계정 생성 설계 메모), 사용법.txt(UCSM 절, 2순위 계정·테스트케이스 절), PR_CHECKLIST(테스트케이스 항목).
 
 ### 검증 (2026-10-10, 랩)
 
 | 항목 | 결과 |
 |---|---|
-| 랩 .58 (Go 1.26.5) | `go vet ./...`·`go test ./...` 통과 |
-| 랩 .60 (Go 1.20.14) | build·vet·test 통과 (Go 1.20 호환 확인) |
-| 바이너리 재빌드 | `bin/biostool` (Go 1.26.5), `bin/biostool_os6` (Go 1.20.14) 를 다시 빌드해 함께 커밋 |
+| 랩 .58 (Go 1.26.5) | `go vet ./...`·`go test ./...` 통과. `bash testcase/rf_fallback_case.sh` 통과(6개 시나리오 모두 PASS, SKIP 0) |
+| 랩 .60 (Go 1.20.14) | build·vet·test 통과 (Go 1.20 호환 확인). `testcase/rf_fallback_case.sh` 를 기본 바이너리와 `RF_FORCE_OS6=1`(`*_os6`) 로 각각 통과 |
+| 바이너리 재빌드 | `bin/biostool` (Go 1.26.5), `bin/biostool_os6` (Go 1.20.14), `bin/mockbmc`, `bin/mockbmc_os6` 를 다시 빌드해 함께 커밋 |
 | 실제 UCSM 장비 | 조회하지 않음 (미확인) |
 
 랩으로 소스를 보낼 때 Windows 작업 트리의 Go 파일은 CRLF 이므로 LF 로 바꿔 보내야 `TestModeSetOnlyInSetPath` 가 통과합니다(저장소 blob 은 LF).
@@ -33,11 +39,19 @@ Cisco UCSM 읽기 전용 점검과 연구용 프로파일을 추가했습니다.
 
 | 파일 | 빌드 | 크기(바이트) | sha256 |
 |---|---|---|---|
-| `bin/biostool` | Go 1.26.5 | 7262370 | `cdbd7e632e7be525ca1f238ef62d78974d97b95861cfcef99dee41783786d4e1` |
-| `bin/biostool_os6` | Go 1.20.14 | 5898240 | `1cd1cdc1894cd70026974bdc1c9577386ae1659c35b8c27238a5688f06dc1464` |
+| `bin/biostool` | Go 1.26.5 | 7295138 | `640f305df3594319271925759ee716a3b06ad12a81f3441a9f6a17cfceae1383` |
+| `bin/biostool_os6` | Go 1.20.14 | 5931008 | `086633f0c6214d18708669eb85374ec3ed474304c39a3fe7079f47e1159559ee` |
+| `bin/mockbmc` | Go 1.26.5 | 7213218 | `5d8858005bef1e5cc5b8726bb46657ca71496a85bc8f5e53f256bc1f5b40c038` |
+| `bin/mockbmc_os6` | Go 1.20.14 | 5660672 | `44eed8cfc8579800d22e90af338b5c87ce02b3870b6fe96918f56ec50f463d48` |
+
+### 알려진 한계 (2순위 계정)
+
+- **실제 BMC 에서 확인하지 않았습니다.** 비인증 ServiceRoot 가 벤더(`Vendor`·`Oem`)를 돌려주는지, 보안 강화로 ServiceRoot 가 막힌 BMC, 로그인 실패 횟수와 잠금 정책, Basic 인증 BMC 에서의 동작은 [FIRST_RUN.md](FIRST_RUN.md) 26~29 항목입니다. 레지스트리 허용값의 실제 표기(`Enable` 대 `Enabled`)는 30 항목입니다.
+- 비인증 ServiceRoot 가 막힌 BMC 는 벤더를 식별하지 못해 예비 계정을 시도하지 않고 `AUTH_FAIL` 로 남습니다(다른 벤더 계정을 돌려가며 넣지 않음).
+- 계정이 아예 없는 BMC 에 계정을 만들어 주는 기능은 없습니다(설계 메모: [ARCHITECTURE.md](ARCHITECTURE.md) “추후 확장”).
+- `mockbmc` 에 `-open-serviceroot` 플래그를 추가했습니다(비인증 ServiceRoot 에 응답, 벤더 식별·2순위 계정 시험용). 기본은 꺼짐(401)이며 실제 BMC 의 설정과는 무관한 mock 전용 옵션입니다.
 
 ### 알려진 한계 (UCSM 및 프로파일)
-
 - **실 UCSM 미확인.** 응답 형태(outCookie·errorCode), 블레이드 dn·PID 매칭(`ucsmModelKey`), 실효 설정 위치(`<blade dn>/bios/bios-settings/…`)는 [FIRST_RUN.md](FIRST_RUN.md) 18~20 항목입니다.
 - BIOS 정책(`bios-prof-*`)은 보지 않고 서버에 실제 적용된 값만 봅니다.
 - `biosPlatformDefaults` 를 조회하지 않습니다. 현재값이 `platform-default` 이면 OK 로 추측하지 않고 사유에 확인 안내를 붙입니다.

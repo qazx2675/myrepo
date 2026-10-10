@@ -1098,6 +1098,22 @@ func TestSetIntegerCanonical(t *testing.T) {
 	}
 }
 
+// 허용값 A|B (Enabled|Enable) 중 BMC 레지스트리가 받는 표기(Enable)로 설정한다 — 첫 값 Enabled 는 레지스트리에 없다.
+func TestSetPicksRegistrySpelling(t *testing.T) {
+	s := startMockTree(t, "lenovo-sr650v3", nil)
+	must(t, s.SetBiosAttr("Processors_HyperThreading", "Disable"))
+	prof := setProf(t, strings.Replace(setProfText,
+		"LENOVO,SR650 V3,hyper_threading,Processors_HyperThreading,Enable,Y",
+		"LENOVO,SR650 V3,hyper_threading,Processors_HyperThreading,Enabled|Enable,Y", 1))
+	rc := checkRCFor(t, 1, "", s.URL())
+	run := runCheckP(t, rc, prof)
+	applyY(t, rc, run)
+	wantStatus(t, applyResults(t, run), s, "Processors_HyperThreading", StatusApplied)
+	if b := patchBodies(s); len(b) != 1 || !strings.Contains(b[0], `"Processors_HyperThreading":"Enable"`) {
+		t.Errorf("PATCH 본문 = %v (레지스트리 표기 Enable 로 보내야 함)", b)
+	}
+}
+
 // 본문을 만들 수 없는 프로파일(위험 속성명, 같은 속성 중복)은 보내지 않는다.
 func TestSetUnsafeProfileNotSent(t *testing.T) {
 	s := startMockTree(t, "dell-r660", nil)

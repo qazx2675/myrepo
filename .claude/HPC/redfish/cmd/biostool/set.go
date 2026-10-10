@@ -152,6 +152,7 @@ func (h *setHost) authStatus() string {
 type setEnv struct {
 	conf     *Config
 	password string
+	fallback *fallbackCreds
 	prof     *Profile
 	apply    bool              // false 면 dry-run (쓰기 없음, ModeReadOnly)
 	fromDump map[string]string // dry-run -from-dump 일 때 호스트 덤프 폴더
@@ -162,7 +163,7 @@ func newSetEnv(rc *runContext, run *checkRun, apply bool) (*setEnv, error) {
 	if run.prof == nil {
 		return nil, errors.New("점검에 쓴 프로파일 정보가 없어 설정할 수 없습니다")
 	}
-	e := &setEnv{conf: rc.Conf, password: rc.Password, prof: run.prof, apply: apply, regs: &regCache{m: map[string]*regEntry{}}}
+	e := &setEnv{conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, prof: run.prof, apply: apply, regs: &regCache{m: map[string]*regEntry{}}}
 	if run.FromDump != "" {
 		if apply {
 			return nil, errors.New("덤프 읽기 모드에서는 설정할 수 없습니다")
@@ -334,19 +335,19 @@ func (e *setEnv) runHost(h *setHost) {
 	if e.apply {
 		mode = ModeSet
 	}
-	c := NewClient(ClientOpts{
+	h.contacted = true
+	c, li, lerr := loginWithFallback(ClientOpts{
 		BaseURL: h.Target.BaseURL(), User: e.conf.User, Pass: e.password, Insecure: e.conf.Insecure,
 		Timeout: e.conf.Timeout, Retries: e.conf.Retries, Mode: mode, Gap: checkClientGap,
-	})
-	h.contacted = true
+	}, e.fallback)
 	defer func() {
 		if err := c.Close(); err != nil {
 			h.Notes = append(h.Notes, "세션 삭제: "+errBrief(err))
 		}
-		h.Stats = c.Stats()
+		h.Stats = li.stats(c)
 	}()
-	if err := c.Login(); err != nil {
-		h.finishErr(err)
+	if lerr != nil {
+		h.finishErr(lerr)
 		return
 	}
 	if e.planHost(h, newMemoGet(c.GetRaw)) && e.apply {
@@ -534,6 +535,7 @@ func (e *setEnv) planHost(h *setHost, m *memoGet) bool {
 		}
 	}
 	for _, it := range h.open() {
+		it.Value = pickAllowedValue(it.Value, it.allowed, reg, it.Attr)
 		raw, st, why := typedValue(it.Value, reg, it.Attr, bios.Attributes[it.Attr])
 		if st != "" {
 			it.set(st, why)
@@ -589,6 +591,32 @@ func changedWhy(old, now *SystemInfo) string {
 		return "Settings 경로가 점검 때와 다름"
 	}
 	return ""
+}
+
+// pickAllowedValue 는 프로파일 허용값 A|B (예: Enabled|Enable) 중 이 BMC 가 받는 표기를 고릅니다.
+// 레지스트리가 있고 속성이 Enumeration 이면 레지스트리 허용값에 정확히 있는 첫 값, 없으면 대소문자만 다른 값(레지스트리
+// 표기로 보냄)을 씁니다. 레지스트리가 없거나 고를 수 없으면 기본값(첫 값 = def)을 그대로 씁니다 (그러면 기존 검사가 거부).
+func pickAllowedValue(def string, allowed []string, reg *attrRegistry, name string) string {
+	if reg == nil || len(allowed) < 2 {
+		return def
+	}
+	ra := reg.lookup(name)
+	if ra == nil || ra.Type != "Enumeration" {
+		return def
+	}
+	for _, a := range allowed {
+		if inList(ra.Values, a) {
+			return a
+		}
+	}
+	for _, a := range allowed {
+		for _, v := range ra.Values {
+			if strings.EqualFold(a, v) {
+				return v
+			}
+		}
+	}
+	return def
 }
 
 // typedValue 는 보낼 값을 속성 형식에 맞는 JSON 으로 만듭니다.

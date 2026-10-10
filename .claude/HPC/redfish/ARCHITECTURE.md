@@ -23,6 +23,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `dump.go` | `dump`(`xml.sh`) 본체: GET 전용 좁은 순회, 호스트당 경로 상한, JSON 저장(`safeSeg`/`dirPart`), `index.tsv`, 사람이 읽는 요약 |
 | `allcheck.go` | `allcheck`(`all_bios_check.sh`) 본체: 기준(`diff.txt`)·제외 속성(`ignore_attrs.txt`)·모델별 분류·Attributes 전체 비교·`all_diff.tsv`·`summary.tsv` |
 | `allreport.go` | `allcheck` 의 터미널 리포트(모델 그룹·속성별 집계·특이사항·분류 불가) |
+| `fallback.go` | **2순위(예비) 계정.** `/etc/rf_tool/rf.conf`(`-rf-conf`·`RF_TOOL_CONF`) 로드·검증(`loadRFConf`·`parseRFConf`), 비인증 ServiceRoot 로 벤더 식별(`vendorFromServiceRoot`), 1순위가 401 일 때만 1회 재로그인하는 `loginWithFallback`. 비밀번호는 클로저 안에만 두고 출력하지 않음 |
 | `retry.go` | `-retry-from`: 이전 결과 읽기·검증, 재시도 대상만 다시 실행한 결과를 이전 결과와 병합(`merged_*`) |
 | `*_test.go` | 단위·통합 테스트. 보안 규칙은 `redfish_security_test.go`·`set_security_test.go`, 수천 대 시험은 `scale_test.go`, mock 연동은 `mock_integration_test.go` |
 
@@ -34,7 +35,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 |---|---|
 | `internal/mockbmc/mockbmc.go` | Redfish BMC 를 흉내 내는 mock 서버: 트리 파일 서빙, 세션, Pending 병합, 레지스트리 검사, 요청 기록(`Calls`·`Writes`·`LogHits`·`Sessions`), 장애 주입 |
 | `internal/mockbmc/farm.go` | `Farm`: 한 TLS 리스너로 가상 BMC 수천 대(127.0.x.y)를 흉내 냄(트리 공유, 호스트별 상태만 개별). 리눅스 전용 |
-| `cmd/mockbmc/main.go` | `mockbmc` 실행 파일(`mockbmc.sh` 가 빌드·실행). 종료 시 `MOCKBMC_SUMMARY` 집계 출력 |
+| `cmd/mockbmc/main.go` | `mockbmc` 실행 파일(`mockbmc.sh` 가 실행, 바이너리가 없을 때만 빌드). 종료 시 `MOCKBMC_SUMMARY` 집계 출력 |
 | `testdata/` | mock 용 **합성** Redfish 트리 6종(Dell·HPE×2·Lenovo·Cisco·Supermicro)과 테스트용 프로파일 `testdata/profiles-test/VM.tsv`. 실제 덤프가 아님 → [testdata/README.md](testdata/README.md) |
 
 ### 데이터·설정·스크립트·산출물
@@ -50,9 +51,11 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `all_bios_check.sh` | 전체 비교 래퍼 → `biostool allcheck` |
 | `encrypt.sh` | 비밀번호 암호화 래퍼(비밀번호는 파이프로만 전달) → `biostool encrypt` |
 | `lib.sh` | 래퍼 공용 함수: OS(커널 메이저)별 바이너리 선택 `select_bin`, `conf_val`. bash 4.1 호환 |
-| `mockbmc.sh` | mock BMC 기동 래퍼(필요하면 `bin/mockbmc` 빌드, 저장소에는 커밋하지 않음) |
+| `mockbmc.sh` | mock BMC 기동 래퍼(`bin/mockbmc`(`_os6`) 가 있으면 그대로 사용, 없을 때만 go 로 빌드) |
+| `testcase/rf_fallback_case.sh` | 2순위 계정·접속불가 구분·설정 표기 선택을 mock 으로 직접 시험하는 케이스(Go 불필요, `bin/mockbmc` 사용). 설명 `testcase/README.md` |
 | `setup.sh` · `build.sh` · `build_os6.sh` | 오프라인 빌드 / os8 빌드 / os6(RHEL6, Go 1.20.x) 빌드 |
 | `bin/biostool` · `bin/biostool_os6` | **빌드 완료 바이너리(커밋 대상).** 회사 환경에 Go 가 없어 이것이 곧 배포본. 소스를 고치면 둘 다 재빌드해 함께 커밋 |
+| `bin/mockbmc` · `bin/mockbmc_os6` | mock 서버 빌드 완료 바이너리(폐쇄망 시험용으로 커밋). mock 소스를 고치면 둘 다 재빌드 |
 | `go.mod` | `module biostool`, `go 1.20`, 외부 의존성 없음(→ `vendor/` 불필요) |
 | `.gitignore` · `.gitattributes` | 실제 호스트·계정·결과물 커밋 차단 / `.sh`·`.tsv`·`.example`·`.json` 은 LF, `bin/*` 는 바이너리 |
 | `README.md` · `WORKFLOW.md` · `workflow*.svg` · `FIRST_RUN.md` · `PR_CHECKLIST.md` · `CHANGELOG.md` · `사용법.txt` · `계획서.md` | 문서(README 4절 참고) |
@@ -67,6 +70,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | **새 표준 항목** 추가 | 표준 4항목을 늘리려면 `inspect.go` 의 `stdKeywords`(이름 후보 키워드)와 `profile.go` 가 쓰는 항목 목록, 프로파일 TSV 행. 표준이 아닌 **추가 항목**은 프로파일에 새 `std_name` 행만 추가하면 됨(코드 수정 불필요) |
 | **상태(결과 코드) 추가·변경** | 점검: `check.go` 상수와 `judge`, 터미널 표시는 `report.go`(`reportOrder`·`otherErrOrder`), 설정: `set.go` 상수·`applyOrder`·`applyFailedStatus`, 재시도 여부는 `check.go` 의 `isRetryStatus`, 병합은 `retry.go`. 바뀌면 README 3.6절 표 갱신 |
 | **안전 규칙 변경**(허용 호출·본문·위험 속성) | `redfish.go` 의 `checkAllowed`·`checkBody`·`reDangerAttr` + **보안 테스트**(`redfish_security_test.go`, `set_security_test.go`)를 먼저 고치고 통과시킬 것. 허용목록을 넓히면 PR_CHECKLIST 의 보안 항목을 반드시 확인 |
+| **2순위 계정** 동작(벤더 식별 규칙·rf.conf 키·시도 조건) | `fallback.go`, 호출 지점은 `check.go`·`dump.go`·`allcheck.go`, 리포트 구역은 `report.go`. 시험은 `testcase/rf_fallback_case.sh` |
 | 로그인·재시도·타임아웃·AUTH_FAIL 동작 | `redfish.go`(`Client.do`·`login`), 차단기는 `sweep.go`, conf 키는 `conf.go` |
 | **bios.conf 키 추가** | `conf.go`(`Config`·`defaultConfig`·`parseConf` 의 switch), `bios.conf.example`, README 3.3절 표, `lib.sh` 가 읽는 키라면 `conf_val` 호출부 |
 | 터미널 리포트 모양 | 점검 `report.go`, 설정 결과 `set.go`(`writeApplyReport`), 전체 비교 `allreport.go` |
@@ -99,3 +103,15 @@ BMC 에 남는 흔적을 줄이고 운영자의 실수를 코드로 막는 것�
 6. **비밀 취급** — 비밀번호는 `pass.enc`(AES-256-GCM)+`key.bin`(0600)으로만 보관, CLI 인자·로그·TSV 에 남기지 않으며 오류 상세에서도 비밀번호·토큰·Basic 헤더를 지웁니다. 결과 파일은 0600.
 
 작업 흐름도는 [WORKFLOW.md](WORKFLOW.md) 참고.
+
+## 추후 확장 (아직 구현되지 않음)
+
+### 계정이 아예 없는 BMC 에 y/n 으로 계정 생성·패스워드 설정
+
+현재의 2순위 계정(`fallback.go`)은 **이미 있는 예비 계정으로 로그인만** 합니다. 공용 계정도 예비 계정도 없는 BMC 에 계정을 만들어 주는 기능은 **없습니다**. 필요해지면 아래 설계를 따릅니다(설계 메모일 뿐 코드·테스트 없음).
+
+- **연결 지점:** `fallback.go` 의 `loginWithFallback` 이 최종 `AUTH_FAIL` 을 돌려주는 자리. 이 직후(1순위·2순위가 모두 거부된 호스트)에서 “계정 생성 제안” 단계를 호출합니다. 로그인 자체가 안 되는 BMC 이므로 **계정을 만들려면 관리자 권한 계정이 따로 필요**하고, 그 계정도 rf.conf 에서 읽어야 합니다.
+- **rf.conf 확장:** `<vendor>_create_user`, `<vendor>_create_pass`(만들 계정)처럼 키를 더하고, 관리자 계정은 `<vendor>_admin_user`/`_admin_pass` 등으로 분리합니다. `parseRFConf` 는 알 수 없는 키를 오류로 처리하므로 키 목록 확장이 필요합니다.
+- **벤더별 경로:** 표준 `POST /redfish/v1/AccountService/Accounts`(본문 `UserName`·`Password`·`RoleId`), 비밀번호 변경은 `PATCH …/Accounts/<id>`. 벤더마다 `RoleId`·슬롯 규칙이 달라 첫 실장비에서 확인이 필요합니다.
+- **쓰기이므로 안전 규칙 선행:** (1) `redfish.go` 의 `checkAllowed`/`checkBody` 허용목록에 AccountService 경로를 별도 모드로 추가(기본 모드에서는 계속 거부), (2) 프로파일의 `verified=Y` 에 해당하는 **벤더·모델별 허가 목록**, (3) **y/n 프롬프트**(호스트마다 직접 입력, 비대화형 입력은 N, `-stdin-ok` 와 같은 자동화 예외는 두지 않음), (4) `-dry-run` 에서 보낼 요청만 출력, (5) 로그·결과 파일에 비밀번호를 남기지 않고 생성 사실(호스트·시각)만 기록. 모두 `set.go` 와 같은 “쓰기 경로는 한 곳” 원칙을 따라 별도 파일(예: `account.go`)로 둡니다.
+- **보안 테스트:** `*_security_test.go` 에 “허용목록 밖 계정 경로 거부”, “프롬프트 없이 쓰지 않음”, “비밀번호가 출력에 없음” 을 먼저 추가합니다.

@@ -25,6 +25,7 @@ func main() {
 	pass := flag.String("pass", "", "BMC 비밀번호 (프로세스 목록에 보이므로 환경변수 MOCKBMC_PASS 권장)")
 	noSess := flag.Bool("no-sessions", false, "세션 서비스 없는 BMC 흉내 (Basic 인증 폴백 시험)")
 	verbose := flag.Bool("v", false, "요청마다 한 줄 출력")
+	openRoot := flag.Bool("open-serviceroot", false, "비인증 ServiceRoot(GET /redfish/v1/)에 응답 (벤더 식별·2순위 계정 시험용)")
 	flag.Parse()
 
 	if *dir == "" {
@@ -38,7 +39,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "오류: 비밀번호가 필요합니다 (환경변수 MOCKBMC_PASS 또는 -pass)")
 		os.Exit(1)
 	}
-	opts := mockbmc.Options{User: *user, Pass: *pass, NoSessions: *noSess}
+	opts := mockbmc.Options{User: *user, Pass: *pass, NoSessions: *noSess, OpenServiceRoot: *openRoot}
 	if *verbose {
 		opts.Logf = func(f string, a ...interface{}) { fmt.Printf(f+"\n", a...) }
 	}

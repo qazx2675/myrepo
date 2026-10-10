@@ -156,6 +156,7 @@ func writeReport(w io.Writer, run *checkRun, o reportOpts) {
 	writeOKSection(w, run, o, p)
 	writeFailSection(w, run, o, p)
 	writeBlockedSection(w, run, o, p)
+	writeFallbackSection(w, run, o, p)
 	writeOtherSection(w, run, p)
 
 	fmt.Fprintln(w)
@@ -399,6 +400,43 @@ func candidateText(h *hostCheck, std string) string {
 	return ""
 }
 
+// writeFallbackSection 은 2순위 계정(rf.conf)으로 로그인한 호스트를 보여 줍니다 (계정명 없이 벤더만).
+func writeFallbackSection(w io.Writer, run *checkRun, o reportOpts, p painter) {
+	var names []string
+	for _, h := range run.Hosts {
+		if h.CredSource != credFallback {
+			continue
+		}
+		n := h.Target.Hostname
+		if h.Info != nil && h.Info.Vendor != "" {
+			n += "(" + h.Info.Vendor + ")"
+		}
+		names = append(names, n)
+	}
+	if len(names) == 0 {
+		return
+	}
+	file := filepath.ToSlash(filepath.Join(run.Dir, fallbackLoginFile))
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "%s %s대  → %s\n", p.yellow("[2순위 계정(rf.conf)으로 접속]"), commaInt(len(names)), file)
+	var lines []string
+	if len(names) <= o.ListMax {
+		lines = wrapNames(names, "  ", reportWidth)
+	}
+	if lines == nil || len(lines) >= okListMaxLines {
+		fmt.Fprintf(w, "  호스트가 많아 이름은 생략합니다 → %s\n", file)
+	} else {
+		for _, l := range lines {
+			fmt.Fprintln(w, l)
+		}
+	}
+	fmt.Fprintln(w, "  공용(1순위) 계정이 거부되어 벤더별 예비 계정으로 접속했습니다. 해당 BMC 에 공용 계정을 등록하십시오.")
+}
+
+// connFailStatuses 는 [접속불가] 로 묶는 호스트 상태입니다 (계정 문제가 아닌 네트워크·BMC 응답 실패).
+var connFailStatuses = map[string]bool{StatusUnreachable: true, StatusTimeout: true, StatusBMCError: true, StatusHTTPError: true}
+
+// writeOtherSection 은 호스트 단위 오류를 [접속불가] / [계정 오류 AUTH_FAIL] / [기타 오류] 로 나눠 보여 줍니다.
 func writeOtherSection(w io.Writer, run *checkRun, p painter) {
 	hosts, _ := run.tally()
 	known := map[string]bool{}
@@ -409,8 +447,53 @@ func writeOtherSection(w io.Writer, run *checkRun, p painter) {
 	if len(sts) == 0 {
 		return
 	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, p.yellow("[기타 오류]"))
+	var conn, other []string
+	connN := 0
+	for _, st := range sts {
+		switch {
+		case connFailStatuses[st]:
+			conn = append(conn, st)
+			connN += hosts[st]
+		case st != StatusAuthFail:
+			other = append(other, st)
+		}
+	}
+	retry := 0
+	if connN > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s (네트워크·포트·TLS·타임아웃 — 계정 문제 아님)\n", p.yellow(fmt.Sprintf("[접속불가] %s대", commaInt(connN))))
+		retry += writeStatusLines(w, run, conn)
+	}
+	if n := hosts[StatusAuthFail]; n > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "%s (1순위, 2순위 계정 모두 실패 또는 예비 계정 없음)\n", p.yellow(fmt.Sprintf("[계정 오류 AUTH_FAIL] %s대", commaInt(n))))
+		shown := 0
+		for _, h := range run.Hosts {
+			if h.Status != StatusAuthFail {
+				continue
+			}
+			if shown == 10 {
+				fmt.Fprintf(w, "  ... 외 %d대\n", n-shown)
+				break
+			}
+			shown++
+			fmt.Fprintf(w, "  %s  %s\n", padTo(h.Target.Hostname, hostNameWidth(run)), h.Detail)
+		}
+		fmt.Fprintln(w, "    계정 잠금을 막으려고 재시도하지 않았습니다. 계정/비밀번호를 확인한 뒤 해당 대상만 다시 실행하십시오.")
+	}
+	if len(other) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, p.yellow("[기타 오류]"))
+		retry += writeStatusLines(w, run, other)
+	}
+	if retry > 0 {
+		fmt.Fprintf(w, "  %s 재시도 대상 %d대 → %s (그대로 -user 로 넘겨 다시 실행할 수 있습니다)\n",
+			p.cyan("*"), retry, filepath.ToSlash(filepath.Join(run.Dir, "retry.txt")))
+	}
+}
+
+// writeStatusLines 는 상태별 호스트 목록(최대 10대)과 안내를 출력하고, 그중 재시도 대상 호스트 수를 돌려줍니다.
+func writeStatusLines(w io.Writer, run *checkRun, sts []string) int {
 	retry := 0
 	for _, st := range sts {
 		var names []string
@@ -434,8 +517,6 @@ func writeOtherSection(w io.Writer, run *checkRun, p painter) {
 		}
 		fmt.Fprintf(w, "  %-14s %s대  %s%s\n", st, commaInt(len(names)), strings.Join(shown, " "), more)
 		switch st {
-		case StatusAuthFail:
-			fmt.Fprintln(w, "    계정 잠금을 막으려고 재시도하지 않았습니다. 계정/비밀번호를 확인한 뒤 해당 대상만 다시 실행하십시오.")
 		case StatusSkippedAuthStop:
 			fmt.Fprintln(w, "    AUTH_FAIL 차단기(auth_fail_stop)가 작동해 접속하지 않았습니다. 계정/비밀번호를 확인한 뒤 retry.txt 로 다시 실행하십시오.")
 		case StatusHTTPError, StatusUnsupported:
@@ -448,10 +529,7 @@ func writeOtherSection(w io.Writer, run *checkRun, p painter) {
 			fmt.Fprintln(w, "    -from-dump 폴더에 호스트 이름과 같은 덤프 폴더가 없습니다.")
 		}
 	}
-	if retry > 0 {
-		fmt.Fprintf(w, "  %s 재시도 대상 %d대 → %s (그대로 -user 로 넘겨 다시 실행할 수 있습니다)\n",
-			p.cyan("*"), retry, filepath.ToSlash(filepath.Join(run.Dir, "retry.txt")))
-	}
+	return retry
 }
 
 // failItem 은 Pending 으로 설정할 FAIL 항목 1개입니다 (단계 6 의 입력).
