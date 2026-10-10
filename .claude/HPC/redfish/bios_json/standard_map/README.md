@@ -19,6 +19,24 @@
 | `../../profiles/VM_research.tsv` | **`biostool` 프로파일 형식**(`vendor model std_name attribute value verified`)으로 변환한 결과. `bios_check.sh --profile VM_research` 로 바로 사용 |
 | `map_bios_attrs.ps1` | 위 파일을 다시 만드는 스크립트 (조사 데이터가 갱신되면 재실행) |
 
+## 프로토콜 구분 — JSON(Redfish)과 XML 은 섞지 않는다
+
+체크 스크립트는 **Redfish JSON 이 나오는 모델은 JSON, 아니면 XML** 로 동작해야 하므로 두 경로를 파일 단계에서 분리했습니다.
+조사 데이터에서 XML 을 JSON 으로 변환해 Redfish 값처럼 쓴 곳이 있는지 점검한 결과:
+
+- **값 변환은 없습니다.** 어떤 벤더도 XML 응답을 Redfish 속성으로 바꿔 넣지 않았습니다. HPE·Dell·Lenovo·Supermicro 파일은 Redfish 문서·레지스트리 기준이고, `README.md` 어디에도 XML→JSON 변환 기록이 없습니다.
+- **다만 Cisco 의 `bios_attributes.json` 은 JSON 파일이지만 내용은 XML API 클래스/토큰 메타데이터**입니다 (`biosVf*` 클래스, `vp*` 속성 — ucsmsdk/imcsdk 에서 추출). 파일 형식이 JSON 일 뿐 UCSM 은 Redfish 가 없습니다. Intersight(`bios.Policy`)는 Redfish 가 아닌 별도 REST JSON 입니다.
+- 이전 버전의 `profiles/VM_research.tsv` 는 Cisco XML 토큰(`vpIntelHyperThreadingTech` 등)을 Redfish 프로파일 행으로 섞어 넣었습니다. **수정:** Redfish 가 아닌 소스(`protocol` ≠ `json-redfish`)는 프로파일에서 빼고 `standard_bios_map_xml.tsv` 로 분리했습니다.
+
+| `protocol` | 해당 | 점검 방법 | 결과 파일 |
+|---|---|---|---|
+| `json-redfish` | HPE iLO, Dell iDRAC, Lenovo XCC, Supermicro, (Cray) | `GET /redfish/v1/Systems/<id>/Bios` 의 `Attributes` | `profiles/VM_research.tsv` |
+| `xml` | Cisco UCSM(블레이드 B200 M4/M5, B480 M5, X210c M7), CIMC XML | `POST https://<ucsm>/nuova` `configResolveClass`(`biosSettings`, `biosVProfile`) 응답의 `vp*` 속성 | `standard_bios_map_xml.tsv` |
+| `json-intersight-rest` | Cisco Intersight(IMM) | `GET /api/v1/bios/Policies` (Redfish 아님) | `standard_bios_map.json` 의 해당 행 |
+
+`biostool` 은 Redfish 전용이라 UCSM 관리형 블레이드는 `UNSUPPORTED` 로 점검됩니다. **XML 점검기는 아직 없습니다** — `standard_bios_map_xml.tsv`(클래스·속성·기대값·XML 예시)가 그 점검기의 입력 데이터입니다.
+`xml.sh` 는 이름과 달리 Redfish 를 GET 해 JSON 으로 덤프하는 사전조사 스크립트이며 XML 과 무관합니다.
+
 ## 만든 방법 (typesafe-ai / Jev)
 
 TypeSafe 문서의 "select instead of generate" 패턴을 따랐습니다.

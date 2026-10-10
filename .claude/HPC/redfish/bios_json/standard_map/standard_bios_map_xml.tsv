@@ -1,0 +1,20 @@
+# Cisco UCSM XML API rows (NOT a biostool profile: biostool speaks Redfish only). POST https://<ucsm>/nuova, configResolveClass on biosSettings / biosVProfile.
+# columns: vendor model std_name xml_class xml_attribute value protocol xml_example verified
+vendor	model	std_name	xml_class	xml_attribute	value	protocol	xml_example	verified
+CISCO	UCS B200 M4	system_profile	biosVfCPUPerformance	vpCPUPerformance	hpc	xml	<biosVfCPUPerformance vpCPUPerformance="hpc"/>	N
+CISCO	UCS B200 M4	hyper_threading	biosVfIntelHyperThreadingTech	vpIntelHyperThreadingTech	enabled	xml	<biosVfIntelHyperThreadingTech vpIntelHyperThreadingTech="enabled"/>	N
+CISCO	UCS B200 M5	system_profile	biosVfCPUPerformance	vpCPUPerformance	hpc	xml	<biosVfCPUPerformance vpCPUPerformance="hpc"/>	N
+CISCO	UCS B200 M5	hyper_threading	biosVfIntelHyperThreadingTech	vpIntelHyperThreadingTech	enabled	xml	<biosVfIntelHyperThreadingTech vpIntelHyperThreadingTech="enabled"/>	N
+CISCO	UCS B480 M5	system_profile	biosVfCPUPerformance	vpCPUPerformance	hpc	xml	<biosVfCPUPerformance vpCPUPerformance="hpc"/>	N
+CISCO	UCS B480 M5	hyper_threading	biosVfIntelHyperThreadingTech	vpIntelHyperThreadingTech	enabled	xml	<biosVfIntelHyperThreadingTech vpIntelHyperThreadingTech="enabled"/>	N
+CISCO	UCS X210c M7	system_profile	biosVfCPUPerformance	vpCPUPerformance	hpc	xml	<biosVfCPUPerformance vpCPUPerformance="hpc"/>	N
+CISCO	UCS X210c M7	hyper_threading	biosVfIntelHyperThreadingTech	vpIntelHyperThreadingTech	enabled	xml	<biosVfIntelHyperThreadingTech vpIntelHyperThreadingTech="enabled"/>	N
+# UNMAPPED CISCO UCS B200 M4 llc_prefetch: none_of_candidates
+# UNMAPPED CISCO UCS B200 M4 sub_numa_cluster: no_candidates
+# UNMAPPED CISCO UCS B200 M5 llc_prefetch: none_of_candidates
+# UNMAPPED CISCO UCS B200 M5 sub_numa_cluster: no_candidates
+# UNMAPPED CISCO UCS B480 M5 llc_prefetch: none_of_candidates
+# UNMAPPED CISCO UCS B480 M5 sub_numa_cluster: no_candidates
+# UNMAPPED CISCO UCS X210c M7 llc_prefetch: none_of_candidates
+# UNMAPPED CISCO UCS X210c M7 sub_numa_cluster: no_candidates
+
