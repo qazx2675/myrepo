@@ -1,0 +1,1515 @@
+# pdftotext -layout slice of Cisco UCS Server BIOS Tokens, Release 4.1 PDF (b_UCS_BIOS_Tokens_Guide_4_1.pdf): M5 (B200 M5/B480 M5 ...) token tables, releases 4.1(1a)-4.1(3h). Audit copy; (c) Cisco.
+           guide/UCS_roadmap.html
+           For a complete list of all C-Series documentation, see the Cisco UCS C-Series Servers Documentation Roadmap
+           available at the following URL: https://www.cisco.com/c/en/us/td/docs/unified_computing/ucs/overview/
+           guide/ucs_rack_roadmap.html.
+           For information on supported firmware versions and supported UCS Manager versions for the rack servers
+           that are integrated with the UCS Manager for management, refer to Release Bundle Contents for Cisco UCS
+           Software.
+
+
+
+Documentation Feedback
+           To provide technical feedback on this document, or to report an error or omission, please send your comments
+           to ucs-docfeedback@external.cisco.com. We appreciate your feedback.
+
+
+
+
+                                                                   Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                     vii
+                                                            Preface
+Documentation Feedback
+
+
+
+
+                Cisco UCS Server BIOS Tokens, Release 4.1
+    viii
+                                                                   CHAPTER                1
+          UCS Server BIOS Tokens
+             • Server BIOS Tokens in Release 4.1(3h), on page 1
+             • Server BIOS Tokens in Release 4.1(3e), on page 2
+             • Server BIOS Tokens in Release 4.1(3a), on page 2
+             • Server BIOS Tokens in Release 4.1(2) , on page 4
+             • Server BIOS Tokens in Release 4.1(1a), on page 6
+
+
+Server BIOS Tokens in Release 4.1(3h)
+          The platforms supported in this release 4.1(3h) are:
+             • B200 M5
+             • B480 M5
+             • C220 M5
+             • C240 M5
+             • C240 SD M5
+             • C480 M5
+             • S3260 M5
+             • C125 M5
+             • C480 M5 ML
+
+          The following table lists the newly added BIOS token names, including the defaults and values for each
+          supported M5 platform in this release. The BIOS tokens listed in the Server BIOS Tokens in Release 4.1(1a)
+          , Server BIOS Tokens in Release 4.1(2) , on page 4, Server BIOS Tokens in Release 4.1(3a), on page 2,
+          and Server BIOS Tokens in Release 4.1(3e), on page 2 table are also supported in this release.
+
+           Name                 Default Value         M5 Server             Platform                 Dependencies
+                                                      Supported Values
+
+           SHA-1 PCR Bank Enabled                     Enabled, Disabled     All M5 Servers
+
+           SHA-256 PCR          Enabled               Enabled, Disabled     All M5 Servers
+           Bank
+
+
+
+
+                                                                  Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                1
+                                                                                                           UCS Server BIOS Tokens
+  Server BIOS Tokens in Release 4.1(3e)
+
+
+
+
+Server BIOS Tokens in Release 4.1(3e)
+                        The platforms supported in this release 4.1(3e) are:
+                            • B200 M5
+                            • B480 M5
+                            • C220 M5
+                            • C240 M5
+                            • C240 SD M5
+                            • C480 M5
+                            • S3260 M5
+                            • C125 M5
+                            • C480 M5 ML
+
+                        The following table lists the newly added BIOS token names, including the defaults and values for each
+                        supported M5 platform in this release. The BIOS tokens listed in the Server BIOS Tokens in Release 4.1(1a)
+                        , Server BIOS Tokens in Release 4.1(2) , on page 4, and Server BIOS Tokens in Release 4.1(3a), on page
+                        2 table are also supported in this release.
+
+                         Name                     Default Value     M5 Server           Platform             Dependencies
+                                                                    Supported Values
+
+                         Burst and Postponed Disabled               Enabled, Disabled   All M5 Servers
+                         Refresh
+
+
+
+Server BIOS Tokens in Release 4.1(3a)
+                        The platforms supported in this release 4.1(3a) are:
+                            • B200 M5
+                            • B480 M5
+                            • C220 M5
+                            • C240 M5
+                            • C240 SD M5
+                            • C480 M5
+                            • S3260 M5
+                            • C125 M5
+                            • C480 M5 ML
+
+
+
+
+                    Cisco UCS Server BIOS Tokens, Release 4.1
+       2
+UCS Server BIOS Tokens
+                                                                                                  Server BIOS Tokens in Release 4.1(3a)
+
+
+
+
+                         The following table lists the newly added BIOS token names, including the defaults and values for each
+                         supported M5 platform in this release. The BIOS tokens listed in the Server BIOS Tokens in Release 4.1(1a)
+                         and Server BIOS Tokens in Release 4.1(2) , on page 4 table are also supported in this release.
+
+                         Name                 Default Value         M5 Server             Platform                 Dependencies
+                                                                    Supported Values
+
+                         Memory Thermal       Closed Loop           Closed Loop        All M5 Servers
+                         Throttling Mode      Thermal Throttling    Thermal Throttling
+                                                                                       Note       This
+                                              (CLTT) with           (CLTT) with
+                                                                                                  token is
+                                              Platform              Platform
+                                                                                                  not
+                                              Environment           Environment
+                                                                                                  supported
+                                              Control Interface     Control Interface
+                                                                                                  on C125
+                                              (PECI)                (PECI), Disabled
+                                                                                                  M5
+                                                                                                  servers.
+
+                         Advanced Memory Disabled                   Enabled, Disabled     All M5 Servers
+                         Test
+                                                                                          Note           This
+                                                                                                         token is
+                                                                                                         not
+                                                                                                         supported
+                                                                                                         on C125
+                                                                                                         M5
+                                                                                                         servers.
+
+                         Transparent Secure Auto                    Enabled, Disabled,    C125 M5 servers
+                         Memory Encryption                          Auto
+                         (TSME)
+
+                         Secure Encrypted     Auto                  253 ASIDs, 509        C125 M5 servers
+                         Virtualization (SEV)                       ASIDs, Auto
+
+                         DRAM SW Thermal Disabled                   Enabled, Disabled     C125 M5 servers
+                         Throttling
+
+                         Memory Refresh       1x Refresh            1x Refresh, 2x        All M5 Servers
+                         Rate                                       Refresh
+
+                         Panic and High       Low                   High, Low             All M5 Servers
+                         Watermark
+
+                         PCIe PLL SSC         Disabled              Auto, Disabled,       All M5 Servers
+                                                                    ZeroPointFive
+
+                         Configurable TDP     Normal                Normal, Level 1,      All M5 Servers
+                         Level                                      Level 2
+
+                         Uncore Frequency     Enabled               Enabled, Disabled     All M5 Servers
+                         Scaling
+
+                         UPI Link Frequency Auto                    Auto, 9.6GT/s,        All M5 Servers
+                         Select                                     10.4GT/s
+
+
+
+
+                                                                                Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                                    3
+                                                                                                             UCS Server BIOS Tokens
+  Server BIOS Tokens in Release 4.1(2)
+
+
+
+
+                         Name                     Default Value         M5 Server           Platform          Dependencies
+                                                                        Supported Values
+
+                         External SSC             Disabled for blade    Enabled, Disabled   All M5 Servers
+                         Enable                   and Cisco UCS
+                                                  S3260 M5 Storage
+                                                  servers
+                                                  Enabled for rack
+                                                  servers (except for
+                                                  Cisco UCS S3260
+                                                  M5 Storage servers)
+
+                         CR QoS                   Disabled              Recipe 1, Recipe 2, All M5 Servers
+                                                                        Recipe 3, Disabled
+
+                         NVM Performance BW Optimized                   BW Optimized,      All M5 Servers
+                         Setting                                        Latency Optimized,
+                                                                        Balanced Profile
+
+                         CR FastGo Config         Auto                  Default, Option 1, All M5 Servers
+                                                                        Option 2, Option 3,
+                                                                        Option 4, Option 5,
+                                                                        Auto
+
+                         Snoopy mode for          Disabled              Enabled, Disabled   All M5 Servers
+                         2LM
+
+                         Snoopy mode for          Disabled              Enabled, Disabled   All M5 Servers
+                         AD
+
+
+
+Server BIOS Tokens in Release 4.1(2)
+                        Cisco UCS Manager, Release 4.1(2) introduces the Cisco UCS C240 SD M5 Server to the list of supported
+                        platforms. The platforms supported in this release are:
+                            • B200 M5
+                            • B480 M5
+                            • C220 M5
+                            • C240 M5
+                            • C240 SD M5
+                            • C480 M5
+                            • S3260 M5
+                            • C125 M5
+                            • C480 M5 ML
+
+
+
+
+                    Cisco UCS Server BIOS Tokens, Release 4.1
+       4
+UCS Server BIOS Tokens
+                                                                                                    Server BIOS Tokens in Release 4.1(2)
+
+
+
+
+                         The following table lists the newly added BIOS token names, including the defaults and values for each
+                         supported M5 platform in this release. The BIOS tokens listed in the Server BIOS Tokens in Release 4.1(1a)
+                         table are also supported in this release.
+
+                         Name                 Default Value         M5 Server             Platform                  Dependencies
+                                                                    Supported Values
+
+                         Memory Refresh       2x Refresh            1x Refresh, 2x        All M5 Servers
+                         Rate                                       Refresh
+
+                         Panic and High       Low                   High, Low             All M5 Servers
+                         Watermark
+
+                         PCIe PLL SSC         Disabled              Auto, Disabled,       All M5 Servers
+                                                                    ZeroPointFive
+
+                         Configurable TDP     Normal                Normal, Level 1,      All M5 Servers
+                         Level                                      Level 2
+
+                         Uncore Frequency     Enabled               Enabled, Disabled     All M5 Servers
+                         Scaling
+
+                         UPI Link Frequency Auto                    Auto, 9.6GT/s,        All M5 Servers
+                         Select                                     10.4GT/s
+
+                         External SSC         Disabled for blade    Enabled, Disabled     All M5 Servers
+                         Enable               and Cisco UCS
+                                              S3260 M5 Storage
+                                              servers
+                                              Enabled for rack
+                                              servers (except for
+                                              Cisco UCS S3260
+                                              M5 Storage servers)
+
+                         CR QoS               Disabled              Recipe 1, Recipe 2, All M5 Servers
+                                                                    Recipe 3, Disabled
+
+                         NVM Performance BW Optimized               BW Optimized,      All M5 Servers
+                         Setting                                    Latency Optimized,
+                                                                    Balanced Profile
+
+                         CR FastGo Config     Auto                  Default, Option 1, All M5 Servers
+                                                                    Option 2, Option 3,
+                                                                    Option 4, Option 5,
+                                                                    Auto
+
+                         Snoopy mode for      Disabled              Enabled, Disabled     All M5 Servers
+                         2LM
+
+                         Snoopy mode for      Disabled              Enabled, Disabled     All M5 Servers
+                         AD
+
+
+
+
+                                                                                Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                                     5
+                                                                                                            UCS Server BIOS Tokens
+  Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+Server BIOS Tokens in Release 4.1(1a)
+                        The UCS M5 platforms supported in this release are:
+                            • B200 M5
+                            • B480 M5
+                            • C220 M5
+                            • C240 M5
+                            • C480 M5
+                            • S3260 M5
+                            • C125 M5
+                            • C480 M5 ML
+
+                        The following table lists the BIOS token names, including the defaults and values for each supported M5
+                        platform in this release.
+
+                         Name                      Default      M5 Server Supported Platform                 Dependencies
+                                                   Value        Values
+
+                         Legacy USB                Enabled      Disabled , Enabled,   B200 M5, B480 M5,
+                         Support                                Auto                  C220 M5, C240 M5,
+                                                                                      C480 M5, S3260 M5
+
+                         FRB-2 Timer               Enabled      Enabled, Disabled     B200 M5, B480 M5,
+                                                                                      C220 M5, C240 M5,
+                                                                                      C480 M5, S3260 M5,
+                                                                                      C125 M5
+
+                         OS Boot Watchdog Power Off             Power Off, Reset      B200 M5, B480 M5,      Applicable only
+                         Timer Policy                                                 C220 M5, C240 M5,      when OS Boot
+                                                                                      C480 M5, S3260 M5,     Watchdog Timer is
+                                                                                      C125 M5                Enabled.
+
+                         OS Boot Watchdog 10 minutes            5 minutes, 10 minutes, B200 M5, B480 M5,     Applicable only
+                         Timer Timeout                          15 minutes, 20         C220 M5, C240 M5,     when OS Boot
+                                                                minutes                C480 M5, S3260 M5,    Watchdog Timer is
+                                                                                       C125 M5               Enabled.
+
+                         OS Boot Watchdog Disabled              Enabled, Disabled     B200 M5, B480 M5,
+                         Timer                                                        C220 M5, C240 M5,
+                                                                                      C480 M5, S3260 M5,
+                                                                                      C125 M5
+
+                         Flow Control              None         None, RTS-CTS         B200 M5, B480 M5,      Applicable only
+                                                                                      C220 M5, C240 M5,      when Console
+                                                                                      C480 M5, S3260 M5,     Redirection is COM
+                                                                                      C125 M5                0.
+
+
+
+
+                    Cisco UCS Server BIOS Tokens, Release 4.1
+       6
+UCS Server BIOS Tokens
+                                                                                                 Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name                 Default    M5 Server Supported Platform                             Dependencies
+                                              Value      Values
+
+                         Baud Rate            115.2k     9.6k, 19.2k, 38.4k,        B200 M5, B480 M5,             Applicable only
+                                                         57.6k, 115.2k              C220 M5, C240 M5,             when Console
+                                                                                    C480 M5, S3260 M5,            Redirection is COM
+                                                                                    C125 M5                       0.
+
+                         Terminal Type        VT100      PC-ANSI, VT100,            B200 M5, B480 M5,             Applicable only
+                                                         VT100-PLUS,                C220 M5, C240 M5,             when Console
+                                                         VT-UTF8                    C480 M5, S3260 M5,            Redirection is COM
+                                                                                    C125 M5                       0.
+
+                         Console Redirection Disabled    COM 0, COM 1,              B200 M5, B480 M5,
+                                                         Disabled                   C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5,
+                                                                                    C125 M5
+
+                         Number of Retries    13         Infinite, 5, 13            B200 M5                       Applicable only
+                                                                                                                  when Boot Option
+                                                                                    B480 M5
+                                                                                                                  Retry is Enabled.
+                                                                                    C480 M5
+
+                         Cool Down Time       90         15, 45, 90                 B200 M5                       Applicable only
+                         (sec)                                                                                    when Boot Option
+                                                                                    B480 M5
+                                                                                                                  Retry is Enabled.
+                                                                                    C480 M5
+
+                         Boot Option Retry    Disabled   Enabled, Disabled          B200 M5
+                                                                                    B480 M5
+                                                                                    C480 M5
+
+                         Trusted Platform     Enabled    Enabled, Disabled          B200 M5, B480 M5,
+                         Module (TPM)                                               C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5,
+                                                                                    C125 M5
+
+                         Intel Virtualization Enabled    Enabled, Disabled          B200 M5, B480 M5,
+                         Technology                                                 C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5
+
+                         Intel VT for directed Enabled   Enabled, Disabled          B200 M5, B480 M5,
+                         IO                                                         C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5
+
+
+
+
+                                                                               Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                                   7
+                                                                                                       UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform              Dependencies
+                                                 Value        Values
+
+                       Intel Trusted      Disabled            Enabled, Disabled    B200 M5, B480 M5,    Can be Enabled only
+                       Execution                                                   C220 M5, C240 M5,    when Trusted
+                       Technology Support                                          C480 M5, S3260 M5    Platform Module
+                                                                                                        (TPM) is Enabled.
+                                                                                                        Enabling Intel
+                                                                                                        Trusted Execution
+                                                                                                        Technology
+                                                                                                        Support auto
+                                                                                                        enables Intel VT for
+                                                                                                        directed IO andIntel
+                                                                                                        Virtualization
+                                                                                                        Technology.
+
+                       Local 2X Apic             Disabled     Enabled, Disabled    B200 M5, B480 M5,    Enabling Local X2
+                                                                                   C220 M5, C240 M5,    Apic auto enables
+                                                                                   C480 M5, S3260 M5    Intel VT for
+                                                                                                        directed IO.
+
+                       Intel VTD         Disabled             Enabled, Disabled    B200 M5, B480 M5,
+                       Coherency Support                                           C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+                       Intel VTD ATS             Enabled      Enabled, Disabled    B200 M5, B480 M5,
+                       support                                                     C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+                       UEFI Boot Mode            Enabled      Enabled, Disabled    B200 M5, B480 M5,
+                                                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+                       NUMA Optimized            Enabled      Enabled, Disabled    B200 M5, B480 M5,
+                                                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+                       Select Memory RAS ADDDC                Mirror Mode 1LM,    B200 M5, B480 M5,
+                       configuration     Sparing              Partial Mirror mode C220 M5, C240 M5,
+                                                              1LM, Maximum        C480 M5, S3260 M5
+                                                              Performance, ADDDC
+                                                              Sparing
+
+                       Select PPR Type           Hard PPR     Hard PPR, Disabled   B200 M5, B480 M5,
+                                                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+                       Memory Mapped IO Enabled               Enabled, Disabled    B200 M5, B480 M5,
+                       Above 4GB                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+     8
+UCS Server BIOS Tokens
+                                                                                              Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name                Default    M5 Server Supported Platform                           Dependencies
+                                             Value      Values
+
+                         Hardware            Enabled    Enabled, Disabled        B200 M5, B480 M5,
+                         Prefetcher                                              C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         Adjacent Cache      Enabled    Enabled, Disabled        B200 M5, B480 M5,
+                         Line Prefetcher                                         C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         DCU Streamer        Enabled    Enabled, Disabled        B200 M5, B480 M5,
+                         Prefetch                                                C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         DCU IP Prefetcher   Enabled    Enabled, Disabled        B200 M5, B480 M5,
+                                                                                 C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         Processor C1E       Disabled   Enabled, Disabled        B200 M5, B480 M5,
+                                                                                 C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         Processor C6 Report Disabled   Enabled, Disabled        B200 M5, B480 M5,
+                                                                                 C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         Execute Disable Bit Enabled    Enabled, Disabled        B200 M5, B480 M5,
+                                                                                 C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         Intel Turbo Boost   Enabled    Enabled, Disabled        B200 M5, B480 M5,
+                         Tech                                                    C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         P STATE             HW ALL     HW ALL, SW ALL,          B200 M5, B480 M5,
+                         Coordination                   SW ANY                   C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         Boot Performance    Max         Max Performance,      B200 M5, B480 M5,
+                         Mode                Performance Max Efficient, Set by C220 M5, C240 M5,
+                                                         Intel NM              C480 M5, S3260 M5
+
+                         Enhanced Intel      Enabled    Enabled, Disabled        B200 M5, B480 M5,             Disabling Enhanced
+                         SpeedStep Tech                                          C220 M5, C240 M5,             Intel SpeedStep
+                                                                                 C480 M5, S3260 M5             Tech auto disables
+                                                                                                               Intel Turbo Boost
+                                                                                                               Tech.
+
+                         Intel               Enabled    Enabled, Disabled        B200 M5, B480 M5,
+                         HyperThreading                                          C220 M5, C240 M5,
+                         Tech                                                    C480 M5, S3260 M5
+
+
+
+
+                                                                            Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                                9
+                                                                                                        UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform               Dependencies
+                                                 Value        Values
+
+                       CPU Performance           Custom       Enterprise, HPC, High B200 M5, B480 M5,
+                                                              Throughput, Custom C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    10
+UCS Server BIOS Tokens
+                                                                            Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name   Default   M5 Server Supported Platform                       Dependencies
+                                Value     Values
+                                                                                             If set as Enterprise
+                                                                                             then:
+                                                                                                 • Hardware
+                                                                                                   Prefetcher is
+                                                                                                   Enabled
+                                                                                                 • Adjacent
+                                                                                                   Cache Line
+                                                                                                   Prefetcher is
+                                                                                                   Enabled
+                                                                                                 • DCU Streamer
+                                                                                                   Prefetch is
+                                                                                                   Enabled
+                                                                                                 • DCU IP
+                                                                                                   Prefetcher is
+                                                                                                   Enabled
+
+                                                                                             If set as High
+                                                                                             Throughput then:
+                                                                                                 • Hardware
+                                                                                                   Prefetcher is
+                                                                                                   Disabled
+                                                                                                 • Adjacent
+                                                                                                   Cache Line
+                                                                                                   Prefetcher is
+                                                                                                   Disabled
+                                                                                                 • DCU Streamer
+                                                                                                   Prefetch is
+                                                                                                   Disabled
+                                                                                                 • DCU IP
+                                                                                                   Prefetcher is
+                                                                                                   Enabled
+
+                                                                                             If set as HPC then:
+                                                                                                 • Hardware
+                                                                                                   Prefetcher is
+                                                                                                   Enabled
+                                                                                                 • Adjacent
+                                                                                                   Cache Line
+                                                                                                   Prefetcher is
+                                                                                                   Enabled
+                                                                                                 • DCU Streamer
+                                                                                                   Prefetch is
+
+
+
+
+                                                          Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                              11
+                                                                                                       UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform              Dependencies
+                                                 Value        Values
+                                                                                                             Enabled
+                                                                                                           • DCU IP
+                                                                                                             Prefetcher is
+                                                                                                             Enabled
+
+                       CDN Control               Enabled      Enabled, Disabled   B480 M5B200 M5, ,     By default, CDN
+                                                                                  C220 M5, C240 M5,     Control is Disabled
+                                                                                  C480 M5, S3260 M5,    in the UCSM
+                                                                                  C125 M5               Manager. (It is
+                                                                                                        Enabled by default
+                                                                                                        in Standalone mode.)
+
+                       Processor CMCI            Enabled      Enabled, Disabled   B200 M5, B480 M5,
+                                                                                  C220 M5, C240 M5,
+                                                                                  C480 M5, S3260 M5
+
+                       Adaptive Memory           Enabled      Enabled, Disabled   B200 M5, B480 M5,
+                       Training                                                   C220 M5, C240 M5,
+                                                                                  C480 M5, S3260 M5,
+                                                                                  C480 M5 ML
+
+                       OptionROM                 Enabled      Enabled, Disabled   All M5 Servers
+                       Launch
+                       Optimization
+
+                       BIOS Techlog Level Minimum             Maximum, Normal,    All M5 Servers
+                                                              Minimum
+
+                       All Onboard LOM           Enabled      Enabled, Disabled   C220 M5, C240 M5      If set as Disabled,
+                                                                                                        then LOM Port 0
+                                                                                  C480 M5
+                                                                                                        OptionROM and
+                                                                                                        LOM Port 1
+                                                                                                        OptionROM are
+                                                                                                        Disabled.
+                                                                                                        If set as Enabled,
+                                                                                                        then LOM Port 0
+                                                                                                        OptionROM and
+                                                                                                        LOM Port 1
+                                                                                                        OptionROM are
+                                                                                                        Enabled.
+
+                       VMD Enable                Disabled     Enabled, Disabled   C220 M5, C240 M5,
+                                                                                  B200 M5, B480 M5
+
+                       PCIe RAS Support Enabled               Enabled, Disabled   All M5 Servers
+
+                       ACS Control               Enabled      Enabled, Disabled   C480 M5
+                       SLOT-11
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    12
+UCS Server BIOS Tokens
+                                                                                            Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name              Default    M5 Server Supported Platform                           Dependencies
+                                           Value      Values
+
+                         ACS Control       Enabled    Enabled, Disabled        C480 M5
+                         SLOT-12
+
+                         ACS Control       Enabled    Enabled, Disabled        C480 M5
+                         SLOT-13
+
+                         ACS Control       Enabled    Enabled, Disabled        C480 M5
+                         SLOT-14
+
+                         ACS Control GPU-1 Disabled   Enabled, Disabled        C480 M5
+
+                         ACS Control GPU-2 Disabled   Enabled, Disabled        C480 M5
+
+                         ACS Control GPU-3 Disabled   Enabled, Disabled        C480 M5
+
+                         ACS Control GPU-4 Disabled   Enabled, Disabled        C480 M5
+
+                         ACS Control GPU-5 Disabled   Enabled, Disabled        C480 M5
+
+                         ACS Control GPU-6 Disabled   Enabled, Disabled        C480 M5
+
+                         ACS Control GPU-7 Disabled   Enabled, Disabled        C480 M5
+
+                         ACS Control GPU-8 Disabled   Enabled, Disabled        C480 M5
+
+                         LOM Port 1        Enabled    Disabled, Enabled        C220 M5, C240 M5
+                         OptionROM
+                                                                               C480 M5
+
+                         LOM Port 2        Enabled    Disabled, Enabled        C220 M5, C240 M5
+                         OptionROM
+                                                                               C480 M5
+
+                         SBNVMe1           Enabled    Disabled, Enabled        S3260 M5
+                         OptionROM
+
+                         SBNVMe2           Enabled    Disabled, Enabled        S3260 M5
+                         OptionROM
+
+                         IOEMezz1          Enabled    Disabled, Enabled        S3260 M5
+                         OptionROM
+
+                         IOENVMe1          Enabled    Disabled, Enabled        S3260 M5
+                         OptionROM
+
+                         IOENVMe2          Enabled    Disabled, Enabled        S3260 M5
+                         OptionROM
+
+                         IOESlot1          Enabled    Disabled, Enabled        S3260 M5
+                         OptionROM
+
+                         IOESlot2          Enabled    Disabled, Enabled        S3260 M5
+                         OptionROM
+
+
+
+
+                                                                          Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                              13
+                                                                                             UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform    Dependencies
+                                                 Value        Values
+
+                       SBMezz1                   Enabled      Disabled, Enabled   S3260 M5
+                       OptionROM
+
+                       SBMezz2                   Enabled      Disabled, Enabled   S3260 M5
+                       OptionROM
+
+                       SIOC1 OptionROM Enabled                Disabled, Enabled   S3260 M5
+
+                       SIOC2 OptionROM Enabled                Disabled, Enabled   S3260 M5
+
+                       SIOCNvme1                 Enabled      Disabled, Enabled   S3260 M5
+                       OptionROM
+
+                       SIOCNvme2                 Enabled      Disabled, Enabled   S3260 M5
+                       OptionROM
+
+                       SBLom1                    Enabled      Disabled, Enabled   S3260 M5
+                       OptionROM
+
+                       SBNVMe1 Link              Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       SBNVMe2 Link              Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       SIOCNVMe1 Link            Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       SIOCNVMe2 Link            Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       SIOC1 Link Speed          Auto         Disabled, Auto,  S3260 M5
+                                                              GEN1, GEN2, GEN3
+
+                       SIOC2 Link Speed          Auto         Disabled, Auto,  S3260 M5
+                                                              GEN1, GEN2, GEN3
+
+                       SBMezz1 Link              Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       SBMezz2 Link              Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       IOESlot1 Link             Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       IOESlot2 Link             Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+                       IOEMezz1 Link             Auto         Disabled, Auto,  S3260 M5
+                       Speed                                  GEN1, GEN2, GEN3
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    14
+UCS Server BIOS Tokens
+                                                                                         Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name            Default   M5 Server Supported Platform                           Dependencies
+                                         Value     Values
+
+                         IOENVMe1 Link   Auto      Disabled, Auto,  S3260 M5
+                         Speed                     GEN1, GEN2, GEN3
+
+                         IOENVMe2 Link   Auto      Disabled, Auto,  S3260 M5
+                         Speed                     GEN1, GEN2, GEN3
+
+                         PCIe Slot 1     Enabled   Disabled, Enabled        C220 M5, C240 M5
+                         OptionROM
+                                                                            C480 M5
+
+                         PCIe Slot 2     Enabled   Disabled, Enabled        C220 M5, C240 M5
+                         OptionROM
+                                                                            C480 M5
+
+                         PCIe Slot 3     Enabled   Disabled, Enabled        C240 M5
+                         OptionROM
+                                                                            C480 M5
+
+                         PCIe Slot 4     Enabled   Disabled, Enabled        C240 M5
+                         OptionROM
+                                                                            C480 M5
+
+                         PCIe Slot 5     Enabled   Disabled, Enabled        C240 M5
+                         OptionROM
+                                                                            C480 M5
+
+                         PCIe Slot 6     Enabled   Disabled, Enabled        C240 M5
+                         OptionROM
+                                                                            C480 M5
+
+                         PCIe Slot 7     Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+                         PCIe Slot 8     Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+                         PCIe Slot 9     Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+                         PCIe Slot 10    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+                         PCIe Slot 11    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+                         PCIe Slot 12    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+                         PCIe Slot 13    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+                         PCIe Slot 14    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+
+
+
+
+                                                                       Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                           15
+                                                                                                      UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform             Dependencies
+                                                 Value        Values
+
+                       PCIe Slot MLOM            Enabled      Disabled, Enabled   C220 M5, C240 M5
+                       OptionROM
+
+                       PCIe Slot MRAID           Enabled      Disabled, Enabled   C220 M5, C240 M5
+                       OptionROM
+
+                       PCIe Slot RAID            Enabled      Disabled, Enabled   C480 M5
+                       OptionROM
+
+                       PCIe Slot N1              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N2              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N3              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N4              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N5              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N6              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N7              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N8              Enabled      Disabled, Enabled   C220 M5, C240 M5,
+                       OptionROM                                                  C480 M5
+
+                       PCIe Slot N9              Enabled      Disabled, Enabled   C220 M5, C480 M5
+                       OptionROM
+                       PCIe Slot N10             Enabled      Disabled, Enabled   C220 M5, C480 M5
+                       OptionROM
+                       PCIe Slot N11             Enabled      Disabled, Enabled   C480 M5
+                       OptionROM
+                       PCIe Slot N12             Enabled      Disabled, Enabled   C480 M5
+                       OptionROM
+                       PCIe Slot N13             Enabled      Disabled, Enabled   C480 M5
+                       OptionROM
+                       PCIe Slot N14             Enabled      Disabled, Enabled   C480 M5
+                       OptionROM
+                       PCIe Slot N15             Enabled      Disabled, Enabled   C480 M5
+                       OptionROM
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    16
+UCS Server BIOS Tokens
+                                                                                          Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name             Default   M5 Server Supported Platform                           Dependencies
+                                          Value     Values
+
+                         PCIe Slot N16    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N17    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N18    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N19    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N20    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N21    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N22    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N23    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot N24    Enabled   Disabled, Enabled        C480 M5
+                         OptionROM
+                         PCIe Slot Rear   Enabled   Disabled, Enabled        C240 M5, C480 M5
+                         NVMe1
+                         OptionROM
+
+                         PCIe Slot Rear   Enabled   Disabled, Enabled        C240 M5, C480 M5
+                         NVMe2
+                         OptionROM
+
+                         PCIe Slot Rear   Enabled   Disabled, Enabled        C480 M5
+                         NVMe3
+                         OptionROM
+
+                         PCIe Slot Rear   Enabled   Disabled, Enabled        C480 M5
+                         NVMe4
+                         OptionROM
+
+                         PCIe Slot Rear   Enabled   Disabled, Enabled        C480 M5
+                         NVMe5
+                         OptionROM
+
+                         PCIe Slot Rear   Enabled   Disabled, Enabled        C480 M5
+                         NVMe6
+                         OptionROM
+
+                         PCIe Slot Rear   Enabled   Disabled, Enabled        C480 M5
+                         NVMe7
+                         OptionROM
+
+
+
+
+                                                                        Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                            17
+                                                                                                      UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform             Dependencies
+                                                 Value        Values
+
+                       PCIe Slot Rear            Enabled      Disabled, Enabled   C480 M5
+                       NVMe8
+                       OptionROM
+
+                       MRAID Link Speed Auto                  Disabled, Auto,  C220 M5, C240 M5
+                                                              GEN1, GEN2, GEN3
+
+                       RAID Link Speed           Auto         Disabled, Auto,  C480 M5
+                                                              GEN1, GEN2, GEN3
+
+                       MLOM Link Speed Auto                   Disabled, Auto,  C220 M5, C240 M5
+                                                              GEN1, GEN2, GEN3
+
+                       PCIe Slot 1 Link          Auto         Disabled, Auto, GEN1 C220 M5, C240 M5
+                       Speed                                  , GEN2, GEN3
+                                                                                   C480 M5
+                                                                                  C125 M5
+
+                       PCIe Slot 2 Link          Auto         Disabled, Auto,  C220 M5, C240 M5
+                       Speed                                  GEN1, GEN2, GEN3
+                                                                               C480 M5
+                                                                                  C125 M5
+
+                       PCIe Slot 3 Link          Auto         Disabled, Auto,  C240 M5
+                       Speed                                  GEN1, GEN2, GEN3
+                                                                               C480 M5
+                                                                                  C125 M5
+
+                       PCIe Slot 4 Link          Auto         Disabled, Auto,  C240 M5
+                       Speed                                  GEN1, GEN2, GEN3
+                                                                               C480 M5
+                                                                                  C125 M5
+
+                       PCIe Slot 5 Link          Auto         Disabled, Auto,  C240 M5
+                       Speed                                  GEN1, GEN2, GEN3
+                                                                               C480 M5
+                                                                                  C125 M5
+
+                       PCIe Slot 6 Link          Auto         Disabled, Auto,  C240 M5
+                       Speed                                  GEN1, GEN2, GEN3
+                                                                               C480 M5
+                                                                                  C125 M5
+
+                       PCIe Slot 7 Link          Auto         Disabled, Auto,  C480 M5
+                       Speed                                  GEN1, GEN2, GEN3
+                                                                               C125 M5
+
+                       PCIe Slot 8 Link          Auto         Disabled, Auto,  C480 M5
+                       Speed                                  GEN1, GEN2, GEN3
+                                                                               C125 M5
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    18
+UCS Server BIOS Tokens
+                                                                                                    Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name                 Default         M5 Server Supported Platform                           Dependencies
+                                              Value           Values
+
+                         PCIe Slot 9 Link     Auto            Disabled, Auto,  C480 M5
+                         Speed                                GEN1, GEN2, GEN3
+                                                                               C125 M5
+
+                         PCIe Slot 10 Link    Auto            Disabled, Auto,  C480 M5
+                         Speed                                GEN1, GEN2, GEN3
+                                                                               C125 M5
+
+                         PCIe Slot 11 Link    Auto            Disabled, Auto,  C480 M5
+                         Speed                                GEN1, GEN2, GEN3
+                                                                               C125 M5
+
+                         PCIe Slot 12 Link    Auto            Disabled, Auto,  C480 M5
+                         Speed                                GEN1, GEN2, GEN3
+                                                                               C125 M5
+
+                         Front NVME1 Link Auto                Disabled, Auto,  C220 M5, C240 M5
+                         Speed                                GEN1, GEN2, GEN3
+
+                         Front NVME2 Link Auto                Disabled, Auto,  C220 M5, C240 M5
+                         Speed                                GEN1, GEN2, GEN3
+
+                         Rear NVME1 Link Auto                 Disabled, Auto,  C240 M5
+                         Speed                                GEN1, GEN2, GEN3
+
+                         Rear NVME2 Link Auto                 Disabled, Auto,  C240 M5
+                         Speed                                GEN1, GEN2, GEN3
+
+                         Power On Password Disabled           Enabled, Disabled        C220 M5, C240 M5
+                                                                                       C480 M5
+                                                                                       C125 M5
+
+                         P-SATA mode          For S3260       AHCI, LSI SW RAID, B200 M5, B480 M5,
+                                              M5: AHCI        Disabled           C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+                                              For all other
+                                              servers: LSI
+                                              SW RAID
+
+                         Processor Prefetch   Auto            Enabled,                 B200 M5, B480 M5,
+                         Config                               Disabled,Auto            C220 M5, C240 M5,
+                                                                                       C480 M5, S3260 M5,
+                                                                                       C125 M5
+
+                         VGA Priority         OnBoard         OnBoard, OffBoard,       C220 M5, C240 M5
+                                                              OnBoard VGA
+                                                              Disabled
+
+
+
+
+                                                                                  Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                                      19
+                                                                                                            UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform                   Dependencies
+                                                 Value        Values
+
+                       Core Multi                All          All, 1, 2, 3, 4, 5, 6, 7, B200 M5, B480 M5,
+                       Processing                             8, 9, 10, 11, 12, 13, 14, C220 M5, C240 M5,
+                                                              15, 16, 17, 18, 19, 20, C480 M5, S3260 M5
+                                                              21, 22, 23, 24, 25, 26,
+                                                              27, 28
+
+                       USB Port Front            Enabled      Enabled, Disabled     C220 M5, C240 M5
+                                                                                    C480 M5
+
+                       USB Port Rear             Enabled      Enabled, Disabled     C220 M5, C240 M5
+                                                                                    C480 M5
+
+                       USB Port KVM              Enabled      Enabled, Disabled     C220 M5, C240 M5
+                                                                                    C480 M5
+
+                       USB Port VMedia           Enabled      Enabled, Disabled     C480 M5
+
+                       USB Port Internal         Enabled      Enabled, Disabled     C220 M5, C240 M5
+                                                                                    C480 M5
+
+                       USB Port SD Card          Enabled      Enabled, Disabled     C220 M5, C240 M5
+                                                                                    C480 M5
+
+                       Workload                  IO Sensitive Balanced, IO Sensitive B200 M5, B480 M5,
+                       Configuration                                                 C220 M5, C240 M5,
+                                                                                     C480 M5, S3260 M5
+
+                       IMC Interleave            Auto         1-way Interleave,      B200 M5, B480 M5,
+                                                              2-way Interleave, Auto C220 M5, C240 M5,
+                                                                                     C480 M5, S3260 M5
+
+                       Sub NUMA                  Disabled     Enabled, Disabled     B200 M5, B480 M5,
+                       Clustering                                                   C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5
+
+                       KTI Prefetch              Enabled      Enabled, Disabled     B200 M5, B480 M5,
+                                                                                    C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5
+
+                       XPT Prefetch              Disabled     Enabled, Disabled     B200 M5, B480 M5,
+                                                                                    C220 M5, C240 M5,
+                                                                                    C480 M5, S3260 M5
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    20
+UCS Server BIOS Tokens
+                                                                                              Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name               Default     M5 Server Supported Platform                           Dependencies
+                                            Value       Values
+
+                         Energy Performance OS          OS, BIOS                 B200 M5, B480 M5,             If set as OS then
+                         Tuning                                                  C220 M5, C240 M5,             Energy
+                                                                                 C480 M5, S3260 M5             Performance is
+                                                                                                               Balanced
+                                                                                                               Performance.
+                                                                                                               If set as BIOS then,
+                                                                                                               Energy
+                                                                                                               Performance is
+                                                                                                               Performance,
+                                                                                                               Balanced
+                                                                                                               Performance,
+                                                                                                               Balanced Power, or
+                                                                                                               Power.
+
+                         Energy Performance Balanced    Performance,             B200 M5, B480 M5,
+                                            Performance Balanced                 C220 M5, C240 M5,
+                                                        Performance,             C480 M5, S3260 M5
+                                                        Balanced Power,
+                                                        Power
+
+                         Package C State    C0 C1 State No Limit, Auto, C0 C1 B200 M5, B480 M5,
+                         Limit                          State, C2, C6 Non     C220 M5, C240 M5,
+                                                        Retention, C6         C480 M5, S3260 M5
+                                                        Retention
+
+                         LLC Prefetch       Disabled    Enabled, Disabled        B200 M5, B480 M5,
+                                                                                 C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+                         CPU Hardware     HWPM          Disabled, HWPM      B200 M5, B480 M5,                  If set as HWPM
+                         Power Management Native        Native Mode, HWPM C220 M5, C240 M5,                    OOB Mode then,
+                                          Mode          OOB Mode, Native    C480 M5, S3260 M5                  ProcessorEppProfile
+                                                        Mode with no Legacy                                    is set as
+                                                                                                               Performance,
+                                                                                                               Balanced
+                                                                                                               Performance, or
+                                                                                                               Balanced Power,
+                                                                                                               Power.
+
+                         IPV6 PXE Support Disabled      Enabled, Disabled        B200 M5, B480 M5,
+                                                                                 C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5,
+                                                                                 C125 M5
+
+                         Energy Efficient   Disabled    Enabled, Disabled        B200 M5, B480 M5,
+                         Turbo                                                   C220 M5, C240 M5,
+                                                                                 C480 M5, S3260 M5
+
+
+
+
+                                                                            Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                                21
+                                                                                                         UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform                Dependencies
+                                                 Value        Values
+
+                       Autonomous Core           Disabled     Enabled, Disabled    B200 M5, B480 M5,
+                       C-state                                                     C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+                       ProcessorEppProfile Balanced    Performance,                B200 M5, B480 M5,
+                                           Performance Balanced                    C220 M5, C240 M5,
+                                                       Performance,                C480 M5, S3260 M5
+                                                       Balanced Power,
+                                                       Power
+
+                       Patrol Scrub              Enabled      Enabled, Disabled    B200 M5, B480 M5,
+                                                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5
+
+                       Intel Speed Select        Base         Base, Option 1, Option B200 M5, B480 M5,
+                                                              2                      C220 M5, C240 M5,
+                                                                                     C480 M5, S3260 M5
+
+                       BME DMA                   Disabled     Enabled, Disabled    B200 M5, B480 M5,
+                       Mitigation                                                  C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                       CDN Support for           Disabled     Enabled, Disabled    C480 M5
+                       LOMs
+
+                       DCPMM Firmware Disabled                Enabled, Disabled    B200 M5, B480 M5,
+                       Downgrade                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                       Core Performance          Auto         Auto, Disabled       C125 M5
+                       Boost
+
+                       Global C-state            Auto         Auto, Enabled,       C125 M5
+                       Control                                Disabled
+
+                       L1 Stream HW              Auto         Auto, Enabled,       C125 M5
+                       Prefetcher                             Disabled
+
+                       L2 Stream HW              Auto         Auto, Enabled,       C125 M5
+                       Prefetcher                             Disabled
+
+                       AMD Memory                Auto         Auto, None,Channel, C125 M5
+                       Interleaving                           Die, Socket
+
+                       AMD Memory                Auto         Auto, 256 Bytes, 512 C125 M5
+                       Interleaving Size                      Bytes, 1 KB, 2 KB
+
+                       Chipselect                Auto         Auto, Disabled       C125 M5
+                       Interleaving
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    22
+UCS Server BIOS Tokens
+                                                                                            Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name               Default   M5 Server Supported Platform                           Dependencies
+                                            Value     Values
+
+                         Bank Group Swap    Auto      Auto, Enabled,           C125 M5
+                                                      Disabled
+
+                         Determinism Slider Auto      Auto, Power,             C125 M5
+                                                      Performance
+
+                         IOMMU              Auto      Auto, Enabled,           C125 M5
+                                                      Disabled
+
+                         Downcore control   Auto      Auto, TWO (1 + 1), C125 M5
+                                                      TWO (2 + 0), THREE
+                                                      (3 + 0), FOUR (2 + 2),
+                                                      FOUR (4 + 0), SIX (3
+                                                      + 3)
+
+                         SMT Mode           Auto      Auto, Off                C125 M5
+
+                         SVM Mode           Enabled   Enabled, Disabled        C125 M5
+
+                         SMEE               Enabled   Enabled, Disabled        C125 M5
+
+                         PCIe Slot GPU1     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         PCIe Slot GPU2     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         PCIe Slot GPU3     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         PCIe Slot GPU4     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         PCIe Slot GPU5     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         PCIe Slot GPU6     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         PCIe Slot GPU7     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         PCIe Slot GPU8     Enabled   Enabled, Disabled        C480 M5 ML
+                         OptionROM
+
+                         Slot 1 state       Enabled   Enabled, Disabled,       C480 M5 ML
+                                                      UEFI Only, Legacy
+                                                      Only
+
+                         Slot 2 state       Enabled   Enabled, Disabled,       C480 M5 ML
+                                                      UEFI Only, Legacy
+                                                      Only
+
+
+
+
+                                                                          Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                              23
+                                                                                                UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                       Name                      Default      M5 Server Supported Platform       Dependencies
+                                                 Value        Values
+
+                       Slot 3 state              Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 4 state              Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 5 state              Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 6 state              Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 7 state              Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 8 state              Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 9 state              Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 10 state             Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 11 state             Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 12 state             Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 13 state             Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+                       Slot 14 state             Enabled      Enabled, Disabled,   C480 M5 ML
+                                                              UEFI Only, Legacy
+                                                              Only
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    24
+UCS Server BIOS Tokens
+                                                                                                Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                         Name                Default    M5 Server Supported Platform                             Dependencies
+                                             Value      Values
+
+                         Partial Memory      Disabled   Percentage, Value in       B200 M5, B480 M5,
+                         Mirror Mode                    GB, Disabled               C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         Partial Mirror      0.00       0.00 - 50.00 with a        B200 M5, B480 M5,
+                         percentage                     step size of 0.01          C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         Partial Mirror1 Size 0         0 - 65535 with a step      B200 M5, B480 M5,
+                         in GB                          size of 1                  C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         Partial Mirror2 Size 0         0 - 65535 with a step      B200 M5, B480 M5,
+                         in GB                          size of 1                  C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         Partial Mirror3 Size 0         0 - 65535 with a step      B200 M5, B480 M5,
+                         in GB                          size of 1                  C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         Partial Mirror4 Size 0         0 - 65535 with a step      B200 M5, B480 M5,
+                         in GB                          size of 1                  C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         Memory Size Limit 0            0 - 65535 with a step      B200 M5, B480 M5,
+                         in GB                          size of 1                  C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         Network Stack       Enabled    Enabled, Disabled          B200 M5, B480 M5,
+                                                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+                         IPV4 PXE Support Enabled       Enabled, Disabled          B200 M5, B480 M5,
+                                                                                   C220 M5, C240 M5,
+                                                                                   C480 M5, S3260 M5,
+                                                                                   C125 M5
+
+
+
+
+                                                                              Cisco UCS Server BIOS Tokens, Release 4.1
+                                                                                                                                  25
+                                                              UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.1(1a)
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.1
+    26

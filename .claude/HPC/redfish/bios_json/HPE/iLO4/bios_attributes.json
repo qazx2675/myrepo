@@ -1,0 +1,4411 @@
+{
+ "_meta": {
+  "vendor": "HPE",
+  "mgmt_version": "iLO4",
+  "protocol": "json (Redfish: iLO 4 2.30+, /rest/v1 legacy: 2.00+)",
+  "firmware_version": "iLO 4 2.82 (2023-03-02, EOL; 데이터모델 문서는 2.30 기준)",
+  "retrieved": "2026-10-10",
+  "status": "unverified (속성 목록=공식 문서 합집합, ROM 별 레지스트리 미확보; URI 는 verified)",
+  "sources": {
+   "doc_ilo4_2.30": "HPE iLO 4 RESTful API Data Model Reference, HpBios Attributes (https://hewlettpackard.github.io/ilo-rest-api-docs/ilo4/). 이름·type·allowed_values·read_only 는 이 문서에서 스크립트로 파싱(HTML 직접 수신). default 는 문서에 없음.",
+   "fixture_default_config": "stackhpc/proliantutils tests/ilo/ris_sample_outputs.py GET_DEFAULT_CONFIG (iLO4 /rest/v1/systems/1/bios/BaseConfigs 의 default 샘플, 153항목, ROM 미상, 값 \"10\" 같은 숫자 enum 형태). sample_default 에만 사용.",
+   "fixture_current_I36": "동일 파일 GET_BIOS_SETTINGS (AttributeRegistry HpBiosAttributeRegistryI36.1.0.40, iLO4 현재값 샘플). sample_value 에만 사용."
+  },
+  "notes": [
+   "모델/ROM(P89 등) 별로 실제 노출 속성은 다를 수 있음. 문서 합집합.",
+   "SanitizeProc{1,2}Dimm{N} 은 패턴(실제 속성명은 DIMM 번호별)으로 한 건으로 수록.",
+   "iLO4 값 형식: 숫자 enum 이 그대로(예 AsrTimeoutMinutes \"10\"), iLO5+ 는 \"Timeout10\" 처럼 접두어.",
+   "default=null: 문서에 없음. sample_default 는 ROM 불명 fixture 값이라 참고용."
+  ],
+  "attribute_count": 237
+ },
+ "attributes": {
+  "AcpiRootBridgePxm": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enabled, the System ROM reports the proximity relationship between I/O devices and system memory to the operating system. Most operating systems can use this information to efficiently assign memory resources for devices, such as network controllers and storage devices. Additionally, certain I/O devices might not be able to take advantage of I/O handling benefits if their OS drivers are not properly optimized to support this feature. See your operating system and I/O device documentation for more details.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "AcpiSlit": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "The ACPI SLIT (System Locality Information Table) defines the relative access times between processors, memory subsystems, and I/O subsystems. Operating systems that support the SLIT can use this information to improve performance by allocating resources and workloads more efficiently.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "AdjSecPrefetch": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the processor Adjacent Sector Prefetch feature. In some cases, setting this option to disabled can improve performance. Typically, setting this option to enabled provides better performance. Only disable this option after performing application benchmarking to verify improved performance in the environment.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "AdminEmail": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the server administrator’s e-mail address.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "AdminName": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the server administrator’s name text.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "AdminOtherInfo": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the server administrator’s information text.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "AdminPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enter the administrator password to protect the server configuration. When this option is enabled, you are prompted for this password before being allowed to modify the configuration.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": null
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable password"
+  },
+  "AdminPhone": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the server administrator’s phone number text.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "AdvancedMemProtection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AdvancedEcc",
+    "OnlineSpareAdvancedEcc",
+    "MirroredAdvancedEcc"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure additional memory protection with ECC (Error Checking and Correcting). Options and support vary per system. Advanced ECC keeps all installed memory available for use while still protecting the system against all single-bit failures and certain multi-bit failures. Online Spare Memory enables a system to automatically map out a group of memory that is detected to be at an increased risk of receiving uncorrected memory errors based on an advanced analysis of corrected memory errors.  The mapped out memory is automatically replaced by a spare group of memory without interrupting the system. Mirrored Memory provides the maximum protection against uncorrected memory errors that might otherwise result in a system failure. Lockstep Mode with DDDC Support keeps all installed memory available for use while error corrections are performed in cases of multiple DRAM device failures. This support enables protection beyond Advanced ECC. Enabling this option might impact memory performance.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AdvancedEcc",
+    "fixture_current_I36": "AdvancedEcc"
+   },
+   "sample_default": "AdvancedEcc",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "AsrStatus": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure the Automatic Server Recovery option, which enables the system to automatically reboot if the server locks up.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "AsrTimeoutMinutes": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "10",
+    "15",
+    "20",
+    "30",
+    "5"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Automatic Server Recovery is enabled, you can use this option to set the time to wait before rebooting the server in the event of an operating system crash or server lockup.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "10",
+    "fixture_current_I36": "10"
+   },
+   "sample_default": "10",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "AssetTagProtection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Locked",
+    "Unlocked"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to lock Asset Tag information. When set to lock, the Asset Tag is not erased if the default system settings are restored.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Unlocked",
+    "fixture_current_I36": "Unlocked"
+   },
+   "sample_default": "Unlocked",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "AutoPowerOn": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AlwaysPowerOn",
+    "AlwaysPowerOff",
+    "RestoreLastState"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure the server to automatically power on when AC power is applied to the system. By default, the system returns to its previous power state when AC power is restored after an AC power loss. This option causes the system to always returns to the “on” state whenever power is applied, even if the system is in the “off” state when power is lost.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "RestoreLastState"
+   },
+   "sample_default": "RestoreLastState",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "BootMode": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Uefi",
+    "LegacyBios"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the boot mode of the system. Selecting UEFI Mode configures the system to boot Unified Extensible Firmware Interface (UEFI) compatible operating systems. Selecting Legacy BIOS Mode configures the system to boot traditional operating systems in Legacy BIOS compatibility mode. The operating system can only boot in the mode in which it is installed. The following options require booting in UEFI Boot Mode: Secure Boot, IPv6 PXE Boot, boot > 2.2 TB Disks in AHCI SATA Mode, and Dynamic Smart Array RAID.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Uefi",
+    "fixture_current_I36": "Uefi"
+   },
+   "sample_default": "Uefi",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "BootOrderPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "RetryIndefinitely",
+    "AttemptOnce",
+    "ResetAfterFailed"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure how the system attempts to boot devices per the Boot Order when no bootable device is found. If configured to “Retry Boot Order Indefinitely,” the system continuously attempts to process the Boot Order until a bootable device is found. If configured to “Attempt Boot Order Once,” the system attempts to process all items in the Boot Order once. If configured for “Reset After Failed Boot Attempt,” the system attempts to process all items in the Boot Order once, and then reboots the system.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "RetryIndefinitely",
+    "fixture_current_I36": "RetryIndefinitely"
+   },
+   "sample_default": "RetryIndefinitely",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ChannelInterleaving": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can only configure this option if the Power Profile is set to Custom. Use this option to modify the level of interleaving for which the memory system is configured. Typically, higher levels of memory interleaving result in maximum performance. However, reducing the level of interleaving can result in power savings.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "CollabPowerControl": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "For operating systems that support the Processor Clocking Control (PCC) Interface, enabling this option enables the Operating System to request processor frequency changes even if the Power Regulator option on the server configured for Dynamic Power Savings Mode. For Operating Systems that do not support the PCC Interface, or when the Power Regulator Mode is not configured for Dynamic Power Savings Mode, this option has no effect on system operation.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ConsistentDevNaming": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "LomsOnly",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the level of Consistent Device Naming. On supported operating systems, NIC ports are named based on their location in the system. CDN Support for LOMs Only names Embedded NICs and FlexibleLOMs. Existing NIC connections retain their name until reinstalled under the OS environment.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "LomsOnly",
+    "fixture_current_I36": "LomsOnly"
+   },
+   "sample_default": "LomsOnly",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "CustomPostMessage": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter a message to be displayed during system startup.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "DaylightSavingsTime": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option controls the Daylight Savings Time (DST) adjustment to the displayed Local time.  If this option is disabled, the displayed local time will not be adjusted for DST.  If this option is enabled, the displayed local time will be advanced by one hour.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "DcuIpPrefetcher": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the processor DCU IP Prefetcher feature. In some cases, setting this option to disabled can improve performance. In most cases, the default value of enabled provides optimal performance. Only disable this option after performing application benchmarking to verify improved performance in the environment.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "DcuStreamPrefetcher": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the processor DCU Stream Prefetcher feature. In some cases, setting this option to disabled can improve performance. Typically, setting this option to enabled provides better performance. Only disable this option after performing application benchmarking to verify improved performance in your environment.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Dhcpv4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enabled, this option enables obtaining the pre-boot network IPv4 configuration from a DHCP server. Individual settings are not available. When disabled, you must configure static IP address settings individually.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "DynamicPowerCapping": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure when the System ROM executes power calibration during the boot process. In Auto mode, calibration is run the first time the server is booted and is then only run again when the server’s hardware configuration or configuration settings change. When disabled, the calibration does not run and Dynamic Power Capping is not supported. When enabled, the calibration is run on every boot.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "DynamicPowerResponse": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Fast",
+    "Slow"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable the System BIOS to control processor performance and power states depending on the processor workload. You can set the response time for switching between power states. \n- The Fast setting is optimal for most workloads where low latency response to an increase in processor demand is a requirement. \n- The Slow setting is optimal for workloads where a longer latency response to an increase in processing demand is an acceptable trade-off for reduced power consumption. Selecting this option can have a negative effect on performance, depending on the workload.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Fast",
+    "fixture_current_I36": "Fast"
+   },
+   "sample_default": "Fast",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbNicEnable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbSas1Boot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Boot All Targets is selected, the UEFI BIOS will allow all valid boot targets attached to the storage controller to be made available in the UEFI Boot Order List. If Boot No Targets is selected, no boot targets from this storage controller will be made available in the UEFI Boot Order.If Boot Limit to 3 Targets is selected, 3 boot targets attached to the storage controller will be made available in the UEFI Boot Order.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbSasEnable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Enabled"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbSata1Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbSata2Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbVideoConnection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "AlwaysDisabled",
+    "AlwaysEnabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When configured for Auto mode, the external video connection to the embedded video controller is automatically disabled to save power when a monitor is not attached. It is automatically enabled when a monitor is attached, including when the server is operating. When configured for Always Disabled, the external video connection to the embedded video controller is disabled and a monitor connected to this port does not display except during system boot. This can be used for security reasons. When configured for Always Enabled, the external video connection to the embedded video controller is always enabled. This option is only required if a monitor is attached with a monitor detection that does not function properly (making AUTO mode not work properly). Note: This option does not affect Integrated Remote Console video. Also, if you press F9 or F11 during system boot, the configured video connector behavior is overridden and the video console remains enabled. This lets you reconfigure the Embedded Video Connection option even if the video is disabled.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbeddedDiagnostics": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable Embedded Diagnostics functionality. If disabled, you cannot launch Embedded Diagnostics. Enable this option to use the Embedded Diagnostics functionality.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbeddedDiagsMode": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "TextConsole"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure Embedded Diagnostics in Auto or Text Console mode.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbeddedSata": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Ahci",
+    "Raid"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Important: Dynamic Smart Array RAID is not supported when the Boot Mode is configured in Legacy BIOS Mode. Use this option to configure the embedded chipset SATA controller. When selecting the Advanced Host Controller Interface (AHCI) or RAID (if supported), make sure the proper operating system drivers are used for proper operation.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Ahci",
+    "fixture_current_I36": "Ahci"
+   },
+   "sample_default": "Ahci",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbeddedSerialPort": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Com1Irq4",
+    "Com2Irq3",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to assign the logical COM Port address and associated default resources to the selected physical serial port. The operating system can overwrite this setting.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Com1Irq4",
+    "fixture_current_I36": "Com2Irq3"
+   },
+   "sample_default": "Com1Irq4",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbeddedUefiShell": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable the Embedded UEFI Shell. If enabled, you can launch the Embedded UEFI Shell from the pre-boot environment. When enabled, you can add the Embedded UEFI Shell to the UEFI Boot Order if the boot mode is configured for UEFI by selecting the option entitled ‘Add Embedded UEFI Shell to Boot Order’. When disabled, the Embedded UEFI Shell is not available in the pre-boot environment, and you cannot add it to the UEFI boot order. The Embedded UEFI Shell is a pre-boot command line environment that you can use for scripting and running UEFI applications. It provides CLI-based commands to configure the server, update the System ROM and other firmware, and obtain system information and error logs.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmbeddedUserPartition": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control the Embedded User Partition. The Embedded User Partition is a general purpose disk partition on non-volatile flash memory that is embedded on the system board.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EmsConsole": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "Com1Irq4",
+    "Com2Irq3"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure the ACPI serial port settings, which include redirecting the Windows Server Emergency Management console (EMS) through the serial port. If you select this option for redirecting EMS through a network connection, two options are available: \n1) When redirecting EMS through a virtual serial port, select the value (COM1 or COM2) that corresponds to the resources assigned to the Virtual Serial Port in the System Options menu. \n2) When redirecting EMS through a physical serial port, select the value (COM1 or COM2) that corresponds to the resources assigned to the embedded serial port in the System Options menu.\nEMS Console is not supported at 38400 BAUD.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Com1Irq4"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EnergyPerfBias": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "MaxPerf",
+    "BalancedPerf",
+    "BalancedPower",
+    "PowerSavingsMode"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can only configure this option if the Power Profile is set to Custom. Use this option to configure several processor subsystems to optimize the performance and power usage of the processor. Balanced Performance provides optimum power efficiency and is recommended for most environments. Maximum Performance Mode is recommended for environments that require the highest performance and lowest latency but are not sensitive to power consumption. Only use Power Savings Mode in environments that are power sensitive and can accept reduced performance.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "BalancedPerf",
+    "fixture_current_I36": "BalancedPerf"
+   },
+   "sample_default": "BalancedPerf",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "EraseUserDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to erase the user defaults backup.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "No",
+    "fixture_current_I36": "No"
+   },
+   "sample_default": "No",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ExtendedAmbientTemp": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "ASHRAE3",
+    "ASHRAE4"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable the server to operate at higher ambient temperatures than normally supported. These options are only supported with specific hardware configurations. See your server documentation before configuring the server to enable extended ambient temperature support. Improper system operation or damage to hardware components can result from enabling these options in unsupported configurations. Selecting Enabled for 40c Ambient (ASHRAE 3) enables the server to operate in environments with ambient temperatures up to 40 degrees Celsius. Selecting Enabled for 45c Ambient (ASHRAE 4) enables the server to operate in environments with ambient temperatures up to 45 degrees Celsius. Not all servers support both 40c Ambient (ASHRAE 3) and 45c Ambient (ASHRAE 4).",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ExtendedMemTest": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enabled, the system validates memory during the memory initialization process. If uncorrectable memory errors are detected, the memory is mapped out and the failed DIMMs are logged to the Integrated Management Log (IML). Enabling this option can result in a significant increase in system boot time.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "F11BootMenu": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the POST One-Time Boot F11 Prompt.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "FCScanPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "CardConfig"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to change the default Fibre Channel or FCoE policy for scanning for boot targets. When configured for Scan All Targets, each installed FC/FCoE adapter scans all available targets. When configured for Scan Configured Targets Only, the FC/FCoE adapters scan only targets that are preconfigured in the devices settings. This option overrides any individual device settings configured in the device specific setup.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets",
+    "fixture_current_I36": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "FanFailPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Shutdown",
+    "Allow"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure how the server reacts when fans fail resulting in the server not having required fans in operation. When configured for “Shutdown/Halt on Critical Fan Failures,” the server cannot boot or operate when it does not have required fans operating due to one or more fan failures.  When configured for “Allow Operation with Critical Fan Failures,” the server can boot and operate if it does not have required fans operating due to one or more fan failures. It is recommended that you configure the Fan Failure Policy to the default state of “Shutdown/Halt on Critical Fan Failures.” Operating without the required fans operating can result in damage to hardware components.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Shutdown",
+    "fixture_current_I36": "Shutdown"
+   },
+   "sample_default": "Shutdown",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "FanInstallReq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "EnableMessaging",
+    "DisableMessaging"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure how the server reacts when all required fans are not installed. When configured for Enable Messaging, the server displays messages and log events to the Integrated Management Log (IML) when required fans are not installed. The server can still boot and operate. When configured for Disable Messaging, the server does not display messages and log events when required fans are not installed. All indications that the server is operating without required fans are removed. It is recommended that you leave Fan Installation Requirements in the default state of Enable Messaging. Operating without the required fans can result in damage to hardware components.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "EnableMessaging",
+    "fixture_current_I36": "EnableMessaging"
+   },
+   "sample_default": "EnableMessaging",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "FlexLom1Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Enabled"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "HwPrefetcher": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the processor HW prefetch feature. In some cases, setting this option to disabled can improve performance. Typically, setting this option to enabled provides better performance. Only disable this option after performing application benchmarking to verify improved performance in the environment.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelDmiLinkFreq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "DmiGen1"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to force the link speed between the processor and the southbridge to run at slower speeds to save power.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelNicDmaChannels": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the Intel NIC DMA Channels support. This is a NIC acceleration option that runs only on Intel-based NICs.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelPerfMonitoring": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option does not impact performance. When enabled, this option exposes certain chipset devices that can be used with the Intel Performance Monitoring Toolkit.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelProcVtd": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "If enabled, a hypervisor or operating system supporting this option can use hardware capabilities provided by Intel’s Virtualization Technology for Directed I/O. You can leave this set to enabled even if you are not using a hypervisor or an operating system that uses this option.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelQpiFreq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "MinQpiSpeed"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to set the QPI Link frequency to a lower speed. Running at a lower frequency can reduce power consumption, but can also affect system performance. You can only configure this option if two or more CPUs are present and the Power Profile is set to custom.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelQpiLinkEn": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "SingleLink"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure the QPI topology to use fewer links between processors, when available. Changing from the default can reduce QPI bandwidth performance in exchange for less power consumption.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelQpiPowerManagement": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to place the Quick Path Interconnect (QPI) links into a low power state when the links are not being used. This lowers power usage with minimal effect on performance. You can only configure this option if two or more CPUs are present and the Power Profile is set to custom.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelTxt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to modify Intel TXT support.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IntelligentProvisioning": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable the Intelligent Provisioning functionality. When disabled, you are prevented from entering the Intelligent Provisioning environment by pressing F10 during server boot. You must set this option to enabled to use Intelligent Provisioning functionality.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "InternalSDCardSlot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable the Internal SD Card Slot. When set to disabled, the SD card slot is disabled, regardless of whether an SD Card is installed or not. It will not be visible in the pre-boot environment or under the operating system.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "IoNonPostedPrefetching": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Disabling non-posted prefetching for I/O can significantly improve performance for a small set of configurations that require a balanced mix of read/write I/O traffic (for example, configurations that include Infiniband) or multiple x16 devices that utilize max bandwidth of the PCI-e bus. Disabling this feature does, however, have a slight impact on 100% I/O read bandwidth.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Ipv4Address": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to specify the pre-boot network IPv4 address. Enter a static IP addresses using dotted-decimal notation (for example, 127.0.0.1). If DHCP is used (DHCPv4 option is enabled), this setting is unavailable because the value is supplied automatically.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "0.0.0.0",
+    "fixture_current_I36": "0.0.0.0"
+   },
+   "sample_default": "0.0.0.0",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "Ipv4Gateway": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to specify the pre-boot network gateway IPv4 address. Enter a static IP addresses using dotted-decimal notation (for example, 127.0.0.1). If DHCP is used (DHCPv4 option is enabled), this setting is unavailable because the value is supplied automatically.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "0.0.0.0",
+    "fixture_current_I36": "0.0.0.0"
+   },
+   "sample_default": "0.0.0.0",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "Ipv4PrimaryDNS": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to specify the pre-boot network Primary DNS Server IPv4 address. Enter a static IP addresses using dotted-decimal notation (for example, 127.0.0.1). If DHCP is used (DHCPv4 option is enabled), this setting is unavailable because the value is supplied automatically.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "0.0.0.0",
+    "fixture_current_I36": "0.0.0.0"
+   },
+   "sample_default": "0.0.0.0",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "Ipv4SecondaryDNS": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to specify the pre-boot network Secondary DNS Server IPv4 address. Enter a static IP addresses using dotted-decimal notation (for example, 127.0.0.1). If DHCP is used (DHCPv4 option is enabled), this setting is unavailable because the value is supplied automatically.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "0.0.0.0",
+    "fixture_current_I36": "0.0.0.0"
+   },
+   "sample_default": "0.0.0.0",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "Ipv4SubnetMask": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to specify the pre-boot network subnet mask. Enter a static IP addresses using dotted-decimal notation (for example, 255.255.255.0). If DHCP is used (DHCPv4 option is enabled), this setting is unavailable because the value is supplied automatically.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "0.0.0.0",
+    "fixture_current_I36": "0.0.0.0"
+   },
+   "sample_default": "0.0.0.0",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "Ipv6Duid": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "DuidLlt"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control the IPv6 DHCP Unique Identifier (DUID). If configured for Auto, the DUID is set using the server’s Universal Unique Identifier (UUID), or using the DUID-LLT method if the server UUID is not available. If configured for DUID-LLT, the DUID is set based on Link-layer Address Plus Time [DUID-LLT] method. You can configure this option only when Boot Mode is set to UEFI.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "MaxMemBusFreqMHz": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "2133",
+    "1867",
+    "1600",
+    "1333"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can only configure this option if the Power Profile is set to Custom. Use this option to configure the memory system to run memory at a lower maximum speed than that supported by the installed processor and DIMM configuration. Setting this option to Auto configures the system to run memory at the maximum speed supported.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "MaxPcieSpeed": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "MaxSupported",
+    "PcieGen1"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can only configure this option if the Power Profile is set to Custom. If a PCI Express device does not run properly at its optimal speed, lowering the speed at which the device is running can address this issue. This option enables you to lower the maximum PCI Express speed at which the server allows PCI Express devices to operate. You can also use it to address issues with problematic PCI Express devices. Setting this value to Maximum Supported configures the platform to run at the maximum speed supported by the platform or the PCIe device, whichever is lower.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "MaxSupported",
+    "fixture_current_I36": "MaxSupported"
+   },
+   "sample_default": "MaxSupported",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "MemFastTraining": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure memory training on server reboots. When enabled, the platform uses the previously saved memory training parameters determined from the last cold boot of the server, which improves the server boot time. When disabled, the platform performs a full-memory training on every server reboot.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "MinProcIdlePkgState": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "C6Retention",
+    "C6NonRetention",
+    "NoState"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can configure this option only if the Power Profile is set to Custom. Use this option to select the lowest idle package power state (C-state) of the processor. The processor automatically transitions into package C-states based on the Core C-states in which cores on the processor have transitioned. The higher the package C-state, the lower the power usage of that idle package state. (Package C6 (retention) is the lowest power idle package state supported by the processor).",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "C6Retention",
+    "fixture_current_I36": "C6Retention"
+   },
+   "sample_default": "C6Retention",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "MinProcIdlePower": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "C6",
+    "C3",
+    "C1E",
+    "NoCStates"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can only configure this option if Power Profile is set to Custom. Use this option to select the lowest idle power state (C-state) of the processor that the operating system uses. The higher the C-state, the lower the power usage of that idle state. (C6 is the lowest power idle state supported by the processor).",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "C6",
+    "fixture_current_I36": "C6"
+   },
+   "sample_default": "C6",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "MixedPowerSupplyReporting": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enabled, the server logs a message that a mixed power supply configuration is present. When disabled, the server no longer logs messages that a mixed power supply configuration is present.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NetworkBootRetry": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the Network Boot Retry setting. By default, the System BIOS attempts to boot the Network device (such as a PXE device) up to 20 times before moving to the next IPL device.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "NetworkBoot",
+    "fixture_current_I36": "NetworkBoot"
+   },
+   "sample_default": "NetworkBoot",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot10": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot11": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot12": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Disabled"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Disabled"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Disabled"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Disabled"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NicBoot9": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable network boot (PXE, iSCSI, or FCoE) for the selected NIC. You might need to configure the NIC firmware for the boot option to be active.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NmiDebugButton": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to generate an NMI via the NMI button/jumper.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NodeInterleaving": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the NUMA architecture properties for the system. All operating system platforms support NUMA architectures. In most cases, disable the Node Interleaving option for optimum performance. When this option is enabled, memory addresses are interleaved across the memory installed for each processor and workloads might experience improved performance. Node Interleaving cannot be enabled when NVDIMMs are present in the system.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NumaGroupSizeOpt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Clustered",
+    "Flat"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure how the System ROM reports the size of a NUMA node (number of logical processors), which assists the Operating System in grouping processors for application use (referred to as Kgroups). The default setting of Clustered provides better performance due to the resulting groups being optimized along NUMA boundaries. However, some applications might not be optimized to take advantage of processors spanning multiple groups. In such cases, selecting the Flat option might be necessary in order for those applications to utilize more logical processors.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Clustered",
+    "fixture_current_I36": "Clustered"
+   },
+   "sample_default": "Clustered",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NvDimmNBackupPowerPolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "WaitForBackupPower",
+    "BootWithoutBackupPower"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "If sufficient battery backup power for the installed NVDIMMs of type NVDIMM-N is not available, this option allows the batteries to charge before boot. If this option is configured for ‘Continue Boot without Backup Power’, the server boots with or without sufficient battery backup power. In this case, if sufficient battery backup power is not available, the installed NVDIMMs of type NVDIMM-N are NOT be used by the operating system as persistent storage or as system memory.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NvDimmNForcedRecovery": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When this option is enabled, all NVDIMM-N devices that are mapped out of the system (not available to the operating system) due to uncorrectable errors are mapped back during the next boot. This option only takes effect on the next reboot. If an NVDIMM-N experiences any additional uncorrectable errors, it is mapped out again. This option can be utilized to assist in recovery of data on an NVDIMM-N that experienced an error but might be functional again.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NvDimmNIntegrityChecking": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When this option is enabled, the NVDIMM-N is checked during system boot to determine the integrity of the data stored on the NVDIMM-N. If any data cannot be read properly, the NVDIMM-N is mapped out (not available to the operating system). If this option is disabled, an NVDIMM-N that cannot read data or has corrupt data might result in uncorrectable errors that cause machine checks or system resets. Enable this option to ensure any NVDIMM-Ns that are visible to the operating system operate appropriately. Enabling this option, in addition to each installed NVDIMM-N, results in an increased boot time of several seconds.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NvDimmNMemFunctionality": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option enables or disables NVDIMM-N functionality (including backing up the contents of the memory to flash on power down/reset).  If this option is Disabled, then the the operating system does NOT use NVDIMM-Ns as persistent storage and system memory.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Enabled"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NvDimmNMemInterleaving": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option controls whether the NVDIMM-Ns installed on a particular processor are interleaved with each other in the memory map. This option does NOT impact the interleaving of standard DIMMs, and interleaving is never enabled across NVDIMM-Ns and standard DIMMs. NVDIMM-Ns installed on different processors are never interleaved together. If this option is changed, then all installed NVDIMM-Ns must be sanitized.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "NvDimmNSanitizePolicy": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "SanitizeAndRebootSystem",
+    "SanitizeAndShutdownSystem",
+    "SanitizeAndBootToFirmwareUI"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option is used to sanitize/erase all user data and error status data saved in the selected NVDIMM-Ns. Selected NVDIMM-Ns are sanitized/erased on the next reboot. This process is required BEFORE the NVDIMM-N Memory Interleaving option can be modified. An NVDIMM-N must be sanitized/erased when it is initially installed in the system or installed in a different DIMM slot on the system. In addition, an NVDIMM-N can be recovered to normal operation if it has received an Uncorrectable Memory Error, a Backup Error, a Restore Error, or an Arming Error (if the NVDIMM hardware is functional). The largest group of NVDIMM-Ns selected are sanitized/erased. For example, if ‘Sanitize/Erase all NVDIMM-N on Processor 1’ is Enabled and ‘Sanitize/Erase Processor 1 DIMM 8’ is Disabled, all NVDIMM-Ns on Processor 1 are sanitized/erased, including Processor 1 DIMM 8. Three policies control the action of the system after NVDIMM-Ns are sanitized/erased. The options are to power off the system after sanitizing/erasing NVDIMMs, to allow the system to boot to the operating system after sanitizing/erasing NVDIMMs, or to boot to the System Utilities after sanitizing/erasing NVDIMMs.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "OldAdminPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "In order to set a new Admin Password, the previous Admin Password must be specified.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": null
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable password"
+  },
+  "OldPowerOnPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "In order to set a new Power On Password, the previous Power On Password must be specified.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": null
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable password"
+  },
+  "PciBusPadding": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the default PCI Bus setting where each expansion slot is provided with an extra PCI Bus number. By default, the System BIOS pads one PCI bus per expansion slot so that expansion cards with PCI-PCI bridges do not effect current bus numbering schemes. Disabling this option works around issues with certain expansion cards. It is recommended that you do not disable this option unless a specific issue is encountered.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PciSlot1Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PciSlot2Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PciSlot3Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PciSlot4Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PciSlot5Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PciSlot6Enable": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to enable or disable PCI devices.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PcieExpressEcrcSupport": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control the PCI Express End-to-End CRC (ECRC) policy for all installed PCIe Devices. When set to enabled, a PCI Express device that supports this option can take advantage of end-to-end CRC checking to increase the reliability of data transfers.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PostF1Prompt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Delayed20Sec",
+    "Delayed2Sec",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure the system to display the F1 key in the server POST screen. If an error is encountered, you can press the F1 key to continue with the server power-up sequence. Select one of the following options: \nDelayed 20 Seconds - If an error occurs, the system pauses for 20 seconds at the F1 prompt and continues to boot the OS. \nDelayed 2 Seconds - If an error occurs, the system pauses for 2 seconds at the F1 prompt and continues to boot the OS. \nDisabled - If an error occurs, the system bypasses the F1 prompt and continues to boot the OS. \nNote: For critical errors, the system pauses for 20 seconds at the F1 prompt, regardless of how this option is configured.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Delayed20Sec",
+    "fixture_current_I36": "Delayed20Sec"
+   },
+   "sample_default": "Delayed20Sec",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PowerButton": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Disabling this option disables the momentary power button functionality. This option does not affect the four-second power button override or the remote power control functionality.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PowerOnDelay": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "None",
+    "Random",
+    "15Sec",
+    "30Sec",
+    "45Sec",
+    "60Sec"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to delay the server from turning on for a specified time. Pressing the power button (using the Virtual Power Button), or Wake-ON LAN events, and RTC Wake-up events override the delay and immediately turn on the server. This enables staggering when servers power-up after a power loss to prevent power usage spikes.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "None",
+    "fixture_current_I36": "None"
+   },
+   "sample_default": "None",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PowerOnLogo": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable the display of the logo during system boot. This option does not affect system boot times.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PowerOnPassword": {
+   "type": "Password",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "When the server powers on, a prompt is displayed to enter a password before continuing the boot process. In the event of an ASR reboot, the Power-On Password is bypassed and the server boots normally.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": null
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable password"
+  },
+  "PowerProfile": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "BalancedPowerPerf",
+    "MinPower",
+    "MaxPerf",
+    "Custom"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": null,
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "BalancedPowerPerf",
+    "fixture_current_I36": "BalancedPowerPerf"
+   },
+   "sample_default": "BalancedPowerPerf",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PowerRegulator": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "DynamicPowerSavings",
+    "StaticLowPower",
+    "StaticHighPerf",
+    "OsControl"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can only configure this option if the Power Profile is set to Custom. Use this option to configure the following Power Regulator support: \n- Dynamic Power Savings Mode: Automatically varies processor speed and power usage based on processor utilization. Allows for the reduction of overall power consumption with little or no impact on performance. Does not require OS support. \n- Static Low Power Mode: Reduces processor speed and power usage. Guarantees a lower maximum power usage for the system. Performance impacts are greater for environments with higher processor utilization. \n- Static High Performance Mode: Processors run in their maximum power/performance state at all times regardless of the OS power management policy. \n- OS Control Mode: Processors run in their maximum power/performance state at all times unless the OS enables a power management policy.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "DynamicPowerSavings",
+    "fixture_current_I36": "DynamicPowerSavings"
+   },
+   "sample_default": "DynamicPowerSavings",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "PreBootNetwork": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "EmbNic",
+    "FlexLom1",
+    "PciSlot1",
+    "PciSlot2",
+    "PciSlot3",
+    "PciSlot4",
+    "PciSlot5",
+    "PciSlot6"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the network interface used for pre-boot network connections. If the selected NIC has more than one port, only the first port with a network connection is used. When the selection is Auto, the system uses the first available port with a network connection.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ProcAes": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable the Advanced Encryption Standard Instruction Set (AES-NI) in the processor.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ProcCoreDisable": {
+   "type": "Integer",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to disable processor cores using Intel’s Core Multi-Processing (CMP) Technology. This option disables a specific number of the cores on each physical processor, which can reduce processor power usage and can improve performance for some applications, such as those that benefit from higher performance cores rather than more processing cores. This option also addresses issues with software that is licensed on a per-core basis. Enter a value equal to the number of enabled cores per socket.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": 0,
+    "fixture_current_I36": 0
+   },
+   "sample_default": 0,
+   "doc_kind_raw": "PATCHable integer"
+  },
+  "ProcHyperthreading": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable Intel Hyperthreading. When enabled, each physical processor core operates as two logical processor cores. When disabled, each physical processor core operates as only one logical processor core. Enabling this option can improve overall performance for applications that benefit from a higher processor core count.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ProcNoExecute": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to protect your system against malicious code and viruses. Memory is marked as non-executable unless the location contains executable code. Some viruses attempt to insert and execute code from non-executable memory locations. Attacks are intercepted and an exception is generated. Your operating system must support this option. Certain operating systems (including Windows 2012 and Windows 2012 R2) require this option to be enabled and override this setting.  See your operating system documentation for more details.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ProcTurbo": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Turbo Boost Technology enables the processor to transition to a higher frequency than the processor’s rated speed if the processor has available power and is within temperature specifications. Disabling this option reduces power usage and also reduces the system’s maximum achievable performance under some workloads.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ProcVirtualization": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enabled, a hypervisor or operating system supporting this option can use hardware capabilities provided by Intel’s Virtualization Technology. Some hypervisors require that you enable Virtualization Technology. You can leave this set to enabled even if you are not using a hypervisor or an operating system that uses this option.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ProcX2Apic": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "ForceEnabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "+x2APIC support enables operating systems to run more efficiently on high core count configurations. It also optimizes interrupt distribution in virtualized environments. In most cases, set this option to enabled. This configures the operating system to optionally enable x2APIC support when it loads. Some older hypervisors and operating systems might have issues with optional x2APIC support, in which case disabling x2APIC might be necessary to address those issues. Additionally, some hypervisors and operating systems do not use x2APIC unless this option is set to Force Enabled prior to booting.  The Force Enabled option also causes the Intel® VT-d setting to be set to enabled.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ProductId": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to set the system product ID. This value must always match the product ID sticker located on the chassis.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "727021-B21"
+   },
+   "doc_kind_raw": "PATCHable string"
+  },
+  "QpiBandwidthOpt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Balanced",
+    "OptimizedForIo"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "The QPI link between two processors provides the best performance for most applications. The Balanced option provides the best performance for most applications and benchmarks. The optimized for I/O option can increase bandwidth from I/O devices, such as GPUs that rely on direct access to system memory. This option is only configurable if two or more CPUs are present.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Balanced",
+    "fixture_current_I36": "Balanced"
+   },
+   "sample_default": "Balanced",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "QpiHomeSnoopOpt": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "DirectoryOsbEnabled",
+    "DirectoryOsbDisabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option allows the disabling of the Directory and Opportunistic Snoop Broadcast (OSB) functionality that is available when the QPI snoop mode is set to Home Snoop. Directory and OSB provides better memory latency and increased bandwidth and is recommended for the vast majority of workloads that benefit from Home Snoop.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "QpiSnoopConfig": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Standard",
+    "EarlySnoop",
+    "ClusterOnDie"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the snoop mode used by the processor and QPI bus. Changing this option can have an impact on memory performance. The Home Snoop option provides high-memory bandwidth in an average NUMA environment. The Cluster on Die option can provide increased memory bandwidth in highly optimized NUMA workloads. The Early Snoop option can decrease memory latency, but can also result in lower overall bandwidth as compared to the other modes.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Standard",
+    "fixture_current_I36": "Standard"
+   },
+   "sample_default": "Standard",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "RedundantPowerSupply": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "BalancedMode",
+    "HighEfficiencyAuto",
+    "HighEfficiencyOddStandby",
+    "HighEfficiencyEvenStandby"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure how the system handles redundant power supply configurations. Balanced Mode shares the power delivery equally between all installed power supplies. All High Efficiency Mode options provide the most power efficient operation with redundant power supplies by keeping half of the power supplies in standby mode at lower power usage levels. The High Efficiency Mode options enable the system to select which power supply to place in standby. Auto enables the system to select between the odd or even power supply based on a semi-random distribution within a group of systems.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "BalancedMode"
+   },
+   "sample_default": "BalancedMode",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "RemovableFlashBootSeq": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "InternalSdCardFirst",
+    "InternalKeysFirst",
+    "ExternalKeysFirst"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enumerating boot devices, use this option to select which USB or SD Card devices you want to search for first. You can select whether the system boots to external USB drive keys, internal USB drive keys, or the internal SD card slot. This option does not override the device boot order in the Standard Boot Order (IPL) option. You can only configure this option when Boot Mode is set to Legacy BIOS.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "ExternalKeysFirst",
+    "fixture_current_I36": "ExternalKeysFirst"
+   },
+   "sample_default": "ExternalKeysFirst",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "RestoreDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to reset all configuration settings to their default values. Changes that have been made might be lost. You need to reboot the system for changes to take effect.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "No",
+    "fixture_current_I36": "No"
+   },
+   "sample_default": "No",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "RestoreManufacturingDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to reset all configuration settings to their default manufacturing values. Changes that have been made might be lost. If Secure Boot is enabled, related security settings might be lost. You need to reboot the system for changes to take effect.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "No",
+    "fixture_current_I36": "No"
+   },
+   "sample_default": "No",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "RomSelection": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "CurrentRom",
+    "BackupRom"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to revert the server to a previous BIOS ROM image. The backup image is the BIOS ROM image that was used prior to the last flash event.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "CurrentRom"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SanitizeAllNvDimmN": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Enabled, all user data in ALL NVDIMM-Ns in the system is erased on the next reboot.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SanitizeProc1NvDimmN": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Enabled, all user data in NVDIMM-Ns installed on the selected processor is erased on the next reboot.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SanitizeProc2NvDimmN": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Enabled, all user data in NVDIMM-Ns installed on the selected processor is erased on the next reboot.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SanitizeProc{1,2}Dimm{N}": {
+   "type": "Enumeration",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "When Enabled, all user data in the selected NVDIMM-N is erased on the next reboot.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SataSecureErase": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control whether Secure Erase functionality is supported. When enabled, the Security Freeze Lock command is not sent to supported SATA hard drives, enabling Secure erase to function (the Secure Erase command is supported). This option is only supported when the SATA controller is in AHCI mode. Secure Erase only operates with hard drives that support the Secure Erase command.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SaveUserDefaults": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to save the current settings as the system defaults.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "No",
+    "fixture_current_I36": "No"
+   },
+   "sample_default": "No",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SecureBoot": {
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "seen_in": [
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled"
+   },
+   "sample_default": "Disabled"
+  },
+  "SecureBootStatus": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": true,
+   "description": "The current state of Secure Boot configuration.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "read only enumeration"
+  },
+  "SerialConsoleBaudRate": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "9600",
+    "19200",
+    "38400",
+    "57600",
+    "115200"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This is the transfer rate at which data is transmitted through the serial port.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "115200",
+    "fixture_current_I36": "115200"
+   },
+   "sample_default": "115200",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SerialConsoleEmulation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Vt100",
+    "Ansi",
+    "Vt100Plus"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the emulation mode type. The option you select depends on the emulation you want to use in your serial terminal program (such as Hyperterminal or Putty). The BIOS emulation mode must match the mode you select in your terminal program.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Vt100Plus",
+    "fixture_current_I36": "Vt100Plus"
+   },
+   "sample_default": "Vt100Plus",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SerialConsolePort": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "Disabled",
+    "Physical",
+    "Virtual"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to re-direct video and keystrokes through the serial port to OS boot. This option can interfere with non-terminal devices attached to the serial port. In such cases, set this option to Disabled. This option is only supported in English language mode when running in the UEFI pre-boot System Utilities.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "SerialNumber": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to set the system serial number. This value must always match the serial number sticker located on the chassis.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "SGH449WNL3"
+   },
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServerAssetTag": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to modify the Server Asset Tag text line.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServerName": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to modify the server name text line.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServerOtherInfo": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to modify the Other Server text line.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServerPrimaryOs": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to modify the Server Primary OS text line.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServiceEmail": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the server service contact e-mail address.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServiceName": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the server service contact name text.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServiceOtherInfo": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the other server service contact information text.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "ServicePhone": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Enter the server service contact phone number text.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "Slot1NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot1StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Boot All Targets is selected, the UEFI BIOS will allow all valid boot targets attached to the storage controller to be made available in the UEFI Boot Order List. If Boot No Targets is selected, no boot targets from this storage controller will be made available in the UEFI Boot Order.If Boot Limit to 3 Targets is selected, 3 boot targets attached to the storage controller will be made available in the UEFI Boot Order.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot2StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Boot All Targets is selected, the UEFI BIOS will allow all valid boot targets attached to the storage controller to be made available in the UEFI Boot Order List. If Boot No Targets is selected, no boot targets from this storage controller will be made available in the UEFI Boot Order.If Boot Limit to 3 Targets is selected, 3 boot targets attached to the storage controller will be made available in the UEFI Boot Order.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot3StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Boot All Targets is selected, the UEFI BIOS will allow all valid boot targets attached to the storage controller to be made available in the UEFI Boot Order List. If Boot No Targets is selected, no boot targets from this storage controller will be made available in the UEFI Boot Order.If Boot Limit to 3 Targets is selected, 3 boot targets attached to the storage controller will be made available in the UEFI Boot Order.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot4StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Boot All Targets is selected, the UEFI BIOS will allow all valid boot targets attached to the storage controller to be made available in the UEFI Boot Order List. If Boot No Targets is selected, no boot targets from this storage controller will be made available in the UEFI Boot Order.If Boot Limit to 3 Targets is selected, 3 boot targets attached to the storage controller will be made available in the UEFI Boot Order.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot5StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Boot All Targets is selected, the UEFI BIOS will allow all valid boot targets attached to the storage controller to be made available in the UEFI Boot Order List. If Boot No Targets is selected, no boot targets from this storage controller will be made available in the UEFI Boot Order.If Boot Limit to 3 Targets is selected, 3 boot targets attached to the storage controller will be made available in the UEFI Boot Order.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot1": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot2": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot3": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot4": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot5": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot6": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot7": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6NicBoot8": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NetworkBoot",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable/disable UEFI network boot for the selected NIC card.This option applies only for PXE Boot and iSCSI Software Initiator boot attempts in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Slot6StorageBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "AllTargets",
+    "ThreeTargets",
+    "NoTargets"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When Boot All Targets is selected, the UEFI BIOS will allow all valid boot targets attached to the storage controller to be made available in the UEFI Boot Order List. If Boot No Targets is selected, no boot targets from this storage controller will be made available in the UEFI Boot Order.If Boot Limit to 3 Targets is selected, 3 boot targets attached to the storage controller will be made available in the UEFI Boot Order.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "AllTargets"
+   },
+   "sample_default": "AllTargets",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Sriov": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "If enabled, SR-IOV support enables a hypervisor to create virtual instances of a PCI-express device, potentially increasing performance. If enabled, the BIOS allocates additional resources to PCI-express devices. You can leave this option set to enabled even if you are not using a hypervisor.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TcmOperation": {
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "seen_in": [
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disable"
+   },
+   "sample_default": "Disable"
+  },
+  "TcmVisibility": {
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "seen_in": [
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Visible"
+   },
+   "sample_default": "Visible"
+  },
+  "ThermalConfig": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "OptimalCooling",
+    "IncreasedCooling",
+    "MaxCooling"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the fan cooling solution for the system. Optimal Cooling provides the most efficient solution by configuring fan speeds to the minimum required speedto provide adequate cooling. Increased Cooling runs fans at higher speeds to provide additional cooling. Select Increased Cooling when third-party storage controllers are cabled to the embedded hard drive cage, or if the system is experiencing thermal issues that cannot be resolved. Maximum cooling provides the maximum cooling available on this platform.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "OptimalCooling",
+    "fixture_current_I36": "OptimalCooling"
+   },
+   "sample_default": "OptimalCooling",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "ThermalShutdown": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control the reaction of the system to caution level thermal events. When disabled, the System Management Firmware ignores thermal events and the system immediately powers off in data-destructive situations.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TimeFormat": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Utc",
+    "Local"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option controls how the system time is stored in the hardware Real Time Clock (RTC). When configured to ‘Coordinated Universal Time (UTC)’ (default) the local time is calculated from the associated time zone value. When configured to ‘Local Time’ the time is stored directly as local time and the time zone option does not have meaning. Setting this option to ‘Local Time’ works around an issue when using Microsoft Windows operating systems in Legacy Boot Mode where the time is set incorrectly.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_current_I36": "Utc"
+   },
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TimeZone": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "UtcM12",
+    "UtcM11",
+    "UtcM10",
+    "UtcM9",
+    "UtcM8",
+    "UtcM7",
+    "UtcM6",
+    "UtcM5",
+    "UtcM430",
+    "UtcM4",
+    "UtcM330",
+    "UtcM3",
+    "UtcM2",
+    "UtcM1",
+    "Utc0",
+    "UtcP1",
+    "UtcP2",
+    "UtcP3",
+    "UtcP330",
+    "UtcP4",
+    "UtcP430",
+    "UtcP5",
+    "UtcP530",
+    "UtcP545",
+    "UtcP6",
+    "UtcP630",
+    "UtcP7",
+    "UtcP8",
+    "UtcP9",
+    "UtcP930",
+    "UtcP10",
+    "UtcP11",
+    "UtcP12",
+    "UtcP13",
+    "UtcP14",
+    "Unspecified"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "This option displays the current time zone setting for the system.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "UtcM7",
+    "fixture_current_I36": "Unspecified"
+   },
+   "sample_default": "UtcM7",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TmOperation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoAction",
+    "Enable",
+    "Disable",
+    "Clear"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable the Trusted Module ™ and BIOS secure startup. When enabled, the TM is fully functional. When disabled, the TM is visible; however, functionality is limited. This option also enables you to reset the TM to factory settings, which clears any assigned passwords, keys, or ownership data. Clearing the TM can prevent the server from booting to a TM-aware operating system if the operating system uses TM’s measurements.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TmVisibility": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Hidden",
+    "Visible"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to hide the Trusted Module ™ from the operating system. When the TM is hidden, BIOS secure startup is disabled, and the TM does not respond to any commands. Intended use is for removing the TM option from the system without removing the actual hardware.",
+   "seen_in": [
+    "doc_ilo4_2.30"
+   ],
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Tpm2Operation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoAction",
+    "Clear"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to perform a clear operation on the TPM. Clearing the TPM can prevent the server from booting to a TPM-aware operating system if the operating system uses TPM’s measurements. TPM 2.0 is supported only in UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "NoAction",
+    "fixture_current_I36": "NoAction"
+   },
+   "sample_default": "NoAction",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Tpm2Ppi": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control Physical Presence Interface for TPM 2.0 operation. This option is used to control whether the user is prompted during the next boot after a TPM 2.0 operation request was initiated by the Operating System. When TPM 2.0 Physical Presence Confirmation is Enabled, the system will prompt for confirmation during POST. When TPM 2.0 Physical Presence Confirmation is Disabled, the system will not prompt for confirmation during POST.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "Tpm2Visibility": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Hidden",
+    "Visible"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to hide TPM from the operating system. When the TPM is hidden, BIOS secure startup is disabled, and the TPM does not respond to any commands. Intended use is for removing the TPM option from the system without removing the actual hardware. TPM 2.0 is only supported in UEFI boot mode.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Visible",
+    "fixture_current_I36": "Visible"
+   },
+   "sample_default": "Visible",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TpmBinding": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to bind the TPM module to the system board by using a value that is unique to each server board. This option ensures that the TPM measurement in PCR[0] is unique for every server regardless of hardware and firmware configuration.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TpmOperation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoAction",
+    "Enable",
+    "Disable",
+    "Clear"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable the Trusted Platform Module and BIOS secure startup. When enabled, the TPM is fully functional. When disabled, the TPM is visible; however, functionality is limited. This option also enables you to reset the TPM to factory settings, which clears any assigned passwords, keys, or ownership data. Clearing the TPM can prevent the server from booting to a TPM-aware operating system if the operating system uses TPM’s measurements.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disable"
+   },
+   "sample_default": "Disable",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TpmState": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NotPresent",
+    "PresentDisabled",
+    "PresentEnabled"
+   ],
+   "default": null,
+   "read_only": true,
+   "description": "Current TPM device state: Not Present; Present and Disabled; Present and Enabled.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "NotPresent",
+    "fixture_current_I36": "NotPresent"
+   },
+   "sample_default": "NotPresent",
+   "doc_kind_raw": "read only enumeration"
+  },
+  "TpmType": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "NoTpm",
+    "Tpm12",
+    "Tpm20",
+    "Tm10"
+   ],
+   "default": null,
+   "read_only": true,
+   "description": "Current TPM device type.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "NoTpm",
+    "fixture_current_I36": "NoTpm"
+   },
+   "sample_default": "NoTpm",
+   "doc_kind_raw": "read only enumeration"
+  },
+  "TpmUefiOpromMeasuring": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable measuring the UEFI PCI option ROMs. Disabling this option skips measuring the UEFI PCI option ROMs.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "TpmVisibility": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Hidden",
+    "Visible"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to hide TPM from the operating system. When the TPM is hidden, BIOS secure startup is disabled, and the TPM does not respond to any commands. Intended use is for removing the TPM option from the system without removing the actual hardware.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Visible",
+    "fixture_current_I36": "Visible"
+   },
+   "sample_default": "Visible",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UefiOptimizedBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enabled, the System BIOS boots using native UEFI graphics drivers. When disabled, the System BIOS boots using INT10 legacy video support. You cannot disable this option if Secure Boot is enabled. You can only configure this option if Boot Mode is configured to UEFI. \nSet this option to disabled for compatibility with Microsoft Windows 2008 and Windows 2008 R2 operating systems on a system configured for UEFI Boot Mode. \nSet this option to enabled for compatibility with VMWare ESXi operating systems on a system configured for UEFI Boot Mode.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UefiPxeBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "IPv4ThenIPv6",
+    "IPv4",
+    "IPv6",
+    "IPv6ThenIPv4"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control the ordering of network boot targets in the UEFI Boot Order list.\nIf configured for Auto, the order of the existing network boot targets is not modified in the UEFI Boot Order list. New network boot targets are added to the end of the list using the default policy of the System ROM.\nIf configured for IPv4 then IPv6, the UEFI  Boot Order is modified to list all existing IPv4 targets before any existing IPv6 targets. New network boot targets will have IPv4 targets added before IPv6 targets. \nIf configured for IPv6 then IPv4, the UEFI Boot Order is modified to list all existing IPv6 targets before any existing IPv4 targets. \nIf configured for IPv4, all existing IPv6 network boot targets are removed in the UEFI Boot Order. No new IPv6 network boot targets are added to the list. \nIf configured for IPv6, all existing IPv4 network boot targets in the UEFI Boot Order are removed. No new IPv4 network boot targets are added to the list. \nWhen modifying these settings, changes to the UEFI Boot Order are not reflected until you reboot the system. You can configure this option only when Boot Mode is set to UEFI.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UefiShellBootOrder": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "When enabled, this option adds the Embedded UEFI Shell as an entry in the UEFI Boot Order list. This option is only available when the Boot Mode is configured as UEFI, and the Embedded UEFI Shell is enabled.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UefiShellStartup": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable automatic execution of the Embedded UEFI Shell startup script. You can store the script file on local media or access it from a network location. The script file must be named “startup.nsh” and must be placed on local media or a network location accessible to the server.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UefiShellStartupLocation": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "AttachedMedia",
+    "NetworkLocation"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to select the location of the Embedded UEFI Shell startup script. For the ‘File Systems on Attached Media’ option, you must name the script file “startup.nsh” and place it on a UEFI accessible local file system, such as a FAT32 partition on a USB disk or HDD. For the ‘Network Location’ option, the file must end with a .nsh extension, and must be placed at an HTTP or FTP location accessible to the server. When you select the ‘Auto’ option, the system attempts to retrieve the startup script from the network location first, followed by locally attached media.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UefiShellStartupUrl": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure a network URL to a UEFI Shell startup script. URLs in HTTP or FTP formats are accepted using either an IPv4 server address or host name. For example, this can be http://192.168.0.0/file/file.nsh or http://example.com/file/file.nsh. IPv6 server addresses are not supported. The file must end with an .nsh extension. When configured, the Embedded UEFI Shell attempts to load and execute the startup script from the network location pointed to by this URL.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "UrlBootFile": {
+   "type": "String",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure a network URL to a bootable ISO or EFI file. URLs in HTTP or FTP formats are accepted using either an IPv4 server address or host name. For example, this can be http://192.168.0.0/file/image.iso or http://example.com/file/image.efi. IPv6 server addresses are not supported. When configured, this URL is listed as a boot option in the UEFI boot menu. Selecting the boot option downloads the file to the system memory and attempts booting from it. This setting requires configuring the pre-boot network settings to access the URL location. It is supported only in UEFI boot mode. \nNote: Booting from an ISO file is limited to files that enable the system to boot a preliminary OS environment (such as WinPE or a mini Linux) where further installation can proceed over an OS network connection. ISO files that contain the full OS installation media are not supported.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "",
+    "fixture_current_I36": ""
+   },
+   "sample_default": "",
+   "doc_kind_raw": "PATCHable string"
+  },
+  "Usb3Mode": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Auto",
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure the operating mode of the USB 3.0 ports. If set to Auto Mode, USB 3.0 capable devices operate at USB 2.0 speeds in the pre-boot environment and during boot. When a USB 3.0 capable OS USB driver loads, USB 3.0 devices transition to USB 3.0 speeds. This mode provides compatibility with operating systems that do not support USB 3.0, while enabling USB 3.0 devices to operate at USB 3.0 speeds with current operating systems. If enabled, USB 3.0 capable devices operate at USB 3.0 speeds at all times (including the pre-boot environment) when in UEFI Boot Mode. Do not use this mode with operating systems that do not support USB 3.0. If operating in Legacy Boot Mode, the USB 3.0 ports do not function in the pre-boot environment, and are not bootable. If set to disabled, USB 3.0 capable devices function at USB 2.0 speeds at all times.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Auto",
+    "fixture_current_I36": "Auto"
+   },
+   "sample_default": "Auto",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UsbBoot": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Set this option to disabled to prevent the system from booting to any USB devices connected to the server. This includes preventing boot to virtual media devices and the embedded SD or uSD card slot (if supported).",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Enabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UsbControl": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "UsbEnabled",
+    "ExternalUsbDisabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "USB Enabled: Enables all USB ports and embedded devices. External USB Ports Disabled: Disables only external USB ports.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "UsbEnabled",
+    "fixture_current_I36": "UsbEnabled"
+   },
+   "sample_default": "UsbEnabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "UtilityLang": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "English",
+    "Japanese",
+    "Chinese"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Select this option to adjust the current language for the system.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "English",
+    "fixture_current_I36": "English"
+   },
+   "sample_default": "English",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "VideoOptions": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "OptionalVideoOnly",
+    "BothVideoEnabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to configure video settings in the system. When set to Add-in Video Enabled, Embedded Video Disabled, the system only displays video to the first discovered add-in video controller. When set to Both Add-in and Embedded Video Enabled, the system displays video to both the embedded and the first discovered add-in video controllers. In both modes, early system startup video is displayed to the embedded video controller.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "BothVideoEnabled",
+    "fixture_current_I36": "BothVideoEnabled"
+   },
+   "sample_default": "BothVideoEnabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "VirtualInstallDisk": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to control the Virtual Install Disk. The Virtual Install Disk contains drivers specific to this server that an OS can use during installation. If enabled, the Virtual Install Disk appears as a drive in the operating system.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "VirtualSerialPort": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Com1Irq4",
+    "Com2Irq3",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to assign the logical COM port address and associated default resources used by the Virtual Serial Port (VSP). VSP enables the Management Processor to present an emulated serial port to support the BIOS Serial Console and operating system serial console.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Com2Irq3",
+    "fixture_current_I36": "Com1Irq4"
+   },
+   "sample_default": "Com2Irq3",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "VlanControl": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to enable or disable VLAN tagging on all enabled network interfaces.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Disabled"
+   },
+   "sample_default": "Disabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  },
+  "VlanId": {
+   "type": "Integer",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to set the global VLAN ID for all enabled network interfaces. Possible values are 0 to 4094.A value of 0 indicates that the device will send untagged frames.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": 0
+   },
+   "sample_default": 0,
+   "doc_kind_raw": "PATCHable integer"
+  },
+  "VlanPriority": {
+   "type": "Integer",
+   "allowed_values": null,
+   "default": null,
+   "read_only": false,
+   "description": "Use this option to set the priority for the VLAN tagged frames. Possible values are 0 to 7.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config"
+   ],
+   "sample_value": {
+    "fixture_default_config": 0
+   },
+   "sample_default": 0,
+   "doc_kind_raw": "PATCHable integer"
+  },
+  "WakeOnLan": {
+   "type": "Enumeration",
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "read_only": false,
+   "description": "You can configure the server to be powered on remotely when it receives a special packet. This option requires a NIC, NIC driver, and operating system that are WOL-capable.",
+   "seen_in": [
+    "doc_ilo4_2.30",
+    "fixture_default_config",
+    "fixture_current_I36"
+   ],
+   "sample_value": {
+    "fixture_default_config": "Enabled",
+    "fixture_current_I36": "Disabled"
+   },
+   "sample_default": "Enabled",
+   "doc_kind_raw": "PATCHable enumeration"
+  }
+ }
+}

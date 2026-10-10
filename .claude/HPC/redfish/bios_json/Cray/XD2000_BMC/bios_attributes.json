@@ -1,0 +1,19 @@
+{
+  "meta": {"vendor": "HPE Cray", "mgmt_version": "XD2000_BMC (HPE Cray XD BMC, AMI MegaRAC 계열, ODM Inventec)", "user_models": ["XD220V"], "source": "공개 자료에서 XD2000 BIOS Attribute Registry / Bios Attributes 덤프를 찾지 못함. URI 는 HPE 서버관리포털 BIOS 데이터모델 문서 + AMI MegaRAC Redfish 레퍼런스(Lenovo TSM) + Cray-HPE/hms-scsd(AMI Gigabyte) + NVIDIA DGX H100(AMI) + HewlettPackard/CrayXD_PFUT 에서 확인", "firmware_version": "BIOS: CU2K_5.32_v3.80 (Ubuntu 인증 목록에서 본 공개 최신값, HPE 릴리스노트 미확인) / BMC: unknown", "retrieved": "2026-10-10", "status": "unavailable", "attribute_count": 0},
+  "attributes": [],
+  "attributes_note": "추측으로 속성을 만들지 않았다. AMI 계열은 플랫폼마다 속성명 체계가 다르다 (Gigabyte/DGX 는 TCG001·IPMI002 같은 AMI 매핑 코드, Lenovo SR635/655 는 Q00001_Boot_Mode 형식). XD220v 의 체계는 실장비 GET 으로만 확정 가능. 얻는 방법은 README.md '실장비에서 속성 전체 수집' 참조.",
+  "uris": [
+    {"uri": "/redfish/v1/Systems", "method": "GET", "status": "verified", "note": "멤버는 /redfish/v1/Systems/Self 로 예상. PFUT 가 Systems 를 GET 해 BiosVersion 을 읽음"},
+    {"uri": "/redfish/v1/Systems/Self", "method": "GET", "status": "verified", "note": "HPE PFUT Power_Cycle.py (XD220v/XD225v/XD295v 공용) + AMI 공통(Cray CSM Gigabyte, Lenovo TSM). 응답의 BiosVersion = 현재 BIOS 버전"},
+    {"uri": "/redfish/v1/Systems/Self/Bios", "method": "GET", "status": "verified", "note": "현재 BIOS 설정(읽기 전용). HPE 서버관리포털이 Cray XD 노드의 pending 영역을 Systems/Self/Bios/SD 로 명시 + AMI 레퍼런스. XD220v 실장비 응답은 미확인"},
+    {"uri": "/redfish/v1/Systems/Self/Bios/SD", "method": "GET, PATCH, PUT, POST", "status": "verified", "note": "앞으로 적용할 설정(@Redfish.Settings.SettingsObject). PATCH 시 If-Match 필요(etag 없으면 '*'), 적용하려면 재부팅. 대기 중인 변경이 없으면 GET 이 404"},
+    {"uri": "/redfish/v1/Systems/Self/Bios/Actions/Bios.ResetBios", "method": "POST {\"ResetType\":\"Reset\"}", "status": "unverified", "note": "AMI MegaRAC 레퍼런스(Lenovo TSM) 1건만 확인. Bios 응답의 Actions 에서 target 을 확인할 것"},
+    {"uri": "/redfish/v1/Systems/Self/Bios/Actions/Bios.ChangePassword", "method": "POST {\"PasswordName\",\"OldPassword\",\"NewPassword\"}", "status": "unverified", "note": "AMI MegaRAC 레퍼런스 1건만 확인. PasswordName 값(Lenovo 는 SETUP001)은 플랫폼마다 다름"},
+    {"uri": "/redfish/v1/Systems/Self/Bios/ResetBiosActionInfo", "method": "GET", "status": "unverified", "note": "AMI 레퍼런스 응답 예시에만 나옴"},
+    {"uri": "/redfish/v1/Systems/Self/Bios/ChangePasswordActionInfo", "method": "GET", "status": "unverified", "note": "AMI 레퍼런스 응답 예시에만 나옴"},
+    {"uri": "/redfish/v1/Registries", "method": "GET", "status": "verified", "note": "BiosAttributeRegistry* 항목 탐색 (AMI 공통: DGX H100, hms-scsd)"},
+    {"uri": "/redfish/v1/Registries/<Bios 응답의 AttributeRegistry 값> → Location[].Uri", "method": "GET", "status": "unverified", "note": "레지스트리 파일명은 플랫폼마다 다름 (Gigabyte: /redfish/v1/Registries/BiosAttributeRegistry.json, DGX: BiosAttributeRegistry106.en-US.1.0.6.json). XD220v 파일명 unknown"},
+    {"uri": "/redfish/v1/UpdateService/FirmwareInventory/BIOS", "method": "GET", "status": "verified", "note": "HPE PFUT (XD295v_XD220v_XD225v/Bios_Update.py) 의 BIOS 갱신 대상"},
+    {"uri": "/redfish/v1/UpdateService/upload", "method": "POST multipart (UpdateParameters Targets=[.../FirmwareInventory/BIOS], OemParameters ImageType=HPM)", "status": "verified", "note": "HPE PFUT. BIOS 펌웨어 갱신용(설정 아님). 진행 상태는 UpdateService Oem.AMIUpdateService"}
+  ]
+}

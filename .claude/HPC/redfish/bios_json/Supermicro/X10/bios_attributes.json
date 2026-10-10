@@ -1,0 +1,15 @@
+{
+ "_meta": {
+  "vendor": "Supermicro",
+  "mgmt_version": "X10 (BMC firmware 3.xx)",
+  "source": null,
+  "firmware_version": "BMC 3.91 / BIOS 3.4a (feed, 2026-07-19)",
+  "retrieved": "2026-10-10",
+  "status": "unavailable",
+  "reason": "No Redfish BIOS resources: Reference Guide 2.0a Bios URIs are marked \"only X11DP supports\". BIOS settings only via SUM XML / vendor tools.",
+  "representative_boards_checked": "X10DRi/-T",
+  "protocol_for_bios": "none (Redfish present but no Bios); xml via SUM",
+  "device_dump": "GET /redfish/v1/Registries -> BiosAttributeRegistry -> Location[].Uri ; GET /redfish/v1/Systems/1/Bios ; GET /redfish/v1/Systems/1/Bios/SD (SUM alternative: sum -i <BMC> -u <USER> -p <PASS> -c GetCurrentBiosCfg --file bios.xml)"
+ },
+ "attributes": []
+}

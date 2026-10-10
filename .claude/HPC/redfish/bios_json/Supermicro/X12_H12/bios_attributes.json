@@ -1,0 +1,15 @@
+{
+ "_meta": {
+  "vendor": "Supermicro",
+  "mgmt_version": "X12/H12 (BMC firmware 1.xx)",
+  "source": null,
+  "firmware_version": "BMC 1.08.12 / 01.07.09 / 1.08.03 / 01.06.32 ; BIOS 2.5 / 2.4 / 3.7 / 3.7 (feed)",
+  "retrieved": "2026-10-10",
+  "status": "unavailable",
+  "reason": "Redfish User Guide (Gen 12+) documents the BIOS URIs, but the full BiosAttributeRegistry exists only on the device.",
+  "representative_boards_checked": "X12DPi-NT6, X12DPG-QT6, H12SSL-i, H12DSi-NT6",
+  "protocol_for_bios": "json",
+  "device_dump": "GET /redfish/v1/Registries -> BiosAttributeRegistry -> Location[].Uri ; GET /redfish/v1/Systems/1/Bios ; GET /redfish/v1/Systems/1/Bios/SD (SUM alternative: sum -i <BMC> -u <USER> -p <PASS> -c GetCurrentBiosCfg --file bios.xml)"
+ },
+ "attributes": []
+}

@@ -1,0 +1,818 @@
+# pdftotext -layout of 'Server BIOS Tokens in Release 6.0(2b)/6.0(1b)' (m-ucs-server-bios-tokens.pdf) and supported-server lists. Audit copy; (c) Cisco.
+          UCS Server BIOS Tokens
+             • Server BIOS Tokens in Release 6.0(2b), on page 1
+             • Server BIOS Tokens in Release 6.0(1b), on page 16
+
+
+Server BIOS Tokens in Release 6.0(2b)
+          This document provides new and changed server BIOS token information in Cisco UCS Manager release,
+          6.0(2b). The servers supported in this release 6.0(2b) continue utilizing the BIOS tokens from the previous
+          release.
+          For detailed information on server-specific tokens introduced in earlier versions, refer Cisco UCS Server
+          BIOS Tokens, Release 4.3 and Cisco UCS Server BIOS Tokens, Release 4.2
+          Cisco UCS Manager supports the following servers in 6.0(2b):
+             • Cisco UCS 410c M8 Compute Node
+
+
+
+          Note   This platform is supported from 6.0(2b) onwards.
+
+             • Cisco UCS X210c M8 Compute Node
+             • Cisco UCS X215c M8 Compute Node
+             • Cisco UCS C240 M8 Server
+             • Cisco UCS C220 M8 Server
+             • Cisco UCS C245 M8 Server
+             • Cisco UCS C225 M8 Server
+             • Cisco UCS X410c M7 Compute Node
+             • Cisco UCS X210c M7 Compute Node
+             • Cisco UCS X210c M6 Compute Node
+             • Cisco UCS C240 M7 Server
+             • Cisco UCS C220 M7 Server
+
+
+
+
+                                                                                 UCS Server BIOS Tokens
+                                                                                                                1
+                                                                                              UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                          • Cisco UCS C220 M6
+                          • Cisco UCS C240 M6
+                          • Cisco UCS C245 M6
+                          • Cisco UCS C225 M6
+                          • Cisco UCS B200 M6
+                          • Cisco UCS B200 M5
+                          • Cisco UCS B480 M5
+                          • Cisco UCS C220 M5
+                          • Cisco UCS C240 M5
+                          • Cisco UCS C240 SD M5
+                          • Cisco UCS C480 M5
+                          • Cisco UCS C480 M5 ML
+                          • Cisco UCS S3260 M5
+                          • Cisco UCS C125 M5
+
+
+                      New/Changed BIOS Tokens for 6.0(2b)
+
+                       Name                        Default    Supported      Platform        New/Changed
+                                                   Value      Values
+                       Speculative Lock            Enabled      • Enabled       • C220 M8    New
+                                                                • Disabled      • C240 M8
+                                                                                • X210c M8
+
+                       Uncore Frequency Scaling    Mode 1       • Mode 1        • C220 M8    New
+                       IO
+                                                                • Mode 0        • C240 M8
+                                                                                • X210c M8
+
+                       GPU Direct CPU1             Disabled     • Enabled       • X210c M7   New
+                                                                • Disabled      • X410c M7
+                                                                                • X210c M8
+                                                                                • X215c M8
+
+
+
+
+                  UCS Server BIOS Tokens
+     2
+UCS Server BIOS Tokens
+                                                                                              Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                         Name                          Default       Supported         Platform            New/Changed
+                                                       Value         Values
+                         GPU Direct CPU2               Disabled           • Enabled       • X210c M7       New
+                                                                          • Disabled      • X410c M7
+                                                                                          • X210c M8
+                                                                                          • X215c M8
+
+                         GPU Direct CPU3               Disabled           • Enabled    X410c M7            New
+                                                                          • Disabled
+
+                         GPU Direct CPU4               Disabled           • Enabled    X410c M7            New
+                                                                          • Disabled
+
+                         xGMI Link Configuration       Auto               • Auto       C225 M6,            Changed
+                                                                                       C245M6
+                                                                          • 3 xGMI                         Note
+                                                                            Links                          2 xGMI Links value is
+                                                                                                           not supported.
+                                                                          • 4 xGMI
+                                                                            Links
+
+
+                         New BIOS Tokens for Cisco UCS 410c M8 Compute Node
+
+                         Name                                    Default Value           Supported Values
+                         GPU Direct CPU1                         Disabled                   • Enabled
+                                                                                            • Disabled
+
+                         GPU Direct CPU2                         Disabled                   • Enabled
+                                                                                            • Disabled
+
+                         GPU Direct CPU3                         Disabled                   • Enabled
+                                                                                            • Disabled
+
+                         GPU Direct CPU4                         Disabled                   • Enabled
+                                                                                            • Disabled
+
+                         Uncore Frequency Scaling IO             Mode 1                     • Mode 1
+                                                                                            • Mode 0
+
+
+
+
+                                                                                             UCS Server BIOS Tokens
+                                                                                                                                3
+                                                                                      UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                       Name                        Default Value   Supported Values
+                       Speculative Lock            Enabled            • Enabled
+                                                                      • Disabled
+
+                       FRB 2 Timer                 Enabled            • Enabled
+                                                                      • Disabled
+
+                       OS Watchdog Timer Policy    Power Off          • Power Off
+                                                                      • Reset
+
+                       OS Watchdog Timer Timeout   10 minutes         • 5 minutes
+                                                                      • 10 minutes
+                                                                      • 15 minutes
+                                                                      • 20 minutes
+
+                       OS Watchdog Timer           Disabled           • Enabled
+                                                                      • Disabled
+
+                       Flow Control                None               • None
+                                                                      • RTS-CTS
+
+                       Baud rate                   115.2k             • 9.6k
+                                                                      • 19.2k
+                                                                      • 38.4k
+                                                                      • 57.6k
+                                                                      • 115.2k
+
+                       Terminal type               VT100              • PC-ANSI
+                                                                      • VT100
+                                                                      • VT100-PLUS
+                                                                      • VT-UTF8
+
+                       Console redirection         Disabled           • COM 0
+                                                                      • COM 1
+                                                                      • Disabled
+
+
+
+
+                  UCS Server BIOS Tokens
+     4
+UCS Server BIOS Tokens
+                                                                                 Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                         Name                               Default Value   Supported Values
+                         Security Device Support            Enabled            • Enabled
+                                                                               • Disabled
+
+                         Trusted Platform Module State      Enabled            • Enabled
+                                                                               • Disabled
+
+                         SHA-1 PCR Bank                     Enabled            • Enabled
+                                                                               • Disabled
+
+                         SHA256 PCR Bank                    Enabled            • Enabled
+                                                                               • Disabled
+
+                         SHA384 PCR Bank                    Disabled           • Enabled
+                                                                               • Disabled
+
+                         TPM Pending Operation              None               • None
+                                                                               • TpmClear
+
+                         TPM Minimal Physical Presence      Disabled           • Enabled
+                                                                               • Disabled
+
+                         Intel Virtualization Technology    Enabled            • Enabled
+                                                                               • Disabled
+
+                         Intel Trusted Execution Technology Disabled           • Enabled
+                         Support
+                                                                               • Disabled
+
+                         NUMA                               Enabled            • Enabled
+                                                                               • Disabled
+
+                         Select Memory RAS Configuration    ADDDC Sparing      • Mirror Mode 1LM
+                                                                               • Partial Mirror mode 1LM
+                                                                               • Maximum Performance
+                                                                               • ADDDC Sparing
+
+                         Select PPR type                    Hard PPR           • Disabled
+                                                                               • Hard PPR
+
+
+
+
+                                                                                UCS Server BIOS Tokens
+                                                                                                                   5
+                                                                                             UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                       Name                             Default Value     Supported Values
+                       Above 4G Decoding                Enabled              • Enabled
+                                                                             • Disabled
+
+                       Hardware Prefetcher              Enabled              • Enabled
+                                                                             • Disabled
+
+                       Adjacent Cache Line Prefetcher   Enabled              • Enabled
+                                                                             • Disabled
+
+                       DCU Streamer Prefetch            Enabled              • Auto
+                                                                             • Enabled
+                                                                             • Disabled
+
+                       DCU IP Prefetcher                Enabled              • Enabled
+                                                                             • Disabled
+
+                       Processor C1E                    Enabled              • Enabled
+                                                                             • Disabled
+
+                       Processor C6 Report              Auto                 • Auto
+                                                                             • Enabled
+                                                                             • Disabled
+
+                       Turbo Mode                       Enabled              • Enabled
+                                                                             • Disabled
+
+                       EIST PSD Function                HW ALL               • HW ALL
+                                                                             • SW ALL
+
+                       Boot Performance Mode            Max Performance      • Max Performance
+                                                                             • Max Efficient
+
+                       Uncore Frequency Scaling         Mode 1               • Mode 1
+                                                                             • Mode 0
+
+                       SpeedStep (Pstates)              Enabled              • Enabled
+                                                                             • Disabled
+
+
+
+
+                  UCS Server BIOS Tokens
+     6
+UCS Server BIOS Tokens
+                                                                              Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                         Name                            Default Value   Supported Values
+                         Configurable TDP Level          Normal             • Normal
+                                                                            • Level 1
+                                                                            • Level 2
+
+                         Hyper-Threading [ALL]           Enabled            • Enabled
+                                                                            • Disabled
+
+                         CPU Performance                 Custom             • Enterprise
+                                                                            • High Throughput
+                                                                            • HPC
+                                                                            • Custom
+
+                         CDN Control                     Enabled            • Enabled
+                                                                            • Disabled
+
+                         Processor CMCI                  Enabled            • Enabled
+                                                                            • Disabled
+
+                         Adaptive Memory Training        Enabled            • Enabled
+                                                                            • Disabled
+
+                         OptionROM Launch Optimization   Enabled            • Enabled
+                                                                            • Disabled
+
+                         BIOS Techlog Level              Minimum            • Maximum
+                                                                            • Normal
+                                                                            • Minimum
+
+                         VMD Enable                      Disabled           • Enabled
+                                                                            • Disabled
+
+                         PCIe RAS Support                Enabled            • Enabled
+                                                                            • Disabled
+
+                         Power ON Password               Disabled           • Enabled
+                                                                            • Disabled
+
+
+
+
+                                                                             UCS Server BIOS Tokens
+                                                                                                                7
+                                                                                                   UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                       Name                             Default Value          Supported Values
+                       Cores Enabled                    All                       • All
+                                                                                  • 4–86
+
+                       USB Port Front                   Enabled                   • Enabled
+                                                                                  • Disabled
+
+                       USB Port KVM                     Enabled                   • Enabled
+                                                                                  • Disabled
+
+                       USB Port:M.2 Storage             Enabled                   • Enabled
+                                                                                  • Disabled
+
+                       Workload Configuration           IO Sensitive              • Balanced
+                                                                                  • IO Sensitive
+
+                       Sub NUMA Clustering              Disabled                  • Auto
+                                                                                  • Disabled
+                                                                                  • Enabled
+
+                       UPI Prefetch                     Auto                      • Enabled
+                                                                                  • Disabled
+                                                                                  • Auto
+
+                       XPT Prefetch                     Auto                      • Enabled
+                                                                                  • Disabled
+                                                                                  • Auto
+
+                       Power Performance Tuning         OS                        • OS
+                                                                                  • BIOS
+                                                                                  • PECI
+
+                       Energy/Performance Bias Config   Balanced Performance      • Performance
+                                                                                  • Balanced Performance
+                                                                                  • Power
+                                                                                  • Balanced Power
+
+
+
+
+                  UCS Server BIOS Tokens
+     8
+UCS Server BIOS Tokens
+                                                                               Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                         Name                     Default Value           Supported Values
+                         Package C State          C0 C1 State                • No limit
+                                                                             • Auto
+                                                                             • C0 C1 State
+                                                                             • C2
+                                                                             • C6 Non Retention
+
+                         LLC Prefetch             Enabled                    • Enabled
+                                                                             • Disabled
+
+                         Hardware P-States        HWPM Native Mode           • HWPM Native Mode
+                                                                             • HWPM OOB Mode
+                                                                             • Native Mode with no Legacy
+                                                                             • Disabled
+
+                         IPV6 PXE Support         Enabled                    • Disabled
+                                                                             • Enabled
+
+                         Energy Efficient Turbo   Disabled                   • Disabled
+                                                                             • Enabled
+
+                         Processor EPP Profile    Balanced Performance       • Performance
+                                                                             • Balanced Performance
+                                                                             • Power
+                                                                             • Balanced Power
+
+                         Patrol Scrub             Enable at End of POST      • Enable at End of POST
+                                                                             • Disabled
+
+                         Intel Speed Select       Auto                       • Auto
+                                                                             • Level 0
+                                                                             • Level 1
+                                                                             • Level 2
+                                                                             • Level 3
+                                                                             • Level 4
+
+
+
+
+                                                                              UCS Server BIOS Tokens
+                                                                                                                 9
+                                                                                                    UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                       Name                             Default Value            Supported Values
+                       Intel Dynamic Speed Select       Disabled                    • Enabled
+                                                                                    • Disabled
+
+                       BME DMA Mitigation               Disabled                    • Enabled
+                                                                                    • Disabled
+
+                       Partial Memory Mirror Mode       Disabled                    • Percentage
+                                                                                    • Disabled
+
+                       Partial Mirror Percentage        5.00                        • Between 5.00 (min) - 40.00 (max)
+
+                       Memory size limit in GB          0                           • Between 0 (min) - 65535 (max)
+
+                       Network Stack                    Enabled                     • Enabled
+                                                                                    • Disabled
+
+                       External SSC Enable              Off                         • 0P3_Percent
+                                                                                    • 0P5_Percent
+                                                                                    • Hardware
+                                                                                    • Off
+
+                       IPv4 PXE Support                 Enabled                     • Enabled
+                                                                                    • Disabled
+
+                       IIO eDPC Support                 On Fatal and Non-Fatal      • Disabled
+                                                        Errors
+                                                                                    • On Fatal Error
+                                                                                    • On Fatal and Non-Fatal Errors
+
+                       Total Memory Encryption (TME)    Disabled                    • Enabled
+                                                                                    • Disabled
+
+                       Multikey Total Memory Encryption Disabled                    • Enabled
+                                                                                    • Disabled
+
+                       SW Guard Extensions (SGX)        Disabled                    • Enabled
+                                                                                    • Disabled
+
+
+
+
+                  UCS Server BIOS Tokens
+    10
+UCS Server BIOS Tokens
+                                                                                     Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                         Name                             Default Value         Supported Values
+                         SGX Factory Reset                Disabled                 • Enabled
+                                                                                   • Disabled
+
+                         SGX Pkg info In-Band Access      Disabled                 • Enabled
+                                                                                   • Disabled
+
+                         SGX QoS                          Enabled                  • Enabled
+                                                                                   • Disabled
+
+                         Select Owner EPOCH Input Type    Manual User Defined      • SGX Owner EPOCH activated
+                                                          Owner EPOCHs
+                                                                                   • Change to New Random Owner
+                                                                                     EPOCHs
+                                                                                   • Manual User Defined Owner
+                                                                                     EPOCHs
+                                                                                   • SGX Owner EPOCH deactivated
+
+                         SGX Write Enable                 Enabled                  • Enabled
+                                                                                   • Disabled
+
+                         SGX Auto MP Registration Agent   Disabled                 • Enabled
+                                                                                   • Disabled
+
+                         SProcessor Epoch 0               0                        • Between 0 (Min) - ffffffffffffffff
+                                                                                     (Max)
+                                                                                    Note
+                                                                                    Hash byte 7-0
+
+
+                         SProcessor Epoch 1               0                        • Between 0 (Min) - ffffffffffffffff
+                                                                                     (Max)
+                                                                                    Note
+                                                                                    Hash byte 7-0
+
+
+                         SGX PUBKEY HASH0                 0                        • Between 0 (Min) - ffffffffffffffff
+                                                                                     (Max)
+                                                                                    Note
+                                                                                    Hash byte 7-0
+
+
+
+
+                                                                                    UCS Server BIOS Tokens
+                                                                                                                       11
+                                                                                                    UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                       Name                             Default Value            Supported Values
+                       SGX PUBKEY HASH1                 0                           • Between 0 (Min) - ffffffffffffffff
+                                                                                      (Max)
+                                                                                     Note
+                                                                                     Hash byte 15-8
+
+
+                       SGX PUBKEY HASH2                 0                           • Between 0 (Min) - ffffffffffffffff
+                                                                                      (Max)
+                                                                                     Note
+                                                                                     Hash byte 23-16
+
+
+                       SGX PUBKEY HASH3                 0                           • Between 0 (Min) - ffffffffffffffff
+                                                                                      (Max)
+                                                                                     Note
+                                                                                     Hash byte 31-24
+
+
+                       Memory Thermal Throttling Mode   CLTT with PECI              • CLTT with PECI
+                                                                                    • Disabled
+
+                       Enhanced Memory Test             Auto                        • Enabled
+                                                                                    • Disabled
+                                                                                    • Auto
+
+                       IPv4 HTTP Support                Enabled                     • Disabled
+                                                                                    • Enabled
+
+                       IPv6 HTTP Support                Enabled                     • Disabled
+                                                                                    • Enabled
+
+                       NTB Test Mode                    Disabled                    • Enabled
+                                                                                    • Disabled
+
+                       NTB Device Type                  Upstream                    • Upstream
+                                                                                    • Downstream
+
+                       UMA                              Hemisphere(2-clusters)      • Hemisphere(2-clusters)
+                                                                                    • Disable(All2All)
+
+
+
+
+                  UCS Server BIOS Tokens
+    12
+UCS Server BIOS Tokens
+                                                                                Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                         Name                              Default Value   Supported Values
+                         Virtual Numa                      Disabled           • Disabled
+                                                                              • Enabled
+
+                         XPT remote prefetch               Auto               • Enabled
+                                                                              • Disabled
+                                                                              • Auto
+
+                         LLC Dead Line                     Enabled            • Enabled
+                                                                              • Disabled
+                                                                              • Auto
+
+                         Enhanced CPU Performance          Disabled           • Auto
+                                                                              • Disabled
+
+                         UPI Link Enablement               Auto               • Auto
+                                                                              •1
+                                                                              •2
+                                                                              •3
+
+                         UPI Power Manangement             Disabled           • Enabled
+                                                                              • Disabled
+
+                         UPI Link Speed                    Auto               • 16.0GT/s
+                                                                              • 20.0GT/s
+                                                                              • 24.0GT/s
+                                                                              • Auto
+                                                                              • Use Per Link Setting
+
+                         LIMIT CPU PA to 46 Bits           Enabled            • Enabled
+                                                                              • Disabled
+
+                         Adaptive Refresh Management Level Default            • Default
+                                                                              • Level A
+                                                                              • Level B
+                                                                              • Level C
+
+
+
+
+                                                                               UCS Server BIOS Tokens
+                                                                                                                  13
+                                                                                               UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                       Name                           Default Value         Supported Values
+                       Rank Margin Tool               Disabled                 • Enabled
+                                                                               • Disabled
+
+                       DMA Control Opt-In Flag        Disabled                 • Enabled
+                                                                               • Disabled
+
+                       Error Check Scrub              Enabled with result      • Disabled
+                                                      collection
+                                                                               • Enabled without Result Collection
+                                                                               • Enabled with Result Collection
+
+                       PRMRR Size                     256M                     • Invalid Config.
+                                                                               • 128M
+                                                                               • 256M
+                                                                               • 512M
+                                                                               • 1G
+                                                                               • 2G
+                                                                               • 4G
+                                                                               • 8G
+                                                                               • 16G
+                                                                               • 32G
+                                                                               • 64G
+                                                                               • 128G
+                                                                               • 256G
+                                                                               • 512G
+
+                       Trust Domain Extension (TDX)   Disabled                 • Enabled
+                                                                               • Disabled
+
+                       TDX Secure Arbitration Mode    Disabled                 • Enabled
+                       (SEAM) Loader
+                                                                               • Disabled
+
+
+
+
+                  UCS Server BIOS Tokens
+    14
+UCS Server BIOS Tokens
+                                                                           Server BIOS Tokens in Release 6.0(2b)
+
+
+
+
+                         Name                         Default Value   Supported Values
+                         MMIO High Base               32T                • 512G
+                                                                         • 1T
+                                                                         • 2T
+                                                                         • 4T
+                                                                         • 16T
+                                                                         • 24T
+                                                                         • 32T
+                                                                         • 40T
+                                                                         • 56T
+                                                                         • Auto
+
+                         MMIO High Granularity Size   256G               • 1G
+                                                                         • 4G
+                                                                         • 16G
+                                                                         • 32G
+                                                                         • 64G
+                                                                         • 256G
+                                                                         • 1024G
+                                                                         • Auto
+
+                         IOAT Configuration           Enabled            • Disabled
+                                                                         • Enabled
+
+                         DFX OSB                      Enabled            • Auto
+                                                                         • Enabled
+                                                                         • Disabled
+
+                         Re-Size BAR Support          Disabled           • Enabled
+                                                                         • Disabled
+
+                         PreBoot DMA Protection       Disabled           • Enabled
+                                                                         • Disabled
+
+
+
+
+                                                                          UCS Server BIOS Tokens
+                                                                                                             15
+                                                                                                              UCS Server BIOS Tokens
+  Server BIOS Tokens in Release 6.0(1b)
+
+
+
+
+                         Name                                    Default Value             Supported Values
+                         UEFI Memory Map Special Purpose Enabled                              • Enabled
+                         Memory Flag
+                                                                                              • Disabled
+
+                         ACPI SRAT Special Purpose               Enabled                      • Enabled
+                         Memory Flag
+                                                                                              • Disabled
+
+                         Latency Optimized Mode                  Disabled                     • Enabled
+                                                                                              • Disabled
+
+                         Run Time Post Package Repair            Disabled                     • Enabled
+                                                                                              • Disabled
+
+
+                        Related Documentation
+                            • Server BIOS Tokens, Release 4.3
+                            • Server BIOS Tokens, Release 4.2
+                            • Server BIOS Tokens, Release 4.1
+
+
+
+Server BIOS Tokens in Release 6.0(1b)
+                        This document provides new and changed server BIOS token information in Cisco UCS Manager release,
+                        6.0(1b). The servers supported in this release 6.0(1b) continue utilizing the BIOS tokens from the previous
+                        release and no new servers are added in this release.
+                        For detailed information on server-specific tokens introduced in earlier versions, refer Cisco UCS Server
+                        BIOS Tokens, Release 4.3 and Cisco UCS Server BIOS Tokens, Release 4.2
+                        Cisco UCS Manager supports the following servers in 6.0(1b):
+                            • Cisco UCS X215c M8
+                            • Cisco UCS X210c M8
+                            • Cisco UCS X410c M7
+                            • Cisco UCS X210c M7
+                            • Cisco UCS X210c M6
+                            • Cisco UCS C240 M8
+                            • Cisco UCS C220 M8
+                            • Cisco UCS C245 M8
+                            • Cisco UCS C225 M8
+                            • Cisco UCS C240 M7
+
+
+
+
+                    UCS Server BIOS Tokens
+      16
+UCS Server BIOS Tokens
+                                                                                              Server BIOS Tokens in Release 6.0(1b)
+
+
+
+
+                            • Cisco UCS C220 M7
+                            • Cisco UCS C240 M6
+                            • Cisco UCS C220 M6
+                            • Cisco UCS C245 M6
+                            • Cisco UCS C225 M6
+                            • Cisco UCS B200 M6
+                            • Cisco UCS B200 M5
+                            • Cisco UCS B480 M5
+                            • Cisco UCS C240 M5
+                            • Cisco UCS C240 SD M5
+                            • Cisco UCS C220 M5
+                            • Cisco UCS C480 M5
+                            • Cisco UCS C480 M5 ML
+                            • Cisco UCS S3260 M5
+                            • Cisco UCS C125 M5
+
+
+                         New/Changed BIOS Tokens for 6.0(1b)
+
+                         Name             Default Value         Supported Values            Servers/Platform           New/Changed
+
+                         IIO eDPC         On Fatal and          Disabled, On Fatal Error,   X210c M8, X210c M7, New
+                         Support          Non-Fatal Errors      On Fatal and Non-Fatal      X410c M7
+                                                                Errors
+
+                         Related Documentation
+                            • Server BIOS Tokens, Release 4.3
+                            • Server BIOS Tokens, Release 4.2
+                            • Server BIOS Tokens, Release 4.1
+
+
+
+
+                                                                                             UCS Server BIOS Tokens
+                                                                                                                                17
+                                           UCS Server BIOS Tokens
+Server BIOS Tokens in Release 6.0(1b)
+
+
+
+
+                  UCS Server BIOS Tokens
+    18
+

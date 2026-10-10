@@ -1,0 +1,15 @@
+{
+ "_meta": {
+  "vendor": "Supermicro",
+  "mgmt_version": "X11/H11 (BMC firmware 1.xx, e.g. 1.74.xx)",
+  "source": null,
+  "firmware_version": "BMC 1.74.19 (X11DPi-NT) / 1.74.25 (X11DPH-T), BIOS 4.7 (feed)",
+  "retrieved": "2026-10-10",
+  "status": "unavailable",
+  "reason": "Guide 2.0a (2019) lists Bios, Bios/SD, ResetBios, ChangePassword as \"only X11DP supports\"; later X11 firmware not documented in any public guide found. Registry content is on-device only.",
+  "representative_boards_checked": "X11DPi-NT, X11DPH-T",
+  "protocol_for_bios": "json (X11DP only, unverified for other X11) ; xml via SUM",
+  "device_dump": "GET /redfish/v1/Registries -> BiosAttributeRegistry -> Location[].Uri ; GET /redfish/v1/Systems/1/Bios ; GET /redfish/v1/Systems/1/Bios/SD (SUM alternative: sum -i <BMC> -u <USER> -p <PASS> -c GetCurrentBiosCfg --file bios.xml)"
+ },
+ "attributes": []
+}

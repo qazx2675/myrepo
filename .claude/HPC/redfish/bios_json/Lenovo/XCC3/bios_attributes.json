@@ -1,0 +1,1200 @@
+{
+ "_meta": {
+  "vendor": "Lenovo",
+  "mgmt_version": "XCC3",
+  "protocol": "json (Redfish)",
+  "source": "Lenovo XCC3 REST API guide (registry example for SR650 V4) + Lenovo Press LP2210",
+  "firmware_version": "doc example: ThinkSystem SR650 V4 UEFI/registry FirmwareVersion \"1.20\"; latest not determined",
+  "retrieved": "2026-10-10",
+  "status": "minimal (no user model; 4 attribute names from docs + tuning guide subset; no public real dump found)",
+  "models": {
+   "user_models": [],
+   "comparison_only": "V4 servers (e.g. SR650 V4)"
+  },
+  "field_semantics": {
+   "type": "null unless the registry entry was published (docs) - type_hint is inferred from the JSON value type of real dumps",
+   "allowed_values": "Redfish ValueName list; only from published registry entries in docs",
+   "allowed_values_display": "UI/display choices from Lenovo Press tuning guide; Redfish spelling replaces space/dash/slash with underscore (e.g. \"I/O sensitive\" -> I_OSensitive) - see observed values",
+   "default": "only from docs registry; default_display from tuning guide",
+   "read_only": "null unless registry entry published",
+   "verification": "verified = attribute name seen in >=2 independent sources or a published registry entry; otherwise unverified"
+  },
+  "proxy_warning": "XCC3 is comparison-only. LP2210 covers EPYC 9005 (Turin); Lenovo documents it as a tuning guide for \"ThinkSystem servers with 5th Gen AMD EPYC\" without naming models in the extracted text - SR645 V3 can also run 9005, so LP2210 names are NOT proof of XCC3."
+ },
+ "uris": {
+  "service_root": "/redfish/v1/",
+  "system": "/redfish/v1/Systems/1",
+  "bios": "/redfish/v1/Systems/1/Bios",
+  "bios_pending": "/redfish/v1/Systems/1/Bios/Pending",
+  "bios_settings_note": "Lenovo has NO /Bios/Settings; the @Redfish.Settings.SettingsObject of Bios points to /Bios/Pending (SupportedApplyTimes: OnReset)",
+  "actions": {
+   "ResetBios": "POST /redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios (empty body)",
+   "ChangePassword": "POST /redfish/v1/Systems/1/Bios/Actions/Bios.ChangePassword {PasswordName: UefiAdminPassword|UefiPowerOnPassword, OldPassword, NewPassword}"
+  },
+  "action_info": "/redfish/v1/Systems/1/Bios/ChangePasswordActionInfo",
+  "attribute_registry": "/redfish/v1/schemas/registries/BiosAttributeRegistry.1.0.0.json",
+  "registry_id": "BiosAttributeRegistry.1.0.0",
+  "firmware_inventory_uefi": "/redfish/v1/UpdateService/FirmwareInventory/UEFI",
+  "registries_collection": "/redfish/v1/Registries (from Lenovo sample scripts: member whose @odata.id contains the Bios.AttributeRegistry name)",
+  "patch_example": "PATCH /redfish/v1/Systems/1/Bios/Pending {\"Attributes\": {\"<Name>\": \"<Value>\"}} -> 200 RebootRequired; applied on next host reset",
+  "note_xcc3": "XCC3 doc lists ResetBios target as /redfish/v1/Systems/system/Bios/Actions/Bios.ResetBios (doc inconsistency; Bios resource itself uses Systems/1). Verify on device: GET /redfish/v1/Systems/1/Bios -> Actions.#Bios.ResetBios.target"
+ },
+ "sources": {
+  "doc_xcc3_rest": {
+   "type": "vendor doc",
+   "url": "https://pubs.lenovo.com/xcc3-restapi/resource_for_bios_get",
+   "also": [
+    "https://pubs.lenovo.com/xcc3-restapi/pending_bios_settings_get",
+    "https://pubs.lenovo.com/xcc3-restapi/bios_attribute_registries_get"
+   ],
+   "note": "registry example for SR650 V4 FW 1.20; attribute list elided"
+  },
+  "lp2210": {
+   "type": "Lenovo Press tuning guide (HTML)",
+   "url": "https://lenovopress.lenovo.com/lp2210",
+   "scope": "5th Gen AMD EPYC 9005 (Turin); published 28 Apr 2025",
+   "note": "tuning subset only; models not named in extracted text"
+  }
+ },
+ "attribute_count": 34,
+ "attribute_count_note": "tiny set; see unavailable",
+ "attributes": [
+  {
+   "name": "AdvancedRAS_DIMMDisablePolicy",
+   "group": "AdvancedRAS",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "doc_xcc3_rest",
+     "model": "doc example (SR650 V4 context)",
+     "platform": "doc-example",
+     "value": "DisableFaultyDIMMPersistently"
+    }
+   ],
+   "sources": [
+    "doc_xcc3_rest"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "CXLMemoryModule_MemoryMode",
+   "group": "CXLMemoryModule",
+   "type": "Enumeration",
+   "type_hint": null,
+   "allowed_values": [
+    "MemoryMode_1LM_Vol",
+    "HeterogeneousInterleave",
+    "FlatMemoryMode"
+   ],
+   "allowed_values_display": null,
+   "default": "MemoryMode_1LM_Vol",
+   "default_display": null,
+   "read_only": false,
+   "menu_path": "./CXLMemoryModule/CXLMemoryModule_CXLMemoryModule",
+   "onecli": null,
+   "observed": [],
+   "sources": [
+    "doc_xcc3_rest"
+   ],
+   "verification": "verified",
+   "display_name": "Memory Mode",
+   "registry_source": "doc_xcc3_rest"
+  },
+  {
+   "name": "DevicesandIOPorts_Bifurcation_Slot7",
+   "group": "DevicesandIOPorts",
+   "type": "Enumeration",
+   "type_hint": null,
+   "allowed_values": [
+    "x16",
+    "x8x8",
+    "x8x4x4",
+    "x4x4x8",
+    "x4x4x4x4"
+   ],
+   "allowed_values_display": null,
+   "default": "x16",
+   "default_display": null,
+   "read_only": false,
+   "menu_path": "./SystemUEFI/DevicesandIOPorts_Bifurcation/DevicesandIOPorts_Bifurcation_OverrideSlotBifurcation",
+   "onecli": null,
+   "observed": [],
+   "sources": [
+    "doc_xcc3_rest"
+   ],
+   "verification": "verified",
+   "display_name": "Slot 7",
+   "registry_source": "doc_xcc3_rest"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeTenBitTagSupport",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Devices and I/O Ports → PCIe Ten Bit Tag Support",
+   "onecli": "DevicesandIOPorts.PCIeTenBitTagSupport",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Memory_DRAMScrubTime",
+   "group": "Memory",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "1 hour",
+    "4 hour",
+    "8 hour",
+    "16 hour",
+    "24 hour",
+    "48 hour"
+   ],
+   "default": null,
+   "default_display": "24 hour",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → DRAM Scrub Time",
+   "onecli": "Memory.DRAMScrubTime",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Disabled",
+      "1 hour",
+      "4 hour",
+      "8 hour",
+      "16 hour",
+      "24 hour",
+      "48 hour"
+     ],
+     "default_display": "24 hour"
+    }
+   ]
+  },
+  {
+   "name": "Memory_Interleave",
+   "group": "Memory",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Interleave",
+   "onecli": "Memory.Interleave",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Memory_MemoryPowerDownEnable",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Memory Power Down Enable",
+   "onecli": "Memory.MemoryPowerDownEnable",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Memory_MemorySpeed",
+   "group": "Memory",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Maximum",
+    "6000 MHz",
+    "5600 MHz",
+    "5200 MHz",
+    "Minimum"
+   ],
+   "default": null,
+   "default_display": "Maximum",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Memory Speed",
+   "onecli": "Memory.MemorySpeed",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Maximum",
+      "6000 MHz",
+      "5600 MHz",
+      "5200 MHz",
+      "Minimum"
+     ],
+     "default_display": "Maximum"
+    }
+   ]
+  },
+  {
+   "name": "Memory_NUMANodesperSocket",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "NPS0",
+    "NPS1",
+    "NPS2",
+    "NPS4"
+   ],
+   "default": null,
+   "default_display": "NPS1",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → NUMA Nodes per Socket",
+   "onecli": "Memory.NUMANodesperSocket",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "NPS0",
+      "NPS1",
+      "NPS2",
+      "NPS4"
+     ],
+     "default_display": "NPS1"
+    }
+   ]
+  },
+  {
+   "name": "PowerProfileSelection",
+   "group": "PowerProfileSelection",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Efficiency Mode",
+    "High Performance Mode",
+    "Maximum IO Performance Mode",
+    "Balanced Memory Performance Mode",
+    "Balanced Core Performance Mode",
+    "Balanced Core Memory Performance Mode"
+   ],
+   "default": null,
+   "default_display": "Efficiency Mode",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Power Profile Selection",
+   "onecli": "Power.PowerProfileSelection",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "notes": [
+    "documented without Group_ prefix (likely documentation typo; verify on device)"
+   ],
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Efficiency Mode",
+      "High Performance Mode",
+      "Maximum IO Performance Mode",
+      "Balanced Memory Performance Mode",
+      "Balanced Core Performance Mode",
+      "Balanced Core Memory Performance Mode"
+     ],
+     "default_display": "Efficiency Mode"
+    }
+   ]
+  },
+  {
+   "name": "Processors_4_LinkxGMIMaxSpeed",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "32Gbps",
+    "25Gbps",
+    "Minimum"
+   ],
+   "default": null,
+   "default_display": "Minimum",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → 4-Link xGMI Max Speed (or 3-Link xGMI Max Speed)",
+   "onecli": "Processors.4-LinkxGMIMaxSpeed",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "32Gbps",
+      "25Gbps",
+      "Minimum"
+     ],
+     "default_display": "Minimum"
+    }
+   ]
+  },
+  {
+   "name": "Processors_ACPICSTC2Latency",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → ACPI CST C2 Latency",
+   "onecli": "Processors.ACPICSTC2Latency",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_ACPISRATL3CacheasNUMADomain",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Disabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → ACPI SRAT L3 Cache as NUMA Domain",
+   "onecli": "Processors.ACPISRATL3CacheasNUMADomain",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Disabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_BoostFmax",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Manual",
+    "Auto"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → BoostFmax",
+   "onecli": "BoostFmax",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Manual",
+      "Auto"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CPPC",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → CPPC",
+   "onecli": "Processors.CPPC",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CPUSpeculativeStoreModes",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": "Processors.CPUSpeculativeStoreModes",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_CorePerformanceBoost",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Core Performance Boost",
+   "onecli": "Processors.CorePerformanceBoost",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_DFC_States",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → DF C-States",
+   "onecli": "Processors.DFC-States",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_DeterminismSlider",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Power",
+    "Performance"
+   ],
+   "default": null,
+   "default_display": "Performance",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Determinism Slider",
+   "onecli": "Processors.DeterminismSlider",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Power",
+      "Performance"
+     ],
+     "default_display": "Performance"
+    }
+   ]
+  },
+  {
+   "name": "Processors_GMIFolding",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → GMI Folding",
+   "onecli": "Processors.GMIFolding",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_GlobalC_stateControl",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Global C-state Control",
+   "onecli": "Processors.GlobalC-stateControl",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_L1StreamHWPrefetcher",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → L1 Stream HW Prefetcher",
+   "onecli": null,
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_NumberofEnabledCPUCoresPerSocket",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "All",
+    "(Any core count value based on the CCDs and Cores Per CCD in your server)"
+   ],
+   "default": null,
+   "default_display": "All",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Number of Enabled CPU Cores Per Socket",
+   "onecli": "Processors.NumberofEnabledCPUCoresPerSocket",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "All",
+      "(Any core count value based on the CCDs and Cores Per CCD in your server)"
+     ],
+     "default_display": "All"
+    }
+   ]
+  },
+  {
+   "name": "Processors_P_state",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → P-State",
+   "onecli": "Processors.P-state",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_PackagePowerLimit",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "Maximum",
+    "Manual"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Package Power Limit",
+   "onecli": "Processors.PackagePowerLimit",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Auto",
+      "Maximum",
+      "Manual"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_PeriodicDirectoryRinsePDRTuning",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Periodic Directory Rinse (PDR) Tuning",
+   "onecli": "Processors.PeriodicDirectoryRinsePDRTuning",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_ProbeFilterOrganization",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Probe Filter Organization",
+   "onecli": "Processors.ProbeFilterOrganization",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_SMTMode",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → SMT Mode",
+   "onecli": "Processors.SMTMode",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_SOCP_states",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "P0",
+    "P1",
+    "P2"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → DF P-states",
+   "onecli": "Processors.SOCP-states",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Auto",
+      "P0",
+      "P1",
+      "P2"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_cTDP",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "Maximum",
+    "Manual"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → cTDP",
+   "onecli": "Processors.cTDP",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Auto",
+      "Maximum",
+      "Manual"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_xGMIForceLinkWidth",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": "Processors.xGMIForceLinkWidth",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_xGMIMaximumLinkWidth",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "x4",
+    "x8",
+    "x16"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → xGMI Maximum Link Width",
+   "onecli": "Processors.xGMIMaximumLinkWidth",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [
+      "Auto",
+      "x4",
+      "x8",
+      "x16"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_xGMIP-States",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → xGMI P-States",
+   "onecli": "Processors.xGMIP-States",
+   "observed": [],
+   "sources": [
+    "lp2210"
+   ],
+   "verification": "unverified",
+   "notes": [
+    "documented name contains hyphen (likely documentation artifact; verify on device)"
+   ],
+   "tuning_guide": [
+    {
+     "source": "lp2210",
+     "platform": "amd_turin_9005",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "iSCSI_TargetPort_8",
+   "group": "iSCSI",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "doc_xcc3_rest",
+     "model": "doc example (SR650 V4 context)",
+     "platform": "doc-example",
+     "value": 3260
+    }
+   ],
+   "sources": [
+    "doc_xcc3_rest"
+   ],
+   "verification": "unverified"
+  }
+ ],
+ "device_specific_attribute_patterns": [],
+ "device_specific_pattern_count": 0,
+ "registry_entries_from_docs": [
+  {
+   "AttributeName": "CXLMemoryModule_MemoryMode",
+   "Type": "Enumeration",
+   "DisplayName": "Memory Mode",
+   "DefaultValue": "MemoryMode_1LM_Vol",
+   "ReadOnly": false,
+   "Value": [
+    {
+     "ValueName": "MemoryMode_1LM_Vol",
+     "ValueDisplayName": "1LM + Vol"
+    },
+    {
+     "ValueName": "HeterogeneousInterleave",
+     "ValueDisplayName": "Heterogeneous Interleave"
+    },
+    {
+     "ValueName": "FlatMemoryMode",
+     "ValueDisplayName": "Flat Memory Mode"
+    }
+   ],
+   "MenuPath": "./CXLMemoryModule/CXLMemoryModule_CXLMemoryModule",
+   "ResetRequired": true,
+   "IsSystemUniqueProperty": false,
+   "Hidden": false,
+   "GrayOut": false,
+   "WriteOnly": false,
+   "from": "doc_xcc3_rest (SR650 V4 FW 1.20)"
+  },
+  {
+   "AttributeName": "DevicesandIOPorts_Bifurcation_Slot7",
+   "Type": "Enumeration",
+   "DisplayName": "Slot 7",
+   "DefaultValue": "x16",
+   "ReadOnly": false,
+   "Value": [
+    {
+     "ValueName": "x16",
+     "ValueDisplayName": "x16"
+    },
+    {
+     "ValueName": "x8x8",
+     "ValueDisplayName": "x8x8"
+    },
+    {
+     "ValueName": "x8x4x4",
+     "ValueDisplayName": "x8x4x4"
+    },
+    {
+     "ValueName": "x4x4x8",
+     "ValueDisplayName": "x4x4x8"
+    },
+    {
+     "ValueName": "x4x4x4x4",
+     "ValueDisplayName": "x4x4x4x4"
+    }
+   ],
+   "MenuPath": "./SystemUEFI/DevicesandIOPorts_Bifurcation/DevicesandIOPorts_Bifurcation_OverrideSlotBifurcation",
+   "ResetRequired": true,
+   "IsSystemUniqueProperty": false,
+   "Hidden": false,
+   "GrayOut": false,
+   "WriteOnly": false,
+   "from": "doc_xcc3_rest (SR650 V4 FW 1.20)"
+  }
+ ],
+ "registry_dependencies_from_docs": [
+  "Broadcom adapter LegacyVLANMode==Disabled -> VLANID GrayOut (adapter pattern; doc example)"
+ ],
+ "onecli_only_settings": [],
+ "unavailable": {
+  "full_list": "No public XCC3 dump/registry found (github search for CXLMemoryModule_MemoryMode, DevicesandIOPorts_Bifurcation_Slot, SystemSettings_WorkloadProfile returned only AI-generated tools / nothing)",
+  "vcf_readiness_claim": "vmware/vcf-readiness claims V4 uses SystemSettings_WorkloadProfile; NOT corroborated by any Lenovo document -> NOT included",
+  "how_to_dump": [
+   "GET https://<BMC>/redfish/v1/Systems/1/Bios  (Attributes = current values)",
+   "GET https://<BMC>/redfish/v1/Systems/1/Bios/Pending  (pending values)",
+   "GET https://<BMC>/redfish/v1/schemas/registries/BiosAttributeRegistry.1.0.0.json  (full registry: AttributeName/Type/Value[]/DefaultValue/ReadOnly/MenuPath/Dependencies/Menus)",
+   "curl -sk -u <USER>:<PASSWORD> <URL> -o <file>.json   (use placeholders; do not commit real credentials)",
+   "OneCLI: onecli config show all --override --log 5 --imm <USER>:<PASSWORD>@<BMC_IP>   (OneCLI/ASU variable form Group.Setting, e.g. Processors.CStates)"
+  ]
+ }
+}

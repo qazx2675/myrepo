@@ -1,0 +1,2517 @@
+{
+ "_meta": {
+  "vendor": "Supermicro",
+  "mgmt_version": "X13/H13 (Gen 13 BMC, AST2600 class; firmware 01.xx)",
+  "board": "H13SSH (AS-1115HS-TNR, AMD EPYC 9004/9005)",
+  "source": "Supermicro H13SSH User Manual MNL-2587 Rev 1.1c (2026-03-09), chapter 4 BIOS, https://www.supermicro.com/manuals/motherboard/H13/MNL-2587.pdf ; bold text = default per manual. Parsed by script from the PDF (pdftohtml -xml), not retyped.",
+  "firmware_version": "BIOS 4.0 / BMC 01.13.11 (latest on download feed 2026-07-19: H13SSH_4.0_AS01.13.11_SAA1.5.0-p9). The manual does not state which BIOS version it matches.",
+  "retrieved": "2026-10-10",
+  "status": "unverified (partial)",
+  "warning": "These are BIOS SETUP UI names from the manual, NOT Redfish AttributeName values. attribute_id/type/read_only are null because the Redfish BiosAttributeRegistry of a real BMC is not public. The manual lists only part of the real registry (manual itself says some settings are not recorded). Do not use ui_name as a PATCH key without checking the registry on the device.",
+  "row_count": 158,
+  "rows_with_parsed_options": 64,
+  "rows_with_default": 62,
+  "device_dump": "GET /redfish/v1/Registries -> BiosAttributeRegistry -> Location[].Uri ; GET /redfish/v1/Systems/1/Bios ; GET /redfish/v1/Systems/1/Bios/SD"
+ },
+ "attributes": [
+  {
+   "attribute_id": null,
+   "ui_name": "System Date/System Time",
+   "menu": "Main Setup",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Use this option to change the system date and time. To change system date and time settings, please highlight System Date or System Time using the arrow keys and enter new values using the keyboard. Press the <Tab> key or the arrow keys to move between fields. The date must be entered in MM/DD/YYYY format. The time is entered in HH:MM:SS format. Note: The time is in the 24-hour format. For example, 5:30 P.M. appears as 17:30:00. The date's default value is 01/01/2015 after RTC reset.",
+   "manual_page_in_pdf": 46,
+   "bold_text_in_description": [
+    "Note:"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "BIOS Version",
+   "menu": "Main Setup",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the version of the BIOS ROM used in the system.",
+   "manual_page_in_pdf": 47,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Build Date",
+   "menu": "Main Setup",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the date when the version of the BIOS ROM used in the system was built.",
+   "manual_page_in_pdf": 47,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "CPLD Version",
+   "menu": "Main Setup",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the CPLD version of the BIOS ROM used in the system.",
+   "manual_page_in_pdf": 47,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Memory Information",
+   "menu": "Main Setup",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 47,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Total Memory",
+   "menu": "Main Setup",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the total size of memory available in the system.",
+   "manual_page_in_pdf": 47,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Boot Configuration",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 48,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Quiet Boot",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Use this feature to select the screen display between the Power-on Self Test (POST) messages and the OEM logo upon bootup. Select Disabled to display the POST messages. Select Enabled to display the OEM logo instead of the normal POST messages. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 48,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Option ROM Messages",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Force BIOS",
+    "Keep Current"
+   ],
+   "default": "Force BIOS",
+   "read_only": null,
+   "description": "Use this feature to set the display mode for the Option ROM. Select Keep Current to display the current AddOn ROM setting. Select Force BIOS to use the Option ROM display set by the system BIOS. The options are Force BIOS and Keep Current.",
+   "manual_page_in_pdf": 48,
+   "bold_text_in_description": [
+    "Force BIOS"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Bootup NumLock State",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "On",
+    "Off"
+   ],
+   "default": "On",
+   "read_only": null,
+   "description": "Use this feature to select the keyboard <Numlock> state. The options are On and Off.",
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": [
+    "On"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Wait For \"F1\" If Error",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Use this feature to force the system to wait until the 'F1' key is pressed if an error occurs. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "INT19 (Interrupt 19) Trap Response",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Immediate",
+    "Postponed"
+   ],
+   "default": "Immediate",
+   "read_only": null,
+   "description": "Interrupt 19 is the software interrupt that handles the boot disk function. When this item is set to Immediate, the ROM BIOS of the host adaptors will \"capture\" Interrupt 19 at bootup immediately and allow the drives that are attached to these host adaptors to function as bootable disks. If this item is set to Postponed, the ROM BIOS of the host adaptors will not capture Interrupt 19 immediately and allow the drives attached to these adaptors to function as bootable devices at bootup. The options are Immediate and Postponed.",
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": [
+    "Immediate"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Re-try Boot",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Legacy Boot",
+    "EFI Boot"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "If this item is enabled, the BIOS will automatically reboot the system from a specified boot device after its initial boot failure. The options are Disabled, Legacy Boot, and EFI Boot.",
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Power Configuration",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Watch Dog Function",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "If enabled, the Watch Dog Timer will allow the system to reset or generate NMI based on jumper settings when it is expired for more than 5 minutes. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Restore on AC Power Loss",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Power Off",
+    "Power On",
+    "Last State"
+   ],
+   "default": "Last State",
+   "read_only": null,
+   "description": "Use this feature to set the power state after a power outage. Select Stay-Off for the system power to remain off after a power loss. Select Power-On for the system power to be turned on after a power loss. Select Last State to allow the system to resume its last power state before a power loss. The options are Power Off, Power On, and Last State.",
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": [
+    "Last State"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Power Button Function",
+   "menu": "Advanced",
+   "submenu": "Boot Feature",
+   "type": null,
+   "allowed_values": [
+    "Instant Off",
+    "4 Seconds Override"
+   ],
+   "default": "Instant Off",
+   "read_only": null,
+   "description": "This feature controls how the system shuts down when the power button is pressed. Select Instant Off to instantly power off the system as soon as the user presses the power button. Select 4 Seconds Override for the user to power off the system after pressing and holding the power button for 4 seconds or longer. The options are Instant Off and 4 Seconds Override.",
+   "manual_page_in_pdf": 49,
+   "bold_text_in_description": [
+    "Instant Off"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "CPU Configuration",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Workload Profile",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "HPC",
+    "I/O",
+    "Virtualization",
+    "Telco NFVI",
+    "Telco NFVI-FP",
+    "Telco FlexRAN",
+    "Low Latency"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "This setting is used to configure the BIOS settings to match the selected workload. Options include Disabled, HPC, I/O, Virtualization, Telco NFVI, Telco NFVI-FP, Telco FlexRAN, and Low Latency.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SMT Control",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to specify Symmetric Multithreading. Options include Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Core Performance Boost",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "This setting is used to configure for Core Performance Boost. Options include Disabled and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Global C-state Control",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "This setting is used to configure for Global C-state Control. Options include Disabled, Enabled and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SEV-ES ASID Space Limit",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting customize SEV-VS ASID space limit. The default value is 1.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "1"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Local APIC Mode",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Compatibility",
+    "xAPIC",
+    "x2APIC",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to adjust local APIC mode. Options include Compatibility, xAPIC, x2APIC, and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PPIN Opt-in",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "The Protected Processor Identification Number (PPIN) is a unique serial number for each processor. The options include Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SNP Memory (RMP Table) Coverage",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Custom",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Select Enabled to set the entire system memory covered. The options include Disabled, Enabled, Custom, and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SMEE",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "This feature sets the option to enable or disable Secure Memory Encryption. The options are Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "AVX512",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "The options include Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 50,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "MONITOR and MWAIT disable",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Enabled",
+    "Disabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Select Enabled to set the opcodes become invalid. The options include Enabled, Disabled, and Auto.",
+   "manual_page_in_pdf": 51,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "L1 Stream HW Prefetcher / L2 Stream HW Prefetcher",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "This setting is used to enable or disable the L1/L2 Stream Hardware Prefetcher. The options are Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 51,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "CCD Control",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Auto",
+    "2 CCDs",
+    "4 CCDs",
+    "6 CCDs",
+    "8 CCDs",
+    "10 CCDs"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to disable CCDs in the CPU. Options include Auto, 2 CCDs, 4 CCDs, 6 CCDs, 8 CCDs, and 10 CCDs.",
+   "manual_page_in_pdf": 51,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Core Control",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": [
+    "Auto",
+    "ONE (1+0)",
+    "TWO (2+0)",
+    "THREE (3+0)",
+    "FOUR (4+0)",
+    "FIVE (5+0)",
+    "SIX (6+0)",
+    "SEVEN (7+0)"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "This sets the number of cores to be used by your system. Once this option has been used to remove any cores, a power cycle is required in order for the future selections to take effect. Options include Auto, ONE (1+0), TWO (2+0), THREE (3+0), FOUR (4+0), FIVE (5+0), SIX (6+0), and SEVEN (7+0). If unsure, leave this to Auto.",
+   "manual_page_in_pdf": 51,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SVM Mode",
+   "menu": "Advanced",
+   "submenu": "CPU Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting Disables or Enables CPU Virtualization.",
+   "manual_page_in_pdf": 51,
+   "bold_text_in_description": [
+    "Enables"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "North Bridge Configuration",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 52,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "IOMMU",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to enable/disable IOMMU. Options include Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 52,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "TDP Control",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Manual",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to configure the cTDP Control. Options include Manual and Auto.",
+   "manual_page_in_pdf": 52,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Package Power Limit Control",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Manual",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting for Package Power Limit Control. Options include Manual and Auto.",
+   "manual_page_in_pdf": 52,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Determinism Control",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Manual",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to configure the Determinism Slider. Options include Manual and Auto.",
+   "manual_page_in_pdf": 52,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "APBDIS",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "0",
+    "1",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to set APBDIS. Options include 0, 1, and Auto.",
+   "manual_page_in_pdf": 53,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Power Profile Selection",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "High Performance Mode",
+    "Efficiency Mode",
+    "Maximum IO Performance Mode",
+    "Balanced Memory Performance Mode",
+    "Balanced Core Performance Mode",
+    "Balanced Core Memory Performance Mode",
+    "Auto"
+   ],
+   "default": null,
+   "read_only": null,
+   "description": "With a Turin processor installed, options include High Performance Mode, Efficiency Mode, Maximum IO Performance Mode, Balanced Memory Performance Mode, Balanced Core Performance Mode, Balanced Core Memory Performance Mode, and Auto. With a Genoa/Bergamo processor installed, options include High Performance Mode, Efficiency Mode, Maximum IO Performance Mode, and Balanced Memory Performance Mode.",
+   "manual_page_in_pdf": 53,
+   "bold_text_in_description": [
+    "Auto",
+    "High Performance Mode"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "DF Cstates",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to enable/disable DF Cstates. Options include Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 53,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Data Link Feature Cap",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Enabled",
+    "Disabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to set Data Link Feature Cap. Options include Enabled, Disabled, and Auto.",
+   "manual_page_in_pdf": 53,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SEV-SNP Support",
+   "menu": "Advanced",
+   "submenu": "NB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disable",
+    "Enable"
+   ],
+   "default": "Disable",
+   "read_only": null,
+   "description": "Use this setting for SEV-SNP Support. Options include Disable and Enable.",
+   "manual_page_in_pdf": 53,
+   "bold_text_in_description": [
+    "Disable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Configuration",
+   "menu": "Advanced",
+   "submenu": "Trusted Computing",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 54,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Security Device Support",
+   "menu": "Advanced",
+   "submenu": "Trusted Computing",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "If this feature and the TPM jumper on the motherboard are both set to Enabled, onboard security devices will be enabled for TPM (Trusted Platform Module) support to enhance data integrity and network security. Please reboot the system for a change on this setting to take effect. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 54,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "ACPI Settings",
+   "menu": "Advanced",
+   "submenu": "ACPI Settings",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 54,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "High Precision Event Timer",
+   "menu": "Advanced",
+   "submenu": "ACPI Settings",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "The High Precision Event Timer (HPET) can produce periodic interrupts and is used to synchronize multimedia streams, providing smooth playback and reducing the need to use other timestamp calculations. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 54,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PCI AER Support",
+   "menu": "Advanced",
+   "submenu": "ACPI Settings",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "Enbles Advanced error reporting capability. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 54,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "NUMA Nodes Per Socket",
+   "menu": "Advanced",
+   "submenu": "ACPI Settings",
+   "type": null,
+   "allowed_values": [
+    "NPS0",
+    "NPS1",
+    "NPS2",
+    "NPS4",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this feature to specify the number of desired NUMA nodes per socket. The options are NPS0, NPS1, NPS2, NPS4, and Auto.",
+   "manual_page_in_pdf": 55,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "ACPI SRAT L3 Cache As NUMA Domain",
+   "menu": "Advanced",
+   "submenu": "ACPI Settings",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this setting to enabe/disable ACPI SRAT L3 Cache As NUMA Domain. The options are Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 55,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Super IO Configuration",
+   "menu": "Advanced",
+   "submenu": "Super IO Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "The following Super IO information will display: • Super IO Chip AST2600",
+   "manual_page_in_pdf": 55,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "COM1",
+   "menu": "Advanced",
+   "submenu": "Serial Port Console Redirection",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 56,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Console Redirection",
+   "menu": "Advanced",
+   "submenu": "Serial Port Console Redirection",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "Select Enabled to enable console redirection support for a serial port specified by the user. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 56,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SOL",
+   "menu": "Advanced",
+   "submenu": "Serial Port Console Redirection",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 56,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Console Redirection",
+   "menu": "Advanced",
+   "submenu": "Serial Port Console Redirection",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Select Enabled to enable console redirection support for a serial port specified by the user. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 56,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Legacy Serial Redirection Port",
+   "menu": "Advanced",
+   "submenu": "Console Redirection Settings",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "The default is COM1.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Console Redirection",
+   "menu": "Advanced",
+   "submenu": "Console Redirection Settings",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PCI Bus Driver Version: A5.01.28",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PCI Devices Common Settings:",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Above 4G Decoding",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting Disables or Enables 64-bit capable devices ability to be decoded in above 4G address space (only if the system supports 64-bit PCI decoding).",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Enables"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Re-Size BAR Support",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "If system has resizable BAR capable PCIe devices, use the options Disable or Enable resizable BAR support.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Disable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SR-IOV Support",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "If the system has SR-IOV capable PCIe devices, this setting will Disable or Enable the Single Root IO Virtualization Support for the system.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Disable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "BME DMA Mitigation",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "Re-enable Bus Master Attribute disabled during PCI enumeration for PCI Bridges after SMM Locked. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "ASPM Support",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Auto",
+    "Force L0s"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "Use thes setting to set the ASPM level. The options are Disabled, Auto, and Force L0s.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PCIe ARI Support",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Use this setting to Disable, Enable, or Auto control the Alternative Routing-ID Interpretation.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PCIe ARI Enumeration",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Use this setting to Disable, Enable, or Auto control the ARI Forwarding Enable for each downstream port.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Relaxed Ordering",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Select Enable to enable Relaxed Ordering support, which will allow certain transactions to violate the strict-ordering rules of PCI bus for a transaction to be completed prior to other transactions that have already been enqueued. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Clock Spread Spectrum",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "Use this setting to Disable or Enable CG1_PLL Spread Spectrum for your system. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 58,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "No Snoop",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Select Enable to support no-snoop mode for each CB device. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "VGA Priority",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Onboard",
+    "External"
+   ],
+   "default": "Onboard",
+   "read_only": null,
+   "description": "Use this setting to select between onboard or external VGA support. The options are Onboard and External.",
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": [
+    "Onboard"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PCIe Ten Bit Tag Support",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Use this setting to Disable, Enable, or Auto control the PCIe ten bit tags for supported devices.",
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "NVMe Firmware Source",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Vendor Defined Firmware",
+    "AMI Native Support"
+   ],
+   "default": "Vendor Defined Firmware",
+   "read_only": null,
+   "description": "Use this setting to select between the AMI Native firmware support or the device vendor- defined firmware support. The options are Vendor Defined Firmware and AMI Native Support.",
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": [
+    "Vendor Defined Firmware"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PCI Devices Option Rom Setting",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Onboard Video Option ROM",
+   "menu": "Advanced",
+   "submenu": "PCIe/PCI/PnP Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "EFI",
+    "Legacy"
+   ],
+   "default": "EFI",
+   "read_only": null,
+   "description": "Use this feature to control the execution of UEFI and Legacy Video OpROM. The options include Disabled, EFI, and Legacy.",
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": [
+    "EFI"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "USB Configuration",
+   "menu": "Advanced",
+   "submenu": "USB Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "USB Module Version: 29",
+   "menu": "Advanced",
+   "submenu": "USB Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "USB Controllers: 2 XHCIs",
+   "menu": "Advanced",
+   "submenu": "USB Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "USB Devices: 2 keyboards, 2 Mice, 5 Hubs",
+   "menu": "Advanced",
+   "submenu": "USB Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Legacy USB Support",
+   "menu": "Advanced",
+   "submenu": "USB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Enabled",
+    "Disabled",
+    "Auto"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Select Enabled to support onboard legacy USB devices. Select Auto to disable legacy support if there are no legacy USB devices present. Select Disable to have all USB devices available for EFI applications only. The options are Enabled, Disabled, and Auto.",
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "XHCI Hand-Off",
+   "menu": "Advanced",
+   "submenu": "USB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "This is a work-around solution for operating systems that do not support XHCI (Extensible Host Controller Interface) hand-off. The XHCI ownership change should be claimed by the XHCI driver. The options are Enabled and Disabled.",
+   "manual_page_in_pdf": 59,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Port 60/64 Emulation",
+   "menu": "Advanced",
+   "submenu": "USB Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Select Enabled for I/O port 60h/64h emulation support, which in turn, will provide complete legacy USB keyboard support for the operating systems that do not support legacy USB devices. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Network Configuration",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Network Stack",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting allows you to Disable or Enable the UEFI Network Stack.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "Enable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "IPv4 PXE Support",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting allows you to Disable or Enable IPv4 PXE boot support. If disabled, IPv4 PXE boot support will not be available.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "Enable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "IPv4 HTTP Support",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting allows you to Disable or Enable IPv4 HTTP boot support. If disabled, IPv4 HTTP boot support will not be available.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "Disable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "IPv6 PXE Support",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting allows you to Disable or Enable IPv6 PXE boot support. If disabled, IPv6 PXE boot support will not be available.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "Enable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "IPv6 HTTP Support",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting allows you to Disable or Enable IPv4 HTTP boot support. If disabled, IPv4 HTTP boot support will not be available.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "Disable"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "PXE Boot Wait Time",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting allows you to set in a number field the wait time to press the ESC key to abort the PXE boot. The default value is 0.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "0"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Media Detect Count",
+   "menu": "Advanced",
+   "submenu": "Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting allows you set in a number field the number of times presence of media will be checked. The default value is 1.",
+   "manual_page_in_pdf": 60,
+   "bold_text_in_description": [
+    "1"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SATA Configuration",
+   "menu": "Advanced",
+   "submenu": "SATA Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "SATA Enable",
+   "menu": "Advanced",
+   "submenu": "SATA Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled",
+    "Auto"
+   ],
+   "default": "Auto",
+   "read_only": null,
+   "description": "Use this feature to disable or enable OnChip SATA Controller. The options include Disabled, Enabled, and Auto.",
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": [
+    "Auto"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "HTTP Boot Configuration",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "HTTP Boot Policy",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Sets the HTTP boot policy to Apply to all LANs, Apply to each LAN, or Boot Priority #1 instantly.",
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": [
+    "Apply to each LAN"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "HTTPS Boot Checks Hostname",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": [
+    "Enabled",
+    "Disabled (WARNING: Security Risk!!)"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Selects whether HTTPS Boot checks the hostname of TLS certificates matches the hostname provided by the remote server. The options include Enabled and Disabled (WARNING: Security Risk!!).",
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Priority of HTTP Boot",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Instance of Priority 1: 1",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Select IPv4 or IPv6",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Choose to set the targeted LAN port to boot from IPv4 or IPv6.",
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": [
+    "IPv4"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Boot Description",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This setting must be filled out, otherwise the boot option for the URI cannot be created.",
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Boot URI",
+   "menu": "Advanced",
+   "submenu": "HTTP Boot Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This option is an input field used to enter a web or network address to point to the HTTP boot files. This supports the HTTP or HTTPS protocols only.",
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Supermicro KMS Server IP address",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Enter IP4 address in dotted-decimal notation.",
+   "manual_page_in_pdf": 61,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Second Supermicro KMS Server IP address",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Enter IP4 address in dotted-decimal notation.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Supermicro KMS TCP Port number",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Enter Supermicro KMS TCP port number. The default value is 5696.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": [
+    "5696"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "KMS Time Out",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "KMS Server connecting time-out, unit is second, in the range of 5~30 seconds. The default value is 5.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": [
+    "5"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Supermicro KMS Server Retry Count",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Test connection to key manage server. range is 0~10. 0 means retrying infinitely. Others mean retry-count. The default value is 2.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": [
+    "2"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "TimeZone",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Enter the correct timezone. The default value is 0.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": [
+    "0"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "TCG Nvme KMS Policy",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": [
+    "Normal Unlock",
+    "Do Nothing",
+    "Reset All Devices",
+    "Delete Key Id List"
+   ],
+   "default": "Do Nothing",
+   "read_only": null,
+   "description": "The options include Normal Unlock, Do Nothing, Reset All Devices and Delete Key Id List.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": [
+    "Do Nothing"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Client UserName",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Use this setting to enter the client identity. Choose a username 0-63 characters long.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Client Password",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Use this setting to enter the client password. Choose a password 0-31 characters long.",
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "KMS TLS Certifiicate / Size",
+   "menu": "Advanced",
+   "submenu": "Supermicro KMS Server Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 62,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "BMC Firmware Revision",
+   "menu": "BMC",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item indicates the IPMI firmware revision used in your system.",
+   "manual_page_in_pdf": 65,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "BMC Status",
+   "menu": "BMC",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item indicates the status of the IPMI firmware installed in your system.",
+   "manual_page_in_pdf": 65,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Enabling/Disabling Options",
+   "menu": "BMC",
+   "submenu": "System Event Log",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "SEL Components Select Enabled for all system event logging at bootup. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 65,
+   "bold_text_in_description": [
+    "SEL Components",
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Erasing Settings",
+   "menu": "BMC",
+   "submenu": "System Event Log",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Erase SEL",
+   "menu": "BMC",
+   "submenu": "System Event Log",
+   "type": null,
+   "allowed_values": [
+    "No",
+    "Yes",
+    "On next reset",
+    "Yes",
+    "On every reset"
+   ],
+   "default": "No",
+   "read_only": null,
+   "description": "Select Yes, On next reset to erase all system event logs upon next system reboot. Select Yes, On every reset to erase all system event logs upon each system reboot. Select No to keep all system event logs after each system reboot. The options are No, Yes, On next reset, and Yes, On every reset.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": [
+    "No"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "When SEL is Full",
+   "menu": "BMC",
+   "submenu": "System Event Log",
+   "type": null,
+   "allowed_values": [
+    "Do Nothing",
+    "Erase Immediately"
+   ],
+   "default": "Do Nothing",
+   "read_only": null,
+   "description": "This feature allows the user to decide what the BIOS should do when the system event log is full. Select Erase Immediately to erase all events in the log when the system event log is full. The options are Do Nothing and Erase Immediately. Note: After making changes on a setting, be sure to reboot the system for the changes to take effect.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": [
+    "Do Nothing",
+    "Note:"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Update BMC LAN Configuration",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": [
+    "No",
+    "Yes"
+   ],
+   "default": "No",
+   "read_only": null,
+   "description": "Select Yes to enable BMC Network Configuration. The options include No and Yes. If set to Yes, the following option becomes available.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": [
+    "No"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Configure IPv4 Support",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This section displays static configuration features for IPV4 support.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "BMC LAN Selection",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the IPMI LAN setting. The default setting is Failover.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": [
+    "Failover"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "BMC Network Link Status",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the IPMI Network Link status. The default setting is Dedicated LAN.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": [
+    "Dedicated LAN"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Configuration Address Source",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This feature allows the user to select the source of the IP address for this computer. If Static is selected, you will need to know the IP address of this computer and enter it to the system manually in the field. If DHCP is selected, the BIOS will search for a DHCP (Dynamic Host Configuration Protocol) server in the network that is attached to and request the next available IP address for this computer. The default setting is Static.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": [
+    "Static"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Station IP Address",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the Station IP address for this computer. This should be in decimal and in dotted quad form.",
+   "manual_page_in_pdf": 66,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Subnet Mask",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the sub-network that this computer belongs to. The value of each three- digit number separated by dots should not exceed 255.",
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Station MAC Address",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the Station MAC address for this computer. Mac addresses are 6 two-digit hexadecimal numbers.",
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Gateway IP Address",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This item displays the Gateway IP address for this computer. This should be in decimal and in dotted quad form (i.e., 172.31.0.1).",
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "VLAN",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "The options include Disabled and Enabled.",
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Configure IPv6 Support",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This section displays configuration features for IPv6 support.",
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "IPv6 Address Status: Active",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "IPv6 Support",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Use this feature to enable or disable LAN1 IPv6 support. The default setting is Enabled.",
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Configuration Address Source",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This feature allows the user to select the source of the IP address for this computer. If Static is selected, you will need to know the IP address of this computer and enter it to the system manually in the field. If DHCP is selected, the BIOS will search for a DHCP (Dynamic Host Configuration Protocol) server in the network that is attached to and request the next available IP address for this computer. The default setting is DHCP.",
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": [
+    "DHCP"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Station IPv6 Address",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Prefix Length: 64",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Configure VLAN Support",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Lan Channel: 1",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "VLAN Support: Unspecified",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Current Configuration Address: Disabled",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "VLAN ID: 0",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "VLAN Priority: 0",
+   "menu": "BMC",
+   "submenu": "BMC Network Configuration",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 67,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Enabling/Disabling Options",
+   "menu": "Event Logs",
+   "submenu": "Change SMBIOS Event Log Settings",
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "read_only": null,
+   "description": "SMBIOS Event Log Select Enabled to enable SMBIOS (System Management BIOS) Event Logging during system boot. The options are Disabled and Enabled. Erasing Settings Erase Event Log Select Yes to erase all error events in the SMBIOS (System Management BIOS) log before an event logging is initialized at bootup. The options are No, Yes, Next reset, and Yes, Every reset. When Log is Full Select Erase Immediately to immediately erase all errors in the SMBIOS event log when the event log is full. Select Do Nothing for the system to do nothing when the SMBIOS event log is full. The options are Do Nothing and Erase Immediately. SMBIOS Event Log Standard Settings Log System Boot Event Select Enabled to log system boot events. The options are Enabled and Disabled. MECI (Multiple Event Count Increment) Enter the increment value for the multiple event counter. Enter a number between 1 to 255. The default setting is 1. METW (Multiple Event Count Time Window) This item is used to determine how long (in minutes) the multiple event counter should wait before generating a new event log. Enter a number between 0 to 99. The default setting is 60. Note: Please reboot the system for these changes to take effect.",
+   "manual_page_in_pdf": 68,
+   "bold_text_in_description": [
+    "SMBIOS Event Log",
+    "Enabled",
+    "Erasing Settings",
+    "Erase Event Log",
+    "No",
+    "When Log is Full",
+    "Do Nothing",
+    "SMBIOS Event Log Standard Settings",
+    "Log System Boot Event",
+    "Disabled",
+    "MECI (Multiple Event Count Increment)",
+    "1",
+    "METW (Multiple Event Count Time Window)",
+    "60",
+    "Note:"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Date/Time/Error Code/Severity",
+   "menu": "Event Logs",
+   "submenu": "View SMBIOS Event Log",
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 69,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Administrator Password",
+   "menu": "Security",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Press <Enter> to create a new, or change an existing Administrator password. Note that if the Administrator Password is erased, the User Password will be cleared as well.",
+   "manual_page_in_pdf": 70,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Password Check",
+   "menu": "Security",
+   "submenu": null,
+   "type": null,
+   "allowed_values": [
+    "Setup",
+    "Always"
+   ],
+   "default": "Setup",
+   "read_only": null,
+   "description": "Select Setup for the system to check for a password at Setup. Select Always for the system to check for a password at bootup or upon entering the BIOS Setup utility. The options are Setup and Always.",
+   "manual_page_in_pdf": 70,
+   "bold_text_in_description": [
+    "Setup"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Secure Boot",
+   "menu": "Security",
+   "submenu": null,
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Disabled",
+   "read_only": null,
+   "description": "This option allows you specify when the Platform Key (PK) is enrolled. When enabled, the System Mode is user deployed, and the CSM function is disabled. Options include Disabled and Enabled.",
+   "manual_page_in_pdf": 70,
+   "bold_text_in_description": [
+    "Disabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Secure Boot Mode",
+   "menu": "Security",
+   "submenu": null,
+   "type": null,
+   "allowed_values": [
+    "Standard",
+    "Custom"
+   ],
+   "default": "Custom",
+   "read_only": null,
+   "description": "Use this item to select the secure boot mode. The options are Standard and Custom.",
+   "manual_page_in_pdf": 71,
+   "bold_text_in_description": [
+    "Custom"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "CSM Support",
+   "menu": "Security",
+   "submenu": null,
+   "type": null,
+   "allowed_values": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": "Enabled",
+   "read_only": null,
+   "description": "Select Enabled to support the EFI Compatibility Support Module (CSM), which provides compatibility support for traditional legacy BIOS for system boot. The options are Disabled and Enabled.",
+   "manual_page_in_pdf": 71,
+   "bold_text_in_description": [
+    "Enabled"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Boot Configuration",
+   "menu": "Boot",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 74,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Boot Mode Select",
+   "menu": "Boot",
+   "submenu": null,
+   "type": null,
+   "allowed_values": [
+    "Legacy",
+    "UEFI",
+    "Dual"
+   ],
+   "default": "UEFI",
+   "read_only": null,
+   "description": "Use this item to select the type of device that the system is going to boot from. The options are Legacy, UEFI, and Dual.",
+   "manual_page_in_pdf": 74,
+   "bold_text_in_description": [
+    "UEFI"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Legacy to EFI Support",
+   "menu": "Boot",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This option Disables or Enables the system to boot to an EFI OS after the boot failed from the legacy boot order.",
+   "manual_page_in_pdf": 74,
+   "bold_text_in_description": [
+    "Disables"
+   ]
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "FIXED BOOT ORDER Priorities Section",
+   "menu": "Boot",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "This option prioritizes the order of bootable devices that the system to boot from. Press <Enter> on each entry from top to bottom to select devices.",
+   "manual_page_in_pdf": 74,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Save Options",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 76,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Discard Changes and Exit",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Select this option to quit the BIOS Setup without making any permanent changes to the system configuration, and reboot the computer. Select Discard Changes and Exit from the Exit menu and press <Enter>.",
+   "manual_page_in_pdf": 76,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Save Changes and Reset",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Select this option to reset the system after saving the changes.",
+   "manual_page_in_pdf": 76,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Save Changes",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "After completing the system configuration changes, select this option to save the changes you have made. This will not reset (reboot) the system.",
+   "manual_page_in_pdf": 76,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Discard Changes",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Select this option and press <Enter> to discard all the changes and return to the AMI BIOS utility Program.",
+   "manual_page_in_pdf": 76,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Default Options",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": null,
+   "manual_page_in_pdf": 77,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Restore Optimized Defaults",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "To set this feature, select Restore Defaults from the Save & Exit menu and press <Enter>. These are factory settings designed for maximum system stability, but not for maximum performance.",
+   "manual_page_in_pdf": 77,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Save as User Defaults",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "To set this feature, select Save as User Defaults from the Exit menu and press <Enter>. This enables the user to save any changes to the BIOS setup for future use.",
+   "manual_page_in_pdf": 77,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Restore User Defaults",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "To set this feature, select Restore User Defaults from the Exit menu and press <Enter>. Use this feature to retrieve user-defined settings that were saved previously.",
+   "manual_page_in_pdf": 77,
+   "bold_text_in_description": null
+  },
+  {
+   "attribute_id": null,
+   "ui_name": "Boot Override Section",
+   "menu": "Save & Exit",
+   "submenu": null,
+   "type": null,
+   "allowed_values": null,
+   "default": null,
+   "read_only": null,
+   "description": "Listed in this section are other boot options for the system (i.e., UEFI: Built-in EFI Shell). Select an option and press <Enter>. Your system will boot to the selected boot option.",
+   "manual_page_in_pdf": 77,
+   "bold_text_in_description": null
+  }
+ ]
+}

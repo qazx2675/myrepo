@@ -1,0 +1,7666 @@
+{
+ "_meta": {
+  "vendor": "Lenovo",
+  "mgmt_version": "XCC2",
+  "protocol": "json (Redfish)",
+  "source": "Lenovo XCC2 REST API guide + Lenovo Press LP1977 (AMD) / LP1836 (Intel) + public real-device values (SR635 V3) + operator configs",
+  "firmware_version": "latest XCC2/UEFI for SR645 V3/SR675 V3/SD650 V3 NOT determined; weka SR635 V3 data has no firmware tag (its file lists SystemBiosVersion 1.7.2 etc. among its keys, recorded as attribute values only)",
+  "retrieved": "2026-10-10",
+  "status": "partial (AMD Genoa: full-key-set proxy from SR635 V3 (1S sibling of SR645 V3); Intel EGS (SD650 V3): tuning subset + operator configs only)",
+  "models": {
+   "amd_genoa": [
+    "SR645 V3",
+    "SR675 V3"
+   ],
+   "intel_eagle_stream": [
+    "SD650 V3"
+   ]
+  },
+  "field_semantics": {
+   "type": "null unless the registry entry was published (docs) - type_hint is inferred from the JSON value type of real dumps",
+   "allowed_values": "Redfish ValueName list; only from published registry entries in docs",
+   "allowed_values_display": "UI/display choices from Lenovo Press tuning guide; Redfish spelling replaces space/dash/slash with underscore (e.g. \"I/O sensitive\" -> I_OSensitive) - see observed values",
+   "default": "only from docs registry; default_display from tuning guide",
+   "read_only": "null unless registry entry published",
+   "verification": "verified = attribute name seen in >=2 independent sources or a published registry entry; otherwise unverified"
+  },
+  "proxy_warning": "SR635 V3 is a 1-socket AMD sibling, not a user model. SR645 V3 (2S) / SR675 V3 (GPU) differ in slots, GPU, xGMI/2-socket attributes. SD650 V3 is Intel Sapphire/Emerald Rapids (Eagle Stream): no real dump found; do NOT assume the AMD key set applies."
+ },
+ "uris": {
+  "service_root": "/redfish/v1/",
+  "system": "/redfish/v1/Systems/1",
+  "bios": "/redfish/v1/Systems/1/Bios",
+  "bios_pending": "/redfish/v1/Systems/1/Bios/Pending",
+  "bios_settings_note": "Lenovo has NO /Bios/Settings; the @Redfish.Settings.SettingsObject of Bios points to /Bios/Pending (SupportedApplyTimes: OnReset)",
+  "actions": {
+   "ResetBios": "POST /redfish/v1/Systems/1/Bios/Actions/Bios.ResetBios (empty body)",
+   "ChangePassword": "POST /redfish/v1/Systems/1/Bios/Actions/Bios.ChangePassword {PasswordName: UefiAdminPassword|UefiPowerOnPassword, OldPassword, NewPassword}"
+  },
+  "action_info": "/redfish/v1/Systems/1/Bios/ChangePasswordActionInfo",
+  "attribute_registry": "/redfish/v1/schemas/registries/BiosAttributeRegistry.1.0.0.json",
+  "registry_id": "BiosAttributeRegistry.1.0.0",
+  "firmware_inventory_uefi": "/redfish/v1/UpdateService/FirmwareInventory/UEFI",
+  "registries_collection": "/redfish/v1/Registries (from Lenovo sample scripts: member whose @odata.id contains the Bios.AttributeRegistry name)",
+  "patch_example": "PATCH /redfish/v1/Systems/1/Bios/Pending {\"Attributes\": {\"<Name>\": \"<Value>\"}} -> 200 RebootRequired; applied on next host reset"
+ },
+ "sources": {
+  "doc_xcc2_rest": {
+   "type": "vendor doc",
+   "url": "https://pubs.lenovo.com/xcc2-restapi/resource_for_bios_get",
+   "also": [
+    "https://pubs.lenovo.com/xcc2-restapi/pending_bios_settings_get",
+    "https://pubs.lenovo.com/xcc2-restapi/bios_attribute_registries_get"
+   ],
+   "note": "text identical to XCC doc; examples copied from XCC (SR650 CDI340M)"
+  },
+  "lp1977": {
+   "type": "Lenovo Press tuning guide (HTML)",
+   "url": "https://lenovopress.lenovo.com/lp1977",
+   "scope": "4th Gen AMD EPYC 9004 (Genoa/Bergamo)",
+   "note": "tuning subset only"
+  },
+  "lp1836": {
+   "type": "Lenovo Press tuning guide (HTML)",
+   "url": "https://lenovopress.lenovo.com/lp1836",
+   "scope": "4th/5th Gen Intel Xeon SP (Eagle Stream)",
+   "note": "tuning subset only; guide states update 22 Sep 2026"
+  },
+  "weka_sr635v3": {
+   "type": "real device values (tool defaults DB)",
+   "url": "https://github.com/weka/tools/blob/c36ab635f0255381f5fa7093c1730c4a2d8d2f9e/bios_tool/defaults-db.yml",
+   "model": "ThinkSystem SR635 V3 (AMD EPYC 9004, 1S)",
+   "note": "labelled \"default/factory reset values\" by the repo; firmware version not recorded; 310 keys incl. adapter-specific keys"
+  },
+  "sapcc_sr655v3": {
+   "type": "operator config (SAP CCloud helm-charts)",
+   "url": "https://github.com/sapcc/helm-charts/blob/47f56fe985ca773f55048eec6f10c0f799d45f9d/system/metal-settings/bios_settings/lenovo-sr655-v3.yaml",
+   "model": "ThinkSystem SR655 V3 (AMD Genoa)",
+   "note": "settings that operators apply"
+  },
+  "sapcc_sr650v3": {
+   "type": "operator config (SAP CCloud helm-charts)",
+   "url": "https://github.com/sapcc/helm-charts/blob/47f56fe985ca773f55048eec6f10c0f799d45f9d/system/metal-settings/bios_settings/lenovo-sr650-v3.yaml",
+   "model": "ThinkSystem SR650 V3 (Intel EGS)",
+   "note": "settings that operators apply; value style evidence"
+  },
+  "lenovo_py_redfish": {
+   "type": "Lenovo official sample scripts",
+   "url": "https://github.com/lenovo/python-redfish-lenovo/tree/27e195c82840f58375782ec20604703d9bf57828/examples",
+   "note": "URI flow only (Bios -> @Redfish.Settings.SettingsObject = Pending; registry via Registries)"
+  }
+ },
+ "attribute_count": 199,
+ "attribute_count_note": "union of AMD-Genoa and Intel-EGS sources; per-attribute \"observed[].platform\"/\"tuning_guide[].platform\" tells which platform. Not the complete registry of any single model.",
+ "attributes": [
+  {
+   "name": "AdvancedRAS_PCIErrorRecovery",
+   "group": "AdvancedRAS",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "AdvancedRAS_PlatformFirstErrorHandling",
+   "group": "AdvancedRAS",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "BootModes_InfiniteBootRetry",
+   "group": "BootModes",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "BootModes_PreventOSChangesToBootOrder",
+   "group": "BootModes",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "BootModes_SystemBootMode",
+   "group": "BootModes",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "UEFIMode"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "UEFIMode"
+    }
+   ],
+   "sources": [
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "DevicesandIOPorts_ActiveVideo",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "OnboardDevice"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_COMPort1",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_COMPortActiveAfterBoot",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Com1BaudRate",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Com1BaudRate_115200"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Com1DataBits",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Com1DataBits_8"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Com1FlowControl",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Com1Parity",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "None"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Com1StopBits",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Com1StopBits_1"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Com1TerminalEmulation",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "ANSI"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_ConsoleRedirection",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay0",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay1",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay2",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay3",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay4",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay5",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay6",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay7",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay8",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_NVMeBay9",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_OnboardSATAControllers",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_OnboardVideo",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_Slot1",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_Slot3",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_Slot6",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "doc_xcc2_rest",
+     "model": "doc example (copied from XCC doc, not a real dump)",
+     "platform": "doc-example",
+     "value": "Enable"
+    }
+   ],
+   "sources": [
+    "doc_xcc2_rest",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "DevicesandIOPorts_Device_Slot9",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_EnableDisableIntelVMD",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "sapcc_sr650v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_IOMMU",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "DevicesandIOPorts_IntelVTforDirectedIOVTd",
+   "group": "DevicesandIOPorts",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Devices and I/O Ports → Intel VT for DirectedI/O (VT-d)",
+   "onecli": "DevicesandIOPorts.IntelVTforDirectedIOVTd",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "DevicesandIOPorts_LegacyOptionROMDisplay",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "COMPort1"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_MMConfigBase",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "sapcc_sr650v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCI64BitResourceAllocation",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    },
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "sapcc_sr650v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeARIForwarding",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay0",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay1",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay2",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay3",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay4",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay5",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay6",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay7",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay8",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_NVMeBay9",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_Slot1",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_Slot3",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_Slot6",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeGen_Slot9",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_PCIeTenBitTagSupport",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Devices and I/O Ports → PCIe Ten Bit Tag Support",
+   "onecli": "DevicesandIOPorts.PCIeTenBitTagSupport",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "DevicesandIOPorts_SPRedirection",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_SRIOV",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "DevicesandIOPorts_SerialPortAccessMode",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_SerialPortSharing",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Slot1Bifurcation",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "x16"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_Slot3Bifurcation",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "x16"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_USBDownRearPort",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_USBInternalPort",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_USBLeftFrontPort",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_USBLeftRearPort",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_USBMassStorageDriverSupport",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_USBRightFrontPort",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_USBUpRearPort",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DevicesandIOPorts_VirtualCOMPort2",
+   "group": "DevicesandIOPorts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "DiskGPTRecovery_DiskGPTRecovery",
+   "group": "DiskGPTRecovery",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Manual"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "EnableDisableAdapterOptionROMSupport_Network",
+   "group": "EnableDisableAdapterOptionROMSupport",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "UEFI"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "EnableDisableAdapterOptionROMSupport_OtherPCIdevices",
+   "group": "EnableDisableAdapterOptionROMSupport",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "UEFI"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "EnableDisableAdapterOptionROMSupport_Storage",
+   "group": "EnableDisableAdapterOptionROMSupport",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "UEFI"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "EnableDisableAdapterOptionROMSupport_Video",
+   "group": "EnableDisableAdapterOptionROMSupport",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "UEFI"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "LegacyBIOS_LegacyBIOS",
+   "group": "LegacyBIOS",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "LegacyBIOS_NonOnboardPXE",
+   "group": "LegacyBIOS",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "LegacyBIOS_RehookINT19h",
+   "group": "LegacyBIOS",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_1TBremap",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "AttemptToRemap"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_ADDDCSparing",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Disabled",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → ADDDC Sparing",
+   "onecli": "Memory.ADDDCSparing",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Disabled"
+    }
+   ]
+  },
+  {
+   "name": "Memory_DDRHealingBIST",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_DRAMPostPackageRepair",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_DRAMRefreshRate",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "DRAMRefreshRate_1x"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_DRAMScrubTime",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "1 hour",
+    "4 hour",
+    "8 hour",
+    "16 hour",
+    "24 hour",
+    "48 hour"
+   ],
+   "default": null,
+   "default_display": "24 hour",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → DRAM Scrub Time",
+   "onecli": "Memory.DRAMScrubTime",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "DRAMScrubTime_24Hours"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Disabled",
+      "1 hour",
+      "4 hour",
+      "8 hour",
+      "16 hour",
+      "24 hour",
+      "48 hour"
+     ],
+     "default_display": "24 hour"
+    }
+   ]
+  },
+  {
+   "name": "Memory_Interleave",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Interleave",
+   "onecli": "Memory.Interleave",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Memory_MemoryDataScrambling",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Memory Data Scrambling",
+   "onecli": "Memory.MemoryDataScrambling",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Memory_MemoryPowerDownEnable",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Memory Power Down Enable",
+   "onecli": "Memory.MemoryPowerDownEnable",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Memory_MemorySpeed",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Maximum",
+    "4800 MHz",
+    "4400 MHz",
+    "4000 MHz",
+    "Minimum"
+   ],
+   "default": null,
+   "default_display": "Maximum",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Memory Speed",
+   "onecli": "Memory.MemorySpeed",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Maximum"
+    },
+    {
+     "source": "doc_xcc2_rest",
+     "model": "doc example (copied from XCC doc, not a real dump)",
+     "platform": "doc-example",
+     "value": "MaxPerformance"
+    }
+   ],
+   "sources": [
+    "doc_xcc2_rest",
+    "lp1836",
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Maximum",
+      "4800 MHz",
+      "4400 MHz",
+      "4000 MHz",
+      "Minimum"
+     ],
+     "default_display": "Maximum"
+    },
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Maximum Performance",
+      "Balanced",
+      "Minimal Power"
+     ],
+     "default_display": "Maximum Performance"
+    }
+   ]
+  },
+  {
+   "name": "Memory_NUMANodesperSocket",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "NPS0",
+    "NPS1",
+    "NPS2",
+    "NPS4"
+   ],
+   "default": null,
+   "default_display": "NPS1",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → NUMA Nodes per Socket",
+   "onecli": "Memory.NUMANodesperSocket",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "NPS1"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "NPS0",
+      "NPS1",
+      "NPS2",
+      "NPS4"
+     ],
+     "default_display": "NPS1"
+    }
+   ]
+  },
+  {
+   "name": "Memory_PagePolicy",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Closed",
+    "Adaptive"
+   ],
+   "default": null,
+   "default_display": "Closed",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Page Policy",
+   "onecli": "Memory.PagePolicy",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Closed",
+      "Adaptive"
+     ],
+     "default_display": "Closed"
+    }
+   ]
+  },
+  {
+   "name": "Memory_PatrolScrub",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Patrol Scrub",
+   "onecli": "Memory.PatrolScrub",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Memory_SEVControl",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_SEV_ESASIDSpaceLimit",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 1
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_SMEE",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_SME_MK",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_SocketInterleave",
+   "group": "Memory",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "NUMA",
+    "Non-NUMA"
+   ],
+   "default": null,
+   "default_display": "NUMA",
+   "read_only": null,
+   "menu_path": "System Settings → Memory → Socket Interleave",
+   "onecli": "Memory.SocketInterleave",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "NUMA",
+      "Non-NUMA"
+     ],
+     "default_display": "NUMA"
+    }
+   ]
+  },
+  {
+   "name": "Memory_SubUrgRefLowerBound",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "SubUrgRefLowerBound_1"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_TSME",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Memory_UrgRefLimit",
+   "group": "Memory",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "UrgRefLimit_4"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "NetworkStackSettings_IPv4HTTPSupport",
+   "group": "NetworkStackSettings",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "NetworkStackSettings_IPv4PXESupport",
+   "group": "NetworkStackSettings",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "NetworkStackSettings_IPv6HTTPSupport",
+   "group": "NetworkStackSettings",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "NetworkStackSettings_IPv6PXESupport",
+   "group": "NetworkStackSettings",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "NetworkStackSettings_Mediadetectcount",
+   "group": "NetworkStackSettings",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 1
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "NetworkStackSettings_NetworkStack",
+   "group": "NetworkStackSettings",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "NetworkStackSettings_PXEbootwaittime",
+   "group": "NetworkStackSettings",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 0
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "OperatingModes_ChooseOperatingMode",
+   "group": "OperatingModes",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Minimal Power",
+    "Efficiency – Favor Power",
+    "Efficiency – Favor Performance",
+    "Maximum Performance",
+    "Custom Mode"
+   ],
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings -> Operating Modes > Choose Operating Mode",
+   "onecli": "OperatingModes.ChooseOperatingMode",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "MaximumEfficiency"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "MaximumPerformance"
+    },
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "CustomMode"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3",
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Minimal Power",
+      "Efficiency – Favor Power",
+      "Efficiency – Favor Performance",
+      "Maximum Performance",
+      "Custom Mode"
+     ],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "POSTAttempts_POSTAttemptsLimit",
+   "group": "POSTAttempts",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "POSTAttemptsLimit_3"
+    },
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "sapcc_sr650v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "Power_ACPIFixedPowerButton",
+   "group": "Power",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Power_ASPM",
+   "group": "Power",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Disabled",
+   "read_only": null,
+   "menu_path": "System Settings → Power → ASPM",
+   "onecli": "Power.ASPM",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Auto",
+      "Disabled"
+     ],
+     "default_display": "Disabled"
+    }
+   ]
+  },
+  {
+   "name": "Power_EfficiencyMode",
+   "group": "Power",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Efficiency Mode",
+   "onecli": "Power.EfficiencyMode",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Disabled"
+     ],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Power_PCIePowerBrake",
+   "group": "Power",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Reactive",
+    "Proactive",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Proactive",
+   "read_only": null,
+   "menu_path": "System Settings → Power → PCIe Power Brake",
+   "onecli": "Power.PCIePowerBrake",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Proactive"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Reactive",
+      "Proactive",
+      "Disabled"
+     ],
+     "default_display": "Proactive"
+    }
+   ]
+  },
+  {
+   "name": "Power_PlatformControlledType",
+   "group": "Power",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Maximum Performance",
+    "Efficiency – Favor Performance",
+    "Efficiency - Favor Power",
+    "Minimal Power"
+   ],
+   "default": null,
+   "default_display": "Efficiency – Favor Performance",
+   "read_only": null,
+   "menu_path": "System Settings → Power → Platform Controlled Type",
+   "onecli": "Power.PlatformControlledType",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "MaximumPerformance"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Maximum Performance",
+      "Efficiency – Favor Performance",
+      "Efficiency - Favor Power",
+      "Minimal Power"
+     ],
+     "default_display": "Efficiency – Favor Performance"
+    }
+   ]
+  },
+  {
+   "name": "Power_PowerPerformanceBias",
+   "group": "Power",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Platform Controlled",
+    "OS Controlled"
+   ],
+   "default": null,
+   "default_display": "Platform Controlled",
+   "read_only": null,
+   "menu_path": "System Settings → Power → Power/Performance Bias",
+   "onecli": "Power.PowerPerformanceBias",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "PlatformControlled"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Platform Controlled",
+      "OS Controlled"
+     ],
+     "default_display": "Platform Controlled"
+    }
+   ]
+  },
+  {
+   "name": "Power_WorkloadConfiguration",
+   "group": "Power",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Balanced",
+    "I/O sensitive"
+   ],
+   "default": null,
+   "default_display": "Balanced",
+   "read_only": null,
+   "menu_path": "System Settings → Power → Workload Configuration",
+   "onecli": "Power.WorkloadConfiguration",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "I_OSensitive"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Balanced",
+      "I/O sensitive"
+     ],
+     "default_display": "Balanced"
+    }
+   ]
+  },
+  {
+   "name": "Processors_4_LinkxGMIMaxSpeed",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "32Gbps",
+    "25Gbps",
+    "Minimum"
+   ],
+   "default": null,
+   "default_display": "Minimum",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → 4-Link xGMI Max Speed (or 3-Link xGMI Max Speed)",
+   "onecli": "Processors.4-LinkxGMIMaxSpeed",
+   "observed": [],
+   "sources": [
+    "lp1977"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "32Gbps",
+      "25Gbps",
+      "Minimum"
+     ],
+     "default_display": "Minimum"
+    }
+   ]
+  },
+  {
+   "name": "Processors_ACPICSTC2Latency",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → ACPI CST C2 Latency",
+   "onecli": "Processors.ACPICSTC2Latency",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 800
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_ACPISRATL3CacheasNUMADomain",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Disabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → ACPI SRAT L3 Cache as NUMA Domain",
+   "onecli": "Processors.ACPISRATL3CacheasNUMADomain",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Disabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_APICMode",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_AmountofMemorytoCover",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 8192
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_BoostFmax",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Manual",
+    "Auto"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → BoostFmax",
+   "onecli": "BoostFmax",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Manual",
+      "Auto"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_BoostFmaxManual",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 0
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_C-StateInterruptResponseTime",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "<value>"
+   ],
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → C-State Interrupt Response Time",
+   "onecli": "Processors.C-StateInterruptResponseTime",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "notes": [
+    "documented name contains hyphen (likely documentation artifact; verify on device)",
+    "documented name had whitespace: 'Processors_ C-StateInterruptResponseTime'"
+   ],
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "<value>"
+     ],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_C1EnhancedMode",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → C1 Enhanced Mode",
+   "onecli": "Processors.C1EnhancedMode",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CPPC",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → CPPC",
+   "onecli": "Processors.CPPC",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CPUFrequencyLimits",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Full turbo uplift",
+    "Restrict maximum frequency"
+   ],
+   "default": null,
+   "default_display": "Full turbo uplift",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → CPU Frequency Limits",
+   "onecli": "Processors.CPUFrequencyLimits",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Full turbo uplift",
+      "Restrict maximum frequency"
+     ],
+     "default_display": "Full turbo uplift"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CPUPCIeRelaxedOrdering",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Disabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → PCH PCIe Relaxed Ordering",
+   "onecli": "Processors.CPUPCIeRelaxedOrdering",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Disabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CPUPstateControl",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Autonomous",
+    "Cooperative without Legacy",
+    "Cooperative with Legacy",
+    "Legacy",
+    "None"
+   ],
+   "default": null,
+   "default_display": "Autonomous",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → CPU P-state Control",
+   "onecli": "Processors.CPUPstateControl",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Autonomous"
+    },
+    {
+     "source": "doc_xcc2_rest",
+     "model": "doc example (copied from XCC doc, not a real dump)",
+     "platform": "doc-example",
+     "value": "Autonomous"
+    }
+   ],
+   "sources": [
+    "doc_xcc2_rest",
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Autonomous",
+      "Cooperative without Legacy",
+      "Cooperative with Legacy",
+      "Legacy",
+      "None"
+     ],
+     "default_display": "Autonomous"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CPUSpeculativeStoreModes",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": "Processors.CPUSpeculativeStoreModes",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Balanced"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_CStates",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Legacy",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Legacy",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → C-States",
+   "onecli": "Processors.CStates",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Disabled"
+    },
+    {
+     "source": "doc_xcc2_rest",
+     "model": "doc example (copied from XCC doc, not a real dump)",
+     "platform": "doc-example",
+     "value": "Disable"
+    }
+   ],
+   "sources": [
+    "doc_xcc2_rest",
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Legacy",
+      "Disabled"
+     ],
+     "default_display": "Legacy"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CoNapTime",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "<value>"
+   ],
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → C0 Nap Time",
+   "onecli": "Processors.CoNapTime",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "<value>"
+     ],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_CorePerformanceBoost",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Core Performance Boost",
+   "onecli": "Processors.CorePerformanceBoost",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_CoresinCPUPackage",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "All",
+    "1",
+    "2",
+    "3",
+    "N-1"
+   ],
+   "default": null,
+   "default_display": "All",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Cores in CPU Package",
+   "onecli": "Processors.CoresinCPUPackage",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "All",
+      "1",
+      "2",
+      "3",
+      "N-1"
+     ],
+     "default_display": "All"
+    }
+   ]
+  },
+  {
+   "name": "Processors_DCA",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → DCA",
+   "onecli": "Processors.DCA",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_DFC_States",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → DF C-States",
+   "onecli": "Processors.DFC-States",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_DeterminismSlider",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Power",
+    "Performance"
+   ],
+   "default": null,
+   "default_display": "Performance",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Determinism Slider",
+   "onecli": "Processors.DeterminismSlider",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Performance"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Power",
+      "Performance"
+     ],
+     "default_display": "Performance"
+    }
+   ]
+  },
+  {
+   "name": "Processors_EnergyEfficientTurbo",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Energy Efficient Turbo",
+   "onecli": "Processors.EnergyEfficientTurbo",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_EnhancedREPMOVSBSTOSB",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_FastShortREPMOVSB",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_GlobalC_stateControl",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Global C-state Control",
+   "onecli": "Processors.GlobalC-stateControl",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_HSMPSupport",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_HardwarePrefetcher",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings→ Processors → Hardware Prefetcher",
+   "onecli": "Processors.HardwarePrefetcher",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_HyperThreading",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Hyper-Threading",
+   "onecli": "Processors.HyperThreading",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_IntelSpeedSelect",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "Base",
+    "Config 1",
+    "Config 2",
+    "SST-PP V2"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Processor → Intel Speed Select Technology",
+   "onecli": "Processors.IntelSpeedSelect",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Auto",
+      "Base",
+      "Config 1",
+      "Config 2",
+      "SST-PP V2"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_IntelVirtualizationTechnology",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Intel Virtualization Technology",
+   "onecli": "Processors.IntelVirtualizationTechnology",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_L1",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → UPI Power Management",
+   "onecli": "Processors.L1",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_L1RegionPrefetcher",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_L1StreamHWPrefetcher",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → L1 Stream HW Prefetcher",
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_L1StridePrefetcher",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_L2StreamHWPrefetcher",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_L2UpDownPrefetcher",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_MONITORMWAIT",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → MONITOR/MWAIT",
+   "onecli": "Processors.MONITORMWAIT",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "lp1977",
+    "sapcc_sr650v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    },
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_NumberofEnabledCPUCoresPerSocket",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "All",
+    "(Any core count value based on the CCDs and Cores Per CCD in your server)"
+   ],
+   "default": null,
+   "default_display": "All",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Number of Enabled CPU Cores Per Socket",
+   "onecli": "Processors.NumberofEnabledCPUCoresPerSocket",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "All"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "All",
+      "(Any core count value based on the CCDs and Cores Per CCD in your server)"
+     ],
+     "default_display": "All"
+    }
+   ]
+  },
+  {
+   "name": "Processors_P-stateHysteresis",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → P-State Hysteresis",
+   "onecli": "Processors.P-stateHysteresis",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "notes": [
+    "documented name contains hyphen (likely documentation artifact; verify on device)"
+   ],
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_PCHPCIeRelaxedOrdering",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → PCH PCIe Relaxed Ordering",
+   "onecli": "Processors.PCHPCIeRelaxedOrdering",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_P_state",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → P-State",
+   "onecli": "Processors.P-state",
+   "observed": [],
+   "sources": [
+    "lp1977"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_P_state1",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_P_state2",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_PackagePowerLimit",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "Maximum",
+    "Manual"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → Package Power Limit",
+   "onecli": "Processors.PackagePowerLimit",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Auto",
+      "Maximum",
+      "Manual"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_PackagePowerLimitManual",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 0
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_PeriodicDirectoryRinsePDRTuning",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Periodic Directory Rinse (PDR) Tuning",
+   "onecli": "Processors.PeriodicDirectoryRinsePDRTuning",
+   "observed": [],
+   "sources": [
+    "lp1977"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_ProcessorsXtoYcoresactive",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Maximum Turbo Frequency - 1 bin",
+    "Maximum Turbo Frequency - 2 bins",
+    "Maximum Turbo Frequency - 3 bins",
+    "…",
+    "Maximum Turbo Frequency - N bins"
+   ],
+   "default": null,
+   "default_display": "Maximum Turbo Frequency - 1 bin",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → CPU Frequency Limits",
+   "onecli": "Processors.ProcessorsXtoYcoresactive",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Maximum Turbo Frequency - 1 bin",
+      "Maximum Turbo Frequency - 2 bins",
+      "Maximum Turbo Frequency - 3 bins",
+      "…",
+      "Maximum Turbo Frequency - N bins"
+     ],
+     "default_display": "Maximum Turbo Frequency - 1 bin"
+    }
+   ]
+  },
+  {
+   "name": "Processors_RocketMode",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Rocket Mode",
+   "onecli": "Processors.RocketMode",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "notes": [
+    "documented name had whitespace: 'Processors_ RocketMode'"
+   ],
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_SEV_SNPSupport",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_SMTMode",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → SMT Mode",
+   "onecli": "Processors.SMTMode",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Disabled",
+      "Enabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_SNC",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Disabled",
+    "SNC2",
+    "SNC4"
+   ],
+   "default": null,
+   "default_display": "Disabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → SNC",
+   "onecli": "Processors.SNC",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Disabled",
+      "SNC2",
+      "SNC4"
+     ],
+     "default_display": "Disabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_SNPMemoryRMPTableCoverage",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_SOCP_states",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "P0",
+    "P1",
+    "P2"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → DF P-states",
+   "onecli": "Processors.SOCP-states",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Auto",
+      "P0",
+      "P1",
+      "P2"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_SVMMode",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "Processors_SnoopPreference",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Home Snoop Plus",
+    "Home"
+   ],
+   "default": null,
+   "default_display": "Home Snoop Plus",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Snoop Preference",
+   "onecli": "Processors.SnoopPreference",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Home Snoop Plus",
+      "Home"
+     ],
+     "default_display": "Home Snoop Plus"
+    }
+   ]
+  },
+  {
+   "name": "Processors_SplitRMPTable",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_TurboMode",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Turbo Mode",
+   "onecli": "Processors.TurboMode",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_UMA-BasedClustering",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": "System Settings → Processors → UMA-Based Clustering",
+   "onecli": "Processors.UMA-BasedClustering",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "notes": [
+    "documented name contains hyphen (likely documentation artifact; verify on device)"
+   ],
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_UPILinkDisable",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled All Links",
+    "Minimum Number of Links Enabled"
+   ],
+   "default": null,
+   "default_display": "Enabled All Links",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → UPI Link Disable",
+   "onecli": "Processors.UPILinkDisable",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled All Links",
+      "Minimum Number of Links Enabled"
+     ],
+     "default_display": "Enabled All Links"
+    }
+   ]
+  },
+  {
+   "name": "Processors_UPILinkFrequency",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Maximum Performance",
+    "Balanced",
+    "Minimal Power"
+   ],
+   "default": null,
+   "default_display": "Maximum Performance",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → UPI Link Frequency",
+   "onecli": "Processors.UPILinkFrequency",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Maximum Performance",
+      "Balanced",
+      "Minimal Power"
+     ],
+     "default_display": "Maximum Performance"
+    }
+   ]
+  },
+  {
+   "name": "Processors_UPIPrefetcher",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → UPI Prefetcher",
+   "onecli": "Processors.UPIPrefetcher",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_UncoreFrequencyScaling",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → Uncore Frequency Scaling",
+   "onecli": "Processors.UncoreFrequencyScaling",
+   "observed": [
+    {
+     "source": "sapcc_sr650v3",
+     "model": "ThinkSystem SR650 V3",
+     "platform": "intel_eagle_stream",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "lp1836",
+    "sapcc_sr650v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_XPTPrefetcher",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Enabled",
+    "Disabled"
+   ],
+   "default": null,
+   "default_display": "Enabled",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → XPT Prefetcher",
+   "onecli": "Processors.XPTPrefetcher",
+   "observed": [],
+   "sources": [
+    "lp1836"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1836",
+     "platform": "intel_eagle_stream",
+     "values_display": [
+      "Enabled",
+      "Disabled"
+     ],
+     "default_display": "Enabled"
+    }
+   ]
+  },
+  {
+   "name": "Processors_cTDP",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "Maximum",
+    "Manual"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Operating Modes → cTDP",
+   "onecli": "Processors.cTDP",
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "lp1977",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Auto",
+      "Maximum",
+      "Manual"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "Processors_cTDPManual",
+   "group": "Processors",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 0
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Processors_xGMIForceLinkWidth",
+   "group": "Processors",
+   "type": null,
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": "Processors.xGMIForceLinkWidth",
+   "observed": [],
+   "sources": [
+    "lp1977"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [],
+     "default_display": null
+    }
+   ]
+  },
+  {
+   "name": "Processors_xGMIMaximumLinkWidth",
+   "group": "Processors",
+   "type": "Enumeration (from tuning guide; Redfish ValueName spelling not guaranteed)",
+   "type_hint": null,
+   "allowed_values": null,
+   "allowed_values_display": [
+    "Auto",
+    "x4",
+    "x8",
+    "x16"
+   ],
+   "default": null,
+   "default_display": "Auto",
+   "read_only": null,
+   "menu_path": "System Settings → Processors → xGMI Maximum Link Width",
+   "onecli": "Processors.xGMIMaximumLinkWidth",
+   "observed": [],
+   "sources": [
+    "lp1977"
+   ],
+   "verification": "unverified",
+   "tuning_guide": [
+    {
+     "source": "lp1977",
+     "platform": "amd_genoa",
+     "values_display": [
+      "Auto",
+      "x4",
+      "x8",
+      "x16"
+     ],
+     "default_display": "Auto"
+    }
+   ]
+  },
+  {
+   "name": "SecureBootConfiguration_SecureBootMode",
+   "group": "SecureBootConfiguration",
+   "type": "Enumeration",
+   "type_hint": "string",
+   "allowed_values": [
+    "UserMode",
+    "SetupMode",
+    "AuditMode",
+    "DeployedMode"
+   ],
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": true,
+   "menu_path": "./SecureBootConfiguration/SecureBootConfiguration_SecureBootConfiguration",
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "UserMode"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "UserMode"
+    }
+   ],
+   "sources": [
+    "doc_xcc2_rest",
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "display_name": "Secure Boot Mode",
+   "registry_source": "doc_xcc2_rest"
+  },
+  {
+   "name": "SecureBootConfiguration_SecureBootPolicy",
+   "group": "SecureBootConfiguration",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "FactoryPolicy"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "SecureBootConfiguration_SecureBootSetting",
+   "group": "SecureBootConfiguration",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    },
+    {
+     "source": "sapcc_sr655v3",
+     "model": "ThinkSystem SR655 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "sapcc_sr655v3",
+    "weka_sr635v3"
+   ],
+   "verification": "verified"
+  },
+  {
+   "name": "SecureBootConfiguration_SecureBootStatus",
+   "group": "SecureBootConfiguration",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Secured_Core_DMAProtection",
+   "group": "Secured",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Secured_Core_DMArSupport",
+   "group": "Secured",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Secured_Core_DRTMMemoryReservation",
+   "group": "Secured",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Secured_Core_DRTMVirtualDeviceSupport",
+   "group": "Secured",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Secured_Core_IOMMU",
+   "group": "Secured",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Secured_Core_Secured_Core",
+   "group": "Secured",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Custom"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "Secured_Core_TSME",
+   "group": "Secured",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "SystemRecovery_F1StartControl",
+   "group": "SystemRecovery",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Auto"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "SystemRecovery_POSTWatchdogTimer",
+   "group": "SystemRecovery",
+   "type": "Enumeration",
+   "type_hint": "string",
+   "allowed_values": [
+    "Disable",
+    "Enable"
+   ],
+   "allowed_values_display": null,
+   "default": "Disable",
+   "default_display": null,
+   "read_only": false,
+   "menu_path": "./SystemRecovery/SystemRecovery_SystemRecovery",
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "doc_xcc2_rest",
+    "weka_sr635v3"
+   ],
+   "verification": "verified",
+   "display_name": "POST Watchdog Timer",
+   "registry_source": "doc_xcc2_rest"
+  },
+  {
+   "name": "SystemRecovery_POSTWatchdogTimerValue",
+   "group": "SystemRecovery",
+   "type": null,
+   "type_hint": "integer",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": 5
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "SystemRecovery_PostLoadSetupDefault",
+   "group": "SystemRecovery",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "SystemRecovery_RebootSystemOnNMI",
+   "group": "SystemRecovery",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Enabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "TrustedComputingGroup_DeviceOperation",
+   "group": "TrustedComputingGroup",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "None"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "TrustedComputingGroup_DeviceStatus",
+   "group": "TrustedComputingGroup",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "TPM2.0 Device present."
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "TrustedComputingGroup_SHA_1PCRBank",
+   "group": "TrustedComputingGroup",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "Disabled"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  },
+  {
+   "name": "UEFILanguage_SelectLanguage",
+   "group": "UEFILanguage",
+   "type": null,
+   "type_hint": "string",
+   "allowed_values": null,
+   "allowed_values_display": null,
+   "default": null,
+   "default_display": null,
+   "read_only": null,
+   "menu_path": null,
+   "onecli": null,
+   "observed": [
+    {
+     "source": "weka_sr635v3",
+     "model": "ThinkSystem SR635 V3",
+     "platform": "amd_genoa",
+     "value": "English_US"
+    }
+   ],
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "verification": "unverified"
+  }
+ ],
+ "device_specific_attribute_patterns": [
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_Create",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_CurrentVDCapacity",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_CurrentVDName",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_CurrentVDRAIDLevel",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_CurrentVDState",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_CurrentVDStripeSize",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_Delete",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_Name",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_RAIDLevel",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "M2NVMe2_BayRAIDKit__M2_StripeSize",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_Advancedpowersettings",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_BannerMessageTimeout",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_BlinkLEDs",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_BootLUN",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_BootLegacyInterruptDisable",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_BootRetryCount",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_BootStrapType",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_BoottoTarget",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_CHAPAuthentication",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_CHAPID",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_CHAPMutualAuthentication",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_CHAPSecret",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_ChipType",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_Connect",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_DHCPClient_IdHWTypeIB",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_DHCPHWTypeIB",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_DefaultGateway",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_DeviceName",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_EFIVersion",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_FamilyFirmwareVersion",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_IPAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_IPVersion",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_IPv4IPv6support",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_IPv6Address",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_IPv6DefaultGateway",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_IPv6PrefixLength",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_IPv6PrimaryDNS",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_LegacyBootProtocol",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_LinkSpeed",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_LinkStatus",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_MACAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_NetworkLinkType",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_PCIAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_PCIDeviceID",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_PCIVirtualFunctionsAdvertised",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_PKey",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_PrimaryDNS",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_PxeBootFilters",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_Slotpowerlimiter",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_SocketDirectOperation",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_SubnetMask",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_TCPIPParametersviaDHCP",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_TCPPort",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_VirtualLANID",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_VirtualLANMode",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_VirtualMACAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_VirtualizationMode",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_iSCSIName",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter_<ID>__Slot<N>_iSCSIParametersviaDHCP",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_BannerMessageTimeout",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_BlinkLEDs",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_BootRetryCount",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_BootStrapType",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_ChipType",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_DeviceName",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_EFIVersion",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_FamilyFirmwareVersion",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_IPv4IPv6support",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_LegacyBootProtocol",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_LinkSpeed",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_LinkStatus",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_MACAddress",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_PCIAddress",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_PCIDeviceID",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_PCIVirtualFunctionsAdvertised",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_PortsEnabled",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_RTPPSENABLEDONPOWERUP",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_SocketDirectOperation",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_VMwareDistributedServicesEngineDPU",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_VirtualLANID",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_VirtualLANMode",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_VirtualMACAddress",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_VirtualizationMode",
+   "count_in_sources": 2,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_WakeOnLAN",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "MellanoxNetworkAdapter__Slot<N>PhysicalPort<P>LogicalPort<L>_WakeOnLANLinkSpeed",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_BannerMessageTimeout",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_BlinkLEDs",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_BootLUN",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_BootLegacyInterruptDisable",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_BootRetryCount",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_BootStrapType",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_BoottoTarget",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_CHAPAuthentication",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_CHAPID",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_CHAPMutualAuthentication",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_CHAPSecret",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_ChipType",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_Connect",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_DHCPClient_IdHWTypeIB",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_DHCPHWTypeIB",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_DefaultGateway",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_DeviceName",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_EFIVersion",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_FamilyFirmwareVersion",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_IPAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_IPVersion",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_IPv4IPv6support",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_IPv6Address",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_IPv6DefaultGateway",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_IPv6PrefixLength",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_IPv6PrimaryDNS",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_LegacyBootProtocol",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_LinkSpeed",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_LinkStatus",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_MACAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_NetworkLinkType",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_PCIAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_PCIDeviceID",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_PCIVirtualFunctionsAdvertised",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_PKey",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_PrimaryDNS",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_PxeBootFilters",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_RTPPSENABLEDONPOWERUP",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_SocketDirectOperation",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_SubnetMask",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_TCPIPParametersviaDHCP",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_TCPPort",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_VirtualLANID",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "integer"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_VirtualLANMode",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_VirtualMACAddress",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_VirtualizationMode",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_iSCSIName",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  },
+  {
+   "pattern": "NvidiaNetworkAdapter_<ID>__Slot<N>_iSCSIParametersviaDHCP",
+   "count_in_sources": 1,
+   "sources": [
+    "weka_sr635v3"
+   ],
+   "value_types": [
+    "string"
+   ],
+   "status": "device-specific (depends on installed NIC/RAID kit; names embed slot/port; value omitted)"
+  }
+ ],
+ "device_specific_pattern_count": 133,
+ "registry_entries_from_docs": [
+  {
+   "AttributeName": "SystemRecovery_POSTWatchdogTimer",
+   "Type": "Enumeration",
+   "DisplayName": "POST Watchdog Timer",
+   "DefaultValue": "Disable",
+   "ReadOnly": false,
+   "Value": [
+    {
+     "ValueName": "Disable",
+     "ValueDisplayName": "Disable"
+    },
+    {
+     "ValueName": "Enable",
+     "ValueDisplayName": "Enable"
+    }
+   ],
+   "MenuPath": "./SystemRecovery/SystemRecovery_SystemRecovery",
+   "HelpText": "Enable/Disable POST Watchdog Timer.",
+   "WarningText": "POST Watchdog Timer changes require a system reboot to take effect.",
+   "ResetRequired": true,
+   "GrayOut": false,
+   "Hidden": false,
+   "DisplayOrder": 1,
+   "WriteOnly": false,
+   "from": "doc_xcc_rest + doc_xcc2_rest (identical example, SR650 CDI340M)"
+  },
+  {
+   "AttributeName": "SecureBootConfiguration_SecureBootMode",
+   "Type": "Enumeration",
+   "DisplayName": "Secure Boot Mode",
+   "DefaultValue": null,
+   "ReadOnly": true,
+   "Value": [
+    {
+     "ValueName": "UserMode",
+     "ValueDisplayName": "UserMode"
+    },
+    {
+     "ValueName": "SetupMode",
+     "ValueDisplayName": "SetupMode"
+    },
+    {
+     "ValueName": "AuditMode",
+     "ValueDisplayName": "AuditMode"
+    },
+    {
+     "ValueName": "DeployedMode",
+     "ValueDisplayName": "DeployedMode"
+    }
+   ],
+   "MenuPath": "./SecureBootConfiguration/SecureBootConfiguration_SecureBootConfiguration",
+   "HelpText": "Display the current secure boot mode",
+   "WarningText": "Secure Boot Mode changes require a system reboot to take effect.",
+   "ResetRequired": true,
+   "GrayOut": false,
+   "Hidden": false,
+   "DisplayOrder": 118,
+   "WriteOnly": false,
+   "from": "doc_xcc_rest + doc_xcc2_rest"
+  }
+ ],
+ "registry_dependencies_from_docs": [
+  {
+   "DependencyFor": "BootModes_SystemBootMode",
+   "MapFrom": "LegacyBIOS_LegacyBIOS == \"Enable\"",
+   "MapTo": "BootModes_SystemBootMode.GrayOut = true"
+  },
+  {
+   "DependencyFor": "SystemRecovery_POSTWatchdogTimerValue",
+   "MapFrom": "SystemRecovery_POSTWatchdogTimer == \"Disable\"",
+   "MapTo": "SystemRecovery_POSTWatchdogTimerValue.GrayOut = true"
+  }
+ ],
+ "onecli_only_settings": [
+  {
+   "onecli": "Processors.L2RFOPrefetcher",
+   "title": "L2 RFO Prefetcher",
+   "values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "Processors.LLCPrefetch",
+   "title": "LLC Prefetch",
+   "values_display": [
+    "Disabled",
+    "Enabled"
+   ],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "Memory.CRQoSConfiguration",
+   "title": "CR QoS Configuration and CR FastGo Configuration",
+   "values_display": [
+    "Auto",
+    "None",
+    "Option 1",
+    "Option 2",
+    "Option 3",
+    "Option 4",
+    "Option 5"
+   ],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "Processors.IrqThreshold",
+   "title": "Local/Remote Threshold",
+   "values_display": [],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "Processors.StaleAtoS",
+   "title": "Stale AtoS",
+   "values_display": [
+    "Auto",
+    "Disabled",
+    "Enabled",
+    "Disabled",
+    "Enabled"
+   ],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "Processors.SnoopResponseHoldOff",
+   "title": "Snoop Response Hold Off",
+   "values_display": [
+    "0, 1, 2 ... F"
+   ],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "Processors.LLCdeadlinealloc",
+   "title": "LLC dead line allocation",
+   "values_display": [
+    "Enabled",
+    "Disabled",
+    "Auto"
+   ],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "Processors.UncoreFrequencyLimit",
+   "title": "Uncore Frequency Limit",
+   "values_display": [
+    "Hex value 0, 1, 2 ... 3F"
+   ],
+   "source": "lp1836",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  },
+  {
+   "onecli": "For slots DevicesandIOPorts.PCIeGen_SlotN",
+   "title": "PCIe Gen Speed Selection",
+   "values_display": [
+    "Auto",
+    "Gen1",
+    "Gen2",
+    "Gen3",
+    "Gen4",
+    "Gen5"
+   ],
+   "source": "lp1977",
+   "status": "no Redfish attribute name given in the guide (hidden/OneCLI-only item); Redfish name unknown"
+  }
+ ],
+ "unavailable": {
+  "registry_json": "XCC2 BiosAttributeRegistry.1.0.0.json served by BMC only; the XCC2 doc example is a verbatim copy of the XCC (SR650 CDI340M) example",
+  "intel_eagle_stream_full_list": "SD650 V3 full attribute list: no public dump found",
+  "allowed_values_default_readonly": "null for all attributes without a published registry entry",
+  "how_to_dump": [
+   "GET https://<BMC>/redfish/v1/Systems/1/Bios  (Attributes = current values)",
+   "GET https://<BMC>/redfish/v1/Systems/1/Bios/Pending  (pending values)",
+   "GET https://<BMC>/redfish/v1/schemas/registries/BiosAttributeRegistry.1.0.0.json  (full registry: AttributeName/Type/Value[]/DefaultValue/ReadOnly/MenuPath/Dependencies/Menus)",
+   "curl -sk -u <USER>:<PASSWORD> <URL> -o <file>.json   (use placeholders; do not commit real credentials)",
+   "OneCLI: onecli config show all --override --log 5 --imm <USER>:<PASSWORD>@<BMC_IP>   (OneCLI/ASU variable form Group.Setting, e.g. Processors.CStates)"
+  ]
+ }
+}

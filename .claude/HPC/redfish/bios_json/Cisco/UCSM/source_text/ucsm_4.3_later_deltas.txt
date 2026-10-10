@@ -1,0 +1,1327 @@
+# 4.3 guide: supported-server lists per release (lines 184-330) and 4.3(4a)-(6c) new/changed tables (lines 1122-2300). Audit copy; (c) Cisco.
+             • Server BIOS Tokens in Release 4.3(6c), on page 1
+             • Server BIOS Tokens in Release 4.3(6a), on page 3
+             • Server BIOS Tokens in Release 4.3(5c), on page 19
+             • Server BIOS Tokens in Release 4.3(5a), on page 21
+             • Server BIOS Tokens in Release 4.3(4b), on page 29
+             • Server BIOS Tokens in Release 4.3(4a), on page 34
+             • Server BIOS Tokens in Release 4.3(3c), on page 37
+             • Server BIOS Tokens in Release 4.3(3a), on page 38
+             • Server BIOS Tokens in Release 4.3(2c), on page 39
+             • Server BIOS Tokens in Release 4.3(2b), on page 45
+
+
+Server BIOS Tokens in Release 4.3(6c)
+          Cisco UCS Manager supports the following servers in 4.3(6c):
+             • Cisco UCS X210c M8 Compute Node
+             • Cisco UCS X215c M8 Compute Node
+             • Cisco UCS C240 M8 Server
+             • Cisco UCS C220 M8 Server
+             • Cisco UCS C245 M8 Server
+             • Cisco UCS C225 M8 Server
+             • Cisco UCS X410c M7 Compute Node
+             • Cisco UCS X210c M7 Compute Node
+             • Cisco UCS X210c M6 Compute Node
+             • Cisco UCS C240 M7 Server
+             • Cisco UCS C220 M7 Server
+             • Cisco UCS C220 M6
+             • Cisco UCS C240 M6
+
+
+
+
+                                                                Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                            1
+                                                                                                           UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(6c)
+
+
+
+
+                          • Cisco UCS C245 M6
+                          • Cisco UCS C225 M6
+                          • Cisco UCS B200 M6
+                          • Cisco UCS B200 M5
+                          • Cisco UCS B480 M5
+                          • Cisco UCS C220 M5
+                          • Cisco UCS C240 M5
+                          • Cisco UCS C240 SD M5
+                          • Cisco UCS C480 M5
+                          • Cisco UCS C480 M5 ML
+                          • Cisco UCS S3260 M5
+                          • Cisco UCS C125 M5
+
+
+                      New/Changed BIOS Tokens for 4.3(6c)
+
+                       Name                 Default Value     Supported Values                  Platform            New/Changed
+                       IIO eDPC             On Fatal and     Disabled, On Fatal and Non-Fatal C225 M8, C245 M8, New
+                       Support              Non-Fatal Errors Errors                           X215c M8
+                                                              Note
+                                                              The value On Fatal Error is not
+                                                              supported on C225 M8, C245
+                                                              M8, and X215c M8 servers.
+
+                       Sub NUMA             Disabled          Auto, Enabled, Disabled           C220 M8, C240 M8, Changed
+                       Clustering                                                               X210c M8
+
+                      Related Documentation
+                          • Server BIOS Tokens in Release 4.3.6a
+                          • Server BIOS Tokens in Release 4.3(5c)
+                          • Server BIOS Tokens in Release 4.3(5a)
+                          • Server BIOS Tokens in Release 4.3(4b)
+                          • Server BIOS Tokens in Release 4.3(4a)
+                          • Server BIOS Tokens in Release 4.3(3c)
+                          • Server BIOS Tokens in Release 4.3(3a)
+                          • Server BIOS Tokens in Release 4.3(2c)
+                          • Server BIOS Tokens in Release 4.3(2b)
+                          • Server BIOS Tokens in Release 4.2
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+     2
+ UCS Server BIOS Tokens
+                                                                                                     Server BIOS Tokens in Release 4.3(6a)
+
+
+
+
+                             • Server BIOS Tokens in Release 4.1
+
+
+
+Server BIOS Tokens in Release 4.3(6a)
+                          Cisco UCS Manager supports the following servers in 4.3(6a):
+                             • Cisco UCS X210c M8 Compute Node
+
+
+
+                      Note      This platform is supported from 4.3(6a) onwards.
+
+                             • Cisco UCS X215c M8 Compute Node
+                             • Cisco UCS C240 M8 Server
+
+
+
+                      Note      This platform is supported from 4.3(6a) onwards.
+
+                             • Cisco UCS C220 M8 Server
+
+
+
+                      Note      This platform is supported from 4.3(6a) onwards.
+
+                             • Cisco UCS C245 M8 Server
+                             • Cisco UCS C225 M8 Server
+                             • Cisco UCS X410c M7 Compute Node
+                             • Cisco UCS X210c M7 Compute Node
+                             • Cisco UCS X210c M6 Compute Node
+                             • Cisco UCS C240 M7 Server
+                             • Cisco UCS C220 M7 Server
+                             • Cisco UCS C220 M6
+                             • Cisco UCS C240 M6
+                             • Cisco UCS C245 M6
+                             • Cisco UCS C225 M6
+                             • Cisco UCS B200 M6
+                             • Cisco UCS B200 M5
+                             • Cisco UCS B480 M5
+                             • Cisco UCS C220 M5
+
+
+
+
+                                                                                   Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                       3
+                                                                                                         UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(6a)
+
+
+
+
+                          • Cisco UCS C240 M5
+                          • Cisco UCS C240 SD M5
+                          • Cisco UCS C480 M5
+                          • Cisco UCS C480 M5 ML
+                          • Cisco UCS S3260 M5
+                          • Cisco UCS C125 M5
+Server BIOS Tokens in Release 4.3(5c)
+                          Cisco UCS Manager supports the following servers in 4.3(5c):
+                             • Cisco UCS X215c M8 Compute Node
+                             • Cisco UCS C245 M8 Server
+                             • Cisco UCS C225 M8 Server
+                             • Cisco UCS X410c M7 Compute Node
+                             • Cisco UCS X210c M7 Compute Node
+                             • Cisco UCS X210c M6 Compute Node
+                             • Cisco UCS C240 M7 Server
+
+
+
+
+                                                                                Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                    19
+                                                                                                        UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(5c)
+
+
+
+
+                          • Cisco UCS C220 M7 Server
+                          • Cisco UCS C220 M6
+                          • Cisco UCS C240 M6
+                          • Cisco UCS C245 M6
+                          • Cisco UCS C225 M6
+                          • Cisco UCS B200 M6
+                          • Cisco UCS B200 M5
+                          • Cisco UCS B480 M5
+                          • Cisco UCS C220 M5
+                          • Cisco UCS C240 M5
+                          • Cisco UCS C240 SD M5
+                          • Cisco UCS C480 M5
+                          • Cisco UCS C480 M5 ML
+                          • Cisco UCS S3260 M5
+                          • Cisco UCS C125 M5
+
+
+                      New/Changed BIOS Tokens for 4.3(5c)
+
+                       Name                     Default       Supported Values               Platform            New/Changed
+                                                Value
+                       CCD Control              Auto          Auto, 2 CCDs, 4 CCDs, 6 CCDs, 8 C225 M8, C245 M8, Changed
+                                                              CCDs, 10 CCDs, 12 CCDs, 14 CCDs X215c M8
+
+                       Power Profile            High        High Performance Mode, Efficiency C225 M8, C245 M8, Changed
+                       Selection F19h           Performance Mode, Maximum IO Performance X215c M8
+                                                Mode        Mode, Balanced Memory
+                                                            Performance Mode, Balanced Core
+                                                            Performance Mode, Balanced Core
+                                                            Memory Performance Mode, Auto
+
+                       CPU Downcore             Auto          Auto, ONE (1 + 0), TWO (2 + 0), C225 M8, C245 M8, Changed
+                       control F19                            THREE (3 + 0), FOUR (4 + 0),       X215c M8
+                       M10h-1Fh                               FIVE (5 + 0), SIX (6 + 0), SEVEN
+                                                              (7 + 0), EIGHT (8 + 0), NINE (9 +
+                                                              0), TEN (10 + 0), ELEVEN (11 + 0),
+                                                              TWELVE (12 + 0), THIRTEEN (13
+                                                              + 0), FOURTEEN (14 + 0),
+                                                              FIFTEEN (15 + 0)
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    20
+ UCS Server BIOS Tokens
+                                                                                                     Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                          Name                 Default      Supported Values                         Platform                  New/Changed
+                                               Value
+                          UEFI Memory          Enabled      Enabled, Disabled                        C220 M7, C240 M7, Changed
+                          Map Special                                                                X210c M7, X410c
+                          Purpose Memory                                                             M7
+                          Flag
+
+                          ACPI SRAT            Enabled      Enabled, Disabled                        C220 M7, C240 M7, Changed
+                          Special Purpose                                                            X210c M7, X410c
+                          Memory Flag                                                                M7
+
+                          Related Documentation
+                             • Server BIOS Tokens in Release 4.3(5a)
+                             • Server BIOS Tokens in Release 4.3(4b)
+                             • Server BIOS Tokens in Release 4.3(4a)
+                             • Server BIOS Tokens in Release 4.3(3c)
+                             • Server BIOS Tokens in Release 4.3(3a)
+                             • Server BIOS Tokens in Release 4.3(2c)
+                             • Server BIOS Tokens in Release 4.3(2b)
+                             • Server BIOS Tokens in Release 4.2
+                             • Server BIOS Tokens in Release 4.1
+
+
+
+Server BIOS Tokens in Release 4.3(5a)
+                          Cisco UCS Manager supports the following servers in 4.3(5a):
+                             • Cisco UCS X215c M8 Compute Node
+
+
+
+                      Note      This platform is supported from 4.3(5a) onwards.
+
+                             • Cisco UCS C225 M8 Server
+
+
+
+                      Note      This platform is supported from 4.3(5a) onwards.
+
+                             • Cisco UCS C245 M8 Server
+                             • Cisco UCS X410c M7 Compute Node
+                             • Cisco UCS X210c M7 Compute Node
+                             • Cisco UCS X210c M6 Compute Node
+
+
+
+
+                                                                                   Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                       21
+                                                                                                   UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                          • Cisco UCS C220 M7 Server
+                          • Cisco UCS C240 M7 Server
+                          • Cisco UCS C220 M6
+                          • Cisco UCS C240 M6
+                          • Cisco UCS C245 M6
+                          • Cisco UCS C225 M6
+                          • Cisco UCS B200 M6
+                          • Cisco UCS B200 M5
+                          • Cisco UCS B480 M5
+                          • Cisco UCS C220 M5
+                          • Cisco UCS C240 M5
+                          • Cisco UCS C240 SD M5
+                          • Cisco UCS C480 M5
+                          • Cisco UCS C480 M5 ML
+                          • Cisco UCS S3260 M5
+                          • Cisco UCS C125 M5
+
+
+                      BIOS Tokens for Cisco UCS X215c M8 Compute Node
+
+                       Name                                   Default Value   Supported Values
+                       FRB 2 Timer                            Enabled         Enabled, Disabled
+
+                       OS Watchdog Timer Policy               Power Off       Power Off, Reset
+
+                       OS Watchdog Timer Timeout              10 minutes      5 minutes, 10 minutes, 15 minutes, 20
+                                                                              minutes
+
+                       OS Watchdog Timer                      Disabled        Enabled, Disabled
+
+                       Flow Control                           None            None, RTS-CTS
+
+                       Baud rate                              115.2k          9.6k, 19.2k, 38.4k, 57.6k, 115.2k
+
+                       Terminal type                          VT100           PC-ANSI, VT100, VT100-PLUS, VT-UTF8
+
+                       Console redirection                    Disabled        COM 0, COM 1, Disabled
+
+                       Security Device Support                Enabled         Enabled, Disabled
+
+                       Trusted Platform Module State          Enabled         Enabled, Disabled
+
+                       SHA-1 PCR Bank                         Disabled        Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    22
+UCS Server BIOS Tokens
+                                                                                           Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                         Name                            Default Value            Supported Values
+                         SHA256 PCR Bank                 Enabled                  Enabled, Disabled
+
+                         SHA384 PCR Bank                 Disabled                 Enabled, Disabled
+
+                         Above 4G Decoding               Enabled                  Enabled, Disabled
+
+                         CDN Control                     Enabled                  Enabled, Disabled
+
+                         PCIe Slots CDN Control          Disabled                 Disabled, Enabled
+
+                         Core Performance Boost          Auto                     Disabled, Auto
+
+                         Global C-state Control          Disabled                 Disabled, Enabled, Auto
+
+                         L1 Stream HW Prefetcher         Auto                     Disabled, Enabled, Auto
+
+                         L2 Stream HW Prefetcher         Auto                     Disabled, Enabled, Auto
+
+                         NUMA Nodes per Socket           Auto                     NPS0, NPS1, NPS2, NPS4, Auto
+
+                         Chipselect Interleaving         Auto                     Disabled, Auto, Enabled
+
+                         Bank Group Swap                 Auto                     Disabled, Enabled, Auto
+
+                         Determinism Slider              Auto                     Power, Performance, Auto
+
+                         IPv4 PXE Support                Enabled                  Disabled, Enabled
+
+                         IPV6 PXE Support                Enabled                  Disabled, Enabled
+
+                         IOMMU                           Auto                     Disabled, Enabled, Auto
+
+                         SMT Mode                        Enabled                  Auto, Enabled, Disabled
+
+                         SVM Mode                        Enabled                  Enabled, Disabled
+
+                         CPU Downcore control F19        Auto                     Auto, ONE (1 + 0), TWO (2 + 0), THREE
+                         M10h-1Fh                                                 (3 + 0), FOUR (4 + 0), FIVE (5 + 0), SIX
+                                                                                  (6 + 0), SEVEN (7 + 0)
+
+                         Downcore control F19 MA0h-AFh   Auto                     Auto, TWO (1 + 1), FOUR (2 + 2), SIX (3
+                                                                                  + 3), EIGHT (4 + 4), TEN (5 + 5),
+                                                                                  TWELVE (6 + 6), FOURTEEN (7 + 7)
+
+                         SR-IOV Support                  Enabled                  Enabled, Disabled
+
+                         SMEE                            Auto                     Enabled, Disabled, Auto
+
+                         BIOS Techlog Level              Minimum                  Maximum, Normal, Minimum
+
+                         OptionROM Launch Optimization   Enabled                  Enabled, Disabled
+
+                         PCIe ARI Support                Auto                     Enabled, Disabled, Auto
+
+                         Re-Size BAR Support             Enabled                  Enabled, Disabled
+
+
+
+
+                                                                         Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                             23
+                                                                                                       UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                       Name                                   Default Value      Supported Values
+                       TSME                                   Auto               Enabled, Disabled, Auto
+
+                       IPv4 HTTP Support                      Enabled            Disabled, Enabled
+
+                       IPv6 HTTP Support                      Enabled            Disabled, Enabled
+
+                       Network Stack                          Enabled            Enabled, Disabled
+
+                       SEV-SNP Support                        Auto               Auto, Enabled, Disabled
+
+                       CPPC                                   Auto               Auto, Enabled, Disabled
+
+                       Power Profile Selection F19h           High Performance   High Performance Mode, Efficiency Mode,
+                                                              Mode               Maximum IO Performance Mode, Balanced
+                                                                                 Memory Performance Mode
+
+                       SNP Memory Coverage                    Auto               Auto, Enabled, Disabled, Custom
+
+                       SNP Memory Size to Cover in MB         8192               Integer (0 to 1048576)
+
+                       BME DMA Mitigation                     Disabled           Disabled, Enabled
+
+                       Post Package Repair                    Hard PPR           Disabled, Hard PPR
+
+                       Runtime Post Package Repair            Disabled           Disabled, Enabled
+
+                       APBDIS                                 Auto               0, 1, Auto
+
+                       Fixed SOC P-State SP5 F19h             0                  Integer (0 to 2)
+
+                       CCD Control                            Auto               Auto, 2 CCDs, 4 CCDs, 6 CCDs, 8 CCDs,
+                                                                                 10 CCDs
+
+                       Streaming Stores Control               Auto               Disabled, Enabled, Auto
+
+                       ACPI SRAT L3 Cache As NUMA             Auto               Disabled, Enabled, Auto
+                       Domain
+                       DF C-States                            Auto               Disabled, Enabled, Auto
+
+                       SEV-ES ASID Space Limit                1                  Integer (1 to 1007)
+
+                       Local APIC Mode                        Auto               Compatibility, XAPIC, X2APIC, Auto
+
+                       DRAM Scrub Time                        24 hours           Disabled, 1 hour, 4 hours, 6 hours, 8 hours,
+                                                                                 12 hours, 16 hours, 24 hours, 48 hours, Auto
+
+                       PCIe Ten Bit Tag Support               Auto               Auto, Enabled, Disabled
+
+                       4-link xGMI max speed                  Auto               20Gbps, 25Gbps, 32Gbps, Auto
+
+                       Memory Interleaving                    Auto               Disabled, Auto, Enabled
+
+                       DF PState Frequency Optimizer          Auto               Auto, Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    24
+UCS Server BIOS Tokens
+                                                                                                 Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                         Name                                 Default Value             Supported Values
+                         AVX512                               Auto                      Auto, Enabled, Disabled
+
+                         Power Down Enable                    Auto                      Auto, Enabled, Disabled
+
+                         xGMI Force Link Width                Auto                      Auto, 0, 1, 2
+
+                         Memory Refresh Rate                  1x Refresh                1x Refresh, 2x Refresh
+
+                         Burst and Postponed Refresh          Disabled                  Disabled, Enabled
+
+                         TPM Pending Operation                None                      None, TpmClear
+
+                         Enhanced Memory Test                 Auto                      Disabled, Enabled, Auto
+
+                         Enhanced CPU Performance             Disabled                  Disabled, Auto
+
+
+                         BIOS Tokens for Cisco UCS C225 M8 Server
+
+                         Name Field (Display Name)             Default Value            Supported Values
+                         MLOM Link Speed                       Auto                     Disabled, Auto, GEN1, GEN2, GEN3,
+                                                                                        GEN4, GEN5
+
+                         MLOM OptionROM                        Enabled                  Disabled, Enabled
+
+                         PCIe Slot n Link Speed where n ranges Auto                     Disabled, Auto, GEN1, GEN2, GEN3,
+                         from 1 to 3                                                    GEN4, GEN5
+
+                         PCIe Slot n OptionROM where n         Enabled                  Disabled, Enabled
+                         ranges from 1 to 3
+
+                         MRAID Link Speed                      Auto                     Disabled, Auto, GEN1, GEN2, GEN3,
+                                                                                        GEN4, GEN5
+                         MRAID OptionROM                       Enabled                  Disabled, Enabled
+
+                         Front NVME n Link Speed where n       Auto                     Disabled, Auto, GEN1, GEN2, GEN3,
+                         ranges from 1 to 10                                            GEN4, GEN5
+
+                         Front NVME n OptionROM                Enabled                  Disabled, Enabled
+                         where n ranges from 1 to 10
+                         PCIe Slot MSTOR Link Speed            Auto                     Disabled, Auto, GEN1, GEN2, GEN3,
+                                                                                        GEN4, GEN5
+
+                         PCIe Slot MSTOR RAID                  Enabled                  Disabled, Enabled
+                         OptionROM
+
+                         VGA Priority                          Onboard                  Onboard, Offboard, Onboard VGA Disabled
+
+                         FRB 2 Timer                           Enabled                  Enabled, Disabled
+
+                         OS Watchdog Timer Policy              Power Off                Power Off, Reset
+
+
+
+
+                                                                               Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                   25
+                                                                                                  UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                       Name Field (Display Name)              Default Value   Supported Values
+                       OS Watchdog Timer Timeout              10 minutes      5 minutes, 10 minutes, 15 minutes, 20
+                                                                              minutes
+
+                       OS Watchdog Timer                      Disabled        Enabled, Disabled
+
+                       Flow Control                           None            None, RTS-CTS
+
+                       Baud rate                              115.2k          9.6k, 19.2k, 38.4k, 57.6k, 115.2k
+
+                       Terminal type                          VT100           PC-ANSI, VT100, VT100-PLUS, VT-UTF8
+
+                       Console redirection                    Disabled        COM 0, COM 1, Disabled
+
+                       Security Device Support                Enabled         Enabled, Disabled
+
+                       Trusted Platform Module State          Enabled         Enabled, Disabled
+
+                       SHA-1 PCR Bank                         Disabled        Enabled, Disabled
+
+                       SHA256 PCR Bank                        Enabled         Enabled, Disabled
+
+                       SHA384 PCR Bank                        Disabled        Enabled, Disabled
+
+                       Above 4G Decoding                      Enabled         Enabled, Disabled
+
+                       CDN Control                            Enabled         Enabled, Disabled
+
+                       PCIe Slots CDN Control                 Disabled        Disabled, Enabled
+
+                       Power ON Password                      Disabled        Disabled, Enabled
+
+                       Core Performance Boost                 Auto            Disabled, Auto
+
+                       Global C-state Control                 Disabled        Disabled, Enabled, Auto
+
+                       L1 Stream HW Prefetcher                Auto            Disabled, Enabled, Auto
+
+                       L2 Stream HW Prefetcher                Auto            Disabled, Enabled, Auto
+
+                       NUMA Nodes per Socket                  Auto            NPS0, NPS1, NPS2, NPS4, Auto
+
+                       Chipselect Interleaving                Auto            Disabled, Auto, Enabled
+
+                       Bank Group Swap                        Auto            Disabled, Enabled, Auto
+
+                       Determinism Slider                     Auto            Power, Performance, Auto
+
+                       IPv4 PXE Support                       Enabled         Disabled, Enabled
+
+                       IPV6 PXE Support                       Enabled         Disabled, Enabled
+
+                       IOMMU                                  Auto            Disabled, Enabled, Auto
+
+                       SMT Mode                               Enabled         Auto, Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    26
+UCS Server BIOS Tokens
+                                                                                            Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                         Name Field (Display Name)        Default Value            Supported Values
+                         SVM Mode                         Enabled                  Enabled, Disabled
+
+                         CPU Downcore control F19         Auto                     Auto, ONE (1 + 0), TWO (2 + 0), THREE
+                         M10h-1Fh                                                  (3 + 0), FOUR (4 + 0), FIVE (5 + 0), SIX
+                                                                                   (6 + 0), SEVEN (7 + 0)
+
+                         Downcore control F19 MA0h-AFh    Auto                     Auto, TWO (1 + 1), FOUR (2 + 2), SIX (3
+                                                                                   + 3), EIGHT (4 + 4), TEN (5 + 5),
+                                                                                   TWELVE (6 + 6), FOURTEEN (7 + 7)
+
+                         SR-IOV Support                   Enabled                  Enabled, Disabled
+
+                         SMEE                             Auto                     Enabled, Disabled, Auto
+
+                         BIOS Techlog Level               Minimum                  Maximum, Normal, Minimum
+
+                         OptionROM Launch Optimization    Enabled                  Enabled, Disabled
+
+                         PCIe ARI Support                 Auto                     Enabled, Disabled, Auto
+
+                         Re-Size BAR Support              Enabled                  Enabled, Disabled
+
+                         TSME                             Auto                     Enabled, Disabled, Auto
+
+                         IPv4 HTTP Support                Enabled                  Disabled, Enabled
+
+                         IPv6 HTTP Support                Enabled                  Disabled, Enabled
+
+                         Network Stack                    Enabled                  Enabled, Disabled
+
+                         SEV-SNP Support                  Auto                     Auto, Enabled, Disabled
+
+                         CPPC                             Auto                     Auto, Enabled, Disabled
+
+                         Power Profile Selection F19h     High Performance         High Performance Mode, Efficiency Mode,
+                                                          Mode                     Maximum IO Performance Mode, Balanced
+                                                                                   Memory Performance Mode
+
+                         SNP Memory Coverage              Auto                     Auto, Enabled, Disabled, Custom
+
+                         SNP Memory Size to Cover in MB   8192                     Integer (0 to 1048576)
+
+                         BME DMA Mitigation               Disabled                 Disabled, Enabled
+
+                         Post Package Repair              Hard PPR                 Disabled, Hard PPR
+
+                         Runtime Post Package Repair      Disabled                 Disabled, Enabled
+
+                         APBDIS                           Auto                     0, 1, Auto
+
+                         Fixed SOC P-State SP5 F19h       0                        Integer (0 to 2)
+
+                         CCD Control                      Auto                     Auto, 2 CCDs, 4 CCDs, 6 CCDs, 8 CCDs,
+                                                                                   10 CCDs
+
+
+
+
+                                                                          Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                              27
+                                                                                                         UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(5a)
+
+
+
+
+                       Name Field (Display Name)                Default Value      Supported Values
+                       Streaming Stores Control                 Auto               Disabled, Enabled, Auto
+
+                       ACPI SRAT L3 Cache As NUMA               Auto               Disabled, Enabled, Auto
+                       Domain
+                       DF C-States                              Auto               Disabled, Enabled, Auto
+
+                       SEV-ES ASID Space Limit                  1                  Integer (1 to 1007)
+
+                       Local APIC Mode                          Auto               Compatibility, XAPIC, X2APIC, Auto
+
+                       DRAM Scrub Time                          24 hours           Disabled, 1 hour, 4 hours, 6 hours, 8 hours,
+                                                                                   12 hours, 16 hours, 24 hours, 48 hours, Auto
+
+                       PCIe Ten Bit Tag Support                 Auto               Auto, Enabled, Disabled
+
+                       4-link xGMI max speed                    Auto               20Gbps, 25Gbps, 32Gbps, Auto
+
+                       Memory Interleaving                      Auto               Disabled, Auto, Enabled
+
+                       DF PState Frequency Optimizer            Auto               Auto, Enabled, Disabled
+
+                       AVX512                                   Auto               Auto, Enabled, Disabled
+
+                       Power Down Enable                        Auto               Auto, Enabled, Disabled
+
+                       xGMI Force Link Width                    Auto               Auto, 0, 1, 2
+
+                       Memory Refresh Rate                      1x Refresh         1x Refresh, 2x Refresh
+
+                       Burst and Postponed Refresh              Disabled           Disabled, Enabled
+
+                       TPM Pending Operation                    None               None, TpmClear
+
+                       Enhanced Memory Test                     Auto               Disabled, Enabled, Auto
+
+                       Enhanced CPU Performance                 Disabled           Disabled, Auto
+
+
+                      New/Changed BIOS Tokens for 4.3(5a)
+
+                       Name                        Default    Supported Values     Platform                       New/Changed
+                                                   Value
+                       Re-Size BAR Support Enabled            Enabled, Disabled    X410c M7, X210c M7, C220 New
+                                                                                   M7, C240 M7
+
+                       Global C-state              Disabled   Disabled, Enabled,   C245 M8                        Changed
+                       Control                                Auto
+
+                      Related Documentation
+                          • Server BIOS Tokens in Release 4.3(4b)
+                          • Server BIOS Tokens in Release 4.3(4a)
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    28
+ UCS Server BIOS Tokens
+                                                                                                     Server BIOS Tokens in Release 4.3(4b)
+
+
+
+
+                             • Server BIOS Tokens in Release 4.3(3c)
+                             • Server BIOS Tokens in Release 4.3(3a)
+                             • Server BIOS Tokens in Release 4.3(2c)
+                             • Server BIOS Tokens in Release 4.3(2b)
+                             • Server BIOS Tokens in Release 4.2
+                             • Server BIOS Tokens in Release 4.1
+
+
+
+Server BIOS Tokens in Release 4.3(4b)
+                          Cisco UCS Manager supports the following servers in 4.3(4b):
+                             • Cisco UCS C245 M8 Server
+
+
+
+                      Note      This platform is supported from 4.3(4b) onwards.
+
+                             • Cisco UCS X410c M7 Compute Node
+                             • Cisco UCS X210c M7 Compute Node
+                             • Cisco UCS X210c M6 Compute Node
+                             • Cisco UCS C220 M7 Server
+                             • Cisco UCS C240 M7 Server
+                             • Cisco UCS C220 M6
+                             • Cisco UCS C240 M6
+                             • Cisco UCS C245 M6
+                             • Cisco UCS C225 M6
+                             • Cisco UCS B200 M6
+                             • Cisco UCS B200 M5
+                             • Cisco UCS B480 M5
+                             • Cisco UCS C220 M5
+                             • Cisco UCS C240 M5
+                             • Cisco UCS C240 SD M5
+                             • Cisco UCS C480 M5
+                             • Cisco UCS C480 M5 ML
+                             • Cisco UCS S3260 M5
+
+
+
+
+                                                                                   Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                       29
+                                                                                                  UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(4b)
+
+
+
+
+                          • Cisco UCS C125 M5
+
+
+                      BIOS Tokens for Cisco UCS C245 M8 Server
+
+                       Name                                   Default Value   Supported Values
+
+                       MLOM Link Speed                        Auto            Disabled, Auto, GEN1, GEN2, GEN3,
+                                                                              GEN4, GEN5
+
+                       MLOM OptionROM                         Enabled         Disabled, Enabled
+
+                       PCIe Slot n Link Speed where n ranges Auto             Disabled, Auto, GEN1, GEN2, GEN3,
+                       from 1 to 8                                            GEN4, GEN5
+
+                       PCIe Slot n OptionROM where n ranges Enabled           Disabled, Enabled
+                       from 1 to 8
+                       MRAID1 Link Speed                      Auto            Disabled, Auto, GEN1, GEN2, GEN3,
+                                                                              GEN4, GEN5
+
+                       MRAID1 OptionROM                       Enabled         Disabled, Enabled
+
+                       MRAID2 Link Speed                      Auto            Disabled, Auto, GEN1, GEN2, GEN3,
+                                                                              GEN4, GEN5
+
+                       MRAID2 OptionROM                       Enabled         Disabled, Enabled
+
+                       Front NVME n Link Speed where n        Auto            Disabled, Auto, GEN1, GEN2, GEN3,
+                       ranges from 1 to 4                                     GEN4, GEN5
+
+                       Front NVME n OptionROM where n         Enabled         Disabled, Enabled
+                       ranges from 1 to 4
+
+                       Rear NVME n Link Speed where n         Auto            Disabled, Auto, GEN1, GEN2, GEN3,
+                       ranges from 1 to 4                                     GEN4, GEN5
+
+                       Rear NVME n OptionROMwhere n           Enabled         Enabled, Disabled
+                       ranges from 1 to 4
+
+                       PCIe Slot MSTOR Link Speed             Auto            Disabled, Auto, GEN1, GEN2, GEN3,
+                                                                              GEN4, GEN5
+
+                       PCIe Slot MSTOR RAID OptionROM Enabled                 Enabled, Disabled
+
+                       VGA Priority                           Onboard         Offboard, Onboard, Onboard VGA
+                                                                              Disabled
+
+                       FRB 2 Timer                            Enabled         Enabled, Disabled
+
+                       OS Watchdog Timer Policy               Power-off       Power-off, Reset
+                       OS Boot Watchdog Timer Timeout         10 minutes      5 minutes, 10 minutes, 15 minutes, 20
+                                                                              minutes
+
+                       OS Boot Watchdog Timer                 Disabled        Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    30
+UCS Server BIOS Tokens
+                                                                                            Server BIOS Tokens in Release 4.3(4b)
+
+
+
+
+                         Name                                 Default Value         Supported Values
+
+                         Flow Control                         None                  None, RTS-CTS
+                         Baud Rate                            115.2k                9.6k, 19.2k, 38.4k, 57.6k, 115.2k
+
+                         Terminal type                        VT100                 PC-ANSI, VT100, VT100-PLUS,
+                                                                                    VT-UTF8
+
+                         Console Redirection                  Disabled              COM 0, COM 1, Disabled
+
+                         Security Device Support              Enabled               Enabled, Disabled
+
+                         Trusted Platform Module State        Enabled               Enabled, Disabled
+
+                         SHA-1 PCR Bank                       Disabled              Enabled, Disabled
+
+                         SHA256 PCR Bank                      Enabled               Enabled, Disabled
+
+                         SHA384 PCR Bank                      Disabled              Enabled, Disabled
+
+                         Above 4G Decoding                    Enabled               Enabled, Disabled
+
+                         CDN Control                          Enabled               Enabled, Disabled
+
+                         PCIe Slots CDN Control where CDN     Disabled              Enabled, Disabled
+                         refers to Consistent Device Naming
+
+                         Power ON Password                    Disabled              Enabled, Disabled
+
+                         Core Performance Boost               Auto                  Enabled, Disabled, Auto
+
+                         Global C-state Control               Auto                  Enabled, Disabled, Auto
+
+                         L1 Stream HW Prefetcher              Auto                  Enabled, Disabled, Auto
+
+                         L2 Stream HW Prefetcher              Auto                  Enabled, Disabled, Auto
+
+                         NUMA Nodes per Socket                Auto                  NPS0, NPS1, NPS2, NPS4, Auto
+
+                         Chipselect Interleaving              Auto                  Enabled, Disabled, Auto
+
+                         Bank Group Swap                      Auto                  Enabled, Disabled, Auto
+
+                         Determinism Slider                   Auto                  Auto, Performance, Power
+
+                         IPv4 PXE Support                     Enabled               Enabled, Disabled
+
+                         IPv6 PXE Support                     Enabled               Enabled, Disabled
+
+                         IOMMU                                Auto                  Enabled, Disabled, Auto
+
+                         SMT Mode                             Enabled               Enabled, Disabled, Auto
+
+                         SVM Mode                             Enabled               Enabled, Disabled
+
+
+
+
+                                                                          Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                              31
+                                                                                                        UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(4b)
+
+
+
+
+                       Name                                      Default Value      Supported Values
+
+                       CPU Downcore control F19 M10h-1Fh Auto                       Auto, ONE (1 + 0), TWO (2 + 0), THREE
+                       where F refers to the processor family and                   (3 + 0), FOUR (4 + 0), FIVE (5 + 0), SIX
+                       M denotes the model                                          (6 + 0), SEVEN (7 + 0)
+
+                       Downcore control F19 MA0h-AFh              Auto              Auto, TWO (1 + 1), FOUR (2 + 2), SIX (3
+                       where F refers to the processor family and                   + 3), EIGHT (4 + 4), TEN (5 + 5),
+                       M denotes the model                                          TWELVE (6 + 6), FOURTEEN (7 + 7)
+
+                       SR-IOV Support                            Enabled            Enabled, Disabled
+
+                       SMEE                                      Auto               Enabled, Disabled, Auto
+
+                       BIOS Techlog Level                        Minimum            Maximum, Minimum, Normal
+
+                       OptionROM Launch Optimization             Enabled            Enabled, Disabled
+
+                       PCIe ARI Support                          Auto               Enabled, Disabled, Auto
+
+                       Re-Size BAR Support                       Enabled            Enabled, Disabled
+
+                       TSME                                      Auto               Enabled, Disabled, Auto
+
+                       IPv4 HTTP Support                         Enabled            Enabled, Disabled
+
+                       IPv6 HTTP Support                         Enabled            Enabled, Disabled
+
+                       Network Stack                             Enabled            Enabled, Disabled
+
+                       SEV-SNP Support                           Auto               Enabled, Disabled, Auto
+
+                       CPPC                                      Auto               Enabled, Disabled, Auto
+
+                       Power Profile Selection F19h where F      High Performance   High Performance Mode, Efficiency Mode,
+                       refers to the processor family and M      Mode               Maximum IO Performance Mode,
+                       denotes the model                                            Balanced Memory Performance Mode
+
+                       SNP Memory Coverage                       Auto               Auto, Enabled, Disabled, Custom
+
+                       SNP Memory Size to Cover in MB            8192               0 - 1048576
+
+                       BME DMA Mitigation                        Disabled           Enabled, Disabled
+
+                       Post Package Repair                       Hard PPR           Disabled, Hard PPR
+
+                       Runtime Post Package Repair               Disabled           Enabled, Disabled
+
+                       Burst and Postponed Refresh               Disabled           Enabled, Disabled
+
+                       APBDIS                                    Auto               0, 1, Auto
+
+                       Fixed SOC P-State SP5 F19h where F        0                  0-2
+                       refers to the processor family
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    32
+UCS Server BIOS Tokens
+                                                                                                Server BIOS Tokens in Release 4.3(4b)
+
+
+
+
+                         Name                                    Default Value          Supported Values
+
+                         CCD Control                             Auto                   Auto, 2 CCDs, 4 CCDs, 6 CCDs, 8 CCDs,
+                                                                                        10 CCDs
+
+                         Streaming Stores Control                Auto                   Enabled, Disabled, Auto
+
+                         ACPI SRAT L3 Cache As NUMA              Auto                   Enabled, Disabled, Auto
+                         Domain
+
+                         DF C-States                             Auto                   Enabled, Disabled, Auto
+
+                         SEV-ES ASID Space Limit                 1                      1- 1007
+
+                         Local APIC Mode                         Auto                   Compatibility, XAPIC, X2APIC, Auto
+
+                         DRAM Scrub Time                         24 hours               Disabled, 1 hour, 4 hours, 6 hours, 8 hours,
+                                                                                        12 hours,16 hours, 24 hours, 48 hours,
+                                                                                        Auto
+
+                         PCIe Ten Bit Tag Support                Auto                   Enabled, Disabled, Auto
+
+                         4-link xGMI max speed                   Auto                   20 Gbps, 25 Gbps, 32 Gbps, Auto
+
+                         Memory Interleaving                     Auto                   Enabled, Disabled, Auto
+
+                         DF PState Frequency Optimizer           Auto                   Enabled, Disabled, Auto
+
+                         AVX512                                  Auto                   Enabled, Disabled, Auto
+
+                         Power Down Enable                       Auto                   Enabled, Disabled, Auto
+
+                         xGMI Force Link Width                   Auto                   Auto, 0, 1, 2
+
+                         Memory Refresh Rate                     1x Refresh             1x Refresh, 2x Refresh
+
+                         TPM Pending Operation                   None                   None, TpmClear
+
+                         Enhanced Memory Test                    Auto                   Disabled, Enabled, Auto
+
+                         Enhanced CPU Performance                Disabled               Disabled, Auto
+
+                         Related Documentation
+                           • Server BIOS Tokens in Release 4.3(4a)
+                           • Server BIOS Tokens in Release 4.3(3c)
+                           • Server BIOS Tokens in Release 4.3(3a)
+                           • Server BIOS Tokens in Release 4.3(2c)
+                           • Server BIOS Tokens in Release 4.3(2b)
+                           • Server BIOS Tokens in Release 4.2
+                           • Server BIOS Tokens in Release 4.1
+
+
+
+
+                                                                              Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                  33
+                                                                                                      UCS Server BIOS Tokens
+  Server BIOS Tokens in Release 4.3(4a)
+
+
+
+
+Server BIOS Tokens in Release 4.3(4a)
+                        Cisco UCS Manager supports the following servers in 4.3(4a):
+                            • Cisco UCS X410c M7 Compute Node
+                            • Cisco UCS X210c M7 Compute Node
+                            • Cisco UCS X210c M6 Compute Node
+                            • Cisco UCS C220 M7 Server
+                            • Cisco UCS C240 M7 Server
+                            • Cisco UCS C220 M6
+                            • Cisco UCS C240 M6
+                            • Cisco UCS C245 M6
+                            • Cisco UCS C225 M6
+                            • Cisco UCS B200 M6
+                            • Cisco UCS B200 M5
+                            • Cisco UCS B480 M5
+                            • Cisco UCS C220 M5
+                            • Cisco UCS C240 M5
+                            • Cisco UCS C240 SD M5
+                            • Cisco UCS C480 M5
+                            • Cisco UCS C480 M5 ML
+                            • Cisco UCS S3260 M5
+                            • Cisco UCS C125 M5
+
+
+                        New/Changed BIOS Tokens for 4.3(4a)
+
+                         Name                        Default    Supported Values          Platform             New/Changed
+                                                     Value
+
+                         DFX OSB                     Enabled    Auto, Enabled, Disabled   X410c M7, X210c M7 New
+
+                         SHA384 PCR Bank*            Disabled   Enabled, Disabled         C225 M6, C245 M6,    New
+                                                                                          C220 M6, C240 M6,
+                                                                                          X210c M6, B200 M6
+
+                         Local APIC Mode*            Auto       Compatibility, XAPIC,     C245 M6, C225 M6     New
+                                                                X2APIC, Auto
+
+
+
+
+                    Cisco UCS Server BIOS Tokens, Release 4.3
+      34
+UCS Server BIOS Tokens
+                                                                                              Server BIOS Tokens in Release 4.3(4a)
+
+
+
+
+                         Name                 Default    Supported Values                  Platform                     New/Changed
+                                              Value
+
+                         DRAM Scrub Time      Auto       Disabled,1 hour,4 hours, 8    C245 M6, C225 M6                 New
+                                                         hours, 16 hours, 24 hours, 48
+                                                         hours, Auto
+
+                         Memory Interleaving Auto        Disabled, Auto                    C245 M6, C225 M6             New
+
+                         PCIe Ten Bit Tag     Auto       Auto, Enabled, Disabled           C245 M6, C225 M6             New
+                         Support
+
+                         EDC Control Throttle Auto       Auto, Enabled, Disabled           C245 M6, C225 M6             New
+
+                         DLWM Support         Auto       Auto, Enabled, Disabled           C245 M6, C225 M6             New
+
+                         Memory Clock Speed Auto         Auto, 800 MHz, 933 MHz,  C245 M6, C225 M6,                     New
+                         7xx3 (AMD 3rd Gen               1067 MHz, 1200 MHz, 1333 X210c M6, B200 M6
+                         CPU)                            MHz, 1467 MHz, 1600 MHz,
+                                                         1633 MHz, 1667 MHz, 1700
+                                                         MHz, 1733 MHz, 1767 MHz,
+                                                         1800 MHz, 400 MHz
+
+                         Memory Clock Speed Auto         Auto, 667 MHz, 800 MHz,  C245 M6, C225 M6,                     New
+                         7xx2 (AMD 2nd Gen               933 MHz, 1067 MHz, 1200 X210c M6, B200 M6
+                         CPU)                            MHz, 1333 MHz, 1467 MHz,
+                                                         1600 MHz
+
+                         xGMI Link            Auto       Auto, 2 xGMI Links, 3 xGMI C245 M6, C225 M6                    New
+                         Configuration                   Links, 4 xGMI Links
+
+                         Preferred IO 7xx3    Auto       Auto, Bus                         C245 M6, C225 M6             New
+                         (AMD 3rd Gen CPU)
+
+                         Preferred IO 7xx2 Auto          Auto, Manual                      C245 M6, C225 M6             New
+                         (AMD 2nd Gen CPU)
+
+                         Core Watchdog Timer Auto        Auto,Enabled, Disabled            C245 M6, C225 M6             New
+                         Enable
+
+                         Serial Mux           Disabled   Enabled, Disabled                 C245 M6, C225 M6             New
+
+                         Memory Refresh Rate 1x Refresh 1x Refresh, 2x Refresh             C245 M6, C225 M6             New
+
+                         PRMRR Size           256M       Invalid Config, Auto, 128M, X410c M7, X210c M7, Changed
+                                                         256M, 512M, 1G, 2G, 4G, 8G, C220 M7, C240 M7
+                                                         16G, 32G, 64G, 128G, 256G,
+                                                         512G
+
+
+
+
+                                                                            Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                35
+                                                                                                       UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(4a)
+
+
+
+
+                   Note         • SHA384 PCR Bank Bios token supports PID models UCS-TPM-002D and UCS-TPM-002D-D.
+                                • For Local APIC Mode Bios token, Compatability values are not supported for AMD EPYC 7XX2
+                                  series.
+
+
+                      Deprecated BIOS Tokens for 4.3(4a)
+
+                       Name                          Default Value Supported Values         Platform
+
+                       DCPMM Firmware                Enabled      Auto, Enabled, Disabled   X410c M7, X210c M7, C220 M7,
+                       Downgrade                                                            C240 M7
+
+                       CR QoS                        Disabled     Profile 1, Disabled       X410c M7, X210c M7, C220 M7,
+                                                                                            C240 M7
+
+                       NVM Performance               BW           BW Optimized, Balanced    X410c M7, X210c M7, C220 M7,
+                       Setting                       Optimized    Profile                   C240 M7
+
+                       CR FastGo Config              Auto         Enable optimization,      X410c M7, X210c M7, C220 M7,
+                                                                  Disable Optimization      C240 M7
+
+                       Snoopy mode for AD            Disabled     Enabled, Disabled         X410c M7, X210c M7, C220 M7,
+                                                                                            C240 M7
+
+                       Snoopy for 2LM                Disabled     Enabled, Disabled         X410c M7, X210c M7, C220 M7,
+                                                                                            C240 M7
+
+                       Volatile Memory Mode 1LM                   1LM, 2LM                  X410c M7, X210c M7, C220 M7,
+                                                                                            C240 M7
+
+                       eADR                          Disabled     Enabled, Disabled, Auto   X410c M7, X210c M7, C220 M7,
+                                                                                            C240 M7
+
+                       Memory Bandwidth              Enabled      Enabled, Disabled         X410c M7, X210c M7, C220 M7,
+                       Boost                                                                C240 M7
+
+                      Related Documentation
+                          • Server BIOS Tokens in Release 4.3(3c)
+                          • Server BIOS Tokens in Release 4.3(3a)
+                          • Server BIOS Tokens in Release 4.3(2c)
+                          • Server BIOS Tokens in Release 4.3(2b)
+                          • Server BIOS Tokens, Release 4.2
+                          • Server BIOS Tokens, Release 4.1
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    36
+ UCS Server BIOS Tokens
+                                                                                                   Server BIOS Tokens in Release 4.3(3c)
+
+
+
+
+Server BIOS Tokens in Release 4.3(3c)
+                          Cisco UCS Manager supports the following servers in 4.3(3c):
+                             • Cisco UCS X410c M7 Compute Node
+                             • Cisco UCS X210c M7 Compute Node
+                             • Cisco UCS X210c M6 Compute Node
+                             • Cisco UCS C240 M7 Server
+                             • Cisco UCS C220 M7 Server
+                             • Cisco UCS C240 M6
+                             • Cisco UCS C220 M6
+                             • Cisco UCS C245 M6
+                             • Cisco UCS C225 M6
+                             • Cisco UCS B200 M6
+                             • Cisco UCS B200 M5
+                             • Cisco UCS B480 M5
+                             • Cisco UCS C220 M5
+                             • Cisco UCS C240 M5
+                             • Cisco UCS C240 SD M5
+                             • Cisco UCS C480 M5
+                             • Cisco UCS C480 M5 ML
+                             • Cisco UCS S3260 M5
+                             • Cisco UCS C125 M5
+
+
+                          New/Changed BIOS Tokens for 4.3(3c)
+
+                          Name                  Default      Supported Values             Platform                           New/Changed
+                                                Value
+
+                          MMIO High             256G         1G, 4G, 16G, 64G, 256G, X410c M7, X210c M7, C240 New
+                          Granularity Size                   1024G                   M7, C220 M7
+
+                          MMIO High Base        32T          512G, 1T, 2T, 4T, 16T,       X410c M7, X210c M7, C240 New
+                                                             24T, 32T, 40T, 56T           M7, C220 M7
+
+                          IOAT Configuration Enabled         Disabled, Enabled            X410c M7, X210c M7, C240 New
+                                                                                          M7, C220 M7
+
+                          Related Documentation
+
+
+
+
+                                                                                 Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                     37
+                                                                                       UCS Server BIOS Tokens
+  Server BIOS Tokens in Release 4.3(3a)
+
+
+
+
+                            • Server BIOS Tokens in Release 4.3(3a)
+                            • Server BIOS Tokens in Release 4.3(2c)
+                            • Server BIOS Tokens in Release 4.3(2b)
+                            • Server BIOS Tokens, Release 4.2
+                            • Server BIOS Tokens, Release 4.1
+
+
+
+Server BIOS Tokens in Release 4.3(3a)
+                        Cisco UCS Manager supports the following servers in 4.3(3a):
+                            • Cisco UCS X410c M7 Compute Node
+                            • Cisco UCS X210c M7 Compute Node
+                            • Cisco UCS X210c M6 Compute Node
+                            • Cisco UCS C220 M7 Server
+                            • Cisco UCS C240 M7 Server
+                            • Cisco UCS C220 M6
+                            • Cisco UCS C240 M6
+                            • Cisco UCS C245 M6
+                            • Cisco UCS C225 M6
+                            • Cisco UCS B200 M6
+                            • Cisco UCS B200 M5
+                            • Cisco UCS B480 M5
+                            • Cisco UCS C220 M5
+                            • Cisco UCS C240 M5
+                            • Cisco UCS C240 SD M5
+                            • Cisco UCS C480 M5
+                            • Cisco UCS C480 M5 ML
+                            • Cisco UCS S3260 M5
+                            • Cisco UCS C125 M5
+
+
+
+
+                    Cisco UCS Server BIOS Tokens, Release 4.3
+      38
+ UCS Server BIOS Tokens
+                                                                                                      Server BIOS Tokens in Release 4.3(2c)
+
+
+
+
+                          New/Changed BIOS Tokens for 4.3(3a)
+
+                          Name                    Default        Supported Values          Platform                            New/Changed
+                                                  Value
+
+                          Trust Domain            Disabled       Enabled, Disabled         X410c M7, X210c M7, C220 New
+                          Extension (TDX)                                                  M7, C240 M7
+
+                          TDX Secure              Disabled       Enabled, Disabled         X410c M7, X210c M7, C220 New
+                          Arbitration Mode                                                 M7, C240 M7
+                          (SEAM) Loader
+
+                          SHA384 PCR Bank         Disabled       Enabled, Disabled         X410c M7, X210c M7, C220 New
+                                                                                           M7, C240 M7
+
+                          QpiLinkSpeed            Auto           20.0GT/s,12.8GT/s,        X410c M7, X210c M7, C220 New
+                                                                 14.4GT/s, 16.0GT/s,       M7, C240 M7
+                                                                 Auto
+
+                          C1 Auto Demotion        Auto           Auto, Enabled,            X410c M7, X210c M7, C220 Changed
+                                                                 Disabled                  M7, C240 M7
+
+                          C1 Auto UnDemotion Auto                Auto, Enabled,            X410c M7, X210c M7, C220 Changed
+                                                                 Disabled                  M7, C240 M7
+
+                          Related Documentation
+                             • Server BIOS Tokens in Release 4.3(2c)
+                             • Server BIOS Tokens in Release 4.3(2b)
+                             • Server BIOS Tokens, Release 4.2
+                             • Server BIOS Tokens, Release 4.1
+
+
+
+Server BIOS Tokens in Release 4.3(2c)
+                          Cisco UCS Manager supports the following server in 4.3(2c):
+                             • Cisco UCS X410c M7 Compute Node
+
+
+
+                      Note      This platform is supported from 4.3(2c) onwards.
+

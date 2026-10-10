@@ -1,0 +1,5472 @@
+{
+ "_meta": {
+  "vendor": "Cisco",
+  "mgmt_version": "UCSM",
+  "protocol": "xml (UCSM XML API /nuova); NOT Redfish",
+  "source": "CiscoUcs/ucsmsdk master commit dc365e4a55f6 (2026-08-10), ucsmsdk 0.9.27 \"Support for UCSM release 6.0(2d)\": ucsmsdk/mometa/bios/*.py + ucsmeta.py VersionMeta, parsed by script (ast, no import)",
+  "firmware_version": "UCSM metadata up to 6.0(2d); per-token introduced_ucsm = first UCSM release containing the class/attribute",
+  "retrieved": "2026-10-10",
+  "status": "verified-source-single for vp* names/enums (SDK); second source: Cisco BIOS tokens guide/other see README",
+  "attribute_count": 149,
+  "class_count": 99,
+  "default_note": "ucsmsdk metadata carries no per-token default; UCSM semantics: every vp* token defaults to \"platform-default\" (value taken from the server platform default, biosSettings under computePlatform/capabilityCatalogue) when \"platform-default\" is in allowed_values. Numeric/free-form tokens have default=null.",
+  "model_applicability": "NOT in ucsmsdk. Which tokens apply to B200 M4/M5, B480 M5, X210c M7 is determined by the per-platform defaults catalogue (computePlatform/biosSettings) on the live UCSM; see README for how to query."
+ },
+ "token_classes": [
+  {
+   "class": "biosVfACPI10Support",
+   "rn": "ACPI10-Support",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpACPI10Support",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfASPMSupport",
+   "rn": "ASPM-Support",
+   "introduced_ucsm": "2.5(1a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpASPMSupport",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "forcel0",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.5(1a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfAllUSBDevices",
+   "rn": "All-USB-Devices",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpAllUSBDevices",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfAltitude",
+   "rn": "Altitude",
+   "introduced_ucsm": "2.2(3a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpAltitude",
+     "type": "string",
+     "allowed_values": [
+      "1500-m",
+      "300-m",
+      "3000-m",
+      "900-m",
+      "auto",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(3a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfAssertNMIOnPERR",
+   "rn": "Assert-NMI-on-PERR",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpAssertNMIOnPERR",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfAssertNMIOnSERR",
+   "rn": "Assert-NMI-on-SERR",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpAssertNMIOnSERR",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfBMEDMAMitigation",
+   "rn": "BME-DMA-Mitigation",
+   "introduced_ucsm": "4.0(1a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpBMEDMAMitigation",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "4.0(1a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfBootOptionRetry",
+   "rn": "Boot-option-retry",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpBootOptionRetry",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfCPUHardwarePowerManagement",
+   "rn": "CPU-Hardware-Power-Management",
+   "introduced_ucsm": "3.1(1e)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpCPUHardwarePowerManagement",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "hwpm-native-mode",
+      "hwpm-oob-mode",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(1e)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfCPUPerformance",
+   "rn": "CPU-Performance",
+   "introduced_ucsm": "1.4(1i)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpCPUPerformance",
+     "type": "string",
+     "allowed_values": [
+      "custom",
+      "enterprise",
+      "high-throughput",
+      "hpc",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(1i)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfConsistentDeviceNameControl",
+   "rn": "Consistent-Device-Name-Control",
+   "introduced_ucsm": "2.2(4b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpCDNControl",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(4b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfConsoleRedirection",
+   "rn": "Console-redirection",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpBaudRate",
+     "type": "string",
+     "allowed_values": [
+      "115200",
+      "19200",
+      "38400",
+      "57600",
+      "9600",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpConsoleRedirection",
+     "type": "string",
+     "allowed_values": [
+      "com-0",
+      "com-1",
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended",
+      "serial-port-a",
+      "serial-port-b"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpFlowControl",
+     "type": "string",
+     "allowed_values": [
+      "none",
+      "platform-default",
+      "platform-recommended",
+      "rts-cts"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpLegacyOSRedirection",
+     "type": "string",
+     "allowed_values": [
+      "80x24",
+      "80x25",
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpPuttyKeyPad",
+     "type": "string",
+     "allowed_values": [
+      "escn",
+      "linux",
+      "platform-default",
+      "platform-recommended",
+      "sco",
+      "vt100",
+      "vt400",
+      "xtermr6"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpTerminalType",
+     "type": "string",
+     "allowed_values": [
+      "pc-ansi",
+      "platform-default",
+      "platform-recommended",
+      "vt-utf8",
+      "vt100",
+      "vt100-plus"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfCoreMultiProcessing",
+   "rn": "Core-MultiProcessing",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpCoreMultiProcessing",
+     "type": "string",
+     "allowed_values": [
+      "1",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "2",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "all",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfDDR3VoltageSelection",
+   "rn": "DDR3-Voltage-Selection",
+   "introduced_ucsm": "2.5(1a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpDDR3VoltageSelection",
+     "type": "string",
+     "allowed_values": [
+      "ddr3-1350mv",
+      "ddr3-1500mv",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.5(1a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfDRAMClockThrottling",
+   "rn": "DRAM-Clock-Throttling",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpDRAMClockThrottling",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "balanced",
+      "energy-efficient",
+      "performance",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfDirectCacheAccess",
+   "rn": "Direct-Cache-Access",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpDirectCacheAccess",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfDramRefreshRate",
+   "rn": "Dram-Refresh-Rate",
+   "introduced_ucsm": "2.0(5a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpDramRefreshRate",
+     "type": "string",
+     "allowed_values": [
+      "1x",
+      "2x",
+      "3x",
+      "4x",
+      "auto",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(5a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfEnergyPerformanceTuning",
+   "rn": "Energy-Performance-Tuning",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPwrPerfTuning",
+     "type": "string",
+     "allowed_values": [
+      "bios",
+      "os",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfEnhancedIntelSpeedStepTech",
+   "rn": "Enhanced-Intel-SpeedStep-Tech",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpEnhancedIntelSpeedStepTech",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfEnhancedPowerCappingSupport",
+   "rn": "Enhanced-PowerCapping-Support",
+   "introduced_ucsm": "3.0(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpEnhancedPowerCapping",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfExecuteDisableBit",
+   "rn": "Execute-Disable-Bit",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpExecuteDisableBit",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfFRB2Timer",
+   "rn": "FRB-2-Timer",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpFRB2Timer",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfFrequencyFloorOverride",
+   "rn": "Frequency-Floor-Override",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpFrequencyFloorOverride",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfFrontPanelLockout",
+   "rn": "Front-panel-lockout",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpFrontPanelLockout",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIOEMezz1OptionROM",
+   "rn": "IOEMezz1-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIOEMezz1OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIOENVMe1OptionROM",
+   "rn": "IOENVMe1-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIOENVMe1OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIOENVMe2OptionROM",
+   "rn": "IOENVMe2-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIOENVMe2OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIOESlot1OptionROM",
+   "rn": "IOESlot1-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIOESlot1OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIOESlot2OptionROM",
+   "rn": "IOESlot2-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIOESlot2OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntegratedGraphics",
+   "rn": "Integrated-Graphics",
+   "introduced_ucsm": "3.1(1e)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIntegratedGraphics",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(1e)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntegratedGraphicsApertureSize",
+   "rn": "Integrated-Graphics-Aperture-Size",
+   "introduced_ucsm": "3.1(1e)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIntegratedGraphicsApertureSize",
+     "type": "string",
+     "allowed_values": [
+      "1024mb",
+      "128mb",
+      "2048mb",
+      "256mb",
+      "4096mb",
+      "512mb",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(1e)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntelEntrySASRAIDModule",
+   "rn": "Intel-entry-SAS-RAID-module",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSASRAID",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(1i)"
+    },
+    {
+     "attribute": "vpSASRAIDModule",
+     "type": "string",
+     "allowed_values": [
+      "intel-esrtii",
+      "it-ir-raid",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(1i)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntelHyperThreadingTech",
+   "rn": "Intel-HyperThreading-Tech",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIntelHyperThreadingTech",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntelTrustedExecutionTechnology",
+   "rn": "Intel-Trusted-Execution-Technology",
+   "introduced_ucsm": "2.2(4b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIntelTrustedExecutionTechnologySupport",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(4b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntelTurboBoostTech",
+   "rn": "Intel-Turbo-Boost-Tech",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIntelTurboBoostTech",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntelVTForDirectedIO",
+   "rn": "Intel-VT-for-directed-IO",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIntelVTDATSSupport",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpIntelVTDCoherencySupport",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpIntelVTDInterruptRemapping",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpIntelVTDPassThroughDMASupport",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpIntelVTForDirectedIO",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfIntelVirtualizationTechnology",
+   "rn": "Intel-Virtualization-Technology",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpIntelVirtualizationTechnology",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfInterleaveConfiguration",
+   "rn": "Interleave-Configuration",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpChannelInterleaving",
+     "type": "string",
+     "allowed_values": [
+      "1-way",
+      "2-way",
+      "3-way",
+      "4-way",
+      "auto",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpMemoryInterleaving",
+     "type": "string",
+     "allowed_values": [
+      "2-way-node-interleave",
+      "4-way-node-interleave",
+      "8-way-interleaving-inter-socket",
+      "numa---1-way-node-interleave",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpRankInterleaving",
+     "type": "string",
+     "allowed_values": [
+      "1-way",
+      "2-way",
+      "4-way",
+      "8-way",
+      "auto",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfLocalX2Apic",
+   "rn": "Local-X2-Apic",
+   "introduced_ucsm": "2.1(3a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpLocalX2Apic",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "platform-default",
+      "platform-recommended",
+      "x2apic",
+      "xapic"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.1(3a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfLvDIMMSupport",
+   "rn": "LvDIMM-Support",
+   "introduced_ucsm": "1.3(1c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpLvDDRMode",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "performance-mode",
+      "platform-default",
+      "platform-recommended",
+      "power-saving-mode"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.3(1c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfMaxVariableMTRRSetting",
+   "rn": "Max-Variable-MTRR-Setting",
+   "introduced_ucsm": "1.4(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpProcessorMtrr",
+     "type": "string",
+     "allowed_values": [
+      "8",
+      "auto-max",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfMaximumMemoryBelow4GB",
+   "rn": "Maximum-memory-below-4GB",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpMaximumMemoryBelow4GB",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfMemoryMappedIOAbove4GB",
+   "rn": "Memory-mapped-IO-above-4GB",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpMemoryMappedIOAbove4GB",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfMirroringMode",
+   "rn": "Mirroring-Mode",
+   "introduced_ucsm": "1.3(1c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpMirroringMode",
+     "type": "string",
+     "allowed_values": [
+      "inter-socket",
+      "intra-socket",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.3(1c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfNUMAOptimized",
+   "rn": "NUMA-optimized",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpNUMAOptimized",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOSBootWatchdogTimer",
+   "rn": "OS-Boot-Watchdog-Timer",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpOSBootWatchdogTimer",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOSBootWatchdogTimerPolicy",
+   "rn": "OS-Boot-Watchdog-Timer-Policy",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpOSBootWatchdogTimerPolicy",
+     "type": "string",
+     "allowed_values": [
+      "platform-default",
+      "platform-recommended",
+      "power-off",
+      "reset"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOSBootWatchdogTimerTimeout",
+   "rn": "OS-Boot-Watchdog-Timer-Timeout",
+   "introduced_ucsm": "2.0(3a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpOSBootWatchdogTimerTimeout",
+     "type": "string",
+     "allowed_values": [
+      "10-minutes",
+      "15-minutes",
+      "20-minutes",
+      "5-minutes",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(3a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOnboardGraphics",
+   "rn": "Onboard-Graphics",
+   "introduced_ucsm": "3.1(1e)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpOnboardGraphics",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(1e)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOnboardSATAController",
+   "rn": "Onboard-SATA-controller",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpOnboardSATAController",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "vpSATAMode",
+     "type": "string",
+     "allowed_values": [
+      "ahci",
+      "compatibility",
+      "enhanced",
+      "platform-default",
+      "platform-recommended",
+      "sw-raid"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOnboardStorage",
+   "rn": "Onboard-Storage",
+   "introduced_ucsm": "2.0(3a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpOnboardSCUStorageSupport",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(3a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOptionROMEnable",
+   "rn": "OptionROM-Enable",
+   "introduced_ucsm": "2.0(2m)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpState",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.0(2m)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOptionROMLoad",
+   "rn": "OptionROM-load",
+   "introduced_ucsm": "1.4(1i)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpLoad",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.4(1i)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfOutOfBandManagement",
+   "rn": "Out-of-Band-Management",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpComSpcrEnable",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPCHSATAMode",
+   "rn": "PCH-SATA-Mode",
+   "introduced_ucsm": "2.2(4b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSATAMode",
+     "type": "string",
+     "allowed_values": [
+      "ahci",
+      "disabled",
+      "lsi-sw-raid",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(4b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPCILOMPortsConfiguration",
+   "rn": "PCI-LOM-Ports-Configuration",
+   "introduced_ucsm": "2.2(4b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPCIe10GLOM2Link",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(4b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPCIROMCLP",
+   "rn": "PCI-ROM-CLP",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPCIROMCLP",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPCISlotLinkSpeed",
+   "rn": "PCI-Slot-Link-Speed",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPCIeSlot10LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot1LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot2LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot3LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot4LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot5LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot6LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot7LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot8LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPCIeSlot9LinkSpeed",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "gen1",
+      "gen2",
+      "gen3",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPCISlotOptionROMEnable",
+   "rn": "PCI-Slot-OptionROM-Enable",
+   "introduced_ucsm": "2.0(2m)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPCIeSlotHBAOptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(3a)"
+    },
+    {
+     "attribute": "vpPCIeSlotMLOMOptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(3a)"
+    },
+    {
+     "attribute": "vpPCIeSlotN1OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(3a)"
+    },
+    {
+     "attribute": "vpPCIeSlotN2OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(3a)"
+    },
+    {
+     "attribute": "vpPCIeSlotSASOptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpSlot10State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpSlot1State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    },
+    {
+     "attribute": "vpSlot2State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    },
+    {
+     "attribute": "vpSlot3State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    },
+    {
+     "attribute": "vpSlot4State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    },
+    {
+     "attribute": "vpSlot5State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    },
+    {
+     "attribute": "vpSlot6State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.1(2a)"
+    },
+    {
+     "attribute": "vpSlot7State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.1(2a)"
+    },
+    {
+     "attribute": "vpSlot8State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpSlot9State",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpSlotMezzState",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.0(2m)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPOSTErrorPause",
+   "rn": "POST-error-pause",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPOSTErrorPause",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPSTATECoordination",
+   "rn": "P-STATE-Coordination",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPSTATECoordination",
+     "type": "string",
+     "allowed_values": [
+      "hw-all",
+      "platform-default",
+      "platform-recommended",
+      "sw-all",
+      "sw-any"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPackageCStateLimit",
+   "rn": "Package-C-State-Limit",
+   "introduced_ucsm": "2.0(2m)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPackageCStateLimit",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c6",
+      "c7",
+      "c7s",
+      "no-limit",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPanicAndHighWatermark",
+   "rn": "Panic-and-High-Watermark",
+   "introduced_ucsm": "4.1(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPanicAndHighWatermark",
+     "type": "string",
+     "allowed_values": [
+      "high",
+      "low",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "4.1(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfPreBootDMAProtection",
+   "rn": "PreBoot-DMA-Protection",
+   "introduced_ucsm": "4.3(6a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPreBootDMAProtection",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "4.3(6a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorC1E",
+   "rn": "Processor-C1E",
+   "introduced_ucsm": "2.0(1m)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpProcessorC1E",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(1m)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorC3Report",
+   "rn": "Processor-C3-Report",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpProcessorC3Report",
+     "type": "string",
+     "allowed_values": [
+      "acpi-c2",
+      "acpi-c3",
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorC6Report",
+   "rn": "Processor-C6-Report",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpProcessorC6Report",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorC7Report",
+   "rn": "Processor-C7-Report",
+   "introduced_ucsm": "2.0(2m)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpProcessorC7Report",
+     "type": "string",
+     "allowed_values": [
+      "c7",
+      "c7s",
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorCMCI",
+   "rn": "Processor-CMCI",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpProcessorCMCI",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorCState",
+   "rn": "Processor-C-State",
+   "introduced_ucsm": "2.0(1m)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpProcessorCState",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(1m)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorEnergyConfiguration",
+   "rn": "Processor-Energy-Configuration",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpEnergyPerformance",
+     "type": "string",
+     "allowed_values": [
+      "balanced-energy",
+      "balanced-performance",
+      "energy-efficient",
+      "performance",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPowerTechnology",
+     "type": "string",
+     "allowed_values": [
+      "custom",
+      "disabled",
+      "energy-efficient",
+      "performance",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfProcessorPrefetchConfig",
+   "rn": "Processor-Prefetch-Config",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpAdjacentCacheLinePrefetcher",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpDCUIPPrefetcher",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpDCUStreamerPrefetch",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpHardwarePrefetcher",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfQPILinkFrequencySelect",
+   "rn": "QPI-Link-Frequency-Select",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpQPILinkFrequencySelect",
+     "type": "string",
+     "allowed_values": [
+      "6400",
+      "7200",
+      "8000",
+      "9600",
+      "auto",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfQPISnoopMode",
+   "rn": "QPI-Snoop-Mode",
+   "introduced_ucsm": "2.2(4b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpQPISnoopMode",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "cluster-on-die",
+      "early-snoop",
+      "home-directory-snoop-with-osb",
+      "home-snoop",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(4b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfQuietBoot",
+   "rn": "Quiet-Boot",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpQuietBoot",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfRedirectionAfterBIOSPOST",
+   "rn": "Redirection-After-BIOS-POST",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpRedirectionAfterPOST",
+     "type": "string",
+     "allowed_values": [
+      "always-enable",
+      "bootloader",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfResumeOnACPowerLoss",
+   "rn": "Resume-on-AC-power-loss",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpResumeOnACPowerLoss",
+     "type": "string",
+     "allowed_values": [
+      "last-state",
+      "platform-default",
+      "platform-recommended",
+      "reset",
+      "stay-off"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSBMezz1OptionROM",
+   "rn": "SBMezz1-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSBMezz1OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSBNVMe1OptionROM",
+   "rn": "SBNVMe1-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSBNVMe1OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSIOC1OptionROM",
+   "rn": "SIOC1-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSIOC1OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSIOC2OptionROM",
+   "rn": "SIOC2-OptionROM",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSIOC2OptionROM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "legacy-only",
+      "platform-default",
+      "platform-recommended",
+      "uefi-only"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfScrubPolicies",
+   "rn": "Scrub-Policies",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpDemandScrub",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpPatrolScrub",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSelectMemoryRASConfiguration",
+   "rn": "SelectMemory-RAS-configuration",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSelectMemoryRASConfiguration",
+     "type": "string",
+     "allowed_values": [
+      "lockstep",
+      "maximum-performance",
+      "mirroring",
+      "platform-default",
+      "platform-recommended",
+      "sparing"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSerialPortAEnable",
+   "rn": "Serial-port-A-enable",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSerialPortAEnable",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSparingMode",
+   "rn": "Sparing-Mode",
+   "introduced_ucsm": "1.4(1i)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSparingMode",
+     "type": "string",
+     "allowed_values": [
+      "dimm-sparing",
+      "platform-default",
+      "platform-recommended",
+      "rank-sparing"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(1i)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfSriovConfig",
+   "rn": "Sriov-Config",
+   "introduced_ucsm": "2.1(1a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpSriov",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.1(1a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfTPMPendingOperation",
+   "rn": "TPM-Pending-Operation",
+   "introduced_ucsm": "2.2(4b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpTPMPendingOperation",
+     "type": "string",
+     "allowed_values": [
+      "none",
+      "platform-default",
+      "platform-recommended",
+      "tpmclear",
+      "tpmppioowneroff",
+      "tpmppioowneron"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(4b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfTPMSupport",
+   "rn": "TPM-Support",
+   "introduced_ucsm": "2.2(3a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpTPMSupport",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(3a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfTrustedPlatformModule",
+   "rn": "Trusted-Platform-Module",
+   "introduced_ucsm": "2.2(4b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpTrustedPlatformModuleSupport",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(4b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUCSMBootModeControl",
+   "rn": "UCSM-Boot-Mode-Control",
+   "introduced_ucsm": "2.1(3a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpUEFIBootMode",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.1(3a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUCSMBootOrderRuleControl",
+   "rn": "UCSM-Boot-Order-Rule-Control",
+   "introduced_ucsm": "1.4(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpUCSMBootOrderRule",
+     "type": "string",
+     "allowed_values": [
+      "loose",
+      "platform-default",
+      "platform-recommended",
+      "strict"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.4(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUEFIOSUseLegacyVideo",
+   "rn": "UEFI-OS-use-legacy-video",
+   "introduced_ucsm": "1.4(1i)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpUEFIOSUseLegacyVideo",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(1i)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUSBBootConfig",
+   "rn": "USB-Boot-Config",
+   "introduced_ucsm": "1.1(1j)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpLegacyUSBSupport",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(2m)"
+    },
+    {
+     "attribute": "vpMakeDeviceNonBootable",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUSBConfiguration",
+   "rn": "USB-Configuration",
+   "introduced_ucsm": "2.2(3a)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpLegacyUSBSupport",
+     "type": "string",
+     "allowed_values": [
+      "auto",
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(3a)"
+    },
+    {
+     "attribute": "vpXHCIMode",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(3a)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUSBFrontPanelAccessLock",
+   "rn": "USB-Front-Panel-Access-Lock",
+   "introduced_ucsm": "1.4(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpUSBFrontPanelLock",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUSBPortConfiguration",
+   "rn": "USB-port-configuration",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpPort6064Emulation",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpUSBPortFront",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpUSBPortInternal",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpUSBPortKVM",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpUSBPortRear",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpUSBPortSDCard",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    },
+    {
+     "attribute": "vpUSBPortVMedia",
+     "type": "string",
+     "allowed_values": [
+      "disabled",
+      "enabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfUSBSystemIdlePowerOptimizingSetting",
+   "rn": "USB-System-Idle-Power-Optimizing-Setting",
+   "introduced_ucsm": "1.4(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpUSBIdlePowerOptimizing",
+     "type": "string",
+     "allowed_values": [
+      "high-performance",
+      "lower-idle-power",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(2b)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfVGAPriority",
+   "rn": "VGA-Priority",
+   "introduced_ucsm": "2.2(2c)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpVGAPriority",
+     "type": "string",
+     "allowed_values": [
+      "offboard",
+      "onboard",
+      "onboard-vga-disabled",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.2(2c)"
+    }
+   ]
+  },
+  {
+   "class": "biosVfWorkloadConfiguration",
+   "rn": "Workload-Configuration",
+   "introduced_ucsm": "3.1(2b)",
+   "parents": [
+    "biosSettings",
+    "biosVProfile"
+   ],
+   "tokens": [
+    {
+     "attribute": "vpWorkloadConfiguration",
+     "type": "string",
+     "allowed_values": [
+      "balanced",
+      "io-sensitive",
+      "platform-default",
+      "platform-recommended"
+     ],
+     "allowed_range": null,
+     "regex": null,
+     "min": null,
+     "max": null,
+     "default": "platform-default",
+     "read_only": false,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.1(2b)"
+    }
+   ]
+  }
+ ],
+ "container_classes": {
+  "biosBOT": {
+   "meta": {
+    "class_name": "biosBOT",
+    "rn": "bdgep",
+    "introduced": "1.0(1e)",
+    "access": "InputOutput",
+    "read_roles": [
+     "read-only"
+    ],
+    "parents": [
+     "biosUnit"
+    ],
+    "children": [
+     "biosBootDevGrp"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "lastUpdate",
+     "type": "string",
+     "allowed_values": [
+      "never"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.0(1e)"
+    }
+   ]
+  },
+  "biosBootDev": {
+   "meta": {
+    "class_name": "biosBootDev",
+    "rn": "[order]",
+    "introduced": "1.0(1e)",
+    "access": "InputOutput",
+    "read_roles": [
+     "read-only"
+    ],
+    "parents": [
+     "biosBootDevGrp"
+    ],
+    "children": [],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "descr",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "deviceName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(1b)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "errValue",
+     "type": "string",
+     "allowed_values": [
+      "FAILURE",
+      "SUCCESS"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(1b)"
+    },
+    {
+     "attribute": "order",
+     "type": "string",
+     "allowed_values": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7"
+     ],
+     "access": "NAMING",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.0(1e)"
+    }
+   ]
+  },
+  "biosBootDevGrp": {
+   "meta": {
+    "class_name": "biosBootDevGrp",
+    "rn": "bdg-[order]",
+    "introduced": "1.0(1e)",
+    "access": "InputOutput",
+    "read_roles": [
+     "read-only"
+    ],
+    "parents": [
+     "biosBOT"
+    ],
+    "children": [
+     "biosBootDev"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "descr",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "deviceName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(1b)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "errVal",
+     "type": "string",
+     "allowed_values": [
+      "FAILURE",
+      "SUCCESS"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.2(1b)"
+    },
+    {
+     "attribute": "order",
+     "type": "string",
+     "allowed_values": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7"
+     ],
+     "access": "NAMING",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "type",
+     "type": "string",
+     "allowed_values": [
+      "bev-order",
+      "cd-order",
+      "cimc-vmedia-cdd-device-order",
+      "cimc-vmedia-fdd-device-order",
+      "cimc-vmedia-hdd-device-order",
+      "external-usb-device-order",
+      "fdd-order",
+      "hdd-order",
+      "internal-efi-shell",
+      "internal-usb-device-order",
+      "iscsi-any-device-order",
+      "iscsi-device-order",
+      "kvm-vmedia-cdd-device-order",
+      "kvm-vmedia-fdd-device-order",
+      "kvm-vmedia-hdd-device-order",
+      "lan-any-device-order",
+      "local-storage-any-device-order",
+      "network-device-order",
+      "nvme-device-order",
+      "nvme-disk-ssd-device-order",
+      "nvme-pci-ssd-device-order",
+      "san-any-device-order",
+      "san-device-order",
+      "sdcard-device-order",
+      "system-boot-order",
+      "uefi-shell-device-order",
+      "uefi-target-device-order",
+      "unknown-device-order"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    }
+   ]
+  },
+  "biosFeatureRef": {
+   "meta": {
+    "class_name": "biosFeatureRef",
+    "rn": "feature-ref-[name]",
+    "introduced": "1.3(1c)",
+    "access": "InputOutput",
+    "read_roles": [
+     ""
+    ],
+    "parents": [
+     "biosRef"
+    ],
+    "children": [
+     "biosParameterRef"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "ftrMoClassName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.4(1i)"
+    },
+    {
+     "attribute": "isSupported",
+     "type": "string",
+     "allowed_values": [
+      "no",
+      "yes"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "name",
+     "type": "string",
+     "allowed_values": null,
+     "access": "NAMING",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.3(1c)"
+    }
+   ]
+  },
+  "biosParameterRef": {
+   "meta": {
+    "class_name": "biosParameterRef",
+    "rn": "parameter-ref-[name]",
+    "introduced": "1.3(1c)",
+    "access": "InputOutput",
+    "read_roles": [
+     ""
+    ],
+    "parents": [
+     "biosFeatureRef"
+    ],
+    "children": [
+     "biosSettingRef"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "isSupported",
+     "type": "string",
+     "allowed_values": [
+      "no",
+      "yes"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "name",
+     "type": "string",
+     "allowed_values": null,
+     "access": "NAMING",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "propertyName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.4(1i)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.3(1c)"
+    }
+   ]
+  },
+  "biosRef": {
+   "meta": {
+    "class_name": "biosRef",
+    "rn": "bios-ref",
+    "introduced": "1.3(1c)",
+    "access": "InputOutput",
+    "read_roles": [
+     ""
+    ],
+    "parents": [
+     "equipmentBladeBiosCapProvider"
+    ],
+    "children": [
+     "biosFeatureRef",
+     "biosTokenParam"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "forceOverrideOnLoad",
+     "type": "string",
+     "allowed_values": [
+      "no",
+      "yes"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "4.0(1a)"
+    },
+    {
+     "attribute": "isSupported",
+     "type": "string",
+     "allowed_values": [
+      "no",
+      "yes"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.3(1c)"
+    }
+   ]
+  },
+  "biosSettingRef": {
+   "meta": {
+    "class_name": "biosSettingRef",
+    "rn": "setting-ref-[name]",
+    "introduced": "1.3(1c)",
+    "access": "InputOutput",
+    "read_roles": [
+     ""
+    ],
+    "parents": [
+     "biosParameterRef"
+    ],
+    "children": [],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "constantName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.4(1i)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "isDefault",
+     "type": "string",
+     "allowed_values": [
+      "no",
+      "yes"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "isSupported",
+     "type": "string",
+     "allowed_values": [
+      "no",
+      "yes"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "name",
+     "type": "string",
+     "allowed_values": null,
+     "access": "NAMING",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.3(1c)"
+    }
+   ]
+  },
+  "biosSettings": {
+   "meta": {
+    "class_name": "biosSettings",
+    "rn": "bios-settings",
+    "introduced": "1.3(1c)",
+    "access": "InputOutput",
+    "read_roles": [
+     ""
+    ],
+    "parents": [
+     "biosUnit",
+     "capabilityCatalogue",
+     "computeDefaults",
+     "computePlatform"
+    ],
+    "children": [
+     "biosTokenFeatureGroup",
+     "biosTokenParam",
+     "biosVfACPI10Support",
+     "biosVfASPMSupport",
+     "biosVfAllUSBDevices",
+     "biosVfAltitude",
+     "biosVfAssertNMIOnPERR",
+     "biosVfAssertNMIOnSERR",
+     "biosVfBMEDMAMitigation",
+     "biosVfBootOptionRetry",
+     "biosVfCPUHardwarePowerManagement",
+     "biosVfCPUPerformance",
+     "biosVfConsistentDeviceNameControl",
+     "biosVfConsoleRedirection",
+     "biosVfCoreMultiProcessing",
+     "biosVfDDR3VoltageSelection",
+     "biosVfDRAMClockThrottling",
+     "biosVfDirectCacheAccess",
+     "biosVfDramRefreshRate",
+     "biosVfEnergyPerformanceTuning",
+     "biosVfEnhancedIntelSpeedStepTech",
+     "biosVfEnhancedPowerCappingSupport",
+     "biosVfExecuteDisableBit",
+     "biosVfFRB2Timer",
+     "biosVfFrequencyFloorOverride",
+     "biosVfFrontPanelLockout",
+     "biosVfIOEMezz1OptionROM",
+     "biosVfIOENVMe1OptionROM",
+     "biosVfIOENVMe2OptionROM",
+     "biosVfIOESlot1OptionROM",
+     "biosVfIOESlot2OptionROM",
+     "biosVfIntegratedGraphics",
+     "biosVfIntegratedGraphicsApertureSize",
+     "biosVfIntelEntrySASRAIDModule",
+     "biosVfIntelHyperThreadingTech",
+     "biosVfIntelTrustedExecutionTechnology",
+     "biosVfIntelTurboBoostTech",
+     "biosVfIntelVTForDirectedIO",
+     "biosVfIntelVirtualizationTechnology",
+     "biosVfInterleaveConfiguration",
+     "biosVfLocalX2Apic",
+     "biosVfLvDIMMSupport",
+     "biosVfMaxVariableMTRRSetting",
+     "biosVfMaximumMemoryBelow4GB",
+     "biosVfMemoryMappedIOAbove4GB",
+     "biosVfMirroringMode",
+     "biosVfNUMAOptimized",
+     "biosVfOSBootWatchdogTimer",
+     "biosVfOSBootWatchdogTimerPolicy",
+     "biosVfOSBootWatchdogTimerTimeout",
+     "biosVfOnboardGraphics",
+     "biosVfOnboardSATAController",
+     "biosVfOnboardStorage",
+     "biosVfOptionROMEnable",
+     "biosVfOptionROMLoad",
+     "biosVfOutOfBandManagement",
+     "biosVfPCHSATAMode",
+     "biosVfPCILOMPortsConfiguration",
+     "biosVfPCIROMCLP",
+     "biosVfPCISlotLinkSpeed",
+     "biosVfPCISlotOptionROMEnable",
+     "biosVfPOSTErrorPause",
+     "biosVfPSTATECoordination",
+     "biosVfPackageCStateLimit",
+     "biosVfPanicAndHighWatermark",
+     "biosVfPreBootDMAProtection",
+     "biosVfProcessorC1E",
+     "biosVfProcessorC3Report",
+     "biosVfProcessorC6Report",
+     "biosVfProcessorC7Report",
+     "biosVfProcessorCMCI",
+     "biosVfProcessorCState",
+     "biosVfProcessorEnergyConfiguration",
+     "biosVfProcessorPrefetchConfig",
+     "biosVfQPILinkFrequencySelect",
+     "biosVfQPISnoopMode",
+     "biosVfQuietBoot",
+     "biosVfRedirectionAfterBIOSPOST",
+     "biosVfResumeOnACPowerLoss",
+     "biosVfSBMezz1OptionROM",
+     "biosVfSBNVMe1OptionROM",
+     "biosVfSIOC1OptionROM",
+     "biosVfSIOC2OptionROM",
+     "biosVfScrubPolicies",
+     "biosVfSelectMemoryRASConfiguration",
+     "biosVfSerialPortAEnable",
+     "biosVfSparingMode",
+     "biosVfSriovConfig",
+     "biosVfTPMPendingOperation",
+     "biosVfTPMSupport",
+     "biosVfTrustedPlatformModule",
+     "biosVfUCSMBootModeControl",
+     "biosVfUCSMBootOrderRuleControl",
+     "biosVfUEFIOSUseLegacyVideo",
+     "biosVfUSBBootConfig",
+     "biosVfUSBConfiguration",
+     "biosVfUSBFrontPanelAccessLock",
+     "biosVfUSBPortConfiguration",
+     "biosVfUSBSystemIdlePowerOptimizingSetting",
+     "biosVfVGAPriority",
+     "biosVfWorkloadConfiguration"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "propAcl",
+     "type": "ulong",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.3(1c)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.3(1c)"
+    }
+   ]
+  },
+  "biosTokenFeatureGroup": {
+   "meta": {
+    "class_name": "biosTokenFeatureGroup",
+    "rn": "tokn-featr-[name]",
+    "introduced": "3.2(1d)",
+    "access": "InputOutput",
+    "read_roles": [
+     "admin",
+     "ls-compute",
+     "ls-config",
+     "ls-server",
+     "ls-server-policy",
+     "pn-policy"
+    ],
+    "parents": [
+     "biosSettings",
+     "biosVProfile"
+    ],
+    "children": [
+     "biosTokenParam"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "name",
+     "type": "string",
+     "allowed_values": null,
+     "access": "NAMING",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "supportedByDefault",
+     "type": "string",
+     "allowed_values": [
+      "no",
+      "yes"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    }
+   ]
+  },
+  "biosTokenParam": {
+   "meta": {
+    "class_name": "biosTokenParam",
+    "rn": "tokn-param-[target_token_name]",
+    "introduced": "3.2(1d)",
+    "access": "InputOutput",
+    "read_roles": [
+     "admin",
+     "ls-compute",
+     "ls-config",
+     "ls-server",
+     "ls-server-policy",
+     "pn-policy"
+    ],
+    "parents": [
+     "biosRef",
+     "biosSettings",
+     "biosTokenFeatureGroup"
+    ],
+    "children": [
+     "biosTokenSettings"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "Type",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "4.1(1a)"
+    },
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "legacyPropId",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "paramName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "targetTokenName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "NAMING",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "uiGroupName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    }
+   ]
+  },
+  "biosTokenSettings": {
+   "meta": {
+    "class_name": "biosTokenSettings",
+    "rn": "tokn-setng-[settings_mo_rn]",
+    "introduced": "3.2(1d)",
+    "access": "InputOutput",
+    "read_roles": [
+     "admin",
+     "ls-compute",
+     "ls-config",
+     "ls-server",
+     "ls-server-policy",
+     "pn-policy"
+    ],
+    "parents": [
+     "biosTokenParam"
+    ],
+    "children": [],
+    "verbs": [
+     "Get",
+     "Set"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "Maximum",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "4.1(1a)"
+    },
+    {
+     "attribute": "Minimum",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "4.1(1a)"
+    },
+    {
+     "attribute": "Step",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "4.1(1a)"
+    },
+    {
+     "attribute": "Unit",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "4.1(1a)"
+    },
+    {
+     "attribute": "biosRetSettingName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "isAssigned",
+     "type": "string",
+     "allowed_values": [
+      "false",
+      "no",
+      "true",
+      "yes"
+     ],
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "legacyPropVal",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "settingsMoRn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "NAMING",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "3.2(1d)"
+    },
+    {
+     "attribute": "targetTokenValue",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.2(1d)"
+    }
+   ]
+  },
+  "biosUnit": {
+   "meta": {
+    "class_name": "biosUnit",
+    "rn": "bios",
+    "introduced": "1.0(1e)",
+    "access": "InputOutput",
+    "read_roles": [
+     "read-only"
+    ],
+    "parents": [
+     "computeBlade",
+     "computeExtBoard",
+     "computeRackUnit",
+     "computeServerUnit"
+    ],
+    "children": [
+     "biosBOT",
+     "biosSettings",
+     "faultInst",
+     "firmwareBootDefinition",
+     "firmwareRunning",
+     "firmwareUpdatable"
+    ],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "initSeq",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "initTs",
+     "type": "string",
+     "allowed_values": [
+      "never"
+     ],
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "model",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "revision",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "serial",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.0(1e)"
+    },
+    {
+     "attribute": "vendor",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.0(1e)"
+    }
+   ]
+  },
+  "biosVIdentityParams": {
+   "meta": {
+    "class_name": "biosVIdentityParams",
+    "rn": "bios-videntity-params",
+    "introduced": "2.0(1m)",
+    "access": "InputOutput",
+    "read_roles": [
+     ""
+    ],
+    "parents": [
+     "computeBlade",
+     "computeRackUnit",
+     "computeServerUnit"
+    ],
+    "children": [],
+    "verbs": [
+     "Get"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "2.0(1m)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.0(1m)"
+    },
+    {
+     "attribute": "lsServerName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.0(1m)"
+    },
+    {
+     "attribute": "lsServerTmplName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.0(1m)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.0(1m)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.0(1m)"
+    },
+    {
+     "attribute": "sysName",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.0(1m)"
+    }
+   ]
+  },
+  "biosVProfile": {
+   "meta": {
+    "class_name": "biosVProfile",
+    "rn": "bios-prof-[name]",
+    "introduced": "1.1(1j)",
+    "access": "InputOutput",
+    "read_roles": [
+     "admin",
+     "ls-compute",
+     "ls-config",
+     "ls-server",
+     "ls-server-policy",
+     "pn-policy"
+    ],
+    "parents": [
+     "orgOrg"
+    ],
+    "children": [
+     "biosTokenFeatureGroup",
+     "biosVfACPI10Support",
+     "biosVfASPMSupport",
+     "biosVfAllUSBDevices",
+     "biosVfAltitude",
+     "biosVfAssertNMIOnPERR",
+     "biosVfAssertNMIOnSERR",
+     "biosVfBMEDMAMitigation",
+     "biosVfBootOptionRetry",
+     "biosVfCPUHardwarePowerManagement",
+     "biosVfCPUPerformance",
+     "biosVfConsistentDeviceNameControl",
+     "biosVfConsoleRedirection",
+     "biosVfCoreMultiProcessing",
+     "biosVfDDR3VoltageSelection",
+     "biosVfDRAMClockThrottling",
+     "biosVfDirectCacheAccess",
+     "biosVfDramRefreshRate",
+     "biosVfEnergyPerformanceTuning",
+     "biosVfEnhancedIntelSpeedStepTech",
+     "biosVfEnhancedPowerCappingSupport",
+     "biosVfExecuteDisableBit",
+     "biosVfFRB2Timer",
+     "biosVfFrequencyFloorOverride",
+     "biosVfFrontPanelLockout",
+     "biosVfIOEMezz1OptionROM",
+     "biosVfIOENVMe1OptionROM",
+     "biosVfIOENVMe2OptionROM",
+     "biosVfIOESlot1OptionROM",
+     "biosVfIOESlot2OptionROM",
+     "biosVfIntegratedGraphics",
+     "biosVfIntegratedGraphicsApertureSize",
+     "biosVfIntelEntrySASRAIDModule",
+     "biosVfIntelHyperThreadingTech",
+     "biosVfIntelTrustedExecutionTechnology",
+     "biosVfIntelTurboBoostTech",
+     "biosVfIntelVTForDirectedIO",
+     "biosVfIntelVirtualizationTechnology",
+     "biosVfInterleaveConfiguration",
+     "biosVfLocalX2Apic",
+     "biosVfLvDIMMSupport",
+     "biosVfMaxVariableMTRRSetting",
+     "biosVfMaximumMemoryBelow4GB",
+     "biosVfMemoryMappedIOAbove4GB",
+     "biosVfMirroringMode",
+     "biosVfNUMAOptimized",
+     "biosVfOSBootWatchdogTimer",
+     "biosVfOSBootWatchdogTimerPolicy",
+     "biosVfOSBootWatchdogTimerTimeout",
+     "biosVfOnboardGraphics",
+     "biosVfOnboardSATAController",
+     "biosVfOnboardStorage",
+     "biosVfOptionROMEnable",
+     "biosVfOptionROMLoad",
+     "biosVfOutOfBandManagement",
+     "biosVfPCHSATAMode",
+     "biosVfPCILOMPortsConfiguration",
+     "biosVfPCIROMCLP",
+     "biosVfPCISlotLinkSpeed",
+     "biosVfPCISlotOptionROMEnable",
+     "biosVfPOSTErrorPause",
+     "biosVfPSTATECoordination",
+     "biosVfPackageCStateLimit",
+     "biosVfPanicAndHighWatermark",
+     "biosVfPreBootDMAProtection",
+     "biosVfProcessorC1E",
+     "biosVfProcessorC3Report",
+     "biosVfProcessorC6Report",
+     "biosVfProcessorC7Report",
+     "biosVfProcessorCMCI",
+     "biosVfProcessorCState",
+     "biosVfProcessorEnergyConfiguration",
+     "biosVfProcessorPrefetchConfig",
+     "biosVfQPILinkFrequencySelect",
+     "biosVfQPISnoopMode",
+     "biosVfQuietBoot",
+     "biosVfRedirectionAfterBIOSPOST",
+     "biosVfResumeOnACPowerLoss",
+     "biosVfSBMezz1OptionROM",
+     "biosVfSBNVMe1OptionROM",
+     "biosVfSIOC1OptionROM",
+     "biosVfSIOC2OptionROM",
+     "biosVfScrubPolicies",
+     "biosVfSelectMemoryRASConfiguration",
+     "biosVfSerialPortAEnable",
+     "biosVfSparingMode",
+     "biosVfSriovConfig",
+     "biosVfTPMPendingOperation",
+     "biosVfTPMSupport",
+     "biosVfTrustedPlatformModule",
+     "biosVfUCSMBootModeControl",
+     "biosVfUCSMBootOrderRuleControl",
+     "biosVfUEFIOSUseLegacyVideo",
+     "biosVfUSBBootConfig",
+     "biosVfUSBConfiguration",
+     "biosVfUSBFrontPanelAccessLock",
+     "biosVfUSBPortConfiguration",
+     "biosVfUSBSystemIdlePowerOptimizingSetting",
+     "biosVfVGAPriority",
+     "biosVfWorkloadConfiguration"
+    ],
+    "verbs": [
+     "Add",
+     "Get",
+     "Remove",
+     "Set"
+    ]
+   },
+   "properties": [
+    {
+     "attribute": "childAction",
+     "type": "string",
+     "allowed_values": null,
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "descr",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "dn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "intId",
+     "type": "string",
+     "allowed_values": [
+      "none"
+     ],
+     "access": "INTERNAL",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "name",
+     "type": "string",
+     "allowed_values": null,
+     "access": "NAMING",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "policyLevel",
+     "type": "uint",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "2.1(1a)"
+    },
+    {
+     "attribute": "policyOwner",
+     "type": "string",
+     "allowed_values": [
+      "local",
+      "pending-policy",
+      "policy"
+     ],
+     "access": "READ_WRITE",
+     "introduced_ucsm": "2.1(1a)"
+    },
+    {
+     "attribute": "rebootOnUpdate",
+     "type": "string",
+     "allowed_values": [
+      "false",
+      "no",
+      "true",
+      "yes"
+     ],
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.4(1i)"
+    },
+    {
+     "attribute": "rn",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "1.1(1j)"
+    },
+    {
+     "attribute": "sacl",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_ONLY",
+     "introduced_ucsm": "3.0(2c)"
+    },
+    {
+     "attribute": "status",
+     "type": "string",
+     "allowed_values": null,
+     "access": "READ_WRITE",
+     "introduced_ucsm": "1.1(1j)"
+    }
+   ]
+  }
+ }
+}

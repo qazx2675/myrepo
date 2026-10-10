@@ -44,6 +44,7 @@
 - 미확보 항목: XD2000 BMC 전용 계정 관리 문서(슬롯 ID, 비밀번호 정책, Web UI 메뉴).
 - 재시도 1 (다른 문서군): XD220v/XD225v/XD665 서버 가이드(BMC overview, Redfish, System Inventory 페이지), XD675 BMC 가이드(Managing users, IPMI), XD2000 Chassis 가이드, HPE Community 스레드(Cloudflare 차단, 우회 안 함). 결과: 계정 URI 문서 없음, XD675 가이드에서 사용자 관리/IPMI 확보.
 - 재시도 2 (공개 코드/샘플): HewlettPackard/CrayXD_PFUT(AMI OEM 확인), Cray-HPE/docs-csm(`Manage_System_Passwords`, `Change_River_BMC_Credentials`, `Add_Root_Service_Account_for_Gigabyte_Controllers`, `Configure_root_user_on_HPE_iLO_BMCs`), Cray-HPE/hms-scsd, AMI MegaRAC Redfish 레퍼런스(Lenovo 포장본), NVIDIA DGX H100. 결과: AMI 계열 일반 동작 확보, XD220v 전용 값은 미확보.
+- 재시도 3 (다른 증거): HPE XD220v 가이드 페이지(JS 렌더링으로 본문 빈 응답), 웹 검색(XD220v BMC 사용자 관리·AMI SP-X AccountService 문서 미발견), CrayXD_PFUT `Bmc_Update.py`(AccountService/조건부 헤더 미사용, UpdateService 업로드만), docs-csm release/1.6 `Add_Root_Service_Account_for_Gigabyte_Controllers`(AMI: IPMI ID 4 = Redfish Accounts/4), `Change_Air-Cooled_Node_BMC_Credentials`(20자 경고). 결과: XD220v 전용 값 미확보, 항목 상태 변동 없음. 정정: 위 검증표/재시도 2 에서 인용한 `Change_River_BMC_Credentials`(If-None-Match)는 docs-csm release 1.0~1.6 에서 원문을 재확인하지 못했다(404). 조건부 헤더 verified 근거는 NVIDIA DGX H100 `If-Match: *` 로 한정한다.
 - 결론: AMI 공통 방법을 `verified (AMI 계열)` 로 기록, XD220v 전용 값은 `unverified`. 추측으로 슬롯 번호를 만들지 않음 (반드시 GET 으로 확인).
 
 ## 한계

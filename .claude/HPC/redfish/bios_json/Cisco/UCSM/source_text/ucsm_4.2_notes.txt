@@ -1,0 +1,105 @@
+# 4.2 guide (b_UCS_BIOS_Tokens_Guide_chapter_01.pdf): 4.2(1d)-4.2(3b); lists B200 M5/B480 M5 and M4 C-series; B200 M4 absent from 4.2(1d) list in this guide. Audit copy; (c) Cisco.
+          UCS Server BIOS Tokens
+             • Server BIOS Tokens in Release 4.2(3b), on page 1
+             • Server BIOS Tokens in Release 4.2(2c), on page 2
+             • Server BIOS Tokens in Release 4.2(1m), on page 2
+             • Server BIOS Tokens in Release 4.2(1l), on page 3
+             • Server BIOS Tokens in Release 4.2(1i), on page 7
+             • Server BIOS Tokens in Release 4.2(1f), on page 12
+             • Server BIOS Tokens in Release 4.2(1d), on page 15
+
+
+Server BIOS Tokens in Release 4.2(3b)
+          Cisco UCS Manager continues to support the following servers in 4.2(3b):
+             • C220 M6
+             • C240 M6
+             • C225 M6
+             • C245 M6
+             • B200 M6
+
+          For Cisco UCS C-series and B-series BIOS tokens supported on M4 and M5 servers, refer Cisco UCS Server
+          BIOS Tokens, Release 4.1.
+
+          New and Changed BIOS Tokens for 4.2(3b)
+
+           Name             Default       M6 Server            Platform                Dependencies New/Changed
+                            Value         Supported Values
+
+           X2APIC Opt       Disabled      Disabled, Enabled    C220M6, C240M6,                          New
+           Out                                                 B200M6
+
+           Security Dev.    Enabled       Disabled, Enabled    C220M6, C240M6,                          New
+           Support                                             C225M6, C245M6,
+                                                               B200M6
+
+
+
+
+                                                                               UCS Server BIOS Tokens
+                                                                                                              1
+                                                                                                               UCS Server BIOS Tokens
+  Server BIOS Tokens in Release 4.2(2c)
+
+
+
+
+Server BIOS Tokens in Release 4.2(2c)
+                        Cisco UCS Manager supports the following servers in 4.2(2c) release:
+                            • C220 M6
+                            • C240 M6
+
+                        For Cisco UCS C-series and B-series BIOS tokens supported on M4 and M5 servers, refer Cisco UCS Server
+                        BIOS Tokens, Release 4.1.
+
+                        BIOS Tokens for C220 M6 and C240 M6 in 4.2(2c)
+                        The following table lists the new BIOS tokens for 4.2(2c) release:
+
+                         Name                          Default     M6 Server Supported         Platform                 New/Changed
+                                                       Value       Values
+
+                         TPM Minimal Physical          Disabled    Disabled, Enabled           C220 M6 and C240         New
+                         Presence                                                              M6
+
+
+
+Server BIOS Tokens in Release 4.2(1d)
+                          Cisco UCS Manager introduces support for the following servers in 4.2(1d):
+                             • C220 M6—BIOS Tokens for C220 M6 and C240 M6 in 4.2(1d), on page 15
+                             • C240 M6—BIOS Tokens for C220 M6 and C240 M6 in 4.2(1d), on page 15
+                             • B200 M6—BIOS Tokens for B200 M6 in 4.2(1d), on page 19
+
+                          Cisco UCS Manager continues to support the following servers in 4.2(1d):
+                             • B200 M5
+                             • B480 M5
+                             • C220 M5
+                             • C240 M5
+                             • C240 SD M5
+                             • C480 M5
+                             • S3260 M5
+                             • C125 M5
+                             • C480 M5 ML
+                             • C220 M4
+                             • C240 M4
+                             • C460 M4
+                             • S3260 M4
+
+                          For Cisco UCS C-series and B-series BIOS tokens supported on M4 and M5 servers, refer Cisco UCS Server
+                          BIOS Tokens, Release 4.1. In addition, refer the following New and Changed BIOS Tokens for M5 servers
+                          in 4.2(1d), on page 24 for updated M5 server support.
+
+                          BIOS Tokens for C220 M6 and C240 M6 in 4.2(1d)
+
+                          Name              Default Value    Server            Platform                              Dependencies
+                                                             Supported
+                                                             Values
+
+                          Core Multi        All              All, 1 to 48      C220 M6 and C240 M6
+                          Processing
+
+
+
+
+                                                                                               UCS Server BIOS Tokens
+                                                                                                                                  15
+                                                                                                  UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.2(1d)

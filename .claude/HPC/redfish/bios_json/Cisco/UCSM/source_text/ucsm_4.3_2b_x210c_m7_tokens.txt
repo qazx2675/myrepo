@@ -1,0 +1,745 @@
+# pdftotext -layout slice of Cisco UCS Server BIOS Tokens, Release 4.3 PDF (b-ucs-bios-tokens-guide-4_3.pdf, updated 2025-07-07), section 'Server BIOS Tokens in Release 4.3(2b)' incl. 'BIOS Tokens for Cisco UCS X210c M7 Compute Node'. Audit copy; (c) Cisco.
+Server BIOS Tokens in Release 4.3(2b)
+                          Cisco UCS Manager supports the following servers in release 4.3(2b):
+                             • Cisco UCS X210c M7 Compute Node
+
+
+
+                      Note      This platform is supported from 4.3(2b) onwards.
+
+                             • Cisco UCS X210c M6 Compute Node
+
+
+
+                      Note      This platform is supported from 4.3(2b) onwards.
+
+                             • Cisco UCS C220 M7 Server
+
+
+
+                      Note      This platform is supported from 4.3(2b) onwards.
+
+                             • Cisco UCS C240 M7 Server
+
+
+
+                      Note      This platform is supported from 4.3(2b) onwards.
+
+                             • Cisco UCS C220 M6
+                             • Cisco UCS C240 M6
+                             • Cisco UCS C245 M6
+
+
+
+
+                                                                                   Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                       45
+                                                                                                            UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                          • Cisco UCS C225 M6
+                          • Cisco UCS B200 M6
+                          • Cisco UCS B200 M5
+                          • Cisco UCS B480 M5
+                          • Cisco UCS C220 M5
+                          • Cisco UCS C240 M5
+                          • Cisco UCS C240 SD M5
+                          • Cisco UCS C480 M5
+                          • Cisco UCS C480 M5 ML
+                          • Cisco UCS S3260 M5
+                          • Cisco UCS C125 M5
+
+
+                      BIOS Tokens for Cisco UCS X210c M7 Compute Node
+
+                       Name                                   Default Value          Server Supported Values
+
+                       PRMRR Size                             256M                   Invalid Config, 128M, 256M, 512M,1G, 2G,
+                                                                                     4G, 8G, 16G, 32G, 64G, 128G, 256G, 512G
+                                                                                     Note
+                                                                                     SGX, Total Memory Encryption must be
+                                                                                     enabled.
+
+                       Optimized Power Mode                   Disabled               Enabled, Disabled
+
+                       Adaptive Refresh Management            Default                Default, Level A, Level B, Level C
+                       Level
+
+                       Rank Margin Tool                       Disabled               Enabled, Disabled
+
+                       Error Check Scrub                      Enabled without result Disabled, Enabled without Result Collection,
+                                                              collection             Enabled with Result Collection
+
+                       PCIe PLL SSC Percent                   255                    0–20
+
+                       Above 4G Decoding                      Enabled                Enabled Disabled
+
+                       VMD Enablement                         Disabled               Enabled Disabled
+
+                       PCIe RAS Support                       Enabled                Enabled Disabled
+
+                       CDN Support for LOM                    Disabled               Enabled Disabled
+
+                       External SSC Enable                    Off                    0P3_Percent,P5_Percent, Hardware, Off
+
+                       CDN Control                            Enabled                Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    46
+UCS Server BIOS Tokens
+                                                                                           Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                         Name                            Default Value        Server Supported Values
+
+                         Intel VT for directed IO        Enabled              Enabled, Disabled
+
+                         Intel VTD Coherency Support     Disabled             Enabled, Disabled
+
+                         USB Port Front                  Enabled              Enabled, Disabled
+
+                         USB Port KVM                    Enabled              Enabled, Disabled
+
+                         USB Port:M.2 Storage            Enabled              Enabled, Disabled
+
+                         NTB Test Mode                   Disabled             Enabled, Disabled
+
+                         NTB Device Type                 Upstream             Upstream, Downstream
+
+                         C1 Auto Demotion                Enabled              Enabled, Disabled
+
+                         FRB 2 Timer                     Enabled              Enabled, Disabled
+
+                         OS Watchdog Timer Policy        Power Off            Reset, Power Off
+
+                         OS Watchdog Timer Timeout       10 minutes           5 minutes, 10 minutes, 15 minutes, 20 minutes
+
+                         OS Watchdog timer               Disabled             Enabled, Disabled
+
+                         Flow Control                    None                 None, RTS-CTS
+
+                         Baud Rate                       115.2k               9.6k, 19.2k,38.4k, 57.6k, 115.2k
+
+                         Terminal Type                   VT100                PC-ANSI, VT100, VT100-PLUS, VT-UTF8
+
+                         Console Redirection             VT100                PC-ANSI, VT100, VT100-PLUS, VT-UTF8
+
+                         Adaptive Memory Training        Enabled              Enabled, Disabled
+
+                         OptionROM Launch                Enabled              Enabled, Disabled
+                         Optimization
+
+                         BIOS Techlog level              Minimum              Maximum, Minimum, Normal
+
+                         IPV6 PXE support                Enabled              Enabled, Disabled
+
+                         Network stack                   Enabled              Enabled, Disabled
+
+                         IPv4 PXE Support                Enabled              Enabled, Disabled
+
+                         IPv4 HTTP Support               Enabled              Enabled, Disabled
+
+                         IPv6 HTTP Support               Enabled              Enabled, Disabled
+
+                         Security Device Support         Enabled              Enabled, Disabled
+
+                         Trusted Platform Module State   Enabled              Enabled, Disabled
+
+                         SHA-1 PCR Bank                  Enabled              Enabled, Disabled
+
+
+
+
+                                                                         Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                             47
+                                                                                                          UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                       Name                                   Default Value         Server Supported Values
+
+                       SHA-256 PCR Bank                       Enabled               Enabled, Disabled
+
+                       TPM Pending Operation                  None                  None, TpmClear
+
+                       TPM Minimal Physical Presence Disabled                       Enabled, Disabled
+
+                       Intel Trusted Execution                Enabled               Enabled, Disabled
+                       Technology Support
+
+                       Total Memory Encryption (TME) Disabled                       Enabled, Disabled
+
+                       SGX QoS                                Enabled               Enabled, Disabled
+
+                       SGX write Enable                       Enabled               Enabled, Disabled
+
+                       DMA Control Opt-In Flag                Disabled              Enabled, Disabled
+
+                       Power on Password                      Disabled              Enabled, Disabled
+
+                       Multikey Total Memory                  Disabled              Enabled, Disabled
+                       Encryption
+
+                       SW Guard Extensions (SGX)              Disabled              Enabled, Disabled
+
+                       SGX Factory Reset                      Disabled              Enabled, Disabled
+
+                       SGX Pkg info In-Band Access            Disabled              Enabled, Disabled
+
+                       Select Owner EPOCH Input               Manual User Defined   SGX Owner EPOCH activated, Change to New
+                       Type                                   Owner EPOCHs          Random Owner EPOCHs, Manual User
+                                                                                    Defined Owner EPOCHs
+
+                       SGX Auto MP Registration               Disabled              Enabled, Disabled
+                       Agent
+
+                       SProcessor Epoch 0                     0                     Between 7-0
+
+                       Pubkey Hash 0                          0                     Between 7-0
+
+                       SGX Pubkey Hash 1                      0                     Between 15-8
+
+                       NUMA                                   Disabled              Enabled, Disabled
+
+                       Select Memory RAS                      ADDDC Sparing         Mirror Mode 1LM, Partial Mirror mode 1LM,
+                       Configuration                                                Maximum Performance, ADDDC Sparing
+
+                       Select PPR type                        Hard PPR              Disabled, Hard PPR
+
+                       Partial Cache Line Sparing             Disabled              Enabled, Disabled
+
+                       BME DMA Mitigation                     Disabled              Enabled, Disabled
+
+                       Partial Memory Mirror Mode             Disabled              Percentage, Value in GB, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    48
+UCS Server BIOS Tokens
+                                                                                                Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                         Name                              Default Value           Server Supported Values
+
+                         Partial Mirror Percentage         0                       Between 0-50
+
+                         Intel Virtualization Technology   Enabled                 Enabled, Disabled
+
+                         Memory size limit in GB           0                       Between 0-65535
+
+                         CR QoS                            Disabled                Profile 1, Disabled
+
+                         NVM Performance Setting           BW Optimized            BW Optimized, Balanced Profile
+
+                         CR FastGo Config                  Auto                    Enable optimization, Disable Optimization
+
+                         Snoopy mode for AD                Disabled                Enabled, Disabled
+
+                         Snoopy for 2LM                    Disabled                Enabled, Disabled
+
+                         Memory refresh rate               1x Refresh              1x Refresh, 2x Refresh
+
+                         Panic and High Watermark          Low                     High, Low
+
+                         Memory Thermal Throttling         CLTT with PECI          CLTT with PECI, Disabled
+                         Mode
+
+                         Enhanced Memory Test              Auto                    Enabled, Disabled, Auto
+
+                         UMA                               Quadrant(4-clusters)    Quadrant(4-clusters), Hemisphere(2-clusters),
+                                                                                   Disabled
+
+                         Volatile Memory Mode              1LM                     1LM, 2LM
+
+                         eADR                              Disabled                Enabled, Disabled, Auto
+
+                         Memory Bandwidth Boost            Enabled                 Enabled, Disabled
+
+                         Virtual NUMA                      Disabled                Enabled, Disabled
+
+                         XPT remote prefetch               Auto                    Enabled, Disabled, Auto
+
+                         LLC Dead Line                     Enabled                 Enabled, Disabled, Auto
+
+                         Extended APIC                     Enabled                 Enabled, Disabled
+
+                         Hardware Prefetcher               Enabled                 Enabled, Disabled
+
+                         Adjacent Cache Line Prefetcher Enabled                    Enabled, Disabled
+
+                         DCU Streamer Prefetch             Enabled                 Enabled, Disabled
+
+                         DCU IP Prefetcher                 Enabled                 Enabled, Disabled
+
+                         Processor C1E                     Disabled                Enabled, Disabled
+
+                         Processor C6 Report               Enabled                 Enabled, Disabled
+
+                         Turbo Mode                        Enabled                 Enabled, Disabled
+
+
+
+
+                                                                              Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                  49
+                                                                                                             UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                       Name                                   Default Value         Server Supported Values
+
+                       EIST PSD Function                      HW All                HW all, SW all
+
+                       Boot Performance Mode                  Max Performance       Max Efficient, Max Performance,
+
+                       Uncore Frequency Scaling               Enabled               Enabled, Disabled
+
+                       SpeedStep (Pstates)                    Enabled               Enabled, Disabled
+
+                       Configurable TDP Level                 Normal                Level 1, Level 2, Normal
+
+                       Intel HyperThreading Tech              Enabled               Enabled, Disabled
+
+                       CPU Performance                        Custom                Enterprise, High Throughput, HPC, Custom
+
+                       Processor CMCI                         Enabled               Enabled, Disabled
+
+                       Cores Enabled                          Enabled               All, 1–64
+
+                       Workload Configuration                 IO Sensitive          Balanced, IO Sensitive
+
+                       Sub NUMA Clustering                    Disabled              Auto, Disabled, SNC 2, SNC 4
+
+                       UPI Prefetch                           Auto                  Enabled, Disabled, Auto
+
+                       XPT Prefetch                           Auto                  Enabled, Disabled, Auto
+
+                       Energy/Performance Bias Config Balanced Performance Performance, Balanced Performance, Power,
+                                                                           Balanced Power
+
+                       Package C State                        C0 C1 State           No limit, Auto, C0 C1 State, C2, C6 Non
+                                                                                    Retension, C6 Retention
+
+                       LLC Prefetch                           Enabled               Enabled, Disabled
+
+                       Hardware P-States                      HWPM Native Mode      HWPM Native Mode, HWPM OOB Mode,
+                                                                                    Native Mode with no Legacy, Disabled
+
+                       Energy Efficient Turbo                 Disabled              Enabled, Disabled
+
+                       Autonomous Core C-state                Disabled              Enabled, Disabled
+
+                       Processor EPP Profile                  Balanced Performance Performance, Balanced Performance, Power,
+                                                                                   Balanced Power
+
+                       Patrol Scrub                           Enable at End of POST Enable at End of POST, Disabled
+
+                       Intel Dynamic Speed Select             Disabled              Enabled, Disabled
+
+                       DCPMM Firmware Downgrade Disabled                            Enabled, Disabled
+
+                       Enhanced CPU Performance               Disabled              Auto, Disabled
+
+                       UPI Power Management                   Disabled              Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    50
+UCS Server BIOS Tokens
+                                                                                              Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                         Name                             Default Value          Server Supported Values
+
+                         UPI Link Speed                   Auto                   12.8GT/s, 14.4GT/s, 16.0GT/s, Auto
+
+                         LIMIT CPU PA to 46 Bit           Enabled                Enabled, Disabled
+
+                         X2APIC Opt Out                   Disabled               Enabled, Disabled
+
+
+                         BIOS Tokens for Cisco UCS X210c M6 Compute Node
+
+                         Name                             Default Value          Server Supported Values
+
+                         PRMRR Size                       256M                   Invalid Config, 128M, 256M, 512M,1G, 2G,
+                                                                                 4G, 8G, 16G, 32G, 64G, 128G, 256G, 512G
+                                                                                 Note
+                                                                                 SGX, Total Memory Encryption must be
+                                                                                 enabled.
+
+
+                         BIOS Tokens for Cisco UCS C240 M7 Server and Cisco UCS C220 M7 Server
+
+                         Name                             Default Value          Server Supported Values
+
+                         PRMRR Size                       256M                   Invalid Config, 128M, 256M, 512M,1G, 2G,
+                                                                                 4G, 8G, 16G, 32G, 64G, 128G, 256G, 512G
+                                                                                 Note
+                                                                                 SGX, Total Memory Encryption must be
+                                                                                 enabled.
+
+                         Optimized Power Mode             Disabled               Enabled, Disabled
+
+                         Adaptive Refresh Management      Default                Default, Level A, Level B, Level C
+                         Level
+
+                         Rank Margin Tool                 Disabled               Enabled, Disabled
+
+                         Error Check Scrub                Enabled without result Disabled, Enabled without Result Collection,
+                                                          collection             Enabled with Result Collection
+
+                         PCIe PLL SSC Percent             255                    0–20
+
+                         PCIe Slot MSTOR RAID             Enabled                Enabled Disabled
+                         OptionROM
+
+                         Above 4G Decoding                Enabled                Enabled Disabled
+
+                         VMD Enablement                   Disabled               Enabled Disabled
+
+                         PCIe RAS Support                 Enabled                Enabled Disabled
+
+                         External SSC Enable              Off                    0P3_Percent,P5_Percent, Hardware, Off
+
+
+
+
+                                                                            Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                                51
+                                                                                                                UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                       Name                                   Default Value            Server Supported Values
+
+                       IIO eDPC Support                       On fatal and non-fatal   Disabled, On fatal error, On fatal and non-fatal
+                                                              error                    error
+
+                       CDN Control                            Enabled                  Enabled, Disabled
+
+                       PCIe Slots CDN Control                 Disabled                 Enabled, Disabled
+
+                       Intel VT for directed IO               Enabled                  Enabled, Disabled
+
+                       Intel VTD Coherency Support            Disabled                 Enabled, Disabled
+
+                       USB Port Rear                          Enabled                  Enabled, Disabled
+
+                       C1 Auto Demotion                       Enabled                  Enabled, Disabled
+
+                       FRB 2 Timer                            Enabled                  Enabled, Disabled
+
+                       OS Watchdog Timer Policy               Power Off                Reset, Power Off
+
+                       OS Watchdog Timer Timeout              10 minutes               5 minutes, 10 minutes, 15 minutes, 20 minutes
+
+                       OS Watchdog timer                      Disabled                 Enabled, Disabled
+
+                       Flow Control                           None                     None, RTS-CTS
+
+                       Baud Rate                              115.2k                   9.6k, 19.2k,38.4k, 57.6k, 115.2k
+
+                       Terminal Type                          VT100                    PC-ANSI, VT100, VT100-PLUS, VT-UTF8
+
+                       Console Redirection                    VT100                    PC-ANSI, VT100, VT100-PLUS, VT-UTF8
+
+                       Adaptive Memory Training               Enabled                  Enabled, Disabled
+
+                       OptionROM Launch                       Enabled                  Enabled, Disabled
+                       Optimization
+
+                       BIOS Techlog level                     Minimum                  Maximum, Minimum, Normal
+
+                       VGA priority                           Onboard                  Onboard, Offboard, Onboard VGA Disabled
+
+                       IPV6 PXE support                       Enabled                  Enabled, Disabled
+
+                       Network stack                          Enabled                  Enabled, Disabled
+
+                       IPv4 PXE Support                       Enabled                  Enabled, Disabled
+
+                       IPv4 HTTP Support                      Enabled                  Enabled, Disabled
+
+                       IPv6 HTTP Support                      Enabled                  Enabled, Disabled
+
+                       Security Device Support                Enabled                  Enabled, Disabled
+
+                       Trusted Platform Module State          Enabled                  Enabled, Disabled
+
+                       SHA-1 PCR Bank                         Enabled                  Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    52
+UCS Server BIOS Tokens
+                                                                                          Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                         Name                          Default Value         Server Supported Values
+
+                         SHA256 PCR Bank               Enabled               Enabled, Disabled
+
+                         TPM Pending Operation         None                  None, TpmClear
+
+                         TPM Minimal Physical Presence Disabled              Enabled, Disabled
+
+                         Intel Trusted Execution       Enabled               Enabled, Disabled
+                         Technology Support
+
+                         Total Memory Encryption (TME) Disabled              Enabled, Disabled
+
+                         SGX QoS                       Enabled               Enabled, Disabled
+
+                         SGX write Enable              Enabled               Enabled, Disabled
+
+                         DMA Control Opt-In Flag       Disabled              Enabled, Disabled
+
+                         Power on Password             Disabled              Enabled, Disabled
+
+                         Multikey Total Memory         Disabled              Enabled, Disabled
+                         Encryption
+
+                         SW Guard Extensions (SGX)     Disabled              Enabled, Disabled
+
+                         SGX Factory Reset             Disabled              Enabled, Disabled
+
+                         SGX Pkg info In-Band Access   Disabled              Enabled, Disabled
+
+                         Select Owner EPOCH Input      Manual User Defined   SGX Owner EPOCH activated, Change to New
+                         Type                          Owner EPOCHs          Random Owner EPOCHs, Manual User
+                                                                             Defined Owner EPOCHs
+
+                         SGX Auto MP Registration      Disabled              Enabled, Disabled
+                         Agent
+
+                         SProcessor Epoch 0            0                     Between 7-0
+
+                         Pubkey Hash 0                 0                     Between 7-0
+
+                         SGX Pubkey Hash 1             0                     Between 15-8
+
+                         NUMA                          Disabled              Enabled, Disabled
+
+                         Select Memory RAS             ADDDC Sparing         Mirror Mode 1LM, Partial Mirror mode 1LM,
+                         Configuration                                       Maximum Performance, ADDDC Sparing
+
+                         Select PPR type               Hard PPR              Disabled, Hard PPR
+
+                         Partial Cache Line Sparing    Disabled              Enabled, Disabled
+
+                         BME DMA Mitigation            Disabled              Enabled, Disabled
+
+                         Partial Memory Mirror Mode    Disabled              Percentage, Value in GB, Disabled
+
+
+
+
+                                                                        Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                            53
+                                                                                                              UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                       Name                                   Default Value          Server Supported Values
+
+                       Partial Mirror Percentage              0                      Between 0-50
+
+                       Intel Virtualization Technology        Enabled                Enabled, Disabled
+
+                       Memory size limit in GB                0                      Between 0-65535
+
+                       CR QoS                                 Disabled               Profile 1, Disabled
+
+                       NVM Performance Setting                BW Optimized           BW Optimized, Balanced Profile
+
+                       CR FastGo Config                       Auto                   Enable optimization, Disable Optimization
+
+                       Snoopy mode for AD                     Disabled               Enabled, Disabled
+
+                       Snoopy for 2LM                         Disabled               Enabled, Disabled
+
+                       Memory refresh rate                    1x Refresh             1x Refresh, 2x Refresh
+
+                       Panic and High Watermark               Low                    High, Low
+
+                       Memory Thermal Throttling              CLTT with PECI         CLTT with PECI, Disabled
+                       Mode
+
+                       Enhanced Memory Test                   Auto                   Enabled, Disabled, Auto
+
+                       UMA                                    Quadrant(4-clusters)   Quadrant(4-clusters), Hemisphere(2-clusters),
+                                                                                     Disabled
+
+                       Volatile Memory Mode                   1LM                    1LM, 2LM
+
+                       eADR                                   Disabled               Enabled, Disabled, Auto
+
+                       Memory Bandwidth Boost                 Enabled                Enabled, Disabled
+
+                       Virtual NUMA                           Disabled               Enabled, Disabled
+
+                       XPT remote prefetch                    Auto                   Enabled, Disabled, Auto
+
+                       LLC Dead Line                          Enabled                Enabled, Disabled, Auto
+
+                       Extended APIC                          Enabled                Enabled, Disabled
+
+                       Hardware Prefetcher                    Enabled                Enabled, Disabled
+
+                       Adjacent Cache Line Prefetcher Enabled                        Enabled, Disabled
+
+                       DCU Streamer Prefetch                  Enabled                Enabled, Disabled
+
+                       DCU IP Prefetcher                      Enabled                Enabled, Disabled
+
+                       Processor C1E                          Disabled               Enabled, Disabled
+
+                       Processor C6 Report                    Enabled                Enabled, Disabled
+
+                       Turbo Mode                             Enabled                Enabled, Disabled
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    54
+UCS Server BIOS Tokens
+                                                                                            Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                         Name                           Default Value          Server Supported Values
+
+                         EIST PSD Function              HW All                 HW all, SW all
+
+                         Boot Performance Mode          Max Performance        Max Efficient, Max Performance,
+
+                         Uncore Frequency Scaling       Enabled                Enabled, Disabled
+
+                         SpeedStep (Pstates)            Enabled                Enabled, Disabled
+
+                         Configurable TDP Level         Normal                 Level 1, Level 2, Normal
+
+                         Intel HyperThreading Tech      Enabled                Enabled, Disabled
+
+                         CPU Performance                Custom                 Enterprise, High Throughput, HPC, Custom
+
+                         Processor CMCI                 Enabled                Enabled, Disabled
+
+                         Cores Enabled                  Enabled                All, 1–64
+
+                         Workload Configuration         IO Sensitive           Balanced, IO Sensitive
+
+                         Sub NUMA Clustering            Disabled               Auto, Disabled, SNC 2, SNC 4
+
+                         UPI Prefetch                   Auto                   Enabled, Disabled, Auto
+
+                         XPT Prefetch                   Auto                   Enabled, Disabled, Auto
+
+                         Power Performance Tuning       OS                     OS, BIOS, PECI
+
+                         Energy/Performance Bias Config Balanced Performance Performance, Balanced Performance, Power,
+                                                                             Balanced Power
+
+                         Package C State                C0 C1 State            No limit, Auto, C0 C1 State, C2, C6 Non
+                                                                               Retension, C6 Retention
+
+                         LLC Prefetch                   Enabled                Enabled, Disabled
+
+                         Hardware P-States              HWPM Native Mode       HWPM Native Mode, HWPM OOB Mode,
+                                                                               Native Mode with no Legacy, Disabled
+
+                         Energy Efficient Turbo         Disabled               Enabled, Disabled
+
+                         Autonomous Core C-state        Disabled               Enabled, Disabled
+
+                         Processor EPP Profile          Balanced Performance Performance, Balanced Performance, Power,
+                                                                             Balanced Power
+
+                         Patrol Scrub                   Enable at End of POST Enable at End of POST, Disabled
+
+                         Intel Dynamic Speed Select     Disabled               Enabled, Disabled
+
+                         DCPMM Firmware Downgrade Disabled                     Enabled, Disabled
+
+                         Enhanced CPU Performance       Disabled               Auto, Disabled
+
+
+
+
+                                                                          Cisco UCS Server BIOS Tokens, Release 4.3
+                                                                                                                              55
+                                                                                                          UCS Server BIOS Tokens
+Server BIOS Tokens in Release 4.3(2b)
+
+
+
+
+                       Name                                   Default Value         Server Supported Values
+
+                       UPI Power Management                   Disabled              Enabled, Disabled
+
+                       UPI Link Speed                         Auto                  12.8GT/s, 14.4GT/s, 16.0GT/s, Auto
+
+                       LIMIT CPU PA to 46 Bit                 Enabled               Enabled, Disabled
+
+                       X2APIC Opt Out                         Disabled              Enabled, Disabled
+
+                       PCIe Slots CDN Control                 Enabled               Enabled, Disabled
+
+
+                      New/Changed BIOS Tokens for 4.3(2b)
+
+                       Name                    Default        Supported Values               Platform              New/Changed
+                                               Value
+                       PRMRR Size              256M           Invalid Config, 128M, 256M,    C220 M6, C240 M6,     New
+                                                              512M,1G, 2G, 4G, 8G, 16G,      B200 M6
+                                                              32G, 64G, 128G, 256G, 512G
+                                                              Note
+                                                              SGX, Total Memory Encryption
+                                                              must be enabled.
+
+                       Burst and         Disabled             Enabled, Disabled              C225 M6, C245 M6      New
+                       Postponed Refresh
+                       PCIe Slots CDN          Enabled        Enabled, Disabled              C220 M6, C240 M6,     New
+                       Control                                                               C225 M6, C245 M6
+
+                      Related Documentation
+                          • Server BIOS Tokens in Release 4.2.
+                          • Server BIOS Tokens in Release 4.1.
+
+
+
+
+                  Cisco UCS Server BIOS Tokens, Release 4.3
+    56

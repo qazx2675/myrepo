@@ -1,0 +1,15 @@
+{
+ "_meta": {
+  "vendor": "Supermicro",
+  "mgmt_version": "X14/H14 (Gen 14 BMC firmware 01.0x.xx.xx)",
+  "source": null,
+  "firmware_version": "BMC 01.06.04.13, BIOS 1.5 (feed)",
+  "retrieved": "2026-10-10",
+  "status": "unavailable",
+  "reason": "Redfish User Guide Rev 6.1 lists Gen 14; registry only on device. No user-owned X14/H14 model.",
+  "representative_boards_checked": "X14DBI-T",
+  "protocol_for_bios": "json",
+  "device_dump": "GET /redfish/v1/Registries -> BiosAttributeRegistry -> Location[].Uri ; GET /redfish/v1/Systems/1/Bios ; GET /redfish/v1/Systems/1/Bios/SD (SUM alternative: sum -i <BMC> -u <USER> -p <PASS> -c GetCurrentBiosCfg --file bios.xml)"
+ },
+ "attributes": []
+}
