@@ -6,9 +6,9 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $keyLine = (Get-Content "$HOME\.jev-claude.env" | Where-Object { $_ -match '^JEV_API_KEY=' } | Select-Object -First 1)
 $key = ($keyLine -replace '^JEV_API_KEY=', '').Trim('"', "'", ' ')
-$cache = Join-Path $env:TEMP 'jev_std_map_cache.json'
+$cachePath = Join-Path $env:TEMP 'jev_std_map_cache.json'
 $script:Cache = @{}
-if (Test-Path $cache) { (Get-Content $cache -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $script:Cache[$_.Name] = $_.Value } }
+if (Test-Path $cachePath) { (Get-Content $cachePath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $script:Cache[$_.Name] = $_.Value } }
 
 function Jev($state, $questions) {
   $body = @{ model = 'jev-latest'; state = $state; questions = $questions } | ConvertTo-Json -Depth 8 -Compress
@@ -18,7 +18,7 @@ function Jev($state, $questions) {
     try {
       $r = Invoke-RestMethod -Method Post -Uri 'https://api.typesafe.ai/v1/systemone' -Headers @{ Authorization = "Bearer $key" } -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 90
       $script:Cache[$ck] = $r.answers
-      $script:Cache | ConvertTo-Json -Depth 10 | Set-Content $cache -Encoding UTF8
+      $script:Cache | ConvertTo-Json -Depth 10 | Set-Content $cachePath -Encoding UTF8
       return $r.answers
     } catch { Start-Sleep -Seconds (2 * ($i + 1)); $err = $_ }
   }
