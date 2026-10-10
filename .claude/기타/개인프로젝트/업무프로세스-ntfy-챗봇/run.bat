@@ -1,8 +1,7 @@
 @echo off
-chcp 65001 > nul
-title 업무프로세스 ntfy 챗봇
+title Ntfy Chatbot
+chcp 65001 >nul
 cd /d "%~dp0"
-
 where py >nul 2>nul
 if %errorlevel% equ 0 (
     py -u bot\bot.py
