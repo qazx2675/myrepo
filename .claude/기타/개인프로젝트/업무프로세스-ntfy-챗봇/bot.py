@@ -21,8 +21,8 @@ import urllib.error
 # Windows 콘솔 UTF-8 출력 보정
 if sys.platform == 'win32':
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
-        sys.stderr.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+        sys.stderr.reconfigure(encoding='utf-8', line_buffering=True)
     except Exception:
         pass
 
@@ -72,6 +72,17 @@ def load_or_create_env():
     if "NTFY_SERVER" not in env_vars:
         env_vars["NTFY_SERVER"] = "https://ntfy.sh"
         updated = True
+    if "NTFY_TOPIC" not in env_vars and "NTFY_QUESTION_TOPIC" not in env_vars:
+        # 기본값으로 가장 편리한 단일 토픽(1개 구독으로 질의응답) 생성
+        env_vars["NTFY_TOPIC"] = f"proc-chat-{secrets.token_hex(8)}"
+        updated = True
+
+    if "NTFY_TOPIC" in env_vars and env_vars["NTFY_TOPIC"]:
+        single_t = env_vars["NTFY_TOPIC"]
+        env_vars["NTFY_QUESTION_TOPIC"] = single_t
+        env_vars["NTFY_ANSWER_TOPIC"] = single_t
+        env_vars["NTFY_FEEDBACK_TOPIC"] = single_t
+
     if "NTFY_QUESTION_TOPIC" not in env_vars:
         env_vars["NTFY_QUESTION_TOPIC"] = f"proc-q-{secrets.token_hex(8)}"
         updated = True
@@ -121,9 +132,17 @@ def load_or_create_env():
 CONFIG = load_or_create_env()
 
 NTFY_SERVER = CONFIG.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
-NTFY_QUESTION_TOPIC = CONFIG.get("NTFY_QUESTION_TOPIC")
-NTFY_ANSWER_TOPIC = CONFIG.get("NTFY_ANSWER_TOPIC")
-NTFY_FEEDBACK_TOPIC = CONFIG.get("NTFY_FEEDBACK_TOPIC")
+NTFY_TOPIC = CONFIG.get("NTFY_TOPIC", "")
+if NTFY_TOPIC:
+    NTFY_QUESTION_TOPIC = NTFY_TOPIC
+    NTFY_ANSWER_TOPIC = NTFY_TOPIC
+    NTFY_FEEDBACK_TOPIC = NTFY_TOPIC
+else:
+    NTFY_QUESTION_TOPIC = CONFIG.get("NTFY_QUESTION_TOPIC")
+    NTFY_ANSWER_TOPIC = CONFIG.get("NTFY_ANSWER_TOPIC")
+    NTFY_FEEDBACK_TOPIC = CONFIG.get("NTFY_FEEDBACK_TOPIC")
+
+IS_SINGLE_TOPIC = (NTFY_QUESTION_TOPIC == NTFY_ANSWER_TOPIC)
 NTFY_TOKEN = CONFIG.get("NTFY_TOKEN", "")
 OLLAMA_URL = CONFIG.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 MODEL = CONFIG.get("MODEL", "qwen3:8b")
@@ -265,7 +284,7 @@ def query_llm(question, doc_text=None):
     }
 
 # ntfy 발행 (메시지 분할 및 피드백 버튼 첨부)
-def publish_ntfy(answer_text, q_id, title="업무프로세스 답변"):
+def publish_ntfy(answer_text, q_id, title="🤖 답변"):
     # 4096바이트 / 한글 약 1300자 분할 처리
     max_chunk_chars = 1200
     chunks = []
@@ -297,7 +316,8 @@ def publish_ntfy(answer_text, q_id, title="업무프로세스 답변"):
         payload = {
             "topic": NTFY_ANSWER_TOPIC,
             "title": chunk_title,
-            "message": chunk
+            "message": chunk,
+            "tags": ["bot"]
         }
 
         # 마지막 조각에만 👍/👎 버튼 부착 (Section 3.5)
@@ -424,6 +444,49 @@ def process_feedback(msg_id, fb_text):
         "answer": answer
     })
 
+# 이벤트 디스패처
+def handle_single_topic_event(msg_id, msg_text, event):
+    """
+    단일 토픽 모드용 통합 핸들러:
+    - 봇이 보낸 답변은 무시 (무한 루프 방지)
+    - good/bad 피드백 메시지는 process_feedback으로 전달
+    - 사용자 일반 질문은 process_question으로 전달
+    """
+    tags = event.get("tags") or []
+    title = event.get("title") or ""
+    
+    # 1. 봇 자신이 보낸 메시지인지 확인
+    if "bot" in tags or title.startswith("🤖") or title in ["오류 발생", "워밍업"]:
+        return
+
+    # 2. 피드백 메시지인지 확인 (👍/👎 버튼 클릭 시 발행된 텍스트)
+    parts = msg_text.strip().split()
+    if parts and parts[0].lower() in ["good", "bad"]:
+        process_feedback(msg_id, msg_text)
+        return
+
+    # 3. 빈 메시지 무시
+    if not msg_text.strip():
+        return
+
+    # 4. 사용자 질문 처리
+    process_question(msg_id, msg_text)
+
+def handle_question_only(msg_id, msg_text, event):
+    """분리 토픽 모드: 질문 처리 (봇 자체 발행 메시지 제외)"""
+    tags = event.get("tags") or []
+    if "bot" in tags:
+        return
+    if not msg_text.strip():
+        return
+    process_question(msg_id, msg_text)
+
+def handle_feedback_only(msg_id, msg_text, event):
+    """분리 토픽 모드: 피드백 처리"""
+    if not msg_text.strip():
+        return
+    process_feedback(msg_id, msg_text)
+
 # ntfy 스트림 구독 워커 (질문 토픽 & 피드백 토픽)
 def subscribe_stream(topic, on_message, last_id_key):
     state = load_state()
@@ -469,7 +532,7 @@ def subscribe_stream(topic, on_message, last_id_key):
                             st[last_id_key] = msg_id
                             save_state(st)
 
-                        on_message(msg_id, msg_text)
+                        on_message(msg_id, msg_text, event)
         except urllib.error.HTTPError as e:
             if e.code == 400 and last_id:
                 print(f"[{topic} 알림] 이전 메시지 ID({last_id})가 만료되었거나 유효하지 않아 400 오류 발생. 상태를 초기화하고 최신 스트림으로 자동 전환합니다.")
@@ -494,9 +557,15 @@ def startup_warmup():
     print(f" 문서 경로: {TARGET_DOC_PATH}")
     print(f" 모델: {MODEL} | 컨텍스트: {NUM_CTX} | 온도: {TEMPERATURE}")
     print(f" ntfy 서버: {NTFY_SERVER}")
-    print(f" 질문 토픽: {NTFY_QUESTION_TOPIC}")
-    print(f" 답변 토픽: {NTFY_ANSWER_TOPIC}")
-    print(f" 피드백 토픽: {NTFY_FEEDBACK_TOPIC}")
+    if IS_SINGLE_TOPIC:
+        print(f" [운영 모드] 🌟 단일 토픽 대화 모드 (1개 방 구독으로 통합)")
+        print(f" 👉 구독할 단일 토픽: {NTFY_QUESTION_TOPIC}")
+        print(f"    (휴대폰 ntfy 앱에서 위 토픽 1개만 구독하시면 질문/답변이 한 방에서 이뤄집니다)")
+    else:
+        print(f" [운영 모드] 분리 토픽 모드 (3개 토픽)")
+        print(f" 질문 토픽: {NTFY_QUESTION_TOPIC}")
+        print(f" 답변 토픽: {NTFY_ANSWER_TOPIC}")
+        print(f" 피드백 토픽: {NTFY_FEEDBACK_TOPIC}")
     print("=" * 60)
 
     doc_text = read_document()
@@ -527,23 +596,33 @@ def startup_warmup():
 def main():
     startup_warmup()
 
-    # 질문 구독 스레드
-    t_q = threading.Thread(
-        target=subscribe_stream,
-        args=(NTFY_QUESTION_TOPIC, process_question, "last_q_id"),
-        daemon=True
-    )
-    t_q.start()
+    if IS_SINGLE_TOPIC:
+        print(f"[단일 토픽 모드 가동] '{NTFY_QUESTION_TOPIC}' 토픽 1개로 질문/답변/피드백 통합 대기 중")
+        t_single = threading.Thread(
+            target=subscribe_stream,
+            args=(NTFY_QUESTION_TOPIC, handle_single_topic_event, "last_single_id"),
+            daemon=True
+        )
+        t_single.start()
+    else:
+        print(f"[분리 토픽 모드 가동] 질문({NTFY_QUESTION_TOPIC}) / 피드백({NTFY_FEEDBACK_TOPIC}) 대기 중")
+        # 질문 구독 스레드
+        t_q = threading.Thread(
+            target=subscribe_stream,
+            args=(NTFY_QUESTION_TOPIC, handle_question_only, "last_q_id"),
+            daemon=True
+        )
+        t_q.start()
 
-    # 피드백 구독 스레드
-    t_fb = threading.Thread(
-        target=subscribe_stream,
-        args=(NTFY_FEEDBACK_TOPIC, process_feedback, "last_fb_id"),
-        daemon=True
-    )
-    t_fb.start()
+        # 피드백 구독 스레드
+        t_fb = threading.Thread(
+            target=subscribe_stream,
+            args=(NTFY_FEEDBACK_TOPIC, handle_feedback_only, "last_fb_id"),
+            daemon=True
+        )
+        t_fb.start()
 
-    print("[챗봇 대기 중] 휴대폰에서 질문을 전송하면 실시간으로 응답합니다. (종료: Ctrl+C)")
+    print("\n[챗봇 준비 완료] 휴대폰에서 질문을 전송하면 실시간으로 응답합니다. (종료: Ctrl+C)")
     try:
         while True:
             time.sleep(1)
