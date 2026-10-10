@@ -434,8 +434,6 @@ def subscribe_stream(topic, on_message, last_id_key):
         url = f"{NTFY_SERVER}/{topic}/json"
         if last_id:
             url += f"?since={last_id}"
-        else:
-            url += "?since=all"
 
         print(f"[{topic} 구독 시작] URL: {url}")
         headers = {}
@@ -472,6 +470,18 @@ def subscribe_stream(topic, on_message, last_id_key):
                             save_state(st)
 
                         on_message(msg_id, msg_text)
+        except urllib.error.HTTPError as e:
+            if e.code == 400 and last_id:
+                print(f"[{topic} 알림] 이전 메시지 ID({last_id})가 만료되었거나 유효하지 않아 400 오류 발생. 상태를 초기화하고 최신 스트림으로 자동 전환합니다.")
+                last_id = ""
+                st = load_state()
+                st[last_id_key] = ""
+                save_state(st)
+                time.sleep(1)
+                continue
+            print(f"[{topic} HTTP 에러] {e}. {backoff}초 후 재연결...")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 300)
         except Exception as e:
             print(f"[{topic} 연결 종료 또는 에러] {e}. {backoff}초 후 재연결...")
             time.sleep(backoff)

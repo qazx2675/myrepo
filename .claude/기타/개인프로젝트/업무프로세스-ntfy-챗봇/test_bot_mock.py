@@ -73,11 +73,15 @@ class TestBotComponents(unittest.TestCase):
         self.assertTrue(found, "feedback.jsonl에 캐시된 질문/답변과 함께 저장되어야 함")
 
     def test_state_saving_and_loading(self):
-        st = bot.load_state()
-        st["last_q_id"] = "msg_test_999"
-        bot.save_state(st)
-        loaded = bot.load_state()
-        self.assertEqual(loaded.get("last_q_id"), "msg_test_999")
+        original_state = bot.load_state()
+        try:
+            st = original_state.copy()
+            st["last_q_id"] = "test_temp_id"
+            bot.save_state(st)
+            loaded = bot.load_state()
+            self.assertEqual(loaded.get("last_q_id"), "test_temp_id")
+        finally:
+            bot.save_state(original_state)
 
 if __name__ == "__main__":
     unittest.main()
