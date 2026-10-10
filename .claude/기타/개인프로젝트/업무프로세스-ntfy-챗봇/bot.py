@@ -204,26 +204,24 @@ def read_document(path=TARGET_DOC_PATH):
 
 # 시스템 프롬프트 구성
 def build_system_prompt(doc_text):
-    return f"""당신은 사내 '서버 운영 및 관리 표준 지침서(업무프로세스)'를 완벽히 숙지하고 실무 엔지니어를 지원하는 친절하고 유능한 업무 비서 AI입니다.
+    return f"""당신은 사내 '서버 운영 및 관리 표준 지침서'를 기반으로 실무 엔지니어의 질문에 명쾌하게 답하는 유능한 사내 AI 어시스턴트입니다.
 
 다음은 사내 표준 업무프로세스 지침서 전문입니다:
 ===
 {doc_text}
 ===
 
-[답변 작성 원칙]
-1. 자연스럽고 실무에 도움되는 설명:
-   - 기계적이거나 형식적인 딱딱한 답변 대신, 동료 엔지니어에게 인수인계하듯 자연스럽고 친절한 말투(~합니다, ~해 주세요, ~하시면 됩니다)로 조리 있게 설명하세요.
-   - 질문자의 구체적인 상황(서버 용도, 동반 작업 등)을 파악하여, 관련된 사전 승인 확인, 작업 절차, 사후 점검 및 주의사항을 유기적으로 엮어 안내하세요.
-2. 철저한 문서 기반 및 단계별 절차 안내:
-   - 업무프로세스 문서에 규정된 사전 확인 사항(예: 개발 서버 요청 권한, ITOM 등록 여부, 담당자 확인 등)을 먼저 짚어주세요.
-   - 본 작업 절차는 번호 목록(1, 2, 3...)으로 명확하게 정리하여 가독성을 높이세요.
-   - 작업 후 필수 환경설정 체크(스크립트 경로, 파일명 등)와 주의사항을 누락 없이 포함하세요.
-   - 문서에 명시되지 않은 내용은 임의로 상상하지 말고, "해당 세부 사항은 업무프로세스 문서에 나와 있지 않으므로 담당자에게 확인이 필요합니다."라고 자연스럽게 안내하세요.
-3. 근거 표기:
-   - 답변 마지막 줄에는 엔지니어가 문서를 찾아볼 수 있도록 참고한 지침서 항목을 안내하세요. (예: 📌 근거: 제2.3절 서버 용도 확인, 제3.1절 OS 설치 공통 프로세스, 제5.1절 망 변경)
-4. 분량 및 가독성:
-   - 모바일(ntfy) 화면에서 읽기 편하도록 문단과 줄바꿈을 적절히 활용하여 명확하게 작성하세요."""
+[답변 작성 핵심 지침 - 반드시 준수할 것]
+1. 문서 복사·붙여넣기 및 무관한 내용 나열 절대 금지:
+   - 지침서에 적힌 목차나 세부 설정을 백과사전식으로 길게 복사·나열하지 마십시오.
+   - 질문과 직접적으로 관련 없는 항목(예: USB 차단 블록 점검, limit/nofile 설정, tmp 삭제 주기 등 무관한 작업)은 일절 언급하지 마십시오.
+2. 질문 상황에 꼭 필요한 핵심 실무 절차만 3~4단계로 콤팩트하게 브리핑:
+   - 질문자가 요청한 핵심 작업(예: 개발 서버 승인 주체 확인 -> OS 설치 작업 및 공지 -> 망변경 요청 및 검증)만 짚어 사람이 동료에게 인수인계하듯 자연스러운 구어체(~하세요, ~하시면 됩니다)로 조리 있게 설명하세요.
+3. 분량 제한 (매우 중요):
+   - 모바일 화면에서 한눈에 쏙 들어오도록 공백 포함 400자~600자 내외로 군더더기 없이 간결하게 작성하세요.
+   - 긴 설정 파일 코드 블록이나 지침서 원문 인용을 지양하고, 엔지니어가 취해야 할 실제 행동 위주로 서술하세요.
+4. 참고 근거 표기:
+   - 답변 마지막 줄에 참고한 지침서 절 번호만 1줄로 간결히 덧붙이세요. (예: 📌 참고: 제2.3절 서버 용도 확인, 제3.1절 OS 설치, 제5.1절 망 변경)"""
 
 # Ollama LLM 호출
 def query_llm(question, doc_text=None):
@@ -291,7 +289,25 @@ def query_llm(question, doc_text=None):
         "unanswered": unanswered
     }
 
-# ntfy 발행 (메시지 분할 및 피드백 버튼 첨부)
+def _send_ntfy_payload(payload, idx, total_chunks):
+    headers = {"Content-Type": "application/json; charset=utf-8"}
+    if NTFY_TOKEN:
+        headers["Authorization"] = f"Bearer {NTFY_TOKEN}"
+
+    try:
+        req = urllib.request.Request(
+            NTFY_SERVER,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            _ = resp.read()
+        print(f"[ntfy 발행 성공] 조각 ({idx}/{total_chunks}) -> {NTFY_ANSWER_TOPIC}")
+    except Exception as e:
+        print(f"[ntfy 발행 실패] 조각 ({idx}/{total_chunks}): {e}")
+
+# ntfy 발행 (메시지 분할 및 역순 발행)
 def publish_ntfy(answer_text, q_id, title="🤖 답변"):
     # 4096바이트 / 한글 약 1300자 분할 처리
     max_chunk_chars = 1200
@@ -300,7 +316,6 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변"):
     if len(answer_text) <= max_chunk_chars:
         chunks = [answer_text]
     else:
-        # 분할
         lines = answer_text.split("\n")
         cur_chunk = ""
         for line in lines:
@@ -315,22 +330,13 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변"):
 
     total_chunks = len(chunks)
     
-    for idx, chunk in enumerate(chunks, 1):
-        chunk_title = title
-        if total_chunks > 1:
-            chunk_title = f"{title} ({idx}/{total_chunks})"
-        
-        is_last = (idx == total_chunks)
+    if total_chunks == 1:
         payload = {
             "topic": NTFY_ANSWER_TOPIC,
-            "title": chunk_title,
-            "message": chunk,
-            "tags": ["bot"]
-        }
-
-        # 마지막 조각에만 👍/👎 버튼 부착 (Section 3.5)
-        if is_last:
-            payload["actions"] = [
+            "title": title,
+            "message": chunks[0],
+            "tags": ["bot"],
+            "actions": [
                 {
                     "action": "http",
                     "label": "👍 좋음",
@@ -344,23 +350,38 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변"):
                     "body": f"bad {q_id}"
                 }
             ]
-
-        headers = {"Content-Type": "application/json; charset=utf-8"}
-        if NTFY_TOKEN:
-            headers["Authorization"] = f"Bearer {NTFY_TOKEN}"
-
-        try:
-            req = urllib.request.Request(
-                NTFY_SERVER,
-                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                headers=headers,
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                _ = resp.read()
-            print(f"[ntfy 발행 성공] 조각 {idx}/{total_chunks} -> {NTFY_ANSWER_TOPIC}")
-        except Exception as e:
-            print(f"[ntfy 발행 실패] 조각 {idx}/{total_chunks}: {e}")
+        }
+        _send_ntfy_payload(payload, 1, 1)
+    else:
+        # 모바일 앱 피드는 최신 메시지가 상단에 위치하므로,
+        # 역순 (마지막 조각 -> 1번 조각)으로 전송하여
+        # 사용자가 위에서 아래로(1 -> 2 -> 3) 자연스럽게 읽을 수 있도록 배치
+        indexed_chunks = list(enumerate(chunks, 1))
+        for idx, chunk in reversed(indexed_chunks):
+            chunk_title = f"{title} ({idx}/{total_chunks})"
+            payload = {
+                "topic": NTFY_ANSWER_TOPIC,
+                "title": chunk_title,
+                "message": chunk,
+                "tags": ["bot"]
+            }
+            if idx == total_chunks:
+                payload["actions"] = [
+                    {
+                        "action": "http",
+                        "label": "👍 좋음",
+                        "url": f"{NTFY_SERVER}/{NTFY_FEEDBACK_TOPIC}",
+                        "body": f"good {q_id}"
+                    },
+                    {
+                        "action": "http",
+                        "label": "👎 나쁨",
+                        "url": f"{NTFY_SERVER}/{NTFY_FEEDBACK_TOPIC}",
+                        "body": f"bad {q_id}"
+                    }
+                ]
+            _send_ntfy_payload(payload, idx, total_chunks)
+            time.sleep(0.8)
 
 # 질문 처리 메인 로직
 def process_question(msg_id, question_text):
