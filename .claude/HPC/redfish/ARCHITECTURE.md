@@ -8,7 +8,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 
 | 파일 | 역할 |
 |---|---|
-| `main.go` | CLI 진입점. 서브커맨드(`check`·`allcheck`·`dump`·`encrypt`)·공통 플래그·`usageText`, `prepare`(conf → 대상 해석 → 비밀번호 복호화), 실행 요약 출력 |
+| `main.go` | CLI 진입점. 서브커맨드(`check`·`allcheck`·`dump`·`encrypt`·`ucsm`)·공통 플래그·`usageText`, `prepare`(conf → 대상 해석 → 비밀번호 복호화), 실행 요약 출력 |
 | `conf.go` | `bios.conf` 파서와 기본값(`Config`). 알 수 없는 키·비밀번호 키는 오류 |
 | `profile.go` | `profiles/<이름>.tsv` 로드·검증(`*` 행의 `verified=Y` 거부, 중복 검사), `rowsFor`(모델 정확 일치 우선 → `*`) |
 | `modelnorm.go` | 모델명 정규화 `normalizeModel`(프로파일의 model 열과 BMC 가 보고한 Model 을 같은 키로 맞추는 **한곳의 규칙**, allcheck 도 사용) |
@@ -16,7 +16,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `cryptutil.go` | AES-256-GCM 비밀번호 암복호화(`pass.enc`+`key.bin`, 0600), `encrypt` 서브커맨드의 본체 |
 | `redfish.go` | **BMC 와 통신하는 유일한 HTTP 클라이언트.** 세션 1회·`checkAllowed`(호출 허용목록)·`checkBody`(본문 검사)·타임아웃·재시도·백오프·401 즉시 중단·오류 상태 분류(`UNREACHABLE`·`TIMEOUT`·`BMC_ERROR`·`AUTH_FAIL`·`UNSUPPORTED`·`HTTP_ERROR`)·비밀번호 마스킹 |
 | `inspect.go` | 시스템 판별 `detectSystem`(ServiceRoot → Systems → Bios → Settings 경로 → 속성 레지스트리 위치), Bios 속성·레지스트리 해석, 벤더 정규화 `normalizeVendor`, **표준 4항목 이름 후보 키워드 `stdKeywords`** |
-| `sweep.go` | 호스트 순회 워커풀과 **AUTH_FAIL 차단기**(웜업 직렬 → 병렬, `SKIPPED_AUTH_STOP`). check·dump·allcheck·set 이 공유 |
+| `sweep.go` | 호스트 순회 워커풀과 **AUTH_FAIL 차단기**(웜업 직렬 → 병렬, `SKIPPED_AUTH_STOP`). check·dump·allcheck·set·ucsm 이 공유 |
 | `check.go` | `check` 본체: 호스트별 판정(`judge`), 상태 상수(OK·FAIL·UNVERIFIED·PENDING_*·MAPPING_MISSING·NO_DUMP), Dell BIOS Job 판별, `-from-dump` 읽기, `result.tsv`·`ok.txt`·`fail.tsv`·`retry.txt`·`run_info.txt` 기록 |
 | `report.go` | `check` 의 터미널 리포트(`[OK]`·`[FAIL 상세]`·`[설정 불가]`·`[기타 오류]`)와 **Y/N 확인**(`confirmApply`, 비대화형 입력은 N, `-stdin-ok`) |
 | `set.go` | **BMC 에 쓰는 유일한 경로.** 입력 재검증·벤더 제한·재조회·레지스트리 사전검증·시스템 프로파일 종속 처리·PATCH 1회·Dell Job POST·반영 재조회, `-dry-run`(`buildPlan`/`writePlan` 공유), `apply_*` 결과 파일과 설정 리포트 |
@@ -25,6 +25,8 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `allreport.go` | `allcheck` 의 터미널 리포트(모델 그룹·속성별 집계·특이사항·분류 불가) |
 | `retry.go` | `-retry-from`: 이전 결과 읽기·검증, 재시도 대상만 다시 실행한 결과를 이전 결과와 병합(`merged_*`) |
 | `*_test.go` | 단위·통합 테스트. 보안 규칙은 `redfish_security_test.go`·`set_security_test.go`, 수천 대 시험은 `scale_test.go`, mock 연동은 `mock_integration_test.go` |
+
+**Cisco UCSM(XML API) 점검 — `ucsm.go` + `internal/ucsmxml/`** (`biostool ucsm`, 래퍼 `ucsm_check.sh`, 읽기 전용·설정 기능 없음). 대상은 블레이드 BMC 가 아니라 UCSM(FI VIP) 주소이고, 기대값은 `bios_json/standard_map/standard_bios_map_xml.tsv`(`-xml-map`)입니다. `ucsm.go` 는 매핑 TSV 해석(`parseUcsmMap`, `# UNMAPPED` 줄 포함), 모델 키 `ucsmModelKey`(TSV `UCS B200 M5` ↔ PID `UCSB-B200-M5` 를 맞추는 한곳의 규칙), 서버별 실효값 수집(dn 이 `<서버 dn>/bios/bios-settings/…` 인 인스턴스만, BIOS 정책 `bios-prof-*` 는 무시), 판정(OK·FAIL·UNVERIFIED·MAPPING_MISSING·UNSUPPORTED, 호스트 단위 AUTH_FAIL·UNREACHABLE·TIMEOUT·XML_ERROR)과 터미널 요약을 맡고, 호스트 순회·AUTH_FAIL 차단기는 `sweep.go`, 결과 폴더·0600 쓰기는 `check.go` 의 `newRunDir`·`writeTSV` 를 그대로 씁니다. UCSM 과의 통신은 **`internal/ucsmxml` 패키지만** 하며, 공개된 호출은 `Login`·`ResolveClass`·`Logout` 뿐이고 모든 요청은 전송 직전 단일 관문 `gate` 를 지납니다: 루트가 `aaaLogin`·`configResolveClass`·`aaaLogout` 이 아니거나, 자식 요소·추가 속성·남의 쿠키·`inHierarchical≠false`·허용목록(`computeBlade` + 매핑 TSV 의 `bios*` 클래스) 밖 classId 면 보내지 않고 `ErrNotAllowed`(`configConfMo`·`configResolveDn` 등 쓰기·임의 조회는 만들 수 없음). 별도 패키지로 둔 이유는 `redfish_test.go` 의 구조 가드(“`cmd/biostool` 에서 HTTP 는 `redfish.go` 만”)를 유지하면서 UCSM 전송 경로를 패키지 경계로 막기 위해서입니다. 결과는 Redfish 의 `result.tsv` 와 섞지 않고 `results/<일시>/ucsm_result.tsv` 에 씁니다 — 열: `ucsm_host ip protocol(xml) mgmt_version(UCSM) server_dn vendor model std_name xml_class attribute expected current result` (호스트 단위 오류는 `server_dn`·`std_name` 이 `-` 인 1행, serial 등 식별정보 없음). 테스트는 `ucsm_test.go`(가짜 UCSM 판정·AUTH_FAIL 1회·허용목록·비밀값 노출)와 `internal/ucsmxml/ucsmxml_test.go`(관문·마스킹).
 
 ### mock BMC (개발·검증 전용, 배포 대상 아님)
 
@@ -40,9 +42,11 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | 경로 | 역할 |
 |---|---|
 | `profiles/VM.tsv` | 표준값(프로파일). 엑셀 표 시작값, 전부 `verified=N`. 프로파일 추가 = 파일 추가 |
+| `profiles/VM_research.tsv` | 표준값(프로파일, 연구용). `bios_json/` 조사 데이터에서 생성(`map_bios_attrs.ps1`), 전부 `verified=N` |
 | `bios.conf.example` · `user.txt.example` · `diff.txt.example` · `ignore_attrs.txt.example` | 설정·입력 파일 예시(실제 값은 `.gitignore` 로 커밋 금지) |
 | `bios_check.sh` | 점검·설정 래퍼(프로파일 메뉴, 파일 확인) → `biostool check` |
 | `xml.sh` | 사전조사 래퍼 → `biostool dump -targets …` |
+| `ucsm_check.sh` | Cisco UCSM 읽기 전용 점검 래퍼 → `biostool ucsm` (위 “Cisco UCSM” 단락 참고) |
 | `all_bios_check.sh` | 전체 비교 래퍼 → `biostool allcheck` |
 | `encrypt.sh` | 비밀번호 암호화 래퍼(비밀번호는 파이프로만 전달) → `biostool encrypt` |
 | `lib.sh` | 래퍼 공용 함수: OS(커널 메이저)별 바이너리 선택 `select_bin`, `conf_val`. bash 4.1 호환 |

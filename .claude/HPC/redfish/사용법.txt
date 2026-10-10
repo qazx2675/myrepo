@@ -95,6 +95,9 @@ bash bios_check.sh
 # 프로파일을 지정해서 점검 (메뉴 생략)
 bash bios_check.sh --profile VM
 
+# 연구용 프로파일 (조사 데이터 기반, 전부 verified=N 이라 점검만 되고 설정은 되지 않음)
+bash bios_check.sh --profile VM_research
+
 # 설정 없이 미리 보기: 호스트별로 Y 를 누르면 보낼 PATCH 경로·본문을 출력만 한다 (BMC 에 쓰지 않고 Y/N 도 안 묻는다)
 bash bios_check.sh --profile VM -dry-run
 
@@ -254,3 +257,23 @@ cat results/<일시>/mapping_missing/summary.txt
 
 # 파일 권한 확인 (모두 600, 비밀번호는 들어 있지 않다)
 ls -l results/<일시>/
+
+
+########################################################################
+# 10. Cisco UCSM 점검 (읽기 전용, 설정 없음) — 대상은 블레이드 BMC 가 아니라 UCSM(FI VIP) 주소
+########################################################################
+
+# user.txt 의 UCSM 주소를 점검한다 (호출은 aaaLogin -> configResolveClass -> aaaLogout 뿐)
+bash ucsm_check.sh
+
+# 다른 목록, 기대값 TSV, 나열 수를 지정한다
+bash ucsm_check.sh -user <UCSM 목록 파일> -xml-map bios_json/standard_map/standard_bios_map_xml.tsv -list-max 50
+
+# 바이너리를 직접 실행한다 (위와 같음)
+bin/biostool ucsm -user <UCSM 목록 파일>
+
+# 결과를 표로 본다 (열: ucsm_host ip protocol mgmt_version server_dn vendor model std_name xml_class attribute expected current result)
+column -t -s$'\t' results/<일시>/ucsm_result.tsv | less -S
+
+# FAIL 행만 본다 (result 는 13번째 열)
+awk -F'\t' '$13=="FAIL"' results/<일시>/ucsm_result.tsv

@@ -8,7 +8,7 @@
 - BMC 에 남기는 흔적을 줄이려고 호스트당 **로그인 1회**, 허용목록 밖 호출(로그 조회·ClearLog·Reset 등)은 **전송 전에 코드가 차단**합니다.
 - 사전조사(`xml.sh`)로 처음 만나는 모델의 속성 이름을 확인하고, 모델별 BIOS 전체 비교(`all_bios_check.sh`)도 할 수 있습니다.
 
-> **현재 상태(v0.1.0): 실제 BMC 에 접속해 본 적이 없습니다.** 모든 검증은 합성 데이터로 만든 mock BMC 와 `-from-dump` 로만 했습니다. 모델을 처음 만날 때의 절차와 사람이 확인할 항목은 [FIRST_RUN.md](FIRST_RUN.md) 에 모았습니다. 반드시 먼저 읽으십시오.
+> **현재 상태(v0.1.0): 실제 BMC 에 접속해 본 적이 없습니다.** 모든 검증은 합성 데이터로 만든 mock BMC 와 `-from-dump` 로만 했습니다. 같은 이유로 Cisco UCSM 점검(`ucsm_check.sh`, 2.9절)도 실제 UCSM 에 접속해 보지 않았습니다. 모델을 처음 만날 때의 절차와 사람이 확인할 항목은 [FIRST_RUN.md](FIRST_RUN.md) 에 모았습니다. 반드시 먼저 읽으십시오.
 
 관련 문서: [ARCHITECTURE.md](ARCHITECTURE.md)(파일별 역할·수정 가이드) · [WORKFLOW.md](WORKFLOW.md)(작업 흐름도) · [FIRST_RUN.md](FIRST_RUN.md)(첫 실장비 절차) · [PR_CHECKLIST.md](PR_CHECKLIST.md) · [CHANGELOG.md](CHANGELOG.md) · [사용법.txt](사용법.txt)(명령만 모은 목록) · [계획서.md](계획서.md)(설계·결정 이력)
 
@@ -28,7 +28,7 @@ chmod +x bin/biostool bin/biostool_os6 *.sh    # 실행 권한이 없을 때 (�
 
 | 파일 | 대상 | 비고 |
 |---|---|---|
-| `bin/biostool` | RHEL8 등 커널 3.x 이상 | 정적 링크(CGO 없음). Go 1.25 로 빌드 |
+| `bin/biostool` | RHEL8 등 커널 3.x 이상 | 정적 링크(CGO 없음). Go 1.26.5 로 빌드(v0.2.0 후보, sha256 은 CHANGELOG 참고) |
 | `bin/biostool_os6` | **RHEL6**(커널 2.6.32) | 정적 링크. **Go 1.20.x** 로 빌드(RHEL6 커널에서는 Go 1.24 이상 바이너리가 동작하지 않음). **RHEL6 에서는 빌드하지 않고 이 파일을 그대로 씁니다.** `setup.sh` 는 os8 만 만들고, RHEL6 용은 저장소에 빌드 완료 상태로 커밋되어 있습니다 |
 
 `bios_check.sh`·`xml.sh`·`all_bios_check.sh`·`encrypt.sh` 는 `uname -r` 의 커널 메이저 버전이 3 미만이면 `bin/biostool_os6`, 아니면 `bin/biostool` 을 **자동 선택**합니다(선택한 바이너리에 실행 권한이 없으면 `chmod +x` 를 시도합니다). 바이너리가 없고 `go` 도 없으면 안내 후 종료합니다(종료코드 2). 스크립트는 RHEL6 의 bash 4.1 에서도 돌아가도록 썼습니다.
@@ -76,6 +76,7 @@ cp ignore_attrs.txt.example ignore_attrs.txt   # (선택) 비교에서 뺄 속�
 ```bash
 bash bios_check.sh                    # profiles/*.tsv 를 번호 메뉴로 선택
 bash bios_check.sh --profile VM       # 메뉴 생략
+bash bios_check.sh --profile VM_research   # 조사 데이터 기반 표준값 (전부 verified=N 이라 점검만 되고 설정은 안 됨, 3.4절)
 ```
 
 1. 스크립트가 필요한 파일(`bios.conf`, `user.txt`, `pass.enc`, `key.bin`)이 있는지 확인하고 없으면 만드는 방법을 알려 줍니다.
@@ -325,19 +326,43 @@ OK                     1  → results/20261007_162940/ok.txt (OK·PENDING_OK 호
 
 `mockbmc.sh` 는 `testdata/` 의 **합성 Redfish 트리**를 BMC 처럼 서빙하는 개발·검증용 서버입니다(Go 필요, `bin/mockbmc` 는 저장소에 없고 필요할 때 빌드). 실제 서버에 쓰기 전에 흐름을 익히는 용도이며 임시 conf 를 따로 쓰는 방법은 [사용법.txt](사용법.txt) 의 “mock 연습” 에 있습니다. testdata 의 설명과 한계는 [testdata/README.md](testdata/README.md) 를 보십시오.
 
+### 2.9 Cisco UCSM 점검 (읽기 전용) — `ucsm_check.sh`
+
+UCSM 이 관리하는 블레이드(B200 M4/M5, B480 M5, X210c M7 등)는 Redfish 가 없어 `bios_check.sh` 로는 `UNSUPPORTED` 가 됩니다. 이 블레이드는 `ucsm_check.sh` 로 UCSM XML API 를 읽어, 매핑 TSV(`bios_json/standard_map/standard_bios_map_xml.tsv`)의 기대값과 비교합니다. **읽기 전용이며 설정 기능이 없습니다.**
+
+```bash
+bash ucsm_check.sh                                # user.txt 의 UCSM 주소를 점검
+bash ucsm_check.sh -user ucsm.txt -list-max 50    # 나머지 인자는 biostool ucsm 에 그대로 전달
+```
+
+- `user.txt` 의 한 줄은 블레이드 BMC 가 아니라 **UCSM(Fabric Interconnect VIP) 주소**입니다. 계정은 `bios.conf` 의 `user`, 비밀번호는 `bash encrypt.sh` 로 만든 `pass.enc` 를 씁니다(읽기 전용 계정 권장).
+- UCSM 에 보내는 호출은 `POST https://<UCSM>/nuova` 의 `aaaLogin` → `configResolveClass`(computeBlade, 그리고 매핑의 `bios*` 클래스마다 1회) → `aaaLogout` 뿐입니다. 그 밖의 요청은 전송 전에 코드가 막습니다.
+- 결과는 `results/<일시>/ucsm_result.tsv` 에 쓰며 Redfish 의 `result.tsv` 와 섞지 않습니다. 열: `ucsm_host ip protocol mgmt_version server_dn vendor model std_name xml_class attribute expected current result`. 서버·항목마다 1행이고, 호스트 단위 오류는 `server_dn`·`std_name` 이 `-` 인 1행입니다.
+- 항목 판정: `OK` · `FAIL` · `UNVERIFIED` · `MAPPING_MISSING` · `UNSUPPORTED`. 호스트 오류: `AUTH_FAIL` · `UNREACHABLE` · `TIMEOUT` · `XML_ERROR`. 매핑 TSV 에는 `verified=Y` 행이 없어서 불일치는 모두 `UNVERIFIED` 로 보입니다.
+- `-dry-run`, `-profile`, `-from-dump`, `-retry-from` 과 `retry.txt` 는 없습니다(`ucsm` 이 이 옵션을 거부합니다). 실패한 UCSM 은 `-user` 로 그 주소만 다시 실행하십시오.
+
+한계:
+
+- BIOS 정책(`org-root/.../bios-prof-*`)은 보지 않고, **서버에 실제 적용된 값**(`<서버 dn>/bios/bios-settings/…`)만 봅니다.
+- `biosPlatformDefaults` 를 조회하지 않습니다. 현재값이 `platform-default` 이면 실제 값은 확인되지 않으며, OK 로 추측하지 않고 사유에 확인 안내를 붙입니다.
+- 세션 갱신이 없습니다. 긴 실행 중 세션이 만료(errorCode 552 등)되면 해당 항목이 `UNSUPPORTED` 로 보일 수 있습니다.
+- 랙 서버(computeRackUnit)는 대상이 아닙니다.
+- **실제 UCSM 에 접속해 본 적이 없습니다.** 응답 형태, 블레이드 dn·PID 매칭, 실효 설정 위치는 [FIRST_RUN.md](FIRST_RUN.md) 의 확인 항목 18~25 입니다.
+
 ---
 
 ## 3. 옵션별 상세 설명
 
 ### 3.1 서브커맨드
 
-`biostool` 은 한 바이너리에 서브커맨드 네 개가 있고, bash 래퍼가 파일 확인·바이너리 선택·프로파일 메뉴를 맡습니다. 직접 실행하려면 `bin/biostool help` 를 보십시오.
+`biostool` 은 한 바이너리에 서브커맨드 다섯 개가 있고, bash 래퍼가 파일 확인·바이너리 선택·프로파일 메뉴를 맡습니다. 직접 실행하려면 `bin/biostool help` 를 보십시오.
 
 | 서브커맨드 | 래퍼 | 하는 일 | BMC 쓰기 |
 |---|---|---|---|
 | `check` | `bios_check.sh` | 프로파일 표준값 점검, 승인 시 Pending 설정, `-dry-run` | **Y 응답 시에만**(PATCH, Dell 은 Job POST) |
 | `allcheck` | `all_bios_check.sh` | 모델별 BIOS 전체 Attribute 비교 | 없음 |
 | `dump` | `xml.sh` | 사전조사 덤프(GET 전용) | 없음 |
+| `ucsm` | `ucsm_check.sh` | Cisco UCSM(XML API) 블레이드 BIOS 실효값 점검, 대상은 UCSM 주소 | 없음 |
 | `encrypt` | `encrypt.sh` | 표준입력의 비밀번호를 AES-256-GCM 으로 암호화 | 해당 없음 |
 
 ### 3.2 플래그
@@ -355,7 +380,8 @@ OK                     1  → results/20261007_162940/ok.txt (OK·PENDING_OK 호
 | `-dry-run` | `false` | check | 설정 없이 보낼 PATCH·Job 만 출력. Y/N 안 묻음. `allcheck` 에는 쓸 수 없음 |
 | `-no-prompt` | `false` | check | FAIL 이 있어도 묻지 않고 종료(아무것도 설정하지 않음) |
 | `-stdin-ok` | `false` | check | 표준입력이 터미널이 아니어도(파이프·파일) Y/N 을 읽음. 자동화 전용(경고 출력) |
-| `-list-max <N>` | check 100 / allcheck 20 | check allcheck | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수 |
+| `-list-max <N>` | check 100 / allcheck 20 / ucsm 20 | check allcheck ucsm | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수. ucsm: FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 |
+| `-xml-map <파일>` | `bios_json/standard_map/standard_bios_map_xml.tsv` | ucsm | UCSM 기대값 매핑 TSV |
 | `-fail-max <N>` | `200` | check | `[FAIL 상세]`·`[설정 불가]`·`[적용 안 됨]` 에 보여 줄 최대 줄 수(넘으면 `fail.tsv`·`apply_result.tsv` 안내) |
 | `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 모델을 적어도 확인용) |
 | `-ignore <파일>` | `ignore_attrs.txt` | allcheck | 비교 제외 속성 목록. 파일이 없으면 내장 기본 목록, `-ignore` 로 직접 준 파일이 없으면 오류 |
@@ -375,6 +401,7 @@ OK                     1  → results/20261007_162940/ok.txt (OK·PENDING_OK 호
 | `bios_check.sh` | `[--profile <이름>] [biostool check 옵션...]` | 파일 확인 → 프로파일 메뉴(3회까지 재입력) → `biostool check -profile …`. `-retry-from` 이면 `user.txt` 불필요, `-from-dump` 이면 `pass.enc`·`key.bin` 불필요. `-h` 도움말 |
 | `xml.sh` | `[--compact] [대상...]` | 대상 인자를 쉼표로 묶어 `biostool dump -targets …`. 대상이 없으면 `user.txt`. **설정은 항상 `./bios.conf` 를 쓰며 `-conf` 등 다른 옵션은 받지 않습니다**(알 수 없는 옵션은 오류). 일부 호스트가 실패해도 안내를 보여 준 뒤 종료코드를 전달 |
 | `all_bios_check.sh` | `[biostool allcheck 옵션...]` | 파일 확인 후 `biostool allcheck` 실행 |
+| `ucsm_check.sh` | `[-user <파일>] [-xml-map <파일>] [-list-max N] ...` | 파일 확인 후 `biostool ucsm` 실행(읽기 전용). `-h` 도움말. 2.9절 |
 | `encrypt.sh` | (인자 없음) | 비밀번호를 두 번 입력받아 같을 때만 `pass.enc`·`key.bin`(권한 600) 생성 |
 | `mockbmc.sh` | `<트리이름> [포트]` 또는 `-dir <경로> -listen <주소> -user <ID> [-v]` | mock BMC 기동(개발·검증용). 비밀번호는 환경변수 `MOCKBMC_PASS`. 종료 시 집계 한 줄 출력 |
 | `setup.sh` / `build.sh` / `build_os6.sh` | (인자 없음) | 1.2절 |
@@ -431,6 +458,7 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 - **`verified=Y` 는 모델을 지정한 행에만** 쓸 수 있습니다. **`*` 행에 `verified=Y` 를 쓰면 프로파일 로드 오류**입니다(검증하지 않은 모델에도 맞으므로 쓰기 허가를 줄 수 없음). `*` 행은 점검 비교용입니다.
 - `verified=Y` 는 첫 실장비에서 dry-run 본문을 **사람이 확인한 뒤에만** 표시합니다. `N` 인 모델은 FAIL 이어도 `UNVERIFIED` 로 점검만 되고 Y 를 눌러도 설정되지 않습니다.
 - 같은 (벤더, 모델, 항목, 속성) 행이 중복되면 오류입니다. `profiles/VM.tsv` 에 들어 있는 행은 **엑셀 표에서 가져온 시작값(전부 `verified=N`)** 이며 첫 실장비에서 확정해야 합니다([FIRST_RUN.md](FIRST_RUN.md)).
+- **`profiles/VM_research.tsv`(연구용)** 는 조사 데이터(`bios_json/`)에서 만든 Redfish(JSON) 표준값입니다. 모든 행이 `verified=N` 이라 점검만 되고 설정은 되지 않습니다. 생성 스크립트 `bios_json/standard_map/map_bios_attrs.ps1` 와 오프라인 검증 결과 [profile_validation.md](bios_json/standard_map/profile_validation.md)(120행: OK 89, 허용값 확인 불가 29, Supermicro UI 이름만 2, 오류 0)가 있습니다. 검증은 데이터 대조일 뿐 실장비 확인이 아닙니다. 수동 보정 2건(Lenovo `Enabled|Enable`·`Disabled|Disable` 둘 다 허용, SD650 V3 hyper_threading 대체 후보 `Processors_HyperThreading`)은 `map_bios_attrs.ps1` 로 다시 만들면 덮어써지니 다시 적용하십시오.
 
 ### 3.5 입력 파일 형식
 
@@ -536,6 +564,8 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `cmd/mockbmc/`, `internal/mockbmc/` | mock BMC 서버와 가상 BMC 수천 대를 한 리스너에 올리는 Farm(시험용) |
 | `testdata/` | mock 용 **합성** Redfish 트리 6종(+ 테스트용 프로파일). 실제 덤프가 아님 → [testdata/README.md](testdata/README.md) |
 | `profiles/VM.tsv` | 표준값(프로파일) — 엑셀 표 시작값, 전부 `verified=N` |
+| `profiles/VM_research.tsv` | 표준값(프로파일, 연구용) — 조사 데이터 기반 Redfish(JSON) 값, 전부 `verified=N`. 3.4절 |
+| `ucsm_check.sh` · `cmd/biostool/ucsm.go` · `internal/ucsmxml/` | Cisco UCSM 읽기 전용 점검 래퍼와 구현(2.9절) |
 | `bios.conf.example`, `user.txt.example`, `diff.txt.example`, `ignore_attrs.txt.example` | 설정·입력 파일 예시(실제 값 없음) |
 | `go.mod` | `module biostool`, `go 1.20`, 외부 의존성 없음 |
 | `.gitignore`, `.gitattributes` | 실제 호스트·계정·결과물 커밋 차단 / `.sh` 등은 LF 로 체크아웃 |
@@ -553,7 +583,7 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 - **재부팅을 하지 않습니다.** 설정은 BMC 의 Pending 까지이고 **다음 재부팅 때 반영**됩니다. 반영 전에는 현재값이 그대로이며 재점검에서 `PENDING_OK` 로 보입니다. Dell 은 iDRAC Job Queue 에 BIOS 설정 Job 이 있어야 반영됩니다(없으면 `PENDING_NO_JOB`).
 - **BMC 로그에 흔적이 남습니다.** 호스트당 로그인/로그아웃 기록 1쌍, 설정(Y)을 하면 설정 변경(및 Dell 은 Job) 기록이 추가됩니다. 같은 기능을 짧은 간격으로 반복 실행하지 마십시오. 세션 생성을 지원하지 않는 BMC 는 Basic 인증으로 폴백하므로(`auth=basic`) 요청마다 인증 기록이 남을 수 있습니다. 기존 로그·Job·남의 Pending 은 절대 건드리지 않습니다.
 - **`testdata/` 는 합성 자료입니다.** 공개 문서를 바탕으로 사람이 만든 것이라 실제 BMC 덤프가 아니며 속성명·허용값·경로가 실제 장비와 다를 수 있습니다. 테스트가 통과한 것은 실제 장비에서 된다는 뜻이 아닙니다.
-- **미검증 모델은 설정하지 않습니다.** `verified=Y`(모델을 지정한 행)만 Y 로 설정되고 `*` 행은 `verified=Y` 를 쓸 수 없습니다. 쓰기는 Dell·HPE·Lenovo 만 하며 Cisco·Supermicro 와 Cisco UCSM 관리형·Supermicro X11 이하는 점검만(안 되면 `UNSUPPORTED`)입니다.
+- **미검증 모델은 설정하지 않습니다.** `verified=Y`(모델을 지정한 행)만 Y 로 설정되고 `*` 행은 `verified=Y` 를 쓸 수 없습니다. 쓰기는 Dell·HPE·Lenovo 만 하며 Cisco·Supermicro 와 Cisco UCSM 관리형·Supermicro X11 이하는 점검만(안 되면 `UNSUPPORTED`)입니다. Cisco UCSM 관리형 블레이드는 Redfish 점검 대신 `ucsm_check.sh`(읽기 전용)로 봅니다(2.9절).
 - **AUTH_FAIL(401)은 재시도하지 않고, 차단기(`auth_fail_stop`)가 계정 잠금을 막습니다.** 공통 계정이 틀렸을 때 수천 대에 시도하지 않도록 처음 몇 대만 접속하고 멈춥니다. `auth_fail_stop=0` 으로 끄면 계정이 잠길 수 있습니다. 계정 잠금 정책이 있는 환경에서는 비밀번호를 먼저 확인하십시오.
 - **실제 RHEL6 커널(2.6.32)에서의 기동은 확인되지 않았습니다.** `bin/biostool_os6` 는 Go 1.20.14 정적 빌드이고 CentOS 6 userland(bash 4.1.2)에서의 동작은 확인했지만, 랩의 커널은 4.18 입니다. 회사 RHEL6 에서 처음 실행할 때 `bin/biostool_os6 help` 가 뜨는지부터 확인하십시오.
 - 점검·설정 결과(`results/`)에는 호스트 이름·모델·BIOS 설정값이 들어 있고 `pass.enc`·`key.bin` 은 비밀번호와 직결됩니다. 모두 커밋 금지(`.gitignore` 등록)이며 필요 없으면 직접 삭제하십시오. 결과 파일 권한은 0600 입니다.

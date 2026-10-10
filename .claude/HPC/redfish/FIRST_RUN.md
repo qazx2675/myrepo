@@ -34,7 +34,7 @@
 
 | # | 항목 (왜 불확실한가) | 무엇을 보면 되는지 | 결과를 어디에 반영하는지 | 상태 |
 |---|---|---|---|---|
-| 1 | **Dell `Performance` ↔ `PerfOptimized`** — 엑셀 표의 값 표기가 둘 중 어느 쪽인지 모름 | `xml.sh` 요약의 `SysProfile` `[허용값: …]` 에 정확히 어떤 문자열이 있는지 | `profiles/VM.tsv` 의 DELL `system_profile` 행 `value`(실제 허용값만 유효, 모르면 `A\|B` 로 둘 다) | 미확인 |
+| 1 | **Dell `Performance` ↔ `PerfOptimized`** — 엑셀 표의 값 표기가 둘 중 어느 쪽인지 모름 | `xml.sh` 요약의 `SysProfile` `[허용값: …]` 에 정확히 어떤 문자열이 있는지 | `profiles/VM.tsv` 의 DELL `system_profile` 행 `value`(실제 허용값만 유효, 모르면 `A\|B` 로 둘 다) | 데이터 기준 해소(레지스트리 값이 `PerfOptimized`). 실장비의 실제 값 대조는 권장 |
 | 2 | **HPE `ProHyperthreading` 철자** — 엑셀의 `ProHyperthreading` 은 `ProcHyperthreading` 의 오타일 가능성 | 요약의 `hyper_threading` 후보 속성 이름 | HPE `hyper_threading` 행 `attribute`(두 철자를 후보 행 두 줄로 두면 실제 있는 쪽을 사용) | 미확인 |
 | 3 | **`HighPerformanceCompute(HPC)` 표기** — HPE WorkloadProfile 허용값의 정확한 문자열(공백·하이픈·괄호·대소문자) | 요약의 `WorkloadProfile` `[허용값: …]` | HPE `system_profile` 행 `value`(값 비교는 대소문자까지 정확히) | 미확인 |
 | 4 | **Cisco CIMC 단독 vs UCSM 관리형 구분** — Redfish 응답만으로 구분되는지 모름 | `xml.sh` 가 `UNSUPPORTED`/오류로 끝나는지, 시스템·매니저 응답의 모델·링크, 관리 방식을 담당자에게 확인 | 구분 가능하면 이 문서·README 에 기준 기록. 구분이 안 되면 Cisco 전체를 점검만(현재 쓰기는 이미 Dell·HPE·Lenovo 로 제한)으로 유지. 계획서 7장 갱신 | 미확인 |
@@ -51,6 +51,14 @@
 | 15 | **실제 BMC 응답 지연 기반 소요 시간** — mock 은 즉시 응답(3,000대 3초)이라 실제 시간을 알 수 없음. 호스트당 GET 이 십수 번이고 같은 BMC 로 가는 요청 사이에 100ms 간격을 둠 | 수십 대 단계에서 `time bash bios_check.sh --profile VM -no-prompt` 로 소요 시간 측정 후 수천 대로 환산 | `bios.conf` 의 `concurrency`·`timeout`·`retries` 조정, README 에 실측 기록 | 미확인 |
 | 16 | **`ApplyTime=OnReset` 지원** — Bios 가 `@Redfish.Settings.SupportedApplyTimes` 에 `OnReset` 을 알릴 때만 본문에 넣음. 알리지 않으면 본문에 없음(BMC 기본 동작에 맡김) | dry-run 본문에 `@Redfish.SettingsApplyTime` 이 있는지, 없다면 BMC 가 기본으로 재부팅 때 반영하는지 | `set.go` 의 `planHost`(`onReset`) | 미확인 |
 | 17 | **속성 레지스트리 접근** — 레지스트리를 못 읽으면 ReadOnly·허용값 사전검증 없이 보냄 | dry-run 의 `참고: 레지스트리 … 사전검증 없이 계산했습니다`, 요약의 `registry=없음` | `inspect.go` 의 레지스트리 위치 탐색 | 미확인 |
+| 18 | **UCSM 응답 형태** — `aaaLogin` 응답의 outCookie·errorCode 와 세션 만료 응답(errorCode 552)이 가정과 같은지 모름. 만료는 현재 `UNSUPPORTED` 로 보일 수 있음 | `bash ucsm_check.sh` 1대 실행 후 `ucsm_result.tsv` 의 호스트 단위 행 상태와 터미널 `[UCSM 오류]`·`예:` 줄. 긴 실행에서 만료가 나는지 | `internal/ucsmxml` 의 응답 파싱·오류 분류, 세션 갱신 여부(현재 없음) | 미확인 |
+| 19 | **블레이드 dn·PID 매칭** — X210c M7 등이 `computeBlade` 로 보이는지, dn 이 `sys/chassis-N/blade-M` 인지, PID(예 `UCSB-B200-M5`)가 매핑 TSV 모델(`UCS B200 M5`)과 `ucsmModelKey` 로 맞는지 모름 | ucsm 요약의 서버 dn·모델, `MAPPING_MISSING` 이 나오는 모델 | `standard_bios_map_xml.tsv` 의 `model` 열, `ucsm.go` 의 `ucsmModelKey` | 미확인 |
+| 20 | **실효 설정 위치** — 서버에 적용된 BIOS 값이 `<blade dn>/bios/bios-settings/…` 아래에 있는지 모름(BIOS 정책 `bios-prof-*` 는 무시함) | `ucsm_result.tsv` 에서 `current` 가 `-` 인 `UNSUPPORTED` 행, UCSM 화면의 서버 BIOS 값과 대조 | `ucsm.go` 의 `ucsmServerOf`·`ucsmSettingsSeg`, 매핑 TSV 의 `xml_class`·`xml_attribute` | 미확인 |
+| 21 | **system_profile 값 선택** — `vpCPUPerformance=hpc` 와 `vpEnergyPerformance=performance` 중 어느 쪽이 UCSM 의 고성능 프로파일인지 모름 | UCSM 화면의 BIOS 프로파일 값과 두 속성의 현재값 | 매핑 TSV 의 `system_profile` 행(하나만 남기고 `verified` 판단) | 미확인 |
+| 22 | **Lenovo `Enabled` 대 `Enable`** — XCC 가 실제로 어느 쪽 값을 주는지 모름(프로파일은 둘 다 허용) | 요약의 `[허용값: …]`, dry-run 본문의 값 | `profiles/VM_research.tsv` 의 LENOVO 행 `value`(수동 보정 항목이라 `map_bios_attrs.ps1` 재생성 시 다시 적용) | 미확인 |
+| 23 | **매핑에 없는 항목의 노출 여부** — SR630/SR650/SD530 `llc_prefetch`, SR645/SR675 V3 `sub_numa_cluster`, XE9780 `LogicalProc` 가 실제 BMC 에 있는지 모름 | 점검 결과의 `MAPPING_MISSING`·`UNSUPPORTED`, `mapping_missing/summary.txt`, 속성 이름 검색 | `profiles/VM_research.tsv` 해당 행(없으면 그 항목은 `MAPPING_MISSING` 으로 남김) | 미확인 |
+| 24 | **HPE iLO6 Gen11 허용값** — 문서의 AMD 샘플 기반이라 값이 `mapped_value_assumed`(가정)임 | iLO 요약의 `[허용값: …]`, hyper_threading·system_profile 값 | `profiles/VM_research.tsv` 의 HPE iLO6 행 `value`([bios_json/HPE/iLO6/README.md](bios_json/HPE/iLO6/README.md) 참고) | 미확인 |
+| 25 | **Supermicro 속성 이름** — 조사 데이터의 이름은 BIOS Setup UI 이름(`UI_NAME_ONLY`)이라 Redfish AttributeName 과 다를 수 있음 | Supermicro BMC 의 Bios Attributes 실제 키 | `profiles/VM_research.tsv` 의 SUPERMICRO 행 `attribute` | 미확인 |
 
 ## C. 확인 결과를 반영한 뒤 할 일
 

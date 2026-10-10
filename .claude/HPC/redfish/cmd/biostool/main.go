@@ -31,6 +31,7 @@ const usageText = `사용법:
   biostool check   -profile <이름> [공통 옵션]    BIOS 표준값 점검
   biostool allcheck [-diff diff.txt] [옵션]       모델별 BIOS 전체 Attribute 비교 (읽기 전용)
   biostool dump    [-targets 대상,...] [-out 디렉터리] [-compact] [공통 옵션]  사전조사 덤프 (GET 전용)
+  biostool ucsm    [-xml-map <TSV>] [-list-max N] [-conf] [-user] [-hosts]  Cisco UCSM XML API BIOS 점검 (읽기 전용, 대상=UCSM 주소)
   biostool encrypt [-key key.bin] [-out pass.enc]  표준입력의 비밀번호를 암호화
 
 공통 옵션:
@@ -66,6 +67,8 @@ func main() {
 		err = cmdDump(os.Args[2:])
 	case "encrypt":
 		err = cmdEncrypt(os.Args[2:])
+	case "ucsm":
+		err = cmdUcsm(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usageText)
 		return

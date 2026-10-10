@@ -1,5 +1,49 @@
 # CHANGELOG.md — redfish (biostool)
 
+## [Unreleased] (v0.2.0 후보) - 2026-10-10
+
+Cisco UCSM 읽기 전용 점검과 연구용 프로파일을 추가했습니다. **실제 BMC·UCSM 에 접속해 본 적은 없습니다**(아래 “알려진 한계”, [FIRST_RUN.md](FIRST_RUN.md) 18~25).
+
+### 추가
+
+- **Cisco UCSM 읽기 전용 점검**: `biostool ucsm` + 래퍼 `ucsm_check.sh`. 대상은 블레이드 BMC 가 아니라 UCSM(Fabric Interconnect VIP) 주소입니다. 호출은 `POST https://<UCSM>/nuova` 의 `aaaLogin` → `configResolveClass` → `aaaLogout` 뿐이며 전송 직전 관문(`internal/ucsmxml`)이 그 밖의 요청을 막습니다. 기대값은 `bios_json/standard_map/standard_bios_map_xml.tsv`(`-xml-map` 으로 변경). 결과는 `results/<일시>/ucsm_result.tsv`. 판정 OK·FAIL·UNVERIFIED·MAPPING_MISSING·UNSUPPORTED, 호스트 오류 AUTH_FAIL·UNREACHABLE·TIMEOUT·XML_ERROR. 쓰기·재부팅·`-retry-from`·`retry.txt` 는 없습니다. 테스트: `cmd/biostool/ucsm_test.go`, `internal/ucsmxml/ucsmxml_test.go`.
+- **연구용 프로파일 `profiles/VM_research.tsv`**: `bios_json/` 조사 데이터에서 만든 Redfish(JSON) 표준값입니다. 모든 행 `verified=N` 이라 점검만 되고 설정은 되지 않습니다. `bash bios_check.sh --profile VM_research`.
+- **프로파일 오프라인 검증**: `bios_json/standard_map/validate_profile.ps1` → `profile_validation.md` (120행: OK 89, 허용값 확인 불가 29, Supermicro UI 이름만 2, 오류 0). 데이터와의 대조일 뿐 실장비 확인이 아닙니다.
+
+### 변경
+
+- `VM_research.tsv` 수동 보정 2건: Lenovo 값 `Enabled|Enable`·`Disabled|Disable` 둘 다 허용, SD650 V3 hyper_threading 대체 후보 `Processors_HyperThreading`. `map_bios_attrs.ps1` 로 재생성하면 덮어써집니다.
+- FIRST_RUN 1번(Dell `Performance` ↔ `PerfOptimized`): 조사 데이터의 레지스트리 값이 `PerfOptimized` 이므로 데이터 기준으로 해소했습니다. 실장비 값 대조는 여전히 권장합니다.
+- 문서: README(VM_research·UCSM 사용법 2.9절, 서브커맨드·플래그·래퍼 표), `bios_json/standard_map/README.md`(XML 점검기 존재 반영), FIRST_RUN(확인 항목 18~25 추가), ARCHITECTURE(`ucsm` 위치), 사용법.txt(UCSM 절).
+
+### 검증 (2026-10-10, 랩)
+
+| 항목 | 결과 |
+|---|---|
+| 랩 .58 (Go 1.26.5) | `go vet ./...`·`go test ./...` 통과 |
+| 랩 .60 (Go 1.20.14) | build·vet·test 통과 (Go 1.20 호환 확인) |
+| 바이너리 재빌드 | `bin/biostool` (Go 1.26.5), `bin/biostool_os6` (Go 1.20.14) 를 다시 빌드해 함께 커밋 |
+| 실제 UCSM 장비 | 조회하지 않음 (미확인) |
+
+랩으로 소스를 보낼 때 Windows 작업 트리의 Go 파일은 CRLF 이므로 LF 로 바꿔 보내야 `TestModeSetOnlyInSetPath` 가 통과합니다(저장소 blob 은 LF).
+
+빌드 완료 바이너리 (v0.2.0 후보, v0.1.0 항목의 해시와 별도):
+
+| 파일 | 빌드 | 크기(바이트) | sha256 |
+|---|---|---|---|
+| `bin/biostool` | Go 1.26.5 | 7254178 | `7ede02b5f4d452d1422264c353e7166bee97f3d34d2cb1ec1dc8ee37625ae9a4` |
+| `bin/biostool_os6` | Go 1.20.14 | 5890048 | `505cab676d80d21a1093ea0e92266db9813bf45e93c1d3b0087a0e23b5132bfb` |
+
+### 알려진 한계 (UCSM 및 프로파일)
+
+- **실 UCSM 미확인.** 응답 형태(outCookie·errorCode), 블레이드 dn·PID 매칭(`ucsmModelKey`), 실효 설정 위치(`<blade dn>/bios/bios-settings/…`)는 [FIRST_RUN.md](FIRST_RUN.md) 18~20 항목입니다.
+- BIOS 정책(`bios-prof-*`)은 보지 않고 서버에 실제 적용된 값만 봅니다.
+- `biosPlatformDefaults` 를 조회하지 않습니다. 현재값이 `platform-default` 이면 OK 로 추측하지 않고 사유에 확인 안내를 붙입니다.
+- 세션 갱신이 없습니다. 긴 실행 중 세션 만료(errorCode 552 등)는 `UNSUPPORTED` 로 보일 수 있습니다.
+- 재시도 기능이 없습니다(실패한 UCSM 은 `-user` 로 다시 실행). 랙 서버(computeRackUnit)는 대상이 아닙니다.
+- 매핑 TSV 의 모든 행이 `verified=N` 이라 불일치는 `FAIL` 이 아니라 `UNVERIFIED` 로 보입니다.
+- `VM_research.tsv` 의 값(Lenovo `Enabled`/`Enable`, HPE iLO6 허용값, SR630/650/SD530 `llc_prefetch`, SR645/675 V3 `sub_numa_cluster`, XE9780 `LogicalProc`, Supermicro 속성명)은 실장비에서 확인하지 않았습니다. FIRST_RUN 19~25 항목입니다.
+
 ## [0.1.0] - 2026-10-08
 
 BMC(Redfish)의 BIOS 표준값을 점검하고 승인된 항목만 Pending 으로 설정하는 도구의 첫 릴리스입니다. **실제 BMC 에 접속해 본 적이 없고** 모든 검증은 합성 mock 과 `-from-dump` 로 했습니다(아래 “알려진 제한”, [FIRST_RUN.md](FIRST_RUN.md)).

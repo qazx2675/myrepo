@@ -18,6 +18,7 @@
 | `standard_bios_map.csv` | 같은 내용의 표 (엑셀용) |
 | `../../profiles/VM_research.tsv` | **`biostool` 프로파일 형식**(`vendor model std_name attribute value verified`)으로 변환한 결과. `bios_check.sh --profile VM_research` 로 바로 사용 |
 | `map_bios_attrs.ps1` | 위 파일을 다시 만드는 스크립트 (조사 데이터가 갱신되면 재실행) |
+| `validate_profile.ps1` → `profile_validation.md` | `VM_research.tsv` 를 조사 데이터와 대조한 오프라인 검증 결과 (2026-10-10, 120행: OK 89, 허용값 확인 불가 29, Supermicro UI 이름만 2, 오류 0). 실장비를 조회하지 않음 |
 
 ## 프로토콜 구분 — JSON(Redfish)과 XML 은 섞지 않는다
 
@@ -34,7 +35,7 @@
 | `xml` | Cisco UCSM(블레이드 B200 M4/M5, B480 M5, X210c M7), CIMC XML | `POST https://<ucsm>/nuova` `configResolveClass`(`biosSettings`, `biosVProfile`) 응답의 `vp*` 속성 | `standard_bios_map_xml.tsv` |
 | `json-intersight-rest` | Cisco Intersight(IMM) | `GET /api/v1/bios/Policies` (Redfish 아님) | `standard_bios_map.json` 의 해당 행 |
 
-`biostool` 은 Redfish 전용이라 UCSM 관리형 블레이드는 `UNSUPPORTED` 로 점검됩니다. **XML 점검기는 아직 없습니다** — `standard_bios_map_xml.tsv`(클래스·속성·기대값·XML 예시)가 그 점검기의 입력 데이터입니다.
+`biostool check`(Redfish)는 UCSM 관리형 블레이드를 `UNSUPPORTED` 로 점검합니다. UCSM 은 `biostool ucsm`(래퍼 `ucsm_check.sh`, 읽기 전용)으로 점검하며, `standard_bios_map_xml.tsv`(클래스·속성·기대값·XML 예시)가 그 입력 데이터입니다(사용법: 저장소 `README.md` 2.9절).
 `xml.sh` 는 이름과 달리 Redfish 를 GET 해 JSON 으로 덤프하는 사전조사 스크립트이며 XML 과 무관합니다.
 
 ## 만든 방법 (typesafe-ai / Jev)
