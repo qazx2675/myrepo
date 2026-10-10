@@ -1,0 +1,30 @@
+name: Ntfy Chatbot CI
+
+on:
+  push:
+    paths:
+      - '.claude/기타/개인프로젝트/업무프로세스-ntfy-챗봇/**'
+      - '.github/workflows/ntfy-chatbot-ci.yml'
+  pull_request:
+    paths:
+      - '.claude/기타/개인프로젝트/업무프로세스-ntfy-챗봇/**'
+      - '.github/workflows/ntfy-chatbot-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/기타/개인프로젝트/업무프로세스-ntfy-챗봇
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Syntax Check
+        run: |
+          python -m py_compile bot.py run_tests.py
+      - name: Run Unit Tests
+        run: |
+          python -m unittest test_bot_mock.py -v
