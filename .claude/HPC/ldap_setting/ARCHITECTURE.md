@@ -30,6 +30,7 @@
 | "서비스 재시작 대상 변경" | `internal/render/lib_common.sh` 의 `restart_for_changed` **한 곳만** (apply·rollback 양쪽에 반영됨) |
 | "되돌리기 동작 변경" | `internal/render/rollback_body.sh` |
 | "되돌리기 CLI 변경" | `cmd/ldap-config-engine/main.go` 의 `runRollback` |
+| "`-no-restart` 동작 변경" | `internal/render/render.go` 의 `noRestartLib`(헤더 `NO_RESTART=1` + `restart_svc`·`sss_cache` 덮어쓰기). `lib_common.sh` 는 고치지 않음 — 고치면 플래그 없이도 생성 스크립트가 바뀜. auto_setup 이 원복 때 항상 켬, 독립 실행 기본은 종전과 동일 |
 | "자산현황 형식 변경" | `internal/asset/asset.go` |
 
 ## 반드시 지킬 것

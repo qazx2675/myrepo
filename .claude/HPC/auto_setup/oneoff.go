@@ -479,67 +479,62 @@ func (st *tuiState) oneoffShutdown() {
 func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) string {
 	width = clampWidth(width)
 	var title string
-	var body []string
+	var pre, post []string // 본문: 고정 머리 / 항상 남기는 입력 줄 (모두 줄바꿈이 끝난 화면 줄)
+	var list [][]string    // 넘치면 줄이는 목록 (블록 하나 = 원래 한 줄이 줄바꿈된 화면 줄들)
+	keepTail := false      // 목록이 넘칠 때 true 면 끝(최근)을 남기고 false 면 처음을 남김
 	var hint string
+	// 본문 한 줄: 앞 한 칸 들여쓰고, 폭에 들어가면 종전 그대로, 넘치면 단어 단위로 줄바꿈 (이어지는 줄은 3칸 들여씀)
+	line := func(l string) []string { return wrapSegs(color, width, 1, "   ", seg{" " + l, ""}) }
 	switch o.step {
 	case ooUser:
 		title = o.name() + " - user 선택"
 		if o.menu != nil {
-			body = append(body, o.menu...)
-			body = append(body, "", "번호 입력 > "+string(o.in)+"_")
+			for _, m := range o.menu {
+				list = append(list, line(m))
+			}
+			post = append(line(""), inputLines(color, width, "번호 입력 > "+string(o.in)+"_")...)
 			hint = " Enter 선택  Esc 취소 (입력이 비었을 때 q 도 취소)"
 		} else {
-			body = append(body, "user 이름 입력 > "+string(o.in)+"_")
+			post = inputLines(color, width, "user 이름 입력 > "+string(o.in)+"_")
 			hint = " Enter 확인  Esc 취소 (입력이 비었을 때 q 도 취소)"
 		}
 	case ooHosts:
 		title = o.name() + " - user " + o.user + " - " + map[bool]string{true: "작업 대상 서버 목록", false: "호스트 입력"}[o.awx]
 		// 한 문장이지만 80칸 터미널에서 잘리지 않게 두 줄로 나눠 보여 준다
-		var hs []string
+		var hs, intro []string
 		if o.awx {
-			body = append(body, "작업 대상 서버 목록을 붙여넣은 뒤 Ctrl+D 를 누르세요 (호스트명 또는 12필드 줄)",
+			intro = []string{"작업 대상 서버 목록을 붙여넣은 뒤 Ctrl+D 를 누르세요 (호스트명 또는 12필드 줄)",
 				"(공백·쉼표·| 구분 가능, Esc 취소) — 비워 두고 Ctrl+D 면 건너뜁니다",
-				"※ 입력하면 "+filepath.Join(awx_dir, o.user+".txt")+" 를 덮어쓰고, 01 의 '등록 후 확인' 에도 자동 입력됩니다", "")
+				"※ 입력하면 " + filepath.Join(awx_dir, o.user+".txt") + " 를 덮어쓰고, 01 의 '등록 후 확인' 에도 자동 입력됩니다", ""}
 			_, hs = parseAwxList(string(o.in))
 		} else {
-			body = append(body, "호스트를 입력하거나 붙여넣은 뒤 Ctrl+D 를 누르세요", "(공백·쉼표·탭·| 는 줄바꿈으로 바뀝니다, Esc 취소)", "")
+			intro = []string{"호스트를 입력하거나 붙여넣은 뒤 Ctrl+D 를 누르세요", "(공백·쉼표·탭·| 는 줄바꿈으로 바뀝니다, Esc 취소)", ""}
 			hs = normalizeHosts(string(o.in))
 		}
-		body = append(body, fmt.Sprintf("입력된 호스트 %d대:", len(hs)))
-		room := rMax(height-9, 3)
-		line := ""
-		var rows []string
-		for _, h := range hs {
-			if line != "" && strWidth(line)+1+strWidth(h) > width-3 {
-				rows = append(rows, "  "+line)
-				line = ""
+		for _, l := range intro {
+			pre = append(pre, line(l)...)
+		}
+		pre = append(pre, line(fmt.Sprintf("입력된 호스트 %d대:", len(hs)))...)
+		if len(hs) > 0 { // 입력한 호스트 에코 — 폭에 맞춰 이어 붙이고 넘치면 호스트 단위로 다음 줄(긴 호스트명은 글자 단위)
+			for _, row := range wrapSegs(color, width, 1, "   ", seg{"   " + strings.Join(hs, " "), ""}) {
+				list = append(list, []string{row})
 			}
-			if line != "" {
-				line += " "
-			}
-			line += h
 		}
-		if line != "" {
-			rows = append(rows, "  "+line)
-		}
-		if len(rows) > room {
-			rows = append([]string{"  …"}, rows[len(rows)-room+1:]...)
-		}
-		body = append(body, rows...)
-		body = append(body, "", "> ")
+		keepTail = true
 		cur := string(o.in)
 		if i := strings.LastIndex(cur, "\n"); i >= 0 {
 			cur = cur[i+1:]
 		}
-		body[len(body)-1] += cur + "_"
+		post = append(line(""), inputLines(color, width, "> "+cur+"_")...)
 		hint = " Enter 줄바꿈  Ctrl+D 입력 완료  Esc 취소 (입력이 비었을 때 q 도 취소)"
 		if o.awx {
 			hint = " Enter 줄바꿈  Ctrl+D 입력 완료 (비었으면 건너뜀)  Esc 취소"
 		}
 	case ooMode:
 		title = "체크스크립트 단독 실행 - 모드 선택"
-		body = []string{fmt.Sprintf("user %s   호스트 %d대", o.user, len(o.hosts)), "",
-			"  t 설정체크만 (환경설정 수정 안 함)"}
+		pre = append(line(fmt.Sprintf("user %s   호스트 %d대", o.user, len(o.hosts))), line("")...)
+		pre = append(pre, wrapSegs(color, width, 1, "     ", seg{"   t 설정체크만 (환경설정 수정 안 함)", stGreen})...)
+		pre = append(pre, wrapSegs(color, width, 1, "     ", seg{"   c 설정체크 + ", stGreen}, seg{"설정수정 (환경설정 수정함)", stRed})...)
 		hint = " t / c 를 누르면 바로 실행합니다  Esc 취소"
 	case ooRun:
 		title = fmt.Sprintf("체크스크립트 단독 실행 [%s] - user %s %d대", modeLabel(o.mode), o.user, len(o.hosts))
@@ -547,28 +542,27 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 		if el < 0 {
 			el = 0
 		}
-		body = append(body, fmt.Sprintf("경과 %d분 %02d초", el/60, el%60), "")
-		body = append(body, tailLines(o.proc.LogPath(), oneoffTailN)...)
+		pre = append(line(fmt.Sprintf("경과 %d분 %02d초", el/60, el%60)), line("")...)
+		for _, l := range tailLines(o.proc.LogPath(), oneoffTailN) {
+			list = append(list, line(l))
+		}
+		keepTail = true // 로그는 최근 줄이 보여야 한다
 		hint = " 실행 중 — 취소: Ctrl+X"
 		if o.cancelAsk {
 			hint = " 실행을 취소할까요? [y/n]"
 		}
 	}
-	out := []string{segLine(color, width, redSegs(" "+title, stBold)...), sepLine(width)}
-	for _, l := range body {
-		switch {
-		case o.step == ooMode && strings.HasPrefix(l, "  t "):
-			out = append(out, segLine(color, width, seg{" " + l, stGreen}))
-			out = append(out, segLine(color, width, seg{"   c 설정체크 + ", stGreen}, seg{"설정수정 (환경설정 수정함)", stRed}))
-		default:
-			out = append(out, segLine(color, width, seg{" " + l, ""}))
-		}
-	}
+	out := append(wrapSegs(color, width, 1, "  ", redSegs(" "+title, stBold)...), sepLine(width))
 	foot := []string{sepLine(width)}
 	if o.msg != "" {
-		foot = append(foot, segLine(color, width, seg{" " + o.msg, stYellow}))
+		foot = append(foot, wrapSegs(color, width, 1, "  ", seg{" " + o.msg, stYellow})...)
 	}
 	foot = append(foot, hintLines(color, width, hint)...)
+	avail := 0 // 0 = 높이 제한 없음
+	if height > 0 {
+		avail = rMax(height-len(out)-len(foot), 1)
+	}
+	out = append(out, fitBody(color, avail, keepTail, pre, list, post)...)
 	if height > 0 {
 		for len(out) < height-len(foot) {
 			out = append(out, "")
@@ -578,6 +572,83 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 		}
 	}
 	return strings.Join(append(out, foot...), "\n")
+}
+
+// inputLines: 입력 한 줄(프롬프트 포함)을 글자 단위로 줄바꿈한다 — 편집 중인 글자가 단어 단위로 튀지 않고,
+// 긴 입력도 프롬프트 바로 뒤에서 이어진다. 폭에 들어가면 종전과 같은 한 줄 (앞 한 칸 들여쓰기, 이어지는 줄은 3칸).
+func inputLines(color bool, width int, text string) []string {
+	text = cleanText(" " + text)
+	if strWidth(text) <= width {
+		return []string{segLine(color, width, seg{text, ""})}
+	}
+	var out []string
+	for _, l := range wrapAtoms(width, "", "   ", []atom{{segs: []seg{{text, ""}}}}) {
+		out = append(out, segLine(color, width, l...))
+	}
+	return out
+}
+
+// fitBody: 본문(pre + list + post, 모두 줄바꿈이 끝난 화면 줄)을 avail 줄 안에 넣는다. avail <= 0 이면 전부.
+// list 는 블록(원래 한 줄이 줄바꿈된 여러 줄) 목록이다. post(입력 줄)는 항상 남기고(post 자체가 길면 커서가
+// 있는 끝을 남김), list 가 넘치면 keepTail 에 따라 앞(위) 또는 뒤(아래)를 블록 단위로 버리고 "(위/아래 N줄 생략)"
+// 한 줄로 바꾼다. 입력 줄이 화면 밖으로 밀리지 않게 하는 것이 목적.
+func fitBody(color bool, avail int, keepTail bool, pre []string, list [][]string, post []string) []string {
+	n := 0
+	for _, b := range list {
+		n += len(b)
+	}
+	flat := func(blocks [][]string) []string {
+		var out []string
+		for _, b := range blocks {
+			out = append(out, b...)
+		}
+		return out
+	}
+	if avail <= 0 || len(pre)+n+len(post) <= avail {
+		return append(append(append([]string{}, pre...), flat(list)...), post...)
+	}
+	if len(post) >= avail {
+		return append([]string{}, post[len(post)-avail:]...)
+	}
+	budget := avail - len(post)
+	room := budget - len(pre) // list 에 줄 수 있는 줄 (생략 안내 한 줄 포함)
+	dir := map[bool]string{true: "위", false: "아래"}[keepTail]
+	mark := func(hidden int) string {
+		return paint(color, stGray, fmt.Sprintf("   (%s %d줄 생략)", dir, hidden))
+	}
+	var mid []string
+	switch {
+	case room >= 2:
+		var kept []string
+		if keepTail { // 끝에서부터 블록 단위로 채움 (블록 하나가 room-1 보다 길면 그 블록의 끝 부분)
+			for i := len(list) - 1; i >= 0 && len(kept) < room-1; i-- {
+				if b := list[i]; len(kept)+len(b) <= room-1 {
+					kept = append(append([]string{}, b...), kept...)
+				} else if len(kept) == 0 {
+					kept = append([]string{}, b[len(b)-(room-1):]...)
+				} else {
+					break
+				}
+			}
+			mid = append([]string{mark(n - len(kept))}, kept...)
+		} else {
+			for i := 0; i < len(list) && len(kept) < room-1; i++ {
+				if b := list[i]; len(kept)+len(b) <= room-1 {
+					kept = append(kept, b...)
+				} else if len(kept) == 0 {
+					kept = append(kept, b[:room-1]...)
+				} else {
+					break
+				}
+			}
+			mid = append(kept, mark(n-len(kept)))
+		}
+	case room == 1:
+		mid = []string{mark(n)}
+	default:
+		pre = pre[:budget] // 머리만으로도 넘치는 아주 작은 창
+	}
+	return append(append(append([]string{}, pre...), mid...), post...)
 }
 
 // name: 화면 제목 머리말

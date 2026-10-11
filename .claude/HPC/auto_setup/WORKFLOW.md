@@ -181,6 +181,46 @@ codes/<code>.txt
 # manual-run 은 완료 여부와 상관없이 수락(접속불가는 wall 에 표시) → 데몬 run 큐에서 실행(동시 1개), code·wall 동일
 ```
 
+## 변경 작업 흐름 (m 메뉴, v0.7.0)
+
+화면 1·2 어디서나 `m` → 메뉴 번호. 엔진(`ip-change-engine`, `ldap-config-engine`)을 os8_mgmt 에서 호출하고, 응답 없는 호스트만 os6_mgmt 경유로 다시 시도합니다. 미리보기에서 `yes` 를 정확히 입력해야 실행됩니다.
+
+```mermaid
+flowchart TD
+    M["[화면 1·2] m 키<br/>켜진 항목만 표시 (conf 또는 --admin)"] --> K{"메뉴 번호"}
+    K -->|"1 · 2 · 3"| U["user 선택<br/>(x 와 같은 메뉴)"]
+    K -->|"4 원복"| RB["원복 종류 선택<br/>IP / LDAP / 둘 다"]
+    K -->|"5 auto.appl 원복"| U
+    RB --> U
+    U --> IF{"infra 필요?<br/>(2 · 3)"}
+    IF -->|Yes| INF["infra 메뉴 선택<br/>(ldap_config.conf)"]
+    IF -->|No| IN
+    INF --> IN["대상 입력 → Ctrl+D<br/>원복·5 는 user 기록으로 자동 채움"]
+    IN --> DR{"LDAP 포함?<br/>(2 · 3)"}
+    DR -->|Yes| DRY["LDAP dry-run 자동 조회<br/>(-no-restart, 노드는 바뀌지 않음)"]
+    DR -->|No| PV
+    DRY --> PV["미리보기<br/>진행 중 job 경고 · 재시작 안 함 안내"]
+    PV --> YES{"yes 를 정확히 입력?"}
+    YES -->|No| CAN["취소 — 아무것도 바꾸지 않음"]
+    YES -->|Yes| REC["기록 파일 먼저 생성 (실패하면 실행 안 함)<br/>changes/사용자명/시각_종류.json"]
+    REC --> BR{"실행 종류"}
+    BR -->|"1 · 3 · 4 (IP 포함)"| IPS["IP 단계 (ifcfg, 재시작 없음)<br/>os8 실행 → 응답 없는 호스트만 os6_mgmt 경유"]
+    BR -->|"2 · 4 (LDAP 만)"| LDS["LDAP 단계 (-no-restart)<br/>os8 실행 → 응답 없는 호스트만 os6 경유"]
+    BR -->|"5"| APS["auto.appl 단계<br/>노드 /root/auto_appl_restore.sh 만 실행"]
+    IPS -->|"1 · 4 (IP 만)"| RES
+    IPS -->|"3 · 4 (둘 다): IP 성공 호스트"| LDS
+    IPS -->|"3: IP 실패 호스트"| SKP["건너뜀 (IP 실패)"]
+    LDS --> RES
+    APS --> RES
+    SKP --> RES
+    RES["결과 화면<br/>호스트별 IP / LDAP / auto.appl 칸"] --> LOG["auto_setup.log 요약 한 줄<br/>원복 성공 → 이전 기록 갱신"]
+```
+
+- 취소: 실행 중 `Ctrl+X` → `y` (프로세스 그룹 SIGTERM, 3초 뒤 SIGKILL). 중단되면 호스트별 결과를 그대로 기록하고 "일부 호스트만 변경됐을 수 있음" 을 표시합니다.
+- 경유 래퍼: os6 경유가 필요한 호스트가 있을 때만 임시 래퍼(0700)를 만들어 엔진 `-gossh` 로 넘기고, 끝나면 지웁니다.
+- 기록 위치와 형식은 README 「변경 작업」 참고. 변경 흐름의 화면 구성은 `change_render.go` 에 있습니다.
+- `workflow.svg` 는 2차 기준 그림이며, 변경 작업 흐름은 위 mermaid 로만 있습니다.
+
 ## 흐름도 보조 자료
 
 - **계획서 §14**: 2차 설계

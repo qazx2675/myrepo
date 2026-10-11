@@ -26,7 +26,7 @@ echo "== 1. 신규: os8 역할 가이드 (빈 conf → 값 입력 → setup.sh �
 P=$TMP/p1; newproj "$P"
 mkdir -p "$TMP/awx" "$TMP/share"; : > "$TMP/check.sh"
 cp "$P/conf/auto_setup.conf.example" "$P/conf/auto_setup.conf"
-printf '%s\n' os6mgmt01 "$TMP/check.sh" "$TMP/awx" "$TMP/share" '' '' '' '' '' '' '' '' '' /user/gossh /user/as - \
+printf '%s\n' os6mgmt01 "$TMP/check.sh" "$TMP/awx" "$TMP/share" '' '' '' '' '' '' '' '' '' '' '' '' '' /user/gossh /user/as - \
 	| bash "$P/conf/setup_guide.sh" --role os8 --yes > "$TMP/o1" 2>&1
 rc=$?
 chk "종료코드 0" "[ $rc -eq 0 ]"

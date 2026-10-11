@@ -106,6 +106,7 @@ type tuiEnv struct {
 	Tick    func(d time.Duration) (c <-chan time.Time, stop func())
 	Now     func() time.Time
 	Signals <-chan os.Signal // 없으면 nil
+	Resize  <-chan os.Signal // 창 크기 변경(SIGWINCH) — 오면 화면을 지우고 바로 다시 그린다. 없으면 nil
 	Color   bool
 	// InReady: d 안에 In 에서 읽을 입력이 있으면 true (nil = 항상 바로 Read). 키 읽기 goroutine 을
 	// AWX 실행 동안 안전하게 멈추려면 Read 가 오래 막히지 않아야 해서 실제 tty 에서는 poll 방식으로 쓴다.
@@ -135,6 +136,9 @@ func runTUI(src SnapshotSource, plain bool) int {
 	defer signal.Stop(sig)
 	signal.Ignore(syscall.SIGTSTP) // Ctrl+Z 로 TUI 가 멈추지 않게
 	defer signal.Reset(syscall.SIGTSTP)
+	winch := make(chan os.Signal, 1)
+	notifyResize(winch)
+	defer signal.Stop(winch)
 	env := tuiEnv{
 		In:      in,
 		Out:     out,
@@ -146,6 +150,7 @@ func runTUI(src SnapshotSource, plain bool) int {
 		},
 		Now:     time.Now,
 		Signals: sig,
+		Resize:  winch,
 		Color:   os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb",
 		InReady: func(d time.Duration) bool { return waitReadable(in, d) },
 		AwxPrep: func() (func(), error) { return withAwxTermios(in) },
@@ -184,9 +189,11 @@ type tuiState struct {
 	oo          *oneoffState         // x 체크스크립트 단독 실행 입력·실행 화면, nil = 없음
 	fastTick    <-chan time.Time     // 단독 실행 중 1초 갱신 tick (실행 중에만)
 	fastStop    func()
-	awx         *awxState  // w AWX 실행 확인·프로파일 선택 화면, nil = 없음
-	restore     func()     // 현재 raw 모드를 되돌리는 함수 (AWX 실행 후 raw 재진입 때 교체됨)
-	inMu        sync.Mutex // 키 읽기 goroutine 이 poll+Read 하는 동안 잡고 있음 — AWX 실행 중 Lock 으로 멈춘다
+	awx         *awxState        // w AWX 실행 확인·프로파일 선택 화면, nil = 없음
+	chgMenu     []changeMenuItem // m 변경 메뉴 화면 (켜진 항목), nil = 없음 (change_tui.go)
+	chg         *changeState     // m 변경 흐름 (메뉴에서 고른 뒤), nil = 없음 — 실행 중에는 fastTick 사용
+	restore     func()           // 현재 raw 모드를 되돌리는 함수 (AWX 실행 후 raw 재진입 때 교체됨)
+	inMu        sync.Mutex       // 키 읽기 goroutine 이 poll+Read 하는 동안 잡고 있음 — AWX 실행 중 Lock 으로 멈춘다
 }
 
 // runTUILoop: raw 모드 진입 → 그리기·키·tick 루프 → (정상·패닉·시그널 어느 경로든) 화면·termios 복원
@@ -204,6 +211,7 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 
 	st.sel.DateFilter = true
 	defer st.oneoffShutdown()
+	defer st.changeShutdown()
 	keys := make(chan keyEv, 64)
 	done := make(chan struct{})
 	defer close(done)
@@ -257,10 +265,13 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 		case <-tick:
 			st.refresh()
 		case <-st.fastTick:
+		case <-env.Resize: // 터미널이 이전 프레임을 reflow 한 채로 남지 않게 지우고 새 폭으로 바로 다시 그림
+			io.WriteString(env.Out, "\x1b[2J")
 		case <-env.Signals:
 			return 0
 		}
 		st.pollOneoff()
+		st.pollChange()
 		st.draw()
 	}
 }
@@ -300,6 +311,10 @@ func (st *tuiState) draw() {
 		s = renderAwx(st.awx, w, h, st.env.Color)
 	case st.oo != nil:
 		s = renderOneoff(st.oo, st.env.Now(), w, h, st.env.Color)
+	case st.chg != nil:
+		s = renderChange(st.chg, w, h, st.env.Color)
+	case st.chgMenu != nil:
+		s = renderChangeMenu(st.chgMenu, w, h, st.env.Color)
 	case st.view != nil:
 		if st.view.kind == viewRecheck && st.sel.Detail && h >= 24 {
 			s = renderRecheckSplit(st.snap, st.withErr(), st.view, w, h, st.env.Color)
@@ -316,9 +331,10 @@ func (st *tuiState) draw() {
 	io.WriteString(st.env.Out, "\x1b[H"+strings.ReplaceAll(s, "\n", "\x1b[K\r\n")+"\x1b[K\x1b[J")
 }
 
-// withErr: 갱신 오류가 있으면 안내 줄에 표시
+// withErr: 갱신 오류가 있으면 안내 줄에 표시 (+ m 변경이 사용 가능하면 키 안내 줄에 `m 변경`)
 func (st *tuiState) withErr() selection {
 	sel := st.sel
+	sel.Change = st.changeAvailable()
 	if st.err != "" && sel.Msg == "" {
 		sel.Msg = "[X] 상태 갱신 실패: " + st.err
 	}
@@ -327,6 +343,10 @@ func (st *tuiState) withErr() selection {
 
 // handle: 키 처리. 종료하면 true.
 func (st *tuiState) handle(ev keyEv) bool {
+	if st.chg != nil || st.chgMenu != nil { // m 변경 메뉴·흐름: Ctrl+C/Ctrl+Z 무시, 나머지 키는 그쪽이 처리
+		st.handleChange(ev)
+		return false
+	}
 	if ev.k == kRune && (ev.r == runeCtrlC || ev.r == runeCtrlZ) {
 		st.sel.Msg = "종료는 q 를 누르세요"
 		return false
@@ -372,6 +392,9 @@ func (st *tuiState) handle(ev keyEv) bool {
 	}
 	if ev.k == kRune && (ev.r == 'w' || ev.r == 'W') {
 		st.startAwx()
+		return false
+	}
+	if ev.k == kRune && (ev.r == 'm' || ev.r == 'M') && st.startChange() { // 꺼져 있으면 키 무반응 (다른 화면 키와 같이 아래로)
 		return false
 	}
 	if st.sel.Detail {

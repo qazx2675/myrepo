@@ -21,8 +21,28 @@ var applyBody string
 //go:embed rollback_body.sh
 var rollbackBody string
 
+// noRestartLib 는 -no-restart 일 때만 lib_common.sh 바로 뒤에 붙습니다.
+//
+// lib_common.sh 를 고치면 플래그를 안 줘도 생성 스크립트가 바뀌므로, 그 파일은
+// 그대로 두고 restart_svc 와 sss_cache 만 덮어씁니다. 재시작 표(restart_for_changed)는
+// lib_common.sh 한 곳에 그대로 남고, 표가 고른 서비스가 SKIP-RESTART 로 기록됩니다.
+const noRestartLib = `###############################################################################
+# NO_RESTART=1 (-no-restart) : 서비스를 재시작하지 않습니다 (sss_cache -E 도 생략).
+# lib_common.sh 의 restart_svc 를 덮어씁니다. 재시작 표는 lib_common.sh 그대로입니다.
+###############################################################################
+
+restart_svc()
+{
+    log SKIP-RESTART "$1 (NO_RESTART)"
+    return 0
+}
+
+sss_cache() { :; }
+`
+
 // ApplyScript 는 (인프라, 사이트) 조합 하나에 대한 apply 스크립트 전문을 만듭니다.
-func ApplyScript(in config.Infra, s4 config.S4Rule, site string) (string, error) {
+// noRestart 면 헤더에 NO_RESTART=1 을 넣고 서비스 재시작을 막습니다(false 면 종전과 같은 바이트).
+func ApplyScript(in config.Infra, s4 config.S4Rule, site string, noRestart bool) (string, error) {
 	st, ok := in.Sites[site]
 	if !ok {
 		return "", fmt.Errorf("인프라 %q 에 사이트 %q 가 정의되어 있지 않습니다", in.Name, site)
@@ -59,10 +79,17 @@ func ApplyScript(in config.Infra, s4 config.S4Rule, site string) (string, error)
 	writeVar(&b, "S4_PREFIX", s4.Prefix)
 	writeVar(&b, "S4_NSLCD", boolVar(hasService(s4, "nslcd")))
 	writeVar(&b, "S4_NTP", boolVar(hasService(s4, "ntp")))
+	if noRestart {
+		b.WriteString("NO_RESTART=1\n")
+	}
 
 	b.WriteString("\n")
 	b.WriteString(libCommon)
 	b.WriteString("\n")
+	if noRestart {
+		b.WriteString(noRestartLib)
+		b.WriteString("\n")
+	}
 	b.WriteString(applyBody)
 	return b.String(), nil
 }
@@ -83,7 +110,8 @@ const (
 //
 // 적용 스크립트와 달리 인프라·사이트 값이 필요 없습니다.
 // 노드에 남아 있는 <파일>.bak.<STAMP> 만 보고 판단하기 때문입니다.
-func RollbackScript(mode RollbackMode, stamp string) (string, error) {
+// noRestart 면 되돌린 파일의 서비스를 재시작하지 않고 SKIP-RESTART 로만 남깁니다.
+func RollbackScript(mode RollbackMode, stamp string, noRestart bool) (string, error) {
 	switch mode {
 	case RollbackList, RollbackLatest:
 		stamp = ""
@@ -102,9 +130,16 @@ func RollbackScript(mode RollbackMode, stamp string) (string, error) {
 	b.WriteString("set -u\n\n")
 	writeVar(&b, "MODE", string(mode))
 	writeVar(&b, "STAMP", stamp)
+	if noRestart {
+		b.WriteString("NO_RESTART=1\n")
+	}
 	b.WriteString("\n")
 	b.WriteString(libCommon)
 	b.WriteString("\n")
+	if noRestart {
+		b.WriteString(noRestartLib)
+		b.WriteString("\n")
+	}
 	b.WriteString(rollbackBody)
 	return b.String(), nil
 }

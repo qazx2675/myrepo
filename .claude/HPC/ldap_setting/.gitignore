@@ -4,4 +4,5 @@ conf/assets.txt
 *.txt
 !*.txt.sample
 !conf/*.sample
-bin/
+bin/*
+!bin/*_os6

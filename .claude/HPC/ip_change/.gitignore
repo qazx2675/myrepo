@@ -2,4 +2,5 @@
 conf/*.txt
 conf/ip_change.conf
 !conf/*.sample
-bin/
+bin/*
+!bin/*_os6

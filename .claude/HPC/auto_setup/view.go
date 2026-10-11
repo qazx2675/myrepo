@@ -233,9 +233,9 @@ func lineStyle(l string) string {
 
 func renderView(v *viewState, width, height int, color bool) string {
 	width = clampWidth(width)
-	head := []string{segLine(color, width, redSegs(" "+v.title, stBold)...),
-		segLine(color, width, seg{" 상태: " + v.status, map[bool]string{true: stGreen, false: stCyan}[v.done]}),
-		sepLine(width)}
+	head := wrapSegs(color, width, 1, "  ", redSegs(" "+v.title, stBold)...)
+	head = append(head, wrapSegs(color, width, 1, "  ", seg{" 상태: " + v.status, map[bool]string{true: stGreen, false: stCyan}[v.done]})...)
+	head = append(head, sepLine(width))
 	hint := " ↑↓ 스크롤  Space/b 쪽 이동  q/Esc 닫기"
 	switch {
 	case v.kind == viewRecheck && v.done:
@@ -244,11 +244,15 @@ func renderView(v *viewState, width, height int, color bool) string {
 		hint += "  (닫아도 데몬은 계속 진행합니다. 결과는 v 로 다시 볼 수 있습니다)"
 	}
 	foot := append([]string{sepLine(width)}, hintLines(color, width, hint)...)
+	var lines []string // 본문은 줄바꿈한 화면 줄 단위로 스크롤
+	for _, l := range v.lines {
+		lines = append(lines, wrapSegs(color, width, 1, "   ", redSegs(" "+l, lineStyle(l))...)...)
+	}
 	avail := rMax(height-len(head)-len(foot), 1)
 	if height <= 0 {
-		avail = len(v.lines)
+		avail = len(lines)
 	}
-	maxStart := rMax(len(v.lines)-avail, 0)
+	maxStart := rMax(len(lines)-avail, 0)
 	start := v.scroll
 	if v.follow {
 		start = maxStart
@@ -258,18 +262,25 @@ func renderView(v *viewState, width, height int, color bool) string {
 	}
 	v.scroll = start
 	body := make([]string, 0, avail)
-	for i := start; i < len(v.lines) && len(body) < avail; i++ {
-		body = append(body, segLine(color, width, redSegs(" "+v.lines[i], lineStyle(v.lines[i]))...))
+	for i := start; i < len(lines) && len(body) < avail; i++ {
+		body = append(body, lines[i])
 	}
 	for len(body) < avail && height > 0 {
 		body = append(body, "")
 	}
-	return strings.Join(append(append(head, body...), foot...), "\n")
+	out := append(append(head, body...), foot...)
+	if height > 0 && len(out) > height { // 머리·꼬리만으로 높이를 넘는 아주 작은 창: 화면이 밀리지 않게
+		out = out[:height]
+	}
+	return strings.Join(out, "\n")
 }
 
 // renderRecheckSplit: g 재확인 화면 — 위에는 호스트표(단계가 갱신되는 것을 바로 확인), 아래에는 진행 과정·결과
 func renderRecheckSplit(s Snapshot, sel selection, v *viewState, width, height int, color bool) string {
 	topH := rMin(rMax(height/2, 12), 16)
+	if j, g := findGroup(s, sel.JobID, sel.Yml); g != nil { // 좁아서 꼬리(수동 실행·키 안내)가 줄바꿈된 만큼 위쪽을 늘린다 (아래 진행 창은 8줄 이상 남김)
+		topH = rMax(rMin(topH+len(detailFoot(s, sel, j, g, width, color))-6, height-8), topH)
+	}
 	top := strings.Split(renderDetail(s, sel, width, topH, color), "\n")
 	for len(top) < topH {
 		top = append(top, "")

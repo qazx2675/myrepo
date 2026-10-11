@@ -1,5 +1,21 @@
 # CHANGELOG — ldap_setting
 
+## 2026-10-12 — `-no-restart` 플래그 · go.mod `go 1.20`
+
+- `-no-restart` 플래그 추가(기본 false). 켜면 apply·rollback 스크립트 헤더에
+  `NO_RESTART=1` 이 들어가고, `lib_common.sh` 뒤에 붙는 덮어쓰기 블록이 `restart_svc` 를
+  `log SKIP-RESTART "<svc> (NO_RESTART)"` 만 남기도록 바꾸며 `sss_cache -E` 도 생략.
+  재시작 표(`restart_for_changed`)는 `lib_common.sh` 한 곳 그대로. **auto_setup 이 원복 때
+  항상 켬. 독립 실행 기본은 종전과 동일** — 플래그를 안 주면 생성 스크립트가 바이트 단위로
+  이전과 같음(`lib_common.sh` 를 고치지 않은 이유. 변경 전 엔진의 `-print-script` 11종과
+  `cmp` 일치 확인).
+- `go.mod`: `go 1.26.5` → `go 1.20` (Go 1.25·1.20 툴체인이 1.26.5 를 거부해 빌드 불가였음).
+- `bin/ldap-config-engine_os6` 추가: RHEL 6 용 정적 바이너리 (`build_os6.sh` 가 빌드, RHEL 6 에서 단독 실행용). auto_setup 의 TUI `m` 메뉴는 os8_mgmt 에 설치된 엔진을 호출한다.
+- `render_test.go`: off 는 NO_RESTART 없음 + on 에서 추가분을 빼면 off 와 같음, rollback
+  하네스(systemctl/sss_cache 를 셸 함수 기록기로 대체)에서 on 은 SKIP-RESTART·호출 0회,
+  대조군 off 는 RESTARTED·`sss_cache -E` 호출. `test_all.sh` [16]: `-root` fixture 에서
+  `-rollback -no-restart` 복원 일치 + `RESTARTED` 없음(28/28 통과).
+
 ## 2026-09-29 — 적용 시 데몬 재시작 제거 · auto.appl 은 .bak 대기 후 /root 스크립트로 원복
 
 - `apply_body.sh`: 적용이 더 이상 서비스(nslcd/sssd/autofs/ntpd/chronyd)를 재시작하지

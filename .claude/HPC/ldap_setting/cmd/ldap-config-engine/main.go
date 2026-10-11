@@ -32,6 +32,7 @@ func main() {
 		root         = flag.String("root", "", "원격에서 기록할 루트 (테스트용. 비우면 실제 /etc)")
 		defaultSite  = flag.String("default-site", "", "자산현황에서 못 찾은 호스트에 적용할 site (conf 의 default_site 를 덮어씀)")
 		withMonitor  = flag.Bool("monitor", false, "60초가 지나도 안 끝나면 /dev/tty 에 호스트별 진행 화면을 띄우고, Ctrl+C 는 5초 안에 3번 눌러야 종료 (통합 스크립트가 켬)")
+		noRestart    = flag.Bool("no-restart", false, "서비스를 재시작하지 않음(sss_cache -E 도 생략). 되돌린 파일의 서비스는 SKIP-RESTART 로만 기록 (auto_setup 이 원복 때 켬)")
 
 		listBackups = flag.Bool("list-backups", false, "각 노드에 남아 있는 백업 시점 목록만 조회 (변경 없음)")
 		rollback    = flag.Bool("rollback", false, "가장 최근 백업 시점으로 되돌리기")
@@ -69,7 +70,7 @@ func main() {
 		confPath: *confPath, assetPath: *assetPath, infraName: *infraName,
 		onlySite: *onlySite, onlyHost: *onlyHost, hostListPath: *hostListPath, dryRun: *dryRun,
 		printScript: *printScript, root: *root, defaultSite: *defaultSite, monitor: *withMonitor,
-		rbMode: rbMode, rbStamp: *rollbackTo,
+		noRestart: *noRestart, rbMode: rbMode, rbStamp: *rollbackTo,
 		remote: remote.Options{
 			GosshPath: *gosshPath, User: *user, Password: *password,
 			KeyPath: *keyPath, Port: *port, Concurrency: *concurrency,
@@ -94,6 +95,7 @@ type opts struct {
 	root         string
 	defaultSite  string
 	monitor      bool
+	noRestart    bool
 	rbMode       render.RollbackMode
 	rbStamp      string
 	remote       remote.Options
@@ -142,7 +144,7 @@ func run(o opts) error {
 			return fmt.Errorf("-print-script 에는 -site 가 필요합니다. 정의된 사이트: %s",
 				strings.Join(in.SiteNames(), ", "))
 		}
-		s, err := render.ApplyScript(in, cfg.S4, o.onlySite)
+		s, err := render.ApplyScript(in, cfg.S4, o.onlySite, o.noRestart)
 		if err != nil {
 			return err
 		}
@@ -199,7 +201,7 @@ func run(o opts) error {
 		hosts := bySite[site]
 		sort.Strings(hosts)
 
-		script, err := render.ApplyScript(in, cfg.S4, site)
+		script, err := render.ApplyScript(in, cfg.S4, site, o.noRestart)
 		if err != nil {
 			for _, r := range runs {
 				r.cleanup()
@@ -404,7 +406,7 @@ func loadTargets(o opts, defaultSite string, keepUnmatched bool) ([]asset.Entry,
 //
 // 적용과 달리 사이트별로 스크립트가 갈리지 않으므로 gossh 를 한 번만 호출합니다.
 func runRollback(o opts) error {
-	script, err := render.RollbackScript(o.rbMode, o.rbStamp)
+	script, err := render.RollbackScript(o.rbMode, o.rbStamp, o.noRestart)
 	if err != nil {
 		return err
 	}

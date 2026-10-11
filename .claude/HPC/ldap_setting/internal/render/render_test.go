@@ -1,6 +1,9 @@
 package render
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,7 +27,7 @@ func infra() config.Infra {
 }
 
 func TestApplyScriptEmbedsValues(t *testing.T) {
-	s, err := ApplyScript(infra(), config.S4Rule{Enabled: true, Prefix: "s4", Services: []string{"nslcd", "ntp"}}, "a1")
+	s, err := ApplyScript(infra(), config.S4Rule{Enabled: true, Prefix: "s4", Services: []string{"nslcd", "ntp"}}, "a1", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +51,7 @@ func TestApplyScriptEmbedsValues(t *testing.T) {
 func TestQuoteEscaping(t *testing.T) {
 	in := infra()
 	in.BindPW = "pw'with'quote"
-	s, err := ApplyScript(in, config.S4Rule{}, "a1")
+	s, err := ApplyScript(in, config.S4Rule{}, "a1", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +61,7 @@ func TestQuoteEscaping(t *testing.T) {
 }
 
 func TestUnknownSite(t *testing.T) {
-	if _, err := ApplyScript(infra(), config.S4Rule{}, "a9"); err == nil {
+	if _, err := ApplyScript(infra(), config.S4Rule{}, "a9", false); err == nil {
 		t.Fatal("없는 사이트인데 오류가 나지 않았습니다")
 	}
 }
@@ -73,7 +76,7 @@ func TestRollbackScriptModes(t *testing.T) {
 		{RollbackLatest, "", "MODE='latest'"},
 		{RollbackStamp, "20260907120000", "STAMP='20260907120000'"},
 	} {
-		s, err := RollbackScript(tc.mode, tc.stamp)
+		s, err := RollbackScript(tc.mode, tc.stamp, false)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.mode, err)
 		}
@@ -89,7 +92,7 @@ func TestRollbackScriptModes(t *testing.T) {
 
 // list/latest 에는 STAMP 가 들어가면 안 됩니다(오해 방지).
 func TestRollbackStampClearedForNonStampModes(t *testing.T) {
-	s, err := RollbackScript(RollbackLatest, "20260907120000")
+	s, err := RollbackScript(RollbackLatest, "20260907120000", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,14 +104,14 @@ func TestRollbackStampClearedForNonStampModes(t *testing.T) {
 // STAMP 는 원격 셸로 나가는 값이라 숫자 14자리만 허용해야 합니다.
 func TestRollbackStampValidation(t *testing.T) {
 	for _, bad := range []string{"", "abc", "2026090712000", "202609071200000", "20260907; rm -rf /", "2026-09-07"} {
-		if _, err := RollbackScript(RollbackStamp, bad); err == nil {
+		if _, err := RollbackScript(RollbackStamp, bad, false); err == nil {
 			t.Errorf("잘못된 STAMP %q 가 통과했습니다", bad)
 		}
 	}
 }
 
 func TestRollbackUnknownMode(t *testing.T) {
-	if _, err := RollbackScript(RollbackMode("wipe"), ""); err == nil {
+	if _, err := RollbackScript(RollbackMode("wipe"), "", false); err == nil {
 		t.Fatal("알 수 없는 모드인데 오류가 나지 않았습니다")
 	}
 }
@@ -116,7 +119,7 @@ func TestRollbackUnknownMode(t *testing.T) {
 // apply 스크립트도 공용 라이브러리를 포함해야 합니다. 단 apply 는 서비스를
 // 재시작하지 않으므로(autofs 행 방지) restart_for_changed 를 호출하면 안 됩니다.
 func TestApplyScriptIncludesLib(t *testing.T) {
-	s, err := ApplyScript(infra(), config.S4Rule{}, "a1")
+	s, err := ApplyScript(infra(), config.S4Rule{}, "a1", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,5 +131,108 @@ func TestApplyScriptIncludesLib(t *testing.T) {
 	}
 	if !strings.Contains(s, "/root/auto_appl_restore.sh") {
 		t.Error("apply 스크립트에 auto.appl 원복 스크립트 생성이 없습니다")
+	}
+}
+
+// -no-restart 를 안 주면 종전 스크립트와 같아야 하고, 주면 헤더 한 줄과
+// noRestartLib 블록만 더해져야 합니다(그 둘을 빼면 off 결과와 바이트 단위로 같음).
+func TestNoRestartOnlyAddsHeaderAndOverride(t *testing.T) {
+	type gen func(bool) (string, error)
+	s4 := config.S4Rule{Enabled: true, Prefix: "s4", Services: []string{"nslcd", "ntp"}}
+	cases := map[string]gen{
+		"apply":           func(nr bool) (string, error) { return ApplyScript(infra(), s4, "a1", nr) },
+		"rollback-list":   func(nr bool) (string, error) { return RollbackScript(RollbackList, "", nr) },
+		"rollback-latest": func(nr bool) (string, error) { return RollbackScript(RollbackLatest, "", nr) },
+		"rollback-stamp":  func(nr bool) (string, error) { return RollbackScript(RollbackStamp, "20260907120000", nr) },
+	}
+	for name, g := range cases {
+		off, err := g(false)
+		if err != nil {
+			t.Fatalf("%s off: %v", name, err)
+		}
+		on, err := g(true)
+		if err != nil {
+			t.Fatalf("%s on: %v", name, err)
+		}
+		if strings.Contains(off, "NO_RESTART") {
+			t.Errorf("%s: 플래그가 꺼졌는데 NO_RESTART 가 들어갔습니다", name)
+		}
+		if !strings.Contains(on, "\nNO_RESTART=1\n") {
+			t.Errorf("%s: 플래그가 켜졌는데 헤더에 NO_RESTART=1 이 없습니다", name)
+		}
+		// 덮어쓰기 블록은 lib_common.sh 뒤에 와야 restart_svc 를 이깁니다.
+		if li, oi := strings.Index(on, libCommon), strings.Index(on, noRestartLib); li < 0 || oi < li+len(libCommon) {
+			t.Errorf("%s: noRestartLib 가 lib_common.sh 뒤에 붙지 않았습니다 (lib=%d override=%d)", name, li, oi)
+		}
+		stripped := strings.Replace(on, "NO_RESTART=1\n", "", 1)
+		stripped = strings.Replace(stripped, noRestartLib+"\n", "", 1)
+		if stripped != off {
+			t.Errorf("%s: 추가분을 빼도 off 스크립트와 다릅니다", name)
+		}
+	}
+}
+
+// 되돌린 파일에 대응하는 서비스가 -no-restart 에서는 SKIP-RESTART 로만 남고
+// systemctl·sss_cache 가 한 번도 불리지 않아야 합니다. 대조군(off)에서는 같은
+// 하네스로 RESTARTED 가 나와야 이 시험이 실제 경로를 탄다는 것이 증명됩니다.
+//
+// 하네스: 생성된 rollback 스크립트에서 본체(TARGETS=) 앞까지만 잘라 쓰고
+// (헤더 + lib_common.sh + 덮어쓰기), CHANGED 를 직접 채운 뒤 restart_for_changed 를
+// 부릅니다. systemctl/sss_cache 는 맨 앞에 셸 함수로 정의한 기록기라 실제 서비스는
+// 절대 건드리지 않습니다(셸 함수가 PATH 의 명령보다 우선).
+func TestRollbackNoRestartSkipsServices(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash 가 없어 건너뜁니다")
+	}
+	services := []string{"nslcd", "sssd", "autofs", "ntpd", "chronyd"}
+
+	run := func(noRestart bool) (out, rec string) {
+		s, err := RollbackScript(RollbackLatest, "", noRestart)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cut := strings.Index(s, "\nTARGETS=\"")
+		if cut < 0 {
+			t.Fatal("rollback 본체 시작(TARGETS=)을 찾지 못했습니다")
+		}
+		recPath := filepath.Join(t.TempDir(), "rec")
+		prog := "REC='" + recPath + "'\n" +
+			"systemctl() { echo \"systemctl $*\" >> \"$REC\"; return 0; }\n" +
+			"sss_cache() { echo \"sss_cache $*\" >> \"$REC\"; }\n" +
+			s[:cut+1] +
+			"CHANGED=\" /etc/nslcd.conf /etc/sssd/sssd.conf /etc/autofs.conf /etc/ntp.conf /etc/chrony.conf\"\n" +
+			"restart_for_changed\n"
+		cmd := exec.Command("bash")
+		cmd.Stdin = strings.NewReader(prog)
+		cmd.Env = append(os.Environ(), "ROOT=", "DRYRUN=0")
+		b, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("bash 실행 실패: %v\n%s", err, b)
+		}
+		r, _ := os.ReadFile(recPath) // 기록이 없으면 파일도 없음
+		return string(b), string(r)
+	}
+
+	out, rec := run(true)
+	if strings.Contains(out, "RESTARTED") {
+		t.Errorf("-no-restart 인데 RESTARTED 가 나왔습니다:\n%s", out)
+	}
+	if rec != "" {
+		t.Errorf("-no-restart 인데 systemctl/sss_cache 가 불렸습니다:\n%s", rec)
+	}
+	for _, svc := range services {
+		if !strings.Contains(out, "APPLY|SKIP-RESTART|"+svc+" (NO_RESTART)\n") {
+			t.Errorf("-no-restart: %s 의 SKIP-RESTART 기록이 없습니다:\n%s", svc, out)
+		}
+	}
+
+	out, rec = run(false)
+	for _, svc := range services {
+		if !strings.Contains(out, "APPLY|RESTARTED|"+svc+"\n") {
+			t.Errorf("대조군: %s 가 RESTARTED 가 아닙니다(하네스가 실제 경로를 안 탐):\n%s", svc, out)
+		}
+	}
+	if !strings.Contains(rec, "sss_cache -E\n") {
+		t.Errorf("대조군: sss_cache -E 가 불리지 않았습니다:\n%s", rec)
 	}
 }

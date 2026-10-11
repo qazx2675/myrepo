@@ -355,6 +355,36 @@ else
 fi
 
 ###############################################################################
+echo "[16] -no-restart 롤백 : 복원 결과는 같고, 서비스는 SKIP-RESTART (NO_RESTART) 로만 남아야 한다"
+###############################################################################
+
+"$ENGINE" -rollback -no-restart -print-script > "$WORK/rb_nr.sh" 2>/dev/null
+
+make_fixture "$WORK/rbnr" 8
+cp -a "$WORK/rbnr" "$WORK/rbnr_orig"
+apply "$WORK/rbnr" "$WORK/ap_a1.sh"
+out="$(ROOT="$WORK/rbnr" bash "$WORK/rb_nr.sh" 2>&1)"; rc=$?
+
+if [ "$rc" = "0" ] && grep -qx 'NO_RESTART=1' "$WORK/rb_nr.sh" &&
+   diff -r --exclude='*.bak.*' --exclude='autofs_ldap_auth.conf' --exclude='auto.appl_back' --exclude='auto.appl.bak' --exclude='root' \
+        "$WORK/rbnr_orig" "$WORK/rbnr" >/dev/null 2>&1; then
+    ok "-no-restart 롤백 후 원본과 완전히 일치"
+else
+    ng "-no-restart 롤백 결과가 원본과 다름 (rc=$rc)" "$out"
+fi
+
+# ROOT 테스트 모드 문구가 아니라 NO_RESTART 문구여야 덮어쓰기 경로를 탄 것입니다.
+if ! printf '%s\n' "$out" | grep -q 'RESTARTED' &&
+   ! printf '%s\n' "$out" | grep -q 'SKIP-RESTART|.*(ROOT=' &&
+   printf '%s\n' "$out" | grep -qx 'APPLY|SKIP-RESTART|sssd (NO_RESTART)' &&
+   printf '%s\n' "$out" | grep -qx 'APPLY|SKIP-RESTART|autofs (NO_RESTART)' &&
+   printf '%s\n' "$out" | grep -qx 'APPLY|SKIP-RESTART|chronyd (NO_RESTART)'; then
+    ok "-no-restart 롤백: RESTARTED 없음, sssd/autofs/chronyd 는 SKIP-RESTART (NO_RESTART)"
+else
+    ng "-no-restart 롤백이 재시작을 시도했거나 기록이 다름" "$out"
+fi
+
+###############################################################################
 echo
 echo "=============================="
 echo " PASS: $PASS   FAIL: $FAIL"

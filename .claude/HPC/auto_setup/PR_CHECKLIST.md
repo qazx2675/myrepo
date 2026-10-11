@@ -164,6 +164,19 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 - [ ] **README 순서·주의사항**: 빌드·설치 → 사용 방법 → 옵션별 상세 → 문서별 설명 → 주의사항(Disclaimer) → 전역 명령어, LDAP LDAP 복원은 공유경로 경유(명령줄에 비밀 없음, `ldap_share_dir` 는 대상 root 읽기 가능해야 함, 사용 후 자동 삭제)·`ldapbak/` 수동 삭제 안내 포함
 - [ ] **버전 태그**: `git tag -a auto_setup-v0.2.0 -m "양방향 동일 실행·완료기록·LDAP 백업/복원·TUI (CHANGELOG 2026-10-03 항목)"`
 
+## 변경 작업 항목 (v0.7.0, m 메뉴)
+
+- [ ] **원복·LDAP 엔진 `-no-restart` 고정**: LDAP 엔진 호출 인자에 `-no-restart` 가 항상 붙음 (`grep -n 'ldapNoRestart' changerun.go`). `-print-script`·`-p` 는 호출하지 않음 (`grep -nE 'print-script|"-p"' changerun.go` 결과 없음). 테스트 `TestChangeLDAPArgsAlwaysNoRestart`, `bash test/run_change_os.sh` 에서 `RESTARTED` 0건
+- [ ] **bindpw 미노출**: `go test ./...` 의 `TestChangeSecretMask`·`TestChangeSecretNowhere` 통과. 데모 실행 뒤 `grep -rl DEMO_BINDPW_ "$DEMO_DIR/data"` 결과 없음 (기록·로그·임시 파일). gossh 명령줄은 base64 로 싣기 때문에 평문 grep 으로는 잡히지 않음 (README 주의사항 참고)
+- [ ] **꺼짐 상태**: conf 의 `enable_*` 를 비우고 `--admin` 없이 실행 → `m` 무반응, 안내 줄에 `m 변경` 없음 (`TestChangeKeyOffIsNoop`). 화면은 내용·키가 같아야 하며, 60~80칸에서 `…` 잘림이 줄바꿈으로 바뀐 것만 허용 (`git diff -- testdata` 의 차이가 줄바꿈뿐인지 확인). **화면 바이트 동일은 아님**
+- [ ] **엔진 os6 바이너리 재빌드·커밋**: 엔진 소스를 바꾸면 `bash build_os6.sh` (.60, Go 1.20) 로 `ip_change/bin/ip-change-engine_os6`, `ldap_setting/bin/ldap-config-engine_os6` 를 다시 빌드, `file` 로 statically linked 확인, +x 유지
+- [ ] **폭 60/80/120 줄바꿈**: `TestChangeRenderWrapNoTruncation`, `TestChangeMenuRenderWrapNoTruncation` 통과, 메뉴 골든 `tui_changemenu_*_60.golden` 갱신 (폭 60 미만은 최선)
+- [ ] **go.mod**: `ip_change/go.mod`·`ldap_setting/go.mod` 가 `go 1.20`. Go 1.20 (.60) 에서 `go vet`·`go test`·빌드 통과
+- [ ] **랩 검증**: `bash test/run_change_os.sh` (끝 줄 `PASS=<n> FAIL=<m>`, FAIL=0), `bash test/run_change_lab.sh` (종료코드 3 이면 자기 접속 불가 → 결과에 사유를 적고 `run_change_os.sh` 결과로 대체), `bash test/demo_change.sh` 후 `--stop`
+- [ ] **conf 샘플**: `conf/auto_setup.conf.example` 에 `enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine` 이 빈 값으로 있음. `conf/auto_setup.conf` 는 커밋하지 않음
+- [ ] **setup.sh**: 엔진 소스가 없거나 빌드가 실패해도 설치 전체가 중단되지 않음 (건너뜀·경고 메시지), `ldap_config.conf` 는 600
+- [ ] **문서**: README 「변경 작업」 절, CHANGELOG 0.7.0, WORKFLOW 「변경 작업 흐름」(mermaid), ARCHITECTURE 「반드시 지킬 것」, `사용법.txt` 13절 실장비 체크리스트가 서로 어긋나지 않음
+
 ## 기존 사용법 불변 확인
 
 - [ ] **01.AWX_nodeinfo_V2.sh 불변**
