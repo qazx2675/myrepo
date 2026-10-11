@@ -55,6 +55,8 @@ MODEL = CONFIG.get("MODEL", "qwen3:8b")
 NUM_CTX = int(CONFIG.get("NUM_CTX", 24576))
 KEEP_ALIVE = CONFIG.get("KEEP_ALIVE", "30m")
 TEMPERATURE = float(CONFIG.get("TEMPERATURE", 0.2))
+TOP_P = float(CONFIG.get("TOP_P", 0.8))
+TOP_K = int(CONFIG.get("TOP_K", 20))
 NO_ANSWER_TEXT = CONFIG.get("NO_ANSWER_TEXT", "문서에 없는 내용입니다.")
 
 def read_document(path=DOC_PATH):
@@ -97,7 +99,9 @@ def query_llm(question, system_prompt):
         ],
         "options": {
             "num_ctx": NUM_CTX,
-            "temperature": TEMPERATURE
+            "temperature": TEMPERATURE,
+            "top_p": TOP_P,
+            "top_k": TOP_K
         },
         "keep_alive": KEEP_ALIVE,
         "stream": False
@@ -226,7 +230,7 @@ def run_all_tests():
     print(f"총 {len(test_cases)}개 테스트케이스를 로드했습니다.\n")
 
     today_str = datetime.now(KST).strftime("%Y%m%d")
-    output_csv = os.path.join(TESTS_DIR, f"결과_{today_str}.csv")
+    output_csv = os.path.join(os.environ.get("TESTS_OUT_DIR") or TESTS_DIR, f"결과_{today_str}.csv")
 
     results = []
     elapsed_times = []
