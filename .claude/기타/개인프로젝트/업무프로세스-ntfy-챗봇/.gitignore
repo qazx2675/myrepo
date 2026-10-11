@@ -1,0 +1,27 @@
+# 비밀/개인 설정
+users.json
+.env
+state.json
+
+# 운영 데이터·로그
+logs/
+백업/
+업무프로세스.md
+
+# 파이썬 캐시
+__pycache__/
+*.pyc
+
+# 실험 산출물
+실험/**/runs.jsonl
+실험/**/run*.log
+실험/**/비교표.*
+실험/_smoke/
+실험/_snapshot.txt
+실험/01_문서분석.md
+ALLDONE*
+_run_s4*.sh
+
+# 테스트 결과/기대값 (tests/결과_20261010.csv 는 이미 추적 중)
+tests/결과_*.csv
+tests/테스트케이스_v2_기대.md

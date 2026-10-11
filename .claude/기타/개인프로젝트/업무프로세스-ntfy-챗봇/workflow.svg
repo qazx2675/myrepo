@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1060" width="900" height="1060" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif">
+  <title>업무프로세스 ntfy 챗봇 작업 흐름도</title>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .bg{fill:#ffffff}
+      .box{fill:#f1f5f9;stroke:#64748b;stroke-width:1.5}
+      .phone{fill:#dcfce7;stroke:#16a34a;stroke-width:1.5}
+      .ntfy{fill:#e0f2fe;stroke:#0284c7;stroke-width:1.5}
+      .llm{fill:#fef3c7;stroke:#d97706;stroke-width:1.5}
+      .guard{fill:#fee2e2;stroke:#dc2626;stroke-width:1.5}
+      .t{font-size:15px;fill:#0f172a;font-weight:700}
+      .s{font-size:12.5px;fill:#334155}
+      .n{font-size:12px;fill:#64748b}
+      .h{font-size:20px;fill:#0f172a;font-weight:700}
+      .ln{stroke:#475569;stroke-width:1.6;fill:none;marker-end:url(#arr)}
+      .lnd{stroke:#94a3b8;stroke-width:1.4;fill:none;stroke-dasharray:5 4;marker-end:url(#arr)}
+    </style>
+  </defs>
+  <rect class="bg" width="900" height="1060"/>
+  <text x="450" y="34" text-anchor="middle" class="h">업무프로세스 ntfy 챗봇 — 질문 1건이 처리되는 흐름</text>
+
+  <!-- 1 휴대폰 -->
+  <rect class="phone" x="260" y="56" width="380" height="58" rx="10"/>
+  <text x="450" y="80" text-anchor="middle" class="t">① 휴대폰(ntfy 앱)에서 질문 전송</text>
+  <text x="450" y="100" text-anchor="middle" class="s">사용자별 개인 토픽 (users.json) — 서로의 질문·답변은 보이지 않음</text>
+  <path class="ln" d="M450 114 V140"/>
+
+  <!-- 2 ntfy -->
+  <rect class="ntfy" x="260" y="140" width="380" height="50" rx="10"/>
+  <text x="450" y="162" text-anchor="middle" class="t">② ntfy.sh</text>
+  <text x="450" y="180" text-anchor="middle" class="s">봇이 사용자 토픽 7개를 스트림으로 구독</text>
+  <path class="ln" d="M450 190 V216"/>
+
+  <!-- 3 수신 -->
+  <rect class="box" x="230" y="216" width="440" height="62" rx="10"/>
+  <text x="450" y="240" text-anchor="middle" class="t">③ bot.py 질문 수신</text>
+  <text x="450" y="260" text-anchor="middle" class="s">터미널에 [질문 수신] 사용자 | 시각 | 질문 출력 · 자기 답변/피드백은 무시</text>
+  <path class="ln" d="M450 278 V304"/>
+
+  <!-- 4 reset 분기 -->
+  <rect class="box" x="300" y="304" width="300" height="50" rx="25"/>
+  <text x="450" y="326" text-anchor="middle" class="t">/reset 인가?</text>
+  <text x="450" y="344" text-anchor="middle" class="s">예 → 맥락 초기화 후 즉시 답장 (큐 건너뜀)</text>
+  <path class="ln" d="M450 354 V382"/>
+  <text x="462" y="372" class="n">아니오</text>
+
+  <!-- 5 큐 -->
+  <rect class="guard" x="230" y="382" width="440" height="62" rx="10"/>
+  <text x="450" y="406" text-anchor="middle" class="t">④ 선입선출(FIFO) 큐 — 단일 워커</text>
+  <text x="450" y="426" text-anchor="middle" class="s">앞에 대기가 있으면 "접수되었습니다. 앞에 N건 대기 중" 안내</text>
+  <path class="ln" d="M450 444 V470"/>
+
+  <!-- 6 문서 로더 -->
+  <rect class="box" x="130" y="470" width="640" height="82" rx="10"/>
+  <text x="450" y="494" text-anchor="middle" class="t">⑤ 문서 로더 (업무프로세스.md)</text>
+  <text x="450" y="514" text-anchor="middle" class="s">질문마다 해시 확인 → 바뀌었으면 재적재 (봇 재시작 불필요)</text>
+  <text x="450" y="532" text-anchor="middle" class="s">토큰 예산 초과 시 ## / ### 절 선택 모드 · 용어표 자동 파싱 · 다중 문서(DOC_PATHS)</text>
+  <path class="ln" d="M450 552 V578"/>
+
+  <!-- 7 프롬프트 -->
+  <rect class="box" x="130" y="578" width="640" height="82" rx="10"/>
+  <text x="450" y="602" text-anchor="middle" class="t">⑥ 프롬프트 조립</text>
+  <text x="450" y="622" text-anchor="middle" class="s">서술형 규칙(문서 근거만, 일부 근거는 "확인된 부분 + 없는 부분 명시") + 문서 전문</text>
+  <text x="450" y="640" text-anchor="middle" class="s">+ 약어 용어 참고 + 사용자별 최근 3턴 맥락(TTL 10분)</text>
+  <path class="ln" d="M450 660 V686"/>
+
+  <!-- 8 LLM -->
+  <rect class="llm" x="230" y="686" width="440" height="66" rx="10"/>
+  <text x="450" y="710" text-anchor="middle" class="t">⑦ Ollama 로컬 LLM (qwen3.5:9b-q8_0)</text>
+  <text x="450" y="730" text-anchor="middle" class="s">think=false (추론 끔) → 평균 약 5초 · 100% GPU · 폐쇄 환경, 외부 전송 없음</text>
+  <path class="ln" d="M450 752 V778"/>
+
+  <!-- 9 후처리 -->
+  <rect class="box" x="230" y="778" width="440" height="62" rx="10"/>
+  <text x="450" y="802" text-anchor="middle" class="t">⑧ 후처리 · 로그</text>
+  <text x="450" y="822" text-anchor="middle" class="s">§ 조항 인용 제거 · think 블록 제거 · 맥락 저장 · qa/unanswered 로그</text>
+  <path class="ln" d="M450 840 V866"/>
+
+  <!-- 10 분할 -->
+  <rect class="guard" x="130" y="866" width="640" height="82" rx="10"/>
+  <text x="450" y="890" text-anchor="middle" class="t">⑨ UTF-8 바이트 기준 조각 분할 (기본 1,000바이트)</text>
+  <text x="450" y="910" text-anchor="middle" class="s">ntfy.sh 푸시 한도 4,000바이트(본문 2회·제목 3회·버튼 2회 계산) 때문에 글자 수가 아닌 바이트로 나눔</text>
+  <text x="450" y="930" text-anchor="middle" class="s">제목 "답변 (i/N) - 질문 첫 줄" · 안내문은 첫 조각만 · 👍/👎는 마지막 조각만</text>
+  <path class="ln" d="M450 948 V974"/>
+
+  <!-- 11 발행 -->
+  <rect class="ntfy" x="130" y="974" width="640" height="62" rx="10"/>
+  <text x="450" y="998" text-anchor="middle" class="t">⑩ 역순(N → 1)으로 1.2초 간격 발행 → 마크다운 서식</text>
+  <text x="450" y="1018" text-anchor="middle" class="s">앱은 최신이 위 → 위에서 아래로 (1/N)(2/N)…(N/N) · 해당 사용자 토픽으로만 발행</text>
+
+  <!-- 보조: 시작 시 -->
+  <rect class="box" x="700" y="56" width="180" height="80" rx="8" stroke-dasharray="5 4"/>
+  <text x="790" y="78" text-anchor="middle" class="t">시작 시</text>
+  <text x="790" y="98" text-anchor="middle" class="s">[3] 챗봇_시작.bat</text>
+  <text x="790" y="116" text-anchor="middle" class="s">Ollama 가동 → 워밍업</text>
+</svg>

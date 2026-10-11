@@ -1,0 +1,104 @@
+# 업무프로세스 ntfy 챗봇 사용법 (입력할 명령만)
+# 아래 명령은 PowerShell 또는 cmd 에서 운영 폴더(D:\업무프로세스)로 이동한 뒤 실행합니다.
+# 토픽 값과 토큰은 이 파일에 적지 않습니다 (users.json / .env 에서 확인).
+
+# ---------------------------------------------------------
+# 1. 봇 시작 / 중지
+# ---------------------------------------------------------
+# 운영 폴더로 이동
+cd D:\업무프로세스
+
+# 봇 시작 (Ollama 가동 확인 후 봇 실행. 콘솔 창은 열어 둡니다)
+.\[3] 챗봇_시작.bat
+
+# 봇 중지 (콘솔에서 Ctrl+C 로도 종료됩니다)
+.\[4] 챗봇_중지.bat
+
+# ---------------------------------------------------------
+# 2. 수동 테스트 (절차 보기 -> 케이스 전송 -> 앱/터미널 확인)
+# ---------------------------------------------------------
+# 절차와 기대 결과 체크리스트 보기
+python bot\수동테스트.py show
+
+# 케이스 목록 보기
+python bot\수동테스트.py list
+
+# 긴 답변 (여러 조각으로 나뉘는지: 제목 (1/N), (2/N) 순서, 안내문은 (1/N) 에만, 버튼은 마지막에만)
+python bot\수동테스트.py send 사용자1 long
+
+# 짧은 답변 (조각 번호 없는 단일 메시지)
+python bot\수동테스트.py send 사용자1 short
+
+# 대화 맥락 초기화 (/reset)
+python bot\수동테스트.py send 사용자1 reset
+
+# 질문 3개 연속 전송 (대기 안내 확인)
+python bot\수동테스트.py send 사용자1 burst
+
+# 문서 밖 질문 (거절 문구 확인)
+python bot\수동테스트.py send 사용자1 noanswer
+
+# q_id 없는 'good test' 가 일반 질문으로 처리되는지 확인
+python bot\수동테스트.py send 사용자1 feedback-guard
+
+# 확인 프롬프트 없이 전송하려면 --yes 를 붙입니다
+python bot\수동테스트.py send 사용자1 long --yes
+
+# users.json 위치나 ntfy 서버를 바꿔 쓸 때
+python bot\수동테스트.py --users-file D:\업무프로세스\users.json --ntfy-server https://ntfy.sh send 사용자1 short
+
+# 메뉴 방식으로 실행 (1 절차 보기 / 2 케이스 전송)
+.\[6] 수동테스트.bat
+
+# ---------------------------------------------------------
+# 3. 로그 확인
+# ---------------------------------------------------------
+# 최근 질문/답변 기록 마지막 10건
+Get-Content D:\업무프로세스\logs\qa.jsonl -Tail 10 -Encoding UTF8
+
+# 마지막 N건을 읽기 쉽게 (질문, 시간, 사용자 위주로 보기)
+Get-Content D:\업무프로세스\logs\qa.jsonl -Tail 5 -Encoding UTF8 | ForEach-Object { $_ | ConvertFrom-Json } | Format-List
+
+# 오류 기록 확인 (파일이 없으면 오류가 없는 것입니다)
+Get-Content D:\업무프로세스\logs\errors.jsonl -Tail 20 -Encoding UTF8
+
+# 문서에 없어서 답하지 못한 질문 기록
+Get-Content D:\업무프로세스\logs\unanswered.jsonl -Tail 10 -Encoding UTF8
+
+# 👍/👎 피드백 기록
+Get-Content D:\업무프로세스\logs\feedback.jsonl -Tail 10 -Encoding UTF8
+
+# 새 로그가 쌓이는 것을 실시간으로 보기 (Ctrl+C 로 종료)
+Get-Content D:\업무프로세스\logs\qa.jsonl -Tail 3 -Wait -Encoding UTF8
+
+# ---------------------------------------------------------
+# 4. 모델 교체 (.env 의 MODEL= 줄만 변경)
+# ---------------------------------------------------------
+# 새 모델 받기 (태그는 예시)
+ollama pull qwen3.5:9b-q6_K
+
+# 변경 전 .env 백업
+Copy-Item D:\업무프로세스\.env D:\업무프로세스\.env.bak
+
+# .env 를 메모장으로 열어 MODEL= 줄만 수정 (gemma3 계열은 NUM_CTX=16384 도 함께)
+notepad D:\업무프로세스\.env
+
+# 봇 중지 후 다시 시작
+.\[4] 챗봇_중지.bat
+.\[3] 챗봇_시작.bat
+
+# 시작 로그의 '모델:' 값이 바뀌었는지 보고, PROCESSOR 가 100% GPU 인지 확인
+ollama ps
+
+# 환경변수 MODEL 이 설정돼 있으면 .env 값이 무시됩니다. 설정 여부 확인
+echo $env:MODEL
+
+# ---------------------------------------------------------
+# 5. 문서 교체 후 반영 확인
+# ---------------------------------------------------------
+# 문서 파일을 교체(저장)합니다. 봇 재시작은 필요 없고 다음 질문부터 반영됩니다.
+notepad D:\업무프로세스\업무프로세스.md
+
+# 반영 여부 확인: 다음 질문 처리 후 doc_changes.jsonl 에 변경 기록이 생깁니다
+python bot\수동테스트.py send 사용자1 short
+Get-Content D:\업무프로세스\logs\doc_changes.jsonl -Tail 3 -Encoding UTF8

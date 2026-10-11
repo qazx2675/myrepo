@@ -1,0 +1,2 @@
+{"ts": "2026-10-11T13:50:37+09:00", "model": "gemma3:12b-it-qat", "num_ctx": 16384, "load_sec": 9.52, "error": "", "size": 8835301375, "size_vram": 8835301375, "gpu_pct": 100.0, "context_length": 16384, "vram_used_mb": 11571, "vram_total_mb": 12288}
+{"ts": "2026-10-11T13:51:49+09:00", "model": "exaone3.5:7.8b-instruct-q8_0", "num_ctx": 16384, "load_sec": 7.59, "error": "", "size": 10139761376, "size_vram": 10139761376, "gpu_pct": 100.0, "context_length": 16384, "vram_used_mb": 10971, "vram_total_mb": 12288}
