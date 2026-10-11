@@ -1,5 +1,10 @@
 # CHANGELOG.md — ip_change
 
+## 2026-10-12 — `go.mod` `go 1.20` · os6 정적 바이너리 `bin/ip-change-engine_os6`
+
+- `go.mod`: `go 1.26.5` → `go 1.20`. Go 1.20·1.25 툴체인이 1.26.5 를 거부해 빌드할 수 없었음. 소스는 그대로이므로 동작은 바뀌지 않음.
+- `bin/ip-change-engine_os6` 추가: RHEL 6 용 정적 바이너리 (`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`, Go 1.20). `build_os6.sh` 가 같이 빌드하며, RHEL 6 에서 엔진을 단독 실행할 때 쓴다. auto_setup 의 TUI `m` 메뉴(IP 변경·원복)는 os8_mgmt 에 설치된 엔진 (`setup.sh` → `/usr/local/bin/ip-change-engine`) 을 호출한다.
+
 ## 2026-09-23 — `-monitor` 진행 화면 · Ctrl+C 3회 종료
 
 - `-monitor` 플래그 추가(기본 꺼짐 — 끄면 기존과 동일). 켜면 60초가 지나도 안
