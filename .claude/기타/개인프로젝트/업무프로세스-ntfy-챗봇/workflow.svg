@@ -30,7 +30,7 @@
 
   <!-- 2 ntfy -->
   <rect class="ntfy" x="260" y="140" width="380" height="50" rx="10"/>
-  <text x="450" y="162" text-anchor="middle" class="t">② ntfy.sh (공개 서버, 토픽명 = 비밀번호 역할)</text>
+  <text x="450" y="162" text-anchor="middle" class="t">② ntfy.sh</text>
   <text x="450" y="180" text-anchor="middle" class="s">봇이 사용자 토픽 7개를 스트림으로 구독</text>
   <path class="ln" d="M450 190 V216"/>
 
