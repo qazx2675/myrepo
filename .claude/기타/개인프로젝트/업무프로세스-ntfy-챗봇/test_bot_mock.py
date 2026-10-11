@@ -959,7 +959,8 @@ class TestAnswerFormat(BotTestBase):
             self.assertLessEqual(enc(p["message"]), self.m.CHUNK_MAX_BYTES)
             acts = json.dumps(p.get("actions", []), ensure_ascii=False)
             # message 2회(안드로이드/iOS 복사본) + 제목 3회 + 버튼 2회 + 고정 필드·APNS 본문 약 700B
-            est = 2 * enc(p["message"]) + 3 * enc(p["title"]) + 2 * enc(acts) + 700
+            # (markdown 발행 시 content_type 필드가 data/APNS 에 각 1회 더 들어가 약 100B 가산)
+            est = 2 * enc(p["message"]) + 3 * enc(p["title"]) + 2 * enc(acts) + 700 + 100
             self.assertLess(est, 4000, f"FCM 직렬화 추정 {est}B")
         # 내용 보존: 공백/개행을 제외한 글자가 순서대로 이어짐
         body = "".join(p["message"] for p in reversed(self.sent))
@@ -993,6 +994,26 @@ class TestAnswerFormat(BotTestBase):
         # 안내문을 포함한 첫 조각도 바이트 한도 이내
         for p in self.sent:
             self.assertLessEqual(len(p["message"].encode("utf-8")), self.m.CHUNK_MAX_BYTES)
+
+    # ---- 마크다운 발행 ----
+    def test_answer_chunks_are_markdown_only(self):
+        self._process("긴 질문", self._answer(8))
+        self.assertGreater(len(self.sent), 1)
+        self.assertTrue(all(p.get("markdown") is True for p in self.sent))
+        self._process("짧은 질문", "짧은 답변")
+        self.assertTrue(self.sent[-1].get("markdown") is True)
+        # 오류/접수 안내/초기화 같은 시스템 메시지는 일반 텍스트
+        self.m.publish_ntfy("접수되었습니다. 앞에 1건 대기 중입니다", "q2", title="접수 안내", topic="t", feedback=False)
+        self.assertNotIn("markdown", self.sent[-1])
+
+    def test_markdown_can_be_disabled(self):
+        m_off, _ = self.make_bot(env={"MARKDOWN": "false"})
+        self.assertFalse(m_off.MARKDOWN)
+        sent = []
+        m_off._send_ntfy_payload = lambda payload, idx, total, label="": sent.append(payload)
+        m_off.publish_ntfy("본문", "q", title="답변", topic="t", markdown=True)
+        self.assertNotIn("markdown", sent[0])
+        self.assertTrue(self.m.MARKDOWN)
 
     def test_other_titles_unchanged(self):
         m = self.m

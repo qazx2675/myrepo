@@ -179,6 +179,8 @@ ANSWER_RESERVE = int(CONFIG.get("ANSWER_RESERVE", 3000))
 CHUNK_INTERVAL = max(float(CONFIG.get("CHUNK_INTERVAL_SEC", 1.2)), 1.1)
 # 조각 1개의 최대 크기(UTF-8 바이트). ntfy.sh 푸시 한도(직렬화 4000B)를 넘으면 앱에서 본문이 잘려 보인다
 CHUNK_MAX_BYTES = min(max(int(CONFIG.get("CHUNK_MAX_BYTES", 1000)), 300), 1300)
+# 답변을 마크다운으로 발행(앱에서 굵게/목록/제목 서식 적용). false 면 일반 텍스트
+MARKDOWN = str(CONFIG.get("MARKDOWN", "true")).strip().lower() != "false"
 HISTORY_TURNS = 3
 DOC_PATHS_CFG = CONFIG.get("DOC_PATHS", "")  # 세미콜론 구분 다중 문서
 DOC_DIR_CFG = CONFIG.get("DOC_DIR", "")      # 폴더 내 .md 전체
@@ -759,8 +761,9 @@ def _send_ntfy_payload(payload, idx, total_chunks, label=""):
 # label: 로그에 남길 사용자 이름 (토픽은 로그에 남기지 않음)
 # title_fn: (idx, total) -> 조각 제목. 지정하면 title 대신 사용
 # header: 첫 조각 맨 앞에만 붙일 안내문 (조각 경계에서 잘리거나 단독 조각이 되지 않음)
+# markdown: True 이고 설정 MARKDOWN 이 켜져 있으면 ntfy 앱이 **굵게**, 목록, ### 제목 등을 서식으로 표시
 def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None, feedback=True,
-                 title_fn=None, header=""):
+                 title_fn=None, header="", markdown=False):
     answer_topic = topic or NTFY_ANSWER_TOPIC
     feedback_topic = topic or NTFY_FEEDBACK_TOPIC
     label = label or LEGACY_USER
@@ -821,6 +824,8 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
             "message": chunks[0],
             "tags": ["bot"]
         }
+        if markdown and MARKDOWN:
+            payload["markdown"] = True
         if feedback:
             payload["actions"] = feedback_actions()
         _send_ntfy_payload(payload, 1, 1, label)
@@ -837,6 +842,8 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
                 "message": chunk,
                 "tags": ["bot"]
             }
+            if markdown and MARKDOWN:
+                payload["markdown"] = True
             if idx == total_chunks and feedback:
                 payload["actions"] = feedback_actions()
             _send_ntfy_payload(payload, idx, total_chunks, label)
@@ -927,7 +934,7 @@ def process_question(msg_id, question_text, user=None, topic=None, epoch=None):
     )
     # ntfy 로 전송 (해당 사용자 토픽으로만). 안내문은 첫 조각에만 붙는다
     publish_ntfy(ans, q_id, topic=topic, label=user, header=disclaimer,
-                 title_fn=lambda i, n: build_answer_title(question_text, i, n))
+                 title_fn=lambda i, n: build_answer_title(question_text, i, n), markdown=True)
 
 # 선입선출 큐 (전 사용자 공용, 단일 워커)
 JOB_QUEUE = queue.Queue()
