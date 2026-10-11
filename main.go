@@ -33,7 +33,16 @@ var (
 	os8_autosetup   = "" // os8_mgmt 위 auto_setup 경로 (비면 /usr/local/bin/auto_setup)
 	os6_os_check_sh = "" // os6_mgmt 위 os_check 경로 (2차 체크용). 비우면 os_check_sh 와 같은 경로(autofs 공유)로 간주, os6_mgmt 도 비면 2차 체크 생략, "-" 면 2차 체크 끄기
 	ldap_share_dir  = "" // LDAP 복원용 autofs 공유 경로: os8_mgmt·대상 서버가 모두 보는 곳, 비우면 자동 복원 안 함(수동 복원 안내). 대상 root 가 읽을 수 있어야 함(no_root_squash)
+
+	// v0.7.0 변경 메뉴 (conf.go 의 헬퍼가 해석): 전부 빈 값 = 꺼짐 / 엔진 자동 탐색
+	enable_ip_change   = "" // y/yes/1/true(대소문자 무시) 면 TUI 의 IP 변경 메뉴 켜짐 (--admin 이면 conf 와 무관하게 켜짐)
+	enable_ldap_change = "" // 위와 같음, LDAP 변경 메뉴
+	ip_engine          = "" // ip-change-engine 실행 파일 전체 경로 (비면 <auto_setup 디렉터리>/ip-change-engine → PATH)
+	ldap_engine        = "" // ldap-config-engine 실행 파일 전체 경로 (비면 <auto_setup 디렉터리>/ldap-config-engine → PATH)
 )
+
+// adminMode: `auto_setup --admin` 으로 TUI 를 띄웠을 때만 true. 변경 메뉴를 conf 와 무관하게 켠다 (데몬·request 에는 영향 없음).
+var adminMode bool
 
 // 조정 가능한 값 (빈 변수 아님)
 var (
@@ -49,6 +58,7 @@ var (
 const usageText = `사용법: auto_setup [명령]
   (인자 없음)         현재 상태 리포트 (tty 면 TUI, 아니면 텍스트 표)
   --plain             텍스트 표로 출력
+  --admin             TUI 의 변경 메뉴(m: IP·LDAP 변경·원복)를 conf 와 무관하게 켠다 (TUI 전용, 데몬·request 에는 영향 없음)
   -h, --help          이 도움말
   --start | start     데몬 기동 (이미 실행 중이면 안내)
   --stop | stop       데몬 종료
@@ -80,7 +90,30 @@ func usageFail() int {
 	return 1
 }
 
+// splitAdmin: 명령 앞쪽(--admin·--plain 만 이어지는 구간)의 --admin 을 떼어 낸다.
+// admin 은 떼고 남은 인자가 없을 때(= TUI 모드)만 true — --plain·데몬 명령·request 에는 영향이 없다.
+func splitAdmin(args []string) (rest []string, admin bool) {
+	n, found := 0, false
+	for n < len(args) && (args[n] == "--admin" || args[n] == "--plain") {
+		if args[n] == "--admin" {
+			found = true
+		}
+		n++
+	}
+	if !found {
+		return args, false
+	}
+	for _, a := range args[:n] {
+		if a != "--admin" {
+			rest = append(rest, a)
+		}
+	}
+	rest = append(rest, args[n:]...)
+	return rest, len(rest) == 0
+}
+
 func run(args []string) int {
+	args, adminMode = splitAdmin(args)
 	if len(args) == 0 {
 		return cmdReport(false)
 	}

@@ -1,5 +1,50 @@
 # CHANGELOG
 
+## [0.7.0] - 2026-10-12
+
+### 추가
+- **`m` 변경 메뉴** (화면 1·2 어디서나, os8_mgmt 에서만 실행). 켜진 항목만 표시하고 번호는 고정
+  - `1` IP 변경 · `2` LDAP 변경 · `3` IP+LDAP 변경 (둘 다 켜졌을 때) · `4` 원복 (IP·LDAP·둘 다, 켜진 것만) · `5` auto.appl 원복 (LDAP 이 켜졌을 때)
+  - 흐름: user 선택 (x 와 같은 메뉴) → [LDAP 계열: infra 메뉴 선택] → 대상 입력 (Ctrl+D) → [LDAP 계열: dry-run 자동 조회] → 미리보기 → `yes` 를 정확히 입력하면 실행 → 결과 화면. `yes` 가 아니면 아무것도 바꾸지 않고 취소
+  - 입력은 `hostname ip` (공백·탭·쉼표·`=` 구분 허용, 정규화). GW 는 새 IP 의 마지막 옥텟을 `1` 로 고정. IP 는 ifcfg 만 바꾸고 재시작하지 않음
+  - 원복과 auto.appl 원복은 user 의 이전 기록으로 대상을 자동 채움 (수정·붙여넣기로 대체 가능). 원복 종류는 메뉴 4 에서 IP / LDAP / 둘 다 중 고름
+- **활성화**: conf `enable_ip_change`·`enable_ldap_change` (y/yes/1/true, 비우면 꺼짐). `auto_setup --admin` 으로 TUI 를 띄우면 conf 와 무관하게 켜짐 (데몬·request 에는 영향 없음). os6_mgmt 원격 TUI 에서 `m` 을 누르면 "os8_mgmt 에서 실행하세요" 안내만 표시
+- **엔진 경로**: conf `ip_engine`·`ldap_engine` (비우면 auto_setup 실행 파일과 같은 디렉터리 → PATH). `ip-change-engine`·`ldap-config-engine` 을 **바이너리로 호출**하며 코드는 흡수하지 않음 (두 도구는 계속 독립 사용 가능)
+- **변경용 conf 위치**: `ip_change.conf`·`ldap_config.conf`·`assets.txt` 는 auto_setup.conf 를 읽은 디렉터리 (없으면 `/etc/auto_setup`) 에서 읽음
+- **실행 경로**: os8_mgmt 에서 먼저 실행하고, 응답 없는 호스트만 os6_mgmt 경유로 재시도 (`os6_mgmt`·`os6_gossh` 설정 시). 이미 route=os6 인 호스트는 처음부터 os6 경유. 경유는 엔진 `-gossh` 에 임시 래퍼 (0700, 실행 뒤 삭제) 를 넘겨 `ssh <os6_mgmt> <os6_gossh>` 로 전달
+- **IP+LDAP**: IP 를 먼저 적용하고 IP 성공 호스트만 LDAP 적용. IP 실패 호스트는 결과에 `건너뜀(IP 실패)` 로 표시
+- **원복 (메뉴 4)**: 엔진 기본값인 가장 최근 백업으로 되돌림. 대상 목록을 먼저 보여 주고 yes 확인
+- **auto.appl 원복 (메뉴 5)**: 대상은 user 의 LDAP 적용 성공 호스트 중 `auto.appl 대기` 인 호스트. 노드의 `/root/auto_appl_restore.sh` 만 gossh 로 실행 (엔진 미사용, 서비스 재시작 없음)
+- **기록**: `<state>/changes/<user>/<YYYYmmddHHMMSS>_<kind>.json` (디렉터리 0700, 파일 0600, 호스트별 결과). `auto_setup.log` 에 요약 한 줄. 기록 파일을 만들 수 없으면 실행하지 않음
+- **취소**: 실행 중 `Ctrl+X` → `y` (q/Esc 는 무시). 프로세스 그룹에 SIGTERM, 3초 뒤 SIGKILL. 중단되면 "일부 호스트만 변경됐을 수 있음" 을 표시하고 호스트별 결과를 그대로 기록
+- **진행 중 job 경고**: 대상이 추적 중인 job 의 호스트이면 미리보기에 빨간 경고만 표시. job·snapshot·데몬은 건드리지 않음
+- **설치 (setup.sh)**: [5/6] 두 엔진을 `GOPROXY=off CGO_ENABLED=0` 으로 빌드해 `/usr/local/bin` 에 설치 (소스가 없으면 건너뜀). [6/6] conf 샘플 (`ip_change.conf`·`ldap_config.conf`(600)·`assets.txt`) 을 `/etc/auto_setup/` 에 복사하되 이미 있는 파일은 덮어쓰지 않음
+- **conf 예시**: `conf/auto_setup.conf.example` 에 `enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine` 4개 추가 (모두 빈 값)
+- **os6 엔진 바이너리**: `ip_change/bin/ip-change-engine_os6`, `ldap_setting/bin/ldap-config-engine_os6` (정적, +x). `build_os6.sh` 가 같이 빌드. RHEL 6 에서 엔진을 단독 실행할 때 쓰며, `m` 메뉴는 os8_mgmt 의 엔진을 호출
+- **테스트·모의 환경**: `test/demo_change.sh` (실제 엔진 + 가짜 gossh 로 IP·LDAP·원복·auto.appl 원복 모의), `test/run_change_os.sh` (RHEL 7/8/9 fixture 판정, `-no-restart` 검증), `test/run_change_lab.sh` (.58 자기 자신, fixture 경로만 변경), `test/lib_change.sh`·`test/fake_gossh.sh`
+- **레이아웃 테스트**: 메뉴 화면 골든 (`tui_changemenu_*_60.golden`), 변경 화면은 폭 60/80/120 에서 잘림 없이 줄바꿈되는지 테스트
+
+### 변경
+- **좁은 화면 줄바꿈**: 60칼 이상에서 모든 줄이 `…` 없이 줄바꿈됨. 헤더·job 줄·안내 줄·호스트 행 비고·변경 화면 표가 대상. 그룹 행이 폭에 안 들어가면 2줄 카드형 (1줄 yml 전체 이름, 2줄 구성·대수·막대·경과·%). 창 크기가 바뀌면 (SIGWINCH) 즉시 다시 그림. x·w 화면도 같은 규칙
+- **안내 줄·도움말**: 변경 메뉴가 켜졌을 때만 안내 줄에 `m 변경` 한 항목 추가 (색 별도). 도움말 (`?`) 에 `m` 설명 추가
+- **main.go**: `--admin` 플래그 (TUI 모드에서만 의미) 와 빈 변수 4개 (`enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine`)
+- **ldap_setting**: `-no-restart` 플래그 추가 (기본 꺼짐. 플래그를 주지 않으면 생성 스크립트는 종전과 같음). auto_setup 의 LDAP 호출 (dry-run·적용·원복) 에는 항상 붙임
+- **go.mod**: `ip_change`·`ldap_setting` 의 `go 1.26.5` → `go 1.20` (Go 1.20/1.25 빌드 가능, 동작 불변)
+
+### 주의사항
+- **꺼짐 상태 화면**: 기본 설정 (메뉴 꺼짐) 에서도 60~80칸의 `…` 잘림이 줄바꿈으로 바뀜. 내용·키·동작은 같지만 **화면이 바이트 단위로 같지는 않음**. 골든 `tui_*.golden` 의 차이는 모두 줄바꿈 변화
+- **설정 변경 도구**: 적용 뒤 무작위 몇 대에 직접 접속해 반영을 확인하십시오. IP 는 ifcfg 만 바꾸므로 네트워크 재시작·재부팅 뒤에 반영됩니다. 노드 서비스는 재시작하지 않습니다 (LDAP 적용·원복 모두 `-no-restart`)
+- **auto.appl**: LDAP 적용 후 새 auto.appl 은 `/etc/auto.appl.bak` 에 대기합니다. 메뉴 5 를 실행해야 반영됩니다
+- **bindpw**: `ldap_config.conf` 에만 있고 퍼미션 600, 커밋 금지. 화면·기록·로그·임시 파일에는 남기지 않습니다 (`-print-script` 호출 안 함). 단 LDAP 엔진은 적용·원복 스크립트를 base64 로 gossh 명령줄에 싣기 때문에 os8·os6·대상의 `ps` 에 base64 문자열이 잠깐 보일 수 있습니다 (ldap_setting 의 기존 설계, 이번 버전에서 바꾸지 않음)
+- **기존 현장 설정**: `conf/update_v0.7.0.sh` (미리보기 `--dry`, 되돌리기 `--undo`) 가 `auto_setup.conf` 에 새 변수 4개(`enable_ip_change`, `enable_ldap_change`, `ip_engine`, `ldap_engine`, 전부 빈 값)를 추가합니다. 메뉴를 켜려면 적용 후 `enable_ip_change=y` 등을 채우고 `auto_setup --restart` 하십시오 (데몬은 시작 때 한 번만 읽음; TUI 만 `--admin` 으로 임시로 켜는 것은 재시작 불필요)
+- **진행 중 job**: 변경 대상이 추적 중인 job 의 호스트이면 IP 반영 뒤 추적이 끊기거나 설치·체크와 겹칠 수 있습니다 (경고만 표시)
+- **검증 범위**: RHEL 7·9 실장비 동작은 fixture 검증까지입니다. 실장비 확인 항목은 `사용법.txt` 13절
+
+### 테스트
+- Go: `change*_test.go` (메뉴 가시성·`--admin`, 입력 정규화, 경유 폴백, IP→LDAP 건너뜀, 기록 권한·bindpw 미노출, 취소, 줄바꿈 골든), `conf_test.go` (새 키·엔진 찾기·`--admin` 인자), `tui_test.go` (SIGWINCH 즉시 재그리기), 골든 `testdata/tui_*.golden` 갱신 (줄바꿈)
+- 모의·랩: `test/run_change_os.sh`, `test/run_change_lab.sh`, `test/demo_change.sh`
+- 되돌리기: 태그 `backup-before-v0.7.0` (= origin/master c7906be)
+
 ## [0.6.2] - 2026-10-09
 
 ### 변경

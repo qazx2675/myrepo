@@ -25,3 +25,5 @@ func oneoffSysProcAttr() *syscall.SysProcAttr { return nil }
 func killGroup(pid int, sig syscall.Signal) {}
 
 func ttySize(f *os.File) (int, int) { return 80, 24 }
+
+func notifyResize(c chan<- os.Signal) {}

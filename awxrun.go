@@ -177,12 +177,14 @@ func (st *tuiState) runAwx(p *AwxProfile, user, verify string) {
 func renderAwx(a *awxState, width, height int, color bool) string {
 	width = clampWidth(width)
 	var title, hint string
-	var body []seg
+	var body [][]string // 줄바꿈이 끝난 화면 줄 블록 (폭에 들어가면 종전과 같은 출력)
+	add := func(cont string, s seg) { body = append(body, wrapSegs(color, width, 1, cont, s)) }
 	switch a.step {
 	case awxAsk:
 		title = "AWX 실행"
-		body = []seg{{" AWX auto 실행? [y/n]", ""}, {"", ""},
-			{" yml 마다 OS 버전이 다르면 N 을 입력하세요", stYellow}}
+		add("   ", seg{" AWX auto 실행? [y/n]", ""})
+		add("   ", seg{"", ""})
+		add("   ", seg{" yml 마다 OS 버전이 다르면 N 을 입력하세요", stYellow})
 		hint = " y auto 프로파일 선택  n 일반 실행 (01 의 질문에 직접 응답)  Esc 취소"
 	case awxPick:
 		title = "AWX 실행 - 프로파일 선택"
@@ -191,21 +193,24 @@ func renderAwx(a *awxState, width, height int, color bool) string {
 			if p.Desc != "" {
 				l += "  " + p.Desc
 			}
-			body = append(body, seg{l, ""})
+			add("    ", seg{l, ""}) // 번호 뒤 nodeinfo 에 맞춰 이어 씀
 		}
 		if len(a.problems) > 0 {
-			body = append(body, seg{"", ""}, seg{" 사용할 수 없는 프로파일:", stGray})
+			add("   ", seg{"", ""})
+			add("   ", seg{" 사용할 수 없는 프로파일:", stGray})
 			for _, pr := range a.problems {
-				body = append(body, seg{"   " + pr, stGray})
+				add("     ", seg{"   " + pr, stGray})
 			}
 		}
 		hint = " 번호를 누르면 바로 실행합니다  Esc 뒤로"
 	}
-	out := []string{segLine(color, width, redSegs(" "+title, stBold)...), sepLine(width)}
-	for _, s := range body {
-		out = append(out, segLine(color, width, s))
-	}
+	out := append(wrapSegs(color, width, 1, "  ", redSegs(" "+title, stBold)...), sepLine(width))
 	foot := append([]string{sepLine(width)}, hintLines(color, width, hint)...)
+	avail := 0 // 0 = 높이 제한 없음
+	if height > 0 {
+		avail = rMax(height-len(out)-len(foot), 1)
+	}
+	out = append(out, fitBody(color, avail, false, nil, body, nil)...)
 	if height > 0 {
 		for len(out) < height-len(foot) {
 			out = append(out, "")
