@@ -928,11 +928,45 @@ class TestAnswerFormat(BotTestBase):
             self.assertGreaterEqual(s, self.m.CHUNK_INTERVAL)
             self.assertGreaterEqual(s, 1.1)
 
+    # 줄 1개 = 한글 95자 + 접두 약 292바이트. 조각 한도 1000바이트(첫 조각은 안내문만큼 덜 채움)
     def test_two_chunks(self):
-        self._check_multi(15, 2)
+        self._check_multi(5, 2)
 
     def test_three_chunks(self):
-        self._check_multi(30, 3)
+        self._check_multi(8, 3)
+
+    # ---- 바이트 기준 분할 (ntfy.sh FCM 4000바이트 한도) ----
+    def test_chunk_max_bytes_default_and_clamp(self):
+        self.assertEqual(self.m.CHUNK_MAX_BYTES, 1000)
+        m_low, _ = self.make_bot(env={"CHUNK_MAX_BYTES": "10"})
+        self.assertEqual(m_low.CHUNK_MAX_BYTES, 300)
+        m_hi, _ = self.make_bot(env={"CHUNK_MAX_BYTES": "9999"})
+        self.assertEqual(m_hi.CHUNK_MAX_BYTES, 1300)
+
+    def test_every_chunk_within_byte_limit_and_fcm_estimate(self):
+        """한글/영문/긴 줄이 섞인 답변도 모든 조각이 바이트 한도 안이고 FCM 직렬화 추정이 4000B 미만"""
+        mixed = "\n".join([
+            "1. **승인 확인:** " + "서버 용도를 확인합니다. " * 12,
+            "`" + "a" * 700 + "`",                   # 공백 없는 긴 영문 줄
+            "가" * 900,                              # 한도보다 긴 한글 줄 (글자 단위 분할)
+            "\n".join(f"{i}. " + "나다라마바사 " * 20 for i in range(12)),
+            "📌 참고: 문서, 2. 공통 원칙 및 지원 범위, 3. OS 설치 및 패치 관리",
+        ])
+        self._process("긴 혼합 질문입니다 " + "질" * 40, mixed)
+        self.assertGreater(len(self.sent), 3)
+        enc = lambda s: len(s.encode("utf-8"))
+        for p in self.sent:
+            self.assertLessEqual(enc(p["message"]), self.m.CHUNK_MAX_BYTES)
+            acts = json.dumps(p.get("actions", []), ensure_ascii=False)
+            # message 2회(안드로이드/iOS 복사본) + 제목 3회 + 버튼 2회 + 고정 필드·APNS 본문 약 700B
+            est = 2 * enc(p["message"]) + 3 * enc(p["title"]) + 2 * enc(acts) + 700
+            self.assertLess(est, 4000, f"FCM 직렬화 추정 {est}B")
+        # 내용 보존: 공백/개행을 제외한 글자가 순서대로 이어짐
+        body = "".join(p["message"] for p in reversed(self.sent))
+        norm = lambda s: "".join(s.split())
+        self.assertTrue(norm(body).startswith(norm("**AI 답변은 100% 정확하지 않습니다.**")))
+        self.assertTrue(norm(body).endswith(norm("📌 참고: 문서, 2. 공통 원칙 및 지원 범위, 3. OS 설치 및 패치 관리")))
+        self.assertEqual(norm(body).count("가" * 900), 1)
 
     def test_single_chunk_title_disclaimer_and_buttons(self):
         self._process("짧은 질문", "짧은 답변")
@@ -946,7 +980,7 @@ class TestAnswerFormat(BotTestBase):
 
     def test_disclaimer_never_alone_or_split(self):
         """첫 줄이 매우 길어도 안내문만 단독 조각이 되거나 중간에서 잘리지 않는다"""
-        for first_len in (1100, 1000):
+        for first_len in (250, 200):   # 한글 250자 = 750바이트. 안내문과 합쳐도 조각 한도(1000B) 안
             self.sent.clear()
             self._process("질문", "나" * first_len + "\n" + "다" * 300)
             self.assertEqual(len(self.sent), 2)
@@ -956,9 +990,9 @@ class TestAnswerFormat(BotTestBase):
             self.assertTrue(disc_lines[0].endswith("**") and disc_lines[1].endswith("**"))
             self.assertIn("나" * first_len, first, "안내문과 답변 첫 줄이 같은 조각")
             self.assertNotIn("**", self.sent[0]["message"])
-        # 첫 줄이 한도 안이면 안내문을 포함한 첫 조각도 1200자 이내
+        # 안내문을 포함한 첫 조각도 바이트 한도 이내
         for p in self.sent:
-            self.assertLessEqual(len(p["message"]), 1200)
+            self.assertLessEqual(len(p["message"].encode("utf-8")), self.m.CHUNK_MAX_BYTES)
 
     def test_other_titles_unchanged(self):
         m = self.m
@@ -991,7 +1025,7 @@ class TestAnswerFormat(BotTestBase):
         m._send_ntfy_payload = self.real_send   # 실제 _send_ntfy_payload 로 로그 확인 (urlopen 은 mock)
         m.NTFY_TOKEN = "SECRET_TOKEN_VALUE"
         with mock.patch.object(m.urllib.request, "urlopen", lambda req, timeout=None: FakeResp()):
-            out = self._process("처리 질문\n둘째", self._answer(15))
+            out = self._process("처리 질문\n둘째", self._answer(5))
         self.assertIn("[질문 처리 시작] ID: q1 | 사용자: 가 | 질문: 처리 질문\n", out)
         self.assertNotIn("[질문 수신]", out)
         self.assertIn("[ntfy 발행 성공] 조각 (2/2) -> 가 | 제목: 답변 (2/2) - 처리 질문", out)

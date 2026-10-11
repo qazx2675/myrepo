@@ -177,6 +177,8 @@ CONTEXT_TTL_SEC = int(CONFIG.get("CONTEXT_TTL_SEC", 600))
 ANSWER_RESERVE = int(CONFIG.get("ANSWER_RESERVE", 3000))
 # 조각 발행 간격(초). ntfy 메시지 시각은 1초 단위라 같은 초에 들어가면 앱에서 순서가 뒤바뀔 수 있어 1.1초 이상 유지
 CHUNK_INTERVAL = max(float(CONFIG.get("CHUNK_INTERVAL_SEC", 1.2)), 1.1)
+# 조각 1개의 최대 크기(UTF-8 바이트). ntfy.sh 푸시 한도(직렬화 4000B)를 넘으면 앱에서 본문이 잘려 보인다
+CHUNK_MAX_BYTES = min(max(int(CONFIG.get("CHUNK_MAX_BYTES", 1000)), 300), 1300)
 HISTORY_TURNS = 3
 DOC_PATHS_CFG = CONFIG.get("DOC_PATHS", "")  # 세미콜론 구분 다중 문서
 DOC_DIR_CFG = CONFIG.get("DOC_DIR", "")      # 폴더 내 .md 전체
@@ -762,25 +764,35 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
     answer_topic = topic or NTFY_ANSWER_TOPIC
     feedback_topic = topic or NTFY_FEEDBACK_TOPIC
     label = label or LEGACY_USER
-    # 4096바이트 / 한글 약 1300자 분할 처리
-    max_chunk_chars = 1200
-    chunks = []
+    # ntfy.sh 는 푸시(FCM) 직렬화가 4000바이트를 넘으면 message 를 바이트 단위로 잘라 보낸다.
+    # 직렬화에 message 가 2번(안드로이드/iOS 복사본), 제목 3번, 버튼 2번 들어가므로
+    # 글자 수가 아니라 UTF-8 바이트 기준으로 조각을 나눈다 (한글 1자 = 3바이트).
+    def _nbytes(s):
+        return len(s.encode("utf-8"))
 
-    if len(header) + len(answer_text) <= max_chunk_chars:
-        chunks = [answer_text]
-    else:
-        lines = answer_text.split("\n")
-        cur_chunk = ""
-        for line in lines:
-            cap = max_chunk_chars - (len(header) if not chunks else 0)  # 첫 조각은 안내문 길이만큼 덜 채움
-            if len(cur_chunk) + len(line) + 1 > cap:
-                if cur_chunk:
-                    chunks.append(cur_chunk.strip())
-                cur_chunk = line + "\n"
-            else:
-                cur_chunk += line + "\n"
-        if cur_chunk.strip():
-            chunks.append(cur_chunk.strip())
+    def _cap():  # 첫 조각은 안내문 길이만큼 덜 채움
+        return max(CHUNK_MAX_BYTES - (_nbytes(header) if not chunks else 0), 200)
+
+    chunks = []
+    cur_chunk = ""
+    for line in answer_text.split("\n"):
+        pieces = [line]
+        if _nbytes(line) + 1 > _cap():  # 한 줄이 한도보다 길면 글자 단위로 분할
+            pieces, buf = [], ""
+            for ch in line:
+                if _nbytes(buf) + _nbytes(ch) + 1 > _cap():
+                    pieces.append(buf)
+                    buf = ""
+                buf += ch
+            if buf:
+                pieces.append(buf)
+        for piece in pieces:
+            if cur_chunk and _nbytes(cur_chunk) + _nbytes(piece) + 1 > _cap():
+                chunks.append(cur_chunk.strip())
+                cur_chunk = ""
+            cur_chunk += piece + "\n"
+    if cur_chunk.strip() or not chunks:
+        chunks.append(cur_chunk.strip())
     if header:
         chunks[0] = header + chunks[0]
 
