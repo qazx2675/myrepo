@@ -175,6 +175,8 @@ THINK_DROPPED = False  # 모델이 think 를 지원하지 않아 400 이 오면 
 
 CONTEXT_TTL_SEC = int(CONFIG.get("CONTEXT_TTL_SEC", 600))
 ANSWER_RESERVE = int(CONFIG.get("ANSWER_RESERVE", 3000))
+# 조각 발행 간격(초). ntfy 메시지 시각은 1초 단위라 같은 초에 들어가면 앱에서 순서가 뒤바뀔 수 있어 1.1초 이상 유지
+CHUNK_INTERVAL = max(float(CONFIG.get("CHUNK_INTERVAL_SEC", 1.2)), 1.1)
 HISTORY_TURNS = 3
 DOC_PATHS_CFG = CONFIG.get("DOC_PATHS", "")  # 세미콜론 구분 다중 문서
 DOC_DIR_CFG = CONFIG.get("DOC_DIR", "")      # 폴더 내 .md 전체
@@ -746,14 +748,17 @@ def _send_ntfy_payload(payload, idx, total_chunks, label=""):
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             _ = resp.read()
-        print(f"[ntfy 발행 성공] 조각 ({idx}/{total_chunks}) -> {label}")
+        print(f"[ntfy 발행 성공] 조각 ({idx}/{total_chunks}) -> {label} | 제목: {payload.get('title', '')}")
     except Exception as e:
         print(f"[ntfy 발행 실패] 조각 ({idx}/{total_chunks}): {e}")
 
 # ntfy 발행 (메시지 분할 및 역순 발행)
 # topic: 발행할 토픽(사용자 개인 토픽). 생략하면 단일/분리 토픽 모드의 답변 토픽.
 # label: 로그에 남길 사용자 이름 (토픽은 로그에 남기지 않음)
-def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None, feedback=True):
+# title_fn: (idx, total) -> 조각 제목. 지정하면 title 대신 사용
+# header: 첫 조각 맨 앞에만 붙일 안내문 (조각 경계에서 잘리거나 단독 조각이 되지 않음)
+def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None, feedback=True,
+                 title_fn=None, header=""):
     answer_topic = topic or NTFY_ANSWER_TOPIC
     feedback_topic = topic or NTFY_FEEDBACK_TOPIC
     label = label or LEGACY_USER
@@ -761,13 +766,14 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
     max_chunk_chars = 1200
     chunks = []
 
-    if len(answer_text) <= max_chunk_chars:
+    if len(header) + len(answer_text) <= max_chunk_chars:
         chunks = [answer_text]
     else:
         lines = answer_text.split("\n")
         cur_chunk = ""
         for line in lines:
-            if len(cur_chunk) + len(line) + 1 > max_chunk_chars:
+            cap = max_chunk_chars - (len(header) if not chunks else 0)  # 첫 조각은 안내문 길이만큼 덜 채움
+            if len(cur_chunk) + len(line) + 1 > cap:
                 if cur_chunk:
                     chunks.append(cur_chunk.strip())
                 cur_chunk = line + "\n"
@@ -775,6 +781,8 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
                 cur_chunk += line + "\n"
         if cur_chunk.strip():
             chunks.append(cur_chunk.strip())
+    if header:
+        chunks[0] = header + chunks[0]
 
     total_chunks = len(chunks)
 
@@ -797,7 +805,7 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
     if total_chunks == 1:
         payload = {
             "topic": answer_topic,
-            "title": title,
+            "title": title_fn(1, 1) if title_fn else title,
             "message": chunks[0],
             "tags": ["bot"]
         }
@@ -810,7 +818,7 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
         # 사용자가 위에서 아래로(1 -> 2 -> 3) 자연스럽게 읽을 수 있도록 배치
         indexed_chunks = list(enumerate(chunks, 1))
         for idx, chunk in reversed(indexed_chunks):
-            chunk_title = f"{title} ({idx}/{total_chunks})"
+            chunk_title = title_fn(idx, total_chunks) if title_fn else f"{title} ({idx}/{total_chunks})"
             payload = {
                 "topic": answer_topic,
                 "title": chunk_title,
@@ -820,10 +828,25 @@ def publish_ntfy(answer_text, q_id, title="🤖 답변", topic=None, label=None,
             if idx == total_chunks and feedback:
                 payload["actions"] = feedback_actions()
             _send_ntfy_payload(payload, idx, total_chunks, label)
-            time.sleep(0.8)
+            time.sleep(CHUNK_INTERVAL)
 
 # 사용자에게 보내는 오류 문구 (상세 원인은 errors.jsonl 에만 기록)
 ERROR_REPLY_TEXT = "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요"
+
+def _first_line(text):
+    """공백 제거 후 비어 있지 않은 첫 줄 (없으면 "")"""
+    return next((l.strip() for l in (text or "").splitlines() if l.strip()), "")
+
+# 답변 조각 제목: '답변 (i/N) - 질문 첫 줄(최대 30자)'
+def build_answer_title(question, idx, total):
+    q = _first_line(question)
+    if len(q) > 30:
+        q = q[:30] + "…"
+    head = "답변" if total == 1 else f"답변 ({idx}/{total})"
+    return f"{head} - {q}" if q else head
+
+# 봇 답변 제목 형식 (tags 외 2차 자기 메시지 판별용)
+ANSWER_TITLE_RE = re.compile(r"^답변(?: \(\d+/\d+\))?(?: - |$)")
 
 # 질문 처리 메인 로직
 def process_question(msg_id, question_text, user=None, topic=None, epoch=None):
@@ -831,7 +854,7 @@ def process_question(msg_id, question_text, user=None, topic=None, epoch=None):
     q_id = msg_id if msg_id else str(uuid.uuid4())[:8]
     if epoch is None:
         epoch = get_epoch(user)
-    print(f"\n[질문 수신] ID: {q_id} | 사용자: {user} | 질문: {question_text}")
+    print(f"\n[질문 처리 시작] ID: {q_id} | 사용자: {user} | 질문: {_first_line(question_text)}")
 
     history = get_history(user)
     res = query_llm(question_text, history=history)
@@ -890,10 +913,9 @@ def process_question(msg_id, question_text, user=None, topic=None, epoch=None):
         f"**같은 대화의 최근 {HISTORY_TURNS}턴까지 맥락이 이어집니다. 새 주제는 /reset 으로 초기화하세요"
         f" ({max(CONTEXT_TTL_SEC // 60, 1)}분 이상 질문이 없으면 자동 초기화).**\n\n"
     )
-    final_ans = disclaimer + ans
-
-    # ntfy 로 전송 (해당 사용자 토픽으로만)
-    publish_ntfy(final_ans, q_id, topic=topic, label=user)
+    # ntfy 로 전송 (해당 사용자 토픽으로만). 안내문은 첫 조각에만 붙는다
+    publish_ntfy(ans, q_id, topic=topic, label=user, header=disclaimer,
+                 title_fn=lambda i, n: build_answer_title(question_text, i, n))
 
 # 선입선출 큐 (전 사용자 공용, 단일 워커)
 JOB_QUEUE = queue.Queue()
@@ -1009,6 +1031,9 @@ def accept_question(msg_id, msg_text, user, topic):
         publish_ntfy("대화 맥락을 초기화했습니다", msg_id or "", title="초기화",
                      topic=topic, label=user, feedback=False)
         return
+    lines = msg_text.strip().splitlines()
+    shown = "\n".join([lines[0]] + ["    " + l for l in lines[1:]])  # 여러 줄이면 둘째 줄부터 들여쓰기
+    print(f"\n[질문 수신] 사용자: {user} | {datetime.now(KST).strftime('%H:%M:%S')} | 질문: {shown}")
     enqueue_question(msg_id, msg_text, user, topic)
 
 def handle_single_topic_event(msg_id, msg_text, event, user=None, topic=None):
@@ -1023,7 +1048,8 @@ def handle_single_topic_event(msg_id, msg_text, event, user=None, topic=None):
     title = event.get("title") or ""
 
     # 1. 봇 자신이 보낸 메시지인지 확인
-    if "bot" in tags or title.startswith("🤖") or title in ["오류 발생", "워밍업"]:
+    if ("bot" in tags or title.startswith("🤖") or title in ["오류 발생", "워밍업"]
+            or ANSWER_TITLE_RE.match(title)):
         return
 
     # 2. 피드백 메시지인지 확인 (👍/👎 버튼: 'good|bad <내 답변 ID>' 일 때만. 그 외는 일반 질문)
