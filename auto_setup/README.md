@@ -4,6 +4,7 @@ OS 설치(01) 완료 후 자동으로 OS 설정을 검사하고 결과를 공유
 
 - **1차(v0.1.0)**: 01 전달 → ping·준비확인 감시 → os_check 자동 실행 → code/wall 공유
 - **2차(v0.2.0)**: 양방향 동일 실행(os8_mgmt 단일 원본, os6_mgmt 는 원격 클라이언트), 이중체크, 완료기록, LDAP 백업/복원, 상태 TUI
+- **v0.7.0**: TUI `m` 변경 메뉴 (IP 변경·LDAP 변경·IP+LDAP·원복·auto.appl 원복, 엔진 호출) + 좁은 화면 줄바꿈 — 아래 「변경 작업」 참고
 
 ## 빌드 및 설치 방법
 
@@ -33,7 +34,9 @@ auto_setup/
 │   ├── manual_check.sh   ← 대화형 단계별 점검 (1~17단계)
 │   ├── run_e2e.sh        ← 1차 목업 E2E (85건)
 │   ├── run_e2e2.sh       ← 2차 목업 E2E (a~f, 191건)
-│   └── lib_e2e.sh        ← E2E 공용 함수·스텁 (gossh, ssh, wall)
+│   ├── lib_e2e.sh        ← E2E 공용 함수·스텁 (gossh, ssh, wall)
+│   ├── demo_change.sh / run_change_os.sh / run_change_lab.sh ← 변경 메뉴(m) 모의 환경 · RHEL 7/8/9 검증 · .58 실동작 (v0.7.0)
+│   └── lib_change.sh / fake_gossh.sh ← 변경 시험용 fixture 노드 · 가짜 gossh (v0.7.0)
 ├── testdata/             ← TUI 골든 파일, os_check 결과 샘플
 ├── 사용법.txt
 └── 문서 (README.md / CHANGELOG.md / ARCHITECTURE.md / WORKFLOW.md / workflow.svg / PR_CHECKLIST.md)
@@ -84,6 +87,8 @@ vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
 | `awx_dir` | `awxkit/dhcp.sh` 가 있는 awx_script 디렉터리 (autofs 동일 경로) | `os_check_sh` 와 같은 디렉터리의 `dhcp.sh` 만 후보 |
 | `ldap_share_dir` | LDAP 복원용 autofs 공유 경로. os8_mgmt·대상 서버가 모두 보는 곳이며 **대상 root 가 읽을 수 있어야 함(no_root_squash)** | 자동 복원 안 함(binddn 이 다르면 `수동 복원 필요` 로 표시) |
 | `awx_profile_1` ~ `awx_profile_9` | (v0.6.0, 선택) TUI `w` 로 AWX 를 실행할 때 고르는 프로파일 9개. 형식 `nodeinfo(y/n)\|OS값\|설명` (아래 「체크스크립트 단독 실행(x) · AWX 실행(w)」 참고) | 그 번호는 쓰지 않음. 프로파일이 하나도 없으면 `w` 는 질문 없이 AWX 를 그대로 실행 |
+| `enable_ip_change` · `enable_ldap_change` | (v0.7.0) TUI 변경 메뉴(`m`)의 IP·LDAP 항목을 켬. `y`·`yes`·`1`·`true` 만 켜짐 (「변경 작업」 참고) | 꺼짐 (`--admin` 이면 conf 와 무관하게 켜짐) |
+| `ip_engine` · `ldap_engine` | (v0.7.0) 변경 엔진 실행 파일 전체 경로 | auto_setup 과 같은 디렉터리 → PATH 순으로 찾음 |
 
 #### os_check 2개, 01 1개
 
@@ -138,12 +143,13 @@ cd /root/로컬경로/auto_setup
 # 2. 빌드만 (테스트용)
 go build -o auto_setup .
 
-# 3. 빌드 + /usr/local/bin 설치 + cron(매분 ensure) + tmpfiles 등록 (root, 멱등)
+# 3. 빌드 + /usr/local/bin 설치 + cron(매분 ensure) + tmpfiles 등록 + 변경 엔진 2개·conf 샘플 (root, 멱등)
 bash setup.sh
 
 # 4. os6 용 빌드 (Go 1.20 서버 .60 에서, 정적 바이너리)
 bash build_os6.sh
 # → auto_setup_os6 생성 (os6_mgmt 의 os6_autosetup 경로에 'auto_setup' 이름으로 배치, probe 용)
+# (v0.7.0) 같은 실행에서 ../ip_change/bin/ip-change-engine_os6, ../ldap_setting/bin/ldap-config-engine_os6 도 빌드 (소스가 있을 때)
 # (Go 가 없는 회사 환경은 빌드 불필요: 저장소에 빌드 완료된 auto_setup_os6 (go1.20 정적, 변수 빈 값) 가 있으니 probe 용으로 그대로 배치)
 ```
 
@@ -167,14 +173,17 @@ bash conf/update_v0.4.0.sh --undo
 - 업데이트는 앵커(코드 줄) 기준으로 삽입합니다. 앵커 줄이 현장에서 바뀌었거나 지워졌으면 **파일을 건드리지 않고 중단**하고 위치를 알려 줍니다. CRLF 사본도 자동으로 LF 로 처리합니다.
 - 백업은 `conf/auto_setup.conf.bak.<시각>`, 되돌리기 기록은 `conf/.update_journal` 에 남습니다(커밋 제외).
 - **v0.6.0 업데이트**: `bash conf/update_v0.6.0.sh` (미리보기 `--dry`, 되돌리기 `--undo`). 새 변수는 선택 항목 `awx_profile_1`~`9` 뿐입니다. 업데이트 뒤 설정 변경 확인은 아래 「주의사항 (Disclaimer)」 을 따르십시오.
+- **v0.7.0 업데이트**: `bash conf/update_v0.7.0.sh` (미리보기 `--dry`, 되돌리기 `--undo`). 새 변수는 선택 항목 `enable_ip_change`, `enable_ldap_change`, `ip_engine`, `ldap_engine` 4개이며 모두 빈 값(꺼짐)으로 추가됩니다. 앵커는 `ldap_share_dir=` 줄입니다.
 - v0.4.1 은 설정 파일 변경이 없습니다(바이너리만 변경, `update_v0.4.0.sh` 가 최신 업데이트 스크립트). v0.4.0 의 설정 파일 변경은 `os6_mgmt` 위 안내 주석 1줄뿐이고 신규 변수는 없습니다. 동작 변경은 바이너리에 있으므로 3·4 단계가 필수입니다.
 
 ### setup.sh 수행 내용
 
-1. `go build -o auto_setup .` (main.go 포함 전체 빌드)
+1. `go build -o auto_setup .` (main.go 포함 전체 빌드). `conf/auto_setup.conf` 가 있으면 `/etc/auto_setup/auto_setup.conf` 로 설치 (기존 파일을 덮어씀)
 2. `install -m 0755 auto_setup /usr/local/bin/auto_setup`
 3. crontab 에 `* * * * * /usr/local/bin/auto_setup ensure >/dev/null 2>&1` 등록 (중복 방지)
 4. `/etc/tmpfiles.d/auto_setup.conf` 에 `x /tmp/auto_setup` 등록 (무기한 감시 작업이 tmp 정리로 지워지지 않도록)
+5. (v0.7.0) `ip-change-engine`·`ldap-config-engine` 을 `GOPROXY=off CGO_ENABLED=0` 으로 빌드해 `/usr/local/bin` 에 설치 (소스가 없으면 건너뜀)
+6. (v0.7.0) `ip_change.conf`·`ldap_config.conf`(600)·`assets.txt` 샘플을 `/etc/auto_setup/` 에 복사 — 이미 있는 파일은 덮어쓰지 않음
 
 ## 사용 방법
 
@@ -221,6 +230,7 @@ codes/<code>.txt 생성 (wall 알림은 v0.4.3 부터 끔 — 결과는 TUI·`au
 |---|---|
 | (인자 없음) | 현재 상태 리포트. tty 면 TUI, 아니면 텍스트 표 |
 | `--plain` | 텍스트 표로 출력 (색 없음) |
+| `--admin` | TUI 의 변경 메뉴(`m`)를 conf 와 상관없이 켬 (TUI 전용, 데몬·`--plain`·`request` 에는 영향 없음) |
 | `-h`, `--help` | 사용법 출력 |
 | `--start` \| `start` | 데몬 기동 (이미 실행 중이면 안내) — os8_mgmt 에서만 |
 | `--stop` \| `stop` | 데몬 종료 (pid 확인 후 SIGTERM, 대기) — os8_mgmt 에서만 |
@@ -267,6 +277,7 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 | 공통 | r | 바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동 갱신: 로컬 2초, 원격 10초. 연타는 5초에 1회만 요청) |
 | 공통 | x | 체크스크립트 단독 실행 (user·호스트 입력 → t/c, 기록 안 남김) — 아래 참고 |
 | 공통 | w | AWX 실행 (awx_dir 의 01 을 이 터미널에서 실행, 프로파일 선택) — 아래 참고 |
+| 공통 | m | 변경 작업 메뉴 (IP 변경·LDAP 변경·IP+LDAP·원복·auto.appl 원복). conf `enable_ip_change`/`enable_ldap_change` 또는 `--admin` 이 있을 때만, os8_mgmt 에서만 실행 — 아래 「변경 작업」 참고 |
 | 공통 | Ctrl+C / Ctrl+Z | 무시 (종료는 q) |
 | 공통 | ? | 도움말 (아무 키나 누르면 닫힘) |
 
@@ -325,6 +336,94 @@ awx_profile_2=n|2026-OPC_MDP|nodeinfo 미사용, OPC_MDP
 > **부하**: 대부분 os8_mgmt 에서 쓰면 부하가 거의 없습니다. 원격(os6) 화면은 자동 갱신이 **10초마다 gossh 1회**입니다.
 
 **모의 테스트로 확인**: `bash test/demo_flow.sh` 로 모의 환경을 만들고(데모 conf 는 awx_profile_1·2 가 정상, 3 은 일부러 틀린 예), `source /tmp/as_demo_flow/env.sh` 후 `auto_setup` 을 실행해 `x` 로 127.0.0.11/12/14 를 붙여넣고 `t` 또는 `c`, `w` 로 auto `y` → 프로파일 1 을 골라 보고 `Ctrl+X` 취소도 눌러 보십시오. 끝나면 `bash test/demo_flow.sh --stop`.
+
+### 변경 작업 (IP·LDAP 변경·원복, v0.7.0)
+
+화면 1·2 어디서나 `m` 키로 변경 메뉴를 엽니다. IP 변경·LDAP 변경·원복은 노드 설정을 바꾸는 작업이므로 **os8_mgmt 에서만** 실행하며, 실행 전에 미리보기와 `yes` 확인을 거칩니다. 엔진(`ip-change-engine`, `ldap-config-engine`)은 바이너리로 호출하며 auto_setup 은 엔진 코드를 흡수하지 않습니다. 두 도구는 계속 독립적으로 쓸 수 있습니다.
+
+**메뉴** (켜진 항목만 표시, 번호는 고정)
+
+| 번호 | 항목 | 표시 조건 |
+|---|---|---|
+| `1` | IP 변경 | `enable_ip_change` |
+| `2` | LDAP 변경 | `enable_ldap_change` |
+| `3` | IP+LDAP 변경 (IP 먼저, IP 실패 호스트는 LDAP 건너뜀) | 둘 다 |
+| `4` | 원복 (IP · LDAP · 둘 다, 가장 최근 백업) | 둘 중 하나 |
+| `5` | auto.appl 원복 (LDAP 적용 후 대기 중인 auto.appl 반영) | `enable_ldap_change` |
+
+**사용 방법 (TUI)**
+
+1. `m` → 번호 선택. `Esc`/`q` 로 닫기
+2. `4` 원복이면 종류 선택 (IP / LDAP / 둘 다)
+3. user 선택 (`x` 와 같은 메뉴, 번호 또는 이름)
+4. `2`·`3` 이면 infra 선택 (`ldap_config.conf` 의 `infra.<이름>.*` 목록에서 번호)
+5. 대상을 입력하고 `Ctrl+D`
+   - **IP (`1`·`3`)**: 한 줄에 `hostname 새IP`. 예) `web01 10.1.2.11`. 공백·탭·쉼표·`=`·`->` 구분을 모두 쓸 수 있습니다. GW 는 새 IP 의 마지막 옥텟을 `1` 로 바꾼 값 (`10.1.2.1`). 같은 호스트가 두 번 나오면 마지막 값을 쓰고 경고합니다.
+   - **LDAP (`2`·`3`)**: hostname 목록 (공백·쉼표·탭·`|`). site 는 `assets.txt` 로 판정하고, 없으면 `ldap_config.conf` 의 `default_site`, 그것도 없으면 그 호스트는 건너뜁니다.
+   - **원복·auto.appl 원복 (`4`·`5`)**: user 의 이전 기록으로 대상이 자동으로 채워집니다. 그대로 `Ctrl+D` 하거나, 새로 입력·붙여넣으면 목록을 대체합니다 (Backspace 로 편집).
+6. (`2`·`3`) LDAP dry-run 이 자동으로 실행되어 바뀔 내용을 보여 줍니다. 노드는 바뀌지 않습니다.
+7. 미리보기에서 **`yes` 를 정확히 입력**하고 Enter 를 누릅니다. 다른 입력이면 아무것도 바꾸지 않고 취소합니다. 진행 중 job 과 겹치는 호스트는 빨간 경고로 표시됩니다.
+8. 실행 중에는 `q`/`Esc` 가 무시됩니다. 취소는 `Ctrl+X` → `y` 입니다 (일부 호스트만 바뀌었을 수 있음).
+9. 결과 화면이 열립니다 (`↑↓` 스크롤, `q`/`Esc` 닫기). 맨 아래에 기록 파일 경로가 나옵니다.
+
+**실행 경로 (os8 → os6)**
+
+- 모든 호스트는 os8_mgmt 에서 먼저 실행합니다.
+- 응답이 없는 호스트만 `os6_mgmt` 경유로 한 번 더 시도합니다 (`os6_mgmt`·`os6_gossh` 가 설정된 경우). 이미 route=os6 로 알려진 호스트는 처음부터 os6 경유입니다.
+- 경유는 엔진 `-gossh` 에 넘기는 임시 래퍼 (작업 디렉터리 0700, 끝나면 삭제)로 합니다. 비밀번호 인자 `-p` 는 쓰지 않습니다.
+- 원복은 엔진 기본값(가장 최근 백업)을 씁니다. 특정 백업 시점으로 되돌리려면 엔진을 단독으로 실행하십시오 (`사용법.txt` 13절).
+
+**기록과 로그**
+
+- 기록: `<상태 디렉터리>/changes/<user>/<YYYYmmddHHMMSS>_<kind>.json`. 상태 디렉터리는 `/tmp/auto_setup` (또는 `AUTO_SETUP_DIR`). 디렉터리 0700, 파일 0600. `kind` 는 `ip` · `ldap` · `both` · `rollback-ip` · `rollback-ldap` · `rollback-both` · `appl` 중 하나입니다.
+- 기록에는 호스트별 결과가 들어갑니다 (IP·LDAP·auto.appl 칸, 기존/새 IP, GW, 경로 os8|os6, 상세). bindpw 와 gossh 명령줄은 들어가지 않습니다.
+- `auto_setup.log` 에는 `변경 메뉴 <kind>: user <user> 대상 N대 OK a FAIL b` 한 줄이 남습니다.
+- 원복이 성공하면 이전 적용 기록의 해당 호스트에 `ip_rolled_back`·`ldap_rolled_back` 을 표시하고 auto.appl 대기(`appl_pending`)를 해제합니다. 그래서 다음 원복 때 같은 호스트가 다시 대상으로 잡히지 않습니다.
+
+**conf 키** (`/etc/auto_setup/auto_setup.conf` 등, 전부 비우면 꺼짐)
+
+| 키 | 기본값 | 의미 |
+|---|---|---|
+| `enable_ip_change` | 비움 (꺼짐) | `y`·`yes`·`1`·`true` 면 메뉴 `1` (둘 다 켜지면 `3` 도), 원복의 IP 항목 표시 |
+| `enable_ldap_change` | 비움 (꺼짐) | 메뉴 `2` (둘 다 켜지면 `3`), `5`, 원복의 LDAP 항목 표시 |
+| `ip_engine` | 비움 | `ip-change-engine` 전체 경로. 비우면 auto_setup 과 같은 디렉터리 → PATH |
+| `ldap_engine` | 비움 | `ldap-config-engine` 전체 경로. 같은 규칙 |
+
+변경에 쓰는 파일은 auto_setup.conf 를 읽은 디렉터리에서 찾습니다 (없으면 `/etc/auto_setup/`). `setup.sh` 가 샘플을 설치하며 이미 있는 파일은 덮어쓰지 않습니다.
+
+| 파일 | 내용 |
+|---|---|
+| `ip_change.conf` | ifcfg 탐색 경로 (`network_scripts_dir`, 기본 `/etc/sysconfig/network-scripts`) 등 |
+| `ldap_config.conf` | `infra.<이름>.*` (uri·binddn·bindpw 등), `default_site`. 퍼미션 600 |
+| `assets.txt` | `hostname<TAB>site`. LDAP 의 site 판정에 씀 |
+
+**`--admin`**: `auto_setup --admin` 으로 TUI 를 띄우면 conf 설정과 상관없이 메뉴 `1`~`5` 가 모두 나옵니다. 데몬·`--plain`·`request` 명령에는 영향이 없습니다. os6_mgmt 원격 TUI 에서 `m` 을 누르면 "os8_mgmt 에서 실행하세요" 안내만 나오고 실행은 되지 않습니다.
+
+**설치·적용 절차 (os8_mgmt)**
+
+```bash
+bash setup.sh                           # auto_setup + 엔진 2개 빌드·설치 + conf 샘플 (기존 /etc/auto_setup 파일은 유지)
+auto_setup --restart                    # 옛 바이너리로 도는 데몬 재기동
+vi /etc/auto_setup/auto_setup.conf      # enable_ip_change=y, enable_ldap_change=y 등 (기존 설정 파일은 자동으로 바뀌지 않음)
+vi /etc/auto_setup/ip_change.conf       # 현장 값으로 수정
+vi /etc/auto_setup/ldap_config.conf     # infra 값·bindpw 입력
+vi /etc/auto_setup/assets.txt           # hostname<TAB>site
+chmod 600 /etc/auto_setup/ldap_config.conf
+```
+
+- 저장소의 `conf/auto_setup.conf` 가 있는 상태로 `setup.sh` 를 실행하면 `/etc/auto_setup/auto_setup.conf` 가 그 내용으로 덮어써지므로, 새 키는 저장소 쪽 `conf/auto_setup.conf` 에 넣으십시오.
+- os6_mgmt 에는 변경 메뉴 설치가 필요 없습니다. `ip_change/bin/ip-change-engine_os6`·`ldap_setting/bin/ldap-config-engine_os6` 는 RHEL 6 에서 엔진을 단독으로 실행할 때 쓰는 정적 바이너리이며 `build_os6.sh` 가 빌드합니다.
+
+**주의사항 (변경 작업)**
+
+- **설정 변경 도구입니다.** 적용·원복 뒤 무작위 몇 대에 직접 접속해 실제로 반영됐는지 확인하십시오.
+- **IP**: ifcfg 파일만 바꿉니다. 반영은 네트워크 재시작 또는 재부팅 뒤이며, 이 도구는 네트워크를 재시작하지 않습니다. 결과 화면에도 이 안내가 나옵니다.
+- **노드 서비스 재시작 없음**: LDAP 엔진 호출 (dry-run·적용·원복) 에는 항상 `-no-restart` 가 붙어 nslcd·sssd·autofs·ntpd·chronyd 를 재시작하지 않습니다. 새 설정이 서비스에 반영되는 시점은 사용자가 정합니다.
+- **auto.appl**: LDAP 적용 시 새 `auto.appl` 은 `/etc/auto.appl.bak` 에 대기합니다. 메뉴 `5` 를 실행해야 반영됩니다. 그 전까지 `ldap_check` 는 auto.appl 을 읽지 못해 FAIL 로 나올 수 있습니다.
+- **bindpw**: `ldap_config.conf` 에만 있고 퍼미션은 600 이어야 합니다. 이 파일은 커밋하지 않습니다 (`.gitignore` 제외). 화면·기록·로그·임시 파일에 남기지 않으며 엔진의 `-print-script` 는 호출하지 않습니다. 다만 LDAP 엔진은 적용·원복 스크립트를 base64 로 인코딩해 gossh 명령줄에 싣기 때문에, os8_mgmt·os6_mgmt·대상 서버의 `ps` 에 그 base64 문자열이 잠깐 보일 수 있습니다. 이는 ldap_setting 의 기존 설계이며 이번 버전에서 바꾸지 않았습니다.
+- **진행 중 job**: 변경 대상이 추적 중인 job 의 호스트이면 미리보기에 경고가 나옵니다. IP 가 바뀌면 그 job 의 추적이 끊길 수 있습니다. job·snapshot·데몬은 건드리지 않습니다.
+- **취소**: `Ctrl+X` → `y` 로 중단하면 이미 끝난 호스트는 바뀐 상태로 남습니다. 결과 화면과 기록에 호스트별 결과가 남습니다.
+- **검증 범위**: RHEL 7·9 실장비 동작은 fixture 검증까지입니다. 실장비 확인 체크리스트는 `사용법.txt` 13절에 있습니다.
 
 ### 실행 모드: 설정체크 + 설정수정 / 설정체크만 (v0.5.0)
 
@@ -465,6 +564,11 @@ bash test/run_e2e2.sh b e      # 시나리오 지정
 # E2E 스크래치 보존 (로그 확인)
 KEEP_SCRATCH=1 bash test/run_e2e2.sh f
 
+# 변경 메뉴(m) 검증 (v0.7.0): RHEL 7/8/9 fixture 판정·-no-restart 확인 / .58 자기 자신 실동작 (접속 불가면 종료코드 3) / 모의 환경
+bash test/run_change_os.sh      # 끝 줄 PASS=<n> FAIL=<m>
+bash test/run_change_lab.sh     # 실제 gossh 로 자기 자신 접속 — fixture 경로만 변경, 실제 /etc 는 건드리지 않음
+bash test/demo_change.sh        # 모의 환경 준비 (사용법은 스크립트 상단 참고), --stop 으로 정리
+
 # awx_script 테스트 (54건)
 bash ../awx_script/test/run_tests.sh
 ```
@@ -523,6 +627,9 @@ bash ../awx_script/test/run_tests.sh
 | `runner.go` | os_check 실행(-auto), os6 gossh 래퍼, code 생성, wall |
 | `ensure.go` | ensure 하위명령: flock + setsid + 데몬 기동 |
 | `log.go` / `notify.go` / `iface.go` | 로그 / 알림(wall 은 기본 꺼짐, 코드는 유지) / 인터페이스(Pinger·Checker·Runner·Notifier·Clock·LdapBackup·Second) |
+| `change.go` · `changerun.go` · `changerec.go` | m 변경 메뉴: 상태기계·입력 정규화·bindpw 마스킹 / 엔진·gossh 실행, os6 경유, 엔진 인자(`-no-restart`) / user 별 기록·원복 자동 채움 (v0.7.0) |
+| `change_render.go` · `change_tui.go` · `change_s6_test.go` | 변경 화면 문자열(줄바꿈) · `m` 키 연결 · RHEL 7/8/9 fixture 교차 점검 (v0.7.0) |
+| `계획서_v0.7.md` | v0.7.0 명세 (확정 사항 §1, 단계 §3) |
 | `*_test.go` / `testdata/` | 단위 테스트·TUI 골든 |
 | `test/manual_check.sh` | 대화형 점검 1~17단계 |
 | `test/run_e2e.sh` / `test/run_e2e2.sh` / `test/lib_e2e.sh` | 1차 / 2차 목업 E2E / 공용 함수 |
@@ -545,6 +652,7 @@ bash ../awx_script/test/run_tests.sh
 - `AUTO_SETUP_NOW` 는 테스트 전용입니다(운영에서 설정하면 snapshot 시각이 어긋남).
 - 원격 클라이언트 모드의 gossh 호출에는 **시간 제한이 없습니다**(os8_mgmt 가 응답하지 않으면 대기).
 - 2차 체크는 설정(set)을 한 번 더 적용할 수 있습니다(`os6_os_check_sh="-"` 로 끔).
+- (v0.7.0) 변경 메뉴(`m`)의 LDAP 엔진은 적용·원복 스크립트를 base64 로 gossh 명령줄에 실으므로 `ps` 에 base64 문자열이 잠깐 보일 수 있습니다 (ldap_setting 의 기존 설계). 변경 메뉴 RHEL 7·9 실장비 동작은 fixture 검증까지입니다.
 
 ## 주의사항 (Disclaimer)
 
@@ -552,7 +660,7 @@ bash ../awx_script/test/run_tests.sh
 
 **설정 변경 후 반드시 다음을 확인하세요:**
 
-1. 설정 변경 스크립트이므로, **설정 변경 후 랜덤한 서버 몇 대를 선택하여 실제로 변경되었는지 확인하세요.** LDAP 복원·2차 체크도 서버 설정을 바꿉니다.
+1. 설정 변경 스크립트이므로, **설정 변경 후 랜덤한 서버 몇 대를 선택하여 실제로 변경되었는지 확인하세요.** LDAP 복원·2차 체크·변경 메뉴(`m`)도 서버 설정을 바꿉니다.
 2. 데몬이 상시 실행되므로 감시 대상이 많거나 os_check 가 오래 걸리면 리소스를 모니터링하세요.
 3. 무기한 감시 작업은 `auto_setup cancel` 로 종료할 때까지 계속되므로, 필요시 `jobs/done/` 을 확인해 정리하세요.
 4. LDAP 백업(`ldapbak/`)에는 bindpw 가 포함된 원본 설정이 있으므로 작업 종료 후 수동 삭제를 권장합니다.
@@ -572,6 +680,9 @@ auto_setup
 
 # 데몬 제어 (os8_mgmt)
 auto_setup --restart
+
+# 변경 메뉴(m)를 conf 없이 TUI 에서 켜기 (os8_mgmt, 데몬에는 영향 없음)
+auto_setup --admin
 
 # 작업별 상태 / 4자리 code 결과 / 취소
 auto_setup status

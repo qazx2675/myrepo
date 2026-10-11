@@ -2,11 +2,13 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeOneoff struct {
@@ -251,5 +253,250 @@ func TestCloseViewRemovesDir(t *testing.T) {
 	}
 	if _, err := os.Stat(sub); !os.IsNotExist(err) {
 		t.Error("임시 디렉터리가 남음")
+	}
+}
+
+// ---- 좁은 화면 줄바꿈 (S5b): x(체크스크립트 단독 실행)·w(AWX 실행) 화면 ----
+
+const (
+	wrapUser = "kim.donghyeon-with-a-very-long-account-name-for-wrapping-test_0123456789"
+	wrapHost = "compute-rack-abcdefghijklmnopqrstuvwxyz-0123456789-and-a-very-long-suffix-without-spaces"
+	wrapDir  = "/opt/hpc/awx/very/long/directory/name/for/the/awx_nodeinfo_scripts/current"
+)
+
+var wrapNow = time.Unix(1700000000, 0)
+
+type wrapCase struct {
+	name string
+	text string
+}
+
+func wrapMenu(n int) []string {
+	m := []string{"1) alice", "2) bob  (홍길동 책임 - 인프라팀 / 설정 담당)",
+		"3) " + wrapUser + "  (아주 긴 설명이 붙은 사용자 항목입니다 - 줄바꿈 확인용)"}
+	for i := 4; i <= n; i++ {
+		m = append(m, fmt.Sprintf("%d) user%02d  (설명 %d)", i, i, i))
+	}
+	return m
+}
+
+// oneoffWrapRenders: x·w 의 user 메뉴/이름 입력, 호스트 입력(일반·AWX), 모드 선택, 실행 중(취소 확인 포함), 결과 창 렌더
+func oneoffWrapRenders(t *testing.T, width, height int, color bool) []wrapCase {
+	t.Helper()
+	oldDir := awx_dir
+	awx_dir = wrapDir
+	t.Cleanup(func() { awx_dir = oldDir })
+
+	logDir := t.TempDir()
+	var lg strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&lg, "[%02d] %s 점검 중 — %s\n", i, wrapHost, strings.Repeat("긴 로그 줄 ", 6))
+	}
+	os.WriteFile(filepath.Join(logDir, "os_check.log"), []byte(lg.String()), 0644)
+	proc := &fakeOneoff{dir: logDir, done: make(chan struct{})}
+
+	var many strings.Builder
+	for i := 0; i < 80; i++ {
+		fmt.Fprintf(&many, "node%03d.cluster.example.com ", i)
+	}
+	awxIn := "h1 h2\n" +
+		"10.0.0.1 255.255.255.0 10.0.0.254 " + wrapHost + " rhel8 x86 gpu ib 100g y n 비고\n" +
+		"10.0.0.2 255.255.255.0 10.0.0.254 node-b rhel8 x86 gpu ib 100g y n " + strings.Repeat("긴비고 ", 12) + "끝"
+	runLong := &oneoffState{step: ooRun, user: wrapUser, hosts: make([]string, 40), proc: proc, started: wrapNow.Add(-75 * time.Second),
+		msg: "실행 중에는 닫을 수 없습니다 — 취소는 Ctrl+X"}
+	var states []wrapCase
+	add := func(name string, o *oneoffState) {
+		states = append(states, wrapCase{name, renderOneoff(o, wrapNow, width, height, color)})
+	}
+	add("user-menu", &oneoffState{step: ooUser, menu: wrapMenu(3), in: []rune("3"), msg: longMsg})
+	add("user-menu-many", &oneoffState{step: ooUser, menu: wrapMenu(60), in: []rune("57")})
+	add("user-name", &oneoffState{step: ooUser, in: []rune(wrapUser + wrapUser),
+		msg: "user 메뉴를 찾을 수 없습니다 (awx_dir 의 01 user_route 확인) — user 이름을 직접 입력하세요"})
+	add("hosts", &oneoffState{step: ooHosts, user: wrapUser,
+		in: []rune("h1,h2 h3|h1\n" + wrapHost + " h4 h5\n" + strings.Repeat("host-abc ", 12) + "tail-END-0123")})
+	add("hosts-many", &oneoffState{step: ooHosts, user: "bob", in: []rune(many.String() + "\n" + wrapHost + "-LAST")})
+	add("hosts-awx", &oneoffState{step: ooHosts, user: wrapUser, awx: true, in: []rune(awxIn)})
+	add("hosts-awx-empty", &oneoffState{step: ooHosts, user: "bob", awx: true, msg: longMsg})
+	add("user-awx", &oneoffState{step: ooUser, awx: true, in: []rune(wrapUser), menu: wrapMenu(3)})
+	add("mode", &oneoffState{step: ooMode, user: wrapUser, hosts: make([]string, 12)})
+	add("run", runLong)
+	ask := *runLong
+	ask.cancelAsk = true
+	add("run-cancel", &ask)
+
+	v := &viewState{kind: viewOneoff, done: true, status: "완료 (rc=0)",
+		title: fmt.Sprintf("체크스크립트 단독 실행 결과 [%s] - user %s %d대", modeLabel(""), wrapUser, 40),
+		lines: []string{"작업 : 설정체크 + 설정수정", wrapHost + " : FAIL ntp 설정이 서버와 다릅니다 (기대값 chrony, 현재값 ntpd) — 수정 후 다시 확인",
+			"h2 : ok", "최종 결과 : NO FAIL"}}
+	states = append(states, wrapCase{"result", renderView(v, width, height, color)})
+	return states
+}
+
+func checkWrapLayout(t *testing.T, what string, w, h int, color bool, r string) {
+	t.Helper()
+	lines := strings.Split(r, "\n")
+	if h > 0 && len(lines) > h {
+		t.Fatalf("%s 폭 %d 높이 %d: %d줄로 높이 초과\n%s", what, w, h, len(lines), stripANSI(r))
+	}
+	for _, l := range lines {
+		p := stripANSI(l)
+		if strWidth(p) > w {
+			t.Fatalf("%s 폭 %d color=%v: 폭 초과(%d): %q", what, w, color, strWidth(p), p)
+		}
+		if w >= 60 && strings.Contains(p, "…") {
+			t.Fatalf("%s 폭 %d color=%v: … 로 잘림: %q\n%s", what, w, color, p, stripANSI(r))
+		}
+		if i := strings.LastIndex(l, "\x1b["); i >= 0 && !strings.HasPrefix(l[i:], "\x1b[0m") {
+			t.Fatalf("%s 폭 %d: 줄 끝 리셋 없음: %q", what, w, l)
+		}
+	}
+}
+
+// 폭 ≥ 60 이면 … 로 잘리지 않고 어떤 줄도 폭을 넘지 않는다 (40칸도 폭은 넘지 않는다)
+func TestOneoffLayoutNoEllipsis(t *testing.T) {
+	for _, w := range []int{40, 60, 61, 79, 80, 120} {
+		for _, color := range []bool{false, true} {
+			for _, h := range []int{0, 24, 40} {
+				for _, c := range oneoffWrapRenders(t, w, h, color) {
+					checkWrapLayout(t, "x/w "+c.name, w, h, color, c.text)
+				}
+			}
+		}
+	}
+}
+
+// 입력 줄(커서가 있는 마지막 줄)·실행 중 로그의 끝은 목록이 넘쳐도 화면 안에 남는다
+func TestOneoffLayoutKeepsInputVisible(t *testing.T) {
+	squash := func(s string) string { return strings.Join(strings.Fields(stripANSI(s)), "") }
+	want := map[string]string{
+		"user-menu-many": "57_", "user-name": wrapUser[len(wrapUser)-12:] + "_", "hosts": "tail-END-0123_",
+		"hosts-many": "-LAST_", "hosts-awx": "끝_", "user-awx": wrapUser[len(wrapUser)-12:] + "_", "run": "긴로그줄",
+	}
+	for _, w := range []int{40, 60, 80, 120} {
+		for _, h := range []int{14, 24} {
+			for _, c := range oneoffWrapRenders(t, w, h, false) {
+				if tail, ok := want[c.name]; ok && !strings.Contains(squash(c.text), tail) {
+					t.Errorf("%s 폭 %d 높이 %d: %q 가 화면 밖\n%s", c.name, w, h, tail, c.text)
+				}
+			}
+		}
+	}
+	// 로그는 최근 줄(29번)이 보이고, 생략된 앞쪽은 안내 줄로 표시. user 메뉴는 처음부터 보이고 아래를 생략 표시
+	for _, c := range oneoffWrapRenders(t, 60, 24, false) {
+		if c.name == "run" && (!strings.Contains(c.text, "[29]") || !strings.Contains(c.text, "(위 ")) {
+			t.Errorf("실행 중 로그 꼬리/생략 안내 이상:\n%s", c.text)
+		}
+		if c.name == "run" { // 생략 안내 바로 아래는 로그 한 줄의 처음 (줄바꿈된 줄 중간에서 시작하지 않음)
+			lines := strings.Split(c.text, "\n")
+			for i, l := range lines {
+				if strings.Contains(l, "(위 ") && !strings.HasPrefix(lines[i+1], " [") {
+					t.Errorf("로그가 줄 중간에서 시작: %q\n%s", lines[i+1], c.text)
+				}
+			}
+		}
+		if c.name == "user-menu-many" && (!strings.Contains(c.text, "1) alice") || !strings.Contains(c.text, "(아래 ")) {
+			t.Errorf("user 메뉴 처음/생략 안내 이상:\n%s", c.text)
+		}
+	}
+}
+
+// 한 줄에 들어가는 화면은 종전과 같은 출력 (모드 선택 화면 전체를 그대로 비교)
+func TestOneoffLayoutWideSameAsBefore(t *testing.T) {
+	o := &oneoffState{step: ooMode, user: "alice", hosts: []string{"h1", "h2", "h3"}}
+	got := renderOneoff(o, wrapNow, 80, 10, false)
+	sep := strings.Repeat("-", 80)
+	want := strings.Join([]string{
+		" 체크스크립트 단독 실행 - 모드 선택", sep,
+		" user alice   호스트 3대", " ",
+		"   t 설정체크만 (환경설정 수정 안 함)", "   c 설정체크 + 설정수정 (환경설정 수정함)",
+		"", "", sep, " t / c 를 누르면 바로 실행합니다  Esc 취소"}, "\n")
+	if got != want {
+		t.Errorf("모드 선택 화면이 종전과 다름\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+	// 색 on: t 줄은 초록, c 줄의 설정수정은 빨강
+	c := renderOneoff(o, wrapNow, 80, 10, true)
+	if !strings.Contains(c, "\x1b[32m   t 설정체크만 (환경설정 수정 안 함)\x1b[0m") ||
+		!strings.Contains(c, "\x1b[32m   c 설정체크 + \x1b[0m\x1b[1;31m설정수정 (환경설정 수정함)\x1b[0m") {
+		t.Errorf("모드 색:\n%s", goldenText(c))
+	}
+	u := &oneoffState{step: ooUser, in: []rune("ali")}
+	lines := strings.Split(renderOneoff(u, wrapNow, 80, 8, false), "\n")
+	if lines[2] != " user 이름 입력 > ali_" || len(lines) != 8 {
+		t.Errorf("user 입력 화면:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+// 호스트 에코는 종전의 이어 붙이기(폭 안에서 호스트 단위로 다음 줄)와 같은 줄바꿈
+func TestOneoffLayoutHostEchoSameAsPacking(t *testing.T) {
+	hosts := []string{"web01", "web02-long-name", "db1", "node-0001.example.com", "a", "bb", "ccc", "gpu-node-000123.cluster", "x",
+		"login1", "login2", "storage-a.hpc.example.com", "n7", "n8", "n9"}
+	pack := func(width int) []string { // 종전 구현 그대로 (본문 앞 한 칸 + 두 칸 들여쓰기)
+		line := ""
+		var rows []string
+		for _, h := range hosts {
+			if line != "" && strWidth(line)+1+strWidth(h) > width-3 {
+				rows = append(rows, "   "+line)
+				line = ""
+			}
+			if line != "" {
+				line += " "
+			}
+			line += h
+		}
+		if line != "" {
+			rows = append(rows, "   "+line)
+		}
+		return rows
+	}
+	for w := 40; w <= 130; w += 9 {
+		o := &oneoffState{step: ooHosts, user: "u", in: []rune(strings.Join(hosts, "\n"))}
+		var got []string
+		in := false
+		for _, l := range strings.Split(renderOneoff(o, wrapNow, w, 200, false), "\n") {
+			switch {
+			case strings.HasPrefix(l, " 입력된 호스트 "):
+				in = true
+			case in && l == " ":
+				in = false
+			case in:
+				got = append(got, l)
+			}
+		}
+		if want := pack(w); strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("폭 %d 호스트 에코 불일치\n--- got ---\n%s\n--- want ---\n%s", w, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+	}
+}
+
+// 골든: 폭 60 (색 off/on) — user 메뉴·호스트 입력·AWX 입력·모드·실행 중·결과를 한 파일에
+func TestOneoffLayoutGolden(t *testing.T) {
+	for _, color := range []bool{false, true} {
+		mode := "plain"
+		if color {
+			mode = "color"
+		}
+		var sb strings.Builder
+		for _, c := range oneoffWrapRenders(t, 60, 24, color) {
+			if c.name == "user-menu-many" || c.name == "hosts-awx-empty" || c.name == "run-cancel" {
+				continue
+			}
+			sb.WriteString("== " + c.name + " ==\n" + c.text + "\n")
+		}
+		got := goldenText(sb.String())
+		name := "tui_oneoff_" + mode + "_60.golden"
+		path := filepath.Join("testdata", name)
+		if *updateGolden {
+			if err := os.WriteFile(path, []byte(got), 0644); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		want, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("골든 없음 %s (go test -run OneoffLayoutGolden -update): %v", name, err)
+		}
+		if string(want) != got {
+			t.Errorf("%s 불일치\n--- got ---\n%s", name, got)
+		}
 	}
 }

@@ -306,6 +306,53 @@ func TestRestoreOnSignal(t *testing.T) {
 	assertRestored(t, r)
 }
 
+// 창 크기 변경(SIGWINCH): 다음 갱신을 기다리지 않고 화면을 지운 뒤 새 폭으로 바로 다시 그린다.
+// 80칼 색 화면의 안내 줄에는 반전(\x1b[7m)이 없다 (반전은 선택 행에만).
+func TestResizeRedrawsImmediately(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	env, r := newRig(pr)
+	env.Color = true
+	redrawn := make(chan struct{})
+	n := 0
+	env.Size = func() (int, int) {
+		n++
+		if n == 1 {
+			return 80, 24
+		}
+		if n == 2 {
+			close(redrawn)
+		}
+		return 60, 24
+	}
+	rs := make(chan os.Signal, 1)
+	rs <- os.Interrupt // 값은 상관없음 (실제로는 SIGWINCH)
+	env.Resize = rs
+	go func() {
+		<-redrawn
+		pw.Write([]byte("q"))
+	}()
+	if code := runTUILoop(&fakeSrc{snap: twoGroupSnap(), local: true}, env); code != 0 {
+		t.Fatalf("exit=%d", code)
+	}
+	o := r.out.String()
+	first := o[:strings.Index(o, "\x1b[2J")]
+	if !strings.Contains(first, strings.Repeat("-", 80)+"\x1b[K") {
+		t.Fatalf("첫 화면은 80칼: %q", first)
+	}
+	lines := strings.Split(first, "\r\n")
+	for _, l := range lines[len(lines)-2:] { // 안내 줄 2줄
+		if strings.Contains(l, "\x1b[7m") || !strings.Contains(stripANSI(l), "w AWX") && !strings.Contains(stripANSI(l), "q 종료") {
+			t.Errorf("80칼 안내 줄에 반전이 있거나 안내가 아님: %q", l)
+		}
+	}
+	f := lastFrame(r)
+	if !strings.Contains(o, "\x1b[2J\x1b[H") || !strings.Contains(f, strings.Repeat("-", 60)+"\x1b[K") || strings.Contains(f, strings.Repeat("-", 61)) {
+		t.Fatalf("크기 변경 후 지우고 60칼로 다시 그려야 함: %q", f)
+	}
+	assertRestored(t, r)
+}
+
 func TestRestoreOnPanic(t *testing.T) {
 	for _, n := range []int{1, 2} { // 첫 갱신 중 / 두 번째(r 키) 갱신 중 패닉
 		src := &fakeSrc{snap: twoGroupSnap(), local: true, panicOn: n}

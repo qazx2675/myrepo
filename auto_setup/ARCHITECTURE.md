@@ -4,7 +4,7 @@
 
 | 파일/폴더 | 역할 | 비고 |
 |---|---|---|
-| `main.go` | 최상단 빈 변수 9개 + CLI 분기(무인자 리포트·--start/--stop/--restart·snapshot·done·request 포함) + 상수(주기/대기/정체 시간) | 실행 대상 |
+| `main.go` | 최상단 빈 변수 9개 + CLI 분기(무인자 리포트·--start/--stop/--restart·snapshot·done·request 포함) + 상수(주기/대기/정체 시간) · `--admin`(0.7.0, TUI 변경 메뉴 켜기) · 변경 키 4개(`enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine`) | 실행 대상 |
 | `daemon.go` | 데몬 루프: queue 수거·경로 판별·ping 감시·준비확인·스케줄·run 큐 | 상태기계 중추 |
 | `state.go` | Job/Host 구조체, JSON 원자 저장/복원 (재기동 후 이어하기) | 상태 영속화 |
 | `icmp.go` | raw 소켓 ping (echo id+seq 로 호스트 매핑) | local 경로 |
@@ -15,16 +15,24 @@
 | `log.go` | /tmp/auto_setup/auto_setup.log 관리 (10MB 롤오버) | 로깅 |
 | `notify.go` | wall 알림 발송 | 결과 공유 |
 | `paths.go` | `os6_os_check_sh`·`awx_dir` 해석, dhcp.sh 링크 후보 (autofs 동일 경로 포함) | 2차 |
-| `conf.go` · `conf/auto_setup.conf.example` | 빈 변수를 설정 파일(`conf/auto_setup.conf`)로 채움 (빌드 변수가 우선) | 0.3.0 |
+| `conf.go` · `conf/auto_setup.conf.example` | 빈 변수를 설정 파일(`conf/auto_setup.conf`)로 채움 (빌드 변수가 우선). 0.7.0: 변경 메뉴 가시성(`ipChangeEnabled`·`ldapChangeEnabled`), 엔진 경로(`engineBin`), 변경 conf 디렉터리(`changeConfDir`) | 0.3.0, 0.7.0 |
 | `conf/setup_guide.sh` · `conf/update_v*.sh` · `conf/vars.manifest` | 빈 변수 입력 가이드·현장 사본 업데이트(git-upload-sk 틀로 **생성**, 직접 고치지 말고 manifest 수정 후 재생성) · 변수 목록 | 0.4.0 |
 | `model.go` | 호스트 단계(Stage)·한글 라벨·정체 판정, 그룹(yml) 집합, Snapshot 구조체·BuildSnapshot (CLI·TUI·원격 공용) | 2차 |
 | `client.go` | SnapshotSource(로컬/원격), gossh 원샷 전송·출력 복원 = 원격 클라이언트 모드 | 2차 |
 | `ctl.go` | `--start/--stop/--restart`, snapshot/done/request 명령, 색 메시지 | 2차 |
-| `tui.go` | TUI 루프: raw tty, 키 파싱, 화면 전환, 자동 갱신, 수동 OS 체크 요청 (입출력·시계 주입) | 2차 |
+| `tui.go` | TUI 루프: raw tty, 키 파싱, 화면 전환, 자동 갱신, 수동 OS 체크 요청 (입출력·시계 주입). `m` 키는 `change_tui.go` 로 넘김 (0.7.0) | 2차 |
 | `view.go` | TUI 전체 화면 보기: 수동 실행(c/t) 결과, g 재확인 진행, v 최근 결과 (데몬 기록·code 본문을 읽어 실시간 표시) | 단위 테스트 `mode_test.go` |
 | `awxprofile.go` | conf 의 `awx_profile_1`~`9` 파싱 (`nodeinfo(y/n)\|OS값\|설명`, OS 값 검증, 무효 프로파일은 사유와 함께 제외) | 0.6.0, `awxprofile_test.go` |
 | `oneoff.go` | `x` 키: 체크스크립트 단독 실행 (user 선택 → 호스트 입력 → t/c → 임시 디렉터리에서 os_check 실행 → 결과 창, 기록 안 남김) | 0.6.0, `oneoff_test.go`, `oneoffExec` 등 주입 |
 | `awxrun.go` | `w` 키: awx_dir 의 01 을 TUI 밖 터미널에서 실행 (auto 프로파일 선택, `AWX_AUTO*` 환경변수, Ctrl+X 즉시 취소, 끝나면 복귀) | 0.6.0, `awxrun_test.go`, `awxExec` 주입 |
+| `change.go` | `m` 변경 메뉴 상태기계(메뉴→user→infra→입력→dry-run→미리보기→yes→실행→결과), 메뉴 가시성(`changeMenuItems`), 입력 정규화(`parseIPInput`·`parseHostInput`), infra 목록, bindpw 마스킹(`secretMask`), assets site 조회 | 0.7.0, `change_test.go`, `changeExec` 등 주입 |
+| `changerun.go` | 엔진·gossh 외부 실행(`changeExec`), os8 → os6_mgmt 경유(`routed`), 엔진 인자(`ipEngineArgs`·`ldapEngineArgs`, LDAP 은 항상 `-no-restart`), 엔진 출력 파싱, 취소(프로세스 그룹 SIGTERM → 3초 뒤 SIGKILL), 임시 디렉터리(0700) | 0.7.0, `changerun_test.go`, `change_s6_test.go` |
+| `changerec.go` | user 별 기록 `changes/<user>/<시각>_<kind>.json`(디렉터리 0700, 파일 0600, 원자 갱신), 원복·auto.appl 대상 자동 채움(`changeAutofill`), 원복 성공 뒤 이전 기록 갱신(`markAfterRun`), `auto_setup.log` 요약 한 줄 | 0.7.0, `changerec_test.go` |
+| `change_render.go` | 변경 흐름 화면 문자열(`renderChange`): 입력·dry-run·미리보기·실행·결과 표, 위험 문구 빨강, 줄바꿈(`wrapSegs`) | 0.7.0, `change_render_test.go` |
+| `change_tui.go` | `m` 키 연결: 메뉴 화면(`renderChangeMenu`), 흐름 시작·tick·종료, 원격(os6) 안내 문구 | 0.7.0, `change_tui_test.go` |
+| `test/demo_change.sh` · `test/run_change_os.sh` · `test/run_change_lab.sh` | 변경 메뉴 모의 환경 / RHEL 7·8·9 fixture 판정·`-no-restart` 검증 / .58 자기 자신 실동작 (fixture 경로만) | 0.7.0 |
+| `test/lib_change.sh` · `test/fake_gossh.sh` | 변경 시험용 fixture 노드·conf 생성 / 가짜 gossh (호스트별 fixture 루트에서 엔진 스크립트를 로컬 실행, systemctl 등은 호출만 기록) | 0.7.0 |
+| `계획서_v0.7.md` | v0.7.0 명세 (확정 사항 §1, 단계 §3, 불변 조건 §0) | 구현 기준 |
 | `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙 | 2차, 골든 테스트 |
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |
@@ -33,8 +41,9 @@
 | `second.go` | 2차(이중) 체크: os6_mgmt 실행·결과 회수·code 섹션 병합 | 2차 |
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
 | `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route), TUI 골든 파일 | 검증 |
-| `setup.sh` | 빌드 + /usr/local/bin 설치 + cron + tmpfiles 등록 (멱등) | 설치 도구 |
-| `build_os6.sh` | Go 1.20 정적 빌드 → auto_setup_os6 (CGO_ENABLED=0) | os6 빌드 |
+| `setup.sh` | 빌드 + /usr/local/bin 설치 + cron + tmpfiles 등록 (멱등). 0.7.0: 변경 엔진 2개 빌드·설치, conf 샘플을 `/etc/auto_setup` 에 복사(기존 파일 유지) | 설치 도구 |
+| `build_os6.sh` | Go 1.20 정적 빌드 → auto_setup_os6 (CGO_ENABLED=0). 0.7.0: 엔진 os6 바이너리 2개(`../ip_change/bin`, `../ldap_setting/bin`) 도 빌드 | os6 빌드 |
+| `../ip_change/bin/ip-change-engine_os6` · `../ldap_setting/bin/ldap-config-engine_os6` | RHEL 6 에서 엔진을 단독 실행할 때 쓰는 정적 바이너리 (0.7.0). 소스 변경 때 `build_os6.sh` 로 재빌드해 커밋 | 엔진 소스 옆 |
 | `test/` | 대화형 점검(manual_check.sh 1~17단계), 목업 E2E(run_e2e.sh 85건, run_e2e2.sh 177건), 공용(lib_e2e.sh), 스텁(gossh/ssh/wall) | 검증 하네스 |
 | `README.md` | 설치·사용·옵션 가이드 | 배포 필수 |
 | `CHANGELOG.md` | 변경 이력 | 배포 필수 |
@@ -68,6 +77,7 @@
 │   └── rejected/          #   거부된 요청 (마지막 줄 reason=, 정리 정책 없음)
 ├── ldapbak/               # (2차) LDAP 백업 (0700, 자동 삭제 안 됨, bindpw 포함 원본)
 │   └── <jobid>/<host>/    #   ldap.conf resolv.conf nslcd|sssd.conf ntp|chrony.conf, meta.json (파일 0600)
+├── changes/               # (0.7.0) m 변경 메뉴 기록: <user>/<YYYYmmddHHMMSS>_<kind>.json (디렉터리 0700, 파일 0600, 자동 삭제 안 됨)
 ├── runs/
 │   ├── <code>/
 │   │   ├── targets.txt    # 이 run 의 대상 호스트 목록
@@ -168,6 +178,14 @@
 
 화면 그리기는 상태→문자열 순수 함수(`renderOverview`/`renderDetail`/`renderHelp`/`renderPlain`)이고, 입출력·크기·tick·시계는 `tuiEnv` 로 주입해 키 시퀀스 테스트가 가능하다. raw tty 는 termios ioctl(`tty_linux.go`). 비 tty·`--plain` 이면 색 없는 텍스트를 한 번 출력.
 
+## 반드시 지킬 것
+
+- **원복은 항상 `-no-restart`**: LDAP 엔진 호출 (dry-run·적용·원복) 인자는 `ldapEngineArgs` 가 만든다. 서비스 재시작을 막는 `ldapNoRestart` 를 빼지 않는다. `-print-script` 와 `-p`(비밀번호 인자) 는 쓰지 않는다.
+- **bindpw 비노출**: 화면·기록(`changes/`)·로그·임시 파일·snapshot 어디에도 bindpw 를 남기지 않는다. 엔진 출력은 들어오는 즉시 `secretMask` 로 마스킹하고 DIFF 줄은 화면 꼬리에 넣지 않는다. 기록은 디렉터리 0700, 파일 0600. 단 LDAP 엔진의 gossh 명령줄은 base64 로 bindpw 를 싣는다 (ldap_setting 의 기존 설계, 주의사항은 README 「변경 작업」).
+- **기존 동작 불변 (conf 꺼짐 + `--admin` 없음)**: `m` 은 무반응이고 안내 줄에 `m 변경` 이 없다. 60칼 이상 줄바꿈 규칙 외에는 화면·키·동작을 바꾸지 않는다. 기존 01·os_check 사용법은 그대로 둔다.
+- **엔진은 바이너리로만 호출**: 엔진 코드를 auto_setup 에 흡수하지 않는다. 두 도구는 독립 사용 가능해야 한다.
+- **엔진 소스를 고치면** `build_os6.sh` 로 `ip_change/bin/ip-change-engine_os6`, `ldap_setting/bin/ldap-config-engine_os6` 를 다시 빌드해 커밋한다 (+x).
+
 ## 수정 요청 가이드
 
 | 요청 | 확인 대상 | 참고 |
@@ -189,6 +207,12 @@
 | 2차 체크 대상·병합 변경 | `daemon.go` `selectSecondTargets`, `second.go` | code 섹션 포맷 |
 | TUI 화면·키 변경 | `render.go`(순수 함수), `tui.go`(키) | 골든 파일 갱신 (`testdata/tui_*.golden`) |
 | 요청 종류 추가 | `requests.go` `collectRequests`, `ctl.go` `requestArgsOK` | 원격 중계 인자 검증도 함께 |
+| 변경 메뉴 항목·번호·표시 조건 | `change.go` `changeMenuItems` | 번호는 계획서 §1 로 고정 (1~5). 메뉴 가시성 테스트 갱신 |
+| 변경 입력 형식 (`hostname ip`, 구분자) | `change.go` `parseIPInput`·`parseHostInput` | 잘못된 줄은 사유와 함께 제외 |
+| 엔진 호출 인자 | `changerun.go` `ipEngineArgs`·`ldapEngineArgs` | `-no-restart` 유지 여부를 테스트로 확인 |
+| 경유(os8 → os6) 규칙 | `changerun.go` `routed` | os8 먼저, 응답 없는 호스트만 os6 |
+| 변경 기록 형식·위치·원복 자동 채움 | `changerec.go` (`createChangeRecord`·`changeAutofill`·`markAfterRun`) | 0600 유지, 원자 갱신 |
+| 변경 화면 문구·줄바꿈 | `change_render.go`, `change_tui.go` | 골든 `testdata/tui_changemenu_*` 갱신, 폭 60/80/120 확인 |
 
 ## 테스트 주입점 (iface.go)
 
@@ -204,6 +228,7 @@
 | `LdapBackup` | 가짜 gossh/ssh(PATH 스텁) 또는 fake 구현 | LDAP same/diff/na/수동 복원 필요/공유경로 접근 실패·bindpw 미노출 |
 | `Second` | 가짜 구현 / PATH 의 ssh 스텁 | 2차 대상 선별·병합 |
 | `tuiEnv` | 가짜 In/Out/Size/Tick/Now | 키 시퀀스·골든 렌더 |
+| `changeExec` (변경 메뉴 외부 명령 실행기) | Go 테스트의 가짜 실행기 / 엔진의 `-gossh` 로 `test/fake_gossh.sh` 지정 (모의·E2E) | 변경 흐름·경유·취소 시험 |
 
 - 단위 테스트(state_test, daemon_test 등)에서 가짜를 직접 주입
 - E2E(run_e2e.sh)에서 bash 스텁(gossh, ssh, wall) 사용

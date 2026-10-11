@@ -284,3 +284,66 @@ func TestAwxProfileWithListAndEsc(t *testing.T) {
 		t.Fatal("Esc 로 취소했는데 실행됨")
 	}
 }
+
+// ---- 좁은 화면 줄바꿈 (S5b) ----
+
+func wrapAwxStates(t *testing.T) []*awxState {
+	t.Helper()
+	saveConfVars(t)
+	setProfiles(t,
+		"y|2025|"+strings.Repeat("긴 프로파일 설명입니다 ", 6)+"끝",
+		"n|2024|",
+		"n|2026-ECAD_TCAD|"+strings.Repeat("x", 90),
+		"bad|x|y",
+		"n|9999|OS 값이 허용되지 않는 프로파일")
+	valid, problems := parseAwxProfiles()
+	if len(valid) != 3 || len(problems) != 2 {
+		t.Fatalf("프로파일 파싱: valid=%d problems=%v", len(valid), problems)
+	}
+	return []*awxState{{step: awxAsk, profiles: valid}, {step: awxPick, profiles: valid, problems: problems}}
+}
+
+// 폭 ≥ 60 이면 … 로 잘리지 않고 어떤 줄도 폭을 넘지 않으며, 설명은 줄바꿈해도 남는다
+func TestAwxLayoutNoEllipsis(t *testing.T) {
+	states := wrapAwxStates(t)
+	squash := func(s string) string { return strings.Join(strings.Fields(stripANSI(s)), "") }
+	for si, a := range states {
+		for _, w := range []int{40, 60, 61, 79, 80, 120} {
+			for _, color := range []bool{false, true} {
+				for _, h := range []int{0, 24} {
+					r := renderAwx(a, w, h, color)
+					checkWrapLayout(t, "w awx step "+strings.Repeat("*", si+1), w, h, color, r)
+					if a.step == awxPick {
+						for _, want := range []string{strings.Repeat("x", 90), "끝", "awx_profile_4:nodeinfo값bad은y또는n이어야함", "default)"} {
+							if !strings.Contains(squash(r), want) {
+								t.Errorf("폭 %d 높이 %d: %q 사라짐\n%s", w, h, want, stripANSI(r))
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// 한 줄에 들어가면 종전과 같은 한 줄, 높이가 모자라면 아래를 생략 표시하되 안내 줄은 남는다
+func TestAwxLayoutWideAndShort(t *testing.T) {
+	a := wrapAwxStates(t)[1]
+	r := renderAwx(a, 160, 0, false)
+	for _, want := range []string{" 2) nodeinfo=n  OS=2024", "   awx_profile_4: nodeinfo 값 bad 은 y 또는 n 이어야 함"} {
+		found := false
+		for _, l := range strings.Split(r, "\n") {
+			if strings.HasPrefix(l, want) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("한 줄 %q 없음:\n%s", want, r)
+		}
+	}
+	short := renderAwx(a, 60, 9, false)
+	lines := strings.Split(short, "\n")
+	if len(lines) != 9 || !strings.Contains(short, "(아래 ") || !strings.Contains(lines[len(lines)-1], "Esc 뒤로") {
+		t.Errorf("낮은 창(%d줄):\n%s", len(lines), short)
+	}
+}

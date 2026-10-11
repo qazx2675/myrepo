@@ -1,0 +1,7 @@
+# 이 셸 스크립트들은 Go 바이너리에 go:embed 로 포함되어 Linux 노드에서 실행됩니다.
+# Windows 에서 편집/커밋하더라도 저장소 blob 은 반드시 LF 여야 합니다
+# (CRLF 가 섞이면 원격 노드 bash 가 깨집니다).
+* text=auto eol=lf
+*.sh   text eol=lf
+*.go   text eol=lf
+*.md   text eol=lf

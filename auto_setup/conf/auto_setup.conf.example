@@ -42,3 +42,13 @@ os8_autosetup=
 os6_os_check_sh=
 # LDAP 복원용 autofs 공유 경로 (대상 root 가 읽을 수 있어야 함). 비우면 자동 복원 안 함
 ldap_share_dir=
+
+# (v0.7.0) TUI 변경 메뉴 (m 키: IP 변경 / LDAP 변경 / 원복) — 비우면 꺼짐(기존 화면·키 그대로)
+# 켜짐 값: y, yes, 1, true (대소문자 무시). 그 외는 꺼짐. `auto_setup --admin` 으로 TUI 를 띄우면 conf 와 무관하게 켜진다.
+# 변경 conf(ip_change.conf, ldap_config.conf, assets.txt)는 이 파일이 있는 디렉터리(없으면 /etc/auto_setup)에서 읽는다 (setup.sh 가 샘플을 설치).
+enable_ip_change=
+enable_ldap_change=
+# 변경 엔진 실행 파일 전체 경로. 비우면 <auto_setup 실행 파일 디렉터리>/ip-change-engine → PATH 순으로 찾는다 (setup.sh 는 /usr/local/bin 에 설치)
+ip_engine=
+# 위와 같음: ldap-config-engine
+ldap_engine=

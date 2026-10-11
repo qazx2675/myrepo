@@ -4,11 +4,29 @@ package main
 import (
 	"bufio"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 const confFileName = "auto_setup.conf"
+
+// 변경 엔진 실행 파일 이름 (engineBin 의 인자)
+const (
+	ipEngineName   = "ip-change-engine"
+	ldapEngineName = "ldap-config-engine"
+)
+
+// confLoadedFrom: loadConf 가 마지막으로 읽은 설정 파일 경로 (없으면 ""). changeConfDir 의 기준.
+var confLoadedFrom string
+
+// engineExeDir: auto_setup 실행 파일이 있는 디렉터리 (찾지 못하면 ""). 테스트에서 바꾼다.
+var engineExeDir = func() string {
+	if exe, err := os.Executable(); err == nil {
+		return filepath.Dir(exe)
+	}
+	return ""
+}
 
 // confVars: 설정 파일 키 → main.go 의 빈 변수 (키 이름 = 변수 이름)
 func confVars() map[string]*string {
@@ -31,6 +49,12 @@ func confVars() map[string]*string {
 		"os8_autosetup":   &os8_autosetup,
 		"os6_os_check_sh": &os6_os_check_sh,
 		"ldap_share_dir":  &ldap_share_dir,
+
+		// v0.7.0 변경 메뉴
+		"enable_ip_change":   &enable_ip_change,
+		"enable_ldap_change": &enable_ldap_change,
+		"ip_engine":          &ip_engine,
+		"ldap_engine":        &ldap_engine,
 	}
 }
 
@@ -50,12 +74,14 @@ func confPaths() []string {
 // (빌드 때 -X 로 넣은 값이 우선). 알 수 없는 키는 무시. 읽은 파일 경로를 반환(없으면 "").
 func loadConf(paths []string) string {
 	vars := confVars()
+	confLoadedFrom = ""
 	for _, p := range paths {
 		f, err := os.Open(p)
 		if err != nil {
 			continue
 		}
 		defer f.Close()
+		confLoadedFrom = p
 		sc := bufio.NewScanner(f)
 		for sc.Scan() {
 			line := strings.TrimSpace(sc.Text())
@@ -79,3 +105,56 @@ func loadConf(paths []string) string {
 	}
 	return ""
 }
+
+// confTrue: 켜짐 값 판정 — y/yes/1/true (대소문자 무시, 앞뒤 공백 무시). 그 외(빈 값 포함)는 꺼짐.
+func confTrue(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "y", "yes", "1", "true":
+		return true
+	}
+	return false
+}
+
+// ipChangeEnabled: IP 변경 메뉴 가시성 = --admin 이거나 conf enable_ip_change 가 켜짐
+func ipChangeEnabled() bool { return adminMode || confTrue(enable_ip_change) }
+
+// ldapChangeEnabled: LDAP 변경 메뉴 가시성 = --admin 이거나 conf enable_ldap_change 가 켜짐
+func ldapChangeEnabled() bool { return adminMode || confTrue(enable_ldap_change) }
+
+// engineBin: 변경 엔진 실행 파일 경로. name 은 ipEngineName 또는 ldapEngineName.
+// conf 의 ip_engine / ldap_engine 이 있으면 존재 확인 없이 그대로 돌려주고(실행 때 오류가 보이게),
+// 비면 <auto_setup 실행 파일 디렉터리>/<name> → PATH 순으로 찾는다. 못 찾으면 "".
+func engineBin(name string) string {
+	switch name {
+	case ipEngineName:
+		if ip_engine != "" {
+			return ip_engine
+		}
+	case ldapEngineName:
+		if ldap_engine != "" {
+			return ldap_engine
+		}
+	}
+	if d := engineExeDir(); d != "" {
+		p := filepath.Join(d, name)
+		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && st.Mode()&0111 != 0 {
+			return p
+		}
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	return ""
+}
+
+// changeConfDir: 변경용 conf(ip_change.conf·ldap_config.conf·assets.txt) 디렉터리 —
+// auto_setup.conf 를 읽은 디렉터리, 읽은 파일이 없으면 /etc/auto_setup
+func changeConfDir() string {
+	if confLoadedFrom != "" {
+		return filepath.Dir(confLoadedFrom)
+	}
+	return "/etc/auto_setup"
+}
+
+// changeConfPath: changeConfDir()/<name> (name = ip_change.conf | ldap_config.conf | assets.txt)
+func changeConfPath(name string) string { return filepath.Join(changeConfDir(), name) }

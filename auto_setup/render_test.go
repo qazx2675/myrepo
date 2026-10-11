@@ -1,10 +1,11 @@
-// render_test.go - 렌더 순수 함수 테스트: 한글 폭, 막대, 골든(색 on/off × 폭 80/120 × 샘플), bindpw·제어문자 미노출
+// render_test.go - 렌더 순수 함수 테스트: 한글 폭, 막대, 골든(색 on/off × 폭 40/60/80/120 × 샘플), bindpw·제어문자 미노출, 좁은 화면 줄바꿈
 package main
 
 import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +111,21 @@ func sampleKorean() Snapshot {
 			tsHost("server-abcdefghijklmnopqrstuvwxyz-0123456789", StageStuck, 4500, ""))))
 }
 
+// sampleLong: 좁은 화면 줄바꿈 확인용 — 긴 job 이름·all yml·영문/한글 yml 이름·긴 호스트명·긴 비고, 수동 run 기록
+func sampleLong() Snapshot {
+	j := tsJob("20261008-103043-alice-infra-team-long-job", "alice", false,
+		tsGroup("infra_inventory-20261008103043_4ea.yml", "인피니밴드", "rhel8.10", "pxe", "y",
+			tsHost("node-a01", StageDone, 100, "code 4821"),
+			tsHost("server-abcdefghijklmnopqrstuvwxyz-0123456789", StageInstalling, 700, "비고 한글 설명이 아주 길게 이어지는 경우에도 줄바꿈되어 모두 보여야 합니다 끝"),
+			tsHost("node-a03", StageStuck, 4500, "LDAP 적용실패, 이름 미해결 - 관리자에게 문의 (재시도 3회 모두 실패) 마지막")),
+		tsGroup("한글로_아주_긴_그룹_이름을_가진_인벤토리_파일-20261008103043.yml", "eth", "rhel7", "pxe", "n",
+			tsHost("gpu001", StageReady, 30, "")))
+	j.AllYml = "infra_inventory-20261008103043_all_hosts.yml"
+	j.Runs = []Run{{Code: "5012", Hosts: []string{"node-a01"}, At: tsNow - 120, Manual: true, Yml: j.Groups[0].Yml}}
+	j.Manual = []SnapManual{{Yml: j.Groups[1].Yml, State: "waiting", Requested: tsNow - 30}}
+	return tsSnap(true, j)
+}
+
 // ---- 폭 계산 ----
 
 func TestRuneWidth(t *testing.T) {
@@ -211,15 +227,16 @@ func TestRenderGolden(t *testing.T) {
 	samples := []struct {
 		name string
 		s    Snapshot
-	}{{"normal", sampleNormal()}, {"stuck", sampleStuck()}, {"alldone", sampleAllDone()}, {"nojob", sampleNoJob()}, {"korean", sampleKorean()}}
+	}{{"normal", sampleNormal()}, {"stuck", sampleStuck()}, {"alldone", sampleAllDone()}, {"nojob", sampleNoJob()}, {"korean", sampleKorean()},
+		{"long", sampleLong()}}
 	for _, sm := range samples {
 		for _, color := range []bool{false, true} {
-			for _, w := range []int{80, 120} {
+			for _, w := range []int{40, 60, 80, 120} {
 				mode := "plain"
 				if color {
 					mode = "color"
 				}
-				name := "tui_" + sm.name + "_" + mode + "_" + map[int]string{80: "80", 120: "120"}[w] + ".golden"
+				name := "tui_" + sm.name + "_" + mode + "_" + strconv.Itoa(w) + ".golden"
 				got := goldenText(renderAll(sm.s, w, color))
 				path := filepath.Join("testdata", name)
 				if *updateGolden {
@@ -257,7 +274,7 @@ func allRenders(s Snapshot, width int, color bool) []string {
 }
 
 func TestRenderWidthNeverExceeded(t *testing.T) {
-	for _, s := range []Snapshot{sampleNormal(), sampleStuck(), sampleAllDone(), sampleNoJob(), sampleKorean()} {
+	for _, s := range []Snapshot{sampleNormal(), sampleStuck(), sampleAllDone(), sampleNoJob(), sampleKorean(), sampleLong()} {
 		for _, w := range []int{40, 60, 80, 120, 200} {
 			for _, color := range []bool{false, true} {
 				for _, r := range allRenders(s, w, color) {
@@ -394,6 +411,201 @@ func TestHintLines(t *testing.T) {
 				for _, it := range []string{"↑↓ 이동", "← 목록", "q 복귀", "c 체크+수정", "t 체크만", "w AWX"} {
 					if !strings.Contains(plain, it) {
 						t.Fatalf("폭 %d 에서 %q 사라짐: %q", w, it, plain)
+					}
+				}
+			}
+		}
+	}
+}
+
+// ---- 좁은 화면 줄바꿈 (S5) ----
+
+const longMsg = "[X] 상태 갱신 실패: open /var/lib/auto_setup/state/jobs/20261008-103043-alice.json: permission denied (권한 확인 필요)"
+
+// wideRenders: allRenders + 날짜 줄·그룹 선택·전체 보기·확인 질문·긴 안내·결과 창
+func wideRenders(s Snapshot, width int, color bool) []string {
+	out := allRenders(s, width, color)
+	n := len(flatGroups(s))
+	for row := -1; row < n; row++ {
+		out = append(out, renderOverview(s, selection{Row: row, DateFilter: true, Msg: longMsg}, width, 24, color))
+	}
+	for _, j := range s.Jobs {
+		sel := selection{Detail: true, JobID: j.ID, Yml: allView, Host: 1, Msg: longMsg}
+		out = append(out, renderDetail(s, sel, width, 24, color), renderDetail(s, sel, width, 0, color))
+		for _, g := range j.Groups {
+			for _, mode := range []string{"", ModeCheck} {
+				sel := selection{Detail: true, JobID: j.ID, Yml: g.Yml, Host: 2, Confirm: true, Mode: mode, Msg: longMsg}
+				out = append(out, renderDetail(s, sel, width, 30, color))
+			}
+		}
+	}
+	v := &viewState{kind: viewRun, done: true, title: "수동 실행 [설정체크 + 설정수정] - infra_inventory-20261008103043_4ea.yml",
+		status: "완료 - code 5012  (auto_setup code 5012) - 결과 파일 /var/lib/auto_setup/codes/5012.txt",
+		lines: []string{"작업 : 설정체크 + 설정수정", "server-abcdefghijklmnopqrstuvwxyz-0123456789-and-a-very-long-suffix-without-spaces-at-all",
+			"127.0.0.14  접속불가  os8 무응답 → os6 무응답 → 접속불가로 판정되어 다음 주기에 다시 시도합니다 (최대 3회)"}}
+	out = append(out, renderView(v, width, 24, color), renderView(v, width, 0, color))
+	v.done, v.kind = false, viewRecheck
+	out = append(out, renderView(v, width, 24, color))
+	return out
+}
+
+func wrapSamples() []Snapshot {
+	return []Snapshot{sampleNormal(), sampleStuck(), sampleAllDone(), sampleNoJob(), sampleKorean(), sampleLong()}
+}
+
+// 폭 ≥ 60 이면 어떤 줄에도 '…' 가 없고(잘림 없이 줄바꿈) 어떤 줄도 폭을 넘지 않는다
+func TestRenderWrapNoEllipsis(t *testing.T) {
+	for si, s := range wrapSamples() {
+		for _, w := range []int{60, 61, 63, 67, 72, 79, 80, 81, 99, 100, 119, 120, 150} {
+			for _, color := range []bool{false, true} {
+				for ri, r := range wideRenders(s, w, color) {
+					for _, line := range strings.Split(r, "\n") {
+						p := stripANSI(line)
+						if strings.Contains(p, "…") {
+							t.Fatalf("sample %d render %d 폭 %d color=%v: … 로 잘림: %q\n%s", si, ri, w, color, p, stripANSI(r))
+						}
+						if strWidth(p) > w {
+							t.Fatalf("sample %d render %d 폭 %d 초과(%d): %q", si, ri, w, strWidth(p), p)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// 줄바꿈해도 내용이 사라지지 않는다 (긴 이름·비고·안내가 공백을 빼면 그대로 화면에 있다)
+func TestRenderWrapKeepsContent(t *testing.T) {
+	s := sampleLong()
+	j := s.Jobs[0]
+	squash := func(x string) string { return strings.Join(strings.Fields(stripANSI(x)), "") }
+	for _, w := range []int{60, 80} {
+		ov := squash(renderOverview(s, selection{Row: 0, Msg: longMsg}, w, 40, true))
+		for _, want := range []string{j.ID, j.AllYml, j.Groups[0].Yml, j.Groups[1].Yml, "인피니밴드/rhel8.10/pxe/y", "33%", longMsg} {
+			if !strings.Contains(ov, squash(want)) {
+				t.Errorf("폭 %d 화면 1 에 %q 없음:\n%s", w, want, renderOverview(s, selection{Row: 0}, w, 40, false))
+			}
+		}
+		// 화면 2: 표 칸 안 줄바꿈은 옆 칸과 섞이므로 단어 단위로 확인 (긴 호스트명은 앞·뒤 조각)
+		d := renderDetail(s, selection{Detail: true, JobID: j.ID, Yml: j.Groups[0].Yml, Host: 1, Confirm: true}, w, 40, false)
+		words := append(strings.Fields(j.Groups[0].Hosts[1].Note), strings.Fields(j.Groups[0].Hosts[2].Note)...)
+		words = append(words, "server-abcdefghij", "0123456789", "[y/n]", "code 5012")
+		for _, want := range words {
+			if !strings.Contains(d, want) {
+				t.Errorf("폭 %d 화면 2 에 %q 없음:\n%s", w, want, d)
+			}
+		}
+	}
+}
+
+// 넓은 폭에서는 종전 한 줄 형태 유지 (job 헤더·그룹 행이 한 줄), 좁으면 그룹 행은 2줄 카드형
+func TestRenderWideKeepsOneLine(t *testing.T) {
+	s := sampleLong()
+	ov := renderOverview(s, selection{Row: -5}, 120, 0, false)
+	if !strings.Contains(ov, " job "+s.Jobs[0].ID+"  alice  전달 ") || !strings.Contains(ov, "  all="+s.Jobs[0].AllYml) {
+		t.Errorf("job 헤더 한 줄:\n%s", ov)
+	}
+	for _, l := range strings.Split(ov, "\n") {
+		if strings.HasPrefix(l, "  infra_inventory-") && !strings.HasSuffix(l, "33%") {
+			t.Errorf("120칼 그룹 행은 한 줄이어야 함: %q", l)
+		}
+	}
+	// 80칼: 이름이 칸보다 길면 2줄 카드형 (1줄 전체 이름, 2줄 구성·대수·막대·경과·%)
+	lines := strings.Split(renderOverview(s, selection{Row: 0}, 80, 0, false), "\n")
+	for i, l := range lines {
+		if l == "> "+s.Jobs[0].Groups[0].Yml {
+			if i+1 >= len(lines) || !strings.HasPrefix(lines[i+1], "  인피니밴드/rhel8.10/pxe/y ") || !strings.HasSuffix(lines[i+1], "33%") {
+				t.Fatalf("카드 2줄:\n%s", strings.Join(lines, "\n"))
+			}
+			return
+		}
+	}
+	t.Fatalf("카드 1줄(전체 이름) 없음:\n%s", strings.Join(lines, "\n"))
+}
+
+// 선택 행 반전(\x1b[7m)은 선택 행(줄바꿈된 줄 전부)에만 — 안내 줄·다른 행에는 없다
+func TestRenderReverseOnlySelected(t *testing.T) {
+	revLines := func(r string) (idx []int, lines []string) {
+		lines = strings.Split(r, "\n")
+		for i, l := range lines {
+			if strings.Contains(l, "\x1b[7m") {
+				idx = append(idx, i)
+			}
+		}
+		return
+	}
+	contiguous := func(idx []int) bool {
+		for i := 1; i < len(idx); i++ {
+			if idx[i] != idx[i-1]+1 {
+				return false
+			}
+		}
+		return true
+	}
+	for _, s := range wrapSamples() {
+		for _, w := range []int{60, 80, 120} {
+			for _, r := range wideRenders(s, w, true) {
+				if idx, _ := revLines(r); !contiguous(idx) {
+					t.Fatalf("폭 %d: 반전 줄이 한 덩어리가 아님 %v:\n%s", w, idx, goldenText(r))
+				}
+			}
+		}
+	}
+	s := sampleLong()
+	j := s.Jobs[0]
+	// 화면 1: 카드형 그룹 행 2줄 모두 반전, 안내 줄 반전 없음
+	idx, lines := revLines(renderOverview(s, selection{Row: 0}, 60, 24, true))
+	if len(idx) < 2 || !strings.HasPrefix(stripANSI(lines[idx[0]]), "> infra_inventory-") || !strings.Contains(stripANSI(lines[idx[len(idx)-1]]), "33%") {
+		t.Fatalf("카드 행 반전 %v:\n%s", idx, goldenText(strings.Join(lines, "\n")))
+	}
+	// 화면 2: 줄바꿈된 호스트 행 전체가 반전 (호스트명 첫 줄 ~ 비고 끝)
+	idx, lines = revLines(renderDetail(s, selection{Detail: true, JobID: j.ID, Yml: j.Groups[0].Yml, Host: 1}, 60, 24, true))
+	var sb strings.Builder
+	for _, i := range idx {
+		sb.WriteString(stripANSI(lines[i]))
+	}
+	if len(idx) < 2 || !strings.HasPrefix(stripANSI(lines[idx[0]]), "> server-") || !strings.Contains(sb.String(), "끝") {
+		t.Fatalf("호스트 행 반전 %v:\n%s", idx, goldenText(strings.Join(lines, "\n")))
+	}
+}
+
+// 색이 켜진 모든 줄은 마지막 SGR 이 리셋(\x1b[0m) — 지우고 다시 그릴 때 색·반전이 줄 끝(\x1b[K)으로 새지 않는다
+func TestRenderLinesEndReset(t *testing.T) {
+	for _, s := range wrapSamples() {
+		for _, w := range []int{40, 60, 80, 120} {
+			for _, r := range wideRenders(s, w, true) {
+				for _, l := range strings.Split(r, "\n") {
+					if i := strings.LastIndex(l, "\x1b["); i >= 0 && !strings.HasPrefix(l[i:], "\x1b[0m") {
+						t.Fatalf("폭 %d: 줄 끝 리셋 없음: %q", w, l)
+					}
+				}
+			}
+		}
+	}
+}
+
+// 스크롤: 여러 줄로 줄바꿈된 행도 커서 행 전체가 보이고, 본문이 행 중간에서 시작하지 않는다
+func TestRenderScrollWrappedRows(t *testing.T) {
+	var hosts []SnapHost
+	for i := 0; i < 30; i++ {
+		name := "h" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		hosts = append(hosts, tsHost(name, StageInstalling, 100, "비고 "+strings.Repeat("길게 ", 12)+"끝-"+name))
+	}
+	s := tsSnap(true, tsJob("J1", "u", false, tsGroup("big.yml", "", "", "", "", hosts...)))
+	for _, w := range []int{60, 80} {
+		for _, row := range []int{0, 1, 10, 28, 29} {
+			out := renderDetail(s, selection{Detail: true, JobID: "J1", Yml: "big.yml", Host: row}, w, 22, false)
+			lines := strings.Split(out, "\n")
+			if len(lines) > 22 {
+				t.Fatalf("높이 초과 %d", len(lines))
+			}
+			if !strings.Contains(out, "> "+padR(hosts[row].Host, 8)) || !strings.Contains(out, "끝-"+hosts[row].Host) {
+				t.Errorf("폭 %d row %d 커서 행 전체가 안 보임:\n%s", w, row, out)
+			}
+			for i, l := range lines {
+				if strings.HasPrefix(l, "  호스트") && i+1 < len(lines) {
+					if n := lines[i+1]; !strings.HasPrefix(n, "  h") && !strings.HasPrefix(n, "> h") {
+						t.Errorf("폭 %d row %d: 본문이 행 중간에서 시작: %q\n%s", w, row, n, out)
 					}
 				}
 			}

@@ -5,10 +5,14 @@ package main
 
 import (
 	"os"
+	"os/signal"
 	"syscall"
 	"time"
 	"unsafe"
 )
+
+// notifyResize: 창 크기 변경(SIGWINCH)을 c 로 받는다
+func notifyResize(c chan<- os.Signal) { signal.Notify(c, syscall.SIGWINCH) }
 
 // tcsetsf: TCSETSF(0x5412, x86·arm 공통) - syscall 패키지에 상수가 없다. 출력 대기 후 적용하며 입력 버퍼를 버린다
 const tcsetsf = 0x5412
