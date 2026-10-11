@@ -169,6 +169,8 @@ py experiment.py run --models qwen3.5:9b-q8_0 --variants P1_nothink --cases v2 -
 
 ---
 
+> 처리 흐름은 [WORKFLOW.md](WORKFLOW.md) 의 흐름도([workflow.svg](workflow.svg))를 참고하세요.
+
 ## 4. 문서별 설명 및 주의사항 (Disclaimer)
 
 > [!NOTE]

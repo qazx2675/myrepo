@@ -107,3 +107,5 @@
 3. 메시지 분할 기준(`CHUNK_MAX_BYTES`, 기본 1,000바이트)이나 피드백 버튼 형식을 바꾸려면 `publish_ntfy()` 를 수정합니다.
 4. 사용자 추가·교체는 `users.json` 을 편집합니다. 자세한 절차는 README 2.2를 봅니다.
 5. 모델을 바꾸려면 `.env` 의 `MODEL=` 한 줄을 수정합니다 (README 3.1).
+
+작업 흐름도는 [WORKFLOW.md](WORKFLOW.md) 참고 (그림: [workflow.svg](workflow.svg)).
