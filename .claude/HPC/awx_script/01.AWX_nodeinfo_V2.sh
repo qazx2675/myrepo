@@ -97,6 +97,10 @@ if [[ $AWX_AUTO == 1 && $AWX_AUTO_NODEINFO == [YyNn] ]]; then
 		# auto 모드: 환경변수 AWX_AUTO_NODEINFO(y|n) 로 자동 답변
 		awx_yn=$AWX_AUTO_NODEINFO
 		echo " awx nodeinfo 사용여부 Y|N : ${awx_yn} (auto)"
+	elif [[ $AWX_AUTO != 1 && $AWX_AUTO_NODEINFO == [YyNn] ]]; then
+		# auto_setup 양식 생성(프로파일 없는 AWX 실행): AWX_AUTO 없이 nodeinfo 질문만 자동 답변, 나머지 질문은 그대로 직접 입력
+		awx_yn=$AWX_AUTO_NODEINFO
+		echo " awx nodeinfo 사용여부 Y|N : ${awx_yn} (auto_setup)"
 	else
 		[[ $AWX_AUTO == 1 ]] && warn "[!] AWX_AUTO_NODEINFO 가 y|n 이 아니어서 직접 입력합니다"
 		read -r -p " awx nodeinfo 사용여부 Y|N : " awx_yn
@@ -147,6 +151,392 @@ fix_mac() {
 		if (i) $6 = substr($6, 1, length($6)-1) substr("02468aceACE", i, 1)
 	}
 	{ print }' "${user}.txt") && printf '%s\n' "$content" > "${user}.txt"
+}
+
+# [4-1] DNS 점검: ${user}.txt 의 hostname(4번째)·IP(5번째)를 /etc/resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의해 비교한다.
+# 판정 규칙은 auto_setup 의 dnscheck.go 와 같다 (/etc/hosts·getent 는 쓰지 않고, 짧은 이름은 search/ndots 를 glibc 와 같은 순서로 붙여 조회).
+#   일치 / 불일치(합의된 A 1개 != 등록 IP, 교체 대상) / 판단 불가(서버끼리 다름·A 와 NX 혼재·A 여러 개: 경고만, 교체 제외) /
+#   미등록(응답한 서버가 모두 NXDOMAIN·NODATA) / 조회 실패(응답한 서버 없음). 1대라도 A 를 받아야 점검하고, 아니면 한 줄 안내 후 그대로 진행한다.
+# 속도: dig(없으면 nslookup) 질의를 xargs -P 32 로 병렬 실행, 질의당 2초·재시도 1회.
+#   응답을 한 번도 못 받고 3번 실패한 서버는 이후 질의를 건너뛴다 (응답 기록 ok.N, 실패 횟수 fail.N 줄 수를 DNS_DIR 에 둠).
+# 테스트 훅 환경변수: AWX_RESOLV_CONF(기본 /etc/resolv.conf), AWX_TTY(auto 모드 질문을 읽는 곳, 기본 /dev/tty)
+# DNS 서버 주소 해석: "1.2.3.4" | "fe80::1%eth0" | "1.2.3.4:5353" | "[::1]:5353" → "주소,포트"
+dns_server_spec() {
+	local a=$1 re4='^[0-9]{1,3}(\.[0-9]{1,3}){3}$' re4p='^([0-9]{1,3}(\.[0-9]{1,3}){3}):([0-9]+)$' re6p='^\[([0-9A-Fa-f:.]+(%[A-Za-z0-9._-]+)?)\]:([0-9]+)$' re6='^[0-9A-Fa-f:.]+(%[A-Za-z0-9._-]+)?$'
+	if [[ $a =~ $re6p ]]; then echo "${BASH_REMATCH[1]},${BASH_REMATCH[3]}"
+	elif [[ $a =~ $re4p ]]; then echo "${BASH_REMATCH[1]},${BASH_REMATCH[3]}"
+	elif [[ $a =~ $re4 ]]; then echo "$a,53"
+	elif [[ $a == *:* && $a =~ $re6 ]]; then echo "$a,53"
+	fi
+}
+
+# dns_read_conf <resolv.conf> : DNS_SRVS("주소,포트" 공백 구분, 최대 3) · DNS_SEARCH · DNS_NDOTS 설정. search/domain 이 없으면 호스트명의 도메인(glibc 동작)
+dns_read_conf() {
+	local f=$1 line s n o spec h dup
+	local -a w cur
+	DNS_SRVS=""; DNS_SEARCH=""; DNS_NDOTS=1
+	if [[ -r $f ]]; then
+		while IFS= read -r line || [[ -n $line ]]; do
+			line=${line#"${line%%[![:space:]]*}"}
+			[[ -z $line || $line == [\#\;]* ]] && continue
+			read -ra w <<< "$line"
+			case ${w[0]} in
+				nameserver)
+					[[ -n ${w[1]} ]] || continue
+					spec=$(dns_server_spec "${w[1]}")
+					[[ -n $spec ]] || continue
+					read -ra cur <<< "$DNS_SRVS"
+					dup=0
+					for s in "${cur[@]}"; do [[ $s == "$spec" ]] && dup=1; done
+					(( dup == 0 && ${#cur[@]} < 3 )) && DNS_SRVS="${DNS_SRVS:+$DNS_SRVS }$spec" ;;
+				domain) [[ -n ${w[1]} ]] && DNS_SEARCH=${w[1]} ;;
+				search) [[ -n ${w[1]} ]] && DNS_SEARCH="${w[*]:1:6}" ;;
+				options)
+					for o in "${w[@]:1}"; do
+						if [[ $o =~ ^ndots:([0-9]+)$ ]]; then
+							n=$((10#${BASH_REMATCH[1]})); (( n > 15 )) && n=15; DNS_NDOTS=$n
+						fi
+					done ;;
+			esac
+		done < "$f"
+	fi
+	if [[ -z $DNS_SEARCH ]]; then
+		h=$(hostname 2>/dev/null) || h=$HOSTNAME
+		[[ $h == ?*.?* ]] && DNS_SEARCH=${h#*.}
+	fi
+}
+
+# dns_cands <이름> : 질의할 이름 순서를 dns_cand 배열에 담는다 (glibc·nslookup 과 같음 —
+# 끝이 '.' 이면 그 이름만, 점 개수 >= ndots 면 이름 그대로 먼저 → search 도메인, 아니면 search 도메인 먼저 → 그대로)
+dns_cands() {
+	local h=$1 s dots
+	local -a ws=()
+	dns_cand=()
+	if [[ $h == *. ]]; then
+		while [[ $h == *. ]]; do h=${h%.}; done
+		[[ -n $h ]] && dns_cand=("$h")
+		return 0
+	fi
+	for s in $DNS_SEARCH; do
+		while [[ $s == .* ]]; do s=${s#.}; done
+		while [[ $s == *. ]]; do s=${s%.}; done
+		[[ -n $s ]] && ws+=("$h.$s")
+	done
+	dots=${h//[^.]/}
+	if (( ${#dots} >= DNS_NDOTS )); then dns_cand=("$h" "${ws[@]}"); else dns_cand=("${ws[@]}" "$h"); fi
+}
+
+# dns_ask <서버번호> <이름> <A|PTR> : 질의 1회(재시도 포함). NOERROR/NXDOMAIN 이면 0 (Q_VALS: A 의 IPv4 또는 PTR 이름, 공백 구분, 없으면 빈 값),
+# 응답이 없거나 SERVFAIL 등이면 1. xargs 가 띄우는 자식 bash 에서도 쓰므로 DNS_* 환경변수만 본다.
+dns_ask() {
+	local i=$1 name=$2 type=$3 spec addr port out rc line st="" alive=0 ret=1 v
+	local -a f srv w
+	local re4='^[0-9]+(\.[0-9]+){3}$'
+	Q_VALS=""
+	if [[ ! -e $DNS_DIR/ok.$i && -f $DNS_DIR/fail.$i ]]; then
+		mapfile -t f < "$DNS_DIR/fail.$i"
+		(( ${#f[@]} >= 3 )) && return 1
+	fi
+	read -ra srv <<< "$DNS_SRVS"
+	spec=${srv[i]}; addr=${spec%,*}; port=${spec##*,}
+	if [[ $DNS_TOOL == dig ]]; then
+		out=$(dig -r +noall +comments +answer +time=2 +tries=2 -t "$type" -p "$port" "@$addr" "$name." 2>/dev/null); rc=$?
+		if (( rc == 0 )); then
+			while IFS= read -r line; do
+				if [[ $line == *"status: "* ]]; then st=${line#*status: }; st=${st%%,*}; continue; fi
+				[[ -z $line || $line == \;* ]] && continue
+				read -ra w <<< "$line"
+				[[ ${w[2]} == IN && ${w[3]} == "$type" ]] || continue
+				v=${w[4]%.}
+				if [[ $type == A ]]; then [[ $v =~ $re4 ]] || continue; fi
+				Q_VALS="${Q_VALS:+$Q_VALS }$v"
+			done <<< "$out"
+			if [[ $st == NOERROR || $st == NXDOMAIN ]]; then alive=1; ret=0
+			elif [[ -n $st ]]; then alive=1   # SERVFAIL·REFUSED 등: 서버는 살아 있으나 답으로 쓰지 않음
+			fi
+		fi
+	else
+		out=$(nslookup -type="$type" -timeout=2 -retry=1 -port="$port" "$name." "$addr" 2>&1); rc=$?
+		case $out in
+			*SERVFAIL*|*REFUSED*) alive=1 ;;
+			*"timed out"*|*"no servers"*|*"refused"*|*"communications error"*) ;;
+			*)
+				while IFS= read -r line; do
+					if [[ $type == A && $line == Address:* ]]; then
+						v=${line#Address:}; v=${v//[[:space:]]/}
+						[[ $v =~ $re4 ]] && Q_VALS="${Q_VALS:+$Q_VALS }$v"
+					elif [[ $type == PTR && $line == *"name = "* ]]; then
+						v=${line##*"name = "}; v=${v%.}
+						Q_VALS="${Q_VALS:+$Q_VALS }$v"
+					fi
+				done <<< "$out"
+				if [[ -n $Q_VALS || $out == *NXDOMAIN* || $out == *"No answer"* || $out == *"find "* || $rc -eq 0 ]]; then alive=1; ret=0; fi ;;
+		esac
+	fi
+	if (( alive )); then
+		[[ -e $DNS_DIR/ok.$i ]] || : > "$DNS_DIR/ok.$i"
+	else
+		echo x >> "$DNS_DIR/fail.$i"
+	fi
+	(( ret )) && Q_VALS=""
+	return $ret
+}
+
+# dns_lookup_a <서버번호> : 후보 이름(dns_cand)을 한 서버에 차례로 물어 결과를 출력한다 (A:ip,ip = A 있음 / N = A 없음 / F = 응답 없음·오류)
+dns_lookup_a() {
+	local i=$1 c r=F re='^[A-Za-z0-9_][A-Za-z0-9_.-]*$'
+	for c in "${dns_cand[@]}"; do
+		[[ $c =~ $re ]] || { r=F; break; }
+		if dns_ask "$i" "$c" A; then
+			if [[ -n $Q_VALS ]]; then r="A:${Q_VALS// /,}"; break; fi
+			r=N
+		else
+			r=F; break
+		fi
+	done
+	echo "$r"
+}
+
+# dns_worker <고유 이름 번호> <소문자 이름> : 서버들에 동시에 A 질의 → $DNS_DIR/res 에 "번호|서버1|서버2|.." 한 줄 (응답 없는 서버 하나가 호스트당 4초를 잡아먹어도 겹치게)
+dns_worker() {
+	local idx=$1 name=$2 i r res=""
+	local -a srv
+	read -ra srv <<< "$DNS_SRVS"
+	dns_cands "$name"
+	for ((i = 0; i < ${#srv[@]}; i++)); do
+		dns_lookup_a "$i" > "$DNS_DIR/t.$idx.$i" &
+	done
+	wait
+	for ((i = 0; i < ${#srv[@]}; i++)); do
+		read -r r < "$DNS_DIR/t.$idx.$i" || r=F
+		rm -f "$DNS_DIR/t.$idx.$i"
+		res+="|${r:-F}"
+	done
+	printf '%s%s\n' "$idx" "$res" >> "$DNS_DIR/res"
+}
+
+# dns_batch <번호 이름>... : 한 번의 bash 로 여러 호스트를 처리한다 (호스트마다 bash 를 새로 띄우는 비용을 줄임)
+dns_batch() {
+	while (( $# >= 2 )); do dns_worker "$1" "$2"; shift 2; done
+}
+
+# dns_ptr_worker <IPv4> : 모든 서버에 PTR 질의 → $DNS_DIR/ptr 에 "ip|이름 이름.." 한 줄
+dns_ptr_worker() {
+	local ip=$1 i names="" o1 o2 o3 o4 re='^[0-9]+(\.[0-9]+){3}$'
+	local -a srv
+	[[ $ip =~ $re ]] || return 0
+	IFS=. read -r o1 o2 o3 o4 <<< "$ip"
+	read -ra srv <<< "$DNS_SRVS"
+	for ((i = 0; i < ${#srv[@]}; i++)); do
+		dns_ask "$i" "$o4.$o3.$o2.$o1.in-addr.arpa" PTR && [[ -n $Q_VALS ]] && names="${names:+$names }$Q_VALS"
+	done
+	printf '%s|%s\n' "$ip" "$names" >> "$DNS_DIR/ptr"
+}
+
+# dns_check: 위 규칙으로 점검해 표를 출력하고, 불일치가 있으면 교체 여부를 묻는다.
+#   대화형: a 모두 DNS 로 / n 그대로 / s 하나씩 / q 중단.  AWX_AUTO=1: 터미널(/dev/tty)로 "등록값 그대로 계속 진행할까요? [y/N]" (y 외·터미널 없음은 중단).
+#   AWX_DNS_CHECKED=1(auto_setup 양식 생성에서 이미 점검·결정): 표만 출력하고 묻지 않고 진행.  교체는 ${user}.txt 5번째 필드만 바꾼다.
+dns_check() {
+	local d tool per n_ok n_mm n_un n_am n_na total ans rn h oldip newip tty
+	if command -v dig >/dev/null 2>&1; then tool=dig
+	elif command -v nslookup >/dev/null 2>&1; then tool=nslookup
+	else warn "DNS 도구 없음 — 점검 생략"; return 0
+	fi
+	dns_read_conf "${AWX_RESOLV_CONF:-/etc/resolv.conf}"
+	[[ -n $DNS_SRVS ]] || { warn "DNS 조회 불가 — 점검 생략"; return 0; }
+	d=$(mktemp -d) || { warn "[!] DNS 점검 임시 디렉터리를 만들 수 없어 생략합니다"; return 0; }
+	add_tmp "$d"
+	export DNS_TOOL=$tool DNS_DIR=$d DNS_SRVS DNS_SEARCH DNS_NDOTS
+	export -f dns_cands dns_ask dns_lookup_a dns_worker dns_batch dns_ptr_worker
+	: > "$d/res"; : > "$d/ptr"; : > "$d/warn.tsv"
+
+	# rows.tsv: "행번호 hostname 등록IP 고유이름번호",  uniq.txt: 고유 이름(소문자)을 "번호\n이름\n" 쌍으로 (xargs -0 입력)
+	awk -v d="$d" '{
+		k = tolower($4)
+		if (!(k in u)) { u[k] = ++n; print n "\n" k > (d "/uniq.txt") }
+		printf "%d\t%s\t%s\t%d\n", NR, $4, $5, u[k] > (d "/rows.tsv")
+	}' "${user}.txt"
+	# 호스트가 적을 땐 1대씩 병렬로(응답 없는 서버를 가려내는 3번 실패가 한꺼번에 쌓이게), 많으면 최대 10대씩 묶어 bash 시작 비용을 줄인다
+	per=$(( ($(wc -l < "$d/uniq.txt") / 2 + 31) / 32 )); (( per > 10 )) && per=10; (( per < 1 )) && per=1
+	tr '\n' '\0' < "$d/uniq.txt" | xargs -0 -n $((per * 2)) -P 32 bash -c 'dns_batch "$@"' _
+
+	# 판정: status.tsv 한 줄당 "행번호 hostname 등록IP 상태 DNS_IP A목록 비고"  (상태 OK 일치/MM 불일치/AM 판단 불가/UN 미등록/NA 조회 실패)
+	awk -F'\t' -v rf="$d/res" -v anyf="$d/anyA" '
+	function sortuniq(str,   arr, cnt, x, y, tmp, outs, prev) {
+		cnt = split(str, arr, ",")
+		for (x = 2; x <= cnt; x++) { tmp = arr[x]; for (y = x - 1; y >= 1 && (arr[y] "") > (tmp ""); y--) arr[y + 1] = arr[y]; arr[y + 1] = tmp }
+		outs = ""; prev = ""
+		for (x = 1; x <= cnt; x++) if (arr[x] != "" && (arr[x] "") != prev) { outs = outs (outs == "" ? "" : ",") arr[x]; prev = arr[x] "" }
+		return outs
+	}
+	FILENAME == rf { split($0, p, "|"); res[p[1]] = $0; next }
+	{
+		n = split(res[$4], p, "|")
+		nA = 0; nNX = 0; all = ""; nk = 0; split("", keys)
+		for (k = 2; k <= n; k++) {
+			if (substr(p[k], 1, 2) == "A:") {
+				nA++; ips = sortuniq(substr(p[k], 3)); all = all "," ips
+				if (!(ips in keys)) { keys[ips] = 1; nk++ }
+			} else if (p[k] == "N") nNX++
+		}
+		st = ""; dnsip = ""; ips = ""; note = ""
+		if (nA + nNX == 0) { st = "NA"; note = "응답한 서버 없음" }
+		else if (nA == 0) { st = "UN"; note = "미등록" }
+		else {
+			any = 1; ips = sortuniq(all)
+			if (nNX > 0 || nk > 1) { st = "AM"; note = "판단 불가: 서버 간 답이 다름" }
+			else if (split(ips, t, ",") != 1) { st = "AM"; note = "판단 불가: A 레코드 여러 개" }
+			else { dnsip = ips; st = ((ips "") == ($3 "")) ? "OK" : "MM" }
+		}
+		printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", $1, $2, $3, st, dnsip, ips, note
+	}
+	END { if (any) print 1 > anyf }' "$d/res" "$d/rows.tsv" > "$d/status.tsv"
+
+	if [[ ! -s $d/anyA ]]; then
+		warn "DNS 조회 불가 — 점검 생략"
+		export -nf dns_cands dns_ask dns_lookup_a dns_worker dns_batch dns_ptr_worker
+		rm -rf "$d"
+		return 0
+	fi
+
+	# 불일치 호스트의 등록 IP 만 PTR 조회 (중복 경고용)
+	awk -F'\t' '$4 == "MM" && !s[$3]++ { print $3 }' "$d/status.tsv" | tr '\n' '\0' | xargs -0 -r -n 1 -P 32 bash -c 'dns_ptr_worker "$1"' _
+	export -nf dns_cands dns_ask dns_lookup_a dns_worker dns_batch dns_ptr_worker
+
+	# 중복 경고: 불일치 호스트의 등록 IP 가 (목록) 다른 호스트의 등록 IP, (DNS) 다른 호스트의 DNS 기준 IP, (PTR) 다른 hostname 의 역조회와 같은지. warn.tsv: "행번호 문구"
+	awk -F'\t' -v pf="$d/ptr" -v wf="$d/warn.tsv" '
+	function shortn(h,   i) { h = tolower(h); i = index(h, "."); if (i > 0) h = substr(h, 1, i - 1); return h }
+	function add(i, other, tag,   key) {
+		key = tag "/" shortn(other)
+		if (key in seen) return
+		seen[key] = 1
+		print rn[i] "\t등록IP " ip[i] " 은 " other " 의 IP (" tag ")" > wf
+	}
+	FILENAME == pf { i = index($0, "|"); pt[substr($0, 1, i - 1)] = substr($0, i + 1); next }
+	{ n++; rn[n] = $1; host[n] = $2; ip[n] = $3; st[n] = $4; dip[n] = $5; sh[n] = shortn($2) }
+	END {
+		for (i = 1; i <= n; i++) {
+			if (st[i] != "MM" || ip[i] == "") continue
+			split("", seen)
+			for (j = 1; j <= n; j++) if (j != i && sh[j] != sh[i] && (ip[j] "") == (ip[i] "")) add(i, host[j], "목록")
+			for (j = 1; j <= n; j++) if (j != i && sh[j] != sh[i] && (st[j] == "OK" || st[j] == "MM") && (dip[j] "") == (ip[i] "")) add(i, host[j], "DNS")
+			m = split(pt[ip[i]], pn, " ")
+			for (k = 1; k <= m; k++) pn[k] = shortn(pn[k])
+			for (k = 2; k <= m; k++) { t = pn[k]; for (j = k - 1; j >= 1 && (pn[j] "") > (t ""); j--) pn[j + 1] = pn[j]; pn[j + 1] = t }
+			for (k = 1; k <= m; k++) if (pn[k] != sh[i]) add(i, pn[k], "PTR")
+		}
+	}' "$d/ptr" "$d/status.tsv"
+
+	read -r n_ok n_mm n_un n_am n_na total < <(awk -F'\t' '{ c[$4]++ } END { print c["OK"] + 0, c["MM"] + 0, c["UN"] + 0, c["AM"] + 0, c["NA"] + 0, NR }' "$d/status.tsv")
+
+	# 표: 일치가 아닌 호스트만. 경고(⚠) 노랑, 조회 실패·불일치의 DNS IP 빨강
+	if (( total > n_ok )); then
+		awk -F'\t' -v wf="$d/warn.tsv" -v cy="$YELLOW" -v cr="$RED" -v rst="$RST" '
+		function pad(s, w, dw) { if (dw == "") dw = length(s); while (dw < w) { s = s " "; dw++ } return s }
+		function col(c, s) { return (c == "" || s == "") ? s : c s rst }
+		FILENAME == wf { wl[$1] = wl[$1] (wl[$1] == "" ? "" : "\t") $2; next }
+		$4 == "OK" { next }
+		{
+			n++; hh[n] = $2; rr[n] = $3; sa[n] = $4
+			dv[n] = ($4 == "MM") ? $5 : ($6 != "" ? $6 : "-")
+			nt[n] = $7; wv[n] = wl[$1]
+			if (length(hh[n]) > w1) w1 = length(hh[n])
+			if (length(rr[n]) > w2) w2 = length(rr[n])
+			if (length(dv[n]) > w3) w3 = length(dv[n])
+		}
+		END {
+			if (w1 < 8) w1 = 8
+			if (w2 < 6) w2 = 6
+			if (w3 < 6) w3 = 6
+			print pad("hostname", w1) "  " pad("등록IP", w2, 6) "  " pad("DNS IP", w3) "  비고"
+			for (i = 1; i <= n; i++) {
+				note = ""
+				if (nt[i] != "") {
+					if (sa[i] == "NA") note = col(cr, "⚠ " nt[i])
+					else if (sa[i] == "AM") note = col(cy, "⚠ " nt[i])
+					else note = nt[i]
+				}
+				m = split(wv[i], ws, "\t")
+				for (k = 1; k <= m; k++) note = note (note == "" ? "" : "  ") col(cy, "⚠ " ws[k])
+				dcell = (note != "") ? pad(dv[i], w3) : dv[i]
+				if (sa[i] == "MM") dcell = col(cr, dcell)
+				line = pad(hh[i], w1) "  " pad(rr[i], w2) "  " dcell
+				if (note != "") line = line "  " note
+				print line
+			}
+		}' "$d/warn.tsv" "$d/status.tsv"
+	fi
+
+	if (( n_mm == 0 )); then
+		echo "[DNS] 일치 ${n_ok}대 (미등록 ${n_un}, 판단 불가 ${n_am}, 조회 실패 ${n_na})"
+		rm -rf "$d"
+		return 0
+	fi
+	warn "[DNS] 불일치 ${n_mm}대 (일치 ${n_ok}대, 미등록 ${n_un}, 판단 불가 ${n_am}, 조회 실패 ${n_na})"
+	: > "$d/apply.tsv"
+	awk -F'\t' '$4 == "MM" { print $1 "\t" $2 "\t" $3 "\t" $5 }' "$d/status.tsv" > "$d/mm.tsv"
+
+	if [[ $AWX_DNS_CHECKED == 1 ]]; then
+		echo "[DNS] auto_setup 에서 이미 점검·결정함 (AWX_DNS_CHECKED=1) — 등록값 그대로 진행"
+		rm -rf "$d"
+		return 0
+	elif [[ $AWX_AUTO == 1 ]]; then
+		# auto 모드: stdin 이 없으므로 질문은 터미널로만 받는다. 물을 수 없으면 중단
+		tty=${AWX_TTY:-/dev/tty}
+		printf '%s' "${YELLOW}등록값 그대로 계속 진행할까요? [y/N] ${RST}"
+		ans=""
+		if ! { IFS= read -r ans < "$tty"; } 2>/dev/null; then
+			echo
+			err "[X] DNS 불일치가 있으나 터미널(${tty})에서 답을 받을 수 없어 중단합니다"
+			exit 1
+		fi
+		echo "[DNS] 응답: ${ans:-(없음)}"
+		[[ $ans == [Yy] || $ans == [Yy][Ee][Ss] ]] || { err "[X] DNS 불일치 — 중단"; exit 1; }
+		rm -rf "$d"
+		return 0
+	fi
+
+	while true; do
+		read -r -p "${YELLOW}a 모두 DNS 로 / n 그대로 / s 하나씩 / q 중단 : ${RST}" ans || { err "[X] 입력이 끝났습니다"; exit 1; }
+		case $ans in
+			a|A) awk -F'\t' '{ print $1 "\t" $4 }' "$d/mm.tsv" > "$d/apply.tsv"; break ;;
+			n|N) break ;;
+			s|S)
+				exec 3< "$d/mm.tsv"
+				while IFS=$'\t' read -r rn h oldip newip <&3; do
+					read -r -p "  ${h} ${oldip} -> ${newip} 로 바꿀까요? [y/N] " ans || { err "[X] 입력이 끝났습니다"; exit 1; }
+					[[ $ans == [Yy] ]] && printf '%s\t%s\n' "$rn" "$newip" >> "$d/apply.tsv"
+				done
+				exec 3<&-
+				break ;;
+			q|Q) log "작업 취소 (DNS 점검에서 중단)"; exit 0 ;;
+			*) warn "[!] a, n, s, q 중 하나를 입력하세요" ;;
+		esac
+	done
+
+	if [[ -s $d/apply.tsv ]]; then
+		# 5번째 필드만 바꾼다 (다른 필드·공백·줄 순서는 바이트 그대로). apply.tsv: "행번호 새IP"
+		awk -v af="$d/apply.tsv" -v cf="$d/changed" '
+		function repl5(line, newip,   s, pre, i) {
+			s = line; pre = ""
+			for (i = 1; i <= 4; i++) { match(s, /^[ \t]*[^ \t]+/); pre = pre substr(s, 1, RLENGTH); s = substr(s, RLENGTH + 1) }
+			match(s, /^[ \t]*/); pre = pre substr(s, 1, RLENGTH); s = substr(s, RLENGTH + 1)
+			match(s, /^[^ \t]+/)
+			return pre newip substr(s, RLENGTH + 1)
+		}
+		FILENAME == af { to[$1] = $2; next }
+		{
+			if (FNR in to) {
+				print "[DNS] " $4 " " $5 " -> " to[FNR] > cf
+				print repl5($0, to[FNR])
+			} else print
+		}' "$d/apply.tsv" "${user}.txt" > "$d/new.txt" && cat "$d/new.txt" > "${user}.txt"
+		[[ -f $d/changed ]] && cat "$d/changed"
+		echo "[DNS] $(grep -c . "$d/changed")대 교체"
+	else
+		echo "[DNS] 교체 없음 — 등록값 그대로 진행"
+	fi
+	rm -rf "$d"
 }
 
 # [5] 등록 대상 20개씩 세로 다단 출력
@@ -370,6 +760,8 @@ log "[3-1] apply_infra_alias"
 apply_infra_alias
 log "[4] fix_mac"
 fix_mac
+log "[4-1] dns_check"
+dns_check
 log "[5] show_targets"
 show_targets
 

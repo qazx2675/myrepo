@@ -65,7 +65,7 @@ func TestDoneKeyHostAndGroup(t *testing.T) {
 	h.enter("a.yml", "a2")
 	h.keys("d")
 	f := h.frame()
-	if h.st.done == nil || !strings.Contains(f, donePromptHost) || !strings.Contains(f, "d 수동 완료") {
+	if h.st.done == nil || !strings.Contains(f, donePromptHost) || !strings.Contains(f, "h 호스트 작업") {
 		t.Fatalf("프롬프트:\n%s", f)
 	}
 	lines := strings.Split(f, "\n")
@@ -178,8 +178,8 @@ func TestDoneKeyExclusiveWithMenuAndOthers(t *testing.T) {
 	h := doneTUI(t)
 	h.enter("a.yml", "a2")
 	h.keys("d")
-	h.keys("mMxXwW")
-	if h.st.chgMenu != nil || h.st.oo != nil || h.st.awx != nil || h.st.done == nil || h.st.done.confirm {
+	h.keys("mMxXwWhHsS")
+	if h.st.chgMenu != nil || h.st.menu != nil || h.st.oo != nil || h.st.awx != nil || h.st.done == nil || h.st.done.confirm {
 		t.Fatalf("프롬프트 중 m/x/w 는 무시여야 함:\n%s", h.frame())
 	}
 	h.keys("\x1b")
@@ -238,9 +238,9 @@ func TestDoneKeyRemoteRelay(t *testing.T) {
 	}
 }
 
-// 안내 줄(화면 2): d 수동 완료 항목 + 색, 폭 40~200 에서 넘치지 않고 프롬프트·확인 줄도 잘리지 않는다
+// 안내 줄(화면 2): d 는 h 호스트 작업 메뉴 안으로 들어갔다(메뉴 항목 색은 분홍 그대로), 폭 40~200 에서 넘치지 않고 프롬프트·확인 줄도 잘리지 않는다
 func TestDoneHintAndPromptWidths(t *testing.T) {
-	if !strings.Contains(renderDetail(doneSnap(), selection{Detail: true, JobID: "J1", Yml: "a.yml"}, 120, 24, true), "\x1b[1;38;5;175md 수동 완료\x1b[0m") {
+	if !strings.Contains(strings.Join(menuLines(hostMenu(false), 120, true), "\n"), "\x1b[1;38;5;175md\x1b[0m") {
 		t.Error("d 수동 완료 색(분홍)")
 	}
 	for _, c := range []string{"1;36", stRed, "1;32", "1;33", "1;35", "1;34", "1;38;5;208"} {
@@ -273,8 +273,8 @@ func TestDoneHintAndPromptWidths(t *testing.T) {
 					}
 					out := renderDetail(s, sel, w, 24, color)
 					p := stripANSI(out)
-					if !strings.Contains(p, "d 수동 완료") {
-						t.Errorf("w=%d: 안내 줄에 d 수동 완료 없음", w)
+					if !strings.Contains(p, "h 호스트 작업") {
+						t.Errorf("w=%d: 안내 줄에 h 호스트 작업 없음", w)
 					}
 					for _, l := range strings.Split(p, "\n") {
 						if strWidth(l) > w {

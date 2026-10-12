@@ -55,6 +55,18 @@ func confVars() map[string]*string {
 		"enable_ldap_change": &enable_ldap_change,
 		"ip_engine":          &ip_engine,
 		"ldap_engine":        &ldap_engine,
+
+		// v0.8.0 신규 설치 양식 템플릿·gossh 작업 실행 위치
+		"newhost_template_1": &newhost_template_1,
+		"newhost_template_2": &newhost_template_2,
+		"newhost_template_3": &newhost_template_3,
+		"newhost_template_4": &newhost_template_4,
+		"newhost_template_5": &newhost_template_5,
+		"newhost_template_6": &newhost_template_6,
+		"newhost_template_7": &newhost_template_7,
+		"newhost_template_8": &newhost_template_8,
+		"newhost_template_9": &newhost_template_9,
+		"work_os6_over":      &work_os6_over,
 	}
 }
 

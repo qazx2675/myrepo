@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 841" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TUI m — 변경 작업 (IP · LDAP · 원복)">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="841" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">TUI m — 변경 작업 (IP · LDAP · 원복)</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">키 · 화면 1 · 2 · os8_mgmt 에서만 실행 (conf enable_ip_change / enable_ldap_change 또는 --admin)</text>
+
+  <rect x="40" y="56" width="450" height="30" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">m</text>
+  <path d="M265 86 L265 122" class="ln"/>
+  <rect x="40" y="122" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="142" class="t tb" text-anchor="middle">변경 메뉴가 켜져 있는가?</text>
+  <rect x="560" y="114" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="134" class="t tb" text-anchor="middle">꺼져 있으면 키 무반응</text>
+  <text x="715" y="150" class="t" text-anchor="middle">안내 줄에 "m 변경" 도 보이지 않음</text>
+  <path d="M490 137 L560 137" class="ln"/>
+  <text x="498" y="132" class="t tm">아니오</text>
+  <path d="M265 152 L265 188" class="ln"/>
+  <text x="273" y="169" class="t tm">예</text>
+  <rect x="40" y="188" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="208" class="t tb" text-anchor="middle">os6_mgmt 원격 클라이언트인가?</text>
+  <rect x="560" y="188" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="208" class="t tb" text-anchor="middle">"os8_mgmt 에서 실행하세요" 안내만</text>
+  <path d="M490 203 L560 203" class="ln"/>
+  <text x="498" y="198" class="t tm">예</text>
+  <path d="M265 218 L265 246" class="ln"/>
+  <text x="273" y="235" class="t tm">아니오(os8_mgmt)</text>
+  <rect x="40" y="246" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="266" class="t tb" text-anchor="middle">인라인 메뉴 (켜진 항목만, 번호 고정)</text>
+  <text x="265" y="282" class="t" text-anchor="middle">1 IP 변경  2 LDAP 변경  3 IP+LDAP  4 원복  5 auto.appl 원복</text>
+  <text x="265" y="298" class="t" text-anchor="middle">(Esc/m/q 닫기)</text>
+  <path d="M265 308 L265 336" class="ln"/>
+  <rect x="40" y="336" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="356" class="t tb" text-anchor="middle">user → (LDAP 계열) infra → 대상 입력 Ctrl+D</text>
+  <text x="265" y="372" class="t" text-anchor="middle">4 원복은 종류(IP/LDAP/둘 다) 먼저, 원복·5 는 user 의 이전 기록으로</text>
+  <text x="265" y="388" class="t" text-anchor="middle">대상 자동 채움</text>
+  <path d="M265 398 L265 426" class="ln"/>
+  <rect x="40" y="426" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="446" class="t tb" text-anchor="middle">(LDAP 계열) dry-run 자동 조회</text>
+  <text x="265" y="462" class="t" text-anchor="middle">ldap-config-engine -no-restart, 노드는 바뀌지 않음</text>
+  <path d="M265 472 L265 500" class="ln"/>
+  <rect x="40" y="500" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="520" class="t tb" text-anchor="middle">미리보기에서 yes 를 정확히 입력?</text>
+  <text x="265" y="536" class="t" text-anchor="middle">진행 중 job 과 겹치는 호스트는 빨간 경고</text>
+  <rect x="560" y="508" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="528" class="t tb" text-anchor="middle">다른 입력이면 취소 — 아무것도 바꾸지 않음</text>
+  <path d="M490 523 L560 523" class="ln"/>
+  <text x="498" y="518" class="t tm">아니오</text>
+  <path d="M265 546 L265 574" class="ln"/>
+  <text x="273" y="563" class="t tm">yes</text>
+  <rect x="40" y="574" width="450" height="78" rx="6" class="sec"/>
+  <text x="265" y="594" class="t tb" text-anchor="middle">기록 파일 먼저 생성 (실패하면 실행 안 함) → 실행</text>
+  <text x="265" y="610" class="t" text-anchor="middle">changes/&lt;user&gt;/&lt;시각&gt;_&lt;kind&gt;.json, os8 먼저 → 응답 없는 호스트만</text>
+  <text x="265" y="626" class="t" text-anchor="middle">os6_mgmt 경유</text>
+  <text x="265" y="642" class="t" text-anchor="middle">IP+LDAP 는 IP 실패 호스트의 LDAP 건너뜀, 취소는 Ctrl+X → y</text>
+  <path d="M265 652 L265 680" class="ln"/>
+  <rect x="40" y="680" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="700" class="t tb" text-anchor="middle">결과 화면 + auto_setup.log 요약 한 줄</text>
+  <text x="265" y="716" class="t" text-anchor="middle">IP / LDAP / auto.appl 칸, 원복 성공 시 이전 기록 갱신</text>
+  <text x="265" y="732" class="t" text-anchor="middle">서비스는 재시작하지 않음 (-no-restart), bindpw 는 어디에도 남기지 않음</text>
+  <text x="40" y="779" class="t tm">범례</text>
+  <rect x="80" y="768" width="14" height="14" class="box"/>
+  <text x="100" y="779" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="768" width="14" height="14" class="dec"/>
+  <text x="237" y="779" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="768" width="14" height="14" class="ldap"/>
+  <text x="395" y="779" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="768" width="14" height="14" class="sec"/>
+  <text x="699" y="779" class="t tm">기록 · 결과</text>
+  <rect x="80" y="788" width="14" height="14" class="ext"/>
+  <text x="100" y="799" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="816" class="t tm">코드: change_tui.go startChange · change.go changeMenuItems · changerun.go ldapEngineArgs · changerec.go createChangeRecord</text>
+</svg>

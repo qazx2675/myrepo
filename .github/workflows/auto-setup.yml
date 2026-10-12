@@ -1,0 +1,49 @@
+name: auto-setup CI
+
+on:
+  push:
+    paths:
+      - '.claude/HPC/auto_setup/**'
+      - '.github/workflows/auto-setup.yml'
+  pull_request:
+    paths:
+      - '.claude/HPC/auto_setup/**'
+      - '.github/workflows/auto-setup.yml'
+
+jobs:
+  auto-setup:
+    name: auto_setup (Go 1.26.5 빌드·테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/auto_setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      # 표준 라이브러리만 쓰고 go.mod 에 require 가 없어 vendor 디렉터리가 없다 → -mod=vendor 는 쓰지 않는다
+      # (폐쇄망도 외부 모듈 없이 Go 1.26.5 로 그대로 빌드)
+      - name: 오프라인 빌드
+        run: CGO_ENABLED=0 go build ./...
+      - name: go vet
+        run: go vet ./...
+      - name: 단위 테스트 (랩 전용 tcsh_live_test 는 AS_TEST_LOGIN_MGMT 가 없어 SKIP)
+        run: go test ./...
+      - name: bash 문법 검사
+        run: bash -n setup.sh build_os6.sh conf/*.sh test/*.sh
+
+  go120-compat:
+    name: Go 1.20 문법 호환 (os6 용 auto_setup_os6 빌드 조건)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/HPC/auto_setup
+    steps:
+      - uses: actions/checkout@v4
+      # auto_setup_os6 는 Go 1.20 으로 빌드한다 → min/max 내장·slices/maps·range-over-int·log/slog 등을 쓰면 여기서 깨진다
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.20.14' }
+      - name: Go 1.20 빌드 (정적, os6 용과 같은 조건)
+        run: CGO_ENABLED=0 go build ./...
+      - name: Go 1.20 vet (테스트 파일 포함 컴파일)
+        run: go vet ./...

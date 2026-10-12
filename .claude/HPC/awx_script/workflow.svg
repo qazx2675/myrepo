@@ -53,12 +53,29 @@
   <text x="750" y="415" class="text">[2] download_txt</text>
   <text x="750" y="435" class="text" font-size="12">Y: nodeinfo | N: 기존 파일</text>
 
-  <!-- [3] msg 파싱 / [4] MAC / [5] 다단 -->
+  <!-- [3] msg 파싱 / [4] MAC / [4-1] DNS 점검 / [5] 다단 -->
   <path d="M 750 450 L 750 490" class="arrow"/>
   <rect x="600" y="490" width="300" height="80" class="box" rx="5"/>
-  <text x="750" y="515" class="text">[3] msg 파싱</text>
-  <text x="750" y="535" class="text" font-size="12">[4] MAC 짝수 보정</text>
-  <text x="750" y="555" class="text" font-size="12">[5] 등록 대상 다단 출력</text>
+  <text x="750" y="510" class="text">[3] msg 파싱</text>
+  <text x="750" y="527" class="text" font-size="12">[4] MAC 짝수 보정</text>
+  <text x="750" y="544" class="text" font-size="12">[4-1] DNS 점검 (왼쪽 상세)</text>
+  <text x="750" y="561" class="text" font-size="12">[5] 등록 대상 다단 출력</text>
+
+  <!-- [4-1] DNS 점검 상세 (신규) -->
+  <path d="M 600 530 L 452 530" class="arrow"/>
+  <text x="526" y="522" class="text" font-size="11">[4-1]</text>
+  <rect x="150" y="396" width="300" height="210" class="box" rx="5"/>
+  <text x="300" y="420" class="text">[4-1] DNS 점검 (dns_check)</text>
+  <text x="300" y="442" class="text" font-size="12">resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의</text>
+  <text x="300" y="459" class="text" font-size="12">(dig 우선, 없으면 nslookup, 둘 다 없으면 생략)</text>
+  <text x="300" y="476" class="text" font-size="12">xargs -P 32 병렬, 질의당 2초 · 재시도 1회</text>
+  <text x="300" y="493" class="text" font-size="12">일치 / 불일치 / 판단 불가 / 미등록 / 조회 실패</text>
+  <text x="300" y="510" class="text" font-size="12">불일치: a 모두 DNS 로 · n 그대로</text>
+  <text x="300" y="527" class="text" font-size="12">            s 하나씩 · q 중단</text>
+  <text x="300" y="544" class="text" font-size="12">AWX_AUTO=1: /dev/tty 로 "등록값 그대로</text>
+  <text x="300" y="561" class="text" font-size="12">계속 진행할까요? [y/N]" (못 물으면 중단)</text>
+  <text x="300" y="578" class="text" font-size="12">AWX_DNS_CHECKED=1: 표만 출력하고 진행</text>
+  <text x="300" y="595" class="text" font-size="12">교체는 &lt;user&gt;.txt 5번째 필드만, LOG [DNS]</text>
 
   <!-- [6] 작업진행여부 -->
   <path d="M 750 570 L 750 610" class="arrow"/>

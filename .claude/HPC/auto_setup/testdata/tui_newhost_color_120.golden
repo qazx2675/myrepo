@@ -1,0 +1,172 @@
+== paste ==
+\e[1m 신규 설치 양식 [user: alice] - 1/5 붙여넣기\e[0m
+------------------------------------------------------------------------------------------------------------------------
+ hostname ip mac 을 한 줄에 한 대씩 붙여넣으세요 — 구분자(공백·탭·쉼표)·순서 무관
+\e[90m MAC: aa:bb:cc:dd:ee:ff · aa-bb-… · aabb.ccdd.eeff · aabbccddeeff → 소문자 aa:bb:… 로 저장\e[0m
+\e[90m 끝내기: 빈 줄 또는 . (Ctrl+D)   고치기: d 번호 삭제(d 3-5,8) · e 번호 다시 입력 · 빈 줄에서 Backspace = 앞 줄\e[0m
+\e[1m 입력 5대\e[0m\e[1;31m  오류 1줄 (빨강)\e[0m
+   1  svr001            10.0.0.1         aa:bb:cc:dd:ee:01
+   2  svr002            10.0.0.2         aa:bb:cc:dd:ee:02
+   3  spice-a01         10.0.0.3         aa:bb:cc:dd:ee:03
+   4  gpu0001           10.0.0.4         aa:bb:cc:dd:ee:04
+   5  svr002 10.0.0.5  \e[1;31m✗ 값이 2개 (hostname ip mac 3개 필요)\e[0m
+
+
+
+
+
+
+
+
+
+
+ > _
+------------------------------------------------------------------------------------------------------------------------
+ \e[1;36mEnter 줄 확정\e[0m  \e[1m빈 줄/. 입력 끝\e[0m  \e[1;36m↑↓ PgUp/PgDn 스크롤\e[0m  \e[1mEsc 닫기\e[0m  \e[1mCtrl+X 취소\e[0m
+== assign ==
+\e[1m 신규 설치 양식 [user: alice] - 2/5 템플릿 지정\e[0m
+------------------------------------------------------------------------------------------------------------------------
+\e[1m 템플릿 — 번호·별칭·이름으로 지정합니다\e[0m
+   1 [A]    tmp tmp sec <hostname> <ip> <mac> bond sda  sda5      500 8.10 uefi\e[90m   (sec-bond-sda-500-8.10-uefi)\e[0m
+   2 [mec]  tmp tmp mec <hostname> <ip> <mac> eth0 sda  sda5      500 9.6  uefi\e[90m   (mec-eth0-sda-500-9.6-uefi)\e[0m
+   3        tmp tmp mec <hostname> <ip> <mac> eth0 nvme nvme0n1p8 400 9.6  uefi\e[90m   (mec-eth0-nvme-400-9.6-uefi)\e[0m
+
+\e[1m 총 4대 · 지정 3\e[0m\e[33m · 추천 1\e[0m
+\e[1m #  hostname   ip        mac                템플릿   값 (infra nic disk 용량 os boot)\e[0m
+ 1  svr001     10.0.0.1  aa:bb:cc:dd:ee:01  \e[32m1 [A]  \e[0m  sec bond sda 500 8.10 uefi
+ 2  svr002     10.0.0.2  aa:bb:cc:dd:ee:02  \e[36m1 [A]* \e[0m  sec bond sda 500 9.6 uefi
+ 3  spice-a01  10.0.0.3  aa:bb:cc:dd:ee:03  \e[32m2 [mec]\e[0m  mec eth0 sda 500 9.6 uefi
+ 4  gpu0001    10.0.0.4  aa:bb:cc:dd:ee:04  \e[33m추천   \e[0m  \e[33mgpu bond nvme 900 8.10 uefi\e[0m\e[90m  ← gpu0100\e[0m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\e[90m 예) svr001-020=1  spice*=mec  1-20=2  *=A  ·  열 수정: svr005 os=9.6  svr001-005 nic=eth0 boot=legacy\e[0m
+\e[90m 새 템플릿: + sec bond sda 500 8.10 uefi [별칭]  ·  열: infra nic disk size(용량) os boot  ·  나중 지정이 덮어씀\e[0m
+ 지정 > svr0_
+------------------------------------------------------------------------------------------------------------------------
+\e[33m 3행 지정했습니다\e[0m
+ \e[1;36mEnter 적용 (빈 입력이면 다음: DNS 점검)\e[0m  \e[1;36m↑↓ PgUp/PgDn 스크롤\e[0m  \e[1mEsc 이전 단계\e[0m  \e[1mCtrl+X 취소\e[0m
+== dnsask ==
+\e[1m 신규 설치 양식 [user: alice] - 3/5 DNS 점검\e[0m
+------------------------------------------------------------------------------------------------------------------------
+\e[33m 등록 IP 가 DNS 와 다른 호스트 1대 — 판단 불가·미등록·조회 실패는 표에만 보이고 바꾸지 않습니다\e[0m
+
+\e[1m hostname   등록IP    DNS IP     비고\e[0m
+\e[33m svr001     10.0.0.1  10.0.0.11  ⚠ 등록IP 10.0.0.1 은 svr009 의 IP (DNS)\e[0m
+\e[90m spice-a01  10.0.0.3  -          미등록 사유\e[0m
+\e[90m gpu0001    10.0.0.4  -          ⚠ 판단 불가 사유\e[0m
+
+
+
+
+
+
+
+
+
+
+
+
+
+\e[1m a 모두 DNS 로 / n 그대로 / s 하나씩 / q 중단 :\e[0m
+------------------------------------------------------------------------------------------------------------------------
+ \e[1ma 모두 DNS 로\e[0m  \e[1mn 그대로\e[0m  \e[1;38;5;108ms 하나씩\e[0m  \e[1mq 중단\e[0m  \e[1;36m↑↓ PgUp/PgDn 스크롤\e[0m  \e[1mEsc 이전 단계\e[0m
+== preview ==
+\e[1m 신규 설치 양식 [user: alice] - 4/5 미리보기\e[0m
+------------------------------------------------------------------------------------------------------------------------
+ DNS 점검: 일치 1 · 불일치 1 (DNS 로 바꿈 1) · 판단 불가 1 · 미등록 1 · 조회 실패 0
+\e[33m DNS 경고 (바꾸지 않음):\e[0m
+\e[1m hostname   등록IP    DNS IP  비고\e[0m
+\e[90m spice-a01  10.0.0.3  -       미등록 사유\e[0m
+\e[90m gpu0001    10.0.0.4  -       ⚠ 판단 불가 사유\e[0m
+
+\e[1m ■ sec-bond-sda-500-8.10-uefi = 1 [A] — 1대\e[0m
+   \e[36mtmp tmp sec svr001    10.0.0.11 aa:bb:cc:dd:ee:01 bond sda  sda5      500 8.10 uefi\e[0m
+      \e[36m(DNS 로 바꿈 10.0.0.1 → 10.0.0.11)\e[0m
+\e[1m ■ sec-bond-sda-500-9.6-uefi — 1대\e[0m
+   tmp tmp sec svr002    10.0.0.2  aa:bb:cc:dd:ee:02 bond sda  sda5      500 9.6  uefi
+\e[1m ■ mec-eth0-sda-500-9.6-uefi = 2 [mec] — 1대\e[0m
+   tmp tmp mec spice-a01 10.0.0.3  aa:bb:cc:dd:ee:03 eth0 sda  sda5      500 9.6  uefi
+\e[1m ■ gpu-bond-nvme-900-8.10-uefi — 1대\e[0m
+\e[33m   tmp tmp gpu gpu0001   10.0.0.4  aa:bb:cc:dd:ee:04 bond nvme nvme0n1p8 900 8.10 uefi\e[0m\e[33m  (추천 ← gpu0100)\e[0m
+
+
+
+
+
+
+
+
+
+\e[1m y 를 누르면 /awx/alice.txt 에 4대를 저장합니다 (기존 파일은 백업)\e[0m
+------------------------------------------------------------------------------------------------------------------------
+\e[33m DNS IP 로 1대 바꿨습니다\e[0m
+ \e[1my 저장\e[0m  \e[1;36m↑↓ PgUp/PgDn 스크롤\e[0m  \e[1mEsc 이전 단계\e[0m  \e[1mCtrl+X 취소\e[0m
+== saved ==
+\e[1m 신규 설치 양식 [user: alice] - 5/5 저장 완료\e[0m
+------------------------------------------------------------------------------------------------------------------------
+\e[32m 저장 완료: /awx/alice.txt (4대)\e[0m
+ 기존 파일 백업: /tmp/auto_setup/newhost/alice/backup/20261012-140506.txt
+ 이력: /tmp/auto_setup/newhost/alice/history/20261012-140506.txt
+\e[90m 저장된 내용 (다시 읽음):\e[0m
+ tmp tmp sec svr001 10.0.0.11 aa:bb:cc:dd:ee:01 bond sda sda5 500 8.10 uefi
+ tmp tmp sec svr002 10.0.0.2 aa:bb:cc:dd:ee:02 bond sda sda5 500 9.6 uefi
+ tmp tmp mec spice-a01 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 500 9.6 uefi
+ tmp tmp gpu gpu0001 10.0.0.4 aa:bb:cc:dd:ee:04 bond nvme nvme0n1p8 900 8.10 uefi
+
+
+
+
+
+
+
+
+
+
+
+\e[1m AWX 실행할까요? [y/n]\e[0m
+------------------------------------------------------------------------------------------------------------------------
+ \e[1my AWX 실행 (nodeinfo N · 대상 목록 자동)\e[0m  \e[1mn 저장만 하고 닫기\e[0m  \e[1;36m↑↓ PgUp/PgDn 스크롤\e[0m
+== cancel-ask ==
+\e[1m 신규 설치 양식 [user: alice] - 4/5 미리보기\e[0m
+------------------------------------------------------------------------------------------------------------------------
+ DNS 점검: 일치 1 · 불일치 1 (DNS 로 바꿈 1) · 판단 불가 1 · 미등록 1 · 조회 실패 0
+\e[33m DNS 경고 (바꾸지 않음):\e[0m
+\e[1m hostname   등록IP    DNS IP  비고\e[0m
+\e[90m spice-a01  10.0.0.3  -       미등록 사유\e[0m
+\e[90m gpu0001    10.0.0.4  -       ⚠ 판단 불가 사유\e[0m
+
+\e[1m ■ sec-bond-sda-500-8.10-uefi = 1 [A] — 1대\e[0m
+   \e[36mtmp tmp sec svr001    10.0.0.11 aa:bb:cc:dd:ee:01 bond sda  sda5      500 8.10 uefi\e[0m
+      \e[36m(DNS 로 바꿈 10.0.0.1 → 10.0.0.11)\e[0m
+\e[1m ■ sec-bond-sda-500-9.6-uefi — 1대\e[0m
+   tmp tmp sec svr002    10.0.0.2  aa:bb:cc:dd:ee:02 bond sda  sda5      500 9.6  uefi
+\e[1m ■ mec-eth0-sda-500-9.6-uefi = 2 [mec] — 1대\e[0m
+   tmp tmp mec spice-a01 10.0.0.3  aa:bb:cc:dd:ee:03 eth0 sda  sda5      500 9.6  uefi
+\e[1m ■ gpu-bond-nvme-900-8.10-uefi — 1대\e[0m
+\e[33m   tmp tmp gpu gpu0001   10.0.0.4  aa:bb:cc:dd:ee:04 bond nvme nvme0n1p8 900 8.10 uefi\e[0m\e[33m  (추천 ← gpu0100)\e[0m
+
+
+
+\e[1m y 를 누르면 /awx/alice.txt 에 4대를 저장합니다 (기존 파일은 백업)\e[0m
+\e[1;31m 신규 설치 양식을 취소할까요? (저장하지 않음) [y/n]\e[0m
+------------------------------------------------------------------------------------------------------------------------
+ \e[1my 취소\e[0m  \e[1m다른 키 계속\e[0m

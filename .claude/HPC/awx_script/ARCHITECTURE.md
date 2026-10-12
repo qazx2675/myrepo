@@ -6,7 +6,9 @@
 |---|---|---|
 | `01.AWX_nodeinfo_V2.sh` | 메인 스크립트 — 노드정보 수집, 가공, 분할, yml 생성, git 업로드, LDAP/LACP 점검 | 실행 대상 |
 | `02.source_dhcp_pxe.sh` | 보조 스크립트 — yml별 인벤토리/DHCP/PXE 자동 반복 등록 | 01 에서 자동 호출 또는 단독 실행 |
-| `test/run_tests.sh` | 검증 하네스 — 계획서 §9 기준, 목업 스텁으로 E2E 검증 | 개발/CI 용도 |
+| `test/run_tests.sh` | 검증 하네스 — 계획서 §9 기준, 목업 스텁으로 E2E 검증 (108건, DNS 케이스 21~23 포함) | 개발/CI 용도 |
+| `test/fake_dns.py` | 가짜 DNS 서버(UDP, 127.0.0.1) — 실제 `dig`/`nslookup` 출력을 01 이 해석하는지 확인하는 케이스 23 용 | **랩·CI 전용** (운영에 배치하지 않음, python3) |
+| `setup/` | `setup_guide.sh`·`update_v0.6.0.sh`·`update_v0.6.1.sh`·`update_unreleased_dns.sh`·`vars.manifest` — 빈 변수 입력 가이드·현장 사본 업데이트 (git-upload-sk 틀로 생성, 직접 고치지 말고 재생성). `update_unreleased_dns.sh` 는 01 만 변경 | Unreleased |
 | `README.md` | 사용자 문서 — 설치, 사용, 옵션, 주의사항 | 배포 필수 |
 | `CHANGELOG.md` | 변경 이력 | 배포 필수 |
 | `ARCHITECTURE.md` | 이 문서 — 폴더 구조, 함수 흐름 | 개발 참고 |
@@ -31,6 +33,7 @@
 | [3] | `parse_msg()` | `${user}.txt` | msg 행 파싱, 12필드 검증 또는 종료 |
 | [3-1] | `apply_infra_alias()` | `${user}.txt`, `infra_alias` | 3번째 필드(infra)의 미등록 이름을 치환하고 건수 출력 |
 | [4] | `fix_mac()` | `${user}.txt` | MAC 짝수 보정 (spice/pice/dspr/pspr + ev 미포함) |
+| [4-1] | `dns_check()` (+ `dns_server_spec`·`dns_read_conf`·`dns_cands`·`dns_ask`·`dns_lookup_a`·`dns_worker`·`dns_batch`·`dns_ptr_worker`) | `${user}.txt`, `/etc/resolv.conf`(`AWX_RESOLV_CONF`) | resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의(dig → nslookup, `xargs -P 32`, 질의당 2초·재시도 1회)해 판정 5종·중복 경고(목록·DNS·PTR) 표 출력, 불일치면 a/n/s/q (auto 모드는 `/dev/tty` y/N, `AWX_DNS_CHECKED=1` 은 표만), 교체는 5번째 필드만 + LOG `[DNS]`. auto_setup `dnscheck.go` 와 같은 규칙 |
 | [5] | `show_targets()` | `${user}.txt` | 호스트명 20개씩 세로 다단 출력 + 총 대수 |
 | [6] | (메인 루프) | 프롬프트 Y/N | N → 종료, Y → 계속 |
 | [7] | `inventory_delete()` | ssh 설정 | 원격 호스트에서 삭제 스크립트 실행 |
@@ -69,6 +72,8 @@
 | 출력 형식 변경 (다단 열/행, 총 대수) | `show_targets()`, 계획서 §5-6 |
 | LDAP/LACP 점검 로직 | `check_servers()`, 계획서 §5-12 |
 | 02 옵션 확인표 레이아웃 | `02` `print_table()`, 계획서 §5-15 |
+| DNS 점검 규칙(판정·중복 경고·속도·auto 모드 질문) | `dns_check()` 와 보조 `dns_*` 함수, **auto_setup `dnscheck.go` 와 같이 고칠 것**, 테스트 케이스 21~23 |
+| nodeinfo 질문 자동 답변 | `download_txt()` 의 `AWX_AUTO_NODEINFO` 분기 (`AWX_AUTO` 있을 때·없을 때) |
 | 메뉴 명령어 추가 | [13] 메뉴 루프, 계획서 §5-13 |
 | 재시도 정책 | [14] 02 호출, 계획서 §5-14 |
 | 로깅 형식 | `log()` 함수, 계획서 §5-2 |

@@ -52,3 +52,23 @@ enable_ldap_change=
 ip_engine=
 # 위와 같음: ldap-config-engine
 ldap_engine=
+
+# (v0.8.0) 신규 설치 양식 템플릿 (선택, 최대 9개) — TUI 에서 w → 2 (CLI: auto_setup newhost) 로 01 의 12필드 양식을 만들 때 고르는 설치 값 묶음
+# 형식: newhost_template_N=별칭|infra nic disk 용량 os boot   (별칭은 비워도 되고 `|` 자체를 생략해도 된다)
+#   disk: sda 또는 nvme (root 파티션은 sda → sda5, nvme → nvme0n1p8 로 정해짐) / 용량: 숫자 / boot: uefi, legacy, 레거시 / 나머지는 공백 없는 문자열
+#   이름은 값으로 자동 생성된다: infra-nic-disk-용량-os-boot (예 sec-bond-sda-500-8.10-uefi). 형식이 틀린 템플릿은 목록에서 빠지고 사유가 표시됨
+#   예) newhost_template_1=A|sec bond sda 500 8.10 uefi
+#   예) newhost_template_2=mec eth0 nvme 400 9.6 uefi
+newhost_template_1=
+newhost_template_2=
+newhost_template_3=
+newhost_template_4=
+newhost_template_5=
+newhost_template_6=
+newhost_template_7=
+newhost_template_8=
+newhost_template_9=
+
+# (v0.8.0) gossh 작업(s 키)의 실행 위치 기준 대수 — 이 대수 이하는 os8 gossh 로 실행(접속불가는 os6_mgmt 경유 재실행), 초과하면 전량 os6_mgmt 경유
+# 숫자 (1 이상). 비우거나 숫자가 아니면 1000
+work_os6_over=

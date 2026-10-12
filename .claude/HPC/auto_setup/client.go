@@ -159,7 +159,7 @@ func remoteBin() string {
 // remoteCommand: gossh 에 넘길 원격 명령.
 // gossh 는 줄마다 공백을 다듬고 빈 줄을 버리며 stdout/stderr 를 따로 내보내므로, 바이트 동일을 위해
 // 원격에서 stdout·stderr 를 파일로 받아 base64 로 싣고 종료코드를 표지줄로 보낸다.
-// 로그인 셸이 csh 여도 되도록 전체를 한 줄 `sh -c '…'` 로 만든다.
+// 로그인 셸이 csh 여도 되도록 전체를 한 줄 `bash -c '…'` 로 만든다 (remoteBash — os6 경로와 같은 감싸기).
 func remoteCommand(args []string) string {
 	var sb strings.Builder
 	sb.WriteString(shQuote(remoteBin()))
@@ -168,7 +168,7 @@ func remoteCommand(args []string) string {
 	}
 	script := "t=$(mktemp -d) || exit 97; " + sb.String() + " </dev/null >$t/o 2>$t/e; r=$?; " +
 		"echo " + markRC + "$r; echo " + markO + "; base64 $t/o; echo " + markE + "; base64 $t/e; rm -rf $t"
-	return "sh -c " + shQuote(script)
+	return remoteBash(script)
 }
 
 // remoteRun: os8_mgmt 에서 `<os8_autosetup> args…` 를 gossh 원샷으로 실행. err 은 전송 실패(응답 없음/형식 오류)만.

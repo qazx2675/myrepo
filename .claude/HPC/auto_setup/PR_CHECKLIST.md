@@ -4,7 +4,7 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 
 ## 빌드 및 문법 검사
 
-- [ ] `bash -n setup.sh build_os6.sh test/*.sh` 에러 없음
+- [ ] `bash -n setup.sh build_os6.sh conf/*.sh test/*.sh` 에러 없음
 - [ ] `go vet ./...` 경고 없음
 - [ ] `gofmt -l .` 출력 없음 (형식 통일)
 - [ ] `shellcheck -S warning setup.sh build_os6.sh test/*.sh` 경고 0건 (os_check·01 도 신규 경고 0)
@@ -186,6 +186,23 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 - [ ] **anaconda 감지**: ping X 없이 anaconda 응답이면 설치중·SeenDown·DownAt (`anaconda_test.go`), g 재확인 `단계 대기 → 설치중`, 종료 job 은 단계 불변
 - [ ] **문서**: CHANGELOG 0.7.1, README 키 표·「변경 작업」, `사용법.txt`, ARCHITECTURE, 도움말(`?`)이 서로 어긋나지 않음
 
+## v0.8.0 항목 (메뉴 h·w · 신규 설치 양식 · DNS 점검 · gossh 작업 · 결함 수정 ①②③)
+
+- [ ] **Go 1.26.5 빌드·검증 + Go 1.20 호환**: 폐쇄망 버전으로 `export PATH=/opt/go1.26.5/bin:$PATH GOTOOLCHAIN=local; go build ./... && go vet ./... && go test ./...` 통과 (`go test` 398 PASS·7 SKIP 안팎). `go.mod` 는 `go 1.20` 유지. **Go 1.20 문법·표준 라이브러리만** — `grep -nE '(^|[^A-Za-z0-9_.])(min|max)\(|"slices"|"maps"|"log/slog"' *.go` 로 내장 min/max·slices·maps·slog 가 없는지 확인 (자체 함수 `rMin`·`rMax` 는 해당 없음, 주석 안의 `max(` 는 무시). range-over-int 와 for 루프 변수의 새 의미는 grep 으로 안 잡히므로 **Go 1.20 호환 job(CI) 또는 .60 의 Go 1.20 빌드**로 확인. 외부 의존성 추가 없음 (`go.mod` 에 require 없음)
+- [ ] **os6 바이너리**: 소스를 바꿨으면 Go 1.20 서버(.60)에서 `bash build_os6.sh` 로 `auto_setup_os6` 를 재빌드해 **같은 커밋에 포함** (`file auto_setup_os6` 에 `statically linked`, 변수는 빈 값). 회사 환경에는 Go 가 없으므로 .gitignore 로 빼지 않음
+- [ ] **tcsh 확인 (랩)**: os6_mgmt 로 보내는 원격 명령을 만들거나 고쳤으면 `AS_TEST_LOGIN_MGMT=<user@host> go test -run ViaLoginShell -v .` (로그인 셸이 tcsh 인 계정) — SKIP 이 아니라 PASS. 원격 명령은 `remoteBash`/`shq` 를 거치고(`grep -n 'sh -c' client.go` 에 옛 `sh -c` 없음), 래퍼 2종(`os6WrapperScript`·`chgOS6WrapperScript`)은 같은 형태 (`TestOS6WrappersLoginTcsh`, `TestRemoteBashQuoting`, `TestRemoteBashBang`)
+- [ ] **결함 ①③**: 준비확인·`g` 의 60초 제한과 프로세스 그룹 종료(`TestCheckTimeoutKillsGroup`), gossh 출력 해석 통일(`TestParseGossh`, `TestParseCheckFQDNAndMismatch` — FQDN↔짧은 이름·ANSI·형식 불일치). LDAP 수집 응답 원본은 로그에 남지 않음 (bindpw)
+- [ ] **메뉴 h·w**: 안내 줄·도움말(`?`)·골든(`tui_menus_*` 등)이 새 구조와 일치, 숨은 단축키 `c t g v d x` 동작 유지, 메뉴 닫힘 상태는 열기 전과 바이트 동일, 폭 40~120 에서 `…` 잘림 없음 (`menu_tui_test.go`). `ww`·`w` `Enter` 가 예전의 AWX 실행
+- [ ] **신규 설치 양식**: 저장 전에는 어떤 파일도 바뀌지 않음, 저장 시 기존 `<user>.txt` 백업(실패하면 중단)·`history/` 사본, 디렉터리 0700·파일 0600, MAC 소문자·중복·형식 오류 차단, AWX 연결은 nodeinfo N 강제·대상 목록 자동 입력·`AWX_DNS_CHECKED` (`newhost_test.go`, `newhost_tui_test.go`, `awxrun_test.go`)
+- [ ] **DNS 점검**: Go(`dnscheck.go`)와 bash(01 `dns_check`)의 판정 5종·중복 경고 3종·속도 상수가 같음 (`dnscheck_test.go`, awx `bash ../awx_script/test/run_tests.sh` 108건 — DNS 케이스 21~23). 01 auto 모드는 `/dev/tty` 로 묻고 못 물으면 중단, `AWX_DNS_CHECKED=1` 은 표만 출력. `test/fake_dns.py` 는 랩·CI 전용(운영 설치 대상 아님)
+- [ ] **gossh 작업 `s`**: 실행 위치 규칙(os8 ≤ 기준 → os8 + 접속불가만 os6 재실행 / 초과 → 전량 os6 / os6_mgmt 에서 열면 os6 직접), 기록 `work/<user>/` 0700·0600, 출력 7일·user 당 200MB·`/tmp/<3자리>` 7일 정리, 위험어 확인 (`work_test.go`, `work_tui_test.go`)
+- [ ] **새 conf 변수는 빈 값으로만**: `main.go`·`conf/auto_setup.conf.example`·`conf/vars.manifest`(32개)에 `newhost_template_1~9`·`work_os6_over` 가 빈 값, 비면 기존과 같은 동작. `conf/auto_setup.conf` 는 커밋하지 않음
+- [ ] **update_v0.8.0.sh 생성기 검증**: `bash -n conf/update_v0.8.0.sh`, 마지막 줄이 `#__END_OF_UPDATE__` 이고 `awk 'END{print NR}' conf/update_v0.8.0.sh` 가 파일 머리의 `GUS_EXPECT_LINES` 와 같음 (직접 고치지 말고 `vars.manifest` 수정 후 **재생성**). `bash test/run_setup_scripts.sh` 54건 PASS — `--dry` 무변경·멱등·`--undo` 바이트 동일·v0.6.0→v0.7.0→v0.8.0 순차 적용·기존 값 보존. awx_script `setup/update_unreleased_dns.sh` 도 같은 검증 (`GUS_EXPECT_LINES`, 01 만 변경)
+- [ ] **SVG 재생성**: 명령·키 흐름이 바뀐 곳은 `docs/svg/*.svg`(단계와 맨 아래 "코드:" 줄)·`workflow.svg`·awx_script `workflow.svg`([4-1] 단계)를 함께 고침. 모든 SVG 가 `xmllint --noout` 를 통과 (없으면 python `xml.dom.minidom` 파싱), `<style>` 의 라이트/다크 CSS 변수 유지. `docs/svg/README.md` 표와 파일 목록이 일치 (README·WORKFLOW 의 상대 링크가 실제 파일을 가리키는지 스크립트로 확인)
+- [ ] **CI**: `.github/workflows/auto-setup.yml` 이 `.claude/HPC/auto_setup/**` 와 워크플로 파일 자신으로 paths 필터, working-directory 가 `.claude/HPC/auto_setup`, Go 1.26.5 `build`·`vet`·`test` + `bash -n setup.sh build_os6.sh conf/*.sh test/*.sh`, Go 1.20 문법 호환 job (build·vet)
+- [ ] **문서**: README(키 표 메뉴 구조·새 절 4개·빈 변수 표·알려진 제한)·CHANGELOG 0.8.0·ARCHITECTURE(새 파일 행 누락 0, 「수정 요청 가이드」 새 항목)·WORKFLOW(mermaid + SVG)·`사용법.txt` 14절·`docs/svg/README.md` 가 서로 어긋나지 않음. awx_script: README·CHANGELOG `[Unreleased]`·`사용법.txt`·WORKFLOW·`workflow.svg`·ARCHITECTURE
+- [ ] **버전 태그**: `git tag -a auto_setup-v0.8.0 -m "메뉴 h·w, 신규 설치 양식, DNS 점검, gossh 작업 기록, 결함 ①②③ (CHANGELOG 2026-10-13 항목)"`
+
 ## 기존 사용법 불변 확인
 
 - [ ] **01.AWX_nodeinfo_V2.sh 불변**
@@ -204,16 +221,16 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 - [ ] **CHANGELOG.md**: 2026-10-02(v0.1.0) 항목 유지 + 2026-10-03(v0.2.0) 항목 (신규·변경·주의)
 - [ ] **ARCHITECTURE.md**: 폴더 구조·파일 역할·런타임 디렉터리·함수 매핑
 - [ ] **WORKFLOW.md**: mermaid 흐름도 + 단계별 설명
-- [ ] **workflow.svg**: 정적 SVG 흐름도 (2차 반영, 다크/라이트 지원)
+- [ ] **workflow.svg**: 정적 SVG 흐름도 (v0.8.0 반영, 다크/라이트 지원) + `docs/svg/` 명령·키별 31개
 - [ ] **PR_CHECKLIST.md**: 이 체크리스트
 - [ ] **사용법.txt**: 명령어 중심 빠른 참고 (맨 위 1-7 섹션)
-- [ ] **.github/workflows/ci.yml**: setup-go + go test/vet/build + bash -n
+- [ ] **.github/workflows/ci.yml**: setup-go + go test/vet/build + bash -n (저장소 루트 `.github/workflows/auto-setup.yml` 은 경로 필터 CI)
 
 ## 최종 체크 (커밋 전)
 
 ```bash
 # 1. 빌드 및 정적 검사
-bash -n setup.sh build_os6.sh test/*.sh
+bash -n setup.sh build_os6.sh conf/*.sh test/*.sh
 go vet ./... && gofmt -l .
 shellcheck -S warning setup.sh build_os6.sh test/*.sh
 
@@ -221,9 +238,10 @@ shellcheck -S warning setup.sh build_os6.sh test/*.sh
 go test ./...
 
 # 3. 목업 E2E (root 필요)
-sudo bash test/run_e2e.sh      # 85건
-sudo bash test/run_e2e2.sh     # 191건
-bash ../awx_script/test/run_tests.sh   # 54건
+sudo bash test/run_e2e.sh      # 86건
+sudo bash test/run_e2e2.sh     # 194건
+bash test/run_setup_scripts.sh # 54건
+bash ../awx_script/test/run_tests.sh   # 108건
 
 # 4. 빈 변수 확인 (main.go 8개 / os_check 2개 + 01 1개, 모두 "")
 grep -nE '^\s+(os6_mgmt|os6_gossh|os6_autosetup|os_check_sh|awx_dir|os8_mgmt|os8_autosetup|os6_os_check_sh|ldap_share_dir)\s+=' main.go
