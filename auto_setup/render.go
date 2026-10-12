@@ -639,6 +639,9 @@ func clampWidth(width int) int {
 // titleLines: 상단 2줄 — 제목·갱신 시각·데몬 상태 / 총계
 func titleLines(s Snapshot, width int, color bool) []string {
 	left := []seg{{" auto_setup 상태 리포트", stBold}}
+	if forceUser != "" {
+		left = append(left, seg{"  [user: " + forceUser + "]", stYellow})
+	}
 	var dm seg
 	if s.Daemon.Running {
 		t := "● 데몬 실행"

@@ -421,7 +421,7 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 		for _, n := range cand {
 			cr, ok := res[n]
 			if !ok || !cr.Responded {
-				detail[n] = "os8 무응답"
+				detail[n] = "os8 무응답" + whySuffix(cr)
 				miss = append(miss, n)
 				continue
 			}
@@ -452,7 +452,7 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 					nOS6++
 					rc.Hosts = append(rc.Hosts, RecheckHost{Host: n, Result: "os6", Detail: d.recheckApply(j, n, "os6", cr, t, closed)})
 				} else {
-					detail[n] += " → os6 무응답"
+					detail[n] += " → os6 무응답" + whySuffix(res[n])
 					left = append(left, n)
 				}
 			}
@@ -478,6 +478,14 @@ func (d *Daemon) recheckHosts(id, yml string, now time.Time) string {
 		logf("[!] 재확인(g) 접속불가·미응답 %d대 (job %s): %s", len(miss), j.ID, strings.Join(miss, " "))
 	}
 	return ""
+}
+
+// whySuffix: 무응답 사유(gossh 가 출력한 메시지)가 있으면 " (사유)" 형태로
+func whySuffix(cr CheckResult) string {
+	if cr.Why == "" {
+		return ""
+	}
+	return " (" + cr.Why + ")"
 }
 
 // recheckApply: g 재확인에서 응답한 호스트 1대 반영 — 경로 갱신 + (아직 READY 전이면) 준비확인 결과 반영.

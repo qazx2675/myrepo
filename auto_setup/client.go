@@ -27,10 +27,14 @@ type SnapshotSource interface {
 
 // newSource: os8_mgmt 가 비어 있지 않으면 원격, 아니면 로컬
 func newSource() SnapshotSource {
+	var src SnapshotSource = localSource{}
 	if os8_mgmt != "" {
-		return remoteSource{}
+		src = remoteSource{}
 	}
-	return localSource{}
+	if forceUser != "" { // auto_setup -user: 해당 user 의 job 만
+		return userFilterSource{src}
+	}
+	return src
 }
 
 // snapshotNow: 스냅샷 기준 시각. 테스트 결정성을 위해 AUTO_SETUP_NOW(epoch 초)가 있으면 그 값을 쓴다.

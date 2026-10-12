@@ -211,6 +211,9 @@ func (st *tuiState) startOneoff() {
 
 // newUserStep: user 선택 단계 상태 (x 와 w 가 공유). 01 의 user_route 메뉴를 읽을 수 있으면 번호 선택, 아니면 이름 직접 입력.
 func (st *tuiState) newUserStep(awx bool, p *AwxProfile) *oneoffState {
+	if forceUser != "" && userNameRe.MatchString(forceUser) { // auto_setup -user: user 를 묻지 않고 바로 다음 단계
+		return &oneoffState{step: ooHosts, user: forceUser, awx: awx, awxProf: p}
+	}
 	o := &oneoffState{step: ooUser, awx: awx, awxProf: p}
 	if awx_dir != "" {
 		if route := parseUserRoute(filepath.Join(awx_dir, "01.AWX_nodeinfo_V2.sh")); route != "" {
