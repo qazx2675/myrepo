@@ -83,12 +83,16 @@ func TestSecondRunEndToEnd(t *testing.T) {
 			run = l
 		}
 	}
-	for _, w := range []string{`cat > "$d/targets.txt"`, "-auto 'user1' targets.txt > os_check.log 2>&1; echo ==RC==$?", `'\''x'\''`} {
+	// 원격 명령은 bash -c '…' 로 감싸므로 안쪽 ' 는 '\'' 로 한 번 더 이스케이프되어 보인다
+	if !strings.Contains(run, "mgmtstub bash -c 'd=$(mktemp -d)") {
+		t.Fatalf("bash -c 로 감싸야 함:\n%s", run)
+	}
+	for _, w := range []string{`cat > "$d/targets.txt"`, `-auto '\''user1'\'' targets.txt > os_check.log 2>&1; echo ==RC==$?`, `'\''\'\'''\''x'\''\'\'''\''`} {
 		if !strings.Contains(run, w) {
 			t.Fatalf("원격 실행 명령에 %q 없음:\n%s", w, run)
 		}
 	}
-	if !strings.Contains(string(lg), "tar cf - os_check.log $(ls check.res_'user1'*") || !strings.Contains(string(lg), "rm -rf ") {
+	if !strings.Contains(string(lg), `tar cf - os_check.log $(ls check.res_'\''user1'\''*`) || !strings.Contains(string(lg), "rm -rf ") {
 		t.Fatalf("회수·삭제 명령:\n%s", lg)
 	}
 	// code 병합

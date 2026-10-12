@@ -13,7 +13,7 @@
 
  \e[1;36m↑↓ 이동\e[0m  \e[1;36m←→ 작업 전환\e[0m  \e[1;36mEnter 상세\e[0m  \e[1ma 전체 보기\e[0m  \e[1mr 새로고침\e[0m
  \e[1m? 도움말\e[0m  \e[1mq 종료\e[0m
- \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
+ \e[1;34mw AWX·신규설치\e[0m  \e[1;38;5;108ms gossh 작업\e[0m  \e[1;35mx 단독 체크\e[0m
 == detail ==
 \e[1m job J1 / web.yml  (ib/rhel8/pxe/y)  완료 2/2\e[0m
  \e[32m완료 2\e[0m  
@@ -29,8 +29,7 @@
 
  \e[1;36m↑↓ 이동\e[0m  \e[1;36m← 목록\e[0m  \e[1mf 정체·실패만\e[0m  \e[1ma 전체 그룹\e[0m  \e[1mr 새로고침\e[0m
  \e[1m? 도움말\e[0m  \e[1mq 복귀\e[0m
- \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m  \e[1;38;5;175md 수동 완료\e[0m
- \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
+ \e[1;38;5;141mh 호스트 작업\e[0m  \e[1;34mw AWX·신규설치\e[0m  \e[1;38;5;108ms gossh 작업\e[0m  \e[1;35mx 단독 체크\e[0m
 == detail filter ==
 \e[1m job J1 / web.yml  (ib/rhel8/pxe/y)  완료 2/2\e[0m
  \e[32m완료 2\e[0m  \e[33m[필터: 정체·실패만]\e[0m
@@ -44,5 +43,4 @@
 
  \e[1;36m↑↓ 이동\e[0m  \e[1;36m← 목록\e[0m  \e[1mf 정체·실패만\e[0m  \e[1ma 전체 그룹\e[0m  \e[1mr 새로고침\e[0m
  \e[1m? 도움말\e[0m  \e[1mq 복귀\e[0m
- \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m  \e[1;38;5;175md 수동 완료\e[0m
- \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
+ \e[1;38;5;141mh 호스트 작업\e[0m  \e[1;34mw AWX·신규설치\e[0m  \e[1;38;5;108ms gossh 작업\e[0m  \e[1;35mx 단독 체크\e[0m

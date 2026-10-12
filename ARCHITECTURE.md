@@ -1,26 +1,28 @@
 # ARCHITECTURE
 
+사용법은 [README.md](README.md), 흐름도는 [WORKFLOW.md](WORKFLOW.md)·[workflow.svg](workflow.svg)·[docs/svg/](docs/svg/README.md) (명령·키별 31개).
+
 ## 폴더 구조 및 파일 역할
 
 | 파일/폴더 | 역할 | 비고 |
 |---|---|---|
-| `main.go` | 최상단 빈 변수 9개 + CLI 분기(무인자 리포트·--start/--stop/--restart·snapshot·done·request 포함) + 상수(주기/대기/정체 시간) · `--admin`(0.7.0, TUI 변경 메뉴 켜기) · 변경 키 4개(`enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine`) | 실행 대상 |
+| `main.go` | 최상단 빈 변수(9개 + `awx_profile_1~9` + 변경 키 4개 `enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine` + 0.8.0 `newhost_template_1~9`·`work_os6_over` = 32개) + CLI 분기(무인자 리포트·--start/--stop/--restart·snapshot·done·request 포함) + 상수(주기/대기/정체 시간) · `--admin`(0.7.0) · `-user`(0.7.3, `splitUser`) · `newhost`·`s`(0.8.0, 해당 CLI 진입) · `work-relay`(내부용, os6_mgmt → os8_mgmt 기록 중계) | 실행 대상 |
 | `daemon.go` | 데몬 루프: queue 수거·경로 판별·ping 감시·준비확인·스케줄·run 큐 | 상태기계 중추 |
 | `state.go` | Job/Host 구조체, JSON 원자 저장/복원 (재기동 후 이어하기) | 상태 영속화 |
 | `icmp.go` | raw 소켓 ping (echo id+seq 로 호스트 매핑) | local 경로 |
 | `probe.go` | probe 하위명령(os6_mgmt 쪽) + os6 장기 ssh 세션 관리 | os6 경로 |
-| `check.go` | 준비확인: gossh -pm uptime, anaconda 감지, READY 판정 (local/os6) | 설치 완료 감지 |
-| `runner.go` | os_check 실행(-auto), os6 gossh 래퍼 생성, code 파일 작성, wall 발송 | run 실행 |
+| `check.go` | 준비확인: gossh -pm uptime, anaconda 감지, READY 판정 (local/os6). 0.8.0: 호출 1회 전체 **60초 제한**(`checkTimeout`, 초과 시 프로세스 그룹 종료·사유 `시간 초과(60초)`), os6 ssh 옵션 `-o BatchMode=yes -o ConnectTimeout=10` + `remoteBash`, **gossh 출력 해석 통일**(`parseGossh` — ANSI 제거·`호스트: 내용` 분리·FQDN↔짧은 이름 맞춤·`ERROR:`/`SSH 접속 실패` 사유 인식, 해석 실패는 `logGosshUnparsed` 가 로그 `[!] gossh 출력 해석 실패`) | 설치 완료 감지 |
+| `runner.go` | os_check 실행(-auto / -auto-check), os6 gossh 래퍼 생성(`os6WrapperScript`), code 파일 작성, wall 발송. 0.8.0: **`shq`**(셸 인용)·**`remoteBash`**(원격 명령을 `bash -c '…'` 로 감쌈, `!` 가 있으면 base64) 가 여기 있고 check·ldapbk·second·client·changerun 이 같은 함수를 씀 | run 실행 |
 | `ensure.go` | ensure 하위명령: flock + setsid + daemon 백그라운드 기동 | cron 훅 |
 | `log.go` | /tmp/auto_setup/auto_setup.log 관리 (10MB 롤오버) | 로깅 |
 | `notify.go` | wall 알림 발송 | 결과 공유 |
 | `paths.go` | `os6_os_check_sh`·`awx_dir` 해석, dhcp.sh 링크 후보 (autofs 동일 경로 포함) | 2차 |
 | `conf.go` · `conf/auto_setup.conf.example` | 빈 변수를 설정 파일(`conf/auto_setup.conf`)로 채움 (빌드 변수가 우선). 0.7.0: 변경 메뉴 가시성(`ipChangeEnabled`·`ldapChangeEnabled`), 엔진 경로(`engineBin`), 변경 conf 디렉터리(`changeConfDir`) | 0.3.0, 0.7.0 |
-| `conf/setup_guide.sh` · `conf/update_v*.sh` · `conf/vars.manifest` | 빈 변수 입력 가이드·현장 사본 업데이트(git-upload-sk 틀로 **생성**, 직접 고치지 말고 manifest 수정 후 재생성) · 변수 목록 | 0.4.0 |
+| `conf/setup_guide.sh` · `conf/update_v0.4.0.sh` · `update_v0.6.0.sh` · `update_v0.7.0.sh` · `update_v0.8.0.sh` · `conf/vars.manifest` | 빈 변수 입력 가이드·현장 사본 업데이트(git-upload-sk 틀로 **생성**, 직접 고치지 말고 manifest 수정 후 재생성)·변수 목록(현재 32개). `update_v0.8.0.sh` 는 앵커 `ldap_engine=` 뒤에 `newhost_template_1~9`·`work_os6_over` 빈 변수를 추가 (`--dry`·`--undo`) | 0.4.0~0.8.0, `test/run_setup_scripts.sh` |
 | `model.go` | 호스트 단계(Stage)·한글 라벨·정체 판정, 그룹(yml) 집합, Snapshot 구조체·BuildSnapshot (CLI·TUI·원격 공용) | 2차 |
-| `client.go` | SnapshotSource(로컬/원격), gossh 원샷 전송·출력 복원 = 원격 클라이언트 모드 | 2차 |
+| `client.go` | SnapshotSource(로컬/원격), gossh 원샷 전송·출력 복원 = 원격 클라이언트 모드. 0.8.0: 원격 명령이 `remoteBash` 로 `sh -c` → `bash -c` (`remoteCommand`) | 2차 |
 | `ctl.go` | `--start/--stop/--restart`, snapshot/done/request 명령, 색 메시지 | 2차 |
-| `tui.go` | TUI 루프: raw tty, 키 파싱, 화면 전환, 자동 갱신, 수동 OS 체크 요청 (입출력·시계 주입). `m` 키는 `change_tui.go` 로 넘김 (0.7.0) | 2차 |
+| `tui.go` | TUI 루프: raw tty, 키 파싱, 화면 전환, 자동 갱신, 수동 OS 체크 요청 (입출력·시계 주입). `m` 키는 `change_tui.go` 로 넘김 (0.7.0). 0.8.0: `h`·`w` 는 `menu_tui.go`, `s` 는 `work_tui.go`, `w`→2 는 `newhost_tui.go` 로 넘기고 인라인 줄(`inlineSel`)·신규 설치 양식·gossh 작업 화면을 그리기 분기에 추가 | 2차 |
 | `view.go` | TUI 전체 화면 보기: 수동 실행(c/t) 결과, g 재확인 진행, v 최근 결과 (데몬 기록·code 본문을 읽어 실시간 표시) | 단위 테스트 `mode_test.go` |
 | `awxprofile.go` | conf 의 `awx_profile_1`~`9` 파싱 (`nodeinfo(y/n)\|OS값\|설명`, OS 값 검증, 무효 프로파일은 사유와 함께 제외) | 0.6.0, `awxprofile_test.go` |
 | `oneoff.go` | `x` 키: 체크스크립트 단독 실행 (user 선택 → 호스트 입력 → t/c → 임시 디렉터리에서 os_check 실행 → 결과 창, 기록 안 남김) | 0.6.0, `oneoff_test.go`, `oneoffExec` 등 주입 |
@@ -31,29 +33,44 @@
 | `change_render.go` | 변경 흐름 화면 문자열(`renderChange`): 입력·dry-run·미리보기·실행·결과 표, 위험 문구 빨강, 줄바꿈(`wrapSegs`) | 0.7.0, `change_render_test.go` |
 | `change_tui.go` | `m` 키 연결: 인라인 메뉴 줄(`changeMenuLines` → `selection.Inline`, 0.7.1 — 전체 화면 `renderChangeMenu` 는 제거), 흐름 시작·tick·종료, 원격(os6) 안내 문구 | 0.7.0, `change_tui_test.go` |
 | `done_tui.go` | `d` 수동 완료(0.7.1): 화면 2 인라인 프롬프트·확인(`doneState`, 대상은 그리기·실행마다 스냅샷으로 재계산), 로컬 `markDone` / 원격 `remoteRun("done" …)` | 0.7.1, `done_tui_test.go` |
+| `userfilter.go` | `-user <이름>` / `-user=<이름>` 해석(`splitUser`: 영문·숫자·`. _ -`, `.`·`..` 거부), `forceUser`, 지정 user 의 job 만 남기는 `userFilterSource`(`filterSnapshotUser`) | 0.7.3, `userfilter_test.go` |
+| `sessionuser.go` | 세션 user: `fixedUser`·`headerUser`·`needSessionUser`(`-user` → 세션 user → 처음 한 번 선택, 선택 화면은 `x` 의 user 단계 재사용)·CLI 용 `askUserCLI`(3번까지 묻기)·`readLineRaw` | 0.8.0, `sessionuser_test.go` |
+| `menu_tui.go` | `h`(호스트 작업, 화면 2)·`w`(AWX) 항목별 인라인 메뉴: `hostMenu`·`awxMenu`·`handleMenu`·`pickMenu`(글자·번호 선택 → 숨은 단축키 핸들러 `handleDetail` 호출)·`menuLines`(항목 단위 줄바꿈). `startWork`·`startNewhost` 가 `s`·`w`→2 의 연결 지점 | 0.8.0, `menu_tui_test.go`, 골든 `tui_menus_*` |
+| `flow_tui.go` | 전체 화면 흐름 공통 부품: `flowFrame`/`renderFlow`(제목·고정 머리·스크롤 본문·입력 줄·안내 줄)·`flowScroll`(↑↓ PgUp/PgDn)·`pasteBuf`(여러 줄 붙여넣기, 빈 줄·`.`·Ctrl+D 로 끝)·`bgTask`/`startBG`/`fastTickWhile`(백그라운드 계산 + 1초 tick) | 0.8.0 (신규 설치 양식·gossh 작업이 씀) |
+| `newhost.go` | 신규 설치 양식 순수 로직: 붙여넣기 해석(`nhParseLine`, MAC 4형식 → 소문자)·중복 검사(`nhCheckDups`)·고치기 명령(`d`/`e`)·템플릿 목록(`loadNewhostTemplates` = conf + user 별 `templates`, `+` 추가)·지정 미니 언어(`nhParseAssign`)·이력 추천(`loadNewhostHistory`)·12필드 줄(`nhLine`)·저장(`newhostSave`: 백업 → 임시 파일 + rename → history 사본)·AWX 환경(`newhostAwxEnv`: nodeinfo N 강제·`AWX_DNS_CHECKED`) | 0.8.0, `newhost_test.go` |
+| `newhost_tpl.go` | 템플릿 한 줄 파싱·검증(`parseNewhostTpl`: `별칭\|infra nic disk 용량 os boot`, disk → root 파티션 유도), conf `newhost_template_1~9`, gossh 작업 기준 대수 `work_os6_over`(`parseWorkOS6Over`/`workOS6Over`, 비면 1000) | 0.8.0, `newhost_tpl_test.go` |
+| `newhost_tui.go` | 신규 설치 양식 5단계 상태기계·화면(`newhostState`: 붙여넣기 → 템플릿 지정 → DNS(a/n/s/q) → 미리보기 → 저장 확인), `startNewhostFlow`(os8_mgmt·awx_dir 확인 → 세션 user), 저장 뒤 AWX 실행 연결(`newhostAwx`·`runNewhostAwx`), CLI `cmdNewhost`. `newhostDNS` 는 테스트 주입점 | 0.8.0, `newhost_tui_test.go`, 골든 `tui_newhost_*` |
+| `dnscheck.go` | DNS 점검 엔진: resolv.conf 읽기(`readDNSConf`)·search/ndots 후보(`dnsCandidates`)·최소 DNS 클라이언트(UDP, 잘림 시 TCP)·서버별 질의(`dnsResolver`, 3번 실패한 서버 건너뜀)·판정 5종(`dnsJudge`)·`CheckDNS`·중복 경고(`dnsAddWarnings`: 목록·DNS·PTR)·표(`RenderDNSTable`)·교체(`ApplyDNS`). awx_script 01 의 `dns_check` 와 **같은 규칙** | 0.8.0, `dnscheck_test.go`(가짜 DNS 서버) |
+| `work.go` | gossh 작업 기록 로직·저장소: 호스트 붙여넣기 해석(`workParseHosts`)·`/tmp/<3자리>` 이름(`workNewName`)·기록 형식(`workRec`/`workDB`, index.jsonl 추가 전용)·실행 경로(`workPlan`)·gossh/ssh 명령(`workLocalArgv`/`workOS6Inner`)·`script -q -f -c` 래퍼(`workScript`)·출력 판정(`judgeWork`)·정리(`workCleanOut` 출력 7일·user 당 200MB, `workCleanTmp`, 데몬이 하루 한 번 `workCleanAll`)·os6→os8 중계(`remoteWorkStore` ↔ `cmdWorkRelay`) | 0.8.0, `work_test.go` |
+| `work_tui.go` | gossh 작업 화면(`workState`: 목록 → n 새 작업 / Enter 항목 메뉴 / `/` 검색 → 명령 입력 → 확인 → TUI 를 떠나 실행)·`openWork`·CLI `cmdWork`·결과 보기(`less -R`, `workLess` 주입) | 0.8.0, `work_tui_test.go` |
+| `tcsh_live_test.go` | **랩 전용** 시험: 로그인 셸이 tcsh/csh 인 계정으로 진짜 ssh 접속해 준비확인·LDAP `gosshBatch`·2차 체크·gossh 작업·원격 클라이언트가 `!` 가 있어도 동작하는지 확인. 환경변수 `AS_TEST_LOGIN_MGMT=<user@host>` 가 없으면 SKIP | 0.8.0 (CI 에서는 SKIP) |
 | `test/demo_change.sh` · `test/run_change_os.sh` · `test/run_change_lab.sh` | 변경 메뉴 모의 환경 / RHEL 7·8·9 fixture 판정·`-no-restart` 검증 / .58 자기 자신 실동작 (fixture 경로만) | 0.7.0 |
 | `test/lib_change.sh` · `test/fake_gossh.sh` | 변경 시험용 fixture 노드·conf 생성 / 가짜 gossh (호스트별 fixture 루트에서 엔진 스크립트를 로컬 실행, systemctl 등은 호출만 기록) | 0.7.0 |
 | `계획서_v0.7.md` | v0.7.0 명세 (확정 사항 §1, 단계 §3, 불변 조건 §0) | 구현 기준 |
-| `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙 | 2차, 골든 테스트 |
+| `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙. 0.8.0: 안내 줄 둘째 묶음 `menuHint`(`h 호스트 작업  w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크`)·`hintStyles`(h·s 색)·도움말(항목별 메뉴) | 2차, 골든 테스트 |
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |
 | `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel / refresh / recheck(g 재확인: os8 → os6)), 수동 run 스케줄 | 2차 |
 | `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교·공유경로(`ldap_share_dir`) 경유 백업 세트 복원 | 2차 |
 | `second.go` | 2차(이중) 체크: os6_mgmt 실행·결과 회수·code 섹션 병합 | 2차 |
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
-| `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route), TUI 골든 파일 | 검증 |
+| `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route·change*·oneoff·awx*·menu·newhost*·dnscheck·work*·sessionuser·userfilter·pgkeys), TUI 골든 파일 — `go test ./...` 398 PASS, 7 SKIP | 검증 |
 | `setup.sh` | 빌드 + /usr/local/bin 설치 + cron + tmpfiles 등록 (멱등). 0.7.0: 변경 엔진 2개 빌드·설치, conf 샘플을 `/etc/auto_setup` 에 복사(기존 파일 유지) | 설치 도구 |
 | `build_os6.sh` | Go 1.20 정적 빌드 → auto_setup_os6 (CGO_ENABLED=0). 0.7.0: 엔진 os6 바이너리 2개(`../ip_change/bin`, `../ldap_setting/bin`) 도 빌드 | os6 빌드 |
 | `../ip_change/bin/ip-change-engine_os6` · `../ldap_setting/bin/ldap-config-engine_os6` | RHEL 6 에서 엔진을 단독 실행할 때 쓰는 정적 바이너리 (0.7.0). 소스 변경 때 `build_os6.sh` 로 재빌드해 커밋 | 엔진 소스 옆 |
-| `test/` | 대화형 점검(manual_check.sh 1~17단계), 목업 E2E(run_e2e.sh 85건, run_e2e2.sh 177건), 공용(lib_e2e.sh), 스텁(gossh/ssh/wall) | 검증 하네스 |
+| `test/` | 대화형 점검(manual_check.sh 1~17단계), 목업 E2E(run_e2e.sh 86건, run_e2e2.sh 194건), 가이드·업데이트(run_setup_scripts.sh 54건), 변경 메뉴(run_change_os.sh 173건, run_change_lab.sh 18건), 공용(lib_e2e.sh), 스텁(gossh/ssh/wall), 모의 데모(demo_flow.sh 가짜 작업·데몬·스텁 / make_demo_jobs.sh 화면용 가짜 작업 — 데몬 없이 파일만) | 검증 하네스 |
+| `auto_setup_os6` | 빌드 완료 os6 용 정적 바이너리(Go 1.20, 변수 빈 값). 회사 환경에는 Go 가 없어 저장소에 포함. **소스를 고치면 `build_os6.sh` 로 재빌드해 커밋** | 배포 필수 |
 | `README.md` | 설치·사용·옵션 가이드 | 배포 필수 |
 | `CHANGELOG.md` | 변경 이력 | 배포 필수 |
 | `ARCHITECTURE.md` | 이 문서 — 폴더 구조, 함수 역할, 수정 가이드 | 개발 참고 |
 | `WORKFLOW.md` | 흐름도(텍스트 mermaid) | 개발/설명 용도 |
-| `workflow.svg` | 흐름도(SVG) | 브라우저 열람 용도 |
+| `workflow.svg` | 흐름도(SVG, v0.8.0 신규 기능 열 포함) | 브라우저 열람 용도 |
 | `PR_CHECKLIST.md` | 풀리퀘스트 검증 항목 | CI 참고 |
 | `사용법.txt` | 명령어 중심 빠른 참고 | 운영 담당자 용도 |
 | `.github/workflows/ci.yml` | 폴더 내 CI (bash/shellcheck/go test) | 자동 검증 |
+| `<저장소 루트>/.github/workflows/auto-setup.yml` | 이 폴더 변경 시만 도는 CI (paths 필터): Go 1.26.5 `build`·`vet`·`test` + `bash -n`, Go 1.20 문법 호환 job (0.8.0) | 자동 검증 |
+| `docs/svg/*.svg` · `docs/svg/README.md` | CLI 명령 14개·TUI 키 17개 흐름도(라이트/다크 대응) + 목록 표. 각 그림 맨 아래 "코드:" 줄이 구현 위치 | 0.8.0, 문서 |
+| `수정계획서.md` | v0.8.0 수정계획서 (인터뷰 결과, 확정 사항 §9, 단계별 모델 §11) | 참고(그대로 둠) |
 
 ## 런타임 디렉터리 구조
 
@@ -79,6 +96,9 @@
 ├── ldapbak/               # (2차) LDAP 백업 (0700, 자동 삭제 안 됨, bindpw 포함 원본)
 │   └── <jobid>/<host>/    #   ldap.conf resolv.conf nslcd|sssd.conf ntp|chrony.conf, meta.json (파일 0600)
 ├── changes/               # (0.7.0) m 변경 메뉴 기록: <user>/<YYYYmmddHHMMSS>_<kind>.json (디렉터리 0700, 파일 0600, 자동 삭제 안 됨)
+├── recheck/               # (0.4.7) g 재확인 진행 기록: <jobid>.json (TUI 진행 창이 읽음)
+├── newhost/               # (0.8.0) 신규 설치 양식: <user>/{templates, backup/<시각>.txt, history/<시각>.txt} (0700/0600, 자동 삭제 안 됨)
+├── work/                  # (0.8.0) gossh 작업 기록: <user>/{index.jsonl(요약, 영구), lists/<xxx>.txt, out/<id>.log.gz(7일·200MB), relay/} (0700/0600)
 ├── runs/
 │   ├── <code>/
 │   │   ├── targets.txt    # 이 run 의 대상 호스트 목록
@@ -115,7 +135,9 @@
 
 - **후보**: (미처리 && ping up && seen_down) || (기동 직후 1회)
 - **local**: `gossh -pm -script -w <tmpfile> "cat /proc/uptime"`; `<tmpfile>_os_install` 에 없으면 anaconda 아님
-- **os6**: ssh 로 os6_mgmt 에 임시 파일 생성 → gossh 실행 → 결과 수집
+- **os6**: ssh 로 os6_mgmt 에 임시 파일 생성 → gossh 실행 → 결과 수집 (원격 명령은 `remoteBash` 로 `bash -c` 감싸기)
+- **시간 제한 (0.8.0)**: 두 경로 모두 호출 1회 전체 60초(`checkTimeout`) — 넘으면 프로세스 그룹을 종료하고 받은 출력까지만 해석, 호스트는 무응답 + 사유 `시간 초과(60초)`
+- **출력 해석 (0.8.0)**: `parseGossh(out, hosts)` 하나가 준비확인(`parseCheck`)과 LDAP(`gosshBatch`)의 응답을 나눈다. 호스트 이름은 정확히 같은 이름 → 짧은 이름 순, 하나도 못 찾으면 `gosshOut.Head`(원본 앞 5줄)로 로그·`출력 형식 불일치` 표시
 
 ### runner.go 의 code 파일 생성
 
@@ -185,6 +207,10 @@
 - **bindpw 비노출**: 화면·기록(`changes/`)·로그·임시 파일·snapshot 어디에도 bindpw 를 남기지 않는다. 엔진 출력은 들어오는 즉시 `secretMask` 로 마스킹하고 DIFF 줄은 화면 꼬리에 넣지 않는다. 기록은 디렉터리 0700, 파일 0600. 단 LDAP 엔진의 gossh 명령줄은 base64 로 bindpw 를 싣는다 (ldap_setting 의 기존 설계, 주의사항은 README 「변경 작업」).
 - **기존 동작 불변 (conf 꺼짐 + `--admin` 없음)**: `m` 은 무반응이고 안내 줄에 `m 변경` 이 없다. 60칼 이상 줄바꿈 규칙 외에는 화면·키·동작을 바꾸지 않는다. 기존 01·os_check 사용법은 그대로 둔다.
 - **엔진은 바이너리로만 호출**: 엔진 코드를 auto_setup 에 흡수하지 않는다. 두 도구는 독립 사용 가능해야 한다.
+- **os6_mgmt 로 보내는 원격 명령은 모두 `remoteBash`/`shq` 를 거친다** (0.8.0): 로그인 셸이 csh/tcsh 여도 `$(...)`·`${f}` 가 bash 에서 해석되게 `bash -c '…'` 로 감싸고, 경로·인자는 `shq` 로 인용한다. 새 원격 호출을 만들면 같은 함수를 쓰고, bash 래퍼(`os6WrapperScript`·`chgOS6WrapperScript`)는 같은 형태를 유지한다. 줄바꿈이 있는 inner 는 안 된다 (csh). 시험은 `tcsh_live_test.go`.
+- **준비확인·`g` 의 외부 호출에는 60초 상한을 유지한다** (`checkTimeout`) — 시간 초과는 무응답 + 사유 `시간 초과(60초)`.
+- **새 conf 변수는 빈 값으로만 추가** (0.8.0 방침): `main.go` + `conf/auto_setup.conf.example` + `conf/vars.manifest` + `update_v*.sh` 재생성 + README 빈 변수 표. 비어 있으면 기존과 똑같이 동작해야 한다.
+- **DNS 규칙은 두 곳을 같이 고친다**: auto_setup `dnscheck.go` 와 awx_script `01.AWX_nodeinfo_V2.sh` 의 `dns_check` (판정 5종·중복 경고·속도 상수·`AWX_DNS_CHECKED`).
 - **엔진 소스를 고치면** `build_os6.sh` 로 `ip_change/bin/ip-change-engine_os6`, `ldap_setting/bin/ldap-config-engine_os6` 를 다시 빌드해 커밋한다 (+x).
 
 ## 수정 요청 가이드
@@ -216,6 +242,22 @@
 | 경유(os8 → os6) 규칙 | `changerun.go` `routed` | os8 먼저, 응답 없는 호스트만 os6 |
 | 변경 기록 형식·위치·원복 자동 채움 | `changerec.go` (`createChangeRecord`·`changeAutofill`·`markAfterRun`) | 0600 유지, 원자 갱신 |
 | 변경 화면 문구·줄바꿈 | `change_render.go`, `change_tui.go` | 골든 `testdata/tui_changemenu_*` 갱신, 폭 60/80/120 확인 |
+| `h`·`w` 메뉴 항목·글자·번호 | `menu_tui.go` `hostMenu`·`awxMenu`, 안내 줄 `render.go` `menuHint`·`hintStyles`·`renderHelp` | 숨은 단축키(c t g v d x)는 그대로 동작해야 함. 골든 `tui_menus_*`·`menu_tui_test.go`, docs/svg 의 `tui_h_*`·`tui_w_*` |
+| `-user`·세션 user | `userfilter.go`(`splitUser`·`filterSnapshotUser`), `sessionuser.go`(`needSessionUser`·`askUserCLI`) | `.`·`..` 거부 유지, x·w→1·m 은 기존처럼 매번 묻기 |
+| 신규 설치 양식 — 붙여넣기 해석·MAC 형식·중복 | `newhost.go` `nhParseLine`·`nhNormMAC`·`nhCheckDups` | 잘못된 줄은 사유와 함께 막기 (`newhost_test.go`) |
+| 신규 설치 양식 — 템플릿 형식·값 검사 | `newhost_tpl.go` `parseNewhostTpl`, conf `newhost_template_N` | root 파티션은 disk 로 유도, 01 의 12필드 순서(`nhLine`)와 일치 |
+| 신규 설치 양식 — 지정 언어·이력 추천 | `newhost.go` `nhParseAssign`·`loadNewhostHistory` | 한 줄 전체 검사 후 적용(하나라도 틀리면 변경 없음) |
+| 신규 설치 양식 — 단계·키·화면, 저장·백업 | `newhost_tui.go`, `newhost.go` `newhostSave` | 저장 전에는 파일을 바꾸지 않음, 백업 실패 시 중단 |
+| 신규 설치 양식 → AWX 연결 | `newhost.go` `newhostAwxEnv`, `newhost_tui.go` `newhostAwx`·`runNewhostAwx`, `awxrun.go` | nodeinfo N 강제, `AWX_DNS_CHECKED`, 프로파일 없을 때 `AWX_AUTO_NODEINFO=n` 만 |
+| DNS 판정·중복 경고·속도 | `dnscheck.go` `dnsJudge`·`dnsAddWarnings`·`CheckDNS`, 상수 `dnsQueryTimeout` 등 | **awx_script 01 `dns_check` 와 동기화**, 테스트 `dnscheck_test.go` + awx `test/run_tests.sh` 21~23 |
+| gossh 작업 실행 위치·기준 대수 | `work.go` `workPlan`, `newhost_tpl.go` `workOS6Over`, conf `work_os6_over` | 규칙: os8 ≤ 기준 → os8 + 접속불가만 os6 재실행 / 초과 → 전량 os6 / os6_mgmt 에서 열면 os6 직접 |
+| gossh 작업 기록 형식·보관·정리 | `work.go` `workRec`·`workCleanOut`·`workCleanTmp`·`workCleanAll`, 상수 `workKeep`·`workUserCap` | index.jsonl 은 추가 전용, 디렉터리 0700·파일 0600 |
+| gossh 작업 화면·키 | `work_tui.go`, 흐름 부품 `flow_tui.go` | 실행은 TUI 를 떠나 `script` 로 (`workOutside`) |
+| os6 원격 명령 감싸기·인용 | `runner.go` `remoteBash`·`shq`, 래퍼 `os6WrapperScript`·`changerun.go` `chgOS6WrapperScript` | `!` 는 base64, 새 호출도 같은 함수 사용, `tcsh_live_test.go` 로 랩 확인 |
+| gossh 출력 해석·FQDN/짧은 이름 | `check.go` `parseGossh`·`logGosshUnparsed` | LDAP 수집 응답은 원본 로그 금지 (bindpw) |
+| 준비확인·재확인 시간 제한 | `check.go` `checkTimeout` | 60초 고정(conf 변수 없음) |
+| 새 conf 변수 추가 | `main.go`, `conf/auto_setup.conf.example`, `conf/vars.manifest` → `update_v*.sh` 재생성, README 빈 변수 표 | 빈 값으로만, 기존 값 불변 |
+| 명령·키 흐름이 바뀜 | 해당 `docs/svg/*.svg` 의 단계와 "코드:" 줄, `workflow.svg`, `WORKFLOW.md`, README 표의 링크 | SVG 는 `xmllint --noout` 로 확인 |
 
 ## 테스트 주입점 (iface.go)
 
@@ -232,6 +274,11 @@
 | `Second` | 가짜 구현 / PATH 의 ssh 스텁 | 2차 대상 선별·병합 |
 | `tuiEnv` | 가짜 In/Out/Size/Tick/Now | 키 시퀀스·골든 렌더 |
 | `changeExec` (변경 메뉴 외부 명령 실행기) | Go 테스트의 가짜 실행기 / 엔진의 `-gossh` 로 `test/fake_gossh.sh` 지정 (모의·E2E) | 변경 흐름·경유·취소 시험 |
+| `awxExec` (AWX 실행) | 가짜 실행기 | `w`→1·신규 설치 양식 뒤 AWX 환경변수 확인 |
+| `newhostDNS` · `dnsResolvConf` · `dnsLocalDomain` | 가짜 DNS 결과 / 임시 resolv.conf + 가짜 UDP DNS 서버 | 양식 DNS 단계 · 판정 표 시험 |
+| `workScript` · `workLess` · `workTmpDir` · `workUserCap` · `workRand` | 가짜 gossh 실행기·`less`·임시 `/tmp`·작은 상한·고정 난수 | gossh 작업 실행·정리·이름 시험 |
+| `checkTimeout` | 짧은 값 + hang 하는 가짜 gossh/ssh | 60초 제한·프로세스 그룹 종료 시험 |
+| 로그인 셸 `AS_TEST_LOGIN_MGMT` | 진짜 ssh (tcsh 계정) + 가짜 gossh 스크립트 | `tcsh_live_test.go` — 랩 전용 |
 
 - 단위 테스트(state_test, daemon_test 등)에서 가짜를 직접 주입
 - E2E(run_e2e.sh)에서 bash 스텁(gossh, ssh, wall) 사용

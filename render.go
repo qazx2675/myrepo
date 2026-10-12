@@ -639,8 +639,8 @@ func clampWidth(width int) int {
 // titleLines: 상단 2줄 — 제목·갱신 시각·데몬 상태 / 총계
 func titleLines(s Snapshot, width int, color bool) []string {
 	left := []seg{{" auto_setup 상태 리포트", stBold}}
-	if forceUser != "" {
-		left = append(left, seg{"  [user: " + forceUser + "]", stYellow})
+	if u := headerUser(); u != "" { // -user 로 지정했거나 세션 user 를 고른 뒤
+		left = append(left, seg{"  [user: " + u + "]", stYellow})
 	}
 	var dm seg
 	if s.Daemon.Running {
@@ -847,12 +847,9 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 			idx++
 		}
 	}
-	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n x 단독 체크  w AWX"
+	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
 	if sel.DateFilter {
-		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n x 단독 체크  w AWX"
-	}
-	if sel.Change {
-		hint += "  m 변경"
+		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
 	}
 	foot := append([]string{msgLine(sel, width, color)}, hintLines(color, width, hint)...)
 	return finish(head, body, cursor, height, width, color, append(foot, sel.Inline...))
@@ -1062,12 +1059,9 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 func detailFoot(s Snapshot, sel selection, j *SnapJob, g *SnapGroup, width int, color bool) []string {
 	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
 		msgLine(sel, width, color)}
-	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침  ? 도움말  q 복귀\n c 체크+수정  t 체크만  g 재확인  v 결과  d 수동 완료  x 단독 체크  w AWX"
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침  ? 도움말  q 복귀\n" + menuHint(sel, true)
 	if sel.Yml == allView {
-		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀\n g 재확인  d 수동 완료  x 단독 체크  w AWX"
-	}
-	if sel.Change {
-		hint += "  m 변경"
+		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀\n" + menuHint(sel, true)
 	}
 	foot = append(foot, hintLines(color, width, hint)...)
 	foot = append(foot, sel.Inline...)
@@ -1162,24 +1156,30 @@ func renderHelp(width, height int, color bool) string {
 		"   a           선택한 job 의 모든 그룹(yml) 호스트를 한 표로 (그룹 열 표시)",
 		"   r           바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동: 로컬 2초, 원격 5초)",
 		"               정체 호스트는 ping 상태와 상관없이 즉시 다시 확인(수동 재시도)",
-		"   x           체크스크립트 단독 실행 (화면 1·2 어디서나) - user·호스트 입력 → t/c 선택 → 결과 보기, 기록 안 남김 (취소: Ctrl+X)",
-		"   w           AWX 실행 (화면 1·2 어디서나) - (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",
-		"   m           변경 작업 메뉴 (화면 1·2 어디서나, os8_mgmt 에서만) - IP 변경·LDAP 변경·IP+LDAP 변경·원복·auto.appl 원복",
-		"               메뉴는 화면을 바꾸지 않고 키 안내 줄 아래에 열립니다 - 번호 선택, Esc/m/q 로 메뉴만 닫기",
-		"               user·대상 입력(Ctrl+D) → 미리보기 → yes 입력 → 실행 → 결과. 서비스는 재시작하지 않음 (취소: Ctrl+X → y)",
-		"               conf enable_ip_change/enable_ldap_change 또는 --admin 으로 켭니다 (꺼져 있으면 m 키는 무반응)",
 		"   q / Esc     종료",
 		" 화면 2 (호스트표)",
 		"   ↑ ↓ (k j)   호스트 행 이동 (PgUp/PgDn 한 화면씩)",
 		"   ← / Esc / q 화면 1 로 복귀",
 		"   f           정체·실패 호스트만 보기 (토글)",
-		"   c           수동 실행: 설정체크 + 설정수정 (환경설정을 수정함) - 완료 여부와 상관없이 그룹 전체 시도, y/n 확인",
-		"   t           수동 실행: 설정체크만 (환경설정은 수정하지 않음) - 점검 결과만 보고 싶을 때, y/n 확인",
+		" 항목별 메뉴 (v0.8.0) - 키 안내 줄 아래에 열리고 화면은 바뀌지 않습니다. 글자 또는 번호로 선택, Esc/q 로 메뉴만 닫기",
+		"   h           호스트 작업 메뉴 (화면 2 에서만) - 선택한 그룹에 대한 작업. 전체 보기에서는 g·d 만",
+		"               c (1) 체크+수정 - 설정체크 + 설정수정 (환경설정을 수정함). 완료 여부와 상관없이 그룹 전체 시도, y/n 확인",
+		"               t (2) 체크만 - 설정체크만 (환경설정은 수정하지 않음). 점검 결과만 보고 싶을 때, y/n 확인",
 		"               c / t 를 누르면 결과 화면이 열리고, 끝나면 그 화면에 결과가 그대로 표시됩니다 (v 로 다시 보기)",
-		"   v           이 그룹의 가장 최근 수동 실행 결과 보기",
-		"   d           수동 완료 - 안내 줄 아래에서 1 이 호스트 / 2 그룹 미완료 전체 선택 → y 확인. 부팅 시각 검증 없이 완료로 인정, 체크스크립트는 실행 안 함 (CLI: auto_setup done)",
-		"   * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
-		"   g           서버 상태 수동 재확인 - 완료 제외 모든 호스트를 os8 → 안 되면 os6_mgmt → 둘 다 안 되면 접속불가. 진행 과정·실패 지점·최종 결과가 화면에 실시간 표시",
+		"               g (3) 재확인 - 서버 상태 수동 재확인. 완료 제외 모든 호스트를 os8 → 안 되면 os6_mgmt → 둘 다 안 되면 접속불가. 진행 과정·실패 지점·최종 결과가 화면에 실시간 표시",
+		"               d (4) 수동 완료 - 안내 줄 아래에서 1 이 호스트 / 2 그룹 미완료 전체 선택 → y 확인. 부팅 시각 검증 없이 완료로 인정, 체크스크립트는 실행 안 함 (CLI: auto_setup done)",
+		"               v (5) 결과 - 이 그룹의 가장 최근 수동 실행 결과 보기",
+		"               * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
+		"   w           AWX 메뉴 (화면 1·2 어디서나)",
+		"               1 AWX 실행 - w / Enter / 1 중 아무 키 (그래서 ww 가 예전의 w). (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",
+		"               2 신규 설치 양식 - hostname ip mac 붙여넣기 → 템플릿 지정 → DNS 점검 → 미리보기 → awx_dir/<user>.txt 저장(기존 파일 백업) → AWX 실행? (nodeinfo N, os8_mgmt 에서만, CLI: auto_setup newhost)",
+		"   m           변경 작업 메뉴 (화면 1·2 어디서나, os8_mgmt 에서만) - IP 변경·LDAP 변경·IP+LDAP 변경·원복·auto.appl 원복",
+		"               메뉴는 화면을 바꾸지 않고 키 안내 줄 아래에 열립니다 - 번호 선택, Esc/m/q 로 메뉴만 닫기",
+		"               user·대상 입력(Ctrl+D) → 미리보기 → yes 입력 → 실행 → 결과. 서비스는 재시작하지 않음 (취소: Ctrl+X → y)",
+		"               conf enable_ip_change/enable_ldap_change 또는 --admin 으로 켭니다 (꺼져 있으면 m 키는 무반응)",
+		"   s           gossh 작업 (화면 1·2 어디서나) - 메뉴 없이 작업 화면이 바로 열립니다",
+		"   x           체크스크립트 단독 실행 (화면 1·2 어디서나) - user·호스트 입력 → t/c 선택 → 결과 보기, 기록 안 남김 (취소: Ctrl+X)",
+		"   * c t g v d 는 h 메뉴 없이 화면 2 에서 바로 눌러도 동작합니다 (예전 단축키 그대로)",
 		" 색: 완료 초록 / 진행 청록 / 대기 회색 / 경고 노랑 / 정체·실패 빨강. NO_COLOR 설정 시 색 없음",
 		" 막대: # 완료  + 진행  . 대기  ! 정체·실패",
 		" %: 완료 대수 / 전체 (배포중·설치중·부팅확인·체크중은 + 로만 보이고 % 는 완료될 때 오름)",
@@ -1259,10 +1259,25 @@ func mergedGroup(j *SnapJob) *SnapGroup {
 // ---- 키 안내 줄 색 ----
 
 // hintStyles: 키 안내 항목(첫 토큰 = 키)별 색. 이동 = 청록, c(수정 포함) = 빨강, t = 초록, g = 노랑, x = 자홍, w = 파랑,
-// m(변경 메뉴) = 주황, d(수동 완료) = 분홍, 나머지 = 굵게.
+// m(변경 메뉴) = 주황, d(수동 완료) = 분홍, h(호스트 작업 메뉴) = 보라, s(gossh 작업) = 연초록, 나머지 = 굵게.
 var hintStyles = map[string]string{
 	"↑↓": "1;36", "←→": "1;36", "←": "1;36", "Enter": "1;36",
 	"c": stRed, "t": "1;32", "g": "1;33", "x": "1;35", "w": "1;34", "m": "1;38;5;208", "d": "1;38;5;175",
+	"h": "1;38;5;141", "s": "1;38;5;108",
+}
+
+// menuHint: 안내 줄의 둘째 묶음(v0.8.0 항목별 메뉴) — `h 호스트 작업`(화면 2 만)  `w AWX·신규설치`  `m 변경`(켜졌을 때만)  `s gossh 작업`  `x 단독 체크`.
+// c t g v d 는 h 메뉴 안으로 들어갔고 숨은 단축키로 계속 동작한다 (menu_tui.go).
+func menuHint(sel selection, host bool) string {
+	hint := " "
+	if host {
+		hint += "h 호스트 작업  "
+	}
+	hint += "w AWX·신규설치"
+	if sel.Change {
+		hint += "  m 변경"
+	}
+	return hint + "  s gossh 작업  x 단독 체크"
 }
 
 // hintSegs: " ↑↓ 이동  ← 목록  c 체크+수정 …" 를 항목(두 칸 간격)별로 나눠 색을 입힌다 (색이 꺼지면 글자만 이어 붙임)

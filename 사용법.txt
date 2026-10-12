@@ -19,7 +19,9 @@ bash setup.sh
 
 # ===== 2. 상태 보기 · 데몬 제어 =====
 
-# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, Enter 상세, a 전체 그룹 한 표로, ←→ 작업 전환, f 정체·실패만, c 설정체크+설정수정, t 설정체크만(수정 안 함), v 최근 수동 결과, g 재확인(os8→os6, 진행 창), 맨 위에서 ↑ 날짜 줄 → ←전날 →다음날, r 새로고침, ? 도움말, q 종료)
+# 현재 상태 리포트: 터미널이면 TUI(↑↓ 행, PgUp/PgDn 한 화면, Enter 상세, a 전체 그룹 한 표로, ←→ 작업 전환, f 정체·실패만, 맨 위에서 ↑ 날짜 줄 → ←전날 →다음날, r 새로고침, ? 도움말, q 종료)
+# (0.8.0~) 화면 2 의 h = 호스트 작업 메뉴 (c 설정체크+설정수정, t 설정체크만(수정 안 함), g 재확인(os8→os6, 진행 창), d 수동 완료, v 최근 수동 결과 — c t g v d 는 메뉴 없이 눌러도 동작),
+#         w = AWX 메뉴 (1 AWX 실행·ww, 2 신규 설치 양식), m 변경 메뉴(켜졌을 때), s gossh 작업, x 체크스크립트 단독 실행 — 14절 참고
 auto_setup
 
 # TUI 가 아니라 텍스트 표로 보기 (파이프·로그용, 색 없음)
@@ -278,7 +280,7 @@ AUTO_SETUP_DIR=/tmp/as_demo auto_setup
 
 # ===== 12. 체크스크립트 단독 실행(x) · AWX 실행(w) (0.6.0~) =====
 # 화면에서: x = 체크스크립트 단독 실행 (user 선택 → 호스트 붙여넣고 Ctrl+D → t 설정체크만 / c 설정체크+설정수정, 실행 중 Ctrl+X → y 취소, 기록 안 남김)
-#           w = AWX 실행 (awx_dir 의 01 을 이 화면을 내려놓고 실행, auto 여부·프로파일 선택, Ctrl+X 즉시 취소, 끝나면 복귀)
+#           w = AWX 메뉴 (0.8.0~): 1 (또는 ww, w Enter) = AWX 실행 (awx_dir 의 01 을 이 화면을 내려놓고 실행, auto 여부·프로파일 선택, Ctrl+X 즉시 취소, 끝나면 복귀), 2 = 신규 설치 양식 (14절)
 #           Ctrl+C / Ctrl+Z 는 무시 (종료는 q)
 #           q / Esc 는 체크스크립트 실행 중에는 무시 (결과 창에서 q/Esc 로 닫기)
 
@@ -289,7 +291,7 @@ AUTO_SETUP_DIR=/tmp/as_demo auto_setup
 # 모의 환경 준비 (root, 운영 데이터 미사용) — 데모 conf 에 awx_profile_1·2 가 들어 있음
 bash test/demo_flow.sh
 
-# 이 셸에 환경 설정 후 화면 실행 → x 로 127.0.0.11/12/14 붙여넣고 t 또는 c, w 로 auto y → 프로파일 1, Ctrl+X 취소도 눌러 보기
+# 이 셸에 환경 설정 후 화면 실행 → x 로 127.0.0.11/12/14 붙여넣고 t 또는 c, ww 로 auto y → 프로파일 1, Ctrl+X 취소도 눌러 보기
 source /tmp/as_demo_flow/env.sh
 auto_setup
 
@@ -409,3 +411,78 @@ ls -l /etc/auto.appl /etc/auto.appl.bak /etc/auto.appl.before_restore.* 2>/dev/n
 # [결과 기록] 실행 기록의 호스트별 결과 (기록에는 bindpw 와 gossh 명령줄이 없음)
 ls -l /tmp/auto_setup/changes/<user>/
 cat /tmp/auto_setup/changes/<user>/<파일명>.json
+
+# ===== 14. v0.8.0: 업데이트 · 메뉴(h·w) · 신규 설치 양식 · gossh 작업 · DNS 점검 · tcsh 확인 =====
+# 흐름도: docs/svg/ (명령별 cli_*.svg, 키별 tui_*.svg), 설명은 README.md 「신규 설치 양식」「DNS 점검」「gossh 작업 기록」
+
+# [업데이트 0.8.0] 설정 파일 변경 미리보기 — 새 빈 변수 10개(newhost_template_1~9, work_os6_over) 추가만, 기존 값은 그대로 (파일은 바뀌지 않음)
+# v0.7.0 업데이트가 먼저 적용된 conf 여야 함 (앵커 ldap_engine= 줄). 더 오래된 사본은 update_v0.6.0.sh → update_v0.7.0.sh → update_v0.8.0.sh 순서
+bash conf/update_v0.8.0.sh --dry
+
+# [업데이트 0.8.0] 적용 — 새 변수 10개 질문에는 Enter (빈 값 유지)
+bash conf/update_v0.8.0.sh
+
+# [업데이트 0.8.0] 설정 파일만 되돌리기 (가장 최근 백업)
+bash conf/update_v0.8.0.sh --undo
+
+# [업데이트 0.8.0, os8_mgmt] 재빌드·설치 후 데몬 재기동 — 새 동작(메뉴 h·w, 신규 설치 양식, gossh 작업, 60초 제한, bash -c)은 바이너리에 있음
+bash setup.sh
+auto_setup --restart
+
+# [업데이트 0.8.0, os6_mgmt] 저장소의 새 auto_setup_os6 를 os6_autosetup 경로에 'auto_setup' 이름으로 교체 (경로는 환경에 맞게)
+cp auto_setup_os6 <os6_autosetup 경로>/auto_setup && chmod 755 <os6_autosetup 경로>/auto_setup
+
+# [업데이트 awx_script] 01 의 DNS 점검 추가 (0.6.1 이상 사본, 01 만 변경·현장 값 보존) — 미리보기 → 적용 → 되돌리기
+bash <awx_script 경로>/setup/update_unreleased_dns.sh --dry
+bash <awx_script 경로>/setup/update_unreleased_dns.sh
+bash <awx_script 경로>/setup/update_unreleased_dns.sh --undo
+
+# [키 안내] 화면 2 의 안내 줄 둘째 줄에 "h 호스트 작업  w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크" 가 보이는지
+#   h = 호스트 작업 메뉴 (화면 2 에서만): c 체크+수정  t 체크만  g 재확인  d 수동 완료  v 결과 (글자 또는 번호 1~5, Esc/q/h 로 메뉴만 닫기)
+#   w = AWX 메뉴: 1 AWX 실행 (ww 또는 w Enter 가 예전의 w)  2 신규 설치 양식
+#   예전 단축키 c t g v d x 는 메뉴 없이 눌러도 그대로 동작 (숨은 단축키, ? 도움말에 표시)
+auto_setup
+
+# user 를 지정해서 실행: 그 user 의 job 만 보이고 x·w·m 의 user 선택을 건너뜀 (s·신규 설치 양식도 이 user 를 씀)
+auto_setup -user alice
+
+# [신규 설치 양식] CLI 로 열기 (TUI 의 w → 2 와 같은 화면, os8_mgmt·터미널에서만). -user 가 없으면 user 번호/이름을 먼저 묻는다
+# 화면에서: hostname ip mac 붙여넣기(빈 줄 또는 . 로 끝) → 템플릿 지정(예 svr001-020=1  svr021-023=mec) → DNS 점검(불일치면 a/n/s/q) → 미리보기 y → 저장 → AWX 실행? [y/n]
+auto_setup newhost -user alice
+
+# [신규 설치 양식] 저장 결과 확인 — 양식 파일(12필드), 덮어쓰기 전 백업, 이력 사본, 이 user 의 템플릿
+cat <awx_dir>/alice.txt
+ls -l /tmp/auto_setup/newhost/alice/backup/ /tmp/auto_setup/newhost/alice/history/
+cat /tmp/auto_setup/newhost/alice/templates
+
+# [신규 설치 양식] DNS 로 바꾼 IP 는 auto_setup.log 에도 남음
+grep 'newhost user=alice' /tmp/auto_setup/auto_setup.log
+
+# [gossh 작업 기록] CLI 로 열기 (TUI 의 s 와 같은 화면). n 새 작업 → 호스트 붙여넣기 → 명령 입력 → 실행, Enter 항목 메뉴, / 호스트 검색
+auto_setup s -user alice
+
+# [gossh 작업 기록] 저장 확인 — 요약(index.jsonl, 영구), 호스트 목록 사본(lists/), 압축 출력(out/, 7일·200MB), 만든 /tmp/<3자리> 목록 파일
+ls -l /tmp/auto_setup/work/alice/ /tmp/auto_setup/work/alice/lists/ /tmp/auto_setup/work/alice/out/
+cat /tmp/auto_setup/work/alice/index.jsonl
+ls -l /tmp/[a-z][a-z][a-z]
+
+# [gossh 작업 기록] 실행 위치 기준 대수를 바꿔 보려면 conf 의 work_os6_over 를 채우고 재시작 (비면 1000: 이하는 os8 gossh, 초과는 전량 os6_mgmt 경유)
+grep '^work_os6_over=' /etc/auto_setup/auto_setup.conf
+
+# [DNS 점검 확인] 점검 기준이 되는 DNS 서버(최대 3개)와 직접 질의 결과 — /etc/hosts 는 쓰지 않음
+grep -E '^(nameserver|search|domain|options)' /etc/resolv.conf
+dig +short +time=2 +tries=1 @<DNS 서버> <hostname> A
+nslookup <hostname> <DNS 서버>
+
+# [DNS 점검 확인] awx_script 01 [4-1] 의 결과: 교체한 호스트는 LOG 에 [DNS] 줄로 남음
+grep '\[DNS\]' <awx_dir>/LOG/<user>.log
+
+# [DNS 점검 확인] awx_script 테스트 (DNS 케이스 21~23 포함, 108건) — 가짜 DNS 서버(test/fake_dns.py)는 랩·CI 전용
+bash ../awx_script/test/run_tests.sh
+
+# [tcsh 로그인 셸 확인, 랩 전용] root 키 인증으로 ssh 되고 로그인 셸이 tcsh 인 계정(예: ascsh)이 있어야 함. 없으면 테스트는 SKIP
+getent passwd ascsh
+AS_TEST_LOGIN_MGMT=ascsh@localhost go test -run ViaLoginShell -v .
+
+# [60초 제한·gossh 출력 해석] 단위 테스트만 따로 (가짜 hang·FQDN·ANSI·bash -c 인용)
+go test -run 'TestCheckTimeoutKillsGroup|TestParseGossh|TestParseCheckFQDNAndMismatch|TestRemoteBash' -v .

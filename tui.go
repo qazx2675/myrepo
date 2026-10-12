@@ -140,14 +140,23 @@ func runTUI(src SnapshotSource, plain bool) int {
 	if plain || !tty {
 		return printPlain(src, out)
 	}
+	env, cleanup := realTUIEnv(in, out)
+	defer cleanup()
+	return runTUILoop(src, env)
+}
+
+// realTUIEnv: 실제 tty 용 환경 (시그널·창 크기·poll·AWX termios). cleanup 은 시그널 설정을 되돌린다 (무인자 TUI·auto_setup newhost 공용).
+func realTUIEnv(in, out *os.File) (tuiEnv, func()) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	defer signal.Stop(sig)
 	signal.Ignore(syscall.SIGTSTP) // Ctrl+Z 로 TUI 가 멈추지 않게
-	defer signal.Reset(syscall.SIGTSTP)
 	winch := make(chan os.Signal, 1)
 	notifyResize(winch)
-	defer signal.Stop(winch)
+	cleanup := func() {
+		signal.Stop(winch)
+		signal.Reset(syscall.SIGTSTP)
+		signal.Stop(sig)
+	}
 	env := tuiEnv{
 		In:      in,
 		Out:     out,
@@ -164,7 +173,7 @@ func runTUI(src SnapshotSource, plain bool) int {
 		InReady: func(d time.Duration) bool { return waitReadable(in, d) },
 		AwxPrep: func() (func(), error) { return withAwxTermios(in) },
 	}
-	return runTUILoop(src, env)
+	return env, cleanup
 }
 
 // printPlain: 스냅샷 1회 텍스트 출력 (색 없음). 폭은 COLUMNS 또는 120.
@@ -200,16 +209,29 @@ type tuiState struct {
 	fastStop    func()
 	awx         *awxState        // w AWX 실행 확인·프로파일 선택 화면, nil = 없음
 	chgMenu     []changeMenuItem // m 변경 메뉴 (켜진 항목, 안내 줄 아래 인라인), nil = 없음 (change_tui.go)
+	menu        *inlineMenu      // h 호스트 작업·w AWX 항목별 메뉴 (안내 줄 아래 인라인), nil = 없음 (menu_tui.go)
 	done        *doneState       // d 수동 완료 프롬프트 (안내 줄 아래 인라인), nil = 없음 (done_tui.go)
 	chg         *changeState     // m 변경 흐름 (메뉴에서 고른 뒤), nil = 없음 — 실행 중에는 fastTick 사용
+	nh          *newhostState    // w→2 신규 설치 양식 흐름, nil = 없음 (newhost_tui.go) — DNS 조회 중에는 fastTick 사용
+	wk          *workState       // s gossh 작업 화면, nil = 없음 (work_tui.go)
+	oneShot     bool             // CLI auto_setup newhost: 흐름이 닫히면(AWX 실행 포함) 루프를 끝낸다
+	nhSaved     bool             // 이번 실행에서 신규 설치 양식을 저장했음 (CLI 종료 코드)
 	restore     func()           // 현재 raw 모드를 되돌리는 함수 (AWX 실행 후 raw 재진입 때 교체됨)
 	inMu        sync.Mutex       // 키 읽기 goroutine 이 poll+Read 하는 동안 잡고 있음 — AWX 실행 중 Lock 으로 멈춘다
 }
 
 // runTUILoop: raw 모드 진입 → 그리기·키·tick 루프 → (정상·패닉·시그널 어느 경로든) 화면·termios 복원
-func runTUILoop(src SnapshotSource, env tuiEnv) int {
+func runTUILoop(src SnapshotSource, env tuiEnv) int { return runTUILoopWith(src, env, nil) }
+
+// runTUILoopWith: runTUILoop 에 시작 hook 을 더한 것 — start 는 첫 그리기 전에 한 번 불린다
+// (CLI auto_setup newhost 가 oneShot 으로 신규 설치 양식 흐름만 연다). start 가 있으면 raw 모드 실패 시 표 대신 오류로 끝낸다.
+func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) int {
 	restore, err := env.MakeRaw()
 	if err != nil {
+		if start != nil {
+			fmt.Fprintln(os.Stderr, "[X] 터미널을 raw 모드로 바꾸지 못했습니다:", err)
+			return 1
+		}
 		return printPlain(src, env.Out)
 	}
 	io.WriteString(env.Out, enterScreen)
@@ -220,6 +242,7 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 	}()
 
 	st.sel.DateFilter = true
+	sessionUser = "" // 세션 user 는 이 TUI 가 끝날 때까지만 기억
 	defer st.oneoffShutdown()
 	defer st.changeShutdown()
 	keys := make(chan keyEv, 64)
@@ -265,12 +288,34 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 	defer stop()
 
 	st.refresh()
+	if start != nil {
+		start(st)
+	}
 	st.draw()
+	// key: 키 하나 처리, 끝내야 하면 true (oneShot 은 흐름이 닫히면 끝)
+	key := func(ev keyEv) bool {
+		if ev.k == kEOF || st.handle(ev) {
+			return true
+		}
+		return st.oneShot && st.nh == nil && st.awx == nil && st.oo == nil && st.wk == nil
+	}
 	for {
 		select {
 		case ev := <-keys:
-			if ev.k == kEOF || st.handle(ev) {
+			if key(ev) {
 				return 0
+			}
+			// 신규 설치 양식·gossh 작업의 붙여넣기 단계에서만: 이미 들어와 쌓인 키는 모두 처리한 뒤 한 번만 그린다
+			// (대량 붙여넣기에서 키마다 화면 전체를 다시 쓰지 않게 — 다른 화면의 키 처리·그리기 순서는 그대로)
+			for more := true; more && ((st.nh != nil && st.nh.step == nhPaste) || (st.wk != nil && st.wk.step == wkPaste)); {
+				select {
+				case ev := <-keys:
+					if key(ev) {
+						return 0
+					}
+				default:
+					more = false
+				}
 			}
 		case <-tick:
 			st.refresh()
@@ -282,6 +327,11 @@ func runTUILoop(src SnapshotSource, env tuiEnv) int {
 		}
 		st.pollOneoff()
 		st.pollChange()
+		st.pollNewhost()
+		st.pollWork()
+		if st.oneShot && st.nh == nil && st.awx == nil && st.oo == nil && st.wk == nil {
+			return 0
+		}
 		st.draw()
 	}
 }
@@ -307,6 +357,9 @@ func (st *tuiState) clamp() {
 		_, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 		if g == nil {
 			st.sel.Detail, st.sel.Confirm, st.done = false, false, nil
+			if st.menu != nil && st.menu.Open == 'h' { // 호스트 작업 메뉴도 함께 닫기 (w 메뉴는 화면 1 에서도 열리므로 유지)
+				st.menu = nil
+			}
 			return
 		}
 		st.sel.Host = rMax(rMin(st.sel.Host, len(visibleHosts(g, st.sel.Filter))-1), 0)
@@ -317,6 +370,10 @@ func (st *tuiState) draw() {
 	w, h := st.env.Size()
 	var s string
 	switch {
+	case st.nh != nil:
+		s = renderNewhost(st.nh, st.env.Now(), w, h, st.env.Color)
+	case st.wk != nil:
+		s = renderWork(st.wk, w, h, st.env.Color)
 	case st.awx != nil:
 		s = renderAwx(st.awx, w, h, st.env.Color)
 	case st.oo != nil:
@@ -339,12 +396,14 @@ func (st *tuiState) draw() {
 	io.WriteString(st.env.Out, "\x1b[H"+strings.ReplaceAll(s, "\n", "\x1b[K\r\n")+"\x1b[K\x1b[J")
 }
 
-// inlineSel: withErr + 키 안내 줄 아래에 붙는 인라인 줄 (m 변경 메뉴 또는 d 수동 완료 프롬프트, 둘은 동시에 열리지 않음)
+// inlineSel: withErr + 키 안내 줄 아래에 붙는 인라인 줄 (m 변경 메뉴 · h/w 항목별 메뉴 · d 수동 완료 프롬프트, 동시에 열리지 않음)
 func (st *tuiState) inlineSel(w, h int) selection {
 	sel := st.withErr()
 	switch {
 	case st.chgMenu != nil && st.chg == nil:
 		sel.Inline = changeMenuLines(st.chgMenu, w, h, st.env.Color)
+	case st.menu != nil:
+		sel.Inline = menuLines(st.menu, w, st.env.Color)
 	case st.done != nil:
 		sel.Inline = st.doneLines(w, st.env.Color)
 	}
@@ -363,8 +422,20 @@ func (st *tuiState) withErr() selection {
 
 // handle: 키 처리. 종료하면 true.
 func (st *tuiState) handle(ev keyEv) bool {
+	if st.nh != nil { // 신규 설치 양식 흐름: 모든 키를 그쪽이 처리 (Ctrl+C/Ctrl+Z 무시, 취소는 Ctrl+X)
+		st.handleNewhost(ev)
+		return false
+	}
+	if st.wk != nil { // gossh 작업 화면: 모든 키를 그쪽이 처리 (Ctrl+C/Ctrl+Z 무시)
+		st.handleWork(ev)
+		return false
+	}
 	if st.chg != nil || st.chgMenu != nil { // m 변경 메뉴·흐름: Ctrl+C/Ctrl+Z 무시, 나머지 키는 그쪽이 처리
 		st.handleChange(ev)
+		return false
+	}
+	if st.menu != nil { // h·w 항목별 메뉴: 글자/번호 선택·Esc/q 닫기, 그 밖의 키는 무시 (m 메뉴와 같은 규칙)
+		st.handleMenu(ev)
 		return false
 	}
 	if st.done != nil { // d 수동 완료 프롬프트: 1/2 선택·y 확인 외의 키는 여기서 소비 (x/w/m 과 동시에 열리지 않음)
@@ -414,8 +485,16 @@ func (st *tuiState) handle(ev keyEv) bool {
 		st.startOneoff()
 		return false
 	}
-	if ev.k == kRune && (ev.r == 'w' || ev.r == 'W') {
-		st.startAwx()
+	if ev.k == kRune && (ev.r == 'w' || ev.r == 'W') { // w 는 AWX 메뉴 (ww / w Enter / w 1 = 예전의 AWX 실행)
+		st.openMenu('w')
+		return false
+	}
+	if ev.k == kRune && (ev.r == 's' || ev.r == 'S') { // gossh 작업 화면 (메뉴 없음, 화면 1·2 어디서나)
+		st.startWork()
+		return false
+	}
+	if ev.k == kRune && (ev.r == 'h' || ev.r == 'H') && st.sel.Detail { // h 호스트 작업 메뉴 (화면 2 에서만)
+		st.openMenu('h')
 		return false
 	}
 	if ev.k == kRune && (ev.r == 'm' || ev.r == 'M') && st.startChange() { // 꺼져 있으면 키 무반응 (다른 화면 키와 같이 아래로)

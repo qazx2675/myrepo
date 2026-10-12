@@ -158,7 +158,7 @@ sc_a() {
 	t_has "a6 리포트에 정체 1·실패 2(진행 job 합계)" "$S/l.out" '정체 1'
 	t_eq "a7 snapshot 은 상태 디렉터리를 바꾸지 않음(요청·완료기록 디렉터리 비어 있음)" "$(find "$A/requests" "$A/done" -type f | wc -l)" 0
 	rem "$A" status > "$S/r.out" 2> /dev/null
-	t_hasF "a8 원격 gossh 호출 기록(호스트=os8.mgmt)" "$E2E_SCEN/rgossh.log" "os8.mgmt sh -c "
+	t_hasF "a8 원격 gossh 호출 기록(호스트=os8.mgmt)" "$E2E_SCEN/rgossh.log" "os8.mgmt bash -c "
 
 	# 변경 명령: 같은 샘플의 사본 2개에 로컬/원격을 각각 적용 → 출력·결과 파일 동일
 	c1="$S/a_c1"; c2="$S/a_c2"
@@ -648,7 +648,7 @@ NO FAIL : 127.0.0.21 127.0.0.22 127.0.0.23 (3대)"
 	t_eq "f2 1차 원본 줄은 2차 섹션 앞에 그대로" "$(grep -c "^원본 : $F1/runs/$FCODE/os_check.log\$" "$C1")" 1
 	t_eq "f3 runs/<code>/second/ 에 targets·log·결과 회수" "$(ls "$F1/runs/$FCODE/second" | paste -sd' ')" "check.res_${E2E_USER} check.res_${E2E_USER}_info check.res_${E2E_USER}_kernel check.res_${E2E_USER}_postapply os_check.log targets.txt"
 	t_eq "f3 2차 targets.txt" "$(paste -sd' ' "$F1/runs/$FCODE/second/targets.txt")" "127.0.0.22 127.0.0.23 127.0.0.24"
-	t_has "f3 ssh 호출: os6_mgmt 로 목록 전달 + os_check -auto (2차 체크)" "$E2E_SCEN/ssh.log" "^ssh \[-o\] \[BatchMode=yes\] \[-o\] \[ConnectTimeout=10\] \[$E2E_MGMT\] \[d=.*-auto '$E2E_USER' targets.txt"
+	t_has "f3 ssh 호출: os6_mgmt 로 목록 전달 + os_check -auto (2차 체크)" "$E2E_SCEN/ssh.log" "^ssh \[-o\] \[BatchMode=yes\] \[-o\] \[ConnectTimeout=10\] \[$E2E_MGMT\] \[bash -c 'd=.*-auto '\\\\''$E2E_USER'\\\\'' targets.txt"
 	DONEJ=$(ls "$F1"/jobs/done/*.json 2> /dev/null | head -1)
 	t_eq "f4 job 호스트의 2차 상태: 22·23 ok, 24 fail" "$(grep -oE '"second": "[a-z]+"' "$DONEJ" | sort | uniq -c | awk '{print $1 $3 $4}' | paste -sd' ')" '1"fail" 2"ok"'
 	t_eq "f4 최종 처리: 5대 모두 processed(1차 OK 또는 2차 판정) → job 종료" "$(grep -c '"processed": "[0-9]\{4\}"' "$DONEJ")" 5
@@ -676,7 +676,7 @@ NO FAIL : 127.0.0.21 127.0.0.22 127.0.0.23 (3대)"
 	if [[ -n $FCODE ]]; then ok "f7 autofs 빌드 흐름 완료 (code $FCODE)"; else bad "f7 흐름" "$(tail -5 "$F3/auto_setup.log" | paste -sd'|')"; return; fi
 	t_has "f7 2차 체크 완료 (os6_os_check_sh 비어도 os_check_sh 로 폴백)" "$F3/auto_setup.log" '2차 체크 완료: job [^ ]+ 3대 중 OK 2대'
 	t_eq "f7 code: 2차 섹션 있음" "$(grep -c '^### 2차 체크 (os6_mgmt)$' "$C3")" 1
-	t_has "f7 ssh 명령에 os_check_sh 경로(autofs 동일 경로)" "$E2E_SCEN/ssh.log" "bash '$OC/os_check_final_annotated.sh' -auto"
+	t_has "f7 ssh 명령에 os_check_sh 경로(autofs 동일 경로)" "$E2E_SCEN/ssh.log" "bash '\\\\''$OC/os_check_final_annotated.sh'\\\\'' -auto"
 	t_hasF "f7 ssh 명령에 awx dhcp 후보(awxkit/dhcp.sh)" "$E2E_SCEN/ssh.log" "$S/awx/awxkit/dhcp.sh"
 	t_hasF "f7 ssh 명령에 awx dhcp 후보(awx_dir/dhcp.sh)" "$E2E_SCEN/ssh.log" "$S/awx/dhcp.sh"
 	t_hasF "f7 ssh 명령에 os_check 옆 dhcp.sh 후보" "$E2E_SCEN/ssh.log" "$OC/dhcp.sh"

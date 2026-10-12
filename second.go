@@ -28,9 +28,10 @@ type realSecond struct{}
 
 func NewRealSecond() Second { return realSecond{} }
 
-// secondSSH: os6_mgmt 로의 ssh 호출 (1차 probe/래퍼와 같은 BatchMode, 접속 제한시간 추가)
+// secondSSH: os6_mgmt 로의 ssh 호출 (1차 probe/래퍼와 같은 BatchMode, 접속 제한시간 추가).
+// 원격 명령은 remoteBash 로 감싸 bash 가 해석한다 (os6_mgmt 로그인 셸이 csh 여도 동작).
 func secondSSH(stdin, remote string) (string, error) {
-	return runExternal(stdin, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remote)
+	return runExternal(stdin, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(remote))
 }
 
 // secondRunScript: 원격 임시 디렉터리 생성 → 목록 수신(stdin) → os_check -auto 실행 (sh 호환 문법)

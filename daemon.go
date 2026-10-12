@@ -57,6 +57,7 @@ type Daemon struct {
 	checkErr   map[string]string
 	forceCheck map[string]bool // r 키 수동 재시도: 정체 호스트를 ping 상태와 상관없이 다음 준비확인에 포함 (check 가 소비)
 	doneLogged map[string]bool // 거부한 완료기록(호스트+내용) — 로그 1회
+	lastWork   time.Time       // 마지막 gossh 작업 기록 정리 (하루 한 번, work.go workCleanAll)
 }
 
 type hostRT struct {
@@ -464,6 +465,10 @@ func (d *Daemon) step(now time.Time) {
 	d.scheduleManual(now)
 	d.closeFinished()
 	d.saveDirty()
+	if now.Sub(d.lastWork) >= 24*time.Hour { // gossh 작업 기록: 출력 7일·user 당 200MB, /tmp/<3자리> 7일
+		d.lastWork = now
+		workCleanAll(now)
+	}
 }
 
 // onProgress: 1차 run 이 끝나고 2차 체크가 시작됨 → 대상 호스트 stage=second

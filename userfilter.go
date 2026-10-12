@@ -33,7 +33,7 @@ func splitUser(args []string) (rest []string, user string, err error) {
 			i = len(args)
 		}
 	}
-	if user != "" && !userNameRe.MatchString(user) {
+	if user != "" && (!userNameRe.MatchString(user) || !validChangeUser(user)) { // . 와 .. 는 디렉터리 이름으로 쓰이는 곳(newhost·work)이 있어 불가
 		return nil, "", fmt.Errorf("user 이름이 올바르지 않습니다: %q (영문·숫자·. _ - 만)", user)
 	}
 	return rest, user, nil

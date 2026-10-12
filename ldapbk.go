@@ -242,8 +242,9 @@ func gosshBatch(route string, hosts []string, cmd string, timeout time.Duration)
 		if os6_mgmt == "" || os6_gossh == "" {
 			return nil, errors.New("os6_mgmt/os6_gossh 가 비어 있습니다")
 		}
-		remote := "f=$(mktemp); cat > $f; " + os6_gossh + " -pm -script -w $f " + shq(cmd) + "; rm -f $f ${f}_*"
-		out, err = ldapExec(timeout, hostList(hosts), "ssh", os6_mgmt, remote)
+		// 원격은 bash 가 해석하도록 remoteBash 로 감싼다 (os6_mgmt 로그인 셸이 csh 여도 동작)
+		remote := "f=$(mktemp); cat > $f; " + shq(os6_gossh) + " -pm -script -w $f " + shq(cmd) + "; rm -f $f ${f}_*"
+		out, err = ldapExec(timeout, hostList(hosts), "ssh", os6_mgmt, remoteBash(remote))
 	} else {
 		f, e := os.CreateTemp("", "as_ldap_")
 		if e != nil {
@@ -258,26 +259,15 @@ func gosshBatch(route string, hosts []string, cmd string, timeout time.Duration)
 		}
 		out, err = ldapExec(timeout, "", "gossh", "-pm", "-script", "-w", p, cmd)
 	}
-	res := splitGossh(out)
+	g := parseGossh(out, hosts)
+	logGosshUnparsed("LDAP", g, false) // 수집 응답에는 설정 파일 base64 가 있어 원본 줄은 남기지 않는다
+	res := g.Lines
 	if err != nil && len(res) == 0 {
 		if _, ok := err.(*exec.ExitError); !ok {
 			return nil, errors.New("gossh 실행 실패")
 		}
 	}
 	return res, nil
-}
-
-// splitGossh: "host: 본문" 줄을 호스트별로 모은다 (호스트 자리에 공백이 있는 안내 줄은 무시)
-func splitGossh(out string) map[string][]string {
-	res := map[string][]string{}
-	for _, l := range strings.Split(strings.ReplaceAll(out, "\r", ""), "\n") {
-		h, body, ok := strings.Cut(l, ": ")
-		if !ok || h == "" || strings.ContainsAny(h, " \t") {
-			continue
-		}
-		res[h] = append(res[h], body)
-	}
-	return res
 }
 
 // ---- 파싱 ----
