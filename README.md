@@ -8,6 +8,7 @@ OS 설치(01) 완료 후 자동으로 OS 설정을 검사하고 결과를 공유
 - **v0.7.1**: `m` 메뉴를 화면 전환 없이 안내 줄 아래에 인라인으로 표시, 화면 2 `d` 수동 완료(TUI), 준비확인에서 anaconda 가 보이면 ping X 를 못 봤어도 설치중으로 표시
 - **v0.7.2**: `PageUp`/`PageDown` 지원 (목록·호스트표·결과 창·변경 화면)
 - **v0.7.3**: `auto_setup -user <이름>` (해당 user 의 job 만 보이고 `x`·`w`·`m` 의 user 선택을 건너뜀), 재확인(`g`)·준비확인이 gossh 실패 사유를 표시, os6 준비확인 원격 명령을 `bash -c` 로 감쌈
+- **v0.8.1**: 신규 설치 양식 → AWX 실행에서 **프로파일을 고르지 않으면 nodeinfo 자동 N 을 적용하지 않음** (프로파일을 `y` 로 고른 경우에만 N 강제) — 아래 「신규 설치 양식」
 - **v0.8.0**: ① 항목별 인라인 메뉴 `h`(호스트 작업)·`w`(AWX) — 아래 「키」 ② **신규 설치 양식**(`w`→2 / `auto_setup newhost`) ③ **DNS 점검**(양식 생성의 Go 구현 + awx_script 01 의 `[4-1]`) ④ **gossh 작업 기록**(`s` / `auto_setup s`) ⑤ 세션 user ⑥ 결함 수정: 준비확인·`g` 의 gossh/ssh 호출에 **60초 제한**, os6_mgmt 로 보내는 원격 명령을 모두 `bash -c` 로 감싸 **csh/tcsh 로그인 셸에서도 동작**(`!` 포함 명령은 base64 로 전송), gossh 출력 해석 통일(FQDN↔짧은 이름, 해석 실패 시 로그·화면에 사유), 셸 인용 함수 `shq`
 
 흐름도: 전체 [`workflow.svg`](workflow.svg) · [`WORKFLOW.md`](WORKFLOW.md), 명령·키별 31개 [`docs/svg/`](docs/svg/README.md).
@@ -452,8 +453,8 @@ svr001-020=1  svr021-023=mec  svr024-043=3
 **저장과 AWX 연결**
 
 - 저장 위치 `awx_dir/<user>.txt`. 기존 파일은 `<AUTO_SETUP_DIR>/newhost/<user>/backup/<시각>.txt` 로 백업하고(실패하면 아무것도 바꾸지 않음), 같은 내용을 `history/<시각>.txt` 에도 남깁니다. 임시 파일에 쓰고 rename 하며 권한은 기존 파일을 따릅니다 (새 파일은 0644 — 01 이 읽어야 함). 이력 사본만 못 남기면 저장은 유지하고 경고합니다. `newhost/<user>/` 는 디렉터리 0700·파일 0600 이며 자동 삭제하지 않습니다.
-- 5/5 에서 `y` → 기존 AWX 실행 흐름: 프로파일이 있으면 번호를 고르고, **nodeinfo 는 프로파일과 상관없이 N 으로 강제**(`AWX_AUTO_NODEINFO=n`), user 는 양식의 user(`AWX_USER`), **대상 서버 목록은 방금 만든 hostname 들로 자동 입력**(`AWX_VERIFY_FILE`). DNS 를 실제로 점검했으면 `AWX_DNS_CHECKED=1` 을 넘겨 01 이 같은 점검을 되풀이하지 않고 표만 출력합니다.
-- **프로파일이 하나도 없으면** `AWX_AUTO` 없이 `AWX_AUTO_NODEINFO=n` 만 넘깁니다 — 01 은 nodeinfo 질문만 자동 답하고 나머지 질문(작업진행·인벤토리 소스·OS 버전 등)은 직접 응답합니다.
+- 5/5 에서 `y` → 기존 AWX 실행 흐름: 프로파일을 쓸지 먼저 묻고(`AWX auto 실행? [y/n]`), **`y` 로 프로파일을 고르면 nodeinfo 는 프로파일 값과 상관없이 N 으로 강제**(`AWX_AUTO_NODEINFO=n`), **`n`(프로파일 없이 일반 실행)이면 자동 N 을 적용하지 않고** 01 의 nodeinfo 질문을 직접 응답합니다. user 는 양식의 user(`AWX_USER`), **대상 서버 목록은 방금 만든 hostname 들로 자동 입력**(`AWX_VERIFY_FILE`). DNS 를 실제로 점검했으면 `AWX_DNS_CHECKED=1` 을 넘겨 01 이 같은 점검을 되풀이하지 않고 표만 출력합니다.
+- **프로파일을 고르지 않거나 하나도 없으면** `AWX_AUTO`·`AWX_AUTO_NODEINFO` 를 넘기지 않는 일반 실행입니다 — nodeinfo 를 쓸 수 있도록 01 의 모든 질문(nodeinfo·작업진행·인벤토리 소스·OS 버전 등)에 직접 응답합니다. user·대상 목록·`AWX_DNS_CHECKED` 만 자동입니다.
 
 ### DNS 점검 (v0.8.0)
 
@@ -477,7 +478,7 @@ svr001-020=1  svr021-023=mec  svr024-043=3
   `a` 불일치 전부 DNS IP 로 교체 · `n` 등록값 그대로 · `s` 호스트마다 `y/n` · `q` 중단. 교체는 IP(5번째 필드)만 바꾸고 01 은 LOG 에 `[DNS] svr0001 1.1.1.1 -> 1.1.1.2` 로 남깁니다.
 - **속도**: 동시 32개, 질의당 2초·재시도 1회, 응답을 한 번도 못 받고 3번 실패한 서버는 이후 질의를 건너뜁니다. 01(bash)은 1000대·2코어에서 약 11초 (랩 측정).
 - **01 의 auto 모드 (`AWX_AUTO=1`)**: stdin 이 `/dev/null` 이라 질문은 **`/dev/tty`** 로 받습니다. 불일치가 나오면 표를 출력하고 `등록값 그대로 계속 진행할까요? [y/N]` 을 묻습니다 — `y` 면 진행, 그 외이거나 터미널이 없어 물을 수 없으면 **중단**합니다. auto_setup 양식 생성에서 이미 점검·결정했으면(`AWX_DNS_CHECKED=1`) 표만 출력하고 묻지 않고 진행합니다.
-- 01 은 `AWX_AUTO_NODEINFO`(y|n)를 **`AWX_AUTO` 없이도** 존중합니다 (신규 설치 양식 → AWX 실행이 프로파일 없이 nodeinfo N 만 넘길 때 씀). 테스트 훅 환경변수 `AWX_RESOLV_CONF`·`AWX_TTY` 는 시험용입니다.
+- 01 은 `AWX_AUTO_NODEINFO`(y|n)를 **`AWX_AUTO` 없이도** 존중합니다 (auto_setup 은 이 단독 사용을 쓰지 않습니다 — 직접 실행할 때만). 테스트 훅 환경변수 `AWX_RESOLV_CONF`·`AWX_TTY` 는 시험용입니다.
 
 ### gossh 작업 기록 (s / `auto_setup s`, v0.8.0)
 
@@ -870,7 +871,7 @@ bash ../awx_script/test/run_tests.sh
 - 원격 클라이언트 모드의 gossh 호출에는 **시간 제한이 없습니다**(os8_mgmt 가 응답하지 않으면 대기).
 - 2차 체크는 설정(set)을 한 번 더 적용할 수 있습니다(`os6_os_check_sh="-"` 로 끔).
 - (v0.7.0) 변경 메뉴(`m`)의 LDAP 엔진은 적용·원복 스크립트를 base64 로 gossh 명령줄에 실으므로 `ps` 에 base64 문자열이 잠깐 보일 수 있습니다 (ldap_setting 의 기존 설계). 변경 메뉴 RHEL 7·9 실장비 동작은 fixture 검증까지입니다.
-- (v0.8.0) **프로파일이 없는 AWX 경로**: 신규 설치 양식 → AWX 실행에서 `awx_profile_N` 이 하나도 없으면 `AWX_AUTO` 없이 `AWX_AUTO_NODEINFO=n` 만 넘기므로 01 의 나머지 질문(작업진행·인벤토리 소스·OS 버전 선택 등)은 직접 응답해야 합니다. nodeinfo 질문은 01 이 자동으로 N 을 답합니다 (`… n (auto_setup)`). awx_script 업데이트(`setup/update_unreleased_dns.sh`)를 적용하지 않은 구버전 01 은 이 질문을 그대로 물으므로, 실행 직전 안내 줄대로 N 을 직접 입력하십시오.
+- (v0.8.1) **프로파일 없이 이어가는 AWX 경로**: 신규 설치 양식 → AWX 실행에서 프로파일을 고르지 않으면(또는 `awx_profile_N` 이 하나도 없으면) 자동 응답이 전혀 없는 일반 실행이므로 nodeinfo 질문을 포함한 01 의 모든 질문에 직접 응답해야 합니다. 신규 설치라 nodeinfo 를 쓸 수 없으면 프로파일을 골라(`y`) nodeinfo N 으로 실행하거나 질문에 `N` 을 입력하십시오.
 - (v0.8.0) **원격 인자 128KB**: os6_mgmt 로 보내는 원격 명령은 셸 인자 한 개(약 128KB)를 넘지 못합니다. gossh 작업의 os6 전량 실행은 호스트 목록을 gzip+base64 로, os6_mgmt → os8_mgmt 기록 중계는 약 56KB 조각으로 나눠 이 안에 맞추지만, 이름이 매우 긴 호스트가 수만 대이면 실패할 수 있습니다. 중계되는 전체 출력은 5MB 를 넘으면 앞·뒤만 보냅니다.
 - (v0.8.0) **os6 로컬 보관분 미병합**: os6_mgmt 에서 연 `s` 가 os8_mgmt 로 기록을 보내지 못하면 이 서버(os6_mgmt)의 기록을 보여 주고 거기에 저장합니다. 나중에 os8_mgmt 가 돌아와도 **그 기록은 os8_mgmt 의 기록과 합쳐지지 않습니다**.
 - (v0.8.0) **os6 probe 세션의 원격 명령**: 데몬이 os6_mgmt 에 걸어 두는 장기 ssh 세션(`auto_setup probe`)의 명령은 `bash -c` 로 감싸지 않고 경로를 `shQuote` 로만 인용합니다. 로그인 셸이 tcsh 이고 `os6_autosetup` 경로에 `!` 가 있으면 history 치환으로 실패합니다 (경로에 `!` 를 쓰지 마십시오).

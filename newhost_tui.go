@@ -655,7 +655,7 @@ func (st *tuiState) newhostAwx(req nhAwxReq) {
 	st.awx = &awxState{step: awxAsk, profiles: valid, problems: problems, nh: &req}
 }
 
-// runNewhostAwx: 대상 확인 파일(hostname 목록)을 만들고 nodeinfo N 강제 환경으로 01 실행
+// runNewhostAwx: 대상 확인 파일(hostname 목록)을 만들고 01 실행 (p 가 있으면 nodeinfo N 강제, nil 이면 자동 응답 없음)
 func (st *tuiState) runNewhostAwx(req nhAwxReq, p *AwxProfile) {
 	verify := ""
 	if f, err := os.CreateTemp("", "as_awx_verify_"); err == nil {
@@ -807,7 +807,7 @@ func renderNewhost(n *newhostState, now time.Time, width, height int, color bool
 			f.Body = append(f.Body, ln("", l)...)
 		}
 		f.Foot = append(f.Foot, ln(stBold, "AWX 실행할까요? [y/n]")...)
-		f.Hint = " y AWX 실행 (nodeinfo N · 대상 목록 자동)  n 저장만 하고 닫기  ↑↓ PgUp/PgDn 스크롤"
+		f.Hint = " y AWX 실행 (프로파일 선택 시 nodeinfo N · 대상 목록 자동)  n 저장만 하고 닫기  ↑↓ PgUp/PgDn 스크롤"
 	}
 	switch n.ask {
 	case nhAskCancel:

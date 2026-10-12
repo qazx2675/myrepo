@@ -2,7 +2,7 @@
 // 붙여넣기 줄 해석(hostname ip mac, 순서·구분자 무관, MAC 4형식 → 소문자 aa:bb:..), 목록 내 중복 검사,
 // 템플릿 목록(conf newhost_template_1~9 + user 별 templates 파일)과 `+` 추가 저장, 지정 미니 언어
 // (`svr001-020=1  spice*=mec  1-20=2  *=A`, 열 수정 `svr005 os=9.6`), 이력 추천, 12필드 줄 생성,
-// 저장(기존 파일 백업 → 임시 파일 + rename, 이력 사본), AWX 실행 환경변수(nodeinfo N 강제).
+// 저장(기존 파일 백업 → 임시 파일 + rename, 이력 사본), AWX 실행 환경변수(프로파일을 고르면 nodeinfo N, 안 고르면 자동 응답 없음).
 // 화면·키는 newhost_tui.go.
 //
 // 저장 위치: <AUTO_SETUP_DIR>/newhost/<user>/{templates, backup/<시각>.txt, history/<시각>.txt} (디렉터리 0700, 파일 0600).
@@ -809,9 +809,8 @@ type nhAwxReq struct {
 
 // newhostAwxEnv: 신규 설치 양식 → AWX 실행 환경. awxEnv 에 더해
 //   - 프로파일을 골랐으면 nodeinfo 만 n 으로 바꿔 AWX_AUTO=1 (OS 등 나머지 자동 응답은 프로파일 그대로)
-//   - 프로파일 없이(일반 실행) 가면 AWX_AUTO 는 켜지 않는다 — 켜면 01 의 작업진행여부·메뉴 su 와 02 의 OS 선택까지
-//     자동이 되어 일반 실행과 달라지므로. 대신 AWX_AUTO_NODEINFO=n 만 넘긴다 (01 은 AWX_AUTO 없이도 이 값으로
-//     nodeinfo 질문에 자동 답변 — update_unreleased_dns.sh 미적용 구버전 01 은 안내 줄대로 N 을 직접 입력, newhostAwxNote).
+//   - 프로파일을 고르지 않으면(일반 실행) 자동 응답을 일절 넘기지 않는다 — nodeinfo 도 자동 N 이 아니라 01 이 묻는 대로
+//     직접 응답한다 (nodeinfo 를 쓸 수 있도록)
 //   - DNS 점검을 했으면 AWX_DNS_CHECKED=1 (01 은 표만 출력하고 묻지 않음)
 func newhostAwxEnv(p *AwxProfile, user, verify string, dnsChecked bool) []string {
 	var q *AwxProfile
@@ -821,9 +820,6 @@ func newhostAwxEnv(p *AwxProfile, user, verify string, dnsChecked bool) []string
 		q = &c
 	}
 	env := awxEnv(q, user, verify)
-	if q == nil {
-		env = append(env, "AWX_AUTO_NODEINFO=n")
-	}
 	if dnsChecked {
 		env = append(env, "AWX_DNS_CHECKED=1")
 	}
@@ -835,5 +831,5 @@ func newhostAwxNote(p *AwxProfile) string {
 	if p != nil {
 		return fmt.Sprintf("[auto_setup] 신규 설치 양식: nodeinfo 는 N 으로 실행합니다 (프로파일 %d 의 nodeinfo=%s 와 무관)", p.No, p.Nodeinfo)
 	}
-	return "[auto_setup] 신규 설치 양식: nodeinfo 는 N 으로 실행합니다 (01 이 자동 답변, 구버전 01 이 질문하면 N 을 입력하세요)"
+	return "[auto_setup] 신규 설치 양식: 프로파일 없이 일반 실행합니다 — 01 의 nodeinfo 질문은 직접 응답하세요 (자동 N 아님)"
 }
