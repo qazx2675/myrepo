@@ -503,6 +503,10 @@ func (c *changeState) previewKey(ev keyEv) bool {
 		if c.scroll < c.maxScroll {
 			c.scroll++
 		}
+	case ev.k == kPgUp:
+		c.scroll = rMax(c.scroll-10, 0)
+	case ev.k == kPgDn:
+		c.scroll = rMin(c.scroll+10, c.maxScroll)
 	case ev.k == kEnter:
 		if string(c.in) != "yes" { // 정확히 yes 만 진행
 			c.CloseMsg = c.kind.title() + " 을(를) 취소했습니다 (yes 가 아님 — 아무것도 바꾸지 않음)"
@@ -549,9 +553,9 @@ func (c *changeState) resultKey(ev keyEv) bool {
 		if c.scroll < c.maxScroll {
 			c.scroll++
 		}
-	case ev.k == kRune && ev.r == ' ':
+	case ev.k == kRune && ev.r == ' ', ev.k == kPgDn:
 		c.scroll = rMin(c.scroll+10, c.maxScroll)
-	case ev.k == kRune && ev.r == 'b':
+	case ev.k == kRune && ev.r == 'b', ev.k == kPgUp:
 		c.scroll = rMax(c.scroll-10, 0)
 	}
 	return false
