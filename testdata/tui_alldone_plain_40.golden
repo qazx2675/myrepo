@@ -43,7 +43,7 @@
  a 전체 그룹  r 새로고침  ? 도움말
  q 복귀
  c 체크+수정  t 체크만  g 재확인  v 결과
- x 단독 체크  w AWX
+ d 수동 완료  x 단독 체크  w AWX
 == detail filter ==
  job J1 / web.yml  (ib/rhel8/pxe/y)
   완료 2/2
@@ -62,4 +62,4 @@
  a 전체 그룹  r 새로고침  ? 도움말
  q 복귀
  c 체크+수정  t 체크만  g 재확인  v 결과
- x 단독 체크  w AWX
+ d 수동 완료  x 단독 체크  w AWX

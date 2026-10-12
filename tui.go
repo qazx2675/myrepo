@@ -190,7 +190,8 @@ type tuiState struct {
 	fastTick    <-chan time.Time     // 단독 실행 중 1초 갱신 tick (실행 중에만)
 	fastStop    func()
 	awx         *awxState        // w AWX 실행 확인·프로파일 선택 화면, nil = 없음
-	chgMenu     []changeMenuItem // m 변경 메뉴 화면 (켜진 항목), nil = 없음 (change_tui.go)
+	chgMenu     []changeMenuItem // m 변경 메뉴 (켜진 항목, 안내 줄 아래 인라인), nil = 없음 (change_tui.go)
+	done        *doneState       // d 수동 완료 프롬프트 (안내 줄 아래 인라인), nil = 없음 (done_tui.go)
 	chg         *changeState     // m 변경 흐름 (메뉴에서 고른 뒤), nil = 없음 — 실행 중에는 fastTick 사용
 	restore     func()           // 현재 raw 모드를 되돌리는 함수 (AWX 실행 후 raw 재진입 때 교체됨)
 	inMu        sync.Mutex       // 키 읽기 goroutine 이 poll+Read 하는 동안 잡고 있음 — AWX 실행 중 Lock 으로 멈춘다
@@ -296,7 +297,7 @@ func (st *tuiState) clamp() {
 	if st.sel.Detail {
 		_, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 		if g == nil {
-			st.sel.Detail, st.sel.Confirm = false, false
+			st.sel.Detail, st.sel.Confirm, st.done = false, false, nil
 			return
 		}
 		st.sel.Host = rMax(rMin(st.sel.Host, len(visibleHosts(g, st.sel.Filter))-1), 0)
@@ -313,8 +314,6 @@ func (st *tuiState) draw() {
 		s = renderOneoff(st.oo, st.env.Now(), w, h, st.env.Color)
 	case st.chg != nil:
 		s = renderChange(st.chg, w, h, st.env.Color)
-	case st.chgMenu != nil:
-		s = renderChangeMenu(st.chgMenu, w, h, st.env.Color)
 	case st.view != nil:
 		if st.view.kind == viewRecheck && st.sel.Detail && h >= 24 {
 			s = renderRecheckSplit(st.snap, st.withErr(), st.view, w, h, st.env.Color)
@@ -324,11 +323,23 @@ func (st *tuiState) draw() {
 	case st.help:
 		s = renderHelp(w, h, st.env.Color)
 	case st.sel.Detail:
-		s = renderDetail(st.snap, st.withErr(), w, h, st.env.Color)
+		s = renderDetail(st.snap, st.inlineSel(w, h), w, h, st.env.Color)
 	default:
-		s = renderOverview(st.snap, st.withErr(), w, h, st.env.Color)
+		s = renderOverview(st.snap, st.inlineSel(w, h), w, h, st.env.Color)
 	}
 	io.WriteString(st.env.Out, "\x1b[H"+strings.ReplaceAll(s, "\n", "\x1b[K\r\n")+"\x1b[K\x1b[J")
+}
+
+// inlineSel: withErr + 키 안내 줄 아래에 붙는 인라인 줄 (m 변경 메뉴 또는 d 수동 완료 프롬프트, 둘은 동시에 열리지 않음)
+func (st *tuiState) inlineSel(w, h int) selection {
+	sel := st.withErr()
+	switch {
+	case st.chgMenu != nil && st.chg == nil:
+		sel.Inline = changeMenuLines(st.chgMenu, w, h, st.env.Color)
+	case st.done != nil:
+		sel.Inline = st.doneLines(w, st.env.Color)
+	}
+	return sel
 }
 
 // withErr: 갱신 오류가 있으면 안내 줄에 표시 (+ m 변경이 사용 가능하면 키 안내 줄에 `m 변경`)
@@ -345,6 +356,10 @@ func (st *tuiState) withErr() selection {
 func (st *tuiState) handle(ev keyEv) bool {
 	if st.chg != nil || st.chgMenu != nil { // m 변경 메뉴·흐름: Ctrl+C/Ctrl+Z 무시, 나머지 키는 그쪽이 처리
 		st.handleChange(ev)
+		return false
+	}
+	if st.done != nil { // d 수동 완료 프롬프트: 1/2 선택·y 확인 외의 키는 여기서 소비 (x/w/m 과 동시에 열리지 않음)
+		st.handleDone(ev)
 		return false
 	}
 	if ev.k == kRune && (ev.r == runeCtrlC || ev.r == runeCtrlZ) {
@@ -502,6 +517,8 @@ func (st *tuiState) handleDetail(ev keyEv) {
 		st.openLatestResult()
 	case ev.k == kRune && (ev.r == 'g' || ev.r == 'G'):
 		st.requestRecheck()
+	case ev.k == kRune && (ev.r == 'd' || ev.r == 'D'):
+		st.startDone()
 	}
 }
 

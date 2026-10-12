@@ -1,13 +1,10 @@
-// change_tui.go - m 키(v0.7.0): 변경 메뉴 화면과 TUI 연결.
+// change_tui.go - m 키(v0.7.0): 변경 메뉴와 TUI 연결. 메뉴는 화면 전환 없이 키 안내 줄 아래에 인라인으로 열린다(v0.7.1).
 // 메뉴 항목 선택 → newChangeState → 이후 모든 키는 changeState.handleKey 로, 화면은 renderChange 로 (change.go·change_render.go).
 // 실행 중에는 x 와 같이 fast tick(1초)으로 화면을 갱신하고 q/Esc/Ctrl+C/Ctrl+Z 는 무시한다 (취소는 Ctrl+X → y).
 // 꺼져 있으면(conf·--admin 모두 아님) m 키는 무반응이고 안내 줄에도 나오지 않는다 — 화면은 v0.6.2 와 같다.
 package main
 
-import (
-	"strings"
-	"time"
-)
+import "time"
 
 // changeRemoteMsg: os6_mgmt 원격 클라이언트에서 m 을 눌렀을 때 (메시지 줄에만 표시, 안내 줄에는 넣지 않음)
 const changeRemoteMsg = "변경 기능은 os8_mgmt 에서 실행하세요"
@@ -34,11 +31,11 @@ func (st *tuiState) startChange() bool {
 	return st.chgMenu != nil
 }
 
-// handleChange: 변경 메뉴·흐름 화면의 키. 메뉴는 번호 선택 / Esc·q 닫기, 흐름은 changeState.handleKey.
+// handleChange: 변경 메뉴·흐름 화면의 키. 인라인 메뉴는 번호 선택 / Esc·m·q 는 메뉴만 닫기(그 밖의 키는 무시), 흐름은 changeState.handleKey.
 func (st *tuiState) handleChange(ev keyEv) {
 	if st.chg == nil { // 메뉴
 		switch {
-		case ev.k == kEsc || ev.k == kLeft || (ev.k == kRune && (ev.r == 'q' || ev.r == 'Q')):
+		case ev.k == kEsc || (ev.k == kRune && (ev.r == 'q' || ev.r == 'Q' || ev.r == 'm' || ev.r == 'M')):
 			st.chgMenu = nil
 		case ev.k == kRune:
 			for _, it := range st.chgMenu {
@@ -105,7 +102,7 @@ func (st *tuiState) changeShutdown() {
 // changeItemName / changeItemDesc: 메뉴 항목 이름·한 줄 설명 (계획서 §1 메뉴)
 func changeItemName(k changeKind) string {
 	if k == kindBoth {
-		return "IP + LDAP 변경"
+		return "IP+LDAP"
 	}
 	return k.title()
 }
@@ -126,32 +123,34 @@ func changeItemDesc(k changeKind) string {
 	return ""
 }
 
-// renderChangeMenu: m 메뉴 화면 — 켜진 항목을 번호로 고른다. 모든 줄은 폭에 맞춰 줄바꿈 (… 로 자르지 않음).
-func renderChangeMenu(items []changeMenuItem, width, height int, color bool) string {
+// changeMenuTallRows: 이 높이 이상이면 인라인 메뉴에 위험 안내와 항목별 설명 줄을 덧붙인다 (낮으면 번호 목록만)
+const changeMenuTallRows = 32
+
+// changeMenuLines: m 메뉴 — 현재 화면은 그대로 두고 키 안내 줄 바로 아래에 붙는 줄들 (selection.Inline).
+// 첫 줄(들): `변경 ▶ 1 IP 변경  2 LDAP 변경 …   (번호 선택, Esc/m 닫기)` — 항목(두 칸 간격) 단위로 줄바꿈, … 로 자르지 않음.
+func changeMenuLines(items []changeMenuItem, width, height int, color bool) []string {
 	width = clampWidth(width)
-	title := " 변경 작업"
+	label := "변경 ▶ "
 	if adminMode {
-		title += " (--admin)"
+		label = "변경(--admin) ▶ "
 	}
-	head := append(wrapSegs(color, width, 1, "  ", seg{title, stBold}), sepLine(width))
-	var body []string
-	add := func(cont string, segs ...seg) { body = append(body, wrapSegs(color, width, 1, cont, segs...)...) }
-	add("   ", seg{" 노드의 ", ""}, seg{"설정 변경", stRed},
-		seg{" 작업입니다 — 항목을 고르면 user·대상 입력 → 미리보기 → yes 확인 순으로 진행하며, 확인 전에는 아무것도 바꾸지 않습니다", ""})
-	body = append(body, "")
+	segs := []seg{{" ", ""}, {label, hintStyles["m"]}}
+	for i, it := range items {
+		if i > 0 {
+			segs = append(segs, seg{"  ", ""})
+		}
+		segs = append(segs, seg{string(it.Key), "1;32"}, seg{" " + changeItemName(it.Kind), stBold})
+	}
+	segs = append(segs, seg{"   ", ""}, seg{"(번호 선택, Esc/m 닫기)", stGray})
+	out := wrapSegs(color, width, 2, "   ", segs...)
+	if height < changeMenuTallRows {
+		return out
+	}
+	out = append(out, wrapSegs(color, width, 1, "   ", seg{" 노드의 ", ""}, seg{"설정 변경", stRed},
+		seg{" 작업입니다 — 확인(yes) 전에는 아무것도 바꾸지 않습니다", ""})...)
 	for _, it := range items {
-		add("    ", seg{" ", ""}, seg{string(it.Key), stGreen}, seg{" " + changeItemName(it.Kind), stBold},
-			seg{" — " + changeItemDesc(it.Kind), ""})
+		out = append(out, wrapSegs(color, width, 1, "      ", seg{" ", ""}, seg{string(it.Key), "1;32"},
+			seg{" " + changeItemName(it.Kind), stBold}, seg{" — " + changeItemDesc(it.Kind), ""})...)
 	}
-	foot := append([]string{sepLine(width)}, hintLines(color, width, " 번호 선택  Esc/q 닫기")...)
-	if height > 0 {
-		room := rMax(height-len(head)-len(foot), 1)
-		if len(body) > room {
-			body = body[:room]
-		}
-		for len(body) < room {
-			body = append(body, "")
-		}
-	}
-	return strings.Join(append(append(head, body...), foot...), "\n")
+	return out
 }

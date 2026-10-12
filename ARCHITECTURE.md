@@ -29,7 +29,8 @@
 | `changerun.go` | 엔진·gossh 외부 실행(`changeExec`), os8 → os6_mgmt 경유(`routed`), 엔진 인자(`ipEngineArgs`·`ldapEngineArgs`, LDAP 은 항상 `-no-restart`), 엔진 출력 파싱, 취소(프로세스 그룹 SIGTERM → 3초 뒤 SIGKILL), 임시 디렉터리(0700) | 0.7.0, `changerun_test.go`, `change_s6_test.go` |
 | `changerec.go` | user 별 기록 `changes/<user>/<시각>_<kind>.json`(디렉터리 0700, 파일 0600, 원자 갱신), 원복·auto.appl 대상 자동 채움(`changeAutofill`), 원복 성공 뒤 이전 기록 갱신(`markAfterRun`), `auto_setup.log` 요약 한 줄 | 0.7.0, `changerec_test.go` |
 | `change_render.go` | 변경 흐름 화면 문자열(`renderChange`): 입력·dry-run·미리보기·실행·결과 표, 위험 문구 빨강, 줄바꿈(`wrapSegs`) | 0.7.0, `change_render_test.go` |
-| `change_tui.go` | `m` 키 연결: 메뉴 화면(`renderChangeMenu`), 흐름 시작·tick·종료, 원격(os6) 안내 문구 | 0.7.0, `change_tui_test.go` |
+| `change_tui.go` | `m` 키 연결: 인라인 메뉴 줄(`changeMenuLines` → `selection.Inline`, 0.7.1 — 전체 화면 `renderChangeMenu` 는 제거), 흐름 시작·tick·종료, 원격(os6) 안내 문구 | 0.7.0, `change_tui_test.go` |
+| `done_tui.go` | `d` 수동 완료(0.7.1): 화면 2 인라인 프롬프트·확인(`doneState`, 대상은 그리기·실행마다 스냅샷으로 재계산), 로컬 `markDone` / 원격 `remoteRun("done" …)` | 0.7.1, `done_tui_test.go` |
 | `test/demo_change.sh` · `test/run_change_os.sh` · `test/run_change_lab.sh` | 변경 메뉴 모의 환경 / RHEL 7·8·9 fixture 판정·`-no-restart` 검증 / .58 자기 자신 실동작 (fixture 경로만) | 0.7.0 |
 | `test/lib_change.sh` · `test/fake_gossh.sh` | 변경 시험용 fixture 노드·conf 생성 / 가짜 gossh (호스트별 fixture 루트에서 엔진 스크립트를 로컬 실행, systemctl 등은 호출만 기록) | 0.7.0 |
 | `계획서_v0.7.md` | v0.7.0 명세 (확정 사항 §1, 단계 §3, 불변 조건 §0) | 구현 기준 |
@@ -206,6 +207,8 @@
 | LDAP 대상 파일·OS 분기 변경 | `ldapbk.go` `lbFilePaths`/`detectScript` | `ldap_check.sh` 와 동기화, bindpw 미노출·binddn 파서(Go/awk) 일치 확인 |
 | 2차 체크 대상·병합 변경 | `daemon.go` `selectSecondTargets`, `second.go` | code 섹션 포맷 |
 | TUI 화면·키 변경 | `render.go`(순수 함수), `tui.go`(키) | 골든 파일 갱신 (`testdata/tui_*.golden`) |
+| 화면 아래 인라인 줄(m 메뉴·d 프롬프트) | `render.go` `selection.Inline` → `renderOverview`/`detailFoot` 의 꼬리 맨 끝, `tui.go` `inlineSel` | 닫혀 있을 때(Inline 비어 있음) 화면은 바이트 동일해야 함 (`TestInlineMenuOpenCloseByteIdentical`). 두 인라인은 동시에 열리지 않게 `handle` 에서 먼저 소비 |
+| 준비확인 anaconda 처리 | `daemon.go` `applyCheck` | ping X 없이도 설치중(SeenDown·DownAt 설정). 종료된 job 은 `recheckApply` 가 건드리지 않음 (`anaconda_test.go`) |
 | 요청 종류 추가 | `requests.go` `collectRequests`, `ctl.go` `requestArgsOK` | 원격 중계 인자 검증도 함께 |
 | 변경 메뉴 항목·번호·표시 조건 | `change.go` `changeMenuItems` | 번호는 계획서 §1 로 고정 (1~5). 메뉴 가시성 테스트 갱신 |
 | 변경 입력 형식 (`hostname ip`, 구분자) | `change.go` `parseIPInput`·`parseHostInput` | 잘못된 줄은 사유와 함께 제외 |

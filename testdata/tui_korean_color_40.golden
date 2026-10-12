@@ -38,7 +38,7 @@
  \e[1ma 전체 그룹\e[0m  \e[1mr 새로고침\e[0m  \e[1m? 도움말\e[0m
  \e[1mq 복귀\e[0m
  \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m
- \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
+ \e[1;38;5;175md 수동 완료\e[0m  \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
 == detail filter ==
  \e[1mjob J1 / 한글그룹.yml\e[0m
   \e[1m(인피니/rhel8/pxe/y)  완료 1/3\e[0m
@@ -61,4 +61,4 @@
  \e[1ma 전체 그룹\e[0m  \e[1mr 새로고침\e[0m  \e[1m? 도움말\e[0m
  \e[1mq 복귀\e[0m
  \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m
- \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
+ \e[1;38;5;175md 수동 완료\e[0m  \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
