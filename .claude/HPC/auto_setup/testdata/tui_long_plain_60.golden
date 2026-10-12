@@ -38,7 +38,8 @@
 
  ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침
  ? 도움말  q 복귀
- c 체크+수정  t 체크만  g 재확인  v 결과  x 단독 체크  w AWX
+ c 체크+수정  t 체크만  g 재확인  v 결과  d 수동 완료
+ x 단독 체크  w AWX
 == detail filter ==
  job 20261008-103043-alice-infra-team-long-job /
   infra_inventory-20261008103043_4ea.yml
@@ -58,4 +59,5 @@
 
  ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침
  ? 도움말  q 복귀
- c 체크+수정  t 체크만  g 재확인  v 결과  x 단독 체크  w AWX
+ c 체크+수정  t 체크만  g 재확인  v 결과  d 수동 완료
+ x 단독 체크  w AWX
