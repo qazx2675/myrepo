@@ -228,6 +228,7 @@ func newChangeState(env *changeEnv, kind changeKind) *changeState {
 	}
 	c.msg = c.userMsg()
 	c.checkEngines()
+	c.applyForcedUser()
 	return c
 }
 
@@ -284,6 +285,7 @@ func (c *changeState) handleKey(ev keyEv) (closed bool) {
 				if o.key == ev.r {
 					c.rbIP, c.rbLDAP, c.step, c.msg = o.ip, o.ldap, csUser, c.userMsg()
 					c.checkEngines()
+					c.applyForcedUser()
 					return false
 				}
 			}
@@ -348,20 +350,34 @@ func (c *changeState) userKey(ev keyEv) bool {
 			return false
 		}
 		c.user, c.in, c.msg = user, nil, ""
-		if c.needsInfra() {
-			c.step = csInfra
-			names, err := ldapInfraNames(filepath.Join(c.env.ConfDir, "ldap_config.conf"))
-			c.infras = names
-			if err != nil || len(names) == 0 {
-				c.msg = "ldap_config.conf 에 infra.<이름>.* 항목이 없습니다 (" + filepath.Join(c.env.ConfDir, "ldap_config.conf") + ") — Esc 로 닫기"
-			}
-			return false
-		}
-		c.enterInput()
+		c.afterUser()
 	default:
 		c.editLine(ev)
 	}
 	return false
+}
+
+// afterUser: user 가 정해진 뒤의 단계 (LDAP 계열이면 infra 선택, 아니면 대상 입력)
+func (c *changeState) afterUser() {
+	if c.needsInfra() {
+		c.step = csInfra
+		names, err := ldapInfraNames(filepath.Join(c.env.ConfDir, "ldap_config.conf"))
+		c.infras = names
+		if err != nil || len(names) == 0 {
+			c.msg = "ldap_config.conf 에 infra.<이름>.* 항목이 없습니다 (" + filepath.Join(c.env.ConfDir, "ldap_config.conf") + ") — Esc 로 닫기"
+		}
+		return
+	}
+	c.enterInput()
+}
+
+// applyForcedUser: auto_setup -user <이름> 으로 띄웠으면 user 단계를 건너뜀 (user 단계이고 치명 오류가 아닐 때만)
+func (c *changeState) applyForcedUser() {
+	if forceUser == "" || c.step != csUser || !validChangeUser(forceUser) {
+		return
+	}
+	c.user, c.in, c.msg = forceUser, nil, ""
+	c.afterUser()
 }
 
 func (c *changeState) infraKey(ev keyEv) bool {

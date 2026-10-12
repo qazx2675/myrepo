@@ -27,6 +27,7 @@ type Pinger interface {
 type CheckResult struct {
 	Responded, Anaconda bool
 	Uptime              float64
+	Why                 string // 무응답 사유(gossh 가 그 호스트에 대해 출력한 메시지, 없으면 빈 문자열) — 진단 표시용
 }
 
 // 키=Host
