@@ -193,8 +193,8 @@ func TestNewhostFlowFull(t *testing.T) {
 		t.Fatalf("AWX 로 이어져야 함: nh=%v envs=%d msg=%q", h.st.nh != nil, len(h.envs), h.st.sel.Msg)
 	}
 	m := envMap(h.envs[0])
-	if m["AWX_USER"] != "alice" || m["AWX_AUTO_NODEINFO"] != "n" || m["AWX_DNS_CHECKED"] != "1" || m["AWX_AUTO"] == "1" {
-		t.Errorf("AWX env: %v", m)
+	if _, ok := m["AWX_AUTO_NODEINFO"]; m["AWX_USER"] != "alice" || ok || m["AWX_DNS_CHECKED"] != "1" || m["AWX_AUTO"] == "1" {
+		t.Errorf("AWX env (프로파일 없음 — 자동 N 이 없어야 함): %v", m)
 	}
 	if h.verify[0] != "svr001\nsvr002\nspice-a01\n" {
 		t.Errorf("대상 확인 파일: %q", h.verify[0])
@@ -202,7 +202,7 @@ func TestNewhostFlowFull(t *testing.T) {
 	if _, err := os.Stat(m["AWX_VERIFY_FILE"]); !os.IsNotExist(err) {
 		t.Errorf("대상 확인 파일이 지워지지 않음")
 	}
-	if !strings.Contains(h.rg.out.String(), "nodeinfo 는 N 으로 실행합니다 (01 이 자동 답변") || h.st.sel.Msg != "AWX 종료 (rc=0)" {
+	if !strings.Contains(h.rg.out.String(), "프로파일 없이 일반 실행합니다") || h.st.sel.Msg != "AWX 종료 (rc=0)" {
 		t.Errorf("안내 줄·종료 메시지: %q", h.st.sel.Msg)
 	}
 }
@@ -218,7 +218,7 @@ func TestNewhostAwxProfiles(t *testing.T) {
 			t.Errorf("DNS 비활성 사유가 미리보기에 없음:\n%s", h.frame())
 		}
 		h.keys("yy")
-		if h.st.awx == nil || h.st.awx.nh == nil || !strings.Contains(h.frame(), "신규 설치 양식: user alice · 대상 1대 · nodeinfo 는 프로파일과 상관없이 N") {
+		if h.st.awx == nil || h.st.awx.nh == nil || !strings.Contains(h.frame(), "신규 설치 양식: user alice · 대상 1대 · y 로 프로파일을 고르면 nodeinfo 는 N 으로 실행") {
 			t.Fatalf("%s: 프로파일 질문 화면이어야 함:\n%s", path, h.frame())
 		}
 		switch path {
@@ -236,8 +236,10 @@ func TestNewhostAwxProfiles(t *testing.T) {
 			}
 		case "plain":
 			h.keys("n")
-			if m := envMap(h.envs[0]); m["AWX_AUTO"] == "1" || m["AWX_AUTO_NODEINFO"] != "n" {
+			if m := envMap(h.envs[0]); m["AWX_AUTO"] == "1" {
 				t.Errorf("일반 실행 env: %v", m)
+			} else if v, ok := m["AWX_AUTO_NODEINFO"]; ok {
+				t.Errorf("프로파일을 고르지 않았는데 자동 N 이 적용됨: AWX_AUTO_NODEINFO=%s", v)
 			}
 			if h.st.oo != nil {
 				t.Errorf("user·목록 입력 단계가 열리면 안 됨")

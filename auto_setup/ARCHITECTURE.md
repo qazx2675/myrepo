@@ -248,7 +248,7 @@
 | 신규 설치 양식 — 템플릿 형식·값 검사 | `newhost_tpl.go` `parseNewhostTpl`, conf `newhost_template_N` | root 파티션은 disk 로 유도, 01 의 12필드 순서(`nhLine`)와 일치 |
 | 신규 설치 양식 — 지정 언어·이력 추천 | `newhost.go` `nhParseAssign`·`loadNewhostHistory` | 한 줄 전체 검사 후 적용(하나라도 틀리면 변경 없음) |
 | 신규 설치 양식 — 단계·키·화면, 저장·백업 | `newhost_tui.go`, `newhost.go` `newhostSave` | 저장 전에는 파일을 바꾸지 않음, 백업 실패 시 중단 |
-| 신규 설치 양식 → AWX 연결 | `newhost.go` `newhostAwxEnv`, `newhost_tui.go` `newhostAwx`·`runNewhostAwx`, `awxrun.go` | nodeinfo N 강제, `AWX_DNS_CHECKED`, 프로파일 없을 때 `AWX_AUTO_NODEINFO=n` 만 |
+| 신규 설치 양식 → AWX 연결 | `newhost.go` `newhostAwxEnv`, `newhost_tui.go` `newhostAwx`·`runNewhostAwx`, `awxrun.go` | 프로파일을 고르면 nodeinfo N 강제, 안 고르면 자동 응답 없음(일반 실행), `AWX_DNS_CHECKED` |
 | DNS 판정·중복 경고·속도 | `dnscheck.go` `dnsJudge`·`dnsAddWarnings`·`CheckDNS`, 상수 `dnsQueryTimeout` 등 | **awx_script 01 `dns_check` 와 동기화**, 테스트 `dnscheck_test.go` + awx `test/run_tests.sh` 21~23 |
 | gossh 작업 실행 위치·기준 대수 | `work.go` `workPlan`, `newhost_tpl.go` `workOS6Over`, conf `work_os6_over` | 규칙: os8 ≤ 기준 → os8 + 접속불가만 os6 재실행 / 초과 → 전량 os6 / os6_mgmt 에서 열면 os6 직접 |
 | gossh 작업 기록 형식·보관·정리 | `work.go` `workRec`·`workCleanOut`·`workCleanTmp`·`workCleanAll`, 상수 `workKeep`·`workUserCap` | index.jsonl 은 추가 전용, 디렉터리 0700·파일 0600 |

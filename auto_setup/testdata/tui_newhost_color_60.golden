@@ -143,7 +143,7 @@
 
 \e[1m AWX 실행할까요? [y/n]\e[0m
 ------------------------------------------------------------
- \e[1my AWX 실행 (nodeinfo N · 대상 목록 자동)\e[0m
+ \e[1my AWX 실행 (프로파일 선택 시 nodeinfo N · 대상 목록 자동)\e[0m
  \e[1mn 저장만 하고 닫기\e[0m  \e[1;36m↑↓ PgUp/PgDn 스크롤\e[0m
 == cancel-ask ==
 \e[1m 신규 설치 양식 [user: alice] - 4/5 미리보기\e[0m

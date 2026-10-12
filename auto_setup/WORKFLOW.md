@@ -280,11 +280,11 @@ flowchart TD
     V -->|"y"| SV["awx_dir/<user>.txt 저장<br/>기존은 newhost/<user>/backup/, history/ 에 사본"]
     SV --> AQ{"5/5 AWX 실행할까요?"}
     AQ -->|"n"| E["저장만 완료 (나중에 w → 1)"]
-    AQ -->|"y"| AX["01 실행: nodeinfo N 강제, 대상 목록 자동 입력<br/>DNS 를 점검했으면 AWX_DNS_CHECKED=1"]
+    AQ -->|"y"| AX["01 실행: 프로파일을 고르면 nodeinfo N 강제<br/>안 고르면 일반 실행(nodeinfo 질문 직접 응답)<br/>대상 목록 자동 입력, DNS 점검했으면 AWX_DNS_CHECKED=1"]
 ```
 
 - 각 단계에서 `Esc` = 이전 단계, `Ctrl+X` → `y` = 취소(저장 안 함). 저장 전에는 어떤 파일도 바꾸지 않습니다.
-- 프로파일(`awx_profile_N`)이 있으면 5/5 의 `y` 뒤에 프로파일을 고르고, 없으면 `AWX_AUTO` 없이 `AWX_AUTO_NODEINFO=n` 만 넘깁니다.
+- 프로파일(`awx_profile_N`)이 있으면 5/5 의 `y` 뒤에 `AWX auto 실행? [y/n]` 을 묻습니다. `y` → 프로파일 선택(nodeinfo N 강제), `n` 또는 프로파일 없음 → 자동 응답 없는 일반 실행(nodeinfo 질문 직접 응답).
 
 ## DNS 점검 흐름 (auto_setup 양식 · awx_script 01 [4-1], v0.8.0)
 

@@ -89,7 +89,7 @@
   <text x="273" y="823" class="t tm">y</text>
   <rect x="40" y="834" width="450" height="94" rx="6" class="ldap"/>
   <text x="265" y="854" class="t tb" text-anchor="middle">01 실행 (기존 w 흐름)</text>
-  <text x="265" y="870" class="t" text-anchor="middle">프로파일이 있으면 번호 선택. nodeinfo 는 프로파일과 상관없이 N 으로</text>
+  <text x="265" y="870" class="t" text-anchor="middle">프로파일을 고르면 nodeinfo N · 안 고르면 일반 실행</text>
   <text x="265" y="886" class="t" text-anchor="middle">강제, 대상 목록은 방금 만든 hostname 들로 자동 입력</text>
   <text x="265" y="902" class="t" text-anchor="middle">DNS 를 실제 점검했으면 AWX_DNS_CHECKED=1 (01 은 표만 출력하고</text>
   <text x="265" y="918" class="t" text-anchor="middle">묻지 않음)</text>
