@@ -52,6 +52,14 @@ AWX 노드정보 V2 스크립트 풀리퀘스트 검증 항목. 모든 항목을
 - [ ] **WORKFLOW.md**: 흐름 변경 시 mermaid 갱신
 - [ ] **workflow.svg**: 흐름 변경 시 이미지 갱신
 
+## DNS 점검 ([Unreleased])
+
+- [ ] **`[4-1] dns_check`**: `[4] fix_mac` 다음·`[5]` 전에 호출되고(`log "[4-1] dns_check"`), dig → nslookup → 둘 다 없으면 `DNS 도구 없음 — 점검 생략`. 판정 5종·중복 경고(목록·DNS·PTR)·속도(`xargs -P 32`, 2초·재시도 1회)가 auto_setup `dnscheck.go` 와 같음
+- [ ] **auto 모드**: 불일치면 `/dev/tty` 로 `[y/N]` (y 외·터미널 없음은 중단), `AWX_DNS_CHECKED=1` 은 표만. `AWX_AUTO_NODEINFO` 는 `AWX_AUTO` 없이도 nodeinfo 질문만 자동 답변. DNS 서버·도구가 없으면 한 줄 안내만 하고 기존대로 진행 (resolv.conf 가 없는 테스트 환경에서는 기존 케이스가 `점검 생략` 한 줄만 추가로 보임)
+- [ ] **테스트**: `bash test/run_tests.sh` 108건 PASS (케이스 21~23), `test/fake_dns.py` 는 랩·CI 전용(운영 배치 금지)
+- [ ] **업데이트 스크립트**: `setup/update_unreleased_dns.sh` — `bash -n`, 마지막 줄 `#__END_OF_UPDATE__`·줄 수(`GUS_EXPECT_LINES`) 일치, `--dry` 무변경·`--undo` 복원, 01 만 변경 (`vars.manifest` 버전은 그대로)
+- [ ] **문서·그림**: README `[4-1]`, CHANGELOG `[Unreleased]`, 사용법.txt Step 7, WORKFLOW(mermaid), `workflow.svg` 의 `[4-1]` 상자, ARCHITECTURE(`dns_check`·`fake_dns.py`) 가 서로 일치. `xmllint --noout workflow.svg`
+
 ## 코드 규칙
 
 - [ ] **01 최상단 변수** 7개 검증:

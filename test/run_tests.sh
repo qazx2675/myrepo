@@ -96,10 +96,11 @@ setup_case() {
 	CALLS=$STUBLOG/calls.log; OUT=$S/out.txt
 	: > "$CALLS"
 	export STUBLOG SVR_DIR REMOTE_DIR
-	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_USER AWX_VERIFY_FILE
+	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_USER AWX_VERIFY_FILE AWX_DNS_CHECKED AWX_TTY AWX_RESOLV_CONF STUB_DNSDB
 	export GOSSH_SCENARIO=same
 	export AUTO_SETUP_DIR="$S/as"   # 01 [14-1] auto_setup 전달 위치(스크래치)
 	export PATH="$S/bin:$ORIG_PATH"
+	export AWX_RESOLV_CONF="$S/no_resolv.conf"   # DNS 점검: 기본은 resolv.conf 없음 → "점검 생략" (기존 케이스가 실제 DNS 를 건드리지 않게). DNS 케이스는 dns_setup 이 바꾼다
 
 	cp "$SRC/$F01" "$SRC/$F02" "$W/"
 	echo "POWERLIMIT_SENTINEL" > "$W/.power_limit_setting.txt"
@@ -1346,15 +1347,50 @@ auto_cases() {
 	t_has "나머지는 auto (OS 2024)" "$OUT" '^OS 버전 선택 : 2024 \(auto\)$'
 	case_end
 
-	case_begin "18e" "AWX_AUTO 없이 AWX_AUTO_* 만 있으면 기존과 동일(auto 에코 없음, 입력 그대로 사용)"
+	case_begin "18e" "AWX_AUTO 없이 AWX_AUTO_OS 만 있으면 기존과 동일(auto 에코 없음, 입력 그대로 사용)"
 	setup_case
 	seed_raw D6
-	export AWX_AUTO_NODEINFO=y AWX_AUTO_OS=2025
+	export AWX_AUTO_OS=2025
 	run01 'N\nY\nsu\n1\nY\n'
 	t_rc "01 종료코드" "$RC" 0
-	t_no "(auto) 에코 없음" "$OUT" '\(auto\)'
+	t_no "(auto) 에코 없음" "$OUT" '\(auto\)|\(auto_setup\)'
 	t_eq "nodeinfo 미호출(입력 N)" "$(grep -c '^nodeinfo ' "$CALLS")" 0
 	t_has "입력 1 → default_os (AWX_AUTO_OS=2025 무시)" "$CALLS" '^pxe .* -os 2026-ECAD_TCAD '
+	case_end
+
+	case_begin "18f" "AWX_AUTO 없이 AWX_AUTO_NODEINFO=n: nodeinfo 질문만 자동 답변 '(auto_setup)', 나머지 질문은 직접 입력"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025
+	run01 'Y\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "nodeinfo 자동 답변 표시" "$OUT" '^ awx nodeinfo 사용여부 Y\|N : n \(auto_setup\)$'
+	t_eq "nodeinfo 미호출" "$(grep -c '^nodeinfo ' "$CALLS")" 0
+	t_no "다른 질문은 auto 아님" "$OUT" '\(auto\)$'
+	t_has "입력 1 → default_os (AWX_AUTO_OS 무시)" "$CALLS" '^pxe .* -os 2026-ECAD_TCAD '
+	t_no "경고 없음" "$OUT" 'AWX_AUTO_NODEINFO'
+	case_end
+
+	case_begin "18g" "AWX_AUTO 없이 AWX_AUTO_NODEINFO=y: nodeinfo 가 호출되고 나머지 질문은 직접 입력"
+	setup_case
+	seed_nodeinfo D6; export NODEINFO_MODE=msg
+	export AWX_AUTO_NODEINFO=y
+	run01 'Y\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "nodeinfo 자동 답변 표시" "$OUT" '^ awx nodeinfo 사용여부 Y\|N : y \(auto_setup\)$'
+	t_has "nodeinfo -hosts 호출" "$CALLS" "^nodeinfo -user $TU -hosts $W/$TU\.txt$"
+	t_has "02 까지 완료" "$CALLS" '^pxe '
+	case_end
+
+	case_begin "18h" "AWX_AUTO 없이 AWX_AUTO_NODEINFO 가 y|n 이 아니면 자동 답변 없이 직접 입력(경고 없음)"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO_NODEINFO=x
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_no "자동 답변 표시 없음" "$OUT" '\(auto\)|\(auto_setup\)'
+	t_no "경고 없음" "$OUT" 'AWX_AUTO_NODEINFO'
+	t_eq "nodeinfo 미호출(입력 N)" "$(grep -c '^nodeinfo ' "$CALLS")" 0
 	case_end
 
 	case_begin "19a" "다른 디렉터리에서 실행(bash <절대경로>/01...): 스크립트 디렉터리 기준으로 동작"
@@ -1494,6 +1530,628 @@ auto_cases() {
 	unset AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_COLOR AWX_USER AWX_VERIFY_FILE
 }
 
+# ===================== 케이스 21~23: DNS 점검 ([4-1] dns_check) =====================
+# 스텁 dig/nslookup 이 $STUB_DNSDB("서버 이름 타입 값")를 읽어 응답한다. 값: IP[,IP] | NX | NODATA | SERVFAIL | FAIL(응답 없음). 없는 이름은 NX.
+# resolv.conf 는 스크래치의 가짜(AWX_RESOLV_CONF): 서버 10.1.0.1~3, search dns.test.  기존 케이스는 resolv.conf 가 없어 "점검 생략"이 나온다.
+FARM_NONE=""; FARM_NSL=""; DNSKEEP=""
+mk_farm() {   # 변수명 제외할_명령... : 시스템 명령은 그대로 심볼릭 링크하되 제외한 이름(dig/nslookup)만 없는 PATH 용 디렉터리
+	local var=$1 d dirs=() i f; shift
+	f=$(TMPDIR=/tmp mktemp -d); SCRATCHES+=("$f")
+	IFS=: read -ra dirs <<< "$ORIG_PATH"
+	for ((i = ${#dirs[@]} - 1; i >= 0; i--)); do
+		d=${dirs[i]}; [[ -d $d ]] || continue
+		find "$d" -maxdepth 1 \( -type f -o -type l \) -print0 2>/dev/null | xargs -0 -r ln -sft "$f"
+	done
+	for d in "$@"; do rm -f "$f/$d"; done
+	printf -v "$var" '%s' "$f"
+}
+
+dns_setup() {   # [both|dig|nslookup|none] : 스텁 도구와 가짜 resolv.conf 준비. none 이면 dig·nslookup 이 모두 없는 PATH
+	local tools=${1:-both}
+	STUB_DNSDB=$S/dnsdb; : > "$STUB_DNSDB"; export STUB_DNSDB
+	DCALLS=$STUBLOG/dns_calls.log; : > "$DCALLS"
+	# 스텁이 공유하는 조회 프로그램: 정확히 일치하는 줄 > 이름 * 줄 > NX
+	cat > "$STUBLOG/dnsq.awk" <<'AWK'
+$1 == s && $3 == t { if ($2 == n) ex = $4; else if ($2 == "*") wi = $4 }
+END { print (ex != "" ? ex : (wi != "" ? wi : "NX")) }
+AWK
+	printf '# test resolv.conf\n; comment\nnameserver 10.1.0.1\nnameserver 10.1.0.2\nnameserver 10.1.0.3\nsearch dns.test\n' > "$S/resolv.conf"
+	export AWX_RESOLV_CONF=$S/resolv.conf
+	if [[ $tools == both || $tools == dig ]]; then
+		cat > "$S/bin/dig" <<'STUB'
+#!/bin/bash
+srv=""; type=A; name=""
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		@*) srv=${1#@} ;;
+		-t) type=$2; shift ;;
+		-p) shift ;;
+		-r|+*) ;;
+		*) name=$1 ;;
+	esac
+	shift
+done
+name=${name%.}; name=${name,,}
+echo "dig $srv $name $type" >> "$STUBLOG/dns_calls.log"
+val=$(awk -v s="$srv" -v n="$name" -v t="$type" -f "$STUBLOG/dnsq.awk" "$STUB_DNSDB")
+hdr() { printf ';; Got answer:\n;; ->>HEADER<<- opcode: QUERY, status: %s, id: 1\n;; flags: qr rd ra; QUERY: 1, ANSWER: %d, AUTHORITY: 0, ADDITIONAL: 1\n\n' "$1" "$2"; }
+case $val in
+	FAIL) echo ";; connection timed out; no servers could be reached"; exit 9 ;;
+	NX) hdr NXDOMAIN 0 ;;
+	NODATA) hdr NOERROR 0 ;;
+	SERVFAIL) hdr SERVFAIL 0 ;;
+	*)
+		IFS=, read -ra v <<< "$val"
+		hdr NOERROR "${#v[@]}"; echo ";; ANSWER SECTION:"
+		for x in "${v[@]}"; do
+			if [[ $type == PTR ]]; then printf '%s.\t60\tIN\tPTR\t%s.\n' "$name" "$x"; else printf '%s.\t60\tIN\tA\t%s\n' "$name" "$x"; fi
+		done ;;
+esac
+exit 0
+STUB
+	fi
+	if [[ $tools == both || $tools == nslookup ]]; then
+		cat > "$S/bin/nslookup" <<'STUB'
+#!/bin/bash
+type=A; pos=()
+for a in "$@"; do
+	case $a in -type=*) type=${a#-type=} ;; -*) ;; *) pos+=("$a") ;; esac
+done
+name=${pos[0]%.}; name=${name,,}; srv=${pos[1]}
+echo "nslookup $srv $name $type" >> "$STUBLOG/dns_calls.log"
+val=$(awk -v s="$srv" -v n="$name" -v t="$type" -f "$STUBLOG/dnsq.awk" "$STUB_DNSDB")
+hdr() { printf 'Server:\t\t%s\nAddress:\t%s#53\n\n' "$srv" "$srv"; }
+case $val in
+	FAIL) echo ";; connection timed out; no servers could be reached"; echo; exit 1 ;;
+	NX) hdr; echo "** server can't find $name: NXDOMAIN" >&2; echo; exit 1 ;;
+	SERVFAIL) hdr; echo "** server can't find $name: SERVFAIL" >&2; echo; exit 1 ;;
+	NODATA) hdr; echo "Non-authoritative answer:"; echo; exit 0 ;;
+	*)
+		hdr; echo "Non-authoritative answer:"
+		IFS=, read -ra v <<< "$val"
+		if [[ $type == PTR ]]; then
+			for x in "${v[@]}"; do printf '%s\tname = %s.\n' "$name" "$x"; done
+		else
+			printf 'Name:\t%s\n' "$name"
+			for x in "${v[@]}"; do echo "Address: $x"; done
+		fi
+		echo; exit 0 ;;
+esac
+STUB
+	fi
+	chmod +x "$S"/bin/*
+	if [[ $tools == both || $tools == dig ]]; then export PATH="$S/bin:$ORIG_PATH"
+	else
+		[[ -n $FARM_NONE ]] || mk_farm FARM_NONE dig nslookup
+		export PATH="$S/bin:$FARM_NONE"
+	fi
+}
+dns_rec() {   # 이름 값 [서버번호...] : A 레코드(이름에 '.' 이 없으면 .dns.test 를 붙임). 서버 생략 시 1 2 3
+	local n=$1 v=$2 s; shift 2
+	[[ $n == *.* || $n == '*' ]] || n=$n.dns.test
+	n=${n,,}
+	(( $# )) || set -- 1 2 3
+	for s in "$@"; do printf '10.1.0.%s %s A %s\n' "$s" "$n" "$v" >> "$STUB_DNSDB"; done
+}
+dns_raw() {   # 이름 값 : 이름 그대로(접미사 없이) 모든 서버에 A
+	local s
+	for s in 1 2 3; do printf '10.1.0.%s %s A %s\n' "$s" "$1" "$2" >> "$STUB_DNSDB"; done
+}
+dns_ptr() {   # IPv4 이름 : 모든 서버에 PTR
+	local a b c d s; IFS=. read -r a b c d <<< "$1"
+	for s in 1 2 3; do printf '10.1.0.%s %s.%s.%s.%s.in-addr.arpa PTR %s\n' "$s" "$d" "$c" "$b" "$a" "$2" >> "$STUB_DNSDB"; done
+}
+D6_FIXED() { D6 | sed 's/ 1\.1T / 1200 /'; }   # D6 을 01 의 [2] sed(1.1T → 1200)까지 거친 모양 (기대값)
+dns_q() { grep -cE "$1" "$DCALLS"; }
+
+# 불일치·일치 섞인 4대. 공백·탭이 일정하지 않은 줄을 일부러 넣어 "5번째 필드 외 바이트 동일"을 확인한다
+DA() {
+	printf 'Dell R750 INFRA-A dnsA1 10.2.0.1 aa:bb:cc:dd:ee:01 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell  R750\tINFRA-A dnsA2 10.2.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-A  dnsA3  10.2.0.3  aa:bb:cc:dd:ee:03 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-A dnsA4 10.2.0.4 aa:bb:cc:dd:ee:04 eth0 sda sda5 1200 RHEL8\tUEFI\n'
+}
+DA_REC() { dns_rec dnsA1 10.2.0.101; dns_rec dnsA2 10.2.0.2; dns_rec dnsA3 10.2.0.103; dns_rec dnsA4 10.2.0.104; }
+DA_ALL() {   # a: 불일치 3대(1·3·4번 줄)의 5번째 필드만 DNS 값으로
+	printf 'Dell R750 INFRA-A dnsA1 10.2.0.101 aa:bb:cc:dd:ee:01 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell  R750\tINFRA-A dnsA2 10.2.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-A  dnsA3  10.2.0.103  aa:bb:cc:dd:ee:03 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-A dnsA4 10.2.0.104 aa:bb:cc:dd:ee:04 eth0 sda sda5 1200 RHEL8\tUEFI\n'
+}
+DA_S() {     # s + y n y: 1번 줄·4번 줄만 교체
+	printf 'Dell R750 INFRA-A dnsA1 10.2.0.101 aa:bb:cc:dd:ee:01 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell  R750\tINFRA-A dnsA2 10.2.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-A  dnsA3  10.2.0.3  aa:bb:cc:dd:ee:03 eth0 sda sda5 1200 RHEL8 UEFI\n'
+	printf 'Dell R750 INFRA-A dnsA4 10.2.0.104 aa:bb:cc:dd:ee:04 eth0 sda sda5 1200 RHEL8\tUEFI\n'
+}
+
+# 전체 유형 13대: 일치 2 · 불일치 5(중복 경고 목록/DNS/PTR 포함) · 판단 불가 3 · 미등록 2 · 조회 실패 1
+FL_REG=(10.5.0.1 10.5.0.2 10.5.0.3 10.5.0.4 10.5.0.5 10.5.0.6 10.5.0.7 10.5.0.8 10.5.0.9 10.5.0.1 10.5.0.30 10.5.0.50 10.5.0.99)
+FL_ALL=(10.5.0.1 10.5.0.22 10.5.0.3 10.5.0.4 10.5.0.5 10.5.0.6 10.5.0.7 10.5.0.8 10.5.0.9 10.5.0.100 10.5.0.31 10.5.0.51 10.5.0.50)   # 'a' 이후 5번째 필드(불일치 5대만 DNS 값)
+FL() {   # 입력 줄: 번호가 곧 fl01..fl13
+	local i
+	for ((i = 0; i < 13; i++)); do printf 'Dell R750 INFRA-A fl%02d %s aa:bb:cc:dd:ee:%02x eth0 sda sda5 1200 RHEL8 UEFI\n' $((i + 1)) "${FL_REG[i]}" $((i + 1)); done
+}
+FL_EXPECT_ALL() {
+	local i
+	for ((i = 0; i < 13; i++)); do printf 'Dell R750 INFRA-A fl%02d %s aa:bb:cc:dd:ee:%02x eth0 sda sda5 1200 RHEL8 UEFI\n' $((i + 1)) "${FL_ALL[i]}" $((i + 1)); done
+}
+FL_REC() {
+	dns_rec fl01 10.5.0.1
+	dns_rec fl02 10.5.0.22
+	dns_rec fl03 10.5.0.3 1 2; dns_rec fl03 10.5.0.4 3
+	dns_rec fl04 10.5.0.4,10.5.0.40
+	dns_rec fl05 10.5.0.5 1 3; dns_rec fl05 NX 2
+	dns_rec fl06 NX
+	dns_rec fl07 NODATA
+	dns_rec fl08 SERVFAIL
+	dns_rec fl09 10.5.0.9 1 2; dns_rec fl09 FAIL 3
+	dns_rec fl10 10.5.0.100
+	dns_rec fl11 10.5.0.31; dns_ptr 10.5.0.30 other30.dns.test
+	dns_rec fl12 10.5.0.51
+	dns_rec fl13 10.5.0.50
+}
+fl_table() { sed -n '/^hostname /,/^\[DNS\] /p' "$OUT" | sed '$d'; }   # OUT 의 표 부분(머리글 줄 ~ 요약 줄 직전)
+
+dns_cases() {
+	local E=$'\033' i n n4 n41 n5
+	unset AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS
+	DNSKEEP=$(TMPDIR=/tmp mktemp -d); SCRATCHES+=("$DNSKEEP")   # 케이스 사이에 표를 비교하려고 남겨 두는 곳
+
+	case_begin "21a" "일치 3대: 표·질문 없이 '[DNS] 일치 3대' 한 줄, ${TU}.txt 불변, 단계 로그 [4]→[4-1]→[5] 순서, 서버 3대 모두에 질의"
+	setup_case; dns_setup
+	seed_raw D6
+	dns_rec host01 10.9.0.1; dns_rec host02 10.9.0.2; dns_rec host03 10.9.0.3
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "일치 요약" "$OUT" '^\[DNS\] 일치 3대 \(미등록 0, 판단 불가 0, 조회 실패 0\)$'
+	t_no "표 없음" "$OUT" '^hostname +등록IP'
+	t_no "점검 생략 아님" "$OUT" '점검 생략'
+	t_eq "${TU}.txt 불변" "$(cat "$W/$TU.txt")" "$(D6_FIXED)"
+	n4=$(grep -n '\[4\] fix_mac' "$OUT" | cut -d: -f1); n41=$(grep -n '\[4-1\] dns_check' "$OUT" | cut -d: -f1); n5=$(grep -n '\[5\] show_targets' "$OUT" | cut -d: -f1)
+	t_eq "로그 순서 [4] < [4-1] < [5]" "$(( n4 < n41 && n41 < n5 ? 1 : 0 ))" 1
+	t_eq "서버 3대 모두 질의(host01.dns.test)" "$(grep -E '^dig [^ ]+ host01\.dns\.test A$' "$DCALLS" | awk '{print $2}' | sort | paste -sd' ')" "10.1.0.1 10.1.0.2 10.1.0.3"
+	t_eq "첫 후보는 search 도메인 붙인 이름(짧은 이름 ndots 1 미만)" "$(grep -E '^dig 10\.1\.0\.1 host01' "$DCALLS" | paste -sd';')" "dig 10.1.0.1 host01.dns.test A"
+	t_eq "작업진행 N → ssh/scp 미호출" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
+	t_notmp
+	case_end
+
+	case_begin "21b" "불일치 → a: 모두 DNS 로 교체. 5번째 필드만 바뀌고 나머지(공백·탭 포함)는 바이트 동일, LOG 에 [DNS] 줄"
+	setup_case; dns_setup
+	seed_raw DA; DA_REC
+	run01 'N\na\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "표 머리글" "$OUT" '^hostname +등록IP +DNS IP +비고$'
+	t_has "표: dnsA1" "$OUT" '^dnsA1 +10\.2\.0\.1 +10\.2\.0\.101$'
+	t_has "표: dnsA3" "$OUT" '^dnsA3 +10\.2\.0\.3 +10\.2\.0\.103$'
+	t_has "표: dnsA4" "$OUT" '^dnsA4 +10\.2\.0\.4 +10\.2\.0\.104$'
+	t_no "표에 일치 호스트 없음" "$OUT" '^dnsA2 '
+	t_has "불일치 요약" "$OUT" '^\[DNS\] 불일치 3대 \(일치 1대, 미등록 0, 판단 불가 0, 조회 실패 0\)$'
+	t_has "교체 로그 dnsA1" "$OUT" '^\[DNS\] dnsA1 10\.2\.0\.1 -> 10\.2\.0\.101$'
+	t_has "교체 로그 dnsA3" "$OUT" '^\[DNS\] dnsA3 10\.2\.0\.3 -> 10\.2\.0\.103$'
+	t_has "교체 로그 dnsA4" "$OUT" '^\[DNS\] dnsA4 10\.2\.0\.4 -> 10\.2\.0\.104$'
+	t_has "LOG 에 교체 기록" "$W/LOG/$TU.log" '^\[DNS\] dnsA1 10\.2\.0\.1 -> 10\.2\.0\.101$'
+	t_has "교체 대수" "$OUT" '^\[DNS\] 3대 교체$'
+	DA_ALL > "$S/expect.txt"
+	t_eq "${TU}.txt 바이트 비교(5번째 필드만 변경)" "$(cmp "$S/expect.txt" "$W/$TU.txt" && echo same)" same
+	t_notmp
+	case_end
+
+	case_begin "21c" "불일치 → n: 그대로 진행, 파일 불변, '교체 없음'"
+	setup_case; dns_setup
+	seed_raw DA; DA_REC
+	run01 'N\nn\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "교체 없음" "$OUT" '^\[DNS\] 교체 없음 — 등록값 그대로 진행$'
+	t_no "교체 로그 없음" "$OUT" '^\[DNS\] dnsA. '
+	DA > "$S/expect.txt"
+	t_eq "${TU}.txt 바이트 동일" "$(cmp "$S/expect.txt" "$W/$TU.txt" && echo same)" same
+	t_has "작업진행 단계까지 진행([5])" "$OUT" '\[5\] show_targets'
+	case_end
+
+	case_begin "21d" "불일치 → s: 호스트마다 y/n (y n y → 1번·4번 줄만 교체)"
+	setup_case; dns_setup
+	seed_raw DA; DA_REC
+	run01 'N\ns\ny\nn\ny\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "교체 로그 dnsA1" "$OUT" '^\[DNS\] dnsA1 10\.2\.0\.1 -> 10\.2\.0\.101$'
+	t_no "dnsA3 는 n → 교체 로그 없음" "$OUT" '^\[DNS\] dnsA3 '
+	t_has "교체 로그 dnsA4" "$OUT" '^\[DNS\] dnsA4 10\.2\.0\.4 -> 10\.2\.0\.104$'
+	t_has "교체 대수" "$OUT" '^\[DNS\] 2대 교체$'
+	DA_S > "$S/expect.txt"
+	t_eq "${TU}.txt 바이트 비교" "$(cmp "$S/expect.txt" "$W/$TU.txt" && echo same)" same
+	case_end
+
+	case_begin "21e" "불일치 → q: 중단(종료코드 0, 작업 취소), 파일 불변, 이후 단계([5]·ssh) 없음"
+	setup_case; dns_setup
+	seed_raw DA; DA_REC
+	run01 'N\nq\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "작업 취소 로그" "$OUT" '작업 취소 \(DNS 점검에서 중단\)'
+	t_no "[5] 이후 진행 안 함" "$OUT" '\[5\] show_targets'
+	DA > "$S/expect.txt"
+	t_eq "${TU}.txt 바이트 동일" "$(cmp "$S/expect.txt" "$W/$TU.txt" && echo same)" same
+	t_eq "ssh/scp 미호출" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
+	t_notmp
+	case_end
+
+	case_begin "21f" "메뉴 잘못된 입력은 다시 묻고, 입력이 끝나면 오류 종료(1)"
+	setup_case; dns_setup
+	seed_raw DA; DA_REC
+	run01 'N\nx\nn\nN\n'
+	t_rc "잘못된 입력 후 n: 종료코드" "$RC" 0
+	t_has "재입력 안내" "$OUT" '^\[!\] a, n, s, q 중 하나를 입력하세요$'
+	t_has "n 처리" "$OUT" '^\[DNS\] 교체 없음'
+	setup_case; dns_setup
+	seed_raw DA; DA_REC
+	run01 'N\n'
+	t_rc "메뉴에서 입력 끝: 종료코드 1" "$RC" 1
+	t_has "입력 끝 오류" "$OUT" '^\[X\] 입력이 끝났습니다$'
+	case_end
+
+	case_begin "21g" "전체 유형 13대(dig): 표·비고·중복 경고 3종, 교체는 불일치만(a)"
+	setup_case; dns_setup
+	seed_raw FL; FL_REC
+	run01 'N\na\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "요약" "$OUT" '^\[DNS\] 불일치 5대 \(일치 2대, 미등록 2, 판단 불가 3, 조회 실패 1\)$'
+	t_has "불일치: fl02(경고 없음)" "$OUT" '^fl02 +10\.5\.0\.2 +10\.5\.0\.22$'
+	t_has "판단 불가: 서버 간 다름(fl03)" "$OUT" '^fl03 +10\.5\.0\.3 +10\.5\.0\.3,10\.5\.0\.4 +⚠ 판단 불가: 서버 간 답이 다름$'
+	t_has "판단 불가: A 여러 개(fl04)" "$OUT" '^fl04 +10\.5\.0\.4 +10\.5\.0\.4,10\.5\.0\.40 +⚠ 판단 불가: A 레코드 여러 개$'
+	t_has "판단 불가: A 와 NX 혼재(fl05)" "$OUT" '^fl05 +10\.5\.0\.5 +10\.5\.0\.5 +⚠ 판단 불가: 서버 간 답이 다름$'
+	t_has "미등록 NXDOMAIN(fl06)" "$OUT" '^fl06 +10\.5\.0\.6 +- +미등록$'
+	t_has "미등록 NODATA(fl07)" "$OUT" '^fl07 +10\.5\.0\.7 +- +미등록$'
+	t_has "조회 실패(fl08)" "$OUT" '^fl08 +10\.5\.0\.8 +- +⚠ 응답한 서버 없음$'
+	t_no "응답한 서버끼리 같으면 일치(fl09: 서버 1대 응답 없음)" "$OUT" '^fl09 '
+	t_no "일치(fl01)는 표에 없음" "$OUT" '^fl01 '
+	t_has "중복 경고 (목록)+(DNS) fl10" "$OUT" '^fl10 +10\.5\.0\.1 +10\.5\.0\.100 +⚠ 등록IP 10\.5\.0\.1 은 fl01 의 IP \(목록\)  ⚠ 등록IP 10\.5\.0\.1 은 fl01 의 IP \(DNS\)$'
+	t_has "중복 경고 (PTR) fl11" "$OUT" '^fl11 +10\.5\.0\.30 +10\.5\.0\.31 +⚠ 등록IP 10\.5\.0\.30 은 other30 의 IP \(PTR\)$'
+	t_has "중복 경고 (DNS) fl12" "$OUT" '^fl12 +10\.5\.0\.50 +10\.5\.0\.51 +⚠ 등록IP 10\.5\.0\.50 은 fl13 의 IP \(DNS\)$'
+	t_has "불일치 fl13(경고 없음)" "$OUT" '^fl13 +10\.5\.0\.99 +10\.5\.0\.50$'
+	t_eq "PTR 은 불일치 등록 IP 5개 × 서버 3 = 15회만" "$(dns_q ' PTR$')" 15
+	t_eq "미등록 fl06: 서버1 에 search 이름 → 짧은 이름 순서" "$(grep -E '^dig 10\.1\.0\.1 fl06' "$DCALLS" | paste -sd';')" "dig 10.1.0.1 fl06.dns.test A;dig 10.1.0.1 fl06 A"
+	t_eq "교체는 불일치 5대만(판단 불가·미등록·실패 제외)" "$(grep -c '^\[DNS\] fl.. ' "$OUT")" 5
+	FL_EXPECT_ALL > "$S/expect.txt"
+	t_eq "${TU}.txt 바이트 비교" "$(cmp "$S/expect.txt" "$W/$TU.txt" && echo same)" same
+	fl_table > "$DNSKEEP/tbl_dig.txt"
+	t_notmp
+	case_end
+
+	case_begin "21h" "같은 전체 유형 13대를 nslookup 만 있는 환경에서(폴백): 표·요약이 dig 결과와 동일"
+	setup_case; dns_setup nslookup
+	seed_raw FL; FL_REC
+	run01 'N\nn\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "요약" "$OUT" '^\[DNS\] 불일치 5대 \(일치 2대, 미등록 2, 판단 불가 3, 조회 실패 1\)$'
+	fl_table > "$DNSKEEP/tbl_nsl.txt"
+	t_eq "표 전체가 dig 실행 결과와 동일" "$(cmp "$DNSKEEP/tbl_dig.txt" "$DNSKEEP/tbl_nsl.txt" && echo same)" same
+	t_eq "nslookup 스텁만 호출(dig 호출 0)" "$(grep -c '^dig ' "$DCALLS")" 0
+	t_eq "nslookup 호출 있음" "$(( $(grep -c '^nslookup ' "$DCALLS") > 0 ? 1 : 0 ))" 1
+	t_eq "PTR 도 같은 횟수" "$(dns_q ' PTR$')" 15
+	case_end
+
+	case_begin "21i" "판단 불가만 있고 불일치 없음: 표에 경고, 질문 없이 진행, 파일 불변"
+	setup_case; dns_setup
+	seed_raw D6
+	dns_rec host01 10.9.0.1 1 2; dns_rec host01 10.9.0.9 3
+	dns_rec host02 10.9.0.2,10.9.0.22
+	dns_rec host03 10.9.0.3
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "서버 간 다름" "$OUT" '^host01 +10\.9\.0\.1 +10\.9\.0\.1,10\.9\.0\.9 +⚠ 판단 불가: 서버 간 답이 다름$'
+	t_has "A 여러 개" "$OUT" '^host02 +10\.9\.0\.2 +10\.9\.0\.2,10\.9\.0\.22 +⚠ 판단 불가: A 레코드 여러 개$'
+	t_has "요약(불일치 없음)" "$OUT" '^\[DNS\] 일치 1대 \(미등록 0, 판단 불가 2, 조회 실패 0\)$'
+	t_no "질문·교체 없음" "$OUT" '^\[DNS\] (교체|[0-9]+대 교체|응답)'
+	t_eq "${TU}.txt 불변" "$(cat "$W/$TU.txt")" "$(D6_FIXED)"
+	t_has "작업진행 단계까지 진행([5])" "$OUT" '\[5\] show_targets'
+	case_end
+
+	case_begin "21j" "불일치 + 판단 불가 섞임, a: 불일치만 교체"
+	setup_case; dns_setup
+	seed_raw D6
+	dns_rec host01 10.9.0.11
+	dns_rec host02 10.9.0.2,10.9.0.22
+	dns_rec host03 10.9.0.3
+	run01 'N\na\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "교체 1건" "$(grep -c '^\[DNS\] host.. ' "$OUT")" 1
+	t_has "host01 교체" "$OUT" '^\[DNS\] host01 10\.9\.0\.1 -> 10\.9\.0\.11$'
+	t_eq "host02(판단 불가) 5번째 필드 불변" "$(awk '$4 == "host02" {print $5}' "$W/$TU.txt")" 10.9.0.2
+	t_eq "host01 5번째 필드 교체" "$(awk '$4 == "host01" {print $5}' "$W/$TU.txt")" 10.9.0.11
+	case_end
+
+	case_begin "21k" "A 레코드를 한 번도 못 받음(전부 시간 초과/전부 NX): '점검 생략' 한 줄 후 기존대로 진행"
+	setup_case; dns_setup
+	seed_raw D6
+	dns_rec '*' FAIL
+	run01 'N\nN\n'
+	t_rc "전부 시간 초과: 종료코드" "$RC" 0
+	t_has "점검 생략 문구" "$OUT" '^DNS 조회 불가 — 점검 생략$'
+	t_eq "점검 생략 한 줄만" "$(grep -c '점검 생략' "$OUT")" 1
+	t_no "표·요약 없음" "$OUT" '^hostname |^\[DNS\]'
+	t_eq "${TU}.txt 불변" "$(cat "$W/$TU.txt")" "$(D6_FIXED)"
+	t_has "기존대로 [5] 진행" "$OUT" '\[5\] show_targets'
+	setup_case; dns_setup
+	seed_raw D6
+	run01 'N\nN\n'
+	t_rc "전부 NXDOMAIN(A 없음): 종료코드" "$RC" 0
+	t_has "점검 생략 문구" "$OUT" '^DNS 조회 불가 — 점검 생략$'
+	setup_case
+	seed_raw D6
+	run01 'N\nN\n'
+	t_rc "resolv.conf 없음: 종료코드" "$RC" 0
+	t_has "점검 생략 문구" "$OUT" '^DNS 조회 불가 — 점검 생략$'
+	t_notmp
+	case_end
+
+	case_begin "21l" "dig·nslookup 둘 다 없음: 'DNS 도구 없음 — 점검 생략' 후 진행"
+	setup_case; dns_setup none
+	seed_raw D6
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "도구 없음 문구" "$OUT" '^DNS 도구 없음 — 점검 생략$'
+	t_no "그 외 DNS 출력 없음" "$OUT" '^\[DNS\]|^hostname '
+	t_has "기존대로 [5] 진행" "$OUT" '\[5\] show_targets'
+	case_end
+
+	case_begin "21m" "응답 없는 서버는 건너뜀: 한 서버가 계속 시간 초과여도 3번 실패한 뒤로는 그 서버에 묻지 않고(100대 중 일부만 질의), 나머지 2대 답으로 일치 판정"
+	setup_case; dns_setup
+	DN 100 > "$W/$TU.txt"
+	for i in $(seq 1 100); do dns_rec "$(printf 'host%02d' "$i")" "10.2.0.$i" 1 2; done
+	dns_rec '*' FAIL 3
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "100대 모두 일치" "$OUT" '^\[DNS\] 일치 100대 \(미등록 0, 판단 불가 0, 조회 실패 0\)$'
+	n=$(dns_q '^dig 10\.1\.0\.3 ')
+	t_eq "응답 없는 서버(10.1.0.3)에는 3번 이상 40번 이하만 질의(100대 전부 묻지 않음)" "$(( n >= 3 && n <= 40 ? 1 : 0 ))" 1
+	CEV+=("10.1.0.3 질의 ${n}회")
+	t_eq "정상 서버(10.1.0.1)에는 100대 모두 질의" "$(dns_q '^dig 10\.1\.0\.1 host')" 100
+	case_end
+
+	case_begin "21n" "resolv.conf 해석: 주석·중복·4번째 nameserver 무시, search/ndots(점 2개 이상은 그대로 먼저), 포트 표기"
+	setup_case; dns_setup
+	printf '# c\n; c\nnameserver 10.1.0.1\nnameserver 10.1.0.1\nnameserver 10.1.0.2:5353\nnameserver 10.1.0.3\nnameserver 10.1.0.4\nsearch a.test b.test\noptions ndots:2 timeout:1\n' > "$S/resolv.conf"
+	cat > "$W/$TU.txt" <<'EOF'
+Dell R750 INFRA-A svr1 10.7.0.1 aa:bb:cc:dd:ee:01 eth0 sda sda5 1200 RHEL8 UEFI
+Dell R750 INFRA-A x.y.z 10.7.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 1200 RHEL8 UEFI
+Dell R750 INFRA-A abs. 10.7.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 1200 RHEL8 UEFI
+EOF
+	dns_rec svr1.b.test 10.7.0.1; dns_rec x.y.z 10.7.0.2; dns_raw abs 10.7.0.3
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "3대 일치" "$OUT" '^\[DNS\] 일치 3대 '
+	t_eq "서버는 3개(10.1.0.4 제외·중복 제거, 포트 표기 허용)" "$(grep -E '^dig ' "$DCALLS" | awk '{print $2}' | sort -u | paste -sd' ')" "10.1.0.1 10.1.0.2 10.1.0.3"
+	t_eq "svr1: ndots 2 > 점 0개 → a.test, b.test 순서(A 나오면 멈춤)" "$(grep -E '^dig 10\.1\.0\.1 svr1' "$DCALLS" | awk '{print $3}' | paste -sd' ')" "svr1.a.test svr1.b.test"
+	t_eq "x.y.z: 점 2개 >= ndots → 이름 그대로 먼저" "$(grep -E '^dig 10\.1\.0\.1 x\.y\.z' "$DCALLS" | awk '{print $3}' | paste -sd' ')" "x.y.z"
+	t_eq "끝이 '.' 이면 그 이름만" "$(grep -E '^dig 10\.1\.0\.1 abs' "$DCALLS" | awk '{print $3}' | paste -sd' ')" "abs"
+	case_end
+
+	case_begin "21o" "search/domain 이 resolv.conf 에 없으면 호스트명의 도메인을 씀 (hostname 스텁 lab01.dom.test)"
+	setup_case; dns_setup
+	printf 'nameserver 10.1.0.1\n' > "$S/resolv.conf"
+	printf '#!/bin/bash\necho lab01.dom.test\n' > "$S/bin/hostname"; chmod +x "$S/bin/hostname"
+	seed_raw D6
+	dns_rec host01.dom.test 10.9.0.1 1; dns_rec host02.dom.test 10.9.0.2 1; dns_rec host03.dom.test 10.9.0.3 1
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "3대 일치" "$OUT" '^\[DNS\] 일치 3대 '
+	t_eq "질의 이름" "$(grep -E '^dig 10\.1\.0\.1 host01' "$DCALLS" | awk '{print $3}' | paste -sd' ')" "host01.dom.test"
+	case_end
+
+	case_begin "21p" "AWX_COLOR=1: 경고 노랑(⚠)·조회 실패 빨강, LOG 에는 색 코드 없음 / 색 없음이면 표에 색 코드 없음"
+	setup_case; dns_setup
+	seed_raw FL; FL_REC
+	export AWX_COLOR=1
+	run01 'N\nn\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "판단 불가 노랑" "$OUT" "${E}\[33m⚠ 판단 불가: 서버 간 답이 다름${E}\[0m"
+	t_has "조회 실패 빨강" "$OUT" "${E}\[31m⚠ 응답한 서버 없음${E}\[0m"
+	t_has "중복 경고 노랑" "$OUT" "${E}\[33m⚠ 등록IP 10\.5\.0\.30 은 other30 의 IP \(PTR\)${E}\[0m"
+	t_eq "LOG 에 색 코드 없음" "$(grep -c "$E" "$W/LOG/$TU.log")" 0
+	unset AWX_COLOR
+	setup_case; dns_setup
+	seed_raw FL; FL_REC
+	run01 'N\nn\nN\n'
+	t_eq "색 없음: 출력에 색 코드 없음" "$(grep -c "$E" "$OUT")" 0
+	case_end
+
+	case_begin "21q" "AWX_DNS_CHECKED=1 (AWX_AUTO 없이): 표만 출력하고 묻지 않고 진행, 파일 불변"
+	setup_case; dns_setup
+	seed_raw DA; DA_REC
+	export AWX_DNS_CHECKED=1
+	run01 'N\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "표" "$OUT" '^dnsA1 +10\.2\.0\.1 +10\.2\.0\.101$'
+	t_has "이미 점검 안내" "$OUT" '^\[DNS\] auto_setup 에서 이미 점검·결정함 \(AWX_DNS_CHECKED=1\) — 등록값 그대로 진행$'
+	t_no "메뉴 입력 소비 없음(교체 로그 없음)" "$OUT" '^\[DNS\] dnsA. |교체'
+	DA > "$S/expect.txt"
+	t_eq "${TU}.txt 바이트 동일" "$(cmp "$S/expect.txt" "$W/$TU.txt" && echo same)" same
+	t_has "[5] 진행" "$OUT" '\[5\] show_targets'
+	case_end
+
+	# ---- 22: AWX_AUTO=1 (stdin 없음, 질문은 터미널로) ----
+	# 터미널 대신 AWX_TTY(테스트 훅)에 파일을 준다. 기본값 /dev/tty 경로는 22g 에서 script 로 실제 pty 를 붙여 확인한다.
+	auto_dns_setup() {   # 불일치 1대(host02) + 나머지 일치
+		setup_case; dns_setup
+		seed_raw D6
+		dns_rec host01 10.9.0.1; dns_rec host02 10.9.0.22; dns_rec host03 10.9.0.3
+		export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025
+	}
+	run01_nostdin() {
+		RUN01_COUNT=$((RUN01_COUNT+1))
+		( cd "$W" && TMPDIR="$S/tmp" timeout 180 bash "./$F01" < /dev/null 2>&1 | cat > "$S/out.txt"; echo "${PIPESTATUS[0]}" > "$S/rc" )
+		RC=$(cat "$S/rc")
+	}
+
+	case_begin "22a" "auto + 불일치 + 터미널 없음(AWX_TTY 를 열 수 없음): 표 출력 후 중단(종료코드 1), 이후 단계 없음"
+	auto_dns_setup
+	export AWX_TTY=$S/no_such_tty
+	run01_nostdin
+	t_rc "01 종료코드" "$RC" 1
+	t_has "표" "$OUT" '^host02 +10\.9\.0\.2 +10\.9\.0\.22$'
+	t_has "질문 문구" "$OUT" '등록값 그대로 계속 진행할까요\? \[y/N\] '
+	t_has "중단 사유" "$OUT" "^\[X\] DNS 불일치가 있으나 터미널\($S/no_such_tty\)에서 답을 받을 수 없어 중단합니다$"
+	t_no "작업진행 단계 없음" "$OUT" '작업진행여부'
+	t_eq "ssh/scp 미호출" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
+	t_eq "${TU}.txt 불변" "$(cat "$W/$TU.txt")" "$(D6_FIXED)"
+	t_notmp
+	case_end
+
+	case_begin "22b" "auto + 불일치 + 터미널에서 y: 등록값 그대로 끝까지 진행(교체 없음)"
+	auto_dns_setup
+	printf 'y\n' > "$S/tty_in"; export AWX_TTY=$S/tty_in
+	run01_nostdin
+	t_rc "01 종료코드" "$RC" 0
+	t_has "응답 기록" "$OUT" '\[DNS\] 응답: y$'
+	t_has "LOG 에도 응답 기록" "$W/LOG/$TU.log" '\[DNS\] 응답: y$'
+	t_has "작업진행여부 auto" "$OUT" '작업진행여부 \(Y\|N\) : .*Y \(auto\)'
+	t_has "02 까지 완료" "$CALLS" '^pxe '
+	t_eq "${TU}.txt 불변(등록값 그대로)" "$(cat "$W/$TU.txt")" "$(D6_FIXED)"
+	t_has "완료" "$OUT" '완료'
+	case_end
+
+	case_begin "22c" "auto + 불일치 + 터미널에서 N / 빈 입력 / EOF: 중단(종료코드 1)"
+	auto_dns_setup
+	printf 'N\n' > "$S/tty_in"; export AWX_TTY=$S/tty_in
+	run01_nostdin
+	t_rc "N: 종료코드" "$RC" 1
+	t_has "N: 중단 문구" "$OUT" '^\[X\] DNS 불일치 — 중단$'
+	t_no "N: 작업진행 단계 없음" "$OUT" '작업진행여부'
+	t_eq "N: ssh/scp 미호출" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
+	auto_dns_setup
+	printf '\n' > "$S/tty_in"; export AWX_TTY=$S/tty_in
+	run01_nostdin
+	t_rc "빈 줄: 종료코드" "$RC" 1
+	t_has "빈 줄: 중단 문구" "$OUT" '^\[X\] DNS 불일치 — 중단$'
+	auto_dns_setup
+	: > "$S/tty_in"; export AWX_TTY=$S/tty_in
+	run01_nostdin
+	t_rc "EOF(빈 파일): 종료코드" "$RC" 1
+	t_has "EOF: 답을 받을 수 없어 중단" "$OUT" '터미널\(.*\)에서 답을 받을 수 없어 중단합니다'
+	t_notmp
+	case_end
+
+	case_begin "22d" "auto + 불일치 없음: 터미널이 없어도 묻지 않고 진행 (AWX_TTY 를 열 수 없는 경로)"
+	setup_case; dns_setup
+	seed_raw D6
+	dns_rec host01 10.9.0.1; dns_rec host02 10.9.0.2; dns_rec host03 10.9.0.3
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 AWX_TTY=$S/no_such_tty
+	run01_nostdin
+	t_rc "01 종료코드" "$RC" 0
+	t_has "일치 요약" "$OUT" '^\[DNS\] 일치 3대 '
+	t_no "질문 없음" "$OUT" '계속 진행할까요'
+	t_has "02 까지 완료" "$CALLS" '^pxe '
+	case_end
+
+	case_begin "22e" "auto + AWX_DNS_CHECKED=1 + 터미널 없음: 표만 출력하고 묻지 않고 진행, 등록값 그대로"
+	auto_dns_setup
+	export AWX_TTY=$S/no_such_tty AWX_DNS_CHECKED=1
+	run01_nostdin
+	t_rc "01 종료코드" "$RC" 0
+	t_has "표" "$OUT" '^host02 +10\.9\.0\.2 +10\.9\.0\.22$'
+	t_has "이미 점검 안내" "$OUT" '이미 점검·결정함 \(AWX_DNS_CHECKED=1\)'
+	t_no "질문 없음" "$OUT" '계속 진행할까요'
+	t_has "02 까지 완료" "$CALLS" '^pxe '
+	t_eq "${TU}.txt 불변" "$(cat "$W/$TU.txt")" "$(D6_FIXED)"
+	case_end
+
+	case_begin "22f" "auto 아닌 일반 실행에서 AWX_TTY 는 무시(질문은 stdin 메뉴), 메뉴는 그대로 a/n/s/q"
+	setup_case; dns_setup
+	seed_raw D6
+	dns_rec host01 10.9.0.1; dns_rec host02 10.9.0.22; dns_rec host03 10.9.0.3
+	export AWX_TTY=$S/no_such_tty
+	run01 'N\na\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "교체" "$OUT" '^\[DNS\] host02 10\.9\.0\.2 -> 10\.9\.0\.22$'
+	case_end
+	unset AWX_TTY AWX_DNS_CHECKED AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS
+
+	# 22g: 실제 pty 로 기본 경로(/dev/tty) 확인 — script 가 없으면 건너뜀
+	if command -v script >/dev/null 2>&1; then
+		for ans in y N; do
+			case_begin "22g-$ans" "auto + 실제 /dev/tty(script 로 pty 연결) 에서 '$ans': $( [[ $ans == y ]] && echo '진행' || echo '중단' )"
+			auto_dns_setup
+			RUN01_COUNT=$((RUN01_COUNT+1))
+			( cd "$W" && { sleep 1; printf '%s\n' "$ans"; sleep 4; } | NO_COLOR=1 TMPDIR="$S/tmp" timeout 120 script -qefc "bash ./$F01" /dev/null 2>&1 | tr -d '\r' > "$S/out.txt"; echo "${PIPESTATUS[1]}" > "$S/rc" )
+			RC=$(cat "$S/rc")
+			t_has "질문 문구" "$OUT" '등록값 그대로 계속 진행할까요\? \[y/N\] '
+			if [[ $ans == y ]]; then
+				t_rc "종료코드" "$RC" 0
+				t_has "응답 기록" "$OUT" '\[DNS\] 응답: y$'
+				t_has "02 까지 완료" "$CALLS" '^pxe '
+			else
+				t_rc "종료코드" "$RC" 1
+				t_has "중단" "$OUT" '^\[X\] DNS 불일치 — 중단$'
+				t_eq "ssh/scp 미호출" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
+			fi
+			case_end
+		done
+		unset AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS
+	else
+		printf '%-10s %-8s %s\n' "SKIP" "22g" "script 명령 없음 — /dev/tty 실제 경로 확인 생략"
+		ROWS+=("SKIP${SEP}22g${SEP}script 없음${SEP}")
+	fi
+}
+
+# ===================== 케이스 23: 실제 dig / nslookup + 가짜 DNS 서버(UDP) =====================
+# 스텁이 아니라 시스템의 진짜 dig·nslookup 출력을 01 이 해석하는지 확인한다 (python3 + dig + nslookup 이 있을 때만)
+real_dns_cases() {
+	local i port p0 pids=() zone
+	if ! command -v python3 >/dev/null 2>&1 || ! command -v dig >/dev/null 2>&1 || ! command -v nslookup >/dev/null 2>&1; then
+		printf '%-10s %-8s %s\n' "SKIP" "23" "python3/dig/nslookup 없음 — 실제 도구 확인 생략"
+		ROWS+=("SKIP${SEP}23${SEP}python3/dig/nslookup 없음${SEP}")
+		return 0
+	fi
+	[[ -n $FARM_NSL ]] || mk_farm FARM_NSL dig
+	setup_case
+	p0=$(( 40000 + RANDOM % 20000 ))
+	zone=$S/fz; mkdir -p "$zone"
+	# 서버 3대: 포트 p0..p0+2.  fl 와 같은 내용을 서버별 존 파일로
+	{
+		echo "fl01.dns.test A 10.5.0.1"; echo "fl02.dns.test A 10.5.0.22"
+		echo "fl03.dns.test A 10.5.0.3"; echo "fl04.dns.test A 10.5.0.4,10.5.0.40"
+		echo "fl05.dns.test A 10.5.0.5"; echo "fl06.dns.test A NX"; echo "fl07.dns.test A NODATA"; echo "fl08.dns.test A SERVFAIL"
+		echo "fl09.dns.test A 10.5.0.9"; echo "fl10.dns.test A 10.5.0.100"; echo "fl11.dns.test A 10.5.0.31"
+		echo "fl12.dns.test A 10.5.0.51"; echo "fl13.dns.test A 10.5.0.50"
+		echo "30.0.5.10.in-addr.arpa PTR other30.dns.test"
+	} > "$zone/z1"
+	cp "$zone/z1" "$zone/z2"; cp "$zone/z1" "$zone/z3"
+	sed -i 's/^fl03.dns.test A 10.5.0.3$/fl03.dns.test A 10.5.0.4/' "$zone/z3"      # 서버 3 만 다른 답
+	sed -i 's/^fl05.dns.test A 10.5.0.5$/fl05.dns.test A NX/' "$zone/z2"             # 서버 2 만 NXDOMAIN
+	sed -i 's/^fl09.dns.test A 10.5.0.9$/fl09.dns.test A DROP/' "$zone/z3"           # 서버 3 은 응답 안 함(시간 초과)
+	for i in 1 2 3; do
+		python3 "$SRC/test/fake_dns.py" $((p0 + i - 1)) "$zone/z$i" "$zone/pid$i" > /dev/null 2>&1 < /dev/null &
+		pids+=($!)
+	done
+	for ((i = 0; i < 30; i++)); do [[ -s $zone/pid1 && -s $zone/pid2 && -s $zone/pid3 ]] && break; sleep 0.2; done
+	sleep 0.5
+	printf 'nameserver 127.0.0.1:%d\nnameserver 127.0.0.1:%d\nnameserver 127.0.0.1:%d\nsearch dns.test\n' "$p0" $((p0 + 1)) $((p0 + 2)) > "$S/resolv.conf"
+	export AWX_RESOLV_CONF=$S/resolv.conf
+	STUB_DNSDB=$S/dnsdb; : > "$STUB_DNSDB"; export STUB_DNSDB
+
+	case_begin "23a" "진짜 dig + 가짜 DNS 서버 3대: 13대 판정·표·중복 경고(PTR 포함)가 스텁 결과와 같음"
+	seed_raw FL
+	run01 'N\nn\nN\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_has "요약" "$OUT" '^\[DNS\] 불일치 5대 \(일치 2대, 미등록 2, 판단 불가 3, 조회 실패 1\)$'
+	fl_table > "$DNSKEEP/tbl_real_dig.txt"
+	t_eq "표 전체가 스텁 dig 실행 결과와 동일" "$(cmp "$DNSKEEP/tbl_dig.txt" "$DNSKEEP/tbl_real_dig.txt" && echo same)" same
+	t_no "진짜 도구인데 점검 생략 아님" "$OUT" '점검 생략'
+	case_end
+
+	case_begin "23b" "진짜 nslookup(dig 없는 PATH) + 같은 가짜 DNS 서버: 표가 진짜 dig 결과와 동일"
+	seed_raw FL
+	local savepath=$PATH
+	export PATH="$S/bin:$FARM_NSL"; run01 'N\nn\nN\n'; export PATH=$savepath
+	t_rc "01 종료코드" "$RC" 0
+	t_has "요약" "$OUT" '^\[DNS\] 불일치 5대 \(일치 2대, 미등록 2, 판단 불가 3, 조회 실패 1\)$'
+	fl_table > "$DNSKEEP/tbl_real_nsl.txt"
+	t_eq "표 전체가 진짜 dig 결과와 동일" "$(cmp "$DNSKEEP/tbl_real_dig.txt" "$DNSKEEP/tbl_real_nsl.txt" && echo same)" same
+	case_end
+
+	kill "${pids[@]}" 2>/dev/null
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -1513,6 +2171,8 @@ feature_cases
 ext_cases
 os6_cases
 auto_cases
+dns_cases
+real_dns_cases
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="

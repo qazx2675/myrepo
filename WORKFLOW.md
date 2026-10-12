@@ -25,7 +25,9 @@ flowchart TD
     F1 --> G
     F2 --> G
     
-    G["[4] MAC 짝수 보정<br/>spice/pice/dspr/pspr<br/>+ ev 미포함"] --> H["[5] 등록 대상 출력<br/>20개씩 세로 다단"]
+    G["[4] MAC 짝수 보정<br/>spice/pice/dspr/pspr<br/>+ ev 미포함"] --> G1["[4-1] DNS 점검 dns_check<br/>resolv.conf 서버에 직접 A 질의"]
+    G1 -->|"불일치 + q"| END3A["작업 취소 exit 0"]
+    G1 -->|"일치 / 점검 생략 / 처리 완료"| H["[5] 등록 대상 출력<br/>20개씩 세로 다단"]
     H --> I["프롬프트: 작업진행여부"]
     
     I -->|N| END4["작업 취소<br/>exit 0"]
@@ -60,6 +62,38 @@ flowchart TD
     T -->|Y| S
     T -->|N| END11["exit 1"]
 ```
+
+## [4-1] DNS 점검 흐름 (dns_check, Unreleased)
+
+auto_setup 신규 설치 양식(Go `dnscheck.go`)과 **같은 규칙**입니다. `${user}.txt` 의 hostname(4번째)·IP(5번째)를 `/etc/resolv.conf` 의 DNS 서버(최대 3)에 직접 A 질의합니다.
+
+```mermaid
+flowchart TD
+    A["dns_check 시작"] --> B{"dig 또는 nslookup 이 있는가?"}
+    B -->|"아니오"| B1["DNS 도구 없음 — 점검 생략<br/>기존대로 진행"]
+    B -->|"예"| C["resolv.conf 의 nameserver 최대 3, search, ndots 읽기"]
+    C --> D{"nameserver 가 있는가?"}
+    D -->|"아니오"| D1["DNS 조회 불가 — 점검 생략<br/>기존대로 진행"]
+    D -->|"예"| E["호스트마다 모든 서버에 A 질의<br/>xargs -P 32, 질의당 2초, 재시도 1회"]
+    E --> F{"1대라도 A 를 받았는가?"}
+    F -->|"아니오"| D1
+    F -->|"예"| G["판정: 일치 · 불일치 · 판단 불가 · 미등록 · 조회 실패<br/>불일치 IP 는 PTR 도 질의해 중복 경고 (목록 · DNS · PTR)"]
+    G --> H{"불일치가 있는가?"}
+    H -->|"아니오"| H1["[DNS] 일치 N대 요약 후 진행"]
+    H -->|"예"| I["표 출력 (일치 제외)"]
+    I --> J{"어떤 모드인가?"}
+    J -->|"AWX_DNS_CHECKED=1"| K["표만 출력하고 묻지 않고 진행"]
+    J -->|"AWX_AUTO=1"| L["/dev/tty 로 등록값 그대로 계속? y/N"]
+    L -->|"y"| K1["진행"]
+    L -->|"그 외 · 터미널 없음"| L1["중단 exit 1"]
+    J -->|"대화형"| M["a 모두 DNS 로 / n 그대로 / s 하나씩 / q 중단"]
+    M -->|"q"| M1["작업 취소 exit 0"]
+    M -->|"a · s"| N["${user}.txt 5번째 필드(IP)만 교체<br/>LOG [DNS] host 옛IP -> 새IP"]
+    M -->|"n"| K1
+```
+
+- 테스트 훅: `AWX_RESOLV_CONF`(resolv.conf 경로), `AWX_TTY`(auto 모드 질문을 읽는 곳). `AWX_AUTO_NODEINFO` 는 `AWX_AUTO` 없이도 nodeinfo 질문만 자동 답변합니다.
+- 그림: `workflow.svg` 의 `[4-1]` 상자.
 
 ## 02.source_dhcp_pxe.sh 실행 흐름
 

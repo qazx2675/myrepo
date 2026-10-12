@@ -97,3 +97,36 @@ bash setup/setup_guide.sh
 bash setup/update_v0.6.1.sh --dry
 bash setup/update_v0.6.1.sh
 bash setup/update_v0.6.1.sh --undo
+
+# ===== Step 7. DNS 점검 [4-1] (Unreleased) =====
+# 01 이 ${user}.txt 의 hostname·IP 를 /etc/resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의해 비교한다 (/etc/hosts 는 쓰지 않음). 일치만 있으면 "[DNS] 일치 N대 …" 한 줄
+
+# 현장 사본 업데이트(01 만, 0.6.1 이상 위 증분): 미리보기 → 적용 → 되돌리기
+bash setup/update_unreleased_dns.sh --dry
+bash setup/update_unreleased_dns.sh
+bash setup/update_unreleased_dns.sh --undo
+
+# 점검 기준이 되는 DNS 서버·검색 도메인 확인
+grep -E '^(nameserver|search|domain|options)' /etc/resolv.conf
+
+# 질의 도구 확인 (dig 우선, 없으면 nslookup, 둘 다 없으면 "DNS 도구 없음 — 점검 생략")
+command -v dig nslookup
+
+# 01 이 하는 질의를 손으로 재현 (DNS 서버 하나에 직접 A 질의, 짧은 이름은 search 도메인을 붙여 시도)
+dig +short +time=2 +tries=1 @<DNS 서버> <hostname> A
+nslookup <hostname> <DNS 서버>
+
+# 불일치가 있으면 표 + "a 모두 DNS 로 / n 그대로 / s 하나씩 / q 중단 :" 질문. 교체한 호스트는 LOG 에 남음
+grep '\[DNS\]' LOG/<user>.log
+
+# auto 모드: DNS 불일치가 나오면 /dev/tty 로 "등록값 그대로 계속 진행할까요? [y/N]" 을 묻는다 (터미널이 없으면 중단)
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
+
+# auto_setup 양식 생성이 이미 DNS 를 점검·결정했다면 표만 출력하고 묻지 않고 진행 (auto_setup 이 넘김)
+AWX_DNS_CHECKED=1 AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
+
+# AWX_AUTO 없이 nodeinfo 질문만 자동 답변 (auto_setup 신규 설치 양식 → AWX 실행, 프로파일 없을 때)
+AWX_AUTO_NODEINFO=n bash 01.AWX_nodeinfo_V2.sh
+
+# DNS 점검 테스트 (케이스 21~23, 전체 108건) — 가짜 DNS 서버 test/fake_dns.py 는 랩·CI 전용 (python3 필요)
+bash test/run_tests.sh
