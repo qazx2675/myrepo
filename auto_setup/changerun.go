@@ -612,6 +612,7 @@ func (r *chgRunner) os6Wrapper() (string, error) {
 // 비밀번호·bindpw 는 들어가지 않는다 (gossh 인증은 기존과 같이 키 기반, -p 없음).
 // runner.go 의 os6WrapperScript(데몬용, bin/gossh 고정 경로) 와 같은 방식이지만, TUI 에서 도는 별도 프로세스 그룹이라
 // ssh 가 /dev/tty 로 비밀번호를 물으면 멈추므로 BatchMode=yes 를 주고, os6_gossh 경로도 원격 셸용으로 따옴표 처리한다.
+// 원격 명령은 bash -c '…' 로 감싼다 (runner.go remoteBash 와 같은 형태 — os6_mgmt 로그인 셸이 csh 여도 동작).
 func chgOS6WrapperScript(mgmt, gossh string) string {
 	return "#!/bin/bash\n" +
 		"# auto_setup 변경 메뉴: os6_mgmt 경유 gossh 래퍼 (실행 중에만 있는 임시 파일)\n" +
@@ -624,7 +625,15 @@ for x in "$@"; do
   a="$a $(printf '%q' "$x")"
 done
 if [ -z "$w" ] || [ ! -r "$w" ]; then echo "as_change: -w 호스트 목록 파일 없음" >&2; exit 97; fi
-exec ssh -o BatchMode=yes "$M" "f=\$(mktemp) || exit 97; cat > \"\$f\"; $G$a; rc=\$?; rm -f \"\$f\" \"\$f\"_*; exit \$rc" < "$w"
+c="f=\$(mktemp) || exit 97; cat > \"\$f\"; $G$a; rc=\$?; rm -f \"\$f\" \"\$f\"_*; exit \$rc"
+if [[ $c == *'!'* ]]; then
+  # ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
+  bq=$'\x60'
+  e=$(printf %s "$c" | base64 -w0 | sed 's/../&./g')
+  exec ssh -o BatchMode=yes "$M" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$w"
+fi
+c=${c//\'/\'\\\'\'}
+exec ssh -o BatchMode=yes "$M" "bash -c '$c'" < "$w"
 `
 }
 
@@ -821,7 +830,7 @@ func parseApplOut(o changeOut, hosts []string) map[string]engHost {
 		return failMap(hosts, "gossh 실행 실패: "+o.StartErr.Error())
 	}
 	set, out := hostSet(hosts), map[string]engHost{}
-	for h, lines := range splitGossh(stripANSI(o.Stdout)) {
+	for h, lines := range parseGossh(o.Stdout, hosts).Lines {
 		if !set[h] {
 			continue
 		}

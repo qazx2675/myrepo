@@ -39,6 +39,7 @@ type awxState struct {
 	step     int
 	profiles []AwxProfile
 	problems []string
+	nh       *nhAwxReq // 신규 설치 양식에서 이어 온 실행 (user·대상 목록은 양식 그대로, nodeinfo N 강제), nil = 일반 w
 }
 
 // awxExec: bash 01 을 dir 에서 env 로 실행하고 종료 코드를 돌려준다 (SIGINT 로 죽으면 130). 테스트에서 가짜로 교체.
@@ -88,10 +89,17 @@ func (st *tuiState) handleAwx(ev keyEv) {
 		case ev.k == kEsc:
 			st.awx = nil
 			st.sel.Msg = "취소했습니다"
+			if a.nh != nil {
+				st.sel.Msg = "AWX 실행을 취소했습니다 — " + nhSavedOnlyMsg
+			}
 		case ev.k == kRune && (ev.r == 'y' || ev.r == 'Y'):
 			a.step = awxPick
 		case ev.k == kRune && (ev.r == 'n' || ev.r == 'N'):
 			st.awx = nil
+			if a.nh != nil {
+				st.runNewhostAwx(*a.nh, nil)
+				return
+			}
 			st.oo = st.newUserStep(true, nil)
 		}
 	case awxPick:
@@ -103,6 +111,10 @@ func (st *tuiState) handleAwx(ev keyEv) {
 				if a.profiles[i].No == int(ev.r-'0') {
 					p := a.profiles[i]
 					st.awx = nil
+					if a.nh != nil {
+						st.runNewhostAwx(*a.nh, &p)
+						return
+					}
 					st.oo = st.newUserStep(true, &p)
 					return
 				}
@@ -128,6 +140,11 @@ func awxEnv(p *AwxProfile, user, verify string) []string {
 
 // runAwx: TUI 를 떠나 01 을 실행하고 돌아온다 (패키지 주석 참고)
 func (st *tuiState) runAwx(p *AwxProfile, user, verify string) {
+	st.runAwxEnv(awxEnv(p, user, verify), "")
+}
+
+// runAwxEnv: runAwx 의 본체 — env 로 01 을 실행한다. note 가 있으면 시작 줄 다음에 한 줄 더 찍는다 (신규 설치 양식의 nodeinfo 안내).
+func (st *tuiState) runAwxEnv(env []string, note string) {
 	out := st.env.Out
 	st.inMu.Lock() // 키 읽기 goroutine 정지 (자식이 끝날 때까지)
 	io.WriteString(out, leaveScreen)
@@ -139,7 +156,10 @@ func (st *tuiState) runAwx(p *AwxProfile, user, verify string) {
 		}
 	}
 	fmt.Fprint(out, awxStartLine+"\n")
-	rc, err := awxExec(awx_dir, awxEnv(p, user, verify))
+	if note != "" {
+		fmt.Fprint(out, note+"\n")
+	}
+	rc, err := awxExec(awx_dir, env)
 	endPrep()
 	// 자식이 받은 ^X 의 SIGINT 가 Notify 채널에 남아 있으면 TUI 가 종료되므로 비운다
 	if st.env.Signals != nil {
@@ -203,6 +223,10 @@ func renderAwx(a *awxState, width, height int, color bool) string {
 			}
 		}
 		hint = " 번호를 누르면 바로 실행합니다  Esc 뒤로"
+	}
+	if a.nh != nil { // 신규 설치 양식에서 이어 옴
+		body = append([][]string{wrapSegs(color, width, 1, "   ", seg{fmt.Sprintf(" 신규 설치 양식: user %s · 대상 %d대 · nodeinfo 는 프로파일과 상관없이 N",
+			a.nh.User, len(a.nh.Hosts)), stCyan}), {""}}, body...)
 	}
 	out := append(wrapSegs(color, width, 1, "  ", redSegs(" "+title, stBold)...), sepLine(width))
 	foot := append([]string{sepLine(width)}, hintLines(color, width, hint)...)

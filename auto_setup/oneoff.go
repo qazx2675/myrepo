@@ -66,6 +66,8 @@ type oneoffState struct {
 	started   time.Time
 	cancelAsk bool
 	cancelled bool
+
+	onUser func(user string) // 세션 user 선택 단계(needSessionUser)에서만 채움: user 가 정해지면 호출. nil = x/w/m 의 일반 user 단계
 }
 
 // ---- 순수 함수 ----
@@ -215,20 +217,48 @@ func (st *tuiState) newUserStep(awx bool, p *AwxProfile) *oneoffState {
 		return &oneoffState{step: ooHosts, user: forceUser, awx: awx, awxProf: p}
 	}
 	o := &oneoffState{step: ooUser, awx: awx, awxProf: p}
-	if awx_dir != "" {
-		if route := parseUserRoute(filepath.Join(awx_dir, "01.AWX_nodeinfo_V2.sh")); route != "" {
-			if !filepath.IsAbs(route) {
-				route = filepath.Join(awx_dir, route)
-			}
-			if out, err := oneoffCmdOut(awx_dir, filepath.Join(route, "info_mn.sh")); err == nil && strings.TrimSpace(out) != "" {
-				o.menu, o.route = splitLines(strings.TrimRight(out, "\n")), route
-			}
-		}
-	}
+	o.menu, o.route = userMenu()
 	if o.menu == nil {
-		o.msg = "user 메뉴를 찾을 수 없습니다 (awx_dir 의 01 user_route 확인) — user 이름을 직접 입력하세요"
+		o.msg = userMenuMissingMsg
 	}
 	return o
+}
+
+const userMenuMissingMsg = "user 메뉴를 찾을 수 없습니다 (awx_dir 의 01 user_route 확인) — user 이름을 직접 입력하세요"
+
+// userMenu: 01 의 user_route 아래 info_mn.sh 출력(user 메뉴 줄)과 user_route 절대 경로. 읽을 수 없으면 (nil, "").
+func userMenu() (menu []string, route string) {
+	if awx_dir == "" {
+		return nil, ""
+	}
+	route = parseUserRoute(filepath.Join(awx_dir, "01.AWX_nodeinfo_V2.sh"))
+	if route == "" {
+		return nil, ""
+	}
+	if !filepath.IsAbs(route) {
+		route = filepath.Join(awx_dir, route)
+	}
+	if out, err := oneoffCmdOut(awx_dir, filepath.Join(route, "info_mn.sh")); err == nil && strings.TrimSpace(out) != "" {
+		return splitLines(strings.TrimRight(out, "\n")), route
+	}
+	return nil, ""
+}
+
+// pickUser: user 선택 입력 한 줄 → user 이름. menu 가 있으면 번호로 보고 info.sh 로 이름을 조회하고, 없으면 입력을 이름으로 본다.
+// 실패하면 errMsg(화면·CLI 에 보일 안내)를 돌려준다.
+func pickUser(menu []string, route, line string) (user, errMsg string) {
+	user = strings.TrimSpace(line)
+	if menu != nil {
+		out, err := oneoffCmdOut(awx_dir, filepath.Join(route, "info.sh"), user)
+		if err != nil {
+			return "", "[X] user 조회 실패 — 번호를 다시 입력하세요"
+		}
+		user = strings.TrimSpace(out)
+	}
+	if !userNameRe.MatchString(user) {
+		return "", "[X] user 이름이 올바르지 않습니다 (영문·숫자·. _ - 만) — 다시 입력하세요"
+	}
+	return user, ""
 }
 
 // parseAwxList: AWX 대상 목록 입력 → (<user>.txt 에 쓸 줄, 대상 호스트명).
@@ -326,17 +356,18 @@ func (st *tuiState) ooUserKey(ev keyEv) {
 		if line == "" {
 			return
 		}
-		user := line
-		if o.menu != nil {
-			out, err := oneoffCmdOut(awx_dir, filepath.Join(o.route, "info.sh"), line)
-			if err != nil {
-				o.msg, o.in = "[X] user 조회 실패 — 번호를 다시 입력하세요", nil
-				return
-			}
-			user = strings.TrimSpace(out)
+		user, errMsg := pickUser(o.menu, o.route, line)
+		if errMsg == "" && o.onUser != nil && !validChangeUser(user) { // 세션 user 는 디렉터리 이름으로도 쓰이므로 . 와 .. 불가
+			errMsg = "[X] user 이름이 올바르지 않습니다 (. 와 .. 는 쓸 수 없음) — 다시 입력하세요"
 		}
-		if !userNameRe.MatchString(user) {
-			o.msg, o.in = "[X] user 이름이 올바르지 않습니다 (영문·숫자·. _ - 만) — 다시 입력하세요", nil
+		if errMsg != "" {
+			o.msg, o.in = errMsg, nil
+			return
+		}
+		if o.onUser != nil { // 세션 user: 기억하고 이 단계를 닫은 뒤 다음 단계로 이어 준다
+			next := o.onUser
+			st.oo, sessionUser = nil, user
+			next(user)
 			return
 		}
 		o.user, o.in, o.msg, o.step = user, nil, "", ooHosts
@@ -491,6 +522,9 @@ func renderOneoff(o *oneoffState, now time.Time, width, height int, color bool) 
 	switch o.step {
 	case ooUser:
 		title = o.name() + " - user 선택"
+		if o.onUser != nil {
+			title = "이 세션에서 사용할 user 선택 (TUI 를 닫을 때까지 기억합니다)"
+		}
 		if o.menu != nil {
 			for _, m := range o.menu {
 				list = append(list, line(m))

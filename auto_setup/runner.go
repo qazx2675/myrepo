@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -119,11 +120,30 @@ func fileExists(p string) bool {
 
 func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// remoteBash: ssh 로 보내는 원격 명령을 `bash -c '<inner>'` 한 줄로 감싼다 (inner 의 작은따옴표는 shq 로 이스케이프).
+// 원격 로그인 셸이 csh/tcsh 여도 작은따옴표 안은 글자 그대로 bash 에 넘어가므로 $(...)·${f}·$? 를 bash 가 해석한다.
+// inner 에 줄바꿈이 있으면 안 된다 (csh 는 작은따옴표 안의 줄바꿈을 받지 않음).
+// 아래 bash 래퍼 두 개(os6WrapperScript, chgOS6WrapperScript)는 같은 감싸기를 bash 안에서 한다 (${c//\'/\'\\\'\'}).
+//
+// tcsh 는 작은따옴표 안의 `!` 도 history 치환해 "Event not found" 로 깨진다. inner 에 `!` 가 있을 때만
+// bash -c "`echo <base64(두 글자마다 .)> | tr -d . | base64 -d`" 로 보낸다 — `$`·`!`·작은따옴표·백슬래시가 없어
+// sh·bash·csh·tcsh 로그인 셸 모두에서 같은 inner 가 bash 에 전달된다 (원격 stdin 은 inner 가 그대로 쓴다).
+// '.' 은 gossh 를 거치는 경로(client.go remoteRun)에서 base64 가 위험어(reboot·halt·ddc 등)나 /user/ 를 우연히 만들지 않게 한다.
+// `!` 가 없으면 기존 형태(bash -c '…') 그대로. 래퍼 두 개도 `!` 가 있으면 같은 형태를 bash 로 만든다.
+func remoteBash(inner string) string {
+	if !strings.Contains(inner, "!") {
+		return "bash -c " + shq(inner)
+	}
+	return `bash -c "` + "`echo " + dotOut(base64.StdEncoding.EncodeToString([]byte(inner))) + " | tr -d . | base64 -d`" + `"`
+}
+
+// os6WrapperScript: 원격 명령은 bash -c '…' 로 감싸 보낸다 (remoteBash 와 같은 형태, os6_mgmt 로그인 셸이 csh 여도 동작).
+// os6_gossh 경로는 원격 bash 용으로 한 번 더 인용한다(shq(shq(…))) — 공백·' 가 있어도 깨지지 않게.
 func os6WrapperScript() string {
 	return `#!/bin/bash
 # gossh - os6_mgmt 경유 gossh 래퍼 (auto_setup 이 생성, 직접 수정 금지)
 mgmt=` + shq(os6_mgmt) + `
-gossh=` + shq(os6_gossh) + `
+gossh=` + shq(shq(os6_gossh)) + `
 q=""
 wfile=""
 while [ $# -gt 0 ]; do
@@ -137,7 +157,15 @@ while [ $# -gt 0 ]; do
 	shift
 done
 [ -n "$wfile" ] || wfile=/dev/null
-exec ssh "$mgmt" "f=\$(mktemp); cat > \$f; $gossh$q; rc=\$?; rm -f \$f \${f}_*; exit \$rc" < "$wfile"
+c="f=\$(mktemp); cat > \$f; $gossh$q; rc=\$?; rm -f \$f \${f}_*; exit \$rc"
+if [[ $c == *'!'* ]]; then
+	# ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
+	bq=$'\x60'
+	e=$(printf %s "$c" | base64 -w0 | sed 's/../&./g')
+	exec ssh "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$wfile"
+fi
+c=${c//\'/\'\\\'\'}
+exec ssh "$mgmt" "bash -c '$c'" < "$wfile"
 `
 }
 

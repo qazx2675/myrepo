@@ -684,7 +684,7 @@ func TestChangeOS6WrapperEscape(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
 	bin := filepath.Join(dir, "bin")
-	gdir := filepath.Join(dir, "g dir $x")
+	gdir := filepath.Join(dir, "g dir $x 'q'")
 	for _, d := range []string{out, bin, gdir} {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			t.Fatal(err)

@@ -19,8 +19,13 @@ awx_script/
 ├── LOG/                         ← (자동 생성) 사용자별 실행 로그
 ├── tmp/                         ← (자동 생성) 임시 결과물
 ├── dhcp_pool/                   ← (자동 생성) DHCP 삭제 정보
+├── setup/                       ← 빈 변수 입력 가이드·현장 사본 업데이트 (생성물, 직접 고치지 말 것)
+│   ├── setup_guide.sh / vars.manifest
+│   ├── update_v0.6.0.sh / update_v0.6.1.sh
+│   └── update_unreleased_dns.sh ← [Unreleased] DNS 점검·AWX_AUTO_NODEINFO 업데이트 (01 만, 0.6.1 위 증분)
 └── test/                        ← 테스트 하네스
-    └── run_tests.sh
+    ├── run_tests.sh             ← 목업 E2E (108건)
+    └── fake_dns.py              ← 가짜 DNS 서버(UDP) — 실제 dig/nslookup 케이스용, **랩·CI 전용** (운영에 배치하지 않음)
 ```
 
 ### 의존성
@@ -33,6 +38,8 @@ awx_script/
 | 유틸 | sed | 파일 내용 치환 (sed -i) |
 | 유틸 | ssh, scp | 원격 명령 실행, 파일 전송 |
 | 유틸 | gossh | 병렬 호스트 확인 (PATH 에 있어야 함) |
+| 유틸 | dig (bind-utils) 또는 nslookup | [Unreleased] DNS 점검 `[4-1]` — dig 를 먼저 쓰고 없으면 nslookup, 둘 다 없으면 점검만 생략 |
+| 유틸 | xargs, mktemp | DNS 점검의 병렬 질의(`xargs -P 32`)·임시 디렉터리 |
 | 외부 | awxkit | AWX 인벤토리 등록 래퍼 |
 
 ### 최상단 변수 7개 채우기
@@ -140,6 +147,28 @@ awx nodeinfo 사용여부 Y|N : Y
 
 - **Y**: AWX 노드정보 자동 수집 (awxkit/nodeinfo.sh 호출)
 - **N**: 기존 `${user}.txt` 파일 사용 (파일이 있어야 함)
+
+#### [4-1] DNS 점검 (`dns_check`, [Unreleased])
+
+`[4] fix_mac` 다음, `[5]` 대상 출력 전에 `${user}.txt` 의 hostname(4번째)·IP(5번째)가 DNS 와 맞는지 확인합니다. auto_setup 의 신규 설치 양식(Go, `dnscheck.go`)과 **같은 규칙**입니다.
+
+- **기준값**: `/etc/resolv.conf` 의 각 nameserver(최대 3)에 **직접** A 레코드를 묻고 그 답을 기준으로 합니다. `/etc/hosts`·getent 는 쓰지 않습니다. 짧은 이름은 `search`/`domain`/`ndots` 를 glibc·nslookup 과 같은 순서로 붙여 조회합니다.
+- **도구**: `dig +short +time=2 +tries=1 @서버` 를 우선, 없으면 `nslookup`, 둘 다 없으면 `DNS 도구 없음 — 점검 생략` 경고만 하고 기존대로 진행합니다.
+- **판정**: 일치 / **불일치**(합의된 A 1개 ≠ 등록 IP — 교체 대상) / 판단 불가(서버끼리 답이 다르거나 A 여러 개 — 경고만, 교체 제외) / 미등록(응답한 서버가 모두 NXDOMAIN) / 조회 실패(응답한 서버 없음). 1대라도 A 를 받아야 점검하고, 전부 실패하면 `DNS 조회 불가 — 점검 생략` 한 줄만 출력하고 기존대로 진행합니다.
+- **중복 경고**: 불일치 호스트의 등록 IP 가 다른 hostname 의 것으로 보이면 `⚠ 등록IP 1.1.1.1 은 svr0005 의 IP (목록|DNS|PTR)` — 목록 안의 다른 hostname 이 같은 IP / 다른 호스트의 DNS 기준 IP / 그 IP 의 역조회(PTR, 불일치 IP 만 질의).
+- **속도**: `xargs -P 32` 병렬, 질의당 2초·재시도 1회. 응답을 한 번도 못 받고 3번 실패한 서버는 이후 질의를 건너뜁니다. 1000대·2코어에서 약 11초.
+- **출력과 선택** (불일치가 있을 때)
+
+  ```
+  hostname  등록IP   DNS IP   비고
+  svr0001   1.1.1.1  1.1.1.2  ⚠ 등록IP 1.1.1.1 은 svr0005 의 IP (DNS)
+  a 모두 DNS 로 / n 그대로 / s 하나씩 / q 중단 :
+  ```
+
+  `a` 전부 DNS IP 로 교체, `n` 등록값 그대로, `s` 호스트마다 y/N, `q` 중단(exit 0, 로그 `작업 취소 (DNS 점검에서 중단)`). 교체는 `${user}.txt` **5번째 필드만** 바꾸고 LOG 에 `[DNS] svr0001 1.1.1.1 -> 1.1.1.2` 로 남깁니다. 불일치가 없으면 `[DNS] 일치 N대 (미등록 …, 판단 불가 …, 조회 실패 …)` 한 줄이 나옵니다.
+- **auto 모드 (`AWX_AUTO=1`)**: stdin 이 `/dev/null` 이므로 질문은 **`/dev/tty`** 로 받습니다. 불일치가 나오면 표를 출력하고 `등록값 그대로 계속 진행할까요? [y/N]` — `y` 면 진행, 그 외이거나 터미널이 없어 물을 수 없으면 **중단**(exit 1)합니다.
+- **`AWX_DNS_CHECKED=1`** (auto_setup 신규 설치 양식이 이미 점검·결정한 경우): 표만 출력하고 `[DNS] auto_setup 에서 이미 점검·결정함 … — 등록값 그대로 진행` 후 묻지 않고 진행합니다.
+- **테스트 훅**: `AWX_RESOLV_CONF`(기본 `/etc/resolv.conf`), `AWX_TTY`(auto 모드 질문을 읽는 곳, 기본 `/dev/tty`) — 시험용입니다.
 
 #### [5] 등록 대상 다단 출력
 
@@ -286,7 +315,7 @@ bash /path/to/awx_script/01.AWX_nodeinfo_V2.sh
 | 변수 | 값 | 동작 |
 |---|---|---|
 | `AWX_AUTO` | `1` | auto 모드 켜기 (다른 값이면 끔) |
-| `AWX_AUTO_NODEINFO` | `y` 또는 `n` | 01 의 `awx nodeinfo 사용여부` 에 자동 답변 (`y`·`n` 이 아니면 직접 묻고 노란 경고) |
+| `AWX_AUTO_NODEINFO` | `y` 또는 `n` | 01 의 `awx nodeinfo 사용여부` 에 자동 답변 (`y`·`n` 이 아니면 직접 묻고 노란 경고). **[Unreleased]: `AWX_AUTO` 없이 이 변수만 줘도 이 질문만 자동 답변** (`… (auto_setup)` 표시, 나머지 질문은 그대로 직접 응답 — auto_setup 신규 설치 양식이 프로파일 없이 AWX 를 실행할 때 사용) |
 | `AWX_AUTO_OS` | `2024` `2025` `2026` `2026-OPC_MDP` `2026-ECAD_TCAD` `default` | 02 의 `OS 버전 선택` 을 모든 yml 에 적용 (`default` = 02 의 기본값). 선택지에 없으면 auto 를 끄고 직접 묻습니다 |
 
 자동으로 답하는 질문 (답변은 `값 (auto)` 으로 표시):
@@ -298,6 +327,7 @@ bash /path/to/awx_script/01.AWX_nodeinfo_V2.sh
 | 변수 | 값 | 동작 |
 |---|---|---|
 | `AWX_USER` | `[A-Za-z0-9._-]+` | user 메뉴·번호 입력을 건너뛰고 이 값을 user 로 사용 (`user : 값 (auto_setup)`). 형식이 틀리면 노란 경고 후 메뉴로 진행 |
+| `AWX_DNS_CHECKED` | `1` | ([Unreleased]) auto_setup 양식 생성에서 DNS 점검을 이미 했음 — `[4-1]` 이 표만 출력하고 묻지 않고 진행 (위 「[4-1] DNS 점검」) |
 | `AWX_VERIFY_FILE` | 파일 경로 | `등록 후 확인` 의 대상 서버 목록(공백/쉼표/\| 구분)을 stdin 대신 이 파일에서 읽음 (`붙여넣을 목록: auto_setup 에서 입력한 N대`). 없거나 빈 파일이면 stdin 에서 읽음 |
 
 auto_setup TUI `w` 가 user 와 대상 서버 목록을 이 두 변수로 넘기므로, 입력 없이 끝까지 실행됩니다.
@@ -315,7 +345,14 @@ bash setup/setup_guide.sh           # 빈 변수 입력 가이드 (setup/vars.ma
 bash setup/update_v0.6.1.sh --dry   # 현장 사본 업데이트 미리보기 (파일 불변, 0.6.0 이전 사본도 한 번에 가능한 누적)
 bash setup/update_v0.6.1.sh         # 적용 (현장 값·주석 보존, 신규 변수 없음)
 bash setup/update_v0.6.1.sh --undo  # 되돌리기 (가장 최근 백업)
+
+# [Unreleased] DNS 점검([4-1])·AWX_AUTO_NODEINFO 변경 — 01 만 변경, 0.6.1 이상 사본 위 증분, 현장 값·주석 보존
+bash setup/update_unreleased_dns.sh --dry    # 미리보기 (파일 불변)
+bash setup/update_unreleased_dns.sh          # 적용
+bash setup/update_unreleased_dns.sh --undo   # 되돌리기
 ```
+
+- `update_unreleased_dns.sh` 는 `vars.manifest` 의 버전을 올리지 않습니다 (`[Unreleased]` 라 버전 번호 없음, 새 변수 없음).
 
 - 업데이트 뒤 설정 변경 확인은 아래 「주의사항 (Disclaimer)」 을 따르십시오.
 
@@ -325,7 +362,9 @@ bash setup/update_v0.6.1.sh --undo  # 되돌리기 (가장 최근 백업)
 |---|---|
 | `01.AWX_nodeinfo_V2.sh` | 메인 스크립트 — 노드정보 수집, 가공, yml 생성, git 업로드 |
 | `02.source_dhcp_pxe.sh` | 보조 스크립트 — yml별 인벤토리/DHCP/PXE 등록 (01 내에서 자동 호출) |
-| `test/run_tests.sh` | 테스트 하네스 — 계획서 §9 검증 기준. 01/02 를 실제로 실행하는 목업 E2E(스텁 awxkit/ssh/scp/gossh), 랩(bash 4.4)에서 실행 |
+| `test/run_tests.sh` | 테스트 하네스 — 계획서 §9 검증 기준. 01/02 를 실제로 실행하는 목업 E2E(스텁 awxkit/ssh/scp/gossh, DNS 케이스 21~23: 스텁 dig/nslookup + 실제 dig/nslookup), 랩(bash 4.4)에서 실행 — 108건 |
+| `test/fake_dns.py` | 가짜 DNS 서버(UDP, 127.0.0.1) — 실제 `dig`/`nslookup` 출력을 01 이 해석하는지 확인하는 케이스 23 용. **랩·CI 전용**이라 운영 서버에는 배치하지 않음 (python3 필요) |
+| `setup/update_unreleased_dns.sh` | [Unreleased] DNS 점검·`AWX_AUTO_NODEINFO` 업데이트 (01 만, 0.6.1 위 증분, 생성 스크립트) |
 | `계획서.md` | 설계 근거와 결정 사항(§8) |
 | `.github/workflows/ci.yml` | 단독 브랜치용 CI (bash -n / shellcheck / 테스트) |
 | `README.md` | 이 파일 — 설치, 사용, 옵션 가이드 |

@@ -39,6 +39,18 @@ var (
 	enable_ldap_change = "" // 위와 같음, LDAP 변경 메뉴
 	ip_engine          = "" // ip-change-engine 실행 파일 전체 경로 (비면 <auto_setup 디렉터리>/ip-change-engine → PATH)
 	ldap_engine        = "" // ldap-config-engine 실행 파일 전체 경로 (비면 <auto_setup 디렉터리>/ldap-config-engine → PATH)
+
+	// v0.8.0 신규 설치 양식 템플릿 (선택): "별칭|infra nic disk 용량 os boot" — 비우면 미사용 (newhost_tpl.go)
+	newhost_template_1 = ""
+	newhost_template_2 = ""
+	newhost_template_3 = ""
+	newhost_template_4 = ""
+	newhost_template_5 = ""
+	newhost_template_6 = ""
+	newhost_template_7 = ""
+	newhost_template_8 = ""
+	newhost_template_9 = ""
+	work_os6_over      = "" // gossh 작업(s)을 os8 gossh 로 실행하는 최대 대수 — 초과하면 os6_mgmt 경유 (숫자, 비우면 1000; newhost_tpl.go 의 workOS6Over)
 )
 
 // adminMode: `auto_setup --admin` 으로 TUI 를 띄웠을 때만 true. 변경 메뉴를 conf 와 무관하게 켠다 (데몬·request 에는 영향 없음).
@@ -78,6 +90,8 @@ const usageText = `사용법: auto_setup [명령]
   daemon              포그라운드 데몬 (보통 ensure 가 백그라운드로 기동)
   ensure              데몬이 없으면 백그라운드로 기동 (cron 매분)
   probe [-i 10s]      (os6_mgmt 쪽) stdin 호스트 목록 ping 감시
+  newhost [-user <이름>]  신규 설치 양식: hostname ip mac → awx_dir/<user>.txt (TUI w→2 와 같은 화면, tty·os8_mgmt 에서만)
+  s [-user <이름>]        gossh 작업 기록: 붙여넣은 호스트를 /tmp/<3자리> 로 만들어 gossh 실행·user 별 기록 (TUI s 와 같은 화면, tty 에서만)
 `
 
 func main() {
@@ -153,6 +167,38 @@ func run(args []string) int {
 		return runEnsure()
 	case "probe":
 		return runProbe(args[1:])
+	case "newhost": // -user 는 명령 앞·뒤 어디든 (auto_setup newhost -user alice)
+		rest, u, err := splitUser(args[1:])
+		if err != nil {
+			msgErr("%v", err)
+			return 1
+		}
+		if len(rest) != 0 {
+			return usageFail()
+		}
+		if u != "" {
+			forceUser = u
+		}
+		return cmdNewhost()
+	case "s": // gossh 작업 기록 (-user 는 명령 앞·뒤 어디든)
+		rest, u, err := splitUser(args[1:])
+		if err != nil {
+			msgErr("%v", err)
+			return 1
+		}
+		if len(rest) != 0 {
+			return usageFail()
+		}
+		if u != "" {
+			forceUser = u
+		}
+		return cmdWork()
+	case "work-relay": // 내부용: os6_mgmt 원격 클라이언트의 gossh 작업 기록을 os8_mgmt 에 저장·조회 (work.go)
+		if os8_mgmt != "" {
+			msgErr("work-relay 는 os8_mgmt 에서만 실행합니다")
+			return 1
+		}
+		return cmdWorkRelay(args[1:])
 	case "status", "snapshot", "code", "cancel", "done", "request":
 		if !relayArgsOK(args) {
 			return usageFail()

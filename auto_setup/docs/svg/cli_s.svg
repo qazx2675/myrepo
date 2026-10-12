@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 693" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="auto_setup s [-user 이름]">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="693" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">auto_setup s [-user 이름]</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">CLI · gossh 작업 기록 — TUI s 와 같은 화면 (tty 에서만)</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">auto_setup s [-user 이름]</text>
+  <text x="265" y="92" class="t" text-anchor="middle">-user 는 명령 앞·뒤 어디든</text>
+  <path d="M265 102 L265 146" class="ln"/>
+  <rect x="40" y="146" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="166" class="t tb" text-anchor="middle">tty 인가?</text>
+  <rect x="560" y="130" width="310" height="62" rx="6" class="ext"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">[X] auto_setup s 는 터미널(tty)에서</text>
+  <text x="715" y="166" class="t tb" text-anchor="middle">실행하세요</text>
+  <text x="715" y="182" class="t" text-anchor="middle">종료코드 1</text>
+  <path d="M490 161 L560 161" class="ln"/>
+  <text x="498" y="156" class="t tm">아니오</text>
+  <path d="M265 176 L265 220" class="ln"/>
+  <text x="273" y="193" class="t tm">예</text>
+  <rect x="40" y="220" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="240" class="t tb" text-anchor="middle">user 정하기 (askUserCLI)</text>
+  <text x="265" y="256" class="t" text-anchor="middle">-user 가 있으면 묻지 않음, 없으면 user 메뉴/직접 입력</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <rect x="40" y="294" width="450" height="78" rx="6" class="box"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">작업 목록 화면 (openWork)</text>
+  <text x="265" y="330" class="t" text-anchor="middle">&lt;상태&gt;/work/&lt;user&gt;/ 의 기록을 읽고 가볍게 정리 (출력 7일 · user 당</text>
+  <text x="265" y="346" class="t" text-anchor="middle">200MB · /tmp 파일 7일)</text>
+  <text x="265" y="362" class="t" text-anchor="middle">os6_mgmt 에서 열었으면 기록은 os8_mgmt 에 중계 (work-relay)</text>
+  <path d="M265 372 L265 400" class="ln"/>
+  <rect x="40" y="400" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="420" class="t tb" text-anchor="middle">n 새 작업 / Enter 항목 메뉴 / / 호스트 검색</text>
+  <text x="265" y="436" class="t" text-anchor="middle">자세한 단계는 tui_s.svg 와 같음</text>
+  <path d="M265 446 L265 474" class="ln"/>
+  <rect x="40" y="474" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="494" class="t tb" text-anchor="middle">TUI 를 잠시 떠나 터미널에서 gossh 실행</text>
+  <text x="265" y="510" class="t" text-anchor="middle">script -q -f -c 로 tty 를 유지한 채 출력 저장 (색·위험어 y/N 확인 그대로)</text>
+  <path d="M265 520 L265 548" class="ln"/>
+  <rect x="40" y="548" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="568" class="t tb" text-anchor="middle">종료</text>
+  <text x="265" y="584" class="t" text-anchor="middle">q / Esc 로 닫으면 마지막 메시지를 출력하고 종료코드 0</text>
+  <text x="40" y="631" class="t tm">범례</text>
+  <rect x="80" y="620" width="14" height="14" class="box"/>
+  <text x="100" y="631" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="620" width="14" height="14" class="dec"/>
+  <text x="237" y="631" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="620" width="14" height="14" class="ldap"/>
+  <text x="395" y="631" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="620" width="14" height="14" class="sec"/>
+  <text x="699" y="631" class="t tm">기록 · 결과</text>
+  <rect x="80" y="640" width="14" height="14" class="ext"/>
+  <text x="100" y="651" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="668" class="t tm">코드: work_tui.go cmdWork · main.go work-relay · work.go workPlan</text>
+</svg>

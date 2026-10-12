@@ -10,7 +10,7 @@
 
  ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침
  ? 도움말  q 종료
- x 단독 체크  w AWX  m 변경
+ w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크
  변경 ▶ 1 IP 변경  2 LDAP 변경  3 IP+LDAP  4 원복
    5 auto.appl 원복   (번호 선택, Esc/m 닫기)
 == overview-ip-only ==
@@ -25,7 +25,7 @@
 
  ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침
  ? 도움말  q 종료
- x 단독 체크  w AWX  m 변경
+ w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크
  변경 ▶ 1 IP 변경   (번호 선택, Esc/m 닫기)
 == detail-admin ==
  job J1 / web.yml  (ib/rhel8/pxe/y)  완료 2/6
@@ -46,8 +46,8 @@
 
  ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침
  ? 도움말  q 복귀
- c 체크+수정  t 체크만  g 재확인  v 결과  d 수동 완료
- x 단독 체크  w AWX  m 변경
+ h 호스트 작업  w AWX·신규설치  m 변경  s gossh 작업
+ x 단독 체크
  변경(--admin) ▶ 1 IP 변경  2 LDAP 변경  3 IP+LDAP  4 원복
    5 auto.appl 원복   (번호 선택, Esc/m 닫기)
 == overview-tall ==
@@ -62,7 +62,7 @@
 
  ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침
  ? 도움말  q 종료
- x 단독 체크  w AWX  m 변경
+ w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크
  변경 ▶ 1 IP 변경  2 LDAP 변경  3 IP+LDAP  4 원복
    5 auto.appl 원복   (번호 선택, Esc/m 닫기)
  노드의 설정 변경 작업입니다 — 확인(yes) 전에는 아무것도

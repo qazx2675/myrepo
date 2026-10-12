@@ -105,7 +105,7 @@ func TestOS6WrapperQuoting(t *testing.T) {
 	t.Cleanup(func() { os6_mgmt, os6_gossh = oldM, oldG })
 
 	tmp := t.TempDir()
-	fakeGossh := filepath.Join(tmp, "fakegossh")
+	fakeGossh := filepath.Join(tmp, "fake gossh's") // os6_gossh 경로의 공백·' 인용 확인
 	os.WriteFile(fakeGossh, []byte(`#!/bin/bash
 prev=
 for a in "$@"; do
@@ -205,5 +205,58 @@ func TestRunnerEmptyOsCheckSh(t *testing.T) {
 	_, err := NewRealRunner().Run(&Job{User: "u"}, []string{"h"}, false)
 	if err == nil || !strings.Contains(err.Error(), "os_check_sh 가 비어 있습니다") {
 		t.Fatalf("에러: %v", err)
+	}
+}
+
+// os6 경유 bash 래퍼 두 개(데몬 bin/gossh, 변경 메뉴 gossh_os6.sh): os6_mgmt 로그인 셸이 tcsh 여도
+// 원격 명령(bash -c '…')의 $(mktemp)·인자 인용·os6_gossh 경로(공백·'·$)가 그대로 동작한다
+func TestOS6WrappersLoginTcsh(t *testing.T) {
+	needBash(t)
+	if _, err := exec.LookPath("tcsh"); err != nil {
+		t.Skip("tcsh 없음")
+	}
+	setupDir(t)
+	oldM, oldG := os6_mgmt, os6_gossh
+	t.Cleanup(func() { os6_mgmt, os6_gossh = oldM, oldG })
+
+	tmp := t.TempDir()
+	gdir := filepath.Join(tmp, "g dir 'q' $x")
+	os.MkdirAll(gdir, 0755)
+	fakeGossh := filepath.Join(gdir, "it's gossh")
+	os.WriteFile(fakeGossh, []byte(`#!/bin/bash
+prev=
+for a in "$@"; do
+  echo "[$a]"
+  if [ "$prev" = "-w" ]; then echo "LIST:$(cat "$a" | paste -sd,)"; fi
+  prev=$a
+done
+exit 3
+`), 0755)
+	fakeBin := filepath.Join(tmp, "bin")
+	os.MkdirAll(fakeBin, 0755)
+	os.WriteFile(filepath.Join(fakeBin, "ssh"), []byte("#!/bin/bash\nwhile [ \"$1\" = -o ]; do shift 2; done\nshift\nexec tcsh -c \"$1\"\n"), 0755)
+	list := filepath.Join(tmp, "list.txt")
+	os.WriteFile(list, []byte("h1\nh2\n"), 0644)
+
+	os6_mgmt, os6_gossh = "mgmtstub", fakeGossh
+	if err := writeOS6Wrapper(); err != nil {
+		t.Fatal(err)
+	}
+	chg := filepath.Join(tmp, "gossh_os6.sh")
+	os.WriteFile(chg, []byte(chgOS6WrapperScript("mgmtstub", fakeGossh)), 0700)
+
+	weird := `it's "q" $HOME x;y !z $(id) \b`
+	for _, w := range []string{filepath.Join(binDir(), "gossh"), chg} {
+		cmd := exec.Command("bash", w, "-pm", "-w", list, weird, "-script")
+		cmd.Env = append(os.Environ(), "PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		out, err := cmd.Output()
+		if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 3 {
+			t.Fatalf("%s: 종료코드 3 이 전달되어야 함: %v\n%s", w, err, out)
+		}
+		lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+		if len(lines) != 6 || lines[0] != "[-pm]" || lines[1] != "[-w]" || lines[3] != "LIST:h1,h2" ||
+			lines[4] != "["+weird+"]" || lines[5] != "[-script]" || lines[2] == "["+list+"]" {
+			t.Fatalf("%s: 출력:\n%s", w, out)
+		}
 	}
 }

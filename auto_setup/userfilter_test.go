@@ -20,6 +20,8 @@ func TestSplitUser(t *testing.T) {
 		{[]string{"-user"}, nil, "", true},
 		{[]string{"-user", "a b"}, nil, "", true},
 		{[]string{"-user", "../x"}, nil, "", true},
+		{[]string{"-user", ".."}, nil, "", true}, // 디렉터리 이름으로 쓰이므로 . 와 .. 불가
+		{[]string{"-user", "."}, nil, "", true},
 	}
 	for _, c := range cases {
 		rest, user, err := splitUser(c.in)

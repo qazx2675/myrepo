@@ -1,5 +1,47 @@
 # CHANGELOG
 
+## [0.8.0] - 2026-10-13
+
+### 추가
+- **항목별 인라인 메뉴 `h`·`w`** (`menu_tui.go`): `m` 변경 메뉴와 같은 방식 — 화면을 바꾸지 않고 키 안내 줄 아래에 한 줄(좁으면 항목 단위 줄바꿈)로 열리고, 글자 또는 번호로 고르며 `Esc`/`q` 로 메뉴만 닫는다.
+  - `h` 호스트 작업 (화면 2): `c` 체크+수정 · `t` 체크만 · `g` 재확인 · `d` 수동 완료 · `v` 결과 (번호 1~5). 전체 보기(`a`)에서는 `g`·`d` 만 표시. 화면 1 에서는 `h` 가 없음
+  - `w` AWX: `1` AWX 실행 · `2` 신규 설치 양식. **`ww` / `w` `Enter` / `w` `1` 이 예전의 `w` 동작**. 3번 자리(킥스타트 파티션 변경)는 예정이라 항목을 만들지 않음
+  - 예전 단축키 `c` `t` `g` `v` `d` `x` 는 **숨은 단축키로 그대로 동작** (메뉴는 같은 핸들러를 호출). 안내 줄에서만 빠지고 `?` 도움말에 표시. 안내 줄 둘째 줄: ` h 호스트 작업  w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크`
+- **신규 설치 양식** (`w`→2 / `auto_setup newhost [-user <이름>]`, os8_mgmt 에서만, `newhost*.go`): nodeinfo 를 쓸 수 없는 신규 설치 서버용. `hostname ip mac` 붙여넣기(구분자·순서 무관, MAC 4형식 → 소문자, 오류·중복은 고칠 때까지 진행 불가, `d`/`e` 로 고치기) → 템플릿 지정(conf `newhost_template_1~9` + user 별 `+` 추가, 범위·패턴·행 번호·`*`, 열 수정 `svr005 os=9.6`, 지정 없는 행은 이력 추천) → DNS 점검(a/n/s/q) → 미리보기 → `awx_dir/<user>.txt` 저장(기존 파일은 `newhost/<user>/backup/` 백업, `history/` 사본) → `AWX 실행할까요? [y/n]`. 저장 뒤 AWX 는 nodeinfo N 강제·대상 목록 자동 입력·DNS 를 점검했으면 `AWX_DNS_CHECKED=1`. 프로파일이 없으면 `AWX_AUTO` 없이 `AWX_AUTO_NODEINFO=n` 만 넘김. CLI 는 tty 필요, 저장했으면 종료코드 0
+- **DNS 점검** (`dnscheck.go`): `/etc/resolv.conf` 의 DNS 서버(최대 3)에 직접 A 질의(외부 명령 없이 표준 라이브러리로 UDP/TCP 구현, `/etc/hosts`·getent 는 쓰지 않음, search/ndots 는 glibc 와 같은 순서). 판정 5종(일치·불일치·판단 불가·미등록·조회 실패), 중복 경고 3종(목록·DNS·PTR), 동시 32·질의당 2초·재시도 1회. 신규 설치 양식에서 사용하며 awx_script 01 `[4-1] dns_check` 와 같은 규칙
+- **gossh 작업 기록** (`s` / `auto_setup s [-user <이름>]`, `work*.go`): 붙여넣은 호스트로 `/tmp/<소문자 3자리>` 목록을 만들어 gossh 를 실행하고 user 별로 기록. `n` 새 작업(같은 목록이면 재사용 질문) · `Enter` 항목 메뉴(같은 파일로 새 명령·재실행·실패/접속불가만 재실행·결과 보기 `less -R`·메모·호스트 목록) · `/` 호스트 검색. 실행 위치: 대수 ≤ `work_os6_over`(비면 1000) 는 os8 gossh + **접속불가만 os6_mgmt 경유 재실행**, 초과는 **전량 os6_mgmt 경유**(`ssh -t`, `bash -c`), os6_mgmt 에서 열면 대수와 상관없이 os6 gossh 로 바로 실행하고 기록은 os8_mgmt 로 중계(내부 `work-relay`). TUI 를 잠시 떠나 `script -q -f -c` 로 tty 를 유지한 채 실행(출력·색·위험어 확인 그대로)
+  - 기록 `<AUTO_SETUP_DIR>/work/<user>/{index.jsonl, lists/, out/, relay/}`(0700/0600): 요약은 영구, 전체 출력(gzip)은 7일·user 당 200MB, `/tmp/<3자리>` 파일도 7일. 데몬이 하루 한 번 정리(`workCleanAll`), 위험어(reboot·halt 등)는 화면 확인 후 gossh 의 확인을 거침
+- **세션 user** (`sessionuser.go`): `-user` 없이 실행하면 `s`·신규 설치 양식을 처음 열 때 한 번 고르고 TUI 를 닫을 때까지 기억(헤더 `[user: …]`). CLI `s`·`newhost` 는 시작할 때 묻고 `-user` 가 있으면 묻지 않음. `x`·`w`→1·`m` 은 기존처럼 매번 묻는다. `-user .`·`..` 는 거부
+- **새 빈 변수 10개** — `newhost_template_1`~`9`, `work_os6_over` (모두 빈 값, 비면 기존과 같음). `conf/update_v0.8.0.sh`(앵커 `ldap_engine=`, `--dry`·`--undo`), `conf/vars.manifest` 0.8.0(32개), `conf/auto_setup.conf.example`
+- **명령·키별 흐름도 `docs/svg/` 31개**(CLI 14 + TUI 17, 라이트/다크 대응) + `docs/svg/README.md` 목록 표. README 의 명령·키 표 행마다 링크
+- **CI**: 저장소 루트 `.github/workflows/auto-setup.yml` (paths 필터, Go 1.26.5 `build`·`vet`·`test` + `bash -n`, Go 1.20 문법 호환 job)
+
+### 변경
+- **`w` 는 메뉴**가 됨 (위). 안내 줄·`?` 도움말·골든(`tui_*`·`tui_menus_*`·`tui_newhost_*`)을 새 구조에 맞춰 갱신. 닫혀 있을 때 화면 1·2 의 본문은 그대로이고 안내 줄 둘째 줄만 바뀜
+- **os6_mgmt 원격 명령은 모두 `bash -c '<명령>'`**(`remoteBash`, `shq` 인용)으로 감싸 보냄 — 준비확인·os_check run·2차 체크·LDAP 백업·복원·원격 클라이언트 중계(`sh -c` → `bash -c`)·변경 엔진·gossh 작업. 로그인 셸이 csh/tcsh 여도 `$(...)`·`${f}` 가 bash 에서 해석된다. 명령에 `!` 가 있으면 tcsh history 치환을 피하려 base64(두 글자마다 `.`)로 전송, os6 gossh 래퍼 2종도 같은 형태. awx_script 01/02 의 os6 경로는 이미 `bash <파일>` 방식이라 영향 없음(점검만)
+- 준비확인·`g` 의 os6 ssh 옵션을 다른 경로와 같은 `-o BatchMode=yes -o ConnectTimeout=10` 으로 통일
+- 01 은 `AWX_AUTO_NODEINFO`(y|n)를 `AWX_AUTO` 없이도 존중 (awx_script `[Unreleased]` 참고)
+- **빌드**: 폐쇄망은 **Go 1.26.5** 로 빌드·검증하고 `go.mod` 는 `go 1.20` 유지 — `auto_setup_os6` 는 Go 1.20.14 정적 빌드(변수 빈 값, 재빌드해 커밋). Go 1.20 문법·표준 라이브러리만 사용(외부 의존성 0)
+
+### 수정
+- **① 준비확인·`g` 의 무한 대기**: gossh(os8)·`ssh <os6_mgmt>`(os6) 호출 1회마다 **전체 60초 제한**(`checkTimeout`) — 넘으면 프로세스 그룹(gossh/ssh 와 자식)을 종료하고 받은 출력까지만 해석, 그 호스트는 무응답 + 사유 `시간 초과(60초)`
+- **② csh/tcsh 로그인 셸**: os6_mgmt 로그인 셸이 csh/tcsh 면 `$(...)`·`${f}` 가 bash 로 해석되지 않거나 `!` 에서 `Event not found` 가 나던 문제 (위 `bash -c`·base64)
+- **③ gossh 출력 해석 통일** (`parseGossh`): 준비확인 `parseCheck` 와 LDAP `splitGossh` 가 따로 해석하던 것을 하나로 — ANSI 색 제거, `호스트: 내용` 분리, `ERROR: 종료코드 N`·`SSH 접속 실패: …` 줄을 사유로 인식, 호스트 이름은 정확히 같은 이름 우선 → 짧은 이름(첫 `.` 앞)으로 맞춤(둘 이상과 겹치면 맞추지 않음). 출력이 있는데 호스트를 하나도 못 찾으면 원본 앞 5줄을 `auto_setup.log` 에 `[!] gossh 출력 해석 실패` 로 남기고(LDAP 은 bindpw 보호로 원본 미기록) `g` 결과 상세에 `출력 형식 불일치` 표시
+- `os6_gossh` 경로·원격 인자는 모두 `shq` 를 거침 — 공백·`'` 가 있어도 깨지지 않음
+- gossh 작업 기록 저장(`workWriteFile`)의 임시 파일 이름을 호출마다 고유하게 — 한 프로세스 안의 동시 저장이 같은 임시 파일을 밟아 rename 이 실패하던 경쟁 상태(race) 수정
+
+### 테스트
+- `go test ./...` **398 PASS (7 SKIP)** — Go 1.26.5 (폐쇄망 버전)로 build·vet·test, `auto_setup_os6` 는 Go 1.20.14
+- E2E: `test/run_e2e.sh` 86 · `test/run_e2e2.sh` 194 · `test/run_change_os.sh` 173 · `test/run_change_lab.sh` 18 · `test/run_setup_scripts.sh` 54 · awx_script `test/run_tests.sh` 108
+- 랩 전용 `tcsh_live_test.go`: `AS_TEST_LOGIN_MGMT=<user@host> go test -run ViaLoginShell .` — 로그인 셸이 tcsh 인 계정으로 진짜 ssh 접속해 준비확인·LDAP `gosshBatch`·2차 체크·gossh 작업·원격 클라이언트를 `!` 포함 명령까지 확인 (환경변수가 없으면 SKIP)
+- 신규 단위 테스트: `menu_tui_test.go`·`newhost_test.go`·`newhost_tpl_test.go`·`newhost_tui_test.go`·`dnscheck_test.go`(가짜 DNS 서버)·`work_test.go`·`work_tui_test.go`·`sessionuser_test.go`, `check_test.go` 에 출력 해석·60초 제한(가짜 hang)·`bash -c` 인용 추가
+
+### 주의사항
+- **현장 업데이트**: `bash conf/update_v0.8.0.sh --dry` → 실행(새 변수 10개는 Enter 로 빈 값 유지) → `bash setup.sh` → `auto_setup --restart` → os6_mgmt 의 `auto_setup_os6` 교체. 새 동작은 바이너리에 있으므로 `setup.sh`·재기동·os6 바이너리 교체가 필수. v0.7.0 conf 가 먼저 적용돼 있어야 함(앵커 `ldap_engine=`)
+- awx_script 의 DNS 점검은 `setup/update_unreleased_dns.sh` (01 만 변경, 현장 값 보존)
+- **설정 변경 도구**: 신규 설치 양식은 `awx_dir/<user>.txt` 를 만든다(기존 파일은 백업). 설정 변경 후에는 랜덤 몇 대를 직접 확인하십시오
+- 알려진 제한은 README 「알려진 제한」: 프로파일 없는 AWX 경로(01 의 나머지 질문은 직접 응답, 구버전 01 은 nodeinfo 도 N 직접 입력), 원격 인자 128KB, os6 로컬 보관분 미병합, os6 probe 세션 경로의 `!`
+
 ## [0.7.3] - 2026-10-12
 
 ### 추가

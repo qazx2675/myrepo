@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 725" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TUI x — 체크스크립트 단독 실행">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="725" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">TUI x — 체크스크립트 단독 실행</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">키 · 화면 1 · 2 어디서나 (일회성 — auto_setup 의 codes · runs · log 에는 아무것도 남기지 않음)</text>
+
+  <rect x="40" y="56" width="450" height="30" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">x</text>
+  <path d="M265 86 L265 122" class="ln"/>
+  <rect x="40" y="122" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="142" class="t tb" text-anchor="middle">os_check_sh 가 채워져 있는가?</text>
+  <rect x="560" y="114" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="134" class="t tb" text-anchor="middle">안내만 표시</text>
+  <text x="715" y="150" class="t" text-anchor="middle">"os_check_sh 가 비어 있어 실행할 수 없습니다"</text>
+  <path d="M490 137 L560 137" class="ln"/>
+  <text x="498" y="132" class="t tm">아니오</text>
+  <path d="M265 152 L265 188" class="ln"/>
+  <text x="273" y="169" class="t tm">예</text>
+  <rect x="40" y="188" width="450" height="78" rx="6" class="box"/>
+  <text x="265" y="208" class="t tb" text-anchor="middle">user 선택 (newUserStep)</text>
+  <text x="265" y="224" class="t" text-anchor="middle">01 의 user_route 로 info_mn.sh 메뉴를 보여 주고 번호 입력. 메뉴가</text>
+  <text x="265" y="240" class="t" text-anchor="middle">없으면 이름 직접 입력</text>
+  <text x="265" y="256" class="t" text-anchor="middle">-user 로 실행했으면 이 단계를 건너뜀</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <rect x="40" y="294" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">호스트 입력</text>
+  <text x="265" y="330" class="t" text-anchor="middle">여러 줄 붙여넣기 후 Ctrl+D (공백 · 쉼표 · 탭 · | 는 줄바꿈, 중복 제거),</text>
+  <text x="265" y="346" class="t" text-anchor="middle">0대면 다시 입력</text>
+  <path d="M265 356 L265 384" class="ln"/>
+  <rect x="40" y="384" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="404" class="t tb" text-anchor="middle">모드 선택</text>
+  <text x="265" y="420" class="t" text-anchor="middle">t = 설정체크만 (-auto-check)  /  c = 설정체크 + 설정수정 (-auto, 빨강)</text>
+  <path d="M265 430 L265 458" class="ln"/>
+  <text x="273" y="447" class="t tm">t 또는 c (누르면 바로 실행)</text>
+  <rect x="40" y="458" width="450" height="94" rx="6" class="ldap"/>
+  <text x="265" y="478" class="t tb" text-anchor="middle">임시 디렉터리에서 os_check_sh 실행</text>
+  <text x="265" y="494" class="t" text-anchor="middle">targets.txt 를 만들고 os_check_sh -auto-check | -auto &lt;user&gt;</text>
+  <text x="265" y="510" class="t" text-anchor="middle">targets.txt</text>
+  <text x="265" y="526" class="t" text-anchor="middle">경과 시간과 로그 끝 15줄을 1초마다 갱신, 취소는 Ctrl+X → y (프로세스</text>
+  <text x="265" y="542" class="t" text-anchor="middle">그룹 종료)</text>
+  <path d="M265 552 L265 580" class="ln"/>
+  <rect x="40" y="580" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="600" class="t tb" text-anchor="middle">결과 창 (기존 결과 창과 같음)</text>
+  <text x="265" y="616" class="t" text-anchor="middle">↑↓ Space b 스크롤, q / Esc 로 닫으면 임시 디렉터리 삭제</text>
+  <text x="40" y="663" class="t tm">범례</text>
+  <rect x="80" y="652" width="14" height="14" class="box"/>
+  <text x="100" y="663" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="652" width="14" height="14" class="dec"/>
+  <text x="237" y="663" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="652" width="14" height="14" class="ldap"/>
+  <text x="395" y="663" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="652" width="14" height="14" class="sec"/>
+  <text x="699" y="663" class="t tm">기록 · 결과</text>
+  <rect x="80" y="672" width="14" height="14" class="ext"/>
+  <text x="100" y="683" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="700" class="t tm">코드: oneoff.go startOneoff · oneoff.go newUserStep · oneoff.go oneoffStart</text>
+</svg>

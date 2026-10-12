@@ -57,12 +57,12 @@ func TestAwxMissingDirOrScript(t *testing.T) {
 	c := useFakeAwx(t, 0)
 	want := "awx_dir 가 비었거나 01.AWX_nodeinfo_V2.sh 가 없습니다 (/etc/auto_setup/auto_setup.conf)"
 	awx_dir = ""
-	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "w")
+	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "ww")
 	if f := lastFrame(r); !strings.Contains(f, want) {
 		t.Errorf("awx_dir 빈 값 안내 없음:\n%s", f)
 	}
 	awx_dir = t.TempDir() // 01 없음
-	r = runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "w")
+	r = runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "ww")
 	if f := lastFrame(r); !strings.Contains(f, want) {
 		t.Errorf("01 없음 안내 없음:\n%s", f)
 	}
@@ -73,7 +73,7 @@ func TestAwxMissingDirOrScript(t *testing.T) {
 
 func TestAwxProfileYesPickEnv(t *testing.T) {
 	c := useFakeAwx(t, 0, "n|2024|첫째", "y|2025|둘째", "bad|x|y")
-	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wy2alice\r\x04")
+	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwy2alice\r\x04")
 	o := r.out.String()
 	for _, want := range []string{"AWX auto 실행? [y/n]", "yml 마다 OS 버전이 다르면 N 을 입력하세요",
 		"1) nodeinfo=n  OS=2024  첫째", "2) nodeinfo=y  OS=2025  둘째", "awx_profile_3", "AWX 종료 (rc=0)"} {
@@ -101,7 +101,7 @@ func TestAwxProfileYesPickEnv(t *testing.T) {
 func TestAwxProfileNoRunsPlain(t *testing.T) {
 	t.Setenv("AWX_AUTO", "")
 	c := useFakeAwx(t, 3, "y|2025|a")
-	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wnalice\r\x04")
+	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwnalice\r\x04")
 	if c.n != 1 || c.has("AWX_AUTO=1") || c.has("AWX_AUTO_NODEINFO") || c.has("AWX_AUTO_OS") {
 		t.Errorf("n=%d AWX_* 환경변수가 있으면 안 됨", c.n)
 	}
@@ -113,7 +113,7 @@ func TestAwxProfileNoRunsPlain(t *testing.T) {
 func TestAwxNoProfilesNoPrompt(t *testing.T) {
 	t.Setenv("AWX_AUTO", "")
 	c := useFakeAwx(t, 0)
-	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "walice\r\x04")
+	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwalice\r\x04")
 	if c.n != 1 || c.has("AWX_AUTO=1") {
 		t.Errorf("n=%d 바로 일반 실행이어야 함", c.n)
 	}
@@ -124,7 +124,7 @@ func TestAwxNoProfilesNoPrompt(t *testing.T) {
 
 func TestAwxInterruptedMessage(t *testing.T) {
 	useFakeAwx(t, 130)
-	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "walice\r\x04")
+	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwalice\r\x04")
 	if f := lastFrame(r); !strings.Contains(f, "AWX 취소됨 (Ctrl+X)") {
 		t.Errorf("취소 메시지 없음:\n%s", f)
 	}
@@ -133,7 +133,7 @@ func TestAwxInterruptedMessage(t *testing.T) {
 func TestAwxEscCancelsPrompt(t *testing.T) {
 	c := useFakeAwx(t, 0, "y|2025|a")
 	// ask 에서 Esc → 취소, 다시 w y Esc → 뒤로(ask), Esc → 취소
-	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "w\x1b"+"wy\x1b\x1b")
+	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "ww\x1b"+"wwy\x1b\x1b")
 	if c.n != 0 {
 		t.Errorf("실행되면 안 됨: %d", c.n)
 	}
@@ -144,7 +144,7 @@ func TestAwxEscCancelsPrompt(t *testing.T) {
 
 func TestAwxPickIgnoresInvalidNumber(t *testing.T) {
 	c := useFakeAwx(t, 0, "y|2025|a")
-	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wy5\x1b\x1b")
+	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwy5\x1b\x1b")
 	if c.n != 0 {
 		t.Errorf("없는 번호로 실행되면 안 됨")
 	}
@@ -178,7 +178,7 @@ func (g *gateIn) Read(p []byte) (int, error) {
 
 func TestAwxPausesKeyReader(t *testing.T) {
 	c := useFakeAwx(t, 0)
-	g := &gateIn{data: []byte("walice\r\x04")}
+	g := &gateIn{data: []byte("wwalice\r\x04")}
 	env, r := newRig(g)
 	env.InReady = g.ready
 	preps := 0
@@ -236,7 +236,7 @@ func TestAwxListWrittenAndEnv(t *testing.T) {
 		}
 		return oldExec(dir, env)
 	}
-	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "walice\rh1 h2,h3\r\r\x04")
+	r := runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwalice\rh1 h2,h3\r\r\x04")
 	if c.n != 1 || c.val("AWX_USER") != "alice" {
 		t.Fatalf("n=%d AWX_USER=%q", c.n, c.val("AWX_USER"))
 	}
@@ -262,7 +262,7 @@ func TestAwxListSkipKeepsFile(t *testing.T) {
 	c := useFakeAwx(t, 0)
 	userTxt := filepath.Join(awx_dir, "alice.txt")
 	os.WriteFile(userTxt, []byte("keep\n"), 0644)
-	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "walice\r\x04")
+	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwalice\r\x04")
 	if c.n != 1 || c.val("AWX_USER") != "alice" || c.has("AWX_VERIFY_FILE") {
 		t.Fatalf("n=%d env 이상", c.n)
 	}
@@ -274,12 +274,12 @@ func TestAwxListSkipKeepsFile(t *testing.T) {
 // 프로파일 + 목록: auto 환경변수와 함께 전달, Esc 로 목록 입력 취소
 func TestAwxProfileWithListAndEsc(t *testing.T) {
 	c := useFakeAwx(t, 0, "y|2025|a")
-	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wy1bob\rh9\x04")
+	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwy1bob\rh9\x04")
 	if c.n != 1 || c.val("AWX_AUTO") != "1" || c.val("AWX_USER") != "bob" || c.val("AWX_VERIFY_FILE") == "" {
 		t.Fatalf("env 이상 n=%d", c.n)
 	}
 	c2 := useFakeAwx(t, 0)
-	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "walice\rh1\x1b")
+	runKeys(t, &fakeSrc{snap: twoGroupSnap(), local: true}, "wwalice\rh1\x1b")
 	if c2.n != 0 {
 		t.Fatal("Esc 로 취소했는데 실행됨")
 	}

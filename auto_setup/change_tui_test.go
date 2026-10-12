@@ -125,8 +125,8 @@ func TestChangeKeyOnShowsHintAndMenu(t *testing.T) {
 	for _, c := range cases {
 		h := chgTUISetup(t, c.ip, c.ldap, c.admin)
 		over := h.frame()
-		if !strings.Contains(over, "x 단독 체크  w AWX  m 변경") {
-			t.Errorf("%s: 화면 1 안내 줄에 `x 단독 체크  w AWX  m 변경`:\n%s", c.name, over)
+		if !strings.Contains(over, "w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크") {
+			t.Errorf("%s: 화면 1 안내 줄에 `w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크`:\n%s", c.name, over)
 		}
 		h.keys("m")
 		if h.st.chgMenu == nil {
@@ -153,7 +153,7 @@ func TestChangeKeyOnShowsHintAndMenu(t *testing.T) {
 			if strings.Contains(l, "▶") {
 				at = i
 			}
-			if strings.Contains(l, "x 단독 체크  w AWX  m 변경") {
+			if strings.Contains(l, "w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크") {
 				hint = i
 			}
 		}
@@ -164,9 +164,9 @@ func TestChangeKeyOnShowsHintAndMenu(t *testing.T) {
 			t.Errorf("%s: --admin 표시가 있으면 안 됨", c.name)
 		}
 		// 열려 있는 동안 다른 키·방향키·Ctrl+C 는 무시, 없는 번호도 무시 (TUI 는 종료되지 않음)
-		for _, k := range []string{"z", "\x1b[D", "\x1b[A", "\r", "x", "w", "d", "\x03", "\x1a", "?", "r"} {
+		for _, k := range []string{"z", "\x1b[D", "\x1b[A", "\r", "x", "w", "d", "h", "s", "\x03", "\x1a", "?", "r"} {
 			h.keys(k)
-			if h.st.chgMenu == nil || h.st.chg != nil || h.st.oo != nil || h.st.awx != nil || h.st.done != nil || h.st.help {
+			if h.st.chgMenu == nil || h.st.chg != nil || h.st.oo != nil || h.st.awx != nil || h.st.done != nil || h.st.menu != nil || h.st.help {
 				t.Fatalf("%s: 메뉴가 열린 동안 %q 는 무시여야 함", c.name, k)
 			}
 		}
