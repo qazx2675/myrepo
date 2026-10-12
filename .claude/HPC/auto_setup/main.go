@@ -58,6 +58,7 @@ var (
 const usageText = `사용법: auto_setup [명령]
   (인자 없음)         현재 상태 리포트 (tty 면 TUI, 아니면 텍스트 표)
   --plain             텍스트 표로 출력
+  -user <이름>        지정한 user 의 job 만 보이고, x·w·m 의 user 선택을 건너뛴다 (--admin·--plain 과 함께 쓸 수 있음)
   --admin             TUI 의 변경 메뉴(m: IP·LDAP 변경·원복)를 conf 와 무관하게 켠다 (TUI 전용, 데몬·request 에는 영향 없음)
   -h, --help          이 도움말
   --start | start     데몬 기동 (이미 실행 중이면 안내)
@@ -113,6 +114,12 @@ func splitAdmin(args []string) (rest []string, admin bool) {
 }
 
 func run(args []string) int {
+	var userErr error
+	args, forceUser, userErr = splitUser(args)
+	if userErr != nil {
+		msgErr("%v", userErr)
+		return 1
+	}
 	args, adminMode = splitAdmin(args)
 	if len(args) == 0 {
 		return cmdReport(false)

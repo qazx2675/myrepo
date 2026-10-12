@@ -243,7 +243,7 @@ SSHLOG=$E2E_SCEN/ssh.log
 t_has "probe 세션: ssh -o BatchMode=yes -o ServerAliveInterval=30 <os6_mgmt> '<dir>/auto_setup' probe -i '10s'" "$SSHLOG" \
 	"^ssh \[-o\] \[BatchMode=yes\] \[-o\] \[ServerAliveInterval=30\] \[$E2E_MGMT\] \['$OS6/auto_setup' probe -i '10s'\]$"
 t_eq "probe 로 보낸 목록 = os6 호스트만(host ip)" "$(sort -u "$E2E_SCEN/probe.log" | paste -sd'|')" "probe-list: 192.0.2.1 192.0.2.1"
-t_hasF "준비확인(os6): ssh 로 gossh -pm -script uptime" "$SSHLOG" "-pm -script -w \$f 'cat /proc/uptime'"
+t_hasF "준비확인(os6): ssh 로 gossh -pm -script uptime" "$SSHLOG" "-pm -script -w \$f \"cat /proc/uptime\""
 t_eq "준비확인 gossh: local 은 127.0.0.x 2대만" "$(grep '^local hosts=.* cmd=cat /proc/uptime$' "$E2E_SCEN/gossh.hosts" | head -1)" "local hosts=127.0.0.1 127.0.0.2 cmd=cat /proc/uptime"
 t_eq "준비확인 gossh: os6 는 192.0.2.1 만" "$(grep '^os6 hosts=.* cmd=cat /proc/uptime$' "$E2E_SCEN/gossh.hosts" | head -1)" "os6 hosts=192.0.2.1 cmd=cat /proc/uptime"
 if [[ -x $AS/bin/gossh ]]; then ok "os6 gossh 래퍼 생성(0755)"; else bad "os6 gossh 래퍼 생성(0755)" ""; fi

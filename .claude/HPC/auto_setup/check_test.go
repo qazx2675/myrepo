@@ -11,9 +11,9 @@ import (
 
 func fakeExternal(t *testing.T, fn func(stdin, name string, args ...string) (string, error)) {
 	t.Helper()
-	old := runExternal
-	runExternal = fn
-	t.Cleanup(func() { runExternal = old })
+	old, oldD := runExternal, runExternalDiag
+	runExternal, runExternalDiag = fn, fn
+	t.Cleanup(func() { runExternal, runExternalDiag = old, oldD })
 }
 
 func TestParseCheck(t *testing.T) {
@@ -96,7 +96,7 @@ func TestCheckOS6(t *testing.T) {
 			t.Fatalf("stdin: %q", stdin)
 		}
 		r := args[1]
-		for _, s := range []string{"f=$(mktemp)", "cat > $f", "/stub/gossh -pm -script -w $f 'cat /proc/uptime'",
+		for _, s := range []string{"f=$(mktemp)", "cat > $f", "/stub/gossh -pm -script -w $f \"cat /proc/uptime\"",
 			"echo ==OSI==", "cat ${f}_os_install", "rm -f $f ${f}_*"} {
 			if !strings.Contains(r, s) {
 				t.Fatalf("원격 문자열에 %q 없음: %s", s, r)
@@ -131,5 +131,26 @@ func TestCheckUnknownRouteAndEmpty(t *testing.T) {
 	}
 	if res, err := NewRealChecker().Check("local", nil); err != nil || len(res) != 0 {
 		t.Fatalf("빈 목록: %v %v", res, err)
+	}
+}
+
+// 무응답 호스트의 사유(gossh 가 출력한 메시지)를 Why 로 보존한다
+func TestParseCheckWhy(t *testing.T) {
+	out := "a: 10.5 20.0\nb: SSH 접속 실패: dial tcp 10.0.0.2:22: i/o timeout\n\x1b[33mc: OS 설치중\x1b[0m\nz: 무관\n"
+	res := parseCheck([]string{"a", "b", "c", "d"}, out, "")
+	if !res["a"].Responded || res["a"].Why != "" {
+		t.Fatalf("a: %+v", res["a"])
+	}
+	if res["b"].Responded || res["b"].Why != "SSH 접속 실패: dial tcp 10.0.0.2:22: i/o timeout" {
+		t.Fatalf("b: %+v", res["b"])
+	}
+	if res["c"].Why != "OS 설치중" || res["d"].Why != "" {
+		t.Fatalf("c/d: %+v %+v", res["c"], res["d"])
+	}
+}
+
+func TestWhySuffix(t *testing.T) {
+	if whySuffix(CheckResult{}) != "" || whySuffix(CheckResult{Why: "x"}) != " (x)" {
+		t.Fatal("whySuffix")
 	}
 }
