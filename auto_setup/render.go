@@ -397,18 +397,19 @@ func fmtClock(s Snapshot, t int64, layout string) string {
 
 // selection: 화면 상태 (렌더 입력)
 type selection struct {
-	Row        int    // 화면 1: 그룹 행 번호 (전 job 의 그룹을 이어서 센 번호)
-	Detail     bool   // 화면 2 (호스트표)
-	JobID      string // 화면 2 대상 job
-	Yml        string // 화면 2 대상 그룹
-	Host       int    // 화면 2: (필터 적용된) 호스트 행 번호
-	Filter     bool   // 화면 2: 정체·실패만
-	Confirm    bool   // 수동 실행 y/n 확인 중
-	Mode       string // 확인 중인 수동 실행 모드: ModeCheck = 설정체크만, 비면 설정체크 + 설정수정
-	Msg        string // 하단 안내 한 줄
-	DateFilter bool   // 화면 1: 날짜별 보기 (TUI 만 켬 — 날짜 줄 표시, 그 날짜의 그룹만)
-	Date       string // 화면 1: 보고 있는 날짜 YYYYMMDD ("" = 가장 최근 날짜를 따라감)
-	Change     bool   // 안내 줄에 `m 변경` 표시 (v0.7.0 변경 메뉴가 켜져 있고 로컬 데몬일 때만 TUI 가 켠다)
+	Row        int      // 화면 1: 그룹 행 번호 (전 job 의 그룹을 이어서 센 번호)
+	Detail     bool     // 화면 2 (호스트표)
+	JobID      string   // 화면 2 대상 job
+	Yml        string   // 화면 2 대상 그룹
+	Host       int      // 화면 2: (필터 적용된) 호스트 행 번호
+	Filter     bool     // 화면 2: 정체·실패만
+	Confirm    bool     // 수동 실행 y/n 확인 중
+	Mode       string   // 확인 중인 수동 실행 모드: ModeCheck = 설정체크만, 비면 설정체크 + 설정수정
+	Msg        string   // 하단 안내 한 줄
+	DateFilter bool     // 화면 1: 날짜별 보기 (TUI 만 켬 — 날짜 줄 표시, 그 날짜의 그룹만)
+	Date       string   // 화면 1: 보고 있는 날짜 YYYYMMDD ("" = 가장 최근 날짜를 따라감)
+	Change     bool     // 안내 줄에 `m 변경` 표시 (v0.7.0 변경 메뉴가 켜져 있고 로컬 데몬일 때만 TUI 가 켠다)
+	Inline     []string // 키 안내 줄 바로 아래에 붙는 줄들 (v0.7.1: m 변경 메뉴, d 수동 완료 프롬프트). 비면 화면은 종전과 같다
 }
 
 type grpRef struct{ Job, Grp int }
@@ -726,7 +727,7 @@ func msgLine(sel selection, width int, color bool) string {
 		return ""
 	}
 	st := stYellow
-	if strings.HasPrefix(sel.Msg, "요청됨") {
+	if strings.HasPrefix(sel.Msg, "요청됨") || strings.HasPrefix(sel.Msg, "완료 처리 요청") {
 		st = stGreen
 	}
 	return wrapLine(color, width, seg{" " + sel.Msg, st})
@@ -850,7 +851,8 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 	if sel.Change {
 		hint += "  m 변경"
 	}
-	return finish(head, body, cursor, height, width, color, append([]string{msgLine(sel, width, color)}, hintLines(color, width, hint)...))
+	foot := append([]string{msgLine(sel, width, color)}, hintLines(color, width, hint)...)
+	return finish(head, body, cursor, height, width, color, append(foot, sel.Inline...))
 }
 
 func flatLines(blocks [][]string) []string {
@@ -1057,14 +1059,15 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 func detailFoot(s Snapshot, sel selection, j *SnapJob, g *SnapGroup, width int, color bool) []string {
 	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
 		msgLine(sel, width, color)}
-	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침  ? 도움말  q 복귀\n c 체크+수정  t 체크만  g 재확인  v 결과  x 단독 체크  w AWX"
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침  ? 도움말  q 복귀\n c 체크+수정  t 체크만  g 재확인  v 결과  d 수동 완료  x 단독 체크  w AWX"
 	if sel.Yml == allView {
-		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀\n g 재확인  x 단독 체크  w AWX"
+		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀\n g 재확인  d 수동 완료  x 단독 체크  w AWX"
 	}
 	if sel.Change {
 		hint += "  m 변경"
 	}
 	foot = append(foot, hintLines(color, width, hint)...)
+	foot = append(foot, sel.Inline...)
 	return strings.Split(strings.Join(foot, "\n"), "\n")
 }
 
@@ -1159,6 +1162,7 @@ func renderHelp(width, height int, color bool) string {
 		"   x           체크스크립트 단독 실행 (화면 1·2 어디서나) - user·호스트 입력 → t/c 선택 → 결과 보기, 기록 안 남김 (취소: Ctrl+X)",
 		"   w           AWX 실행 (화면 1·2 어디서나) - (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",
 		"   m           변경 작업 메뉴 (화면 1·2 어디서나, os8_mgmt 에서만) - IP 변경·LDAP 변경·IP+LDAP 변경·원복·auto.appl 원복",
+		"               메뉴는 화면을 바꾸지 않고 키 안내 줄 아래에 열립니다 - 번호 선택, Esc/m/q 로 메뉴만 닫기",
 		"               user·대상 입력(Ctrl+D) → 미리보기 → yes 입력 → 실행 → 결과. 서비스는 재시작하지 않음 (취소: Ctrl+X → y)",
 		"               conf enable_ip_change/enable_ldap_change 또는 --admin 으로 켭니다 (꺼져 있으면 m 키는 무반응)",
 		"   q / Esc     종료",
@@ -1170,6 +1174,7 @@ func renderHelp(width, height int, color bool) string {
 		"   t           수동 실행: 설정체크만 (환경설정은 수정하지 않음) - 점검 결과만 보고 싶을 때, y/n 확인",
 		"               c / t 를 누르면 결과 화면이 열리고, 끝나면 그 화면에 결과가 그대로 표시됩니다 (v 로 다시 보기)",
 		"   v           이 그룹의 가장 최근 수동 실행 결과 보기",
+		"   d           수동 완료 - 안내 줄 아래에서 1 이 호스트 / 2 그룹 미완료 전체 선택 → y 확인. 부팅 시각 검증 없이 완료로 인정, 체크스크립트는 실행 안 함 (CLI: auto_setup done)",
 		"   * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
 		"   g           서버 상태 수동 재확인 - 완료 제외 모든 호스트를 os8 → 안 되면 os6_mgmt → 둘 다 안 되면 접속불가. 진행 과정·실패 지점·최종 결과가 화면에 실시간 표시",
 		" 색: 완료 초록 / 진행 청록 / 대기 회색 / 경고 노랑 / 정체·실패 빨강. NO_COLOR 설정 시 색 없음",
@@ -1251,10 +1256,10 @@ func mergedGroup(j *SnapJob) *SnapGroup {
 // ---- 키 안내 줄 색 ----
 
 // hintStyles: 키 안내 항목(첫 토큰 = 키)별 색. 이동 = 청록, c(수정 포함) = 빨강, t = 초록, g = 노랑, x = 자홍, w = 파랑,
-// m(변경 메뉴) = 주황, 나머지 = 굵게.
+// m(변경 메뉴) = 주황, d(수동 완료) = 분홍, 나머지 = 굵게.
 var hintStyles = map[string]string{
 	"↑↓": "1;36", "←→": "1;36", "←": "1;36", "Enter": "1;36",
-	"c": stRed, "t": "1;32", "g": "1;33", "x": "1;35", "w": "1;34", "m": "1;38;5;208",
+	"c": stRed, "t": "1;32", "g": "1;33", "x": "1;35", "w": "1;34", "m": "1;38;5;208", "d": "1;38;5;175",
 }
 
 // hintSegs: " ↑↓ 이동  ← 목록  c 체크+수정 …" 를 항목(두 칸 간격)별로 나눠 색을 입힌다 (색이 꺼지면 글자만 이어 붙임)

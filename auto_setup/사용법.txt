@@ -61,6 +61,8 @@ auto_setup done --job 20261002-153000-user1
 # 그 job 의 특정 그룹(yml)만
 auto_setup done --job 20261002-153000-user1 --yml gpu.yml
 
+# (0.7.1~) TUI 에서도 가능: 화면 2 에서 d → 1 이 호스트 / 2 그룹 미완료 전체 → y (위 done 과 같은 동작, 전체 보기 a 에서는 1 만)
+
 # 수동 OS 체크 실행 요청: 완료 여부와 상관없이 그룹(yml) 전체를 시도, 접속불가 호스트는 wall 에 표시, 데몬 run 큐에서 실행됨 (TUI 의 c 키와 같음)
 # 설정체크만 (환경설정 수정 안 함, TUI 의 t 키와 같음): 끝에 check
 auto_setup request manual-run 20261002-153000-user1 gpu.yml check
@@ -305,7 +307,8 @@ bash conf/update_v0.7.0.sh
 bash conf/update_v0.7.0.sh --undo
 
 # ===== 13. 변경 메뉴 m: IP 변경 · LDAP 변경 · IP+LDAP · 원복 · auto.appl 원복 (0.7.0~, os8_mgmt) =====
-# 화면: 화면 1·2 어디서나 m → 메뉴 번호 (켜진 항목만 표시) → 원복이면 종류 (IP / LDAP / 둘 다) → user 번호
+# 화면: 화면 1·2 어디서나 m → (0.7.1~) 화면은 그대로, 키 안내 줄 바로 아래에 "변경 ▶ 1 IP 변경  2 LDAP 변경 …" 한 줄 (Esc/m/q 는 메뉴만 닫음)
+#       → 메뉴 번호 (켜진 항목만 표시) → 원복이면 종류 (IP / LDAP / 둘 다) → user 번호
 #       → LDAP 계열이면 infra 번호 → 대상 입력 후 Ctrl+D → 미리보기 → yes 입력 후 Enter → 결과 (↑↓ 스크롤, q/Esc 닫기)
 #       IP 입력 줄: hostname 새IP  (예: web01 10.1.2.11, 공백·탭·쉼표·= 구분 가능. GW 는 새 IP 의 마지막 옥텟을 1 로)
 #       LDAP 입력: hostname 목록 (공백·쉼표·탭·| 구분). 원복·auto.appl 원복은 user 기록으로 대상이 미리 채워짐

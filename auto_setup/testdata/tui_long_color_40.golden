@@ -46,7 +46,7 @@
  \e[1ma 전체 그룹\e[0m  \e[1mr 새로고침\e[0m  \e[1m? 도움말\e[0m
  \e[1mq 복귀\e[0m
  \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m
- \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
+ \e[1;38;5;175md 수동 완료\e[0m  \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
 == detail filter ==
  \e[1mjob\e[0m
   \e[1m20261008-103043-alice-infra-team-long-\e[0m
@@ -71,4 +71,4 @@
  \e[1ma 전체 그룹\e[0m  \e[1mr 새로고침\e[0m  \e[1m? 도움말\e[0m
  \e[1mq 복귀\e[0m
  \e[1;31mc 체크+수정\e[0m  \e[1;32mt 체크만\e[0m  \e[1;33mg 재확인\e[0m  \e[1mv 결과\e[0m
- \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m
+ \e[1;38;5;175md 수동 완료\e[0m  \e[1;35mx 단독 체크\e[0m  \e[1;34mw AWX\e[0m

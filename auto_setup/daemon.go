@@ -823,9 +823,13 @@ func (d *Daemon) checkRoute(key, route string, hosts []string) (map[string]Check
 func (d *Daemon) applyCheck(j *Job, name string, cr CheckResult, t int64) {
 	h := j.Hosts[name]
 	if cr.Anaconda {
-		if h.SeenDown {
-			d.setStage(j, name, StageInstalling, t)
+		if !h.SeenDown { // ping X 를 못 봤어도(기동 전에 이미 내려갔다 올라온 경우) anaconda 가 보이면 설치 진행 중
+			h.SeenDown = true
+			h.DownAt = t
+			d.dirty[j.ID] = true
+			logf("anaconda 감지: %s (job %s, ping X 를 보지 못했지만 설치중으로 간주)", name, j.ID)
 		}
+		d.setStage(j, name, StageInstalling, t)
 		return
 	}
 	// 마지막 부팅 시각 (완료기록 인정 규칙용). 반올림 흔들림(±2초)은 저장하지 않음.

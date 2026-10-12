@@ -112,17 +112,15 @@ func TestChangeKeyOffIsNoop(t *testing.T) {
 // ---- 켜짐: 안내 줄 · 메뉴 항목 · 닫기 ----
 
 func TestChangeKeyOnShowsHintAndMenu(t *testing.T) {
-	five := []string{"1 IP 변경", "2 LDAP 변경", "3 IP + LDAP 변경 — IP 먼저, 실패 호스트는 LDAP 건너뜀",
-		"4 원복 — 가장 최근 백업으로 (서비스 재시작 없음)", "5 auto.appl 원복 — LDAP 적용 후 대기 중인 auto.appl 반영"}
 	cases := []struct {
 		name            string
 		ip, ldap, admin bool
 		want, not       []string
 	}{
-		{"ip 만", true, false, false, []string{five[0], five[3]}, []string{"2 LDAP", "3 IP + LDAP", "5 auto.appl"}},
-		{"ldap 만", false, true, false, []string{five[1], five[3], five[4]}, []string{"1 IP 변경", "3 IP + LDAP"}},
-		{"둘 다", true, true, false, five, nil},
-		{"--admin", false, false, true, append([]string{"변경 작업 (--admin)"}, five...), nil},
+		{"ip 만", true, false, false, []string{"변경 ▶ 1 IP 변경  4 원복   (번호 선택, Esc/m 닫기)"}, []string{"2 LDAP", "3 IP+LDAP", "5 auto.appl"}},
+		{"ldap 만", false, true, false, []string{"변경 ▶ 2 LDAP 변경  4 원복  5 auto.appl 원복"}, []string{"1 IP 변경", "3 IP+LDAP"}},
+		{"둘 다", true, true, false, []string{"변경 ▶ 1 IP 변경  2 LDAP 변경  3 IP+LDAP  4 원복  5 auto.appl 원복   (번호 선택, Esc/m 닫기)"}, nil},
+		{"--admin", false, false, true, []string{"변경(--admin) ▶ 1 IP 변경  2 LDAP 변경  3 IP+LDAP  4 원복  5 auto.appl 원복"}, nil},
 	}
 	for _, c := range cases {
 		h := chgTUISetup(t, c.ip, c.ldap, c.admin)
@@ -145,25 +143,83 @@ func TestChangeKeyOnShowsHintAndMenu(t *testing.T) {
 				t.Errorf("%s: 꺼진 항목 %q 가 보임", c.name, s)
 			}
 		}
+		// 인라인: 화면 전환 없이 현재 화면(그룹 목록·키 안내 줄)이 그대로 있고, 메뉴는 키 안내 줄 바로 아래
+		if !strings.Contains(menu, "web") && !strings.Contains(menu, "a.yml") {
+			t.Errorf("%s: 메뉴가 열려도 화면 1 이 그대로여야 함:\n%s", c.name, menu)
+		}
+		lines := strings.Split(menu, "\n")
+		at, hint := -1, -1
+		for i, l := range lines {
+			if strings.Contains(l, "▶") {
+				at = i
+			}
+			if strings.Contains(l, "x 단독 체크  w AWX  m 변경") {
+				hint = i
+			}
+		}
+		if at < 0 || hint < 0 || at != hint+1 {
+			t.Errorf("%s: 메뉴 줄(%d)이 키 안내 줄(%d) 바로 아래여야 함:\n%s", c.name, at, hint, menu)
+		}
 		if !c.admin && strings.Contains(menu, "(--admin)") {
 			t.Errorf("%s: --admin 표시가 있으면 안 됨", c.name)
 		}
-		h.keys("z") // 목록에 없는 키는 무시
-		if h.st.chgMenu == nil || h.st.chg != nil {
-			t.Errorf("%s: 없는 번호는 무시", c.name)
+		// 열려 있는 동안 다른 키·방향키·Ctrl+C 는 무시, 없는 번호도 무시 (TUI 는 종료되지 않음)
+		for _, k := range []string{"z", "\x1b[D", "\x1b[A", "\r", "x", "w", "d", "\x03", "\x1a", "?", "r"} {
+			h.keys(k)
+			if h.st.chgMenu == nil || h.st.chg != nil || h.st.oo != nil || h.st.awx != nil || h.st.done != nil || h.st.help {
+				t.Fatalf("%s: 메뉴가 열린 동안 %q 는 무시여야 함", c.name, k)
+			}
 		}
-		h.keys("q")
-		if h.st.chgMenu != nil || h.frame() != over {
-			t.Errorf("%s: q 로 메뉴를 닫으면 화면 1 로 돌아와야 함", c.name)
+		if h.frame() != menu {
+			t.Errorf("%s: 무시한 키로 화면이 바뀜", c.name)
 		}
-		h.keys("\rM") // 화면 2 에서도 (대문자 M)
-		if h.st.chgMenu == nil || !strings.Contains(h.frame(), "변경 작업") {
-			t.Errorf("%s: 화면 2 에서 M", c.name)
+		// q / m / Esc 는 메뉴만 닫는다 — 닫으면 화면은 열기 전과 바이트 동일
+		for _, k := range []string{"q", "m", "M", "\x1b"} {
+			h.keys(k)
+			if h.st.chgMenu != nil || h.frame() != over {
+				t.Errorf("%s: %q 로 메뉴를 닫으면 열기 전 화면과 같아야 함", c.name, k)
+			}
+			h.keys("m")
+		}
+		if h.handleKeyQuits("q") || h.st.chgMenu != nil {
+			t.Errorf("%s: 메뉴에서 q 는 메뉴만 닫고 TUI 를 종료하면 안 됨", c.name)
+		}
+		h.keys("\rM") // 화면 2 에서도 (대문자 M) — 화면 2 가 그대로 있고 아래에 메뉴
+		if h.st.chgMenu == nil || !strings.Contains(h.frame(), "▶") || !strings.Contains(h.frame(), "호스트") {
+			t.Errorf("%s: 화면 2 에서 M (화면 2 가 그대로):\n%s", c.name, h.frame())
 		}
 		h.keys("\x1b")
 		if h.st.chgMenu != nil || !strings.Contains(h.frame(), "m 변경") || !strings.Contains(h.frame(), "호스트") {
 			t.Errorf("%s: Esc 로 메뉴 닫고 화면 2 로:\n%s", c.name, h.frame())
 		}
+	}
+}
+
+// handleKeyQuits: 키 열을 먹이면서 handle 이 종료(true)를 돌려준 적이 있는지
+func (h *chgTUI) handleKeyQuits(s string) bool {
+	quit := false
+	for _, ev := range parseKeys([]byte(s)) {
+		if h.st.handle(ev) {
+			quit = true
+		}
+		h.st.draw()
+	}
+	return quit
+}
+
+// 메뉴가 열려 있어도 자동 갱신(새 스냅샷)은 정상 — 화면이 새 데이터로 다시 그려지고 메뉴는 유지된다
+func TestChangeMenuInlineSurvivesRefresh(t *testing.T) {
+	h := chgTUISetup(t, true, true, false)
+	h.keys("m")
+	src := h.st.src.(*fakeSrc)
+	s := twoGroupSnap()
+	s.Jobs[0].Groups[0].Hosts[1].Stage = StageDone
+	src.snap = s
+	h.st.refresh()
+	h.st.pollChange()
+	h.st.draw()
+	if h.st.chgMenu == nil || !strings.Contains(h.frame(), "변경 ▶ 1 IP 변경") {
+		t.Fatalf("갱신 후에도 메뉴가 보여야 함:\n%s", h.frame())
 	}
 }
 
@@ -404,48 +460,51 @@ func TestChangeHintWrapsNoTruncation(t *testing.T) {
 	}
 }
 
-// ---- 메뉴 화면 레이아웃 ----
+// ---- 인라인 메뉴 레이아웃 ----
 
 var chgMenuAll = []changeMenuItem{{'1', kindIP, ""}, {'2', kindLDAP, ""}, {'3', kindBoth, ""}, {'4', kindRollback, ""}, {'5', kindApplRestore, ""}}
 
-func TestChangeMenuRenderWrapNoTruncation(t *testing.T) {
+// 메뉴 줄: 폭 60/80/120 × 색 on/off × 낮음/높음 — 폭 초과·잘림(…) 없음, 색 끄면 ANSI 없음, 높을 때만 설명
+func TestChangeMenuLinesWrapNoTruncation(t *testing.T) {
 	for _, admin := range []bool{false, true} {
 		old := adminMode
 		adminMode = admin
-		for _, w := range []int{60, 80, 120} {
+		for _, w := range []int{40, 60, 80, 120} {
 			for _, color := range []bool{false, true} {
-				for _, hgt := range []int{0, 24} {
-					out := renderChangeMenu(chgMenuAll, w, hgt, color)
-					lines := strings.Split(out, "\n")
-					if hgt > 0 && len(lines) != hgt {
-						t.Errorf("w=%d 높이 %d: %d 줄", w, hgt, len(lines))
-					}
+				for _, hgt := range []int{24, 40} {
+					lines := changeMenuLines(chgMenuAll, w, hgt, color)
 					for i, l := range lines {
 						p := stripANSI(l)
 						if strWidth(p) > w || strings.Contains(p, "…") {
-							t.Errorf("w=%d color=%v 줄 %d 폭 초과·잘림: %q", w, color, i, p)
+							t.Errorf("w=%d color=%v h=%d 줄 %d 폭 초과·잘림: %q", w, color, hgt, i, p)
 						}
 					}
+					out := strings.Join(lines, "\n")
 					if !color && strings.Contains(out, "\x1b") {
 						t.Error("색 끄면 ANSI 없음")
 					}
 					plain := strings.Join(strings.Fields(stripANSI(out)), "")
-					want := []string{"변경작업", "설정변경", "미리보기→yes확인", "1IP변경—", "2LDAP변경—", "3IP+LDAP변경—IP먼저,실패호스트는LDAP건너뜀",
-						"4원복—가장최근백업으로(서비스재시작없음)", "5auto.appl원복—LDAP적용후대기중인auto.appl반영", "번호선택", "Esc/q닫기",
-						"hostname과새IP입력—ifcfg만바꾸고네트워크는재시작하지않음", "dry-run으로바뀔내용을먼저확인"}
+					want := []string{"변경▶", "1IP변경", "2LDAP변경", "3IP+LDAP", "4원복", "5auto.appl원복", "(번호선택,Esc/m닫기)"}
 					if admin {
-						want = append(want, "(--admin)")
+						want[0] = "변경(--admin)▶"
 					}
+					tall := []string{"설정변경작업입니다", "1IP변경—hostname과새IP입력—ifcfg만바꾸고네트워크는재시작하지않음", "2LDAP변경—infra선택+hostname입력—dry-run으로바뀔내용을먼저확인",
+						"3IP+LDAP—IP먼저,실패호스트는LDAP건너뜀", "4원복—가장최근백업으로(서비스재시작없음)", "5auto.appl원복—LDAP적용후대기중인auto.appl반영"}
 					for _, s := range want {
 						if !strings.Contains(plain, s) {
-							t.Errorf("w=%d color=%v admin=%v: %q 없음:\n%s", w, color, admin, s, stripANSI(out))
+							t.Errorf("w=%d color=%v h=%d admin=%v: %q 없음:\n%s", w, color, hgt, admin, s, stripANSI(out))
 						}
 					}
-					if (strings.Contains(plain, "(--admin)")) != admin {
-						t.Errorf("w=%d: --admin 표시 불일치", w)
+					for _, s := range tall {
+						if got := strings.Contains(plain, s); got != (hgt >= changeMenuTallRows) {
+							t.Errorf("w=%d h=%d: 설명 %q 표시=%v (높을 때만 나와야 함)", w, hgt, s, got)
+						}
 					}
-					if color && !strings.Contains(out, "\x1b[1;31m설정") {
+					if hgt >= changeMenuTallRows && color && !strings.Contains(out, "\x1b[1;31m설정 변경") {
 						t.Errorf("w=%d: `설정 변경` 은 빨강", w)
+					}
+					if color && !strings.Contains(out, "\x1b[1;32m1\x1b[0m") {
+						t.Errorf("w=%d: 번호는 초록 굵게", w)
 					}
 				}
 			}
@@ -454,7 +513,43 @@ func TestChangeMenuRenderWrapNoTruncation(t *testing.T) {
 	}
 }
 
-func TestChangeMenuRenderGolden(t *testing.T) {
+// 메뉴가 닫혀 있으면(Inline 비어 있음) 화면은 종전과 바이트 동일, 열리면 메뉴 줄이 안내 줄 아래에 붙고 본문만 줄어든다
+func TestInlineMenuOpenCloseByteIdentical(t *testing.T) {
+	s := sampleNormal()
+	j := s.Jobs[0]
+	for _, w := range []int{40, 60, 80, 120} {
+		for _, color := range []bool{false, true} {
+			for _, detail := range []bool{false, true} {
+				sel := selection{Change: true}
+				render := func(sel selection) string { return renderOverview(s, sel, w, 24, color) }
+				if detail {
+					sel.Detail, sel.JobID, sel.Yml = true, j.ID, j.Groups[0].Yml
+					render = func(sel selection) string { return renderDetail(s, sel, w, 24, color) }
+				}
+				closed := render(sel)
+				if closed != render(selection{Change: true, Detail: sel.Detail, JobID: sel.JobID, Yml: sel.Yml, Inline: []string{}}) {
+					t.Errorf("w=%d: 빈 Inline 은 종전과 같아야 함", w)
+				}
+				sel.Inline = changeMenuLines(chgMenuAll, w, 24, color)
+				open := strings.Split(render(sel), "\n")
+				if len(open) > 24 {
+					t.Errorf("w=%d detail=%v: 열면 높이 24 이하, 실제 %d", w, detail, len(open))
+				}
+				tail := open[len(open)-len(sel.Inline):]
+				if strings.Join(tail, "\n") != strings.Join(sel.Inline, "\n") {
+					t.Errorf("w=%d: 메뉴 줄이 맨 아래에 와야 함", w)
+				}
+				for _, l := range open {
+					if strWidth(stripANSI(l)) > w {
+						t.Errorf("w=%d 폭 초과: %q", w, stripANSI(l))
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestChangeMenuInlineGolden(t *testing.T) {
 	for _, color := range []bool{false, true} {
 		mode := "plain"
 		if color {
@@ -462,13 +557,26 @@ func TestChangeMenuRenderGolden(t *testing.T) {
 		}
 		oldAdmin := adminMode
 		var sb strings.Builder
+		s := sampleNormal()
+		j := s.Jobs[0]
 		for _, c := range []struct {
-			name  string
-			items []changeMenuItem
-			admin bool
-		}{{"all", chgMenuAll, false}, {"ip-only", chgMenuAll[:1], false}, {"admin", chgMenuAll, true}} {
+			name   string
+			items  []changeMenuItem
+			admin  bool
+			detail bool
+			h      int
+		}{{"overview-all", chgMenuAll, false, false, 24}, {"overview-ip-only", chgMenuAll[:1], false, false, 24},
+			{"detail-admin", chgMenuAll, true, true, 24}, {"overview-tall", chgMenuAll, false, false, 40}} {
 			adminMode = c.admin
-			sb.WriteString("== " + c.name + " ==\n" + renderChangeMenu(c.items, 60, 24, color) + "\n")
+			sel := selection{Change: true, Inline: changeMenuLines(c.items, 60, c.h, color)}
+			out := ""
+			if c.detail {
+				sel.Detail, sel.JobID, sel.Yml = true, j.ID, j.Groups[0].Yml
+				out = renderDetail(s, sel, 60, c.h, color)
+			} else {
+				out = renderOverview(s, sel, 60, c.h, color)
+			}
+			sb.WriteString("== " + c.name + " ==\n" + out + "\n")
 		}
 		adminMode = oldAdmin
 		got := goldenText(sb.String())
@@ -482,7 +590,7 @@ func TestChangeMenuRenderGolden(t *testing.T) {
 		}
 		want, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("골든 없음 %s (go test -run ChangeMenuRenderGolden -update): %v", name, err)
+			t.Fatalf("골든 없음 %s (go test -run ChangeMenuInlineGolden -update): %v", name, err)
 		}
 		if string(want) != got {
 			t.Errorf("%s 불일치\n--- got ---\n%s", name, got)

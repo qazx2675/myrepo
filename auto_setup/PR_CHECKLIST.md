@@ -170,12 +170,21 @@ auto_setup 데몬 + CLI 풀리퀘스트 검증 항목. 모든 항목을 확인�
 - [ ] **bindpw 미노출**: `go test ./...` 의 `TestChangeSecretMask`·`TestChangeSecretNowhere` 통과. 데모 실행 뒤 `grep -rl DEMO_BINDPW_ "$DEMO_DIR/data"` 결과 없음 (기록·로그·임시 파일). gossh 명령줄은 base64 로 싣기 때문에 평문 grep 으로는 잡히지 않음 (README 주의사항 참고)
 - [ ] **꺼짐 상태**: conf 의 `enable_*` 를 비우고 `--admin` 없이 실행 → `m` 무반응, 안내 줄에 `m 변경` 없음 (`TestChangeKeyOffIsNoop`). 화면은 내용·키가 같아야 하며, 60~80칸에서 `…` 잘림이 줄바꿈으로 바뀐 것만 허용 (`git diff -- testdata` 의 차이가 줄바꿈뿐인지 확인). **화면 바이트 동일은 아님**
 - [ ] **엔진 os6 바이너리 재빌드·커밋**: 엔진 소스를 바꾸면 `bash build_os6.sh` (.60, Go 1.20) 로 `ip_change/bin/ip-change-engine_os6`, `ldap_setting/bin/ldap-config-engine_os6` 를 다시 빌드, `file` 로 statically linked 확인, +x 유지
-- [ ] **폭 60/80/120 줄바꿈**: `TestChangeRenderWrapNoTruncation`, `TestChangeMenuRenderWrapNoTruncation` 통과, 메뉴 골든 `tui_changemenu_*_60.golden` 갱신 (폭 60 미만은 최선)
+- [ ] **폭 60/80/120 줄바꿈**: `TestChangeRenderWrapNoTruncation`, `TestChangeMenuLinesWrapNoTruncation` 통과, 메뉴 골든 `tui_changemenu_*_60.golden` 갱신 (폭 60 미만은 최선)
 - [ ] **go.mod**: `ip_change/go.mod`·`ldap_setting/go.mod` 가 `go 1.20`. Go 1.20 (.60) 에서 `go vet`·`go test`·빌드 통과
 - [ ] **랩 검증**: `bash test/run_change_os.sh` (끝 줄 `PASS=<n> FAIL=<m>`, FAIL=0), `bash test/run_change_lab.sh` (종료코드 3 이면 자기 접속 불가 → 결과에 사유를 적고 `run_change_os.sh` 결과로 대체), `bash test/demo_change.sh` 후 `--stop`
 - [ ] **conf 샘플**: `conf/auto_setup.conf.example` 에 `enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine` 이 빈 값으로 있음. `conf/auto_setup.conf` 는 커밋하지 않음
 - [ ] **setup.sh**: 엔진 소스가 없거나 빌드가 실패해도 설치 전체가 중단되지 않음 (건너뜀·경고 메시지), `ldap_config.conf` 는 600
 - [ ] **문서**: README 「변경 작업」 절, CHANGELOG 0.7.0, WORKFLOW 「변경 작업 흐름」(mermaid), ARCHITECTURE 「반드시 지킬 것」, `사용법.txt` 13절 실장비 체크리스트가 서로 어긋나지 않음
+
+## 인라인 메뉴·수동 완료·anaconda 감지 항목 (v0.7.1)
+
+- [ ] **m 메뉴 인라인**: 현재 화면이 그대로 그려진 채 키 안내 줄 바로 아래에 메뉴 줄 (`TestChangeKeyOnShowsHintAndMenu`). 번호 외 키 무시, `Esc`/`m`/`q` 는 메뉴만 닫고 TUI 를 종료하지 않음. 닫으면 열기 전과 바이트 동일 (`TestInlineMenuOpenCloseByteIdentical`)
+- [ ] **폭 40~120 줄바꿈**: `TestChangeMenuLinesWrapNoTruncation` (… 잘림 없음), 골든 `tui_changemenu_*_60.golden`·`tui_donemenu_*_60.golden`
+- [ ] **d 수동 완료**: 선택 → 확인(y 만 진행) → 완료기록(출처 manual) / 원격은 `done` 중계 (`TestDoneKey*`). 전체 보기는 `1` 만, 완료·종료 job 은 안내만, m·x·w 와 동시에 열리지 않음
+- [ ] **화면 2 안내 줄**: `d 수동 완료` 포함, 폭 40~200 에서 넘치지 않음 (`TestDoneHintAndPromptWidths`). 화면 1·`--plain` 은 변화 없음
+- [ ] **anaconda 감지**: ping X 없이 anaconda 응답이면 설치중·SeenDown·DownAt (`anaconda_test.go`), g 재확인 `단계 대기 → 설치중`, 종료 job 은 단계 불변
+- [ ] **문서**: CHANGELOG 0.7.1, README 키 표·「변경 작업」, `사용법.txt`, ARCHITECTURE, 도움말(`?`)이 서로 어긋나지 않음
 
 ## 기존 사용법 불변 확인
 

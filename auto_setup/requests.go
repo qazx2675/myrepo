@@ -494,10 +494,15 @@ func (d *Daemon) recheckApply(j *Job, name, route string, cr CheckResult, t int6
 			notes = append(notes, "경로 "+old+" → "+route)
 		}
 	}
+	before := stageLabels[effectiveStage(h, t)]
 	if active(h) && h.ReadyAt == 0 && !closed { // 종료된 job 은 경로만 갱신하고 단계는 건드리지 않음
 		d.applyCheck(j, name, cr, t)
 	}
-	notes = append(notes, "단계 "+stageLabels[effectiveStage(h, t)])
+	if after := stageLabels[effectiveStage(h, t)]; after != before {
+		notes = append(notes, "단계 "+before+" → "+after)
+	} else {
+		notes = append(notes, "단계 "+after)
+	}
 	return strings.Join(notes, ", ")
 }
 
