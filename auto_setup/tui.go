@@ -27,6 +27,8 @@ const (
 	kEsc
 	kRune
 	kEOF
+	kPgUp
+	kPgDn
 )
 
 type keyEv struct {
@@ -55,6 +57,13 @@ func parseKeys(b []byte) []keyEv {
 					return out
 				}
 				switch b[j] {
+				case '~': // ESC [ 5 ~ = PageUp, ESC [ 6 ~ = PageDown
+					switch string(b[i+2 : j]) {
+					case "5":
+						out = append(out, keyEv{k: kPgUp})
+					case "6":
+						out = append(out, keyEv{k: kPgDn})
+					}
 				case 'A':
 					out = append(out, keyEv{k: kUp})
 				case 'B':
@@ -419,6 +428,12 @@ func (st *tuiState) handle(ev keyEv) bool {
 	return st.handleOverview(ev)
 }
 
+// pageRows: PageUp/PageDown 이 한 번에 움직일 행 수 (화면 높이 - 머리·꼬리, 최소 1)
+func (st *tuiState) pageRows() int {
+	_, h := st.env.Size()
+	return rMax(h-8, 1)
+}
+
 func (st *tuiState) handleOverview(ev keyEv) bool {
 	refs := visibleGroups(st.snap, st.sel)
 	switch {
@@ -428,6 +443,12 @@ func (st *tuiState) handleOverview(ev keyEv) bool {
 		}
 	case ev.k == kDown || (ev.k == kRune && ev.r == 'j'):
 		st.sel.Row = rMax(rMin(st.sel.Row+1, len(refs)-1), 0)
+	case ev.k == kPgUp:
+		if st.sel.Row > 0 {
+			st.sel.Row = rMax(st.sel.Row-st.pageRows(), 0)
+		}
+	case ev.k == kPgDn:
+		st.sel.Row = rMax(rMin(st.sel.Row+st.pageRows(), len(refs)-1), 0)
 	case (ev.k == kLeft || ev.k == kRight) && st.sel.Row == -1: // 날짜 줄: ← 전날, → 다음날
 		delta := 1
 		if ev.k == kLeft {
@@ -497,6 +518,10 @@ func (st *tuiState) handleDetail(ev keyEv) {
 		st.sel.Host = rMax(st.sel.Host-1, 0)
 	case ev.k == kDown || (ev.k == kRune && ev.r == 'j'):
 		st.sel.Host = rMax(rMin(st.sel.Host+1, n-1), 0)
+	case ev.k == kPgUp:
+		st.sel.Host = rMax(st.sel.Host-st.pageRows(), 0)
+	case ev.k == kPgDn:
+		st.sel.Host = rMax(rMin(st.sel.Host+st.pageRows(), n-1), 0)
 	case ev.k == kLeft || ev.k == kEsc || (ev.k == kRune && ev.r == 'q'):
 		st.sel.Detail = false
 	case ev.k == kRune && (ev.r == 'f' || ev.r == 'F'):

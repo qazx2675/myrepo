@@ -195,9 +195,9 @@ func (st *tuiState) handleView(ev keyEv) {
 		v.scroll = rMax(v.scroll-1, 0)
 	case ev.k == kDown || (ev.k == kRune && ev.r == 'j'):
 		v.scroll++
-	case ev.k == kRune && ev.r == ' ':
+	case ev.k == kRune && ev.r == ' ', ev.k == kPgDn:
 		v.scroll += page
-	case ev.k == kRune && ev.r == 'b':
+	case ev.k == kRune && ev.r == 'b', ev.k == kPgUp:
 		v.follow = false
 		v.scroll = rMax(v.scroll-page, 0)
 	case ev.k == kRune && (ev.r == 'G'):
@@ -236,7 +236,7 @@ func renderView(v *viewState, width, height int, color bool) string {
 	head := wrapSegs(color, width, 1, "  ", redSegs(" "+v.title, stBold)...)
 	head = append(head, wrapSegs(color, width, 1, "  ", seg{" 상태: " + v.status, map[bool]string{true: stGreen, false: stCyan}[v.done]})...)
 	head = append(head, sepLine(width))
-	hint := " ↑↓ 스크롤  Space/b 쪽 이동  q/Esc 닫기"
+	hint := " ↑↓ 스크롤  PgUp/PgDn·Space/b 쪽 이동  q/Esc 닫기"
 	switch {
 	case v.kind == viewRecheck && v.done:
 		hint += "  g 다시 재확인"
