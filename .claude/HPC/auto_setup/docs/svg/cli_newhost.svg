@@ -90,7 +90,7 @@
   <text x="273" y="831" class="t tm">y</text>
   <rect x="40" y="850" width="450" height="62" rx="6" class="ldap"/>
   <text x="265" y="870" class="t tb" text-anchor="middle">01 실행 (터미널을 넘김)</text>
-  <text x="265" y="886" class="t" text-anchor="middle">프로파일이 있으면 번호 선택 · nodeinfo 는 N 으로 강제 · 대상 목록 자동</text>
+  <text x="265" y="886" class="t" text-anchor="middle">y 프로파일 선택(nodeinfo N) · n 일반 실행 · 대상 목록 자동</text>
   <text x="265" y="902" class="t" text-anchor="middle">입력 · DNS 점검했으면 AWX_DNS_CHECKED=1</text>
   <text x="40" y="949" class="t tm">범례</text>
   <rect x="80" y="938" width="14" height="14" class="box"/>

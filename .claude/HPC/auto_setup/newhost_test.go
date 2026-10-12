@@ -433,10 +433,16 @@ func TestNewhostAwxEnv(t *testing.T) {
 	if _, ok := m["AWX_DNS_CHECKED"]; ok {
 		t.Errorf("DNS 미점검인데 AWX_DNS_CHECKED: %v", m)
 	}
-	if _, ok := m["AWX_VERIFY_FILE"]; ok || m["AWX_AUTO_NODEINFO"] != "n" || m["AWX_USER"] != "bob" {
+	// 프로파일을 고르지 않은 일반 실행에는 자동 N 을 걸지 않는다 (nodeinfo 를 쓸 수 있어야 함)
+	if _, ok := m["AWX_VERIFY_FILE"]; ok || m["AWX_USER"] != "bob" {
 		t.Errorf("일반 실행: %v", m)
 	}
-	if !strings.Contains(newhostAwxNote(nil), "N 으로 실행") || !strings.Contains(newhostAwxNote(p), "프로파일 2 의 nodeinfo=y 와 무관") {
+	for _, k := range []string{"AWX_AUTO_NODEINFO", "AWX_AUTO_OS"} {
+		if v, ok := m[k]; ok {
+			t.Errorf("일반 실행에 %s=%s 가 있으면 안 됨: %v", k, v, m)
+		}
+	}
+	if !strings.Contains(newhostAwxNote(nil), "nodeinfo 질문은 직접 응답") || !strings.Contains(newhostAwxNote(p), "프로파일 2 의 nodeinfo=y 와 무관") {
 		t.Errorf("안내 줄")
 	}
 }

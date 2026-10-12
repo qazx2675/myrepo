@@ -1172,7 +1172,7 @@ func renderHelp(width, height int, color bool) string {
 		"               * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
 		"   w           AWX 메뉴 (화면 1·2 어디서나)",
 		"               1 AWX 실행 - w / Enter / 1 중 아무 키 (그래서 ww 가 예전의 w). (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",
-		"               2 신규 설치 양식 - hostname ip mac 붙여넣기 → 템플릿 지정 → DNS 점검 → 미리보기 → awx_dir/<user>.txt 저장(기존 파일 백업) → AWX 실행? (nodeinfo N, os8_mgmt 에서만, CLI: auto_setup newhost)",
+		"               2 신규 설치 양식 - hostname ip mac 붙여넣기 → 템플릿 지정 → DNS 점검 → 미리보기 → awx_dir/<user>.txt 저장(기존 파일 백업) → AWX 실행? (프로파일을 고르면 nodeinfo N, 안 고르면 일반 실행, os8_mgmt 에서만, CLI: auto_setup newhost)",
 		"   m           변경 작업 메뉴 (화면 1·2 어디서나, os8_mgmt 에서만) - IP 변경·LDAP 변경·IP+LDAP 변경·원복·auto.appl 원복",
 		"               메뉴는 화면을 바꾸지 않고 키 안내 줄 아래에 열립니다 - 번호 선택, Esc/m/q 로 메뉴만 닫기",
 		"               user·대상 입력(Ctrl+D) → 미리보기 → yes 입력 → 실행 → 결과. 서비스는 재시작하지 않음 (취소: Ctrl+X → y)",

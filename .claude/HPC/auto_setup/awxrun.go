@@ -39,7 +39,7 @@ type awxState struct {
 	step     int
 	profiles []AwxProfile
 	problems []string
-	nh       *nhAwxReq // 신규 설치 양식에서 이어 온 실행 (user·대상 목록은 양식 그대로, nodeinfo N 강제), nil = 일반 w
+	nh       *nhAwxReq // 신규 설치 양식에서 이어 온 실행 (user·대상 목록은 양식 그대로, 프로파일을 고르면 nodeinfo N 강제), nil = 일반 w
 }
 
 // awxExec: bash 01 을 dir 에서 env 로 실행하고 종료 코드를 돌려준다 (SIGINT 로 죽으면 130). 테스트에서 가짜로 교체.
@@ -225,8 +225,12 @@ func renderAwx(a *awxState, width, height int, color bool) string {
 		hint = " 번호를 누르면 바로 실행합니다  Esc 뒤로"
 	}
 	if a.nh != nil { // 신규 설치 양식에서 이어 옴
-		body = append([][]string{wrapSegs(color, width, 1, "   ", seg{fmt.Sprintf(" 신규 설치 양식: user %s · 대상 %d대 · nodeinfo 는 프로파일과 상관없이 N",
-			a.nh.User, len(a.nh.Hosts)), stCyan}), {""}}, body...)
+		note := "y 로 프로파일을 고르면 nodeinfo 는 N 으로 실행 · n 이면 일반 실행(nodeinfo 질문에 직접 응답)"
+		if a.step == awxPick {
+			note = "프로파일의 nodeinfo 값과 상관없이 N 으로 실행"
+		}
+		body = append([][]string{wrapSegs(color, width, 1, "   ", seg{fmt.Sprintf(" 신규 설치 양식: user %s · 대상 %d대 · %s",
+			a.nh.User, len(a.nh.Hosts), note), stCyan}), {""}}, body...)
 	}
 	out := append(wrapSegs(color, width, 1, "  ", redSegs(" "+title, stBold)...), sepLine(width))
 	foot := append([]string{sepLine(width)}, hintLines(color, width, hint)...)

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.8.1] - 2026-10-13
+
+### 수정
+- **신규 설치 양식 → AWX 실행에서 프로파일을 고르지 않으면 자동 N 을 적용하지 않는다**: v0.8.0 은 프로파일 없이 이어가도 `AWX_AUTO_NODEINFO=n` 을 넘겨 nodeinfo 가 자동 N 이었다. 이제 `AWX auto 실행? [y/n]` 에서 `y` 로 프로파일을 고른 경우에만 nodeinfo N 으로 실행하고, `n`(또는 프로파일 없음)은 자동 응답이 없는 일반 실행이라 01 의 nodeinfo 질문에 직접 응답한다 (nodeinfo 를 쓸 수 있도록). user·대상 목록·`AWX_DNS_CHECKED` 자동 입력은 그대로. 질문 화면 머리·저장 화면 안내 줄·도움말 문구 갱신, 골든 `tui_newhost_*` 안내 줄 1줄 갱신
+- 01 의 `AWX_AUTO_NODEINFO` 단독 사용(awx_script `[Unreleased]`)은 auto_setup 이 더 이상 쓰지 않는다 (수동 실행용으로만 남음)
+
 ## [0.8.0] - 2026-10-13
 
 ### 추가

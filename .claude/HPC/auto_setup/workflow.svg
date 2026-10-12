@@ -136,7 +136,7 @@
   <text x="1080" y="214" class="t" text-anchor="middle">(범위·패턴·이력 추천)</text>
   <text x="1080" y="230" class="t" text-anchor="middle">→ DNS 점검 → 미리보기 → awx_dir/&lt;user&gt;.txt</text>
   <text x="1080" y="246" class="t" text-anchor="middle">저장 (기존은 backup/)</text>
-  <text x="1080" y="262" class="t" text-anchor="middle">→ AWX 실행(01): nodeinfo N 강제, 대상 목록</text>
+  <text x="1080" y="262" class="t" text-anchor="middle">→ AWX 실행(01): 프로파일 시 nodeinfo N, 대상 목록</text>
   <text x="1080" y="278" class="t" text-anchor="middle">자동 입력</text>
   <rect x="930" y="332" width="300" height="174" rx="6" class="nw"/>
   <text x="1080" y="352" class="t tb" text-anchor="middle">DNS 점검 (dnscheck.go · 01 [4-1]</text>
