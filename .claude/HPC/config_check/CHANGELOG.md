@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-10-14 — 내부 흐름 상세 설명도 추가
+
+- **문서(`workflow-detail.svg`)**: 실사용용 `workflow.svg` 와 별개로, 내부 처리 단계·변수·상태 코드(OK/OFF/REF/INST/NOSV/NONE)·임시 파일 구조를 설명하는 상세 흐름도를 추가했다. 스크립트 코드는 변경하지 않았다.
+- **영향 범위**: `workflow-detail.svg`(신규), `README.md` 문서별 설명 표 1줄, `CHANGELOG.md`.
+
 ## 2026-10-07 — 처리 흐름도 추가
 
 - **문서(`workflow.svg`)**: user 선택 → 리스트 확인 → 작업 진행(y/n) → OS 체크(gossh 1회) → 체크 리포트 → 환경설정(y/n/set) → 재체크 → 마무리 출력 흐름도를 추가했다. 스크립트 코드는 변경하지 않았다.

@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1350" width="100%" height="100%" style="background-color: #0f172a; font-family: 'Pretendard', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="50%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="stepGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="blueBox" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+    <linearGradient id="emeraldBox" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#065f46"/>
+    </linearGradient>
+    <linearGradient id="amberBox" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b45309"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="purpleBox" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#5b21b6"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <!-- Title Banner -->
+  <rect x="30" y="25" width="1140" height="85" rx="14" fill="url(#headerGrad)" stroke="#475569" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="60" y="62" fill="#f8fafc" font-size="24" font-weight="bold">config_check.sh — 워크플로 및 아키텍처 다이어그램</text>
+  <text x="60" y="90" fill="#94a3b8" font-size="14">OS 체크 + 환경설정 적용 + 재체크 + 벤더/VM/DHCP 코멘트 자동화 (gossh 기반)</text>
+  <rect x="960" y="42" width="185" height="32" rx="6" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+  <text x="1052" y="63" fill="#38bdf8" font-size="13" font-weight="bold" text-anchor="middle">.claude/HPC/config_check</text>
+
+  <!-- Left Column: Setup & Env Config -->
+  <rect x="30" y="135" width="320" height="370" rx="12" fill="url(#stepGrad)" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="30" y="135" width="320" height="38" rx="12" fill="#1e293b"/>
+  <text x="50" y="160" fill="#38bdf8" font-size="15" font-weight="bold">0. 초기 설정 및 공통 모듈</text>
+
+  <rect x="48" y="190" width="284" height="85" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <text x="62" y="212" fill="#e2e8f0" font-size="13" font-weight="bold">주요 경로 및 스크립트 변수</text>
+  <text x="62" y="232" fill="#94a3b8" font-size="11.5">• info_mn.sh / info.sh (User 조회)</text>
+  <text x="62" y="250" fill="#94a3b8" font-size="11.5">• check/os/run.sh (OS 체크 스크립트)</text>
+  <text x="62" y="268" fill="#94a3b8" font-size="11.5">• appl_change.sh / setting.sh / setting_insert.sh</text>
+
+  <rect x="48" y="288" width="284" height="95" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <text x="62" y="310" fill="#e2e8f0" font-size="13" font-weight="bold">환경 맞춤 변수 &amp; 세션 제어</text>
+  <text x="62" y="330" fill="#94a3b8" font-size="11.5">• os6_host, uptime_enable_user</text>
+  <text x="62" y="348" fill="#94a3b8" font-size="11.5">• ai_server_list / script, dhcp_server</text>
+  <text x="62" y="366" fill="#fbbf24" font-size="11.5">• gsh(): SIGINT 무시 래퍼 (gossh Ctrl+C 유지)</text>
+
+  <rect x="48" y="396" width="284" height="92" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <text x="62" y="418" fill="#e2e8f0" font-size="13" font-weight="bold">내장 AWK 헬퍼 함수</text>
+  <text x="62" y="438" fill="#94a3b8" font-size="11.5">• VENDOR_AWK: 호스트명 접두어별 벤더 판별</text>
+  <text x="72" y="455" fill="#64748b" font-size="11">(c/h/sh→D, p→L, l→J, d→T, m→W, 기타→X)</text>
+  <text x="62" y="473" fill="#94a3b8" font-size="11.5">• EXPAND_AWK: host[01-03] 압축 표기 전개</text>
+
+  <!-- Left Column Middle: State Codes -->
+  <rect x="30" y="525" width="320" height="295" rx="12" fill="url(#stepGrad)" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="30" y="525" width="320" height="38" rx="12" fill="#1e293b"/>
+  <text x="50" y="550" fill="#a78bfa" font-size="15" font-weight="bold">호스트 상태 분류 코드 ($TMP/*.state)</text>
+
+  <rect x="48" y="580" width="65" height="26" rx="5" fill="#065f46" stroke="#34d399"/>
+  <text x="80" y="598" fill="#ecfdf5" font-size="12" font-weight="bold" text-anchor="middle">OK</text>
+  <text x="125" y="598" fill="#cbd5e1" font-size="12.5">정상 접속 및 체크 출력 확인</text>
+
+  <rect x="48" y="618" width="65" height="26" rx="5" fill="#9f1239" stroke="#fb7185"/>
+  <text x="80" y="636" fill="#fff1f2" font-size="12" font-weight="bold" text-anchor="middle">OFF</text>
+  <text x="125" y="636" fill="#cbd5e1" font-size="12.5">_res_off / _res_cancel (전원/취소)</text>
+
+  <rect x="48" y="656" width="65" height="26" rx="5" fill="#92400e" stroke="#fbbf24"/>
+  <text x="80" y="674" fill="#fffbeb" font-size="12" font-weight="bold" text-anchor="middle">REF</text>
+  <text x="125" y="674" fill="#cbd5e1" font-size="12.5">_res_refsed (Connection Refused)</text>
+
+  <rect x="48" y="694" width="65" height="26" rx="5" fill="#1e40af" stroke="#60a5fa"/>
+  <text x="80" y="712" fill="#eff6ff" font-size="12" font-weight="bold" text-anchor="middle">INST</text>
+  <text x="125" y="712" fill="#cbd5e1" font-size="12.5">_os_install (OS 설치 진행 중)</text>
+
+  <rect x="48" y="732" width="65" height="26" rx="5" fill="#5b21b6" stroke="#c084fc"/>
+  <text x="80" y="750" fill="#f5f3ff" font-size="12" font-weight="bold" text-anchor="middle">NOSV</text>
+  <text x="125" y="750" fill="#cbd5e1" font-size="12.5">_nosvrauto (svrauto 계정 없음)</text>
+
+  <rect x="48" y="770" width="65" height="26" rx="5" fill="#334155" stroke="#94a3b8"/>
+  <text x="80" y="788" fill="#f8fafc" font-size="12" font-weight="bold" text-anchor="middle">NONE</text>
+  <text x="125" y="788" fill="#cbd5e1" font-size="12.5">접속 성공했으나 체크 출력 없음 (no_output)</text>
+
+  <!-- Main Workflow Column -->
+  <rect x="390" y="135" width="780" height="95" rx="12" fill="url(#blueBox)" stroke="#60a5fa" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="415" y="165" fill="#ffffff" font-size="16" font-weight="bold">1. User 선택 및 대상 파일 검증</text>
+  <text x="415" y="190" fill="#dbeafe" font-size="13">• info_mn.sh 실행 → 번호 입력(user_choice) 또는 -auto 인자 처리 → info.sh로 User ID 추출</text>
+  <text x="415" y="212" fill="#dbeafe" font-size="13">• 실행 디렉토리 내 ${user}.txt 존재 여부 확인 (없으면 즉시 종료)</text>
+
+  <line x1="780" y1="230" x2="780" y2="260" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+
+  <rect x="390" y="265" width="780" height="105" rx="12" fill="url(#stepGrad)" stroke="#38bdf8" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="415" y="295" fill="#38bdf8" font-size="16" font-weight="bold">2. 작업 대상 호스트 리스트 정제 및 요약 출력</text>
+  <text x="415" y="320" fill="#e2e8f0" font-size="13">• 공백/줄바꿈 정규화 및 중복 제거 → $TMP/hosts 생성 (총 대수 TOTAL 계산)</text>
+  <text x="415" y="342" fill="#cbd5e1" font-size="13">• 최대 30행 다단(Multi-column) 테이블 형태로 대상 호스트 목록 출력</text>
+  <text x="415" y="362" fill="#cbd5e1" font-size="13">• 호스트 접두어(Prefix) 그룹별 수량 집계 (예: prefix * Nea, 총 N EA)</text>
+
+  <line x1="780" y1="370" x2="780" y2="400" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+
+  <rect x="390" y="405" width="780" height="90" rx="12" fill="url(#stepGrad)" stroke="#38bdf8" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="415" y="435" fill="#38bdf8" font-size="16" font-weight="bold">3. 작업 진행 확인 및 Uptime 사전 조회</text>
+  <text x="415" y="460" fill="#e2e8f0" font-size="13">• 프롬프트: "작업을 진행하시겠습니까? (y/n)" → 'n' 선택 시 안전 종료</text>
+  <text x="415" y="482" fill="#fbbf24" font-size="13">• [조건부] user가 uptime_enable_user에 해당하면: gsh -script -w "$HOSTS" "uptime" 실행</text>
+
+  <line x1="780" y1="495" x2="780" y2="525" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+
+  <rect x="390" y="530" width="780" height="220" rx="12" fill="url(#emeraldBox)" stroke="#34d399" stroke-width="2" filter="url(#shadow)"/>
+  <text x="415" y="562" fill="#ffffff" font-size="17" font-weight="bold">4. 1차 OS 체크 실행 — run_check "$HOSTS" "chk1"</text>
+  <rect x="415" y="575" width="730" height="36" rx="6" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+  <text x="430" y="598" fill="#a7f3d0" font-size="13" font-family="monospace">gsh -pm -script -w "$t" "bash $check_script pd; :" &gt; $TMP/chk1.out 2&gt; $TMP/chk1.err</text>
+
+  <rect x="415" y="625" width="230" height="108" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="430" y="648" fill="#34d399" font-size="13" font-weight="bold">① 접속/상태 파싱 (.state)</text>
+  <text x="430" y="668" fill="#cbd5e1" font-size="11.5">• gossh 결과 파일(_res_off 등)</text>
+  <text x="430" y="685" fill="#cbd5e1" font-size="11.5">  EXPAND_AWK로 호스트별 전개</text>
+  <text x="430" y="702" fill="#cbd5e1" font-size="11.5">• 출력 유무 대조하여 OK / NONE</text>
+  <text x="430" y="719" fill="#cbd5e1" font-size="11.5">  최종 상태 매핑 및 카운트 집계</text>
+
+  <rect x="665" y="625" width="230" height="108" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="680" y="648" fill="#34d399" font-size="13" font-weight="bold">② 체크 결과 분석 (.fail / .info)</text>
+  <text x="680" y="668" fill="#cbd5e1" font-size="11.5">• 항목별 FAIL / INFO 라인 추출</text>
+  <text x="680" y="685" fill="#cbd5e1" font-size="11.5">• usb0 인터페이스 검출 (.usb0)</text>
+  <text x="680" y="702" fill="#cbd5e1" font-size="11.5">• LDAP 설정 상태 요약 (.ldap)</text>
+  <text x="680" y="719" fill="#cbd5e1" font-size="11.5">• 상태줄(total/0숨김/탭구분) 출력</text>
+
+  <rect x="915" y="625" width="230" height="108" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="930" y="648" fill="#34d399" font-size="13" font-weight="bold">③ 특수 서버/인프라 연동</text>
+  <text x="930" y="668" fill="#cbd5e1" font-size="11.5">• AI GPU 서버 포함 시 전용</text>
+  <text x="930" y="685" fill="#cbd5e1" font-size="11.5">  ai_server_script 실행</text>
+  <text x="930" y="702" fill="#cbd5e1" font-size="11.5">• vCenter VM 인벤토리 대조</text>
+  <text x="930" y="719" fill="#cbd5e1" font-size="11.5">• DHCP 서버 정보 조회 연동</text>
+
+  <line x1="780" y1="750" x2="780" y2="785" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrowAmber)"/>
+
+  <rect x="390" y="790" width="780" height="235" rx="12" fill="url(#stepGrad)" stroke="#fbbf24" stroke-width="2" filter="url(#shadow)"/>
+  <text x="415" y="822" fill="#fbbf24" font-size="17" font-weight="bold">5. 환경설정 수정 분기 — "환경설정을 수정하시겠습니까? (y / n / set)"</text>
+
+  <rect x="415" y="842" width="230" height="162" rx="8" fill="url(#amberBox)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="530" y="868" fill="#ffffff" font-size="15" font-weight="bold" text-anchor="middle">[ y ] 전체 설정 적용</text>
+  <line x1="430" y1="878" x2="630" y2="878" stroke="#fcd34d" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="430" y="900" fill="#fef3c7" font-size="12">1) appl_change.sh 실행</text>
+  <text x="430" y="922" fill="#fef3c7" font-size="12">2) setting.sh 실행</text>
+  <text x="430" y="944" fill="#fef3c7" font-size="12">3) setting_insert.sh 실행</text>
+  <text x="430" y="966" fill="#fef3c7" font-size="12">4) usb0 검출 호스트 비활성화</text>
+  <text x="430" y="988" fill="#ffffff" font-size="12" font-weight="bold">→ 완료 후 2차 재체크 진행</text>
+
+  <rect x="665" y="842" width="230" height="162" rx="8" fill="url(#purpleBox)" stroke="#c084fc" stroke-width="1.5"/>
+  <text x="780" y="868" fill="#ffffff" font-size="15" font-weight="bold" text-anchor="middle">[ set ] 기본 설정만 적용</text>
+  <line x1="680" y1="878" x2="880" y2="878" stroke="#e9d5ff" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="680" y="900" fill="#f3e8ff" font-size="12">• appl_change.sh 생략</text>
+  <text x="680" y="922" fill="#f3e8ff" font-size="12">1) setting.sh 실행</text>
+  <text x="680" y="944" fill="#f3e8ff" font-size="12">2) setting_insert.sh 실행</text>
+  <text x="680" y="966" fill="#f3e8ff" font-size="12">3) 필요 시 네트워크/usb0 정리</text>
+  <text x="680" y="988" fill="#ffffff" font-size="12" font-weight="bold">→ 완료 후 2차 재체크 진행</text>
+
+  <rect x="915" y="842" width="230" height="162" rx="8" fill="#1e293b" stroke="#64748b" stroke-width="1.5"/>
+  <text x="1030" y="868" fill="#e2e8f0" font-size="15" font-weight="bold" text-anchor="middle">[ n ] 수정 건너뛰기</text>
+  <line x1="930" y1="878" x2="1130" y2="878" stroke="#94a3b8" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="930" y="905" fill="#cbd5e1" font-size="12">• 원격 설정 변경 스크립트를</text>
+  <text x="930" y="925" fill="#cbd5e1" font-size="12">  실행하지 않음</text>
+  <text x="930" y="955" fill="#94a3b8" font-size="12">• 1차 체크(chk1) 결과를 기준으로</text>
+  <text x="930" y="975" fill="#94a3b8" font-size="12">  최종 요약/코멘트 단계로 이동</text>
+
+  <line x1="530" y1="1004" x2="530" y2="1055" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowAmber)"/>
+  <line x1="780" y1="1004" x2="780" y2="1055" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowAmber)"/>
+  <line x1="1030" y1="1004" x2="1030" y2="1185" stroke="#64748b" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+
+  <rect x="390" y="1060" width="520" height="95" rx="12" fill="url(#emeraldBox)" stroke="#34d399" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="415" y="1090" fill="#ffffff" font-size="16" font-weight="bold">6. 2차 OS 재체크 — run_check "$HOSTS" "chk2"</text>
+  <text x="415" y="1115" fill="#d1fae5" font-size="13">• 환경설정 적용 후 동일한 대상에 대해 run.sh pd 재실행</text>
+  <text x="415" y="1137" fill="#d1fae5" font-size="13">• 1차 대비 해결된 항목 확인 및 잔여 FAIL / INFO / LDAP 상태 갱신</text>
+
+  <line x1="650" y1="1155" x2="650" y2="1185" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+
+  <!-- Left Bottom Box: Temp Files Info -->
+  <rect x="30" y="840" width="320" height="475" rx="12" fill="url(#stepGrad)" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="30" y="840" width="320" height="38" rx="12" fill="#1e293b"/>
+  <text x="50" y="865" fill="#38bdf8" font-size="15" font-weight="bold">임시 디렉토리 ($TMP) 산출물 구조</text>
+
+  <text x="50" y="900" fill="#f8fafc" font-size="13" font-family="monospace">/tmp/config_check.XXXXXX/</text>
+  <text x="60" y="928" fill="#cbd5e1" font-size="12.5" font-family="monospace">├─ hosts</text>
+  <text x="165" y="928" fill="#94a3b8" font-size="12">정제된 전체 대상 호스트</text>
+  <text x="60" y="958" fill="#34d399" font-size="12.5" font-family="monospace">├─ chk1.out / .err</text>
+  <text x="195" y="958" fill="#94a3b8" font-size="12">gossh 원문 출력</text>
+  <text x="60" y="988" fill="#34d399" font-size="12.5" font-family="monospace">├─ chk1.state</text>
+  <text x="165" y="988" fill="#94a3b8" font-size="12">호스트별 상태 태그 매핑</text>
+  <text x="60" y="1018" fill="#fb7185" font-size="12.5" font-family="monospace">├─ chk1.fail</text>
+  <text x="165" y="1018" fill="#94a3b8" font-size="12">FAIL 발생 호스트 및 내역</text>
+  <text x="60" y="1048" fill="#38bdf8" font-size="12.5" font-family="monospace">├─ chk1.info</text>
+  <text x="165" y="1048" fill="#94a3b8" font-size="12">INFO 항목 요약 내역</text>
+  <text x="60" y="1078" fill="#fbbf24" font-size="12.5" font-family="monospace">├─ chk1.usb0</text>
+  <text x="165" y="1078" fill="#94a3b8" font-size="12">usb0 인터페이스 감지 호스트</text>
+  <text x="60" y="1108" fill="#c084fc" font-size="12.5" font-family="monospace">├─ chk1.ldap</text>
+  <text x="165" y="1108" fill="#94a3b8" font-size="12">LDAP 설정 상태 요약</text>
+  <text x="60" y="1138" fill="#64748b" font-size="12.5" font-family="monospace">└─ chk2.*</text>
+  <text x="165" y="1138" fill="#94a3b8" font-size="12">환경설정 수정 후 2차 재체크</text>
+
+  <rect x="48" y="1165" width="284" height="130" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <text x="62" y="1190" fill="#fbbf24" font-size="13" font-weight="bold">핵심 안정성 처리</text>
+  <text x="62" y="1212" fill="#cbd5e1" font-size="11.5">• trap 'rm -rf "$TMP"' EXIT 로 종료 시</text>
+  <text x="62" y="1230" fill="#cbd5e1" font-size="11.5">  임시 파일 자동 정리</text>
+  <text x="62" y="1252" fill="#cbd5e1" font-size="11.5">• run.sh 실행 시 끝에 "; :" 를 붙여</text>
+  <text x="62" y="1270" fill="#cbd5e1" font-size="11.5">  non-zero 종료코드에 의한 stderr 분리 방지</text>
+
+  <rect x="390" y="1190" width="780" height="125" rx="12" fill="url(#blueBox)" stroke="#60a5fa" stroke-width="2" filter="url(#shadow)"/>
+  <text x="415" y="1222" fill="#ffffff" font-size="17" font-weight="bold">7. 최종 결과 요약 및 벤더 코멘트 생성</text>
+  <text x="415" y="1248" fill="#dbeafe" font-size="13">• 상태별 집계 줄 출력 (0건인 항목은 숨김 처리, 탭 구분, Total 색상 강조, no_output 분리 표시)</text>
+  <text x="415" y="1272" fill="#dbeafe" font-size="13">• 미접속/오류 호스트(OFF, REF, INST, NOSV) 및 FAIL 호스트에 대해 VENDOR_AWK로 벤더 코드(D/L/J/T/W/X) 매핑</text>
+  <text x="415" y="1296" fill="#fef08a" font-size="13" font-weight="bold">• vCenter VM 상태(vcenter_vm_inventory_status.txt) 및 DHCP 조회 결과를 결합하여 전달용 코멘트 출력</text>
+</svg>
