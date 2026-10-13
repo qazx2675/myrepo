@@ -124,11 +124,9 @@ flowchart TD
     J --> K["invsync -user -file yml"]
     K -->|실패| K1["skip 나머지<br/>fail_cnt++"]
     K1 --> J
-    K -->|성공| L["dhcp -user -infra"]
-    L -->|실패| K1
-    L -->|성공| M["pxe -user -infra -os -boot -splunk"]
-    M -->|실패| K1
-    M -->|성공| M1["성공 기록"]
+    K -->|성공| L["dhcp -user -infra<br/>∥ pxe -user -infra -os -boot -splunk<br/>(동시 실행, 둘 다 끝날 때까지 대기)"]
+    L -->|dhcp 또는 pxe 실패| K1
+    L -->|둘 다 성공| M1["성공 기록"]
     M1 --> J
     J -->|모든 yml 완료| N["요약 출력<br/>전체/성공/실패"]
     N --> O{"실패<br/>여부"}

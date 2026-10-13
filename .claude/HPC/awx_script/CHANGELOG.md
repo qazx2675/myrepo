@@ -11,6 +11,7 @@
 
 ### 변경
 - 문서: `workflow.svg` 가 오른쪽·아래가 잘려 보이던 문제 수정(캔버스를 1200x2440 으로 확대, DNS 점검 상자 폭 확대) 및 흐름도에서 "[0] 초기화" 상자 제거(`WORKFLOW.md` 도 동일)
+- 문서: 02 흐름도(`workflow.svg`, `WORKFLOW.md` 배치 모드)를 실제 동작에 맞춰 "dhcp ∥ pxe 동시 실행(둘 다 끝나야 다음 yml)" 으로 수정
 - 01: `AWX_AUTO_NODEINFO`(y|n)를 **`AWX_AUTO` 없이도** 존중 — 이 변수만 주면 `awx nodeinfo 사용여부` 질문만 자동 답변(`… (auto_setup)` 표시)하고 나머지 질문은 그대로 직접 응답. auto_setup 신규 설치 양식이 프로파일 없이 AWX 를 실행할 때 nodeinfo N 을 넘기는 용도. `AWX_AUTO=1` 일 때의 기존 동작과 변수가 없을 때의 동작은 그대로
 
 ### 추가 (이전 미배포 항목)
