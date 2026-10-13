@@ -1,207 +1,214 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="2400" height="4880" viewBox="0 0 1200 2440" style="background-color: #ffffff" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="2000" viewBox="0 0 1100 2000" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans CJK KR',sans-serif">
   <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4a4f63"/></marker>
     <style>
-      .box { fill: #fff4e6; stroke: #333; stroke-width: 2; }
-      .diamond { fill: #e8f4f8; stroke: #333; stroke-width: 2; }
-      .error { fill: #ffe6e6; stroke: #c00; stroke-width: 2; }
-      .text { font-family: Arial, sans-serif; font-size: 13px; text-anchor: middle; }
-      .title { font-size: 16px; font-weight: bold; }
-      .line { stroke: #333; stroke-width: 2; fill: none; }
-      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .auto  { fill: #e7f0ff; stroke: #3a63c8; stroke-width: 1.6; }
+      .input { fill: #fff1dc; stroke: #e08600; stroke-width: 2; }
+      .stop  { fill: #ffe5e5; stroke: #d03030; stroke-width: 1.6; }
+      .done  { fill: #e3f6e8; stroke: #2f9e57; stroke-width: 2; }
+      .inner { fill: #ffffff; stroke: #3a63c8; stroke-width: 1.4; }
+      .band  { fill: #eef0f5; }
+      .note  { fill: #fbfbfb; stroke: #9aa0ad; stroke-width: 1.2; stroke-dasharray: 5 4; }
+      .ln    { stroke: #4a4f63; stroke-width: 1.7; fill: none; marker-end: url(#ah); }
+      .lnd   { stroke: #4a4f63; stroke-width: 1.5; fill: none; marker-end: url(#ah); stroke-dasharray: 6 4; }
+      .tie   { stroke: #9aa0ad; stroke-width: 1.2; fill: none; stroke-dasharray: 4 4; }
+      .ti    { font-size: 24px; font-weight: bold; fill: #1d2140; text-anchor: middle; }
+      .sub   { font-size: 14px; fill: #4a4f63; text-anchor: middle; }
+      .bt    { font-size: 16px; font-weight: bold; fill: #1d2140; }
+      .h     { font-size: 15.5px; font-weight: bold; fill: #1d2140; text-anchor: middle; }
+      .b     { font-size: 13.5px; fill: #2b2f45; text-anchor: middle; }
+      .s     { font-size: 11.5px; fill: #7a7f8f; text-anchor: middle; }
+      .lb    { font-size: 13px; font-weight: bold; fill: #b04a00; text-anchor: middle; }
+      .lg    { font-size: 13px; fill: #2b2f45; }
+      .nl    { font-size: 12.5px; fill: #4a4f63; text-anchor: middle; }
     </style>
-    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <polygon points="0 0, 10 3, 0 6" fill="#333" />
-    </marker>
   </defs>
+  <rect width="1100" height="2000" fill="#ffffff"/>
 
-  <!-- 배경 -->
-  <rect width="1200" height="2440" fill="#ffffff"/>
+  <!-- 제목 · 범례 -->
+  <text class="ti" x="550" y="42">AWX 노드정보 등록 — 한눈에 보는 흐름</text>
+  <text class="sub" x="550" y="68">위에서 아래로 진행합니다. 주황색(⌨) 상자는 작업자가 직접 입력·선택하는 곳이고, 나머지는 스크립트가 자동으로 처리합니다.</text>
+  <rect class="auto"  x="235" y="86" width="26" height="18" rx="4"/><text class="lg" x="268" y="100">자동 처리</text>
+  <rect class="input" x="365" y="86" width="26" height="18" rx="4"/><text class="lg" x="398" y="100">⌨ 작업자 입력·선택</text>
+  <rect class="stop"  x="545" y="86" width="26" height="18" rx="4"/><text class="lg" x="578" y="100">중단 · 종료</text>
+  <rect class="done"  x="680" y="86" width="26" height="18" rx="4"/><text class="lg" x="713" y="100">완료</text>
+  <rect class="note"  x="775" y="86" width="26" height="18" rx="4"/><text class="lg" x="808" y="100">보충 설명</text>
 
-  <!-- ===== 01.AWX_nodeinfo_V2.sh ===== -->
-  <text x="500" y="30" class="text title">01.AWX_nodeinfo_V2.sh 실행 흐름</text>
+  <!-- ===================== 1단계 ===================== -->
+  <rect class="band" x="20" y="124" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="147">1단계 · 준비 — 등록할 서버 목록 만들기</text>
+  <text class="nl" x="1064" y="146" style="text-anchor:end">01.AWX_nodeinfo_V2.sh</text>
 
+  <!-- 작업 시작 -->
+  <rect class="auto" x="270" y="176" width="560" height="62" rx="10"/>
+  <text class="h" x="550" y="197">작업 시작 : bash 01.AWX_nodeinfo_V2.sh</text>
+  <text class="b" x="550" y="216">작업자(user)를 고르면 그 사람의 &lt;user&gt;.txt 로 진행하고, 화면 내용을 로그로 남김</text>
+  <text class="s" x="550" y="230">[1] user · LOG/&lt;user&gt;.log</text>
+  <path class="ln" d="M830 207 H866"/>
+  <rect class="stop" x="866" y="187" width="214" height="40" rx="8"/>
+  <text class="b" x="973" y="212">user 값이 없으면 → 중단</text>
+  <path class="ln" d="M550 238 V262"/>
 
-  <!-- [1] user 호출 -->
-  <rect x="350" y="50" width="300" height="60" class="box" rx="5"/>
-  <text x="500" y="75" class="text">[1] user 호출</text>
-  <text x="500" y="95" class="text" font-size="12">현장 코드로 $user 설정</text>
+  <!-- nodeinfo 사용 여부 -->
+  <rect class="input" x="270" y="262" width="560" height="58" rx="10"/>
+  <text class="h" x="550" y="287">⌨ AWX 에서 서버 정보를 가져올까요?</text>
+  <text class="b" x="550" y="308">화면 질문 : awx nodeinfo 사용여부 Y|N   <tspan class="s">[2] download_txt</tspan></text>
+  <path class="ln" d="M420 320 V350"/><text class="lb" x="404" y="341">Y</text>
+  <path class="ln" d="M680 320 V350"/><text class="lb" x="696" y="341">N</text>
+  <rect class="auto" x="60" y="350" width="440" height="78" rx="10"/>
+  <text class="h" x="280" y="374">Y : AWX 에서 자동 조회</text>
+  <text class="b" x="280" y="395">&lt;user&gt;.txt 에 호스트명만 한 줄에 하나씩 적어 두면</text>
+  <text class="b" x="280" y="414">조회 결과(서버당 12칸 정보)로 파일을 자동으로 채움</text>
+  <rect class="auto" x="600" y="350" width="440" height="78" rx="10"/>
+  <text class="h" x="820" y="374">N : 미리 준비한 파일을 그대로 사용</text>
+  <text class="b" x="820" y="395">&lt;user&gt;.txt 에 서버당 12칸 정보를 직접 적어 둠</text>
+  <text class="s" x="820" y="414">vendor model infra hostname ip mac nic disk part 용량 os boot</text>
+  <path class="ln" d="M280 428 V448 H550 V466"/>
+  <path class="ln" d="M820 428 V448 H550" style="marker-end:none"/>
 
-  <!-- user 검증 -->
-  <path d="M 500 110 L 500 250" class="arrow"/>
-  <polygon points="500,250 470,270 530,270" class="diamond"/>
-  <text x="500" y="270" class="text" font-size="12">user 값?</text>
+  <!-- 자동 정리 -->
+  <rect class="auto" x="270" y="466" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="487">자동 정리 · 형식 검사</text>
+  <text class="b" x="550" y="506">값 치환(1.1T→1200 등) · 줄마다 12칸인지 검사</text>
+  <text class="b" x="550" y="523">infra 이름 치환 · MAC 끝자리가 홀수면 짝수로 보정</text>
+  <text class="s" x="550" y="536">[3] parse_msg · [3-1] apply_infra_alias · [4] fix_mac</text>
+  <path class="ln" d="M830 505 H866"/>
+  <rect class="stop" x="866" y="485" width="214" height="40" rx="8"/>
+  <text class="b" x="973" y="510">12칸이 아닌 줄 → 중단</text>
+  <path class="ln" d="M550 544 V568"/>
 
-  <!-- user 오류 -->
-  <path d="M 470 270 L 300 300" class="arrow"/>
-  <rect x="150" y="300" width="300" height="50" class="error" rx="5"/>
-  <text x="300" y="325" class="text">[X] user 오류 → exit 1</text>
+  <!-- DNS 확인 -->
+  <rect class="input" x="270" y="568" width="560" height="80" rx="10"/>
+  <text class="h" x="550" y="589">DNS 확인 (다를 때만 ⌨ 질문)</text>
+  <text class="b" x="550" y="608">파일에 적힌 IP 와 DNS 에 등록된 IP 를 비교</text>
+  <text class="b" x="550" y="626">다르면 : a 모두 DNS 값으로 · n 그대로 · s 하나씩 확인 · q 중단</text>
+  <text class="s" x="550" y="640">[4-1] dns_check</text>
+  <path class="ln" d="M550 648 V672"/>
 
-  <!-- user 정상 -->
-  <path d="M 530 270 L 650 300" class="arrow"/>
-  <rect x="600" y="300" width="300" height="50" class="box" rx="5"/>
-  <text x="750" y="325" class="text">LOG 파일 열기</text>
+  <!-- 대상 목록 -->
+  <rect class="auto" x="270" y="672" width="560" height="50" rx="10"/>
+  <text class="h" x="550" y="694">등록할 서버 목록을 화면에 보여 줌 (총 N대)</text>
+  <text class="s" x="550" y="712">[5] show_targets</text>
+  <path class="ln" d="M550 722 V746"/>
 
-  <!-- [2] download_txt -->
-  <path d="M 750 350 L 750 390" class="arrow"/>
-  <rect x="600" y="390" width="300" height="60" class="box" rx="5"/>
-  <text x="750" y="415" class="text">[2] download_txt</text>
-  <text x="750" y="435" class="text" font-size="12">Y: nodeinfo | N: 기존 파일</text>
+  <!-- 작업진행 -->
+  <rect class="input" x="270" y="746" width="560" height="50" rx="10"/>
+  <text class="h" x="550" y="776">⌨ 작업진행여부 (Y|N) — 목록을 확인하고 결정</text>
+  <path class="ln" d="M830 771 H866"/><text class="lb" x="848" y="763">N</text>
+  <rect class="stop" x="866" y="751" width="214" height="40" rx="8"/>
+  <text class="b" x="973" y="776">아무것도 바꾸지 않고 종료</text>
 
-  <!-- [3] msg 파싱 / [4] MAC / [4-1] DNS 점검 / [5] 다단 -->
-  <path d="M 750 450 L 750 490" class="arrow"/>
-  <rect x="600" y="490" width="300" height="80" class="box" rx="5"/>
-  <text x="750" y="510" class="text">[3] msg 파싱</text>
-  <text x="750" y="527" class="text" font-size="12">[4] MAC 짝수 보정</text>
-  <text x="750" y="544" class="text" font-size="12">[4-1] DNS 점검 (왼쪽 상세)</text>
-  <text x="750" y="561" class="text" font-size="12">[5] 등록 대상 다단 출력</text>
+  <!-- ===================== 2단계 ===================== -->
+  <rect class="band" x="20" y="814" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="837">2단계 · 점검 — 인벤토리를 만들고 서버 상태 확인</text>
+  <text class="nl" x="1064" y="836" style="text-anchor:end">01.AWX_nodeinfo_V2.sh</text>
+  <path class="ln" d="M550 796 V866"/><text class="lb" x="566" y="808">Y</text>
 
-  <!-- [4-1] DNS 점검 상세 (신규) -->
-  <path d="M 600 530 L 542 530" class="arrow"/>
-  <text x="571" y="522" class="text" font-size="11">[4-1]</text>
-  <rect x="60" y="396" width="480" height="210" class="box" rx="5"/>
-  <text x="300" y="420" class="text">[4-1] DNS 점검 (dns_check)</text>
-  <text x="300" y="442" class="text" font-size="12">resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의</text>
-  <text x="300" y="459" class="text" font-size="12">(dig 우선, 없으면 nslookup, 둘 다 없으면 생략)</text>
-  <text x="300" y="476" class="text" font-size="12">xargs -P 32 병렬, 질의당 2초 · 재시도 1회</text>
-  <text x="300" y="493" class="text" font-size="12">일치 / 불일치 / 판단 불가 / 미등록 / 조회 실패</text>
-  <text x="300" y="510" class="text" font-size="12">불일치: a 모두 DNS 로 · n 그대로</text>
-  <text x="300" y="527" class="text" font-size="12">            s 하나씩 · q 중단</text>
-  <text x="300" y="544" class="text" font-size="12">AWX_AUTO=1: /dev/tty 로 "등록값 그대로</text>
-  <text x="300" y="561" class="text" font-size="12">계속 진행할까요? [y/N]" (못 물으면 중단)</text>
-  <text x="300" y="578" class="text" font-size="12">AWX_DNS_CHECKED=1: 표만 출력하고 진행</text>
-  <text x="300" y="595" class="text" font-size="12">교체는 &lt;user&gt;.txt 5번째 필드만, LOG [DNS]</text>
+  <!-- 인벤토리 만들기 -->
+  <rect class="auto" x="270" y="866" width="560" height="100" rx="10"/>
+  <text class="h" x="550" y="887">인벤토리 만들기 (자동)</text>
+  <text class="b" x="550" y="907">필수 설정값 확인 → 기존 인벤토리 삭제</text>
+  <text class="b" x="550" y="925">조건이 같은 서버끼리 그룹으로 나눠 그룹별 yml + 전체(_all) yml 생성</text>
+  <text class="b" x="550" y="943">dhcp_pool 기록 → git 업로드</text>
+  <text class="s" x="550" y="957">[7]~[11] inventory_delete · split_files · dhcp_info · gen_inventory · git_upload</text>
+  <path class="ln" d="M830 893 H866"/>
+  <rect class="stop" x="866" y="873" width="214" height="40" rx="8"/>
+  <text class="b" x="973" y="898">설정값이 비어 있으면 → 중단</text>
+  <path class="tie" d="M270 916 H252"/>
+  <rect class="note" x="20" y="872" width="232" height="88" rx="8"/>
+  <text class="nl" x="136" y="896">그룹 나누는 기준</text>
+  <text class="nl" x="136" y="916">infra · nic · disk · 용량</text>
+  <text class="nl" x="136" y="934">os · boot · splunk 가</text>
+  <text class="nl" x="136" y="952">모두 같은 서버끼리 yml 1개</text>
+  <path class="ln" d="M550 966 V990"/>
 
-  <!-- [6] 작업진행여부 -->
-  <path d="M 750 570 L 750 610" class="arrow"/>
-  <polygon points="750,610 720,630 780,630" class="diamond"/>
-  <text x="750" y="635" class="text" font-size="12">작업진행?</text>
+  <!-- 서버 상태 점검 -->
+  <rect class="auto" x="270" y="990" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1011">서버 상태 점검 (자동, 결과만 화면에 표시)</text>
+  <text class="b" x="550" y="1030">LDAP 주소 · LACP(본딩) 서버 · 응답 없는 서버</text>
+  <text class="b" x="550" y="1047">os8_mgmt 에서 접속이 안 되는 서버는 os6_mgmt 에서 한 번 더 확인</text>
+  <text class="s" x="550" y="1060">[12] check_servers</text>
+  <path class="ln" d="M550 1068 V1092"/>
 
-  <!-- N 선택 -->
-  <path d="M 720 630 L 300 660" class="arrow"/>
-  <rect x="150" y="660" width="300" height="50" class="box" rx="5"/>
-  <text x="300" y="685" class="text">작업 취소 → exit 0</text>
+  <!-- 메뉴 -->
+  <rect class="input" x="270" y="1092" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1116">⌨ 메뉴 : AWX 인벤토리 소스</text>
+  <text class="b" x="550" y="1136">ls = 만든 yml 목록 보기 · 파일명 입력 = 그 yml 내용 보기</text>
+  <text class="b" x="550" y="1155">exit = 종료 · su = 등록 시작   <tspan class="s">[13]</tspan></text>
+  <path class="lnd" d="M270 1146 H236 V1116 H268"/>
+  <text class="nl" x="180" y="1124">ls · 파일명은</text>
+  <text class="nl" x="180" y="1142">몇 번이든 반복</text>
+  <path class="ln" d="M830 1131 H866"/><text class="lb" x="848" y="1123">exit</text>
+  <rect class="stop" x="866" y="1111" width="214" height="40" rx="8"/>
+  <text class="b" x="973" y="1136">등록 없이 종료</text>
 
-  <!-- Y 선택: 변수 검사 -->
-  <path d="M 780 630 L 900 660" class="arrow"/>
-  <rect x="800" y="660" width="200" height="50" class="box" rx="5"/>
-  <text x="900" y="685" class="text" font-size="12">변수 사전 검사</text>
+  <!-- ===================== 3단계 ===================== -->
+  <rect class="band" x="20" y="1188" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1211">3단계 · 등록 — AWX 에 소스 · DHCP · PXE 등록</text>
+  <text class="nl" x="1064" y="1210" style="text-anchor:end">su 를 입력하면 02.source_dhcp_pxe.sh 가 자동 실행</text>
+  <path class="ln" d="M550 1170 V1240"/><text class="lb" x="568" y="1183">su</text>
 
-  <!-- [7~12] 메인 작업 -->
-  <path d="M 900 710 L 900 750" class="arrow"/>
-  <rect x="750" y="750" width="300" height="120" class="box" rx="5"/>
-  <text x="900" y="775" class="text">[7] inventory_delete</text>
-  <text x="900" y="795" class="text" font-size="12">[8] 분할 파일 생성</text>
-  <text x="900" y="815" class="text" font-size="12">[9] dhcp_pool 기록</text>
-  <text x="900" y="835" class="text" font-size="12">[10] yml 수집 (scp)</text>
-  <text x="900" y="855" class="text" font-size="12">[11] git 업로드</text>
+  <!-- OS 선택 -->
+  <rect class="input" x="270" y="1240" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1264">⌨ OS 버전 선택</text>
+  <text class="b" x="550" y="1284">1 = 기본값(2026-ECAD_TCAD)을 모든 yml 에 한 번에 적용</text>
+  <text class="b" x="550" y="1303">2 = yml 마다 직접 선택 (2024 · 2025 · 2026 · 2026-OPC_MDP · 2026-ECAD_TCAD)</text>
+  <path class="ln" d="M550 1318 V1342"/>
 
-  <!-- [12] LDAP/LACP -->
-  <path d="M 900 870 L 900 910" class="arrow"/>
-  <rect x="750" y="910" width="300" height="70" class="box" rx="5"/>
-  <text x="900" y="935" class="text">[12] LDAP/LACP 점검</text>
-  <text x="900" y="955" class="text" font-size="12">tmp/all_${user} 생성</text>
+  <!-- 옵션 확인 -->
+  <rect class="input" x="270" y="1342" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1366">⌨ 옵션 확인표 → 옵션이 맞습니까 (Y|N)</text>
+  <text class="b" x="550" y="1386">표 : 번호 | yml | infra | os | boot | splunk | 호스트 수</text>
+  <text class="b" x="550" y="1405">Y = 그대로 진행 · N = yml 마다 값을 다시 입력 (Enter = 현재 값 유지)</text>
+  <path class="ln" d="M550 1420 V1444"/>
 
-  <!-- [13] 메뉴 루프 -->
-  <path d="M 900 980 L 900 1020" class="arrow"/>
-  <rect x="750" y="1020" width="300" height="70" class="box" rx="5"/>
-  <text x="900" y="1045" class="text">[13] 메뉴 루프</text>
-  <text x="900" y="1065" class="text" font-size="12">su/exit/ls/파일명 처리</text>
+  <!-- yml 별 등록 -->
+  <rect class="auto" x="270" y="1444" width="560" height="176" rx="10"/>
+  <text class="h" x="550" y="1468">yml 하나씩 차례로 자동 등록</text>
+  <rect class="inner" x="390" y="1482" width="320" height="36" rx="8"/>
+  <text class="b" x="550" y="1505">① AWX 인벤토리 소스 등록 (invsync)</text>
+  <path class="ln" d="M500 1518 L430 1548"/>
+  <path class="ln" d="M600 1518 L670 1548"/>
+  <text class="lb" x="550" y="1542">동시 실행</text>
+  <rect class="inner" x="320" y="1548" width="220" height="36" rx="8"/>
+  <text class="b" x="430" y="1571">② DHCP 등록</text>
+  <rect class="inner" x="560" y="1548" width="220" height="36" rx="8"/>
+  <text class="b" x="670" y="1571">② PXE 등록</text>
+  <text class="b" x="550" y="1606">둘 다 끝나야 다음 yml 로 넘어감 · 실패한 yml 은 건너뛰고 계속</text>
+  <path class="lnd" d="M830 1600 H860 V1462 H832"/>
+  <text class="nl" x="955" y="1520">다음 yml 이 남아 있으면</text>
+  <text class="nl" x="955" y="1538">① 부터 반복</text>
+  <path class="ln" d="M550 1620 V1644"/>
 
-  <!-- su 선택 -->
-  <path d="M 900 1090 L 900 1130" class="arrow"/>
-  <polygon points="900,1130 870,1150 930,1150" class="diamond"/>
-  <text x="900" y="1155" class="text" font-size="12">su?</text>
+  <!-- 결과 정리 -->
+  <rect class="auto" x="270" y="1644" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1668">모든 yml 이 끝나면 결과 정리</text>
+  <text class="b" x="550" y="1688">yml 이 2개 이상이고 모두 성공 → 전체 yml 로 인벤토리 소스 한 번 더 갱신</text>
+  <text class="b" x="550" y="1707">성공·실패 요약 · 최종 수량(HPC/SDS · infra · OS 별) · 파티션 표준 확인</text>
+  <path class="ln" d="M550 1722 V1746"/>
 
-  <!-- [14] 02 호출 -->
-  <path d="M 930 1150 L 950 1170 L 950 1220" class="arrow"/>
-  <rect x="800" y="1220" width="300" height="70" class="box" rx="5"/>
-  <text x="950" y="1245" class="text">[14] 02 호출</text>
-  <text x="950" y="1265" class="text" font-size="12">그룹 yml + 옵션 전달</text>
+  <!-- 실패 시 재시도 -->
+  <rect class="input" x="270" y="1746" width="560" height="50" rx="10"/>
+  <text class="h" x="550" y="1776">실패한 yml 이 있으면 ⌨ 재시도 (Y|N)</text>
+  <path class="ln" d="M830 1771 H866"/><text class="lb" x="848" y="1763">N</text>
+  <rect class="stop" x="866" y="1751" width="214" height="40" rx="8"/>
+  <text class="b" x="973" y="1776">중단 (실패로 종료)</text>
+  <path class="lnd" d="M270 1771 H236 V1279 H268"/>
+  <text class="nl" x="168" y="1520">Y : 3단계를</text>
+  <text class="nl" x="168" y="1538">처음부터 다시</text>
 
-  <!-- 02 성공 여부 -->
-  <path d="M 950 1290 L 950 1330" class="arrow"/>
-  <polygon points="950,1330 920,1350 980,1350" class="diamond"/>
-  <text x="950" y="1355" class="text" font-size="12">성공?</text>
+  <!-- ===================== 4단계 ===================== -->
+  <rect class="band" x="20" y="1814" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1837">4단계 · 마무리</text>
+  <path class="ln" d="M550 1796 V1866"/><text class="lb" x="584" y="1808">모두 성공</text>
 
-  <!-- 재시도 -->
-  <path d="M 920 1350 L 700 1380 L 700 1300 L 800 1300" class="arrow"/>
-  <text x="750" y="1370" class="text" font-size="11">재시도 Y</text>
-
-  <!-- 성공: 종료 -->
-  <path d="M 980 1350 L 1000 1370 L 1000 1420" class="arrow"/>
-  <rect x="850" y="1420" width="300" height="50" class="box" rx="5"/>
-  <text x="1000" y="1445" class="text">완료 → exit 0</text>
-
-  <!-- ===== 02.source_dhcp_pxe.sh ===== -->
-  <text x="500" y="1550" class="text title">02.source_dhcp_pxe.sh 실행 흐름 (01에서 호출)</text>
-
-  <!-- 인자 파싱 -->
-  <rect x="350" y="1570" width="300" height="60" class="box" rx="5"/>
-  <text x="500" y="1595" class="text">인자 파싱</text>
-  <text x="500" y="1615" class="text" font-size="12">yml=infra,os,boot,splunk</text>
-
-  <!-- 인자 개수 검증 -->
-  <path d="M 500 1630 L 500 1670" class="arrow"/>
-  <polygon points="500,1670 470,1690 530,1690" class="diamond"/>
-  <text x="500" y="1695" class="text" font-size="12">인자 확인</text>
-
-  <!-- 배치 모드 -->
-  <path d="M 530 1690 L 700 1720" class="arrow"/>
-  <rect x="600" y="1720" width="200" height="60" class="box" rx="5"/>
-  <text x="700" y="1745" class="text">배치 모드</text>
-  <text x="700" y="1765" class="text" font-size="11">(1개 이상)</text>
-
-  <!-- 옵션 확인표 -->
-  <path d="M 700 1780 L 700 1820" class="arrow"/>
-  <rect x="600" y="1820" width="200" height="60" class="box" rx="5"/>
-  <text x="700" y="1845" class="text">옵션 확인표</text>
-  <text x="700" y="1865" class="text" font-size="11">번호|yml|infra|os|boot|..</text>
-
-  <!-- 옵션 맞음? -->
-  <path d="M 700 1880 L 700 1920" class="arrow"/>
-  <polygon points="700,1920 670,1940 730,1940" class="diamond"/>
-  <text x="700" y="1945" class="text" font-size="12">맞음?</text>
-
-  <!-- 수동 수정 -->
-  <path d="M 670 1940 L 500 1970 L 500 1880 L 600 1880" class="arrow"/>
-  <text x="580" y="1960" class="text" font-size="11">N: 수정</text>
-
-  <!-- yml별 실행 -->
-  <path d="M 730 1940 L 850 1970" class="arrow"/>
-  <rect x="750" y="1970" width="200" height="100" class="box" rx="5"/>
-  <text x="850" y="1995" class="text" font-size="12">yml별 실행</text>
-  <text x="850" y="2015" class="text" font-size="11">invsync</text>
-  <text x="850" y="2035" class="text" font-size="11">dhcp ∥ pxe 동시 실행</text>
-  <text x="850" y="2055" class="text" font-size="11">둘 다 끝나야 다음 yml</text>
-
-  <!-- 요약 -->
-  <path d="M 850 2070 L 850 2110" class="arrow"/>
-  <rect x="750" y="2110" width="200" height="70" class="box" rx="5"/>
-  <text x="850" y="2135" class="text" font-size="12">요약 출력</text>
-  <text x="850" y="2155" class="text" font-size="11">전체/성공/실패</text>
-
-  <!-- exit 코드 -->
-  <path d="M 850 2180 L 850 2220" class="arrow"/>
-  <polygon points="850,2220 820,2240 880,2240" class="diamond"/>
-  <text x="850" y="2250" class="text" font-size="12">실패?</text>
-
-  <!-- exit 0 -->
-  <path d="M 880 2240 L 950 2270 L 950 2320" class="arrow"/>
-  <rect x="850" y="2320" width="200" height="50" class="box" rx="5"/>
-  <text x="950" y="2345" class="text">exit 0 (성공)</text>
-
-  <!-- exit 1 -->
-  <path d="M 820 2240 L 700 2270 L 700 2320" class="arrow"/>
-  <rect x="600" y="2320" width="200" height="50" class="error" rx="5"/>
-  <text x="700" y="2345" class="text">exit 1 (실패)</text>
-
-  <!-- 범례 -->
-  <text x="50" y="2380" class="text" font-size="12" text-anchor="start">범례:</text>
-  <rect x="50" y="2390" width="30" height="20" class="box"/>
-  <text x="95" y="2405" class="text" text-anchor="start" font-size="11">처리</text>
-  <polygon points="170,2400 160,2410 180,2410" class="diamond" transform="scale(0.8)"/>
-  <text x="195" y="2405" class="text" text-anchor="start" font-size="11">분기</text>
-  <rect x="280" y="2390" width="30" height="20" class="error"/>
-  <text x="325" y="2405" class="text" text-anchor="start" font-size="11">오류</text>
+  <rect class="input" x="270" y="1866" width="560" height="62" rx="10"/>
+  <text class="h" x="550" y="1887">⌨ 등록 후 확인 : 작업 대상 서버 목록을 붙여넣기</text>
+  <text class="b" x="550" y="1906">모두 등록됐는지 비교해서 알려 줌 (빈 줄만 입력하면 건너뜀)</text>
+  <text class="s" x="550" y="1919">[14-1] 작업 기록을 auto_setup 으로 전달 · [15] verify_hosts</text>
+  <path class="ln" d="M550 1928 V1946"/>
+  <rect class="done" x="450" y="1946" width="200" height="36" rx="18"/>
+  <text class="h" x="550" y="1970">완료</text>
+  <text class="s" x="1080" y="1992" style="text-anchor:end">※ 설정이 실제로 바뀌는 작업이므로, 완료 후 임의의 서버 몇 대를 직접 확인하세요.</text>
 </svg>
