@@ -117,7 +117,7 @@ func TestWorkNewRunReuseDeriveMemoSearch(t *testing.T) {
 		t.Fatalf("명령 입력 단계: step=%d draft=%+v", w.step, w.draft)
 	}
 	file := w.draft.File
-	if f := h.frame(); !strings.Contains(f, "파일: /tmp/"+file+" (새 목록) · svr001 등 4대") || !strings.Contains(f, "접속불가 호스트는 os6_mgmt 경유로 자동 재실행") {
+	if f := h.frame(); !strings.Contains(f, "파일: "+workPath(file)+" (새 목록) · svr001 등 4대") || !strings.Contains(f, "접속불가 호스트는 os6_mgmt 경유로 자동 재실행") {
 		t.Fatalf("명령 화면:\n%s", f)
 	}
 	h.keys("cat /proc/uptime\r")
@@ -191,7 +191,7 @@ func TestWorkNewRunReuseDeriveMemoSearch(t *testing.T) {
 		t.Fatalf("재실행 결과: %+v", w.flat[0].Res)
 	}
 	h.keys("\r3")
-	if w.step != wkAsk || !strings.Contains(w.ask, "실패·접속불가 1대만 새 파일 /tmp/") {
+	if w.step != wkAsk || !strings.Contains(w.ask, "실패·접속불가 1대만 새 파일 "+workListDir()+"/") {
 		t.Fatalf("3 확인: %q", w.ask)
 	}
 	h.keys("y")

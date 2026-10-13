@@ -310,16 +310,16 @@ flowchart TD
 
 ## gossh 작업 흐름 (s / auto_setup s, v0.8.0)
 
-호스트 목록 파일(`/tmp/<3자리>`)별로 gossh 실행 기록을 user 별로 남깁니다. 그림: [tui_s.svg](docs/svg/tui_s.svg) · [cli_s.svg](docs/svg/cli_s.svg)
+호스트 목록 파일(`/tmp/auto_setup/lists/<3자리>`)별로 gossh 실행 기록을 user 별로 남깁니다. 그림: [tui_s.svg](docs/svg/tui_s.svg) · [cli_s.svg](docs/svg/cli_s.svg)
 
 ```mermaid
 flowchart TD
     S["s 또는 auto_setup s"] --> U["user 정하기 (-user 또는 세션 user)"]
-    U --> L["작업 목록 work/<user>/index.jsonl<br/>열 때 정리: 출력 7일 · 200MB · /tmp 파일 7일"]
+    U --> L["작업 목록 work/<user>/index.jsonl<br/>열 때 정리: 출력 7일 · 200MB · 목록 파일 7일"]
     L -->|"n"| PA["호스트 붙여넣기"]
     PA --> RU{"같은 목록이 있는가?"}
     RU -->|"예 y"| CMD["명령 한 줄 입력"]
-    RU -->|"아니오 n"| NEW["/tmp/<소문자 3자리> 이름 정함"]
+    RU -->|"아니오 n"| NEW["/tmp/auto_setup/lists/<소문자 3자리> 이름 정함"]
     NEW --> CMD
     L -->|"Enter"| ITEM["항목 메뉴: 새 명령 · 재실행 · 실패만 재실행 · 결과 보기 · 메모 · 호스트 목록"]
     ITEM --> CMD

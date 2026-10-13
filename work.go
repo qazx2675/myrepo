@@ -40,8 +40,20 @@ const (
 	workDangerFlag = "-dnlgjawkrdjqghkrdls"
 )
 
-// workTmpDir: 호스트 목록 파일(/tmp/<3자리>)을 만드는 곳 (테스트에서 바꾼다)
-var workTmpDir = "/tmp"
+// workTmpDir: 호스트 목록 파일(<3자리>)을 만드는 곳. 비면 <데이터 디렉터리>/lists (기본 /tmp/auto_setup/lists —
+// /tmp 를 비워도 auto_setup 상태와 한곳에 모이게 한다). 테스트에서 바꾼다.
+var workTmpDir = ""
+
+// workListDir: 목록 파일 디렉터리
+func workListDir() string {
+	if workTmpDir != "" {
+		return workTmpDir
+	}
+	return filepath.Join(dataDir(), "lists")
+}
+
+// workPath: 목록 파일 전체 경로 (사용자가 gossh -w 에 그대로 쓴다)
+func workPath(name string) string { return filepath.Join(workListDir(), name) }
 
 // workUserCap: user 당 전체 출력 상한 (압축 크기, 확정 200MB — 테스트만 줄인다)
 var workUserCap int64 = 200 << 20
@@ -405,7 +417,7 @@ func workNewName(db *workDB) (string, error) {
 		if db != nil && db.used(n) {
 			return true
 		}
-		_, err := os.Lstat(filepath.Join(workTmpDir, n))
+		_, err := os.Lstat(workPath(n))
 		return err == nil || !os.IsNotExist(err)
 	}
 	name := func(k int) string {
@@ -423,7 +435,7 @@ func workNewName(db *workDB) (string, error) {
 			return n, nil
 		}
 	}
-	return "", errors.New("사용할 수 있는 /tmp/<3자리> 이름이 없습니다")
+	return "", errors.New("사용할 수 있는 목록 파일 <3자리> 이름이 없습니다")
 }
 
 // workNewID: 실행 id (시각 + 임의 4자리)
@@ -437,7 +449,10 @@ func workWriteTmp(name string, hosts []string, excl bool) error {
 	if excl {
 		flag = os.O_WRONLY | os.O_CREATE | os.O_EXCL
 	}
-	f, err := os.OpenFile(filepath.Join(workTmpDir, name), flag, 0644)
+	if err := os.MkdirAll(workListDir(), 0755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(workPath(name), flag, 0644)
 	if err != nil {
 		return err
 	}
@@ -450,9 +465,9 @@ func workWriteTmp(name string, hosts []string, excl bool) error {
 
 // workTmpMatches: /tmp/<name> 이 있고 내용(해석한 호스트 목록)이 hosts 와 같으면 (있음, 같음)
 func workTmpMatches(name string, hosts []string) (exists, same bool) {
-	b, err := os.ReadFile(filepath.Join(workTmpDir, name))
+	b, err := os.ReadFile(workPath(name))
 	if err != nil {
-		_, serr := os.Lstat(filepath.Join(workTmpDir, name))
+		_, serr := os.Lstat(workPath(name))
 		return serr == nil, false
 	}
 	got := workParseHosts(string(b))
@@ -969,7 +984,7 @@ func workCleanTmp(db *workDB, now time.Time) (removed int) {
 		if now.Sub(time.Unix(at, 0)) <= workKeep || !workNameRe.MatchString(f) {
 			continue
 		}
-		p := filepath.Join(workTmpDir, f)
+		p := workPath(f)
 		fi, err := os.Lstat(p)
 		if err != nil || !fi.Mode().IsRegular() || now.Sub(fi.ModTime()) <= workKeep {
 			continue
@@ -1287,7 +1302,7 @@ func workRunOnce(argv []string) ([]byte, int, error) {
 // 돌려주는 msg 는 TUI 로 돌아갔을 때 안내 줄에 보일 한 줄.
 func workExecute(req workRunReq, store workStore, fallback workStore, out io.Writer, now func() time.Time) (workRec, string, bool) {
 	start := now()
-	path := filepath.Join(workTmpDir, req.File)
+	path := workPath(req.File)
 	rec := workRec{T: "run", ID: workNewID(start), File: req.File, Parent: req.Parent, At: start.Unix(), TTY: workTTY(),
 		Side: req.Plan.Side, Cmd: req.Cmd, N: len(req.Hosts)}
 	rec.Server, _ = os.Hostname()

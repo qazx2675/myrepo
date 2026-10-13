@@ -50,7 +50,7 @@
   <rect x="40" y="294" width="450" height="78" rx="6" class="box"/>
   <text x="265" y="314" class="t tb" text-anchor="middle">작업 목록 화면 (openWork)</text>
   <text x="265" y="330" class="t" text-anchor="middle">&lt;상태&gt;/work/&lt;user&gt;/ 의 기록을 읽고 가볍게 정리 (출력 7일 · user 당</text>
-  <text x="265" y="346" class="t" text-anchor="middle">200MB · /tmp 파일 7일)</text>
+  <text x="265" y="346" class="t" text-anchor="middle">200MB · 목록 파일 7일)</text>
   <text x="265" y="362" class="t" text-anchor="middle">os6_mgmt 에서 열었으면 기록은 os8_mgmt 에 중계 (work-relay)</text>
   <path d="M265 372 L265 400" class="ln"/>
   <rect x="40" y="400" width="450" height="46" rx="6" class="box"/>

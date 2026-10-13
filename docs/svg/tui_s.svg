@@ -37,7 +37,7 @@
   <text x="265" y="150" class="t tb" text-anchor="middle">세션 user 정하기 → 작업 목록 (openWork)</text>
   <text x="265" y="166" class="t" text-anchor="middle">&lt;상태&gt;/work/&lt;user&gt;/{index.jsonl, lists/, out/} — 파일(/tmp/&lt;3자리&gt;)별로</text>
   <text x="265" y="182" class="t" text-anchor="middle">묶고 최근 실행이 위</text>
-  <text x="265" y="198" class="t" text-anchor="middle">열 때 가볍게 정리: 출력 7일 · user 당 200MB · /tmp 파일 7일</text>
+  <text x="265" y="198" class="t" text-anchor="middle">열 때 가볍게 정리: 출력 7일 · user 당 200MB · 목록 파일 7일</text>
   <path d="M265 208 L265 260" class="ln"/>
   <rect x="40" y="260" width="450" height="30" rx="6" class="dec"/>
   <text x="265" y="280" class="t tb" text-anchor="middle">목록에서 누른 키는?  (n / Enter / /)</text>
