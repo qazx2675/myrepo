@@ -543,7 +543,15 @@ func (st *tuiState) handleOverview(ev keyEv) bool {
 			st.sel.Host, st.sel.Filter = 0, false
 		}
 	case ev.k == kRune && (ev.r == 'a' || ev.r == 'A'):
-		if st.sel.Row >= 0 && st.sel.Row < len(refs) {
+		if forceUser != "" { // -user: a = 내 job 만 ↔ 전체 user 보기 (그룹 전체 보기는 Enter 후 a)
+			showAllUsers = !showAllUsers
+			st.refresh()
+			if showAllUsers {
+				st.sel.Msg = "전체 user 의 job 을 보여 줍니다 (a: 내 job 만)"
+			} else {
+				st.sel.Msg = "user " + forceUser + " 의 job 만 보여 줍니다"
+			}
+		} else if st.sel.Row >= 0 && st.sel.Row < len(refs) {
 			j := st.snap.Jobs[refs[st.sel.Row].Job]
 			st.sel.Detail, st.sel.JobID, st.sel.Yml = true, j.ID, allView
 			st.sel.Host, st.sel.Filter = 0, false

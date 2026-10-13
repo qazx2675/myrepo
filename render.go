@@ -847,9 +847,16 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 			idx++
 		}
 	}
-	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
+	aLab := "a 전체 보기" // -user 로 실행하면 a 는 전체 user 보기 토글
+	if forceUser != "" {
+		aLab = "a 전체 user"
+		if showAllUsers {
+			aLab = "a 내 job 만"
+		}
+	}
+	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  " + aLab + "  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
 	if sel.DateFilter {
-		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  a 전체 보기  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
+		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  " + aLab + "  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
 	}
 	foot := append([]string{msgLine(sel, width, color)}, hintLines(color, width, hint)...)
 	return finish(head, body, cursor, height, width, color, append(foot, sel.Inline...))
