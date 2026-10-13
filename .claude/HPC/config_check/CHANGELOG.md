@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-10-14 — 내부 흐름 상세 설명도 추가
+
+- **문서(`workflow-detail.svg`)**: 실사용용 `workflow.svg` 와 별개로, 내부 처리 단계·변수·상태 코드(OK/OFF/REF/INST/NOSV/NONE)·임시 파일 구조를 설명하는 상세 흐름도를 추가했다. 스크립트 코드는 변경하지 않았다.
+- **영향 범위**: `workflow-detail.svg`(신규), `README.md` 문서별 설명 표 1줄, `CHANGELOG.md`.
+
 ## 2026-10-13 — `-auto-check` 추가 (auto_setup 설정체크만 t)
 
 - **`-auto-check <user> <호스트목록파일>`**: `-auto` 와 같이 user 선택·질문 없이 진행하되 환경설정 수정 질문에 `n` 으로 답해 설정 적용·재점검·`check.res_<user>_postapply`·완료기록을 하지 않는다. 점검 결과 `check.res_<user>` 와 결과 리포트만 만든다 (질문 에코는 `(-auto-check)`). `-auto` 만 아는 사본에 auto_setup 의 설정체크만(t)을 실행하면 user 선택 메뉴에서 멈추던 문제 해결
