@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart TD
-    A["[0] 초기화<br/>trap cleanup EXIT<br/>변수/로그 준비"] --> B["[1] user 호출<br/>user() 빈 함수<br/>현장 코드 삽입 필요"]
+    B["[1] user 호출<br/>user() 빈 함수<br/>현장 코드 삽입 필요"]
     B --> C{"user 값<br/>확인"}
     C -->|비어 있음| C1["[X] 오류 종료<br/>user 함수 확인"]
     C1 --> END1["exit 1"]
