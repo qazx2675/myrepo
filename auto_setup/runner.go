@@ -37,9 +37,25 @@ type realRunner struct{}
 
 func NewRealRunner() Runner { return realRunner{} }
 
+// checkModeUnsupported: 설정체크만(t, -auto-check) 을 이 체크스크립트가 지원하지 않으면 사유, 아니면 "".
+// -auto 만 아는 스크립트(config_check.sh 등)에 -auto-check 를 주면 사용자 선택 메뉴에서 멈춘다.
+// 스크립트를 읽을 수 없으면 판단하지 않는다 (막지 않음).
+func checkModeUnsupported() string {
+	b, err := os.ReadFile(os_check_sh)
+	if err != nil || strings.Contains(string(b), "-auto-check") {
+		return ""
+	}
+	return "os_check_sh 가 -auto-check 를 지원하지 않음 (설정체크만 t 불가 — c 로 실행하거나 -auto-check 를 지원하는 체크스크립트로 교체)"
+}
+
 func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	if os_check_sh == "" {
 		return RunResult{}, errors.New("os_check_sh 가 비어 있습니다")
+	}
+	if j.RunMode == ModeCheck {
+		if m := checkModeUnsupported(); m != "" {
+			return RunResult{}, errors.New(m)
+		}
 	}
 	if hasOS6 && os6_mgmt == "" {
 		return RunResult{}, errors.New("os6_mgmt 가 비어 있습니다 (os6 호스트 포함 run)")
@@ -356,6 +372,40 @@ func buildCodeTextMode(mode, logText, post string, havePost bool, hosts []string
 	}
 
 	parts = append(parts, extractSummaries(splitLines(logText))...)
+	if !ok {
+		parts = append(parts, noReportDiag(logText))
+	}
 	parts = append(parts, "원본 : "+logFile)
 	return strings.Join(parts, "\n\n") + "\n", !ok
+}
+
+// noReportDiag: 결과 리포트가 없을 때(대상이 모두 접속불가이거나 체크스크립트가 중간에 멈춤) 결과 창에 보여 줄 진단.
+// 로그 파일 경로를 열어 보지 않아도 원인을 알 수 있게 체크스크립트 출력의 마지막 줄을 함께 싣는다.
+func noReportDiag(logText string) string {
+	var tail []string
+	for _, l := range splitLines(logText) {
+		l = strings.TrimRight(ansiRe.ReplaceAllString(l, ""), " \t\r")
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		if r := []rune(l); len(r) > 160 {
+			l = string(r[:160]) + "…"
+		}
+		tail = append(tail, l)
+	}
+	if len(tail) > 12 {
+		tail = tail[len(tail)-12:]
+	}
+	var sb strings.Builder
+	sb.WriteString("[!] 결과 리포트가 없습니다 — 대상 서버가 모두 접속불가이거나 체크스크립트가 끝까지 실행되지 않았습니다.\n")
+	sb.WriteString("    user 선택 화면에서 멈췄다면 체크스크립트가 -auto / -auto-check 인자를 인식하지 못한 것입니다 (os_check_sh 버전 확인).")
+	if len(tail) == 0 {
+		sb.WriteString("\n    체크스크립트 출력이 없습니다.")
+		return sb.String()
+	}
+	sb.WriteString("\n체크스크립트 출력 (마지막 " + fmt.Sprint(len(tail)) + "줄):")
+	for _, l := range tail {
+		sb.WriteString("\n  | " + l)
+	}
+	return sb.String()
 }

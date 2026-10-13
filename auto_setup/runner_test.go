@@ -260,3 +260,55 @@ exit 3
 		}
 	}
 }
+
+// -auto-check 를 모르는 체크스크립트는 설정체크만(t)을 막는다 (사용자 선택 메뉴에서 멈추는 것 방지)
+func TestCheckModeUnsupported(t *testing.T) {
+	old := os_check_sh
+	t.Cleanup(func() { os_check_sh = old })
+	dir := t.TempDir()
+	only := filepath.Join(dir, "cc.sh")
+	both := filepath.Join(dir, "oc.sh")
+	os.WriteFile(only, []byte("#!/bin/bash\nif [ \"${1:-}\" = \"-auto\" ]; then :; fi\n"), 0755)
+	os.WriteFile(both, []byte("#!/bin/bash\n[ \"$1\" == \"-auto\" ] || [ \"$1\" == \"-auto-check\" ]\n"), 0755)
+	os_check_sh = only
+	if checkModeUnsupported() == "" {
+		t.Error("-auto 만 아는 스크립트는 막아야 함")
+	}
+	if _, err := NewRealRunner().Run(&Job{User: "u", RunMode: ModeCheck}, []string{"h"}, false); err == nil || !strings.Contains(err.Error(), "-auto-check") {
+		t.Errorf("Run 이 설정체크만을 막지 않음: %v", err)
+	}
+	os_check_sh = both
+	if m := checkModeUnsupported(); m != "" {
+		t.Errorf("지원하는 스크립트를 막음: %s", m)
+	}
+	os_check_sh = filepath.Join(dir, "missing.sh")
+	if m := checkModeUnsupported(); m != "" {
+		t.Errorf("읽을 수 없으면 막지 않아야 함: %s", m)
+	}
+}
+
+// 결과 리포트가 없으면 code 본문에 원인 안내와 체크스크립트 출력 끝부분이 들어간다
+func TestNoReportDiag(t *testing.T) {
+	log := "\x1b[33m사용자를 선택하세요\x1b[0m\n1) alice\n2) bob\nInput Number: \n"
+	text, abnormal := buildCodeTextMode("", log, "", false, []string{"h1"}, "/x/os_check.log")
+	if !abnormal {
+		t.Fatal("리포트가 없으면 abnormal")
+	}
+	for _, s := range []string{"결과 리포트가 없습니다", "-auto-check", "Input Number:", "1) alice", "원본 : /x/os_check.log"} {
+		if !strings.Contains(text, s) {
+			t.Errorf("본문에 %q 없음:\n%s", s, text)
+		}
+	}
+	if strings.Contains(text, "\x1b") {
+		t.Error("ANSI 가 남음")
+	}
+	empty, _ := buildCodeTextMode("", "", "", false, []string{"h1"}, "/x/l")
+	if !strings.Contains(empty, "출력이 없습니다") {
+		t.Errorf("빈 출력 안내 없음:\n%s", empty)
+	}
+	// 정상 리포트면 진단을 붙이지 않는다
+	ok, ab := buildCodeTextMode("", reportStart+"\nx\n"+reportEnd+"\n", "", false, []string{"h1"}, "/x/l")
+	if ab || strings.Contains(ok, "결과 리포트가 없습니다") {
+		t.Errorf("정상 리포트에 진단이 붙음:\n%s", ok)
+	}
+}
