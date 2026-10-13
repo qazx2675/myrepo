@@ -198,6 +198,11 @@ func (d *Daemon) acceptManualRun(pl map[string]string) string {
 	if m := pl["mode"]; m != "" && m != ModeCheck {
 		return "알 수 없는 mode (check 만 허용)"
 	}
+	if pl["mode"] == ModeCheck && os_check_sh != "" {
+		if m := checkModeUnsupported(); m != "" {
+			return m
+		}
+	}
 	j, _ := d.findJob(id)
 	if j == nil {
 		return "job 없음"
