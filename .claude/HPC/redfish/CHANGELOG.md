@@ -4,6 +4,10 @@
 
 Cisco UCSM 읽기 전용 점검·연구용 프로파일과 2순위(예비) 계정을 추가했습니다. **실제 BMC·UCSM 에 접속해 본 적은 없습니다**(아래 “알려진 한계”, [FIRST_RUN.md](FIRST_RUN.md) 18~25).
 
+### 수정
+
+- **`workflow*.svg` 6개가 GitHub 에서 잘려 보이던 문제**: 글자를 `foreignObject`(고정 크기 상자)가 아니라 `<text>` 로 내도록 다시 렌더링(`htmlLabels:false`, 측정 17px → 표시 16px 로 박스 여유). WORKFLOW.md 에 그림별 단계·확인 순서 표 추가, PR_CHECKLIST “흐름도 다시 그리기” 갱신.
+
 ### 추가
 
 - **1순위 계정 생성·비밀번호 변경 `biostool account create|change`** + 래퍼 `account_create.sh` (확정 사양 [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md), 사용법·실제 출력 README 2.12절). 1순위 계정(`bios.conf` user + `pass.enc`)이 BMC 에 없으면 rf.conf 의 벤더 admin(2순위)으로 로그인해 **같은 id/pw 의 관리자 계정을 만들고**(같은 id 가 있으면 덮어쓰지 않고 건너뜀), 새 계정으로 1회 로그인해 검증하며, **인증이 거부된 서버만 이번 실행이 만든 계정을 되돌립니다**(롤백). 점검 끝(`bios_check.sh`)에서도 같은 질문을 하며 기본 응답은 Y(빈 입력)입니다. 터미널이 아니면 `-stdin-ok` 없이는 묻지 않습니다. `change` 는 바이너리를 직접 쓰고(래퍼 없음) 새 비밀번호를 터미널에서 `*` 로 2번 입력받으며 붙여넣기를 거부합니다. `pass.enc` 는 자동 갱신하지 않고 `cd <폴더>; bash encrypt.sh` 를 csh 에서 그대로 복사할 수 있게 안내합니다. 결과 `account_result.tsv`(0600, 비밀번호·해시 없음). 구현 `cmd/biostool/account*.go`.
