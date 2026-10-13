@@ -135,8 +135,17 @@ cat results/<일시>/merged_retry.txt
 # 6. 모델별 BIOS 전체 비교 (읽기 전용)
 ########################################################################
 
-# diff.txt(기준) 와 user.txt(대상) 를 같은 모델끼리 BIOS Attribute 전체로 비교한다
+# (터미널) 대화형: 대상 입력(user.txt 또는 hostname) → 1.체크 / 2.전체비교 → 비교서버 입력
 bash all_bios_check.sh
+
+# 비교서버 1대를 직접 지정해 user.txt 의 대상과 BIOS 전체 값을 비교한다 (같으면 '모두 동일', 다르면 비교서버=a → 대상=b)
+bash all_bios_check.sh -ref <비교서버 hostname>
+
+# diff.txt(기준) 와 user.txt(대상) 를 같은 모델끼리 BIOS Attribute 전체로 비교한다 (목록 파일 방식)
+bash all_bios_check.sh -user user.txt -diff diff.txt
+
+# 화면 리포트 전체(상한 없음)는 결과 폴더의 report.txt 에도 저장된다
+less results/<일시>_all/report.txt
 
 # 호스트당 터미널에 보일 차이 속성 수를 줄인다 (나머지는 all_diff.tsv)
 bash all_bios_check.sh -diff-max 10

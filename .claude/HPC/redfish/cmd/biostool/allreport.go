@@ -17,6 +17,16 @@ type allReportOpts struct {
 	ListMax int  // 차이 상세·특이사항·오류에 나열할 최대 호스트 수
 	DiffMax int  // 호스트당 보여 줄 차이 속성 수 (속성별 집계의 줄 수 상한이기도 함)
 	Color   bool // ANSI 색 (TTY 이고 NO_COLOR 가 없을 때)
+	// RefWord 는 기준 호스트를 부르는 말입니다. 비어 있으면 "기준", -ref 로 직접 지정했으면 "비교서버".
+	RefWord string
+}
+
+// word 는 기준 호스트의 호칭입니다.
+func (o allReportOpts) word() string {
+	if o.RefWord == "" {
+		return "기준"
+	}
+	return o.RefWord
 }
 
 // allGroup 은 같은 모델 키로 묶은 결과입니다 (기준이 있는 모델만 만들어집니다).
@@ -78,7 +88,7 @@ func refText(refs []*allRef) string {
 func writeAllReport(w io.Writer, r *allRun, o allReportOpts) {
 	p := painter{o.Color}
 	t := r.tally()
-	fmt.Fprintf(w, "== BIOS 전체 비교 (대상 %s대, 기준 %d대 / %s) ==\n", commaInt(len(r.Hosts)), len(r.Refs), r.Now.Format("2006-01-02 15:04"))
+	fmt.Fprintf(w, "== BIOS 전체 비교 (대상 %s대, %s %d대 / %s) ==\n", commaInt(len(r.Hosts)), o.word(), len(r.Refs), r.Now.Format("2006-01-02 15:04"))
 
 	line := func(label string, n int, color func(string) string, tail string) {
 		s := fmt.Sprintf("%-16s %7s", label, commaInt(n))
@@ -86,6 +96,18 @@ func writeAllReport(w io.Writer, r *allRun, o allReportOpts) {
 			s = color(s)
 		}
 		fmt.Fprintln(w, s+tail)
+	}
+	if o.RefWord != "" {
+		// 비교서버 모드: 비교한 대상이 모두 같으면 한 줄로 알린다.
+		otherN := 0
+		for st, n := range t {
+			if st != StatusSame && st != StatusIsReference {
+				otherN += n
+			}
+		}
+		if t[StatusSame] > 0 && otherN == 0 {
+			fmt.Fprintln(w, p.green(fmt.Sprintf("모두 동일: 대상 %s대의 BIOS 값이 (제외 속성을 뺀) %s와 전부 같습니다.", commaInt(t[StatusSame]), o.word())))
+		}
 	}
 	line("완전 일치", t[StatusSame], p.green, "")
 	line("차이 있음", t[StatusDiff], p.red, "  → "+filepath.ToSlash(filepath.Join(r.Dir, "all_diff.tsv")))
@@ -123,7 +145,7 @@ func writeAllReport(w io.Writer, r *allRun, o allReportOpts) {
 	writeAllGroups(w, groups, o, r, p)
 	writeAllAgg(w, groups, o, p)
 	writeAllSpecial(w, r, o, p)
-	writeAllRefErrors(w, r, p)
+	writeAllRefErrors(w, r, o, p)
 	writeAllUnclassified(w, r, o, p)
 
 	fmt.Fprintln(w)
@@ -150,8 +172,8 @@ func writeAllGroups(w io.Writer, groups []*allGroup, o allReportOpts, r *allRun,
 		if g.Self > 0 {
 			self = fmt.Sprintf(" (기준 자신 %d대 제외)", g.Self)
 		}
-		fmt.Fprintf(w, "%s 기준: %s / 대상 %d대 / 완전 일치 %s / 차이 있음 %s%s\n",
-			p.cyan("["+g.Label+"]"), refText(g.Refs), len(g.Hosts), same, diff, self)
+		fmt.Fprintf(w, "%s %s: %s / 대상 %d대 / 완전 일치 %s / 차이 있음 %s%s\n",
+			p.cyan("["+g.Label+"]"), o.word(), refText(g.Refs), len(g.Hosts), same, diff, self)
 
 		width, shown := 0, 0
 		for _, h := range g.Hosts {
@@ -196,8 +218,12 @@ func writeAllGroups(w io.Writer, groups []*allGroup, o allReportOpts, r *allRun,
 				tag := ""
 				if d.Status != attrDiff {
 					tag = "  (" + d.Status + ")"
+					if o.RefWord != "" {
+						// 비교서버 모드는 어느 쪽에만 있는 속성인지 말로 풀어 쓴다.
+						tag = "  (" + map[string]string{attrOnlyRef: o.word() + "에만 있음", attrOnlyHost: "대상에만 있음"}[d.Status] + ")"
+					}
 				}
-				fmt.Fprintf(w, "      %s  기준=%s → 대상=%s%s\n", padTo(d.Attr, aw), clip(d.refCell(), 60), clip(d.hostCell(), 60), tag)
+				fmt.Fprintf(w, "      %s  %s=%s → 대상=%s%s\n", padTo(d.Attr, aw), o.word(), clip(d.refCell(), 60), clip(d.hostCell(), 60), tag)
 			}
 		}
 	}
@@ -311,7 +337,7 @@ func writeAllAgg(w io.Writer, groups []*allGroup, o allReportOpts, p painter) {
 				}
 				mix = "  [" + strings.Join(parts, ", ") + "]"
 			}
-			fmt.Fprintf(w, "   %s%s  %d대 (%d%%)  기준 %s → 대상 %s%s\n", mark, padTo(e.Attr, aw), e.Hosts, e.Hosts*100/len(g.Hosts),
+			fmt.Fprintf(w, "   %s%s  %d대 (%d%%)  %s %s → 대상 %s%s\n", mark, padTo(e.Attr, aw), e.Hosts, e.Hosts*100/len(g.Hosts), o.word(),
 				topVals(e.RefVals, 2), topVals(e.HostVals, 3), mix)
 		}
 		if flagged {
@@ -417,7 +443,7 @@ func writeAllSpecial(w io.Writer, r *allRun, o allReportOpts, p painter) {
 }
 
 // writeAllRefErrors 는 읽지 못한 기준 호스트입니다 (기준이 빠지면 그 모델의 대상이 REF_UNREACHABLE 이 됩니다).
-func writeAllRefErrors(w io.Writer, r *allRun, p painter) {
+func writeAllRefErrors(w io.Writer, r *allRun, o allReportOpts, p painter) {
 	var bad []*allRef
 	for _, ref := range r.Refs {
 		if !ref.Snap.ok() {
@@ -428,7 +454,11 @@ func writeAllRefErrors(w io.Writer, r *allRun, p painter) {
 		return
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, p.boldRed("[기준 호스트 오류]")+" 읽지 못한 기준은 비교에서 빠집니다 (diff.txt 는 매번 다시 읽으므로 복구 후 재실행)")
+	if o.RefWord != "" {
+		fmt.Fprintln(w, p.boldRed("[비교서버 오류]")+" 비교서버를 읽지 못해 이 모델의 대상은 비교하지 못했습니다 (접속·계정을 확인한 뒤 다시 실행)")
+	} else {
+		fmt.Fprintln(w, p.boldRed("[기준 호스트 오류]")+" 읽지 못한 기준은 비교에서 빠집니다 (diff.txt 는 매번 다시 읽으므로 복구 후 재실행)")
+	}
 	for _, ref := range bad {
 		d := ""
 		if ref.Snap.Detail != "" {
@@ -477,7 +507,11 @@ func writeAllUnclassified(w io.Writer, r *allRun, o allReportOpts, p painter) {
 			for _, l := range labels {
 				fmt.Fprintf(w, "    [%s] %d대: %s\n", l, len(byLabel[l]), namesText(byLabel[l], o.ListMax))
 			}
-			fmt.Fprintln(w, "    이 모델의 정상 설정값을 가진 대표 hostname 을 diff.txt 에 추가한 뒤 다시 실행하십시오.")
+			if o.RefWord != "" {
+				fmt.Fprintln(w, "    "+o.word()+"와 모델이 달라 비교하지 않았습니다. 이 모델과 같은 모델의 비교서버를 지정해 다시 실행하십시오.")
+			} else {
+				fmt.Fprintln(w, "    이 모델의 정상 설정값을 가진 대표 hostname 을 diff.txt 에 추가한 뒤 다시 실행하십시오.")
+			}
 			continue
 		}
 		names := make([]string, len(hs))

@@ -110,8 +110,14 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    S(["bash all_bios_check.sh"]) --> W["all_bios_check.sh<br/>바이너리 선택 · bios.conf · diff.txt · user.txt · pass.enc 확인<br/>-from-dump 이면 접속 안 하므로 pass.enc 불필요"]
-    W --> L["biostool allcheck<br/>diff.txt (기준) · ignore_attrs.txt (없으면 내장 목록) · user.txt 로드<br/>읽기 전용, 쓰기 호출 없음"]
+    S(["bash all_bios_check.sh"]) --> IN{"터미널이고 -user · -diff · -ref 가 없는가"}
+    IN -->|"예 (대화형)"| Q1["대상 입력<br/>user.txt 파일 또는 hostname"]
+    Q1 --> Q2{"1. 체크 / 2. 전체비교"}
+    Q2 -->|"1. 체크"| CK(["bios_check.sh -user 대상<br/>1번 흐름으로"])
+    Q2 -->|"2. 전체비교"| Q3["비교서버 입력 (hostname 1대)<br/>→ -ref 비교서버"]
+    IN -->|"아니오 (인자 · 파이프)"| W
+    Q3 --> W["all_bios_check.sh<br/>바이너리 선택 · bios.conf · user.txt · pass.enc 확인<br/>-ref 가 없으면 diff.txt 도 확인<br/>-from-dump 이면 접속 안 하므로 pass.enc 불필요"]
+    W --> L["biostool allcheck<br/>비교서버(-ref) 또는 diff.txt (기준) · ignore_attrs.txt (없으면 내장 목록) · user.txt 로드<br/>읽기 전용, 쓰기 호출 없음"]
     L --> R1["1단계: 기준 호스트 읽기<br/>호스트당 GET 4번: Root · Systems · System · Bios<br/>모델은 BMC 가 보고한 값을 정규화한 키"]
     R1 --> R2["2단계: 대상 호스트 읽기<br/>AUTH_FAIL 예산은 1단계와 공유, 읽는 즉시 비교하고 값은 버림"]
     R2 --> C{"대상과 같은 모델의<br/>기준 호스트가 있는가"}
@@ -123,7 +129,7 @@ flowchart TD
     NR --> O
     RU --> O
     RF --> O
-    O["results/일시_all/<br/>all_diff.tsv · summary.tsv · retry.txt · run_info.txt"] --> T["터미널 리포트<br/>모델 그룹별 차이 · 속성별 집계 · 특이사항 · 분류 불가와 오류"]
+    O["results/일시_all/<br/>all_diff.tsv · summary.tsv · retry.txt · run_info.txt · report.txt"] --> T["터미널 리포트<br/>모두 동일 또는 비교서버=a → 대상=b (양방향)<br/>모델 그룹별 차이 · 속성별 집계 · 특이사항 · 분류 불가와 오류"]
 ```
 
 ## 5. 재시도 — `-retry-from 이전결과폴더`

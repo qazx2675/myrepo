@@ -4,6 +4,10 @@
 
 Cisco UCSM 읽기 전용 점검·연구용 프로파일과 2순위(예비) 계정을 추가했습니다. **실제 BMC·UCSM 에 접속해 본 적은 없습니다**(아래 “알려진 한계”, [FIRST_RUN.md](FIRST_RUN.md) 18~25).
 
+### 변경
+
+- **`all_bios_check.sh` 대화형 모드 + 비교서버(`-ref`)**: 터미널에서 `-user`/`-diff`/`-ref`/`-from-dump`/`-retry-from` 없이 실행하면 `대상 입력 → 1. 체크(bios_check.sh) / 2. 전체비교 → 비교서버 입력` 순으로 묻습니다(대상은 `user.txt` 파일 또는 hostname 직접 입력, 기본 `user.txt`). `biostool allcheck -ref <hostname>` 은 `diff.txt` 없이 비교서버 1대를 직접 받으며(`-diff` 와 동시 사용 불가), 리포트가 "비교서버" 표기로 `비교서버=a → 대상=b`, 한쪽에만 있는 속성은 `(비교서버에만 있음)`/`(대상에만 있음)` 으로 양방향을 말로 보여 주고 모두 같으면 `모두 동일` 한 줄을 냅니다. 화면 리포트 전체를 결과 폴더 `report.txt`(0600, 상한·색 없음)로도 저장합니다. 인자를 주는 기존 사용법(`diff.txt` 방식)과 기존 리포트 문구는 그대로입니다. 테스트 `TestAllCheckRefWordReport`, 랩 .58/.60 mock BMC 3~4대 실행으로 확인.
+
 ### 수정
 
 - **`workflow*.svg` 6개가 GitHub 에서 잘려 보이던 문제**: 글자를 `foreignObject`(고정 크기 상자)가 아니라 `<text>` 로 내도록 다시 렌더링(`htmlLabels:false`, 측정 17px → 표시 16px 로 박스 여유). WORKFLOW.md 에 그림별 단계·확인 순서 표 추가, PR_CHECKLIST “흐름도 다시 그리기” 갱신.
@@ -50,8 +54,8 @@ Cisco UCSM 읽기 전용 점검·연구용 프로파일과 2순위(예비) 계�
 
 | 파일 | 빌드 | 크기(바이트) | sha256 |
 |---|---|---|---|
-| `bin/biostool` | Go 1.26.5 | 7475362 | `1f9d439970ec34578b88cdce66746b5b80a9cd459405da07bac9438e5c23e915` |
-| `bin/biostool_os6` | Go 1.20.14 | 6107136 | `39a895e198248d8ac4b262cfa89d265fa78cd95354726b642db2221a39697220` |
+| `bin/biostool` | Go 1.26.5 | 7479458 | `cc1439a4d424ab901368105413e4d4338ce0f3aa21f4ba8ad49d69ccb9612622` |
+| `bin/biostool_os6` | Go 1.20.14 | 6111232 | `210249522cd8ee9ede3cc36b10606797724f46310cec4e6010db850467ca5877` |
 | `bin/mockbmc` | Go 1.26.5 | 7237794 | `41b6b9a69fbcce12e49ddf09d7823a31cfdcf55f26eeb06ee2988693dab45c97` |
 | `bin/mockbmc_os6` | Go 1.20.14 | 5689344 | `8f5e997045fee74b55d71ab88bfa00b2985dcb79561a5235710caacb12c5fc49` |
 

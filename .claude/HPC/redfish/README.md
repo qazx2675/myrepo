@@ -246,9 +246,26 @@ bash xml.sh --compact 192.0.2.10      # 호스트당 1줄 요약
 표준 4개 항목이 아니라, **같은 모델 안에서 정상(기준) 호스트와 BIOS Attribute 전체를 비교**합니다. 읽기 전용이며 설정은 하지 않습니다.
 
 ```bash
-bash all_bios_check.sh                       # diff.txt(기준) 와 user.txt(대상) 비교
+bash all_bios_check.sh                       # 터미널이면 대화형: 대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력
+bash all_bios_check.sh -ref host0001-m       # 비교서버 1대를 직접 지정, user.txt 의 대상과 BIOS 전체 값 비교
+bash all_bios_check.sh -user u.txt -diff diff.txt   # 목록 파일 방식(비대화형)
 bash all_bios_check.sh -diff-max 10          # 나머지 인자는 biostool allcheck 에 그대로 전달
 ```
+
+**대화형 흐름** (인자 없이 터미널에서 실행했을 때. `-user`/`-diff`/`-ref`/`-from-dump`/`-retry-from` 중 하나라도 주면 아래 대화 없이 곧바로 실행):
+
+```text
+대상(user.txt 파일 경로 또는 hostname, 쉼표·공백 구분) [user.txt] : 127.0.0.1:19302,127.0.0.1:19303
+1. 체크      (프로파일 표준값과 비교, 다르면 설정 여부를 묻는다)
+2. 전체비교  (비교서버 1대의 BIOS 전체 값과 대상을 비교, 다른 값만 리포트)
+선택 [1/2] : 2
+비교서버(hostname 1대) : 127.0.0.1:19301
+```
+
+- **1. 체크**는 `bios_check.sh -user <대상>` 을 그대로 실행합니다(프로파일 선택 메뉴 → 점검 → 설정 Y/N).
+- **2. 전체비교**는 비교서버 1대의 BIOS 속성 전체를 읽어, 대상의 속성 전체와 비교합니다. 호스트마다 달라야 하는 값(서비스태그·MAC·시간 등)은 `ignore_attrs.txt`(없으면 내장 목록)로 뺍니다.
+- 비교서버와 모델이 다른 대상은 비교하지 않고 `NO_REFERENCE` 로 알립니다(같은 모델끼리만 비교).
+- 리포트 전체는 화면과 같은 내용이 `results/<일시>_all/report.txt` 로도 저장됩니다(상한 없음, 색 없음).
 
 - `diff.txt` 에는 정상 설정값을 가진 대표 호스트의 **hostname 만** 한 줄에 하나씩 적습니다(모델은 BMC 에서 자동 조회). 모델마다 한 대 이상 적으십시오.
 - 기준·대상 모두 BMC 가 보고한 실제 모델을 정규화(`ProLiant DL360 Gen11` = `DL360Gen11`)해 **같은 모델끼리** 비교합니다.
@@ -275,6 +292,36 @@ bash all_bios_check.sh -diff-max 10          # 나머지 인자는 biostool allc
 ```
 
 같은 속성이 대상의 과반에서 다르게 나오면 기준 호스트의 값이 예외일 수 있으니 기준을 다시 확인하라는 안내가 `[속성별 집계]` 에 붙습니다.
+
+**비교서버 모드(`-ref`, 대화형 2번)의 리포트** — 호칭이 "비교서버" 이고, 양쪽 방향의 차이를 모두 보여 줍니다. 아래는 mock BMC 3대(비교서버 1, 같은 대상 1, ProcTurbo 만 다른 대상 1)와 mock BMC 대상 1대(`Sriov` 없음 + `OnlyOnTarget` 추가)의 실제 출력입니다.
+
+```text
+== BIOS 전체 비교 (대상 2대, 비교서버 1대 / 2026-10-13 08:56) ==
+완전 일치                  1
+차이 있음                  1  → results/20261013_085622_all/all_diff.tsv
+
+[HPE ProLiant DL360 Gen11] 비교서버: 127.0.0.1:19301 (BIOS U54 v1.40 (01/15/2025)) / 대상 2대 / 완전 일치 1대 / 차이 있음 1대
+  127.0.0.1:19303  DIFF 1, ONLY_REF 0, ONLY_HOST 0
+      ProcTurbo  비교서버=Enabled → 대상=Disabled
+```
+
+```text
+  127.0.0.1:19304  DIFF 0, ONLY_REF 1, ONLY_HOST 1
+      Sriov         비교서버=Enabled → 대상=<없음>  (비교서버에만 있음)
+      OnlyOnTarget  비교서버=<없음> → 대상=x  (대상에만 있음)
+```
+
+대상이 모두 같으면 한 줄이 맨 위에 붙습니다.
+
+```text
+== BIOS 전체 비교 (대상 1대, 비교서버 1대 / 2026-10-13 08:57) ==
+모두 동일: 대상 1대의 BIOS 값이 (제외 속성을 뺀) 비교서버와 전부 같습니다.
+완전 일치                  1
+차이 있음                  0  → results/20261013_085750_all/all_diff.tsv
+```
+
+- 한 속성에서 값이 다르면 `비교서버=a → 대상=b`, 한쪽에만 있는 속성은 `(비교서버에만 있음)` / `(대상에만 있음)` 로 방향을 말로 표시합니다. `all_diff.tsv` 에는 같은 내용이 `DIFF` / `ONLY_REF` / `ONLY_HOST` 로 들어갑니다.
+- 비교서버를 읽지 못하면(접속 불가·계정 오류) 그 모델의 대상은 비교하지 못하고 `[비교서버 오류]` 로 알립니다.
 
 ### 2.5 저장된 덤프로 오프라인 실행 — `-from-dump`
 
@@ -696,7 +743,7 @@ $ bin/biostool account change
 |---|---|---|
 | `bios_check.sh` | `[--profile <이름>] [biostool check 옵션...]` | 파일 확인 → 프로파일 메뉴(3회까지 재입력) → `biostool check -profile …`. `-retry-from` 이면 `user.txt` 불필요, `-from-dump` 이면 `pass.enc`·`key.bin` 불필요. `-h` 도움말 |
 | `xml.sh` | `[--compact] [대상...]` | 대상 인자를 쉼표로 묶어 `biostool dump -targets …`. 대상이 없으면 `user.txt`. **설정은 항상 `./bios.conf` 를 쓰며 `-conf` 등 다른 옵션은 받지 않습니다**(알 수 없는 옵션은 오류). 일부 호스트가 실패해도 안내를 보여 준 뒤 종료코드를 전달 |
-| `all_bios_check.sh` | `[biostool allcheck 옵션...]` | 파일 확인 후 `biostool allcheck` 실행 |
+| `all_bios_check.sh` | `[-ref <비교서버>] [biostool allcheck 옵션...]` | 인자 없이 터미널에서 실행하면 대화형(대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력). 그 밖에는 파일 확인 후 `biostool allcheck` 실행 |
 | `ucsm_check.sh` | `[-user <파일>] [-xml-map <파일>] [-list-max N] ...` | 파일 확인 후 `biostool ucsm` 실행(읽기 전용). `-h` 도움말. 2.9절 |
 | `account_create.sh` | `[-dry-run] [-ucsm] [-j N] [biostool account create 옵션...]` | 파일(bios.conf·user.txt·pass.enc·rf.conf) 확인 후 `biostool account create`. 2.12절 |
 | `encrypt.sh` | (인자 없음) | 비밀번호를 두 번 입력받아 같을 때만 `pass.enc`·`key.bin`(권한 600) 생성 |
@@ -835,6 +882,7 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `REF_UNREACHABLE` | 이 모델의 기준일 수 있는 호스트를 모두 읽지 못함 | ○ |
 | 호스트 오류 | `UNREACHABLE` `TIMEOUT` `BMC_ERROR` `SKIPPED_AUTH_STOP` 는 `retry.txt` ○, `AUTH_FAIL` `UNSUPPORTED` `HTTP_ERROR` `NO_HOSTS_ENTRY` `NO_DUMP` 는 × | |
 
+- `-ref <hostname>`(비교서버 직접 지정, `-diff` 와 함께 쓸 수 없음): `diff.txt` 를 읽지 않고, 리포트가 "기준" 대신 "비교서버" 로 표기하며 모두 같으면 `모두 동일` 한 줄을 냅니다. 화면 리포트 전체는 `report.txt` 로도 저장됩니다.
 - 속성 단위(`all_diff.tsv`): `DIFF`(값 다름), `ONLY_REF`(기준에만 존재), `ONLY_HOST`(대상에만 존재; BIOS 버전이 다르면 흔함).
 - 특이사항(`summary.tsv` 의 `notes`): `BIOS_VER_DIFF`(대상 버전 ≠ 기준 버전, 비교는 그대로 진행), `MULTI_REF`(같은 모델 기준이 여럿: BIOS 버전이 같은 쪽, 없으면 `diff.txt` 순서의 첫 기준), `DIFF_TXT_MODEL_MISMATCH`(`diff.txt` 의 모델 칸이 실제와 다름).
 

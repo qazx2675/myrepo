@@ -904,6 +904,7 @@ func (r *allRun) runInfo() string {
 func cmdAllCheck(args []string) error {
 	fs, o := newFlagSet("allcheck")
 	diff := fs.String("diff", "diff.txt", "기준(정상 설정값) 호스트 목록: 한 줄에 hostname")
+	ref := fs.String("ref", "", "비교서버 hostname (쉼표로 여러 개 가능). 지정하면 -diff 파일을 읽지 않고 리포트가 '비교서버' 표기를 씁니다")
 	ignore := fs.String("ignore", "ignore_attrs.txt", "비교에서 제외할 속성 목록 (없으면 내장 기본 목록)")
 	listMax := fs.Int("list-max", 20, "차이 상세·특이사항·오류에 나열할 최대 호스트 수")
 	diffMax := fs.Int("diff-max", 30, "호스트당 터미널에 보일 차이 속성 최대 수")
@@ -921,14 +922,28 @@ func cmdAllCheck(args []string) error {
 		return err
 	}
 
-	explicitIgnore := false
+	explicitIgnore, explicitDiff := false, false
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "ignore" {
+		switch f.Name {
+		case "ignore":
 			explicitIgnore = true
+		case "diff":
+			explicitDiff = true
 		}
 	})
-	entries, err := loadRefList(*diff)
-	if err != nil {
+	var entries []refEntry
+	var err error
+	refWord, refSrc := "", *diff
+	if *ref != "" {
+		if explicitDiff {
+			return fmt.Errorf("-ref 와 -diff 는 함께 쓸 수 없습니다 (비교서버를 직접 지정하거나 목록 파일을 쓰십시오)")
+		}
+		entries = parseRefList(strings.NewReplacer(",", "\n", ";", "\n").Replace(*ref))
+		if len(entries) == 0 {
+			return fmt.Errorf("-ref 에 비교서버 hostname 이 없습니다")
+		}
+		refWord, refSrc = "비교서버", "-ref 지정"
+	} else if entries, err = loadRefList(*diff); err != nil {
 		return err
 	}
 	ign, err := loadIgnore(*ignore, explicitIgnore)
@@ -944,14 +959,23 @@ func cmdAllCheck(args []string) error {
 		return err
 	}
 	printSummary(rc, o, "")
-	fmt.Printf("기준(정상) 호스트: %s 에서 %d개, 제외 속성: %s\n", *diff, len(refs), ign.Source)
+	if refWord != "" {
+		fmt.Printf("비교서버: %s (%d대), 제외 속성: %s\n", strings.Join(refNames(refs), ", "), len(refs), ign.Source)
+	} else {
+		fmt.Printf("기준(정상) 호스트: %s 에서 %d개, 제외 속성: %s\n", refSrc, len(refs), ign.Source)
+	}
 
 	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: ign, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, RetryFromDir: o.retryFrom})
 	if run == nil {
 		return err
 	}
 	fmt.Println()
-	writeAllReport(os.Stdout, run, allReportOpts{ListMax: *listMax, DiffMax: *diffMax, Color: useColor()})
+	writeAllReport(os.Stdout, run, allReportOpts{ListMax: *listMax, DiffMax: *diffMax, Color: useColor(), RefWord: refWord})
+	// 화면 리포트와 같은 내용을 상한 없이 파일로도 남긴다 (색 없음, 0600).
+	if f, ferr := os.OpenFile(filepath.Join(run.Dir, "report.txt"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); ferr == nil {
+		writeAllReport(f, run, allReportOpts{ListMax: 1 << 30, DiffMax: 1 << 30, RefWord: refWord})
+		f.Close()
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "경고: 결과 파일 기록 중 오류: "+err.Error())
 	}

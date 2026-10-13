@@ -774,6 +774,44 @@ func TestAllCheckReportLimits(t *testing.T) {
 	}
 }
 
+// -ref(비교서버) 모드 리포트: '비교서버' 표기, 비교서버=a → 대상=b, 한쪽에만 있는 속성은 말로 풀어 쓰고, 모두 같으면 '모두 동일'.
+func TestAllCheckRefWordReport(t *testing.T) {
+	_, ref := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, same := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, diff := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"ProcTurbo": "Disabled", "OnlyOnHost": "v"})
+	})
+
+	// 모두 같다: 비교서버 모드에서만 '모두 동일' 한 줄
+	run := runAllT(t, 1, ref+"\n", []string{same}, "")
+	var rep bytes.Buffer
+	writeAllReport(&rep, run, allReportOpts{ListMax: 20, DiffMax: 30, RefWord: "비교서버"})
+	if !strings.Contains(rep.String(), "모두 동일: 대상 1대의 BIOS 값이 (제외 속성을 뺀) 비교서버와") {
+		t.Errorf("모두 동일 줄 없음\n%s", rep.String())
+	}
+	rep.Reset()
+	writeAllReport(&rep, run, allReportOpts{ListMax: 20, DiffMax: 30})
+	if strings.Contains(rep.String(), "모두 동일") {
+		t.Errorf("기존(기준) 모드 리포트에 '모두 동일' 이 나옴\n%s", rep.String())
+	}
+
+	// 다른 값이 있다: 비교서버=a → 대상=b, 대상에만 있는 속성은 '대상에만 있음'
+	run = runAllT(t, 1, ref+"\n", []string{diff}, "")
+	rep.Reset()
+	writeAllReport(&rep, run, allReportOpts{ListMax: 20, DiffMax: 30, RefWord: "비교서버"})
+	out := rep.String()
+	for _, want := range []string{
+		"비교서버 1대", "비교서버=", "→ 대상=Disabled", "OnlyOnHost", "(대상에만 있음)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("리포트에 %q 없음\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "모두 동일") || strings.Contains(out, "기준=") {
+		t.Errorf("차이가 있는데 '모두 동일' 또는 '기준=' 표기가 나옴\n%s", out)
+	}
+}
+
 // 수많은 BIOS 버전 불일치 호스트도 그룹으로 묶어 상한 안에서 보여 준다.
 func TestAllCheckSpecialListIsBounded(t *testing.T) {
 	run := &allRun{Now: checkNow, Dir: "results/x_all", Ignore: testIgnore}
