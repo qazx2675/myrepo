@@ -155,6 +155,10 @@ func checkOS6(hosts []string) (map[string]CheckResult, error) {
 		if err == nil {
 			err = errors.New("os6 응답 형식 오류")
 		}
+		// ssh 가 낸 실패 사유(Permission denied, Could not resolve hostname, 원격 bash 오류 등)는 out 에 있다 — 함께 보여 준다
+		if h := diagHead(out); h != "" {
+			return nil, fmt.Errorf("os6 준비확인 실패: %v — %s", err, h)
+		}
 		return nil, fmt.Errorf("os6 준비확인 실패: %v", err)
 	}
 	parts := strings.SplitN(out, osiMarker, 2)
@@ -163,6 +167,24 @@ func checkOS6(hosts []string) (map[string]CheckResult, error) {
 		markTimeout(res)
 	}
 	return res, nil
+}
+
+// diagHead: 외부 명령 출력에서 사람이 읽을 첫 몇 줄 (ANSI 제거, 빈 줄 제외, 최대 3줄·160자). 진단 메시지용
+func diagHead(out string) string {
+	var ls []string
+	for _, l := range strings.Split(ansiRe.ReplaceAllString(out, ""), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			ls = append(ls, l)
+			if len(ls) == 3 {
+				break
+			}
+		}
+	}
+	s := strings.Join(ls, " / ")
+	if r := []rune(s); len(r) > 160 {
+		s = string(r[:160]) + "…"
+	}
+	return s
 }
 
 // parseCheck: gossh 출력("host: 123.45 678.9", 사유 줄 포함) + _os_install(한 줄 한 호스트) → 결과.

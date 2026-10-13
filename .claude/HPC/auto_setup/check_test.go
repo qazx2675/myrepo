@@ -381,3 +381,26 @@ func TestRemoteBashBang(t *testing.T) {
 		t.Fatalf("! 없음: %s", got)
 	}
 }
+
+// os6 ssh 가 실패하면 ssh 가 낸 사유(출력)를 오류 메시지에 함께 보여 준다
+func TestCheckOS6ErrorShowsReason(t *testing.T) {
+	oldM, oldG := os6_mgmt, os6_gossh
+	os6_mgmt, os6_gossh = "mgmtstub", "/stub/gossh"
+	t.Cleanup(func() { os6_mgmt, os6_gossh = oldM, oldG })
+	fakeExternal(t, func(stdin, name string, args ...string) (string, error) {
+		return "Permission denied (publickey,password).\n", errors.New("exit status 255")
+	})
+	_, err := NewRealChecker().Check("os6", []string{"a"})
+	if err == nil || !strings.Contains(err.Error(), "exit status 255") || !strings.Contains(err.Error(), "Permission denied") {
+		t.Fatalf("사유가 오류에 없음: %v", err)
+	}
+}
+
+func TestDiagHead(t *testing.T) {
+	if got := diagHead("\n  a \x1b[31mb\x1b[0m\n\nc\nd\ne\n"); got != "a b / c / d" {
+		t.Fatalf("diagHead: %q", got)
+	}
+	if diagHead(" \n") != "" {
+		t.Fatal("빈 출력")
+	}
+}

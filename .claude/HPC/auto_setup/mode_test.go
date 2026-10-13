@@ -57,7 +57,7 @@ func TestRunnerCheckOnlyMode(t *testing.T) {
 	td, _ := filepath.Abs("testdata")
 	tmp := t.TempDir()
 	os_check_sh = filepath.Join(tmp, "os_check_stub.sh")
-	os.WriteFile(os_check_sh, []byte("#!/bin/bash\necho \"$@\" > args.txt\ncat '"+td+"/os_check.log'\ncp '"+td+"/check.res_user1_postapply' check.res_user1\n"), 0755)
+	os.WriteFile(os_check_sh, []byte("#!/bin/bash\n# -auto -auto-check 지원 스텁\necho \"$@\" > args.txt\ncat '"+td+"/os_check.log'\ncp '"+td+"/check.res_user1_postapply' check.res_user1\n"), 0755)
 
 	j := &Job{ID: "j1", User: "user1", RunMode: ModeCheck}
 	res, err := NewRealRunner().Run(j, []string{"host01", "host02", "host03", "host04"}, false)

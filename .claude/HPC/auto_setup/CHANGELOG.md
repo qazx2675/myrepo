@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.8.2] - 2026-10-13
+
+### 수정
+- **os6_mgmt 경유 준비확인·재확인(g)이 실패하면 실제 사유를 보여 준다**: `os6 준비확인 실패: exit status 255` 만 나오던 것에 ssh 가 낸 출력(예 `Permission denied (publickey)`, `Could not resolve hostname`, 원격 bash 오류)의 첫 3줄을 덧붙인다 (`diagHead`). g 진행 창의 `os6_mgmt 확인 호출 실패: …` 와 `auto_setup.log` 에 그대로 나온다
+- **설정체크만(t) — 체크스크립트가 `-auto-check` 를 모르면 실행하지 않고 사유를 알린다**: `-auto` 만 아는 스크립트(config_check.sh 등)에 `-auto-check` 를 주면 user 선택 메뉴에서 멈추고 결과 창에는 아무것도 나오지 않았다. 요청을 거부(`requests/rejected` 의 reason)하고 Runner 도 실행 전에 막는다: `os_check_sh 가 -auto-check 를 지원하지 않음 (설정체크만 t 불가 — c 로 실행하거나 …)`. 스크립트를 읽을 수 없으면 막지 않는다
+- **결과 리포트가 없을 때 결과 창(code 본문)에 원인을 보여 준다**: 대상이 모두 접속불가이거나 체크스크립트가 중간에 멈췄을 때 `[!] 결과 리포트가 없습니다 …` 안내와 체크스크립트 출력의 마지막 12줄을 싣는다 (예전에는 로그 경로를 열어 봐야 user 선택 화면을 볼 수 있었다)
+
 ## [0.8.1] - 2026-10-13
 
 ### 수정
