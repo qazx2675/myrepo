@@ -23,6 +23,9 @@ func fixedUser() string {
 // headerUser: 헤더 `[user: …]` 에 보일 user — forceUser 우선, 없으면 세션 user
 func headerUser() string {
 	if forceUser != "" {
+		if showAllUsers {
+			return forceUser + " · 전체 user 보기"
+		}
 		return forceUser
 	}
 	return sessionUser
