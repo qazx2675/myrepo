@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="2000" height="4800" viewBox="0 0 1000 2400" style="background-color: #ffffff" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg width="2400" height="4880" viewBox="0 0 1200 2440" style="background-color: #ffffff" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
   <defs>
     <style>
       .box { fill: #fff4e6; stroke: #333; stroke-width: 2; }
@@ -16,24 +16,19 @@
   </defs>
 
   <!-- 배경 -->
-  <rect width="1000" height="2400" fill="#ffffff"/>
+  <rect width="1200" height="2440" fill="#ffffff"/>
 
   <!-- ===== 01.AWX_nodeinfo_V2.sh ===== -->
   <text x="500" y="30" class="text title">01.AWX_nodeinfo_V2.sh 실행 흐름</text>
 
-  <!-- [0] 초기화 -->
-  <rect x="350" y="50" width="300" height="60" class="box" rx="5"/>
-  <text x="500" y="75" class="text">[0] 초기화</text>
-  <text x="500" y="95" class="text" font-size="12">trap cleanup, 변수/로그 준비</text>
 
   <!-- [1] user 호출 -->
-  <path d="M 500 110 L 500 150" class="arrow"/>
-  <rect x="350" y="150" width="300" height="60" class="box" rx="5"/>
-  <text x="500" y="175" class="text">[1] user 호출</text>
-  <text x="500" y="195" class="text" font-size="12">현장 코드로 $user 설정</text>
+  <rect x="350" y="50" width="300" height="60" class="box" rx="5"/>
+  <text x="500" y="75" class="text">[1] user 호출</text>
+  <text x="500" y="95" class="text" font-size="12">현장 코드로 $user 설정</text>
 
   <!-- user 검증 -->
-  <path d="M 500 210 L 500 250" class="arrow"/>
+  <path d="M 500 110 L 500 250" class="arrow"/>
   <polygon points="500,250 470,270 530,270" class="diamond"/>
   <text x="500" y="270" class="text" font-size="12">user 값?</text>
 
@@ -62,9 +57,9 @@
   <text x="750" y="561" class="text" font-size="12">[5] 등록 대상 다단 출력</text>
 
   <!-- [4-1] DNS 점검 상세 (신규) -->
-  <path d="M 600 530 L 452 530" class="arrow"/>
-  <text x="526" y="522" class="text" font-size="11">[4-1]</text>
-  <rect x="150" y="396" width="300" height="210" class="box" rx="5"/>
+  <path d="M 600 530 L 542 530" class="arrow"/>
+  <text x="571" y="522" class="text" font-size="11">[4-1]</text>
+  <rect x="60" y="396" width="480" height="210" class="box" rx="5"/>
   <text x="300" y="420" class="text">[4-1] DNS 점검 (dns_check)</text>
   <text x="300" y="442" class="text" font-size="12">resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의</text>
   <text x="300" y="459" class="text" font-size="12">(dig 우선, 없으면 nslookup, 둘 다 없으면 생략)</text>
