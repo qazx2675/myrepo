@@ -102,5 +102,18 @@ printf 'ab01 ab02\n' > "$W/run/u1.txt"
 chk "수동 모드 정상 종료" "[ $rc -eq 0 ]"
 chk "수동 모드: 마커·postapply·완료기록 없음" "! grep -q '결과 리포트' '$W/o6' && [ ! -e '$W/run/check.res_u1_postapply' ] && [ -z \"\$(ls -A '$W/done_local' | grep ab0)\" ]"
 
+# 7) -auto-check: -auto 와 같이 질문 없이 진행하되 환경설정 수정 n, 설정 적용·재점검·postapply·완료기록 없음 (check.res_<user> 는 생성)
+rm -rf "$W/run"/* "$W/done_local"/*; : > "$GOSSH_LOG"
+make_copy "$W/cc_chk.sh" "$W/done_local" ""
+(cd "$W/run" && bash "$W/cc_chk.sh" -auto-check u1 "$W/targets.txt" </dev/null >"$W/o7" 2>&1); rc=$?
+chk "-auto-check 정상 종료(stdin 없이, user 선택 화면 없음)" "[ $rc -eq 0 ] && ! grep -q 'input Number' '$W/o7'"
+chk "-auto-check 질문 에코 (y / n)" "grep -q '작업을 진행하시겠습니까? (y/n): y (-auto-check)' '$W/o7' && grep -q '환경설정을 수정하시겠습니까? (y/n/set): n (-auto-check)' '$W/o7'"
+chk "-auto-check 설정 명령(insert/appl/setting) 실행 안 함" "! grep -q 'setting.sh' '$W/gossh.log' && ! grep -q 'appl_change.sh' '$W/gossh.log'"
+chk "-auto-check 점검 결과 check.res_u1 만 생성 (postapply 없음)" "[ -s '$W/run/check.res_u1' ] && [ ! -e '$W/run/check.res_u1_postapply' ]"
+chk "-auto-check 결과 리포트 마커 출력" "grep -qx '############### 결과 리포트 ###############' '$W/o7'"
+chk "-auto-check 완료기록 없음" "[ -z \"\$(ls -A '$W/done_local' 2>/dev/null)\" ] && ! grep -q '완료기록' '$W/o7'"
+(cd "$W/run" && bash "$W/cc_chk.sh" -auto-check u1 </dev/null >"$W/o7b" 2>&1); rc=$?
+chk "-auto-check 인자 부족 → 종료코드 1" "[ $rc -eq 1 ]"
+
 echo "=== PASS $pass / FAIL $failn ==="
 [ "$failn" -eq 0 ]

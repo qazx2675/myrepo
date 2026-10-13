@@ -65,6 +65,16 @@ user 선택·y/n 질문 없이 진행합니다(`... : y (-auto)` 에코). `작�
 - auto_setup 에서는 `os_check_sh` 에 이 스크립트의 경로를 지정하면 됩니다.
 - 테스트: `bash test/run_auto_test.sh` (gossh 스텁, 18건)
 
+#### 설정체크만 `-auto-check` (auto_setup `t`)
+
+`-auto-check <user> <호스트목록파일>` 은 `-auto` 와 같지만 환경설정 수정 질문에 `n` 으로 답해 **설정 적용·재점검·완료기록을 하지 않습니다** (점검 결과 `check.res_<user>` 와 결과 리포트만). auto_setup 의 설정체크만(t) 이 이 인자로 실행합니다. 이 인자가 없는 사본에서는 auto_setup 이 `t` 를 거부하고 안내합니다.
+
+`-auto` 가 이미 적용된 사본에는 증분 패치를 적용합니다 (백업·주석 변경 검사·문법 확인은 `apply_auto_mode.sh` 와 같음).
+
+```bash
+bash apply_auto_check.sh /경로/config_check.sh
+```
+
 #### 회사 사본에 반영하기 (`apply_auto_mode.sh`)
 
 회사 사본은 벤더 문자열·주석·코멘트 문구를 직접 수정해 쓰므로 **덮어쓰지 말고 적용 스크립트만 실행**합니다. `auto_mode.patch`(코드 줄만 건드리고 주석·코멘트 줄은 수정하지 않는 diff)를 적용하며, **주석·코멘트가 바뀌게 되면 적용하지 않고 중단**합니다(대상 파일 불변).
@@ -165,6 +175,7 @@ undefined  undefined    2ea Std 27Year asdf KERNEL RHEL2
 | `test/run_auto_test.sh` | `-auto`·완료기록 테스트 (gossh 스텁) |
 | `auto_mode.patch` | `-auto`·완료기록 변경분만 담은 패치(주석·코멘트 줄 불변) |
 | `apply_auto_mode.sh` | 회사 사본에 패치 적용 + 주석·코멘트 변경 검사 + 백업 |
+| `apply_auto_check.sh` · `auto_check_mode.patch` | `-auto` 가 이미 적용된 사본에 `-auto-check` 만 추가하는 증분 패치 적용 |
 | `계획서.md` | 요구사항·설계 결정·검증 계획 |
 | `ARCHITECTURE.md` | 함수/파일 → 역할 표 |
 | `PR_CHECKLIST.md` | 수정 후 확인 체크리스트 |
