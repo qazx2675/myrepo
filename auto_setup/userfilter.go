@@ -9,6 +9,9 @@ import (
 // forceUser: -user 로 지정한 user (비면 기존과 같음 — 모든 job 이 보이고 user 를 물어본다)
 var forceUser string
 
+// showAllUsers: -user 로 실행했어도 화면 1 의 a 로 켜는 "전체 user 보기" (다른 user 의 job 도 보임, 다시 a 로 내 job 만)
+var showAllUsers bool
+
 // splitUser: 명령 앞쪽(--admin·--plain·-user 만 이어지는 구간)에서 -user/--user <이름> 또는 -user=<이름> 을 떼어 낸다.
 // 값이 없거나 user 이름 규칙(영문·숫자·. _ -)에 맞지 않으면 오류.
 func splitUser(args []string) (rest []string, user string, err error) {
@@ -46,6 +49,9 @@ func (u userFilterSource) Snapshot() (Snapshot, error) {
 	s, err := u.SnapshotSource.Snapshot()
 	if err != nil {
 		return s, err
+	}
+	if showAllUsers {
+		return s, nil
 	}
 	return filterSnapshotUser(s, forceUser), nil
 }

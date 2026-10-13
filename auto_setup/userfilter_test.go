@@ -3,6 +3,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +69,29 @@ func TestNewUserStepForced(t *testing.T) {
 	o := st.newUserStep(true, nil)
 	if o.step != ooHosts || o.user != "alice" || !o.awx {
 		t.Fatalf("-user alice: %+v", o)
+	}
+}
+
+// -user 로 실행해도 화면 1 의 a 는 다른 user 의 job 까지 보이게 토글한다
+func TestForceUserAToggleAllUsers(t *testing.T) {
+	h := menuTUI(t)
+	oldF, oldS := forceUser, showAllUsers
+	t.Cleanup(func() { forceUser, showAllUsers = oldF, oldS })
+	forceUser, showAllUsers = "nobody-xyz", false
+	h.st.src = userFilterSource{h.st.src}
+	h.st.refresh()
+	if len(h.st.snap.Jobs) != 0 {
+		t.Fatalf("다른 user 라 job 이 없어야 함: %d", len(h.st.snap.Jobs))
+	}
+	h.keys("a")
+	if !showAllUsers || len(h.st.snap.Jobs) == 0 {
+		t.Fatalf("a 로 전체 user 가 보여야 함: all=%v jobs=%d", showAllUsers, len(h.st.snap.Jobs))
+	}
+	if !strings.Contains(h.frame(), "전체 user 보기") {
+		t.Errorf("머리에 전체 user 보기 표시 없음")
+	}
+	h.keys("a")
+	if showAllUsers || len(h.st.snap.Jobs) != 0 {
+		t.Fatalf("다시 a 로 내 job 만: all=%v jobs=%d", showAllUsers, len(h.st.snap.Jobs))
 	}
 }
