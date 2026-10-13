@@ -1,191 +1,220 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1240 1300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="auto_setup 실행 흐름 (v0.8.0)">
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="2020" viewBox="0 0 1100 2020" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans CJK KR',sans-serif">
   <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4a4f63"/></marker>
     <style>
-      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; --nw:#e0f7f5; --nws:#00838f; }
-      @media (prefers-color-scheme: dark) {
-        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; --nw:#17393b; --nws:#4dd0e1; }
-      }
-      .bg { fill: var(--bg); }
-      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
-      .tb { font-weight: bold; }
-      .tm { fill: var(--mute); font-size: 11px; }
-      .ttl { font-size: 18px; font-weight: bold; }
-      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
-      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
-      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
-      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
-      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
-      .nw { fill: var(--nw); stroke: var(--nws); stroke-width: 1.5; }
-      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
-      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
-      .ahf { fill: var(--ln); }
-      .ahd { fill: var(--exs); }
+      .auto  { fill: #e7f0ff; stroke: #3a63c8; stroke-width: 1.6; }
+      .input { fill: #fff1dc; stroke: #e08600; stroke-width: 2; }
+      .stop  { fill: #ffe5e5; stroke: #d03030; stroke-width: 1.6; }
+      .done  { fill: #e3f6e8; stroke: #2f9e57; stroke-width: 2; }
+      .link  { fill: #f1ebff; stroke: #7650c8; stroke-width: 2; }
+      .band  { fill: #eef0f5; }
+      .note  { fill: #fbfbfb; stroke: #9aa0ad; stroke-width: 1.2; stroke-dasharray: 5 4; }
+      .ln    { stroke: #4a4f63; stroke-width: 1.7; fill: none; marker-end: url(#ah); }
+      .lnd   { stroke: #4a4f63; stroke-width: 1.5; fill: none; marker-end: url(#ah); stroke-dasharray: 6 4; }
+      .tie   { stroke: #9aa0ad; stroke-width: 1.2; fill: none; stroke-dasharray: 4 4; }
+      .ti    { font-size: 24px; font-weight: bold; fill: #1d2140; text-anchor: middle; }
+      .sub   { font-size: 14px; fill: #4a4f63; text-anchor: middle; }
+      .bt    { font-size: 16px; font-weight: bold; fill: #1d2140; }
+      .h     { font-size: 15.5px; font-weight: bold; fill: #1d2140; text-anchor: middle; }
+      .b     { font-size: 13.5px; fill: #2b2f45; text-anchor: middle; }
+      .s     { font-size: 11.5px; fill: #7a7f8f; text-anchor: middle; }
+      .lb    { font-size: 13px; font-weight: bold; fill: #b04a00; text-anchor: middle; }
+      .lg    { font-size: 13px; fill: #2b2f45; }
+      .nl    { font-size: 12.5px; fill: #4a4f63; text-anchor: middle; }
     </style>
-    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
-    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
   </defs>
+  <rect width="1100" height="2020" fill="#ffffff"/>
 
-  <rect width="1240" height="1300" class="bg"/>
-  <text x="620" y="30" class="t ttl" text-anchor="middle">auto_setup 실행 흐름 (v0.8.0: os8_mgmt 단일 원본)</text>
+  <!-- 제목 · 범례 -->
+  <text class="ti" x="550" y="42">auto_setup — 한눈에 보는 흐름</text>
+  <text class="sub" x="550" y="68">AWX 노드정보 등록이 끝나면 넘어와, OS 설치 완료를 기다렸다가 설정 체크까지 자동으로 진행합니다. 주황색(⌨)은 작업자가 직접 하는 곳입니다.</text>
+  <rect class="auto"  x="170" y="86" width="26" height="18" rx="4"/><text class="lg" x="203" y="100">자동 처리</text>
+  <rect class="input" x="285" y="86" width="26" height="18" rx="4"/><text class="lg" x="318" y="100">⌨ 작업자 입력·선택</text>
+  <rect class="stop"  x="465" y="86" width="26" height="18" rx="4"/><text class="lg" x="498" y="100">중단 · 주의</text>
+  <rect class="done"  x="590" y="86" width="26" height="18" rx="4"/><text class="lg" x="623" y="100">완료</text>
+  <rect class="note"  x="675" y="86" width="26" height="18" rx="4"/><text class="lg" x="708" y="100">보충 설명</text>
+  <rect class="link"  x="795" y="86" width="26" height="18" rx="4"/><text class="lg" x="828" y="100">AWX 흐름도와 연결</text>
 
-  <!-- 01 -->
-  <rect x="40" y="52" width="210" height="48" rx="6" class="box"/>
-  <text x="145" y="72" class="t tb" text-anchor="middle">[os6_mgmt] 01 실행</text>
-  <text x="145" y="89" class="t tm" text-anchor="middle">auto_setup_host 채움</text>
-  <rect x="350" y="52" width="210" height="48" rx="6" class="box"/>
-  <text x="455" y="72" class="t tb" text-anchor="middle">[os8_mgmt] 01 실행</text>
-  <text x="455" y="89" class="t tm" text-anchor="middle">로컬 queue 에 기록</text>
-  <path d="M145 100 L145 115 L200 115 L200 128" class="ln"/>
-  <text x="60" y="118" class="t tm">gossh 원샷</text>
-  <path d="M455 100 L455 115 L400 115 L400 128" class="ln"/>
-  <rect x="90" y="130" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="152" class="t tb" text-anchor="middle">os8_mgmt queue/&lt;epoch&gt;_&lt;user&gt;_&lt;pid&gt;.job</text>
-  <text x="300" y="168" class="t" text-anchor="middle">user= time= 호스트줄 + 그룹 줄(yml=… / all=…)</text>
-  <rect x="90" y="204" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="226" class="t tb" text-anchor="middle">데몬 queue 수거 (cron 매분 ensure, os8_mgmt 에서만)</text>
-  <text x="300" y="242" class="t" text-anchor="middle">5초 주기, jobs/&lt;jobid&gt;.json</text>
-  <rect x="90" y="278" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="300" class="t tb" text-anchor="middle">DNS 조회 · 경로 판별</text>
-  <text x="300" y="316" class="t" text-anchor="middle">로컬 ping 실패 → os6 (설치 중 os8 무응답·os6 응답 → os6 전환)</text>
-  <rect x="90" y="352" width="420" height="52" rx="6" class="ldap"/>
-  <text x="300" y="374" class="t tb" text-anchor="middle">전달 시점 LDAP 백업 (ping O 호스트만)</text>
-  <text x="300" y="390" class="t" text-anchor="middle">ldapbak/&lt;jobid&gt;/&lt;host&gt;/ (0700 / 0600)</text>
-  <rect x="90" y="426" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="448" class="t tb" text-anchor="middle">감시: ping 10초 → seen_down(설치 시작)</text>
-  <text x="300" y="464" class="t" text-anchor="middle">준비확인 30초: gossh -pm uptime (호출당 60초 제한)</text>
-  <rect x="90" y="500" width="420" height="52" rx="6" class="dec"/>
-  <text x="300" y="522" class="t tb" text-anchor="middle">READY ?  응답 · anaconda 아님</text>
-  <text x="300" y="538" class="t" text-anchor="middle">uptime &lt; 전달 이후 경과시간</text>
-  <rect x="90" y="574" width="420" height="52" rx="6" class="ldap"/>
-  <text x="300" y="596" class="t tb" text-anchor="middle">LDAP 비교 (stage=ldap, os_check 전)</text>
-  <text x="300" y="612" class="t" text-anchor="middle">새 OS ldap.conf binddn uid vs 백업</text>
-  <rect x="90" y="648" width="420" height="52" rx="6" class="ldap"/>
-  <text x="300" y="670" class="t tb" text-anchor="middle">same / 백업 없음 → 생략</text>
-  <text x="300" y="686" class="t" text-anchor="middle">diff → 공유경로 경유 백업 세트 복원 + 서비스 재시작</text>
-  <rect x="90" y="722" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="744" class="t tb" text-anchor="middle">스케줄: 전부 READY 면 즉시, 아니면 7분 / 3분 묶음</text>
-  <text x="300" y="760" class="t" text-anchor="middle">run 큐 (동시 1개)</text>
-  <rect x="90" y="796" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="818" class="t tb" text-anchor="middle">os_check -auto &lt;user&gt; &lt;목록&gt;</text>
-  <text x="300" y="834" class="t" text-anchor="middle">runs/&lt;code&gt;/ (os8_mgmt)</text>
-  <rect x="90" y="870" width="420" height="52" rx="6" class="dec"/>
-  <text x="300" y="892" class="t tb" text-anchor="middle">2차 대상 있음 ?</text>
-  <text x="300" y="908" class="t" text-anchor="middle">route=local 의 접속불가 · FAIL (os6 설정 시)</text>
-  <rect x="90" y="944" width="420" height="52" rx="6" class="sec"/>
-  <text x="300" y="966" class="t tb" text-anchor="middle">[2차] os6_mgmt 에서 os_check -auto 1회</text>
-  <text x="300" y="982" class="t" text-anchor="middle">결과 tar 회수 → runs/&lt;code&gt;/second/</text>
-  <rect x="90" y="1018" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="1040" class="t tb" text-anchor="middle">code 파일 생성 codes/&lt;code&gt;.txt</text>
-  <text x="300" y="1056" class="t" text-anchor="middle">리포트 · FAIL/NO FAIL · LDAP·Splunk·커널 · 원본 · 2차 섹션</text>
-  <rect x="90" y="1092" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="1114" class="t tb" text-anchor="middle">wall(기본 꺼짐) + 완료 처리 (processed)</text>
-  <text x="300" y="1130" class="t" text-anchor="middle">최종 판정 = 1차 OK 또는 2차 OK</text>
-  <rect x="90" y="1166" width="420" height="52" rx="6" class="box"/>
-  <text x="300" y="1188" class="t tb" text-anchor="middle">모두 완료 → jobs/done 으로 이동</text>
-  <text x="300" y="1204" class="t" text-anchor="middle">남으면 무기한 감시 (auto_setup cancel 로 종료)</text>
-  <path d="M300 182 L300 204" class="ln"/>
-  <path d="M300 256 L300 278" class="ln"/>
-  <path d="M300 330 L300 352" class="ln"/>
-  <path d="M300 404 L300 426" class="ln"/>
-  <path d="M300 478 L300 500" class="ln"/>
-  <path d="M300 552 L300 574" class="ln"/>
-  <path d="M300 626 L300 648" class="ln"/>
-  <path d="M300 700 L300 722" class="ln"/>
-  <path d="M300 774 L300 796" class="ln"/>
-  <path d="M300 848 L300 870" class="ln"/>
-  <path d="M300 996 L300 1018" class="ln"/>
-  <path d="M300 1070 L300 1092" class="ln"/>
-  <path d="M300 1144 L300 1166" class="ln"/>
-  <path d="M300 922 L300 944" class="ln"/>
-  <path d="M300 996 L300 1018" class="ln"/>
-  <path d="M510 896 L548 896 L548 1044 L512 1044" class="ln"/>
-  <text x="556" y="940" class="t tm">없음</text>
-  <path d="M90 526 L60 526 L60 452 L88 452" class="ln"/>
-  <text x="22" y="492" class="t tm">아니오</text>
-  <text x="300" y="1236" class="t tm" text-anchor="middle">미완료 호스트는 감시 루프로 복귀</text>
-  <rect x="600" y="130" width="280" height="120" rx="6" class="ext"/>
-  <text x="740" y="150" class="t tb" text-anchor="middle">상태 리포트 / TUI</text>
-  <text x="740" y="166" class="t" text-anchor="middle">화면1 그룹(yml) → Enter 화면2 호스트표</text>
-  <text x="740" y="182" class="t" text-anchor="middle">r 새로고침  f 정체·실패  a 전체  ? 도움말  q</text>
-  <text x="740" y="198" class="t" text-anchor="middle">h 호스트 작업  w AWX·신규설치  m 변경</text>
-  <text x="740" y="214" class="t" text-anchor="middle">s gossh 작업  x 단독 체크  (c t g d v 는 h 안)</text>
-  <text x="740" y="230" class="t" text-anchor="middle">os6_mgmt: gossh 원샷 10초 폴링</text>
-  <rect x="600" y="774" width="280" height="96" rx="6" class="ext"/>
-  <text x="740" y="810" class="t tb" text-anchor="middle">요청 requests/&lt;epoch&gt;_&lt;kind&gt;.req</text>
-  <text x="740" y="826" class="t" text-anchor="middle">TUI h→c·t·g · auto_setup request</text>
-  <text x="740" y="842" class="t" text-anchor="middle">5초 수거, 완료 여부와 상관없이 수락</text>
-  <rect x="600" y="1070" width="280" height="96" rx="6" class="ext"/>
-  <text x="740" y="1106" class="t tb" text-anchor="middle">완료기록 done/&lt;host&gt;</text>
-  <text x="740" y="1122" class="t" text-anchor="middle">epoch user sha256 source</text>
-  <text x="740" y="1138" class="t" text-anchor="middle">전달 이후·부팅 이후만 인정</text>
-  <path d="M740 250 L740 772" class="dash"/>
-  <path d="M600 822 L512 822" class="dash"/>
-  <path d="M600 1118 L512 1118" class="dash"/>
-  <text x="750" y="520" class="t tm">요청 파일만 남김</text>
-  <text x="600" y="1186" class="t tm">os_check 정상 종료 시 기록</text>
-  <text x="600" y="1202" class="t tm">수동: auto_setup done (시각 검증 없음)</text>
-  <text x="600" y="890" class="t tm">수동 run: 데몬 run 큐에서 실행</text>
+  <!-- ===================== 0단계 ===================== -->
+  <rect class="band" x="20" y="124" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="147">0단계 · 연결 — AWX 노드정보 등록이 끝나면 자동으로 넘어옴</text>
+  <text class="nl" x="1064" y="146" style="text-anchor:end">awx_script/workflow.svg 4단계 [14-1]</text>
 
-  <!-- v0.8.0 신규 기능 (세 번째 열) -->
-  <rect x="930" y="130" width="300" height="158" rx="6" class="nw"/>
-  <text x="1080" y="150" class="t tb" text-anchor="middle">신규 설치 양식 (TUI w→2 · CLI newhost)</text>
-  <text x="1080" y="166" class="t" text-anchor="middle">os8_mgmt 에서만 — nodeinfo 를 쓸 수 없는</text>
-  <text x="1080" y="182" class="t" text-anchor="middle">신규 설치 서버용</text>
-  <text x="1080" y="198" class="t" text-anchor="middle">hostname ip mac 붙여넣기 → 템플릿 지정</text>
-  <text x="1080" y="214" class="t" text-anchor="middle">(범위·패턴·이력 추천)</text>
-  <text x="1080" y="230" class="t" text-anchor="middle">→ DNS 점검 → 미리보기 → awx_dir/&lt;user&gt;.txt</text>
-  <text x="1080" y="246" class="t" text-anchor="middle">저장 (기존은 backup/)</text>
-  <text x="1080" y="262" class="t" text-anchor="middle">→ AWX 실행(01): 프로파일 시 nodeinfo N, 대상 목록</text>
-  <text x="1080" y="278" class="t" text-anchor="middle">자동 입력</text>
-  <rect x="930" y="332" width="300" height="174" rx="6" class="nw"/>
-  <text x="1080" y="352" class="t tb" text-anchor="middle">DNS 점검 (dnscheck.go · 01 [4-1]</text>
-  <text x="1080" y="368" class="t tb" text-anchor="middle">dns_check)</text>
-  <text x="1080" y="384" class="t" text-anchor="middle">resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의</text>
-  <text x="1080" y="400" class="t" text-anchor="middle">(동시 32, 질의당 2초·재시도 1회)</text>
-  <text x="1080" y="416" class="t" text-anchor="middle">일치 / 불일치 / 판단 불가 / 미등록 + 중복 IP</text>
-  <text x="1080" y="432" class="t" text-anchor="middle">경고</text>
-  <text x="1080" y="448" class="t" text-anchor="middle">불일치: a 모두 DNS 로 · n 그대로 · s 하나씩 ·</text>
-  <text x="1080" y="464" class="t" text-anchor="middle">q 중단</text>
-  <text x="1080" y="480" class="t" text-anchor="middle">01 auto 모드: /dev/tty 로 계속 여부 질문,</text>
-  <text x="1080" y="496" class="t" text-anchor="middle">AWX_DNS_CHECKED=1 이면 표만 출력</text>
-  <rect x="930" y="550" width="300" height="174" rx="6" class="nw"/>
-  <text x="1080" y="570" class="t tb" text-anchor="middle">gossh 작업 기록 (TUI s · CLI s)</text>
-  <text x="1080" y="586" class="t" text-anchor="middle">호스트 붙여넣기 → /tmp/&lt;3자리&gt; → gossh</text>
-  <text x="1080" y="602" class="t" text-anchor="middle">실행 (tty 유지, 위험어 확인 그대로)</text>
-  <text x="1080" y="618" class="t" text-anchor="middle">대수 ≤ work_os6_over(비면 1000): os8 실행,</text>
-  <text x="1080" y="634" class="t" text-anchor="middle">접속불가만 os6_mgmt 재실행 / 초과: 전량</text>
-  <text x="1080" y="650" class="t" text-anchor="middle">os6_mgmt</text>
-  <text x="1080" y="666" class="t" text-anchor="middle">os6_mgmt 에서 열면 os6 gossh 로 바로 실행,</text>
-  <text x="1080" y="682" class="t" text-anchor="middle">기록은 os8_mgmt 로 중계</text>
-  <text x="1080" y="698" class="t" text-anchor="middle">&lt;상태&gt;/work/&lt;user&gt;/ 요약 영구 · 출력 7일 ·</text>
-  <text x="1080" y="714" class="t" text-anchor="middle">user 당 200MB</text>
-  <rect x="930" y="768" width="300" height="62" rx="6" class="ext"/>
-  <text x="1080" y="788" class="t tb" text-anchor="middle">데몬: 하루 한 번 workCleanAll</text>
-  <text x="1080" y="804" class="t" text-anchor="middle">gossh 작업 출력 7일 · user 당 200MB ·</text>
-  <text x="1080" y="820" class="t" text-anchor="middle">/tmp/&lt;3자리&gt; 7일 정리</text>
-  <rect x="930" y="874" width="300" height="142" rx="6" class="nw"/>
-  <text x="1080" y="894" class="t tb" text-anchor="middle">항목별 메뉴 · 세션 user (v0.8.0)</text>
-  <text x="1080" y="910" class="t" text-anchor="middle">h 호스트 작업 ▶ c 체크+수정 · t 체크만 · g</text>
-  <text x="1080" y="926" class="t" text-anchor="middle">재확인 · d 수동 완료 · v 결과</text>
-  <text x="1080" y="942" class="t" text-anchor="middle">w AWX ▶ 1 AWX 실행 · 2 신규 설치 양식</text>
-  <text x="1080" y="958" class="t" text-anchor="middle">m 변경 · s gossh 작업 · x 단독 체크</text>
-  <text x="1080" y="974" class="t" text-anchor="middle">기존 단축키 c t g v d x 는 그대로 동작</text>
-  <text x="1080" y="990" class="t" text-anchor="middle">세션 user: -user 또는 s·신규 설치 때 처음 한</text>
-  <text x="1080" y="1006" class="t" text-anchor="middle">번 선택</text>
-  <path d="M880 190 L928 190" class="dash"/>
-  <path d="M905 190 L905 637 L928 637" class="dash"/>
-  <path d="M905 637 L905 945 L928 945" class="dash"/>
-  <path d="M1080 288 L1080 330" class="dash"/>
-  <path d="M1080 724 L1080 766" class="dash"/>
-  <text x="1088" y="314" class="t tm">DNS 점검</text>
-  <text x="1088" y="750" class="t tm">데몬 정리</text>
+  <rect class="link" x="270" y="176" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="198">AWX 01 : 등록이 성공하면 작업(job)을 auto_setup 에 전달</text>
+  <text class="b" x="550" y="218">작업자(user) · 시각 · 호스트 목록 · 그룹(yml) 정보를 파일 하나로 남김</text>
+  <text class="s" x="550" y="238">[14-1] 01.AWX_nodeinfo_V2.sh → os8_mgmt 의 queue/&lt;시각&gt;_&lt;user&gt;_&lt;pid&gt;.job</text>
+  <path class="tie" d="M270 215 H252"/>
+  <rect class="note" x="20" y="172" width="232" height="86" rx="8"/>
+  <text class="nl" x="136" y="194">01 을 어디서 돌렸나</text>
+  <text class="nl" x="136" y="214">os8_mgmt : 로컬 queue 에 바로</text>
+  <text class="nl" x="136" y="232">os6_mgmt : gossh 로 os8_mgmt</text>
+  <text class="nl" x="136" y="250">queue 에 전송 (auto_setup_host)</text>
+  <path class="tie" d="M830 215 H848"/>
+  <rect class="note" x="848" y="186" width="232" height="58" rx="8"/>
+  <text class="nl" x="964" y="210">전달이 실패해도 AWX 등록</text>
+  <text class="nl" x="964" y="230">결과에는 영향 없음 (경고만)</text>
+  <path class="ln" d="M550 254 V324"/>
 
-  <!-- 범례 -->
-  <rect x="600" y="1230" width="14" height="14" class="box"/><text x="620" y="1241" class="t tm">데몬 처리</text>
-  <rect x="690" y="1230" width="14" height="14" class="ldap"/><text x="710" y="1241" class="t tm">LDAP</text>
-  <rect x="750" y="1230" width="14" height="14" class="sec"/><text x="770" y="1241" class="t tm">2차 체크</text>
-  <rect x="600" y="1252" width="14" height="14" class="dec"/><text x="620" y="1263" class="t tm">판정</text>
-  <rect x="690" y="1252" width="14" height="14" class="ext"/><text x="710" y="1263" class="t tm">외부 입력/조회 (점선)</text>
-  <rect x="880" y="1252" width="14" height="14" class="nw"/><text x="900" y="1263" class="t tm">v0.8.0 신규 기능</text>
+  <!-- ===================== 1단계 ===================== -->
+  <rect class="band" x="20" y="272" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="295">1단계 · 접수 — 데몬이 작업을 받아 감시 준비</text>
+  <text class="nl" x="1064" y="294" style="text-anchor:end">auto_setup 데몬 (os8_mgmt 에만 상주)</text>
+
+  <rect class="auto" x="270" y="324" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="346">데몬이 queue 를 5초마다 수거 → 작업(job) 만들기</text>
+  <text class="b" x="550" y="366">jobs/&lt;jobid&gt;.json 에 서버별 진행 단계를 기록하며 감시 시작</text>
+  <text class="s" x="550" y="386">cron 이 매분 auto_setup ensure 로 데몬이 살아 있는지 확인 (죽어 있으면 다시 띄움)</text>
+  <path class="ln" d="M550 402 V426"/>
+
+  <rect class="auto" x="270" y="426" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="448">DNS 조회 · 경로 정하기</text>
+  <text class="b" x="550" y="468">os8_mgmt 에서 ping 이 되면 local, 안 되면 os6_mgmt 경유(os6)</text>
+  <text class="b" x="550" y="487">설치 중 os8 은 무응답 · os6 는 응답하면 그때 os6 로 자동 전환</text>
+  <path class="tie" d="M270 465 H252"/>
+  <rect class="note" x="20" y="430" width="232" height="70" rx="8"/>
+  <text class="nl" x="136" y="452">os6 경유 = os6_mgmt 가</text>
+  <text class="nl" x="136" y="470">대신 ping · 준비확인 ·</text>
+  <text class="nl" x="136" y="488">체크를 해 줌</text>
+  <path class="ln" d="M550 504 V528"/>
+
+  <rect class="auto" x="270" y="528" width="560" height="62" rx="10"/>
+  <text class="h" x="550" y="550">LDAP 설정 백업 (지금 응답하는 서버만)</text>
+  <text class="b" x="550" y="570">설치 전 LDAP 설정을 백업 → 설치가 끝난 뒤 비교에 사용</text>
+  <text class="s" x="550" y="584">ldapbak/&lt;jobid&gt;/&lt;host&gt;/ (0700 / 0600)</text>
+  <path class="ln" d="M550 590 V666"/>
+
+  <!-- ===================== 2단계 ===================== -->
+  <rect class="band" x="20" y="614" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="637">2단계 · 감시 — OS 설치가 끝날 때까지 기다리기</text>
+  <text class="nl" x="1064" y="636" style="text-anchor:end">ping 10초 · 준비확인 30초</text>
+
+  <rect class="auto" x="270" y="666" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="688">ping 10초마다 → 응답이 끊기면 '설치 시작'으로 표시</text>
+  <text class="b" x="550" y="708">준비확인 30초마다 : gossh -pm 으로 uptime 조회 (한 번에 최대 60초)</text>
+  <text class="s" x="550" y="728">anaconda(설치 화면)가 보이면 '설치중' · os8 무응답이면 os6_mgmt 경유로 다시 확인</text>
+  <path class="ln" d="M550 744 V768"/>
+
+  <rect class="auto" x="270" y="768" width="560" height="62" rx="10"/>
+  <text class="h" x="550" y="790">READY ? — 설치가 끝나고 새로 부팅됐나</text>
+  <text class="b" x="550" y="811">응답함 · anaconda 아님 · 부팅 후 시간(uptime) &lt; 전달 후 지난 시간</text>
+  <path class="lnd" d="M270 799 H236 V705 H268"/>
+  <text class="nl" x="180" y="744">아니오 :</text>
+  <text class="nl" x="180" y="762">계속 감시</text>
+  <path class="ln" d="M830 799 H866"/>
+  <rect class="stop" x="866" y="770" width="214" height="58" rx="8"/>
+  <text class="b" x="973" y="794">60분 넘게 READY 안 됨</text>
+  <text class="b" x="973" y="813">→ '정체' 표시 (감시는 계속)</text>
+  <path class="ln" d="M550 830 V922"/><text class="lb" x="566" y="852">예</text>
+
+  <!-- ===================== 3단계 ===================== -->
+  <rect class="band" x="20" y="870" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="893">3단계 · 체크 — 설정 체크스크립트 자동 실행</text>
+  <text class="nl" x="1064" y="892" style="text-anchor:end">config_check.sh -auto</text>
+
+  <rect class="auto" x="270" y="922" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="944">LDAP 비교 · 다르면 복원</text>
+  <text class="b" x="550" y="964">새 OS 의 LDAP 설정(binddn)을 1단계 백업과 비교</text>
+  <text class="b" x="550" y="983">다르면 공유 경로를 통해 백업을 복원하고 LDAP 서비스 재시작</text>
+  <path class="tie" d="M830 961 H848"/>
+  <rect class="note" x="848" y="932" width="232" height="58" rx="8"/>
+  <text class="nl" x="964" y="956">같거나 백업이 없으면</text>
+  <text class="nl" x="964" y="974">건드리지 않고 다음으로</text>
+  <path class="ln" d="M550 1000 V1024"/>
+
+  <rect class="auto" x="270" y="1024" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1046">서버를 묶어서 체크 실행 (한 번에 한 작업씩)</text>
+  <text class="b" x="550" y="1066">모두 READY 면 바로 · 아니면 7분 대기, 늦게 온 서버는 3분 묶음</text>
+  <text class="s" x="550" y="1086">os_check_sh -auto &lt;user&gt; &lt;목록&gt; → runs/&lt;code&gt;/</text>
+  <path class="tie" d="M270 1063 H252"/>
+  <rect class="note" x="20" y="1020" width="232" height="86" rx="8"/>
+  <text class="nl" x="136" y="1042">config_check.sh 가 -auto 로</text>
+  <text class="nl" x="136" y="1060">질문 없이 설정 체크</text>
+  <text class="nl" x="136" y="1078">→ 설정 수정 → 다시 체크</text>
+  <text class="nl" x="136" y="1096">(작업자 입력 없음)</text>
+  <path class="ln" d="M550 1102 V1126"/>
+
+  <rect class="auto" x="270" y="1126" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1148">2차 체크 (os6_mgmt 를 설정한 경우)</text>
+  <text class="b" x="550" y="1168">os8 에서 접속이 안 됐거나 FAIL 인 서버만 os6_mgmt 에서 한 번 더</text>
+  <text class="s" x="550" y="1188">결과를 runs/&lt;code&gt;/second/ 로 회수</text>
+  <path class="tie" d="M830 1165 H848"/>
+  <rect class="note" x="848" y="1146" width="232" height="40" rx="8"/>
+  <text class="nl" x="964" y="1171">대상이 없으면 건너뜀</text>
+  <path class="ln" d="M550 1204 V1280"/>
+
+  <!-- ===================== 4단계 ===================== -->
+  <rect class="band" x="20" y="1228" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1251">4단계 · 결과 — 결과 코드와 완료 처리</text>
+  <text class="nl" x="1064" y="1250" style="text-anchor:end">codes/&lt;code&gt;.txt</text>
+
+  <rect class="auto" x="270" y="1280" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1302">결과 코드(code) 파일 만들기</text>
+  <text class="b" x="550" y="1322">결과 리포트 · FAIL / NO FAIL · LDAP · Splunk · 커널 요약 · 2차 결과</text>
+  <text class="s" x="550" y="1342">리포트가 없으면 원인 안내와 체크스크립트 출력의 마지막 줄을 함께 표시</text>
+  <path class="ln" d="M550 1358 V1382"/>
+
+  <rect class="auto" x="270" y="1382" width="560" height="62" rx="10"/>
+  <text class="h" x="550" y="1404">완료 처리 : 1차 OK 또는 2차 OK 인 서버</text>
+  <text class="b" x="550" y="1424">완료되지 않은 서버는 2단계 감시로 돌아감 (wall 알림은 기본 꺼짐)</text>
+  <path class="tie" d="M270 1413 H252"/>
+  <rect class="note" x="20" y="1372" width="232" height="82" rx="8"/>
+  <text class="nl" x="136" y="1394">config_check 를 따로 돌려</text>
+  <text class="nl" x="136" y="1412">먼저 끝난 서버도 완료기록</text>
+  <text class="nl" x="136" y="1430">(done/&lt;host&gt;)으로 인정</text>
+  <text class="nl" x="136" y="1446">수동 : auto_setup done</text>
+  <path class="ln" d="M550 1444 V1468"/>
+
+  <rect class="done" x="410" y="1468" width="280" height="38" rx="19"/>
+  <text class="h" x="550" y="1493">모두 완료 → jobs/done 으로 이동</text>
+  <path class="tie" d="M690 1487 H848"/>
+  <rect class="note" x="848" y="1458" width="232" height="58" rx="8"/>
+  <text class="nl" x="964" y="1482">남은 서버가 있으면 무기한 감시</text>
+  <text class="nl" x="964" y="1500">(auto_setup cancel 로 종료)</text>
+
+  <!-- ===================== 작업자 화면 ===================== -->
+  <rect class="band" x="20" y="1534" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1557">언제든 · 작업자 화면 — 진행 상황 보기와 수동 작업</text>
+  <text class="nl" x="1064" y="1556" style="text-anchor:end">auto_setup [-user 이름] · os6_mgmt 에서도 같은 화면</text>
+
+  <rect class="input" x="170" y="1586" width="760" height="62" rx="10"/>
+  <text class="h" x="550" y="1608">⌨ 상태 화면 : 화면 1 작업·그룹 → Enter → 화면 2 서버 표</text>
+  <text class="b" x="550" y="1629">r 새로고침 · f 정체·실패만 · a 전체 보기 (-user 일 때는 전체 user 보기) · ? 도움말 · q 종료</text>
+  <path class="ln" d="M450 1648 V1660 H295 V1676"/>
+  <path class="ln" d="M650 1648 V1660 H805 V1676"/>
+
+  <rect class="input" x="60" y="1676" width="470" height="96" rx="10"/>
+  <text class="h" x="295" y="1698">⌨ h 호스트 작업 (화면 2)</text>
+  <text class="b" x="295" y="1718">c 체크+수정 · t 체크만 · g 재확인</text>
+  <text class="b" x="295" y="1737">d 수동 완료 · v 결과 보기</text>
+  <text class="s" x="295" y="1758">요청을 남기면 데몬이 5초 안에 수거해 3단계와 같은 순서로 실행</text>
+
+  <rect class="input" x="570" y="1676" width="470" height="96" rx="10"/>
+  <text class="h" x="805" y="1698">⌨ w AWX</text>
+  <text class="b" x="805" y="1718">1 AWX 실행 : 01 을 이 터미널에서 실행 (프로파일 선택)</text>
+  <text class="b" x="805" y="1737">2 신규 설치 양식 : hostname ip mac → 템플릿 → DNS 점검</text>
+  <text class="s" x="805" y="1758">저장 후 01 실행 — 프로파일을 고르면 nodeinfo N, 안 고르면 일반 실행</text>
+
+  <rect class="input" x="60" y="1790" width="470" height="78" rx="10"/>
+  <text class="h" x="295" y="1812">⌨ m 변경 작업</text>
+  <text class="b" x="295" y="1832">IP 변경 · LDAP 변경 · IP+LDAP · 원복 · auto.appl 원복</text>
+  <text class="s" x="295" y="1852">conf enable_* 또는 --admin 일 때 · 미리보기 후 yes 로 확인</text>
+
+  <rect class="input" x="570" y="1790" width="470" height="78" rx="10"/>
+  <text class="h" x="805" y="1812">⌨ s gossh 작업 기록</text>
+  <text class="b" x="805" y="1832">호스트 붙여넣기 → /tmp/auto_setup/lists/&lt;3자리&gt; → gossh</text>
+  <text class="s" x="805" y="1852">user 별 기록·검색·재실행 · 1000대 이하는 os8 → 접속불가만 os6</text>
+
+  <rect class="input" x="60" y="1886" width="470" height="62" rx="10"/>
+  <text class="h" x="295" y="1908">⌨ x 체크스크립트 단독 실행</text>
+  <text class="b" x="295" y="1928">user · 서버 입력 → t / c 선택 → 결과 (기록은 남기지 않음)</text>
+
+  <rect class="link" x="570" y="1886" width="470" height="62" rx="10"/>
+  <text class="h" x="805" y="1908">w 의 1 · 2 는 AWX 흐름도 1단계로 이어짐</text>
+  <text class="b" x="805" y="1928">awx_script/workflow.svg — 등록이 끝나면 다시 0단계로</text>
+  <path class="lnd" d="M1040 1724 H1062 V1917 H1042"/>
+
+  <text class="s" x="1080" y="1990" style="text-anchor:end">※ 설정이 실제로 바뀌는 작업(c 체크+수정 · m 변경)은 완료 후 임의의 서버 몇 대를 직접 확인하세요.</text>
+  <text class="s" x="1080" y="2008" style="text-anchor:end">명령·키별 자세한 흐름은 docs/svg/ 를 참고하세요.</text>
 </svg>
