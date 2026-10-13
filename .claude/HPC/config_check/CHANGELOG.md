@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-10-14 — 상세 흐름도를 실제 동작에 맞게 수정
+
+- **문서(`workflow-detail.svg`)**: 환경설정 y/set 실행 스크립트(`setting_insert.sh; appl_change.sh` [; `setting.sh`])·대상(OK 호스트만), 임시 파일명(`first.*`/`recheck.*`), `-auto`/`-auto-check` 분기, 마무리 출력 순서를 실제 스크립트에 맞게 정정하고 `nosvrauto` 표기를 `no_mgmt-autofs` 로 바꿨다. 스크립트 코드는 변경하지 않았다.
+
 ## 2026-10-14 — 내부 흐름 상세 설명도 추가
 
 - **문서(`workflow-detail.svg`)**: 실사용용 `workflow.svg` 와 별개로, 내부 처리 단계·변수·상태 코드(OK/OFF/REF/INST/NOSV/NONE)·임시 파일 구조를 설명하는 상세 흐름도를 추가했다. 스크립트 코드는 변경하지 않았다.
