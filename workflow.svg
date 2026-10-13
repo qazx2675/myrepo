@@ -172,8 +172,8 @@
   <rect x="750" y="1970" width="200" height="100" class="box" rx="5"/>
   <text x="850" y="1995" class="text" font-size="12">yml별 실행</text>
   <text x="850" y="2015" class="text" font-size="11">invsync</text>
-  <text x="850" y="2035" class="text" font-size="11">↓ dhcp</text>
-  <text x="850" y="2055" class="text" font-size="11">↓ pxe</text>
+  <text x="850" y="2035" class="text" font-size="11">dhcp ∥ pxe 동시 실행</text>
+  <text x="850" y="2055" class="text" font-size="11">둘 다 끝나야 다음 yml</text>
 
   <!-- 요약 -->
   <path d="M 850 2070 L 850 2110" class="arrow"/>
