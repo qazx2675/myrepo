@@ -8,6 +8,7 @@ OS 설치(01) 완료 후 자동으로 OS 설정을 검사하고 결과를 공유
 - **v0.7.1**: `m` 메뉴를 화면 전환 없이 안내 줄 아래에 인라인으로 표시, 화면 2 `d` 수동 완료(TUI), 준비확인에서 anaconda 가 보이면 ping X 를 못 봤어도 설치중으로 표시
 - **v0.7.2**: `PageUp`/`PageDown` 지원 (목록·호스트표·결과 창·변경 화면)
 - **v0.7.3**: `auto_setup -user <이름>` (해당 user 의 job 만 보이고 `x`·`w`·`m` 의 user 선택을 건너뜀), 재확인(`g`)·준비확인이 gossh 실패 사유를 표시, os6 준비확인 원격 명령을 `bash -c` 로 감쌈
+- **v0.8.3**: gossh 작업(`s`) 호스트 목록 파일을 `/tmp/auto_setup/lists/<3자리>` 로 이동 (auto_setup 상태와 한곳에)
 - **v0.8.2**: os6 경유 확인 실패 사유 표시, 체크스크립트가 `-auto-check` 를 모르면 설정체크만(t)을 막고 안내, 결과 리포트가 없을 때 결과 창에 원인·출력 끝부분 표시
 - **v0.8.1**: 신규 설치 양식 → AWX 실행에서 **프로파일을 고르지 않으면 nodeinfo 자동 N 을 적용하지 않음** (프로파일을 `y` 로 고른 경우에만 N 강제) — 아래 「신규 설치 양식」
 - **v0.8.0**: ① 항목별 인라인 메뉴 `h`(호스트 작업)·`w`(AWX) — 아래 「키」 ② **신규 설치 양식**(`w`→2 / `auto_setup newhost`) ③ **DNS 점검**(양식 생성의 Go 구현 + awx_script 01 의 `[4-1]`) ④ **gossh 작업 기록**(`s` / `auto_setup s`) ⑤ 세션 user ⑥ 결함 수정: 준비확인·`g` 의 gossh/ssh 호출에 **60초 제한**, os6_mgmt 로 보내는 원격 명령을 모두 `bash -c` 로 감싸 **csh/tcsh 로그인 셸에서도 동작**(`!` 포함 명령은 base64 로 전송), gossh 출력 해석 통일(FQDN↔짧은 이름, 해석 실패 시 로그·화면에 사유), 셸 인용 함수 `shq`
@@ -294,7 +295,7 @@ codes/<code>.txt 생성 (wall 알림은 v0.4.3 부터 끔 — 결과는 TUI·`au
 | `ensure` | 데몬이 없으면 백그라운드 기동 (cron 매분) — os8_mgmt 에서만 | [cli_ensure_daemon](docs/svg/cli_ensure_daemon.svg) |
 | `probe [-i 10s]` | (os6_mgmt 쪽) stdin 호스트 목록을 받고 ping 상태 출력 (`host up\|down`) | [cli_probe](docs/svg/cli_probe.svg) |
 | `newhost [-user <이름>]` | (v0.8.0) 신규 설치 양식 — hostname ip mac → `awx_dir/<user>.txt`. TUI `w`→2 와 같은 화면 (tty·os8_mgmt 에서만, 「신규 설치 양식」 참고) | [cli_newhost](docs/svg/cli_newhost.svg) |
-| `s [-user <이름>]` | (v0.8.0) gossh 작업 기록 — 붙여넣은 호스트를 `/tmp/<3자리>` 로 만들어 gossh 실행·user 별 기록. TUI `s` 와 같은 화면 (tty 에서만, 「gossh 작업 기록」 참고) | [cli_s](docs/svg/cli_s.svg) |
+| `s [-user <이름>]` | (v0.8.0) gossh 작업 기록 — 붙여넣은 호스트를 `/tmp/auto_setup/lists/<3자리>` 로 만들어 gossh 실행·user 별 기록. TUI `s` 와 같은 화면 (tty 에서만, 「gossh 작업 기록」 참고) | [cli_s](docs/svg/cli_s.svg) |
 | 그 외 | 사용법을 stderr 로 출력 후 exit 1 | |
 
 (내부용 `work-relay` 는 os6_mgmt 의 gossh 작업 기록을 os8_mgmt 에 저장·조회하는 하위명령이며 직접 쓰지 않습니다.)
@@ -483,7 +484,7 @@ svr001-020=1  svr021-023=mec  svr024-043=3
 
 ### gossh 작업 기록 (s / `auto_setup s`, v0.8.0)
 
-"zz, bb, fc 로 만든 파일에 뭘 했는지" 를 잊지 않도록 호스트 목록 파일(`/tmp/<소문자 3자리>`)별 gossh 실행 기록을 **user 별**로 남깁니다. TUI `s` 는 메뉴 없이 작업 화면이 바로 열리고, 밖에서는 `auto_setup s [-user <이름>]` (tty 에서만, os6_mgmt 에서도 가능 — 기록은 os8_mgmt 에 중계). 터미널을 옮겨도 같은 user 로 열면 같은 목록이 보입니다. 흐름도: [s](docs/svg/tui_s.svg) · [auto_setup s](docs/svg/cli_s.svg)
+"zz, bb, fc 로 만든 파일에 뭘 했는지" 를 잊지 않도록 호스트 목록 파일(`/tmp/auto_setup/lists/<소문자 3자리>`)별 gossh 실행 기록을 **user 별**로 남깁니다. TUI `s` 는 메뉴 없이 작업 화면이 바로 열리고, 밖에서는 `auto_setup s [-user <이름>]` (tty 에서만, os6_mgmt 에서도 가능 — 기록은 os8_mgmt 에 중계). 터미널을 옮겨도 같은 user 로 열면 같은 목록이 보입니다. 흐름도: [s](docs/svg/tui_s.svg) · [auto_setup s](docs/svg/cli_s.svg)
 
 ```
 [user: alice] gossh 작업
@@ -498,7 +499,7 @@ svr001-020=1  svr021-023=mec  svr024-043=3
 
 | 키 | 동작 |
 |---|---|
-| `n` | **새 작업**: 호스트 붙여넣기(공백·쉼표·줄바꿈 구분, `svr[001-020]` 범위 표기, 중복은 한 번만, 빈 줄·`.`·`Ctrl+D` 로 끝) → 같은 목록이 이미 있으면 `qkz 와 같은 목록(20대) — 재사용? [y/n]` → 새 목록이면 `/tmp/<3자리>` 이름을 정함(이미 있는 이름은 피함) → 명령 한 줄 입력 → 실행 |
+| `n` | **새 작업**: 호스트 붙여넣기(공백·쉼표·줄바꿈 구분, `svr[001-020]` 범위 표기, 중복은 한 번만, 빈 줄·`.`·`Ctrl+D` 로 끝) → 같은 목록이 이미 있으면 `qkz 와 같은 목록(20대) — 재사용? [y/n]` → 새 목록이면 `/tmp/auto_setup/lists/<3자리>` 이름을 정함(이미 있는 이름은 피함) → 명령 한 줄 입력 → 실행 |
 | `Enter` | 선택한 실행 줄의 **항목 메뉴**: `1` 같은 파일로 새 명령 · `2` 재실행 · `3` 실패·접속불가 호스트만 재실행(새 파일, 원본에서 파생 표시) · `4` 결과 보기(압축 출력을 풀어 `less -R`) · `5` 메모(파일 단위) · `6` 호스트 목록 보기 |
 | `/` | **호스트 검색**(정확한 이름 또는 짧은 이름) — 그 호스트가 들어 있던 작업과 명령을 시간순으로 |
 | `↑` `↓` `PgUp` `PgDn` · `q`/`Esc` | 이동·스크롤 · 닫기 |
@@ -507,7 +508,7 @@ svr001-020=1  svr021-023=mec  svr024-043=3
 
 | 열린 곳 | 대수 | 실행 |
 |---|---|---|
-| os8_mgmt | ≤ `work_os6_over` | os8 gossh (`gossh -w /tmp/<3자리> '<명령>'`). **접속불가** 호스트만 os6_mgmt 경유로 자동 재실행 (`os6_mgmt`·`os6_gossh` 설정 시) |
+| os8_mgmt | ≤ `work_os6_over` | os8 gossh (`gossh -w /tmp/auto_setup/lists/<3자리> '<명령>'`). **접속불가** 호스트만 os6_mgmt 경유로 자동 재실행 (`os6_mgmt`·`os6_gossh` 설정 시) |
 | os8_mgmt | 초과 | **전량** os6_mgmt 경유 — 호스트 목록을 base64 로 넘기고 `ssh -t` 로 실행 (`bash -c` 로 감쌈, 출력·위험어 확인 그대로) |
 | os6_mgmt (원격 클라이언트) | 상관없음 | 이 서버의 gossh(`os6_gossh`)로 바로 실행, 기록은 os8_mgmt 로 중계 |
 
@@ -524,7 +525,7 @@ svr001-020=1  svr021-023=mec  svr024-043=3
 | `out/<id>.log.gz` | 전체 출력(압축) | **7일**, user 당 **200MB** 를 넘으면 오래된 것부터 삭제 |
 | `relay/` | os6_mgmt 에서 중계 중인 조각 (os8_mgmt) | 임시 |
 
-- 정리: **데몬이 하루 한 번**(`workCleanAll`) + 작업 화면을 열 때. `/tmp/<3자리>` 목록 파일도 7일 뒤 함께 정리합니다. 보관 기간이 지난 출력은 `4 결과 보기` 에서 `요약만 남아 있습니다` 로 안내합니다.
+- 정리: **데몬이 하루 한 번**(`workCleanAll`) + 작업 화면을 열 때. `/tmp/auto_setup/lists/<3자리>` 목록 파일도 7일 뒤 함께 정리합니다. 보관 기간이 지난 출력은 `4 결과 보기` 에서 `요약만 남아 있습니다` 로 안내합니다.
 - os6_mgmt → os8_mgmt 중계는 한 번에 약 56KB(인코딩 후 약 90KB, 원격 셸 인자 128KB 제한 안)씩 나눠 보내며, 출력이 5MB 를 넘으면 앞·뒤만 보냅니다.
 
 ### 변경 작업 (IP·LDAP 변경·원복, v0.7.0)
@@ -791,7 +792,7 @@ bash ../awx_script/test/run_tests.sh
 | `queuePoll` | 5s | queue·요청·완료기록 수거 주기 |
 | `installStuck` | 60분 | seen_down 후 이 시간을 넘겨도 READY 가 안 되면 정체 |
 | `checkTimeout` (check.go, v0.8.0) | 60초 | 준비확인·`g` 의 gossh/ssh 호출 1회 전체 상한 (넘으면 프로세스 그룹 종료, 사유 `시간 초과(60초)`). conf 변수 없음 |
-| `workKeep` · `workUserCap` (work.go, v0.8.0) | 7일 · 200MB | gossh 작업 전체 출력·`/tmp/<3자리>` 보관 기간 / user 당 출력 상한 |
+| `workKeep` · `workUserCap` (work.go, v0.8.0) | 7일 · 200MB | gossh 작업 전체 출력·`/tmp/auto_setup/lists/<3자리>` 보관 기간 / user 당 출력 상한 |
 | `dnsQueryTimeout` · `dnsAttempts` · `dnsConcurrency` · `dnsMaxServers` (dnscheck.go, v0.8.0) | 2초 · 2회(최초 1 + 재시도 1) · 32 · 3 | DNS 점검 질의 시간·횟수·동시 수·사용하는 nameserver 수 |
 
 ### 호스트 단계(stage)
@@ -841,7 +842,7 @@ bash ../awx_script/test/run_tests.sh
 | `menu_tui.go` · `flow_tui.go` | `h`·`w` 항목별 인라인 메뉴(글자·번호 선택, 숨은 단축키 핸들러 호출) / 전체 화면 흐름 공통 부품(틀·스크롤·붙여넣기·백그라운드 작업) (v0.8.0) |
 | `newhost.go` · `newhost_tpl.go` · `newhost_tui.go` | 신규 설치 양식: 붙여넣기 해석·지정 미니 언어·이력 추천·저장 / 템플릿 파싱·검증·`work_os6_over` / 5단계 화면·`newhost` CLI·AWX 연결 (v0.8.0) |
 | `dnscheck.go` | DNS 점검 엔진: resolv.conf 서버에 직접 A 질의(UDP/TCP, 표준 라이브러리만)·판정 5종·중복 경고·교체 (v0.8.0) |
-| `work.go` · `work_tui.go` | gossh 작업 기록: 붙여넣기·`/tmp/<3자리>`·실행 경로·`script` 래퍼·판정·저장·정리·os6→os8 중계(`work-relay`) / 작업 화면·`s` CLI (v0.8.0) |
+| `work.go` · `work_tui.go` | gossh 작업 기록: 붙여넣기·`/tmp/auto_setup/lists/<3자리>`·실행 경로·`script` 래퍼·판정·저장·정리·os6→os8 중계(`work-relay`) / 작업 화면·`s` CLI (v0.8.0) |
 | `tcsh_live_test.go` | 랩 전용: 로그인 셸이 tcsh 인 계정으로 os6 경로·원격 클라이언트·gossh 작업 확인 (`AS_TEST_LOGIN_MGMT`, 없으면 SKIP) |
 | `auto_setup_os6` | 빌드 완료 os6 용 정적 바이너리 (Go 1.20, 변수 빈 값). 소스 변경 때 `build_os6.sh` 로 재빌드해 커밋 |
 | `conf/update_v0.4.0.sh` · `update_v0.6.0.sh` · `update_v0.7.0.sh` · `update_v0.8.0.sh` | 현장 conf 업데이트 (생성 스크립트, 직접 고치지 말고 `vars.manifest` 수정 후 재생성) |

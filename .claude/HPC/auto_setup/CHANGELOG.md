@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.8.3] - 2026-10-13
+
+### 변경
+- **gossh 작업(`s`)의 호스트 목록 파일 위치**: `/tmp/<3자리>` → `/tmp/auto_setup/lists/<3자리>` (데이터 디렉터리 `AUTO_SETUP_DIR` 아래 `lists/`). `/tmp` 에 3글자 파일이 흩어지지 않고 auto_setup 상태와 한곳에 모인다. 화면·확인 문구·`gossh -w <경로>` 안내는 전체 경로로 표시한다. 이미 만든 `/tmp/<3자리>` 는 그대로 두며(기록의 호스트 목록 사본 `work/<user>/lists/` 로 재실행 가능) 7일 정리 대상은 새 위치 파일이다
+- 참고: auto_setup 의 모든 상태(jobs·queue·done·codes·runs·work·newhost·changes·log)는 `AUTO_SETUP_DIR`(기본 `/tmp/auto_setup`) 아래에 있다. `/tmp` 를 비우면 진행 중 job 추적·완료기록·작업 기록이 사라진다 (설정은 `/etc/auto_setup/auto_setup.conf` 또는 실행파일 옆 `conf/` 라 영향 없음). 영구 보관하려면 환경변수 `AUTO_SETUP_DIR` 로 `/tmp` 밖 경로를 지정
+
 ## [0.8.2] - 2026-10-13
 
 ### 수정
