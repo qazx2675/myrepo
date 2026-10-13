@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# graphify 지식 그래프 산출물 (HPC 코드 그래프, 로컬 전용)
+graphify-out/
