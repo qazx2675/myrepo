@@ -120,7 +120,7 @@ func workNotes(client bool) []workNote {
 	for _, p := range problems {
 		n = append(n, workNote{stYellow, "⚠ " + p})
 	}
-	return append(n, workNote{stGray, "요약은 영구 보관 · 전체 출력은 7일(user 당 200MB) · /tmp 목록 파일은 7일 뒤 정리"})
+	return append(n, workNote{stGray, "요약은 영구 보관 · 전체 출력은 7일(user 당 200MB) · 목록 파일(" + workListDir() + ")은 7일 뒤 정리"})
 }
 
 // reload: 기록을 다시 읽는다. 원격 클라이언트에서 os8 를 읽지 못하면 이 서버의 기록으로 바꿔 보여 준다.
@@ -258,7 +258,7 @@ func (w *workState) keyMenu(ev keyEv) {
 			return
 		}
 		d.Cmd = r.Cmd
-		w.confirm(fmt.Sprintf("재실행: /tmp/%s (%s대) — %s   [y/n]", r.File, commaN(len(list)), r.Cmd), func() { w.submit(d) })
+		w.confirm(fmt.Sprintf("재실행: %s (%s대) — %s   [y/n]", workPath(r.File), commaN(len(list)), r.Cmd), func() { w.submit(d) })
 	case '3':
 		hosts := workRetryHosts(r, list)
 		if len(hosts) == 0 {
@@ -273,7 +273,7 @@ func (w *workState) keyMenu(ev keyEv) {
 			return
 		}
 		d := workDraft{File: name, Parent: r.File, NewList: true, Hosts: hosts, Cmd: r.Cmd}
-		w.confirm(fmt.Sprintf("실패·접속불가 %s대만 새 파일 /tmp/%s 로 재실행 (%s 에서 파생) — %s   [y/n]", commaN(len(hosts)), name, r.File, r.Cmd),
+		w.confirm(fmt.Sprintf("실패·접속불가 %s대만 새 파일 %s 로 재실행 (%s 에서 파생) — %s   [y/n]", commaN(len(hosts)), workPath(name), r.File, r.Cmd),
 			func() { w.submit(d) })
 	case '4':
 		w.view = r.ID
@@ -509,7 +509,7 @@ func workPrepareTmp(db *workDB, d *workDraft) (note string, err error) {
 		case !exists:
 			return "", workWriteTmp(d.File, d.Hosts, true)
 		}
-		note = fmt.Sprintf("/tmp/%s 내용이 기록과 달라 그대로 두고 ", d.File)
+		note = fmt.Sprintf("%s 내용이 기록과 달라 그대로 두고 ", workPath(d.File))
 		d.Parent, d.NewList = d.File, true
 		if d.File, err = workNewName(db); err != nil {
 			return "", err
@@ -525,7 +525,7 @@ func workPrepareTmp(db *workDB, d *workDraft) (note string, err error) {
 		}
 	}
 	if note != "" && err == nil {
-		note += "/tmp/" + d.File + " 로 실행했습니다 — "
+		note += workPath(d.File) + " 로 실행했습니다 — "
 	}
 	return note, err
 }
@@ -570,7 +570,7 @@ func (st *tuiState) runWorkDraft(d workDraft) {
 	w := st.wk
 	note, err := workPrepareTmp(w.db, &d)
 	if err != nil {
-		w.setErr("[X] /tmp/" + d.File + " 를 만들지 못했습니다: " + err.Error())
+		w.setErr("[X] " + workPath(d.File) + " 를 만들지 못했습니다: " + err.Error())
 		return
 	}
 	req := workRunReq{User: w.user, File: d.File, Parent: d.Parent, Hosts: d.Hosts, Cmd: d.Cmd, Danger: d.Danger, Plan: d.Plan, Client: w.client}
@@ -880,7 +880,7 @@ func renderWork(w *workState, width, height int, color bool) string {
 		f.Title += " - 새 작업"
 		f.Head = append(f.Head, ln(stBold, fmt.Sprintf("입력 %s대", commaN(len(w.pasted))))...)
 		f.Foot = ln(stBold, fmt.Sprintf("%s 와 같은 목록(%s대) — 재사용? [y/n]", w.reuse, commaN(len(w.db.Lists[w.reuse]))))
-		f.Hint = " y 재사용 (/tmp/" + w.reuse + ")  n 새 목록 만들기  Esc 이전"
+		f.Hint = " y 재사용 (" + workPath(w.reuse) + ")  n 새 목록 만들기  Esc 이전"
 	case wkCmd:
 		d := w.draft
 		f.Title += " - 명령 입력"
@@ -891,7 +891,7 @@ func renderWork(w *workState, width, height int, color bool) string {
 		case d.NewList:
 			kind = "새 목록"
 		}
-		f.Head = append(f.Head, ln(stBold, fmt.Sprintf("파일: /tmp/%s (%s) · %s", d.File, kind, workListText(d.Hosts)))...)
+		f.Head = append(f.Head, ln(stBold, fmt.Sprintf("파일: %s (%s) · %s", workPath(d.File), kind, workListText(d.Hosts)))...)
 		p := workPlan(len(d.Hosts), w.client)
 		where := "실행: " + p.Side + " gossh"
 		switch {
@@ -906,7 +906,7 @@ func renderWork(w *workState, width, height int, color bool) string {
 		}
 		f.Head = append(f.Head, ln("", where)...)
 		f.Head = append(f.Head, ln(stGray, "TUI 를 잠시 떠나 터미널에서 gossh 를 그대로 실행합니다 (출력·색·위험 명령 확인 그대로, 끝나면 이 목록으로)")...)
-		f.Foot = inputLines(color, width, "gossh -w /tmp/"+d.File+" > "+w.in.text()+"_")
+		f.Foot = inputLines(color, width, "gossh -w "+workPath(d.File)+" > "+w.in.text()+"_")
 		f.Hint = " Enter 실행  Esc 취소"
 	case wkMemo:
 		g := w.sel.File

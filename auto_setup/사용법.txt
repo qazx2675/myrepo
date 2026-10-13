@@ -461,7 +461,7 @@ grep 'newhost user=alice' /tmp/auto_setup/auto_setup.log
 # [gossh 작업 기록] CLI 로 열기 (TUI 의 s 와 같은 화면). n 새 작업 → 호스트 붙여넣기 → 명령 입력 → 실행, Enter 항목 메뉴, / 호스트 검색
 auto_setup s -user alice
 
-# [gossh 작업 기록] 저장 확인 — 요약(index.jsonl, 영구), 호스트 목록 사본(lists/), 압축 출력(out/, 7일·200MB), 만든 /tmp/<3자리> 목록 파일
+# [gossh 작업 기록] 저장 확인 — 요약(index.jsonl, 영구), 호스트 목록 사본(lists/), 압축 출력(out/, 7일·200MB), 만든 /tmp/auto_setup/lists/<3자리> 목록 파일
 ls -l /tmp/auto_setup/work/alice/ /tmp/auto_setup/work/alice/lists/ /tmp/auto_setup/work/alice/out/
 cat /tmp/auto_setup/work/alice/index.jsonl
 ls -l /tmp/[a-z][a-z][a-z]
