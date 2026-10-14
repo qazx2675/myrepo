@@ -53,6 +53,8 @@ HPE	DL560 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL560 Gen11	hyper_threading	WorkloadProfile	GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
 HPE	DL560 Gen11	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL560 Gen11	sub_numa_cluster	SubNumaClustering	Disabled	N
+HPE	*	hyper_threading	ProcHyperthreading	Enabled	N
+HPE	*	hyper_threading	WorkloadProfile	GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
 DELL	R640	system_profile	SysProfile	PerfOptimized	N
 DELL	R640	hyper_threading	LogicalProc	Enabled	N
 DELL	R640	llc_prefetch	LlcPrefetch	Enabled	N
