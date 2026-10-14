@@ -1,0 +1,28 @@
+# bios_export 사용법 — 명령만 (위의 # 줄이 설명)
+
+# 설정 파일 준비 (user= 에 BMC 계정 ID)
+cp bios.conf.example bios.conf
+vi bios.conf
+
+# BMC 비밀번호를 암호화해 pass.enc + key.bin 생성
+bash encrypt.sh
+
+# 비교서버와 대상서버들의 BIOS 설정값(JSON)을 뽑는다 (읽기 전용)
+bash bios_export.sh <비교서버> <대상1> <대상2>
+
+# 대상을 파일로 지정 (한 줄에 하나)
+cp user.txt.example user.txt
+vi user.txt
+bash bios_export.sh <비교서버>
+
+# 결과 폴더
+ls -d results/*_all | tail -1
+
+# 비교서버 대비 다른 값만 본다
+less results/<일시>_all/report.txt
+
+# 뽑은 JSON 을 눈으로 비교한다 (파일 이름은 호스트 이름의 ':' 를 '_' 로 바꾼 것)
+cd results/<일시>_all/attrs
+diff -u <비교서버>.json <대상>.json | less
+diff -y -W 200 --suppress-common-lines <비교서버>.json <대상>.json | less
+vimdiff <비교서버>.json <대상>.json
