@@ -2,7 +2,7 @@
 # all_bios_check.sh — 모델별 BIOS 전체 Attribute 비교 실행 래퍼 (읽기 전용, 설정은 하지 않음).
 #
 # 사용법:
-#   bash all_bios_check.sh                          # (터미널) 대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력
+#   bash all_bios_check.sh                          # (터미널) bios.sh 의 TUI 로 넘어감 (옛 1.체크/2.전체비교 메뉴를 대신함)
 #   bash all_bios_check.sh -ref <비교서버>          # 비교서버 1대와 user.txt 의 BIOS 전체 값을 비교
 #   bash all_bios_check.sh -user u.txt              # (터미널 아님/인자 있음) diff.txt(기준) 와 대상을 비교
 #   bash all_bios_check.sh -diff-max 10             # 나머지 인자는 그대로 biostool allcheck 에 전달
@@ -12,7 +12,9 @@
 # 하는 일: 스크립트 위치로 이동 → OS 에 맞는 바이너리 선택(없으면 빌드 시도) → 필요한 파일 확인 →
 #          bin/biostool allcheck 실행. 기준·대상 모두 BMC 에서 모델을 자동 조회해 같은 모델끼리 비교합니다.
 set -euo pipefail
+caller_pwd="$PWD"
 cd "$(dirname "$0")"
+script_dir="$PWD"
 . ./lib.sh
 
 usage() {
@@ -31,8 +33,10 @@ usage() {
   -list-max <N>        차이 상세·특이사항·오류에 나열할 호스트 수 (기본 20)
   -conf <파일>, -hosts <파일>
 
-인자 없이 터미널에서 실행하면 대화형으로 진행합니다:
-  대상(user.txt 또는 hostname) 입력 → 1. 체크(bios_check.sh) / 2. 전체비교 → 비교서버 입력
+새 진입점은 `bash bios.sh` 입니다. 인자 없이 터미널에서 실행하면 bios.sh 의 TUI 로 넘어갑니다
+  (-conf/-hosts/-ignore 만 함께 줘도 같음. -diff-max, -list-max, -export-attrs 를 주면 옛 대화형 메뉴:
+   대상 입력 → 1. 체크(bios_check.sh) / 2. 전체비교 → 비교서버 입력).
+-user, -diff, -ref, -from-dump, -retry-from 등을 주면 옛 방식(biostool allcheck, 비대화형 리포트)으로 동작합니다.
 
 처음 한 번 준비할 것:
   cp bios.conf.example bios.conf      # user= 에 BMC 계정 ID 입력
@@ -88,6 +92,11 @@ tmp_user=""
 cleanup_tmp() { [ -n "$tmp_user" ] && rm -f "$tmp_user"; return 0; }
 trap cleanup_tmp EXIT
 if [ -t 0 ] && [ -z "$(opt_val user "")$(opt_val diff "")$(opt_val ref "")$(opt_val from-dump "")$(opt_val retry-from "")" ]; then
+  # 새 진입점 bios.sh 의 TUI 가 이 1.체크/2.전체비교 메뉴를 대신한다 (allcheck 전용 옵션을 줬거나 출력이 터미널이 아니면 아래 옛 메뉴).
+  if [ -t 1 ] && ! printf '%s\n' ${args[@]+"${args[@]}"} | grep -qE '^--?(diff-max|list-max|export-attrs)(=|$)'; then
+    cd "$caller_pwd"
+    exec bash "$script_dir/bios.sh" ${args[@]+"${args[@]}"}
+  fi
   printf '대상(user.txt 파일 경로 또는 hostname, 쉼표·공백 구분) [user.txt] : '
   read -r in_user || in_user=""
   in_user="${in_user:-user.txt}"

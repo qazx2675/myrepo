@@ -7,11 +7,16 @@
 #   bash bios_check.sh --profile VM -no-prompt # 나머지 인자는 그대로 biostool check 에 전달
 #   bash bios_check.sh -conf my.conf -user list.txt
 #
-# 하는 일: 스크립트 위치로 이동 → OS 에 맞는 바이너리 선택(없으면 빌드 시도) →
+# 새 진입점은 bios.sh 입니다. 옛 방식 전용 옵션(-retry-from, -dry-run, -no-prompt, -stdin-ok, -list-max, -fail-max)이 없고
+# 프로파일을 줬거나 터미널이면 bios.sh 로 넘기고, 그 밖에는 아래 옛 방식(biostool check)으로 동작합니다.
+#
+# 하는 일(옛 방식): 스크립트 위치로 이동 → OS 에 맞는 바이너리 선택(없으면 빌드 시도) →
 #          필요한 파일 확인 → 프로파일 선택 → bin/biostool check -profile <선택> 실행.
 # 재부팅은 하지 않으며, 설정은 BMC 의 Pending 까지만 합니다.
 set -euo pipefail
+caller_pwd="$PWD"
 cd "$(dirname "$0")"
+script_dir="$PWD"
 . ./lib.sh
 
 usage() {
@@ -19,9 +24,14 @@ usage() {
 사용법:
   bash bios_check.sh [--profile <이름>] [biostool check 옵션...]
 
-  --profile <이름>   profiles/<이름>.tsv 를 바로 사용 (생략하면 번호 메뉴)
-  그 외 인자           그대로 biostool check 에 전달 (-from-dump <디렉터리>, -retry-from <폴더>, -dry-run,
+  --profile <이름>   profiles/<이름>.tsv 를 바로 사용 (생략하면 터미널에서는 bios.sh 의 TUI, 아니면 번호 메뉴)
+  그 외 인자           그대로 전달 (-from-dump <디렉터리>, -retry-from <폴더>, -dry-run,
                       -no-prompt, -stdin-ok, -list-max <N>, -fail-max <N>, -conf <파일>, -user <파일>, -hosts <파일>)
+
+동작 경로:
+  새 진입점은 `bash bios.sh` 입니다 (TUI, -plain, -auto-check/-auto, 전체비교 -ref/-ref-json/-diff 까지 한 곳에서).
+  -retry-from, -dry-run, -no-prompt, -stdin-ok, -list-max, -fail-max 중 하나라도 주면 옛 방식(biostool check)으로 실행하고,
+  그 외 (--profile, -from-dump, -conf, -user, -hosts 만, 또는 터미널에서 인자 없이) 는 bios.sh 로 넘깁니다.
 
 1순위 계정이 없는 BMC (2순위 rf.conf 계정으로만 접속된 호스트):
   점검 끝에 "1순위 계정을 만들까요? [Y/n]" 을 묻습니다 (빈 입력 = Y). 터미널이 아니거나 -no-prompt 이면 묻지 않고
@@ -68,6 +78,26 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# 새 진입점 bios.sh 로 위임: 옛 방식 전용 옵션(-retry-from, -dry-run, -no-prompt, -stdin-ok, -list-max, -fail-max)이 없고,
+# 프로파일을 줬거나 터미널일 때만 (프로파일 없이 터미널이 아니면 아래 번호 메뉴를 stdin 으로 받던 옛 동작 유지).
+legacy=0
+for a in ${args[@]+"${args[@]}"}; do
+  case "$a" in
+    -retry-from | --retry-from | -retry-from=* | --retry-from=* | -dry-run | --dry-run | -dry-run=* | --dry-run=* | \
+      -no-prompt | --no-prompt | -no-prompt=* | --no-prompt=* | -stdin-ok | --stdin-ok | -stdin-ok=* | --stdin-ok=* | \
+      -list-max | --list-max | -list-max=* | --list-max=* | -fail-max | --fail-max | -fail-max=* | --fail-max=*)
+      legacy=1
+      ;;
+  esac
+done
+if [ "$legacy" = "0" ] && { [ -n "$profile" ] || [ -t 1 ]; }; then
+  cd "$caller_pwd"
+  if [ -n "$profile" ]; then
+    exec bash "$script_dir/bios.sh" -profile "$profile" ${args[@]+"${args[@]}"}
+  fi
+  exec bash "$script_dir/bios.sh" ${args[@]+"${args[@]}"}
+fi
 
 select_bin || exit 2
 

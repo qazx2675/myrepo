@@ -1119,18 +1119,18 @@ func TestSetUnsafeProfileNotSent(t *testing.T) {
 	s := startMockTree(t, "dell-r660", nil)
 	must(t, s.SetBiosAttr("LogicalProc", "Disabled"))
 	info := &SystemInfo{Vendor: "Dell", Model: "PowerEdge R660", SettingsPath: dellSettings, ManagerPath: "/redfish/v1/Managers/iDRAC.Embedded.1"}
-	mk := func(std, attr, val string) *setItem {
+	mk := func(std, attr, val string) *applyItem {
 		b, _ := json.Marshal(val)
-		return &setItem{Std: std, Attr: attr, Value: val, raw: b}
+		return &applyItem{Std: std, Attr: attr, Value: val, raw: b}
 	}
 	for _, c := range []struct {
 		name  string
-		items []*setItem
+		items []*applyItem
 		want  string
 	}{
-		{"위험 속성명", []*setItem{mk("x", "SetupPassword", "a")}, StatusInvalidValue},
-		{"기본값 복원류", []*setItem{mk("x", "LoadDefaults", "Yes")}, StatusInvalidValue},
-		{"같은 속성 두 번", []*setItem{mk("a", "LogicalProc", "Enabled"), mk("b", "LogicalProc", "Disabled")}, StatusInvalidValue},
+		{"위험 속성명", []*applyItem{mk("x", "SetupPassword", "a")}, StatusInvalidValue},
+		{"기본값 복원류", []*applyItem{mk("x", "LoadDefaults", "Yes")}, StatusInvalidValue},
+		{"같은 속성 두 번", []*applyItem{mk("a", "LogicalProc", "Enabled"), mk("b", "LogicalProc", "Disabled")}, StatusInvalidValue},
 	} {
 		p := buildPlan(info, true, true, "", c.items)
 		if p.Err == "" || p.ErrStatus != c.want || p.ready() {
@@ -1140,16 +1140,16 @@ func TestSetUnsafeProfileNotSent(t *testing.T) {
 	// Settings 경로가 허용목록 밖이거나 Dell Manager 를 모르면 보내지 않는다.
 	bad := *info
 	bad.SettingsPath = "/redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset"
-	if p := buildPlan(&bad, true, true, "", []*setItem{mk("h", "LogicalProc", "Enabled")}); p.ready() || p.ErrStatus != StatusSetUnsupported {
+	if p := buildPlan(&bad, true, true, "", []*applyItem{mk("h", "LogicalProc", "Enabled")}); p.ready() || p.ErrStatus != StatusSetUnsupported {
 		t.Errorf("허용목록 밖 경로: %+v", p)
 	}
 	noMgr := *info
 	noMgr.ManagerPath = ""
-	if p := buildPlan(&noMgr, true, true, "", []*setItem{mk("h", "LogicalProc", "Enabled")}); p.ready() {
+	if p := buildPlan(&noMgr, true, true, "", []*applyItem{mk("h", "LogicalProc", "Enabled")}); p.ready() {
 		t.Errorf("Dell Manager 없음: %+v", p)
 	}
 	// 정상 계획의 Job 본문에는 재부팅 관련 키가 절대 없다.
-	p := buildPlan(info, true, true, "", []*setItem{mk("h", "LogicalProc", "Enabled")})
+	p := buildPlan(info, true, true, "", []*applyItem{mk("h", "LogicalProc", "Enabled")})
 	var jb map[string]string
 	must(t, json.Unmarshal(p.JobBody, &jb))
 	keys := make([]string, 0, len(jb))

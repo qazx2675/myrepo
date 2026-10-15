@@ -6,6 +6,7 @@
 - **재부팅은 하지 않습니다.** 설정은 BMC 의 Pending(다음 재부팅 때 반영)까지입니다. OS 설치 같은 정상 재부팅에서 반영됩니다.
 - 수천 대를 한 번에 처리합니다(동시 접속 기본 100). 일시 오류는 자동 재시도하고, 실패 목록(`retry.txt`)만 다시 돌릴 수 있습니다.
 - BMC 에 남기는 흔적을 줄이려고 호스트당 **로그인 1회**, 허용목록 밖 호출(로그 조회·ClearLog·Reset 등)은 **전송 전에 코드가 차단**합니다.
+- **`bash bios.sh` 하나로** 대상 입력 → 프로파일 점검 → (선택) BIOS 전체비교 → (선택) 수정까지 터미널 화면(TUI)에서 진행합니다. 호스트당 1회 접속으로 프로파일 결과와 전체비교를 함께 얻고, 결과는 색상 줄과 CSV 로 봅니다(2.0절). auto_setup 같은 자동화는 `bash bios.sh -auto <user> targets.txt` 로 점검만 합니다.
 - 사전조사(`xml.sh`)로 처음 만나는 모델의 속성 이름을 확인하고, 모델별 BIOS 전체 비교(`all_bios_check.sh`)도 할 수 있습니다.
 - 공용(1순위) 계정이 없는 BMC 는 벤더 admin(rf.conf, 2순위)으로 접속해 **계정을 만들 수 있고**(`account_create.sh`, 기본 Y), 공용 계정의 **비밀번호를 바꿀 수도 있습니다**(`biostool account change`). 2.12절.
 
@@ -32,7 +33,7 @@ chmod +x bin/biostool bin/biostool_os6 *.sh    # 실행 권한이 없을 때 (�
 | `bin/biostool` | RHEL8 등 커널 3.x 이상 | 정적 링크(CGO 없음). Go 1.26.5 로 빌드(v0.2.0 후보, sha256 은 CHANGELOG 참고) |
 | `bin/biostool_os6` | **RHEL6**(커널 2.6.32) | 정적 링크. **Go 1.20.x** 로 빌드(RHEL6 커널에서는 Go 1.24 이상 바이너리가 동작하지 않음). **RHEL6 에서는 빌드하지 않고 이 파일을 그대로 씁니다.** `setup.sh` 는 os8 만 만들고, RHEL6 용은 저장소에 빌드 완료 상태로 커밋되어 있습니다 |
 
-`bios_check.sh`·`xml.sh`·`all_bios_check.sh`·`encrypt.sh` 는 `uname -r` 의 커널 메이저 버전이 3 미만이면 `bin/biostool_os6`, 아니면 `bin/biostool` 을 **자동 선택**합니다(선택한 바이너리에 실행 권한이 없으면 `chmod +x` 를 시도합니다). 바이너리가 없고 `go` 도 없으면 안내 후 종료합니다(종료코드 2). 스크립트는 RHEL6 의 bash 4.1 에서도 돌아가도록 썼습니다.
+`bios.sh`·`bios_check.sh`·`xml.sh`·`all_bios_check.sh`·`bios_export.sh`·`encrypt.sh` 는 `uname -r` 의 커널 메이저 버전이 3 미만이면 `bin/biostool_os6`, 아니면 `bin/biostool` 을 **자동 선택**합니다(선택한 바이너리에 실행 권한이 없으면 `chmod +x` 를 시도합니다). 바이너리가 없고 `go` 도 없으면 안내 후 종료합니다(종료코드 2). 스크립트는 RHEL6 의 bash 4.1 에서도 돌아가도록 썼습니다.
 
 > 스크립트에 실행 권한이 없어도 **`bash bios_check.sh` 처럼 `bash` 를 앞에 붙이면** 됩니다. 이 문서의 명령은 모두 그 형태입니다.
 
@@ -62,7 +63,10 @@ bash encrypt.sh                      # BMC 비밀번호 입력(2회) → pass.en
 cp user.txt.example user.txt         # 점검할 대상을 한 줄에 하나씩
 cp diff.txt.example diff.txt         # (all_bios_check.sh 를 쓸 때) 정상 설정값을 가진 기준 호스트
 cp ignore_attrs.txt.example ignore_attrs.txt   # (선택) 비교에서 뺄 속성
+mkdir -p refs                        # (선택) 전체비교 기준으로 고를 JSON 폴더 (bios_export.sh 결과를 복사해 둠, bios.conf 의 refs_dir)
 ```
+
+`bash bios.sh` 로 쓸 때는 대상을 TUI 화면에서 직접 입력(붙여넣기)해도 되므로 `user.txt` 가 꼭 필요하지는 않습니다(`-plain`·`-user` 를 줄 때만 필요). `bios.conf` 에는 점검에서 뺄 속성(`exclude_attrs`), 전체비교 차이를 수정 대상에 넣을지(`allcheck_set`), 기준 JSON 폴더(`refs_dir`), 비대화형 기본 프로파일(`auto_profile`) 키가 있습니다(3.3절).
 
 - **BMC 비밀번호는 평문으로 디스크·명령행·로그에 남지 않습니다.** `encrypt.sh` 가 화면에 보이지 않게 두 번 입력받아 파이프(표준입력)로만 넘기고, AES-256-GCM 으로 암호화한 `pass.enc` 와 키 `key.bin` 으로 나눠 보관합니다. 둘은 짝이므로 함께 보관하고 **git 에 올리지 마십시오**.
 - `user.txt` 한 줄에 대상 하나: `IP` / `hostname-m` / `hostname`(+ 선택적으로 `:포트`). `hostname` 은 `/etc/hosts` 에서 `hostname-m` 의 IP 를, `hostname-m` 은 그 이름의 IP 를 찾습니다(`/etc/hosts` 형식은 `IP  hostname-m`, 한 줄에 별칭이 여럿이어도 됨). 빈 줄·`#` 주석은 무시하고 중복은 한 번만 처리합니다.
@@ -72,7 +76,117 @@ cp ignore_attrs.txt.example ignore_attrs.txt   # (선택) 비교에서 뺄 속�
 
 ## 2. 사용 방법
 
+### 2.0 통합 진입점 — `bios.sh` (TUI, 권장)
+
+점검·전체비교·수정을 한 명령으로 합친 기본 진입점입니다. 아래 2.1~2.4절의 옛 래퍼(`bios_check.sh`·`all_bios_check.sh`)는 그대로 쓸 수 있고, 터미널에서 옛 전용 옵션 없이 실행하면 이 흐름으로 넘어옵니다. 흐름도는 [WORKFLOW.md](WORKFLOW.md) 7번([workflow_bios.svg](workflow_bios.svg)), 자동화용은 8번([workflow_auto.svg](workflow_auto.svg))입니다.
+
+```bash
+bash bios.sh                                  # (터미널) TUI: 대상 입력 → 프로파일 선택 → 점검 → 전체비교 → 수정
+bash bios.sh -profile VM -user user.txt       # 프로파일·대상 파일을 미리 지정 (화면에서 묻지 않음)
+bash bios.sh -plain -profile VM               # TUI 없이 색 없는 평문 출력 (읽기 전용, 설정 질문 없음)
+bash bios.sh -plain -profile VM -ref <비교서버> # 평문 + 비교서버와 BIOS 전체 값 비교
+bash bios.sh -auto-check <user> targets.txt   # 비대화형 점검만 → 호출한 폴더에 check.res_<user>
+bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>_postapply (auto_setup 용)
+```
+
+![bios.sh 흐름도](workflow_bios.svg)
+
+**진행 순서 (TUI)**
+
+1. **대상 입력** — 대상 파일을 지정하거나 hostname / hostname-m / IP 를 붙여넣습니다(한 줄에 하나, Ctrl+D 완료, Ctrl+X 취소). `-user` 를 주면 묻지 않습니다.
+2. **프로파일 선택** — `profiles/*.tsv` 중에서 고릅니다(`-profile` 로 지정하면 생략).
+3. **접속·조회** — 호스트당 **로그인 1회**로 BIOS 전체 속성을 한 번에 읽어, 프로파일 판정과 전체비교에 함께 씁니다(전체비교 때 대상에 다시 접속하지 않음). 진행 상황이 한 줄로 갱신됩니다.
+4. **프로파일 결과 화면** — 프로파일에 등록된 항목의 결과를 색상 줄로 보여 줍니다. 닫으려고 `q` 를 누르면 **“전체비교 결과를 볼까요?”** 를 묻습니다(`e` 는 이 질문 없이 바로 수정 단계).
+5. **전체비교(y)** — 기준을 고르면 같은 화면에서 전체비교 결과로 바뀝니다(아래 “전체비교 기준”).
+6. **수정** — 미리보기를 보고 **“수정할까요?”** 에 y 를 누르면 Pending 까지만 설정합니다(아래 “수정 규칙”). 재부팅은 하지 않습니다.
+7. **요약** — TUI 를 닫고 OK / difference / N/A / 오류 건수, 결과 폴더, CSV 목록, 설정 결과를 출력합니다.
+
+**TUI 키**
+
+| 키 | 동작 |
+|---|---|
+| `←` `→` | 벤더 탭 이동 |
+| `Tab` / `Shift+Tab` | 관리망(관리 컨트롤러) 그룹 탭 다음 / 이전 |
+| `↑` `↓` (`k` `j`) | 한 줄 위 / 아래 |
+| `PgUp` `PgDn` | 한 화면 위 / 아래 (`Home` `End` = `g` `G` 처음 / 끝) |
+| `a` `o` `f` `n` | 필터: 전체 / OK 만 / difference 만 / N/A 만 (접속·조회 실패 포함) |
+| `s` | 요약: 호스트마다 한 줄(OK / difference / N/A 건수) |
+| `e` | 수정 메뉴 (바로 수정 단계) |
+| `?` | 도움말 (아무 키로 닫음) |
+| `q` / `Esc` | 종료 / 결과 닫기 |
+| `Ctrl+X` | **진행 중 작업 취소**: 접속·조회(아직 시작하지 않은 호스트는 접속하지 않고 `CANCELED`, `retry.txt` 로 다시 실행), 기준 조회, 설정 적용, 대상 붙여넣기·질문 |
+| `Ctrl+C` / `Ctrl+Z` | **무시**됩니다 (“종료는 q 를 누르세요” 안내만). 터미널이 깨지지 않게 하려는 것입니다 |
+
+탭 전환·필터는 화면 안에서 제자리로 다시 그립니다. 표준출력이 터미널이 아니거나 `-plain` 이면 TUI 대신 평문으로 출력합니다. 그룹은 같은 벤더 안에서 관리 컨트롤러 모델별로 나누되 **BIOS 속성 이름 목록이 같으면 하나로 합칩니다**(예: iLO 4 + iLO 5).
+
+**출력 줄 형식과 태그 3종** (TUI 본문·평문 공통, 탭 구분)
+
+```text
+[OK]  hostname  ip  vendor  model  bios_version  attribute  기준값  현재값  비고
+```
+
+| 태그 | 색 | 묶이는 상태(비고에 원래 상태명이 그대로 나옴) |
+|---|---|---|
+| `[OK]` | 초록 | `OK`, `PENDING_OK`(전체비교는 `SAME`) |
+| `[difference]` | 노랑 | `FAIL`, `UNVERIFIED`, `PENDING_EXISTS`, `PENDING_NO_JOB`(전체비교는 값이 다름 `DIFF`, 대상에만 있는 속성 `ONLY_HOST` — 기준값은 `(없음)`) |
+| `[N/A]` | 회색 | `MAPPING_MISSING`, `NO_DUMP`, 대상에 속성이 없음(`ONLY_REF`), 접속·조회 실패 |
+
+- 기준값 칸(프로파일 기대값 또는 비교서버 값)은 항상 초록이고, 현재값 칸은 태그 색을 따릅니다. 호스트 단위 오류(접속 실패 등)는 빨강입니다.
+- 값이 없는 칸(`-`)은 화면·CSV 에서 `(N/A)` 로 표시합니다. `profiles/*.tsv` 의 양식은 바뀌지 않습니다.
+- `NO_COLOR` 환경변수를 설정하거나 터미널이 아니면 색이 없습니다.
+- **태그는 묶음 표시이므로 `[N/A]` 를 “문제 없음”으로 읽지 마십시오.** 판정할 수 없다는 뜻이고(매핑 없음, 대상에 속성 없음 등), 접속 실패도 N/A 줄로 나옵니다. 원인은 비고(원래 상태명)에서 확인합니다.
+
+**전체비교 기준 (3종 중 하나)**
+
+| 기준 | 지정 | 설명 |
+|---|---|---|
+| 비교서버 hostname | TUI 에서 입력 / `-ref <hostname>`(쉼표로 여러 개) | 대상 목록에 있으면 그 호스트의 조회 결과를 쓰고, 없으면 그 서버만 추가 조회합니다. 비워 두면 `diff.txt` |
+| refs 폴더의 JSON | TUI 목록에서 선택 / `-ref-json <파일>`(파일 이름만 주면 `refs_dir` 에서 찾음) | `bios_export.sh`(2.4.1절)로 뽑은 속성 JSON. 기준으로 쓸 수 없는 파일은 목록에서 빠집니다 |
+| `diff.txt` | TUI 목록에서 선택 / `-diff <파일>` | 모델별 기준 호스트 목록(옛 `all_bios_check.sh` 와 같은 선택 규칙) |
+
+`-ref`·`-ref-json`·`-diff` 를 주면 기준을 묻지 않으며 셋 중 하나만 쓸 수 있습니다. **같은 모델끼리만** 비교하고, BIOS 버전이 달라도 속성 이름 목록이 같으면 비교·수정 대상이 됩니다(다르면 “속성 이름 목록이 기준과 다름 (설정 불가)”). 비교에서 뺄 속성은 `ignore_attrs.txt`(없으면 내장 목록)와 `bios.conf` 의 `exclude_attrs` 를 합쳐 적용하며, `exclude_attrs` 는 프로파일 점검에서도 그 속성 행을 점검하지 않습니다.
+
+**수정 규칙** (“수정할까요?” — 질문은 한 번)
+
+- 대상: 프로파일의 difference(**`verified=Y` 행만**)와, `bios.conf` 의 **`allcheck_set=on` 일 때만** 전체비교의 difference 를 함께 설정합니다(기본 `off` = 프로파일 항목만).
+- 같은 속성의 목표값이 프로파일과 비교서버에서 다르면 설정하지 않고 미리보기에 **`[충돌]`** 로 보입니다.
+- 제외 목록(`ignore_attrs.txt` + `exclude_attrs`)·위험 속성·N/A·쓰기 불가 벤더(Dell·HPE·Lenovo 가 아닌 호스트)·속성 이름 목록이 다른 호스트는 미리보기에 제외 사유와 함께 빠집니다.
+- 남이 걸어 둔 **Pending 이 있는 장비**는 호스트·속성·Pending 값 목록을 보여 주고 `y` 포함 / `n` 제외 / `Ctrl+X` 취소를 묻습니다. 포함하기로 했을 때도 그 목록과 정확히 같은 Pending 만 허용하고, 설정 중에 새로 생긴 Pending 이 있으면 쓰지 않습니다(`PENDING_EXISTS`).
+- 적용은 옛 설정(2.1절)과 같은 안전 경로(`set.go`)입니다: 재조회 → 레지스트리 검사 → 호스트당 PATCH 1회(+Dell Job 최대 1회) → **재부팅 없음**. 끝나면 Pending 을 다시 조회해 반영 여부를 설정 결과 화면에 보여 줍니다.
+- `-from-dump`(덤프 읽기)·`-plain`·`-auto`/`-auto-check` 에서는 설정하지 않습니다.
+
+**진행 표시** — 지금 단계 하나를 한 줄로 보입니다: `[1/4 설정 확인] [2/4 접속·조회 123/1000 · OK 100 difference 20 N/A 3 오류 0 · 경과 00:12] [3/4 CSV 저장] [4/4 TUI]`. 설정을 적용할 때는 호스트별 진행 줄이 나옵니다. 터미널은 한 줄을 제자리 갱신하고, 비대화형(`-auto`)은 10초마다 한 줄을 표준에러로 찍습니다.
+
+**결과 파일** — `results/<일시>/` 에 기존 `result.tsv`·`ok.txt`·`fail.tsv`·`retry.txt`·`run_info.txt` 와 함께 CSV 가 저장됩니다(UTF-8 BOM, 엑셀에서 바로 열림, 권한 0600). 프로파일 결과는 `profile_`, 전체비교는 `compare_` 접두어입니다.
+
+| CSV | 내용 |
+|---|---|
+| `<접두어>summary.csv` | 호스트 1줄: 불일치 건수, N/A 건수, 다른 속성의 “대상값 / 기준값” 나열 |
+| `<접두어>wide_hosts_<벤더>_<그룹>.csv` | 호스트=행, 속성=열, 첫 행이 기준값(difference 칸은 `[DIFF]` 표시) |
+| `<접두어>wide_attrs_<벤더>_<그룹>.csv` | 속성=행, 호스트=열, “차이” 열(몇 대가 다른지) |
+| `<접두어>long.csv` | 화면 줄 형식 그대로(태그·비고 포함) |
+
+`<그룹>` 은 벤더 안에서 관리 컨트롤러 버전별로 나눈 것이며, BIOS 속성 이름 목록이 같으면 하나로 합쳐 `iLO 4+iLO 5` 처럼 이어 부릅니다(파일 이름에서는 영문·숫자·`.`·`_`·`-` 밖의 글자가 `_` 가 되어 `iLO_4_iLO_5`).
+
+**비대화형 `-auto` / `-auto-check`** (auto_setup 이 호출)
+
+```bash
+bash bios.sh -auto-check <user> targets.txt [-profile VM]
+bash bios.sh -auto       <user> targets.txt [-profile VM]
+```
+
+- 묻지 않고 **프로파일 점검만** 합니다(`-auto` 도 설정하지 않음). `-ref`·`-ref-json`·`-diff` 와는 함께 쓸 수 없습니다. 프로파일은 `-profile` 또는 `bios.conf` 의 `auto_profile` 이며 둘 다 없으면 오류입니다. 이름 `<user>` 는 결과 파일 이름에 쓰이므로 영문·숫자·`.`·`_`·`-` 만 가능합니다.
+- `targets.txt` 는 **호출한 폴더 기준 경로**이고, 결과 `check.res_<user>`(`-auto` 는 같은 내용의 `check.res_<user>_postapply` 도)는 **호출한 폴더**에 만들어집니다(`bios.sh` 가 `-res-dir` 로 넘김, 권한 0644).
+- 호스트마다 한 줄입니다: `host: OK` / `host: OK (N/A N건)` / `host: FAIL difference N건 (속성 현재값→기준값, …)` / `host: FAIL N/A 접속실패(사유)`. 속성 수준 N/A 만 있으면 OK 로 보고 건수만 남깁니다.
+- 점검을 끝냈으면 FAIL 이 있어도 종료코드 0 이고, conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닙니다.
+
+![auto 흐름도](workflow_auto.svg)
+
+**옛 래퍼와의 관계** — `bios_check.sh` 는 옛 전용 옵션(`-retry-from`·`-dry-run`·`-no-prompt`·`-stdin-ok`·`-list-max`·`-fail-max`)이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘기고, 옵션이 있으면 옛 방식(`biostool check`, 2.1절)으로 동작합니다. `all_bios_check.sh` 는 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘어가고(옛 1.체크/2.전체비교 메뉴는 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만), `-user`·`-diff`·`-ref`·`-from-dump`·`-retry-from` 을 주면 옛 방식(2.4절)입니다.
+
 ### 2.1 점검과 설정 — `bios_check.sh`
+
+> 터미널에서 인자 없이, 또는 `--profile` 만(옛 전용 옵션 없이) 주면 이 스크립트는 `bios.sh`(2.0절)로 넘어가 TUI 로 점검하고 마지막에 수정 여부를 묻습니다. 아래의 한 줄 프롬프트 방식(`Y/N`)은 `-dry-run`·`-no-prompt`·`-stdin-ok`·`-retry-from`·`-list-max`·`-fail-max` 를 줄 때의 동작입니다.
 
 ```bash
 bash bios_check.sh                    # profiles/*.tsv 를 번호 메뉴로 선택
@@ -245,6 +359,8 @@ bash xml.sh --compact 192.0.2.10      # 호스트당 1줄 요약
 
 표준 4개 항목이 아니라, **같은 모델 안에서 정상(기준) 호스트와 BIOS Attribute 전체를 비교**합니다. 읽기 전용이며 설정은 하지 않습니다.
 
+> 인자 없이 터미널에서 실행하면 `bios.sh` TUI(2.0절)로 넘어가므로 아래 “대화형 흐름”(1.체크 / 2.전체비교 메뉴)은 `-diff-max`·`-list-max`·`-export-attrs` 를 함께 줄 때만 나옵니다. `-user`·`-diff`·`-ref`·`-from-dump`·`-retry-from` 을 주는 방식은 그대로입니다. 전체비교 결과를 보고 바로 수정까지 하려면 `bash bios.sh` 를 쓰십시오.
+
 ```bash
 bash all_bios_check.sh                       # 터미널이면 대화형: 대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력
 bash all_bios_check.sh -ref host0001-m       # 비교서버 1대를 직접 지정, user.txt 의 대상과 BIOS 전체 값 비교
@@ -323,6 +439,30 @@ bash all_bios_check.sh -diff-max 10          # 나머지 인자는 biostool allc
 - 한 속성에서 값이 다르면 `비교서버=a → 대상=b`, 한쪽에만 있는 속성은 `(비교서버에만 있음)` / `(대상에만 있음)` 로 방향을 말로 표시합니다. `all_diff.tsv` 에는 같은 내용이 `DIFF` / `ONLY_REF` / `ONLY_HOST` 로 들어갑니다.
 - 비교서버를 읽지 못하면(접속 불가·계정 오류) 그 모델의 대상은 비교하지 못하고 `[비교서버 오류]` 로 알립니다.
 
+#### 2.4.1 설정값(JSON)을 뽑아 눈으로 비교 — `bios_export.sh`
+
+리포트는 **다른 값만** 보여 줍니다. 비교서버와 대상서버의 BIOS 속성 **전체**를 나란히 보고 싶으면 JSON 으로 뽑습니다. 읽기 전용이며(서버당 GET 4번, 로그인 1회) 추가 접속 없이 읽은 값을 파일로 저장할 뿐입니다.
+
+```bash
+bash bios_export.sh <비교서버> <대상1> <대상2>    # hostname / IP / IP:포트
+bash bios_export.sh <비교서버>                    # 대상은 user.txt
+```
+
+- 호스트마다 `results/<일시>_all/attrs/<호스트>.json`(호스트 이름의 `:` 등은 `_` 로 바뀜)이 만들어집니다. 안에는 호스트·모델·BIOS 버전과 속성 전체(이름 순 정렬)만 있고 비밀번호·토큰은 없으며 권한은 0600 입니다.
+- 같은 실행의 차이 리포트(`report.txt`, `all_diff.tsv`)도 함께 나옵니다.
+- 직접 쓰려면 `biostool allcheck -ref <비교서버> -export-attrs`(옵션 없이는 저장하지 않음).
+
+비교하는 법(실행이 끝나면 같은 명령이 안내됩니다):
+
+```bash
+cd results/<일시>_all/attrs
+diff -u <비교서버>.json <대상>.json | less
+diff -y -W 200 --suppress-common-lines <비교서버>.json <대상>.json | less
+vimdiff <비교서버>.json <대상>.json
+```
+
+첫 줄의 `host`·`ip` 는 서버마다 달라서 항상 다르게 나옵니다. 아래 `attributes` 의 차이만 보시면 됩니다.
+
 ### 2.5 저장된 덤프로 오프라인 실행 — `-from-dump`
 
 BMC 에 접속하지 않고 `xml.sh` 가 저장한 덤프를 읽어 같은 판정을 합니다(비밀번호 복호화도 하지 않으므로 `pass.enc`·`key.bin` 불필요). 설정은 할 수 없습니다(Y/N 도 묻지 않음).
@@ -379,6 +519,9 @@ OK                     1  → results/20261007_162940/ok.txt (OK·PENDING_OK 호
 | `…/retry.txt` | check·allcheck | 재시도 대상 입력 원문(그대로 `-user` 로 사용 가능) |
 | `…/run_info.txt` | 모두 | 실행 요약: 프로파일·시각·모드·대상 수·상태별 집계·BMC 호출 수(세션 생성 N, GET N) |
 | `…/mapping_missing/` | check | MAPPING_MISSING 모델의 덤프 1대분 + `index.tsv` + `summary.txt`(사람이 읽고 프로파일에 행을 추가) |
+| `…/profile_summary.csv` · `profile_wide_hosts_*.csv` · `profile_wide_attrs_*.csv` · `profile_long.csv` | bios | 프로파일 결과 CSV 4종(UTF-8 BOM, 2.0절) |
+| `…/compare_*.csv` (위와 같은 4종) | bios | 전체비교 결과 CSV (전체비교를 했을 때만) |
+| `<호출한 폴더>/check.res_<user>` (`-auto` 는 `check.res_<user>_postapply` 도) | bios `-auto`/`-auto-check` | auto_setup 이 읽는 호스트별 한 줄 결과(2.0절). `results/` 가 아니라 호출한 폴더에 만들어짐 |
 | `…/apply_result.tsv` | 설정(Y) | 항목별 설정 결과 |
 | `…/applied.txt` | 설정(Y) | Pending 반영을 재조회로 확인한(APPLIED) 호스트 |
 | `…/apply_failed.txt` | 설정(Y) | 실패·미확인·접속 못 한 대상(있을 때만) |
@@ -693,10 +836,11 @@ $ bin/biostool account change
 
 ### 3.1 서브커맨드
 
-`biostool` 은 한 바이너리에 서브커맨드 여섯 개가 있고, bash 래퍼가 파일 확인·바이너리 선택·프로파일 메뉴를 맡습니다. 직접 실행하려면 `bin/biostool help` 를 보십시오.
+`biostool` 은 한 바이너리에 서브커맨드 일곱 개가 있고, bash 래퍼가 파일 확인·바이너리 선택·프로파일 메뉴를 맡습니다. 직접 실행하려면 `bin/biostool help` 를 보십시오.
 
 | 서브커맨드 | 래퍼 | 하는 일 | BMC 쓰기 |
 |---|---|---|---|
+| `bios` | `bios.sh` | **통합 진입점**: 프로파일 점검 + 전체비교(비교서버 / refs JSON / `diff.txt`) + TUI 수정, CSV, 비대화형 `-auto`/`-auto-check`. 2.0절 | **TUI 에서 “수정할까요?” y 일 때만**(`-plain`·`-auto`·`-from-dump` 는 쓰기 없음) |
 | `check` | `bios_check.sh` | 프로파일 표준값 점검, 승인 시 Pending 설정, `-dry-run` | **Y 응답 시에만**(PATCH, Dell 은 Job POST) |
 | `allcheck` | `all_bios_check.sh` | 모델별 BIOS 전체 Attribute 비교 | 없음 |
 | `dump` | `xml.sh` | 사전조사 덤프(GET 전용) | 없음 |
@@ -729,6 +873,14 @@ $ bin/biostool account change
 | `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 모델을 적어도 확인용) |
 | `-ignore <파일>` | `ignore_attrs.txt` | allcheck | 비교 제외 속성 목록. 파일이 없으면 내장 기본 목록, `-ignore` 로 직접 준 파일이 없으면 오류 |
 | `-diff-max <N>` | `30` | allcheck | 호스트당 터미널에 보일 차이 속성 수(넘으면 `all_diff.tsv` 안내) |
+| `-conf`·`-user`·`-hosts`·`-profile`·`-from-dump` | 위와 같음 | bios | `bios` 에서도 같은 뜻. `-profile` 은 TUI 에서는 생략하면 화면에서 고르고, `-plain`·`-auto` 에서는 필수(`-auto` 는 `auto_profile` 로 대체 가능). `-user` 를 주면 TUI 가 대상을 묻지 않음 |
+| `-ref <hostname>` | (없음) | bios | 전체비교 비교서버(쉼표로 여러 개). 대상 목록에 있으면 다시 접속하지 않음 |
+| `-ref-json <파일>` | (없음) | bios | 전체비교 기준 속성 JSON(`bios_export.sh`·`allcheck -export-attrs` 결과). 파일 이름만 주면 `refs_dir` 에서 찾음 |
+| `-diff <파일>` | (없음) | bios | 전체비교 기준 목록(모델별 기준 호스트). `-ref`·`-ref-json`·`-diff` 는 하나만 |
+| `-ignore <파일>` | `ignore_attrs.txt` | bios | 전체비교에서 제외할 속성 목록(없으면 내장 목록, `bios.conf` 의 `exclude_attrs` 와 합침) |
+| `-plain` | `false` | bios | TUI 없이 색 없는 평문 출력(설정 질문 없음). 표준출력이 터미널이 아니어도 평문 |
+| `-auto-check <user> <targets>` / `-auto <user> <targets>` | | bios | 비대화형 점검만 → `check.res_<user>`(`-auto` 는 `_postapply` 도). 설정 없음, 동시에 쓸 수 없음 |
+| `-res-dir <폴더>` | `.` | bios | `check.res_<user>` 를 쓸 폴더. `bios.sh` 가 호출한 폴더를 자동으로 넘김 |
 | `-targets <대상,...>` | (없음) | dump | 대상을 쉼표·공백으로 직접 지정(지정하면 `-user` 파일 대신 사용, `ip:포트` 가능). `xml.sh` 가 인자를 모아 전달 |
 | `-out <디렉터리>` | conf 의 `dump_dir` | dump | 덤프 저장 디렉터리 |
 | `-compact` | `false` | dump | 호스트당 1줄 요약 |
@@ -741,9 +893,11 @@ $ bin/biostool account change
 
 | 스크립트 | 사용법 | 설명 |
 |---|---|---|
-| `bios_check.sh` | `[--profile <이름>] [biostool check 옵션...]` | 파일 확인 → 프로파일 메뉴(3회까지 재입력) → `biostool check -profile …`. `-retry-from` 이면 `user.txt` 불필요, `-from-dump` 이면 `pass.enc`·`key.bin` 불필요. `-h` 도움말 |
+| `bios.sh` | `[--profile <이름>] [biostool bios 옵션...]` / `-auto\|-auto-check <user> <targets.txt>` | **통합 진입점**. 파일 확인(`bios.conf`·`pass.enc`·`key.bin`, `-plain`·`-user` 일 때 `user.txt`, `-auto` 일 때 targets.txt) → `biostool bios`. `-h` 도움말. 2.0절 |
+| `bios_export.sh` | `<비교서버> [<대상> ...]` | 속성 JSON 추출(2.4.1절) |
+| `bios_check.sh` | `[--profile <이름>] [biostool check 옵션...]` | 옛 전용 옵션이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘김(2.0절). 그 밖에는 파일 확인 → 프로파일 메뉴(3회까지 재입력) → `biostool check -profile …`. `-retry-from` 이면 `user.txt` 불필요, `-from-dump` 이면 `pass.enc`·`key.bin` 불필요. `-h` 도움말 |
 | `xml.sh` | `[--compact] [대상...]` | 대상 인자를 쉼표로 묶어 `biostool dump -targets …`. 대상이 없으면 `user.txt`. **설정은 항상 `./bios.conf` 를 쓰며 `-conf` 등 다른 옵션은 받지 않습니다**(알 수 없는 옵션은 오류). 일부 호스트가 실패해도 안내를 보여 준 뒤 종료코드를 전달 |
-| `all_bios_check.sh` | `[-ref <비교서버>] [biostool allcheck 옵션...]` | 인자 없이 터미널에서 실행하면 대화형(대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력). 그 밖에는 파일 확인 후 `biostool allcheck` 실행 |
+| `all_bios_check.sh` | `[-ref <비교서버>] [biostool allcheck 옵션...]` | 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘김(옛 대화형 메뉴 대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력 은 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만). 그 밖에는 파일 확인 후 `biostool allcheck` 실행 |
 | `ucsm_check.sh` | `[-user <파일>] [-xml-map <파일>] [-list-max N] ...` | 파일 확인 후 `biostool ucsm` 실행(읽기 전용). `-h` 도움말. 2.9절 |
 | `account_create.sh` | `[-dry-run] [-ucsm] [-j N] [biostool account create 옵션...]` | 파일(bios.conf·user.txt·pass.enc·rf.conf) 확인 후 `biostool account create`. 2.12절 |
 | `encrypt.sh` | (인자 없음) | 비밀번호를 두 번 입력받아 같을 때만 `pass.enc`·`key.bin`(권한 600) 생성 |
@@ -770,6 +924,10 @@ $ bin/biostool account change
 | `result_dir` | `results` | | 결과 폴더의 부모 |
 | `dump_dir` | `dumps` | | 사전조사 덤프 저장 위치 |
 | `profile_dir` | `profiles` | | 프로파일(`<이름>.tsv`) 디렉터리 |
+| `exclude_attrs` | (비어 있음) | | 점검·전체비교에서 뺄 BIOS 속성 패턴. `\|` 로 구분, `*` 는 와일드카드, 대소문자 무시(예: `ServiceTag\|*Uuid*\|BootSeq*`). 전체비교는 `ignore_attrs.txt`(없으면 내장 목록)와 **합쳐서** 제외하고, 프로파일 점검은 그 속성 행을 점검하지 않음 |
+| `allcheck_set` | `off` | | `on`: 전체비교의 difference 도 TUI “수정할까요?” 대상에 넣음 / `off`: 프로파일(`verified=Y`) 항목만 설정. `on` 이어도 같은 모델·같은 속성 이름 목록·쓰기 가능 벤더일 때만 |
+| `refs_dir` | `refs` | | 전체비교 기준 속성 JSON 폴더(`-ref-json` 이름 검색, TUI 기준 목록). `bios_export.sh` 결과 `attrs/<호스트>.json` 을 넣어 둠 |
+| `auto_profile` | (비어 있음) | | 비대화형 `-auto`/`-auto-check` 에서 `-profile` 을 주지 않았을 때 쓸 프로파일 이름. 비우면 `-profile` 필수 |
 
 같은 BMC 로 가는 연속 요청은 최소 100ms 간격을 두며(BMC 부하 방지), 환경변수 프록시는 거치지 않고 리다이렉트는 따라가지 않습니다.
 
@@ -811,7 +969,9 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 |---|---|
 | `user.txt` | 한 줄에 대상 하나(`IP` / `이름-m` / `이름`, 뒤에 `:포트` 가능). `#` 주석·빈 줄 무시, 중복은 처음 것만 |
 | `diff.txt` | 한 줄에 기준 호스트 하나(`user.txt` 와 같은 이름 해석). 뒤에 공백/탭 뒤로 모델을 적어도 되지만 확인용(실제 모델과 다르면 `DIFF_TXT_MODEL_MISMATCH` 경고 후 실제 모델로 분류) |
-| `ignore_attrs.txt` | 한 줄에 패턴 하나, `#` 주석, 대소문자 무시, `*` 만 와일드카드. 파일이 있으면 그 파일만 씀 |
+| `ignore_attrs.txt` | 한 줄에 패턴 하나, `#` 주석, 대소문자 무시, `*` 만 와일드카드. 파일이 있으면 그 파일만 씀(`allcheck`). `bios` 는 이 목록(없으면 내장 기본 목록)과 `bios.conf` 의 `exclude_attrs` 를 합쳐 씀 |
+| `refs/*.json` | `bios_export.sh`(`allcheck -export-attrs`)가 만든 호스트별 BIOS 속성 JSON(호스트·벤더·모델·BIOS 버전·속성 전체). 전체비교 기준으로 고르며 `refs_dir` 에 둠 |
+| `targets.txt` (`-auto`) | `user.txt` 와 같은 형식(한 줄에 대상 하나). 호출한 폴더 기준 경로 |
 
 **동시 접속과 ulimit.** 호스트마다 연결이 열리므로 `ulimit -n`(열린 파일 수)은 `concurrency` 보다 넉넉해야 합니다(동시 수 + 수십 이상, 기본 100 이면 1024 로 충분). 수천 대를 처리하려고 `concurrency` 를 크게 올릴 때는 `ulimit -n` 도 함께 올리십시오.
 
@@ -886,6 +1046,18 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 - 속성 단위(`all_diff.tsv`): `DIFF`(값 다름), `ONLY_REF`(기준에만 존재), `ONLY_HOST`(대상에만 존재; BIOS 버전이 다르면 흔함).
 - 특이사항(`summary.tsv` 의 `notes`): `BIOS_VER_DIFF`(대상 버전 ≠ 기준 버전, 비교는 그대로 진행), `MULTI_REF`(같은 모델 기준이 여럿: BIOS 버전이 같은 쪽, 없으면 `diff.txt` 순서의 첫 기준), `DIFF_TXT_MODEL_MISMATCH`(`diff.txt` 의 모델 칸이 실제와 다름).
 
+#### 통합 점검(`bios`) — 화면·CSV 의 태그 3종
+
+화면(색상 줄)·CSV 는 위의 원래 상태를 세 태그로 묶어 보여 주고 원래 상태명은 비고에 남깁니다. `result.tsv` 의 상태 값은 바뀌지 않습니다.
+
+| 태그 | 원래 상태 |
+|---|---|
+| `[OK]` | `OK`, `PENDING_OK`, `SAME` |
+| `[difference]` | `FAIL`, `UNVERIFIED`, `PENDING_EXISTS`, `PENDING_NO_JOB`, `DIFF`, `ONLY_HOST`(기준에 없고 대상에만 있는 속성 — 기준값 `(없음)`) |
+| `[N/A]` | `MAPPING_MISSING`, `NO_DUMP`, `ONLY_REF`(대상에 속성 없음), 접속·조회 실패(`UNREACHABLE`·`AUTH_FAIL` 등 호스트 단위 오류, 화면에서는 빨강) |
+
+호스트 단위로 `CANCELED`(TUI 에서 Ctrl+X 로 조회를 취소해 접속하지 않은 호스트)는 `retry.txt` 에 모이므로 그 파일을 `-user` 로 넘겨 `bios.sh` 를 다시 실행하면 됩니다.
+
 #### 사전조사(`dump`) — `index.tsv` 의 `status`
 
 `OK`, `PARTIAL`(일부 리소스 실패 또는 호스트당 120경로 상한), `SAVE_FAIL`(저장 실패), 그리고 `UNREACHABLE` `TIMEOUT` `BMC_ERROR` `AUTH_FAIL` `UNSUPPORTED` `HTTP_ERROR` `NO_HOSTS_ENTRY` `SKIPPED_AUTH_STOP`(HTTP 코드가 있으면 `AUTH_FAIL(HTTP 401)` 처럼 붙음).
@@ -898,7 +1070,8 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 |---|---|
 | `README.md` | 이 문서: 설치·빌드·사용법·옵션·상태 코드·주의사항 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 폴더·파일별 역할 표, “OO 추가면 볼 곳” 가이드, 안전 설계 요약 |
-| [WORKFLOW.md](WORKFLOW.md) + `workflow*.svg` | 점검·설정·사전조사·전체 비교·재시도의 작업 흐름도(mermaid, 렌더링한 SVG 포함) |
+| [WORKFLOW.md](WORKFLOW.md) + `workflow*.svg` | 점검·설정·사전조사·전체 비교·재시도·계정 생성과 통합 진입점 `bios.sh`(`workflow_bios.svg`)·auto_setup 연동 `-auto`(`workflow_auto.svg`)의 작업 흐름도(mermaid, 렌더링한 SVG 포함) |
+| [계획서_v0.2_TUI.md](계획서_v0.2_TUI.md) | 통합 점검(TUI)·색상 줄·CSV·제외 목록·`-auto` 의 확정 사양과 단계 |
 | [FIRST_RUN.md](FIRST_RUN.md) | 첫 실장비 절차와 사람이 확인할 항목 목록(결과를 어디에 반영할지 포함) |
 | [PR_CHECKLIST.md](PR_CHECKLIST.md) | 수정·배포 전 체크리스트(바이너리 재빌드·두 바이너리 커밋·보안 테스트 등) |
 | [CHANGELOG.md](CHANGELOG.md) | 변경 이력(v0.1.0), 버전 태그 안내 |
@@ -907,11 +1080,13 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `account_create.sh` · `cmd/biostool/account*.go` | 계정 생성(래퍼)·생성/변경 구현·허용목록 본문 검사·터미널 입력(2.12절) |
 | [계획서.md](계획서.md) | 설계 원본·인터뷰 결정·성공기준 검증 현황·단계 진행표 |
 | `setup.sh`, `build.sh`, `build_os6.sh` | 오프라인 빌드 / os8 빌드 / os6(RHEL6) 빌드 |
-| `bios_check.sh`, `xml.sh`, `all_bios_check.sh`, `encrypt.sh`, `lib.sh` | 실행 래퍼(점검·설정 / 사전조사 / 전체 비교 / 비밀번호 암호화 / 공용 함수) |
+| `bios.sh` | **통합 진입점**(TUI 점검·전체비교·수정, `-plain`, `-auto`/`-auto-check`) → `biostool bios`. 2.0절 |
+| `bios_check.sh`, `xml.sh`, `all_bios_check.sh`, `bios_export.sh`, `encrypt.sh`, `lib.sh` | 실행 래퍼(점검·설정 / 사전조사 / 전체 비교 / 속성 JSON 추출 / 비밀번호 암호화 / 공용 함수). `bios_check.sh`·`all_bios_check.sh` 는 조건에 따라 `bios.sh` 로 넘김 |
 | `mockbmc.sh` | mock BMC 기동(개발·검증용). 빌드 완료 `bin/mockbmc`(`_os6`)가 있으면 그대로 사용 |
 | `testcase/` | `rf_fallback_case.sh`(2순위 계정·접속불가 구분·표기 선택 시험)와 설명. 2.11절 |
 | `bin/biostool`, `bin/biostool_os6`, `bin/mockbmc`, `bin/mockbmc_os6` | 빌드 완료 바이너리(os8 / RHEL6, mock 서버 포함) — 저장소에 **커밋**되어 있음 |
-| `cmd/biostool/` | Go 소스(점검·설정·덤프·전체 비교·재시도·Redfish 클라이언트)와 테스트 |
+| `cmd/biostool/` | Go 소스(점검·설정·덤프·전체 비교·재시도·Redfish 클라이언트, 통합 점검 `unified*.go`·TUI `tui_*.go`·출력 `lineout.go`/`csvout.go`/`checkres.go`·설정 계획 `setplan.go`)와 테스트 |
+| `refs/` | (선택) 전체비교 기준 속성 JSON 폴더. 2.0절 |
 | `cmd/mockbmc/`, `internal/mockbmc/` | mock BMC 서버와 가상 BMC 수천 대를 한 리스너에 올리는 Farm(시험용) |
 | `testdata/` | mock 용 **합성** Redfish 트리 6종(+ 테스트용 프로파일). 실제 덤프가 아님 → [testdata/README.md](testdata/README.md) |
 | `profiles/VM.tsv` | 표준값(프로파일) — 엑셀 표 시작값, 전부 `verified=N` |
@@ -926,11 +1101,12 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 
 ## 주의사항 (Disclaimer)
 
-> 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다.
+> 본 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다.
 
 > **설정 변경(Y 적용) 후에는 랜덤한 서버 몇 대를 직접 확인해 실제로 변경되었는지 확인하십시오.** (BMC 웹 화면·BIOS Setup 에서 값을 보거나, 재부팅 후 `bios_check.sh` 로 재점검합니다.) 이 도구가 출력하는 `APPLIED` 는 “BMC 의 Pending 에 기대값이 들어간 것을 재조회로 확인했다”는 뜻일 뿐, BIOS 에 실제로 반영되었다는 보증이 아닙니다.
 
 - **이 도구는 아직 실제 BMC 에서 검증되지 않았습니다(v0.1.0).** 모델을 처음 만날 때는 [FIRST_RUN.md](FIRST_RUN.md) 의 절차대로 1대부터 확인하십시오. 속성 이름·허용값·Settings 경로·Dell Job 동작은 실제 응답으로 확정해야 합니다.
+- **통합 점검(`bash bios.sh`)의 수정 단계도 같은 규칙입니다.** TUI 에서 “수정할까요?”에 y 를 누를 때만 쓰고, `-plain`·`-auto`·`-auto-check`·`-from-dump` 는 쓰지 않습니다. 전체비교 difference 는 `allcheck_set=on` 일 때만, 프로파일 항목은 `verified=Y` 일 때만 설정되며 `[충돌]` 항목은 설정하지 않습니다. **수정 뒤에는 랜덤한 서버 몇 대를 직접 확인해 실제로 변경되었는지 확인하십시오.** 태그 `[N/A]` 는 “문제 없음”이 아니라 “판정할 수 없음”입니다. TUI 에서 Ctrl+C/Ctrl+Z 는 무시되고(종료는 q), 작업 취소는 Ctrl+X 입니다.
 - **재부팅을 하지 않습니다.** 설정은 BMC 의 Pending 까지이고 **다음 재부팅 때 반영**됩니다. 반영 전에는 현재값이 그대로이며 재점검에서 `PENDING_OK` 로 보입니다. Dell 은 iDRAC Job Queue 에 BIOS 설정 Job 이 있어야 반영됩니다(없으면 `PENDING_NO_JOB`).
 - **BMC 로그에 흔적이 남습니다.** 호스트당 로그인/로그아웃 기록 1쌍, 설정(Y)을 하면 설정 변경(및 Dell 은 Job) 기록이 추가됩니다. 같은 기능을 짧은 간격으로 반복 실행하지 마십시오. 세션 생성을 지원하지 않는 BMC 는 Basic 인증으로 폴백하므로(`auth=basic`) 요청마다 인증 기록이 남을 수 있습니다. 기존 로그·Job·남의 Pending 은 절대 건드리지 않습니다.
 - **`testdata/` 는 합성 자료입니다.** 공개 문서를 바탕으로 사람이 만든 것이라 실제 BMC 덤프가 아니며 속성명·허용값·경로가 실제 장비와 다를 수 있습니다. 테스트가 통과한 것은 실제 장비에서 된다는 뜻이 아닙니다.
@@ -950,7 +1126,7 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 ```bash
 # 방법 1: 이 폴더를 PATH 에 추가 (래퍼 스크립트와 bin/ 을 그대로 쓰는 방법 — 권장)
 echo 'export PATH="$PATH:/opt/redfish"' >> ~/.bashrc      # /opt/redfish = 이 폴더를 놓은 경로
-bios_check.sh --profile VM          # 어디서든 실행 (스크립트가 자기 폴더로 이동해 실행합니다)
+bios.sh --profile VM                # 어디서든 실행 (스크립트가 자기 폴더로 이동해 실행합니다. -auto 의 targets.txt·check.res_<user> 는 호출한 폴더 기준)
 
 # 방법 2: 바이너리만 복사 (직접 biostool 을 쓰는 경우)
 sudo cp bin/biostool /usr/local/bin/biostool        # RHEL6 은 bin/biostool_os6 를 biostool 이름으로 복사

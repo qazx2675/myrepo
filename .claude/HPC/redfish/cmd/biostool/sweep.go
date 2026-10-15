@@ -22,6 +22,19 @@ import (
 // StatusSkippedAuthStop 은 AUTH_FAIL 차단기가 작동해 접속하지 않은 호스트의 상태입니다.
 const StatusSkippedAuthStop = "SKIPPED_AUTH_STOP"
 
+// StatusCanceled 는 진행 중 취소(TUI Ctrl+X)로 접속하지 않은 호스트의 상태입니다 (retry.txt 에 들어감).
+const StatusCanceled = "CANCELED"
+
+// chanClosed 는 c 가 닫혔는지 봅니다 (nil 이면 false).
+func chanClosed(c <-chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
+}
+
 // hostOutcome 은 호스트 1대 처리 결과를 차단기 관점으로 줄인 값입니다.
 type hostOutcome int
 

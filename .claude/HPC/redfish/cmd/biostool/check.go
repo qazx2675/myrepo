@@ -70,9 +70,17 @@ type hostCheck struct {
 
 	// MgmtVersion 은 result.tsv mgmt_version 열입니다 (이미 읽은 Manager 리소스에서, 모르면 "-" 또는 빈 문자열).
 	MgmtVersion string
+	// MgmtModel 은 Manager 리소스의 Model 입니다 (예: "iLO 5", 모르면 "-"). TUI 탭·CSV 그룹 기준.
+	MgmtModel string
 
 	// CredSource 는 로그인에 성공한 계정 출처입니다: credPrimary / credFallback(rf.conf 2순위) / "" (로그인 안 함·실패).
 	CredSource string
+
+	// attrs 는 Bios 현재 Attributes 전체입니다 (checkOpts.KeepAttrs 일 때만, 판정까지 간 호스트만). 전체비교 재사용용 (unified.go).
+	attrs map[string]string
+	// pendDiff 는 현재값과 다른(또는 현재 속성에 없는) Pending 전체입니다 (checkOpts.KeepAttrs 일 때만).
+	// 설정 계획(setplan.go)이 남의 Pending 목록을 보여 줄 때 씁니다 (추가 GET 없음).
+	pendDiff map[string]string
 }
 
 func (h *hostCheck) setErr(err error) {
@@ -124,9 +132,9 @@ func (h *hostCheck) hasStatus(st string) bool {
 }
 
 // isRetryStatus 는 retry.txt 에 넣을 호스트 상태입니다. AUTH_FAIL 은 넣지 않고(계정부터 고쳐야 함),
-// 차단기가 건너뛴 SKIPPED_AUTH_STOP 은 넣습니다.
+// 차단기가 건너뛴 SKIPPED_AUTH_STOP 과 취소로 건너뛴 CANCELED 는 넣습니다.
 func isRetryStatus(s string) bool {
-	return s == StatusUnreachable || s == StatusTimeout || s == StatusBMCError || s == StatusSkippedAuthStop
+	return s == StatusUnreachable || s == StatusTimeout || s == StatusBMCError || s == StatusSkippedAuthStop || s == StatusCanceled
 }
 
 // ---- 호스트별 호출 도우미 ----
@@ -227,6 +235,13 @@ type checkOpts struct {
 	ResultDir    string
 	RetryFromDir string    // 단계 7: -retry-from 값 (이전 결과 폴더 또는 그 안의 retry.txt). 비면 일반 점검
 	Now          time.Time // 결과 폴더 이름·리포트 시각 (0 이면 지금)
+	// KeepAttrs 가 true 면 판정한 호스트의 Bios Attributes 전체를 hostCheck.attrs 에 남깁니다 (추가 GET 없음, unified.go).
+	KeepAttrs bool
+	// OnHost 는 i 번째(rc.Targets 순서) 호스트 결과가 정해진 직후 불립니다 (건너뛴 호스트 포함). 여러 고루틴에서
+	// 불리므로 i 번째 칸에만 쓸 것. nil 이면 안 부름.
+	OnHost func(i int, h *hostCheck)
+	// Cancel 이 닫히면 아직 시작하지 않은 호스트는 접속하지 않고 CANCELED 로 남깁니다 (진행 중인 호스트는 끝까지). nil 이면 취소 없음.
+	Cancel <-chan struct{}
 }
 
 // checkRun 은 점검 1회의 전체 결과입니다.
@@ -254,6 +269,8 @@ type checkEnv struct {
 	offline  bool
 	regs     *regCache
 	mm       *mmDumper
+	excl     *ignoreSet // bios.conf exclude_attrs (ignore_attrs.txt 는 프로파일 점검에 쓰지 않음)
+	keep     bool       // checkOpts.KeepAttrs
 }
 
 // newRunDir 은 results/<YYYYMMDD_HHMMSS> 를 만듭니다 (같은 초에 또 실행하면 _2, _3 ...).
@@ -301,6 +318,8 @@ func doCheck(rc *runContext, o checkOpts) (*checkRun, error) {
 	env := &checkEnv{
 		conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, prof: o.Profile,
 		regs: &regCache{m: map[string]*regEntry{}},
+		excl: newIgnoreSet(rc.Conf.ExcludeAttrs, "bios.conf exclude_attrs"),
+		keep: o.KeepAttrs,
 	}
 	run := &checkRun{Profile: o.Profile.Name, Now: now, Dir: dir, FromDump: o.FromDump, prof: o.Profile, RetryFromDir: prevDir, prevResult: prev,
 		FallbackOn: rc.Fallback != nil && o.FromDump == ""}
@@ -319,20 +338,32 @@ func doCheck(rc *runContext, o checkOpts) (*checkRun, error) {
 		authStop = 0 // 덤프 읽기는 BMC 에 로그인하지 않는다
 	}
 	run.AuthStop = authStop
+	// skip 은 접속하지 않은 호스트를 st 상태로 남긴다 (이름 해석 실패는 원래 상태를 유지한다).
+	skip := func(i int, st string) {
+		h := newHostCheck(rc.Targets[i])
+		h.Status = st
+		if h.Target.Err != "" {
+			h.Status = h.Target.Err
+		}
+		run.Hosts[i] = h
+		if o.OnHost != nil {
+			o.OnHost(i, h)
+		}
+	}
 	sweepHosts(len(rc.Targets), rc.Conf.Concurrency, authStop,
 		func(i int) hostOutcome {
+			if chanClosed(o.Cancel) {
+				skip(i, StatusCanceled)
+				return outNone
+			}
 			h := env.checkHost(rc.Targets[i])
 			run.Hosts[i] = h
+			if o.OnHost != nil {
+				o.OnHost(i, h)
+			}
 			return outcomeOf(h.Status, h.Stats, h.Target.Err == "")
 		},
-		func(i int) {
-			h := newHostCheck(rc.Targets[i])
-			h.Status = StatusSkippedAuthStop
-			if h.Target.Err != "" {
-				h.Status = h.Target.Err // 이름 해석 실패는 원래 상태를 유지한다
-			}
-			run.Hosts[i] = h
-		})
+		func(i int) { skip(i, StatusSkippedAuthStop) })
 	if env.mm != nil {
 		run.MMModels = env.mm.n
 	}
@@ -422,7 +453,7 @@ func (e *checkEnv) evaluate(h *hostCheck, m *memoGet) {
 		if h.Status == "" && h.Info != nil && h.Info.ManagerPath != "" {
 			_, _ = m.fetch(h.Info.ManagerPath)
 		}
-		h.MgmtVersion = mgmtVersion(m, h.Info)
+		h.MgmtModel, h.MgmtVersion = mgmtModelVersion(m, h.Info)
 	}()
 	if err != nil {
 		h.setErr(err)
@@ -459,6 +490,9 @@ func (e *checkEnv) evaluate(h *hostCheck, m *memoGet) {
 			h.setErr(err)
 			return
 		}
+	}
+	if e.keep {
+		h.attrs = attrs
 	}
 	e.judge(h, m, info, attrs, pend)
 }
@@ -520,6 +554,12 @@ func (e *checkEnv) judge(h *hostCheck, m *memoGet, info *SystemInfo, attrs, pend
 		}
 	}
 	for k, v := range pend {
+		if cur, ok := attrs[k]; e.keep && (!ok || cur != v) {
+			if h.pendDiff == nil {
+				h.pendDiff = map[string]string{}
+			}
+			h.pendDiff[k] = v
+		}
 		if ours[k] {
 			continue
 		}
@@ -531,6 +571,9 @@ func (e *checkEnv) judge(h *hostCheck, m *memoGet, info *SystemInfo, attrs, pend
 	who := strings.TrimSpace(info.Vendor + " " + info.Model)
 	for i, std := range e.prof.Items {
 		p := picks[i]
+		if e.excludedItem(p.rows, p.name) {
+			continue // bios.conf exclude_attrs: 점검하지 않고 결과·집계에도 넣지 않는다 (Pending 은 위에서 우리 것으로 본 그대로)
+		}
 		it := itemResult{Std: std, Attr: "-", Expected: "-", Current: "-", Pending: "-"}
 		switch {
 		case len(p.rows) == 0:
@@ -620,6 +663,23 @@ func (e *checkEnv) judge(h *hostCheck, m *memoGet, info *SystemInfo, attrs, pend
 			h.Jobs = membersCount(b)
 		}
 	}
+}
+
+// excludedItem 은 항목이 bios.conf exclude_attrs 에 걸려 점검하지 않을 것인지 봅니다: BMC 에서 찾은 속성 이름이 걸리거나,
+// 찾지 못했으면 프로파일 후보 속성이 모두 걸릴 때. 행이 없는 항목은 속성을 모르므로 빼지 않는다 (MAPPING_MISSING 그대로).
+func (e *checkEnv) excludedItem(rows []profRow, name string) bool {
+	if name != "" {
+		return e.excl.match(name)
+	}
+	if len(rows) == 0 {
+		return false
+	}
+	for _, r := range rows {
+		if !e.excl.match(r.Attr) {
+			return false
+		}
+	}
+	return true
 }
 
 // maxJobScan 은 Dell Job 목록에서 BIOS 설정 Job 을 찾으려고 GET 할 최대 멤버 수입니다 (목록 뒤쪽, 최근 것부터).
@@ -794,19 +854,29 @@ func colIndex(header []string, name string) int {
 // (예: Model "iLO 5", FirmwareVersion "iLO 5 v2.99" → "iLO 5 2.99"). 새로 GET 하지 않고 memo 에 있는 응답만 봅니다.
 // Manager 를 읽지 않았거나 값이 없으면 "-" 입니다.
 func mgmtVersion(m *memoGet, info *SystemInfo) string {
+	_, v := mgmtModelVersion(m, info)
+	return v
+}
+
+// mgmtModelVersion 은 mgmtVersion 과 같은 응답에서 Manager Model(예: "iLO 5")도 함께 돌려줍니다 (없으면 "-").
+func mgmtModelVersion(m *memoGet, info *SystemInfo) (model, version string) {
 	if m == nil || info == nil || info.ManagerPath == "" {
-		return "-"
+		return "-", "-"
 	}
 	_, key := pathKey(info.ManagerPath)
 	r, ok := m.m[key]
 	if !ok || r.err != nil {
-		return "-"
+		return "-", "-"
 	}
 	var mgr struct{ Model, FirmwareVersion string }
 	if json.Unmarshal(r.b, &mgr) != nil {
-		return "-"
+		return "-", "-"
 	}
-	return formatMgmtVersion(mgr.Model, mgr.FirmwareVersion)
+	model = tsvField(strings.TrimSpace(mgr.Model))
+	if model == "" {
+		model = "-"
+	}
+	return model, formatMgmtVersion(mgr.Model, mgr.FirmwareVersion)
 }
 
 // formatMgmtVersion 은 Model 과 FirmwareVersion 을 합칩니다. FirmwareVersion 이 Model 로 시작하면 겹치는 부분과

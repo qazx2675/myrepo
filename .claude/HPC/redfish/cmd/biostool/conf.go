@@ -26,6 +26,10 @@ type Config struct {
 	ResultDir    string        // 결과 TSV 저장 디렉터리
 	DumpDir      string        // 사전조사 덤프 저장 디렉터리
 	ProfileDir   string        // 프로파일(.tsv) 디렉터리
+	ExcludeAttrs []string      // 점검·전체비교에서 뺄 속성 패턴 (| 구분, * 와일드카드, 대소문자 무시). 비면 없음
+	AllcheckSet  bool          // true 면 전체비교 difference 도 설정 대상에 넣는다 (기본 false)
+	RefsDir      string        // 기준 속성 JSON(bios_export / -export-attrs 결과) 폴더
+	AutoProfile  string        // 비대화형(bios -auto / -auto-check)에서 -profile 이 없을 때 쓸 프로파일 이름. 비면 없음
 }
 
 func defaultConfig() Config {
@@ -40,6 +44,7 @@ func defaultConfig() Config {
 		ResultDir:    "results",
 		DumpDir:      "dumps",
 		ProfileDir:   "profiles",
+		RefsDir:      "refs",
 	}
 }
 
@@ -86,6 +91,19 @@ func parseConf(text, name string) (*Config, error) {
 			setIfNotEmpty(&c.DumpDir, val)
 		case "profile_dir":
 			setIfNotEmpty(&c.ProfileDir, val)
+		case "refs_dir":
+			setIfNotEmpty(&c.RefsDir, val)
+		case "auto_profile":
+			if val != "" {
+				if err = validProfileName(val); err != nil {
+					err = fmt.Errorf("%s:%d: auto_profile: %w", name, lineNo, err)
+				}
+			}
+			c.AutoProfile = val
+		case "exclude_attrs":
+			c.ExcludeAttrs = splitExclude(val)
+		case "allcheck_set":
+			c.AllcheckSet, err = parseOnOff(name, lineNo, key, val)
 		case "concurrency":
 			c.Concurrency, err = parseIntAtLeast(name, lineNo, key, val, 1)
 		case "retries":
@@ -121,6 +139,28 @@ func setIfNotEmpty(dst *string, val string) {
 	if val != "" {
 		*dst = val
 	}
+}
+
+// splitExclude 는 exclude_attrs 값을 | 로 나눕니다 (앞뒤 공백·빈 칸 제거). 빈 값이면 nil.
+func splitExclude(val string) []string {
+	var out []string
+	for _, p := range strings.Split(val, "|") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// parseOnOff 는 on/off 값을 읽습니다 (대소문자 무시).
+func parseOnOff(name string, lineNo int, key, val string) (bool, error) {
+	switch strings.ToLower(val) {
+	case "on":
+		return true, nil
+	case "off":
+		return false, nil
+	}
+	return false, fmt.Errorf("%s:%d: %s 값은 on 또는 off 여야 합니다", name, lineNo, key)
 }
 
 func parseIntAtLeast(name string, lineNo int, key, val string, lo int) (int, error) {

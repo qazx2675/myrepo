@@ -1,8 +1,8 @@
 # 작업 흐름도 — redfish (BIOS 표준값 점검·설정 도구)
 
-명령 한 번이 실행되는 주요 경로 6가지를 그렸습니다. 옵션 전체는 [README.md](README.md), 파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md), 첫 실장비에서 사람이 확인할 것은 [FIRST_RUN.md](FIRST_RUN.md) 를 참고하세요.
+명령 한 번이 실행되는 주요 경로 8가지를 그렸습니다. 지금의 기본 진입점은 `bash bios.sh`(7번, TUI)이고 auto_setup 연동 경로는 8번입니다. 옵션 전체는 [README.md](README.md), 파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md), 첫 실장비에서 사람이 확인할 것은 [FIRST_RUN.md](FIRST_RUN.md) 를 참고하세요.
 
-각 흐름은 mermaid 로 그렸고(GitHub 에서 바로 렌더링됩니다), mermaid 를 렌더링한 그림을 같은 폴더에 함께 두었습니다: 1번 [workflow.svg](workflow.svg), 2번 [workflow_set.svg](workflow_set.svg), 3번 [workflow_dump.svg](workflow_dump.svg), 4번 [workflow_allcheck.svg](workflow_allcheck.svg), 5번 [workflow_retry.svg](workflow_retry.svg), 6번 [workflow_account.svg](workflow_account.svg). 글자는 `<text>` 로 들어 있어(foreignObject 아님) 뷰어 글꼴이 달라도 잘리지 않습니다. mermaid 를 보지 못하는 뷰어에서는 SVG 를 여십시오.
+각 흐름은 mermaid 로 그렸고(GitHub 에서 바로 렌더링됩니다), mermaid 를 렌더링한 그림을 같은 폴더에 함께 두었습니다: 1번 [workflow.svg](workflow.svg), 2번 [workflow_set.svg](workflow_set.svg), 3번 [workflow_dump.svg](workflow_dump.svg), 4번 [workflow_allcheck.svg](workflow_allcheck.svg), 5번 [workflow_retry.svg](workflow_retry.svg), 6번 [workflow_account.svg](workflow_account.svg), 7번 [workflow_bios.svg](workflow_bios.svg), 8번 [workflow_auto.svg](workflow_auto.svg). 글자는 `<text>` 로 들어 있어(foreignObject 아님) 뷰어 글꼴이 달라도 잘리지 않습니다. mermaid 를 보지 못하는 뷰어에서는 SVG 를 여십시오.
 
 ## 그림별 단계와 확인 순서
 
@@ -12,12 +12,14 @@
 |---|---|---|---|---|
 | 1 | 6. [workflow_account.svg](workflow_account.svg) | 준비: 1순위 계정 만들기 | `bash account_create.sh` (점검 끝 `[Y/n]`) | 점검에서 AUTH_FAIL 이 나오고 2순위(rf.conf)로만 접속될 때. 읽기 점검 → 목록 y/n → admin 로 생성 → 새 계정 로그인 검증 → 실패 시 롤백. 결과 상태가 `CREATED` 인지 |
 | 2 | 3. [workflow_dump.svg](workflow_dump.svg) | 사전조사: 모델별 속성명·허용값 수집 | `bash xml.sh --compact 대상...` | 처음 보는 모델이거나 점검에서 `MAPPING_MISSING` 이 나올 때. 읽기 전용 덤프 → 요약 → `profiles/*.tsv` 에 `verified=N` 행 추가 |
-| 3 | 1. [workflow.svg](workflow.svg) | 점검: 표준값과 대조 | `bash bios_check.sh --profile <이름>` | 기본 작업. 호스트마다 GET 만 하고 OK / FAIL / UNVERIFIED / MAPPING_MISSING 판정. 끝에서 FAIL 이 있으면 설정 여부를 묻는다 |
-| 4 | 2. [workflow_set.svg](workflow_set.svg) | 설정: FAIL 항목을 Pending 으로 기록 | 점검 끝의 `Y` (먼저 `-dry-run` 권장) | 점검 결과가 맞고 `verified=Y` 행이 있을 때만. 호스트별 `APPLIED` / `ALREADY_OK` / `UNVERIFIED` / `REJECTED` 등. 재부팅은 하지 않으므로 반영 후 랜덤 서버 확인 |
-| 5 | 5. [workflow_retry.svg](workflow_retry.svg) | 재시도: 일시 오류 호스트만 다시 | `-retry-from <이전결과폴더>` | 3~4번 결과에 `retry.txt` 대상이 남았을 때. 새 결과가 이전 결과와 병합되고 `merged_retry.txt` 가 비면 끝 |
-| 6 | 4. [workflow_allcheck.svg](workflow_allcheck.svg) | 전체 비교: 같은 모델끼리 속성 전체 비교 | `bash all_bios_check.sh` | 표준값 표(프로파일) 밖의 차이를 찾을 때. 설정 흐름과 독립이며 읽기 전용. `diff.txt` 의 기준 호스트와 비교해 SAME / DIFF |
+| 3 | 7. [workflow_bios.svg](workflow_bios.svg) | **통합 점검(기본 진입점)**: 프로파일 점검 → 전체비교 → 수정까지 한 화면(TUI) | `bash bios.sh` | 기본 작업. 호스트당 1회 조회로 프로파일 결과와 전체비교를 함께 얻고, 같은 TUI 에서 `y` 로 전체비교, 마지막에 수정(Pending, 재부팅 없음)을 묻는다. 설정 후 랜덤 서버 확인 |
+| 4 | 8. [workflow_auto.svg](workflow_auto.svg) | auto_setup 연동(비대화형): 점검만, 설정 없음 | `bash bios.sh -auto <user> targets.txt` (또는 `-auto-check`) | 묻지 않고 `check.res_<user>` 한 줄 결과만 만든다. 종료코드 0 이면 점검 완료(FAIL 이 있어도 0) |
+| 5 | 1. [workflow.svg](workflow.svg) | 옛 방식 점검: 표준값과 대조(Y/N 줄 프롬프트) | `bash bios_check.sh --profile <이름> -no-prompt` 등 | `-dry-run`·`-no-prompt`·`-stdin-ok`·`-retry-from`·`-list-max`·`-fail-max` 를 줄 때의 동작. 호스트마다 GET 만 하고 OK / FAIL / UNVERIFIED / MAPPING_MISSING 판정. 이 옵션 없이 터미널에서 실행하면 bios.sh(7번)로 넘어간다 |
+| 6 | 2. [workflow_set.svg](workflow_set.svg) | 설정: FAIL 항목을 Pending 으로 기록 | 점검 끝의 `Y` (먼저 `-dry-run` 권장) / TUI 의 수정 단계 | 점검 결과가 맞고 `verified=Y` 행이 있을 때만. 호스트별 `APPLIED` / `ALREADY_OK` / `UNVERIFIED` / `REJECTED` 등. 재부팅은 하지 않으므로 반영 후 랜덤 서버 확인 |
+| 7 | 5. [workflow_retry.svg](workflow_retry.svg) | 재시도: 일시 오류 호스트만 다시 | `-retry-from <이전결과폴더>` | 옛 방식 결과에 `retry.txt` 대상이 남았을 때. 새 결과가 이전 결과와 병합되고 `merged_retry.txt` 가 비면 끝 |
+| 8 | 4. [workflow_allcheck.svg](workflow_allcheck.svg) | 옛 방식 전체 비교: 같은 모델끼리 속성 전체 비교 | `bash all_bios_check.sh -ref <비교서버>` 등 | 목록 파일·`-from-dump`·`-retry-from` 방식. 설정 흐름과 독립이며 읽기 전용. 인자 없이 터미널에서 실행하면 bios.sh(7번)로 넘어간다 |
 
-처음 도입할 때 권장 흐름: 1(계정) → 2(사전조사) → 3(점검) → 4(`-dry-run` 후 설정) → 5(재시도) → 6(전체 비교). 이미 계정과 프로파일이 있으면 3 → 4 → 5 만 반복합니다.
+처음 도입할 때 권장 흐름(표의 순서 열): 1(계정) → 2(사전조사) → `bios_check.sh -dry-run`(5·6, 보낼 본문 확인) → 3(`bash bios.sh` 로 점검·전체비교·설정). 일시 오류 재시도는 7(옛 방식). 자동화는 4(`-auto`)가 `check.res_<user>` 를 만들어 auto_setup 이 읽습니다.
 
 공통 약속: 재부팅은 하지 않습니다. 호스트당 로그인은 1회, 끝나면 자기 세션만 삭제합니다. 허용목록 밖 호출(로그 조회·ClearLog·Reset 등)은 전송 전에 코드가 막습니다.
 
@@ -25,7 +27,9 @@
 
 ```mermaid
 flowchart TD
-    S(["bash bios_check.sh --profile VM"]) --> W["bios_check.sh<br/>폴더 이동 → OS 에 맞는 바이너리 선택<br/>커널 3 미만은 bin/biostool_os6, 그 외 bin/biostool<br/>필요 파일 확인: bios.conf · user.txt · pass.enc · key.bin"]
+    S(["bash bios_check.sh --profile VM"]) --> LG{"-retry-from · -dry-run · -no-prompt<br/>-stdin-ok · -list-max · -fail-max 가 있거나<br/>프로파일도 없고 터미널도 아닌가"}
+    LG -->|"아니오"| BS(["bios.sh 로 넘어감<br/>7번 흐름 (TUI)"])
+    LG -->|"예 (옛 방식)"| W["bios_check.sh<br/>폴더 이동 → OS 에 맞는 바이너리 선택<br/>커널 3 미만은 bin/biostool_os6, 그 외 bin/biostool<br/>필요 파일 확인: bios.conf · user.txt · pass.enc · key.bin"]
     W --> M{"파일이 모두 있는가"}
     M -->|없음| X1(["안내 후 종료 (코드 1)"])
     M -->|있음| P["프로파일 선택<br/>--profile 또는 번호 메뉴"]
@@ -111,7 +115,9 @@ flowchart TD
 ```mermaid
 flowchart TD
     S(["bash all_bios_check.sh"]) --> IN{"터미널이고 -user · -diff · -ref 가 없는가"}
-    IN -->|"예 (대화형)"| Q1["대상 입력<br/>user.txt 파일 또는 hostname"]
+    IN -->|"예 (대화형)"| IN2{"-diff-max · -list-max<br/>-export-attrs 가 있는가"}
+    IN2 -->|"아니오"| BS(["bios.sh 로 넘어감<br/>7번 흐름 (TUI)"])
+    IN2 -->|"예 (옛 대화형 메뉴)"| Q1["대상 입력<br/>user.txt 파일 또는 hostname"]
     Q1 --> Q2{"1. 체크 / 2. 전체비교"}
     Q2 -->|"1. 체크"| CK(["bios_check.sh -user 대상<br/>1번 흐름으로"])
     Q2 -->|"2. 전체비교"| Q3["비교서버 입력 (hostname 1대)<br/>→ -ref 비교서버"]
@@ -176,3 +182,68 @@ flowchart TD
 ```
 
 `account change` 는 같은 4~5단계(새 비밀번호를 터미널에서 직접 2번 입력 → y → 변경 → 새 비밀번호 로그인 검증 → 인증 거부면 이전 비밀번호 복원)이며 `pass.enc` 는 자동으로 바꾸지 않고 `cd <폴더>; bash encrypt.sh` 를 안내합니다.
+
+
+## 7. 통합 점검·전체비교·수정 — `bash bios.sh` (TUI)
+
+터미널에서 인자 없이 실행하면 대상·프로파일을 화면에서 고르고, 호스트당 1회 접속해 BIOS 전체 속성을 읽어 프로파일 결과와 전체비교에 함께 씁니다. 설정은 맨 끝에서 한 번만 묻고 Pending 까지만 합니다(재부팅 없음). 키: ←→ 벤더 탭 · Tab 관리망 그룹 탭 · ↑↓ · PgUp/PgDn · a/o/f/n 필터 · s 요약 · e 수정 · ? 도움말 · q 종료 · Ctrl+X 진행 중 작업 취소 · Ctrl+C/Ctrl+Z 는 무시.
+
+```mermaid
+flowchart TD
+    S(["bash bios.sh"]) --> W["bios.sh<br/>폴더 이동 → OS 에 맞는 바이너리 선택<br/>커널 3 미만은 bin/biostool_os6, 그 외 bin/biostool<br/>필요 파일 확인: bios.conf · pass.enc · key.bin<br/>user.txt 는 -plain · -user 를 줬을 때만 필요"]
+    W --> M{"파일이 모두 있는가"}
+    M -->|없음| X1(["안내 후 종료 (코드 1)"])
+    M -->|있음| T{"표준출력이 터미널이고<br/>-plain · -auto 가 아닌가"}
+    T -->|아니오| PL(["평문 출력 (색 없음, 읽기 전용)<br/>-profile 필수 · 설정 질문 없음<br/>-ref · -ref-json · -diff 를 주면 전체비교도 출력"])
+    T -->|예| A["1. 대상 입력<br/>대상 파일 지정 또는 붙여넣기<br/>붙여넣기: Ctrl+D 완료 · Ctrl+X 취소"]
+    A --> B["2. 프로파일 선택<br/>-profile 로 지정하면 생략"]
+    B --> C["3. 접속·조회 (호스트당 로그인 1회, GET 만)<br/>BIOS 전체 속성을 한 번에 읽어<br/>프로파일 판정과 전체비교에 함께 사용<br/>진행 표시 · Ctrl+X 취소 (남은 호스트는 CANCELED)<br/>result.tsv · profile_ CSV 저장"]
+    C --> D["4. 프로파일 결과 TUI<br/>[OK] · [difference] · [N/A] 색상 줄<br/>벤더 탭 · 관리망 그룹 탭 · 필터 · 요약"]
+    D --> E{"q 종료 →<br/>전체비교 결과를 볼까요? (y/n)<br/>e 는 질문 없이 수정 단계로"}
+    E -->|"n 또는 e"| SET
+    E -->|y| R{"기준 선택<br/>-ref · -ref-json · -diff 를 줬으면 묻지 않음"}
+    R -->|"비교서버 hostname<br/>(비우면 diff.txt)"| CP
+    R -->|"refs 폴더의 JSON<br/>(bios_export 결과)"| CP
+    R -->|"diff.txt (모델별 기준)"| CP
+    CP["전체비교 (대상에는 다시 접속하지 않음)<br/>비교서버만 추가 조회 · 같은 모델끼리만 비교<br/>BIOS 버전이 달라도 속성 이름 목록이 같으면 허용<br/>제외 = ignore_attrs.txt + exclude_attrs<br/>compare_ CSV 저장"] --> CT["전체비교 TUI (같은 화면에서 제자리 갱신)"]
+    CT --> SET
+    SET{"-from-dump 인가"}
+    SET -->|예| NS(["설정하지 않음 (접속 안 함)"])
+    SET -->|아니오| PLAN["수정 미리보기 (BMC 접속 없음)<br/>프로파일 difference (verified=Y 행만)<br/>+ 전체비교 difference (allcheck_set=on 일 때만)<br/>같은 속성의 목표값이 다르면 설정 안 함 [충돌]<br/>제외 속성 · 위험 속성 · N/A · Dell/HPE/Lenovo 외 제외"]
+    PLAN --> EM{"설정할 항목이 있는가"}
+    EM -->|없음| SUM
+    EM -->|있음| Q{"수정할까요? y/n"}
+    Q -->|n| SUM
+    Q -->|y| PQ{"남의 Pending 이 있는 장비가 있는가"}
+    PQ -->|예| PA{"호스트 · 속성 · Pending 값 목록 표시<br/>y 포함 / n 제외 / Ctrl+X 취소"}
+    PQ -->|아니오| AP
+    PA -->|"y 또는 n"| AP
+    PA -->|"Ctrl+X"| SUM
+    AP["Pending 설정 (재부팅 없음)<br/>호스트마다 재조회 · 레지스트리 검사 · PATCH 1회<br/>Dell 은 Job 최대 1회 · 재시도 없음<br/>호스트별 진행 줄 · Ctrl+X 취소"] --> RC["Pending 재조회로 반영 여부 표시<br/>설정 결과 화면"]
+    RC --> SUM
+    NS --> SUM
+    SUM(["TUI 를 닫고 요약 출력<br/>OK · difference · N/A · 오류 건수<br/>결과 폴더 · CSV 목록 · 설정 결과"])
+```
+
+## 8. auto_setup 연동(비대화형) — `bash bios.sh -auto <user> targets.txt`
+
+묻지 않고 프로파일 점검만 하며 설정은 하지 않습니다(`-auto` 도 점검만). 결과는 호출한 폴더의 `check.res_<user>` 입니다.
+
+```mermaid
+flowchart TD
+    S(["bash bios.sh -auto 사용자 targets.txt<br/>또는 -auto-check (auto_setup 이 호출)"]) --> W["bios.sh<br/>호출한 폴더를 기억한 뒤 스크립트 폴더로 이동<br/>OS 에 맞는 바이너리 선택<br/>targets.txt 를 호출한 폴더 기준 절대경로로 바꾸고<br/>-res-dir 로 호출한 폴더를 넘김<br/>필요 파일 확인: bios.conf · pass.enc · key.bin · targets.txt"]
+    W --> M{"파일이 모두 있는가"}
+    M -->|없음| X1(["안내 후 종료 (코드 1)"])
+    M -->|있음| G{"-ref · -ref-json · -diff 를<br/>함께 줬는가"}
+    G -->|예| X2(["오류로 종료<br/>-auto 는 프로파일 점검만 함"])
+    G -->|아니오| P{"프로파일이 있는가<br/>-profile 또는 bios.conf auto_profile"}
+    P -->|없음| X3(["오류로 종료 (종료코드 0 아님)"])
+    P -->|있음| C["설정 확인 → 접속·조회<br/>호스트당 로그인 1회, GET 만, 묻지 않음<br/>진행은 10초마다 한 줄 (표준에러)"]
+    C --> J["호스트별 판정<br/>프로파일 결과 줄을 OK · difference · N/A 로 묶음<br/>exclude_attrs 에 걸린 속성은 점검 제외"]
+    J --> F["결과 폴더 results/일시/ 에<br/>result.tsv · CSV 저장"]
+    F --> R["check.res_사용자 기록 (호출한 폴더, 권한 0644)<br/>호스트마다 한 줄<br/>host: OK 또는 host: OK (N/A N건)<br/>host: FAIL difference N건 (속성 현재값→기준값 ...)<br/>host: FAIL N/A 접속실패(사유)"]
+    R --> A{"-auto 인가"}
+    A -->|예| R2["check.res_사용자_postapply 에도<br/>같은 내용 기록"]
+    A -->|"아니오 (-auto-check)"| E
+    R2 --> E(["종료코드 0 (FAIL 이 있어도 0)<br/>설정(Pending 쓰기) 은 하지 않음"])
+```

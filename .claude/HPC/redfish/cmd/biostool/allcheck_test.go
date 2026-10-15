@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -809,6 +810,51 @@ func TestAllCheckRefWordReport(t *testing.T) {
 	}
 	if strings.Contains(out, "모두 동일") || strings.Contains(out, "기준=") {
 		t.Errorf("차이가 있는데 '모두 동일' 또는 '기준=' 표기가 나옴\n%s", out)
+	}
+}
+
+// -export-attrs: 기준·대상의 BIOS 속성이 호스트별 JSON 으로 저장된다 (기본은 저장하지 않음).
+func TestAllCheckExportAttrs(t *testing.T) {
+	_, ref := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, dst := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"ProcTurbo": "Disabled"})
+	})
+	fastCheck(t)
+	rc := checkRCFor(t, 1, "", dst)
+	refs, err := newAllRefs(parseRefList(ref+"\n"), writeHosts(t, ""))
+	must(t, err)
+	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: testIgnore, ResultDir: t.TempDir(), Now: checkNow, ExportAttrs: true})
+	if err != nil {
+		t.Fatalf("doAllCheck: %v", err)
+	}
+	if run.ExportN != 2 {
+		t.Fatalf("저장한 JSON = %d, 기대 2 (비교서버 + 대상)", run.ExportN)
+	}
+	read := func(host string) attrExport {
+		b, err := os.ReadFile(filepath.Join(run.ExportDir, attrFileName(host)))
+		must(t, err)
+		var e attrExport
+		must(t, json.Unmarshal(b, &e))
+		return e
+	}
+	r, d := read(ref), read(dst)
+	if r.Attributes["ProcTurbo"] != "Enabled" || d.Attributes["ProcTurbo"] != "Disabled" || len(r.Attributes) != len(d.Attributes) {
+		t.Errorf("속성 저장 내용이 다름: 비교서버=%q 대상=%q (%d/%d개)", r.Attributes["ProcTurbo"], d.Attributes["ProcTurbo"], len(r.Attributes), len(d.Attributes))
+	}
+	if r.Model == "" || r.BiosVersion == "" {
+		t.Errorf("모델·BIOS 버전이 비어 있음: %+v", r)
+	}
+	if st, err := os.Stat(filepath.Join(run.ExportDir, attrFileName(ref))); err != nil || st.Mode().Perm() != 0o600 {
+		t.Errorf("파일 권한이 0600 이 아님: %v %v", st, err)
+	}
+
+	// 끄면 attrs 폴더 자체가 없다
+	run2 := runAllT(t, 1, ref+"\n", []string{dst}, "")
+	if run2.ExportDir != "" {
+		t.Errorf("기본 실행인데 ExportDir=%q", run2.ExportDir)
+	}
+	if got := attrFileName("127.0.0.1:19301"); got != "127.0.0.1_19301.json" {
+		t.Errorf("파일 이름 = %q", got)
 	}
 }
 

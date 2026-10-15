@@ -32,6 +32,8 @@ const (
 	StatusIsReference    = "REFERENCE"       // 기준 호스트 자신이라 같은 모델의 다른 기준이 없어 비교하지 않음
 	StatusNoReference    = "NO_REFERENCE"    // 이 모델의 기준 호스트가 diff.txt 에 없음
 	StatusRefUnreachable = "REF_UNREACHABLE" // 이 모델의 기준일 수 있는 호스트가 모두 접속 실패
+	// StatusRefCanceled 는 이 모델의 기준일 수 있는 호스트를 취소(TUI Ctrl+X)로 조회하지 않아 비교하지 못함 (전체비교 TUI 만, 태그 N/A)
+	StatusRefCanceled = "REF_CANCELED"
 )
 
 // 속성 단위 상태 (all_diff.tsv 의 status. SAME 은 행으로 남기지 않고 summary 의 개수로만 센다).
@@ -169,7 +171,26 @@ func loadIgnore(path string, explicit bool) (*ignoreSet, error) {
 	return parseIgnore(string(data), path), nil
 }
 
+// mergeExclude 는 ignore_attrs.txt(또는 내장 기본 목록) 패턴에 bios.conf exclude_attrs 를 합칩니다 (합집합, 중복 제거).
+// excl 이 비면 ign 을 그대로 돌려줍니다.
+func mergeExclude(ign *ignoreSet, excl []string) *ignoreSet {
+	if len(excl) == 0 {
+		return ign
+	}
+	var pats []string
+	src := fmt.Sprintf("bios.conf exclude_attrs %d개", len(excl))
+	if ign != nil {
+		pats = append(pats, ign.Pats...)
+		src = ign.Source + " + " + src
+	}
+	return newIgnoreSet(append(pats, excl...), src)
+}
+
+// match 는 이름이 제외 패턴 중 하나에 걸리는지 봅니다 (nil 이면 아무것도 제외하지 않음).
 func (s *ignoreSet) match(name string) bool {
+	if s == nil {
+		return false
+	}
 	l := strings.ToLower(name)
 	for _, p := range s.Pats {
 		if globMatch(p, l) {
@@ -219,6 +240,10 @@ type biosSnap struct {
 	Key          string // 모델 키: 소문자 벤더|normalizeModel(Model)
 	Attrs        map[string]string
 	Stats        CallStats
+	// MgmtModel·MgmtVersion 은 BMC Manager 의 Model·표기 버전입니다 (hostCheck 와 같은 값). allcheck 는 Manager 를
+	// 읽지 않아 비어 있고, 프로파일 점검과 함께 읽은 스냅샷(unified.go)만 채워집니다.
+	MgmtModel   string
+	MgmtVersion string
 }
 
 func (s *biosSnap) ok() bool { return s.Status == "" }
@@ -390,6 +415,8 @@ type allRun struct {
 	prevSummary  *tsvTable   // 단계 7: 이전 summary.tsv (병합 바탕, 읽기만 한다)
 	prevAllDiff  *tsvTable   // 단계 7: 이전 all_diff.tsv
 	Retry        *retryMerge // 단계 7: 병합 결과 (병합했을 때만)
+	ExportDir    string      // -export-attrs 일 때 속성 JSON 폴더 (아니면 빈 문자열)
+	ExportN      int32       // 저장한 속성 JSON 파일 수
 }
 
 type allEnv struct {
@@ -402,6 +429,8 @@ type allEnv struct {
 	refByID  map[string]*allRef
 	byKey    map[string][]*allRef // 모델 키 → 접속에 성공한 기준 (diff.txt 순서)
 	failed   []*allRef            // 읽지 못한 기준
+	// cancel 이 닫히면 sweepSnaps 는 아직 시작하지 않은 호스트에 접속하지 않고 CANCELED 스냅샷을 넘긴다 (nil 이면 취소 없음)
+	cancel <-chan struct{}
 }
 
 // ---- 읽기 ----
@@ -454,6 +483,10 @@ func (e *allEnv) sweepSnaps(ts []Target, authStop int, handle func(i int, s *bio
 	var fails int32
 	sweepHosts(len(ts), e.conf.Concurrency, authStop,
 		func(i int) hostOutcome {
+			if chanClosed(e.cancel) {
+				handle(i, &biosSnap{Target: ts[i], Status: StatusCanceled, Detail: "취소 (Ctrl+X) — 조회하지 않음"})
+				return outNone
+			}
 			s := e.fetch(ts[i])
 			handle(i, s)
 			o := outcomeOf(s.Status, s.Stats, ts[i].Err == "")
@@ -495,6 +528,10 @@ type allOpts struct {
 	ResultDir    string
 	RetryFromDir string    // 단계 7: -retry-from 값 (이전 결과 폴더 또는 그 안의 retry.txt). 비면 일반 비교
 	Now          time.Time // 0 이면 지금
+	ExportAttrs  bool      // true 면 읽은 속성을 <결과 폴더>/attrs/<호스트>.json 으로 저장
+	// OnHost 는 대상 i 번째(rc.Targets 순서)의 판정이 끝난 직후, 속성 값을 버리기 전에 불립니다
+	// (h.Snap.Attrs·h.Ref.Snap.Attrs 가 아직 있어 compareLines 를 부를 수 있음). 여러 고루틴에서 불리므로 i 번째 칸에만 쓸 것. nil 이면 안 부름.
+	OnHost func(i int, h *allHost)
 }
 
 // doAllCheck 는 기준·대상 전체를 읽어 비교하고 결과 파일을 씁니다. 파일 쓰기에 실패해도 결과(run)는 돌려줍니다.
@@ -532,6 +569,12 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 	}
 	run := &allRun{Now: now, Dir: dir, FromDump: o.FromDump, AuthStop: authStop, Ignore: o.Ignore, Refs: o.Refs,
 		RetryFromDir: prevDir, prevSummary: prevSum, prevAllDiff: prevDiff}
+	if o.ExportAttrs {
+		run.ExportDir = filepath.Join(dir, "attrs")
+		if err := os.MkdirAll(run.ExportDir, 0o700); err != nil {
+			return nil, fmt.Errorf("속성 JSON 폴더: %w", err)
+		}
+	}
 
 	// ① 기준 호스트
 	refTs := make([]Target, len(o.Refs))
@@ -539,18 +582,11 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 		refTs[i] = r.Target
 		env.refByID[r.ID] = r
 	}
-	fails1 := env.sweepSnaps(refTs, authStop, func(i int, s *biosSnap) { o.Refs[i].Snap = s })
-	for _, r := range o.Refs {
-		if !r.Snap.ok() {
-			env.failed = append(env.failed, r)
-			continue
-		}
-		env.byKey[r.Snap.Key] = append(env.byKey[r.Snap.Key], r)
-		if r.Entry.Model != "" && normalizeModel(r.Entry.Model) != normalizeModel(r.Snap.Model) {
-			r.Notes = append(r.Notes, hostNote{noteDiffTxtModelMismatch,
-				fmt.Sprintf("diff.txt 의 모델 %q ≠ BMC 가 보고한 %q (실제 모델로 분류)", r.Entry.Model, r.Snap.Model)})
-		}
-	}
+	fails1 := env.sweepSnaps(refTs, authStop, func(i int, s *biosSnap) {
+		o.Refs[i].Snap = s
+		_ = exportAttrs(run.ExportDir, s, &run.ExportN)
+	})
+	env.indexRefs(o.Refs)
 
 	// ② 대상 호스트: 기준과 같은 호스트는 다시 읽지 않고, 나머지는 읽는 즉시 비교한다.
 	hosts := make([]*allHost, len(rc.Targets))
@@ -558,6 +594,9 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 	for i, t := range rc.Targets {
 		if r := env.refByID[targetID(t)]; r != nil {
 			hosts[i] = env.finish(&allHost{Target: t, Snap: r.Snap})
+			if o.OnHost != nil {
+				o.OnHost(i, hosts[i])
+			}
 			continue
 		}
 		todo = append(todo, i)
@@ -569,6 +608,10 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 		}
 		handle := func(j int, s *biosSnap) {
 			hosts[todo[j]] = env.finish(&allHost{Target: ts[j], Snap: s})
+			if o.OnHost != nil {
+				o.OnHost(todo[j], hosts[todo[j]])
+			}
+			_ = exportAttrs(run.ExportDir, s, &run.ExportN)
 			s.Attrs = nil // 비교가 끝났으니 속성 값은 버린다 (기준의 것만 남김)
 		}
 		stop2 := authStop
@@ -585,6 +628,22 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 	}
 	run.Hosts = hosts
 	return run, run.writeFiles()
+}
+
+// indexRefs 는 읽기를 마친 기준들을 모델 키별(byKey)·읽기 실패(failed)로 나누고, diff.txt 모델 칸이 실제 모델과
+// 다르면 DIFF_TXT_MODEL_MISMATCH 를 남깁니다 (refByID 는 호출 쪽이 미리 채움).
+func (e *allEnv) indexRefs(refs []*allRef) {
+	for _, r := range refs {
+		if !r.Snap.ok() {
+			e.failed = append(e.failed, r)
+			continue
+		}
+		e.byKey[r.Snap.Key] = append(e.byKey[r.Snap.Key], r)
+		if r.Entry.Model != "" && normalizeModel(r.Entry.Model) != normalizeModel(r.Snap.Model) {
+			r.Notes = append(r.Notes, hostNote{noteDiffTxtModelMismatch,
+				fmt.Sprintf("diff.txt 의 모델 %q ≠ BMC 가 보고한 %q (실제 모델로 분류)", r.Entry.Model, r.Snap.Model)})
+		}
+	}
 }
 
 // finish 는 읽은 스냅샷으로 호스트의 상태를 정합니다 (읽기 실패면 그 상태, 성공이면 비교).
@@ -615,6 +674,13 @@ func (e *allEnv) classify(h *allHost) {
 			if names := e.failedFor(s); len(names) > 0 {
 				h.Status = StatusRefUnreachable
 				h.Detail = "기준 읽기 실패: " + strings.Join(names, ", ") + " (모델 미상이면 이 모델의 기준일 수 있음)"
+				for _, n := range names { // 후보 중 취소로 조회하지 않은 기준이 있으면 다시 실행하면 비교될 수 있다
+					if strings.HasSuffix(n, "("+StatusCanceled+")") {
+						h.Status = StatusRefCanceled
+						h.Detail = "기준 조회를 취소해 비교하지 않음 (Ctrl+X): " + strings.Join(names, ", ")
+						break
+					}
+				}
 			} else {
 				h.Status, h.Detail = StatusNoReference, "모델 키 "+s.Key+" 의 기준이 diff.txt 에 없음"
 			}
@@ -904,6 +970,7 @@ func (r *allRun) runInfo() string {
 func cmdAllCheck(args []string) error {
 	fs, o := newFlagSet("allcheck")
 	diff := fs.String("diff", "diff.txt", "기준(정상 설정값) 호스트 목록: 한 줄에 hostname")
+	expAttrs := fs.Bool("export-attrs", false, "읽은 BIOS 속성을 호스트마다 <결과 폴더>/attrs/<호스트>.json 으로 저장 (diff·vimdiff 로 눈으로 비교)")
 	ref := fs.String("ref", "", "비교서버 hostname (쉼표로 여러 개 가능). 지정하면 -diff 파일을 읽지 않고 리포트가 '비교서버' 표기를 씁니다")
 	ignore := fs.String("ignore", "ignore_attrs.txt", "비교에서 제외할 속성 목록 (없으면 내장 기본 목록)")
 	listMax := fs.Int("list-max", 20, "차이 상세·특이사항·오류에 나열할 최대 호스트 수")
@@ -954,6 +1021,7 @@ func cmdAllCheck(args []string) error {
 	if err != nil {
 		return err
 	}
+	ign = mergeExclude(ign, rc.Conf.ExcludeAttrs) // ignore_attrs.txt ∪ bios.conf exclude_attrs
 	refs, err := newAllRefs(entries, o.hosts)
 	if err != nil {
 		return err
@@ -965,7 +1033,7 @@ func cmdAllCheck(args []string) error {
 		fmt.Printf("기준(정상) 호스트: %s 에서 %d개, 제외 속성: %s\n", refSrc, len(refs), ign.Source)
 	}
 
-	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: ign, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, RetryFromDir: o.retryFrom})
+	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: ign, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, RetryFromDir: o.retryFrom, ExportAttrs: *expAttrs})
 	if run == nil {
 		return err
 	}
@@ -975,6 +1043,10 @@ func cmdAllCheck(args []string) error {
 	if f, ferr := os.OpenFile(filepath.Join(run.Dir, "report.txt"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); ferr == nil {
 		writeAllReport(f, run, allReportOpts{ListMax: 1 << 30, DiffMax: 1 << 30, RefWord: refWord})
 		f.Close()
+	}
+	if run.ExportDir != "" {
+		fmt.Printf("%s 속성 JSON %d개: %s/  (diff -u 비교서버.json 대상.json 또는 vimdiff 로 비교)\n",
+			"*", run.ExportN, filepath.ToSlash(run.ExportDir))
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "경고: 결과 파일 기록 중 오류: "+err.Error())

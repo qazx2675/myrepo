@@ -60,10 +60,11 @@ const applyNotice = `※ 재부팅은 하지 않았습니다. 설정은 BMC 의 
 ※ 반영(재부팅) 후 bios_check.sh 로 재점검하십시오.
 ※ [Disclaimer] 설정 변경 후 랜덤한 서버 몇 대를 직접 확인해 실제 변경되었는지 확인하십시오.`
 
-// setItem 은 설정 대상 항목 1개입니다.
-type setItem struct {
+// applyItem 은 설정 대상 항목 1개입니다.
+type applyItem struct {
 	Std, Attr, Expected string
 	Unverified          bool // dry-run 시험 출력용 UNVERIFIED 항목 (실제 설정 대상이 아님)
+	Compare             bool // 전체비교 항목 (setplan.go): 프로파일 행 대신 Expected(비교서버 값) 하나만 보낸다
 	Value               string
 	Status              string // 비어 있으면 아직 보낼 후보
 	Detail              string
@@ -73,16 +74,16 @@ type setItem struct {
 }
 
 // set 은 상태가 아직 없을 때만 정합니다 (먼저 정해진 사유를 덮어쓰지 않음).
-func (it *setItem) set(st, detail string) {
+func (it *applyItem) set(st, detail string) {
 	if it.Status == "" {
 		it.Status, it.Detail = st, detail
 	}
 }
 
-// setPlan 은 호스트 1대에 보낼 요청입니다. Body·JobBody 는 checkBody 를 거친 정규형으로 실제 전송 바이트와 같습니다.
-type setPlan struct {
-	Items     []*setItem // 본문에 넣은 항목
-	Deferred  []*setItem // 프로파일 종속으로 미룬 항목
+// hostPlan 은 호스트 1대에 보낼 요청입니다. Body·JobBody 는 checkBody 를 거친 정규형으로 실제 전송 바이트와 같습니다.
+type hostPlan struct {
+	Items     []*applyItem // 본문에 넣은 항목
+	Deferred  []*applyItem // 프로파일 종속으로 미룬 항목
 	DeferWhy  string
 	Path      string // PATCH 경로 (전송형)
 	Body      []byte
@@ -92,27 +93,30 @@ type setPlan struct {
 	Err       string
 }
 
-func (p *setPlan) ready() bool { return p != nil && p.Err == "" && len(p.Items) > 0 }
+func (p *hostPlan) ready() bool { return p != nil && p.Err == "" && len(p.Items) > 0 }
 
 // setHost 는 호스트 1대의 설정 진행 상황입니다.
 type setHost struct {
 	Target    Target
 	Info      *SystemInfo // 점검 때 정보
-	Items     []*setItem
-	Plan      *setPlan // 실제 적용 계획 (dry-run 에서는 "Y 면 보낼 요청")
-	Trial     *setPlan // dry-run: 미검증 항목까지 넣은 시험 계획
-	Tried     bool     // PATCH 를 시도했는지 (apply_requests.txt 대상, 결과 줄에 실제 결과)
-	Sent      bool     // PATCH 가 실제로 BMC 로 전송됐는지 (허용목록 등에서 막혔으면 false)
-	Job       string   // Dell Job 처리 메모
-	RegNote   string   // 레지스트리를 못 읽은 사유 (비면 레지스트리로 사전검증함)
-	DupOf     string   // 같은 BMC(IP:포트)를 가리키는 앞의 대상 이름 (있으면 이 대상은 처리하지 않음)
+	Items     []*applyItem
+	Plan      *hostPlan // 실제 적용 계획 (dry-run 에서는 "Y 면 보낼 요청")
+	Trial     *hostPlan // dry-run: 미검증 항목까지 넣은 시험 계획
+	Tried     bool      // PATCH 를 시도했는지 (apply_requests.txt 대상, 결과 줄에 실제 결과)
+	Sent      bool      // PATCH 가 실제로 BMC 로 전송됐는지 (허용목록 등에서 막혔으면 false)
+	Job       string    // Dell Job 처리 메모
+	RegNote   string    // 레지스트리를 못 읽은 사유 (비면 레지스트리로 사전검증함)
+	DupOf     string    // 같은 BMC(IP:포트)를 가리키는 앞의 대상 이름 (있으면 이 대상은 처리하지 않음)
 	Notes     []string
 	Stats     CallStats
 	contacted bool
+	// okPend 는 사용자가 설정 미리보기에서 보고 포함하기로 한 남의 Pending (속성 → 값, setplan.go 만 채움).
+	// 재조회한 Pending 이 이 목록과 정확히 같은 것만 남의 것으로 보지 않는다 (그 뒤 새로 생긴 Pending 은 그대로 PENDING_EXISTS).
+	okPend map[string]string
 }
 
-func (h *setHost) open() []*setItem {
-	var out []*setItem
+func (h *setHost) open() []*applyItem {
+	var out []*applyItem
 	for _, it := range h.Items {
 		if it.Status == "" {
 			out = append(out, it)
@@ -218,7 +222,7 @@ func applyHosts(fails []failItem) []*setHost {
 			idx[f.Target] = h
 			out = append(out, h)
 		}
-		h.Items = append(h.Items, &setItem{Std: f.Std, Attr: f.Attr, Expected: f.Expected})
+		h.Items = append(h.Items, &applyItem{Std: f.Std, Attr: f.Attr, Expected: f.Expected})
 	}
 	markDuplicates(out)
 	return out
@@ -232,10 +236,10 @@ func dryRunHosts(run *checkRun) []*setHost {
 		if h.Status != "" {
 			continue
 		}
-		var items []*setItem
+		var items []*applyItem
 		for _, it := range h.Items {
 			if h.settable(it) || it.Result == StatusUnverified {
-				items = append(items, &setItem{Std: it.Std, Attr: it.Attr, Expected: it.Expected, Unverified: it.Result == StatusUnverified})
+				items = append(items, &applyItem{Std: it.Std, Attr: it.Attr, Expected: it.Expected, Unverified: it.Result == StatusUnverified})
 			}
 		}
 		if len(items) > 0 {
@@ -359,7 +363,17 @@ func (e *setEnv) runHost(h *setHost) {
 // 같은 (벤더, 모델, 항목) 후보 행 중 속성 이름(대소문자 무시)·기대값이 같은 행이 있어야 하고,
 // 실제 적용 항목은 그 행이 모델을 지정한(model≠*) verified=Y 행이어야 합니다 (parseProfile 도 * 행의 Y 를 거부).
 // BMC 가 보고한 모델이 비어 있으면 쓰지 않습니다. 보낼 값은 허용값 A|B 의 첫 값입니다.
-func (e *setEnv) verifyItem(h *setHost, it *setItem) {
+func (e *setEnv) verifyItem(h *setHost, it *applyItem) {
+	if it.Compare {
+		// 전체비교 항목: 같은 모델·속성 이름 목록 관문과 제외·위험 속성 거르기는 buildSetPlan 이 했고, 모델 재확인은
+		// planHost(changedWhy), 레지스트리 형식·ReadOnly 검사는 typedValue 가 한다. 보낼 값은 비교서버 값 하나뿐이다.
+		if h.Info != nil && normalizeModel(h.Info.Model) == "" {
+			it.set(StatusUnverified, "BMC 가 보고한 모델명이 비어 있어 설정하지 않음 (같은 모델끼리만 비교서버 값으로 설정)")
+			return
+		}
+		it.allowed, it.Value = []string{it.Expected}, it.Expected
+		return
+	}
 	if h.Info != nil {
 		if !it.Unverified && normalizeModel(h.Info.Model) == "" {
 			it.set(StatusUnverified, "BMC 가 보고한 모델명이 비어 있어 설정하지 않음 (모델을 지정한 verified=Y 행만 쓴다)")
@@ -445,7 +459,7 @@ func (e *setEnv) planHost(h *setHost, m *memoGet) bool {
 		}
 	}
 
-	var pendOurs []*setItem // Dell: Pending 이 이미 기대값인 항목 (BIOS 설정 Job 이 있어야 반영됨)
+	var pendOurs []*applyItem // Dell: Pending 이 이미 기대값인 항목 (BIOS 설정 Job 이 있어야 반영됨)
 	for _, it := range h.open() {
 		c, ok := cur[it.Attr]
 		if !ok {
@@ -491,6 +505,9 @@ func (e *setEnv) planHost(h *setHost, m *memoGet) bool {
 		}
 		if al, ok := ours[k]; ok && matchAny(al, v) {
 			continue
+		}
+		if pv, ok := h.okPend[k]; ok && pv == v {
+			continue // 미리보기에서 사용자가 보고 포함하기로 한 남의 Pending (applySetPlan includePending=true)
 		}
 		foreign = append(foreign, k+"="+v)
 	}
@@ -556,7 +573,7 @@ func (e *setEnv) planHost(h *setHost, m *memoGet) bool {
 			pendProf = pv // 이미 우리 표준값으로 프로파일 변경이 대기 중 (남의 값이면 위에서 PENDING_EXISTS)
 		}
 	}
-	var verified, all []*setItem
+	var verified, all []*applyItem
 	for _, it := range h.open() {
 		all = append(all, it)
 		if !it.Unverified {
@@ -702,12 +719,12 @@ func inList(list []string, v string) bool {
 // 시스템 프로파일 규칙: 프로파일이 바뀌는 중이면(이번에 보내거나 이미 Pending) 다른 항목이 프로파일에 종속되어
 // ReadOnly 가 되거나 덮어써질 수 있으므로, 목표 프로파일이 Custom 이 아니면 프로파일 항목만 보내고 나머지는 미룬다.
 // Custom 이어도 레지스트리를 못 읽었으면 보수적으로 똑같이 한다.
-func buildPlan(info *SystemInfo, onReset, haveReg bool, pendProf string, items []*setItem) *setPlan {
+func buildPlan(info *SystemInfo, onReset, haveReg bool, pendProf string, items []*applyItem) *hostPlan {
 	if len(items) == 0 {
 		return nil
 	}
-	p := &setPlan{Items: items}
-	var prof *setItem
+	p := &hostPlan{Items: items}
+	var prof *applyItem
 	for _, it := range items {
 		if it.Std == profileStd {
 			prof = it
@@ -730,7 +747,7 @@ func buildPlan(info *SystemInfo, onReset, haveReg bool, pendProf string, items [
 			p.Items, p.DeferWhy = nil, why
 			for _, it := range items {
 				if it == prof {
-					p.Items = []*setItem{prof}
+					p.Items = []*applyItem{prof}
 				} else {
 					p.Deferred = append(p.Deferred, it)
 				}
@@ -740,7 +757,7 @@ func buildPlan(info *SystemInfo, onReset, haveReg bool, pendProf string, items [
 	if len(p.Items) == 0 {
 		return p
 	}
-	fail := func(st, why string) *setPlan {
+	fail := func(st, why string) *hostPlan {
 		p.ErrStatus, p.Err = st, why
 		return p
 	}
@@ -860,7 +877,7 @@ var reJobURI = regexp.MustCompile(`(?i)"(/redfish/v1/Managers/[^"/]+/Jobs/[^"/]+
 // 본문에 "JID_" 문자열만 있거나 무관한 새 Job 이 생긴 것은 인정하지 않는다 (GET 은 읽기 전용, 원래 대소문자 ID 사용).
 // (Location 헤더는 Client.Patch 가 돌려주지 않아 보지 않는다 — redfish.go 는 수정하지 않음)
 // 돌려주는 errText 가 비어 있지 않으면 Job 생성 실패입니다.
-func dellJob(c *Client, p *setPlan, st int, body []byte, before map[string]bool) (note, errText string) {
+func dellJob(c *Client, p *hostPlan, st int, body []byte, before map[string]bool) (note, errText string) {
 	if st == http.StatusAccepted {
 		return "Dell: PATCH 응답 HTTP 202 → BIOS 설정 Job 이 자동 생성된 것으로 보고 Job POST 안 함", ""
 	}
@@ -964,7 +981,7 @@ func bmcMessage(err error) string {
 
 // writePlan 은 보낼 요청 1건(PATCH + Dell Job)을 출력합니다. dry-run 출력과 실제 적용 기록(apply_requests.txt)이
 // 같은 함수를 쓰며, 본문은 실제로 전송되는 바이트 그대로입니다.
-func writePlan(w io.Writer, p *setPlan) {
+func writePlan(w io.Writer, p *hostPlan) {
 	fmt.Fprintf(w, "  PATCH %s\n", p.Path)
 	fmt.Fprintf(w, "  본문  %s\n", p.Body)
 	if p.JobPath != "" {

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -16,9 +17,9 @@ func TestParseConfDefaults(t *testing.T) {
 	want := Config{
 		User: "admin", PassFile: "pass.enc", KeyFile: "key.bin", Concurrency: 100,
 		Timeout: 20 * time.Second, Insecure: true, Retries: 2, AuthFailStop: 3,
-		ResultDir: "results", DumpDir: "dumps", ProfileDir: "profiles",
+		ResultDir: "results", DumpDir: "dumps", ProfileDir: "profiles", RefsDir: "refs",
 	}
-	if *c != want {
+	if !reflect.DeepEqual(*c, want) {
 		t.Errorf("기본값 불일치\n got=%+v\nwant=%+v", *c, want)
 	}
 }
@@ -28,7 +29,8 @@ func TestParseConfAllKeys(t *testing.T) {
 		"user = root \r\n" +
 		"pass_file=a.enc\r\nkey_file=a.key\r\n" +
 		"concurrency=7\r\ntimeout=5\r\ninsecure=false\r\nretries=0\r\nauth_fail_stop=5\r\n" +
-		"result_dir=r\r\ndump_dir=d\r\nprofile_dir=p\r\n"
+		"result_dir=r\r\ndump_dir=d\r\nprofile_dir=p\r\n" +
+		"exclude_attrs= A | *Uuid* ||B \r\nallcheck_set=ON\r\nrefs_dir=myrefs\r\n"
 	c, err := parseConf(text, "bios.conf")
 	if err != nil {
 		t.Fatal(err)
@@ -37,8 +39,9 @@ func TestParseConfAllKeys(t *testing.T) {
 		User: "root", PassFile: "a.enc", KeyFile: "a.key", Concurrency: 7,
 		Timeout: 5 * time.Second, Insecure: false, Retries: 0, AuthFailStop: 5,
 		ResultDir: "r", DumpDir: "d", ProfileDir: "p",
+		ExcludeAttrs: []string{"A", "*Uuid*", "B"}, AllcheckSet: true, RefsDir: "myrefs",
 	}
-	if *c != want {
+	if !reflect.DeepEqual(*c, want) {
 		t.Errorf("불일치\n got=%+v\nwant=%+v", *c, want)
 	}
 }
@@ -66,6 +69,7 @@ func TestParseConfErrors(t *testing.T) {
 		{"모르는 키", "user=a\nconcurency=5\n", "알 수 없는 키"},
 		{"= 없음", "user=a\nfoo\n", "key=value"},
 		{"비밀번호 키", "user=a\npassword=s3cret-value\n", "비밀번호는 conf 에 둘 수 없습니다"},
+		{"allcheck_set 값", "user=a\nallcheck_set=yes\n", "on 또는 off"},
 	}
 	for _, tc := range cases {
 		_, err := parseConf(tc.text, "bios.conf")
@@ -112,5 +116,19 @@ func TestParseConfAuthFailStopZeroDisables(t *testing.T) {
 	c, err := parseConf("user=a\nauth_fail_stop=0\n", "bios.conf")
 	if err != nil || c.AuthFailStop != 0 {
 		t.Errorf("auth_fail_stop=0 은 비활성(0) 으로 읽혀야 함: %v %+v", err, c)
+	}
+}
+
+func TestParseConfV02Keys(t *testing.T) {
+	c, err := parseConf("user=a\nexclude_attrs=\nallcheck_set=off\nrefs_dir=\n", "bios.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ExcludeAttrs != nil || c.AllcheckSet || c.RefsDir != "refs" {
+		t.Errorf("빈 exclude_attrs·off·빈 refs_dir 은 기본값이어야 함: %+v", c)
+	}
+	c, err = parseConf("user=a\nexclude_attrs=X\nexclude_attrs=Y|Z\n", "bios.conf")
+	if err != nil || !reflect.DeepEqual(c.ExcludeAttrs, []string{"Y", "Z"}) {
+		t.Errorf("exclude_attrs 는 마지막 줄이 적용돼야 함: %v %+v", err, c)
 	}
 }

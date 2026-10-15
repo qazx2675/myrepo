@@ -1,8 +1,57 @@
 # CHANGELOG.md — redfish (biostool)
 
+## [Unreleased] (v0.3.0 후보) - 2026-10-15
+
+`bash bios.sh` 하나로 점검·전체비교·수정을 터미널 화면(TUI)에서 진행하는 통합 진입점을 추가했습니다. 확정 사양은 [계획서_v0.2_TUI.md](계획서_v0.2_TUI.md), 사용법은 README 2.0절, 흐름도는 [WORKFLOW.md](WORKFLOW.md) 7·8번입니다. **실제 BMC 에 접속해 본 적은 없습니다**(mock·`-from-dump` 로만 검증).
+
+### 추가
+
+- **통합 진입점 `bios.sh` + `biostool bios`**: 인자 없이 터미널에서 실행하면 TUI(대상 입력 → 프로파일 선택 → 접속·조회 → 프로파일 결과 → “전체비교 결과를 볼까요?” → 기준 선택 → 전체비교 → “수정할까요?” → 요약). `-profile`·`-user`·`-ref`·`-ref-json`·`-diff`·`-ignore`·`-from-dump`·`-plain` 옵션. TUI 키: ←→ 벤더 탭 · Tab 관리망 그룹 탭 · ↑↓(k j) · PgUp/PgDn · a/o/f/n 필터 · s 요약 · e 수정 · ? 도움말 · q/Esc 종료 · **Ctrl+C/Ctrl+Z 무시**(“종료는 q”) · **Ctrl+X 진행 중 작업 취소**(접속·조회, 기준 조회, 설정 적용). 구현 `unified_cmd.go`·`tui_flow.go`·`tui_view.go`·`tui_render.go`·`tui_keys.go`·`tui_tty_linux.go`(raw 터미널은 `syscall` 만, 리눅스 외는 `tui_tty_other.go` 가 평문으로 대체).
+- **1회 수집(`unified.go`)**: 호스트당 로그인 1회로 BIOS 전체 속성을 읽어 프로파일 판정과 전체비교에 함께 사용합니다(전체비교 때 대상에 다시 접속하지 않음). 기존 결과 파일(`result.tsv` 등)은 그대로 기록합니다.
+- **전체비교 기준 3종**: 비교서버 hostname(대상 목록에 없으면 그 서버만 추가 조회, `-ref`), `refs/` 폴더의 JSON(`bios_export.sh` 결과, `-ref-json`·TUI 목록), `diff.txt`(모델별 기준, `-diff`). 같은 모델끼리만 비교하고 BIOS 버전이 달라도 속성 이름 목록이 같으면 허용합니다.
+- **색상 줄 출력 + 태그 3종**: `[태그] host↹ip↹vendor↹model↹bios↹attribute↹기준값↹현재값↹비고`. 태그 `[OK]`(초록) / `[difference]`(노랑) / `[N/A]`(회색), 호스트 단위 오류는 빨강, 기준값 칸은 항상 초록, 비고에 원래 상태명. **태그는 상태를 묶은 표시이므로 `[N/A]` 는 “문제 없음”이 아니라 “판정할 수 없음”**(MAPPING_MISSING·NO_DUMP·대상에 속성 없음·접속 실패)이고, 값 없음(`-`)은 `(N/A)` 로 표시합니다(`profiles/*.tsv` 양식은 그대로). `NO_COLOR`·터미널이 아니면 색 없음. 구현 `resultline.go`·`resultconv.go`·`lineout.go`.
+- **CSV 4종**(결과 폴더, UTF-8 BOM, 0600; `profile_`/`compare_` 접두어): `summary.csv`(호스트 1줄·불일치 건수·“대상값 / 기준값”), `wide_hosts_<벤더>_<그룹>.csv`, `wide_attrs_<벤더>_<그룹>.csv`, `long.csv`. 그룹은 벤더 안에서 관리 컨트롤러(관리 컨트롤러 모델)별로 나누되 **BIOS 속성 이름 목록이 같으면 하나로 합칩니다**. 구현 `csvout.go`.
+- **conf 키 4개**(`bios.conf.example` 갱신): `exclude_attrs`(점검·전체비교 제외 패턴, `ignore_attrs.txt` 와 합침, 프로파일 점검에서도 그 행 제외), `allcheck_set`(전체비교 difference 를 수정 대상에 넣을지, 기본 off), `refs_dir`(기준 JSON 폴더, 기본 `refs`), `auto_profile`(비대화형 기본 프로파일).
+- **수정(설정) 단계**(`setplan.go`): 프로파일 difference(**`verified=Y` 행만**)와 `allcheck_set=on` 일 때만 전체비교 difference 를 함께 설정, 같은 속성의 목표값이 다르면 설정하지 않고 `[충돌]`, 제외 목록·위험 속성·N/A·쓰기 불가 벤더 제외, 남의 Pending 이 있는 장비는 목록을 보여 주고 y 포함 / n 제외 / Ctrl+X 취소, **Pending 까지만 설정(재부팅 없음)** 후 Pending 재조회로 반영 여부 표시. 실제 쓰기는 기존 `set.go` 의 안전 경로를 그대로 탑니다.
+- **비대화형 `-auto` / `-auto-check <user> <targets>`**(auto_setup 연동): 묻지 않고 프로파일 점검만 하며 **설정은 하지 않습니다**(`-auto` 도 점검만). 결과 `check.res_<user>`(`-auto` 는 `check.res_<user>_postapply` 도)를 호출한 폴더에 만들며(`-res-dir`, `bios.sh` 가 호출 폴더를 넘김) 호스트마다 한 줄(`host: OK` / `host: FAIL difference N건 (…)` / `host: FAIL N/A 접속실패(…)`). 점검을 끝냈으면 FAIL 이 있어도 종료코드 0. 구현 `checkres.go`.
+- **진행 표시**(`progress.go`): `[1/4 설정 확인] [2/4 접속·조회 n/N · OK … difference … N/A … 오류 … · 경과 mm:ss] [3/4 CSV 저장] [4/4 TUI]`. 터미널은 제자리 갱신, 비대화형은 10초마다 한 줄, 설정 때는 호스트별 진행 줄.
+- **문서**: README 2.0절·표(서브커맨드·플래그·래퍼·conf 키·결과 파일·태그), 사용법.txt 3절, ARCHITECTURE(새 파일·수정 가이드), WORKFLOW 7·8번과 `workflow_bios.svg`·`workflow_auto.svg`, PR_CHECKLIST(TUI·`-auto` 항목).
+
+### 변경
+
+- **`bios_check.sh`·`all_bios_check.sh` 는 호환 래퍼로 남습니다.** `bios_check.sh` 는 옛 전용 옵션(`-retry-from`·`-dry-run`·`-no-prompt`·`-stdin-ok`·`-list-max`·`-fail-max`)이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘기고, 옵션이 있으면 옛 방식(Y/N 줄 프롬프트)으로 동작합니다. `all_bios_check.sh` 는 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘어가며 **옛 대화형 1.체크/2.전체비교 메뉴는 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만** 나옵니다. `-user`·`-diff`·`-ref`·`-from-dump`·`-retry-from` 방식은 그대로입니다.
+- 터미널에서 `bash bios_check.sh --profile VM` 은 이제 TUI 로 점검하고 마지막에 수정 여부를 묻습니다(`Y/N` 줄 프롬프트가 아님).
+- README 의 주의사항 문구를 “본 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)…” 로 맞췄습니다.
+
+### 알려진 한계
+
+- 실제 BMC 에서 확인하지 않았습니다. 수정 단계의 반영은 “Pending 에 기대값이 들어간 것을 재조회로 확인”한 것일 뿐이므로 **설정 변경 후 랜덤한 서버 몇 대를 직접 확인**하십시오.
+- 리눅스가 아닌 환경(개발용 빌드)에서는 TUI 가 열리지 않고 평문 출력으로 대체됩니다.
+- `.gitignore` 에 `refs/` 는 아직 없습니다(실제 호스트 속성 값이 들어갈 수 있으므로 커밋하지 마십시오).
+
+### 바이너리 sha256
+
+| 파일 | Go | 크기 | sha256 |
+|---|---|---|---|
+| bin/biostool | go1.26.5 | 7774370 | 9dd536ce35f214ee0ff9026220f3967bf0351a26179fd5228c7ca7dfe549d1a4 |
+| bin/biostool_os6 | go1.20.14 | 6406144 | a70d459e70341c9e5e2d501ba3e83e818d45e5981732069d1b881ca2550d983f |
+
+직접 시험: `bash testcase/demo_env.sh start` (mock BMC 6대·시험용 conf 생성, 따라 할 명령 출력) → `bash testcase/demo_env.sh stop`.
+
+태그(커밋·푸시 후 직접 실행, 아직 만들지 않았습니다):
+
+```bash
+git tag -a v0.3.0 -m "redfish bios.sh 통합 점검(TUI)·전체비교·CSV·auto_setup 연동 (CHANGELOG 2026-10-15 항목)"
+git push origin v0.3.0
+```
+
 ## [Unreleased] (v0.2.0 후보) - 2026-10-10
 
 Cisco UCSM 읽기 전용 점검·연구용 프로파일과 2순위(예비) 계정을 추가했습니다. **실제 BMC·UCSM 에 접속해 본 적은 없습니다**(아래 “알려진 한계”, [FIRST_RUN.md](FIRST_RUN.md) 18~25).
+
+### 추가 (설정값 JSON 추출)
+
+- **`bios_export.sh` + `biostool allcheck -export-attrs`**: 비교서버와 대상서버의 BIOS 속성 전체를 호스트별 JSON(`results/<일시>_all/attrs/<호스트>.json`, 0600, 이름 순 정렬, 비밀번호·토큰 없음)으로 저장해 `diff`·`vimdiff` 로 눈으로 비교합니다. 기본 실행은 저장하지 않습니다. 추가 접속은 없고(읽은 값을 저장), 같은 실행의 차이 리포트도 함께 나옵니다. 구현 `cmd/biostool/allexport.go`, 테스트 `TestAllCheckExportAttrs`, 랩 .58 mock BMC 2대 실행으로 확인.
 
 ### 변경
 

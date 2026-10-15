@@ -71,7 +71,105 @@ cp ignore_attrs.txt.example ignore_attrs.txt
 
 
 ########################################################################
-# 3. 사전조사 (처음 만나는 모델) — GET 만 보낸다
+# 3. 통합 실행 bios.sh — 점검·전체비교·수정을 한 화면(TUI)에서 (기본 진입점, 재부팅은 하지 않음)
+########################################################################
+
+# (터미널) TUI: 대상 입력(파일 지정 / 붙여넣기: Ctrl+D 완료, Ctrl+X 취소) -> 프로파일 선택 -> 접속·조회(호스트당 로그인 1회)
+# -> 프로파일 결과 화면 -> q 를 누르면 "전체비교 결과를 볼까요?" -> y: 기준 선택 -> 전체비교 화면 -> "수정할까요?" y/n
+# 화면 키: <- -> 벤더 탭 / Tab 관리망 그룹 탭 / 위아래(k j) 한 줄 / PgUp PgDn 한 화면 / a 전체 o OK만 f difference만 n N/A만 / s 요약
+#          e 수정 메뉴(전체비교 질문 건너뜀) / ? 도움말 / q 또는 Esc 종료 / Ctrl+X 진행 중 작업 취소 / Ctrl+C·Ctrl+Z 는 무시(종료는 q)
+bash bios.sh
+
+# 프로파일과 대상 파일을 미리 지정해 화면에서 묻지 않게 한다
+bash bios.sh -profile VM -user user.txt
+
+# 연구용 프로파일 (전부 verified=N 이라 점검만 되고 설정되지 않음)
+bash bios.sh -profile VM_research
+
+# TUI 없이 색 없는 평문으로 출력한다 (읽기 전용, 설정 질문 없음. 파이프·파일로 저장할 때도 평문)
+bash bios.sh -plain -profile VM
+
+# 한 줄 형식: [OK]/[difference]/[N/A] host ip vendor model bios attribute 기준값 현재값 비고(원래 상태명). 색을 끄려면 NO_COLOR
+NO_COLOR=1 bash bios.sh -plain -profile VM
+
+# 접속 없이 xml.sh 로 저장한 덤프를 읽는다 (설정은 하지 않음)
+bash bios.sh -plain -profile VM -from-dump dumps
+
+# --- 전체비교 기준 3종 (같은 모델끼리만 비교, 제외 속성은 ignore_attrs.txt + bios.conf exclude_attrs) ---
+
+# 기준 1: 비교서버 hostname (그 서버만 추가 조회, 쉼표로 여러 개). 평문 출력으로 BIOS 전체 값을 비교한다
+bash bios.sh -plain -profile VM -ref <비교서버 hostname>
+
+# 기준 1 을 TUI 에서: 전체비교 y -> 기준 선택에서 "비교서버 hostname 입력" (비워 두면 diff.txt)
+bash bios.sh -profile VM -ref <비교서버 hostname>
+
+# 기준 2: refs 폴더의 JSON (bios_export.sh 로 뽑은 속성 JSON). 파일 이름만 주면 bios.conf 의 refs_dir 에서 찾는다
+bash bios.sh -plain -profile VM -ref-json <파일이름>.json
+
+# 기준 3: diff.txt (모델별 기준 호스트 목록)
+bash bios.sh -plain -profile VM -diff diff.txt
+
+# 전체비교에서 제외할 속성 목록 파일을 직접 지정한다 (없으면 내장 기본 목록. bios.conf 의 exclude_attrs 는 항상 합쳐서 적용)
+bash bios.sh -plain -profile VM -ref <비교서버 hostname> -ignore <제외속성 파일>
+
+# --- 기준 JSON 을 refs/ 에 모으기 ---
+
+# 비교서버의 BIOS 속성 JSON 을 뽑는다 (읽기 전용): results/<일시>_all/attrs/<호스트>.json
+bash bios_export.sh <비교서버> <대상1> <대상2>
+
+# refs 폴더에 복사해 두면 TUI 기준 선택 목록과 -ref-json 에 나온다 (실제 호스트 값이므로 git 에 올리지 말 것)
+mkdir -p refs
+cp results/<일시>_all/attrs/<비교서버>.json refs/
+
+# --- auto_setup 비대화형 (점검만, 설정 없음, 묻지 않음) ---
+
+# 호출한 폴더에 check.res_<user> 를 만든다. targets.txt 는 호출한 폴더 기준 경로. 프로파일은 -profile 또는 bios.conf 의 auto_profile
+bash bios.sh -auto-check <user> targets.txt -profile VM
+
+# 위와 같고 check.res_<user>_postapply 도 같은 내용으로 만든다 (-auto 도 점검만 한다)
+bash bios.sh -auto <user> targets.txt -profile VM
+
+# 결과: 호스트마다 한 줄 (host: OK / host: OK (N/A N건) / host: FAIL difference N건 (...) / host: FAIL N/A 접속실패(...))
+cat check.res_<user>
+
+# FAIL 이 있어도 종료코드는 0 이다 (치명적 오류만 0 이 아님)
+bash bios.sh -auto-check <user> targets.txt -profile VM; echo $?
+
+# --- 옛 스크립트 호환 ---
+
+# 옛 전용 옵션 없이 터미널에서 실행하면 bios.sh 로 넘어간다 (같은 TUI)
+bash bios_check.sh --profile VM
+bash all_bios_check.sh
+
+# 옛 방식(Y/N 줄 프롬프트)은 -dry-run -no-prompt -stdin-ok -retry-from -list-max -fail-max 중 하나를 줄 때: 5~7절 참고
+bash bios_check.sh --profile VM -no-prompt
+
+# --- bios.conf 에서 쓰는 키 (bios.conf.example 참고, 줄 끝 주석 불가) ---
+
+# 점검·전체비교에서 뺄 속성 패턴: | 구분, * 와일드카드, 대소문자 무시. 프로파일 점검에서는 해당 행을 점검하지 않는다
+#   exclude_attrs=ServiceTag|*Uuid*|BootSeq*
+# on: 전체비교 difference 도 "수정할까요?" 대상에 넣는다 / off(기본): 프로파일(verified=Y) 항목만 설정
+#   allcheck_set=off
+# 전체비교 기준 JSON 폴더 (기본 refs)
+#   refs_dir=refs
+# -auto 에서 -profile 을 주지 않았을 때 쓸 프로파일 이름
+#   auto_profile=VM
+vi bios.conf
+
+# --- 결과 파일 ---
+
+# 결과 폴더에 CSV 가 함께 저장된다 (UTF-8 BOM, 엑셀로 열기). 프로파일 결과 profile_*, 전체비교 compare_*
+ls results/<일시>/*.csv
+
+# 호스트 1줄 요약 / 한 줄 전체 목록
+cat results/<일시>/profile_summary.csv
+cat results/<일시>/profile_long.csv
+
+# 수정(Y)을 했다면 끝난 뒤 랜덤한 서버 몇 대를 BMC 화면/BIOS Setup 에서 직접 열어 실제로 바뀌었는지 눈으로 확인한다 (Disclaimer)
+
+
+########################################################################
+# 4. 사전조사 (처음 만나는 모델) — GET 만 보낸다
 ########################################################################
 
 # 대상을 직접 지정해서 덤프를 저장하고 짧은 요약을 출력한다 (요약을 읽어 전달한다. 파일은 반출하지 않는다)
@@ -86,13 +184,13 @@ find dumps -maxdepth 4 -type d
 
 
 ########################################################################
-# 4. 점검 (읽기 전용) / dry-run / 설정(Y) / 재점검
+# 5. 점검 (읽기 전용) / dry-run / 설정(Y) / 재점검
 ########################################################################
 
-# 점검: 프로파일을 번호 메뉴로 고른다. FAIL 이 있으면 마지막에 설정하시겠습니까? (Y/N) 을 묻는다 (직접 입력, N 이면 아무것도 안 함)
+# 점검: 터미널에서 인자 없이 실행하면 bios.sh(3절)의 TUI 로 넘어간다. 옛 전용 옵션이 있으면 프로파일을 번호 메뉴로 고르고 FAIL 이 있을 때 설정하시겠습니까? (Y/N) 을 묻는다
 bash bios_check.sh
 
-# 프로파일을 지정해서 점검 (메뉴 생략)
+# 프로파일을 지정해서 점검 (메뉴 생략, 터미널이면 bios.sh 로 넘어감)
 bash bios_check.sh --profile VM
 
 # 연구용 프로파일 (조사 데이터 기반, 전부 verified=N 이라 점검만 되고 설정은 되지 않음)
@@ -117,7 +215,7 @@ printf 'Y\n' | bash bios_check.sh --profile VM -stdin-ok
 
 
 ########################################################################
-# 5. 실패한 건만 다시 (재시도)
+# 6. 실패한 건만 다시 (재시도)
 ########################################################################
 
 # 일시 오류(UNREACHABLE/TIMEOUT/BMC_ERROR)·SKIPPED_AUTH_STOP 대상이 모인 목록 확인 (AUTH_FAIL 은 들어가지 않음)
@@ -132,10 +230,10 @@ cat results/<일시>/merged_retry.txt
 
 
 ########################################################################
-# 6. 모델별 BIOS 전체 비교 (읽기 전용)
+# 7. 모델별 BIOS 전체 비교 (읽기 전용)
 ########################################################################
 
-# (터미널) 대화형: 대상 입력(user.txt 또는 hostname) → 1.체크 / 2.전체비교 → 비교서버 입력
+# (터미널) 인자 없이 실행하면 bios.sh(3절)의 TUI 로 넘어간다. 옛 대화형 메뉴(대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력)는 -diff-max -list-max -export-attrs 를 줄 때만
 bash all_bios_check.sh
 
 # 비교서버 1대를 직접 지정해 user.txt 의 대상과 BIOS 전체 값을 비교한다 (같으면 '모두 동일', 다르면 비교서버=a → 대상=b)
@@ -146,6 +244,18 @@ bash all_bios_check.sh -user user.txt -diff diff.txt
 
 # 화면 리포트 전체(상한 없음)는 결과 폴더의 report.txt 에도 저장된다
 less results/<일시>_all/report.txt
+
+# 비교서버와 대상서버의 BIOS 설정값(JSON)을 뽑아 눈으로 비교한다 (읽기 전용)
+bash bios_export.sh <비교서버> <대상1> <대상2>
+
+# 대상을 생략하면 user.txt
+bash bios_export.sh <비교서버>
+
+# 뽑은 JSON 을 비교한다 (파일 이름은 호스트 이름의 ':' 를 '_' 로 바꾼 것)
+cd results/<일시>_all/attrs
+diff -u <비교서버>.json <대상>.json | less
+diff -y -W 200 --suppress-common-lines <비교서버>.json <대상>.json | less
+vimdiff <비교서버>.json <대상>.json
 
 # 호스트당 터미널에 보일 차이 속성 수를 줄인다 (나머지는 all_diff.tsv)
 bash all_bios_check.sh -diff-max 10
@@ -161,7 +271,7 @@ column -t -s$'\t' results/<일시>_all/all_diff.tsv | less -S
 
 
 ########################################################################
-# 7. 접속 없이 덤프로 시험 (-from-dump)
+# 8. 접속 없이 덤프로 시험 (-from-dump)
 ########################################################################
 
 # 대상 전체의 덤프를 먼저 저장한다 (BMC 접속은 이때 한 번)
@@ -176,7 +286,7 @@ bash all_bios_check.sh -from-dump dumps
 
 
 ########################################################################
-# 8. mock 으로 연습하기 — 실서버가 아니라 합성 데이터(testdata)로 만든 가짜 BMC 입니다 (빌드 완료 bin/mockbmc 사용, Go 불필요)
+# 9. mock 으로 연습하기 — 실서버가 아니라 합성 데이터(testdata)로 만든 가짜 BMC 입니다 (빌드 완료 bin/mockbmc 사용, Go 불필요)
 ########################################################################
 
 # 연습용 임시 폴더와 mock 이 쓸 임의 비밀번호(실제 비밀번호를 쓰지 말 것)
@@ -210,7 +320,7 @@ printf '%s\n' 127.0.0.1:18441 127.0.0.1:18442 > $PRACTICE/user.txt
 # 연습 1: dry-run — 보낼 요청만 확인 (연습용 conf/목록을 -conf, -user 로 지정)
 bash bios_check.sh --profile VM -conf $PRACTICE/bios.conf -user $PRACTICE/user.txt -dry-run
 
-# 연습 2: 점검 후 프롬프트에서 Y 를 직접 입력해 Pending 설정까지 해 본다
+# 연습 2: 점검 후 Y 를 직접 입력해 Pending 설정까지 해 본다 (터미널이면 bios.sh TUI 의 "수정할까요?" 에서 y)
 bash bios_check.sh --profile VM -conf $PRACTICE/bios.conf -user $PRACTICE/user.txt
 
 # 연습 3: 재점검 — 적용한 항목이 PENDING_OK 로 바뀐다
@@ -231,7 +341,7 @@ rm -rf $PRACTICE
 
 
 ########################################################################
-# 9. 결과 파일 보는 법 (results/<일시>/ 는 실행할 때마다 새로 생긴다)
+# 10. 결과 파일 보는 법 (results/<일시>/ 는 실행할 때마다 새로 생긴다)
 ########################################################################
 
 # 결과 폴더 목록 (같은 초에 또 실행하면 _2, _3 이 붙는다)
@@ -269,7 +379,7 @@ ls -l results/<일시>/
 
 
 ########################################################################
-# 10. Cisco UCSM 점검 (읽기 전용, 설정 없음) — 대상은 블레이드 BMC 가 아니라 UCSM(FI VIP) 주소
+# 11. Cisco UCSM 점검 (읽기 전용, 설정 없음) — 대상은 블레이드 BMC 가 아니라 UCSM(FI VIP) 주소
 ########################################################################
 
 # user.txt 의 UCSM 주소를 점검한다 (호출은 aaaLogin -> configResolveClass -> aaaLogout 뿐)
@@ -289,7 +399,7 @@ awk -F'\t' '$13=="FAIL"' results/<일시>/ucsm_result.tsv
 
 
 ########################################################################
-# 11. 2순위(예비) 계정 — /etc/rf_tool/rf.conf (공용 계정이 없는 BMC 용, 파일이 없으면 기능 꺼짐)
+# 12. 2순위(예비) 계정 — /etc/rf_tool/rf.conf (공용 계정이 없는 BMC 용, 파일이 없으면 기능 꺼짐)
 ########################################################################
 
 # rf.conf 를 만든다 (root 만 읽기). 형식: <vendor>_user=..., <vendor>_pass=... (vendor = dell hpe lenovo supermicro cisco), # 주석
@@ -314,7 +424,7 @@ awk -F'\t' '$9=="-"{print $14}' results/<일시>/result.tsv | sort | uniq -c
 
 
 ########################################################################
-# 12. 테스트케이스 — 2순위 계정·접속불가 구분·설정 표기 선택을 mock 으로 직접 시험 (Go 불필요, 실제 BMC 접속 없음)
+# 13. 테스트케이스 — 2순위 계정·접속불가 구분·설정 표기 선택을 mock 으로 직접 시험 (Go 불필요, 실제 BMC 접속 없음)
 ########################################################################
 
 # 실행한다 (127.0.0.1 포트 19101~19106 에 mock 을 띄우고 끝나면 정리, /etc/rf_tool/rf.conf 는 건드리지 않음). 시나리오별 PASS/FAIL, 실패가 있으면 종료코드 1
@@ -328,7 +438,7 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh
 
 
 ########################################################################
-# 13. 1순위 계정 생성 — 공용 계정이 없는 BMC 에 계정 만들기 (rf.conf 의 벤더 admin 으로 로그인, 재부팅·BIOS 변경 없음)
+# 14. 1순위 계정 생성 — 공용 계정이 없는 BMC 에 계정 만들기 (rf.conf 의 벤더 admin 으로 로그인, 재부팅·BIOS 변경 없음)
 ########################################################################
 
 # 필요한 것: bios.conf 의 user = 만들 계정 ID, pass.enc = 그 비밀번호, /etc/rf_tool/rf.conf = 벤더 admin (평문, chmod 600)
@@ -360,7 +470,7 @@ awk -F'\t' '$7=="ROLLBACK_FAILED" || $7=="VERIFY_UNKNOWN"{print $1, $7, $9}' res
 
 
 ########################################################################
-# 14. 비밀번호 변경 — 바이너리를 직접 쓴다 (새 비밀번호는 터미널에서 직접 2번 입력, 붙여넣기 거부)
+# 15. 비밀번호 변경 — 바이너리를 직접 쓴다 (새 비밀번호는 터미널에서 직접 2번 입력, 붙여넣기 거부)
 ########################################################################
 
 # 먼저 대상과 요청 형태만 본다 (새 비밀번호 입력 없음, 쓰기 없음)
@@ -380,7 +490,7 @@ bash bios_check.sh --profile VM -no-prompt
 
 
 ########################################################################
-# 15. 테스트케이스 시나리오 7~11 — 계정 생성·중복 건너뜀·슬롯 방식·검증 실패 롤백·변경 dry-run (12절 스크립트가 함께 실행)
+# 16. 테스트케이스 시나리오 7~11 — 계정 생성·중복 건너뜀·슬롯 방식·검증 실패 롤백·변경 dry-run (13절 스크립트가 함께 실행)
 ########################################################################
 
 # 실행 (mock 의 -accounts 계층을 쓴다. 실제 BMC 접속 없음)

@@ -22,6 +22,15 @@
 - [ ] 두 바이너리가 같은 입력(mock)에서 같은 결과를 내는지 확인했다 (os8 ↔ os6 결과 파일 비교, 타임스탬프 제외)
 - [ ] Go 1.20 호환을 지켰다: `slices`·`maps`·`cmp` 패키지, `min`/`max`/`clear` 내장함수, `log/slog` 금지. 확신이 없으면 .60(Go 1.20)에서 빌드해 확인
 
+### 통합 점검 (`bios.sh` / TUI / `-auto`)
+
+- [ ] **`-auto`/`-auto-check` 경로에 쓰기가 없다**: 비대화형은 프로파일 점검만 하고 BMC 에 PATCH·POST 를 보내지 않는다(`setplan_test.go` 가 `applySetPlan` 을 TUI 흐름 밖에서 호출하지 못하게 막는지, mock 의 `Writes` 가 0 인지). `-plain`·`-from-dump` 도 쓰기 없음
+- [ ] `check.res_<user>` 가 **호출한 폴더**에 만들어지고(`-res-dir`, `bios.sh` 가 호출 폴더를 넘김) `-auto` 는 `_postapply` 도 같은 내용으로 만든다. targets.txt 는 호출한 폴더 기준 경로이고, FAIL 이 있어도 종료코드 0 이다
+- [ ] **TUI 에서 Ctrl+C·Ctrl+Z 는 무시**(“종료는 q 를 누르세요”)되고 **Ctrl+X 는 진행 중 작업(접속·조회, 기준 조회, 설정 적용)을 취소**한다. 터미널에서 직접 한 번 확인(종료 후 터미널 상태가 정상으로 돌아오는지 포함)
+- [ ] 수정 단계 규칙이 유지된다: 프로파일 `verified=Y` 만, 전체비교는 `allcheck_set=on` 일 때만, `[충돌]` 은 설정하지 않음, 남의 Pending 은 질문(y/n/Ctrl+X), Pending 까지만(재부팅 없음)
+- [ ] 태그 3종 묶음(`tagFor`)·`(N/A)` 표기·CSV 4종(UTF-8 BOM)·`check.res_<user>` 형식을 바꿨다면 README 2.0절·3.6절·사용법.txt 와 `계획서_v0.2_TUI.md` 를 함께 갱신했다
+- [ ] 옛 래퍼 호환: `bios_check.sh`(옛 전용 옵션이 있으면 옛 방식)·`all_bios_check.sh`(옵션 없이 터미널이면 `bios.sh`)의 분기가 그대로다
+
 ### 랩 검증 (Windows 에서 Go 를 실행하지 않음)
 
 - [ ] 랩 .58(Go 1.25)에서 `go vet ./... && go test ./...` 통과
@@ -54,4 +63,4 @@
 
 ## 흐름도 다시 그리기
 
-`workflow*.svg` 는 WORKFLOW.md 의 mermaid 블록 6개를 렌더링한 것입니다(블록 순서 = workflow, _set, _dump, _allcheck, _retry, _account). mermaid 를 고쳤으면 다시 렌더링해 같은 이름으로 교체하십시오. GitHub 에서 SVG 가 잘려 보이던 원인은 글자가 `foreignObject`(고정 크기 상자)에 들어 있어 뷰어 글꼴이 렌더링 때보다 넓으면 잘린 것이므로, **글자를 `<text>` 로 내는 `htmlLabels:false` 로 렌더링**합니다. `mermaid@10.9.3` 의 `mermaid.render` 를 브라우저에서 호출하고 설정은 `{"htmlLabels":false,"useMaxWidth":false,"padding":24,"nodeSpacing":45,"rankSpacing":45,"curve":"basis","wrappingWidth":800}`, `fontFamily` 는 `Malgun Gothic, Noto Sans KR, Noto Sans CJK KR, sans-serif`, **측정용 `fontSize` 는 17px** 로 하고 저장 전에 SVG 안의 `font-size:17px` 를 `16px` 로 바꿉니다(박스에 약 6% 여유). 그 뒤 `width`/`height` 를 올림한 정수로 명시하고 `viewBox="-8 -8 W H"` 에 맞춘 흰 배경 `<rect>` 를 깔아(다크 모드 미리보기에서도 읽히게) 저장하며, XML 유효성과 `<foreignObject>` 가 0개인지 확인합니다. 텍스트가 잘리지 않는지 브라우저로 직접 열어 보십시오.
+`workflow*.svg` 는 WORKFLOW.md 의 mermaid 블록 8개를 렌더링한 것입니다(블록 순서 = workflow, _set, _dump, _allcheck, _retry, _account, _bios, _auto). `workflow_bios.svg`·`workflow_auto.svg` 와 `workflow.svg`·`workflow_allcheck.svg` 는 아래 절차 대신 `npx -y @mermaid-js/mermaid-cli@11 -i in.mmd -o out.svg -c cfg.json`(`cfg.json` = `{"htmlLabels":false,"flowchart":{"htmlLabels":false}}` + 위와 같은 `fontFamily`·간격 설정)로 렌더링한 뒤, `width`/`height` 정수 명시·`viewBox="-8 -8 W H"`·흰 배경 `<rect>`·`font-size:16px` 로 후처리했습니다. 어느 방법이든 `<foreignObject>` 가 0개이고 한글이 `<text>` 로 들어 있는지 확인합니다. mermaid 를 고쳤으면 다시 렌더링해 같은 이름으로 교체하십시오. GitHub 에서 SVG 가 잘려 보이던 원인은 글자가 `foreignObject`(고정 크기 상자)에 들어 있어 뷰어 글꼴이 렌더링 때보다 넓으면 잘린 것이므로, **글자를 `<text>` 로 내는 `htmlLabels:false` 로 렌더링**합니다. `mermaid@10.9.3` 의 `mermaid.render` 를 브라우저에서 호출하고 설정은 `{"htmlLabels":false,"useMaxWidth":false,"padding":24,"nodeSpacing":45,"rankSpacing":45,"curve":"basis","wrappingWidth":800}`, `fontFamily` 는 `Malgun Gothic, Noto Sans KR, Noto Sans CJK KR, sans-serif`, **측정용 `fontSize` 는 17px** 로 하고 저장 전에 SVG 안의 `font-size:17px` 를 `16px` 로 바꿉니다(박스에 약 6% 여유). 그 뒤 `width`/`height` 를 올림한 정수로 명시하고 `viewBox="-8 -8 W H"` 에 맞춘 흰 배경 `<rect>` 를 깔아(다크 모드 미리보기에서도 읽히게) 저장하며, XML 유효성과 `<foreignObject>` 가 0개인지 확인합니다. 텍스트가 잘리지 않는지 브라우저로 직접 열어 보십시오.

@@ -96,7 +96,7 @@ func TestSecR1_Write2xxReadErrorIsSetError(t *testing.T) {
 			w.Write([]byte(`{"Members":[]}`))
 		}
 	})
-	p := &setPlan{JobPath: dellJobs, JobBody: []byte(`{"TargetSettingsURI":"` + dellSettings + `"}`)}
+	p := &hostPlan{JobPath: dellJobs, JobBody: []byte(`{"TargetSettingsURI":"` + dellSettings + `"}`)}
 	if _, errText := dellJob(jc, p, 200, []byte(`{}`), map[string]bool{}); !strings.Contains(errText, StatusSetError) || strings.Contains(errText, StatusRejected) {
 		t.Errorf("Job POST 200 + 본문 끊김: %q", errText)
 	}
@@ -160,7 +160,7 @@ func TestSecR2_DellJobAutoCreateStrict(t *testing.T) {
 					w.WriteHeader(404)
 				}
 			})
-			p := &setPlan{JobPath: dellJobs, JobBody: []byte(`{"TargetSettingsURI":"` + dellSettings + `"}`)}
+			p := &hostPlan{JobPath: dellJobs, JobBody: []byte(`{"TargetSettingsURI":"` + dellSettings + `"}`)}
 			before := map[string]bool{strings.ToLower(old): true}
 			note, errText := dellJob(c, p, cs.status, []byte(cs.body), before)
 			mu.Lock()
@@ -636,9 +636,9 @@ func TestSecApplyRequestsSentFlag(t *testing.T) {
 	// 허용목록에서 막힌 PATCH 는 Sent=false 로 기록되고 BMC 에 닿지 않는다.
 	c := NewClient(ClientOpts{BaseURL: s.URL(), User: testUser, Pass: testPass, Insecure: true, Mode: ModeSet, Gap: -1})
 	defer c.Close()
-	it := &setItem{Std: "hyper_threading", Attr: "LogicalProc", Expected: "Enabled", Value: "Enabled"}
-	h := &setHost{Target: run.Hosts[0].Target, Info: run.Hosts[0].Info, Items: []*setItem{it}, Plan: &setPlan{
-		Items: []*setItem{it}, Path: dellSystem + "/Actions/ComputerSystem.Reset", Body: []byte(`{"Attributes":{"LogicalProc":"Enabled"}}`),
+	it := &applyItem{Std: "hyper_threading", Attr: "LogicalProc", Expected: "Enabled", Value: "Enabled"}
+	h := &setHost{Target: run.Hosts[0].Target, Info: run.Hosts[0].Info, Items: []*applyItem{it}, Plan: &hostPlan{
+		Items: []*applyItem{it}, Path: dellSystem + "/Actions/ComputerSystem.Reset", Body: []byte(`{"Attributes":{"LogicalProc":"Enabled"}}`),
 	}}
 	w0 := s.Writes()
 	(&setEnv{}).send(h, c)

@@ -5,6 +5,8 @@
 //
 //	biostool check   -profile VM [-conf bios.conf] [-user user.txt] [-from-dump 디렉터리] [-no-prompt] [-stdin-ok] [-list-max N] [-fail-max N] [-dry-run] [-hosts /etc/hosts] [-retry-from 이전결과폴더]
 //	biostool allcheck [-diff diff.txt] [-ignore ignore_attrs.txt] [-conf bios.conf] [-user user.txt] [-from-dump 디렉터리] [-list-max N] [-diff-max N] [-hosts /etc/hosts] [-retry-from 이전결과폴더]
+//	biostool bios    -profile VM [-ref 호스트 | -ref-json refs/x.json | -diff diff.txt] [-ignore ignore_attrs.txt] [-plain] [공통 옵션]
+//	biostool bios    -auto-check|-auto <user> <targets.txt> [-profile VM] [공통 옵션]
 //	biostool dump    [-targets 대상,대상...] [-conf bios.conf] [-user user.txt] [-hosts /etc/hosts] [-out dumps] [-compact]
 //	printf '%s' "$pw" | biostool encrypt [-key key.bin] [-out pass.enc]
 package main
@@ -13,6 +15,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -30,6 +33,10 @@ func (e notImplementedError) Error() string {
 const usageText = `사용법:
   biostool check   -profile <이름> [공통 옵션]    BIOS 표준값 점검
   biostool allcheck [-diff diff.txt] [옵션]       모델별 BIOS 전체 Attribute 비교 (읽기 전용)
+  biostool bios    -profile <이름> [-ref 호스트 | -ref-json 파일 | -diff diff.txt] [-plain] [옵션]
+                                                 호스트당 1회 조회로 프로파일 점검 + 전체비교 (읽기 전용)
+  biostool bios    -auto-check|-auto <user> <targets.txt> [-profile <이름>]
+                                                 비대화형 점검만 → ./check.res_<user> (-auto 는 _postapply 도, 설정 없음)
   biostool dump    [-targets 대상,...] [-out 디렉터리] [-compact] [공통 옵션]  사전조사 덤프 (GET 전용)
   biostool ucsm    [-xml-map <TSV>] [-list-max N] [-conf] [-user] [-hosts]  Cisco UCSM XML API BIOS 점검 (읽기 전용, 대상=UCSM 주소)
   biostool encrypt [-key key.bin] [-out pass.enc]  표준입력의 비밀번호를 암호화
@@ -65,6 +72,8 @@ func main() {
 		err = cmdCheck(os.Args[2:])
 	case "allcheck":
 		err = cmdAllCheck(os.Args[2:])
+	case "bios":
+		err = cmdBios(os.Args[2:])
 	case "dump":
 		err = cmdDump(os.Args[2:])
 	case "encrypt":
@@ -210,6 +219,10 @@ type runContext struct {
 	Fallback *fallbackCreds // rf.conf 의 2순위 계정 (nil 이면 기능 꺼짐). 출력 금지.
 }
 
+// prepareWarnOut 은 prepare 의 경고·알림(rf.conf) 출력 곳입니다. TUI 가 열려 있는 동안에는 흐름(tui_flow.go)이
+// 버퍼로 바꿔 두었다가 TUI 를 닫은 뒤 표준에러에 찍는다.
+var prepareWarnOut io.Writer = os.Stderr
+
 // prepare 는 conf 로드 → 대상 해석 → 비밀번호 복호화를 수행합니다.
 // targetsArg 가 비어 있지 않으면 대상 목록 파일 대신 그 값을 씁니다.
 // retryFromPath 가 비어 있지 않으면 그 폴더의 retry.txt 에서 대상을 읽습니다.
@@ -248,10 +261,10 @@ func prepare(o *commonOpts, targetsArg string, retryFromPath string) (*runContex
 			return nil, err
 		}
 		if warn != "" {
-			fmt.Fprintln(os.Stderr, "경고: "+warn)
+			fmt.Fprintln(prepareWarnOut, "경고: "+warn)
 		}
 		if fb == nil && explicit {
-			fmt.Fprintf(os.Stderr, "알림: 2순위 계정 파일 %s 이(가) 없어 2순위 계정 기능을 쓰지 않습니다\n", path)
+			fmt.Fprintf(prepareWarnOut, "알림: 2순위 계정 파일 %s 이(가) 없어 2순위 계정 기능을 쓰지 않습니다\n", path)
 		}
 		rc.Fallback = fb
 	}
