@@ -34,15 +34,30 @@ func (fr *flowRig) screen() string { return tuiStripANSI(fr.r.out.String()) }
 // optional 의 단계는 순서와 상관없이 그 키를 넣습니다 (단계 7 구현에 따라 나올 수도 있는 화면). initial 은 시작 전에 넣는 키.
 func runFlowT(t *testing.T, a biosTUIArgs, initial string, script []flowStep, optional map[string]string) (*flowRig, error) {
 	t.Helper()
+	return runFlowTC(t, a, initial, script, optional, nil)
+}
+
+// runFlowTC 는 runFlowT 에 check 를 더한 것입니다: script 의 i 번째 단계에서 키를 넣기 직전에 부른다 (nil 이면 안 부름).
+func runFlowTC(t *testing.T, a biosTUIArgs, initial string, script []flowStep, optional map[string]string, check func(i int, f *biosFlow)) (*flowRig, error) {
+	t.Helper()
 	pr, pw := io.Pipe()
 	t.Cleanup(func() { pw.Close() })
-	u, r := newTUIRigReader(t, pr, nil)
+	// 단계의 키는 TUI 가 그 화면을 그리고 키를 기다리기 시작할 때(env.Ready) 넣는다 — Ask 가 묻기 전에 쌓인 키를 버려도 남게.
+	pending := ""
+	u, r := newTUIRigReader(t, pr, func(e *tuiEnv, _ *tuiRig) {
+		e.Ready = func() {
+			if k := pending; k != "" {
+				pending = ""
+				pw.Write([]byte(k))
+			}
+		}
+	})
 	fr := &flowRig{r: r}
 	next := 0
 	f := &biosFlow{ui: u, a: a}
 	f.step = func(name string) {
 		if k, ok := optional[name]; ok {
-			pw.Write([]byte(k))
+			pending += k
 			return
 		}
 		fr.steps = append(fr.steps, name)
@@ -51,7 +66,10 @@ func runFlowT(t *testing.T, a biosTUIArgs, initial string, script []flowStep, op
 			pw.Close() // 입력 끝 → 흐름이 끝난다
 			return
 		}
-		pw.Write([]byte(script[next].keys))
+		if check != nil {
+			check(next, f)
+		}
+		pending += script[next].keys
 		next++
 	}
 	if initial != "" {
@@ -103,7 +121,7 @@ func flowNames(s []flowStep) []string {
 	return out
 }
 
-// 붙여넣기 대상 → 프로파일 고르기 → 1차 화면 q → 전체비교 y (비교서버 hostname) → q → 수정 n.
+// 붙여넣기 대상 → 프로파일 고르기 → 1차 화면 Tab → 전체 설정 비교 (비교서버 hostname) → q → 수정 n.
 func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 	a, ua := startAllSrv(t, "hpe-dl360gen11", nil)
 	b, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
@@ -119,12 +137,12 @@ func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 		{"targets", "2"},
 		{"targets-paste", ua + "\n" + ub + "\x04"},
 		{"profile", "2"}, // OTHER, VM
-		{"profile-result", "q"},
-		{"ask-compare", "y"},
+		{"profile-result", "\t"},
 		{"ref", "1"},
 		{"ref-host", ua + "\r"},
-		{"compare-result", "q"},
+		{"compare-result", "qq"},
 		{"ask-set", "n"},
+		{"compare-result", "qq"}, // 거절하면 결과 보기로 돌아오고, 다시 q 두 번이면 묻지 않고 끝
 	}
 	fr, err := runFlowT(t, biosTUIArgs{O: o}, "", script, nil)
 	if err != nil {
@@ -149,7 +167,7 @@ func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 	}
 	sc := fr.screen()
 	for _, want := range []string{"[진행] [2/4 접속·조회", "BIOS 점검 결과 — 프로파일 VM", "전체비교 — 기준 비교서버 " + ua,
-		"전체비교 결과를 볼까요? [y/n]", "수정 미리보기", "수정할까요? [y/n]"} {
+		"화면  >[프로파일 점검] [전체 설정 비교]", "[프로파일 점검] >[전체 설정 비교]", "수정 미리보기", "위 수정대상을 적용할까요? [y/n]"} {
 		if !strings.Contains(sc, want) {
 			t.Errorf("화면에 %q 없음", want)
 		}
@@ -168,6 +186,127 @@ func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(fr.f.u.Check.Dir, f)); err != nil {
 			t.Errorf("%s 없음", f)
 		}
+	}
+}
+
+// 화면 탭: 첫 Tab 은 기준 선택 + 비교, 다시 Tab 이면 프로파일 화면(필터 유지), 그다음 Tab 은 기준을 묻지 않고 비교 화면,
+// r 은 기준을 다시 골라 비교 (CSV 는 덮어써 한 번만 셈). 기준 서버 자신은 자기 값으로 OK·REFERENCE 줄.
+func TestBiosFlowViewTabsAndReRef(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"ProcHyperthreading": "Disabled"})
+	})
+	_, o := flowEnv(t, "")
+	var gotCmp *compareResult
+	swapFlowPlan(t, func(cfg *Config, u *unifiedRun, cmp *compareResult) *setPlan {
+		gotCmp = cmp
+		return &setPlan{Items: []setItem{{Host: ub, Attr: "ProcHyperthreading", From: "Disabled", To: "Enabled", Source: SetSrcProfile}}}
+	}, nil)
+	script := []flowStep{
+		{"targets", "2"},
+		{"targets-paste", ua + "\n" + ub + "\x04"},
+		{"profile", "2"},
+		{"profile-result", "f\t"}, // 3: 프로파일 화면 difference 필터 → Tab
+		{"ref", "1"},
+		{"ref-host", ua + "\r"},
+		{"compare-result", "o\t"}, // 6
+		{"profile-result", "\t"},  // 7: 필터 유지
+		{"compare-result", "r"},   // 8: 기준을 묻지 않고 비교 화면 (필터 유지)
+		{"ref", "1"},
+		{"ref-host", ub + "\r"},
+		{"compare-result", "qq"}, // 11
+		{"ask-set", "n"},
+		{"compare-result", "qq"},
+	}
+	refLines := func(cmp *compareResult, host string) {
+		n := 0
+		for _, l := range cmp.Lines {
+			if l.Host != host {
+				continue
+			}
+			n++
+			if l.HostError || l.Tag != TagOK || l.Note != StatusIsReference || l.Expected != l.Current || l.Attr == "-" {
+				t.Errorf("기준 서버 줄: %+v", l)
+			}
+		}
+		if n < 5 {
+			t.Errorf("기준 서버 %s 줄 %d개 (속성마다 줄이어야 함)", host, n)
+		}
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+		ui := f.ui
+		switch i {
+		case 3:
+			if ui.Tab() != 0 || f.cmp != nil {
+				t.Errorf("시작은 프로파일 화면, 비교 전: tab=%d", ui.Tab())
+			}
+		case 6:
+			if ui.Tab() != 1 || f.cmp == nil || f.cmp.Label != "비교서버 "+ua || !ui.refKey {
+				t.Fatalf("첫 Tab → 비교 화면: tab=%d cmp=%v", ui.Tab(), f.cmp)
+			}
+			refLines(f.cmp, ua)
+		case 7:
+			if ui.Tab() != 0 || ui.filter != tuiFilterDiff || !strings.Contains(ui.title, "프로파일 VM") {
+				t.Errorf("Tab → 프로파일 화면, 필터 유지: tab=%d filter=%c title=%q", ui.Tab(), ui.filter, ui.title)
+			}
+		case 8:
+			if ui.Tab() != 1 || ui.filter != tuiFilterOK || f.cmp.Label != "비교서버 "+ua {
+				t.Errorf("다시 Tab → 비교 화면(다시 비교 안 함), 필터 유지: tab=%d filter=%c", ui.Tab(), ui.filter)
+			}
+		case 11:
+			if ui.Tab() != 1 || ui.filter != tuiFilterAll || f.cmp.Label != "비교서버 "+ub || !ui.refKey {
+				t.Errorf("r → 새 기준 결과: tab=%d filter=%c label=%q", ui.Tab(), ui.filter, f.cmp.Label)
+			}
+			refLines(f.cmp, ub)
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	if gotCmp == nil || gotCmp.Label != "비교서버 "+ub {
+		t.Errorf("설정 계획에는 마지막 전체비교 결과: %+v", gotCmp)
+	}
+	seen := map[string]bool{}
+	for _, p := range fr.f.csvs {
+		if seen[p] {
+			t.Errorf("CSV 중복: %s", p)
+		}
+		seen[p] = true
+	}
+	if out := fr.out.String(); !strings.Contains(out, "전체비교: 기준 비교서버 "+ub+" — 차이 있는 호스트 1대") {
+		t.Errorf("요약:\n%s", out)
+	}
+	if sc := fr.screen(); !strings.Contains(sc, "r 기준 다시 선택") || !strings.Contains(sc, "전체비교 — 기준 비교서버 "+ub) {
+		t.Errorf("비교 화면 안내:\n%s", tuiLastFrame(fr.r))
+	}
+}
+
+// 비교 화면으로 처음 넘어가 기준 고르기를 취소하면 프로파일 화면으로 돌아오고, 다음 Tab 에 다시 묻는다.
+func TestBiosFlowViewTabRefCanceled(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua), "VM"
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+	script := []flowStep{
+		{"profile-result", "\t"},
+		{"ref", "\x1b"},
+		{"profile-result", "\t"},
+		{"ref", "1"},
+		{"ref-host", ua + "\r"},
+		{"compare-result", "qq"},
+	}
+	fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	if !strings.Contains(fr.screen(), "전체 설정 비교 기준을 고르지 않았습니다") || fr.f.cmp == nil {
+		t.Errorf("취소 안내·두 번째 비교: cmp=%v\n%s", fr.f.cmp, tuiLastFrame(fr.r))
 	}
 }
 
@@ -198,10 +337,9 @@ func TestBiosFlowFileTargetRefJSON(t *testing.T) {
 		{"targets", "1"},
 		{"targets-file", strings.Repeat("\x7f", len("user.txt")) + targets + "\r"},
 		{"profile", "2"},
-		{"profile-result", "q"},
-		{"ask-compare", "y"},
+		{"profile-result", "\t"},
 		{"ref", "2"}, // 1 hostname, 2 golden.json, 3 diff.txt
-		{"compare-result", "q"},
+		{"compare-result", "qq"},
 	}
 	fr, err := runFlowT(t, biosTUIArgs{O: o}, "", script, map[string]string{"preview-empty": "q"})
 	if err != nil {
@@ -223,7 +361,7 @@ func TestBiosFlowFileTargetRefJSON(t *testing.T) {
 	}
 }
 
-// -user·-profile 지정 → 대상·프로파일을 묻지 않음, 1차 화면 e → 전체비교 질문 없이 수정 단계, Pending 질문 y/n/Ctrl+X.
+// -user·-profile 지정 → 대상·프로파일을 묻지 않음, 1차 화면 e → 전체비교 없이 수정 단계, Pending 질문 y/n/Ctrl+X.
 func TestBiosFlowEditPendingBranches(t *testing.T) {
 	for _, c := range []struct {
 		key     string
@@ -255,8 +393,9 @@ func TestBiosFlowEditPendingBranches(t *testing.T) {
 			})
 			script := []flowStep{{"profile-result", "e"}, {"ask-set", "y"}, {"ask-pending", c.key}}
 			if c.applied {
-				script = append(script, flowStep{"set-result", "q"})
+				script = append(script, flowStep{"set-result", "q"}) // 설정 결과 q → 결과 보기로
 			}
+			script = append(script, flowStep{"profile-result", "qq"}) // 적용·취소 뒤에는 다시 묻지 않고 끝
 			fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "", script, nil)
 			if err != nil {
 				t.Fatalf("흐름 오류: %v", err)
@@ -295,7 +434,7 @@ func TestBiosFlowCancelDuringCollect(t *testing.T) {
 	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
 	// Ctrl+X 는 시작 전에 넣는다 — 키를 처음 받는 곳이 [2/4 접속·조회] 진행 화면이다 (첫 호스트는 로그인 400ms 지연)
 	fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "\x18",
-		[]flowStep{{"profile-result", "q"}, {"ask-compare", "n"}}, map[string]string{"preview-empty": "q"})
+		[]flowStep{{"profile-result", "qq"}}, map[string]string{"preview-empty": "q"})
 	if err != nil {
 		t.Fatalf("흐름 오류: %v", err)
 	}
@@ -343,8 +482,9 @@ func TestBiosFlowCancelDuringRefFetch(t *testing.T) {
 		return &setPlan{}
 	}, nil)
 	ref := compareRef{Hosts: []string{r1 + "," + r2 + "," + r3}}
+	// -ref 를 줬으므로 수집 직후 바로 비교한다: 그 비교서버 조회 진행 화면에서 Ctrl+X
 	fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true, Ref: ref},
-		"", []flowStep{{"profile-result", "q"}, {"ask-compare", "y\x18"}, {"compare-result", "q"}}, map[string]string{"preview-empty": "q"})
+		"", []flowStep{{"compare-auto", "\x18"}, {"profile-result", "qq"}}, map[string]string{"preview-empty": "q"})
 	if err != nil {
 		t.Fatalf("흐름 오류: %v", err)
 	}
@@ -395,6 +535,138 @@ func TestBiosFlowCancelDuringRefFetch(t *testing.T) {
 	}
 	if out := fr.out.String(); !strings.Contains(out, fmt.Sprintf("전체비교 취소: 비교서버 %d대 조회 안 함 — 대상 %d대 %s", gotCmp.RefCanceled, gotCmp.RefCanceled, StatusRefCanceled)) {
 		t.Errorf("요약:\n%s", out)
+	}
+}
+
+// 옵션(-user·-profile·-ref)을 모두 주면 대상·프로파일·기준을 묻지 않고 수집 직후 전체 설정 비교까지 해 둔다
+// (첫 Tab 은 기준을 묻지 않고 바로 비교 화면). 설정은 하지 않고 수정 단계의 확인은 그대로 묻는다.
+func TestBiosFlowOneShotOptionsAutoCompare(t *testing.T) {
+	a, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	b, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"ProcHyperthreading": "Disabled"})
+	})
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua, ub), "VM"
+	var gotCmp *compareResult
+	swapFlowPlan(t, func(cfg *Config, u *unifiedRun, cmp *compareResult) *setPlan {
+		gotCmp = cmp
+		return &setPlan{Items: []setItem{{Host: ub, Attr: "ProcHyperthreading", From: "Disabled", To: "Enabled", Source: SetSrcProfile}}}
+	}, nil)
+	script := []flowStep{
+		{"compare-auto", ""},
+		{"profile-result", "\t"}, // 1
+		{"compare-result", "qq"}, // 2
+		{"ask-set", "n"},
+		{"compare-result", "qq"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o, UserSet: true, Ref: compareRef{Hosts: []string{ua}}}, "", script, nil, func(i int, f *biosFlow) {
+		switch i {
+		case 1:
+			if f.ui.Tab() != 0 || f.cmp == nil || f.cmp.Label != "비교서버 "+ua || !strings.Contains(f.ui.title, "프로파일 VM") {
+				t.Errorf("Tab 전에 비교가 끝나 있고 첫 화면은 프로파일: tab=%d cmp=%v title=%q", f.ui.Tab(), f.cmp, f.ui.title)
+			}
+		case 2:
+			if f.ui.Tab() != 1 || f.ui.title != "전체비교 — 기준 비교서버 "+ua || !f.ui.refKey {
+				t.Errorf("Tab → 기준을 묻지 않고 비교 화면: tab=%d title=%q", f.ui.Tab(), f.ui.title)
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v (대상·프로파일·기준을 묻지 않아야 함)", fr.steps)
+	}
+	if gotCmp == nil {
+		t.Error("설정 계획에 전체비교 결과가 넘어가야 함")
+	}
+	out := fr.out.String()
+	for _, want := range []string{"전체비교: 기준 비교서버 " + ua + " — 차이 있는 호스트 1대", "설정: 설정하지 않았습니다", "compare_long.csv"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("요약에 %q 없음:\n%s", want, out)
+		}
+	}
+	for _, s := range []*mockbmc.Server{a, b} {
+		assertOneSession(t, s)
+		assertClean(t, s)
+	}
+}
+
+// q 는 한 단계 뒤로: 프로파일 고르기의 q → 대상 입력. 결과 맨 위의 q→Esc·N·Ctrl+X 는 끝내지 않고, e 는 수정 단계,
+// 거기서 취소하면 결과 보기로 돌아온다. q 두 번은 설정할 항목이 있으면 수정 단계, 거절 뒤 q 두 번이면 끝.
+func TestBiosFlowQuitBackAndSetLoop(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		first  string // 결과 화면 첫 키
+		builds int    // ask-set 때까지 계획을 만든 횟수 (q 두 번 경로는 종료 판단 + 수정 단계로 2번)
+	}{
+		{"e", "q\x1bN\x18e", 1},
+		{"qq", "qq", 2},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+			_, o := flowEnv(t, "")
+			builds := 0
+			swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan {
+				builds++
+				return &setPlan{Items: []setItem{{Host: ua, Attr: "ProcTurbo", From: "Enabled", To: "Disabled", Source: SetSrcProfile}}}
+			}, nil)
+			script := []flowStep{
+				{"targets", "2"},
+				{"targets-paste", ua + "\x04"},
+				{"profile", "q"}, // 프로파일 고르기 q → 대상 입력으로
+				{"targets", "2"},
+				{"targets-paste", ua + "\x04"},
+				{"profile", "2"},
+				{"profile-result", c.first},
+				{"ask-set", "\x18"}, // 7: 수정 단계 취소 → 결과 보기로
+				{"profile-result", "qq"},
+			}
+			fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+				if i == 7 && builds != c.builds {
+					t.Errorf("ask-set 까지 계획 %d번, 기대 %d (e 경로면 q/Esc/N/Ctrl+X 로 끝나지 않았음)", builds, c.builds)
+				}
+			})
+			if err != nil {
+				t.Fatalf("흐름 오류: %v", err)
+			}
+			if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+				t.Errorf("단계 = %v", fr.steps)
+			}
+			sc := fr.screen()
+			for _, want := range []string{"결과 보기로 돌아왔습니다", "q 두 번 종료"} {
+				if !strings.Contains(sc, want) {
+					t.Errorf("화면에 %q 없음", want)
+				}
+			}
+			if c.name == "e" && (!strings.Contains(sc, tuiQuitConfirm) || !strings.Contains(sc, "Ctrl+X 는 진행 중 작업 취소입니다")) {
+				t.Errorf("종료 확인·Ctrl+X 안내가 그려져야 함")
+			}
+			if out := fr.out.String(); !strings.Contains(out, "설정: 설정하지 않았습니다") || !strings.Contains(out, "대상 1대 점검") {
+				t.Errorf("요약:\n%s", out)
+			}
+		})
+	}
+}
+
+// 흐름 중 패닉이어도 터미널(TUI Close)과 prepare 경고 출력 곳은 되돌린 뒤 패닉이 위로 올라간다.
+func TestBiosFlowPanicRestoresTerminal(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua), "VM"
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { panic("계획 패닉") }, nil)
+	oldWarn := prepareWarnOut
+	var flow *biosFlow
+	func() {
+		defer func() {
+			if v := recover(); v != "계획 패닉" {
+				t.Errorf("패닉이 위로 올라가야 함: %v", v)
+			}
+		}()
+		runFlowTC(t, biosTUIArgs{O: o, UserSet: true}, "", []flowStep{{"profile-result", "qq"}}, nil, func(i int, f *biosFlow) { flow = f })
+	}()
+	if flow == nil || !flow.ui.closed || prepareWarnOut != oldWarn {
+		t.Errorf("패닉 뒤 복원: closed=%v warnOut 복원=%v", flow != nil && flow.ui.closed, prepareWarnOut == oldWarn)
 	}
 }
 

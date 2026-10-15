@@ -186,7 +186,7 @@ flowchart TD
 
 ## 7. 통합 점검·전체비교·수정 — `bash bios.sh` (TUI)
 
-터미널에서 인자 없이 실행하면 대상·프로파일을 화면에서 고르고, 호스트당 1회 접속해 BIOS 전체 속성을 읽어 프로파일 결과와 전체비교에 함께 씁니다. 설정은 맨 끝에서 한 번만 묻고 Pending 까지만 합니다(재부팅 없음). 키: ←→ 벤더 탭 · Tab 관리망 그룹 탭 · ↑↓ · PgUp/PgDn · a/o/f/n 필터 · s 요약 · e 수정 · ? 도움말 · q 종료 · Ctrl+X 진행 중 작업 취소 · Ctrl+C/Ctrl+Z 는 무시.
+터미널에서 인자 없이 실행하면 대상·프로파일을 화면에서 고르고, 호스트당 1회 접속해 BIOS 전체 속성을 읽어 프로파일 결과와 전체비교에 함께 씁니다. 설정은 맨 끝에서 묻습니다: 확인 1(차이 항목 전부를 `현재값 -> 변경값 (수정대상)` / `(수정제외: 사유)` 로 보이고 “위 수정대상을 적용할까요?”), 수정제외가 있으면 확인 2(그 항목만 다시 보이고 “수정제외 항목을 확인했습니다. 진행할까요?”), 남의 Pending 이 있으면 포함 여부. 확인 1·2 에서 n/Esc/Ctrl+X 면 아무것도 쓰지 않고 결과 화면으로 돌아옵니다. Pending 까지만 설정하고 재부팅은 없습니다. 서버 고유값·부팅·보안·RAID·PXE·NIC 속성(보호 속성)은 어느 경우에도 설정하지 않고 수정제외로 보입니다. 키: Tab 화면 전환([프로파일 점검] ↔ [전체 설정 비교]) · ←→ 벤더(Enter 로 들어가면 관리망 그룹) · q 한 단계 뒤로(벤더 줄에서는 q 를 한 번 더 눌러야 끝, 설정할 항목이 있으면 끝내기 전에 수정 단계) · Esc 뒤로(벤더 줄에서는 종료 확인 취소) · ↑↓ · PgUp/PgDn · a/o/f/n 필터 · s 요약 · r 비교 기준 다시 선택 · e 수정 · ? 도움말 · Ctrl+X 진행 중 작업 취소 · Ctrl+C/Ctrl+Z 는 무시.
 
 ```mermaid
 flowchart TD
@@ -198,30 +198,43 @@ flowchart TD
     T -->|예| A["1. 대상 입력<br/>대상 파일 지정 또는 붙여넣기<br/>붙여넣기: Ctrl+D 완료 · Ctrl+X 취소"]
     A --> B["2. 프로파일 선택<br/>-profile 로 지정하면 생략"]
     B --> C["3. 접속·조회 (호스트당 로그인 1회, GET 만)<br/>BIOS 전체 속성을 한 번에 읽어<br/>프로파일 판정과 전체비교에 함께 사용<br/>진행 표시 · Ctrl+X 취소 (남은 호스트는 CANCELED)<br/>result.tsv · profile_ CSV 저장"]
-    C --> D["4. 프로파일 결과 TUI<br/>[OK] · [difference] · [N/A] 색상 줄<br/>벤더 탭 · 관리망 그룹 탭 · 필터 · 요약"]
-    D --> E{"q 종료 →<br/>전체비교 결과를 볼까요? (y/n)<br/>e 는 질문 없이 수정 단계로"}
-    E -->|"n 또는 e"| SET
-    E -->|y| R{"기준 선택<br/>-ref · -ref-json · -diff 를 줬으면 묻지 않음"}
+    C --> D["4. 결과 TUI [프로파일 점검] 화면<br/>[OK] · [difference] · [N/A] 색상 줄<br/>←→ 벤더 · Enter 로 관리망 그룹 · q 한 단계 뒤로 · 필터 · 요약"]
+    D --> E{"키"}
+    E -->|"q 두 번 (설정할 항목 있음) 또는 e"| SET
+    E -->|"q 두 번 (항목 없음 · 이미 거절·적용)"| SUM
+    E -->|"Tab (처음)"| R{"기준 선택<br/>-ref · -ref-json · -diff 를 줬으면 묻지 않음<br/>r 키로 다시 고를 때는 항상 메뉴"}
     R -->|"비교서버 hostname<br/>(비우면 diff.txt)"| CP
     R -->|"refs 폴더의 JSON<br/>(bios_export 결과)"| CP
     R -->|"diff.txt (모델별 기준)"| CP
-    CP["전체비교 (대상에는 다시 접속하지 않음)<br/>비교서버만 추가 조회 · 같은 모델끼리만 비교<br/>BIOS 버전이 달라도 속성 이름 목록이 같으면 허용<br/>제외 = ignore_attrs.txt + exclude_attrs<br/>compare_ CSV 저장"] --> CT["전체비교 TUI (같은 화면에서 제자리 갱신)"]
-    CT --> SET
+    R -->|"취소"| D
+    CP["전체비교 (대상에는 다시 접속하지 않음)<br/>비교서버만 추가 조회 · 같은 모델끼리만 비교<br/>BIOS 버전이 달라도 속성 이름 목록이 같으면 허용<br/>기준 서버 자신은 자기 값으로 OK (REFERENCE)<br/>제외 = ignore_attrs.txt + exclude_attrs<br/>compare_ CSV 저장"] --> CT["[전체 설정 비교] 화면<br/>Tab 으로 두 화면을 오감 (화면마다 위치·필터 유지)"]
+    CT -->|"Tab"| D
+    CT -->|"r 기준 다시 선택"| R
+    CT -->|"q 두 번 (설정할 항목 있음) 또는 e"| SET
+    CT -->|"q 두 번 (항목 없음 · 이미 거절·적용)"| SUM
     SET{"-from-dump 인가"}
     SET -->|예| NS(["설정하지 않음 (접속 안 함)"])
-    SET -->|아니오| PLAN["수정 미리보기 (BMC 접속 없음)<br/>프로파일 difference (verified=Y 행만)<br/>+ 전체비교 difference (allcheck_set=on 일 때만)<br/>같은 속성의 목표값이 다르면 설정 안 함 [충돌]<br/>제외 속성 · 위험 속성 · N/A · Dell/HPE/Lenovo 외 제외"]
+    NS --> BK
+    SET -->|아니오| PLAN["수정 계획 (BMC 접속 없음)<br/>프로파일 difference (verified=Y 행만)<br/>+ 전체비교 difference (allcheck_set=on · BIOS 버전이 같은 호스트만)<br/>같은 속성의 목표값이 다르면 설정 안 함 [충돌]<br/>보호 속성 (IQN · IP · ServerName · 부팅 · 보안 · RAID · PXE · NIC) 은 수정제외<br/>제외 속성 · 위험 속성 · N/A · Dell/HPE/Lenovo 외 · BIOS_VER_DIFF 제외<br/>시스템 프로파일 성격 속성이 여럿이면 프로파일 행만<br/>Dell 은 남의 Pending 이 있으면 호스트 제외"]
     PLAN --> EM{"설정할 항목이 있는가"}
-    EM -->|없음| SUM
-    EM -->|있음| Q{"수정할까요? y/n"}
-    Q -->|n| SUM
-    Q -->|y| PQ{"남의 Pending 이 있는 장비가 있는가"}
+    EM -->|없음| NI["설정할 항목이 없습니다<br/>(수정제외 · 충돌 사유가 있으면 미리보기를 보임)"]
+    NI --> BK
+    EM -->|있음| Q1{"확인 1: 차이 항목 전부를 보임<br/>현재값 -> 변경값 (수정대상) / (수정제외: 사유)<br/>위 수정대상을 적용할까요? y/n"}
+    Q1 -->|"n · Esc · Ctrl+X"| BK
+    Q1 -->|y| XQ{"수정제외 항목이 있는가"}
+    XQ -->|있음| Q2{"확인 2: 수정제외 항목만 다시 보임<br/>아래 항목은 변경하지 않습니다<br/>수정제외 항목을 확인했습니다. 진행할까요? y/n"}
+    XQ -->|없음| PQ
+    Q2 -->|"n · Esc · Ctrl+X"| BK
+    Q2 -->|y| PQ
+    PQ{"남의 Pending 이 있는 장비가 있는가"}
     PQ -->|예| PA{"호스트 · 속성 · Pending 값 목록 표시<br/>y 포함 / n 제외 / Ctrl+X 취소"}
     PQ -->|아니오| AP
     PA -->|"y 또는 n"| AP
-    PA -->|"Ctrl+X"| SUM
-    AP["Pending 설정 (재부팅 없음)<br/>호스트마다 재조회 · 레지스트리 검사 · PATCH 1회<br/>Dell 은 Job 최대 1회 · 재시도 없음<br/>호스트별 진행 줄 · Ctrl+X 취소"] --> RC["Pending 재조회로 반영 여부 표시<br/>설정 결과 화면"]
-    RC --> SUM
-    NS --> SUM
+    PA -->|"Ctrl+X"| BK
+    AP["Pending 설정 (재부팅 없음)<br/>보호 속성이 하나라도 섞인 호스트는 접속 없이 PROTECTED_ATTR<br/>호스트마다 재조회 · 레지스트리 검사 · PATCH 1회<br/>Dell 은 Job 최대 1회 · 재시도 없음<br/>호스트별 진행 줄 · Ctrl+X 취소 (시작 전 호스트는 CANCELED)"] --> RC["Pending 재조회로 반영 여부 표시<br/>설정 결과 화면"]
+    RC --> BK2["결과 화면으로 돌아옴 (이후 다시 설정은 막힘)"]
+    BK2 --> D
+    BK(["아무것도 쓰지 않고 결과 화면으로 돌아옴"]) --> D
     SUM(["TUI 를 닫고 요약 출력<br/>OK · difference · N/A · 오류 건수<br/>결과 폴더 · CSV 목록 · 설정 결과"])
 ```
 

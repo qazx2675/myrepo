@@ -225,7 +225,7 @@ func checkAllowed(method, rawPath string, mode Mode, sessPath string) (string, e
 var reDangerAttr = regexp.MustCompile(`(?i)password|passwd|pwd|restore|factory|resetbios|resetcmos|clearcmos|bootorder|bootseq|bootsequence|clear|defaults?$`)
 
 // checkAttributes 는 PATCH 의 Attributes 내부를 검사합니다.
-// 키는 "@" 로 시작할 수 없고 위험 속성명(reDangerAttr)이 아니어야 하며,
+// 키는 "@" 로 시작할 수 없고 위험 속성명(reDangerAttr)·내장 보호 속성(protect.go builtinProtect)이 아니어야 하며,
 // 값은 비어 있지 않은 문자열·숫자·불리언뿐입니다 (객체/배열/null/빈값 금지).
 // 프로파일 허용목록은 단계 6 에서 추가로 강제한다 (여기서는 위험 형태만 걸러냄).
 func checkAttributes(attrs map[string]json.RawMessage) error {
@@ -238,6 +238,9 @@ func checkAttributes(attrs map[string]json.RawMessage) error {
 		}
 		if reDangerAttr.MatchString(name) {
 			return fmt.Errorf("위험 속성명 %q 는 설정할 수 없음", name)
+		}
+		if p := builtinProtectSet.match(name); p != "" { // 내장 보호 목록 (protect.go, 끌 수 없음)
+			return fmt.Errorf("보호 속성 %q (패턴 %s) 는 설정할 수 없음", name, p)
 		}
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.UseNumber()

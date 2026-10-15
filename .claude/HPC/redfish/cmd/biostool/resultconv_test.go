@@ -217,7 +217,7 @@ func TestCompareLines(t *testing.T) {
 		}
 	}
 
-	for _, st := range []string{StatusUnreachable, StatusNoReference, StatusIsReference} {
+	for _, st := range []string{StatusUnreachable, StatusNoReference} {
 		e := &allHost{Target: Target{Hostname: "h2"}, Status: st, Snap: &biosSnap{Status: StatusUnreachable}}
 		if st != StatusUnreachable {
 			e.Snap = &biosSnap{Vendor: "HPE", Attrs: map[string]string{"A": "1"}}
@@ -225,6 +225,20 @@ func TestCompareLines(t *testing.T) {
 		ls := compareLines(e, ign)
 		if len(ls) != 1 || lineKey(ls[0]) != "N/A|-|(N/A)|(N/A)|"+st+"|true" {
 			t.Errorf("%s: %+v", st, ls)
+		}
+	}
+
+	// 기준 호스트 자신: 자기 값을 기준값·현재값으로 OK 줄 (비고 REFERENCE, 제외 속성 빼고 이름순)
+	e := &allHost{Target: Target{Hostname: "ref"}, Status: StatusIsReference, Snap: &biosSnap{Vendor: "HPE", Model: "DL360", BiosVersion: "U46",
+		Attrs: map[string]string{"B": "2", "A": "1", "Turbo": "On", "SystemUuid": "u", "Empty": ""}}}
+	ls := compareLines(e, ign)
+	wantRef := []string{"OK|A|1|1|REFERENCE|false", "OK|B|2|2|REFERENCE|false", "OK|Empty|(N/A)|(N/A)|REFERENCE|false"}
+	if len(ls) != len(wantRef) {
+		t.Fatalf("REFERENCE 줄 %d개, 기대 %d개: %+v", len(ls), len(wantRef), ls)
+	}
+	for i, l := range ls {
+		if k := lineKey(l); k != wantRef[i] || l.Host != "ref" || l.Vendor != "HPE" || l.Kind != KindCompare {
+			t.Errorf("REFERENCE 줄 %d = %s %+v, 기대 %s", i, k, l, wantRef[i])
 		}
 	}
 }
@@ -257,7 +271,12 @@ func TestAllCheckOnHostCompareLines(t *testing.T) {
 	if len(lines[0]) < 5 || strings.Join(diff, ",") != "difference|ProcTurbo|Enabled|Disabled|DIFF|false" {
 		t.Errorf("대상 줄 %d개, 차이 %v", len(lines[0]), diff)
 	}
-	if len(lines[1]) != 1 || !lines[1][0].HostError || lines[1][0].Note != StatusIsReference {
-		t.Errorf("기준 자신: %+v", lines[1])
+	if len(lines[1]) < 5 {
+		t.Errorf("기준 자신은 속성마다 줄: %d개", len(lines[1]))
+	}
+	for _, l := range lines[1] {
+		if l.HostError || l.Tag != TagOK || l.Note != StatusIsReference || l.Expected != l.Current {
+			t.Errorf("기준 자신 줄: %+v", l)
+		}
 	}
 }

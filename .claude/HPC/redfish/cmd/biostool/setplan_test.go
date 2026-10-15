@@ -107,6 +107,16 @@ func itemStatus(t *testing.T, u *unifiedRun, host, attr string) (string, string)
 	return r.status, r.detail
 }
 
+// hasItem 은 목록에 host·attr 항목이 있는지 봅니다 (Protected·Excluded 확인용).
+func hasItem(list []setItem, host, attr string) bool {
+	for _, it := range list {
+		if it.Host == host && it.Attr == attr {
+			return true
+		}
+	}
+	return false
+}
+
 func applyResultsDir(t *testing.T, dir string) map[string]applyRow {
 	t.Helper()
 	return applyResults(t, &checkRun{Dir: dir})
@@ -194,7 +204,7 @@ func TestSetPlanCompareGateConflictDedupe(t *testing.T) {
 	if fmt.Sprint(p.Conflicts) != fmt.Sprint(wantC) {
 		t.Errorf("충돌 = %v", p.Conflicts)
 	}
-	if !hasLine(p.Skipped, ub, "AdminPassword", "위험 속성") || !hasLine(p.Skipped, uc, "속성 목록이 비교서버와 달라 설정 제외") || hasLine(p.Skipped, "allcheck_set") {
+	if !hasItem(p.Protected, ub, "AdminPassword") || !hasLine(p.Skipped, uc, "속성 목록이 비교서버와 달라 설정 제외") || hasLine(p.Skipped, "allcheck_set") {
 		t.Errorf("제외 = %v", p.Skipped)
 	}
 	pre := strings.Join(p.Preview(), "\n")
@@ -316,10 +326,13 @@ func TestApplySetPlanBodiesAndVerify(t *testing.T) {
 	p := buildSetPlan(rc.Conf, u, compareT(t, u, compareRef{Hosts: []string{ua}}))
 	want := []string{
 		ub + "|ProcHyperthreading|Disabled|Enabled|profile|false", ub + "|ProcTurbo|Disabled|Enabled|compare|false",
-		ub + "|SecureBootStatus|Enabled|Disabled|compare|false", ud + "|LogicalProc|Disabled|Enabled|profile|false",
+		ud + "|LogicalProc|Disabled|Enabled|profile|false",
 	}
 	if got := planKeys(p); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("항목 = %v", got)
+	}
+	if !hasItem(p.Protected, ub, "SecureBootStatus") { // 보호 속성 (SecureBoot*) → 설정 항목이 아님
+		t.Errorf("보호 = %v", p.Protected)
 	}
 	out, reps := applyT(t, rc, u, p, false, nil, nil)
 
@@ -328,7 +341,7 @@ func TestApplySetPlanBodiesAndVerify(t *testing.T) {
 		t.Fatalf("b PATCH %d회, 기대 1", len(pb))
 	}
 	if got := fmt.Sprint(patchAttrs(t, pb[0])); got != "map[ProcHyperthreading:Enabled ProcTurbo:Enabled]" {
-		t.Errorf("b PATCH 속성 = %s (ReadOnly SecureBootStatus 는 빠져야 함)", got)
+		t.Errorf("b PATCH 속성 = %s (보호 속성 SecureBootStatus 는 빠져야 함)", got)
 	}
 	if pd := patchBodies(d); len(pd) != 1 || fmt.Sprint(patchAttrs(t, pd[0])) != "map[LogicalProc:Enabled]" {
 		t.Errorf("Dell PATCH = %v", pd)
@@ -341,8 +354,7 @@ func TestApplySetPlanBodiesAndVerify(t *testing.T) {
 		assertSetSafe(t, s)
 	}
 	for _, c := range []struct{ host, attr, st string }{
-		{ub, "ProcHyperthreading", StatusApplied}, {ub, "ProcTurbo", StatusApplied},
-		{ub, "SecureBootStatus", StatusSkippedReadOnly}, {ud, "LogicalProc", StatusApplied},
+		{ub, "ProcHyperthreading", StatusApplied}, {ub, "ProcTurbo", StatusApplied}, {ud, "LogicalProc", StatusApplied},
 	} {
 		if st, det := itemStatus(t, u, c.host, c.attr); st != c.st {
 			t.Errorf("%s %s = %s (%s), 기대 %s", c.host, c.attr, st, det, c.st)
@@ -351,13 +363,13 @@ func TestApplySetPlanBodiesAndVerify(t *testing.T) {
 	if ph := b.Pending()[pendKeyHPE]; ph["ProcHyperthreading"] != "Enabled" || ph["ProcTurbo"] != "Enabled" || len(ph) != 2 {
 		t.Errorf("HPE pending = %v", ph)
 	}
-	if out.OK != 1 || out.Fail != 1 {
+	if out.OK != 2 || out.Fail != 0 {
 		t.Errorf("결과 OK %d 실패 %d", out.OK, out.Fail)
 	}
 	lines := strings.Join(out.Lines, "\n")
 	for _, w := range []string{
-		ud + "  [완료] Pending 목표값 확인 1/1건", ub + "  [미반영] 목표값 확인 2/3건", "ProcTurbo → Enabled  APPLIED (PATCH",
-		"재조회 Pending=Enabled 확인", "SecureBootStatus → Disabled  SKIPPED_READONLY", "재부팅은 하지 않았습니다",
+		ud + "  [완료] Pending 목표값 확인 1/1건", ub + "  [완료] Pending 목표값 확인 2/2건", "ProcTurbo → Enabled  APPLIED (PATCH",
+		"재조회 Pending=Enabled 확인", "재부팅은 하지 않았습니다",
 	} {
 		if !strings.Contains(lines, w) {
 			t.Errorf("결과 줄에 %q 없음:\n%s", w, lines)

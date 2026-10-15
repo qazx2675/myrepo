@@ -12,21 +12,30 @@ package main
 //		j.Set("[2/4 접속·조회 12/100]")                  // 진행 줄 갱신 (200ms 마다·바뀔 때 다시 그림)
 //		select { case <-j.Canceled(): ... }             // Ctrl+X 를 누르면 닫힌다
 //		return nil })
+//	ui.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})  // 결과 보기 위 보기 탭 (Tab 으로 전환)
 //	ui.SetResults("BIOS 점검 결과 — 프로파일 VM", groupLines(lines))
-//	if ui.Ask("전체비교 결과를 볼까요?") == TUIYes { ... ui.SetResults("전체비교 — 기준 host01", vgs2) }
-//	switch ui.Browse() { case TUIEdit: ...수정 메뉴...; case TUIQuit: return }   // q/Esc 또는 e 까지 결과 보기
+//	switch ui.Browse() {                                  // 벤더 줄에서 q 두 번, e, Tab, r 까지 결과 보기
+//	case TUITab: ui.SwitchTab(1); ...처음이면 비교 후 ui.SetResults("전체비교 — 기준 host01", vgs2)...
+//	case TUIEdit: ...수정 메뉴...; case TUIQuit: return }
 //
 // API
 //   - tuiOpen(env tuiEnv) (*TUI, error) / tuiOpenTTY() (*TUI, error) / (*TUI).Close()
-//   - SetResults(title, vgs) 결과 보기로 내용 교체 (탭·필터·스크롤 처음으로), SetText(title, lines) 글 보기로 교체
-//     (미리보기·Pending 목록 등), SetMessage(msg) 맨 아래 안내 줄
-//   - Browse() TUIAction        결과 보기 키 루프: q/Esc → TUIQuit, e → TUIEdit (Ctrl+X 는 무시)
-//   - Ask(q) TUIAnswer          y → TUIYes, n → TUINo, Ctrl+X/Esc → TUIAbort (↑↓ PgUp/PgDn ←→ Tab 으로 결과는 계속 볼 수 있음)
+//   - SetResults(title, vgs) 지금 보기 탭의 결과 보기 내용 교체 (벤더·그룹·필터·스크롤 처음으로), SetText(title, lines)
+//     글 보기로 교체 (미리보기·Pending 목록 등), SetMessage(msg) 맨 아래 안내 줄
+//   - SetTabs(names) / SwitchTab(i) / Tab() 보기 탭: 탭마다 결과 보기 상태(벤더·그룹·단계·필터·스크롤)를 따로 둔다.
+//     SetRefKey(on) 지금 보기 탭에서 r 키(기준 다시 선택)를 받음
+//   - Browse() TUIAction        결과 보기 키 루프: q 는 한 단계 뒤로 — 관리망 그룹 줄이면 벤더 줄로, 글 보기면 TUIQuit
+//     (부른 쪽이 결과 보기로 돌아감), 벤더 줄(맨 위)이면 종료 확인 안내 후 q 를 한 번 더 → TUIQuit (Esc·다른 키는 계속).
+//     Esc 는 관리망 그룹 줄·글 보기에서 q 와 같고 벤더 줄에서는 종료 확인만 취소. e → TUIEdit,
+//     Tab/Shift+Tab → TUITab (보기 탭 2개 이상), r → TUIRef (SetRefKey) (Ctrl+X 는 안내만)
+//   - Ask(q) TUIAnswer          y → TUIYes, n → TUINo, Ctrl+X/Esc → TUIAbort (↑↓ PgUp/PgDn ←→ Enter 로 결과는 계속 볼 수 있음).
+//     묻기 전에 이미 들어와 쌓인 키(미리 친 키)는 버린다 — 확인 질문이 앞서 친 y 로 넘어가지 않게
 //   - InputLine(prompt, init) (string, bool), InputLines(title) ([]string, bool), Choose(title, items) (int, bool)
 //   - Progress(title, fn) error 진행 줄을 띄우고 fn 이 끝날 때까지 결과 보기 키를 받는다. Ctrl+X → j.Canceled() 닫힘.
 //     q/Esc 는 무시("작업 중"). fn 이 패닉하면 화면을 되돌릴 수 있게 호출한 goroutine 에서 다시 패닉한다.
 //   - Quit() bool               SIGTERM/SIGHUP/SIGINT 를 받았거나 입력이 끝났음 — 이후 모든 메서드는 곧바로
 //     돌아온다 (Browse=TUIQuit, Ask=TUIAbort, 입력=ok false, Progress 는 fn 을 취소 상태로 실행). 흐름은 Quit 이면 Close 후 끝낸다.
+//     Progress 가 취소한 작업(진행 중 호스트)을 기다리는 동안 시그널을 또 받으면 기다리지 않고 터미널을 되돌린 뒤 바로 끝낸다(tuiExit).
 //
 // 모든 키는 raw 모드(ISIG 끔)로 받아 Ctrl+C/Ctrl+Z 는 종료하지 않고 안내만 한다. 그리기는 대체 화면 안에서
 // 커서를 맨 위로 옮겨 덮어쓰는 제자리 갱신이다. TUI 가 열려 있는 동안 표준출력·표준오류에 쓰면 화면이 깨지므로
@@ -61,14 +70,26 @@ type tuiEnv struct {
 	Resize  <-chan os.Signal                                        // 창 크기 변경 (nil 가능)
 	Color   bool
 	Close   func() // Close 때 마지막으로 부름 (시그널 해제·tty 닫기, nil 가능)
+	Ready   func() // 키 루프가 화면을 그리고 키를 기다리기 시작할 때 부름 (테스트가 키를 넣는 곳, nil 가능)
 }
+
+// tuiExit 는 끝내는 중에 시그널을 또 받았을 때 부르는 종료입니다 (테스트에서 바꿔 끼운다).
+var tuiExit = os.Exit
+
+// tuiExitSignal 은 두 번째 시그널로 바로 끝낼 때의 종료 코드입니다.
+const tuiExitSignal = 1
+
+// tuiQuitConfirm 은 결과 보기 맨 위(벤더 줄)에서 q 를 한 번 눌렀을 때의 안내입니다.
+const tuiQuitConfirm = "종료하려면 q 를 한 번 더 누르세요 (Esc: 계속)"
 
 // TUIAction 은 Browse 가 끝난 까닭입니다.
 type TUIAction int
 
 const (
-	TUIQuit TUIAction = iota // q/Esc, 시그널, 입력 끝
+	TUIQuit TUIAction = iota // 벤더 줄에서 q 두 번(종료 확인), 글 보기에서 q/Esc(돌아가기), 시그널, 입력 끝
 	TUIEdit                  // e 수정 메뉴
+	TUITab                   // Tab/Shift+Tab 보기 탭 전환 (탭이 2개라 방향은 따로 없음)
+	TUIRef                   // r 기준 다시 선택 (SetRefKey 로 켠 보기에서만)
 )
 
 // TUIAnswer 는 Ask 의 답입니다. 0 값이 TUIAbort 라서 모르면 "취소" 로 다룬다.
@@ -155,13 +176,30 @@ type TUI struct {
 	text     []string
 	textMode bool
 	vi, gi   int  // 선택한 벤더·관리망 그룹
+	inGroup  bool // ←→ 가 움직이는 줄: false 벤더 줄, true 관리망 그룹 줄 (Enter 로 들어가고 q/Esc 로 나옴)
 	filter   rune // tuiFilterAll ...
 	top      int  // 본문 첫 줄 위치
+	refKey   bool // r 키(기준 다시 선택)를 받음
+	quitArm  bool // 벤더 줄에서 q 를 한 번 눌러 종료 확인 중 (다음 q 면 종료, 다른 키면 취소)
 	bodyH    int  // 마지막으로 그린 본문 높이 (PgUp/PgDn 단위)
 	help     bool
 	msg      string
 	prompt   *tuiPrompt
 	job      *TUIJob
+
+	tabs  []string      // 보기 탭 이름 (2개 이상이면 줄을 그리고 Tab 으로 전환)
+	ti    int           // 지금 보기 탭
+	saved []tuiResState // 보기 탭마다 저장한 결과 보기 상태 (지금 탭 것은 위 필드에 있음)
+}
+
+// tuiResState 는 보기 탭 1개의 결과 보기 상태입니다.
+type tuiResState struct {
+	title       string
+	vgs         []VendorGroups
+	vi, gi, top int
+	inGroup     bool
+	filter      rune
+	refKey      bool
 }
 
 // tuiOpen 은 raw 모드·대체 화면으로 들어가고 키 읽기를 시작합니다. raw 모드 실패면 아무것도 쓰지 않고 오류.
@@ -257,10 +295,38 @@ func (u *TUI) readKeys() {
 
 // ---- 내용 ----
 
-// SetResults 는 결과 보기 내용을 바꿉니다 (벤더·그룹·필터·스크롤은 처음으로).
+// SetResults 는 지금 보기 탭의 결과 보기 내용을 바꿉니다 (벤더·그룹·단계·필터·스크롤은 처음으로, r 키 끔).
 func (u *TUI) SetResults(title string, vgs []VendorGroups) {
 	u.title, u.vgs, u.text, u.textMode = title, vgs, nil, false
-	u.vi, u.gi, u.top, u.filter = 0, 0, 0, tuiFilterAll
+	u.vi, u.gi, u.top, u.filter, u.inGroup, u.refKey = 0, 0, 0, tuiFilterAll, false, false
+}
+
+// SetRefKey 는 지금 보기 탭에서 r 키(Browse → TUIRef)를 받을지 정합니다.
+func (u *TUI) SetRefKey(on bool) { u.refKey = on }
+
+// SetTabs 는 결과 보기 위의 보기 탭입니다 (지금 내용은 0번 탭, 다른 탭은 빈 결과 보기로 시작).
+func (u *TUI) SetTabs(names []string) {
+	u.tabs, u.ti, u.saved = names, 0, make([]tuiResState, len(names))
+}
+
+// Tab 은 지금 보기 탭 번호입니다.
+func (u *TUI) Tab() int { return u.ti }
+
+// SwitchTab 은 지금 결과 보기 상태를 저장하고 i 번 보기 탭의 상태로 바꿉니다 (글 보기였어도 결과 보기로 돌아감).
+func (u *TUI) SwitchTab(i int) {
+	if i < 0 || i >= len(u.tabs) {
+		return
+	}
+	if i != u.ti {
+		u.saved[u.ti] = tuiResState{u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey}
+		s := u.saved[i]
+		if s.title == "" {
+			s.title, s.filter = u.tabs[i], tuiFilterAll
+		}
+		u.ti = i
+		u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey = s.title, s.vgs, s.vi, s.gi, s.top, s.inGroup, s.filter, s.refKey
+	}
+	u.text, u.textMode = nil, false
 }
 
 // SetText 는 글 줄 보기로 바꿉니다 (탭·필터 없음, 스크롤만).
@@ -281,6 +347,9 @@ func (u *TUI) run(handle func(k tuiKey) bool, tick <-chan time.Time, wake <-chan
 		return
 	}
 	u.draw()
+	if u.env.Ready != nil {
+		u.env.Ready()
+	}
 	for {
 		select {
 		case k := <-u.keys:
@@ -323,7 +392,7 @@ func (u *TUI) key(k tuiKey, handle func(tuiKey) bool) bool {
 		return false
 	}
 	if k.isRune(tuiCtrlC, tuiCtrlZ) {
-		u.msg = "종료는 q 를 누르세요"
+		u.msg = "종료는 q 를 두 번 누르세요"
 		if u.prompt != nil || u.job != nil {
 			u.msg = "취소는 Ctrl+X 를 누르세요"
 		}
@@ -341,16 +410,43 @@ func (u *TUI) tick(d time.Duration) (<-chan time.Time, func()) {
 	return t.C, t.Stop
 }
 
-// Browse 는 결과 보기 키 루프입니다: q/Esc → TUIQuit, e → TUIEdit.
+// Browse 는 결과 보기 키 루프입니다: q 는 한 단계 뒤로 — 관리망 그룹 줄이면 벤더 줄로, 글 보기면 TUIQuit(돌아가기),
+// 벤더 줄(맨 위)이면 종료 확인 안내를 띄우고 q 를 한 번 더 누르면 TUIQuit (Esc·다른 키는 확인 취소, 계속 보기).
+// Esc 는 벤더 줄에서 끝내지 않는다. e → TUIEdit, Tab/Shift+Tab → TUITab (보기 탭 2개 이상), r → TUIRef (SetRefKey 로 켠 보기).
 func (u *TUI) Browse() TUIAction {
 	act := TUIQuit
+	u.quitArm = false
+	defer func() { u.quitArm = false }()
 	u.run(func(k tuiKey) bool {
+		armed := u.quitArm
+		u.quitArm = false // 종료 확인은 바로 다음 키 하나에만 (key() 가 안내 줄도 지움)
 		switch {
+		case k.isRune('q', 'Q') && !u.textMode && !u.inGroup:
+			if armed {
+				act = TUIQuit
+				return true
+			}
+			u.quitArm, u.msg = true, tuiQuitConfirm
+			return false
+		case k.k == tkEsc && !u.textMode && !u.inGroup: // 맨 위의 Esc 는 종료 확인 취소만
+			return false
 		case k.k == tkEsc || k.isRune('q', 'Q'):
-			act = TUIQuit
+			if u.back() {
+				return false
+			}
+			act = TUIQuit // 글 보기: 결과 보기로 돌아가기
 			return true
+		case k.isRune(tuiCtrlX):
+			u.msg = "Ctrl+X 는 진행 중 작업 취소입니다 — 종료는 q 를 두 번 누르세요"
+			return false
 		case k.isRune('e', 'E'):
 			act = TUIEdit
+			return true
+		case (k.isRune(tuiTab) || k.k == tkBackTab) && !u.textMode && len(u.tabs) > 1:
+			act = TUITab
+			return true
+		case k.isRune('r', 'R') && !u.textMode && u.refKey:
+			act = TUIRef
 			return true
 		}
 		u.navKey(k) // Ctrl+X 등 나머지는 무시
@@ -360,7 +456,8 @@ func (u *TUI) Browse() TUIAction {
 }
 
 // Progress 는 fn 을 다른 goroutine 에서 돌리며 진행 줄을 보여 줍니다. 그동안 결과 보기 키는 그대로 동작하고
-// Ctrl+X 는 취소 요청(j.Canceled 닫힘), q/Esc 는 무시합니다. fn 이 끝날 때까지 기다려 그 오류를 돌려줍니다.
+// Ctrl+X 는 취소 요청(j.Canceled 닫힘), q/Esc 는 관리망 그룹 줄에서 벤더 줄로 돌아가기만 하고 끝내지 않습니다
+// (Tab·e·r 도 무시). fn 이 끝날 때까지 기다려 그 오류를 돌려줍니다.
 func (u *TUI) Progress(title string, fn func(j *TUIJob) error) error {
 	j := &TUIJob{status: title, wake: make(chan struct{}, 1), cancel: make(chan struct{})}
 	if u.quit {
@@ -381,6 +478,7 @@ func (u *TUI) Progress(title string, fn func(j *TUIJob) error) error {
 		case k.isRune(tuiCtrlX):
 			j.doCancel()
 			u.msg = "취소를 요청했습니다 — 작업이 멈추기를 기다리는 중"
+		case (k.k == tkEsc || k.isRune('q', 'Q')) && u.back():
 		case k.k == tkEsc || k.isRune('q', 'Q', 'e', 'E'):
 			u.msg = "작업 중입니다 — 취소는 Ctrl+X"
 		default:
@@ -392,7 +490,22 @@ func (u *TUI) Progress(title string, fn func(j *TUIJob) error) error {
 	if u.quit {
 		j.doCancel()
 	}
-	<-fin
+	// 취소한 작업(진행 중 호스트)이 끝나기를 기다리는 동안에도 시그널을 받는다: 끝내는 중에 또 받으면
+	// 기다리지 않고 터미널을 되돌린 뒤 바로 끝낸다 (시그널이 버려져 종료가 늦어지지 않게).
+	for waiting := true; waiting; {
+		select {
+		case <-fin:
+			waiting = false
+		case <-u.env.Signals:
+			if !u.quit { // 첫 시그널: 작업 취소 후 계속 기다림
+				u.quit = true
+				j.doCancel()
+				continue
+			}
+			u.Close()
+			tuiExit(tuiExitSignal)
+		}
+	}
 	u.job = nil
 	if pv != nil {
 		panic(pv)
@@ -400,8 +513,10 @@ func (u *TUI) Progress(title string, fn func(j *TUIJob) error) error {
 	return err
 }
 
-// Ask 는 y/n 질문입니다. 방향키·PgUp/PgDn·Tab 으로 뒤의 결과는 계속 볼 수 있다.
+// Ask 는 y/n 질문입니다. 방향키·PgUp/PgDn·Enter 로 뒤의 결과는 계속 볼 수 있다.
+// 질문을 띄우기 전에 이미 들어와 쌓인 키는 버린다 (앞 화면에서 미리 친 y 가 확인으로 쓰이지 않게).
 func (u *TUI) Ask(question string) TUIAnswer {
+	u.drainKeys()
 	ans := TUIAbort
 	u.prompt = &tuiPrompt{kind: tpYesNo, title: question}
 	defer func() { u.prompt = nil }()
@@ -424,6 +539,20 @@ func (u *TUI) Ask(question string) TUIAnswer {
 		return false
 	}, nil, nil, nil)
 	return ans
+}
+
+// drainKeys 는 이미 들어와 쌓인 키를 버립니다 (입력 끝이면 Quit).
+func (u *TUI) drainKeys() {
+	for {
+		select {
+		case k := <-u.keys:
+			if k.k == tkEOF {
+				u.quit = true
+			}
+		default:
+			return
+		}
+	}
 }
 
 // InputLine 은 한 줄 입력입니다 (Enter 확인, Ctrl+X/Esc 취소). 앞뒤 공백은 지운다.
@@ -548,7 +677,7 @@ func (p *tuiPrompt) edit(k tuiKey) {
 
 // ---- 결과 보기 키 ----
 
-// navKey 는 결과 보기 이동·탭·필터·도움말 키입니다.
+// navKey 는 결과 보기 이동(벤더·관리망 그룹·스크롤)·필터·도움말 키입니다. 보기 탭(Tab)·뒤로(q/Esc)는 부르는 쪽에서.
 func (u *TUI) navKey(k tuiKey) {
 	page := tuiMaxInt(u.bodyH, 1)
 	switch {
@@ -567,23 +696,33 @@ func (u *TUI) navKey(k tuiKey) {
 	case k.k == tkEnd || k.isRune('G'):
 		u.top = u.bodyCount()
 	case u.textMode || len(u.vgs) == 0:
-	case k.k == tkLeft && u.vi > 0:
-		u.vi, u.gi, u.top = u.vi-1, 0, 0
-	case k.k == tkRight && u.vi < len(u.vgs)-1:
-		u.vi, u.gi, u.top = u.vi+1, 0, 0
-	case k.isRune(tuiTab) || k.k == tkBackTab:
-		n := len(u.vgs[u.vi].Groups)
-		if n > 1 {
-			d := 1
-			if k.k == tkBackTab {
-				d = n - 1
-			}
-			u.gi, u.top = (u.gi+d)%n, 0
+	case k.k == tkEnter && !u.inGroup: // 벤더 안으로: 이제 ←→ 가 관리망 그룹을 움직인다
+		if len(u.vgs[u.vi].Groups) > 1 {
+			u.inGroup = true
+		} else {
+			u.msg = "이 벤더는 관리망 그룹이 하나뿐입니다"
 		}
+	case u.inGroup && k.k == tkLeft && u.gi > 0:
+		u.gi, u.top = u.gi-1, 0
+	case u.inGroup && k.k == tkRight && u.gi < len(u.vgs[u.vi].Groups)-1:
+		u.gi, u.top = u.gi+1, 0
+	case !u.inGroup && k.k == tkLeft && u.vi > 0:
+		u.vi, u.gi, u.top = u.vi-1, 0, 0
+	case !u.inGroup && k.k == tkRight && u.vi < len(u.vgs)-1:
+		u.vi, u.gi, u.top = u.vi+1, 0, 0
 	case k.isRune(tuiFilterAll, tuiFilterOK, tuiFilterDiff, tuiFilterNA, tuiFilterSum):
 		u.filter, u.top = k.r, 0
 	}
 	u.clampTop()
+}
+
+// back 은 관리망 그룹 줄에서 벤더 줄로 한 단계 돌아갑니다 (돌아갔으면 true, 이미 맨 위 단계면 false).
+func (u *TUI) back() bool {
+	if u.textMode || !u.inGroup {
+		return false
+	}
+	u.inGroup = false
+	return true
 }
 
 func (u *TUI) clampTop() {
@@ -642,6 +781,9 @@ func (u *TUI) frame(w, h int) []string {
 	}
 	var head, body []string
 	g := u.group()
+	if !u.textMode && len(u.tabs) > 1 {
+		head = append(head, tuiTabsLine(color, w, "화면", u.tabs, u.ti, "Tab 전환", false))
+	}
 	switch {
 	case u.textMode:
 		for _, l := range u.text {
@@ -654,16 +796,16 @@ func (u *TUI) frame(w, h int) []string {
 		for i, vg := range u.vgs {
 			names[i] = tuiDash(vg.Vendor)
 		}
-		head = append(head, tuiTabsLine(color, w, "벤더", names, u.vi, ""))
+		head = append(head, tuiTabsLine(color, w, "벤더", names, u.vi, "", !u.inGroup))
 		hosts := fmt.Sprintf("호스트 %d대", len(g.Hosts))
 		if gs := u.vgs[u.vi].Groups; len(gs) > 1 {
 			gn := make([]string, len(gs))
 			for i, x := range gs {
 				gn[i] = tuiDash(x.Name)
 			}
-			head = append(head, tuiTabsLine(color, w, "관리망", gn, u.gi, hosts))
+			head = append(head, tuiTabsLine(color, w, "관리망", gn, u.gi, hosts, u.inGroup))
 		} else {
-			head = append(head, tuiSegLine(color, w, tuiSeg{" 관리망  ", tuiStBold}, tuiSeg{tuiDash(g.Name), ""}, tuiSeg{"   " + hosts, tuiStGray}))
+			head = append(head, tuiSegLine(color, w, tuiSeg{"   관리망  ", tuiStBold}, tuiSeg{tuiDash(g.Name), ""}, tuiSeg{"   " + hosts, tuiStGray}))
 		}
 		var tbl []string
 		if u.filter == tuiFilterSum {
@@ -737,14 +879,36 @@ func (u *TUI) hintItems() []string {
 		}
 	}
 	nav := []string{"↑↓ 한 줄", "PgUp/PgDn 한 화면"}
-	if !u.textMode {
-		nav = append([]string{"←→ 벤더", "Tab 관리망"}, nav...)
+	quit := "q 두 번 종료" // 맨 위(벤더 줄)는 종료 확인
+	if u.textMode {
+		quit = "q/Esc 돌아가기"
+	} else {
+		var lv []string // 지금 단계(벤더 줄 / 관리망 그룹 줄)의 키를 앞에
+		if len(u.tabs) > 1 && u.job == nil {
+			lv = append(lv, "Tab 화면 전환")
+		}
+		switch {
+		case u.inGroup:
+			lv, quit = append(lv, "←→ 관리망"), "q/Esc 벤더로"
+		case len(u.vgs) > 0:
+			lv = append(lv, "←→ 벤더")
+			if u.vi < len(u.vgs) && len(u.vgs[u.vi].Groups) > 1 {
+				lv = append(lv, "Enter 관리망 고르기")
+			}
+		}
+		nav = append(lv, nav...)
 		nav = append(nav, "a 전체", "o OK만", "f difference만", "n N/A만", "s 요약")
+		if u.refKey && u.job == nil {
+			nav = append(nav, "r 기준 다시 선택")
+		}
 	}
 	if u.job != nil {
+		if u.inGroup {
+			nav = append(nav, quit)
+		}
 		return append(nav, "Ctrl+X 작업 취소", "? 도움말")
 	}
-	return append(nav, "e 수정 메뉴", "? 도움말", "q 종료")
+	return append(nav, "e 수정 메뉴", "? 도움말", quit)
 }
 
 // promptLines 는 질문·입력 상자 줄입니다 (여러 줄 입력·고르기는 화면 높이의 1/3·1/2 까지).

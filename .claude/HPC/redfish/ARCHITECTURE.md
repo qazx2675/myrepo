@@ -9,7 +9,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | 파일 | 역할 |
 |---|---|
 | `main.go` | CLI 진입점. 서브커맨드(`bios`·`check`·`allcheck`·`dump`·`encrypt`·`ucsm`·`account`)·공통 플래그·`usageText`, `prepare`(conf → 대상 해석 → 비밀번호 복호화), 실행 요약 출력 |
-| `conf.go` | `bios.conf` 파서와 기본값(`Config`). 알 수 없는 키·비밀번호 키는 오류. 통합 점검 키 `exclude_attrs`·`allcheck_set`·`refs_dir`·`auto_profile` 포함 |
+| `conf.go` | `bios.conf` 파서와 기본값(`Config`). 알 수 없는 키·비밀번호 키는 오류. 통합 점검 키 `exclude_attrs`·`allcheck_set`·`protect_attrs`·`refs_dir`·`auto_profile` 포함 |
 | `account.go` | `biostool account create|change` 본체: 점검(`probeCreate`)·생성(`createOnHost`)·검증·롤백(`rollbackCreate`)·변경(`changeOnHost`), 벤더별 생성 단계(`planCreate`), 워커풀+웜업(`runAcctPool`), 결과 `account_result.tsv`·요약·Y/n |
 | `account_gate.go` | 계정 쓰기 본문 검사(`checkAccountCreateBody`·`checkAccountPatchBody`): 허용 키·값·형태를 고정 (`redfish.go` `checkBody` 가 호출) |
 | `account_input.go` · `account_tty_linux.go` · `account_tty_other.go` | 새 비밀번호 터미널 입력(`*` 표시·2번 입력·붙여넣기 거부), csh 명령 인용(`cshQuote`), 입력 버퍼 비우기. raw 입력은 리눅스 전용(`syscall` ioctl) |
@@ -19,12 +19,12 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `modelnorm.go` | 모델명 정규화 `normalizeModel`(프로파일의 model 열과 BMC 가 보고한 Model 을 같은 키로 맞추는 **한곳의 규칙**, allcheck 도 사용) |
 | `resolve.go` | 대상 목록 해석: `user.txt` 파싱, `/etc/hosts` 에서 `이름-m` 조회, `:포트`, 재시도 목록(`loadRetryList`), `NO_HOSTS_ENTRY` |
 | `cryptutil.go` | AES-256-GCM 비밀번호 암복호화(`pass.enc`+`key.bin`, 0600), `encrypt` 서브커맨드의 본체 |
-| `redfish.go` | **BMC 와 통신하는 유일한 HTTP 클라이언트.** 세션 1회·`checkAllowed`(호출 허용목록)·`checkBody`(본문 검사)·타임아웃·재시도·백오프·401 즉시 중단·오류 상태 분류(`UNREACHABLE`·`TIMEOUT`·`BMC_ERROR`·`AUTH_FAIL`·`UNSUPPORTED`·`HTTP_ERROR`)·비밀번호 마스킹 |
+| `redfish.go` | **BMC 와 통신하는 유일한 HTTP 클라이언트.** 세션 1회·`checkAllowed`(호출 허용목록)·`checkBody`(본문 검사)·타임아웃·재시도·백오프·401 즉시 중단·오류 상태 분류(`UNREACHABLE`·`TIMEOUT`·`BMC_ERROR`·`AUTH_FAIL`·`UNSUPPORTED`·`HTTP_ERROR`)·비밀번호 마스킹. PATCH 본문 검사 `checkAttributes` 가 위험 속성명 외에 내장 보호 속성(`protect.go`)도 거부 |
 | `inspect.go` | 시스템 판별 `detectSystem`(ServiceRoot → Systems → Bios → Settings 경로 → 속성 레지스트리 위치), Bios 속성·레지스트리 해석, 벤더 정규화 `normalizeVendor`, **표준 4항목 이름 후보 키워드 `stdKeywords`** |
-| `sweep.go` | 호스트 순회 워커풀과 **AUTH_FAIL 차단기**(웜업 직렬 → 병렬, `SKIPPED_AUTH_STOP`). check·dump·allcheck·set·ucsm 이 공유 |
+| `sweep.go` | 호스트 순회 워커풀과 **AUTH_FAIL 차단기**(웜업 직렬 → 병렬, `SKIPPED_AUTH_STOP`). check·dump·allcheck·set·ucsm 이 공유. 호스트 처리 중 패닉은 `onPanic` 으로 그 호스트만 오류(`BMC_ERROR`, `panicDetail`)로 남기고 나머지를 계속함(콜백이 없으면 모두 끝낸 뒤 호출한 goroutine 에서 다시 패닉) |
 | `check.go` | `check` 본체: 호스트별 판정(`judge`), 상태 상수(OK·FAIL·UNVERIFIED·PENDING_*·MAPPING_MISSING·NO_DUMP), Dell BIOS Job 판별, `-from-dump` 읽기, `result.tsv`·`ok.txt`·`fail.tsv`·`retry.txt`·`run_info.txt` 기록 |
 | `report.go` | `check` 의 터미널 리포트(`[OK]`·`[FAIL 상세]`·`[설정 불가]`·`[기타 오류]`)와 **Y/N 확인**(`confirmApply`, 비대화형 입력은 N, `-stdin-ok`) |
-| `set.go` | **BMC 에 쓰는 유일한 경로.** 입력 재검증·벤더 제한·재조회·레지스트리 사전검증·시스템 프로파일 종속 처리·PATCH 1회·Dell Job POST·반영 재조회, `-dry-run`(`buildPlan`/`writePlan` 공유), `apply_*` 결과 파일과 설정 리포트 |
+| `set.go` | **BMC 에 쓰는 유일한 경로.** 입력 재검증·벤더 제한·**보호 속성 검사(걸리면 호스트 통째로 `PROTECTED_ATTR`, PATCH 직전 본문 재검사)**·재조회·레지스트리 사전검증(전체비교 항목은 Enumeration·Integer·Boolean 만)·시스템 프로파일 종속 처리·PATCH 1회·Dell Job POST·반영 재조회, `-dry-run`(`buildPlan`/`writePlan` 공유), `apply_*` 결과 파일과 설정 리포트 |
 | `dump.go` | `dump`(`xml.sh`) 본체: GET 전용 좁은 순회, 호스트당 경로 상한, JSON 저장(`safeSeg`/`dirPart`), `index.tsv`, 사람이 읽는 요약 |
 | `allcheck.go` | `allcheck`(`all_bios_check.sh`) 본체: 기준(`diff.txt`)·제외 속성(`ignore_attrs.txt`)·모델별 분류·Attributes 전체 비교·`all_diff.tsv`·`summary.tsv` |
 | `allreport.go` | `allcheck` 의 터미널 리포트(모델 그룹·속성별 집계·특이사항·분류 불가) |
@@ -33,19 +33,20 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `unified.go` | **수집 통합 엔진** `runUnified`: 호스트당 1회 접속(읽기 전용)으로 프로파일 판정 + BIOS 전체 속성 스냅샷을 함께 얻고, `Compare` 로 대상에 다시 접속하지 않고 전체비교(기준 = 비교서버 hostname / refs JSON / `diff.txt`, 같은 모델끼리만, 속성 이름 목록 검사 `sameAttrNames`), `WriteOutputs` 로 CSV 저장, `listRefJSON` 으로 refs 폴더 목록 |
 | `resultline.go` | 화면·CSV 공통 결과 줄 `ResultLine`, 태그 3종(`tagFor`: OK / difference / N/A)·`showValue`(`-`→`(N/A)`), 벤더 → 관리 컨트롤러 그룹 나누기 `groupLines`(BIOS 속성 이름 목록이 같으면 한 그룹으로 합침) |
 | `resultconv.go` | 프로파일 점검 결과(`hostCheck`)와 전체비교 결과(`allHost`)를 `ResultLine` 으로 바꿈 (비고 = 원래 상태명) |
-| `lineout.go` | 색상 줄 렌더러 `formatLine`(`[태그] host↹ip↹…↹기준값↹현재값↹비고`, 기준값은 항상 초록, 호스트 오류는 빨강), `NO_COLOR`·tty 판단 `colorEnabled` |
-| `csvout.go` | CSV 4종 저장(UTF-8 BOM, 0600): `summary.csv`·`wide_hosts_<벤더>_<그룹>.csv`·`wide_attrs_<벤더>_<그룹>.csv`·`long.csv` (`profile_`/`compare_` 접두어) |
-| `checkres.go` | auto_setup 이 읽는 `check.res_<user>` 한 줄 결과(`host: OK` / `host: FAIL difference N건 (...)` / `host: FAIL N/A 접속실패(...)`) 생성·기록 |
+| `lineout.go` | 색상 줄 렌더러 `formatLine`(`[태그] host↹ip↹…↹기준값↹현재값↹비고`, 기준값은 항상 초록, 호스트 오류는 빨강), `NO_COLOR`·tty 판단 `colorEnabled`. `lineSafe` 가 BMC·호스트에서 온 글자의 제어 문자를 공백으로 바꿈(터미널 이스케이프 주입 방지) |
+| `csvout.go` | CSV 4종 저장(UTF-8 BOM, 0600): `summary.csv`·`wide_hosts_<벤더>_<그룹>.csv`·`wide_attrs_<벤더>_<그룹>.csv`·`long.csv` (`profile_`/`compare_` 접두어). 모든 칸은 `csvSafe` 를 거쳐 수식 주입(`=` `+` `@` TAB CR, 음수가 아닌 `-` 시작)을 `'` 로 막음 |
+| `checkres.go` | auto_setup 이 읽는 `check.res_<user>` 한 줄 결과(`host: OK` / `host: FAIL difference N건 (...)` / `host: FAIL N/A 접속실패(...)`) 생성·기록. `removeCheckRes`(시작 때 이전 결과 삭제)·`writeFileAtomic`(임시 파일 + rename)·`lineSafe` 로 옛 결과를 읽거나 반쯤 쓴 파일을 보지 않게 함 |
 | `progress.go` | 진행 표시 `[1/4 설정 확인] [2/4 접속·조회 123/1000 · OK … difference … N/A … 오류 …]`: 터미널은 한 줄 제자리 갱신, 비대화형은 10초마다 한 줄, TUI 안에서는 `TUIJob` 으로 전달 |
 | `tui_keys.go` | TUI 키 파서(방향키·PgUp/PgDn·Home/End·Shift+Tab·Ctrl 키·UTF-8 문자) |
 | `tui_tty_linux.go` · `tui_tty_other.go` | raw 터미널·창 크기·SIGWINCH(리눅스, `syscall` 만 사용) / 리눅스가 아닌 개발 빌드용 자리 채움(평문 출력으로 대신) |
 | `tui_render.go` | 화면 조각을 만드는 순수 함수: 한글 표시 폭, 색, 결과 줄·요약 표, 탭 줄, 키 안내 줄바꿈, 도움말 텍스트(`tuiHelpLines`), 비 tty 평문 출력 |
-| `tui_view.go` | TUI 본체: 대체 화면·제자리 갱신, `Browse`(결과 보기, ←→ 벤더 탭·Tab 그룹 탭·필터 a/o/f/n/s·`e`·`?`·`q`)·`Ask`·`InputLine(s)`·`Choose`·`Progress`, Ctrl+C/Ctrl+Z 무시(“종료는 q”)·Ctrl+X 작업 취소 |
-| `tui_flow.go` | `biostool bios` 대화형 흐름: 대상 입력 → 프로파일 선택 → 접속·조회 → 프로파일 결과 → “전체비교 결과를 볼까요?” → 기준 선택 → 전체비교 화면 → 수정 미리보기·“수정할까요?”·남의 Pending 질문 → 설정·재조회 → 요약 |
-| `setplan.go` | **설정 계획·적용**: `buildSetPlan`(BMC 접속 없음. 프로파일 `verified=Y` difference + `allcheck_set=on` 일 때만 전체비교 difference, 충돌 `[충돌]`, 제외 목록·위험 속성·N/A·쓰기 불가 벤더 제외, 남의 Pending 목록) / `applySetPlan`(`set.go` 의 `runHost` 를 그대로 타서 재조회·레지스트리 검사·PATCH 1회·Pending 재조회. 재부팅 없음, TUI 흐름에서만 호출) |
+| `tui_view.go` | TUI 본체: 대체 화면·제자리 갱신, `Browse`(결과 보기, ←→ 벤더 탭·Tab 그룹 탭·필터 a/o/f/n/s·`e`·`?`·`q`)·`Ask`·`InputLine(s)`·`Choose`·`Progress`, Ctrl+C/Ctrl+Z 무시(“종료는 q 를 두 번 누르세요”)·Ctrl+X 작업 취소. 벤더 줄 `q` 두 번 종료(다른 키는 확인 취소), `Ask` 는 질문 전에 쌓인 키를 버리고, 취소 대기 중 두 번째 시그널은 터미널을 되돌리고 바로 종료(`tuiExit`), `Progress` 의 패닉은 호출 goroutine 에서 다시 패닉 |
+| `tui_flow.go` | `biostool bios` 대화형 흐름: 대상 입력 → 프로파일 선택 → 접속·조회 → 결과 화면(Tab 으로 [프로파일 점검] ↔ [전체 설정 비교], 처음 넘어갈 때 기준 선택·비교, r 로 기준 다시 선택) → 벤더 줄에서 q 두 번(또는 e) → 수정 확인 1(차이 항목 전부 `현재값 -> 변경값 (수정대상)`/`(수정제외: 사유)`, “위 수정대상을 적용할까요?”) → 수정 확인 2(수정제외가 있을 때만, “수정제외 항목을 확인했습니다. 진행할까요?”) → 남의 Pending 질문 → 설정·재조회 → 요약. `setStep` 이 이 순서를 맡고 n/Esc/Ctrl+X 면 아무것도 쓰지 않고 결과 보기로 돌아옴. `declined`/`applied` 로 종료 때 재질문·재설정을 막고, 흐름 중 패닉이어도 터미널을 되돌림 |
+| `setplan.go` | **설정 계획·적용**: `buildSetPlan`(BMC 접속 없음. 프로파일 `verified=Y` difference + `allcheck_set=on` 일 때만 전체비교 difference, 충돌 `[충돌]`, **보호 속성(`protect.go`)은 항목이 되지 않고 수정제외**, 제외 목록·위험 속성·N/A·쓰기 불가 벤더·BIOS 버전이 다른 비교서버(`BIOS_VER_DIFF`) 제외, 시스템 프로파일 성격 속성이 여럿이면 프로파일 행만, 남의 Pending 목록(Dell 은 남의 Pending 이 있으면 호스트 제외). 확인 화면 줄 `ConfirmLines`/`ExcludedLines`) / `applySetPlan`(`set.go` 의 `runHost` 를 그대로 타서 재조회·레지스트리 검사·PATCH 1회·Pending 재조회. 재부팅 없음, TUI 흐름에서만 호출) |
+| `protect.go` | **절대 바꾸지 않는 속성(보호 속성)**: 내장 패턴 `builtinProtect`(iSCSI/IQN·IP/네트워크·이름/식별·부팅(BootMode·PXE·URL/HTTP 부팅 포함)·보안(SecureBoot·TPM·비밀번호)·스토리지(RAID·SATA·NVMe·VMD)·NIC/LOM/OCP/WoL/OptionRom/Slot)은 코드에 고정이라 conf 로 끌 수 없고, `bios.conf` `protect_attrs` 는 `newProtectSet` 으로 더하기만 함. `match`/`why` 가 `setplan.go`·`set.go`·`redfish.go` 세 곳에서 쓰임 |
 | `fallback.go` | **2순위(예비) 계정.** `/etc/rf_tool/rf.conf`(`-rf-conf`·`RF_TOOL_CONF`) 로드·검증(`loadRFConf`·`parseRFConf`), 비인증 ServiceRoot 로 벤더 식별(`vendorFromServiceRoot`), 1순위가 401 일 때만 1회 재로그인하는 `loginWithFallback`. 비밀번호는 클로저 안에만 두고 출력하지 않음 |
 | `retry.go` | `-retry-from`: 이전 결과 읽기·검증, 재시도 대상만 다시 실행한 결과를 이전 결과와 병합(`merged_*`) |
-| `*_test.go` | 단위·통합 테스트. 보안 규칙은 `redfish_security_test.go`·`set_security_test.go`, 수천 대 시험은 `scale_test.go`, mock 연동은 `mock_integration_test.go` |
+| `*_test.go` | 단위·통합 테스트. 보안 규칙은 `redfish_security_test.go`·`set_security_test.go`·`protect_test.go`(보호 패턴이 `profiles/*.tsv` 속성을 막지 않는지 포함), 수정 확인 흐름은 `setstep_test.go`·`setplan_test.go`·`tui_flow_test.go`, 수천 대 시험은 `scale_test.go`, mock 연동은 `mock_integration_test.go` |
 
 **Cisco UCSM(XML API) 점검 — `ucsm.go` + `internal/ucsmxml/`** (`biostool ucsm`, 래퍼 `ucsm_check.sh`, 읽기 전용·설정 기능 없음). 대상은 블레이드 BMC 가 아니라 UCSM(FI VIP) 주소이고, 기대값은 `bios_json/standard_map/standard_bios_map_xml.tsv`(`-xml-map`)입니다. `ucsm.go` 는 매핑 TSV 해석(`parseUcsmMap`, `# UNMAPPED` 줄 포함), 모델 키 `ucsmModelKey`(TSV `UCS B200 M5` ↔ PID `UCSB-B200-M5` 를 맞추는 한곳의 규칙), 서버별 실효값 수집(dn 이 `<서버 dn>/bios/bios-settings/…` 인 인스턴스만, BIOS 정책 `bios-prof-*` 는 무시), 판정(OK·FAIL·UNVERIFIED·MAPPING_MISSING·UNSUPPORTED, 호스트 단위 AUTH_FAIL·UNREACHABLE·TIMEOUT·XML_ERROR)과 터미널 요약을 맡고, 호스트 순회·AUTH_FAIL 차단기는 `sweep.go`, 결과 폴더·0600 쓰기는 `check.go` 의 `newRunDir`·`writeTSV` 를 그대로 씁니다. UCSM 과의 통신은 **`internal/ucsmxml` 패키지만** 하며, 공개된 호출은 `Login`·`ResolveClass`·`Logout` 뿐이고 모든 요청은 전송 직전 단일 관문 `gate` 를 지납니다: 루트가 `aaaLogin`·`configResolveClass`·`aaaLogout` 이 아니거나, 자식 요소·추가 속성·남의 쿠키·`inHierarchical≠false`·허용목록(`computeBlade` + 매핑 TSV 의 `bios*` 클래스) 밖 classId 면 보내지 않고 `ErrNotAllowed`(`configConfMo`·`configResolveDn` 등 쓰기·임의 조회는 만들 수 없음). 별도 패키지로 둔 이유는 `redfish_test.go` 의 구조 가드(“`cmd/biostool` 에서 HTTP 는 `redfish.go` 만”)를 유지하면서 UCSM 전송 경로를 패키지 경계로 막기 위해서입니다. 결과는 Redfish 의 `result.tsv` 와 섞지 않고 `results/<일시>/ucsm_result.tsv` 에 씁니다 — 열: `ucsm_host ip protocol(xml) mgmt_version(UCSM) server_dn vendor model std_name xml_class attribute expected current result` (호스트 단위 오류는 `server_dn`·`std_name` 이 `-` 인 1행, serial 등 식별정보 없음). 테스트는 `ucsm_test.go`(가짜 UCSM 판정·AUTH_FAIL 1회·허용목록·비밀값 노출)와 `internal/ucsmxml/ucsmxml_test.go`(관문·마스킹).
 
@@ -97,10 +98,11 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | 로그인·재시도·타임아웃·AUTH_FAIL 동작 | `redfish.go`(`Client.do`·`login`), 차단기는 `sweep.go`, conf 키는 `conf.go` |
 | **bios.conf 키 추가** | `conf.go`(`Config`·`defaultConfig`·`parseConf` 의 switch), `bios.conf.example`, README 3.3절 표, `lib.sh` 가 읽는 키라면 `conf_val` 호출부 |
 | 터미널 리포트 모양 | 점검 `report.go`, 설정 결과 `set.go`(`writeApplyReport`), 전체 비교 `allreport.go` |
-| **통합 점검(`bios.sh`) 화면·키** 수정 | 키·탭·필터·도움말 `tui_view.go`(`navKey`·`hintItems`)·`tui_keys.go`·`tui_render.go`(`tuiHelpLines`), 질문 순서·메뉴 문구 `tui_flow.go` |
+| **통합 점검(`bios.sh`) 화면·키** 수정 | 키·탭·필터·도움말 `tui_view.go`(`navKey`·`hintItems`)·`tui_keys.go`·`tui_render.go`(`tuiHelpLines`), 질문 순서·메뉴 문구·수정 확인 1·2(`setStep`) `tui_flow.go`, 확인 화면 줄 `setplan.go`(`ConfirmLines`·`ExcludedLines`) |
 | **색상 줄·태그 3종·`(N/A)` 표기** 수정 | `resultline.go`(`tagFor`·`showValue`), 색·열 순서 `lineout.go`, 상태→줄 변환 `resultconv.go` |
 | **CSV 열·파일 이름·그룹 합치기** 수정 | `csvout.go`(`summaryRows`·`wideHostsRows`·`wideAttrsRows`·`longRows`), 그룹 규칙 `resultline.go`(`groupLines`) |
 | **전체비교 기준**(비교서버 / refs JSON / `diff.txt`)·제외 속성 | `unified.go`(`Compare`·`compareRefs`·`readRefJSON`), conf 키 `conf.go`(`exclude_attrs`·`refs_dir`), 기준 선택 화면 `tui_flow.go`(`chooseRef`) |
+| **보호 속성(절대 바꾸지 않는 속성)** 패턴 추가·조정 | `protect.go`(`builtinProtect`), 막는 곳 `setplan.go`(`protect`)·`set.go`(`runHost`·`send`)·`redfish.go`(`checkAttributes`), 시험 `protect_test.go`(패턴을 넓히면 `profiles/*.tsv` 속성이 막히지 않는지 확인). 사용자가 더하는 쪽은 conf 키 `protect_attrs` |
 | **수정(설정) 규칙**: 대상 선정·충돌·Pending 질문·안전 | `setplan.go`(`buildSetPlan`·`applySetPlan`), 실제 쓰기는 `set.go`(코드 수정 시 `setplan_test.go`·`set_security_test.go`), 설정 관문 conf 키 `allcheck_set` |
 | **auto_setup 연동 결과(`check.res_<user>`)** 형식·`-auto` 동작 | `checkres.go`, `unified_cmd.go`(`-auto`·`-auto-check`·`-res-dir`), 래퍼 `bios.sh`(호출 폴더 처리) |
 | 진행 표시 문구·주기 | `progress.go`, TUI 안의 진행 줄 `tui_view.go`(`Progress`·`TUIJob`) |
@@ -127,10 +129,13 @@ BMC 에 남는 흔적을 줄이고 운영자의 실수를 코드로 막는 것�
 
    → `ClearLog`, 로그·Job 삭제, 리셋(`ComputerSystem.Reset`), 즉시 적용은 경로 자체가 목록에 없어 **구조적으로 불가능**합니다.
 2. **세션 1회** — 호스트당 로그인 1회, 모든 요청에 토큰, 끝나면 자기 세션만 삭제. 세션을 지원하지 않는 BMC 만 Basic 으로 폴백(요청마다 인증 기록이 남을 수 있음). 401 은 재시도하지 않고 이후 호출도 보내지 않습니다.
-3. **쓰기 경로는 `set.go` 뿐** — 점검·덤프·전체 비교는 쓰기가 불가능한 읽기 전용 클라이언트(`ModeReadOnly`)이고, `-dry-run` 도 같은 읽기 전용 클라이언트라 쓰기가 구조적으로 불가능합니다. `ModeSet` 은 Y 응답 뒤 `set.go` 에서만 만듭니다. 통합 점검(`bios.sh`)의 수정 단계도 같은 경로(`setplan.go` 가 `set.go` 의 `runHost` 를 호출)이고 TUI 에서 “수정할까요?”에 y 를 눌렀을 때만 실행되며, 비대화형 `-auto`/`-auto-check`·`-plain`·`-from-dump` 에는 설정 경로가 없습니다.
+3. **쓰기 경로는 `set.go` 뿐** — 점검·덤프·전체 비교는 쓰기가 불가능한 읽기 전용 클라이언트(`ModeReadOnly`)이고, `-dry-run` 도 같은 읽기 전용 클라이언트라 쓰기가 구조적으로 불가능합니다. `ModeSet` 은 Y 응답 뒤 `set.go` 에서만 만듭니다. 통합 점검(`bios.sh`)의 수정 단계도 같은 경로(`setplan.go` 가 `set.go` 의 `runHost` 를 호출)이고 TUI 에서 수정 확인(“위 수정대상을 적용할까요?”, 수정제외가 있으면 “수정제외 항목을 확인했습니다. 진행할까요?” 까지)에 y 를 눌렀을 때만 실행되며, 비대화형 `-auto`/`-auto-check`·`-plain`·`-from-dump` 에는 설정 경로가 없습니다.
 4. **여러 겹의 입력 재검증(`set.go`)** — 점검 결과를 그대로 믿지 않고 프로파일에서 *모델을 지정한 `verified=Y` 행*을 다시 확인, Dell·HPE·Lenovo 만, 재조회로 점검 이후 변화(`CHANGED`·`ALREADY_OK`·`PENDING_EXISTS`) 확인, 레지스트리 ReadOnly·허용값·형식 확인, 시스템 프로파일 종속은 프로파일 항목만 먼저. 호스트당 PATCH 1회·재시도 없음, Dell Job 은 자동 생성되지 않았을 때만 최대 1회.
 5. **계정 잠금 방지** — `sweep.go` 의 AUTH_FAIL 차단기(처음 `auth_fail_stop` 대 직렬 접속 → 성공하면 병렬, 누적되면 중단 + `SKIPPED_AUTH_STOP`).
 6. **비밀 취급** — 비밀번호는 `pass.enc`(AES-256-GCM)+`key.bin`(0600)으로만 보관, CLI 인자·로그·TSV 에 남기지 않으며 오류 상세에서도 비밀번호·토큰·Basic 헤더를 지웁니다. 결과 파일은 0600.
+
+7. **보호 속성(`protect.go`)** — 서버 고유값·부팅·보안·RAID·PXE·NIC 속성은 프로파일이든 전체비교 값이든 설정하지 않습니다. 내장 목록은 conf 로 끌 수 없고 `protect_attrs` 는 더하기만 합니다. 막는 곳은 겹겹입니다: ① `setplan.go` 가 설정 항목에서 빼고 수정제외로 표시 ② `set.go` `runHost` 가 항목 중 하나라도 걸리면 그 호스트를 접속 없이 통째로 `PROTECTED_ATTR` ③ PATCH 직전(`send`)에 실제 본문 속성 재검사 ④ `redfish.go` `checkAttributes` 가 본문 전체 거부. 패턴을 고칠 때는 `protect_test.go`(프로파일 속성이 막히지 않는지)를 함께 통과시킬 것.
+8. **확인 단계와 출력 안전** — 수정 확인 1·2 와 Pending 질문을 모두 통과해야 쓰며, 질문 전에 쌓인 키는 버립니다. 비교서버 값은 레지스트리 형식이 Enumeration·Integer·Boolean 일 때만, BIOS 버전이 같은 호스트에만 보냅니다. BMC·호스트에서 온 글자는 `lineSafe`(제어 문자 제거)와 `csvSafe`(엑셀 수식 주입 방지)를 거쳐 출력하고, `check.res_<user>` 는 시작 때 옛 파일을 지우고 원자적으로 씁니다.
 
 작업 흐름도는 [WORKFLOW.md](WORKFLOW.md) 참고.
 

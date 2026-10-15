@@ -166,6 +166,61 @@ func TestCSVFileNameSanitize(t *testing.T) {
 	}
 }
 
+func TestCSVSafe(t *testing.T) {
+	for in, want := range map[string]string{
+		"":            "",
+		"Enabled":     "Enabled",
+		"-":           "-",
+		"-5":          "-5",
+		"-1.5":        "-1.5",
+		"(N/A)":       "(N/A)",
+		"[DIFF] =1+1": "[DIFF] =1+1",
+		"=1+1":        "'=1+1",
+		"+cmd":        "'+cmd",
+		"@SUM(A1)":    "'@SUM(A1)",
+		"\t=x":        "'\t=x",
+		"\r=x":        "'\r=x",
+		"-x":          "'-x",
+		"-1+1":        "'-1+1",
+		"--":          "'--",
+		"iLO 5 1.0":   "iLO 5 1.0",
+		"10.0.0.1":    "10.0.0.1",
+	} {
+		if got := csvSafe(in); got != want {
+			t.Errorf("csvSafe(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// BMC·호스트에서 온 칸(본문·속성 이름 헤더·호스트 이름 헤더)은 수식으로 열리지 않게 ' 가 붙고, 고정 헤더는 그대로다.
+func TestWriteResultCSVsFormula(t *testing.T) {
+	dir := t.TempDir()
+	l := csvLine("@h", "iLO 5", "=HYPERLINK(\"x\")", TagDiff, "-5", "+1", "-cmd")
+	if _, err := writeResultCSVs(dir, "", []ResultLine{l}); err != nil {
+		t.Fatal(err)
+	}
+	lg := readCSVFile(t, filepath.Join(dir, "long.csv"))
+	if !reflect.DeepEqual(lg[0], csvLineHeader) {
+		t.Fatalf("long 헤더가 바뀜 %q", lg[0])
+	}
+	want := []string{"difference", "'@h", "ip-@h", "HPE", "DL380", "v1", "iLO 5 1.0", "'=HYPERLINK(\"x\")", "-5", "'+1", "'-cmd"}
+	if !reflect.DeepEqual(lg[1], want) {
+		t.Fatalf("long 행 got %q want %q", lg[1], want)
+	}
+	wh := readCSVFile(t, filepath.Join(dir, "wide_hosts_HPE_iLO_5.csv"))
+	if wh[0][7] != "'=HYPERLINK(\"x\")" || wh[2][1] != "'@h" || wh[2][7] != "[DIFF] +1" {
+		t.Fatalf("wide_hosts %q", wh)
+	}
+	wa := readCSVFile(t, filepath.Join(dir, "wide_attrs_HPE_iLO_5.csv"))
+	if !reflect.DeepEqual(wa[0], []string{"Attribute", "차이", "기준값", "'@h"}) || wa[1][0] != "'=HYPERLINK(\"x\")" || wa[1][3] != "'+1" {
+		t.Fatalf("wide_attrs %q", wa)
+	}
+	// 행 함수 자체는 원래 값을 돌려준다 (TUI 등 다른 쓰임에 ' 가 섞이지 않게)
+	if rows := longRows([]ResultLine{l}); rows[1][1] != "@h" {
+		t.Fatalf("longRows 가 바뀜 %q", rows[1])
+	}
+}
+
 func TestWriteResultCSVsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	paths, err := writeResultCSVs(dir, "", nil)

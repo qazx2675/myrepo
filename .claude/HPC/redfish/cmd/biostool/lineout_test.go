@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -44,12 +45,30 @@ func TestFormatLineColor(t *testing.T) {
 			t.Errorf("%s: got %q\nwant %q", c.name, got, want)
 		}
 	}
-	// 호스트 오류 줄은 빨강, 기준값은 그대로 초록
+	// 호스트 오류 줄은 태그·현재값·비고만 빨강, 기준값은 그대로 초록
 	e := ResultLine{Tag: TagNA, Host: "h3", IP: "10.0.0.13", Vendor: "HPE", Attr: "-", Expected: "-", Current: "-", Note: "UNREACHABLE", HostError: true}
 	got := formatLine(e, true)
-	want := lnRed + "[N/A]" + lnReset + " h3\t10.0.0.13\tHPE\t\t\t-\t" + lnGreen + "(N/A)" + lnReset + "\t" + lnRed + "(N/A)" + lnReset + "\tUNREACHABLE"
+	want := lnRed + "[N/A]" + lnReset + " h3\t10.0.0.13\tHPE\t\t\t-\t" + lnGreen + "(N/A)" + lnReset + "\t" + lnRed + "(N/A)" + lnReset + "\t" + lnRed + "UNREACHABLE" + lnReset
 	if got != want {
 		t.Errorf("host error: got %q\nwant %q", got, want)
+	}
+}
+
+// BMC 에서 온 제어 문자는 모든 칸에서 공백이 되고, formatLine 이 붙인 색 코드만 남는다.
+func TestFormatLineStripsControl(t *testing.T) {
+	l := ResultLine{Tag: TagDiff, Host: "h\x1b[2J", IP: "1\n2", Vendor: "V\x07", Model: "M\r", BiosVersion: "B\u009b1m",
+		Attr: "A\tB", Expected: "e\x1b]0;t\x07", Current: "c\x7f", Note: "n\x1b[31m"}
+	got := formatLine(l, false)
+	want := "[difference] h [2J\t1 2\tV \tM \tB 1m\tA B\te ]0;t \tc \tn [31m"
+	if got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+	got = formatLine(l, true)
+	if n := strings.Count(got, "\x1b"); n != 6 { // 태그·기준값·현재값의 색 시작+끝
+		t.Fatalf("ESC %d개 (6 기대): %q", n, got)
+	}
+	if strings.Count(got, "\t") != 8 || strings.ContainsAny(got, "\r\n\a\x7f\u009b") {
+		t.Fatalf("칸 구분이 깨짐: %q", got)
 	}
 }
 

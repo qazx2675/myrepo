@@ -100,6 +100,65 @@ func TestSweepParallelPhaseStopsNewStarts(t *testing.T) {
 	}
 }
 
+// 워커(병렬 단계)·웜업에서 work 가 패닉하면 onPanic 으로 그 호스트만 오류로 남기고 나머지는 계속 처리한다.
+func TestSweepWorkerPanicRecorded(t *testing.T) {
+	var worked int32
+	got := make([]string, 30)
+	sweepHosts(30, 4, 3, func(i int) hostOutcome {
+		atomic.AddInt32(&worked, 1)
+		if i == 0 || i == 7 {
+			panic(fmt.Sprintf("boom %d", i))
+		}
+		got[i] = "ok"
+		return outLoggedIn
+	}, func(i int) { t.Errorf("skip(%d)", i) }, func(i int, v interface{}) { got[i] = panicDetail(v) })
+	if worked != 30 || got[0] != "내부 오류(패닉): boom 0" || got[7] != "내부 오류(패닉): boom 7" || got[29] != "ok" {
+		t.Errorf("처리 %d, 결과 %q", worked, got)
+	}
+	// onPanic 이 없으면 모두 끝낸 뒤 부른 goroutine 에서 다시 패닉 (워커 goroutine 에서 죽지 않음)
+	worked = 0
+	func() {
+		defer func() {
+			if v := recover(); v != "boom" {
+				t.Errorf("부른 쪽 패닉 = %v", v)
+			}
+		}()
+		sweepHosts(20, 4, 0, func(i int) hostOutcome {
+			atomic.AddInt32(&worked, 1)
+			if i == 5 {
+				panic("boom")
+			}
+			return outLoggedIn
+		}, func(int) {})
+	}()
+	if worked != 20 {
+		t.Errorf("다른 호스트는 끝까지: %d", worked)
+	}
+}
+
+// doCheck(통합 수집): 호스트 처리 중 패닉 → 그 호스트는 BMC_ERROR(내부 오류) 로 남고 프로그램은 계속.
+func TestCheckHostPanicBecomesError(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, ub := startAllSrv(t, "hpe-dl360gen11", nil)
+	fastCheck(t)
+	rc := checkRCFor(t, 2, "", ua, ub)
+	run, err := doCheck(rc, checkOpts{Profile: testProf(t), ResultDir: t.TempDir(), Now: checkNow,
+		OnHost: func(i int, h *hostCheck) {
+			if i == 0 && h.Status != StatusBMCError {
+				panic("boom")
+			}
+		}})
+	if run == nil {
+		t.Fatal(err)
+	}
+	if h := run.Hosts[0]; h.Status != StatusBMCError || !strings.Contains(h.Detail, "boom") {
+		t.Errorf("패닉 호스트: %s %q", h.Status, h.Detail)
+	}
+	if h := run.Hosts[1]; h.Status != "" {
+		t.Errorf("다른 호스트는 정상: %s %q", h.Status, h.Detail)
+	}
+}
+
 // ---- Farm 기반 ----
 
 func farmIP(i int) string { return fmt.Sprintf("127.0.%d.%d", i/250+1, i%250+1) }

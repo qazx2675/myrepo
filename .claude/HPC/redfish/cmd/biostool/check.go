@@ -363,7 +363,15 @@ func doCheck(rc *runContext, o checkOpts) (*checkRun, error) {
 			}
 			return outcomeOf(h.Status, h.Stats, h.Target.Err == "")
 		},
-		func(i int) { skip(i, StatusSkippedAuthStop) })
+		func(i int) { skip(i, StatusSkippedAuthStop) },
+		func(i int, v interface{}) { // 처리 중 패닉 → 그 호스트만 오류로 남기고 계속 (retry.txt 에 들어감)
+			h := newHostCheck(rc.Targets[i])
+			h.Status, h.Detail = StatusBMCError, panicDetail(v)
+			run.Hosts[i] = h
+			if o.OnHost != nil {
+				o.OnHost(i, h)
+			}
+		})
 	if env.mm != nil {
 		run.MMModels = env.mm.n
 	}

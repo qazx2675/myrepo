@@ -10,7 +10,8 @@ package main
 //
 // check.res_<user> 는 기본으로 현재 폴더에 쓰며, -res-dir <폴더> 로 바꿀 수 있습니다 (bios.sh 가 호출한 쪽 작업 폴더를 넘김).
 // 비대화형은 묻지 않고, 점검을 끝냈으면 FAIL 이 있어도 종료코드 0 (auto_setup 이 결과 파일을 읽음).
-// conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닌 종료코드입니다.
+// conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닌 종료코드입니다. 시작할 때 이전 check.res_<user>·
+// _postapply 를 지우므로, 치명적 오류로 끝나면 결과 파일이 남지 않습니다 (파일은 임시 파일 + rename 으로 원자적으로 씀).
 
 import (
 	"flag"
@@ -56,6 +57,7 @@ func cmdBios(args []string) error {
 		return err
 	}
 	autoUser := ""
+	var resFiles []string // 비대화형이 쓸 check.res_<user> (+ _postapply)
 	if *autoCheck || *auto {
 		if *autoCheck && *auto {
 			return fmt.Errorf("-auto 와 -auto-check 는 함께 쓸 수 없습니다")
@@ -70,6 +72,15 @@ func cmdBios(args []string) error {
 		}
 		if err := validAutoUser(autoUser); err != nil {
 			return err
+		}
+		// 이후 치명적 오류로 끝나도 auto_setup 이 옛 OK 줄을 읽지 않게, 무엇보다 먼저 이전 결과 파일 둘 다 지운다.
+		res := filepath.Join(*resDir, checkResPrefix+autoUser)
+		if err := removeCheckRes([]string{res, res + "_postapply"}); err != nil {
+			return err
+		}
+		resFiles = []string{res}
+		if *auto {
+			resFiles = append(resFiles, res+"_postapply")
 		}
 	}
 	if fs.NArg() > 0 {
@@ -197,17 +208,10 @@ func cmdBios(args []string) error {
 			warns = append(warns, werr.Error())
 		}
 	}
-	var resFiles []string
-	if autoUser != "" {
-		resFiles = append(resFiles, filepath.Join(*resDir, checkResPrefix+autoUser))
-		if *auto {
-			resFiles = append(resFiles, filepath.Join(*resDir, checkResPrefix+autoUser+"_postapply"))
-		}
-		for _, f := range resFiles {
-			if err := writeCheckRes(f, plines, u.HostOrder()); err != nil {
-				p.Stop()
-				return fmt.Errorf("%s 기록 실패: %w", f, err)
-			}
+	for _, f := range resFiles {
+		if err := writeCheckRes(f, plines, u.HostOrder()); err != nil {
+			p.Stop()
+			return fmt.Errorf("%s 기록 실패: %w", f, err)
 		}
 	}
 	p.Stop()
@@ -243,7 +247,7 @@ func cmdBios(args []string) error {
 				notes = append(notes, h.Detail)
 			}
 			if len(notes) > 0 {
-				fmt.Printf("특이사항 %s: %s\n", h.Target.Hostname, strings.Join(notes, "; "))
+				fmt.Printf("특이사항 %s: %s\n", lineSafe(h.Target.Hostname), lineSafe(strings.Join(notes, "; "))) // Detail 은 BMC 응답에서 옴
 			}
 		}
 	}

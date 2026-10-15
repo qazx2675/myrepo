@@ -64,7 +64,40 @@ func outcomeOf(status string, st CallStats, contacted bool) hostOutcome {
 // sweepHosts 는 호스트 n 대를 처리합니다. work(i) 는 i 번째를 처리하고 결과를 돌려주며,
 // 차단기가 멈춘 뒤 도착한 호스트는 work 대신 skip(i) 이 불립니다 (둘 다 여러 고루틴에서 불릴 수 있으며
 // 각각 i 번째 칸에만 써야 합니다). authStop 이 0 이면 차단기 없이 workers 개 워커로 전부 처리합니다.
-func sweepHosts(n, workers, authStop int, work func(i int) hostOutcome, skip func(i int)) {
+//
+// work 가 패닉하면 프로그램을 죽이지 않습니다: onPanic(i, 패닉 값)을 주면 그것으로 그 호스트를 오류로 남기고
+// (outOther 로 셈) 나머지를 계속 처리합니다. onPanic 이 없으면 모두 끝낸 뒤 부른 goroutine 에서 다시 패닉합니다
+// (워커 goroutine 에서 죽으면 TUI 가 터미널을 되돌릴 수 없으므로).
+func sweepHosts(n, workers, authStop int, work func(i int) hostOutcome, skip func(i int), onPanic ...func(i int, v interface{})) {
+	var pmu sync.Mutex
+	var firstPanic interface{}
+	work = func(work func(int) hostOutcome) func(int) hostOutcome {
+		return func(i int) (o hostOutcome) {
+			defer func() {
+				v := recover()
+				if v == nil {
+					return
+				}
+				o = outOther
+				if len(onPanic) > 0 && onPanic[0] != nil {
+					onPanic[0](i, v)
+					return
+				}
+				pmu.Lock()
+				if firstPanic == nil {
+					firstPanic = v
+				}
+				pmu.Unlock()
+			}()
+			return work(i)
+		}
+	}(work)
+	defer func() {
+		if firstPanic != nil {
+			panic(firstPanic)
+		}
+	}()
+
 	next, authFails := 0, 0
 	if authStop > 0 {
 		attempts, loggedIn := 0, false
@@ -130,6 +163,9 @@ func sweepHosts(n, workers, authStop int, work func(i int) hostOutcome, skip fun
 	close(idx)
 	wg.Wait()
 }
+
+// panicDetail 은 호스트 처리 중 패닉(프로그램 내부 오류)을 그 호스트의 오류 상세(상태 BMC_ERROR)로 남길 글입니다.
+func panicDetail(v interface{}) string { return fmt.Sprintf("내부 오류(패닉): %v", v) }
 
 // authStopWarning 은 차단기가 작동했을 때의 경고문입니다 (skipped 가 0 이면 빈 문자열).
 // fails 는 실제 AUTH_FAIL 호스트 수, skipped 는 접속하지 않고 건너뛴 호스트 수, rerun 은 재실행 방법입니다.

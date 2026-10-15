@@ -70,3 +70,67 @@ func TestCheckResOneLine(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// BMC 에서 온 제어 문자(ESC·BEL·TAB·C1 CSI)는 공백으로 바뀐다 — 터미널 이스케이프 주입 방지.
+func TestCheckResControlChars(t *testing.T) {
+	got := checkResLine("h\x1b[2J", []ResultLine{resLine("h", "A\x1b]0;x\x07", TagDiff, "e\tf", "c\u009b31m")})
+	if want := "h [2J: FAIL difference 1건 (A ]0;x  c 31m→e f)"; got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+	got = checkResLine("h", []ResultLine{{Host: "h", Attr: "-", Tag: TagNA, Note: "x\x1b[31my", HostError: true}})
+	if got != "h: FAIL N/A 접속실패(x [31my)" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// 원자적 쓰기: 대상 경로의 심볼릭 링크를 따라가지 않고(링크가 가리키는 파일은 그대로) 임시 파일도 남기지 않는다.
+func TestWriteCheckResSymlinkNotFollowed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("심볼릭 링크 권한 필요")
+	}
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	must(t, os.WriteFile(victim, []byte("keep\n"), 0o600))
+	path := filepath.Join(dir, "check.res_root")
+	must(t, os.Symlink(victim, path))
+	must(t, writeCheckRes(path, []ResultLine{resLine("h", "A", TagOK, "1", "1")}, nil))
+	if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
+		t.Fatalf("링크 대상이 바뀜: %q", b)
+	}
+	fi, err := os.Lstat(path)
+	must(t, err)
+	if fi.Mode()&os.ModeSymlink != 0 || fi.Mode().Perm() != 0o644 {
+		t.Fatalf("결과 파일 모드 %v (일반 파일 0644 기대)", fi.Mode())
+	}
+	if b, _ := os.ReadFile(path); string(b) != "h: OK\n" {
+		t.Fatalf("내용 %q", b)
+	}
+	ents, err := os.ReadDir(dir)
+	must(t, err)
+	if len(ents) != 2 {
+		t.Fatalf("임시 파일이 남음: %v", ents)
+	}
+}
+
+// 비대화형 실행은 시작하자마자 이전 check.res_<user>·_postapply 를 지운다: 치명적 오류로 끝나도 옛 OK 줄이 남지 않는다.
+func TestBiosAutoRemovesStaleCheckRes(t *testing.T) {
+	e := newRTEnv(t, 3, "")
+	empty := e.writeFile("empty.txt", "# 없음")
+	stale := []string{filepath.Join(e.dir, "check.res_erin"), filepath.Join(e.dir, "check.res_erin_postapply")}
+	for _, mode := range []string{"-auto-check", "-auto"} {
+		for _, f := range stale {
+			must(t, os.WriteFile(f, []byte("old: OK\n"), 0o644))
+		}
+		_, err := rtCapture(t, func() error {
+			return cmdBios([]string{"-conf", e.conf, "-hosts", e.hosts, "-res-dir", e.dir, mode, "erin", empty})
+		})
+		if err == nil {
+			t.Fatalf("%s: 대상 없음인데 오류가 아님", mode)
+		}
+		for _, f := range stale {
+			if _, err := os.Stat(f); err == nil {
+				t.Errorf("%s: 치명적 오류 뒤 이전 %s 이 남음", mode, filepath.Base(f))
+			}
+		}
+	}
+}

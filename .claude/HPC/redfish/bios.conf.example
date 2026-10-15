@@ -35,8 +35,16 @@ profile_dir=profiles
 # 예) exclude_attrs=ServiceTag|*Uuid*|BootSeq*
 exclude_attrs=
 
-# on: 전체비교 결과의 difference 도 "수정할까요?" 설정 대상에 넣음 / off: 프로파일 항목만 설정 (기본 off)
+# on: 전체비교 결과의 difference 도 "위 수정대상을 적용할까요?" 설정 대상에 넣음 / off: 프로파일 항목만 설정 (기본 off)
+# (on 이어도 비교서버와 BIOS 버전이 같고, 적용 때 레지스트리 형식이 Enumeration·Integer·Boolean 인 속성만 설정)
 allcheck_set=off
+
+# 절대 변경하지 않을 BIOS 속성 패턴 추가 (| 로 구분, * 는 0글자 이상 와일드카드, 대소문자 무시). 비우면 추가 없음.
+# 서버 고유값·부팅·보안·RAID·PXE·NIC 관련 속성(IQN, IP, ServerName, BootMode, SecureBoot, *Raid*, *Pxe*, *Nic* 등)은
+# 프로그램에 내장된 보호 목록으로 이미 막혀 있으며, 이 설정이나 ignore_attrs.txt 로 끌 수 없습니다 (여기 적은 것은 더하기만 함).
+# 보호 속성은 프로파일·전체비교 어느 쪽이든 설정하지 않고 수정 확인 화면에 (수정제외) 로 표시됩니다.
+# 예) protect_attrs=MemTest|*Watchdog*|ProcX2Apic
+protect_attrs=
 
 # 기준 속성 JSON 폴더 (bios_export 또는 allcheck -export-attrs 로 추출한 파일을 전체비교 기준으로 고를 때)
 refs_dir=refs

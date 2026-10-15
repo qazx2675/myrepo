@@ -30,6 +30,7 @@ type Config struct {
 	AllcheckSet  bool          // true 면 전체비교 difference 도 설정 대상에 넣는다 (기본 false)
 	RefsDir      string        // 기준 속성 JSON(bios_export / -export-attrs 결과) 폴더
 	AutoProfile  string        // 비대화형(bios -auto / -auto-check)에서 -profile 이 없을 때 쓸 프로파일 이름. 비면 없음
+	ProtectAttrs []string      // 절대 설정하지 않을 속성 패턴 추가분 (| 구분, * 와일드카드, 대소문자 무시). 내장 보호 목록(protect.go)에 더하기만 함
 }
 
 func defaultConfig() Config {
@@ -102,6 +103,8 @@ func parseConf(text, name string) (*Config, error) {
 			c.AutoProfile = val
 		case "exclude_attrs":
 			c.ExcludeAttrs = splitExclude(val)
+		case "protect_attrs":
+			c.ProtectAttrs = splitExclude(val)
 		case "allcheck_set":
 			c.AllcheckSet, err = parseOnOff(name, lineNo, key, val)
 		case "concurrency":

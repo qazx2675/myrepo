@@ -507,7 +507,7 @@ func TestSetRereadDetectsChanges(t *testing.T) {
 
 func TestSetRegistryPrecheck(t *testing.T) {
 	text := setProfText +
-		"HPE,DL360 Gen11,secure_boot,SecureBootStatus,Enabled,Y\n" + // ReadOnly 속성
+		"HPE,DL360 Gen11,thermal,ThermalConfig,MaximumCooling,Y\n" + // ReadOnly 로 바꾼 속성 (SecureBootStatus 는 보호 속성)
 		"HPE,DL360 Gen11,turbo,ProcTurbo,Maybe,Y\n" // 허용값 밖
 	text = strings.Replace(text, "SystemRecovery_POSTWatchdogTimerValue,5,Y", "SystemRecovery_POSTWatchdogTimerValue,50,Y", 1) // 상한 20 초과
 	prof := setProf(t, text)
@@ -516,6 +516,9 @@ func TestSetRegistryPrecheck(t *testing.T) {
 	mixed := startMockTree(t, "hpe-dl360gen11", nil)   // + 정상 FAIL 1건 → 그것만 보냄
 	must(t, mixed.SetBiosAttr("ProcHyperthreading", "Disabled"))
 	lnv := startMockTree(t, "lenovo-sr650v3", nil) // Integer 범위 밖
+	for _, s := range []*mockbmc.Server{onlyBad, mixed} {
+		setRegAttr(t, s, hpe11Registry, "ThermalConfig", func(a map[string]interface{}) { a["ReadOnly"] = true })
+	}
 	rc := checkRCFor(t, 2, "", onlyBad.URL(), mixed.URL(), lnv.URL())
 	run := runCheckP(t, rc, prof)
 	if n := len(run.failItems()); n != 6 {
@@ -524,7 +527,7 @@ func TestSetRegistryPrecheck(t *testing.T) {
 	applyY(t, rc, run)
 	res := applyResults(t, run)
 	for _, s := range []*mockbmc.Server{onlyBad, mixed} {
-		wantStatus(t, res, s, "SecureBootStatus", StatusSkippedReadOnly)
+		wantStatus(t, res, s, "ThermalConfig", StatusSkippedReadOnly)
 		wantStatus(t, res, s, "ProcTurbo", StatusInvalidValue)
 	}
 	wantStatus(t, res, mixed, "ProcHyperthreading", StatusApplied)

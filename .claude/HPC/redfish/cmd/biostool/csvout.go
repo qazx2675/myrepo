@@ -27,8 +27,47 @@ func csvFileName(s string) string {
 	return n
 }
 
-// writeCSVFile 은 BOM + CSV 를 path 에 씁니다 (0600).
+// csvSafe 는 엑셀 수식 주입을 막습니다: 칸이 =, +, @, TAB, CR 로 시작하거나 "-" 로 시작하는데 음수(-5, -1.5)가
+// 아니면 앞에 ' 를 붙입니다. "-" 하나는 그대로 둡니다. 고정 헤더는 이런 글자로 시작하지 않으므로 바뀌지 않습니다.
+func csvSafe(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '@', '\t', '\r':
+		return "'" + s
+	case '-':
+		if len(s) > 1 && !isPlainNumber(s[1:]) {
+			return "'" + s
+		}
+	}
+	return s
+}
+
+// isPlainNumber 는 s 가 숫자로 시작하고 숫자와 '.' 만으로 된 글자인지 봅니다 ("-1+1" 같은 식은 아님).
+func isPlainNumber(s string) bool {
+	if s == "" || s[0] < '0' || s[0] > '9' {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if (s[i] < '0' || s[i] > '9') && s[i] != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+// writeCSVFile 은 BOM + CSV 를 path 에 씁니다 (0600). 모든 칸은 csvSafe 를 거칩니다 (BMC·호스트에서 온 값이
+// 헤더에도 들어가므로 — 속성 이름·호스트 이름 열). rows 자체는 바꾸지 않습니다.
 func writeCSVFile(path string, rows [][]string) error {
+	safe := make([][]string, len(rows))
+	for i, r := range rows {
+		safe[i] = make([]string, len(r))
+		for j, c := range r {
+			safe[i][j] = csvSafe(c)
+		}
+	}
+	rows = safe
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err

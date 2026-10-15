@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -48,9 +49,23 @@ func newTUIRigReader(t *testing.T, in io.Reader, mod func(e *tuiEnv, r *tuiRig))
 	return u, r
 }
 
+// newTUIRig 는 keys 를 처음 키를 기다릴 때(env.Ready) 넣고 입력을 끝냅니다 (사람이 화면을 보고 치듯이 —
+// Ask 가 묻기 전에 쌓인 키를 버려도 시험 키는 남는다).
 func newTUIRig(t *testing.T, keys string) (*TUI, *tuiRig) {
 	t.Helper()
-	return newTUIRigReader(t, strings.NewReader(keys), nil)
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { pw.Close() })
+	var once sync.Once
+	return newTUIRigReader(t, pr, func(e *tuiEnv, _ *tuiRig) {
+		e.Ready = func() {
+			once.Do(func() {
+				if keys != "" {
+					pw.Write([]byte(keys))
+				}
+				pw.Close()
+			})
+		}
+	})
 }
 
 // tuiLastFrame 은 마지막으로 그린 화면 (ANSI 제거, 줄은 \n).
@@ -131,28 +146,97 @@ func TestTUIParseKeys(t *testing.T) {
 func TestTUITabSwitching(t *testing.T) {
 	_, r, _ := browseKeys(t, "x", tuiSampleVGs())
 	f := tuiLastFrame(r)
-	if !strings.Contains(f, "벤더  >[HPE] [DELL]") || !strings.Contains(f, "관리망  >[iLO 4] [iLO 5]   호스트 1대") ||
-		!strings.Contains(f, "AttrB ") || strings.Contains(f, "AttrB5") {
-		t.Errorf("첫 화면은 HPE / iLO 4:\n%s", f)
+	if !strings.Contains(f, ">> 벤더  >[HPE] [DELL]") || !strings.Contains(f, "   관리망  >[iLO 4] [iLO 5]   호스트 1대") ||
+		!strings.Contains(f, "AttrB ") || strings.Contains(f, "AttrB5") || !strings.Contains(f, "←→ 벤더") ||
+		!strings.Contains(f, "Enter 관리망 고르기") || !strings.Contains(f, "q 두 번 종료") {
+		t.Errorf("첫 화면은 HPE / iLO 4, 벤더 줄이 움직이는 줄:\n%s", f)
 	}
-	u, r, _ := browseKeys(t, "\tq", tuiSampleVGs())
-	if f := tuiLastFrame(r); u.gi != 1 || !strings.Contains(f, "[iLO 4] >[iLO 5]") || !strings.Contains(f, "AttrC5") || strings.Contains(f, "h1 ") {
-		t.Errorf("Tab → iLO 5:\n%s", f)
-	}
-	if u, _, _ := browseKeys(t, "\t\tq", tuiSampleVGs()); u.gi != 0 {
-		t.Errorf("Tab 두 번이면 처음 그룹으로 돌아와야 함: gi=%d", u.gi)
-	}
-	if u, _, _ := browseKeys(t, "\x1b[Zq", tuiSampleVGs()); u.gi != 1 {
-		t.Errorf("Shift+Tab 은 이전(마지막) 그룹: gi=%d", u.gi)
-	}
-	u, r, _ = browseKeys(t, "\t\x1b[C\x1b[Cq", tuiSampleVGs())
+	// Enter 로 벤더 안에 들어가면 ←→ 는 관리망 그룹 (끝에서 멈춤, 벤더는 그대로)
+	u, r, act := browseKeys(t, "\r\x1b[C\x1b[C", tuiSampleVGs())
 	f = tuiLastFrame(r)
-	if u.vi != 1 || u.gi != 0 || !strings.Contains(f, "[HPE] >[DELL]") || !strings.Contains(f, "관리망  iDRAC 9   호스트 2대") ||
-		!strings.Contains(f, "LogicalProc") {
+	if !u.inGroup || u.vi != 0 || u.gi != 1 || act != TUIQuit || !strings.Contains(f, "   벤더  >[HPE] [DELL]") ||
+		!strings.Contains(f, ">> 관리망  [iLO 4] >[iLO 5]") || !strings.Contains(f, "AttrC5") || strings.Contains(f, "h1 ") ||
+		!strings.Contains(f, "←→ 관리망") || !strings.Contains(f, "q/Esc 벤더로") {
+		t.Errorf("Enter → ←→ 관리망: inGroup=%v vi=%d gi=%d\n%s", u.inGroup, u.vi, u.gi, f)
+	}
+	if u, _, _ := browseKeys(t, "\r\x1b[C\x1b[D\x1b[D", tuiSampleVGs()); u.gi != 0 || u.vi != 0 {
+		t.Errorf("← 는 첫 그룹에서 멈춤: vi=%d gi=%d", u.vi, u.gi)
+	}
+	// q 는 한 단계 뒤로(그룹 위치는 그대로), 맨 위(벤더 줄)는 q 두 번에 끝낸다. Esc 도 뒤로 가지만 맨 위에서는 끝내지 않음.
+	for _, k := range []string{"q", "\x1b"} {
+		u, _, act = browseKeys(t, "\r\x1b[C"+k+"\x1b[C"+k+"qq", tuiSampleVGs())
+		if act != TUIQuit || u.Quit() || u.inGroup || u.vi != 1 || u.gi != 0 {
+			t.Errorf("%q: 뒤로 → → DELL → 끝: act=%v quit=%v inGroup=%v vi=%d gi=%d", k, act, u.Quit(), u.inGroup, u.vi, u.gi)
+		}
+	}
+	u, _, act = browseKeys(t, "\r\x1b[Cq", tuiSampleVGs())
+	if act != TUIQuit || !u.Quit() || u.inGroup || u.gi != 1 {
+		t.Errorf("그룹 줄의 q 는 끝내지 않음 (입력 끝으로 종료): quit=%v inGroup=%v gi=%d", u.Quit(), u.inGroup, u.gi)
+	}
+	// 관리망 그룹이 하나뿐이면 Enter 는 안내만
+	u, r, _ = browseKeys(t, "\x1b[C\r", tuiSampleVGs())
+	if f := tuiLastFrame(r); u.inGroup || !strings.Contains(f, "관리망 그룹이 하나뿐입니다") || !strings.Contains(f, "관리망  iDRAC 9   호스트 2대") {
+		t.Errorf("그룹 1개 Enter: inGroup=%v\n%s", u.inGroup, f)
+	}
+	u, r, _ = browseKeys(t, "\x1b[C\x1b[Cq", tuiSampleVGs())
+	f = tuiLastFrame(r)
+	if u.vi != 1 || u.gi != 0 || !strings.Contains(f, "[HPE] >[DELL]") || !strings.Contains(f, "LogicalProc") {
 		t.Errorf("→ 는 DELL 로(끝에서 멈춤, 그룹은 처음으로): vi=%d gi=%d\n%s", u.vi, u.gi, f)
 	}
 	if u, _, _ := browseKeys(t, "\x1b[C\x1b[D\x1b[Dq", tuiSampleVGs()); u.vi != 0 {
 		t.Errorf("← 는 처음 벤더에서 멈춤: vi=%d", u.vi)
+	}
+	// 보기 탭이 없으면 Tab 은 아무 일도 하지 않음
+	if u, _, act := browseKeys(t, "\tqq", tuiSampleVGs()); act != TUIQuit || u.Quit() || u.gi != 0 {
+		t.Errorf("탭 없을 때 Tab: act=%v gi=%d", act, u.gi)
+	}
+}
+
+// 보기 탭: Tab 은 어느 단계에서나 TUITab, 탭마다 벤더·그룹·단계·필터·스크롤을 따로 기억한다. r 은 SetRefKey 로 켠 탭에서만.
+func TestTUIViewTabs(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	u, r := newTUIRigReader(t, pr, nil)
+	u.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+	u.SetResults("프로파일 결과", tuiSampleVGs())
+	browse := func(keys string) TUIAction {
+		go pw.Write([]byte(keys))
+		return u.Browse()
+	}
+	if act := browse("r\r\x1b[Cf\t"); act != TUITab || !u.inGroup || u.gi != 1 || u.filter != tuiFilterDiff {
+		t.Fatalf("그룹 줄에서 Tab: act=%v inGroup=%v gi=%d filter=%c", act, u.inGroup, u.gi, u.filter)
+	}
+	f := tuiLastFrame(r)
+	if !strings.Contains(f, "화면  >[프로파일 점검] [전체 설정 비교]   Tab 전환") || !strings.Contains(f, "Tab 화면 전환") || strings.Contains(f, "r 기준") {
+		t.Errorf("보기 탭 줄·안내:\n%s", f)
+	}
+	u.SwitchTab(1)
+	if u.Tab() != 1 || u.vgs != nil || u.inGroup || u.filter != tuiFilterAll || u.title != "전체 설정 비교" {
+		t.Errorf("빈 탭으로: tab=%d inGroup=%v filter=%c title=%q", u.Tab(), u.inGroup, u.filter, u.title)
+	}
+	u.SetResults("전체비교 — 기준 x", groupLines([]ResultLine{tuiL(TagDiff, "DELL", "d9", "iDRAC 9", "SysProfile", "Perf", "Custom", "DIFF")}))
+	u.SetRefKey(true)
+	if act := browse("o\x1b[Z"); act != TUITab || u.filter != tuiFilterOK {
+		t.Fatalf("Shift+Tab: act=%v filter=%c", act, u.filter)
+	}
+	if act := browse("r"); act != TUIRef {
+		t.Errorf("r 은 SetRefKey 탭에서 TUIRef: %v", act)
+	}
+	if f := tuiLastFrame(r); !strings.Contains(f, "[프로파일 점검] >[전체 설정 비교]") || !strings.Contains(f, "전체비교 — 기준 x") || !strings.Contains(f, "r 기준 다시 선택") {
+		t.Errorf("전체 설정 비교 화면:\n%s", f)
+	}
+	u.SwitchTab(0)
+	if u.Tab() != 0 || !u.inGroup || u.gi != 1 || u.filter != tuiFilterDiff || u.refKey || u.title != "프로파일 결과" {
+		t.Errorf("돌아오면 상태 유지: inGroup=%v gi=%d filter=%c refKey=%v", u.inGroup, u.gi, u.filter, u.refKey)
+	}
+	u.SwitchTab(1)
+	if u.filter != tuiFilterOK || !u.refKey || u.title != "전체비교 — 기준 x" {
+		t.Errorf("전체 설정 비교 상태 유지: filter=%c refKey=%v", u.filter, u.refKey)
+	}
+	// 글 보기에서는 Tab·r 을 받지 않는다
+	u.SetText("수정 미리보기", []string{"x"})
+	if act := browse("\trq"); act != TUIQuit || u.Quit() {
+		t.Errorf("글 보기 Tab/r: act=%v", act)
 	}
 }
 
@@ -177,24 +261,24 @@ func TestTUIFiltersAndCounts(t *testing.T) {
 		i := strings.Index(f, "태그")
 		return f[i:]
 	}
-	_, r, _ := browseKeys(t, "\tq", vgs)
+	_, r, _ := browseKeys(t, "\r\x1b[Cq", vgs)
 	if f := tuiLastFrame(r); !strings.Contains(f, "[보기: 전체]  OK 1  difference 1  N/A 1") || !strings.Contains(f, "줄 1-3/3") {
 		t.Errorf("전체 보기 건수:\n%s", f)
 	}
-	_, r, _ = browseKeys(t, "\tfq", vgs)
+	_, r, _ = browseKeys(t, "\r\x1b[Cfq", vgs) // 필터는 어느 단계에서나 (관리망 그룹 줄)
 	if f := tuiLastFrame(r); !strings.Contains(f, "[보기: difference만]") || !strings.Contains(body(f), "[difference]") ||
 		strings.Contains(body(f), "[OK]") || strings.Contains(body(f), "[N/A]") {
 		t.Errorf("f:\n%s", f)
 	}
-	_, r, _ = browseKeys(t, "\toq", vgs)
+	_, r, _ = browseKeys(t, "\r\x1b[Coq", vgs)
 	if f := tuiLastFrame(r); !strings.Contains(f, "[보기: OK만]") || !strings.Contains(body(f), "[OK]") || strings.Contains(body(f), "[difference]") {
 		t.Errorf("o:\n%s", f)
 	}
-	_, r, _ = browseKeys(t, "\tnq", vgs)
+	_, r, _ = browseKeys(t, "\r\x1b[Cnq", vgs)
 	if f := tuiLastFrame(r); !strings.Contains(body(f), "[N/A]") || !strings.Contains(body(f), "(N/A)") || strings.Contains(body(f), "[OK]") {
 		t.Errorf("n (값 없음은 (N/A)):\n%s", f)
 	}
-	_, r, _ = browseKeys(t, "\tnaq", vgs)
+	_, r, _ = browseKeys(t, "\r\x1b[Cnaq", vgs)
 	if f := tuiLastFrame(r); !strings.Contains(f, "[보기: 전체]") || !strings.Contains(body(f), "[OK]") {
 		t.Errorf("a 로 전체 복귀:\n%s", f)
 	}
@@ -236,7 +320,7 @@ func TestTUIScrollBounds(t *testing.T) {
 	if u, _, _ := browseKeys(t, "kk\x1b[5~jjjkq", vgs); u.top != 2 {
 		t.Errorf("맨 위에서 ↑ 는 0 에서 멈추고 j/k 는 한 줄: top=%d", u.top)
 	}
-	if u, _, _ := browseKeys(t, "\x1b[6~\tq", tuiSampleVGs()); u.top != 0 {
+	if u, _, _ := browseKeys(t, "\x1b[6~\r\x1b[Cq", tuiSampleVGs()); u.top != 0 {
 		t.Errorf("줄이 화면보다 적으면 스크롤 없음: top=%d", u.top)
 	}
 }
@@ -245,13 +329,16 @@ func TestTUIScrollBounds(t *testing.T) {
 
 func TestTUICtrlCIgnored(t *testing.T) {
 	for _, k := range []string{"\x03", "\x1a", "\x18"} {
-		u, r, act := browseKeys(t, k+"q", tuiSampleVGs())
+		u, r, act := browseKeys(t, k+"qq", tuiSampleVGs())
 		if act != TUIQuit || u.Quit() {
-			t.Errorf("%q 뒤 q 로 끝나야 함: act=%v quit=%v", k, act, u.Quit())
+			t.Errorf("%q 뒤 q 두 번으로 끝나야 함: act=%v quit=%v", k, act, u.Quit())
 		}
-		has := strings.Contains(r.out.String(), "종료는 q 를 누르세요")
-		if (k != "\x18") != has {
-			t.Errorf("%q: 안내 문구 표시=%v", k, has)
+		want := "종료는 q 를 두 번 누르세요"
+		if k == "\x18" { // 결과 화면의 Ctrl+X 는 끝내지 않고 안내만
+			want = "Ctrl+X 는 진행 중 작업 취소입니다"
+		}
+		if !strings.Contains(r.out.String(), want) {
+			t.Errorf("%q: 안내 %q 없음", k, want)
 		}
 	}
 	// 입력 중 Ctrl+C 는 글자로 들어가지 않고 취소 안내
@@ -271,7 +358,12 @@ func TestTUIQuitKeysAndRestore(t *testing.T) {
 		keys string
 		act  TUIAction
 		quit bool
-	}{{"q", TUIQuit, false}, {"\x1b", TUIQuit, false}, {"jjQ", TUIQuit, false}, {"e", TUIEdit, false}, {"", TUIQuit, true}} {
+	}{
+		{"qq", TUIQuit, false}, {"jjQQ", TUIQuit, false}, {"e", TUIEdit, false}, {"", TUIQuit, true},
+		// 맨 위에서 q 한 번·Esc·N·Ctrl+X 는 끝내지 않는다 (입력 끝으로만 종료). q 뒤 Esc·다른 키면 종료 확인 취소
+		{"q", TUIQuit, true}, {"\x1b", TUIQuit, true}, {"q\x1b", TUIQuit, true}, {"q\x1bq", TUIQuit, true},
+		{"qjq", TUIQuit, true}, {"N", TUIQuit, true}, {"\x18", TUIQuit, true}, {"q\x1bqq", TUIQuit, false},
+	} {
 		u, r, act := browseKeys(t, c.keys, tuiSampleVGs())
 		if act != c.act || u.Quit() != c.quit {
 			t.Errorf("%q: act=%v quit=%v", c.keys, act, u.Quit())
@@ -335,7 +427,7 @@ func TestTUIResizeRedraws(t *testing.T) {
 	})
 	go func() {
 		<-redrawn
-		pw.Write([]byte("q"))
+		pw.Write([]byte("qq"))
 	}()
 	u.SetResults("x", tuiSampleVGs())
 	u.Browse()
@@ -380,13 +472,10 @@ func TestTUIAsk(t *testing.T) {
 }
 
 func TestTUIInputLinesPaste(t *testing.T) {
-	u, _ := newTUIRig(t, "host1\nhost2\r\n  host3  \n\nhost4\x7f5\x04y")
+	u, _ := newTUIRig(t, "host1\nhost2\r\n  host3  \n\nhost4\x7f5\x04")
 	got, ok := u.InputLines("대상 hostname 붙여넣기")
 	if !ok || strings.Join(got, ",") != "host1,host2,host3,host5" {
 		t.Errorf("붙여넣기: %q %v", got, ok)
-	}
-	if a := u.Ask("계속?"); a != TUIYes { // 남은 키는 다음 질문으로
-		t.Errorf("다음 질문=%v", a)
 	}
 	u, _ = newTUIRig(t, "a\nb\x7f\x7fc\x04")
 	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "ac" {
@@ -461,7 +550,7 @@ func TestTUIProgress(t *testing.T) {
 	go func() {
 		<-ready
 		pw.Write([]byte("q"))
-		pw.Write([]byte("\t"))
+		pw.Write([]byte("\r\x1b[C"))
 		pw.Write([]byte("\x18"))
 	}()
 	err := u.Progress("시작", func(j *TUIJob) error {
@@ -479,7 +568,7 @@ func TestTUIProgress(t *testing.T) {
 		t.Errorf("진행 화면:\n%s", tuiLastFrame(r))
 	}
 	if u.gi != 1 {
-		t.Errorf("진행 중에도 Tab 이 동작해야 함: gi=%d", u.gi)
+		t.Errorf("진행 중에도 Enter·→ 가 동작해야 함: gi=%d", u.gi)
 	}
 	// 바로 끝나는 작업
 	if err := u.Progress("x", func(j *TUIJob) error { return nil }); err != nil || u.Quit() {
@@ -515,15 +604,83 @@ func TestTUIProgressSignalCancelsAndPanicPropagates(t *testing.T) {
 	}
 }
 
+// 끝내는 중(첫 시그널로 작업 취소, 진행 중 호스트를 기다림)에 시그널을 또 받으면 기다리지 않고 터미널을 되돌린 뒤 끝낸다.
+func TestTUIProgressSecondSignalExits(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	sig := make(chan os.Signal, 2)
+	u, r := newTUIRigReader(t, pr, func(e *tuiEnv, _ *tuiRig) { e.Signals = sig })
+	release := make(chan struct{})
+	code := -1
+	restoredAtExit := 0
+	old := tuiExit
+	defer func() { tuiExit = old }()
+	tuiExit = func(c int) { code, restoredAtExit = c, r.restored; close(release) }
+	err := u.Progress("x", func(j *TUIJob) error {
+		sig <- os.Interrupt // 첫 시그널: 취소 요청
+		<-j.Canceled()
+		sig <- os.Interrupt // 진행 중 호스트가 아직 안 끝났는데 두 번째 시그널
+		<-release           // 실제로는 os.Exit 로 여기까지 오지 않음
+		return nil
+	})
+	if err != nil || code != tuiExitSignal || restoredAtExit != 1 || r.closed != 1 || !u.Quit() {
+		t.Errorf("두 번째 시그널: err=%v code=%d restored=%d closed=%d", err, code, restoredAtExit, r.closed)
+	}
+}
+
+// 맨 위(벤더 줄) q → 종료 확인 안내, q 한 번 더 → 끝, Esc → 계속. 관리망 그룹 줄·글 보기의 q 는 한 단계 뒤로.
+func TestTUIHomeQuitConfirm(t *testing.T) {
+	u, r, act := browseKeys(t, "q", tuiSampleVGs())
+	if f := tuiLastFrame(r); act != TUIQuit || !u.Quit() || !strings.Contains(f, tuiQuitConfirm) {
+		t.Errorf("q 한 번은 안내만: act=%v quit=%v\n%s", act, u.Quit(), f)
+	}
+	_, r, _ = browseKeys(t, "q\x1b", tuiSampleVGs())
+	if f := tuiLastFrame(r); strings.Contains(f, tuiQuitConfirm) {
+		t.Errorf("Esc 면 종료 확인 안내가 지워져야 함:\n%s", f)
+	}
+	u, _, act = browseKeys(t, "\r\x1b[Cqqq", tuiSampleVGs()) // 그룹 줄 q → 벤더 줄, q q → 끝
+	if act != TUIQuit || u.Quit() || u.inGroup {
+		t.Errorf("그룹 q → 벤더 줄 → q q 끝: act=%v quit=%v inGroup=%v", act, u.Quit(), u.inGroup)
+	}
+	for _, k := range []string{"q", "\x1b"} { // 글 보기(미리보기·설정 결과)의 q/Esc 는 바로 돌아가기
+		u, _ := newTUIRig(t, k)
+		u.SetText("수정 미리보기", []string{"x"})
+		if act := u.Browse(); act != TUIQuit || u.Quit() {
+			t.Errorf("글 보기 %q: act=%v quit=%v", k, act, u.Quit())
+		}
+	}
+}
+
+// Ask 는 묻기 전에 쌓인 키(미리 친 y)를 버리고, 질문을 띄운 뒤 친 키로 답한다. 쌓인 키 중 입력 끝이면 Quit.
+func TestTUIAskDrainsTypeAhead(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	u, _ := newTUIRigReader(t, pr, func(e *tuiEnv, _ *tuiRig) {
+		e.Ready = func() { pw.Write([]byte("n")) }
+	})
+	u.keys <- tuiKey{k: tkRune, r: 'y'}
+	u.keys <- tuiKey{k: tkRune, r: 'y'}
+	if a := u.Ask("수정할까요?"); a != TUINo {
+		t.Errorf("미리 친 y 를 버리고 n: %v", a)
+	}
+	u.keys <- tuiKey{k: tkRune, r: 'y'}
+	u.keys <- tuiKey{k: tkEOF}
+	if a := u.Ask("진행할까요?"); a != TUIAbort || !u.Quit() {
+		t.Errorf("쌓인 입력 끝: a=%v quit=%v", a, u.Quit())
+	}
+}
+
 // ---- 내용 교체·글 보기·도움말 ----
 
 func TestTUISetResultsAndText(t *testing.T) {
-	u, r := newTUIRig(t, "\tfqq"+"Gq")
+	u, r := newTUIRig(t, "\r\x1b[Cfe"+"qq"+"Gq")
 	u.SetResults("BIOS 점검 결과 — 프로파일 VM", tuiSampleVGs())
-	u.Browse()
+	if act := u.Browse(); act != TUIEdit || !u.inGroup || u.gi != 1 {
+		t.Fatalf("그룹 줄에서 e: act=%v inGroup=%v gi=%d", act, u.inGroup, u.gi)
+	}
 	u.SetResults("전체비교 — 기준 ref01", groupLines([]ResultLine{tuiL(TagDiff, "DELL", "d9", "iDRAC 9", "SysProfile", "Perf", "Custom", "FAIL")}))
-	if u.gi != 0 || u.filter != tuiFilterAll {
-		t.Errorf("내용 교체 시 탭·필터 처음으로")
+	if u.gi != 0 || u.inGroup || u.filter != tuiFilterAll {
+		t.Errorf("내용 교체 시 그룹·단계·필터 처음으로")
 	}
 	u.Browse()
 	if f := tuiLastFrame(r); !strings.Contains(f, "전체비교 — 기준 ref01") || !strings.Contains(f, "SysProfile") || strings.Contains(f, "AttrA") {
@@ -538,7 +695,7 @@ func TestTUISetResultsAndText(t *testing.T) {
 		t.Error("글 보기 q")
 	}
 	f := tuiLastFrame(r)
-	if !strings.Contains(f, "미리보기 40") || strings.Contains(f, "미리보기 01") || strings.Contains(f, "벤더") || strings.Contains(f, "Tab 관리망") {
+	if !strings.Contains(f, "미리보기 40") || strings.Contains(f, "미리보기 01") || strings.Contains(f, "벤더") || strings.Contains(f, "←→") {
 		t.Errorf("글 보기 G:\n%s", f)
 	}
 }
@@ -583,11 +740,12 @@ func TestTUIKoreanAlignment(t *testing.T) {
 		}
 	}
 	he := tuiLineTable(true, 0, []ResultLine{{Tag: TagNA, Host: "d2", Attr: "-", Note: "UNREACHABLE", HostError: true}})
-	if !strings.Contains(he[1], "\x1b[31m[N/A]") || !strings.Contains(he[1], "\x1b[31mUNREACHABLE") {
-		t.Errorf("호스트 오류 줄은 빨강: %q", he[1])
+	if !strings.Contains(he[1], "\x1b[31m[N/A]") || !strings.Contains(he[1], "\x1b[31mUNREACHABLE") ||
+		!strings.Contains(he[1], "\x1b[32m(N/A)") || strings.Contains(he[1], "\x1b[31md2") {
+		t.Errorf("호스트 오류 줄은 태그·현재값·비고만 빨강, 기준값은 초록: %q", he[1])
 	}
 	// TUI 화면 줄은 모두 폭(w-1) 안
-	u, r := newTUIRigReader(t, strings.NewReader("\t"), func(e *tuiEnv, r *tuiRig) { e.Color = true; r.w = 50 })
+	u, r := newTUIRigReader(t, strings.NewReader("\r\x1b[C"), func(e *tuiEnv, r *tuiRig) { e.Color = true; r.w = 50 })
 	u.SetResults("BIOS 점검 결과 — 프로파일 아주긴이름의프로파일", tuiSampleVGs())
 	u.Browse()
 	for _, l := range strings.Split(tuiLastFrame(r), "\n") {
@@ -595,8 +753,8 @@ func TestTUIKoreanAlignment(t *testing.T) {
 			t.Errorf("화면 폭 초과: %q", l)
 		}
 	}
-	if !strings.Contains(r.out.String(), "\x1b[7m[iLO 5]") {
-		t.Error("색이 있으면 선택 탭은 반전")
+	if o := r.out.String(); !strings.Contains(o, "\x1b[7m[iLO 5]") || !strings.Contains(o, "\x1b[1;4m[HPE]") {
+		t.Error("색이 있으면 움직이는 줄의 선택 탭은 반전, 다른 줄은 굵은 밑줄")
 	}
 }
 

@@ -6,7 +6,7 @@
 
 ### 추가
 
-- **통합 진입점 `bios.sh` + `biostool bios`**: 인자 없이 터미널에서 실행하면 TUI(대상 입력 → 프로파일 선택 → 접속·조회 → 프로파일 결과 → “전체비교 결과를 볼까요?” → 기준 선택 → 전체비교 → “수정할까요?” → 요약). `-profile`·`-user`·`-ref`·`-ref-json`·`-diff`·`-ignore`·`-from-dump`·`-plain` 옵션. TUI 키: ←→ 벤더 탭 · Tab 관리망 그룹 탭 · ↑↓(k j) · PgUp/PgDn · a/o/f/n 필터 · s 요약 · e 수정 · ? 도움말 · q/Esc 종료 · **Ctrl+C/Ctrl+Z 무시**(“종료는 q”) · **Ctrl+X 진행 중 작업 취소**(접속·조회, 기준 조회, 설정 적용). 구현 `unified_cmd.go`·`tui_flow.go`·`tui_view.go`·`tui_render.go`·`tui_keys.go`·`tui_tty_linux.go`(raw 터미널은 `syscall` 만, 리눅스 외는 `tui_tty_other.go` 가 평문으로 대체).
+- **통합 진입점 `bios.sh` + `biostool bios`**: 인자 없이 터미널에서 실행하면 TUI(대상 입력 → 프로파일 선택 → 접속·조회 → 프로파일 결과 → (Tab) 기준 선택 → 전체 설정 비교 → 수정 확인 “위 수정대상을 적용할까요?” → 요약). `-profile`·`-user`·`-ref`·`-ref-json`·`-diff`·`-ignore`·`-from-dump`·`-plain` 옵션. TUI 키: Tab 화면 전환 · ←→ 벤더(Enter 로 관리망 그룹) · ↑↓(k j) · PgUp/PgDn · a/o/f/n 필터 · s 요약 · e 수정 · ? 도움말 · q 한 단계 뒤로(벤더 줄에서 q 두 번이면 종료) · **Ctrl+C/Ctrl+Z 무시**(“종료는 q 를 두 번 누르세요”) · **Ctrl+X 진행 중 작업 취소**(접속·조회, 기준 조회, 설정 적용). 구현 `unified_cmd.go`·`tui_flow.go`·`tui_view.go`·`tui_render.go`·`tui_keys.go`·`tui_tty_linux.go`(raw 터미널은 `syscall` 만, 리눅스 외는 `tui_tty_other.go` 가 평문으로 대체).
 - **1회 수집(`unified.go`)**: 호스트당 로그인 1회로 BIOS 전체 속성을 읽어 프로파일 판정과 전체비교에 함께 사용합니다(전체비교 때 대상에 다시 접속하지 않음). 기존 결과 파일(`result.tsv` 등)은 그대로 기록합니다.
 - **전체비교 기준 3종**: 비교서버 hostname(대상 목록에 없으면 그 서버만 추가 조회, `-ref`), `refs/` 폴더의 JSON(`bios_export.sh` 결과, `-ref-json`·TUI 목록), `diff.txt`(모델별 기준, `-diff`). 같은 모델끼리만 비교하고 BIOS 버전이 달라도 속성 이름 목록이 같으면 허용합니다.
 - **색상 줄 출력 + 태그 3종**: `[태그] host↹ip↹vendor↹model↹bios↹attribute↹기준값↹현재값↹비고`. 태그 `[OK]`(초록) / `[difference]`(노랑) / `[N/A]`(회색), 호스트 단위 오류는 빨강, 기준값 칸은 항상 초록, 비고에 원래 상태명. **태그는 상태를 묶은 표시이므로 `[N/A]` 는 “문제 없음”이 아니라 “판정할 수 없음”**(MAPPING_MISSING·NO_DUMP·대상에 속성 없음·접속 실패)이고, 값 없음(`-`)은 `(N/A)` 로 표시합니다(`profiles/*.tsv` 양식은 그대로). `NO_COLOR`·터미널이 아니면 색 없음. 구현 `resultline.go`·`resultconv.go`·`lineout.go`.
@@ -22,6 +22,17 @@
 - **`bios_check.sh`·`all_bios_check.sh` 는 호환 래퍼로 남습니다.** `bios_check.sh` 는 옛 전용 옵션(`-retry-from`·`-dry-run`·`-no-prompt`·`-stdin-ok`·`-list-max`·`-fail-max`)이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘기고, 옵션이 있으면 옛 방식(Y/N 줄 프롬프트)으로 동작합니다. `all_bios_check.sh` 는 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘어가며 **옛 대화형 1.체크/2.전체비교 메뉴는 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만** 나옵니다. `-user`·`-diff`·`-ref`·`-from-dump`·`-retry-from` 방식은 그대로입니다.
 - 터미널에서 `bash bios_check.sh --profile VM` 은 이제 TUI 로 점검하고 마지막에 수정 여부를 묻습니다(`Y/N` 줄 프롬프트가 아님).
 - README 의 주의사항 문구를 “본 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)…” 로 맞췄습니다.
+- **TUI 이동을 단계식으로**: 벤더 줄에서 ←→ 로 벤더를 고르고 `Enter` 로 들어가면 ←→ 가 관리망(관리 컨트롤러) 그룹을 바꿉니다(Tab 으로 그룹을 넘기지 않음). `q`/`Esc` 는 한 단계 뒤로(그룹 줄 → 벤더 줄)이고 맨 위(벤더 줄)에서만 결과 보기를 마칩니다. 지금 움직이는 줄은 앞에 `>>` 가 붙고 선택 탭이 반전되며, 키 안내 줄도 단계에 맞게 바뀝니다. ↑↓·PgUp/PgDn·Home/End·a/o/f/n/s 는 어느 단계에서나 동작합니다.
+- **화면 탭 `[프로파일 점검] [전체 설정 비교]`**: 벤더 줄 위에 화면 탭을 두고 `Tab`(`Shift+Tab`)으로 어느 위치에서나 전환합니다. 옛 “q → 전체비교 결과를 볼까요?” 질문은 없앴고, 처음 `[전체 설정 비교]` 로 넘어갈 때 기준을 고르고(`-ref`/`-ref-json`/`-diff` 를 줬으면 묻지 않음) 비교합니다(진행 표시·Ctrl+X 취소 그대로, 기준 선택을 취소하면 프로파일 화면으로 돌아오고 다음 Tab 에 다시 묻습니다). 그 뒤로는 두 결과를 오가며 화면마다 벤더·그룹·필터·스크롤을 따로 기억하고, `[전체 설정 비교]` 에서 `r` 로 기준을 다시 골라 비교할 수 있습니다(`compare_` CSV 는 새 결과로 덮어씀). 벤더 줄에서 `q` 를 두 번 누르면(설정할 항목이 있을 때) 수정 단계로, `e` 는 어디서든 바로 수정 단계로 갑니다(아래 “수정 확인을 두 단계로” 참고).
+- **전체비교의 기준 서버 자신(`REFERENCE`)**: `(N/A) (N/A) REFERENCE` 한 줄 대신 속성마다 기준값 = 현재값 = 자기 값, 태그 `[OK]`, 비고 `REFERENCE` 줄로 보여 줍니다(제외 속성은 빠짐, 화면·`compare_` CSV 공통). 설정 계획은 그대로 이 호스트를 설정하지 않습니다.
+- **기준값 칸은 언제나 초록**: 호스트 단위 오류 줄(접속 실패 등)도 기준값은 초록이고 태그·현재값·비고만 빨강입니다(TUI·평문 줄 공통, 이전에는 TUI 에서 그 줄 전체가 빨강).
+- **절대 바꾸지 않는 속성(보호 속성, `protect.go`)**: 서버 고유값(IQN·iSCSI·IP·네트워크·ServerName·자산번호·UUID)과 부팅(BootMode·부팅 순서·PXE·URL/HTTP 부팅)·보안(SecureBoot·TPM·비밀번호·인증서)·스토리지(RAID·SATA·NVMe·VMD)·NIC(LOM·OCP·WoL·Option ROM·Slot) 속성은 프로파일이든 전체비교 값이든 설정하지 않습니다. 내장 패턴은 코드에 고정이라 `bios.conf`·`ignore_attrs.txt` 로 끌 수 없고, 새 conf 키 `protect_attrs=A|B|*패턴*` 은 **더하기만** 합니다(`bios.conf.example` 갱신). 겹겹이 막습니다: 설정 계획에서 수정제외 표시 → 적용 단계(`set.go`)에서 하나라도 걸리면 그 호스트는 접속도 하지 않고 통째로 `PROTECTED_ATTR` → PATCH 직전에 본문 속성 재검사 → `redfish.go` `checkAttributes` 가 PATCH 본문 전체 거부. 성능 속성(예: Dell `ProcPwrPerf`)을 잘못 막지 않도록 패턴을 좁혀 두었고 `protect_test.go` 가 `profiles/*.tsv` 의 속성이 막히지 않는지 확인합니다.
+- **수정 확인을 두 단계로**: 이전의 “수정할까요?” 한 번을 바꿨습니다. 확인 1 은 차이 항목 전부를 호스트별 `현재값 -> 변경값 (수정대상)` / `(수정제외: 사유)` 로 보이고(값은 자르지 않음) “위 수정대상을 적용할까요?” 를 묻습니다. y 이고 수정제외가 있으면 확인 2 로 수정제외 항목만 “아래 항목은 변경하지 않습니다” 와 함께 다시 보이고 “수정제외 항목을 확인했습니다. 진행할까요?” 를 묻습니다. 그다음 남의 Pending 질문(y 포함 / n 제외 / Ctrl+X 취소). 확인 1·2 에서 `n`·`Esc`·`Ctrl+X` 면 아무것도 쓰지 않고 결과 화면으로 돌아옵니다. 옵션으로 프로파일·대상·기준을 미리 줘도 확인은 항상 묻습니다.
+- **수정 계획 규칙 보강**(`setplan.go`): 비교서버와 BIOS 버전이 다른 호스트(`BIOS_VER_DIFF`)의 비교서버 값은 수정제외, 비교서버 값은 적용 때 레지스트리 형식이 Enumeration·Integer·Boolean 일 때만 전송(문자열·형식 불명은 `INVALID_VALUE`), 시스템 프로파일 성격 속성이 한 호스트에 여러 개면 프로파일 행 항목만 보내고 나머지는 수정제외(적용 단계 `DEPENDS_ON_PROFILE`), Dell 은 설정 Job 이 남의 Pending 까지 적용하므로 남의 Pending 이 있는 호스트는 통째로 제외. 설정 중 `Ctrl+X` 로 시작하지 않은 호스트는 `CANCELED` 로 `apply_failed.txt` 에 모입니다. `PROTECTED_ATTR`·`CANCELED` 를 README 3.6절 표에 추가했습니다.
+- **종료·되돌아가기 규칙 정리**: `q` 는 어디서나 한 단계 뒤로(관리망 그룹 → 벤더 줄, 미리보기·설정 결과 → 결과 화면, 프로파일 고르기 → 대상 입력), 벤더 줄(맨 위)에서는 `q` 다음에 `q` 를 한 번 더 눌러야 끝나고 `Esc`·`N`·`Ctrl+X` 등 다른 키는 종료 확인만 취소합니다(홈에서 `N`·`Ctrl+X` 로는 끝나지 않음). 끝낼 때 설정할 항목이 있으면(덤프 읽기 제외) 먼저 수정 단계로 가고, 거절한 뒤의 `q` `q` 는 다시 묻지 않고 끝납니다(`r` 로 전체 설정 비교를 새로 하면 다시 묻습니다). 설정을 한 번 적용한 뒤에는 같은 세션에서 다시 설정할 수 없습니다. Ctrl+C 안내는 “종료는 q 를 두 번 누르세요” 입니다.
+- **옵션 동작**: `-user` 는 대상, `-profile` 은 프로파일 질문을 건너뛰고, `-ref`/`-ref-json`/`-diff` 를 주면 수집 직후 바로 전체 설정 비교까지 실행합니다(첫 화면은 `[프로파일 점검]`, 실패·취소하면 안내만 남기고 다음 Tab 에 다시 시도). 설정 확인은 항상 묻습니다.
+- **견고성**: 흐름 중 패닉이어도 터미널(대체 화면·커서·raw 모드)을 되돌리고, 호스트 하나의 처리 중 패닉은 그 호스트를 `BMC_ERROR` 로 남기고 나머지를 계속합니다(`sweep.go`). 질문 전에 쌓인 키(미리 친 `y`)는 버리고, 취소 후 기다리는 중 종료 시그널을 한 번 더 받으면 터미널을 되돌리고 바로 끝냅니다.
+- **출력 안전**: `check.res_<user>`(와 `_postapply`)는 비대화형 실행 시작 때 이전 파일을 먼저 지우고(치명적 오류로 끝나도 auto_setup 이 옛 `OK` 줄을 읽지 않게), 임시 파일 + rename 으로 원자적으로 씁니다. CSV 는 `=` `+` `@` TAB CR 로 시작하는 칸과 음수가 아닌 `-` 로 시작하는 칸 앞에 `'` 를 붙여 엑셀 수식 주입을 막고, 화면·평문 출력·`check.res_<user>` 는 제어 문자(ESC 등)를 공백으로 바꿉니다(`lineSafe`).
 
 ### 알려진 한계
 
@@ -33,8 +44,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 7774370 | 9dd536ce35f214ee0ff9026220f3967bf0351a26179fd5228c7ca7dfe549d1a4 |
-| bin/biostool_os6 | go1.20.14 | 6406144 | a70d459e70341c9e5e2d501ba3e83e818d45e5981732069d1b881ca2550d983f |
+| bin/biostool | go1.26.5 | 7852194 | 340024ef3bda28297ea8bc176eea45be76f8ae014bd96b8a402024f4c720442d |
+| bin/biostool_os6 | go1.20.14 | 6471680 | f338ad3fdc51496adb98b78403405ef699d617d0b6b8849a2329fbe19ecb8d51 |
 
 직접 시험: `bash testcase/demo_env.sh start` (mock BMC 6대·시험용 conf 생성, 따라 할 명령 출력) → `bash testcase/demo_env.sh stop`.
 

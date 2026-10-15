@@ -66,7 +66,7 @@ cp ignore_attrs.txt.example ignore_attrs.txt   # (선택) 비교에서 뺄 속�
 mkdir -p refs                        # (선택) 전체비교 기준으로 고를 JSON 폴더 (bios_export.sh 결과를 복사해 둠, bios.conf 의 refs_dir)
 ```
 
-`bash bios.sh` 로 쓸 때는 대상을 TUI 화면에서 직접 입력(붙여넣기)해도 되므로 `user.txt` 가 꼭 필요하지는 않습니다(`-plain`·`-user` 를 줄 때만 필요). `bios.conf` 에는 점검에서 뺄 속성(`exclude_attrs`), 전체비교 차이를 수정 대상에 넣을지(`allcheck_set`), 기준 JSON 폴더(`refs_dir`), 비대화형 기본 프로파일(`auto_profile`) 키가 있습니다(3.3절).
+`bash bios.sh` 로 쓸 때는 대상을 TUI 화면에서 직접 입력(붙여넣기)해도 되므로 `user.txt` 가 꼭 필요하지는 않습니다(`-plain`·`-user` 를 줄 때만 필요). `bios.conf` 에는 점검에서 뺄 속성(`exclude_attrs`), 전체비교 차이를 수정 대상에 넣을지(`allcheck_set`), 절대 바꾸지 않을 속성 추가(`protect_attrs`), 기준 JSON 폴더(`refs_dir`), 비대화형 기본 프로파일(`auto_profile`) 키가 있습니다(3.3절).
 
 - **BMC 비밀번호는 평문으로 디스크·명령행·로그에 남지 않습니다.** `encrypt.sh` 가 화면에 보이지 않게 두 번 입력받아 파이프(표준입력)로만 넘기고, AES-256-GCM 으로 암호화한 `pass.enc` 와 키 `key.bin` 으로 나눠 보관합니다. 둘은 짝이므로 함께 보관하고 **git 에 올리지 마십시오**.
 - `user.txt` 한 줄에 대상 하나: `IP` / `hostname-m` / `hostname`(+ 선택적으로 `:포트`). `hostname` 은 `/etc/hosts` 에서 `hostname-m` 의 IP 를, `hostname-m` 은 그 이름의 IP 를 찾습니다(`/etc/hosts` 형식은 `IP  hostname-m`, 한 줄에 별칭이 여럿이어도 됨). 빈 줄·`#` 주석은 무시하고 중복은 한 번만 처리합니다.
@@ -93,31 +93,46 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 
 **진행 순서 (TUI)**
 
-1. **대상 입력** — 대상 파일을 지정하거나 hostname / hostname-m / IP 를 붙여넣습니다(한 줄에 하나, Ctrl+D 완료, Ctrl+X 취소). `-user` 를 주면 묻지 않습니다.
+1. **대상 입력** — 대상 파일을 지정하거나 hostname / hostname-m / IP 를 붙여넣습니다(한 줄에 하나, Ctrl+D 완료, Ctrl+X 취소). `-user` 를 주면 묻지 않습니다(대상을 옵션으로 줬으면 돌아갈 대상 입력 단계도 없습니다).
 2. **프로파일 선택** — `profiles/*.tsv` 중에서 고릅니다(`-profile` 로 지정하면 생략).
 3. **접속·조회** — 호스트당 **로그인 1회**로 BIOS 전체 속성을 한 번에 읽어, 프로파일 판정과 전체비교에 함께 씁니다(전체비교 때 대상에 다시 접속하지 않음). 진행 상황이 한 줄로 갱신됩니다.
-4. **프로파일 결과 화면** — 프로파일에 등록된 항목의 결과를 색상 줄로 보여 줍니다. 닫으려고 `q` 를 누르면 **“전체비교 결과를 볼까요?”** 를 묻습니다(`e` 는 이 질문 없이 바로 수정 단계).
-5. **전체비교(y)** — 기준을 고르면 같은 화면에서 전체비교 결과로 바뀝니다(아래 “전체비교 기준”).
-6. **수정** — 미리보기를 보고 **“수정할까요?”** 에 y 를 누르면 Pending 까지만 설정합니다(아래 “수정 규칙”). 재부팅은 하지 않습니다.
+4. **결과 화면 `[프로파일 점검]`** — 프로파일에 등록된 항목의 결과를 색상 줄로 보여 줍니다. 맨 위에 화면 탭 `[프로파일 점검] [전체 설정 비교]` 가 있고 `Tab` 으로 오갑니다.
+5. **`[전체 설정 비교]`** — 처음 `Tab` 으로 넘어가면 기준을 고르고(아래 “전체비교 기준”, `-ref`/`-ref-json`/`-diff` 를 줬으면 묻지 않음) 비교 결과를 이 화면에 보여 줍니다. `-ref`/`-ref-json`/`-diff` 를 줬으면 `Tab` 을 기다리지 않고 **수집 직후 바로 전체 비교까지** 해 두며(첫 화면은 그대로 `[프로파일 점검]`) 비교에 실패하거나 취소해도 안내만 남기고 다음 `Tab` 에 다시 시도합니다. 그다음부터 `Tab` 은 두 결과를 자유롭게 오가며 화면마다 벤더·그룹·필터·스크롤 위치를 따로 기억합니다. 이 화면에서 `r` 을 누르면 기준을 다시 골라 비교합니다.
+6. **수정** — 벤더 줄에서 `q` 를 두 번 누르거나(설정할 항목이 있을 때) `e`(어디서든)를 누르면 수정 단계입니다. 먼저 **차이 항목 전부**를 호스트별로 `현재값 -> 변경값 (수정대상)` / `현재값 -> 변경값 (수정제외: 사유)` 로 보이고 **“위 수정대상을 적용할까요?”** 를 묻습니다. y 이고 수정제외 항목이 있으면 그 항목만 “아래 항목은 변경하지 않습니다” 로 다시 보이며 **“수정제외 항목을 확인했습니다. 진행할까요?”** 를 한 번 더 묻습니다. 남의 Pending 이 있으면 포함 여부를 묻고(아래 “수정 규칙”), 모두 통과해야 Pending 까지만 설정합니다(프로파일 + 전체비교를 했으면 그 difference 까지). 재부팅은 하지 않습니다. 첫 두 질문에서 `n`·`Esc`·`Ctrl+X` 면 **아무것도 쓰지 않고** 결과 화면으로 돌아옵니다. `-profile`·`-user`·`-ref` 등 옵션으로 미리 지정해도 이 확인은 항상 묻습니다.
 7. **요약** — TUI 를 닫고 OK / difference / N/A / 오류 건수, 결과 폴더, CSV 목록, 설정 결과를 출력합니다.
 
 **TUI 키**
 
 | 키 | 동작 |
 |---|---|
-| `←` `→` | 벤더 탭 이동 |
-| `Tab` / `Shift+Tab` | 관리망(관리 컨트롤러) 그룹 탭 다음 / 이전 |
+| `Tab` / `Shift+Tab` | 화면 전환 `[프로파일 점검]` ↔ `[전체 설정 비교]` (어느 위치에서나, 처음이면 기준을 고르고 비교) |
+| `←` `→` | 벤더 줄: 벤더 이동 / 관리망 그룹 줄: 관리망(관리 컨트롤러) 그룹 이동. 지금 움직이는 줄은 앞에 `>>` 가 붙고 선택 탭이 반전됩니다 |
+| `Enter` | 벤더 안으로 들어가기 (이후 `←` `→` 가 관리망 그룹을 바꿈, 그룹이 2개 이상일 때) |
+| `q` | **어디서나 한 단계 뒤로**: 관리망 그룹 줄 → 벤더 줄, 미리보기·설정 결과 → 결과 화면, 프로파일 고르기 → 대상 입력. 벤더 줄(맨 위)에서는 “종료하려면 q 를 한 번 더 누르세요” 가 나오고 `q` 를 한 번 더 누르면 결과 보기를 마칩니다 |
+| `Esc` | `q` 와 같이 한 단계 뒤로. 벤더 줄(맨 위)에서는 종료 확인만 취소하고 끝내지 않습니다 |
+| `r` | `[전체 설정 비교]` 화면에서 기준 다시 선택 → 다시 비교 |
 | `↑` `↓` (`k` `j`) | 한 줄 위 / 아래 |
 | `PgUp` `PgDn` | 한 화면 위 / 아래 (`Home` `End` = `g` `G` 처음 / 끝) |
 | `a` `o` `f` `n` | 필터: 전체 / OK 만 / difference 만 / N/A 만 (접속·조회 실패 포함) |
 | `s` | 요약: 호스트마다 한 줄(OK / difference / N/A 건수) |
-| `e` | 수정 메뉴 (바로 수정 단계) |
+| `e` | 수정 단계로 바로 이동 (어디서든. 설정할 항목이 없으면 그 안내, 이미 적용했으면 “다시 점검한 뒤 설정하십시오” 안내) |
 | `?` | 도움말 (아무 키로 닫음) |
-| `q` / `Esc` | 종료 / 결과 닫기 |
-| `Ctrl+X` | **진행 중 작업 취소**: 접속·조회(아직 시작하지 않은 호스트는 접속하지 않고 `CANCELED`, `retry.txt` 로 다시 실행), 기준 조회, 설정 적용, 대상 붙여넣기·질문 |
-| `Ctrl+C` / `Ctrl+Z` | **무시**됩니다 (“종료는 q 를 누르세요” 안내만). 터미널이 깨지지 않게 하려는 것입니다 |
+| `Ctrl+X` | **진행 중 작업 취소**: 접속·조회(아직 시작하지 않은 호스트는 접속하지 않고 `CANCELED`, `retry.txt` 로 다시 실행), 기준 조회, 설정 적용, 대상 붙여넣기·질문. 결과 화면에서는 아무것도 끝내지 않고 안내만 합니다 |
+| `Ctrl+C` / `Ctrl+Z` | **무시**됩니다 (“종료는 q 를 두 번 누르세요” 안내만). 터미널이 깨지지 않게 하려는 것입니다 |
 
-탭 전환·필터는 화면 안에서 제자리로 다시 그립니다. 표준출력이 터미널이 아니거나 `-plain` 이면 TUI 대신 평문으로 출력합니다. 그룹은 같은 벤더 안에서 관리 컨트롤러 모델별로 나누되 **BIOS 속성 이름 목록이 같으면 하나로 합칩니다**(예: iLO 4 + iLO 5).
+↑↓·PgUp/PgDn·Home/End 스크롤과 `a` `o` `f` `n` `s` 필터는 벤더 줄·관리망 그룹 줄 어디서나 동작합니다. 탭 전환·필터는 화면 안에서 제자리로 다시 그립니다. 표준출력이 터미널이 아니거나 `-plain` 이면 TUI 대신 평문으로 출력합니다. 그룹은 같은 벤더 안에서 관리 컨트롤러 모델별로 나누되 **BIOS 속성 이름 목록이 같으면 하나로 합칩니다**(예: iLO 4 + iLO 5).
+
+**끝내기 규칙** (벤더 줄에서 `q` 두 번)
+
+- 벤더 줄에서 `q` 다음 키가 `q` 이면 끝이고, `Esc` 를 포함한 다른 키(`N`·`Ctrl+X` 도)는 종료 확인만 취소하며 결과 보기를 계속합니다. 대상 입력·프로파일 고르기 화면의 `q`/`Esc` 는 취소(한 단계 뒤로)입니다.
+- 끝낼 때 **설정할 항목이 있으면(덤프 읽기가 아닐 때) 먼저 수정 단계**로 갑니다. 거기서 거절·취소하면 결과 화면으로 돌아오고, 그 뒤 `q` `q` 는 **다시 묻지 않고** 끝납니다. `[전체 설정 비교]` 를 새로 하면(`r`) 설정 계획이 바뀔 수 있어 다시 묻습니다.
+- 설정을 한 번 **적용한 뒤에는 같은 세션에서 다시 설정할 수 없습니다**(화면의 값이 적용 전 값이기 때문. 재부팅 후 다시 점검하십시오). 설정할 항목이 없거나 이미 거절·적용했으면 `q` `q` 에 바로 끝납니다.
+
+**견고성**
+
+- 흐름 중 오류(패닉)가 나도 터미널(대체 화면·커서·raw 모드)은 되돌립니다. 호스트 하나를 처리하다 패닉하면 프로그램이 죽지 않고 그 호스트만 `BMC_ERROR` 로 남기고 나머지를 계속합니다.
+- 질문을 띄우기 전에 이미 쌓인 키(미리 친 `y` 등)는 버려서 확인 질문이 앞서 친 키로 넘어가지 않습니다.
+- 작업을 취소하고 기다리는 중 종료 시그널(SIGINT/SIGTERM/SIGHUP)을 한 번 더 받으면 기다리지 않고 터미널을 되돌린 뒤 바로 끝냅니다.
 
 **출력 줄 형식과 태그 3종** (TUI 본문·평문 공통, 탭 구분)
 
@@ -127,11 +142,11 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 
 | 태그 | 색 | 묶이는 상태(비고에 원래 상태명이 그대로 나옴) |
 |---|---|---|
-| `[OK]` | 초록 | `OK`, `PENDING_OK`(전체비교는 `SAME`) |
+| `[OK]` | 초록 | `OK`, `PENDING_OK`(전체비교는 `SAME`, 기준 서버 자신은 `REFERENCE` — 자기 값을 기준값·현재값으로 보임) |
 | `[difference]` | 노랑 | `FAIL`, `UNVERIFIED`, `PENDING_EXISTS`, `PENDING_NO_JOB`(전체비교는 값이 다름 `DIFF`, 대상에만 있는 속성 `ONLY_HOST` — 기준값은 `(없음)`) |
 | `[N/A]` | 회색 | `MAPPING_MISSING`, `NO_DUMP`, 대상에 속성이 없음(`ONLY_REF`), 접속·조회 실패 |
 
-- 기준값 칸(프로파일 기대값 또는 비교서버 값)은 항상 초록이고, 현재값 칸은 태그 색을 따릅니다. 호스트 단위 오류(접속 실패 등)는 빨강입니다.
+- 기준값 칸(프로파일 기대값 또는 비교서버 값)은 호스트 단위 오류 줄까지 **항상 초록**이고, 현재값 칸은 태그 색을 따릅니다. 호스트 단위 오류(접속 실패 등)는 태그·현재값·비고가 빨강입니다.
 - 값이 없는 칸(`-`)은 화면·CSV 에서 `(N/A)` 로 표시합니다. `profiles/*.tsv` 의 양식은 바뀌지 않습니다.
 - `NO_COLOR` 환경변수를 설정하거나 터미널이 아니면 색이 없습니다.
 - **태그는 묶음 표시이므로 `[N/A]` 를 “문제 없음”으로 읽지 마십시오.** 판정할 수 없다는 뜻이고(매핑 없음, 대상에 속성 없음 등), 접속 실패도 N/A 줄로 나옵니다. 원인은 비고(원래 상태명)에서 확인합니다.
@@ -144,16 +159,37 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 | refs 폴더의 JSON | TUI 목록에서 선택 / `-ref-json <파일>`(파일 이름만 주면 `refs_dir` 에서 찾음) | `bios_export.sh`(2.4.1절)로 뽑은 속성 JSON. 기준으로 쓸 수 없는 파일은 목록에서 빠집니다 |
 | `diff.txt` | TUI 목록에서 선택 / `-diff <파일>` | 모델별 기준 호스트 목록(옛 `all_bios_check.sh` 와 같은 선택 규칙) |
 
-`-ref`·`-ref-json`·`-diff` 를 주면 기준을 묻지 않으며 셋 중 하나만 쓸 수 있습니다. **같은 모델끼리만** 비교하고, BIOS 버전이 달라도 속성 이름 목록이 같으면 비교·수정 대상이 됩니다(다르면 “속성 이름 목록이 기준과 다름 (설정 불가)”). 비교에서 뺄 속성은 `ignore_attrs.txt`(없으면 내장 목록)와 `bios.conf` 의 `exclude_attrs` 를 합쳐 적용하며, `exclude_attrs` 는 프로파일 점검에서도 그 속성 행을 점검하지 않습니다.
+`-ref`·`-ref-json`·`-diff` 를 주면 기준을 묻지 않으며 셋 중 하나만 쓸 수 있습니다. **같은 모델끼리만** 비교하고, BIOS 버전이 달라도 속성 이름 목록이 같으면 비교 대상이 되지만(다르면 “속성 이름 목록이 기준과 다름 (설정 불가)”), 비교서버와 BIOS 버전이 다른 호스트(`BIOS_VER_DIFF`)의 차이는 비교서버 값으로 **설정하지 않습니다**(수정제외). 비교에서 뺄 속성은 `ignore_attrs.txt`(없으면 내장 목록)와 `bios.conf` 의 `exclude_attrs` 를 합쳐 적용하며, `exclude_attrs` 는 프로파일 점검에서도 그 속성 행을 점검하지 않습니다.
 
-**수정 규칙** (“수정할까요?” — 질문은 한 번)
+**수정 규칙** (확인 질문 1~3개 — 모두 통과해야 씁니다)
 
+- **확인 1 (차이 항목 전부)**: 맨 위에 `수정대상 N건 · 수정제외 N건` 을 보이고, 호스트별로 `속성  현재값 -> 변경값 (수정대상)` 과 `... (수정제외: 사유)` 를 모두 보입니다(값은 자르지 않음). 이어서 남의 Pending 목록과 “참고”(항목 줄이 없는 제외 사유)가 나오고 **“위 수정대상을 적용할까요?”** 를 묻습니다.
+- **확인 2 (수정제외가 있을 때만)**: “아래 항목은 변경하지 않습니다” 와 수정제외 항목만 다시 보이고 **“수정제외 항목을 확인했습니다. 진행할까요?”** 를 묻습니다. `n`·`Esc`·`Ctrl+X` 면 아무것도 쓰지 않고 결과 화면으로 돌아옵니다.
 - 대상: 프로파일의 difference(**`verified=Y` 행만**)와, `bios.conf` 의 **`allcheck_set=on` 일 때만** 전체비교의 difference 를 함께 설정합니다(기본 `off` = 프로파일 항목만).
 - 같은 속성의 목표값이 프로파일과 비교서버에서 다르면 설정하지 않고 미리보기에 **`[충돌]`** 로 보입니다.
-- 제외 목록(`ignore_attrs.txt` + `exclude_attrs`)·위험 속성·N/A·쓰기 불가 벤더(Dell·HPE·Lenovo 가 아닌 호스트)·속성 이름 목록이 다른 호스트는 미리보기에 제외 사유와 함께 빠집니다.
-- 남이 걸어 둔 **Pending 이 있는 장비**는 호스트·속성·Pending 값 목록을 보여 주고 `y` 포함 / `n` 제외 / `Ctrl+X` 취소를 묻습니다. 포함하기로 했을 때도 그 목록과 정확히 같은 Pending 만 허용하고, 설정 중에 새로 생긴 Pending 이 있으면 쓰지 않습니다(`PENDING_EXISTS`).
-- 적용은 옛 설정(2.1절)과 같은 안전 경로(`set.go`)입니다: 재조회 → 레지스트리 검사 → 호스트당 PATCH 1회(+Dell Job 최대 1회) → **재부팅 없음**. 끝나면 Pending 을 다시 조회해 반영 여부를 설정 결과 화면에 보여 줍니다.
+- 제외 목록(`ignore_attrs.txt` + `exclude_attrs`)·위험 속성·N/A·쓰기 불가 벤더(Dell·HPE·Lenovo 가 아닌 호스트)·속성 이름 목록이 다른 호스트는 확인 화면에 `(수정제외: 사유)` 로 보이고 설정하지 않습니다.
+- **보호 속성**(아래 “절대 바꾸지 않는 속성”)은 프로파일이든 비교서버 값이든 어느 쪽에서도 설정 항목이 되지 않고 `(수정제외: 보호 속성 …)` 로만 보입니다.
+- 전체비교 difference 는 **비교서버와 BIOS 버전이 같은 호스트만** 설정합니다(다르면 `BIOS_VER_DIFF` 로 그 호스트의 비교서버 값은 수정제외). 비교서버 값은 적용 때 레지스트리 형식을 다시 확인해 **Enumeration·Integer·Boolean 일 때만** 보내며(문자열·형식 불명은 `INVALID_VALUE` “수정제외”), 이 판정은 적용 때 정해지므로 확인 화면에는 수정대상으로 보일 수 있습니다.
+- 시스템 프로파일 성격 속성(Dell SysProfile, HPE WorkloadProfile·PowerProfile 등)이 한 호스트에 여러 개면 **프로파일 행 항목만** 보내고 나머지는 수정제외(적용 단계에서는 `DEPENDS_ON_PROFILE`)로 미룹니다. 재부팅 후 다시 점검해 설정하십시오.
+- 남이 걸어 둔 **Pending 이 있는 장비**는 호스트·속성·Pending 값 목록을 보여 주고 `y` 포함 / `n` 제외 / `Ctrl+X` 취소를 묻습니다. 포함하기로 했을 때도 그 목록과 정확히 같은 Pending 만 허용하고, 설정 중에 새로 생긴 Pending 이 있으면 쓰지 않습니다(`PENDING_EXISTS`). 단 **Dell 은 설정 Job 이 남의 Pending 까지 함께 적용**하므로, 남의 Pending 이 있는 Dell 호스트는 묻지 않고 통째로 수정제외합니다.
+- 적용은 옛 설정(2.1절)과 같은 안전 경로(`set.go`)입니다: 재조회 → 레지스트리 검사 → 호스트당 PATCH 1회(+Dell Job 최대 1회) → **재부팅 없음**. 끝나면 Pending 을 다시 조회해 반영 여부를 설정 결과 화면에 보여 줍니다. 적용 중 `Ctrl+X` 로 취소하면 아직 시작하지 않은 호스트는 쓰지 않고 `CANCELED` 로 남으며 `apply_failed.txt` 에 모입니다.
 - `-from-dump`(덤프 읽기)·`-plain`·`-auto`/`-auto-check` 에서는 설정하지 않습니다.
+
+**절대 바꾸지 않는 속성 (보호 속성)** — 서버마다 다른 고유값과 부팅·보안·스토리지·네트워크 관련 속성은 프로파일이든 전체비교(비교서버 값)든 **설정하지 않습니다**. 코드에 고정된 내장 패턴(`cmd/biostool/protect.go`, `*` 는 0글자 이상 와일드카드·대소문자 무시)이며 `bios.conf`·`ignore_attrs.txt` 로 **끌 수 없습니다**.
+
+| 분류 | 패턴 예 |
+|---|---|
+| iSCSI·NVMe-oF 식별자 | `*Iscsi*` `*Iqn*` `*Initiator*` `*Nqn*` |
+| IP·네트워크 주소 | `*Ipv4*` `*Ipv6*` `*IpAddress*` `*Subnet*` `*Gateway*` `*Dns*` `*Dhcp*` `*Vlan*` `*MacAddr*` |
+| 서버 이름·식별 정보 | `ServerName` `*HostName*` `*AssetTag*` `*ServiceTag*` `*SerialNumber*` `*Uuid*` `Admin*` |
+| 부팅 | `BootMode` `*Boot*` `*Pxe*` `*Url*` `*HttpBoot*` `*Ipxe*` `*Network*` (부팅 모드·순서·PXE·URL/HTTP 부팅 포함) |
+| 보안 | `SecureBoot*` `*Secur*` `*Tpm*` `*Password*` `*Pwd*` `*Passphrase*` `*Cert*` `*Sgx*` |
+| 스토리지·RAID | `*Raid*` `*Sata*` `*Nvme*` `*Storage*` `*Vroc*` `*Vmd*` `*Erase*` |
+| NIC·슬롯 | `*Nic*` `*Lom*` `Ocp*` `*Wol*` `*WakeOnLan*` `*OptionRom*` `*Oprom*` `*Slot*` |
+
+- 위 표는 일부이며 전체 목록은 `protect.go` 의 `builtinProtect` 입니다. 성능 속성을 잘못 막지 않도록 짧은 부분 일치는 좁혀 두었고(예: Dell CPU 전원 관리 `ProcPwrPerf` 는 막지 않음), `protect_test.go` 가 `profiles/*.tsv` 의 속성이 막히지 않는지 확인합니다.
+- `bios.conf` 의 `protect_attrs=A|B|*패턴*` 은 이 목록에 **더하기만** 합니다(빼기 불가).
+- **겹겹이 막습니다**: ① 설정 계획에서 보호 속성은 항목이 되지 않고 수정제외로 표시 ② 적용 단계(`set.go`)에서 항목 중 하나라도 보호 속성이면 그 호스트는 접속도 하지 않고 **통째로** `PROTECTED_ATTR` ③ PATCH 직전에 실제 본문의 속성을 다시 검사해 하나라도 걸리면 보내지 않음 ④ Redfish 클라이언트(`redfish.go` `checkAttributes`)가 PATCH 본문 전체를 거부.
 
 **진행 표시** — 지금 단계 하나를 한 줄로 보입니다: `[1/4 설정 확인] [2/4 접속·조회 123/1000 · OK 100 difference 20 N/A 3 오류 0 · 경과 00:12] [3/4 CSV 저장] [4/4 TUI]`. 설정을 적용할 때는 호스트별 진행 줄이 나옵니다. 터미널은 한 줄을 제자리 갱신하고, 비대화형(`-auto`)은 10초마다 한 줄을 표준에러로 찍습니다.
 
@@ -168,6 +204,11 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 
 `<그룹>` 은 벤더 안에서 관리 컨트롤러 버전별로 나눈 것이며, BIOS 속성 이름 목록이 같으면 하나로 합쳐 `iLO 4+iLO 5` 처럼 이어 부릅니다(파일 이름에서는 영문·숫자·`.`·`_`·`-` 밖의 글자가 `_` 가 되어 `iLO_4_iLO_5`).
 
+**출력 안전** — BMC·호스트에서 온 글자(호스트 이름·속성 이름·값)가 화면이나 엑셀에서 명령처럼 동작하지 않게 막습니다.
+
+- CSV 의 모든 칸에서 `=` `+` `@` TAB CR 로 시작하는 값, 그리고 `-` 로 시작하지만 음수(`-5`, `-1.5`)가 아닌 값은 앞에 `'` 를 붙여 엑셀 수식으로 실행되지 않게 합니다(수식 주입 방지. `-` 하나는 그대로).
+- 화면·평문 출력과 `check.res_<user>` 에서는 제어 문자(ESC 를 포함한 C0, DEL, C1, TAB·CR·LF)를 공백으로 바꿔 터미널 이스케이프 주입을 막고 호스트당 한 줄 형식을 지킵니다.
+
 **비대화형 `-auto` / `-auto-check`** (auto_setup 이 호출)
 
 ```bash
@@ -179,6 +220,7 @@ bash bios.sh -auto       <user> targets.txt [-profile VM]
 - `targets.txt` 는 **호출한 폴더 기준 경로**이고, 결과 `check.res_<user>`(`-auto` 는 같은 내용의 `check.res_<user>_postapply` 도)는 **호출한 폴더**에 만들어집니다(`bios.sh` 가 `-res-dir` 로 넘김, 권한 0644).
 - 호스트마다 한 줄입니다: `host: OK` / `host: OK (N/A N건)` / `host: FAIL difference N건 (속성 현재값→기준값, …)` / `host: FAIL N/A 접속실패(사유)`. 속성 수준 N/A 만 있으면 OK 로 보고 건수만 남깁니다.
 - 점검을 끝냈으면 FAIL 이 있어도 종료코드 0 이고, conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닙니다.
+- 시작할 때 **이전 `check.res_<user>`(와 `_postapply`)를 먼저 지웁니다.** 이번 실행이 치명적 오류로 끝나도 auto_setup 이 옛 `OK` 줄을 읽지 않게 하려는 것입니다(심볼릭 링크면 링크만 지우고 가리키는 파일은 건드리지 않음). 결과 파일은 같은 폴더의 임시 파일에 쓴 뒤 이름을 바꾸는 방식(원자적)으로 만들어 읽는 쪽이 반쯤 쓴 파일을 보지 않습니다.
 
 ![auto 흐름도](workflow_auto.svg)
 
@@ -840,7 +882,7 @@ $ bin/biostool account change
 
 | 서브커맨드 | 래퍼 | 하는 일 | BMC 쓰기 |
 |---|---|---|---|
-| `bios` | `bios.sh` | **통합 진입점**: 프로파일 점검 + 전체비교(비교서버 / refs JSON / `diff.txt`) + TUI 수정, CSV, 비대화형 `-auto`/`-auto-check`. 2.0절 | **TUI 에서 “수정할까요?” y 일 때만**(`-plain`·`-auto`·`-from-dump` 는 쓰기 없음) |
+| `bios` | `bios.sh` | **통합 진입점**: 프로파일 점검 + 전체비교(비교서버 / refs JSON / `diff.txt`) + TUI 수정, CSV, 비대화형 `-auto`/`-auto-check`. 2.0절 | **TUI 에서 “위 수정대상을 적용할까요?” 등 확인에 y 일 때만**(`-plain`·`-auto`·`-from-dump` 는 쓰기 없음) |
 | `check` | `bios_check.sh` | 프로파일 표준값 점검, 승인 시 Pending 설정, `-dry-run` | **Y 응답 시에만**(PATCH, Dell 은 Job POST) |
 | `allcheck` | `all_bios_check.sh` | 모델별 BIOS 전체 Attribute 비교 | 없음 |
 | `dump` | `xml.sh` | 사전조사 덤프(GET 전용) | 없음 |
@@ -873,8 +915,8 @@ $ bin/biostool account change
 | `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 모델을 적어도 확인용) |
 | `-ignore <파일>` | `ignore_attrs.txt` | allcheck | 비교 제외 속성 목록. 파일이 없으면 내장 기본 목록, `-ignore` 로 직접 준 파일이 없으면 오류 |
 | `-diff-max <N>` | `30` | allcheck | 호스트당 터미널에 보일 차이 속성 수(넘으면 `all_diff.tsv` 안내) |
-| `-conf`·`-user`·`-hosts`·`-profile`·`-from-dump` | 위와 같음 | bios | `bios` 에서도 같은 뜻. `-profile` 은 TUI 에서는 생략하면 화면에서 고르고, `-plain`·`-auto` 에서는 필수(`-auto` 는 `auto_profile` 로 대체 가능). `-user` 를 주면 TUI 가 대상을 묻지 않음 |
-| `-ref <hostname>` | (없음) | bios | 전체비교 비교서버(쉼표로 여러 개). 대상 목록에 있으면 다시 접속하지 않음 |
+| `-conf`·`-user`·`-hosts`·`-profile`·`-from-dump` | 위와 같음 | bios | `bios` 에서도 같은 뜻. `-profile` 은 TUI 에서는 생략하면 화면에서 고르고, `-plain`·`-auto` 에서는 필수(`-auto` 는 `auto_profile` 로 대체 가능). `-user` 를 주면 TUI 가 대상을 묻지 않고, `-profile` 을 주면 프로파일도 묻지 않음 |
+| `-ref <hostname>` | (없음) | bios | 전체비교 비교서버(쉼표로 여러 개). 대상 목록에 있으면 다시 접속하지 않음. TUI 에서는 수집 직후 바로 전체 설정 비교까지 실행(설정 확인은 그대로 묻음) |
 | `-ref-json <파일>` | (없음) | bios | 전체비교 기준 속성 JSON(`bios_export.sh`·`allcheck -export-attrs` 결과). 파일 이름만 주면 `refs_dir` 에서 찾음 |
 | `-diff <파일>` | (없음) | bios | 전체비교 기준 목록(모델별 기준 호스트). `-ref`·`-ref-json`·`-diff` 는 하나만 |
 | `-ignore <파일>` | `ignore_attrs.txt` | bios | 전체비교에서 제외할 속성 목록(없으면 내장 목록, `bios.conf` 의 `exclude_attrs` 와 합침) |
@@ -925,7 +967,8 @@ $ bin/biostool account change
 | `dump_dir` | `dumps` | | 사전조사 덤프 저장 위치 |
 | `profile_dir` | `profiles` | | 프로파일(`<이름>.tsv`) 디렉터리 |
 | `exclude_attrs` | (비어 있음) | | 점검·전체비교에서 뺄 BIOS 속성 패턴. `\|` 로 구분, `*` 는 와일드카드, 대소문자 무시(예: `ServiceTag\|*Uuid*\|BootSeq*`). 전체비교는 `ignore_attrs.txt`(없으면 내장 목록)와 **합쳐서** 제외하고, 프로파일 점검은 그 속성 행을 점검하지 않음 |
-| `allcheck_set` | `off` | | `on`: 전체비교의 difference 도 TUI “수정할까요?” 대상에 넣음 / `off`: 프로파일(`verified=Y`) 항목만 설정. `on` 이어도 같은 모델·같은 속성 이름 목록·쓰기 가능 벤더일 때만 |
+| `allcheck_set` | `off` | | `on`: 전체비교의 difference 도 TUI “위 수정대상을 적용할까요?” 대상에 넣음 / `off`: 프로파일(`verified=Y`) 항목만 설정. `on` 이어도 같은 모델·같은 속성 이름 목록·같은 BIOS 버전·쓰기 가능 벤더이고, 적용 때 레지스트리 형식이 Enumeration·Integer·Boolean 인 속성일 때만 |
+| `protect_attrs` | (비어 있음) | | **절대 바꾸지 않을** BIOS 속성 패턴 **추가**. `\|` 로 구분, `*` 는 와일드카드, 대소문자 무시(예: `MemTest\|*Watchdog*\|ProcX2Apic`). 서버 고유값·부팅·보안·RAID·PXE·NIC 관련은 내장 목록으로 이미 막혀 있고 이 키나 `ignore_attrs.txt` 로 끌 수 없음(더하기만). 2.0절 |
 | `refs_dir` | `refs` | | 전체비교 기준 속성 JSON 폴더(`-ref-json` 이름 검색, TUI 기준 목록). `bios_export.sh` 결과 `attrs/<호스트>.json` 을 넣어 둠 |
 | `auto_profile` | (비어 있음) | | 비대화형 `-auto`/`-auto-check` 에서 `-profile` 을 주지 않았을 때 쓸 프로파일 이름. 비우면 `-profile` 필수 |
 
@@ -1022,6 +1065,8 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `DEPENDS_ON_PROFILE` | 시스템 프로파일 변경이 먼저(다른 항목이 종속될 수 있음) → 프로파일 항목만 보내고 나머지는 재부팅 후 재점검해 다시 설정 | |
 | `SET_NOT_SUPPORTED_VENDOR` | Dell·HPE·Lenovo 외(Cisco·Supermicro 등) → 접속하지 않음 | |
 | `DUPLICATE_TARGET` | 같은 BMC(IP:포트)를 가리키는 앞의 대상에서 처리 → 두 번 쓰지 않음 | |
+| `PROTECTED_ATTR` | 보호 속성(2.0절)이 섞여 있음 → 그 호스트는 접속도 하지 않고 통째로 쓰지 않음 | |
+| `CANCELED` | TUI 에서 `Ctrl+X` 로 취소해 시작하지 않음 | ○ |
 | `REJECTED` | BMC 가 400 등으로 거부 | ○ |
 | `SET_UNSUPPORTED` | 404/405/501, Settings·Job 경로를 만들 수 없음(허용목록 밖 포함) | ○ |
 | `SET_ERROR` | 5xx·타임아웃·연결 끊김: **쓰기 결과 불명**(재시도하지 않음, 재점검 필요) | ○ |
@@ -1052,9 +1097,9 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 
 | 태그 | 원래 상태 |
 |---|---|
-| `[OK]` | `OK`, `PENDING_OK`, `SAME` |
+| `[OK]` | `OK`, `PENDING_OK`, `SAME`, `REFERENCE`(전체비교의 기준 서버 자신 — 속성마다 자기 값을 기준값·현재값으로) |
 | `[difference]` | `FAIL`, `UNVERIFIED`, `PENDING_EXISTS`, `PENDING_NO_JOB`, `DIFF`, `ONLY_HOST`(기준에 없고 대상에만 있는 속성 — 기준값 `(없음)`) |
-| `[N/A]` | `MAPPING_MISSING`, `NO_DUMP`, `ONLY_REF`(대상에 속성 없음), 접속·조회 실패(`UNREACHABLE`·`AUTH_FAIL` 등 호스트 단위 오류, 화면에서는 빨강) |
+| `[N/A]` | `MAPPING_MISSING`, `NO_DUMP`, `ONLY_REF`(대상에 속성 없음), 접속·조회 실패(`UNREACHABLE`·`AUTH_FAIL` 등 호스트 단위 오류, 화면에서는 태그·현재값·비고 빨강) |
 
 호스트 단위로 `CANCELED`(TUI 에서 Ctrl+X 로 조회를 취소해 접속하지 않은 호스트)는 `retry.txt` 에 모이므로 그 파일을 `-user` 로 넘겨 `bios.sh` 를 다시 실행하면 됩니다.
 
@@ -1085,7 +1130,7 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `mockbmc.sh` | mock BMC 기동(개발·검증용). 빌드 완료 `bin/mockbmc`(`_os6`)가 있으면 그대로 사용 |
 | `testcase/` | `rf_fallback_case.sh`(2순위 계정·접속불가 구분·표기 선택 시험)와 설명. 2.11절 |
 | `bin/biostool`, `bin/biostool_os6`, `bin/mockbmc`, `bin/mockbmc_os6` | 빌드 완료 바이너리(os8 / RHEL6, mock 서버 포함) — 저장소에 **커밋**되어 있음 |
-| `cmd/biostool/` | Go 소스(점검·설정·덤프·전체 비교·재시도·Redfish 클라이언트, 통합 점검 `unified*.go`·TUI `tui_*.go`·출력 `lineout.go`/`csvout.go`/`checkres.go`·설정 계획 `setplan.go`)와 테스트 |
+| `cmd/biostool/` | Go 소스(점검·설정·덤프·전체 비교·재시도·Redfish 클라이언트, 통합 점검 `unified*.go`·TUI `tui_*.go`·출력 `lineout.go`/`csvout.go`/`checkres.go`·설정 계획 `setplan.go`·보호 속성 `protect.go`)와 테스트 |
 | `refs/` | (선택) 전체비교 기준 속성 JSON 폴더. 2.0절 |
 | `cmd/mockbmc/`, `internal/mockbmc/` | mock BMC 서버와 가상 BMC 수천 대를 한 리스너에 올리는 Farm(시험용) |
 | `testdata/` | mock 용 **합성** Redfish 트리 6종(+ 테스트용 프로파일). 실제 덤프가 아님 → [testdata/README.md](testdata/README.md) |
@@ -1106,7 +1151,8 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 > **설정 변경(Y 적용) 후에는 랜덤한 서버 몇 대를 직접 확인해 실제로 변경되었는지 확인하십시오.** (BMC 웹 화면·BIOS Setup 에서 값을 보거나, 재부팅 후 `bios_check.sh` 로 재점검합니다.) 이 도구가 출력하는 `APPLIED` 는 “BMC 의 Pending 에 기대값이 들어간 것을 재조회로 확인했다”는 뜻일 뿐, BIOS 에 실제로 반영되었다는 보증이 아닙니다.
 
 - **이 도구는 아직 실제 BMC 에서 검증되지 않았습니다(v0.1.0).** 모델을 처음 만날 때는 [FIRST_RUN.md](FIRST_RUN.md) 의 절차대로 1대부터 확인하십시오. 속성 이름·허용값·Settings 경로·Dell Job 동작은 실제 응답으로 확정해야 합니다.
-- **통합 점검(`bash bios.sh`)의 수정 단계도 같은 규칙입니다.** TUI 에서 “수정할까요?”에 y 를 누를 때만 쓰고, `-plain`·`-auto`·`-auto-check`·`-from-dump` 는 쓰지 않습니다. 전체비교 difference 는 `allcheck_set=on` 일 때만, 프로파일 항목은 `verified=Y` 일 때만 설정되며 `[충돌]` 항목은 설정하지 않습니다. **수정 뒤에는 랜덤한 서버 몇 대를 직접 확인해 실제로 변경되었는지 확인하십시오.** 태그 `[N/A]` 는 “문제 없음”이 아니라 “판정할 수 없음”입니다. TUI 에서 Ctrl+C/Ctrl+Z 는 무시되고(종료는 q), 작업 취소는 Ctrl+X 입니다.
+- **통합 점검(`bash bios.sh`)의 수정 단계도 같은 규칙입니다.** TUI 에서 “위 수정대상을 적용할까요?”(수정제외가 있으면 “수정제외 항목을 확인했습니다. 진행할까요?” 까지)에 y 를 누를 때만 쓰고, `-plain`·`-auto`·`-auto-check`·`-from-dump` 는 쓰지 않습니다. 전체비교 difference 는 `allcheck_set=on` 일 때만(비교서버와 BIOS 버전이 같고 Enumeration·Integer·Boolean 속성만), 프로파일 항목은 `verified=Y` 일 때만 설정되며 `[충돌]` 항목은 설정하지 않습니다. **수정 뒤에는 랜덤한 서버 몇 대를 직접 확인해 실제로 변경되었는지 확인하십시오.** 태그 `[N/A]` 는 “문제 없음”이 아니라 “판정할 수 없음”입니다. TUI 에서 Ctrl+C/Ctrl+Z 는 무시되고(종료는 q 두 번), 작업 취소는 Ctrl+X 입니다.
+- **서버 고유값·부팅·보안·RAID·PXE·NIC 속성은 절대 바꾸지 않습니다.** IQN·IP·ServerName·BootMode·SecureBoot·TPM·`*Raid*`·`*Pxe*`·`*Nic*` 등은 코드에 고정된 보호 목록(2.0절)으로 막혀 있고 설정 파일로 끌 수 없습니다. 보호 속성이 하나라도 섞인 호스트는 접속도 하지 않고 통째로 쓰지 않습니다(`PROTECTED_ATTR`). 다만 목록은 속성 이름 패턴이므로 **확인 화면의 `(수정제외)` 와 `(수정대상)` 을 꼭 읽고** 적용하십시오.
 - **재부팅을 하지 않습니다.** 설정은 BMC 의 Pending 까지이고 **다음 재부팅 때 반영**됩니다. 반영 전에는 현재값이 그대로이며 재점검에서 `PENDING_OK` 로 보입니다. Dell 은 iDRAC Job Queue 에 BIOS 설정 Job 이 있어야 반영됩니다(없으면 `PENDING_NO_JOB`).
 - **BMC 로그에 흔적이 남습니다.** 호스트당 로그인/로그아웃 기록 1쌍, 설정(Y)을 하면 설정 변경(및 Dell 은 Job) 기록이 추가됩니다. 같은 기능을 짧은 간격으로 반복 실행하지 마십시오. 세션 생성을 지원하지 않는 BMC 는 Basic 인증으로 폴백하므로(`auth=basic`) 요청마다 인증 기록이 남을 수 있습니다. 기존 로그·Job·남의 Pending 은 절대 건드리지 않습니다.
 - **`testdata/` 는 합성 자료입니다.** 공개 문서를 바탕으로 사람이 만든 것이라 실제 BMC 덤프가 아니며 속성명·허용값·경로가 실제 장비와 다를 수 있습니다. 테스트가 통과한 것은 실제 장비에서 된다는 뜻이 아닙니다.

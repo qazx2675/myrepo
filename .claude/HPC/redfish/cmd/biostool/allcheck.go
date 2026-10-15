@@ -495,7 +495,10 @@ func (e *allEnv) sweepSnaps(ts []Target, authStop int, handle func(i int, s *bio
 			}
 			return o
 		},
-		func(i int) { handle(i, skippedSnap(ts[i])) })
+		func(i int) { handle(i, skippedSnap(ts[i])) },
+		func(i int, v interface{}) { // 처리 중 패닉 → 그 호스트만 오류로 남기고 계속
+			handle(i, &biosSnap{Target: ts[i], Status: StatusBMCError, Detail: panicDetail(v)})
+		})
 	return int(fails)
 }
 

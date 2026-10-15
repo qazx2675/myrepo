@@ -31,6 +31,8 @@ import (
 //  5. 본문: 프로파일 속성만 {"Attributes":{...}} + (Bios 가 지원할 때만) ApplyTime=OnReset. 호스트당 PATCH 1회, 재시도 없음.
 //     Dell 은 Job 이 자동 생성되지 않았을 때만 TargetSettingsURI 하나만 담은 Job 을 최대 1회 POST (재부팅 필드 없음).
 //  6. redfish.go 의 허용목록(checkAllowed)·본문 검사(checkBody)가 전송 직전에 다시 막는다.
+//  7. 보호 속성(protect.go: 내장 목록 ∪ bios.conf protect_attrs): 항목 중 하나라도 걸리면 그 호스트는 접속도 하지 않고
+//     통째로 PROTECTED_ATTR. PATCH 직전에 실제 본문 속성을 다시 검사하고, checkAttributes 도 내장 목록을 거부한다.
 //
 // -dry-run 은 같은 계획 함수(buildPlan)·같은 출력 함수(writePlan)를 쓰며, 읽기 전용 Client(ModeReadOnly)라 쓰기가 구조적으로 불가능합니다.
 
@@ -48,6 +50,7 @@ const (
 	StatusSetUnsupported        = "SET_UNSUPPORTED"          // 405/501/404, Settings·Job 경로를 만들 수 없음
 	StatusSetError              = "SET_ERROR"                // 5xx·타임아웃·연결 끊김: 쓰기 결과 불명 (재시도하지 않음)
 	StatusDuplicateTarget       = "DUPLICATE_TARGET"         // 같은 BMC 를 가리키는 앞의 대상에서 처리 → 두 번 쓰지 않음
+	StatusProtectedAttr         = "PROTECTED_ATTR"           // 보호 속성(protect.go)이 섞여 있음 → 그 호스트는 통째로 쓰지 않음
 )
 
 // setVendors 는 쓰기를 허용하는 벤더입니다 (normalizeVendor 결과).
@@ -161,13 +164,15 @@ type setEnv struct {
 	apply    bool              // false 면 dry-run (쓰기 없음, ModeReadOnly)
 	fromDump map[string]string // dry-run -from-dump 일 때 호스트 덤프 폴더
 	regs     *regCache
+	protect  *protectSet // 보호 속성 (내장 목록 ∪ bios.conf protect_attrs)
 }
 
 func newSetEnv(rc *runContext, run *checkRun, apply bool) (*setEnv, error) {
 	if run.prof == nil {
 		return nil, errors.New("점검에 쓴 프로파일 정보가 없어 설정할 수 없습니다")
 	}
-	e := &setEnv{conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, prof: run.prof, apply: apply, regs: &regCache{m: map[string]*regEntry{}}}
+	e := &setEnv{conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, prof: run.prof, apply: apply, regs: &regCache{m: map[string]*regEntry{}},
+		protect: protectFor(rc.Conf)}
 	if run.FromDump != "" {
 		if apply {
 			return nil, errors.New("덤프 읽기 모드에서는 설정할 수 없습니다")
@@ -308,6 +313,11 @@ func (e *setEnv) runHost(h *setHost) {
 		h.finish(StatusDuplicateTarget, "같은 BMC 를 가리키는 앞의 대상("+h.DupOf+")에서 처리 — 두 번 쓰지 않음")
 		return
 	}
+	// 보호 속성: 계획 단계(buildSetPlan)에서 이미 빼지만, 하나라도 들어와 있으면 이 호스트는 접속도 하지 않고 통째로 거부한다.
+	if why := e.protectedWhy(h.Items); why != "" {
+		h.finish(StatusProtectedAttr, why)
+		return
+	}
 	for _, it := range h.Items {
 		e.verifyItem(h, it)
 	}
@@ -357,6 +367,20 @@ func (e *setEnv) runHost(h *setHost) {
 	if e.planHost(h, newMemoGet(c.GetRaw)) && e.apply {
 		e.send(h, c)
 	}
+}
+
+// protectedWhy 는 항목 중 보호 속성이 있으면 호스트 전체 거부 사유를 돌려줍니다 (없으면 "").
+func (e *setEnv) protectedWhy(items []*applyItem) string {
+	var hit []string
+	for _, it := range items {
+		if p := e.protect.match(it.Attr); p != "" {
+			hit = append(hit, sanitizeDetail(it.Attr)+"("+p+")")
+		}
+	}
+	if len(hit) == 0 {
+		return ""
+	}
+	return "보호 속성 " + bv(strings.Join(hit, ", ")) + " 이(가) 포함되어 이 호스트는 아무것도 보내지 않음 (서버 고유값·부팅·보안·RAID·PXE·NIC 관련은 설정 금지)"
 }
 
 // verifyItem 은 항목을 프로파일과 다시 대조합니다 (점검 결과를 그대로 믿지 않는 방어 중첩).
@@ -506,8 +530,10 @@ func (e *setEnv) planHost(h *setHost, m *memoGet) bool {
 		if al, ok := ours[k]; ok && matchAny(al, v) {
 			continue
 		}
-		if pv, ok := h.okPend[k]; ok && pv == v {
-			continue // 미리보기에서 사용자가 보고 포함하기로 한 남의 Pending (applySetPlan includePending=true)
+		if pv, ok := h.okPend[k]; ok && pv == v && info.Vendor != "Dell" {
+			// 미리보기에서 사용자가 보고 포함하기로 한 남의 Pending (applySetPlan includePending=true).
+			// Dell 은 설정 Job 이 남의 Pending 까지 적용하므로 인정하지 않는다.
+			continue
 		}
 		foreign = append(foreign, k+"="+v)
 	}
@@ -552,6 +578,21 @@ func (e *setEnv) planHost(h *setHost, m *memoGet) bool {
 		}
 	}
 	for _, it := range h.open() {
+		if it.Compare {
+			// 비교서버 값은 레지스트리로 형식을 확인한 Enumeration·Integer·Boolean 만 보낸다 (문자열·형식 불명은 서버 고유값일 수 있음).
+			ra := reg.lookup(it.Attr)
+			switch {
+			case reg == nil:
+				it.set(StatusInvalidValue, "수정제외: 레지스트리를 읽지 못해 형식 불명 — 비교서버 값은 Enumeration·Integer·Boolean 만 설정")
+				continue
+			case ra == nil:
+				it.set(StatusInvalidValue, "수정제외: 레지스트리에 없는 속성이라 형식 불명 — 비교서버 값은 Enumeration·Integer·Boolean 만 설정")
+				continue
+			case ra.Type != "Enumeration" && ra.Type != "Integer" && ra.Type != "Boolean":
+				it.set(StatusInvalidValue, "수정제외: 문자열/형식 불명 ("+bv(orDefault(ra.Type, "형식 없음"))+") — 비교서버 값은 Enumeration·Integer·Boolean 만 설정")
+				continue
+			}
+		}
 		it.Value = pickAllowedValue(it.Value, it.allowed, reg, it.Attr)
 		raw, st, why := typedValue(it.Value, reg, it.Attr, bios.Attributes[it.Attr])
 		if st != "" {
@@ -724,20 +765,34 @@ func buildPlan(info *SystemInfo, onReset, haveReg bool, pendProf string, items [
 		return nil
 	}
 	p := &hostPlan{Items: items}
+	// 시스템 프로파일 성격 항목이 여러 개면(예: 프로파일 WorkloadProfile + 비교서버 PowerProfile=Custom) 프로파일 행 항목만
+	// 프로파일로 보고 나머지는 모두 미룬다. 프로파일 행 항목이 없으면 어느 것을 먼저 보낼지 정할 수 없어 아무것도 보내지 않는다.
 	var prof *applyItem
+	var profs []string
 	for _, it := range items {
 		if it.Std == profileStd {
-			prof = it
+			profs = append(profs, it.Attr)
+			if prof == nil || (prof.Compare && !it.Compare) {
+				prof = it
+			}
 		}
+	}
+	multi := len(profs) > 1
+	if multi && prof.Compare {
+		prof = nil
 	}
 	target, src := pendProf, "Pending 으로 재부팅 대기 중인"
 	if prof != nil {
 		target, src = prof.Value, "이번에 설정할"
 	}
 	// 프로파일 항목 하나만 보내는 경우는 종속 문제가 없다. 프로파일이 이미 Pending 이면 다른 항목은 모두 미룬다.
-	if target != "" && (prof == nil || len(items) > 1) {
+	if multi || (target != "" && (prof == nil || len(items) > 1)) {
 		why := ""
 		switch {
+		case multi && prof == nil:
+			why = "시스템 프로파일 성격 속성이 여러 개(" + bv(strings.Join(profs, ", ")) + ")인데 프로파일 행 항목이 없어 순서를 정할 수 없음 — 설정하지 않음"
+		case multi:
+			why = "시스템 프로파일 성격 속성이 여러 개(" + bv(strings.Join(profs, ", ")) + ") — 프로파일 항목(" + bv(prof.Attr) + ")만 먼저, 재부팅 후 재점검해 다시 설정"
 		case !strings.EqualFold(target, "Custom"):
 			why = src + " 시스템 프로파일(" + bv(target) + ")이 먼저 반영되어야 함 (다른 항목이 프로파일에 종속될 수 있음) — 재부팅 후 재점검해 다시 설정"
 		case !haveReg:
@@ -813,6 +868,23 @@ func buildPlan(info *SystemInfo, onReset, haveReg bool, pendProf string, items [
 // send 는 계획대로 PATCH 1회(+Dell Job 최대 1회)를 보내고 Settings 를 다시 읽어 확인합니다. 재시도하지 않습니다.
 func (e *setEnv) send(h *setHost, c *Client) {
 	p := h.Plan
+	// 보호 속성 마지막 확인: 실제로 보낼 본문의 속성 이름을 다시 본다 (하나라도 걸리면 이 호스트는 보내지 않음).
+	var body struct{ Attributes map[string]json.RawMessage }
+	if json.Unmarshal(p.Body, &body) != nil || len(body.Attributes) == 0 {
+		for _, it := range p.Items {
+			it.set(StatusInvalidValue, "보낼 본문을 다시 해석할 수 없어 보내지 않음")
+		}
+		return
+	}
+	var names []*applyItem
+	for k := range body.Attributes {
+		names = append(names, &applyItem{Attr: k})
+	}
+	sort.Slice(names, func(a, b int) bool { return names[a].Attr < names[b].Attr })
+	if why := e.protectedWhy(names); why != "" {
+		h.finish(StatusProtectedAttr, why)
+		return
+	}
 	var before map[string]bool // Dell: PATCH 전 Job 목록 (자동 생성 여부 판단용)
 	if p.JobPath != "" {
 		if b, err := c.GetRaw(p.JobPath); err == nil {
@@ -1051,7 +1123,7 @@ var applyHeader = []string{"host", "ip", "vendor", "model", "std_name", "attribu
 var applyFailedStatus = map[string]bool{
 	StatusApplyUnconfirmed: true, StatusSetError: true, StatusRejected: true, StatusSetUnsupported: true,
 	StatusAuthFail: true, StatusSkippedAuthStop: true, StatusUnreachable: true, StatusTimeout: true,
-	StatusBMCError: true, StatusHTTPError: true, StatusUnsupported: true,
+	StatusBMCError: true, StatusHTTPError: true, StatusUnsupported: true, StatusCanceled: true,
 }
 
 // writeApplyFiles 는 apply_result.tsv, applied.txt, (있으면) apply_failed.txt, apply_requests.txt 를 씁니다 (모두 0600).
@@ -1105,6 +1177,7 @@ var applyOrder = []string{
 	StatusApplied, StatusApplyUnconfirmed, StatusSetError, StatusRejected, StatusSetUnsupported, StatusAuthFail,
 	StatusSkippedAuthStop, StatusDependsOnProfile, StatusAlreadyOK, StatusPendingExists, StatusChanged,
 	StatusSkippedReadOnly, StatusInvalidValue, StatusSetNotSupportedVendor, StatusUnverified, StatusDuplicateTarget,
+	StatusProtectedAttr,
 }
 
 // applyGuide 는 상태별 안내문입니다.
@@ -1116,6 +1189,7 @@ var applyGuide = map[string]string{
 	StatusDependsOnProfile: "시스템 프로파일이 먼저 반영되어야 합니다. 재부팅 후 bios_check.sh 로 재점검해 다시 설정하십시오.",
 	StatusPendingExists:    "점검 이후 남의 Pending 이 생겨 쓰지 않았습니다 (남의 Pending/Job 은 건드리지 않음).",
 	StatusChanged:          "점검 이후 호스트가 바뀌어 쓰지 않았습니다. 다시 점검하십시오.",
+	StatusProtectedAttr:    "보호 속성(서버 고유값·부팅·보안·RAID·PXE·NIC 관련)이 섞여 있어 그 호스트는 아무것도 보내지 않았습니다. 프로파일·설정 계획을 확인하십시오.",
 }
 
 // writeApplyReport 는 설정 결과를 터미널에 출력합니다.
