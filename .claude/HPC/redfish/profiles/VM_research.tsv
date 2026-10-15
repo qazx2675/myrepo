@@ -13,40 +13,38 @@ HPE	XL270d Gen9	system_profile	PowerProfile	MaxPerf	N
 HPE	XL270d Gen9	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL560 Gen8	system_profile	PowerProfile	MaxPerf	N
 HPE	DL560 Gen8	hyper_threading	ProcHyperthreading	Enabled	N
-HPE	DL360 Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	DL360 Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	DL360 Gen10	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL360 Gen10	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL360 Gen10	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	DL560 Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	DL560 Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	DL560 Gen10	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL560 Gen10	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL560 Gen10	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	DL580 Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	DL580 Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	DL580 Gen10	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL580 Gen10	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL580 Gen10	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	XL270d Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	XL270d Gen10	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	XL270d Gen10	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	XL270d Gen10	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	XL270d Gen10	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	DL360 Gen10 Plus	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	DL360 Gen10 Plus	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	DL360 Gen10 Plus	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL360 Gen10 Plus	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL360 Gen10 Plus	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	DL360 Gen11	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	DL360 Gen11	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL360 Gen11	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL360 Gen11	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	DL380 Gen11	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	DL380 Gen11	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	DL380 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL380 Gen11	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL380 Gen11	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	DL560 Gen11	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)|GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
+HPE	DL560 Gen11	system_profile	WorkloadProfile	HighPerformanceCompute|HighPerformanceCompute(HPC)	N
 HPE	DL560 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 HPE	DL560 Gen11	llc_prefetch	LlcPrefetch	Enabled	N
 HPE	DL560 Gen11	sub_numa_cluster	SubNumaClustering	Disabled	N
-HPE	*	hyper_threading	ProcHyperthreading	Enabled	N
-HPE	*	hyper_threading	WorkloadProfile	GeneralPowerEfficientCompute|GeneralPeakFrequencyCompute|GeneralThroughputCompute|Virtualization-PowerEfficient|Virtualization-MaxPerformance|MissionCritical|TransactionalApplicationProcessing|DecisionSupport|GraphicProcessing|I/OThroughput|Custom	N
 DELL	R640	system_profile	SysProfile	PerfOptimized	N
 DELL	R640	hyper_threading	LogicalProc	Enabled	N
 DELL	R640	llc_prefetch	LlcPrefetch	Enabled	N
@@ -117,16 +115,16 @@ LENOVO	SD530	sub_numa_cluster	Processors_SNC	Disabled|Disable	N
 LENOVO	SR630 V2	hyper_threading	Processors_HyperThreading	Enabled|Enable	N
 LENOVO	SR630 V2	llc_prefetch	Processors_LLCPrefetch	Enabled|Enable	N
 LENOVO	SR630 V2	sub_numa_cluster	Processors_SNC	Disabled|Disable	N
-LENOVO	SR645 V3	hyper_threading	Processors_SMTMode	Enabled	N
+LENOVO	SR645 V3	hyper_threading	Processors_SMTMode	Enabled|Enable	N
 LENOVO	SR645 V3	sub_numa_cluster	Processors_SNC	Disabled|Disable	N
-LENOVO	SR675 V3	hyper_threading	Processors_SMTMode	Enabled	N
+LENOVO	SR675 V3	hyper_threading	Processors_SMTMode	Enabled|Enable	N
 LENOVO	SR675 V3	sub_numa_cluster	Processors_SNC	Disabled|Disable	N
-LENOVO	SD650 V3	hyper_threading	Processors_SMTMode	Enabled	N
+LENOVO	SD650 V3	hyper_threading	Processors_SMTMode	Enabled|Enable	N
 # manual (profile_validation.md): Processors_SMTMode has data evidence only for amd_genoa; SD650 V3 is intel_eagle_stream -> fallback candidate (used only if the BMC lacks the row above). Re-add after regenerating with map_bios_attrs.ps1.
 LENOVO	SD650 V3	hyper_threading	Processors_HyperThreading	Enabled|Enable	N
 LENOVO	SD650 V3	sub_numa_cluster	Processors_SNC	Disabled|Disable	N
 SUPERMICRO	AS-1115HS-TNR	system_profile	Power Profile Selection	High Performance Mode	N
-SUPERMICRO	AS-1115HS-TNR	hyper_threading	SMT Control	Auto|Enabled	N
+SUPERMICRO	AS-1115HS-TNR	hyper_threading	SMT Control	Enabled	N
 # UNMAPPED HPE DL360 Gen9 llc_prefetch: none_of_candidates
 # UNMAPPED HPE DL360 Gen9 sub_numa_cluster: no_candidates
 # UNMAPPED HPE XL170r Gen9 llc_prefetch: none_of_candidates
