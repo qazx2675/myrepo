@@ -121,7 +121,8 @@ func renderFlow(f flowFrame, sc *flowScroll, width, height int, color bool) stri
 
 // pasteBuf: 여러 줄 붙여넣기 입력. 키가 한 글자씩 들어와도(대량 붙여넣기 포함) 줄 단위로 확정해 넘긴다.
 type pasteBuf struct {
-	cur []rune // 아직 확정되지 않은 현재 줄
+	cur       []rune // 아직 확정되지 않은 현재 줄
+	ctrlDOnly bool   // true 면 입력 끝은 Ctrl+D 만 — 빈 줄·"." 의 Enter 는 무시 (엑셀 붙여넣기의 빈 행이 입력을 끝내지 않게)
 }
 
 // pasteEv: pasteBuf.key 의 결과
@@ -142,6 +143,9 @@ func (p *pasteBuf) key(ev keyEv) (pasteEv, string) {
 		line := strings.TrimSpace(string(p.cur))
 		p.cur = nil
 		if line == "" || line == "." {
+			if p.ctrlDOnly {
+				return pasteEdited, ""
+			}
 			return pasteEnd, ""
 		}
 		return pasteLine, line

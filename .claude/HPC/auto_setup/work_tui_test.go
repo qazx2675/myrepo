@@ -111,7 +111,11 @@ func TestWorkNewRunReuseDeriveMemoSearch(t *testing.T) {
 	if f := h.frame(); !strings.Contains(f, "입력 4대") || !strings.Contains(f, "svr004") {
 		t.Fatalf("붙여넣기 화면:\n%s", f)
 	}
-	h.keys("\r")
+	h.keys("\r\r\r.\r") // 빈 줄·. 의 엔터는 입력을 끝내지 않는다 (엑셀 붙여넣기의 빈 행)
+	if h.st.wk.step != wkPaste || !strings.Contains(h.frame(), "입력 4대") || !strings.Contains(h.frame(), "Ctrl+D") {
+		t.Fatalf("빈 줄이 입력을 끝냄:\n%s", h.frame())
+	}
+	h.keys("\x04")
 	w := h.st.wk
 	if w.step != wkCmd || !w.draft.NewList || !workNameRe.MatchString(w.draft.File) {
 		t.Fatalf("명령 입력 단계: step=%d draft=%+v", w.step, w.draft)
@@ -140,7 +144,7 @@ func TestWorkNewRunReuseDeriveMemoSearch(t *testing.T) {
 
 	// 같은 목록(순서 달라도) → 재사용? y
 	h.keys("n")
-	h.keys("svr004 svr003 svr002 svr001\r\r")
+	h.keys("svr004 svr003 svr002 svr001\r\x04")
 	if w.step != wkReuse || !strings.Contains(h.frame(), file+" 와 같은 목록(4대) — 재사용? [y/n]") {
 		t.Fatalf("재사용 질문:\n%s", h.frame())
 	}
@@ -155,7 +159,7 @@ func TestWorkNewRunReuseDeriveMemoSearch(t *testing.T) {
 	}
 	// n 이면 새 이름
 	h.keys("n")
-	h.keys("svr001 svr002 svr003 svr004\r\rn")
+	h.keys("svr001 svr002 svr003 svr004\r\x04n")
 	if w.step != wkCmd || w.draft.File == file || !w.draft.NewList {
 		t.Fatalf("새 목록: %+v", w.draft)
 	}
@@ -204,6 +208,20 @@ func TestWorkNewRunReuseDeriveMemoSearch(t *testing.T) {
 	}
 	if !strings.Contains(h.frame(), derived.File+" : svr002 1대  ("+file+" 의 실패·접속불가)") {
 		t.Errorf("파생 표시:\n%s", h.frame())
+	}
+
+	// Enter: 이 실행의 출력을 위에 보여 주면서 아래에 1~6 메뉴 (↑↓ 로 출력 스크롤, Esc 로 목록)
+	h.keys("\r")
+	if mf := h.frame(); w.step != wkMenu || !strings.Contains(mf, "svr002: ERROR: 종료코드 2") || !strings.Contains(mf, "1 같은 파일로 새 명령  2 재실행  3 실패·접속불가만 재실행") {
+		t.Fatalf("Enter 는 출력 + 메뉴:\n%s", mf)
+	}
+	h.keys("\x1b[A\x1b[B") // 출력 스크롤 키는 메뉴를 닫지 않는다
+	if w.step != wkMenu {
+		t.Fatal("↑↓ 는 출력 스크롤")
+	}
+	h.keys("\x1b")
+	if w.step != wkList {
+		t.Fatal("Esc 로 목록")
 	}
 
 	// 5 메모 (파일 단위)
@@ -266,7 +284,7 @@ func TestWorkDangerAndBigAsk(t *testing.T) {
 	workScript = fakeGosshRun(t, &calls, nil, true)
 	h.open("alice")
 	h.keys("n")
-	h.keys("a1 a2\r\r")
+	h.keys("a1 a2\r\x04")
 	h.keys("reboot\r")
 	if h.st.wk.step != wkAsk || !strings.Contains(h.frame(), "위험 명령(reboot·halt 등)") {
 		t.Fatalf("위험 명령 확인:\n%s", h.frame())
@@ -276,7 +294,7 @@ func TestWorkDangerAndBigAsk(t *testing.T) {
 		t.Fatal("n 이면 실행 안 함")
 	}
 	h.keys("n")
-	h.keys("a1 a2\r\r") // 실행하지 않았으므로 기록 없음 → 바로 새 목록
+	h.keys("a1 a2\r\x04") // 실행하지 않았으므로 기록 없음 → 바로 새 목록
 	h.keys("init 6\ry")
 	if len(calls) != 1 || calls[0][3] != workDangerFlag || calls[0][4] != "init 6" {
 		t.Fatalf("확인 후 위험 작업 옵션: %v", calls)
@@ -285,7 +303,7 @@ func TestWorkDangerAndBigAsk(t *testing.T) {
 	work_os6_over = "2"
 	calls = nil
 	h.keys("n")
-	h.keys("b1 b2 b3\r\r")
+	h.keys("b1 b2 b3\r\x04")
 	h.keys("uptime\r")
 	if h.st.wk.step != wkAsk || !strings.Contains(h.st.wk.ask, "3대는 기준 2대를 넘지만 os6_mgmt 가 설정되지 않아") {
 		t.Fatalf("대량 확인: %q", h.st.wk.ask)

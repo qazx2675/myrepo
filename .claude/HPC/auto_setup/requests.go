@@ -183,10 +183,35 @@ func (d *Daemon) findJob(id string) (j *Job, closed bool) {
 	if !validID(id) {
 		return nil, false
 	}
+	if j := d.adoptJobFile(id); j != nil {
+		return j, false
+	}
 	if j, err := loadJobFile(filepath.Join(doneDir(), id+".json")); err == nil {
 		return j, true
 	}
 	return nil, false
+}
+
+// adoptJobFile: jobs/<id>.json 은 있는데 데몬 메모리에 없는 job(화면에는 보이지만 g·수동 run 이 "job 없음" 이 되던 경우)을
+// 메모리에 다시 올린다. 더 새로운 job 이 이미 가져간 호스트는 되돌리지 않는다. 없으면 nil.
+func (d *Daemon) adoptJobFile(id string) *Job {
+	j, err := loadJobFile(jobFile(id))
+	if err != nil || j.ID != id {
+		return nil
+	}
+	d.init()
+	for name := range j.Hosts {
+		for _, o := range d.jobs {
+			if _, ok := o.Hosts[name]; ok {
+				delete(j.Hosts, name)
+				break
+			}
+		}
+	}
+	d.jobs[id] = j
+	d.dirty[id] = true
+	logf("job 복구: %s — jobs/ 파일에는 있으나 데몬 메모리에 없어 다시 올림 (%d대)", id, len(j.Hosts))
+	return j
 }
 
 // acceptManualRun: 수락이면 "", 거부면 사유
