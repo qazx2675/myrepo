@@ -14,8 +14,9 @@ import (
 // notifyResize: 창 크기 변경(SIGWINCH)을 c 로 받는다
 func notifyResize(c chan<- os.Signal) { signal.Notify(c, syscall.SIGWINCH) }
 
-// tcsetsf: TCSETSF(0x5412, x86·arm 공통) - syscall 패키지에 상수가 없다. 출력 대기 후 적용하며 입력 버퍼를 버린다
-const tcsetsf = 0x5412
+// tcsetsf: TCSETSF(0x5404, x86·arm 공통) - 출력 대기 후 적용하며 입력 버퍼를 버린다.
+// (v0.8.5 이전에는 0x5412 로 잘못 적어 TIOCSTI 가 호출됐다 → AWX(01) 실행 뒤 termios 가 복원되지 않아 intr=^X·susp 없음이 남고 Ctrl+C 가 안 먹혔다)
+const tcsetsf = 0x5404
 
 func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
 	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, req, uintptr(arg)); e != 0 {
@@ -37,6 +38,7 @@ func makeRaw(f *os.File) (func(), error) {
 	if err := ioctl(fd, syscall.TCGETS, unsafe.Pointer(&old)); err != nil {
 		return nil, err
 	}
+	sanitizeTermios(&old) // 앞서 비정상 종료한 프로그램이 남긴 깨진 설정이면 정상값으로 (종료 때 그 상태로 되돌리지 않게)
 	t := old
 	t.Iflag &^= syscall.IGNBRK | syscall.BRKINT | syscall.PARMRK | syscall.ISTRIP |
 		syscall.INLCR | syscall.IGNCR | syscall.ICRNL | syscall.IXON
@@ -52,6 +54,26 @@ func makeRaw(f *os.File) (func(), error) {
 	return func() { _ = ioctl(fd, syscall.TCSETS, unsafe.Pointer(&old)) }, nil
 }
 
+// sanitizeTermios: Ctrl+C 가 안 먹는 깨진 터미널 설정(raw 로 남음: ISIG·ICANON 꺼짐, AWX 실행 때 바꾼 intr=^X)을 정상값으로 고친다.
+// 고쳤으면 true. 사용자가 일부러 바꾼 설정(ISIG·ICANON 이 켜져 있고 intr 이 ^X 가 아닌 경우)은 건드리지 않는다.
+func sanitizeTermios(t *syscall.Termios) bool {
+	fixed := false
+	if t.Lflag&(syscall.ISIG|syscall.ICANON) != syscall.ISIG|syscall.ICANON {
+		t.Lflag |= syscall.ISIG | syscall.ICANON | syscall.ECHO | syscall.ECHOE | syscall.IEXTEN
+		t.Iflag |= syscall.ICRNL
+		t.Oflag |= syscall.OPOST | syscall.ONLCR
+		fixed = true
+	}
+	if t.Cc[syscall.VINTR] == 0x18 { // 이 프로그램이 AWX 실행 때 intr 을 ^X 로 바꿨다가 되돌리지 못한 경우
+		t.Cc[syscall.VINTR] = 0x03
+		if t.Cc[syscall.VSUSP] == 0 {
+			t.Cc[syscall.VSUSP] = 0x1a
+		}
+		fixed = true
+	}
+	return fixed
+}
+
 // withAwxTermios: AWX(01) 실행용 터미널 설정 — 현재 termios 를 저장하고 cooked(ISIG|ICANON|ECHO …) 로 바꾼 뒤
 // intr=Ctrl+X(0x18), susp=비활성(_POSIX_VDISABLE=0) 로 설정한다. 돌려주는 함수가 저장해 둔 termios 로 되돌린다
 // (입력 버퍼에 남은 키는 버림 - TCSETSF).
@@ -61,6 +83,7 @@ func withAwxTermios(f *os.File) (func(), error) {
 	if err := ioctl(fd, syscall.TCGETS, unsafe.Pointer(&old)); err != nil {
 		return nil, err
 	}
+	sanitizeTermios(&old)
 	t := old
 	t.Iflag |= syscall.ICRNL | syscall.IXON
 	t.Oflag |= syscall.OPOST | syscall.ONLCR
