@@ -12,6 +12,8 @@ package main
 //	    반환값이 nil 이 아니면 결과를 쓸 수 있고, 이때 error 는 결과 파일 기록 경고입니다.
 //	(*unifiedRun).ProfileLines() []ResultLine          프로파일 결과 줄 (대상 입력 순서)
 //	(*unifiedRun).HostOrder() []string                 대상 hostname 입력 순서 (writeCheckRes 의 hostsOrder)
+//	XML 대상(Target.XML, xmlhost.go): 같은 doCheck 안에서 XML API 로 점검(hostCheck.XML), 스냅샷은 StatusXMLReadOnly 라
+//	    전체비교에서 비교하지 않고(그 상태 줄 1개) 설정 계획에서도 빠집니다.
 //	(*unifiedRun).Compare(ref compareRef, st progStage) (*compareResult, error)
 //	    남겨 둔 스냅샷으로 전체비교 (대상에는 다시 접속하지 않음). 기준은 셋 중 정확히 하나:
 //	      compareRef{Hosts: []string{"host"}}  비교서버 hostname — 대상 목록에 있으면 그 스냅샷을 쓰고, 없으면 그 서버만 1회 조회
@@ -115,6 +117,9 @@ func snapFromCheck(h *hostCheck) *biosSnap {
 		s.Manufacturer, s.Vendor, s.Model, s.BiosVersion = h.Info.Manufacturer, h.Info.Vendor, h.Info.Model, h.Info.BiosVersion
 		s.Key = strings.ToLower(s.Vendor) + "|" + normalizeModel(s.Model)
 	}
+	if h.XML && s.Status == "" { // XML 대상은 점검만 — 전체비교·설정 제외 (속성 스냅샷 없음)
+		s.Status, s.Detail = StatusXMLReadOnly, "XML API 대상 — 전체비교·설정 제외 (읽기 전용)"
+	}
 	if s.Status == "" && len(s.Attrs) == 0 {
 		s.Status, s.Detail = StatusUnsupported, "Bios Attributes 를 읽지 못했습니다"
 	}
@@ -143,10 +148,19 @@ func hostProgTag(h *hostCheck) string {
 func (u *unifiedRun) ProfileLines() []ResultLine { return profileLines(u.Check.Hosts) }
 
 // HostOrder 는 대상 hostname 입력 순서입니다.
+// XML 대상에서 서버가 여럿이라 "<호스트>/<서버 dn>" 으로 나눠 보고한 호스트는 그 이름들이 그 자리에 들어갑니다.
 func (u *unifiedRun) HostOrder() []string {
-	out := make([]string, len(u.rc.Targets))
+	out := make([]string, 0, len(u.rc.Targets))
 	for i, t := range u.rc.Targets {
-		out[i] = t.Hostname
+		var h *hostCheck
+		if u.Check != nil && i < len(u.Check.Hosts) {
+			h = u.Check.Hosts[i]
+		}
+		if labels := xmlServerLabels(h); len(labels) > 0 {
+			out = append(out, labels...)
+			continue
+		}
+		out = append(out, t.Hostname)
 	}
 	return out
 }

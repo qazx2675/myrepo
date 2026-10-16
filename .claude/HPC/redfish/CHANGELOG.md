@@ -1,5 +1,39 @@
 # CHANGELOG.md — redfish (biostool)
 
+## [Unreleased] (v0.3.1 후보) - 2026-10-16
+
+`bash bios.sh` 한 번에 Redfish 장비와 Cisco 장비(UCSM 블레이드·CIMC 랙서버)를 섞어 점검합니다. Cisco 는 XML API(읽기 전용)로 읽습니다. 아래 v0.3.0 항목과 sha256 표는 그대로 두었습니다(이 변경분의 바이너리 sha256 은 이 절 끝 표).
+
+### 추가
+
+- **Cisco XML 혼합 대상**(`xmlhost.go`, `resolve.go` `classifyTargets`): hostname(`-m`·포트를 뗀 이름)이 `bios.conf` 의 `xml_host_prefix`(기본 `c`, 쉼표로 여러 개, 대소문자 무시, 비우면 이름 기준 XML 끔)로 시작하는 대상은 Redfish 대신 UCSM/CIMC XML API 로 점검합니다(`aaaLogin`·`configResolveClass`·`aaaLogout` 만, 읽기 전용). 접속 주소는 `hostname-m`. IP 대상은 `-user` 면 Redfish, **`-user-xml <파일>`** 이면 Cisco(XML). `bios.sh` 도움말·`-auto` 도 `-user-xml` 을 받습니다.
+- **TUI**: 대상에 IP 가 있으면 Cisco(XML) 대상 파일/붙여넣기를 따로 묻습니다(`targets-xml-file`·`targets-xml-paste` 단계, 안내 “Cisco 장비는 XML 로 점검”). hostname 만 있으면 접두어로 자동 분류되므로 묻지 않고, `xml_host_prefix` 가 비면 hostname 도 묻습니다.
+- **서버 선택**: XML 응답에 서버가 1대면 그 호스트, 여러 대면 서비스 프로파일(`lsServer`) 이름이 hostname 과 같은 서버를 고릅니다. 같은 것이 없으면 모든 서버를 `<호스트>/<서버 dn>` 으로 나열하고 비고에 `[XML SP=...]` 를 남깁니다.
+- **폴백**: XML 로그인 전에 실패하면(연결 실패·타임아웃·XML 아닌 응답·HTTP 오류) 그 호스트만 Redfish 로 1번 다시 점검하고 비고에 `XML 실패 → Redfish` 를 남깁니다. `AUTH_FAIL` 은 계정 잠금 방지를 위해 다시 시도하지 않습니다.
+- **XML 호스트는 점검만**: 전체비교는 `[N/A]` + 비고 `XML 대상 — 비교 제외(읽기 전용)`(내부 상태 `XML_READONLY`, 화면에서 회색), 수정(설정) 계획에서도 제외합니다.
+- **mock**: `cmd/mockucsm` + `internal/mockucsm`(UCSM XML API mock, `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답). `testcase/demo_env.sh` 에 c101(XML 단일)·c201/c202(도메인, 서비스 프로파일 이름으로 선택)·c301(XML 실패 → Redfish)과 `user_xml.txt` 추가. 빌드 완료 `bin/mockucsm`(`_os6`) 커밋.
+
+### 변경
+
+- **프로파일 `profiles/*.tsv` 에 구역 `# [redfish]` / `# [xml]` 추가**(`profile.go`): `[xml]` 행의 attribute 는 `클래스.속성`(예: `biosVfCPUPerformance.vpCPUPerformance`), 벤더는 CISCO 만, `*` 모델 불가. `# UNMAPPED` 주석은 `MAPPING_MISSING` 사유. 기존 `bios_json/standard_map/standard_bios_map_xml.tsv` 는 삭제하고 그 행을 `profiles/VM.tsv`·`VM_research.tsv` 의 `# [xml]` 구역으로 옮겼습니다.
+- **`ucsm_check.sh` / `biostool ucsm`**: 기대값을 `-profile <이름>`(기본 VM)의 `# [xml]` 구역에서 읽습니다. **`-xml-map` 옵션은 제거**되었습니다. 조회 클래스에 `computeRackUnit`·`lsServer` 가 더해졌습니다(읽기 전용 허용목록 안).
+- 문서: README 2.0절 “Cisco(XML) 혼합 대상”·3.3절(`xml_host_prefix`)·3.4절(구역 형식)·3.6절, ARCHITECTURE(`xmlhost.go`·mockucsm), WORKFLOW 7번 mermaid(분류 → XML/Redfish → 폴백), 사용법.txt 3·13절, FIRST_RUN 38~41. `workflow_bios.svg` 다시 렌더링.
+
+### 알려진 제한
+
+- 실제 UCSM/CIMC 에 접속해 본 적이 없습니다(mock 만). 확인 항목은 [FIRST_RUN.md](FIRST_RUN.md) 38~41(와 18~21).
+
+### 바이너리 sha256
+
+| 파일 | Go | 크기 | sha256 |
+|---|---|---|---|
+| bin/biostool | go1.26.5 | 7876770 | 6e5e3d44fbbac69e4a8b5c9bcbb775935cdee5a58811b4a8116587cb7d8b8b8f |
+| bin/biostool_os6 | go1.20.14 | 6492160 | e52040cbab86deb87b0538d25f2b393f4c1f7684ccadf6b4c267c453102c6789 |
+| bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
+| bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
+
+`bin/mockbmc`(`_os6`)는 소스 변경이 없어 그대로입니다(재빌드 sha 동일). 검증: 랩 go1.26.5·go1.20.14 `gofmt`·`go vet`·`go test ./...` 통과, `demo_env.sh` 혼합 실행(c101 XML FAIL 1건, c201/c202 서비스 프로파일 선택, c301 XML 실패 → Redfish, `-user-xml`) 확인.
+
 ## [Unreleased] (v0.3.0 후보) - 2026-10-15
 
 `bash bios.sh` 하나로 점검·전체비교·수정을 터미널 화면(TUI)에서 진행하는 통합 진입점을 추가했습니다. 확정 사양은 [계획서_v0.2_TUI.md](계획서_v0.2_TUI.md), 사용법은 README 2.0절, 흐름도는 [WORKFLOW.md](WORKFLOW.md) 7·8번입니다. **실제 BMC 에 접속해 본 적은 없습니다**(mock·`-from-dump` 로만 검증).

@@ -110,7 +110,7 @@ func flowEnv(t *testing.T, refs string) (*rtEnv, *commonOpts) {
 	conf, err := os.ReadFile(e.conf)
 	must(t, err)
 	must(t, os.WriteFile(e.conf, append(conf, []byte("refs_dir="+refs+"\n")...), 0o600))
-	return e, &commonOpts{conf: e.conf, hosts: e.hosts, user: "user.txt"}
+	return e, &commonOpts{conf: e.conf, hosts: e.hosts, user: "user.txt", routeXML: true} // cmdBios 처럼 classifyTargets
 }
 
 func flowNames(s []flowStep) []string {
@@ -136,7 +136,8 @@ func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 	script := []flowStep{
 		{"targets", "2"},
 		{"targets-paste", ua + "\n" + ub + "\x04"},
-		{"profile", "2"}, // OTHER, VM
+		{"targets-xml-paste", "\x04"}, // IP 대상이라 Cisco(XML) 대상을 더 묻는다 (없음)
+		{"profile", "2"},              // OTHER, VM
 		{"profile-result", "\t"},
 		{"ref", "1"},
 		{"ref-host", ua + "\r"},
@@ -233,7 +234,7 @@ func TestBiosFlowViewTabsAndReRef(t *testing.T) {
 			t.Errorf("기준 서버 %s 줄 %d개 (속성마다 줄이어야 함)", host, n)
 		}
 	}
-	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, map[string]string{"targets-xml-paste": "\x04"}, func(i int, f *biosFlow) {
 		ui := f.ui
 		switch i {
 		case 3:
@@ -384,6 +385,7 @@ func TestBiosFlowFileTargetRefJSON(t *testing.T) {
 	script := []flowStep{
 		{"targets", "1"},
 		{"targets-file", strings.Repeat("\x7f", len("user.txt")) + targets + "\r"},
+		{"targets-xml-file", "\r"}, // IP 대상이라 Cisco(XML) 대상 파일을 더 묻는다 (비움 = 없음)
 		{"profile", "2"},
 		{"profile-result", "\t"},
 		{"ref", "2"}, // 1 hostname, 2 golden.json, 3 diff.txt
@@ -662,16 +664,18 @@ func TestBiosFlowQuitBackAndSetLoop(t *testing.T) {
 			script := []flowStep{
 				{"targets", "2"},
 				{"targets-paste", ua + "\x04"},
+				{"targets-xml-paste", "\x04"},
 				{"profile", "q"}, // 프로파일 고르기 q → 대상 입력으로
 				{"targets", "2"},
 				{"targets-paste", ua + "\x04"},
+				{"targets-xml-paste", "\x04"},
 				{"profile", "2"},
 				{"profile-result", c.first},
-				{"ask-set", "\x18"}, // 7: 수정 단계 취소 → 결과 보기로
+				{"ask-set", "\x18"}, // 9: 수정 단계 취소 → 결과 보기로
 				{"profile-result", "qq"},
 			}
 			fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
-				if i == 7 && builds != c.builds {
+				if i == 9 && builds != c.builds {
 					t.Errorf("ask-set 까지 계획 %d번, 기대 %d (e 경로면 q/Esc/N/Ctrl+X 로 끝나지 않았음)", builds, c.builds)
 				}
 			})
@@ -743,6 +747,141 @@ func TestBiosFlowCancelAtTargets(t *testing.T) {
 		t.Errorf("err=%v 요약=%q", err, fr.out.String())
 	}
 	e.noNewDir(before)
+}
+
+// flowNoPlan 은 설정 계획을 만들면 실패하게 바꿔 끼웁니다 (대상 입력만 보는 시험).
+func flowNoPlan(t *testing.T) {
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan {
+		t.Error("계획을 만들면 안 됨")
+		return &setPlan{}
+	}, nil)
+}
+
+// flowTargetsOf 는 대상의 "입력=XML여부" 목록입니다.
+func flowTargetsOf(ts []Target) string {
+	var out []string
+	for _, x := range ts {
+		out = append(out, fmt.Sprintf("%s=%v", x.Input, x.XML))
+	}
+	return strings.Join(out, " ")
+}
+
+const flowCiscoHintC = "hostname 이 c 로 시작하면 자동, IP 는 Cisco(XML) 대상에 따로 넣으십시오"
+
+// 대상 파일에 IP 가 있으면 Cisco(XML) 대상 파일을 더 묻는다 (없는 파일이면 다시 묻고), 그 목록은 모두 XML 대상.
+// 프로파일 고르기에서 q 로 대상 입력에 돌아오면 앞의 Cisco(XML) 대상은 버린다.
+func TestBiosFlowTargetsFileAsksCiscoFile(t *testing.T) {
+	e, o := flowEnv(t, "")
+	flowNoPlan(t)
+	rf := e.writeFile("targets.txt", "10.0.0.1", "host1")
+	cisco := e.writeFile("cisco.txt", "10.0.0.2")
+	var got, gotXML string
+	script := []flowStep{
+		{"targets", "1"},
+		{"targets-file", strings.Repeat("\x7f", len("user.txt")) + rf + "\r"},
+		{"targets-xml-file", "nope.txt\r"},
+		{"targets-xml-file", cisco + "\r"},
+		{"profile", "q"},
+		{"targets", "\x18"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+		if i == 4 {
+			got, gotXML = flowTargetsOf(f.rc.Targets), f.a.O.userXML
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if got != "10.0.0.1=false host1=false 10.0.0.2=true" || gotXML != cisco {
+		t.Errorf("대상 = %s, userXML = %q", got, gotXML)
+	}
+	if o.userXML != "" {
+		t.Errorf("대상 입력으로 돌아오면 Cisco(XML) 대상을 버려야 함: %q", o.userXML)
+	}
+	sc := fr.screen()
+	for _, want := range []string{"Cisco 장비는 XML 로 점검합니다 —", flowCiscoHintC, "Cisco(XML) 대상 파일 (IP 로 적은 Cisco 장비, 비우면 없음)",
+		"Cisco(XML) 대상 파일을 찾을 수 없습니다: nope.txt"} {
+		if !strings.Contains(sc, want) {
+			t.Errorf("화면에 %q 없음", want)
+		}
+	}
+}
+
+// 붙여넣기에 IP 가 있으면 두 번째 붙여넣기 화면(Cisco(XML) 대상)을 보이고 두 목록을 함께 쓴다.
+func TestBiosFlowTargetsPasteAsksCisco(t *testing.T) {
+	_, o := flowEnv(t, "")
+	flowNoPlan(t)
+	var got, gotArg string
+	script := []flowStep{
+		{"targets", "2"},
+		{"targets-paste", "10.0.0.1\nc201\x04"},
+		{"targets-xml-paste", "10.0.0.2\n10.0.0.3\x04"},
+		{"profile", "q"},
+		{"targets", "\x18"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+		if i == 3 {
+			got, gotArg = flowTargetsOf(f.rc.Targets), f.a.O.userXMLArg
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if got != "10.0.0.1=false c201=true 10.0.0.2=true 10.0.0.3=true" || gotArg != "10.0.0.2\n10.0.0.3" {
+		t.Errorf("대상 = %s, 붙여넣은 Cisco = %q", got, gotArg)
+	}
+	sc := fr.screen()
+	for _, want := range []string{flowCiscoHintC, "Cisco(XML) 대상 붙여넣기 (IP 로 적은 Cisco 장비만, 없으면 바로 Ctrl+D)"} {
+		if !strings.Contains(sc, want) {
+			t.Errorf("화면에 %q 없음", want)
+		}
+	}
+}
+
+// 대상이 hostname 뿐이면 Cisco(XML) 대상을 묻지 않는다 (접두어로 자동). xml_host_prefix 가 비면 hostname 이어도 묻는다.
+func TestBiosFlowTargetsNoIPNoCiscoAsk(t *testing.T) {
+	for _, c := range []struct {
+		name, conf, hint, want string
+		ask                    bool
+	}{
+		{"prefix", "", flowCiscoHintC, "c201=true host1=false", false},
+		{"noprefix", "xml_host_prefix=\n", "IP·이름 모두 Cisco(XML) 대상에 넣으십시오", "c201=false host1=false", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e, o := flowEnv(t, "")
+			flowNoPlan(t)
+			if c.conf != "" {
+				conf, err := os.ReadFile(e.conf)
+				must(t, err)
+				must(t, os.WriteFile(e.conf, append(conf, []byte(c.conf)...), 0o600))
+			}
+			rf := e.writeFile("names.txt", "c201", "host1")
+			script := []flowStep{
+				{"targets", "1"},
+				{"targets-file", strings.Repeat("\x7f", len("user.txt")) + rf + "\r"},
+			}
+			if c.ask {
+				script = append(script, flowStep{"targets-xml-file", "\r"})
+			}
+			pi := len(script)
+			script = append(script, flowStep{"profile", "q"}, flowStep{"targets", "\x18"})
+			var got string
+			fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+				if i == pi {
+					got = flowTargetsOf(f.rc.Targets)
+				}
+			})
+			if err != nil {
+				t.Fatalf("흐름 오류: %v", err)
+			}
+			if got != c.want {
+				t.Errorf("대상 = %s, 기대 %s", got, c.want)
+			}
+			if sc := fr.screen(); !strings.Contains(sc, c.hint) {
+				t.Errorf("화면에 %q 없음", c.hint)
+			}
+		})
+	}
 }
 
 // runUnified Cancel 이 이미 닫혀 있으면 아무 호스트에도 접속하지 않는다.

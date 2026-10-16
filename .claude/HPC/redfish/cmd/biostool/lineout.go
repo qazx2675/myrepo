@@ -21,7 +21,7 @@ const (
 
 // lineColor 는 줄의 태그·현재값 색입니다: 호스트 오류는 빨강, 그 외는 태그별 (OK 초록 / difference 노랑 / N/A 회색).
 func lineColor(l ResultLine) string {
-	if l.HostError {
+	if lineIsError(l) {
 		return lnRed
 	}
 	switch l.Tag {
@@ -57,7 +57,7 @@ func formatLine(l ResultLine, color bool) string {
 	}
 	c := lineColor(l)
 	note := lineSafe(l.Note)
-	if l.HostError {
+	if lineIsError(l) {
 		note = paint(lnRed, note)
 	}
 	cols := []string{

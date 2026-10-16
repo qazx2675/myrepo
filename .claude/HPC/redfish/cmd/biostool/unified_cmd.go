@@ -4,9 +4,12 @@ package main
 // 아니면 TUI 흐름(tui_flow.go, 단계 6 — 마지막에 설정 여부를 묻는다)으로 가고, 그 밖에는 평문 출력이며 읽기 전용입니다
 // — 설정(Pending 쓰기)은 하지 않습니다 (-auto 도 점검만).
 //
-//	biostool bios -profile VM [-user user.txt] [-ref host[,host] | -ref-json refs/x.json | -diff diff.txt] [-ignore ignore_attrs.txt] [-plain] [공통 옵션]
+//	biostool bios -profile VM [-user user.txt] [-user-xml xml.txt] [-ref host[,host] | -ref-json refs/x.json | -diff diff.txt] [-ignore ignore_attrs.txt] [-plain] [공통 옵션]
 //	biostool bios -auto-check <user> <targets.txt> [-profile VM] [공통 옵션]   비대화형: 프로파일 점검만 → ./check.res_<user>
 //	biostool bios -auto       <user> <targets.txt> [-profile VM] [공통 옵션]   위와 같음 + ./check.res_<user>_postapply (같은 내용)
+//
+// 대상은 classifyTargets(resolve.go)로 나뉩니다: bios.conf xml_host_prefix(기본 c)로 시작하는 이름과 -user-xml 목록은
+// XML API(UCSM/CIMC, xmlhost.go) 로 점검만 하고(전체비교·설정 제외), 나머지는 Redfish 입니다 (-auto 도 같음).
 //
 // check.res_<user> 는 기본으로 현재 폴더에 쓰며, -res-dir <폴더> 로 바꿀 수 있습니다 (bios.sh 가 호출한 쪽 작업 폴더를 넘김).
 // 비대화형은 묻지 않고, 점검을 끝냈으면 FAIL 이 있어도 종료코드 0 (auto_setup 이 결과 파일을 읽음).
@@ -53,6 +56,8 @@ func cmdBios(args []string) error {
 	plain := fs.Bool("plain", false, "TUI 없이 색 없는 평문으로 출력 (설정 질문 없음)")
 	autoCheck := fs.Bool("auto-check", false, "비대화형 점검: -auto-check <user> <targets.txt> → ./check.res_<user> (설정 없음)")
 	auto := fs.Bool("auto", false, "비대화형 점검: -auto <user> <targets.txt> → ./check.res_<user> + _postapply (설정 없음, 점검만)")
+	fs.StringVar(&o.userXML, "user-xml", "", "XML API(UCSM/CIMC, 읽기 전용)로만 점검할 Cisco 대상 목록 파일 (hostname·IP, 전체비교·설정 제외). Cisco 장비는 XML 선택: hostname 이 xml_host_prefix(기본 c)로 시작하면 자동, IP 는 이 파일에")
+	o.routeXML = true // 대상을 xml_host_prefix·-user-xml 로 Redfish / XML 로 나눈다
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -115,6 +120,10 @@ func cmdBios(args []string) error {
 			explicitUser = true
 		}
 	})
+	if o.userXML != "" && !explicitUser && autoUser == "" {
+		o.user = "" // -user-xml 만 줬으면 기본 user.txt 는 읽지 않는다
+		explicitUser = true
+	}
 	ign, err := loadIgnore(*ignore, explicitIgnore)
 	if err != nil {
 		return err

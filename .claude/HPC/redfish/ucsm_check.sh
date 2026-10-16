@@ -18,7 +18,7 @@ usage() {
   bash ucsm_check.sh [biostool ucsm 옵션...]
 
   -user <파일>         점검할 UCSM(Fabric Interconnect VIP) 주소 목록 (기본 user.txt, 한 줄에 IP 또는 이름)
-  -xml-map <파일>      기대값 매핑 TSV (기본 bios_json/standard_map/standard_bios_map_xml.tsv)
+  -profile <이름>      기대값 프로파일 (기본 VM, profile_dir/<이름>.tsv 의 # [xml] 구역)
   -list-max <N>        FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 (기본 20)
   -conf <파일>, -hosts <파일>
 
@@ -49,7 +49,7 @@ done
 
 select_bin || exit 2
 
-# 인자로 -conf/-user/-xml-map 을 바꿨으면 그 값을, 아니면 기본 파일명을 점검 대상으로 삼는다.
+# 인자로 -conf/-user/-profile 을 바꿨으면 그 값을, 아니면 기본 파일명을 점검 대상으로 삼는다.
 opt_val() { # <옵션이름> <기본값> : args 에서 -name X / --name X / -name=X 를 찾는다.
   local name="$1" def="$2" i n=${#args[@]}
   for ((i = 0; i < n; i++)); do
@@ -71,7 +71,8 @@ opt_val() { # <옵션이름> <기본값> : args 에서 -name X / --name X / -nam
 
 conf="$(opt_val conf bios.conf)"
 userfile="$(opt_val user user.txt)"
-xmlmap="$(opt_val xml-map bios_json/standard_map/standard_bios_map_xml.tsv)"
+profdir="$(conf_val "$conf" profile_dir profiles)"
+profile="$(opt_val profile VM)"
 passfile="$(conf_val "$conf" pass_file pass.enc)"
 keyfile="$(conf_val "$conf" key_file key.bin)"
 
@@ -88,8 +89,8 @@ if [ ! -f "$passfile" ] || [ ! -f "$keyfile" ]; then
   echo "[없음] $passfile / $keyfile  -> bash encrypt.sh  (UCSM 비밀번호를 암호화해 생성)" >&2
   missing=1
 fi
-if [ ! -f "$xmlmap" ]; then
-  echo "[없음] $xmlmap  -> 기대값 매핑 TSV 경로를 -xml-map 으로 지정" >&2
+if [ ! -f "$profdir/$profile.tsv" ]; then
+  echo "[없음] $profdir/$profile.tsv  -> -profile <이름> 으로 # [xml] 구역이 있는 프로파일 지정" >&2
   missing=1
 fi
 if [ "$missing" = "1" ]; then

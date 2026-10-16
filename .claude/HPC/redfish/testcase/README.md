@@ -54,3 +54,21 @@ mock 은 기본으로 **비인증 ServiceRoot 를 401** 로 막습니다(클라�
 ```
 
 합성 데이터(`testdata/`)와 mock 으로 만든 시험이므로 실제 BMC 의 동작(벤더별 ServiceRoot 응답, 잠금 정책 등)은 검증하지 않습니다. 실장비에서 확인할 항목은 [FIRST_RUN.md](../FIRST_RUN.md) 26~30 입니다.
+
+## demo_env.sh — 직접 눌러 보는 모의 환경
+
+TUI·전체비교·수정을 실제 장비 없이 눌러 보는 환경입니다 (`start` / `status` / `stop`, 시험 폴더 `/tmp/bios_demo`).
+
+- Redfish mock BMC 7대(`mockbmc`, 127.0.0.1:19201~19207)와 Cisco UCSM XML mock 2대(`mockucsm`, 19301·19302)를 띄웁니다. `bin/mockucsm`(커널 < 3 이면 `_os6`)이 필요하며 없으면 오류로 멈춥니다.
+- `mockucsm` 은 `aaaLogin`/`configResolveClass`/`aaaLogout` 만 응답하고 `configConfMo` 등은 errorCode 로 거절합니다. 서버 정의는 JSON(`user`, `password`, `servers[]{dn,class,model,sp_name,bios}`)이며 데모에서는 `ucsm_single.json`·`ucsm_domain.json` 으로 생성됩니다.
+- 시연 호스트(`user.txt` 는 IP 6줄 + 이름 4줄의 혼합 목록, 이름은 `hosts` 에서 127.0.0.1 로 해석):
+
+| 대상 | 의미 |
+|---|---|
+| `c101:19301` | XML, 블레이드 1대. hyper_threading=disabled 라 DEMO 에서 FAIL |
+| `c201:19302` / `c202:19302` | XML, 블레이드 3대(서비스 프로파일 c201·c202·other) 중 이름이 맞는 블레이드만 선택 |
+| `c301:19207` | XML 실패(Redfish mock 이라 `/nuova` 없음) → Redfish 폴백 |
+| `127.0.0.1:19201~19206` | 접두사 `c` 가 아니므로 Redfish |
+| `user_xml.txt` (`127.0.0.1:19301`) | `-user-xml` 로 지정하는 IP 형태 XML 대상 |
+
+- 혼합 실행: `bash bios.sh -conf /tmp/bios_demo/bios.conf -hosts /tmp/bios_demo/hosts -profile DEMO -user /tmp/bios_demo/user.txt` (`-user-xml /tmp/bios_demo/user_xml.txt` 추가 가능). 전체 명령은 `start` 출력에 나옵니다.

@@ -17,7 +17,7 @@ func TestParseConfDefaults(t *testing.T) {
 	want := Config{
 		User: "admin", PassFile: "pass.enc", KeyFile: "key.bin", Concurrency: 100,
 		Timeout: 20 * time.Second, Insecure: true, Retries: 2, AuthFailStop: 3,
-		ResultDir: "results", DumpDir: "dumps", ProfileDir: "profiles", RefsDir: "refs",
+		ResultDir: "results", DumpDir: "dumps", ProfileDir: "profiles", RefsDir: "refs", XMLHostPrefix: []string{"c"},
 	}
 	if !reflect.DeepEqual(*c, want) {
 		t.Errorf("기본값 불일치\n got=%+v\nwant=%+v", *c, want)
@@ -39,7 +39,7 @@ func TestParseConfAllKeys(t *testing.T) {
 		User: "root", PassFile: "a.enc", KeyFile: "a.key", Concurrency: 7,
 		Timeout: 5 * time.Second, Insecure: false, Retries: 0, AuthFailStop: 5,
 		ResultDir: "r", DumpDir: "d", ProfileDir: "p",
-		ExcludeAttrs: []string{"A", "*Uuid*", "B"}, AllcheckSet: true, RefsDir: "myrefs",
+		ExcludeAttrs: []string{"A", "*Uuid*", "B"}, AllcheckSet: true, RefsDir: "myrefs", XMLHostPrefix: []string{"c"},
 	}
 	if !reflect.DeepEqual(*c, want) {
 		t.Errorf("불일치\n got=%+v\nwant=%+v", *c, want)

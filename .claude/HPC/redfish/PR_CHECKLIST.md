@@ -31,6 +31,8 @@
 - [ ] 태그 3종 묶음(`tagFor`)·`(N/A)` 표기·CSV 4종(UTF-8 BOM)·`check.res_<user>` 형식을 바꿨다면 README 2.0절·3.6절·사용법.txt 와 `계획서_v0.2_TUI.md` 를 함께 갱신했다
 - [ ] 옛 래퍼 호환: `bios_check.sh`(옛 전용 옵션이 있으면 옛 방식)·`all_bios_check.sh`(옵션 없이 터미널이면 `bios.sh`)의 분기가 그대로다
 
+- [ ] **Cisco XML 혼합 대상(`xmlhost.go`·`classifyTargets`·프로파일 `# [xml]` 구역·`mockucsm`)을 바꿨다면**: XML 호출이 `aaaLogin`·`configResolveClass`·`aaaLogout` 뿐이고 쓰기 경로가 생기지 않았다 (`internal/ucsmxml` 관문 시험), `AUTH_FAIL` 은 Redfish 로 재시도하지 않는다, XML 호스트가 전체비교(`XML_READONLY`)·설정 계획에서 빠진다, `xmlhost_test.go`·`ucsm_test.go`·`tui_flow_test.go` 와 README 2.0절·3.3절·3.4절·사용법.txt·`testcase/README.md` 를 맞췄다. mock 소스를 고쳤다면 `bin/mockucsm`·`bin/mockucsm_os6` 도 재빌드해 함께 커밋
+
 ### 랩 검증 (Windows 에서 Go 를 실행하지 않음)
 
 - [ ] 랩 .58(Go 1.25)에서 `go vet ./... && go test ./...` 통과

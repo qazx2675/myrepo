@@ -227,9 +227,9 @@ func tuiCount(lines []ResultLine) (ok, diff, na int) {
 	return
 }
 
-// tuiTagStyle 은 태그·현재값 색입니다: 호스트 오류 빨강, OK 초록, difference 노랑, N/A 회색.
+// tuiTagStyle 은 태그·현재값 색입니다: 호스트 오류 빨강, OK 초록, difference 노랑, N/A 회색 (XML 비교 제외 줄도 회색).
 func tuiTagStyle(l ResultLine) string {
-	if l.HostError {
+	if lineIsError(l) {
 		return tuiStRed
 	}
 	switch l.Tag {
@@ -255,7 +255,7 @@ var tuiLineHead = []string{"태그", "host", "ip", "vendor", "model", "bios", "a
 func tuiLineRow(l ResultLine) []tuiSeg {
 	tag := tuiTagStyle(l)
 	note := ""
-	if l.HostError {
+	if lineIsError(l) {
 		note = tuiStRed
 	}
 	return []tuiSeg{
@@ -327,14 +327,16 @@ func tuiSummaryRow(s tuiHostSum) []tuiSeg {
 		}
 		return tuiSeg{strconv.Itoa(n), st}
 	}
-	plain := ""
-	if s.Err != "" {
+	plain, errSt := "", tuiStRed
+	if s.Err == xmlCompareNote { // XML 대상 비교 제외는 오류가 아님
+		errSt = tuiStGray
+	} else if s.Err != "" {
 		plain = tuiStRed
 	}
 	return []tuiSeg{
 		{tuiDash(s.Host), plain}, {tuiDash(s.IP), plain}, {tuiDash(s.Model), plain}, {tuiDash(s.Mgmt), plain},
 		num(s.OK, tuiStGreen), num(s.Diff, tuiStYellow), num(s.NA, tuiStGray),
-		{s.Err, tuiStRed},
+		{s.Err, errSt},
 	}
 }
 

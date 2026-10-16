@@ -24,6 +24,9 @@ usage() {
   인자 없이 터미널에서 실행         TUI (대상·프로파일을 화면에서 입력, 끝에서 설정 여부를 묻는다)
   -profile <이름>, --profile <이름>  profiles/<이름>.tsv 를 바로 사용
   -user <파일>                      점검 대상 목록 (기본 user.txt)
+  -user-xml <파일>                  Cisco(XML API, 읽기 전용) 대상 목록 — 점검만 (전체비교·설정 제외)
+                                   Cisco 장비는 XML 선택: hostname 이 c 로 시작하면 자동, IP 는 -user-xml 파일에
+                                   (접두어는 bios.conf xml_host_prefix, -user-xml 만 주면 user.txt 는 읽지 않음)
   -plain                           TUI 없이 색 없는 평문으로 출력 (설정 질문 없음)
   -ref <hostname>                  전체비교 비교서버 (쉼표로 여러 개)
   -ref-json <파일>                  전체비교 기준 속성 JSON (파일 이름만 주면 bios.conf refs_dir 에서 찾음)
@@ -34,9 +37,9 @@ usage() {
 
 비대화형 (auto_setup 이 호출):
   bash bios.sh -auto-check <user> <targets.txt> [-profile <이름>]
-  bash bios.sh -auto       <user> <targets.txt> [-profile <이름>]
+  bash bios.sh -auto       <user> <targets.txt> [-profile <이름>] [-user-xml <파일>]
     - 묻지 않고 점검만 합니다 (설정 없음). 프로파일은 -profile 또는 bios.conf 의 auto_profile.
-    - targets.txt 는 호출한 폴더 기준 경로이고, check.res_<user> (-auto 는 _postapply 도) 는 호출한 폴더에 만들어집니다.
+    - targets.txt 와 -user-xml 파일은 호출한 폴더 기준 경로이고, check.res_<user> (-auto 는 _postapply 도) 는 호출한 폴더에 만들어집니다.
     - 점검을 끝냈으면 FAIL 이 있어도 종료코드 0. conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닙니다.
 
 옛 이름: bios_check.sh (점검), all_bios_check.sh (전체비교) 는 그대로 쓸 수 있습니다 (옛 옵션은 옛 방식으로 동작).
@@ -96,6 +99,26 @@ for ((i = 0; i < n; i++)); do
   esac
 done
 if [ "$auto" = "1" ]; then
+  # -user-xml 도 targets.txt 처럼 호출한 폴더 기준 절대경로로 바꾼다 (-user-xml X / --user-xml X / -user-xml=X)
+  for ((i = 0; i < n; i++)); do
+    case "${args[$i]}" in
+      -user-xml | --user-xml)
+        if [ $((i + 1)) -lt "$n" ]; then
+          case "${args[$((i + 1))]}" in
+            /*) ;;
+            *) args[$((i + 1))]="$caller_pwd/${args[$((i + 1))]}" ;;
+          esac
+        fi
+        ;;
+      -user-xml=* | --user-xml=*)
+        v="${args[$i]#*=}"
+        case "$v" in
+          /*) ;;
+          *) args[$i]="${args[$i]%%=*}=$caller_pwd/$v" ;;
+        esac
+        ;;
+    esac
+  done
   args=(-res-dir "$caller_pwd" ${args[@]+"${args[@]}"})
 fi
 
@@ -129,6 +152,7 @@ has_flag() { # <옵션이름> : args 에 -name / --name 이 있는지
 
 conf="$(opt_val conf bios.conf)"
 userfile="$(opt_val user user.txt)"
+userxml="$(opt_val user-xml "")"
 fromdump="$(opt_val from-dump "")"
 passfile="$(conf_val "$conf" pass_file pass.enc)"
 keyfile="$(conf_val "$conf" key_file key.bin)"
@@ -145,13 +169,18 @@ if [ "$auto" = "1" ]; then
     missing=1
   fi
 else
-  # 터미널이고 -plain 이 아니면 TUI 가 대상을 직접 물으므로 -user 를 주지 않은 user.txt 는 필요 없다
-  if { has_flag plain || [ ! -t 1 ]; } || has_flag user; then
+  # 터미널이고 -plain 이 아니면 TUI 가 대상을 직접 물으므로 -user 를 주지 않은 user.txt 는 필요 없다.
+  # -user-xml 만 주면 biostool 이 user.txt 를 읽지 않으므로 그때도 필요 없다.
+  if { { has_flag plain || [ ! -t 1 ]; } && ! has_flag user-xml; } || has_flag user; then
     if [ ! -f "$userfile" ]; then
       echo "[없음] $userfile  -> cp user.txt.example $userfile  후 점검할 대상을 한 줄에 하나씩 입력" >&2
       missing=1
     fi
   fi
+fi
+if [ -n "$userxml" ] && [ ! -f "$userxml" ]; then
+  echo "[없음] $userxml  -> -user-xml 의 Cisco(XML) 대상 목록 (한 줄에 하나)" >&2
+  missing=1
 fi
 if [ -z "$fromdump" ]; then
   if [ ! -f "$passfile" ] || [ ! -f "$keyfile" ]; then

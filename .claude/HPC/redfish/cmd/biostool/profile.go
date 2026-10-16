@@ -22,6 +22,14 @@ import (
 //     없으면 model 이 `*` 인 (벤더 공통) 행을 씁니다. `*` 행은 점검 비교용이라 verified=Y 를 쓸 수 없습니다(로드 오류).
 //   - 표준 4항목(system_profile, hyper_threading, llc_prefetch, sub_numa_cluster)은 프로파일에 행이
 //     없어도 항상 점검 항목에 들어가고(→ MAPPING_MISSING), 그 밖의 std_name 행은 추가 항목이 됩니다.
+//
+// 구역: 주석 줄 `# [redfish]` / `# [xml]` (대소문자·공백 무시) 이 뒤따르는 행의 프로토콜을 정합니다.
+// 구역 표시 전의 행은 redfish 입니다 (예전 파일과 호환). 같은 6열 형식이며
+//   - [redfish] 행 → Profile.Rows (Redfish Bios Attributes 이름·값)
+//   - [xml] 행     → Profile.XML (Cisco UCSM/CIMC XML API, ucsm.go): vendor 는 CISCO, attribute 는
+//     `<xml_class>.<xml_attribute>` (예: biosVfCPUPerformance.vpCPUPerformance, xml_class 는 bios* 만),
+//     value 는 UCSM 이 보고하는 소문자 그대로 (A|B 허용), verified 규칙은 같음. model 은 ucsmModelKey 로 비교하고 `*` 는 없음.
+//     [xml] 구역의 `# UNMAPPED <벤더> <모델> <std_name>: <사유>` 주석은 MAPPING_MISSING 사유로 읽습니다.
 
 var profileHeader = []string{"vendor", "model", "std_name", "attribute", "value", "verified"}
 
@@ -45,8 +53,31 @@ type profRow struct {
 // Profile 은 로드된 프로파일입니다.
 type Profile struct {
 	Name  string
-	Rows  []profRow
-	Items []string // 점검 항목(std_name) 순서: 표준 4항목, 그다음 추가 항목(등장 순)
+	Rows  []profRow // [redfish] 구역
+	Items []string  // 점검 항목(std_name) 순서: 표준 4항목, 그다음 추가 항목(등장 순)
+	XML   *ucsmMap  // [xml] 구역 (UCSM/CIMC XML API 기대값). 행이 없어도 nil 이 아님
+}
+
+// 프로파일 구역 이름
+const (
+	profSecRedfish = "redfish"
+	profSecXML     = "xml"
+)
+
+// profileSection 은 `# [redfish]` / `# [xml]` 구역 표시 줄인지 봅니다 (t 는 앞뒤 공백을 뗀 줄).
+func profileSection(t string) (string, bool) {
+	if !strings.HasPrefix(t, "#") {
+		return "", false
+	}
+	b := strings.TrimSpace(strings.TrimPrefix(t, "#"))
+	if !strings.HasPrefix(b, "[") || !strings.HasSuffix(b, "]") {
+		return "", false
+	}
+	switch name := strings.ToLower(strings.TrimSpace(b[1 : len(b)-1])); name {
+	case profSecRedfish, profSecXML:
+		return name, true
+	}
+	return "", false
 }
 
 // vendorKey 는 벤더 이름 비교 키입니다 (DELL / Dell Inc. → dell).
@@ -103,13 +134,29 @@ func loadProfile(path, name string) (*Profile, error) {
 // parseProfile 은 프로파일 텍스트를 해석합니다. file 은 오류 메시지용 이름입니다.
 func parseProfile(text, file string) (*Profile, error) {
 	text = strings.TrimPrefix(text, "\ufeff")
-	p := &Profile{}
+	p := &Profile{XML: newUcsmMap()}
 	seen := map[string]int{} // 같은 (벤더, 모델, 항목, 속성) 중복 검사 → 처음 줄 번호
 	headerDone := false
+	section := profSecRedfish // 구역 표시 전의 행은 redfish
 	for i, raw := range strings.Split(text, "\n") {
 		n := i + 1
 		line := strings.TrimRight(raw, "\r")
-		if t := strings.TrimSpace(line); t == "" || strings.HasPrefix(t, "#") {
+		t := strings.TrimSpace(line)
+		if sec, ok := profileSection(t); ok {
+			section = sec
+			continue
+		}
+		if section == profSecXML && strings.HasPrefix(t, ucsmUnmappedPrefix) {
+			key, why, err := parseUcsmUnmapped(t)
+			if err != nil {
+				return nil, fmt.Errorf("%s:%d: %v", file, n, err)
+			}
+			if _, ok := p.XML.Unmapped[key]; !ok {
+				p.XML.Unmapped[key] = why
+			}
+			continue
+		}
+		if t == "" || strings.HasPrefix(t, "#") {
 			continue
 		}
 		cols := strings.Split(line, "\t")
@@ -155,6 +202,12 @@ func parseProfile(text, file string) (*Profile, error) {
 		default:
 			return nil, fmt.Errorf("%s:%d: verified 는 Y 또는 N 이어야 합니다 (현재 %q)", file, n, cols[5])
 		}
+		if section == profSecXML {
+			if err := p.XML.addProfileRow(r, file, n); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		r.vendorKey = vendorKey(r.Vendor)
 		if r.Model == "*" {
 			// * 행은 검증되지 않은 모델에도 맞으므로 쓰기 허가(verified=Y)를 줄 수 없다 (set.go verifyItem 도 다시 막음).
@@ -175,9 +228,10 @@ func parseProfile(text, file string) (*Profile, error) {
 	if !headerDone {
 		return nil, fmt.Errorf("%s: 머리글(%s)이 없습니다", file, strings.Join(profileHeader, " "))
 	}
-	if len(p.Rows) == 0 {
+	if len(p.Rows) == 0 && len(p.XML.Rows) == 0 {
 		return nil, fmt.Errorf("%s: 항목 행이 하나도 없습니다", file)
 	}
+	p.XML.finish()
 
 	have := map[string]bool{}
 	for _, kw := range stdKeywords {

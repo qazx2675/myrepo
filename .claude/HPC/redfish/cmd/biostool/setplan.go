@@ -86,6 +86,7 @@ type setPlan struct {
 	Skipped   []string      // 제외 사유 줄 (verified≠Y, 제외 목록, 위험 속성, 모델·속성목록 불일치, allcheck_set=off 등)
 
 	notes []string     // 항목 줄이 없는 계획·호스트 단위 안내 (확인 화면의 "참고")
+	xml   []string     // XML 대상이라 뺀 호스트 줄 (확인 화면의 "제외")
 	prot  *protectSet  // 보호 패턴 (내장 ∪ protect_attrs)
 	ign   *ignoreSet   // 설정 제외 목록 (내장 기본 ∪ ignore_attrs.txt ∪ exclude_attrs)
 	nCmp  map[int]bool // 전체비교 항목이 있는 호스트 (확인 화면 안내용)
@@ -221,6 +222,12 @@ func (p *setPlan) exclude(si setItem, why string) {
 func (p *setPlan) addHost(u *unifiedRun, i int, hc *hostCheck, ch *allHost, useCmp bool) {
 	if hc == nil || hc.Status != "" {
 		return // 접속·조회 실패는 N/A (설정할 difference 가 없음)
+	}
+	if hc.XML {
+		line := hc.Target.Hostname + "  XML API 대상 — 점검만 (읽기 전용, 설정 제외)"
+		p.Skipped = append(p.Skipped, line)
+		p.xml = append(p.xml, line)
+		return
 	}
 	name := hc.Target.Hostname
 	skip := func(format string, a ...interface{}) string {
@@ -562,11 +569,11 @@ func (p *setPlan) confirmRows(withItems bool) []string {
 }
 
 // ConfirmLines 는 적용 전 확인 화면 1 입니다: 차이 항목 전부를 호스트별로 "현재값 -> 변경값 (수정대상)" 과
-// "현재값 -> 변경값 (수정제외: 사유)" 로 (값은 자르지 않음), 이어서 남의 Pending 목록과 참고(항목 줄이 없는 제외 사유).
-// 보여 줄 것이 하나도 없으면 nil 입니다.
+// "현재값 -> 변경값 (수정제외: 사유)" 로 (값은 자르지 않음), 이어서 남의 Pending 목록, 참고(항목 줄이 없는 제외 사유),
+// 제외(XML 대상 호스트). 보여 줄 것이 하나도 없으면 nil 입니다.
 func (p *setPlan) ConfirmLines() []string {
 	rows := p.confirmRows(true)
-	if len(rows) == 0 && len(p.Pending) == 0 && len(p.notes) == 0 {
+	if len(rows) == 0 && len(p.Pending) == 0 && len(p.notes) == 0 && len(p.xml) == 0 {
 		return nil
 	}
 	n := len(p.Protected) + len(p.Excluded)
@@ -585,6 +592,12 @@ func (p *setPlan) ConfirmLines() []string {
 	if len(p.notes) > 0 {
 		out = append(out, "", "참고:")
 		for _, s := range p.notes {
+			out = append(out, "  "+s)
+		}
+	}
+	if len(p.xml) > 0 {
+		out = append(out, "", "제외:")
+		for _, s := range p.xml {
 			out = append(out, "  "+s)
 		}
 	}
@@ -659,7 +672,7 @@ func applySetPlan(rc *runContext, u *unifiedRun, p *setPlan, includePending bool
 			return nil, errPlanMismatch
 		}
 		hc := u.Check.Hosts[it.hostIdx]
-		if hc == nil || hc.Target.Hostname != it.Host || hc.Status != "" || hc.Info == nil {
+		if hc == nil || hc.Target.Hostname != it.Host || hc.Status != "" || hc.Info == nil || hc.XML {
 			return nil, errPlanMismatch
 		}
 		h := byIdx[it.hostIdx]

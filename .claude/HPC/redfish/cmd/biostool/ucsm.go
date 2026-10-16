@@ -14,21 +14,22 @@ import (
 	"biostool/internal/ucsmxml"
 )
 
-// ucsm.go 는 `biostool ucsm` 의 본체입니다: Cisco UCS Manager(XML API)가 관리하는 블레이드의
-// 실효 BIOS 설정을 매핑 TSV(standard_bios_map_xml.tsv)의 기대값과 비교합니다 (읽기 전용, 설정 기능 없음).
+// ucsm.go 는 `biostool ucsm` 의 본체이자 `biostool bios` 의 XML 대상(xmlhost.go)이 쓰는 UCSM/CIMC XML API 점검입니다:
+// Cisco UCS Manager(또는 standalone CIMC)가 보고하는 서버의 실효 BIOS 설정을 프로파일(profiles/<이름>.tsv)
+// `# [xml]` 구역의 기대값과 비교합니다 (읽기 전용, 설정 기능 없음).
 //
-// 대상(user.txt 한 줄)은 블레이드 BMC 가 아니라 UCSM(Fabric Interconnect VIP) 주소입니다. UCSM 1개마다
+// `biostool ucsm` 의 대상(user.txt 한 줄)은 블레이드 BMC 가 아니라 UCSM(Fabric Interconnect VIP) 주소입니다. 대상 1개마다
 //
-//	aaaLogin 1회 → configResolveClass(computeBlade) → 매핑 TSV 의 서로 다른 xml_class 마다 configResolveClass 1회 → aaaLogout
+//	aaaLogin 1회 → configResolveClass(computeBlade, computeRackUnit, lsServer) → [xml] 구역의 서로 다른 xml_class 마다
+//	configResolveClass 1회 → aaaLogout
 //
 // 순서로 읽습니다. UCSM 과의 통신은 internal/ucsmxml 패키지만 하며, 그 패키지가 보낼 수 있는 요청은
-// aaaLogin·configResolveClass(computeBlade·bios* 클래스, inHierarchical="false")·aaaLogout(자기 쿠키) 뿐입니다
-// (configConfMo 등 설정·변경 계열은 만들 수 있는 함수가 없고, 전송 직전 관문이 한 번 더 막음).
+// aaaLogin·configResolveClass(computeBlade·computeRackUnit·lsServer·bios* 클래스, inHierarchical="false")·
+// aaaLogout(자기 쿠키) 뿐입니다 (configConfMo 등 설정·변경 계열은 만들 수 있는 함수가 없고, 전송 직전 관문이 한 번 더 막음).
 // 결과는 Redfish 의 result.tsv 와 섞지 않고 results/<일시>/ucsm_result.tsv 에 따로 씁니다.
 
 const (
 	ucsmStatusXMLError  = ucsmxml.StatusXMLError // 응답이 XML 아님·errorCode·HTTP 오류 (호스트 단위)
-	ucsmDefaultMap      = "bios_json/standard_map/standard_bios_map_xml.tsv"
 	ucsmVendor          = "Cisco"
 	ucsmPlatformDefault = "platform-default"
 	ucsmSettingsSeg     = "/bios/bios-settings/"
@@ -38,17 +39,15 @@ const (
 	ucsmPlatformNote    = "플랫폼 기본값이라 실제 적용값은 biosPlatformDefaults 확인 필요"
 )
 
-var ucsmMapHeader = []string{"vendor", "model", "std_name", "xml_class", "xml_attribute", "value", "protocol", "xml_example", "verified"}
-
 var ucsmResultHeader = []string{"ucsm_host", "ip", "protocol", "mgmt_version", "server_dn", "vendor", "model", "std_name", "xml_class", "attribute", "expected", "current", "result"}
 
 var (
-	// xml_class 는 BIOS 클래스(bios*)만 받는다: 매핑 TSV 로 aaaUser 같은 다른 클래스를 읽게 만들 수 없게.
+	// xml_class 는 BIOS 클래스(bios*)만 받는다: 프로파일로 aaaUser 같은 다른 클래스를 읽게 만들 수 없게.
 	reUcsmClass = regexp.MustCompile(`^bios[A-Za-z0-9]+$`)
 	reUcsmAttr  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
 )
 
-// ucsmModelKey 는 매핑 TSV 의 model(`UCS B200 M5`, `UCS X210c M7`)과 UCSM 이 보고한 PID
+// ucsmModelKey 는 프로파일 [xml] 구역의 model(`UCS B200 M5`, `UCS X210c M7`)과 UCSM 이 보고한 PID
 // (`UCSB-B200-M5`, `UCSX-210C-M7`)를 같은 키로 맞추는 한곳의 규칙입니다.
 //
 //	소문자 → 영숫자만 → 앞의 "ucs" 제거 → PID 의 `ucsb-b200` 에서 생기는 중복 "bb" 를 "b" 하나로.
@@ -69,9 +68,9 @@ func ucsmModelKey(s string) string {
 	return k
 }
 
-// ---- 매핑 TSV ----
+// ---- 기대값 (프로파일 # [xml] 구역) ----
 
-// ucsmMapRow 는 매핑 TSV 한 줄입니다.
+// ucsmMapRow 는 프로파일 # [xml] 구역의 한 줄입니다 (attribute 열은 `<xml_class>.<xml_attribute>`).
 type ucsmMapRow struct {
 	Line     int
 	Model    string
@@ -84,12 +83,18 @@ type ucsmMapRow struct {
 	modelKey string
 }
 
-// ucsmMap 은 로드된 매핑 TSV 입니다.
+// ucsmMap 은 프로파일 # [xml] 구역을 읽은 기대값입니다 (Profile.XML). 행이 없어도 nil 이 아닙니다.
 type ucsmMap struct {
 	Rows     []ucsmMapRow
 	Unmapped map[string]string // "모델키|std_name" → `# UNMAPPED` 줄의 사유
 	Items    []string          // 점검 항목 순서: 표준 4항목, 그다음 추가 항목(등장 순)
 	Classes  []string          // 조회할 서로 다른 xml_class (등장 순)
+
+	seen map[string]int // 모델키|std|클래스|속성 → 처음 줄 번호 (중복 검사)
+}
+
+func newUcsmMap() *ucsmMap {
+	return &ucsmMap{Unmapped: map[string]string{}, seen: map[string]int{}}
 }
 
 // rowFor 는 (모델키, 항목) 의 첫 행입니다 (없으면 nil).
@@ -115,117 +120,36 @@ func (m *ucsmMap) rowsFor(modelKey, std string) []*ucsmMapRow {
 	return out
 }
 
-// loadUcsmMap 은 매핑 TSV 파일을 읽습니다.
-func loadUcsmMap(path string) (*ucsmMap, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("UCSM 매핑 TSV %s 이(가) 없습니다 (-xml-map 으로 지정)", path)
-		}
-		return nil, fmt.Errorf("UCSM 매핑 TSV %s: %w", path, err)
+// addProfileRow 는 프로파일 # [xml] 구역의 행 1개(공통 열 검사를 마친 profRow)를 넣습니다.
+// vendor 는 CISCO 만, attribute 는 `<xml_class>.<xml_attribute>` (xml_class 는 bios* 읽기 허용목록 형식),
+// model 은 ucsmModelKey 로 비교합니다 (`*` 는 쓸 수 없음). (모델, std_name, 클래스, 속성) 당 행은 1개입니다.
+func (m *ucsmMap) addProfileRow(r profRow, file string, n int) error {
+	if !strings.EqualFold(r.Vendor, "cisco") {
+		return fmt.Errorf("%s:%d: # [xml] 구역의 vendor 는 CISCO 만 쓸 수 있습니다 (현재 %q)", file, n, r.Vendor)
 	}
-	return parseUcsmMap(string(data), path)
+	cls, attr, ok := strings.Cut(r.Attr, ".")
+	if !ok || !reUcsmClass.MatchString(cls) {
+		return fmt.Errorf("%s:%d: # [xml] 구역의 attribute %q 은(는) <xml_class>.<xml_attribute> 형식이고 xml_class 는 bios 로 시작하는 영숫자만 쓸 수 있습니다 (읽기 허용목록)", file, n, r.Attr)
+	}
+	if !reUcsmAttr.MatchString(attr) {
+		return fmt.Errorf("%s:%d: # [xml] 구역의 xml_attribute %q 은(는) 영숫자만 쓸 수 있습니다", file, n, attr)
+	}
+	row := ucsmMapRow{Line: n, Model: r.Model, Std: r.Std, Class: cls, Attr: attr, Value: r.Value, Allowed: r.Allowed, Verified: r.Verified}
+	if row.modelKey = ucsmModelKey(row.Model); row.modelKey == "" {
+		return fmt.Errorf("%s:%d: model %q 에서 비교할 글자가 남지 않습니다 (# [xml] 구역은 * 를 쓸 수 없음)", file, n, row.Model)
+	}
+	key := row.modelKey + "|" + row.Std + "|" + row.Class + "|" + row.Attr
+	if first, dup := m.seen[key]; dup {
+		return fmt.Errorf("%s:%d: %s %s %s %s 행이 %d 줄과 중복입니다 (모델·항목·클래스·속성당 1행)", file, n, row.Model, row.Std, row.Class, row.Attr, first)
+	}
+	m.seen[key] = n
+	m.Rows = append(m.Rows, row)
+	return nil
 }
 
-// parseUcsmMap 은 매핑 TSV 텍스트를 해석합니다. file 은 오류 메시지용 이름입니다.
-//
-// 형식: 탭 구분, 첫 비주석 줄은 머리글 `vendor model std_name xml_class xml_attribute value protocol xml_example verified`.
-// `#` 로 시작하는 줄과 빈 줄은 무시하되, `# UNMAPPED <벤더> <모델> <std_name>: <사유>` 줄은 그 모델·항목의
-// 매핑이 비어 있다는 표시로 읽습니다(→ MAPPING_MISSING 사유). vendor 는 CISCO, protocol 은 xml 만 받습니다.
-// (모델, std_name, 클래스, 속성) 당 행은 1개이며(한 항목에 클래스·속성이 다른 행이 여럿이면 각각 점검),
-// value 의 `A|B` 는 허용값 여러 개입니다 (대소문자까지 정확히 비교).
-func parseUcsmMap(text, file string) (*ucsmMap, error) {
-	text = strings.TrimPrefix(text, "\ufeff")
-	m := &ucsmMap{Unmapped: map[string]string{}}
-	seen := map[string]int{} // 모델키|std → 처음 줄 번호
-	headerDone := false
-	for i, raw := range strings.Split(text, "\n") {
-		n := i + 1
-		line := strings.TrimRight(raw, "\r")
-		t := strings.TrimSpace(line)
-		if strings.HasPrefix(t, ucsmUnmappedPrefix) {
-			key, why, err := parseUcsmUnmapped(t)
-			if err != nil {
-				return nil, fmt.Errorf("%s:%d: %v", file, n, err)
-			}
-			if _, ok := m.Unmapped[key]; !ok {
-				m.Unmapped[key] = why
-			}
-			continue
-		}
-		if t == "" || strings.HasPrefix(t, "#") {
-			continue
-		}
-		cols := strings.Split(line, "\t")
-		for len(cols) > len(ucsmMapHeader) && strings.TrimSpace(cols[len(cols)-1]) == "" {
-			cols = cols[:len(cols)-1]
-		}
-		if len(cols) != len(ucsmMapHeader) {
-			return nil, fmt.Errorf("%s:%d: 탭으로 구분된 %d개 열이어야 합니다 (현재 %d개). 공백이 아니라 탭인지 확인하십시오",
-				file, n, len(ucsmMapHeader), len(cols))
-		}
-		for j := range cols {
-			cols[j] = strings.TrimSpace(cols[j])
-		}
-		if !headerDone {
-			for j, h := range ucsmMapHeader {
-				if !strings.EqualFold(cols[j], h) {
-					return nil, fmt.Errorf("%s:%d: 첫 줄(주석 제외)은 머리글 %q 이어야 합니다", file, n, strings.Join(ucsmMapHeader, "\t"))
-				}
-			}
-			headerDone = true
-			continue
-		}
-		for _, j := range []int{0, 1, 2, 3, 4, 5, 6, 8} { // xml_example(7) 은 참고용이라 비어도 된다
-			if cols[j] == "" {
-				return nil, fmt.Errorf("%s:%d: %s 이(가) 비어 있습니다", file, n, ucsmMapHeader[j])
-			}
-		}
-		r := ucsmMapRow{Line: n, Model: cols[1], Std: cols[2], Class: cols[3], Attr: cols[4], Value: cols[5]}
-		if !strings.EqualFold(cols[0], "cisco") {
-			return nil, fmt.Errorf("%s:%d: vendor 는 CISCO 만 쓸 수 있습니다 (현재 %q)", file, n, cols[0])
-		}
-		if !strings.EqualFold(cols[6], "xml") {
-			return nil, fmt.Errorf("%s:%d: protocol 은 xml 이어야 합니다 (현재 %q, Redfish 행은 profiles/*.tsv 에 둡니다)", file, n, cols[6])
-		}
-		if !reStdName.MatchString(r.Std) {
-			return nil, fmt.Errorf("%s:%d: std_name %q 은(는) 소문자·숫자·밑줄만 쓸 수 있습니다", file, n, r.Std)
-		}
-		if !reUcsmClass.MatchString(r.Class) {
-			return nil, fmt.Errorf("%s:%d: xml_class %q 은(는) bios 로 시작하는 영숫자만 쓸 수 있습니다 (읽기 허용목록)", file, n, r.Class)
-		}
-		if !reUcsmAttr.MatchString(r.Attr) {
-			return nil, fmt.Errorf("%s:%d: xml_attribute %q 은(는) 영숫자만 쓸 수 있습니다", file, n, r.Attr)
-		}
-		for _, v := range strings.Split(r.Value, "|") {
-			if v = strings.TrimSpace(v); v == "" {
-				return nil, fmt.Errorf("%s:%d: value %q 에 빈 허용값이 있습니다 (A|B 형식)", file, n, r.Value)
-			}
-			r.Allowed = append(r.Allowed, v)
-		}
-		switch strings.ToUpper(cols[8]) {
-		case "Y":
-			r.Verified = true
-		case "N":
-		default:
-			return nil, fmt.Errorf("%s:%d: verified 는 Y 또는 N 이어야 합니다 (현재 %q)", file, n, cols[8])
-		}
-		if r.modelKey = ucsmModelKey(r.Model); r.modelKey == "" {
-			return nil, fmt.Errorf("%s:%d: model %q 에서 비교할 글자가 남지 않습니다", file, n, r.Model)
-		}
-		key := r.modelKey + "|" + r.Std + "|" + r.Class + "|" + r.Attr
-		if first, dup := seen[key]; dup {
-			return nil, fmt.Errorf("%s:%d: %s %s %s %s 행이 %d 줄과 중복입니다 (모델·항목·클래스·속성당 1행)", file, n, r.Model, r.Std, r.Class, r.Attr, first)
-		}
-		seen[key] = n
-		m.Rows = append(m.Rows, r)
-	}
-	if !headerDone {
-		return nil, fmt.Errorf("%s: 머리글(%s)이 없습니다", file, strings.Join(ucsmMapHeader, " "))
-	}
-	if len(m.Rows) == 0 {
-		return nil, fmt.Errorf("%s: 항목 행이 하나도 없습니다", file)
-	}
+// finish 는 점검 항목 순서(표준 4항목 + 추가 항목)와 조회할 클래스 목록을 정합니다.
+func (m *ucsmMap) finish() {
+	m.Items, m.Classes = nil, nil
 	have := map[string]bool{}
 	for _, kw := range stdKeywords {
 		m.Items = append(m.Items, kw.Std)
@@ -242,7 +166,6 @@ func parseUcsmMap(text, file string) (*ucsmMap, error) {
 			m.Classes = append(m.Classes, r.Class)
 		}
 	}
-	return m, nil
 }
 
 // parseUcsmUnmapped 는 `# UNMAPPED CISCO UCS B200 M5 llc_prefetch: none_of_candidates` 를
@@ -282,10 +205,11 @@ type ucsmItem struct {
 	Reason   string // 사람이 읽는 사유 (터미널 요약용, TSV 에는 없음)
 }
 
-// ucsmServer 는 UCSM 이 관리하는 서버(computeBlade) 1대입니다. 식별정보(serial 등)는 담지 않습니다.
+// ucsmServer 는 UCSM/CIMC 가 보고한 서버(computeBlade·computeRackUnit) 1대입니다. 식별정보(serial 등)는 담지 않습니다.
 type ucsmServer struct {
-	DN    string // sys/chassis-N/blade-M
+	DN    string // sys/chassis-N/blade-M 또는 sys/rack-unit-N
 	Model string // UCSM 이 보고한 PID (예: UCSB-B200-M5)
+	SP    string // 연결된 서비스 프로파일 이름 (lsServer 의 name, pnDn 이 이 서버) — 없으면 ""
 	Items []ucsmItem
 }
 
@@ -387,24 +311,44 @@ func ucsmCheckHost(conf *Config, password string, m *ucsmMap, t Target) *ucsmHos
 	}
 	h.loggedIn = true
 
-	blades, err := c.ResolveClass(ucsmxml.BladeClass)
-	if err != nil {
-		h.setErr(err)
-		return h
-	}
+	// 서버: 블레이드(computeBlade) + 랙 서버(computeRackUnit, standalone CIMC 는 sys/rack-unit-N).
+	// 서버 클래스에 errorCode 가 오면(그 장비에 없는 클래스) 건너뛰고, 전송 실패·XML 아님은 호스트 단위 오류입니다.
 	byDN := map[string]*ucsmServer{}
-	for _, b := range blades {
-		dn := b.Attrs["dn"]
-		if dn == "" || byDN[dn] != nil {
-			continue
+	for _, cls := range []string{ucsmxml.BladeClass, ucsmxml.RackClass} {
+		objs, err := c.ResolveClass(cls)
+		if err != nil {
+			if ucsmAPIError(err) {
+				continue
+			}
+			h.setErr(err)
+			h.Servers = nil
+			return h
 		}
-		s := &ucsmServer{DN: dn, Model: b.Attrs["model"]}
-		byDN[dn] = s
-		h.Servers = append(h.Servers, s)
+		for _, b := range objs {
+			dn := b.Attrs["dn"]
+			if dn == "" || byDN[dn] != nil {
+				continue
+			}
+			s := &ucsmServer{DN: dn, Model: b.Attrs["model"]}
+			byDN[dn] = s
+			h.Servers = append(h.Servers, s)
+		}
 	}
 	if len(h.Servers) == 0 {
-		h.Status, h.Detail = StatusUnsupported, "UCSM 에 computeBlade 가 없습니다"
+		h.Status, h.Detail = StatusUnsupported, "computeBlade·computeRackUnit 서버가 없습니다"
 		return h
+	}
+	// 서비스 프로파일(lsServer): 이름과 연결된 물리 서버(pnDn). standalone CIMC 처럼 없으면 건너뜀.
+	sps, err := c.ResolveClass(ucsmxml.ServiceProfileClass)
+	if err != nil && !ucsmAPIError(err) {
+		h.setErr(err)
+		h.Servers = nil
+		return h
+	}
+	for _, sp := range sps {
+		if s := byDN[sp.Attrs["pnDn"]]; s != nil && s.SP == "" {
+			s.SP = sp.Attrs["name"]
+		}
 	}
 
 	// 서버 dn → xml_class → 속성. 클래스마다 configResolveClass 1회 (도메인 전체 인스턴스가 한 번에 온다).
@@ -442,7 +386,8 @@ func ucsmCheckHost(conf *Config, password string, m *ucsmMap, t Target) *ucsmHos
 }
 
 // ucsmServerOf 는 biosVf* 인스턴스 dn 에서 서버 dn 을 꺼냅니다
-// (`sys/chassis-1/blade-1/bios/bios-settings/CPU-Performance` → `sys/chassis-1/blade-1`).
+// (`sys/chassis-1/blade-1/bios/bios-settings/CPU-Performance` → `sys/chassis-1/blade-1`,
+// standalone CIMC 의 `sys/rack-unit-1/bios/bios-settings/...` → `sys/rack-unit-1`).
 // 서버에 실제로 적용된 BIOS 설정(서버 dn 아래 bios/bios-settings)이 아니면 빈 문자열입니다.
 //
 // 같은 클래스의 BIOS 정책 인스턴스(org-root/.../bios-prof-*)는 "적용하려는 값" 이라 서비스 프로파일 연결·
@@ -472,9 +417,9 @@ func ucsmJudge(m *ucsmMap, s *ucsmServer, vals map[string]map[string]string, cla
 			it := ucsmItem{Std: std, Class: "-", Attr: "-", Expected: "-", Current: "-"}
 			it.Result = StatusMappingMissing
 			if why, ok := m.Unmapped[mk+"|"+std]; ok && mk != "" {
-				it.Reason = "매핑 TSV 에서 UNMAPPED (" + why + ")"
+				it.Reason = "프로파일 [xml] 구역에서 UNMAPPED (" + why + ")"
 			} else {
-				it.Reason = "매핑 TSV 에 " + orDefault(s.Model, "-") + " 의 " + std + " 행이 없음"
+				it.Reason = "프로파일 [xml] 구역에 " + orDefault(s.Model, "-") + " 의 " + std + " 행이 없음"
 			}
 			out = append(out, it)
 			continue
@@ -502,7 +447,7 @@ func ucsmJudge(m *ucsmMap, s *ucsmServer, vals map[string]map[string]string, cla
 					it.Result = StatusOK
 				case !row.Verified:
 					it.Result = StatusUnverified
-					it.Reason = "매핑 행이 verified=N"
+					it.Reason = "프로파일 [xml] 행이 verified=N"
 				default:
 					it.Result = StatusFail
 				}
@@ -527,6 +472,12 @@ func ucsmMatch(allowed []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// ucsmAPIError 는 UCSM 이 errorCode 로 거절한 조회(그 장비에 없는 클래스 등)인지 봅니다 (전송 실패·XML 아님은 false).
+func ucsmAPIError(err error) bool {
+	var xe *ucsmxml.Error
+	return errors.As(err, &xe) && xe.Code != ""
 }
 
 // ucsmErrBrief 는 오류를 "상태(HTTP 코드)" 한 토막으로 줄입니다.
@@ -781,30 +732,44 @@ func ucsmWriteHostErrors(w io.Writer, run *ucsmRun, hostErr map[string]int, p pa
 
 // ---- 서브커맨드 ----
 
-// cmdUcsm 은 `biostool ucsm` 입니다. 공통 옵션(-conf -user -hosts)과 -xml-map, -list-max 를 받습니다.
+// ucsmDefaultProfile 은 `biostool ucsm` 에 -profile 이 없을 때 기대값을 읽을 프로파일입니다 (# [xml] 구역).
+const ucsmDefaultProfile = "VM"
+
+// cmdUcsm 은 `biostool ucsm` 입니다. 공통 옵션(-conf -user -hosts -profile)과 -list-max 를 받습니다.
+// 기대값은 -profile <이름>(기본 VM) 의 # [xml] 구역입니다.
 func cmdUcsm(args []string) error {
 	fs, o := newFlagSet("ucsm")
-	xmlMap := fs.String("xml-map", ucsmDefaultMap, "UCSM XML 매핑 TSV (vendor model std_name xml_class xml_attribute value protocol xml_example verified)")
 	listMax := fs.Int("list-max", 20, "FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if o.profile != "" || o.dryRun || o.fromDump != "" || o.retryFrom != "" {
-		return fmt.Errorf("ucsm 은 읽기 전용 UCSM XML 점검이라 -profile, -dry-run, -from-dump, -retry-from 을 쓰지 않습니다 (기대값은 -xml-map)")
+	if o.dryRun || o.fromDump != "" || o.retryFrom != "" {
+		return fmt.Errorf("ucsm 은 읽기 전용 UCSM XML 점검이라 -dry-run, -from-dump, -retry-from 을 쓰지 않습니다 (기대값은 -profile 의 # [xml] 구역)")
 	}
 	if *listMax < 0 {
 		return fmt.Errorf("-list-max 는 0 이상이어야 합니다")
 	}
-	m, err := loadUcsmMap(*xmlMap)
-	if err != nil {
+	if o.profile == "" {
+		o.profile = ucsmDefaultProfile
+	}
+	if err := validProfileName(o.profile); err != nil {
 		return err
 	}
 	rc, err := prepare(o, "", "")
 	if err != nil {
 		return err
 	}
-	printSummary(rc, o, "")
-	fmt.Printf("UCSM XML 매핑: %s (행 %d개, 조회 클래스 %d개: %s)\n", *xmlMap, len(m.Rows), len(m.Classes), strings.Join(m.Classes, ", "))
+	profilePath := filepath.Join(rc.Conf.ProfileDir, o.profile+".tsv")
+	prof, err := loadProfile(profilePath, o.profile)
+	if err != nil {
+		return err
+	}
+	m := prof.XML
+	if len(m.Rows) == 0 {
+		return fmt.Errorf("프로파일 %s 에 # [xml] 구역 행이 없습니다 (UCSM 기대값은 # [xml] 구역에 적습니다)", profilePath)
+	}
+	printSummary(rc, o, profilePath)
+	fmt.Printf("UCSM XML 기대값: %s # [xml] 구역 (행 %d개, 조회 클래스 %d개: %s)\n", filepath.ToSlash(profilePath), len(m.Rows), len(m.Classes), strings.Join(m.Classes, ", "))
 	fmt.Println("대상은 UCSM(Fabric Interconnect VIP) 주소입니다. 호출: aaaLogin → configResolveClass(읽기) → aaaLogout")
 
 	run, err := doUcsm(rc, ucsmOpts{Map: m, ResultDir: rc.Conf.ResultDir})

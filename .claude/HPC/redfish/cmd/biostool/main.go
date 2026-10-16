@@ -33,12 +33,13 @@ func (e notImplementedError) Error() string {
 const usageText = `사용법:
   biostool check   -profile <이름> [공통 옵션]    BIOS 표준값 점검
   biostool allcheck [-diff diff.txt] [옵션]       모델별 BIOS 전체 Attribute 비교 (읽기 전용)
-  biostool bios    -profile <이름> [-ref 호스트 | -ref-json 파일 | -diff diff.txt] [-plain] [옵션]
+  biostool bios    -profile <이름> [-ref 호스트 | -ref-json 파일 | -diff diff.txt] [-user-xml 파일] [-plain] [옵션]
                                                  호스트당 1회 조회로 프로파일 점검 + 전체비교 (읽기 전용)
+                                                 xml_host_prefix(기본 c) 이름·-user-xml 대상은 XML API 점검만 (전체비교·설정 제외)
   biostool bios    -auto-check|-auto <user> <targets.txt> [-profile <이름>]
                                                  비대화형 점검만 → ./check.res_<user> (-auto 는 _postapply 도, 설정 없음)
   biostool dump    [-targets 대상,...] [-out 디렉터리] [-compact] [공통 옵션]  사전조사 덤프 (GET 전용)
-  biostool ucsm    [-xml-map <TSV>] [-list-max N] [-conf] [-user] [-hosts]  Cisco UCSM XML API BIOS 점검 (읽기 전용, 대상=UCSM 주소)
+  biostool ucsm    [-profile <이름>] [-list-max N] [-conf] [-user] [-hosts]  Cisco UCSM XML API BIOS 점검 (읽기 전용, 대상=UCSM 주소, 기대값=프로파일 # [xml] 구역, 기본 VM)
   biostool encrypt [-key key.bin] [-out pass.enc]  표준입력의 비밀번호를 암호화
   biostool account create|change [옵션]          1순위 계정 생성 / 비밀번호 변경 (biostool account -h)
 
@@ -111,6 +112,11 @@ type commonOpts struct {
 	hosts     string
 	dryRun    bool
 	rfConf    string // 2순위 계정 파일 (비면 RF_TOOL_CONF → /etc/rf_tool/rf.conf)
+	// routeXML 이 true 면 prepare 가 classifyTargets 로 XML 대상(xml_host_prefix, -user-xml)을 나눈다 (bios 만 켬).
+	routeXML bool
+	userXML  string // -user-xml: 모두 XML 로 점검할 대상 목록 파일 (bios 만, 비면 없음)
+	// userXMLArg 는 TUI 에서 붙여넣은 Cisco(XML) 대상입니다 (비어 있지 않으면 userXML 파일 대신 씀).
+	userXMLArg string
 }
 
 func newFlagSet(name string) (*flag.FlagSet, *commonOpts) {
@@ -240,13 +246,28 @@ func prepare(o *commonOpts, targetsArg string, retryFromPath string) (*runContex
 		if err != nil {
 			return nil, err
 		}
-	} else if inputs, err = loadList(o.user); err != nil {
-		return nil, err
+	} else if o.user != "" || o.userXML == "" {
+		if inputs, err = loadList(o.user); err != nil {
+			return nil, err
+		}
 	}
-	if len(inputs) == 0 {
+	var xmlInputs []string
+	if o.routeXML && o.userXMLArg != "" {
+		xmlInputs = splitTargets(o.userXMLArg)
+	} else if o.routeXML && o.userXML != "" {
+		if xmlInputs, err = loadList(o.userXML); err != nil {
+			return nil, err
+		}
+	}
+	if len(inputs)+len(xmlInputs) == 0 {
 		return nil, fmt.Errorf("대상이 비어 있습니다")
 	}
-	targets, err := resolveTargets(inputs, o.hosts)
+	var targets []Target
+	if o.routeXML {
+		targets, err = classifyTargets(conf, inputs, xmlInputs, o.hosts)
+	} else {
+		targets, err = resolveTargets(inputs, o.hosts)
+	}
 	if err != nil {
 		return nil, err
 	}

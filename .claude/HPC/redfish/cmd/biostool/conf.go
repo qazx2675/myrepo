@@ -31,21 +31,25 @@ type Config struct {
 	RefsDir      string        // 기준 속성 JSON(bios_export / -export-attrs 결과) 폴더
 	AutoProfile  string        // 비대화형(bios -auto / -auto-check)에서 -profile 이 없을 때 쓸 프로파일 이름. 비면 없음
 	ProtectAttrs []string      // 절대 설정하지 않을 속성 패턴 추가분 (| 구분, * 와일드카드, 대소문자 무시). 내장 보호 목록(protect.go)에 더하기만 함
+	// XMLHostPrefix 는 bios 에서 XML API(UCSM/CIMC, 읽기 전용)로 점검할 hostname 접두어입니다 (소문자, 쉼표 구분, 기본 c).
+	// 비면(xml_host_prefix=) 이름으로는 XML 로 보내지 않습니다 (-user-xml 목록만 XML). IP 대상은 접두어와 관계없이 Redfish.
+	XMLHostPrefix []string
 }
 
 func defaultConfig() Config {
 	return Config{
-		PassFile:     "pass.enc",
-		KeyFile:      "key.bin",
-		Concurrency:  100,
-		Timeout:      20 * time.Second,
-		Insecure:     true,
-		Retries:      2,
-		AuthFailStop: 3,
-		ResultDir:    "results",
-		DumpDir:      "dumps",
-		ProfileDir:   "profiles",
-		RefsDir:      "refs",
+		PassFile:      "pass.enc",
+		KeyFile:       "key.bin",
+		Concurrency:   100,
+		Timeout:       20 * time.Second,
+		Insecure:      true,
+		Retries:       2,
+		AuthFailStop:  3,
+		ResultDir:     "results",
+		DumpDir:       "dumps",
+		ProfileDir:    "profiles",
+		RefsDir:       "refs",
+		XMLHostPrefix: []string{"c"},
 	}
 }
 
@@ -105,6 +109,8 @@ func parseConf(text, name string) (*Config, error) {
 			c.ExcludeAttrs = splitExclude(val)
 		case "protect_attrs":
 			c.ProtectAttrs = splitExclude(val)
+		case "xml_host_prefix":
+			c.XMLHostPrefix = splitPrefixes(val)
 		case "allcheck_set":
 			c.AllcheckSet, err = parseOnOff(name, lineNo, key, val)
 		case "concurrency":
@@ -149,6 +155,17 @@ func splitExclude(val string) []string {
 	var out []string
 	for _, p := range strings.Split(val, "|") {
 		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// splitPrefixes 는 xml_host_prefix 값을 쉼표로 나눠 소문자로 돌려줍니다 (앞뒤 공백·빈 칸 제거). 빈 값이면 nil.
+func splitPrefixes(val string) []string {
+	var out []string
+	for _, p := range strings.Split(val, ",") {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
 			out = append(out, p)
 		}
 	}

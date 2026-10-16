@@ -27,6 +27,9 @@ type Target struct {
 	IP       string // 접속 주소 (포트·대괄호 없음)
 	Port     string // 입력에 포트가 있을 때만
 	Err      string
+	// XML 은 bios 에서 Redfish 대신 XML API(UCSM/CIMC, 읽기 전용)로 점검할 대상입니다 (classifyTargets 가 정함).
+	// XML 대상은 전체비교·설정에서 빠집니다.
+	XML bool
 }
 
 // BaseURL 은 접속 기준 URL(`https://ip[:port]`)을 만듭니다. IPv6 는 대괄호로 감쌉니다.
@@ -229,4 +232,67 @@ func resolveTargets(inputs []string, hostsPath string) ([]Target, error) {
 
 func hasSuffixFold(s, suffix string) bool {
 	return len(s) >= len(suffix) && strings.EqualFold(s[len(s)-len(suffix):], suffix)
+}
+
+// classifyTargets 는 bios 의 대상을 해석하고 프로토콜을 정합니다 (rfInputs 다음 xmlInputs 순서로 한 목록).
+//
+//   - rfInputs(-user / 붙여넣기): IP 대상은 항상 Redfish. 이름 대상은 기본 이름(-m·포트를 뗀 것)이
+//     conf.XMLHostPrefix 중 하나로 시작하면(대소문자 무시) XML, 아니면 Redfish.
+//   - xmlInputs(-user-xml): 이름·IP 모두 XML.
+//
+// 같은 입력이 두 목록에 다 있으면 xmlInputs 쪽 하나만 남깁니다.
+func classifyTargets(conf *Config, rfInputs, xmlInputs []string, hostsPath string) ([]Target, error) {
+	inXML := map[string]bool{}
+	for _, in := range xmlInputs {
+		inXML[in] = true
+	}
+	var rfIn []string
+	for _, in := range rfInputs {
+		if !inXML[in] {
+			rfIn = append(rfIn, in)
+		}
+	}
+	rf, err := resolveTargets(rfIn, hostsPath)
+	if err != nil {
+		return nil, err
+	}
+	xml, err := resolveTargets(xmlInputs, hostsPath)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rf {
+		rf[i].XML = !isIPInput(rf[i].Input) && hasXMLPrefix(conf, targetBaseName(rf[i]))
+	}
+	for i := range xml {
+		xml[i].XML = true
+	}
+	return append(rf, xml...), nil
+}
+
+// isIPInput 은 입력이 IP(포트 붙은 것 포함)인지 봅니다.
+func isIPInput(in string) bool {
+	if net.ParseIP(in) != nil {
+		return true
+	}
+	h, _, ok := splitPort(in)
+	return ok && net.ParseIP(h) != nil
+}
+
+// targetBaseName 은 Hostname 에서 ":포트" 를 뗀 기본 이름입니다 (접두어 판정·서비스 프로파일 이름 비교용).
+func targetBaseName(t Target) string {
+	if t.Port != "" {
+		return strings.TrimSuffix(t.Hostname, ":"+t.Port)
+	}
+	return t.Hostname
+}
+
+// hasXMLPrefix 는 이름이 xml_host_prefix 중 하나로 시작하는지 봅니다 (대소문자 무시, 목록이 비면 false).
+func hasXMLPrefix(conf *Config, name string) bool {
+	name = strings.ToLower(name)
+	for _, p := range conf.XMLHostPrefix {
+		if p != "" && strings.HasPrefix(name, strings.ToLower(p)) {
+			return true
+		}
+	}
+	return false
 }

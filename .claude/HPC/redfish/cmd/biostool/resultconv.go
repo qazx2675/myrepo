@@ -19,21 +19,37 @@ func profileLines(hosts []*hostCheck) []ResultLine {
 		}
 		if h.Status != "" {
 			l := base
-			l.Tag, l.Attr, l.Expected, l.Current, l.Note, l.HostError = TagNA, "-", naValue, naValue, h.Status, true
+			l.Tag, l.Attr, l.Expected, l.Current, l.Note, l.HostError = TagNA, "-", naValue, naValue, withNote(h.Status, h.ProtoNote), true
 			out = append(out, l)
 			continue
 		}
 		for _, it := range h.Items {
 			l := base
+			if it.Server != "" { // XML 대상의 서버가 여럿: "<호스트>/<서버 dn>" 마다 따로
+				l.Host, l.Model = it.Server, dash(it.Model)
+			}
 			l.Attr = it.Attr
 			if l.Attr == "" || l.Attr == "-" { // 프로파일에 이 모델 행이 없어 속성을 모름 → 표준 항목 이름으로 보인다
 				l.Attr = it.Std
 			}
 			l.Tag, l.Expected, l.Current, l.Note = tagFor(it.Result), showValue(it.Expected), showValue(it.Current), it.Result
+			if it.Note != "" {
+				l.Note = withNote(it.Result, it.Note)
+			} else {
+				l.Note = withNote(it.Result, h.ProtoNote)
+			}
 			out = append(out, l)
 		}
 	}
 	return out
+}
+
+// withNote 는 비고(상태명) 뒤에 프로토콜 안내를 " [XML]" 처럼 붙입니다 (안내가 없으면 그대로).
+func withNote(status, note string) string {
+	if note == "" {
+		return status
+	}
+	return status + " [" + note + "]"
 }
 
 // compareLines 는 전체비교 대상 1대를 기준(비교서버·refs JSON) 대비 속성마다 1줄로 바꿉니다 (이름순).
@@ -61,6 +77,9 @@ func compareLines(h *allHost, ign *ignoreSet) []ResultLine {
 	if !h.compared() || h.Ref == nil || h.Ref.Snap == nil {
 		l := base
 		l.Tag, l.Attr, l.Expected, l.Current, l.Note, l.HostError = TagNA, "-", naValue, naValue, h.Status, true
+		if h.Status == StatusXMLReadOnly { // XML 대상은 오류가 아니라 비교 제외 (화면은 회색)
+			l.Note = xmlCompareNote
+		}
 		return []ResultLine{l}
 	}
 	ref, host := h.Ref.Snap.Attrs, h.Snap.Attrs

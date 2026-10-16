@@ -15,9 +15,9 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `account_input.go` · `account_tty_linux.go` · `account_tty_other.go` | 새 비밀번호 터미널 입력(`*` 표시·2번 입력·붙여넣기 거부), csh 명령 인용(`cshQuote`), 입력 버퍼 비우기. raw 입력은 리눅스 전용(`syscall` ioctl) |
 | `account_ucsm.go` | Cisco UCSM 사용자 생성·변경(`-ucsm`), `internal/ucsmxml` 계정 모드 사용 |
 | `account_check.go` | `check` 끝에서 2순위로 접속한 호스트에 계정 생성 제안(`offerAccountCreate`, 기본 Y) |
-| `profile.go` | `profiles/<이름>.tsv` 로드·검증(`*` 행의 `verified=Y` 거부, 중복 검사), `rowsFor`(모델 정확 일치 우선 → `*`) |
+| `profile.go` | `profiles/<이름>.tsv` 로드·검증(`*` 행의 `verified=Y` 거부, 중복 검사), `rowsFor`(모델 정확 일치 우선 → `*`). 주석 줄 `# [redfish]` / `# [xml]` 로 구역을 나눠 `[xml]` 행(attribute = `클래스.속성`, 벤더 CISCO, `*` 모델 불가)은 `Profile.XML`(UCSM 기대값), `# UNMAPPED` 주석은 `MAPPING_MISSING` 사유로 읽음 |
 | `modelnorm.go` | 모델명 정규화 `normalizeModel`(프로파일의 model 열과 BMC 가 보고한 Model 을 같은 키로 맞추는 **한곳의 규칙**, allcheck 도 사용) |
-| `resolve.go` | 대상 목록 해석: `user.txt` 파싱, `/etc/hosts` 에서 `이름-m` 조회, `:포트`, 재시도 목록(`loadRetryList`), `NO_HOSTS_ENTRY` |
+| `resolve.go` | 대상 목록 해석: `user.txt` 파싱, `/etc/hosts` 에서 `이름-m` 조회, `:포트`, 재시도 목록(`loadRetryList`), `NO_HOSTS_ENTRY`. `classifyTargets` 가 대상을 Redfish / XML 로 나눔(`xml_host_prefix` 로 시작하는 이름과 `-user-xml` 목록 = XML, IP 는 `-user-xml` 에 있을 때만) |
 | `cryptutil.go` | AES-256-GCM 비밀번호 암복호화(`pass.enc`+`key.bin`, 0600), `encrypt` 서브커맨드의 본체 |
 | `redfish.go` | **BMC 와 통신하는 유일한 HTTP 클라이언트.** 세션 1회·`checkAllowed`(호출 허용목록)·`checkBody`(본문 검사)·타임아웃·재시도·백오프·401 즉시 중단·오류 상태 분류(`UNREACHABLE`·`TIMEOUT`·`BMC_ERROR`·`AUTH_FAIL`·`UNSUPPORTED`·`HTTP_ERROR`)·비밀번호 마스킹. PATCH 본문 검사 `checkAttributes` 가 위험 속성명 외에 내장 보호 속성(`protect.go`)도 거부 |
 | `inspect.go` | 시스템 판별 `detectSystem`(ServiceRoot → Systems → Bios → Settings 경로 → 속성 레지스트리 위치), Bios 속성·레지스트리 해석, 벤더 정규화 `normalizeVendor`, **표준 4항목 이름 후보 키워드 `stdKeywords`** |
@@ -31,6 +31,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `allexport.go` | `allcheck -export-attrs`: 읽은 BIOS 속성을 호스트별 JSON(`attrs/<호스트>.json`)으로 저장 |
 | `unified_cmd.go` | **`biostool bios` 서브커맨드**(`bios.sh` 의 본체): 플래그(`-profile`·`-user`·`-ref`·`-ref-json`·`-diff`·`-ignore`·`-plain`·`-auto`/`-auto-check <user> <targets>`·`-res-dir`), 대화형이면 TUI 흐름으로, 아니면 평문 출력(읽기 전용), `-auto` 는 `check.res_<user>` 기록. 비대화형에는 설정 경로가 없음 |
 | `unified.go` | **수집 통합 엔진** `runUnified`: 호스트당 1회 접속(읽기 전용)으로 프로파일 판정 + BIOS 전체 속성 스냅샷을 함께 얻고, `Compare` 로 대상에 다시 접속하지 않고 전체비교(기준 = 비교서버 hostname / refs JSON / `diff.txt`, 같은 모델끼리만, 속성 이름 목록 검사 `sameAttrNames`), `WriteOutputs` 로 CSV 저장, `listRefJSON` 으로 refs 폴더 목록 |
+| `xmlhost.go` | **Cisco XML 혼합 대상 점검**(`biostool bios`): XML 대상 1대를 `ucsmCheckHost`(ucsm.go)로 읽어 프로파일 `# [xml]` 구역으로 판정(`checkXML`). 서버가 여럿이면 서비스 프로파일(`lsServer`) 이름 = 호스트 이름인 서버를 고르고 없으면 모두 `<호스트>/<서버 dn>` 으로 보고. 로그인 전 실패(AUTH_FAIL 제외)면 그 호스트만 Redfish 로 1번 폴백(비고 `XML 실패 → Redfish`). 전체비교·설정에서는 `StatusXMLReadOnly`(`XML_READONLY`)로 제외 |
 | `resultline.go` | 화면·CSV 공통 결과 줄 `ResultLine`, 태그 3종(`tagFor`: OK / difference / N/A)·`showValue`(`-`→`(N/A)`), 벤더 → 관리 컨트롤러 그룹 나누기 `groupLines`(BIOS 속성 이름 목록이 같으면 한 그룹으로 합침) |
 | `resultconv.go` | 프로파일 점검 결과(`hostCheck`)와 전체비교 결과(`allHost`)를 `ResultLine` 으로 바꿈 (비고 = 원래 상태명) |
 | `lineout.go` | 색상 줄 렌더러 `formatLine`(`[태그] host↹ip↹…↹기준값↹현재값↹비고`, 기준값은 항상 초록, 호스트 오류는 빨강), `NO_COLOR`·tty 판단 `colorEnabled`. `lineSafe` 가 BMC·호스트에서 온 글자의 제어 문자를 공백으로 바꿈(터미널 이스케이프 주입 방지) |
@@ -48,7 +49,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `retry.go` | `-retry-from`: 이전 결과 읽기·검증, 재시도 대상만 다시 실행한 결과를 이전 결과와 병합(`merged_*`) |
 | `*_test.go` | 단위·통합 테스트. 보안 규칙은 `redfish_security_test.go`·`set_security_test.go`·`protect_test.go`(보호 패턴이 `profiles/*.tsv` 속성을 막지 않는지 포함), 수정 확인 흐름은 `setstep_test.go`·`setplan_test.go`·`tui_flow_test.go`, 수천 대 시험은 `scale_test.go`, mock 연동은 `mock_integration_test.go` |
 
-**Cisco UCSM(XML API) 점검 — `ucsm.go` + `internal/ucsmxml/`** (`biostool ucsm`, 래퍼 `ucsm_check.sh`, 읽기 전용·설정 기능 없음). 대상은 블레이드 BMC 가 아니라 UCSM(FI VIP) 주소이고, 기대값은 `bios_json/standard_map/standard_bios_map_xml.tsv`(`-xml-map`)입니다. `ucsm.go` 는 매핑 TSV 해석(`parseUcsmMap`, `# UNMAPPED` 줄 포함), 모델 키 `ucsmModelKey`(TSV `UCS B200 M5` ↔ PID `UCSB-B200-M5` 를 맞추는 한곳의 규칙), 서버별 실효값 수집(dn 이 `<서버 dn>/bios/bios-settings/…` 인 인스턴스만, BIOS 정책 `bios-prof-*` 는 무시), 판정(OK·FAIL·UNVERIFIED·MAPPING_MISSING·UNSUPPORTED, 호스트 단위 AUTH_FAIL·UNREACHABLE·TIMEOUT·XML_ERROR)과 터미널 요약을 맡고, 호스트 순회·AUTH_FAIL 차단기는 `sweep.go`, 결과 폴더·0600 쓰기는 `check.go` 의 `newRunDir`·`writeTSV` 를 그대로 씁니다. UCSM 과의 통신은 **`internal/ucsmxml` 패키지만** 하며, 공개된 호출은 `Login`·`ResolveClass`·`Logout` 뿐이고 모든 요청은 전송 직전 단일 관문 `gate` 를 지납니다: 루트가 `aaaLogin`·`configResolveClass`·`aaaLogout` 이 아니거나, 자식 요소·추가 속성·남의 쿠키·`inHierarchical≠false`·허용목록(`computeBlade` + 매핑 TSV 의 `bios*` 클래스) 밖 classId 면 보내지 않고 `ErrNotAllowed`(`configConfMo`·`configResolveDn` 등 쓰기·임의 조회는 만들 수 없음). 별도 패키지로 둔 이유는 `redfish_test.go` 의 구조 가드(“`cmd/biostool` 에서 HTTP 는 `redfish.go` 만”)를 유지하면서 UCSM 전송 경로를 패키지 경계로 막기 위해서입니다. 결과는 Redfish 의 `result.tsv` 와 섞지 않고 `results/<일시>/ucsm_result.tsv` 에 씁니다 — 열: `ucsm_host ip protocol(xml) mgmt_version(UCSM) server_dn vendor model std_name xml_class attribute expected current result` (호스트 단위 오류는 `server_dn`·`std_name` 이 `-` 인 1행, serial 등 식별정보 없음). 테스트는 `ucsm_test.go`(가짜 UCSM 판정·AUTH_FAIL 1회·허용목록·비밀값 노출)와 `internal/ucsmxml/ucsmxml_test.go`(관문·마스킹).
+**Cisco UCSM(XML API) 점검 — `ucsm.go` + `internal/ucsmxml/`** (`biostool ucsm`, 래퍼 `ucsm_check.sh`, 읽기 전용·설정 기능 없음). 대상은 블레이드 BMC 가 아니라 UCSM(FI VIP) 주소이고, 기대값은 프로파일의 `# [xml]` 구역(`-profile <이름>`, 기본 VM)입니다. `ucsm.go` 는 `# [xml]` 구역 해석(`ucsmMap`·`addProfileRow`, `# UNMAPPED` 줄 포함), 모델 키 `ucsmModelKey`(TSV `UCS B200 M5` ↔ PID `UCSB-B200-M5` 를 맞추는 한곳의 규칙), 서버별 실효값 수집(dn 이 `<서버 dn>/bios/bios-settings/…` 인 인스턴스만, BIOS 정책 `bios-prof-*` 는 무시), 판정(OK·FAIL·UNVERIFIED·MAPPING_MISSING·UNSUPPORTED, 호스트 단위 AUTH_FAIL·UNREACHABLE·TIMEOUT·XML_ERROR)과 터미널 요약을 맡고, 호스트 순회·AUTH_FAIL 차단기는 `sweep.go`, 결과 폴더·0600 쓰기는 `check.go` 의 `newRunDir`·`writeTSV` 를 그대로 씁니다. UCSM 과의 통신은 **`internal/ucsmxml` 패키지만** 하며, 공개된 호출은 `Login`·`ResolveClass`·`Logout` 뿐이고 모든 요청은 전송 직전 단일 관문 `gate` 를 지납니다: 루트가 `aaaLogin`·`configResolveClass`·`aaaLogout` 이 아니거나, 자식 요소·추가 속성·남의 쿠키·`inHierarchical≠false`·허용목록(`computeBlade`·`computeRackUnit`·`lsServer` + 프로파일 `# [xml]` 의 `bios*` 클래스) 밖 classId 면 보내지 않고 `ErrNotAllowed`(`configConfMo`·`configResolveDn` 등 쓰기·임의 조회는 만들 수 없음). 별도 패키지로 둔 이유는 `redfish_test.go` 의 구조 가드(“`cmd/biostool` 에서 HTTP 는 `redfish.go` 만”)를 유지하면서 UCSM 전송 경로를 패키지 경계로 막기 위해서입니다. `biostool bios` 의 XML 대상(`xmlhost.go`)도 같은 `ucsmCheckHost`·`internal/ucsmxml` 을 재사용하므로 읽기 전용 관문이 그대로 적용됩니다. `ucsm` 서브커맨드의 결과는 Redfish 의 `result.tsv` 와 섞지 않고 `results/<일시>/ucsm_result.tsv` 에 씁니다 — 열: `ucsm_host ip protocol(xml) mgmt_version(UCSM) server_dn vendor model std_name xml_class attribute expected current result` (호스트 단위 오류는 `server_dn`·`std_name` 이 `-` 인 1행, serial 등 식별정보 없음). 테스트는 `ucsm_test.go`(가짜 UCSM 판정·AUTH_FAIL 1회·허용목록·비밀값 노출)와 `internal/ucsmxml/ucsmxml_test.go`(관문·마스킹).
 
 ### mock BMC (개발·검증 전용, 배포 대상 아님)
 
@@ -57,6 +58,8 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `internal/mockbmc/mockbmc.go` | Redfish BMC 를 흉내 내는 mock 서버: 트리 파일 서빙, 세션, Pending 병합, 레지스트리 검사, 요청 기록(`Calls`·`Writes`·`LogHits`·`Sessions`), 장애 주입 |
 | `internal/mockbmc/farm.go` | `Farm`: 한 TLS 리스너로 가상 BMC 수천 대(127.0.x.y)를 흉내 냄(트리 공유, 호스트별 상태만 개별). 리눅스 전용 |
 | `cmd/mockbmc/main.go` | `mockbmc` 실행 파일(`mockbmc.sh` 가 실행, 바이너리가 없을 때만 빌드). 종료 시 `MOCKBMC_SUMMARY` 집계 출력 |
+| `internal/mockucsm/` | Cisco UCSM/CIMC XML API 를 흉내 내는 mock 서버: `/nuova` 에서 `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답(그 밖은 errorCode 로 거절), JSON 으로 서버(dn·class·model·sp_name·bios) 정의. 합성 값 |
+| `cmd/mockucsm/main.go` | `mockucsm` 실행 파일(`testcase/demo_env.sh` 가 `bin/mockucsm`(`_os6`)을 기동. 소스를 고치면 `go build -o bin/mockucsm ./cmd/mockucsm` 후 `_os6`(Go 1.20)도 재빌드) |
 | `testdata/` | mock 용 **합성** Redfish 트리 6종(Dell·HPE×2·Lenovo·Cisco·Supermicro)과 테스트용 프로파일 `testdata/profiles-test/VM.tsv`. 실제 덤프가 아님 → [testdata/README.md](testdata/README.md) |
 
 ### 데이터·설정·스크립트·산출물
@@ -79,7 +82,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `testcase/rf_fallback_case.sh` | 2순위 계정·접속불가 구분·설정 표기 선택을 mock 으로 직접 시험하는 케이스(Go 불필요, `bin/mockbmc` 사용). 설명 `testcase/README.md` |
 | `setup.sh` · `build.sh` · `build_os6.sh` | 오프라인 빌드 / os8 빌드 / os6(RHEL6, Go 1.20.x) 빌드 |
 | `bin/biostool` · `bin/biostool_os6` | **빌드 완료 바이너리(커밋 대상).** 회사 환경에 Go 가 없어 이것이 곧 배포본. 소스를 고치면 둘 다 재빌드해 함께 커밋 |
-| `bin/mockbmc` · `bin/mockbmc_os6` | mock 서버 빌드 완료 바이너리(폐쇄망 시험용으로 커밋). mock 소스를 고치면 둘 다 재빌드 |
+| `bin/mockbmc` · `bin/mockbmc_os6` · `bin/mockucsm` · `bin/mockucsm_os6` | mock 서버 빌드 완료 바이너리(폐쇄망 시험용으로 커밋). mock 소스를 고치면 해당 둘 다 재빌드 |
 | `go.mod` | `module biostool`, `go 1.20`, 외부 의존성 없음(→ `vendor/` 불필요) |
 | `.gitignore` · `.gitattributes` | 실제 호스트·계정·결과물 커밋 차단 / `.sh`·`.tsv`·`.example`·`.json` 은 LF, `bin/*` 는 바이너리 |
 | `README.md` · `WORKFLOW.md` · `workflow*.svg`(`workflow_bios.svg`·`workflow_auto.svg` 포함) · `FIRST_RUN.md` · `PR_CHECKLIST.md` · `CHANGELOG.md` · `사용법.txt` · `계획서.md` · `계획서_v0.2_TUI.md` | 문서(README 4절 참고). `계획서_v0.2_TUI.md` 는 통합 점검(TUI) 확정 사양 |

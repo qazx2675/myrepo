@@ -99,6 +99,19 @@ bash bios.sh -profile VM -user user.txt -ref <비교서버 hostname>
 # 연구용 프로파일 (전부 verified=N 이라 점검만 되고 설정되지 않음)
 bash bios.sh -profile VM_research
 
+# Cisco 장비는 XML API(읽기 전용)로 점검한다: hostname 이 bios.conf 의 xml_host_prefix(기본 c)로 시작하면 자동으로 XML,
+# 그 밖의 hostname 과 IP 는 Redfish 다. 한 목록에 섞어 써도 된다. XML 대상은 점검만 하고 전체비교·설정에서는 빠진다
+bash bios.sh -profile VM -user user.txt
+
+# IP 형태의 Cisco 장비는 별도 파일에 적어 -user-xml 로 지정한다 (Redfish 대상은 -user, Cisco(XML) 대상은 -user-xml)
+bash bios.sh -profile VM -user user.txt -user-xml user_xml.txt
+
+# -user-xml 만 주면 user.txt 는 읽지 않고 그 목록만 XML 로 점검한다 (TUI 없이 평문 출력)
+bash bios.sh -plain -profile VM -user-xml user_xml.txt
+
+# 접두어는 bios.conf 에서 바꾼다 (쉼표로 여러 개, 비우면 이름으로는 XML 로 보내지 않고 -user-xml 목록만 XML)
+grep -n xml_host_prefix bios.conf
+
 # TUI 없이 색 없는 평문으로 출력한다 (읽기 전용, 설정 질문 없음. 파이프·파일로 저장할 때도 평문)
 bash bios.sh -plain -profile VM
 
@@ -407,8 +420,8 @@ ls -l results/<일시>/
 # user.txt 의 UCSM 주소를 점검한다 (호출은 aaaLogin -> configResolveClass -> aaaLogout 뿐)
 bash ucsm_check.sh
 
-# 다른 목록, 기대값 TSV, 나열 수를 지정한다
-bash ucsm_check.sh -user <UCSM 목록 파일> -xml-map bios_json/standard_map/standard_bios_map_xml.tsv -list-max 50
+# 다른 목록, 기대값 프로파일(# [xml] 구역), 나열 수를 지정한다
+bash ucsm_check.sh -user <UCSM 목록 파일> -profile VM -list-max 50
 
 # 바이너리를 직접 실행한다 (위와 같음)
 bin/biostool ucsm -user <UCSM 목록 파일>
@@ -457,6 +470,17 @@ bash testcase/rf_fallback_case.sh -v
 
 # 커널과 상관없이 RHEL6 용 *_os6 바이너리로 시험한다
 RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh
+
+# Cisco(XML) 혼합 점검을 장비 없이 눌러 본다 — Redfish mock 7대 + Cisco UCSM XML mock 2대 (필요: bin/mockucsm, Go 불필요)
+# c101(XML 단일) / c201·c202(서비스 프로파일 이름으로 서버 선택) / c301(XML 실패 -> Redfish 폴백) / 127.0.0.1:19201~19206(Redfish)
+bash testcase/demo_env.sh start
+
+# 위 명령이 출력하는 안내대로 혼합 실행한다 (IP 형태 XML 대상은 -user-xml 로 추가)
+bash bios.sh -conf /tmp/bios_demo/bios.conf -hosts /tmp/bios_demo/hosts -profile DEMO -user /tmp/bios_demo/user.txt -user-xml /tmp/bios_demo/user_xml.txt
+
+# 상태 확인 / 종료 (mock 을 내리고 시험 폴더를 정리한다)
+bash testcase/demo_env.sh status
+bash testcase/demo_env.sh stop
 
 
 ########################################################################

@@ -1,7 +1,7 @@
 // Package ucsmxml 은 Cisco UCS Manager XML API(POST https://<UCSM>/nuova)용 읽기 전용 클라이언트입니다.
 //
-// biostool ucsm(cmd/biostool/ucsm.go)만 씁니다. 이 패키지가 UCSM 으로 보낼 수 있는 요청은
-// aaaLogin(로그인 1회) · configResolveClass(computeBlade 와 허용된 bios* 클래스, inHierarchical="false") ·
+// biostool ucsm·bios 의 XML 대상(cmd/biostool/ucsm.go, xmlhost.go)과 account -ucsm 이 씁니다. 이 패키지가 UCSM 으로 보낼 수 있는 요청은
+// aaaLogin(로그인 1회) · configResolveClass(computeBlade·computeRackUnit·lsServer 와 허용된 bios* 클래스, inHierarchical="false") ·
 // aaaLogout(자기 쿠키) 세 가지뿐입니다.
 //
 //   - 밖에 공개된 호출은 Login·ResolveClass·Logout 뿐이고, 요청 본문은 이 패키지 안에서만 만든다.
@@ -52,6 +52,15 @@ const (
 	UserRole      = "admin"   // 생성하는 계정에 부여하는 UCSM 역할 (관리자)
 )
 
+// 항상 허용되는 서버 식별 클래스 (읽기 전용, 고정 상수).
+const (
+	// RackClass 는 랙 서버입니다 (standalone CIMC 는 sys/rack-unit-N).
+	RackClass = "computeRackUnit"
+
+	// ServiceProfileClass 는 서비스 프로파일입니다 (name 과 연결된 물리 서버 pnDn 으로 호스트 이름 ↔ 서버를 맞춤).
+	ServiceProfileClass = "lsServer"
+)
+
 const (
 	endpoint       = "/nuova"
 	maxBody        = 8 << 20 // 응답 본문 상한 8MB
@@ -92,7 +101,8 @@ type Options struct {
 	Insecure bool          // TLS 인증서 검증 생략 (자체서명 UCSM)
 	Timeout  time.Duration // 요청 1건 타임아웃 (0 이면 20초)
 	// Classes 는 configResolveClass 로 읽을 추가 classId 입니다. `bios` 로 시작하는 영숫자만 받아들이고
-	// 나머지는 조용히 버립니다 (버린 클래스는 ResolveClass 에서 ErrNotAllowed). computeBlade 는 항상 허용.
+	// 나머지는 조용히 버립니다 (버린 클래스는 ResolveClass 에서 ErrNotAllowed). computeBlade·computeRackUnit·lsServer 는
+	// 항상 허용 (고정 상수, 매핑·프로파일로 바꿀 수 없음).
 	Classes []string
 	// Account 는 계정 모드입니다 (biostool account -ucsm 만 켠다). 켜면 aaaUser 조회와
 	// configConfMo(sys/user-ext/user-<이름> 의 생성·비밀번호 변경·삭제)만 추가로 허용됩니다.
@@ -131,7 +141,7 @@ func New(o Options) *Client {
 	s := &secrets{user: o.User, pass: o.Pass}
 	c := &Client{
 		sec:     func() *secrets { return s },
-		allowed: map[string]bool{BladeClass: true},
+		allowed: map[string]bool{BladeClass: true, RackClass: true, ServiceProfileClass: true},
 	}
 	for _, k := range o.Classes {
 		if reBiosClass.MatchString(k) {

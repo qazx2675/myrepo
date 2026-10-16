@@ -111,7 +111,7 @@ func TestGateRejectsBeforeSend(t *testing.T) {
 	}
 
 	// 공개 API 로도 허용목록 밖 classId 는 보낼 수 없다.
-	for _, cls := range []string{"configConfMo", "aaaUser", "biosVfOther", "", "computeRackUnit"} {
+	for _, cls := range []string{"configConfMo", "aaaUser", "biosVfOther", "", "lsPower", "lsServerX", "computeRackUnits"} {
 		if _, err := c.ResolveClass(cls); !errors.Is(err, ErrNotAllowed) {
 			t.Errorf("ResolveClass(%q) 는 거부되어야 함: %v", cls, err)
 		}
@@ -131,14 +131,19 @@ func TestGateAllowsBuiltRequests(t *testing.T) {
 	if _, err := c.ResolveClass(BladeClass); err != nil {
 		t.Fatalf("ResolveClass computeBlade: %v", err)
 	}
+	for _, cls := range []string{RackClass, ServiceProfileClass} { // 고정 허용 (서버·서비스 프로파일 읽기)
+		if _, err := c.ResolveClass(cls); err != nil {
+			t.Fatalf("ResolveClass %s: %v", cls, err)
+		}
+	}
 	if _, err := c.ResolveClass("biosVfCPUPerformance"); err != nil {
 		t.Fatalf("ResolveClass biosVf: %v", err)
 	}
 	if err := c.Logout(); err != nil {
 		t.Fatalf("Logout: %v", err)
 	}
-	if err := c.Logout(); err != nil || s.n() != 4 {
-		t.Errorf("Logout 은 멱등이어야 함 (요청 %d건, 기대 4): %v", s.n(), err)
+	if err := c.Logout(); err != nil || s.n() != 6 {
+		t.Errorf("Logout 은 멱등이어야 함 (요청 %d건, 기대 6): %v", s.n(), err)
 	}
 	s.mu.Lock()
 	login := s.bodies[0]

@@ -50,6 +50,10 @@ type itemResult struct {
 	Verified bool
 	// JobUnknown 은 Dell PENDING_OK 인데 예약된 BIOS 설정 Job 이 있는지 확인하지 못했음을 뜻합니다 (리포트 경고용).
 	JobUnknown bool
+	// XML 대상(xmlhost.go)에서 서버가 여럿이라 나눠 보고할 때만: 줄 이름 "<호스트>/<서버 dn>", 그 서버 모델, 비고 꼬리 ("XML SP=<이름>").
+	Server string
+	Model  string
+	Note   string
 }
 
 // hostCheck 는 호스트 1대의 점검 결과입니다. Status 가 비어 있으면 점검이 끝난 것이고(Items 참고),
@@ -75,6 +79,12 @@ type hostCheck struct {
 
 	// CredSource 는 로그인에 성공한 계정 출처입니다: credPrimary / credFallback(rf.conf 2순위) / "" (로그인 안 함·실패).
 	CredSource string
+
+	// XML 은 XML API(UCSM/CIMC, xmlhost.go)로 점검했음을 뜻합니다: 읽기 전용 — 전체비교(StatusXMLReadOnly)·설정에서 빠집니다.
+	XML bool
+	// ProtoNote 는 결과 줄 비고에 붙는 프로토콜 안내입니다 ("XML", "XML 실패 → Redfish", Redfish 대상은 "").
+	ProtoNote   string
+	xmlLoggedIn bool // XML 로그인 성공 (AUTH_FAIL 차단기용)
 
 	// attrs 는 Bios 현재 Attributes 전체입니다 (checkOpts.KeepAttrs 일 때만, 판정까지 간 호스트만). 전체비교 재사용용 (unified.go).
 	attrs map[string]string
@@ -119,6 +129,9 @@ func (h *hostCheck) allGood() bool {
 // settable 은 Y 응답 시 설정 대상이 되는 항목인지 봅니다: FAIL, 또는 verified=Y 이고 남의 Pending 이 없는
 // PENDING_NO_JOB (같은 값을 다시 PATCH 하고 Dell BIOS 설정 Job 을 만든다 — 기존 PATCH+Job 경로 그대로).
 func (h *hostCheck) settable(it itemResult) bool {
+	if h.XML { // XML 대상은 점검만 (읽기 전용)
+		return false
+	}
 	return it.Result == StatusFail || (it.Result == StatusPendingNoJob && it.Verified && h.Foreign == 0)
 }
 
@@ -361,7 +374,7 @@ func doCheck(rc *runContext, o checkOpts) (*checkRun, error) {
 			if o.OnHost != nil {
 				o.OnHost(i, h)
 			}
-			return outcomeOf(h.Status, h.Stats, h.Target.Err == "")
+			return hostOutcomeOf(h)
 		},
 		func(i int) { skip(i, StatusSkippedAuthStop) },
 		func(i int, v interface{}) { // 처리 중 패닉 → 그 호스트만 오류로 남기고 계속 (retry.txt 에 들어감)
@@ -379,6 +392,9 @@ func doCheck(rc *runContext, o checkOpts) (*checkRun, error) {
 }
 
 func (e *checkEnv) checkHost(t Target) *hostCheck {
+	if t.XML && !e.offline { // bios 의 XML 대상 (덤프 읽기는 Redfish 덤프를 그대로 읽음)
+		return e.checkXML(t)
+	}
 	if e.offline {
 		return e.checkOffline(t)
 	}
@@ -909,7 +925,11 @@ func (r *checkRun) rows(h *hostCheck) [][]string {
 	if h.MgmtVersion != "" {
 		mgmt = tsvField(h.MgmtVersion)
 	}
-	base := []string{tsvField(h.Target.Hostname), tsvField(h.Target.IP), tsvField(r.Profile), vendor, model, bios, redfishProtocol, mgmt}
+	proto := redfishProtocol
+	if h.XML {
+		proto = xmlProtocol
+	}
+	base := []string{tsvField(h.Target.Hostname), tsvField(h.Target.IP), tsvField(r.Profile), vendor, model, bios, proto, mgmt}
 	row := func(tail ...string) []string {
 		out := append([]string(nil), base...)
 		for _, s := range tail {
@@ -922,7 +942,11 @@ func (r *checkRun) rows(h *hostCheck) [][]string {
 	}
 	out := make([][]string, 0, len(h.Items))
 	for _, it := range h.Items {
-		out = append(out, row(it.Std, it.Attr, it.Expected, it.Current, it.Pending, it.Result))
+		rw := row(it.Std, it.Attr, it.Expected, it.Current, it.Pending, it.Result)
+		if it.Server != "" { // XML 서버 여럿: 서버마다 이름·모델
+			rw[0], rw[4] = tsvField(it.Server), tsvField(it.Model)
+		}
+		out = append(out, rw)
 	}
 	return out
 }

@@ -186,6 +186,8 @@ flowchart TD
 
 ## 7. 통합 점검·전체비교·수정 — `bash bios.sh` (TUI)
 
+대상은 점검 전에 접속 방식별로 나뉩니다: hostname 이 `xml_host_prefix`(기본 `c`)로 시작하거나 `-user-xml` 에 적은 대상은 Cisco UCSM/CIMC XML API(읽기 전용), 그 밖은 Redfish 입니다. XML 로그인 전에 실패한 호스트는 Redfish 로 1번 다시 점검하고, XML 호스트는 점검만 하며 전체비교·설정에서는 빠집니다([README.md](README.md) 2.0절 “Cisco(XML) 혼합 대상”). 아래 그림의 `분류 → XML / Redfish → 폴백` 가지가 이 부분입니다.
+
 터미널에서 인자 없이 실행하면 대상·프로파일을 화면에서 고르고, 호스트당 1회 접속해 BIOS 전체 속성을 읽어 프로파일 결과와 전체비교에 함께 씁니다. 설정은 맨 끝에서 묻습니다: 확인 1(차이 항목 전부를 `현재값 -> 변경값 (수정대상)` / `(수정제외: 사유)` 로 보이고 “위 수정대상을 적용할까요?”), 수정제외가 있으면 확인 2(그 항목만 다시 보이고 “수정제외 항목을 확인했습니다. 진행할까요?”), 남의 Pending 이 있으면 포함 여부. 확인 1·2 에서 n/Esc/Ctrl+X 면 아무것도 쓰지 않고 결과 화면으로 돌아옵니다. Pending 까지만 설정하고 재부팅은 없습니다. 서버 고유값·부팅·보안·RAID·PXE·NIC 속성(보호 속성)은 어느 경우에도 설정하지 않고 수정제외로 보입니다. 키: Tab 화면 전환([프로파일 점검] ↔ [전체 설정 비교]) · ←→ 벤더(Enter 로 들어가면 관리망 그룹) · q 한 단계 뒤로(벤더 줄에서는 q 를 한 번 더 눌러야 끝, 설정할 항목이 있으면 끝내기 전에 수정 단계) · Esc 뒤로(벤더 줄에서는 종료 확인 취소) · ↑↓ · PgUp/PgDn · a/o/f/n 필터 · s 요약 · r 비교 기준 다시 선택 · e 수정 · ? 도움말 · Ctrl+X 진행 중 작업 취소 · Ctrl+C/Ctrl+Z 는 무시.
 
 ```mermaid
@@ -197,7 +199,14 @@ flowchart TD
     T -->|아니오| PL(["평문 출력 (색 없음, 읽기 전용)<br/>-profile 필수 · 설정 질문 없음<br/>-ref · -ref-json · -diff 를 주면 전체비교도 출력"])
     T -->|예| A["1. 대상 입력<br/>대상 파일 지정 또는 붙여넣기<br/>붙여넣기: Ctrl+D 완료 · Ctrl+X 취소"]
     A --> B["2. 프로파일 선택<br/>-profile 로 지정하면 생략"]
-    B --> C["3. 접속·조회 (호스트당 로그인 1회, GET 만)<br/>BIOS 전체 속성을 한 번에 읽어<br/>프로파일 판정과 전체비교에 함께 사용<br/>진행 표시 · Ctrl+X 취소 (남은 호스트는 CANCELED)<br/>result.tsv · profile_ CSV 저장"]
+    B --> CL["대상 분류 (classifyTargets)<br/>hostname 이 bios.conf xml_host_prefix (기본 c) 로 시작 · -user-xml 목록 → XML<br/>그 밖의 hostname · IP → Redfish"]
+    CL --> RT{"대상 접속 방식"}
+    RT -->|Redfish| C
+    RT -->|"XML (Cisco)"| XC["XML 점검 (읽기 전용, hostname-m 로 접속)<br/>aaaLogin → configResolveClass → aaaLogout<br/>서버 1대면 그 서버 · 여러 대면 서비스 프로파일 이름 = hostname 인 서버<br/>(없으면 모든 서버를 host/server dn 으로 보고)<br/>프로파일 # [xml] 구역으로 판정"]
+    XC --> XF{"로그인 전 실패인가<br/>(연결 실패 · 타임아웃 · XML 아닌 응답)<br/>AUTH_FAIL 은 해당 없음 — 재시도 안 함"}
+    XF -->|아니오| D
+    XF -->|예| FB["그 호스트만 Redfish 로 1번 다시 점검<br/>비고: XML 실패 → Redfish"] --> C
+    C["3. 접속·조회 (호스트당 로그인 1회, GET 만)<br/>BIOS 전체 속성을 한 번에 읽어<br/>프로파일 판정과 전체비교에 함께 사용<br/>진행 표시 · Ctrl+X 취소 (남은 호스트는 CANCELED)<br/>result.tsv · profile_ CSV 저장"]
     C --> D["4. 결과 TUI [프로파일 점검] 화면<br/>[OK] · [difference] · [N/A] 색상 줄<br/>←→ 벤더 · Enter 로 관리망 그룹 · q 한 단계 뒤로 · 필터 · 요약"]
     D --> E{"키"}
     E -->|"q 두 번 (설정할 항목 있음) 또는 e"| SET
@@ -215,7 +224,7 @@ flowchart TD
     SET{"-from-dump 인가"}
     SET -->|예| NS(["설정하지 않음 (접속 안 함)"])
     NS --> BK
-    SET -->|아니오| PLAN["수정 계획 (BMC 접속 없음)<br/>프로파일 difference (verified=Y 행만)<br/>+ 전체비교 difference (allcheck_set=on · BIOS 버전이 같은 호스트만)<br/>같은 속성의 목표값이 다르면 설정 안 함 [충돌]<br/>보호 속성 (IQN · IP · ServerName · 부팅 · 보안 · RAID · PXE · NIC) 은 수정제외<br/>제외 속성 · 위험 속성 · N/A · Dell/HPE/Lenovo 외 · BIOS_VER_DIFF 제외<br/>시스템 프로파일 성격 속성이 여럿이면 프로파일 행만<br/>Dell 은 남의 Pending 이 있으면 호스트 제외"]
+    SET -->|아니오| PLAN["수정 계획 (BMC 접속 없음)<br/>프로파일 difference (verified=Y 행만)<br/>+ 전체비교 difference (allcheck_set=on · BIOS 버전이 같은 호스트만)<br/>같은 속성의 목표값이 다르면 설정 안 함 [충돌]<br/>보호 속성 (IQN · IP · ServerName · 부팅 · 보안 · RAID · PXE · NIC) 은 수정제외<br/>제외 속성 · 위험 속성 · N/A · Dell/HPE/Lenovo 외 · BIOS_VER_DIFF 제외<br/>시스템 프로파일 성격 속성이 여럿이면 프로파일 행만<br/>Dell 은 남의 Pending 이 있으면 호스트 제외<br/>XML 로 점검한 Cisco 호스트는 읽기 전용이라 제외 (전체비교도 N/A)"]
     PLAN --> EM{"설정할 항목이 있는가"}
     EM -->|없음| NI["설정할 항목이 없습니다<br/>(수정제외 · 충돌 사유가 있으면 미리보기를 보임)"]
     NI --> BK

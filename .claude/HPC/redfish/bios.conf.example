@@ -52,3 +52,9 @@ refs_dir=refs
 # 비대화형 점검(bios -auto / -auto-check)에서 -profile 을 주지 않았을 때 쓸 프로파일 이름 (profile_dir/<이름>.tsv).
 # 비우면 -profile 이 반드시 필요합니다. 예) auto_profile=VM
 auto_profile=
+
+# bios: 이 접두어로 시작하는 hostname(-m·포트를 뗀 이름, 대소문자 무시, 쉼표로 여러 개)은 Redfish 대신
+# Cisco UCSM/CIMC XML API 로 점검합니다 (읽기 전용: 점검만, 전체비교·설정 제외. 기대값은 프로파일 # [xml] 구역).
+# IP 대상은 항상 Redfish 입니다 (XML 로 볼 IP 는 bios -user-xml <파일>). 비우면 이름으로는 XML 로 보내지 않습니다.
+# XML 로그인 전에 실패하면(연결 실패·XML 아닌 응답) 그 호스트만 Redfish 로 1번 다시 점검합니다 (AUTH_FAIL 은 재시도 안 함).
+xml_host_prefix=c

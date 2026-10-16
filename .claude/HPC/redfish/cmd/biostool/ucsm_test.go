@@ -114,14 +114,15 @@ func (m *ucsmMock) snapshot() ([]string, int) {
 	return append([]string(nil), m.calls...), m.logouts
 }
 
-// ucsmTestMap 은 시험용 매핑입니다 (@ 는 tabs 가 탭으로 바꾼다).
-const ucsmTestMap = `# 시험용 UCSM 매핑
-vendor@model@std_name@xml_class@xml_attribute@value@protocol@xml_example@verified
-CISCO@UCS B200 M5@system_profile@biosVfCPUPerformance@vpCPUPerformance@hpc@xml@<biosVfCPUPerformance vpCPUPerformance="hpc"/>@N
-CISCO@UCS B200 M5@hyper_threading@biosVfIntelHyperThreadingTech@vpIntelHyperThreadingTech@enabled@xml@-@N
-CISCO@UCS B200 M5@mem_ras@biosVfSelectMemoryRASConfiguration@vpSelectMemoryRASConfiguration@maximum-performance@xml@-@N
-CISCO@UCS X210c M7@system_profile@biosVfCPUPerformance@vpCPUPerformance@hpc|HPC@xml@-@Y
-CISCO@UCS X210c M7@hyper_threading@biosVfIntelHyperThreadingTech@vpIntelHyperThreadingTech@enabled@xml@-@N
+// ucsmTestMap 은 시험용 프로파일입니다 (# [xml] 구역만, @ 는 tabs 가 탭으로 바꾼다).
+const ucsmTestMap = `# 시험용 UCSM 프로파일
+vendor@model@std_name@attribute@value@verified
+# [XML]
+CISCO@UCS B200 M5@system_profile@biosVfCPUPerformance.vpCPUPerformance@hpc@N
+CISCO@UCS B200 M5@hyper_threading@biosVfIntelHyperThreadingTech.vpIntelHyperThreadingTech@enabled@N
+CISCO@UCS B200 M5@mem_ras@biosVfSelectMemoryRASConfiguration.vpSelectMemoryRASConfiguration@maximum-performance@N
+CISCO@UCS X210c M7@system_profile@biosVfCPUPerformance.vpCPUPerformance@hpc|HPC@Y
+CISCO@UCS X210c M7@hyper_threading@biosVfIntelHyperThreadingTech.vpIntelHyperThreadingTech@enabled@N
 # UNMAPPED CISCO UCS B200 M5 llc_prefetch: none_of_candidates
 `
 
@@ -142,9 +143,9 @@ func ucsmFixture(m *ucsmMock) {
 
 func ucsmTestMapT(t *testing.T) *ucsmMap {
 	t.Helper()
-	mp, err := parseUcsmMap(tabs(ucsmTestMap), "map.tsv")
+	p, err := parseProfile(tabs(ucsmTestMap), "UCSM.tsv")
 	must(t, err)
-	return mp
+	return p.XML
 }
 
 func ucsmRunT(t *testing.T, rc *runContext) *ucsmRun {
@@ -206,7 +207,7 @@ func TestUcsmJudgeFlow(t *testing.T) {
 	}
 
 	calls, logouts := m.snapshot()
-	wantCalls := "aaaLogin|configResolveClass computeBlade|configResolveClass biosVfCPUPerformance|" +
+	wantCalls := "aaaLogin|configResolveClass computeBlade|configResolveClass computeRackUnit|configResolveClass lsServer|configResolveClass biosVfCPUPerformance|" +
 		"configResolveClass biosVfIntelHyperThreadingTech|configResolveClass biosVfSelectMemoryRASConfiguration|aaaLogout"
 	if got := strings.Join(calls, "|"); got != wantCalls {
 		t.Errorf("호출 순서\n got  %s\n want %s", got, wantCalls)
@@ -358,48 +359,28 @@ func TestUcsmModelKey(t *testing.T) {
 }
 
 func TestUcsmMapParse(t *testing.T) {
-	// 저장소의 실제 매핑 파일
-	m, err := loadUcsmMap("../../" + ucsmDefaultMap)
-	must(t, err)
-	if len(m.Rows) != 12 || strings.Join(m.Classes, ",") != "biosVfCPUPerformance,biosVfIntelHyperThreadingTech,biosVfProcessorEnergyConfiguration" || len(m.Unmapped) != 8 {
-		t.Errorf("실제 매핑: 행 %d, 클래스 %v, UNMAPPED %d", len(m.Rows), m.Classes, len(m.Unmapped))
-	}
-	// system_profile 은 후보 2개(vpCPUPerformance, vpEnergyPerformance)를 각각 점검한다
-	if sp := m.rowsFor(ucsmModelKey("UCSB-B200-M5"), "system_profile"); len(sp) != 2 || sp[0].Attr != "vpCPUPerformance" || sp[1].Attr != "vpEnergyPerformance" {
-		t.Errorf("system_profile 행: %v", sp)
-	}
-	if m.rowFor(ucsmModelKey("UCSB-B200-M5"), "system_profile") == nil || m.rowFor(ucsmModelKey("UCSX-210C-M7"), "hyper_threading") == nil {
-		t.Error("UCSM PID 로 매핑 행을 찾지 못함")
-	}
-	if m.Unmapped["b480m5|llc_prefetch"] != "none_of_candidates" {
-		t.Errorf("UNMAPPED 해석: %v", m.Unmapped)
-	}
-
-	// 주석·빈 줄·CRLF·BOM·UNMAPPED
-	hdr := "vendor@model@std_name@xml_class@xml_attribute@value@protocol@xml_example@verified\n"
-	row := "CISCO@UCS B200 M5@system_profile@biosVfCPUPerformance@vpCPUPerformance@hpc@xml@-@N\n"
-	text := "\ufeff# 주석\r\n\r\n" + hdr + row + "# UNMAPPED CISCO UCS B200 M5 llc_prefetch: none_of_candidates\r\n# 그냥 주석: UNMAPPED 아님\n"
-	p, err := parseUcsmMap(tabs(text), "t.tsv")
-	must(t, err)
-	if len(p.Rows) != 1 || p.Unmapped["b200m5|llc_prefetch"] != "none_of_candidates" || len(p.Unmapped) != 1 || len(p.Items) != len(stdKeywords) {
-		t.Errorf("주석/UNMAPPED 해석: rows=%d unmapped=%v items=%v", len(p.Rows), p.Unmapped, p.Items)
-	}
-
-	for _, c := range []struct{ name, text, want string }{
-		{"머리글 없음", row, "머리글"},
-		{"주석만", "# 주석\n", "머리글"},
-		{"행 없음", hdr, "항목 행이"},
-		{"열 수", hdr + "CISCO@UCS B200 M5@system_profile\n", "9개 열"},
-		{"protocol", hdr + strings.Replace(row, "@xml@", "@json-redfish@", 1), "protocol"},
-		{"verified", hdr + strings.Replace(row, "@N\n", "@X\n", 1), "verified"},
-		{"쓰기 클래스", hdr + strings.Replace(row, "biosVfCPUPerformance", "configConfMo", 1), "xml_class"},
-		{"벤더", hdr + strings.Replace(row, "CISCO", "DELL", 1), "vendor"},
-		{"중복", hdr + row + row, "중복"},
-		{"빈 허용값", hdr + strings.Replace(row, "@hpc@", "@hpc|@", 1), "빈 허용값"},
-		{"UNMAPPED 형식", hdr + row + "# UNMAPPED CISCO llc_prefetch none\n", "UNMAPPED"},
-	} {
-		if _, err := parseUcsmMap(tabs(c.text), "t.tsv"); err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("%s: 오류에 %q 기대, 실제 %v", c.name, c.want, err)
+	// 저장소의 실제 프로파일 VM.tsv / VM_research.tsv 의 # [xml] 구역 (예전 standard_bios_map_xml.tsv 행)
+	for _, name := range []string{"VM", "VM_research"} {
+		p, err := loadProfile("../../profiles/"+name+".tsv", name)
+		must(t, err)
+		m := p.XML
+		if len(m.Rows) != 12 || strings.Join(m.Classes, ",") != "biosVfCPUPerformance,biosVfIntelHyperThreadingTech,biosVfProcessorEnergyConfiguration" || len(m.Unmapped) != 8 {
+			t.Errorf("%s [xml]: 행 %d, 클래스 %v, UNMAPPED %d", name, len(m.Rows), m.Classes, len(m.Unmapped))
+		}
+		// system_profile 은 후보 2개(vpCPUPerformance, vpEnergyPerformance)를 각각 점검한다
+		if sp := m.rowsFor(ucsmModelKey("UCSB-B200-M5"), "system_profile"); len(sp) != 2 || sp[0].Attr != "vpCPUPerformance" || sp[1].Attr != "vpEnergyPerformance" {
+			t.Errorf("%s system_profile 행: %v", name, sp)
+		}
+		if m.rowFor(ucsmModelKey("UCSB-B200-M5"), "system_profile") == nil || m.rowFor(ucsmModelKey("UCSX-210C-M7"), "hyper_threading") == nil {
+			t.Errorf("%s: UCSM PID 로 [xml] 행을 찾지 못함", name)
+		}
+		if m.Unmapped["b480m5|llc_prefetch"] != "none_of_candidates" {
+			t.Errorf("%s UNMAPPED 해석: %v", name, m.Unmapped)
+		}
+		for _, r := range p.Rows {
+			if strings.Contains(r.Attr, ".") && strings.HasPrefix(r.Attr, "biosVf") {
+				t.Errorf("%s: XML 행이 [redfish] 구역에 있음: %+v", name, r)
+			}
 		}
 	}
 }
@@ -409,10 +390,10 @@ func TestCmdUcsmEndToEnd(t *testing.T) {
 	m := newUcsmMock(t, ucsmFixture)
 	env := newRTEnv(t, 3, "")
 	user := env.writeFile("ucsm.txt", strings.TrimPrefix(m.srv.URL, "https://"))
-	mapPath := env.writeFile("map.tsv", tabs(ucsmTestMap))
+	must(t, os.WriteFile(filepath.Join(env.dir, "profiles", "UCSM.tsv"), []byte(tabs(ucsmTestMap)), 0o600))
 	before := env.dirs()
 	out, err := rtCapture(t, func() error {
-		return cmdUcsm([]string{"-conf", env.conf, "-hosts", env.hosts, "-user", user, "-xml-map", mapPath})
+		return cmdUcsm([]string{"-conf", env.conf, "-hosts", env.hosts, "-user", user, "-profile", "UCSM"})
 	})
 	if err != nil {
 		t.Fatalf("cmdUcsm: %v\n%s", err, out)
@@ -431,8 +412,9 @@ func TestCmdUcsmEndToEnd(t *testing.T) {
 	}
 
 	before = env.dirs()
-	for _, extra := range [][]string{{"-profile", "VM"}, {"-dry-run"}, {"-from-dump", env.dir}, {"-list-max", "-1"}} {
-		args := append([]string{"-conf", env.conf, "-hosts", env.hosts, "-user", user, "-xml-map", mapPath}, extra...)
+	// -profile VM(시험 픽스처)은 # [xml] 구역이 없어 거부, -xml-map 은 없어진 옵션
+	for _, extra := range [][]string{{"-profile", "VM"}, {"-dry-run"}, {"-from-dump", env.dir}, {"-list-max", "-1"}, {"-xml-map", "x.tsv"}} {
+		args := append([]string{"-conf", env.conf, "-hosts", env.hosts, "-user", user, "-profile", "UCSM"}, extra...)
 		if _, err := rtCapture(t, func() error { return cmdUcsm(args) }); err == nil {
 			t.Errorf("%v 는 거부되어야 함", extra)
 		}

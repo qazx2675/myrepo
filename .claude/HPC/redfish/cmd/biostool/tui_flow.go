@@ -2,7 +2,7 @@ package main
 
 // tui_flow.go — `biostool bios` 대화형 흐름 (계획서_v0.2_TUI.md "흐름" 1~6, 단계 6). TUI 세션 1개 안에서 제자리 갱신만 한다.
 //
-//	대상 입력(파일 / 붙여넣기) → 프로파일 선택 → [2/4 접속·조회] → [3/4 CSV 저장] → 결과 화면 [프로파일 점검]
+//	대상 입력(파일 / 붙여넣기, IP 가 있으면 Cisco(XML) 대상도) → 프로파일 선택 → [2/4 접속·조회] → [3/4 CSV 저장] → 결과 화면 [프로파일 점검]
 //	  Tab → [전체 설정 비교] 화면 (처음이면 기준 선택 → 비교서버 조회 → 결과), 다시 Tab 이면 [프로파일 점검] (화면마다 위치 유지)
 //	  r (전체 설정 비교 화면) → 기준 다시 선택 → 다시 비교
 //	  -ref/-ref-json/-diff 를 줬으면 수집 직후 바로 전체 설정 비교까지 (Tab 을 기다리지 않음)
@@ -102,10 +102,7 @@ func (f *biosFlow) wait(name string) {
 // run 은 흐름 본체입니다. Quit(시그널·입력 끝)이면 그 자리에서 끝낸다.
 func (f *biosFlow) run() error {
 	ui := f.ui
-	ui.SetText("BIOS 점검", []string{
-		"대상과 프로파일을 고르면 호스트당 1회 접속해 BIOS 전체 속성을 조회합니다.",
-		"설정은 마지막에 묻고, 재부팅은 하지 않습니다.",
-	})
+	ui.SetText("BIOS 점검", flowIntro)
 	var prof *Profile
 	for prof == nil {
 		targets, ok := f.askTargets()
@@ -242,12 +239,54 @@ func (f *biosFlow) browse() TUIAction {
 	}
 }
 
+// flowIntro 는 시작 화면 글입니다 (대상을 물을 때는 Cisco(XML) 안내 줄을 덧붙임).
+var flowIntro = []string{
+	"대상과 프로파일을 고르면 호스트당 1회 접속해 BIOS 전체 속성을 조회합니다.",
+	"설정은 마지막에 묻고, 재부팅은 하지 않습니다.",
+}
+
+// flowCiscoHint 는 대상 입력 화면의 Cisco(XML) 안내 2줄입니다 (좁은 화면에서 잘리지 않게 나눔).
+// pfx 는 bios.conf xml_host_prefix (비면 이름도 자동으로 나누지 않음).
+func flowCiscoHint(pfx []string) []string {
+	if len(pfx) == 0 {
+		return []string{"Cisco 장비는 XML 로 점검합니다 —", "  IP·이름 모두 Cisco(XML) 대상에 넣으십시오"}
+	}
+	return []string{"Cisco 장비는 XML 로 점검합니다 —",
+		"  hostname 이 " + strings.Join(pfx, ", ") + " 로 시작하면 자동, IP 는 Cisco(XML) 대상에 따로 넣으십시오"}
+}
+
+// anyIPInput 은 입력 중 IP(포트 붙은 것 포함)가 하나라도 있는지 봅니다.
+func anyIPInput(inputs []string) bool {
+	for _, in := range inputs {
+		if isIPInput(in) {
+			return true
+		}
+	}
+	return false
+}
+
 // askTargets 는 대상을 정합니다. 돌려준 문자열이 비면 대상 목록 파일(o.user)을 쓴다. ok=false 는 취소.
+// 대상에 IP 가 있으면(xml_host_prefix 가 비면 늘) Cisco(XML) 대상을 따로 묻는다: 파일은 o.userXML, 붙여넣기는 o.userXMLArg
+// (hostname 은 xml_host_prefix 로 자동으로 나뉘므로 묻지 않음).
 func (f *biosFlow) askTargets() (string, bool) {
 	if f.a.UserSet {
 		return "", true
 	}
 	ui := f.ui
+	o := f.a.O
+	var pfx []string
+	if conf, err := loadConf(o.conf); err == nil { // conf 오류는 cmdBios·prepare 가 알린다 (여기서는 안내 줄만)
+		pfx = conf.XMLHostPrefix
+	}
+	ui.SetText("BIOS 점검", append(append(append([]string{}, flowIntro...), ""), flowCiscoHint(pfx)...))
+	askXML := func(inputs []string) bool { return len(pfx) == 0 || anyIPInput(inputs) }
+	xmlFileTitle, xmlPasteTitle := "Cisco(XML) 대상 파일 (IP 로 적은 Cisco 장비, 비우면 없음)",
+		"Cisco(XML) 대상 붙여넣기 (IP 로 적은 Cisco 장비만, 없으면 바로 Ctrl+D)"
+	if len(pfx) == 0 {
+		xmlFileTitle, xmlPasteTitle = "Cisco(XML) 대상 파일 (Cisco 장비, 비우면 없음)",
+			"Cisco(XML) 대상 붙여넣기 (Cisco 장비만, 없으면 바로 Ctrl+D)"
+	}
+	o.userXML, o.userXMLArg = "", "" // 대상 입력으로 돌아오면 앞에서 넣은 Cisco(XML) 대상은 버린다
 	for {
 		f.wait("targets")
 		i, ok := ui.Choose("대상 입력", []string{"대상 파일 지정", "직접 입력 (붙여넣기: hostname / hostname-m / IP)"})
@@ -265,6 +304,16 @@ func (f *biosFlow) askTargets() (string, bool) {
 				continue
 			}
 			f.a.O.user = p
+			if in, _ := loadList(p); askXML(in) { // 읽기 오류는 prepare 가 알린다
+				x, ok := f.askXMLFile(xmlFileTitle)
+				if !ok {
+					if ui.Quit() {
+						return "", false
+					}
+					continue
+				}
+				o.userXML = x
+			}
 			return "", true
 		}
 		f.wait("targets-paste")
@@ -275,10 +324,43 @@ func (f *biosFlow) askTargets() (string, bool) {
 			}
 			continue
 		}
-		if s := strings.Join(lines, "\n"); len(splitTargets(s)) > 0 {
-			return s, true
+		s := strings.Join(lines, "\n")
+		in := splitTargets(s)
+		if len(in) == 0 {
+			ui.SetMessage("입력한 대상이 없습니다")
+			continue
 		}
-		ui.SetMessage("입력한 대상이 없습니다")
+		if askXML(in) {
+			f.wait("targets-xml-paste")
+			xl, ok := ui.InputLines(xmlPasteTitle)
+			if !ok {
+				if ui.Quit() {
+					return "", false
+				}
+				continue
+			}
+			o.userXMLArg = strings.Join(xl, "\n")
+		}
+		return s, true
+	}
+}
+
+// askXMLFile 은 Cisco(XML) 대상 파일을 묻습니다. 비우면 없음(""). ok=false 는 취소 (대상 입력 처음으로).
+func (f *biosFlow) askXMLFile(title string) (string, bool) {
+	for {
+		f.wait("targets-xml-file")
+		p, ok := f.ui.InputLine(title, "")
+		if !ok {
+			return "", false
+		}
+		if p == "" {
+			return "", true
+		}
+		if _, err := os.Stat(p); err != nil {
+			f.ui.SetMessage("Cisco(XML) 대상 파일을 찾을 수 없습니다: " + p)
+			continue
+		}
+		return p, true
 	}
 }
 

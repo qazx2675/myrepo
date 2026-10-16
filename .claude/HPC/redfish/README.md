@@ -7,6 +7,7 @@
 - 수천 대를 한 번에 처리합니다(동시 접속 기본 100). 일시 오류는 자동 재시도하고, 실패 목록(`retry.txt`)만 다시 돌릴 수 있습니다.
 - BMC 에 남기는 흔적을 줄이려고 호스트당 **로그인 1회**, 허용목록 밖 호출(로그 조회·ClearLog·Reset 등)은 **전송 전에 코드가 차단**합니다.
 - **`bash bios.sh` 하나로** 대상 입력 → 프로파일 점검 → (선택) BIOS 전체비교 → (선택) 수정까지 터미널 화면(TUI)에서 진행합니다. 호스트당 1회 접속으로 프로파일 결과와 전체비교를 함께 얻고, 결과는 색상 줄과 CSV 로 봅니다(2.0절). auto_setup 같은 자동화는 `bash bios.sh -auto <user> targets.txt` 로 점검만 합니다.
+- **Cisco 장비는 XML API 로 점검합니다(`bios.sh` 혼합 대상).** hostname 이 `bios.conf` 의 `xml_host_prefix`(기본 `c`)로 시작하는 대상과 `-user-xml` 목록은 Cisco UCSM/CIMC XML API 로 읽고(읽기 전용: `aaaLogin`·`configResolveClass`·`aaaLogout`), 나머지는 Redfish 로 점검합니다. XML 대상은 프로파일 점검만 하고 전체비교·설정에서는 빠집니다. 2.0절 “Cisco(XML) 혼합 대상”.
 - 사전조사(`xml.sh`)로 처음 만나는 모델의 속성 이름을 확인하고, 모델별 BIOS 전체 비교(`all_bios_check.sh`)도 할 수 있습니다.
 - 공용(1순위) 계정이 없는 BMC 는 벤더 admin(rf.conf, 2순위)으로 접속해 **계정을 만들 수 있고**(`account_create.sh`, 기본 Y), 공용 계정의 **비밀번호를 바꿀 수도 있습니다**(`biostool account change`). 2.12절.
 
@@ -53,7 +54,7 @@ bash build_os6.sh      # (관리자가 소스를 고쳤을 때만) RHEL6 바이�
 
 **vendor/ 가 없는 이유.** 이 프로젝트는 외부 의존성이 **하나도 없습니다**(`go.mod` 에 `require` 가 없고 표준 라이브러리만 사용, `module biostool`, `go 1.20`). 그래서 `go mod vendor` 로 모을 것이 없고 `vendor/` 디렉터리가 필요 없습니다. `setup.sh` 는 다른 프로젝트와 같은 틀(`GOFLAGS=-mod=vendor`, `go build -mod=vendor`)을 그대로 쓰는데, 의존성이 없으면 vendor 디렉터리가 없어도 이 옵션이 정상 동작합니다(랩의 Go 1.25.10 과 Go 1.20.14 에서 둘 다 `setup.sh` 성공을 확인했습니다). 나중에 외부 모듈을 쓰게 되면 `go mod vendor` 로 `vendor/` 를 만들어 커밋해야 폐쇄망 빌드가 유지됩니다.
 
-**소스를 고쳤다면** 바이너리도 다시 빌드해 **두 파일(`bin/biostool`, `bin/biostool_os6`)을 함께 커밋**해야 합니다(mock 서버를 고쳤다면 `bin/mockbmc`, `bin/mockbmc_os6` 도). 회사 환경에는 Go 가 없어 저장소의 바이너리가 곧 배포본입니다([PR_CHECKLIST.md](PR_CHECKLIST.md)).
+**소스를 고쳤다면** 바이너리도 다시 빌드해 **두 파일(`bin/biostool`, `bin/biostool_os6`)을 함께 커밋**해야 합니다(mock 서버를 고쳤다면 `bin/mockbmc`, `bin/mockbmc_os6` 도, UCSM mock 을 고쳤다면 `bin/mockucsm`, `bin/mockucsm_os6` 도). 회사 환경에는 Go 가 없어 저장소의 바이너리가 곧 배포본입니다([PR_CHECKLIST.md](PR_CHECKLIST.md)).
 
 ### 1.3 처음 한 번 준비할 것
 
@@ -84,6 +85,7 @@ mkdir -p refs                        # (선택) 전체비교 기준으로 고를
 bash bios.sh                                  # (터미널) TUI: 대상 입력 → 프로파일 선택 → 점검 → 전체비교 → 수정
 bash bios.sh -profile VM -user user.txt       # 프로파일·대상 파일을 미리 지정 (화면에서 묻지 않음)
 bash bios.sh -plain -profile VM               # TUI 없이 색 없는 평문 출력 (읽기 전용, 설정 질문 없음)
+bash bios.sh -profile VM -user user.txt -user-xml user_xml.txt  # Redfish 대상 + Cisco(XML) 대상 혼합 (IP 형태 Cisco 는 -user-xml)
 bash bios.sh -plain -profile VM -ref <비교서버> # 평문 + 비교서버와 BIOS 전체 값 비교
 bash bios.sh -auto-check <user> targets.txt   # 비대화형 점검만 → 호출한 폴더에 check.res_<user>
 bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>_postapply (auto_setup 용)
@@ -93,7 +95,7 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 
 **진행 순서 (TUI)**
 
-1. **대상 입력** — 대상 파일을 지정하거나 hostname / hostname-m / IP 를 붙여넣습니다(한 줄에 하나, Ctrl+D 완료, Ctrl+X 취소). `-user` 를 주면 묻지 않습니다(대상을 옵션으로 줬으면 돌아갈 대상 입력 단계도 없습니다).
+1. **대상 입력** — 대상 파일을 지정하거나 hostname / hostname-m / IP 를 붙여넣습니다(한 줄에 하나, Ctrl+D 완료, Ctrl+X 취소). `-user` 를 주면 묻지 않습니다(대상을 옵션으로 줬으면 돌아갈 대상 입력 단계도 없습니다). 대상에 IP 가 있으면 이어서 **Cisco(XML) 대상**을 따로 묻습니다(파일 지정 또는 붙여넣기, 비워 두면 없음. `-user-xml` 을 주면 묻지 않음). hostname 은 접두어로 자동 분류되므로 묻지 않습니다.
 2. **프로파일 선택** — `profiles/*.tsv` 중에서 고릅니다(`-profile` 로 지정하면 생략).
 3. **접속·조회** — 호스트당 **로그인 1회**로 BIOS 전체 속성을 한 번에 읽어, 프로파일 판정과 전체비교에 함께 씁니다(전체비교 때 대상에 다시 접속하지 않음). 진행 상황이 한 줄로 갱신됩니다.
 4. **결과 화면 `[프로파일 점검]`** — 프로파일에 등록된 항목의 결과를 색상 줄로 보여 줍니다. 맨 위에 화면 탭 `[프로파일 점검] [전체 설정 비교]` 가 있고 `Tab` 으로 오갑니다.
@@ -225,6 +227,30 @@ bash bios.sh -auto       <user> targets.txt [-profile VM]
 ![auto 흐름도](workflow_auto.svg)
 
 **옛 래퍼와의 관계** — `bios_check.sh` 는 옛 전용 옵션(`-retry-from`·`-dry-run`·`-no-prompt`·`-stdin-ok`·`-list-max`·`-fail-max`)이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘기고, 옵션이 있으면 옛 방식(`biostool check`, 2.1절)으로 동작합니다. `all_bios_check.sh` 는 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘어가고(옛 1.체크/2.전체비교 메뉴는 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만), `-user`·`-diff`·`-ref`·`-from-dump`·`-retry-from` 을 주면 옛 방식(2.4절)입니다.
+
+#### Cisco(XML) 혼합 대상 — Redfish 와 XML API 를 한 번에
+
+Cisco 장비(UCSM 이 관리하는 블레이드, CIMC 단독 랙서버)는 Redfish 가 아니라 XML API 로 읽어야 하므로, `bios.sh` 는 대상마다 접속 방식을 나눕니다. 한 번 실행에 Dell·HPE 같은 Redfish 장비와 Cisco 장비를 섞어도 됩니다. XML 호출은 읽기 전용(`POST https://<관리주소>/nuova` 의 `aaaLogin` → `configResolveClass` → `aaaLogout`)이며 같은 계정(`bios.conf` 의 `user`, `pass.enc`)을 씁니다.
+
+| 대상 | 점검 방식 |
+|---|---|
+| hostname(`-m`·`:포트` 를 뗀 이름)이 `xml_host_prefix` 로 시작 (기본 `c`, 쉼표로 여러 개, 대소문자 무시) | **XML API** — 관리 주소 `hostname-m` 로 접속 |
+| 그 밖의 hostname | Redfish |
+| IP 대상 (`-user` 목록 / TUI 의 Redfish 대상) | Redfish. 접두어와 관계없음 |
+| `-user-xml <파일>` 에 적은 대상 (IP·hostname) | **XML API** (IP 형태 Cisco 는 이쪽에) |
+
+```bash
+bash bios.sh -profile VM -user user.txt                      # user.txt 의 c 로 시작하는 이름은 자동으로 XML
+bash bios.sh -profile VM -user user.txt -user-xml cisco.txt  # IP 형태 Cisco 는 cisco.txt 에 적어 -user-xml 로
+bash bios.sh -plain -profile VM -user-xml cisco.txt          # -user-xml 만 주면 user.txt 는 읽지 않음
+```
+
+- **기대값**은 프로파일의 `# [xml]` 구역입니다(3.4절). 이 구역에 해당 모델 행이 없으면 `MAPPING_MISSING` 입니다.
+- **서버 선택.** XML 응답에 서버가 1대면 그 서버가 이 호스트입니다. 여러 대(UCSM 도메인)면 **서비스 프로파일 이름(`lsServer`)이 hostname 과 같은 서버**를 고르고(대소문자 무시), 하나도 같지 않으면 모든 서버를 `<호스트>/<서버 dn>` 이름으로 나열하며 비고에 `[XML SP=서비스프로파일]` 를 붙입니다.
+- **폴백.** XML 로그인 전에 실패하면(연결 실패·타임아웃·XML 이 아닌 응답·HTTP 오류) 그 호스트만 **Redfish 로 1번 다시 점검**하고 비고에 `XML 실패 → Redfish` 를 남깁니다. `AUTH_FAIL`(계정 거부)은 계정 잠금을 막으려고 **다시 시도하지 않습니다**.
+- **XML 대상은 점검만 합니다.** 전체비교 화면에서는 `[N/A]` 와 비고 `XML 대상 — 비교 제외(읽기 전용)` (오류가 아니라 제외라 회색)로 보이고, 수정(설정) 계획에서도 빠집니다.
+- 접두어 목록을 비우면(`xml_host_prefix=`) 이름으로는 XML 로 보내지 않고 `-user-xml` 목록만 XML 로 갑니다. 이때 TUI 는 hostname 이어도 Cisco(XML) 대상을 묻고 “IP·이름 모두 Cisco(XML) 대상에 넣으십시오” 라고 안내합니다.
+- 장비 없이 혼합 실행을 눌러 보려면 [testcase/README.md](testcase/README.md) 의 `demo_env.sh` (c101·c201·c202·c301)를 쓰십시오. **실제 Cisco 장비에는 접속해 본 적이 없습니다.** 첫 실행 때 확인할 항목은 [FIRST_RUN.md](FIRST_RUN.md) 입니다.
 
 ### 2.1 점검과 설정 — `bios_check.sh`
 
@@ -598,9 +624,13 @@ OK                     1  → results/20261007_162940/ok.txt (OK·PENDING_OK 호
 
 `mockbmc.sh` 는 `testdata/` 의 **합성 Redfish 트리**를 BMC 처럼 서빙하는 개발·검증용 서버입니다(빌드 완료 `bin/mockbmc`·`bin/mockbmc_os6` 가 저장소에 있어 Go 없이 바로 실행되며, 바이너리가 없을 때만 go 로 빌드). 실제 서버에 쓰기 전에 흐름을 익히는 용도이며 임시 conf 를 따로 쓰는 방법은 [사용법.txt](사용법.txt) 의 “mock 연습” 에 있습니다. testdata 의 설명과 한계는 [testdata/README.md](testdata/README.md) 를 보십시오.
 
+`mockucsm`(`cmd/mockucsm`·`internal/mockucsm`)은 Cisco UCSM/CIMC XML API 를 흉내 내는 mock 입니다. `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답하고 `configConfMo` 등 나머지는 errorCode 로 거절하며, 서버 정의(JSON)는 합성 값입니다. `testcase/demo_env.sh` 가 Redfish mock 과 함께 띄웁니다. 빌드 완료 `bin/mockucsm`·`bin/mockucsm_os6` 가 필요합니다(없으면 `go build -o bin/mockucsm ./cmd/mockucsm`).
+
 ### 2.9 Cisco UCSM 점검 (읽기 전용) — `ucsm_check.sh`
 
-UCSM 이 관리하는 블레이드(B200 M4/M5, B480 M5, X210c M7 등)는 Redfish 가 없어 `bios_check.sh` 로는 `UNSUPPORTED` 가 됩니다. 이 블레이드는 `ucsm_check.sh` 로 UCSM XML API 를 읽어, 매핑 TSV(`bios_json/standard_map/standard_bios_map_xml.tsv`)의 기대값과 비교합니다. **읽기 전용이며 설정 기능이 없습니다.**
+UCSM 이 관리하는 블레이드(B200 M4/M5, B480 M5, X210c M7 등)는 Redfish 가 없어 `bios_check.sh` 로는 `UNSUPPORTED` 가 됩니다. 이 블레이드는 `ucsm_check.sh` 로 UCSM XML API 를 읽어, 프로파일(`profiles/<이름>.tsv`, 기본 VM)의 `# [xml]` 구역 기대값과 비교합니다. **읽기 전용이며 설정 기능이 없습니다.**
+
+> `bios.sh` 도 같은 XML 점검을 씁니다. Redfish 대상과 섞어 점검하려면 `ucsm_check.sh` 대신 `bash bios.sh`(2.0절 “Cisco(XML) 혼합 대상”)를 쓰십시오. `ucsm_check.sh` 는 **UCSM 주소만 적은 목록**을 XML 로만 점검하는 독립 도구이고, `bios.sh` 는 호스트 이름(`hostname-m`)의 관리 주소로 접속해 서비스 프로파일 이름으로 서버를 고릅니다.
 
 ```bash
 bash ucsm_check.sh                                # user.txt 의 UCSM 주소를 점검
@@ -608,15 +638,15 @@ bash ucsm_check.sh -user ucsm.txt -list-max 50    # 나머지 인자는 biostool
 ```
 
 - `user.txt` 의 한 줄은 블레이드 BMC 가 아니라 **UCSM(Fabric Interconnect VIP) 주소**입니다. 계정은 `bios.conf` 의 `user`, 비밀번호는 `bash encrypt.sh` 로 만든 `pass.enc` 를 씁니다(읽기 전용 계정 권장).
-- UCSM 에 보내는 호출은 `POST https://<UCSM>/nuova` 의 `aaaLogin` → `configResolveClass`(computeBlade, 그리고 매핑의 `bios*` 클래스마다 1회) → `aaaLogout` 뿐입니다. 그 밖의 요청은 전송 전에 코드가 막습니다.
+- UCSM 에 보내는 호출은 `POST https://<UCSM>/nuova` 의 `aaaLogin` → `configResolveClass`(computeBlade·computeRackUnit·lsServer, 그리고 `# [xml]` 구역의 `bios*` 클래스마다 1회) → `aaaLogout` 뿐입니다. 그 밖의 요청은 전송 전에 코드가 막습니다.
 - 결과는 `results/<일시>/ucsm_result.tsv` 에 쓰며 Redfish 의 `result.tsv` 와 섞지 않습니다. 열: `ucsm_host ip protocol mgmt_version server_dn vendor model std_name xml_class attribute expected current result`. 서버·항목마다 1행이고, 호스트 단위 오류는 `server_dn`·`std_name` 이 `-` 인 1행입니다.
-- 항목 판정: `OK` · `FAIL` · `UNVERIFIED` · `MAPPING_MISSING` · `UNSUPPORTED`. 호스트 오류: `AUTH_FAIL` · `UNREACHABLE` · `TIMEOUT` · `XML_ERROR`. 매핑 TSV 에는 `verified=Y` 행이 없어서 불일치는 모두 `UNVERIFIED` 로 보입니다.
-- `-dry-run`, `-profile`, `-from-dump`, `-retry-from` 과 `retry.txt` 는 없습니다(`ucsm` 이 이 옵션을 거부합니다). 실패한 UCSM 은 `-user` 로 그 주소만 다시 실행하십시오.
+- 항목 판정: `OK` · `FAIL` · `UNVERIFIED` · `MAPPING_MISSING` · `UNSUPPORTED`. 호스트 오류: `AUTH_FAIL` · `UNREACHABLE` · `TIMEOUT` · `XML_ERROR`. 저장소 프로파일의 `# [xml]` 행에는 `verified=Y` 가 없어서 불일치는 모두 `UNVERIFIED` 로 보입니다.
+- 기대값은 `-profile <이름>`(기본 VM)의 `# [xml]` 구역입니다 (`-xml-map` 과 `standard_bios_map_xml.tsv` 는 없어졌습니다). `-dry-run`, `-from-dump`, `-retry-from` 과 `retry.txt` 는 없습니다(`ucsm` 이 이 옵션을 거부합니다). 실패한 UCSM 은 `-user` 로 그 주소만 다시 실행하십시오.
 
 실제 프롬프트 사용 예시입니다(합성 mock UCSM 1대, 블레이드 3대를 `bash ucsm_check.sh` 로 점검한 실제 출력이며 호스트가 `127.0.0.1:포트` 로 보이는 것은 mock 이라서입니다). `system_profile` 은 조사 데이터에 후보가 둘(`vpCPUPerformance=hpc`, `vpEnergyPerformance=performance`)이라 **둘 다 각각 별도 항목으로 점검**합니다.
 
 ```text
-UCSM XML 매핑: bios_json/standard_map/standard_bios_map_xml.tsv (행 12개, 조회 클래스 3개: biosVfCPUPerformance, biosVfIntelHyperThreadingTech, biosVfProcessorEnergyConfiguration)
+UCSM XML 기대값: profiles/VM.tsv # [xml] 구역 (행 12개, 조회 클래스 3개: biosVfCPUPerformance, biosVfIntelHyperThreadingTech, biosVfProcessorEnergyConfiguration)
 대상은 UCSM(Fabric Interconnect VIP) 주소입니다. 호출: aaaLogin → configResolveClass(읽기) → aaaLogout
 
 == UCSM BIOS 점검 결과 (XML API, 읽기 전용 / 2026-10-10 08:36) ==
@@ -910,7 +940,7 @@ $ bin/biostool account change
 | `-j <N>` | `100` (최대 300) | account | 동시 처리 수. 처음 10대는 한 대씩 처리(웜업) |
 | `-dry-run`·`-no-prompt`·`-stdin-ok` | | account | create: 계획만 / 묻지 않고 목록만 / 터미널이 아닌 입력의 y/n 허용. change 는 `-dry-run` 만 의미 있음(새 비밀번호는 터미널 직접 입력) |
 | `-list-max <N>` | check 100 / allcheck 20 / ucsm 20 / account 20 | check allcheck ucsm account | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수. ucsm: FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 |
-| `-xml-map <파일>` | `bios_json/standard_map/standard_bios_map_xml.tsv` | ucsm | UCSM 기대값 매핑 TSV |
+| `-user-xml <파일>` | (없음) | bios | XML API(UCSM/CIMC)로만 점검할 대상 목록 (IP·이름, 점검만 — 전체비교·설정 제외). 이름 대상은 bios.conf `xml_host_prefix`(기본 c)로도 XML 로 갑니다 |
 | `-fail-max <N>` | `200` | check | `[FAIL 상세]`·`[설정 불가]`·`[적용 안 됨]` 에 보여 줄 최대 줄 수(넘으면 `fail.tsv`·`apply_result.tsv` 안내) |
 | `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 모델을 적어도 확인용) |
 | `-ignore <파일>` | `ignore_attrs.txt` | allcheck | 비교 제외 속성 목록. 파일이 없으면 내장 기본 목록, `-ignore` 로 직접 준 파일이 없으면 오류 |
@@ -940,7 +970,7 @@ $ bin/biostool account change
 | `bios_check.sh` | `[--profile <이름>] [biostool check 옵션...]` | 옛 전용 옵션이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘김(2.0절). 그 밖에는 파일 확인 → 프로파일 메뉴(3회까지 재입력) → `biostool check -profile …`. `-retry-from` 이면 `user.txt` 불필요, `-from-dump` 이면 `pass.enc`·`key.bin` 불필요. `-h` 도움말 |
 | `xml.sh` | `[--compact] [대상...]` | 대상 인자를 쉼표로 묶어 `biostool dump -targets …`. 대상이 없으면 `user.txt`. **설정은 항상 `./bios.conf` 를 쓰며 `-conf` 등 다른 옵션은 받지 않습니다**(알 수 없는 옵션은 오류). 일부 호스트가 실패해도 안내를 보여 준 뒤 종료코드를 전달 |
 | `all_bios_check.sh` | `[-ref <비교서버>] [biostool allcheck 옵션...]` | 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘김(옛 대화형 메뉴 대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력 은 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만). 그 밖에는 파일 확인 후 `biostool allcheck` 실행 |
-| `ucsm_check.sh` | `[-user <파일>] [-xml-map <파일>] [-list-max N] ...` | 파일 확인 후 `biostool ucsm` 실행(읽기 전용). `-h` 도움말. 2.9절 |
+| `ucsm_check.sh` | `[-user <파일>] [-profile <이름>] [-list-max N] ...` | 파일 확인 후 `biostool ucsm` 실행(읽기 전용). `-h` 도움말. 2.9절 |
 | `account_create.sh` | `[-dry-run] [-ucsm] [-j N] [biostool account create 옵션...]` | 파일(bios.conf·user.txt·pass.enc·rf.conf) 확인 후 `biostool account create`. 2.12절 |
 | `encrypt.sh` | (인자 없음) | 비밀번호를 두 번 입력받아 같을 때만 `pass.enc`·`key.bin`(권한 600) 생성 |
 | `mockbmc.sh` | `<트리이름> [포트]` 또는 `-dir <경로> -listen <주소> -user <ID> [-v]` | mock BMC 기동(개발·검증용). 비밀번호는 환경변수 `MOCKBMC_PASS`. 종료 시 집계 한 줄 출력 |
@@ -971,6 +1001,7 @@ $ bin/biostool account change
 | `protect_attrs` | (비어 있음) | | **절대 바꾸지 않을** BIOS 속성 패턴 **추가**. `\|` 로 구분, `*` 는 와일드카드, 대소문자 무시(예: `MemTest\|*Watchdog*\|ProcX2Apic`). 서버 고유값·부팅·보안·RAID·PXE·NIC 관련은 내장 목록으로 이미 막혀 있고 이 키나 `ignore_attrs.txt` 로 끌 수 없음(더하기만). 2.0절 |
 | `refs_dir` | `refs` | | 전체비교 기준 속성 JSON 폴더(`-ref-json` 이름 검색, TUI 기준 목록). `bios_export.sh` 결과 `attrs/<호스트>.json` 을 넣어 둠 |
 | `auto_profile` | (비어 있음) | | 비대화형 `-auto`/`-auto-check` 에서 `-profile` 을 주지 않았을 때 쓸 프로파일 이름. 비우면 `-profile` 필수 |
+| `xml_host_prefix` | `c` | | `bios` 에서 hostname(`-m`·포트를 뗀 이름, 대소문자 무시)이 이 접두어로 시작하면 Redfish 대신 Cisco UCSM/CIMC **XML API** 로 점검(읽기 전용, 전체비교·설정 제외). 쉼표로 여러 개(`c,ucs`). 비우면 이름으로는 XML 로 보내지 않음(`-user-xml` 목록만 XML). IP 대상은 접두어와 관계없이 Redfish. 2.0절 |
 
 같은 BMC 로 가는 연속 요청은 최소 100ms 간격을 두며(BMC 부하 방지), 환경변수 프록시는 거치지 않고 리다이렉트는 따라가지 않습니다.
 
@@ -994,6 +1025,21 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `attribute` | BMC 의 속성 이름(대소문자 무시로 찾음) |
 | `value` | 기대값. `A\|B` 로 허용값 여러 개(하나라도 같으면 OK). **값 비교는 대소문자까지 같아야 함**(Cisco 처럼 소문자 값은 행에 그대로). 둘 다 10진 정수면 정수로 비교(`05` = `5`) |
 | `verified` | `Y` 또는 `N` |
+
+**구역 `# [redfish]` / `# [xml]`.** 한 파일에 두 프로토콜의 기대값을 함께 둡니다. 주석 줄 `# [redfish]` 아래 행은 Redfish(Bios Attributes) 점검용(위 표 그대로), `# [xml]` 아래 행은 Cisco UCSM/CIMC XML API 점검용입니다(대소문자·공백 무시, 구역 표시가 없는 윗부분은 `[redfish]`). 열은 같은 6열이고 `[xml]` 구역에서만 다음이 다릅니다.
+
+```text
+# [xml]
+CISCO	UCS B200 M4	system_profile	biosVfCPUPerformance.vpCPUPerformance	hpc	N
+CISCO	UCS B200 M4	hyper_threading	biosVfIntelHyperThreadingTech.vpIntelHyperThreadingTech	enabled	N
+# UNMAPPED CISCO UCS B200 M4 llc_prefetch: none_of_candidates
+```
+
+- `attribute` 는 `<xml_class>.<xml_attribute>` 입니다(`xml_class` 는 `bios` 로 시작하는 클래스만). `value` 는 UCSM 이 보고하는 **소문자 그대로** 적습니다.
+- `vendor` 는 `CISCO` 만 쓸 수 있고 모델에 `*` 를 쓸 수 없습니다(모델 이름은 UCSM 표기 `UCS B200 M5` ↔ PID `UCSB-B200-M5` 를 같게 비교). `verified=Y` 는 쓰지 않습니다(XML 은 읽기 전용이라 설정 대상이 아님).
+- `# UNMAPPED <벤더> <모델> <std_name>: <사유>` 주석은 그 항목이 `MAPPING_MISSING` 인 사유로 쓰입니다(조사했으나 대응하는 XML 속성이 없는 항목).
+- 같은 `std_name` 에 행이 둘이면 둘 다 각각 점검합니다(예: `system_profile` 의 `vpCPUPerformance=hpc` 와 `vpEnergyPerformance=performance`).
+- `bios.sh`·`ucsm_check.sh`(`-profile <이름>`, 기본 VM)가 이 구역을 읽습니다. 예전의 `bios_json/standard_map/standard_bios_map_xml.tsv` 와 `-xml-map` 은 없어졌습니다.
 
 규칙:
 
@@ -1101,6 +1147,8 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `[difference]` | `FAIL`, `UNVERIFIED`, `PENDING_EXISTS`, `PENDING_NO_JOB`, `DIFF`, `ONLY_HOST`(기준에 없고 대상에만 있는 속성 — 기준값 `(없음)`) |
 | `[N/A]` | `MAPPING_MISSING`, `NO_DUMP`, `ONLY_REF`(대상에 속성 없음), 접속·조회 실패(`UNREACHABLE`·`AUTH_FAIL` 등 호스트 단위 오류, 화면에서는 태그·현재값·비고 빨강) |
 
+XML 로 점검한 호스트(Cisco)는 프로파일 점검 줄의 비고에 `XML` 이 붙고(폴백으로 Redfish 가 되면 `XML 실패 → Redfish`), 전체비교 줄은 `[N/A]` + 비고 `XML 대상 — 비교 제외(읽기 전용)` 입니다(내부 상태 `XML_READONLY`, 오류가 아니라 제외라 화면에서 회색). 서비스 프로파일로 서버를 가렸을 때는 비고에 `[XML SP=...]` 가 붙습니다.
+
 호스트 단위로 `CANCELED`(TUI 에서 Ctrl+X 로 조회를 취소해 접속하지 않은 호스트)는 `retry.txt` 에 모이므로 그 파일을 `-user` 로 넘겨 `bios.sh` 를 다시 실행하면 됩니다.
 
 #### 사전조사(`dump`) — `index.tsv` 의 `status`
@@ -1129,10 +1177,11 @@ HPE	DL360 Gen11	hyper_threading	ProcHyperthreading	Enabled	N
 | `bios_check.sh`, `xml.sh`, `all_bios_check.sh`, `bios_export.sh`, `encrypt.sh`, `lib.sh` | 실행 래퍼(점검·설정 / 사전조사 / 전체 비교 / 속성 JSON 추출 / 비밀번호 암호화 / 공용 함수). `bios_check.sh`·`all_bios_check.sh` 는 조건에 따라 `bios.sh` 로 넘김 |
 | `mockbmc.sh` | mock BMC 기동(개발·검증용). 빌드 완료 `bin/mockbmc`(`_os6`)가 있으면 그대로 사용 |
 | `testcase/` | `rf_fallback_case.sh`(2순위 계정·접속불가 구분·표기 선택 시험)와 설명. 2.11절 |
-| `bin/biostool`, `bin/biostool_os6`, `bin/mockbmc`, `bin/mockbmc_os6` | 빌드 완료 바이너리(os8 / RHEL6, mock 서버 포함) — 저장소에 **커밋**되어 있음 |
-| `cmd/biostool/` | Go 소스(점검·설정·덤프·전체 비교·재시도·Redfish 클라이언트, 통합 점검 `unified*.go`·TUI `tui_*.go`·출력 `lineout.go`/`csvout.go`/`checkres.go`·설정 계획 `setplan.go`·보호 속성 `protect.go`)와 테스트 |
+| `bin/biostool`, `bin/biostool_os6`, `bin/mockbmc`, `bin/mockbmc_os6`, `bin/mockucsm`, `bin/mockucsm_os6` | 빌드 완료 바이너리(os8 / RHEL6, mock 서버 포함) — 저장소에 **커밋**되어 있음 |
+| `cmd/biostool/` | Go 소스(점검·설정·덤프·전체 비교·재시도·Redfish 클라이언트, Cisco XML 대상 점검 `xmlhost.go`, 통합 점검 `unified*.go`·TUI `tui_*.go`·출력 `lineout.go`/`csvout.go`/`checkres.go`·설정 계획 `setplan.go`·보호 속성 `protect.go`)와 테스트 |
 | `refs/` | (선택) 전체비교 기준 속성 JSON 폴더. 2.0절 |
 | `cmd/mockbmc/`, `internal/mockbmc/` | mock BMC 서버와 가상 BMC 수천 대를 한 리스너에 올리는 Farm(시험용) |
+| `cmd/mockucsm/`, `internal/mockucsm/` | Cisco UCSM/CIMC XML API mock 서버(시험용, `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답). `testcase/demo_env.sh` 가 사용 |
 | `testdata/` | mock 용 **합성** Redfish 트리 6종(+ 테스트용 프로파일). 실제 덤프가 아님 → [testdata/README.md](testdata/README.md) |
 | `profiles/VM.tsv` | 표준값(프로파일) — 엑셀 표 시작값, 전부 `verified=N` |
 | `profiles/VM_research.tsv` | 표준값(프로파일, 연구용) — 조사 데이터 기반 Redfish(JSON) 값, 전부 `verified=N`. 3.4절 |
