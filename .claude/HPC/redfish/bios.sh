@@ -28,7 +28,7 @@ usage() {
                                    Cisco 장비는 XML 선택: hostname 이 c 로 시작하면 자동, IP 는 -user-xml 파일에
                                    (접두어는 bios.conf xml_host_prefix, -user-xml 만 주면 user.txt 는 읽지 않음)
   -plain                           TUI 없이 색 없는 평문으로 출력 (설정 질문 없음)
-  -ref <hostname>                  전체비교 비교서버 (쉼표로 여러 개)
+  -ref <hostname>                  전체비교 비교서버 (쉼표·공백으로 여러 개)
   -ref-json <파일>                  전체비교 기준 속성 JSON (파일 이름만 주면 bios.conf refs_dir 에서 찾음)
   -diff <파일>                      전체비교 기준 목록 diff.txt
   -ignore <파일>                    전체비교에서 제외할 속성 목록 (기본 ignore_attrs.txt)

@@ -209,8 +209,8 @@ flowchart TD
     C["3. 접속·조회 (호스트당 로그인 1회, GET 만)<br/>BIOS 전체 속성을 한 번에 읽어<br/>프로파일 판정과 전체비교에 함께 사용<br/>진행 표시 · Ctrl+X 취소 (남은 호스트는 CANCELED)<br/>result.tsv · profile_ CSV 저장"]
     C --> D["4. 결과 TUI [프로파일 점검] 화면<br/>[OK] · [difference] · [N/A] 색상 줄<br/>←→ 벤더 · Enter 로 관리망 그룹 · q 한 단계 뒤로 · 필터 · 요약"]
     D --> E{"키"}
-    E -->|"q 두 번 (설정할 항목 있음) 또는 e"| SET
-    E -->|"q 두 번 (항목 없음 · 이미 거절·적용)"| SUM
+    E -->|"e"| SET
+    E -->|"q 두 번 (묻지 않고 종료)"| SUM
     E -->|"Tab (처음)"| R{"기준 선택<br/>-ref · -ref-json · -diff 를 줬으면 묻지 않음<br/>r 키로 다시 고를 때는 항상 메뉴"}
     R -->|"비교서버 hostname<br/>(비우면 diff.txt)"| CP
     R -->|"refs 폴더의 JSON<br/>(bios_export 결과)"| CP
@@ -219,8 +219,8 @@ flowchart TD
     CP["전체비교 (대상에는 다시 접속하지 않음)<br/>비교서버만 추가 조회 · 같은 모델끼리만 비교<br/>BIOS 버전이 달라도 속성 이름 목록이 같으면 허용<br/>기준 서버 자신은 자기 값으로 OK (REFERENCE)<br/>제외 = ignore_attrs.txt + exclude_attrs<br/>compare_ CSV 저장"] --> CT["[전체 설정 비교] 화면<br/>Tab 으로 두 화면을 오감 (화면마다 위치·필터 유지)"]
     CT -->|"Tab"| D
     CT -->|"r 기준 다시 선택"| R
-    CT -->|"q 두 번 (설정할 항목 있음) 또는 e"| SET
-    CT -->|"q 두 번 (항목 없음 · 이미 거절·적용)"| SUM
+    CT -->|"e"| SET
+    CT -->|"q 두 번 (묻지 않고 종료)"| SUM
     SET{"-from-dump 인가"}
     SET -->|예| NS(["설정하지 않음 (접속 안 함)"])
     NS --> BK

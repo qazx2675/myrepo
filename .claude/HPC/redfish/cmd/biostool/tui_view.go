@@ -615,6 +615,9 @@ func (u *TUI) InputLines(title string) ([]string, bool) {
 			return true
 		case k.isRune(tuiCtrlX):
 			return true
+		case (k.isRune(tuiTab) || k.k == tkBackTab) && len(u.tabs) > 1:
+			u.tabOut = true
+			return true
 		case k.isRune(tuiBackspace) && len(p.buf) == 0 && len(p.lines) > 0:
 			p.buf = []rune(p.lines[len(p.lines)-1])
 			p.lines = p.lines[:len(p.lines)-1]

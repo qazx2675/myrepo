@@ -140,8 +140,8 @@ func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 		{"profile", "2"},              // OTHER, VM
 		{"profile-result", "\t"},
 		{"ref", "1"},
-		{"ref-host", ua + "\r"},
-		{"compare-result", "qq"},
+		{"ref-host", ua + "\x04"},
+		{"compare-result", "e"},
 		{"ask-set", "n"},
 		{"compare-result", "qq"}, // 거절하면 결과 보기로 돌아오고, 다시 q 두 번이면 묻지 않고 끝
 	}
@@ -209,13 +209,13 @@ func TestBiosFlowViewTabsAndReRef(t *testing.T) {
 		{"profile", "2"},
 		{"profile-result", "f\t"}, // 3: 프로파일 화면 difference 필터 → Tab
 		{"ref", "1"},
-		{"ref-host", ua + "\r"},
+		{"ref-host", ua + "\x04"},
 		{"compare-result", "o\t"}, // 6
 		{"profile-result", "\t"},  // 7: 필터 유지
 		{"compare-result", "r"},   // 8: 기준을 묻지 않고 비교 화면 (필터 유지)
 		{"ref", "1"},
-		{"ref-host", ub + "\r"},
-		{"compare-result", "qq"}, // 11
+		{"ref-host", ub + "\x04"},
+		{"compare-result", "e"}, // 11
 		{"ask-set", "n"},
 		{"compare-result", "qq"},
 	}
@@ -296,7 +296,7 @@ func TestBiosFlowViewTabRefCanceled(t *testing.T) {
 		{"ref", "\x1b"},
 		{"profile-result", "\t"},
 		{"ref", "1"},
-		{"ref-host", ua + "\r"},
+		{"ref-host", ua + "\x04"},
 		{"compare-result", "qq"},
 	}
 	fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"})
@@ -319,18 +319,18 @@ func TestBiosFlowViewTabOutOfRefChooser(t *testing.T) {
 	o.user, o.profile = e.writeFile("targets.txt", ua), "VM"
 	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
 	script := []flowStep{
-		{"profile-result", "\t"}, // 0: 기준 목록이 뜬다
-		{"ref", "\t"},            // 1: 목록에서 Tab → 프로파일 화면
-		{"profile-result", "\t"}, // 2: 다시 Tab → 목록
-		{"ref", "1"},             // 3: 비교서버 hostname 입력
-		{"ref-host", "\t"},       // 4: 입력 줄에서 Tab → 프로파일 화면
-		{"profile-result", "\t"}, // 5
-		{"ref", "1"},             // 6
-		{"ref-host", ua + "\r"},  // 7: 비교 실행
-		{"compare-result", "r"},  // 8: 기준 다시 고르기
-		{"ref", "\t"},            // 9: 목록에서 Tab → 프로파일 화면 (비교 결과 유지)
-		{"profile-result", "\t"}, // 10: Tab → 이미 비교한 화면 (다시 묻지 않음)
-		{"compare-result", "qq"}, // 11
+		{"profile-result", "\t"},  // 0: 기준 목록이 뜬다
+		{"ref", "\t"},             // 1: 목록에서 Tab → 프로파일 화면
+		{"profile-result", "\t"},  // 2: 다시 Tab → 목록
+		{"ref", "1"},              // 3: 비교서버 hostname 입력
+		{"ref-host", "\t"},        // 4: 입력 줄에서 Tab → 프로파일 화면
+		{"profile-result", "\t"},  // 5
+		{"ref", "1"},              // 6
+		{"ref-host", ua + "\x04"}, // 7: 비교 실행
+		{"compare-result", "r"},   // 8: 기준 다시 고르기
+		{"ref", "\t"},             // 9: 목록에서 Tab → 프로파일 화면 (비교 결과 유지)
+		{"profile-result", "\t"},  // 10: Tab → 이미 비교한 화면 (다시 묻지 않음)
+		{"compare-result", "qq"},  // 11
 	}
 	fr, err := runFlowTC(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"}, func(i int, f *biosFlow) {
 		switch i {
@@ -605,7 +605,7 @@ func TestBiosFlowOneShotOptionsAutoCompare(t *testing.T) {
 	script := []flowStep{
 		{"compare-auto", ""},
 		{"profile-result", "\t"}, // 1
-		{"compare-result", "qq"}, // 2
+		{"compare-result", "e"},  // 2
 		{"ask-set", "n"},
 		{"compare-result", "qq"},
 	}
@@ -643,15 +643,14 @@ func TestBiosFlowOneShotOptionsAutoCompare(t *testing.T) {
 }
 
 // q 는 한 단계 뒤로: 프로파일 고르기의 q → 대상 입력. 결과 맨 위의 q→Esc·N·Ctrl+X 는 끝내지 않고, e 는 수정 단계,
-// 거기서 취소하면 결과 보기로 돌아온다. q 두 번은 설정할 항목이 있으면 수정 단계, 거절 뒤 q 두 번이면 끝.
+// 거기서 취소하면 결과 보기로 돌아온다. q 두 번은 수정 여부를 묻지 않고 끝 (TestBiosFlowRefSplitAndQuitWithoutAsking).
 func TestBiosFlowQuitBackAndSetLoop(t *testing.T) {
 	for _, c := range []struct {
 		name   string
 		first  string // 결과 화면 첫 키
-		builds int    // ask-set 때까지 계획을 만든 횟수 (q 두 번 경로는 종료 판단 + 수정 단계로 2번)
+		builds int    // ask-set 때까지 계획을 만든 횟수
 	}{
 		{"e", "q\x1bN\x18e", 1},
-		{"qq", "qq", 2},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
@@ -691,7 +690,7 @@ func TestBiosFlowQuitBackAndSetLoop(t *testing.T) {
 					t.Errorf("화면에 %q 없음", want)
 				}
 			}
-			if c.name == "e" && (!strings.Contains(sc, tuiQuitConfirm) || !strings.Contains(sc, "Ctrl+X 는 진행 중 작업 취소입니다")) {
+			if !strings.Contains(sc, tuiQuitConfirm) || !strings.Contains(sc, "Ctrl+X 는 진행 중 작업 취소입니다") {
 				t.Errorf("종료 확인·Ctrl+X 안내가 그려져야 함")
 			}
 			if out := fr.out.String(); !strings.Contains(out, "설정: 설정하지 않았습니다") || !strings.Contains(out, "대상 1대 점검") {
@@ -913,5 +912,39 @@ func TestSinkProgress(t *testing.T) {
 	p.Stop()
 	if len(got) < 2 || !strings.HasPrefix(got[len(got)-1], "[2/4 접속·조회 2/3 · OK 1 difference 0 N/A 0 오류 1 · 경과 ") {
 		t.Errorf("sink = %q", got)
+	}
+}
+
+// 비교서버는 공백·줄바꿈으로 여러 개를 줄 수 있고(대상 입력과 같은 규칙), q 두 번은 수정 여부를 묻지 않고 끝낸다 (수정은 e 로만).
+func TestBiosFlowRefSplitAndQuitWithoutAsking(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"ProcHyperthreading": "Disabled"})
+	})
+	_, o := flowEnv(t, "")
+	var gotCmp *compareResult
+	swapFlowPlan(t, func(cfg *Config, u *unifiedRun, cmp *compareResult) *setPlan {
+		gotCmp = cmp
+		return &setPlan{Items: []setItem{{Host: ub, Attr: "ProcHyperthreading", From: "Disabled", To: "Enabled", Source: SetSrcProfile}}}
+	}, nil)
+	script := []flowStep{
+		{"targets", "2"},
+		{"targets-paste", ua + "\n" + ub + "\x04"},
+		{"targets-xml-paste", "\x04"},
+		{"profile", "2"},
+		{"profile-result", "\t"},
+		{"ref", "1"},
+		{"ref-host", ua + " " + ub + "\x04"},
+		{"compare-result", "qq"}, // 설정할 항목이 있어도 묻지 않고 끝 (ask-set 단계가 없어야 함)
+	}
+	fr, err := runFlowT(t, biosTUIArgs{O: o}, "", script, nil)
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	if gotCmp == nil || !strings.Contains(gotCmp.Label, ua) || !strings.Contains(gotCmp.Label, ub) {
+		t.Errorf("비교서버 2개가 모두 쓰여야 함: %+v", gotCmp)
 	}
 }

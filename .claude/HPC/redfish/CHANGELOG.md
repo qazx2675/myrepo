@@ -13,6 +13,11 @@
 - **XML 호스트는 점검만**: 전체비교는 `[N/A]` + 비고 `XML 대상 — 비교 제외(읽기 전용)`(내부 상태 `XML_READONLY`, 화면에서 회색), 수정(설정) 계획에서도 제외합니다.
 - **mock**: `cmd/mockucsm` + `internal/mockucsm`(UCSM XML API mock, `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답). `testcase/demo_env.sh` 에 c101(XML 단일)·c201/c202(도메인, 서비스 프로파일 이름으로 선택)·c301(XML 실패 → Redfish)과 `user_xml.txt` 추가. 빌드 완료 `bin/mockucsm`(`_os6`) 커밋.
 
+### 변경 (사용성)
+
+- **비교서버 입력 규칙 통일**: 전체비교 비교서버를 TUI 에서 입력 줄 하나(쉼표)가 아니라 대상 입력과 같은 여러 줄 입력(한 줄에 하나 또는 공백 구분, Ctrl+D 완료, 바로 Ctrl+D 면 diff.txt)으로 받습니다. `-ref` 도 쉼표·공백·줄바꿈으로 여러 개. 이 입력 화면에서도 Tab 으로 프로파일 화면으로 돌아갑니다.
+- **종료(q 두 번) 때 수정 여부를 묻지 않음**: 수정 단계는 `e` 로만 갑니다. q 두 번은 설정 여부와 관계없이 그대로 끝납니다.
+
 ### 변경
 
 - **프로파일 `profiles/*.tsv` 에 구역 `# [redfish]` / `# [xml]` 추가**(`profile.go`): `[xml]` 행의 attribute 는 `클래스.속성`(예: `biosVfCPUPerformance.vpCPUPerformance`), 벤더는 CISCO 만, `*` 모델 불가. `# UNMAPPED` 주석은 `MAPPING_MISSING` 사유. 기존 `bios_json/standard_map/standard_bios_map_xml.tsv` 는 삭제하고 그 행을 `profiles/VM.tsv`·`VM_research.tsv` 의 `# [xml]` 구역으로 옮겼습니다.
@@ -27,8 +32,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 7876770 | 6e5e3d44fbbac69e4a8b5c9bcbb775935cdee5a58811b4a8116587cb7d8b8b8f |
-| bin/biostool_os6 | go1.20.14 | 6492160 | e52040cbab86deb87b0538d25f2b393f4c1f7684ccadf6b4c267c453102c6789 |
+| bin/biostool | go1.26.5 | 7876770 | 84824c08c3e9c6f95859e5e9d8da6b40454ce5834d6591f8769e953abcc82b0b |
+| bin/biostool_os6 | go1.20.14 | 6492160 | 20748309a9c837df821e118a06147f42630fcada56d01e81876a05c59fa3d76a |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 

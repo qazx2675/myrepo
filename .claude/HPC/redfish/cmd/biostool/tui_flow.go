@@ -7,7 +7,7 @@ package main
 //	  r (전체 설정 비교 화면) → 기준 다시 선택 → 다시 비교
 //	  -ref/-ref-json/-diff 를 줬으면 수집 직후 바로 전체 설정 비교까지 (Tab 을 기다리지 않음)
 //	  q 는 한 단계 뒤로 (관리망 그룹 줄 → 벤더 줄, 미리보기·설정 결과 → 결과 보기, 프로파일 고르기 → 대상 입력)
-//	  벤더 줄에서 q 두 번 → 설정할 항목이 있으면 수정 단계, 없으면(또는 이미 거절·적용) 끝. e → 어디서든 수정 단계
+//	  벤더 줄에서 q 두 번 → 묻지 않고 끝. e → 어디서든 수정 단계
 //	→ 수정 확인 1: 차이 항목 전부를 "현재값 -> 변경값 (수정대상)" / "(수정제외: 사유)" 로 보이고
 //	  "위 수정대상을 적용할까요?" (프로파일 + 전체비교(했으면) difference 를 함께)
 //	→ 수정 확인 2: 수정제외 항목이 있을 때만 그것만 다시 보이고 "수정제외 항목을 확인했습니다. 진행할까요?"
@@ -159,8 +159,8 @@ func (f *biosFlow) run() error {
 	if n := f.countStatus(StatusCanceled); n > 0 {
 		ui.SetMessage(fmt.Sprintf("취소했습니다 — 조회하지 않은 %d대는 %s (retry.txt)", n, StatusCanceled))
 	}
-	// 결과 보기 ↔ 수정 단계: e(어디서든) 또는 맨 위에서 q 두 번(설정할 항목이 있을 때)이면 수정 단계로 가고,
-	// 거기서 취소·거절하면 결과 보기로 돌아온다. 설정할 항목이 없거나 이미 거절·적용했으면 q 두 번에 끝.
+	// 결과 보기 ↔ 수정 단계: e(어디서든)로만 수정 단계로 가고, 거기서 취소·거절하면 결과 보기로 돌아온다.
+	// 맨 위에서 q 두 번은 수정 여부를 묻지 않고 끝낸다.
 	for !ui.Quit() {
 		act := f.browse()
 		if ui.Quit() {
@@ -170,7 +170,10 @@ func (f *biosFlow) run() error {
 			ui.SetMessage("설정은 이미 적용했습니다 — 다시 점검한 뒤 설정하십시오")
 			continue
 		}
-		if act != TUIEdit && (f.applied || f.declined || !f.settable()) {
+		if act != TUIEdit { // q 두 번은 묻지 않고 끝 (수정 단계는 e 로만). 요약의 "설정:" 줄만 남긴다
+			if !f.applied && !f.declined {
+				f.settable()
+			}
 			break
 		}
 		if f.setStep() {
@@ -182,13 +185,13 @@ func (f *biosFlow) run() error {
 		if f.applied {
 			ui.SetMessage("설정: " + f.setNote + " — q 두 번 누르면 끝납니다")
 		} else if f.setNote != "" {
-			ui.SetMessage(f.setNote + " — 결과 보기로 돌아왔습니다 (q 두 번: 설정 없이 종료, e: 수정 단계)")
+			ui.SetMessage(f.setNote + " — 결과 보기로 돌아왔습니다 (q 두 번: 종료, e: 수정 단계)")
 		}
 	}
 	return nil
 }
 
-// settable 은 종료(q 두 번) 때 수정 단계로 갈지입니다: 덤프 읽기가 아니고 설정할 항목이 있으면 true.
+// settable 은 설정할 항목이 있는지입니다 (덤프 읽기가 아니고 항목이 있으면 true). 아니면 요약의 "설정:" 줄을 남긴다.
 // 아니면 요약의 "설정:" 줄을 남긴다.
 func (f *biosFlow) settable() bool {
 	if f.a.O.fromDump != "" {
@@ -493,14 +496,14 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 		return compareRef{}, false
 	case i == 0:
 		f.wait("ref-host")
-		h, ok := f.ui.InputLine("비교서버 hostname (쉼표로 여러 개, 비우면 "+flowDiffFile+")", "")
+		hs, ok := f.ui.InputLines("비교서버 hostname (한 줄에 하나 또는 공백 구분, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")")
 		if !ok {
 			return compareRef{}, false
 		}
-		if h == "" {
-			return compareRef{DiffFile: flowDiffFile}, true
+		if h := splitTargets(strings.Join(hs, "\n")); len(h) > 0 {
+			return compareRef{Hosts: h}, true
 		}
-		return compareRef{Hosts: []string{h}}, true
+		return compareRef{DiffFile: flowDiffFile}, true
 	case i <= len(good):
 		return compareRef{JSONPath: good[i-1].Path}, true
 	}

@@ -260,7 +260,7 @@ func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan str
 	var entries []refEntry
 	var label string
 	if len(ref.Hosts) > 0 {
-		entries = parseRefList(strings.NewReplacer(",", "\n", ";", "\n").Replace(strings.Join(ref.Hosts, "\n")))
+		entries = parseRefList(strings.NewReplacer(",", "\n", ";", "\n", " ", "\n", "\t", "\n").Replace(strings.Join(ref.Hosts, "\n")))
 		if len(entries) == 0 {
 			return nil, "", fmt.Errorf("비교서버 hostname 이 없습니다")
 		}

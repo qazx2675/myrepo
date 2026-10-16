@@ -48,7 +48,7 @@ func resolveRefJSONPath(p, refsDir string) string {
 
 func cmdBios(args []string) error {
 	fs, o := newFlagSet("bios")
-	ref := fs.String("ref", "", "전체비교 비교서버 hostname (쉼표로 여러 개). 대상 목록에 있으면 다시 접속하지 않음")
+	ref := fs.String("ref", "", "전체비교 비교서버 hostname (쉼표·공백으로 여러 개). 대상 목록에 있으면 다시 접속하지 않음")
 	refJSON := fs.String("ref-json", "", "전체비교 기준 속성 JSON (bios_export / allcheck -export-attrs 결과, 파일 이름만 주면 refs_dir 에서 찾음)")
 	diff := fs.String("diff", "", "전체비교 기준 목록 diff.txt (모델별 기준 hostname)")
 	ignore := fs.String("ignore", "ignore_attrs.txt", "전체비교에서 제외할 속성 목록 (없으면 내장 기본 목록, bios.conf exclude_attrs 와 합침)")
