@@ -1,8 +1,8 @@
 // work_tui.go - v0.8.0 gossh 작업 화면 (TUI s / CLI auto_setup s). 로직·저장·실행은 work.go, 화면 틀·입력은 flow_tui.go.
 //
 // 흐름: user(needSessionUser / CLI askUserCLI) → 작업 목록(파일별 묶음, 최신이 위)
-//   - n 새 작업: 호스트 붙여넣기 → (같은 목록이 있으면 재사용? y/n) → 명령 한 줄 → TUI 를 떠나 터미널에서 gossh 실행 → 목록
-//   - Enter: 1 같은 파일로 새 명령  2 재실행  3 실패·접속불가만 재실행(새 파일, 파생 표시)  4 결과 보기(less -R)  5 메모  6 호스트 목록
+//   - n 새 작업: 호스트 붙여넣기(Ctrl+D 로만 끝 — 빈 줄·엔터는 무시) → (같은 목록이 있으면 재사용? y/n) → 명령 한 줄 → TUI 를 떠나 터미널에서 gossh 실행 → 목록
+//   - Enter: 그 실행의 출력을 보여 주면서 아래에 1 같은 파일로 새 명령  2 재실행  3 실패·접속불가만 재실행(새 파일, 파생 표시)  4 결과 보기(less -R)  5 메모  6 호스트 목록
 //   - / 호스트 검색: 그 호스트가 들어 있던 작업과 명령을 시간순으로
 //
 // 실행은 awxrun.go 의 runAwxEnv 와 같은 방식으로 TUI 를 잠시 떠난다(workOutside): 키 읽기 정지 → 대체 화면 종료·termios 복원 →
@@ -70,6 +70,9 @@ type workState struct {
 	query      string
 	found      []*workRec
 	sel        *workRec
+	outLines   []string // 항목 메뉴 위에 보여줄 이 실행의 출력 (Enter 로 열 때 읽음)
+	outNote    string   // 출력을 못 읽은 사유
+	listSc     flowScroll // 메뉴로 들어가기 전 목록 스크롤
 	draft      workDraft
 	ask        string
 	askYes     func()
@@ -165,6 +168,9 @@ func (w *workState) key(ev keyEv) {
 		w.keyList(ev)
 	case wkMenu:
 		w.keyMenu(ev)
+		if w.step == w.back { // 메뉴를 닫고 돌아가면 목록 스크롤을 되돌린다
+			w.sc = w.listSc
+		}
 	case wkPaste:
 		w.keyPaste(ev)
 	case wkReuse:
@@ -218,10 +224,10 @@ func (w *workState) keyList(ev keyEv) {
 	switch {
 	case ev.k == kEnter:
 		if len(w.flat) > 0 {
-			w.sel, w.back, w.step = w.flat[w.cur], wkList, wkMenu
+			w.openMenu(w.flat[w.cur], wkList)
 		}
 	case ev.k == kRune && (ev.r == 'n' || ev.r == 'N'):
-		w.paste, w.pasted, w.pastedSet, w.back = pasteBuf{}, nil, map[string]bool{}, wkList
+		w.paste, w.pasted, w.pastedSet, w.back = pasteBuf{ctrlDOnly: true}, nil, map[string]bool{}, wkList
 		w.sc = flowScroll{Follow: true}
 		w.step = wkPaste
 	case ev.k == kRune && ev.r == '/':
@@ -235,9 +241,53 @@ func (w *workState) keyList(ev keyEv) {
 // workMenuItems: 항목 메뉴
 var workMenuItems = []string{"1 같은 파일로 새 명령", "2 재실행", "3 실패·접속불가만 재실행", "4 결과 보기", "5 메모", "6 호스트 목록 보기"}
 
+// workOutShowMax: 항목 메뉴 위에 보여주는 출력 줄 수 상한 (넘으면 끝쪽만 — 전체는 4 결과 보기)
+const workOutShowMax = 5000
+
+// openMenu: Enter — 이 실행의 출력을 읽어 위에 보여 주고 아래에 1~6 메뉴를 둔다
+func (w *workState) openMenu(r *workRec, back int) {
+	w.listSc = w.sc
+	w.sel, w.back, w.step = r, back, wkMenu
+	w.sc = flowScroll{Follow: true} // 요약은 출력 끝에 있다
+	w.outLines, w.outNote = w.loadOut(r)
+}
+
+// loadOut: 실행 r 의 전체 출력을 화면 줄로 (읽지 못하면 사유)
+func (w *workState) loadOut(r *workRec) ([]string, string) {
+	if r.ID == "" || w.store == nil {
+		return nil, "이 실행에는 보관된 전체 출력이 없습니다 — 요약만 남아 있습니다"
+	}
+	gz, err := w.store.Output(r.ID)
+	if err != nil {
+		if os.IsNotExist(err) || strings.Contains(err.Error(), "출력 없음") {
+			return nil, "이 실행의 전체 출력은 보관 기간(7일)이 지나 삭제됐거나 없습니다 — 요약만 남아 있습니다"
+		}
+		return nil, "[X] 출력을 읽지 못했습니다: " + err.Error()
+	}
+	b, err := gunzipBytes(gz)
+	if err != nil {
+		return nil, "[X] 출력 압축을 풀지 못했습니다: " + err.Error()
+	}
+	text := strings.TrimRight(strings.NewReplacer("\r\n", "\n", "\r", "\n", "\t", "    ").Replace(string(b)), "\n")
+	if text == "" {
+		return nil, "출력이 비어 있습니다"
+	}
+	lines := strings.Split(text, "\n")
+	if len(lines) > workOutShowMax {
+		lines = append([]string{fmt.Sprintf("(앞 %s줄 생략 — 전체는 4 결과 보기)", commaN(len(lines)-workOutShowMax))}, lines[len(lines)-workOutShowMax:]...)
+	}
+	for i, l := range lines {
+		lines[i] = cleanText(l)
+	}
+	return lines, ""
+}
+
 func (w *workState) keyMenu(ev keyEv) {
 	if ev.k == kEsc || (ev.k == kRune && (ev.r == 'q' || ev.r == 'Q')) {
 		w.step = w.back
+		return
+	}
+	if w.sc.key(ev) { // ↑↓ PgUp PgDn: 위의 출력 스크롤
 		return
 	}
 	if ev.k != kRune {
@@ -455,7 +505,7 @@ func (w *workState) keySearch(ev keyEv) {
 	switch {
 	case ev.k == kEnter:
 		if len(w.found) > 0 {
-			w.sel, w.back, w.step = w.found[w.scur], wkSearch, wkMenu
+			w.openMenu(w.found[w.scur], wkSearch)
 		}
 	case ev.k == kRune && ev.r == '/':
 		w.in = pasteBuf{}
@@ -845,9 +895,21 @@ func renderWork(w *workState, width, height int, color bool) string {
 		listView()
 		f.Hint = " ↑↓ 이동  n 새 작업  / 호스트 검색  Enter 선택  q 닫기"
 	case wkMenu:
-		under()
+		r := w.sel
+		f.Title += fmt.Sprintf(" - %s 의 결과", r.File)
+		f.Head = append(f.Head, ln(stBold, fmt.Sprintf("%s %s  %s  → %s", w.workClock(r.At), padR(r.Side, 8), cleanText(r.Cmd), workResText(r)))...)
+		if w.outNote != "" {
+			st := stGray
+			if strings.HasPrefix(w.outNote, "[X]") {
+				st = stRed
+			}
+			f.Body = ln(st, w.outNote)
+		}
+		for _, l := range w.outLines {
+			f.Body = append(f.Body, wrapSegs(color, width, 1, "   ", redSegs(" "+l, lineStyle(l))...)...)
+		}
 		f.Foot = w.menuFoot(width, color)
-		f.Hint = " 번호를 누르세요  Esc 닫기"
+		f.Hint = " 번호를 누르세요  ↑↓ PgUp/PgDn 출력 스크롤  Esc 닫기"
 	case wkAsk:
 		under()
 		f.Foot = ln(stBold, w.ask)
@@ -862,7 +924,7 @@ func renderWork(w *workState, width, height int, color bool) string {
 	case wkPaste:
 		f.Title += " - 새 작업: 호스트 붙여넣기"
 		f.Head = append(f.Head, ln("", "호스트를 붙여넣으세요 — 공백·쉼표·줄바꿈 구분, 중복은 한 번만, svr[001-020] 범위 표기 가능")...)
-		f.Head = append(f.Head, ln(stGray, "끝내기: 빈 줄 또는 . (Ctrl+D)")...)
+		f.Head = append(f.Head, ln(stGray, "끝내기: Ctrl+D 만 (빈 줄·엔터는 무시 — 엑셀에서 복사해 그대로 붙여넣어도 됩니다)")...)
 		f.Head = append(f.Head, ln(stBold, fmt.Sprintf("입력 %s대", commaN(len(w.pasted))))...)
 		if len(w.pasted) > 0 {
 			var segs []seg
@@ -875,7 +937,7 @@ func renderWork(w *workState, width, height int, color bool) string {
 			f.Body = wrapSegs(color, width, 2, "   ", append([]seg{{"   ", ""}}, segs...)...)
 		}
 		f.Foot = append([]string{""}, inputLines(color, width, "> "+w.paste.text()+"_")...)
-		f.Hint = " Enter 줄 확정  빈 줄/. 입력 끝  ↑↓ PgUp/PgDn 스크롤  Esc 취소"
+		f.Hint = " Enter 줄 확정  Ctrl+D 입력 끝  ↑↓ PgUp/PgDn 스크롤  Esc 취소"
 	case wkReuse:
 		f.Title += " - 새 작업"
 		f.Head = append(f.Head, ln(stBold, fmt.Sprintf("입력 %s대", commaN(len(w.pasted))))...)

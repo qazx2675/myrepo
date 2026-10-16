@@ -315,3 +315,33 @@ func TestHintSegsColors(t *testing.T) {
 		t.Errorf("말줄임표 중복: %q", s)
 	}
 }
+
+// 화면에는 보이는데 데몬 메모리에 없는 job (jobs/ 파일만 남은 경우): g 가 "job 없음" 이 되지 않고 메모리에 다시 올려 확인한다
+func TestRecheckAdoptsJobFileMissingFromMemory(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "mgmt", "/os6/gossh")
+	w := newWorld(map[string]*simHost{"h1": install(60, 120, 400, 600)})
+	id := submit(t, "u1", 0, "h1")
+	d := drive(t, w, newTestDaemon(w), 0, 10)
+	if d.jobs[id] == nil {
+		t.Fatal("job 이 메모리에 있어야 함")
+	}
+	d.removeJob(id) // 메모리에서만 사라짐 — jobs/<id>.json 은 그대로
+	if _, err := os.Stat(jobFile(id)); err != nil {
+		t.Fatalf("jobs 파일이 있어야 함: %v", err)
+	}
+	if _, err := writeRequest(ReqRecheck, map[string]string{"jobid": id, "yml": allView}); err != nil {
+		t.Fatal(err)
+	}
+	drive(t, w, d, 15, 15)
+	rc := readRecheck(dataDir(), id)
+	if rc == nil || !rc.Done || strings.Contains(strings.Join(rc.Lines, "\n"), "job 을 찾을 수 없습니다") {
+		t.Fatalf("job 복구 후 재확인이어야 함: %+v", rc)
+	}
+	if len(rc.Hosts) != 1 || rc.Hosts[0].Host != "h1" {
+		t.Fatalf("호스트 결과: %+v", rc.Hosts)
+	}
+	if d.jobs[id] == nil {
+		t.Fatal("복구한 job 이 메모리에 올라와야 함")
+	}
+}
