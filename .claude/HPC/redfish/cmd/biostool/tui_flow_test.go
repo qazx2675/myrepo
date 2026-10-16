@@ -310,6 +310,54 @@ func TestBiosFlowViewTabRefCanceled(t *testing.T) {
 	}
 }
 
+// 비교 화면으로 넘어가며 뜬 기준 고르기(목록·hostname 입력)에서도 Tab 으로 프로파일 화면으로 돌아간다.
+// 이미 비교한 뒤 r 로 기준을 다시 고르다가 Tab 을 눌러도 프로파일 화면으로 가고, 앞의 비교 결과는 그대로 둔다.
+func TestBiosFlowViewTabOutOfRefChooser(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua), "VM"
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+	script := []flowStep{
+		{"profile-result", "\t"}, // 0: 기준 목록이 뜬다
+		{"ref", "\t"},            // 1: 목록에서 Tab → 프로파일 화면
+		{"profile-result", "\t"}, // 2: 다시 Tab → 목록
+		{"ref", "1"},             // 3: 비교서버 hostname 입력
+		{"ref-host", "\t"},       // 4: 입력 줄에서 Tab → 프로파일 화면
+		{"profile-result", "\t"}, // 5
+		{"ref", "1"},             // 6
+		{"ref-host", ua + "\r"},  // 7: 비교 실행
+		{"compare-result", "r"},  // 8: 기준 다시 고르기
+		{"ref", "\t"},            // 9: 목록에서 Tab → 프로파일 화면 (비교 결과 유지)
+		{"profile-result", "\t"}, // 10: Tab → 이미 비교한 화면 (다시 묻지 않음)
+		{"compare-result", "qq"}, // 11
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"}, func(i int, f *biosFlow) {
+		switch i {
+		case 2, 5:
+			if f.ui.Tab() != 0 || f.cmp != nil || f.ui.tabOut {
+				t.Errorf("step %d: Tab 으로 나오면 프로파일 화면·비교 안 함: tab=%d cmp=%v tabOut=%v", i, f.ui.Tab(), f.cmp, f.ui.tabOut)
+			}
+		case 10:
+			if f.ui.Tab() != 0 || f.cmp == nil || f.cmp.Label != "비교서버 "+ua {
+				t.Errorf("r 중 Tab: 프로파일 화면, 앞 비교 유지: tab=%d cmp=%v", f.ui.Tab(), f.cmp)
+			}
+		case 11:
+			if f.ui.Tab() != 1 || f.cmp == nil {
+				t.Errorf("다시 Tab → 비교 화면: tab=%d", f.ui.Tab())
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	if strings.Contains(fr.screen(), "기준을 고르지 않았습니다") {
+		t.Errorf("Tab 으로 나온 것은 '고르지 않았습니다' 안내가 없어야 함:\n%s", tuiLastFrame(fr.r))
+	}
+}
+
 // 대상 파일 지정(기본값 지우고 입력) → refs JSON 기준 (읽을 수 없는 JSON 은 메뉴에서 뺌) → 설정할 항목 없음.
 func TestBiosFlowFileTargetRefJSON(t *testing.T) {
 	a, ua := startAllSrv(t, "hpe-dl360gen11", nil)

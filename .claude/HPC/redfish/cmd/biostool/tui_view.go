@@ -181,6 +181,7 @@ type TUI struct {
 	top      int  // 본문 첫 줄 위치
 	refKey   bool // r 키(기준 다시 선택)를 받음
 	quitArm  bool // 벤더 줄에서 q 를 한 번 눌러 종료 확인 중 (다음 q 면 종료, 다른 키면 취소)
+	tabOut   bool // 기준 고르기·입력 중 Tab 으로 빠져나옴 (TakeTabOut 으로 읽고 지움)
 	bodyH    int  // 마지막으로 그린 본문 높이 (PgUp/PgDn 단위)
 	help     bool
 	msg      string
@@ -311,6 +312,13 @@ func (u *TUI) SetTabs(names []string) {
 
 // Tab 은 지금 보기 탭 번호입니다.
 func (u *TUI) Tab() int { return u.ti }
+
+// TakeTabOut 은 직전 Choose·InputLine 이 Tab 으로 끝났는지 알려 주고 표시를 지웁니다 (true 면 부르는 쪽이 다른 화면 탭으로 간다).
+func (u *TUI) TakeTabOut() bool {
+	t := u.tabOut
+	u.tabOut = false
+	return t
+}
 
 // SwitchTab 은 지금 결과 보기 상태를 저장하고 i 번 보기 탭의 상태로 바꿉니다 (글 보기였어도 결과 보기로 돌아감).
 func (u *TUI) SwitchTab(i int) {
@@ -481,6 +489,8 @@ func (u *TUI) Progress(title string, fn func(j *TUIJob) error) error {
 		case (k.k == tkEsc || k.isRune('q', 'Q')) && u.back():
 		case k.k == tkEsc || k.isRune('q', 'Q', 'e', 'E'):
 			u.msg = "작업 중입니다 — 취소는 Ctrl+X"
+		case (k.isRune(tuiTab) || k.k == tkBackTab) && len(u.tabs) > 1:
+			u.msg = "조회 중에는 화면을 바꿀 수 없습니다 — 끝난 뒤 Tab (취소는 Ctrl+X)"
 		default:
 			u.navKey(k)
 		}
@@ -568,6 +578,9 @@ func (u *TUI) InputLine(prompt, initial string) (string, bool) {
 			return true
 		case k.isRune(tuiCtrlX) || k.k == tkEsc:
 			return true
+		case (k.isRune(tuiTab) || k.k == tkBackTab) && len(u.tabs) > 1:
+			u.tabOut = true
+			return true
 		default:
 			p.edit(k)
 		}
@@ -642,6 +655,9 @@ func (u *TUI) Choose(title string, items []string) (int, bool) {
 			pick = p.cur
 			return true
 		case k.k == tkEsc || k.isRune('q', 'Q', tuiCtrlX):
+			return true
+		case (k.isRune(tuiTab) || k.k == tkBackTab) && len(u.tabs) > 1: // 화면 탭이 있으면 Tab 은 고르기를 접고 다른 화면으로
+			u.tabOut = true
 			return true
 		case k.isRune(tuiBackspace) && p.num != "":
 			p.num = p.num[:len(p.num)-1]
@@ -871,11 +887,19 @@ func (u *TUI) hintItems() []string {
 		case tpYesNo:
 			return []string{"y 예", "n 아니오", "Ctrl+X 취소", "↑↓/PgUp/PgDn 결과 보기"}
 		case tpLine:
-			return []string{"Enter 확인", "Backspace 지우기", "Ctrl+X 취소"}
+			h := []string{"Enter 확인", "Backspace 지우기", "Ctrl+X 취소"}
+			if len(u.tabs) > 1 {
+				h = append(h, "Tab 다른 화면")
+			}
+			return h
 		case tpLines:
 			return []string{"Enter 줄 추가", "Backspace 지우기", "Ctrl+D 완료", "Ctrl+X 취소"}
 		case tpChoose:
-			return []string{"↑↓ 이동", "Enter 선택", "숫자 바로 선택", "Esc 취소"}
+			h := []string{"↑↓ 이동", "Enter 선택", "숫자 바로 선택", "Esc 취소"}
+			if len(u.tabs) > 1 {
+				h = append(h, "Tab 다른 화면")
+			}
+			return h
 		}
 	}
 	nav := []string{"↑↓ 한 줄", "PgUp/PgDn 한 화면"}

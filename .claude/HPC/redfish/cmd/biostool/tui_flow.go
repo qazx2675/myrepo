@@ -226,10 +226,13 @@ func (f *biosFlow) browse() TUIAction {
 			}
 			ui.SwitchTab(1)
 			if f.cmp == nil && !f.compareStep(false) { // 비교하지 못했으면(취소·실패 안내는 그대로) 프로파일 화면으로, 다음 Tab 에 다시 시도
+				ui.TakeTabOut()
 				ui.SwitchTab(0)
 			}
 		case TUIRef:
-			f.compareStep(true)
+			if !f.compareStep(true) && ui.TakeTabOut() { // 기준을 다시 고르다 Tab 이면 프로파일 화면으로 (앞의 비교 결과는 그대로)
+				ui.SwitchTab(0)
+			}
 		default:
 			return act
 		}
@@ -344,7 +347,9 @@ func (f *biosFlow) compareStep(again bool) bool {
 	ui := f.ui
 	ref, ok := f.chooseRef(again)
 	if !ok {
-		ui.SetMessage("전체 설정 비교 기준을 고르지 않았습니다")
+		if !ui.tabOut { // Tab 으로 나온 것이면 안내 없이 다른 화면으로 (부르는 쪽이 TakeTabOut)
+			ui.SetMessage("전체 설정 비교 기준을 고르지 않았습니다")
+		}
 		return false
 	}
 	var cmp *compareResult

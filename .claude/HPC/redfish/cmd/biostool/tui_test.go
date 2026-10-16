@@ -539,6 +539,33 @@ func TestTUIChoose(t *testing.T) {
 	}
 }
 
+// 화면 탭이 있으면 Choose·InputLine 에서 Tab 은 고르기를 접고 TakeTabOut 으로 알린다 (탭이 없으면 무시).
+func TestTUIChooseInputTabOut(t *testing.T) {
+	for _, k := range []string{"\t", "\x1b[Z"} {
+		u, r := newTUIRig(t, k)
+		u.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+		if i, ok := u.Choose("전체비교 기준 선택", []string{"a", "b"}); i != -1 || ok || !u.TakeTabOut() {
+			t.Errorf("Choose %q: %d %v", k, i, ok)
+		}
+		if u.TakeTabOut() {
+			t.Errorf("TakeTabOut 은 한 번 읽으면 지워져야 함")
+		}
+		if f := tuiLastFrame(r); !strings.Contains(f, "Tab 다른 화면") {
+			t.Errorf("Choose 안내 줄:\n%s", f)
+		}
+		u2, _ := newTUIRig(t, "ab"+k)
+		u2.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+		if s, ok := u2.InputLine("비교서버", ""); ok || s != "" || !u2.TakeTabOut() {
+			t.Errorf("InputLine %q: %q %v", k, s, ok)
+		}
+	}
+	// 탭이 없으면(대상·프로파일 고르기 단계) Tab 은 무시 — 목록은 그대로 Enter 로 고른다.
+	u, _ := newTUIRig(t, "\t\r")
+	if i, ok := u.Choose("프로파일 선택", []string{"VM", "HPC"}); i != 0 || !ok || u.TakeTabOut() {
+		t.Errorf("탭 없음: %d %v", i, ok)
+	}
+}
+
 // ---- 진행 ----
 
 func TestTUIProgress(t *testing.T) {
