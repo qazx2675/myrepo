@@ -159,8 +159,10 @@ func (st *tuiState) runAwxEnv(env []string, note string) {
 	if note != "" {
 		fmt.Fprint(out, note+"\n")
 	}
-	rc, err := awxExec(awx_dir, env)
-	endPrep()
+	rc, err := func() (int, error) {
+		defer endPrep() // 패닉이어도 intr=^X 설정을 되돌린다
+		return awxExec(awx_dir, env)
+	}()
 	// 자식이 받은 ^X 의 SIGINT 가 Notify 채널에 남아 있으면 TUI 가 종료되므로 비운다
 	if st.env.Signals != nil {
 		for drained := false; !drained; {
