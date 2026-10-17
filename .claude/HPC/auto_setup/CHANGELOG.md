@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [0.8.7] - 2026-10-17
+
+os8_mgmt 에서 접속불가하고 os6_mgmt 에서만 접속 가능한 서버가 os8 직접 서버와 **같은 흐름·같은 결과**가 되도록 코드 점검 후 수정 (랩 3대: os8_mgmt·os6_mgmt·os8 차단 대상 서버로 실제 확인).
+
+### 수정
+- **os6 경유 체크에서 gossh 결과 파일이 사라지던 문제**: 체크스크립트(config_check.sh)는 gossh 가 목록 옆에 남기는 `<목록>_res_off`(접속불가)·`_res_refsed`·`_os_install`(설치중)·`_nosvrauto`·`_res_cancel` 로 상태를 판정하는데, os6 래퍼는 os6_mgmt 에서 이 파일을 지워 버려 os6 서버는 접속불가여도 `OFF` 가 아닌 `NONE`, 설치중이어도 `INST` 가 아니었다(리포트 집계·벤더 코멘트가 os8 서버와 달랐다). 이제 결과 파일을 os8 쪽 목록 옆으로 가져온다
+- **os6 서버가 섞인 run 은 os8 서버까지 전부 os6_mgmt 경유로 실행되던 문제**: 래퍼가 이번 run 의 os6 경로 목록(`runs/<code>/os6_hosts.txt`, `AUTO_SETUP_OS6_HOSTS`)을 받아 os8 서버는 이 서버의 gossh 로, os6 서버만 os6_mgmt 경유로 동시에 실행하고 출력·결과 파일을 합친다 (os6_mgmt 에서 안 닿는 os8 서버가 실패하지 않음)
+- **`x` 단독 체크에서 os6 서버는 항상 접속불가이던 문제**: os6_mgmt 가 설정돼 있으면 먼저 경로를 판별(`auto_setup route-split`, 수동 run 과 같은 규칙: os8 준비확인 무응답 → os6_mgmt 경유 응답)하고 같은 래퍼로 체크한다. 판별 결과는 체크 로그 첫 줄에 남는다
+- **os6 probe 세션 재시작마다 os6 서버의 ping 상태가 비던 문제**: 다른 서버가 설치 중 오르내리면 probe 목록이 바뀌어 세션이 재시작되는데, 그때마다 상태를 비워 os6 서버는 새 세션의 첫 응답 전까지 ping 정보가 없었다(대량 설치에서 down 감지 지연·정체 원인). 남는 서버의 마지막 상태를 이어 쓴다
+- **os6 probe 가 조용히 실패하던 경우**: `os6_autosetup` 에 디렉터리 대신 실행 파일 경로를 적거나 비워 두면 probe 가 실행되지 않아 os6 서버는 ping 정보 없이 멈췄다. 이제 디렉터리·실행 파일 경로·빈 값(PATH 의 auto_setup) 모두 받고, 로그인 셸이 csh 여도 되도록 `bash -c` 로 감싼다. 세션이 끝나면 ssh 가 낸 사유(Permission denied, No such file 등)를 로그에 붙인다
+- **ping 정보가 없어도 진행**: ping 정보 없음이 1분 이상 이어지는 서버(os6 probe 실패 등)는 ping 과 무관하게 30초마다 준비확인(gossh uptime·anaconda)으로 설치중·READY 를 판정한다 (전에는 ping 이 와야만 확인해 정체로 멈췄다)
+- **down 을 놓친 빠른 재부팅도 진행**: 대기 서버도 5분마다 준비확인해, 제출 뒤 재부팅된 uptime 이면 READY 로 간다 (ping 2주기보다 빨리 재부팅됐거나 probe 재연결 중이어도 os8·os6 같게)
+- **os8_mgmt 에서 이름이 안 풀리는 서버**: 3회 연속 이름 해석 실패하면 os6_mgmt 경유로 감시한다 (probe·준비확인·체크 모두 os6_mgmt 에서 이름으로 접속). 전에는 IP 가 없어 ping 대상에서 빠진 채 대기로 멈췄다
+- **os6 로 잘못 붙은 os8 서버 되돌리기**: os6 경로 서버가 os6 ping 무응답이고 os8 에서 응답하면 local 로 바꾼다 (os8 → os6 전환만 있던 것의 반대 방향)
+
 ## [0.8.6] - 2026-10-16
 
 ### 수정

@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -201,8 +202,21 @@ func (s *os6Sessions) Ping(targets []PingTarget) map[string]PingResult {
 		s.killLocked()
 		s.key = ""
 	} else if !s.alive || key != s.key {
+		// 목록만 바뀐 재시작이면 남는 호스트의 마지막 상태를 이어 쓴다 — 설치 중 다른 호스트가 오르내릴 때마다 목록이 바뀌어
+		// 재시작되는데, 그때마다 상태를 비우면 os6 경로 호스트는 새 세션의 첫 응답 전까지 ping 정보가 없어 진행이 늦어지거나 멈춘다
+		var prev map[string]bool
+		if s.alive {
+			prev = s.state
+		}
 		s.killLocked()
 		s.startLocked(key)
+		if s.alive {
+			for _, t := range targets {
+				if up, ok := prev[t.Host]; ok {
+					s.state[t.Host] = up
+				}
+			}
+		}
 	}
 	out := make(map[string]PingResult, len(targets))
 	for _, t := range targets {
@@ -235,10 +249,11 @@ func (s *os6Sessions) killLocked() {
 }
 
 func (s *os6Sessions) startLocked(key string) {
-	remote := shQuote(strings.TrimRight(s.dir, "/")+"/auto_setup") + " probe -i " + shQuote(s.interval.String())
 	stop := make(chan struct{})
-	cmd := sshCommand("ssh", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=30", s.mgmt, remote)
+	cmd := sshCommand("ssh", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=30", s.mgmt, probeRemote(s.dir, s.interval))
 	cmd.Stdin = io.MultiReader(strings.NewReader(key+"\n\n"), blockReader{stop})
+	errBuf := &bytes.Buffer{}
+	cmd.Stderr = errBuf // 세션이 출력 없이 끝나면 사유(Permission denied, No such file 등)를 로그에 남긴다
 	out, err := cmd.StdoutPipe()
 	if err == nil {
 		err = cmd.Start()
@@ -257,11 +272,18 @@ func (s *os6Sessions) startLocked(key string) {
 	if !s.quiet {
 		logf("os6 probe 세션 시작 (%d대)", strings.Count(key, "\n")+1)
 	}
-	go s.reader(gen, cmd, out, stop)
+	go s.reader(gen, cmd, out, stop, errBuf)
+}
+
+// probeRemote: os6_mgmt 에서 실행할 probe 명령. os6_autosetup 은 auto_setup 이 있는 디렉터리이지만 실행 파일 경로를 적어도 되고,
+// 비어 있으면 PATH 의 auto_setup 을 쓴다 (전에는 실행 파일 경로를 적거나 비우면 probe 가 실패해 os6 경로 호스트의 ping 정보가 없었다).
+// 원격 로그인 셸이 csh 여도 되도록 remoteBash 로 감싼다.
+func probeRemote(dir string, interval time.Duration) string {
+	return remoteBash("p=" + shq(dir) + `; [ -z "$p" ] && p=auto_setup; [ -d "$p" ] && p="${p%/}/auto_setup"; exec "$p" probe -i ` + shq(interval.String()))
 }
 
 // reader: 세션 stdout 의 "host up|down" 을 상태에 반영, 끝나면 세션 사망 처리
-func (s *os6Sessions) reader(gen int, cmd *exec.Cmd, out io.Reader, stop chan struct{}) {
+func (s *os6Sessions) reader(gen int, cmd *exec.Cmd, out io.Reader, stop chan struct{}, errBuf *bytes.Buffer) {
 	sc := bufio.NewScanner(out)
 	got := false
 	for sc.Scan() {
@@ -278,19 +300,25 @@ func (s *os6Sessions) reader(gen int, cmd *exec.Cmd, out io.Reader, stop chan st
 		s.mu.Unlock()
 	}
 	s.mu.Lock()
+	report := false
 	if s.gen == gen {
 		s.alive = false
 		s.state = map[string]bool{}
 		s.cmd = nil
 		s.gen++
-		close(stop)
-		if !s.quiet {
-			logf("os6 probe 세션 종료 (다음 주기에 재시작)")
-		}
+		close(stop) // stdin(blockReader) 을 끝내야 Wait 가 돌아온다
+		report = !s.quiet
 		if !got {
 			s.quiet = true
 		}
 	}
 	s.mu.Unlock()
-	_ = cmd.Wait()
+	_ = cmd.Wait() // stderr 를 다 받은 뒤 사유를 로그에
+	if report {
+		why := ""
+		if h := diagHead(errBuf.String()); h != "" {
+			why = " — " + h
+		}
+		logf("os6 probe 세션 종료 (다음 주기에 재시작)%s", why)
+	}
 }
