@@ -44,27 +44,30 @@ type Daemon struct {
 	Ldap     LdapBackup                          // nil·nopLdap → LDAP 단계 생략
 	Second   Second                              // nil·nopSecond → 2차 체크 생략
 
-	jobs       map[string]*Job
-	rt         map[string]*hostRT // 키=호스트 (진행 중 job 사이에서 유일), 저장하지 않는 런타임 상태
-	dirty      map[string]bool    // 저장이 필요한 job id
-	lastPing   time.Time
-	lastCheck  time.Time
-	cur        *inflight // 실행 중인 run (동시에 1개)
-	doneCh     chan runDone
-	progCh     chan runProgress // run 고루틴 → 2차 체크 시작 알림
-	runRetry   time.Time        // Runner 오류 후 재시도 가능 시각
-	runErr     string           // 마지막 Runner 오류 (같은 오류 반복 로그 방지)
-	checkErr   map[string]string
-	forceCheck map[string]bool // r 키 수동 재시도: 정체 호스트를 ping 상태와 상관없이 다음 준비확인에 포함 (check 가 소비)
-	doneLogged map[string]bool // 거부한 완료기록(호스트+내용) — 로그 1회
-	lastWork   time.Time       // 마지막 gossh 작업 기록 정리 (하루 한 번, work.go workCleanAll)
+	jobs          map[string]*Job
+	rt            map[string]*hostRT // 키=호스트 (진행 중 job 사이에서 유일), 저장하지 않는 런타임 상태
+	dirty         map[string]bool    // 저장이 필요한 job id
+	lastPing      time.Time
+	lastCheck     time.Time
+	lastWaitCheck time.Time // 대기 호스트 전체 준비확인(waitCheck 주기) 마지막 시각
+	cur           *inflight // 실행 중인 run (동시에 1개)
+	doneCh        chan runDone
+	progCh        chan runProgress // run 고루틴 → 2차 체크 시작 알림
+	runRetry      time.Time        // Runner 오류 후 재시도 가능 시각
+	runErr        string           // 마지막 Runner 오류 (같은 오류 반복 로그 방지)
+	checkErr      map[string]string
+	forceCheck    map[string]bool // r 키 수동 재시도: 정체 호스트를 ping 상태와 상관없이 다음 준비확인에 포함 (check 가 소비)
+	doneLogged    map[string]bool // 거부한 완료기록(호스트+내용) — 로그 1회
+	lastWork      time.Time       // 마지막 gossh 작업 기록 정리 (하루 한 번, work.go workCleanAll)
 }
 
 type hostRT struct {
 	up            bool // 마지막 ping 응답
 	localDown     bool // route=local 인데 마지막 로컬 ping 무응답 → 다음 ping 은 os6 에도 확인(both)
+	os6Down       bool // route=os6 인데 마지막 os6 ping 무응답·정보 없음 → 다음 ping 은 로컬에도 확인(both, 로컬 응답이면 local 로)
 	startCheck    bool // 기동 직후 1회 준비확인
 	resolveLogged bool
+	resolveFails  int // 연속 이름 해석 실패 횟수 (resolveToOS6 회면 os6 경유로)
 }
 
 type inflight struct {
@@ -609,12 +612,24 @@ func (d *Daemon) resolve() {
 	wg.Wait()
 	for i, name := range names {
 		if ips[i] == "" {
+			// os8_mgmt 에서 이름을 못 찾는 호스트(os6 쪽 DNS·hosts 에만 있는 경우)는 os6_mgmt 경유로 감시한다 —
+			// probe·준비확인·체크 모두 os6_mgmt 에서 이름으로 접속하므로 os8 의 IP 가 없어도 같은 흐름으로 진행된다
+			// (일시적인 DNS 오류는 넘기도록 resolveToOS6 회 연속 실패했을 때만)
+			r := d.hrt(name)
+			r.resolveFails++
+			if hosts[i].Route == "" && os6_mgmt != "" && r.resolveFails >= resolveToOS6 {
+				hosts[i].Route = "os6"
+				d.dirty[ids[i]] = true
+				logf("경로 판별: %s → os6 (os8_mgmt 이름 해석 실패: %v — os6_mgmt 에서 이름으로 확인)", name, errs[i])
+				continue
+			}
 			if r := d.hrt(name); !r.resolveLogged {
 				r.resolveLogged = true
 				logf("[!] 이름 해석 실패: %s (%v) - 다음 주기 재시도", name, errs[i])
 			}
 			continue
 		}
+		d.hrt(name).resolveFails = 0
 		hosts[i].IP = ips[i]
 		d.dirty[ids[i]] = true
 	}
@@ -645,7 +660,7 @@ func (d *Daemon) ping(now time.Time) {
 	var targets []PingTarget
 	for _, j := range d.jobs {
 		for name, h := range j.Hosts {
-			if !active(h) || h.IP == "" {
+			if !active(h) || (h.IP == "" && h.Route != "os6") { // os6 경로는 IP 없이 이름으로 (os6_mgmt 에서 해석)
 				continue
 			}
 			route, probe := h.Route, h.Route == ""
@@ -653,6 +668,8 @@ func (d *Daemon) ping(now time.Time) {
 				route = "local"
 			} else if r := d.rt[name]; route == "local" && os6_mgmt != "" && r != nil && r.localDown {
 				route = "both" // 로컬 무응답 중이면 os6 에도 물어 os8 에서 안 보이는 호스트를 놓치지 않음
+			} else if route == "os6" && h.IP != "" && r != nil && r.os6Down {
+				route = "both" // os6 무응답 중이면 로컬에도 물어 os8 에서 보이게 된 호스트(잘못 os6 로 판별된 경우 포함)를 놓치지 않음
 			}
 			targets = append(targets, PingTarget{Host: name, IP: h.IP, Route: route})
 			refs[name] = ref{j, h, probe}
@@ -673,6 +690,7 @@ func (d *Daemon) ping(now time.Time) {
 				h.NoPing = ts
 				d.dirty[r.j.ID] = true
 			}
+			d.hrt(name).os6Down = h.Route == "os6"
 			continue // 정보 없음 → 상태 불변
 		}
 		if h.NoPing != 0 {
@@ -689,13 +707,19 @@ func (d *Daemon) ping(now time.Time) {
 			h.Route = "local"
 			nLocal++
 		}
-		if t.Route == "both" && pr.Via == "os6" && pr.Up {
+		switch {
+		case t.Route == "both" && h.Route == "local" && pr.Via == "os6" && pr.Up:
 			h.Route = "os6"
 			d.dirty[r.j.ID] = true
 			logf("경로 전환: %s local → os6 (os8 ping 무응답, os6_mgmt 응답, job %s)", name, r.j.ID)
+		case t.Route == "both" && h.Route == "os6" && pr.Via == "local" && pr.Up:
+			h.Route = "local"
+			d.dirty[r.j.ID] = true
+			logf("경로 전환: %s os6 → local (os6_mgmt ping 무응답, os8 응답, job %s)", name, r.j.ID)
 		}
 		rt := d.hrt(name)
 		rt.localDown = h.Route == "local" && !pr.Up
+		rt.os6Down = h.Route == "os6" && !pr.Up
 		if pr.Up {
 			rt.up = true
 			if h.Miss != 0 {
@@ -735,10 +759,19 @@ func (d *Daemon) ping(now time.Time) {
 	}
 }
 
-// check: 준비확인 1주기. 후보 = 미처리 && ping up && (seen_down || 기동 직후 1회), route 별로 묶어 호출.
+// check: 준비확인 1주기. 후보 = 미처리 && ping up && (seen_down || 기동 직후 1회 || waitCheck 마다 대기 호스트 전체), route 별로 묶어 호출.
 func (d *Daemon) check(now time.Time) {
 	owner := map[string]*Job{}
 	groups := map[string][]string{}
+	// 대기(ping X 를 아직 못 본) 호스트도 waitCheck 마다 한 번 확인한다 — 재부팅이 ping 2주기보다 빨라 down 을 놓쳤거나
+	// (os6 probe 세션 재연결 중 등) 경로와 상관없이, 제출 뒤 재부팅된 uptime 이면 READY 로 진행된다
+	if d.lastWaitCheck.IsZero() { // 기동 직후 1회는 startCheck 가 한다
+		d.lastWaitCheck = now
+	}
+	waitAll := now.Sub(d.lastWaitCheck) >= waitCheck
+	if waitAll {
+		d.lastWaitCheck = now
+	}
 	for _, j := range d.jobs {
 		for name, h := range j.Hosts {
 			r := d.rt[name]
@@ -751,10 +784,17 @@ func (d *Daemon) check(now time.Time) {
 				groups[route] = append(groups[route], name)
 				continue
 			}
+			// ping 정보가 noPingCheck 넘게 없는 호스트(os6 probe 세션 실패·raw 소켓 오류 등)는 ping 과 무관하게 준비확인한다 —
+			// 준비확인(uptime·anaconda)만으로도 설치중·READY 를 판정할 수 있어, ping 이 안 되는 경로의 호스트가 정체로 멈추지 않는다
+			if active(h) && h.ReadyAt == 0 && h.Route != "" && h.NoPing > 0 && now.Unix()-h.NoPing >= secs(noPingCheck) {
+				owner[name] = j
+				groups[h.Route] = append(groups[h.Route], name)
+				continue
+			}
 			if !active(h) || h.ReadyAt != 0 || h.Route == "" || r == nil || !r.up {
 				continue
 			}
-			if !h.SeenDown && !r.startCheck {
+			if !h.SeenDown && !r.startCheck && !waitAll {
 				continue
 			}
 			owner[name] = j

@@ -179,6 +179,13 @@ func realOneoffStart(osCheck, user, mode string, hosts []string) (oneoffProc, er
 		flag = "-auto-check"
 	}
 	cmd := exec.Command("bash", osCheck, flag, user, "targets.txt")
+	// os6_mgmt 가 설정돼 있으면 자동 흐름(run)과 같게: 먼저 경로를 판별(route-split — os8 무응답·os6_mgmt 응답 호스트)하고
+	// gossh 래퍼로 os8 호스트는 이 서버에서, os6 호스트는 os6_mgmt 경유로 체크한다 (전에는 x 에서 os6 호스트는 항상 접속불가)
+	if self, err := os.Executable(); err == nil && os6_mgmt != "" && os6_gossh != "" && writeOS6Wrapper() == nil {
+		cmd = exec.Command("bash", "-c", `"$0" route-split targets.txt > os6_hosts.txt; exec bash "$@"`, self, osCheck, flag, user, "targets.txt")
+		cmd.Env = append(os.Environ(), "PATH="+binDir()+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"AUTO_SETUP_OS6_HOSTS="+filepath.Join(dir, "os6_hosts.txt"))
+	}
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = lf, lf
 	cmd.SysProcAttr = oneoffSysProcAttr()
@@ -198,6 +205,59 @@ func realOneoffStart(osCheck, user, mode string, hosts []string) (oneoffProc, er
 		close(p.done)
 	}()
 	return p, nil
+}
+
+// cmdRouteSplit: `auto_setup route-split <목록 파일>` (내부용, x 단독 체크) — 데몬의 수동 run 경로 재판별과 같은 규칙:
+// os8_mgmt 에서 준비확인(gossh uptime)이 응답하면 os8, 아니면 os6_mgmt 경유로 확인해 응답한 호스트만 stdout 에 한 줄씩.
+// 진행·결과 안내는 stderr (체크 로그에 남는다). os6 미설정·확인 실패면 아무것도 출력하지 않는다 (전부 os8 에서 실행).
+func cmdRouteSplit(list string) int {
+	b, err := os.ReadFile(list)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[auto_setup] 경로 판별 생략: %v\n", err)
+		return 0
+	}
+	hosts := uniq(strings.Fields(string(b)))
+	if len(hosts) == 0 || os6_mgmt == "" || os6_gossh == "" {
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "[auto_setup] 경로 판별: %d대를 os8_mgmt 에서 확인 중…\n", len(hosts))
+	ck := NewRealChecker()
+	res, err := ck.Check("local", hosts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[auto_setup] 경로 판별 실패(os8): %v — 전부 os8 에서 실행\n", err)
+		return 0
+	}
+	var miss []string
+	for _, h := range hosts {
+		if !res[h].Responded {
+			miss = append(miss, h)
+		}
+	}
+	if len(miss) == 0 {
+		fmt.Fprintln(os.Stderr, "[auto_setup] 경로 판별: 전부 os8_mgmt 에서 응답")
+		return 0
+	}
+	res, err = ck.Check("os6", miss)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[auto_setup] 경로 판별 실패(os6): %v — 무응답 %d대는 os8 에서 그대로 시도\n", err, len(miss))
+		return 0
+	}
+	var o6 []string
+	for _, h := range miss {
+		if res[h].Responded {
+			o6 = append(o6, h)
+			fmt.Println(h)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "[auto_setup] 경로 판별: os6_mgmt 경유 %d대%s, 접속불가 %d대\n", len(o6), listSuffix(o6), len(miss)-len(o6))
+	return 0
+}
+
+func listSuffix(hs []string) string {
+	if len(hs) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(hs, " ") + ")"
 }
 
 // ---- 상태 전이 ----

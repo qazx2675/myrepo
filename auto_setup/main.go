@@ -167,6 +167,11 @@ func run(args []string) int {
 		return runEnsure()
 	case "probe":
 		return runProbe(args[1:])
+	case "route-split": // 내부용: x 단독 체크 전 경로 판별 — os8 무응답·os6_mgmt 응답 호스트를 출력 (oneoff.go)
+		if len(args) != 2 {
+			return usageFail()
+		}
+		return cmdRouteSplit(args[1])
 	case "newhost": // -user 는 명령 앞·뒤 어디든 (auto_setup newhost -user alice)
 		rest, u, err := splitUser(args[1:])
 		if err != nil {

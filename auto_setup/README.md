@@ -8,6 +8,7 @@ OS 설치(01) 완료 후 자동으로 OS 설정을 검사하고 결과를 공유
 - **v0.7.1**: `m` 메뉴를 화면 전환 없이 안내 줄 아래에 인라인으로 표시, 화면 2 `d` 수동 완료(TUI), 준비확인에서 anaconda 가 보이면 ping X 를 못 봤어도 설치중으로 표시
 - **v0.7.2**: `PageUp`/`PageDown` 지원 (목록·호스트표·결과 창·변경 화면)
 - **v0.7.3**: `auto_setup -user <이름>` (해당 user 의 job 만 보이고 `x`·`w`·`m` 의 user 선택을 건너뜀), 재확인(`g`)·준비확인이 gossh 실패 사유를 표시, os6 준비확인 원격 명령을 `bash -c` 로 감쌈
+- **v0.8.7**: os8 접속불가·os6 접속가능 서버의 동등 처리 — os6 체크 결과 파일 반환, 경로별 분리 실행, `x` 의 os6 지원, probe 상태 유지·경로 형식, ping 없음·down 놓침·os8 이름 해석 실패에도 진행
 - **v0.8.6**: AWX(01) 실행 뒤 터미널 설정이 복원되지 않아 종료 후 Ctrl+C 가 안 먹던 버그 수정 (+ 깨진 터미널 자동 복구)
 - **v0.8.5**: g(재확인)·수동 run 의 "job 을 찾을 수 없습니다" 복구, gossh 작업 붙여넣기는 Ctrl+D 로만 끝(빈 줄 무시, 엑셀 붙여넣기), Enter 하면 출력 + 1~6 메뉴
 - **v0.8.4**: `-user` 로 실행해도 화면 1 의 `a` 로 다른 user 의 job 까지 보기 (다시 `a` 로 내 job 만)
@@ -98,7 +99,7 @@ vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
 |---|---|---|
 | `os6_mgmt` | 모든 대역에 접근 가능한 서버(RHEL6) | os6 경로·2차 체크 미사용 |
 | `os6_gossh` | os6_mgmt 위 gossh 실행 파일 전체 경로 | — |
-| `os6_autosetup` | os6_mgmt 위 auto_setup(os6 빌드)이 있는 디렉터리 | — |
+| `os6_autosetup` | os6_mgmt 위 auto_setup(os6 빌드)이 있는 디렉터리 (v0.8.7 부터 실행 파일 경로도 가능, 비우면 os6_mgmt PATH 의 `auto_setup`) | — |
 | `os_check_sh` | 이 서버의 `os_check_final_annotated.sh` 전체 경로 (autofs 공유 경로면 os8_mgmt·os6_mgmt 동일) | — |
 | `os8_mgmt` | os8_mgmt 호스트. **비어 있지 않으면 원격 클라이언트 모드** (os6 빌드 때 주입) | 로컬 모드(데몬 서버) |
 | `os8_autosetup` | os8_mgmt 위 auto_setup 경로 | `/usr/local/bin/auto_setup` |
@@ -879,7 +880,7 @@ bash ../awx_script/test/run_tests.sh
 - (v0.8.1) **프로파일 없이 이어가는 AWX 경로**: 신규 설치 양식 → AWX 실행에서 프로파일을 고르지 않으면(또는 `awx_profile_N` 이 하나도 없으면) 자동 응답이 전혀 없는 일반 실행이므로 nodeinfo 질문을 포함한 01 의 모든 질문에 직접 응답해야 합니다. 신규 설치라 nodeinfo 를 쓸 수 없으면 프로파일을 골라(`y`) nodeinfo N 으로 실행하거나 질문에 `N` 을 입력하십시오.
 - (v0.8.0) **원격 인자 128KB**: os6_mgmt 로 보내는 원격 명령은 셸 인자 한 개(약 128KB)를 넘지 못합니다. gossh 작업의 os6 전량 실행은 호스트 목록을 gzip+base64 로, os6_mgmt → os8_mgmt 기록 중계는 약 56KB 조각으로 나눠 이 안에 맞추지만, 이름이 매우 긴 호스트가 수만 대이면 실패할 수 있습니다. 중계되는 전체 출력은 5MB 를 넘으면 앞·뒤만 보냅니다.
 - (v0.8.0) **os6 로컬 보관분 미병합**: os6_mgmt 에서 연 `s` 가 os8_mgmt 로 기록을 보내지 못하면 이 서버(os6_mgmt)의 기록을 보여 주고 거기에 저장합니다. 나중에 os8_mgmt 가 돌아와도 **그 기록은 os8_mgmt 의 기록과 합쳐지지 않습니다**.
-- (v0.8.0) **os6 probe 세션의 원격 명령**: 데몬이 os6_mgmt 에 걸어 두는 장기 ssh 세션(`auto_setup probe`)의 명령은 `bash -c` 로 감싸지 않고 경로를 `shQuote` 로만 인용합니다. 로그인 셸이 tcsh 이고 `os6_autosetup` 경로에 `!` 가 있으면 history 치환으로 실패합니다 (경로에 `!` 를 쓰지 마십시오).
+- (v0.8.7 해결) **os6 probe 세션의 원격 명령**: 이제 다른 원격 명령과 같이 `bash -c` 로 감싸며(`!` 가 있으면 base64), 로그인 셸이 tcsh 여도 `os6_autosetup` 경로를 그대로 씁니다.
 - (v0.8.0) **gossh 작업 판정**: 성공/실패/접속불가는 gossh 의 `ERROR: 종료코드`·`SSH 접속 실패` 줄과 결과 파일로 판정하므로 gossh 출력 형식이 바뀌면 `index.jsonl` 의 집계가 어긋날 수 있습니다 (전체 출력은 그대로 보관됨).
 - (v0.8.0) **DNS 점검 범위**: IPv4 A 레코드와 `resolv.conf` 의 DNS 서버만 봅니다 (`/etc/hosts`·mDNS·AAAA 는 보지 않음). 서버가 하나만 응답하면 그 답이 기준이 됩니다.
 
