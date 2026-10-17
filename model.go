@@ -175,6 +175,15 @@ const snapTimeLayout = "2006-01-02 15:04:05"
 // noPingNote: ping 정보 없음이 이 시간 이상 이어지면 비고에 표시
 var noPingNote = time.Minute
 
+// noPingCheck: ping 정보 없음이 이 시간 이상 이어지면 ping 과 무관하게 준비확인(gossh uptime)으로 진행을 판정한다
+var noPingCheck = time.Minute
+
+// waitCheck: 대기(ping X 를 아직 못 본) 호스트도 이 주기마다 준비확인 — down 을 놓친 빠른 재부팅도 READY 로 진행
+var waitCheck = 5 * time.Minute
+
+// resolveToOS6: os8_mgmt 에서 이름 해석이 이 횟수만큼 연속 실패하면(ping 주기마다 1회) os6_mgmt 경유로 감시한다
+const resolveToOS6 = 3
+
 // StageCounts: 단계별 대수 (Total = 호스트 수)
 type StageCounts struct {
 	Total      int `json:"total"`

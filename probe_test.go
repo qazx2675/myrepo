@@ -208,7 +208,7 @@ func TestOS6SessionsEmptyMgmtAndArgs(t *testing.T) {
 	s.mgmt = "mgmt.test"
 	s.Ping([]PingTarget{{Host: "h1", IP: "10.0.0.1"}})
 	s.Close()
-	want := "ssh -o BatchMode=yes -o ServerAliveInterval=30 mgmt.test '/opt/as/auto_setup' probe -i '10s'"
+	want := "ssh -o BatchMode=yes -o ServerAliveInterval=30 mgmt.test " + probeRemote("/opt/as/", 10*time.Second)
 	if strings.Join(got, " ") != want {
 		t.Fatalf("ssh 인자 %q", strings.Join(got, " "))
 	}

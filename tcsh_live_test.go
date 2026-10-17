@@ -175,7 +175,7 @@ func TestOS6WrappersViaLoginShell(t *testing.T) {
 	chg := filepath.Join(dir, "chg.sh")
 	liveWrite(t, chg, chgOS6WrapperScript(mgmt, gossh))
 	run := filepath.Join(dir, "run.sh")
-	liveWrite(t, run, os6WrapperScript())
+	liveWrite(t, run, os6WrapperScript(""))
 	for name, w := range map[string]string{"os6WrapperScript": run, "chgOS6WrapperScript": chg} {
 		b, err := exec.Command("bash", w, "-pm", "-script", "-w", list, `echo "q!r it's"; [ ! -z 1 ] && echo $((2*3))`).Output()
 		if err != nil {

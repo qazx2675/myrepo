@@ -334,14 +334,13 @@ func TestOldOSNotReady(t *testing.T) {
 	if len(w.runs) != 0 {
 		t.Fatalf("run 이 실행됨: %+v", w.runs)
 	}
-	h2checks := 0
+	// h2(대기)는 기동 직후(600 재기동) 1회와 waitCheck(5분) 주기에만 확인된다 (v0.8.7 — down 을 놓친 재부팅도 진행되도록)
 	for _, c := range w.checks {
-		if strings.Contains(c, "h2") {
-			h2checks++
+		var o int64
+		fmt.Sscanf(c, "%d", &o)
+		if strings.Contains(c, "h2") && o%secs(waitCheck) != 0 {
+			t.Fatalf("h2 는 기동 직후·waitCheck 주기에만 확인돼야 함: %v", w.checks)
 		}
-	}
-	if h2checks != 1 {
-		t.Fatalf("h2 는 기동 직후 1회만 확인돼야 함: %v", w.checks)
 	}
 	j := d.jobs[id]
 	if j == nil || j.Hosts["h1"].ReadyAt != 0 || j.Hosts["h2"].ReadyAt != 0 || !j.Hosts["h1"].SeenDown || j.FirstReady != 0 {

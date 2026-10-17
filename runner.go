@@ -84,7 +84,18 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 		if err := writeOS6Wrapper(); err != nil {
 			return RunResult{}, err
 		}
-		env = append(env, "PATH="+binDir()+string(os.PathListSeparator)+os.Getenv("PATH"))
+		// 래퍼가 os8 호스트는 이 서버의 gossh 로, os6 호스트만 os6_mgmt 경유로 나눠 실행하도록 이번 run 의 os6 경로 호스트 목록을 넘긴다
+		var o6 []string
+		for _, h := range hosts {
+			if jh := j.Hosts[h]; jh != nil && jh.Route == "os6" {
+				o6 = append(o6, h)
+			}
+		}
+		o6File := filepath.Join(dir, "os6_hosts.txt")
+		if err := os.WriteFile(o6File, []byte(strings.Join(o6, "\n")+"\n"), 0644); err != nil {
+			return RunResult{}, err
+		}
+		env = append(env, "PATH="+binDir()+string(os.PathListSeparator)+os.Getenv("PATH"), "AUTO_SETUP_OS6_HOSTS="+o6File)
 	}
 
 	logFile := filepath.Join(dir, "os_check.log")
@@ -155,34 +166,121 @@ func remoteBash(inner string) string {
 
 // os6WrapperScript: 원격 명령은 bash -c '…' 로 감싸 보낸다 (remoteBash 와 같은 형태, os6_mgmt 로그인 셸이 csh 여도 동작).
 // os6_gossh 경로는 원격 bash 용으로 한 번 더 인용한다(shq(shq(…))) — 공백·' 가 있어도 깨지지 않게.
-func os6WrapperScript() string {
+//
+// os6 호스트도 os8 호스트와 똑같이 처리되도록 (v0.8.7):
+//   - gossh 가 -w 목록 옆에 남기는 결과 파일(<목록>_res_off·_res_refsed·_os_install·_nosvrauto·_res_cancel 등)을 os6_mgmt 에서
+//     가져와 원래 목록 옆에 만든다 (체크스크립트가 접속불가·설치중·nosvrauto 를 이 파일로 판정한다). 전에는 os6_mgmt 에서 지워져
+//     os6 호스트는 접속불가여도 OFF 가 아닌 NONE, 설치중이어도 INST 가 아니었다.
+//   - AUTO_SETUP_OS6_HOSTS(이번 run 의 os6 경로 호스트 목록 파일)가 있고 이 서버의 gossh(realGossh)를 찾았으면 -w 목록을 경로별로 나눠
+//     os8 호스트는 이 서버의 gossh 로, os6 호스트만 os6_mgmt 경유로 실행하고 출력·결과 파일을 합친다
+//     (전에는 run 에 os6 호스트가 하나라도 있으면 os8 호스트까지 전부 os6_mgmt 경유 — os6_mgmt 에서 안 닿는 os8 호스트는 실패).
+func os6WrapperScript(realGossh string) string {
 	return `#!/bin/bash
 # gossh - os6_mgmt 경유 gossh 래퍼 (auto_setup 이 생성, 직접 수정 금지)
 mgmt=` + shq(os6_mgmt) + `
 gossh=` + shq(shq(os6_gossh)) + `
-q=""
-wfile=""
-while [ $# -gt 0 ]; do
-	if [ "$1" = "-w" ] && [ $# -ge 2 ] && [ -z "$wfile" ]; then
-		wfile=$2
-		q="$q"' -w "$f"'
-		shift 2
-		continue
+real=` + shq(realGossh) + `
+mark='==AUTO_SETUP_GOSSH_RES=='
+args=("$@")
+wi=-1
+for ((i = 0; i < ${#args[@]}; i++)); do
+	if [ "${args[i]}" = "-w" ] && [ $((i + 1)) -lt ${#args[@]} ]; then
+		wi=$((i + 1))
+		break
 	fi
-	q="$q $(printf '%q' "$1")"
-	shift
 done
-[ -n "$wfile" ] || wfile=/dev/null
-c="f=\$(mktemp); cat > \$f; $gossh$q; rc=\$?; rm -f \$f \${f}_*; exit \$rc"
-if [[ $c == *'!'* ]]; then
-	# ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
-	bq=$'\x60'
-	e=$(printf %s "$c" | base64 -w0 | sed 's/../&./g')
-	exec ssh "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$wfile"
+
+# remote <목록> <결과 접두> : 목록을 stdin 으로 넘겨 os6_mgmt 에서 gossh 실행. 출력은 그대로, 결과 파일은 <결과 접두>_* 로 가져온다
+remote() {
+	local list=$1 dest=$2 q="" i c bq e res rc suf b
+	for ((i = 0; i < ${#args[@]}; i++)); do
+		if [ $i -eq $wi ]; then
+			q="$q"' "$f"'
+			continue
+		fi
+		q="$q $(printf '%q' "${args[i]}")"
+	done
+	c="f=\$(mktemp); cat > \$f; $gossh$q; "'rc=$?; echo '"$mark"'; for x in "$f"_*; do [ -f "$x" ] && echo "${x#$f} $(base64 -w0 < "$x")"; done; rm -f "$f" "$f"_*; exit $rc'
+	res=$(mktemp) || return 1
+	if [[ $c == *'!'* ]]; then
+		# ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
+		bq=$'\x60'
+		e=$(printf %s "$c" | base64 -w0 | sed 's/../&./g')
+		ssh "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
+		rc=${PIPESTATUS[0]}
+	else
+		c=${c//\'/\'\\\'\'}
+		ssh "$mgmt" "bash -c '$c'" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
+		rc=${PIPESTATUS[0]}
+	fi
+	if [ $wi -ge 0 ]; then
+		while read -r suf b; do
+			case "$suf" in _*) printf '%s' "$b" | base64 -d > "${dest}${suf}" 2>/dev/null ;; esac
+		done < "$res"
+	fi
+	rm -f "$res"
+	return $rc
+}
+# 표지줄 전은 그대로 출력, 표지줄 뒤(결과 파일)는 o 로. 표지줄이 출력 마지막 줄에 붙어 오면 앞부분만 출력한다
+filt='r { print > o; next } { i = index($0, m); if (i && substr($0, i) == m) { if (i > 1) printf "%s", substr($0, 1, i - 1); r = 1; next } print; fflush() }'
+
+if [ $wi -lt 0 ]; then # -w 없음: 전부 os6_mgmt 경유 (stdin 없음)
+	remote /dev/null /dev/null
+	exit $?
 fi
-c=${c//\'/\'\\\'\'}
-exec ssh "$mgmt" "bash -c '$c'" < "$wfile"
+wfile=${args[wi]}
+o6=${AUTO_SETUP_OS6_HOSTS:-}
+if [ -z "$o6" ] || [ ! -f "$o6" ] || [ -z "$real" ] || [ ! -x "$real" ]; then # 경로 정보·이 서버 gossh 가 없으면 전부 os6_mgmt 경유
+	remote "$wfile" "$wfile"
+	exit $?
+fi
+L=$(mktemp) && R=$(mktemp) || exit 1
+awk -v L="$L" -v R="$R" 'NR == FNR { s[$1] = 1; next } { h = $1 } h == "" { next } (h in s) { print > R; next } { print > L }' "$o6" "$wfile"
+if [ ! -s "$R" ]; then # os6 호스트 없음: 이 서버의 gossh 그대로
+	rm -f "$L" "$R"
+	exec "$real" "$@"
+fi
+if [ ! -s "$L" ]; then # 전부 os6 호스트
+	rm -f "$L" "$R"
+	remote "$wfile" "$wfile"
+	exit $?
+fi
+# 섞여 있음: os8 호스트는 이 서버에서, os6 호스트는 os6_mgmt 경유로 동시에 실행하고 출력·결과 파일을 합친다
+lo=$(mktemp) && le=$(mktemp) || exit 1
+largs=("${args[@]}")
+largs[wi]=$L
+"$real" "${largs[@]}" > "$lo" 2> "$le" &
+lp=$!
+remote "$R" "$R"
+rrc=$?
+wait $lp
+lrc=$?
+cat "$lo"
+cat "$le" >&2
+declare -A seen
+for p in "$L"_* "$R"_*; do
+	[ -f "$p" ] || continue
+	case "$p" in "$L"_*) suf=${p#"$L"} ;; *) suf=${p#"$R"} ;; esac
+	[ -n "${seen[$suf]:-}" ] && continue
+	seen[$suf]=1
+	cat "$L$suf" "$R$suf" 2>/dev/null > "$wfile$suf"
+done
+rm -f "$L" "$R" "$L"_* "$R"_* "$lo" "$le"
+[ $lrc -ne 0 ] && exit $lrc
+exit $rrc
 `
+}
+
+// localGosshPath: os8 쪽 실제 gossh 경로 (bin/gossh 래퍼 자신은 제외). 없으면 "".
+func localGosshPath() string {
+	p, err := exec.LookPath("gossh")
+	if err != nil {
+		return ""
+	}
+	if a, err := filepath.Abs(p); err == nil && a == filepath.Join(binDir(), "gossh") {
+		return ""
+	}
+	return p
 }
 
 func writeOS6Wrapper() error {
@@ -190,7 +288,7 @@ func writeOS6Wrapper() error {
 		return err
 	}
 	p := filepath.Join(binDir(), "gossh")
-	if err := os.WriteFile(p, []byte(os6WrapperScript()), 0755); err != nil {
+	if err := os.WriteFile(p, []byte(os6WrapperScript(localGosshPath())), 0755); err != nil {
 		return err
 	}
 	return os.Chmod(p, 0755)
@@ -273,11 +371,21 @@ func parsePostapplyHosts(post string, hosts []string) []string {
 	for _, h := range hosts {
 		want[h] = true
 	}
+	// gossh 가 접속하지 못한 호스트는 결과에 "host: ERROR: SSH 접속 실패 …" 줄만 남는다 — 체크 결과가 아니므로 처리로 치지 않는다
+	// (config_check.sh 의 완료기록 규칙과 같게 ERROR 줄이 있는 호스트는 제외). 전에는 이 줄만으로 완료 처리될 수 있었다.
+	bad := map[string]bool{}
+	for _, l := range splitLines(post) {
+		if h := lineHost(l); h != "" {
+			if b := strings.TrimSpace(l[strings.Index(l, ":")+1:]); strings.HasPrefix(b, "ERROR") || strings.HasPrefix(b, "SSH 접속 실패") {
+				bad[h] = true
+			}
+		}
+	}
 	seen := map[string]bool{}
 	var out []string
 	for _, l := range splitLines(post) {
 		h := lineHost(l)
-		if h != "" && want[h] && !seen[h] {
+		if h != "" && want[h] && !seen[h] && !bad[h] {
 			seen[h] = true
 			out = append(out, h)
 		}
