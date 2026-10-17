@@ -68,6 +68,7 @@ type hostRT struct {
 	startCheck    bool // 기동 직후 1회 준비확인
 	resolveLogged bool
 	resolveFails  int // 연속 이름 해석 실패 횟수 (resolveToOS6 회면 os6 경유로)
+	oldOSLogged   bool
 }
 
 type inflight struct {
@@ -888,6 +889,21 @@ func (d *Daemon) applyCheck(j *Job, name string, cr CheckResult, t int64) {
 		}
 		return
 	}
+	// 접수 뒤 재부팅됐어도 설치 기록이 오래된 기존 OS 면 READY 가 아니다 (접속불가 → 기존 OS 로 부팅 → 재부팅 → 설치 흐름의 중간).
+	// 설치 단계로 두고 다음 재부팅·anaconda·새 OS 를 기다린다 (끝내 설치되지 않으면 installStuck 뒤 정체)
+	if cr.OldOS {
+		if !h.SeenDown {
+			h.SeenDown, h.DownAt = true, t
+			d.dirty[j.ID] = true
+		}
+		if r := d.hrt(name); !r.oldOSLogged {
+			r.oldOSLogged = true
+			logf("기존 OS 부팅 감지: %s (job %s, uptime %.0fs, 설치 기록이 오래됨 → READY 아님, 설치를 기다림)", name, j.ID, cr.Uptime)
+		}
+		d.setStage(j, name, StageBooting, t)
+		return
+	}
+	d.hrt(name).oldOSLogged = false
 	h.ReadyAt = t
 	d.dirty[j.ID] = true
 	logf("READY: %s (job %s, uptime %.0fs)", name, j.ID, cr.Uptime)

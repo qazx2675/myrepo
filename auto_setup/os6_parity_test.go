@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -259,5 +260,25 @@ func TestPostapplyErrorHostNotProcessed(t *testing.T) {
 	post := "a1: OK hostname a1\noff1: ERROR: SSH 접속 실패: dial tcp 10.0.0.9:22: connect: no route to host\nb6: OK x\nb6: ERROR: 종료코드 1\n"
 	if got := parsePostapplyHosts(post, []string{"a1", "off1", "b6"}); strings.Join(got, ",") != "a1" {
 		t.Fatalf("ERROR 호스트는 제외: %v", got)
+	}
+}
+
+// 준비확인 해석: 설치 기록(anaconda-ks.cfg)이 uptime 보다 48시간 넘게 오래되면 기존 OS, 방금 설치면 새 OS, 파일 없으면 판단 안 함
+func TestParseCheckOldOS(t *testing.T) {
+	now := int64(1760000000)
+	out := strings.Join([]string{
+		"old1: 120.5 300.1", "old1: " + fmt.Sprint(now), "old1: " + fmt.Sprint(now-90*86400),
+		"new1: 120.5 300.1", "new1: " + fmt.Sprint(now), "new1: " + fmt.Sprint(now-400),
+		"tz1: 120.5 300.1", "tz1: " + fmt.Sprint(now), "tz1: " + fmt.Sprint(now-9*3600-400), // 설치기·OS 시간대 차이 9시간
+		"nof: 120.5 300.1", "nof: " + fmt.Sprint(now), "nof: stat: cannot stat '/root/anaconda-ks.cfg': No such file or directory",
+	}, "\n")
+	res := parseCheck([]string{"old1", "new1", "tz1", "nof"}, out, "")
+	if !res["old1"].OldOS || res["new1"].OldOS || res["tz1"].OldOS || res["nof"].OldOS {
+		t.Fatalf("OldOS 판정: %+v", res)
+	}
+	for _, h := range []string{"old1", "new1", "tz1", "nof"} {
+		if !res[h].Responded || res[h].Uptime != 120.5 {
+			t.Fatalf("%s uptime: %+v", h, res[h])
+		}
 	}
 }
