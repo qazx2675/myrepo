@@ -2,7 +2,7 @@
 
 그림 모음: 전체 [`workflow.svg`](workflow.svg), 명령·키별 31개 [`docs/svg/`](docs/svg/README.md). 사용법은 [README.md](README.md), 코드 구조는 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## auto_setup 실행 흐름 (Mermaid, v0.8.0 반영)
+## auto_setup 실행 흐름 (Mermaid, v0.8.8 반영)
 
 ```mermaid
 flowchart TD
@@ -16,13 +16,13 @@ flowchart TD
     D1 --> E
     D2 --> E["[데몬] queue 수거 5초 주기"]
 
-    E --> F["호스트명 → IP (DNS, 동시 32)<br/>경로 판별: 로컬 ping 실패 → route=os6<br/>(설치 중 os8 무응답·os6 응답 → os6 전환)"]
+    E --> F["호스트명 → IP (DNS, 동시 32)<br/>경로 판별: 로컬 ping 실패 → route=os6<br/>os8 에서 이름 3번 연속 못 찾음 → route=os6<br/>(설치 중 os8 무응답·os6 응답 → os6 전환)"]
     F --> I["jobs/<jobid>.json 저장"]
     I --> BK["전달 시점 LDAP 백업<br/>ping O 인 호스트만, ldapbak/<jobid>/<host>/"]
 
     BK --> J["[루프 ①] ping 감시 10초<br/>무응답 2회 → seen_down (설치 시작)"]
-    J --> L["[루프 ②] 준비확인 30초 (후보만)<br/>gossh -pm cat /proc/uptime<br/>호출당 60초 제한, 원격은 bash -c"]
-    L --> N{"READY?<br/>응답 · anaconda 아님 ·<br/>uptime < 경과시간"}
+    J --> L["[루프 ②] 준비확인 30초 (후보만)<br/>gossh -pm 으로 uptime · 현재 시각 · 설치 기록 시각<br/>호출당 60초 제한, 원격은 bash -c<br/>ping 을 놓쳐도 5분마다 대기 서버 전체 확인"]
+    L --> N{"READY?<br/>응답 · anaconda 아님 ·<br/>uptime < 경과시간 ·<br/>기존 OS 아님 (설치 기록 48시간 이내)"}
     N -->|No| L
     N -->|Yes| LD["LDAP 비교 (stage=ldap)<br/>새 OS ldap.conf binddn uid vs 백업"]
     LD --> LDQ{"같은가?"}
@@ -30,13 +30,13 @@ flowchart TD
     LDQ -->|diff| LR["공유경로(ldap_share_dir) 경유로<br/>백업 파일 세트 복원 + 서비스 재시작<br/>(변수 비면 수동 복원 필요)"]
     LR --> O["[루프 ③] 스케줄 7분/3분<br/>전부 READY 면 즉시"]
 
-    O --> R["[run] os_check -auto user targets.txt<br/>동시 1개, runs/<code>/"]
+    O --> R["[run] os_check -auto user targets.txt<br/>동시 1개, runs/<code>/<br/>os6 서버는 os6_mgmt, 나머지는 os8 에서 동시에"]
     R --> S2{"2차 대상 있음?<br/>route=local 의 접속불가·FAIL<br/>(os6_mgmt·os6_os_check_sh 설정 시)"}
     S2 -->|Yes| S3["os6_mgmt 에서 os_check -auto 1회<br/>결과 tar 회수 → runs/<code>/second/"]
     S2 -->|No| V
     S3 --> V["code 파일 생성<br/>① 결과 리포트 ② FAIL/NO FAIL ③ LDAP·Splunk·커널<br/>④ 원본 경로 ⑤ ### 2차 체크 (os6_mgmt)"]
     V --> Y["wall 발송 (기본 꺼짐): 완료 호스트 + code"]
-    Y --> AA["processed 표시 (최종 = 1차 OK 또는 2차 OK)"]
+    Y --> AA["processed 표시 (최종 = 1차 OK 또는 2차 OK)<br/>접속 실패(ERROR) 서버는 제외"]
     AA --> AB{"모든 호스트 완료?"}
     AB -->|Yes| AB1["작업 종료 jobs → done"]
     AB -->|No| J
@@ -137,8 +137,11 @@ jobs/<jobid>.json 생성
 
 ```bash
 # 후보: (미처리 && ping up && seen_down) || (기동 후 1회)
-# gossh -pm -script -w <list> "cat /proc/uptime"
-# READY = 응답 있음 && anaconda 아님 && uptime < (지금 − submitted)
+#       || (ping 정보가 1분 넘게 없음) || (5분마다 기다리는 서버 전체 — 재부팅이 빨라 꺼짐을 못 본 경우) (0.8.7)
+# gossh -pm -script -w <list> "cat /proc/uptime; date +%s; stat -c %Y /root/anaconda-ks.cfg; :"
+# READY = 응답 있음 && anaconda 아님 && uptime < (지금 − submitted) && 기존 OS 아님
+# 기존 OS = 설치 기록(anaconda-ks.cfg)이 이번 부팅보다 48시간 넘게 오래됨 → READY 아님, 설치를 계속 기다림 (0.8.8)
+#           파일이 없으면 종전처럼 uptime 만으로 판정
 # route=local 무응답 호스트는 같은 주기에 os6_mgmt 경유 재확인 → 응답하면 route=os6 (os6_gossh 필요, 0.4.0)
 # 호출 1회마다 전체 60초 제한(초과 시 프로세스 그룹 종료, 사유 "시간 초과(60초)"), os6 ssh 는 bash -c 로 감싸 csh/tcsh 로그인 셸에서도 동작 (0.8.0)
 # gossh 출력은 parseGossh 하나로 해석 (FQDN ↔ 짧은 이름, 해석 실패 시 로그 "[!] gossh 출력 해석 실패" + 사유 "출력 형식 불일치")
@@ -165,6 +168,8 @@ jobs/<jobid>.json 생성
 ```bash
 # cd /tmp/auto_setup/runs/<code>
 # os6 호스트 포함 시: /tmp/auto_setup/bin/gossh 래퍼 PATH 앞에 삽입
+#   래퍼는 목록을 나눠 os6 서버는 os6_mgmt 에서, 나머지는 os8 gossh 로 동시에 실행하고 출력·결과 파일을 합침 (0.8.7)
+#   체크 결과에 ERROR / SSH 접속 실패가 있는 서버는 완료(processed)로 치지 않음
 # bash os_check_sh -auto <user> targets.txt > os_check.log 2>&1
 # os_check 는 정상 종료 시 (빈 변수 auto_done_* 가 채워진 경우) 완료기록을 남김
 ```
@@ -316,12 +321,12 @@ flowchart TD
 flowchart TD
     S["s 또는 auto_setup s"] --> U["user 정하기 (-user 또는 세션 user)"]
     U --> L["작업 목록 work/<user>/index.jsonl<br/>열 때 정리: 출력 7일 · 200MB · 목록 파일 7일"]
-    L -->|"n"| PA["호스트 붙여넣기"]
+    L -->|"n"| PA["호스트 붙여넣기<br/>빈 줄 무시, Ctrl+D 로 끝"]
     PA --> RU{"같은 목록이 있는가?"}
     RU -->|"예 y"| CMD["명령 한 줄 입력"]
     RU -->|"아니오 n"| NEW["/tmp/auto_setup/lists/<소문자 3자리> 이름 정함"]
     NEW --> CMD
-    L -->|"Enter"| ITEM["항목 메뉴: 새 명령 · 재실행 · 실패만 재실행 · 결과 보기 · 메모 · 호스트 목록"]
+    L -->|"Enter"| ITEM["실행 결과 + 아래에 항목 메뉴: 새 명령 · 재실행 · 실패만 재실행 · 결과 보기 · 메모 · 호스트 목록"]
     ITEM --> CMD
     L -->|"/"| SR["호스트 검색 → 작업·명령 시간순"]
     CMD --> DG{"위험어(reboot·halt 등)?"}
@@ -339,10 +344,26 @@ flowchart TD
     DM["데몬: 하루 한 번 workCleanAll"] -.->|"출력 7일 · user 당 200MB · /tmp 7일"| REC
 ```
 
+## 처음부터 접속이 안 되던 서버 (v0.8.8)
+
+AWX 를 실행할 때부터 ping·ssh 가 안 되던 서버도 os8 경유·os6 경유 상관없이 아래처럼 끝납니다. 기준은 하나입니다: **새 OS 로 올라온 뒤에만 체크하고 완료한다.**
+
+| 흐름 | 결과 |
+|---|---|
+| 접속불가 → 설치(anaconda) → 새 OS | 새 OS 로 올라오면 체크 → 완료 |
+| 접속불가 → (설치 화면을 못 봄) → 새 OS | 같음 |
+| 접속불가 → 기존 OS 부팅 → 재부팅 → 설치 → 새 OS | 기존 OS 인 동안은 기다림 (로그 `기존 OS 부팅 감지`), 새 OS 에서 완료 |
+| 기존 OS 부팅이 여러 번 → 설치 → 새 OS | 같음 |
+| 기존 OS 로만 올라옴 (PXE 실패) | 완료하지 않음 → 60분 뒤 정체 |
+| 끝내 안 올라옴 | 완료하지 않음 → 60분 뒤 정체 |
+
+- 기존 OS 판별: `/root/anaconda-ks.cfg` 가 이번 부팅보다 48시간 넘게 오래됐으면 기존 OS. 48시간 안에 설치된 기존 OS 는 새 OS 로 보입니다.
+- 이런 서버는 접수 때 응답이 없으므로 LDAP 백업이 없고, LDAP 비교도 건너뜁니다.
+
 ## 흐름도 보조 자료
 
 - **계획서 §14**: 2차 설계
-- **workflow.svg**: 정적 SVG 흐름도 (v0.8.0 반영: 항목별 메뉴·신규 설치 양식·DNS 점검·gossh 작업 열 추가)
+- **workflow.svg**: 정적 SVG 흐름도 (v0.8.8 반영: 기존 OS 부팅 대기, 5분 재확인, os6·os8 동시 체크, 처음부터 접속불가 서버 정리)
 - **docs/svg/**: CLI 명령·TUI 키별 흐름도 31개 — [목록](docs/svg/README.md)
 - **README.md**: 사용법·옵션·키 표 (키 행마다 해당 SVG 링크)
 - **ARCHITECTURE.md**: 함수 및 단계 매핑
