@@ -46,7 +46,7 @@ func TestCheckLocal(t *testing.T) {
 			t.Fatalf("명령: %s", name)
 		}
 		want := []string{"-pm", "-script", "-w"}
-		if len(args) != 5 || args[0] != want[0] || args[1] != want[1] || args[2] != want[2] || args[4] != "cat /proc/uptime" {
+		if len(args) != 5 || args[0] != want[0] || args[1] != want[1] || args[2] != want[2] || args[4] != readyCmd {
 			t.Fatalf("인자: %v", args)
 		}
 		listFile = args[3]
@@ -101,7 +101,7 @@ func TestCheckOS6(t *testing.T) {
 		if !strings.HasPrefix(r, "bash -c '") {
 			t.Fatalf("bash -c 로 감싸야 함: %s", r)
 		}
-		for _, s := range []string{"f=$(mktemp)", "cat > $f", `'\''/stub/gossh'\'' -pm -script -w $f "cat /proc/uptime"`,
+		for _, s := range []string{"f=$(mktemp)", "cat > $f", `'\''/stub/gossh'\'' -pm -script -w $f '\''` + readyCmd + `'\''`,
 			"echo ==OSI==", "cat ${f}_os_install", "rm -f $f ${f}_*"} {
 			if !strings.Contains(r, s) {
 				t.Fatalf("원격 문자열에 %q 없음: %s", s, r)
@@ -243,7 +243,7 @@ exec "${LOGIN_SH:-sh}" -c "$1"
 	os.WriteFile(gossh, []byte(`#!/bin/bash
 w=""; last=""
 while [ $# -gt 0 ]; do case $1 in -w) w=$2; shift 2;; *) last=$1; shift;; esac; done
-[ "$last" = "cat /proc/uptime" ] || { echo "bad cmd: $last" >&2; exit 9; }
+[ "$last" = "cat /proc/uptime; date +%s; stat -c %Y /root/anaconda-ks.cfg; :" ] || { echo "bad cmd: $last" >&2; exit 9; }
 grep -qx a "$w" && echo "a: 3.5 1.0"
 grep -qx b "$w" && echo b > "${w}_os_install"
 if [ -n "$HANG" ]; then sleep 30 & echo $! > "$HANG"; sleep 30; fi
