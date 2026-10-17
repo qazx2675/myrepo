@@ -32,6 +32,14 @@ var runExternal = func(stdin string, name string, args ...string) (string, error
 	return out.String(), err
 }
 
+// readyCmd: 준비확인 명령 — uptime, 대상 서버의 현재 시각, 설치 기록(/root/anaconda-ks.cfg) 수정 시각.
+// 설치 기록이 이번 부팅보다 훨씬 오래됐으면 새로 설치되지 않은 기존 OS 로 본다(접수 후 기존 OS 로 잠깐 부팅된 것을 READY 로 보지 않게).
+// 파일이 없으면 stat 이 실패해도 "; :" 로 종료코드 0 (gossh 가 출력 전체를 ERROR 로 돌리지 않게). sh·bash·csh 모두 같은 문법.
+const readyCmd = "cat /proc/uptime; date +%s; stat -c %Y /root/anaconda-ks.cfg; :"
+
+// oldOSSlack: 설치 기록 나이가 uptime 보다 이만큼 이상 길면 기존 OS (설치기·OS 의 시간대 차이·%post 시간을 넉넉히 흡수)
+const oldOSSlack = 48 * 3600
+
 // checkTimeout: 준비확인 호출(gossh / ssh os6_mgmt) 1회 전체 상한. 60초 고정(conf 변수 없음) — 테스트만 줄인다.
 var checkTimeout = 60 * time.Second
 
@@ -103,7 +111,7 @@ func checkLocal(hosts []string) (map[string]CheckResult, error) {
 	}
 	f.Close()
 
-	out, err := runExternalDiag("", "gossh", "-pm", "-script", "-w", p, "cat /proc/uptime")
+	out, err := runExternalDiag("", "gossh", "-pm", "-script", "-w", p, readyCmd)
 	if err != nil && err != errCheckTimeout && strings.TrimSpace(out) == "" {
 		if _, ok := err.(*exec.ExitError); !ok {
 			return nil, err // gossh 실행 자체 실패
@@ -143,7 +151,7 @@ func checkOS6(hosts []string) (map[string]CheckResult, error) {
 	}
 	// exec 로 직접 ssh 를 호출하므로 로컬 셸 확장이 없다 → 원격에서 bash 가 $ 를 확장하도록 remoteBash 로 감싼다
 	// (os6_mgmt 의 로그인 셸이 csh 계열이어도 동작: $(...) 는 csh 에서 오류). os6_gossh 경로는 shq 로 인용.
-	inner := "f=$(mktemp); cat > $f; " + shq(os6_gossh) + ` -pm -script -w $f "cat /proc/uptime"; ` +
+	inner := "f=$(mktemp); cat > $f; " + shq(os6_gossh) + ` -pm -script -w $f ` + shq(readyCmd) + `; ` +
 		"echo " + osiMarker + "; cat ${f}_os_install 2>/dev/null; rm -f $f ${f}_*"
 	out, err := runExternalDiag(hostList(hosts), "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(inner))
 	if !strings.Contains(out, osiMarker) {
@@ -199,10 +207,17 @@ func parseCheck(hosts []string, stdout, osInstall string) map[string]CheckResult
 	res := map[string]CheckResult{}
 	why := map[string]string{}
 	for h, lines := range g.Lines {
+		var ints []int64 // readyCmd 의 date·stat 줄 (정수 하나): 현재 시각, 설치 기록 시각
 		for _, body := range lines {
 			f := strings.Fields(body)
 			if len(f) == 0 {
 				continue
+			}
+			if len(f) == 1 {
+				if n, err := strconv.ParseInt(f[0], 10, 64); err == nil && n > 1e9 {
+					ints = append(ints, n)
+					continue
+				}
 			}
 			up, err := strconv.ParseFloat(f[0], 64)
 			if err != nil {
@@ -212,6 +227,10 @@ func parseCheck(hosts []string, stdout, osInstall string) map[string]CheckResult
 				continue
 			}
 			res[h] = CheckResult{Responded: true, Uptime: up}
+		}
+		if r, ok := res[h]; ok && len(ints) >= 2 && ints[0]-ints[1] > int64(r.Uptime)+oldOSSlack {
+			r.OldOS = true
+			res[h] = r
 		}
 	}
 	for _, line := range strings.Split(osInstall, "\n") {

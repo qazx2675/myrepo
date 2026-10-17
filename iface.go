@@ -27,6 +27,7 @@ type Pinger interface {
 type CheckResult struct {
 	Responded, Anaconda bool
 	Uptime              float64
+	OldOS               bool   // 설치 기록(/root/anaconda-ks.cfg)이 지금 부팅보다 훨씬 오래됨 = 새로 설치되지 않은 기존 OS
 	Why                 string // 무응답 사유(gossh 가 그 호스트에 대해 출력한 메시지, 없으면 빈 문자열) — 진단 표시용
 }
 

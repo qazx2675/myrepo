@@ -42,6 +42,7 @@ type simHost struct {
 	remote                bool       // 로컬 ICMP 불가 (os6 경로로만 보임)
 	unknown               bool       // 항상 Known=false
 	noLocalSSH            bool       // 로컬 준비확인(gossh) 무응답 (ping 은 됨, os6 경유로만 응답)
+	tl                    []tlSeg    // 있으면 위 필드 대신 시간대별 상태 (firstdown_test.go)
 }
 
 func oldOS() *simHost { return &simHost{dd: never, ana: never, reboot: never, boot: never} }
@@ -51,6 +52,9 @@ func install(dd, ana, reboot, boot int64) *simHost {
 }
 
 func (s *simHost) up(o int64) bool {
+	if s.tl != nil {
+		return s.tlAt(o).kind != tlDown
+	}
 	for _, w := range s.downs {
 		if o >= w[0] && o < w[1] {
 			return false
@@ -60,6 +64,9 @@ func (s *simHost) up(o int64) bool {
 }
 
 func (s *simHost) check(o int64) CheckResult {
+	if s.tl != nil {
+		return s.tlCheck(o)
+	}
 	switch {
 	case !s.up(o):
 		return CheckResult{}
@@ -151,7 +158,7 @@ func (w *world) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	}
 	r := RunResult{Code: code}
 	for _, h := range hosts {
-		if s := w.hosts[h]; o >= s.boot && s.up(o) {
+		if s := w.hosts[h]; s.tl != nil && s.up(o) || s.tl == nil && o >= s.boot && s.up(o) { // 시간대 서버: 켜져 있으면 OS 와 상관없이 체크 결과가 나옴(실제와 같음)
 			r.Processed = append(r.Processed, h)
 		}
 	}
