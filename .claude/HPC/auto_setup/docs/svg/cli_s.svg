@@ -54,7 +54,7 @@
   <text x="265" y="362" class="t" text-anchor="middle">os6_mgmt 에서 열었으면 기록은 os8_mgmt 에 중계 (work-relay)</text>
   <path d="M265 372 L265 400" class="ln"/>
   <rect x="40" y="400" width="450" height="46" rx="6" class="box"/>
-  <text x="265" y="420" class="t tb" text-anchor="middle">n 새 작업 / Enter 항목 메뉴 / / 호스트 검색</text>
+  <text x="265" y="420" class="t tb" text-anchor="middle">n 새 작업 / Enter 결과 + 항목 메뉴 / / 호스트 검색</text>
   <text x="265" y="436" class="t" text-anchor="middle">자세한 단계는 tui_s.svg 와 같음</text>
   <path d="M265 446 L265 474" class="ln"/>
   <rect x="40" y="474" width="450" height="46" rx="6" class="ldap"/>

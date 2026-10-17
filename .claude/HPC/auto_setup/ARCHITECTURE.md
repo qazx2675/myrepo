@@ -64,7 +64,7 @@
 | `CHANGELOG.md` | 변경 이력 | 배포 필수 |
 | `ARCHITECTURE.md` | 이 문서 — 폴더 구조, 함수 역할, 수정 가이드 | 개발 참고 |
 | `WORKFLOW.md` | 흐름도(텍스트 mermaid) | 개발/설명 용도 |
-| `workflow.svg` | 흐름도(SVG, v0.8.0 신규 기능 열 포함) | 브라우저 열람 용도 |
+| `workflow.svg` | 흐름도(SVG, v0.8.8 반영) | 브라우저 열람 용도 |
 | `PR_CHECKLIST.md` | 풀리퀘스트 검증 항목 | CI 참고 |
 | `사용법.txt` | 명령어 중심 빠른 참고 | 운영 담당자 용도 |
 | `.github/workflows/ci.yml` | 폴더 내 CI (bash/shellcheck/go test) | 자동 검증 |
