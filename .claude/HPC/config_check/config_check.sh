@@ -86,8 +86,10 @@ EXPAND_AWK='function expand(tok, tag,   p, q, pre, body, post, d, lo, hi, w, i) 
 
 ########################## 1. user 선택 ##########################
 AUTO_MODE=""   # 환경변수로 -auto 가 새어 들어오는 것 방지 (인자 없는 실행은 기존과 동일)
-if [ "${1:-}" = "-auto" ]; then
+AUTO_CHECK_ONLY=""   # -auto-check : -auto 와 같지만 환경설정 수정(n)·재점검·완료기록 없음 (auto_setup 설정체크만)
+if [ "${1:-}" = "-auto" ] || [ "${1:-}" = "-auto-check" ]; then
     AUTO_MODE=1; user="${2:-}"; LIST_FILE="${3:-}"
+    if [ "$1" = "-auto-check" ]; then AUTO_CHECK_ONLY=1; fi
     if [ "$#" -ne 3 ] || [ -z "$user" ] || [ ! -f "$LIST_FILE" ]; then
         echo "-auto <user> <호스트목록파일> : 목록 파일이 없습니다"
         exit 1
@@ -129,7 +131,7 @@ echo
 
 ########################## 3. 작업 진행 여부 ##########################
 if [ -n "$AUTO_MODE" ]; then
-    echo "작업을 진행하시겠습니까? (y/n): y (-auto)"
+    echo "작업을 진행하시겠습니까? (y/n): y (-auto${AUTO_CHECK_ONLY:+-check})"
 else
     while :; do
         read -r -p "작업을 진행하시겠습니까? (y/n): " ans || exit 1
@@ -394,8 +396,9 @@ FINAL="$TMP/first.state"
 ########################## 5. 환경설정 수정 여부 ##########################
 if [ -n "$AUTO_MODE" ]; then
     # -auto : 대상에 p/d 로 시작하는 호스트가 하나 이상이면 set, 아니면 y
-    if grep -qiE '^[[:space:]]*[pd]' "$HOSTS"; then ans=set; else ans=y; fi
-    echo "환경설정을 수정하시겠습니까? (y/n/set): $ans (-auto)"
+    if [ -n "$AUTO_CHECK_ONLY" ]; then ans=n
+    elif grep -qiE '^[[:space:]]*[pd]' "$HOSTS"; then ans=set; else ans=y; fi
+    echo "환경설정을 수정하시겠습니까? (y/n/set): $ans (-auto${AUTO_CHECK_ONLY:+-check})"
 else
     while :; do
         read -r -p "환경설정을 수정하시겠습니까? (y/n/set): " ans || exit 1
@@ -554,6 +557,6 @@ if [ -s "$TMP/ev.list" ]; then
 fi
 if [ -n "$AUTO_MODE" ]; then
     echo "###########################################"
-    auto_record_done
+    if [ -z "$AUTO_CHECK_ONLY" ]; then auto_record_done; fi
 fi
 exit 0
