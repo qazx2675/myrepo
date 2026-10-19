@@ -81,6 +81,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `mockbmc.sh` | mock BMC 기동 래퍼(`bin/mockbmc`(`_os6`) 가 있으면 그대로 사용, 없을 때만 go 로 빌드) |
 | `testcase/rf_fallback_case.sh` | 2순위 계정·접속불가 구분·설정 표기 선택을 mock 으로 직접 시험하는 케이스(Go 불필요, `bin/mockbmc` 사용). 설명 `testcase/README.md` |
 | `setup.sh` · `build.sh` · `build_os6.sh` | 오프라인 빌드 / os8 빌드 / os6(RHEL6, Go 1.20.x) 빌드 |
+| `update.sh` | 설치 폴더(`TARGET`, 고정 `/root/server_vm_python/redhfish/V2`) 갱신: ZIP 풀기 → 백업 → `KEEP` 외 항목 교체 → `profiles/` 파일별 병합(`.update_profiles.sha`) |
 | `bin/biostool` · `bin/biostool_os6` | **빌드 완료 바이너리(커밋 대상).** 회사 환경에 Go 가 없어 이것이 곧 배포본. 소스를 고치면 둘 다 재빌드해 함께 커밋 |
 | `bin/mockbmc` · `bin/mockbmc_os6` · `bin/mockucsm` · `bin/mockucsm_os6` | mock 서버 빌드 완료 바이너리(폐쇄망 시험용으로 커밋). mock 소스를 고치면 해당 둘 다 재빌드 |
 | `go.mod` | `module biostool`, `go 1.20`, 외부 의존성 없음(→ `vendor/` 불필요) |
