@@ -257,7 +257,7 @@ export VC_PASS='...'
 
 #### 보조 스크립트
 
-1·2단계는 `folder_setup.sh`(대화형으로 폴더명·값을 물어보고 `SPEC_DIR` 아래에 생성), 3단계는 `vm_setting_check_insert.sh`(`-u <user>` 또는 그냥 실행 시 번호 메뉴에서 골라 `-f`/`-out`을 자동으로 구성)로 대신할 수 있습니다. 둘 다 이 폴더에 있고 `bash <스크립트명>`으로 실행합니다.
+1·2단계는 `folder_setup.sh`(대화형으로 폴더명·값을 물어보고 `SPEC_DIR` 아래에 생성), 3단계는 `vm_setting_check_insert.sh`(`-u <user>` 또는 그냥 실행 시 번호 메뉴에서 골라 `-f`/`-out`을 자동으로 구성)로 대신할 수 있습니다. 둘 다 이 폴더에 있고 `bash <스크립트명>`으로 실행합니다. 단독 실행은 `VMsetup` 의 `run_<user>/` 기록(이전 `vm_setup.sh` 대상)을 보지 않으며, 설치 직후 그 결과를 그대로 체크하려면 `-fromSetup` 을 붙입니다.
 
 ### 2-5. Task 폴더(임시 작업 폴더)에 있는 VM 체크하기
 
