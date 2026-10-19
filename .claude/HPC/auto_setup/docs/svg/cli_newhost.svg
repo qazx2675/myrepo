@@ -51,9 +51,18 @@
   <path d="M265 282 L265 310" class="ln"/>
   <rect x="40" y="310" width="450" height="78" rx="6" class="box"/>
   <text x="265" y="330" class="t tb" text-anchor="middle">1/5 붙여넣기</text>
-  <text x="265" y="346" class="t" text-anchor="middle">hostname ip mac 한 줄에 한 대 (구분자·순서 무관, MAC 은 소문자로), 빈</text>
-  <text x="265" y="362" class="t" text-anchor="middle">줄 또는 . 로 끝</text>
-  <text x="265" y="378" class="t" text-anchor="middle">형식 오류·목록 안 중복은 빨강 — d 번호 로 삭제 / e 번호 로 다시 입력</text>
+  <text x="265" y="346" class="t" text-anchor="middle">hostname ip mac [템플릿] 한 줄에 한 대 (위에 등록 템플릿 목록),</text>
+  <text x="265" y="362" class="t" text-anchor="middle">MAC 은 소문자로, 빈 줄 또는 . 로 끝</text>
+  <text x="265" y="378" class="t" text-anchor="middle">형식 오류·중복·없는 템플릿은 빨강 — d 번호 삭제 / e 번호 다시 입력</text>
+  <rect x="560" y="310" width="310" height="78" rx="6" class="dec"/>
+  <text x="715" y="330" class="t tb" text-anchor="middle">템플릿을 적은 줄이 있으면 확인</text>
+  <text x="715" y="346" class="t" text-anchor="middle">템플릿별 대수 + 저장될 12필드 줄 예시 1건</text>
+  <text x="715" y="362" class="t" text-anchor="middle">y: 지정하고 2/5 로 · n/Esc: 붙여넣기로</text>
+  <text x="715" y="378" class="t" text-anchor="middle">(전부 없으면 이 확인 없이 바로 2/5)</text>
+  <path d="M490 349 L560 349" class="ln"/>
+  <text x="498" y="344" class="t tm">입력 끝</text>
+  <path d="M715 388 L715 455 L490 455" class="ln"/>
+  <text x="723" y="405" class="t tm">y</text>
   <path d="M265 388 L265 416" class="ln"/>
   <rect x="40" y="416" width="450" height="78" rx="6" class="box"/>
   <text x="265" y="436" class="t tb" text-anchor="middle">2/5 템플릿 지정</text>
@@ -103,5 +112,5 @@
   <text x="699" y="949" class="t tm">기록 · 결과</text>
   <rect x="80" y="958" width="14" height="14" class="ext"/>
   <text x="100" y="969" class="t tm">시작 · 종료 · 참고 (점선)</text>
-  <text x="40" y="986" class="t tm">코드: newhost_tui.go cmdNewhost · sessionuser.go askUserCLI · newhost.go newhostSave · dnscheck.go CheckDNS</text>
+  <text x="40" y="986" class="t tm">코드: newhost_tui.go cmdNewhost·confirmKey · sessionuser.go askUserCLI · newhost.go newhostSave · dnscheck.go CheckDNS</text>
 </svg>
