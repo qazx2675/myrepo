@@ -24,6 +24,7 @@ const (
 	nhDNSEach        // 3 하나씩 y/n
 	nhPreview        // 4 미리보기
 	nhSaved          // 5 저장 확인 + AWX 실행?
+	nhConfirm        // 1 붙여넣은 줄에 템플릿(네 번째 값)이 있을 때: 바뀔 양식 예시 + y/n
 )
 
 // 확인 질문
@@ -166,6 +167,8 @@ func (n *newhostState) handleKey(ev keyEv) {
 		n.pasteKey(ev)
 	case nhAssign:
 		n.assignKey(ev)
+	case nhConfirm:
+		n.confirmKey(ev)
 	case nhDNS:
 		if ev.k == kEsc { // 결과는 버린다 (goroutine 은 끝나면 버퍼에 넣고 사라짐)
 			n.dns, n.step = nil, nhAssign
@@ -259,6 +262,11 @@ func (n *newhostState) commitLine(line string) {
 		return
 	}
 	r := nhParseLine(line)
+	if r.Err == "" && r.Tpl != "" {
+		if _, ok := nhFindTpl(n.tpls, r.Tpl); !ok {
+			r.Err = fmt.Sprintf("템플릿 %q 없음 (번호·별칭·이름)", r.Tpl)
+		}
+	}
 	if n.editRow != 0 {
 		n.rows[n.editRow-1] = r
 		n.jumpRow = n.editRow - 1
@@ -284,7 +292,41 @@ func (n *newhostState) finishPaste() {
 		n.jumpRow = bad[0]
 		return
 	}
+	for _, r := range n.rows {
+		if r.Tpl != "" {
+			n.step, n.sc = nhConfirm, flowScroll{}
+			n.setMsg("")
+			return
+		}
+	}
 	n.enterAssign()
+}
+
+// confirmKey: 붙여넣은 줄의 템플릿을 적용할지 — y 지정 후 템플릿 지정 단계로, n·Esc 는 붙여넣기로 돌아가 고치게 함
+func (n *newhostState) confirmKey(ev keyEv) {
+	if n.sc.key(ev) {
+		return
+	}
+	switch {
+	case ev.k == kRune && (ev.r == 'y' || ev.r == 'Y'):
+		cnt := 0
+		for _, r := range n.rows {
+			i, ok := nhFindTpl(n.tpls, r.Tpl)
+			if r.Tpl == "" || !ok {
+				continue
+			}
+			t := n.tpls[i].NewhostTpl
+			t.Alias, t.No = "", 0
+			n.assign[strings.ToLower(r.Host)] = &nhVals{T: t, Label: nhTplLabel(i, n.tpls[i]), Src: nhSrcTpl}
+			cnt++
+		}
+		n.enterAssign()
+		n.setMsg(fmt.Sprintf("%d행에 템플릿을 지정했습니다 — 빈 Enter 로 DNS 점검, 고칠 곳은 지정 입력", cnt))
+	case ev.k == kEsc || (ev.k == kRune && (ev.r == 'n' || ev.r == 'N')):
+		n.step, n.sc = nhPaste, flowScroll{Follow: true}
+		n.setMsg("붙여넣기로 돌아왔습니다 — d·e 로 고친 뒤 빈 줄로 다시 끝내세요")
+		n.changed()
+	}
 }
 
 // ---- 2 템플릿 지정 ----
@@ -712,7 +754,7 @@ func cmdNewhost() int {
 
 var nhStepNames = map[int]string{
 	nhPaste: "1/5 붙여넣기", nhAssign: "2/5 템플릿 지정", nhDNS: "3/5 DNS 점검", nhDNSAsk: "3/5 DNS 점검",
-	nhDNSEach: "3/5 DNS 점검 (하나씩)", nhPreview: "4/5 미리보기", nhSaved: "5/5 저장 완료",
+	nhDNSEach: "3/5 DNS 점검 (하나씩)", nhPreview: "4/5 미리보기", nhSaved: "5/5 저장 완료", nhConfirm: "1/5 양식 확인",
 }
 
 // nhPad: 폭이 모자랄 때만 오른쪽에 공백 (자르지 않음)
@@ -730,7 +772,18 @@ func renderNewhost(n *newhostState, now time.Time, width, height int, color bool
 	f := flowFrame{Title: fmt.Sprintf("신규 설치 양식 [user: %s] - %s", n.user, nhStepNames[n.step]), Msg: n.msg, MsgErr: n.msgErr}
 	switch n.step {
 	case nhPaste:
-		f.Head = append(f.Head, ln("", "hostname ip mac 을 한 줄에 한 대씩 붙여넣으세요 — 구분자(공백·탭·쉼표)·순서 무관")...)
+		if tl := n.tplLines(width, color); height <= 0 || len(tl)+1 <= height/4 {
+			f.Head = append(f.Head, tl...)
+			f.Head = append(f.Head, "")
+		} else { // 창이 낮으면 입력 줄·본문이 밀리지 않게 번호·별칭만 한 줄로
+			var names []string
+			for i, t := range n.tpls {
+				names = append(names, nhTplLabel(i, t))
+			}
+			f.Head = append(f.Head, ln(stGray, fmt.Sprintf("템플릿 %d개: %s  (전체 내용은 다음 단계)", len(n.tpls), strings.Join(names, ", ")))...)
+		}
+		f.Head = append(f.Head, ln("", "hostname ip mac [템플릿] 을 한 줄에 한 대씩 붙여넣으세요 — 앞 3개는 구분자(공백·탭·쉼표)·순서 무관")...)
+		f.Head = append(f.Head, ln(stGray, "템플릿(번호·별칭·이름)을 맨 뒤에 붙이면 한 번에 지정, 생략하면 다음 단계에서 지정   예) svr001 10.0.0.1 aa:bb:cc:dd:ee:01 A")...)
 		f.Head = append(f.Head, ln(stGray, "MAC: aa:bb:cc:dd:ee:ff · aa-bb-… · aabb.ccdd.eeff · aabbccddeeff → 소문자 aa:bb:… 로 저장")...)
 		f.Head = append(f.Head, ln(stGray, "끝내기: 빈 줄 또는 . (Ctrl+D)   고치기: d 번호 삭제(d 3-5,8) · e 번호 다시 입력 · 빈 줄에서 Backspace = 앞 줄")...)
 		segs := []seg{{fmt.Sprintf(" 입력 %d대", len(n.rows)), stBold}}
@@ -760,6 +813,11 @@ func renderNewhost(n *newhostState, now time.Time, width, height int, color bool
 		f.Foot = append(f.Foot, ln(stGray, "새 템플릿: + sec bond sda 500 8.10 uefi [별칭]  ·  열: infra nic disk size(용량) os boot  ·  나중 지정이 덮어씀")...)
 		f.Foot = append(f.Foot, inputLines(color, width, "지정 > "+string(n.in)+"_")...)
 		f.Hint = " Enter 적용 (빈 입력이면 다음: DNS 점검)  ↑↓ PgUp/PgDn 스크롤  Esc 이전 단계  Ctrl+X 취소"
+	case nhConfirm:
+		f.Head = append(f.Head, ln(stBold, "붙여넣은 줄이 이렇게 바뀝니다 (예시 1건)")...)
+		f.Body = n.confirmBody(width, color)
+		f.Foot = append(f.Foot, ln(stBold, fmt.Sprintf("이렇게 %d대의 템플릿을 지정할까요? [y/n]", n.tplRowCount()))...)
+		f.Hint = " y 지정  n·Esc 붙여넣기로 돌아가 고치기  ↑↓ PgUp/PgDn 스크롤  Ctrl+X 취소"
 	case nhDNS:
 		el := 0
 		if n.dns != nil {
@@ -862,7 +920,11 @@ func (n *newhostState) pasteBody(width int, color bool) []string {
 			if b := r.bad(); b != "" {
 				n.rowLines[i] = wrapSegs(color, width, 2, "      ", seg{num + cleanText(r.Raw) + "  ", ""}, seg{"✗ " + b, stRed})
 			} else {
-				n.rowLines[i] = wrapSegs(color, width, 2, "      ", seg{num + nhPad(r.Host, 16) + "  " + nhPad(r.IP, 15) + "  " + r.MAC, ""})
+				tail := ""
+				if ti, ok := nhFindTpl(n.tpls, r.Tpl); r.Tpl != "" && ok {
+					tail = "  → " + nhTplLabel(ti, n.tpls[ti])
+				}
+				n.rowLines[i] = wrapSegs(color, width, 2, "      ", seg{num + nhPad(r.Host, 16) + "  " + nhPad(r.IP, 15) + "  " + r.MAC + tail, ""})
 			}
 		}
 		n.cache = append(n.cache, n.rowLines[i]...)
@@ -900,6 +962,59 @@ func (n *newhostState) tplLines(width int, color bool) []string {
 	}
 	for _, p := range n.tplProblems {
 		out = append(out, wrapSegs(color, width, 1, "     ", seg{"   ! " + p, stGray})...)
+	}
+	return out
+}
+
+// tplRowCount: 네 번째 값(템플릿)이 있는 행 수
+func (n *newhostState) tplRowCount() int {
+	c := 0
+	for _, r := range n.rows {
+		if r.Tpl != "" {
+			c++
+		}
+	}
+	return c
+}
+
+// confirmBody: 템플릿별 대수 + 첫 번째 줄의 입력 → 저장될 12필드 줄 예시 (템플릿 없는 줄은 다음 단계에서 지정한다는 안내)
+func (n *newhostState) confirmBody(width int, color bool) []string {
+	type grp struct{ ti, cnt int }
+	var groups []*grp
+	byTi := map[int]*grp{}
+	exRow, exTi, none := -1, 0, 0
+	for i, r := range n.rows {
+		ti, ok := nhFindTpl(n.tpls, r.Tpl)
+		if r.Tpl == "" || !ok {
+			none++
+			continue
+		}
+		if exRow < 0 {
+			exRow, exTi = i, ti
+		}
+		g := byTi[ti]
+		if g == nil {
+			g = &grp{ti: ti}
+			byTi[ti] = g
+			groups = append(groups, g)
+		}
+		g.cnt++
+	}
+	var out []string
+	for _, g := range groups {
+		t := n.tpls[g.ti]
+		out = append(out, wrapSegs(color, width, 1, "   ", seg{fmt.Sprintf(" ■ %s (%s) — %d대", nhTplLabel(g.ti, t), t.Name(), g.cnt), stBold})...)
+	}
+	if none > 0 {
+		out = append(out, wrapSegs(color, width, 1, "   ", seg{fmt.Sprintf(" 템플릿 없는 줄 %d대 — 다음 단계에서 지정 (이력 추천이 있으면 노랑)", none), stGray})...)
+	}
+	if exRow >= 0 {
+		r := n.rows[exRow]
+		t := n.tpls[exTi].NewhostTpl
+		out = append(out, "")
+		out = append(out, wrapSegs(color, width, 1, "   ", seg{" 입력   : " + cleanText(r.Raw), ""})...)
+		out = append(out, wrapSegs(color, width, 1, "   ", seg{" 저장될 줄: " + nhLine(r, t), stGreen})...)
+		out = append(out, wrapSegs(color, width, 1, "   ", seg{"            (tmp tmp infra hostname ip mac nic disk part 용량 os boot)", stGray})...)
 	}
 	return out
 }
