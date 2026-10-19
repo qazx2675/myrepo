@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-10-19 — 래퍼 스크립트 이름을 01.vm_setting_check_insert.sh 로 변경
+
+- **파일명**: `vm-param-check/vm_setting_check_insert.sh` → `vm-param-check/01.vm_setting_check_insert.sh` (실서버에서 쓰는 이름과 맞춤). 내용 변경 없음. README·워크플로·`passwd_update.sh`·`vm_setup.sh` 주석의 참조도 새 이름으로 갱신.
+- **주의**: `update_deploy.sh` 는 `01.*` 파일을 사용자 파일로 보고 건드리지 않는다 — 이 파일은 배포 갱신으로 덮어써지지 않으니 직접 복사해야 한다. `main.go` 의 안내 문구(옛 이름)는 바이너리 재빌드를 피하려고 그대로 둠.
+
+---
+
 ## 2026-10-19 — 단독 실행이 이전 vm_setup.sh 대상 서버를 쓰던 문제 수정
 
 - **`vm_setting_check_insert.sh`**: `VMsetup/run_<user>/` 기록(`check_specs.txt`, `check_del_lpage`, `check_del_affinity`)을 **`-fromSetup` 을 줄 때만** 쓴다. 옵션이 없으면(단독 실행) 기록 유무와 상관없이 `<user>.txt` 목록과 스펙 폴더 입력/`-specFolder` 로만 동작한다. 예전에는 `run_<user>/check_specs.txt` 가 있으면 자동으로 그 이전 설치 서버를 체크했다.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # passwd_update.sh — vCenter / ESXi 비밀번호를 암호화해서 저장·갱신한다 (비밀번호가 바뀔 때마다 실행).
-# 저장한 뒤에는 VMsetup/vm_setup.sh, vm-param-check 의 vm_setting_check_insert.sh 가
+# 저장한 뒤에는 VMsetup/vm_setup.sh, vm-param-check 의 01.vm_setting_check_insert.sh 가
 # 환경변수(VC_PASSWORD 등) 없이 이 파일을 풀어서 쓴다.
 #
 # 사용법:

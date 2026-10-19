@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vm_setting_check_insert.sh — 폴더명 기반 스펙 자동매칭(-specRoot)으로 체크를 실행하는
+# 01.vm_setting_check_insert.sh — 폴더명 기반 스펙 자동매칭(-specRoot)으로 체크를 실행하는
 # 보조 스크립트. README.md "빠른 시작" 4~7번을 한 번에 실행하는 셸이다.
 #
 # user: -u <user> 로 지정. 없으면 그냥 실행 시 번호 메뉴에서 고른다(vm_setup.sh 와 같은 양식: 0) 직접 선택).

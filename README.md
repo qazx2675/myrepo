@@ -48,7 +48,7 @@ RHEL 6 커널(2.6.32)은 Go 1.21+ 실행파일을 못 띄워서, govmomi vendor 
 
 - `passwd_update.sh` 가 `secret/key`(처음 한 번 생성, 600) 로 `secret/vcenter_<계정>.enc`, `secret/esxi_<계정>.enc` 를 만든다
   (`openssl enc -aes-256-cbc -md sha256` — OS6 의 openssl 1.0.1 과 OS8 의 1.1.1 이 같은 파일을 푼다).
-- `vm_setup.sh`, `vm-param-check/vm_setting_check_insert.sh` 는 환경변수 → 암호 파일 → 직접 입력 순으로 비밀번호를 얻는다.
+- `vm_setup.sh`, `vm-param-check/01.vm_setting_check_insert.sh` 는 환경변수 → 암호 파일 → 직접 입력 순으로 비밀번호를 얻는다.
 - 다른 서버로 옮길 때는 `secret/` 폴더(키 포함)를 그대로 복사한다. `./passwd_update.sh -list` 로 풀리는지 확인.
 - 키 파일이 있으면 누구든 풀 수 있다 — 파일 권한(root 전용)으로 지키고 저장소에는 올리지 않는다(`.gitignore`).
 

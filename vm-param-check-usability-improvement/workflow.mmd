@@ -1,5 +1,5 @@
 flowchart TD
-    A["실행<br/>vm_setting_check_insert.sh (-u user) 또는 vm-param-check 직접<br/>비밀번호: VC_PASS → ../../secret 암호 파일 → 입력"] --> B{"기대값을 어떻게 정하나?"}
+    A["실행<br/>01.vm_setting_check_insert.sh (-u user) 또는 vm-param-check 직접<br/>비밀번호: VC_PASS → ../../secret 암호 파일 → 입력"] --> B{"기대값을 어떻게 정하나?"}
     B -- 옵션 직접 지정 --> C["-ht -cores -numa -cpu -mem -disk -shares-ev01 ..."] --> E
     B -- "-specRoot +-specFolder" --> C2["대상 VM 전부에 그 스펙 적용<br/>(CAE 번호 무시, vm_setup.sh 가 사용)"] --> E
     B -- -specRoot --> D["VM이 속한 vCenter 폴더명 조회"]
