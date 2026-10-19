@@ -33,7 +33,7 @@ func TestNhParseLine(t *testing.T) {
 	}
 	bad := []struct{ in, want string }{
 		{"svr001 10.0.0.1", "값이 2개"},
-		{"svr001 10.0.0.1 aa:bb:cc:dd:ee:01 x", "값이 4개"},
+		{"svr001 10.0.0.1 aa:bb:cc:dd:ee:01 x y", "값이 5개"},
 		{"svr001 10.0.0.300 aa:bb:cc:dd:ee:01", "IP 형식 오류"},
 		{"svr001 10.0.1 aa:bb:cc:dd:ee:01", "IP 형식 오류"},
 		{"svr001 svr002 aa:bb:cc:dd:ee:01", "IP 가 없음"},

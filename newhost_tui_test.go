@@ -337,7 +337,7 @@ func TestNewhostPasteFix(t *testing.T) {
 		t.Fatalf("오류가 있으면 진행 불가: step=%d msg=%q", n.step, n.msg)
 	}
 	f := h.frame()
-	if !strings.Contains(f, "✗ 값이 2개 (hostname ip mac 3개 필요)") || !strings.Contains(f, "✗ hostname 중복 (행 1,3)") || !strings.Contains(f, "오류 3줄 (빨강)") {
+	if !strings.Contains(f, "✗ 값이 2개 (hostname ip mac [템플릿] 필요)") || !strings.Contains(f, "✗ hostname 중복 (행 1,3)") || !strings.Contains(f, "오류 3줄 (빨강)") {
 		t.Errorf("오류 표시:\n%s", f)
 	}
 	h.keys("d 2\r")
@@ -774,5 +774,65 @@ func TestNewhostGolden(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// 붙여넣기 네 번째 값(템플릿): 처음부터 목록이 보이고, 끝내면 바뀔 양식 예시 + y/n, y 면 지정되어 템플릿 지정 단계로, n 이면 붙여넣기로 돌아감.
+// 템플릿 없는 줄은 종전처럼 다음 단계에서 지정, 없는 템플릿은 빨강 오류.
+func TestNewhostPasteTemplateColumn(t *testing.T) {
+	h := nhSetup(t, "alice")
+	h.keys("w2")
+	if f := h.frame(); !strings.Contains(f, "1 [A]") || !strings.Contains(f, "hostname ip mac [템플릿]") {
+		t.Fatalf("붙여넣기 단계에 템플릿 목록·안내가 없음:\n%s", f)
+	}
+	h.keys("svr001 10.0.0.1 aa:bb:cc:dd:ee:01 A\rsvr002 10.0.0.2 aa:bb:cc:dd:ee:02 mec\rsvr003 10.0.0.3 aa:bb:cc:dd:ee:03\rsvr004 10.0.0.4 aa:bb:cc:dd:ee:04 zzz\r\r")
+	n := h.n()
+	if n.step != nhPaste || !strings.Contains(n.rows[3].Err, `템플릿 "zzz" 없음`) {
+		t.Fatalf("없는 템플릿은 오류여야 함: step=%d %+v", n.step, n.rows[3])
+	}
+	h.keys("d 4\r\r")
+	if n.step != nhConfirm {
+		t.Fatalf("템플릿 있는 줄이 있으면 확인 단계: step=%d msg=%q", n.step, n.msg)
+	}
+	f := h.frame()
+	for _, s := range []string{"1/5 양식 확인", "■ 1 [A] (sec-bond-sda-500-8.10-uefi) — 1대", "■ 2 [mec] (mec-eth0-sda-500-9.6-uefi) — 1대",
+		"템플릿 없는 줄 1대", "입력   : svr001 10.0.0.1 aa:bb:cc:dd:ee:01 A",
+		"저장될 줄: tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond sda sda5 500 8.10 uefi", "이렇게 2대의 템플릿을 지정할까요? [y/n]"} {
+		if !strings.Contains(f, s) {
+			t.Errorf("확인 화면에 %q 없음:\n%s", s, f)
+		}
+	}
+	if len(n.assign) != 0 {
+		t.Errorf("y 전에는 지정되면 안 됨: %v", n.assign)
+	}
+	h.keys("n")
+	if n.step != nhPaste || len(n.rows) != 3 || len(n.assign) != 0 {
+		t.Fatalf("n → 붙여넣기로 (줄 유지): step=%d rows=%d", n.step, len(n.rows))
+	}
+	h.keys("\ry")
+	if n.step != nhAssign || n.eff(n.rows[0]).Label != "1 [A]" || n.eff(n.rows[1]).Label != "2 [mec]" || n.eff(n.rows[2]).Src != nhSrcNone {
+		t.Fatalf("y → 지정 후 템플릿 지정 단계: step=%d %+v %+v %+v", n.step, n.eff(n.rows[0]), n.eff(n.rows[1]), n.eff(n.rows[2]))
+	}
+	if !strings.Contains(n.msg, "2행에 템플릿을 지정했습니다") {
+		t.Errorf("msg=%q", n.msg)
+	}
+	h.keys("svr003=3\r\r")
+	h.waitStep(nhPreview)
+	h.keys("y")
+	want := "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond sda sda5 500 8.10 uefi\n" +
+		"tmp tmp mec svr002 10.0.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 500 9.6 uefi\n" +
+		"tmp tmp mec svr003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 nvme nvme0n1p8 400 9.6 uefi\n"
+	if b, _ := os.ReadFile(filepath.Join(h.awx, "alice.txt")); string(b) != want {
+		t.Errorf("alice.txt:\n%s", b)
+	}
+}
+
+// 템플릿 값이 하나도 없으면 확인 단계 없이 종전처럼 바로 템플릿 지정 단계
+func TestNewhostPasteNoTemplateColumn(t *testing.T) {
+	h := nhSetup(t, "alice")
+	h.keys("w2")
+	h.keys("svr001 10.0.0.1 aa:bb:cc:dd:ee:01\r\r")
+	if h.n().step != nhAssign {
+		t.Fatalf("step=%d", h.n().step)
 	}
 }

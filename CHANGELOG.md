@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## [Unreleased]
+
+### 수정
+- **임시 파일이 `/tmp` 에 흩어지던 것을 `/tmp/auto_setup/tmp` 로 모음**: auto_setup 이 시작할 때 `TMPDIR` 을 `<AUTO_SETUP_DIR>/tmp`(기본 `/tmp/auto_setup/tmp`, 0777+sticky) 로 바꾼다. Go 임시 파일(`as_check_*`·`as_remote_*`·`as_ldap_*`·`as_work_*.log`·`as_oneoff_*`·`as_change_*` 등)과 하위 프로세스(gossh·AWX 01·os_check)의 `mktemp` 가 모두 이 경로를 쓴다. 만들거나 쓸 수 없으면 바꾸지 않는다(종전대로 `/tmp`). ssh 로 넘어간 원격(os6_mgmt) 명령은 TMPDIR 을 받지 않아 그 서버의 `/tmp` 를 그대로 쓴다
+- **`/tmp/config_check.XXXXXX` 는 auto_setup 이 아니라 `config_check.sh` 가 만드는 작업 디렉터리**(종료 시 삭제)였다. `mktemp -d "${TMPDIR:-/tmp}/config_check.XXXXXX"` 로 바꿔 auto_setup 이 실행하면 `/tmp/auto_setup/tmp` 에 만든다. TMPDIR 이 없으면 종전대로 `/tmp`
+- 사용법(`auto_setup -h`)·주석의 gossh 작업 목록 파일 경로를 `/tmp/<3자리>` → `/tmp/auto_setup/lists/<3자리>` 로 바로잡음 (실제 위치는 v0.8.3 부터 `lists/`)
+
+### 변경
+- **`w`→2 신규 설치 양식: 붙여넣기 줄에 템플릿을 함께 적을 수 있음**. `hostname ip mac 별칭` (네 번째 값 = 템플릿 번호·별칭·이름, 앞 3개는 종전처럼 순서 무관). 붙여넣기 화면 처음부터 등록된 템플릿 목록을 보여 주고(창이 낮으면 번호·별칭만 한 줄), 입력을 끝내면 템플릿별 대수와 입력 → 저장될 12필드 줄 예시 1건을 보여 준 뒤 `y/n` 으로 묻는다. `y` 면 지정되어 템플릿 지정 단계로, `n`·Esc 면 붙여넣기로 돌아간다. 없는 템플릿은 그 줄이 빨강 오류. 네 번째 값이 없는 줄은 종전과 같이 다음 단계에서 지정 (전부 없으면 확인 단계 없음)
+
 ## [0.8.8] - 2026-10-18
 
 AWX 실행(접수) 때부터 접속불가였던 서버의 흐름 점검 — 8가지 경우 × os8·os6 경로 시뮬레이션 테스트 추가 (`firstdown_test.go`).

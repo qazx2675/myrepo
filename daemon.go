@@ -469,7 +469,7 @@ func (d *Daemon) step(now time.Time) {
 	d.scheduleManual(now)
 	d.closeFinished()
 	d.saveDirty()
-	if now.Sub(d.lastWork) >= 24*time.Hour { // gossh 작업 기록: 출력 7일·user 당 200MB, /tmp/<3자리> 7일
+	if now.Sub(d.lastWork) >= 24*time.Hour { // gossh 작업 기록: 출력 7일·user 당 200MB, lists/<3자리> 7일
 		d.lastWork = now
 		workCleanAll(now)
 	}

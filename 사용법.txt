@@ -447,7 +447,7 @@ auto_setup
 auto_setup -user alice
 
 # [신규 설치 양식] CLI 로 열기 (TUI 의 w → 2 와 같은 화면, os8_mgmt·터미널에서만). -user 가 없으면 user 번호/이름을 먼저 묻는다
-# 화면에서: hostname ip mac 붙여넣기(빈 줄 또는 . 로 끝) → 템플릿 지정(예 svr001-020=1  svr021-023=mec) → DNS 점검(불일치면 a/n/s/q) → 미리보기 y → 저장 → AWX 실행? [y/n]
+# 화면에서: hostname ip mac [템플릿 번호·별칭] 붙여넣기(빈 줄 또는 . 로 끝, 템플릿을 적었으면 바뀔 양식 예시 확인 y/n) → 템플릿 지정(예 svr001-020=1  svr021-023=mec) → DNS 점검(불일치면 a/n/s/q) → 미리보기 y → 저장 → AWX 실행? [y/n]
 auto_setup newhost -user alice
 
 # [신규 설치 양식] 저장 결과 확인 — 양식 파일(12필드), 덮어쓰기 전 백업, 이력 사본, 이 user 의 템플릿
