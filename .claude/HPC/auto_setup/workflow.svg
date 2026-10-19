@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="2370" viewBox="0 0 1100 2370" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans CJK KR',sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4a4f63"/></marker>
+    <style>
+      .auto  { fill: #e7f0ff; stroke: #3a63c8; stroke-width: 1.6; }
+      .input { fill: #fff1dc; stroke: #e08600; stroke-width: 2; }
+      .stop  { fill: #ffe5e5; stroke: #d03030; stroke-width: 1.6; }
+      .done  { fill: #e3f6e8; stroke: #2f9e57; stroke-width: 2; }
+      .link  { fill: #f1ebff; stroke: #7650c8; stroke-width: 2; }
+      .band  { fill: #eef0f5; }
+      .note  { fill: #fbfbfb; stroke: #9aa0ad; stroke-width: 1.2; stroke-dasharray: 5 4; }
+      .ln    { stroke: #4a4f63; stroke-width: 1.7; fill: none; marker-end: url(#ah); }
+      .lnd   { stroke: #4a4f63; stroke-width: 1.5; fill: none; marker-end: url(#ah); stroke-dasharray: 6 4; }
+      .tie   { stroke: #9aa0ad; stroke-width: 1.2; fill: none; stroke-dasharray: 4 4; }
+      .ti    { font-size: 24px; font-weight: bold; fill: #1d2140; text-anchor: middle; }
+      .sub   { font-size: 14px; fill: #4a4f63; text-anchor: middle; }
+      .bt    { font-size: 16px; font-weight: bold; fill: #1d2140; }
+      .h     { font-size: 15.5px; font-weight: bold; fill: #1d2140; text-anchor: middle; }
+      .b     { font-size: 13.5px; fill: #2b2f45; text-anchor: middle; }
+      .s     { font-size: 11.5px; fill: #7a7f8f; text-anchor: middle; }
+      .lb    { font-size: 13px; font-weight: bold; fill: #b04a00; text-anchor: middle; }
+      .lg    { font-size: 13px; fill: #2b2f45; }
+      .nl    { font-size: 12.5px; fill: #4a4f63; text-anchor: middle; }
+    </style>
+  </defs>
+  <rect width="1100" height="2370" fill="#ffffff"/>
+
+  <!-- 제목 · 범례 -->
+  <text class="ti" x="550" y="42">auto_setup — 한눈에 보는 흐름 (v0.8.8)</text>
+  <text class="sub" x="550" y="68">AWX 노드정보 등록이 끝나면 넘어와, OS 설치 완료를 기다렸다가 설정 체크까지 자동으로 진행합니다. 주황색(⌨)은 작업자가 직접 하는 곳입니다.</text>
+  <rect class="auto"  x="170" y="86" width="26" height="18" rx="4"/><text class="lg" x="203" y="100">자동 처리</text>
+  <rect class="input" x="285" y="86" width="26" height="18" rx="4"/><text class="lg" x="318" y="100">⌨ 작업자 입력·선택</text>
+  <rect class="stop"  x="465" y="86" width="26" height="18" rx="4"/><text class="lg" x="498" y="100">중단 · 주의</text>
+  <rect class="done"  x="590" y="86" width="26" height="18" rx="4"/><text class="lg" x="623" y="100">완료</text>
+  <rect class="note"  x="675" y="86" width="26" height="18" rx="4"/><text class="lg" x="708" y="100">보충 설명</text>
+  <rect class="link"  x="795" y="86" width="26" height="18" rx="4"/><text class="lg" x="828" y="100">AWX 흐름도와 연결</text>
+
+  <!-- ===================== 0단계 ===================== -->
+  <rect class="band" x="20" y="124" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="147">0단계 · 연결 — AWX 노드정보 등록이 끝나면 자동으로 넘어옴</text>
+  <text class="nl" x="1064" y="146" style="text-anchor:end">awx_script/workflow.svg 4단계 [14-1]</text>
+
+  <rect class="link" x="270" y="176" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="198">AWX 01 : 등록이 성공하면 작업(job)을 auto_setup 에 전달</text>
+  <text class="b" x="550" y="218">작업자(user) · 시각 · 호스트 목록 · 그룹(yml) 정보를 파일 하나로 남김</text>
+  <text class="s" x="550" y="238">[14-1] 01.AWX_nodeinfo_V2.sh → os8_mgmt 의 queue/&lt;시각&gt;_&lt;user&gt;_&lt;pid&gt;.job</text>
+  <path class="tie" d="M270 215 H252"/>
+  <rect class="note" x="20" y="172" width="232" height="86" rx="8"/>
+  <text class="nl" x="136" y="194">01 을 어디서 돌렸나</text>
+  <text class="nl" x="136" y="214">os8_mgmt : 로컬 queue 에 바로</text>
+  <text class="nl" x="136" y="232">os6_mgmt : gossh 로 os8_mgmt</text>
+  <text class="nl" x="136" y="250">queue 에 전송 (auto_setup_host)</text>
+  <path class="tie" d="M830 215 H848"/>
+  <rect class="note" x="848" y="186" width="232" height="58" rx="8"/>
+  <text class="nl" x="964" y="210">전달이 실패해도 AWX 등록</text>
+  <text class="nl" x="964" y="230">결과에는 영향 없음 (경고만)</text>
+  <path class="ln" d="M550 254 V324"/>
+
+  <!-- ===================== 1단계 ===================== -->
+  <rect class="band" x="20" y="272" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="295">1단계 · 접수 — 데몬이 작업을 받아 감시 준비</text>
+  <text class="nl" x="1064" y="294" style="text-anchor:end">auto_setup 데몬 (os8_mgmt 에만 상주)</text>
+
+  <rect class="auto" x="270" y="324" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="346">데몬이 queue 를 5초마다 수거 → 작업(job) 만들기</text>
+  <text class="b" x="550" y="366">jobs/&lt;jobid&gt;.json 에 서버별 진행 단계를 기록하며 감시 시작</text>
+  <text class="s" x="550" y="386">cron 이 매분 auto_setup ensure 로 데몬이 살아 있는지 확인 (죽어 있으면 다시 띄움)</text>
+  <path class="ln" d="M550 402 V426"/>
+
+  <rect class="auto" x="270" y="426" width="560" height="96" rx="10"/>
+  <text class="h" x="550" y="448">DNS 조회 · 경로 정하기</text>
+  <text class="b" x="550" y="468">os8_mgmt 에서 ping 이 되면 local, 안 되면 os6_mgmt 경유(os6)</text>
+  <text class="b" x="550" y="487">os8_mgmt 에서 이름을 3번 연속 못 찾으면 os6_mgmt 경유로</text>
+  <text class="s" x="550" y="508">설치 중 os8 은 무응답 · os6 는 응답하면 그때 os6 로 자동 전환</text>
+  <path class="tie" d="M270 474 H252"/>
+  <rect class="note" x="20" y="430" width="232" height="88" rx="8"/>
+  <text class="nl" x="136" y="452">os6 경유 = os6_mgmt 가</text>
+  <text class="nl" x="136" y="470">대신 ping · 준비확인 ·</text>
+  <text class="nl" x="136" y="488">체크를 해 줌</text>
+  <text class="nl" x="136" y="506">(os8 서버와 같은 순서로 진행)</text>
+  <path class="ln" d="M550 522 V546"/>
+
+  <rect class="auto" x="270" y="546" width="560" height="62" rx="10"/>
+  <text class="h" x="550" y="568">LDAP 설정 백업 (지금 응답하는 서버만)</text>
+  <text class="b" x="550" y="588">설치 전 LDAP 설정을 백업 → 설치가 끝난 뒤 비교에 사용</text>
+  <text class="s" x="550" y="602">ldapbak/&lt;jobid&gt;/&lt;host&gt;/ (0700 / 0600)</text>
+  <path class="tie" d="M830 577 H848"/>
+  <rect class="note" x="848" y="548" width="232" height="58" rx="8"/>
+  <text class="nl" x="964" y="572">처음부터 접속이 안 되던 서버는</text>
+  <text class="nl" x="964" y="590">백업 없이 진행 (LDAP 비교 생략)</text>
+  <path class="ln" d="M550 608 V684"/>
+
+  <!-- ===================== 2단계 ===================== -->
+  <rect class="band" x="20" y="632" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="655">2단계 · 감시 — OS 설치가 끝날 때까지 기다리기</text>
+  <text class="nl" x="1064" y="654" style="text-anchor:end">ping 10초 · 준비확인 30초</text>
+
+  <rect class="auto" x="270" y="684" width="560" height="96" rx="10"/>
+  <text class="h" x="550" y="706">ping 10초마다 → 응답이 끊기면 '설치 시작'으로 표시</text>
+  <text class="b" x="550" y="726">준비확인 30초마다 : 부팅 후 시간 · 설치 기록 조회 (한 번에 최대 60초)</text>
+  <text class="b" x="550" y="745">anaconda(설치 화면)가 보이면 '설치중'</text>
+  <text class="s" x="550" y="766">os8 에서 응답이 없으면 os6_mgmt 경유로 다시 확인</text>
+  <path class="tie" d="M830 732 H848"/>
+  <rect class="note" x="848" y="694" width="232" height="76" rx="8"/>
+  <text class="nl" x="964" y="716">재부팅이 빨라 꺼진 것을</text>
+  <text class="nl" x="964" y="734">ping 이 못 봐도, 5분마다</text>
+  <text class="nl" x="964" y="752">기다리는 서버를 모두 다시 확인</text>
+  <path class="ln" d="M550 780 V804"/>
+
+  <rect class="auto" x="270" y="804" width="560" height="80" rx="10"/>
+  <text class="h" x="550" y="826">READY ? — 새 OS 로 설치가 끝나고 부팅됐나</text>
+  <text class="b" x="550" y="847">응답함 · anaconda 아님 · 전달 뒤에 새로 부팅됨 (uptime)</text>
+  <text class="b" x="550" y="866">설치 기록(/root/anaconda-ks.cfg)이 오래되지 않음 = 새로 설치된 OS</text>
+  <path class="lnd" d="M270 844 H236 V732 H268"/>
+  <text class="nl" x="180" y="780">아니오 :</text>
+  <text class="nl" x="180" y="798">계속 감시</text>
+  <path class="ln" d="M830 844 H866"/>
+  <rect class="stop" x="866" y="815" width="214" height="58" rx="8"/>
+  <text class="b" x="973" y="839">60분 넘게 READY 안 됨</text>
+  <text class="b" x="973" y="858">→ '정체' 표시 (감시는 계속)</text>
+  <path class="tie" d="M830 874 H840 V928 H848"/>
+  <rect class="note" x="848" y="886" width="232" height="86" rx="8"/>
+  <text class="nl" x="964" y="908">기존 OS 로 잠깐 올라와도</text>
+  <text class="nl" x="964" y="926">설치 기록이 48시간 넘게 오래됐으면</text>
+  <text class="nl" x="964" y="944">READY 가 아님</text>
+  <text class="nl" x="964" y="962">→ 설치를 계속 기다림</text>
+  <path class="ln" d="M550 884 V1046"/><text class="lb" x="566" y="906">예</text>
+
+  <!-- ===================== 3단계 ===================== -->
+  <rect class="band" x="20" y="994" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1017">3단계 · 체크 — 설정 체크스크립트 자동 실행</text>
+  <text class="nl" x="1064" y="1016" style="text-anchor:end">config_check.sh -auto</text>
+
+  <rect class="auto" x="270" y="1046" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1068">LDAP 비교 · 다르면 복원</text>
+  <text class="b" x="550" y="1088">새 OS 의 LDAP 설정(binddn)을 1단계 백업과 비교</text>
+  <text class="b" x="550" y="1107">다르면 공유 경로를 통해 백업을 복원하고 LDAP 서비스 재시작</text>
+  <path class="tie" d="M830 1085 H848"/>
+  <rect class="note" x="848" y="1056" width="232" height="58" rx="8"/>
+  <text class="nl" x="964" y="1080">같거나 백업이 없으면</text>
+  <text class="nl" x="964" y="1098">건드리지 않고 다음으로</text>
+  <path class="ln" d="M550 1124 V1148"/>
+
+  <rect class="auto" x="270" y="1148" width="560" height="96" rx="10"/>
+  <text class="h" x="550" y="1170">서버를 묶어서 체크 실행 (한 번에 한 작업씩)</text>
+  <text class="b" x="550" y="1190">모두 READY 면 바로 · 아니면 7분 대기, 늦게 온 서버는 3분 묶음</text>
+  <text class="b" x="550" y="1209">os6 경유 서버는 os6_mgmt 에서, 나머지는 os8_mgmt 에서 동시에</text>
+  <text class="s" x="550" y="1230">os_check_sh -auto &lt;user&gt; &lt;목록&gt; → runs/&lt;code&gt;/ (결과는 한곳에 모음)</text>
+  <path class="tie" d="M270 1196 H252"/>
+  <rect class="note" x="20" y="1153" width="232" height="86" rx="8"/>
+  <text class="nl" x="136" y="1175">config_check.sh 가 -auto 로</text>
+  <text class="nl" x="136" y="1193">질문 없이 설정 체크</text>
+  <text class="nl" x="136" y="1211">→ 설정 수정 → 다시 체크</text>
+  <text class="nl" x="136" y="1229">(작업자 입력 없음)</text>
+  <path class="ln" d="M550 1244 V1268"/>
+
+  <rect class="auto" x="270" y="1268" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1290">2차 체크 (os6_mgmt 를 설정한 경우)</text>
+  <text class="b" x="550" y="1310">os8 에서 접속이 안 됐거나 FAIL 인 서버만 os6_mgmt 에서 한 번 더</text>
+  <text class="s" x="550" y="1330">결과를 runs/&lt;code&gt;/second/ 로 회수</text>
+  <path class="tie" d="M830 1307 H848"/>
+  <rect class="note" x="848" y="1288" width="232" height="40" rx="8"/>
+  <text class="nl" x="964" y="1313">대상이 없으면 건너뜀</text>
+  <path class="ln" d="M550 1346 V1422"/>
+
+  <!-- ===================== 4단계 ===================== -->
+  <rect class="band" x="20" y="1370" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1393">4단계 · 결과 — 결과 코드와 완료 처리</text>
+  <text class="nl" x="1064" y="1392" style="text-anchor:end">codes/&lt;code&gt;.txt</text>
+
+  <rect class="auto" x="270" y="1422" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1444">결과 코드(code) 파일 만들기</text>
+  <text class="b" x="550" y="1464">결과 리포트 · FAIL / NO FAIL · LDAP · Splunk · 커널 요약 · 2차 결과</text>
+  <text class="s" x="550" y="1484">리포트가 없으면 원인 안내와 체크스크립트 출력의 마지막 줄을 함께 표시</text>
+  <path class="ln" d="M550 1500 V1524"/>
+
+  <rect class="auto" x="270" y="1524" width="560" height="78" rx="10"/>
+  <text class="h" x="550" y="1546">완료 처리 : 1차 OK 또는 2차 OK 인 서버</text>
+  <text class="b" x="550" y="1566">체크 중 접속 실패(ERROR)가 난 서버는 완료로 치지 않음</text>
+  <text class="b" x="550" y="1585">완료되지 않은 서버는 2단계 감시로 돌아감 (wall 알림은 기본 꺼짐)</text>
+  <path class="tie" d="M270 1563 H252"/>
+  <rect class="note" x="20" y="1522" width="232" height="82" rx="8"/>
+  <text class="nl" x="136" y="1544">config_check 를 따로 돌려</text>
+  <text class="nl" x="136" y="1562">먼저 끝난 서버도 완료기록</text>
+  <text class="nl" x="136" y="1580">(done/&lt;host&gt;)으로 인정</text>
+  <text class="nl" x="136" y="1596">수동 : auto_setup done</text>
+  <path class="ln" d="M550 1602 V1626"/>
+
+  <rect class="done" x="410" y="1626" width="280" height="38" rx="19"/>
+  <text class="h" x="550" y="1651">모두 완료 → jobs/done 으로 이동</text>
+  <path class="tie" d="M690 1645 H848"/>
+  <rect class="note" x="848" y="1616" width="232" height="58" rx="8"/>
+  <text class="nl" x="964" y="1640">남은 서버가 있으면 무기한 감시</text>
+  <text class="nl" x="964" y="1658">(auto_setup cancel 로 종료)</text>
+
+  <!-- ===================== 참고: 처음부터 접속불가 ===================== -->
+  <rect class="band" x="20" y="1692" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1715">참고 · AWX 실행 때부터 접속이 안 되던 서버는 이렇게 끝납니다</text>
+  <text class="nl" x="1064" y="1714" style="text-anchor:end">os8 경유 · os6 경유 모두 같음</text>
+
+  <rect class="done" x="20" y="1744" width="340" height="100" rx="10"/>
+  <text class="h" x="190" y="1768">접속불가 → 설치 → 새 OS</text>
+  <text class="b" x="190" y="1790">설치 화면이 보이든 안 보이든</text>
+  <text class="b" x="190" y="1810">새 OS 로 올라오면 체크 → 완료</text>
+  <text class="s" x="190" y="1832">가장 흔한 경우</text>
+
+  <rect class="done" x="380" y="1744" width="340" height="100" rx="10"/>
+  <text class="h" x="550" y="1768">접속불가 → 기존 OS → 재부팅 → 설치</text>
+  <text class="b" x="550" y="1790">기존 OS 로 올라와 있는 동안은 기다림</text>
+  <text class="b" x="550" y="1810">새 OS 로 올라온 뒤에 체크 → 완료</text>
+  <text class="s" x="550" y="1832">PXE 가 늦게 걸린 경우 (기존 OS 부팅이 여러 번이어도 같음)</text>
+
+  <rect class="stop" x="740" y="1744" width="340" height="100" rx="10"/>
+  <text class="h" x="910" y="1768">끝내 안 올라옴 · 기존 OS 로만 올라옴</text>
+  <text class="b" x="910" y="1790">설치가 안 된 것이므로 완료하지 않음</text>
+  <text class="b" x="910" y="1810">60분 뒤 '정체' 표시 → 현장 확인</text>
+  <text class="s" x="910" y="1832">PXE 실패 · 전원 · 네트워크 문제 등</text>
+
+  <!-- ===================== 작업자 화면 ===================== -->
+  <rect class="band" x="20" y="1872" width="1060" height="34" rx="6"/>
+  <text class="bt" x="36" y="1895">언제든 · 작업자 화면 — 진행 상황 보기와 수동 작업</text>
+  <text class="nl" x="1064" y="1894" style="text-anchor:end">auto_setup [-user 이름] · os6_mgmt 에서도 같은 화면</text>
+
+  <rect class="input" x="170" y="1924" width="760" height="62" rx="10"/>
+  <text class="h" x="550" y="1946">⌨ 상태 화면 : 화면 1 작업·그룹 → Enter → 화면 2 서버 표</text>
+  <text class="b" x="550" y="1967">r 새로고침 · f 정체·실패만 · a 전체 보기 (-user 일 때는 전체 user 보기) · ? 도움말 · q 종료</text>
+  <path class="ln" d="M450 1986 V1998 H295 V2014"/>
+  <path class="ln" d="M650 1986 V1998 H805 V2014"/>
+
+  <rect class="input" x="60" y="2014" width="470" height="96" rx="10"/>
+  <text class="h" x="295" y="2036">⌨ h 호스트 작업 (화면 2)</text>
+  <text class="b" x="295" y="2056">c 체크+수정 · t 체크만 · g 재확인</text>
+  <text class="b" x="295" y="2075">d 수동 완료 · v 결과 보기</text>
+  <text class="s" x="295" y="2096">요청을 남기면 데몬이 5초 안에 수거해 3단계와 같은 순서로 실행</text>
+
+  <rect class="input" x="570" y="2014" width="470" height="96" rx="10"/>
+  <text class="h" x="805" y="2036">⌨ w AWX</text>
+  <text class="b" x="805" y="2056">1 AWX 실행 : 01 을 이 터미널에서 실행 (프로파일 선택)</text>
+  <text class="b" x="805" y="2075">2 신규 설치 양식 : hostname ip mac → 템플릿 → DNS 점검</text>
+  <text class="s" x="805" y="2096">저장 후 01 실행 — 프로파일을 고르면 nodeinfo N, 안 고르면 일반 실행</text>
+
+  <rect class="input" x="60" y="2128" width="470" height="78" rx="10"/>
+  <text class="h" x="295" y="2150">⌨ m 변경 작업</text>
+  <text class="b" x="295" y="2170">IP 변경 · LDAP 변경 · IP+LDAP · 원복 · auto.appl 원복</text>
+  <text class="s" x="295" y="2190">conf enable_* 또는 --admin 일 때 · 미리보기 후 yes 로 확인</text>
+
+  <rect class="input" x="570" y="2128" width="470" height="78" rx="10"/>
+  <text class="h" x="805" y="2150">⌨ s gossh 작업 기록</text>
+  <text class="b" x="805" y="2170">호스트 붙여넣기 (빈 줄 무시) → Ctrl+D 로 끝 → gossh</text>
+  <text class="s" x="805" y="2190">목록에서 Enter = 결과 + 1~6 메뉴 · 1000대 이하는 os8 → 접속불가만 os6</text>
+
+  <rect class="input" x="60" y="2224" width="470" height="62" rx="10"/>
+  <text class="h" x="295" y="2246">⌨ x 체크스크립트 단독 실행</text>
+  <text class="b" x="295" y="2266">user · 서버 입력 → t / c 선택 → 결과 (기록은 남기지 않음)</text>
+
+  <rect class="link" x="570" y="2224" width="470" height="62" rx="10"/>
+  <text class="h" x="805" y="2246">w 의 1 · 2 는 AWX 흐름도 1단계로 이어짐</text>
+  <text class="b" x="805" y="2266">awx_script/workflow.svg — 등록이 끝나면 다시 0단계로</text>
+  <path class="lnd" d="M1040 2062 H1062 V2255 H1042"/>
+
+  <text class="s" x="1080" y="2328" style="text-anchor:end">※ 설정이 실제로 바뀌는 작업(c 체크+수정 · m 변경)은 완료 후 임의의 서버 몇 대를 직접 확인하세요.</text>
+  <text class="s" x="1080" y="2346" style="text-anchor:end">명령·키별 자세한 흐름은 docs/svg/ 를 참고하세요.</text>
+</svg>

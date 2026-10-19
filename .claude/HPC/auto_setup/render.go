@@ -1,0 +1,1332 @@
+// render.go - TUI/--plain 화면 렌더링 순수 함수(Snapshot → 문자열): 한글 폭 계산, 색(ANSI), 총계·그룹 행·호스트표·도움말
+package main
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// ---- 표시 폭 (동아시아 너비: 한글/CJK/전각 = 2칸) ----
+
+// runeWidth: 터미널 표시 칸 수 (제어문자·결합문자·제로폭 0, 한글/CJK/전각 2, 나머지 1)
+func runeWidth(r rune) int {
+	switch {
+	case r == 0 || r < 0x20 || (r >= 0x7f && r < 0xa0):
+		return 0
+	case r >= 0x0300 && r <= 0x036f, r >= 0x200b && r <= 0x200f, r >= 0xfe00 && r <= 0xfe0f, r == 0xfeff:
+		return 0
+	case r >= 0x1100 && r <= 0x115f, // 한글 자모
+		r >= 0x2e80 && r <= 0x303e, // CJK 부수·기호
+		r >= 0x3041 && r <= 0x33ff, // 가나·한글 호환 자모·CJK 호환
+		r >= 0x3400 && r <= 0x4dbf,
+		r >= 0x4e00 && r <= 0x9fff, // CJK 통합 한자
+		r >= 0xa000 && r <= 0xa4cf,
+		r >= 0xa960 && r <= 0xa97f,
+		r >= 0xac00 && r <= 0xd7a3, // 한글 음절
+		r >= 0xf900 && r <= 0xfaff,
+		r >= 0xfe30 && r <= 0xfe6f,
+		r >= 0xff00 && r <= 0xff60, // 전각
+		r >= 0xffe0 && r <= 0xffe6,
+		r >= 0x1f300 && r <= 0x1f64f,
+		r >= 0x1f900 && r <= 0x1f9ff,
+		r >= 0x20000 && r <= 0x3fffd:
+		return 2
+	}
+	return 1
+}
+
+func strWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		w += runeWidth(r)
+	}
+	return w
+}
+
+// cleanText: 제어문자(ESC 포함)를 '?' 로 바꿔 터미널 제어 시퀀스 주입을 막는다 (호스트명·비고는 파일에서 온 값)
+func cleanText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || (r >= 0x7f && r < 0xa0) {
+			return '?'
+		}
+		return r
+	}, s)
+}
+
+// truncW: 표시 폭 w 안으로 줄이고 잘렸으면 끝을 … 로
+func truncW(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if strWidth(s) <= w {
+		return s
+	}
+	var sb strings.Builder
+	used := 0
+	for _, r := range s {
+		rw := runeWidth(r)
+		if used+rw > w-1 {
+			break
+		}
+		sb.WriteRune(r)
+		used += rw
+	}
+	sb.WriteString("…")
+	return sb.String()
+}
+
+// padR / padL: 폭 w 로 줄이고(…) 공백 채움
+func padR(s string, w int) string {
+	s = truncW(cleanText(s), w)
+	if n := w - strWidth(s); n > 0 {
+		s += strings.Repeat(" ", n)
+	}
+	return s
+}
+
+func padL(s string, w int) string {
+	s = truncW(cleanText(s), w)
+	if n := w - strWidth(s); n > 0 {
+		s = strings.Repeat(" ", n) + s
+	}
+	return s
+}
+
+func rMin(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func rMax(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// stripANSI: 테스트·길이 계산용 ANSI SGR 제거
+func stripANSI(s string) string {
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && (s[j] < 0x40 || s[j] > 0x7e) {
+				j++
+			}
+			i = j
+			continue
+		}
+		sb.WriteByte(s[i])
+	}
+	return sb.String()
+}
+
+// ---- 색 ----
+
+const (
+	stGreen  = "32"   // 완료
+	stCyan   = "36"   // 진행
+	stGray   = "90"   // 대기·비활성
+	stYellow = "33"   // 경고
+	stRed    = "1;31" // 정체·실패
+	stBold   = "1"
+)
+
+type seg struct{ t, st string }
+
+func paint(color bool, st, t string) string {
+	if !color || st == "" || t == "" {
+		return t
+	}
+	return "\x1b[" + st + "m" + t + "\x1b[0m"
+}
+
+// segsText: 세그먼트 연결(색 없음)
+func segsText(segs []seg) string {
+	var sb strings.Builder
+	for _, s := range segs {
+		sb.WriteString(s.t)
+	}
+	return sb.String()
+}
+
+// segLine: 세그먼트를 폭 width 안으로 줄여 한 줄로
+func segLine(color bool, width int, segs ...seg) string {
+	var sb strings.Builder
+	left := width
+	for _, s := range segs {
+		if left <= 0 {
+			break
+		}
+		full := cleanText(s.t)
+		t := truncW(full, left)
+		sb.WriteString(paint(color, s.st, t))
+		if t != full { // 잘렸으면 뒤 세그먼트는 버린다 (… 가 반복되지 않게)
+			break
+		}
+		left -= strWidth(t)
+	}
+	return sb.String()
+}
+
+// selLine: 선택 행 — 색이 있으면 반전(폭 전체), 없으면 그대로(마커 '>' 로 구분)
+func selLine(color bool, width int, segs []seg) string {
+	if !color {
+		return segLine(false, width, segs...)
+	}
+	t := truncW(segsText(segs), width)
+	if n := width - strWidth(t); n > 0 {
+		t += strings.Repeat(" ", n)
+	}
+	return "\x1b[7m" + t + "\x1b[0m"
+}
+
+// ---- 줄바꿈 (좁은 화면에서 … 로 자르지 않고 다음 줄로) ----
+
+// atom: 줄바꿈 단위 — glue(앞 간격, 줄 첫머리에 오면 버림) + 내용(한 줄보다 길 때만 글자 단위로 나눔)
+type atom struct {
+	glue seg
+	segs []seg
+}
+
+// splitAtoms: 세그먼트 한 줄을 gap 칸 이상 이어진 공백마다 atom 으로 나눈다 (gap 1 = 단어, 2 = 두 칸 간격 항목).
+// 줄 맨 앞 공백은 lead 로 돌려주고, 줄 끝 공백은 버린다. 제어문자는 cleanText 로 바꾼다.
+func splitAtoms(segs []seg, gap int) (lead string, atoms []atom) {
+	var cur atom
+	var sp strings.Builder // 아직 어디에 붙을지 모르는 공백
+	spSt, started := "", false
+	add := func(t, st string) {
+		if n := len(cur.segs); n > 0 && cur.segs[n-1].st == st {
+			cur.segs[n-1].t += t
+			return
+		}
+		cur.segs = append(cur.segs, seg{t, st})
+	}
+	for _, s := range segs {
+		for _, r := range cleanText(s.t) {
+			if r == ' ' {
+				if sp.Len() == 0 {
+					spSt = s.st
+				}
+				sp.WriteRune(r)
+				continue
+			}
+			if sp.Len() > 0 {
+				switch {
+				case !started:
+					lead = sp.String()
+				case sp.Len() >= gap:
+					atoms = append(atoms, cur)
+					cur = atom{glue: seg{sp.String(), spSt}}
+				default:
+					add(sp.String(), spSt)
+				}
+				sp.Reset()
+			}
+			started = true
+			add(string(r), s.st)
+		}
+	}
+	if started {
+		atoms = append(atoms, cur)
+	}
+	return lead, atoms
+}
+
+// mergeSegs: 빈 세그먼트를 버리고 같은 색이 이어지면 하나로
+func mergeSegs(segs []seg) []seg {
+	var out []seg
+	for _, s := range segs {
+		if s.t == "" {
+			continue
+		}
+		if n := len(out); n > 0 && out[n-1].st == s.st {
+			out[n-1].t += s.t
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// wrapAtoms: atom 을 폭 width 안의 줄들로 배치한다. 첫 줄은 first, 이어지는 줄은 cont(공백) 로 시작한다.
+// 빈 줄에도 안 들어가는 atom 은 글자 단위로 나눈다 (… 로 자르지 않음).
+func wrapAtoms(width int, first, cont string, atoms []atom) [][]seg {
+	var out [][]seg
+	cur := []seg{{first, ""}}
+	used, empty := strWidth(first), true
+	newLine := func() {
+		out = append(out, mergeSegs(cur))
+		cur = []seg{{cont, ""}}
+		used, empty = strWidth(cont), true
+	}
+	for _, a := range atoms {
+		w := strWidth(segsText(a.segs))
+		if !empty && used+strWidth(a.glue.t)+w <= width {
+			cur = append(append(cur, a.glue), a.segs...)
+			used += strWidth(a.glue.t) + w
+			continue
+		}
+		if !empty {
+			newLine()
+		}
+		if used+w <= width {
+			cur = append(cur, a.segs...)
+			used += w
+			empty = false
+			continue
+		}
+		for _, s := range a.segs {
+			var sb strings.Builder
+			for _, r := range s.t {
+				if rw := runeWidth(r); used+rw > width && !empty {
+					cur = append(cur, seg{sb.String(), s.st})
+					sb.Reset()
+					newLine()
+				}
+				sb.WriteRune(r)
+				used += runeWidth(r)
+				empty = false
+			}
+			cur = append(cur, seg{sb.String(), s.st})
+		}
+	}
+	return append(out, mergeSegs(cur))
+}
+
+// wrapSegLines: 세그먼트 한 줄이 폭에 들어가면 그대로(종전과 같은 출력), 아니면 gap 칸 이상 공백(항목 경계)에서 줄바꿈.
+// 이어지는 줄은 cont 로 시작하고, 한 줄보다 긴 항목은 단어로, 긴 단어는 글자 단위로 나눈다.
+func wrapSegLines(width, gap int, cont string, segs []seg) [][]seg {
+	if strWidth(cleanText(segsText(segs))) <= width {
+		return [][]seg{segs}
+	}
+	lead, atoms := splitAtoms(segs, gap)
+	if gap > 1 {
+		max := width - strWidth(cont)
+		var out []atom
+		for _, a := range atoms {
+			if strWidth(segsText(a.segs)) <= max {
+				out = append(out, a)
+				continue
+			}
+			_, sub := splitAtoms(a.segs, 1)
+			if len(sub) > 0 {
+				sub[0].glue = a.glue
+			}
+			out = append(out, sub...)
+		}
+		atoms = out
+	}
+	return wrapAtoms(width, lead, cont, atoms)
+}
+
+// wrapSegs: wrapSegLines 의 각 줄을 렌더
+func wrapSegs(color bool, width, gap int, cont string, segs ...seg) []string {
+	var out []string
+	for _, l := range wrapSegLines(width, gap, cont, segs) {
+		out = append(out, segLine(color, width, l...))
+	}
+	return out
+}
+
+// cellLines: 표 칸 하나를 폭 w 안의 줄들로 (단어 단위, 긴 단어는 글자 단위)
+func cellLines(text string, w int) []string {
+	text = cleanText(text)
+	if w <= 0 || strWidth(text) <= w {
+		return []string{text}
+	}
+	_, atoms := splitAtoms([]seg{{text, ""}}, 1)
+	var out []string
+	for _, l := range wrapAtoms(w, "", "", atoms) {
+		out = append(out, segsText(l))
+	}
+	return out
+}
+
+func lineAt(lines []string, k int) string {
+	if k < len(lines) {
+		return lines[k]
+	}
+	return ""
+}
+
+func stageStyle(st Stage) string {
+	switch st {
+	case StageDone:
+		return stGreen
+	case StageQueued:
+		return stGray
+	case StageStuck, StageFailed:
+		return stRed
+	}
+	return stCyan
+}
+
+// ---- 시간 표시 ----
+
+// fmtDur: 경과 초 → 45s / 12m05s / 1h02m / 2d03h
+func fmtDur(sec int64) string {
+	switch {
+	case sec < 0:
+		sec = 0
+		fallthrough
+	case sec < 60:
+		return fmt.Sprintf("%ds", sec)
+	case sec < 3600:
+		return fmt.Sprintf("%dm%02ds", sec/60, sec%60)
+	case sec < 86400:
+		return fmt.Sprintf("%dh%02dm", sec/3600, sec%3600/60)
+	}
+	return fmt.Sprintf("%dd%02dh", sec/86400, sec%86400/3600)
+}
+
+// fmtClock: epoch → 스냅샷과 같은 시간대의 시각 문자열 (NowText 와 Now 의 차이로 UTC 오프셋을 구함 — 시간대에 무관하게 결정적)
+func fmtClock(s Snapshot, t int64, layout string) string {
+	var off int64
+	if tm, err := time.Parse(snapTimeLayout, s.NowText); err == nil {
+		off = tm.Unix() - s.Now
+	}
+	return time.Unix(t+off, 0).UTC().Format(layout)
+}
+
+// ---- 선택 상태·조회 ----
+
+// selection: 화면 상태 (렌더 입력)
+type selection struct {
+	Row        int      // 화면 1: 그룹 행 번호 (전 job 의 그룹을 이어서 센 번호)
+	Detail     bool     // 화면 2 (호스트표)
+	JobID      string   // 화면 2 대상 job
+	Yml        string   // 화면 2 대상 그룹
+	Host       int      // 화면 2: (필터 적용된) 호스트 행 번호
+	Filter     bool     // 화면 2: 정체·실패만
+	Confirm    bool     // 수동 실행 y/n 확인 중
+	Mode       string   // 확인 중인 수동 실행 모드: ModeCheck = 설정체크만, 비면 설정체크 + 설정수정
+	Msg        string   // 하단 안내 한 줄
+	DateFilter bool     // 화면 1: 날짜별 보기 (TUI 만 켬 — 날짜 줄 표시, 그 날짜의 그룹만)
+	Date       string   // 화면 1: 보고 있는 날짜 YYYYMMDD ("" = 가장 최근 날짜를 따라감)
+	Change     bool     // 안내 줄에 `m 변경` 표시 (v0.7.0 변경 메뉴가 켜져 있고 로컬 데몬일 때만 TUI 가 켠다)
+	Inline     []string // 키 안내 줄 바로 아래에 붙는 줄들 (v0.7.1: m 변경 메뉴, d 수동 완료 프롬프트). 비면 화면은 종전과 같다
+}
+
+type grpRef struct{ Job, Grp int }
+
+// ---- 날짜별 보기 ----
+
+// yml 이름의 14자리 시각(YYYYMMDDhhmmss) 예: infra_inventory-20261008084159_4ea.yml → 20261008
+var ymlDateRe = regexp.MustCompile(`(?:^|\D)(\d{8})\d{6}(?:\D|$)`)
+
+const dateLayout = "20060102"
+
+// groupDate: 그룹의 날짜(YYYYMMDD) — yml 이름의 시각, 없으면 job 전달일
+func groupDate(s Snapshot, j *SnapJob, g *SnapGroup) string {
+	if m := ymlDateRe.FindStringSubmatch(g.Yml); m != nil {
+		if _, err := time.Parse(dateLayout, m[1]); err == nil {
+			return m[1]
+		}
+	}
+	return fmtClock(s, j.Submitted, dateLayout)
+}
+
+// dateRange: 그룹이 있는 가장 이른/늦은 날짜 (그룹이 없으면 ok=false)
+func dateRange(s Snapshot) (lo, hi string, ok bool) {
+	for ji := range s.Jobs {
+		for gi := range s.Jobs[ji].Groups {
+			d := groupDate(s, &s.Jobs[ji], &s.Jobs[ji].Groups[gi])
+			if !ok || d < lo {
+				lo = d
+			}
+			if !ok || d > hi {
+				hi = d
+			}
+			ok = true
+		}
+	}
+	return
+}
+
+// effDate: 보여줄 날짜 — 지정이 없으면 가장 최근 날짜 (그룹이 없으면 "")
+func effDate(s Snapshot, d string) string {
+	if d != "" {
+		return d
+	}
+	_, hi, _ := dateRange(s)
+	return hi
+}
+
+// shiftDate: 하루 단위 이동, 그룹이 있는 날짜 범위 안으로 제한. 가장 최근 날짜에 닿으면 ""(최근을 따라감).
+func shiftDate(s Snapshot, cur string, delta int) string {
+	lo, hi, ok := dateRange(s)
+	if !ok {
+		return ""
+	}
+	t, err := time.Parse(dateLayout, effDate(s, cur))
+	if err != nil {
+		return ""
+	}
+	n := t.AddDate(0, 0, delta).Format(dateLayout)
+	if n < lo {
+		n = lo
+	}
+	if n >= hi {
+		return ""
+	}
+	return n
+}
+
+// visibleGroups: 화면 1 에서 보이는 그룹 행 (날짜별 보기면 그 날짜의 그룹만)
+func visibleGroups(s Snapshot, sel selection) []grpRef {
+	all := flatGroups(s)
+	if !sel.DateFilter {
+		return all
+	}
+	d := effDate(s, sel.Date)
+	var out []grpRef
+	for _, r := range all {
+		if groupDate(s, &s.Jobs[r.Job], &s.Jobs[r.Job].Groups[r.Grp]) == d {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+var weekdayKo = [...]string{"일", "월", "화", "수", "목", "금", "토"}
+
+// dateRowText: "<    2026-10-08 (목)    >   N개 그룹"
+func dateRowText(d string, n int) string {
+	t, err := time.Parse(dateLayout, d)
+	if err != nil {
+		return "<    ????-??-??    >"
+	}
+	return fmt.Sprintf("<    %s (%s)    >   %d개 그룹", t.Format("2006-01-02"), weekdayKo[t.Weekday()], n)
+}
+
+// flatGroups: 화면 1 의 그룹 행 순서
+func flatGroups(s Snapshot) []grpRef {
+	var out []grpRef
+	for ji, j := range s.Jobs {
+		for gi := range j.Groups {
+			out = append(out, grpRef{ji, gi})
+		}
+	}
+	return out
+}
+
+func findGroup(s Snapshot, jobID, yml string) (*SnapJob, *SnapGroup) {
+	for ji := range s.Jobs {
+		if s.Jobs[ji].ID != jobID {
+			continue
+		}
+		if yml == allView {
+			if g := mergedGroup(&s.Jobs[ji]); g != nil {
+				return &s.Jobs[ji], g
+			}
+			return nil, nil
+		}
+		for gi := range s.Jobs[ji].Groups {
+			if s.Jobs[ji].Groups[gi].Yml == yml {
+				return &s.Jobs[ji], &s.Jobs[ji].Groups[gi]
+			}
+		}
+	}
+	return nil, nil
+}
+
+// visibleHosts: 화면 2 에 보이는 호스트 (filter 면 정체·실패만)
+func visibleHosts(g *SnapGroup, filter bool) []SnapHost {
+	if !filter {
+		return g.Hosts
+	}
+	var out []SnapHost
+	for _, h := range g.Hosts {
+		if h.Stage == StageStuck || h.Stage == StageFailed {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func progressCount(c StageCounts) int {
+	return c.Deploying + c.Installing + c.Booting + c.Ready + c.Ldap + c.Checking + c.Second
+}
+
+func pct(c StageCounts) int {
+	if c.Total <= 0 {
+		return 0
+	}
+	return c.Done * 100 / c.Total
+}
+
+func specText(g SnapGroup) string {
+	var p []string
+	for _, v := range []string{g.Infra, g.OS, g.Boot, g.Splunk} {
+		if v != "" {
+			p = append(p, v)
+		}
+	}
+	if len(p) == 0 {
+		return "-"
+	}
+	return strings.Join(p, "/")
+}
+
+// ---- 막대 ----
+
+// barSegs: 단계별 건수 미니 막대 — 완료 '#'(초록) 진행 '+'(청록) 대기 '.'(회색) 정체·실패 '!'(빨강), 비율대로 w 칸 (0 보다 큰 구간은 최소 1칸)
+func barSegs(c StageCounts, w int) []seg {
+	if c.Total <= 0 || w <= 0 {
+		return []seg{{strings.Repeat(" ", rMax(w, 0)), ""}}
+	}
+	n := [4]int{c.Done, progressCount(c), c.Queued, c.Stuck + c.Failed}
+	chars := [4]string{"#", "+", ".", "!"}
+	sty := [4]string{stGreen, stCyan, stGray, stRed}
+	total := n[0] + n[1] + n[2] + n[3]
+	if total == 0 {
+		return []seg{{strings.Repeat(" ", w), ""}}
+	}
+	var alloc, frac [4]int
+	sum := 0
+	for i := range n {
+		alloc[i] = n[i] * w / total
+		frac[i] = n[i] * w % total
+		sum += alloc[i]
+	}
+	for ; sum < w; sum++ { // 나머지 칸은 소수부가 큰 순서로 1칸씩
+		best := -1
+		for i := range n {
+			if n[i] > 0 && (best < 0 || frac[i] > frac[best]) {
+				best = i
+			}
+		}
+		alloc[best]++
+		frac[best] = -1
+	}
+	for i := range n { // 0 보다 큰 구간은 최소 1칸
+		if n[i] > 0 && alloc[i] == 0 {
+			big := 0
+			for k := range alloc {
+				if alloc[k] > alloc[big] {
+					big = k
+				}
+			}
+			alloc[big]--
+			alloc[i] = 1
+		}
+	}
+	var out []seg
+	for i := range alloc {
+		if alloc[i] > 0 {
+			out = append(out, seg{strings.Repeat(chars[i], alloc[i]), sty[i]})
+		}
+	}
+	return out
+}
+
+// ---- 공통 조각 ----
+
+func sepLine(width int) string { return strings.Repeat("-", width) }
+
+func clampWidth(width int) int {
+	if width < 40 {
+		return 40
+	}
+	return width
+}
+
+// titleLines: 상단 2줄 — 제목·갱신 시각·데몬 상태 / 총계
+func titleLines(s Snapshot, width int, color bool) []string {
+	left := []seg{{" auto_setup 상태 리포트", stBold}}
+	if u := headerUser(); u != "" { // -user 로 지정했거나 세션 user 를 고른 뒤
+		left = append(left, seg{"  [user: " + u + "]", stYellow})
+	}
+	var dm seg
+	if s.Daemon.Running {
+		t := "● 데몬 실행"
+		if s.Daemon.PID > 0 {
+			t += fmt.Sprintf(" (pid %d)", s.Daemon.PID)
+		}
+		dm = seg{t, stGreen}
+	} else {
+		dm = seg{"○ 데몬 중지", stRed}
+	}
+	right := []seg{{"갱신 " + clockOf(s), ""}, {"  ", ""}, dm}
+	gap := width - strWidth(segsText(left)) - strWidth(segsText(right)) - 1
+	if gap < 2 {
+		gap = 2
+	}
+	l1 := append(append(left, seg{strings.Repeat(" ", gap), ""}), right...)
+
+	t := s.Totals
+	stuck := seg{fmt.Sprintf("정체 %d", t.Stuck), stGray}
+	if t.Stuck > 0 {
+		stuck.st = stRed
+	}
+	fail := seg{fmt.Sprintf("실패 %d", t.Failed), stGray}
+	if t.Failed > 0 {
+		fail.st = stRed
+	}
+	l2 := []seg{{" ", ""}, {fmt.Sprintf("전체 %d", t.Total), stBold}, {"  ", ""},
+		{fmt.Sprintf("완료 %d", t.Done), stGreen}, {"  ", ""},
+		{fmt.Sprintf("진행 %d", progressCount(t)), stCyan}, {"  ", ""},
+		{fmt.Sprintf("대기 %d", t.Queued), stGray}, {"  ", ""}, stuck, {"  ", ""}, fail}
+	var out []string
+	if strWidth(segsText(left))+2+strWidth(segsText(right)) <= width {
+		out = append(out, segLine(color, width, l1...))
+	} else { // 좁으면 갱신 시각·데몬 상태를 다음 줄로
+		out = append(out, segLine(color, width, left...))
+		out = append(out, wrapSegs(color, width, 2, " ", append([]seg{{" ", ""}}, right...)...)...)
+	}
+	return append(out, wrapSegs(color, width, 2, " ", l2...)...)
+}
+
+func clockOf(s Snapshot) string {
+	if len(s.NowText) >= 19 {
+		return s.NowText[11:19]
+	}
+	return s.NowText
+}
+
+// window: 본문 블록(행 하나 = 블록 하나, 줄바꿈된 행은 여러 줄) 중 cursor 블록 전체가 보이는 avail 줄.
+// 블록 중간에서 시작하지 않는다 (커서 블록이 avail 보다 길면 그 블록의 처음부터).
+func window(blocks [][]string, cursor, avail int) []string {
+	var lines []string
+	var starts []int
+	for _, b := range blocks {
+		starts = append(starts, len(lines))
+		lines = append(lines, b...)
+	}
+	if avail <= 0 || len(lines) <= avail {
+		return lines
+	}
+	cs, ce := 0, 0
+	if cursor >= 0 && cursor < len(blocks) {
+		cs = starts[cursor]
+		ce = cs + len(blocks[cursor])
+	}
+	top := 0
+	if ce > avail {
+		top = ce - avail
+	}
+	if top > cs {
+		top = cs
+	}
+	if top+avail > len(lines) {
+		top = len(lines) - avail
+	}
+	for _, st := range starts {
+		if st >= top {
+			top = rMin(st, cs)
+			break
+		}
+	}
+	return lines[top:rMin(top+avail, len(lines))]
+}
+
+func msgLine(sel selection, width int, color bool) string {
+	if sel.Msg == "" {
+		return ""
+	}
+	st := stYellow
+	if strings.HasPrefix(sel.Msg, "요청됨") || strings.HasPrefix(sel.Msg, "완료 처리 요청") {
+		st = stGreen
+	}
+	return wrapLine(color, width, seg{" " + sel.Msg, st})
+}
+
+// ---- 화면 1 ----
+
+// renderOverview: 화면 1 — 총계 + job 별 헤더 + yml 그룹 행. height<=0 이면 자르지 않고 키 안내 줄도 생략(--plain).
+func renderOverview(s Snapshot, sel selection, width, height int, color bool) string {
+	width = clampWidth(width)
+	head := titleLines(s, width, color)
+	head = append(head, sepLine(width))
+	var body [][]string // 행 하나 = 블록 하나 (좁으면 여러 줄)
+	cursor, idx := 0, 0
+	if len(s.Jobs) == 0 {
+		body = append(body, wrapSegs(color, width, 1, "  ", seg{" 진행 중인 작업 없음 (01 에서 OS 설치를 전달하면 표시됩니다)", ""}))
+	}
+	date := ""
+	if sel.DateFilter && len(s.Jobs) > 0 {
+		date = effDate(s, sel.Date)
+		segs := []seg{{"  ", ""}, {dateRowText(date, len(visibleGroups(s, sel))), stBold}}
+		if sel.Row == -1 {
+			segs[0].t = "> "
+			body = append(body, []string{selLine(color, width, segs)})
+		} else {
+			body = append(body, []string{segLine(color, width, segs...)})
+		}
+		if len(visibleGroups(s, sel)) == 0 {
+			body = append(body, wrapSegs(color, width, 1, "  ", seg{"  이 날짜에는 작업이 없습니다 (← → 로 날짜 이동)", stGray}))
+		}
+	}
+	// 열 폭: 마커2 + 이름 + 구성 + 대수5 + 막대 + 경과7 + 완료율5 + 공백
+	barW := 12
+	if width >= 110 {
+		barW = 20
+	}
+	rest := width - 2 - 5 - barW - 7 - 5 - 6
+	nameW := rest * 55 / 100
+	specW := rest - nameW
+	// 기본 칸에 안 들어가는 이름·구성이 있어도 두 칸을 합친 폭에 모두 들어가면 칸 경계만 옮겨 한 줄 형태 유지 (기본 칸에 들어가면 종전 배치 그대로)
+	maxName, maxSpec := 0, 0
+	for _, r := range visibleGroups(s, sel) {
+		g := s.Jobs[r.Job].Groups[r.Grp]
+		maxName = rMax(maxName, strWidth(cleanText(g.Yml)))
+		maxSpec = rMax(maxSpec, strWidth(cleanText(specText(g))))
+	}
+	if (maxName > nameW || maxSpec > specW) && maxName+maxSpec <= rest {
+		nameW, specW = maxName, rest-maxName
+	}
+	for ji, j := range s.Jobs {
+		if date != "" {
+			any := false
+			for gi := range j.Groups {
+				any = any || groupDate(s, &s.Jobs[ji], &s.Jobs[ji].Groups[gi]) == date
+			}
+			if !any {
+				continue
+			}
+		}
+		hs := stBold
+		tag := ""
+		if j.Closed {
+			hs, tag = stGray, " [종료]"
+		}
+		title := fmt.Sprintf("job %s  %s  전달 %s  %d대  완료 %d/%d%s", j.ID, j.User,
+			fmtClock(s, j.Submitted, "01-02 15:04"), j.Counts.Total, j.Counts.Done, j.Counts.Total, tag)
+		if j.AllYml != "" {
+			title += "  all=" + j.AllYml
+		}
+		// job 헤더: 좁으면 항목(두 칸 간격) 단위로 다음 줄로
+		body = append(body, wrapSegs(color, width, 2, "  ", seg{" " + title, hs}))
+		for gi, g := range j.Groups {
+			if date != "" && groupDate(s, &s.Jobs[ji], &s.Jobs[ji].Groups[gi]) != date {
+				continue
+			}
+			elapsed := "-"
+			if g.MaxElapsed > 0 {
+				elapsed = fmtDur(g.MaxElapsed)
+			}
+			tail := []seg{{padL(fmt.Sprintf("%d대", g.Counts.Total), 5), ""}, {" ", ""}}
+			tail = append(tail, barSegs(g.Counts, barW)...)
+			tail = append(tail, seg{" ", ""}, seg{padL(elapsed, 7), ""}, seg{" ", ""})
+			ps := stCyan
+			if g.Complete {
+				ps = stGreen
+			} else if g.Counts.Stuck+g.Counts.Failed > 0 {
+				ps = stRed
+			}
+			tail = append(tail, seg{padL(fmt.Sprintf("%d%%", pct(g.Counts)), 5), ps})
+			mark := "  "
+			if idx == sel.Row {
+				mark = "> "
+			}
+			var rows [][]seg
+			if strWidth(cleanText(g.Yml)) <= nameW && strWidth(cleanText(specText(g))) <= specW {
+				rows = [][]seg{append([]seg{{mark, ""}, {padR(g.Yml, nameW), ""}, {" ", ""}, {padR(specText(g), specW), stGray}, {" ", ""}}, tail...)}
+			} else { // 한 줄에 안 들어가면 카드형: 1줄 yml 전체 이름, 2줄 구성·대수·막대·경과·%
+				rows = wrapAtoms(width, mark, "  ", []atom{{segs: []seg{{cleanText(g.Yml), ""}}}})
+				rows = append(rows, wrapAtoms(width, "  ", "  ", []atom{{segs: []seg{{cleanText(specText(g)), stGray}}},
+					{glue: seg{" ", ""}, segs: tail}})...)
+			}
+			var block []string
+			for _, r := range rows {
+				if idx == sel.Row {
+					block = append(block, selLine(color, width, r))
+				} else {
+					block = append(block, segLine(color, width, r...))
+				}
+			}
+			if idx == sel.Row {
+				cursor = len(body)
+			}
+			body = append(body, block)
+			idx++
+		}
+	}
+	aLab := "a 전체 보기" // -user 로 실행하면 a 는 전체 user 보기 토글
+	if forceUser != "" {
+		aLab = "a 전체 user"
+		if showAllUsers {
+			aLab = "a 내 job 만"
+		}
+	}
+	hint := " ↑↓ 이동  ←→ 작업 전환  Enter 상세  " + aLab + "  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
+	if sel.DateFilter {
+		hint = " ↑↓ 이동  ←→ 작업 전환 (맨 위 날짜 줄에서는 날짜 이동)  Enter 상세  " + aLab + "  r 새로고침  ? 도움말  q 종료\n" + menuHint(sel, false)
+	}
+	foot := append([]string{msgLine(sel, width, color)}, hintLines(color, width, hint)...)
+	return finish(head, body, cursor, height, width, color, append(foot, sel.Inline...))
+}
+
+func flatLines(blocks [][]string) []string {
+	var out []string
+	for _, b := range blocks {
+		out = append(out, b...)
+	}
+	return out
+}
+
+// finish: 머리 + (스크롤된) 본문 + 꼬리 조립. height<=0 이면 꼬리 없이 전체.
+// 꼬리 항목은 줄바꿈된 여러 줄("\n")일 수 있다. 머리·꼬리만으로 높이를 넘는 아주 작은 창에서는 아래를 잘라 화면이 밀리지 않게 한다.
+func finish(head []string, body [][]string, cursor, height, width int, color bool, foot []string) string {
+	if height <= 0 {
+		return strings.Join(append(head, flatLines(body)...), "\n")
+	}
+	foot = strings.Split(strings.Join(foot, "\n"), "\n")
+	avail := rMax(height-len(head)-len(foot), 1)
+	lines := append(append([]string{}, head...), window(body, cursor, avail)...)
+	lines = append(lines, foot...)
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ---- 화면 2 ----
+
+func hostNoteText(h SnapHost, now int64) string {
+	var p []string
+	switch h.Stage {
+	case StageInstalling:
+		p = append(p, "anaconda")
+	case StageBooting:
+		p = append(p, "READY 대기")
+	case StageStuck:
+		p = append(p, "READY 안 됨")
+	}
+	if h.Stage.installPhase() && h.DownAt > 0 && now > h.DownAt {
+		p = append(p, "설치 "+fmtDur(now-h.DownAt))
+	}
+	if h.Note != "" {
+		p = append(p, h.Note)
+	}
+	return strings.Join(p, ", ")
+}
+
+func noteStyle(h SnapHost) string {
+	n := h.Note
+	if strings.Contains(n, "적용실패") || strings.Contains(n, "FAIL") || strings.Contains(n, "이름 미해결") || strings.Contains(n, "실패") {
+		return stYellow
+	}
+	return ""
+}
+
+// hostTable: 호스트표 — 머리 줄, 행 목록(행 하나 = 블록 하나, 좁으면 여러 줄), 커서 행 번호(host<0 이면 커서 없음).
+// 칸보다 긴 호스트명·그룹·단계는 칸 안에서 줄바꿈, 비고는 칸이 noteMin 이상이면 칸 안에서, 아니면 행 아래 줄(들여쓰기)로.
+func hostTable(hosts []SnapHost, host int, now int64, width int, color bool) (string, [][]string, int) {
+	hostW := 8
+	for _, h := range hosts {
+		hostW = rMax(hostW, rMin(strWidth(cleanText(h.Host)), 28))
+	}
+	const stageW, elapsedW, noteMin = 8, 7, 16
+	ymlW := 0 // 전체 보기(호스트에 Yml 이 있음)면 그룹 yml 열을 추가
+	for _, h := range hosts {
+		if h.Yml != "" {
+			ymlW = rMax(ymlW, rMin(strWidth(cleanText(h.Yml)), 22))
+		}
+	}
+	if ymlW > 0 {
+		ymlW = rMax(ymlW, 9)
+	}
+	fixed := 2 + 2 + stageW + 2 + elapsedW + 2
+	if ymlW > 0 {
+		fixed += 2
+	}
+	// 고정 열이 폭을 넘으면 그룹 → 호스트 열 순으로 줄인다 (넘치는 이름은 칸 안에서 줄바꿈)
+	if over := fixed + hostW + ymlW - width; over > 0 && ymlW > 9 {
+		ymlW -= rMin(over, ymlW-9)
+	}
+	if over := fixed + hostW + ymlW - width; over > 0 {
+		hostW = rMax(hostW-over, 8)
+	}
+	ymlCol := func(y string) string {
+		if ymlW == 0 {
+			return ""
+		}
+		return padR(y, ymlW) + "  "
+	}
+	noteW := rMax(width-fixed-hostW-ymlW, 0)
+	noteHdr := ""
+	if noteW >= strWidth("비고") {
+		noteHdr = padR("비고", noteW)
+	}
+	hdr := segLine(color, width, seg{"  " + padR("호스트", hostW) + "  " + ymlCol("그룹(yml)") + padR("단계", stageW) + "  " +
+		padL("경과", elapsedW) + "  " + noteHdr, stBold})
+	var rows [][]string
+	cursor := 0
+	for i, h := range hosts {
+		el := "-"
+		if h.Elapsed > 0 && h.Stage != StageDone {
+			el = fmtDur(h.Elapsed)
+		}
+		mark := "  "
+		if i == host {
+			mark = "> "
+		}
+		label := h.Label
+		if label == "" {
+			label = h.Stage.Label()
+		}
+		note := cleanText(hostNoteText(h, now))
+		hostL, ymlL, stageL, noteL := cellLines(h.Host, hostW), cellLines(h.Yml, ymlW), cellLines(label, stageW), cellLines(note, noteW)
+		var below [][]seg
+		if strWidth(note) > noteW && noteW < noteMin {
+			noteL = []string{""}
+			_, atoms := splitAtoms([]seg{{note, noteStyle(h)}}, 1)
+			below = wrapAtoms(width, "    ", "    ", atoms)
+		}
+		var lines []string
+		put := func(segs []seg) {
+			if i == host {
+				lines = append(lines, selLine(color, width, segs))
+			} else {
+				lines = append(lines, segLine(color, width, segs...))
+			}
+		}
+		n := rMax(rMax(len(hostL), len(ymlL)), rMax(len(stageL), len(noteL)))
+		for k := 0; k < n; k++ {
+			m, e := mark, el
+			if k > 0 {
+				m, e = "  ", ""
+			}
+			put([]seg{{m, ""}, {padR(lineAt(hostL, k), hostW), ""}, {"  ", ""}, {ymlCol(lineAt(ymlL, k)), stGray},
+				{padR(lineAt(stageL, k), stageW), stageStyle(h.Stage)}, {"  ", ""}, {padL(e, elapsedW), ""}, {"  ", ""},
+				{padR(lineAt(noteL, k), noteW), noteStyle(h)}})
+		}
+		for _, b := range below {
+			put(b)
+		}
+		if i == host {
+			cursor = len(rows)
+		}
+		rows = append(rows, lines)
+	}
+	return hdr, rows, cursor
+}
+
+// renderDetail: 화면 2 — 선택 그룹의 호스트표, 수동 실행 안내. height<=0 이면 자르지 않음.
+func renderDetail(s Snapshot, sel selection, width, height int, color bool) string {
+	width = clampWidth(width)
+	j, g := findGroup(s, sel.JobID, sel.Yml)
+	if g == nil {
+		head := titleLines(s, width, color)
+		head = append(head, sepLine(width))
+		return strings.Join(append(head, wrapSegs(color, width, 1, "  ", seg{" 선택한 그룹을 찾을 수 없습니다 (작업이 종료되었을 수 있음). ← 로 돌아가세요.", ""})...), "\n")
+	}
+	state := ""
+	if j.Closed {
+		state = " [종료된 작업]"
+	}
+	title := fmt.Sprintf(" job %s / %s  (%s)  완료 %d/%d%s", j.ID, g.Yml, specText(*g), g.Counts.Done, g.Counts.Total, state)
+	if sel.Yml == allView {
+		title = fmt.Sprintf(" job %s / 전체 호스트 (그룹 %d개)  완료 %d/%d%s", j.ID, len(j.Groups), g.Counts.Done, g.Counts.Total, state)
+	}
+	head := wrapSegs(color, width, 2, "  ", seg{title, stBold})
+	cs := []seg{{" ", ""}}
+	for _, st := range StageOrder {
+		if n := g.Counts.Get(st); n > 0 {
+			cs = append(cs, seg{fmt.Sprintf("%s %d", st.Label(), n), stageStyle(st)}, seg{"  ", ""})
+		}
+	}
+	if len(cs) == 1 {
+		cs = append(cs, seg{"호스트 없음", stGray})
+	}
+	if sel.Filter {
+		cs = append(cs, seg{"[필터: 정체·실패만]", stYellow})
+	}
+	head = append(head, wrapSegs(color, width, 2, " ", cs...)...)
+	head = append(head, sepLine(width))
+
+	hosts := visibleHosts(g, sel.Filter)
+	var body [][]string
+	cursor := 0
+	if len(hosts) == 0 {
+		if sel.Filter {
+			body = [][]string{{" (정체·실패 호스트 없음)"}}
+		} else {
+			body = [][]string{{" (호스트 없음)"}}
+		}
+	} else {
+		var hdr string
+		hdr, body, cursor = hostTable(hosts, sel.Host, s.Now, width, color)
+		head = append(head, hdr)
+	}
+
+	if height <= 0 {
+		return strings.Join(append(head, flatLines(body)...), "\n")
+	}
+	return finish(head, body, cursor, height, width, color, detailFoot(s, sel, j, g, width, color))
+}
+
+// detailFoot: 화면 2 꼬리 — 구분선, 수동 run 정보, 수동 실행 줄, 안내 한 줄, 키 안내 (좁으면 각각 여러 줄)
+func detailFoot(s Snapshot, sel selection, j *SnapJob, g *SnapGroup, width int, color bool) []string {
+	foot := []string{sepLine(width), runInfoLine(s, j, g, width, color), manualLine(sel, g, width, color),
+		msgLine(sel, width, color)}
+	hint := " ↑↓ 이동  ← 목록  f 정체·실패만  a 전체 그룹  r 새로고침  ? 도움말  q 복귀\n" + menuHint(sel, true)
+	if sel.Yml == allView {
+		hint = " ↑↓ 이동  ← 목록  f 정체·실패만  a 그룹별 보기  r 새로고침  ? 도움말  q 복귀\n" + menuHint(sel, true)
+	}
+	foot = append(foot, hintLines(color, width, hint)...)
+	foot = append(foot, sel.Inline...)
+	return strings.Split(strings.Join(foot, "\n"), "\n")
+}
+
+// runInfoLine: 이 그룹의 수동 run 대기·진행 / 최근 결과 code
+func runInfoLine(s Snapshot, j *SnapJob, g *SnapGroup, width int, color bool) string {
+	if g.Yml == allView {
+		return ""
+	}
+	for _, m := range j.Manual {
+		if m.Yml != g.Yml {
+			continue
+		}
+		if m.State == "running" {
+			return wrapLine(color, width, seg{" 수동 run 진행 중 (체크중) — 요청 " + fmtClock(s, m.Requested, "15:04:05"), stCyan})
+		}
+		return wrapLine(color, width, seg{" 수동 run 대기 중 — 데몬이 곧 시작합니다 (요청 " + fmtClock(s, m.Requested, "15:04:05") + ")", stCyan})
+	}
+	for i := len(j.Runs) - 1; i >= 0; i-- {
+		r := j.Runs[i]
+		if r.Manual && r.Yml == g.Yml {
+			return wrapLine(color, width, seg{fmt.Sprintf(" 최근 수동 run: code %s (%s) → auto_setup code %s", r.Code,
+				fmtClock(s, r.At, "15:04:05"), r.Code), stGreen})
+		}
+	}
+	return ""
+}
+
+// wrapLine: 문장형 보조 줄 — 단어 단위로 줄바꿈해 "\n" 으로 이은 문자열 (이어지는 줄은 두 칸 들여씀)
+func wrapLine(color bool, width int, segs ...seg) string {
+	return strings.Join(wrapSegs(color, width, 1, "  ", segs...), "\n")
+}
+
+// manualLine: [c] OS 체크 수동 실행 — 완료 여부와 상관없이 활성(그룹 전체 시도, 접속불가는 wall 에 표시), 확인 중이면 y/n 질문.
+// 좁으면 여러 줄("\n")이 된다.
+func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
+	if g.Yml == allView {
+		return wrapLine(color, width, seg{" 전체 보기 - 수동 실행(c)은 그룹별 화면에서 하세요 (a 로 돌아가 그룹 선택)", stGray})
+	}
+	if sel.Confirm {
+		extra := ""
+		if n := g.Counts.Total - g.Counts.Done; n > 0 {
+			extra = fmt.Sprintf(", 미완료 %d대 포함", n)
+		}
+		what := []seg{{"'설정체크 + ", stYellow}, {"설정수정 (환경설정 수정함)", stRed}, {"'", stYellow}}
+		if sel.Mode == ModeCheck {
+			what = []seg{{"'설정체크만' (환경설정 수정 안 함)", stYellow}}
+		}
+		segs := []seg{{fmt.Sprintf(" %s (%d대%s)에 ", g.Yml, g.Counts.Total, extra), stYellow}}
+		segs = append(segs, what...)
+		segs = append(segs, seg{" 실행. 계속? [y/n]", stYellow})
+		return wrapLine(color, width, segs...)
+	}
+	return strings.Join(wrapSegs(color, width, 2, " ", seg{" [c] 설정체크 + ", "1;32"}, seg{"설정수정", stRed},
+		seg{"   [t] 설정체크만(수정 안 함)   [g] 재확인   [v] 최근 결과 - 완료 여부와 상관없이 그룹 전체 시도", "1;32"}), "\n")
+}
+
+// redSegs: text 안의 "설정수정"(환경설정을 실제로 수정하는 모드)을 빨간색 seg 로 분리
+func redSegs(text, style string) []seg {
+	var out []seg
+	for {
+		i := strings.Index(text, "설정수정")
+		if i < 0 {
+			break
+		}
+		if i > 0 {
+			out = append(out, seg{text[:i], style})
+		}
+		out = append(out, seg{"설정수정", stRed})
+		text = text[i+len("설정수정"):]
+	}
+	if text != "" {
+		out = append(out, seg{text, style})
+	}
+	return out
+}
+
+// ---- 도움말 ----
+
+func renderHelp(width, height int, color bool) string {
+	width = clampWidth(width)
+	lines := []string{
+		segLine(color, width, seg{" auto_setup 상태 리포트 - 도움말", stBold}),
+		sepLine(width),
+		" 화면 1 (작업·그룹 목록)",
+		"   ↑ ↓ (k j)   그룹 행 이동 (PgUp/PgDn 한 화면씩)",
+		"   ← →         이전/다음 작업(job) 으로 이동",
+		"   ↑ (맨 위)   날짜 줄 선택 → ← 전날 / → 다음날 (그룹 yml 이름의 시각 기준, 기본은 가장 최근 날짜)",
+		"   Enter       선택한 그룹의 호스트표(화면 2)",
+		"   a           선택한 job 의 모든 그룹(yml) 호스트를 한 표로 (그룹 열 표시)",
+		"   r           바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동: 로컬 2초, 원격 5초)",
+		"               정체 호스트는 ping 상태와 상관없이 즉시 다시 확인(수동 재시도)",
+		"   q / Esc     종료",
+		" 화면 2 (호스트표)",
+		"   ↑ ↓ (k j)   호스트 행 이동 (PgUp/PgDn 한 화면씩)",
+		"   ← / Esc / q 화면 1 로 복귀",
+		"   f           정체·실패 호스트만 보기 (토글)",
+		" 항목별 메뉴 (v0.8.0) - 키 안내 줄 아래에 열리고 화면은 바뀌지 않습니다. 글자 또는 번호로 선택, Esc/q 로 메뉴만 닫기",
+		"   h           호스트 작업 메뉴 (화면 2 에서만) - 선택한 그룹에 대한 작업. 전체 보기에서는 g·d 만",
+		"               c (1) 체크+수정 - 설정체크 + 설정수정 (환경설정을 수정함). 완료 여부와 상관없이 그룹 전체 시도, y/n 확인",
+		"               t (2) 체크만 - 설정체크만 (환경설정은 수정하지 않음). 점검 결과만 보고 싶을 때, y/n 확인",
+		"               c / t 를 누르면 결과 화면이 열리고, 끝나면 그 화면에 결과가 그대로 표시됩니다 (v 로 다시 보기)",
+		"               g (3) 재확인 - 서버 상태 수동 재확인. 완료 제외 모든 호스트를 os8 → 안 되면 os6_mgmt → 둘 다 안 되면 접속불가. 진행 과정·실패 지점·최종 결과가 화면에 실시간 표시",
+		"               d (4) 수동 완료 - 안내 줄 아래에서 1 이 호스트 / 2 그룹 미완료 전체 선택 → y 확인. 부팅 시각 검증 없이 완료로 인정, 체크스크립트는 실행 안 함 (CLI: auto_setup done)",
+		"               v (5) 결과 - 이 그룹의 가장 최근 수동 실행 결과 보기",
+		"               * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
+		"   w           AWX 메뉴 (화면 1·2 어디서나)",
+		"               1 AWX 실행 - w / Enter / 1 중 아무 키 (그래서 ww 가 예전의 w). (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",
+		"               2 신규 설치 양식 - hostname ip mac 붙여넣기 → 템플릿 지정 → DNS 점검 → 미리보기 → awx_dir/<user>.txt 저장(기존 파일 백업) → AWX 실행? (프로파일을 고르면 nodeinfo N, 안 고르면 일반 실행, os8_mgmt 에서만, CLI: auto_setup newhost)",
+		"   m           변경 작업 메뉴 (화면 1·2 어디서나, os8_mgmt 에서만) - IP 변경·LDAP 변경·IP+LDAP 변경·원복·auto.appl 원복",
+		"               메뉴는 화면을 바꾸지 않고 키 안내 줄 아래에 열립니다 - 번호 선택, Esc/m/q 로 메뉴만 닫기",
+		"               user·대상 입력(Ctrl+D) → 미리보기 → yes 입력 → 실행 → 결과. 서비스는 재시작하지 않음 (취소: Ctrl+X → y)",
+		"               conf enable_ip_change/enable_ldap_change 또는 --admin 으로 켭니다 (꺼져 있으면 m 키는 무반응)",
+		"   s           gossh 작업 (화면 1·2 어디서나) - 메뉴 없이 작업 화면이 바로 열립니다",
+		"   x           체크스크립트 단독 실행 (화면 1·2 어디서나) - user·호스트 입력 → t/c 선택 → 결과 보기, 기록 안 남김 (취소: Ctrl+X)",
+		"   * c t g v d 는 h 메뉴 없이 화면 2 에서 바로 눌러도 동작합니다 (예전 단축키 그대로)",
+		" 색: 완료 초록 / 진행 청록 / 대기 회색 / 경고 노랑 / 정체·실패 빨강. NO_COLOR 설정 시 색 없음",
+		" 막대: # 완료  + 진행  . 대기  ! 정체·실패",
+		" %: 완료 대수 / 전체 (배포중·설치중·부팅확인·체크중은 + 로만 보이고 % 는 완료될 때 오름)",
+		"",
+		segLine(color, width, seg{" 아무 키나 누르면 닫힙니다", stGray}),
+	}
+	var wrapped []string // 좁으면 단어 단위로 줄바꿈 (키 설명은 설명 칸에 맞춰 들여씀)
+	for _, l := range lines {
+		if strings.Contains(l, "\x1b") {
+			wrapped = append(wrapped, l)
+			continue
+		}
+		cont := "   "
+		if strings.HasPrefix(l, "   ") {
+			cont = strings.Repeat(" ", 15)
+		}
+		wrapped = append(wrapped, wrapSegs(false, width, 1, cont, seg{l, ""})...)
+	}
+	lines = wrapped
+	if height > 0 && len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ---- 비 tty / --plain ----
+
+// renderPlain: 색 없는 텍스트 한 번 출력 — 화면 1 전체 + 정체·실패 호스트가 있는 그룹의 호스트표
+func renderPlain(s Snapshot, width int) string {
+	var sb strings.Builder
+	sb.WriteString(renderOverview(s, selection{Row: -1}, width, 0, false))
+	sb.WriteByte('\n')
+	width = clampWidth(width)
+	for _, j := range s.Jobs {
+		for _, g := range j.Groups {
+			g := g
+			hosts := visibleHosts(&g, true)
+			if len(hosts) == 0 {
+				continue
+			}
+			sb.WriteString("\n" + strings.Join(wrapSegs(false, width, 1, "  ", seg{fmt.Sprintf("[정체·실패] job %s / %s", j.ID, g.Yml), ""}), "\n") + "\n")
+			hdr, rows, _ := hostTable(hosts, -1, s.Now, width, false)
+			lines := append([]string{hdr}, flatLines(rows)...)
+			sb.WriteString(strings.Join(lines, "\n"))
+			sb.WriteByte('\n')
+		}
+	}
+	return sb.String()
+}
+
+// allView: 화면 2 의 특수 그룹 이름 — 한 job 의 모든 그룹(yml) 호스트를 한 표로 본다 (TUI a 키)
+const allView = "*"
+
+// mergedGroup: job 의 모든 그룹 호스트를 그룹 순서대로 이어 붙인 가상 그룹 (그룹이 없으면 nil).
+// 호스트마다 Yml 을 채워 표에 yml 열이 나온다. 수동 실행 대상이 아니다(그룹별로 실행).
+func mergedGroup(j *SnapJob) *SnapGroup {
+	if len(j.Groups) == 0 {
+		return nil
+	}
+	m := &SnapGroup{Yml: allView, Hosts: []SnapHost{}, Complete: true}
+	for _, g := range j.Groups {
+		m.Counts.merge(g.Counts)
+		if g.MaxElapsed > m.MaxElapsed {
+			m.MaxElapsed = g.MaxElapsed
+		}
+		if !g.Complete {
+			m.Complete = false
+		}
+		for _, h := range g.Hosts {
+			h.Yml = g.Yml
+			m.Hosts = append(m.Hosts, h)
+		}
+	}
+	return m
+}
+
+// ---- 키 안내 줄 색 ----
+
+// hintStyles: 키 안내 항목(첫 토큰 = 키)별 색. 이동 = 청록, c(수정 포함) = 빨강, t = 초록, g = 노랑, x = 자홍, w = 파랑,
+// m(변경 메뉴) = 주황, d(수동 완료) = 분홍, h(호스트 작업 메뉴) = 보라, s(gossh 작업) = 연초록, 나머지 = 굵게.
+var hintStyles = map[string]string{
+	"↑↓": "1;36", "←→": "1;36", "←": "1;36", "Enter": "1;36",
+	"c": stRed, "t": "1;32", "g": "1;33", "x": "1;35", "w": "1;34", "m": "1;38;5;208", "d": "1;38;5;175",
+	"h": "1;38;5;141", "s": "1;38;5;108",
+}
+
+// menuHint: 안내 줄의 둘째 묶음(v0.8.0 항목별 메뉴) — `h 호스트 작업`(화면 2 만)  `w AWX·신규설치`  `m 변경`(켜졌을 때만)  `s gossh 작업`  `x 단독 체크`.
+// c t g v d 는 h 메뉴 안으로 들어갔고 숨은 단축키로 계속 동작한다 (menu_tui.go).
+func menuHint(sel selection, host bool) string {
+	hint := " "
+	if host {
+		hint += "h 호스트 작업  "
+	}
+	hint += "w AWX·신규설치"
+	if sel.Change {
+		hint += "  m 변경"
+	}
+	return hint + "  s gossh 작업  x 단독 체크"
+}
+
+// hintSegs: " ↑↓ 이동  ← 목록  c 체크+수정 …" 를 항목(두 칸 간격)별로 나눠 색을 입힌다 (색이 꺼지면 글자만 이어 붙임)
+func hintSegs(hint string) []seg {
+	var out []seg
+	for i, item := range strings.Split(strings.TrimSpace(hint), "  ") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		sep := "  "
+		if i == 0 {
+			sep = " "
+		}
+		style := stBold
+		if f := strings.Fields(item); len(f) > 0 {
+			if s, ok := hintStyles[f[0]]; ok {
+				style = s
+			}
+		}
+		out = append(out, seg{sep, ""}, seg{item, style})
+	}
+	return out
+}
+
+// hintLines: 키 안내를 폭에 맞춰 줄로 나눈다.
+// hint 의 "\n" 은 묶음(보기·이동 / 작업) 경계다. 전체가 한 줄에 들어가면 한 줄로 합치고,
+// 아니면 묶음마다 한 줄로 두며, 묶음이 폭보다 길면 항목(두 칸 간격) 단위로 줄바꿈한다.
+func hintLines(color bool, width int, hint string) []string {
+	groups := strings.Split(hint, "\n")
+	flat := strings.Join(groups, "  ")
+	if len(groups) == 1 || strWidth(flat) <= width {
+		return wrapHint(color, width, flat)
+	}
+	var out []string
+	for _, g := range groups {
+		out = append(out, wrapHint(color, width, g)...)
+	}
+	return out
+}
+
+// wrapHint: 항목(두 칸 간격) 단위로 줄바꿈 (이어지는 줄은 한 칸 들여씀, 한 줄보다 긴 항목은 단어 단위)
+func wrapHint(color bool, width int, hint string) []string {
+	return wrapSegs(color, width, 2, " ", hintSegs(hint)...)
+}

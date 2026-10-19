@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 1027" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TUI w → 2 — 신규 설치 양식">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="1027" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">TUI w → 2 — 신규 설치 양식</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">메뉴 항목 · 화면 1 · 2 (CLI auto_setup newhost 와 같은 화면) — os8_mgmt 에서만</text>
+
+  <rect x="40" y="56" width="450" height="30" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">w → 2</text>
+  <path d="M265 86 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">os8_mgmt(로컬)이고 awx_dir 이 있는가?</text>
+  <rect x="560" y="114" width="310" height="62" rx="6" class="ext"/>
+  <text x="715" y="134" class="t tb" text-anchor="middle">안내만 표시</text>
+  <text x="715" y="150" class="t" text-anchor="middle">"신규 설치 양식은 os8_mgmt 에서 실행하세요" /</text>
+  <text x="715" y="166" class="t" text-anchor="middle">awx_dir 가 비었거나 없습니다</text>
+  <path d="M490 145 L560 145" class="ln"/>
+  <text x="498" y="140" class="t tm">아니오</text>
+  <path d="M265 160 L265 204" class="ln"/>
+  <text x="273" y="177" class="t tm">예</text>
+  <rect x="40" y="204" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">세션 user (needSessionUser)</text>
+  <text x="265" y="240" class="t" text-anchor="middle">-user 가 있으면 그 user, 이미 고른 세션 user 가 있으면 그대로, 없으면</text>
+  <text x="265" y="256" class="t" text-anchor="middle">처음 한 번 고르고 TUI 종료까지 기억</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <rect x="40" y="294" width="450" height="94" rx="6" class="box"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">1/5 붙여넣기</text>
+  <text x="265" y="330" class="t" text-anchor="middle">hostname ip mac (구분자 공백·탭·쉼표, 순서 무관). MAC 은 4형식 →</text>
+  <text x="265" y="346" class="t" text-anchor="middle">소문자 aa:bb:..</text>
+  <text x="265" y="362" class="t" text-anchor="middle">형식 오류 · 목록 안 hostname/IP/MAC 중복은 고치기 전에는 다음으로 못</text>
+  <text x="265" y="378" class="t" text-anchor="middle">감</text>
+  <path d="M265 388 L265 416" class="ln"/>
+  <rect x="40" y="416" width="450" height="78" rx="6" class="box"/>
+  <text x="265" y="436" class="t tb" text-anchor="middle">2/5 템플릿 지정</text>
+  <text x="265" y="452" class="t" text-anchor="middle">conf newhost_template_1~9 + 이 user 의 templates 에 + 로 추가한 것</text>
+  <text x="265" y="468" class="t" text-anchor="middle">범위 svr001-020 · 패턴 spice* · 행 번호 · * 로 지정, 열 수정 svr005</text>
+  <text x="265" y="484" class="t" text-anchor="middle">os=9.6, 지정 없는 행은 이력 추천(노랑)</text>
+  <path d="M265 494 L265 522" class="ln"/>
+  <rect x="40" y="522" width="450" height="62" rx="6" class="ldap"/>
+  <text x="265" y="542" class="t tb" text-anchor="middle">3/5 DNS 점검</text>
+  <text x="265" y="558" class="t" text-anchor="middle">불일치가 없거나 점검을 못 하면 바로 4단계로. 있으면 표 + a 모두 DNS 로</text>
+  <text x="265" y="574" class="t" text-anchor="middle">/ n 그대로 / s 하나씩 / q 중단 (규칙은 README 「DNS 점검」)</text>
+  <path d="M265 584 L265 612" class="ln"/>
+  <rect x="40" y="612" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="632" class="t tb" text-anchor="middle">4/5 미리보기 — y 로 저장?</text>
+  <text x="265" y="648" class="t" text-anchor="middle">12필드 줄을 템플릿별로 묶어 표시, 추천 · DNS 로 바꾼 행은 색 표시</text>
+  <rect x="560" y="612" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="632" class="t tb" text-anchor="middle">Esc: 템플릿 지정으로 / Ctrl+X → y: 취소(저장</text>
+  <text x="715" y="648" class="t tb" text-anchor="middle">안 함)</text>
+  <path d="M490 635 L560 635" class="ln"/>
+  <path d="M265 658 L265 686" class="ln"/>
+  <text x="273" y="675" class="t tm">y</text>
+  <rect x="40" y="686" width="450" height="62" rx="6" class="sec"/>
+  <text x="265" y="706" class="t tb" text-anchor="middle">awx_dir/&lt;user&gt;.txt 저장 → 저장된 내용 다시 보기</text>
+  <text x="265" y="722" class="t" text-anchor="middle">기존 파일은 newhost/&lt;user&gt;/backup/&lt;시각&gt;.txt 로 백업, history/ 에도</text>
+  <text x="265" y="738" class="t" text-anchor="middle">사본</text>
+  <path d="M265 748 L265 776" class="ln"/>
+  <rect x="40" y="776" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="796" class="t tb" text-anchor="middle">5/5 AWX 실행할까요? [y/n]</text>
+  <rect x="560" y="776" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="796" class="t tb" text-anchor="middle">저장만 완료 — 나중에 w 로 실행 가능</text>
+  <path d="M490 791 L560 791" class="ln"/>
+  <text x="498" y="786" class="t tm">n</text>
+  <path d="M265 806 L265 834" class="ln"/>
+  <text x="273" y="823" class="t tm">y</text>
+  <rect x="40" y="834" width="450" height="94" rx="6" class="ldap"/>
+  <text x="265" y="854" class="t tb" text-anchor="middle">01 실행 (기존 w 흐름)</text>
+  <text x="265" y="870" class="t" text-anchor="middle">프로파일을 고르면 nodeinfo N · 안 고르면 일반 실행</text>
+  <text x="265" y="886" class="t" text-anchor="middle">강제, 대상 목록은 방금 만든 hostname 들로 자동 입력</text>
+  <text x="265" y="902" class="t" text-anchor="middle">DNS 를 실제 점검했으면 AWX_DNS_CHECKED=1 (01 은 표만 출력하고</text>
+  <text x="265" y="918" class="t" text-anchor="middle">묻지 않음)</text>
+  <text x="40" y="965" class="t tm">범례</text>
+  <rect x="80" y="954" width="14" height="14" class="box"/>
+  <text x="100" y="965" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="954" width="14" height="14" class="dec"/>
+  <text x="237" y="965" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="954" width="14" height="14" class="ldap"/>
+  <text x="395" y="965" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="954" width="14" height="14" class="sec"/>
+  <text x="699" y="965" class="t tm">기록 · 결과</text>
+  <rect x="80" y="974" width="14" height="14" class="ext"/>
+  <text x="100" y="985" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="1002" class="t tm">코드: newhost_tui.go startNewhostFlow · newhost_tui.go newhostAwx · newhost.go newhostAwxEnv · sessionuser.go needSessionUser</text>
+</svg>

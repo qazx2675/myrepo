@@ -1,0 +1,76 @@
+== overview-all ==
+\e[1m auto_setup 상태 리포트\e[0m
+ 갱신 23:13:20  \e[32m● 데몬 실행 (pid 4242)\e[0m
+ \e[1m전체 9\e[0m  \e[32m완료 2\e[0m  \e[36m진행 6\e[0m  \e[90m대기 1\e[0m  \e[90m정체 0\e[0m  \e[90m실패 0\e[0m
+------------------------------------------------------------
+ \e[1mjob J1  user1  전달 11-14 21:13  9대  완료 2/9\e[0m
+  \e[1mall=(all).yaml\e[0m
+\e[7m> web.yml ib/rhel8/pxe/y     6대 ####++++++..  25m00s   33% \e[0m
+  gpu.yml \e[90meth/rhel7/pxe/n \e[0m   3대 \e[36m++++++++++++\e[0m   2m00s \e[36m   0%\e[0m
+
+ \e[1;36m↑↓ 이동\e[0m  \e[1;36m←→ 작업 전환\e[0m  \e[1;36mEnter 상세\e[0m  \e[1ma 전체 보기\e[0m  \e[1mr 새로고침\e[0m
+ \e[1m? 도움말\e[0m  \e[1mq 종료\e[0m
+ \e[1;34mw AWX·신규설치\e[0m  \e[1;38;5;208mm 변경\e[0m  \e[1;38;5;108ms gossh 작업\e[0m  \e[1;35mx 단독 체크\e[0m
+ \e[1;38;5;208m변경 ▶ \e[0m\e[1;32m1\e[0m\e[1m IP 변경\e[0m  \e[1;32m2\e[0m\e[1m LDAP 변경\e[0m  \e[1;32m3\e[0m\e[1m IP+LDAP\e[0m  \e[1;32m4\e[0m\e[1m 원복\e[0m
+   \e[1;32m5\e[0m\e[1m auto.appl 원복\e[0m   \e[90m(번호 선택, Esc/m 닫기)\e[0m
+== overview-ip-only ==
+\e[1m auto_setup 상태 리포트\e[0m
+ 갱신 23:13:20  \e[32m● 데몬 실행 (pid 4242)\e[0m
+ \e[1m전체 9\e[0m  \e[32m완료 2\e[0m  \e[36m진행 6\e[0m  \e[90m대기 1\e[0m  \e[90m정체 0\e[0m  \e[90m실패 0\e[0m
+------------------------------------------------------------
+ \e[1mjob J1  user1  전달 11-14 21:13  9대  완료 2/9\e[0m
+  \e[1mall=(all).yaml\e[0m
+\e[7m> web.yml ib/rhel8/pxe/y     6대 ####++++++..  25m00s   33% \e[0m
+  gpu.yml \e[90meth/rhel7/pxe/n \e[0m   3대 \e[36m++++++++++++\e[0m   2m00s \e[36m   0%\e[0m
+
+ \e[1;36m↑↓ 이동\e[0m  \e[1;36m←→ 작업 전환\e[0m  \e[1;36mEnter 상세\e[0m  \e[1ma 전체 보기\e[0m  \e[1mr 새로고침\e[0m
+ \e[1m? 도움말\e[0m  \e[1mq 종료\e[0m
+ \e[1;34mw AWX·신규설치\e[0m  \e[1;38;5;208mm 변경\e[0m  \e[1;38;5;108ms gossh 작업\e[0m  \e[1;35mx 단독 체크\e[0m
+ \e[1;38;5;208m변경 ▶ \e[0m\e[1;32m1\e[0m\e[1m IP 변경\e[0m   \e[90m(번호 선택, Esc/m 닫기)\e[0m
+== detail-admin ==
+\e[1m job J1 / web.yml  (ib/rhel8/pxe/y)  완료 2/6\e[0m
+ \e[90m대기 1\e[0m  \e[36m배포중 1\e[0m  \e[36m설치중 1\e[0m  \e[36m부팅확인 1\e[0m  \e[32m완료 2\e[0m  
+------------------------------------------------------------
+\e[1m  호스트    단계         경과  비고                         \e[0m
+\e[7m> web001    완료            -                               \e[0m
+  web002    \e[32m완료    \e[0m        -                               
+  web003    \e[36m설치중  \e[0m   25m00s  anaconda, 설치 25m00s        
+  web004    \e[36m부팅확인\e[0m    4m00s  READY 대기, 설치 4m00s       
+  web005    \e[36m배포중  \e[0m   10m00s  설치 10m00s                  
+  web006    \e[90m대기    \e[0m        -                               
+------------------------------------------------------------
+
+ \e[1;32m[c] 설정체크 + \e[0m\e[1;31m설정수정\e[0m\e[1;32m   [t] 설정체크만(수정 안 함)\e[0m
+ \e[1;32m[g] 재확인\e[0m
+ \e[1;32m[v] 최근 결과 - 완료 여부와 상관없이 그룹 전체 시도\e[0m
+
+ \e[1;36m↑↓ 이동\e[0m  \e[1;36m← 목록\e[0m  \e[1mf 정체·실패만\e[0m  \e[1ma 전체 그룹\e[0m  \e[1mr 새로고침\e[0m
+ \e[1m? 도움말\e[0m  \e[1mq 복귀\e[0m
+ \e[1;38;5;141mh 호스트 작업\e[0m  \e[1;34mw AWX·신규설치\e[0m  \e[1;38;5;208mm 변경\e[0m  \e[1;38;5;108ms gossh 작업\e[0m
+ \e[1;35mx 단독 체크\e[0m
+ \e[1;38;5;208m변경(--admin) ▶ \e[0m\e[1;32m1\e[0m\e[1m IP 변경\e[0m  \e[1;32m2\e[0m\e[1m LDAP 변경\e[0m  \e[1;32m3\e[0m\e[1m IP+LDAP\e[0m  \e[1;32m4\e[0m\e[1m 원복\e[0m
+   \e[1;32m5\e[0m\e[1m auto.appl 원복\e[0m   \e[90m(번호 선택, Esc/m 닫기)\e[0m
+== overview-tall ==
+\e[1m auto_setup 상태 리포트\e[0m
+ 갱신 23:13:20  \e[32m● 데몬 실행 (pid 4242)\e[0m
+ \e[1m전체 9\e[0m  \e[32m완료 2\e[0m  \e[36m진행 6\e[0m  \e[90m대기 1\e[0m  \e[90m정체 0\e[0m  \e[90m실패 0\e[0m
+------------------------------------------------------------
+ \e[1mjob J1  user1  전달 11-14 21:13  9대  완료 2/9\e[0m
+  \e[1mall=(all).yaml\e[0m
+\e[7m> web.yml ib/rhel8/pxe/y     6대 ####++++++..  25m00s   33% \e[0m
+  gpu.yml \e[90meth/rhel7/pxe/n \e[0m   3대 \e[36m++++++++++++\e[0m   2m00s \e[36m   0%\e[0m
+
+ \e[1;36m↑↓ 이동\e[0m  \e[1;36m←→ 작업 전환\e[0m  \e[1;36mEnter 상세\e[0m  \e[1ma 전체 보기\e[0m  \e[1mr 새로고침\e[0m
+ \e[1m? 도움말\e[0m  \e[1mq 종료\e[0m
+ \e[1;34mw AWX·신규설치\e[0m  \e[1;38;5;208mm 변경\e[0m  \e[1;38;5;108ms gossh 작업\e[0m  \e[1;35mx 단독 체크\e[0m
+ \e[1;38;5;208m변경 ▶ \e[0m\e[1;32m1\e[0m\e[1m IP 변경\e[0m  \e[1;32m2\e[0m\e[1m LDAP 변경\e[0m  \e[1;32m3\e[0m\e[1m IP+LDAP\e[0m  \e[1;32m4\e[0m\e[1m 원복\e[0m
+   \e[1;32m5\e[0m\e[1m auto.appl 원복\e[0m   \e[90m(번호 선택, Esc/m 닫기)\e[0m
+ 노드의 \e[1;31m설정 변경\e[0m 작업입니다 — 확인(yes) 전에는 아무것도
+   바꾸지 않습니다
+ \e[1;32m1\e[0m\e[1m IP 변경\e[0m — hostname 과 새 IP 입력 — ifcfg 만 바꾸고
+      네트워크는 재시작하지 않음
+ \e[1;32m2\e[0m\e[1m LDAP 변경\e[0m — infra 선택 + hostname 입력 — dry-run 으로
+      바뀔 내용을 먼저 확인
+ \e[1;32m3\e[0m\e[1m IP+LDAP\e[0m — IP 먼저, 실패 호스트는 LDAP 건너뜀
+ \e[1;32m4\e[0m\e[1m 원복\e[0m — 가장 최근 백업으로 (서비스 재시작 없음)
+ \e[1;32m5\e[0m\e[1m auto.appl 원복\e[0m — LDAP 적용 후 대기 중인 auto.appl 반영

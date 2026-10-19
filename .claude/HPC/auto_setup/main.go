@@ -1,0 +1,268 @@
+// main.go - auto_setup: OS 설치(01) → OS 설정체크(os_check) 자동 연계 데몬/CLI
+package main
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+	"time"
+)
+
+// 환경별로 채우는 값. 커밋·배포 소스에서는 항상 빈 문자열로 둔다.
+var (
+	os6_mgmt      = "" // 모든 대역 접근 가능한 서버 (비우면 os6 경로 미사용)
+	os6_gossh     = "" // os6_mgmt 위 gossh 실행 파일 전체 경로
+	os6_autosetup = "" // os6_mgmt 위 auto_setup(os6 빌드) 이 있는 디렉터리
+	os_check_sh   = "" // 이 서버의 os_check_final_annotated.sh 전체 경로 (autofs 공유 경로면 os8_mgmt·os6_mgmt 동일)
+	awx_dir       = "" // awx 스크립트 경로: awxkit/dhcp.sh 등이 있는 awx_script 디렉터리 (autofs 로 os8_mgmt·os6_mgmt 동일 경로)
+
+	// AWX 실행 프로파일 (선택): "nodeinfo(y/n)|OS값|설명" — 비우면 미사용 (awxprofile.go)
+	awx_profile_1 = ""
+	awx_profile_2 = ""
+	awx_profile_3 = ""
+	awx_profile_4 = ""
+	awx_profile_5 = ""
+	awx_profile_6 = ""
+	awx_profile_7 = ""
+	awx_profile_8 = ""
+	awx_profile_9 = ""
+
+	// 2차 (§14-1)
+	os8_mgmt        = "" // 비어 있지 않으면 원격 클라이언트 모드 (os6 빌드 때 -ldflags -X 로 채움)
+	os8_autosetup   = "" // os8_mgmt 위 auto_setup 경로 (비면 /usr/local/bin/auto_setup)
+	os6_os_check_sh = "" // os6_mgmt 위 os_check 경로 (2차 체크용). 비우면 os_check_sh 와 같은 경로(autofs 공유)로 간주, os6_mgmt 도 비면 2차 체크 생략, "-" 면 2차 체크 끄기
+	ldap_share_dir  = "" // LDAP 복원용 autofs 공유 경로: os8_mgmt·대상 서버가 모두 보는 곳, 비우면 자동 복원 안 함(수동 복원 안내). 대상 root 가 읽을 수 있어야 함(no_root_squash)
+
+	// v0.7.0 변경 메뉴 (conf.go 의 헬퍼가 해석): 전부 빈 값 = 꺼짐 / 엔진 자동 탐색
+	enable_ip_change   = "" // y/yes/1/true(대소문자 무시) 면 TUI 의 IP 변경 메뉴 켜짐 (--admin 이면 conf 와 무관하게 켜짐)
+	enable_ldap_change = "" // 위와 같음, LDAP 변경 메뉴
+	ip_engine          = "" // ip-change-engine 실행 파일 전체 경로 (비면 <auto_setup 디렉터리>/ip-change-engine → PATH)
+	ldap_engine        = "" // ldap-config-engine 실행 파일 전체 경로 (비면 <auto_setup 디렉터리>/ldap-config-engine → PATH)
+
+	// v0.8.0 신규 설치 양식 템플릿 (선택): "별칭|infra nic disk 용량 os boot" — 비우면 미사용 (newhost_tpl.go)
+	newhost_template_1 = ""
+	newhost_template_2 = ""
+	newhost_template_3 = ""
+	newhost_template_4 = ""
+	newhost_template_5 = ""
+	newhost_template_6 = ""
+	newhost_template_7 = ""
+	newhost_template_8 = ""
+	newhost_template_9 = ""
+	work_os6_over      = "" // gossh 작업(s)을 os8 gossh 로 실행하는 최대 대수 — 초과하면 os6_mgmt 경유 (숫자, 비우면 1000; newhost_tpl.go 의 workOS6Over)
+)
+
+// adminMode: `auto_setup --admin` 으로 TUI 를 띄웠을 때만 true. 변경 메뉴를 conf 와 무관하게 켠다 (데몬·request 에는 영향 없음).
+var adminMode bool
+
+// 조정 가능한 값 (빈 변수 아님)
+var (
+	pingInterval  = 10 * time.Second
+	downMisses    = 2 // 연속 무응답 횟수 → ping X
+	checkInterval = 30 * time.Second
+	bootWait      = 7 * time.Minute // 최초 READY 후 대기
+	lateWait      = 3 * time.Minute // 늦게 올라온 서버 묶음 대기
+	queuePoll     = 5 * time.Second
+	installStuck  = 60 * time.Minute // seen_down 후 이 시간을 넘겨도 READY 가 안 되면 정체(stuck)
+)
+
+const usageText = `사용법: auto_setup [명령]
+  (인자 없음)         현재 상태 리포트 (tty 면 TUI, 아니면 텍스트 표)
+  --plain             텍스트 표로 출력
+  -user <이름>        지정한 user 의 job 만 보이고, x·w·m 의 user 선택을 건너뛴다 (--admin·--plain 과 함께 쓸 수 있음)
+  --admin             TUI 의 변경 메뉴(m: IP·LDAP 변경·원복)를 conf 와 무관하게 켠다 (TUI 전용, 데몬·request 에는 영향 없음)
+  -h, --help          이 도움말
+  --start | start     데몬 기동 (이미 실행 중이면 안내)
+  --stop | stop       데몬 종료
+  --restart | restart 데몬 재기동
+  status              작업별 진행 상태 출력
+  snapshot            상태 스냅샷(JSON) 출력
+  code NNNN           code 에 해당하는 결과 코멘트 출력
+  cancel <jobid>      무기한 감시 중인 작업 종료
+  done <host...>      호스트를 수동 완료 처리 (부팅 시각 검증 없음)
+  done --job <jobid> [--yml <그룹>]  job(또는 그 그룹)의 미완료 호스트 전부를 수동 완료 처리
+  request manual-run <jobid> <yml> [check]
+                                     수동 OS 체크 실행 요청
+  request cancel <jobid>             작업 종료 요청
+  request refresh                    즉시 ping·준비확인 요청 (TUI r 키와 같음)
+  request recheck <jobid> <yml|*>    완료 제외 호스트를 os8 → 안 되면 os6_mgmt 순으로 직접 재확인 (TUI g 키와 같음)
+  daemon              포그라운드 데몬 (보통 ensure 가 백그라운드로 기동)
+  ensure              데몬이 없으면 백그라운드로 기동 (cron 매분)
+  probe [-i 10s]      (os6_mgmt 쪽) stdin 호스트 목록 ping 감시
+  newhost [-user <이름>]  신규 설치 양식: hostname ip mac → awx_dir/<user>.txt (TUI w→2 와 같은 화면, tty·os8_mgmt 에서만)
+  s [-user <이름>]        gossh 작업 기록: 붙여넣은 호스트를 /tmp/<3자리> 로 만들어 gossh 실행·user 별 기록 (TUI s 와 같은 화면, tty 에서만)
+`
+
+func main() {
+	runtime.GOMAXPROCS(1)
+	loadConf(confPaths())
+	os.Exit(run(os.Args[1:]))
+}
+
+func usageFail() int {
+	fmt.Fprint(os.Stderr, usageText)
+	return 1
+}
+
+// splitAdmin: 명령 앞쪽(--admin·--plain 만 이어지는 구간)의 --admin 을 떼어 낸다.
+// admin 은 떼고 남은 인자가 없을 때(= TUI 모드)만 true — --plain·데몬 명령·request 에는 영향이 없다.
+func splitAdmin(args []string) (rest []string, admin bool) {
+	n, found := 0, false
+	for n < len(args) && (args[n] == "--admin" || args[n] == "--plain") {
+		if args[n] == "--admin" {
+			found = true
+		}
+		n++
+	}
+	if !found {
+		return args, false
+	}
+	for _, a := range args[:n] {
+		if a != "--admin" {
+			rest = append(rest, a)
+		}
+	}
+	rest = append(rest, args[n:]...)
+	return rest, len(rest) == 0
+}
+
+func run(args []string) int {
+	var userErr error
+	args, forceUser, userErr = splitUser(args)
+	if userErr != nil {
+		msgErr("%v", userErr)
+		return 1
+	}
+	args, adminMode = splitAdmin(args)
+	if len(args) == 0 {
+		return cmdReport(false)
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		fmt.Print(usageText)
+		return 0
+	case "--plain":
+		if len(args) != 1 {
+			return usageFail()
+		}
+		return cmdReport(true)
+	case "--start", "start", "--stop", "stop", "--restart", "restart":
+		if len(args) != 1 {
+			return usageFail()
+		}
+		if os8_mgmt != "" {
+			msgErr(remoteOnlyMsg)
+			return 1
+		}
+		return cmdDaemonCtl(strings.TrimPrefix(args[0], "--"))
+	case "daemon", "ensure":
+		if os8_mgmt != "" {
+			msgErr(remoteOnlyMsg)
+			return 1
+		}
+		if args[0] == "daemon" {
+			return runDaemon()
+		}
+		return runEnsure()
+	case "probe":
+		return runProbe(args[1:])
+	case "route-split": // 내부용: x 단독 체크 전 경로 판별 — os8 무응답·os6_mgmt 응답 호스트를 출력 (oneoff.go)
+		if len(args) != 2 {
+			return usageFail()
+		}
+		return cmdRouteSplit(args[1])
+	case "newhost": // -user 는 명령 앞·뒤 어디든 (auto_setup newhost -user alice)
+		rest, u, err := splitUser(args[1:])
+		if err != nil {
+			msgErr("%v", err)
+			return 1
+		}
+		if len(rest) != 0 {
+			return usageFail()
+		}
+		if u != "" {
+			forceUser = u
+		}
+		return cmdNewhost()
+	case "s": // gossh 작업 기록 (-user 는 명령 앞·뒤 어디든)
+		rest, u, err := splitUser(args[1:])
+		if err != nil {
+			msgErr("%v", err)
+			return 1
+		}
+		if len(rest) != 0 {
+			return usageFail()
+		}
+		if u != "" {
+			forceUser = u
+		}
+		return cmdWork()
+	case "work-relay": // 내부용: os6_mgmt 원격 클라이언트의 gossh 작업 기록을 os8_mgmt 에 저장·조회 (work.go)
+		if os8_mgmt != "" {
+			msgErr("work-relay 는 os8_mgmt 에서만 실행합니다")
+			return 1
+		}
+		return cmdWorkRelay(args[1:])
+	case "status", "snapshot", "code", "cancel", "done", "request":
+		if !relayArgsOK(args) {
+			return usageFail()
+		}
+		if os8_mgmt != "" {
+			return relayRemote(args)
+		}
+		switch args[0] {
+		case "status":
+			return runStatus()
+		case "snapshot":
+			return cmdSnapshot()
+		case "code":
+			return runCode(args[1])
+		case "cancel":
+			return runCancel(args[1])
+		case "done":
+			return cmdDone(args[1:])
+		}
+		return cmdRequest(args[1:])
+	}
+	return usageFail()
+}
+
+// runCode: codes/NNNN.txt 출력
+func runCode(code string) int {
+	b, err := readCode(code)
+	if err != nil {
+		fmt.Println("[X] code 없음")
+		return 1
+	}
+	fmt.Print(string(b))
+	return 0
+}
+
+// runStatus: 작업별 진행 상태 출력
+func runStatus() int {
+	jobs, err := loadJobs()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "[X] jobs 읽기 실패:", err)
+		return 1
+	}
+	if len(jobs) == 0 {
+		fmt.Println("진행 중인 작업 없음")
+		return 0
+	}
+	for _, j := range jobs {
+		fmt.Print(formatJobStatus(j))
+	}
+	return 0
+}
+
+// runCancel: 작업을 jobs/done 으로 이동
+func runCancel(id string) int {
+	if err := cancelJob(id); err != nil {
+		fmt.Fprintln(os.Stderr, "[X]", err)
+		return 1
+	}
+	logf("cancel %s", id)
+	fmt.Println("[O] 작업 종료:", id)
+	return 0
+}
