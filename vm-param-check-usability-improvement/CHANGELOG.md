@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-10-19 — 단독 실행이 이전 vm_setup.sh 대상 서버를 쓰던 문제 수정
+
+- **`vm_setting_check_insert.sh`**: `VMsetup/run_<user>/` 기록(`check_specs.txt`, `check_del_lpage`, `check_del_affinity`)을 **`-fromSetup` 을 줄 때만** 쓴다. 옵션이 없으면(단독 실행) 기록 유무와 상관없이 `<user>.txt` 목록과 스펙 폴더 입력/`-specFolder` 로만 동작한다. 예전에는 `run_<user>/check_specs.txt` 가 있으면 자동으로 그 이전 설치 서버를 체크했다.
+- **VMsetup 연동**: `vm_setup.sh` 의 스펙 체크 단계는 `vm-param-check` 를 직접 호출하므로 영향 없음. 설치 직후 같은 결과를 이 스크립트로 다시 체크하려면 `-u <user> -fromSetup`.
+- **영향 범위**: `vm-param-check/vm_setting_check_insert.sh` 만. Go 바이너리 변경 없음.
+- **검증**: 스텁 바이너리로 `run_lsh` 기록이 있는 상태에서 단독 실행(기록 무시), `-fromSetup`(기록 사용), `-fromSetup` + 기록 없음(오류 안내) 확인.
+
+---
+
 ## 2026-09-24 — 실행할 때마다 셸의 비밀번호 export 지우고 시작
 
 - **`vm_setting_check_insert.sh`**: 시작하자마자 `unset VC_PASSWORD VC_PASS VCENTER_PASS`. `vm_setup.sh`와 같은 이유(셸에 남은 다른 값 때문에 암호 파일을 건너뛰어 로그인 실패가 나던 문제) — 이제 항상 암호 파일 → 직접 입력 순으로만 받는다.
