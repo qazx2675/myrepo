@@ -60,9 +60,9 @@ mkdir -p ./SPEC_DIR
   ```
   이렇게 만든 스펙은 팀이 함께 쓰도록 **git에 커밋하는 것을 권장**합니다(인증정보 같은 민감정보가 아니라 CAE 스펙 정의값이라서).
 
-- **`vm_setting_check_insert.sh`** — 위 4~7번을 대신합니다. 스크립트 상단의 `VC_USER`/`VC_PASS`/`VCENTER_LIST`/`SPEC_ROOT` 변수와, `set_user()` 함수 안의 `user` 값(예: `user="kdh"`)을 채워 두면, `-f "<user>.txt"`로 대상 목록을 읽고 `result_<user>.csv`로 결과를 저장합니다. 실행하면 "실제로 설정을 변경(-fix)하시겠습니까?"를 먼저 물어보고, `y`를 답해도 `vm-param-check` 자체의 최종 변경 확인을 한 번 더 거칩니다(이중 확인).
+- **`01.vm_setting_check_insert.sh`** — 위 4~7번을 대신합니다. 스크립트 상단의 `VC_USER`/`VC_PASS`/`VCENTER_LIST`/`SPEC_ROOT` 변수와, `set_user()` 함수 안의 `user` 값(예: `user="kdh"`)을 채워 두면, `-f "<user>.txt"`로 대상 목록을 읽고 `result_<user>.csv`로 결과를 저장합니다. 실행하면 "실제로 설정을 변경(-fix)하시겠습니까?"를 먼저 물어보고, `y`를 답해도 `vm-param-check` 자체의 최종 변경 확인을 한 번 더 거칩니다(이중 확인).
   ```bash
-  bash vm_setting_check_insert.sh
+  bash 01.vm_setting_check_insert.sh
   ```
 
 스펙 자동매칭 없이 옵션을 매번 직접 지정하려면 다음과 같이 실행합니다.
@@ -117,7 +117,7 @@ bash update_deploy.sh /실제/배포/경로/vm-param-check
 - **배포 경로는 도구 폴더 자체**(`go.mod`와 `vm-param-check` 실행 파일이 있는 곳)를 지정합니다. 안 주면 `/root/vm-param-check-usability-improvement/vm-param-check`.
 - **빌드가 성공한 뒤에만** 배포 경로를 바꿉니다(임시 폴더에서 먼저 빌드). 실패하면 아무것도 안 바뀐 채 중단합니다.
 - **덮어쓰는 파일은 백업**합니다: `<배포경로>.update_backup.<시각>/`. 되돌리려면 그 안의 파일을 같은 경로로 복사하면 됩니다.
-- **직접 값을 채워 쓰는 템플릿**(`vm_setting_check_insert.sh`, `folder_setup.sh`, `testfiles/*`)은 배포본과 다르면 덮어쓰지 않고 `<이름>.new`로 새 버전만 옆에 둡니다. 필요하면 `diff`로 비교해서 직접 반영하세요.
+- **직접 값을 채워 쓰는 템플릿**(`01.vm_setting_check_insert.sh`, `folder_setup.sh`, `testfiles/*`)은 배포본과 다르면 덮어쓰지 않고 `<이름>.new`로 새 버전만 옆에 둡니다. 필요하면 `diff`로 비교해서 직접 반영하세요.
 - `01.*`, `vcenter.txt`, `SPEC_DIR/`, `*.csv`, `*.log`는 저장소에 같은 이름의 파일이 생겨도 절대 덮어쓰지 않습니다.
 - **GitHub에 접속이 안 되는 서버**는 인터넷 되는 곳에서 `git clone --branch vm-param-check-standalone`으로 받은 폴더를 nfs/USB로 옮기고, 그 폴더를 소스로 지정하면 됩니다: `REPO_URL=file:///옮긴/폴더 bash update_deploy.sh /실제/배포/경로/vm-param-check`. (사내 미러 주소도 `REPO_URL`로 지정 가능, 브랜치를 바꾸려면 `REPO_BRANCH`.) 빌드는 `vendor/`만 쓰므로 오프라인으로 됩니다.
 
@@ -168,7 +168,7 @@ vm-param-check-usability-improvement/
     ├── scaletest.go              # -scale 모드 (대량 인벤토리 성능 측정용)
     ├── setup.sh                  # vendor 패키지로 폐쇄망에서도 빌드하는 스크립트
     ├── folder_setup.sh           # -initFolder 대화형 래퍼 스크립트
-    ├── vm_setting_check_insert.sh  # 체크/-fix 실행 래퍼 스크립트(이중 확인 포함)
+    ├── 01.vm_setting_check_insert.sh  # 체크/-fix 실행 래퍼 스크립트(이중 확인 포함)
     ├── real_test.sh              # 실 vCenter 대상 테스트 스크립트
     ├── scale_test.sh             # 스케일 테스트 스크립트
     ├── go.mod / go.sum           # Go 모듈 정의 파일

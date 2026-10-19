@@ -126,7 +126,7 @@ while getopts "u:v:i:s:w:c:nh" opt; do
   esac
 done
 # SPEC_DIR: 기존 vm-param-check 폴더에 SPEC_DIR 을 복원해 두었으면 그것을 먼저 쓴다
-# (vm-param-check 의 vm_setting_check_insert.sh 와 같은 순서 — 두 도구가 같은 스펙을 본다)
+# (vm-param-check 의 01.vm_setting_check_insert.sh 와 같은 순서 — 두 도구가 같은 스펙을 본다)
 if [ -z "$SPEC_DIR" ]; then
   if [ -d "$CHECK_DIR/SPEC_DIR" ]; then SPEC_DIR="$CHECK_DIR/SPEC_DIR"; else SPEC_DIR="$HERE/../SPEC_DIR"; fi
 fi
@@ -1057,7 +1057,7 @@ step_check() {
       [ -n "$bm" ] || continue
       for n in $(seq 1 "$g"); do vm_name "$bm" "$n" >> "check_targets_$k.txt"; echo >> "check_targets_$k.txt"; done
     done < "worklist_$k.txt"
-    # 이번에 쓴 스펙 폴더와 그 대상 VM 목록을 남긴다 — vm_setting_check_insert.sh 가 물어보지 않고 그대로 가져다 쓴다.
+    # 이번에 쓴 스펙 폴더와 그 대상 VM 목록을 남긴다 — 01.vm_setting_check_insert.sh 가 물어보지 않고 그대로 가져다 쓴다.
     printf '%s\t%s\n' "$(basename "$d")" "$RUN_DIR/check_targets_$k.txt" >> check_specs.txt
     VC_USER="$VC_ID" VC_PASS="$VC_PASSWORD" "$CHECK_BIN" -noColor -vcenterList=vcenter_check.txt -f="check_targets_$k.txt" \
       -specRoot="$SPEC_DIR" -specFolder="$(basename "$d")" -yes -onlyFail ${exp_args[@]+"${exp_args[@]}"} -out="check_$k.csv" > "check_$k.log" 2>&1 < /dev/null
