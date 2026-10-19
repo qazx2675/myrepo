@@ -46,6 +46,15 @@ go vet ./... && go test ./...
 # 소스를 고쳤다면 sha256 을 확인하고 두 바이너리를 함께 커밋한다 (회사에는 Go 가 없음)
 sha256sum bin/biostool bin/biostool_os6
 
+# 새 버전 업데이트: 새 ZIP 을 /tmp 에 두고 설치 폴더(/root/server_vm_python/redhfish/V2)에서 실행 — bios.conf·pass.enc·key.bin·user.txt·diff.txt·ignore_attrs.txt·refs·results·dumps 는 그대로, 나머지 교체 (백업: ../backup/V2_<일시>.tgz)
+cd /root/server_vm_python/redhfish/V2 && bash update.sh
+
+# (ZIP 을 직접 지정할 때)
+bash update.sh /tmp/<받은 파일>.zip
+
+# 업데이트 뒤 profiles/<이름>.tsv.new 가 생겼으면 (현장에서 고친 프로파일) 새 버전과 비교해 필요한 줄만 옮기고 .new 를 지운다
+diff profiles/VM.tsv profiles/VM.tsv.new
+
 
 ########################################################################
 # 2. 처음 한 번 준비 (설정 파일, 비밀번호 암호화, 대상 목록)

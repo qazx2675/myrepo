@@ -1,5 +1,11 @@
 # CHANGELOG.md — redfish (biostool)
 
+## [Unreleased] - 2026-10-19
+
+### 추가
+
+- **`update.sh`**(설치 폴더 갱신): `bash update.sh [ZIP|폴더]` 로 `/tmp` 의 가장 최근 ZIP(또는 지정한 ZIP·압축 푼 폴더)을 풀어 고정 설치 폴더 `/root/server_vm_python/redhfish/V2` 를 갱신합니다. `bios.conf`·`pass.enc`·`key.bin`·`user.txt`·`diff.txt`·`ignore_attrs.txt`·`refs/`·`results/`·`dumps/` 는 그대로 두고 나머지 항목만 바꿉니다. 바꾸기 전 `results/`·`dumps/` 를 뺀 전체를 `../backup/V2_<일시>.tgz` 로 백업합니다. `profiles/` 는 파일별로, 현장에서 고치지 않은 파일만 새 버전으로 바꾸고 고친 파일(`verified=Y` 등)은 두고 새 버전을 `<이름>.new` 로 둡니다(판단 기준 `.update_profiles.sha`, 첫 업데이트는 새 버전과 다르면 모두 고친 것으로 봄). 새 버전에 없는 기존 항목은 지우지 않고 알려 주고, `bios.conf` 에 없는 새 설정 키도 알려 줍니다.
+
 ## [0.1.0] - 2026-10-08
 
 BMC(Redfish)의 BIOS 표준값을 점검하고 승인된 항목만 Pending 으로 설정하는 도구의 첫 릴리스입니다. **실제 BMC 에 접속해 본 적이 없고** 모든 검증은 합성 mock 과 `-from-dump` 로 했습니다(아래 “알려진 제한”, [FIRST_RUN.md](FIRST_RUN.md)).

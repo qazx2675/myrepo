@@ -48,6 +48,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `lib.sh` | 래퍼 공용 함수: OS(커널 메이저)별 바이너리 선택 `select_bin`, `conf_val`. bash 4.1 호환 |
 | `mockbmc.sh` | mock BMC 기동 래퍼(필요하면 `bin/mockbmc` 빌드, 저장소에는 커밋하지 않음) |
 | `setup.sh` · `build.sh` · `build_os6.sh` | 오프라인 빌드 / os8 빌드 / os6(RHEL6, Go 1.20.x) 빌드 |
+| `update.sh` | 설치 폴더(`TARGET`, 고정 `/root/server_vm_python/redhfish/V2`) 갱신: ZIP 풀기 → 백업 → `KEEP` 외 항목 교체 → `profiles/` 파일별 병합(`.update_profiles.sha`) |
 | `bin/biostool` · `bin/biostool_os6` | **빌드 완료 바이너리(커밋 대상).** 회사 환경에 Go 가 없어 이것이 곧 배포본. 소스를 고치면 둘 다 재빌드해 함께 커밋 |
 | `go.mod` | `module biostool`, `go 1.20`, 외부 의존성 없음(→ `vendor/` 불필요) |
 | `.gitignore` · `.gitattributes` | 실제 호스트·계정·결과물 커밋 차단 / `.sh`·`.tsv`·`.example`·`.json` 은 LF, `bin/*` 는 바이너리 |

@@ -67,6 +67,26 @@ cp ignore_attrs.txt.example ignore_attrs.txt   # (선택) 비교에서 뺄 속�
 - `user.txt` 한 줄에 대상 하나: `IP` / `hostname-m` / `hostname`(+ 선택적으로 `:포트`). `hostname` 은 `/etc/hosts` 에서 `hostname-m` 의 IP 를, `hostname-m` 은 그 이름의 IP 를 찾습니다(`/etc/hosts` 형식은 `IP  hostname-m`, 한 줄에 별칭이 여럿이어도 됨). 빈 줄·`#` 주석은 무시하고 중복은 한 번만 처리합니다.
 - `bios.conf`, `pass.enc`, `key.bin`, `user.txt`, `diff.txt`, `ignore_attrs.txt`, `results/`, `dumps/` 는 실제 호스트 이름·계정 정보가 들어가므로 `.gitignore` 로 커밋이 막혀 있습니다(예시 파일 `*.example` 만 저장소에 있습니다).
 
+### 1.4 새 버전으로 업데이트 — `update.sh`
+
+설치 폴더는 `/root/server_vm_python/redhfish/V2` 로 고정입니다(`update.sh` 맨 위 `TARGET`). 새 버전 ZIP 을 `/tmp` 에 두고 설치 폴더에서 실행합니다.
+
+```bash
+cd /root/server_vm_python/redhfish/V2
+bash update.sh                      # /tmp 의 가장 최근 *.zip 사용 (ZIP 경로나 압축 푼 폴더를 인자로 줘도 됨)
+```
+
+| 항목 | 처리 |
+|---|---|
+| `bios.conf` `pass.enc` `key.bin` `user.txt` `diff.txt` `ignore_attrs.txt` `refs/` `results/` `dumps/` | **그대로 둠** (현장에서만 만드는 파일) |
+| `profiles/` | 파일별: 현장에서 고치지 않은 파일은 새 버전으로 교체, 새 파일은 추가. 고친 파일(`verified=Y` 등)은 그대로 두고 새 버전을 `<이름>.new` 로 둠(`*.tsv` 가 아니라 읽히지 않음) → `diff profiles/VM.tsv profiles/VM.tsv.new` 로 비교해 필요한 줄만 옮김. 첫 업데이트는 기록(`.update_profiles.sha`)이 없어 새 버전과 다르면 모두 고친 파일로 봄 |
+| 그 밖의 항목 (bin/, 스크립트, 문서, cmd/ …) | 새 버전으로 교체 |
+| 새 버전에 없는 기존 항목 | 지우지 않고 목록만 보여 줌 |
+
+- ZIP 안에서 `lib.sh` 와 `bios_check.sh` 가 함께 있는 폴더를 찾으므로, 저장소 전체 ZIP(`<저장소>-<브랜치>.zip`)이든 redfish 폴더만 묶은 ZIP 이든 됩니다. 못 찾으면 아무것도 바꾸지 않고 끝납니다.
+- 바꾸기 전에 `results/`·`dumps/` 를 뺀 설치 폴더 전체를 `/root/server_vm_python/redhfish/backup/V2_<일시>.tgz` 로 백업합니다. 되돌리려면 설치 폴더를 지우고 `tar xzf <백업> -C /root/server_vm_python/redhfish` 로 풉니다.
+- 터미널이면 버전(CHANGELOG 첫 제목)을 보여 주고 `[Y/n]` 을 묻습니다. 끝나면 `bios.conf` 에 없는 새 설정 키를 알려 줍니다(없으면 기본값으로 동작).
+
 ---
 
 ## 2. 사용 방법
