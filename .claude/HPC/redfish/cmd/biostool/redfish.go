@@ -998,3 +998,191 @@ func passwordForms(pass string) []string {
 	sort.Slice(forms, func(i, j int) bool { return len(forms[i]) > len(forms[j]) })
 	return forms
 }
+
+// ---- Prober: trs(접속 장애 진단) 전용 좁은 관문 ----
+//
+// trs 는 403 의 원인을 가르려고 요청 헤더·인증 방식을 바꿔 보내야 해서 Client 의 고정 헤더로는 부족합니다.
+// 그래도 네트워크 호출은 이 파일 밖에서 하지 못하게(TestNoRawHTTPOutsideRedfish) 한 곳에 두고 허용 범위를 좁힙니다:
+// GET/HEAD/OPTIONS(/redfish 아래, 로그·Actions 경로 제외), 세션 생성 POST 1종, 이 Prober 가 만든 세션의 DELETE 뿐입니다.
+// PATCH·계정 변경·Job·Actions 는 코드상 보낼 수 없습니다. 리다이렉트는 따라가지 않습니다.
+
+// ProbeReq 는 Prober 요청 1건입니다.
+type ProbeReq struct {
+	Method, Path string
+	Auth         string // "" | "basic" | "token"
+	User, Pass   string
+	Token        string
+	Body         []byte
+	UA           string
+	UASet        bool   // UA 가 "" 여도 지정한 것으로 봄 (User-Agent 생략 시험)
+	NoOData      bool   // OData-Version 헤더 생략
+	NoAccept     bool   // Accept 헤더 생략
+	ContentType  string // 본문이 있을 때 Content-Type (비면 application/json)
+}
+
+// ProbeResp 는 Prober 응답입니다. Err 가 nil 이 아니면 요청이 나가지 않았거나 전송에 실패한 것입니다.
+type ProbeResp struct {
+	Status  int
+	Proto   string
+	Header  http.Header
+	Body    []byte
+	TLS     *tls.ConnectionState
+	Err     error
+	Elapsed time.Duration
+	Sent    string // 실제 전송한 경로 (정규형)
+}
+
+// Prober 는 BMC 1대용 진단 클라이언트입니다 (연결 재사용 없음, 요청 간 잠금 없음 — 한 고루틴에서만 씁니다).
+type Prober struct {
+	hostport string
+	cli      *http.Client
+	timeout  time.Duration
+	sess     string // 이 Prober 가 만든 세션 URI (정규형)
+}
+
+var reProbeSession = regexp.MustCompile(`(?i)^/redfish/v1/sessionservice/sessions/[^/]+$`)
+
+// NewProber 는 hostport("ip:포트" 또는 "ip") 로 접속하는 Prober 를 만듭니다. 접속은 하지 않습니다.
+func NewProber(hostport string, insecure bool, timeout time.Duration) *Prober {
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	return &Prober{
+		hostport: hostport,
+		timeout:  timeout,
+		cli: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				Proxy:                  nil,
+				DialContext:            (&net.Dialer{Timeout: timeout}).DialContext,
+				TLSHandshakeTimeout:    timeout,
+				TLSClientConfig:        &tls.Config{InsecureSkipVerify: insecure},
+				DisableKeepAlives:      true,
+				MaxResponseHeaderBytes: 64 << 10,
+			},
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+	}
+}
+
+// Close 는 유휴 연결을 닫습니다.
+func (p *Prober) Close() { p.cli.CloseIdleConnections() }
+
+// Dial 은 TCP 연결만 시험합니다 (hostport 에 포트가 없으면 443).
+func (p *Prober) Dial() (time.Duration, error) {
+	addr := p.hostport
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		addr = net.JoinHostPort(strings.Trim(addr, "[]"), "443")
+	}
+	start := time.Now()
+	c, err := net.DialTimeout("tcp", addr, p.timeout)
+	if err != nil {
+		return 0, err
+	}
+	_ = c.Close()
+	return time.Since(start), nil
+}
+
+// SetSession 은 방금 만든 세션 URI 를 등록합니다 (SessionService/Sessions/<id> 꼴만 받음). 등록해야 DELETE 가 나갑니다.
+func (p *Prober) SetSession(loc string) bool {
+	if i := strings.Index(loc, "/redfish/"); i >= 0 {
+		loc = loc[i:]
+	}
+	clean, _, err := normalizePath(loc)
+	if err != nil || !reProbeSession.MatchString(clean) {
+		return false
+	}
+	p.sess = clean
+	return true
+}
+
+// Session 은 등록된 세션 URI 입니다 (없으면 "").
+func (p *Prober) Session() string { return p.sess }
+
+func (p *Prober) allowed(method, raw string) (string, error) {
+	clean, send, err := normalizePath(raw)
+	if err != nil {
+		return "", notAllowed(method, raw, err.Error())
+	}
+	lc := strings.ToLower(clean)
+	if lc != "/redfish" && !strings.HasPrefix(lc, "/redfish/") {
+		return "", notAllowed(method, raw, "/redfish 밖의 경로")
+	}
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		for _, s := range strings.Split(lc, "/") {
+			if deniedGetSeg(s) {
+				return "", notAllowed(method, raw, "로그/Actions 경로는 조회하지 않음")
+			}
+		}
+	case http.MethodPost:
+		if lc != "/redfish/v1/sessionservice/sessions" {
+			return "", notAllowed(method, raw, "세션 생성 외 POST 금지")
+		}
+	case http.MethodDelete:
+		if p.sess == "" || clean != p.sess || !reProbeSession.MatchString(lc) {
+			return "", notAllowed(method, raw, "이 진단이 만든 세션 외 DELETE 금지")
+		}
+	default:
+		return "", notAllowed(method, raw, "허용되지 않은 메서드")
+	}
+	return send, nil
+}
+
+// Send 는 허용 검사를 거쳐 요청 1건을 보냅니다. 응답 본문은 4MB 까지 읽습니다.
+func (p *Prober) Send(r ProbeReq) ProbeResp {
+	send, err := p.allowed(r.Method, r.Path)
+	if err != nil {
+		return ProbeResp{Err: err}
+	}
+	out := ProbeResp{Sent: send}
+	var rd io.Reader
+	if r.Body != nil {
+		rd = bytes.NewReader(r.Body)
+	}
+	u := url.URL{Scheme: "https", Host: p.hostport, Path: send}
+	req, err := http.NewRequest(r.Method, u.String(), rd)
+	if err != nil {
+		out.Err = errors.New("요청 생성 실패")
+		return out
+	}
+	if !r.NoAccept {
+		req.Header.Set("Accept", "application/json")
+	}
+	if !r.NoOData {
+		req.Header.Set("OData-Version", "4.0")
+	}
+	ua := "biostool-trs/1"
+	if r.UASet {
+		ua = r.UA
+	}
+	req.Header.Set("User-Agent", ua)
+	if r.Body != nil {
+		ct := r.ContentType
+		if ct == "" {
+			ct = "application/json"
+		}
+		req.Header.Set("Content-Type", ct)
+	}
+	switch r.Auth {
+	case "basic":
+		req.SetBasicAuth(r.User, r.Pass)
+	case "token":
+		req.Header.Set("X-Auth-Token", r.Token)
+	}
+	start := time.Now()
+	resp, err := p.cli.Do(req)
+	out.Elapsed = time.Since(start)
+	if err != nil {
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		out.Err = err
+		return out
+	}
+	defer resp.Body.Close()
+	out.Status, out.Proto, out.Header, out.TLS = resp.StatusCode, resp.Proto, resp.Header, resp.TLS
+	out.Body, _ = io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	return out
+}

@@ -12,6 +12,7 @@
 - **폴백**: XML 로그인 전에 실패하면(연결 실패·타임아웃·XML 아닌 응답·HTTP 오류) 그 호스트만 Redfish 로 1번 다시 점검하고 비고에 `XML 실패 → Redfish` 를 남깁니다. `AUTH_FAIL` 은 계정 잠금 방지를 위해 다시 시도하지 않습니다.
 - **XML 호스트는 점검만**: 전체비교는 `[N/A]` + 비고 `XML 대상 — 비교 제외(읽기 전용)`(내부 상태 `XML_READONLY`, 화면에서 회색), 수정(설정) 계획에서도 제외합니다.
 - **mock**: `cmd/mockucsm` + `internal/mockucsm`(UCSM XML API mock, `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답). `testcase/demo_env.sh` 에 c101(XML 단일)·c201/c202(도메인, 서비스 프로파일 이름으로 선택)·c301(XML 실패 → Redfish)과 `user_xml.txt` 추가. 빌드 완료 `bin/mockucsm`(`_os6`) 커밋.
+- **`trs.sh` / `biostool trs`**(`trs.go`): BMC 접속 장애(403 등) 트러블슈팅. `user.txt` 의 관리망 IP(또는 `-targets`)로 TCP/TLS → 비인증 ServiceRoot(403 이면 User-Agent·Accept·슬래시 변형 비교) → 인증(Basic 1회 + 세션 생성 1회, 401 이면 잠금 방지로 중단, 필요 시 rf.conf 2순위 계정 1회 비교) → 인증 후 읽기(Systems·Bios·Managers·NetworkProtocol·내 계정 상태) → 403 경로의 헤더·인증 방식 변형 비교를 하고 원인 추정(`trsDiagnose`)을 출력합니다. 단계별 상태 코드·응답 헤더·Redfish 오류 MessageId 를 그대로 싣고 `results/<일시>_trs/<호스트>.txt` 로 저장합니다(비밀번호·토큰 없음). 읽기 전용(GET/HEAD/OPTIONS + 이번 실행의 세션 생성·삭제). **4xx 전반 대응**: 비인증 ServiceRoot·인증 후 읽기에서 나온 모든 4xx 를 코드별(400~451) 설명·점검 방법과 해당 경로로 정리하고, 4xx 가 난 경로(405 는 OPTIONS Allow 포함)와 세션 생성이 400/405/406/411/415 등일 때는 Accept·OData-Version·Content-Type·User-Agent·슬래시를 바꿔 어떤 모양이 통과하는지 비교합니다(세션 생성 변형이 성공하면 그 세션을 이어 쓰고 끝에 삭제).
 - **`update.sh`**(설치 폴더 갱신): `bash update.sh [ZIP|폴더]` 로 `/tmp` 의 가장 최근 ZIP(또는 지정한 ZIP·압축 푼 폴더)을 풀어 고정 설치 폴더 `/root/server_vm_python/redhfish/V2` 를 갱신합니다. `bios.conf`·`pass.enc`·`key.bin`·`user.txt`·`diff.txt`·`ignore_attrs.txt`·`refs/`·`results/`·`dumps/` 는 그대로 두고 나머지 항목만 바꿉니다. 바꾸기 전 `results/`·`dumps/` 를 뺀 전체를 `../backup/V2_<일시>.tgz` 로 백업합니다. `profiles/` 는 파일별로, 현장에서 고치지 않은 파일만 새 버전으로 바꾸고 고친 파일(`verified=Y` 등)은 두고 새 버전을 `<이름>.new` 로 둡니다(판단 기준 `.update_profiles.sha`, 첫 업데이트는 새 버전과 다르면 모두 고친 것으로 봄). 새 버전에 없는 기존 항목은 지우지 않고 알려 주고, `bios.conf` 에 없는 새 설정 키도 알려 줍니다.
 
 ### 변경 (사용성)
@@ -47,8 +48,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 7880866 | 38398567fcc5eb765bd3ed6659a87211f04c448d834c8bb9f0d0c985b40504ee |
-| bin/biostool_os6 | go1.20.14 | 6496256 | ad75541b039e20ec078da599112d6be262b3c2470fe1493f4d8f3a5a9a16bbca |
+| bin/biostool | go1.26.5 | 7999650 | 8ab607a5780f145138c554cb3ae9124735cdebe6612b4c4c46c733ad704db2e8 |
+| bin/biostool_os6 | go1.20.14 | 6606848 | 9a7bd1967e6fd1e84dffc037be8c8c3e27abde8812d770cbf7843331a8eb15b5 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 

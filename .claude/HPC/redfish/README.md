@@ -93,6 +93,29 @@ bash update.sh                      # /tmp 의 가장 최근 *.zip 사용 (ZIP �
 - 바꾸기 전에 `results/`·`dumps/` 를 뺀 설치 폴더 전체를 `/root/server_vm_python/redhfish/backup/V2_<일시>.tgz` 로 백업합니다. 되돌리려면 설치 폴더를 지우고 `tar xzf <백업> -C /root/server_vm_python/redhfish` 로 풉니다.
 - 터미널이면 버전(CHANGELOG 첫 제목)을 보여 주고 `[Y/n]` 을 묻습니다. 끝나면 `bios.conf` 에 없는 새 설정 키를 알려 줍니다(없으면 기본값으로 동작).
 
+### 1.5 접속 장애(403 등) 트러블슈팅 — `trs.sh`
+
+특정 장비(예: Lenovo SR630 V2)에서 403 이 나면 `user.txt` 에 BMC 관리망 IP 를 넣고 실행합니다. 설정 변경 없이 읽기만 합니다.
+
+```bash
+bash trs.sh                                   # user.txt 의 IP 를 진단
+bash trs.sh -targets 10.1.2.3                 # IP 직접 지정 (쉼표·공백으로 여러 개, ip:포트 가능)
+bash trs.sh -targets 10.1.2.3 -path /redfish/v1/Systems/1/Bios/Settings   # 추가로 GET 해 볼 경로
+```
+
+| 단계 | 하는 일 | 알 수 있는 것 |
+|---|---|---|
+| 1 네트워크 | TCP 443 연결, TLS 버전·암호·인증서 | 방화벽/라우팅, TLS 정책, 인증서 만료 |
+| 2 비인증 ServiceRoot | `GET /redfish/v1/` — 403 이면 User-Agent·Accept·OData-Version·슬래시 변형 비교 | IP 접근 제한인지, 요청 헤더에 반응하는 필터인지 |
+| 3 인증 | Basic 1회 + 세션 생성 1회 (401 이면 즉시 중단, 인증 실패 시 rf.conf 2순위 계정 1회 비교) | 계정/비밀번호, Basic 만 막힌 경우, 1순위 계정 문제 |
+| 4 인증 후 읽기 | Systems·Bios·Managers·NetworkProtocol·SessionService·내 계정(Role/Locked/PasswordChangeRequired) | 어떤 경로만 403 인지, 서비스 비활성, 계정 상태 |
+| 5 변형 비교 | 4xx(403·405·406·415 등)가 난 경로를 헤더·인증 방식·슬래시를 바꿔 재요청 (405 는 OPTIONS Allow, 세션 생성 4xx 는 Content-Type 등 변형 후 성공하면 이어 사용) | 요청 모양 때문인지 권한 때문인지 |
+| 진단 | 위 결과로 원인 후보를 우선순위로 출력 (`trsDiagnose`). 본 모든 4xx 는 코드별 설명(`trs4xx` 표, 400~451)과 해당 경로를 함께 출력 | |
+
+- 응답의 **상태 코드·주요 헤더·Redfish 오류 MessageId/Message/조치** 를 그대로 출력하고 `results/<일시>_trs/<호스트>.txt` 에 저장합니다. 비밀번호·토큰은 싣지 않습니다.
+- 보내는 요청은 GET/HEAD/OPTIONS 와 이번 실행이 만든 세션의 생성·삭제뿐입니다(로그/Actions 경로 제외, PATCH·계정 변경 없음).
+- 이 결과를 그대로 전달하면 확인된 원인에 맞춰 도구의 요청 방식·로직을 고칠 수 있습니다.
+
 ---
 
 ## 2. 사용 방법

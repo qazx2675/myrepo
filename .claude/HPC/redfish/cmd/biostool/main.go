@@ -42,6 +42,7 @@ const usageText = `사용법:
   biostool ucsm    [-profile <이름>] [-list-max N] [-conf] [-user] [-hosts]  Cisco UCSM XML API BIOS 점검 (읽기 전용, 대상=UCSM 주소, 기대값=프로파일 # [xml] 구역, 기본 VM)
   biostool encrypt [-key key.bin] [-out pass.enc]  표준입력의 비밀번호를 암호화
   biostool account create|change [옵션]          1순위 계정 생성 / 비밀번호 변경 (biostool account -h)
+  biostool trs     [-targets 대상,...] [-path 경로,...] [공통 옵션]  BMC 접속 장애(403 등) 단계별 진단 (읽기 전용, 인증 시도 최소)
 
 공통 옵션:
   -conf <파일>        설정 파일 (기본 bios.conf)
@@ -85,6 +86,8 @@ func main() {
 		err = cmdUcsm(os.Args[2:])
 	case "account":
 		err = cmdAccount(os.Args[2:])
+	case "trs":
+		err = cmdTrs(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usageText)
 		return
