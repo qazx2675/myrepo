@@ -184,6 +184,6 @@ sudo cp config_check.sh /usr/local/bin/config_check
 - 체크는 대상 전체에 `gossh -pm -script -w 목록 "bash run.sh pd; :"` **1회**만 실행합니다. `run.sh`는 FAIL이 없으면 `OK`만 출력하고, `pd` 인자를 주면 OK가 아닌 결과값(LDAP, INFO 등)까지 출력하므로 스크립트가 `pd`를 붙여 실행합니다. `; :`는 run.sh가 0이 아닌 값으로 끝나도 gossh가 결과를 stderr로 보내지 않게 하기 위한 것입니다.
 - 접속은 됐지만 체크 결과가 한 줄도 없는 호스트는 OK로 세지 않고(`no_output`), 설정 적용 대상에서도 제외됩니다.
 - 명령에 `/user/` 경로가 있어 gossh가 동시 접속을 350으로 자동 제한합니다(autofs 보호). 스크립트는 이를 우회하지 않습니다.
-- 결과 원본은 실행 디렉토리의 `check.res_${user}`에 남습니다(재체크하면 덮어씀). 값별 호스트가 20대 이상일 때만 `check.info_${user}`도 남습니다. 그 외 중간 파일은 `/tmp/config_check.XXXXXX`에 만들고 종료 시(Ctrl+C 포함) 삭제합니다.
+- 결과 원본은 실행 디렉토리의 `check.res_${user}`에 남습니다(재체크하면 덮어씀). 값별 호스트가 20대 이상일 때만 `check.info_${user}`도 남습니다. 그 외 중간 파일은 `${TMPDIR:-/tmp}/config_check.XXXXXX`(auto_setup 이 실행하면 `/tmp/auto_setup/tmp`)에 만들고 종료 시(Ctrl+C 포함) 삭제합니다.
 - gossh 실행 중 Ctrl+C는 gossh 동작을 따릅니다(1회 진행 호스트 표시, 2회 걸린 호스트 취소, 3회 중단). 3회 중단하면 그때까지의 결과로 계속 진행합니다.
 - 최종 확인은 수동으로: 설정 적용 후 무작위 서버 몇 대에 접속해 실제 반영 여부를 확인하세요.

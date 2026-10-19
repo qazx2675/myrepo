@@ -1,6 +1,6 @@
 // work.go - v0.8.0 gossh 작업 기록 (TUI s / CLI auto_setup s) 의 순수 로직·저장소·실행. 화면은 work_tui.go.
 //
-//   - 호스트 붙여넣기 해석(workParseHosts — gossh 와 같은 구분·범위 표기), /tmp/<소문자 3자리> 이름(workNewName)
+//   - 호스트 붙여넣기 해석(workParseHosts — gossh 와 같은 구분·범위 표기), lists/<소문자 3자리> 이름(workNewName)
 //   - 기록 보관 <AUTO_SETUP_DIR>/work/<user>/ (디렉터리 0700·파일 0600)
 //     index.jsonl   요약(영구) — 한 줄 = 실행 하나 또는 메모 하나. 추가만 하고 고쳐 쓰지 않는다(마지막 메모가 유효).
 //     동시 실행: O_APPEND 로 한 줄을 write 한 번에 쓴다(잠금 없음 — 같은 파일의 O_APPEND write 는 리눅스에서 섞이지 않음).
@@ -967,7 +967,7 @@ func workCleanOut(dir string, now time.Time) (removed int) {
 	return removed
 }
 
-// workCleanTmp: 우리가 만든 /tmp/<3자리> 중 7일 지난 것 삭제 — 이 서버에서 실행한 기록에 있고, 마지막 실행과 파일 수정이 모두 7일 전이며,
+// workCleanTmp: 우리가 만든 lists/<3자리> 중 7일 지난 것 삭제 — 이 서버에서 실행한 기록에 있고, 마지막 실행과 파일 수정이 모두 7일 전이며,
 // 내용이 lists 사본과 같을 때만. gossh 가 옆에 만든 결과 파일(<파일>_res_off 등 정확한 이름)도 함께 지운다.
 func workCleanTmp(db *workDB, now time.Time) (removed int) {
 	if db == nil {

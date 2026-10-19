@@ -35,7 +35,7 @@ red()    { printf '%s%s%s\n' "$R" "$*" "$N"; }
 green()  { printf '%s%s%s\n' "$G" "$*" "$N"; }
 yellow() { printf '%s%s%s\n' "$Y" "$*" "$N"; }
 
-TMP=$(mktemp -d /tmp/config_check.XXXXXX) || exit 1
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/config_check.XXXXXX") || exit 1   # auto_setup 은 TMPDIR 을 <데이터 디렉터리>/tmp 로 줌
 trap 'rm -rf "$TMP"' EXIT
 trap 'echo; exit 130' INT TERM
 

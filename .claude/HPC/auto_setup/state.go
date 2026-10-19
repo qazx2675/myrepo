@@ -116,6 +116,25 @@ func binDir() string   { return filepath.Join(dataDir(), "bin") }
 func logPath() string  { return filepath.Join(dataDir(), "auto_setup.log") }
 func lockPath() string { return filepath.Join(dataDir(), "auto_setup.lock") }
 
+// useDataTmp: 임시 파일(Go 의 os.CreateTemp·하위 프로세스의 mktemp·config_check 의 작업 디렉터리)을 /tmp 가 아니라
+// <데이터 디렉터리>/tmp 에 만들게 TMPDIR 을 바꾼다. 하위 프로세스(gossh·AWX 01·os_check)가 환경을 물려받는다.
+// ssh 로 넘어간 원격 명령은 TMPDIR 을 받지 않아 원격 서버의 /tmp 를 그대로 쓴다.
+// 만들 수 없거나 쓸 수 없으면(권한 등) 바꾸지 않는다.
+func useDataTmp() {
+	d := filepath.Join(dataDir(), "tmp")
+	if err := os.MkdirAll(d, 0755); err != nil {
+		return
+	}
+	_ = os.Chmod(d, os.ModeSticky|0o777) // 여러 user 가 각자 임시 파일을 만들 수 있게 (/tmp 와 같은 sticky)
+	f, err := os.CreateTemp(d, ".probe_")
+	if err != nil {
+		return
+	}
+	f.Close()
+	os.Remove(f.Name())
+	os.Setenv("TMPDIR", d)
+}
+
 func ensureDirs() error {
 	for _, d := range []string{queueDir(), jobsDir(), doneDir(), codesDir(), runsDir(), binDir(), doneRecDir(), requestsDir()} {
 		if err := os.MkdirAll(d, 0755); err != nil {
