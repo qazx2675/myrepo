@@ -91,12 +91,13 @@ const usageText = `사용법: auto_setup [명령]
   ensure              데몬이 없으면 백그라운드로 기동 (cron 매분)
   probe [-i 10s]      (os6_mgmt 쪽) stdin 호스트 목록 ping 감시
   newhost [-user <이름>]  신규 설치 양식: hostname ip mac → awx_dir/<user>.txt (TUI w→2 와 같은 화면, tty·os8_mgmt 에서만)
-  s [-user <이름>]        gossh 작업 기록: 붙여넣은 호스트를 /tmp/<3자리> 로 만들어 gossh 실행·user 별 기록 (TUI s 와 같은 화면, tty 에서만)
+  s [-user <이름>]        gossh 작업 기록: 붙여넣은 호스트를 /tmp/auto_setup/lists/<3자리> 로 만들어 gossh 실행·user 별 기록 (TUI s 와 같은 화면, tty 에서만)
 `
 
 func main() {
 	runtime.GOMAXPROCS(1)
 	loadConf(confPaths())
+	useDataTmp()
 	os.Exit(run(os.Args[1:]))
 }
 

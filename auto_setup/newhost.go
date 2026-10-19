@@ -58,6 +58,7 @@ func newhostUserDir(stateDir, user string) string { return filepath.Join(stateDi
 type nhRow struct {
 	Raw           string
 	Host, IP, MAC string
+	Tpl           string // 네 번째 값(번호·별칭·이름), 없으면 "" — 템플릿 지정 단계에서 따로 지정
 	Err, Dup      string
 }
 
@@ -96,13 +97,16 @@ func nhNormMAC(s string) (mac string, bare, ok bool) {
 	return strings.Join(parts, ":"), bare, true
 }
 
-// nhParseLine: 한 줄 → hostname·ip·mac (구분자 공백·탭·쉼표, 순서 무관). 실패하면 Err 에 사유.
+// nhParseLine: 한 줄 → hostname·ip·mac (구분자 공백·탭·쉼표, 앞 3개는 순서 무관) + 선택적 네 번째 템플릿 값. 실패하면 Err 에 사유.
 func nhParseLine(line string) nhRow {
 	r := nhRow{Raw: strings.TrimSpace(line)}
 	tok := strings.FieldsFunc(r.Raw, func(c rune) bool { return unicode.IsSpace(c) || c == ',' })
-	if len(tok) != 3 {
-		r.Err = fmt.Sprintf("값이 %d개 (hostname ip mac 3개 필요)", len(tok))
+	if len(tok) != 3 && len(tok) != 4 {
+		r.Err = fmt.Sprintf("값이 %d개 (hostname ip mac [템플릿] 필요)", len(tok))
 		return r
+	}
+	if len(tok) == 4 {
+		r.Tpl, tok = tok[3], tok[:3]
 	}
 	var ips, hosts []string
 	type macTok struct {
