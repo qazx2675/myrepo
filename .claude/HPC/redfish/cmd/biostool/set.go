@@ -238,7 +238,7 @@ func applyHosts(fails []failItem) []*setHost {
 func dryRunHosts(run *checkRun) []*setHost {
 	var out []*setHost
 	for _, h := range run.Hosts {
-		if h.Status != "" {
+		if h.Status != "" || h.XML { // XML 대상은 점검만 (보낼 요청 없음)
 			continue
 		}
 		var items []*applyItem

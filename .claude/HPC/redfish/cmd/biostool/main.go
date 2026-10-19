@@ -46,6 +46,8 @@ const usageText = `사용법:
 공통 옵션:
   -conf <파일>        설정 파일 (기본 bios.conf)
   -user <파일>        대상 목록 파일 (기본 user.txt). BMC 계정 ID 는 conf 의 user
+  -user-xml <파일>    (bios·check·allcheck) Cisco(XML) 대상 목록. hostname 이 xml_host_prefix(기본 c)로 시작하는 대상과 함께
+                      XML API 로 점검만 (설정·전체비교 제외, allcheck 는 접속하지 않고 XML_READONLY)
   -profile <이름>     프로파일 이름 (profile_dir/<이름>.tsv)
   -from-dump <디렉터리> 접속 대신 덤프에서 읽기
   -retry-from <폴더경로> 이전 결과 폴더 경로 또는 그 안의 retry.txt 경로 (재시도 모드, -user 와 함께 쓸 수 없음)
@@ -112,7 +114,7 @@ type commonOpts struct {
 	hosts     string
 	dryRun    bool
 	rfConf    string // 2순위 계정 파일 (비면 RF_TOOL_CONF → /etc/rf_tool/rf.conf)
-	// routeXML 이 true 면 prepare 가 classifyTargets 로 XML 대상(xml_host_prefix, -user-xml)을 나눈다 (bios 만 켬).
+	// routeXML 이 true 면 prepare 가 classifyTargets 로 XML 대상(xml_host_prefix, -user-xml)을 나눈다 (bios·check·allcheck 가 켬).
 	routeXML bool
 	userXML  string // -user-xml: 모두 XML 로 점검할 대상 목록 파일 (bios 만, 비면 없음)
 	// userXMLArg 는 TUI 에서 붙여넣은 Cisco(XML) 대상입니다 (비어 있지 않으면 userXML 파일 대신 씀).
@@ -133,15 +135,38 @@ func newFlagSet(name string) (*flag.FlagSet, *commonOpts) {
 	return fs, o
 }
 
+// userXMLUsage 는 -user-xml 옵션 설명입니다 (bios·check·allcheck 공통).
+const userXMLUsage = "XML API(UCSM/CIMC, 읽기 전용)로만 점검할 Cisco 대상 목록 파일 (hostname·IP, 전체비교·설정 제외). Cisco 장비는 XML 선택: hostname 이 xml_host_prefix(기본 c)로 시작하면 자동, IP 는 이 파일에"
+
+// addXMLRouting 은 -user-xml 을 붙이고 대상을 Redfish / XML 로 나누게 합니다 (classifyTargets, bios 와 같은 규칙).
+func addXMLRouting(fs *flag.FlagSet, o *commonOpts) {
+	fs.StringVar(&o.userXML, "user-xml", "", userXMLUsage)
+	o.routeXML = true
+}
+
+// userXMLOnly 는 -user-xml 만 주고 -user·-retry-from 은 주지 않았으면 기본 user.txt 를 읽지 않게 합니다 (Parse 뒤에 부름).
+func userXMLOnly(fs *flag.FlagSet, o *commonOpts) {
+	if o.userXML == "" || o.retryFrom != "" {
+		return
+	}
+	explicit := false
+	fs.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "user" })
+	if !explicit {
+		o.user = ""
+	}
+}
+
 func cmdCheck(args []string) error {
 	fs, o := newFlagSet("check")
 	noPrompt := fs.Bool("no-prompt", false, "FAIL 이 있어도 설정 여부를 묻지 않고 종료")
 	stdinOK := fs.Bool("stdin-ok", false, "자동화용: 표준입력이 터미널이 아니어도 Y/N 을 읽음")
 	listMax := fs.Int("list-max", 100, "[OK] 호스트 이름을 나열할 최대 대수")
 	failMax := fs.Int("fail-max", 200, "[FAIL 상세]·[설정 불가] 에 보여 줄 최대 줄 수")
+	addXMLRouting(fs, o) // xml_host_prefix 이름·-user-xml 대상은 XML API 로 점검만 (설정 제외)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	userXMLOnly(fs, o)
 	if err := validProfileName(o.profile); err != nil {
 		return err
 	}

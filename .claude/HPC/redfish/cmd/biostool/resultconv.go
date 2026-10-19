@@ -67,7 +67,7 @@ func compareLines(h *allHost, ign *ignoreSet) []ResultLine {
 	}
 	if s := h.Snap; s != nil {
 		base.MgmtModel, base.MgmtVersion = dash(s.MgmtModel), dash(s.MgmtVersion)
-		if s.ok() {
+		if s.ok() || s.Status == StatusXMLReadOnly { // XML 대상도 점검에서 읽은 벤더·모델로 보인다 (벤더 탭·CSV 이름이 "-" 가 되지 않게)
 			base.Vendor, base.Model, base.BiosVersion = dash(s.Vendor), dash(s.Model), dash(s.BiosVersion)
 		}
 	}

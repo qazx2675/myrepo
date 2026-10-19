@@ -14,7 +14,11 @@ package main
 //
 // XML 로 점검한 호스트(hostCheck.XML)는 점검만 합니다: 전체비교 스냅샷은 StatusXMLReadOnly, 설정 계획에서 빠집니다.
 
-import "strings"
+import (
+	"strings"
+
+	"biostool/internal/ucsmxml"
+)
 
 const (
 	// StatusXMLReadOnly 는 XML 대상이라 전체비교·설정에서 뺀 호스트의 스냅샷·비교 상태입니다 (TUI: 제외(읽기 전용)).
@@ -64,6 +68,23 @@ func (e *checkEnv) checkXML(t Target) *hostCheck {
 		}
 	}
 	return h
+}
+
+// xmlProbe 는 allcheck 의 XML 대상이 XML API 장비인지 로그인 1번으로 확인합니다 (aaaLogin·aaaLogout 만, 조회 없음).
+// 로그인 전에 실패하면(연결 실패·타임아웃·XML 이 아닌 응답·HTTP 오류 등, AUTH_FAIL 제외) isXML=false 라 부르는 쪽이
+// bios(checkXML)와 같이 Redfish 로 1번 다시 읽습니다. AUTH_FAIL 은 다시 시도하지 않고 status 로 돌려줍니다.
+func xmlProbe(conf *Config, password string, t Target) (isXML bool, status, detail string) {
+	h := &ucsmHost{Target: t}
+	c := ucsmxml.New(ucsmxml.Options{BaseURL: t.BaseURL(), User: conf.User, Pass: password, Insecure: conf.Insecure, Timeout: conf.Timeout})
+	defer c.Logout() // 로그인에 실패해 쿠키가 없으면 아무것도 보내지 않는다
+	if err := c.Login(); err != nil {
+		h.setErr(err)
+		if h.Status == StatusAuthFail {
+			return true, h.Status, h.Detail
+		}
+		return false, "", ""
+	}
+	return true, "", ""
 }
 
 // xmlPickServers 는 호스트 이름에 해당하는 서버를 고릅니다: 1대면 그것, 여러 대면 서비스 프로파일 이름이 같은 서버

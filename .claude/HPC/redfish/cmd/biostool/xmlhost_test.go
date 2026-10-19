@@ -214,6 +214,9 @@ func TestXMLSingleRackServer(t *testing.T) {
 	if h := res.Hosts[0]; h.Status != StatusXMLReadOnly || len(res.Lines) != 1 || !res.Lines[0].HostError {
 		t.Errorf("전체비교 = %s, 줄 %d", h.Status, len(res.Lines))
 	}
+	if l := res.Lines[0]; l.Vendor != ucsmVendor || l.Model != u.Snaps[0].Model || l.Model == "-" { // 벤더 탭·CSV 이름이 "-" 가 되지 않게
+		t.Errorf("전체비교 XML 줄 벤더·모델 = %q %q", l.Vendor, l.Model)
+	}
 	if calls, logouts := m.snapshot(); strings.Contains(strings.Join(calls, "|"), "configConf") || logouts != 1 || calls[0] != "aaaLogin" {
 		t.Errorf("호출 %v 로그아웃 %d", calls, logouts)
 	}
@@ -247,6 +250,37 @@ func TestXMLMultiBladeServiceProfileMatch(t *testing.T) {
 	plan := buildSetPlan(rc.Conf, u, nil)
 	if !plan.Empty() || !strings.Contains(strings.Join(plan.Skipped, nl), "XML API 대상") {
 		t.Errorf("설정 계획에 XML 호스트: items %d skipped %v", len(plan.Items), plan.Skipped)
+	}
+}
+
+// 예전 방식 check(bios_check.sh 옛 옵션)도 XML 대상은 점검만: 리포트 [설정 불가] 에 FAIL 이 사유와 함께 나오고
+// [FAIL 상세]·dry-run 대상에는 없다. allcheck 는 XML 대상에 로그인만 해 보고 XML_READONLY (비교 제외).
+func TestXMLLegacyCheckAndAllcheck(t *testing.T) {
+	m := newUcsmMock(t, spFixture)
+	port := m.srv.URL[strings.LastIndex(m.srv.URL, ":")+1:]
+	rc := checkRCFor(t, 1, "127.0.0.1 c201-m", "c201-m:"+port)
+	rc.Targets[0].XML = true
+	fastCheck(t)
+	run, err := doCheck(rc, checkOpts{Profile: xmlTestProf(t), ResultDir: t.TempDir(), Now: checkNow})
+	must(t, err)
+	var b strings.Builder
+	writeReport(&b, run, reportOpts{ListMax: 100, FailMax: 100})
+	out := b.String()
+	if strings.Contains(out, "[FAIL 상세]") || !strings.Contains(out, "[설정 불가]") ||
+		!strings.Contains(out, "biosVfCPUPerformance.vpCPUPerformance  FAIL") || !strings.Contains(out, "XML API 대상 — 점검만") {
+		t.Errorf("check 리포트:%s%s", nl, out)
+	}
+	if hs := dryRunHosts(run); len(hs) != 0 {
+		t.Errorf("dry-run 대상에 XML 호스트 %d대", len(hs))
+	}
+	before, _ := m.snapshot()
+	n := len(before)
+	s := (&allEnv{conf: rc.Conf, password: rc.Password}).fetch(rc.Targets[0])
+	if s.Status != StatusXMLReadOnly {
+		t.Errorf("allcheck XML 스냅샷 = %s", s.Status)
+	}
+	if calls, _ := m.snapshot(); strings.Join(calls[n:], ",") != "aaaLogin,aaaLogout" { // XML 장비인지 로그인만 확인 (조회 없음)
+		t.Errorf("allcheck 의 XML 호출: %v", calls[n:])
 	}
 }
 

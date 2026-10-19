@@ -56,8 +56,7 @@ func cmdBios(args []string) error {
 	plain := fs.Bool("plain", false, "TUI 없이 색 없는 평문으로 출력 (설정 질문 없음)")
 	autoCheck := fs.Bool("auto-check", false, "비대화형 점검: -auto-check <user> <targets.txt> → ./check.res_<user> (설정 없음)")
 	auto := fs.Bool("auto", false, "비대화형 점검: -auto <user> <targets.txt> → ./check.res_<user> + _postapply (설정 없음, 점검만)")
-	fs.StringVar(&o.userXML, "user-xml", "", "XML API(UCSM/CIMC, 읽기 전용)로만 점검할 Cisco 대상 목록 파일 (hostname·IP, 전체비교·설정 제외). Cisco 장비는 XML 선택: hostname 이 xml_host_prefix(기본 c)로 시작하면 자동, IP 는 이 파일에")
-	o.routeXML = true // 대상을 xml_host_prefix·-user-xml 로 Redfish / XML 로 나눈다
+	addXMLRouting(fs, o) // 대상을 xml_host_prefix·-user-xml 로 Redfish / XML 로 나눈다
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

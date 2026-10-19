@@ -36,6 +36,39 @@ select_bin() {
   [ -x "$BIN" ]
 }
 
+# fix_path_args <호출한 폴더>: 전역 배열 args 의 파일·폴더 옵션(-conf -user -user-xml -hosts -ref-json -diff -ignore
+#   -from-dump -retry-from -rf-conf, `-옵션 값` / `-옵션=값`) 상대경로를, 호출한 폴더에 그 파일·폴더가 있으면 호출한 폴더 기준
+#   절대경로로 바꾼다 (래퍼는 스크립트 폴더로 cd 하므로, 다른 폴더에서 `bash /경로/bios.sh -user list.txt` 로 불러도 찾게).
+#   호출한 폴더에 없으면 그대로 둔다 (예전처럼 스크립트 폴더 기준, -ref-json 은 파일 이름만 주면 refs_dir 에서 찾음).
+fix_path_args() {
+  local cpwd="$1" i n v
+  [ "$cpwd" = "$PWD" ] && return 0
+  n=${#args[@]}
+  for ((i = 0; i < n; i++)); do
+    case "${args[$i]}" in
+      -conf | --conf | -user | --user | -user-xml | --user-xml | -hosts | --hosts | -ref-json | --ref-json | \
+        -diff | --diff | -ignore | --ignore | -from-dump | --from-dump | -retry-from | --retry-from | -rf-conf | --rf-conf)
+        if [ $((i + 1)) -lt "$n" ]; then
+          v="${args[$((i + 1))]}"
+          case "$v" in
+            "" | /* | -*) ;;
+            *) if [ -e "$cpwd/$v" ]; then args[$((i + 1))]="$cpwd/$v"; fi ;;
+          esac
+        fi
+        ;;
+      -conf=* | --conf=* | -user=* | --user=* | -user-xml=* | --user-xml=* | -hosts=* | --hosts=* | -ref-json=* | --ref-json=* | \
+        -diff=* | --diff=* | -ignore=* | --ignore=* | -from-dump=* | --from-dump=* | -retry-from=* | --retry-from=* | -rf-conf=* | --rf-conf=*)
+        v="${args[$i]#*=}"
+        case "$v" in
+          "" | /*) ;;
+          *) if [ -e "$cpwd/$v" ]; then args[$i]="${args[$i]%%=*}=$cpwd/$v"; fi ;;
+        esac
+        ;;
+    esac
+  done
+  return 0
+}
+
 # conf_val <conf파일> <키> <기본값>: bios.conf 에서 key=value 의 값을 읽는다 (없으면 기본값).
 # Go 쪽과 같이 마지막으로 나온 줄이 우선이고, 빈 값이면 기본값을 쓴다.
 conf_val() {

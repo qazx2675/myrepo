@@ -18,6 +18,20 @@
 - **비교서버 입력 규칙 통일**: 전체비교 비교서버를 TUI 에서 입력 줄 하나(쉼표)가 아니라 대상 입력과 같은 여러 줄 입력(한 줄에 하나 또는 공백 구분, Ctrl+D 완료, 바로 Ctrl+D 면 diff.txt)으로 받습니다. `-ref` 도 쉼표·공백·줄바꿈으로 여러 개. 이 입력 화면에서도 Tab 으로 프로파일 화면으로 돌아갑니다.
 - **종료(q 두 번) 때 수정 여부를 묻지 않음**: 수정 단계는 `e` 로만 갑니다. q 두 번은 설정 여부와 관계없이 그대로 끝납니다.
 
+### 변경 (옛 방식도 같은 분류)
+
+- **`bios_check.sh`(옛 옵션 `-no-prompt`·`-dry-run`·`-retry-from` 등 → `biostool check`)·`all_bios_check.sh`(`biostool allcheck`)도 `bios.sh` 와 같이 대상을 Redfish / Cisco XML 로 알아서 나눕니다**(`addXMLRouting`, main.go). hostname 이 `xml_host_prefix`(기본 `c`)로 시작하는 대상과 새 옵션 **`-user-xml <파일>`** 목록이 XML 입니다(`-user-xml` 만 주면 user.txt 는 읽지 않음).
+  - `check`: XML 대상은 XML API 로 점검만 합니다. FAIL 은 `[FAIL 상세]` 가 아니라 `[설정 불가]` 에 “XML API 대상 — 점검만, 설정 안 함” 으로 나오고(UNSUPPORTED 항목도), Y/N 설정·`-dry-run` 대상에서 빠집니다. XML 로그인 전 실패면 Redfish 로 1번 폴백(bios 와 같음).
+  - `allcheck`: XML 대상은 `xmlProbe`(aaaLogin·aaaLogout 만)로 XML 장비인지 확인해 `XML_READONLY`(리포트 “XML 대상 제외”, 오류 아님)로 비교에서 빼고, 로그인 전에 실패하면 Redfish 로 비교합니다. AUTH_FAIL 은 다시 시도하지 않습니다.
+
+### 고침 (실행 로직 점검)
+
+- **`bios.sh` 상대경로**: 다른 폴더에서 `bash /경로/bios.sh -user list.txt` 처럼 부르면 스크립트 폴더로 이동한 뒤 경로를 찾아 파일을 못 찾던 문제. 파일 옵션(`-conf`·`-user`·`-user-xml`·`-hosts`·`-ref-json`·`-diff`·`-ignore`·`-from-dump`·`-rf-conf`)의 상대경로는 호출한 폴더에 그 파일이 있으면 호출한 폴더 기준 절대경로로 바꿔 넘깁니다(없으면 예전처럼 스크립트 폴더 기준, `-ref-json` 파일 이름만은 refs_dir).
+- **옛 래퍼 상대경로**: `bios_check.sh`·`all_bios_check.sh` 도 `bios.sh` 와 같은 상대경로 규칙(`lib.sh` `fix_path_args`, `-retry-from` 폴더 포함)을 씁니다.
+- **TUI 제목**: 수정 미리보기·설정 결과에서 결과 보기로 돌아와도 제목이 “수정 미리보기”로 남고 스크롤이 처음으로 가던 문제 (`SwitchTab` 이 결과 보기 제목·스크롤을 되돌림).
+- **TUI 전체비교의 XML 대상 줄**: 벤더·모델이 `-` 라 벤더 탭이 `[-]`, CSV 이름이 `compare_wide_hosts_-_…` 이던 문제 → 점검에서 읽은 벤더(Cisco)·모델로 표시.
+- **TUI 글 보기의 e**: 미리보기·설정 결과 화면 안내에 “e 수정 메뉴” 가 보였지만 실제로는 결과 보기로 돌아가기만 하던 문제 → 글 보기에서는 e 를 받지 않고 안내에서도 뺌 (수정 단계는 결과 보기에서 e).
+
 ### 변경
 
 - **프로파일 `profiles/*.tsv` 에 구역 `# [redfish]` / `# [xml]` 추가**(`profile.go`): `[xml]` 행의 attribute 는 `클래스.속성`(예: `biosVfCPUPerformance.vpCPUPerformance`), 벤더는 CISCO 만, `*` 모델 불가. `# UNMAPPED` 주석은 `MAPPING_MISSING` 사유. 기존 `bios_json/standard_map/standard_bios_map_xml.tsv` 는 삭제하고 그 행을 `profiles/VM.tsv`·`VM_research.tsv` 의 `# [xml]` 구역으로 옮겼습니다.
@@ -32,8 +46,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 7876770 | 84824c08c3e9c6f95859e5e9d8da6b40454ce5834d6591f8769e953abcc82b0b |
-| bin/biostool_os6 | go1.20.14 | 6492160 | 20748309a9c837df821e118a06147f42630fcada56d01e81876a05c59fa3d76a |
+| bin/biostool | go1.26.5 | 7880866 | 38398567fcc5eb765bd3ed6659a87211f04c448d834c8bb9f0d0c985b40504ee |
+| bin/biostool_os6 | go1.20.14 | 6496256 | ad75541b039e20ec078da599112d6be262b3c2470fe1493f4d8f3a5a9a16bbca |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 

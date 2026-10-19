@@ -7,7 +7,7 @@
 - 수천 대를 한 번에 처리합니다(동시 접속 기본 100). 일시 오류는 자동 재시도하고, 실패 목록(`retry.txt`)만 다시 돌릴 수 있습니다.
 - BMC 에 남기는 흔적을 줄이려고 호스트당 **로그인 1회**, 허용목록 밖 호출(로그 조회·ClearLog·Reset 등)은 **전송 전에 코드가 차단**합니다.
 - **`bash bios.sh` 하나로** 대상 입력 → 프로파일 점검 → (선택) BIOS 전체비교 → (선택) 수정까지 터미널 화면(TUI)에서 진행합니다. 호스트당 1회 접속으로 프로파일 결과와 전체비교를 함께 얻고, 결과는 색상 줄과 CSV 로 봅니다(2.0절). auto_setup 같은 자동화는 `bash bios.sh -auto <user> targets.txt` 로 점검만 합니다.
-- **Cisco 장비는 XML API 로 점검합니다(`bios.sh` 혼합 대상).** hostname 이 `bios.conf` 의 `xml_host_prefix`(기본 `c`)로 시작하는 대상과 `-user-xml` 목록은 Cisco UCSM/CIMC XML API 로 읽고(읽기 전용: `aaaLogin`·`configResolveClass`·`aaaLogout`), 나머지는 Redfish 로 점검합니다. XML 대상은 프로파일 점검만 하고 전체비교·설정에서는 빠집니다. 2.0절 “Cisco(XML) 혼합 대상”.
+- **Cisco 장비는 XML API 로 점검합니다(`bios.sh` 혼합 대상, 옛 방식 `bios_check.sh`·`all_bios_check.sh` 도 같은 분류).** hostname 이 `bios.conf` 의 `xml_host_prefix`(기본 `c`)로 시작하는 대상과 `-user-xml` 목록은 Cisco UCSM/CIMC XML API 로 읽고(읽기 전용: `aaaLogin`·`configResolveClass`·`aaaLogout`), 나머지는 Redfish 로 점검합니다. XML 대상은 프로파일 점검만 하고 전체비교·설정에서는 빠집니다(옛 방식 점검은 XML 의 FAIL 을 `[설정 불가]` 에 사유와 함께 보이고, `all_bios_check.sh` 는 로그인만 확인해 `XML_READONLY` 로 비교에서 뺍니다. XML 로그인 전에 실패하면 Redfish 로 1번 다시). 2.0절 “Cisco(XML) 혼합 대상”.
 - 사전조사(`xml.sh`)로 처음 만나는 모델의 속성 이름을 확인하고, 모델별 BIOS 전체 비교(`all_bios_check.sh`)도 할 수 있습니다.
 - 공용(1순위) 계정이 없는 BMC 는 벤더 admin(rf.conf, 2순위)으로 접속해 **계정을 만들 수 있고**(`account_create.sh`, 기본 Y), 공용 계정의 **비밀번호를 바꿀 수도 있습니다**(`biostool account change`). 2.12절.
 
@@ -940,7 +940,7 @@ $ bin/biostool account change
 | `-j <N>` | `100` (최대 300) | account | 동시 처리 수. 처음 10대는 한 대씩 처리(웜업) |
 | `-dry-run`·`-no-prompt`·`-stdin-ok` | | account | create: 계획만 / 묻지 않고 목록만 / 터미널이 아닌 입력의 y/n 허용. change 는 `-dry-run` 만 의미 있음(새 비밀번호는 터미널 직접 입력) |
 | `-list-max <N>` | check 100 / allcheck 20 / ucsm 20 / account 20 | check allcheck ucsm account | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수. ucsm: FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 |
-| `-user-xml <파일>` | (없음) | bios | XML API(UCSM/CIMC)로만 점검할 대상 목록 (IP·이름, 점검만 — 전체비교·설정 제외). 이름 대상은 bios.conf `xml_host_prefix`(기본 c)로도 XML 로 갑니다 |
+| `-user-xml <파일>` | (없음) | bios, check, allcheck | XML API(UCSM/CIMC)로만 점검할 대상 목록 (IP·이름, 점검만 — 전체비교·설정 제외). 이름 대상은 bios.conf `xml_host_prefix`(기본 c)로도 XML 로 갑니다 |
 | `-fail-max <N>` | `200` | check | `[FAIL 상세]`·`[설정 불가]`·`[적용 안 됨]` 에 보여 줄 최대 줄 수(넘으면 `fail.tsv`·`apply_result.tsv` 안내) |
 | `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 모델을 적어도 확인용) |
 | `-ignore <파일>` | `ignore_attrs.txt` | allcheck | 비교 제외 속성 목록. 파일이 없으면 내장 기본 목록, `-ignore` 로 직접 준 파일이 없으면 오류 |
@@ -965,7 +965,7 @@ $ bin/biostool account change
 
 | 스크립트 | 사용법 | 설명 |
 |---|---|---|
-| `bios.sh` | `[--profile <이름>] [biostool bios 옵션...]` / `-auto\|-auto-check <user> <targets.txt>` | **통합 진입점**. 파일 확인(`bios.conf`·`pass.enc`·`key.bin`, `-plain`·`-user` 일 때 `user.txt`, `-auto` 일 때 targets.txt) → `biostool bios`. `-h` 도움말. 2.0절 |
+| `bios.sh` | `[--profile <이름>] [biostool bios 옵션...]` / `-auto\|-auto-check <user> <targets.txt>` | **통합 진입점**. 파일 확인(`bios.conf`·`pass.enc`·`key.bin`, `-plain`·`-user` 일 때 `user.txt`, `-auto` 일 때 targets.txt) → `biostool bios`. 파일 옵션(`-conf`·`-user`·`-user-xml`·`-hosts`·`-ref-json`·`-diff`·`-ignore`·`-from-dump`·`-rf-conf`)의 상대경로는 호출한 폴더에 그 파일이 있으면 호출한 폴더 기준으로 바꿔 넘김(없으면 스크립트 폴더 기준, `lib.sh` `fix_path_args` — `bios_check.sh`·`all_bios_check.sh` 도 같음, 여기서는 `-retry-from` 폴더도). `-h` 도움말. 2.0절 |
 | `bios_export.sh` | `<비교서버> [<대상> ...]` | 속성 JSON 추출(2.4.1절) |
 | `bios_check.sh` | `[--profile <이름>] [biostool check 옵션...]` | 옛 전용 옵션이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘김(2.0절). 그 밖에는 파일 확인 → 프로파일 메뉴(3회까지 재입력) → `biostool check -profile …`. `-retry-from` 이면 `user.txt` 불필요, `-from-dump` 이면 `pass.enc`·`key.bin` 불필요. `-h` 도움말 |
 | `xml.sh` | `[--compact] [대상...]` | 대상 인자를 쉼표로 묶어 `biostool dump -targets …`. 대상이 없으면 `user.txt`. **설정은 항상 `./bios.conf` 를 쓰며 `-conf` 등 다른 옵션은 받지 않습니다**(알 수 없는 옵션은 오류). 일부 호스트가 실패해도 안내를 보여 준 뒤 종료코드를 전달 |
@@ -1001,7 +1001,7 @@ $ bin/biostool account change
 | `protect_attrs` | (비어 있음) | | **절대 바꾸지 않을** BIOS 속성 패턴 **추가**. `\|` 로 구분, `*` 는 와일드카드, 대소문자 무시(예: `MemTest\|*Watchdog*\|ProcX2Apic`). 서버 고유값·부팅·보안·RAID·PXE·NIC 관련은 내장 목록으로 이미 막혀 있고 이 키나 `ignore_attrs.txt` 로 끌 수 없음(더하기만). 2.0절 |
 | `refs_dir` | `refs` | | 전체비교 기준 속성 JSON 폴더(`-ref-json` 이름 검색, TUI 기준 목록). `bios_export.sh` 결과 `attrs/<호스트>.json` 을 넣어 둠 |
 | `auto_profile` | (비어 있음) | | 비대화형 `-auto`/`-auto-check` 에서 `-profile` 을 주지 않았을 때 쓸 프로파일 이름. 비우면 `-profile` 필수 |
-| `xml_host_prefix` | `c` | | `bios` 에서 hostname(`-m`·포트를 뗀 이름, 대소문자 무시)이 이 접두어로 시작하면 Redfish 대신 Cisco UCSM/CIMC **XML API** 로 점검(읽기 전용, 전체비교·설정 제외). 쉼표로 여러 개(`c,ucs`). 비우면 이름으로는 XML 로 보내지 않음(`-user-xml` 목록만 XML). IP 대상은 접두어와 관계없이 Redfish. 2.0절 |
+| `xml_host_prefix` | `c` | | `bios`·`check`·`allcheck` 에서 hostname(`-m`·포트를 뗀 이름, 대소문자 무시)이 이 접두어로 시작하면 Redfish 대신 Cisco UCSM/CIMC **XML API** 로 점검(읽기 전용, 전체비교·설정 제외). 쉼표로 여러 개(`c,ucs`). 비우면 이름으로는 XML 로 보내지 않음(`-user-xml` 목록만 XML). IP 대상은 접두어와 관계없이 Redfish. 2.0절 |
 
 같은 BMC 로 가는 연속 요청은 최소 100ms 간격을 두며(BMC 부하 방지), 환경변수 프록시는 거치지 않고 리다이렉트는 따라가지 않습니다.
 
@@ -1221,7 +1221,7 @@ XML 로 점검한 호스트(Cisco)는 프로파일 점검 줄의 비고에 `XML`
 ```bash
 # 방법 1: 이 폴더를 PATH 에 추가 (래퍼 스크립트와 bin/ 을 그대로 쓰는 방법 — 권장)
 echo 'export PATH="$PATH:/opt/redfish"' >> ~/.bashrc      # /opt/redfish = 이 폴더를 놓은 경로
-bios.sh --profile VM                # 어디서든 실행 (스크립트가 자기 폴더로 이동해 실행합니다. -auto 의 targets.txt·check.res_<user> 는 호출한 폴더 기준)
+bios.sh --profile VM                # 어디서든 실행 (스크립트가 자기 폴더로 이동해 실행합니다. -auto 의 targets.txt·check.res_<user> 는 호출한 폴더 기준, -user·-conf·-hosts 같은 파일 옵션의 상대경로는 호출한 폴더에 있으면 그 기준)
 
 # 방법 2: 바이너리만 복사 (직접 biostool 을 쓰는 경우)
 sudo cp bin/biostool /usr/local/bin/biostool        # RHEL6 은 bin/biostool_os6 를 biostool 이름으로 복사

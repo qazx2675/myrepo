@@ -233,10 +233,18 @@ func TestTUIViewTabs(t *testing.T) {
 	if u.filter != tuiFilterOK || !u.refKey || u.title != "전체비교 — 기준 x" {
 		t.Errorf("전체 설정 비교 상태 유지: filter=%c refKey=%v", u.filter, u.refKey)
 	}
-	// 글 보기에서는 Tab·r 을 받지 않는다
+	// 글 보기에서는 Tab·r·e 를 받지 않는다 (e 는 수정 단계로 가지 않으므로 안내 줄에도 없음)
 	u.SetText("수정 미리보기", []string{"x"})
-	if act := browse("\trq"); act != TUIQuit || u.Quit() {
-		t.Errorf("글 보기 Tab/r: act=%v", act)
+	if act := browse("\treq"); act != TUIQuit || u.Quit() {
+		t.Errorf("글 보기 Tab/r/e: act=%v", act)
+	}
+	if f := tuiLastFrame(r); strings.Contains(f, "e 수정 메뉴") {
+		t.Errorf("글 보기 안내에 e 수정 메뉴가 없어야 함:\n%s", f)
+	}
+	// 글 보기에서 같은 탭으로 돌아오면 결과 보기 제목이 되돌아온다 (미리보기 제목이 남지 않게)
+	u.SwitchTab(u.Tab())
+	if u.textMode || u.title != "전체비교 — 기준 x" {
+		t.Errorf("글 보기 → 결과 보기 제목: textMode=%v title=%q", u.textMode, u.title)
 	}
 }
 

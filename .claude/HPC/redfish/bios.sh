@@ -34,6 +34,7 @@ usage() {
   -ignore <파일>                    전체비교에서 제외할 속성 목록 (기본 ignore_attrs.txt)
   -from-dump <디렉터리>              접속 대신 xml.sh 로 저장한 덤프를 읽음
   -conf <파일>, -hosts <파일>         설정 파일 / 이름 해석용 hosts
+  (파일·폴더 옵션의 상대경로는 호출한 폴더에 있으면 그 기준, 없으면 이 스크립트 폴더 기준)
 
 비대화형 (auto_setup 이 호출):
   bash bios.sh -auto-check <user> <targets.txt> [-profile <이름>]
@@ -76,6 +77,9 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# 파일·폴더 옵션의 상대경로는 호출한 폴더에 있으면 그 기준으로 (lib.sh fix_path_args)
+fix_path_args "$caller_pwd"
 
 # 비대화형 -auto / -auto-check <user> <targets>: targets 는 호출한 폴더 기준 절대경로로 바꾸고,
 # check.res_<user> 가 호출한 폴더에 만들어지도록 -res-dir 로 넘긴다 (이 스크립트는 위에서 cd 했으므로).

@@ -442,6 +442,19 @@ func (e *allEnv) fetch(t Target) *biosSnap {
 		s.Status = t.Err
 		return s
 	}
+	// Cisco XML 대상은 Redfish 전체비교를 하지 않는다 (bios 와 같이 비교 제외). XML 로그인 전에 실패하면 bios 처럼
+	// Redfish 로 1번 다시 읽는다 (이름만 접두어에 걸린 Redfish 장비).
+	if t.XML && !e.offline {
+		isXML, st, detail := xmlProbe(e.conf, e.password, t)
+		switch {
+		case st != "":
+			s.Status, s.Detail = st, detail
+			return s
+		case isXML:
+			s.Status, s.Detail = StatusXMLReadOnly, "XML API 대상 — 전체비교 제외 (읽기 전용)"
+			return s
+		}
+	}
 	if e.offline {
 		dir, ok := e.dumps[strings.ToLower(dirPart(t.Hostname))]
 		if !ok {
@@ -978,9 +991,11 @@ func cmdAllCheck(args []string) error {
 	ignore := fs.String("ignore", "ignore_attrs.txt", "비교에서 제외할 속성 목록 (없으면 내장 기본 목록)")
 	listMax := fs.Int("list-max", 20, "차이 상세·특이사항·오류에 나열할 최대 호스트 수")
 	diffMax := fs.Int("diff-max", 30, "호스트당 터미널에 보일 차이 속성 최대 수")
+	addXMLRouting(fs, o) // xml_host_prefix 이름·-user-xml 대상은 접속하지 않고 XML_READONLY (비교 제외)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	userXMLOnly(fs, o)
 	if o.profile != "" || o.dryRun {
 		return fmt.Errorf("allcheck 는 읽기 전용 전체 비교라 -profile, -dry-run 을 쓰지 않습니다")
 	}

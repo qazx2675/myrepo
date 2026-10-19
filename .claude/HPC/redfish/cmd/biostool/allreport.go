@@ -114,7 +114,10 @@ func writeAllReport(w io.Writer, r *allRun, o allReportOpts) {
 	if t[StatusIsReference] > 0 {
 		line("기준 자신", t[StatusIsReference], nil, "  (같은 모델의 다른 기준이 없어 비교 안 함)")
 	}
-	known := map[string]bool{StatusSame: true, StatusDiff: true, StatusIsReference: true, StatusNoReference: true, StatusRefUnreachable: true}
+	if t[StatusXMLReadOnly] > 0 { // 오류가 아니라 비교 제외 (Cisco XML API 대상)
+		line("XML 대상 제외", t[StatusXMLReadOnly], nil, "  (Cisco XML API — 읽기 전용, 프로파일 점검은 bios.sh·bios_check.sh)")
+	}
+	known := map[string]bool{StatusSame: true, StatusDiff: true, StatusIsReference: true, StatusNoReference: true, StatusRefUnreachable: true, StatusXMLReadOnly: true}
 	var unclass []string
 	for _, st := range []string{StatusNoReference, StatusRefUnreachable} {
 		if t[st] > 0 {
@@ -538,6 +541,8 @@ func writeAllUnclassified(w io.Writer, r *allRun, o allReportOpts, p painter) {
 			fmt.Fprintln(w, "    /etc/hosts 에 이름-m 항목이 없습니다 (-hosts 로 다른 파일 지정 가능).")
 		case StatusNoDump:
 			fmt.Fprintln(w, "    -from-dump 폴더에 호스트 이름과 같은 덤프 폴더가 없습니다.")
+		case StatusXMLReadOnly:
+			fmt.Fprintln(w, "    Cisco XML API 대상이라 Redfish 전체비교에서 뺐습니다 (오류 아님, 프로파일 점검은 bios.sh·bios_check.sh).")
 		}
 	}
 	if retry > 0 {

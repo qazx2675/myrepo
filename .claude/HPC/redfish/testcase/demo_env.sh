@@ -191,7 +191,7 @@ EOF
   XML 쪽 계정은 mockbmc 와 같은 시험용 계정, 서버 정의는 $D/ucsm_single.json·ucsm_domain.json
 
 따라 해 보기 (저장소 폴더에서):
-  # 1) TUI 전체 흐름: 대상 입력 → 프로파일(DEMO 추천) → 결과 → 전체비교 y → 기준 선택 → 수정 질문
+  # 1) TUI 전체 흐름: 대상 입력 → 프로파일(DEMO 추천) → 결과 → Tab(전체 설정 비교) → 기준 선택 → e(수정 단계), q 두 번 종료
   bash bios.sh -conf $D/bios.conf -hosts $D/hosts
   # 2) 대상 파일 지정 + 프로파일 지정 (Redfish 6대만)
   bash bios.sh -conf $D/bios.conf -hosts $D/hosts -user $D/user_ip_only.txt -profile DEMO

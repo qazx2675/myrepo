@@ -300,7 +300,8 @@ func writeFailSection(w io.Writer, run *checkRun, o reportOpts, p painter) {
 	}
 }
 
-// writeBlockedSection 은 UNVERIFIED / PENDING_EXISTS / MAPPING_MISSING / (설정 불가) PENDING_NO_JOB 항목을 사유와 함께 보여 줍니다.
+// writeBlockedSection 은 UNVERIFIED / PENDING_EXISTS / MAPPING_MISSING / (설정 불가) PENDING_NO_JOB 항목과
+// XML 대상(점검만)의 FAIL·UNSUPPORTED 항목을 사유와 함께 보여 줍니다.
 func writeBlockedSection(w io.Writer, run *checkRun, o reportOpts, p painter) {
 	mw := modelWidth(run)
 	type row struct{ host, text string }
@@ -313,6 +314,16 @@ func writeBlockedSection(w io.Writer, run *checkRun, o reportOpts, p painter) {
 		for _, it := range h.Items {
 			var text string
 			switch it.Result {
+			case StatusFail:
+				if !h.XML {
+					continue // [FAIL 상세] 에 나온다
+				}
+				text = fmt.Sprintf("%s  %-16s %s  FAIL  기대=%s  현재=%s  (XML API 대상 — 점검만, 설정 안 함)", padTo(modelLabel(h.Info), mw), it.Std, it.Attr, it.Expected, it.Current)
+			case StatusUnsupported: // XML 항목만 (그 서버에 클래스·속성이 없음)
+				if !h.XML {
+					continue
+				}
+				text = fmt.Sprintf("%s  %-16s %s  UNSUPPORTED  (%s)", padTo(modelLabel(h.Info), mw), it.Std, it.Attr, it.Reason)
 			case StatusUnverified:
 				text = fmt.Sprintf("%s  %-16s %s  UNVERIFIED  기대=%s  현재=%s  (%s)", padTo(modelLabel(h.Info), mw), it.Std, it.Attr, it.Expected, it.Current, it.Reason)
 			case StatusPendingExists:
@@ -335,8 +346,12 @@ func writeBlockedSection(w io.Writer, run *checkRun, o reportOpts, p painter) {
 			default:
 				continue
 			}
-			hostSet[h.Target.Hostname] = true
-			rows = append(rows, row{h.Target.Hostname, strings.TrimRight(text, " ")})
+			name := h.Target.Hostname
+			if it.Server != "" { // XML 대상의 서버가 여럿: "<호스트>/<서버 dn>"
+				name = it.Server
+			}
+			hostSet[name] = true
+			rows = append(rows, row{name, strings.TrimRight(text, " ")})
 		}
 	}
 	if len(rows) == 0 {

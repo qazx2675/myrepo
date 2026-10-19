@@ -191,6 +191,9 @@ type TUI struct {
 	tabs  []string      // 보기 탭 이름 (2개 이상이면 줄을 그리고 Tab 으로 전환)
 	ti    int           // 지금 보기 탭
 	saved []tuiResState // 보기 탭마다 저장한 결과 보기 상태 (지금 탭 것은 위 필드에 있음)
+
+	resTitle string // 글 보기(SetText)로 바꾸기 전 결과 보기 제목·스크롤 (SwitchTab 이 되돌림)
+	resTop   int
 }
 
 // tuiResState 는 보기 탭 1개의 결과 보기 상태입니다.
@@ -325,6 +328,9 @@ func (u *TUI) SwitchTab(i int) {
 	if i < 0 || i >= len(u.tabs) {
 		return
 	}
+	if u.textMode { // 미리보기 등 글 보기에서 돌아오면 결과 보기 제목·스크롤을 되돌린다
+		u.title, u.top = u.resTitle, u.resTop
+	}
 	if i != u.ti {
 		u.saved[u.ti] = tuiResState{u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey}
 		s := u.saved[i]
@@ -339,6 +345,9 @@ func (u *TUI) SwitchTab(i int) {
 
 // SetText 는 글 줄 보기로 바꿉니다 (탭·필터 없음, 스크롤만).
 func (u *TUI) SetText(title string, lines []string) {
+	if !u.textMode {
+		u.resTitle, u.resTop = u.title, u.top
+	}
 	u.title, u.text, u.textMode = title, lines, true
 	u.top = 0
 }
@@ -420,7 +429,7 @@ func (u *TUI) tick(d time.Duration) (<-chan time.Time, func()) {
 
 // Browse 는 결과 보기 키 루프입니다: q 는 한 단계 뒤로 — 관리망 그룹 줄이면 벤더 줄로, 글 보기면 TUIQuit(돌아가기),
 // 벤더 줄(맨 위)이면 종료 확인 안내를 띄우고 q 를 한 번 더 누르면 TUIQuit (Esc·다른 키는 확인 취소, 계속 보기).
-// Esc 는 벤더 줄에서 끝내지 않는다. e → TUIEdit, Tab/Shift+Tab → TUITab (보기 탭 2개 이상), r → TUIRef (SetRefKey 로 켠 보기).
+// Esc 는 벤더 줄에서 끝내지 않는다. e → TUIEdit (결과 보기에서만), Tab/Shift+Tab → TUITab (보기 탭 2개 이상), r → TUIRef (SetRefKey 로 켠 보기).
 func (u *TUI) Browse() TUIAction {
 	act := TUIQuit
 	u.quitArm = false
@@ -447,7 +456,7 @@ func (u *TUI) Browse() TUIAction {
 		case k.isRune(tuiCtrlX):
 			u.msg = "Ctrl+X 는 진행 중 작업 취소입니다 — 종료는 q 를 두 번 누르세요"
 			return false
-		case k.isRune('e', 'E'):
+		case k.isRune('e', 'E') && !u.textMode:
 			act = TUIEdit
 			return true
 		case (k.isRune(tuiTab) || k.k == tkBackTab) && !u.textMode && len(u.tabs) > 1:
@@ -934,6 +943,9 @@ func (u *TUI) hintItems() []string {
 			nav = append(nav, quit)
 		}
 		return append(nav, "Ctrl+X 작업 취소", "? 도움말")
+	}
+	if u.textMode { // 미리보기·설정 결과 같은 글 보기에서는 e 가 수정 단계로 가지 않는다 (Browse)
+		return append(nav, "? 도움말", quit)
 	}
 	return append(nav, "e 수정 메뉴", "? 도움말", quit)
 }

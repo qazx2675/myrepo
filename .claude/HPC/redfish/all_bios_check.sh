@@ -25,6 +25,8 @@ usage() {
   -ref <hostname>      비교서버 1대를 직접 지정 (diff.txt 불필요, 리포트가 '비교서버' 표기, 모두 같으면 '모두 동일')
   -diff <파일>         기준(정상 설정값) 호스트 목록 (기본 diff.txt)
   -user <파일>         조사 대상 목록 (기본 user.txt)
+  -user-xml <파일>     Cisco(XML) 대상 목록 — 전체비교에서 제외(XML_READONLY, 접속 안 함). hostname 이
+                       bios.conf xml_host_prefix(기본 c)로 시작하는 대상도 같음 (bios.sh 와 같은 분류)
   -ignore <파일>       비교에서 제외할 속성 목록 (기본 ignore_attrs.txt, 없으면 내장 기본 목록)
   -from-dump <디렉터리> 접속 대신 저장된 덤프끼리 비교 (diff.txt 와 user.txt 의 호스트 모두 덤프가 있어야 함:
                        bash xml.sh <기준 호스트> <대상 호스트> ...)
@@ -61,6 +63,9 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# 파일·폴더 옵션의 상대경로는 호출한 폴더에 있으면 그 기준으로 (lib.sh fix_path_args)
+fix_path_args "$caller_pwd"
 
 select_bin || exit 2
 
@@ -148,6 +153,7 @@ difffile="$(opt_val diff diff.txt)"
 reftarget="$(opt_val ref "")"
 fromdump="$(opt_val from-dump "")"
 retryfrom="$(opt_val retry-from "")"
+userxml="$(opt_val user-xml "")"
 passfile="$(conf_val "$conf" pass_file pass.enc)"
 keyfile="$(conf_val "$conf" key_file key.bin)"
 
@@ -160,8 +166,13 @@ if [ -z "$reftarget" ] && [ ! -f "$difffile" ]; then   # -ref 로 비교서버�
   echo "[없음] $difffile  -> cp diff.txt.example $difffile  후 정상 설정값을 가진 대표(기준) hostname 을 한 줄에 하나씩 입력 (모델은 BMC 에서 자동 조회)" >&2
   missing=1
 fi
-if [ -z "$retryfrom" ] && [ ! -f "$userfile" ]; then   # -retry-from 이면 대상은 이전 결과의 retry.txt 라 user.txt 가 필요 없다
+# -retry-from 이면 대상은 이전 결과의 retry.txt, -user 없이 -user-xml 만 주면 그 파일만 읽으므로 user.txt 가 필요 없다
+if [ -z "$retryfrom" ] && { [ -z "$userxml" ] || [ -n "$(opt_val user "")" ]; } && [ ! -f "$userfile" ]; then
   echo "[없음] $userfile  -> cp user.txt.example $userfile  후 조사할 대상 hostname 을 한 줄에 하나씩 입력" >&2
+  missing=1
+fi
+if [ -n "$userxml" ] && [ ! -f "$userxml" ]; then
+  echo "[없음] $userxml  -> -user-xml 의 Cisco(XML) 대상 목록 (한 줄에 하나)" >&2
   missing=1
 fi
 if [ -z "$fromdump" ]; then

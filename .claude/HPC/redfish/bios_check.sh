@@ -26,7 +26,10 @@ usage() {
 
   --profile <이름>   profiles/<이름>.tsv 를 바로 사용 (생략하면 터미널에서는 bios.sh 의 TUI, 아니면 번호 메뉴)
   그 외 인자           그대로 전달 (-from-dump <디렉터리>, -retry-from <폴더>, -dry-run,
-                      -no-prompt, -stdin-ok, -list-max <N>, -fail-max <N>, -conf <파일>, -user <파일>, -hosts <파일>)
+                      -no-prompt, -stdin-ok, -list-max <N>, -fail-max <N>, -conf <파일>, -user <파일>, -hosts <파일>,
+                      -user-xml <파일>)
+  Cisco 장비는 XML API 로 점검만 합니다(설정 제외): hostname 이 bios.conf xml_host_prefix(기본 c)로 시작하면 자동,
+  IP 로 적은 Cisco 장비는 -user-xml 파일에 (bios.sh 와 같은 분류)
 
 동작 경로:
   새 진입점은 `bash bios.sh` 입니다 (TUI, -plain, -auto-check/-auto, 전체비교 -ref/-ref-json/-diff 까지 한 곳에서).
@@ -79,6 +82,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# 파일·폴더 옵션의 상대경로는 호출한 폴더에 있으면 그 기준으로 (lib.sh fix_path_args)
+fix_path_args "$caller_pwd"
+
 # 새 진입점 bios.sh 로 위임: 옛 방식 전용 옵션(-retry-from, -dry-run, -no-prompt, -stdin-ok, -list-max, -fail-max)이 없고,
 # 프로파일을 줬거나 터미널일 때만 (프로파일 없이 터미널이 아니면 아래 번호 메뉴를 stdin 으로 받던 옛 동작 유지).
 legacy=0
@@ -125,6 +131,7 @@ conf="$(opt_val conf bios.conf)"
 userfile="$(opt_val user user.txt)"
 fromdump="$(opt_val from-dump "")"
 retryfrom="$(opt_val retry-from "")"
+userxml="$(opt_val user-xml "")"
 passfile="$(conf_val "$conf" pass_file pass.enc)"
 keyfile="$(conf_val "$conf" key_file key.bin)"
 pdir="$(conf_val "$conf" profile_dir profiles)"
@@ -134,8 +141,13 @@ if [ ! -f "$conf" ]; then
   echo "[없음] $conf  -> cp bios.conf.example $conf  후 user= 에 BMC 계정 ID 입력" >&2
   missing=1
 fi
-if [ -z "$retryfrom" ] && [ ! -f "$userfile" ]; then   # -retry-from 이면 대상은 이전 결과의 retry.txt 라 user.txt 가 필요 없다
+# -retry-from 이면 대상은 이전 결과의 retry.txt, -user 없이 -user-xml 만 주면 그 파일만 읽으므로 user.txt 가 필요 없다
+if [ -z "$retryfrom" ] && { [ -z "$userxml" ] || [ -n "$(opt_val user "")" ]; } && [ ! -f "$userfile" ]; then
   echo "[없음] $userfile  -> cp user.txt.example $userfile  후 점검할 대상을 한 줄에 하나씩 입력" >&2
+  missing=1
+fi
+if [ -n "$userxml" ] && [ ! -f "$userxml" ]; then
+  echo "[없음] $userxml  -> -user-xml 의 Cisco(XML) 대상 목록 (한 줄에 하나)" >&2
   missing=1
 fi
 if [ -z "$fromdump" ]; then
