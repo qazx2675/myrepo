@@ -267,7 +267,7 @@ func skippedSnap(t Target) *biosSnap {
 	return s
 }
 
-// read 는 GET 4번(ServiceRoot, Systems, System, Bios)으로 스냅샷을 채웁니다. 첫 System 만 봅니다 (detectSystem 과 같다).
+// read 는 GET 4번(ServiceRoot, Systems, System, Bios)으로 스냅샷을 채웁니다. BIOS 를 가진 첫 System 만 봅니다 (detectSystem 과 같다, pickSystem).
 func (s *biosSnap) read(get getFunc) error {
 	b, err := get(rootPath)
 	if err != nil {
@@ -287,7 +287,7 @@ func (s *biosSnap) read(get getFunc) error {
 	if len(members) == 0 {
 		return &RFError{Status: StatusUnsupported, Detail: "Systems 컬렉션에 멤버가 없습니다"}
 	}
-	sb, err := get(members[0])
+	sb, err := get(pickSystem(get, members))
 	if err != nil {
 		return err
 	}

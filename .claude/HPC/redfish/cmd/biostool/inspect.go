@@ -91,8 +91,34 @@ func detectSystemWith(get getFunc) (*SystemInfo, error) {
 		return info, &RFError{Status: StatusUnsupported, Detail: "Systems 컬렉션에 멤버가 없습니다"}
 	}
 	info.Systems = members
-	return info, info.fillSystem(get, members[0])
+	return info, info.fillSystem(get, pickSystem(get, members))
 }
+
+// pickSystem 은 Systems 컬렉션에서 BIOS 를 가진 System 을 고릅니다.
+// 첫 멤버에 Bios 링크가 있으면 그대로 씁니다(추가 GET 없음, 기존 동작과 같음). 없으면(예: Dell XE9680 은 첫 멤버가
+// GPU 베이스보드 HGX_Baseboard_0 이고 Manufacturer 가 NVIDIA, Bios 없음) 나머지를 차례로 읽어 Bios 링크가 있는 첫 멤버를 씁니다.
+// 모두 없으면 첫 멤버를 돌려줘 호출한 쪽이 "Bios 리소스 없음"(UNSUPPORTED)을 알리게 합니다.
+func pickSystem(get getFunc, members []string) string {
+	if len(members) <= 1 {
+		return members[0]
+	}
+	for i, m := range members {
+		if i >= maxSystemScan {
+			break
+		}
+		b, err := get(m)
+		if err != nil {
+			continue
+		}
+		var s struct{ Bios odataLink }
+		if json.Unmarshal(b, &s) == nil && s.Bios.ID != "" {
+			return m
+		}
+	}
+	return members[0]
+}
+
+const maxSystemScan = 8 // Bios 를 가진 System 을 찾으려고 읽는 Systems 멤버 수 상한
 
 // fillSystem 은 System 1개의 정보(제조사·모델·BIOS·Settings·레지스트리·Manager)를 채웁니다.
 // info 의 SystemsPath/ManagersPath/RegistriesPath 가 먼저 채워져 있어야 합니다.

@@ -79,7 +79,7 @@ mkdir -p refs                        # (선택) 전체비교 기준으로 고를
 
 ```bash
 cd /root/server_vm_python/redhfish/V2
-bash update.sh                      # /tmp 의 가장 최근 redfish ZIP 사용 (lib.sh+bios_check.sh 가 든 것만, 다른 ZIP 은 건너뜀. ZIP 경로나 압축 푼 폴더를 인자로 줘도 됨)
+bash update.sh                      # /tmp 의 가장 최근 *.zip 사용 (ZIP 경로나 압축 푼 폴더를 인자로 줘도 됨)
 ```
 
 | 항목 | 처리 |

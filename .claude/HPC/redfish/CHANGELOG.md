@@ -13,7 +13,7 @@
 - **XML 호스트는 점검만**: 전체비교는 `[N/A]` + 비고 `XML 대상 — 비교 제외(읽기 전용)`(내부 상태 `XML_READONLY`, 화면에서 회색), 수정(설정) 계획에서도 제외합니다.
 - **mock**: `cmd/mockucsm` + `internal/mockucsm`(UCSM XML API mock, `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답). `testcase/demo_env.sh` 에 c101(XML 단일)·c201/c202(도메인, 서비스 프로파일 이름으로 선택)·c301(XML 실패 → Redfish)과 `user_xml.txt` 추가. 빌드 완료 `bin/mockucsm`(`_os6`) 커밋.
 - **`trs.sh` / `biostool trs`**(`trs.go`): BMC 접속 장애(403 등) 트러블슈팅. `user.txt` 의 관리망 IP(또는 `-targets`)로 TCP/TLS → 비인증 ServiceRoot(403 이면 User-Agent·Accept·슬래시 변형 비교) → 인증(Basic 1회 + 세션 생성 1회, 401 이면 잠금 방지로 중단, 필요 시 rf.conf 2순위 계정 1회 비교) → 인증 후 읽기(Systems·Bios·Managers·NetworkProtocol·내 계정 상태) → 403 경로의 헤더·인증 방식 변형 비교를 하고 원인 추정(`trsDiagnose`)을 출력합니다. 단계별 상태 코드·응답 헤더·Redfish 오류 MessageId 를 그대로 싣고 `results/<일시>_trs/<호스트>.txt` 로 저장합니다(비밀번호·토큰 없음). 읽기 전용(GET/HEAD/OPTIONS + 이번 실행의 세션 생성·삭제). **bios.sh 방식 재현**: 마지막 단계에서 실제 Client 로 bios.sh 와 같은 조회(ServiceRoot `/redfish/v1` → Systems → System → Bios → Settings → 속성 레지스트리)를 해 보고, 실패하면 기본 User-Agent·연결 재사용·끝 슬래시 없는 경로(리다이렉트)·8MB 초과 여부로 원인을 가립니다(trs 는 정상인데 bios.sh 만 HTTP_ERROR 인 경우용). **4xx 전반 대응**: 비인증 ServiceRoot·인증 후 읽기에서 나온 모든 4xx 를 코드별(400~451) 설명·점검 방법과 해당 경로로 정리하고, 4xx 가 난 경로(405 는 OPTIONS Allow 포함)와 세션 생성이 400/405/406/411/415 등일 때는 Accept·OData-Version·Content-Type·User-Agent·슬래시를 바꿔 어떤 모양이 통과하는지 비교합니다(세션 생성 변형이 성공하면 그 세션을 이어 쓰고 끝에 삭제).
-- **`update.sh`**(설치 폴더 갱신): `bash update.sh [ZIP|폴더]` 로 `/tmp` 의 가장 최근 redfish ZIP(`lib.sh`+`bios_check.sh` 가 든 것만 고르고 다른 ZIP 은 건너뜀. 또는 지정한 ZIP·압축 푼 폴더)을 풀어 고정 설치 폴더 `/root/server_vm_python/redhfish/V2` 를 갱신합니다. `bios.conf`·`pass.enc`·`key.bin`·`user.txt`·`diff.txt`·`ignore_attrs.txt`·`refs/`·`results/`·`dumps/` 는 그대로 두고 나머지 항목만 바꿉니다. 바꾸기 전 `results/`·`dumps/` 를 뺀 전체를 `../backup/V2_<일시>.tgz` 로 백업합니다. `profiles/` 는 파일별로, 현장에서 고치지 않은 파일만 새 버전으로 바꾸고 고친 파일(`verified=Y` 등)은 두고 새 버전을 `<이름>.new` 로 둡니다(판단 기준 `.update_profiles.sha`, 첫 업데이트는 새 버전과 다르면 모두 고친 것으로 봄). 새 버전에 없는 기존 항목은 지우지 않고 알려 주고, `bios.conf` 에 없는 새 설정 키도 알려 줍니다.
+- **`update.sh`**(설치 폴더 갱신): `bash update.sh [ZIP|폴더]` 로 `/tmp` 의 가장 최근 ZIP(또는 지정한 ZIP·압축 푼 폴더)을 풀어 고정 설치 폴더 `/root/server_vm_python/redhfish/V2` 를 갱신합니다. `bios.conf`·`pass.enc`·`key.bin`·`user.txt`·`diff.txt`·`ignore_attrs.txt`·`refs/`·`results/`·`dumps/` 는 그대로 두고 나머지 항목만 바꿉니다. 바꾸기 전 `results/`·`dumps/` 를 뺀 전체를 `../backup/V2_<일시>.tgz` 로 백업합니다. `profiles/` 는 파일별로, 현장에서 고치지 않은 파일만 새 버전으로 바꾸고 고친 파일(`verified=Y` 등)은 두고 새 버전을 `<이름>.new` 로 둡니다(판단 기준 `.update_profiles.sha`, 첫 업데이트는 새 버전과 다르면 모두 고친 것으로 봄). 새 버전에 없는 기존 항목은 지우지 않고 알려 주고, `bios.conf` 에 없는 새 설정 키도 알려 줍니다.
 
 ### 변경 (사용성)
 
@@ -27,6 +27,8 @@
   - `allcheck`: XML 대상은 `xmlProbe`(aaaLogin·aaaLogout 만)로 XML 장비인지 확인해 `XML_READONLY`(리포트 “XML 대상 제외”, 오류 아님)로 비교에서 빼고, 로그인 전에 실패하면 Redfish 로 비교합니다. AUTH_FAIL 은 다시 시도하지 않습니다.
 
 ### 고침 (실행 로직 점검)
+
+- **BIOS 를 가진 System 선택**(`inspect.go` `pickSystem`, `allcheck.go`): Dell XE9680 은 Systems 의 첫 멤버가 GPU 베이스보드(`HGX_Baseboard_0`, Manufacturer=NVIDIA, Bios 없음)라서 벤더가 NVIDIA 로 분류되고 비고가 UNSUPPORTED(“System 에 Bios 리소스가 없습니다”)였습니다. 첫 멤버에 Bios 링크가 있으면 그대로(추가 GET 없음), 없으면 나머지(최대 8개)에서 Bios 링크가 있는 첫 System 을 씁니다. 점검·전체비교·시스템 판별 공통.
 
 - **같은 BMC 안의 리다이렉트 따라가기**(`redfish.go` `Client.do`): Lenovo XCC 등이 슬래시 없는 `/redfish/v1` 에 308 을 주면 도구가 따라가지 않아 모든 조회가 HTTP_ERROR 가 되던 문제. GET 에 한해 같은 호스트(상대 경로·같은 host:port 의 https)로의 리다이렉트를 최대 2번 따라갑니다. 다른 호스트·http 로 가는 것과 허용목록 밖(로그/Actions)으로 가는 것은 따르지 않고 3xx 그대로 HTTP_ERROR 입니다. 토큰은 같은 호스트로만 전송됩니다.
 
@@ -50,8 +52,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8016034 | ddfc44eb8c5883ceb943913b7be874479087cfda232410fdef60c53b5ee2e516 |
-| bin/biostool_os6 | go1.20.14 | 6627328 | f8229356512cf6afaeef2f84d5d76ffc0698bc03d0f45efb78c10eea05d5ee30 |
+| bin/biostool | go1.26.5 | 8016034 | 42ec755e76463fba055144a81074cef72a982a96f1c6e52a9360170ec472fdea |
+| bin/biostool_os6 | go1.20.14 | 6627328 | 0a377cf1c50a566d7b0d06fd33f2bd3997e90d9491305fa56e31089b14477f6a |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 
