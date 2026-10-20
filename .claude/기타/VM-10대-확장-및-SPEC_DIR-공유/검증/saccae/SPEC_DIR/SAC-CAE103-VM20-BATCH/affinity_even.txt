@@ -1,2 +1,0 @@
-sched.vcpu0.affinity=4,5
-sched.vcpu1.affinity=6,7

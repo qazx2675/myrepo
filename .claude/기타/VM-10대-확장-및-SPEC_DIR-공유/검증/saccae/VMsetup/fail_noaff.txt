@@ -1,2 +1,0 @@
-# fail_noaff — 실패 테스트: affinity 없는 스펙
-hostname0001
