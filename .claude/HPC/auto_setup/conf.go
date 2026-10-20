@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const confFileName = "auto_setup.conf"
@@ -67,6 +69,9 @@ func confVars() map[string]*string {
 		"newhost_template_8": &newhost_template_8,
 		"newhost_template_9": &newhost_template_9,
 		"work_os6_over":      &work_os6_over,
+
+		// 종료 job 표시 기간(일)
+		"closed_keep_days": &closed_keep_days,
 	}
 }
 
@@ -125,6 +130,15 @@ func confTrue(v string) bool {
 		return true
 	}
 	return false
+}
+
+// closedKeepDur: 종료된 job(jobs/done)을 보여 주는 기간 — conf closed_keep_days(일, 1 이상의 정수).
+// 비우거나 1 미만·숫자가 아니면 closedKeep(24시간). 화면용 스냅샷만 걸러내며 jobs/done 파일은 지우지 않는다.
+func closedKeepDur() time.Duration {
+	if v, err := strconv.Atoi(strings.TrimSpace(closed_keep_days)); err == nil && v >= 1 {
+		return time.Duration(v) * 24 * time.Hour
+	}
+	return closedKeep
 }
 
 // ipChangeEnabled: IP 변경 메뉴 가시성 = --admin 이거나 conf enable_ip_change 가 켜짐

@@ -167,7 +167,7 @@ func groupHosts(j *Job, yml string) ([]string, bool) {
 
 // ---- 스냅샷 ----
 
-// closedKeep: 이 시간 안에 종료된(jobs/done) job 도 스냅샷에 closed=true 로 포함 (완료 후 수동 run 용)
+// closedKeep: 이 시간 안에 종료된(jobs/done) job 도 스냅샷에 closed=true 로 포함 (완료 후 수동 run 용). conf closed_keep_days 가 있으면 그 일수(closedKeepDur)
 var closedKeep = 24 * time.Hour
 
 const snapTimeLayout = "2006-01-02 15:04:05"
@@ -331,7 +331,7 @@ func BuildSnapshot(dir string, now time.Time) Snapshot {
 		s.Totals.merge(sj.Counts)
 		s.Jobs = append(s.Jobs, sj)
 	}
-	for _, j := range readJobsIn(filepath.Join(dir, "jobs", "done"), now.Add(-closedKeep)) {
+	for _, j := range readJobsIn(filepath.Join(dir, "jobs", "done"), now.Add(-closedKeepDur())) {
 		sj := buildSnapJob(j, t, true, manual[j.ID])
 		sj.Recheck = readRecheck(dir, j.ID)
 		s.Jobs = append(s.Jobs, sj)
