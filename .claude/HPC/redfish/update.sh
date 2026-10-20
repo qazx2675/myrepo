@@ -37,9 +37,9 @@ main() {
   else
     zip="$src_arg"
     if [ -z "$zip" ]; then
-      zip="$(ls -t /tmp/*.zip 2>/dev/null | head -n 1 || true)"
+      zip="$(newest_redfish_zip)"
       if [ -z "$zip" ]; then
-        echo "오류: /tmp 에 *.zip 이 없습니다. bash update.sh <ZIP 경로> 로 지정하십시오." >&2
+        echo "오류: /tmp 에 redfish ZIP(lib.sh + bios_check.sh 가 들어 있는 *.zip)이 없습니다. bash update.sh <ZIP 경로> 로 지정하십시오." >&2
         exit 1
       fi
     fi
@@ -128,6 +128,22 @@ main() {
   echo
   echo "완료. 확인: cd $TARGET && bash bios.sh -h"
   echo "주의: 도구 결과는 참고용입니다. 설정을 바꾼 뒤에는 랜덤한 서버 몇 대를 직접 확인하십시오."
+}
+
+# newest_redfish_zip: /tmp 의 *.zip 중 가장 최근이면서 redfish 폴더(lib.sh + bios_check.sh)가 들어 있는 것.
+# 다른 ZIP(예: 장비 도구 압축)이 더 최근이어도 건너뛴다. 풀지 않고 목록만 본다.
+newest_redfish_zip() {
+  local z list
+  command -v unzip >/dev/null 2>&1 || return 0
+  while IFS= read -r z; do
+    [ -n "$z" ] || continue
+    list="$(unzip -Z1 "$z" 2>/dev/null || true)"
+    if printf '%s\n' "$list" | grep -qE '(^|/)lib\.sh$' && printf '%s\n' "$list" | grep -qE '(^|/)bios_check\.sh$'; then
+      echo "$z"
+      return 0
+    fi
+  done < <(ls -t /tmp/*.zip 2>/dev/null || true)
+  return 0
 }
 
 # find_src <폴더>: lib.sh 와 bios_check.sh 가 함께 있는 가장 얕은 폴더
