@@ -1,0 +1,27 @@
+# trs (BMC 접속 장애 진단) 사용법 — 수동으로 시험할 때 쓰는 명령만 모았습니다. 비밀번호·실제 IP 는 적지 않았습니다.
+
+# 실행 권한이 없을 때 (없어도 아래처럼 bash 로 실행하면 됨)
+chmod +x bin/biostool bin/biostool_os6 *.sh
+
+# 처음 한 번: 설정 파일을 만들고 user= 에 BMC 계정 ID 를 입력
+cp bios.conf.example bios.conf
+
+# 처음 한 번: BMC 비밀번호를 암호화 (2회 입력, 화면에 표시되지 않음) -> pass.enc + key.bin 생성
+bash encrypt.sh
+
+# 처음 한 번: 진단할 BMC 관리망 IP 를 한 줄에 하나씩 적는다
+cp user.txt.example user.txt
+
+# user.txt 의 BMC 를 진단 (읽기 전용, 결과는 화면 + results/<일시>_trs/<호스트>.txt)
+bash trs.sh
+
+# user.txt 없이 IP 를 직접 지정 (쉼표·공백으로 여러 개, ip:포트 가능)
+bash trs.sh -targets <BMC IP>
+
+# 추가로 GET 해 볼 경로를 지정 (쉼표 구분)
+bash trs.sh -targets <BMC IP> -path /redfish/v1/Systems/1/Bios/Settings
+
+# 도움말
+bash trs.sh -h
+
+# 진단 결과가 나오면 화면 전체(특히 [2] [6] [진단] 부분)를 그대로 전달한다 — 비밀번호·토큰은 포함되지 않는다
