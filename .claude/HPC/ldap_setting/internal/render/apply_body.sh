@@ -322,6 +322,48 @@ set_directive /etc/openldap/ldap.conf BINDDN  "$BINDDN"
 set_directive /etc/openldap/ldap.conf BINDPW  "$BINDPW"
 
 ###############################################################################
+# 1-1. /etc/sudo-ldap.conf   (URI 줄만 ldap.conf 와 같은 값으로)
+#
+# 두 파일의 URI 기록 방식이 같아서 $URI_LINE 을 그대로 씁니다. 덮어쓰기가 아니라
+# URI 줄만 바꾸고 나머지 줄은 한 글자도 건드리지 않습니다. 키는 uri/URI 어느
+# 쪽이든 찾고, 원래 쓰던 대소문자를 그대로 유지합니다. 파일이 없는 노드(sudo-ldap
+# 미사용)는 만들지 않고 건너뜁니다 — 다른 설정을 모르는 채 새로 만들면 안 되므로.
+###############################################################################
+
+apply_sudo_ldap_uri()
+{
+    local logical=/etc/sudo-ldap.conf
+    local real="$ROOT$logical"
+    local tmp
+
+    if [ ! -f "$real" ]; then
+        log SKIP "$logical (파일 없음)"
+        return 0
+    fi
+
+    tmp="$(mktemp)"
+    # 값에 백슬래시가 들어가도 깨지지 않도록 -v 대신 환경변수로 넘깁니다.
+    AWK_V="$URI_LINE" awk '
+        BEGIN { v = ENVIRON["AWK_V"]; done = 0 }
+        {
+            line = $0
+            sub(/^[ \t]+/, "", line)
+            first = line
+            sub(/[ \t].*$/, "", first)
+            if (tolower(first) == "uri" && line !~ /^#/) {
+                if (!done) { print first " " v; done = 1 }
+                next
+            }
+            print
+        }
+        END { if (!done) print "URI " v }
+    ' "$real" > "$tmp"
+
+    commit_file "$logical" "$tmp"
+}
+apply_sudo_ldap_uri
+
+###############################################################################
 # 2. /etc/autofs_ldap_auth.conf   (XML 한 덩어리라 전체 생성)
 ###############################################################################
 

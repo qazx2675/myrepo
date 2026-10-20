@@ -54,6 +54,7 @@ make_good()
     printf 'search example.com\nnameserver 10.10.1.10\nnameserver 10.10.1.11\n' > "$d/etc/resolv.conf"
     printf '# chrony\nserver 10.20.1.10 iburst\nserver 10.20.1.11 iburst\ndriftfile /var/lib/chrony/drift\n' > "$d/etc/chrony.conf"
     printf '/appl\t-ro,hard,tcp,vers=3\tasdf1:/appl1\n/wappl\t-rw,hard,tcp,vers=3\tasdf1:/wappl1\n' > "$d/etc/auto.appl"
+    printf '# sudo-ldap\nuri %s\nsudoers_base ou=SUDOers,dc=example,dc=com\n' "$URIS" > "$d/etc/sudo-ldap.conf"
 }
 
 ###############################################################################
@@ -154,6 +155,7 @@ for S in a1:qwer1:/appl1 a4:qwer4:/appl4; do
     printf 'nameserver 10.10.2.10\nnameserver 10.10.2.11\n' > "$d/etc/resolv.conf"
     printf 'server 10.20.2.10 iburst\nserver 10.20.2.11 iburst\n' > "$d/etc/chrony.conf"
     printf '/appl\t-rw,soft,intr\t%s:%s\n' "$store" "$mnt" > "$d/etc/auto.appl"
+    printf 'uri %s\n' "$QURIS" > "$d/etc/sudo-ldap.conf"
 
     out="$(check "$d")"; rc=$?
     if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tqwer\t%s' "$site")" ]; then
@@ -172,6 +174,28 @@ if [ "$rc" = "2" ]; then
     ok "설정 파일 부재 시 exit 2"
 else
     ng "설정 파일 부재 처리 오류 (rc=$rc)" "$out"
+fi
+
+###############################################################################
+echo "[9] sudo-ldap.conf 의 URI 가 어긋나면 FAIL, 파일이 없으면 검사 생략(INFO)"
+###############################################################################
+
+cp -a "$WORK/good" "$WORK/sudo_bad"
+printf 'uri ldap://10.10.1.21/ ldap://10.10.1.20/ ldap://10.10.1.22/\n' > "$WORK/sudo_bad/etc/sudo-ldap.conf"
+out="$(check "$WORK/sudo_bad")"; rc=$?
+if [ "$rc" = "1" ] && [ "$out" = "$(printf 'FAIL\tLDAP\tUNDEFINED')" ]; then
+    ok "sudo-ldap.conf URI 불일치 → FAIL"
+else
+    ng "sudo-ldap.conf URI 불일치를 잡지 못함 (rc=$rc)" "$out"
+fi
+
+cp -a "$WORK/good" "$WORK/sudo_none"
+rm -f "$WORK/sudo_none/etc/sudo-ldap.conf"
+out="$(check "$WORK/sudo_none")"; rc=$?
+if [ "$rc" = "0" ] && [ "$out" = "$(printf 'INFO\tLDAP\tzxcv\ta1')" ]; then
+    ok "sudo-ldap.conf 없는 노드는 검사 생략"
+else
+    ng "sudo-ldap.conf 부재 처리 오류 (rc=$rc)" "$out"
 fi
 
 ###############################################################################

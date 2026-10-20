@@ -52,3 +52,10 @@
   `../ldap_setting/test_all.sh` 도 이 스크립트를 호출하므로 함께 갱신, 22/22
   통과. 실제 gossh + tcsh 계정으로 성공/실패 양쪽 모두 원문 그대로 확인
   (`INFO	LDAP	zxcv	a1`, `ERROR: FAIL	LDAP	UNDEFINED`).
+
+## 2026-10-20
+
+### 신규 — sudo-ldap.conf 검사
+- `/etc/sudo-ldap.conf` 가 있는 노드에서만 URI 가 `ldap.conf` 기대값과 같은지 검사
+  (`ldap_setting` 이 같은 URI 를 쓰도록 바꾼 것과 짝). 파일이 없으면 생략.
+- `test_check.sh` 11/11 (어긋남 → FAIL, 파일 없음 → INFO).

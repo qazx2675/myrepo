@@ -327,6 +327,14 @@ if [ -n "$EXPECT_WAPPL_MOUNT" ]; then
     report $? auto.appl-wappl "$SITE"
 fi
 
+# 9. sudo-ldap.conf — 파일이 있는 노드만, URI 가 ldap.conf 와 같은 값인지(선택 항목)
+if [ -f "$ROOT/etc/sudo-ldap.conf" ]; then
+    SUDO_URI="$(awk 'tolower($1) == "uri" { $1=""; sub(/^[ \t]+/,""); print; exit }' \
+                    "$ROOT/etc/sudo-ldap.conf" 2>/dev/null)"
+    [ "$SUDO_URI" = "$EXPECT_URI_LINE" ]
+    report $? sudo-ldap.conf
+fi
+
 if [ "$RC" = "0" ]; then
     echo "INFO	LDAP	$INFRA	$SITE"
 else

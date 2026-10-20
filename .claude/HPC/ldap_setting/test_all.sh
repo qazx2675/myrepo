@@ -64,6 +64,7 @@ make_fixture()
     printf '[ autofs ]\ntimeout = 300\nbrowse_mode = no\nldap_uri="ldap://old/"\nmap_object_class = "automountMap"\n' > "$d/etc/autofs.conf"
     printf 'search example.com\nnameserver 8.8.8.8\noptions timeout:2\n' > "$d/etc/resolv.conf"
     printf '/appl\t-rw,soft,intr\toldstore:/applX\n' > "$d/etc/auto.appl"
+    printf '# sudo-ldap\nuri ldap://old/\nbinddn uid=sudo,dc=e,dc=c\nbindpw sudopw\nsudoers_base ou=SUDOers,dc=example,dc=com\n' > "$d/etc/sudo-ldap.conf"
 }
 
 # hostname 을 위조해서 s4 예외를 테스트하기 위한 가짜 실행파일
@@ -382,6 +383,46 @@ if ! printf '%s\n' "$out" | grep -q 'RESTARTED' &&
     ok "-no-restart 롤백: RESTARTED 없음, sssd/autofs/chronyd 는 SKIP-RESTART (NO_RESTART)"
 else
     ng "-no-restart 롤백이 재시작을 시도했거나 기록이 다름" "$out"
+fi
+
+###############################################################################
+echo "[17] sudo-ldap.conf : URI 줄만 ldap.conf 와 같게 바뀌고 나머지는 그대로여야 한다"
+###############################################################################
+
+make_fixture "$WORK/sd" 8
+cp -a "$WORK/sd/etc/sudo-ldap.conf" "$WORK/sd_before"
+apply "$WORK/sd" "$WORK/ap_a1.sh"
+want="$(awk 'tolower($1)=="uri"{$1="";sub(/^ +/,"");print}' "$WORK/sd/etc/openldap/ldap.conf")"
+got="$(awk '$1=="uri"{$1="";sub(/^ +/,"");print}' "$WORK/sd/etc/sudo-ldap.conf")"
+if [ -n "$want" ] && [ "$got" = "$want" ]; then
+    ok "소문자 uri 줄이 ldap.conf 의 URI 와 동일하게 바뀜 (키 소문자 유지)"
+else
+    ng "sudo-ldap.conf URI 불일치: want=[$want] got=[$got]" "$(cat "$WORK/sd/etc/sudo-ldap.conf")"
+fi
+
+if diff <(grep -vi '^uri ' "$WORK/sd_before") <(grep -vi '^uri ' "$WORK/sd/etc/sudo-ldap.conf") >/dev/null; then
+    ok "URI 이외의 줄은 한 글자도 바뀌지 않음"
+else
+    ng "URI 이외의 줄이 바뀜" "$(diff "$WORK/sd_before" "$WORK/sd/etc/sudo-ldap.conf")"
+fi
+
+# 대문자 URI 도 같은 방식으로 처리, 파일이 없는 노드는 새로 만들지 않아야 한다.
+make_fixture "$WORK/sd2" 8
+sed -i 's/^uri /URI /' "$WORK/sd2/etc/sudo-ldap.conf"
+apply "$WORK/sd2" "$WORK/ap_a1.sh"
+if grep -q "^URI $want\$" "$WORK/sd2/etc/sudo-ldap.conf"; then
+    ok "대문자 URI 도 동일하게 처리"
+else
+    ng "대문자 URI 처리 실패" "$(cat "$WORK/sd2/etc/sudo-ldap.conf")"
+fi
+
+make_fixture "$WORK/sd3" 8
+rm -f "$WORK/sd3/etc/sudo-ldap.conf"
+apply "$WORK/sd3" "$WORK/ap_a1.sh"
+if [ ! -e "$WORK/sd3/etc/sudo-ldap.conf" ]; then
+    ok "sudo-ldap.conf 없는 노드는 새로 만들지 않음"
+else
+    ng "없던 sudo-ldap.conf 를 만들었음"
 fi
 
 ###############################################################################

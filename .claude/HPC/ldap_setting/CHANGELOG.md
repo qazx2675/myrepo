@@ -336,3 +336,19 @@
 - 검증: 임의 ldap.conf 로 블록 생성 → TODO 채운 뒤
   `ldap-config-engine -print-script` 로 정상 파싱·조립되는지 확인. 중복
   이름 재등록 시 거부되는지 확인.
+
+## 2026-10-20
+
+### 신규 — `/etc/sudo-ldap.conf` 의 URI 도 ldap.conf 와 같게 적용
+- `/etc/openldap/ldap.conf` 의 URI 를 바꿀 때 `/etc/sudo-ldap.conf` 의 URI 도 같은
+  값으로 바꿈. 두 파일의 URI 기록 방식이 같아 `$URI_LINE` 을 그대로 사용.
+- 덮어쓰기가 아니라 **URI 줄만** 교체하고 나머지 줄은 한 글자도 건드리지 않음.
+  키는 `uri`/`URI` 어느 쪽이든 찾고 원래 쓰던 대소문자를 유지. 파일이 없는 노드
+  (sudo-ldap 미사용)는 새로 만들지 않고 `SKIP` 으로만 보고.
+- 변경 전 `.bak.<시점>` 백업은 기존 `commit_file` 규칙 그대로이고, 롤백 대상
+  (`rollback_body.sh` 의 TARGETS)에도 추가.
+- 짝 파일: `../ldap_check/ldap_check.sh` 가 파일이 있는 노드에서만 sudo-ldap.conf 의
+  URI 가 기대값과 같은지 검사(없으면 생략). 어긋나면 `FAIL<TAB>LDAP<TAB>UNDEFINED`.
+- 검증: `test_all.sh` 32/32 (새 [17]: 소문자/대문자 uri, URI 외 줄 불변, 파일
+  없는 노드 미생성; 기존 롤백 테스트가 sudo-ldap.conf 복원도 함께 검증),
+  `ldap_check/test_check.sh` 11/11.

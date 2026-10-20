@@ -19,6 +19,7 @@
 # 되돌림 대상 후보. nslcd/sssd 와 ntp/chrony 는 둘 다 후보에 넣고,
 # 실제로 백업이 있는 것만 처리합니다. (그 노드가 어느 쪽을 쓰는지와 무관하게 정확)
 TARGETS="/etc/openldap/ldap.conf
+/etc/sudo-ldap.conf
 /etc/autofs_ldap_auth.conf
 /etc/autofs.conf
 /etc/nslcd.conf

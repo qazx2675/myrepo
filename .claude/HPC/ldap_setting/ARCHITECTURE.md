@@ -24,6 +24,7 @@
 | 요청 | 볼 파일 |
 |---|---|
 | "설정 대상 파일 추가/변경" | `internal/render/apply_body.sh` + `../ldap_check/ldap_check.sh` **두 곳 모두** |
+| "sudo-ldap.conf 처리 변경" | `apply_body.sh` 의 `apply_sudo_ldap_uri` (URI 줄만 교체, 나머지 줄·대소문자 유지, 파일 없으면 생략) + `rollback_body.sh` TARGETS + `../ldap_check/ldap_check.sh` 9번 |
 | "conf 스키마에 키 추가" | `internal/config/config.go`, `conf/ldap_config.conf.sample`, `internal/render/render.go`, 그리고 `../ldap_check/ldap_config.conf.sample` |
 | "CLI 옵션 추가" | `cmd/ldap-config-engine/main.go` |
 | "gossh 호출 방식 변경" | `internal/remote/remote.go` |
