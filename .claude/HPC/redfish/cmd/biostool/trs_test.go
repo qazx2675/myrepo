@@ -12,17 +12,18 @@ import (
 
 // trsServer 는 시나리오별 가짜 BMC 입니다. basic/login/data 는 각 요청에 줄 상태 코드와 본문을 정합니다.
 type trsServer struct {
-	rootStatus  int
-	basicStatus int
-	loginStatus int
-	loginBody   string
-	basicBody   string
-	denyPath    string // 인증된 요청에서 403 을 줄 경로
-	denyUnlessU string // 이 User-Agent 로 오면 허용
-	sessNeedCT  string // 세션 생성 Content-Type 이 이것이 아니면 415
-	noAcceptP   string // 이 경로는 Accept 헤더가 있으면 406
-	status405P  string // 이 경로는 항상 405 (Allow: PATCH)
-	calls       []string
+	rootStatus      int
+	basicStatus     int
+	loginStatus     int
+	loginBody       string
+	basicBody       string
+	denyPath        string // 인증된 요청에서 403 을 줄 경로
+	denyUnlessU     string // 이 User-Agent 로 오면 허용
+	sessNeedCT      string // 세션 생성 Content-Type 이 이것이 아니면 415
+	noAcceptP       string // 이 경로는 Accept 헤더가 있으면 406
+	status405P      string // 이 경로는 항상 405 (Allow: PATCH)
+	redirectNoSlash bool   // 슬래시 없는 /redfish/v1 은 301
+	calls           []string
 }
 
 func (s *trsServer) handler() http.Handler {
@@ -30,6 +31,11 @@ func (s *trsServer) handler() http.Handler {
 		s.calls = append(s.calls, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		p := strings.TrimRight(r.URL.Path, "/")
+		if s.redirectNoSlash && r.URL.Path == "/redfish/v1" {
+			w.Header().Set("Location", "/redfish/v1/")
+			w.WriteHeader(301)
+			return
+		}
 		_, _, hasBasic := r.BasicAuth()
 		tok := r.Header.Get("X-Auth-Token") == "tok-1"
 		switch {
@@ -50,7 +56,7 @@ func (s *trsServer) handler() http.Handler {
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(204)
 		case p == "/redfish/v1":
-			if s.rootStatus != 200 {
+			if s.rootStatus != 200 && !hasBasic && !tok {
 				w.WriteHeader(s.rootStatus)
 				return
 			}
@@ -256,5 +262,29 @@ func TestTrs4xxTableCovers(t *testing.T) {
 	f := &trsFacts{codes: map[int][]string{499: {"GET /x"}}}
 	if n := trs4xxNotes(f); len(n) != 1 || !strings.Contains(n[0], "기타 4xx") {
 		t.Errorf("표에 없는 코드 처리: %v", n)
+	}
+}
+
+func TestTrsReplayRedirectNoSlash(t *testing.T) {
+	s := &trsServer{rootStatus: 200, basicStatus: 200, loginStatus: 201, redirectNoSlash: true}
+	rep, f := trsRun(t, s)
+	if f.rootNoSlash != 301 || !f.replayRan || f.replayErr == "" {
+		t.Fatalf("리다이렉트 재현 실패: %+v", f)
+	}
+	for _, want := range []string{"리다이렉트", "/redfish/v1/ 로 요청하도록 수정"} {
+		if !strings.Contains(rep, want) {
+			t.Errorf("%q 누락:\n%s", want, rep)
+		}
+	}
+}
+
+func TestTrsReplayOK(t *testing.T) {
+	s := &trsServer{rootStatus: 200, basicStatus: 200, loginStatus: 201}
+	rep, f := trsRun(t, s)
+	if !f.replayRan || f.replayErr != "" {
+		t.Fatalf("정상 재현이 실패로 기록됨: %+v", f)
+	}
+	if !strings.Contains(rep, "bios.sh 와 같은 방식(실제 Client)") {
+		t.Errorf("재현 결과 문구 누락:\n%s", rep)
 	}
 }

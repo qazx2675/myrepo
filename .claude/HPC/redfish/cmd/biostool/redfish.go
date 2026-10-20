@@ -1068,6 +1068,13 @@ func NewProber(hostport string, insecure bool, timeout time.Duration) *Prober {
 // Close 는 유휴 연결을 닫습니다.
 func (p *Prober) Close() { p.cli.CloseIdleConnections() }
 
+// EnableKeepAlive 는 연결 재사용을 켭니다 (기본은 요청마다 새 연결). 실제 Client 와 같은 조건을 재현할 때 씁니다.
+func (p *Prober) EnableKeepAlive() {
+	if tr, ok := p.cli.Transport.(*http.Transport); ok {
+		tr.DisableKeepAlives = false
+	}
+}
+
 // Dial 은 TCP 연결만 시험합니다 (hostport 에 포트가 없으면 443).
 func (p *Prober) Dial() (time.Duration, error) {
 	addr := p.hostport

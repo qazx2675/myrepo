@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -66,6 +67,12 @@ type trsFacts struct {
 	denied             []string         // 인증이 통과한 상태에서 403 이 난 경로
 	failed             []trsFail        // 인증 후 4xx(404 제외)가 난 경로 — 변형 비교 대상
 	codes              map[int][]string // 4xx 상태 코드별 "METHOD 경로" (진단 표용)
+	replayRan          bool             // bios.sh 와 같은 방식(실제 Client) 재현을 실행했는지
+	replayErr          string           // 재현 실패 요약 (비면 성공)
+	replayUAGo         int              // 재현 실패 시: 기본 UA(Go-http-client)로 보낸 요청 상태
+	replayKA           []int            // 재현 실패 시: 연결 재사용으로 연속 2회 보낸 요청 상태
+	rootNoSlash        int              // 비인증 GET /redfish/v1 (끝 슬래시 없음) 상태
+	rootNoSlashLoc     string           // 그 응답의 Location
 	sessionVariantOK   string           // 세션 생성이 4xx 였는데 성공한 변형 이름
 	variantDiff        []string
 	acctFound          bool
@@ -89,6 +96,7 @@ type trsFail struct {
 }
 
 type trsHost struct {
+	conf     *Config
 	t        Target
 	user     string
 	pass     string
@@ -179,7 +187,7 @@ func trsRunHost(t Target, conf *Config, pass string, fb *fallbackCreds, extraPat
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
-	h := &trsHost{t: t, user: conf.User, pass: pass, fb: fb, out: &bytes.Buffer{}}
+	h := &trsHost{conf: conf, t: t, user: conf.User, pass: pass, fb: fb, out: &bytes.Buffer{}}
 	h.secrets = append(h.secrets, passwordForms(pass)...)
 	h.secrets = append(h.secrets, base64.StdEncoding.EncodeToString([]byte(conf.User+":"+pass)))
 	h.hostport = t.IP
@@ -205,6 +213,7 @@ func trsRunHost(t Target, conf *Config, pass string, fb *fallbackCreds, extraPat
 	if h.f.rootStatus != 0 {
 		h.stepAuth()
 		h.stepReads(extraPaths)
+		h.stepReplay()
 	}
 	h.stepLogout()
 	h.log("")
@@ -373,6 +382,13 @@ func (h *trsHost) stepRoot() {
 	}
 	h.f.rootStatus = r.status
 	if r.status >= 200 && r.status < 300 {
+		ns := h.req("ServiceRoot 끝 슬래시 없음 (bios.sh 가 쓰는 경로)", trsReq{method: http.MethodGet, path: "/redfish/v1"})
+		if ns.err == nil {
+			h.f.rootNoSlash = ns.status
+			if ns.hdr != nil {
+				h.f.rootNoSlashLoc = h.clean(ns.hdr.Get("Location"))
+			}
+		}
 		h.f.vendor = vendorFromServiceRoot(r.body)
 		var root struct {
 			Product, Vendor, RedfishVersion string
@@ -754,6 +770,94 @@ func ptrBool(p *bool) string {
 	return "false"
 }
 
+// ---- 6. bios.sh 와 같은 방식 재현 ----
+
+func trsErrText(err error) string {
+	var rf *RFError
+	if errors.As(err, &rf) {
+		return fmt.Sprintf("%s HTTP %d: %s", rf.Status, rf.HTTP, rf.Detail)
+	}
+	return err.Error()
+}
+
+// stepReplay 는 bios.sh(check)가 쓰는 실제 Client 로 같은 순서의 조회를 해 봅니다:
+// 로그인 → ServiceRoot(/redfish/v1) → Systems → System → Bios → Settings → 속성 레지스트리 파일 → 레지스트리 JSON.
+// trs 의 다른 단계는 진단용 Prober 를 쓰므로(헤더·연결 재사용·경로 형태가 다름) 이 단계가 "도구가 실제로 하는 요청" 입니다.
+func (h *trsHost) stepReplay() {
+	if !h.f.tokenOK && !h.f.basicOK {
+		return
+	}
+	h.f.replayRan = true
+	h.log("")
+	h.log("[6] bios.sh 와 같은 방식 재현 (실제 Client: 기본 User-Agent, 연결 재사용, /redfish/v1 경로)")
+	c := NewClient(ClientOpts{BaseURL: h.t.BaseURL(), User: h.user, Pass: h.pass, Insecure: h.conf.Insecure, Timeout: h.conf.Timeout, Retries: 0, Mode: ModeReadOnly})
+	defer c.Close()
+	fail := func(step string, err error) {
+		h.f.replayErr = step + ": " + h.clean(trsErrText(err))
+		h.log("  ✘ %s → %s", step, h.f.replayErr[len(step)+2:])
+	}
+	info, err := detectSystem(c)
+	if err != nil {
+		fail("시스템 판별(detectSystem)", err)
+		h.replayProbes()
+		return
+	}
+	h.log("  ✔ 시스템 판별: Vendor=%s Model=%s BiosVersion=%s", h.clean(info.Vendor), h.clean(info.Model), h.clean(info.BiosVersion))
+	h.log("    Bios=%s Settings=%s(%s) Registry=%s", h.clean(info.BiosPath), h.clean(info.SettingsPath), info.SettingsFrom, h.clean(info.RegistryPath))
+	for _, n := range info.Notes {
+		h.log("    참고: %s", h.clean(n))
+	}
+	for _, g := range []struct{ name, p string }{{"Bios 속성", info.BiosPath}, {"Settings", info.SettingsPath}, {"속성 레지스트리", info.RegistryPath}} {
+		if g.p == "" {
+			continue
+		}
+		b, err := c.GetRaw(g.p)
+		if err != nil {
+			fail(g.name+" 조회", err)
+			h.replayProbes()
+			return
+		}
+		h.log("  ✔ %s 조회: %d 바이트", g.name, len(b))
+	}
+	st := c.Stats()
+	h.log("  요청 수: GET %d / 세션 %d / 인증 %s", st.Gets, st.Sessions, st.AuthMode)
+}
+
+// replayProbes: 재현이 실패했을 때, Prober 로 UA·연결 재사용 차이를 가려 봅니다.
+func (h *trsHost) replayProbes() {
+	h.log("  재현 실패 — 같은 요청을 UA·연결 재사용을 바꿔 확인:")
+	mk := func(p string, mod func(*trsReq)) trsReq {
+		r := trsReq{method: http.MethodGet, path: p}
+		if h.f.tokenOK {
+			r.auth, r.token = "token", h.token
+		} else {
+			r.auth, r.user, r.pass = "basic", h.user, h.pass
+		}
+		if mod != nil {
+			mod(&r)
+		}
+		return r
+	}
+	g := h.req("기본 User-Agent=Go-http-client/1.1", mk("/redfish/v1/Systems", func(r *trsReq) { r.ua, r.uaSet = "Go-http-client/1.1", true }))
+	if g.err == nil {
+		h.f.replayUAGo = g.status
+	}
+	ka := NewProber(h.hostport, h.conf.Insecure, h.conf.Timeout)
+	defer ka.Close()
+	ka.EnableKeepAlive()
+	for i := 1; i <= 2; i++ {
+		rq := mk("/redfish/v1/Systems", nil)
+		pr := ka.Send(ProbeReq{Method: rq.method, Path: rq.path, Auth: rq.auth, User: rq.user, Pass: rq.pass, Token: rq.token})
+		if pr.Err != nil {
+			h.f.replayKA = append(h.f.replayKA, 0)
+			h.log("  [연결 재사용 %d회째] 실패: %s", i, h.clean(pr.Err.Error()))
+			continue
+		}
+		h.f.replayKA = append(h.f.replayKA, pr.Status)
+		h.log("  [연결 재사용 %d회째] GET /redfish/v1/Systems → %d", i, pr.Status)
+	}
+}
+
 // ---- 5. 4xx 경로의 헤더·인증 변형 비교 ----
 
 func (h *trsHost) stepVariants() {
@@ -907,6 +1011,30 @@ func trsDiagnose(f *trsFacts) []string {
 	} else if len(f.failed) > 0 || (len(f.uaDiff) == 0 && f.rootStatus >= 400 && f.rootStatus < 500 && f.rootStatus != 401) {
 		add("  (헤더·인증 방식·슬래시 변형 모두 같은 결과 — 요청 모양 문제가 아니라 계정 권한/BMC 정책/리소스 상태입니다)")
 	}
+	if f.rootNoSlash >= 300 && f.rootNoSlash < 400 {
+		add(fmt.Sprintf("● 슬래시 없는 /redfish/v1 이 %d 리다이렉트(Location=%s) — 도구는 리다이렉트를 따라가지 않아 bios.sh 에서 HTTP_ERROR(\"리다이렉트는 따라가지 않습니다\")가 됩니다. 도구가 /redfish/v1/ 로 요청하도록 수정할 대상입니다.", f.rootNoSlash, f.rootNoSlashLoc))
+	} else if f.rootNoSlash >= 400 && f.rootNoSlash != 401 {
+		add(fmt.Sprintf("● 슬래시 없는 /redfish/v1 이 %d — bios.sh 가 쓰는 경로 형태가 이 BMC 에서 거부됩니다. 도구가 /redfish/v1/ 로 요청하도록 수정할 대상입니다.", f.rootNoSlash))
+	}
+	if f.replayRan {
+		switch {
+		case f.replayErr != "":
+			add("● bios.sh 와 같은 방식 요청이 실패했습니다 — " + f.replayErr)
+			lerr := strings.ToLower(f.replayErr)
+			switch {
+			case strings.Contains(lerr, "8mb"):
+				add("  원인: 응답 본문이 도구 상한(8MB)을 넘었습니다 (보통 속성 레지스트리 JSON). 도구의 본문 상한을 올리거나 레지스트리를 건너뛰도록 수정할 대상입니다.")
+			case strings.Contains(lerr, "리다이렉트"):
+				add("  원인: BMC 가 리다이렉트로 응답합니다. 도구가 따라가지 않아 실패합니다 — Location 대상 경로로 요청하도록 수정할 대상입니다.")
+			case f.replayUAGo >= 400 && f.replayUAGo != 401:
+				add(fmt.Sprintf("  원인 후보: 도구의 기본 User-Agent(Go-http-client/1.1)가 %d 로 거부됩니다 (진단용 UA 로는 통과). 도구가 고유 User-Agent 를 보내도록 수정할 대상입니다.", f.replayUAGo))
+			case len(f.replayKA) == 2 && f.replayKA[0] < 400 && f.replayKA[0] > 0 && (f.replayKA[1] == 0 || f.replayKA[1] >= 400):
+				add("  원인 후보: 같은 연결에서 두 번째 요청이 실패합니다 — 연결 재사용(keep-alive)을 BMC 가 받지 않습니다. 도구가 요청마다 새 연결을 쓰도록 수정할 대상입니다.")
+			default:
+				add("  UA·연결 재사용·경로 형태로는 설명되지 않습니다 — 위 [6] 의 실패 줄(상태 코드·내용)을 알려 주십시오.")
+			}
+		}
+	}
 	for p, st := range f.extraStatus {
 		add(fmt.Sprintf("  사용자 지정 경로 %s → %d", p, st))
 	}
@@ -920,6 +1048,9 @@ func trsDiagnose(f *trsFacts) []string {
 		} else {
 			add("● 원인을 특정하지 못했습니다 — 위 [3] 의 상태 코드와 오류 MessageId 를 알려 주십시오.")
 		}
+	}
+	if f.replayRan && f.replayErr == "" {
+		add("● bios.sh 와 같은 방식(실제 Client)으로 시스템 판별·Bios·Settings·레지스트리 조회까지 정상입니다. 그래도 bios.sh 에서만 HTTP_ERROR 면: ① 동시 접속 수(bios.conf concurrency)를 1~5 로 낮춰 보기 ② user.txt 의 대상 표기(IP/이름/포트)가 같은지 ③ bios.sh 비고의 전체 문구(HTTP 코드·내용)를 알려 주십시오.")
 	}
 	return out
 }
