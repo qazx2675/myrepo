@@ -1012,7 +1012,11 @@ func trsDiagnose(f *trsFacts) []string {
 		add("  (헤더·인증 방식·슬래시 변형 모두 같은 결과 — 요청 모양 문제가 아니라 계정 권한/BMC 정책/리소스 상태입니다)")
 	}
 	if f.rootNoSlash >= 300 && f.rootNoSlash < 400 {
-		add(fmt.Sprintf("● 슬래시 없는 /redfish/v1 이 %d 리다이렉트(Location=%s) — 도구는 리다이렉트를 따라가지 않아 bios.sh 에서 HTTP_ERROR(\"리다이렉트는 따라가지 않습니다\")가 됩니다. 도구가 /redfish/v1/ 로 요청하도록 수정할 대상입니다.", f.rootNoSlash, f.rootNoSlashLoc))
+		if f.replayRan && f.replayErr == "" {
+			add(fmt.Sprintf("  (슬래시 없는 /redfish/v1 은 %d 리다이렉트(Location=%s) — 도구가 같은 BMC 안의 리다이렉트를 따라가므로 정상 동작합니다)", f.rootNoSlash, f.rootNoSlashLoc))
+		} else {
+			add(fmt.Sprintf("● 슬래시 없는 /redfish/v1 이 %d 리다이렉트(Location=%s) — 도구가 리다이렉트를 따라가지 못하면 bios.sh 에서 HTTP_ERROR 가 됩니다.", f.rootNoSlash, f.rootNoSlashLoc))
+		}
 	} else if f.rootNoSlash >= 400 && f.rootNoSlash != 401 {
 		add(fmt.Sprintf("● 슬래시 없는 /redfish/v1 이 %d — bios.sh 가 쓰는 경로 형태가 이 BMC 에서 거부됩니다. 도구가 /redfish/v1/ 로 요청하도록 수정할 대상입니다.", f.rootNoSlash))
 	}

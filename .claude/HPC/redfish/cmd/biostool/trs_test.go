@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -268,10 +269,10 @@ func TestTrs4xxTableCovers(t *testing.T) {
 func TestTrsReplayRedirectNoSlash(t *testing.T) {
 	s := &trsServer{rootStatus: 200, basicStatus: 200, loginStatus: 201, redirectNoSlash: true}
 	rep, f := trsRun(t, s)
-	if f.rootNoSlash != 301 || !f.replayRan || f.replayErr == "" {
-		t.Fatalf("리다이렉트 재현 실패: %+v", f)
+	if f.rootNoSlash != 301 || !f.replayRan || f.replayErr != "" {
+		t.Fatalf("리다이렉트를 따라가야 하는데 재현이 실패함: %+v", f)
 	}
-	for _, want := range []string{"리다이렉트", "/redfish/v1/ 로 요청하도록 수정"} {
+	for _, want := range []string{"리다이렉트", "따라가므로 정상"} {
 		if !strings.Contains(rep, want) {
 			t.Errorf("%q 누락:\n%s", want, rep)
 		}
@@ -286,5 +287,56 @@ func TestTrsReplayOK(t *testing.T) {
 	}
 	if !strings.Contains(rep, "bios.sh 와 같은 방식(실제 Client)") {
 		t.Errorf("재현 결과 문구 누락:\n%s", rep)
+	}
+}
+
+func TestClientFollowsSameHostRedirectOnly(t *testing.T) {
+	var reqs []string
+	var srv *httptest.Server
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqs = append(reqs, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost:
+			w.WriteHeader(404) // 세션 미지원 -> Basic
+		case r.URL.Path == "/redfish/v1":
+			w.Header().Set("Location", "/redfish/v1/")
+			w.WriteHeader(308)
+		case r.URL.Path == "/redfish/v1/":
+			_, _ = w.Write([]byte(`{"ok":1}`))
+		case r.URL.Path == "/redfish/v1/Managers":
+			u, _ := url.Parse(srv.URL)
+			w.Header().Set("Location", "https://"+u.Host+"/redfish/v1/Managers/")
+			w.WriteHeader(307)
+		case r.URL.Path == "/redfish/v1/Managers/":
+			_, _ = w.Write([]byte(`{"m":1}`))
+		case r.URL.Path == "/redfish/v1/Systems":
+			w.Header().Set("Location", "https://evil.example/redfish/v1/Systems")
+			w.WriteHeader(308)
+		case r.URL.Path == "/redfish/v1/Chassis":
+			w.Header().Set("Location", "/redfish/v1/Managers/1/LogServices")
+			w.WriteHeader(302)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer srv.Close()
+	c := NewClient(ClientOpts{BaseURL: srv.URL, User: "u", Pass: "p", Insecure: true, Gap: -1})
+	defer c.Close()
+	if b, err := c.GetRaw("/redfish/v1"); err != nil || !strings.Contains(string(b), "ok") {
+		t.Fatalf("같은 호스트 상대 리다이렉트를 따라가야 함: %v %s", err, b)
+	}
+	if b, err := c.GetRaw("/redfish/v1/Managers"); err != nil || !strings.Contains(string(b), "m") {
+		t.Fatalf("같은 호스트 절대 URL 리다이렉트를 따라가야 함: %v", err)
+	}
+	for _, p := range []string{"/redfish/v1/Systems", "/redfish/v1/Chassis"} {
+		if _, err := c.GetRaw(p); err == nil {
+			t.Errorf("%s: 다른 호스트/허용목록 밖 리다이렉트는 따르면 안 됨", p)
+		}
+	}
+	for _, r := range reqs {
+		if strings.Contains(r, "LogServices") || strings.Contains(r, "evil") {
+			t.Errorf("따라가면 안 되는 요청이 나감: %v", reqs)
+		}
 	}
 }

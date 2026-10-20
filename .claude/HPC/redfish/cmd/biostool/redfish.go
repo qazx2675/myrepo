@@ -712,8 +712,24 @@ func (c *Client) do(method, p string, body interface{}) (int, http.Header, []byt
 		c.waitGap()
 		status, hdr, b, dialFail, err := c.roundTrip(method, send, payload, isSession)
 		c.last = time.Now()
+		lc := strings.ToLower(clean)
+		// GET 은 같은 BMC 안의 리다이렉트를 최대 maxRedirects 번 따라간다 (예: /redfish/v1 → /redfish/v1/ 308).
+		// 새 경로도 roundTrip 이 허용목록을 다시 검사하므로 로그/Actions 등으로는 갈 수 없다.
+		for hops := 0; err == nil && method == http.MethodGet && isRedirectStatus(status) && hops < maxRedirects; hops++ {
+			next, ok := c.redirectTarget(hdr.Get("Location"))
+			if !ok {
+				break
+			}
+			if _, aerr := checkAllowed(method, next, c.rfMode, c.sessClean); aerr != nil {
+				break // 허용목록 밖(로그/Actions 등)으로 가는 리다이렉트는 따르지 않고 3xx 그대로 HTTP_ERROR
+			}
+			c.waitGap()
+			status, hdr, b, dialFail, err = c.roundTrip(method, next, nil, false)
+			c.last = time.Now()
+			lc = strings.ToLower(path.Clean(next))
+		}
 		if err == nil {
-			err = c.statusErr(status, strings.ToLower(clean), isSession, b)
+			err = c.statusErr(status, lc, isSession, b)
 		}
 		if err == nil {
 			return status, hdr, b, nil
@@ -742,6 +758,36 @@ func (c *Client) do(method, p string, body interface{}) (int, http.Header, []byt
 		}
 		c.sleep(backoffFor(i))
 	}
+}
+
+const maxRedirects = 2 // GET 리다이렉트를 따라가는 최대 횟수
+
+func isRedirectStatus(s int) bool {
+	return s == http.StatusMovedPermanently || s == http.StatusFound || s == http.StatusSeeOther ||
+		s == http.StatusTemporaryRedirect || s == http.StatusPermanentRedirect
+}
+
+// redirectTarget 은 Location 에서 따라갈 경로를 고릅니다. 같은 호스트(상대 경로 또는 같은 host:port 의 https)만 허용하고,
+// 경로만 취합니다 (쿼리·프래그먼트는 버림). 다른 호스트·http 로의 리다이렉트는 따라가지 않아 자격증명이 새지 않습니다.
+func (c *Client) redirectTarget(loc string) (string, bool) {
+	if loc == "" {
+		return "", false
+	}
+	u, err := url.Parse(loc)
+	if err != nil {
+		return "", false
+	}
+	if u.Host != "" && !strings.EqualFold(u.Host, c.base.Host) {
+		return "", false
+	}
+	if u.Scheme != "" && !strings.EqualFold(u.Scheme, "https") {
+		return "", false
+	}
+	p := u.EscapedPath()
+	if p == "" || !strings.HasPrefix(p, "/") {
+		return "", false
+	}
+	return p, true
 }
 
 // ServiceRootNoAuth 는 인증 정보(토큰·Basic) 없이 ServiceRoot(GET /redfish/v1/)를 1회 읽습니다.

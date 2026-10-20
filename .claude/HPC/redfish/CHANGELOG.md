@@ -28,6 +28,8 @@
 
 ### 고침 (실행 로직 점검)
 
+- **같은 BMC 안의 리다이렉트 따라가기**(`redfish.go` `Client.do`): Lenovo XCC 등이 슬래시 없는 `/redfish/v1` 에 308 을 주면 도구가 따라가지 않아 모든 조회가 HTTP_ERROR 가 되던 문제. GET 에 한해 같은 호스트(상대 경로·같은 host:port 의 https)로의 리다이렉트를 최대 2번 따라갑니다. 다른 호스트·http 로 가는 것과 허용목록 밖(로그/Actions)으로 가는 것은 따르지 않고 3xx 그대로 HTTP_ERROR 입니다. 토큰은 같은 호스트로만 전송됩니다.
+
 - **`bios.sh` 상대경로**: 다른 폴더에서 `bash /경로/bios.sh -user list.txt` 처럼 부르면 스크립트 폴더로 이동한 뒤 경로를 찾아 파일을 못 찾던 문제. 파일 옵션(`-conf`·`-user`·`-user-xml`·`-hosts`·`-ref-json`·`-diff`·`-ignore`·`-from-dump`·`-rf-conf`)의 상대경로는 호출한 폴더에 그 파일이 있으면 호출한 폴더 기준 절대경로로 바꿔 넘깁니다(없으면 예전처럼 스크립트 폴더 기준, `-ref-json` 파일 이름만은 refs_dir).
 - **옛 래퍼 상대경로**: `bios_check.sh`·`all_bios_check.sh` 도 `bios.sh` 와 같은 상대경로 규칙(`lib.sh` `fix_path_args`, `-retry-from` 폴더 포함)을 씁니다.
 - **TUI 제목**: 수정 미리보기·설정 결과에서 결과 보기로 돌아와도 제목이 “수정 미리보기”로 남고 스크롤이 처음으로 가던 문제 (`SwitchTab` 이 결과 보기 제목·스크롤을 되돌림).
@@ -48,8 +50,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8016034 | 0b63b245cf41d55c9e7924961c22bc4a01711c976c976fc2b4b730dd37b68e54 |
-| bin/biostool_os6 | go1.20.14 | 6623232 | d3411c424fe50e497239d472804b97debce51f99d1260a265f0cedf6da36a37b |
+| bin/biostool | go1.26.5 | 8016034 | ddfc44eb8c5883ceb943913b7be874479087cfda232410fdef60c53b5ee2e516 |
+| bin/biostool_os6 | go1.20.14 | 6627328 | f8229356512cf6afaeef2f84d5d76ffc0698bc03d0f45efb78c10eea05d5ee30 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 
