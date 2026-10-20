@@ -112,6 +112,7 @@ vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
 | `ip_engine` · `ldap_engine` | (v0.7.0) 변경 엔진 실행 파일 전체 경로 | auto_setup 과 같은 디렉터리 → PATH 순으로 찾음 |
 | `newhost_template_1` ~ `newhost_template_9` | (v0.8.0, 선택) 신규 설치 양식(`w`→2 / `newhost`)의 공용 템플릿 9개. 형식 `별칭\|infra nic disk 용량 os boot` (예 `A\|sec bond sda 500 8.10 uefi`) — 별칭은 비워도 되고 `\|` 를 생략해도 됨. 「신규 설치 양식」 참고 | 그 번호는 쓰지 않음 (화면에서 `+` 로 만든 user 별 템플릿은 그대로 쓸 수 있음) |
 | `work_os6_over` | (v0.8.0, 선택) gossh 작업(`s`)을 os8 gossh 로 실행하는 **최대 대수**. 초과하면 전량 os6_mgmt 경유 (「gossh 작업 기록」 참고) | `1000` (숫자가 아니면 1000 으로 처리하고 화면에 경고) |
+| `closed_keep_days` | (선택) **종료된 작업(`jobs/done`)을 화면·`status` 에 보여 주는 기간(일)**. 1 이상의 정수. 지난 작업은 파일이 지워지는 게 아니라 화면에서만 빠지며, 값을 늘리면 그 기간의 작업이 날짜별 보기(`←` `→`)에 다시 나옵니다. 종료 후 수동 run·`g` 재확인도 이 기간 안의 작업만 화면에서 고를 수 있습니다 | `1` (24시간, 비우거나 숫자가 아니면 1) |
 
 #### os_check 2개, 01 1개
 
