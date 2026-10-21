@@ -8,7 +8,7 @@
 | `02.source_dhcp_pxe.sh` | 보조 스크립트 — yml별 인벤토리/DHCP/PXE 자동 반복 등록 | 01 에서 자동 호출 또는 단독 실행 |
 | `test/run_tests.sh` | 검증 하네스 — 계획서 §9 기준, 목업 스텁으로 E2E 검증 (108건, DNS 케이스 21~23 포함) | 개발/CI 용도 |
 | `test/fake_dns.py` | 가짜 DNS 서버(UDP, 127.0.0.1) — 실제 `dig`/`nslookup` 출력을 01 이 해석하는지 확인하는 케이스 23 용 | **랩·CI 전용** (운영에 배치하지 않음, python3) |
-| `setup/` | `setup_guide.sh`·`update_v0.6.0.sh`·`update_v0.6.1.sh`·`update_unreleased_dns.sh`·`vars.manifest` — 빈 변수 입력 가이드·현장 사본 업데이트 (git-upload-sk 틀로 생성, 직접 고치지 말고 재생성). `update_unreleased_dns.sh` 는 01 만 변경 | Unreleased |
+| `setup/` | `setup_guide.sh`·`update_v0.6.0.sh`·`update_v0.6.1.sh`·`update_unreleased_dns.sh`·`update_unreleased_tmp_01.sh`·`update_unreleased_tmp_02.sh`·`vars.manifest` — 빈 변수 입력 가이드·현장 사본 업데이트 (git-upload-sk 틀로 생성, 직접 고치지 말고 재생성). `update_unreleased_dns.sh` 는 01 만 변경 | Unreleased |
 | `README.md` | 사용자 문서 — 설치, 사용, 옵션, 주의사항 | 배포 필수 |
 | `CHANGELOG.md` | 변경 이력 | 배포 필수 |
 | `ARCHITECTURE.md` | 이 문서 — 폴더 구조, 함수 흐름 | 개발 참고 |

@@ -4,6 +4,7 @@
 
 ### 수정
 - 01·02: **gossh 결과 파일(호스트명)이 임시 디렉터리에 남던 문제** — gossh 는 `-w <목록>` 옆에 `<목록>_res_off`(접속불가 — os8_mgmt 에서 안 닿는 서버)·`_os_install`·`_nosvrauto`·`_res_refsed` 를 만드는데 종료 정리가 목록만 지워 `/tmp/tmp.XXXXXXXXXX_res_off` 같은 호스트명 파일이 쌓였다(os6 재조사는 `os6_dir` 의 `.os6_hosts.XXXXXX_res_off`). 이제 등록한 임시물마다 `<경로>_*` 도 지운다
+- `setup/update_unreleased_tmp_01.sh`·`update_unreleased_tmp_02.sh`: 현장 사본의 01·02 에 위 두 변경을 앵커 기반으로 적용 (바뀌는 기존 줄은 각 1줄 — 01 `cleanup` 본문, 02 EXIT 트랩; 나머지는 삽입. 0.6.1 이상 사본, CRLF 처리, 현장 값·주석 보존, `--undo` 바이트 복원 — 랩 확인)
 - 01·02: **임시 파일 위치** — TMPDIR 이 없으면(직접 실행) `${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp`(0777+sticky, 못 쓰면 종전대로 `/tmp`) 를 TMPDIR 로 쓴다. auto_setup(w) 에서 실행하면 auto_setup 이 준 TMPDIR 그대로
 
 ### 추가
