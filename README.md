@@ -2,6 +2,8 @@
 
 Redfish BMC(예: Lenovo SR630 V2)에서 403 같은 4xx 오류가 날 때, **어느 단계에서 왜 막히는지** 읽기 전용으로 좁혀 주는 도구입니다. `redfish`(biostool) 프로젝트의 `trs` 기능만 떼어 낸 독립 배포본이며, 소스와 전체 도구는 `bios-collect` 브랜치의 `.claude/HPC/redfish` 에 있습니다.
 
+> **Cisco 장비(UCSX-210C-M7 등)가 `bios.sh` 에서 `UNSUPPORTED [XML 실패 → Redfish]` 로 나오는 경우**는 [`cisco/`](cisco/README.md) 폴더의 전용 진단(`bash cisco/trs.sh -targets <장비 주소>`)을 쓰십시오. 같은 바이너리를 쓰며 Redfish Bios 구조와 XML API 를 모두 확인합니다.
+
 > 설정 변경·재부팅은 하지 않습니다. 보내는 요청은 GET/HEAD/OPTIONS 와 이번 실행이 만든 세션의 생성·삭제뿐이고, 비밀번호·토큰은 화면·파일에 남기지 않습니다.
 
 ## 1. 빌드 및 설치 방법
@@ -63,6 +65,7 @@ bash trs.sh -targets 10.1.2.3 -path /redfish/v1/Systems/1/Bios/Settings   # 추�
 | 파일 | 설명 |
 |---|---|
 | `trs.sh` | 실행 래퍼 (바이너리 선택 → 파일 확인 → `biostool trs`) |
+| `cisco/` | Cisco 전용 진단 (`cisco/trs.sh`, `cisco/README.md`, `cisco/사용법.txt`) — UNSUPPORTED·XML 실패 원인 |
 | `lib.sh` | 래퍼 공용 함수 (바이너리 선택, 설정 읽기) |
 | `encrypt.sh` | BMC 비밀번호 암호화 (`pass.enc` + `key.bin`) |
 | `bios.conf.example` / `user.txt.example` | 설정·대상 목록 예시 |

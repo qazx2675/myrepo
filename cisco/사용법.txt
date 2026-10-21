@@ -1,0 +1,35 @@
+# cisco/trs.sh (Cisco 조사 장애 진단) 사용법 — 수동으로 시험할 때 쓰는 명령만 모았습니다. 비밀번호·실제 IP 는 적지 않았습니다.
+# 명령은 저장소 루트(lib.sh 가 있는 폴더)에서 실행하는 것을 기준으로 합니다. 다른 폴더에서 불러도 됩니다.
+
+# 실행 권한이 없을 때 (없어도 아래처럼 bash 로 실행하면 됨)
+chmod +x bin/biostool bin/biostool_os6 *.sh cisco/*.sh
+
+# 처음 한 번: 설정 파일을 만들고 user= 에 BMC(UCSM) 계정 ID 를 입력 (bios.sh 에서 쓰던 bios.conf·pass.enc·key.bin 을 복사해도 됨)
+cp bios.conf.example bios.conf
+
+# 처음 한 번: 비밀번호를 암호화 (2회 입력, 화면에 표시되지 않음) -> pass.enc + key.bin 생성
+bash encrypt.sh
+
+# 처음 한 번: 진단할 Cisco 장비 주소를 한 줄에 하나씩 적는다
+cp user.txt.example user.txt
+
+# UNSUPPORTED [XML 실패 → Redfish] 가 나온 장비를 진단 (읽기 전용, 결과는 화면 + results/<일시>_trs_cisco/<호스트>.txt)
+bash cisco/trs.sh -targets <장비 주소>
+
+# 블레이드 BMC 주소와 UCSM(Fabric Interconnect 관리 VIP) 주소를 함께 넣어 어느 쪽이 XML API 인지 비교
+bash cisco/trs.sh -targets <블레이드 BMC 주소>,<UCSM VIP>
+
+# user.txt 의 주소를 모두 진단 / hosts 의 이름도 가능
+bash cisco/trs.sh
+bash cisco/trs.sh -targets c101-m
+
+# 프로파일의 # [xml] 구역 클래스까지 XML 로 확인 (profiles/ 폴더가 있을 때)
+bash cisco/trs.sh -targets <UCSM VIP> -profile VM
+
+# 추가로 GET 해 볼 Redfish 경로를 지정 (쉼표 구분)
+bash cisco/trs.sh -targets <장비 주소> -path /redfish/v1/Systems/1/Bios
+
+# 도움말
+bash cisco/trs.sh -h
+
+# 진단 결과가 나오면 화면 전체(특히 [4] [7] [진단] 부분)를 그대로 전달한다 — 비밀번호·토큰은 포함되지 않는다
