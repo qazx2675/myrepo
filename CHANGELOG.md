@@ -1,5 +1,19 @@
 # CHANGELOG.md — 패스워드변경자동화 (pwreset)
 
+## 2026-10-21 (2차) — 변경 유실 버그 수정 + 재접속 검증
+
+- **거짓 성공/변경 유실 버그 수정.** `runShell` 이 `Retype` 를 보내는 즉시
+  성공으로 간주해 반환 → 호출부가 서버의 변경 처리 완료 전에 연결을 닫아
+  변경이 유실되던 문제. 이제 `all authentication tokens updated
+  successfully`(또는 셸 프롬프트)까지 기다린 뒤 닫습니다.
+- **새 비밀번호 재접속 검증 추가.** 변경 시도 후 새 비밀번호로 실제 로그인이
+  되는지 확인해(`verifyLogin`) 그 결과를 성공 기준으로 삼습니다. 변경 직후
+  세션을 끊는 서버에서도 올바르게 판정됩니다.
+- **결과 CSV 에 `detail` 컬럼 추가.** `verified` /
+  `connected-but-not-applied` / 접속 오류 문자열로 실패 사유를 남깁니다.
+- 랩 검증: Rocky(만료 계정)에서 `kbdinteractive` on/off 두 구성 모두 변경·검증
+  확인.
+
 ## 2026-10-21
 
 - CLI 사용성 개선 및 배포 방식 변경.

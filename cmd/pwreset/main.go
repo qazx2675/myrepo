@@ -118,12 +118,14 @@ func runReset(list, out string) error {
 // Permission denied(접속 실패) 시 다음 후보로 재시도하고, 모두 실패하면
 // "접속불가" 로 기록합니다.
 func processHost(ip string, candidates []string, newPass string) Result {
+	lastDetail := ""
 	for idx, cand := range candidates {
-		applied, authFailed := tryCandidate(ip, cand, newPass)
+		applied, authFailed, detail := tryCandidate(ip, cand, newPass)
 		if authFailed {
+			lastDetail = detail
 			continue
 		}
-		return Result{IP: ip, FoundIndex: idx, Status: "성공", Applied: applied}
+		return Result{IP: ip, FoundIndex: idx, Status: "성공", Applied: applied, Detail: detail}
 	}
-	return Result{IP: ip, FoundIndex: -1, Status: "접속불가", Applied: false}
+	return Result{IP: ip, FoundIndex: -1, Status: "접속불가", Applied: false, Detail: lastDetail}
 }

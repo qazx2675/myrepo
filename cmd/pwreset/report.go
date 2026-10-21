@@ -14,10 +14,11 @@ type Result struct {
 	FoundIndex int    // 성공한 후보의 인덱스(0부터), 접속불가면 -1
 	Status     string // "성공" / "접속불가"
 	Applied    bool   // 새 비밀번호 적용 여부
+	Detail     string // 사유(진단용): "verified" / "connected-but-not-applied" / 접속 오류 문자열
 }
 
 // writeCSV 는 결과 목록을 CSV 로 씁니다.
-// 컬럼: ip, found_password_index, status, applied_new_password
+// 컬럼: ip, found_password_index, status, applied_new_password, detail
 func writeCSV(path string, results []Result) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -28,7 +29,7 @@ func writeCSV(path string, results []Result) error {
 	w := csv.NewWriter(f)
 	defer w.Flush()
 
-	if err := w.Write([]string{"ip", "found_password_index", "status", "applied_new_password"}); err != nil {
+	if err := w.Write([]string{"ip", "found_password_index", "status", "applied_new_password", "detail"}); err != nil {
 		return err
 	}
 	for _, r := range results {
@@ -40,7 +41,7 @@ func writeCSV(path string, results []Result) error {
 		if r.Applied {
 			applied = "예"
 		}
-		if err := w.Write([]string{r.IP, idx, r.Status, applied}); err != nil {
+		if err := w.Write([]string{r.IP, idx, r.Status, applied, r.Detail}); err != nil {
 			return err
 		}
 	}

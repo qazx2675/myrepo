@@ -38,7 +38,9 @@
      즉시 그 자리에서 응답. 재입력까지 끝나면 `fsm.completed()` 가 true 가 되고 인증 자체가 성공으로 끝남
    - **경로 B — 일반 password 인증으로 로그인에 성공한 뒤, 셸 단계에서 프롬프트가 뜨는 경우**:
      `runShell` 이 pty 세션을 열고 stdout 을 읽으며 `promptFSM.feed()` 로 같은 문구를 매칭해 stdin 에 입력
-6. 결과를 `Result{IP, FoundIndex, Status, Applied}` 로 모아 `report.go` 가 CSV 로 기록
+6. 변경 시도 후 **새 비밀번호로 재접속(`verifyLogin`)** 해 실제 반영 여부를 확정
+   (서버가 변경 직후 세션을 끊어 Dial 이 오류를 내도 올바르게 판정)
+7. 결과를 `Result{IP, FoundIndex, Status, Applied, Detail}` 로 모아 `report.go` 가 CSV 로 기록
 
 ```mermaid
 flowchart TD
