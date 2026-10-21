@@ -116,7 +116,16 @@ var (
 )
 
 func cmdTrs(args []string) error {
-	fs, o := newFlagSet("trs")
+	return trsMain("trs", "_trs", args, func(t Target, rc *runContext, paths []string) string {
+		rep, _ := trsRunHost(t, rc.Conf, rc.Password, rc.Fallback, paths)
+		return rep
+	})
+}
+
+// trsMain 은 trs 계열 명령(trs, trs-cisco)의 공통 흐름입니다: 대상 준비 → 호스트별 진단(run) → 화면 출력과
+// results/<일시><suffix>/<호스트>.txt 저장.
+func trsMain(name, suffix string, args []string, run func(t Target, rc *runContext, paths []string) string) error {
+	fs, o := newFlagSet(name)
 	targets := fs.String("targets", "", "대상(쉼표 또는 공백 구분, ip:포트 가능). 지정하면 -user 파일 대신 사용")
 	extra := fs.String("path", "", "추가로 GET 해 볼 Redfish 경로 (쉼표 구분, 예: /redfish/v1/Systems/1/Bios/Settings)")
 	if err := fs.Parse(args); err != nil {
@@ -152,15 +161,15 @@ func cmdTrs(args []string) error {
 				reports[i] = fmt.Sprintf("== %s ==\n  대상을 해석하지 못했습니다 (%s)\n", t.Input, t.Err)
 				return
 			}
-			reports[i], _ = trsRunHost(t, rc.Conf, rc.Password, rc.Fallback, paths)
+			reports[i] = run(t, rc, paths)
 		}(i, t)
 	}
 	wg.Wait()
 
 	dir, derr := newRunDir(rc.Conf.ResultDir, time.Now())
 	if derr == nil {
-		if os.Rename(dir, dir+"_trs") == nil {
-			dir += "_trs"
+		if os.Rename(dir, dir+suffix) == nil {
+			dir += suffix
 		}
 	}
 	for i, rep := range reports {
@@ -183,6 +192,26 @@ func cmdTrs(args []string) error {
 
 // trsRunHost 는 호스트 1대를 진단해 리포트 텍스트를 돌려줍니다.
 func trsRunHost(t Target, conf *Config, pass string, fb *fallbackCreds, extraPaths []string) (string, trsFacts) {
+	h := newTrsHost(t, conf, pass, fb)
+	defer h.pr.Close()
+	h.stepNetwork()
+	h.stepRoot()
+	if h.f.rootStatus != 0 {
+		h.stepAuth()
+		h.stepReads(extraPaths)
+		h.stepReplay()
+	}
+	h.stepLogout()
+	h.log("")
+	h.log("[진단] 요청 %d건", h.n)
+	for _, s := range trsDiagnose(&h.f) {
+		h.log("  %s", s)
+	}
+	return h.out.String(), h.f
+}
+
+// newTrsHost 는 호스트 1대의 진단 상태를 만들고 리포트 머리 줄을 씁니다 (접속은 하지 않음). 부른 쪽이 h.pr.Close 를 합니다.
+func newTrsHost(t Target, conf *Config, pass string, fb *fallbackCreds) *trsHost {
 	timeout := conf.Timeout
 	if timeout <= 0 {
 		timeout = defaultTimeout
@@ -200,7 +229,6 @@ func trsRunHost(t Target, conf *Config, pass string, fb *fallbackCreds, extraPat
 		h.hostport += ":443"
 	}
 	h.pr = NewProber(h.hostport, conf.Insecure, timeout)
-	defer h.pr.Close()
 
 	if addr := strings.TrimPrefix(t.BaseURL(), "https://"); addr == t.Hostname {
 		h.log("== %s ==", t.Hostname)
@@ -208,20 +236,7 @@ func trsRunHost(t Target, conf *Config, pass string, fb *fallbackCreds, extraPat
 		h.log("== %s  (%s) ==", t.Hostname, addr)
 	}
 	h.log("계정: %s (bios.conf user) / 시각: %s", conf.User, time.Now().Format("2006-01-02 15:04:05"))
-	h.stepNetwork()
-	h.stepRoot()
-	if h.f.rootStatus != 0 {
-		h.stepAuth()
-		h.stepReads(extraPaths)
-		h.stepReplay()
-	}
-	h.stepLogout()
-	h.log("")
-	h.log("[진단] 요청 %d건", h.n)
-	for _, s := range trsDiagnose(&h.f) {
-		h.log("  %s", s)
-	}
-	return h.out.String(), h.f
+	return h
 }
 
 func (h *trsHost) log(format string, a ...interface{}) {

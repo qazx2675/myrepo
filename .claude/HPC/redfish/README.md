@@ -10,7 +10,7 @@
 - **Cisco 장비는 XML API 로 점검합니다(`bios.sh` 혼합 대상, 옛 방식 `bios_check.sh`·`all_bios_check.sh` 도 같은 분류).** hostname 이 `bios.conf` 의 `xml_host_prefix`(기본 `c`)로 시작하는 대상과 `-user-xml` 목록은 Cisco UCSM/CIMC XML API 로 읽고(읽기 전용: `aaaLogin`·`configResolveClass`·`aaaLogout`), 나머지는 Redfish 로 점검합니다. XML 대상은 프로파일 점검만 하고 전체비교·설정에서는 빠집니다(옛 방식 점검은 XML 의 FAIL 을 `[설정 불가]` 에 사유와 함께 보이고, `all_bios_check.sh` 는 로그인만 확인해 `XML_READONLY` 로 비교에서 뺍니다. XML 로그인 전에 실패하면 Redfish 로 1번 다시). 2.0절 “Cisco(XML) 혼합 대상”.
 - 사전조사(`xml.sh`)로 처음 만나는 모델의 속성 이름을 확인하고, 모델별 BIOS 전체 비교(`all_bios_check.sh`)도 할 수 있습니다.
 - 공용(1순위) 계정이 없는 BMC 는 벤더 admin(rf.conf, 2순위)으로 접속해 **계정을 만들 수 있고**(`bash bios.sh account`, 점검 끝 질문, 기본 Y — 권한이 다른 두 번째 계정 `user2` 도 함께), 공용 계정의 **비밀번호를 바꿀 수도 있습니다**(`bash bios.sh passwd`). 2.12절.
-- `bash bios.sh <명령>` 하나로 모든 기능(account·passwd·trs·dump·export·ucsm·check·allcheck·encrypt·update)을 실행합니다. 2.0절.
+- `bash bios.sh <명령>` 하나로 모든 기능(account·passwd·trs·trs-cisco·dump·export·ucsm·check·allcheck·encrypt·update)을 실행합니다. 2.0절.
 
 > **현재 상태(v0.1.0): 실제 BMC 에 접속해 본 적이 없습니다.** 모든 검증은 합성 데이터로 만든 mock BMC 와 `-from-dump` 로만 했습니다. 같은 이유로 Cisco UCSM 점검(`ucsm_check.sh`, 2.9절)도 실제 UCSM 에 접속해 보지 않았습니다. 모델을 처음 만날 때의 절차와 사람이 확인할 항목은 [FIRST_RUN.md](FIRST_RUN.md) 에 모았습니다. 반드시 먼저 읽으십시오.
 
@@ -117,6 +117,32 @@ bash trs.sh -targets 10.1.2.3 -path /redfish/v1/Systems/1/Bios/Settings   # 추�
 - 보내는 요청은 GET/HEAD/OPTIONS 와 이번 실행이 만든 세션의 생성·삭제뿐입니다(로그/Actions 경로 제외, PATCH·계정 변경 없음).
 - 이 결과를 그대로 전달하면 확인된 원인에 맞춰 도구의 요청 방식·로직을 고칠 수 있습니다.
 
+### 1.6 Cisco 조사 장애(UNSUPPORTED·XML 실패) 진단 — `trs_cisco.sh`
+
+Cisco 장비(예: UCSX-210C-M7)가 `bios.sh` 에서 vendor·모델·BIOS 버전은 나오는데 attr 이 비고 비고가 `UNSUPPORTED [XML 실패 → Redfish]` 로 나올 때 씁니다. 설정 변경 없이 읽기만 합니다.
+
+```bash
+bash trs_cisco.sh                              # user.txt 의 Cisco BMC 주소를 진단
+bash trs_cisco.sh -targets 10.1.2.3            # 주소 직접 지정 (hosts 의 이름-m 도 가능)
+bash trs_cisco.sh -targets c101-m -profile VM  # 프로파일 # [xml] 구역 클래스까지 XML 로 확인
+bash bios.sh trs-cisco -targets 10.1.2.3       # 같은 기능 (bios.sh 하위 명령)
+```
+
+`bios.sh` 는 Cisco 를 **XML API(UCSM/CIMC)로 먼저** 읽고, 로그인 전에 실패하면 **Redfish 로 한 번 더** 읽습니다(비고 `XML 실패 → Redfish`). Redfish 에서 System 에 Bios 리소스가 없거나 속성이 비면 `UNSUPPORTED` 입니다. 이 명령은 두 경로를 모두 보고 원인을 종합합니다.
+
+| 단계 | 하는 일 | 알 수 있는 것 |
+|---|---|---|
+| 0 분류 | 이 대상이 이름/IP 중 무엇이라 bios.sh 가 XML·Redfish 중 어디로 보내는지 | XML 을 시도하는 대상인지 |
+| 1~3 | 네트워크·ServiceRoot·인증 (trs 와 같음, Basic 1회+세션 1회) | 접속·계정 문제 |
+| 4 Cisco Redfish 구조 | System(제조사·모델·SKU·**Bios 링크 유무**·Oem 항목·링크 목록), Bios 후보 경로, Chassis·Manager(CIMC 버전), Registries·펌웨어 목록의 BIOS 항목, System 아래·Oem 하위 리소스를 최대 60건·깊이 3 으로 따라가며 BIOS 속성을 가진 리소스 찾기 | Redfish 에 BIOS 설정이 있는지, 있다면 어느 경로인지 |
+| 6 재현 | 실제 도구(Client)와 같은 방식의 시스템 판별·Bios 조회 | bios.sh 와 같은 결과인지 |
+| 7 XML API | `GET /` → 쿠키 없는 확인 요청 1회(XML API 가 있는지만) → **있을 때만** aaaLogin 1회 + 서버(computeBlade·computeRackUnit)·서비스 프로파일 조회 + 프로파일 `# [xml]` 클래스 조회 | 이 주소가 UCSM/CIMC XML API 인지, 로그인 거부인지, 서버 이름이 맞는지 |
+| 진단 | 원인 후보를 우선순위로 출력 (`ciscoDiagnose`) | |
+
+- XML API 가 없는 주소(404·웹 페이지 등)에는 **비밀번호를 보내지 않습니다**. Redfish 에서 401 이 난 계정으로는 XML 로그인도 하지 않습니다(계정 잠금 방지).
+- 결과는 화면과 `results/<일시>_trs_cisco/<호스트>.txt` 에 저장됩니다(비밀번호·토큰 없음). 이 결과를 그대로 전달하면 확인된 원인에 맞춰 도구를 고칩니다.
+- 독립 배포본은 `trs-standalone` 브랜치의 `cisco/` 폴더(`cisco/trs.sh`)입니다.
+
 ---
 
 ## 2. 사용 방법
@@ -155,6 +181,7 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 | `bash bios.sh account [-dry-run] [-ucsm]` | 1순위(+ `user2`) 계정 생성 (2.12절) | `bash account_create.sh` |
 | `bash bios.sh passwd [-dry-run] [-ucsm]` | 1순위 계정 비밀번호 변경 (2.12절) | `bin/biostool account change` |
 | `bash bios.sh trs [-targets IP,...]` | BMC 접속 장애(403 등) 진단 (1.5절) | `bash trs.sh` |
+| `bash bios.sh trs-cisco [-targets IP,...]` | Cisco UNSUPPORTED·XML 실패 원인 진단 (1.6절) | `bash trs_cisco.sh` |
 | `bash bios.sh dump [대상...]` | 사전조사 덤프 (2.3절) | `bash xml.sh` |
 | `bash bios.sh export <비교서버> [대상...]` | BIOS 설정값 JSON 추출·비교 (2.4.1절) | `bash bios_export.sh` |
 | `bash bios.sh ucsm [-user ucsm.txt]` | Cisco UCSM BIOS 점검 (2.9절) | `bash ucsm_check.sh` |

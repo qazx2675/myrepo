@@ -31,7 +31,7 @@ cd .claude/HPC/redfish
 # user.txt 에 BMC 관리망 IP 를 한 줄에 하나씩 넣고 실행 (bios.conf·pass.enc·key.bin 은 bios.sh 와 같은 것을 사용)
 bash trs.sh
 
-# 같은 동작을 bios.sh 로 (bios.sh 하나로 모든 기능: account passwd trs dump export ucsm check allcheck encrypt update)
+# 같은 동작을 bios.sh 로 (bios.sh 하나로 모든 기능: account passwd trs trs-cisco dump export ucsm check allcheck encrypt update)
 bash bios.sh trs
 
 # bios.sh 기능별 명령 목록 보기
@@ -39,6 +39,21 @@ bash bios.sh -h
 
 # user.txt 없이 IP 를 직접 지정 / 추가 경로 GET (결과는 화면 + results/<일시>_trs/<호스트>.txt, 이 내용을 붙여 주면 원인 분석에 사용)
 bash trs.sh -targets 10.1.2.3 -path /redfish/v1/Systems/1/Bios/Settings
+
+
+########################################################################
+# Cisco 장비(UCSX-210C-M7 등)가 UNSUPPORTED [XML 실패 → Redfish] 로 나올 때 — 원인 진단 (읽기 전용)
+########################################################################
+
+# vendor·모델·BIOS 버전은 나오는데 attr 이 비는 Cisco 장비의 주소를 넣고 실행 (Redfish Bios 구조 + XML API 를 모두 확인)
+bash trs_cisco.sh -targets 10.1.2.3
+
+# user.txt 의 주소를 모두 진단 / hosts 의 이름도 가능 / 프로파일 # [xml] 클래스까지 XML 로 확인
+bash trs_cisco.sh
+bash trs_cisco.sh -targets c101-m -profile VM
+
+# 같은 동작을 bios.sh 로 (결과는 화면 + results/<일시>_trs_cisco/<호스트>.txt, 이 내용을 붙여 주면 원인 분석에 사용)
+bash bios.sh trs-cisco -targets 10.1.2.3
 
 
 ########################################################################

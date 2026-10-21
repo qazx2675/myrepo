@@ -26,6 +26,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `report.go` | `check` 의 터미널 리포트(`[OK]`·`[FAIL 상세]`·`[설정 불가]`·`[기타 오류]`)와 **Y/N 확인**(`confirmApply`, 비대화형 입력은 N, `-stdin-ok`) |
 | `set.go` | **BMC 에 쓰는 유일한 경로.** 입력 재검증·벤더 제한·**보호 속성 검사(걸리면 호스트 통째로 `PROTECTED_ATTR`, PATCH 직전 본문 재검사)**·재조회·레지스트리 사전검증(전체비교 항목은 Enumeration·Integer·Boolean 만)·시스템 프로파일 종속 처리·PATCH 1회·Dell Job POST·반영 재조회, `-dry-run`(`buildPlan`/`writePlan` 공유), `apply_*` 결과 파일과 설정 리포트 |
 | `dump.go` | `dump`(`xml.sh`) 본체: GET 전용 좁은 순회, 호스트당 경로 상한, JSON 저장(`safeSeg`/`dirPart`), `index.tsv`, 사람이 읽는 요약 |
+| `trs_cisco.go` | `trs-cisco`(`trs_cisco.sh`) 본체: Cisco 장비 UNSUPPORTED·XML 실패 원인 진단 — trs 의 네트워크·인증 단계를 재사용(`trsMain`·`newTrsHost`)하고 Cisco Redfish 구조(System Bios 링크·Oem·Chassis·Manager·레지스트리·펌웨어 목록·하위 리소스 탐색)와 XML API(쿠키 없는 확인 요청 → 있을 때만 aaaLogin 1회)를 보고 `ciscoDiagnose` 가 종합. XML 진단 요청은 `ciscoRaw` 허용 3종만 |
 | `trs.go` | `trs`(`trs.sh`) 본체: BMC 접속 장애(403 등) 단계별 진단 — TCP/TLS → 비인증 ServiceRoot(헤더 변형) → 인증(Basic 1회+세션 1회, 401 중단) → 인증 후 읽기 → 403 경로 변형 비교. `trsDiagnose` 가 원인 추정 규칙(새 장애 유형은 여기에 추가), `trs4xx` 표가 4xx 코드별 설명(코드 추가는 이 표). GET/HEAD/OPTIONS·세션 생성/삭제만 허용 |
 | `allcheck.go` | `allcheck`(`all_bios_check.sh`) 본체: 기준(`diff.txt`)·제외 속성(`ignore_attrs.txt`)·모델별 분류·Attributes 전체 비교·`all_diff.tsv`·`summary.tsv` |
 | `allreport.go` | `allcheck` 의 터미널 리포트(모델 그룹·속성별 집계·특이사항·분류 불가) |
@@ -71,7 +72,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `profiles/VM_research.tsv` | 표준값(프로파일, 연구용). `bios_json/` 조사 데이터에서 생성(`map_bios_attrs.ps1`), 전부 `verified=N` |
 | `bios.conf.example` · `user.txt.example` · `diff.txt.example` · `ignore_attrs.txt.example` | 설정·입력 파일 예시(실제 값은 `.gitignore` 로 커밋 금지) |
 | `refs/` | 전체비교 기준으로 고를 속성 JSON 폴더(`bios.conf` 의 `refs_dir`). `bios_export.sh` 로 뽑은 `attrs/<호스트>.json` 을 복사해 둠(실제 값이라 커밋 금지) |
-| `bios.sh` | **통합 진입점**(TUI·`-plain`·`-auto`/`-auto-check`): 폴더 이동 → 바이너리 선택 → 필요 파일 확인 → `biostool bios`. `-auto` 는 호출한 폴더 기준으로 targets 경로·`-res-dir` 를 넘김. 첫 인자가 기능 이름(`account` `passwd` `trs` `dump` `export` `ucsm` `check` `allcheck` `encrypt` `update`)이면 해당 래퍼로 넘김(새 기능 래퍼를 만들면 여기 `case` 에도 추가) |
+| `bios.sh` | **통합 진입점**(TUI·`-plain`·`-auto`/`-auto-check`): 폴더 이동 → 바이너리 선택 → 필요 파일 확인 → `biostool bios`. `-auto` 는 호출한 폴더 기준으로 targets 경로·`-res-dir` 를 넘김. 첫 인자가 기능 이름(`account` `passwd` `trs` `trs-cisco` `dump` `export` `ucsm` `check` `allcheck` `encrypt` `update`)이면 해당 래퍼로 넘김(새 기능 래퍼를 만들면 여기 `case` 에도 추가) |
 | `bios_check.sh` | 옛 이름 래퍼(프로파일 메뉴, 파일 확인) → `biostool check`. 옛 전용 옵션(`-dry-run`·`-no-prompt`·`-stdin-ok`·`-retry-from`·`-list-max`·`-fail-max`)이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘김 |
 | `xml.sh` | 사전조사 래퍼 → `biostool dump -targets …` |
 | `ucsm_check.sh` | Cisco UCSM 읽기 전용 점검 래퍼 → `biostool ucsm` (위 “Cisco UCSM” 단락 참고) |

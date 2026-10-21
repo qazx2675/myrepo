@@ -22,6 +22,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 case "${1:-}" in
   account) shift; exec bash "$script_dir/account_create.sh" "$@" ;;
   trs) shift; exec bash "$script_dir/trs.sh" "$@" ;;
+  trs-cisco | trscisco) shift; exec bash "$script_dir/trs_cisco.sh" "$@" ;;
   dump) shift; exec bash "$script_dir/xml.sh" "$@" ;;
   export) shift; exec bash "$script_dir/bios_export.sh" "$@" ;;
   ucsm) shift; exec bash "$script_dir/ucsm_check.sh" "$@" ;;
@@ -78,6 +79,7 @@ usage() {
   account   [-dry-run] [-ucsm] ...     1순위(+ user2) 계정 생성        = bash account_create.sh
   passwd    [-dry-run] [-ucsm] ...     1순위 계정 비밀번호 변경         = bin/biostool account change
   trs       [-targets IP,...] ...      BMC 접속 장애(403 등) 진단        = bash trs.sh
+  trs-cisco [-targets IP,...] ...      Cisco UNSUPPORTED·XML 실패 원인 진단 = bash trs_cisco.sh
   dump      [대상...] [--compact]      사전조사 덤프 (GET 전용)          = bash xml.sh
   export    <비교서버> [대상...]       BIOS 설정값 JSON 추출·비교        = bash bios_export.sh
   ucsm      [-user ucsm.txt] ...       Cisco UCSM(XML API) BIOS 점검     = bash ucsm_check.sh

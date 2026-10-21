@@ -45,6 +45,7 @@
 - **TUI 제목**: 수정 미리보기·설정 결과에서 결과 보기로 돌아와도 제목이 “수정 미리보기”로 남고 스크롤이 처음으로 가던 문제 (`SwitchTab` 이 결과 보기 제목·스크롤을 되돌림).
 - **TUI 전체비교의 XML 대상 줄**: 벤더·모델이 `-` 라 벤더 탭이 `[-]`, CSV 이름이 `compare_wide_hosts_-_…` 이던 문제 → 점검에서 읽은 벤더(Cisco)·모델로 표시.
 - **TUI 글 보기의 e**: 미리보기·설정 결과 화면 안내에 “e 수정 메뉴” 가 보였지만 실제로는 결과 보기로 돌아가기만 하던 문제 → 글 보기에서는 e 를 받지 않고 안내에서도 뺌 (수정 단계는 결과 보기에서 e).
+- **`trs_cisco.sh` / `biostool trs-cisco`**(`trs_cisco.go`, `bios.sh trs-cisco`): Cisco 장비(UCSX-210C-M7 등)가 vendor·모델·BIOS 버전은 나오는데 attr 이 비고 `UNSUPPORTED [XML 실패 → Redfish]` 로 나올 때의 원인 진단. 이 비고는 bios.sh 가 Cisco 를 XML API(UCSM/CIMC)로 먼저 읽다가 로그인 전에 실패해 Redfish 로 넘어갔고, Redfish System 에 Bios 리소스가 없다는 뜻입니다. 진단은 ① bios.sh 의 XML/Redfish 분류 ② 네트워크·인증(trs 와 같음) ③ Cisco Redfish 구조(System 제조사·모델·SKU·Bios 링크 유무·Oem 항목·링크 목록, Bios 후보 경로, Chassis·Manager(CIMC 버전), Registries·펌웨어 목록의 BIOS 항목, System 아래·Oem 하위 리소스를 최대 60건·깊이 3 으로 따라가며 BIOS 속성 찾기) ④ bios.sh 방식 재현 ⑤ XML API(`GET /` → 쿠키 없는 확인 요청 1회 → XML API 가 있을 때만 aaaLogin 1회 + 서버·서비스 프로파일·프로파일 클래스 조회)를 보고 `ciscoDiagnose` 가 원인 후보를 종합합니다. XML API 가 없는 주소에는 비밀번호를 보내지 않고, Redfish 에서 401 이면 XML 로그인도 하지 않습니다. 독립 배포본은 `trs-standalone` 브랜치 `cisco/` 폴더. `trs.go` 는 `trsMain`·`newTrsHost` 로 나눠 재사용합니다(동작 변화 없음). 실장비 미확인(mock 시나리오 4종 시험).
 - **TUI 렉(전체 설정 비교, 대상 많을 때)**: 키를 누를 때마다(조회 중에는 0.2초마다) 표 전체 줄을 다시 만들어, 50대 × 1,500 속성(7.5만 줄)이면 키 1번에 약 0.28초·115MB 할당 → 누른 키가 밀려 쌓이고 응답이 없다가 쌓인 q 로 끝나는 것처럼 보이던 문제. 행·건수·칸 너비는 벤더·그룹·필터·화면 폭이 바뀔 때만 만들고(`tuiTableCache`), 그릴 때는 보이는 줄만 만듭니다 → 키 1번 약 0.2ms·57KB. mock 50대 시험: 키 663개 처리가 예전 190초 넘게(타임아웃) → 바뀐 뒤 1초 안. 화면 내용·키 동작은 그대로입니다.
 - **TUI 화면 전송량(느린 ssh)**: 바뀐 것이 없는 화면은 다시 보내지 않고(조회 중 0.2초마다 같은 화면을 보내던 것), 방향키·PgUp/PgDn 을 누르고 있어 쌓인 스크롤 키는 모아 처리한 뒤 한 번만 그립니다(스크롤이 아닌 키는 예전처럼 키마다 그림). mock 50대 같은 키 입력에서 터미널로 보낸 양 1.86MB → 37KB.
 - **평문 출력(`-plain`·파이프·리다이렉트)**: 결과 줄을 한 줄마다 write 하던 것(`writeResultLines`)과 `report.txt` 쓰기를 버퍼로 모음. mock 50대 `-plain | cat` 에서 write 호출 79,701 → 3,843 (strace 아래 15.4초 → 6.6초).
@@ -63,8 +64,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8048802 | 1097bc4a1377d1df37ac58d8d3ada4d14a10f5c0b02c8d1d5d10d19937662ab2 |
-| bin/biostool_os6 | go1.20.14 | 6656000 | ecbf969033a9df139679b37cb4bc01e45f06ba6cf3164492cd335ff014c4d028 |
+| bin/biostool | go1.26.5 | 8138914 | c0b7be5c05de7b73574708f2e1ed26eb44004f8cafd7728431a9b210e8a68f5f |
+| bin/biostool_os6 | go1.20.14 | 6746112 | 3651858d28ec221194d110272393bdbd66360fb54317c803729ff0f637bb1a05 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 
