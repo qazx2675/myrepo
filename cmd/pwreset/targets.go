@@ -3,19 +3,19 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 )
 
 // targets 는 대상 목록(list.txt)과 과거 비밀번호 후보(old_password.txt)를 읽습니다.
 //
-// list.txt: 줄바꿈으로 IP 만 나열 (계정은 root 고정).
+// list.txt: 줄바꿈으로 IP 또는 호스트명을 나열 (계정은 root 고정).
 // old_password.txt: 후보 비밀번호를 최신(맨 위)부터 한 줄에 하나씩.
 
-// loadTargets 는 대상 IP 목록을 읽어들입니다.
+// loadTargets 는 대상 목록을 읽어들입니다.
 //
-// 빈 줄과 "#" 로 시작하는 줄은 건너뜁니다. 유효한 IPv4 만 받습니다.
+// 빈 줄과 "#" 로 시작하는 줄은 건너뜁니다. IP 와 호스트명 모두 그대로
+// 받아들입니다(형식 검증 없음) — SSH 접속은 호스트명으로도 가능하기 때문입니다.
 func loadTargets(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -25,15 +25,10 @@ func loadTargets(path string) ([]string, error) {
 
 	var out []string
 	sc := bufio.NewScanner(f)
-	lineNo := 0
 	for sc.Scan() {
-		lineNo++
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
-		}
-		if net.ParseIP(line) == nil || !strings.Contains(line, ".") {
-			return nil, fmt.Errorf("%s:%d: 유효한 IPv4 가 아닙니다: %q", path, lineNo, line)
 		}
 		out = append(out, line)
 	}

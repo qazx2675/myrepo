@@ -4,8 +4,8 @@
 //
 // 사용법:
 //
-//	pwreset -list list.txt -oldpw old_password.txt -newpw newpass.enc -key key.bin -out result.csv
-//	pwreset -encrypt -in plain.txt -out newpass.enc -key key.bin
+//	pwreset -list list.txt -out result.csv
+//	pwreset -pass plain.txt
 package main
 
 import (
@@ -16,24 +16,26 @@ import (
 	"sync"
 )
 
+// 고정 경로. 사용자가 매번 지정하지 않도록 상수로 둡니다.
+const (
+	oldPasswordPath = "old_password.txt" // 과거 비밀번호 후보 목록 (최신이 맨 위)
+	newPassPath     = "newpass.enc"      // 암호화된 새 비밀번호
+	keyPath         = "key.bin"          // AES-256 키 (없으면 -pass 실행 시 생성)
+)
+
 func main() {
 	var (
-		doEncrypt = flag.Bool("encrypt", false, "새 비밀번호 평문을 암호화해 -out 에 저장하는 서브커맨드")
-		in        = flag.String("in", "", "-encrypt: 평문 비밀번호 파일 경로")
-
-		list  = flag.String("list", "list.txt", "대상 IP 목록 파일 (줄바꿈으로 IP 나열, 계정 root 고정)")
-		oldpw = flag.String("oldpw", "old_password.txt", "과거 비밀번호 후보 목록 (최신이 맨 위)")
-		newpw = flag.String("newpw", "newpass.enc", "암호화된 새 비밀번호 파일")
-		key   = flag.String("key", "key.bin", "AES-256 키 파일 (없으면 -encrypt 시 생성)")
-		out   = flag.String("out", "result.csv", "결과 CSV 경로 (-encrypt 시에는 암호문 출력 경로)")
+		pass = flag.String("pass", "", "새 비밀번호 평문 파일 경로. 지정하면 암호화 서브커맨드로 동작 (key.bin 없으면 생성, newpass.enc 로 저장)")
+		list = flag.String("list", "list.txt", "대상 목록 파일 (줄바꿈으로 IP 또는 호스트명 나열, 계정 root 고정)")
+		out  = flag.String("out", "result.csv", "결과 CSV 경로")
 	)
 	flag.Parse()
 
 	var err error
-	if *doEncrypt {
-		err = runEncrypt(*in, *out, *key)
+	if *pass != "" {
+		err = runEncrypt(*pass)
 	} else {
-		err = runReset(*list, *oldpw, *newpw, *key, *out)
+		err = runReset(*list, *out)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "오류: "+err.Error())
@@ -41,11 +43,9 @@ func main() {
 	}
 }
 
-// runEncrypt 는 평문 새 비밀번호를 암호화해 파일로 저장합니다.
-func runEncrypt(in, out, keyPath string) error {
-	if in == "" {
-		return fmt.Errorf("-encrypt 에는 -in <평문파일> 이 필요합니다")
-	}
+// runEncrypt 는 평문 새 비밀번호를 암호화해 newPassPath 에 저장합니다.
+// 키 파일(keyPath)이 없으면 새로 생성합니다.
+func runEncrypt(in string) error {
 	raw, err := os.ReadFile(in)
 	if err != nil {
 		return fmt.Errorf("평문 파일: %w", err)
@@ -60,20 +60,20 @@ func runEncrypt(in, out, keyPath string) error {
 	if err != nil {
 		return fmt.Errorf("암호화: %w", err)
 	}
-	if err := os.WriteFile(out, ct, 0o600); err != nil {
+	if err := os.WriteFile(newPassPath, ct, 0o600); err != nil {
 		return fmt.Errorf("암호문 저장: %w", err)
 	}
-	fmt.Printf("암호화 완료: %s (키: %s)\n", out, keyPath)
+	fmt.Printf("암호화 완료: %s (키: %s)\n", newPassPath, keyPath)
 	return nil
 }
 
 // runReset 은 대상 서버들의 비밀번호 변경 프롬프트를 후보 비밀번호로 처리합니다.
-func runReset(list, oldpw, newpw, keyPath, out string) error {
+func runReset(list, out string) error {
 	k, err := loadKey(keyPath)
 	if err != nil {
 		return fmt.Errorf("키 파일: %w", err)
 	}
-	encNew, err := os.ReadFile(newpw)
+	encNew, err := os.ReadFile(newPassPath)
 	if err != nil {
 		return fmt.Errorf("새 비밀번호 파일: %w", err)
 	}
@@ -87,7 +87,7 @@ func runReset(list, oldpw, newpw, keyPath, out string) error {
 	if err != nil {
 		return fmt.Errorf("대상 목록: %w", err)
 	}
-	candidates, err := loadPasswords(oldpw)
+	candidates, err := loadPasswords(oldPasswordPath)
 	if err != nil {
 		return fmt.Errorf("후보 비밀번호: %w", err)
 	}

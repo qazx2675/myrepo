@@ -1,44 +1,33 @@
 #!/usr/bin/env bash
-# run.sh — pwreset 빌드 + 실행 래퍼.
+# run.sh — pwreset 실행 래퍼. 바이너리(bin/pwreset)는 저장소에 이미 빌드되어
+# 커밋되어 있으므로 여기서는 빌드하지 않습니다.
 #
 # 사용법:
-#   ./run.sh                                             # 기본 파일명으로 실행
-#   ./run.sh -list list.txt -oldpw old_password.txt \
-#            -newpw newpass.enc -key key.bin -out result.csv
-#   ./run.sh -encrypt -in plain.txt -out newpass.enc -key key.bin
+#   ./run.sh -pass <평문파일>                # 새 비밀번호 암호화 (key.bin 없으면 생성, newpass.enc 저장)
+#   ./run.sh -list <파일> [-out <결과csv>]   # 비밀번호 변경 시작
 #
-# 인자를 그대로 pwreset 바이너리에 넘깁니다. 실행 전에 go build 로
-# 바이너리를 (재)빌드하고, 서브커맨드에 필요한 입력 파일이 있는지 확인합니다.
+# 인자를 그대로 bin/pwreset 바이너리에 넘깁니다.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 usage() {
   cat <<'EOF'
 사용법:
-  ./run.sh [-list <파일>] [-oldpw <파일>] [-newpw <파일>] [-key <파일>] [-out <파일>]
-  ./run.sh -encrypt -in <평문파일> [-out <파일>] [-key <파일>]
+  ./run.sh -pass <평문파일>                # 새 비밀번호 암호화 (key.bin 없으면 생성, newpass.enc 저장)
+  ./run.sh -list <파일> [-out <결과csv>]   # 비밀번호 변경 시작
 
-기본값 (인자 생략 시):
-  -list  list.txt
-  -oldpw old_password.txt
-  -newpw newpass.enc
-  -key   key.bin
-  -out   result.csv
+고정 경로 (플래그 없음):
+  old_password.txt  과거 비밀번호 후보 목록 (최신이 맨 위)
+  newpass.enc        암호화된 새 비밀번호 (-pass 로 생성됨)
+  key.bin             AES-256 키 (-pass 실행 시 없으면 자동 생성)
 
 먼저 실행할 것:
   cp list.txt.example         list.txt
   cp old_password.txt.example old_password.txt
-  ./run.sh -encrypt -in <새_비밀번호_평문파일> -out newpass.enc -key key.bin
+  ./run.sh -pass <새_비밀번호_평문파일>
   chmod +x run.sh   # 권한 오류 시
-
-이 스크립트를 처음 받았다면 실행 권한이 없을 수 있습니다: chmod +x run.sh
 EOF
 }
-
-if ! command -v go >/dev/null 2>&1; then
-  echo "오류: go 를 찾을 수 없습니다. Go 툴체인을 먼저 설치하십시오." >&2
-  exit 2
-fi
 
 for a in "$@"; do
   if [ "$a" = "-h" ] || [ "$a" = "--help" ]; then
@@ -47,17 +36,10 @@ for a in "$@"; do
   fi
 done
 
-echo "빌드: pwreset ..."
-go build -o bin/pwreset ./cmd/pwreset
-echo "-> bin/pwreset"
-
-# -encrypt 모드인지 확인 (인자 검증 분기용).
-is_encrypt=0
-for a in "$@"; do
-  if [ "$a" = "-encrypt" ]; then
-    is_encrypt=1
-  fi
-done
+if [ ! -x ./bin/pwreset ]; then
+  echo "오류: bin/pwreset 바이너리가 없습니다(저장소에 커밋된 바이너리가 있는 체크아웃을 쓰십시오)." >&2
+  exit 2
+fi
 
 # 값이 붙는 옵션에서 파일 경로를 뽑아내는 헬퍼.
 get_opt() {
@@ -73,29 +55,19 @@ get_opt() {
   done
 }
 
-if [ "$is_encrypt" = "1" ]; then
-  in_path="$(get_opt -in "$@")"
-  if [ -z "${in_path:-}" ]; then
-    echo "오류: -encrypt 에는 -in <평문파일> 이 필요합니다." >&2
-    usage
-    exit 1
-  fi
-  if [ ! -f "$in_path" ]; then
-    echo "오류: 평문 파일이 없습니다: $in_path" >&2
+pass_path="$(get_opt -pass "$@")"
+
+if [ -n "${pass_path:-}" ]; then
+  if [ ! -f "$pass_path" ]; then
+    echo "오류: 평문 파일이 없습니다: $pass_path" >&2
     exit 1
   fi
 else
   list_path="$(get_opt -list "$@")"
   list_path="${list_path:-list.txt}"
-  oldpw_path="$(get_opt -oldpw "$@")"
-  oldpw_path="${oldpw_path:-old_password.txt}"
-  newpw_path="$(get_opt -newpw "$@")"
-  newpw_path="${newpw_path:-newpass.enc}"
-  key_path="$(get_opt -key "$@")"
-  key_path="${key_path:-key.bin}"
 
   missing=0
-  for f in "$list_path" "$oldpw_path" "$newpw_path" "$key_path"; do
+  for f in "$list_path" old_password.txt newpass.enc key.bin; do
     if [ ! -f "$f" ]; then
       echo "오류: 필요한 파일이 없습니다: $f" >&2
       missing=1

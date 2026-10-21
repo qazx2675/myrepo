@@ -7,7 +7,7 @@
 ```mermaid
 flowchart TD
     A["run.sh (또는 bin/pwreset 직접)"] --> B["list.txt / old_password.txt / newpass.enc 로드<br/>newpass.enc 를 key.bin 으로 복호화"]
-    B --> C["대상 IP 마다 goroutine"]
+    B --> C["대상(IP/호스트명)마다 goroutine"]
     C --> D["후보 비밀번호를 위(최신)부터 순서대로 시도"]
     D --> E{"ssh.Dial (keyboard-interactive + password)"}
     E -->|"인증 실패"| D

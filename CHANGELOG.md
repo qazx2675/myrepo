@@ -1,5 +1,20 @@
 # CHANGELOG.md — 패스워드변경자동화 (pwreset)
 
+## 2026-10-21
+
+- CLI 사용성 개선 및 배포 방식 변경.
+  - `-encrypt -in <file> -out <out> -key <key>` 조합을 `-pass <평문파일>`
+    하나로 대체. `key.bin`/`newpass.enc` 경로는 고정, 없으면 `key.bin` 자동
+    생성
+  - 비밀번호 변경 실행 시 `-oldpw`/`-newpw`/`-key` 플래그 제거.
+    `old_password.txt`/`newpass.enc`/`key.bin` 을 코드 상수로 고정 — `-list
+    <파일>` 만으로 바로 시작
+  - `list.txt` 대상 검증에서 IPv4 형식 체크 제거. 호스트명으로도 SSH 접속이
+    가능하므로 IP/호스트명 모두 그대로 허용
+  - `run.sh` 에서 `go build` 단계 제거. 바이너리(`bin/pwreset`)를 미리
+    빌드해 저장소에 커밋하는 방식으로 배포하며, `run.sh` 는 그 바이너리를
+    바로 실행하는 래퍼로 축소
+
 ## 2026-09-29
 
 - `cmd/pwreset` 초기 구현. 비밀번호 롤테이션 누락으로 SSH 접속 시

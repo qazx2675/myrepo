@@ -2,12 +2,12 @@
 
 | 파일 | 역할 |
 |---|---|
-| `run.sh` | 빌드(`go build`) → 입력 파일 존재 검증 → `bin/pwreset` 실행 |
-| `cmd/pwreset/main.go` | CLI 진입점. 플래그 파싱, `-encrypt`/기본(reset) 모드 분기, 대상별 goroutine 병렬 처리, CSV 저장 |
+| `run.sh` | 입력 파일 존재 검증 → `bin/pwreset` 실행 (빌드는 하지 않음, 바이너리는 저장소에 커밋됨) |
+| `cmd/pwreset/main.go` | CLI 진입점. 플래그 파싱, `-pass`/기본(reset) 모드 분기, 대상별 goroutine 병렬 처리, CSV 저장 |
 | `cmd/pwreset/sshclient.go` | 대상 한 대에 접속해 비밀번호 변경 프롬프트에 응답. SSH 인증 단계 + pty 셸 단계 두 경로 |
 | `cmd/pwreset/promptfsm.go` | 비밀번호 변경 프롬프트 상태머신. 두 경로가 이 상태머신을 공유 |
 | `cmd/pwreset/cryptutil.go` | AES-256-GCM 대칭 암복호화, 키 파일(`key.bin`) 로드/생성 |
-| `cmd/pwreset/targets.go` | `list.txt`(IP 목록), `old_password.txt`(후보 비밀번호) 파싱 |
+| `cmd/pwreset/targets.go` | `list.txt`(IP/호스트명 목록, 형식 검증 없음), `old_password.txt`(후보 비밀번호) 파싱 |
 | `cmd/pwreset/report.go` | 결과를 `result.csv` 로 기록 |
 | `list.txt.example`, `old_password.txt.example` | 입력 파일 형식 예시. 실제 값은 없음 |
 | `.gitignore` | `list.txt`/`old_password.txt`/`newpass.enc`/`key.bin`/`result.csv`/`bin/` 커밋 차단 |
@@ -27,9 +27,9 @@
 
 ## 처리 흐름
 
-1. `main.go`: `-encrypt` 면 `runEncrypt`(평문 → AES-256-GCM 암호화 → `newpass.enc` 저장), 아니면 `runReset`
+1. `main.go`: `-pass` 가 있으면 `runEncrypt`(평문 → AES-256-GCM 암호화 → `newpass.enc` 저장, `key.bin` 없으면 생성), 아니면 `runReset`
 2. `runReset`: 키 로드 → `newpass.enc` 복호화(메모리에서만 평문 유지) → `list.txt`/`old_password.txt` 로드
-3. 대상(IP)마다 goroutine 하나씩 띄워 `processHost` 병렬 실행
+3. 대상(IP 또는 호스트명)마다 goroutine 하나씩 띄워 `processHost` 병렬 실행
 4. `processHost`: `old_password.txt` 의 후보를 **위(최신)부터 순서대로** 시도. 인증 실패면 다음 후보로, 접속(로그인) 성공하면 그 결과를 바로 반환
 5. 한 후보로 `tryCandidate`(`sshclient.go`) 호출:
    - `ssh.Dial` 로 접속 시도. `keyboard-interactive` 콜백과 일반 `password` 인증을 함께 제시
@@ -43,7 +43,7 @@
 ```mermaid
 flowchart TD
     A["run.sh (또는 bin/pwreset 직접)"] --> B["list.txt / old_password.txt / newpass.enc 로드<br/>newpass.enc 를 key.bin 으로 복호화"]
-    B --> C["대상 IP 마다 goroutine"]
+    B --> C["대상(IP/호스트명)마다 goroutine"]
     C --> D["후보 비밀번호를 위(최신)부터 순서대로 시도"]
     D --> E{"ssh.Dial (keyboard-interactive + password)"}
     E -->|"인증 실패"| D

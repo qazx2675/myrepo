@@ -37,10 +37,10 @@
 
 | 항목 | 필요 위치 | 비고 |
 |---|---|---|
-| Go 툴체인 | 관리 PC | `go.mod` 기준 1.26.5. 빌드할 때만 필요 |
+| Go 툴체인 | 관리 PC | 바이너리(`bin/pwreset`)가 저장소에 이미 포함돼 있어 보통은 필요 없습니다. 재빌드할 때만(`go.mod` 기준 1.26.5) |
 | SSH(22번 포트) 접속 가능 | 관리 PC → 대상 서버 | 호스트 키 검증은 하지 않습니다(랩 환경 전제) |
 
-### 1.2 빌드 및 실행
+### 1.2 실행 준비
 
 ```bash
 cd ".claude/HPC/패스워드변경자동화"
@@ -48,11 +48,9 @@ chmod +x run.sh
 ./run.sh -h
 ```
 
-수동 빌드:
-
-```bash
-go build -o bin/pwreset ./cmd/pwreset
-```
+바이너리는 이미 빌드되어 커밋돼 있으므로 `run.sh` 는 빌드하지 않고 바로
+`bin/pwreset` 을 실행합니다. (재빌드가 필요하면 `go build -o bin/pwreset
+./cmd/pwreset` 를 직접 실행하십시오.)
 
 ### 1.3 입력 파일 준비
 
@@ -61,8 +59,8 @@ cp list.txt.example         list.txt
 cp old_password.txt.example old_password.txt
 ```
 
-- `list.txt` — 대상 서버 IP (줄바꿈으로 나열, 계정은 root 고정). 최대 3대
-  전제입니다.
+- `list.txt` — 대상 서버 IP 또는 호스트명 (줄바꿈으로 나열, 계정은 root
+  고정). 최대 3대 전제입니다.
 - `old_password.txt` — 과거 비밀번호 후보. **최신(가장 최근에 쓰였을 것으로
   추정)을 맨 위**에, 한 줄에 하나씩. `pwreset` 은 이 순서대로 시도합니다.
 
@@ -74,21 +72,21 @@ cp old_password.txt.example old_password.txt
 
 ```bash
 echo -n '새비밀번호' > /tmp/plain.txt   # 임시 평문 파일 (사용 후 직접 삭제)
-./run.sh -encrypt -in /tmp/plain.txt -out newpass.enc -key key.bin
+./run.sh -pass /tmp/plain.txt
 shred -u /tmp/plain.txt                # 또는 rm
 ```
 
-`key.bin` 이 없으면 이때 새로 생성됩니다(0600 권한). 이후 `-key key.bin` 을
-그대로 재사용하면 됩니다.
+`key.bin` 이 없으면 이때 새로 생성됩니다(0600 권한). 결과는 항상
+`newpass.enc` 로 저장됩니다(경로 고정, 재실행 시 덮어씁니다).
 
 ### 1.5 실행
 
 ```bash
-./run.sh -list list.txt -oldpw old_password.txt -newpw newpass.enc -key key.bin -out result.csv
+./run.sh -list list.txt
 ```
 
-인자를 생략하면 위 기본 파일명을 그대로 씁니다(1.3~1.4 에서 만든 파일과
-이름이 같다면 인자 없이 `./run.sh` 만 실행해도 됩니다).
+`old_password.txt`/`newpass.enc`/`key.bin` 은 고정 경로라 따로 지정할
+필요가 없습니다. 결과 CSV 경로를 바꾸려면 `-out result.csv` 를 추가하십시오.
 
 ### 1.6 결과 확인
 
@@ -96,7 +94,7 @@ shred -u /tmp/plain.txt                # 또는 rm
 
 | 컬럼 | 의미 |
 |---|---|
-| `ip` | 대상 IP |
+| `ip` | 대상 IP/호스트명 |
 | `found_password_index` | 성공한 후보의 `old_password.txt` 내 인덱스(0부터). 접속 실패 시 빈 값 |
 | `status` | `성공` / `접속불가` (모든 후보로 시도해도 로그인 실패) |
 | `applied_new_password` | 새 비밀번호 적용 여부(`예`/`아니오`) |
@@ -112,19 +110,19 @@ shred -u /tmp/plain.txt                # 또는 rm
 
 | 플래그 | 기본값 | 설명 |
 |---|---|---|
-| `-encrypt` | `false` | 서브커맨드. 새 비밀번호 평문을 암호화해 `-out` 에 저장 |
-| `-in` | (없음) | `-encrypt` 전용. 평문 비밀번호 파일 경로 |
-| `-list` | `list.txt` | 대상 IP 목록 파일 (줄바꿈으로 IP 나열, 계정 root 고정) |
-| `-oldpw` | `old_password.txt` | 과거 비밀번호 후보 목록 (최신이 맨 위) |
-| `-newpw` | `newpass.enc` | 암호화된 새 비밀번호 파일 |
-| `-key` | `key.bin` | AES-256 키 파일 (없으면 `-encrypt` 시 새로 생성) |
-| `-out` | `result.csv` | 결과 CSV 경로 (`-encrypt` 시에는 암호문 출력 경로) |
+| `-pass` | (없음) | 지정하면 암호화 서브커맨드로 동작. 평문 비밀번호 파일 경로. `key.bin` 없으면 생성, `newpass.enc` 로 저장(둘 다 경로 고정) |
+| `-list` | `list.txt` | 대상 목록 파일 (줄바꿈으로 IP/호스트명 나열, 계정 root 고정) |
+| `-out` | `result.csv` | 결과 CSV 경로 |
+
+`old_password.txt`/`newpass.enc`/`key.bin` 은 플래그 없이 고정 경로로
+다룹니다 (사용자가 매번 지정할 필요가 없도록).
 
 ### `run.sh`
 
-빌드 후 입력 파일(list/oldpw/newpw/key, `-encrypt` 시에는 in) 존재 여부를
-검증하고 `bin/pwreset` 을 실행하는 얇은 래퍼입니다. 인자는 그대로
-`pwreset` 에 전달됩니다. `-h`/`--help` 또는 인자 누락 시 사용법을 출력합니다.
+입력 파일(`-pass` 시 평문 파일, 그 외엔 list/old_password.txt/newpass.enc/
+key.bin) 존재 여부를 검증하고 이미 빌드되어 있는 `bin/pwreset` 을 실행하는
+얇은 래퍼입니다(빌드는 하지 않습니다). 인자는 그대로 `pwreset` 에
+전달됩니다. `-h`/`--help` 또는 인자 누락 시 사용법을 출력합니다.
 
 ---
 
@@ -132,8 +130,8 @@ shred -u /tmp/plain.txt                # 또는 rm
 
 | 파일 | 역할 |
 |---|---|
-| `run.sh` | 빌드 + 입력 파일 검증 + 실행 래퍼 |
-| `cmd/pwreset/main.go` | CLI 진입점. 플래그 파싱 → `-encrypt`/기본 모드 분기 → 병렬 처리 → CSV 저장 |
+| `run.sh` | 입력 파일 검증 + 실행 래퍼 (빌드는 하지 않음) |
+| `cmd/pwreset/main.go` | CLI 진입점. 플래그 파싱 → `-pass`/기본 모드 분기 → 병렬 처리 → CSV 저장 |
 | `cmd/pwreset/sshclient.go` | 대상 한 대 접속. SSH 인증 단계(keyboard-interactive)와 pty 셸 단계 두 경로 처리 |
 | `cmd/pwreset/promptfsm.go` | 비밀번호 변경 프롬프트 상태머신 (두 경로가 공유) |
 | `cmd/pwreset/cryptutil.go` | AES-256-GCM 암복호화, 키 파일 로드/생성 |
