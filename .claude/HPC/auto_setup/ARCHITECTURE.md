@@ -7,13 +7,13 @@
 | 파일/폴더 | 역할 | 비고 |
 |---|---|---|
 | `main.go` | 최상단 빈 변수(9개 + `awx_profile_1~9` + 변경 키 4개 `enable_ip_change`·`enable_ldap_change`·`ip_engine`·`ldap_engine` + 0.8.0 `newhost_template_1~9`·`work_os6_over` = 32개) + CLI 분기(무인자 리포트·--start/--stop/--restart·snapshot·done·request 포함) + 상수(주기/대기/정체 시간) · `--admin`(0.7.0) · `-user`(0.7.3, `splitUser`) · `newhost`·`s`(0.8.0, 해당 CLI 진입) · `work-relay`(내부용, os6_mgmt → os8_mgmt 기록 중계) | 실행 대상 |
-| `daemon.go` | 데몬 루프: queue 수거·경로 판별·ping 감시·준비확인·스케줄·run 큐 | 상태기계 중추 |
+| `daemon.go` | 데몬 루프: queue 수거·경로 판별·ping 감시·준비확인·스케줄·run 큐. `step` 이 `fenced()`(`ownerCheck`)로 다른 데몬 출현을 감지하면 저장 없이 loop 종료 | 상태기계 중추 |
 | `state.go` | Job/Host 구조체, JSON 원자 저장/복원 (재기동 후 이어하기) | 상태 영속화 |
 | `icmp.go` | raw 소켓 ping (echo id+seq 로 호스트 매핑) | local 경로 |
 | `probe.go` | probe 하위명령(os6_mgmt 쪽) + os6 장기 ssh 세션 관리 | os6 경로 |
 | `check.go` | 준비확인: gossh -pm uptime, anaconda 감지, READY 판정 (local/os6). 0.8.0: 호출 1회 전체 **60초 제한**(`checkTimeout`, 초과 시 프로세스 그룹 종료·사유 `시간 초과(60초)`), os6 ssh 옵션 `-o BatchMode=yes -o ConnectTimeout=10` + `remoteBash`, **gossh 출력 해석 통일**(`parseGossh` — ANSI 제거·`호스트: 내용` 분리·FQDN↔짧은 이름 맞춤·`ERROR:`/`SSH 접속 실패` 사유 인식, 해석 실패는 `logGosshUnparsed` 가 로그 `[!] gossh 출력 해석 실패`) | 설치 완료 감지 |
 | `runner.go` | os_check 실행(-auto / -auto-check), os6 gossh 래퍼 생성(`os6WrapperScript`), code 파일 작성, wall 발송. 0.8.0: **`shq`**(셸 인용)·**`remoteBash`**(원격 명령을 `bash -c '…'` 로 감쌈, `!` 가 있으면 base64) 가 여기 있고 check·ldapbk·second·client·changerun 이 같은 함수를 씀 | run 실행 |
-| `ensure.go` | ensure 하위명령: flock + setsid + daemon 백그라운드 기동 | cron 훅 |
+| `ensure.go` | ensure 하위명령: flock + setsid + daemon 백그라운드 기동. 중복 데몬 방지: `lockHeldCheck`(lock inode·pid 파일 확인), `findDaemonPids`(/proc 스캔, 같은 `AUTO_SETUP_DIR` 의 daemon), `stopStrayDaemons`(기동 시 SIGTERM) | cron 훅 |
 | `log.go` | /tmp/auto_setup/auto_setup.log 관리 (10MB 롤오버) | 로깅 |
 | `notify.go` | wall 알림 발송 | 결과 공유 |
 | `paths.go` | `os6_os_check_sh`·`awx_dir` 해석, dhcp.sh 링크 후보 (autofs 동일 경로 포함) | 2차 |
@@ -50,11 +50,11 @@
 | `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙. 0.8.0: 안내 줄 둘째 묶음 `menuHint`(`h 호스트 작업  w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크`)·`hintStyles`(h·s 색)·도움말(항목별 메뉴) | 2차, 골든 테스트 |
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |
-| `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel / refresh / recheck(g 재확인: os8 → os6)), 수동 run 스케줄 | 2차 |
+| `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel / refresh / recheck(g 재확인: os8 → os6)), 수동 run 스케줄. 수거 전 `claimRequest` 로 `requests/claimed/` 에 rename 선점 (데몬이 둘이어도 1회 처리) | 2차 |
 | `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교·공유경로(`ldap_share_dir`) 경유 백업 세트 복원 | 2차 |
 | `second.go` | 2차(이중) 체크: os6_mgmt 실행·결과 회수·code 섹션 병합 | 2차 |
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
-| `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route·change*·oneoff·awx*·menu·newhost*·dnscheck·work*·sessionuser·userfilter·pgkeys), TUI 골든 파일 — `go test ./...` 398 PASS, 7 SKIP | 검증 |
+| `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route·change*·oneoff·awx*·menu·newhost*·dnscheck·work*·sessionuser·userfilter·pgkeys·dupdaemon), TUI 골든 파일 — `go test ./...` 398 PASS, 7 SKIP | 검증 |
 | `setup.sh` | 빌드 + /usr/local/bin 설치 + cron + tmpfiles 등록 (멱등). 0.7.0: 변경 엔진 2개 빌드·설치, conf 샘플을 `/etc/auto_setup` 에 복사(기존 파일 유지) | 설치 도구 |
 | `build_os6.sh` | Go 1.20 정적 빌드 → auto_setup_os6 (CGO_ENABLED=0). 0.7.0: 엔진 os6 바이너리 2개(`../ip_change/bin`, `../ldap_setting/bin`) 도 빌드 | os6 빌드 |
 | `../ip_change/bin/ip-change-engine_os6` · `../ldap_setting/bin/ldap-config-engine_os6` | RHEL 6 에서 엔진을 단독 실행할 때 쓰는 정적 바이너리 (0.7.0). 소스 변경 때 `build_os6.sh` 로 재빌드해 커밋 | 엔진 소스 옆 |
