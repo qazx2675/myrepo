@@ -157,7 +157,7 @@ if [[ -z $TMPDIR ]]; then
 	unset _t
 fi
 outdir=$(mktemp -d)
-os6_tmp=()                   # os6 재조사용으로 공유 디렉터리에 만든 임시 파일 (종료 시 삭제 — gossh 결과 파일 <목록>_res_off 등 포함)
+os6_tmp=()                   # os6 재조사용으로 공유 디렉터리에 만든 임시 파일 (종료 시 삭제)
 trap 'rm -rf "$outdir"; for p in "${os6_tmp[@]}"; do [[ -n $p ]] && rm -f "$p" "$p"_*; done' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

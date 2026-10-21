@@ -22,7 +22,8 @@ awx_script/
 ├── setup/                       ← 빈 변수 입력 가이드·현장 사본 업데이트 (생성물, 직접 고치지 말 것)
 │   ├── setup_guide.sh / vars.manifest
 │   ├── update_v0.6.0.sh / update_v0.6.1.sh
-│   └── update_unreleased_dns.sh ← [Unreleased] DNS 점검·AWX_AUTO_NODEINFO 업데이트 (01 만, 0.6.1 위 증분)
+│   ├── update_unreleased_dns.sh ← [Unreleased] DNS 점검·AWX_AUTO_NODEINFO 업데이트 (01 만, 0.6.1 위 증분)
+│   └── update_unreleased_tmp_01.sh / _02.sh ← [Unreleased] gossh 결과 파일 삭제·임시 파일 위치 (01·02 각각)
 └── test/                        ← 테스트 하네스
     ├── run_tests.sh             ← 목업 E2E (108건)
     └── fake_dns.py              ← 가짜 DNS 서버(UDP) — 실제 dig/nslookup 케이스용, **랩·CI 전용** (운영에 배치하지 않음)
@@ -350,6 +351,11 @@ bash setup/update_v0.6.1.sh --undo  # 되돌리기 (가장 최근 백업)
 bash setup/update_unreleased_dns.sh --dry    # 미리보기 (파일 불변)
 bash setup/update_unreleased_dns.sh          # 적용
 bash setup/update_unreleased_dns.sh --undo   # 되돌리기
+
+# [Unreleased] gossh 결과 파일(<목록>_res_off 등 호스트명) 삭제·임시 파일 /tmp/auto_setup/tmp — 01·02 각각, 현장 값·주석 보존
+bash setup/update_unreleased_tmp_01.sh --dry   # 01 미리보기 (파일 불변)
+bash setup/update_unreleased_tmp_01.sh         # 01 적용
+bash setup/update_unreleased_tmp_02.sh         # 02 적용 (--dry·--undo 같음)
 ```
 
 - `update_unreleased_dns.sh` 는 `vars.manifest` 의 버전을 올리지 않습니다 (`[Unreleased]` 라 버전 번호 없음, 새 변수 없음).
@@ -365,6 +371,7 @@ bash setup/update_unreleased_dns.sh --undo   # 되돌리기
 | `test/run_tests.sh` | 테스트 하네스 — 계획서 §9 검증 기준. 01/02 를 실제로 실행하는 목업 E2E(스텁 awxkit/ssh/scp/gossh, DNS 케이스 21~23: 스텁 dig/nslookup + 실제 dig/nslookup), 랩(bash 4.4)에서 실행 — 108건 |
 | `test/fake_dns.py` | 가짜 DNS 서버(UDP, 127.0.0.1) — 실제 `dig`/`nslookup` 출력을 01 이 해석하는지 확인하는 케이스 23 용. **랩·CI 전용**이라 운영 서버에는 배치하지 않음 (python3 필요) |
 | `setup/update_unreleased_dns.sh` | [Unreleased] DNS 점검·`AWX_AUTO_NODEINFO` 업데이트 (01 만, 0.6.1 위 증분, 생성 스크립트) |
+| `setup/update_unreleased_tmp_01.sh` · `_02.sh` | [Unreleased] gossh 결과 파일 삭제·임시 파일 위치 업데이트 (01·02 각각, 0.6.1 이상 위 증분, 생성 스크립트) |
 | `계획서.md` | 설계 근거와 결정 사항(§8) |
 | `.github/workflows/ci.yml` | 단독 브랜치용 CI (bash -n / shellcheck / 테스트) |
 | `README.md` | 이 파일 — 설치, 사용, 옵션 가이드 |
