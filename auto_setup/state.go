@@ -100,11 +100,13 @@ type Job struct {
 
 // ---- 경로 ----
 
+const defaultDataDir = "/tmp/auto_setup"
+
 func dataDir() string {
 	if d := os.Getenv("AUTO_SETUP_DIR"); d != "" {
 		return d
 	}
-	return "/tmp/auto_setup"
+	return defaultDataDir
 }
 
 func queueDir() string { return filepath.Join(dataDir(), "queue") }

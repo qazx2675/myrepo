@@ -22,9 +22,10 @@ const (
 	ReqRecheck   = "recheck"    // payload: jobid=<id> yml=<그룹|*> → 완료 제외 호스트를 os8 → os6_mgmt 순으로 직접 재확인 (TUI g 키)
 )
 
-// 디렉터리: requests/ (새 요청) → active/ (수락된 manual-run, 끝나면 삭제) | rejected/ (거부, 끝에 reason= 줄)
+// 디렉터리: requests/ (새 요청) → claimed/ (데몬이 선점해 처리 중, 처리 후 삭제) → active/ (수락된 manual-run, 끝나면 삭제) | rejected/ (거부, 끝에 reason= 줄)
 func requestsDir() string    { return filepath.Join(dataDir(), "requests") }
 func reqActiveDir() string   { return filepath.Join(dataDir(), "requests", "active") }
+func reqClaimedDir() string  { return filepath.Join(dataDir(), "requests", "claimed") } // 데몬이 선점해 처리 중인 요청
 func reqRejectedDir() string { return filepath.Join(dataDir(), "requests", "rejected") }
 
 // 파일명: <epoch>_<kind>.req, 같은 초에 같은 kind 가 있으면 <epoch>_<kind>_<n>.req
@@ -116,9 +117,13 @@ func listReqFiles(d string) []string {
 // collectRequests: requests/*.req 수거 (데몬 step 마다). 처리한 요청은 requests/ 에서 사라진다.
 func (d *Daemon) collectRequests(now time.Time) {
 	for _, name := range listReqFiles(requestsDir()) {
-		p := filepath.Join(requestsDir(), name)
+		p, ok := claimRequest(name) // 데몬이 둘이어도 요청은 한 번만 처리 (이후 p 는 claimed/ 의 파일)
+		if !ok {
+			continue
+		}
 		b, err := os.ReadFile(p)
 		if err != nil {
+			unclaimRequest(p, name)
 			continue
 		}
 		kind := reqFileRe.FindStringSubmatch(name)[2]
@@ -131,10 +136,12 @@ func (d *Daemon) collectRequests(now time.Time) {
 			}
 			if err := os.MkdirAll(reqActiveDir(), 0755); err != nil {
 				logf("[X] 요청 처리 실패(%s): %v", name, err)
+				unclaimRequest(p, name)
 				continue
 			}
 			if err := os.Rename(p, filepath.Join(reqActiveDir(), name)); err != nil {
 				logf("[X] 요청 처리 실패(%s): %v", name, err)
+				unclaimRequest(p, name)
 				continue
 			}
 			logf("요청 수락: %s (job %s, 그룹 %s) → 수동 run 대기", name, pl["jobid"], pl["yml"])
@@ -173,6 +180,28 @@ func (d *Daemon) collectRequests(now time.Time) {
 			rejectRequest(p, name, b, "알 수 없는 요청 종류")
 		}
 	}
+}
+
+// claimRequest: requests/<name> 을 requests/claimed/<name> 으로 rename 해 이 데몬이 독점한다.
+// 다른 데몬이 먼저 가져갔으면(ENOENT) 조용히 건너뛴다. 반환 경로는 처리할 파일(claimed/).
+func claimRequest(name string) (string, bool) {
+	dst := filepath.Join(reqClaimedDir(), name)
+	if err := os.MkdirAll(reqClaimedDir(), 0755); err != nil {
+		logf("[X] 요청 선점 실패(%s): %v", name, err)
+		return "", false
+	}
+	if err := os.Rename(filepath.Join(requestsDir(), name), dst); err != nil {
+		if !os.IsNotExist(err) {
+			logf("[X] 요청 선점 실패(%s): %v", name, err)
+		}
+		return "", false
+	}
+	return dst, true
+}
+
+// unclaimRequest: 처리하지 못한 선점 요청을 requests/ 로 되돌려 다음 step 에 다시 시도 (실패해도 무시)
+func unclaimRequest(p, name string) {
+	_ = os.Rename(p, filepath.Join(requestsDir(), name))
 }
 
 // findJob: 진행 중(메모리) → 종료(jobs/done) 순으로 찾는다. closed=true 면 jobs/done 의 job.

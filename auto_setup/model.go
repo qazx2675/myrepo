@@ -263,8 +263,9 @@ type Snapshot struct {
 
 type SnapDaemon struct {
 	Running bool  `json:"running"`
-	PID     int   `json:"pid"`     // pid 파일 값 (없으면 0)
-	Started int64 `json:"started"` // 데몬 기동 epoch (pid 파일, 없으면 0)
+	PID     int   `json:"pid"`             // pid 파일 값 (없으면 0)
+	Started int64 `json:"started"`         // 데몬 기동 epoch (pid 파일, 없으면 0)
+	Procs   int   `json:"procs,omitempty"` // 이 데이터 디렉터리를 쓰는 `auto_setup daemon` 프로세스 수 (/proc 스캔, 0·1 정상, 2 이상 = 중복 데몬)
 }
 
 type SnapJob struct {
@@ -324,6 +325,7 @@ func BuildSnapshot(dir string, now time.Time) Snapshot {
 	if pid, started, err := readPidIn(dir); err == nil {
 		s.Daemon = SnapDaemon{Running: processAlive(pid), PID: pid, Started: started}
 	}
+	s.Daemon.Procs = len(findDaemonPids("/proc", dir, os.Getpid()))
 	manual := readActiveRequests(dir)
 	for _, j := range readJobsIn(filepath.Join(dir, "jobs"), time.Time{}) {
 		sj := buildSnapJob(j, t, false, manual[j.ID])
