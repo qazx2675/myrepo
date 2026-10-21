@@ -59,6 +59,9 @@ type Daemon struct {
 	forceCheck    map[string]bool // r 키 수동 재시도: 정체 호스트를 ping 상태와 상관없이 다음 준비확인에 포함 (check 가 소비)
 	doneLogged    map[string]bool // 거부한 완료기록(호스트+내용) — 로그 1회
 	lastWork      time.Time       // 마지막 gossh 작업 기록 정리 (하루 한 번, work.go workCleanAll)
+
+	ownerCheck func() string // 이 데몬이 아직 유일한 데몬인지 확인 (문제 사유, 정상이면 ""). nil 이면 확인 안 함 — runDaemon 이 lockHeldCheck 로 채움
+	lost       bool          // ownerCheck 실패 → 다른 데몬이 같은 디렉터리를 사용 중이라 저장하지 않고 loop 를 끝냄
 }
 
 type hostRT struct {
@@ -69,6 +72,7 @@ type hostRT struct {
 	resolveLogged bool
 	resolveFails  int // 연속 이름 해석 실패 횟수 (resolveToOS6 회면 os6 경유로)
 	oldOSLogged   bool
+	ldapNow       bool // 이번 주기에 os6 로 판별됨 → os6 probe 첫 응답을 기다리지 않고 LDAP 백업을 한 번 시도 (ldapBackup)
 }
 
 type inflight struct {
@@ -296,6 +300,10 @@ func runDaemon() int {
 	_ = os.Setenv("PATH", withStdPath(os.Getenv("PATH")))
 
 	logf("daemon 시작 pid=%d", os.Getpid())
+	// lock 이 교체돼 살아남은 옛 데몬이 있으면 정리 (같은 jobs/*.json 을 서로 덮어써 진행률이 0%↔100% 로 번갈아 보이던 원인)
+	if sent := stopStrayDaemons("/proc", dataDir(), os.Getpid()); len(sent) > 0 {
+		waitGone(sent, 5*time.Second)
+	}
 	if os_check_sh == "" {
 		logf("[X] os_check_sh 가 비어 있습니다 (run 단계에서 작업 대기)")
 	}
@@ -308,15 +316,54 @@ func runDaemon() int {
 		close(stop)
 	}()
 
-	newDefaultDaemon().loop(stop)
+	d := newDefaultDaemon()
+	d.ownerCheck = lockHeldCheck(lock)
+	d.loop(stop)
 	logf("daemon 종료 pid=%d", os.Getpid())
 	return 0
+}
+
+// waitGone: pids 가 모두 사라질 때까지 최대 timeout 대기
+func waitGone(pids []int, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		alive := false
+		for _, p := range pids {
+			if processAlive(p) {
+				alive = true
+			}
+		}
+		if !alive {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// fenced: 다른 데몬이 같은 디렉터리를 쓰고 있으면 true (한 번 true 면 계속 true).
+// 이 데몬의 메모리 상태로 jobs/*.json 을 덮어쓰면 다른 데몬의 진행 상태를 되돌리므로 저장하지 않고 끝낸다.
+func (d *Daemon) fenced() bool {
+	if d.lost {
+		return true
+	}
+	if d.ownerCheck == nil {
+		return false
+	}
+	if why := d.ownerCheck(); why != "" {
+		d.lost = true
+		logf("[X] 다른 데몬이 같은 디렉터리를 사용 중 — 이 데몬(pid=%d)은 저장하지 않고 종료 (%s)", os.Getpid(), why)
+		return true
+	}
+	return false
 }
 
 func (d *Daemon) loop(stop <-chan struct{}) {
 	d.onStart()
 	for {
 		d.step(d.Clock.Now())
+		if d.lost {
+			return
+		}
 		select {
 		case <-stop:
 			return
@@ -436,6 +483,9 @@ func (d *Daemon) sortedJobs() []*Job {
 // step: 한 주기 (loop 는 queuePoll 마다 호출). ping/준비확인은 각자 주기가 됐을 때만 수행.
 func (d *Daemon) step(now time.Time) {
 	d.init()
+	if d.fenced() {
+		return
+	}
 	select {
 	case p := <-d.progCh:
 		d.onProgress(p, now)
@@ -467,11 +517,17 @@ func (d *Daemon) step(now time.Time) {
 	d.refreshStages(now)
 	d.schedule(now)
 	d.scheduleManual(now)
+	if d.fenced() { // ping·준비확인이 길어지는 사이 다른 데몬이 생겼을 수 있음 — 저장 직전에 한 번 더
+		return
+	}
 	d.closeFinished()
 	d.saveDirty()
 	if now.Sub(d.lastWork) >= 24*time.Hour { // gossh 작업 기록: 출력 7일·user 당 200MB, lists/<3자리> 7일
 		d.lastWork = now
 		workCleanAll(now)
+		if n := cleanStaleTmp(now); n > 0 {
+			logf("임시 파일 정리: %s %d개 삭제 (%s 지남)", filepath.Join(dataDir(), "tmp"), n, tmpKeep)
+		}
 	}
 }
 
@@ -512,7 +568,7 @@ func (d *Daemon) ldapBackup() {
 				d.dirty[j.ID] = true
 				continue
 			}
-			if r := d.rt[name]; r != nil && r.up {
+			if r := d.rt[name]; r != nil && (r.up || r.ldapNow) {
 				cand = append(cand, name)
 			}
 		}
@@ -521,9 +577,18 @@ func (d *Daemon) ldapBackup() {
 		}
 		sort.Strings(cand)
 		res := d.Ldap.Backup(j, cand)
-		nOK := 0
+		nOK, nRec := 0, 0
 		for _, n := range cand {
 			st, ok := res[n]
+			r := d.rt[n]
+			early := r.ldapNow && !r.up
+			r.ldapNow = false
+			// 막 os6 로 판별된 호스트가 응답하지 않으면 켜져 있는지 아직 모른다 — 기록하지 않고 종전 규칙에 맡긴다
+			// (ping O 가 되면 그때 백업, ping X 면 "전달 시점 ping X": 처음부터 접속불가 호스트는 os8 호스트와 같은 결과)
+			if early && (!ok || st.Backup != LdapBackupOK && (st.Reason == ldapNoResp || strings.HasPrefix(st.Reason, ldapCallFail))) {
+				continue
+			}
+			nRec++
 			if !ok || st.Backup == "" {
 				st = LdapState{Backup: LdapBackupNone, Reason: "백업 실패"}
 			}
@@ -535,8 +600,11 @@ func (d *Daemon) ldapBackup() {
 			s := st
 			j.Hosts[n].Ldap = &s
 		}
+		if nRec == 0 {
+			continue
+		}
 		d.dirty[j.ID] = true
-		logf("LDAP 백업: job %s %d대 중 %d대", j.ID, len(cand), nOK)
+		logf("LDAP 백업: job %s %d대 중 %d대", j.ID, nRec, nOK)
 	}
 }
 
@@ -676,9 +744,7 @@ func (d *Daemon) ping(now time.Time) {
 			refs[name] = ref{j, h, probe}
 		}
 	}
-	if len(targets) == 0 {
-		return
-	}
+	// 대상이 없어도 Pinger 를 부른다 — 집합이 비면 os6_mgmt 의 probe 세션(ssh)을 끝낸다 (realPinger.Ping)
 	sort.Slice(targets, func(a, b int) bool { return targets[a].Host < targets[b].Host })
 	res := d.Pinger.Ping(targets)
 	nLocal, nOS6 := 0, 0
@@ -686,6 +752,11 @@ func (d *Daemon) ping(now time.Time) {
 		r := refs[t.Host]
 		pr, ok := res[t.Host]
 		h, name := r.h, t.Host
+		// os6 경로 호스트를 "both" 로 물었는데 os6_mgmt 정보는 없고 로컬만 무응답: os8 에서 안 보이는 것은 os6 호스트에게 정상이므로
+		// down 근거가 아니다 → 정보 없음으로 (전에는 probe 가 한 주기만 비어도 ping X·READY 해제로 처리돼 os6 호스트만 대기가 다시 시작됐다)
+		if ok && t.Route == "both" && h.Route == "os6" && pr.Via == "local" && !pr.Up {
+			pr.Known = false
+		}
 		if !ok || !pr.Known {
 			if h.NoPing == 0 {
 				h.NoPing = ts
@@ -703,6 +774,9 @@ func (d *Daemon) ping(now time.Time) {
 			if !pr.Up && os6_mgmt != "" {
 				h.Route = "os6"
 				nOS6++
+				// os8 호스트는 이 주기에 ping O 로 바로 LDAP 백업되는데 os6 호스트는 probe 첫 응답(1~2주기 뒤)을 기다려,
+				// 그 사이 재부팅되면 os6 호스트만 백업을 놓쳤다 → 같은 주기에 os6 경유로 한 번 시도한다
+				d.hrt(name).ldapNow = true
 				continue // 로컬 무응답은 os6 경로의 ping 상태가 아님
 			}
 			h.Route = "local"

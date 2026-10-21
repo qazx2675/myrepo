@@ -465,9 +465,14 @@ func workWriteTmp(name string, hosts []string, excl bool) error {
 
 // workTmpMatches: /tmp/<name> 이 있고 내용(해석한 호스트 목록)이 hosts 와 같으면 (있음, 같음)
 func workTmpMatches(name string, hosts []string) (exists, same bool) {
-	b, err := os.ReadFile(workPath(name))
+	return workFileMatches(workPath(name), hosts)
+}
+
+// workFileMatches: 파일 p 가 있고 내용(해석한 호스트 목록)이 hosts 와 같으면 (있음, 같음)
+func workFileMatches(p string, hosts []string) (exists, same bool) {
+	b, err := os.ReadFile(p)
 	if err != nil {
-		_, serr := os.Lstat(workPath(name))
+		_, serr := os.Lstat(p)
 		return serr == nil, false
 	}
 	got := workParseHosts(string(b))
@@ -561,7 +566,7 @@ func workOS6Inner(hosts []string, cmd string, danger bool) string {
 	if danger {
 		g += " " + workDangerFlag
 	}
-	return "f=$(mktemp) || exit 97; echo " + b64 + " | base64 -d | gzip -dc > $f; c=$(echo " + c64 + " | base64 -d); " + g + ` "$c"` +
+	return remoteTmpSh("f", false, false) + "echo " + b64 + " | base64 -d | gzip -dc > $f; c=$(echo " + c64 + " | base64 -d); " + g + ` "$c"` +
 		"; r=$?; rm -f $f ${f}_*; exit $r"
 }
 
@@ -967,8 +972,12 @@ func workCleanOut(dir string, now time.Time) (removed int) {
 	return removed
 }
 
+// workLegacyDir: v0.8.3 전에 목록 파일을 만들던 곳 (/tmp/<3자리>). 테스트에서 바꾼다.
+var workLegacyDir = "/tmp"
+
 // workCleanTmp: 우리가 만든 lists/<3자리> 중 7일 지난 것 삭제 — 이 서버에서 실행한 기록에 있고, 마지막 실행과 파일 수정이 모두 7일 전이며,
 // 내용이 lists 사본과 같을 때만. gossh 가 옆에 만든 결과 파일(<파일>_res_off 등 정확한 이름)도 함께 지운다.
+// v0.8.3 전 버전이 /tmp/<3자리> 에 남긴 목록도 같은 조건(기록에 있음·7일 지남·내용 같음)일 때 함께 지운다.
 func workCleanTmp(db *workDB, now time.Time) (removed int) {
 	if db == nil {
 		return 0
@@ -984,22 +993,23 @@ func workCleanTmp(db *workDB, now time.Time) (removed int) {
 		if now.Sub(time.Unix(at, 0)) <= workKeep || !workNameRe.MatchString(f) {
 			continue
 		}
-		p := workPath(f)
-		fi, err := os.Lstat(p)
-		if err != nil || !fi.Mode().IsRegular() || now.Sub(fi.ModTime()) <= workKeep {
-			continue
-		}
 		list, ok := db.Lists[f]
 		if !ok || list == nil {
 			continue
 		}
-		if _, same := workTmpMatches(f, list); !same {
-			continue
-		}
-		if os.Remove(p) == nil {
-			removed++
-			for _, suf := range []string{"_res_off", "_res_refsed", "_os_install", "_nosvrauto", "_res_cancel"} {
-				os.Remove(p + suf)
+		for _, p := range []string{workPath(f), filepath.Join(workLegacyDir, f)} {
+			fi, err := os.Lstat(p)
+			if err != nil || !fi.Mode().IsRegular() || now.Sub(fi.ModTime()) <= workKeep {
+				continue
+			}
+			if _, same := workFileMatches(p, list); !same {
+				continue
+			}
+			if os.Remove(p) == nil {
+				removed++
+				for _, suf := range []string{"_res_off", "_res_refsed", "_os_install", "_nosvrauto", "_res_cancel"} {
+					os.Remove(p + suf)
+				}
 			}
 		}
 	}

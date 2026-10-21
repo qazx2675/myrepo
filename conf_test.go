@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func saveConfVars(t *testing.T) {
@@ -290,5 +291,27 @@ func TestCLIAdminFlag(t *testing.T) {
 		if r := runBin(t, lb, env, args...); r.RC != 1 || r.Out != "" || !strings.Contains(r.Err, "사용법: auto_setup") {
 			t.Errorf("%v: 사용법+exit 1 아님: %+v", args, r)
 		}
+	}
+}
+
+func TestClosedKeepDur(t *testing.T) {
+	saveConfVars(t)
+	for _, c := range []struct {
+		in   string
+		want time.Duration
+	}{
+		{"", closedKeep}, {"  ", closedKeep}, {"abc", closedKeep}, {"0", closedKeep}, {"-3", closedKeep}, {"1.5", closedKeep},
+		{"1", 24 * time.Hour}, {"7", 7 * 24 * time.Hour}, {" 30 ", 30 * 24 * time.Hour},
+	} {
+		closed_keep_days = c.in
+		if got := closedKeepDur(); got != c.want {
+			t.Errorf("closed_keep_days=%q: %v, 기대 %v", c.in, got, c.want)
+		}
+	}
+	p := writeConf(t, "closed_keep_days = 14\n")
+	closed_keep_days = ""
+	loadConf([]string{p})
+	if got := closedKeepDur(); got != 14*24*time.Hour {
+		t.Errorf("conf 에서 읽은 값: %v", got)
 	}
 }

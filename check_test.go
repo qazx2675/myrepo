@@ -101,7 +101,7 @@ func TestCheckOS6(t *testing.T) {
 		if !strings.HasPrefix(r, "bash -c '") {
 			t.Fatalf("bash -c 로 감싸야 함: %s", r)
 		}
-		for _, s := range []string{"f=$(mktemp)", "cat > $f", `'\''/stub/gossh'\'' -pm -script -w $f '\''` + readyCmd + `'\''`,
+		for _, s := range []string{`f=$(mktemp "$_t/as.XXXXXXXX")`, `trap "rm -f \"\$f\" \"\$f\"_*" EXIT`, "cat > $f", `'\''/stub/gossh'\'' -pm -script -w $f '\''` + readyCmd + `'\''`,
 			"echo ==OSI==", "cat ${f}_os_install", "rm -f $f ${f}_*"} {
 			if !strings.Contains(r, s) {
 				t.Fatalf("원격 문자열에 %q 없음: %s", s, r)
@@ -258,6 +258,7 @@ exit 0
 
 // os6 준비확인 원격 명령: 로그인 셸이 sh 든 tcsh 든 bash 가 $(mktemp)·${f} 를 해석하고, os6_gossh 의 공백·' 가 깨지지 않는다
 func TestCheckOS6LoginShells(t *testing.T) {
+	setupDir(t)
 	gossh := fakeCheckBin(t)
 	oldM, oldG := os6_mgmt, os6_gossh
 	os6_mgmt, os6_gossh = "mgmtstub", gossh
@@ -282,6 +283,7 @@ func TestCheckOS6LoginShells(t *testing.T) {
 
 // 시간 제한: gossh 가 멈추면 checkTimeout 뒤 프로세스 그룹(자식 포함)을 죽이고, 받은 데까지 반영 + 나머지는 시간 초과
 func TestCheckTimeoutKillsGroup(t *testing.T) {
+	setupDir(t) // 가짜 ssh 의 "원격" bash 도 같은 프로세스 그룹이라 함께 SIGKILL 된다 — 원격 임시 파일이 테스트 디렉터리에 남게
 	gossh := fakeCheckBin(t)
 	old := checkTimeout
 	checkTimeout = 500 * time.Millisecond

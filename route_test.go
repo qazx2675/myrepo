@@ -41,6 +41,65 @@ func TestLocalDownFallsBackToOS6Ping(t *testing.T) {
 	}
 }
 
+// os6 경로 호스트: os6_mgmt probe 정보가 잠깐 비어도(세션 재접속·지연) ping X·READY 해제로 보지 않는다 —
+// 로컬 무응답은 os6 호스트에게 정상이라 down 근거가 아님. 정보가 비는 구간이 있든 없든 run 시각·결과가 같아야 한다.
+func TestOS6ProbeGapNotDown(t *testing.T) {
+	runOnce := func(gaps [][2]int64) ([]runCall, *Host) {
+		setupDir(t)
+		withRoute6(t, "mgmt", "")
+		h1 := install(60, 120, 400, 600)
+		h1.remote = true
+		h1.os6Gaps = gaps
+		w := newWorld(map[string]*simHost{"h1": h1})
+		id := submit(t, "u1", 0, "h1")
+		drive(t, w, newTestDaemon(w), 0, 1800)
+		return w.runs, doneJob(t, id).Hosts["h1"]
+	}
+	want, wh := runOnce(nil)
+	if len(want) != 1 || wh.Processed == "" {
+		t.Fatalf("기준(정보 끊김 없음) run: %+v %+v", want, wh)
+	}
+	// READY 뒤 부팅 대기 중(700~760), 설치 전(20~50) 에 probe 정보가 빔
+	got, gh := runOnce([][2]int64{{20, 50}, {700, 760}})
+	if !reflect.DeepEqual(got, want) || gh.Processed != wh.Processed || gh.DownAt != wh.DownAt {
+		t.Fatalf("probe 정보가 비면 동작이 달라짐:\n got %+v %+v\nwant %+v %+v", got, gh, want, wh)
+	}
+	b, _ := os.ReadFile(logPath())
+	if strings.Contains(string(b), "READY 해제") {
+		t.Fatalf("READY 해제가 기록됨:\n%s", b)
+	}
+}
+
+// LDAP 백업: os6 전용 호스트도 os8 호스트와 같은 주기(첫 ping)에 백업한다 — 전에는 os6 probe 첫 응답(1~2주기 뒤)을 기다려
+// 그 사이 재부팅되면 os6 호스트만 백업을 놓쳤다. 처음부터 꺼진 os6 호스트는 os8 호스트와 같이 "전달 시점 ping X".
+func TestOS6LdapBackupSameCycle(t *testing.T) {
+	setupDir(t)
+	withRoute6(t, "mgmt", "")
+	h6 := install(60, 120, 400, 600)
+	h6.remote = true
+	off6 := install(-10, 120, 400, 600) // 접수 때부터 꺼짐 (os8·os6 모두 무응답)
+	off6.remote = true
+	x := newX(map[string]*simHost{"h8": install(60, 120, 400, 600), "h6": h6, "off6": off6})
+	id := submit(t, "u1", 0, "h8", "h6", "off6")
+	d := drive(t, x.world, newXDaemon(x, true, false), 0, 40)
+	var backups []string
+	for _, e := range x.events {
+		if strings.HasPrefix(e, "backup ") {
+			backups = append(backups, e)
+		}
+	}
+	if len(backups) == 0 || !strings.Contains(backups[0], "h6") || !strings.Contains(backups[0], "h8") {
+		t.Fatalf("h6 는 h8 과 같은 첫 백업 호출이어야 함: %v", backups)
+	}
+	j := d.jobs[id]
+	if j.Hosts["h6"].Ldap == nil || j.Hosts["h6"].Ldap.Backup != LdapBackupOK || j.Hosts["h8"].Ldap.Backup != LdapBackupOK {
+		t.Fatalf("백업: h6=%+v h8=%+v", j.Hosts["h6"].Ldap, j.Hosts["h8"].Ldap)
+	}
+	if l := j.Hosts["off6"].Ldap; l == nil || l.Backup != LdapBackupNone || l.Reason != "전달 시점 ping X" {
+		t.Fatalf("처음부터 꺼진 호스트는 \"전달 시점 ping X\" 여야 함: %+v (백업 호출 %v)", l, backups)
+	}
+}
+
 // os6_mgmt 가 비어 있으면 종전과 같음: 로컬 무응답은 그냥 down (both 질의 없음)
 func TestNoOS6KeepsLocalOnly(t *testing.T) {
 	setupDir(t)

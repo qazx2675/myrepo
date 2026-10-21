@@ -653,6 +653,9 @@ func titleLines(s Snapshot, width int, color bool) []string {
 		dm = seg{"○ 데몬 중지", stRed}
 	}
 	right := []seg{{"갱신 " + clockOf(s), ""}, {"  ", ""}, dm}
+	if n := s.Daemon.Procs; n > 1 { // 같은 디렉터리를 쓰는 데몬이 둘 이상 → 진행률이 번갈아 바뀌는 원인
+		right = append(right, seg{"  ", ""}, seg{fmt.Sprintf("데몬 %d개 실행 중 — auto_setup --restart 필요", n), stRed})
+	}
 	gap := width - strWidth(segsText(left)) - strWidth(segsText(right)) - 1
 	if gap < 2 {
 		gap = 2

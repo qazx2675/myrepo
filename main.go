@@ -51,6 +51,9 @@ var (
 	newhost_template_8 = ""
 	newhost_template_9 = ""
 	work_os6_over      = "" // gossh 작업(s)을 os8 gossh 로 실행하는 최대 대수 — 초과하면 os6_mgmt 경유 (숫자, 비우면 1000; newhost_tpl.go 의 workOS6Over)
+
+	// 종료된 job(jobs/done)을 화면·status 에 보여 주는 기간(일). 1 이상의 정수, 비우거나 잘못되면 1일(24시간) (conf.go 의 closedKeepDur)
+	closed_keep_days = ""
 )
 
 // adminMode: `auto_setup --admin` 으로 TUI 를 띄웠을 때만 true. 변경 메뉴를 conf 와 무관하게 켠다 (데몬·request 에는 영향 없음).

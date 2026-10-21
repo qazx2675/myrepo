@@ -167,7 +167,7 @@ func groupHosts(j *Job, yml string) ([]string, bool) {
 
 // ---- 스냅샷 ----
 
-// closedKeep: 이 시간 안에 종료된(jobs/done) job 도 스냅샷에 closed=true 로 포함 (완료 후 수동 run 용)
+// closedKeep: 이 시간 안에 종료된(jobs/done) job 도 스냅샷에 closed=true 로 포함 (완료 후 수동 run 용). conf closed_keep_days 가 있으면 그 일수(closedKeepDur)
 var closedKeep = 24 * time.Hour
 
 const snapTimeLayout = "2006-01-02 15:04:05"
@@ -263,8 +263,9 @@ type Snapshot struct {
 
 type SnapDaemon struct {
 	Running bool  `json:"running"`
-	PID     int   `json:"pid"`     // pid 파일 값 (없으면 0)
-	Started int64 `json:"started"` // 데몬 기동 epoch (pid 파일, 없으면 0)
+	PID     int   `json:"pid"`             // pid 파일 값 (없으면 0)
+	Started int64 `json:"started"`         // 데몬 기동 epoch (pid 파일, 없으면 0)
+	Procs   int   `json:"procs,omitempty"` // 이 데이터 디렉터리를 쓰는 `auto_setup daemon` 프로세스 수 (/proc 스캔, 0·1 정상, 2 이상 = 중복 데몬)
 }
 
 type SnapJob struct {
@@ -324,6 +325,7 @@ func BuildSnapshot(dir string, now time.Time) Snapshot {
 	if pid, started, err := readPidIn(dir); err == nil {
 		s.Daemon = SnapDaemon{Running: processAlive(pid), PID: pid, Started: started}
 	}
+	s.Daemon.Procs = len(findDaemonPids("/proc", dir, os.Getpid()))
 	manual := readActiveRequests(dir)
 	for _, j := range readJobsIn(filepath.Join(dir, "jobs"), time.Time{}) {
 		sj := buildSnapJob(j, t, false, manual[j.ID])
@@ -331,7 +333,7 @@ func BuildSnapshot(dir string, now time.Time) Snapshot {
 		s.Totals.merge(sj.Counts)
 		s.Jobs = append(s.Jobs, sj)
 	}
-	for _, j := range readJobsIn(filepath.Join(dir, "jobs", "done"), now.Add(-closedKeep)) {
+	for _, j := range readJobsIn(filepath.Join(dir, "jobs", "done"), now.Add(-closedKeepDur())) {
 		sj := buildSnapJob(j, t, true, manual[j.ID])
 		sj.Recheck = readRecheck(dir, j.ID)
 		s.Jobs = append(s.Jobs, sj)
