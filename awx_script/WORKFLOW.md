@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart TD
-    A["[0] 초기화<br/>trap cleanup EXIT<br/>변수/로그 준비"] --> B["[1] user 호출<br/>user() 빈 함수<br/>현장 코드 삽입 필요"]
+    B["[1] user 호출<br/>user() 빈 함수<br/>현장 코드 삽입 필요"]
     B --> C{"user 값<br/>확인"}
     C -->|비어 있음| C1["[X] 오류 종료<br/>user 함수 확인"]
     C1 --> END1["exit 1"]
@@ -124,11 +124,9 @@ flowchart TD
     J --> K["invsync -user -file yml"]
     K -->|실패| K1["skip 나머지<br/>fail_cnt++"]
     K1 --> J
-    K -->|성공| L["dhcp -user -infra"]
-    L -->|실패| K1
-    L -->|성공| M["pxe -user -infra -os -boot -splunk"]
-    M -->|실패| K1
-    M -->|성공| M1["성공 기록"]
+    K -->|성공| L["dhcp -user -infra<br/>∥ pxe -user -infra -os -boot -splunk<br/>(동시 실행, 둘 다 끝날 때까지 대기)"]
+    L -->|dhcp 또는 pxe 실패| K1
+    L -->|둘 다 성공| M1["성공 기록"]
     M1 --> J
     J -->|모든 yml 완료| N["요약 출력<br/>전체/성공/실패"]
     N --> O{"실패<br/>여부"}

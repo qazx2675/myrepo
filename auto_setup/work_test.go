@@ -224,7 +224,7 @@ func TestWorkOS6CommandQuoting(t *testing.T) {
 				t.Errorf("%s: 원격 gossh 인자\n got %q\nwant %q", sh[0], args, want)
 			}
 			for _, a := range args { // gossh 인자에 base64 목록이 들어가지 않음 (위험어 오탐 방지)
-				if strings.Contains(a, "base64") || len(a) > len(c)+40 {
+				if strings.Contains(a, "base64") || (a != want[1] && len(a) > len(c)+40) {
 					t.Errorf("gossh 인자에 목록이 섞임: %q", a)
 				}
 			}
@@ -605,6 +605,34 @@ func TestWorkCleanTmp(t *testing.T) {
 		t.Errorf("1개 삭제 기대: %d", n)
 	}
 	for p, want := range map[string]bool{a: false, aRes: false, b: true, c: true, d: true, e: true, z: true} {
+		if _, err := os.Stat(p); (err == nil) != want {
+			t.Errorf("%s 남음=%v 기대 %v", filepath.Base(p), err == nil, want)
+		}
+	}
+}
+
+// v0.8.3 전 버전이 /tmp/<3자리> 에 남긴 목록도 같은 조건(기록에 있음·7일 지남·내용 같음)이면 지운다
+func TestWorkCleanTmpLegacy(t *testing.T) {
+	workTestEnv(t)
+	oldL := workLegacyDir
+	workLegacyDir = t.TempDir()
+	t.Cleanup(func() { workLegacyDir = oldL })
+	host, _ := os.Hostname()
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	oldT := now.Add(-workKeep - time.Hour)
+	db := &workDB{Lists: map[string][]string{"aaa": {"h1", "h2"}, "bbb": {"h1"}}}
+	db.Runs = []*workRec{{File: "aaa", At: oldT.Unix(), Server: host}, {File: "bbb", At: oldT.Unix(), Server: host}}
+	mk := func(n, body string) string {
+		p := filepath.Join(workLegacyDir, n)
+		os.WriteFile(p, []byte(body), 0644)
+		os.Chtimes(p, oldT, oldT)
+		return p
+	}
+	a, aRes, b := mk("aaa", "h1\nh2\n"), mk("aaa_res_off", "h2\n"), mk("bbb", "사용자 파일\n")
+	if n := workCleanTmp(db, now); n != 1 {
+		t.Errorf("1개 삭제 기대: %d", n)
+	}
+	for p, want := range map[string]bool{a: false, aRes: false, b: true} {
 		if _, err := os.Stat(p); (err == nil) != want {
 			t.Errorf("%s 남음=%v 기대 %v", filepath.Base(p), err == nil, want)
 		}

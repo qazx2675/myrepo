@@ -151,7 +151,7 @@ func checkOS6(hosts []string) (map[string]CheckResult, error) {
 	}
 	// exec 로 직접 ssh 를 호출하므로 로컬 셸 확장이 없다 → 원격에서 bash 가 $ 를 확장하도록 remoteBash 로 감싼다
 	// (os6_mgmt 의 로그인 셸이 csh 계열이어도 동작: $(...) 는 csh 에서 오류). os6_gossh 경로는 shq 로 인용.
-	inner := "f=$(mktemp); cat > $f; " + shq(os6_gossh) + ` -pm -script -w $f ` + shq(readyCmd) + `; ` +
+	inner := remoteTmpSh("f", false, false) + "cat > $f; " + shq(os6_gossh) + ` -pm -script -w $f ` + shq(readyCmd) + `; ` +
 		"echo " + osiMarker + "; cat ${f}_os_install 2>/dev/null; rm -f $f ${f}_*"
 	out, err := runExternalDiag(hostList(hosts), "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(inner))
 	if !strings.Contains(out, osiMarker) {

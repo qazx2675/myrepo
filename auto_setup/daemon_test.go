@@ -42,6 +42,7 @@ type simHost struct {
 	remote                bool       // 로컬 ICMP 불가 (os6 경로로만 보임)
 	unknown               bool       // 항상 Known=false
 	noLocalSSH            bool       // 로컬 준비확인(gossh) 무응답 (ping 은 됨, os6 경유로만 응답)
+	os6Gaps               [][2]int64 // os6_mgmt probe 정보가 없는 구간 (세션 재접속·지연)
 	tl                    []tlSeg    // 있으면 위 필드 대신 시간대별 상태 (firstdown_test.go)
 }
 
@@ -49,6 +50,15 @@ func oldOS() *simHost { return &simHost{dd: never, ana: never, reboot: never, bo
 
 func install(dd, ana, reboot, boot int64) *simHost {
 	return &simHost{dd: dd, ana: ana, reboot: reboot, boot: boot}
+}
+
+func (s *simHost) os6Gap(o int64) bool {
+	for _, g := range s.os6Gaps {
+		if o >= g[0] && o < g[1] {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *simHost) up(o int64) bool {
@@ -116,11 +126,16 @@ func (w *world) Ping(ts []PingTarget) map[string]PingResult {
 			out[t.Host] = PingResult{}
 		case s.remote && t.Route == "local":
 			out[t.Host] = PingResult{Known: true}
-		case t.Route == "both": // realPinger.mergeBoth 와 같은 규칙 (os6 세션은 항상 응답)
+		case t.Route == "os6" && s.os6Gap(w.off()):
+			out[t.Host] = PingResult{}
+		case t.Route == "both": // realPinger.mergeBoth 와 같은 규칙 (os6 세션 정보가 없으면 로컬 결과)
 			up := s.up(w.off())
-			if !s.remote && up {
+			switch {
+			case !s.remote && up:
 				out[t.Host] = PingResult{Up: true, Known: true, Via: "local"}
-			} else {
+			case s.os6Gap(w.off()):
+				out[t.Host] = PingResult{Known: true, Via: "local"}
+			default:
 				out[t.Host] = PingResult{Up: up, Known: true, Via: "os6"}
 			}
 		default:

@@ -31,13 +31,14 @@ func NewRealSecond() Second { return realSecond{} }
 // secondSSH: os6_mgmt 로의 ssh 호출 (1차 probe/래퍼와 같은 BatchMode, 접속 제한시간 추가).
 // 원격 명령은 remoteBash 로 감싸 bash 가 해석한다 (os6_mgmt 로그인 셸이 csh 여도 동작).
 func secondSSH(stdin, remote string) (string, error) {
-	return runExternal(stdin, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(remote))
+	return runExternal(stdin, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30", os6_mgmt, remoteBash(remote))
 }
 
 // secondRunScript: 원격 임시 디렉터리 생성 → 목록 수신(stdin) → os_check -auto 실행 (sh 호환 문법)
 func secondRunScript(user string) string {
 	oc := os6OSCheckPath()
-	return "d=$(mktemp -d) || exit 1; echo " + secondDirMarker + "$d; cat > \"$d/targets.txt\" && cd \"$d\" && " +
+	// TMPDIR=$d: 체크스크립트(config_check)의 작업 디렉터리도 이 안에 — 회수 뒤 rm -rf 로 함께 지워진다
+	return remoteTmpSh("d", true, true) + "export TMPDIR=\"$d\"; echo " + secondDirMarker + "$d; cat > \"$d/targets.txt\" && cd \"$d\" && " +
 		dhcpLinkSh(dhcpCandidates(oc)) + " && " +
 		"bash " + shq(oc) + " -auto " + shq(user) + " targets.txt > os_check.log 2>&1; echo " + secondRCMarker + "$?"
 }

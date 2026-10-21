@@ -79,7 +79,14 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 		_ = os.Symlink(src, filepath.Join(dir, "dhcp.sh"))
 	}
 
-	env := os.Environ()
+	// 체크스크립트·래퍼의 임시 파일(config_check 작업 디렉터리, 경로별 목록)은 이번 run 의 tmp 에 — 끝나면 통째로 지운다
+	// (중간에 죽어 트랩이 못 돈 것까지). env 의 기존 TMPDIR(<데이터 디렉터리>/tmp)보다 뒤에 붙여 이 값이 쓰인다.
+	runTmp := filepath.Join(dir, "tmp")
+	if err := os.MkdirAll(runTmp, 0755); err != nil {
+		return RunResult{}, err
+	}
+	defer os.RemoveAll(runTmp)
+	env := append(os.Environ(), "TMPDIR="+runTmp)
 	if hasOS6 {
 		if err := writeOS6Wrapper(); err != nil {
 			return RunResult{}, err
@@ -164,6 +171,24 @@ func remoteBash(inner string) string {
 	return `bash -c "` + "`echo " + dotOut(base64.StdEncoding.EncodeToString([]byte(inner))) + " | tr -d . | base64 -d`" + `"`
 }
 
+// remoteTmpSh: 원격(os6_mgmt, 원격 클라이언트에서 본 os8_mgmt) 셸에서 임시 파일(dir 이면 디렉터리)을 변수 v 에 만드는 앞부분.
+// /tmp 바로 아래가 아니라 ${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp 에 만든다 (못 만들거나 못 쓰면 TMPDIR → /tmp).
+// ssh 가 끊기면(시간 초과로 이쪽 ssh 를 죽이거나 연결이 끊김) 원격 bash 는 SIGHUP·SIGPIPE 로 죽어 뒤쪽 rm 이 돌지 않으므로
+// (호스트 목록·gossh 결과 파일 <v>_* 가 남음) 트랩으로 지운다. keep 이면 정상 종료 때는 남기고(다음 ssh 로 회수) 끊겼을 때만 지운다.
+// 작은따옴표·`!`·줄바꿈이 없어 remoteBash 와 두 래퍼의 bash -c '…' 어디에 넣어도 그대로 동작한다.
+func remoteTmpSh(v string, dir, keep bool) string {
+	mk, rm := "mktemp", `rm -f \"\$`+v+`\" \"\$`+v+`\"_*`
+	if dir {
+		mk, rm = "mktemp -d", `rm -rf \"\$`+v+`\"`
+	}
+	s := `_t=${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp; mkdir -p "$_t" 2>/dev/null; chmod 1777 "$_t" 2>/dev/null; ` +
+		`[ -d "$_t" ] && [ -w "$_t" ] || _t=${TMPDIR:-/tmp}; ` + v + `=$(` + mk + ` "$_t/as.XXXXXXXX") || exit 97; `
+	if keep {
+		return s + `trap "` + rm + `; exit 129" HUP; trap "` + rm + `; exit 141" PIPE; trap "` + rm + `; exit 143" TERM; `
+	}
+	return s + `trap "` + rm + `" EXIT; trap "exit 129" HUP; trap "exit 141" PIPE; trap "exit 143" TERM; `
+}
+
 // os6WrapperScript: 원격 명령은 bash -c '…' 로 감싸 보낸다 (remoteBash 와 같은 형태, os6_mgmt 로그인 셸이 csh 여도 동작).
 // os6_gossh 경로는 원격 bash 용으로 한 번 더 인용한다(shq(shq(…))) — 공백·' 가 있어도 깨지지 않게.
 //
@@ -181,6 +206,7 @@ mgmt=` + shq(os6_mgmt) + `
 gossh=` + shq(shq(os6_gossh)) + `
 real=` + shq(realGossh) + `
 mark='==AUTO_SETUP_GOSSH_RES=='
+pre=` + shq(remoteTmpSh("f", false, false)) + `
 args=("$@")
 wi=-1
 for ((i = 0; i < ${#args[@]}; i++)); do
@@ -200,17 +226,17 @@ remote() {
 		fi
 		q="$q $(printf '%q' "${args[i]}")"
 	done
-	c="f=\$(mktemp); cat > \$f; $gossh$q; "'rc=$?; echo '"$mark"'; for x in "$f"_*; do [ -f "$x" ] && echo "${x#$f} $(base64 -w0 < "$x")"; done; rm -f "$f" "$f"_*; exit $rc'
+	c="$pre"'cat > "$f"; '"$gossh$q; "'rc=$?; echo '"$mark"'; for x in "$f"_*; do [ -f "$x" ] && echo "${x#$f} $(base64 -w0 < "$x")"; done; rm -f "$f" "$f"_*; exit $rc'
 	res=$(mktemp) || return 1
 	if [[ $c == *'!'* ]]; then
 		# ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
 		bq=$'\x60'
 		e=$(printf %s "$c" | base64 -w0 | sed 's/../&./g')
-		ssh "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
+		ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
 		rc=${PIPESTATUS[0]}
 	else
 		c=${c//\'/\'\\\'\'}
-		ssh "$mgmt" "bash -c '$c'" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
+		ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c '$c'" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
 		rc=${PIPESTATUS[0]}
 	fi
 	if [ $wi -ge 0 ]; then
@@ -288,10 +314,30 @@ func writeOS6Wrapper() error {
 		return err
 	}
 	p := filepath.Join(binDir(), "gossh")
-	if err := os.WriteFile(p, []byte(os6WrapperScript(localGosshPath())), 0755); err != nil {
+	body := os6WrapperScript(localGosshPath())
+	if b, err := os.ReadFile(p); err == nil && string(b) == body {
+		return os.Chmod(p, 0755)
+	}
+	// 데몬 run 과 TUI x 가 같은 파일을 쓴다 — 실행 중인 래퍼를 제자리에서 덮어쓰면 bash 가 읽던 위치가 어긋나므로
+	// 새 파일에 쓰고 rename 한다 (실행 중인 쪽은 옛 파일을 끝까지 읽는다)
+	f, err := os.CreateTemp(binDir(), ".gossh_")
+	if err != nil {
 		return err
 	}
-	return os.Chmod(p, 0755)
+	_, werr := f.WriteString(body)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Chmod(f.Name(), 0755)
+	}
+	if werr == nil {
+		werr = os.Rename(f.Name(), p)
+	}
+	if werr != nil {
+		os.Remove(f.Name())
+	}
+	return werr
 }
 
 // ---- code 파일 ----

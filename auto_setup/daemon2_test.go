@@ -79,6 +79,10 @@ func (f fakeLdap) Backup(j *Job, hosts []string) map[string]LdapState {
 	f.x.ev("backup %s@%d", strings.Join(hosts, ","), f.x.off())
 	out := map[string]LdapState{}
 	for _, h := range hosts {
+		if s := f.x.world.hosts[h]; s != nil && !s.up(f.x.off()) {
+			out[h] = noneState(ldapNoResp) // 실제처럼: 꺼져 있으면 수집 무응답
+			continue
+		}
 		out[h] = LdapState{Backup: LdapBackupOK}
 	}
 	return out

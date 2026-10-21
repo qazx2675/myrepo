@@ -74,7 +74,7 @@ func TestSecondRunEndToEnd(t *testing.T) {
 	}
 	// 원격 명령 형식
 	lg, _ := os.ReadFile(os.Getenv("SSH_LOG"))
-	if strings.Count(string(lg), "-o BatchMode=yes -o ConnectTimeout=10 mgmtstub") != 2 {
+	if strings.Count(string(lg), "-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 mgmtstub") != 2 {
 		t.Fatalf("ssh 호출:\n%s", lg)
 	}
 	run := ""
@@ -84,10 +84,10 @@ func TestSecondRunEndToEnd(t *testing.T) {
 		}
 	}
 	// 원격 명령은 bash -c '…' 로 감싸므로 안쪽 ' 는 '\'' 로 한 번 더 이스케이프되어 보인다
-	if !strings.Contains(run, "mgmtstub bash -c 'd=$(mktemp -d)") {
+	if !strings.Contains(run, "mgmtstub bash -c '_t=${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp;") {
 		t.Fatalf("bash -c 로 감싸야 함:\n%s", run)
 	}
-	for _, w := range []string{`cat > "$d/targets.txt"`, `-auto '\''user1'\'' targets.txt > os_check.log 2>&1; echo ==RC==$?`, `'\''\'\'''\''x'\''\'\'''\''`} {
+	for _, w := range []string{`d=$(mktemp -d "$_t/as.XXXXXXXX")`, `export TMPDIR="$d"`, `cat > "$d/targets.txt"`, `-auto '\''user1'\'' targets.txt > os_check.log 2>&1; echo ==RC==$?`, `'\''\'\'''\''x'\''\'\'''\''`} {
 		if !strings.Contains(run, w) {
 			t.Fatalf("원격 실행 명령에 %q 없음:\n%s", w, run)
 		}

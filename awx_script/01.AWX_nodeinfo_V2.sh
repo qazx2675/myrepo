@@ -22,12 +22,21 @@ start_pwd=$(pwd)
 
 tmp_paths=()
 add_tmp() { tmp_paths+=("$@"); }
-cleanup() {
-	[[ ${#tmp_paths[@]} -gt 0 ]] && rm -rf "${tmp_paths[@]}"
+cleanup() {   # 임시물 + gossh 가 목록 옆에 만든 결과 파일(<목록>_res_off 등 — 접속불가 호스트명이 들어 있음)
+	local p
+	[[ ${#tmp_paths[@]} -gt 0 ]] || return 0
+	for p in "${tmp_paths[@]}"; do [[ -n $p ]] && rm -rf "$p" "$p"_*; done
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+# 임시 파일은 /tmp 바로 아래가 아니라 auto_setup 데이터 디렉터리의 tmp 에 (auto_setup 에서 실행하면 TMPDIR 이 이미 그곳). 못 쓰면 /tmp
+if [[ -z $TMPDIR ]]; then
+	_t=${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp
+	mkdir -p "$_t" 2>/dev/null; chmod 1777 "$_t" 2>/dev/null
+	[[ -d $_t && -w $_t ]] && export TMPDIR=$_t
+	unset _t
+fi
 
 # 색상: 터미널(또는 AWX_COLOR=1)일 때만 사용, NO_COLOR 가 있으면 끔. 로그 파일에는 색 코드를 넣지 않고, 02 에는 AWX_COLOR 로 전달
 if [[ ( -t 1 && -z $NO_COLOR ) || $AWX_COLOR == 1 ]]; then

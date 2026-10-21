@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### 수정
+- 01·02: **gossh 결과 파일(호스트명)이 임시 디렉터리에 남던 문제** — gossh 는 `-w <목록>` 옆에 `<목록>_res_off`(접속불가 — os8_mgmt 에서 안 닿는 서버)·`_os_install`·`_nosvrauto`·`_res_refsed` 를 만드는데 종료 정리가 목록만 지워 `/tmp/tmp.XXXXXXXXXX_res_off` 같은 호스트명 파일이 쌓였다(os6 재조사는 `os6_dir` 의 `.os6_hosts.XXXXXX_res_off`). 이제 등록한 임시물마다 `<경로>_*` 도 지운다
+- 01·02: **임시 파일 위치** — TMPDIR 이 없으면(직접 실행) `${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp`(0777+sticky, 못 쓰면 종전대로 `/tmp`) 를 TMPDIR 로 쓴다. auto_setup(w) 에서 실행하면 auto_setup 이 준 TMPDIR 그대로
+
 ### 추가
 - 01: **DNS 점검 `[4-1] dns_check`** — `[4] fix_mac` 다음, `[5]` 대상 출력 전에 `${user}.txt` 의 hostname(4번째)·IP(5번째)를 `/etc/resolv.conf` 의 DNS 서버(최대 3)에 직접 A 질의해 비교한다 (`/etc/hosts`·getent 는 쓰지 않음, 짧은 이름은 search/ndots 를 glibc 와 같은 순서로 붙임). `dig +short +time=2 +tries=1 @서버` 우선, 없으면 `nslookup`, 둘 다 없으면 `DNS 도구 없음 — 점검 생략`. 판정: 일치 / 불일치 / 판단 불가 / 미등록 / 조회 실패, 중복 경고(`⚠ 등록IP x 은 y 의 IP (목록|DNS|PTR)`). 1대라도 A 를 받아야 점검하고 전부 실패하면 `DNS 조회 불가 — 점검 생략` 후 기존대로 진행. 불일치가 있으면 표 + `a 모두 DNS 로 / n 그대로 / s 하나씩 / q 중단`, 교체는 5번째 필드(IP)만 바꾸고 LOG 에 `[DNS] svr0001 1.1.1.1 -> 1.1.1.2`. `xargs -P 32` 병렬, 질의당 2초·재시도 1회(1000대·2코어 약 11초). auto_setup `dnscheck.go` 와 같은 규칙
 - 01: **auto 모드(`AWX_AUTO=1`)의 DNS 불일치 질문은 `/dev/tty`** — 표를 출력하고 `등록값 그대로 계속 진행할까요? [y/N]`, `y` 면 진행·그 외이거나 터미널이 없어 물을 수 없으면 중단(exit 1). stdin 은 `/dev/null` 이라 터미널로만 묻는다
@@ -10,6 +14,9 @@
 - 테스트: `test/run_tests.sh` 에 케이스 21~23 (DNS 점검: 일치/불일치/중복 경고(목록·DNS·PTR)/미등록/판단 불가/DNS 없음/auto 모드/`AWX_DNS_CHECKED`, 실제 `dig`·`nslookup` + 가짜 UDP DNS 서버) — PASS=108. `test/fake_dns.py` 는 랩·CI 전용(운영에 배치하지 않음)
 
 ### 변경
+- 문서: `workflow.svg` 를 처음 보는 사람도 읽기 쉽게 다시 그림 — 4단계(준비·점검·등록·마무리) 구분, 색으로 자동 처리/작업자 입력/중단/완료 구분, 상자마다 쉬운 설명 + 작은 글씨로 단계 번호·함수명, DHCP·PXE 동시 실행·반복·재시도 흐름 표시 (기존 흐름 기준)
+- 문서: `workflow.svg` 가 오른쪽·아래가 잘려 보이던 문제 수정(캔버스를 1200x2440 으로 확대, DNS 점검 상자 폭 확대) 및 흐름도에서 "[0] 초기화" 상자 제거(`WORKFLOW.md` 도 동일)
+- 문서: 02 흐름도(`workflow.svg`, `WORKFLOW.md` 배치 모드)를 실제 동작에 맞춰 "dhcp ∥ pxe 동시 실행(둘 다 끝나야 다음 yml)" 으로 수정
 - 01: `AWX_AUTO_NODEINFO`(y|n)를 **`AWX_AUTO` 없이도** 존중 — 이 변수만 주면 `awx nodeinfo 사용여부` 질문만 자동 답변(`… (auto_setup)` 표시)하고 나머지 질문은 그대로 직접 응답. auto_setup 신규 설치 양식이 프로파일 없이 AWX 를 실행할 때 nodeinfo N 을 넘기는 용도. `AWX_AUTO=1` 일 때의 기존 동작과 변수가 없을 때의 동작은 그대로
 
 ### 추가 (이전 미배포 항목)

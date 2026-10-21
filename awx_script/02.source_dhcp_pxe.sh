@@ -149,9 +149,16 @@ fi
 # yml 별 순차 실행: invsync 후 dhcp 와 pxe 는 동시 실행하고, 둘 다 끝나야 다음 yml 로 진행
 # (한 단계 실패 시 해당 yml 의 나머지는 건너뛰고 다음 yml 진행)
 results=(); fail_cnt=0; ok=()
+# 임시 파일은 /tmp 바로 아래가 아니라 auto_setup 데이터 디렉터리의 tmp 에 (01 과 같음). 못 쓰면 /tmp
+if [[ -z $TMPDIR ]]; then
+	_t=${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp
+	mkdir -p "$_t" 2>/dev/null; chmod 1777 "$_t" 2>/dev/null
+	[[ -d $_t && -w $_t ]] && export TMPDIR=$_t
+	unset _t
+fi
 outdir=$(mktemp -d)
-os6_tmp=()                   # os6 재조사용으로 공유 디렉터리에 만든 임시 파일 (종료 시 삭제)
-trap 'rm -rf "$outdir" "${os6_tmp[@]}"' EXIT
+os6_tmp=()                   # os6 재조사용으로 공유 디렉터리에 만든 임시 파일 (종료 시 삭제 — gossh 결과 파일 <목록>_res_off 등 포함)
+trap 'rm -rf "$outdir"; for p in "${os6_tmp[@]}"; do [[ -n $p ]] && rm -f "$p" "$p"_*; done' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 for ((i=0; i<total; i++)); do
