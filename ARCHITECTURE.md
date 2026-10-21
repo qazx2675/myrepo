@@ -4,7 +4,7 @@
 |---|---|
 | `run.sh` | 입력 파일 존재 검증 → `bin/pwreset` 실행 (빌드는 하지 않음, 바이너리는 저장소에 커밋됨) |
 | `cmd/pwreset/main.go` | CLI 진입점. 플래그 파싱, `-pass`/기본(reset) 모드 분기, 대상별 goroutine 병렬 처리, CSV 저장 |
-| `cmd/pwreset/sshclient.go` | 대상 한 대에 접속해 비밀번호 변경 프롬프트에 응답. SSH 인증 단계 + pty 셸 단계 두 경로 |
+| `cmd/pwreset/sshclient.go` | 대상 한 대에 접속해 비밀번호 변경 프롬프트에 응답. 키 인증 우선(`loadSigners`), SSH 인증 단계 + pty 셸 단계 두 경로 |
 | `cmd/pwreset/promptfsm.go` | 비밀번호 변경 프롬프트 상태머신. 두 경로가 이 상태머신을 공유 |
 | `cmd/pwreset/cryptutil.go` | AES-256-GCM 대칭 암복호화, 키 파일(`key.bin`) 로드/생성 |
 | `cmd/pwreset/targets.go` | `list.txt`(IP/호스트명 목록, 형식 검증 없음), `old_password.txt`(후보 비밀번호) 파싱 |
@@ -47,7 +47,7 @@ flowchart TD
     A["run.sh (또는 bin/pwreset 직접)"] --> B["list.txt / old_password.txt / newpass.enc 로드<br/>newpass.enc 를 key.bin 으로 복호화"]
     B --> C["대상(IP/호스트명)마다 goroutine"]
     C --> D["후보 비밀번호를 위(최신)부터 순서대로 시도"]
-    D --> E{"ssh.Dial (keyboard-interactive + password)"}
+    D --> E{"ssh.Dial (키 인증 우선, keyboard-interactive · password 폴백)"}
     E -->|"인증 실패"| D
     E -->|"경로 A: keyboard-interactive 단계에서<br/>프롬프트 완료"| G["성공 · 적용됨"]
     E -->|"경로 B: password 인증 성공,<br/>pty 셸에서 promptFSM 이어서 처리"| F["pty 셸 stdout 매칭 → stdin 응답"]

@@ -11,6 +11,7 @@
   네트워크 접속 없이 `go.sum` 에 고정된 `golang.org/x/crypto` 모듈만 씁니다
   (Go 모듈 캐시 또는 vendor 가 준비돼 있어야 합니다).
 - 대상 서버에는 아무것도 설치하지 않습니다. 접속은 순수 SSH 프로토콜(`golang.org/x/crypto/ssh`)만 사용합니다.
+- **인증은 SSH 키를 먼저 시도**하고(없으면 `~/.ssh` 표준 키 자동 탐색, `-i` 로 지정 가능), 후보 비밀번호는 폴백입니다. 대상이 `PasswordAuthentication no` 로 비밀번호 인증을 막아둔 서버에서는 키 인증이 있어야 접속되며, 접속 후 pty 세션에서 뜨는 강제변경 프롬프트의 `Current password` 에는 `old_password.txt` 후보가 사용됩니다.
 - 새 비밀번호는 평문으로 디스크에 남기지 않습니다. AES-256-GCM 으로 암호화한
   `newpass.enc` 와 별도의 키 파일(`key.bin`)로 나눠 보관합니다.
 - 대상별로 goroutine 을 띄워 병렬 처리합니다.
@@ -96,18 +97,20 @@ shred -u /tmp/plain.txt                # 또는 rm
 |---|---|
 | `ip` | 대상 IP/호스트명 |
 | `found_password_index` | 성공한 후보의 `old_password.txt` 내 인덱스(0부터). 접속 실패 시 빈 값 |
-| `status` | `성공`(접속됨) / `접속불가` (모든 후보로 시도해도 로그인 실패) |
-| `applied_new_password` | 새 비밀번호 적용 여부(`예`/`아니오`). **새 비밀번호로 재접속이 확인돼야 `예`** |
-| `detail` | 사유: `verified`(새 비번 접속 확인) / `connected-but-not-applied`(접속은 됐으나 변경 안 됨) / 접속 오류 문자열 |
+| `status` | `성공`(변경됨) / `미적용`(접속은 됐으나 변경 안 됨) / `접속불가`(접속 자체 실패) |
+| `applied_new_password` | 새 비밀번호 적용 여부(`예`/`아니오`) |
+| `detail` | 사유: `verified`(새 비번 접속 확인) / `updated-confirmed`(서버가 변경 성공 문구 출력) / `connected-but-not-applied` / 접속 오류 문자열 |
 
-`applied_new_password` 는 변경 후 **새 비밀번호로 실제 재접속이 되는지
-확인**한 결과입니다(서버가 변경 직후 세션을 끊어도 올바르게 판정).
+성공 판정 기준은 서버의 `all authentication tokens updated successfully`
+출력(`updated-confirmed`)이며, password 인증이 켜진 서버라면 새 비밀번호
+재접속까지 확인(`verified`)합니다.
 
-- `접속불가` : `old_password.txt` 후보로 로그인 자체가 안 됨 → `detail` 의
-  오류 메시지로 원인 확인(비번 틀림/호스트 불가/인증거부 등). 후보 목록을
-  다시 확인하십시오.
-- `성공` + `아니오`(`connected-but-not-applied`) : 접속은 됐으나 변경
-  프롬프트가 없었거나 서버가 새 비밀번호를 거부(복잡도 정책 등)한 경우입니다.
+- `접속불가` : 키·후보 비밀번호 어느 쪽으로도 접속이 안 됨 → `detail` 의 오류
+  메시지로 원인 확인. **대상이 `PasswordAuthentication no` 라면 SSH 키가
+  있어야 접속됩니다**(아래 "인증" 참고).
+- `미적용`(`connected-but-not-applied`) : 접속은 됐으나 변경 프롬프트가
+  없었거나, 모든 후보가 `Current password` 와 불일치, 또는 서버가 새 비밀번호를
+  거부(복잡도 정책 등)한 경우입니다.
 
 ---
 
@@ -120,6 +123,7 @@ shred -u /tmp/plain.txt                # 또는 rm
 | `-pass` | (없음) | 지정하면 암호화 서브커맨드로 동작. 평문 비밀번호 파일 경로. `key.bin` 없으면 생성, `newpass.enc` 로 저장(둘 다 경로 고정) |
 | `-list` | `list.txt` | 대상 목록 파일 (줄바꿈으로 IP/호스트명 나열, 계정 root 고정) |
 | `-out` | `result.csv` | 결과 CSV 경로 |
+| `-i` | (없음) | SSH 개인키 경로. 비우면 `~/.ssh` 의 `id_ed25519`·`id_ecdsa`·`id_rsa` 를 순서대로 사용 |
 
 `old_password.txt`/`newpass.enc`/`key.bin` 은 플래그 없이 고정 경로로
 다룹니다 (사용자가 매번 지정할 필요가 없도록).

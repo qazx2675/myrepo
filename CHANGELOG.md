@@ -1,5 +1,20 @@
 # CHANGELOG.md — 패스워드변경자동화 (pwreset)
 
+## 2026-10-21 (3차) — 키 인증 우선 (PasswordAuthentication no 대응)
+
+- **SSH 키 인증을 1순위로** 추가(gossh 와 동일 방식). `-i <키>` 또는 `~/.ssh`
+  의 `id_ed25519`·`id_ecdsa`·`id_rsa` 자동 탐색. 후보 비밀번호는 폴백.
+  - 대상 서버가 `PasswordAuthentication no` 로 비밀번호 인증을 막아둔 경우
+    기존(비밀번호 전용)엔 `접속불가` 로 실패하던 것을, 키로 접속해 pty
+    세션에서 강제변경을 처리하도록 함. 강제변경의 `Current password` 응답엔
+    `old_password.txt` 후보를 그대로 사용.
+  - 성공 기준을 서버의 `all authentication tokens updated successfully`
+    출력으로 삼음(password 인증이 꺼진 서버에선 새 비번 재접속 검증이 불가).
+  - 결과 status 에 `미적용`(접속은 됐으나 변경 안 됨) 추가. 접속만 된 후보는
+    다음 후보까지 계속 시도.
+  - 랩 검증: Rocky 에서 `PasswordAuthentication no`+만료계정+키 구성으로
+    비밀번호 전용 실패 → 키 인증 접속·강제변경·만료해제 확인.
+
 ## 2026-10-21 (2차) — 변경 유실 버그 수정 + 재접속 검증
 
 - **거짓 성공/변경 유실 버그 수정.** `runShell` 이 `Retype` 를 보내는 즉시

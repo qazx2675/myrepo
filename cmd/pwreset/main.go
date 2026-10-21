@@ -14,6 +14,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // 고정 경로. 사용자가 매번 지정하지 않도록 상수로 둡니다.
@@ -28,6 +30,7 @@ func main() {
 		pass = flag.String("pass", "", "새 비밀번호 평문 파일 경로. 지정하면 암호화 서브커맨드로 동작 (key.bin 없으면 생성, newpass.enc 로 저장)")
 		list = flag.String("list", "list.txt", "대상 목록 파일 (줄바꿈으로 IP 또는 호스트명 나열, 계정 root 고정)")
 		out  = flag.String("out", "result.csv", "결과 CSV 경로")
+		key  = flag.String("i", "", "SSH 개인키 경로 (비우면 ~/.ssh 의 id_ed25519·id_ecdsa·id_rsa 를 순서대로 사용)")
 	)
 	flag.Parse()
 
@@ -35,7 +38,7 @@ func main() {
 	if *pass != "" {
 		err = runEncrypt(*pass)
 	} else {
-		err = runReset(*list, *out)
+		err = runReset(*list, *out, *key)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "오류: "+err.Error())
@@ -68,7 +71,7 @@ func runEncrypt(in string) error {
 }
 
 // runReset 은 대상 서버들의 비밀번호 변경 프롬프트를 후보 비밀번호로 처리합니다.
-func runReset(list, out string) error {
+func runReset(list, out, keyPath string) error {
 	k, err := loadKey(keyPath)
 	if err != nil {
 		return fmt.Errorf("키 파일: %w", err)
@@ -92,7 +95,8 @@ func runReset(list, out string) error {
 		return fmt.Errorf("후보 비밀번호: %w", err)
 	}
 
-	fmt.Printf("대상=%d대  후보=%d개\n", len(targets), len(candidates))
+	signers := loadSigners(keyPath)
+	fmt.Printf("대상=%d대  후보=%d개  키=%d개\n", len(targets), len(candidates), len(signers))
 
 	// 서버별 goroutine 병렬 처리 (계정 잠금 정책 없음 전제, 시도 간 딜레이 불필요).
 	results := make([]Result, len(targets))
@@ -101,7 +105,7 @@ func runReset(list, out string) error {
 		wg.Add(1)
 		go func(i int, ip string) {
 			defer wg.Done()
-			results[i] = processHost(ip, candidates, newPass)
+			results[i] = processHost(ip, signers, candidates, newPass)
 		}(i, ip)
 	}
 	wg.Wait()
@@ -115,17 +119,28 @@ func runReset(list, out string) error {
 
 // processHost 는 한 대상에 대해 후보 비밀번호를 최신부터 순서대로 시도합니다.
 //
-// Permission denied(접속 실패) 시 다음 후보로 재시도하고, 모두 실패하면
-// "접속불가" 로 기록합니다.
-func processHost(ip string, candidates []string, newPass string) Result {
-	lastDetail := ""
+// 변경이 반영되면("성공") 바로 그 후보 인덱스로 기록합니다. 접속은 됐지만 현재
+// 비밀번호(후보) 불일치 등으로 변경이 안 되면 다음 후보를 계속 시도하고, 끝까지
+// 변경이 안 되면 "미적용"(접속은 됨) 으로 남깁니다. 어느 후보로도 접속조차 안
+// 되면 "접속불가" 입니다.
+func processHost(ip string, signers []ssh.Signer, candidates []string, newPass string) Result {
+	everConnected := false
+	connDetail := ""
+	lastErr := ""
 	for idx, cand := range candidates {
-		applied, authFailed, detail := tryCandidate(ip, cand, newPass)
-		if authFailed {
-			lastDetail = detail
+		applied, connected, detail := tryCandidate(ip, signers, cand, newPass)
+		if applied {
+			return Result{IP: ip, FoundIndex: idx, Status: "성공", Applied: true, Detail: detail}
+		}
+		if connected {
+			everConnected = true
+			connDetail = detail
 			continue
 		}
-		return Result{IP: ip, FoundIndex: idx, Status: "성공", Applied: applied, Detail: detail}
+		lastErr = detail
 	}
-	return Result{IP: ip, FoundIndex: -1, Status: "접속불가", Applied: false, Detail: lastDetail}
+	if everConnected {
+		return Result{IP: ip, FoundIndex: -1, Status: "미적용", Applied: false, Detail: connDetail}
+	}
+	return Result{IP: ip, FoundIndex: -1, Status: "접속불가", Applied: false, Detail: lastErr}
 }
