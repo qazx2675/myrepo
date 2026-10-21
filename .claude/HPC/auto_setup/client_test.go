@@ -279,7 +279,8 @@ func TestRemoteCommandQuoting(t *testing.T) {
 	}
 	defer func() { runExternal = oldRun }()
 
-	weird := []string{"a b", "it's", `x"y`, "$HOME;rm -rf /", "`id`", "*"}
+	// 위험어가 든 인자(호스트명 kddc01 등)는 gossh 가 명령째 거부하므로 8진수 printf 로 실린다
+	weird := []string{"a b", "it's", `x"y`, "$HOME;rm -rf /", "`id`", "*", "kddc01", `Asphalt-REBOOT it's \n%s`}
 	r, err := remoteRun(weird)
 	if err != nil {
 		t.Fatal(err)
@@ -288,12 +289,15 @@ func TestRemoteCommandQuoting(t *testing.T) {
 		t.Fatalf("결과: %+v", r)
 	}
 	b, _ := os.ReadFile(argv)
-	want := "<a b>\n<it's>\n<x\"y>\n<$HOME;rm -rf />\n<`id`>\n<*>\n"
+	want := "<a b>\n<it's>\n<x\"y>\n<$HOME;rm -rf />\n<`id`>\n<*>\n<kddc01>\n<Asphalt-REBOOT it's \\n%s>\n"
 	if string(b) != want {
 		t.Fatalf("원격 인자:\n%q\n%q", b, want)
 	}
 	if len(gotArgs) != 6 || gotArgs[0] != "gossh" || !reflect.DeepEqual(gotArgs[1:4], []string{"-pm", "-script", "-w"}) {
 		t.Fatalf("gossh 호출 형식: %v", gotArgs)
+	}
+	if workDanger(gotArgs[5]) {
+		t.Fatalf("원격 명령에 gossh 위험어가 남음: %q", gotArgs[5])
 	}
 	if strings.ContainsAny(gotArgs[5], "\n") {
 		t.Fatalf("원격 명령은 한 줄이어야 함(csh 로그인 셸 대비): %q", gotArgs[5])

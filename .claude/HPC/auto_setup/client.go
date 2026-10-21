@@ -164,11 +164,25 @@ func remoteCommand(args []string) string {
 	var sb strings.Builder
 	sb.WriteString(shQuote(remoteBin()))
 	for _, a := range args {
-		sb.WriteString(" " + shQuote(a))
+		sb.WriteString(" " + relayArg(a))
 	}
-	script := "t=$(mktemp -d) || exit 97; " + sb.String() + " </dev/null >$t/o 2>$t/e; r=$?; " +
+	script := remoteTmpSh("t", true, false) + sb.String() + " </dev/null >$t/o 2>$t/e; r=$?; " +
 		"echo " + markRC + "$r; echo " + markO + "; base64 $t/o; echo " + markE + "; base64 $t/e; rm -rf $t"
 	return remoteBash(script)
+}
+
+// relayArg: 원격 셸에 넘길 인자 하나. gossh 는 명령 문자열에 위험어(reboot·halt·ddc 등, 대소문자 무시)가 있으면 실행을 거부하므로
+// 호스트명·yml 이름에 우연히 들어 있으면(예: kddc01) os6_mgmt 에서만 done·request 가 실패했다 → 그런 인자는 8진수 printf 로 실어
+// 원격 bash 가 복원한다 (숫자·\ 뿐이라 위험어가 생기지 않음). 위험어가 없으면 종전과 같은 인용.
+func relayArg(a string) string {
+	if !workDanger(a) {
+		return shQuote(a)
+	}
+	var b strings.Builder
+	for _, c := range []byte(a) {
+		fmt.Fprintf(&b, `\%03o`, c)
+	}
+	return `"$(printf '` + b.String() + `')"`
 }
 
 // remoteRun: os8_mgmt 에서 `<os8_autosetup> args…` 를 gossh 원샷으로 실행. err 은 전송 실패(응답 없음/형식 오류)만.

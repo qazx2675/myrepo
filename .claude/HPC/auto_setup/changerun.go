@@ -618,6 +618,7 @@ func chgOS6WrapperScript(mgmt, gossh string) string {
 		"# auto_setup 변경 메뉴: os6_mgmt 경유 gossh 래퍼 (실행 중에만 있는 임시 파일)\n" +
 		"M=" + shq(mgmt) + "\n" +
 		"G=" + shq(shq(gossh)) + "\n" +
+		"P=" + shq(remoteTmpSh("f", false, false)) + "\n" +
 		`w=""; a=""; nx=0
 for x in "$@"; do
   if [ "$nx" = 1 ]; then w=$x; a="$a \"\$f\""; nx=0; continue; fi
@@ -625,7 +626,7 @@ for x in "$@"; do
   a="$a $(printf '%q' "$x")"
 done
 if [ -z "$w" ] || [ ! -r "$w" ]; then echo "as_change: -w 호스트 목록 파일 없음" >&2; exit 97; fi
-c="f=\$(mktemp) || exit 97; cat > \"\$f\"; $G$a; rc=\$?; rm -f \"\$f\" \"\$f\"_*; exit \$rc"
+c="$P"'cat > "$f"; '"$G$a; "'rc=$?; rm -f "$f" "$f"_*; exit $rc'
 if [[ $c == *'!'* ]]; then
   # ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
   bq=$'\x60'

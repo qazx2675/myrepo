@@ -72,6 +72,7 @@ type hostRT struct {
 	resolveLogged bool
 	resolveFails  int // 연속 이름 해석 실패 횟수 (resolveToOS6 회면 os6 경유로)
 	oldOSLogged   bool
+	ldapNow       bool // 이번 주기에 os6 로 판별됨 → os6 probe 첫 응답을 기다리지 않고 LDAP 백업을 한 번 시도 (ldapBackup)
 }
 
 type inflight struct {
@@ -524,6 +525,9 @@ func (d *Daemon) step(now time.Time) {
 	if now.Sub(d.lastWork) >= 24*time.Hour { // gossh 작업 기록: 출력 7일·user 당 200MB, lists/<3자리> 7일
 		d.lastWork = now
 		workCleanAll(now)
+		if n := cleanStaleTmp(now); n > 0 {
+			logf("임시 파일 정리: %s %d개 삭제 (%s 지남)", filepath.Join(dataDir(), "tmp"), n, tmpKeep)
+		}
 	}
 }
 
@@ -564,7 +568,7 @@ func (d *Daemon) ldapBackup() {
 				d.dirty[j.ID] = true
 				continue
 			}
-			if r := d.rt[name]; r != nil && r.up {
+			if r := d.rt[name]; r != nil && (r.up || r.ldapNow) {
 				cand = append(cand, name)
 			}
 		}
@@ -573,9 +577,18 @@ func (d *Daemon) ldapBackup() {
 		}
 		sort.Strings(cand)
 		res := d.Ldap.Backup(j, cand)
-		nOK := 0
+		nOK, nRec := 0, 0
 		for _, n := range cand {
 			st, ok := res[n]
+			r := d.rt[n]
+			early := r.ldapNow && !r.up
+			r.ldapNow = false
+			// 막 os6 로 판별된 호스트가 응답하지 않으면 켜져 있는지 아직 모른다 — 기록하지 않고 종전 규칙에 맡긴다
+			// (ping O 가 되면 그때 백업, ping X 면 "전달 시점 ping X": 처음부터 접속불가 호스트는 os8 호스트와 같은 결과)
+			if early && (!ok || st.Backup != LdapBackupOK && (st.Reason == ldapNoResp || strings.HasPrefix(st.Reason, ldapCallFail))) {
+				continue
+			}
+			nRec++
 			if !ok || st.Backup == "" {
 				st = LdapState{Backup: LdapBackupNone, Reason: "백업 실패"}
 			}
@@ -587,8 +600,11 @@ func (d *Daemon) ldapBackup() {
 			s := st
 			j.Hosts[n].Ldap = &s
 		}
+		if nRec == 0 {
+			continue
+		}
 		d.dirty[j.ID] = true
-		logf("LDAP 백업: job %s %d대 중 %d대", j.ID, len(cand), nOK)
+		logf("LDAP 백업: job %s %d대 중 %d대", j.ID, nRec, nOK)
 	}
 }
 
@@ -728,9 +744,7 @@ func (d *Daemon) ping(now time.Time) {
 			refs[name] = ref{j, h, probe}
 		}
 	}
-	if len(targets) == 0 {
-		return
-	}
+	// 대상이 없어도 Pinger 를 부른다 — 집합이 비면 os6_mgmt 의 probe 세션(ssh)을 끝낸다 (realPinger.Ping)
 	sort.Slice(targets, func(a, b int) bool { return targets[a].Host < targets[b].Host })
 	res := d.Pinger.Ping(targets)
 	nLocal, nOS6 := 0, 0
@@ -738,6 +752,11 @@ func (d *Daemon) ping(now time.Time) {
 		r := refs[t.Host]
 		pr, ok := res[t.Host]
 		h, name := r.h, t.Host
+		// os6 경로 호스트를 "both" 로 물었는데 os6_mgmt 정보는 없고 로컬만 무응답: os8 에서 안 보이는 것은 os6 호스트에게 정상이므로
+		// down 근거가 아니다 → 정보 없음으로 (전에는 probe 가 한 주기만 비어도 ping X·READY 해제로 처리돼 os6 호스트만 대기가 다시 시작됐다)
+		if ok && t.Route == "both" && h.Route == "os6" && pr.Via == "local" && !pr.Up {
+			pr.Known = false
+		}
 		if !ok || !pr.Known {
 			if h.NoPing == 0 {
 				h.NoPing = ts
@@ -755,6 +774,9 @@ func (d *Daemon) ping(now time.Time) {
 			if !pr.Up && os6_mgmt != "" {
 				h.Route = "os6"
 				nOS6++
+				// os8 호스트는 이 주기에 ping O 로 바로 LDAP 백업되는데 os6 호스트는 probe 첫 응답(1~2주기 뒤)을 기다려,
+				// 그 사이 재부팅되면 os6 호스트만 백업을 놓쳤다 → 같은 주기에 os6 경유로 한 번 시도한다
+				d.hrt(name).ldapNow = true
 				continue // 로컬 무응답은 os6 경로의 ping 상태가 아님
 			}
 			h.Route = "local"

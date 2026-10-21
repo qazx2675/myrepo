@@ -19,7 +19,7 @@
 | 5. 환경설정 | y/n/set → OK 호스트에 `;`로 묶은 스크립트를 gossh 1회로 실행 → 재체크 → 상태 병합 | 설정 스크립트 목록 변경 |
 | 6. 마무리 | AI 서버, 벤더/공통 코멘트, DHCP, 기타 상태, usb0, VWP | 코멘트 문구 변경 |
 
-## 임시 파일 (`${TMPDIR:-/tmp}/config_check.XXXXXX/`, 종료 시 삭제 — auto_setup 이 실행하면 TMPDIR=<데이터 디렉터리>/tmp)
+## 임시 파일 (`$TMPDIR/config_check.XXXXXX/`, 종료·Ctrl+C·끊김 시 삭제 — TMPDIR 이 없으면 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp`, 못 쓰면 /tmp)
 
 | 파일 | 내용 |
 |---|---|

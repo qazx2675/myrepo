@@ -117,7 +117,7 @@ exit 3
 `), 0755)
 	fakeBin := filepath.Join(tmp, "bin")
 	os.MkdirAll(fakeBin, 0755)
-	os.WriteFile(filepath.Join(fakeBin, "ssh"), []byte("#!/bin/sh\nshift\nexec bash -c \"$1\"\n"), 0755)
+	os.WriteFile(filepath.Join(fakeBin, "ssh"), []byte("#!/bin/sh\nwhile [ \"$1\" = -o ]; do shift 2; done\nshift\nexec bash -c \"$1\"\n"), 0755)
 
 	os6_mgmt, os6_gossh = "mgmtstub", fakeGossh
 	if err := writeOS6Wrapper(); err != nil {

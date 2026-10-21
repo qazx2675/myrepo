@@ -179,13 +179,21 @@ func realOneoffStart(osCheck, user, mode string, hosts []string) (oneoffProc, er
 		flag = "-auto-check"
 	}
 	cmd := exec.Command("bash", osCheck, flag, user, "targets.txt")
+	// 체크스크립트·래퍼의 임시 파일도 이 디렉터리 안에 (화면을 닫을 때 디렉터리째 지워진다)
+	tmpd := filepath.Join(dir, "tmp")
+	if err := os.MkdirAll(tmpd, 0755); err != nil {
+		lf.Close()
+		return fail(err)
+	}
+	env := append(os.Environ(), "TMPDIR="+tmpd)
 	// os6_mgmt 가 설정돼 있으면 자동 흐름(run)과 같게: 먼저 경로를 판별(route-split — os8 무응답·os6_mgmt 응답 호스트)하고
 	// gossh 래퍼로 os8 호스트는 이 서버에서, os6 호스트는 os6_mgmt 경유로 체크한다 (전에는 x 에서 os6 호스트는 항상 접속불가)
 	if self, err := os.Executable(); err == nil && os6_mgmt != "" && os6_gossh != "" && writeOS6Wrapper() == nil {
 		cmd = exec.Command("bash", "-c", `"$0" route-split targets.txt > os6_hosts.txt; exec bash "$@"`, self, osCheck, flag, user, "targets.txt")
-		cmd.Env = append(os.Environ(), "PATH="+binDir()+string(os.PathListSeparator)+os.Getenv("PATH"),
+		env = append(env, "PATH="+binDir()+string(os.PathListSeparator)+os.Getenv("PATH"),
 			"AUTO_SETUP_OS6_HOSTS="+filepath.Join(dir, "os6_hosts.txt"))
 	}
+	cmd.Env = env
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = lf, lf
 	cmd.SysProcAttr = oneoffSysProcAttr()

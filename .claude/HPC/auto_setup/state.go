@@ -137,6 +137,28 @@ func useDataTmp() {
 	os.Setenv("TMPDIR", d)
 }
 
+// tmpKeep: <데이터 디렉터리>/tmp 에 이보다 오래(수정 시각 기준) 남은 항목은 데몬이 지운다 — 강제 종료 등으로 정리되지 못한 임시 파일
+const tmpKeep = 48 * time.Hour
+
+// cleanStaleTmp: <데이터 디렉터리>/tmp 의 오래된 항목 삭제. 지운 개수.
+func cleanStaleTmp(now time.Time) (n int) {
+	d := filepath.Join(dataDir(), "tmp")
+	ents, err := os.ReadDir(d)
+	if err != nil {
+		return 0
+	}
+	for _, e := range ents {
+		fi, err := e.Info()
+		if err != nil || now.Sub(fi.ModTime()) <= tmpKeep {
+			continue
+		}
+		if os.RemoveAll(filepath.Join(d, e.Name())) == nil {
+			n++
+		}
+	}
+	return n
+}
+
 func ensureDirs() error {
 	for _, d := range []string{queueDir(), jobsDir(), doneDir(), codesDir(), runsDir(), binDir(), doneRecDir(), requestsDir()} {
 		if err := os.MkdirAll(d, 0755); err != nil {

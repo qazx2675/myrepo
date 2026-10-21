@@ -243,7 +243,7 @@ func gosshBatch(route string, hosts []string, cmd string, timeout time.Duration)
 			return nil, errors.New("os6_mgmt/os6_gossh 가 비어 있습니다")
 		}
 		// 원격은 bash 가 해석하도록 remoteBash 로 감싼다 (os6_mgmt 로그인 셸이 csh 여도 동작)
-		remote := "f=$(mktemp); cat > $f; " + shq(os6_gossh) + " -pm -script -w $f " + shq(cmd) + "; rm -f $f ${f}_*"
+		remote := remoteTmpSh("f", false, false) + "cat > $f; " + shq(os6_gossh) + " -pm -script -w $f " + shq(cmd) + "; rm -f $f ${f}_*"
 		out, err = ldapExec(timeout, hostList(hosts), "ssh", os6_mgmt, remoteBash(remote))
 	} else {
 		f, e := os.CreateTemp("", "as_ldap_")
@@ -493,6 +493,12 @@ func routeOf(j *Job, host string) string {
 	return "local"
 }
 
+// 백업 수집에서 호스트 응답을 받지 못한 사유 (daemon.go ldapBackup 이 "켜져 있는지 아직 모름" 으로 본다)
+const (
+	ldapNoResp   = "무응답"
+	ldapCallFail = "수집 호출 실패"
+)
+
 func noneState(reason string) LdapState { return LdapState{Backup: LdapBackupNone, Reason: reason} }
 
 func (realLdapBackup) Backup(job *Job, hosts []string) map[string]LdapState {
@@ -563,11 +569,11 @@ func (realLdapBackup) Backup(job *Job, hosts []string) map[string]LdapState {
 				lines, ok, gerr = l, true, nil
 			}
 			if gerr != nil {
-				res[h] = noneState("수집 호출 실패: " + gerr.Error())
+				res[h] = noneState(ldapCallFail + ": " + gerr.Error())
 				continue
 			}
 			if !ok {
-				res[h] = noneState("무응답")
+				res[h] = noneState(ldapNoResp)
 				continue
 			}
 			in := parseInfo(lines)

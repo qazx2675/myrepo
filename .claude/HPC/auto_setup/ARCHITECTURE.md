@@ -44,6 +44,7 @@
 | `work.go` | gossh 작업 기록 로직·저장소: 호스트 붙여넣기 해석(`workParseHosts`)·`/tmp/auto_setup/lists/<3자리>` 이름(`workNewName`)·기록 형식(`workRec`/`workDB`, index.jsonl 추가 전용)·실행 경로(`workPlan`)·gossh/ssh 명령(`workLocalArgv`/`workOS6Inner`)·`script -q -f -c` 래퍼(`workScript`)·출력 판정(`judgeWork`)·정리(`workCleanOut` 출력 7일·user 당 200MB, `workCleanTmp`, 데몬이 하루 한 번 `workCleanAll`)·os6→os8 중계(`remoteWorkStore` ↔ `cmdWorkRelay`) | 0.8.0, `work_test.go` |
 | `work_tui.go` | gossh 작업 화면(`workState`: 목록 → n 새 작업 / Enter 항목 메뉴 / `/` 검색 → 명령 입력 → 확인 → TUI 를 떠나 실행)·`openWork`·CLI `cmdWork`·결과 보기(`less -R`, `workLess` 주입) | 0.8.0, `work_tui_test.go` |
 | `tcsh_live_test.go` | **랩 전용** 시험: 로그인 셸이 tcsh/csh 인 계정으로 진짜 ssh 접속해 준비확인·LDAP `gosshBatch`·2차 체크·gossh 작업·원격 클라이언트가 `!` 가 있어도 동작하는지 확인. 환경변수 `AS_TEST_LOGIN_MGMT=<user@host>` 가 없으면 SKIP | 0.8.0 (CI 에서는 SKIP) |
+| (임시 파일) | `state.go` `useDataTmp`(TMPDIR=`<데이터 디렉터리>/tmp`)·`cleanStaleTmp`(48시간 지난 항목, 데몬 하루 1회), `runner.go` `remoteTmpSh`(원격 임시 파일을 그 서버의 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp` 에 만들고 ssh 가 끊겨도 트랩으로 삭제 — 준비확인·LDAP·래퍼 2개·2차 체크·gossh 작업·원격 클라이언트 공통), 체크 run 은 `runs/<code>/tmp` 를 TMPDIR 로 주고 끝나면 삭제 | `tmpdir_test.go`, `tmpclean_linux_test.go` |
 | `test/demo_change.sh` · `test/run_change_os.sh` · `test/run_change_lab.sh` | 변경 메뉴 모의 환경 / RHEL 7·8·9 fixture 판정·`-no-restart` 검증 / .58 자기 자신 실동작 (fixture 경로만) | 0.7.0 |
 | `test/lib_change.sh` · `test/fake_gossh.sh` | 변경 시험용 fixture 노드·conf 생성 / 가짜 gossh (호스트별 fixture 루트에서 엔진 스크립트를 로컬 실행, systemctl 등은 호출만 기록) | 0.7.0 |
 | `계획서_v0.7.md` | v0.7.0 명세 (확정 사항 §1, 단계 §3, 불변 조건 §0) | 구현 기준 |
