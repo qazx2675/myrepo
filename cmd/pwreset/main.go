@@ -71,7 +71,8 @@ func runEncrypt(in string) error {
 }
 
 // runReset 은 대상 서버들의 비밀번호 변경 프롬프트를 후보 비밀번호로 처리합니다.
-func runReset(list, out, keyPath string) error {
+// sshKey 는 SSH 키 경로(-i)이며, AES 키는 고정 경로 상수 keyPath("key.bin") 를 씁니다.
+func runReset(list, out, sshKey string) error {
 	k, err := loadKey(keyPath)
 	if err != nil {
 		return fmt.Errorf("키 파일: %w", err)
@@ -95,7 +96,7 @@ func runReset(list, out, keyPath string) error {
 		return fmt.Errorf("후보 비밀번호: %w", err)
 	}
 
-	signers := loadSigners(keyPath)
+	signers := loadSigners(sshKey)
 	fmt.Printf("대상=%d대  후보=%d개  키=%d개\n", len(targets), len(candidates), len(signers))
 
 	// 서버별 goroutine 병렬 처리 (계정 잠금 정책 없음 전제, 시도 간 딜레이 불필요).
