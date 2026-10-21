@@ -11,7 +11,18 @@ import (
 // account_ucsm.go 는 Cisco UCSM(XML API) 로컬 사용자 생성·비밀번호 변경입니다 (biostool account -ucsm).
 // 대상은 UCSM 주소이며 블레이드 BMC 가 아닙니다. 요청은 ucsmxml 의 계정 모드(configConfMo 로 aaaUser
 // 하나의 생성·비밀번호 변경·삭제만)를 지납니다. UCSM 은 단일 엔드포인트라 대상을 한 대씩 처리합니다.
-// 생성 계정의 역할은 admin 입니다 (UCSM 의 관리자 역할).
+// 1순위 계정의 역할은 admin 이고, 두 번째 계정(user2)은 user2_role 에 맞춰 operations / read-only / admin 입니다.
+
+// ucsmRole 은 권한 이름을 UCSM 역할로 바꿉니다.
+func ucsmRole(role string) string {
+	switch role {
+	case roleOperator:
+		return "operations"
+	case roleReadOnly:
+		return "read-only"
+	}
+	return ucsmxml.UserRole
+}
 
 func (e *acctEnv) ucsmClient(t Target, user, pass string) *ucsmxml.Client {
 	return ucsmxml.New(ucsmxml.Options{
@@ -35,70 +46,113 @@ func isUcsmAuthFail(err error) bool {
 }
 
 // ucsmProbe 는 1순위 계정으로 로그인해 봅니다 (읽기). AUTH_FAIL 이면 생성 후보입니다.
-func (e *acctEnv) ucsmProbe(t Target) *acctHost {
-	h := newAcctHost(t, "create")
-	h.Vendor = "Cisco"
-	h.Model = "UCSM"
+// 두 번째 계정이 있으면 로그인된 세션에서 사용자 목록을 읽어 있으면 PRESENT, 없거나 못 읽으면 생성 후보입니다.
+func (e *acctEnv) ucsmProbe(t Target) []*acctHost {
+	hs := newCreateHosts(t, e.accounts())
+	for _, x := range hs {
+		x.Vendor, x.Model = "Cisco", "UCSM"
+	}
+	h := hs[0]
 	if t.Err != "" {
-		h.Status = t.Err
-		return h
+		for _, x := range hs {
+			x.Status = t.Err
+		}
+		return hs
 	}
 	c := e.ucsmClient(t, e.conf.User, e.password)
 	defer func() { _ = c.Logout() }()
-	switch err := c.Login(); {
+	err := c.Login()
+	switch {
 	case err == nil:
 		h.Status, h.Source = acctPrimaryOK, credPrimary
 	case isUcsmAuthFail(err):
 		h.Status, h.Source = acctNeedCreate, credFallback
 	default:
-		h.setUcsmErr(err)
+		for _, x := range hs {
+			x.setUcsmErr(err)
+		}
+		return hs
 	}
-	return h
+	var users []string
+	lerr := err
+	if err == nil && len(hs) > 1 {
+		users, lerr = c.ListUsers()
+	}
+	for _, x := range hs[1:] {
+		x.Status = acctNeedCreate
+		if lerr == nil && containsStr(users, x.User) {
+			x.Status = acctPresent
+		}
+	}
+	return hs
 }
 
-// ucsmCreate 는 cisco admin 계정으로 로그인해 1순위 계정을 만들고 검증·롤백합니다.
-func (e *acctEnv) ucsmCreate(h *acctHost) {
-	t := h.Target
+func containsStr(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// ucsmCreate 는 cisco admin 계정으로 로그인 1회 해서 같은 UCSM 의 계정 칸들(hs)을 차례로 만들고 각각 검증·롤백합니다.
+func (e *acctEnv) ucsmCreate(hs []*acctHost) {
+	t := hs[0].Target
 	user, pass, ok := e.fb.lookup("cisco")
 	if !ok {
-		h.Status, h.Detail = acctNoAdmin, "rf.conf 에 Cisco admin 계정(cisco_user/cisco_pass) 없음"
+		for _, h := range hs {
+			h.Status, h.Detail = acctNoAdmin, "rf.conf 에 Cisco admin 계정(cisco_user/cisco_pass) 없음"
+		}
 		return
 	}
 	c := e.ucsmClient(t, user, pass)
 	defer func() { _ = c.Logout() }()
 	if err := c.Login(); err != nil {
-		h.setUcsmErr(err)
-		if h.Status == ucsmxml.StatusAuthFail {
-			h.Detail = "Cisco admin 계정 로그인 거부 — " + h.Detail
+		for _, h := range hs {
+			h.setUcsmErr(err)
+			if h.Status == ucsmxml.StatusAuthFail {
+				h.Detail = "Cisco admin 계정 로그인 거부 — " + h.Detail
+			}
 		}
 		return
 	}
-	c.AddSecret(e.password)
+	for _, s := range e.accounts() {
+		c.AddSecret(s.Pass)
+	}
+	for _, h := range hs {
+		e.ucsmCreateOne(c, h)
+	}
+}
+
+func (e *acctEnv) ucsmCreateOne(c *ucsmxml.Client, h *acctHost) {
+	t := h.Target
+	sp := e.specOf(h)
+	h.User = sp.User
+	role := ucsmRole(sp.Role)
 	users, err := c.ListUsers()
 	if err != nil {
 		h.setUcsmErr(err)
 		return
 	}
-	for _, u := range users {
-		if u == e.conf.User {
-			h.Status, h.Detail = acctExists, "UCSM 에 사용자가 이미 있음 — 덮어쓰지 않음. 비밀번호가 다르면 change 또는 UCSM 에서 확인"
-			return
-		}
-	}
-	h.Method = "configConfMo sys/user-ext/user-" + e.conf.User + " (aaaUser created, role admin)"
-	h.Warn = "UCSM XML 쓰기는 실장비 미확인 방식 (id_json 문서 근거)"
-	if e.dryRun {
-		h.Status, h.Detail = acctWouldCreate, `요청 본문(비밀번호 제외): configConfMo aaaUser name="`+e.conf.User+`" pwd="*****" status="created" + aaaUserRole admin`
+	if containsStr(users, sp.User) {
+		h.Status, h.Detail = acctExists, "UCSM 에 사용자가 이미 있음 — 덮어쓰지 않음. 비밀번호가 다르면 change 또는 UCSM 에서 확인"
 		return
 	}
-	if err := c.CreateUser(e.conf.User, e.password); err != nil {
+	h.Method = "configConfMo sys/user-ext/user-" + sp.User + " (aaaUser created, role " + role + ")"
+	h.Warn = "UCSM XML 쓰기는 실장비 미확인 방식 (id_json 문서 근거)"
+	if e.dryRun {
+		h.Status, h.Detail = acctWouldCreate, `요청 본문(비밀번호 제외): configConfMo aaaUser name="`+sp.User+`" pwd="*****" status="created" + aaaUserRole `+role
+		return
+	}
+	if err := c.CreateUserRole(sp.User, sp.Pass, role); err != nil {
 		h.setUcsmErr(err)
 		if h.Status == ucsmxml.StatusXMLError || h.Status == "" {
 			h.Status = acctRejected
 		}
 		return
 	}
-	verr := e.ucsmVerify(t, e.conf.User, e.password)
+	verr := e.ucsmVerify(t, sp.User, sp.Pass)
 	if verr == nil {
 		h.Status = acctCreated
 		return
@@ -108,9 +162,9 @@ func (e *acctEnv) ucsmCreate(h *acctHost) {
 		h.Detail = "사용자는 만들었으나 검증 로그인을 통신 오류로 하지 못함 — 롤백하지 않음, 수동 확인"
 		return
 	}
-	if derr := c.DeleteUser(e.conf.User); derr != nil {
+	if derr := c.DeleteUser(sp.User); derr != nil {
 		h.Status, h.Rollback = acctRollbackFailed, "실패"
-		h.Detail = "새 계정 로그인 검증 실패 + 삭제 실패 — UCSM 에서 " + e.conf.User + " 를 수동 확인/삭제하십시오"
+		h.Detail = "새 계정 로그인 검증 실패 + 삭제 실패 — UCSM 에서 " + sp.User + " 를 수동 확인/삭제하십시오"
 		return
 	}
 	h.Status, h.Rollback = acctVerifyFailRB, "완료"
@@ -197,17 +251,13 @@ func (e *acctEnv) ucsmChange(h *acctHost) {
 
 func ucsmAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir string, p painter) error {
 	n := len(rc.Targets)
-	hosts := make([]*acctHost, n)
+	groups := make([][]*acctHost, n)
 	fmt.Println("\n[1/2] UCSM 점검 중 (1순위 계정으로 aaaLogin 1회, 읽기)")
 	for i, t := range rc.Targets {
-		hosts[i] = env.ucsmProbe(t)
+		groups[i] = env.ucsmProbe(t)
 	}
-	var need []*acctHost
-	for _, h := range hosts {
-		if h.Status == acctNeedCreate {
-			need = append(need, h)
-		}
-	}
+	hosts := flattenAcct(groups)
+	need := needCreateGroups(groups)
 	fmt.Println()
 	if len(need) == 0 {
 		writeAcctReport(os.Stdout, hosts, af.listMax, p)
@@ -215,10 +265,11 @@ func ucsmAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir strin
 		fmt.Printf("\n생성할 UCSM 이 없습니다. 결과: %s\n", path)
 		return werr
 	}
-	fmt.Printf("계정 %q 를 만들 UCSM (%d대):\n", rc.Conf.User, len(need))
-	printAcctTargets(os.Stdout, need, af.listMax)
+	what := createWhat(need)
+	fmt.Printf("만들 UCSM 계정: %s\n", what)
+	printAcctTargets(os.Stdout, flattenAcct(need), af.listMax)
 	if !env.dryRun {
-		ok, err := confirmCreate(os.Stdin, os.Stdout, len(need), rc.Conf.User, af)
+		ok, err := confirmCreate(os.Stdin, os.Stdout, what, af)
 		if err != nil || !ok {
 			path, _ := writeAcctResult(dir, hosts)
 			fmt.Printf("생성하지 않고 종료합니다. 점검 결과: %s\n", path)
@@ -226,11 +277,11 @@ func ucsmAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir strin
 		}
 	}
 	fmt.Println("\n[2/2] UCSM 사용자 생성 · 로그인 검증 · 실패 시 삭제(롤백)")
-	for _, h := range need {
-		env.ucsmCreate(h)
+	for _, g := range need {
+		env.ucsmCreate(g)
 	}
 	fmt.Println()
-	writeAcctReport(os.Stdout, need, af.listMax, p)
+	writeAcctReport(os.Stdout, flattenAcct(need), af.listMax, p)
 	path, werr := writeAcctResult(dir, hosts)
 	fmt.Printf("\n결과 파일: %s\n", path)
 	printAcctDisclaimer(os.Stdout, "create", env.dryRun)
@@ -242,6 +293,7 @@ func ucsmAccountChange(rc *runContext, env *acctEnv, af *accountFlags, dir strin
 	hosts := make([]*acctHost, n)
 	for i, t := range rc.Targets {
 		hosts[i] = newAcctHost(t, "change")
+		hosts[i].User = rc.Conf.User
 	}
 	if !env.dryRun {
 		ok, err := acquireNewPassword(rc, env, af, n)

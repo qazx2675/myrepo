@@ -22,6 +22,8 @@ import (
 //     만든 뒤 새 계정으로 1회 로그인해 검증하고, 실패한 서버만 이번에 만든 계정을 되돌린다(롤백).
 //   - change: 1순위 계정의 비밀번호를 새 비밀번호로 바꾼다 (새 비밀번호는 터미널에서 직접 2번 입력).
 //     바꾼 뒤 새 비밀번호로 로그인 검증, 실패한 서버만 이전 비밀번호로 되돌린다. pass.enc 는 자동 갱신하지 않는다.
+//   - 두 번째 공용 계정(bios.conf user2 + pass2.enc, 권한 user2_role)이 있으면 create 가 같은 호스트에 그 계정도 만든다
+//     (2순위 로그인 1회로 두 계정을 차례로 만들고 각각 검증·롤백). change 는 1순위 계정만 바꾼다.
 //   - 비밀번호는 어떤 출력·결과 파일·오류 메시지에도 싣지 않는다. 쓰기는 account*.go 만 하며
 //     redfish.go 의 ModeAccount 허용목록(계정 경로·고정 본문 형태)과 ucsmxml 계정 모드를 지난다.
 
@@ -31,6 +33,7 @@ const (
 	acctWouldCreate    = "WOULD_CREATE"            // dry-run: 만들 계획 (전송 안 함)
 	acctNeedCreate     = "NEED_CREATE"             // 점검: 2순위 계정으로만 로그인됨 (생성 대상)
 	acctPrimaryOK      = "PRIMARY_OK"              // 1순위 계정으로 이미 로그인됨 (만들 필요 없음)
+	acctPresent        = "PRESENT"                 // 두 번째 계정(user2)이 BMC 계정 목록에 이미 있음 (만들 필요 없음)
 	acctExists         = "SKIP_EXISTS"             // 같은 id 가 이미 있어 만들지 않음
 	acctNoAdmin        = "NO_ADMIN"                // rf.conf 에 이 벤더의 admin 계정이 없거나 벤더를 식별 못 함
 	acctNoSlot         = "NO_FREE_SLOT"            // 빈 슬롯 없음
@@ -64,13 +67,42 @@ type acctHost struct {
 	Rollback string // "-" | "완료" | "실패"
 	Detail   string
 	Warn     string // 실장비 미확인 방식 경고
+	User     string // 작업한 계정 ID (account_result.tsv 의 account 열)
 	Stats    CallStats
 
-	createdMember string // POST 로 만든 멤버 경로 (롤백용)
-	slotPath      string // 슬롯 PATCH 로 만든 슬롯 경로 (롤백용)
+	spec          *acctSpec // create: 만들 계정 (nil 이면 1순위 계정)
+	createdMember string    // POST 로 만든 멤버 경로 (롤백용)
+	slotPath      string    // 슬롯 PATCH 로 만든 슬롯 경로 (롤백용)
 }
 
 func newAcctHost(t Target, op string) *acctHost { return &acctHost{Target: t, Op: op, Rollback: "-"} }
+
+// acctSpec 은 만들 공용 계정 1개입니다: 1순위(bios.conf user + pass.enc, 관리자) 또는
+// 두 번째(user2 + pass2.enc, 권한 user2_role). Pass 는 메모리에서만 쓴다.
+type acctSpec struct {
+	User, Pass string
+	Role       string // roleAdministrator / roleOperator / roleReadOnly
+	Second     bool   // 두 번째 계정 (user2)
+}
+
+// newCreateHosts 는 호스트 t 에 만들 계정마다 결과 칸을 만듭니다 (1순위 계정이 첫 칸).
+func newCreateHosts(t Target, specs []acctSpec) []*acctHost {
+	hs := make([]*acctHost, len(specs))
+	for i := range specs {
+		hs[i] = newAcctHost(t, "create")
+		hs[i].spec, hs[i].User = &specs[i], specs[i].User
+	}
+	return hs
+}
+
+// name 은 요약·목록에 보일 이름입니다 (두 번째 계정 칸이면 "호스트(계정)").
+func (h *acctHost) name() string {
+	n := sanitizeDetail(h.Target.Hostname)
+	if h.spec != nil && h.spec.Second {
+		n += "(" + sanitizeDetail(h.spec.User) + ")"
+	}
+	return n
+}
 
 // setErr 는 호스트 오류(로그인·조회 실패)를 기록합니다.
 func (h *acctHost) setErr(err error) {
@@ -90,6 +122,38 @@ type acctEnv struct {
 	fb       *fallbackCreds
 	dryRun   bool
 	gap      time.Duration // 0 이면 Client 기본값 (테스트에서 -1)
+	specs    []acctSpec    // create 로 만들 계정 (비면 1순위 계정 하나, newAcctEnv 가 채움)
+}
+
+// newAcctEnv 는 계정 작업 환경을 만듭니다. bios.conf 에 user2 가 있으면 pass2_file 을 key_file 로 복호화해
+// 두 번째 계정으로 넣습니다 (없거나 복호화하지 못하면 오류 — 만들 계정의 비밀번호를 모르는 채로 진행하지 않음).
+func newAcctEnv(rc *runContext, dryRun bool) (*acctEnv, error) {
+	e := &acctEnv{conf: rc.Conf, password: rc.Password, fb: rc.Fallback, dryRun: dryRun}
+	e.specs = []acctSpec{{User: rc.Conf.User, Pass: rc.Password, Role: roleAdministrator}}
+	if rc.Conf.User2 != "" {
+		p2, err := readPassword(rc.Conf.Pass2File, rc.Conf.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("두 번째 계정(user2=%s) 비밀번호를 읽지 못함 — bash encrypt.sh 2 로 %s 를 만드십시오: %w", rc.Conf.User2, rc.Conf.Pass2File, err)
+		}
+		e.specs = append(e.specs, acctSpec{User: rc.Conf.User2, Pass: p2, Role: rc.Conf.User2Role, Second: true})
+	}
+	return e, nil
+}
+
+// accounts 는 만들 계정 목록입니다 (specs 가 비면 1순위 계정 하나, 관리자).
+func (e *acctEnv) accounts() []acctSpec {
+	if len(e.specs) > 0 {
+		return e.specs
+	}
+	return []acctSpec{{User: e.conf.User, Pass: e.password, Role: roleAdministrator}}
+}
+
+// specOf 는 결과 칸 h 가 만들 계정입니다.
+func (e *acctEnv) specOf(h *acctHost) acctSpec {
+	if h.spec != nil {
+		return *h.spec
+	}
+	return e.accounts()[0]
 }
 
 func (e *acctEnv) opts(t Target, user, pass string, mode Mode, retries int) ClientOpts {
@@ -198,9 +262,9 @@ func findAccount(ms []acctMember, name string) *acctMember {
 	return nil
 }
 
-// pickAdminRole 은 BMC 의 Roles 컬렉션에서 관리자 역할 이름을 고릅니다 (Administrator → Admin → admin).
-// 읽지 못하면 "" 이며 호출자가 후보를 순서대로 시도합니다.
-func pickAdminRole(c *Client) string {
+// pickRole 은 BMC 의 Roles 컬렉션에서 권한 role 에 맞는 RoleId 를 고릅니다 (acctRoleIDs 후보 순서,
+// 관리자면 Administrator → Admin → admin). 읽지 못하거나 맞는 것이 없으면 "" 이며 호출자가 후보를 순서대로 시도합니다.
+func pickRole(c *Client, role string) string {
 	var col struct {
 		Members []odataLink `json:"Members"`
 	}
@@ -213,7 +277,7 @@ func pickAdminRole(c *Client) string {
 			have[strings.TrimRight(m.ID, "/")[i+1:]] = true
 		}
 	}
-	for _, r := range []string{"Administrator", "Admin", "admin"} {
+	for _, r := range acctRoleIDs[role] {
 		if have[r] {
 			return r
 		}
@@ -279,12 +343,20 @@ func (e *acctEnv) verifyLogin(t Target, user, pass string) error {
 
 // ---- 점검 (create 의 1단계) ----
 
-// probeCreate 는 1순위 계정으로 로그인해 보고 (실패하면 2순위로) 어느 쪽으로 붙는지 기록합니다. 쓰기 없음.
-func (e *acctEnv) probeCreate(t Target) *acctHost {
-	h := newAcctHost(t, "create")
+// probeCreate 는 1순위 계정 칸만 돌려줍니다 (probeCreateAll 참고).
+func (e *acctEnv) probeCreate(t Target) *acctHost { return e.probeCreateAll(t)[0] }
+
+// probeCreateAll 은 1순위 계정으로 로그인해 보고 (실패하면 2순위로) 어느 쪽으로 붙는지 기록합니다. 쓰기 없음.
+// 두 번째 계정이 있으면 같은 세션에서 계정 목록을 읽어 그 이름이 있는지(PRESENT) 없는지(NEED_CREATE) 봅니다
+// (두 번째 계정으로 로그인해 보지 않음 — 인증 실패 기록을 남기지 않기 위함). 목록을 못 읽으면 생성 단계에서 다시 확인합니다.
+func (e *acctEnv) probeCreateAll(t Target) []*acctHost {
+	hs := newCreateHosts(t, e.accounts())
+	h := hs[0]
 	if t.Err != "" {
-		h.Status = t.Err
-		return h
+		for _, x := range hs {
+			x.Status = t.Err
+		}
+		return hs
 	}
 	c, li, err := loginWithFallback(e.opts(t, e.conf.User, e.password, ModeReadOnly, e.conf.Retries), e.fb)
 	defer func() {
@@ -292,61 +364,102 @@ func (e *acctEnv) probeCreate(t Target) *acctHost {
 		h.Stats = li.stats(c)
 	}()
 	if err != nil {
-		h.setErr(err)
-		return h
+		for _, x := range hs {
+			x.setErr(err)
+		}
+		return hs
 	}
 	h.Source = li.Source
 	h.Vendor, h.Model = lightInfo(c)
+	h.Status = acctNeedCreate
 	if li.Source == credPrimary {
 		h.Status = acctPrimaryOK
-		return h
 	}
-	h.Status = acctNeedCreate
-	return h
+	if len(hs) > 1 {
+		members, lerr := listAccounts(c, accountsCollection(c))
+		for _, x := range hs[1:] {
+			x.Source, x.Vendor, x.Model = li.Source, h.Vendor, h.Model
+			switch {
+			case lerr != nil:
+				x.Status, x.Detail = acctNeedCreate, "계정 목록을 읽지 못함 — 생성 단계에서 다시 확인"
+			case findAccount(members, x.User) != nil:
+				x.Status = acctPresent
+			default:
+				x.Status = acctNeedCreate
+			}
+		}
+	}
+	return hs
 }
 
 // ---- 생성 (create 의 2단계) ----
 
-// createOnHost 는 2순위 계정으로 로그인해 1순위 계정을 만들고 검증·롤백합니다 (dry-run 이면 계획만).
-func (e *acctEnv) createOnHost(h *acctHost) {
-	t := h.Target
+// createOnHost 는 계정 칸 하나를 만듭니다 (createGroup 참고).
+func (e *acctEnv) createOnHost(h *acctHost) { e.createGroup([]*acctHost{h}) }
+
+// createGroup 은 같은 호스트(hs 는 모두 같은 Target)에 만들 계정들을 2순위 계정 로그인 1회로 차례로 만들고
+// 각각 새 계정 로그인으로 검증·롤백합니다 (dry-run 이면 계획만). 호출 수는 첫 칸에 모읍니다.
+func (e *acctEnv) createGroup(hs []*acctHost) {
+	h0 := hs[0]
+	t := h0.Target
 	c, vendor, err := e.openAdmin(t)
 	defer func() {
 		_ = c.Close()
 		st := c.Stats()
-		h.Stats.Gets += st.Gets
-		h.Stats.Posts += st.Posts
-		h.Stats.Patches += st.Patches
-		h.Stats.Deletes += st.Deletes
+		h0.Stats.Gets += st.Gets
+		h0.Stats.Posts += st.Posts
+		h0.Stats.Patches += st.Patches
+		h0.Stats.Deletes += st.Deletes
 	}()
 	if err != nil {
-		if vendor == "" || strings.Contains(err.Error(), "admin 계정 없음") {
-			h.Status, h.Detail = acctNoAdmin, errDetail(err)
-		} else {
-			h.setErr(err)
+		for _, h := range hs {
+			if vendor == "" || strings.Contains(err.Error(), "admin 계정 없음") {
+				h.Status, h.Detail = acctNoAdmin, errDetail(err)
+			} else {
+				h.setErr(err)
+			}
 		}
 		return
 	}
-	c.AddSecret(e.password)
-	if h.Vendor == "" || h.Model == "" {
+	for _, s := range e.accounts() {
+		c.AddSecret(s.Pass)
+	}
+	if h0.Vendor == "" || h0.Model == "" {
 		v, m := lightInfo(c)
-		if h.Vendor == "" {
-			h.Vendor = v
+		if h0.Vendor == "" {
+			h0.Vendor = v
 		}
-		if h.Model == "" {
-			h.Model = m
+		if h0.Model == "" {
+			h0.Model = m
 		}
 	}
 	if vendor == "" {
-		vendor = fallbackVendorKey(h.Vendor)
+		vendor = fallbackVendorKey(h0.Vendor)
 	}
 	coll := accountsCollection(c)
+	for _, h := range hs {
+		if h.Vendor == "" {
+			h.Vendor = h0.Vendor
+		}
+		if h.Model == "" {
+			h.Model = h0.Model
+		}
+		e.createOne(c, h, vendor, coll)
+	}
+}
+
+// createOne 은 열린 admin 세션 c 로 계정 칸 h 의 계정을 만들고 검증·롤백합니다.
+// 계정 목록은 매번 다시 읽는다 (앞 계정이 빈 슬롯을 썼을 수 있음).
+func (e *acctEnv) createOne(c *Client, h *acctHost, vendor, coll string) {
+	t := h.Target
+	sp := e.specOf(h)
+	h.User = sp.User
 	members, err := listAccounts(c, coll)
 	if err != nil {
 		h.setErr(err)
 		return
 	}
-	if m := findAccount(members, e.conf.User); m != nil {
+	if m := findAccount(members, sp.User); m != nil {
 		h.Status = acctExists
 		h.Detail = fmt.Sprintf("id 가 이미 있음 (slot %s, enabled=%t, role=%s) — 덮어쓰지 않음. 비밀번호가 다르면 change 또는 BMC 에서 확인", m.ID, m.Enabled, orDefault(m.RoleID, "-"))
 		return
@@ -357,9 +470,9 @@ func (e *acctEnv) createOnHost(h *acctHost) {
 			slots = append(slots, m)
 		}
 	}
-	role := pickAdminRole(c)
+	role := pickRole(c, sp.Role)
 
-	plan := e.planCreate(vendor, coll, slots, role)
+	plan := e.planCreate(sp, vendor, coll, slots, role)
 	h.Method, h.Warn = plan.method, plan.warn
 	if e.dryRun {
 		h.Status = acctWouldCreate
@@ -380,7 +493,7 @@ func (e *acctEnv) createOnHost(h *acctHost) {
 	}
 
 	// 검증: 새 계정으로 1회 로그인
-	verr := e.verifyLogin(t, e.conf.User, e.password)
+	verr := e.verifyLogin(t, sp.User, sp.Pass)
 	if verr == nil {
 		h.Status = acctCreated
 		return
@@ -397,7 +510,7 @@ func (e *acctEnv) createOnHost(h *acctHost) {
 		h.Detail = "새 계정 로그인 검증 실패(" + errBrief(verr) + ") — 만든 계정을 되돌림"
 	} else {
 		h.Status, h.Rollback = acctRollbackFailed, "실패"
-		h.Detail = "새 계정 로그인 검증 실패 + 롤백 실패 — BMC 에서 계정 " + e.conf.User + " 를 수동 확인/삭제하십시오"
+		h.Detail = "새 계정 로그인 검증 실패 + 롤백 실패 — BMC 에서 계정 " + sp.User + " 를 수동 확인/삭제하십시오"
 	}
 }
 
@@ -430,16 +543,18 @@ type createPlan struct {
 //   - 그 밖: POST → 405/501/404 면 빈 슬롯 PATCH (Lenovo Purley).
 //
 // 미확인 방식(실장비 검증 전)은 warn 에 사유를 적고 그대로 적용을 허용한다 (사양: 경고만).
-func (e *acctEnv) planCreate(vendor, coll string, slots []acctMember, role string) *createPlan {
+// role 은 BMC Roles 에서 고른 RoleId (비면 sp.Role 의 후보를 순서대로, Cisco CIMC 는 소문자 이름 먼저).
+func (e *acctEnv) planCreate(sp acctSpec, vendor, coll string, slots []acctMember, role string) *createPlan {
 	roles := []string{role}
 	if role == "" {
-		roles = []string{"Administrator", "Admin", "admin"}
+		ids := acctRoleIDs[sp.Role]
+		roles = ids
 		if strings.EqualFold(vendor, "Cisco") {
-			roles = []string{"admin", "Administrator"}
+			roles = []string{ids[len(ids)-1], ids[0]} // admin / user / read-only 먼저
 		}
 	}
 	postBody := func(r string) map[string]interface{} {
-		b := map[string]interface{}{"UserName": e.conf.User, "Password": e.password, "RoleId": r}
+		b := map[string]interface{}{"UserName": sp.User, "Password": sp.Pass, "RoleId": r}
 		if !strings.EqualFold(vendor, "HPE") {
 			b["Enabled"] = true
 		}
@@ -454,12 +569,11 @@ func (e *acctEnv) planCreate(vendor, coll string, slots []acctMember, role strin
 			p.steps = append(p.steps, createStep{kind: "POST", path: coll, body: postBody(r)})
 		}
 		if strings.EqualFold(vendor, "HPE") {
-			priv := map[string]bool{"LoginPriv": true, "RemoteConsolePriv": true, "VirtualMediaPriv": true,
-				"VirtualPowerAndResetPriv": true, "iLOConfigPriv": true, "UserConfigPriv": true}
+			priv := hpeOemPrivileges(sp.Role)
 			for _, ok := range []string{"Hpe", "Hp"} {
 				p.steps = append(p.steps, createStep{kind: "POST", path: coll, body: map[string]interface{}{
-					"UserName": e.conf.User, "Password": e.password,
-					"Oem": map[string]interface{}{ok: map[string]interface{}{"LoginName": e.conf.User, "Privileges": priv}},
+					"UserName": sp.User, "Password": sp.Pass,
+					"Oem": map[string]interface{}{ok: map[string]interface{}{"LoginName": sp.User, "Privileges": priv}},
 				}})
 			}
 		}
@@ -471,7 +585,7 @@ func (e *acctEnv) planCreate(vendor, coll string, slots []acctMember, role strin
 		s := slots[0]
 		for _, r := range roles {
 			p.steps = append(p.steps, createStep{kind: "PATCH", path: s.Path, slotID: s.ID, body: map[string]interface{}{
-				"UserName": e.conf.User, "Password": e.password, "RoleId": r, "Enabled": true,
+				"UserName": sp.User, "Password": sp.Pass, "RoleId": r, "Enabled": true,
 			}})
 		}
 	}
@@ -499,6 +613,18 @@ func (e *acctEnv) planCreate(vendor, coll string, slots []acctMember, role strin
 	}
 	p.dryText = "생성 요청 본문(비밀번호 제외): " + maskedBody(p.steps)
 	return p
+}
+
+// hpeOemPrivileges 는 RoleId 를 거부하는 HPE iLO4 에 보낼 Oem 권한입니다 (iLO 의 기본 역할 구성과 같게).
+func hpeOemPrivileges(role string) map[string]bool {
+	switch role {
+	case roleReadOnly:
+		return map[string]bool{"LoginPriv": true}
+	case roleOperator:
+		return map[string]bool{"LoginPriv": true, "RemoteConsolePriv": true, "VirtualMediaPriv": true, "VirtualPowerAndResetPriv": true}
+	}
+	return map[string]bool{"LoginPriv": true, "RemoteConsolePriv": true, "VirtualMediaPriv": true,
+		"VirtualPowerAndResetPriv": true, "iLOConfigPriv": true, "UserConfigPriv": true}
 }
 
 // maskedBody 는 dry-run 에 보여 줄 첫 단계 본문입니다. Password 값은 ***** 로 가립니다.
@@ -584,7 +710,7 @@ func (e *acctEnv) rollbackCreate(c *Client, h *acctHost, coll, vendor string) bo
 	}
 	if target == "" { // Location 이 없었다: 다시 읽어서 우리 이름의 멤버를 찾는다 (이름이 같은 멤버는 우리가 만든 것뿐)
 		if ms, err := listAccounts(c, coll); err == nil {
-			if m := findAccount(ms, e.conf.User); m != nil {
+			if m := findAccount(ms, e.specOf(h).User); m != nil {
 				target = m.Path
 			}
 		}
@@ -752,7 +878,8 @@ func runAcctPool(n, workers, warm int, fn func(i int) string, skip func(i int)) 
 
 // ---- 결과 출력 ----
 
-var acctResultHeader = []string{"hostname", "ip", "vendor", "model", "op", "method", "result", "rollback", "detail", "warn"}
+// account 열은 맨 끝에 둔다 (result 가 7번째 열인 기존 awk 명령이 그대로 맞게).
+var acctResultHeader = []string{"hostname", "ip", "vendor", "model", "op", "method", "result", "rollback", "detail", "warn", "account"}
 
 func (h *acctHost) row() []string {
 	f := func(s string) string {
@@ -762,7 +889,7 @@ func (h *acctHost) row() []string {
 		}
 		return s
 	}
-	return []string{h.Target.Hostname, f(h.Target.IP), f(h.Vendor), f(h.Model), h.Op, f(h.Method), f(h.Status), f(h.Rollback), f(h.Detail), f(h.Warn)}
+	return []string{h.Target.Hostname, f(h.Target.IP), f(h.Vendor), f(h.Model), h.Op, f(h.Method), f(h.Status), f(h.Rollback), f(h.Detail), f(h.Warn), f(h.User)}
 }
 
 // writeAcctResult 는 account_result.tsv 를 씁니다 (0600). 비밀번호·계정 해시는 어디에도 없다.
@@ -779,7 +906,7 @@ func writeAcctResult(dir string, hosts []*acctHost) (string, error) {
 
 // acctSummaryOrder 는 요약에 보여 줄 상태 순서입니다.
 var acctSummaryOrder = []string{
-	acctCreated, acctChanged, acctWouldCreate, acctWouldChange, acctPrimaryOK, acctExists, acctNeedCreate,
+	acctCreated, acctChanged, acctWouldCreate, acctWouldChange, acctPrimaryOK, acctPresent, acctExists, acctNeedCreate,
 	acctVerifyFailRB, acctRollbackFailed, acctVerifyUnknown, acctRejected, acctNoSlot, acctNoAdmin, acctNoAccount,
 	acctSkippedWarmup,
 }
@@ -829,7 +956,7 @@ func writeAcctReport(w io.Writer, hosts []*acctHost, listMax int, p painter) {
 		fmt.Fprintln(w, label)
 		names := make([]string, 0, len(hs))
 		for _, h := range hs {
-			names = append(names, sanitizeDetail(h.Target.Hostname))
+			names = append(names, h.name())
 		}
 		sort.Strings(names)
 		shown := names
@@ -854,7 +981,7 @@ func writeAcctReport(w io.Writer, hosts []*acctHost, listMax int, p painter) {
 					break
 				}
 				shownN++
-				fmt.Fprintf(w, "    - %s: %s\n", sanitizeDetail(h.Target.Hostname), sanitizeDetail(h.Detail))
+				fmt.Fprintf(w, "    - %s: %s\n", h.name(), sanitizeDetail(h.Detail))
 			}
 		}
 	}
@@ -919,6 +1046,7 @@ func acctWorkers(flagVal, confConc int) int {
 
 const accountUsage = `사용법:
   biostool account create [옵션]   1순위 계정이 없는 BMC 에 계정 생성 (점검 → 목록 → Y/n → 생성·검증·롤백)
+                                   bios.conf 에 user2(+pass2.enc, user2_role)가 있으면 두 번째 계정도 없는 곳에 만든다
   biostool account change [옵션]   1순위 계정의 비밀번호 변경 (새 비밀번호는 터미널에서 직접 2번 입력)
 
 옵션:
@@ -969,13 +1097,22 @@ func cmdAccount(args []string) error {
 		return errors.New("rf.conf 에 벤더 admin 계정이 없습니다. 계정 생성은 2순위(admin) 계정이 필요합니다 — /etc/rf_tool/rf.conf 를 확인하십시오 (-rf-conf)")
 	}
 	env := &acctEnv{conf: rc.Conf, password: rc.Password, fb: rc.Fallback, dryRun: co.dryRun}
+	if op == "create" {
+		if env, err = newAcctEnv(rc, co.dryRun); err != nil {
+			return err
+		}
+	}
 	workers := acctWorkers(af.workers, rc.Conf.Concurrency)
 	p := painter{useColor()}
 	dir, err := newRunDir(rc.Conf.ResultDir, time.Now())
 	if err != nil {
 		return fmt.Errorf("결과 폴더: %w", err)
 	}
-	fmt.Printf("설정: %s (id=%s, 동시 %d, dry-run=%t)\n", co.conf, rc.Conf.User, workers, co.dryRun)
+	ids := rc.Conf.User
+	if op == "create" {
+		ids = acctSpecsText(env.accounts())
+	}
+	fmt.Printf("설정: %s (id=%s, 동시 %d, dry-run=%t)\n", co.conf, ids, workers, co.dryRun)
 	fmt.Printf("대상: %d개, 결과 폴더: %s\n", len(rc.Targets), dir)
 
 	switch {
@@ -992,13 +1129,13 @@ func cmdAccount(args []string) error {
 // runAccountCreate: 점검 → 목록 → Y/n → 생성·검증·롤백.
 func runAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir string, workers int, p painter) error {
 	n := len(rc.Targets)
-	hosts := make([]*acctHost, n)
+	groups := make([][]*acctHost, n) // 호스트마다 계정 칸 (1순위가 첫 칸)
 	authStop := rc.Conf.AuthFailStop
 	fmt.Printf("\n[1/2] 점검 중 (읽기 전용, 1순위 계정 → 안 되면 2순위 계정 1회)\n")
 	sweepHosts(n, workers, authStop,
 		func(i int) hostOutcome {
-			h := env.probeCreate(rc.Targets[i])
-			hosts[i] = h
+			groups[i] = env.probeCreateAll(rc.Targets[i])
+			h := groups[i][0]
 			// 2순위로 붙는 것이 이 작업의 정상 상황이므로 차단기에는 로그인 성공으로 센다.
 			switch {
 			case h.Status == StatusAuthFail:
@@ -1011,35 +1148,40 @@ func runAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir string
 			return outOther
 		},
 		func(i int) {
-			h := newAcctHost(rc.Targets[i], "create")
-			h.Status = StatusSkippedAuthStop
-			hosts[i] = h
+			groups[i] = newCreateHosts(rc.Targets[i], env.accounts())
+			for _, h := range groups[i] {
+				h.Status = StatusSkippedAuthStop
+			}
 		})
 
-	var need []*acctHost
-	for _, h := range hosts {
-		if h != nil && h.Status == acctNeedCreate {
-			need = append(need, h)
-		}
-	}
+	hosts := flattenAcct(groups)
+	need := needCreateGroups(groups)
 	fmt.Println()
 	tot := map[string]int{}
-	for _, h := range hosts {
-		tot[h.Status]++
+	for _, g := range groups {
+		tot[g[0].Status]++
 	}
 	fmt.Printf("점검 결과: 1순위 계정으로 접속 %d대, 2순위로만 접속(생성 대상) %d대, 그 밖 %d대\n",
-		tot[acctPrimaryOK], len(need), n-tot[acctPrimaryOK]-len(need))
+		tot[acctPrimaryOK], tot[acctNeedCreate], n-tot[acctPrimaryOK]-tot[acctNeedCreate])
+	if specs := env.accounts(); len(specs) > 1 {
+		t2 := map[string]int{}
+		for _, g := range groups {
+			t2[g[1].Status]++
+		}
+		fmt.Printf("두 번째 계정 %s(%s): 이미 있음 %d대, 생성 대상 %d대\n", specs[1].User, specs[1].Role, t2[acctPresent], t2[acctNeedCreate])
+	}
 	if len(need) == 0 {
 		writeAcctReport(os.Stdout, hosts, af.listMax, p)
 		path, werr := writeAcctResult(dir, hosts)
 		fmt.Printf("\n생성할 호스트가 없습니다. 결과: %s\n", path)
 		return werr
 	}
-	fmt.Printf("\n계정 %q 를 만들 대상 (%d대):\n", rc.Conf.User, len(need))
-	printAcctTargets(os.Stdout, need, af.listMax)
+	what := createWhat(need)
+	fmt.Printf("\n만들 계정: %s\n", what)
+	printAcctTargets(os.Stdout, flattenAcct(need), af.listMax)
 
 	if !env.dryRun {
-		ok, err := confirmCreate(os.Stdin, os.Stdout, len(need), rc.Conf.User, af)
+		ok, err := confirmCreate(os.Stdin, os.Stdout, what, af)
 		if err != nil || !ok {
 			path, _ := writeAcctResult(dir, hosts)
 			fmt.Printf("생성하지 않고 종료합니다. 점검 결과: %s\n", path)
@@ -1049,24 +1191,87 @@ func runAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir string
 	fmt.Printf("\n[2/2] %s\n", map[bool]string{true: "dry-run: 보낼 계획만 확인 (쓰기 없음)", false: "계정 생성 · 로그인 검증 · 실패 서버 롤백"}[env.dryRun])
 	createHosts(env, need, workers)
 	fmt.Println()
-	writeAcctReport(os.Stdout, need, af.listMax, p)
+	writeAcctReport(os.Stdout, flattenAcct(need), af.listMax, p)
 	path, werr := writeAcctResult(dir, hosts)
 	fmt.Printf("\n결과 파일: %s\n", path)
 	printAcctDisclaimer(os.Stdout, "create", env.dryRun)
 	return werr
 }
 
-// createHosts 는 대상 호스트들에 계정을 만듭니다 (웜업 + 병렬).
-func createHosts(env *acctEnv, need []*acctHost, workers int) {
+// flattenAcct 는 호스트별 계정 칸을 한 줄로 폅니다 (결과 파일·요약용).
+func flattenAcct(groups [][]*acctHost) []*acctHost {
+	var out []*acctHost
+	for _, g := range groups {
+		out = append(out, g...)
+	}
+	return out
+}
+
+// needCreateGroups 는 호스트마다 생성 대상(NEED_CREATE) 칸만 남깁니다 (없는 호스트는 뺌).
+func needCreateGroups(groups [][]*acctHost) [][]*acctHost {
+	var out [][]*acctHost
+	for _, g := range groups {
+		var keep []*acctHost
+		for _, h := range g {
+			if h != nil && h.Status == acctNeedCreate {
+				keep = append(keep, h)
+			}
+		}
+		if len(keep) > 0 {
+			out = append(out, keep)
+		}
+	}
+	return out
+}
+
+// createWhat 은 확인 질문에 넣을 "계정(권한) N대" 목록입니다 (계정 순서는 처음 나온 순서).
+func createWhat(groups [][]*acctHost) string {
+	cnt := map[string]int{}
+	role := map[string]string{}
+	var order []string
+	for _, h := range flattenAcct(groups) {
+		if _, ok := cnt[h.User]; !ok {
+			order = append(order, h.User)
+			role[h.User] = roleAdministrator
+			if h.spec != nil {
+				role[h.User] = h.spec.Role
+			}
+		}
+		cnt[h.User]++
+	}
+	parts := make([]string, 0, len(order))
+	for _, u := range order {
+		parts = append(parts, fmt.Sprintf("%s(%s) %d대", sanitizeDetail(u), role[u], cnt[u]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// acctSpecsText 는 설정 요약용 "계정(권한)" 목록입니다.
+func acctSpecsText(specs []acctSpec) string {
+	parts := make([]string, 0, len(specs))
+	for _, s := range specs {
+		parts = append(parts, s.User+"("+s.Role+")")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// createHosts 는 대상 호스트들에 계정을 만듭니다 (웜업 + 병렬, 호스트마다 admin 로그인 1회).
+func createHosts(env *acctEnv, need [][]*acctHost, workers int) {
 	runAcctPool(len(need), workers, acctWarmup,
 		func(i int) string {
-			need[i].Op = "create"
-			env.createOnHost(need[i])
-			return need[i].Status
+			env.createGroup(need[i])
+			for _, h := range need[i] {
+				if isAcctFailure(h.Status) {
+					return h.Status
+				}
+			}
+			return need[i][0].Status
 		},
 		func(i int) {
-			need[i].Status = acctSkippedWarmup
-			need[i].Detail = "웜업(처음 10대)에서 실패가 많아 중단 — 원인 확인 후 다시 실행"
+			for _, h := range need[i] {
+				h.Status = acctSkippedWarmup
+				h.Detail = "웜업(처음 10대)에서 실패가 많아 중단 — 원인 확인 후 다시 실행"
+			}
 		})
 }
 
@@ -1076,12 +1281,13 @@ func printAcctTargets(w io.Writer, hs []*acctHost, max int) {
 			fmt.Fprintf(w, "  ... 외 %d대\n", len(hs)-max)
 			return
 		}
-		fmt.Fprintf(w, "  %-28s %-12s %s\n", sanitizeDetail(h.Target.Hostname), orDefault(sanitizeDetail(h.Vendor), "-"), orDefault(sanitizeDetail(h.Model), "-"))
+		fmt.Fprintf(w, "  %-28s %-12s %s\n", h.name(), orDefault(sanitizeDetail(h.Vendor), "-"), orDefault(sanitizeDetail(h.Model), "-"))
 	}
 }
 
 // confirmCreate 는 생성 여부를 묻습니다 (기본 Y: 빈 입력도 생성). 터미널이 아니면 -stdin-ok 없이는 묻지 않고 N.
-func confirmCreate(in *os.File, w io.Writer, n int, user string, af *accountFlags) (bool, error) {
+// what 은 만들 계정 목록 (createWhat, 예: "admin1(Administrator) 3대, ops1(Operator) 5대").
+func confirmCreate(in *os.File, w io.Writer, what string, af *accountFlags) (bool, error) {
 	if af.noPrompt {
 		fmt.Fprintln(w, "\n-no-prompt 이므로 묻지 않고 종료합니다 (아무것도 만들지 않음).")
 		return false, nil
@@ -1093,7 +1299,7 @@ func confirmCreate(in *os.File, w io.Writer, n int, user string, af *accountFlag
 	if stdinIsTerminal(in) {
 		ttyFlushInput(int(in.Fd())) // 점검 중 눌러 둔 Enter 가 기본 Y 로 읽히지 않게 비운다
 	}
-	prompt := fmt.Sprintf("\n1순위 계정(%s)을 %d대에 만들까요? 재부팅·BIOS 변경은 없습니다. [Y/n]: ", user, n)
+	prompt := fmt.Sprintf("\n계정을 만들까요? [%s] 재부팅·BIOS 변경은 없습니다. [Y/n]: ", what)
 	return askYesNo(in, w, prompt, true), nil
 }
 
@@ -1103,6 +1309,7 @@ func runAccountChange(rc *runContext, env *acctEnv, af *accountFlags, dir string
 	hosts := make([]*acctHost, n)
 	for i, t := range rc.Targets {
 		hosts[i] = newAcctHost(t, "change")
+		hosts[i].User = rc.Conf.User
 	}
 	if !env.dryRun {
 		ok, err := acquireNewPassword(rc, env, af, n)

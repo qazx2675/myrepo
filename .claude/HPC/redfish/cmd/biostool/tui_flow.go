@@ -90,6 +90,12 @@ func (f *biosFlow) runAll(out, errOut io.Writer) error {
 		fmt.Fprintln(errOut, "경고: "+w)
 	}
 	f.summary(out)
+	// 1순위 계정이 없어 2순위(rf.conf)로 점검한 호스트가 있으면 TUI 를 닫은 뒤 계정 생성을 묻는다 (check 와 같음, 기본 Y).
+	if err == nil && f.u != nil {
+		if aerr := offerAccountCreate(f.rc, f.u.Check, false, false, false, os.Stdin, out, reportOpts{Color: useColor()}); aerr != nil {
+			fmt.Fprintln(errOut, "경고: 계정 생성 단계 오류: "+aerr.Error())
+		}
+	}
 	return err
 }
 

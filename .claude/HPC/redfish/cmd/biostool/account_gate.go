@@ -17,8 +17,41 @@ const (
 	acctPassMax = 256 // 비밀번호 최대 글자 수
 )
 
-// adminRoleIDs 는 계정 생성에 허용하는 최고 권한 역할 이름입니다 (Redfish 표준 / Supermicro X10 / Cisco CIMC).
-var adminRoleIDs = map[string]bool{"Administrator": true, "Admin": true, "admin": true}
+// 계정 권한 (bios.conf user2_role 값, 1순위 계정은 늘 Administrator).
+const (
+	roleAdministrator = "Administrator"
+	roleOperator      = "Operator"
+	roleReadOnly      = "ReadOnly"
+)
+
+// acctRoleName 은 user2_role 값을 표준 이름으로 바꿉니다 (대소문자 무시). 모르는 값이면 "".
+func acctRoleName(v string) string {
+	for _, r := range []string{roleAdministrator, roleOperator, roleReadOnly} {
+		if strings.EqualFold(v, r) {
+			return r
+		}
+	}
+	return ""
+}
+
+// acctRoleIDs 는 권한별로 BMC 에 보낼 수 있는 RoleId 후보입니다 (Redfish 표준 / Supermicro X10 / Cisco CIMC 순).
+// Cisco CIMC 는 소문자 이름(admin / user / read-only)을 씁니다.
+var acctRoleIDs = map[string][]string{
+	roleAdministrator: {"Administrator", "Admin", "admin"},
+	roleOperator:      {"Operator", "operator", "user"},
+	roleReadOnly:      {"ReadOnly", "readonly", "read-only"},
+}
+
+// allowedRoleIDs 는 계정 생성 본문에 허용하는 RoleId 입니다 (위 후보 전체. 그 밖의 역할·사용자 정의 역할은 보내지 않음).
+var allowedRoleIDs = func() map[string]bool {
+	m := map[string]bool{}
+	for _, ids := range acctRoleIDs {
+		for _, id := range ids {
+			m[id] = true
+		}
+	}
+	return m
+}()
 
 // validAcctText 는 계정 이름·비밀번호 문자열 검사입니다: UTF-8, 제어문자 없음, 길이 상한.
 // 비밀번호는 특수문자(@ ! # $ % ^ & * 등)를 그대로 허용합니다 (JSON 이스케이프는 encoding/json 이 처리).
@@ -89,7 +122,7 @@ func checkAcctOem(raw json.RawMessage) (map[string]interface{}, error) {
 }
 
 // checkAccountCreateBody 는 계정 컬렉션 POST 본문을 검사합니다.
-// 허용 키: UserName, Password, RoleId(관리자 역할 이름만), Enabled(true), PasswordChangeRequired(false), Oem(HPE 권한).
+// 허용 키: UserName, Password, RoleId(allowedRoleIDs 만), Enabled(true), PasswordChangeRequired(false), Oem(HPE 권한).
 // UserName·Password 는 필수이고 RoleId 또는 Oem 으로 권한이 지정되어야 합니다.
 func checkAccountCreateBody(body []byte) ([]byte, error) {
 	var m map[string]json.RawMessage
@@ -114,8 +147,8 @@ func checkAccountCreateBody(body []byte) ([]byte, error) {
 			out[k] = s
 		case "RoleId":
 			var s string
-			if json.Unmarshal(v, &s) != nil || !adminRoleIDs[s] {
-				return nil, errors.New("RoleId 는 Administrator/Admin/admin 만 허용")
+			if json.Unmarshal(v, &s) != nil || !allowedRoleIDs[s] {
+				return nil, errors.New("RoleId 는 Administrator/Operator/ReadOnly 계열만 허용")
 			}
 			out[k] = s
 		case "Enabled":
@@ -152,7 +185,7 @@ func checkAccountCreateBody(body []byte) ([]byte, error) {
 // checkAccountPatchBody 는 계정 멤버 PATCH 본문을 정확히 아래 4가지 중 하나로만 허용합니다.
 //
 //	{"Password": P}                                              비밀번호 변경
-//	{"UserName": N, "Password": P, "RoleId": 관리자, "Enabled": true}  빈 슬롯에 계정 생성 (Dell iDRAC8/9, Lenovo Purley)
+//	{"UserName": N, "Password": P, "RoleId": R, "Enabled": true}  빈 슬롯에 계정 생성 (Dell iDRAC8/9, Lenovo Purley, R 은 allowedRoleIDs)
 //	{"Enabled": false, "RoleId": "None"}                         슬롯 롤백 1단계 (비활성)
 //	{"UserName": ""}                                             슬롯 롤백 2단계 (이름 비움)
 func checkAccountPatchBody(body []byte) ([]byte, error) {
@@ -206,8 +239,8 @@ func checkAccountPatchBody(body []byte) ([]byte, error) {
 			return nil, err
 		}
 		r, err := str("RoleId", 32, false)
-		if err != nil || !adminRoleIDs[r] {
-			return nil, errors.New("RoleId 는 Administrator/Admin/admin 만 허용")
+		if err != nil || !allowedRoleIDs[r] {
+			return nil, errors.New("RoleId 는 Administrator/Operator/ReadOnly 계열만 허용")
 		}
 		if !isBool("Enabled", true) {
 			return nil, errors.New("Enabled 는 true 만 허용")

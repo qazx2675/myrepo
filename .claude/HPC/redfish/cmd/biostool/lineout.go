@@ -4,6 +4,7 @@ package main
 // 형식: [태그] host<TAB>ip<TAB>vendor<TAB>model<TAB>bios_version<TAB>attribute<TAB>기준값<TAB>현재값<TAB>비고
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -72,10 +73,13 @@ func formatLine(l ResultLine, color bool) string {
 
 // writeResultLines 는 줄들을 한 줄씩 w 에 씁니다 (TUI 가 아닌 평문 출력용).
 // 이름이 writeLines 가 아닌 것은 check.go 의 writeLines(파일 쓰기)와 겹치지 않게 하려는 것입니다.
+// 줄마다 write 를 부르지 않게 버퍼로 모아 끝에 한 번에 내보낸다 (전체비교 7.5만 줄을 ssh·파이프로 볼 때).
 func writeResultLines(w io.Writer, lines []ResultLine, color bool) {
+	bw := bufio.NewWriterSize(w, 64<<10)
 	for _, l := range lines {
-		fmt.Fprintln(w, formatLine(l, color))
+		fmt.Fprintln(bw, formatLine(l, color))
 	}
+	bw.Flush()
 }
 
 // colorEnabled 는 f 에 색을 써도 되는지 봅니다: NO_COLOR 가 있거나 터미널이 아니면 false.

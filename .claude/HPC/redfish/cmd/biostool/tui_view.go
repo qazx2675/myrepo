@@ -57,6 +57,7 @@ const (
 	tuiEnterScreen = "\x1b[?1049h\x1b[?25l" // 대체 화면 + 커서 숨김
 	tuiLeaveScreen = "\x1b[?25h\x1b[?1049l"
 	tuiTickEvery   = 200 * time.Millisecond // Progress 중 다시 그리는 주기
+	tuiKeyBatch    = 256                    // 쌓인 키를 이만큼까지 처리하고 한 번 그림 (keys 채널 크기와 같음)
 )
 
 // tuiEnv 는 TUI 의 바깥 의존입니다 (테스트에서 가짜로 바꾼다).
@@ -194,6 +195,26 @@ type TUI struct {
 
 	resTitle string // 글 보기(SetText)로 바꾸기 전 결과 보기 제목·스크롤 (SwitchTab 이 되돌림)
 	resTop   int
+
+	last string        // 마지막으로 보낸 화면 (같으면 다시 보내지 않음, 화면을 지우면 "")
+	gen  int           // vgs 를 바꿀 때마다 늘림 (표 캐시 무효화)
+	tc   tuiTableCache // 지금 그룹·필터의 표 (키마다 전체 줄을 다시 만들지 않게)
+}
+
+// tuiTableCache 는 지금 보는 표의 행·칸 너비입니다. 행·건수는 (gen, 벤더, 그룹, 필터)가 바뀔 때만,
+// 칸 너비·머리 줄은 화면 폭·색이 바뀔 때만 다시 만들고, 그릴 때는 보이는 줄만 tuiTableRow 로 만든다.
+type tuiTableCache struct {
+	valid        bool
+	gen, vi, gi  int
+	filter       rune
+	head         []string
+	rows         [][]tuiSeg
+	ok, diff, na int
+	cwValid      bool
+	w            int
+	color        bool
+	cw           []int
+	headLine     string
 }
 
 // tuiResState 는 보기 탭 1개의 결과 보기 상태입니다.
@@ -303,6 +324,7 @@ func (u *TUI) readKeys() {
 func (u *TUI) SetResults(title string, vgs []VendorGroups) {
 	u.title, u.vgs, u.text, u.textMode = title, vgs, nil, false
 	u.vi, u.gi, u.top, u.filter, u.inGroup, u.refKey = 0, 0, 0, tuiFilterAll, false, false
+	u.gen++
 }
 
 // SetRefKey 는 지금 보기 탭에서 r 키(Browse → TUIRef)를 받을지 정합니다.
@@ -339,6 +361,7 @@ func (u *TUI) SwitchTab(i int) {
 		}
 		u.ti = i
 		u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey = s.title, s.vgs, s.vi, s.gi, s.top, s.inGroup, s.filter, s.refKey
+		u.gen++
 	}
 	u.text, u.textMode = nil, false
 }
@@ -373,10 +396,16 @@ func (u *TUI) run(handle func(k tuiKey) bool, tick <-chan time.Time, wake <-chan
 			if u.key(k, handle) {
 				return
 			}
-			// 여러 줄 붙여넣기 중에는 이미 들어와 쌓인 키를 모두 처리한 뒤 한 번만 그린다
-			for more := u.prompt != nil && u.prompt.kind == tpLines; more; {
+			// 이미 들어와 쌓인 키는 처리한 뒤 한 번만 그린다: 여러 줄 붙여넣기는 모든 키, 그 밖에는 방향키를
+			// 누르고 있을 때처럼 스크롤 키가 이어질 때만 (스크롤이 아닌 키를 처리하면 바로 그려서 안내 줄이 보이게).
+			// 끝없이 들어와도 tuiKeyBatch 개마다는 그린다.
+			for n, more := 0, tuiScrollKey(k) || (u.prompt != nil && u.prompt.kind == tpLines); more && n < tuiKeyBatch; n++ {
 				select {
-				case k := <-u.keys:
+				case k = <-u.keys:
+					more = tuiScrollKey(k) || (u.prompt != nil && u.prompt.kind == tpLines)
+					if !more { // 스크롤이 아닌 키는 지금까지 움직인 화면을 그린 뒤 처리 (키마다 그리던 때와 같은 순서)
+						u.draw()
+					}
 					if u.key(k, handle) {
 						return
 					}
@@ -390,12 +419,18 @@ func (u *TUI) run(handle func(k tuiKey) bool, tick <-chan time.Time, wake <-chan
 			return
 		case <-u.env.Resize: // 이전 프레임이 reflow 된 채로 남지 않게 지우고 새 크기로 다시 그림
 			io.WriteString(u.env.Out, "\x1b[2J")
+			u.last = ""
 		case <-u.env.Signals:
 			u.quit = true
 			return
 		}
 		u.draw()
 	}
+}
+
+// tuiScrollKey 는 누르고 있으면 반복해 들어오는 이동 키입니다 (↑↓ PgUp PgDn).
+func tuiScrollKey(k tuiKey) bool {
+	return k.k == tkUp || k.k == tkDown || k.k == tkPgUp || k.k == tkPgDn
 }
 
 // key 는 공통 키(입력 끝·도움말 닫기·Ctrl+C/Ctrl+Z)를 처리하고 나머지를 handle 에 넘깁니다.
@@ -771,14 +806,48 @@ func (u *TUI) bodyCount() int {
 	if u.textMode {
 		return len(u.text)
 	}
-	g := u.group()
-	switch {
-	case g == nil:
+	if u.group() == nil {
 		return 1
-	case u.filter == tuiFilterSum:
-		return len(tuiSummarize(*g))
 	}
-	return len(tuiFilterLines(g.Lines, u.filter))
+	return len(u.table().rows)
+}
+
+// table 은 지금 그룹·필터의 표 캐시입니다 (그룹이 있을 때만 부른다).
+func (u *TUI) table() *tuiTableCache {
+	c := &u.tc
+	if c.valid && c.gen == u.gen && c.vi == u.vi && c.gi == u.gi && c.filter == u.filter {
+		return c
+	}
+	g := u.group()
+	*c = tuiTableCache{valid: true, gen: u.gen, vi: u.vi, gi: u.gi, filter: u.filter}
+	c.ok, c.diff, c.na = tuiCount(g.Lines)
+	if u.filter == tuiFilterSum {
+		c.head = tuiSummaryHead
+		for _, s := range tuiSummarize(*g) {
+			c.rows = append(c.rows, tuiSummaryRow(s))
+		}
+	} else {
+		c.head = tuiLineHead
+		for _, l := range tuiFilterLines(g.Lines, u.filter) {
+			c.rows = append(c.rows, tuiLineRow(l))
+		}
+	}
+	return c
+}
+
+// tableWidths 는 표 캐시에 화면 폭 w 의 칸 너비·머리 줄을 채웁니다.
+func (u *TUI) tableWidths(w int) *tuiTableCache {
+	c := u.table()
+	if !c.cwValid || c.w != w || c.color != u.env.Color {
+		c.cwValid, c.w, c.color = true, w, u.env.Color
+		c.cw = tuiColWidths(w, c.head, c.rows)
+		hs := make([]tuiSeg, len(c.head))
+		for i, h := range c.head {
+			hs[i] = tuiSeg{h, tuiStBold}
+		}
+		c.headLine = tuiTableRow(c.color, w, c.cw, hs)
+	}
+	return c
 }
 
 // ---- 그리기 ----
@@ -787,7 +856,12 @@ func (u *TUI) draw() {
 	w, h := u.env.Size()
 	// 마지막 칸은 비워 둔다 (자동 줄바꿈 대기 상태에서 \x1b[K 가 마지막 글자를 지우지 않게)
 	lines := u.frame(tuiMaxInt(w-1, 20), tuiMaxInt(h, 6))
-	io.WriteString(u.env.Out, "\x1b[H"+strings.Join(lines, "\x1b[K\r\n")+"\x1b[K\x1b[J")
+	s := "\x1b[H" + strings.Join(lines, "\x1b[K\r\n") + "\x1b[K\x1b[J"
+	if s == u.last { // 바뀐 것이 없으면 보내지 않는다 (조회 중 0.2초 tick 마다 같은 화면을 느린 ssh 로 다시 보내지 않게)
+		return
+	}
+	u.last = s
+	io.WriteString(u.env.Out, s)
 }
 
 // frame 은 화면 한 장(줄 목록)입니다: 머리(제목·탭·표 머리) + 본문(스크롤) + 꼬리(진행·질문·키 안내·안내 줄).
@@ -807,18 +881,21 @@ func (u *TUI) frame(w, h int) []string {
 		}
 		return out
 	}
-	var head, body []string
+	// 본문은 줄 수(n)와 i 번째 줄 그리기(row)로만 두고 보이는 줄만 그린다 (50대 전체 설정 비교처럼 줄이 많아도 키가 밀리지 않게)
+	var head []string
+	var n int
+	var row func(i int) string
 	g := u.group()
 	if !u.textMode && len(u.tabs) > 1 {
 		head = append(head, tuiTabsLine(color, w, "화면", u.tabs, u.ti, "Tab 전환", false))
 	}
 	switch {
 	case u.textMode:
-		for _, l := range u.text {
-			body = append(body, tuiSegLine(color, w, tuiSeg{l, ""}))
-		}
+		n = len(u.text)
+		row = func(i int) string { return tuiSegLine(color, w, tuiSeg{u.text[i], ""}) }
 	case g == nil:
-		body = []string{" (결과 없음)"}
+		n = 1
+		row = func(int) string { return " (결과 없음)" }
 	default:
 		names := make([]string, len(u.vgs))
 		for i, vg := range u.vgs {
@@ -835,24 +912,20 @@ func (u *TUI) frame(w, h int) []string {
 		} else {
 			head = append(head, tuiSegLine(color, w, tuiSeg{"   관리망  ", tuiStBold}, tuiSeg{tuiDash(g.Name), ""}, tuiSeg{"   " + hosts, tuiStGray}))
 		}
-		var tbl []string
-		if u.filter == tuiFilterSum {
-			tbl = tuiSummaryTable(color, w, *g)
-		} else {
-			tbl = tuiLineTable(color, w, tuiFilterLines(g.Lines, u.filter))
-		}
-		head = append(head, tbl[0])
-		body = tbl[1:]
+		c := u.tableWidths(w)
+		head = append(head, c.headLine)
+		n = len(c.rows)
+		row = func(i int) string { return tuiTableRow(color, w, c.cw, c.rows[i]) }
 	}
 	foot := u.footLines(w, h)
 	bodyH := tuiMaxInt(h-1-len(head)-len(foot), 1)
 	u.bodyH = bodyH
 	u.clampTop()
-	end := tuiMinInt(u.top+bodyH, len(body))
-	out := []string{u.titleLine(w, g, len(body), end)}
+	end := tuiMinInt(u.top+bodyH, n)
+	out := []string{u.titleLine(w, g, n, end)}
 	out = append(out, head...)
-	if u.top < end {
-		out = append(out, body[u.top:end]...)
+	for i := u.top; i < end; i++ {
+		out = append(out, row(i))
 	}
 	for i := end - u.top; i < bodyH; i++ { // 꼬리가 맨 아래에 붙도록 빈 줄
 		out = append(out, "")
@@ -868,9 +941,9 @@ func (u *TUI) frame(w, h int) []string {
 func (u *TUI) titleLine(w int, g *LineGroup, n, end int) string {
 	segs := []tuiSeg{{" " + u.title, tuiStBold}}
 	if !u.textMode && g != nil {
-		ok, diff, na := tuiCount(g.Lines)
+		c := u.table()
 		segs = append(segs, tuiSeg{"   [보기: " + tuiFilterName(u.filter) + "]  ", tuiStCyan})
-		segs = append(segs, tuiCountSegs(ok, diff, na)...)
+		segs = append(segs, tuiCountSegs(c.ok, c.diff, c.na)...)
 	}
 	if n > 0 {
 		segs = append(segs, tuiSeg{fmt.Sprintf("   줄 %d-%d/%d", u.top+1, end, n), tuiStGray})

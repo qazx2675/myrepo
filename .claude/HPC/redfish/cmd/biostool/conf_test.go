@@ -15,7 +15,7 @@ func TestParseConfDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Config{
-		User: "admin", PassFile: "pass.enc", KeyFile: "key.bin", Concurrency: 100,
+		User: "admin", PassFile: "pass.enc", KeyFile: "key.bin", Pass2File: "pass2.enc", Concurrency: 100,
 		Timeout: 20 * time.Second, Insecure: true, Retries: 2, AuthFailStop: 3,
 		ResultDir: "results", DumpDir: "dumps", ProfileDir: "profiles", RefsDir: "refs", XMLHostPrefix: []string{"c"},
 	}
@@ -28,6 +28,7 @@ func TestParseConfAllKeys(t *testing.T) {
 	text := "\ufeff# 주석\r\n\r\n" +
 		"user = root \r\n" +
 		"pass_file=a.enc\r\nkey_file=a.key\r\n" +
+		"user2=ops1\r\nuser2_role=operator\r\npass2_file=b.enc\r\n" +
 		"concurrency=7\r\ntimeout=5\r\ninsecure=false\r\nretries=0\r\nauth_fail_stop=5\r\n" +
 		"result_dir=r\r\ndump_dir=d\r\nprofile_dir=p\r\n" +
 		"exclude_attrs= A | *Uuid* ||B \r\nallcheck_set=ON\r\nrefs_dir=myrefs\r\n"
@@ -36,7 +37,7 @@ func TestParseConfAllKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Config{
-		User: "root", PassFile: "a.enc", KeyFile: "a.key", Concurrency: 7,
+		User: "root", PassFile: "a.enc", KeyFile: "a.key", User2: "ops1", Pass2File: "b.enc", User2Role: "Operator", Concurrency: 7,
 		Timeout: 5 * time.Second, Insecure: false, Retries: 0, AuthFailStop: 5,
 		ResultDir: "r", DumpDir: "d", ProfileDir: "p",
 		ExcludeAttrs: []string{"A", "*Uuid*", "B"}, AllcheckSet: true, RefsDir: "myrefs", XMLHostPrefix: []string{"c"},
@@ -70,6 +71,9 @@ func TestParseConfErrors(t *testing.T) {
 		{"= 없음", "user=a\nfoo\n", "key=value"},
 		{"비밀번호 키", "user=a\npassword=s3cret-value\n", "비밀번호는 conf 에 둘 수 없습니다"},
 		{"allcheck_set 값", "user=a\nallcheck_set=yes\n", "on 또는 off"},
+		{"user2 권한 없음", "user=a\nuser2=b\n", "user2_role"},
+		{"user2 권한 값", "user=a\nuser2=b\nuser2_role=root\n", "Administrator, Operator, ReadOnly"},
+		{"user2 같은 id", "user=a\nuser2=a\nuser2_role=ReadOnly\n", "user 와 달라야"},
 	}
 	for _, tc := range cases {
 		_, err := parseConf(tc.text, "bios.conf")

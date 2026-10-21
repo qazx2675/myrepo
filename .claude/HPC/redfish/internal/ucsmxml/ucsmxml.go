@@ -49,8 +49,12 @@ const (
 	MethodConf    = "configConfMo" // 계정 모드(Options.Account)에서만, aaaUser 생성·비밀번호 변경·삭제로 제한
 	BladeClass    = "computeBlade"
 	UserClass     = "aaaUser" // 계정 모드에서만 configResolveClass 로 읽을 수 있음
-	UserRole      = "admin"   // 생성하는 계정에 부여하는 UCSM 역할 (관리자)
+	UserRole      = "admin"   // 생성하는 계정에 부여하는 UCSM 역할 기본값 (관리자)
 )
+
+// UserRoles 는 계정 생성에 허용하는 UCSM 역할입니다 (admin 관리자 · operations 운영 · read-only 읽기 전용).
+// 그 밖의 역할(aaa, server-equipment 등)은 보내지 않는다.
+var UserRoles = map[string]bool{"admin": true, "operations": true, "read-only": true}
 
 // 항상 허용되는 서버 식별 클래스 (읽기 전용, 고정 상수).
 const (
@@ -309,11 +313,17 @@ func (c *Client) confBody(name, status, inner string, attrs string) []byte {
 		`<inConfig><aaaUser name="` + esc(name) + `" ` + attrs + `dn="` + esc(dn) + `" status="` + status + `">` + inner + `</aaaUser></inConfig></configConfMo>`)
 }
 
-// CreateUser 는 로컬 사용자를 새로 만듭니다 (status="created": 같은 이름이 있으면 UCSM 이 거부, 역할 admin).
+// CreateUser 는 로컬 사용자를 역할 admin 으로 새로 만듭니다 (CreateUserRole 참고).
+func (c *Client) CreateUser(name, pwd string) error { return c.CreateUserRole(name, pwd, UserRole) }
+
+// CreateUserRole 은 로컬 사용자를 역할 role(UserRoles 중 하나)로 새로 만듭니다 (status="created": 같은 이름이 있으면 UCSM 이 거부).
 // 성공하면 이 클라이언트가 만든 사용자로 기억해 DeleteUser(롤백)를 허용합니다.
-func (c *Client) CreateUser(name, pwd string) error {
+func (c *Client) CreateUserRole(name, pwd, role string) error {
 	if !c.account {
 		return errNotAccountMode
+	}
+	if !UserRoles[role] {
+		return notAllowed(MethodConf, "역할 "+clip(role)+" 는 허용목록에 없음")
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -324,7 +334,7 @@ func (c *Client) CreateUser(name, pwd string) error {
 		return ErrNotLoggedIn
 	}
 	c.extra = append(c.extra, pwd)
-	body := c.confBody(name, "created", `<aaaUserRole name="`+UserRole+`" status="created"/>`,
+	body := c.confBody(name, "created", `<aaaUserRole name="`+esc(role)+`" status="created"/>`,
 		`pwd="`+esc(pwd)+`" accountStatus="active" expires="no" firstName="" lastName="" email="" phone="" `)
 	if _, err := c.post(MethodConf, body); err != nil {
 		return err
@@ -485,7 +495,7 @@ func (n *reqNode) keysAre(keys ...string) bool {
 //   - 앞의 세 메서드는 자식 요소가 없고, configResolveClass 는 자기 쿠키 · inHierarchical="false" ·
 //     허용된 classId, aaaLogout 은 자기 쿠키일 때만 nil 입니다.
 //   - configConfMo 는 계정 모드에서만, sys/user-ext/user-<이름> 의 aaaUser 하나에 대한
-//     생성(created, 역할 admin) · 비밀번호 변경(modified, 허용 등록된 이름만) · 삭제(deleted, 이번에 만든 이름만)로 제한됩니다.
+//     생성(created, 역할 admin / operations / read-only) · 비밀번호 변경(modified, 허용 등록된 이름만) · 삭제(deleted, 이번에 만든 이름만)로 제한됩니다.
 //
 // 그 밖(configConfMos, configResolveDn, configResolveChildren, 전원·재부팅 계열 등)은 모두 거부합니다.
 // 거부 사유에는 속성 값(비밀번호·쿠키)을 넣지 않습니다.
@@ -570,8 +580,8 @@ func (c *Client) gateConf(root *reqNode, ck string) error {
 			return notAllowed(method, "생성 속성이 허용 형태가 아님")
 		}
 		if len(u.kids) != 1 || u.kids[0].name != "aaaUserRole" || !u.kids[0].keysAre("name", "status") ||
-			u.kids[0].attrs["name"] != UserRole || u.kids[0].attrs["status"] != "created" || len(u.kids[0].kids) != 0 {
-			return notAllowed(method, `생성에는 aaaUserRole name="admin" 하나만 허용`)
+			!UserRoles[u.kids[0].attrs["name"]] || u.kids[0].attrs["status"] != "created" || len(u.kids[0].kids) != 0 {
+			return notAllowed(method, `생성에는 aaaUserRole 하나(admin / operations / read-only)만 허용`)
 		}
 	case "modified":
 		if !u.keysAre("name", "pwd", "dn", "status") || u.attrs["pwd"] == "" || len(u.kids) != 0 {

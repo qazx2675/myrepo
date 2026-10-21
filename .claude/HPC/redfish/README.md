@@ -9,7 +9,8 @@
 - **`bash bios.sh` 하나로** 대상 입력 → 프로파일 점검 → (선택) BIOS 전체비교 → (선택) 수정까지 터미널 화면(TUI)에서 진행합니다. 호스트당 1회 접속으로 프로파일 결과와 전체비교를 함께 얻고, 결과는 색상 줄과 CSV 로 봅니다(2.0절). auto_setup 같은 자동화는 `bash bios.sh -auto <user> targets.txt` 로 점검만 합니다.
 - **Cisco 장비는 XML API 로 점검합니다(`bios.sh` 혼합 대상, 옛 방식 `bios_check.sh`·`all_bios_check.sh` 도 같은 분류).** hostname 이 `bios.conf` 의 `xml_host_prefix`(기본 `c`)로 시작하는 대상과 `-user-xml` 목록은 Cisco UCSM/CIMC XML API 로 읽고(읽기 전용: `aaaLogin`·`configResolveClass`·`aaaLogout`), 나머지는 Redfish 로 점검합니다. XML 대상은 프로파일 점검만 하고 전체비교·설정에서는 빠집니다(옛 방식 점검은 XML 의 FAIL 을 `[설정 불가]` 에 사유와 함께 보이고, `all_bios_check.sh` 는 로그인만 확인해 `XML_READONLY` 로 비교에서 뺍니다. XML 로그인 전에 실패하면 Redfish 로 1번 다시). 2.0절 “Cisco(XML) 혼합 대상”.
 - 사전조사(`xml.sh`)로 처음 만나는 모델의 속성 이름을 확인하고, 모델별 BIOS 전체 비교(`all_bios_check.sh`)도 할 수 있습니다.
-- 공용(1순위) 계정이 없는 BMC 는 벤더 admin(rf.conf, 2순위)으로 접속해 **계정을 만들 수 있고**(`account_create.sh`, 기본 Y), 공용 계정의 **비밀번호를 바꿀 수도 있습니다**(`biostool account change`). 2.12절.
+- 공용(1순위) 계정이 없는 BMC 는 벤더 admin(rf.conf, 2순위)으로 접속해 **계정을 만들 수 있고**(`bash bios.sh account`, 점검 끝 질문, 기본 Y — 권한이 다른 두 번째 계정 `user2` 도 함께), 공용 계정의 **비밀번호를 바꿀 수도 있습니다**(`bash bios.sh passwd`). 2.12절.
+- `bash bios.sh <명령>` 하나로 모든 기능(account·passwd·trs·dump·export·ucsm·check·allcheck·encrypt·update)을 실행합니다. 2.0절.
 
 > **현재 상태(v0.1.0): 실제 BMC 에 접속해 본 적이 없습니다.** 모든 검증은 합성 데이터로 만든 mock BMC 와 `-from-dump` 로만 했습니다. 같은 이유로 Cisco UCSM 점검(`ucsm_check.sh`, 2.9절)도 실제 UCSM 에 접속해 보지 않았습니다. 모델을 처음 만날 때의 절차와 사람이 확인할 항목은 [FIRST_RUN.md](FIRST_RUN.md) 에 모았습니다. 반드시 먼저 읽으십시오.
 
@@ -145,6 +146,22 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 5. **`[전체 설정 비교]`** — 처음 `Tab` 으로 넘어가면 기준을 고르고(아래 “전체비교 기준”, `-ref`/`-ref-json`/`-diff` 를 줬으면 묻지 않음) 비교 결과를 이 화면에 보여 줍니다. `-ref`/`-ref-json`/`-diff` 를 줬으면 `Tab` 을 기다리지 않고 **수집 직후 바로 전체 비교까지** 해 두며(첫 화면은 그대로 `[프로파일 점검]`) 비교에 실패하거나 취소해도 안내만 남기고 다음 `Tab` 에 다시 시도합니다. 그다음부터 `Tab` 은 두 결과를 자유롭게 오가며 화면마다 벤더·그룹·필터·스크롤 위치를 따로 기억합니다. 이 화면에서 `r` 을 누르면 기준을 다시 골라 비교합니다.
 6. **수정** — 벤더 줄에서 `q` 를 두 번 누르거나(설정할 항목이 있을 때) `e`(어디서든)를 누르면 수정 단계입니다. 먼저 **차이 항목 전부**를 호스트별로 `현재값 -> 변경값 (수정대상)` / `현재값 -> 변경값 (수정제외: 사유)` 로 보이고 **“위 수정대상을 적용할까요?”** 를 묻습니다. y 이고 수정제외 항목이 있으면 그 항목만 “아래 항목은 변경하지 않습니다” 로 다시 보이며 **“수정제외 항목을 확인했습니다. 진행할까요?”** 를 한 번 더 묻습니다. 남의 Pending 이 있으면 포함 여부를 묻고(아래 “수정 규칙”), 모두 통과해야 Pending 까지만 설정합니다(프로파일 + 전체비교를 했으면 그 difference 까지). 재부팅은 하지 않습니다. 첫 두 질문에서 `n`·`Esc`·`Ctrl+X` 면 **아무것도 쓰지 않고** 결과 화면으로 돌아옵니다. `-profile`·`-user`·`-ref` 등 옵션으로 미리 지정해도 이 확인은 항상 묻습니다.
 7. **요약** — TUI 를 닫고 OK / difference / N/A / 오류 건수, 결과 폴더, CSV 목록, 설정 결과를 출력합니다.
+8. **계정 생성 질문** — 1순위 계정(`bios.conf` user)이 거부되어 2순위(`rf.conf`) 계정으로 점검한 호스트가 있으면 요약 뒤에 `계정을 만들까요? [… ] [Y/n]` 을 묻습니다(빈 입력 = Y, 터미널 입력일 때만). `bios.conf` 에 `user2` 가 있으면 같은 호스트에 두 번째 계정도 만듭니다. `-plain` 도 결과 뒤에 같은 질문을 하고, `-auto`/`-auto-check` 는 묻지 않습니다. 자세한 내용은 2.12절.
+
+**기능별 명령** — 지금까지의 기능을 `bios.sh` 하나로 실행할 수 있습니다. 첫 인자가 명령 이름이면 그 기능의 래퍼를 그대로 실행합니다(옵션·경로 규칙은 각 래퍼와 같음, `bash bios.sh <명령> -h`).
+
+| 명령 | 하는 일 | 같은 동작 |
+|---|---|---|
+| `bash bios.sh account [-dry-run] [-ucsm]` | 1순위(+ `user2`) 계정 생성 (2.12절) | `bash account_create.sh` |
+| `bash bios.sh passwd [-dry-run] [-ucsm]` | 1순위 계정 비밀번호 변경 (2.12절) | `bin/biostool account change` |
+| `bash bios.sh trs [-targets IP,...]` | BMC 접속 장애(403 등) 진단 (1.5절) | `bash trs.sh` |
+| `bash bios.sh dump [대상...]` | 사전조사 덤프 (2.3절) | `bash xml.sh` |
+| `bash bios.sh export <비교서버> [대상...]` | BIOS 설정값 JSON 추출·비교 (2.4.1절) | `bash bios_export.sh` |
+| `bash bios.sh ucsm [-user ucsm.txt]` | Cisco UCSM BIOS 점검 (2.9절) | `bash ucsm_check.sh` |
+| `bash bios.sh check -retry-from <폴더>` / `-dry-run` | 옛 점검: 재시도·dry-run (2.2·2.6절) | `bash bios_check.sh` |
+| `bash bios.sh allcheck [-ref 서버 \| -diff diff.txt]` | 옛 전체비교 (2.4절) | `bash all_bios_check.sh` |
+| `bash bios.sh encrypt [2]` | 비밀번호 암호화 (`2` = 두 번째 계정 → `pass2.enc`) | `bash encrypt.sh` |
+| `bash bios.sh update [ZIP]` | 새 버전으로 설치 폴더 갱신 (1.4절) | `bash update.sh` |
 
 **TUI 키**
 
@@ -807,7 +824,28 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 
 1순위 계정(`bios.conf` 의 `user` + `pass.enc` 의 비밀번호)이 일부 BMC 에 없을 때 **같은 id/pw 의 관리자 계정을 만들고**(create), 필요하면 **비밀번호를 바꿉니다**(change). 확정 사양은 [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md), 벤더별 API 근거는 `id_json/<벤더>/` 입니다.
 
-**준비.** 계정을 만드는 호출은 `rf.conf` 의 벤더 admin(2순위) 계정으로 합니다(2.10절). 만들 계정의 비밀번호는 `bash encrypt.sh` 로 `pass.enc` 에 넣어 둔 값입니다. `rf.conf` 에는 `dell` `hpe` `lenovo` `supermicro` `cisco` `cray` 의 `<vendor>_user` / `<vendor>_pass` 를 쓸 수 있습니다.
+**준비.** 계정을 만드는 호출은 `rf.conf` 의 벤더 admin(2순위) 계정으로 합니다(2.10절). 만들 계정의 비밀번호는 `bash encrypt.sh` 로 `pass.enc` 에 넣어 둔 값입니다. `rf.conf` 에는 `dell` `hpe` `lenovo` `supermicro` `cisco` `cray` 의 `<vendor>_user` / `<vendor>_pass` 를 쓸 수 있습니다. `bash bios.sh account` 는 `bash account_create.sh` 와 같습니다.
+
+#### 두 번째 공용 계정 (`user2`, 권한이 다른 계정)
+
+공용 계정을 하나 더(권한이 다르게) 만들려면 `bios.conf` 에 아래를 적고 비밀번호를 `bash encrypt.sh 2` 로 저장합니다. 점검 접속은 지금처럼 `user` 로만 하고, `user2` 는 계정 생성(`bash bios.sh account`, 점검 끝 질문)에서만 씁니다.
+
+```text
+user2=operator1          # 두 번째 계정 id (user 와 달라야 함)
+user2_role=Operator      # Administrator / Operator / ReadOnly 중 하나 (user2 를 쓰면 필수)
+#pass2_file=pass2.enc    # 기본값. key_file(key.bin) 은 pass.enc 와 같은 것을 씀
+```
+
+```bash
+bash encrypt.sh 2                  # 두 번째 계정 비밀번호 입력(2회) → pass2.enc (권한 600)
+bash bios.sh account -dry-run      # 두 계정의 대상·요청 본문 확인 (BMC 에 쓰지 않음)
+bash bios.sh account               # 점검 → [Y/n] → 호스트마다 admin 로그인 1회로 두 계정 생성·검증·롤백
+```
+
+- 점검 단계에서 두 번째 계정은 **로그인해 보지 않고** 계정 목록에서 이름만 확인합니다(인증 실패 기록을 남기지 않기 위함): 있으면 `PRESENT`, 없으면 생성 대상. 1순위 계정이 이미 있는 호스트도 두 번째 계정이 없으면 대상입니다. 이미 있는 계정의 비밀번호가 `pass2.enc` 와 같은지는 확인하지 않습니다.
+- 권한 → BMC 역할: Operator 는 `Operator`(Cisco CIMC `user`), ReadOnly 는 `ReadOnly`(Cisco CIMC `read-only`). BMC 의 Roles 목록에서 맞는 이름을 먼저 고르고, HPE iLO4 처럼 RoleId 를 받지 않으면 Oem 권한(Operator = 로그인·원격 콘솔·가상 미디어·전원, ReadOnly = 로그인)으로 만듭니다. UCSM(`-ucsm`)은 `operations` / `read-only` / `admin`.
+- 확인 질문은 `계정을 만들까요? [biosadmin(Administrator) 3대, operator1(Operator) 5대] … [Y/n]` 처럼 계정별 대수를 보여 주고, 결과 요약에서 두 번째 계정은 `호스트(operator1)` 로 표시합니다.
+- 실제 장비에서 Operator/ReadOnly 역할 이름·권한 범위는 아직 확인하지 못했습니다. 처음에는 `-dry-run` 과 1대 시험으로 확인하십시오.
 
 #### 만들기 (create)
 
@@ -869,15 +907,16 @@ $ bash account_create.sh
 | 4. 검증 | 새 계정으로 **1회** 로그인. 통신 오류로 확인하지 못하면 롤백하지 않고 `VERIFY_UNKNOWN`(수동 확인) |
 | 5. 롤백 | 로그인이 **인증 거부**된 서버만, **이번 실행이 만든 계정**을 삭제(슬롯 방식은 비활성 후 이름 비우기). 원래 있던 계정은 건드리지 않음. 롤백도 실패하면 `ROLLBACK_FAILED`(수동 조치) |
 
-`bios_check.sh` 도 점검 끝에 같은 질문을 합니다: 1순위 로그인이 거부되어 2순위로 접속한 호스트가 있으면 `1순위 계정(…)을 N대에 만들까요? [Y/n]` 을 묻고(빈 입력 = Y), `-no-prompt` 이거나 터미널이 아니면 `account_create.sh` 안내만 합니다. `-dry-run` 이면 계획만 보여 줍니다.
+`bash bios.sh`(TUI·`-plain`)와 `bios_check.sh` 도 점검 끝에 같은 질문을 합니다: 1순위 로그인이 거부되어 2순위로 접속한 호스트가 있으면 `계정을 만들까요? [biosadmin(Administrator) N대 …] [Y/n]` 을 묻고(빈 입력 = Y, `user2` 가 있으면 같은 호스트에 함께 만듦), `-no-prompt` 이거나 터미널이 아니면 `bash bios.sh account` 안내만 합니다. `-dry-run` 이면 계획만 보여 줍니다. 위 화면 예시의 질문 문구는 이 변경 전 형태입니다.
 
-결과 파일 `results/<일시>/account_result.tsv` (0600, **비밀번호·계정 해시 없음**): `hostname ip vendor model op method result rollback detail warn`.
+결과 파일 `results/<일시>/account_result.tsv` (0600, **비밀번호·계정 해시 없음**): `hostname ip vendor model op method result rollback detail warn account` (`account` = 작업한 계정 id, 두 번째 계정은 같은 호스트의 다음 줄).
 
 | result | 뜻 |
 |---|---|
 | `CREATED` | 만들고 새 계정 로그인 검증까지 통과 |
 | `WOULD_CREATE` / `WOULD_CHANGE` | dry-run 계획(전송 없음) |
 | `PRIMARY_OK` | 1순위 계정으로 이미 로그인됨(만들 필요 없음) |
+| `PRESENT` | 두 번째 계정(`user2`)이 계정 목록에 이미 있음(만들 필요 없음) |
 | `SKIP_EXISTS` | 같은 id 가 이미 있음(덮어쓰지 않음). 비밀번호가 다르면 change 또는 BMC 에서 확인 |
 | `NO_ADMIN` | rf.conf 에 이 벤더 admin 이 없거나 벤더를 식별하지 못함 |
 | `REJECTED` / `NO_FREE_SLOT` | BMC 가 거부(암호 정책·권한 등, 사유가 detail 에) / 빈 슬롯 없음 |
@@ -1015,7 +1054,7 @@ $ bin/biostool account change
 | `all_bios_check.sh` | `[-ref <비교서버>] [biostool allcheck 옵션...]` | 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘김(옛 대화형 메뉴 대상 입력 → 1.체크 / 2.전체비교 → 비교서버 입력 은 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만). 그 밖에는 파일 확인 후 `biostool allcheck` 실행 |
 | `ucsm_check.sh` | `[-user <파일>] [-profile <이름>] [-list-max N] ...` | 파일 확인 후 `biostool ucsm` 실행(읽기 전용). `-h` 도움말. 2.9절 |
 | `account_create.sh` | `[-dry-run] [-ucsm] [-j N] [biostool account create 옵션...]` | 파일(bios.conf·user.txt·pass.enc·rf.conf) 확인 후 `biostool account create`. 2.12절 |
-| `encrypt.sh` | (인자 없음) | 비밀번호를 두 번 입력받아 같을 때만 `pass.enc`·`key.bin`(권한 600) 생성 |
+| `encrypt.sh` | `[2]` | 비밀번호를 두 번 입력받아 같을 때만 `pass.enc`·`key.bin`(권한 600) 생성. `2` 면 두 번째 계정(`user2`) 비밀번호 → `pass2.enc`(같은 key.bin) |
 | `mockbmc.sh` | `<트리이름> [포트]` 또는 `-dir <경로> -listen <주소> -user <ID> [-v]` | mock BMC 기동(개발·검증용). 비밀번호는 환경변수 `MOCKBMC_PASS`. 종료 시 집계 한 줄 출력 |
 | `setup.sh` / `build.sh` / `build_os6.sh` | (인자 없음) | 1.2절 |
 | `lib.sh` | (직접 실행 안 함) | 래퍼가 `source` 하는 공용 함수: 바이너리 선택·conf 값 읽기 |
@@ -1031,6 +1070,9 @@ $ bin/biostool account change
 | `user` | (없음) | **예** | BMC 계정 ID. 전 벤더 공통 계정 1개를 전제 |
 | `pass_file` | `pass.enc` | | 암호화된 비밀번호 파일 |
 | `key_file` | `key.bin` | | AES-256 키 파일 |
+| `user2` | (없음) | | 두 번째 공용 계정 ID. 계정 생성에서만 씀(점검 접속은 `user`). `user` 와 달라야 함. 2.12절 |
+| `user2_role` | (없음) | `user2` 가 있으면 **예** | 두 번째 계정 권한: `Administrator` / `Operator` / `ReadOnly` (대소문자 무시) |
+| `pass2_file` | `pass2.enc` | | 두 번째 계정의 암호화된 비밀번호 파일 (`bash encrypt.sh 2`, `key_file` 로 복호화) |
 | `concurrency` | `100` | | 동시에 접속할 호스트 수(1 이상). ulimit 은 3.5절 참고 |
 | `timeout` | `20` | | 요청 1건당 타임아웃(초, 1 이상) |
 | `insecure` | `true` | | `true`: BMC 자체서명 인증서 검증 생략 / `false`: 검증 |

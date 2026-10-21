@@ -14,7 +14,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `account_gate.go` | 계정 쓰기 본문 검사(`checkAccountCreateBody`·`checkAccountPatchBody`): 허용 키·값·형태를 고정 (`redfish.go` `checkBody` 가 호출) |
 | `account_input.go` · `account_tty_linux.go` · `account_tty_other.go` | 새 비밀번호 터미널 입력(`*` 표시·2번 입력·붙여넣기 거부), csh 명령 인용(`cshQuote`), 입력 버퍼 비우기. raw 입력은 리눅스 전용(`syscall` ioctl) |
 | `account_ucsm.go` | Cisco UCSM 사용자 생성·변경(`-ucsm`), `internal/ucsmxml` 계정 모드 사용 |
-| `account_check.go` | `check` 끝에서 2순위로 접속한 호스트에 계정 생성 제안(`offerAccountCreate`, 기본 Y) |
+| `account_check.go` | `check`·`bios`(TUI·`-plain`) 끝에서 2순위로 접속한 호스트에 계정 생성 제안(`offerAccountCreate`, 기본 Y, `user2` 도 함께) |
 | `profile.go` | `profiles/<이름>.tsv` 로드·검증(`*` 행의 `verified=Y` 거부, 중복 검사), `rowsFor`(모델 정확 일치 우선 → `*`). 주석 줄 `# [redfish]` / `# [xml]` 로 구역을 나눠 `[xml]` 행(attribute = `클래스.속성`, 벤더 CISCO, `*` 모델 불가)은 `Profile.XML`(UCSM 기대값), `# UNMAPPED` 주석은 `MAPPING_MISSING` 사유로 읽음 |
 | `modelnorm.go` | 모델명 정규화 `normalizeModel`(프로파일의 model 열과 BMC 가 보고한 Model 을 같은 키로 맞추는 **한곳의 규칙**, allcheck 도 사용) |
 | `resolve.go` | 대상 목록 해석: `user.txt` 파싱, `/etc/hosts` 에서 `이름-m` 조회, `:포트`, 재시도 목록(`loadRetryList`), `NO_HOSTS_ENTRY`. `classifyTargets` 가 대상을 Redfish / XML 로 나눔(`xml_host_prefix` 로 시작하는 이름과 `-user-xml` 목록 = XML, IP 는 `-user-xml` 에 있을 때만) |
@@ -71,7 +71,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `profiles/VM_research.tsv` | 표준값(프로파일, 연구용). `bios_json/` 조사 데이터에서 생성(`map_bios_attrs.ps1`), 전부 `verified=N` |
 | `bios.conf.example` · `user.txt.example` · `diff.txt.example` · `ignore_attrs.txt.example` | 설정·입력 파일 예시(실제 값은 `.gitignore` 로 커밋 금지) |
 | `refs/` | 전체비교 기준으로 고를 속성 JSON 폴더(`bios.conf` 의 `refs_dir`). `bios_export.sh` 로 뽑은 `attrs/<호스트>.json` 을 복사해 둠(실제 값이라 커밋 금지) |
-| `bios.sh` | **통합 진입점**(TUI·`-plain`·`-auto`/`-auto-check`): 폴더 이동 → 바이너리 선택 → 필요 파일 확인 → `biostool bios`. `-auto` 는 호출한 폴더 기준으로 targets 경로·`-res-dir` 를 넘김 |
+| `bios.sh` | **통합 진입점**(TUI·`-plain`·`-auto`/`-auto-check`): 폴더 이동 → 바이너리 선택 → 필요 파일 확인 → `biostool bios`. `-auto` 는 호출한 폴더 기준으로 targets 경로·`-res-dir` 를 넘김. 첫 인자가 기능 이름(`account` `passwd` `trs` `dump` `export` `ucsm` `check` `allcheck` `encrypt` `update`)이면 해당 래퍼로 넘김(새 기능 래퍼를 만들면 여기 `case` 에도 추가) |
 | `bios_check.sh` | 옛 이름 래퍼(프로파일 메뉴, 파일 확인) → `biostool check`. 옛 전용 옵션(`-dry-run`·`-no-prompt`·`-stdin-ok`·`-retry-from`·`-list-max`·`-fail-max`)이 없고 프로파일을 줬거나 터미널이면 `bios.sh` 로 넘김 |
 | `xml.sh` | 사전조사 래퍼 → `biostool dump -targets …` |
 | `ucsm_check.sh` | Cisco UCSM 읽기 전용 점검 래퍼 → `biostool ucsm` (위 “Cisco UCSM” 단락 참고) |
@@ -150,7 +150,8 @@ BMC 에 남는 흔적을 줄이고 운영자의 실수를 코드로 막는 것�
 확정 사양은 [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md), 사용법은 README 2.12절, 흐름도는 [WORKFLOW.md](WORKFLOW.md) 6번입니다.
 
 - **쓰기는 `account*.go` 만 합니다.** `redfish.go` 의 `ModeAccount` 에서만 계정 컬렉션 POST·계정 멤버 PATCH/DELETE 가 열리고(`reAcctColl`·`reAcctMember`), PATCH/DELETE 는 이번 실행이 `AllowAccountTarget` 으로 등록했거나(빈 슬롯·대상 계정) 자기가 POST 로 만든 멤버에만 나갑니다. BIOS 점검·설정 모드에서는 계정 경로가 계속 거부됩니다(`TestCheckAllowedAccountPaths`).
-- **본문은 고정 형태만**: 생성(`UserName`·`Password`·관리자 `RoleId`·`Enabled:true`·HPE `Oem` 권한), PATCH 는 비밀번호 / 빈 슬롯 생성 / 롤백 비활성 / 이름 비우기 4가지(`account_gate.go`).
+- **두 번째 계정**(`bios.conf` `user2`·`user2_role`·`pass2_file`): `account.go` 의 `acctSpec`(계정 id·비밀번호·권한) 목록을 `newAcctEnv` 가 만들고, 호스트마다 계정 칸(`newCreateHosts`)을 두어 `createGroup` 이 admin 로그인 1회로 차례로 만듭니다. 권한 → RoleId 후보는 `account_gate.go` `acctRoleIDs`, UCSM 은 `account_ucsm.go` `ucsmRole`.
+- **본문은 고정 형태만**: 생성(`UserName`·`Password`·`RoleId`(`allowedRoleIDs`: Administrator/Operator/ReadOnly 계열)·`Enabled:true`·HPE `Oem` 권한), PATCH 는 비밀번호 / 빈 슬롯 생성 / 롤백 비활성 / 이름 비우기 4가지(`account_gate.go`).
 - **UCSM**: `internal/ucsmxml` 의 계정 모드(`Options.Account`)에서만 `configConfMo` 가 열리고 `aaaUser` 하나의 생성(admin 역할)·비밀번호 변경(등록된 이름)·삭제(이번에 만든 이름)로 제한됩니다(`gateConf`).
 - **비밀번호**: 인자·환경변수·파일로 받지 않고 출력·결과 파일·오류 메시지(`Client.AddSecret` 마스킹)에 싣지 않습니다.
 - **롤백**: 이번 실행이 만든 계정만 지웁니다(원래 있던 계정은 건드리지 않음). 변경 롤백은 열려 있는 1순위 세션으로 이전 비밀번호를 되돌립니다.

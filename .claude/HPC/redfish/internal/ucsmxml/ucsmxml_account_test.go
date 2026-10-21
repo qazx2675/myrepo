@@ -48,7 +48,7 @@ func TestAccountGateRejects(t *testing.T) {
 	okAttrs := `pwd="p" accountStatus="active" expires="no" firstName="" lastName="" email="" phone="" `
 	role := `<aaaUserRole name="admin" status="created"/>`
 	bad := []string{
-		user("alice", okAttrs, `<aaaUserRole name="read-only" status="created"/>`, "created"),
+		user("alice", okAttrs, `<aaaUserRole name="server-equipment" status="created"/>`, "created"),
 		user("alice", okAttrs, `<aaaUserRole name="aaa" status="created"/>`, "created"),
 		user("alice", okAttrs, role+role, "created"),
 		user("alice", okAttrs, "", "created"),
@@ -157,6 +157,37 @@ func TestAccountCreateChangeDeleteFlow(t *testing.T) {
 	}
 	if err := c.Logout(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// 두 번째 계정(user2_role): operations / read-only 역할로도 만들 수 있고, 그 밖의 역할은 보내지 않는다.
+func TestCreateUserRole(t *testing.T) {
+	s, ts := newSrv(t, accountReply)
+	c := newAcct(ts.URL)
+	if err := c.Login(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.CreateUserRole("ro1", newUserPW, "read-only"); err != nil {
+		t.Fatalf("read-only: %v", err)
+	}
+	before := s.n()
+	if err := c.CreateUserRole("x1", newUserPW, "aaa"); !errors.Is(err, ErrNotAllowed) {
+		t.Errorf("허용목록 밖의 역할이 허용됨: %v", err)
+	}
+	if s.n() != before {
+		t.Error("거부된 역할 요청이 서버에 도달함")
+	}
+	s.mu.Lock()
+	found := false
+	for _, b := range s.bodies {
+		found = found || strings.Contains(b, `<aaaUserRole name="read-only" status="created"/>`)
+	}
+	s.mu.Unlock()
+	if !found {
+		t.Error("read-only 역할 본문이 없음")
+	}
+	if err := c.DeleteUser("ro1"); err != nil {
+		t.Errorf("만든 사용자 롤백 삭제: %v", err)
 	}
 }
 

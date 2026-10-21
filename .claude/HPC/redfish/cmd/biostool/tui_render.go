@@ -344,6 +344,20 @@ func tuiSummaryRow(s tuiHostSum) []tuiSeg {
 // width>0 이면 칸 너비 상한을 줄여 가며(최소 6칸, 넘는 값은 …) 폭 안에 맞추고 그래도 넘치면 줄 끝을 자른다.
 // width<=0 이면 자르지 않는다 (평문 출력).
 func tuiTable(color bool, width int, head []string, rows [][]tuiSeg) []string {
+	cw := tuiColWidths(width, head, rows)
+	hs := make([]tuiSeg, len(head))
+	for c, h := range head {
+		hs[c] = tuiSeg{h, tuiStBold}
+	}
+	out := []string{tuiTableRow(color, width, cw, hs)}
+	for _, r := range rows {
+		out = append(out, tuiTableRow(color, width, cw, r))
+	}
+	return out
+}
+
+// tuiColWidths 는 tuiTable 의 칸 너비입니다 (TUI 는 이것만 미리 구해 두고 보이는 줄만 tuiTableRow 로 그린다).
+func tuiColWidths(width int, head []string, rows [][]tuiSeg) []int {
 	n := len(head)
 	cw := make([]int, n)
 	for c, h := range head {
@@ -373,33 +387,28 @@ func tuiTable(color bool, width int, head []string, rows [][]tuiSeg) []string {
 			cw[c] = tuiMinInt(cw[c], limit)
 		}
 	}
-	row := func(cells []tuiSeg) string {
-		segs := make([]tuiSeg, 0, 2*n)
-		for c := 0; c < n; c++ {
-			var cell tuiSeg
-			if c < len(cells) {
-				cell = cells[c]
-			}
-			t := tuiPadR(cell.t, cw[c])
-			if c == n-1 { // 마지막 칸은 뒤 공백을 채우지 않는다
-				t = strings.TrimRight(t, " ")
-			}
-			if c > 0 {
-				segs = append(segs, tuiSeg{"  ", ""})
-			}
-			segs = append(segs, tuiSeg{t, cell.st})
+	return cw
+}
+
+// tuiTableRow 는 칸 너비 cw 에 맞춘 표 한 줄입니다.
+func tuiTableRow(color bool, width int, cw []int, cells []tuiSeg) string {
+	n := len(cw)
+	segs := make([]tuiSeg, 0, 2*n)
+	for c := 0; c < n; c++ {
+		var cell tuiSeg
+		if c < len(cells) {
+			cell = cells[c]
 		}
-		return strings.TrimRight(tuiSegLine(color, width, segs...), " ")
+		t := tuiPadR(cell.t, cw[c])
+		if c == n-1 { // 마지막 칸은 뒤 공백을 채우지 않는다
+			t = strings.TrimRight(t, " ")
+		}
+		if c > 0 {
+			segs = append(segs, tuiSeg{"  ", ""})
+		}
+		segs = append(segs, tuiSeg{t, cell.st})
 	}
-	hs := make([]tuiSeg, n)
-	for c, h := range head {
-		hs[c] = tuiSeg{h, tuiStBold}
-	}
-	out := []string{row(hs)}
-	for _, r := range rows {
-		out = append(out, row(r))
-	}
-	return out
+	return strings.TrimRight(tuiSegLine(color, width, segs...), " ")
 }
 
 // tuiLineTable 은 결과 줄 표(머리 줄 + 줄들)입니다.

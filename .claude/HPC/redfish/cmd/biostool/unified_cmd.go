@@ -12,6 +12,8 @@ package main
 // XML API(UCSM/CIMC, xmlhost.go) 로 점검만 하고(전체비교·설정 제외), 나머지는 Redfish 입니다 (-auto 도 같음).
 //
 // check.res_<user> 는 기본으로 현재 폴더에 쓰며, -res-dir <폴더> 로 바꿀 수 있습니다 (bios.sh 가 호출한 쪽 작업 폴더를 넘김).
+// 대화형(TUI)·-plain 은 끝에서, 1순위 계정이 없어 2순위(rf.conf)로 점검한 호스트가 있으면 계정 생성을 묻습니다
+// (account_check.go, 터미널 입력일 때만). 비대화형(-auto)은 묻지 않습니다.
 // 비대화형은 묻지 않고, 점검을 끝냈으면 FAIL 이 있어도 종료코드 0 (auto_setup 이 결과 파일을 읽음).
 // conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닌 종료코드입니다. 시작할 때 이전 check.res_<user>·
 // _postapply 를 지우므로, 치명적 오류로 끝나면 결과 파일이 남지 않습니다 (파일은 임시 파일 + rename 으로 원자적으로 씀).
@@ -260,5 +262,9 @@ func cmdBios(args []string) error {
 		}
 	}
 	fmt.Printf("\n결과 폴더: %s/ (result.tsv, CSV %d개)\n", dir, len(csvs))
+	// 1순위 계정이 없어 2순위(rf.conf)로 점검한 호스트가 있으면 계정 생성을 묻는다 (터미널 입력일 때만, 기본 Y).
+	if aerr := offerAccountCreate(rc, u.Check, false, false, false, os.Stdin, os.Stdout, reportOpts{Color: color}); aerr != nil {
+		fmt.Fprintln(os.Stderr, "경고: 계정 생성 단계 오류: "+aerr.Error())
+	}
 	return cmpErr
 }

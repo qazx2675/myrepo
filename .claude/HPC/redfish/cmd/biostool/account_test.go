@@ -95,6 +95,9 @@ func TestCheckAccountBodies(t *testing.T) {
 		`{"UserName":"u","Password":"p","RoleId":"admin","Enabled":true}`,
 		`{"UserName":"u","Password":"p","RoleId":"Administrator","PasswordChangeRequired":false}`,
 		`{"UserName":"u","Password":"p","Oem":{"Hpe":{"LoginName":"u","Privileges":{"LoginPriv":true,"iLOConfigPriv":true}}}}`,
+		`{"UserName":"u","Password":"p","RoleId":"Operator","Enabled":true}`, // 두 번째 계정(user2_role)
+		`{"UserName":"u","Password":"p","RoleId":"ReadOnly"}`,
+		`{"UserName":"u","Password":"p","RoleId":"read-only"}`,
 	}
 	for _, b := range createOK {
 		if _, err := checkAccountCreateBody([]byte(b)); err != nil {
@@ -102,7 +105,8 @@ func TestCheckAccountBodies(t *testing.T) {
 		}
 	}
 	createBad := []string{
-		`{"UserName":"u","Password":"p","RoleId":"Operator"}`,
+		`{"UserName":"u","Password":"p","RoleId":"Supervisor"}`, // 후보 밖의 역할(사용자 정의 등)
+		`{"UserName":"u","Password":"p","RoleId":"None"}`,
 		`{"UserName":"u","Password":"p","RoleId":"Administrator","Enabled":false}`,
 		`{"UserName":"u","RoleId":"Administrator"}`,
 		`{"Password":"p","RoleId":"Administrator"}`,
@@ -123,6 +127,7 @@ func TestCheckAccountBodies(t *testing.T) {
 	patchOK := []string{
 		`{"Password":"x"}`,
 		`{"UserName":"u","Password":"p","RoleId":"Administrator","Enabled":true}`,
+		`{"UserName":"u","Password":"p","RoleId":"Operator","Enabled":true}`,
 		`{"Enabled":false,"RoleId":"None"}`,
 		`{"UserName":""}`,
 	}
@@ -137,7 +142,7 @@ func TestCheckAccountBodies(t *testing.T) {
 		`{"RoleId":"Administrator"}`,
 		`{"Enabled":true}`,
 		`{"UserName":"newname"}`,
-		`{"UserName":"u","Password":"p","RoleId":"Operator","Enabled":true}`,
+		`{"UserName":"u","Password":"p","RoleId":"Supervisor","Enabled":true}`,
 		`{"Locked":false}`,
 		`{"Enabled":false,"RoleId":"Administrator"}`,
 		`{}`,

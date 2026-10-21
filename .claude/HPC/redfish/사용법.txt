@@ -31,6 +31,12 @@ cd .claude/HPC/redfish
 # user.txt 에 BMC 관리망 IP 를 한 줄에 하나씩 넣고 실행 (bios.conf·pass.enc·key.bin 은 bios.sh 와 같은 것을 사용)
 bash trs.sh
 
+# 같은 동작을 bios.sh 로 (bios.sh 하나로 모든 기능: account passwd trs dump export ucsm check allcheck encrypt update)
+bash bios.sh trs
+
+# bios.sh 기능별 명령 목록 보기
+bash bios.sh -h
+
 # user.txt 없이 IP 를 직접 지정 / 추가 경로 GET (결과는 화면 + results/<일시>_trs/<호스트>.txt, 이 내용을 붙여 주면 원인 분석에 사용)
 bash trs.sh -targets 10.1.2.3 -path /redfish/v1/Systems/1/Bios/Settings
 
@@ -521,6 +527,20 @@ bash account_create.sh
 
 # 점검(bios_check.sh) 끝에서도 같은 질문이 나온다 (2순위로 접속한 호스트가 있을 때. -no-prompt 면 안내만)
 bash bios_check.sh --profile VM
+
+# bios.sh 점검(TUI·-plain) 끝에서도 같은 질문이 나온다 (TUI 를 닫은 뒤, 그냥 Enter = Y)
+bash bios.sh -profile VM
+
+# bios.sh 로 바로 계정 생성 (= bash account_create.sh, 옵션도 같음)
+bash bios.sh account -dry-run
+bash bios.sh account
+
+# (선택) 두 번째 공용 계정: bios.conf 에 user2=<ID> 와 user2_role=Operator (또는 Administrator / ReadOnly) 를 적은 뒤 비밀번호 저장 -> pass2.enc
+bash encrypt.sh 2
+
+# 두 번째 계정까지 계획 확인 → 생성 (두 계정 모두 없는 곳에만 만든다. 결과 파일 맨 끝 열 account 에 계정 id)
+bash bios.sh account -dry-run
+bash bios.sh account
 
 # 대상이 Cisco UCSM(XML API) 일 때 (대상 목록은 UCSM 주소, rf.conf 의 cisco_user/cisco_pass 사용)
 bash account_create.sh -ucsm -user ucsm.txt

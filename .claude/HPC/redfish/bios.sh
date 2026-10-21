@@ -8,13 +8,39 @@
 #   bash bios.sh -plain -profile VM -ref <비교서버> # 평문 + 비교서버와 BIOS 전체 값 비교
 #   bash bios.sh -auto-check <user> targets.txt   # 비대화형 점검 → 호출한 폴더에 check.res_<user>
 #   bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>_postapply (auto_setup 용)
+#   bash bios.sh <명령> [옵션...]                 # 기능별 명령 (account, passwd, trs, dump, export, ucsm, check, allcheck, encrypt, update)
 #
 # 하는 일: 스크립트 위치로 이동 → OS 에 맞는 바이너리 선택(없으면 빌드 시도) → 필요한 파일 확인 →
 #          bin/biostool bios 실행. 재부팅은 하지 않으며, 설정(TUI 에서만)은 BMC 의 Pending 까지만 합니다.
+#          점검 끝에 1순위 계정이 없어 2순위(rf.conf)로 점검한 호스트가 있으면 계정 생성을 묻습니다 (기본 Y).
 set -euo pipefail
 caller_pwd="$PWD" # 스크립트 위치로 이동하기 전 호출한 쪽 작업 폴더 (-auto 의 targets 경로·check.res_<user> 위치 기준)
-cd "$(dirname "$0")"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+# 기능별 명령: 첫 인자가 명령 이름이면 그 기능의 래퍼를 그대로 실행한다 (나머지 인자는 그대로 전달).
+# 래퍼가 각자 호출한 폴더 기준으로 경로를 해석하도록 이 스크립트 폴더로 이동하기 전에 넘긴다.
+case "${1:-}" in
+  account) shift; exec bash "$script_dir/account_create.sh" "$@" ;;
+  trs) shift; exec bash "$script_dir/trs.sh" "$@" ;;
+  dump) shift; exec bash "$script_dir/xml.sh" "$@" ;;
+  export) shift; exec bash "$script_dir/bios_export.sh" "$@" ;;
+  ucsm) shift; exec bash "$script_dir/ucsm_check.sh" "$@" ;;
+  check) shift; exec bash "$script_dir/bios_check.sh" "$@" ;;
+  allcheck) shift; exec bash "$script_dir/all_bios_check.sh" "$@" ;;
+  encrypt) shift; exec bash "$script_dir/encrypt.sh" "$@" ;;
+  update) shift; exec bash "$script_dir/update.sh" "$@" ;;
+esac
+
+cd "$script_dir"
 . ./lib.sh
+
+# passwd: 래퍼 없이 바이너리를 바로 쓴다 (bios.conf·user.txt 는 이 폴더 기준, account_create.sh 와 같음).
+if [ "${1:-}" = "passwd" ]; then
+  shift
+  select_bin || exit 2
+  echo "※ 이 도구는 참고용(보조 도구)입니다. 비밀번호를 바꾼 뒤에는 랜덤한 서버 몇 대를 직접 골라 실제로 로그인되는지 확인하십시오."
+  exec "$BIN" account change "$@"
+fi
 
 usage() {
   cat <<'EOF'
@@ -42,6 +68,23 @@ usage() {
     - 묻지 않고 점검만 합니다 (설정 없음). 프로파일은 -profile 또는 bios.conf 의 auto_profile.
     - targets.txt 와 -user-xml 파일은 호출한 폴더 기준 경로이고, check.res_<user> (-auto 는 _postapply 도) 는 호출한 폴더에 만들어집니다.
     - 점검을 끝냈으면 FAIL 이 있어도 종료코드 0. conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닙니다.
+
+점검 끝 계정 생성 질문 (TUI·-plain):
+  1순위 계정(bios.conf user)이 거부되어 2순위(/etc/rf_tool/rf.conf) 계정으로 점검한 호스트가 있으면
+  "계정을 만들까요? [Y/n]" 을 묻습니다 (빈 입력 = Y, 터미널 입력일 때만). bios.conf 에 user2 가 있으면
+  같은 호스트에 두 번째 계정(user2_role 권한)도 함께 만듭니다. -auto / -auto-check 는 묻지 않습니다.
+
+기능별 명령 (bash bios.sh <명령> [옵션...], 옵션은 각 명령의 -h 참고):
+  account   [-dry-run] [-ucsm] ...     1순위(+ user2) 계정 생성        = bash account_create.sh
+  passwd    [-dry-run] [-ucsm] ...     1순위 계정 비밀번호 변경         = bin/biostool account change
+  trs       [-targets IP,...] ...      BMC 접속 장애(403 등) 진단        = bash trs.sh
+  dump      [대상...] [--compact]      사전조사 덤프 (GET 전용)          = bash xml.sh
+  export    <비교서버> [대상...]       BIOS 설정값 JSON 추출·비교        = bash bios_export.sh
+  ucsm      [-user ucsm.txt] ...       Cisco UCSM(XML API) BIOS 점검     = bash ucsm_check.sh
+  check     -retry-from <폴더> | -dry-run ...  옛 점검 (재시도·dry-run)  = bash bios_check.sh
+  allcheck  [-ref 서버 | -diff diff.txt] ...   옛 전체비교              = bash all_bios_check.sh
+  encrypt   [2]                        비밀번호 암호화 (2: 두 번째 계정 → pass2.enc) = bash encrypt.sh
+  update    [ZIP 경로]                 새 버전으로 설치 폴더 갱신         = bash update.sh
 
 옛 이름: bios_check.sh (점검), all_bios_check.sh (전체비교) 는 그대로 쓸 수 있습니다 (옛 옵션은 옛 방식으로 동작).
 

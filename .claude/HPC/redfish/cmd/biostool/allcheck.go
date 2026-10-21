@@ -1059,7 +1059,9 @@ func cmdAllCheck(args []string) error {
 	writeAllReport(os.Stdout, run, allReportOpts{ListMax: *listMax, DiffMax: *diffMax, Color: useColor(), RefWord: refWord})
 	// 화면 리포트와 같은 내용을 상한 없이 파일로도 남긴다 (색 없음, 0600).
 	if f, ferr := os.OpenFile(filepath.Join(run.Dir, "report.txt"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600); ferr == nil {
-		writeAllReport(f, run, allReportOpts{ListMax: 1 << 30, DiffMax: 1 << 30, RefWord: refWord})
+		bw := bufio.NewWriter(f)
+		writeAllReport(bw, run, allReportOpts{ListMax: 1 << 30, DiffMax: 1 << 30, RefWord: refWord})
+		bw.Flush()
 		f.Close()
 	}
 	if run.ExportDir != "" {

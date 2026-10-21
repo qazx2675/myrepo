@@ -13,6 +13,14 @@
 - **XML 호스트는 점검만**: 전체비교는 `[N/A]` + 비고 `XML 대상 — 비교 제외(읽기 전용)`(내부 상태 `XML_READONLY`, 화면에서 회색), 수정(설정) 계획에서도 제외합니다.
 - **mock**: `cmd/mockucsm` + `internal/mockucsm`(UCSM XML API mock, `aaaLogin`·`configResolveClass`·`aaaLogout` 만 응답). `testcase/demo_env.sh` 에 c101(XML 단일)·c201/c202(도메인, 서비스 프로파일 이름으로 선택)·c301(XML 실패 → Redfish)과 `user_xml.txt` 추가. 빌드 완료 `bin/mockucsm`(`_os6`) 커밋.
 - **`trs.sh` / `biostool trs`**(`trs.go`): BMC 접속 장애(403 등) 트러블슈팅. `user.txt` 의 관리망 IP(또는 `-targets`)로 TCP/TLS → 비인증 ServiceRoot(403 이면 User-Agent·Accept·슬래시 변형 비교) → 인증(Basic 1회 + 세션 생성 1회, 401 이면 잠금 방지로 중단, 필요 시 rf.conf 2순위 계정 1회 비교) → 인증 후 읽기(Systems·Bios·Managers·NetworkProtocol·내 계정 상태) → 403 경로의 헤더·인증 방식 변형 비교를 하고 원인 추정(`trsDiagnose`)을 출력합니다. 단계별 상태 코드·응답 헤더·Redfish 오류 MessageId 를 그대로 싣고 `results/<일시>_trs/<호스트>.txt` 로 저장합니다(비밀번호·토큰 없음). 읽기 전용(GET/HEAD/OPTIONS + 이번 실행의 세션 생성·삭제). **bios.sh 방식 재현**: 마지막 단계에서 실제 Client 로 bios.sh 와 같은 조회(ServiceRoot `/redfish/v1` → Systems → System → Bios → Settings → 속성 레지스트리)를 해 보고, 실패하면 기본 User-Agent·연결 재사용·끝 슬래시 없는 경로(리다이렉트)·8MB 초과 여부로 원인을 가립니다(trs 는 정상인데 bios.sh 만 HTTP_ERROR 인 경우용). **4xx 전반 대응**: 비인증 ServiceRoot·인증 후 읽기에서 나온 모든 4xx 를 코드별(400~451) 설명·점검 방법과 해당 경로로 정리하고, 4xx 가 난 경로(405 는 OPTIONS Allow 포함)와 세션 생성이 400/405/406/411/415 등일 때는 Accept·OData-Version·Content-Type·User-Agent·슬래시를 바꿔 어떤 모양이 통과하는지 비교합니다(세션 생성 변형이 성공하면 그 세션을 이어 쓰고 끝에 삭제).
+- **`bios.sh` 기능별 명령**: `bash bios.sh <명령> [옵션...]` 으로 지금까지의 기능을 한 진입점에서 실행합니다 — `account`(계정 생성 = `account_create.sh`), `passwd`(1순위 비밀번호 변경 = `biostool account change`), `trs`, `dump`(`xml.sh`), `export`(`bios_export.sh`), `ucsm`(`ucsm_check.sh`), `check`(옛 점검: `-retry-from`·`-dry-run`), `allcheck`, `encrypt`, `update`. 각 래퍼를 그대로 실행하므로 옵션·경로 규칙은 기존과 같습니다(`bash bios.sh <명령> -h`). 명령 없이 실행하면 이전과 같은 TUI/평문 점검입니다.
+- **`bios.sh` 점검 끝 계정 생성 질문**(`tui_flow.go` `runAll`, `unified_cmd.go`): `bios_check.sh`(옛 check)에만 있던 기능을 `bios.sh`(TUI·`-plain`)에도 넣었습니다. 1순위 계정(`bios.conf` user)이 거부되어 2순위(`rf.conf`) 계정으로 점검한 호스트가 있으면 TUI 를 닫은 뒤(평문은 결과 뒤) "계정을 만들까요? [Y/n]" 을 묻습니다(빈 입력 = Y, 터미널 입력일 때만, 점검 중 눌러 둔 Enter 는 버림). `-auto`/`-auto-check` 는 묻지 않습니다.
+- **두 번째 공용 계정**(`bios.conf` `user2`·`user2_role`·`pass2_file`): 권한이 다른 공용 계정을 하나 더 만들 수 있습니다. `user2_role` 은 `Administrator`/`Operator`/`ReadOnly`(user2 를 쓰면 필수, user 와 같은 id 불가), 비밀번호는 **`bash encrypt.sh 2`** 로 `pass2.enc`(같은 `key.bin`) 에 저장합니다. 점검 접속에는 쓰지 않고 계정 생성(`bash bios.sh account`, 점검 끝 질문)에서만 씁니다.
+  - 점검 단계는 두 번째 계정으로 로그인해 보지 않고(인증 실패 기록 방지) 계정 목록에서 이름만 확인합니다: 있으면 `PRESENT`, 없으면 생성 대상. 1순위 계정이 있는 호스트도 두 번째 계정이 없으면 대상입니다.
+  - 생성은 호스트마다 2순위(admin) 로그인 1회로 두 계정을 차례로 만들고(빈 슬롯은 계정마다 다시 읽어 서로 다른 슬롯), 각각 새 계정으로 로그인해 검증하고 실패한 계정만 롤백합니다.
+  - 권한별 RoleId 후보: Operator → `Operator`/`operator`/`user`(Cisco CIMC), ReadOnly → `ReadOnly`/`readonly`/`read-only`. BMC 의 Roles 에서 맞는 이름을 먼저 고릅니다. HPE iLO4(Oem 권한)는 Operator = 로그인·원격 콘솔·가상 미디어·전원, ReadOnly = 로그인만. UCSM 은 `admin`/`operations`/`read-only`.
+  - 안전장치(`account_gate.go`, `ucsmxml` gate): 허용 RoleId 를 위 후보로 넓혔습니다(관리자보다 낮은 표준 역할만 추가, 사용자 정의 역할·그 밖의 값은 계속 거부). UCSM 생성 역할도 `admin`·`operations`·`read-only` 만.
+  - `account_result.tsv` 맨 끝에 `account` 열(작업한 계정 id) 추가 — 기존 열 순서(result 는 7번째)는 그대로. 요약에서 두 번째 계정은 `호스트(계정)` 로 표시. `.gitignore`·`update.sh` KEEP 에 `pass2.enc` 추가.
 - **`update.sh`**(설치 폴더 갱신): `bash update.sh [ZIP|폴더]` 로 `/tmp` 의 가장 최근 redfish ZIP(`lib.sh`+`bios_check.sh` 가 든 것만 고르고 다른 ZIP 은 건너뜀. 또는 지정한 ZIP·압축 푼 폴더)을 풀어 고정 설치 폴더 `/root/server_vm_python/redhfish/V2` 를 갱신합니다. `bios.conf`·`pass.enc`·`key.bin`·`user.txt`·`diff.txt`·`ignore_attrs.txt`·`refs/`·`results/`·`dumps/` 는 그대로 두고 나머지 항목만 바꿉니다. 바꾸기 전 `results/`·`dumps/` 를 뺀 전체를 `../backup/V2_<일시>.tgz` 로 백업합니다. `profiles/` 는 파일별로, 현장에서 고치지 않은 파일만 새 버전으로 바꾸고 고친 파일(`verified=Y` 등)은 두고 새 버전을 `<이름>.new` 로 둡니다(판단 기준 `.update_profiles.sha`, 첫 업데이트는 새 버전과 다르면 모두 고친 것으로 봄). 새 버전에 없는 기존 항목은 지우지 않고 알려 주고, `bios.conf` 에 없는 새 설정 키도 알려 줍니다.
 
 ### 변경 (사용성)
@@ -37,6 +45,9 @@
 - **TUI 제목**: 수정 미리보기·설정 결과에서 결과 보기로 돌아와도 제목이 “수정 미리보기”로 남고 스크롤이 처음으로 가던 문제 (`SwitchTab` 이 결과 보기 제목·스크롤을 되돌림).
 - **TUI 전체비교의 XML 대상 줄**: 벤더·모델이 `-` 라 벤더 탭이 `[-]`, CSV 이름이 `compare_wide_hosts_-_…` 이던 문제 → 점검에서 읽은 벤더(Cisco)·모델로 표시.
 - **TUI 글 보기의 e**: 미리보기·설정 결과 화면 안내에 “e 수정 메뉴” 가 보였지만 실제로는 결과 보기로 돌아가기만 하던 문제 → 글 보기에서는 e 를 받지 않고 안내에서도 뺌 (수정 단계는 결과 보기에서 e).
+- **TUI 렉(전체 설정 비교, 대상 많을 때)**: 키를 누를 때마다(조회 중에는 0.2초마다) 표 전체 줄을 다시 만들어, 50대 × 1,500 속성(7.5만 줄)이면 키 1번에 약 0.28초·115MB 할당 → 누른 키가 밀려 쌓이고 응답이 없다가 쌓인 q 로 끝나는 것처럼 보이던 문제. 행·건수·칸 너비는 벤더·그룹·필터·화면 폭이 바뀔 때만 만들고(`tuiTableCache`), 그릴 때는 보이는 줄만 만듭니다 → 키 1번 약 0.2ms·57KB. mock 50대 시험: 키 663개 처리가 예전 190초 넘게(타임아웃) → 바뀐 뒤 1초 안. 화면 내용·키 동작은 그대로입니다.
+- **TUI 화면 전송량(느린 ssh)**: 바뀐 것이 없는 화면은 다시 보내지 않고(조회 중 0.2초마다 같은 화면을 보내던 것), 방향키·PgUp/PgDn 을 누르고 있어 쌓인 스크롤 키는 모아 처리한 뒤 한 번만 그립니다(스크롤이 아닌 키는 예전처럼 키마다 그림). mock 50대 같은 키 입력에서 터미널로 보낸 양 1.86MB → 37KB.
+- **평문 출력(`-plain`·파이프·리다이렉트)**: 결과 줄을 한 줄마다 write 하던 것(`writeResultLines`)과 `report.txt` 쓰기를 버퍼로 모음. mock 50대 `-plain | cat` 에서 write 호출 79,701 → 3,843 (strace 아래 15.4초 → 6.6초).
 
 ### 변경
 
@@ -52,12 +63,14 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8016034 | 42ec755e76463fba055144a81074cef72a982a96f1c6e52a9360170ec472fdea |
-| bin/biostool_os6 | go1.20.14 | 6627328 | 0a377cf1c50a566d7b0d06fd33f2bd3997e90d9491305fa56e31089b14477f6a |
+| bin/biostool | go1.26.5 | 8048802 | 1097bc4a1377d1df37ac58d8d3ada4d14a10f5c0b02c8d1d5d10d19937662ab2 |
+| bin/biostool_os6 | go1.20.14 | 6656000 | ecbf969033a9df139679b37cb4bc01e45f06ba6cf3164492cd335ff014c4d028 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 
 `bin/mockbmc`(`_os6`)는 소스 변경이 없어 그대로입니다(재빌드 sha 동일). 검증: 랩 go1.26.5·go1.20.14 `gofmt`·`go vet`·`go test ./...` 통과, `demo_env.sh` 혼합 실행(c101 XML FAIL 1건, c201/c202 서비스 프로파일 선택, c301 XML 실패 → Redfish, `-user-xml`) 확인.
+계정(user2·bios.sh 질문) 변경분 검증: `account_user2_test.go`(두 계정 생성·Dell 슬롯 2개·목록 점검·점검 끝 제안·RoleId 후보), `testcase/rf_fallback_case.sh` 11개 PASS(일반·`RF_FORCE_OS6=1`), mock 으로 `bash bios.sh -plain` → 2순위 점검 → 질문에 Enter → `CREATED` 2건(biosadmin·ops1), 비밀번호 출력 0건, 재실행 시 질문 없음. 실장비 미확인.
+TUI 렉·출력 변경분 검증: `tui_bench_test.go`(`go test -bench TUI ./cmd/biostool`), `TestTUISkipsSameFrame`, go1.26.5·go1.20.14 `go test ./...` 통과, mock 50대(속성 1,518개) `bash bios.sh … -ref` → Tab → 키 663개 → qq 로 예전·새 바이너리 비교.
 
 ## [Unreleased] (v0.3.0 후보) - 2026-10-15
 

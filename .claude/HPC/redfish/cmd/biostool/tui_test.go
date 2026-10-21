@@ -449,6 +449,23 @@ func TestTUIResizeRedraws(t *testing.T) {
 	}
 }
 
+// 화면이 그대로면 다시 보내지 않는다 (조회 중 tick 마다 같은 화면을 보내지 않게).
+func TestTUISkipsSameFrame(t *testing.T) {
+	u, r := newTUIRig(t, "")
+	u.SetResults("x", tuiSampleVGs())
+	u.draw()
+	n := r.out.Len()
+	u.draw()
+	if r.out.Len() != n {
+		t.Errorf("같은 화면을 다시 보냄: %d → %d 바이트", n, r.out.Len())
+	}
+	u.SetMessage("바뀜")
+	u.draw()
+	if r.out.Len() == n || !strings.Contains(tuiLastFrame(r), "바뀜") {
+		t.Errorf("바뀐 화면을 보내지 않음")
+	}
+}
+
 // ---- 질문·입력 ----
 
 func TestTUIAsk(t *testing.T) {

@@ -9,6 +9,13 @@ user=admin
 pass_file=pass.enc
 key_file=key.bin
 
+# (선택) 두 번째 공용 계정 — 계정 생성(bash bios.sh account, 점검 끝 생성 질문)에서만 씁니다. 점검 접속은 위 user 로만 합니다.
+# user2 를 적으면 user2_role 이 필요합니다: Administrator / Operator / ReadOnly
+# 비밀번호는 bash encrypt.sh 2 로 pass2_file(기본 pass2.enc) 에 저장합니다 (key_file 은 같은 것을 씀).
+#user2=operator1
+#user2_role=Operator
+#pass2_file=pass2.enc
+
 # 동시에 접속할 호스트 수
 concurrency=100
 
