@@ -106,6 +106,12 @@ bash setup/update_unreleased_dns.sh --dry
 bash setup/update_unreleased_dns.sh
 bash setup/update_unreleased_dns.sh --undo
 
+# 현장 사본 업데이트(Unreleased): gossh 결과 파일(<목록>_res_off 등 호스트명) 삭제, 임시 파일을 /tmp/auto_setup/tmp 에 — 01·02 각각
+bash setup/update_unreleased_tmp_01.sh --dry
+bash setup/update_unreleased_tmp_01.sh
+bash setup/update_unreleased_tmp_02.sh
+# 되돌리기: bash setup/update_unreleased_tmp_01.sh --undo  (02 도 같음)
+
 # 점검 기준이 되는 DNS 서버·검색 도메인 확인
 grep -E '^(nameserver|search|domain|options)' /etc/resolv.conf
 

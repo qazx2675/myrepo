@@ -22,8 +22,8 @@ start_pwd=$(pwd)
 
 tmp_paths=()
 add_tmp() { tmp_paths+=("$@"); }
-cleanup() {   # 임시물 + gossh 가 목록 옆에 만든 결과 파일(<목록>_res_off 등 — 접속불가 호스트명이 들어 있음)
-	local p
+cleanup() {
+	local p   # 임시물 + gossh 가 목록 옆에 만든 결과 파일(<목록>_res_off 등 — 접속불가 호스트명이 들어 있음)도 지운다
 	[[ ${#tmp_paths[@]} -gt 0 ]] || return 0
 	for p in "${tmp_paths[@]}"; do [[ -n $p ]] && rm -rf "$p" "$p"_*; done
 }
