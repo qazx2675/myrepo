@@ -75,6 +75,14 @@ user 선택·y/n 질문 없이 진행합니다(`... : y (-auto)` 에코). `작�
 bash apply_auto_check.sh /경로/config_check.sh
 ```
 
+#### 작업 디렉터리를 `/tmp` 바로 아래에 만들지 않기 (`apply_tmpdir.sh`)
+
+`config_check.XXXXXX` 작업 디렉터리는 `$TMPDIR` 에 만듭니다. auto_setup 이 실행하면 auto_setup 이 정한 곳(`/tmp/auto_setup/tmp`·run 별 tmp 등), 직접 실행하면 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp`(만들 수 없거나 쓸 수 없으면 `/tmp`)입니다. 터미널·ssh 가 끊겨도(SIGHUP) 지웁니다. 회사 사본에는 아래로 반영합니다(바뀌는 기존 줄은 `TMP=$(mktemp …)` 한 줄, 주석·코멘트 불변, 이미 적용된 사본은 그대로).
+
+```bash
+bash apply_tmpdir.sh /경로/config_check.sh   # <대상>.bak 백업 후 적용
+```
+
 #### 회사 사본에 반영하기 (`apply_auto_mode.sh`)
 
 회사 사본은 벤더 문자열·주석·코멘트 문구를 직접 수정해 쓰므로 **덮어쓰지 말고 적용 스크립트만 실행**합니다. `auto_mode.patch`(코드 줄만 건드리고 주석·코멘트 줄은 수정하지 않는 diff)를 적용하며, **주석·코멘트가 바뀌게 되면 적용하지 않고 중단**합니다(대상 파일 불변).
@@ -177,6 +185,7 @@ undefined  undefined    2ea Std 27Year asdf KERNEL RHEL2
 | `auto_mode.patch` | `-auto`·완료기록 변경분만 담은 패치(주석·코멘트 줄 불변) |
 | `apply_auto_mode.sh` | 회사 사본에 패치 적용 + 주석·코멘트 변경 검사 + 백업 |
 | `apply_auto_check.sh` · `auto_check_mode.patch` | `-auto` 가 이미 적용된 사본에 `-auto-check` 만 추가하는 증분 패치 적용 |
+| `apply_tmpdir.sh` | 회사 사본의 작업 디렉터리를 `/tmp` 바로 아래가 아니라 TMPDIR(없으면 `/tmp/auto_setup/tmp`)에 만들게 바꿈 + HUP 트랩 |
 | `계획서.md` | 요구사항·설계 결정·검증 계획 |
 | `ARCHITECTURE.md` | 함수/파일 → 역할 표 |
 | `PR_CHECKLIST.md` | 수정 후 확인 체크리스트 |
@@ -195,6 +204,6 @@ sudo cp config_check.sh /usr/local/bin/config_check
 - 체크는 대상 전체에 `gossh -pm -script -w 목록 "bash run.sh pd; :"` **1회**만 실행합니다. `run.sh`는 FAIL이 없으면 `OK`만 출력하고, `pd` 인자를 주면 OK가 아닌 결과값(LDAP, INFO 등)까지 출력하므로 스크립트가 `pd`를 붙여 실행합니다. `; :`는 run.sh가 0이 아닌 값으로 끝나도 gossh가 결과를 stderr로 보내지 않게 하기 위한 것입니다.
 - 접속은 됐지만 체크 결과가 한 줄도 없는 호스트는 OK로 세지 않고(`no_output`), 설정 적용 대상에서도 제외됩니다.
 - 명령에 `/user/` 경로가 있어 gossh가 동시 접속을 350으로 자동 제한합니다(autofs 보호). 스크립트는 이를 우회하지 않습니다.
-- 결과 원본은 실행 디렉토리의 `check.res_${user}`에 남습니다(재체크하면 덮어씀). 값별 호스트가 20대 이상일 때만 `check.info_${user}`도 남습니다. 그 외 중간 파일은 `/tmp/config_check.XXXXXX`에 만들고 종료 시(Ctrl+C 포함) 삭제합니다.
+- 결과 원본은 실행 디렉토리의 `check.res_${user}`에 남습니다(재체크하면 덮어씀). 값별 호스트가 20대 이상일 때만 `check.info_${user}`도 남습니다. 중간 파일은 `$TMPDIR/config_check.XXXXXX`(위 `apply_tmpdir.sh` 참고)에 만들고 종료·Ctrl+C·끊김 시 삭제합니다. 그 외 중간 파일은 `/tmp/config_check.XXXXXX`에 만들고 종료 시(Ctrl+C 포함) 삭제합니다.
 - gossh 실행 중 Ctrl+C는 gossh 동작을 따릅니다(1회 진행 호스트 표시, 2회 걸린 호스트 취소, 3회 중단). 3회 중단하면 그때까지의 결과로 계속 진행합니다.
 - 최종 확인은 수동으로: 설정 적용 후 무작위 서버 몇 대에 접속해 실제 반영 여부를 확인하세요.

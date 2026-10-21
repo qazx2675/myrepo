@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-10-21 — 작업 디렉터리를 /tmp 바로 아래에 만들지 않음
+
+- **작업 디렉터리 위치**: `/tmp/config_check.XXXXXX` → `$TMPDIR/config_check.XXXXXX`. TMPDIR 이 없으면 `${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp`(0777+sticky, 만들 수 없거나 쓸 수 없으면 `/tmp`). auto_setup 이 실행하면 auto_setup 이 TMPDIR 을 준다(os8_mgmt 는 run 별 `runs/<code>/tmp`, os6_mgmt 2차 체크는 원격 작업 디렉터리 안). os8_mgmt `/tmp` 에 `config_check.*` 가 보이던 것은 이 스크립트의 작업 디렉터리였다
+- **끊김 정리 명시**: `trap 'exit 129' HUP` 추가 — 터미널·ssh 가 끊겨도 EXIT 트랩으로 작업 디렉터리를 지운다 (bash 4.4 는 원래도 지웠음, 셸 버전과 무관하게 명시)
+- **현장 반영**: `bash apply_tmpdir.sh <config_check.sh>` (바뀌는 기존 줄은 `TMP=$(mktemp …)` 한 줄, 주석·코멘트 불변, 백업 `.bak`, 이미 적용된 사본은 그대로)
+
 ## 2026-10-14 — 상세 흐름도를 실제 동작에 맞게 수정
 
 - **문서(`workflow-detail.svg`)**: 환경설정 y/set 실행 스크립트(`setting_insert.sh; appl_change.sh` [; `setting.sh`])·대상(OK 호스트만), 임시 파일명(`first.*`/`recheck.*`), `-auto`/`-auto-check` 분기, 마무리 출력 순서를 실제 스크립트에 맞게 정정하고 `nosvrauto` 표기를 `no_mgmt-autofs` 로 바꿨다. 스크립트 코드는 변경하지 않았다.

@@ -35,9 +35,16 @@ red()    { printf '%s%s%s\n' "$R" "$*" "$N"; }
 green()  { printf '%s%s%s\n' "$G" "$*" "$N"; }
 yellow() { printf '%s%s%s\n' "$Y" "$*" "$N"; }
 
-TMP=$(mktemp -d /tmp/config_check.XXXXXX) || exit 1
+# 작업 디렉터리는 /tmp 바로 아래가 아니라 auto_setup 데이터 디렉터리의 tmp 에 (auto_setup 이 실행하면 TMPDIR 로 지정됨). 못 쓰면 /tmp
+if [ -z "${TMPDIR:-}" ]; then
+    _t=${AUTO_SETUP_DIR:-/tmp/auto_setup}/tmp
+    mkdir -p "$_t" 2>/dev/null; chmod 1777 "$_t" 2>/dev/null
+    [ -d "$_t" ] && [ -w "$_t" ] && TMPDIR=$_t
+fi
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/config_check.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 trap 'echo; exit 130' INT TERM
+trap 'exit 129' HUP   # 터미널·ssh 가 끊겨도 작업 디렉터리를 지운다
 
 # gossh 는 Ctrl+C 를 직접 처리한다(1회: 진행 호스트 표시, 2회: 걸린 호스트 취소, 3회: 중단).
 # 이 구간에서는 스크립트가 INT 를 무시해야 gossh 의 동작이 그대로 유지된다.
