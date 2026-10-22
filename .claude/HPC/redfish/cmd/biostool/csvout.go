@@ -218,7 +218,8 @@ func wideHostsRows(g LineGroup) [][]string {
 	attrs, at := ix.attrs, ix.at
 	_, tally := tallyHosts(g.Lines)
 	head := append([]string{"구분", "Hostname", "IP", "Vendor", "Model", "BIOS", "불일치 건수"}, attrs...)
-	exp := append([]string{"기준", "", "", "", "", "", ""}, make([]string, len(attrs))...)
+	refHost, refIP := refLabel(g.Lines)
+	exp := append([]string{"기준", refHost, refIP, "", "", "", ""}, make([]string, len(attrs))...)
 	for i, a := range attrs {
 		exp[7+i] = ix.expected[a]
 	}
@@ -322,4 +323,20 @@ func writeResultCSVsCancel(dir, prefix string, lines []ResultLine, cancel <-chan
 		return paths, err
 	}
 	return paths, nil
+}
+
+// refLabel 은 그룹에서 비교에 쓰인 기준 호스트들의 hostname·IP 입니다 (처음 나온 순서, 여러 개면 " / " 로 잇는다).
+// 기준 호스트를 알 수 없으면(프로파일 점검 등) 빈 값입니다.
+func refLabel(lines []ResultLine) (host, ip string) {
+	seen := map[string]bool{}
+	var hs, ips []string
+	for _, l := range lines {
+		if l.RefHost == "" || seen[l.RefHost+"\x00"+l.RefIP] {
+			continue
+		}
+		seen[l.RefHost+"\x00"+l.RefIP] = true
+		hs = append(hs, l.RefHost)
+		ips = append(ips, l.RefIP)
+	}
+	return strings.Join(hs, " / "), strings.Join(ips, " / ")
 }

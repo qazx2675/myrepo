@@ -25,6 +25,8 @@
 
 ### 변경 (사용성)
 
+- **전체비교 결과 CSV 의 `wide_hosts` “기준” 행에 기준 호스트 표시**(`csvout.go` `refLabel`, `resultconv.go`, `ResultLine.RefHost`·`RefIP`): 기준 행의 Hostname·IP 칸이 비어 있어 어떤 서버를 기준으로 비교했는지 알 수 없던 문제. 이제 비교에 쓰인 기준 호스트의 hostname·IP 가 들어가고, 한 그룹에 기준이 둘 이상이면 `기준1 / 기준2` 처럼 잇습니다. 기준 JSON(`-ref-json`)이면 JSON 의 host·ip(없으면 파일 이름)이고, 프로파일 점검 결과는 기준 호스트가 없어 전과 같이 빈 칸입니다. 열 순서·개수는 그대로.
+
 - **비교서버 입력 규칙 통일**: 전체비교 비교서버를 TUI 에서 입력 줄 하나(쉼표)가 아니라 대상 입력과 같은 여러 줄 입력(한 줄에 하나 또는 공백 구분, Ctrl+D 완료, 바로 Ctrl+D 면 diff.txt)으로 받습니다. `-ref` 도 쉼표·공백·줄바꿈으로 여러 개. 이 입력 화면에서도 Tab 으로 프로파일 화면으로 돌아갑니다.
 - **종료(q 두 번) 때 수정 여부를 묻지 않음**: 수정 단계는 `e` 로만 갑니다. q 두 번은 설정 여부와 관계없이 그대로 끝납니다.
 
@@ -64,8 +66,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8138914 | c0b7be5c05de7b73574708f2e1ed26eb44004f8cafd7728431a9b210e8a68f5f |
-| bin/biostool_os6 | go1.20.14 | 6746112 | 3651858d28ec221194d110272393bdbd66360fb54317c803729ff0f637bb1a05 |
+| bin/biostool | go1.26.5 | 8143010 | 932c0fc22e84a31e0cbca1d9171a1adb9cfaab57c172cd704e702d9cd0448278 |
+| bin/biostool_os6 | go1.20.14 | 6746112 | 0145bc8177b996580390b18e62d41e40477512c038af80c8aa644a2f85f18a9d |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 

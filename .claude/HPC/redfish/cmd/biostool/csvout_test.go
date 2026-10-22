@@ -228,3 +228,21 @@ func TestWriteResultCSVsEmpty(t *testing.T) {
 		t.Fatalf("paths=%v err=%v", paths, err)
 	}
 }
+
+// 전체비교 줄에 기준 호스트가 있으면 wide_hosts 의 기준 행에 hostname·IP 가 나오고, 여러 기준이면 " / " 로 잇는다. 없으면 빈 칸.
+func TestWideHostsRefHost(t *testing.T) {
+	a := csvLine("h1", "iLO 5", "A", TagOK, "on", "on", "SAME")
+	b := csvLine("h2", "iLO 5", "A", TagOK, "on", "on", "SAME")
+	c := csvLine("h3", "iLO 5", "A", TagOK, "on", "on", "SAME")
+	a.RefHost, a.RefIP = "ref1", "10.0.0.1"
+	b.RefHost, b.RefIP = "ref1", "10.0.0.1"
+	c.RefHost, c.RefIP = "ref2", "10.0.0.2"
+	rows := wideHostsRows(groupLines([]ResultLine{a, b, c})[0].Groups[0])
+	if rows[1][1] != "ref1 / ref2" || rows[1][2] != "10.0.0.1 / 10.0.0.2" {
+		t.Fatalf("기준 행 %q", rows[1])
+	}
+	plain := wideHostsRows(groupLines([]ResultLine{csvLine("h1", "iLO 5", "A", TagOK, "on", "on", "OK")})[0].Groups[0])
+	if plain[1][1] != "" || plain[1][2] != "" {
+		t.Fatalf("프로파일 점검은 빈 칸이어야 함: %q", plain[1])
+	}
+}

@@ -212,7 +212,7 @@ func TestCompareLines(t *testing.T) {
 		if k := lineKey(l); k != want[i] {
 			t.Errorf("줄 %d = %s, 기대 %s", i, k, want[i])
 		}
-		if l.Kind != KindCompare || l.Host != "h1" || l.Vendor != "Dell" || l.BiosVersion != "1.8.2" || l.MgmtModel != "-" {
+		if l.Kind != KindCompare || l.Host != "h1" || l.Vendor != "Dell" || l.BiosVersion != "1.8.2" || l.MgmtModel != "-" || l.RefHost != "ref" || l.RefIP != "-" {
 			t.Errorf("줄 %d 호스트 칸: %+v", i, l)
 		}
 	}
@@ -237,7 +237,7 @@ func TestCompareLines(t *testing.T) {
 		t.Fatalf("REFERENCE 줄 %d개, 기대 %d개: %+v", len(ls), len(wantRef), ls)
 	}
 	for i, l := range ls {
-		if k := lineKey(l); k != wantRef[i] || l.Host != "ref" || l.Vendor != "HPE" || l.Kind != KindCompare {
+		if k := lineKey(l); k != wantRef[i] || l.Host != "ref" || l.RefHost != "ref" || l.Vendor != "HPE" || l.Kind != KindCompare {
 			t.Errorf("REFERENCE 줄 %d = %s %+v, 기대 %s", i, k, l, wantRef[i])
 		}
 	}

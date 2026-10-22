@@ -43,6 +43,8 @@ type ResultLine struct {
 	Current     string // 대상 현재값
 	Note        string // 원래 상태명 (FAIL, UNVERIFIED, ONLY_REF, UNREACHABLE ...)
 	HostError   bool   // 호스트 단위 오류 줄 (접속·조회 실패)
+	RefHost     string // 비교한 기준 호스트 hostname (전체비교만. 기준 자신이면 자기 자신, 프로파일 점검은 빈 값)
+	RefIP       string // 기준 호스트 IP
 }
 
 // tagFor 는 원래 상태명을 태그 3종으로 묶습니다. 모르는 상태(호스트 오류 등)는 N/A.

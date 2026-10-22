@@ -71,6 +71,11 @@ func compareLines(h *allHost, ign *ignoreSet) []ResultLine {
 			base.Vendor, base.Model, base.BiosVersion = dash(s.Vendor), dash(s.Model), dash(s.BiosVersion)
 		}
 	}
+	if h.Status == StatusIsReference {
+		base.RefHost, base.RefIP = base.Host, base.IP
+	} else if h.compared() && h.Ref != nil {
+		base.RefHost, base.RefIP = h.Ref.Target.Hostname, dash(h.Ref.Target.IP)
+	}
 	if h.Status == StatusIsReference && h.Snap != nil && h.Snap.Attrs != nil {
 		return referenceLines(base, h.Snap.Attrs, ign)
 	}
