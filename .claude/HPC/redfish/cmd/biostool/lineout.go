@@ -46,7 +46,7 @@ func lineSafe(s string) string {
 	}, s)
 }
 
-// formatLine 은 결과 줄 1개를 TAB 으로 나눈 한 줄로 만듭니다 (개행 없음). 기준값 칸은 항상 초록입니다
+// formatLine 은 결과 줄 1개를 TAB 으로 나눈 한 줄로 만듭니다 (개행 없음). 기준값 칸은 항상 초록, 비고는 OK 줄 초록·그 밖 노랑(호스트 오류는 빨강)입니다
 // (호스트 오류 줄도 — 그 줄은 태그·현재값·비고만 빨강). 기준값·현재값의 "-"·빈 값은 (N/A) 로 보여 줍니다.
 // 모든 칸은 lineSafe 로 제어 문자를 지운 뒤 색을 입힙니다.
 func formatLine(l ResultLine, color bool) string {
@@ -58,8 +58,13 @@ func formatLine(l ResultLine, color bool) string {
 	}
 	c := lineColor(l)
 	note := lineSafe(l.Note)
-	if lineIsError(l) {
+	switch {
+	case lineIsError(l):
 		note = paint(lnRed, note)
+	case l.Tag == TagOK:
+		note = paint(lnGreen, note)
+	default:
+		note = paint(lnYellow, note)
 	}
 	cols := []string{
 		paint(c, "["+lineSafe(l.Tag)+"]") + " " + lineSafe(l.Host),

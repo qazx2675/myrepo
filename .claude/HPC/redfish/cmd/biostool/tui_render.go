@@ -252,11 +252,15 @@ var tuiLineHead = []string{"태그", "host", "ip", "vendor", "model", "bios", "a
 
 // tuiLineRow 는 결과 줄 1개를 칸으로 나눕니다. 기준값은 항상 초록(호스트 오류 줄도), 태그·현재값은 태그 색,
 // 호스트 오류 줄은 태그·현재값·비고가 빨강.
+// 비고는 OK 줄이 초록, 그 밖(difference·N/A)은 노랑.
 func tuiLineRow(l ResultLine) []tuiSeg {
 	tag := tuiTagStyle(l)
-	note := ""
-	if lineIsError(l) {
+	note := tuiStYellow
+	switch {
+	case lineIsError(l):
 		note = tuiStRed
+	case l.Tag == TagOK:
+		note = tuiStGreen
 	}
 	return []tuiSeg{
 		{"[" + l.Tag + "]", tag},
