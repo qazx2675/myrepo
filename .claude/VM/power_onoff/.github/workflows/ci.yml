@@ -1,0 +1,18 @@
+# 이 폴더(power_onoff)가 저장소 루트인 브랜치/서브트리에서 동작한다.
+# master 에서는 .claude/VM/power_onoff 아래라 실행되지 않으므로 저장소 루트 .github/workflows/vm-power-onoff.yml 이 같은 일을 한다.
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      - run: GOPROXY=off go build -mod=vendor ./...
+      - run: GOPROXY=off go vet -mod=vendor ./...
+      - run: GOPROXY=off go test -mod=vendor ./...
+      - name: 스크립트 문법 검사
+        run: for f in setup.sh install.sh build_os6.sh test/*.sh dev/*.sh; do bash -n "$f"; done

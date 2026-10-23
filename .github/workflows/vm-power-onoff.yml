@@ -1,0 +1,24 @@
+# master 용: .claude/VM/power_onoff 를 빌드·정적분석·테스트한다. (폴더가 저장소 루트인 브랜치에서는 폴더 안의 .github/workflows/ci.yml 이 동작)
+name: vm-power-onoff
+
+on:
+  push:
+    paths: ['.claude/VM/power_onoff/**', '.github/workflows/vm-power-onoff.yml']
+  pull_request:
+    paths: ['.claude/VM/power_onoff/**', '.github/workflows/vm-power-onoff.yml']
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/VM/power_onoff
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.5' }
+      - run: GOPROXY=off go build -mod=vendor ./...
+      - run: GOPROXY=off go vet -mod=vendor ./...
+      - run: GOPROXY=off go test -mod=vendor ./...
+      - name: 스크립트 문법 검사
+        run: for f in setup.sh install.sh build_os6.sh test/*.sh dev/*.sh; do bash -n "$f"; done

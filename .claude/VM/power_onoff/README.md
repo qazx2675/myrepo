@@ -1,0 +1,159 @@
+# vm_power_onoff — vCenter VM 안전 Power Off / Power On / 재부팅
+
+vCenter 에 연결된 VM(`<BM이름>ev01`, `<BM이름>ev02` …)을 **휴먼 에러가 나지 않도록 다단계 안전장치**를 거쳐 끄고·켜고·재부팅하는 Go 도구입니다.
+user 를 번호로 고르고 기능을 고르면, (VWP 해당 시 담당자 확인 코드) → 안전장치 5단계를 통과한 뒤에만 실제 전원 작업을 합니다.
+
+| 기능 | 동작 |
+|---|---|
+| 1) Power Off | Guest OS 정상 종료 요청을 **대상 전체에 한꺼번에** 보냄 → 제한 시간 안에 안 꺼진 VM 은 목록을 보여주고 `YeS` 확인 후 강제 PowerOff |
+| 2) Power On (순차) | lpage 사용중 BM 의 VM 은 **ev 단계별**로: 모든 ev01 에 동시에 PowerOn → 전부 부팅 완료될 때까지 대기 → 모든 ev02 에 동시에 PowerOn → … . lpage 미사용 BM 은 안내 후 한 번에 부팅 |
+| 3) 일괄 Power On | OS 설치용. 순서·부팅 확인 없이 **전 대상 병렬**로 한 번에 켬 |
+| 4) 재부팅 | Power Off 를 대상 전체에 한꺼번에 → 전부 꺼진 것을 확인 → Power On 을 대상 전체에 한꺼번에 (순차 부팅은 2번 기능에만 있음) |
+
+> 작업 흐름도: [WORKFLOW.md](WORKFLOW.md) / 폴더·파일 역할: [ARCHITECTURE.md](ARCHITECTURE.md) / 설계 결정 전체: [계획서.md](계획서.md)
+
+## 1. 빌드 및 설치 방법
+
+이 폴더만 통째로 받으면 **인터넷 없이** 빌드됩니다(의존성 govmomi 가 `vendor/` 에 들어 있고, `setup.sh` 가 `GOPROXY=off`, `-mod=vendor` 로 빌드).
+
+```bash
+# 요구사항: Go 1.26.5 이상, Linux (Rocky Linux 8 에서 검증). OS6 는 Go 없이 미리 빌드된 파일 사용
+cd power_onoff
+bash setup.sh                 # → ./vm_power_onoff  (OS6 서버에서는 자동으로 bin_os6/vm_power_onoff.gz 를 풀어 둠)
+sudo bash install.sh          # /usr/local/bin/vm_power_onoff 와 /etc/vcetner_pwon_off/pwonoff.conf 설치
+sudo vi /etc/vcetner_pwon_off/pwonoff.conf   # users / vcenters / (필요 시) secret_lib, os6_host 수정
+```
+
+- `install.sh [허용디렉터리]`: 허용디렉터리 기본값은 이 폴더 절대경로(`allowed_dir`). 이미 `pwonoff.conf` 가 있으면 덮어쓰지 않습니다. 제거는 `sudo bash install.sh -u`.
+- OS6(RHEL/CentOS 6, 커널 2.6.32)용 실행파일은 Go 1.20 빌드 서버에서 `bash build_os6.sh` 로 `bin_os6/vm_power_onoff.gz` 를 만듭니다(저장소에 포함됨).
+- 설정 디렉터리 이름은 요구사항 그대로 **`/etc/vcetner_pwon_off/`** 입니다(철자 `vcetner`).
+
+## 2. 사용 방법
+
+대상 파일을 **허용 디렉터리(`allowed_dir`)** 에 `on_off_<user>.txt` 이름으로 만듭니다. **VM 이름만** 한 줄에 하나(`#` 주석 가능). BM 이름은 적지 않습니다.
+
+```text
+# on_off_hong.txt  — BM svr1 의 VM 3대, BM svr2 의 VM 1대
+svr1ev01
+svr1ev02
+svr1ev03
+svr2ev01
+```
+
+```bash
+cd /home/power_onoff            # conf 의 allowed_dir. 이 디렉터리 밖에서는 실행 불가
+vm_power_onoff                  # 1) user 번호 선택 → 2) vCenter 선택 → 3) 비밀번호 → 4) 기능 선택 → 5) 안전장치 → 실행
+vm_power_onoff -u hong          # user 지정 (Enter = 이전 실행 vCenter)
+vm_power_onoff -u hong -v 192.168.0.50 -n   # 계획(대상·상태·VWP)만 확인, 전원 작업 없음
+vm_power_onoff --demo           # vCenter 없이 샘플 3대로 안전장치만 체험
+```
+
+진행 순서:
+
+1. **허용 경로 확인** — 현재 디렉터리가 `allowed_dir` 이 아니면 즉시 종료. conf 가 root 소유가 아니거나 group/other 쓰기 가능이어도 종료.
+2. **user 선택**(숫자 1~) → `on_off_<user>.txt` 만 읽습니다(다른 이름·심볼릭 링크 불가).
+3. **vCenter 선택**(번호, `0`=직접 입력, Enter=이 user 의 이전 vCenter) → **비밀번호**(`secret_lib` 암호 파일 → 없으면 직접 입력, 화면 표시 안 함).
+4. **기능 선택**(1~4) → 대상 VM 을 vCenter 에서 조회해 **계획표**(BM별 전원 상태, lpage 사용/미사용 → 부팅 방식)를 출력. 대상 VM 이 vCenter 에 없거나 같은 이름이 2대 이상이면 **아무 작업도 하지 않고** 목록을 보여준 뒤 종료합니다.
+5. **VWP 확인** — 대상 VM 의 상위 폴더 경로 또는 포트그룹 이름에 `vwp`(대소문자 무시)가 있으면 빨간 경고 배너가 뜨고, 담당자 확인 후 **6자리 코드**를 입력해야 다음으로 갑니다.
+6. **안전장치 5단계**(아래) 통과.
+7. **실행** → 결과 표(성공/스킵/실패, 소요 시간) → 하나라도 실패하면 종료코드 1. 실행 기록은 `allowed_dir/run_<user>/` 에 남습니다.
+
+### 안전장치 5단계
+
+| 단계 | 동작 | 틀리면 |
+|---|---|---|
+| 1/5 | 영문 대문자+숫자 6자리 코드를 입력 → 통과하면 작업 대상 호스트 목록과 `총 N대` 출력 | 즉시 취소(exit 1) |
+| 2/5 | "다음 단계는 1분(60초)의 입력 제한 시간이 있습니다…" 안내 후 Enter 로 진행 | — |
+| 3/5 | 대상 VM 이름을 **직접 입력**(복사·붙여넣기 가능, 공백·탭·줄바꿈 구분, 순서 무관). 60초 이내. 대상과 정확히 같아야 하며 **중복이 하나라도 있거나 다르면** 취소 | 취소(누락/대상 아님/중복 표시) |
+| 4/5 | `정말 작업을 진행하시겠습니까? (YeS/No):` — 대소문자까지 정확히 `YeS` 만 통과 | `yes`,`YES`,`y`,`No` 등 모두 취소 |
+| 5/5 | `10 .. 9 .. 8 .. 7 .. 6 .. 5 .. 4 .. 3 .. 2 .. 1` 한 줄 카운트다운 (Ctrl+C 로 취소) | Ctrl+C 중단 |
+
+모든 단계에서 Ctrl+C(SIGINT)는 즉시 중단(exit 1)이며, 취소 사유가 화면에 `[취소] …` 로 표시됩니다.
+
+## 3. 옵션별 상세 설명
+
+### 명령행 옵션
+
+| 옵션 | 설명 |
+|---|---|
+| `-u <user>` | user 를 번호 선택 없이 지정(conf `users` 에 있어야 함) |
+| `-v <vCenter>` | vCenter 주소 직접 지정(`host` 또는 `host:port`) |
+| `-id <계정>` | vCenter 계정(기본: conf `vc_id`, 보통 `lscsystems@vsphere.local`) |
+| `-n` | 계획까지만 확인하고 종료(전원 작업 없음) |
+| `--demo` | 샘플 3대(`web-prd-01`, `web-prd-02`, `was-prd-01`)로 안전장치 1~5단계만 실행. vCenter·conf 불필요, 전원 작업 없음 |
+| `--version`, `-h` | 버전 / 도움말 |
+
+### 설정 파일 `/etc/vcetner_pwon_off/pwonoff.conf`
+
+`키=값` 형식, `#` 주석. 알 수 없는 키·중복 키·잘못된 값은 시작할 때 오류로 종료합니다. 예시: [pwonoff.conf.example](pwonoff.conf.example)
+
+| 키 | 기본값 | 설명 |
+|---|---|---|
+| `allowed_dir` | (필수) | 이 디렉터리에서만 실행 가능. `on_off_<user>.txt`, `run_<user>/` 가 여기에 위치 |
+| `users` | (필수) | 선택 가능한 user 목록(콤마). 영문 소문자/숫자/`_`. 적은 순서가 번호 |
+| `vcenters` | — | vCenter 목록(콤마), 번호 선택용 |
+| `vc_id` | `lscsystems@vsphere.local` | vCenter 계정 |
+| `secret_lib` | (빈 값) | VMsetup 의 `secret_lib.sh` 경로. 채우면 암호 파일에서 비밀번호를 읽고, 비우면 매번 입력 |
+| `os6_host`, `os6_user` | (빈 값), `root` | 부팅 완료 확인 시 직접 접속이 안 되는 대역을 `ssh os6_user@os6_host` 로 경유(키 인증). 비우면 직접 확인만 |
+| `concurrency` | 200 | 한 번에 vCenter 로 보내는 최대 동시 작업 수. 대상이 이보다 많을 때만 나머지를 이어서 보냄 (보통 대상 전체가 한꺼번에 나감) |
+| `shutdown_timeout` | 300 | Guest 종료 대기(초) |
+| `boot_timeout` | 600 | 순차 부팅에서 한 ev 단계의 VM 부팅 완료 대기(초) |
+| `boot_poll_interval` | 10 | 상태 확인 간격(초) |
+| `port_check_timeout` | 3 | 22 포트 연결 제한(초) |
+
+### 순차 부팅(2번)의 판정 규칙
+
+- **lpage 사용중**: 그 BM 의 대상 VM 중 하나라도 `sched.mem.lpage.enable1GPage=TRUE` → 그 BM 의 VM 은 **ev 단계별** 순차 대상.
+- **ev 단계(wave)**: 순차 대상 BM 전체에서 같은 ev 번호끼리 한 단계입니다. 예) 대상이 svr1ev01~02, svr2ev01~02 이면 ① `svr1ev01`, `svr2ev01` 에 **동시에** PowerOn → 둘 다 **부팅 완료될 때까지 대기** → ② `svr1ev02`, `svr2ev02` 에 동시에 PowerOn → … . VM 하나씩 켜는 것이 아니라, 단계 안은 병렬이고 단계 사이만 순차입니다.
+- **부팅 완료** = ① VMware Tools 실행 + heartbeat green + IPv4 확보 → ② 22 포트 응답(직접, 막힌 대역은 `os6_host` 경유). 화면에 `22 직접` / `22 os6_mgmt 경유` 로 구분 표시.
+- **lpage 미사용**: `※ <BM>: lpage 미사용 — 한 번에 부팅해도 됩니다.` 안내 후 순차 단계를 기다리지 않고 한 번에 켭니다(부팅 완료 대기 없음).
+- 한 단계에서 제한 시간(`boot_timeout`) 안에 부팅이 안 된 VM 이 있으면 **그 VM 목록을 보여주고 한 번만** `계속 대기(c) / 이 VM 건너뛰고 다음 ev 단계(s) / 순차 부팅 중단(q)` 를 묻습니다. `c` 는 못 켜진 VM 만 다시 대기, `s` 는 그 VM 을 실패로 두고 다음 ev 단계, `q` 는 남은 ev 단계를 실행하지 않습니다. 같은 단계의 다른 VM 은 정상 처리됩니다.
+- BM 은 이름이 아니라 vCenter 에서 조회한 **실제 ESXi 호스트** 기준으로 묶습니다(이름상 BM 과 다르면 계획표에 `[주의]` 표시).
+
+### VWP 검사
+
+VM 이 속한 **모든 상위 폴더 이름**과 **모든 NIC 포트그룹 이름**에 `vwp`(대소문자 무시)가 들어 있으면 `vwp대상 장비가 포함되어있습니다. vwp장비의 경우 vwp담당자에게 확인이 필요합니다.` 경고와 해당 VM·사유가 표시되고, 담당자 확인 후 화면의 6자리 코드를 입력해야 합니다(안전장치 코드와는 별개).
+
+### 종료 코드와 실행 기록
+
+- 정상 완료 `0`. 안전장치 취소·Ctrl+C·오류·실패 VM 이 하나라도 있으면 `1`.
+- `allowed_dir/run_<user>/YYYYmmdd_HHMMSS_<기능>.log`(디렉터리 700, 파일 600): 실행 시각·OS 계정·user·vCenter·기능·대상·VWP 여부·안전장치 통과/취소 사유·VM별 결과. **비밀번호와 확인 코드 입력값은 기록하지 않습니다.**
+
+## 4. 문서별 설명
+
+| 문서/폴더 | 내용 |
+|---|---|
+| [README.md](README.md) | 이 문서: 설치, 사용법, 옵션, 주의사항 |
+| [사용법.txt](사용법.txt) | 수동 시험에 쓸 명령어 모음(각 명령 위에 설명 주석) |
+| [계획서.md](계획서.md) | 요구사항·인터뷰 결정 사항·설계 전체, 구현 후 변경 사항 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 파일별 역할 표 — 어디를 고치면 되는지 |
+| [WORKFLOW.md](WORKFLOW.md), `workflow.svg` | 실행 흐름도 (mermaid / SVG) |
+| [CHANGELOG.md](CHANGELOG.md) | 변경 이력 |
+| [PR_CHECKLIST.md](PR_CHECKLIST.md) | 수정·배포 전 체크리스트 |
+| `test/` | `run_tests.sh`(전체 시험), `guard_scenarios.sh`(안전장치 시나리오), `e2e_vcsim.sh`+`e2e_driver.py`(vcsim 위 전체 흐름), `vcsim_server/`(시험용 vCenter 시뮬레이터) |
+| `dev/sync_test.sh` | 로컬에서 쓴 코드를 빌드 서버(192.168.0.58)로 보내 go vet/test/build 를 돌리는 도우미 |
+| `.github/workflows/ci.yml` | 커밋마다 vendor 기준 빌드·vet·테스트 |
+
+시험 실행(빌드 서버, root): `bash test/run_tests.sh` → 마지막 줄 `PASS=N FAIL=M`. 실제 vCenter 없이 vcsim 으로 모든 기능·안전장치·취소 경로를 확인합니다.
+
+## 주의사항 (Disclaimer)
+
+> 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다.
+> **설정 변경·전원 작업 스크립트의 경우, 작업 후 무작위로 서버 몇 대를 골라 실제로 변경(전원 상태·부팅 완료)되었는지 직접 확인하는 절차가 반드시 필요합니다.**
+
+- 이 도구는 **전원을 직접 끄고 켭니다.** 반드시 `-n` 으로 대상·계획을 먼저 확인하고, 안전장치 3단계에서 대상 목록을 눈으로 대조하세요.
+- 강제 PowerOff 는 Guest OS 가 정상 종료되지 못한 VM 에만 묻고, `YeS` 가 아니면 하지 않습니다. 데이터 손상 위험을 이해한 뒤에만 승인하세요.
+- Ctrl+C 로 중단해도 **이미 vCenter 에 요청한 작업은 vCenter 에서 계속 진행**될 수 있습니다. 중단 후 전원 상태를 `-n` 으로 다시 확인하세요.
+- Power Off·일괄 Power On·재부팅은 대상 전체에 명령을 한꺼번에 보냅니다. lpage 사용중 BM 에서 한꺼번에 켜면 메모리 할당 실패가 날 수 있으므로(계획표에 경고 표시) 그런 BM 은 2번(ev 단계별 순차)을 쓰세요.
+- vCenter 비밀번호는 환경변수(`VC_PASSWORD`/`VC_PASS`)에서 읽지 않습니다. `secret_lib` 암호 파일 또는 직접 입력만 사용하며, conf·소스·로그에 비밀번호를 적지 마세요.
+- `pwonoff.conf` 는 root 소유, group/other 쓰기 금지여야 동작합니다(허용 경로·user 우회 방지).
+
+## 5. 전역 명령어로 사용하기 (선택 사항)
+
+빌드된 실행 파일을 PATH에 포함된 디렉터리로 복사하거나, 실행 파일이 있는 경로를 PATH에 추가하면 어디서든 명령어처럼 쓸 수 있습니다.
+
+```bash
+sudo cp /home/power_onoff/vm_power_onoff /usr/local/bin/
+```
+
+(`sudo bash install.sh` 가 같은 일을 하면서 설정 파일까지 설치합니다. 전역 명령으로 등록해도 **`allowed_dir` 에서만 실행**됩니다.)

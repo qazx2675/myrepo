@@ -1,0 +1,45 @@
+# vm_power_onoff 수동 시험용 명령어 모음 (각 명령 위에 설명)
+
+# [빌드] 폴더 안에서 오프라인 빌드 (인터넷 불필요, Go 1.26.5 이상)
+bash setup.sh
+
+# [설치] /usr/local/bin/vm_power_onoff 와 /etc/vcetner_pwon_off/pwonoff.conf 설치 (root). 인자 = 허용 디렉터리(기본: 현재 폴더)
+sudo bash install.sh /home/power_onoff
+
+# [설정] users / vcenters 를 환경에 맞게 수정 (필요하면 secret_lib, os6_host 채움)
+sudo vi /etc/vcetner_pwon_off/pwonoff.conf
+
+# [대상 파일] 허용 디렉터리에 on_off_<user>.txt 작성 — VM 이름만 한 줄에 하나 (예: svr1ev01)
+vi /home/power_onoff/on_off_hong.txt
+
+# [안전장치 체험] vCenter 없이 샘플 3대(web-prd-01, web-prd-02, was-prd-01)로 안전장치 1~5단계만 실행, 전원 작업 없음
+vm_power_onoff --demo
+
+# [계획 확인] 전원 작업 없이 대상 VM 상태·lpage 여부·VWP 여부만 확인 (user 선택 → vCenter 선택 → 비밀번호 → 기능 선택)
+cd /home/power_onoff && vm_power_onoff -u hong -v 192.168.0.50 -n
+
+# [실제 작업] user 번호 선택부터 시작. 기능: 1 Off / 2 Power On(순차) / 3 일괄 Power On(OS 설치용) / 4 재부팅
+cd /home/power_onoff && vm_power_onoff
+
+# [작업 후 확인] 무작위로 몇 대를 골라 전원 상태를 다시 확인 (-n 으로 상태만 조회)
+cd /home/power_onoff && vm_power_onoff -u hong -v 192.168.0.50 -n
+
+# [실행 기록 확인] 시각·OS 계정·대상·안전장치 결과·VM별 결과
+ls -l /home/power_onoff/run_hong/ && tail -n 40 /home/power_onoff/run_hong/*.log
+
+# ---- 개발/시험 (빌드 서버 192.168.0.58, root) ----
+
+# [전체 시험] vet + 단위 + race + vcsim + 안전장치 시나리오 + E2E. 마지막 줄 PASS=N FAIL=M
+bash test/run_tests.sh
+
+# [안전장치 시나리오만] 빌드한 바이너리로 --demo 파이프 입력 시나리오 실행
+bash test/guard_scenarios.sh ./vm_power_onoff
+
+# [E2E만] vcsim 위에서 처음부터 끝까지(conf 임시 교체 후 복원)
+bash test/e2e_vcsim.sh
+
+# [OS6 바이너리] Go 1.20 빌드 서버(192.168.0.60)에서 bin_os6/vm_power_onoff.gz 생성
+bash build_os6.sh
+
+# [로컬 → 빌드 서버] 코드를 192.168.0.58 로 보내 vet/test/build 실행 (로컬에 Go 없을 때)
+bash dev/sync_test.sh test -tags vcsim
