@@ -1,0 +1,56 @@
+{
+  "cmd/guarddemo/main.go": {
+    "mtime": 1792736353.8807838,
+    "seen": 1792736707.8021562,
+    "ast_hash": "0f87a571a5815c166fdc8a34dee129e7",
+    "semantic_hash": "0f87a571a5815c166fdc8a34dee129e7"
+  },
+  "go.mod": {
+    "mtime": 1792736353.8088334,
+    "seen": 1792736707.8021562,
+    "ast_hash": "08eed0112a1c2d9630cca2144a5ec185",
+    "semantic_hash": "08eed0112a1c2d9630cca2144a5ec185"
+  },
+  "guard.go": {
+    "mtime": 1792736353.5865755,
+    "seen": 1792736707.8021562,
+    "ast_hash": "66be989ee1153f76f0877f5803262f6c",
+    "semantic_hash": "66be989ee1153f76f0877f5803262f6c"
+  },
+  "guard_test.go": {
+    "mtime": 1792736353.6370232,
+    "seen": 1792736707.8021562,
+    "ast_hash": "1718686c46da2d4abc713b9b262aa551",
+    "semantic_hash": "1718686c46da2d4abc713b9b262aa551"
+  },
+  "test/guard_scenarios.sh": {
+    "mtime": 1792736353.693738,
+    "seen": 1792736707.8021562,
+    "ast_hash": "8b1201e4b3139cccd92616452e0e4a95",
+    "semantic_hash": "8b1201e4b3139cccd92616452e0e4a95"
+  },
+  "types.go": {
+    "mtime": 1792736353.7505882,
+    "seen": 1792736707.8021562,
+    "ast_hash": "bd011ecb138904d9432718feb2566664",
+    "semantic_hash": "bd011ecb138904d9432718feb2566664"
+  },
+  "ui.go": {
+    "mtime": 1792736353.533929,
+    "seen": 1792736707.8021562,
+    "ast_hash": "c27267ac2410efc6b85efb54d7da3834",
+    "semantic_hash": "c27267ac2410efc6b85efb54d7da3834"
+  },
+  "PROMPT.md": {
+    "mtime": 1792736494.2825308,
+    "seen": 1792736707.8021562,
+    "ast_hash": "11f5ca5e6a4ab982a46123045c33a020",
+    "semantic_hash": "11f5ca5e6a4ab982a46123045c33a020"
+  },
+  "README.md": {
+    "mtime": 1792736494.241739,
+    "seen": 1792736707.8021562,
+    "ast_hash": "e3b987b3de2151ec6626ca4860bddae3",
+    "semantic_hash": "e3b987b3de2151ec6626ca4860bddae3"
+  }
+}
