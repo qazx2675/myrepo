@@ -19,7 +19,13 @@ secret_lib=/home/V2/secret_lib.sh
 os6_host=
 os6_user=root
 
-concurrency=200           # 한 번에 vCenter 로 보내는 최대 동시 작업 수 (대상이 이보다 많으면 나머지는 이어서). Off/일괄 On/재부팅은 대상 전체를 한꺼번에 보냄
+# 교차검증(선택): on 이면 안전장치 1~5단계 통과 직후·전원 작업 직전에 확인자(다른 user)의 승인을 받는다.
+# 승인 후 2분 내에 작업을 시작하지 않으면 승인이 취소된다. -n / --demo 에서는 호출하지 않음. 기본 off
+# 확인자는 -c <user> 로 지정하거나 번호로 선택 (본인 제외). cross_check_bin 은 절대경로 (비우면 기본값)
+cross_check=off
+cross_check_bin=/usr/local/bin/cross_check
+
+concurrency=200         # 한 번에 vCenter 로 보내는 최대 동시 작업 수 (대상이 이보다 많으면 나머지는 이어서). Off/일괄 On/재부팅은 대상 전체를 한꺼번에 보냄
 shutdown_timeout=300      # Guest 종료 대기(초)
 boot_timeout=600          # VM 1대 부팅 완료 대기(초)
 boot_poll_interval=10     # 부팅 상태 확인 간격(초)

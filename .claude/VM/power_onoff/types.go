@@ -23,6 +23,8 @@ type Config struct {
 	BootTimeout      time.Duration
 	BootPollInterval time.Duration
 	PortCheckTimeout time.Duration
+	CrossCheck       bool   // cross_check=on 이면 안전장치 통과 후 전원 작업 직전에 확인자 교차검증을 거친다 (기본 off)
+	CrossCheckBin    string // cross_check 실행 파일 절대경로 (기본 /usr/local/bin/cross_check)
 }
 
 // VMInfo 는 vCenter 에서 조회한 대상 VM 한 대의 상태다.

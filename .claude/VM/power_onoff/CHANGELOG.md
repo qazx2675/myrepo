@@ -2,6 +2,21 @@
 
 버전 태그는 이 파일의 항목과 연결합니다: `git tag -a vm-power-onoff-v0.1.0 -m "<요약> (CHANGELOG 2026-10-23 항목)"`
 
+## 0.2.0 — 2026-10-24
+
+원격 2인 1조 교차검증 데몬 `cross_check` 추가와 vm_power_onoff 연동. 문서: [cross_check/README.md](cross_check/README.md), 계획서 [cross_check/PLAN.md](cross_check/PLAN.md), 결정 기록 [cross_check/INTERVIEW.md](cross_check/INTERVIEW.md).
+
+> **[필수 정책]** `cross_check` 데몬을 사용하는 작업의 경우, 확인자의 **승인 완료 후 2분 내에 본 작업을 진행하지 않으면 해당 작업 승인은 자동으로 취소(중단)** 처리됩니다.
+
+- **cross_check 데몬**(`cross_check/`, 별도 Go 모듈·표준 라이브러리만): Unix 소켓 `/var/run/cross_check/cross_check.sock`, root crontab `* * * * * cross_check --ensure` 로 상시 구동. 작업 상태 `대기`/`승인`/`중단`과 사유를 `/var/lib/cross_check/jobs.json` 에 기록(재시작 시 열린 작업은 `데몬 재시작` 으로 중단).
+- **CLI**: `--user`(사용자 화면) · `--run --user --checker`(`--cechker` 오타 허용, 승인 시 stdout 에 `CROSS_CHECK_JOB`/`CROSS_CHECK_TOKEN` 두 줄) · `--start --job`(승인 후 2분 이내 1회) · `--admin` · `--daemon` · `--ensure`. 종료 코드 0/1/2/3/130, 경로 환경변수 `CROSS_CHECK_*`.
+- **승인 방식**: 확인자는 대상을 붙여넣지 않고 화면에 표시된 대상 목록을 확인한 뒤 **본인 패스워드**로 승인/취소. 작업자는 대기 중 모든 상태 전이(승인·취소·2분 만료·종료 등)를 사유와 함께 받고, 승인 직후 내 작업 리스트를 봄. 대기 중 작업자 스크립트가 끝나면(Ctrl+C·세션 끊김·kill -9) 즉시 `중단`. 작업자 = 확인자면 즉시 `중단`.
+- **인증·보안 강화**: `cross_check.conf` 의 `users=`(관리자가 관리하는 허용 이름, `auth=required` 면 필수)만 등록·작업·승인 가능, 작업자·확인자 모두 등록 필수, `admin` 은 소켓으로 등록 불가(`install.sh` 가 `auth.conf` 에 `admin=<무작위>` 를 쓰고 한 번만 출력). 패스워드 6~128자, 오답 5회 연속 후 지연(잠금 아님, 올바른 패스워드는 통과), `--start` token 은 1회용, 중단된 작업은 관리자도 되살릴 수 없음. 작업자는 `target_dir/on_off_<user>.txt` 의 부분집합만 요청 가능. 동시 연결 256 · 유휴 읽기 60초 · 사용자당 대기 50건 · 저장 20000건 · 30일 지난 중단 작업 자동 삭제.
+- **vm_power_onoff 연동**: conf `cross_check=off|on`(기본 off), `cross_check_bin`, 옵션 `-c <checker>`. `on` 이면 안전장치 1~5단계 통과 직후·전원 작업 직전에 `cross_check --run` → 승인 → 곧바로 `--start`. 거부·중단·2분 초과·Ctrl+C 면 전원 작업 없이 exit 1. `-n`/`--demo` 는 호출하지 않음. 기본 off 라 기존 동작은 그대로.
+- **설치**: `setup.sh`/`install.sh` 가 cross_check 빌드·설치, `/etc/cross_check/`(conf·auth), `/var/lib/cross_check`(0700), tmpfiles.d, crontab 등록, 데몬 기동까지 구성(`--enable-cross-check`, `--skip-vm-power-onoff`). `build_os6.sh` 는 `cross_check` 도 Go 1.20 으로 정적 빌드해 `bin_os6/cross_check.gz` 를 만든다(`--cross-check-only`).
+- **시험**: `cross_check/` 안의 `go test ./...`(단위·임시 소켓 통합), 격리 E2E `cross_check/test/e2e.sh`, 루트의 `crosscheck_test.go`.
+- **한계**: 모든 사용자가 root 이고 패스워드는 평문 저장(설계)이라 root 가 `auth.conf`·기록·데몬을 직접 고치는 우회는 막지 못한다. `run`/`list` 는 패스워드가 없어 사용자 이름을 알면 그 사람의 작업·대상이 보인다. 등록은 `users` 목록 안의 선착순. 자세한 내용은 [cross_check/README.md](cross_check/README.md) 6장. `bin_os6/cross_check.gz` 는 Go 1.20 빌드 서버에서 만들어 추가해야 한다(아직 없음).
+
 ## 0.1.0 — 2026-10-23
 
 최초 구현. 설계 결정 전체는 [계획서.md](계획서.md).

@@ -34,6 +34,55 @@ func TestParseConfigOK(t *testing.T) {
 		cfg.PortCheckTimeout != 3*time.Second || cfg.OS6Host != "" {
 		t.Errorf("기본값 이상: %+v", cfg)
 	}
+	// 교차검증은 기본 off, 실행 파일은 기본 경로
+	if cfg.CrossCheck || cfg.CrossCheckBin != "/usr/local/bin/cross_check" {
+		t.Errorf("교차검증 기본값 이상: %v %q", cfg.CrossCheck, cfg.CrossCheckBin)
+	}
+}
+
+func TestParseConfigCrossCheck(t *testing.T) {
+	base := "allowed_dir=/a\nusers=x\n"
+	ok := []struct {
+		name, in string
+		on       bool
+		bin      string
+	}{
+		{"on", base + "cross_check=on\n", true, "/usr/local/bin/cross_check"},
+		{"off", base + "cross_check=off\n", false, "/usr/local/bin/cross_check"},
+		{"bin 지정", base + "cross_check=on\ncross_check_bin=/opt/cc/cross_check\n", true, "/opt/cc/cross_check"},
+		{"bin 만 지정", base + "cross_check_bin=/opt/cc/cross_check  # 경로\n", false, "/opt/cc/cross_check"},
+		{"bin 비움=기본값", base + "cross_check_bin=\n", false, "/usr/local/bin/cross_check"},
+	}
+	for _, c := range ok {
+		cfg, err := ParseConfig(strings.NewReader(c.in))
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if cfg.CrossCheck != c.on || cfg.CrossCheckBin != c.bin {
+			t.Errorf("%s: CrossCheck=%v bin=%q", c.name, cfg.CrossCheck, cfg.CrossCheckBin)
+		}
+	}
+	bad := map[string]string{
+		"값 yes":          base + "cross_check=yes\n",
+		"값 대문자":          base + "cross_check=ON\n",
+		"값 true":         base + "cross_check=true\n",
+		"값 비어 있음":        base + "cross_check=\n",
+		"bin 상대경로":       base + "cross_check_bin=bin/cross_check\n",
+		"bin 파일명만":       base + "cross_check_bin=cross_check\n",
+		"cross_check 중복": base + "cross_check=on\ncross_check=off\n",
+		"bin 중복":         base + "cross_check_bin=/a/b\ncross_check_bin=/a/c\n",
+	}
+	for name, in := range bad {
+		if _, err := ParseConfig(strings.NewReader(in)); err == nil {
+			t.Errorf("%s: 오류가 나야 함", name)
+		}
+	}
+	// 오류에 줄 번호와 키가 들어간다
+	_, err := ParseConfig(strings.NewReader(base + "cross_check=maybe\n"))
+	if err == nil || !strings.Contains(err.Error(), "3번째 줄") || !strings.Contains(err.Error(), "cross_check") {
+		t.Errorf("줄 번호/키가 없음: %v", err)
+	}
 }
 
 func TestParseConfigErrors(t *testing.T) {

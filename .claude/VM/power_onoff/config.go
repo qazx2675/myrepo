@@ -27,6 +27,7 @@ func defaultConfig() *Config {
 		BootTimeout:      600 * time.Second,
 		BootPollInterval: 10 * time.Second,
 		PortCheckTimeout: 3 * time.Second,
+		CrossCheckBin:    DefaultCrossCheckBin,
 	}
 }
 
@@ -125,6 +126,23 @@ func ParseConfig(r io.Reader) (*Config, error) {
 			}
 			if val != "" {
 				cfg.OS6User = val
+			}
+		case "cross_check":
+			switch val {
+			case "on":
+				cfg.CrossCheck = true
+			case "off":
+				cfg.CrossCheck = false
+			default:
+				return bad(fmt.Errorf("on 또는 off 여야 합니다: %q", val))
+			}
+		case "cross_check_bin":
+			// 비우면 기본 경로를 쓰고, 값을 주면 절대경로여야 한다
+			if val != "" {
+				if !filepath.IsAbs(val) {
+					return bad(fmt.Errorf("절대경로여야 합니다: %q", val))
+				}
+				cfg.CrossCheckBin = filepath.Clean(val)
 			}
 		case "concurrency":
 			n, err := parsePositive(val)

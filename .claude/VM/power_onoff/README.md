@@ -25,6 +25,7 @@ sudo vi /etc/vcetner_pwon_off/pwonoff.conf   # users / vcenters / (필요 시) s
 ```
 
 - `install.sh [허용디렉터리]`: 허용디렉터리 기본값은 이 폴더 절대경로(`allowed_dir`). 이미 `pwonoff.conf` 가 있으면 덮어쓰지 않습니다. 제거는 `sudo bash install.sh -u`.
+- `setup.sh` / `install.sh` 는 교차검증 데몬 `cross_check`([cross_check/README.md](cross_check/README.md))도 함께 빌드·설치하고 데몬까지 띄웁니다. `pwonoff.conf` 의 `cross_check` 는 기본 `off` 이고, `sudo bash install.sh --enable-cross-check`(또는 `bash setup.sh --enable-cross-check`)를 주면 `on` 으로 설치합니다. 처음 설치할 때 **관리자(admin) 패스워드가 화면에 한 번만 출력**됩니다.
 - OS6(RHEL/CentOS 6, 커널 2.6.32)용 실행파일은 Go 1.20 빌드 서버에서 `bash build_os6.sh` 로 `bin_os6/vm_power_onoff.gz` 를 만듭니다(저장소에 포함됨).
 - 설정 디렉터리 이름은 요구사항 그대로 **`/etc/vcetner_pwon_off/`** 입니다(철자 `vcetner`).
 
@@ -80,6 +81,7 @@ vm_power_onoff --demo           # vCenter 없이 샘플 3대로 안전장치만 
 | `-v <vCenter>` | vCenter 주소 직접 지정(`host` 또는 `host:port`) |
 | `-id <계정>` | vCenter 계정(기본: conf `vc_id`, 보통 `lscsystems@vsphere.local`) |
 | `-n` | 계획까지만 확인하고 종료(전원 작업 없음) |
+| `-c <checker>` | 교차검증 확인자 지정(conf 의 `users` 에 있고 본인이 아니어야 함). conf 에 `cross_check=on` 일 때만 쓰이며, 생략하면 본인을 뺀 번호 목록에서 고름. `cross_check=off` 에서 주면 경고 후 무시 |
 | `--demo` | 샘플 3대(`web-prd-01`, `web-prd-02`, `was-prd-01`)로 안전장치 1~5단계만 실행. vCenter·conf 불필요, 전원 작업 없음 |
 | `--version`, `-h` | 버전 / 도움말 |
 
@@ -95,6 +97,8 @@ vm_power_onoff --demo           # vCenter 없이 샘플 3대로 안전장치만 
 | `vc_id` | `lscsystems@vsphere.local` | vCenter 계정 |
 | `secret_lib` | (빈 값) | VMsetup 의 `secret_lib.sh` 경로. 채우면 암호 파일에서 비밀번호를 읽고, 비우면 매번 입력 |
 | `os6_host`, `os6_user` | (빈 값), `root` | 부팅 완료 확인 시 직접 접속이 안 되는 대역을 `ssh os6_user@os6_host` 로 경유(키 인증). 비우면 직접 확인만 |
+| `cross_check` | `off` | `on` 이면 안전장치 1~5단계 통과 직후, 실제 전원 작업 직전에 확인자(다른 user)의 승인을 받음. `-n`, `--demo` 에서는 호출하지 않음 |
+| `cross_check_bin` | `/usr/local/bin/cross_check` | 교차검증 실행 파일 절대경로(비우면 기본값). `cross_check=on` 이면 시작할 때 실행 가능한지 확인 |
 | `concurrency` | 200 | 한 번에 vCenter 로 보내는 최대 동시 작업 수. 대상이 이보다 많을 때만 나머지를 이어서 보냄 (보통 대상 전체가 한꺼번에 나감) |
 | `shutdown_timeout` | 300 | Guest 종료 대기(초) |
 | `boot_timeout` | 600 | 순차 부팅에서 한 ev 단계의 VM 부팅 완료 대기(초) |
@@ -119,6 +123,28 @@ VM 이 속한 **모든 상위 폴더 이름**과 **모든 NIC 포트그룹 이�
 - 정상 완료 `0`. 안전장치 취소·Ctrl+C·오류·실패 VM 이 하나라도 있으면 `1`.
 - `allowed_dir/run_<user>/YYYYmmdd_HHMMSS_<기능>.log`(디렉터리 700, 파일 600): 실행 시각·OS 계정·user·vCenter·기능·대상·VWP 여부·안전장치 통과/취소 사유·VM별 결과. **비밀번호와 확인 코드 입력값은 기록하지 않습니다.**
 
+### 교차검증(cross_check) 연동
+
+> **[필수 정책]** `cross_check` 데몬을 사용하는 작업의 경우, 확인자의 **승인 완료 후 2분 내에 본 작업을 진행하지 않으면 해당 작업 승인은 자동으로 취소(중단)** 처리됩니다.
+
+2인 1조 교차검증을 원격으로 하는 `cross_check` 데몬([cross_check/README.md](cross_check/README.md))과 연동할 수 있습니다. 작업자는 자기 터미널에서 대기하고, 확인자는 자기 터미널에서 `cross_check --user <확인자>` 로 대상 목록을 확인한 뒤 **본인 패스워드로 승인**합니다.
+
+| 설정 | 설명 |
+|---|---|
+| conf `cross_check=on` | 교차검증 사용(기본 `off`). `sudo bash install.sh --enable-cross-check` 로도 켬 |
+| conf `cross_check_bin=` | `cross_check` 실행 파일 절대경로(기본 `/usr/local/bin/cross_check`) |
+| `-c <checker>` | 확인자 지정(생략하면 번호로 선택, 본인 제외) |
+
+```bash
+vm_power_onoff -u hong -c kim      # 안전장치 1~5단계 통과 후 → kim 의 승인 대기 → 승인되면 곧바로 전원 작업
+```
+
+- 교차검증은 **안전장치 1~5단계를 모두 통과한 직후, 실제 전원 작업 직전**에 실행됩니다. 작업자가 안전장치에서 취소하면 확인자를 부르지 않습니다.
+- 확인자가 승인하면 vm_power_onoff 가 곧바로 `cross_check --start` 로 "승인 후 2분" 창을 확인한 뒤 전원 작업을 시작합니다. 거부·취소·2분 초과·Ctrl+C·오류면 `[취소] 교차검증 미승인` 으로 **전원 작업 없이 종료 코드 1** 로 끝나고, 감사 로그에 남습니다.
+- user(`-u`)와 확인자는 `cross_check` 쪽 설정(`/etc/cross_check/cross_check.conf` 의 `users=`)에도 있고 `cross_check --user <이름>` 으로 **처음 한 번 패스워드를 등록**해야 합니다. `pwonoff.conf` 와 `cross_check.conf` 의 `users` 는 서로 다른 목록입니다.
+- 데몬은 올린 대상이 `<target_dir>/on_off_<user>.txt` 의 부분집합인지 검사하므로 `cross_check.conf` 의 `target_dir` 은 `allowed_dir` 과 같아야 합니다(`install.sh` 가 같은 값으로 설정).
+- 보안 모델·알려진 한계(모두 root 로 쓰므로 root 우회는 막지 못함, 패스워드 평문 저장 등)는 [cross_check/README.md](cross_check/README.md) 6장을 읽어 주세요.
+
 ## 4. 문서별 설명
 
 | 문서/폴더 | 내용 |
@@ -129,6 +155,7 @@ VM 이 속한 **모든 상위 폴더 이름**과 **모든 NIC 포트그룹 이�
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 파일별 역할 표 — 어디를 고치면 되는지 |
 | [WORKFLOW.md](WORKFLOW.md), `workflow.svg` | 실행 흐름도 (mermaid / SVG) |
 | [CHANGELOG.md](CHANGELOG.md) | 변경 이력 |
+| [cross_check/README.md](cross_check/README.md) | 교차검증 데몬: 2분 필수 정책, 설치·등록, 명령, 보안 모델·한계, 문제 해결 (계획서 [PLAN.md](cross_check/PLAN.md), 결정 기록 [INTERVIEW.md](cross_check/INTERVIEW.md)) |
 | [PR_CHECKLIST.md](PR_CHECKLIST.md) | 수정·배포 전 체크리스트 |
 | `test/` | `run_tests.sh`(전체 시험), `guard_scenarios.sh`(안전장치 시나리오), `e2e_vcsim.sh`+`e2e_driver.py`(vcsim 위 전체 흐름), `vcsim_server/`(시험용 vCenter 시뮬레이터) |
 | `dev/sync_test.sh` | 로컬에서 쓴 코드를 빌드 서버(192.168.0.58)로 보내 go vet/test/build 를 돌리는 도우미 |

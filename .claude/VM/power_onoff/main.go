@@ -1,6 +1,6 @@
 // vm_power_onoff: vCenter 의 VM 을 안전장치(휴먼 에러 방지)를 거쳐 Power Off / Power On / 재부팅한다.
 //
-// 흐름: user 선택 → vCenter 선택 → 비밀번호 → 기능 선택 → 대상 조회·계획 → (VWP 확인) → 안전장치 5단계 → 실행 → 결과
+// 흐름: user 선택 → vCenter 선택 → 비밀번호 → 기능 선택 → 대상 조회·계획 → (VWP 확인) → 안전장치 5단계 → (교차검증) → 실행 → 결과
 // 설정 파일은 /etc/vcetner_pwon_off/pwonoff.conf, 대상은 allowed_dir/on_off_<user>.txt (VM 이름만).
 package main
 
@@ -37,10 +37,11 @@ func usage() {
   vm_power_onoff -u hong               user 지정
   vm_power_onoff -u hong -v 192.168.0.50   vCenter 를 직접 지정 (Enter = 이 user 의 이전 vCenter)
   vm_power_onoff -u hong -n            계획(대상·VWP 여부)까지만 확인, 전원 작업 없음
+  vm_power_onoff -u hong -c kim        교차검증 확인자 지정 (conf 에 cross_check=on 일 때만 사용, 없으면 번호로 선택)
   vm_power_onoff --demo                vCenter 없이 샘플 3대로 안전장치만 체험 (전원 작업 없음)
 
 옵션:
-  -u <user>   -v <vCenter>   -id <계정>(기본 설정값)   -n   --demo   -h   --version
+  -u <user>   -v <vCenter>   -id <계정>(기본 설정값)   -c <checker>   -n   --demo   -h   --version
 
 설정: %s  (allowed_dir 에서만 실행 가능)
 대상: <allowed_dir>/on_off_<user>.txt  — 한 줄에 VM 이름 하나 (예: svr1ev01), '#' 주석
@@ -52,6 +53,7 @@ func main() {
 		fUser    = flag.String("u", "", "user")
 		fVC      = flag.String("v", "", "vCenter")
 		fID      = flag.String("id", "", "vCenter 계정")
+		fChecker = flag.String("c", "", "교차검증 확인자 (cross_check=on 일 때만)")
 		fPlan    = flag.Bool("n", false, "계획까지만")
 		fDemo    = flag.Bool("demo", false, "안전장치 데모")
 		fVersion = flag.Bool("version", false, "버전")
@@ -71,10 +73,10 @@ func main() {
 	if *fDemo {
 		os.Exit(RunDemo(ctx, in, out))
 	}
-	os.Exit(run(ctx, in, out, *fUser, *fVC, *fID, *fPlan))
+	os.Exit(run(ctx, in, out, *fUser, *fVC, *fID, *fChecker, *fPlan))
 }
 
-func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, optID string, planOnly bool) int {
+func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, optID, optChecker string, planOnly bool) int {
 	// 0. 설정·허용 경로
 	cfg, err := LoadConfig(ConfPath)
 	if err != nil {
@@ -86,11 +88,27 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	if optID != "" {
 		cfg.VCID = optID
 	}
+	// 교차검증: -c 는 cross_check=on 일 때만 의미가 있다. 실제 전원 작업일 때만 실행 파일을 미리 확인한다.
+	if optChecker != "" && !cfg.CrossCheck {
+		fmt.Fprintln(out, Yellow("[경고] -c 는 conf 에 cross_check=on 일 때만 쓰입니다. 무시합니다."))
+		optChecker = ""
+	}
+	useCross := crossCheckNeeded(cfg, planOnly)
+	if useCross {
+		if err := CheckCrossCheckBin(cfg.CrossCheckBin); err != nil {
+			fatal("%v", err)
+		}
+	}
 
 	// 1. user
 	user, err := pickUser(ctx, in, out, cfg, optUser)
 	if err != nil {
 		fatal("%v", err)
+	}
+	if useCross && optChecker != "" { // 잘못된 -c 는 vCenter 접속 전에 바로 알린다
+		if err := ValidateChecker(cfg, user, optChecker); err != nil {
+			fatal("%v", err)
+		}
 	}
 	// 2. 대상 파일
 	targets, err := LoadTargets(cfg.AllowedDir, user)
@@ -173,6 +191,14 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 		return ExitFail
 	}
 	audit.Printf("안전장치 1~5단계 통과")
+
+	// 9-1. 교차검증 (cross_check=on): 안전장치가 모두 끝난 뒤 전원 작업 직전에 확인자 승인을 받는다
+	if useCross {
+		gate := &CrossCheckGate{Cfg: cfg, CC: newCrossChecker(cfg.CrossCheckBin), In: in, Out: out, ErrOut: os.Stderr, Audit: audit}
+		if err := gate.Run(ctx, user, optChecker, names); err != nil {
+			return ExitFail
+		}
+	}
 
 	// 10. 실행
 	r := &Runner{Cfg: cfg, Ops: NewGovmomiOps(cli), Log: NewRunLog(out, audit), Ask: askLine(in, out)}

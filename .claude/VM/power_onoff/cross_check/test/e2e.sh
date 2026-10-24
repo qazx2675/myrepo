@@ -1,0 +1,432 @@
+#!/usr/bin/env bash
+# cross_check 격리 E2E 시나리오(Linux).
+#
+# 사용법: bash test/e2e.sh <cross_check 바이너리 경로>
+#
+# 빌드는 하지 않는다. 임시 디렉터리 하나 안에서 CROSS_CHECK_* 환경변수로 소켓·설정·비밀번호·작업 기록·잠금·로그
+# 경로를 모두 바꿔 실제 데몬(--daemon)을 띄우므로 /etc, /var 의 실제 파일은 건드리지 않는다.
+# 각 경우마다 PASS/FAIL 을 찍고, 하나라도 실패하면 0 이 아닌 코드로 끝난다. 끝나면 데몬과 임시 디렉터리를 정리한다.
+set -euo pipefail
+
+BIN_ARG=${1:?사용법: bash test/e2e.sh <cross_check 바이너리 경로>}
+BIN=$(cd "$(dirname "$BIN_ARG")" && pwd)/$(basename "$BIN_ARG")
+if [ ! -x "$BIN" ]; then
+	echo "실행 파일이 아님: $BIN" >&2
+	exit 2
+fi
+
+T=$(mktemp -d /tmp/cc_e2e.XXXXXX)
+DPID=""
+
+daemon_pids() {
+	# 이 시험의 잠금 파일에 적힌 pid + 처음 띄운 데몬
+	{ cat "$T/run/daemon.lock" 2>/dev/null || true; echo "$DPID"; } | tr -s ' \n' '\n' | grep -E '^[0-9]+$' | sort -u || true
+}
+
+cleanup() {
+	set +e
+	local p
+	for p in $(jobs -p); do kill -9 "$p" 2>/dev/null; done
+	for p in $(daemon_pids); do kill -TERM "$p" 2>/dev/null; done
+	sleep 0.5
+	for p in $(daemon_pids); do kill -9 "$p" 2>/dev/null; done
+	# --ensure 가 띄운 데몬은 이 시험의 바이너리·소켓으로만 찾는다
+	for p in $(pgrep -f -- "$BIN --daemon" 2>/dev/null); do
+		if tr '\0' '\n' <"/proc/$p/environ" 2>/dev/null | grep -qx "CROSS_CHECK_SOCKET=$T/run/cc.sock"; then
+			kill -9 "$p" 2>/dev/null
+		fi
+	done
+	rm -rf "$T"
+}
+trap cleanup EXIT
+
+export CROSS_CHECK_SOCKET="$T/run/cc.sock"
+export CROSS_CHECK_CONF="$T/etc/cross_check.conf"
+export CROSS_CHECK_AUTH="$T/etc/auth.conf"
+export CROSS_CHECK_STATE="$T/lib/jobs.json"
+export CROSS_CHECK_LOCK="$T/run/daemon.lock"
+export CROSS_CHECK_LOG="$T/daemon.log"
+export CROSS_CHECK_COLOR=never
+unset CROSS_CHECK_TOKEN || true
+
+mkdir -p "$T/run" "$T/etc" "$T/lib" "$T/targets" "$T/out"
+# users= : 작업자·확인자로 쓸 수 있는 이름(dave 는 목록에 있지만 등록하지 않음, zed 는 목록 밖)
+cat >"$CROSS_CHECK_CONF" <<EOF
+# e2e 임시 설정
+target_dir=$T/targets
+auth=required
+users=alice,bob,carol,dave
+approval_ttl_sec=3
+EOF
+printf 'vm01ev01\nvm02ev01\nvm03ev01\n# 주석\n' >"$T/targets/on_off_alice.txt"
+printf 'vm01ev01\n' >"$T/targets/on_off_dave.txt"
+printf 'vm01ev01\n' >"$T/targets/on_off_zed.txt"
+printf 'vm01ev01\tvm02ev01  # 탭·공백 구분과 주석\n' >"$T/t_alice.txt"
+printf 'vm03ev01\n' >"$T/t_alice3.txt"
+
+# 비밀번호는 모두 6자 이상
+ALICE_PW='alice pw'
+BOB_PW='pw=bob 2'
+CAROL_PW='carol_pw'
+ADMIN_PW='adm_pw_1'
+
+# admin 항목은 install.sh 처럼 미리 써 둔다(0600). 화면·register 로는 만들 수 없다.
+(
+	umask 077
+	printf '# e2e: install.sh 가 만든 것처럼\nadmin=%s\n' "$ADMIN_PW" >"$CROSS_CHECK_AUTH"
+)
+chmod 600 "$CROSS_CHECK_AUTH"
+
+# raw <JSON 한 줄> : 데몬 소켓에 요청 한 줄을 보내고 응답 한 줄을 출력(perl 의 IO::Socket::UNIX 사용).
+HAVE_PERL=0
+if command -v perl >/dev/null 2>&1 && perl -MIO::Socket::UNIX -e 1 2>/dev/null; then HAVE_PERL=1; fi
+raw() {
+	perl -MIO::Socket::UNIX -e '
+		my $s = IO::Socket::UNIX->new(Peer => $ARGV[0]) or die "connect: $!\n";
+		print $s $ARGV[1], "\n";
+		my $l = <$s>;
+		print defined $l ? $l : "(응답 없음)\n";
+	' "$CROSS_CHECK_SOCKET" "$1"
+}
+
+PASS=0
+FAIL=0
+pass() {
+	echo "PASS  $1"
+	PASS=$((PASS + 1))
+}
+fail() {
+	local name=$1 f
+	shift
+	echo "FAIL  $name"
+	for f in "$@"; do
+		echo "  ---- $f"
+		if [ -f "$f" ]; then sed 's/^/    /' "$f" | tail -40; fi
+	done
+	FAIL=$((FAIL + 1))
+}
+
+# tui <user> <출력파일> <입력 줄...>  → RC
+tui() {
+	local u=$1 o=$2
+	shift 2
+	RC=0
+	printf '%s\n' "$@" | "$BIN" --user "$u" >"$o" 2>&1 || RC=$?
+}
+
+# admin <출력파일> <입력 줄...>  → RC
+admin() {
+	local o=$1
+	shift
+	RC=0
+	printf '%s\n' "$@" | "$BIN" --admin >"$o" 2>&1 || RC=$?
+}
+
+# wait_for <파일> <패턴> [최대 0.1초 횟수]
+wait_for() {
+	local f=$1 pat=$2 max=${3:-100} n=0
+	while ! grep -q -- "$pat" "$f" 2>/dev/null; do
+		n=$((n + 1))
+		if [ "$n" -gt "$max" ]; then return 1; fi
+		sleep 0.1
+	done
+}
+
+# start_worker <이름> <대상 파일> → WPID, JOB (stdout: $T/out/<이름>.out, stderr: .err)
+start_worker() {
+	local name=$1 tf=$2
+	"$BIN" --run --user alice --checker bob --targets-file "$tf" >"$T/out/$name.out" 2>"$T/out/$name.err" &
+	WPID=$!
+	JOB=""
+	if wait_for "$T/out/$name.err" '\[대기\] 작업'; then
+		JOB=$(sed -n 's/^\[대기\] 작업 \([^ ]*\) .*/\1/p' "$T/out/$name.err" | head -1)
+	fi
+}
+
+# job_row <user> <job id> : 그 사용자 화면 표에서 작업 행
+job_row() {
+	printf 'q\n' | "$BIN" --user "$1" 2>&1 | grep -E "^ +\[[0-9]+\] +$2 " || true
+}
+
+# wait_row <user> <job id> <패턴> : 표의 행이 패턴과 맞을 때까지(최대 5초)
+wait_row() {
+	local n=0
+	while ! job_row "$1" "$2" | grep -q -- "$3"; do
+		n=$((n + 1))
+		if [ "$n" -gt 25 ]; then return 1; fi
+		sleep 0.2
+	done
+}
+
+# approve_as_bob <job id> <출력파일>
+approve_as_bob() {
+	tui bob "$2" "o $1" a "$BOB_PW" q
+}
+
+echo "== cross_check e2e: $BIN"
+echo "== 임시 디렉터리: $T"
+
+# ---- 데몬 기동 ----
+"$BIN" --daemon >"$T/daemon.out" 2>&1 &
+DPID=$!
+n=0
+while [ ! -S "$CROSS_CHECK_SOCKET" ]; do
+	n=$((n + 1))
+	if [ "$n" -gt 50 ] || ! kill -0 "$DPID" 2>/dev/null; then
+		fail "데몬 기동" "$T/daemon.out" "$T/daemon.log"
+		exit 1
+	fi
+	sleep 0.1
+done
+if "$BIN" --ensure; then pass "데몬 기동(--daemon) + --ensure 는 떠 있으면 조용히 0"; else fail "--ensure(데몬 있음)" "$T/daemon.log"; fi
+
+# ---- 1. 첫 실행 등록 ----
+tui alice "$T/out/reg_alice.txt" "$ALICE_PW" "다른값" "$ALICE_PW" "$ALICE_PW" q
+ok=1
+[ "$RC" -eq 0 ] || ok=0
+grep -q '두 입력이 서로 다릅니다' "$T/out/reg_alice.txt" || ok=0
+grep -q '\[등록 완료\]' "$T/out/reg_alice.txt" || ok=0
+if grep -qF "$ALICE_PW" "$T/out/reg_alice.txt"; then ok=0; fi # 비밀번호가 화면에 나오면 안 됨
+mode=$(stat -c %a "$CROSS_CHECK_AUTH" 2>/dev/null || echo none)
+[ "$mode" = 600 ] || ok=0
+if [ $ok = 1 ]; then pass "첫 실행 등록(불일치 → 재입력 → 등록), auth.conf 0600, 비밀번호 비노출"; else fail "첫 실행 등록 (mode=$mode rc=$RC)" "$T/out/reg_alice.txt"; fi
+
+tui bob "$T/out/reg_bob.txt" "$BOB_PW" "$BOB_PW" q
+rb=$RC
+tui carol "$T/out/reg_carol.txt" "$CAROL_PW" "$CAROL_PW" q
+rcarol=$RC
+tui alice "$T/out/reg_again.txt" q
+if [ "$rb$rcarol$RC" = 000 ] && grep -q '\[등록 완료\]' "$T/out/reg_carol.txt" && ! grep -q '첫 실행' "$T/out/reg_again.txt" &&
+	grep -qx "admin=$ADMIN_PW" "$CROSS_CHECK_AUTH"; then
+	pass "bob·carol 등록(미리 쓴 admin 줄 유지), 재실행 시 다시 묻지 않음"
+else
+	fail "추가 등록 ($rb/$rcarol/$RC)" "$T/out/reg_bob.txt" "$T/out/reg_carol.txt" "$T/out/reg_again.txt"
+fi
+
+# 6자 미만 비밀번호는 등록 거부(3번 모두 짧으면 exit 1)
+tui dave "$T/out/reg_short.txt" "12345" "12345" "abc" "abc" "x1" "x1" q
+if [ "$RC" -eq 1 ] && grep -q '6~128자' "$T/out/reg_short.txt" && ! grep -q '^dave=' "$CROSS_CHECK_AUTH"; then
+	pass "6자 미만 비밀번호 등록 거부"
+else
+	fail "짧은 비밀번호 (rc=$RC)" "$T/out/reg_short.txt"
+fi
+
+# users= 목록 밖 이름은 등록 불가(가짜 확인자 만들기 차단)
+tui zed "$T/out/reg_zed.txt" "zed_pw_1" "zed_pw_1" q
+if [ "$RC" -eq 1 ] && grep -q 'users= 목록에 없어' "$T/out/reg_zed.txt" && ! grep -q '^zed=' "$CROSS_CHECK_AUTH"; then
+	pass "users= 목록 밖 이름(zed) 등록 거부, exit 1"
+else
+	fail "목록 밖 등록 (rc=$RC)" "$T/out/reg_zed.txt"
+fi
+
+# admin 은 등록할 수 없음: CLI 는 예약 이름으로 막고(exit 2), 데몬도 register admin 을 거부
+RC=0
+printf 'squat_pw_1\nsquat_pw_1\nq\n' | "$BIN" --user admin >"$T/out/reg_admin_cli.txt" 2>&1 || RC=$?
+if [ "$HAVE_PERL" = 1 ]; then
+	raw '{"op":"register","user":"admin","password":"squat_pw_1"}' >"$T/out/reg_admin_raw.txt" 2>&1 || true
+	raw_ok=0
+	grep -q '"ok":false' "$T/out/reg_admin_raw.txt" && grep -q '등록할 수 없음' "$T/out/reg_admin_raw.txt" && raw_ok=1
+else
+	echo "SKIP  perl 이 없어 소켓 직접 register admin 시험 생략"
+	raw_ok=1
+fi
+if [ "$RC" -eq 2 ] && [ "$raw_ok" = 1 ] && [ "$(grep -c '^admin=' "$CROSS_CHECK_AUTH")" -eq 1 ] && grep -qx "admin=$ADMIN_PW" "$CROSS_CHECK_AUTH"; then
+	pass "register admin 거부(CLI exit 2, 데몬 거부), admin 줄은 그대로"
+else
+	fail "register admin (rc=$RC raw=$raw_ok)" "$T/out/reg_admin_cli.txt" "$T/out/reg_admin_raw.txt"
+fi
+
+# ---- 2. 거부되는 run ----
+RC=0
+"$BIN" --run --user alice --checker alice --targets-file "$T/t_alice.txt" >"$T/out/same.out" 2>"$T/out/same.err" || RC=$?
+if [ "$RC" -eq 1 ] && grep -q '동일' "$T/out/same.err" && grep -q '중단으로 기록' "$T/out/same.err" && [ ! -s "$T/out/same.out" ]; then
+	pass "작업자=확인자 → 즉시 중단(기록), exit 1"
+else
+	fail "작업자=확인자 (rc=$RC)" "$T/out/same.err"
+fi
+
+RC=0
+"$BIN" --run --user dave --cechker bob --targets-file "$T/t_alice3.txt" >"$T/out/dave.out" 2>"$T/out/dave.err" || RC=$?
+if [ "$RC" -eq 3 ] && grep -q '미등록' "$T/out/dave.err"; then
+	pass "미등록 작업자 거부(--cechker 오타 플래그), exit 3"
+else
+	fail "미등록 작업자 (rc=$RC)" "$T/out/dave.err"
+fi
+
+RC=0
+"$BIN" --run --user alice --checker zed --targets-file "$T/t_alice.txt" >"$T/out/zed_chk.out" 2>"$T/out/zed_chk.err" || RC=$?
+RC2=0
+"$BIN" --run --user zed --checker bob --targets-file "$T/t_alice3.txt" >"$T/out/zed_wrk.out" 2>"$T/out/zed_wrk.err" || RC2=$?
+if [ "$RC" -eq 3 ] && grep -q '확인자 zed 는 cross_check.conf 의 users= 목록에 없음' "$T/out/zed_chk.err" && [ ! -s "$T/out/zed_chk.out" ] &&
+	[ "$RC2" -eq 3 ] && grep -q '작업자 zed 는' "$T/out/zed_wrk.err"; then
+	pass "users= 목록 밖 확인자·작업자(zed) --run 거부, exit 3"
+else
+	fail "목록 밖 run ($RC/$RC2)" "$T/out/zed_chk.err" "$T/out/zed_wrk.err"
+fi
+
+RC=0
+printf 'vm01ev01 vm99zz01\n' | "$BIN" --run --user alice --checker bob >"$T/out/outside.out" 2>"$T/out/outside.err" || RC=$?
+if [ "$RC" -eq 3 ] && grep -q '등록되지 않은 대상' "$T/out/outside.err" && grep -q 'vm99zz01' "$T/out/outside.err"; then
+	pass "on_off_alice.txt 밖의 대상(stdin) 거부, exit 3"
+else
+	fail "대상 밖 (rc=$RC)" "$T/out/outside.err"
+fi
+
+# ---- 3. 정상 흐름: 대기 → 틀린 패스워드 → 제3자 → 승인 → --start ----
+start_worker w1 "$T/t_alice.txt"
+J1=$JOB
+if [ -n "$J1" ] && job_row bob "$J1" | grep -q '대기'; then
+	pass "작업 등록 → 대기 (작업 $J1)"
+else
+	fail "대기 등록" "$T/out/w1.err"
+fi
+
+tui bob "$T/out/wrong.txt" "o $J1" a "틀린비번" "" q
+if grep -q '승인 실패: 인증 실패' "$T/out/wrong.txt" && job_row bob "$J1" | grep -q '대기' && kill -0 "$WPID" 2>/dev/null; then
+	pass "틀린 패스워드 승인 거부(대기 유지, 작업자 계속 대기)"
+else
+	fail "틀린 패스워드" "$T/out/wrong.txt"
+fi
+
+tui carol "$T/out/carol_open.txt" "o $J1" q
+tui bob "$T/out/carol_as_bob.txt" "o $J1" a "$CAROL_PW" "" q
+if grep -q '열 수 없습니다' "$T/out/carol_open.txt" && grep -q '인증 실패' "$T/out/carol_as_bob.txt" && job_row bob "$J1" | grep -q '대기'; then
+	pass "지정 확인자가 아닌 carol: 작업을 못 열고, bob 사칭(carol 패스워드)도 거부"
+else
+	fail "제3자 승인 차단" "$T/out/carol_open.txt" "$T/out/carol_as_bob.txt"
+fi
+
+# 대상 확인 화면(확인자에게 대상 목록이 보여야 함) + 승인
+approve_as_bob "$J1" "$T/out/approve1.txt"
+RC=0
+wait "$WPID" || RC=$?
+lines=$(wc -l <"$T/out/w1.out")
+if [ "$RC" -eq 0 ] && grep -q '\[승인 완료\]' "$T/out/approve1.txt" && grep -q 'vm02ev01' "$T/out/approve1.txt" &&
+	grep -qx "CROSS_CHECK_JOB=$J1" "$T/out/w1.out" && grep -qE '^CROSS_CHECK_TOKEN=[0-9a-f]{32}$' "$T/out/w1.out" && [ "$lines" -eq 2 ] &&
+	grep -q '\[승인\] 작업' "$T/out/w1.err" && grep -q '내 작업 리스트' "$T/out/w1.err" && grep -q '필수 정책' "$T/out/w1.err"; then
+	pass "확인자 승인 → --run exit 0, stdout 은 CROSS_CHECK_JOB/TOKEN 두 줄, stderr 에 내 작업 리스트·정책"
+else
+	fail "승인 흐름 (rc=$RC lines=$lines)" "$T/out/approve1.txt" "$T/out/w1.out" "$T/out/w1.err"
+fi
+
+RC3=0
+"$BIN" --start --job "$J1" --token 00000000000000000000000000000000 >"$T/out/start1c.txt" 2>&1 || RC3=$?
+RC=0
+(eval "$(cat "$T/out/w1.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB") >"$T/out/start1.txt" 2>&1 || RC=$?
+RC2=0
+(eval "$(cat "$T/out/w1.out")" && "$BIN" --start --job "$CROSS_CHECK_JOB" --token "$CROSS_CHECK_TOKEN") >"$T/out/start1b.txt" 2>&1 || RC2=$?
+if [ "$RC" -eq 0 ] && grep -q '\[시작\]' "$T/out/start1.txt" && [ "$RC2" -eq 1 ] && grep -q '이미 시작' "$T/out/start1b.txt" &&
+	[ "$RC3" -eq 1 ] && grep -q '인증 실패' "$T/out/start1c.txt"; then
+	pass "틀린 token exit 1(인증 실패), --start(env token) exit 0, 사용한 token 으로 두 번째 시작은 exit 1"
+else
+	fail "--start ($RC/$RC2/$RC3)" "$T/out/start1.txt" "$T/out/start1b.txt" "$T/out/start1c.txt"
+fi
+if job_row alice "$J1" | grep -q '본 작업 시작'; then pass "작업자 표에 승인·본 작업 시작 표시"; else fail "시작 표시" ; fi
+
+# ---- 4. 확인자 취소 ----
+start_worker w2 "$T/t_alice3.txt"
+J2=$JOB
+tui bob "$T/out/cancel.txt" "o $J2" c "$BOB_PW" q
+RC=0
+wait "$WPID" || RC=$?
+if [ -n "$J2" ] && [ "$RC" -eq 1 ] && grep -q '확인자 bob 가 취소' "$T/out/w2.err" && [ ! -s "$T/out/w2.out" ] &&
+	job_row alice "$J2" | grep -q '확인자 bob 가 취소'; then
+	pass "확인자 취소 → 작업자 exit 1(사유 출력), 작업자 표에 사유"
+else
+	fail "확인자 취소 (rc=$RC)" "$T/out/cancel.txt" "$T/out/w2.err"
+fi
+
+# ---- 5. 대기 중 작업자 kill -9 / Ctrl+C ----
+start_worker w3 "$T/t_alice3.txt"
+J3=$JOB
+kill -9 "$WPID"
+wait "$WPID" 2>/dev/null || true
+if [ -n "$J3" ] && wait_row alice "$J3" '작업자 스크립트 종료' && job_row alice "$J3" | grep -q '중단'; then
+	pass "대기 중 작업자 kill -9 → 즉시 중단(작업자 스크립트 종료)"
+else
+	fail "kill -9" "$T/out/w3.err" "$T/daemon.log"
+fi
+
+start_worker w4 "$T/t_alice3.txt"
+J4=$JOB
+kill -INT "$WPID"
+RC=0
+wait "$WPID" || RC=$?
+if [ -n "$J4" ] && [ "$RC" -eq 130 ] && wait_row alice "$J4" '작업자 스크립트 종료'; then
+	pass "대기 중 Ctrl+C(SIGINT) → exit 130, 작업 중단"
+else
+	fail "Ctrl+C (rc=$RC)" "$T/out/w4.err"
+fi
+
+# ---- 6. 승인 후 유효시간(시험 설정 3초) 초과 → --start 거부 ----
+start_worker w5 "$T/t_alice3.txt"
+J5=$JOB
+approve_as_bob "$J5" "$T/out/approve5.txt"
+RC=0
+wait "$WPID" || RC=$?
+sleep 4.5
+RC2=0
+(eval "$(cat "$T/out/w5.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB") >"$T/out/start5.txt" 2>&1 || RC2=$?
+if [ -n "$J5" ] && [ "$RC" -eq 0 ] && [ "$RC2" -eq 1 ] && grep -q '미진행' "$T/out/start5.txt" &&
+	job_row alice "$J5" | grep -q '승인 후 2분 내 미진행'; then
+	pass "승인 후 유효시간 초과 → --start exit 1, 작업자 표에 만료 사유"
+else
+	fail "만료 (run=$RC start=$RC2)" "$T/out/approve5.txt" "$T/out/w5.err" "$T/out/start5.txt"
+fi
+
+# ---- 7. 관리자 ----
+admin "$T/out/adm_bad.txt" x y z
+RA=$RC
+admin "$T/out/adm_list.txt" "$ADMIN_PW" 1 6 q
+if [ "$RA" -eq 1 ] && grep -q '인증 실패' "$T/out/adm_bad.txt" && [ "$RC" -eq 0 ] && grep -q "$J1" "$T/out/adm_list.txt" &&
+	grep -q '작업별 대상' "$T/out/adm_list.txt" && grep -q '조회 기능이 없어' "$T/out/adm_list.txt"; then
+	pass "관리자: 틀린 패스워드 3회 → exit 1, 올바른 패스워드로 전체 목록(대상 포함)"
+else
+	fail "관리자 ($RA/$RC)" "$T/out/adm_bad.txt" "$T/out/adm_list.txt"
+fi
+
+# ---- 8. 데몬 강제 종료 → 동시 --ensure 3개 → 하나만 기동, 재시작 처리 ----
+start_worker w6 "$T/t_alice3.txt"
+J6=$JOB
+approve_as_bob "$J6" "$T/out/approve6.txt"
+RC=0
+wait "$WPID" || RC=$?
+for p in $(daemon_pids); do kill -9 "$p" 2>/dev/null || true; done
+wait "$DPID" 2>/dev/null || true
+DPID=""
+r1=0 r2=0 r3=0
+"$BIN" --ensure >"$T/out/ens1.txt" 2>&1 &
+e1=$!
+"$BIN" --ensure >"$T/out/ens2.txt" 2>&1 &
+e2=$!
+"$BIN" --ensure >"$T/out/ens3.txt" 2>&1 &
+e3=$!
+wait "$e1" || r1=$?
+wait "$e2" || r2=$?
+wait "$e3" || r3=$?
+sleep 0.5
+cnt=0
+for p in $(pgrep -f -- "$BIN --daemon" || true); do
+	if tr '\0' '\n' <"/proc/$p/environ" 2>/dev/null | grep -qx "CROSS_CHECK_SOCKET=$CROSS_CHECK_SOCKET"; then cnt=$((cnt + 1)); fi
+done
+if [ "$RC" -eq 0 ] && [ "$r1$r2$r3" = 000 ] && [ "$cnt" -eq 1 ] && "$BIN" --ensure; then
+	pass "데몬 kill -9 후 동시 --ensure 3개 → 모두 exit 0, 데몬은 1개"
+else
+	fail "--ensure 재기동 (run=$RC ensure=$r1$r2$r3 daemons=$cnt)" "$T/out/ens1.txt" "$T/daemon.log"
+fi
+if job_row alice "$J6" | grep -q '데몬 재시작' && job_row alice "$J1" | grep -q '본 작업 시작' && job_row alice "$J1" | grep -q '승인'; then
+	pass "재시작: 미시작 승인 건은 중단(데몬 재시작), 이미 시작한 승인 건은 기록 유지"
+else
+	fail "재시작 처리" "$T/daemon.log"
+	job_row alice "$J6"
+	job_row alice "$J1"
+fi
+
+echo
+echo "== 결과: PASS $PASS, FAIL $FAIL"
+if [ "$FAIL" -ne 0 ]; then
+	echo "== 데몬 로그(마지막 40줄)"
+	tail -40 "$T/daemon.log" 2>/dev/null || true
+	exit 1
+fi
+exit 0

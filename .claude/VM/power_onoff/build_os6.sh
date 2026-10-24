@@ -5,16 +5,20 @@
 #
 # 사용법 (Go 1.20 이 있는 빌드 서버, 예: 192.168.0.60 의 /opt/go1.20):
 #   bash build_os6.sh [Go1.20 실행파일]        # 기본: $GO_OS6 → /opt/go1.20/bin/go
-# OS6 서버에서는 빌드하지 않고 bash setup.sh 가 bin_os6/vm_power_onoff.gz 를 풀어 쓴다.
+#   bash build_os6.sh --cross-check-only [Go1.20 실행파일]   # cross_check 만 (vendor 불필요)
+# 이어서 cross_check(교차검증, 표준 라이브러리만) 도 같은 Go 1.20 으로 정적 빌드해 bin_os6/cross_check.gz 로 만든다.
+# OS6 서버에서는 빌드하지 않고 bash setup.sh 가 bin_os6/vm_power_onoff.gz, bin_os6/cross_check.gz 를 풀어 쓴다.
 # (vendor/ 는 이 폴더 안에 들어 있다 — 폴더만 받아도 빌드된다)
 set -euo pipefail
 cd "$(dirname "$0")"
+CC_ONLY=0
+if [ "${1:-}" = "--cross-check-only" ]; then CC_ONLY=1; shift; fi
 ROOT="$(pwd)"; OUT="$ROOT/bin_os6"; BIN=vm_power_onoff
 VENDOR_SRC="$ROOT/vendor"
 GO_BIN="${1:-${GO_OS6:-/opt/go1.20/bin/go}}"
 [ -x "$GO_BIN" ] || { echo "[오류] Go 1.20 실행파일이 없습니다: $GO_BIN" >&2; exit 2; }
 "$GO_BIN" version | grep -q 'go1\.20' || { echo "[오류] Go 1.20 이 아닙니다: $("$GO_BIN" version)" >&2; exit 2; }
-[ -d "$VENDOR_SRC" ] || { echo "[오류] vendor 원본이 없습니다: $VENDOR_SRC" >&2; exit 2; }
+[ "$CC_ONLY" -eq 1 ] || [ -d "$VENDOR_SRC" ] || { echo "[오류] vendor 원본이 없습니다: $VENDOR_SRC" >&2; exit 2; }
 
 need() { grep -q "$2" "$1" || { echo "[오류] 패치 대상 문구를 못 찾음: $1 — govmomi 버전이 바뀌었으면 이 스크립트도 갱신하세요." >&2; exit 3; }; }
 
@@ -53,6 +57,7 @@ GOEOF
 
 mkdir -p "$OUT"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+if [ "$CC_ONLY" -eq 0 ]; then
 # 소스만 복사(vendor 링크·빌드 결과·테스트 제외) → vendor 는 실제 파일로 복사
 tar cf - --exclude=./vendor --exclude="./$BIN" --exclude=./bin_os6 --exclude=./dev --exclude='./run_*' --exclude='*_test.go' . | (cd "$T" && tar xf -)
 mkdir -p "$T/vendor"; cp -r "$VENDOR_SRC/." "$T/vendor/"
@@ -67,4 +72,21 @@ if (cd "$T" && GOTOOLCHAIN=local CGO_ENABLED=0 GOFLAGS=-mod=vendor GOPROXY=off G
   printf 'OK   bin_os6/%s.gz (%s) — %s\n' "$BIN" "$(du -h "$OUT/$BIN.gz" | cut -f1)" "$("$GO_BIN" version)"
 else
   echo "실패"; sed 's/^/    | /' "$T/build.log" | head -30; exit 1
+fi
+fi
+
+# ── cross_check (별도 모듈 ./cross_check, 표준 라이브러리만 → vendor·패치 불필요) ──
+CC_BIN=cross_check
+CC_SRC="$ROOT/cross_check"
+[ -f "$CC_SRC/go.mod" ] && [ -d "$CC_SRC/cmd/cross_check" ] || { echo "[오류] cross_check 소스가 없습니다: $CC_SRC/cmd/cross_check" >&2; exit 2; }
+CT="$T/cc"; mkdir -p "$CT"
+(cd "$CC_SRC" && tar cf - --exclude=./bin --exclude=./test --exclude='*_test.go' .) | (cd "$CT" && tar xf -)
+find "$CT" -type f \( -name '*.go' -o -name go.mod \) -exec sed -i 's/\r$//' {} +
+sed -i 's/^go 1\.[0-9.]*$/go 1.20/' "$CT/go.mod"
+if (cd "$CT" && GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS=-mod=mod GOPROXY=off GOSUMDB=off GOWORK=off \
+      "$GO_BIN" build -trimpath -ldflags "-s -w" -o "$T/$CC_BIN" ./cmd/cross_check) > "$T/build_cc.log" 2>&1; then
+  gzip -9 -n -c "$T/$CC_BIN" > "$OUT/$CC_BIN.gz"
+  printf 'OK   bin_os6/%s.gz (%s) — %s\n' "$CC_BIN" "$(du -h "$OUT/$CC_BIN.gz" | cut -f1)" "$("$GO_BIN" version)"
+else
+  echo "실패 (cross_check)"; sed 's/^/    | /' "$T/build_cc.log" | head -30; exit 1
 fi
