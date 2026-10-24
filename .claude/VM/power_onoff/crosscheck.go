@@ -16,14 +16,14 @@ import (
 )
 
 // 교차검증(cross_check): conf 의 cross_check=on 일 때 안전장치 1~5단계 통과 직후, 실제 전원 작업 직전에
-// 확인자(다른 user)의 승인을 받는다. 승인 → 곧바로 --start 로 "승인 후 2분" 안에 시작했음을 데몬에 알린다.
+// 확인자(다른 user)의 승인을 받는다. 승인 → 곧바로 --start 로 승인 유효시간(cross_check.conf 의 approval_ttl_sec, 기본 2분) 안에 시작했음을 데몬에 알린다.
 // 토큰은 cross_check 와 주고받는 용도로만 쓰고 화면·감사 로그에는 절대 남기지 않는다.
 
 // DefaultCrossCheckBin 은 cross_check_bin 의 기본값이다.
 const DefaultCrossCheckBin = "/usr/local/bin/cross_check"
 
 // crossCheckNotice 는 승인을 기다리기 전에 반드시 보여 주는 정책 안내다.
-const crossCheckNotice = "※ cross_check 정책: 확인자 승인 후 2분 내에 본 작업을 진행하지 않으면 승인이 자동 취소됩니다."
+const crossCheckNotice = "※ cross_check 정책: 확인자 승인 후 설정된 시간(cross_check.conf 의 approval_ttl_sec, 기본 2분) 내에 본 작업을 진행하지 않으면 승인이 자동 취소됩니다."
 
 // cross_check 와의 약속: --run 은 승인 시 stdout 에 아래 두 줄을 찍고, 토큰은 --start 에 환경변수로만 넘긴다.
 const (
@@ -49,7 +49,7 @@ type CrossChecker interface {
 	// Run 은 targets(VM 이름)를 확인자에게 올리고 승인될 때까지 기다린다. 사람이 볼 진행 출력은 out/errOut 으로 그대로 흘린다.
 	// 승인되면 작업 ID 와 일회용 토큰을 돌려준다.
 	Run(ctx context.Context, user, checker string, targets []string, out, errOut io.Writer) (jobID, token string, err error)
-	// Start 는 승인 후 2분 창이 아직 열려 있는지 확인하고 시작을 알린다. nil 이면 시작 가능.
+	// Start 는 승인 유효시간 창이 아직 열려 있는지 확인하고 시작을 알린다. nil 이면 시작 가능.
 	Start(ctx context.Context, jobID, token string) error
 }
 
@@ -185,7 +185,7 @@ func (g *CrossCheckGate) Run(ctx context.Context, user, optChecker string, targe
 		return cancel("확인자 선택 실패")
 	}
 
-	// (b) 승인 요청 — 대기 전에 2분 정책부터 알린다
+	// (b) 승인 요청 — 대기 전에 승인 유효시간 정책부터 알린다
 	fmt.Fprintln(g.Out)
 	fmt.Fprintln(g.Out, Yellow(crossCheckNotice))
 	fmt.Fprintf(g.Out, "[INFO] 확인자 %s 에게 교차검증을 요청합니다 (대상 %d대). 승인을 기다리는 중... (Ctrl+C 로 취소)\n", checker, len(targets))
@@ -205,14 +205,14 @@ func (g *CrossCheckGate) Run(ctx context.Context, user, optChecker string, targe
 	g.Audit.Printf("교차검증 승인 확인자=%s job=%s", checker, jobID)
 	fmt.Fprintln(g.Out, Green(fmt.Sprintf("[INFO] 교차검증 승인됨 (확인자 %s, 작업 ID %s)", checker, jobID)))
 
-	// (c) 승인 후 2분 창이 열려 있는지 확인하며 시작을 알린다
+	// (c) 승인 후 유효시간 창이 열려 있는지 확인하며 시작을 알린다
 	if err := g.CC.Start(ctx, jobID, token); err != nil {
 		class := crossCheckClass(err)
 		g.Audit.Printf("교차검증 시작 거부 확인자=%s job=%s 분류=%s", checker, jobID, class)
 		if ctx.Err() != nil {
 			fmt.Fprintln(g.Out)
 		}
-		fmt.Fprintln(g.Out, Red("[취소] 교차검증 승인 시간(2분) 초과 또는 거부"))
+		fmt.Fprintln(g.Out, Red("[취소] 교차검증 승인 유효시간 초과 또는 거부"))
 		return fmt.Errorf("교차검증 시작 거부: %s", class)
 	}
 	g.Audit.Printf("교차검증 시작 허용 확인자=%s job=%s", checker, jobID)

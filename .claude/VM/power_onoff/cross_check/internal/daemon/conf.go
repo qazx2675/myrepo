@@ -9,7 +9,8 @@ package daemon
 //	auth=required                              ← required(기본) | off
 //	users=hong,kim,lee                         ← 작업자·확인자로 쓸 수 있는 이름(쉼표 구분, 영소문자·숫자·_,
 //	                                             admin 불가). auth=required 면 필수. 목록 밖 이름은 등록·작업·승인 불가
-//	approval_ttl_sec=120                       ← 승인 후 start 허용 시간(초, 기본 120)
+//	approval_ttl_sec=120                       ← 승인 후 start 허용 시간(초, 10~3600, 기본 120 = 2분). 바꾸면 데몬에 SIGHUP
+//	                                             (pkill -HUP -f 'cross_check --daemon') 또는 재시작으로 반영
 //
 // 대상 파일(<target_dir>/on_off_<user>.txt, vm_power_onoff 와 같은 형식): 한 줄에 이름 하나, '#' 주석·빈 줄 무시.
 // run 의 대상은 이 파일에 있는 이름의 부분집합이어야 한다(작업자는 자기에게 등록된 대상만 작업).
@@ -115,8 +116,9 @@ func LoadConf(path string) (Conf, error) {
 			c.Users = users
 		case "approval_ttl_sec":
 			n, err := strconv.Atoi(v)
-			if err != nil || n <= 0 {
-				return c, fmt.Errorf("설정 파일 %s %d번째 줄: approval_ttl_sec 는 양의 정수(초): %q", path, ln, v)
+			if min := minTTLSec(); err != nil || n < min || n > MaxApprovalTTLSec {
+				return c, fmt.Errorf("설정 파일 %s %d번째 줄: approval_ttl_sec 는 %d~%d 사이의 정수(초)여야 함(기본 %d = %s): %q",
+					path, ln, min, MaxApprovalTTLSec, int(DefaultApprovalTTL/time.Second), FormatTTLDuration(DefaultApprovalTTL), clip(v))
 			}
 			c.ApprovalTTL = time.Duration(n) * time.Second
 		default:

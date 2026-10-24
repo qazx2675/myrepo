@@ -30,7 +30,7 @@ type Config struct {
 	AuthSkipPermCheck bool                              // 비밀번호 파일 권한(mode&077) 검사 생략(Windows·테스트용)
 	TargetDir         string                            // 사용자별 on_off_<user>.txt 위치. AuthRequired 에서는 필수, AuthOff 에서 비면 대상 검사 생략
 	AllowedUsers      []string                          // users= 목록. AuthRequired 에서는 필수(register·run·승인·취소·비밀번호 변경은 이 이름만). AuthOff 는 무시
-	ApprovalTTL       time.Duration                     // 승인 후 start 허용 시간(기본 2분)
+	ApprovalTTL       time.Duration                     // 승인 후 start 허용 시간(기본 2분 = 120초, cross_check.conf 의 approval_ttl_sec). 실행 중 SIGHUP 으로 바꿀 수 있음(ReloadApprovalTTL)
 	SweepInterval     time.Duration                     // 승인 만료 검사 주기(기본 1초)
 	AuthMaxFailures   int                               // 이 횟수만큼 연속 실패하면 그 이름의 시도를 지연(기본 5)
 	AuthDelay         time.Duration                     // 지연 시간(기본 1초)
@@ -144,6 +144,7 @@ type Server struct {
 
 	// mu 는 작업 상태 전이(조회 → 검사 → 갱신 → 알림)를 한 줄로 세운다.
 	mu      sync.Mutex
+	ttl     time.Duration                // 지금 적용 중인 승인 유효시간(cfg.ApprovalTTL 로 시작, SIGHUP 으로 바뀔 수 있어 mu 로 보호)
 	waiters map[string]*waiter           // 작업 ID → 이벤트를 받을 작업자(run) 연결
 	pending map[string]time.Time         // 승인됐지만 아직 start 안 한 작업 ID → 승인 시각(스위퍼 대상)
 	tokens  map[string][sha256.Size]byte // 작업 ID → sha256(token). 메모리에만 두고 파일·로그에 남기지 않음
@@ -197,6 +198,7 @@ func NewServer(cfg Config) (*Server, error) {
 		auth:    auth,
 		thr:     newThrottle(cfg.AuthMaxFailures, cfg.AuthDelay, cfg.GlobalFailLimit, cfg.GlobalFailWindow, cfg.Sleep),
 		ln:      ln,
+		ttl:     cfg.ApprovalTTL,
 		waiters: map[string]*waiter{},
 		pending: map[string]time.Time{},
 		tokens:  map[string][sha256.Size]byte{},
@@ -211,8 +213,66 @@ func NewServer(cfg Config) (*Server, error) {
 	} else if ok, err := auth.Registered(AdminUser); err == nil && !ok {
 		s.logf("[경고] auth.conf 에 admin 항목이 없음 — 관리자 기능은 모두 거부됨(install.sh 실행 또는 admin=<패스워드> 줄 추가)")
 	}
-	s.logf("데몬 시작: 소켓 %s, 저장소 %s, 승인 유효 %s, 허용 사용자 %d명", cfg.SocketPath, cfg.StorePath, cfg.ApprovalTTL, len(cfg.AllowedUsers))
+	s.logf("데몬 시작: 소켓 %s, 저장소 %s, 승인 유효 %s(%d초), 허용 사용자 %d명", cfg.SocketPath, cfg.StorePath,
+		FormatTTLDuration(cfg.ApprovalTTL), int(cfg.ApprovalTTL/time.Second), len(cfg.AllowedUsers))
 	return s, nil
+}
+
+// TTL 은 지금 적용 중인 승인 유효시간.
+func (s *Server) TTL() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ttl
+}
+
+// ttlSec 은 TTL 을 초로(1초 미만이면 0 → 응답에서 필드 생략).
+func (s *Server) ttlSec() int { return int(s.TTL() / time.Second) }
+
+// approvedEventLocked 는 승인 이벤트(만료 시각 포함)를 만든다. mu 를 잡고 부른다.
+func (s *Server) approvedEventLocked(reason, by string, at time.Time) Event {
+	exp := at.Add(s.ttl)
+	return Event{Event: EventStatus, Status: StatusApproved, Reason: reason, By: by,
+		TTLSec: int(s.ttl / time.Second), ExpiresAt: &exp}
+}
+
+// ReloadApprovalTTL 은 confPath 를 다시 읽어 approval_ttl_sec 만 바꾼다(SIGHUP 처리용).
+// 설정 파일에 오류가 있거나 값이 범위 밖이면 기존 값을 그대로 두고 오류를 돌려준다(로그에도 남김).
+// users·target_dir·auth 는 바뀌어도 반영하지 않고(재시작 필요) 달라졌다는 경고만 남긴다.
+// 이미 승인되어 start 를 기다리는 작업에도 새 값이 적용된다(만료 시각 = 승인 시각 + 새 값).
+func (s *Server) ReloadApprovalTTL(confPath string) (old, now time.Duration, err error) {
+	c, err := LoadConf(confPath)
+	s.mu.Lock()
+	old = s.ttl
+	if err != nil {
+		s.mu.Unlock()
+		s.logf("[경고] 설정 다시 읽기(SIGHUP) 실패 — 승인 유효시간 %s 유지: %v", FormatTTLDuration(old), err)
+		return old, old, err
+	}
+	s.ttl = c.ApprovalTTL
+	s.mu.Unlock()
+	if old == c.ApprovalTTL {
+		s.logf("설정 다시 읽기(SIGHUP): 승인 유효시간 변경 없음(%s)", FormatTTLDuration(old))
+	} else {
+		s.logf("설정 다시 읽기(SIGHUP): 승인 유효시간 %s(%d초) → %s(%d초)",
+			FormatTTLDuration(old), int(old/time.Second), FormatTTLDuration(c.ApprovalTTL), int(c.ApprovalTTL/time.Second))
+	}
+	if c.AuthMode != s.cfg.AuthMode || c.TargetDir != s.cfg.TargetDir || !sameStrings(c.Users, s.cfg.AllowedUsers) {
+		s.logf("[알림] users·target_dir·auth 의 변경은 SIGHUP 으로 반영되지 않습니다 — 반영하려면 데몬을 다시 띄우세요(pkill -f 'cross_check --daemon')")
+	}
+	return old, c.ApprovalTTL, nil
+}
+
+// sameStrings 는 두 목록이 순서까지 같은지.
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // listenUnix 는 소켓 디렉터리(없으면 0755)를 만들고, 남은 소켓 파일은 연결이 안 될 때만 지운 뒤 듣고 0666 으로 연다.
@@ -448,7 +508,7 @@ func (s *Server) handleConn(c net.Conn) {
 func (s *Server) dispatch(req Request, uid int) Response {
 	switch req.Op {
 	case OpPing:
-		return Response{OK: true}
+		return Response{OK: true, TTLSec: s.ttlSec()}
 	case OpList:
 		if !ValidName(req.User) {
 			return fail("사용자 이름이 올바르지 않음(영소문자·숫자·_ 만): " + clip(req.User))
@@ -728,7 +788,7 @@ func (s *Server) handleRun(c net.Conn, r *bufio.Reader, req Request, uid int) {
 		io.Copy(io.Discard, r)
 		close(readDone)
 	}()
-	if err := s.writeLine(c, Response{OK: true, ID: j.ID, Token: token}); err != nil {
+	if err := s.writeLine(c, Response{OK: true, ID: j.ID, Token: token, TTLSec: s.ttlSec()}); err != nil {
 		s.workerGone(j.ID, w)
 		return
 	}
@@ -753,7 +813,7 @@ func (s *Server) handleRun(c net.Conn, r *bufio.Reader, req Request, uid int) {
 }
 
 // workerGone 은 작업자 연결이 끊겼을 때 부른다. 아직 대기면 즉시 중단, 승인 후라면 연결만 정리
-// (승인 후 미시작 건은 스위퍼가 2분 뒤 중단한다).
+// (승인 후 미시작 건은 스위퍼가 승인 유효시간이 지나면 중단한다).
 func (s *Server) workerGone(id string, w *waiter) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -825,7 +885,7 @@ func (s *Server) abortLocked(id, reason, by string, extra func(*store.Job)) erro
 	}
 	delete(s.pending, id)
 	// token 은 지우지 않는다: 중단된 작업은 어차피 시작할 수 없고, 작업자가 나중에 start 하면
-	// "인증 실패" 대신 실제 중단 사유(예: 승인 후 2분 내 미진행)를 받아야 한다(스위퍼 만료 뒤 start).
+	// "인증 실패" 대신 실제 중단 사유(예: 승인 후 {TTL} 내 미진행)를 받아야 한다(스위퍼 만료 뒤 start).
 	s.notifyLocked(id, Event{Event: EventStatus, Status: StatusAborted, Reason: reason, By: by}, true)
 	s.logf("작업 %s 중단: %s", id, reason)
 	return nil
@@ -834,9 +894,10 @@ func (s *Server) abortLocked(id, reason, by string, extra func(*store.Job)) erro
 // opList 는 user 가 작업자 또는 확인자인 작업을 대상 목록과 함께 돌려준다.
 func (s *Server) opList(user string) Response {
 	out := []JobView{}
+	ttl := s.TTL()
 	for _, j := range s.st.List() {
 		if j.User == user || j.Checker == user {
-			out = append(out, viewOf(j))
+			out = append(out, viewOf(j, ttl))
 		}
 	}
 	return Response{OK: true, Jobs: out}
@@ -848,7 +909,7 @@ func (s *Server) opGet(req Request) Response {
 	if !ok || !ValidName(req.User) || (j.User != req.User && j.Checker != req.User) {
 		return fail(msgNotMember)
 	}
-	v := viewOf(j)
+	v := viewOf(j, s.TTL())
 	return Response{OK: true, Job: &v}
 }
 
@@ -874,7 +935,7 @@ func (s *Server) opApprove(req Request, uid int) Response {
 		return fail("저장 실패: " + err.Error())
 	}
 	s.pending[j.ID] = now
-	s.notifyLocked(j.ID, Event{Event: EventStatus, Status: StatusApproved, Reason: reasonApproved(j.Checker), By: j.Checker}, false)
+	s.notifyLocked(j.ID, s.approvedEventLocked(reasonApproved(j.Checker), j.Checker, now), false)
 	s.logf("작업 %s 승인: 확인자 %s", j.ID, j.Checker)
 	return Response{OK: true}
 }
@@ -931,9 +992,10 @@ func (s *Server) opStart(req Request) Response {
 		return fail("이미 시작 신호를 받은 작업")
 	}
 	now := s.cfg.Now()
-	if j.ApprovedAt == nil || now.Sub(*j.ApprovedAt) > s.cfg.ApprovalTTL {
-		s.abortLocked(j.ID, ReasonExpired, BySystem, nil)
-		return fail(ReasonExpired)
+	if j.ApprovedAt == nil || now.Sub(*j.ApprovedAt) > s.ttl {
+		reason := ReasonExpired(s.ttl)
+		s.abortLocked(j.ID, reason, BySystem, nil)
+		return fail(reason)
 	}
 	if _, err := s.st.Update(j.ID, func(x *store.Job) { x.StartedAt = &now }); err != nil {
 		return fail("저장 실패: " + err.Error())
@@ -945,7 +1007,7 @@ func (s *Server) opStart(req Request) Response {
 	return Response{OK: true}
 }
 
-// sweepLoop 는 주기적으로 승인 후 TTL 이 지나도록 start 가 없는 작업을 중단한다.
+// sweepLoop 는 주기적으로 승인 후 유효시간(approval_ttl_sec)이 지나도록 start 가 없는 작업을 중단한다.
 func (s *Server) sweepLoop() {
 	t := time.NewTicker(s.cfg.SweepInterval)
 	defer t.Stop()
@@ -964,8 +1026,8 @@ func (s *Server) sweep() {
 	now := s.cfg.Now()
 	s.mu.Lock()
 	for id, at := range s.pending {
-		if now.Sub(at) > s.cfg.ApprovalTTL {
-			s.abortLocked(id, ReasonExpired, BySystem, nil)
+		if now.Sub(at) > s.ttl {
+			s.abortLocked(id, ReasonExpired(s.ttl), BySystem, nil)
 		}
 	}
 	s.mu.Unlock()
@@ -975,7 +1037,7 @@ func (s *Server) sweep() {
 // opAdminSet 은 관리자가 상태를 바꾼다. 허용: 대기→승인, 대기→중단, 승인→중단.
 // 대기로 되돌리는 것은 막고(기다리는 작업자 연결이 없을 수 있음), 중단된 작업은 되살릴 수 없다
 // (중단 뒤에 남은 token 으로 다시 시작되는 것을 막음). 이미 승인된 작업을 다시 승인하지도 않는다.
-// 승인으로 바꾸면 ApprovedAt 을 지금으로 정해 2분 규칙을 적용한다.
+// 승인으로 바꾸면 ApprovedAt 을 지금으로 정해 승인 유효시간(approval_ttl_sec) 규칙을 적용한다.
 func (s *Server) opAdminSet(req Request) Response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1012,7 +1074,7 @@ func (s *Server) opAdminSet(req Request) Response {
 			return fail("저장 실패: " + err.Error())
 		}
 		s.pending[j.ID] = now
-		s.notifyLocked(j.ID, Event{Event: EventStatus, Status: StatusApproved, Reason: reason, By: ByAdmin}, false)
+		s.notifyLocked(j.ID, s.approvedEventLocked(reason, ByAdmin, now), false)
 		s.logf("작업 %s 관리자 승인", j.ID)
 	case StatusWaiting:
 		return fail("대기로는 되돌릴 수 없음(작업자를 다시 실행하세요)")

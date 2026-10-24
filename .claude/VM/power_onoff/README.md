@@ -126,6 +126,8 @@ VM 이 속한 **모든 상위 폴더 이름**과 **모든 NIC 포트그룹 이�
 ### 교차검증(cross_check) 연동
 
 > **[필수 정책]** `cross_check` 데몬을 사용하는 작업의 경우, 확인자의 **승인 완료 후 2분 내에 본 작업을 진행하지 않으면 해당 작업 승인은 자동으로 취소(중단)** 처리됩니다.
+>
+> 위 **2분은 기본값**입니다. `/etc/cross_check/cross_check.conf` 의 `approval_ttl_sec`(초, 10~3600, 기본 120)로 바꿀 수 있습니다. 새로 설치할 때는 `sudo bash install.sh --approval-ttl 300`(새 conf 에만 적용), 이미 운영 중이면 conf 수정 후 `sudo pkill -HUP -f 'cross_check --daemon'` 으로 재시작 없이 반영합니다. 자세한 방법: [cross_check/README.md](cross_check/README.md#승인-유효시간-바꾸기).
 
 2인 1조 교차검증을 원격으로 하는 `cross_check` 데몬([cross_check/README.md](cross_check/README.md))과 연동할 수 있습니다. 작업자는 자기 터미널에서 대기하고, 확인자는 자기 터미널에서 `cross_check --user <확인자>` 로 대상 목록을 확인한 뒤 **본인 패스워드로 승인**합니다.
 
@@ -140,7 +142,7 @@ vm_power_onoff -u hong -c kim      # 안전장치 1~5단계 통과 후 → kim �
 ```
 
 - 교차검증은 **안전장치 1~5단계를 모두 통과한 직후, 실제 전원 작업 직전**에 실행됩니다. 작업자가 안전장치에서 취소하면 확인자를 부르지 않습니다.
-- 확인자가 승인하면 vm_power_onoff 가 곧바로 `cross_check --start` 로 "승인 후 2분" 창을 확인한 뒤 전원 작업을 시작합니다. 거부·취소·2분 초과·Ctrl+C·오류면 `[취소] 교차검증 미승인` 으로 **전원 작업 없이 종료 코드 1** 로 끝나고, 감사 로그에 남습니다.
+- 확인자가 승인하면 vm_power_onoff 가 곧바로 `cross_check --start` 로 승인 유효시간(`approval_ttl_sec`, 기본 2분) 창을 확인한 뒤 전원 작업을 시작합니다. 거부·취소·승인 유효시간 초과·Ctrl+C·오류면 `[취소] 교차검증 미승인` 으로 **전원 작업 없이 종료 코드 1** 로 끝나고, 감사 로그에 남습니다.
 - user(`-u`)와 확인자는 `cross_check` 쪽 설정(`/etc/cross_check/cross_check.conf` 의 `users=`)에도 있고 `cross_check --user <이름>` 으로 **처음 한 번 패스워드를 등록**해야 합니다. `pwonoff.conf` 와 `cross_check.conf` 의 `users` 는 서로 다른 목록입니다.
 - 데몬은 올린 대상이 `<target_dir>/on_off_<user>.txt` 의 부분집합인지 검사하므로 `cross_check.conf` 의 `target_dir` 은 `allowed_dir` 과 같아야 합니다(`install.sh` 가 같은 값으로 설정).
 - 보안 모델·알려진 한계(모두 root 로 쓰므로 root 우회는 막지 못함, 패스워드 평문 저장 등)는 [cross_check/README.md](cross_check/README.md) 6장을 읽어 주세요.
@@ -155,7 +157,7 @@ vm_power_onoff -u hong -c kim      # 안전장치 1~5단계 통과 후 → kim �
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 파일별 역할 표 — 어디를 고치면 되는지 |
 | [WORKFLOW.md](WORKFLOW.md), `workflow.svg` | 실행 흐름도 (mermaid / SVG) |
 | [CHANGELOG.md](CHANGELOG.md) | 변경 이력 |
-| [cross_check/README.md](cross_check/README.md) | 교차검증 데몬: 2분 필수 정책, 설치·등록, 명령, 보안 모델·한계, 문제 해결 (계획서 [PLAN.md](cross_check/PLAN.md), 결정 기록 [INTERVIEW.md](cross_check/INTERVIEW.md)) |
+| [cross_check/README.md](cross_check/README.md) | 교차검증 데몬: 2분(기본) 필수 정책과 승인 유효시간 설정, 설치·등록, 명령, 보안 모델·한계, 문제 해결 (계획서 [PLAN.md](cross_check/PLAN.md), 결정 기록 [INTERVIEW.md](cross_check/INTERVIEW.md)) |
 | [PR_CHECKLIST.md](PR_CHECKLIST.md) | 수정·배포 전 체크리스트 |
 | `test/` | `run_tests.sh`(전체 시험), `guard_scenarios.sh`(안전장치 시나리오), `e2e_vcsim.sh`+`e2e_driver.py`(vcsim 위 전체 흐름), `vcsim_server/`(시험용 vCenter 시뮬레이터) |
 | `dev/sync_test.sh` | 로컬에서 쓴 코드를 빌드 서버(192.168.0.58)로 보내 go vet/test/build 를 돌리는 도우미 |

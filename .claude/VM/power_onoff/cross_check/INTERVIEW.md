@@ -44,3 +44,10 @@
 ## 보안 점검 반영 (Q29)
 
 읽기 전용 보안 점검에서 나온 지적을 반영했다: 가짜 확인자 이름으로 자기 승인(→ `users=` 목록 제한), `admin` 선점(→ 등록 금지, install.sh 가 생성), 잠금 DoS(→ 지연 방식), 연결/작업 수 상한, 시작 토큰 일회성, 중단 작업 부활 금지. 의도적으로 남긴 것: `run`/`list` 무인증, 평문 패스워드, root 공유 환경의 우회 가능성.
+
+## 후속 지시: 승인 유효시간 설정화와 놀이터 (Q30~Q31)
+
+| # | 질문 | 결정 | 근거 |
+|---|---|---|---|
+| Q30 | "승인 후 2분 안에 진행하지 않으면 취소" 규칙을 설정으로 바꿀 수 있게? | 2분은 **기본값**으로 두고(문서의 필수 정책 문장은 그대로, 바로 아래에 "기본값이며 `approval_ttl_sec` 로 변경 가능" 추가) `cross_check.conf` 의 `approval_ttl_sec` 를 정식 설정으로: 정수 **10~3600초**(그 밖이면 데몬이 시작하지 않음). 데몬이 실제 값을 `ping`·`run` 응답, 승인 이벤트(`ttl_sec`,`expires_at`), `list`/`get`(`ttl_sec`, 승인 후 미시작이면 `expires_at`)에 **선택 필드**로 알리고, 모든 화면·메시지·중단 사유(`승인 후 {TTL} 내 미진행`)는 `FormatTTL`(2분/45초/1분 30초/1시간)로 그 값을 표기(하드코딩 "2분" 제거). 클라이언트는 데몬 값 → 설정 파일 → 기본 2분 순으로 표시. 반영은 **SIGHUP**(`pkill -HUP -f 'cross_check --daemon'`)로 `approval_ttl_sec` **만** 서버 mutex 안에서 다시 읽음(잘못된 값·깨진 파일이면 이전 값 유지 + 로그, 이미 승인된 작업에도 새 값 적용) 또는 재시작. `install.sh --approval-ttl <초>` 는 새로 만드는 conf 에만 반영(기존 conf 는 덮어쓰지 않고 수정 방법만 안내) | 사용자 지시. 하한 10초는 확인자 승인과 작업자 `--start` 사이의 최소 여유, 상한 1시간은 "승인 직후 바로 작업" 정책의 취지. 재시작은 열린 작업을 중단시키므로 SIGHUP 으로 값만 바꾸게 함. e2e 의 3초 만료 시험은 시험 전용 환경변수 `CROSS_CHECK_TEST_MIN_TTL_SEC` 로 하한만 낮춤(운영 설정 아님) |
+| Q31 | 손으로 시험해 볼 환경? | `test/playground.sh`(start/stop/restart/reload/ttl/status/reset/env/help) + `test/playground_worker.sh`(작업자 시뮬레이터). `$CC_PLAY_DIR`(기본 `$HOME/cc_playground`) 한 폴더 안에서만 데몬·conf·auth.conf(0600)·상태·로그·소켓을 쓰고 `/etc`·`/var`·`/usr/local`·crontab 은 건드리지 않음(위험 경로는 거부). 시험 계정 alice/bob/carol/admin 을 고정 시험 패스워드로 미리 등록(파일·도움말에 "시험 전용" 명시). `PATH` 에 두는 래퍼 `bin/cross_check` 와 `eval "$(bash playground.sh env)"` 로 어느 터미널에서나 그냥 `cross_check` 사용 | 사용자 지시("직접 시험해 볼 수 있는 환경") |

@@ -12,6 +12,8 @@
 #   sudo bash install.sh [허용디렉터리]      # 허용디렉터리 = conf 의 allowed_dir (기본: 이 폴더의 절대경로)
 #   sudo bash install.sh --enable-cross-check [허용디렉터리]   # pwonoff.conf 의 cross_check=on 으로 (기본은 그대로 둠)
 #   sudo bash install.sh --skip-vm-power-onoff [허용디렉터리]  # vm_power_onoff 실행파일은 설치하지 않음 (cross_check 만)
+#   sudo bash install.sh --approval-ttl 300  # 새로 만드는 cross_check.conf 의 approval_ttl_sec(승인 후 본 작업 시작 허용 시간, 10~3600초, 기본 120=2분).
+#                                            이미 cross_check.conf 가 있으면 덮어쓰지 않고 고치는 방법만 안내
 #   sudo bash install.sh -u                   # 제거: 실행파일·crontab 줄 삭제, 데몬 중지 (설정·비밀번호·작업 기록은 남김)
 # 시험용 경로 바꾸기(기본은 실제 위치): CC_ETC CC_STATE CC_BIN_DIR CC_SOCKET_DIR CC_PWONOFF_DIR CC_TMPFILES_DIR CC_LOG
 #   CC_CRON_BIN(crontab 에 적을 실행파일, 기본 $CC_BIN_DIR/cross_check)  CC_SKIP_CRON=1  CC_SKIP_START=1
@@ -46,12 +48,18 @@ CC_PW_SH="$HERE/cross_check/scripts/cc_admin_pw.sh"
 UNINSTALL=0
 ENABLE_CC=0
 SKIP_VM=0
+APPROVAL_TTL=""
+APPROVAL_TTL_GIVEN=0
 ALLOWED=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -u) UNINSTALL=1 ;;
     --enable-cross-check) ENABLE_CC=1 ;;
     --skip-vm-power-onoff) SKIP_VM=1 ;;
+    --approval-ttl)
+      [ $# -ge 2 ] || { echo "[오류] --approval-ttl 에는 초 단위 값이 필요합니다 (예: --approval-ttl 300)" >&2; exit 1; }
+      APPROVAL_TTL="$2"; APPROVAL_TTL_GIVEN=1; shift ;;
+    --approval-ttl=*) APPROVAL_TTL="${1#*=}"; APPROVAL_TTL_GIVEN=1 ;;
     -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "[오류] 알 수 없는 옵션: $1 (bash install.sh -h)" >&2; exit 1 ;;
     *)
@@ -60,6 +68,21 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# --approval-ttl 검증: 10~3600 의 정수(초)
+if [ "$APPROVAL_TTL_GIVEN" -eq 1 ] && [ "$UNINSTALL" -eq 0 ]; then
+  case "$APPROVAL_TTL" in
+    *[!0-9]*|'') APPROVAL_TTL_BAD=1 ;;
+    *) if [ "${#APPROVAL_TTL}" -gt 5 ]; then APPROVAL_TTL_BAD=1; else
+         APPROVAL_TTL=$((10#$APPROVAL_TTL))
+         if [ "$APPROVAL_TTL" -lt 10 ] || [ "$APPROVAL_TTL" -gt 3600 ]; then APPROVAL_TTL_BAD=1; fi
+       fi ;;
+  esac
+  if [ "${APPROVAL_TTL_BAD:-0}" = 1 ]; then
+    echo "[오류] --approval-ttl 은 10~3600 사이의 정수(초)여야 합니다 (예: 120 = 2분, 300 = 5분, 3600 = 1시간): $APPROVAL_TTL" >&2
+    exit 1
+  fi
+fi
 
 # 데몬에 넘길 경로 환경변수 (기본 위치가 아닐 때만 — 시험용)
 cc_env() {
@@ -194,6 +217,11 @@ fi
 # cross_check.conf — 없을 때만 (users 는 설치된 pwonoff.conf, 없으면 예시에서)
 if [ -e "$CC_CONF" ]; then
   echo "[INFO] $CC_CONF 가 이미 있어 덮어쓰지 않습니다"
+  if [ -n "$APPROVAL_TTL" ]; then
+    echo "[INFO] --approval-ttl $APPROVAL_TTL 은 적용하지 않았습니다(기존 설정 보존). 바꾸려면 root 로:"
+    echo "         1) $CC_CONF 의 approval_ttl_sec= 줄을 다음처럼 수정 (없으면 한 줄 추가):  approval_ttl_sec=$APPROVAL_TTL"
+    echo "         2) 반영: pkill -HUP -f 'cross_check --daemon'   (재시작 없이 이 값만 다시 읽음, 또는 데몬 재시작 / cross_check --ensure)"
+  fi
 else
   USERS_SRC="$CONF"; [ -f "$USERS_SRC" ] || USERS_SRC="$HERE/pwonoff.conf.example"
   CC_USERS="$(sed -n 's/^users=//p' "$USERS_SRC" | head -1 | sed 's/#.*//' | tr -d ' \t\r')"
@@ -213,11 +241,14 @@ users=$CC_USERS
 # 승인·취소·관리자 기능에 패스워드 요구 (required | off)
 auth=required
 
-# 승인 후 이 시간(초) 안에 본 작업(--start)을 시작하지 않으면 승인 취소
-approval_ttl_sec=120
+# 승인 유효시간(초): 확인자가 승인한 뒤 이 시간 안에 작업자가 본 작업(--start)을 시작하지 않으면
+# 승인이 자동 취소(중단)됩니다. 허용 10~3600, 기본 120(= 2분). 필수 정책의 기준값이 2분이므로
+# 바꾸면 정책과 달라집니다. 바꾼 뒤 반영: pkill -HUP -f 'cross_check --daemon' (재시작 없이 이 값만 다시 읽음)
+# 또는 데몬 재시작(열려 있던 대기/승인 작업은 중단됨). 이미 승인되어 대기 중인 작업에도 새 값이 적용됩니다.
+approval_ttl_sec=${APPROVAL_TTL:-120}
 EOF
   install -m 644 -o root -g root "$CC_CONF.tmp" "$CC_CONF"; rm -f "$CC_CONF.tmp"
-  echo "[완료] $CC_CONF (target_dir=$CC_TARGET, users=$CC_USERS)"
+  echo "[완료] $CC_CONF (target_dir=$CC_TARGET, users=$CC_USERS, approval_ttl_sec=${APPROVAL_TTL:-120})"
 fi
 
 # auth.conf — 없을 때만. admin 패스워드는 만들 때 한 번만 화면에 보인다.
@@ -256,7 +287,7 @@ if [ "$CC_SKIP_START" = 1 ]; then
   echo "[INFO] CC_SKIP_START=1 — 데몬 기동 건너뜀"
 else
   if [ "$CC_CHANGED" -eq 1 ] && daemon_running; then
-    echo "[INFO] 실행파일이 바뀌어 데몬을 다시 띄웁니다"
+    echo "[INFO] 실행파일이 바뀌어 데몬을 다시 띄웁니다 (설정의 approval_ttl_sec 만 바꿀 때는 재시작 없이 pkill -HUP -f 'cross_check --daemon' 으로 충분)"
     stop_daemon || true
   fi
   cc_env "$CC_DST" --ensure || echo "[경고] cross_check --ensure 가 실패했습니다 (종료 코드 $?)" >&2
@@ -274,6 +305,8 @@ echo "남은 수동 작업:"
 echo "  1) $CONF 의 users / vcenters 를 환경에 맞게 수정 (교차검증 사용자 목록은 $CC_CONF 의 users)"
 echo "  2) 각 사람이 한 번씩 등록: cross_check --user <이름>   (선착순 등록이므로 모두 가능한 빨리)"
 echo "  3) 관리자 화면: cross_check --admin   (admin 패스워드: $CC_AUTH 의 admin= 줄)"
+CC_TTL_NOW="$(sed -n 's/^approval_ttl_sec=\([0-9][0-9]*\).*/\1/p' "$CC_CONF" 2>/dev/null | head -1 || true)"
+echo "     승인 유효시간(승인 후 본 작업 시작 허용 시간): ${CC_TTL_NOW:-120}초 — 바꾸려면 $CC_CONF 의 approval_ttl_sec= 수정 후 pkill -HUP -f 'cross_check --daemon'"
 if [ "$CC_STATE_KEY" = on ]; then
   echo "  4) 교차검증 사용 중 (pwonoff.conf cross_check=on)"
 else

@@ -125,7 +125,7 @@ func TestCrossCheckGateApprove(t *testing.T) {
 	}
 	out := e.out.String()
 	if !strings.Contains(out, crossCheckNotice) {
-		t.Errorf("2분 정책 안내가 없음:\n%s", out)
+		t.Errorf("승인 유효시간 정책 안내가 없음:\n%s", out)
 	}
 	if strings.Index(out, crossCheckNotice) > strings.Index(out, "가짜 cross_check 진행 출력") {
 		t.Errorf("정책 안내는 승인 대기(진행 출력)보다 먼저여야 함:\n%s", out)
@@ -213,7 +213,7 @@ func TestCrossCheckGateStartRefused(t *testing.T) {
 		t.Errorf("호출 횟수 이상: run=%d start=%d", len(f.runs), len(f.starts))
 	}
 	out := e.out.String()
-	if !strings.Contains(out, "[취소] 교차검증 승인 시간(2분) 초과 또는 거부") {
+	if !strings.Contains(out, "[취소] 교차검증 승인 유효시간 초과 또는 거부") {
 		t.Errorf("시작 거부 문구 없음:\n%s", out)
 	}
 	au := e.auditText(t)

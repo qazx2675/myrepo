@@ -142,29 +142,57 @@ func fmtTimePtr(t *time.Time) string {
 	return fmtTime(*t)
 }
 
-// PolicyText 는 계획서 4-2 의 필수 정책 문구. ttl 이 2분이 아니면 현재 설정값을 덧붙인다.
+// PolicyText 는 계획서 4-2 의 필수 정책 문구. 시간은 이 데몬의 승인 유효시간(approval_ttl_sec)으로 만든다
+// (기본 2분). 기본값이 아니면 설정으로 바뀐 값임을 덧붙인다.
 func PolicyText(ttl time.Duration) string {
-	s := "[필수 정책] cross_check 데몬을 사용하는 작업은 확인자의 승인 완료 후 2분 내에 본 작업을 진행하지 않으면 " +
-		"해당 작업 승인은 자동으로 취소(중단) 처리됩니다."
-	if ttl > 0 && ttl != daemon.DefaultApprovalTTL {
-		s += fmt.Sprintf(" (이 데몬 설정: %d초)", int(ttl/time.Second))
+	if ttl <= 0 {
+		ttl = daemon.DefaultApprovalTTL
+	}
+	s := "[필수 정책] cross_check 데몬을 사용하는 작업은 확인자의 승인 완료 후 " + daemon.FormatTTLDuration(ttl) +
+		" 내에 본 작업을 진행하지 않으면 해당 작업 승인은 자동으로 취소(중단) 처리됩니다."
+	if ttl != daemon.DefaultApprovalTTL {
+		s += fmt.Sprintf(" (이 데몬 설정: approval_ttl_sec=%d)", int(ttl/time.Second))
 	}
 	return s
 }
 
+// ttlHeader 는 사용자·관리자 화면 머리말 아래에 보여 주는 현재 승인 유효시간 한 줄.
+func ttlHeader(ttl time.Duration) string {
+	if ttl <= 0 {
+		ttl = daemon.DefaultApprovalTTL
+	}
+	s := fmt.Sprintf("  승인 유효시간: %s (approval_ttl_sec=%d) — 확인자 승인 후 이 시간 안에 본 작업을 시작하지 않으면 승인이 자동 취소됩니다",
+		daemon.FormatTTLDuration(ttl), int(ttl/time.Second))
+	return s
+}
+
+// jobTTL 은 작업 하나에 적용되는 승인 유효시간: 데몬이 준 값(JobView.TTLSec)을 우선하고, 없으면 def(그것도 없으면 기본값).
+func jobTTL(j daemon.JobView, def time.Duration) time.Duration {
+	if j.TTLSec > 0 {
+		return time.Duration(j.TTLSec) * time.Second
+	}
+	if def > 0 {
+		return def
+	}
+	return daemon.DefaultApprovalTTL
+}
+
 // remainText 는 승인 후 아직 시작하지 않은 작업의 남은 시간 문구.
+// 만료 시각은 데몬이 준 ExpiresAt 을 우선하고, 없으면 승인 시각 + 유효시간으로 계산한다.
 func remainText(j daemon.JobView, ttl time.Duration, now time.Time) string {
 	if j.Status != daemon.StatusApproved || j.ApprovedAt == nil || j.StartedAt != nil {
 		return ""
 	}
-	if ttl <= 0 {
-		ttl = daemon.DefaultApprovalTTL
+	ttl = jobTTL(j, ttl)
+	exp := j.ApprovedAt.Add(ttl)
+	if j.ExpiresAt != nil {
+		exp = *j.ExpiresAt
 	}
-	left := j.ApprovedAt.Add(ttl).Sub(now)
+	left := exp.Sub(now)
 	if left <= 0 {
 		return "승인 유효시간 지남(곧 중단 처리)"
 	}
-	return fmt.Sprintf("2분 내 본 작업 필요(남은 %d초)", int((left+time.Second-1)/time.Second))
+	return fmt.Sprintf("승인 후 %s 내 본 작업 필요(남은 %d초)", daemon.FormatTTLDuration(ttl), int((left+time.Second-1)/time.Second))
 }
 
 // reasonText 는 표의 사유 칸: 중단 사유, 시작 기록, 승인 후 남은 시간 순으로 보여준다.

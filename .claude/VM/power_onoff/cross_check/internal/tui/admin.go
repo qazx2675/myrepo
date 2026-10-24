@@ -33,6 +33,8 @@ const AdminMissingText = `관리자(admin) 항목이 auth.conf 에 없어 관리
 // RunAdmin 은 cross_check --admin 화면을 돌리고 종료 코드를 돌려준다.
 // admin 항목이 없으면 안내만 하고 종료 1, 있으면 세션마다 한 번 패스워드를 묻는다(최대 3번).
 func (s *Session) RunAdmin(ctx context.Context) int {
+	s.println(s.p.Cyan(fmt.Sprintf("==== cross_check 관리자 — %s ====", s.opt.Now().Format("2006-01-02 15:04:05"))))
+	s.println(ttlHeader(s.opt.ApprovalTTL))
 	reg, err := s.c.UserRegistered(daemon.AdminUser)
 	if err != nil {
 		if msg, ok := isDaemonErr(err); ok {

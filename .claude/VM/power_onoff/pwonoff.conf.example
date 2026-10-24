@@ -20,7 +20,7 @@ os6_host=
 os6_user=root
 
 # 교차검증(선택): on 이면 안전장치 1~5단계 통과 직후·전원 작업 직전에 확인자(다른 user)의 승인을 받는다.
-# 승인 후 2분 내에 작업을 시작하지 않으면 승인이 취소된다. -n / --demo 에서는 호출하지 않음. 기본 off
+# 승인 후 설정된 시간(cross_check.conf 의 approval_ttl_sec, 기본 2분) 내에 작업을 시작하지 않으면 승인이 취소된다. -n / --demo 에서는 호출하지 않음. 기본 off
 # 확인자는 -c <user> 로 지정하거나 번호로 선택 (본인 제외). cross_check_bin 은 절대경로 (비우면 기본값)
 cross_check=off
 cross_check_bin=/usr/local/bin/cross_check

@@ -673,13 +673,13 @@ func TestStartAfterTTLExpires(t *testing.T) {
 	}
 	nextEvent(t, rh, StatusApproved, "")
 	clk.Add(2*time.Minute + time.Second)
-	wantDaemonErr(t, c.Start(rh.ID, rh.Token), ReasonExpired)
-	nextEvent(t, rh, StatusAborted, ReasonExpired)
-	if j := h.job(rh.ID); j.Status != StatusAborted || j.Reason != ReasonExpired {
+	wantDaemonErr(t, c.Start(rh.ID, rh.Token), ReasonExpired(DefaultApprovalTTL))
+	nextEvent(t, rh, StatusAborted, ReasonExpired(DefaultApprovalTTL))
+	if j := h.job(rh.ID); j.Status != StatusAborted || j.Reason != ReasonExpired(DefaultApprovalTTL) {
 		t.Fatalf("만료 후 작업 = %+v", j)
 	}
 	// 중단된 뒤에도 시작은 계속 거부되고, 올바른 token 이면 실제 중단 사유를 알려 준다(틀린 token 은 인증 실패)
-	wantDaemonErr(t, c.Start(rh.ID, rh.Token), ReasonExpired)
+	wantDaemonErr(t, c.Start(rh.ID, rh.Token), ReasonExpired(DefaultApprovalTTL))
 	wantDaemonErr(t, c.Start(rh.ID, "bad"), MsgAuthFailed)
 }
 
@@ -699,16 +699,16 @@ func TestSweeperExpiresUnstarted(t *testing.T) {
 	}
 	nextEvent(t, idle, StatusWaiting, "")
 	nextEvent(t, idle, StatusApproved, "")
-	ev := nextEvent(t, idle, StatusAborted, ReasonExpired)
+	ev := nextEvent(t, idle, StatusAborted, ReasonExpired(150*time.Millisecond))
 	if ev.By != BySystem {
 		t.Errorf("만료 이벤트 by = %q", ev.By)
 	}
 	expectClosed(t, idle)
-	if j := h.job(idle.ID); j.Status != StatusAborted || j.Reason != ReasonExpired {
+	if j := h.job(idle.ID); j.Status != StatusAborted || j.Reason != ReasonExpired(150*time.Millisecond) {
 		t.Fatalf("스위퍼 만료 = %+v", j)
 	}
 	// 스위퍼가 먼저 만료시킨 뒤의 start 도 "인증 실패" 가 아니라 만료 사유를 받아야 한다
-	wantDaemonErr(t, c.Start(idle.ID, idle.Token), ReasonExpired)
+	wantDaemonErr(t, c.Start(idle.ID, idle.Token), ReasonExpired(150*time.Millisecond))
 	wantDaemonErr(t, c.Start(idle.ID, "bad"), MsgAuthFailed)
 	time.Sleep(300 * time.Millisecond)
 	if j := h.job(started.ID); j.Status != StatusApproved {

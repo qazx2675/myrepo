@@ -17,6 +17,7 @@ fi
 
 T=$(mktemp -d /tmp/cc_e2e.XXXXXX)
 DPID=""
+DPID2="" # 범위 검증 시험용 보조 데몬
 
 daemon_pids() {
 	# 이 시험의 잠금 파일에 적힌 pid + 처음 띄운 데몬
@@ -28,6 +29,7 @@ cleanup() {
 	local p
 	for p in $(jobs -p); do kill -9 "$p" 2>/dev/null; done
 	for p in $(daemon_pids); do kill -TERM "$p" 2>/dev/null; done
+	[ -z "$DPID2" ] || kill -9 "$DPID2" 2>/dev/null
 	sleep 0.5
 	for p in $(daemon_pids); do kill -9 "$p" 2>/dev/null; done
 	# --ensure 가 띄운 데몬은 이 시험의 바이너리·소켓으로만 찾는다
@@ -48,6 +50,9 @@ export CROSS_CHECK_LOCK="$T/run/daemon.lock"
 export CROSS_CHECK_LOG="$T/daemon.log"
 export CROSS_CHECK_COLOR=never
 unset CROSS_CHECK_TOKEN || true
+# 시험 전용: 설정 파일 검증의 approval_ttl_sec 최소값(원래 10초)을 3초로 낮춰 만료 시험을 짧게 한다.
+# (아래 "범위 검증" 시험은 이 변수를 지우고 실제 최소 10초가 지켜지는지 따로 본다)
+export CROSS_CHECK_TEST_MIN_TTL_SEC=3
 
 mkdir -p "$T/run" "$T/etc" "$T/lib" "$T/targets" "$T/out"
 # users= : 작업자·확인자로 쓸 수 있는 이름(dave 는 목록에 있지만 등록하지 않음, zed 는 목록 밖)
@@ -303,8 +308,10 @@ wait "$WPID" || RC=$?
 lines=$(wc -l <"$T/out/w1.out")
 if [ "$RC" -eq 0 ] && grep -q '\[승인 완료\]' "$T/out/approve1.txt" && grep -q 'vm02ev01' "$T/out/approve1.txt" &&
 	grep -qx "CROSS_CHECK_JOB=$J1" "$T/out/w1.out" && grep -qE '^CROSS_CHECK_TOKEN=[0-9a-f]{32}$' "$T/out/w1.out" && [ "$lines" -eq 2 ] &&
-	grep -q '\[승인\] 작업' "$T/out/w1.err" && grep -q '내 작업 리스트' "$T/out/w1.err" && grep -q '필수 정책' "$T/out/w1.err"; then
-	pass "확인자 승인 → --run exit 0, stdout 은 CROSS_CHECK_JOB/TOKEN 두 줄, stderr 에 내 작업 리스트·정책"
+	grep -q '\[승인\] 작업' "$T/out/w1.err" && grep -q '내 작업 리스트' "$T/out/w1.err" && grep -q '필수 정책' "$T/out/w1.err" &&
+	grep -q '승인 완료 후 3초 내에' "$T/out/w1.err" && grep -q '승인 유효시간: 3초' "$T/out/w1.err" && ! grep -q '2분' "$T/out/w1.err" &&
+	grep -q '승인 완료 후 3초 내에' "$T/out/approve1.txt" && ! grep -q '2분' "$T/out/approve1.txt"; then
+	pass "확인자 승인 → --run exit 0, stdout 은 CROSS_CHECK_JOB/TOKEN 두 줄, stderr 에 내 작업 리스트·정책(설정한 3초로 표시, 2분 하드코딩 없음), 확인자 승인 화면도 3초"
 else
 	fail "승인 흐름 (rc=$RC lines=$lines)" "$T/out/approve1.txt" "$T/out/w1.out" "$T/out/w1.err"
 fi
@@ -368,8 +375,8 @@ sleep 4.5
 RC2=0
 (eval "$(cat "$T/out/w5.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB") >"$T/out/start5.txt" 2>&1 || RC2=$?
 if [ -n "$J5" ] && [ "$RC" -eq 0 ] && [ "$RC2" -eq 1 ] && grep -q '미진행' "$T/out/start5.txt" &&
-	job_row alice "$J5" | grep -q '승인 후 2분 내 미진행'; then
-	pass "승인 후 유효시간 초과 → --start exit 1, 작업자 표에 만료 사유"
+	job_row alice "$J5" | grep -q '승인 후 3초 내 미진행' && grep -q '승인 후 3초 내 미진행' "$T/out/start5.txt" && ! grep -q '2분' "$T/out/start5.txt"; then
+	pass "승인 후 유효시간(설정 3초) 초과 → --start exit 1, 메시지·작업자 표 사유 모두 '승인 후 3초 내 미진행'"
 else
 	fail "만료 (run=$RC start=$RC2)" "$T/out/approve5.txt" "$T/out/w5.err" "$T/out/start5.txt"
 fi
@@ -384,6 +391,86 @@ if [ "$RA" -eq 1 ] && grep -q '인증 실패' "$T/out/adm_bad.txt" && [ "$RC" -e
 else
 	fail "관리자 ($RA/$RC)" "$T/out/adm_bad.txt" "$T/out/adm_list.txt"
 fi
+
+# ---- 7b. 승인 유효시간(approval_ttl_sec): 화면 표시 · SIGHUP 다시 읽기 · 범위 검증 ----
+# 이 데몬은 conf 의 approval_ttl_sec=3 으로 떠 있다(위 3·6번이 이미 3초 만료를 확인). 여기서는 값이 화면·핑으로 보이는지,
+# 데몬을 죽이지 않고 SIGHUP 으로 값만 바꿀 수 있는지(잘못된 값은 기존 유지), 그리고 최소 10초/최대 3600초 검증을 본다.
+conf_ttl() { sed -i "s/^approval_ttl_sec=.*/approval_ttl_sec=$1/" "$CROSS_CHECK_CONF"; }
+# ttl_is <표시 문구> <초> : 사용자 화면 머리말이 그 값이 될 때까지(최대 3초)
+ttl_is() {
+	local n=0 o want="승인 유효시간: $1 (approval_ttl_sec=$2)"
+	# 파이프 끝에서 grep -q 가 먼저 닫으면 SIGPIPE(pipefail)로 오판할 수 있어 출력을 변수로 받아 비교한다
+	while o=$(printf 'q\n' | "$BIN" --user alice 2>&1 || true); [ "${o#*"$want"}" = "$o" ]; do
+		n=$((n + 1))
+		if [ "$n" -gt 30 ]; then return 1; fi
+		sleep 0.1
+	done
+}
+
+admin "$T/out/ttl_adm.txt" "$ADMIN_PW" q
+ok=1
+ttl_is 3초 3 || ok=0
+grep -q '승인 유효시간: 3초 (approval_ttl_sec=3)' "$T/out/ttl_adm.txt" || ok=0
+if [ "$HAVE_PERL" = 1 ]; then pr=$(raw '{"op":"ping"}'); case $pr in *'"ttl_sec":3'*) ;; *) ok=0 ;; esac; fi
+if [ $ok = 1 ]; then pass "사용자·관리자 화면 머리말과 ping(ttl_sec)에 설정한 승인 유효시간(3초) 표시"; else fail "유효시간 표시" "$T/out/ttl_adm.txt"; fi
+
+conf_ttl 7
+kill -HUP "$DPID"
+ok=1
+ttl_is 7초 7 || ok=0
+kill -0 "$DPID" 2>/dev/null || ok=0
+if [ "$HAVE_PERL" = 1 ]; then pr=$(raw '{"op":"ping"}'); case $pr in *'"ttl_sec":7'*) ;; *) ok=0 ;; esac; fi
+grep -q '3초(3초) → 7초(7초)' "$T/daemon.log" || ok=0
+for bad in abc 99999 0; do
+	conf_ttl "$bad"
+	kill -HUP "$DPID"
+	sleep 0.4
+	ttl_is 7초 7 || ok=0 # 잘못된 값이면 기존(7초) 유지
+done
+kill -0 "$DPID" 2>/dev/null || ok=0
+grep -q '승인 유효시간 7초 유지' "$T/daemon.log" || ok=0
+conf_ttl 3
+kill -HUP "$DPID"
+ttl_is 3초 3 || ok=0
+if [ $ok = 1 ]; then pass "SIGHUP: 데몬 유지한 채 approval_ttl_sec 만 다시 읽음(3→7초), 잘못된 값(abc/99999/0)은 기존 값 유지+로그, 다시 3초로 복귀"; else fail "SIGHUP 다시 읽기" "$T/daemon.log"; fi
+
+# 범위 검증: 최소 10 · 최대 3600 (시험용 최소값 변수를 지우고 실제 규칙으로 확인). 데몬은 뜨지 않고 exit 3 + 한국어 안내
+mkdir -p "$T/run2" "$T/lib2"
+ttl_conf="$T/etc/ttl2.conf"
+ok=1
+for v in 5 9 99999 3601 0 -1 abc; do
+	printf 'target_dir=%s\nusers=alice,bob\napproval_ttl_sec=%s\n' "$T/targets" "$v" >"$ttl_conf"
+	RC=0
+	env -u CROSS_CHECK_TEST_MIN_TTL_SEC CROSS_CHECK_CONF="$ttl_conf" CROSS_CHECK_SOCKET="$T/run2/cc.sock" CROSS_CHECK_LOCK="$T/run2/daemon.lock" \
+		CROSS_CHECK_STATE="$T/lib2/jobs.json" CROSS_CHECK_LOG="$T/daemon2.log" "$BIN" --daemon >"$T/out/badttl.txt" 2>&1 || RC=$?
+	if [ "$RC" -ne 3 ] || ! grep -q 'approval_ttl_sec 는 10~3600 사이의 정수' "$T/out/badttl.txt" || [ -S "$T/run2/cc.sock" ]; then
+		ok=0
+		echo "  (approval_ttl_sec=$v 가 거부되지 않음 rc=$RC)"
+		cat "$T/out/badttl.txt"
+	fi
+done
+if [ $ok = 1 ]; then pass "approval_ttl_sec 5·9·99999·3601·0·-1·abc 는 데몬 기동 거부(exit 3, '10~3600 사이의 정수')"; else fail "범위 검증(거부)"; fi
+
+# 경계값 10 은 허용: 보조 데몬을 따로 띄워 화면 머리말에서 10초 확인
+printf 'target_dir=%s\nusers=alice,bob\napproval_ttl_sec=10\n' "$T/targets" >"$ttl_conf"
+env -u CROSS_CHECK_TEST_MIN_TTL_SEC CROSS_CHECK_CONF="$ttl_conf" CROSS_CHECK_SOCKET="$T/run2/cc.sock" CROSS_CHECK_LOCK="$T/run2/daemon.lock" \
+	CROSS_CHECK_STATE="$T/lib2/jobs.json" CROSS_CHECK_LOG="$T/daemon2.log" "$BIN" --daemon >"$T/out/ttl10.txt" 2>&1 &
+DPID2=$!
+n=0
+while [ ! -S "$T/run2/cc.sock" ] && [ "$n" -lt 50 ]; do
+	n=$((n + 1))
+	sleep 0.1
+done
+RC=0
+printf 'q\n' | CROSS_CHECK_SOCKET="$T/run2/cc.sock" "$BIN" --user alice >"$T/out/ttl10_hdr.txt" 2>&1 || RC=$?
+if [ "$RC" -eq 0 ] && grep -q '승인 유효시간: 10초 (approval_ttl_sec=10)' "$T/out/ttl10_hdr.txt"; then
+	pass "approval_ttl_sec=10(최솟값)은 허용되고 화면에 10초로 표시"
+else
+	fail "최솟값 10 (rc=$RC)" "$T/out/ttl10.txt" "$T/out/ttl10_hdr.txt" "$T/daemon2.log"
+fi
+kill "$DPID2" 2>/dev/null || true
+wait "$DPID2" 2>/dev/null || true
+DPID2=""
 
 # ---- 8. 데몬 강제 종료 → 동시 --ensure 3개 → 하나만 기동, 재시작 처리 ----
 start_worker w6 "$T/t_alice3.txt"

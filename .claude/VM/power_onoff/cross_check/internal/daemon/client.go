@@ -153,6 +153,16 @@ func (c *Client) Ping() error {
 	return err
 }
 
+// ApprovalTTL 은 데몬이 지금 적용 중인 승인 유효시간을 ping 으로 알아낸다.
+// 구버전 데몬처럼 값을 주지 않으면 (0, nil) 이므로 호출자는 설정 파일·기본값으로 대신한다.
+func (c *Client) ApprovalTTL() (time.Duration, error) {
+	resp, err := c.call(Request{Op: OpPing})
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(resp.TTLSec) * time.Second, nil
+}
+
 // UserRegistered 는 user 가 auth.conf 에 등록되어 있는지 알려준다(인증 없음, 첫 실행 등록 안내용).
 // 비밀번호 파일이 손상되어 판단할 수 없으면 *DaemonError.
 func (c *Client) UserRegistered(user string) (bool, error) {
@@ -213,8 +223,8 @@ func (c *Client) Cancel(id, user, password string) error {
 }
 
 // Start 는 본 작업 직전에 부른다. token 은 Run 이 준 RunHandle.Token.
-// 승인 상태이고, 승인 후 2분(ApprovalTTL) 이내이며, 처음일 때만 nil. 2분이 지났으면 작업은 중단되고
-// Msg 가 ReasonExpired 인 *DaemonError 가 온다.
+// 승인 상태이고, 승인 후 유효시간(approval_ttl_sec) 이내이며, 처음일 때만 nil. 유효시간이 지났으면 작업은 중단되고
+// Msg 가 "승인 후 {TTL} 내 미진행"(ReasonExpired, IsExpiredReason 으로 알아봄) 인 *DaemonError 가 온다.
 func (c *Client) Start(id, token string) error {
 	_, err := c.call(Request{Op: OpStart, ID: id, Token: token})
 	return err
@@ -230,7 +240,7 @@ func (c *Client) AdminList(adminPassword string) ([]store.Job, error) {
 }
 
 // AdminSet 은 작업 상태를 바꾼다: 대기→승인, 대기→중단, 승인→중단 만 된다(대기로 못 되돌리고, 중단된 작업은
-// 되살릴 수 없음). reason 은 "관리자 변경: " 뒤에 붙는다. 승인으로 바꾸면 그때부터 2분 규칙이 적용된다.
+// 되살릴 수 없음). reason 은 "관리자 변경: " 뒤에 붙는다. 승인으로 바꾸면 그때부터 승인 유효시간 규칙이 적용된다.
 func (c *Client) AdminSet(adminPassword, id string, status store.Status, reason string) error {
 	_, err := c.call(Request{Op: OpAdminSet, Password: adminPassword, ID: id, Status: status, Reason: reason})
 	return err
@@ -260,8 +270,9 @@ func (c *Client) AdminSetPassword(adminPassword, user, newPassword string) error
 // RunHandle 은 run 으로 등록한 작업 하나와 그 전용 연결. 이 연결이 열려 있는 동안 데몬은 작업자가 살아 있다고 본다:
 // 대기 중에 Close(또는 프로세스 종료)하면 데몬이 즉시 그 작업을 중단한다. 승인 후에 닫는 것은 괜찮다.
 type RunHandle struct {
-	ID    string // 작업 ID
-	Token string // Start 에 넘길 1회용 token(화면·로그에 출력하지 말 것)
+	ID     string // 작업 ID
+	Token  string // Start 에 넘길 1회용 token(화면·로그에 출력하지 말 것)
+	TTLSec int    // run 시점에 데몬이 알려 준 승인 유효시간(초). 구버전 데몬이면 0
 
 	conn    net.Conn
 	events  chan Event
@@ -309,7 +320,7 @@ func (c *Client) Run(user, checker string, targets []string) (*RunHandle, error)
 		return nil, &DaemonError{Op: OpRun, Msg: resp.Error, ID: resp.ID}
 	}
 	h := &RunHandle{
-		ID: resp.ID, Token: resp.Token, conn: conn,
+		ID: resp.ID, Token: resp.Token, TTLSec: resp.TTLSec, conn: conn,
 		events: make(chan Event, 64), decided: make(chan struct{}),
 	}
 	go h.readLoop(r)
@@ -356,7 +367,7 @@ func (h *RunHandle) Events() <-chan Event { return h.events }
 // Wait 는 승인되거나 중단될 때까지 기다린다(대기에는 시간 제한이 없다).
 // 승인이면 nil, 중단이면 *AbortedError, 연결이 끊기면 그 밖의 error.
 // ctx 가 먼저 끝나면 연결을 닫고 ctx.Err() 를 돌려준다(데몬은 대기 중이던 작업을 "작업자 스크립트 종료" 로 중단).
-// 승인된 뒤에도 연결은 열려 있어 Events 로 이후 이벤트(2분 만료·관리자 변경·본 작업 시작)를 받을 수 있다.
+// 승인된 뒤에도 연결은 열려 있어 Events 로 이후 이벤트(승인 유효시간 만료·관리자 변경·본 작업 시작)를 받을 수 있다.
 func (h *RunHandle) Wait(ctx context.Context) error {
 	select {
 	case <-h.decided:

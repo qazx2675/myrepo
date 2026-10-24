@@ -2,6 +2,19 @@
 
 버전 태그는 이 파일의 항목과 연결합니다: `git tag -a vm-power-onoff-v0.1.0 -m "<요약> (CHANGELOG 2026-10-23 항목)"`
 
+## 0.2.1 — 2026-10-25
+
+cross_check 승인 유효시간 설정화와 손으로 해 보는 시험 환경 추가. 필수 정책 문구(아래 0.2.0 항목)는 그대로이고, **2분은 기본값**이며 `cross_check.conf` 의 `approval_ttl_sec` 로 바꿀 수 있습니다.
+
+- **`approval_ttl_sec` 정식 설정**: 정수 **10~3600초**(기본 120). 범위 밖·숫자 아님이면 데몬이 시작하지 않고 한국어 안내(`approval_ttl_sec 는 10~3600 사이의 정수(초)여야 함`)를 냅니다.
+- **하드코딩된 "2분" 제거**: 중단 사유 `승인 후 {TTL} 내 미진행`(기본 설정이면 이전과 같은 `승인 후 2분 내 미진행`), `--run` 승인 출력·정책 안내, `--start` 거부 문구, 확인자/작업자 TUI 의 승인 안내와 `남은 시간`, 관리자 화면이 모두 데몬의 실제 값으로 표기됩니다(`FormatTTL`: `2분` · `45초` · `1분 30초` · `1시간`). vm_power_onoff 의 교차검증 관문 안내는 "설정된 시간(cross_check.conf 의 approval_ttl_sec, 기본 2분)" 으로 일반화했고, 시작 거부 문구는 `[취소] 교차검증 승인 유효시간 초과 또는 거부` 입니다.
+- **통신(하위 호환)**: `ping` 응답에 `ttl_sec`, `run` 응답에 `ttl_sec`, 승인 이벤트에 `ttl_sec`·`expires_at`, `list`/`get` 의 작업에 `ttl_sec`(+승인 후 미시작이면 `expires_at`)를 **선택 필드**로 추가했습니다. 필드가 없는 구버전과도 동작합니다.
+- **재시작 없이 반영(SIGHUP)**: `pkill -HUP -f 'cross_check --daemon'` 이 `approval_ttl_sec` **만** 다시 읽습니다(잘못된 값이면 이전 값 유지 + 로그, 이미 승인된 작업에도 새 값 적용). 이전에는 SIGHUP 을 무시했습니다.
+- **화면**: 사용자·관리자 화면 머리말에 `승인 유효시간: … (approval_ttl_sec=N)` 표시(데몬에 물어 표시).
+- **설치**: `install.sh`·`setup.sh` 에 `--approval-ttl <초>` — **새로 만드는** `cross_check.conf` 에만 반영하고 기존 파일은 덮어쓰지 않으며 고치는 방법을 안내합니다. 기본 conf 템플릿에 키 설명 주석이 들어갑니다.
+- **놀이터**: `cross_check/test/playground.sh`·`playground_worker.sh` — `/etc`·`/var`·crontab 을 건드리지 않는 격리 폴더(`$CC_PLAY_DIR`, 기본 `$HOME/cc_playground`)에 데몬·시험 계정(alice/bob/carol/admin)·대상 파일을 만들고, 작업자 시뮬레이터와 함께 터미널 두 개로 승인·취소·시간 초과·관리자 모드를 직접 시험합니다(`bash playground.sh help` 에 따라 하기 안내).
+- **시험**: 단위(`FormatTTL`·`LoadConf` 범위·핑/이벤트/뷰의 ttl·`ReloadApprovalTTL`·화면 표기), e2e 에 설정 3초 표시·SIGHUP 변경·범위 검증(5·99999 거부, 10 허용) 추가. e2e 는 시험 전용 환경변수 `CROSS_CHECK_TEST_MIN_TTL_SEC=3` 으로 최소 10초 검증만 낮춥니다(운영 설정 아님).
+
 ## 0.2.0 — 2026-10-24
 
 원격 2인 1조 교차검증 데몬 `cross_check` 추가와 vm_power_onoff 연동. 문서: [cross_check/README.md](cross_check/README.md), 계획서 [cross_check/PLAN.md](cross_check/PLAN.md), 결정 기록 [cross_check/INTERVIEW.md](cross_check/INTERVIEW.md).

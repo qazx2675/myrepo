@@ -19,21 +19,22 @@
 //
 // op 목록과 규칙:
 //
-//	ping                            → {"ok":true}
+//	ping                            → {"ok":true,"ttl_sec":120}  (ttl_sec: 이 데몬의 승인 유효시간. 구버전 데몬은 필드 없음)
 //	status_user {user}              → {"ok":true,"registered":bool}  (첫 실행 등록 안내용, 인증 없음)
 //	register {user,password}        → users= 목록에 있고 auth.conf 에 아직 없는 user 만 등록(admin 은 항상 거부)
 //	change_password {user,password,new_password} → 현재 비밀번호 확인 후 변경
 //	run     {user,checker,targets}  → 작업자·확인자 모두 users= 목록에 있고 등록되어 있으며, targets 가
 //	                                  <target_dir>/on_off_<user>.txt 의 부분집합일 때만 등록.
-//	                                  {"ok":true,"id":"...","token":"..."} 후 연결 유지. 이후 상태가 바뀔 때마다
-//	                                  {"event":"status","status":"대기|승인|중단","reason":"...","by":"..."} 한 줄씩.
+//	                                  {"ok":true,"id":"...","token":"...","ttl_sec":120} 후 연결 유지. 이후 상태가 바뀔 때마다
+//	                                  {"event":"status","status":"대기|승인|중단","reason":"...","by":"..."} 한 줄씩
+//	                                  (승인 이벤트에는 선택 필드 ttl_sec, expires_at(RFC3339) 가 붙는다).
 //	                                  중단 또는 본 작업 시작 이벤트 뒤 데몬이 연결을 닫는다.
 //	                                  대기 중 작업자 연결이 끊기면(Ctrl+C·세션 끊김·kill -9) 즉시 중단.
-//	list    {user}                  → user 가 작업자/확인자인 작업(대상 목록 포함)
+//	list    {user}                  → user 가 작업자/확인자인 작업(대상 목록 포함). 각 작업에 ttl_sec, 승인 후 미시작이면 expires_at
 //	get     {id,user[,password]}    → 그 작업 하나(user 가 작업자/확인자일 때). password 를 주면 그것도 확인
 //	approve {id,user,password}      → 확인자 본인 비밀번호로 대기 작업 승인
 //	cancel  {id,user,password}      → 확인자 본인 비밀번호로 대기 작업 취소
-//	start   {id,token}              → 본 작업 직전 신호. 승인 후 ApprovalTTL(기본 2분) 이내 1회(성공하면 token 폐기)
+//	start   {id,token}              → 본 작업 직전 신호. 승인 후 ApprovalTTL(approval_ttl_sec, 기본 120초) 이내 1회(성공하면 token 폐기)
 //	admin_list / admin_set {id,status,reason} / admin_delete {id} / admin_clear /
 //	admin_set_password {user,new_password}                       ← password 는 admin 의 것
 //	                                  (auth.conf 에 admin 항목이 없으면 관리자 op 는 모두 거부)
@@ -68,7 +69,7 @@ const (
 
 // 기본값과 한도.
 const (
-	DefaultApprovalTTL   = 2 * time.Minute // 승인 후 start 까지 허용 시간(계획서 4-2 필수 정책)
+	DefaultApprovalTTL   = 2 * time.Minute // 승인 후 start 까지 허용 시간 기본값(계획서 4-2 필수 정책). cross_check.conf 의 approval_ttl_sec 로 바꾼다
 	DefaultSweepInterval = time.Second     // 승인 만료 검사 주기
 
 	MaxLineSize  = 1 << 20 // 요청 한 줄 최대 크기(줄바꿈 제외). 넘으면 오류 응답 후 연결 종료
@@ -155,7 +156,6 @@ const (
 const (
 	ReasonSameUser    = "작업자와 확인자가 동일"
 	ReasonWorkerGone  = "작업자 스크립트 종료"
-	ReasonExpired     = "승인 후 2분 내 미진행"
 	ReasonRestart     = "데몬 재시작"
 	ReasonShutdown    = "데몬 종료"
 	ReasonAdminSet    = "관리자 변경"
@@ -163,6 +163,8 @@ const (
 	ReasonAdminClear  = "관리자 전체 정리"
 	ReasonStarted     = "본 작업 시작" // 이벤트 전용(상태는 승인 유지, StartedAt 기록)
 )
+
+// (승인 만료 사유 "승인 후 {TTL} 내 미진행" 은 ttl.go 의 ReasonExpired(ttl) 함수로 만든다.)
 
 // ReasonCancel 은 확인자 취소 사유 "확인자 {checker} 가 취소".
 func ReasonCancel(checker string) string { return "확인자 " + checker + " 가 취소" }
@@ -209,6 +211,7 @@ type Request struct {
 type Response struct {
 	OK      bool        `json:"ok"`
 	Error   string      `json:"error"`
+	TTLSec  int         `json:"ttl_sec,omitempty"`  // ping/run: 이 데몬의 승인 유효시간(초). 구버전 데몬은 안 줌
 	ID      string      `json:"id,omitempty"`       // run: 등록된 작업 ID(동일인 중단 때도 기록용으로 채움)
 	Token   string      `json:"token,omitempty"`    // run: start 에 쓸 1회용 token(128비트 hex). 작업자에게만 한 번 준다
 	Jobs    []JobView   `json:"jobs,omitempty"`     // list
@@ -229,6 +232,9 @@ type Event struct {
 	Status store.Status `json:"status"`           // 바뀐 뒤의 상태
 	Reason string       `json:"reason,omitempty"` // 사람이 읽는 한국어 사유
 	By     string       `json:"by,omitempty"`     // 확인자/작업자 이름, BySystem, ByAdmin
+	// 승인 이벤트에만: 승인 유효시간(초)과 그 만료 시각(이 시각까지 --start 해야 함). 구버전 클라이언트는 무시한다.
+	TTLSec    int        `json:"ttl_sec,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // JobView 는 list/get 응답의 작업 한 건. 작업자·확인자(그리고 관리자)만 받으므로 대상 목록을 담는다
@@ -245,15 +251,28 @@ type JobView struct {
 	ApprovedAt  *time.Time   `json:"approved_at,omitempty"`
 	StartedAt   *time.Time   `json:"started_at,omitempty"`
 	UpdatedAt   time.Time    `json:"updated_at"`
+	// TTLSec 은 이 데몬의 승인 유효시간(초), ExpiresAt 은 승인되었고 아직 시작하지 않은 작업의 만료 시각(승인 시각 + 유효시간).
+	// 둘 다 선택 필드(구버전 데몬은 안 줌). 유효시간을 바꾸면(SIGHUP) 이미 승인된 작업에도 새 값이 적용된다.
+	TTLSec    int        `json:"ttl_sec,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // viewOf 는 저장된 작업에서 JobView 를 만든다(uid 등 감사 필드는 admin_list 에서만 보인다).
-func viewOf(j store.Job) JobView {
-	return JobView{
+// ttl 은 이 데몬의 승인 유효시간(0 이하면 TTLSec/ExpiresAt 을 채우지 않음).
+func viewOf(j store.Job, ttl time.Duration) JobView {
+	v := JobView{
 		ID: j.ID, User: j.User, Checker: j.Checker, Status: j.Status, Reason: j.Reason,
 		TargetCount: len(j.Targets), Targets: j.Targets,
 		CreatedAt: j.CreatedAt, ApprovedAt: j.ApprovedAt, StartedAt: j.StartedAt, UpdatedAt: j.UpdatedAt,
 	}
+	if ttl > 0 {
+		v.TTLSec = int(ttl / time.Second)
+		if j.Status == StatusApproved && j.ApprovedAt != nil && j.StartedAt == nil {
+			exp := j.ApprovedAt.Add(ttl)
+			v.ExpiresAt = &exp
+		}
+	}
+	return v
 }
 
 // ValidName 은 user/checker 이름이 ^[a-z0-9_]+$ 이고 MaxNameLen 이하인지 검사한다.

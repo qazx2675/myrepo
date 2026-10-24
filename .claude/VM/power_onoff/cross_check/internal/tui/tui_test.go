@@ -324,7 +324,7 @@ func TestListRendering(t *testing.T) {
 		job("job1", "alice", "bob", daemon.StatusWaiting, "", "vm01ev01", "vm02ev01"),
 		j2,
 		job("job3", "alice", "bob", daemon.StatusAborted, daemon.ReasonCancel("bob"), "vm01ev01"),
-		job("job4", "alice", "carol", daemon.StatusAborted, daemon.ReasonExpired, "vm01ev01"),
+		job("job4", "alice", "carol", daemon.StatusAborted, daemon.ReasonExpired(daemon.DefaultApprovalTTL), "vm01ev01"),
 		job("job5", "alice", "bob", daemon.StatusAborted, daemon.ReasonWorkerGone, "vm01ev01"),
 		job("job6", "alice", "bob", daemon.StatusAborted, daemon.ReasonAdminSet+": 잘못된 기록", "vm01ev01"),
 		job("job7", "dave", "alice", daemon.StatusWaiting, "", "vm09ev01"),
@@ -663,4 +663,60 @@ func TestDispWidthAndPolicy(t *testing.T) {
 	if !strings.Contains(PolicyText(3*time.Second), "3초") || strings.Contains(PolicyText(2*time.Minute), "설정") {
 		t.Fatal("정책 문구")
 	}
+}
+
+// ---- 승인 유효시간(approval_ttl_sec) 표시 ----
+
+func TestPolicyTextFollowsConfiguredTTL(t *testing.T) {
+	def := PolicyText(2 * time.Minute)
+	if !strings.Contains(def, "승인 완료 후 2분 내에 본 작업을 진행하지 않으면") || strings.Contains(def, "approval_ttl_sec") {
+		t.Fatalf("기본(2분) 정책 문구: %s", def)
+	}
+	custom := PolicyText(90 * time.Second)
+	if !strings.Contains(custom, "승인 완료 후 1분 30초 내에") || !strings.Contains(custom, "approval_ttl_sec=90") || strings.Contains(custom, "후 2분 내에") {
+		t.Fatalf("90초 정책 문구: %s", custom)
+	}
+	if !strings.Contains(PolicyText(0), "후 2분 내에") || !strings.Contains(PolicyText(time.Hour), "후 1시간 내에") {
+		t.Fatal("0 은 기본값, 3600초는 1시간")
+	}
+}
+
+func TestRemainTextUsesDaemonValues(t *testing.T) {
+	appr := t0
+	j := job("j", "alice", "bob", daemon.StatusApproved, "", "vm01ev01")
+	j.ApprovedAt = &appr
+	// 데몬 값이 없으면 Options 의 값(여기서는 5분)으로 계산
+	if got := remainText(j, 5*time.Minute, t0.Add(10*time.Second)); got != "승인 후 5분 내 본 작업 필요(남은 290초)" {
+		t.Fatalf("옵션 TTL: %q", got)
+	}
+	// 데몬이 준 ttl_sec/expires_at 이 우선(데몬 설정이 바뀌어도 화면이 따라감)
+	exp := t0.Add(45 * time.Second)
+	j.TTLSec, j.ExpiresAt = 45, &exp
+	if got := remainText(j, 5*time.Minute, t0.Add(10*time.Second)); got != "승인 후 45초 내 본 작업 필요(남은 35초)" {
+		t.Fatalf("데몬 TTL: %q", got)
+	}
+	if got := remainText(j, 5*time.Minute, t0.Add(46*time.Second)); !strings.Contains(got, "유효시간 지남") {
+		t.Fatalf("만료: %q", got)
+	}
+}
+
+func TestHeadersShowEffectiveTTL(t *testing.T) {
+	f := newFake()
+	f.pw["alice"] = "pw_alice_1"
+	out, code, _ := runUser(t, f, "alice", "q\n", Options{ApprovalTTL: 90 * time.Second})
+	if code != ExitOK {
+		t.Fatalf("code=%d", code)
+	}
+	mustContain(t, out, "승인 유효시간: 1분 30초 (approval_ttl_sec=90)")
+
+	f.pw["admin"] = "pw_admin_4"
+	var buf bytes.Buffer
+	s := New(strings.NewReader("pw_admin_4\nq\n"), &buf, f, Options{Now: func() time.Time { return t0 }, ApprovalTTL: 600 * time.Second})
+	s.RunAdmin(context.Background())
+	mustContain(t, buf.String(), "==== cross_check 관리자", "승인 유효시간: 10분 (approval_ttl_sec=600)")
+	// 기본값이면 2분
+	buf.Reset()
+	s = New(strings.NewReader("pw_admin_4\nq\n"), &buf, f, Options{Now: func() time.Time { return t0 }})
+	s.RunAdmin(context.Background())
+	mustContain(t, buf.String(), "승인 유효시간: 2분 (approval_ttl_sec=120)")
 }

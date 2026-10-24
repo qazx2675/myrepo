@@ -32,7 +32,7 @@ import (
 	"cross_check/internal/tui"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 // 종료 코드.
 const (
@@ -87,7 +87,8 @@ func errorf(format string, a ...any) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `cross_check %s — 원격 2인 1조 교차검증(작업자 대기 → 확인자 패스워드 승인 → 2분 내 본 작업)
+	ttlText := daemon.FormatTTLDuration(approvalTTL()) // 이 서버 설정(읽을 수 없으면 기본 2분)
+	fmt.Fprintf(os.Stderr, `cross_check %s — 원격 2인 1조 교차검증(작업자 대기 → 확인자 패스워드 승인 → 승인 유효시간 내 본 작업)
 
 사용법(항상 사용자를 지정):
   cross_check --user <user>                          사용자 화면(TUI): 첫 실행 시 패스워드 등록(6자 이상),
@@ -95,7 +96,7 @@ func usage() {
                                                      (작업자·확인자 이름은 설정 파일 users= 목록에 있어야 함)
   cross_check --run --user <user> --checker <확인자>  작업 등록 후 확인자 승인까지 대기(작업 스크립트 안에서)
         [--targets-file <파일>]                       대상 목록(없으면 stdin). 줄바꿈·탭·공백 구분, '#' 주석
-  cross_check --start --job <ID> [--token <T>]        본 작업 직전 신호(승인 후 2분 이내, token 은 env %s 도 가능)
+  cross_check --start --job <ID> [--token <T>]        본 작업 직전 신호(승인 후 %s 이내, token 은 env %s 도 가능)
   cross_check --admin                                관리자 화면(목록·상태 변경·삭제·정리·패스워드 재설정)
                                                      (auth.conf 의 admin= 항목은 install.sh 가 만든다)
   cross_check --daemon                               데몬을 포그라운드로 실행
@@ -113,12 +114,13 @@ func usage() {
 
 종료 코드: 0 승인·성공, 1 중단·거부, 2 사용법 오류, 3 연결·데몬·입력 오류, 130 Ctrl+C
 
-[필수 정책] 확인자의 승인 완료 후 2분 내에 본 작업(--start)을 진행하지 않으면 해당 작업 승인은 자동으로 취소(중단)된다.
+[필수 정책] 확인자의 승인 완료 후 %s 내에 본 작업(--start)을 진행하지 않으면 해당 작업 승인은 자동으로 취소(중단)된다.
+  (승인 유효시간은 cross_check.conf 의 approval_ttl_sec 로 바꾼다: 기본 120초 = 2분, 허용 10~3600. 데몬에 SIGHUP 또는 재시작으로 반영)
 
 경로(환경변수로 바꿀 수 있음):
   소켓 %s (%s)   설정 %s (%s)
   비밀번호 %s (%s)   작업 기록 %s (%s)
-`, version, envToken,
+`, version, ttlText, envToken, ttlText,
 		daemon.DefaultSocketPath, daemon.EnvSocket, daemon.DefaultConfPath, envConf,
 		daemon.DefaultAuthPath, envAuth, daemon.DefaultStorePath, envState)
 }
@@ -224,12 +226,26 @@ func dial() (*daemon.Client, bool) {
 	return c, true
 }
 
-// approvalTTL 은 표시용 승인 유효시간(설정 파일을 읽을 수 있으면 그 값, 아니면 2분).
+// approvalTTL 은 설정 파일(cross_check.conf)에서 읽은 승인 유효시간(읽을 수 없으면 기본 2분).
+// 실제로 적용 중인 값은 데몬이 알고 있으므로(SIGHUP 으로 바뀔 수 있음) 데몬에 연결된 뒤에는 effectiveTTL 을 쓴다.
 func approvalTTL() time.Duration {
 	if c, err := daemon.LoadConf(confPath()); err == nil && c.ApprovalTTL > 0 {
 		return c.ApprovalTTL
 	}
 	return daemon.DefaultApprovalTTL
+}
+
+// effectiveTTL 은 화면·메시지에 쓸 승인 유효시간: hintSec(데몬이 이벤트·응답으로 준 값) → 데몬에 ping → 설정 파일 → 기본값.
+func effectiveTTL(c *daemon.Client, hintSec int) time.Duration {
+	if hintSec > 0 {
+		return time.Duration(hintSec) * time.Second
+	}
+	if c != nil {
+		if d, err := c.ApprovalTTL(); err == nil && d > 0 {
+			return d
+		}
+	}
+	return approvalTTL()
 }
 
 func signalContext() (context.Context, context.CancelFunc) {
@@ -238,11 +254,11 @@ func signalContext() (context.Context, context.CancelFunc) {
 
 // ---- --user / --admin ----
 
-func tuiOptions() tui.Options {
+func tuiOptions(c *daemon.Client) tui.Options {
 	return tui.Options{
 		Color:       tui.ColorEnabled(os.Stdout),
 		HideInput:   tui.EchoOff,
-		ApprovalTTL: approvalTTL(),
+		ApprovalTTL: effectiveTTL(c, 0),
 	}
 }
 
@@ -257,7 +273,7 @@ func cmdUser(user string) int {
 	defer c.Close()
 	ctx, stop := signalContext()
 	defer stop()
-	return tui.New(os.Stdin, os.Stdout, c, tuiOptions()).RunUser(ctx, user)
+	return tui.New(os.Stdin, os.Stdout, c, tuiOptions(c)).RunUser(ctx, user)
 }
 
 func cmdAdmin() int {
@@ -268,7 +284,7 @@ func cmdAdmin() int {
 	defer c.Close()
 	ctx, stop := signalContext()
 	defer stop()
-	return tui.New(os.Stdin, os.Stdout, c, tuiOptions()).RunAdmin(ctx)
+	return tui.New(os.Stdin, os.Stdout, c, tuiOptions(c)).RunAdmin(ctx)
 }
 
 // ---- --run ----
@@ -419,9 +435,13 @@ func runSameUser(user, targetsFile string) int {
 	return exitFail
 }
 
-// approved 는 승인 직후: 승인 안내, 내 작업 리스트, 2분 정책, stdout 의 기계용 두 줄.
+// approved 는 승인 직후: 승인 안내, 내 작업 리스트, 승인 유효시간 정책, stdout 의 기계용 두 줄.
 func approved(c *daemon.Client, h *daemon.RunHandle, user, checker string, ev daemon.Event) int {
-	ttl := approvalTTL()
+	hint := ev.TTLSec
+	if hint <= 0 {
+		hint = h.TTLSec
+	}
+	ttl := effectiveTTL(c, hint)
 	by := ev.By
 	if by == "" {
 		by = checker
@@ -435,6 +455,11 @@ func approved(c *daemon.Client, h *daemon.RunHandle, user, checker string, ev da
 	}
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, errP.Bold(tui.PolicyText(ttl)))
+	exp := time.Now().Add(ttl)
+	if ev.ExpiresAt != nil {
+		exp = *ev.ExpiresAt
+	}
+	fmt.Fprintf(os.Stderr, "  승인 유효시간: %s — %s 까지 아래 --start 를 호출해야 합니다\n", daemon.FormatTTLDuration(ttl), exp.Local().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "  본 작업 직전에: cross_check --start --job %s  (token 은 %s 환경변수로 전달)\n", h.ID, envToken)
 	fmt.Printf("CROSS_CHECK_JOB=%s\nCROSS_CHECK_TOKEN=%s\n", h.ID, h.Token)
 	return exitOK
@@ -471,8 +496,8 @@ func cmdStart(job, token string) int {
 		var de *daemon.DaemonError
 		if errors.As(err, &de) {
 			fmt.Fprintln(os.Stderr, errP.Red(fmt.Sprintf("[거부] 작업 %s 시작 불가 — %s", job, de.Msg)))
-			if strings.Contains(de.Msg, daemon.ReasonExpired) {
-				fmt.Fprintln(os.Stderr, "  "+tui.PolicyText(approvalTTL()))
+			if daemon.IsExpiredReason(de.Msg) {
+				fmt.Fprintln(os.Stderr, "  "+tui.PolicyText(effectiveTTL(c, 0)))
 			}
 			return exitFail
 		}
@@ -526,9 +551,24 @@ func cmdDaemon() int {
 		errorf("%v", err)
 		return exitError
 	}
-	signal.Ignore(syscall.SIGHUP, syscall.SIGPIPE)
+	signal.Ignore(syscall.SIGPIPE)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// SIGHUP: 종료하지 않고 cross_check.conf 의 approval_ttl_sec 만 다시 읽는다(잘못된 값이면 기존 값 유지 + 로그).
+	// 터미널이 닫혀 SIGHUP 이 와도 데몬은 죽지 않고 설정만 다시 읽는다.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hup:
+				srv.ReloadApprovalTTL(confPath())
+			}
+		}
+	}()
 	if err := srv.Serve(ctx); err != nil {
 		logger.Printf("데몬 오류: %v", err)
 		return exitError

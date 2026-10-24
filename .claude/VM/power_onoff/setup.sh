@@ -5,6 +5,7 @@
 #   bash setup.sh [허용디렉터리]        # install.sh 에 넘길 allowed_dir (기본: 이 폴더의 절대경로)
 #   bash setup.sh --no-install          # 빌드만 (install.sh 실행 안 함)
 #   bash setup.sh --enable-cross-check  # install.sh 에 넘김: pwonoff.conf 의 cross_check=on
+#   bash setup.sh --approval-ttl 300    # install.sh 에 넘김: 새로 만드는 cross_check.conf 의 approval_ttl_sec(10~3600초, 기본 120=2분)
 #   bash setup.sh --skip-vm-power-onoff # vm_power_onoff 빌드·설치를 건너뛰고 cross_check 만 (Go 1.26.5 미만 서버 등)
 #   bash setup.sh --os6                 # OS6(RHEL/CentOS 6)용: bin_os6/*.gz 를 풀어 쓴다 (OS6 서버에서는 자동)
 # Go 버전: vm_power_onoff 는 1.26.5 이상, cross_check 는 표준 라이브러리만 써서 1.20 이상이면 된다.
@@ -13,12 +14,14 @@ set -euo pipefail
 cd "$(dirname "$0")"
 HERE="$(pwd -P)"
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 
 OS6=0
 NO_INSTALL=0
 ENABLE_CC=0
 SKIP_VM=0
+APPROVAL_TTL=""
+APPROVAL_TTL_GIVEN=0
 ALLOWED=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -26,6 +29,10 @@ while [ $# -gt 0 ]; do
     --no-install) NO_INSTALL=1 ;;
     --enable-cross-check) ENABLE_CC=1 ;;
     --skip-vm-power-onoff) SKIP_VM=1 ;;
+    --approval-ttl)
+      [ $# -ge 2 ] || { echo "오류: --approval-ttl 에는 초 단위 값이 필요합니다 (예: --approval-ttl 300)" >&2; exit 2; }
+      APPROVAL_TTL="$2"; APPROVAL_TTL_GIVEN=1; shift ;;
+    --approval-ttl=*) APPROVAL_TTL="${1#*=}"; APPROVAL_TTL_GIVEN=1 ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "오류: 알 수 없는 옵션: $1" >&2; usage >&2; exit 2 ;;
     *)
@@ -48,6 +55,7 @@ finish() {
   [ -n "$ALLOWED" ] && args+=("$ALLOWED")
   [ "$ENABLE_CC" -eq 1 ] && args+=(--enable-cross-check)
   [ "$SKIP_VM" -eq 1 ] && args+=(--skip-vm-power-onoff)
+  [ "$APPROVAL_TTL_GIVEN" -eq 1 ] && args+=(--approval-ttl "$APPROVAL_TTL")
   local cmd="sudo bash $HERE/install.sh${args[*]+ ${args[*]}}"
   echo
   if [ "$NO_INSTALL" -eq 1 ]; then

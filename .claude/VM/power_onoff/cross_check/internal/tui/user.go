@@ -149,6 +149,7 @@ func (s *Session) renderUser(user string, v userView) {
 	now := s.opt.Now()
 	s.println()
 	s.println(s.p.Cyan(fmt.Sprintf("==== cross_check — 사용자 %s — %s ====", user, now.Format("2006-01-02 15:04:05"))))
+	s.println(ttlHeader(s.opt.ApprovalTTL))
 	if v.err != nil {
 		if msg, ok := isDaemonErr(v.err); ok {
 			s.errorf("목록 조회 거부: %s", msg)
@@ -261,7 +262,7 @@ func (s *Session) openJob(ctx context.Context, user, id string) error {
 		return s.checkerActions(ctx, user, j)
 	}
 	if j.User == user && j.Status == daemon.StatusApproved && j.StartedAt == nil {
-		s.println(s.p.Bold(PolicyText(s.opt.ApprovalTTL)))
+		s.println(s.p.Bold(PolicyText(jobTTL(j, s.opt.ApprovalTTL))))
 	}
 	_, err = s.ask(ctx, "Enter 를 누르면 목록으로 돌아갑니다: ")
 	return err
@@ -331,7 +332,7 @@ func (s *Session) checkerActions(ctx context.Context, user string, j daemon.JobV
 			err = s.c.Approve(j.ID, user, pw)
 			if err == nil {
 				s.okf("[승인 완료] 작업 %s (작업자 %s, 대상 %d개)를 승인했습니다. 작업자 스크립트가 다음 단계로 진행합니다.", j.ID, j.User, len(j.Targets))
-				s.println(s.p.Bold(PolicyText(s.opt.ApprovalTTL)))
+				s.println(s.p.Bold(PolicyText(jobTTL(j, s.opt.ApprovalTTL))))
 				return nil
 			}
 			if !s.actionFailed("승인", err) {
