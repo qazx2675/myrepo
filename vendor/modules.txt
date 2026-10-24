@@ -1,0 +1,10 @@
+# github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
+## explicit
+github.com/nfnt/resize
+# github.com/tc-hib/winres v0.3.1
+## explicit; go 1.19
+github.com/tc-hib/winres
+github.com/tc-hib/winres/version
+# golang.org/x/image v0.12.0
+## explicit; go 1.12
+golang.org/x/image/bmp

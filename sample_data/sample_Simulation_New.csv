@@ -1,0 +1,8 @@
+모델코드,랙라벨,hostname,몇U,수동지정U
+DELL-XE8545,X001Y002,dsvr-stage-01,4,
+HPE-DL360,X001Y002,psvr-stage-02,2,
+012_001,X001Y002,,2,
+012_001,X001Y001,msvr-dup-fail,2,1
+012_002,X001Y001,msvr-netzone-fail,2,49
+Cisco-Switch,X001Y002,csw-tor-ok,2,50
+012_001,X004Y001,msvr-newrack-auto,2,

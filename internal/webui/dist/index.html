@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>데이터센터 3D 렌더러 및 입고 시뮬레이션 시스템</title>
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <div id="app-container">
+    <!-- 상단 툴바 -->
+    <header id="top-toolbar"></header>
+
+    <!-- 메인 워크스페이스 -->
+    <div id="main-workspace">
+      <!-- 좌측 패널: Reports Legend and Data & Cabinet Inventory -->
+      <aside id="left-panel"></aside>
+
+      <!-- 중앙: Three.js 3D 뷰포트 -->
+      <main id="viewport-container"></main>
+
+      <!-- 우측 패널: Cabinet Elevation (2D 실장도 및 수동 할당) -->
+      <aside id="right-panel"></aside>
+    </div>
+  </div>
+
+  <!-- 1. 오프라인 로컬 벤더 스크립트 라이브러리 -->
+  <script src="./vendor/three.min.js"></script>
+  <script src="./vendor/OrbitControls.js"></script>
+  <script src="./vendor/CSS2DRenderer.js"></script>
+  <script src="./vendor/papaparse.min.js"></script>
+
+  <!-- 2. 상태 관리 및 검증 엔진 -->
+  <script src="./sample_data/sample_data.js"></script>
+  <script src="./js/state/validator.js"></script>
+  <script src="./js/state/store.js"></script>
+
+  <!-- 3. 로컬 파일시스템 영속성 및 CSV 핸들러 -->
+  <script src="./js/storage/folderManager.js"></script>
+  <script src="./js/storage/csvHandler.js"></script>
+
+  <!-- 4. 3D 렌더링 엔진 및 프로시저럴 텍스처 -->
+  <script src="./js/renderer3d/textureGenerator.js"></script>
+  <script src="./js/renderer3d/deviceMeshBuilder.js"></script>
+  <script src="./js/renderer3d/rackMeshBuilder.js"></script>
+  <script src="./js/renderer3d/sceneManager.js"></script>
+
+  <!-- 5. UI 모달 및 패널 컴포넌트 -->
+  <script src="./js/ui/errorReportModal.js"></script>
+  <script src="./js/ui/layoutEditorModal.js"></script>
+  <script src="./js/ui/sharedFolderModal.js"></script>
+  <script src="./js/ui/leftCabinetList.js"></script>
+  <script src="./js/ui/rightElevationPanel.js"></script>
+  <script src="./js/ui/topToolbar.js"></script>
+
+  <!-- 6. 메인 앱 진입점 -->
+  <script src="./js/app.js"></script>
+</body>
+</html>

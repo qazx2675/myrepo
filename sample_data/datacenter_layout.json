@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "activeSiteId": "SITE-A",
+  "sites": [
+    {
+      "siteId": "SITE-A",
+      "name": "제1데이터센터 (SITE A)",
+      "gridWidth": 24,
+      "gridDepth": 18,
+      "tileSizeMm": 600,
+      "aisleTiles": [
+        { "x": 3, "z": 4, "type": "perforated" },
+        { "x": 4, "z": 4, "type": "perforated" },
+        { "x": 5, "z": 4, "type": "perforated" },
+        { "x": 6, "z": 4, "type": "perforated" },
+        { "x": 7, "z": 4, "type": "perforated" },
+        { "x": 8, "z": 4, "type": "perforated" },
+        { "x": 9, "z": 4, "type": "perforated" },
+        { "x": 10, "z": 4, "type": "perforated" },
+        { "x": 3, "z": 5, "type": "perforated" },
+        { "x": 4, "z": 5, "type": "perforated" },
+        { "x": 5, "z": 5, "type": "perforated" },
+        { "x": 6, "z": 5, "type": "perforated" },
+        { "x": 7, "z": 5, "type": "perforated" },
+        { "x": 8, "z": 5, "type": "perforated" },
+        { "x": 9, "z": 5, "type": "perforated" },
+        { "x": 10, "z": 5, "type": "perforated" },
+        { "x": 3, "z": 8, "type": "perforated" },
+        { "x": 4, "z": 8, "type": "perforated" },
+        { "x": 5, "z": 8, "type": "perforated" },
+        { "x": 6, "z": 8, "type": "perforated" },
+        { "x": 7, "z": 8, "type": "perforated" },
+        { "x": 8, "z": 8, "type": "perforated" },
+        { "x": 9, "z": 8, "type": "perforated" },
+        { "x": 10, "z": 8, "type": "perforated" }
+      ],
+      "racks": [
+        { "rackId": "X001Y001", "name": "X001Y001", "gridX": 3, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 },
+        { "rackId": "X002Y001", "name": "X002Y001", "gridX": 4, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 },
+        { "rackId": "X003Y001", "name": "X003Y001", "gridX": 5, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 },
+        { "rackId": "X004Y001", "name": "X004Y001", "gridX": 6, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 },
+        { "rackId": "X005Y001", "name": "X005Y001", "gridX": 7, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 },
+        { "rackId": "X006Y001", "name": "X006Y001", "gridX": 8, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 },
+        { "rackId": "X007Y001", "name": "X007Y001", "gridX": 9, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 },
+        { "rackId": "X008Y001", "name": "X008Y001", "gridX": 10, "gridZ": 6, "widthTiles": 1, "depthTiles": 2, "maxU": 42, "rotationDeg": 0, "powerBudgetKw": 6.0 }
+      ]
+    }
+  ]
+}
