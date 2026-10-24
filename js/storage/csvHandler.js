@@ -131,10 +131,13 @@
         el.innerHTML = `
           <div class="dc-loading-box">
             <div class="dc-loading-spinner"></div>
-            <div id="dc-loading-msg" class="dc-loading-msg">${title}</div>
-            <div id="dc-loading-sub" class="dc-loading-sub">${subtitle}</div>
+            <div id="dc-loading-msg" class="dc-loading-msg"></div>
+            <div id="dc-loading-sub" class="dc-loading-sub"></div>
           </div>
         `;
+        // 파일명 등 외부 문자열은 textContent 로만 넣는다
+        el.querySelector('#dc-loading-msg').textContent = title;
+        el.querySelector('#dc-loading-sub').textContent = subtitle;
         document.body.appendChild(el);
       } else {
         const msg = document.getElementById('dc-loading-msg');

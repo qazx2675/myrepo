@@ -14,6 +14,11 @@ func TestStore_SaveLoadAndSetDir(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	exeDir := filepath.Join(tmpDir, "exe")
+	// exeDir 이 없으면 설정이 사용자 실제 %APPDATA%\datacenter-viewer\data_path.txt 에 기록되어
+	// 테스트가 끝난 뒤 삭제된 임시 폴더를 공유 폴더로 가리키게 되므로 반드시 만든다
+	if err := os.MkdirAll(exeDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll exeDir failed: %v", err)
+	}
 	dataDir1 := filepath.Join(tmpDir, "data1")
 	dataDir2 := filepath.Join(tmpDir, "data2")
 

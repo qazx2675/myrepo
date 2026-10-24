@@ -4,6 +4,17 @@
 (function (global) {
   'use strict';
 
+  // CSV/공유 폴더에서 들어온 문자열(호스트명, 모델, 랙 이름, 색상)을 innerHTML 에 넣기 전에 이스케이프 (XSS 방지)
+  function escapeHtml(str) {
+    if (str === undefined || str === null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   const VENDOR_META = [
     { key: 'HP', label: 'HP (^p)' },
     { key: 'DELL', label: 'DELL (^d)' },
@@ -86,8 +97,8 @@
         item.title = `${v.label} 색상 변경`;
 
         item.innerHTML = `
-          <input type="color" class="dc-vendor-color-input" data-vendor="${v.key}" value="${currentColor}">
-          <span class="dc-vendor-swatch" style="background-color: ${currentColor};"></span>
+          <input type="color" class="dc-vendor-color-input" data-vendor="${v.key}" value="${escapeHtml(currentColor)}">
+          <span class="dc-vendor-swatch" style="background-color: ${escapeHtml(currentColor)};"></span>
           <span class="dc-vendor-name">${v.label}</span>
         `;
 
@@ -171,14 +182,14 @@
 
         const segHtml = stats.vendorBreakdown.map(b => {
           const pct = Math.max(8, Math.round((b.usedU / stats.maxU) * 100));
-          return `<div style="width:${pct}%; background:${b.color}; height:100%;" title="${b.label}: ${b.usedU}U"></div>`;
+          return `<div style="width:${pct}%; background:${escapeHtml(b.color)}; height:100%;" title="${escapeHtml(b.label)}: ${escapeHtml(b.usedU)}U"></div>`;
         }).join('');
 
         tr.innerHTML = `
           <td>
             <div class="dc-cab-name-cell">
-              <span class="dc-status-dot" style="background-color: ${stats.color};"></span>
-              <strong class="dc-cab-name">${rack.name || rackId}</strong>
+              <span class="dc-status-dot" style="background-color: ${escapeHtml(stats.color)};"></span>
+              <strong class="dc-cab-name">${escapeHtml(rack.name || rackId)}</strong>
             </div>
           </td>
           <td>

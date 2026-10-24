@@ -325,6 +325,20 @@
     }
 
     /**
+     * 해제되는 텍스처를 쓰던 공유 재질(상판 템플릿, 눈금 등)을 풀에서 제거
+     */
+    dropMaterialsForTexture(texture) {
+      if (!texture) return;
+      Object.keys(this.sharedMats).forEach(key => {
+        const mat = this.sharedMats[key];
+        if (mat && mat.map === texture) {
+          mat.dispose();
+          delete this.sharedMats[key];
+        }
+      });
+    }
+
+    /**
      * 전체 랙을 다시 만들지 않고 선택 하이라이트 상태만 O(1)로 즉시 업데이트
      */
     updateRackSelectionVisual(rackGroup, isSelected) {

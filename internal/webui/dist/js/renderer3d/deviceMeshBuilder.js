@@ -84,6 +84,19 @@
     }
 
     /**
+     * 해제되는 텍스처를 쓰던 면 재질을 캐시에서 제거 (재질이 텍스처/캔버스를 붙잡아 GC 되지 않던 누수 차단)
+     */
+    dropMaterialsForTexture(texture) {
+      if (!texture) return;
+      for (const [key, mat] of Array.from(this.faceMaterialCache.entries())) {
+        if (mat.map === texture) {
+          mat.dispose();
+          this.faceMaterialCache.delete(key);
+        }
+      }
+    }
+
+    /**
      * 단일 장비(서버 또는 스위치) 3D 메쉬 생성
      */
     createDeviceMesh(device, rack, options = {}) {

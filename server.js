@@ -22,8 +22,9 @@ const server = http.createServer((req, res) => {
 
   const filePath = path.join(PUBLIC_DIR, reqPath);
 
-  // 보안 체크
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  // 보안 체크: 프로젝트 폴더 밖(형제 폴더 포함) 접근 차단
+  const rel = path.relative(PUBLIC_DIR, filePath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -41,7 +42,7 @@ const server = http.createServer((req, res) => {
 
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Access-Control-Allow-Origin': '*'
+      'X-Content-Type-Options': 'nosniff'
     });
 
     const readStream = fs.createReadStream(filePath);
@@ -49,6 +50,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+// 같은 네트워크의 다른 PC에서 data/ 폴더(호스트명 목록)를 내려받지 못하도록 이 PC에서만 접속 허용
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`[Server] Datacenter 3D Renderer running at http://localhost:${PORT}/index.html`);
 });

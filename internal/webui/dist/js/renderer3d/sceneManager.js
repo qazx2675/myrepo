@@ -56,6 +56,7 @@
       this.vertSpeedMultiplier = 1.0;   // Q/E 눈높이 수직 이동 속도 배율 (기본값 1.0x)
 
       this.isInitialized = false;
+      this._sweepTimer = null;
       this.animationFrameId = null;
       this._boundAnimate = this.animate.bind(this);
       this._renderFramesRemaining = 60;
@@ -201,6 +202,20 @@
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.container.appendChild(this.renderer.domElement);
+
+      // 내장 그래픽 드라이버 리셋 등으로 WebGL 컨텍스트가 복구되면, 업로드 후 1x1 로 줄여 둔 캔버스로는
+      // 텍스처를 다시 올릴 수 없으므로 텍스처/재질 캐시를 비우고 씬을 새로 만든다
+      this.renderer.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
+      this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+        const texGen = global.DCTextureGenerator;
+        if (texGen) {
+          texGen.cache.forEach(tex => this._dropMaterialsForTexture(tex));
+          texGen.clearAll();
+        }
+        this.rebuildFloor();
+        this.rebuildRacks();
+        this.requestRender(10);
+      });
 
       // 앱 창(--app 모드) 생성 직후 레이아웃 크기 확정 시 즉시 1:1 리사이즈 동기화
       if (typeof ResizeObserver !== 'undefined') {
@@ -657,6 +672,7 @@
         }
       }
       this.updateMassiveScaleLOD();
+      this._scheduleTextureSweep();
     }
 
     rebuildSingleRack(rackId) {
@@ -692,6 +708,44 @@
         this.rackGroupMap.set(normId, newGroup);
       }
       this.updateMassiveScaleLOD();
+      this._scheduleTextureSweep();
+    }
+
+    _dropMaterialsForTexture(tex) {
+      if (this.rackBuilder) {
+        if (this.rackBuilder.deviceBuilder) this.rackBuilder.deviceBuilder.dropMaterialsForTexture(tex);
+        this.rackBuilder.dropMaterialsForTexture(tex);
+      }
+    }
+
+    /**
+     * 씬에서 더 이상 쓰지 않는 텍스처(선택 해제된 랙의 상세 호스트명 텍스처, 이전 명판/상판 등)를 모아서 해제
+     * - 기존 LRU(최대 450장)는 선택 해제된 랙의 텍스처를 계속 쥐고 있었고, 면 재질 캐시가 텍스처를 참조해
+     *   캔버스가 GC 되지 않아 랙을 클릭할수록 메모리가 수백 MB씩 늘었음
+     * - 랙 재구성이 잠잠해진 뒤 1초 후 한 번만 실행 (씬 전체 순회 비용을 연속 클릭 중에 쓰지 않음)
+     */
+    _scheduleTextureSweep() {
+      if (this._sweepTimer) clearTimeout(this._sweepTimer);
+      this._sweepTimer = setTimeout(() => {
+        this._sweepTimer = null;
+        this._sweepTextures();
+      }, 1000);
+    }
+
+    _sweepTextures() {
+      const texGen = global.DCTextureGenerator;
+      if (!texGen || !this.scene) return 0;
+      const used = new Set();
+      this.scene.traverse(obj => {
+        const m = obj.material;
+        if (!m) return;
+        if (Array.isArray(m)) {
+          for (let i = 0; i < m.length; i++) if (m[i] && m[i].map) used.add(m[i].map);
+        } else if (m.map) {
+          used.add(m.map);
+        }
+      });
+      return texGen.releaseUnused(used, tex => this._dropMaterialsForTexture(tex));
     }
 
     /**

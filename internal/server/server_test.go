@@ -94,3 +94,56 @@ func TestServerAPI_SharedDirAndSync(t *testing.T) {
 		t.Errorf("expected tracker.IsConnected() true after API requests")
 	}
 }
+
+func TestGuard_BlocksForeignSitesAndRebinding(t *testing.T) {
+	tmpDir := t.TempDir()
+	exeDir := filepath.Join(tmpDir, "exe")
+	_ = os.MkdirAll(exeDir, 0o755)
+	st, err := storage.New(filepath.Join(tmpDir, "data"), exeDir)
+	if err != nil {
+		t.Fatalf("storage.New failed: %v", err)
+	}
+	handler, _ := New(fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html></html>")}}, st)
+
+	do := func(method, target, host, origin, ctype, fetchSite string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, bytes.NewReader([]byte(`{"dataDir":"x"}`)))
+		req.Host = host
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if ctype != "" {
+			req.Header.Set("Content-Type", ctype)
+		}
+		if fetchSite != "" {
+			req.Header.Set("Sec-Fetch-Site", fetchSite)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	cases := []struct {
+		name                              string
+		method, path, host, origin, ctype string
+		fetchSite                         string
+		want                              int
+	}{
+		{"same-origin bootstrap", "GET", "/api/bootstrap", "127.0.0.1:5000", "", "", "same-origin", http.StatusOK},
+		{"DNS rebinding host", "GET", "/api/bootstrap", "evil.example:5000", "", "", "", http.StatusForbidden},
+		{"cross-site origin POST", "POST", "/api/config/data-dir", "127.0.0.1:5000", "http://evil.example", "application/json", "cross-site", http.StatusForbidden},
+		{"other local port origin", "POST", "/api/config/data-dir", "127.0.0.1:5000", "http://127.0.0.1:5500", "application/json", "", http.StatusForbidden},
+		{"text/plain POST (no preflight)", "POST", "/api/save", "127.0.0.1:5000", "", "text/plain", "", http.StatusUnsupportedMediaType},
+		{"bye beacon without body", "POST", "/api/bye", "127.0.0.1:5000", "http://127.0.0.1:5000", "", "same-origin", http.StatusOK},
+	}
+	for _, c := range cases {
+		rec := do(c.method, c.path, c.host, c.origin, c.ctype, c.fetchSite)
+		if rec.Code != c.want {
+			t.Errorf("%s: got %d, want %d", c.name, rec.Code, c.want)
+		}
+	}
+
+	rec := do("GET", "/index.html", "localhost:5000", "", "", "")
+	if rec.Header().Get("Content-Security-Policy") == "" || rec.Header().Get("X-Frame-Options") != "DENY" {
+		t.Errorf("security headers missing: %v", rec.Header())
+	}
+}

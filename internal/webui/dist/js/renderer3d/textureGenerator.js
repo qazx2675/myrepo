@@ -10,8 +10,44 @@
   class TextureGenerator {
     constructor() {
       this.cache = new Map();
-      this._detailedServerKeys = [];
-      this.MAX_DETAILED_TEXTURES = 450;
+      // 캐시에 넣지만 씬에서 쓰이지 않으면 해제해도 되는 텍스처 접두사 (바닥/출입문/눈금 등 고정 텍스처는 제외)
+      this.RELEASABLE_PREFIXES = ['srv_', 'sw_', 'roof_', 'rack_plate_'];
+    }
+
+    _shrinkCanvas(tex) {
+      const im = tex && tex.image;
+      if (im && im.width > 1 && typeof im.getContext === 'function') {
+        im.width = 1;
+        im.height = 1;
+      }
+    }
+
+    /**
+     * 씬에서 더 이상 참조하지 않는 텍스처를 GPU/캐시에서 해제 (기존 LRU 대체)
+     * - usedSet: 현재 씬 메쉬들이 참조 중인 텍스처 Set
+     * - onRelease(tex): 해당 텍스처를 쥐고 있는 재질 캐시 정리 콜백
+     * - 참조 중인 텍스처는 절대 건드리지 않으므로 safeSetTexture2D 크래시(v3.0.8)가 재발하지 않음
+     */
+    releaseUnused(usedSet, onRelease) {
+      let released = 0;
+      for (const [key, tex] of Array.from(this.cache.entries())) {
+        if (!tex || usedSet.has(tex)) continue;
+        if (!this.RELEASABLE_PREFIXES.some(p => key.startsWith(p))) continue;
+        if (onRelease) onRelease(tex);
+        if (tex.dispose) tex.dispose();
+        this._shrinkCanvas(tex);
+        this.cache.delete(key);
+        released++;
+      }
+      return released;
+    }
+
+    /**
+     * WebGL 컨텍스트 복구 시 전체 캐시 폐기 (캔버스를 1x1로 줄여 두었으므로 재업로드 불가 → 새로 생성)
+     */
+    clearAll() {
+      this.cache.forEach(tex => { if (tex && tex.dispose) tex.dispose(); });
+      this.cache.clear();
     }
 
     /**
@@ -21,17 +57,11 @@
       for (const key of Array.from(this.cache.keys())) {
         if (key.startsWith('srv_') || key.startsWith('sw_') || key.startsWith('roof_')) {
           const tex = this.cache.get(key);
-          if (tex) {
-            if (tex.dispose) tex.dispose();
-            if (tex.image && tex.image.width) {
-              tex.image.width = 1;
-              tex.image.height = 1;
-            }
-          }
+          if (tex && tex.dispose) tex.dispose();
+          this._shrinkCanvas(tex);
           this.cache.delete(key);
         }
       }
-      this._detailedServerKeys = [];
     }
 
     /**
@@ -63,24 +93,6 @@
 
       if (typeof document === 'undefined') return null;
 
-      // 상세 서버 텍스처 LRU 메모리 관리 (최대 450개로 제한하여 메모리 누수 원천 차단)
-      // 주의: oldTex.image = null 로 설정하면 아직 메쉬에 바인딩된 텍스처를 Three.js WebGLTextures.safeSetTexture2D 가 읽을 때
-      // Cannot read properties of null (reading 'complete') 크래시가 발생하므로 절대 image 참조를 null 로 만들지 않는다!
-      const isDetailedServerTex = key.startsWith('srv_front_v5_') || key.startsWith('srv_back_v5_');
-      if (isDetailedServerTex) {
-        if (this._detailedServerKeys.length >= this.MAX_DETAILED_TEXTURES) {
-          const evictKey = this._detailedServerKeys.shift();
-          if (evictKey && this.cache.has(evictKey)) {
-            const oldTex = this.cache.get(evictKey);
-            if (oldTex) {
-              if (oldTex.dispose) oldTex.dispose();
-            }
-            this.cache.delete(evictKey);
-          }
-        }
-        this._detailedServerKeys.push(key);
-      }
-
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
@@ -96,6 +108,9 @@
         // 밉맵 단계 간 블렌딩으로 인한 글씨 흐림을 방지하기 위해 LinearMipmapNearestFilter 적용
         texture.minFilter = THREE.LinearMipmapNearestFilter;
         texture.magFilter = THREE.LinearFilter;
+        // GPU 업로드가 끝나면 원본 캔버스 비트맵(텍스처와 같은 크기의 2번째 사본)을 1x1로 줄여 RAM 반환
+        // 주의: image 를 null 로 만들지 않는다 (v3.0.8 safeSetTexture2D 크래시). 해제는 releaseUnused() 에서만 수행
+        texture.onUpdate = () => this._shrinkCanvas(texture);
       } else {
         texture = { canvas };
       }

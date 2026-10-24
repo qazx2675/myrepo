@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"io/fs"
+	"mime"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -219,7 +223,61 @@ func New(static fs.FS, st *storage.Store) (http.Handler, *Tracker) {
 		w.Header().Set("Cache-Control", "no-store")
 		fileServer.ServeHTTP(w, r)
 	})
-	return mux, tracker
+	return guard(mux), tracker
+}
+
+// contentSecurityPolicy 는 외부 스크립트/프레임 삽입을 막는다. 3D 엔진·UI 는 모두 같은 출처의 파일만 사용하고
+// 화면 요소는 인라인 style 속성을 쓰므로 style-src 에만 'unsafe-inline' 을 허용한다.
+const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; " +
+	"base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+// isLoopbackHost 는 Host/Origin 의 호스트 부분이 이 PC 자신(127.0.0.1, localhost, ::1)인지 확인한다.
+func isLoopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	return host == "127.0.0.1" || host == "::1" || strings.EqualFold(host, "localhost")
+}
+
+// guard 는 다른 웹사이트가 사용자의 브라우저를 통해 로컬 API 를 호출하는 공격을 막는다.
+//   - Host 검사: DNS 리바인딩(공격자 도메인을 127.0.0.1 로 바꿔 데이터를 읽어가는 공격) 차단
+//   - Origin/Sec-Fetch-Site 검사: 외부 사이트가 몰래 보내는 저장/폴더 변경 요청(CSRF) 차단
+//   - POST 는 application/json 만 허용: 브라우저가 사전 확인(preflight) 없이 보낼 수 있는 폼/텍스트 요청 차단
+//     (/api/bye 는 창 닫힘 비콘이라 본문이 없고 상태 변경도 없어 예외)
+func guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackHost(r.Host) {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if origin := r.Header.Get("Origin"); origin != "" && origin != "null" {
+			u, err := url.Parse(origin)
+			if err != nil || !isLoopbackHost(u.Host) || u.Host != r.Host {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+		}
+		if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" || site == "same-site" {
+			http.Error(w, "forbidden cross-site request", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/api/bye" {
+			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if mt != "application/json" {
+				http.Error(w, "application/json required", http.StatusUnsupportedMediaType)
+				return
+			}
+		}
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

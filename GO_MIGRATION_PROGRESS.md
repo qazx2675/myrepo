@@ -56,6 +56,10 @@
 - [x] v3.0.8 신규 PC 단독 실행 시 상단 툴바/패널 미표시(검은 화면) 근본 원인 규명 및 완벽 해결:
   - **원인 규명 (실제 브라우저 재현 완료)**: 새 PC에서 `data/` 폴더 없이 처음 실행하면 초기 샘플 데이터(32랙, 173대 서버)가 로드되어 `massiveScale = false` 모드로 동작함. 이때 173대 서버의 상세 텍스처(약 346장)가 한 번에 생성되면서 `MAX_DETAILED_TEXTURES(120)`를 초과해 1~60번째 서버 메쉬에 바인딩된 활성 텍스처의 `oldTex.image = null`이 호출됨. 직후 `sceneManager.init()` 끝의 `animate() -> renderer.render()`에서 Three.js `safeSetTexture2D`가 `Cannot read properties of null (reading 'complete')` 예외로 크래시되면서 그 아래 줄의 `LeftCabinetList`, `RightElevationPanel`, `TopToolbar` 생성 코드가 실행되지 못해 상단 툴바가 검은색 빈 줄로 남았음.
   - **해결**: `textureGenerator.js`에서 `oldTex.image = null` 대입을 제거(`oldTex.dispose()`만 호출)하고 `MAX_DETAILED_TEXTURES = 450`으로 상향. `app.js`에서 각 UI 컴포넌트 초기화를 독립 `try-catch`로 격리하고 `TopToolbar`를 최우선 초기화하도록 수정. `server_test.go`에서 `exeDir`을 생성하도록 수정하여 `go test` 시 `%APPDATA%\datacenter-viewer\data_path.txt`가 오염되지 않도록 조치.
+- [x] v3.0.9 랙 클릭 시 메모리 누적 해결 및 보안 강화 (상세: CHANGELOG v3.0.9):
+  - **텍스처 해제 방식 변경**: LRU(450장) → 사용 중 여부 기반 `releaseUnused` + 재질 캐시 정리 + 업로드 후 캔버스 1x1 축소. 15,000대에서 랙 10개 클릭 후 2.1GB → 1.0GB. 해상도/화면은 변경 없음(픽셀 비교 0 차이).
+  - **시야 거리 제한 기능은 측정 결과 메모리 효과가 없어(±40MB) 제외** — 다시 시도하지 말 것.
+  - **보안**: Go 서버 `guard`(Host/Origin/JSON 검사 + CSP), 패널 XSS 이스케이프, `server.js` 127.0.0.1 바인딩, `filestore_test.go` 가 `%APPDATA%` 를 덮어쓰던 문제 수정.
 
 ## 메모 및 다른 모델 인수인계 가이드
 1. **절대 주의사항 (`go mod vendor` 금지 & `tex.image = null` 금지)**:
@@ -75,7 +79,15 @@
 5. **Windows 11 스마트 앱 컨트롤(Smart App Control) 환경 구동 가이드**:
    - 직접 `.exe` 더블클릭을 원할 경우: `Windows 보안 > 앱 및 브라우저 컨트롤 > 스마트 앱 컨트롤 설정`에서 '꺼짐' 선택.
    - 보안 설정을 변경하지 않고 바로 실행하려면: `datacenter-viewer.bat` 또는 `datacenter-viewer.lnk`를 더블클릭하면 팝업 없이 브라우저 창으로 즉시 실행됨.
-6. **초기 랙 상태(초반 상태) 리셋 메커니즘**:
+6. **텍스처 메모리 해제 원리 (v3.0.9)**:
+   - 텍스처는 `getOrCreateTexture` 에서 `texture.onUpdate` 로 GPU 업로드 직후 캔버스를 1x1 로 줄인다. 따라서 **같은 텍스처를 다시 업로드(`needsUpdate = true`)하면 빈 텍스처가 된다** — 내용을 바꾸려면 새 키로 새 텍스처를 만들 것.
+   - 해제는 `sceneManager._sweepTextures()` → `textureGenerator.releaseUnused()` 만 수행한다. 랙을 다시 만드는 코드를 추가하면 `this._scheduleTextureSweep()` 을 호출할 것.
+   - 새 재질 캐시를 만들면 `dropMaterialsForTexture(tex)` 도 구현해 `_dropMaterialsForTexture` 에 연결할 것 (안 하면 텍스처가 GC 되지 않음).
+7. **로컬 API 보안 원리 (v3.0.9)**:
+   - `internal/server/server.go` 의 `guard` 가 모든 요청을 감싼다. 새 POST API 는 프론트에서 반드시 `Content-Type: application/json` 으로 보낼 것 (아니면 415).
+   - CSP 가 `script-src 'self'` 이므로 인라인 `<script>` / `onclick=""` 속성은 동작하지 않는다. 이벤트는 `addEventListener` 로 연결할 것.
+   - CSV/공유 폴더에서 온 문자열을 `innerHTML` 에 넣을 때는 반드시 `escapeHtml()` 을 거칠 것.
+8. **초기 랙 상태(초반 상태) 리셋 메커니즘**:
    - `초기_상태로_리셋.bat` 실행 시 기존 대용량 데이터를 `data/backup_15000/`으로 백업하고, `sample_data/datacenter_layout_initial.json`(32개 기본 랙) 및 빈 `allocated_hosts.csv`로 원복함.
    - 웹 UI 상단 툴바의 **[🔄 초기 랙 상태로 리셋]** 버튼(`store.resetToInitialState()`)을 통해서도 실시간으로 즉시 리셋 후 신규 CSV 업로드 가능.
 

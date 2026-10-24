@@ -1,5 +1,33 @@
 # 변경 이력 (CHANGELOG)
 
+## [2026-10-24] - v3.0.9 랙 클릭 시 메모리 누적(15,000대 기준 2.1GB→1.0GB) 해결 및 로컬 API/화면 보안 강화
+
+* **랙을 클릭할수록 메모리가 수백 MB씩 늘던 원인 규명 및 해결 (3D 화면 픽셀 단위 동일, 해상도 변경 없음)**:
+  1. **원인 1 — 선택 해제된 랙의 상세 텍스처가 최대 450장까지 남아 있음 ([`textureGenerator.js`](js/renderer3d/textureGenerator.js))**: 랙 1개 선택 시 서버 앞/뒤 상세 호스트명 텍스처 약 50장(장당 1~2MB 캔버스 + GPU 사본)이 생기는데, 선택을 바꿔도 LRU 한도(450장)에 닿을 때까지 해제되지 않아 랙 9개 정도만 둘러봐도 1GB 이상 누적됨.
+  2. **원인 2 — 면 재질 캐시가 텍스처를 붙잡아 GC 불가 ([`deviceMeshBuilder.js`](js/renderer3d/deviceMeshBuilder.js))**: LRU 가 텍스처를 `dispose()` 해도 `faceMaterialCache` 의 재질이 계속 그 텍스처(=캔버스)를 참조해 캔버스 비트맵이 영영 반환되지 않았음.
+  3. **원인 3 — 업로드가 끝난 캔버스 원본이 계속 메모리에 남음**: 모든 텍스처가 GPU 사본 + 같은 크기의 캔버스 원본 2벌로 존재.
+  * **해결**:
+    * LRU 를 **사용 중 여부 기반 해제(`releaseUnused`)** 로 교체. 랙 재구성 후 1초 뒤 씬 전체를 한 번 순회해 어떤 메쉬도 쓰지 않는 텍스처(`srv_`, `sw_`, `roof_`, `rack_plate_`)만 해제하고, 그 텍스처를 쥔 재질도 캐시에서 제거([`sceneManager.js`](js/renderer3d/sceneManager.js) `_sweepTextures`). 사용 중인 텍스처는 절대 건드리지 않으므로 v3.0.8 의 `safeSetTexture2D` 크래시가 재발하지 않음.
+    * `texture.onUpdate` 에서 GPU 업로드 직후 캔버스를 1x1 로 축소 (`image = null` 은 여전히 금지). WebGL 컨텍스트 복구 시에는 캐시를 비우고 씬을 재생성.
+    * **텍스처 해상도는 기존 그대로**(일반 2048 / 대규모 1024 / 스위치 2048) 유지 — 선명도 저하 없음.
+  * **측정 (Linux 헤드리스 Chromium + SwiftShader, 15,000대 / 599랙, Chromium 전체 프로세스 PSS)**:
+
+    | 시점 | 수정 전 | 수정 후 |
+    |---|---|---|
+    | 처음 로드 | 1,018MB | 773~782MB |
+    | 랙 10개 클릭 후 | 2,126MB | 1,048~1,074MB |
+    | 통로 이동 후 | 2,163MB | 1,056~1,155MB |
+    | 전체 뷰 복귀 | 2,176MB | 1,029~1,164MB |
+    | 랙 40개 클릭 + 카메라 이동 후 | 3,433MB | 2,646MB |
+
+    * 고정 카메라에서 같은 장면을 찍어 비교한 결과 3D 영역 차이 픽셀 0개.
+  * **검토 후 제외한 방안 — 시야 거리 제한(게임식 가시 범위)**: 30m 밖 랙을 숨기고 내부 서버 메쉬를 스트리밍하도록 구현·측정했으나, 드로우콜은 절반(10,500→5,200)으로 줄어도 메모리 차이는 40MB 안팎(측정 오차 수준)이라 제외함. 메모리의 대부분은 메쉬 수가 아니라 텍스처/GPU 버퍼이기 때문.
+* **보안 강화**:
+  * **로컬 API 보호 ([`server.go`](internal/server/server.go) `guard`)**: 사용자가 브라우저로 연 아무 웹사이트나 `127.0.0.1` 의 API 를 호출해 데이터 폴더를 임의 경로(UNC 포함)로 바꾸거나 저장 데이터를 덮어쓰고(CSRF), DNS 리바인딩으로 호스트 목록을 읽어갈 수 있었음 → Host 헤더 루프백 검사, Origin/Sec-Fetch-Site 검사, POST 는 `application/json` 만 허용(`/api/bye` 제외), `Content-Security-Policy`/`X-Frame-Options`/`nosniff` 헤더 추가. `server_test.go` 에 공격 시나리오 테스트 추가.
+  * **XSS 차단 ([`rightElevationPanel.js`](js/ui/rightElevationPanel.js), [`leftCabinetList.js`](js/ui/leftCabinetList.js), [`csvHandler.js`](js/storage/csvHandler.js))**: CSV 호스트명·모델명, 공유 폴더 레이아웃의 랙 이름·벤더 색상이 이스케이프 없이 `innerHTML` 로 들어가, 공유 폴더 CSV 하나로 모든 사용자 화면에서 스크립트 실행이 가능했음 → 이스케이프 적용 (CSP 로 이중 차단).
+  * **Node 폴백 서버 ([`server.js`](server.js))**: `0.0.0.0` + `Access-Control-Allow-Origin: *` 로 같은 네트워크의 누구나 `data/` 를 내려받을 수 있었음 → `127.0.0.1` 바인딩, CORS 헤더 제거, 형제 폴더 경로 우회(`startsWith`) 수정.
+  * **테스트가 실제 설정을 덮어쓰던 문제 ([`filestore_test.go`](internal/storage/filestore_test.go))**: `exeDir` 을 만들지 않아 `go test` 가 사용자 `%APPDATA%\datacenter-viewer\data_path.txt` 에 삭제될 임시 폴더 경로를 기록하던 문제 수정 (Linux 에서는 테스트 실패로 드러남).
+
 ## [2026-10-24] - v3.0.8 신규 PC 단독 실행 시 상단 툴바/사이드 패널 미표시(검은 화면) 근본 원인 규명 및 완벽 해결
 
 * **다른 PC로 `datacenter-viewer.exe`만 복사해 처음 실행했을 때 상단 툴바와 좌·우 패널이 검은 빈 줄로만 보이던 실제 원인 규명 및 수정**:

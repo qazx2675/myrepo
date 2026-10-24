@@ -4,6 +4,17 @@
 (function (global) {
   'use strict';
 
+  // CSV/공유 폴더에서 들어온 문자열(호스트명, 모델, 랙 이름, 색상)을 innerHTML 에 넣기 전에 이스케이프 (XSS 방지)
+  function escapeHtml(str) {
+    if (str === undefined || str === null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   class RightElevationPanel {
     constructor(containerEl, store) {
       this.container = containerEl;
@@ -228,17 +239,17 @@
             const typeTag = isSwitch ? '<span class="dc-tag-switch">SW</span>' : '';
             const hostLabel = isTemp
               ? `<span style="color:#f3b3ff; font-weight:800;">[임시할당]</span>`
-              : `<strong>${dev.hostname}</strong>`;
+              : `<strong>${escapeHtml(dev.hostname)}</strong>`;
 
             blockEl.innerHTML = `
               <div class="dc-elev-content">
                 ${simTag}${typeTag}
-                <span class="dc-elev-vendor-badge" style="background:${vColor};">${vendor}</span>
-                <span class="dc-elev-model-code">${dev.model || '-'}</span>
+                <span class="dc-elev-vendor-badge" style="background:${escapeHtml(vColor)};">${escapeHtml(vendor)}</span>
+                <span class="dc-elev-model-code">${escapeHtml(dev.model || '-')}</span>
                 ${hostLabel}
               </div>
               <div class="dc-u-number-label" style="color:#ffd600; font-weight:700;">
-                ${dev.startU}${dev.formFactorU > 1 ? `~${dev.endU}` : ''}U (${dev.formFactorU}U)
+                ${escapeHtml(dev.startU)}${dev.formFactorU > 1 ? `~${escapeHtml(dev.endU)}` : ''}U (${escapeHtml(dev.formFactorU)}U)
               </div>
             `;
 
