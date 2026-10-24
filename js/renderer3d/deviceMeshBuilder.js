@@ -96,6 +96,52 @@
       }
     }
 
+    _resolveVendor(device, options) {
+      const vendorColors = options.vendorColors || (global.DCValidator && global.DCValidator.DEFAULT_VENDOR_COLORS) || {};
+      const vendor = device.vendor || (global.DCValidator ? global.DCValidator.determineVendor(device.hostname, device.model) : 'OTHER');
+      const vColor = vendorColors[vendor] || device.colorTag || '#4caf50';
+      return { vendor, vColor };
+    }
+
+    _getMassiveTemplateMaterial(device, vColor, isSim, isFacingBack, isSwitch) {
+      if (isSwitch) {
+        const tex = this.textureGen.getSwitchTexture(device, isFacingBack);
+        return this._getFaceMaterial(tex, isSim, isFacingBack);
+      }
+      const tex = isFacingBack
+        ? this.textureGen.getServerBackTexture(device, vColor, true, false)
+        : this.textureGen.getServerFrontTexture(device, vColor, true, false);
+      return this._getFaceMaterial(tex, isSim, isFacingBack);
+    }
+
+    getDeviceLocalY(device) {
+      const height = (device.formFactorU || 1) * U_HEIGHT;
+      const startU = device.startU || 1;
+      return (startU - 1) * U_HEIGHT + height / 2;
+    }
+
+    /**
+     * 대규모 비상세 템플릿 서버(인스턴싱 대상) 여부 - createDeviceMesh 의 템플릿 분기와 같은 조건
+     */
+    isInstanceable(device, options) {
+      const isDetailed = !!options.isDetailed || !options.massiveScale;
+      return !!options.massiveScale && !isDetailed && device.deviceType !== 'switch' && !device.isSimulation;
+    }
+
+    /**
+     * 인스턴싱 대상 장비의 공유 지오메트리/템플릿 재질/랙 내부 높이 (createDeviceMesh 와 같은 순서로 텍스처 요청)
+     */
+    getInstanceParts(device, options) {
+      this._ensureSharedMaterials();
+      const { vColor } = this._resolveVendor(device, options);
+      const isFacingBack = (device.orientation || options.globalOrientation || 'front') === 'back';
+      return {
+        geometry: this._getBoxGeometry(device.formFactorU || 1),
+        material: this._getMassiveTemplateMaterial(device, vColor, false, isFacingBack, false),
+        localY: this.getDeviceLocalY(device)
+      };
+    }
+
     /**
      * 단일 장비(서버 또는 스위치) 3D 메쉬 생성
      */
@@ -109,9 +155,7 @@
       const isSwitch = device.deviceType === 'switch';
 
       const geometry = this._getBoxGeometry(formFactorU);
-      const vendorColors = options.vendorColors || (global.DCValidator && global.DCValidator.DEFAULT_VENDOR_COLORS) || {};
-      const vendor = device.vendor || (global.DCValidator ? global.DCValidator.determineVendor(device.hostname, device.model) : 'OTHER');
-      const vColor = vendorColors[vendor] || device.colorTag || '#4caf50';
+      const { vendor, vColor } = this._resolveVendor(device, options);
 
       const orientation = device.orientation || options.globalOrientation || 'front';
       const isFacingBack = orientation === 'back';
@@ -119,15 +163,7 @@
 
       let activeMat = null;
       if (options.massiveScale && !isDetailed) {
-        if (isSwitch) {
-          const tex = this.textureGen.getSwitchTexture(device, isFacingBack);
-          activeMat = this._getFaceMaterial(tex, isSim, isFacingBack);
-        } else {
-          const tex = isFacingBack
-            ? this.textureGen.getServerBackTexture(device, vColor, true, false)
-            : this.textureGen.getServerFrontTexture(device, vColor, true, false);
-          activeMat = this._getFaceMaterial(tex, isSim, isFacingBack);
-        }
+        activeMat = this._getMassiveTemplateMaterial(device, vColor, isSim, isFacingBack, isSwitch);
       } else {
         let frontTex = null;
         let backTex = null;
@@ -156,8 +192,7 @@
       mesh.receiveShadow = false;
       mesh.matrixAutoUpdate = false;
 
-      const startU = device.startU || 1;
-      const posY = (startU - 1) * U_HEIGHT + height / 2;
+      const posY = this.getDeviceLocalY(device);
       mesh.position.set(0, posY, 0);
       mesh.updateMatrix();
 

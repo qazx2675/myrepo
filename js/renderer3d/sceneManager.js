@@ -265,6 +265,16 @@
       this.racksGroup.name = 'RacksGroup';
       this.scene.add(this.racksGroup);
 
+      // 대규모 장면(랙 > 120) 비선택 랙 장비 인스턴스 레이어 (racksGroup 의 형제)
+      this._instancingSupported = !!THREE.InstancedMesh && (this.renderer.capabilities.isWebGL2 || this.renderer.extensions.has('ANGLE_instanced_arrays'));
+      if (global.DCInstanceLayer) {
+        this.deviceInstances = new global.DCInstanceLayer('DeviceInstanceLayer', 'device');
+        this.scene.add(this.deviceInstances.group);
+      }
+      this.scene.onBeforeRender = (r, s, cam) => {
+        if (this.deviceInstances) this.deviceInstances.updateViewMatrices(cam);
+      };
+
       // 8. 인터랙션
       this.raycaster = new THREE.Raycaster();
       this.mouse = new THREE.Vector2();
@@ -645,12 +655,14 @@
         this.racksGroup.remove(obj);
       }
       this.rackGroupMap.clear();
+      if (this.deviceInstances) this.deviceInstances.clear();
 
       const racks = this.store.getRacks();
       const isMassive = racks.length > 60 || (this.store.state.devices && this.store.state.devices.length > 500);
       if (this.renderer && this.renderer.shadowMap) {
         this.renderer.shadowMap.autoUpdate = !isMassive;
       }
+      const useInst = this._useDeviceInstancing();
       const options = {
         selectedRackId: this.store.state.selectedRackId,
         simulationView: this.store.state.simulationView,
@@ -658,8 +670,11 @@
         showBadges: this.store.state.showBadges,
         massiveScale: isMassive,
         lazyDevices: false,
-        tileSize: 1.0
+        tileSize: 1.0,
+        instancedDevices: useInst
       };
+      const instOpts = useInst ? this._deviceInstanceOptions(options) : null;
+      if (useInst) this.deviceInstances.begin();
 
       for (let i = 0; i < racks.length; i++) {
         const rack = racks[i];
@@ -669,7 +684,14 @@
         if (rackGroup) {
           this.racksGroup.add(rackGroup);
           this.rackGroupMap.set(rackId, rackGroup);
+          if (useInst && this.store.state.selectedRackId !== rackId) {
+            this.deviceInstances.addRackDevices(rackId, this._deviceBaseMatrix(rackGroup), devices, this.rackBuilder.deviceBuilder, instOpts);
+          }
         }
+      }
+      if (useInst) {
+        this.deviceInstances.commit();
+        this._syncDeviceInstances();
       }
       this.updateMassiveScaleLOD();
       this._scheduleTextureSweep();
@@ -701,12 +723,19 @@
         lazyDevices: false,
         tileSize: 1.0
       };
+      const useInst = this._useDeviceInstancing();
+      const append = useInst && !isSelected && !this.deviceInstances.coversRack(normId) && !this.deviceInstances.isInvalid(normId);
+      options.instancedDevices = useInst && !isSelected && (append || this.deviceInstances.coversRack(normId));
 
       const newGroup = this.rackBuilder.createRackGroup(rack, devices, options);
       if (newGroup) {
         this.racksGroup.add(newGroup);
         this.rackGroupMap.set(normId, newGroup);
+        if (append) {
+          this.deviceInstances.appendRack(normId, this._deviceBaseMatrix(newGroup), devices, this.rackBuilder.deviceBuilder, this._deviceInstanceOptions(options));
+        }
       }
+      this._syncDeviceInstances();
       this.updateMassiveScaleLOD();
       this._scheduleTextureSweep();
     }
@@ -716,6 +745,35 @@
         if (this.rackBuilder.deviceBuilder) this.rackBuilder.deviceBuilder.dropMaterialsForTexture(tex);
         this.rackBuilder.dropMaterialsForTexture(tex);
       }
+      if (this.deviceInstances) this.deviceInstances.dropMaterialsForTexture(tex);
+    }
+
+    // 장비 인스턴싱은 rackSelected 가 재구성 경로를 타는 장면(랙 > 120)에서만 켠다 (선택 랙이 항상 상세 메쉬로 다시 만들어지도록)
+    _useDeviceInstancing() {
+      return !!this.deviceInstances && this._instancingSupported && (this.store.getRacks() || []).length > 120;
+    }
+
+    _syncDeviceInstances() {
+      if (!this.deviceInstances) return;
+      const sel = this.store.state.selectedRackId;
+      if (this.deviceInstances.setSelectedRacks(sel ? [sel] : [])) this.requestRender(5);
+    }
+
+    // RackMeshBuilder 의 devOptions 와 같은 입력 (비선택 대규모 템플릿 경로)
+    _deviceInstanceOptions(options) {
+      return {
+        massiveScale: true,
+        isDetailed: false,
+        globalOrientation: options.globalOrientation,
+        simulationView: options.simulationView,
+        vendorColors: this.store.state.vendorColors
+      };
+    }
+
+    // 장비 Mesh 의 matrixWorld 와 같은 곱셈 순서: racksGroup.matrixWorld x rackGroup.matrix x devGroup.matrix
+    _deviceBaseMatrix(rackGroup) {
+      const base = new THREE.Matrix4().multiplyMatrices(this.racksGroup.matrixWorld, rackGroup.matrix);
+      return base.multiply(rackGroup.userData.devGroup.matrix);
     }
 
     /**
@@ -765,6 +823,7 @@
           devGroup.visible = !isTopView;
         }
       }
+      if (this.deviceInstances) this.deviceInstances.group.visible = !isTopView;
       this.requestRender(5);
     }
 
@@ -1085,10 +1144,18 @@
       this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
       this.raycaster.setFromCamera(this.mouse, this.camera);
-      const intersects = this.raycaster.intersectObjects(this.racksGroup.children, true);
+      const layer = this.deviceInstances;
+      const targets = (layer && layer.meshCount > 0) ? this.racksGroup.children.concat([layer.group]) : this.racksGroup.children;
+      const intersects = this.raycaster.intersectObjects(targets, true);
 
       if (intersects.length > 0) {
         for (const hit of intersects) {
+          const il = hit.object.userData && hit.object.userData.instanceLayer;
+          if (il) {
+            const ud = il.getHitUserData(hit.object, hit.instanceId);
+            if (ud) return { userData: ud };
+            continue;
+          }
           let curr = hit.object;
           while (curr && curr !== this.racksGroup) {
             if (curr.userData && (curr.userData.type === 'device' || curr.userData.type === 'rack')) {
@@ -1282,6 +1349,7 @@
       });
 
       this.store.subscribe('rackDevicesChanged', (rackId) => {
+        if (this.deviceInstances && rackId) this.deviceInstances.invalidateRack(String(rackId).toUpperCase());
         this.rebuildSingleRack(rackId);
       });
 

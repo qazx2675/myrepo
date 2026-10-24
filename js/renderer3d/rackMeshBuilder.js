@@ -246,6 +246,7 @@
         };
 
         for (let i = 0; i < devices.length; i++) {
+          if (options.instancedDevices && this.deviceBuilder.isInstanceable(devices[i], devOptions)) continue;
           const devMesh = this.deviceBuilder.createDeviceMesh(devices[i], rack, devOptions);
           if (devMesh) {
             devMesh.matrixAutoUpdate = false;

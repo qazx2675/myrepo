@@ -20,6 +20,7 @@ func TestEmbeddedFrontendAssets(t *testing.T) {
 		"js/renderer3d/sceneManager.js",
 		"js/renderer3d/rackMeshBuilder.js",
 		"js/renderer3d/deviceMeshBuilder.js",
+		"js/renderer3d/deviceInstancer.js",
 		"js/renderer3d/textureGenerator.js",
 		"js/ui/sharedFolderModal.js",
 		"js/ui/topToolbar.js",
