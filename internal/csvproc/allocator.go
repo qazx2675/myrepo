@@ -341,7 +341,7 @@ func Validate(rows []Row, opt Options) model.ValidationResult {
 			}
 			rack = model.Rack{
 				SiteID: siteID, RackID: rackID, Name: rackID, RackX: rowIdx, RackY: colIdx,
-				GridX: 3 + (colIdx - 1), GridZ: 3 + (rowIdx-1)*4, WidthTiles: 1, DepthTiles: 2,
+				GridX: 3 + (colIdx - 1), GridZ: 3 + (rowIdx-1)*1, WidthTiles: 1, DepthTiles: 2,
 				MaxU: 52, ServerMaxU: 48, RotationDeg: 0,
 			}
 			rackMap[key] = rack

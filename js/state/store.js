@@ -30,7 +30,7 @@
       this.state = {
         version: "2.2.0",
         activeSiteId: "SITE-A",
-        // false (기본): X가 행(Row, 세로축 Z방향 나열, 간격 4칸), Y가 열(Column, 가로축 X방향 나열)
+        // false (기본): X가 행(Row, 세로축 Z방향 나열, 간격 1칸), Y가 열(Column, 가로축 X방향 나열)
         // true (반전): X가 열(Column, 가로축), Y가 행(Row, 세로축)
         invertXY: false,
         vendorColors: { ...DEFAULT_COLORS },
@@ -270,14 +270,14 @@
       }
 
       if (!this.state.invertXY) {
-        // 기본: X가 행(세로 Z 방향, 4칸 간격), Y가 열(가로 X 방향, 1칸 간격)
+        // 기본: X가 행(세로 Z 방향), Y가 열(가로 X 방향). 라벨 번호가 이미 칸 단위 위치이므로 1칸 간격(X001 다음 X006 이면 5칸 떨어짐)
         const gx = 3 + (effectiveYIdx - 1) * 1;
-        const gz = 3 + (effectiveXIdx - 1) * 4;
+        const gz = 3 + (xNum - 1) * 1;
         return { gridX: gx, gridZ: gz, xIdx: effectiveXIdx, yIdx: effectiveYIdx, rawX: xNum, rawY: yNum };
       } else {
-        // 반전(invertXY = true): X가 가로(열), Y가 세로(행, 4칸 간격)
-        const gx = 3 + (effectiveXIdx - 1) * 1;
-        const gz = 3 + (effectiveYIdx - 1) * 4;
+        // 반전(invertXY = true): X가 가로(열), Y가 세로(행). 1칸 간격
+        const gx = 3 + (xNum - 1) * 1;
+        const gz = 3 + (effectiveYIdx - 1) * 1;
         return { gridX: gx, gridZ: gz, xIdx: effectiveXIdx, yIdx: effectiveYIdx, rawX: xNum, rawY: yNum };
       }
     }

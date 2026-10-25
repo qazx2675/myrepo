@@ -323,7 +323,7 @@
         return;
       }
 
-      // 2단계: 해당 센터(dcName) 내 랙 존재 여부 검증 (미존재 시 X=행, Y=열 규칙 및 4칸 간격으로 자동 배치)
+      // 2단계: 해당 센터(dcName) 내 랙 존재 여부 검증 (미존재 시 X=행, Y=열 규칙 및 1칸 간격으로 자동 배치)
       const compositeKey = `${dcName}::${rackId}`;
       let rack = rackMap.get(compositeKey);
       if (!rack) {
@@ -346,7 +346,7 @@
             rackX: rowIdx,
             rackY: colIdx,
             gridX: 3 + (colIdx - 1),
-            gridZ: 3 + (rowIdx - 1) * 4,
+            gridZ: 3 + (rowIdx - 1) * 1,
             widthTiles: 1,
             depthTiles: 2,
             maxU: 52,
