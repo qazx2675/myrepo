@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"cross_check/internal/store"
+	"cross_check/internal/verify"
 )
 
 // Config 는 데몬 설정. 0/nil 인 값은 기본값으로 채운다.
@@ -31,7 +32,8 @@ type Config struct {
 	TargetDir         string                            // 사용자별 on_off_<user>.txt 위치. AuthRequired 에서는 필수, AuthOff 에서 비면 대상 검사 생략
 	AllowedUsers      []string                          // users= 목록. AuthRequired 에서는 필수(register·run·승인·취소·비밀번호 변경은 이 이름만). AuthOff 는 무시
 	ApprovalTTL       time.Duration                     // 승인 후 start 허용 시간(기본 2분 = 120초, cross_check.conf 의 approval_ttl_sec). 실행 중 SIGHUP 으로 바꿀 수 있음(ReloadApprovalTTL)
-	SweepInterval     time.Duration                     // 승인 만료 검사 주기(기본 1초)
+	WorkTimeout       time.Duration                     // 본 작업(작업중) 제한 시간(기본 24시간, cross_check.conf 의 work_timeout_sec). SIGHUP 으로 바꿀 수 있음
+	SweepInterval     time.Duration                     // 승인 만료·작업 제한 검사 주기(기본 1초)
 	AuthMaxFailures   int                               // 이 횟수만큼 연속 실패하면 그 이름의 시도를 지연(기본 5)
 	AuthDelay         time.Duration                     // 지연 시간(기본 1초)
 	GlobalFailLimit   int                               // GlobalFailWindow 안의 전체 실패가 이보다 많으면 실패 응답마다 지연(기본 100)
@@ -84,6 +86,9 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if c.ApprovalTTL <= 0 {
 		c.ApprovalTTL = DefaultApprovalTTL
+	}
+	if c.WorkTimeout <= 0 {
+		c.WorkTimeout = DefaultWorkTimeout
 	}
 	if c.SweepInterval <= 0 {
 		c.SweepInterval = DefaultSweepInterval
@@ -145,9 +150,11 @@ type Server struct {
 	// mu 는 작업 상태 전이(조회 → 검사 → 갱신 → 알림)를 한 줄로 세운다.
 	mu      sync.Mutex
 	ttl     time.Duration                // 지금 적용 중인 승인 유효시간(cfg.ApprovalTTL 로 시작, SIGHUP 으로 바뀔 수 있어 mu 로 보호)
+	work    time.Duration                // 지금 적용 중인 본 작업 제한 시간(cfg.WorkTimeout 로 시작, SIGHUP 으로 바뀔 수 있음)
 	waiters map[string]*waiter           // 작업 ID → 이벤트를 받을 작업자(run) 연결
 	pending map[string]time.Time         // 승인됐지만 아직 start 안 한 작업 ID → 승인 시각(스위퍼 대상)
-	tokens  map[string][sha256.Size]byte // 작업 ID → sha256(token). 메모리에만 두고 파일·로그에 남기지 않음
+	working map[string]time.Time         // 작업중(start 받음, finish 전)인 작업 ID → 시작 시각(작업 제한 시간 대상)
+	tokens  map[string][sha256.Size]byte // 작업 ID → sha256(token). run 부터 finish 까지 유지. 메모리에만 두고 파일·로그에 남기지 않음
 
 	connMu  sync.Mutex
 	conns   map[net.Conn]bool // 열린 연결(true = 작업자 run 연결)
@@ -199,22 +206,25 @@ func NewServer(cfg Config) (*Server, error) {
 		thr:     newThrottle(cfg.AuthMaxFailures, cfg.AuthDelay, cfg.GlobalFailLimit, cfg.GlobalFailWindow, cfg.Sleep),
 		ln:      ln,
 		ttl:     cfg.ApprovalTTL,
+		work:    cfg.WorkTimeout,
 		waiters: map[string]*waiter{},
 		pending: map[string]time.Time{},
+		working: map[string]time.Time{},
 		tokens:  map[string][sha256.Size]byte{},
 		conns:   map[net.Conn]bool{},
 		done:    make(chan struct{}),
 	}
 	if n := st.AbortOpen(ReasonRestart); n > 0 {
-		s.logf("재시작 전 남아 있던 대기/승인 작업 %d건을 중단 처리(%s)", n, ReasonRestart)
+		s.logf("재시작 전 남아 있던 대기/승인(시작 전)/작업중 작업 %d건을 정리(%s: 대기·시작 전은 중단, 작업중은 승인/작업중단)", n, ReasonRestart)
 	}
 	if cfg.AuthMode == AuthOff {
 		s.logf("[경고] AuthMode=off: 비밀번호·token·users 목록 검사를 하지 않음(시험용)")
 	} else if ok, err := auth.Registered(AdminUser); err == nil && !ok {
 		s.logf("[경고] auth.conf 에 admin 항목이 없음 — 관리자 기능은 모두 거부됨(install.sh 실행 또는 admin=<패스워드> 줄 추가)")
 	}
-	s.logf("데몬 시작: 소켓 %s, 저장소 %s, 승인 유효 %s(%d초), 허용 사용자 %d명", cfg.SocketPath, cfg.StorePath,
-		FormatTTLDuration(cfg.ApprovalTTL), int(cfg.ApprovalTTL/time.Second), len(cfg.AllowedUsers))
+	s.logf("데몬 시작(pid %d): 소켓 %s, 저장소 %s, 승인 유효 %s(%d초), 작업 제한 %s(%d초), 허용 사용자 %d명", os.Getpid(), cfg.SocketPath, cfg.StorePath,
+		FormatTTLDuration(cfg.ApprovalTTL), int(cfg.ApprovalTTL/time.Second), FormatTTLDuration(cfg.WorkTimeout), int(cfg.WorkTimeout/time.Second),
+		len(cfg.AllowedUsers))
 	return s, nil
 }
 
@@ -228,6 +238,13 @@ func (s *Server) TTL() time.Duration {
 // ttlSec 은 TTL 을 초로(1초 미만이면 0 → 응답에서 필드 생략).
 func (s *Server) ttlSec() int { return int(s.TTL() / time.Second) }
 
+// WorkTimeout 은 지금 적용 중인 본 작업 제한 시간.
+func (s *Server) WorkTimeout() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.work
+}
+
 // approvedEventLocked 는 승인 이벤트(만료 시각 포함)를 만든다. mu 를 잡고 부른다.
 func (s *Server) approvedEventLocked(reason, by string, at time.Time) Event {
 	exp := at.Add(s.ttl)
@@ -235,21 +252,28 @@ func (s *Server) approvedEventLocked(reason, by string, at time.Time) Event {
 		TTLSec: int(s.ttl / time.Second), ExpiresAt: &exp}
 }
 
-// ReloadApprovalTTL 은 confPath 를 다시 읽어 approval_ttl_sec 만 바꾼다(SIGHUP 처리용).
+// ReloadApprovalTTL 은 confPath 를 다시 읽어 approval_ttl_sec 와 work_timeout_sec 만 바꾼다(SIGHUP 처리용).
 // 설정 파일에 오류가 있거나 값이 범위 밖이면 기존 값을 그대로 두고 오류를 돌려준다(로그에도 남김).
 // users·target_dir·auth 는 바뀌어도 반영하지 않고(재시작 필요) 달라졌다는 경고만 남긴다.
-// 이미 승인되어 start 를 기다리는 작업에도 새 값이 적용된다(만료 시각 = 승인 시각 + 새 값).
+// 이미 승인되어 start 를 기다리는 작업에도 새 값이 적용된다(만료 시각 = 승인 시각 + 새 값). 작업 제한 시간도 같다.
+// 돌려주는 old/now 는 승인 유효시간이다.
 func (s *Server) ReloadApprovalTTL(confPath string) (old, now time.Duration, err error) {
 	c, err := LoadConf(confPath)
 	s.mu.Lock()
 	old = s.ttl
+	oldWork := s.work
 	if err != nil {
 		s.mu.Unlock()
-		s.logf("[경고] 설정 다시 읽기(SIGHUP) 실패 — 승인 유효시간 %s 유지: %v", FormatTTLDuration(old), err)
+		s.logf("[경고] 설정 다시 읽기(SIGHUP) 실패 — 승인 유효시간 %s 유지, 작업 제한 %s 유지: %v", FormatTTLDuration(old), FormatTTLDuration(oldWork), err)
 		return old, old, err
 	}
 	s.ttl = c.ApprovalTTL
+	s.work = c.WorkTimeout
 	s.mu.Unlock()
+	if oldWork != c.WorkTimeout {
+		s.logf("설정 다시 읽기(SIGHUP): 작업 제한 시간 %s(%d초) → %s(%d초)",
+			FormatTTLDuration(oldWork), int(oldWork/time.Second), FormatTTLDuration(c.WorkTimeout), int(c.WorkTimeout/time.Second))
+	}
 	if old == c.ApprovalTTL {
 		s.logf("설정 다시 읽기(SIGHUP): 승인 유효시간 변경 없음(%s)", FormatTTLDuration(old))
 	} else {
@@ -508,7 +532,7 @@ func (s *Server) handleConn(c net.Conn) {
 func (s *Server) dispatch(req Request, uid int) Response {
 	switch req.Op {
 	case OpPing:
-		return Response{OK: true, TTLSec: s.ttlSec()}
+		return Response{OK: true, TTLSec: s.ttlSec(), WorkSec: int(s.WorkTimeout() / time.Second), PID: os.Getpid()}
 	case OpList:
 		if !ValidName(req.User) {
 			return fail("사용자 이름이 올바르지 않음(영소문자·숫자·_ 만): " + clip(req.User))
@@ -533,6 +557,8 @@ func (s *Server) dispatch(req Request, uid int) Response {
 		return s.opCancel(req, uid)
 	case OpStart:
 		return s.opStart(req)
+	case OpFinish:
+		return s.opFinish(req)
 	case OpStatusUser:
 		if !ValidName(req.User) {
 			return fail("사용자 이름이 올바르지 않음(영소문자·숫자·_ 만): " + clip(req.User))
@@ -730,7 +756,7 @@ func (s *Server) handleRun(c net.Conn, r *bufio.Reader, req Request, uid int) {
 	}
 	now := s.cfg.Now()
 	base := store.Job{
-		User: req.User, Checker: req.Checker, Targets: req.Targets,
+		User: req.User, Checker: req.Checker, Targets: req.Targets, Caller: SanitizeCaller(req.Caller),
 		CreatedAt: now, UpdatedAt: now, WorkerUID: uid, CheckerUID: -1,
 	}
 
@@ -780,7 +806,7 @@ func (s *Server) handleRun(c net.Conn, r *bufio.Reader, req Request, uid int) {
 		return
 	}
 	s.markWorker(c)
-	s.logf("작업 %s 등록: 작업자 %s, 확인자 %s, 대상 %d개", j.ID, j.User, j.Checker, len(j.Targets))
+	s.logf("작업 %s 등록: 작업자 %s, 확인자 %s, 대상 %d개, 호출 %q", j.ID, j.User, j.Checker, len(j.Targets), j.Caller)
 
 	// 작업자가 보내는 것은 더 없다. 읽기는 연결 끊김(EOF) 감지용.
 	readDone := make(chan struct{})
@@ -884,6 +910,7 @@ func (s *Server) abortLocked(id, reason, by string, extra func(*store.Job)) erro
 		return err
 	}
 	delete(s.pending, id)
+	delete(s.working, id)
 	// token 은 지우지 않는다: 중단된 작업은 어차피 시작할 수 없고, 작업자가 나중에 start 하면
 	// "인증 실패" 대신 실제 중단 사유(예: 승인 후 {TTL} 내 미진행)를 받아야 한다(스위퍼 만료 뒤 start).
 	s.notifyLocked(id, Event{Event: EventStatus, Status: StatusAborted, Reason: reason, By: by}, true)
@@ -891,13 +918,13 @@ func (s *Server) abortLocked(id, reason, by string, extra func(*store.Job)) erro
 	return nil
 }
 
-// opList 는 user 가 작업자 또는 확인자인 작업을 대상 목록과 함께 돌려준다.
+// opList 는 user 가 작업자 또는 확인자인 작업을 돌려준다(대상 목록은 user 가 작업자인 작업에만 — viewOf).
 func (s *Server) opList(user string) Response {
 	out := []JobView{}
 	ttl := s.TTL()
 	for _, j := range s.st.List() {
 		if j.User == user || j.Checker == user {
-			out = append(out, viewOf(j, ttl))
+			out = append(out, viewOf(j, ttl, user))
 		}
 	}
 	return Response{OK: true, Jobs: out}
@@ -909,11 +936,13 @@ func (s *Server) opGet(req Request) Response {
 	if !ok || !ValidName(req.User) || (j.User != req.User && j.Checker != req.User) {
 		return fail(msgNotMember)
 	}
-	v := viewOf(j, s.TTL())
+	v := viewOf(j, s.TTL(), req.User)
 	return Response{OK: true, Job: &v}
 }
 
-// opApprove 는 확인자 본인(비밀번호 확인은 dispatch 에서 끝남)이 대기 작업을 승인한다.
+// opApprove 는 확인자 본인(비밀번호 확인은 dispatch 에서 끝남)이 붙여넣은 대상(req.Pasted)을 작업 대상과 대조해
+// 일치하면 승인하고, 다르면(빠짐·남음·중복·빈 입력) 작업을 중단한다(계획서 4-1 "확인자가 붙여넣은 대상이 일치하지 않는 경우").
+// 응답·사유·로그에는 개수만 넣는다(확인자는 대상 이름을 알 수 없어야 한다).
 func (s *Server) opApprove(req Request, uid int) Response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -922,11 +951,19 @@ func (s *Server) opApprove(req Request, uid int) Response {
 		return fail(msgNoJob)
 	}
 	if j.Status != StatusWaiting {
-		return fail(fmt.Sprintf("대기 상태가 아니라 승인할 수 없음(현재 %s)", j.Status))
+		return fail(fmt.Sprintf("대기 상태가 아니라 승인할 수 없음(현재 %s)", StatusLabel(j.Status, j.Phase)))
+	}
+	if r := verify.Compare(j.Targets, verify.Parse(req.Pasted)); !r.OK() {
+		reason := MismatchReason(len(r.Missing), len(r.Extra), len(r.Duplicate), r.Empty)
+		if err := s.abortLocked(j.ID, reason, j.Checker, func(x *store.Job) { x.CheckerUID = uid }); err != nil {
+			return fail("저장 실패: " + err.Error())
+		}
+		return fail(reason + " — 작업이 중단되었습니다(작업자 스크립트도 중단)")
 	}
 	now := s.cfg.Now()
 	if _, err := s.st.Update(j.ID, func(x *store.Job) {
 		x.Status = StatusApproved
+		x.Phase = PhaseNone
 		x.Reason = ""
 		x.ApprovedAt = &now
 		x.StartedAt = nil
@@ -957,25 +994,39 @@ func (s *Server) opCancel(req Request, uid int) Response {
 	return Response{OK: true}
 }
 
-// opStart 는 본 작업 직전 신호. run 이 준 token 이 맞고, 승인 후 TTL 이내이며, 처음일 때만 통과한다.
-// 성공하면 token 을 지운다(같은 token 으로 두 번 시작할 수 없음). 중단된 작업의 token 은 남겨 두어
+// checkTokenLocked 는 start/finish 의 token 을 확인한다. 통과면 "", 아니면 응답 문구. mu 를 잡고 부른다.
+// token 이 이미 폐기된(끝난) 작업이면 상태를 그대로 알려 준다(상태는 list 로도 보이므로 숨길 것이 없음).
+func (s *Server) checkTokenLocked(req Request) string {
+	if s.cfg.AuthMode == AuthOff {
+		return ""
+	}
+	h, ok := s.tokens[req.ID]
+	if !ok {
+		if j, found := s.st.Get(req.ID); found && req.Token != "" && j.Status == StatusApproved {
+			if j.Phase == PhaseDone || j.Phase == PhaseAborted {
+				return fmt.Sprintf("이미 끝난 작업(현재 %s)", StatusLabel(j.Status, j.Phase))
+			}
+			if j.StartedAt != nil {
+				return "이미 시작 신호를 받은 작업"
+			}
+		}
+		return MsgAuthFailed
+	}
+	sum := sha256.Sum256([]byte(req.Token))
+	if req.Token == "" || subtle.ConstantTimeCompare(sum[:], h[:]) != 1 {
+		return MsgAuthFailed
+	}
+	return ""
+}
+
+// opStart 는 본 작업 직전 신호. run 이 준 token 이 맞고, 승인 후 TTL 이내이며, 처음일 때만 통과한다(phase → 작업중).
+// token 은 finish 까지 남긴다(같은 token 으로 두 번 시작은 "이미 시작"). 중단된 작업의 token 도 남겨 두어
 // 작업자가 늦게 start 해도 "인증 실패" 대신 실제 중단 사유를 받게 한다.
 func (s *Server) opStart(req Request) Response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cfg.AuthMode != AuthOff {
-		h, ok := s.tokens[req.ID]
-		if !ok {
-			// 이미 시작해 token 을 지운 작업: 시작 여부는 list 로도 보이므로 그대로 알려 준다(아무것도 바꾸지 않음).
-			if j, found := s.st.Get(req.ID); found && j.Status == StatusApproved && j.StartedAt != nil && req.Token != "" {
-				return fail("이미 시작 신호를 받은 작업")
-			}
-			return fail(MsgAuthFailed)
-		}
-		sum := sha256.Sum256([]byte(req.Token))
-		if req.Token == "" || subtle.ConstantTimeCompare(sum[:], h[:]) != 1 {
-			return fail(MsgAuthFailed)
-		}
+	if m := s.checkTokenLocked(req); m != "" {
+		return fail(m)
 	}
 	j, ok := s.st.Get(req.ID)
 	if !ok {
@@ -991,23 +1042,98 @@ func (s *Server) opStart(req Request) Response {
 	if j.StartedAt != nil {
 		return fail("이미 시작 신호를 받은 작업")
 	}
+	if j.Phase != PhaseNone {
+		return fail(fmt.Sprintf("이미 끝난 작업(현재 %s)", StatusLabel(j.Status, j.Phase)))
+	}
 	now := s.cfg.Now()
 	if j.ApprovedAt == nil || now.Sub(*j.ApprovedAt) > s.ttl {
 		reason := ReasonExpired(s.ttl)
 		s.abortLocked(j.ID, reason, BySystem, nil)
 		return fail(reason)
 	}
-	if _, err := s.st.Update(j.ID, func(x *store.Job) { x.StartedAt = &now }); err != nil {
+	if _, err := s.st.Update(j.ID, func(x *store.Job) { x.StartedAt = &now; x.Phase = PhaseWorking }); err != nil {
 		return fail("저장 실패: " + err.Error())
 	}
 	delete(s.pending, j.ID)
-	delete(s.tokens, j.ID)
+	s.working[j.ID] = now
 	s.notifyLocked(j.ID, Event{Event: EventStatus, Status: StatusApproved, Reason: ReasonStarted, By: j.User}, true)
-	s.logf("작업 %s 본 작업 시작", j.ID)
+	s.logf("작업 %s 본 작업 시작(작업중)", j.ID)
 	return Response{OK: true}
 }
 
-// sweepLoop 는 주기적으로 승인 후 유효시간(approval_ttl_sec)이 지나도록 start 가 없는 작업을 중단한다.
+// opFinish 는 본 작업 결과. token 이 맞아야 하고:
+//   - result done: phase 작업중 → 작업완료 (작업자 스크립트가 취소 없이 끝까지 실행됨. VM 별 성공 여부는 보지 않는다)
+//   - result aborted: 승인 시작 전(phase 없음) 또는 작업중 → 작업중단 (최종 확인에서 No, Ctrl+C 등)
+//
+// 끝나면 token 을 지우고 더 바꿀 수 없다.
+func (s *Server) opFinish(req Request) Response {
+	if req.Result != ResultDone && req.Result != ResultAborted {
+		return fail(fmt.Sprintf("result 는 %s 또는 %s: %q", ResultDone, ResultAborted, clip(req.Result)))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if m := s.checkTokenLocked(req); m != "" {
+		return fail(m)
+	}
+	j, ok := s.st.Get(req.ID)
+	if !ok {
+		return fail(MsgAuthFailed)
+	}
+	if j.Status != StatusApproved {
+		msg := fmt.Sprintf("승인 상태가 아니라 결과를 기록할 수 없음(현재 %s", j.Status)
+		if j.Reason != "" {
+			msg += ": " + j.Reason
+		}
+		return fail(msg + ")")
+	}
+	var phase store.Phase
+	var reason string
+	switch {
+	case j.Phase == PhaseDone || j.Phase == PhaseAborted:
+		return fail(fmt.Sprintf("이미 끝난 작업(현재 %s)", StatusLabel(j.Status, j.Phase)))
+	case req.Result == ResultDone && j.Phase != PhaseWorking:
+		return fail("본 작업을 시작하지 않아(--start 전) 완료로 기록할 수 없음 — 멈췄다면 --result aborted")
+	case req.Result == ResultDone:
+		phase = PhaseDone
+	case j.Phase == PhaseWorking:
+		phase, reason = PhaseAborted, ReasonWorkerAborted
+	default:
+		phase, reason = PhaseAborted, ReasonWorkerAbortedBeforeStart
+	}
+	if err := s.finishPhaseLocked(j.ID, phase, reason); err != nil {
+		return fail("저장 실패: " + err.Error())
+	}
+	return Response{OK: true}
+}
+
+// finishPhaseLocked 는 승인 작업의 단계를 끝낸다(작업완료/작업중단): phase·종료 시각·사유를 저장하고
+// 만료·작업 제한 추적과 token 을 정리한다(이후 start/finish 불가). finish·작업 제한 시간·관리자가 쓴다. mu 를 잡고 부른다.
+func (s *Server) finishPhaseLocked(id string, phase store.Phase, reason string) error {
+	now := s.cfg.Now()
+	if _, err := s.st.Update(id, func(x *store.Job) {
+		x.Phase = phase
+		x.FinishedAt = &now
+		if reason != "" {
+			x.Reason = reason
+		}
+	}); err != nil {
+		s.logf("작업 %s → %s 저장 실패: %v", id, StatusLabel(StatusApproved, phase), err)
+		return err
+	}
+	delete(s.pending, id)
+	delete(s.working, id)
+	delete(s.tokens, id)
+	if reason != "" {
+		s.logf("작업 %s → %s(%s)", id, StatusLabel(StatusApproved, phase), reason)
+	} else {
+		s.logf("작업 %s → %s", id, StatusLabel(StatusApproved, phase))
+	}
+	return nil
+}
+
+// sweepLoop 는 주기적으로 승인 후 유효시간(approval_ttl_sec)이 지나도록 start 가 없는 작업을 중단하고,
+// 작업중으로 작업 제한 시간(work_timeout_sec)을 넘긴 작업을 승인/작업중단("작업자 응답 없음")으로 바꾼다.
+// (본 작업을 시작한 작업은 승인 유효시간으로 만료되지 않는다.)
 func (s *Server) sweepLoop() {
 	t := time.NewTicker(s.cfg.SweepInterval)
 	defer t.Stop()
@@ -1028,6 +1154,11 @@ func (s *Server) sweep() {
 	for id, at := range s.pending {
 		if now.Sub(at) > s.ttl {
 			s.abortLocked(id, ReasonExpired(s.ttl), BySystem, nil)
+		}
+	}
+	for id, at := range s.working {
+		if now.Sub(at) > s.work {
+			s.finishPhaseLocked(id, PhaseAborted, ReasonWorkTimeout)
 		}
 	}
 	s.mu.Unlock()
@@ -1058,6 +1189,9 @@ func (s *Server) opAdminSet(req Request) Response {
 			return fail("저장 실패: " + err.Error())
 		}
 	case StatusApproved:
+		if req.Phase != PhaseNone {
+			return s.adminSetPhaseLocked(j, req.Phase, reason)
+		}
 		switch j.Status {
 		case StatusAborted:
 			return fail(MsgNoResurrect)
@@ -1067,6 +1201,7 @@ func (s *Server) opAdminSet(req Request) Response {
 		now := s.cfg.Now()
 		if _, err := s.st.Update(j.ID, func(x *store.Job) {
 			x.Status = StatusApproved
+			x.Phase = PhaseNone
 			x.Reason = reason
 			x.ApprovedAt = &now
 			x.StartedAt = nil
@@ -1081,6 +1216,33 @@ func (s *Server) opAdminSet(req Request) Response {
 	default:
 		return fail("상태는 승인 또는 중단만 가능: " + clip(string(req.Status)))
 	}
+	return Response{OK: true}
+}
+
+// adminSetPhaseLocked 는 관리자가 승인 작업의 단계를 끝낸다: 작업중 → 작업완료/작업중단, 시작 전 → 작업중단.
+// 작업중으로 바꾸는 것은 작업자의 --start 만 할 수 있고, 이미 끝난 단계는 바꾸지 않는다. mu 를 잡고 부른다.
+func (s *Server) adminSetPhaseLocked(j store.Job, phase store.Phase, reason string) Response {
+	if j.Status != StatusApproved {
+		return fail(fmt.Sprintf("승인 상태가 아니라 작업 단계를 바꿀 수 없음(현재 %s)", j.Status))
+	}
+	switch phase {
+	case PhaseDone:
+		if j.Phase != PhaseWorking {
+			return fail(fmt.Sprintf("작업중인 작업만 작업완료로 바꿀 수 있음(현재 %s)", StatusLabel(j.Status, j.Phase)))
+		}
+	case PhaseAborted:
+		if j.Phase != PhaseNone && j.Phase != PhaseWorking {
+			return fail(fmt.Sprintf("이미 끝난 작업(현재 %s)", StatusLabel(j.Status, j.Phase)))
+		}
+	case PhaseWorking:
+		return fail("작업중은 작업자의 --start 로만 바꿀 수 있음")
+	default:
+		return fail("작업 단계는 작업완료 또는 작업중단만 가능: " + clip(string(phase)))
+	}
+	if err := s.finishPhaseLocked(j.ID, phase, reason); err != nil {
+		return fail("저장 실패: " + err.Error())
+	}
+	s.notifyLocked(j.ID, Event{Event: EventStatus, Status: StatusApproved, Reason: reason, By: ByAdmin}, true)
 	return Response{OK: true}
 }
 
@@ -1144,6 +1306,7 @@ func (s *Server) prune() int {
 	for _, id := range ids {
 		delete(s.tokens, id)
 		delete(s.pending, id)
+		delete(s.working, id)
 	}
 	if len(ids) > 0 {
 		s.logf("오래된 중단 작업 %d건 정리(%s 이전)", len(ids), cutoff.Format("2006-01-02 15:04:05"))
@@ -1162,6 +1325,7 @@ func (s *Server) opAdminDelete(req Request) Response {
 		return fail("저장 실패: " + err.Error())
 	}
 	delete(s.pending, req.ID)
+	delete(s.working, req.ID)
 	delete(s.tokens, req.ID)
 	s.notifyLocked(req.ID, Event{Event: EventStatus, Status: StatusAborted, Reason: ReasonAdminDelete, By: ByAdmin}, true)
 	s.logf("작업 %s 관리자 삭제", req.ID)
@@ -1180,6 +1344,7 @@ func (s *Server) opAdminClear() Response {
 		s.notifyLocked(id, Event{Event: EventStatus, Status: StatusAborted, Reason: ReasonAdminClear, By: ByAdmin}, true)
 	}
 	s.pending = map[string]time.Time{}
+	s.working = map[string]time.Time{}
 	s.tokens = map[string][sha256.Size]byte{}
 	s.logf("관리자 전체 정리: %d건 삭제", n)
 	return Response{OK: true, Count: n}

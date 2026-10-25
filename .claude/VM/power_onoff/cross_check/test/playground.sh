@@ -182,6 +182,8 @@ auth=required
 users=$DEMO_USERS
 # 승인 유효시간(초, 10~3600): 확인자 승인 뒤 이 시간 안에 작업자가 --start 하지 않으면 승인이 자동 취소됩니다
 approval_ttl_sec=$ttl
+# 본 작업 제한 시간(초, 600~604800): 작업중(--start 후)으로 이 시간 안에 --finish 가 없으면 승인/작업중단(작업자 응답 없음)
+work_timeout_sec=86400
 EOF
     say "[준비] 설정: $P_CONF  (users=$DEMO_USERS, approval_ttl_sec=$ttl)"
   fi
@@ -299,8 +301,10 @@ cmd_status() {
   fi
   if [ -f "$P_STATE" ]; then
     local s
-    s="$(grep -o '"status": *"[^"]*"' "$P_STATE" 2>/dev/null | sed 's/.*: *"\(.*\)"/\1/' | sort | uniq -c | sed 's/^ *\([0-9]*\) \(.*\)/\2 \1건/' | tr '\n' ' ' || true)"
+    s="$(grep -o '"status": *"[^"]*"' "$P_STATE" 2>/dev/null | sed 's/.*: *"\(.*\)"/\1/' | LC_ALL=C sort | LC_ALL=C uniq -c | sed 's/^ *\([0-9]*\) \(.*\)/\2 \1건/' | tr '\n' ' ' || true)"
     say "작업 기록   : ${s:-없음}"
+    s="$(grep -o '"phase": *"[^"]*"' "$P_STATE" 2>/dev/null | sed 's/.*: *"\(.*\)"/\1/' | LC_ALL=C sort | LC_ALL=C uniq -c | sed 's/^ *\([0-9]*\) \(.*\)/승인\/\2 \1건/' | tr '\n' ' ' || true)"
+    [ -z "$s" ] || say "  (승인 중) : $s"
   else
     say "작업 기록   : 없음"
   fi
@@ -352,35 +356,53 @@ cmd_help() {
    [터미널 1 = 작업자 alice]
      cd $SCRIPT_DIR
      bash playground_worker.sh alice bob
-        → "[대기] 작업 <ID> — 확인자 bob 의 승인을 기다립니다" 가 나오면 기다립니다.
+        → "[대기] 작업 <ID> — 확인자 bob 의 승인을 기다립니다" 와 대상 목록(svr1ev01 svr1ev02 svr2ev01)이 나오면 기다립니다.
+          (실제로는 이 대상 목록을 메신저 등으로 확인자에게 전달합니다 — 확인자 화면에는 대상이 보이지 않습니다)
 
-   [터미널 2 = 확인자 bob]
+   [터미널 2 = 확인자 bob]  — 전체 화면(auto_setup 상태 리포트와 같은 방식, 키 하나로 바로 동작, 2초마다 자동 갱신)
      eval "\$(bash $self env)"     # 이 터미널에서 cross_check 명령을 쓸 수 있게 함
      cross_check --user bob
-        → 화면 머리말에 승인 유효시간이 보이고, "내가 확인자인 작업" 에 [1] 작업이 보입니다.
-        → 명령> 1        (대상 VM 목록 확인)
-        → a  를 입력하고 패스워드  $PW_BOB  (입력은 화면에 보이지 않습니다)
-        → "[승인 완료]" 와 "승인 완료 후 ${ttl}초 내에 …" 정책이 보입니다.
+        → 맨 위 "cross_check 상태 리포트  (user: bob)", 오른쪽에 "갱신 HH:MM:SS  ● 데몬 실행 (pid N)",
+          둘째 줄 카운터 "전체 … 대기 … 승인 … 작업중 … 작업완료 … 작업중단 … 중단 …", 아래에 작업 표가 보입니다.
+        → → (오른쪽 화살표)   "내가 확인자인 작업" 구역으로 전환 (←→ 로 오감, a 는 두 구역 함께 보기)
+        → ↑↓ 로 alice 의 대기 작업을 고르고 Enter        → "1/3 대상 붙여넣기" 화면
+        → 전달받은 대상을 붙여넣기:  svr1ev01 svr1ev02 svr2ev01
+             (한 줄에 공백으로, 줄마다 하나씩, 탭 섞어서 — 어느 것이든 됨. 화면에는 "인식한 이름: 3개" 만 보이고 일치 여부는 안 보임)
+        → 빈 줄에서 Enter (또는 Ctrl+D)                 → "2/3 패스워드"
+        → 패스워드  $PW_BOB  를 치고 Enter (화면에는 * 로만 보임) → "3/3 결과" 에 "[승인 완료]" 와 "승인 완료 후 ${ttl}초 내에 …" 정책
+        → Enter 로 목록에 돌아오면 상태가 "승인" 으로 바뀌어 있습니다.  q 로 종료.
+        (줄 입력 화면이 필요하면 cross_check --user bob --plain: 번호로 열고 a → 대상 붙여넣기 → 빈 줄 → 패스워드)
 
    [터미널 1] 승인 알림이 뜨고 "내 작업 리스트", 승인 유효시간(만료 시각)이 나온 뒤
-        "Enter 를 누르면 본 작업을 시작합니다" 에서 Enter  →  "작업 수행(시뮬레이션)" 이 나오면 성공.
+        "본 작업을 시작할까요? [Y/n]" 에서 Enter  →  "작업 수행(시뮬레이션)" → "[완료] … 승인/작업완료" 가 나오면 성공.
+        (bob 화면 목록에서 상태가 승인 → 승인/작업중 → 승인/작업완료 로 바뀌는 것이 보입니다.
+         호출 스크립트 열에는 자동 감지된 playground_worker.sh 가 보입니다)
 
 2) 시험해 볼 시나리오 (각각 새 작업으로 — 터미널 1 에서 playground_worker.sh 를 다시 실행)
-   (a) 틀린 패스워드    : bob 화면에서 a → 아무 틀린 값 → "승인 실패: 인증 실패"(대기 유지) → 다시 a → $PW_BOB
-   (b) 확인자가 아닌 carol: cross_check --user carol → 그 작업은 목록에 없고 'o <ID>' 도 "열 수 없습니다".
-                          bob 화면에서 a 후 carol 의 패스워드($PW_CAROL)를 넣어도 "인증 실패"(사칭 차단)
-   (c) 취소             : bob 화면에서 c → $PW_BOB → 터미널 1 에 "[중단] … 확인자 bob 가 취소" 후 종료
-   (d) 작업자 Ctrl+C    : 승인 전에 터미널 1 에서 Ctrl+C → bob 화면에서 r(새로고침) → "작업자 스크립트 종료" 로 중단
-   (e) 승인 후 시간 초과 : 유효시간을 짧게 →  bash $self ttl 20
-                          터미널 1 에서 승인 후 Enter 를 누르지 말고 20초 넘게 기다렸다가 Enter
+   (a) 틀린 패스워드    : 2/3 에서 아무 틀린 값 → "[X] 인증 실패"(작업은 대기 그대로) → 다시 $PW_BOB
+   (b) 붙여넣기 불일치  : 1/3 에서 svr1ev01 svr1ev02 만 붙여넣고 → 패스워드 → "붙여넣은 대상 불일치(빠짐 1·남음 0·중복 0)"
+                          → 작업은 중단, 터미널 1 에 같은 사유로 "[중단]" 후 종료(이름은 어디에도 나오지 않고 개수만)
+   (c) 확인자가 아닌 carol: cross_check --user carol → 그 작업은 목록에 없음. bob 화면에서 carol 의 패스워드($PW_CAROL)를
+                          넣어도 "인증 실패"(사칭 차단)
+   (d) 취소             : bob 화면에서 작업을 고르고 c → $PW_BOB → 터미널 1 에 "[중단] … 확인자 bob 가 취소" 후 종료
+   (e) 작업자 Ctrl+C    : 승인 전에 터미널 1 에서 Ctrl+C → bob 화면(2초마다 갱신)에서 그 작업이 "중단"(상세: 작업자 스크립트 종료)
+   (f) 승인 후 시간 초과 : 유효시간을 짧게 →  bash $self ttl 20
+                          터미널 1 에서 승인 후 [Y/n] 에 답하지 말고 20초 넘게 기다렸다가 Enter
                           → "[거부] … 승인 후 20초 내 미진행" 이 들어간 거부 메시지가 나오고 작업 수행은 나오지 않음.
                           (유효시간을 바꾸기 전에 이미 승인된 작업에도 새 값이 적용됩니다)
-                          (bob 화면에서 w 를 누르면 2초마다 갱신되며 '남은 N초' 가 줄어드는 것을 볼 수 있습니다)
-   (f) users 밖 사용자    : cross_check --user dave          → "users= 목록에 없어 등록할 수 없음"
+   (g) 본 작업 전에 No  : 승인 후 [Y/n] 에 n → "승인/작업중단"(작업자가 본 작업 전에 중단)
+   (h) 작업 중 Ctrl+C   : "작업 수행(시뮬레이션)" 중에 Ctrl+C → "승인/작업중단"(작업자가 작업을 중단)
+                          (천천히 하려면 CC_PLAY_WORK_SEC=10 bash playground_worker.sh alice bob)
+   (i) 작업 중 kill -9  : 작업 중에 다른 터미널에서 pkill -9 -f playground_worker.sh → 아무것도 보고되지 않으므로
+                          conf 의 work_timeout_sec(기본 86400초 = 24시간) 뒤 데몬이 "승인/작업중단"(작업자 응답 없음)으로 바꿉니다
+   (j) users 밖 사용자    : cross_check --user dave          → "users= 목록에 없어 등록할 수 없음"
                           bash playground_worker.sh alice dave → "확인자 dave 는 … users= 목록에 없음"
-   (g) 대상 파일 밖의 대상 : bash playground_worker.sh alice bob svr9ev99   → "등록되지 않은 대상" 으로 거부(종료 코드 3)
-   (h) 작업자 = 확인자    : bash playground_worker.sh alice alice → 기다리지 않고 즉시 중단
-   (i) 관리자 모드       : cross_check --admin → $PW_ADMIN → 머리말에 승인 유효시간 표시, 1) 전체 목록 2) 상태 변경 3) 삭제 …
+   (k) 대상 파일 밖의 대상 : bash playground_worker.sh alice bob svr9ev99   → "등록되지 않은 대상" 으로 거부(종료 코드 3)
+   (l) 작업자 = 확인자    : bash playground_worker.sh alice alice → 기다리지 않고 즉시 중단
+   (m) 관리자 모드       : cross_check --admin → $PW_ADMIN → 머리말에 승인 유효시간·작업 제한, 모든 작업 표(대상 수 포함).
+                          Enter 상세(대상 목록) · s 상태 변경(번호 → 사유 → Enter) · d 삭제(y/n) ·
+                          x 전체 정리(확인 문구 "전체 정리" 입력) · p 패스워드 재설정 · q 종료
+   전체 화면 키(사용자): ↑↓ 이동  ←→ 작업 전환  Enter 상세/승인  a 전체 보기  r 새로고침  c 취소  p 패스워드 변경  ? 도움말  q 종료
 
 3) 유효시간 바꾸기 (승인 후 몇 초 안에 작업을 시작해야 하는지)
    - 간단히:        bash $self ttl 300         # conf 수정 + 데몬에 SIGHUP(재시작 없이 반영)

@@ -1,9 +1,14 @@
-// Package tui 는 cross_check 의 사용자(--user)·관리자(--admin) 화면이다.
+// Package tui 는 cross_check 의 사용자(--user)·관리자(--admin) 화면이다. 두 가지 방식이 있다.
 //
-// 줄 입력 + ANSI 색상 방식(INTERVIEW Q3)이며, 모든 입출력은 주입한 io.Reader/io.Writer 와
-// Client 인터페이스로만 한다(테스트에서 가짜 클라이언트와 각본 입력을 쓴다).
-// 비밀번호는 HideInput(보통 EchoOff: 터미널이면 stty -echo)을 켠 채 같은 LineReader 로 읽고 절대 화면에 쓰지 않는다.
-// stdin 이 터미널이 아니면 그냥 한 줄 읽는다(스크립트·테스트에서 파이프로 넣을 수 있게).
+//   - 전체 화면(screen*.go): stdin·stdout 이 모두 터미널이고 linux 이면 auto_setup 상태 리포트와 같은 방식 —
+//     raw 모드(syscall ioctl), 대체 화면, 커서 숨김, 프레임마다 한 번의 write, 2초 자동 갱신, 창 크기 변경 처리,
+//     한글 2칸 폭 배치, 키 하나로 바로 동작, 모든 종료 경로에서 터미널 복원.
+//   - 줄 입력 화면(Session, 이 파일·user.go·admin.go): 파이프·테스트·e2e·비 linux 일 때(또는 --plain).
+//     같은 동작(등록·목록·승인(대상 붙여넣기 → 패스워드)·취소·패스워드 변경·관리자 기능)을 한 줄씩 명령으로 한다.
+//
+// 모든 입출력은 주입한 io.Reader/io.Writer(전체 화면은 Env)와 Client 인터페이스로만 한다(테스트에서 가짜 클라이언트와 각본 입력을 쓴다).
+// 비밀번호는 화면에 쓰지 않는다: 전체 화면은 '*' 만, 줄 입력 화면은 HideInput(보통 EchoOff: 터미널이면 stty -echo)을 켠 채 읽는다.
+// 확인자는 작업 대상을 볼 수 없다(데몬이 확인자에게 대상 목록을 주지 않음). 작업자에게 전달받은 대상을 붙여넣으면 데몬이 대조한다.
 package tui
 
 import (
@@ -28,15 +33,17 @@ const (
 
 // Client 는 TUI 가 쓰는 데몬 요청. *daemon.Client 가 그대로 만족한다.
 type Client interface {
+	Info() (daemon.Info, error)
 	UserRegistered(user string) (bool, error)
 	Register(user, password string) error
 	ChangePassword(user, oldPassword, newPassword string) error
 	List(user string) ([]daemon.JobView, error)
 	Get(id, user, password string) (daemon.JobView, error)
-	Approve(id, user, password string) error
+	Approve(id, user, password, pasted string) error
 	Cancel(id, user, password string) error
 	AdminList(adminPassword string) ([]store.Job, error)
 	AdminSet(adminPassword, id string, status store.Status, reason string) error
+	AdminSetPhase(adminPassword, id string, phase store.Phase, reason string) error
 	AdminDelete(adminPassword, id string) error
 	AdminClear(adminPassword string) (int, error)
 	AdminSetPassword(adminPassword, user, newPassword string) error
@@ -62,7 +69,7 @@ type Session struct {
 	p   Painter
 	opt Options
 
-	prev     map[string]store.Status // 지난 새로고침 때의 상태(전이 알림용)
+	prev     map[string]string // 지난 새로고침 때의 상태 표기(상태/단계, 전이 알림용)
 	prevInit bool
 	shown    []string // 마지막 화면의 [번호] → 작업 ID
 }
@@ -81,7 +88,7 @@ func New(in io.Reader, out io.Writer, c Client, opt Options) *Session {
 	if opt.MaxRows <= 0 {
 		opt.MaxRows = 20
 	}
-	return &Session{in: NewLineReader(in), out: out, c: c, p: Painter{On: opt.Color}, opt: opt, prev: map[string]store.Status{}}
+	return &Session{in: NewLineReader(in), out: out, c: c, p: Painter{On: opt.Color}, opt: opt, prev: map[string]string{}}
 }
 
 // errQuit 은 입력이 끝났거나(EOF) Ctrl+C 로 화면을 끝내야 할 때. code 는 종료 코드.

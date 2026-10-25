@@ -73,14 +73,14 @@ func TestUnlistedNamesDeniedWithGenericMessage(t *testing.T) {
 
 	_, err := c.Run("alice", "carol", []string{"vm01ev01"})
 	wantDaemonErr(t, err, "확인자 carol 는")
-	wantExact(t, c.Approve(rh.ID, "carol", cpw), MsgAuthFailed)
+	wantExact(t, c.Approve(rh.ID, "carol", cpw, h.paste(rh.ID)), MsgAuthFailed)
 	wantExact(t, c.Cancel(rh.ID, "carol", cpw), MsgAuthFailed)
 	wantExact(t, c.ChangePassword("carol", cpw, "carol_new_pw"), MsgAuthFailed)
 	_, err = c.Get(rh.ID, "carol", cpw)
 	wantExact(t, err, MsgAuthFailed)
 	wantDaemonErr(t, c.Register("carol", "carol_pw_x"), "users= 목록에 없어")
 	// admin 이라는 이름은 관리자 op 에서만 쓴다
-	wantExact(t, c.Approve(rh.ID, "admin", testPasswords["admin"]), MsgAuthFailed)
+	wantExact(t, c.Approve(rh.ID, "admin", testPasswords["admin"], h.paste(rh.ID)), MsgAuthFailed)
 	wantExact(t, c.ChangePassword("admin", testPasswords["admin"], "new_admin_pw"), MsgAuthFailed)
 
 	if h.job(rh.ID).Status != StatusWaiting {
@@ -90,7 +90,7 @@ func TestUnlistedNamesDeniedWithGenericMessage(t *testing.T) {
 		t.Fatal("거부된 change_password 가 비밀번호를 바꿈")
 	}
 	// 목록 안 이름은 정상
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -108,7 +108,7 @@ func TestAuthOffIgnoresUserList(t *testing.T) {
 	}
 	wantDaemonErr(t, c.Register("admin", "admin_pw_1"), "등록할 수 없음")
 	rh := h.run(c, "zed", "yan", []string{"x01"})
-	if err := c.Approve(rh.ID, "yan", ""); err != nil {
+	if err := c.Approve(rh.ID, "yan", "", h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -143,7 +143,7 @@ func TestRegression_AdminSquatRejected(t *testing.T) {
 	}
 	wantDaemonErr(t, c.Start(rh.ID, rh.Token), "승인 상태가 아니")
 	// bob 은 빼앗기지 않음
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,9 +161,9 @@ func TestRegression_NoLockoutDoS(t *testing.T) {
 	c := h.client()
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 	for i := 0; i < 20; i++ {
-		wantExact(t, c.Approve(rh.ID, "bob", "wrong_pw"), MsgAuthFailed)
+		wantExact(t, c.Approve(rh.ID, "bob", "wrong_pw", h.paste(rh.ID)), MsgAuthFailed)
 	}
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatalf("연속 실패 뒤 정당한 확인자가 막힘: %v", err)
 	}
 	for i := 0; i < 20; i++ {
@@ -201,7 +201,7 @@ func TestThrottleSerializedPerUserWithoutServerLock(t *testing.T) {
 	c := h.client()
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 	for i := 0; i < DefaultAuthMaxFailures; i++ {
-		wantExact(t, c.Approve(rh.ID, "bob", "wrong_pw"), MsgAuthFailed)
+		wantExact(t, c.Approve(rh.ID, "bob", "wrong_pw", h.paste(rh.ID)), MsgAuthFailed)
 	}
 	refs := func() int {
 		h.srv.thr.mu.Lock()
@@ -219,7 +219,7 @@ func TestThrottleSerializedPerUserWithoutServerLock(t *testing.T) {
 			return
 		}
 		defer cc.Close()
-		results <- cc.Approve(rh.ID, "bob", pw)
+		results <- cc.Approve(rh.ID, "bob", pw, h.paste(rh.ID))
 	}
 	go attempt("wrong_a1")
 	go attempt("wrong_b2")
@@ -233,7 +233,7 @@ func TestThrottleSerializedPerUserWithoutServerLock(t *testing.T) {
 	}
 	// 지연 중에도 서버 mu 를 쓰는 다른 요청(run, 다른 확인자의 승인)은 막히지 않는다
 	rh2 := h.run(c, "alice", "carol", []string{"vm01ev02"})
-	if err := c.Approve(rh2.ID, "carol", testPasswords["carol"]); err != nil {
+	if err := c.Approve(rh2.ID, "carol", testPasswords["carol"], h.paste(rh2.ID)); err != nil {
 		t.Fatalf("지연 중 다른 사용자 승인: %v", err)
 	}
 	select {
@@ -289,23 +289,23 @@ func TestGlobalFailureCapDelaysFailures(t *testing.T) {
 	c := h.client()
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 	for _, u := range []string{"bob", "carol", "zed1"} {
-		c.Approve(rh.ID, u, "wrong_pw")
+		c.Approve(rh.ID, u, "wrong_pw", h.paste(rh.ID))
 	}
 	if rec.n() != 0 {
 		t.Fatalf("한도(3) 이하에서는 지연 없음: %d", rec.n())
 	}
-	wantExact(t, c.Approve(rh.ID, "zed2", "wrong_pw"), MsgAuthFailed)
+	wantExact(t, c.Approve(rh.ID, "zed2", "wrong_pw", h.paste(rh.ID)), MsgAuthFailed)
 	if rec.n() != 1 {
 		t.Fatalf("한도를 넘은 실패는 지연: %d", rec.n())
 	}
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if rec.n() != 1 {
 		t.Fatalf("성공은 지연하지 않음: %d", rec.n())
 	}
 	clk.Add(DefaultGlobalFailWindow + time.Second)
-	c.Approve(rh.ID, "bob", "wrong_pw")
+	c.Approve(rh.ID, "bob", "wrong_pw", h.paste(rh.ID))
 	if rec.n() != 1 {
 		t.Fatalf("구간이 지나면 다시 한도 아래: %d", rec.n())
 	}
@@ -350,7 +350,7 @@ func TestAdminSetPasswordListedUsersOnly(t *testing.T) {
 		t.Fatalf("목록 안 사용자 항목 새로 만들기: %v", err)
 	}
 	rh := h.run(c, "alice", "gina", []string{"vm01ev01"})
-	if err := c.Approve(rh.ID, "gina", "gina_pw_1"); err != nil {
+	if err := c.Approve(rh.ID, "gina", "gina_pw_1", h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -447,7 +447,7 @@ func TestReadDeadlineAndClientReconnect(t *testing.T) {
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 	nextEvent(t, rh, StatusWaiting, "")
 	time.Sleep(400 * time.Millisecond)
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatalf("쉬었다가 승인(재연결): %v", err)
 	}
 	nextEvent(t, rh, StatusApproved, "bob 가 승인")
@@ -502,7 +502,7 @@ func TestPruneOldAbortedJobs(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := h.run(c, "alice", "bob", []string{"vm01ev02"})
-	c.Approve(started.ID, "bob", bpw)
+	c.Approve(started.ID, "bob", bpw, h.paste(started.ID))
 	if err := c.Start(started.ID, started.Token); err != nil {
 		t.Fatal(err)
 	}
@@ -565,27 +565,39 @@ func TestRegression_TokenRetiredAfterStart(t *testing.T) {
 	c := h.client()
 	apw := testPasswords["admin"]
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.Start(rh.ID, rh.Token); err != nil {
 		t.Fatal(err)
 	}
-	h.srv.mu.Lock()
-	_, still := h.srv.tokens[rh.ID]
-	h.srv.mu.Unlock()
-	if still {
-		t.Fatal("시작 성공 뒤 token 이 남음")
+	hasToken := func(id string) bool {
+		h.srv.mu.Lock()
+		defer h.srv.mu.Unlock()
+		_, ok := h.srv.tokens[id]
+		return ok
+	}
+	// token 은 finish 까지 남는다(작업중). 두 번째 start 는 거부
+	if !hasToken(rh.ID) {
+		t.Fatal("시작 뒤(작업중) token 은 finish 까지 남아야 함")
 	}
 	wantDaemonErr(t, c.Start(rh.ID, rh.Token), "이미 시작")
 	wantDaemonErr(t, c.AdminSet(apw, rh.ID, StatusApproved, ""), "이미 승인된")
-	if j := h.job(rh.ID); j.StartedAt == nil {
-		t.Fatal("시작 기록이 지워짐")
+	if err := c.Finish(rh.ID, rh.Token, ResultDone); err != nil {
+		t.Fatal(err)
+	}
+	if hasToken(rh.ID) {
+		t.Fatal("finish 뒤 token 이 남음")
+	}
+	wantDaemonErr(t, c.Start(rh.ID, rh.Token), "이미 끝난 작업")
+	wantDaemonErr(t, c.Finish(rh.ID, rh.Token, ResultAborted), "이미 끝난 작업")
+	if j := h.job(rh.ID); j.StartedAt == nil || j.Phase != PhaseDone {
+		t.Fatalf("시작·완료 기록: %+v", j)
 	}
 
 	// 중단된 작업의 token 은 남아 작업자가 실제 사유를 받는다
 	rh2 := h.run(c, "alice", "bob", []string{"vm01ev02"})
-	c.Approve(rh2.ID, "bob", testPasswords["bob"])
+	c.Approve(rh2.ID, "bob", testPasswords["bob"], h.paste(rh2.ID))
 	if err := c.AdminSet(apw, rh2.ID, StatusAborted, "점검"); err != nil {
 		t.Fatal(err)
 	}

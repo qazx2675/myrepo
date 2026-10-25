@@ -28,6 +28,17 @@ const (
 	중단 Status = "중단" // 취소·불일치·작업자 종료·승인 유효시간 초과·데몬 재시작 등(사유는 Reason)
 )
 
+// Phase 는 승인된 작업의 본 작업 진행 단계. 상태가 승인일 때만 뜻이 있다.
+// 빈 값은 "승인됐지만 본 작업 시작 전"(승인 유효시간 카운트다운 중)이다.
+type Phase string
+
+const (
+	작업전  Phase = ""     // 승인, 본 작업 시작 전
+	작업중  Phase = "작업중"  // --start 를 받음(작업자 스크립트 실행 중)
+	작업완료 Phase = "작업완료" // --finish --result done (스크립트가 취소 없이 끝까지 실행됨)
+	작업중단 Phase = "작업중단" // --finish --result aborted (작업자가 멈춤·Ctrl+C), 작업 제한 시간 초과, 데몬 재시작
+)
+
 // Job 은 교차검증 작업 한 건. 시각 필드는 nil 이면 아직 없음.
 type Job struct {
 	ID         string     `json:"id"`
@@ -35,10 +46,13 @@ type Job struct {
 	Checker    string     `json:"checker"` // 확인자
 	Targets    []string   `json:"targets"` // 작업 대상 목록(작업자가 등록한 것)
 	Status     Status     `json:"status"`
-	Reason     string     `json:"reason,omitempty"` // 중단 사유
+	Phase      Phase      `json:"phase,omitempty"`  // 승인 뒤 본 작업 단계(빈 값 = 시작 전). 예전 jobs.json 에는 없다
+	Reason     string     `json:"reason,omitempty"` // 중단 사유(작업중단 사유 포함)
+	Caller     string     `json:"caller,omitempty"` // --run 을 부른 스크립트 이름(정보용, 위조 가능 — 권한 판단에 쓰지 않음)
 	CreatedAt  time.Time  `json:"created_at"`
 	ApprovedAt *time.Time `json:"approved_at,omitempty"`
-	StartedAt  *time.Time `json:"started_at,omitempty"` // --start 신호를 받은 시각
+	StartedAt  *time.Time `json:"started_at,omitempty"`  // --start 신호를 받은 시각
+	FinishedAt *time.Time `json:"finished_at,omitempty"` // 작업완료/작업중단이 된 시각
 	UpdatedAt  time.Time  `json:"updated_at"`
 	WorkerUID  int        `json:"worker_uid"`  // SO_PEERCRED 로 얻은 작업자 OS uid(미사용 시 0)
 	CheckerUID int        `json:"checker_uid"` // 승인한 확인자의 OS uid
@@ -55,6 +69,10 @@ func (j Job) clone() Job {
 	if j.StartedAt != nil {
 		t := *j.StartedAt
 		c.StartedAt = &t
+	}
+	if j.FinishedAt != nil {
+		t := *j.FinishedAt
+		c.FinishedAt = &t
 	}
 	return c
 }
@@ -331,20 +349,31 @@ func (s *Store) Clear() (int, error) {
 	return n, nil
 }
 
-// AbortOpen 은 아직 끝나지 않은 작업 — 대기, 그리고 승인됐지만 본 작업 시작(StartedAt) 전인 작업 — 을
-// 중단(사유 reason)으로 바꾸고 바꾼 개수를 돌려준다.
-// 데몬 재시작 직후 한 번 호출한다: 재시작 전 연결과 메모리의 start token 은 모두 사라졌기 때문이다.
-// 이미 본 작업을 시작한 승인 건(StartedAt 있음)은 실제로 진행된 작업의 기록이므로 그대로 둔다.
-// 저장 실패 시에도 메모리 상태는 중단으로 바뀐 채 남고, 다음 저장 때 함께 기록된다.
+// AbortOpen 은 데몬 재시작 직후 한 번 호출한다: 재시작 전 연결과 메모리의 token 은 모두 사라졌기 때문이다.
+//   - 대기, 그리고 승인됐지만 본 작업 시작 전(Phase 빈 값)인 작업은 중단(사유 reason)으로 바꾼다.
+//   - 본 작업 중(Phase 작업중)이던 작업은 상태 승인과 시작 기록을 그대로 두고 Phase 만 작업중단(사유 reason)으로 바꾼다
+//     (token 이 사라져 작업자가 결과(--finish)를 보낼 수 없으므로 더 추적하지 않는다).
+//   - 이미 끝난 작업(작업완료·작업중단·중단)은 건드리지 않는다.
+//
+// 바꾼 개수를 돌려준다. 저장 실패 시에도 메모리 상태는 바뀐 채 남고, 다음 저장 때 함께 기록된다.
 func (s *Store) AbortOpen(reason string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
 	n := 0
 	for _, j := range s.jobs {
-		if j.Status == 대기 || (j.Status == 승인 && j.StartedAt == nil) {
+		switch {
+		case j.Status == 대기 || (j.Status == 승인 && j.Phase == 작업전 && j.StartedAt == nil):
 			j.Status = 중단
 			j.Reason = reason
+			j.UpdatedAt = now
+			n++
+		case j.Status == 승인 && j.Phase == 작업중:
+			// (Phase 가 없던 예전 버전의 "시작함" 기록(StartedAt 만 있음)은 끝났는지 알 수 없어 그대로 둔다)
+			j.Phase = 작업중단
+			j.Reason = reason
+			t := now
+			j.FinishedAt = &t
 			j.UpdatedAt = now
 			n++
 		}

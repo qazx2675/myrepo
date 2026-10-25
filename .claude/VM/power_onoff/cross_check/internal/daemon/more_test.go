@@ -54,7 +54,7 @@ func TestRegistration(t *testing.T) {
 	}
 	// 새로 등록한 사용자가 바로 확인자로 쓰인다
 	rh := h.run(c, "alice", "dave", []string{"vm01ev01"})
-	if err := c.Approve(rh.ID, "dave", "pw dave"); err != nil {
+	if err := c.Approve(rh.ID, "dave", "pw dave", h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -100,8 +100,8 @@ func TestChangePassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"]), MsgAuthFailed)
-	if err := c.Approve(rh.ID, "bob", "new_bob"); err != nil {
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)), MsgAuthFailed)
+	if err := c.Approve(rh.ID, "bob", "new_bob", h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(h.authPath)
@@ -274,8 +274,20 @@ func TestListAndGetScope(t *testing.T) {
 	wantDaemonErr(t, err, msgNotMember)
 	_, err = c.Get(b.ID, "carol", "wrong")
 	wantDaemonErr(t, err, MsgAuthFailed)
-	if v, err := c.Get(b.ID, "carol", testPasswords["carol"]); err != nil || v.Targets[0] != "vm01ev02" {
-		t.Fatalf("Get(carol) = %+v, %v", v, err)
+	// 확인자는 대상을 볼 수 없다(목록·개수 모두 없음). 작업자는 본다.
+	if v, err := c.Get(b.ID, "carol", testPasswords["carol"]); err != nil || len(v.Targets) != 0 || v.TargetCount != 0 {
+		t.Fatalf("Get(carol, 확인자) 에는 대상이 없어야 함 = %+v, %v", v, err)
+	}
+	if v, err := c.Get(b.ID, "alice", ""); err != nil || len(v.Targets) != 1 || v.Targets[0] != "vm01ev02" || v.TargetCount != 1 {
+		t.Fatalf("Get(alice, 작업자) = %+v, %v", v, err)
+	}
+	if len(bob[0].Targets) != 0 || bob[0].TargetCount != 0 {
+		t.Fatalf("List(bob, 확인자) 에 대상이 보임: %+v", bob[0])
+	}
+	// 응답 JSON 자체에도 대상 이름·개수 필드가 없어야 한다
+	raw, _ := json.Marshal(rawCall(t, h.sock, `{"op":"list","user":"bob"}`))
+	if strings.Contains(string(raw), "vm01ev01") || strings.Contains(string(raw), "target") {
+		t.Fatalf("확인자 list 응답에 대상 정보: %s", raw)
 	}
 }
 
@@ -293,8 +305,8 @@ func TestSecretsNeverLeak(t *testing.T) {
 			outputs = append(outputs, err.Error())
 		}
 	}
-	collect(nil, c.Approve(rh.ID, "bob", "wrong_guess_pw"))
-	collect(nil, c.Approve(rh.ID, "bob", testPasswords["carol"]))
+	collect(nil, c.Approve(rh.ID, "bob", "wrong_guess_pw", h.paste(rh.ID)))
+	collect(nil, c.Approve(rh.ID, "bob", testPasswords["carol"], h.paste(rh.ID)))
 	collect(nil, c.Cancel(rh.ID, "carol", testPasswords["carol"]))
 	collect(nil, c.ChangePassword("carol", "wrong_guess_pw", "new_secret_pw"))
 	collect(nil, c.Register("bob", "another_secret_pw"))
@@ -302,7 +314,7 @@ func TestSecretsNeverLeak(t *testing.T) {
 	collect(c.AdminList("wrong_guess_pw"))
 	collect(nil, c.Start(rh.ID, "bad_token_value"))
 	collect(c.Get(rh.ID, "bob", "wrong_guess_pw"))
-	collect(nil, c.Approve(rh.ID, "bob", testPasswords["bob"]))
+	collect(nil, c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)))
 	collect(c.List("bob"))
 	collect(c.List("alice"))
 	collect(c.Get(rh.ID, "bob", testPasswords["bob"]))
@@ -485,7 +497,7 @@ func TestPeerUIDRecordedOnly(t *testing.T) {
 	known = false
 	mu.Unlock()
 	c2 := h.client()
-	if err := c2.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c2.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if j := h.job(rh.ID); j.CheckerUID != -1 {
@@ -517,7 +529,7 @@ func TestConcurrentJobs(t *testing.T) {
 			}
 			defer rh.Close()
 			if i%2 == 0 {
-				err = c.Approve(rh.ID, "bob", testPasswords["bob"])
+				err = c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID))
 			} else {
 				err = c.Cancel(rh.ID, "bob", testPasswords["bob"])
 			}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -93,6 +94,9 @@ func TestNewCode(t *testing.T) {
 
 const okHosts = "svr1ev01\nsvr1ev02\nsvr2ev01\n"
 
+// promptYeS 는 4단계 질문(두 방식 공통).
+const promptYeS = "정말 작업을 진행하시겠습니까? (YeS/No, ls=대상 보기): "
+
 func TestGuardPass(t *testing.T) {
 	cases := map[string]string{
 		"개행":    "svr1ev01\nsvr1ev02\nsvr2ev01\n",
@@ -109,7 +113,7 @@ func TestGuardPass(t *testing.T) {
 			if err != nil {
 				t.Fatalf("통과 기대: %v\n%s", err, out)
 			}
-			for _, m := range []string{"svr1ev01\nsvr1ev02\nsvr2ev01\n총 3대", "1분(60초)의 입력 제한 시간", "정말 작업을 진행하시겠습니까? (YeS/No): "} {
+			for _, m := range []string{"svr1ev01\nsvr1ev02\nsvr2ev01\n총 3대", "1분(60초)의 입력 제한 시간", promptYeS} {
 				if !strings.Contains(out, m) {
 					t.Fatalf("출력에 %q 없음\n%s", m, out)
 				}
@@ -263,6 +267,144 @@ func TestGuardCancel(t *testing.T) {
 	})
 }
 
+// 4단계 ls: 대상 목록과 대수를 다시 보여 주고 취소하지 않고 다시 묻는다(기존 방식).
+func TestGuardStep4Ls(t *testing.T) {
+	for _, ls := range []string{"ls", "LS", " ls ", "Ls\t"} {
+		t.Run(ls, func(t *testing.T) {
+			n := 0
+			o := testOpts()
+			o.OnList = func() { n++ }
+			err, out := runGuardStr(t, "ABC123\n\n"+okHosts+ls+"\n"+ls+"\nYeS\n", o)
+			if err != nil {
+				t.Fatalf("ls 뒤 YeS 는 통과: %v\n%s", err, out)
+			}
+			if c := strings.Count(out, "작업 대상 호스트 목록:\nsvr1ev01\nsvr1ev02\nsvr2ev01\n총 3대\n"); c != 3 {
+				t.Errorf("1단계 + ls 2회 = 목록 3번이어야 함 (%d)\n%s", c, out)
+			}
+			if c := strings.Count(out, promptYeS); c != 3 || n != 2 {
+				t.Errorf("질문 %d번, OnList %d번 (3, 2 기대)\n%s", c, n, out)
+			}
+			if !strings.HasSuffix(out, "10 .. 9 .. 8 .. 7 .. 6 .. 5 .. 4 .. 3 .. 2 .. 1\n") || strings.Contains(out, "[취소]") {
+				t.Errorf("카운트다운까지 가야 함\n%s", out)
+			}
+		})
+	}
+	// ShowTargets(실제 실행의 BM별 목록)를 ls 에서도 그대로 쓴다
+	o := testOpts()
+	o.ShowTargets = func(w io.Writer) { io.WriteString(w, "BM 묶음 목록\n") }
+	err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"ls\nYeS\n", o)
+	if err != nil || strings.Count(out, "BM 묶음 목록\n총 3대") != 2 {
+		t.Errorf("ls 가 ShowTargets 를 쓰지 않음: %v\n%s", err, out)
+	}
+	// ls 뒤에도 YeS 가 아니면 취소, ls 와 비슷한 말은 ls 가 아님
+	for in, shown := range map[string]string{"ls\nyes\n": "yes", "ls\n\n": "빈 입력", "ls\n": "EOF", "ls -l\n": "ls -l", "lss\n": "lss"} {
+		err, out := runGuardStr(t, "ABC123\n\n"+okHosts+in, testOpts())
+		wantCancel(t, err, out, "YeS 미입력 (입력값: "+shown+")")
+		if strings.Contains(out, "Ctrl+C 로 취소 가능") {
+			t.Fatalf("%q: 취소인데 5단계 진행", in)
+		}
+	}
+}
+
+// 기존 방식에서 AfterCountdown 은 카운트다운 뒤에 한 번 불리고, 오류면 취소한다.
+func TestGuardAfterCountdown(t *testing.T) {
+	calls := 0
+	o := testOpts()
+	o.AfterCountdown = func(context.Context) error { calls++; return nil }
+	if err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", o); err != nil || calls != 1 {
+		t.Fatalf("통과 + 1회 호출: %v %d\n%s", err, calls, out)
+	}
+	o.AfterCountdown = func(context.Context) error { calls++; return errors.New("거부") }
+	err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", o)
+	wantCancel(t, err, out, "교차검증 승인 유효시간 초과 또는 거부", " .. 1\n")
+	err, out = runGuardStr(t, "ABC123\n\n"+okHosts+"No\n", o)
+	wantCancel(t, err, out, "YeS 미입력 (입력값: No)")
+	if calls != 2 {
+		t.Errorf("4단계 취소 때는 부르지 않아야 함: %d", calls)
+	}
+}
+
+// ccHooks 는 교차검증 방식(Checker/CrossCheck/AfterCountdown)을 흉내 낸다.
+type ccHooks struct {
+	checker                    string
+	checkerErr, ccErr, failAft error
+	calls                      []string
+}
+
+func (h *ccHooks) opts() GuardOpts {
+	o := testOpts()
+	o.Checker = func(ctx context.Context, in *LineReader, out io.Writer) (string, error) {
+		h.calls = append(h.calls, "checker")
+		fmt.Fprintln(out, "[2/5] 가짜 확인자 메뉴")
+		return h.checker, h.checkerErr
+	}
+	o.CrossCheck = func(ctx context.Context, c string) error {
+		h.calls = append(h.calls, "approve:"+c)
+		return h.ccErr
+	}
+	o.AfterCountdown = func(context.Context) error {
+		h.calls = append(h.calls, "start")
+		return h.failAft
+	}
+	return o
+}
+
+func TestGuardCrossCheckMode(t *testing.T) {
+	h := &ccHooks{checker: "dhk"}
+	err, out := runGuardStr(t, "ABC123\nls\nYeS\n", h.opts())
+	if err != nil {
+		t.Fatalf("통과해야 함: %v\n%s", err, out)
+	}
+	if strings.Join(h.calls, ",") != "checker,approve:dhk,start" {
+		t.Errorf("호출 순서: %v", h.calls)
+	}
+	for _, w := range []string{"[2/5] 가짜 확인자 메뉴", "[3/5] 교차검증 — 확인자 dhk 의 승인을 받습니다", promptYeS, "10 .. 9"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("출력에 %q 없음:\n%s", w, out)
+		}
+	}
+	if strings.Contains(out, "1분(60초)") || strings.Contains(out, "호스트명") || strings.Count(out, "총 3대") != 2 {
+		t.Errorf("교차검증 방식인데 이름 입력 단계가 나오거나 ls 목록 이상:\n%s", out)
+	}
+
+	// 확인자 선택 실패 → 그 사유로 취소, 승인 요청 없음
+	h = &ccHooks{checkerErr: errors.New("확인자 선택 실패 (잘못된 입력 3회)")}
+	err, out = runGuardStr(t, "ABC123\nYeS\n", h.opts())
+	wantCancel(t, err, out, "확인자 선택 실패 (잘못된 입력 3회)")
+	if strings.Join(h.calls, ",") != "checker" {
+		t.Errorf("호출: %v", h.calls)
+	}
+
+	// 미승인 → [취소] 교차검증 미승인, 4단계 없음
+	h = &ccHooks{checker: "dhk", ccErr: errors.New("미승인")}
+	err, out = runGuardStr(t, "ABC123\nYeS\n", h.opts())
+	wantCancel(t, err, out, "교차검증 미승인")
+	if strings.Contains(out, "[4/5]") || strings.Join(h.calls, ",") != "checker,approve:dhk" {
+		t.Errorf("미승인인데 진행: %v\n%s", h.calls, out)
+	}
+
+	// 승인 후 yes → 취소, --start 없음
+	h = &ccHooks{checker: "dhk"}
+	err, out = runGuardStr(t, "ABC123\nyes\n", h.opts())
+	wantCancel(t, err, out, "YeS 미입력 (입력값: yes)")
+	if strings.Join(h.calls, ",") != "checker,approve:dhk" {
+		t.Errorf("yes 인데 --start: %v", h.calls)
+	}
+
+	// 카운트다운 뒤 --start 거부 → 취소
+	h = &ccHooks{checker: "dhk", failAft: errors.New("만료")}
+	err, out = runGuardStr(t, "ABC123\nYeS\n", h.opts())
+	wantCancel(t, err, out, "교차검증 승인 유효시간 초과 또는 거부")
+
+	// Checker 나 CrossCheck 하나만 있으면 기존 방식 그대로
+	o := (&ccHooks{checker: "dhk"}).opts()
+	o.CrossCheck = nil
+	o.AfterCountdown = nil
+	if err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", o); err != nil || !strings.Contains(out, "1분(60초)") {
+		t.Errorf("하나만 있으면 기존 방식: %v\n%s", err, out)
+	}
+}
+
 func TestConfirmCode(t *testing.T) {
 	out := &syncBuf{}
 	in := NewLineReader(strings.NewReader("XY12Z9\nxy12z9\n"))
@@ -290,6 +432,15 @@ func TestRunDemo(t *testing.T) {
 	rc := RunDemo(context.Background(), NewLineReader(strings.NewReader("ABC123\n\nwas-prd-01 web-prd-02 web-prd-01\nYeS\n")), out)
 	if rc != 0 || !strings.Contains(out.String(), "[DEMO] 실제 전원 작업은 하지 않습니다") {
 		t.Fatalf("rc=%d\n%s", rc, out)
+	}
+	if !strings.Contains(out.String(), "cross_check=on(기본)이면 2/5 는 확인자 번호 선택, 3/5 는 VM 이름 입력 대신 확인자 승인 대기") {
+		t.Errorf("데모에 교차검증 방식 안내 없음:\n%s", out)
+	}
+	// 데모도 4단계 ls 지원 (데모 대상 3대)
+	out = &syncBuf{}
+	rc = RunDemo(context.Background(), NewLineReader(strings.NewReader("ABC123\n\nwas-prd-01 web-prd-02 web-prd-01\nls\nYeS\n")), out)
+	if rc != 0 || strings.Count(out.String(), "web-prd-01\nweb-prd-02\nwas-prd-01\n총 3대") != 2 {
+		t.Fatalf("데모 ls: rc=%d\n%s", rc, out)
 	}
 	out = &syncBuf{}
 	rc = RunDemo(context.Background(), NewLineReader(strings.NewReader("ABC123\n\nwas-prd-01 web-prd-02 web-prd-01\nyes\n")), out)

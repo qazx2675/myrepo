@@ -1,6 +1,38 @@
 # CHANGELOG
 
-버전 태그는 이 파일의 항목과 연결합니다: `git tag -a vm-power-onoff-v0.1.0 -m "<요약> (CHANGELOG 2026-10-23 항목)"`
+버전 태그는 이 파일의 항목과 연결합니다. 배포 시점마다 태그를 남기고 태그 메시지에 CHANGELOG 의 어느 항목까지 포함하는지 적습니다(태그는 만들거나 푸시하기 전에 사용자 확인을 받습니다).
+
+```bash
+# 이 저장소에는 다른 프로젝트 태그(v0.1.0 등)가 있어 접두어를 붙입니다. 폴더가 저장소 루트인 경우의 기본 형태는 `git tag -a v0.3.0 -m ...` 입니다.
+git tag -a vm-power-onoff-v0.3.0 -m "교차검증(cross_check) 기본 on·3단계 대체, 확인자 붙여넣기 승인, 전체 화면 TUI, 작업 단계·--finish (CHANGELOG 2026-10-25 항목)"
+git push origin vm-power-onoff-v0.3.0
+```
+
+## 0.3.0 — 2026-10-25
+
+교차검증(cross_check)이 원래 목적대로 **안전장치 3단계(VM 이름 입력)를 대신**합니다. vm_power_onoff 버전 0.3.0, cross_check 버전 0.3.0(데몬·화면·프로토콜도 이 릴리스에서 크게 바뀜 — 아래 "cross_check 0.3.0").
+
+- **BREAKING — `cross_check` 기본 on**: `pwonoff.conf` 에 키가 없어도 `on`, 새로 만드는 conf(`pwonoff.conf.example`)도 `cross_check=on`. 끄려면 `cross_check=off`. `on` 인데 `cross_check_bin` 이 없거나 실행할 수 없으면 vCenter 를 묻기 전에 `cross_check 가 설치되어 있지 않습니다: <경로> — bash setup.sh 로 설치하거나 pwonoff.conf 에 cross_check=off 를 지정하세요` 로 종료(exit 1). conf `users` 에 작업자 외 user 가 없을 때도 시작 시 안내 후 종료. `-n`·`--demo` 는 cross_check 없이 동작. 이미 `cross_check=off` 가 적힌 기존 conf 는 그대로 off 입니다.
+- **BREAKING — 3/5 대체**: `cross_check=on` 이면 3/5 에서 VM 이름을 묻지 않고 `cross_check --run` 으로 확인자 승인을 기다립니다(대상 VM 이름은 stdin). 거부·확인자 취소·데몬 오류·Ctrl+C → `[취소] 교차검증 미승인`, 전원 작업 없이 exit 1. 이전(0.2.x)의 "1~5단계를 모두 마친 뒤 승인" 순서는 없어졌습니다.
+- **2/5 확인자 번호 선택**: 60초 안내 + Enter 대신 `확인자를 선택하세요` 메뉴(conf `users` 에서 작업자 본인 제외, conf 순서). 잘못된 번호는 다시 묻고 3번 틀리면 취소, Ctrl+C 취소, `-c <checker>` 면 `[2/5] 확인자: <checker> (-c)` 로 메뉴 생략.
+- **4/5 `ls`**: 질문이 `정말 작업을 진행하시겠습니까? (YeS/No, ls=대상 보기):` 로 바뀌고, `ls`(대소문자·앞뒤 공백 무시)를 입력하면 1단계와 같은 대상 VM 목록(BM별)과 `총 N대` 를 보여 준 뒤 **취소 없이 다시 묻습니다**(횟수 제한 없음). `YeS` 만 진행, 그 밖(`yes`, `y`, `No`, 빈 입력, `ls -l` …)은 지금처럼 취소. 기존 방식(`cross_check=off`)과 `--demo` 에도 적용.
+- **5/5 뒤 `--start`**: 10초 카운트다운이 끝나자마자 `cross_check --start --job <ID>`(token 은 자식 환경변수로만, 관문 안에서 1회용). 거부(승인 유효시간 초과 등) → 사유 한 줄 + `[취소] 교차검증 승인 유효시간 초과 또는 거부`, 전원 작업 없음. 승인 유효시간(`approval_ttl_sec`, 기본 2분)은 승인 → 4/5 → 카운트다운 → `--start` 를 덮으며, 승인 직후 안내에 마감 시각이 나옵니다.
+- **`cross_check=off`**: 기존 1~5단계(2/5 Enter, 3/5 VM 이름 입력) 그대로 + 4/5 `ls`. **`--demo`**: 데몬이 없으므로 기존 방식 + `ls`, 교차검증 방식에서 2/3단계가 다르다는 안내 한 줄.
+- **감사 로그**: 확인자 선택(번호/`-c`), 요청·승인/미승인 분류, 4/5 `ls` 사용 횟수, `--start` 허용/거부를 기록(token 은 기록하지 않음).
+- **설치**: `install.sh`/`setup.sh` 에 `--disable-cross-check`(`pwonoff.conf` 의 `cross_check=` 를 `off` 로, 없으면 줄 추가). `--enable-cross-check` 는 효과 없이 안내만(이미 off 인 conf 면 고치는 방법 안내). 마지막 안내 문구를 "기본 on / 끄는 방법" 으로 변경. cross_check 실행 파일을 설치하지 못했는데 conf 가 on 이면 경고.
+- **코드**: `GuardOpts` 에 `Checker`·`CrossCheck`·`AfterCountdown`·`OnList` 훅(둘 다 nil 이면 기존 방식), `CrossCheckGate` 를 `SelectChecker`(2/5)·`Approve`(3/5)·`Start`(카운트다운 뒤)로 나누고 `Hook` 으로 연결.
+- **시험**: 단위(번호 선택 정상·3회 오입력·Ctrl+C·EOF·`-c`·본인 제외·1명·0명, 승인/거부, `ls` 반복 후 `YeS`·`yes` 취소, `--start` 거부, 기존 방식 유지, 데모, conf 기본 on·예시 conf on), `guard_scenarios.sh` 에 `ls` 4건, `e2e_driver.py` 는 conf 에 `cross_check=off` 를 명시해 기존 방식을 시험(+`ls` 2회, 미설치 시 조기 종료), 새 `test/e2e_vcsim_crosscheck.sh`+`.py`(vcsim + 격리 cross_check 데몬: 번호 선택→TUI 승인→`ls`→`YeS`→카운트다운→Power Off, 확인자 취소, 4/5 `yes`, 틀린 패스워드, 4/5 에서 승인 유효시간 3초 초과→`--start` 거부, 데몬 없음). `e2e_vcsim.sh`·`run_tests.sh` 는 `GOFLAGS` 환경변수를 따름.
+
+### cross_check 0.3.0 (같은 날짜 항목에 포함)
+
+- **BREAKING — 승인 방식 변경(패스워드만 → 붙여넣기 + 패스워드)**: 확인자는 작업자에게 전달받은 대상을 자기 화면에 **붙여넣고**(줄바꿈·탭·공백 구분, 순서 무관) **본인 패스워드**를 입력해 승인합니다. 확인자 화면에는 **대상이 보이지 않습니다**(개수도 안 줌). 붙여넣은 목록이 작업 대상과 다르면(빠짐·남음·중복·빈 입력) 작업이 **중단**(`붙여넣은 대상 불일치(빠짐 N·남음 N·중복 N)`, 개수만 기록)되고 작업자 스크립트도 중단됩니다. 데몬 `approve` 요청에 `pasted` 필드가 추가되었고 `internal/verify/` 가 파싱·대조를 맡습니다. 작업자의 `--run` 화면에는 확인자에게 전달할 대상 목록이 출력됩니다.
+- **전체 화면 TUI**: `--user`/`--admin` 이 터미널이면 `auto_setup` 상태 리포트와 같은 전체 화면(raw 모드, 2초 자동 갱신, 머리말에 데몬 pid·카운터, `←→` 구역 전환, 핫키, 붙여넣기 구간 처리, 종료 시 터미널 복원)입니다. 파이프·`--plain`·`TERM=dumb`·raw 전환 실패면 같은 동작의 줄 입력 화면으로 대체합니다. 표준 라이브러리만 사용(go 1.20 유지).
+- **승인 이후 단계**: `승인/작업중`(`--start`), `승인/작업완료`(`--finish --result done`: 작업 스크립트가 취소 없이 끝까지 실행됨 — **일부 VM 의 실패는 검사하지 않음**), `승인/작업중단`(`--finish --result aborted`: Ctrl+C·최종 확인 No·시작 전 포기, 작업 제한 시간 초과, 데몬 재시작, 관리자 변경). 새 명령 **`cross_check --finish --job <ID> --result done|aborted`**(token 은 `--start` 와 같은 `CROSS_CHECK_TOKEN`, 끝나면 폐기). 관리자 화면의 상태 변경도 단계를 다룹니다.
+- **`work_timeout_sec`**(cross_check.conf, 기본 86400초, 600~604800): `작업중` 인 채 `--finish` 가 없으면 데몬이 `승인/작업중단`(`작업자 응답 없음`)으로 바꿉니다. SIGHUP(`pkill -HUP -f 'cross_check --daemon'`)으로 `approval_ttl_sec` 와 함께 다시 읽습니다. `install.sh` 가 만드는 conf 에는 이 줄이 없어 기본값을 씁니다.
+- **호출 스크립트(caller) 기록**: `--run` 이 `--caller NAME` → `CROSS_CHECK_CALLER` → 부모 프로세스 감지 순으로 호출 스크립트 이름을 정해 데몬에 보냅니다(정보용·위조 가능, 제어문자 제거 64자). 사용자·관리자 화면의 목록은 사유 대신 **호출 스크립트** 칸을 보이고 사유는 상세·실시간 이벤트에 나옵니다.
+- **vm_power_onoff 연동**: 전원 작업이 끝나면 `cross_check --finish`(done/aborted)로 결과를 알립니다(4/5 에서 No·Ctrl+C 도 aborted).
+- **문서**: `cross_check/README.md` 를 git-upload-sk 순서(빌드·설치 → 사용 → 옵션 → 문서별 → 주의사항 → 전역 명령어)로 재구성하고 승인 방식·상태·단계·키를 최신으로 고침. `cross_check/INTERVIEW.md` 의 Q3(TUI 조사)·Q8·Q23(패스워드만 승인)은 정정·철회하고 Q33~Q40 과 계획서 지시사항 점검표 추가. `ARCHITECTURE.md`(verify·화면 파일·문서 행), `WORKFLOW.md`+`workflow.svg`(교차검증 방식 그림 새로 작성), `PR_CHECKLIST.md`, `사용법.txt`(cross_check 명령), `.github/workflows/ci.yml`(vm_power_onoff 와 cross_check 별도 작업) 갱신.
+- **시험**: `go test ./...`(cross_check)에 단계·붙여넣기·caller·화면 시험 추가, `test/e2e.sh`(붙여넣기 불일치·`--finish`·작업 제한 시간·caller 감지), 새 `test/pty_e2e.sh`(실제 pty 에서 전체 화면 붙여넣기 승인과 터미널 복원).
 
 ## 0.2.1 — 2026-10-25
 

@@ -143,7 +143,7 @@ func TestTTLReportedInRunEventsAndJobViews(t *testing.T) {
 		t.Fatalf("대기 작업 view: %+v %v", v, err)
 	}
 	approvedAt := clk.Now()
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	ev := nextEvent(t, rh, StatusApproved, "")
@@ -169,7 +169,7 @@ func TestTTLReportedInRunEventsAndJobViews(t *testing.T) {
 
 	// 시작한 작업은 expires_at 이 사라진다
 	r2 := h.run(c, "alice", "bob", []string{"vm01ev02"})
-	c.Approve(r2.ID, "bob", testPasswords["bob"])
+	c.Approve(r2.ID, "bob", testPasswords["bob"], h.paste(r2.ID))
 	if err := c.Start(r2.ID, r2.Token); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestReloadApprovalTTL(t *testing.T) {
 
 	// 승인된 작업을 하나 만들어 둔다(120초 기준 승인)
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
-	c.Approve(rh.ID, "bob", testPasswords["bob"])
+	c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID))
 
 	// 값을 줄이면 이미 승인된 작업에도 적용
 	write("approval_ttl_sec=30\n")

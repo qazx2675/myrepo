@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 
 	"cross_check/internal/daemon"
 	"cross_check/internal/store"
@@ -16,7 +17,7 @@ const ClearConfirmText = "전체 정리"
 const adminMenu = `
 [관리자 메뉴]
   1) 전체 목록(대상 포함)
-  2) 상태 변경(승인/중단, 사유)
+  2) 상태 변경(승인/중단/작업완료/작업중단, 사유)
   3) 작업 삭제
   4) 전체 정리
   5) 사용자 패스워드 재설정
@@ -35,6 +36,10 @@ const AdminMissingText = `관리자(admin) 항목이 auth.conf 에 없어 관리
 func (s *Session) RunAdmin(ctx context.Context) int {
 	s.println(s.p.Cyan(fmt.Sprintf("==== cross_check 관리자 — %s ====", s.opt.Now().Format("2006-01-02 15:04:05"))))
 	s.println(ttlHeader(s.opt.ApprovalTTL))
+	if info, err := s.c.Info(); err == nil && info.WorkTimeout > 0 {
+		s.printf("  작업 제한 시간: %s (work_timeout_sec=%d) — 본 작업(작업중)이 이보다 오래 끝나지 않으면 승인/작업중단(작업자 응답 없음)\n",
+			daemon.FormatTTLDuration(info.WorkTimeout), int(info.WorkTimeout/time.Second))
+	}
 	reg, err := s.c.UserRegistered(daemon.AdminUser)
 	if err != nil {
 		if msg, ok := isDaemonErr(err); ok {
@@ -150,19 +155,22 @@ func (s *Session) adminList(pw string) ([]store.Job, bool) {
 			}
 			reason += "본 작업 시작 " + fmtTime(*j.StartedAt)
 		}
+		if j.FinishedAt != nil {
+			reason += " / " + string(j.Phase) + " " + fmtTime(*j.FinishedAt)
+		}
 		if reason == "" {
 			reason = "-"
 		}
 		rows = append(rows, []string{
-			fmt.Sprintf("[%d]", i+1), j.ID, j.User, j.Checker, string(j.Status),
+			fmt.Sprintf("[%d]", i+1), j.ID, j.User, j.Checker, daemon.StatusLabel(j.Status, j.Phase),
 			fmtTime(j.CreatedAt), fmtTimePtr(j.ApprovedAt), strconv.Itoa(len(j.Targets)),
-			fmt.Sprintf("%d/%d", j.WorkerUID, j.CheckerUID), reason,
+			fmt.Sprintf("%d/%d", j.WorkerUID, j.CheckerUID), callerText(j.Caller), reason,
 		})
 	}
-	table(s.out, "  ", []string{"번호", "ID", "작업자", "확인자", "상태", "생성", "승인", "대상", "uid(작업/확인)", "사유"}, rows,
+	table(s.out, "  ", []string{"번호", "ID", "작업자", "확인자", "상태", "생성", "승인", "대상", "uid(작업/확인)", "호출 스크립트", "사유"}, rows,
 		func(row, col int, cell string) string {
 			if col == 4 {
-				return s.p.Status(jobs[row].Status, cell)
+				return s.p.Label(jobs[row].Status, jobs[row].Phase, cell)
 			}
 			return cell
 		})
@@ -186,36 +194,46 @@ func (s *Session) pickJobID(ctx context.Context, last []store.Job) (string, erro
 	return in, nil
 }
 
-// adminSet 은 2번: 상태를 승인 또는 중단으로 바꾼다(사유는 "관리자 변경: " 뒤에 붙는다).
+// adminSet 은 2번: 상태를 바꾼다(사유는 "관리자 변경: " 뒤에 붙는다).
+// 1) 승인(대기 → 승인)  2) 중단  3) 승인/작업완료(작업중 → 작업완료)  4) 승인/작업중단(시작 전·작업중 → 작업중단).
+// 허용 여부는 데몬이 판단한다(중단된 작업은 되살릴 수 없음, 끝난 단계는 바꿀 수 없음).
 func (s *Session) adminSet(ctx context.Context, pw string, last []store.Job) error {
 	id, err := s.pickJobID(ctx, last)
 	if err != nil || id == "" {
 		return err
 	}
-	c, err := s.ask(ctx, "바꿀 상태 — 1) 승인  2) 중단 : ")
+	c, err := s.ask(ctx, "바꿀 상태 — 1) 승인  2) 중단  3) 승인/작업완료  4) 승인/작업중단 : ")
 	if err != nil {
 		return err
 	}
-	var st store.Status
+	st, ph := daemon.StatusApproved, daemon.PhaseNone
 	switch c {
 	case "1", string(daemon.StatusApproved):
-		st = daemon.StatusApproved
 	case "2", string(daemon.StatusAborted):
 		st = daemon.StatusAborted
+	case "3", "승인/작업완료", string(daemon.PhaseDone):
+		ph = daemon.PhaseDone
+	case "4", "승인/작업중단", string(daemon.PhaseAborted):
+		ph = daemon.PhaseAborted
 	default:
-		s.warnf("1 또는 2 를 입력하세요. 변경하지 않았습니다.")
+		s.warnf("1~4 중 하나를 입력하세요. 변경하지 않았습니다.")
 		return nil
 	}
 	reason, err := s.ask(ctx, "사유(선택): ")
 	if err != nil {
 		return err
 	}
-	if err := s.c.AdminSet(pw, id, st, reason); err != nil {
+	if ph != daemon.PhaseNone {
+		err = s.c.AdminSetPhase(pw, id, ph, reason)
+	} else {
+		err = s.c.AdminSet(pw, id, st, reason)
+	}
+	if err != nil {
 		s.adminErr("상태 변경", err)
 		return nil
 	}
-	s.okf("[변경 완료] 작업 %s → %s", id, st)
-	if st == daemon.StatusApproved {
+	s.okf("[변경 완료] 작업 %s → %s", id, daemon.StatusLabel(st, ph))
+	if st == daemon.StatusApproved && ph == daemon.PhaseNone {
 		s.println(s.p.Bold(PolicyText(s.opt.ApprovalTTL)))
 	}
 	return nil

@@ -261,19 +261,22 @@ func TestHappyPath(t *testing.T) {
 		t.Errorf("대기 이벤트 by = %q", ev.By)
 	}
 
-	// 확인자는 목록에서 대상을 볼 수 있다(붙여넣기 없이 보고 승인)
+	// 확인자는 목록에서 대상을 볼 수 없다(작업자에게 전달받은 대상을 붙여넣어 대조)
 	jobs, err := c.List("bob")
 	if err != nil || len(jobs) != 1 || jobs[0].ID != rh.ID || jobs[0].Status != StatusWaiting {
 		t.Fatalf("List(bob) = %+v, %v", jobs, err)
 	}
-	if len(jobs[0].Targets) != 2 || jobs[0].TargetCount != 2 {
-		t.Fatalf("확인자에게 대상이 보여야 함: %+v", jobs[0])
+	if len(jobs[0].Targets) != 0 || jobs[0].TargetCount != 0 {
+		t.Fatalf("확인자에게 대상이 보이면 안 됨: %+v", jobs[0])
+	}
+	if mine, _ := c.List("alice"); len(mine) != 1 || len(mine[0].Targets) != 2 || mine[0].TargetCount != 2 {
+		t.Fatalf("작업자에게는 대상이 보여야 함: %+v", mine)
 	}
 	if v, err := c.Get(rh.ID, "bob", ""); err != nil || v.Checker != "bob" {
 		t.Fatalf("Get = %+v, %v", v, err)
 	}
 
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := rh.Wait(context.Background()); err != nil {
@@ -296,10 +299,21 @@ func TestHappyPath(t *testing.T) {
 		t.Errorf("시작 이벤트 by = %q", ev.By)
 	}
 	expectClosed(t, rh)
-	if j := h.job(rh.ID); j.StartedAt == nil || j.Status != StatusApproved {
-		t.Fatalf("시작 후 작업 = %+v", j)
+	if j := h.job(rh.ID); j.StartedAt == nil || j.Status != StatusApproved || j.Phase != PhaseWorking {
+		t.Fatalf("시작 후 작업(승인/작업중) = %+v", j)
 	}
 	wantDaemonErr(t, c.Start(rh.ID, rh.Token), "이미 시작")
+	wantDaemonErr(t, c.Finish(rh.ID, "0123456789abcdef0123456789abcdef", ResultDone), MsgAuthFailed)
+	wantDaemonErr(t, c.Finish(rh.ID, rh.Token, "maybe"), "result 는")
+	if err := c.Finish(rh.ID, rh.Token, ResultDone); err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+	if j := h.job(rh.ID); j.Phase != PhaseDone || j.FinishedAt == nil || j.Reason != "" {
+		t.Fatalf("완료 후 작업(승인/작업완료) = %+v", j)
+	}
+	if v, _ := c.Get(rh.ID, "bob", ""); v.Phase != PhaseDone || StatusLabel(v.Status, v.Phase) != "승인/작업완료" {
+		t.Fatalf("Get 에 phase: %+v", v)
+	}
 }
 
 func TestSameUserAborted(t *testing.T) {
@@ -326,7 +340,7 @@ func TestWorkerDisconnectAborts(t *testing.T) {
 		j := h.job(rh.ID)
 		return j.Status == StatusAborted && j.Reason == ReasonWorkerGone
 	})
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"]), "대기 상태가 아니")
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)), "대기 상태가 아니")
 
 	// ctx 취소도 같은 결과
 	rh2 := h.run(c, "alice", "bob", []string{"vm01ev02"})
@@ -372,21 +386,21 @@ func TestApproveRequiresCheckerPassword(t *testing.T) {
 	c := h.client()
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", ""), MsgAuthFailed)                     // 비밀번호 없음
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", "pw=bob"), MsgAuthFailed)               // 틀림
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["carol"]), MsgAuthFailed) // 남의 비밀번호로 bob 사칭
-	wantDaemonErr(t, c.Approve(rh.ID, "carol", testPasswords["carol"]), msgNoJob)    // carol 본인 인증은 되지만 확인자가 아님
-	wantDaemonErr(t, c.Approve(rh.ID, "alice", testPasswords["alice"]), msgNoJob)    // 작업자 자신
-	wantDaemonErr(t, c.Approve("nosuchjob", "bob", testPasswords["bob"]), msgNoJob)  // 없는 작업
-	wantDaemonErr(t, c.Approve(rh.ID, "zed", "anything"), MsgAuthFailed)             // 없는 사용자도 같은 문구
-	wantDaemonErr(t, c.Approve(rh.ID, "BOB", testPasswords["bob"]), MsgAuthFailed)   // 이름 규칙 위반
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", "", h.paste(rh.ID)), MsgAuthFailed)                          // 비밀번호 없음
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", "pw=bob", h.paste(rh.ID)), MsgAuthFailed)                    // 틀림
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["carol"], h.paste(rh.ID)), MsgAuthFailed)      // 남의 비밀번호로 bob 사칭
+	wantDaemonErr(t, c.Approve(rh.ID, "carol", testPasswords["carol"], h.paste(rh.ID)), msgNoJob)         // carol 본인 인증은 되지만 확인자가 아님
+	wantDaemonErr(t, c.Approve(rh.ID, "alice", testPasswords["alice"], h.paste(rh.ID)), msgNoJob)         // 작업자 자신
+	wantDaemonErr(t, c.Approve("nosuchjob", "bob", testPasswords["bob"], h.paste("nosuchjob")), msgNoJob) // 없는 작업
+	wantDaemonErr(t, c.Approve(rh.ID, "zed", "anything", h.paste(rh.ID)), MsgAuthFailed)                  // 없는 사용자도 같은 문구
+	wantDaemonErr(t, c.Approve(rh.ID, "BOB", testPasswords["bob"], h.paste(rh.ID)), MsgAuthFailed)        // 이름 규칙 위반
 	if h.job(rh.ID).Status != StatusWaiting {
 		t.Fatal("실패한 승인이 상태를 바꿈")
 	}
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"]), "대기 상태가 아니")
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)), "대기 상태가 아니")
 }
 
 func TestCheckerWithoutEntryDenied(t *testing.T) {
@@ -402,7 +416,7 @@ func TestCheckerWithoutEntryDenied(t *testing.T) {
 	}
 	writeAuth(t, h.authPath, users)
 	waitFor(t, 2*time.Second, "파일 다시 읽기", func() bool { ok, _ := c.UserRegistered("bob"); return !ok })
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"]), MsgAuthFailed)
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)), MsgAuthFailed)
 	if h.job(rh.ID).Status != StatusWaiting {
 		t.Fatal("상태가 바뀜")
 	}
@@ -473,8 +487,8 @@ func TestAdminOpsRequireAdminPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	rh4 := h.run(c, "alice", "bob", []string{"vm01ev01"})
-	wantDaemonErr(t, c.Approve(rh4.ID, "bob", testPasswords["bob"]), MsgAuthFailed)
-	if err := c.Approve(rh4.ID, "bob", "brand_new"); err != nil {
+	wantDaemonErr(t, c.Approve(rh4.ID, "bob", testPasswords["bob"], h.paste(rh4.ID)), MsgAuthFailed)
+	if err := c.Approve(rh4.ID, "bob", "brand_new", h.paste(rh4.ID)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -487,7 +501,7 @@ func TestAuthModeOff(t *testing.T) {
 	})
 	c := h.client()
 	rh := h.run(c, "dave", "erin", []string{"anything01"}) // 미등록 사용자·대상 파일 없음
-	if err := c.Approve(rh.ID, "erin", ""); err != nil {
+	if err := c.Approve(rh.ID, "erin", "", h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := rh.Wait(context.Background()); err != nil {
@@ -526,13 +540,13 @@ func TestThrottleDelaysButCorrectPasswordWins(t *testing.T) {
 	c := h.client()
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 	for i := 1; i <= 5; i++ {
-		wantDaemonErr(t, c.Approve(rh.ID, "bob", "guess_pw"), MsgAuthFailed)
+		wantDaemonErr(t, c.Approve(rh.ID, "bob", "guess_pw", h.paste(rh.ID)), MsgAuthFailed)
 	}
 	if rec.n() != 0 {
 		t.Fatalf("5번째 실패까지는 지연 없음: %d", rec.n())
 	}
 	// 6번째부터는 지연 뒤 검사(문구는 그대로 일반 실패)
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", "guess_pw"), MsgAuthFailed)
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", "guess_pw", h.paste(rh.ID)), MsgAuthFailed)
 	if rec.n() != 1 || rec.calls[0] != DefaultAuthDelay {
 		t.Fatalf("6번째 시도는 %s 지연이어야 함: %v", DefaultAuthDelay, rec.calls)
 	}
@@ -544,7 +558,7 @@ func TestThrottleDelaysButCorrectPasswordWins(t *testing.T) {
 		t.Fatalf("다른 이름은 지연되면 안 됨: %d", rec.n())
 	}
 	// 지연 중에도 올바른 비밀번호는 통과(잠금 DoS 없음)하고 횟수를 지운다
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatalf("지연 중 올바른 비밀번호가 거부됨: %v", err)
 	}
 	if rec.n() != 2 {
@@ -554,13 +568,13 @@ func TestThrottleDelaysButCorrectPasswordWins(t *testing.T) {
 		t.Fatalf("성공 후 연속 실패 횟수 = %d", n)
 	}
 	rh2 := h.run(c, "alice", "bob", []string{"vm01ev02"})
-	wantDaemonErr(t, c.Approve(rh2.ID, "bob", "guess_pw"), MsgAuthFailed)
+	wantDaemonErr(t, c.Approve(rh2.ID, "bob", "guess_pw", h.paste(rh2.ID)), MsgAuthFailed)
 	if rec.n() != 2 {
 		t.Fatalf("횟수가 지워졌으면 다음 실패는 지연 없음: %d", rec.n())
 	}
 	// 목록 밖 이름은 이름별 기록을 남기지 않는다(아무 이름이나 보내 맵을 키울 수 없음)
 	for i := 0; i < 10; i++ {
-		c.Approve(rh2.ID, fmt.Sprintf("zed%d", i), "x_guess")
+		c.Approve(rh2.ID, fmt.Sprintf("zed%d", i), "x_guess", "")
 	}
 	h.srv.thr.mu.Lock()
 	tracked := len(h.srv.thr.users)
@@ -579,7 +593,7 @@ func TestAuthFileMissingOrLoose(t *testing.T) {
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 
 	os.Chmod(h.authPath, 0o640) // 그룹이 읽을 수 있음 → 아무도 인증하지 않음
-	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"]), "chmod 600")
+	wantDaemonErr(t, c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)), "chmod 600")
 	_, err := c.Run("alice", "bob", []string{"vm01ev01"})
 	wantDaemonErr(t, err, "인증 불가")
 	_, err = c.UserRegistered("bob")
@@ -587,7 +601,7 @@ func TestAuthFileMissingOrLoose(t *testing.T) {
 	wantDaemonErr(t, c.Register("dave", "pw_dave_1"), "변경하지 않음") // 손상된 파일은 덮어쓰지 않음
 
 	os.Chmod(h.authPath, 0o600) // 권한을 고치면 재시작 없이 다시 동작
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -636,7 +650,7 @@ func TestStartRequiresToken(t *testing.T) {
 	c := h.client()
 	rh := h.run(c, "alice", "bob", []string{"vm01ev01"})
 	wantDaemonErr(t, c.Start(rh.ID, rh.Token), "승인 상태가 아니") // 승인 전
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	wantDaemonErr(t, c.Start(rh.ID, ""), MsgAuthFailed)
@@ -660,7 +674,7 @@ func TestStartAfterTTLExpires(t *testing.T) {
 	c := h.client()
 
 	ok := h.run(c, "alice", "bob", []string{"vm01ev01"})
-	c.Approve(ok.ID, "bob", testPasswords["bob"])
+	c.Approve(ok.ID, "bob", testPasswords["bob"], h.paste(ok.ID))
 	clk.Add(2 * time.Minute) // 정확히 2분은 허용
 	if err := c.Start(ok.ID, ok.Token); err != nil {
 		t.Fatalf("2분 정각 Start: %v", err)
@@ -668,7 +682,7 @@ func TestStartAfterTTLExpires(t *testing.T) {
 
 	rh := h.run(c, "alice", "bob", []string{"vm01ev02"})
 	nextEvent(t, rh, StatusWaiting, "")
-	if err := c.Approve(rh.ID, "bob", testPasswords["bob"]); err != nil {
+	if err := c.Approve(rh.ID, "bob", testPasswords["bob"], h.paste(rh.ID)); err != nil {
 		t.Fatal(err)
 	}
 	nextEvent(t, rh, StatusApproved, "")
@@ -692,8 +706,8 @@ func TestSweeperExpiresUnstarted(t *testing.T) {
 	idle := h.run(c, "alice", "bob", []string{"vm01ev01"})
 	started := h.run(c, "alice", "bob", []string{"vm01ev02"})
 	waiting := h.run(c, "alice", "bob", []string{"vm02ev01"})
-	c.Approve(idle.ID, "bob", testPasswords["bob"])
-	c.Approve(started.ID, "bob", testPasswords["bob"])
+	c.Approve(idle.ID, "bob", testPasswords["bob"], h.paste(idle.ID))
+	c.Approve(started.ID, "bob", testPasswords["bob"], h.paste(started.ID))
 	if err := c.Start(started.ID, started.Token); err != nil {
 		t.Fatal(err)
 	}
@@ -717,4 +731,14 @@ func TestSweeperExpiresUnstarted(t *testing.T) {
 	if j := h.job(waiting.ID); j.Status != StatusWaiting {
 		t.Fatalf("대기 작업에는 시간 제한이 없음: %+v", j)
 	}
+}
+
+// paste 는 확인자가 붙여넣을 글: 그 작업의 대상 목록을 줄바꿈으로 이은 것(작업자가 전달한 그대로).
+// 없는 작업이면 빈 글(데몬이 확인자 검사에서 먼저 거절한다).
+func (h *harness) paste(id string) string {
+	j, ok := h.srv.st.Get(id)
+	if !ok {
+		return ""
+	}
+	return strings.Join(j.Targets, "\n")
 }

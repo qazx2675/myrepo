@@ -4,7 +4,8 @@
 #                                       #   root(또는 sudo -n 가능)이면 이어서 install.sh 까지 자동 실행
 #   bash setup.sh [허용디렉터리]        # install.sh 에 넘길 allowed_dir (기본: 이 폴더의 절대경로)
 #   bash setup.sh --no-install          # 빌드만 (install.sh 실행 안 함)
-#   bash setup.sh --enable-cross-check  # install.sh 에 넘김: pwonoff.conf 의 cross_check=on
+#   bash setup.sh --disable-cross-check # install.sh 에 넘김: pwonoff.conf 의 cross_check=off (교차검증 끄기, 0.3.0 부터 기본 on)
+#   bash setup.sh --enable-cross-check  # install.sh 에 넘김: 기본 on 이라 효과 없음(안내만, 예전 스크립트 호환용)
 #   bash setup.sh --approval-ttl 300    # install.sh 에 넘김: 새로 만드는 cross_check.conf 의 approval_ttl_sec(10~3600초, 기본 120=2분)
 #   bash setup.sh --skip-vm-power-onoff # vm_power_onoff 빌드·설치를 건너뛰고 cross_check 만 (Go 1.26.5 미만 서버 등)
 #   bash setup.sh --os6                 # OS6(RHEL/CentOS 6)용: bin_os6/*.gz 를 풀어 쓴다 (OS6 서버에서는 자동)
@@ -14,11 +15,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 HERE="$(pwd -P)"
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
 
 OS6=0
 NO_INSTALL=0
 ENABLE_CC=0
+DISABLE_CC=0
 SKIP_VM=0
 APPROVAL_TTL=""
 APPROVAL_TTL_GIVEN=0
@@ -28,6 +30,7 @@ while [ $# -gt 0 ]; do
     --os6) OS6=1 ;;
     --no-install) NO_INSTALL=1 ;;
     --enable-cross-check) ENABLE_CC=1 ;;
+    --disable-cross-check) DISABLE_CC=1 ;;
     --skip-vm-power-onoff) SKIP_VM=1 ;;
     --approval-ttl)
       [ $# -ge 2 ] || { echo "오류: --approval-ttl 에는 초 단위 값이 필요합니다 (예: --approval-ttl 300)" >&2; exit 2; }
@@ -54,6 +57,7 @@ finish() {
   local args=()
   [ -n "$ALLOWED" ] && args+=("$ALLOWED")
   [ "$ENABLE_CC" -eq 1 ] && args+=(--enable-cross-check)
+  [ "$DISABLE_CC" -eq 1 ] && args+=(--disable-cross-check)
   [ "$SKIP_VM" -eq 1 ] && args+=(--skip-vm-power-onoff)
   [ "$APPROVAL_TTL_GIVEN" -eq 1 ] && args+=(--approval-ttl "$APPROVAL_TTL")
   local cmd="sudo bash $HERE/install.sh${args[*]+ ${args[*]}}"
@@ -82,7 +86,8 @@ manual_steps() {
   local n="$1"
   echo "  $n) /etc/vcetner_pwon_off/pwonoff.conf 의 users / vcenters 를 환경에 맞게 수정"; n=$((n + 1))
   echo "  $n) allowed_dir 에 on_off_<user>.txt 를 만들고 그 디렉터리에서 vm_power_onoff 실행"; n=$((n + 1))
-  echo "  $n) 교차검증을 쓰려면 각 사람이 한 번씩 등록: cross_check --user <이름>   (선착순 등록이므로 빨리)"; n=$((n + 1))
+  echo "  $n) 교차검증은 기본 on — 각 사람이 한 번씩 등록: cross_check --user <이름>   (선착순 등록이므로 빨리)"; n=$((n + 1))
+  echo "     (안전장치 2/5 확인자 번호 선택, 3/5 VM 이름 입력 대신 확인자 승인. 끄려면 pwonoff.conf 에 cross_check=off 또는 install.sh --disable-cross-check)"
   echo "  $n) 관리자(admin) 패스워드는 /etc/cross_check/auth.conf 에 있음 (install.sh 가 처음 한 번만 화면에 출력)"
 }
 

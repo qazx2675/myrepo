@@ -19,12 +19,27 @@ func (e *GuardError) Error() string { return "[취소] " + e.Reason }
 
 // GuardOpts 는 안전장치 설정. 0/nil 이면 기본값.
 type GuardOpts struct {
-	InputTimeout time.Duration     // 3단계 전체 입력 제한(기본 60s)
+	InputTimeout time.Duration     // 3단계 전체 입력 제한(기본 60s, 기존 방식에서만)
 	Countdown    int               // 5단계 카운트다운 시작 숫자(기본 10)
 	Tick         time.Duration     // 카운트다운 간격(기본 1s)
 	NewCode      func() string     // nil 이면 NewCode()
-	ShowTargets  func(w io.Writer) // 1단계 통과 후 대상 목록 출력(nil 이면 한 줄에 하나씩). "총 N대" 는 RunGuard 가 출력
+	ShowTargets  func(w io.Writer) // 1단계 통과 후·4단계 ls 때 대상 목록 출력(nil 이면 한 줄에 하나씩). "총 N대" 는 RunGuard 가 출력
+	OnList       func()            // 4단계에서 ls 를 입력할 때마다 호출(감사 로그 횟수용, nil 이면 무시)
+
+	// 교차검증 방식(cross_check=on): Checker 와 CrossCheck 를 둘 다 주면
+	// 2단계 = 확인자 번호 선택(Checker), 3단계 = VM 이름 입력 대신 확인자 승인 대기(CrossCheck).
+	// 둘 중 하나라도 nil 이면 기존 방식(2단계 Enter, 3단계 VM 이름 입력).
+	Checker    func(ctx context.Context, in *LineReader, out io.Writer) (string, error) // 오류 문구 = 취소 사유
+	CrossCheck func(ctx context.Context, checker string) error                          // 승인 대기. nil 이 아니면 미승인
+	// AfterCountdown 은 5단계 카운트다운이 끝난 직후 호출된다(교차검증의 --start). 오류면 취소.
+	AfterCountdown func(ctx context.Context) error
 }
+
+// 교차검증 방식의 취소 사유
+const (
+	reasonCCNotApproved = "교차검증 미승인"
+	reasonCCStartFailed = "교차검증 승인 유효시간 초과 또는 거부"
+)
 
 func (o GuardOpts) withDefaults() GuardOpts {
 	if o.InputTimeout <= 0 {
@@ -81,12 +96,30 @@ func secs(d time.Duration) string {
 	return d.String()
 }
 
+// isLs 는 4단계의 대상 보기 명령(ls, 앞뒤 공백·대소문자 무시)인지 본다.
+func isLs(s string) bool { return strings.EqualFold(strings.TrimSpace(s), "ls") }
+
+// printTargetList 는 1단계 통과 후와 4단계 ls 에서 같은 모양으로 대상 목록과 "총 N대" 를 출력한다.
+func printTargetList(out io.Writer, targets []string, opts GuardOpts) {
+	fmt.Fprintln(out, "작업 대상 호스트 목록:")
+	if opts.ShowTargets != nil {
+		opts.ShowTargets(out)
+	} else {
+		for _, t := range targets {
+			fmt.Fprintln(out, t)
+		}
+	}
+	fmt.Fprintln(out, Bold(fmt.Sprintf("총 %d대", len(targets))))
+}
+
 // RunGuard 는 계획서 10장의 안전장치 1~5단계. 통과하면 nil, 취소면 *GuardError(화면 출력까지 끝낸 상태).
+// opts.Checker/CrossCheck 가 있으면 2·3단계가 교차검증 방식(확인자 선택 → 승인 대기)으로 바뀐다.
 func RunGuard(ctx context.Context, in *LineReader, out io.Writer, targets []string, opts GuardOpts) error {
 	opts = opts.withDefaults()
 	interrupted := func(err error) bool {
 		return err != nil && ctx.Err() != nil && !errors.Is(err, io.EOF) && !errors.Is(err, ErrTimeout)
 	}
+	ccMode := opts.Checker != nil && opts.CrossCheck != nil
 
 	// 1단계: 확인 코드
 	code := opts.NewCode()
@@ -104,16 +137,103 @@ func RunGuard(ctx context.Context, in *LineReader, out io.Writer, targets []stri
 		return cancelGuard(out, "확인 코드 불일치")
 	}
 	fmt.Fprintln(out, Green("[INFO] 확인 코드 일치"))
-	fmt.Fprintln(out, "작업 대상 호스트 목록:")
-	if opts.ShowTargets != nil {
-		opts.ShowTargets(out)
-	} else {
-		for _, t := range targets {
-			fmt.Fprintln(out, t)
+	printTargetList(out, targets, opts)
+
+	if ccMode {
+		if err := ccStages(ctx, in, out, opts); err != nil {
+			return err
+		}
+	} else if err := classicStages(ctx, in, out, targets, opts, interrupted); err != nil {
+		return err
+	}
+
+	// 4단계: YeS (ls = 대상 목록 다시 보기, 몇 번이든 취소 없이 다시 묻는다)
+	for {
+		fmt.Fprintf(out, "%s 정말 작업을 진행하시겠습니까? (YeS/No, ls=대상 보기): ", Bold("[4/5]"))
+		ans, err := in.ReadLine(ctx)
+		if interrupted(err) {
+			return cancelGuard(out, reasonInterrupt)
+		}
+		if err != nil {
+			fmt.Fprintln(out)
+			return cancelGuard(out, "YeS 미입력 (입력값: EOF)")
+		}
+		if isLs(ans) {
+			if opts.OnList != nil {
+				opts.OnList()
+			}
+			printTargetList(out, targets, opts)
+			continue
+		}
+		ans = strings.TrimSpace(ans)
+		if ans != "YeS" {
+			shown := ans
+			if shown == "" {
+				shown = "빈 입력"
+			}
+			return cancelGuard(out, "YeS 미입력 (입력값: "+shown+")")
+		}
+		break
+	}
+
+	// 5단계: 카운트다운(한 줄에 가로로)
+	fmt.Fprintf(out, "%s (Ctrl+C 로 취소 가능)\n", Bold("[5/5]"))
+	t := time.NewTimer(opts.Tick)
+	defer t.Stop()
+	for i := opts.Countdown; i >= 1; i-- {
+		if i != opts.Countdown {
+			fmt.Fprint(out, " .. ")
+		}
+		fmt.Fprint(out, strconv.Itoa(i))
+		t.Reset(opts.Tick)
+		select {
+		case <-ctx.Done():
+			return cancelGuard(out, reasonInterrupt)
+		case <-t.C:
 		}
 	}
-	fmt.Fprintln(out, Bold(fmt.Sprintf("총 %d대", len(targets))))
+	fmt.Fprintln(out)
 
+	// 카운트다운 직후(교차검증: 승인 유효시간 안인지 --start 로 확인)
+	if opts.AfterCountdown != nil {
+		if err := opts.AfterCountdown(ctx); err != nil {
+			if ctx.Err() != nil {
+				fmt.Fprintln(out)
+			}
+			fmt.Fprintln(out, Red("[취소] "+reasonCCStartFailed))
+			return &GuardError{Reason: reasonCCStartFailed}
+		}
+	}
+	return nil
+}
+
+// ccStages 는 교차검증 방식의 2·3단계: 확인자 번호 선택 → 확인자 승인 대기(VM 이름 입력 없음).
+func ccStages(ctx context.Context, in *LineReader, out io.Writer, opts GuardOpts) error {
+	// 2단계: 확인자 선택 (Checker 가 메뉴 출력·재입력까지 맡는다)
+	fmt.Fprintln(out)
+	checker, err := opts.Checker(ctx, in, out)
+	if err != nil {
+		if ctx.Err() != nil {
+			return cancelGuard(out, reasonInterrupt)
+		}
+		return cancelGuard(out, err.Error())
+	}
+
+	// 3단계: 교차검증 승인 대기 (CrossCheck 가 진행 출력을 맡는다)
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "%s 교차검증 — 확인자 %s 의 승인을 받습니다 (VM 이름 입력 대신)\n", Bold("[3/5]"), checker)
+	if err := opts.CrossCheck(ctx, checker); err != nil {
+		if ctx.Err() != nil {
+			fmt.Fprintln(out) // 승인 대기 줄을 끝내고 출력
+		}
+		fmt.Fprintln(out, Red("[취소] "+reasonCCNotApproved))
+		return &GuardError{Reason: reasonCCNotApproved}
+	}
+	return nil
+}
+
+// classicStages 는 기존 방식의 2·3단계: 준비 확인(Enter) → 제한 시간 안에 VM 이름 입력.
+func classicStages(ctx context.Context, in *LineReader, out io.Writer, targets []string, opts GuardOpts, interrupted func(error) bool) error {
 	// 2단계: 준비 확인(시간 제한 없음, 입력 내용은 버림)
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s 다음 단계는 1분(60초)의 입력 제한 시간이 있습니다. 호스트명을 입력할 준비가 완료되면 Enter를 눌러 다음 단계로 진행하세요.\n", Bold("[2/5]"))
@@ -162,43 +282,6 @@ func RunGuard(ctx context.Context, in *LineReader, out io.Writer, targets []stri
 		return cancelGuard(out, "호스트 목록 불일치")
 	}
 	fmt.Fprintln(out, Green(fmt.Sprintf("[INFO] 호스트 목록 일치 (%d대)", len(targets))))
-
-	// 4단계: YeS
-	fmt.Fprintf(out, "%s 정말 작업을 진행하시겠습니까? (YeS/No): ", Bold("[4/5]"))
-	ans, err := in.ReadLine(ctx)
-	if interrupted(err) {
-		return cancelGuard(out, reasonInterrupt)
-	}
-	if err != nil {
-		fmt.Fprintln(out)
-		return cancelGuard(out, "YeS 미입력 (입력값: EOF)")
-	}
-	ans = strings.TrimSpace(ans)
-	if ans != "YeS" {
-		shown := ans
-		if shown == "" {
-			shown = "빈 입력"
-		}
-		return cancelGuard(out, "YeS 미입력 (입력값: "+shown+")")
-	}
-
-	// 5단계: 카운트다운(한 줄에 가로로)
-	fmt.Fprintf(out, "%s (Ctrl+C 로 취소 가능)\n", Bold("[5/5]"))
-	t := time.NewTimer(opts.Tick)
-	defer t.Stop()
-	for i := opts.Countdown; i >= 1; i-- {
-		if i != opts.Countdown {
-			fmt.Fprint(out, " .. ")
-		}
-		fmt.Fprint(out, strconv.Itoa(i))
-		t.Reset(opts.Tick)
-		select {
-		case <-ctx.Done():
-			return cancelGuard(out, reasonInterrupt)
-		case <-t.C:
-		}
-	}
-	fmt.Fprintln(out)
 	return nil
 }
 
@@ -285,6 +368,7 @@ func RunDemo(ctx context.Context, in *LineReader, out io.Writer) int {
 		opts.Tick = time.Duration(v) * time.Millisecond
 	}
 	fmt.Fprintln(out, Cyan("[DEMO] vCenter 없이 샘플 대상 3대로 안전장치만 시험합니다"))
+	fmt.Fprintln(out, Cyan("[DEMO] 데모는 기존 방식입니다. 실제 실행에서 cross_check=on(기본)이면 2/5 는 확인자 번호 선택, 3/5 는 VM 이름 입력 대신 확인자 승인 대기입니다"))
 	if err := RunGuard(ctx, in, out, demoTargets, opts); err != nil {
 		return ExitFail
 	}

@@ -19,26 +19,38 @@
 //
 // op 목록과 규칙:
 //
-//	ping                            → {"ok":true,"ttl_sec":120}  (ttl_sec: 이 데몬의 승인 유효시간. 구버전 데몬은 필드 없음)
+//	ping                            → {"ok":true,"ttl_sec":120,"work_timeout_sec":86400,"pid":1234}
+//	                                  (ttl_sec: 승인 유효시간, work_timeout_sec: 본 작업 제한 시간, pid: 데몬 pid. 모두 선택 필드 — 구버전 데몬은 없음)
 //	status_user {user}              → {"ok":true,"registered":bool}  (첫 실행 등록 안내용, 인증 없음)
 //	register {user,password}        → users= 목록에 있고 auth.conf 에 아직 없는 user 만 등록(admin 은 항상 거부)
 //	change_password {user,password,new_password} → 현재 비밀번호 확인 후 변경
-//	run     {user,checker,targets}  → 작업자·확인자 모두 users= 목록에 있고 등록되어 있으며, targets 가
+//	run     {user,checker,targets[,caller]} → 작업자·확인자 모두 users= 목록에 있고 등록되어 있으며, targets 가
 //	                                  <target_dir>/on_off_<user>.txt 의 부분집합일 때만 등록.
 //	                                  {"ok":true,"id":"...","token":"...","ttl_sec":120} 후 연결 유지. 이후 상태가 바뀔 때마다
 //	                                  {"event":"status","status":"대기|승인|중단","reason":"...","by":"..."} 한 줄씩
 //	                                  (승인 이벤트에는 선택 필드 ttl_sec, expires_at(RFC3339) 가 붙는다).
 //	                                  중단 또는 본 작업 시작 이벤트 뒤 데몬이 연결을 닫는다.
 //	                                  대기 중 작업자 연결이 끊기면(Ctrl+C·세션 끊김·kill -9) 즉시 중단.
-//	list    {user}                  → user 가 작업자/확인자인 작업(대상 목록 포함). 각 작업에 ttl_sec, 승인 후 미시작이면 expires_at
-//	get     {id,user[,password]}    → 그 작업 하나(user 가 작업자/확인자일 때). password 를 주면 그것도 확인
-//	approve {id,user,password}      → 확인자 본인 비밀번호로 대기 작업 승인
+//	                                  caller 는 --run 을 부른 스크립트 이름(정보용·위조 가능, 권한 판단에 쓰지 않음. 제어문자 제거, 64자까지)
+//	list    {user}                  → user 가 작업자/확인자인 작업. 대상 목록(targets, target_count)은 user 가 그 작업의
+//	                                  작업자일 때만 담는다(확인자는 대상을 볼 수 없다 — 전달받은 대상을 붙여넣어 대조).
+//	                                  각 작업에 ttl_sec, 승인 후 미시작이면 expires_at, 그리고 phase·caller·finished_at(선택)
+//	get     {id,user[,password]}    → 그 작업 하나(user 가 작업자/확인자일 때, 대상 규칙은 list 와 같음). password 를 주면 그것도 확인
+//	approve {id,user,password,pasted} → 확인자 본인 비밀번호를 먼저 확인(틀리면 "인증 실패", 상태 그대로, 지연 규칙 적용)한 뒤
+//	                                  pasted(확인자가 붙여넣은 글: 줄바꿈·탭·공백 구분)를 작업 대상과 집합 비교(verify.Compare).
+//	                                  일치하면 승인. 불일치(빠짐·남음·중복·빈 입력)면 작업을 중단("붙여넣은 대상 불일치(빠짐 N·남음 N·중복 N)")
+//	                                  하고 작업자에게 알린다. 응답·사유·로그에는 개수만 넣고 이름은 절대 넣지 않는다
 //	cancel  {id,user,password}      → 확인자 본인 비밀번호로 대기 작업 취소
-//	start   {id,token}              → 본 작업 직전 신호. 승인 후 ApprovalTTL(approval_ttl_sec, 기본 120초) 이내 1회(성공하면 token 폐기)
-//	admin_list / admin_set {id,status,reason} / admin_delete {id} / admin_clear /
+//	start   {id,token}              → 본 작업 직전 신호. 승인 후 ApprovalTTL(approval_ttl_sec, 기본 120초) 이내 1회 → phase 작업중.
+//	                                  token 은 finish 까지 유지한다
+//	finish  {id,token,result}       → 본 작업 결과. result "done": phase 작업중 → 작업완료 / "aborted": 시작 전(phase 없음)·작업중
+//	                                  → 작업중단. 끝나면 token 폐기(이후 변경 불가). 작업중으로 work_timeout_sec(기본 86400초)를
+//	                                  넘기면 데몬이 작업중단("작업자 응답 없음")으로 바꾼다(작업자 kill -9 등)
+//	admin_list / admin_set {id,status[,phase],reason} / admin_delete {id} / admin_clear /
 //	admin_set_password {user,new_password}                       ← password 는 admin 의 것
 //	                                  (auth.conf 에 admin 항목이 없으면 관리자 op 는 모두 거부)
-//	                                  admin_set: 대기→승인/중단, 승인→중단 만(중단된 작업은 되살릴 수 없음)
+//	                                  admin_set: 대기→승인/중단, 승인→중단(중단된 작업은 되살릴 수 없음),
+//	                                  승인/작업중 → 승인/작업완료·승인/작업중단, 승인(시작 전) → 승인/작업중단
 //	                                  admin_set_password: users= 목록의 사용자만(항목이 없으면 새로 만듦)
 //
 // run 연결 하나가 작업 하나에 대응하고, 그 밖의 op 는 한 연결에서 여러 번 주고받을 수 있다.
@@ -52,6 +64,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"cross_check/internal/store"
@@ -71,6 +84,7 @@ const (
 const (
 	DefaultApprovalTTL   = 2 * time.Minute // 승인 후 start 까지 허용 시간 기본값(계획서 4-2 필수 정책). cross_check.conf 의 approval_ttl_sec 로 바꾼다
 	DefaultSweepInterval = time.Second     // 승인 만료 검사 주기
+	DefaultWorkTimeout   = 24 * time.Hour  // 본 작업(작업중) 제한 시간 기본값. cross_check.conf 의 work_timeout_sec 로 바꾼다
 
 	MaxLineSize  = 1 << 20 // 요청 한 줄 최대 크기(줄바꿈 제외). 넘으면 오류 응답 후 연결 종료
 	MaxTargets   = 100000  // run 대상 최대 개수(실제로는 MaxLineSize 가 먼저 걸릴 수 있음)
@@ -99,6 +113,7 @@ const (
 	OpApprove     = "approve"
 	OpCancel      = "cancel"
 	OpStart       = "start"
+	OpFinish      = "finish"
 	OpAdminList   = "admin_list"
 	OpAdminSet    = "admin_set"
 	OpAdminDelete = "admin_delete"
@@ -143,6 +158,28 @@ const (
 	StatusAborted  store.Status = "중단"
 )
 
+// 승인된 작업의 본 작업 단계(store.Phase). 빈 값은 "승인, 본 작업 시작 전".
+const (
+	PhaseNone    store.Phase = ""
+	PhaseWorking store.Phase = "작업중"
+	PhaseDone    store.Phase = "작업완료"
+	PhaseAborted store.Phase = "작업중단"
+)
+
+// finish 의 result 값.
+const (
+	ResultDone    = "done"
+	ResultAborted = "aborted"
+)
+
+// StatusLabel 은 화면에 쓰는 상태 표기: 대기, 중단, 승인, 승인/작업중, 승인/작업완료, 승인/작업중단.
+func StatusLabel(st store.Status, ph store.Phase) string {
+	if st == StatusApproved && ph != PhaseNone {
+		return string(st) + "/" + string(ph)
+	}
+	return string(st)
+}
+
 // EventStatus 는 run 연결로 밀어주는 이벤트 이름(현재는 이것 하나).
 const EventStatus = "status"
 
@@ -162,6 +199,15 @@ const (
 	ReasonAdminDelete = "관리자 삭제"
 	ReasonAdminClear  = "관리자 전체 정리"
 	ReasonStarted     = "본 작업 시작" // 이벤트 전용(상태는 승인 유지, StartedAt 기록)
+
+	// ReasonMismatch 는 확인자가 붙여넣은 대상이 작업 대상과 다를 때의 중단 사유 머리(뒤에 개수가 붙는다, MismatchReason).
+	ReasonMismatch = "붙여넣은 대상 불일치"
+	// ReasonWorkTimeout 은 작업중으로 work_timeout_sec 를 넘겨 작업중단이 될 때의 사유(작업자 kill -9 등).
+	ReasonWorkTimeout = "작업자 응답 없음"
+	// ReasonWorkerAborted 는 작업자가 --finish --result aborted 로 본 작업을 멈췄을 때(작업중 → 작업중단).
+	ReasonWorkerAborted = "작업자가 작업을 중단"
+	// ReasonWorkerAbortedBeforeStart 는 승인 뒤 본 작업을 시작하지 않고 멈췄을 때(시작 전 → 작업중단).
+	ReasonWorkerAbortedBeforeStart = "작업자가 본 작업 전에 중단"
 )
 
 // (승인 만료 사유 "승인 후 {TTL} 내 미진행" 은 ttl.go 의 ReasonExpired(ttl) 함수로 만든다.)
@@ -204,20 +250,26 @@ type Request struct {
 	Checker     string       `json:"checker,omitempty"`      // run
 	Targets     []string     `json:"targets,omitempty"`      // run
 	Status      store.Status `json:"status,omitempty"`       // admin_set
+	Phase       store.Phase  `json:"phase,omitempty"`        // admin_set: 상태 승인일 때의 단계(작업완료/작업중단). 빈 값 = 시작 전
 	Reason      string       `json:"reason,omitempty"`       // admin_set
+	Pasted      string       `json:"pasted,omitempty"`       // approve: 확인자가 붙여넣은 대상 글(줄바꿈·탭·공백 구분)
+	Caller      string       `json:"caller,omitempty"`       // run: --run 을 부른 스크립트 이름(정보용)
+	Result      string       `json:"result,omitempty"`       // finish: ResultDone | ResultAborted
 }
 
 // Response 는 응답 한 줄. ok/error 는 항상 들어가고 나머지는 op 에 따라 채운다.
 type Response struct {
 	OK      bool        `json:"ok"`
 	Error   string      `json:"error"`
-	TTLSec  int         `json:"ttl_sec,omitempty"`  // ping/run: 이 데몬의 승인 유효시간(초). 구버전 데몬은 안 줌
-	ID      string      `json:"id,omitempty"`       // run: 등록된 작업 ID(동일인 중단 때도 기록용으로 채움)
-	Token   string      `json:"token,omitempty"`    // run: start 에 쓸 1회용 token(128비트 hex). 작업자에게만 한 번 준다
-	Jobs    []JobView   `json:"jobs,omitempty"`     // list
-	Job     *JobView    `json:"job,omitempty"`      // get
-	AllJobs []store.Job `json:"all_jobs,omitempty"` // admin_list
-	Count   int         `json:"count,omitempty"`    // admin_clear: 지운 개수
+	TTLSec  int         `json:"ttl_sec,omitempty"`          // ping/run: 이 데몬의 승인 유효시간(초). 구버전 데몬은 안 줌
+	PID     int         `json:"pid,omitempty"`              // ping: 데몬 pid(화면 머리말 표시용). 구버전 데몬은 안 줌
+	WorkSec int         `json:"work_timeout_sec,omitempty"` // ping: 본 작업 제한 시간(초). 구버전 데몬은 안 줌
+	ID      string      `json:"id,omitempty"`               // run: 등록된 작업 ID(동일인 중단 때도 기록용으로 채움)
+	Token   string      `json:"token,omitempty"`            // run: start 에 쓸 1회용 token(128비트 hex). 작업자에게만 한 번 준다
+	Jobs    []JobView   `json:"jobs,omitempty"`             // list
+	Job     *JobView    `json:"job,omitempty"`              // get
+	AllJobs []store.Job `json:"all_jobs,omitempty"`         // admin_list
+	Count   int         `json:"count,omitempty"`            // admin_clear: 지운 개수
 	// status_user: auth.conf 에 항목이 있는지(다른 op 에서는 빠짐)
 	Registered *bool `json:"registered,omitempty"`
 }
@@ -237,19 +289,22 @@ type Event struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-// JobView 는 list/get 응답의 작업 한 건. 작업자·확인자(그리고 관리자)만 받으므로 대상 목록을 담는다
-// (확인자는 붙여넣기 대신 대상을 보고 비밀번호로 승인한다).
+// JobView 는 list/get 응답의 작업 한 건. 대상 목록(Targets, TargetCount)은 요청한 사람이 그 작업의 작업자일 때만 담는다:
+// 확인자는 대상을 볼 수 없고, 작업자에게 전달받은 대상을 붙여넣어 데몬이 대조한다(계획서 3-2). 관리자는 admin_list 로 본다.
 type JobView struct {
 	ID          string       `json:"id"`
 	User        string       `json:"user"`    // 작업자
 	Checker     string       `json:"checker"` // 확인자
 	Status      store.Status `json:"status"`
+	Phase       store.Phase  `json:"phase,omitempty"` // 승인 뒤 본 작업 단계(빈 값 = 시작 전)
 	Reason      string       `json:"reason,omitempty"`
-	TargetCount int          `json:"target_count"`
-	Targets     []string     `json:"targets"`
+	Caller      string       `json:"caller,omitempty"`       // --run 을 부른 스크립트(정보용)
+	TargetCount int          `json:"target_count,omitempty"` // 작업자에게만
+	Targets     []string     `json:"targets,omitempty"`      // 작업자에게만
 	CreatedAt   time.Time    `json:"created_at"`
 	ApprovedAt  *time.Time   `json:"approved_at,omitempty"`
 	StartedAt   *time.Time   `json:"started_at,omitempty"`
+	FinishedAt  *time.Time   `json:"finished_at,omitempty"`
 	UpdatedAt   time.Time    `json:"updated_at"`
 	// TTLSec 은 이 데몬의 승인 유효시간(초), ExpiresAt 은 승인되었고 아직 시작하지 않은 작업의 만료 시각(승인 시각 + 유효시간).
 	// 둘 다 선택 필드(구버전 데몬은 안 줌). 유효시간을 바꾸면(SIGHUP) 이미 승인된 작업에도 새 값이 적용된다.
@@ -257,17 +312,20 @@ type JobView struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-// viewOf 는 저장된 작업에서 JobView 를 만든다(uid 등 감사 필드는 admin_list 에서만 보인다).
+// viewOf 는 저장된 작업에서 viewer 에게 보낼 JobView 를 만든다(uid 등 감사 필드는 admin_list 에서만 보인다).
+// 대상 목록은 viewer 가 작업자일 때만 담는다(확인자에게는 개수도 주지 않는다).
 // ttl 은 이 데몬의 승인 유효시간(0 이하면 TTLSec/ExpiresAt 을 채우지 않음).
-func viewOf(j store.Job, ttl time.Duration) JobView {
+func viewOf(j store.Job, ttl time.Duration, viewer string) JobView {
 	v := JobView{
-		ID: j.ID, User: j.User, Checker: j.Checker, Status: j.Status, Reason: j.Reason,
-		TargetCount: len(j.Targets), Targets: j.Targets,
-		CreatedAt: j.CreatedAt, ApprovedAt: j.ApprovedAt, StartedAt: j.StartedAt, UpdatedAt: j.UpdatedAt,
+		ID: j.ID, User: j.User, Checker: j.Checker, Status: j.Status, Phase: j.Phase, Reason: j.Reason, Caller: j.Caller,
+		CreatedAt: j.CreatedAt, ApprovedAt: j.ApprovedAt, StartedAt: j.StartedAt, FinishedAt: j.FinishedAt, UpdatedAt: j.UpdatedAt,
+	}
+	if viewer == j.User {
+		v.TargetCount, v.Targets = len(j.Targets), j.Targets
 	}
 	if ttl > 0 {
 		v.TTLSec = int(ttl / time.Second)
-		if j.Status == StatusApproved && j.ApprovedAt != nil && j.StartedAt == nil {
+		if j.Status == StatusApproved && j.Phase == PhaseNone && j.ApprovedAt != nil && j.StartedAt == nil {
 			exp := j.ApprovedAt.Add(ttl)
 			v.ExpiresAt = &exp
 		}
@@ -332,6 +390,40 @@ func validateRun(req Request) error {
 	}
 	return nil
 }
+
+// MaxCallerLen 은 caller(호출 스크립트 이름) 최대 글자 수(rune).
+const MaxCallerLen = 64
+
+// SanitizeCaller 는 caller 를 정리한다: 잘못된 UTF-8 은 '?', 제어문자(ESC 포함)는 지우고, 64자까지 자른 뒤 앞뒤 공백을 뗀다.
+// 정보용 표시값이라 권한 판단에 쓰지 않는다(작업자가 마음대로 정할 수 있다).
+func SanitizeCaller(s string) string {
+	s = strings.ToValidUTF8(s, "?")
+	var b strings.Builder
+	n := 0
+	for _, r := range s {
+		if r < 0x20 || (r >= 0x7f && r < 0xa0) {
+			continue
+		}
+		if n >= MaxCallerLen {
+			break
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// MismatchReason 은 붙여넣기 불일치 중단 사유: "붙여넣은 대상 불일치(빠짐 N·남음 N·중복 N)" — 개수만, 이름은 넣지 않는다.
+// 붙여넣은 것이 없으면 "붙여넣은 대상 불일치(붙여넣은 대상 없음)".
+func MismatchReason(missing, extra, dup int, empty bool) string {
+	if empty && extra == 0 && dup == 0 {
+		return ReasonMismatch + "(붙여넣은 대상 없음)"
+	}
+	return fmt.Sprintf("%s(빠짐 %d·남음 %d·중복 %d)", ReasonMismatch, missing, extra, dup)
+}
+
+// IsMismatchReason 은 msg 가 붙여넣기 불일치 사유(또는 그 응답 문구)인지.
+func IsMismatchReason(msg string) bool { return strings.HasPrefix(msg, ReasonMismatch) }
 
 // clip 은 오류 메시지에 넣을 사용자 입력을 32바이트로 자른다(1 MiB 짜리 이름을 그대로 돌려주지 않게).
 func clip(s string) string {

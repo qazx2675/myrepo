@@ -34,8 +34,8 @@ func TestParseConfigOK(t *testing.T) {
 		cfg.PortCheckTimeout != 3*time.Second || cfg.OS6Host != "" {
 		t.Errorf("기본값 이상: %+v", cfg)
 	}
-	// 교차검증은 기본 off, 실행 파일은 기본 경로
-	if cfg.CrossCheck || cfg.CrossCheckBin != "/usr/local/bin/cross_check" {
+	// 교차검증은 기본 on(0.3.0~), 실행 파일은 기본 경로
+	if !cfg.CrossCheck || cfg.CrossCheckBin != "/usr/local/bin/cross_check" {
 		t.Errorf("교차검증 기본값 이상: %v %q", cfg.CrossCheck, cfg.CrossCheckBin)
 	}
 }
@@ -50,8 +50,10 @@ func TestParseConfigCrossCheck(t *testing.T) {
 		{"on", base + "cross_check=on\n", true, "/usr/local/bin/cross_check"},
 		{"off", base + "cross_check=off\n", false, "/usr/local/bin/cross_check"},
 		{"bin 지정", base + "cross_check=on\ncross_check_bin=/opt/cc/cross_check\n", true, "/opt/cc/cross_check"},
-		{"bin 만 지정", base + "cross_check_bin=/opt/cc/cross_check  # 경로\n", false, "/opt/cc/cross_check"},
-		{"bin 비움=기본값", base + "cross_check_bin=\n", false, "/usr/local/bin/cross_check"},
+		{"bin 만 지정(키 없음=기본 on)", base + "cross_check_bin=/opt/cc/cross_check  # 경로\n", true, "/opt/cc/cross_check"},
+		{"bin 비움=기본값", base + "cross_check_bin=\n", true, "/usr/local/bin/cross_check"},
+		{"키 없음=기본 on", base, true, "/usr/local/bin/cross_check"},
+		{"off 로 끔(주석 포함)", base + "cross_check=off   # 끔\n", false, "/usr/local/bin/cross_check"},
 	}
 	for _, c := range ok {
 		cfg, err := ParseConfig(strings.NewReader(c.in))
@@ -82,6 +84,22 @@ func TestParseConfigCrossCheck(t *testing.T) {
 	_, err := ParseConfig(strings.NewReader(base + "cross_check=maybe\n"))
 	if err == nil || !strings.Contains(err.Error(), "3번째 줄") || !strings.Contains(err.Error(), "cross_check") {
 		t.Errorf("줄 번호/키가 없음: %v", err)
+	}
+}
+
+// 배포하는 예시 conf(install.sh 가 새 conf 로 복사)는 그대로 파싱되고 교차검증이 켜져 있어야 한다.
+func TestConfigExampleCrossCheckOn(t *testing.T) {
+	f, err := os.Open("pwonoff.conf.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	cfg, err := ParseConfig(f)
+	if err != nil {
+		t.Fatalf("예시 conf 파싱 실패: %v", err)
+	}
+	if !cfg.CrossCheck || cfg.CrossCheckBin != DefaultCrossCheckBin {
+		t.Errorf("예시 conf 의 교차검증: on=%v bin=%q", cfg.CrossCheck, cfg.CrossCheckBin)
 	}
 }
 

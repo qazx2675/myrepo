@@ -23,7 +23,7 @@ type Config struct {
 	BootTimeout      time.Duration
 	BootPollInterval time.Duration
 	PortCheckTimeout time.Duration
-	CrossCheck       bool   // cross_check=on 이면 안전장치 통과 후 전원 작업 직전에 확인자 교차검증을 거친다 (기본 off)
+	CrossCheck       bool   // cross_check=on(기본) 이면 안전장치 2단계 확인자 선택·3단계 확인자 승인(VM 이름 입력 대신)·카운트다운 뒤 --start. off 면 기존 방식
 	CrossCheckBin    string // cross_check 실행 파일 절대경로 (기본 /usr/local/bin/cross_check)
 }
 

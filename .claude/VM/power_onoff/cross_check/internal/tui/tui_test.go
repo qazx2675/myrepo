@@ -12,6 +12,7 @@ import (
 
 	"cross_check/internal/daemon"
 	"cross_check/internal/store"
+	"cross_check/internal/verify"
 )
 
 // ---- 가짜 데몬 클라이언트 ----
@@ -24,6 +25,8 @@ type fakeClient struct {
 	calls     []string
 	onList    func(n int) // List 가 n 번째로 불릴 때(감시 모드 시험용)
 	connErr   error       // 모든 호출이 통신 오류
+	pasted    []string    // Approve 로 받은 붙여넣기 글
+	ttl       time.Duration
 }
 
 func newFake() *fakeClient {
@@ -34,6 +37,15 @@ func derr(msg string) error { return &daemon.DaemonError{Msg: msg} }
 
 func (f *fakeClient) record(s string) {
 	f.calls = append(f.calls, s)
+}
+
+func (f *fakeClient) Info() (daemon.Info, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.connErr != nil {
+		return daemon.Info{}, f.connErr
+	}
+	return daemon.Info{PID: 4128, ApprovalTTL: f.ttl, WorkTimeout: 24 * time.Hour}, nil
 }
 
 func (f *fakeClient) UserRegistered(user string) (bool, error) {
@@ -92,10 +104,18 @@ func (f *fakeClient) List(user string) ([]daemon.JobView, error) {
 	var out []daemon.JobView
 	for _, j := range f.jobs {
 		if j.User == user || j.Checker == user {
-			out = append(out, j)
+			out = append(out, hideFor(j, user))
 		}
 	}
 	return out, nil
+}
+
+// hideFor 는 데몬과 같은 규칙: 작업자가 아니면 대상 목록·개수를 뺀다.
+func hideFor(j daemon.JobView, viewer string) daemon.JobView {
+	if viewer != j.User {
+		j.Targets, j.TargetCount = nil, 0
+	}
+	return j
 }
 
 func (f *fakeClient) find(id string) *daemon.JobView {
@@ -114,13 +134,14 @@ func (f *fakeClient) Get(id, user, password string) (daemon.JobView, error) {
 	if j == nil || (j.User != user && j.Checker != user) {
 		return daemon.JobView{}, derr("작업이 없거나 이 작업의 작업자·확인자가 아님")
 	}
-	return *j, nil
+	return hideFor(*j, user), nil
 }
 
-func (f *fakeClient) Approve(id, user, password string) error {
+func (f *fakeClient) Approve(id, user, password, pasted string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.record("approve " + id + " " + user)
+	f.pasted = append(f.pasted, pasted)
 	if err := f.auth(user, password); err != nil {
 		return err
 	}
@@ -130,6 +151,11 @@ func (f *fakeClient) Approve(id, user, password string) error {
 	}
 	if j.Status != daemon.StatusWaiting {
 		return derr("대기 상태가 아니라 승인할 수 없음(현재 " + string(j.Status) + ")")
+	}
+	if r := verify.Compare(j.Targets, verify.Parse(pasted)); !r.OK() {
+		reason := daemon.MismatchReason(len(r.Missing), len(r.Extra), len(r.Duplicate), r.Empty)
+		j.Status, j.Reason = daemon.StatusAborted, reason
+		return derr(reason + " — 작업이 중단되었습니다(작업자 스크립트도 중단)")
 	}
 	now := time.Now()
 	j.Status, j.ApprovedAt = daemon.StatusApproved, &now
@@ -163,8 +189,8 @@ func (f *fakeClient) AdminList(pw string) ([]store.Job, error) {
 	var out []store.Job
 	for _, j := range f.jobs {
 		out = append(out, store.Job{ID: j.ID, User: j.User, Checker: j.Checker, Targets: j.Targets,
-			Status: j.Status, Reason: j.Reason, CreatedAt: j.CreatedAt, ApprovedAt: j.ApprovedAt, StartedAt: j.StartedAt,
-			WorkerUID: 0, CheckerUID: -1})
+			Status: j.Status, Phase: j.Phase, Reason: j.Reason, Caller: j.Caller, CreatedAt: j.CreatedAt, ApprovedAt: j.ApprovedAt,
+			StartedAt: j.StartedAt, FinishedAt: j.FinishedAt, UpdatedAt: j.UpdatedAt, WorkerUID: 0, CheckerUID: -1})
 	}
 	return out, nil
 }
@@ -181,6 +207,25 @@ func (f *fakeClient) AdminSet(pw, id string, status store.Status, reason string)
 		return derr("작업을 찾을 수 없음: " + id)
 	}
 	j.Status = status
+	j.Reason = daemon.ReasonAdminSet + ": " + reason
+	return nil
+}
+
+func (f *fakeClient) AdminSetPhase(pw, id string, phase store.Phase, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record("admin_set_phase " + id + " " + string(phase) + " " + reason)
+	if err := f.adminAuth(pw); err != nil {
+		return err
+	}
+	j := f.find(id)
+	if j == nil {
+		return derr("작업을 찾을 수 없음: " + id)
+	}
+	if j.Status != daemon.StatusApproved {
+		return derr("승인 상태가 아니라 작업 단계를 바꿀 수 없음")
+	}
+	j.Phase = phase
 	j.Reason = daemon.ReasonAdminSet + ": " + reason
 	return nil
 }
@@ -329,12 +374,25 @@ func TestListRendering(t *testing.T) {
 		job("job6", "alice", "bob", daemon.StatusAborted, daemon.ReasonAdminSet+": 잘못된 기록", "vm01ev01"),
 		job("job7", "dave", "alice", daemon.StatusWaiting, "", "vm09ev01"),
 	}
+	f.jobs[0].Caller = "vm_power_onoff"
+	f.jobs[6].Caller = "작업.sh"
 	out, code, _ := runUser(t, f, "alice", "q\n", Options{})
 	if code != ExitOK {
 		t.Fatalf("code=%d", code)
 	}
-	// 작업자에게 보이는 상태·사유: 확인자 취소, 2분 만료, 작업자 스크립트 종료, 관리자 변경
-	mustContain(t, out, "확인자 bob 가 취소", "승인 후 2분 내 미진행", "작업자 스크립트 종료", "관리자 변경: 잘못된 기록")
+	// 표에는 사유 대신 호출 스크립트 열(사유는 상세·알림에서 본다)
+	mustContain(t, out, "호출 스크립트", "vm_power_onoff", "작업.sh")
+	for _, r := range []string{"확인자 bob 가 취소", "승인 후 2분 내 미진행", "작업자 스크립트 종료", "관리자 변경: 잘못된 기록"} {
+		if strings.Contains(out, r) {
+			t.Fatalf("목록 표에 사유 %q 가 보이면 안 됨(호출 스크립트 열로 바뀜):\n%s", r, out)
+		}
+	}
+	// 확인자 표(job7)에는 대상 수도 없다
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "job7") && strings.Contains(line, " 1 ") {
+			t.Fatalf("확인자 표에 대상 수: %q", line)
+		}
+	}
 	// 승인된 내 작업은 눈에 띄게 표시
 	mustContain(t, out, "★ [승인] 내 작업 job2", "승인 ★", "남은 100초")
 	mustContain(t, out, "내 작업 (작업자) — 6건", "내가 확인자인 작업 — 1건", "내 승인을 기다리는 작업 1건")
@@ -363,13 +421,20 @@ func TestApproveWrongThenRightPassword(t *testing.T) {
 	f.pw["bob"] = "bobpw"
 	f.pw["alice"] = "alicepw"
 	f.jobs = []daemon.JobView{job("j1", "alice", "bob", daemon.StatusWaiting, "", "vm01ev01", "vm02ev01")}
-	in := "1\na\nwrong\na\nbobpw\nq\n"
+	// 붙여넣기(순서·구분자 섞어도 됨, 빈 줄로 끝) → 틀린 패스워드 → 다시 a → 붙여넣기 → 맞는 패스워드
+	in := "1\na\nvm02ev01\tvm01ev01\n\nwrong\na\nvm01ev01\nvm02ev01\n\nbobpw\nq\n"
 	out, code, hides := runUser(t, f, "bob", in, Options{})
 	if code != ExitOK {
 		t.Fatalf("code=%d\n%s", code, out)
 	}
-	mustContain(t, out, "내 역할   : 확인자", "vm01ev01", "vm02ev01", "승인하려면 패스워드를 입력하세요",
-		"승인 실패: 인증 실패", "[승인 완료] 작업 j1", "[필수 정책]")
+	mustContain(t, out, "내 역할   : 확인자", "확인자에게는 표시되지 않음", "전달받은 작업 대상을 붙여넣으세요", "인식한 이름: 2개",
+		"승인하려면 패스워드를 입력하세요", "승인 실패: 인증 실패", "[승인 완료] 작업 j1", "[필수 정책]")
+	if strings.Contains(out, "vm01ev01") || strings.Contains(out, "vm02ev01") {
+		t.Fatalf("확인자 화면에 대상 이름이 나옴:\n%s", out)
+	}
+	if len(f.pasted) != 2 || f.pasted[1] != "vm01ev01\nvm02ev01" {
+		t.Fatalf("붙여넣은 글: %q", f.pasted)
+	}
 	if hides != 2 {
 		t.Fatalf("hide 호출 = %d", hides)
 	}
@@ -386,7 +451,7 @@ func TestApproveLockedNoInfiniteLoop(t *testing.T) {
 	f.pw["bob"] = "bobpw"
 	f.jobs = []daemon.JobView{job("j1", "alice", "bob", daemon.StatusWaiting, "", "vm01ev01")}
 	// 입력이 끝나면(EOF) 반드시 끝난다
-	out, code, _ := runUser(t, f, "bob", "o j1\na\nx\na\ny\n", Options{})
+	out, code, _ := runUser(t, f, "bob", "o j1\na\nvm01ev01\n\nx\na\nvm01ev01\n\ny\n", Options{})
 	if code != ExitOK {
 		t.Fatalf("code=%d", code)
 	}
@@ -402,11 +467,11 @@ func TestApproveAlreadyAbortedReturnsToList(t *testing.T) {
 	var once sync.Once
 	g := &abortBeforeApprove{fakeClient: f, once: &once}
 	var buf bytes.Buffer
-	s := New(strings.NewReader("1\na\nbobpw\nq\n"), &buf, g, Options{})
+	s := New(strings.NewReader("1\na\nvm01ev01\n\nbobpw\nq\n"), &buf, g, Options{})
 	if c := s.RunUser(context.Background(), "bob"); c != ExitOK {
 		t.Fatalf("code=%d", c)
 	}
-	mustContain(t, buf.String(), "대기 상태가 아니라 승인할 수 없음(현재 중단)", "작업자 스크립트 종료")
+	mustContain(t, buf.String(), "대기 상태가 아니라 승인할 수 없음(현재 중단)")
 }
 
 // abortBeforeApprove 는 승인 직전에 작업자가 끊겨 중단된 상황을 흉내 낸다.
@@ -415,13 +480,13 @@ type abortBeforeApprove struct {
 	once *sync.Once
 }
 
-func (a *abortBeforeApprove) Approve(id, user, pw string) error {
+func (a *abortBeforeApprove) Approve(id, user, pw, pasted string) error {
 	a.once.Do(func() {
 		a.mu.Lock()
 		a.jobs[0].Status, a.jobs[0].Reason = daemon.StatusAborted, daemon.ReasonWorkerGone
 		a.mu.Unlock()
 	})
-	return a.fakeClient.Approve(id, user, pw)
+	return a.fakeClient.Approve(id, user, pw, pasted)
 }
 
 func TestCancelFlow(t *testing.T) {
@@ -436,9 +501,9 @@ func TestCancelFlow(t *testing.T) {
 	if f.jobs[0].Status != daemon.StatusAborted || f.jobs[0].Reason != "확인자 bob 가 취소" {
 		t.Fatalf("%+v", f.jobs[0])
 	}
-	// 취소 뒤 목록에 사유가 보인다
-	if i := strings.LastIndex(out, "확인자 bob 가 취소"); i < strings.Index(out, "[취소 완료]") {
-		t.Fatalf("취소 뒤 목록에 사유가 보여야 함:\n%s", out)
+	// 취소 뒤 목록에 중단 상태가 보인다(사유는 상세에서)
+	if i := strings.LastIndex(out, "중단"); i < strings.Index(out, "[취소 완료]") {
+		t.Fatalf("취소 뒤 목록에 중단이 보여야 함:\n%s", out)
 	}
 }
 
@@ -629,7 +694,7 @@ func TestAdminMenuFlows(t *testing.T) {
 		t.Fatalf("code=%d\n%s", code, out)
 	}
 	mustContain(t, out, "[전체 작업] 3건", "[작업별 대상]", "j1 (2개): vm01ev01, vm02ev01",
-		"[변경 완료] 작업 j1 → 중단", "[변경 완료] 작업 j2 → 승인", "[필수 정책]", "1 또는 2 를 입력하세요",
+		"[변경 완료] 작업 j1 → 중단", "[변경 완료] 작업 j2 → 승인", "[필수 정책]", "1~4 중 하나를 입력하세요",
 		"삭제하지 않았습니다", "[삭제 완료] 작업 j3", "6~128자", "[재설정 완료] alice",
 		"등록 사용자 목록 조회 기능이 없어", "alice, bob",
 		"확인 문구가 달라", "[정리 완료] 2건 삭제", "1~6 또는 q")

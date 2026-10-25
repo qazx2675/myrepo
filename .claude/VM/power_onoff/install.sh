@@ -10,7 +10,8 @@
 # 설정 디렉터리 이름은 요구사항 그대로 'vcetner' 철자를 쓴다.
 # 사용법:
 #   sudo bash install.sh [허용디렉터리]      # 허용디렉터리 = conf 의 allowed_dir (기본: 이 폴더의 절대경로)
-#   sudo bash install.sh --enable-cross-check [허용디렉터리]   # pwonoff.conf 의 cross_check=on 으로 (기본은 그대로 둠)
+#   sudo bash install.sh --disable-cross-check [허용디렉터리]  # pwonoff.conf 의 cross_check=off 로 (교차검증 끄기 → 기존 2/5 Enter·3/5 VM 이름 입력)
+#   sudo bash install.sh --enable-cross-check   # 0.3.0 부터 교차검증은 기본 on — 효과 없음(안내만 출력, 예전 스크립트 호환용)
 #   sudo bash install.sh --skip-vm-power-onoff [허용디렉터리]  # vm_power_onoff 실행파일은 설치하지 않음 (cross_check 만)
 #   sudo bash install.sh --approval-ttl 300  # 새로 만드는 cross_check.conf 의 approval_ttl_sec(승인 후 본 작업 시작 허용 시간, 10~3600초, 기본 120=2분).
 #                                            이미 cross_check.conf 가 있으면 덮어쓰지 않고 고치는 방법만 안내
@@ -47,6 +48,7 @@ CC_PW_SH="$HERE/cross_check/scripts/cc_admin_pw.sh"
 
 UNINSTALL=0
 ENABLE_CC=0
+DISABLE_CC=0
 SKIP_VM=0
 APPROVAL_TTL=""
 APPROVAL_TTL_GIVEN=0
@@ -55,12 +57,13 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -u) UNINSTALL=1 ;;
     --enable-cross-check) ENABLE_CC=1 ;;
+    --disable-cross-check) DISABLE_CC=1 ;;
     --skip-vm-power-onoff) SKIP_VM=1 ;;
     --approval-ttl)
       [ $# -ge 2 ] || { echo "[오류] --approval-ttl 에는 초 단위 값이 필요합니다 (예: --approval-ttl 300)" >&2; exit 1; }
       APPROVAL_TTL="$2"; APPROVAL_TTL_GIVEN=1; shift ;;
     --approval-ttl=*) APPROVAL_TTL="${1#*=}"; APPROVAL_TTL_GIVEN=1 ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "[오류] 알 수 없는 옵션: $1 (bash install.sh -h)" >&2; exit 1 ;;
     *)
       [ -z "$ALLOWED" ] || { echo "[오류] 허용디렉터리는 하나만 지정합니다: $1" >&2; exit 1; }
@@ -169,25 +172,36 @@ if [ ! -d "$ALLOWED" ]; then
 fi
 echo "[INFO] 대상 파일은 $ALLOWED/on_off_<user>.txt 에 두고, 그 디렉터리에서 vm_power_onoff 를 실행합니다."
 
-# pwonoff.conf 의 cross_check 키: --enable-cross-check 일 때만 on 으로 (그 외에는 그대로)
+# pwonoff.conf 의 cross_check 키: 0.3.0 부터 기본 on(키가 없어도 on). --disable-cross-check 일 때만 off 로 (그 외에는 그대로)
 CC_STATE_KEY="$(sed -n 's/^cross_check=\([^#[:space:]]*\).*/\1/p' "$CONF" | tr -d '\r' | head -1)"
+[ -n "$CC_STATE_KEY" ] || CC_STATE_KEY=on
 if [ "$ENABLE_CC" -eq 1 ]; then
-  if [ "$CC_STATE_KEY" = on ]; then
-    echo "[INFO] $CONF 에 이미 cross_check=on"
-  elif grep -q '^cross_check=' "$CONF"; then
-    sed -i 's/^cross_check=.*/cross_check=on/' "$CONF"
-    echo "[완료] $CONF : cross_check=on (교차검증 사용)"
-  else
-    printf 'cross_check=on\n' >> "$CONF"
-    echo "[완료] $CONF : cross_check=on 줄 추가 (교차검증 사용)"
+  echo "[INFO] --enable-cross-check: 0.3.0 부터 교차검증(cross_check)은 기본 on 이라 이 옵션은 아무것도 바꾸지 않습니다 (현재 $CONF : cross_check=$CC_STATE_KEY)"
+  if [ "$CC_STATE_KEY" = off ] && [ "$DISABLE_CC" -eq 0 ]; then
+    echo "       이 conf 는 cross_check=off 로 명시되어 있어 꺼진 채로 남습니다 — 켜려면 $CONF 의 cross_check=off 를 cross_check=on 으로 고치세요"
   fi
-  CC_STATE_KEY=on
+fi
+if [ "$DISABLE_CC" -eq 1 ]; then
+  if [ "$CC_STATE_KEY" = off ]; then
+    echo "[INFO] $CONF 에 이미 cross_check=off"
+  elif grep -q '^cross_check=' "$CONF"; then
+    sed -i 's/^cross_check=.*/cross_check=off/' "$CONF"
+    echo "[완료] $CONF : cross_check=off (교차검증 끔 — 안전장치 2/5 Enter, 3/5 VM 이름 입력)"
+  else
+    printf 'cross_check=off\n' >> "$CONF"
+    echo "[완료] $CONF : cross_check=off 줄 추가 (교차검증 끔 — 안전장치 2/5 Enter, 3/5 VM 이름 입력)"
+  fi
+  CC_STATE_KEY=off
 fi
 
 # ── cross_check ────────────────────────────────────────────────
 if [ ! -x "$CC_SRC" ]; then
   echo "[경고] $CC_SRC 가 없어 cross_check(교차검증)는 설치하지 않았습니다." >&2
   echo "       OS6 이면 Go 1.20 빌드 서버에서 bash build_os6.sh 로 bin_os6/cross_check.gz 를 만든 뒤 bash setup.sh 를 다시 실행하십시오." >&2
+  if [ "$CC_STATE_KEY" = on ] && [ ! -x "$CC_DST" ]; then
+    echo "[경고] $CONF 는 cross_check=on(기본)이라 cross_check 가 없으면 vm_power_onoff 가 시작하자마자 멈춥니다." >&2
+    echo "       교차검증 없이 쓰려면: sudo bash $HERE/install.sh --disable-cross-check   (또는 $CONF 에 cross_check=off)" >&2
+  fi
   exit 0
 fi
 
@@ -307,8 +321,8 @@ echo "  2) 각 사람이 한 번씩 등록: cross_check --user <이름>   (선�
 echo "  3) 관리자 화면: cross_check --admin   (admin 패스워드: $CC_AUTH 의 admin= 줄)"
 CC_TTL_NOW="$(sed -n 's/^approval_ttl_sec=\([0-9][0-9]*\).*/\1/p' "$CC_CONF" 2>/dev/null | head -1 || true)"
 echo "     승인 유효시간(승인 후 본 작업 시작 허용 시간): ${CC_TTL_NOW:-120}초 — 바꾸려면 $CC_CONF 의 approval_ttl_sec= 수정 후 pkill -HUP -f 'cross_check --daemon'"
-if [ "$CC_STATE_KEY" = on ]; then
-  echo "  4) 교차검증 사용 중 (pwonoff.conf cross_check=on)"
+if [ "$CC_STATE_KEY" = off ]; then
+  echo "  4) 교차검증은 꺼져 있음 (pwonoff.conf cross_check=off — 안전장치 2/5 Enter, 3/5 VM 이름 입력) — 켜려면 $CONF 의 cross_check=on"
 else
-  echo "  4) 교차검증은 꺼져 있음 — 켜려면: sudo bash $HERE/install.sh --enable-cross-check   (또는 $CONF 의 cross_check=on)"
+  echo "  4) 교차검증 사용 중 (기본 on: 안전장치 2/5 확인자 번호 선택, 3/5 VM 이름 입력 대신 확인자 승인) — 끄려면: sudo bash $HERE/install.sh --disable-cross-check   (또는 $CONF 의 cross_check=off)"
 fi

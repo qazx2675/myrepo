@@ -3,7 +3,8 @@
 # [빌드] 폴더 안에서 오프라인 빌드 (인터넷 불필요, Go 1.26.5 이상)
 bash setup.sh
 
-# [설치] /usr/local/bin/vm_power_onoff 와 /etc/vcetner_pwon_off/pwonoff.conf 설치 (root). 인자 = 허용 디렉터리(기본: 현재 폴더)
+# [설치] /usr/local/bin/vm_power_onoff, cross_check 와 설정 파일 설치, crontab 등록, 데몬 기동 (root). 인자 = 허용 디렉터리(기본: 현재 폴더). 마지막에 admin 패스워드가 한 번만 출력됨
+# (setup.sh 를 root 로 실행했다면 이미 설치까지 끝난 것이므로 생략. 교차검증을 끄려면 끝에 --disable-cross-check)
 sudo bash install.sh /home/power_onoff
 
 # [설정] users / vcenters 를 환경에 맞게 수정 (필요하면 secret_lib, os6_host 채움)
@@ -11,6 +12,46 @@ sudo vi /etc/vcetner_pwon_off/pwonoff.conf
 
 # [대상 파일] 허용 디렉터리에 on_off_<user>.txt 작성 — VM 이름만 한 줄에 하나 (예: svr1ev01)
 vi /home/power_onoff/on_off_hong.txt
+
+# ---- 교차검증(cross_check, 기본 on) ----
+
+# [cross_check 설정] 작업자·확인자 전원이 users= 에 있어야 함(처음에 pwonoff.conf 의 users 를 복사). 승인 유효시간 approval_ttl_sec(기본 120초 = 2분)도 여기서 변경
+sudo vi /etc/cross_check/cross_check.conf
+
+# [등록] 사람마다 한 번씩 패스워드 등록(6~128자, 선착순). 작업자·확인자 각자 자기 터미널에서
+cross_check --user hong
+
+# [데몬 확인] 데몬 기동 보장(없으면 띄움)과 프로세스 확인. crontab 이 매분 같은 일을 함
+sudo cross_check --ensure && pgrep -af 'cross_check --daemon'
+
+# [작업자 터미널] 안전장치 1/5 → 2/5 확인자 번호 선택 → 3/5 에서 대기. 화면에 나온 대상 목록을 확인자에게 전달(-c kim 이면 2/5 생략)
+cd /home/power_onoff && vm_power_onoff -u hong -c kim
+
+# [확인자 터미널] 전체 화면에서 ←→ 로 '내가 확인자인 작업' 선택 → Enter → 전달받은 대상 붙여넣기(Ctrl+D 또는 빈 줄 Enter) → 본인 패스워드 → 승인. 취소는 c + 패스워드, 종료는 q
+cross_check --user kim
+
+# [작업 상태 확인] (작업자 터미널은 승인 후 승인 유효시간 안에 4/5 YeS → 5/5 카운트다운 → 전원 작업, 끝나면 --finish 로 승인/작업완료가 기록됨) 내 작업·내가 확인자인 작업 목록(상태: 대기/승인/승인·작업중/승인·작업완료/승인·작업중단/중단, 호출 스크립트 칸)
+cross_check --user hong
+
+# [줄 입력 화면] 전체 화면 대신 한 줄씩 명령으로 쓰는 화면(파이프·원격 접속 문제 시)
+cross_check --user kim --plain
+
+# [관리자] auth.conf 의 admin= 패스워드로 로그인해 상태 변경(s)·삭제(d)·전체 정리(x)·사용자 패스워드 재설정(p)
+sudo cross_check --admin
+
+# [승인 유효시간 변경] cross_check.conf 의 approval_ttl_sec(10~3600초) 수정 후 재시작 없이 반영(work_timeout_sec 도 같이 다시 읽음)
+sudo vi /etc/cross_check/cross_check.conf && sudo pkill -HUP -f 'cross_check --daemon'
+
+# [직접 단계별로 호출] 작업 스크립트가 하는 일을 손으로: 작업 등록·승인 대기(대상은 파일에서) → --start → --finish. 결과는 done 또는 aborted
+out="$(cross_check --run --user hong --checker kim --targets-file /home/power_onoff/on_off_hong.txt)" || exit 1; eval "$out"; export CROSS_CHECK_TOKEN
+cross_check --start --job "$CROSS_CHECK_JOB"
+cross_check --finish --job "$CROSS_CHECK_JOB" --result done
+
+# [cross_check 격리 놀이터] /etc·/var·crontab 을 건드리지 않고 한 폴더에서 데몬·시험 계정으로 작업자/확인자 역할을 손으로 해 봄(터미널 2개, 안내는 help)
+cd cross_check/test && bash playground.sh start --ttl 20 && bash playground.sh help
+
+# [cross_check 시험] 단위·통합 시험과 격리 E2E (cross_check 는 별도 모듈이라 폴더 안에서 실행)
+cd cross_check && go vet ./... && go test ./... && bash test/e2e.sh bin/cross_check
 
 # [안전장치 체험] vCenter 없이 샘플 3대(web-prd-01, web-prd-02, was-prd-01)로 안전장치 1~5단계만 실행, 전원 작업 없음
 vm_power_onoff --demo

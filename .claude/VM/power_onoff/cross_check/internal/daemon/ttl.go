@@ -32,6 +32,26 @@ func minTTLSec() int {
 	return MinApprovalTTLSec
 }
 
+// work_timeout_sec(본 작업 제한 시간) 허용 범위(초). 작업중으로 이보다 오래 --finish 가 없으면 작업중단("작업자 응답 없음").
+const (
+	MinWorkTimeoutSec = 600    // 10분
+	MaxWorkTimeoutSec = 604800 // 7일
+)
+
+// EnvMinWorkTimeoutSec 는 시험 전용: work_timeout_sec 검증의 최소값(초)을 낮춘다(격리 E2E 가 몇 초짜리 제한을 쓰기 위함).
+// 운영에서는 설정하지 않는다. 문서화된 설정이 아니다.
+const EnvMinWorkTimeoutSec = "CROSS_CHECK_TEST_MIN_WORK_TIMEOUT_SEC"
+
+// minWorkTimeoutSec 는 LoadConf 가 받아들이는 work_timeout_sec 의 최소값(기본 MinWorkTimeoutSec).
+func minWorkTimeoutSec() int {
+	if v := os.Getenv(EnvMinWorkTimeoutSec); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n < MinWorkTimeoutSec {
+			return n
+		}
+	}
+	return MinWorkTimeoutSec
+}
+
 // FormatTTL 은 초 단위 시간을 사람이 읽는 한국어로 바꾼다.
 //
 //	120 → "2분"   45 → "45초"   90 → "1분 30초"   3600 → "1시간"   3720 → "1시간 2분"

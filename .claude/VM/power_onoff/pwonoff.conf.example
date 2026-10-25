@@ -19,10 +19,13 @@ secret_lib=/home/V2/secret_lib.sh
 os6_host=
 os6_user=root
 
-# 교차검증(선택): on 이면 안전장치 1~5단계 통과 직후·전원 작업 직전에 확인자(다른 user)의 승인을 받는다.
-# 승인 후 설정된 시간(cross_check.conf 의 approval_ttl_sec, 기본 2분) 내에 작업을 시작하지 않으면 승인이 취소된다. -n / --demo 에서는 호출하지 않음. 기본 off
-# 확인자는 -c <user> 로 지정하거나 번호로 선택 (본인 제외). cross_check_bin 은 절대경로 (비우면 기본값)
-cross_check=off
+# 교차검증(기본 on): 안전장치 3단계(VM 이름 직접 입력)를 확인자(다른 user)의 승인으로 대신한다.
+#   2/5 확인자 번호 선택(-c <user> 로 미리 지정 가능, 본인 제외) → 3/5 확인자가 자기 터미널(cross_check --user <확인자>)에서 패스워드로 승인
+#   → 4/5 YeS (ls = 대상 보기) → 5/5 카운트다운 → 전원 작업.
+# 승인 후 설정된 시간(cross_check.conf 의 approval_ttl_sec, 기본 2분) 안에 4/5·5/5 를 마치지 않으면 승인이 취소된다. -n / --demo 에서는 호출하지 않음.
+# 끄려면 cross_check=off (기존 방식: 2/5 Enter, 3/5 VM 이름 입력). on 인데 cross_check_bin 이 없으면 시작하자마자 멈춘다.
+# cross_check_bin 은 절대경로 (비우면 기본값)
+cross_check=on
 cross_check_bin=/usr/local/bin/cross_check
 
 concurrency=200         # 한 번에 vCenter 로 보내는 최대 동시 작업 수 (대상이 이보다 많으면 나머지는 이어서). Off/일괄 On/재부팅은 대상 전체를 한꺼번에 보냄

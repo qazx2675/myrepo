@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # e2e_vcsim.sh — vm_power_onoff 바이너리를 vcsim 위에서 처음부터 끝까지 시험한다 (root, Linux, Python3, 모듈 캐시의 govmomi 필요).
+# 안전장치는 기존 방식(conf 에 cross_check=off)으로 돈다. 교차검증 방식(기본 on)은 e2e_vcsim_crosscheck.sh.
 # 빌드 서버(192.168.0.58)에서 실행한다. 로컬에서는:
 #   REMOTE_DIR=/root/pod_all bash dev/sync_test.sh build    # 소스 동기화 + 빌드
 #   ssh root@192.168.0.58 'bash /root/pod_all/test/e2e_vcsim.sh'
 # /etc/vcetner_pwon_off/pwonoff.conf 를 임시로 바꾸므로 끝나면 원래 것을 복원한다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-GO="${GO:-/opt/go1.26.5/bin/go}"; export GOFLAGS=-mod=mod GOPROXY=off GONOSUMDB='*'
+# GO·GOFLAGS 는 환경변수로 바꿀 수 있다 (예: GO=/usr/bin/go GOFLAGS=-mod=vendor GOTOOLCHAIN=local)
+GO="${GO:-/opt/go1.26.5/bin/go}"; export GOFLAGS="${GOFLAGS:--mod=mod}" GOPROXY=off GONOSUMDB='*'
 [ "$(id -u)" -eq 0 ] || { echo "root 로 실행하세요" >&2; exit 1; }
 TMP="$(mktemp -d)"; WORK="$TMP/allowed"; mkdir -p "$WORK"
 CONF_DIR=/etc/vcetner_pwon_off; CONF="$CONF_DIR/pwonoff.conf"; BAK="$TMP/conf.bak"

@@ -4,18 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	"cross_check/internal/daemon"
-	"cross_check/internal/store"
+	"cross_check/internal/verify"
 )
 
-const userHelp = "명령: <번호> 또는 o <번호|ID> 작업 열기 · r/Enter 새로고침 · w 감시(2초 자동 갱신) · p 패스워드 변경 · q 종료"
+const userHelp = "명령: <번호> 또는 o <번호|ID> 작업 열기(확인자는 승인·취소) · r/Enter 새로고침 · w 감시(2초 자동 갱신) · p 패스워드 변경 · q 종료"
 
-// RunUser 는 cross_check --user <user> 화면을 돌리고 종료 코드를 돌려준다.
+// RunUser 는 cross_check --user <user> 의 줄 입력 화면(터미널이 아닐 때·--plain)을 돌리고 종료 코드를 돌려준다.
 // 처음이면 패스워드를 등록하고(INTERVIEW Q26), 내 작업(작업자)과 내가 확인자인 작업 두 표를 보여준다.
-// 확인자 화면에는 입력 시간 제한이 없다(계획서 3-2).
+// 확인자 화면에는 입력 시간 제한이 없다(계획서 3-2). 전체 화면(RunUserFull)과 같은 동작이다.
 func (s *Session) RunUser(ctx context.Context, user string) int {
 	reg, err := s.c.UserRegistered(user)
 	if err != nil {
@@ -122,23 +123,26 @@ func (s *Session) loadUser(user string) userView {
 	var notes []string
 	now := s.opt.Now()
 	for _, j := range jobs {
+		label := daemon.StatusLabel(j.Status, j.Phase)
 		old, seen := s.prev[j.ID]
-		changed := s.prevInit && (!seen || old != j.Status)
+		changed := s.prevInit && (!seen || old != label)
 		if j.User == user {
 			switch {
-			case j.Status == daemon.StatusApproved && j.StartedAt == nil && remainText(j, s.opt.ApprovalTTL, now) != "" && (changed || !s.prevInit):
+			case j.Status == daemon.StatusApproved && j.Phase == daemon.PhaseNone && j.StartedAt == nil && remainText(j, s.opt.ApprovalTTL, now) != "" && (changed || !s.prevInit):
 				notes = append(notes, s.p.Green(fmt.Sprintf("★ [승인] 내 작업 %s — 확인자 %s 가 승인했습니다. %s", j.ID, j.Checker, remainText(j, s.opt.ApprovalTTL, now))))
 			case j.Status == daemon.StatusAborted && changed && seen:
 				notes = append(notes, s.p.Red(fmt.Sprintf("[중단] 내 작업 %s — %s", j.ID, j.Reason)))
+			case j.Status == daemon.StatusApproved && j.Phase != daemon.PhaseNone && changed && seen:
+				notes = append(notes, s.p.Label(j.Status, j.Phase, fmt.Sprintf("[%s] 내 작업 %s", label, j.ID)))
 			}
 		}
 		if j.Checker == user && j.Status == daemon.StatusWaiting && changed && !seen {
-			notes = append(notes, s.p.Yellow(fmt.Sprintf("[새 요청] 작업자 %s 의 작업 %s (대상 %d개) 확인 요청", j.User, j.ID, j.TargetCount)))
+			notes = append(notes, s.p.Yellow(fmt.Sprintf("[새 요청] 작업자 %s 의 작업 %s 확인 요청 — 번호로 열어 전달받은 대상을 붙여넣고 승인", j.User, j.ID)))
 		}
 	}
-	s.prev = map[string]store.Status{}
+	s.prev = map[string]string{}
 	for _, j := range jobs {
-		s.prev[j.ID] = j.Status
+		s.prev[j.ID] = daemon.StatusLabel(j.Status, j.Phase)
 	}
 	s.prevInit = true
 	return userView{jobs: jobs, notices: notes}
@@ -181,12 +185,14 @@ func (s *Session) renderUser(user string, v userView) {
 		}
 	}
 	if waiting > 0 {
-		s.println(s.p.Yellow(fmt.Sprintf("※ 내 승인을 기다리는 작업 %d건 — 번호로 열어 대상 확인 후 a 승인 / c 취소", waiting)))
+		s.println(s.p.Yellow(fmt.Sprintf("※ 내 승인을 기다리는 작업 %d건 — 번호로 열어 a 승인(전달받은 대상 붙여넣기 → 패스워드) / c 취소", waiting)))
 	}
 	s.println(userHelp)
 }
 
 // jobTable 은 표 하나. asWorker 면 상대 칸은 확인자, 아니면 작업자. 최근 MaxRows 건만 보여준다.
+// 열: 번호, ID, 상대, 상태(승인/작업중 등), 생성, 승인, [대상 수 — 작업자 표에만], 호출 스크립트.
+// (중단 사유는 표에 넣지 않고 작업 상세와 알림 줄에 보인다. 확인자 표에는 대상 수도 없다 — 확인자는 대상을 볼 수 없다.)
 func (s *Session) jobTable(title, otherCol string, jobs []daemon.JobView, asWorker bool) {
 	s.println()
 	s.println(s.p.Bold("[" + title + "]"))
@@ -207,20 +213,24 @@ func (s *Session) jobTable(title, otherCol string, jobs []daemon.JobView, asWork
 		if !asWorker {
 			other = j.User
 		}
-		st := string(j.Status)
-		if asWorker && j.Status == daemon.StatusApproved && j.StartedAt == nil {
+		st := daemon.StatusLabel(j.Status, j.Phase)
+		if asWorker && remainText(j, s.opt.ApprovalTTL, now) != "" {
 			st += " ★"
 		}
-		rows = append(rows, []string{
-			fmt.Sprintf("[%d]", len(s.shown)), j.ID, other, st,
-			fmtTime(j.CreatedAt), fmtTimePtr(j.ApprovedAt), strconv.Itoa(j.TargetCount),
-			reasonText(j, s.opt.ApprovalTTL, now),
-		})
+		row := []string{fmt.Sprintf("[%d]", len(s.shown)), j.ID, other, st, fmtTime(j.CreatedAt), fmtTimePtr(j.ApprovedAt)}
+		if asWorker {
+			row = append(row, strconv.Itoa(j.TargetCount))
+		}
+		rows = append(rows, append(row, callerText(j.Caller)))
 	}
-	table(s.out, "  ", []string{"번호", "ID", otherCol, "상태", "생성", "승인", "대상", "사유"}, rows,
+	headers := []string{"번호", "ID", otherCol, "상태", "생성", "승인"}
+	if asWorker {
+		headers = append(headers, "대상")
+	}
+	table(s.out, "  ", append(headers, "호출 스크립트"), rows,
 		func(row, col int, cell string) string {
 			if col == 3 {
-				return s.p.Status(jobs[row].Status, cell)
+				return s.p.Label(jobs[row].Status, jobs[row].Phase, cell)
 			}
 			return cell
 		})
@@ -261,33 +271,39 @@ func (s *Session) openJob(ctx context.Context, user, id string) error {
 	if j.Checker == user && j.Status == daemon.StatusWaiting {
 		return s.checkerActions(ctx, user, j)
 	}
-	if j.User == user && j.Status == daemon.StatusApproved && j.StartedAt == nil {
+	if j.User == user && remainText(j, s.opt.ApprovalTTL, s.opt.Now()) != "" {
 		s.println(s.p.Bold(PolicyText(jobTTL(j, s.opt.ApprovalTTL))))
 	}
 	_, err = s.ask(ctx, "Enter 를 누르면 목록으로 돌아갑니다: ")
 	return err
 }
 
-// printDetail 은 작업 상세(대상 목록 포함 — 확인자도 대상을 보고 판단한다, INTERVIEW Q23).
+// printDetail 은 작업 상세. 대상 목록은 작업자에게만 보인다(확인자는 작업자에게 전달받은 대상을 붙여넣어 대조한다).
 func (s *Session) printDetail(user string, j daemon.JobView) {
 	s.println()
 	s.println(s.p.Cyan(fmt.Sprintf("---- 작업 %s ----", j.ID)))
 	role := "작업자"
-	if j.Checker == user {
+	if j.Checker == user && j.User != user {
 		role = "확인자"
 	}
 	now := s.opt.Now()
 	s.printf("  내 역할   : %s\n", role)
 	s.printf("  작업자    : %s\n", j.User)
 	s.printf("  확인자    : %s\n", j.Checker)
-	s.printf("  상태      : %s\n", s.p.Status(j.Status, string(j.Status)))
+	s.printf("  상태      : %s\n", s.p.Label(j.Status, j.Phase, daemon.StatusLabel(j.Status, j.Phase)))
 	s.printf("  사유      : %s\n", reasonText(j, s.opt.ApprovalTTL, now))
+	s.printf("  호출      : %s\n", callerText(j.Caller))
 	s.printf("  생성      : %s\n", fmtTime(j.CreatedAt))
 	s.printf("  승인      : %s\n", fmtTimePtr(j.ApprovedAt))
 	s.printf("  본 작업   : %s\n", fmtTimePtr(j.StartedAt))
+	s.printf("  작업 종료 : %s\n", fmtTimePtr(j.FinishedAt))
 	s.printf("  갱신      : %s\n", fmtTime(j.UpdatedAt))
-	s.printf("  대상 VM   : %d개\n", len(j.Targets))
-	writeTargets(s, j.Targets)
+	if role == "작업자" {
+		s.printf("  대상 VM   : %d개\n", len(j.Targets))
+		writeTargets(s, j.Targets)
+	} else {
+		s.printf("  대상 VM   : (확인자에게는 표시되지 않음 — 작업자에게 전달받은 대상을 붙여넣어 승인)\n")
+	}
 }
 
 // writeTargets 는 대상 이름을 한 줄에 4개씩 번호와 함께 쓴다.
@@ -308,10 +324,34 @@ func writeTargets(s *Session, ts []string) {
 	}
 }
 
-// checkerActions 는 확인자의 승인(a)/취소(c). 시간 제한 없이 기다린다.
-// 비밀번호가 틀리면 다시 고를 수 있고, 상태가 바뀌어 거절되면(이미 중단 등) 목록으로 돌아간다.
+// readPasted 는 확인자가 붙여넣는 대상 목록을 받는다: 빈 줄 또는 입력 끝(EOF)까지. 인식한 이름 수만 알려 주고 판정은 하지 않는다.
+// EOF 로 끝나면 eof=true (이후 패스워드를 읽을 수 없으므로 호출자는 종료한다).
+func (s *Session) readPasted(ctx context.Context, worker string) (text string, n int, eof bool, err error) {
+	s.println(s.p.Bold(fmt.Sprintf("작업자 %s 에게 전달받은 작업 대상을 붙여넣으세요(줄바꿈·탭·공백 구분). 빈 줄(Enter) 또는 Ctrl+D 로 끝냅니다.", worker)))
+	s.println("  대상 목록은 이 화면에 표시되지 않습니다. 대조는 데몬이 하며 결과는 패스워드 확인 뒤에 나옵니다.")
+	var lines []string
+	for {
+		line, rerr := s.in.ReadLine(ctx)
+		if rerr != nil {
+			if ctx.Err() == nil && errors.Is(rerr, io.EOF) {
+				eof = true
+				break
+			}
+			return "", 0, false, s.readErr(ctx, rerr)
+		}
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+		lines = append(lines, line)
+	}
+	text = strings.Join(lines, "\n")
+	return text, len(verify.Parse(text)), eof, nil
+}
+
+// checkerActions 는 확인자의 승인(a: 대상 붙여넣기 → 패스워드)/취소(c: 패스워드). 시간 제한 없이 기다린다.
+// 비밀번호가 틀리면 다시 고를 수 있고, 대상이 달라 중단되거나 상태가 바뀌어 거절되면(이미 중단 등) 목록으로 돌아간다.
 func (s *Session) checkerActions(ctx context.Context, user string, j daemon.JobView) error {
-	s.println(s.p.Yellow("이 작업의 확인자입니다. 위 대상 목록을 작업자와 대조한 뒤 승인하거나 취소하세요."))
+	s.println(s.p.Yellow("이 작업의 확인자입니다. a 를 누르고 작업자에게 전달받은 대상을 붙여넣은 뒤 패스워드로 승인하거나, c 로 취소하세요."))
 	for {
 		line, err := s.ask(ctx, "a 승인 · c 취소 · Enter 목록으로 > ")
 		if err != nil {
@@ -321,6 +361,18 @@ func (s *Session) checkerActions(ctx context.Context, user string, j daemon.JobV
 		case "":
 			return nil
 		case "a":
+			pasted, n, eof, err := s.readPasted(ctx, j.User)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				s.warnf("붙여넣은 대상이 없어 승인하지 않았습니다.")
+				if eof {
+					return errQuit{ExitOK}
+				}
+				continue
+			}
+			s.printf("  인식한 이름: %d개\n", n)
 			pw, err := s.askSecret(ctx, "승인하려면 패스워드를 입력하세요: ")
 			if err != nil {
 				return err
@@ -329,9 +381,9 @@ func (s *Session) checkerActions(ctx context.Context, user string, j daemon.JobV
 				s.warnf("입력이 없어 승인하지 않았습니다.")
 				continue
 			}
-			err = s.c.Approve(j.ID, user, pw)
+			err = s.c.Approve(j.ID, user, pw, pasted)
 			if err == nil {
-				s.okf("[승인 완료] 작업 %s (작업자 %s, 대상 %d개)를 승인했습니다. 작업자 스크립트가 다음 단계로 진행합니다.", j.ID, j.User, len(j.Targets))
+				s.okf("[승인 완료] 작업 %s (작업자 %s, 붙여넣은 대상 %d개 일치)를 승인했습니다. 작업자 스크립트가 다음 단계로 진행합니다.", j.ID, j.User, n)
 				s.println(s.p.Bold(PolicyText(jobTTL(j, s.opt.ApprovalTTL))))
 				return nil
 			}
@@ -366,6 +418,10 @@ func (s *Session) actionFailed(what string, err error) bool {
 	msg, ok := isDaemonErr(err)
 	if !ok {
 		s.errorf("%s 요청 실패: %v", what, err)
+		return false
+	}
+	if daemon.IsMismatchReason(msg) {
+		s.errorf("%s 실패: %s", what, msg)
 		return false
 	}
 	s.errorf("%s 실패: %s", what, msg)

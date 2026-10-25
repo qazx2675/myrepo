@@ -57,22 +57,15 @@ func (p Painter) Status(st store.Status, s string) string {
 	return s
 }
 
+// Label 은 상태+단계 표기(대기·승인·승인/작업중·승인/작업완료·승인/작업중단·중단)에 전체 화면과 같은 색을 칠한다.
+func (p Painter) Label(st store.Status, ph store.Phase, s string) string {
+	return p.paint(kindStyle[kindOf(st, ph)], s)
+}
+
 // ---- 폭 계산(한글은 2칸) ----
 
-// dispWidth 는 터미널 표시 폭. 한글·한자·전각 문자는 2칸으로 센다.
-func dispWidth(s string) int {
-	w := 0
-	for _, r := range s {
-		switch {
-		case r >= 0x1100 && r <= 0x115F, r >= 0x2E80 && r <= 0xA4CF, r >= 0xAC00 && r <= 0xD7A3,
-			r >= 0xF900 && r <= 0xFAFF, r >= 0xFE30 && r <= 0xFE4F, r >= 0xFF00 && r <= 0xFF60, r >= 0xFFE0 && r <= 0xFFE6:
-			w += 2
-		default:
-			w++
-		}
-	}
-	return w
-}
+// dispWidth 는 터미널 표시 폭(전체 화면과 같은 runeWidth 표: 한글·한자·전각 2칸, 제어·결합 문자 0칸).
+func dispWidth(s string) int { return strWidth(s) }
 
 // pad 는 s 뒤에 공백을 붙여 표시 폭을 w 로 맞춘다.
 func pad(s string, w int) string {
@@ -180,7 +173,7 @@ func jobTTL(j daemon.JobView, def time.Duration) time.Duration {
 // remainText 는 승인 후 아직 시작하지 않은 작업의 남은 시간 문구.
 // 만료 시각은 데몬이 준 ExpiresAt 을 우선하고, 없으면 승인 시각 + 유효시간으로 계산한다.
 func remainText(j daemon.JobView, ttl time.Duration, now time.Time) string {
-	if j.Status != daemon.StatusApproved || j.ApprovedAt == nil || j.StartedAt != nil {
+	if j.Status != daemon.StatusApproved || j.Phase != daemon.PhaseNone || j.ApprovedAt == nil || j.StartedAt != nil {
 		return ""
 	}
 	ttl = jobTTL(j, ttl)
@@ -195,7 +188,7 @@ func remainText(j daemon.JobView, ttl time.Duration, now time.Time) string {
 	return fmt.Sprintf("승인 후 %s 내 본 작업 필요(남은 %d초)", daemon.FormatTTLDuration(ttl), int((left+time.Second-1)/time.Second))
 }
 
-// reasonText 는 표의 사유 칸: 중단 사유, 시작 기록, 승인 후 남은 시간 순으로 보여준다.
+// reasonText 는 상세·작업자 리스트의 사유: 중단 사유, 시작·종료 기록, 승인 후 남은 시간 순으로 보여준다.
 func reasonText(j daemon.JobView, ttl time.Duration, now time.Time) string {
 	parts := []string{}
 	if j.Reason != "" {
@@ -204,7 +197,11 @@ func reasonText(j daemon.JobView, ttl time.Duration, now time.Time) string {
 	if j.Status == daemon.StatusApproved {
 		if j.StartedAt != nil {
 			parts = append(parts, "본 작업 시작 "+fmtTime(*j.StartedAt))
-		} else if r := remainText(j, ttl, now); r != "" {
+		}
+		if j.FinishedAt != nil {
+			parts = append(parts, string(j.Phase)+" "+fmtTime(*j.FinishedAt))
+		}
+		if r := remainText(j, ttl, now); r != "" {
 			parts = append(parts, r)
 		}
 	}
@@ -250,13 +247,13 @@ func WriteWorkerList(w io.Writer, p Painter, user string, jobs []daemon.JobView,
 		if j.ApprovedAt != nil {
 			at = fmtTime(*j.ApprovedAt)
 		}
-		rows = append(rows, []string{j.ID, j.Checker, string(j.Status), at,
+		rows = append(rows, []string{j.ID, j.Checker, daemon.StatusLabel(j.Status, j.Phase), at,
 			fmt.Sprintf("%d", j.TargetCount), joinTargets(j.Targets, 10) + "  [" + reasonText(j, ttl, now) + "]"})
 	}
 	table(w, "  ", []string{"ID", "확인자", "상태", "시각(승인/생성)", "대상수", "대상 VM [사유]"}, rows,
 		func(row, col int, cell string) string {
 			if col == 2 {
-				return p.Status(mine[row].Status, cell)
+				return p.Label(mine[row].Status, mine[row].Phase, cell)
 			}
 			return cell
 		})

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -15,9 +16,15 @@ import (
 	"time"
 )
 
-// 교차검증(cross_check): conf 의 cross_check=on 일 때 안전장치 1~5단계 통과 직후, 실제 전원 작업 직전에
-// 확인자(다른 user)의 승인을 받는다. 승인 → 곧바로 --start 로 승인 유효시간(cross_check.conf 의 approval_ttl_sec, 기본 2분) 안에 시작했음을 데몬에 알린다.
-// 토큰은 cross_check 와 주고받는 용도로만 쓰고 화면·감사 로그에는 절대 남기지 않는다.
+// 교차검증(cross_check): conf 의 cross_check=on(기본)일 때 안전장치 단계에 끼어든다.
+//   2/5 확인자(다른 user) 번호 선택(-c 면 미리 선택) → 3/5 VM 이름 입력 대신 cross_check --run 으로 확인자 승인 대기
+//   → 4/5 YeS → 5/5 카운트다운 → 곧바로 --start 로 승인 유효시간(cross_check.conf 의 approval_ttl_sec, 기본 2분) 안에 시작했음을 데몬에 알린다.
+//   → 본 작업(Runner)이 끝나면 --finish 로 결과를 알린다:
+//      done    = Runner 가 취소 없이 끝까지 실행됨(VM 별 성공·실패는 보지 않는다) → 승인/작업완료
+//      aborted = 승인 뒤 4/5 에서 YeS 가 아님·Ctrl+C, 카운트다운 중 Ctrl+C, 본 작업 중 Ctrl+C → 승인/작업중단
+//      (--start 가 거부/만료되면 데몬이 이미 중단으로 기록했으므로 보내지 않는다. kill -9 등으로 죽으면 보낼 수 없고
+//       데몬의 work_timeout_sec 가 처리한다)
+// 토큰은 cross_check 와 주고받는 용도로만 쓰고(관문 안에만 보관, --finish 뒤 지움) 화면·감사 로그에는 절대 남기지 않는다.
 
 // DefaultCrossCheckBin 은 cross_check_bin 의 기본값이다.
 const DefaultCrossCheckBin = "/usr/local/bin/cross_check"
@@ -41,6 +48,13 @@ const (
 	ccExitSpawn     = -2
 )
 
+// --finish 의 result 값과 그 호출 제한 시간(Ctrl+C 로 취소됐을 수 있는 ctx 대신 새 ctx 로 부른다).
+const (
+	ccResultDone    = "done"
+	ccResultAborted = "aborted"
+	ccFinishTimeout = 15 * time.Second
+)
+
 // jobID 는 인자로 넘기므로 '-' 로 시작하거나 특수문자가 있으면 거부한다.
 var ccJobRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
@@ -51,10 +65,24 @@ type CrossChecker interface {
 	Run(ctx context.Context, user, checker string, targets []string, out, errOut io.Writer) (jobID, token string, err error)
 	// Start 는 승인 유효시간 창이 아직 열려 있는지 확인하고 시작을 알린다. nil 이면 시작 가능.
 	Start(ctx context.Context, jobID, token string) error
+	// Finish 는 본 작업 결과(result = done | aborted)를 알린다.
+	Finish(ctx context.Context, jobID, token, result string) error
 }
 
 // newCrossChecker 는 실제 실행에서 쓰는 구현을 만든다(시험에서 교체 가능).
-var newCrossChecker = func(bin string) CrossChecker { return &execCrossChecker{Bin: bin} }
+// --run 의 --caller 에는 이 프로그램의 실제 실행 파일 이름(보통 vm_power_onoff)을 넘긴다.
+var newCrossChecker = func(bin string) CrossChecker { return &execCrossChecker{Bin: bin, Caller: selfName()} }
+
+// selfName 은 이 프로그램의 실행 파일 이름(os.Executable 의 마지막 요소, 안 되면 os.Args[0] 의 것)이다.
+func selfName() string {
+	if p, err := os.Executable(); err == nil && p != "" {
+		return filepath.Base(p)
+	}
+	if len(os.Args) > 0 && os.Args[0] != "" {
+		return filepath.Base(os.Args[0])
+	}
+	return ""
+}
 
 // CrossCheckError 는 cross_check 가 승인하지 않았거나 실패한 경우다. Msg 에는 토큰을 담지 않는다.
 type CrossCheckError struct {
@@ -94,17 +122,21 @@ func crossCheckClass(err error) string {
 // 계획만 보는 -n 에서는 부르지 않는다(--demo 는 run() 에 오지 않는다).
 func crossCheckNeeded(cfg *Config, planOnly bool) bool { return cfg.CrossCheck && !planOnly }
 
-// CheckCrossCheckBin 은 cross_check 실행 파일이 쓸 수 있는 상태인지 미리 확인한다(안전장치에 들어가기 전에 실패시키려는 것).
+// ccInstallHint 는 cross_check 를 쓸 수 없을 때 붙이는 해결 방법이다.
+const ccInstallHint = " — bash setup.sh 로 설치하거나 pwonoff.conf 에 cross_check=off 를 지정하세요"
+
+// CheckCrossCheckBin 은 cross_check 실행 파일이 쓸 수 있는 상태인지 미리 확인한다(vCenter 접속·안전장치에 들어가기 전에 실패시키려는 것).
+// cross_check 는 기본 on 이므로 설치되지 않은 서버에서는 여기서 바로 멈추고 끄는 방법을 알려 준다.
 func CheckCrossCheckBin(path string) error {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return fmt.Errorf("cross_check 실행 파일을 찾을 수 없습니다 (cross_check_bin=%s): %v", path, err)
+		return fmt.Errorf("cross_check 가 설치되어 있지 않습니다: %s%s", path, ccInstallHint)
 	}
 	if !fi.Mode().IsRegular() {
-		return fmt.Errorf("cross_check 실행 파일이 일반 파일이 아닙니다: %s", path)
+		return fmt.Errorf("cross_check 가 설치되어 있지 않습니다: %s (일반 파일이 아님)%s", path, ccInstallHint)
 	}
 	if runtime.GOOS != "windows" && fi.Mode().Perm()&0111 == 0 {
-		return fmt.Errorf("cross_check 실행 파일에 실행 권한이 없습니다: %s", path)
+		return fmt.Errorf("cross_check 가 설치되어 있지 않습니다: %s (실행 권한 없음)%s", path, ccInstallHint)
 	}
 	return nil
 }
@@ -122,14 +154,8 @@ func ValidateChecker(cfg *Config, user, checker string) error {
 	return nil
 }
 
-// pickChecker 는 -c 값을 검증하거나, 없으면 본인을 뺀 users 번호 메뉴로 고른다.
-func pickChecker(ctx context.Context, in *LineReader, out io.Writer, cfg *Config, user, opt string) (string, error) {
-	if opt != "" {
-		if err := ValidateChecker(cfg, user, opt); err != nil {
-			return "", err
-		}
-		return opt, nil
-	}
+// checkerCandidates 는 확인자로 고를 수 있는 user 다: conf users 순서 그대로, 작업자 본인 제외.
+func checkerCandidates(cfg *Config, user string) ([]string, error) {
 	var cands []string
 	for _, u := range cfg.Users {
 		if u != user {
@@ -137,60 +163,99 @@ func pickChecker(ctx context.Context, in *LineReader, out io.Writer, cfg *Config
 		}
 	}
 	if len(cands) == 0 {
-		return "", errors.New("확인자로 선택할 user 가 없습니다 (conf users 에 본인 외 user 가 필요합니다)")
+		return nil, fmt.Errorf("확인자로 선택할 user 가 없습니다 (pwonoff.conf 의 users 에 작업자 %s 외의 user 가 필요합니다. 교차검증을 쓰지 않으려면 cross_check=off)", user)
 	}
-	fmt.Fprintln(out, "\n교차검증 확인자를 선택하세요:")
+	return cands, nil
+}
+
+// checkerTries 는 2단계 확인자 번호 입력 기회(틀리면 다시 묻고, 모두 틀리면 취소).
+const checkerTries = 3
+
+// 안전장치 2·3·5단계에 끼우는 교차검증 관문 ---------------------------------------
+
+// CrossCheckGate 는 cross_check=on 일 때 안전장치에 끼우는 교차검증 관문이다.
+// Hook 으로 GuardOpts 에 SelectChecker(2단계)·Approve(3단계)·Start(5단계 카운트다운 직후)를 건다.
+type CrossCheckGate struct {
+	Cfg        *Config
+	CC         CrossChecker
+	Out        io.Writer // 화면
+	ErrOut     io.Writer // cross_check 의 stderr (보통 os.Stderr)
+	Audit      *Audit
+	User       string   // 작업자
+	OptChecker string   // -c 값 (비우면 번호 메뉴)
+	Targets    []string // 승인 받을 VM 이름 = 실제 전원 작업 대상
+
+	// Approve 가 채우고 Start·Finish 가 쓴다. token 은 화면·로그에 내지 않고 --finish 를 보냈거나(성공·실패 모두)
+	// 보낼 필요가 없어지면(--start 거부) 지운다. started 는 --start 가 통과했는지(두 번 시작 방지).
+	checker, job, token string
+	started             bool
+}
+
+// Hook 은 RunGuard 가 교차검증 방식으로 돌도록 opts 에 관문 단계를 건다.
+func (g *CrossCheckGate) Hook(opts *GuardOpts) {
+	opts.Checker = g.SelectChecker
+	opts.CrossCheck = g.Approve
+	opts.AfterCountdown = g.Start
+}
+
+// SelectChecker 는 2단계: -c 가 있으면 그 확인자(미리 선택), 없으면 본인을 뺀 users 번호 메뉴.
+// 잘못된 번호는 checkerTries 번까지 다시 묻는다. 오류 문구는 그대로 취소 사유가 된다(Ctrl+C 는 ctx 로 RunGuard 가 판단).
+func (g *CrossCheckGate) SelectChecker(ctx context.Context, in *LineReader, out io.Writer) (string, error) {
+	fail := func(why string, err error) (string, error) {
+		g.Audit.Printf("교차검증 확인자 선택 실패: %s", why)
+		return "", err
+	}
+	if g.OptChecker != "" {
+		if err := ValidateChecker(g.Cfg, g.User, g.OptChecker); err != nil {
+			fmt.Fprintln(out, Red("[오류] "+err.Error()))
+			return fail(err.Error(), errors.New("확인자 선택 실패 (-c 값이 올바르지 않음)"))
+		}
+		fmt.Fprintf(out, "%s 확인자: %s (-c)\n", Bold("[2/5]"), g.OptChecker)
+		g.Audit.Printf("교차검증 확인자 선택 확인자=%s 방법=-c", g.OptChecker)
+		return g.OptChecker, nil
+	}
+	cands, err := checkerCandidates(g.Cfg, g.User)
+	if err != nil {
+		fmt.Fprintln(out, Red("[오류] "+err.Error()))
+		return fail(err.Error(), errors.New("확인자 선택 실패 (선택할 user 없음)"))
+	}
+	fmt.Fprintf(out, "%s 확인자를 선택하세요 (교차검증 승인자, 작업자 %s 제외):\n", Bold("[2/5]"), g.User)
 	for i, u := range cands {
 		fmt.Fprintf(out, "  %d) %s\n", i+1, u)
 	}
-	s, err := readChoice(ctx, in, "번호 입력: ")
-	if err != nil {
-		return "", err
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil || n < 1 || n > len(cands) {
-		return "", fmt.Errorf("잘못된 선택입니다: %q (1~%d)", s, len(cands))
-	}
-	return cands[n-1], nil
-}
-
-// 안전장치 직후의 교차검증 단계 ------------------------------------------------
-
-// CrossCheckGate 는 전원 작업 직전의 마지막 관문이다.
-type CrossCheckGate struct {
-	Cfg    *Config
-	CC     CrossChecker
-	In     *LineReader
-	Out    io.Writer // 화면
-	ErrOut io.Writer // cross_check 의 stderr (보통 os.Stderr)
-	Audit  *Audit
-}
-
-// Run 은 확인자를 정하고 승인을 받아 시작 신호까지 보낸다. 통과하면 nil.
-// 오류면 화면 출력·감사 기록까지 끝낸 상태이므로 호출자는 전원 작업 없이 ExitFail 로 끝내면 된다.
-func (g *CrossCheckGate) Run(ctx context.Context, user, optChecker string, targets []string) error {
-	cancel := func(class string) error {
-		if ctx.Err() != nil {
-			fmt.Fprintln(g.Out) // 승인 대기 줄을 끝내고 출력
+	for try := 1; ; try++ {
+		fmt.Fprint(out, "번호 입력: ")
+		s, err := in.ReadLine(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				g.Audit.Printf("교차검증 확인자 선택 중 Ctrl+C")
+				return "", ctx.Err()
+			}
+			fmt.Fprintln(out)
+			return fail("입력 종료(EOF)", errors.New("입력 종료(EOF)"))
 		}
-		fmt.Fprintln(g.Out, Red("[취소] 교차검증 미승인"))
-		return fmt.Errorf("교차검증 미승인: %s", class)
+		s = strings.TrimSpace(s)
+		if n, e := strconv.Atoi(s); e == nil && n >= 1 && n <= len(cands) {
+			fmt.Fprintf(out, "확인자: %s\n", cands[n-1])
+			g.Audit.Printf("교차검증 확인자 선택 확인자=%s 방법=번호(%d번째 입력)", cands[n-1], try)
+			return cands[n-1], nil
+		}
+		if try >= checkerTries {
+			return fail(fmt.Sprintf("잘못된 입력 %d회", checkerTries), fmt.Errorf("확인자 선택 실패 (잘못된 입력 %d회)", checkerTries))
+		}
+		fmt.Fprintln(out, Yellow(fmt.Sprintf("[경고] 잘못된 선택입니다: %q (1~%d 중 번호) — 다시 입력하세요 (남은 기회 %d번)", s, len(cands), checkerTries-try)))
 	}
+}
 
-	// (a) 확인자
-	checker, err := pickChecker(ctx, g.In, g.Out, g.Cfg, user, optChecker)
-	if err != nil {
-		g.Audit.Printf("교차검증 확인자 선택 실패: %v", err)
-		fmt.Fprintln(g.Out, Red("[오류] "+err.Error()))
-		return cancel("확인자 선택 실패")
-	}
-
-	// (b) 승인 요청 — 대기 전에 승인 유효시간 정책부터 알린다
-	fmt.Fprintln(g.Out)
+// Approve 는 3단계: 확인자에게 승인을 요청하고 승인될 때까지 기다린다(VM 이름 입력 대신). 승인되면 nil.
+// 미승인이면 감사 기록까지 남긴 오류를 돌려주고, 화면의 "[취소] 교차검증 미승인" 은 RunGuard 가 출력한다.
+func (g *CrossCheckGate) Approve(ctx context.Context, checker string) error {
+	g.checker, g.job, g.token, g.started = checker, "", "", false
+	// 대기 전에 승인 유효시간 정책부터 알린다
 	fmt.Fprintln(g.Out, Yellow(crossCheckNotice))
-	fmt.Fprintf(g.Out, "[INFO] 확인자 %s 에게 교차검증을 요청합니다 (대상 %d대). 승인을 기다리는 중... (Ctrl+C 로 취소)\n", checker, len(targets))
-	g.Audit.Printf("교차검증 요청 작업자=%s 확인자=%s 대상=%d대", user, checker, len(targets))
-	jobID, token, err := g.CC.Run(ctx, user, checker, targets, g.Out, g.ErrOut)
+	fmt.Fprintf(g.Out, "[INFO] 확인자 %s 에게 교차검증을 요청합니다 (대상 %d대). 승인을 기다리는 중... (Ctrl+C 로 취소)\n", checker, len(g.Targets))
+	g.Audit.Printf("교차검증 요청 작업자=%s 확인자=%s 대상=%d대", g.User, checker, len(g.Targets))
+	jobID, token, err := g.CC.Run(ctx, g.User, checker, g.Targets, g.Out, g.ErrOut)
 	if err == nil && (jobID == "" || token == "" || !ccJobRe.MatchString(jobID)) {
 		err = &CrossCheckError{Code: ccExitError, Msg: "승인 응답에 작업 ID/토큰이 없거나 올바르지 않습니다"}
 	}
@@ -200,23 +265,91 @@ func (g *CrossCheckGate) Run(ctx context.Context, user, optChecker string, targe
 			class = (&CrossCheckError{Code: ccExitInterrupt}).Class()
 		}
 		g.Audit.Printf("교차검증 미승인 확인자=%s 분류=%s", checker, class)
-		return cancel(class)
+		return fmt.Errorf("교차검증 미승인: %s", class)
 	}
+	g.job, g.token = jobID, token
 	g.Audit.Printf("교차검증 승인 확인자=%s job=%s", checker, jobID)
 	fmt.Fprintln(g.Out, Green(fmt.Sprintf("[INFO] 교차검증 승인됨 (확인자 %s, 작업 ID %s)", checker, jobID)))
+	fmt.Fprintln(g.Out, Yellow("[INFO] 승인 유효시간 안에 4/5 YeS 입력과 5/5 카운트다운을 마쳐야 전원 작업이 시작됩니다 (cross_check --start 는 카운트다운 직후 자동 호출, 넘기면 승인 자동 취소)"))
+	return nil
+}
 
-	// (c) 승인 후 유효시간 창이 열려 있는지 확인하며 시작을 알린다
-	if err := g.CC.Start(ctx, jobID, token); err != nil {
+// Start 는 5단계 카운트다운 직후: 승인 유효시간 창이 아직 열려 있는지 cross_check --start 로 확인하며 시작을 알린다.
+// 통과하면 nil. 거부(유효시간 초과 등)면 감사 기록·사유 한 줄 출력 후 오류(화면의 "[취소] …" 는 RunGuard 가 출력).
+// 거부되면 데몬이 이미 중단으로 기록했으므로 token 을 지워 --finish 를 보내지 않는다. 단 --start 도중 Ctrl+C 면
+// 시작이 기록됐는지 알 수 없으므로 token 을 남겨 두어 뒤이은 Finish(aborted)가 작업중단을 알리게 한다.
+func (g *CrossCheckGate) Start(ctx context.Context) error {
+	job, token := g.job, g.token
+	if job == "" || token == "" || g.started { // 시작은 한 번만
+		g.Audit.Printf("교차검증 시작 거부: 승인된 작업이 없음")
+		return &CrossCheckError{Code: ccExitError, Msg: "승인된 작업이 없습니다"}
+	}
+	if err := g.CC.Start(ctx, job, token); err != nil {
 		class := crossCheckClass(err)
-		g.Audit.Printf("교차검증 시작 거부 확인자=%s job=%s 분류=%s", checker, jobID, class)
 		if ctx.Err() != nil {
-			fmt.Fprintln(g.Out)
+			class = (&CrossCheckError{Code: ccExitInterrupt}).Class()
+		} else {
+			g.token = ""
 		}
-		fmt.Fprintln(g.Out, Red("[취소] 교차검증 승인 유효시간 초과 또는 거부"))
+		g.Audit.Printf("교차검증 시작 거부 확인자=%s job=%s 분류=%s", g.checker, job, class)
+		var ce *CrossCheckError
+		if errors.As(err, &ce) && ce.Msg != "" && ctx.Err() == nil {
+			fmt.Fprintln(g.Out, Yellow("  사유: "+strings.ReplaceAll(ce.Msg, token, "***")))
+		}
 		return fmt.Errorf("교차검증 시작 거부: %s", class)
 	}
-	g.Audit.Printf("교차검증 시작 허용 확인자=%s job=%s", checker, jobID)
+	g.started = true
+	g.Audit.Printf("교차검증 시작 허용 확인자=%s job=%s", g.checker, job)
 	fmt.Fprintln(g.Out, Green("[INFO] 교차검증 통과 — 전원 작업을 시작합니다"))
+	return nil
+}
+
+// Abort 는 승인 뒤 본 작업을 시작하지 않고 멈췄을 때(4/5 에서 YeS 가 아님·Ctrl+C, 카운트다운 중 Ctrl+C) 부른다:
+// 승인된 작업이 남아 있으면 --finish --result aborted(승인/작업중단). 승인 전·--start 거부 뒤에는 아무것도 하지 않는다.
+func (g *CrossCheckGate) Abort() { g.Finish(ccResultAborted) }
+
+// ReportRun 은 본 작업(Runner)이 돌아온 직후 부른다: ctx 가 취소됐으면(Ctrl+C·종료 신호) aborted, 아니면 done.
+// VM 별 성공·실패는 보지 않는다(일부 VM 이 실패해도 끝까지 실행됐으면 작업완료).
+func (g *CrossCheckGate) ReportRun(ctx context.Context) {
+	if ctx.Err() != nil {
+		g.Finish(ccResultAborted)
+		return
+	}
+	g.Finish(ccResultDone)
+}
+
+// ccResultLabel 은 result 를 데몬의 상태 표기로 바꾼다.
+func ccResultLabel(result string) string {
+	if result == ccResultDone {
+		return "승인/작업완료"
+	}
+	return "승인/작업중단"
+}
+
+// Finish 는 cross_check --finish 로 본 작업 결과(done|aborted)를 데몬에 알린다. 승인된 작업이 없거나 이미 보고했으면 nil.
+// 이미 취소됐을 수 있는 ctx 대신 짧은 제한 시간의 새 ctx 로 부른다. 실패해도 vm_power_onoff 의 종료 코드는 바꾸지 않고
+// [경고] 한 줄과 감사 로그만 남긴다(반환값은 시험·호출자 참고용). 성공·실패와 관계없이 token 은 지운다.
+func (g *CrossCheckGate) Finish(result string) error {
+	job, token := g.job, g.token
+	g.token = ""
+	if job == "" || token == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), ccFinishTimeout)
+	defer cancel()
+	if err := g.CC.Finish(ctx, job, token, result); err != nil {
+		class := crossCheckClass(err)
+		why := ""
+		var ce *CrossCheckError
+		if errors.As(err, &ce) && ce.Msg != "" {
+			why = " — " + strings.ReplaceAll(ce.Msg, token, "***")
+		}
+		g.Audit.Printf("교차검증 결과 보고 실패: %s job=%s 분류=%s", result, job, class)
+		fmt.Fprintln(g.Out, Yellow(fmt.Sprintf("[경고] 교차검증 결과(%s)를 cross_check 데몬에 알리지 못했습니다 (작업 %s, %s)%s", result, job, class, why)))
+		return err
+	}
+	g.Audit.Printf("교차검증 결과 보고: %s job=%s", result, job)
+	fmt.Fprintf(g.Out, "[INFO] 교차검증 결과 보고: %s (작업 %s)\n", ccResultLabel(result), job)
 	return nil
 }
 
@@ -224,8 +357,9 @@ func (g *CrossCheckGate) Run(ctx context.Context, user, optChecker string, targe
 
 // execCrossChecker 는 cross_check 실행 파일을 직접 띄운다(셸을 거치지 않는다).
 type execCrossChecker struct {
-	Bin string
-	pre []string // 시험용: 실행 파일 뒤 맨 앞에 끼워 넣는 인자
+	Bin    string
+	Caller string   // --run --caller 값(이 프로그램의 실행 파일 이름). 비우면 넘기지 않는다
+	pre    []string // 시험용: 실행 파일 뒤 맨 앞에 끼워 넣는 인자
 }
 
 func (c *execCrossChecker) command(ctx context.Context, args ...string) *exec.Cmd {
@@ -246,6 +380,9 @@ func ccWaitError(ctx context.Context, err error, what string) error {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) { // --finish 의 제한 시간(ccFinishTimeout)
+		return &CrossCheckError{Code: ccExitError, Msg: what + " 제한 시간 초과"}
+	}
 	if ctx.Err() != nil {
 		return &CrossCheckError{Code: ccExitInterrupt, Msg: what + " 중 Ctrl+C"}
 	}
@@ -257,7 +394,11 @@ func ccWaitError(ctx context.Context, err error, what string) error {
 }
 
 func (c *execCrossChecker) Run(ctx context.Context, user, checker string, targets []string, out, errOut io.Writer) (string, string, error) {
-	cmd := c.command(ctx, "--run", "--user", user, "--checker", checker)
+	args := []string{"--run", "--user", user, "--checker", checker}
+	if c.Caller != "" {
+		args = append(args, "--caller", c.Caller)
+	}
+	cmd := c.command(ctx, args...)
 	cmd.Stdin = strings.NewReader(strings.Join(targets, "\n") + "\n")
 	f := &ccFilter{out: out}
 	cmd.Stdout = f
@@ -280,8 +421,23 @@ func (c *execCrossChecker) Start(ctx context.Context, jobID, token string) error
 	if !ccJobRe.MatchString(jobID) {
 		return &CrossCheckError{Code: ccExitError, Msg: "작업 ID 형식이 올바르지 않습니다"}
 	}
-	cmd := c.command(ctx, "--start", "--job", jobID)
-	// 토큰은 자식 프로세스의 환경에만 둔다(부모 환경·인자·화면에는 없음)
+	return c.runWithToken(ctx, "--start", token, "--start", "--job", jobID)
+}
+
+func (c *execCrossChecker) Finish(ctx context.Context, jobID, token, result string) error {
+	if !ccJobRe.MatchString(jobID) {
+		return &CrossCheckError{Code: ccExitError, Msg: "작업 ID 형식이 올바르지 않습니다"}
+	}
+	if result != ccResultDone && result != ccResultAborted {
+		return &CrossCheckError{Code: ccExitError, Msg: "결과 값이 올바르지 않습니다: " + result}
+	}
+	return c.runWithToken(ctx, "--finish", token, "--finish", "--job", jobID, "--result", result)
+}
+
+// runWithToken 은 token 을 자식 프로세스의 환경(CROSS_CHECK_TOKEN)에만 넣어 cross_check 를 실행한다(부모 환경·인자·화면에는 없음).
+// 출력은 화면으로 보내지 않고, 실패하면 그 첫 줄(token 은 가림)을 사유로 붙인다.
+func (c *execCrossChecker) runWithToken(ctx context.Context, what, token string, args ...string) error {
+	cmd := c.command(ctx, args...)
 	env := make([]string, 0, len(os.Environ())+1)
 	for _, e := range os.Environ() {
 		if !strings.HasPrefix(e, ccEnvToken+"=") {
@@ -293,7 +449,7 @@ func (c *execCrossChecker) Start(ctx context.Context, jobID, token string) error
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 	if err := cmd.Run(); err != nil {
-		ce := ccWaitError(ctx, err, "--start").(*CrossCheckError)
+		ce := ccWaitError(ctx, err, what).(*CrossCheckError)
 		// 사유 한 줄만 덧붙인다(토큰이 섞여 있으면 가린다)
 		if msg := strings.TrimSpace(strings.ReplaceAll(buf.String(), token, "***")); msg != "" {
 			if i := strings.IndexAny(msg, "\r\n"); i >= 0 {

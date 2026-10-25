@@ -53,6 +53,9 @@ unset CROSS_CHECK_TOKEN || true
 # 시험 전용: 설정 파일 검증의 approval_ttl_sec 최소값(원래 10초)을 3초로 낮춰 만료 시험을 짧게 한다.
 # (아래 "범위 검증" 시험은 이 변수를 지우고 실제 최소 10초가 지켜지는지 따로 본다)
 export CROSS_CHECK_TEST_MIN_TTL_SEC=3
+# 시험 전용: work_timeout_sec 최소값(원래 600초)을 3초로 낮춰 "작업자 응답 없음"(작업중 kill -9) 시험을 짧게 한다.
+export CROSS_CHECK_TEST_MIN_WORK_TIMEOUT_SEC=3
+unset CROSS_CHECK_CALLER || true
 
 mkdir -p "$T/run" "$T/etc" "$T/lib" "$T/targets" "$T/out"
 # users= : 작업자·확인자로 쓸 수 있는 이름(dave 는 목록에 있지만 등록하지 않음, zed 는 목록 밖)
@@ -62,6 +65,7 @@ target_dir=$T/targets
 auth=required
 users=alice,bob,carol,dave
 approval_ttl_sec=3
+work_timeout_sec=3
 EOF
 printf 'vm01ev01\nvm02ev01\nvm03ev01\n# 주석\n' >"$T/targets/on_off_alice.txt"
 printf 'vm01ev01\n' >"$T/targets/on_off_dave.txt"
@@ -148,12 +152,13 @@ start_worker() {
 	fi
 }
 
-# job_row <user> <job id> : 그 사용자 화면 표에서 작업 행
+# job_row <user> <job id> : 그 사용자 화면(줄 입력 화면)에서 'o <ID>' 로 연 작업 상세(내 역할·상태·사유·호출·시각·대상 줄).
+# (0.3.0 부터 목록 표에는 사유 대신 호출 스크립트 열이 있으므로 상태·사유는 상세에서 본다)
 job_row() {
-	printf 'q\n' | "$BIN" --user "$1" 2>&1 | grep -E "^ +\[[0-9]+\] +$2 " || true
+	printf 'o %s\n\n\nq\n' "$2" | "$BIN" --user "$1" 2>&1 | sed -nE '/^---- 작업 /,/^(이 작업의 확인자|Enter 를 누르면)/p' || true
 }
 
-# wait_row <user> <job id> <패턴> : 표의 행이 패턴과 맞을 때까지(최대 5초)
+# wait_row <user> <job id> <패턴> : 작업 상세가 패턴과 맞을 때까지(최대 5초)
 wait_row() {
 	local n=0
 	while ! job_row "$1" "$2" | grep -q -- "$3"; do
@@ -163,9 +168,17 @@ wait_row() {
 	done
 }
 
-# approve_as_bob <job id> <출력파일>
+# approve_as_bob <job id> <출력파일> <붙여넣을 대상...> : bob 이 작업을 열어 a → 대상 붙여넣기(빈 줄로 끝) → 패스워드
 approve_as_bob() {
-	tui bob "$2" "o $1" a "$BOB_PW" q
+	local id=$1 o=$2
+	shift 2
+	tui bob "$o" "o $id" a "$@" "" "$BOB_PW" q
+}
+
+# raw_ok <JSON> <패턴> : 소켓 직접 요청의 응답이 패턴을 포함하는지(perl 없으면 통과로 본다)
+raw_has() {
+	[ "$HAVE_PERL" = 1 ] || return 0
+	raw "$1" | grep -q -- "$2"
 }
 
 echo "== cross_check e2e: $BIN"
@@ -286,7 +299,7 @@ else
 	fail "대기 등록" "$T/out/w1.err"
 fi
 
-tui bob "$T/out/wrong.txt" "o $J1" a "틀린비번" "" q
+tui bob "$T/out/wrong.txt" "o $J1" a vm02ev01 vm01ev01 "" "틀린비번" "" q
 if grep -q '승인 실패: 인증 실패' "$T/out/wrong.txt" && job_row bob "$J1" | grep -q '대기' && kill -0 "$WPID" 2>/dev/null; then
 	pass "틀린 패스워드 승인 거부(대기 유지, 작업자 계속 대기)"
 else
@@ -294,24 +307,39 @@ else
 fi
 
 tui carol "$T/out/carol_open.txt" "o $J1" q
-tui bob "$T/out/carol_as_bob.txt" "o $J1" a "$CAROL_PW" "" q
+tui bob "$T/out/carol_as_bob.txt" "o $J1" a vm01ev01 vm02ev01 "" "$CAROL_PW" "" q
 if grep -q '열 수 없습니다' "$T/out/carol_open.txt" && grep -q '인증 실패' "$T/out/carol_as_bob.txt" && job_row bob "$J1" | grep -q '대기'; then
 	pass "지정 확인자가 아닌 carol: 작업을 못 열고, bob 사칭(carol 패스워드)도 거부"
 else
 	fail "제3자 승인 차단" "$T/out/carol_open.txt" "$T/out/carol_as_bob.txt"
 fi
 
-# 대상 확인 화면(확인자에게 대상 목록이 보여야 함) + 승인
-approve_as_bob "$J1" "$T/out/approve1.txt"
+# 확인자에게는 대상이 보이지 않는다(목록·상세·소켓 응답 모두) — 작업자에게는 보인다
+tui bob "$T/out/bob_view.txt" "o $J1" "" q
+ok=1
+grep -q '확인자에게는 표시되지 않음' "$T/out/bob_view.txt" || ok=0
+if grep -q 'vm01ev01\|vm02ev01' "$T/out/bob_view.txt"; then ok=0; fi
+if [ "$HAVE_PERL" = 1 ]; then
+	raw '{"op":"list","user":"bob"}' >"$T/out/bob_raw.txt"
+	if grep -q 'vm01ev01\|target' "$T/out/bob_raw.txt"; then ok=0; fi
+	raw '{"op":"list","user":"alice"}' | grep -q '"target_count":2' || ok=0
+fi
+job_row alice "$J1" | grep -q 'vm02ev01' || ok=0
+grep -q '위 대상 목록을 확인자 bob 에게 전달하세요' "$T/out/w1.err" || ok=0
+if [ $ok = 1 ]; then pass "확인자에게 대상 숨김(화면·소켓 list 응답), 작업자 상세·--run 안내에는 대상 표시"; else fail "확인자 대상 숨김" "$T/out/bob_view.txt" "$T/out/bob_raw.txt"; fi
+
+# 대상 붙여넣기(순서 바꿔·탭 섞어) + 패스워드 → 승인
+approve_as_bob "$J1" "$T/out/approve1.txt" "$(printf 'vm02ev01\tvm01ev01')"
 RC=0
 wait "$WPID" || RC=$?
 lines=$(wc -l <"$T/out/w1.out")
-if [ "$RC" -eq 0 ] && grep -q '\[승인 완료\]' "$T/out/approve1.txt" && grep -q 'vm02ev01' "$T/out/approve1.txt" &&
+if [ "$RC" -eq 0 ] && grep -q '\[승인 완료\]' "$T/out/approve1.txt" && ! grep -q 'vm02ev01' "$T/out/approve1.txt" &&
+	grep -q '인식한 이름: 2개' "$T/out/approve1.txt" &&
 	grep -qx "CROSS_CHECK_JOB=$J1" "$T/out/w1.out" && grep -qE '^CROSS_CHECK_TOKEN=[0-9a-f]{32}$' "$T/out/w1.out" && [ "$lines" -eq 2 ] &&
 	grep -q '\[승인\] 작업' "$T/out/w1.err" && grep -q '내 작업 리스트' "$T/out/w1.err" && grep -q '필수 정책' "$T/out/w1.err" &&
 	grep -q '승인 완료 후 3초 내에' "$T/out/w1.err" && grep -q '승인 유효시간: 3초' "$T/out/w1.err" && ! grep -q '2분' "$T/out/w1.err" &&
 	grep -q '승인 완료 후 3초 내에' "$T/out/approve1.txt" && ! grep -q '2분' "$T/out/approve1.txt"; then
-	pass "확인자 승인 → --run exit 0, stdout 은 CROSS_CHECK_JOB/TOKEN 두 줄, stderr 에 내 작업 리스트·정책(설정한 3초로 표시, 2분 하드코딩 없음), 확인자 승인 화면도 3초"
+	pass "확인자 대상 붙여넣기+패스워드 승인 → --run exit 0, stdout 은 CROSS_CHECK_JOB/TOKEN 두 줄, stderr 에 내 작업 리스트·정책(설정한 3초로 표시, 2분 하드코딩 없음), 확인자 승인 화면도 3초"
 else
 	fail "승인 흐름 (rc=$RC lines=$lines)" "$T/out/approve1.txt" "$T/out/w1.out" "$T/out/w1.err"
 fi
@@ -328,7 +356,25 @@ if [ "$RC" -eq 0 ] && grep -q '\[시작\]' "$T/out/start1.txt" && [ "$RC2" -eq 1
 else
 	fail "--start ($RC/$RC2/$RC3)" "$T/out/start1.txt" "$T/out/start1b.txt" "$T/out/start1c.txt"
 fi
-if job_row alice "$J1" | grep -q '본 작업 시작'; then pass "작업자 표에 승인·본 작업 시작 표시"; else fail "시작 표시" ; fi
+if job_row alice "$J1" | grep -q '본 작업 시작' && job_row alice "$J1" | grep -qx '  상태      : 승인/작업중'; then
+	pass "--start 후 승인/작업중(본 작업 시작 기록)"
+else
+	fail "시작 표시"
+	job_row alice "$J1"
+fi
+# 승인 유효시간(3초)이 지나도 시작한 작업은 만료되지 않는다(작업 제한 3초 안에 finish)
+RC=0
+(eval "$(cat "$T/out/w1.out")" && export CROSS_CHECK_TOKEN && "$BIN" --finish --job "$CROSS_CHECK_JOB" --result done) >"$T/out/fin1.txt" 2>&1 || RC=$?
+RC2=0
+(eval "$(cat "$T/out/w1.out")" && export CROSS_CHECK_TOKEN && "$BIN" --finish --job "$CROSS_CHECK_JOB" --result aborted) >"$T/out/fin1b.txt" 2>&1 || RC2=$?
+RC3=0
+(eval "$(cat "$T/out/w1.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB") >"$T/out/fin1c.txt" 2>&1 || RC3=$?
+if [ "$RC" -eq 0 ] && grep -q '승인/작업완료' "$T/out/fin1.txt" && [ "$RC2" -eq 1 ] && grep -q '이미 끝난 작업' "$T/out/fin1b.txt" &&
+	[ "$RC3" -eq 1 ] && grep -q '이미 끝난 작업' "$T/out/fin1c.txt" && job_row alice "$J1" | grep -qx '  상태      : 승인/작업완료'; then
+	pass "--finish --result done → 승인/작업완료(exit 0), 끝난 뒤 finish·start 는 exit 1(이미 끝난 작업)"
+else
+	fail "finish done ($RC/$RC2/$RC3)" "$T/out/fin1.txt" "$T/out/fin1b.txt" "$T/out/fin1c.txt"
+fi
 
 # ---- 4. 확인자 취소 ----
 start_worker w2 "$T/t_alice3.txt"
@@ -337,7 +383,7 @@ tui bob "$T/out/cancel.txt" "o $J2" c "$BOB_PW" q
 RC=0
 wait "$WPID" || RC=$?
 if [ -n "$J2" ] && [ "$RC" -eq 1 ] && grep -q '확인자 bob 가 취소' "$T/out/w2.err" && [ ! -s "$T/out/w2.out" ] &&
-	job_row alice "$J2" | grep -q '확인자 bob 가 취소'; then
+	job_row alice "$J2" | grep -q '확인자 bob 가 취소' && grep -q '취소 완료' "$T/out/cancel.txt"; then
 	pass "확인자 취소 → 작업자 exit 1(사유 출력), 작업자 표에 사유"
 else
 	fail "확인자 취소 (rc=$RC)" "$T/out/cancel.txt" "$T/out/w2.err"
@@ -368,7 +414,7 @@ fi
 # ---- 6. 승인 후 유효시간(시험 설정 3초) 초과 → --start 거부 ----
 start_worker w5 "$T/t_alice3.txt"
 J5=$JOB
-approve_as_bob "$J5" "$T/out/approve5.txt"
+approve_as_bob "$J5" "$T/out/approve5.txt" vm03ev01
 RC=0
 wait "$WPID" || RC=$?
 sleep 4.5
@@ -379,6 +425,124 @@ if [ -n "$J5" ] && [ "$RC" -eq 0 ] && [ "$RC2" -eq 1 ] && grep -q '미진행' "$
 	pass "승인 후 유효시간(설정 3초) 초과 → --start exit 1, 메시지·작업자 표 사유 모두 '승인 후 3초 내 미진행'"
 else
 	fail "만료 (run=$RC start=$RC2)" "$T/out/approve5.txt" "$T/out/w5.err" "$T/out/start5.txt"
+fi
+
+# ---- 6b. 붙여넣은 대상 불일치 → 중단(개수만 알림) ----
+start_worker w7 "$T/t_alice.txt"
+J7=$JOB
+approve_as_bob "$J7" "$T/out/approve7.txt" vm01ev01
+RC=0
+wait "$WPID" || RC=$?
+if [ -n "$J7" ] && [ "$RC" -eq 1 ] && grep -q '붙여넣은 대상 불일치(빠짐 1·남음 0·중복 0)' "$T/out/approve7.txt" &&
+	! grep -q 'vm02ev01' "$T/out/approve7.txt" && grep -q '붙여넣은 대상 불일치(빠짐 1·남음 0·중복 0)' "$T/out/w7.err" &&
+	job_row alice "$J7" | grep -qx '  상태      : 중단' && ! grep -q 'vm02ev01' "$T/daemon.log"; then
+	pass "붙여넣은 대상 불일치 → 작업 중단, 작업자 exit 1, 확인자·작업자·로그에는 개수만(이름 없음)"
+else
+	fail "불일치 (rc=$RC)" "$T/out/approve7.txt" "$T/out/w7.err"
+fi
+
+# 틀린 패스워드면 붙여넣기가 틀려도 상태 그대로(패스워드를 먼저 확인)
+start_worker w7b "$T/t_alice3.txt"
+J7B=$JOB
+tui bob "$T/out/approve7b.txt" "o $J7B" a vm99zz99 "" "틀린비번" "" q
+if [ -n "$J7B" ] && grep -q '인증 실패' "$T/out/approve7b.txt" && ! grep -q '불일치' "$T/out/approve7b.txt" &&
+	job_row bob "$J7B" | grep -qx '  상태      : 대기' && kill -0 "$WPID" 2>/dev/null; then
+	pass "틀린 패스워드 + 틀린 붙여넣기 → 인증 실패만, 작업은 대기 유지(대조 전)"
+else
+	fail "패스워드 먼저" "$T/out/approve7b.txt"
+fi
+kill -INT "$WPID" 2>/dev/null || true
+wait "$WPID" 2>/dev/null || true
+
+# ---- 6c. 본 작업 단계: 작업중 → aborted / 시작 전 aborted / 시작 전 done 거부 ----
+start_worker w9 "$T/t_alice3.txt"
+J9=$JOB
+approve_as_bob "$J9" "$T/out/approve9.txt" vm03ev01
+wait "$WPID" || true
+RA=0
+(eval "$(cat "$T/out/w9.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB" &&
+	"$BIN" --finish --job "$CROSS_CHECK_JOB" --result aborted) >"$T/out/fin9.txt" 2>&1 || RA=$?
+start_worker w10 "$T/t_alice3.txt"
+J10=$JOB
+approve_as_bob "$J10" "$T/out/approve10.txt" vm03ev01
+wait "$WPID" || true
+RD=0
+(eval "$(cat "$T/out/w10.out")" && export CROSS_CHECK_TOKEN && "$BIN" --finish --job "$CROSS_CHECK_JOB" --result done) >"$T/out/fin10a.txt" 2>&1 || RD=$?
+RB=0
+(eval "$(cat "$T/out/w10.out")" && export CROSS_CHECK_TOKEN && "$BIN" --finish --job "$CROSS_CHECK_JOB" --result aborted) >"$T/out/fin10b.txt" 2>&1 || RB=$?
+RS=0
+(eval "$(cat "$T/out/w10.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB") >"$T/out/fin10c.txt" 2>&1 || RS=$?
+if [ "$RA" -eq 0 ] && job_row alice "$J9" | grep -qx '  상태      : 승인/작업중단' && job_row alice "$J9" | grep -q '작업자가 작업을 중단' &&
+	[ "$RD" -eq 1 ] && grep -q '시작하지 않아' "$T/out/fin10a.txt" && [ "$RB" -eq 0 ] && [ "$RS" -eq 1 ] &&
+	job_row alice "$J10" | grep -qx '  상태      : 승인/작업중단' && job_row alice "$J10" | grep -q '작업자가 본 작업 전에 중단'; then
+	pass "작업중 → --finish aborted = 승인/작업중단, 시작 전 done 거부(exit 1)·aborted = 승인/작업중단(본 작업 전에 중단), 그 뒤 start 거부"
+else
+	fail "작업 단계 ($RA/$RD/$RB/$RS)" "$T/out/fin9.txt" "$T/out/fin10a.txt" "$T/out/fin10b.txt" "$T/out/fin10c.txt"
+fi
+
+# ---- 6d. 작업중에 작업자 kill -9 → 작업 제한(시험 3초) 뒤 승인/작업중단(작업자 응답 없음), caller 자동 감지 ----
+cat >"$T/work_kill.sh" <<EOS
+#!/bin/bash
+# e2e: 실제 작업 스크립트처럼 --run → --start → (작업) → --finish. 작업 중에 kill -9 당한다.
+out=\$("$BIN" --run --user alice --checker bob --targets-file "\$1") || exit 1
+eval "\$out"; export CROSS_CHECK_TOKEN
+"$BIN" --start --job "\$CROSS_CHECK_JOB" || exit 1
+echo "STARTED \$CROSS_CHECK_JOB"
+sleep 300
+"$BIN" --finish --job "\$CROSS_CHECK_JOB" --result done
+EOS
+bash "$T/work_kill.sh" "$T/t_alice3.txt" >"$T/out/wk.out" 2>"$T/out/wk.err" &
+WK=$!
+JK=""
+if wait_for "$T/out/wk.err" '\[대기\] 작업'; then JK=$(sed -n 's/^\[대기\] 작업 \([^ ]*\) .*/\1/p' "$T/out/wk.err" | head -1); fi
+approve_as_bob "$JK" "$T/out/approvek.txt" vm03ev01
+ok=1
+wait_for "$T/out/wk.out" 'STARTED' 50 || ok=0
+# 스크립트(bash)를 먼저 죽이고 그 자식(sleep)을 죽인다 — 자식부터 죽이면 스크립트가 다음 줄(--finish)로 넘어간다
+KIDS=$(pgrep -P "$WK" 2>/dev/null || true)
+kill -9 "$WK" 2>/dev/null || true
+# shellcheck disable=SC2086
+[ -z "$KIDS" ] || kill -9 $KIDS 2>/dev/null || true
+wait "$WK" 2>/dev/null || true
+sleep 4.5
+if [ $ok = 1 ] && [ -n "$JK" ] && job_row alice "$JK" | grep -qx '  상태      : 승인/작업중단' && job_row alice "$JK" | grep -q '작업자 응답 없음' &&
+	job_row alice "$JK" | grep -q '호출      : work_kill.sh' && grep -q '호출: work_kill.sh' "$T/out/wk.err"; then
+	pass "작업중 작업자 kill -9 → 승인 유효시간으로는 만료되지 않고 작업 제한(3초) 뒤 승인/작업중단(작업자 응답 없음), caller 자동 감지 = work_kill.sh"
+else
+	fail "작업 제한 (ok=$ok job=$JK)" "$T/out/wk.err" "$T/out/wk.out" "$T/daemon.log"
+	job_row alice "$JK"
+fi
+
+# ---- 6e. caller: --caller / CROSS_CHECK_CALLER / 자동(이 시험 스크립트) ----
+RC=0
+"$BIN" --run --user alice --checker bob --targets-file "$T/t_alice3.txt" --caller 'my_job.sh' >"$T/out/c1.out" 2>"$T/out/c1.err" &
+C1=$!
+wait_for "$T/out/c1.err" '\[대기\] 작업' || true
+JC1=$(sed -n 's/^\[대기\] 작업 \([^ ]*\) .*/\1/p' "$T/out/c1.err" | head -1)
+CROSS_CHECK_CALLER='env_job.sh' "$BIN" --run --user alice --checker bob --targets-file "$T/t_alice3.txt" >"$T/out/c2.out" 2>"$T/out/c2.err" &
+C2=$!
+wait_for "$T/out/c2.err" '\[대기\] 작업' || true
+JC2=$(sed -n 's/^\[대기\] 작업 \([^ ]*\) .*/\1/p' "$T/out/c2.err" | head -1)
+ok=1
+job_row bob "$JC1" | grep -q '호출      : my_job.sh' || ok=0
+job_row bob "$JC2" | grep -q '호출      : env_job.sh' || ok=0
+job_row alice "$J7" | grep -q '호출      : e2e.sh' || ok=0 # start_worker 는 이 스크립트(bash e2e.sh)가 직접 부름
+printf 'q\n' | "$BIN" --user bob 2>&1 | grep -q 'my_job.sh' || ok=0 # 목록 표의 호출 스크립트 열
+kill -INT "$C1" "$C2" 2>/dev/null || true
+wait "$C1" 2>/dev/null || true
+wait "$C2" 2>/dev/null || true
+if [ $ok = 1 ]; then pass "caller 기록: --caller my_job.sh, CROSS_CHECK_CALLER=env_job.sh, 자동 감지 e2e.sh (상세·목록 표)"; else
+	fail "caller" "$T/out/c1.err" "$T/out/c2.err"
+	job_row bob "$JC1"
+	job_row alice "$J7"
+fi
+
+# ---- 6f. ping 의 pid, 줄 입력 화면 머리말 ----
+if raw_has '{"op":"ping"}' "\"pid\":$DPID" && raw_has '{"op":"ping"}' '"work_timeout_sec":3'; then
+	pass "ping 응답에 pid(데몬 $DPID)·work_timeout_sec(3)"
+else
+	fail "ping pid"
+	raw '{"op":"ping"}' || true
 fi
 
 # ---- 7. 관리자 ----
@@ -473,11 +637,19 @@ wait "$DPID2" 2>/dev/null || true
 DPID2=""
 
 # ---- 8. 데몬 강제 종료 → 동시 --ensure 3개 → 하나만 기동, 재시작 처리 ----
+# 작업중인 작업 하나(J8: 시작 직후 데몬이 죽음 → 재시작 때 승인/작업중단). 작업 제한(3초)·승인 유효시간(3초) 안에 데몬을 죽인다
+start_worker w8 "$T/t_alice3.txt"
+J8=$JOB
 start_worker w6 "$T/t_alice3.txt"
 J6=$JOB
-approve_as_bob "$J6" "$T/out/approve6.txt"
+W6=$WPID
+approve_as_bob "$J8" "$T/out/approve8.txt" vm03ev01
+RC8=0
+wait_for "$T/out/w8.out" 'CROSS_CHECK_TOKEN=' 50 || RC8=9
+(eval "$(cat "$T/out/w8.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB") >"$T/out/start8.txt" 2>&1 || RC8=$?
+approve_as_bob "$J6" "$T/out/approve6.txt" vm03ev01
 RC=0
-wait "$WPID" || RC=$?
+wait "$W6" || RC=$?
 for p in $(daemon_pids); do kill -9 "$p" 2>/dev/null || true; done
 wait "$DPID" 2>/dev/null || true
 DPID=""
@@ -501,12 +673,15 @@ if [ "$RC" -eq 0 ] && [ "$r1$r2$r3" = 000 ] && [ "$cnt" -eq 1 ] && "$BIN" --ensu
 else
 	fail "--ensure 재기동 (run=$RC ensure=$r1$r2$r3 daemons=$cnt)" "$T/out/ens1.txt" "$T/daemon.log"
 fi
-if job_row alice "$J6" | grep -q '데몬 재시작' && job_row alice "$J1" | grep -q '본 작업 시작' && job_row alice "$J1" | grep -q '승인'; then
-	pass "재시작: 미시작 승인 건은 중단(데몬 재시작), 이미 시작한 승인 건은 기록 유지"
+if job_row alice "$J6" | grep -q '데몬 재시작' && job_row alice "$J6" | grep -qx '  상태      : 중단' &&
+	job_row alice "$J1" | grep -qx '  상태      : 승인/작업완료' && [ "$RC8" -eq 0 ] &&
+	job_row alice "$J8" | grep -qx '  상태      : 승인/작업중단' && job_row alice "$J8" | grep -q '데몬 재시작'; then
+	pass "재시작: 미시작 승인 건은 중단(데몬 재시작), 작업중이던 건은 승인/작업중단(데몬 재시작), 끝난 건(작업완료)은 그대로"
 else
-	fail "재시작 처리" "$T/daemon.log"
+	fail "재시작 처리 (rc8=$RC8)" "$T/daemon.log" "$T/out/start8.txt"
 	job_row alice "$J6"
 	job_row alice "$J1"
+	job_row alice "$J8"
 fi
 
 echo

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # e2e_driver.py — vm_power_onoff 바이너리를 vcsim(시뮬레이터) 위에서 처음부터 끝까지 돌려 본다 (Python 3.6+).
 # 직접 실행하지 말고 test/e2e_vcsim.sh 로 실행 (빌드·conf 준비·정리 포함).
+# 여기 시나리오는 기존 방식(cross_check=off) 안전장치를 쓴다 — 실제 cross_check 데몬이 필요 없다.
+# 교차검증 방식(cross_check=on, 기본)은 test/e2e_vcsim_crosscheck.py 가 이 파일을 import 해서 시험한다.
 import os, re, select, signal, subprocess, sys, time
 
 BIN, SIM, WORK, CONF = sys.argv[1], sys.argv[2], sys.argv[3], "/etc/vcetner_pwon_off/pwonoff.conf"
@@ -87,10 +89,12 @@ class Sim:
             self.p.kill()
 
 
-def write_conf(addr, extra=""):
+def write_conf(addr, extra="", cc="off"):
+    """cc: "off"(기존 방식, 기본) / "on" / None(키를 쓰지 않음 = 프로그램 기본값 on)."""
+    cc_line = "" if cc is None else "cross_check=%s\n" % cc
     open(CONF, "w").write(
         "allowed_dir=%s\nusers=tester,other\nvcenters=%s\nvc_id=user\nconcurrency=4\n"
-        "shutdown_timeout=3\nboot_timeout=2\nboot_poll_interval=1\nport_check_timeout=1\n%s" % (WORK, addr, extra))
+        "shutdown_timeout=3\nboot_timeout=2\nboot_poll_interval=1\nport_check_timeout=1\n%s%s" % (WORK, addr, cc_line, extra))
     os.chmod(CONF, 0o644)
 
 
@@ -138,18 +142,37 @@ def through_vwp(pr):
     pr.send(m.group(1) + "\n")
 
 
-def through_guard(pr, names=TARGETS, ans="YeS"):
+# 4/5 단계 질문 (두 방식 공통). 강제 PowerOff 질문 "(YeS/No): " 과는 다르다.
+YES_PROMPT = r"\[4/5\] 정말 작업을 진행하시겠습니까\? \(YeS/No, ls=대상 보기\): "
+
+
+def through_code(pr, names):
+    """1/5: 확인 코드를 그대로 입력하고 대상 목록·총 N대 를 확인한다."""
     m = pr.expect(r"\[1/5\] 확인 코드: ([A-Z0-9]{6})")
     pr.expect(r"입력하세요: ")
     pr.send(m.group(1) + "\n")
     pr.expect(r"총 %d대" % len(names))
+
+
+def answer_yes(pr, names, ans="YeS", ls=0):
+    """4/5: ls 를 ls 번 보내 목록·총 N대 가 다시 나오는지(취소 없이 다시 묻는지) 확인한 뒤 ans 를 보낸다."""
+    pr.expect(YES_PROMPT)
+    for _ in range(ls):
+        pr.send("ls\n")
+        pr.expect(r"작업 대상 호스트 목록:\n(?:.*\n)*?총 %d대\n" % len(names))
+        pr.expect(YES_PROMPT)
+    pr.send(ans + "\n")
+
+
+def through_guard(pr, names=TARGETS, ans="YeS", ls=0):
+    """기존 방식(cross_check=off): 코드 → Enter → VM 이름 입력 → (ls) → YeS."""
+    through_code(pr, names)
     pr.expect(r"\[2/5\]")
     pr.send("\n")
     pr.expect(r"이내\):")
     pr.send(" ".join(reversed(names)) + "\n")  # 순서 무관, 공백 구분
     pr.expect(r"호스트 목록 일치")
-    pr.expect(r"\(YeS/No\): ")
-    pr.send(ans + "\n")
+    answer_yes(pr, names, ans, ls)
 
 
 def check_states(power_expect, names=TARGETS):
@@ -176,14 +199,14 @@ def s_plan():
         sim.close()
 
 
-@scenario("off: VWP+안전장치+강제OFF(YeS)")
+@scenario("off: VWP+안전장치(ls 2회)+강제OFF(YeS)")
 def s_off():
     sim, pr = start([], power="on")
     try:
         login(pr, 1)
         pr.expect(r"Power Off 계획 — 총 4대")
         through_vwp(pr)
-        through_guard(pr)
+        through_guard(pr, ls=2)
         pr.expect(r"10 \.\. 9 \.\. 8 \.\. 7 \.\. 6 \.\. 5 \.\. 4 \.\. 3 \.\. 2 \.\. 1", 20)
         pr.expect(r"강제 PowerOff 하시겠습니까\? \(YeS/No\): ", 30)
         pr.send("YeS\n")
@@ -192,8 +215,18 @@ def s_off():
         check_states("off")
         rd = os.path.join(WORK, "run_tester")
         assert os.path.isdir(rd) and os.listdir(rd), "감사 로그 없음"
+        assert "안전장치 4단계 ls(대상 보기) 2회" in read_audit(), "감사 로그에 ls 횟수 없음"
     finally:
         sim.close()
+
+
+def read_audit(user="tester"):
+    """allowed_dir/run_<user>/ 아래 감사 로그를 모두 이어 붙여 돌려준다."""
+    logs, rd = "", os.path.join(WORK, "run_" + user)
+    for root, _, files in os.walk(rd):
+        for f in sorted(files):
+            logs += open(os.path.join(root, f), errors="replace").read()
+    return logs
 
 
 @scenario("off: 강제 OFF 질문에 yes → 끄지 않음")
@@ -359,6 +392,26 @@ def s_conf_perm():
         sim.close()
 
 
+@scenario("실행불가: 기본 on 인데 cross_check 미설치")
+def s_cc_missing():
+    sim = Sim("on")
+    try:
+        write_conf(sim.addr, "cross_check_bin=/nonexistent/cross_check\n", cc=None)  # 키 없음 = 기본 on
+        write_targets(["svr1ev01"])
+        pr = Proc([BIN, "-u", "tester", "-v", sim.addr])
+        assert pr.wait(10) == 1, pr.buf
+        assert ("cross_check 가 설치되어 있지 않습니다: /nonexistent/cross_check — bash setup.sh 로 설치하거나 "
+                "pwonoff.conf 에 cross_check=off 를 지정하세요") in pr.buf, pr.buf
+        assert "비밀번호" not in pr.buf and "[1/5]" not in pr.buf, "vCenter/안전장치 전에 멈춰야 함:\n" + pr.buf
+        # -n(계획만)은 교차검증을 쓰지 않으므로 cross_check 없이도 된다
+        pr = Proc([BIN, "-u", "tester", "-v", sim.addr, "-n"])
+        login(pr, 1)
+        pr.expect(r"-n 지정")
+        assert pr.wait(10) == 0
+    finally:
+        sim.close()
+
+
 @scenario("user/vCenter/기능 번호 선택 + 비밀번호 유출 없음")
 def s_menus():
     sim = Sim("on")
@@ -380,10 +433,14 @@ def s_menus():
         sim.close()
 
 
-for fn in [s_plan, s_menus, s_off, s_off_refuse, s_on_all, s_on_seq, s_wrong_code, s_wrong_hosts, s_not_yes,
-           s_missing_vm, s_outside, s_bad_user, s_symlink, s_conf_perm]:
-    fn()
+def main():
+    for fn in [s_plan, s_menus, s_off, s_off_refuse, s_on_all, s_on_seq, s_wrong_code, s_wrong_hosts, s_not_yes,
+               s_missing_vm, s_outside, s_bad_user, s_symlink, s_conf_perm, s_cc_missing]:
+        fn()
+    fails = [n for n, ok in results if not ok]
+    print("\nE2E PASS=%d FAIL=%d" % (len(results) - len(fails), len(fails)))
+    sys.exit(1 if fails else 0)
 
-fails = [n for n, ok in results if not ok]
-print("\nE2E PASS=%d FAIL=%d" % (len(results) - len(fails), len(fails)))
-sys.exit(1 if fails else 0)
+
+if __name__ == "__main__":
+    main()

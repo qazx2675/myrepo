@@ -1,56 +1,148 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1010" font-family="Malgun Gothic, Noto Sans CJK KR, sans-serif" font-size="14">
-  <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#555"/></marker>
-    <style>
-      .b{fill:#eef4ff;stroke:#4a6fa5;stroke-width:1.5}
-      .g{fill:#fff4d6;stroke:#c08a00;stroke-width:1.5}
-      .r{fill:#ffe5e5;stroke:#c0392b;stroke-width:1.5}
-      .o{fill:#e6f6e6;stroke:#2e8b3d;stroke-width:1.5}
-      .d{fill:#fff;stroke:#555;stroke-width:1.5}
-      text{fill:#222} .s{font-size:12px;fill:#444}
-      line,path.l{stroke:#555;stroke-width:1.5;fill:none}
-    </style>
-  </defs>
-  <rect width="900" height="1010" fill="#fff"/>
-  <text x="450" y="28" text-anchor="middle" font-size="18" font-weight="bold">vm_power_onoff 작업 흐름</text>
-
-  <rect class="b" x="300" y="45" width="300" height="38" rx="8"/><text x="450" y="69" text-anchor="middle">시작: vm_power_onoff</text>
-  <line x1="450" y1="83" x2="450" y2="105" marker-end="url(#a)"/>
-  <rect class="b" x="260" y="105" width="380" height="50" rx="8"/><text x="450" y="127" text-anchor="middle">conf 읽기 + 권한 검사</text><text x="450" y="145" text-anchor="middle" class="s">허용 경로(allowed_dir) 확인</text>
-  <path class="l" d="M640 130 H780 V975" marker-end="url(#a)"/><text x="700" y="124" class="s">위반 → 오류(exit 1)</text>
-  <line x1="450" y1="155" x2="450" y2="177" marker-end="url(#a)"/>
-  <rect class="b" x="260" y="177" width="380" height="38" rx="8"/><text x="450" y="201" text-anchor="middle">user 선택 → on_off_&lt;user&gt;.txt 읽기</text>
-  <line x1="450" y1="215" x2="450" y2="237" marker-end="url(#a)"/>
-  <rect class="b" x="260" y="237" width="380" height="38" rx="8"/><text x="450" y="261" text-anchor="middle">vCenter 선택 → 비밀번호</text>
-  <line x1="450" y1="275" x2="450" y2="297" marker-end="url(#a)"/>
-  <rect class="b" x="220" y="297" width="460" height="38" rx="8"/><text x="450" y="321" text-anchor="middle">기능 선택: 1 Off / 2 순차 On / 3 일괄 On / 4 재부팅</text>
-  <line x1="450" y1="335" x2="450" y2="357" marker-end="url(#a)"/>
-  <rect class="b" x="260" y="357" width="380" height="38" rx="8"/><text x="450" y="381" text-anchor="middle">vCenter 에서 대상 VM 조회 (없음/중복 → 종료)</text>
-  <line x1="450" y1="395" x2="450" y2="417" marker-end="url(#a)"/>
-  <rect class="b" x="260" y="417" width="380" height="38" rx="8"/><text x="450" y="441" text-anchor="middle">계획표 출력 (-n 이면 여기서 종료)</text>
-  <line x1="450" y1="455" x2="450" y2="477" marker-end="url(#a)"/>
-  <path class="d" d="M450 477 L560 505 L450 533 L340 505 Z"/><text x="450" y="509" text-anchor="middle">VWP 해당 VM?</text>
-  <path class="l" d="M340 505 H150 V560" marker-end="url(#a)"/><text x="245" y="498" class="s">예</text>
-  <rect class="g" x="40" y="560" width="220" height="62" rx="8"/><text x="150" y="585" text-anchor="middle">경고 배너 + 6자리 코드</text><text x="150" y="604" text-anchor="middle" class="s">불일치 → 취소</text>
-  <path class="l" d="M150 622 V660 H350" marker-end="url(#a)"/>
-  <path class="l" d="M560 505 H600 V660 H550" marker-end="url(#a)"/><text x="570" y="498" class="s">아니오</text>
-  <rect class="g" x="250" y="640" width="400" height="76" rx="8" transform="translate(0,20)"/>
-  <text x="450" y="680" text-anchor="middle" font-weight="bold">안전장치 1~5단계</text>
-  <text x="450" y="699" text-anchor="middle" class="s">코드 → Enter → 60초 VM 이름 입력 → YeS → 10초 카운트다운</text>
-  <text x="450" y="717" text-anchor="middle" class="s">틀리거나 Ctrl+C → 취소(exit 1)</text>
-  <path class="l" d="M650 700 H780" /><text x="700" y="694" class="s">취소</text>
-  <line x1="450" y1="736" x2="450" y2="765" marker-end="url(#a)"/>
-
-  <rect class="r" x="30" y="765" width="190" height="86" rx="8"/><text x="125" y="788" text-anchor="middle" font-weight="bold">1 Power Off</text><text x="125" y="807" text-anchor="middle" class="s">Guest 종료 (대상 전체 동시)</text><text x="125" y="823" text-anchor="middle" class="s">미종료 → YeS 확인 후</text><text x="125" y="839" text-anchor="middle" class="s">강제 PowerOff</text>
-  <rect class="o" x="240" y="765" width="190" height="86" rx="8"/><text x="335" y="788" text-anchor="middle" font-weight="bold">3 일괄 Power On</text><text x="335" y="810" text-anchor="middle" class="s">대상 전체 동시 PowerOn</text><text x="335" y="826" text-anchor="middle" class="s">(OS 설치용)</text>
-  <rect class="o" x="450" y="765" width="190" height="86" rx="8"/><text x="545" y="788" text-anchor="middle" font-weight="bold">4 재부팅</text><text x="545" y="810" text-anchor="middle" class="s">Off 완료 확인 →</text><text x="545" y="826" text-anchor="middle" class="s">대상 전체 동시 PowerOn</text>
-  <rect class="g" x="660" y="765" width="210" height="86" rx="8"/><text x="765" y="788" text-anchor="middle" font-weight="bold">2 Power On (순차)</text><text x="765" y="808" text-anchor="middle" class="s">lpage BM: ev 단계별</text><text x="765" y="824" text-anchor="middle" class="s">같은 ev 번호 전체 동시 PowerOn</text><text x="765" y="840" text-anchor="middle" class="s">전부 부팅 완료 후 다음 ev</text>
-  <text x="765" y="868" text-anchor="middle" class="s">lpage 미사용 BM: 안내 후 한 번에</text>
-  <text x="765" y="884" text-anchor="middle" class="s">지연 시 단계당 c/s/q 한 번</text>
-  <path class="l" d="M450 765 H125 V765"/>
-  <line x1="125" y1="851" x2="125" y2="910"/><line x1="335" y1="851" x2="335" y2="910"/><line x1="545" y1="851" x2="545" y2="910"/><line x1="765" y1="890" x2="765" y2="910"/>
-  <path class="l" d="M125 910 H765"/>
-  <line x1="450" y1="910" x2="450" y2="935" marker-end="url(#a)"/>
-  <rect class="b" x="230" y="935" width="440" height="38" rx="8"/><text x="450" y="959" text-anchor="middle">결과 표 + 실행 기록(run_&lt;user&gt;/) → 실패 있으면 exit 1</text>
-  <rect class="r" x="690" y="975" width="180" height="26" rx="6"/><text x="780" y="993" text-anchor="middle" class="s">취소/오류 종료 (exit 1)</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1830" viewBox="0 0 1200 1830" font-family="Malgun Gothic, Noto Sans CJK KR, sans-serif" font-size="13" role="img" aria-label="vm_power_onoff 와 cross_check 작업 흐름도">
+<title>vm_power_onoff + cross_check 작업 흐름</title>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#555"/></marker>
+<style>
+.b{fill:#eef4ff;stroke:#4a6fa5;stroke-width:1.5}
+.o{fill:#fff1de;stroke:#c9741a;stroke-width:1.5}
+.d{fill:#fff;stroke:#555;stroke-width:1.5}
+.r{fill:#ffe5e5;stroke:#c0392b;stroke-width:1.5}
+text{fill:#222}
+.s{fill:#555}
+.rt{fill:#8a1f14}
+path.l{stroke:#555;stroke-width:1.5;fill:none}
+</style>
+</defs>
+<rect width="1200" height="1830" fill="#ffffff"/>
+<text x="600.0" y="28" text-anchor="middle" font-size="18" font-weight="bold">vm_power_onoff + cross_check 작업 흐름 (cross_check=on 기본)</text>
+<text x="600.0" y="48" text-anchor="middle" font-size="11.5" class="s">vm_power_onoff -u hong [-c kim] 한 번이 실행되는 흐름. 파란색 = vm_power_onoff, 주황색 = cross_check(확인자 터미널·데몬 기록), 빨간색 = 취소·중단</text>
+<rect class="b" x="280" y="62" width="380" height="40" rx="8"/>
+<text x="470" y="86.5" text-anchor="middle" font-size="13">시작: vm_power_onoff -u hong</text>
+<path class="l" d="M470 102 L470 126" marker-end="url(#a)"/>
+<rect class="b" x="280" y="126" width="380" height="48" rx="8"/>
+<text x="470" y="146.0" text-anchor="middle" font-size="13">conf 읽기 + 권한 검사</text>
+<text x="470" y="163.0" text-anchor="middle" font-size="11.5" class="s">허용 경로(allowed_dir) 확인</text>
+<path class="l" d="M660 150 L700 150" marker-end="url(#a)"/>
+<rect class="r" x="700" y="136" width="180" height="28" rx="14"/>
+<text x="790.0" y="154.0" text-anchor="middle" font-size="11.5" class="rt">종료 (exit 1)</text>
+<path class="l" d="M470 174 L470 198" marker-end="url(#a)"/>
+<rect class="b" x="280" y="198" width="380" height="48" rx="8"/>
+<text x="470" y="218.0" text-anchor="middle" font-size="13">user → vCenter → 비밀번호 → 기능 선택</text>
+<text x="470" y="235.0" text-anchor="middle" font-size="11.5" class="s">1 Off / 2 순차 On / 3 일괄 On / 4 재부팅</text>
+<path class="l" d="M470 246 L470 270" marker-end="url(#a)"/>
+<rect class="b" x="280" y="270" width="380" height="48" rx="8"/>
+<text x="470" y="290.0" text-anchor="middle" font-size="13">vCenter 에서 대상 VM 조회 → 계획표</text>
+<text x="470" y="307.0" text-anchor="middle" font-size="11.5" class="s">-n 이면 여기서 종료 (전원 작업 없음)</text>
+<path class="l" d="M660 294 L700 294" marker-end="url(#a)"/>
+<rect class="r" x="700" y="274" width="180" height="40" rx="20"/>
+<text x="790.0" y="290.5" text-anchor="middle" font-size="11.5" class="rt">대상 없음/중복 → 종료</text>
+<text x="790.0" y="305.5" text-anchor="middle" font-size="11.5" class="rt">(아무 작업 안 함)</text>
+<path class="l" d="M470 318 L470 342" marker-end="url(#a)"/>
+<polygon class="d" points="470,342 595,380 470,418 345,380"/>
+<text x="470" y="384.5" text-anchor="middle" font-size="12.5">VWP 해당 VM?</text>
+<path class="l" d="M470 418 L470 450" marker-end="url(#a)"/>
+<text x="478" y="440" text-anchor="start" font-size="11.5" class="s">예</text>
+<rect class="b" x="280" y="450" width="380" height="44" rx="8"/>
+<text x="470" y="476.5" text-anchor="middle" font-size="13">경고 배너 + 6자리 담당자 확인 코드</text>
+<path class="l" d="M660 472 L700 472" marker-end="url(#a)"/>
+<rect class="r" x="700" y="458" width="180" height="28" rx="14"/>
+<text x="790.0" y="476.0" text-anchor="middle" font-size="11.5" class="rt">코드 불일치 → 종료</text>
+<path class="l" d="M345 380 L250 380 L250 560 L280 560" marker-end="url(#a)"/>
+<text x="205" y="374" text-anchor="start" font-size="11.5" class="s">아니오</text>
+<path class="l" d="M470 494 L470 530" marker-end="url(#a)"/>
+<rect class="b" x="280" y="530" width="380" height="60" rx="8"/>
+<text x="470" y="556.0" text-anchor="middle" font-size="13">안전장치 1/5: 6자리 확인 코드 입력</text>
+<text x="470" y="573.0" text-anchor="middle" font-size="11.5" class="s">통과하면 대상 호스트 목록(BM별) + 총 N대</text>
+<path class="l" d="M660 560 L700 560" marker-end="url(#a)"/>
+<rect class="r" x="700" y="546" width="180" height="28" rx="14"/>
+<text x="790.0" y="564.0" text-anchor="middle" font-size="11.5" class="rt">불일치/Ctrl+C → 취소</text>
+<path class="l" d="M470 590 L470 622" marker-end="url(#a)"/>
+<polygon class="d" points="470,622 595,660 470,698 345,660"/>
+<text x="470" y="656.5" text-anchor="middle" font-size="12.5">conf cross_check</text>
+<text x="470" y="672.5" text-anchor="middle" font-size="11.5" class="s">(키가 없으면 on)</text>
+<path class="l" d="M345 660 L150 660 L150 715" marker-end="url(#a)"/>
+<text x="165" y="652" text-anchor="start" font-size="11.5" class="s">off (기존 방식)</text>
+<rect class="b" x="20" y="715" width="260" height="106" rx="8"/>
+<text x="150" y="747.0" text-anchor="middle" font-size="13">2/5 Enter</text>
+<text x="150" y="764.0" text-anchor="middle" font-size="13">3/5 60초 안에 VM 이름</text>
+<text x="150" y="781.0" text-anchor="middle" font-size="13">직접 입력 (공백·탭·줄바꿈 구분)</text>
+<text x="150" y="798.0" text-anchor="middle" font-size="11.5" class="s">틀리거나 시간 초과 → 취소 (exit 1)</text>
+<path class="l" d="M595 660 L800 660 L800 700" marker-end="url(#a)"/>
+<text x="640" y="652" text-anchor="start" font-size="11.5" class="s">on (교차검증 방식)</text>
+<rect class="b" x="630" y="700" width="340" height="58" rx="8"/>
+<text x="800" y="725.0" text-anchor="middle" font-size="13">2/5 확인자 번호 선택</text>
+<text x="800" y="742.0" text-anchor="middle" font-size="11.5" class="s">작업자 본인 제외 · -c 면 생략 · 3회 오입력 → 취소</text>
+<path class="l" d="M970 729 L1000 729" marker-end="url(#a)"/>
+<rect class="r" x="1000" y="715" width="180" height="28" rx="14"/>
+<text x="1090.0" y="733.0" text-anchor="middle" font-size="11.5" class="rt">취소/Ctrl+C → 종료</text>
+<path class="l" d="M800 758 L800 786" marker-end="url(#a)"/>
+<rect class="b" x="630" y="786" width="340" height="76" rx="8"/>
+<text x="800" y="811.5" text-anchor="middle" font-size="13">3/5 cross_check --run (대상은 stdin)</text>
+<text x="800" y="828.5" text-anchor="middle" font-size="11.5" class="s">VM 이름 입력은 없음 · 호출 스크립트 이름도 기록</text>
+<text x="800" y="845.5" text-anchor="middle" font-size="13">상태: 대기</text>
+<path class="l" d="M970 824 L1000 824" marker-end="url(#a)"/>
+<rect class="r" x="1000" y="802" width="180" height="44" rx="22"/>
+<text x="1090.0" y="820.5" text-anchor="middle" font-size="11.5" class="rt">Ctrl+C·세션 끊김</text>
+<text x="1090.0" y="835.5" text-anchor="middle" font-size="11.5" class="rt">→ 즉시 중단</text>
+<path class="l" d="M800 862 L800 890" marker-end="url(#a)"/>
+<rect class="o" x="630" y="890" width="340" height="88" rx="8"/>
+<text x="800" y="913.0" text-anchor="middle" font-size="13">확인자: cross_check --user 확인자</text>
+<text x="800" y="930.0" text-anchor="middle" font-size="13">(전체 화면) 작업 선택 → 작업자에게</text>
+<text x="800" y="947.0" text-anchor="middle" font-size="13">전달받은 대상 붙여넣기 → 패스워드</text>
+<text x="800" y="964.0" text-anchor="middle" font-size="11.5" class="s">확인자 화면에는 대상이 보이지 않음 (개수만)</text>
+<path class="l" d="M970 934 L1000 934" marker-end="url(#a)"/>
+<rect class="r" x="1000" y="912" width="180" height="44" rx="22"/>
+<text x="1090.0" y="930.5" text-anchor="middle" font-size="11.5" class="rt">c + 패스워드: 취소</text>
+<text x="1090.0" y="945.5" text-anchor="middle" font-size="11.5" class="rt">→ 중단 (작업자도 취소)</text>
+<path class="l" d="M800 978 L800 1008" marker-end="url(#a)"/>
+<polygon class="d" points="800,1008 950,1050 800,1092 650,1050"/>
+<text x="800" y="1038.5" text-anchor="middle" font-size="12.5">붙여넣은 대상 =</text>
+<text x="800" y="1054.5" text-anchor="middle" font-size="12.5">작업 대상?</text>
+<text x="800" y="1070.5" text-anchor="middle" font-size="11.5" class="s">순서 무관 · 중복 불가</text>
+<path class="l" d="M950 1050 L1000 1050" marker-end="url(#a)"/>
+<text x="962" y="1042" text-anchor="start" font-size="11.5" class="s">다름</text>
+<rect class="r" x="1000" y="1030" width="180" height="40" rx="20"/>
+<text x="1090.0" y="1046.5" text-anchor="middle" font-size="11.5" class="rt">중단 (개수만 알림)</text>
+<text x="1090.0" y="1061.5" text-anchor="middle" font-size="11.5" class="rt">승인 아님</text>
+<path class="l" d="M800 1092 L800 1124" marker-end="url(#a)"/>
+<text x="808" y="1114" text-anchor="start" font-size="11.5" class="s">같음 + 패스워드 일치</text>
+<rect class="o" x="630" y="1124" width="340" height="62" rx="8"/>
+<text x="800" y="1142.5" text-anchor="middle" font-size="13">작업 '승인' — 승인 유효시간 시작</text>
+<text x="800" y="1159.5" text-anchor="middle" font-size="11.5" class="s">approval_ttl_sec (기본 120초 = 2분)</text>
+<text x="800" y="1176.5" text-anchor="middle" font-size="13">작업자에게 승인 이벤트 + 내 작업 리스트</text>
+<path class="l" d="M150 821 L150 1250 L280 1250" marker-end="url(#a)"/>
+<path class="l" d="M800 1186 L800 1250 L660 1250" marker-end="url(#a)"/>
+<rect class="b" x="280" y="1226" width="380" height="54" rx="8"/>
+<text x="470" y="1249.0" text-anchor="middle" font-size="13">안전장치 4/5: 정말 진행? (YeS/No, ls)</text>
+<text x="470" y="1266.0" text-anchor="middle" font-size="11.5" class="s">YeS 만 진행 · ls = 대상 다시 보기 · 그 밖은 취소 (exit 1)</text>
+<path class="l" d="M470 1280 L470 1308" marker-end="url(#a)"/>
+<rect class="b" x="280" y="1308" width="380" height="54" rx="8"/>
+<text x="470" y="1331.0" text-anchor="middle" font-size="13">안전장치 5/5: 10초 카운트다운</text>
+<text x="470" y="1348.0" text-anchor="middle" font-size="11.5" class="s">Ctrl+C 로 취소 (exit 1)</text>
+<path class="l" d="M470 1362 L470 1392" marker-end="url(#a)"/>
+<rect class="o" x="280" y="1392" width="380" height="74" rx="8"/>
+<text x="470" y="1416.5" text-anchor="middle" font-size="13">(on) cross_check --start --job ID</text>
+<text x="470" y="1433.5" text-anchor="middle" font-size="11.5" class="s">승인 유효시간 이내 1회만 통과 → 상태: 승인/작업중</text>
+<text x="470" y="1450.5" text-anchor="middle" font-size="13">(off 면 이 단계 없음)</text>
+<path class="l" d="M660 1429 L700 1429" marker-end="url(#a)"/>
+<rect class="r" x="700" y="1409" width="200" height="40" rx="20"/>
+<text x="800.0" y="1425.5" text-anchor="middle" font-size="11.5" class="rt">유효시간 초과/거부</text>
+<text x="800.0" y="1440.5" text-anchor="middle" font-size="11.5" class="rt">→ 중단 (전원 작업 없음)</text>
+<path class="l" d="M470 1466 L470 1496" marker-end="url(#a)"/>
+<rect class="b" x="280" y="1496" width="380" height="62" rx="8"/>
+<text x="470" y="1514.5" text-anchor="middle" font-size="13">전원 작업 실행</text>
+<text x="470" y="1531.5" text-anchor="middle" font-size="11.5" class="s">1 Off / 2 순차 On / 3 일괄 On / 4 재부팅</text>
+<text x="470" y="1548.5" text-anchor="middle" font-size="11.5" class="s">(작업중이 work_timeout_sec 를 넘기면 승인/작업중단)</text>
+<path class="l" d="M470 1558 L470 1586" marker-end="url(#a)"/>
+<rect class="b" x="280" y="1586" width="380" height="40" rx="8"/>
+<text x="470" y="1610.5" text-anchor="middle" font-size="13">결과 표 + 실행 기록 (run_user/)</text>
+<path class="l" d="M470 1626 L470 1656" marker-end="url(#a)"/>
+<rect class="o" x="250" y="1656" width="440" height="100" rx="8"/>
+<text x="470" y="1685.0" text-anchor="middle" font-size="13">(on) cross_check --finish --result done | aborted</text>
+<text x="470" y="1702.0" text-anchor="middle" font-size="11.5" class="s">done = 스크립트가 취소 없이 끝까지 실행 → 승인/작업완료</text>
+<text x="470" y="1719.0" text-anchor="middle" font-size="11.5" class="s">(일부 VM 실패 여부는 보지 않음)</text>
+<text x="470" y="1736.0" text-anchor="middle" font-size="11.5" class="s">aborted = 4/5 에서 No · Ctrl+C 등 → 승인/작업중단</text>
+<path class="l" d="M470 1756 L470 1782" marker-end="url(#a)"/>
+<rect class="b" x="320" y="1782" width="300" height="34" rx="8"/>
+<text x="470" y="1803.5" text-anchor="middle" font-size="13">종료 (실패 VM 이 있으면 exit 1)</text>
 </svg>

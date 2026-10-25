@@ -1,6 +1,9 @@
 // vm_power_onoff: vCenter 의 VM 을 안전장치(휴먼 에러 방지)를 거쳐 Power Off / Power On / 재부팅한다.
 //
-// 흐름: user 선택 → vCenter 선택 → 비밀번호 → 기능 선택 → 대상 조회·계획 → (VWP 확인) → 안전장치 5단계 → (교차검증) → 실행 → 결과
+// 흐름: user 선택 → vCenter 선택 → 비밀번호 → 기능 선택 → 대상 조회·계획 → (VWP 확인) → 안전장치 5단계 → 실행 → 결과
+// 안전장치(cross_check=on, 기본): 1 코드 → 2 확인자 번호 선택 → 3 확인자 승인 대기(cross_check) → 4 YeS(ls=대상 보기) → 5 카운트다운 → --start
+// → 실행 → --finish done(끝까지 실행) / aborted(승인 뒤 No·Ctrl+C)
+// 안전장치(cross_check=off): 1 코드 → 2 Enter → 3 VM 이름 입력 → 4 YeS(ls=대상 보기) → 5 카운트다운
 // 설정 파일은 /etc/vcetner_pwon_off/pwonoff.conf, 대상은 allowed_dir/on_off_<user>.txt (VM 이름만).
 package main
 
@@ -20,7 +23,7 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+const version = "0.3.0"
 
 var vcenterRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
 
@@ -37,14 +40,16 @@ func usage() {
   vm_power_onoff -u hong               user 지정
   vm_power_onoff -u hong -v 192.168.0.50   vCenter 를 직접 지정 (Enter = 이 user 의 이전 vCenter)
   vm_power_onoff -u hong -n            계획(대상·VWP 여부)까지만 확인, 전원 작업 없음
-  vm_power_onoff -u hong -c kim        교차검증 확인자 지정 (conf 에 cross_check=on 일 때만 사용, 없으면 번호로 선택)
-  vm_power_onoff --demo                vCenter 없이 샘플 3대로 안전장치만 체험 (전원 작업 없음)
+  vm_power_onoff -u hong -c kim        교차검증 확인자 지정 (cross_check=on(기본)일 때 2/5 단계 번호 선택을 건너뜀)
+  vm_power_onoff --demo                vCenter 없이 샘플 3대로 안전장치만 체험 (기존 방식 1~5단계, 전원 작업 없음)
 
 옵션:
   -u <user>   -v <vCenter>   -id <계정>(기본 설정값)   -c <checker>   -n   --demo   -h   --version
 
 설정: %s  (allowed_dir 에서만 실행 가능)
 대상: <allowed_dir>/on_off_<user>.txt  — 한 줄에 VM 이름 하나 (예: svr1ev01), '#' 주석
+안전장치 4/5 단계에서 ls 를 입력하면 대상 VM 목록과 대수를 다시 보여 줍니다(취소되지 않음).
+교차검증(cross_check)은 기본 on — 끄려면 conf 에 cross_check=off
 `, version, ConfPath)
 }
 
@@ -53,7 +58,7 @@ func main() {
 		fUser    = flag.String("u", "", "user")
 		fVC      = flag.String("v", "", "vCenter")
 		fID      = flag.String("id", "", "vCenter 계정")
-		fChecker = flag.String("c", "", "교차검증 확인자 (cross_check=on 일 때만)")
+		fChecker = flag.String("c", "", "교차검증 확인자 (cross_check=on 일 때만, 기본 on)")
 		fPlan    = flag.Bool("n", false, "계획까지만")
 		fDemo    = flag.Bool("demo", false, "안전장치 데모")
 		fVersion = flag.Bool("version", false, "버전")
@@ -88,7 +93,8 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	if optID != "" {
 		cfg.VCID = optID
 	}
-	// 교차검증: -c 는 cross_check=on 일 때만 의미가 있다. 실제 전원 작업일 때만 실행 파일을 미리 확인한다.
+	// 교차검증(기본 on): -c 는 cross_check=on 일 때만 의미가 있다. 실제 전원 작업일 때만 실행 파일을 미리 확인한다
+	// (설치되지 않았으면 vCenter 를 묻기 전에 바로 멈추고 cross_check=off 로 끄는 방법을 알려 준다).
 	if optChecker != "" && !cfg.CrossCheck {
 		fmt.Fprintln(out, Yellow("[경고] -c 는 conf 에 cross_check=on 일 때만 쓰입니다. 무시합니다."))
 		optChecker = ""
@@ -105,8 +111,12 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	if err != nil {
 		fatal("%v", err)
 	}
-	if useCross && optChecker != "" { // 잘못된 -c 는 vCenter 접속 전에 바로 알린다
-		if err := ValidateChecker(cfg, user, optChecker); err != nil {
+	if useCross { // 잘못된 -c 나 고를 확인자가 없는 conf 는 vCenter 접속 전에 바로 알린다
+		if optChecker != "" {
+			if err := ValidateChecker(cfg, user, optChecker); err != nil {
+				fatal("%v", err)
+			}
+		} else if _, err := checkerCandidates(cfg, user); err != nil {
 			fatal("%v", err)
 		}
 	}
@@ -181,32 +191,46 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 		audit.Printf("VWP 확인 코드 통과")
 	}
 
-	// 9. 안전장치 1~5단계
+	// 9. 안전장치 1~5단계 (cross_check=on 이면 2단계 확인자 선택, 3단계 확인자 승인 대기, 카운트다운 직후 --start)
 	names := make([]string, len(vms))
 	for i, v := range vms {
 		names[i] = v.Name
 	}
-	if err := RunGuard(ctx, in, out, names, GuardOpts{ShowTargets: func(w io.Writer) { printTargetsByBM(w, vms) }}); err != nil {
+	lsCount := 0
+	gopts := GuardOpts{ShowTargets: func(w io.Writer) { printTargetsByBM(w, vms) }, OnList: func() { lsCount++ }}
+	var gate *CrossCheckGate
+	if useCross {
+		gate = &CrossCheckGate{Cfg: cfg, CC: newCrossChecker(cfg.CrossCheckBin), Out: out, ErrOut: os.Stderr, Audit: audit,
+			User: user, OptChecker: optChecker, Targets: names}
+		gate.Hook(&gopts)
+	}
+	err = RunGuard(ctx, in, out, names, gopts)
+	audit.Printf("안전장치 4단계 ls(대상 보기) %d회", lsCount)
+	if err != nil {
 		audit.Printf("안전장치 취소: %v", err)
+		if gate != nil {
+			gate.Abort() // 승인 뒤 4/5 No·Ctrl+C, 카운트다운 중 Ctrl+C → 승인/작업중단 (승인 전·--start 거부면 보내지 않음)
+		}
 		return ExitFail
 	}
-	audit.Printf("안전장치 1~5단계 통과")
-
-	// 9-1. 교차검증 (cross_check=on): 안전장치가 모두 끝난 뒤 전원 작업 직전에 확인자 승인을 받는다
 	if useCross {
-		gate := &CrossCheckGate{Cfg: cfg, CC: newCrossChecker(cfg.CrossCheckBin), In: in, Out: out, ErrOut: os.Stderr, Audit: audit}
-		if err := gate.Run(ctx, user, optChecker, names); err != nil {
-			return ExitFail
-		}
+		audit.Printf("안전장치 1~5단계 통과 (교차검증 방식)")
+	} else {
+		audit.Printf("안전장치 1~5단계 통과")
 	}
 
 	// 10. 실행
 	r := &Runner{Cfg: cfg, Ops: NewGovmomiOps(cli), Log: NewRunLog(out, audit), Ask: askLine(in, out)}
 	r.WaitBoot = NewBootChecker(cfg, cli.Refresh, func(vm, f string, a ...any) { r.Log.Logf(vm, f, a...) }).WaitBoot
 	t0 := time.Now()
-	results := r.Run(ctx, act, vms)
+	results := executeRun(ctx, r, act, vms, gate)
 
 	// 11. 결과
+	return reportResults(ctx, out, audit, act, results, t0)
+}
+
+// reportResults 는 11단계: 결과표·감사 로그를 남기고 종료 코드를 정한다(교차검증 결과 보고 성공 여부와는 무관).
+func reportResults(ctx context.Context, out io.Writer, audit *Audit, act Action, results []Result, t0 time.Time) int {
 	failed := PrintSummary(out, results, ColorEnabled())
 	for _, x := range results {
 		audit.Printf("결과 %s %s %s %s %s", x.VM, x.Op, x.Status, fmtElapsed(x.Elapsed), x.Note)
@@ -224,6 +248,16 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	}
 	fmt.Fprintln(out, Green("[완료] "+act.String()))
 	return ExitOK
+}
+
+// executeRun 은 10단계 실행: Runner 를 돌리고, 교차검증(gate != nil)이면 곧바로 결과를 데몬에 알린다 —
+// 끝까지 실행되면 done(VM 별 실패가 있어도), 실행 중 Ctrl+C·종료 신호(ctx 취소)면 aborted. 보고 실패는 종료 코드에 영향 없음.
+func executeRun(ctx context.Context, r *Runner, act Action, vms []*VMInfo, gate *CrossCheckGate) []Result {
+	results := r.Run(ctx, act, vms)
+	if gate != nil {
+		gate.ReportRun(ctx)
+	}
+	return results
 }
 
 // 선택 메뉴 ---------------------------------------------------------------

@@ -1,4 +1,7 @@
-// cross_check 는 2인 1조 교차검증 데몬과 그 클라이언트(작업자 --run/--start, 사용자·관리자 TUI)를 담은 단일 바이너리다.
+// cross_check 는 2인 1조 교차검증 데몬과 그 클라이언트(작업자 --run/--start/--finish, 사용자·관리자 TUI)를 담은 단일 바이너리다.
+//
+// --user/--admin 은 stdin·stdout 이 모두 터미널이고 linux 이면 전체 화면(auto_setup 과 같은 방식), 아니면(파이프·스크립트·
+// 테스트) 또는 --plain 이면 같은 동작의 줄 입력 화면이다.
 //
 // 종료 코드: 0 성공/승인, 1 거부/중단, 2 사용법 오류, 3 연결·데몬·입력 오류, 130 Ctrl+C.
 //
@@ -32,7 +35,7 @@ import (
 	"cross_check/internal/tui"
 )
 
-const version = "0.2.1"
+const version = "0.3.0"
 
 // 종료 코드.
 const (
@@ -50,7 +53,8 @@ const (
 	envState = "CROSS_CHECK_STATE" // jobs.json 경로
 	envLock  = "CROSS_CHECK_LOCK"  // 데몬 잠금 파일(없으면 소켓을 바꿨을 때 그 디렉터리의 daemon.lock)
 	envLog   = "CROSS_CHECK_LOG"   // 데몬 로그 파일
-	envToken = "CROSS_CHECK_TOKEN" // --start 의 token
+	envToken = "CROSS_CHECK_TOKEN" // --start/--finish 의 token
+	// --run 의 호출 스크립트 이름은 envCaller(CROSS_CHECK_CALLER, caller.go)
 	// 소켓은 daemon.EnvSocket(CROSS_CHECK_SOCKET)
 )
 
@@ -88,16 +92,22 @@ func errorf(format string, a ...any) {
 
 func usage() {
 	ttlText := daemon.FormatTTLDuration(approvalTTL()) // 이 서버 설정(읽을 수 없으면 기본 2분)
-	fmt.Fprintf(os.Stderr, `cross_check %s — 원격 2인 1조 교차검증(작업자 대기 → 확인자 패스워드 승인 → 승인 유효시간 내 본 작업)
+	fmt.Fprintf(os.Stderr, `cross_check %s — 원격 2인 1조 교차검증(작업자 대기 → 확인자가 대상 붙여넣기+패스워드로 승인 → 승인 유효시간 내 본 작업)
 
 사용법(항상 사용자를 지정):
-  cross_check --user <user>                          사용자 화면(TUI): 첫 실행 시 패스워드 등록(6자 이상),
-                                                     내 작업·내가 확인자인 작업 목록, 승인(a)/취소(c)
-                                                     (작업자·확인자 이름은 설정 파일 users= 목록에 있어야 함)
+  cross_check --user <user> [--plain]                사용자 화면: 첫 실행 시 패스워드 등록(6자 이상),
+                                                     내 작업·내가 확인자인 작업 목록. 확인자는 대기 작업을 골라 Enter →
+                                                     작업자에게 전달받은 대상 붙여넣기 → 패스워드 → 승인(대상이 다르면 중단)
+                                                     (터미널이면 전체 화면, 파이프·--plain 이면 줄 입력 화면.
+                                                      작업자·확인자 이름은 설정 파일 users= 목록에 있어야 함)
   cross_check --run --user <user> --checker <확인자>  작업 등록 후 확인자 승인까지 대기(작업 스크립트 안에서)
         [--targets-file <파일>]                       대상 목록(없으면 stdin). 줄바꿈·탭·공백 구분, '#' 주석
-  cross_check --start --job <ID> [--token <T>]        본 작업 직전 신호(승인 후 %s 이내, token 은 env %s 도 가능)
-  cross_check --admin                                관리자 화면(목록·상태 변경·삭제·정리·패스워드 재설정)
+        [--caller <이름>]                             호출 스크립트 이름(정보용. 없으면 env %s, 그것도 없으면 부모 프로세스에서 감지)
+  cross_check --start --job <ID> [--token <T>]        본 작업 직전 신호(승인 후 %s 이내 → 승인/작업중, token 은 env %s 도 가능)
+  cross_check --finish --job <ID> --result done|aborted [--token <T>]
+                                                     본 작업 결과: done = 스크립트가 끝까지 실행됨(승인/작업완료),
+                                                     aborted = 중단·No·Ctrl+C(승인/작업중단, 시작 전에도 가능)
+  cross_check --admin [--plain]                      관리자 화면(목록·상태 변경·삭제·정리·패스워드 재설정)
                                                      (auth.conf 의 admin= 항목은 install.sh 가 만든다)
   cross_check --daemon                               데몬을 포그라운드로 실행
   cross_check --ensure                               데몬이 없으면 백그라운드로 띄움(crontab 매분 실행용)
@@ -110,7 +120,10 @@ func usage() {
   CROSS_CHECK_TOKEN=<token>
   (JOB/TOKEN 두 줄은 승인됐을 때만 나온다. eval "$(...)" 로 바로 받으면 실패해도 종료 코드가 0 이 되므로 아래처럼 쓴다)
   예) out=$(cross_check --run --user hong --checker kim < targets.txt) || exit 1; eval "$out"; export CROSS_CHECK_TOKEN
-      cross_check --start --job "$CROSS_CHECK_JOB"
+      cross_check --start --job "$CROSS_CHECK_JOB" || exit 1
+      ... 본 작업 ...
+      cross_check --finish --job "$CROSS_CHECK_JOB" --result done     (중단하면 --result aborted)
+  작업중으로 work_timeout_sec(기본 86400초 = 24시간)를 넘기면 데몬이 승인/작업중단("작업자 응답 없음")으로 바꾼다.
 
 종료 코드: 0 승인·성공, 1 중단·거부, 2 사용법 오류, 3 연결·데몬·입력 오류, 130 Ctrl+C
 
@@ -120,7 +133,7 @@ func usage() {
 경로(환경변수로 바꿀 수 있음):
   소켓 %s (%s)   설정 %s (%s)
   비밀번호 %s (%s)   작업 기록 %s (%s)
-`, version, ttlText, envToken, ttlText,
+`, version, envCaller, ttlText, envToken, ttlText,
 		daemon.DefaultSocketPath, daemon.EnvSocket, daemon.DefaultConfPath, envConf,
 		daemon.DefaultAuthPath, envAuth, daemon.DefaultStorePath, envState)
 }
@@ -133,8 +146,9 @@ func realMain(args []string) int {
 	fs := flag.NewFlagSet("cross_check", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
-		user, checker, job, token, targetsFile          string
-		run, start, admin, daemonMode, ensure, showVers bool
+		user, checker, job, token, targetsFile, caller, result  string
+		run, start, finish, admin, daemonMode, ensure, showVers bool
+		plain                                                   bool
 	)
 	fs.StringVar(&user, "user", "", "사용자")
 	fs.StringVar(&checker, "checker", "", "확인자")
@@ -144,6 +158,10 @@ func realMain(args []string) int {
 	fs.StringVar(&targetsFile, "targets-file", "", "대상 목록 파일")
 	fs.BoolVar(&run, "run", false, "작업 등록·대기")
 	fs.BoolVar(&start, "start", false, "본 작업 시작 신호")
+	fs.BoolVar(&finish, "finish", false, "본 작업 결과")
+	fs.StringVar(&result, "result", "", "본 작업 결과(done|aborted)")
+	fs.StringVar(&caller, "caller", "", "호출 스크립트 이름")
+	fs.BoolVar(&plain, "plain", false, "줄 입력 화면 강제")
 	fs.BoolVar(&admin, "admin", false, "관리자 화면")
 	fs.BoolVar(&daemonMode, "daemon", false, "데몬 실행")
 	fs.BoolVar(&ensure, "ensure", false, "데몬 보장")
@@ -163,14 +181,29 @@ func realMain(args []string) int {
 		return exitUsage
 	}
 	modes := 0
-	for _, m := range []bool{run, start, admin, daemonMode, ensure, showVers} {
+	for _, m := range []bool{run, start, finish, admin, daemonMode, ensure, showVers} {
 		if m {
 			modes++
 		}
 	}
 	if modes > 1 {
 		usage()
-		errorf("--run/--start/--admin/--daemon/--ensure/--version 은 하나만 지정")
+		errorf("--run/--start/--finish/--admin/--daemon/--ensure/--version 은 하나만 지정")
+		return exitUsage
+	}
+	if caller != "" && !run {
+		usage()
+		errorf("--caller 는 --run 과 함께만 씀")
+		return exitUsage
+	}
+	if result != "" && !finish {
+		usage()
+		errorf("--result 는 --finish 와 함께만 씀")
+		return exitUsage
+	}
+	if plain && (run || start || finish || daemonMode || ensure || showVers) {
+		usage()
+		errorf("--plain 은 --user/--admin 화면에만 씀")
 		return exitUsage
 	}
 
@@ -184,10 +217,12 @@ func realMain(args []string) int {
 		return cmdEnsure()
 	case start:
 		return cmdStart(job, token)
+	case finish:
+		return cmdFinish(job, token, result)
 	case admin:
-		return cmdAdmin()
+		return cmdAdmin(plain)
 	case run:
-		return cmdRun(user, checker, targetsFile)
+		return cmdRun(user, checker, targetsFile, caller)
 	}
 	if user == "" {
 		usage()
@@ -199,7 +234,7 @@ func realMain(args []string) int {
 		errorf("--checker/--job/--token/--targets-file 은 --run/--start 와 함께만 씀")
 		return exitUsage
 	}
-	return cmdUser(user)
+	return cmdUser(user, plain)
 }
 
 // checkUserName 은 --user 이름을 미리 검사한다(데몬도 검사하지만 메시지를 친절하게).
@@ -262,7 +297,15 @@ func tuiOptions(c *daemon.Client) tui.Options {
 	}
 }
 
-func cmdUser(user string) int {
+// fullScreen 은 전체 화면을 쓸지: --plain 이 아니고, stdin·stdout 이 모두 터미널이고, linux 이고, TERM 이 dumb 가 아님.
+func fullScreen(plain bool) bool {
+	return !plain && os.Getenv("TERM") != "dumb" && tui.FullScreenAvailable(os.Stdin, os.Stdout)
+}
+
+// screenColor 는 전체 화면 색(NO_COLOR·CROSS_CHECK_COLOR=never 이면 끔).
+func screenColor() bool { return tui.ColorEnabled(os.Stdout) }
+
+func cmdUser(user string, plain bool) int {
 	if !checkUserName("사용자", user) {
 		return exitUsage
 	}
@@ -271,17 +314,34 @@ func cmdUser(user string) int {
 		return exitError
 	}
 	defer c.Close()
+	if fullScreen(plain) {
+		env, cleanup := tui.RealEnv(os.Stdin, os.Stdout, screenColor())
+		code, done := tui.RunUserFull(env, c, user)
+		cleanup()
+		if done {
+			return code
+		}
+		// raw 모드로 바꾸지 못함: 아래 줄 입력 화면으로
+	}
 	ctx, stop := signalContext()
 	defer stop()
 	return tui.New(os.Stdin, os.Stdout, c, tuiOptions(c)).RunUser(ctx, user)
 }
 
-func cmdAdmin() int {
+func cmdAdmin(plain bool) int {
 	c, ok := dial()
 	if !ok {
 		return exitError
 	}
 	defer c.Close()
+	if fullScreen(plain) {
+		env, cleanup := tui.RealEnv(os.Stdin, os.Stdout, screenColor())
+		code, done := tui.RunAdminFull(env, c)
+		cleanup()
+		if done {
+			return code
+		}
+	}
 	ctx, stop := signalContext()
 	defer stop()
 	return tui.New(os.Stdin, os.Stdout, c, tuiOptions(c)).RunAdmin(ctx)
@@ -334,7 +394,7 @@ func printEvent(ev daemon.Event) {
 	fmt.Fprintf(os.Stderr, "  %s %s — %s%s\n", stamp(), errP.Status(ev.Status, "["+string(ev.Status)+"]"), reason, by)
 }
 
-func cmdRun(user, checker, targetsFile string) int {
+func cmdRun(user, checker, targetsFile, callerFlag string) int {
 	if user == "" || checker == "" {
 		usage()
 		errorf("--run 에는 --user 와 --checker(또는 --cechker)가 모두 필요")
@@ -343,8 +403,9 @@ func cmdRun(user, checker, targetsFile string) int {
 	if !checkUserName("작업자", user) || !checkUserName("확인자", checker) {
 		return exitError
 	}
+	caller := resolveCaller(callerFlag)
 	if user == checker {
-		return runSameUser(user, targetsFile)
+		return runSameUser(user, targetsFile, caller)
 	}
 	targets, err := readTargets(targetsFile)
 	if err != nil {
@@ -362,7 +423,7 @@ func cmdRun(user, checker, targetsFile string) int {
 	}
 	defer c.Close()
 
-	h, err := c.Run(user, checker, targets)
+	h, err := c.RunCaller(user, checker, targets, caller)
 	if err != nil {
 		var de *daemon.DaemonError
 		if errors.As(err, &de) {
@@ -376,9 +437,18 @@ func cmdRun(user, checker, targetsFile string) int {
 
 	ctx, stop := signalContext()
 	defer stop()
-	fmt.Fprintf(os.Stderr, "%s 작업 %s — 확인자 %s 의 승인을 기다립니다 (Ctrl+C 로 취소)\n", errP.Yellow("[대기]"), h.ID, checker)
-	fmt.Fprintf(os.Stderr, "  대상 %d개: %s\n", len(targets), joinCapped(targets, 20))
-	fmt.Fprintf(os.Stderr, "  확인자 안내: cross_check --user %s 에서 작업 %s 를 열어 승인(a)\n", checker, h.ID)
+	fmt.Fprintf(os.Stderr, "%s 작업 %s — 확인자 %s 의 승인을 기다립니다 (Ctrl+C 로 취소, 호출: %s)\n", errP.Yellow("[대기]"), h.ID, checker, caller)
+	// 확인자에게 그대로 전달해 붙여넣게 하는 목록: 쉼표 없이 공백·줄바꿈으로만 구분(확인자 화면은 공백·탭·줄바꿈을 구분자로 본다)
+	fmt.Fprintf(os.Stderr, "  대상 %d개:\n", len(targets))
+	for i := 0; i < len(targets); i += 8 {
+		end := i + 8
+		if end > len(targets) {
+			end = len(targets)
+		}
+		fmt.Fprintf(os.Stderr, "    %s\n", strings.Join(targets[i:end], " "))
+	}
+	fmt.Fprintf(os.Stderr, "  확인자 안내: 위 대상 목록을 확인자 %s 에게 전달하세요(확인자 화면에는 대상이 보이지 않습니다).\n", checker)
+	fmt.Fprintf(os.Stderr, "             확인자는 cross_check --user %s 에서 작업 %s 를 골라 Enter → 대상 붙여넣기 → 패스워드로 승인합니다.\n", checker, h.ID)
 
 	events := h.Events()
 	for {
@@ -413,14 +483,14 @@ func cmdRun(user, checker, targetsFile string) int {
 
 // runSameUser 는 작업자 = 확인자: 기다리지 않고 바로 중단(종료 코드 1). 데몬이 떠 있으면 중단 기록을 남긴다.
 // 터미널 stdin 은 기다리지 않도록 읽지 않는다(파일·파이프로 온 대상만 기록에 담는다).
-func runSameUser(user, targetsFile string) int {
+func runSameUser(user, targetsFile, caller string) int {
 	var targets []string
 	if targetsFile != "" || !tui.IsTerminal(os.Stdin) {
 		targets, _ = readTargets(targetsFile)
 	}
 	note := "(데몬에 기록하지 못함)"
 	if c, err := daemon.Dial(daemon.SocketFromEnv()); err == nil {
-		h, err := c.Run(user, user, targets)
+		h, err := c.RunCaller(user, user, targets, caller)
 		var de *daemon.DaemonError
 		switch {
 		case err == nil: // 일어나면 안 되지만, 열린 작업을 남기지 않게 바로 닫는다(데몬이 중단 처리)
@@ -461,15 +531,9 @@ func approved(c *daemon.Client, h *daemon.RunHandle, user, checker string, ev da
 	}
 	fmt.Fprintf(os.Stderr, "  승인 유효시간: %s — %s 까지 아래 --start 를 호출해야 합니다\n", daemon.FormatTTLDuration(ttl), exp.Local().Format("15:04:05"))
 	fmt.Fprintf(os.Stderr, "  본 작업 직전에: cross_check --start --job %s  (token 은 %s 환경변수로 전달)\n", h.ID, envToken)
+	fmt.Fprintf(os.Stderr, "  본 작업이 끝나면: cross_check --finish --job %s --result done  (멈추면 --result aborted)\n", h.ID)
 	fmt.Printf("CROSS_CHECK_JOB=%s\nCROSS_CHECK_TOKEN=%s\n", h.ID, h.Token)
 	return exitOK
-}
-
-func joinCapped(list []string, max int) string {
-	if len(list) <= max {
-		return strings.Join(list, ", ")
-	}
-	return strings.Join(list[:max], ", ") + fmt.Sprintf(" 외 %d개", len(list)-max)
 }
 
 // ---- --start ----
@@ -504,7 +568,50 @@ func cmdStart(job, token string) int {
 		errorf("%v", err)
 		return exitError
 	}
-	fmt.Fprintf(os.Stderr, "%s 작업 %s — 본 작업 시작이 기록되었습니다 (%s)\n", errP.Green("[시작]"), job, stamp())
+	fmt.Fprintf(os.Stderr, "%s 작업 %s — 본 작업 시작이 기록되었습니다(승인/작업중) (%s)\n", errP.Green("[시작]"), job, stamp())
+	return exitOK
+}
+
+// ---- --finish ----
+
+// cmdFinish 는 본 작업 결과를 기록한다: done(작업중 → 승인/작업완료) / aborted(시작 전·작업중 → 승인/작업중단).
+func cmdFinish(job, token, result string) int {
+	if job == "" {
+		usage()
+		errorf("--finish 에는 --job <ID> 가 필요")
+		return exitUsage
+	}
+	if result != daemon.ResultDone && result != daemon.ResultAborted {
+		usage()
+		errorf("--finish 에는 --result done 또는 --result aborted 가 필요")
+		return exitUsage
+	}
+	if token == "" {
+		token = os.Getenv(envToken)
+	}
+	if token == "" {
+		errorf("token 이 없습니다: --token 또는 환경변수 %s (cross_check --run 이 stdout 으로 준 값)", envToken)
+		return exitUsage
+	}
+	c, ok := dial()
+	if !ok {
+		return exitError
+	}
+	defer c.Close()
+	if err := c.Finish(job, token, result); err != nil {
+		var de *daemon.DaemonError
+		if errors.As(err, &de) {
+			fmt.Fprintln(os.Stderr, errP.Red(fmt.Sprintf("[거부] 작업 %s 결과 기록 불가 — %s", job, de.Msg)))
+			return exitFail
+		}
+		errorf("%v", err)
+		return exitError
+	}
+	if result == daemon.ResultDone {
+		fmt.Fprintf(os.Stderr, "%s 작업 %s — 승인/작업완료 로 기록되었습니다 (%s)\n", errP.Green("[완료]"), job, stamp())
+	} else {
+		fmt.Fprintf(os.Stderr, "%s 작업 %s — 승인/작업중단 으로 기록되었습니다 (%s)\n", errP.Yellow("[작업중단]"), job, stamp())
+	}
 	return exitOK
 }
 

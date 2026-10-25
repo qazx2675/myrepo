@@ -27,6 +27,7 @@ func defaultConfig() *Config {
 		BootTimeout:      600 * time.Second,
 		BootPollInterval: 10 * time.Second,
 		PortCheckTimeout: 3 * time.Second,
+		CrossCheck:       true, // 0.3.0 부터 기본 on (끄려면 conf 에 cross_check=off)
 		CrossCheckBin:    DefaultCrossCheckBin,
 	}
 }

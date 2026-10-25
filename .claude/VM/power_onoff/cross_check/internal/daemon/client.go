@@ -153,6 +153,23 @@ func (c *Client) Ping() error {
 	return err
 }
 
+// Info 는 ping 으로 알아낸 데몬 정보. 구버전 데몬은 값을 주지 않아 0 일 수 있다.
+type Info struct {
+	PID         int           // 데몬 pid
+	ApprovalTTL time.Duration // 승인 유효시간(approval_ttl_sec)
+	WorkTimeout time.Duration // 본 작업 제한 시간(work_timeout_sec)
+}
+
+// Info 는 ping 으로 데몬 pid·승인 유효시간·작업 제한 시간을 알아낸다(화면 머리말 표시용).
+func (c *Client) Info() (Info, error) {
+	resp, err := c.call(Request{Op: OpPing})
+	if err != nil {
+		return Info{}, err
+	}
+	return Info{PID: resp.PID, ApprovalTTL: time.Duration(resp.TTLSec) * time.Second,
+		WorkTimeout: time.Duration(resp.WorkSec) * time.Second}, nil
+}
+
 // ApprovalTTL 은 데몬이 지금 적용 중인 승인 유효시간을 ping 으로 알아낸다.
 // 구버전 데몬처럼 값을 주지 않으면 (0, nil) 이므로 호출자는 설정 파일·기본값으로 대신한다.
 func (c *Client) ApprovalTTL() (time.Duration, error) {
@@ -187,7 +204,8 @@ func (c *Client) ChangePassword(user, oldPassword, newPassword string) error {
 	return err
 }
 
-// List 는 user 가 작업자 또는 확인자인 작업 목록(생성 순, 대상 목록 포함)을 돌려준다(비밀번호 없음).
+// List 는 user 가 작업자 또는 확인자인 작업 목록(생성 순)을 돌려준다(비밀번호 없음).
+// 대상 목록은 user 가 작업자인 작업에만 들어 있다(확인자는 대상을 볼 수 없다).
 func (c *Client) List(user string) ([]JobView, error) {
 	resp, err := c.call(Request{Op: OpList, User: user})
 	if err != nil {
@@ -209,10 +227,12 @@ func (c *Client) Get(id, user, password string) (JobView, error) {
 	return *resp.Job, nil
 }
 
-// Approve 는 확인자 user 가 자기 비밀번호로 대기 작업 id 를 승인한다. 승인되면 작업자에게 승인 이벤트가 간다.
-// 비밀번호가 틀리면 상태는 그대로이고 *DaemonError("인증 실패…").
-func (c *Client) Approve(id, user, password string) error {
-	_, err := c.call(Request{Op: OpApprove, ID: id, User: user, Password: password})
+// Approve 는 확인자 user 가 작업자에게 전달받은 대상(pasted: 붙여넣은 글 그대로, 줄바꿈·탭·공백 구분)과
+// 자기 비밀번호로 대기 작업 id 를 승인한다. 데몬은 비밀번호를 먼저 확인하고(틀리면 상태는 그대로이고
+// *DaemonError("인증 실패…")), 그다음 붙여넣은 대상을 작업 대상과 집합 비교한다. 일치하면 승인(작업자에게 승인 이벤트),
+// 다르면 작업이 중단되고 Msg 가 "붙여넣은 대상 불일치(빠짐 N·남음 N·중복 N) …"(IsMismatchReason) 인 *DaemonError 가 온다.
+func (c *Client) Approve(id, user, password, pasted string) error {
+	_, err := c.call(Request{Op: OpApprove, ID: id, User: user, Password: password, Pasted: pasted})
 	return err
 }
 
@@ -230,6 +250,13 @@ func (c *Client) Start(id, token string) error {
 	return err
 }
 
+// Finish 는 본 작업 결과를 기록한다. token 은 Run 이 준 RunHandle.Token(Start 뒤에도 유효).
+// result ResultDone: 작업중 → 작업완료, ResultAborted: 시작 전·작업중 → 작업중단. 끝난 뒤에는 바꿀 수 없다.
+func (c *Client) Finish(id, token, result string) error {
+	_, err := c.call(Request{Op: OpFinish, ID: id, Token: token, Result: result})
+	return err
+}
+
 // AdminList 는 모든 작업(대상·감사 uid 포함)을 돌려준다. adminPassword 는 auth.conf 의 admin 비밀번호.
 func (c *Client) AdminList(adminPassword string) ([]store.Job, error) {
 	resp, err := c.call(Request{Op: OpAdminList, Password: adminPassword})
@@ -243,6 +270,13 @@ func (c *Client) AdminList(adminPassword string) ([]store.Job, error) {
 // 되살릴 수 없음). reason 은 "관리자 변경: " 뒤에 붙는다. 승인으로 바꾸면 그때부터 승인 유효시간 규칙이 적용된다.
 func (c *Client) AdminSet(adminPassword, id string, status store.Status, reason string) error {
 	_, err := c.call(Request{Op: OpAdminSet, Password: adminPassword, ID: id, Status: status, Reason: reason})
+	return err
+}
+
+// AdminSetPhase 는 승인 작업의 본 작업 단계를 끝낸다: 작업중 → 작업완료(PhaseDone)/작업중단(PhaseAborted),
+// 시작 전 → 작업중단. reason 은 "관리자 변경: " 뒤에 붙는다.
+func (c *Client) AdminSetPhase(adminPassword, id string, phase store.Phase, reason string) error {
+	_, err := c.call(Request{Op: OpAdminSet, Password: adminPassword, ID: id, Status: StatusApproved, Phase: phase, Reason: reason})
 	return err
 }
 
@@ -287,7 +321,12 @@ type RunHandle struct {
 // 동일인(user==checker)이면 데몬이 중단 기록만 남기고 *DaemonError(ID 채움)를 돌려준다.
 // 성공하면 새 연결을 쥔 RunHandle 을 돌려준다(Client 의 연결과 별개). 다 쓰면 Close 한다.
 func (c *Client) Run(user, checker string, targets []string) (*RunHandle, error) {
-	b, err := encodeLine(Request{Op: OpRun, User: user, Checker: checker, Targets: targets})
+	return c.RunCaller(user, checker, targets, "")
+}
+
+// RunCaller 는 Run 에 호출 스크립트 이름(caller, 정보용)을 더한 것. 데몬이 제어문자를 지우고 64자로 자른다.
+func (c *Client) RunCaller(user, checker string, targets []string, caller string) (*RunHandle, error) {
+	b, err := encodeLine(Request{Op: OpRun, User: user, Checker: checker, Targets: targets, Caller: caller})
 	if err != nil {
 		return nil, err
 	}

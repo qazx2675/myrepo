@@ -210,12 +210,34 @@ func TestAbortOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n := s.AbortOpen("데몬 재시작"); n != 2 {
-		t.Fatalf("AbortOpen = %d, want 2", n)
+	// 작업중 / 작업완료 / 작업중단 건
+	mk("p", 승인)
+	mk("f", 승인)
+	mk("x", 승인)
+	for id, ph := range map[string]Phase{"p": 작업중, "f": 작업완료, "x": 작업중단} {
+		ph := ph
+		if _, err := s.Update(id, func(j *Job) { j.ApprovedAt = &started; j.StartedAt = &started; j.Phase = ph }); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// 이미 본 작업을 시작한 승인 건은 기록 그대로
-	if j, _ := s.Get("s"); j.Status != 승인 || j.Reason != "" || j.StartedAt == nil {
-		t.Fatalf("시작된 승인 건은 유지되어야 함: %+v", j)
+
+	if n := s.AbortOpen("데몬 재시작"); n != 3 {
+		t.Fatalf("AbortOpen = %d, want 3", n)
+	}
+	// Phase 가 없던 예전 버전의 시작 기록(StartedAt 만)은 그대로
+	if j, _ := s.Get("s"); j.Status != 승인 || j.Reason != "" || j.StartedAt == nil || j.Phase != 작업전 {
+		t.Fatalf("예전 시작 기록은 유지되어야 함: %+v", j)
+	}
+	// 작업중이던 건은 승인·시작 기록을 두고 Phase 만 작업중단
+	if j, _ := s.Get("p"); j.Status != 승인 || j.Phase != 작업중단 || j.Reason != "데몬 재시작" || j.StartedAt == nil || j.FinishedAt == nil {
+		t.Fatalf("작업중 → 승인/작업중단: %+v", j)
+	}
+	// 이미 끝난 건은 그대로
+	if j, _ := s.Get("f"); j.Phase != 작업완료 || j.Reason != "" {
+		t.Fatalf("작업완료 유지: %+v", j)
+	}
+	if j, _ := s.Get("x"); j.Phase != 작업중단 || j.Reason != "" {
+		t.Fatalf("작업중단 유지: %+v", j)
 	}
 	for _, id := range []string{"w", "a"} {
 		j, _ := s.Get(id)
@@ -327,5 +349,31 @@ func TestLenCountDeleteWhere(t *testing.T) {
 	s2, err := Open(p)
 	if err != nil || s2.Len() != 3 {
 		t.Fatalf("다시 열기: %v len=%d", err, s2.Len())
+	}
+}
+
+// 0.2.x 의 jobs.json(phase·caller·finished_at 없음)도 그대로 읽히고, 다시 저장해도 빈 필드는 쓰지 않는다.
+func TestOldFileWithoutPhaseLoads(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "jobs.json")
+	old := `{"jobs":[{"id":"j1","user":"alice","checker":"bob","targets":["vm01ev01"],"status":"승인",` +
+		`"created_at":"2026-10-24T09:00:00+09:00","approved_at":"2026-10-24T09:01:00+09:00","started_at":"2026-10-24T09:01:30+09:00",` +
+		`"updated_at":"2026-10-24T09:01:30+09:00","worker_uid":0,"checker_uid":0}]}`
+	if err := os.WriteFile(p, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, ok := s.Get("j1")
+	if !ok || j.Status != 승인 || j.Phase != 작업전 || j.Caller != "" || j.FinishedAt != nil || j.StartedAt == nil {
+		t.Fatalf("예전 기록: %+v", j)
+	}
+	if _, err := s.Update("j1", func(j *Job) {}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	if strings.Contains(string(b), `"phase"`) || strings.Contains(string(b), `"caller"`) || strings.Contains(string(b), `"finished_at"`) {
+		t.Fatalf("빈 필드는 저장하지 않아야 함: %s", b)
 	}
 }

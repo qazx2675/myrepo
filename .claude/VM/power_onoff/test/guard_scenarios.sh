@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # test/guard_scenarios.sh — vm_power_onoff --demo 에 파이프 입력으로 안전장치 취소/통과 시나리오를 확인한다.
+# --demo 는 데몬이 없으므로 기존 방식(2/5 Enter, 3/5 VM 이름 입력)이다. 4/5 의 ls(대상 보기)도 확인한다.
 #   bash test/guard_scenarios.sh [바이너리 경로(기본 ./vm_power_onoff)]
 # 결과: PASS=N FAIL=M, FAIL 이 있으면 exit 1
 set -u
@@ -39,6 +40,19 @@ run "YES 입력"         1 "[취소] YeS 미입력 (입력값: YES)" "ABC123\n\n
 run "No 입력"          1 "[취소] YeS 미입력 (입력값: No)"  "ABC123\n\n${OK_HOSTS}No\n"
 run "정상 YeS"         0 "[DEMO] 실제 전원 작업은 하지 않습니다" "ABC123\n\nwas-prd-01 web-prd-01\tweb-prd-02\nYeS\n"
 run "카운트다운 한 줄" 0 "10 .. 9 .. 8 .. 7 .. 6 .. 5 .. 4 .. 3 .. 2 .. 1" "ABC123\n\n${OK_HOSTS}YeS\n"
+run "데모: 교차검증 방식 안내" 0 "cross_check=on(기본)이면 2/5 는 확인자 번호 선택" "ABC123\n\n${OK_HOSTS}YeS\n"
+run "4/5 ls 후 YeS 통과" 0 "[DEMO] 실제 전원 작업은 하지 않습니다" "ABC123\n\n${OK_HOSTS}ls\nYeS\n"
+run "4/5 LS 후 yes 취소" 1 "[취소] YeS 미입력 (입력값: yes)" "ABC123\n\n${OK_HOSTS} LS \nyes\n"
+
+# 4/5 ls 두 번: 목록·총 3대 가 1단계 + 2번 = 3번 나오고, 취소 없이 다시 묻는다
+out=$(printf "ABC123\n\n${OK_HOSTS}ls\nls\nYeS\n" | "$BIN" --demo 2>&1); rc=$?
+n=$(grep -c '^총 3대$' <<<"$out"); q=$(grep -o 'ls=대상 보기): ' <<<"$out" | wc -l)
+if [ "$rc" = 0 ] && [ "$n" = 3 ] && [ "$q" = 3 ]; then
+  PASS=$((PASS+1)); echo "[PASS] 4/5 ls 2회 (목록 3번, 질문 3번)"
+else
+  FAIL=$((FAIL+1)); echo "[FAIL] 4/5 ls 2회 (rc=$rc, 총 3대 $n번, 질문 $q번 — 기대 0/3/3)"
+  sed 's/^/    | /' <<<"$out" | tail -15
+fi
 
 # 입력 시간 초과: 3단계에서 입력 없이 stdin 을 열어 둔다
 out=$( { printf 'ABC123\n\n'; sleep 4; } | PWONOFF_TEST_INPUT_TIMEOUT=2 "$BIN" --demo 2>&1 ); rc=$?

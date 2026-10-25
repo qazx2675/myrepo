@@ -59,7 +59,7 @@ mkdir -p "$OUT"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 if [ "$CC_ONLY" -eq 0 ]; then
 # 소스만 복사(vendor 링크·빌드 결과·테스트 제외) → vendor 는 실제 파일로 복사
-tar cf - --exclude=./vendor --exclude="./$BIN" --exclude=./bin_os6 --exclude=./dev --exclude='./run_*' --exclude='*_test.go' . | (cd "$T" && tar xf -)
+tar cf - --exclude=./vendor --exclude="./$BIN" --exclude=./bin_os6 --exclude=./cross_check --exclude=./dev --exclude='./run_*' --exclude='*_test.go' . | (cd "$T" && tar xf -)
 mkdir -p "$T/vendor"; cp -r "$VENDOR_SRC/." "$T/vendor/"
 # 윈도우에서 받은 사본이면 CRLF 라 치환이 안 맞는다 — 임시 사본의 줄끝만 LF 로
 find "$T" -type f \( -name '*.go' -o -name go.mod -o -name modules.txt \) -exec sed -i 's/\r$//' {} +
