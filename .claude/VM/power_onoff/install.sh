@@ -4,7 +4,7 @@
 #   /etc/vcetner_pwon_off/pwonoff.conf      설정 파일 (이미 있으면 덮어쓰지 않음)
 #   /usr/local/bin/cross_check              실행파일 (cross_check/bin/cross_check, 없으면 setup.sh 로 먼저 빌드)
 #   /etc/cross_check/cross_check.conf       데몬 설정 (없을 때만 생성: target_dir=allowed_dir, users=pwonoff.conf 의 users)
-#   /etc/cross_check/auth.conf              user=패스워드 (0600, 없을 때만 생성: admin=<무작위 16자>, 그때 한 번만 화면 출력)
+#   /etc/cross_check/auth.conf              user=패스워드 (0600, 없을 때만 생성: admin=abc135!! 기본값 — 설치 후 바꾸세요)
 #   /var/lib/cross_check (0700)             작업 기록,  /etc/tmpfiles.d/cross_check.conf  (/run/cross_check 재부팅 후 생성)
 #   root crontab                            * * * * * /usr/local/bin/cross_check --ensure  (데몬이 죽어 있으면 매분 다시 띄움)
 # 설정 디렉터리 이름은 요구사항 그대로 'vcetner' 철자를 쓴다.
@@ -42,7 +42,8 @@ CC_CONF="$CC_ETC/cross_check.conf"
 CC_AUTH="$CC_ETC/auth.conf"
 CC_SOCK="$CC_SOCKET_DIR/cross_check.sock"
 CC_CRON_SH="$HERE/cross_check/scripts/cc_cron.sh"
-CC_PW_SH="$HERE/cross_check/scripts/cc_admin_pw.sh"
+# 관리자(admin) 기본 패스워드. 무작위 값이 아니라 고정 기본값이다 — 작은따옴표로 둘 것(!! 가 셸 히스토리 확장되지 않게).
+CC_ADMIN_DEFAULT_PW='abc135!!'
 
 [ "$(id -u)" -eq 0 ] || { echo "[오류] root 로 실행하세요 (sudo bash install.sh)" >&2; exit 1; }
 
@@ -265,28 +266,27 @@ EOF
   echo "[완료] $CC_CONF (target_dir=$CC_TARGET, users=$CC_USERS, approval_ttl_sec=${APPROVAL_TTL:-120})"
 fi
 
-# auth.conf — 없을 때만. admin 패스워드는 만들 때 한 번만 화면에 보인다.
+# auth.conf — 없을 때만. admin 은 기본 패스워드(abc135!!)로 만든다. 이미 있으면 덮어쓰지 않는다.
 if [ -e "$CC_AUTH" ]; then
   if [ -n "$(find "$CC_AUTH" -perm /077 2>/dev/null)" ] || [ "$(stat -c %u "$CC_AUTH")" != 0 ]; then
     chown root:root "$CC_AUTH"; chmod 600 "$CC_AUTH"
     echo "[완료] $CC_AUTH 권한을 0600 root:root 로 조정"
   fi
   grep -q '^admin=' "$CC_AUTH" || echo "[경고] $CC_AUTH 에 admin= 줄이 없습니다 — 관리자 기능(--admin)을 쓸 수 없습니다" >&2
-  echo "[INFO] $CC_AUTH 가 이미 있어 그대로 둡니다 (관리자 패스워드 분실 시 이 파일의 admin= 줄 확인)"
+  echo "[INFO] $CC_AUTH 가 이미 있어 그대로 둡니다 (관리자 패스워드는 이 파일의 admin= 줄 — 기본값 abc135!!)"
 else
-  ADMIN_PW="$(bash "$CC_PW_SH" 16)"
+  ADMIN_PW="$CC_ADMIN_DEFAULT_PW"
   ( umask 077; printf 'admin=%s\n' "$ADMIN_PW" > "$CC_AUTH.tmp" )
   chown root:root "$CC_AUTH.tmp"; chmod 600 "$CC_AUTH.tmp"; mv -f "$CC_AUTH.tmp" "$CC_AUTH"
   echo
   echo "  ################################################################"
-  echo "  #  cross_check 관리자(admin) 패스워드 — 지금 한 번만 표시합니다"
+  echo "  #  cross_check 관리자(admin) 기본 패스워드를 $CC_AUTH 에 저장했습니다"
   echo "  #"
-  echo "  #      admin 패스워드:  $ADMIN_PW"
+  echo "  #      admin 패스워드:  abc135!!   (기본값 — 보안을 위해 바꾸세요)"
   echo "  #"
-  echo "  #  분실 시 $CC_AUTH 를 확인 (root 만 읽기 가능)"
+  echo "  #  변경: root 가 $CC_AUTH 의 admin= 줄을 수정 (파일은 0600 root 유지)"
   echo "  ################################################################"
   echo
-  unset ADMIN_PW
 fi
 
 # crontab — 매분 --ensure (데몬이 없으면 다시 띄움)
@@ -318,7 +318,7 @@ echo
 echo "남은 수동 작업:"
 echo "  1) $CONF 의 users / vcenters 를 환경에 맞게 수정 (교차검증 사용자 목록은 $CC_CONF 의 users)"
 echo "  2) 각 사람이 한 번씩 등록: cross_check --user <이름>   (선착순 등록이므로 모두 가능한 빨리)"
-echo "  3) 관리자 화면: cross_check --admin   (admin 패스워드: $CC_AUTH 의 admin= 줄)"
+echo "  3) 관리자 화면: cross_check --admin   (기본 admin 패스워드: abc135!! — 바꾸려면 $CC_AUTH 의 admin= 줄 수정)"
 CC_TTL_NOW="$(sed -n 's/^approval_ttl_sec=\([0-9][0-9]*\).*/\1/p' "$CC_CONF" 2>/dev/null | head -1 || true)"
 echo "     승인 유효시간(승인 후 본 작업 시작 허용 시간): ${CC_TTL_NOW:-120}초 — 바꾸려면 $CC_CONF 의 approval_ttl_sec= 수정 후 pkill -HUP -f 'cross_check --daemon'"
 if [ "$CC_STATE_KEY" = off ]; then

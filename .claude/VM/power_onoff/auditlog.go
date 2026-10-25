@@ -10,7 +10,7 @@ import (
 )
 
 // Audit 는 실행 기록이다: allowed_dir/run_<user>/YYYYmmdd_HHMMSS_<기능>.log (디렉터리 0700, 파일 0600).
-// 비밀번호와 확인 코드 입력값은 기록하지 않는다. nil 이어도 안전하다(기록 안 함).
+// 비밀번호와 확인 문구 입력값은 기록하지 않는다. nil 이어도 안전하다(기록 안 함).
 type Audit struct {
 	mu   sync.Mutex
 	f    *os.File
@@ -21,8 +21,27 @@ func OpenAudit(runDir string, act Action) (*Audit, error) {
 	if err := os.MkdirAll(runDir, 0o700); err != nil {
 		return nil, err
 	}
-	p := filepath.Join(runDir, time.Now().Format("20060102_150405")+"_"+act.Slug()+".log")
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	base := time.Now().Format("20060102_150405") + "_" + act.Slug()
+	// 같은 초에 같은 기능을 또 실행해도 기록이 사라지지 않게 _2, _3 … 을 붙인다.
+	var (
+		p   string
+		f   *os.File
+		err error
+	)
+	for i := 1; i <= 100; i++ {
+		name := base + ".log"
+		if i > 1 {
+			name = fmt.Sprintf("%s_%d.log", base, i)
+		}
+		p = filepath.Join(runDir, name)
+		f, err = os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			break
+		}
+		if !os.IsExist(err) {
+			return nil, err
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

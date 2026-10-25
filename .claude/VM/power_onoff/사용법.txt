@@ -24,7 +24,7 @@ cross_check --user hong
 # [데몬 확인] 데몬 기동 보장(없으면 띄움)과 프로세스 확인. crontab 이 매분 같은 일을 함
 sudo cross_check --ensure && pgrep -af 'cross_check --daemon'
 
-# [작업자 터미널] 안전장치 1/5 → 2/5 확인자 번호 선택 → 3/5 에서 대기. 화면에 나온 대상 목록을 확인자에게 전달(-c kim 이면 2/5 생략)
+# [작업자 터미널] (VWP 대상이면 담당자 확인 후 VWPekaekdwkghkrdls 입력) → 안전장치 1/5 'woqnxldwkrdjq(재부팅작업)을 그대로 입력하세요.' 에 woqnxldwkrdjq 입력(Power Off/On/재부팅 공통) → 2/5 확인자 번호 선택 → 3/5 에서 대기. 화면에 나온 대상 목록을 확인자에게 전달(-c kim 이면 2/5 생략)
 cd /home/power_onoff && vm_power_onoff -u hong -c kim
 
 # [확인자 터미널] 전체 화면에서 ←→ 로 '내가 확인자인 작업' 선택 → Enter → 전달받은 대상 붙여넣기(Ctrl+D 또는 빈 줄 Enter) → 본인 패스워드 → 승인. 취소는 c + 패스워드, 종료는 q

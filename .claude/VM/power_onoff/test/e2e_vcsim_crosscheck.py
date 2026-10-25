@@ -4,7 +4,7 @@
 #   python3 test/e2e_vcsim_crosscheck.py <vm_power_onoff> <vcsim_server> <allowed_dir>   (환경변수 CC_BIN=<cross_check 실행 파일>)
 # 데몬은 임시 폴더에서만 돈다(/etc/cross_check·/var·crontab 을 건드리지 않음).
 # 확인자 승인은 TUI(cross_check --user other)의 줄 입력 화면에 파이프로: o <작업> → a → 작업자에게 받은 대상 붙여넣기(빈 줄로 끝) → 패스워드.
-# 흐름: 1/5 코드 → 2/5 확인자 번호 → 3/5 승인 대기(확인자 TUI 승인) → 4/5 ls·YeS → 5/5 카운트다운 → --start → 전원 작업 → --finish
+# 흐름: 1/5 작업 확인 문구 → 2/5 확인자 번호 → 3/5 승인 대기(확인자 TUI 승인) → 4/5 ls·YeS → 5/5 카운트다운 → --start → 전원 작업 → --finish
 # 각 시나리오가 끝나면 격리 데몬의 작업 기록(jobs.json)에서 status/phase/caller/reason 을 확인한다:
 #   끝까지 실행(일부 VM 실패 포함) → 승인/작업완료, 승인 뒤 No·SIGINT → 승인/작업중단, 확인자 취소·승인 유효시간 초과 → 중단
 import json, os, re, shutil, signal, subprocess, sys, tempfile, time
@@ -149,8 +149,16 @@ def new_audit(before):
     return "".join(open(f, errors="replace").read() for f in sorted(audit_files() - before))
 
 
+def run_audit(pr):
+    """이 실행이 화면에 알려 준 감사 로그("[INFO] 감사 로그: 경로")를 읽는다. 못 찾으면 새로 생긴 파일로 대신한다."""
+    m = re.search(r"\[INFO\] 감사 로그: (\S+)", pr.buf)
+    if m and os.path.exists(m.group(1)):
+        return open(m.group(1), errors="replace").read()
+    return new_audit(pr.audit_before)
+
+
 def to_wait(menu=True, targets=("svr1ev01",), action=1, power="on"):
-    """1/5 코드 → 2/5 확인자(menu=True 면 번호 메뉴에서 1번=other, 아니면 -c other) → 3/5 승인 대기 까지."""
+    """1/5 작업 확인 문구 → 2/5 확인자(menu=True 면 번호 메뉴에서 1번=other, 아니면 -c other) → 3/5 승인 대기 까지."""
     sim = d.Sim(power)
     d.write_conf(sim.addr, "cross_check_bin=%s\n" % CC, cc="on")
     d.write_targets(list(targets))
@@ -189,7 +197,7 @@ def to_countdown(pr, jid, targets=("svr1ev01",), ls=0):
 
 
 def assert_reported(pr, result):
-    au = new_audit(pr.audit_before)
+    au = run_audit(pr)
     assert "교차검증 결과 보고: %s job=" % result in au, "감사 로그에 결과 보고(%s) 없음:\n%s" % (result, au[-1200:])
     assert "결과 보고 실패" not in au and "[경고] 교차검증 결과" not in pr.buf, "결과 보고 실패:\n" + pr.buf[-800:]
     label = "승인/작업완료" if result == "done" else "승인/작업중단"
@@ -198,7 +206,7 @@ def assert_reported(pr, result):
 
 
 def assert_not_reported(pr):
-    au = new_audit(pr.audit_before)
+    au = run_audit(pr)
     assert "교차검증 결과 보고" not in au and "교차검증 결과 보고" not in pr.buf, "--finish 를 보내면 안 됨:\n" + au[-1200:]
     return au
 
@@ -393,7 +401,7 @@ def s_cc_expire():
         assert pr.wait(10) == 1
         assert "교차검증 통과" not in pr.buf and "강제 PowerOff" not in pr.buf and "합계" not in pr.buf, pr.buf[-800:]
         assert "사유: " in pr.buf, "거부 사유 한 줄이 없음:\n" + pr.buf[-800:]
-        assert "교차검증 시작 거부 확인자=other" in new_audit(pr.audit_before)
+        assert "교차검증 시작 거부 확인자=other" in run_audit(pr)
         assert_not_reported(pr)  # 데몬이 이미 중단으로 기록 → --finish 를 보내지 않는다
         no_token(pr)
         d.check_states("on", ["svr1ev01"])

@@ -2,7 +2,7 @@ package tui
 
 // screen_user.go - cross_check --user <나> 의 전체 화면(auto_setup 상태 리포트와 같은 모양).
 //
-//	목록  : 머리말(제목·갱신·데몬) / 카운터 / 구분선 / 작업 구역(내 작업 · 내가 확인자인 작업, ←→ 전환, a 전체 보기) / 안내 / 키 안내
+//	목록  : 머리말(제목·갱신·데몬) / 카운터 / 구분선 / 작업 구역(내가 확인자인 작업 · 내 작업, ←→/Tab 전환, a 전체 보기) / 안내 / 키 안내
 //	상세  : 작업 하나(확인자에게는 대상 목록을 보이지 않음)
 //	승인  : 1/3 대상 붙여넣기(인식한 이름 수만 표시, 판정은 보이지 않음) → 2/3 패스워드 → 3/3 결과
 //	취소  : 패스워드 → 중단
@@ -39,7 +39,7 @@ const (
 
 // UserHint 는 목록 화면의 키 안내(문서에 그대로 쓰는 문구).
 // (한 줄에 들어가지 않으면 "\n" 위치에서 두 줄로 나눈다)
-const UserHint = "↑↓ 이동  ←→ 작업 전환  Enter 상세/승인  a 전체 보기  r 새로고침\nc 취소  p 패스워드 변경  ? 도움말  q 종료"
+const UserHint = "↑↓ 이동  ←→/Tab 구역 전환  Enter 상세/승인  a 전체 보기  r 새로고침\nc 취소  p 패스워드 변경  ? 도움말  q 종료"
 
 type userScreen struct {
 	c    Client
@@ -57,7 +57,7 @@ type userScreen struct {
 	prevInit bool
 
 	mode  userMode
-	pane  int  // 0 = 내 작업(작업자), 1 = 내가 확인자인 작업
+	pane  int  // 0 = 내가 확인자인 작업(기본), 1 = 내 작업(작업자)
 	all   bool // a 전체 보기: 두 구역을 함께
 	selID string
 	row   int
@@ -184,8 +184,8 @@ func (u *userScreen) visible() []daemon.JobView {
 		j := u.jobs[i]
 		switch {
 		case u.all && (j.User == u.user || j.Checker == u.user):
-		case !u.all && u.pane == 0 && j.User == u.user:
-		case !u.all && u.pane == 1 && j.Checker == u.user:
+		case !u.all && u.pane == 1 && j.User == u.user:
+		case !u.all && u.pane == 0 && j.Checker == u.user:
 		default:
 			continue
 		}
@@ -305,7 +305,7 @@ func (u *userScreen) keyList(ev keyEv) bool {
 		move(0)
 	case ev.k == kEnd:
 		move(len(vis) - 1)
-	case ev.k == kLeft || ev.k == kRight:
+	case ev.k == kLeft || ev.k == kRight || ev.k == kBackTab || (ev.k == kRune && ev.r == '\t'):
 		if u.all {
 			u.all = false
 		} else {
@@ -726,8 +726,8 @@ func (u *userScreen) renderList(w, h int, color bool) string {
 	if u.all {
 		bar = []seg{{" ", ""}, tab(true, fmt.Sprintf("전체 보기 %d", len(vis))), {"  (a: 작업별 보기)", stGray}}
 	} else {
-		bar = []seg{{" ", ""}, tab(u.pane == 0, fmt.Sprintf("내 작업 (작업자) %d", mine)), {"  ", ""},
-			tab(u.pane == 1, fmt.Sprintf("내가 확인자인 작업 %d", chk))}
+		bar = []seg{{" ", ""}, tab(u.pane == 0, fmt.Sprintf("내가 확인자인 작업 %d", chk)), {"  ", ""},
+			tab(u.pane == 1, fmt.Sprintf("내 작업 (작업자) %d", mine))}
 	}
 	if chkWait > 0 {
 		bar = append(bar, seg{"  ", ""}, seg{fmt.Sprintf("승인 대기 %d건", chkWait), stYellow})
@@ -736,7 +736,7 @@ func (u *userScreen) renderList(w, h int, color bool) string {
 	cursor := 0
 	if len(rows) == 0 {
 		empty := " (작업 없음 — 작업자가 작업 스크립트에서 cross_check --run 으로 요청하면 여기에 표시됩니다)"
-		if !u.all && u.pane == 0 {
+		if !u.all && u.pane == 1 {
 			empty = " (내가 작업자인 작업이 없습니다 — 작업 스크립트가 cross_check --run 을 부르면 표시됩니다)"
 		} else if !u.all {
 			empty = " (내가 확인자인 작업이 없습니다 — 작업자가 나를 확인자로 지정하면 표시됩니다)"
@@ -904,7 +904,7 @@ func (u *userScreen) renderHelp(w, h int, color bool) string {
 	lines := []string{
 		" [목록]",
 		"   ↑↓ (j/k)  작업 이동            PgUp/PgDn  한 쪽씩",
-		"   ←→        작업 전환: 내 작업(작업자) ↔ 내가 확인자인 작업",
+		"   ←→ / Tab  구역 전환: 내가 확인자인 작업 ↔ 내 작업(작업자) (Shift+Tab 은 이전)",
 		"   a         전체 보기(두 구역을 함께) ↔ 작업별 보기",
 		"   Enter     내가 확인자인 대기 작업이면 승인 화면, 아니면 상세",
 		"   c         취소(중단) — 내가 확인자인 대기 작업, 패스워드 필요",

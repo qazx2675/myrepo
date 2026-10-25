@@ -4,7 +4,7 @@
 # 사용법: bash test/pty_e2e.sh <cross_check 바이너리 경로> [화면 기록을 남길 폴더]
 #
 # e2e.sh 처럼 임시 디렉터리 하나 안에서 CROSS_CHECK_* 환경변수로 데몬·설정·패스워드·기록을 따로 띄우므로 /etc, /var 는 건드리지 않는다.
-# 시나리오: alice 가 --run 으로 대기 → 실제 pty 에서 cross_check --user bob(전체 화면)을 띄워 ↓↑ → (작업 전환) → Enter →
+# 시나리오: alice 가 --run 으로 대기 → 실제 pty 에서 cross_check --user bob(전체 화면)을 띄워 ↓↑ → (Tab 으로 구역 왕복) → Enter →
 # 대상 붙여넣기(붙여넣기 구간 표시 ESC[200~ … ESC[201~ 안에 빈 줄·탭 섞음) → 빈 줄 Enter → 패스워드 → 결과 → q.
 # 확인: 작업이 승인되고 alice 의 --run 이 0 으로 끝나는지, 화면에 패스워드·대상 목록(데몬이 준 것)이 없는지,
 #       종료 뒤 pty 의 termios 가 시작 전과 같고 화면 복원 시퀀스로 끝나는지. 화면 기록(붙여넣은 뒤·승인 뒤)을 남긴다.
@@ -119,11 +119,13 @@ def check(cond, name):
 wait_for("cross_check 상태 리포트")
 wait_for("● 데몬 실행 (pid ")
 check(buf.startswith(b"\x1b[?1049h\x1b[?25l\x1b[?2004h"), "대체 화면·커서 숨김·붙여넣기 구간 표시로 시작")
-check("(user: bob)" in screen() and "↑↓ 이동  ←→ 작업 전환" in screen(), "머리말 (user: bob)·키 안내 줄")
+check("(user: bob)" in screen() and "↑↓ 이동  ←→/Tab 구역 전환" in screen(), "머리말 (user: bob)·키 안내 줄")
 cur = termios.tcgetattr(slave)
 check((cur[3] & termios.ICANON) == 0 and (cur[3] & termios.ECHO) == 0 and (cur[3] & termios.ISIG) == 0, "실행 중 raw 모드(ICANON·ECHO·ISIG 꺼짐)")
 send(b"\x1b[B"); send(b"\x1b[A")                # ↓↑ (목록 이동)
-send(b"\x1b[C")                                 # → 내가 확인자인 작업
+send(b"\t")                                     # Tab → 내 작업(작업자) 구역
+wait_for("[내 작업 (작업자) 0]")
+send(b"\x1b[Z")                                 # Shift+Tab → 내가 확인자인 작업(기본 구역)
 wait_for("[내가 확인자인 작업 1]")
 check(job in screen() and "pty_e2e.sh" in screen(), "확인자 구역에 작업 %s (호출 스크립트 pty_e2e.sh)" % job)
 check("svr1ev01" not in screen(), "확인자 목록에 대상 이름 없음")

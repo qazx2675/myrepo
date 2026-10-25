@@ -7,7 +7,7 @@ set -u
 BIN="${1:-./vm_power_onoff}"
 [ -x "$BIN" ] || { echo "실행 파일 없음: $BIN" >&2; exit 2; }
 
-export PWONOFF_COLOR=never PWONOFF_TEST_CODE=ABC123 PWONOFF_TEST_TICK_MS=10
+export PWONOFF_COLOR=never PWONOFF_TEST_TICK_MS=10
 unset PWONOFF_TEST_INPUT_TIMEOUT
 PASS=0; FAIL=0
 OK_HOSTS='web-prd-01\nweb-prd-02\nwas-prd-01\n'
@@ -30,22 +30,25 @@ run() {
   check "$1" "$2" "$3" "$out" "$rc"
 }
 
-run "코드 틀림"        1 "[취소] 확인 코드 불일치"   "abc123\n\n${OK_HOSTS}YeS\n"
-run "호스트 누락"      1 "누락: was-prd-01"          "ABC123\n\nweb-prd-01 web-prd-02\n\nYeS\n"
-run "호스트 초과"      1 "대상 아님: db-prd-01"      "ABC123\n\nweb-prd-01 web-prd-02 was-prd-01 db-prd-01\nYeS\n"
-run "호스트 중복"      1 "중복: web-prd-01(2회)"     "ABC123\n\nweb-prd-01 web-prd-01 web-prd-02 was-prd-01\nYeS\n"
-run "대소문자 틀림"    1 "[취소] 호스트 목록 불일치" "ABC123\n\nWEB-PRD-01 web-prd-02 was-prd-01\nYeS\n"
-run "yes 입력"         1 "[취소] YeS 미입력 (입력값: yes)" "ABC123\n\n${OK_HOSTS}yes\n"
-run "YES 입력"         1 "[취소] YeS 미입력 (입력값: YES)" "ABC123\n\n${OK_HOSTS}YES\n"
-run "No 입력"          1 "[취소] YeS 미입력 (입력값: No)"  "ABC123\n\n${OK_HOSTS}No\n"
-run "정상 YeS"         0 "[DEMO] 실제 전원 작업은 하지 않습니다" "ABC123\n\nwas-prd-01 web-prd-01\tweb-prd-02\nYeS\n"
-run "카운트다운 한 줄" 0 "10 .. 9 .. 8 .. 7 .. 6 .. 5 .. 4 .. 3 .. 2 .. 1" "ABC123\n\n${OK_HOSTS}YeS\n"
-run "데모: 교차검증 방식 안내" 0 "cross_check=on(기본)이면 2/5 는 확인자 번호 선택" "ABC123\n\n${OK_HOSTS}YeS\n"
-run "4/5 ls 후 YeS 통과" 0 "[DEMO] 실제 전원 작업은 하지 않습니다" "ABC123\n\n${OK_HOSTS}ls\nYeS\n"
-run "4/5 LS 후 yes 취소" 1 "[취소] YeS 미입력 (입력값: yes)" "ABC123\n\n${OK_HOSTS} LS \nyes\n"
+run "1/5 안내문"        0 "[1/5] woqnxldwkrdjq(재부팅작업)을 그대로 입력하세요." "woqnxldwkrdjq\n\n${OK_HOSTS}YeS\n"
+run "1/5 앞뒤 공백 허용" 0 "[INFO] 작업 확인 문구 일치" "  woqnxldwkrdjq \n\n${OK_HOSTS}YeS\n"
+run "문구 대소문자"    1 "[취소] 작업 확인 문구 불일치" "WOQNXLDWKRDJQ\n\n${OK_HOSTS}YeS\n"
+run "한글 원문 입력"   1 "[취소] 작업 확인 문구 불일치" "재부팅작업\n\n${OK_HOSTS}YeS\n"
+run "호스트 누락"      1 "누락: was-prd-01"          "woqnxldwkrdjq\n\nweb-prd-01 web-prd-02\n\nYeS\n"
+run "호스트 초과"      1 "대상 아님: db-prd-01"      "woqnxldwkrdjq\n\nweb-prd-01 web-prd-02 was-prd-01 db-prd-01\nYeS\n"
+run "호스트 중복"      1 "중복: web-prd-01(2회)"     "woqnxldwkrdjq\n\nweb-prd-01 web-prd-01 web-prd-02 was-prd-01\nYeS\n"
+run "대소문자 틀림"    1 "[취소] 호스트 목록 불일치" "woqnxldwkrdjq\n\nWEB-PRD-01 web-prd-02 was-prd-01\nYeS\n"
+run "yes 입력"         1 "[취소] YeS 미입력 (입력값: yes)" "woqnxldwkrdjq\n\n${OK_HOSTS}yes\n"
+run "YES 입력"         1 "[취소] YeS 미입력 (입력값: YES)" "woqnxldwkrdjq\n\n${OK_HOSTS}YES\n"
+run "No 입력"          1 "[취소] YeS 미입력 (입력값: No)"  "woqnxldwkrdjq\n\n${OK_HOSTS}No\n"
+run "정상 YeS"         0 "[DEMO] 실제 전원 작업은 하지 않습니다" "woqnxldwkrdjq\n\nwas-prd-01 web-prd-01\tweb-prd-02\nYeS\n"
+run "카운트다운 한 줄" 0 "10 .. 9 .. 8 .. 7 .. 6 .. 5 .. 4 .. 3 .. 2 .. 1" "woqnxldwkrdjq\n\n${OK_HOSTS}YeS\n"
+run "데모: 교차검증 방식 안내" 0 "cross_check=on(기본)이면 2/5 는 확인자 번호 선택" "woqnxldwkrdjq\n\n${OK_HOSTS}YeS\n"
+run "4/5 ls 후 YeS 통과" 0 "[DEMO] 실제 전원 작업은 하지 않습니다" "woqnxldwkrdjq\n\n${OK_HOSTS}ls\nYeS\n"
+run "4/5 LS 후 yes 취소" 1 "[취소] YeS 미입력 (입력값: yes)" "woqnxldwkrdjq\n\n${OK_HOSTS} LS \nyes\n"
 
 # 4/5 ls 두 번: 목록·총 3대 가 1단계 + 2번 = 3번 나오고, 취소 없이 다시 묻는다
-out=$(printf "ABC123\n\n${OK_HOSTS}ls\nls\nYeS\n" | "$BIN" --demo 2>&1); rc=$?
+out=$(printf "woqnxldwkrdjq\n\n${OK_HOSTS}ls\nls\nYeS\n" | "$BIN" --demo 2>&1); rc=$?
 n=$(grep -c '^총 3대$' <<<"$out"); q=$(grep -o 'ls=대상 보기): ' <<<"$out" | wc -l)
 if [ "$rc" = 0 ] && [ "$n" = 3 ] && [ "$q" = 3 ]; then
   PASS=$((PASS+1)); echo "[PASS] 4/5 ls 2회 (목록 3번, 질문 3번)"
@@ -55,14 +58,14 @@ else
 fi
 
 # 입력 시간 초과: 3단계에서 입력 없이 stdin 을 열어 둔다
-out=$( { printf 'ABC123\n\n'; sleep 4; } | PWONOFF_TEST_INPUT_TIMEOUT=2 "$BIN" --demo 2>&1 ); rc=$?
+out=$( { printf 'woqnxldwkrdjq\n\n'; sleep 4; } | PWONOFF_TEST_INPUT_TIMEOUT=2 "$BIN" --demo 2>&1 ); rc=$?
 check "입력 시간 초과" 1 "[취소] 입력 시간 2초 초과" "$out" "$rc"
 
 # 카운트다운 중 SIGINT
 tmp=$(mktemp)
 pidf=$(mktemp)
 # 바이너리 자신의 PID 를 남기려고 bash -c 안에서 exec 한다
-{ printf "ABC123\n\n${OK_HOSTS}YeS\n"; sleep 5; } |
+{ printf "woqnxldwkrdjq\n\n${OK_HOSTS}YeS\n"; sleep 5; } |
   PWONOFF_TEST_TICK_MS=500 bash -c 'echo $$ >"$1"; exec "$2" --demo' _ "$pidf" "$BIN" >"$tmp" 2>&1 &
 job=$!
 sleep 2

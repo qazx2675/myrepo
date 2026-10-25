@@ -44,7 +44,7 @@ GOPROXY=off GOFLAGS=-mod=mod go build -o bin/cross_check ./cmd/cross_check
 | 빌드 | `cross_check/bin/cross_check` (Go 1.20 이상, `GOPROXY=off`). vm_power_onoff 는 Go 1.26.5 이상 필요 |
 | 실행파일 | `/usr/local/bin/cross_check` |
 | `/etc/cross_check/cross_check.conf` | **없을 때만** 생성: `target_dir`=허용디렉터리(vm_power_onoff 의 `allowed_dir` 과 같은 값), `users`=설치된 `pwonoff.conf` 의 `users` **(처음 한 번만 복사 — 이후 `pwonoff.conf` 의 users 를 바꿔도 따라가지 않으므로 직접 수정)**, `auth=required`, `approval_ttl_sec=120`(또는 `--approval-ttl <초>` 로 준 값, 키 설명은 주석으로 들어감). `work_timeout_sec` 줄은 만들지 않으므로 기본값(86400초)이 쓰입니다 — 바꾸려면 직접 추가. **이미 파일이 있으면 `--approval-ttl` 을 줘도 덮어쓰지 않고** 고치는 방법만 출력 |
-| `/etc/cross_check/auth.conf` | **없을 때만** 생성(0600, root): `admin=<무작위 16자>` — **관리자 패스워드는 이때 화면에 한 번만 출력**됩니다. 분실하면 root 가 이 파일의 `admin=` 줄을 확인/수정. 이미 있으면 권한만 0600 root 로 바로잡고 `admin=` 줄이 없으면 경고 |
+| `/etc/cross_check/auth.conf` | **없을 때만** 생성(0600, root): `admin=abc135!!` — **관리자 패스워드의 기본값은 `abc135!!`** 입니다(무작위 값 아님, 설치 완료 문구에도 안내). 보안을 위해 root 가 이 파일의 `admin=` 줄을 고쳐 바꾸세요(6~128자). 이미 있으면 권한만 0600 root 로 바로잡고 `admin=` 줄이 없으면 경고 |
 | `/var/lib/cross_check` | 작업 기록 디렉터리(0700) |
 | `/etc/tmpfiles.d/cross_check.conf` | 재부팅 후 `/run/cross_check`(소켓 디렉터리) 생성 |
 | root crontab | `* * * * * /usr/local/bin/cross_check --ensure >/dev/null 2>&1 # cross_check` 정확히 한 줄(멱등) |
@@ -101,7 +101,7 @@ cross_check --user hong
 - 패스워드 규칙: **6~128자**, 앞뒤 공백·줄바꿈·NUL 금지. 입력은 3번까지 다시 할 수 있습니다.
 - **`users=` 목록에 있는 이름만** 등록됩니다. 목록에 없으면 "관리자에게 추가를 요청하세요" 와 함께 거부됩니다.
 - **선착순**: 먼저 등록한 사람이 그 이름의 패스워드를 갖습니다. 이미 등록된 이름은 덮어쓸 수 없고(`이미 등록됨`), 바꾸려면 화면의 `p` 키(현재 패스워드 필요), 분실했으면 관리자가 재설정합니다.
-- **`admin` 은 소켓으로 등록할 수 없습니다.** `install.sh` 가 `auth.conf` 에 직접 씁니다.
+- **`admin` 은 소켓으로 등록할 수 없습니다.** `install.sh` 가 `auth.conf` 에 기본 패스워드 `abc135!!` 로 직접 씁니다.
 - `--run` 은 **작업자와 확인자 모두 등록되어 있어야** 동작합니다(`auth=off` 제외). 미등록이면 등록 방법을 안내하며 거부합니다.
 
 ### OS6
@@ -212,7 +212,7 @@ cross_check --finish --job "$CROSS_CHECK_JOB" --result done        # 스크립�
 
 `cross_check --user <나>` 를 터미널에서 실행하면 `auto_setup` 상태 리포트와 같은 **전체 화면**이 열립니다(raw 모드, 대체 화면, 2초마다 자동 갱신, 종료 시 터미널 복원). 머리말에 갱신 시각과 `● 데몬 실행 (pid N)`(또는 `○ 데몬 중지`), 그 아래 카운터(`전체 · 대기 · 승인 · 작업중 · 작업완료 · 작업중단 · 중단`)와 `승인 유효시간 2분` 이 보입니다. 첫 실행이면 먼저 [패스워드 등록](#최초-등록-패스워드) 화면이 나옵니다.
 
-1. **작업 구역**: `내 작업`(내가 작업자)과 `내가 확인자인 작업` 두 구역을 `←→` 로 전환(`a` 는 전체 보기). 표에는 ID, 작업자, 확인자, 상태, **호출 스크립트**, 시각(승인 후 미시작이면 남은 시간)이 나옵니다. 새 요청은 알림 줄로 표시됩니다.
+1. **작업 구역**: `내가 확인자인 작업`(왼쪽, 처음 선택됨)과 `내 작업`(내가 작업자) 두 구역을 `←` `→` 또는 `Tab`(`Shift+Tab` 은 이전)으로 전환(`a` 는 전체 보기). 표에는 ID, 작업자, 확인자, 상태, **호출 스크립트**, 시각(승인 후 미시작이면 남은 시간)이 나옵니다. 새 요청은 알림 줄로 표시됩니다.
 2. 내가 확인자인 `대기` 작업에서 `Enter` → **승인 화면**.
    - **1/3 대상 붙여넣기**: 작업자에게 전달받은 대상을 붙여넣습니다(줄바꿈·탭·공백 구분, 순서 무관). 화면에는 **인식한 이름 수만** 보이고 판정(맞는지)은 보이지 않습니다. `Ctrl+D` 또는 빈 줄에서 `Enter` 로 끝내고, `Esc` 는 승인하지 않고 돌아갑니다.
    - **2/3 패스워드**: 확인자 본인 패스워드(`*` 로 표시). 틀리면 `인증 실패` 로 상태는 그대로이고 다시 입력합니다(5번 연속 틀리면 이후 시도는 1초씩 지연).
@@ -274,7 +274,7 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 
 | 명령 | 설명 |
 |---|---|
-| `cross_check --user <user> [--plain]` | 사용자 화면. 첫 실행이면 패스워드 등록. 내 작업·내가 확인자인 작업 목록, 승인(대상 붙여넣기 → 패스워드)/취소. 터미널이면 전체 화면, `--plain`·파이프면 줄 입력 화면 |
+| `cross_check --user <user> [--plain]` | 사용자 화면. 첫 실행이면 패스워드 등록. 내가 확인자인 작업·내 작업 목록(이 순서), 승인(대상 붙여넣기 → 패스워드)/취소. 터미널이면 전체 화면, `--plain`·파이프면 줄 입력 화면 |
 | `cross_check --run --user <작업자> --checker <확인자> [--targets-file <파일>] [--caller <이름>]` | 작업 등록 후 확인자 승인까지 대기(작업 스크립트 안에서 호출). 대상 목록은 `--targets-file` 또는 stdin(줄바꿈·탭·공백 구분, `#` 주석). **`--cechker` 오타도 같은 뜻으로 받습니다.** `--caller` 는 호출 스크립트 이름(정보용, 생략하면 환경변수 `CROSS_CHECK_CALLER` → 부모 프로세스 감지 → `(알 수 없음)`, 64자까지) |
 | `cross_check --start --job <ID> [--token <T>]` | 본 작업 직전 신호. 승인 후 유효시간(`approval_ttl_sec`, 기본 2분) 이내 1회만 통과 → `승인/작업중`. token 은 환경변수 `CROSS_CHECK_TOKEN` 으로 주는 것을 권장(`--token` 은 `ps` 에 보임) |
 | `cross_check --finish --job <ID> --result done\|aborted [--token <T>]` | 본 작업 결과. `done` = 작업중 → `승인/작업완료`(스크립트가 취소 없이 끝까지 실행됨), `aborted` = 시작 전 또는 작업중 → `승인/작업중단`(Ctrl+C·최종 확인에서 No). 끝나면 token 폐기 |
@@ -328,7 +328,7 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 | 화면 | 키 | 동작 |
 |---|---|---|
 | 목록 | `↑` `↓` (`k` `j`), PgUp/PgDn, Home/End | 작업 이동 |
-| 목록 | `←` `→` | 구역 전환: 내 작업(작업자) ↔ 내가 확인자인 작업 |
+| 목록 | `←` `→` `Tab` / `Shift+Tab` | 구역 전환: 내가 확인자인 작업(기본) ↔ 내 작업(작업자). 전체 보기(`a`)에서 누르면 구역 보기로 돌아옴 |
 | 목록 | `a` | 전체 보기(두 구역 함께) ↔ 구역별 보기 |
 | 목록 | `Enter` | 내가 확인자인 `대기` 작업이면 **승인 화면**, 아니면 상세 화면 |
 | 목록 | `c` | **취소(중단)** — 내가 확인자인 대기 작업, 패스워드 필요. 작업자의 스크립트도 중단됨 |
@@ -345,11 +345,11 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 | 승인 2/3 | (패스워드) `Enter` | 승인 요청. 틀리면 2/3 에 머묾 |
 | 승인 2/3 | `Esc` | 1/3(붙여넣기)로 돌아감 |
 
-줄 입력 화면(`--plain`·파이프)에서는 `<번호>` 또는 `o <번호|ID>` 로 작업을 열고(확인자·대기면 `a` 승인 → 붙여넣기 → 패스워드, `c` 취소), `r`/Enter 새로고침, `w` 감시(2초 자동 갱신, Enter 로 종료), `p` 패스워드 변경, `h`/`?` 도움말, `q` 종료입니다.
+줄 입력 화면(`--plain`·파이프)에서는 `<번호>` 또는 `o <번호|ID>` 로 작업을 열고(확인자·대기면 `a` 승인 → 붙여넣기 → 패스워드, `c` 취소; 목록은 `[내가 확인자인 작업]` 이 먼저, 번호는 두 표에 걸쳐 이어짐), `r`/Enter 새로고침, `w` 감시(2초 자동 갱신, Enter 로 종료), `p` 패스워드 변경, `h`/`?` 도움말, `q` 종료입니다.
 
 ### 관리자 화면 키
 
-`auth.conf` 의 `admin=` 패스워드로 로그인합니다(최대 3번). `admin=` 줄이 없으면 안내 문구를 출력하고 종료 코드 1 로 끝나며(데몬도 관리자 기능을 모두 거부), `admin` 은 소켓으로 등록할 수 없으므로 `install.sh` 를 실행하거나 root 가 `admin=<패스워드>`(6자 이상, 파일 0600) 줄을 추가해야 합니다. admin 패스워드 변경도 root 가 파일을 직접 고칩니다. 화면 머리말에 데몬이 지금 쓰는 **승인 유효시간**(`approval_ttl_sec=120`)과 **작업 제한**(`work_timeout_sec=86400`)이 표시됩니다.
+`auth.conf` 의 `admin=` 패스워드로 로그인합니다(최대 3번). `admin=` 줄이 없으면 안내 문구를 출력하고 종료 코드 1 로 끝나며(데몬도 관리자 기능을 모두 거부), `admin` 은 소켓으로 등록할 수 없으므로 `install.sh` 를 실행하거나 root 가 `admin=<패스워드>`(6자 이상, 파일 0600) 줄을 추가해야 합니다. admin 의 기본 패스워드는 `abc135!!` 입니다(`install.sh` 가 `auth.conf` 가 없을 때만 넣고, 이미 `admin=` 줄이 있으면 덮어쓰지 않음). 관리자 화면의 `p` 는 users= 목록 사용자의 패스워드 재설정이며 admin 은 바꾸지 못하므로, admin 패스워드 변경은 root 가 `auth.conf` 의 `admin=` 줄을 직접 고칩니다. 화면 머리말에 데몬이 지금 쓰는 **승인 유효시간**(`approval_ttl_sec=120`)과 **작업 제한**(`work_timeout_sec=86400`)이 표시됩니다.
 
 | 키 | 동작 |
 |---|---|
@@ -412,7 +412,7 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 | `internal/tui/` | 전체 화면(`screen*.go`, `render.go`, `keys.go`, `flow.go`)과 줄 입력 화면(`user.go`, `admin.go`, `session.go`), 터미널 제어(`tty_linux.go`, `term_*.go`) |
 | `internal/verify/` | 붙여넣은 대상 파싱(줄바꿈·탭·공백)과 집합 대조 |
 | `internal/store/` | 작업 기록 `jobs.json`(원자적 저장) |
-| `scripts/` | `cc_cron.sh`(root crontab 줄 관리), `cc_admin_pw.sh`(admin 무작위 패스워드) |
+| `scripts/` | `cc_cron.sh`(root crontab 줄 관리), `cc_admin_pw.sh`(admin 기본 패스워드 `abc135!!` 출력, 길이 인자를 주면 무작위 값) |
 | `test/e2e.sh` | 격리 E2E: 임시 디렉터리에서 실제 데몬을 띄워 전체 시나리오 시험(`/etc`·`/var` 불사용) |
 | `test/pty_e2e.sh` | 전체 화면 TUI 를 실제 pty 에서 시험(붙여넣기·패스워드·터미널 복원) |
 | `test/playground.sh`, `test/playground_worker.sh` | 손으로 해 보는 격리 놀이터(데몬·시험 계정·작업자 시뮬레이터) |

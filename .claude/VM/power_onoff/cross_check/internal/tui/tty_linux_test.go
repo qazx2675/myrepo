@@ -148,7 +148,7 @@ func TestFullScreenOnRealPty(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 		m.Write([]byte(b))
 	}
-	step("\x1b[C")                                           // → 확인자 구역
+	step("\t\x1b[Z")                                         // Tab(내 작업) → Shift+Tab(확인자 구역, 기본)
 	step("\r")                                               // 승인 1/3
 	step("\x1b[200~svr2ev01\nsvr1ev01\tsvr1ev02\n\x1b[201~") // 붙여넣기
 	step("\r")                                               // 빈 줄 Enter

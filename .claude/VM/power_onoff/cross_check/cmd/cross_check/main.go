@@ -35,7 +35,7 @@ import (
 	"cross_check/internal/tui"
 )
 
-const version = "0.3.0"
+const version = "0.3.1"
 
 // 종료 코드.
 const (

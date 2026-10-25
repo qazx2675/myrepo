@@ -15,7 +15,7 @@
 - [ ] 안전장치 1~5단계 취소 사유와 exit 1 이 그대로다(`test/guard_scenarios.sh` PASS) — 특히 `YeS` 대소문자, 3단계 중복/누락/초과 취소
 - [ ] 허용 경로(`allowed_dir`) 밖 실행 불가, conf 권한(root 소유, group/other 쓰기 금지) 검사가 유지된다
 - [ ] 대상 파일은 `on_off_<user>.txt` 하나만 읽는다(다른 이름·심볼릭 링크 거부)
-- [ ] 비밀번호·확인 코드가 화면 에코, 로그, 감사 로그, 오류 메시지에 남지 않는다(비밀번호는 `LineReader` 로만 읽음)
+- [ ] 비밀번호·확인 문구 입력값이 화면 에코, 로그, 감사 로그, 오류 메시지에 남지 않는다(비밀번호는 `LineReader` 로만 읽음)
 - [ ] Off/일괄 On/재부팅은 대상 전체 동시 전송, **순차 부팅은 2번 기능(lpage)만이며 ev 단계 단위**(단계 안은 병렬) — 이 규칙이 바뀌었으면 README·계획서·WORKFLOW 갱신
 - [ ] 실제 vCenter(home-test)에서 최소 1회 확인했거나, 못 했다면 사유를 CHANGELOG 에 적었다(Tools/heartbeat/IP 와 22 포트 판정은 vcsim 으로 재현 불가)
 

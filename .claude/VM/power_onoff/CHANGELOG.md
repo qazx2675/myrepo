@@ -8,6 +8,19 @@ git tag -a vm-power-onoff-v0.3.0 -m "교차검증(cross_check) 기본 on·3단�
 git push origin vm-power-onoff-v0.3.0
 ```
 
+## 0.3.1 — 2026-10-25
+
+안전장치 1/5 와 VWP 담당자 확인에서 랜덤 6자리 코드 대신 **작업 내용을 나타내는 고정 문구**를 입력합니다. vm_power_onoff 버전 0.3.1, cross_check 버전 0.3.1(화면·관리자 기본 패스워드 변경).
+
+- **1/5 작업 확인 문구**: `[1/5] woqnxldwkrdjq(재부팅작업)을 그대로 입력하세요.` — 괄호 앞 영문 `woqnxldwkrdjq`(한글 '재부팅작업'을 영문 자판으로 친 것)를 입력합니다. Power Off/On(순차)/일괄 Power On 모두 같은 문구. 비교 규칙은 이전 코드와 같음(앞뒤 공백 무시, 대소문자까지 정확히). 틀리면 `[취소] 작업 확인 문구 불일치`(이전: `확인 코드 불일치`), 통과 시 `[INFO] 작업 확인 문구 일치`.
+- **VWP 담당자 확인 문구**: `담당자 확인이 완료되었다면 VWPekaekdwkghkrdls(VWP담당자확인)을 그대로 입력하세요.` — `VWPekaekdwkghkrdls` 를 입력. 틀리면 `[취소] VWP 담당자 확인 문구 불일치`(이전: `VWP 확인 코드 불일치`), 감사 로그는 `VWP 담당자 확인 통과`.
+- **cross_check 사용자 화면**: `[내가 확인자인 작업]` 구역이 **가장 먼저**(기본 선택·왼쪽) 보이고, `←→`/`Tab`(`Shift+Tab` 은 이전)으로 `내 작업(작업자)` 구역과 전환합니다. `--plain` 줄 입력 화면도 확인자 표가 먼저 나오고 번호가 이어집니다. 골든·pty 시험 갱신.
+- **관리자 기본 패스워드 `abc135!!`**: `install.sh` 가 `auth.conf` 를 새로 만들 때 무작위 값 대신 `admin=abc135!!` 를 넣습니다(이미 `admin=` 줄이 있으면 덮어쓰지 않음). 모든 설치가 같은 값이므로 설치 뒤 root 가 `/etc/cross_check/auth.conf` 의 `admin=` 줄을 직접 고치세요(관리자 화면 `p` 는 `users=` 사용자만 재설정하고 admin 은 거부합니다). `scripts/cc_admin_pw.sh` 는 인자 없이 `abc135!!` 를 출력하고 길이를 주면 무작위 값을 냅니다.
+- **감사 로그 이름 충돌 수정**: 감사 로그는 `YYYYmmdd_HHMMSS_<기능>.log` 인데 같은 초에 같은 기능을 두 번 실행하면 두 번째 실행의 기록이 통째로 사라졌습니다. 이제 `_2`, `_3` … 을 붙입니다(`auditlog_test.go`). e2e 의 간헐 실패(`e2e_vcsim_crosscheck`)의 원인이었습니다.
+- 그 밖의 흐름(2/5 확인자 선택·`-c`, 3/5 교차검증 승인, 4/5 `ls`·`YeS`, 5/5 카운트다운, `cross_check=off` 기존 방식, 입력 제한 시간, 대상 목록·`총 N대`)은 그대로입니다.
+- **코드**: `NewCode`(crypto/rand 6자리)·`GuardOpts.NewCode` 제거, 고정 문구 상수 `WorkPhrase`·`VWPPhrase`, `ConfirmCode` → `ConfirmPhrase`. 시험용 환경변수 **`PWONOFF_TEST_CODE` 제거**(문구가 고정이라 필요 없음, 설정해도 무시).
+- **시험**: `guard_test.go`·`crosscheck_test.go` 입력을 `WorkPhrase` 로, 1/5 안내문·앞뒤 공백 허용·대소문자/한글 원문/옛 코드 형태 불일치 단위 시험 추가. `guard_scenarios.sh` 는 고정 문구 입력 + 안내문·공백 허용·대소문자·한글 원문 4건 추가, `e2e_driver.py` 의 `through_code`/`through_vwp` 는 새 안내문을 기다려 고정 문구를 보냄(`e2e_vcsim_crosscheck.py` 는 이를 그대로 사용).
+
 ## 0.3.0 — 2026-10-25
 
 교차검증(cross_check)이 원래 목적대로 **안전장치 3단계(VM 이름 입력)를 대신**합니다. vm_power_onoff 버전 0.3.0, cross_check 버전 0.3.0(데몬·화면·프로토콜도 이 릴리스에서 크게 바뀜 — 아래 "cross_check 0.3.0").

@@ -176,8 +176,8 @@ func (s *Session) renderUser(user string, v userView) {
 		}
 	}
 	s.shown = s.shown[:0]
-	s.jobTable(fmt.Sprintf("내 작업 (작업자) — %d건", len(mine)), "확인자", mine, true)
 	s.jobTable(fmt.Sprintf("내가 확인자인 작업 — %d건", len(checking)), "작업자", checking, false)
+	s.jobTable(fmt.Sprintf("내 작업 (작업자) — %d건", len(mine)), "확인자", mine, true)
 	waiting := 0
 	for _, j := range checking {
 		if j.Status == daemon.StatusWaiting {

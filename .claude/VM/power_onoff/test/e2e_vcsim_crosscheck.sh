@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # e2e_vcsim_crosscheck.sh — 교차검증 방식(cross_check=on, 기본) 안전장치를 vcsim + 격리된 실제 cross_check 데몬으로 끝까지 시험한다.
 # (root, Linux, Python3. 빌드 서버(192.168.0.58)에서 실행)
-#   1/5 코드 → 2/5 확인자 번호 → 3/5 확인자 TUI 승인(대상 붙여넣기 + 패스워드) → 4/5 ls·YeS → 5/5 카운트다운 → --start → Power Off → --finish
+#   1/5 작업 확인 문구 → 2/5 확인자 번호 → 3/5 확인자 TUI 승인(대상 붙여넣기 + 패스워드) → 4/5 ls·YeS → 5/5 카운트다운 → --start → Power Off → --finish
 #   + VM 실패(강제 OFF No) / 확인자 취소 / 대상 불일치 / 4/5 에 yes·No / 카운트다운·본 작업 중 SIGINT / 승인 유효시간(3초) 초과 / 데몬 없음
 #   각 시나리오 뒤 격리 데몬의 jobs.json 에서 상태를 확인한다(승인/작업완료 · 승인/작업중단 · 중단, caller=vm_power_onoff)
 # 데몬은 임시 폴더에서만 돈다(/etc/cross_check·/var·crontab 미사용). /etc/vcetner_pwon_off/pwonoff.conf 는 임시로 바꾸고 끝나면 복원한다.

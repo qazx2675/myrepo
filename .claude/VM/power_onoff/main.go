@@ -1,9 +1,9 @@
 // vm_power_onoff: vCenter 의 VM 을 안전장치(휴먼 에러 방지)를 거쳐 Power Off / Power On / 재부팅한다.
 //
 // 흐름: user 선택 → vCenter 선택 → 비밀번호 → 기능 선택 → 대상 조회·계획 → (VWP 확인) → 안전장치 5단계 → 실행 → 결과
-// 안전장치(cross_check=on, 기본): 1 코드 → 2 확인자 번호 선택 → 3 확인자 승인 대기(cross_check) → 4 YeS(ls=대상 보기) → 5 카운트다운 → --start
+// 안전장치(cross_check=on, 기본): 1 작업 확인 문구 → 2 확인자 번호 선택 → 3 확인자 승인 대기(cross_check) → 4 YeS(ls=대상 보기) → 5 카운트다운 → --start
 // → 실행 → --finish done(끝까지 실행) / aborted(승인 뒤 No·Ctrl+C)
-// 안전장치(cross_check=off): 1 코드 → 2 Enter → 3 VM 이름 입력 → 4 YeS(ls=대상 보기) → 5 카운트다운
+// 안전장치(cross_check=off): 1 작업 확인 문구 → 2 Enter → 3 VM 이름 입력 → 4 YeS(ls=대상 보기) → 5 카운트다운
 // 설정 파일은 /etc/vcetner_pwon_off/pwonoff.conf, 대상은 allowed_dir/on_off_<user>.txt (VM 이름만).
 package main
 
@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-const version = "0.3.0"
+const version = "0.3.1"
 
 var vcenterRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
 
@@ -183,12 +183,11 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	if hits := FindVWP(vms); len(hits) > 0 {
 		audit.Printf("VWP 해당 %d대/%d대", len(hits), len(vms))
 		PrintVWPBanner(out, hits, len(vms), ColorEnabled())
-		code := NewCode()
-		if err := ConfirmCode(ctx, in, out, fmt.Sprintf(" 담당자 확인이 완료되었다면 아래 6자리 코드를 입력하세요: %s\n > ", Bold(code)), code); err != nil {
+		if err := ConfirmPhrase(ctx, in, out, fmt.Sprintf(" 담당자 확인이 완료되었다면 %s(%s)을 그대로 입력하세요.\n > ", Bold(VWPPhrase), VWPPhraseHint), VWPPhrase); err != nil {
 			audit.Printf("VWP 확인 취소: %v", err)
 			return ExitFail
 		}
-		audit.Printf("VWP 확인 코드 통과")
+		audit.Printf("VWP 담당자 확인 통과")
 	}
 
 	// 9. 안전장치 1~5단계 (cross_check=on 이면 2단계 확인자 선택, 3단계 확인자 승인 대기, 카운트다운 직후 --start)

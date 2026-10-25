@@ -149,6 +149,7 @@ func TestKeyDecoder(t *testing.T) {
 		want []keyEv
 	}{
 		{"\x1b[A\x1b[B\x1b[C\x1b[D", []e{{k: kUp}, {k: kDown}, {k: kRight}, {k: kLeft}}},
+		{"\x1b[Z\t", []e{{k: kBackTab}, {k: kRune, r: '\t'}}},
 		{"\x1bOA\x1bOB\x1bOC\x1bOD", []e{{k: kUp}, {k: kDown}, {k: kRight}, {k: kLeft}}},
 		{"\x1b", []e{{k: kEsc}}},
 		{"\x1bq", []e{{k: kEsc}, {k: kRune, r: 'q'}}},
@@ -226,7 +227,7 @@ func TestKeyDecoderPartialSequences(t *testing.T) {
 func TestFullApproveFlowPasteThenPassword(t *testing.T) {
 	f := aliceJobFake()
 	// → 확인자 구역, Enter(승인 화면), 붙여넣기(탭·공백·줄바꿈 섞어서), Ctrl+D, 틀린 패스워드, 맞는 패스워드, Enter(목록), q
-	keys := kRightS + "\r" + "svr2ev01\tsvr1ev01\n svr1ev02 \n" + ctrlD + "wrongpw\r" + "bob12345\r" + "\r" + "q"
+	keys := "\r" + "svr2ev01\tsvr1ev01\n svr1ev02 \n" + ctrlD + "wrongpw\r" + "bob12345\r" + "\r" + "q"
 	r, code := runUserKeys(t, f, "bob", keys)
 	assertRestored(t, r)
 	if code != ExitOK {
@@ -260,7 +261,7 @@ func TestFullApproveFlowPasteThenPassword(t *testing.T) {
 
 func TestFullApproveMismatchAborts(t *testing.T) {
 	f := aliceJobFake()
-	keys := kRightS + "\r" + "svr1ev01 svr1ev02\n\r" + "bob12345\r"
+	keys := "\r" + "svr1ev01 svr1ev02\n\r" + "bob12345\r"
 	r, _ := runUserKeys(t, f, "bob", keys+"\rq")
 	fr := strings.Join(frames(r), "\n")
 	if !strings.Contains(fr, "붙여넣은 대상 불일치(빠짐 1·남음 0·중복 0)") || !strings.Contains(fr, "작업이 중단되었습니다") {
@@ -278,7 +279,6 @@ func TestFullApproveMismatchAborts(t *testing.T) {
 func TestPasteStepLiveCount(t *testing.T) {
 	u := newUserScreen(aliceJobFake(), "bob", true, nil, time.Local)
 	u.refresh()
-	u.key(keyEv{k: kRight})
 	u.key(keyEv{k: kEnter})
 	feed := func(s string) {
 		for _, ev := range parseKeys([]byte(s)) {
@@ -310,7 +310,7 @@ func TestPasteStepLiveCount(t *testing.T) {
 func TestFullApproveEscAndEmptyPaste(t *testing.T) {
 	f := aliceJobFake()
 	// 빈 상태로 Ctrl+D(안내만) → Esc → 목록(승인 안 보냄)
-	r, _ := runUserKeys(t, f, "bob", kRightS+"\r"+ctrlD+kEscS+"q")
+	r, _ := runUserKeys(t, f, "bob", "\r"+ctrlD+kEscS+"q")
 	if !strings.Contains(strings.Join(frames(r), "\n"), "승인하지 않고 목록으로 돌아왔습니다") {
 		t.Fatalf("Esc → 목록:\n%s", lastFrame(r))
 	}
@@ -320,7 +320,7 @@ func TestFullApproveEscAndEmptyPaste(t *testing.T) {
 	// 2/3 에서 Esc → 1/3 으로(붙여넣은 내용 유지, 패스워드는 지움)
 	u := newUserScreen(aliceJobFake(), "bob", true, nil, time.Local)
 	u.refresh()
-	for _, ev := range parseKeys([]byte(kRightS + "\rsvr1ev01\n" + ctrlD + "abc" + kEscS)) {
+	for _, ev := range parseKeys([]byte("\rsvr1ev01\n" + ctrlD + "abc" + kEscS)) {
 		u.key(ev)
 	}
 	if fr := stripANSI(u.render(100, 30, false)); u.ap.step != apPaste || !strings.Contains(fr, "1/3") || !strings.Contains(fr, "인식한 이름: 1개") || len(u.ap.pw.rs) != 0 {
@@ -331,7 +331,7 @@ func TestFullApproveEscAndEmptyPaste(t *testing.T) {
 // 붙여넣기 구간(bracketed paste) 안의 빈 줄은 입력을 끝내지 않는다. 구간 밖의 빈 줄 Enter 가 끝.
 func TestFullBracketedPasteBlankLines(t *testing.T) {
 	f := aliceJobFake()
-	keys := kRightS + "\r" + pStart + "svr1ev01\n\n\nsvr1ev02\r\n\nsvr2ev01\n" + pEnd + "\r" + "bob12345\r" + "\rq"
+	keys := "\r" + pStart + "svr1ev01\n\n\nsvr1ev02\r\n\nsvr2ev01\n" + pEnd + "\r" + "bob12345\r" + "\rq"
 	r, _ := runUserKeys(t, f, "bob", keys)
 	if f.jobs[0].Status != daemon.StatusApproved {
 		t.Fatalf("붙여넣은 빈 줄로 끝나지 않고 3개 모두 받아 승인: %+v\n%s", f.jobs[0], lastFrame(r))
@@ -346,13 +346,13 @@ func TestFullBracketedPasteBlankLines(t *testing.T) {
 
 func TestFullCheckerCannotSeeTargetsWorkerCan(t *testing.T) {
 	f := aliceJobFake()
-	r, _ := runUserKeys(t, f, "bob", kRightS+kRightS+kRightS) // 확인자: 목록만(Enter 는 승인 화면)
+	r, _ := runUserKeys(t, f, "bob", "") // 확인자: 목록만(Enter 는 승인 화면)
 	for _, fr := range frames(r) {
 		if strings.Contains(fr, "svr1ev01") {
 			t.Fatalf("확인자 화면에 대상:\n%s", fr)
 		}
 	}
-	r, _ = runUserKeys(t, f, "alice", "\r") // 작업자 상세
+	r, _ = runUserKeys(t, f, "alice", "\t\r") // Tab → 내 작업(작업자) 구역, 상세
 	fr := lastFrame(r)
 	if !strings.Contains(fr, "svr1ev01") || !strings.Contains(fr, "대상 VM") || !strings.Contains(fr, "3개") {
 		t.Fatalf("작업자 상세에는 대상:\n%s", fr)
@@ -364,7 +364,7 @@ func TestFullCheckerCannotSeeTargetsWorkerCan(t *testing.T) {
 
 func TestFullCancelNeedsPassword(t *testing.T) {
 	f := aliceJobFake()
-	r, _ := runUserKeys(t, f, "bob", kRightS+"c"+"\r"+"nope00\r"+"bob12345\r"+"q")
+	r, _ := runUserKeys(t, f, "bob", "c"+"\r"+"nope00\r"+"bob12345\r"+"q")
 	all := strings.Join(frames(r), "\n")
 	for _, want := range []string{"취소(중단)", "패스워드를 입력하세요", "[X] 인증 실패", "[취소 완료] 작업 tnfa0001"} {
 		if !strings.Contains(all, want) {
@@ -376,7 +376,7 @@ func TestFullCancelNeedsPassword(t *testing.T) {
 	}
 	// 작업자는 c 로 취소할 수 없다
 	f2 := aliceJobFake()
-	r2, _ := runUserKeys(t, f2, "alice", "cq")
+	r2, _ := runUserKeys(t, f2, "alice", "\tcq")
 	if !strings.Contains(strings.Join(frames(r2), "\n"), "c 취소는 내가 확인자인 대기 작업에서만") || f2.hasCall("cancel") {
 		t.Fatal("작업자 c 는 안내만")
 	}
@@ -391,15 +391,29 @@ func TestFullListPanesAllViewAndCounters(t *testing.T) {
 	r, _ := runUserKeys(t, f, "bob", "")
 	fr := lastFrame(r)
 	for _, want := range []string{"cross_check 상태 리포트", "(user: bob)", "갱신 09:00:30", "● 데몬 실행 (pid 4128)",
-		"전체 1  대기 0  승인 0  작업중 1  작업완료 0  작업중단 0  중단 0", "[내 작업 (작업자) 1]", "승인/작업중", "승인 대기 1건",
-		"↑↓ 이동  ←→ 작업 전환  Enter 상세/승인  a 전체 보기", "q 종료"} {
+		"전체 1  대기 1  승인 0  작업중 0  작업완료 0  작업중단 0  중단 0", "[내가 확인자인 작업 1]", "내 작업 (작업자) 1", "승인 대기 1건", "playground_worker.sh",
+		"↑↓ 이동  ←→/Tab 구역 전환  Enter 상세/승인  a 전체 보기", "q 종료"} {
 		if !strings.Contains(fr, want) {
 			t.Errorf("목록에 %q 없음:\n%s", want, fr)
 		}
 	}
-	r, _ = runUserKeys(t, f, "bob", kRightS)
-	if fr := lastFrame(r); !strings.Contains(fr, "[내가 확인자인 작업 1]") || !strings.Contains(fr, "전체 1  대기 1") || !strings.Contains(fr, "playground_worker.sh") {
-		t.Fatalf("→ 확인자 구역:\n%s", fr)
+	if strings.Index(fr, "내가 확인자인 작업 1") > strings.Index(fr, "내 작업 (작업자) 1") {
+		t.Errorf("확인자 구역이 왼쪽(먼저)이어야 함:\n%s", fr)
+	}
+	// ← → Tab Shift+Tab 모두 구역 전환(2구역이라 서로 반대편으로), Tab 두 번이면 처음으로
+	for name, key := range map[string]string{"→": kRightS, "←": "\x1b[D", "Tab": "\t", "Shift+Tab": "\x1b[Z"} {
+		r, _ = runUserKeys(t, f, "bob", key)
+		if fr := lastFrame(r); !strings.Contains(fr, "[내 작업 (작업자) 1]") || !strings.Contains(fr, "승인/작업중") || strings.Contains(fr, "playground_worker.sh") {
+			t.Fatalf("%s → 내 작업 구역:\n%s", name, fr)
+		}
+	}
+	r, _ = runUserKeys(t, f, "bob", "\t\t")
+	if fr := lastFrame(r); !strings.Contains(fr, "[내가 확인자인 작업 1]") || !strings.Contains(fr, "playground_worker.sh") {
+		t.Fatalf("Tab 두 번 → 처음(확인자) 구역:\n%s", fr)
+	}
+	r, _ = runUserKeys(t, f, "bob", "a\t")
+	if fr := lastFrame(r); !strings.Contains(fr, "[내가 확인자인 작업 1]") || strings.Contains(fr, "[전체 보기") {
+		t.Fatalf("전체 보기에서 Tab → 구역 보기:\n%s", fr)
 	}
 	r, _ = runUserKeys(t, f, "bob", "a")
 	if fr := lastFrame(r); !strings.Contains(fr, "[전체 보기 2]") || !strings.Contains(fr, "전체 2  대기 1  승인 0  작업중 1") {
@@ -686,30 +700,28 @@ func goldenScreens(t *testing.T) map[string]func(w int, color bool) string {
 		}
 	}
 	return map[string]func(int, bool) string{
-		"user_mine": user(nil),
-		"user_checker": user(func(u *userScreen) {
-			u.key(keyEv{k: kRight})
+		"user_mine": user(func(u *userScreen) {
+			u.key(keyEv{k: kRight}) // 기본은 확인자 구역 → 내 작업
 		}),
+		"user_checker": user(nil), // 기본 구역
 		"user_detail_worker": user(func(u *userScreen) {
+			u.key(keyEv{k: kRune, r: '\t'}) // Tab → 내 작업
 			u.key(keyEv{k: kDown})
 			u.key(keyEv{k: kEnter})
 		}),
 		"user_paste": user(func(u *userScreen) {
-			u.key(keyEv{k: kRight})
 			u.key(keyEv{k: kEnter})
 			for _, ev := range parseKeys([]byte("svr2ev01\tsvr1ev01\nsvr1ev02 가나다\nsvr9")) {
 				u.key(ev)
 			}
 		}),
 		"user_password": user(func(u *userScreen) {
-			u.key(keyEv{k: kRight})
 			u.key(keyEv{k: kEnter})
 			for _, ev := range parseKeys([]byte("svr2ev01 svr1ev01 svr1ev02\n\x04bob1")) {
 				u.key(ev)
 			}
 		}),
 		"user_result": user(func(u *userScreen) {
-			u.key(keyEv{k: kRight})
 			u.key(keyEv{k: kEnter})
 			for _, ev := range parseKeys([]byte("svr2ev01 svr1ev01 svr1ev02\n\x04bob12345\r")) {
 				u.key(ev)

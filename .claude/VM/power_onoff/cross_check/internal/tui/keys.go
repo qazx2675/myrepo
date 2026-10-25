@@ -22,6 +22,7 @@ const (
 	kPgDn
 	kHome
 	kEnd
+	kBackTab // Shift+Tab (ESC [ Z)
 )
 
 type keyEv struct {
@@ -102,6 +103,8 @@ func (d *keyDecoder) feed(b []byte) []keyEv {
 					emit(keyEv{k: kRight})
 				case 'D':
 					emit(keyEv{k: kLeft})
+				case 'Z':
+					emit(keyEv{k: kBackTab})
 				case 'H':
 					emit(keyEv{k: kHome})
 				case 'F':

@@ -138,7 +138,7 @@ func (e *gateEnv) noToken(t *testing.T) {
 	}
 }
 
-// guard 는 관문을 건 RunGuard 를 문자열 입력으로 돌린다(1단계 코드 ABC123).
+// guard 는 관문을 건 RunGuard 를 문자열 입력으로 돌린다(1단계 입력은 WorkPhrase).
 func (e *gateEnv) guard(t *testing.T, ctx context.Context, input string) error {
 	t.Helper()
 	o := testOpts()
@@ -394,10 +394,10 @@ func TestCrossCheckSelectCheckerFewUsers(t *testing.T) {
 // 관문을 건 RunGuard 전체 흐름 ------------------------------------------------
 
 func TestCrossCheckGuardFlow(t *testing.T) {
-	// 코드 → 확인자 2번(dhk) → 승인 → ls 두 번 → YeS → 카운트다운 → --start
+	// 작업 확인 문구 → 확인자 2번(dhk) → 승인 → ls 두 번 → YeS → 카운트다운 → --start
 	f := approvedFake()
 	e := newGateEnv(t, f, "ljh", "")
-	if err := e.guard(t, context.Background(), "ABC123\n2\nls\n LS \nYeS\n"); err != nil {
+	if err := e.guard(t, context.Background(), WorkPhrase+"\n2\nls\n LS \nYeS\n"); err != nil {
 		t.Fatalf("통과해야 함: %v\n%s", err, e.out.String())
 	}
 	out := e.out.String()
@@ -436,7 +436,7 @@ func TestCrossCheckGuardCancels(t *testing.T) {
 	f := approvedFake()
 	f.runErr = &CrossCheckError{Code: 1, Msg: "확인자 취소"}
 	e := newGateEnv(t, f, "lsh", "dhk")
-	err := e.guard(t, context.Background(), "ABC123\nYeS\n")
+	err := e.guard(t, context.Background(), WorkPhrase+"\nYeS\n")
 	wantCancel(t, err, e.out.String(), "교차검증 미승인")
 	if strings.Contains(e.out.String(), "[4/5]") || len(f.starts) != 0 {
 		t.Errorf("미승인인데 4단계/--start 진행:\n%s", e.out.String())
@@ -445,7 +445,7 @@ func TestCrossCheckGuardCancels(t *testing.T) {
 	// 승인 후 4단계에서 yes → 취소, --start 안 부름 (승인은 유효시간이 지나면 데몬이 자동 취소)
 	f = approvedFake()
 	e = newGateEnv(t, f, "lsh", "dhk")
-	err = e.guard(t, context.Background(), "ABC123\nls\nyes\n")
+	err = e.guard(t, context.Background(), WorkPhrase+"\nls\nyes\n")
 	wantCancel(t, err, e.out.String(), "YeS 미입력 (입력값: yes)")
 	if len(f.starts) != 0 || strings.Contains(e.out.String(), "[5/5]") {
 		t.Errorf("yes 인데 진행:\n%s", e.out.String())
@@ -454,14 +454,14 @@ func TestCrossCheckGuardCancels(t *testing.T) {
 	// 교차검증 방식에서는 VM 이름을 묻지 않는다: 이름 줄은 4단계 답으로 읽혀 취소
 	f = approvedFake()
 	e = newGateEnv(t, f, "lsh", "dhk")
-	err = e.guard(t, context.Background(), "ABC123\nsvr1ev01 svr1ev02 svr2ev01\nYeS\n")
+	err = e.guard(t, context.Background(), WorkPhrase+"\nsvr1ev01 svr1ev02 svr2ev01\nYeS\n")
 	wantCancel(t, err, e.out.String(), "YeS 미입력 (입력값: svr1ev01 svr1ev02 svr2ev01)")
 
 	// 카운트다운 뒤 --start 거부(승인 유효시간 초과) → 취소
 	f = approvedFake()
 	f.startErr = &CrossCheckError{Code: 1, Msg: "승인 유효시간 초과"}
 	e = newGateEnv(t, f, "lsh", "dhk")
-	err = e.guard(t, context.Background(), "ABC123\nYeS\n")
+	err = e.guard(t, context.Background(), WorkPhrase+"\nYeS\n")
 	wantCancel(t, err, e.out.String(), "교차검증 승인 유효시간 초과 또는 거부", "10 .. 9 .. 8")
 	if len(f.starts) != 1 || strings.Contains(e.out.String(), "교차검증 통과") {
 		t.Errorf("--start 거부 처리 이상: %+v\n%s", f.starts, e.out.String())
@@ -470,7 +470,7 @@ func TestCrossCheckGuardCancels(t *testing.T) {
 	// 확인자 3회 잘못 입력 → 취소, cross_check 호출 없음
 	f = approvedFake()
 	e = newGateEnv(t, f, "ljh", "")
-	err = e.guard(t, context.Background(), "ABC123\n9\n9\n9\nYeS\n")
+	err = e.guard(t, context.Background(), WorkPhrase+"\n9\n9\n9\nYeS\n")
 	wantCancel(t, err, e.out.String(), "확인자 선택 실패 (잘못된 입력 3회)")
 	if len(f.runs) != 0 {
 		t.Error("확인자 선택 실패인데 cross_check 호출됨")
@@ -480,7 +480,7 @@ func TestCrossCheckGuardCancels(t *testing.T) {
 	f = approvedFake()
 	e = newGateEnv(t, f, "lsh", "")
 	e.g.Cfg = &Config{Users: []string{"lsh"}}
-	err = e.guard(t, context.Background(), "ABC123\n1\nYeS\n")
+	err = e.guard(t, context.Background(), WorkPhrase+"\n1\nYeS\n")
 	wantCancel(t, err, e.out.String(), "확인자 선택 실패 (선택할 user 없음)")
 	if len(f.runs) != 0 {
 		t.Error("확인자 없음인데 cross_check 호출됨")
@@ -494,7 +494,7 @@ func TestCrossCheckGuardInterrupt(t *testing.T) {
 	e := newGateEnv(t, f, "lsh", "dhk")
 	pr, pw := io.Pipe()
 	defer pw.Close()
-	go io.WriteString(pw, "ABC123\n")
+	go io.WriteString(pw, WorkPhrase+"\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(100*time.Millisecond, cancel)
 	o := testOpts()
@@ -516,7 +516,7 @@ func TestCrossCheckGuardInterrupt(t *testing.T) {
 	e = newGateEnv(t, f, "ljh", "")
 	pr2, pw2 := io.Pipe()
 	defer pw2.Close()
-	go io.WriteString(pw2, "ABC123\n")
+	go io.WriteString(pw2, WorkPhrase+"\n")
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	time.AfterFunc(80*time.Millisecond, cancel2)
 	o2 := testOpts()
@@ -808,11 +808,11 @@ func wantFinish(t *testing.T, f *fakeCC, e *gateEnv, result string) {
 func TestCrossCheckFinishAbortAfterApproval(t *testing.T) {
 	// 승인 뒤 4/5 에서 YeS 가 아니면(No·빈 입력·소문자·EOF) 승인/작업중단(aborted), --start 는 없음
 	for in, reason := range map[string]string{
-		"ABC123\nNo\n":        "YeS 미입력 (입력값: No)",
-		"ABC123\n\n":          "YeS 미입력 (입력값: 빈 입력)",
-		"ABC123\nls\nyes\n":   "YeS 미입력 (입력값: yes)",
-		"ABC123\n":            "YeS 미입력 (입력값: EOF)",
-		"ABC123\nls\nls\nN\n": "YeS 미입력 (입력값: N)",
+		WorkPhrase + "\nNo\n":        "YeS 미입력 (입력값: No)",
+		WorkPhrase + "\n\n":          "YeS 미입력 (입력값: 빈 입력)",
+		WorkPhrase + "\nls\nyes\n":   "YeS 미입력 (입력값: yes)",
+		WorkPhrase + "\n":            "YeS 미입력 (입력값: EOF)",
+		WorkPhrase + "\nls\nls\nN\n": "YeS 미입력 (입력값: N)",
 	} {
 		f := approvedFake()
 		e := newGateEnv(t, f, "lsh", "dhk")
@@ -831,7 +831,7 @@ func TestCrossCheckFinishNotSentWithoutApproval(t *testing.T) {
 	f := approvedFake()
 	f.runErr = &CrossCheckError{Code: 1, Msg: "확인자 취소"}
 	e := newGateEnv(t, f, "lsh", "dhk")
-	wantCancel(t, e.guard(t, context.Background(), "ABC123\nYeS\n"), e.out.String(), "교차검증 미승인")
+	wantCancel(t, e.guard(t, context.Background(), WorkPhrase+"\nYeS\n"), e.out.String(), "교차검증 미승인")
 	e.g.Abort()
 	e.g.ReportRun(context.Background())
 	if len(f.finishes) != 0 {
@@ -840,7 +840,7 @@ func TestCrossCheckFinishNotSentWithoutApproval(t *testing.T) {
 	// 확인자 선택 실패 → cross_check 를 전혀 부르지 않음
 	f = approvedFake()
 	e = newGateEnv(t, f, "ljh", "")
-	wantCancel(t, e.guard(t, context.Background(), "ABC123\n9\n9\n9\n"), e.out.String(), "확인자 선택 실패 (잘못된 입력 3회)")
+	wantCancel(t, e.guard(t, context.Background(), WorkPhrase+"\n9\n9\n9\n"), e.out.String(), "확인자 선택 실패 (잘못된 입력 3회)")
 	e.g.Abort()
 	if len(f.order) != 0 {
 		t.Errorf("cross_check 호출됨: %v", f.order)
@@ -852,7 +852,7 @@ func TestCrossCheckFinishNotSentWhenStartRefused(t *testing.T) {
 	f := approvedFake()
 	f.startErr = &CrossCheckError{Code: 1, Msg: "--start 종료 코드 1: [거부] 승인 유효시간 초과 " + ccTestToken}
 	e := newGateEnv(t, f, "lsh", "dhk")
-	err := e.guard(t, context.Background(), "ABC123\nYeS\n")
+	err := e.guard(t, context.Background(), WorkPhrase+"\nYeS\n")
 	wantCancel(t, err, e.out.String(), "교차검증 승인 유효시간 초과 또는 거부")
 	e.g.Abort()
 	e.g.ReportRun(context.Background())
@@ -868,7 +868,7 @@ func TestCrossCheckFinishCtrlCAtConfirm(t *testing.T) {
 	e := newGateEnv(t, f, "lsh", "dhk")
 	pr, pw := io.Pipe()
 	defer pw.Close()
-	go io.WriteString(pw, "ABC123\n")
+	go io.WriteString(pw, WorkPhrase+"\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	o := testOpts()
@@ -897,7 +897,7 @@ func TestCrossCheckFinishCtrlCInCountdown(t *testing.T) {
 	e.g.Hook(&o)
 	done := make(chan error, 1)
 	go func() {
-		done <- RunGuard(ctx, NewLineReader(strings.NewReader("ABC123\nYeS\n")), e.out, ccTargets, o)
+		done <- RunGuard(ctx, NewLineReader(strings.NewReader(WorkPhrase+"\nYeS\n")), e.out, ccTargets, o)
 	}()
 	waitFor(t, e.out, "10 .. 9")
 	cancel()
@@ -920,7 +920,7 @@ func TestCrossCheckFinishCtrlCDuringStart(t *testing.T) {
 		return &CrossCheckError{Code: ccExitInterrupt, Msg: "--start 중 Ctrl+C"}
 	}
 	e := newGateEnv(t, f, "lsh", "dhk")
-	err := e.guard(t, ctx, "ABC123\nYeS\n")
+	err := e.guard(t, ctx, WorkPhrase+"\nYeS\n")
 	wantCancel(t, err, e.out.String(), "교차검증 승인 유효시간 초과 또는 거부")
 	e.g.Abort()
 	wantFinish(t, f, e, "aborted")
@@ -940,7 +940,7 @@ func (c cancelOnOps) PowerOn(ctx context.Context, vm *VMInfo) error {
 // passGuard 는 승인 → YeS → 카운트다운 → --start 까지 통과시킨다.
 func passGuard(t *testing.T, e *gateEnv, ctx context.Context) {
 	t.Helper()
-	if err := e.guard(t, ctx, "ABC123\nYeS\n"); err != nil {
+	if err := e.guard(t, ctx, WorkPhrase+"\nYeS\n"); err != nil {
 		t.Fatalf("통과해야 함: %v\n%s", err, e.out.String())
 	}
 }

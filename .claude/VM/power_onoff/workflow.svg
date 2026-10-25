@@ -43,15 +43,15 @@ path.l{stroke:#555;stroke-width:1.5;fill:none}
 <path class="l" d="M470 418 L470 450" marker-end="url(#a)"/>
 <text x="478" y="440" text-anchor="start" font-size="11.5" class="s">예</text>
 <rect class="b" x="280" y="450" width="380" height="44" rx="8"/>
-<text x="470" y="476.5" text-anchor="middle" font-size="13">경고 배너 + 6자리 담당자 확인 코드</text>
+<text x="470" y="476.5" text-anchor="middle" font-size="13">경고 배너 + 담당자 확인 문구(VWPekaekdwkghkrdls)</text>
 <path class="l" d="M660 472 L700 472" marker-end="url(#a)"/>
 <rect class="r" x="700" y="458" width="180" height="28" rx="14"/>
-<text x="790.0" y="476.0" text-anchor="middle" font-size="11.5" class="rt">코드 불일치 → 종료</text>
+<text x="790.0" y="476.0" text-anchor="middle" font-size="11.5" class="rt">문구 불일치 → 종료</text>
 <path class="l" d="M345 380 L250 380 L250 560 L280 560" marker-end="url(#a)"/>
 <text x="205" y="374" text-anchor="start" font-size="11.5" class="s">아니오</text>
 <path class="l" d="M470 494 L470 530" marker-end="url(#a)"/>
 <rect class="b" x="280" y="530" width="380" height="60" rx="8"/>
-<text x="470" y="556.0" text-anchor="middle" font-size="13">안전장치 1/5: 6자리 확인 코드 입력</text>
+<text x="470" y="556.0" text-anchor="middle" font-size="13">안전장치 1/5: 작업 확인 문구(woqnxldwkrdjq)</text>
 <text x="470" y="573.0" text-anchor="middle" font-size="11.5" class="s">통과하면 대상 호스트 목록(BM별) + 총 N대</text>
 <path class="l" d="M660 560 L700 560" marker-end="url(#a)"/>
 <rect class="r" x="700" y="546" width="180" height="28" rx="14"/>

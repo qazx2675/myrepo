@@ -8,7 +8,7 @@
 | target.go | `on_off_<user>.txt` 읽기(이 이름만, 심볼릭 링크 거부), VM 이름 규칙 `<BM>evNN`, 정렬 |
 | vcenter.go | govmomi 접속, 대상 VM 조회(전원/실제 호스트/폴더/포트그룹/lpage/Tools/IP), 비밀번호(암호 파일→직접), 이전 vCenter 기억 |
 | vwp.go | VWP 판정(폴더 경로·포트그룹, 대소문자 무시)과 경고 배너 |
-| guard.go | **안전장치 5단계**: 기존 방식(코드→Enter→60초 이름 입력→`YeS`→카운트다운)과 교차검증 방식(코드→확인자 선택→승인 대기→`YeS`→카운트다운→`--start`, `GuardOpts.Checker/CrossCheck/AfterCountdown` 훅), 4/5 `ls`(대상 다시 보기), VWP 확인 코드, `--demo` |
+| guard.go | **안전장치 5단계**: 기존 방식(작업 확인 문구→Enter→60초 이름 입력→`YeS`→카운트다운)과 교차검증 방식(작업 확인 문구→확인자 선택→승인 대기→`YeS`→카운트다운→`--start`, `GuardOpts.Checker/CrossCheck/AfterCountdown` 훅), 4/5 `ls`(대상 다시 보기), VWP 담당자 확인 문구(`WorkPhrase`·`VWPPhrase` 고정 문구, `ConfirmPhrase`), `--demo` |
 | ui.go | 색상 출력, 공용 stdin 리더 `LineReader`(프로세스당 하나, 타임아웃 입력) |
 | power.go | 전원 작업: Off(Guest 종료→강제 확인), 일괄 On, **lpage BM ev 단계별 순차 On(같은 ev 동시 → 전부 부팅 대기 → 다음 ev)**, 재부팅, 단계별 c/s/q 질문 |
 | power_govmomi.go | `VMOps` 의 실제 구현(vCenter 태스크 호출) |

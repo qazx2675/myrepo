@@ -52,7 +52,7 @@ func displayWidth(s string) int {
 	return w
 }
 
-// PrintVWPBanner 는 계획서 9장 형식의 경고 배너를 출력한다(확인 코드 프롬프트는 호출자 몫).
+// PrintVWPBanner 는 계획서 9장 형식의 경고 배너를 출력한다(담당자 확인 문구 프롬프트는 호출자 몫).
 func PrintVWPBanner(w io.Writer, hits []VWPHit, total int, color bool) {
 	lines := []string{
 		"[경고] vwp대상 장비가 포함되어있습니다.",

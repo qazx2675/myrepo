@@ -42,7 +42,6 @@ func testOpts() GuardOpts {
 	return GuardOpts{
 		InputTimeout: 2 * time.Second,
 		Tick:         time.Millisecond,
-		NewCode:      func() string { return "ABC123" },
 	}
 }
 
@@ -73,25 +72,6 @@ func wantCancel(t *testing.T, err error, out, reason string, more ...string) {
 	}
 }
 
-func TestNewCode(t *testing.T) {
-	seen := map[string]bool{}
-	for i := 0; i < 500; i++ {
-		c := NewCode()
-		if len(c) != 6 {
-			t.Fatalf("길이 %d: %q", len(c), c)
-		}
-		for _, r := range c {
-			if !strings.ContainsRune(codeChars, r) {
-				t.Fatalf("문자셋 밖: %q", c)
-			}
-		}
-		seen[c] = true
-	}
-	if len(seen) < 490 {
-		t.Fatalf("코드가 너무 자주 겹침: %d", len(seen))
-	}
-}
-
 const okHosts = "svr1ev01\nsvr1ev02\nsvr2ev01\n"
 
 // promptYeS 는 4단계 질문(두 방식 공통).
@@ -109,7 +89,7 @@ func TestGuardPass(t *testing.T) {
 	}
 	for name, hosts := range cases {
 		t.Run(name, func(t *testing.T) {
-			err, out := runGuardStr(t, "ABC123\n\n"+hosts+"YeS\n", testOpts())
+			err, out := runGuardStr(t, WorkPhrase+"\n\n"+hosts+"YeS\n", testOpts())
 			if err != nil {
 				t.Fatalf("통과 기대: %v\n%s", err, out)
 			}
@@ -123,19 +103,38 @@ func TestGuardPass(t *testing.T) {
 }
 
 func TestGuardStep1Mismatch(t *testing.T) {
-	err, out := runGuardStr(t, "abc123\n\n"+okHosts+"YeS\n", testOpts())
-	wantCancel(t, err, out, "확인 코드 불일치")
-	if strings.Contains(out, "총 3대") {
-		t.Fatal("불일치인데 대상 목록 출력")
+	// 한글 원문·대소문자 다름·옛 랜덤 코드 형태는 모두 불일치
+	for _, in := range []string{"재부팅작업", "WOQNXLDWKRDJQ", "woqnxldwkrdjq(재부팅작업)", "ABC123", "woqnxldwkrdj"} {
+		err, out := runGuardStr(t, in+"\n\n"+okHosts+"YeS\n", testOpts())
+		wantCancel(t, err, out, reasonWorkPhrase)
+		if strings.Contains(out, "총 3대") {
+			t.Fatalf("%q: 불일치인데 대상 목록 출력", in)
+		}
 	}
-	err, out = runGuardStr(t, "", testOpts())
-	wantCancel(t, err, out, "확인 코드 불일치")
+	err, out := runGuardStr(t, "", testOpts())
+	wantCancel(t, err, out, reasonWorkPhrase)
+}
+
+func TestGuardStep1Phrase(t *testing.T) {
+	// 안내문은 고정 문구 + 괄호 안 한글, 앞뒤 공백은 무시
+	err, out := runGuardStr(t, " \t"+WorkPhrase+"  \n\n"+okHosts+"YeS\n", testOpts())
+	if err != nil {
+		t.Fatalf("앞뒤 공백은 무시해야 함: %v\n%s", err, out)
+	}
+	for _, m := range []string{"[1/5] woqnxldwkrdjq(재부팅작업)을 그대로 입력하세요.\n > ", "[INFO] 작업 확인 문구 일치"} {
+		if !strings.Contains(out, m) {
+			t.Fatalf("출력에 %q 없음\n%s", m, out)
+		}
+	}
+	if strings.Contains(out, "확인 코드") {
+		t.Fatalf("'확인 코드' 표현이 남음\n%s", out)
+	}
 }
 
 func TestGuardShowTargets(t *testing.T) {
 	o := testOpts()
 	o.ShowTargets = func(w io.Writer) { io.WriteString(w, "BM svr1: ...\n") }
-	err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", o)
+	err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"YeS\n", o)
 	if err != nil || !strings.Contains(out, "BM svr1: ...\n총 3대") {
 		t.Fatalf("ShowTargets 미사용: %v\n%s", err, out)
 	}
@@ -156,7 +155,7 @@ func TestGuardStep3Mismatch(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err, out := runGuardStr(t, "ABC123\n\n"+c.hosts+"YeS\n", testOpts())
+			err, out := runGuardStr(t, WorkPhrase+"\n\n"+c.hosts+"YeS\n", testOpts())
 			wantCancel(t, err, out, "호스트 목록 불일치", c.more...)
 			if strings.Contains(out, "YeS/No") {
 				t.Fatal("불일치인데 4단계 진행")
@@ -166,7 +165,7 @@ func TestGuardStep3Mismatch(t *testing.T) {
 }
 
 func TestGuardStep3RemainTime(t *testing.T) {
-	err, out := runGuardStr(t, "ABC123\n\nsvr1ev01\nsvr1ev02\nsvr2ev01\nYeS\n", testOpts())
+	err, out := runGuardStr(t, WorkPhrase+"\n\nsvr1ev01\nsvr1ev02\nsvr2ev01\nYeS\n", testOpts())
 	if err != nil || !strings.Contains(out, "(남은 시간 ") {
 		t.Fatalf("남은 시간 표시 없음: %v\n%s", err, out)
 	}
@@ -176,7 +175,7 @@ func TestGuardStep3Timeout(t *testing.T) {
 	pr, pw := io.Pipe()
 	defer pw.Close()
 	go func() {
-		io.WriteString(pw, "ABC123\n\nsvr1ev01\n")
+		io.WriteString(pw, WorkPhrase+"\n\nsvr1ev01\n")
 		time.Sleep(80 * time.Millisecond)
 		io.WriteString(pw, "svr1ev02\n") // 줄마다 타이머가 새로 시작되지 않는지(총 시간) 확인
 	}()
@@ -203,7 +202,7 @@ func TestGuardStep4(t *testing.T) {
 	}
 	for in, shown := range cases {
 		t.Run(shown, func(t *testing.T) {
-			err, out := runGuardStr(t, "ABC123\n\n"+okHosts+in, testOpts())
+			err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+in, testOpts())
 			wantCancel(t, err, out, "YeS 미입력 (입력값: "+shown+")")
 			if strings.Contains(out, "Ctrl+C 로 취소 가능") {
 				t.Fatal("취소인데 5단계 진행")
@@ -213,7 +212,7 @@ func TestGuardStep4(t *testing.T) {
 }
 
 func TestGuardCountdownLine(t *testing.T) {
-	err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", testOpts())
+	err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"YeS\n", testOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,9 +244,9 @@ func runCancel(t *testing.T, input string, tick, cancelAfter time.Duration) (err
 func TestGuardCancel(t *testing.T) {
 	cases := map[string]string{
 		"1단계": "",
-		"2단계": "ABC123\n",
-		"3단계": "ABC123\n\nsvr1ev01\n",
-		"4단계": "ABC123\n\n" + okHosts,
+		"2단계": WorkPhrase + "\n",
+		"3단계": WorkPhrase + "\n\nsvr1ev01\n",
+		"4단계": WorkPhrase + "\n\n" + okHosts,
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -256,7 +255,7 @@ func TestGuardCancel(t *testing.T) {
 		})
 	}
 	t.Run("5단계", func(t *testing.T) {
-		err, out := runCancel(t, "ABC123\n\n"+okHosts+"YeS\n", 40*time.Millisecond, 130*time.Millisecond)
+		err, out := runCancel(t, WorkPhrase+"\n\n"+okHosts+"YeS\n", 40*time.Millisecond, 130*time.Millisecond)
 		wantCancel(t, err, out, "Ctrl+C 로 중단", "10 .. 9")
 		if strings.Contains(out, " .. 1\n") {
 			t.Fatal("카운트다운이 끝까지 감")
@@ -274,7 +273,7 @@ func TestGuardStep4Ls(t *testing.T) {
 			n := 0
 			o := testOpts()
 			o.OnList = func() { n++ }
-			err, out := runGuardStr(t, "ABC123\n\n"+okHosts+ls+"\n"+ls+"\nYeS\n", o)
+			err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+ls+"\n"+ls+"\nYeS\n", o)
 			if err != nil {
 				t.Fatalf("ls 뒤 YeS 는 통과: %v\n%s", err, out)
 			}
@@ -292,13 +291,13 @@ func TestGuardStep4Ls(t *testing.T) {
 	// ShowTargets(실제 실행의 BM별 목록)를 ls 에서도 그대로 쓴다
 	o := testOpts()
 	o.ShowTargets = func(w io.Writer) { io.WriteString(w, "BM 묶음 목록\n") }
-	err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"ls\nYeS\n", o)
+	err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"ls\nYeS\n", o)
 	if err != nil || strings.Count(out, "BM 묶음 목록\n총 3대") != 2 {
 		t.Errorf("ls 가 ShowTargets 를 쓰지 않음: %v\n%s", err, out)
 	}
 	// ls 뒤에도 YeS 가 아니면 취소, ls 와 비슷한 말은 ls 가 아님
 	for in, shown := range map[string]string{"ls\nyes\n": "yes", "ls\n\n": "빈 입력", "ls\n": "EOF", "ls -l\n": "ls -l", "lss\n": "lss"} {
-		err, out := runGuardStr(t, "ABC123\n\n"+okHosts+in, testOpts())
+		err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+in, testOpts())
 		wantCancel(t, err, out, "YeS 미입력 (입력값: "+shown+")")
 		if strings.Contains(out, "Ctrl+C 로 취소 가능") {
 			t.Fatalf("%q: 취소인데 5단계 진행", in)
@@ -311,13 +310,13 @@ func TestGuardAfterCountdown(t *testing.T) {
 	calls := 0
 	o := testOpts()
 	o.AfterCountdown = func(context.Context) error { calls++; return nil }
-	if err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", o); err != nil || calls != 1 {
+	if err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"YeS\n", o); err != nil || calls != 1 {
 		t.Fatalf("통과 + 1회 호출: %v %d\n%s", err, calls, out)
 	}
 	o.AfterCountdown = func(context.Context) error { calls++; return errors.New("거부") }
-	err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", o)
+	err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"YeS\n", o)
 	wantCancel(t, err, out, "교차검증 승인 유효시간 초과 또는 거부", " .. 1\n")
-	err, out = runGuardStr(t, "ABC123\n\n"+okHosts+"No\n", o)
+	err, out = runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"No\n", o)
 	wantCancel(t, err, out, "YeS 미입력 (입력값: No)")
 	if calls != 2 {
 		t.Errorf("4단계 취소 때는 부르지 않아야 함: %d", calls)
@@ -351,7 +350,7 @@ func (h *ccHooks) opts() GuardOpts {
 
 func TestGuardCrossCheckMode(t *testing.T) {
 	h := &ccHooks{checker: "dhk"}
-	err, out := runGuardStr(t, "ABC123\nls\nYeS\n", h.opts())
+	err, out := runGuardStr(t, WorkPhrase+"\nls\nYeS\n", h.opts())
 	if err != nil {
 		t.Fatalf("통과해야 함: %v\n%s", err, out)
 	}
@@ -369,7 +368,7 @@ func TestGuardCrossCheckMode(t *testing.T) {
 
 	// 확인자 선택 실패 → 그 사유로 취소, 승인 요청 없음
 	h = &ccHooks{checkerErr: errors.New("확인자 선택 실패 (잘못된 입력 3회)")}
-	err, out = runGuardStr(t, "ABC123\nYeS\n", h.opts())
+	err, out = runGuardStr(t, WorkPhrase+"\nYeS\n", h.opts())
 	wantCancel(t, err, out, "확인자 선택 실패 (잘못된 입력 3회)")
 	if strings.Join(h.calls, ",") != "checker" {
 		t.Errorf("호출: %v", h.calls)
@@ -377,7 +376,7 @@ func TestGuardCrossCheckMode(t *testing.T) {
 
 	// 미승인 → [취소] 교차검증 미승인, 4단계 없음
 	h = &ccHooks{checker: "dhk", ccErr: errors.New("미승인")}
-	err, out = runGuardStr(t, "ABC123\nYeS\n", h.opts())
+	err, out = runGuardStr(t, WorkPhrase+"\nYeS\n", h.opts())
 	wantCancel(t, err, out, "교차검증 미승인")
 	if strings.Contains(out, "[4/5]") || strings.Join(h.calls, ",") != "checker,approve:dhk" {
 		t.Errorf("미승인인데 진행: %v\n%s", h.calls, out)
@@ -385,7 +384,7 @@ func TestGuardCrossCheckMode(t *testing.T) {
 
 	// 승인 후 yes → 취소, --start 없음
 	h = &ccHooks{checker: "dhk"}
-	err, out = runGuardStr(t, "ABC123\nyes\n", h.opts())
+	err, out = runGuardStr(t, WorkPhrase+"\nyes\n", h.opts())
 	wantCancel(t, err, out, "YeS 미입력 (입력값: yes)")
 	if strings.Join(h.calls, ",") != "checker,approve:dhk" {
 		t.Errorf("yes 인데 --start: %v", h.calls)
@@ -393,43 +392,42 @@ func TestGuardCrossCheckMode(t *testing.T) {
 
 	// 카운트다운 뒤 --start 거부 → 취소
 	h = &ccHooks{checker: "dhk", failAft: errors.New("만료")}
-	err, out = runGuardStr(t, "ABC123\nYeS\n", h.opts())
+	err, out = runGuardStr(t, WorkPhrase+"\nYeS\n", h.opts())
 	wantCancel(t, err, out, "교차검증 승인 유효시간 초과 또는 거부")
 
 	// Checker 나 CrossCheck 하나만 있으면 기존 방식 그대로
 	o := (&ccHooks{checker: "dhk"}).opts()
 	o.CrossCheck = nil
 	o.AfterCountdown = nil
-	if err, out := runGuardStr(t, "ABC123\n\n"+okHosts+"YeS\n", o); err != nil || !strings.Contains(out, "1분(60초)") {
+	if err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"YeS\n", o); err != nil || !strings.Contains(out, "1분(60초)") {
 		t.Errorf("하나만 있으면 기존 방식: %v\n%s", err, out)
 	}
 }
 
-func TestConfirmCode(t *testing.T) {
+func TestConfirmPhrase(t *testing.T) {
 	out := &syncBuf{}
-	in := NewLineReader(strings.NewReader("XY12Z9\nxy12z9\n"))
-	if err := ConfirmCode(context.Background(), in, out, "VWP 코드: ", "XY12Z9"); err != nil {
+	in := NewLineReader(strings.NewReader("  " + VWPPhrase + " \n" + strings.ToLower(VWPPhrase) + "\n"))
+	if err := ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase); err != nil {
 		t.Fatal(err)
 	}
-	err := ConfirmCode(context.Background(), in, out, "VWP 코드: ", "XY12Z9")
-	wantCancel(t, err, out.String(), "VWP 확인 코드 불일치")
-	err = ConfirmCode(context.Background(), in, out, "VWP 코드: ", "XY12Z9") // EOF
-	wantCancel(t, err, out.String(), "VWP 확인 코드 불일치")
+	err := ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase)
+	wantCancel(t, err, out.String(), reasonVWPPhrase)
+	err = ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase) // EOF
+	wantCancel(t, err, out.String(), reasonVWPPhrase)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	pr, pw := io.Pipe()
 	defer pw.Close()
 	out2 := &syncBuf{}
-	err = ConfirmCode(ctx, NewLineReader(pr), out2, "VWP 코드: ", "XY12Z9")
+	err = ConfirmPhrase(ctx, NewLineReader(pr), out2, "VWP 확인: ", VWPPhrase)
 	wantCancel(t, err, out2.String(), "Ctrl+C 로 중단")
 }
 
 func TestRunDemo(t *testing.T) {
-	t.Setenv("PWONOFF_TEST_CODE", "ABC123")
 	t.Setenv("PWONOFF_TEST_TICK_MS", "1")
 	out := &syncBuf{}
-	rc := RunDemo(context.Background(), NewLineReader(strings.NewReader("ABC123\n\nwas-prd-01 web-prd-02 web-prd-01\nYeS\n")), out)
+	rc := RunDemo(context.Background(), NewLineReader(strings.NewReader(WorkPhrase+"\n\nwas-prd-01 web-prd-02 web-prd-01\nYeS\n")), out)
 	if rc != 0 || !strings.Contains(out.String(), "[DEMO] 실제 전원 작업은 하지 않습니다") {
 		t.Fatalf("rc=%d\n%s", rc, out)
 	}
@@ -438,12 +436,12 @@ func TestRunDemo(t *testing.T) {
 	}
 	// 데모도 4단계 ls 지원 (데모 대상 3대)
 	out = &syncBuf{}
-	rc = RunDemo(context.Background(), NewLineReader(strings.NewReader("ABC123\n\nwas-prd-01 web-prd-02 web-prd-01\nls\nYeS\n")), out)
+	rc = RunDemo(context.Background(), NewLineReader(strings.NewReader(WorkPhrase+"\n\nwas-prd-01 web-prd-02 web-prd-01\nls\nYeS\n")), out)
 	if rc != 0 || strings.Count(out.String(), "web-prd-01\nweb-prd-02\nwas-prd-01\n총 3대") != 2 {
 		t.Fatalf("데모 ls: rc=%d\n%s", rc, out)
 	}
 	out = &syncBuf{}
-	rc = RunDemo(context.Background(), NewLineReader(strings.NewReader("ABC123\n\nwas-prd-01 web-prd-02 web-prd-01\nyes\n")), out)
+	rc = RunDemo(context.Background(), NewLineReader(strings.NewReader(WorkPhrase+"\n\nwas-prd-01 web-prd-02 web-prd-01\nyes\n")), out)
 	if rc != 1 || strings.Contains(out.String(), "실제 전원 작업은") {
 		t.Fatalf("rc=%d\n%s", rc, out)
 	}

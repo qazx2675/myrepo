@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +21,6 @@ type GuardOpts struct {
 	InputTimeout time.Duration     // 3단계 전체 입력 제한(기본 60s, 기존 방식에서만)
 	Countdown    int               // 5단계 카운트다운 시작 숫자(기본 10)
 	Tick         time.Duration     // 카운트다운 간격(기본 1s)
-	NewCode      func() string     // nil 이면 NewCode()
 	ShowTargets  func(w io.Writer) // 1단계 통과 후·4단계 ls 때 대상 목록 출력(nil 이면 한 줄에 하나씩). "총 N대" 는 RunGuard 가 출력
 	OnList       func()            // 4단계에서 ls 를 입력할 때마다 호출(감사 로그 횟수용, nil 이면 무시)
 
@@ -51,31 +49,20 @@ func (o GuardOpts) withDefaults() GuardOpts {
 	if o.Tick <= 0 {
 		o.Tick = time.Second
 	}
-	if o.NewCode == nil {
-		o.NewCode = NewCode
-	}
 	return o
 }
 
-const codeChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-// NewCode 는 crypto/rand 로 [A-Z0-9] 6자리 확인 코드를 만든다.
-func NewCode() string {
-	out := make([]byte, 0, 6)
-	buf := make([]byte, 16)
-	for len(out) < 6 {
-		if _, err := rand.Read(buf); err != nil {
-			panic("crypto/rand 실패: " + err.Error())
-		}
-		for _, b := range buf {
-			// 252 = 36*7, 그 이상은 버려 치우침 방지
-			if b < 252 && len(out) < 6 {
-				out = append(out, codeChars[b%36])
-			}
-		}
-	}
-	return string(out)
-}
+// 1/5 단계와 VWP 담당자 확인에서 그대로 입력해야 하는 고정 문구.
+// 한글 안내(괄호 안)를 영문 자판으로 친 문자열이며, 비교는 앞뒤 공백만 무시하고 대소문자까지 정확히 같아야 한다.
+// 1/5 문구는 전원 작업 종류(Power Off/On/재부팅)와 관계없이 같다.
+const (
+	WorkPhrase       = "woqnxldwkrdjq" // 재부팅작업
+	WorkPhraseHint   = "재부팅작업"
+	VWPPhrase        = "VWPekaekdwkghkrdls" // VWP담당자확인
+	VWPPhraseHint    = "VWP담당자확인"
+	reasonWorkPhrase = "작업 확인 문구 불일치"
+	reasonVWPPhrase  = "VWP 담당자 확인 문구 불일치"
+)
 
 const reasonInterrupt = "Ctrl+C 로 중단"
 
@@ -121,11 +108,9 @@ func RunGuard(ctx context.Context, in *LineReader, out io.Writer, targets []stri
 	}
 	ccMode := opts.Checker != nil && opts.CrossCheck != nil
 
-	// 1단계: 확인 코드
-	code := opts.NewCode()
+	// 1단계: 작업 확인 문구(고정, 작업 종류와 무관)
 	fmt.Fprintln(out)
-	fmt.Fprintf(out, "%s 확인 코드: %s\n", Bold("[1/5]"), Bold(Yellow(code)))
-	fmt.Fprint(out, "위 확인 코드를 그대로 입력하세요: ")
+	fmt.Fprintf(out, "%s %s(%s)을 그대로 입력하세요.\n > ", Bold("[1/5]"), Bold(Yellow(WorkPhrase)), WorkPhraseHint)
 	line, err := in.ReadLine(ctx)
 	if interrupted(err) {
 		return cancelGuard(out, reasonInterrupt)
@@ -133,10 +118,10 @@ func RunGuard(ctx context.Context, in *LineReader, out io.Writer, targets []stri
 	if err != nil {
 		fmt.Fprintln(out)
 	}
-	if err != nil || strings.TrimSpace(line) != code {
-		return cancelGuard(out, "확인 코드 불일치")
+	if err != nil || strings.TrimSpace(line) != WorkPhrase {
+		return cancelGuard(out, reasonWorkPhrase)
 	}
-	fmt.Fprintln(out, Green("[INFO] 확인 코드 일치"))
+	fmt.Fprintln(out, Green("[INFO] 작업 확인 문구 일치"))
 	printTargetList(out, targets, opts)
 
 	if ccMode {
@@ -335,8 +320,8 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
-// ConfirmCode 는 VWP 확인용: prompt 출력 후 한 줄이 code 와 같으면 nil.
-func ConfirmCode(ctx context.Context, in *LineReader, out io.Writer, prompt string, code string) error {
+// ConfirmPhrase 는 VWP 담당자 확인용: prompt 출력 후 한 줄(앞뒤 공백 무시)이 phrase 와 같으면 nil.
+func ConfirmPhrase(ctx context.Context, in *LineReader, out io.Writer, prompt string, phrase string) error {
 	fmt.Fprint(out, prompt)
 	line, err := in.ReadLine(ctx)
 	if err != nil && ctx.Err() != nil && !errors.Is(err, io.EOF) {
@@ -345,8 +330,8 @@ func ConfirmCode(ctx context.Context, in *LineReader, out io.Writer, prompt stri
 	if err != nil {
 		fmt.Fprintln(out)
 	}
-	if err != nil || strings.TrimSpace(line) != code {
-		return cancelGuard(out, "VWP 확인 코드 불일치")
+	if err != nil || strings.TrimSpace(line) != phrase {
+		return cancelGuard(out, reasonVWPPhrase)
 	}
 	return nil
 }
@@ -358,9 +343,6 @@ var demoTargets = []string{"web-prd-01", "web-prd-02", "was-prd-01"}
 // PWONOFF_TEST_* 환경변수는 시험용으로 데모에서만 읽는다(실제 모드에선 읽지 않음).
 func RunDemo(ctx context.Context, in *LineReader, out io.Writer) int {
 	var opts GuardOpts
-	if c := os.Getenv("PWONOFF_TEST_CODE"); c != "" {
-		opts.NewCode = func() string { return c }
-	}
 	if v, err := strconv.Atoi(os.Getenv("PWONOFF_TEST_INPUT_TIMEOUT")); err == nil && v > 0 {
 		opts.InputTimeout = time.Duration(v) * time.Second
 	}

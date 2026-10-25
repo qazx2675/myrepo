@@ -412,8 +412,11 @@ func TestListRendering(t *testing.T) {
 			t.Fatalf("ID 열 위치가 다름: %v\n%s", cols, out)
 		}
 	}
-	// 번호는 두 표에 걸쳐 이어진다: 확인자 표 첫 행이 [7]
-	mustContain(t, out, "[7]   job7  dave")
+	// 번호는 두 표에 걸쳐 이어진다: 확인자 표(먼저 나옴)가 [1], 내 작업 표는 [2] 부터
+	mustContain(t, out, "[1]   job7  dave", "[2]   job1  bob")
+	if strings.Index(out, "내가 확인자인 작업 — 1건") > strings.Index(out, "내 작업 (작업자) — 6건") {
+		t.Fatalf("확인자 표가 먼저 나와야 함:\n%s", out)
+	}
 }
 
 func TestApproveWrongThenRightPassword(t *testing.T) {

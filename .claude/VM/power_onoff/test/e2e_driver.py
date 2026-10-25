@@ -138,19 +138,25 @@ def login(pr, action):
 
 def through_vwp(pr):
     pr.expect(r"vwp대상 장비가 포함되어있습니다")
-    m = pr.expect(r"코드를 입력하세요: ([A-Z0-9]{6})")
-    pr.send(m.group(1) + "\n")
+    pr.expect(r"담당자 확인이 완료되었다면 VWPekaekdwkghkrdls\(VWP담당자확인\)을 그대로 입력하세요\.\n > ")
+    pr.send(VWP_PHRASE + "\n")
 
 
 # 4/5 단계 질문 (두 방식 공통). 강제 PowerOff 질문 "(YeS/No): " 과는 다르다.
 YES_PROMPT = r"\[4/5\] 정말 작업을 진행하시겠습니까\? \(YeS/No, ls=대상 보기\): "
 
 
+# 1/5 와 VWP 담당자 확인에서 그대로 입력하는 고정 문구(guard.go 의 WorkPhrase / VWPPhrase)
+WORK_PHRASE = "woqnxldwkrdjq"  # 재부팅작업
+VWP_PHRASE = "VWPekaekdwkghkrdls"  # VWP담당자확인
+STEP1_PROMPT = r"\[1/5\] woqnxldwkrdjq\(재부팅작업\)을 그대로 입력하세요\.\n > "
+
+
 def through_code(pr, names):
-    """1/5: 확인 코드를 그대로 입력하고 대상 목록·총 N대 를 확인한다."""
-    m = pr.expect(r"\[1/5\] 확인 코드: ([A-Z0-9]{6})")
-    pr.expect(r"입력하세요: ")
-    pr.send(m.group(1) + "\n")
+    """1/5: 작업 확인 문구를 그대로 입력하고 대상 목록·총 N대 를 확인한다."""
+    pr.expect(STEP1_PROMPT)
+    pr.send(WORK_PHRASE + "\n")
+    pr.expect(r"\[INFO\] 작업 확인 문구 일치")
     pr.expect(r"총 %d대" % len(names))
 
 
@@ -165,7 +171,7 @@ def answer_yes(pr, names, ans="YeS", ls=0):
 
 
 def through_guard(pr, names=TARGETS, ans="YeS", ls=0):
-    """기존 방식(cross_check=off): 코드 → Enter → VM 이름 입력 → (ls) → YeS."""
+    """기존 방식(cross_check=off): 작업 확인 문구 → Enter → VM 이름 입력 → (ls) → YeS."""
     through_code(pr, names)
     pr.expect(r"\[2/5\]")
     pr.send("\n")
@@ -280,15 +286,14 @@ def s_on_seq():
         sim.close()
 
 
-@scenario("취소: 확인 코드 불일치")
+@scenario("취소: 작업 확인 문구 불일치(대소문자)")
 def s_wrong_code():
     sim, pr = start([], power="on", targets=["svr1ev01"])
     try:
         login(pr, 1)
-        pr.expect(r"\[1/5\] 확인 코드: ")
-        pr.expect(r"입력하세요: ")
-        pr.send("ZZZZZZ\n")
-        pr.expect(r"\[취소\] 확인 코드 불일치")
+        pr.expect(STEP1_PROMPT)
+        pr.send(WORK_PHRASE.upper() + "\n")
+        pr.expect(r"\[취소\] 작업 확인 문구 불일치")
         assert pr.wait(10) == 1
         check_states("on", ["svr1ev01"])
     finally:
@@ -300,9 +305,8 @@ def s_wrong_hosts():
     sim, pr = start([], power="on", targets=["svr1ev01", "svr1ev02"])
     try:
         login(pr, 1)
-        m = pr.expect(r"\[1/5\] 확인 코드: ([A-Z0-9]{6})")
-        pr.expect(r"입력하세요: ")
-        pr.send(m.group(1) + "\n")
+        pr.expect(STEP1_PROMPT)
+        pr.send(WORK_PHRASE + "\n")
         pr.expect(r"\[2/5\]")
         pr.send("\n")
         pr.expect(r"이내\):")
