@@ -9,6 +9,7 @@
 //	biostool bios    -auto-check|-auto <user> <targets.txt> [-profile VM] [공통 옵션]
 //	biostool dump    [-targets 대상,대상...] [-conf bios.conf] [-user user.txt] [-hosts /etc/hosts] [-out dumps] [-compact]
 //	printf '%s' "$pw" | biostool encrypt [-key key.bin] [-out pass.enc]
+//	biostool encrypt -rf <벤더> [-key key.bin] [-out rf.enc]
 package main
 
 import (
@@ -41,6 +42,7 @@ const usageText = `사용법:
   biostool dump    [-targets 대상,...] [-out 디렉터리] [-compact] [공통 옵션]  사전조사 덤프 (GET 전용)
   biostool ucsm    [-profile <이름>] [-list-max N] [-conf] [-user] [-hosts]  Cisco UCSM XML API BIOS 점검 (읽기 전용, 대상=UCSM 주소, 기대값=프로파일 # [xml] 구역, 기본 VM)
   biostool encrypt [-key key.bin] [-out pass.enc]  표준입력의 비밀번호를 암호화
+  biostool encrypt -rf <벤더> [-key key.bin] [-out rf.enc]  2순위 계정 비밀번호를 rf.enc 의 그 벤더 항목에만 저장 (bash encrypt.sh rf)
   biostool account create|change [옵션]          1순위 계정 생성 / 비밀번호 변경 (biostool account -h)
   biostool trs     [-targets 대상,...] [-path 경로,...] [공통 옵션]  BMC 접속 장애(403 등) 단계별 진단 (읽기 전용, 인증 시도 최소)
   biostool trs-cisco [-targets 대상,...] [-path 경로,...] [공통 옵션]  Cisco(UCSX 등) UNSUPPORTED·XML 실패 원인 진단 (Redfish Bios 구조 + XML API, 읽기 전용)
@@ -233,9 +235,23 @@ func cmdCheck(args []string) error {
 func cmdEncrypt(args []string) error {
 	fs := flag.NewFlagSet("encrypt", flag.ContinueOnError)
 	key := fs.String("key", "key.bin", "AES-256 키 파일 (없으면 생성)")
-	out := fs.String("out", "pass.enc", "암호문 출력 경로")
+	out := fs.String("out", "pass.enc", "암호문 출력 경로 (-rf 이면 기본 rf.enc)")
+	rfVendor := fs.String("rf", "", "2순위 계정 벤더(dell|hpe|lenovo|supermicro|cisco|cray): rf.enc 의 그 벤더 항목만 갱신")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *rfVendor != "" {
+		outSet := false
+		fs.Visit(func(f *flag.Flag) { outSet = outSet || f.Name == "out" })
+		if !outSet {
+			*out = "rf.enc"
+		}
+		v := normRFVendor(*rfVendor)
+		if err := encryptRFVendor(os.Stdin, os.Stderr, v, *out, *key); err != nil {
+			return err
+		}
+		fmt.Printf("암호화 완료: %s 의 %s 항목 (키: %s, 다른 벤더 항목은 그대로)\n", *out, v, *key)
+		return nil
 	}
 	// 비밀번호는 인자로 받지 않고 표준입력으로만 받는다 (ps/히스토리 노출 방지).
 	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
@@ -308,11 +324,11 @@ func prepare(o *commonOpts, targetsArg string, retryFromPath string) (*runContex
 			return nil, err
 		}
 		path, explicit := rfConfPath(o.rfConf)
-		fb, warn, err := loadRFConf(path)
+		fb, warns, err := loadRFConfEnc(path, conf.RFEncFile, conf.KeyFile)
 		if err != nil {
 			return nil, err
 		}
-		if warn != "" {
+		for _, warn := range warns {
 			fmt.Fprintln(prepareWarnOut, "경고: "+warn)
 		}
 		if fb == nil && explicit {

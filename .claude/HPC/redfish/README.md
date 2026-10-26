@@ -172,7 +172,7 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
 5. **`[전체 설정 비교]`** — 처음 `Tab` 으로 넘어가면 기준을 고르고(아래 “전체비교 기준”, `-ref`/`-ref-json`/`-diff` 를 줬으면 묻지 않음) 비교 결과를 이 화면에 보여 줍니다. `-ref`/`-ref-json`/`-diff` 를 줬으면 `Tab` 을 기다리지 않고 **수집 직후 바로 전체 비교까지** 해 두며(첫 화면은 그대로 `[프로파일 점검]`) 비교에 실패하거나 취소해도 안내만 남기고 다음 `Tab` 에 다시 시도합니다. 그다음부터 `Tab` 은 두 결과를 자유롭게 오가며 화면마다 벤더·그룹·필터·스크롤 위치를 따로 기억합니다. 이 화면에서 `r` 을 누르면 기준을 다시 골라 비교합니다.
 6. **수정** — 벤더 줄에서 `q` 를 두 번 누르거나(설정할 항목이 있을 때) `e`(어디서든)를 누르면 수정 단계입니다. 먼저 **차이 항목 전부**를 호스트별로 `현재값 -> 변경값 (수정대상)` / `현재값 -> 변경값 (수정제외: 사유)` 로 보이고 **“위 수정대상을 적용할까요?”** 를 묻습니다. y 이고 수정제외 항목이 있으면 그 항목만 “아래 항목은 변경하지 않습니다” 로 다시 보이며 **“수정제외 항목을 확인했습니다. 진행할까요?”** 를 한 번 더 묻습니다. 남의 Pending 이 있으면 포함 여부를 묻고(아래 “수정 규칙”), 모두 통과해야 Pending 까지만 설정합니다(프로파일 + 전체비교를 했으면 그 difference 까지). 재부팅은 하지 않습니다. 첫 두 질문에서 `n`·`Esc`·`Ctrl+X` 면 **아무것도 쓰지 않고** 결과 화면으로 돌아옵니다. `-profile`·`-user`·`-ref` 등 옵션으로 미리 지정해도 이 확인은 항상 묻습니다.
 7. **요약** — TUI 를 닫고 OK / difference / N/A / 오류 건수, 결과 폴더, CSV 목록, 설정 결과를 출력합니다.
-8. **계정 생성 질문** — 1순위 계정(`bios.conf` user)이 거부되어 2순위(`rf.conf`) 계정으로 점검한 호스트가 있으면 요약 뒤에 `계정을 만들까요? [… ] [Y/n]` 을 묻습니다(빈 입력 = Y, 터미널 입력일 때만). `bios.conf` 에 `user2` 가 있으면 같은 호스트에 두 번째 계정도 만듭니다. `-plain` 도 결과 뒤에 같은 질문을 하고, `-auto`/`-auto-check` 는 묻지 않습니다. 자세한 내용은 2.12절.
+8. **계정 생성 질문** — 1순위 계정(`bios.conf` user)이 거부되어 2순위(`rf.conf`) 계정으로 점검한 호스트가 있으면 요약 뒤에 `계정을 만들까요? [… ] [Y/n]` 을 묻습니다(빈 입력 = Y, 터미널 입력일 때만). `bios.conf` 에 `user2` 가 있으면 같은 호스트에 두 번째 계정도 만듭니다. `-plain` 도 결과 뒤에 같은 질문을 하고, `-auto`/`-auto-check` 는 묻지 않습니다. 질문 전에 생성 대상을 `results/<일시>/account_targets.txt`, 1순위 인증 실패 + `rf.conf` 계정도 없거나 거부되어 **만들 수 없는** 호스트(`AUTH_FAIL`)를 `account_unfixable.txt` 로 따로 남기고(호스트 이름·IP 만, 0600), Y 로 만든 뒤에는 **1순위 계정을 만든 호스트만** 1순위 계정으로 자동 재점검해 원래 결과와 합쳐 보여 줍니다(`results/<일시>/recheck/<일시>/`). 자세한 내용은 2.12절.
 
 **기능별 명령** — 지금까지의 기능을 `bios.sh` 하나로 실행할 수 있습니다. 첫 인자가 명령 이름이면 그 기능의 래퍼를 그대로 실행합니다(옵션·경로 규칙은 각 래퍼와 같음, `bash bios.sh <명령> -h`).
 
@@ -786,24 +786,31 @@ ucsm_host        ip         protocol  mgmt_version  server_dn              vendo
 
 ```bash
 sudo mkdir -p /etc/rf_tool
-sudo vi /etc/rf_tool/rf.conf          # 아래 형식으로 작성
+sudo vi /etc/rf_tool/rf.conf          # 아래 형식으로 계정명만 작성 (비밀번호는 적지 않음)
 sudo chmod 600 /etc/rf_tool/rf.conf   # root 만 읽기 (그룹/기타에 열려 있으면 경고)
+
+# 비밀번호는 벤더별로 암호화해 도구 폴더의 rf.enc 에 저장 (pass.enc 와 같은 key.bin, 권한 600)
+bash encrypt.sh rf                    # rf.conf 에 <vendor>_user 가 있는 벤더를 차례로 묻는다
+bash encrypt.sh rf dell               # Dell 비밀번호만 갱신 (rf.enc 의 다른 벤더 항목은 그대로)
+bash encrypt.sh rf hpe                # HPE 비밀번호만 갱신
+bash bios.sh encrypt rf lenovo        # bios.sh 로도 같음
 ```
 
 ```text
-# /etc/rf_tool/rf.conf — key=value, # 주석. 벤더별 예비 계정 (평문)
+# /etc/rf_tool/rf.conf — key=value, # 주석. 벤더별 예비 계정의 계정명
 dell_user=...
-dell_pass=...
 hpe_user=...
-hpe_pass=...
 lenovo_user=...
-lenovo_pass=...
-# supermicro_user / supermicro_pass , cisco_user / cisco_pass , cray_user / cray_pass 도 같은 형식
+# supermicro_user , cisco_user , cray_user 도 같은 형식
 ```
+
+비밀번호 입력은 터미널에서 직접 합니다: 글자마다 `*` 만 표시하고, 붙여넣기로 보이는 입력은 거부하며, 두 번 입력이 같을 때만 저장합니다(`bash bios.sh passwd` 의 새 비밀번호 입력과 같은 규칙). 비밀번호는 명령행 인자로 받지 않으므로 화면·`ps`·쉘 히스토리에 남지 않습니다.
 
 | 항목 | 내용 |
 |---|---|
-| 키 | `<vendor>_user`, `<vendor>_pass` (`vendor` = `dell` `hpe` `lenovo` `supermicro` `cisco`). 그 밖의 키·`key=value` 가 아닌 줄은 오류. `user` 만 있고 `pass` 가 비면 오류 |
+| 키 | rf.conf: `<vendor>_user` (`vendor` = `dell` `hpe` `lenovo` `supermicro` `cisco` `cray`). 그 밖의 키·`key=value` 가 아닌 줄은 오류. `user` 가 있는데 rf.enc 에도 평문 `<vendor>_pass` 에도 비밀번호가 없으면 오류 |
+| 비밀번호 파일 | `bios.conf` 의 `rf_enc_file`(기본 `rf.enc`, `pass.enc` 와 같은 폴더), `key_file`(기본 `key.bin`)로 복호화. 벤더마다 한 줄(`<vendor>=<암호문>`)씩 따로 암호화. 없으면 평문 호환만 씀. 키가 맞지 않거나 형식이 깨졌으면 오류(비밀번호 값은 출력 안 함). `update.sh` 가 지우지 않음(KEEP), `.gitignore` 제외 |
+| 평문 호환(과도기) | rf.conf 에 예전 형식의 평문 `<vendor>_pass=...` 가 남아 있으면 `경고:` 한 줄(키 이름만, 값 없음) 후 그대로 씀. 같은 벤더가 rf.enc 에도 있으면 **rf.enc 우선**. `bash encrypt.sh rf <벤더>` 로 옮긴 뒤 평문 줄은 지우십시오 |
 | 경로 | 기본 `/etc/rf_tool/rf.conf`. `-rf-conf <경로>` 또는 환경변수 `RF_TOOL_CONF` 로 바꿈(플래그가 우선). 명시했는데 파일이 없으면 `알림` 한 줄만 출력하고 기능을 끔 |
 | 시도 조건 | 1순위(`bios.conf` 의 `user` + `pass.enc`) 로그인이 **401 인증 실패일 때만**. 연결 거부·타임아웃·5xx 같은 인증 외 실패에는 시도하지 않음 |
 | 벤더 식별 | 비인증 ServiceRoot(`/redfish/v1`)의 `Vendor` → `Oem` 키 → `Product` → `Name` 순서. 식별하지 못하거나 rf.conf 에 그 벤더 계정이 없으면 시도하지 않음(다른 벤더 계정을 돌려가며 넣지 않음) |
@@ -814,7 +821,7 @@ lenovo_pass=...
 
 **접속불가와 계정 오류는 다른 구역입니다.** 포트가 닫혔거나 응답이 없는 호스트는 `[접속불가]`, 계정이 거부된 호스트는 `[계정 오류 AUTH_FAIL]` 로 나뉘므로 “계정 문제로 보이지만 사실은 네트워크” 를 구분할 수 있습니다.
 
-**보안 주의.** rf.conf 는 **평문**입니다. `chmod 600`(root 만 읽기)을 지키고, 저장소에 커밋하지 말며(`.gitignore` 와 무관하게 `/etc` 에만 두는 파일), 백업·티켓·메신저에 붙여 넣지 마십시오. 예비 계정은 가능한 한 권한이 낮은(BIOS 설정만 가능한) 계정으로 만들고, 쓰고 나면 해당 BMC 에 공용 계정을 등록해 예비 계정 접속이 사라지게 하십시오.
+**보안 주의.** rf.enc 는 key.bin 과 짝입니다 — 둘이 함께 유출되면 풀 수 있으므로 둘 다 권한 600 을 지키고 저장소·백업·티켓·메신저에 올리지 마십시오. rf.conf(계정명)도 `chmod 600` 을 권장합니다. 예비 계정은 가능한 한 권한이 낮은(BIOS 설정만 가능한) 계정으로 만들고, 쓰고 나면 해당 BMC 에 공용 계정을 등록해 예비 계정 접속이 사라지게 하십시오.
 
 **벤더 식별의 한계(위험).** 벤더는 인증 전 ServiceRoot 응답만으로 정합니다. 1순위를 거부하고 `{"Vendor":"Dell"}` 같은 응답을 돌려주는 상대(TLS 검증을 끈 기본 설정에서의 중간자, 침해된 BMC, `user.txt` 에 잘못 들어간 주소)에게는 해당 벤더의 예비 비밀번호가 넘어갈 수 있습니다. 신뢰하는 관리망에서만 쓰고, 벤더별 예비 비밀번호는 서로 다르게 두십시오. 점검 후 Y 적용·dry-run 은 같은 규칙으로 BMC 에 다시 로그인하므로 한 번 실행에 인증 시도가 늘어납니다(위 표의 “횟수”).
 
@@ -851,7 +858,7 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 
 1순위 계정(`bios.conf` 의 `user` + `pass.enc` 의 비밀번호)이 일부 BMC 에 없을 때 **같은 id/pw 의 관리자 계정을 만들고**(create), 필요하면 **비밀번호를 바꿉니다**(change). 확정 사양은 [ACCOUNT_SPEC.md](ACCOUNT_SPEC.md), 벤더별 API 근거는 `id_json/<벤더>/` 입니다.
 
-**준비.** 계정을 만드는 호출은 `rf.conf` 의 벤더 admin(2순위) 계정으로 합니다(2.10절). 만들 계정의 비밀번호는 `bash encrypt.sh` 로 `pass.enc` 에 넣어 둔 값입니다. `rf.conf` 에는 `dell` `hpe` `lenovo` `supermicro` `cisco` `cray` 의 `<vendor>_user` / `<vendor>_pass` 를 쓸 수 있습니다. `bash bios.sh account` 는 `bash account_create.sh` 와 같습니다.
+**준비.** 계정을 만드는 호출은 `rf.conf` 의 벤더 admin(2순위) 계정으로 합니다(2.10절). 만들 계정의 비밀번호는 `bash encrypt.sh` 로 `pass.enc` 에 넣어 둔 값입니다. `rf.conf` 에는 `dell` `hpe` `lenovo` `supermicro` `cisco` `cray` 의 `<vendor>_user` 를, 그 비밀번호는 `bash encrypt.sh rf [벤더]` 로 `rf.enc` 에 둡니다(2.10절). `bash bios.sh account` 는 `bash account_create.sh` 와 같습니다.
 
 #### 두 번째 공용 계정 (`user2`, 권한이 다른 계정)
 
@@ -934,7 +941,36 @@ $ bash account_create.sh
 | 4. 검증 | 새 계정으로 **1회** 로그인. 통신 오류로 확인하지 못하면 롤백하지 않고 `VERIFY_UNKNOWN`(수동 확인) |
 | 5. 롤백 | 로그인이 **인증 거부**된 서버만, **이번 실행이 만든 계정**을 삭제(슬롯 방식은 비활성 후 이름 비우기). 원래 있던 계정은 건드리지 않음. 롤백도 실패하면 `ROLLBACK_FAILED`(수동 조치) |
 
-`bash bios.sh`(TUI·`-plain`)와 `bios_check.sh` 도 점검 끝에 같은 질문을 합니다: 1순위 로그인이 거부되어 2순위로 접속한 호스트가 있으면 `계정을 만들까요? [biosadmin(Administrator) N대 …] [Y/n]` 을 묻고(빈 입력 = Y, `user2` 가 있으면 같은 호스트에 함께 만듦), `-no-prompt` 이거나 터미널이 아니면 `bash bios.sh account` 안내만 합니다. `-dry-run` 이면 계획만 보여 줍니다. 위 화면 예시의 질문 문구는 이 변경 전 형태입니다.
+`bash bios.sh`(TUI·`-plain`)와 `bios_check.sh` 도 점검 끝에 같은 질문을 합니다: 1순위 로그인이 거부되어 2순위로 접속한 호스트가 있으면 `계정을 만들까요? [biosadmin(Administrator) N대 …] [Y/n]` 을 묻고(빈 입력 = Y, `user2` 가 있으면 같은 호스트에 함께 만듦), `-no-prompt` 이거나 터미널이 아니면 `bash bios.sh account` 안내만 합니다. `-dry-run`(`bios_check.sh`)이면 BMC 에 쓰지 않고 계획만 보여 주며 재점검도 하지 않습니다. 위 화면 예시의 질문 문구는 이 변경 전 형태입니다.
+
+점검 끝 질문의 대상 목록·재점검 (결과 폴더 `results/<일시>/`, 모두 0600, 비밀번호·계정 해시 없음):
+
+| 파일·폴더 | 내용 |
+|---|---|
+| `account_targets.txt` | 생성 대상 = 1순위 계정이 거부되어 2순위(`rf.conf`)로 점검한 호스트. 한 줄에 `<user.txt 원문><TAB># <hostname> <ip>` — `#` 뒤는 주석이라 그대로 대상 목록(`-user account_targets.txt`)으로 다시 쓸 수 있음. 질문 전에 씀(n 이어도 남음) |
+| `account_unfixable.txt` | 생성 불가 = 1순위 인증 실패 + `rf.conf` 에 그 벤더 계정이 없거나(벤더 식별 실패·`rf.conf` 없음 포함) 그 계정도 거부됨(`AUTH_FAIL`). 형식은 위와 같음. 화면에는 처음 10대의 사유를 보임 |
+| `recheck/<일시>/` | Y 로 만든 뒤 **1순위 계정이 `CREATED`** 인 호스트만 1순위 계정으로 다시 점검한 결과(`result.tsv` 등 점검과 같은 파일) + 원래 결과에서 그 호스트를 바꿔 끼운 합친 결과 CSV `profile_merged_*`. 이미 있어 건너뛴(`SKIP_EXISTS`)·실패한 호스트는 다시 접속하지 않음(인증 실패 기록을 늘리지 않음). 두 번째 계정(`user2`)은 이미 있으면 `SKIP_EXISTS` 로 건너뛰고, 재점검 여부는 1순위 계정 결과로만 정함 |
+
+화면 예 (재점검):
+
+```
+※ 계정을 만들 수 없는 호스트 1대 — 1순위 계정(biosadmin) 인증 실패, 2순위(rf.conf) 계정도 없거나 거부됨 → results/20261023_101500/account_unfixable.txt
+  host0040                     1순위 계정 인증 실패 — rf.conf 에 Dell 예비 계정 없음
+
+※ 1순위 계정(biosadmin)으로 로그인되지 않아 2순위(rf.conf) 계정으로 점검한 호스트 3대 — 1순위 계정을 만들 수 있습니다.
+생성 대상 목록: results/20261023_101500/account_targets.txt
+...
+만든 뒤에는 1순위 계정을 만든 호스트만 1순위 계정으로 다시 점검해 결과를 합쳐 보여 줍니다.
+계정을 만들까요? [...] [Y/n]:
+...
+1순위 계정(biosadmin)을 만든 호스트 2대를 다시 점검합니다 ...
+
+== 재점검 (1순위 계정, 2대) ==
+(점검 결과 줄)
+
+합친 결과 (전체 4대, 재점검 2대 반영): OK 2대 / difference 1대 / N/A 0대 / 오류 1대
+재점검 결과 폴더: results/20261023_101500/recheck/20261023_102210/ (result.tsv, 합친 결과 CSV 4개)
+```
 
 결과 파일 `results/<일시>/account_result.tsv` (0600, **비밀번호·계정 해시 없음**): `hostname ip vendor model op method result rollback detail warn account` (`account` = 작업한 계정 id, 두 번째 계정은 같은 호스트의 다음 줄).
 
@@ -999,7 +1035,7 @@ $ bin/biostool account change
 
 #### Cisco UCSM (`-ucsm`)
 
-대상은 **UCSM 주소**(블레이드 BMC 가 아님)이고 계정은 UCSM 로컬 사용자입니다. `rf.conf` 의 `cisco_user`/`cisco_pass` 로 `aaaLogin` → `configConfMo`(sys/user-ext/user-<id>, 역할 `admin`) → `aaaLogout` 만 보냅니다(`aaaUser` 하나의 생성·비밀번호 변경·삭제 외 호출은 코드가 차단). UCSM 은 대상을 한 대씩 처리합니다.
+대상은 **UCSM 주소**(블레이드 BMC 가 아님)이고 계정은 UCSM 로컬 사용자입니다. `rf.conf` 의 `cisco_user` 와 `rf.enc` 의 cisco 비밀번호로 `aaaLogin` → `configConfMo`(sys/user-ext/user-<id>, 역할 `admin`) → `aaaLogout` 만 보냅니다(`aaaUser` 하나의 생성·비밀번호 변경·삭제 외 호출은 코드가 차단). UCSM 은 대상을 한 대씩 처리합니다.
 
 #### 동시 처리 수 (`-j`)
 
@@ -1321,7 +1357,7 @@ XML 로 점검한 호스트(Cisco)는 프로파일 점검 줄의 비고에 `XML`
 - **AUTH_FAIL(401)은 재시도하지 않고, 차단기(`auth_fail_stop`)가 계정 잠금을 막습니다.** 공통 계정이 틀렸을 때 수천 대에 시도하지 않도록 처음 몇 대만 접속하고 멈춥니다. `auth_fail_stop=0` 으로 끄면 계정이 잠길 수 있습니다. 계정 잠금 정책이 있는 환경에서는 비밀번호를 먼저 확인하십시오.
 - **실제 RHEL6 커널(2.6.32)에서의 기동은 확인되지 않았습니다.** `bin/biostool_os6` 는 Go 1.20.14 정적 빌드이고 CentOS 6 userland(bash 4.1.2)에서의 동작은 확인했지만, 랩의 커널은 4.18 입니다. 회사 RHEL6 에서 처음 실행할 때 `bin/biostool_os6 help` 가 뜨는지부터 확인하십시오.
 - 점검·설정 결과(`results/`)에는 호스트 이름·모델·BIOS 설정값이 들어 있고 `pass.enc`·`key.bin` 은 비밀번호와 직결됩니다. 모두 커밋 금지(`.gitignore` 등록)이며 필요 없으면 직접 삭제하십시오. 결과 파일 권한은 0600 입니다.
-- **계정 생성·비밀번호 변경(2.12절) 후에는 랜덤한 서버 몇 대를 직접 골라 실제로 로그인되는지 확인하십시오.** 이 기능의 벤더별 방식은 문서 근거이며 실제 BMC 로 확인하지 않았습니다. 생성은 기본이 Y(빈 입력)이므로 `-dry-run` 으로 대상과 본문을 먼저 확인하십시오. rf.conf 의 admin 비밀번호는 평문이므로 권한 600 을 지키고 저장소에 커밋하지 마십시오.
+- **계정 생성·비밀번호 변경(2.12절) 후에는 랜덤한 서버 몇 대를 직접 골라 실제로 로그인되는지 확인하십시오.** 이 기능의 벤더별 방식은 문서 근거이며 실제 BMC 로 확인하지 않았습니다. 생성은 기본이 Y(빈 입력)이므로 `-dry-run` 으로 대상과 본문을 먼저 확인하십시오. rf.enc·key.bin(2순위 admin 비밀번호)은 권한 600 을 지키고 저장소에 커밋하지 마십시오.
 - 같은 BMC 를 가리키는 입력이 둘(예: `host` 와 `host-m`)이면 설정은 한 번만 합니다(`DUPLICATE_TARGET`). 입력 목록에 같은 서버를 다른 표기로 중복해 넣지 않는 것이 좋습니다.
 
 ---

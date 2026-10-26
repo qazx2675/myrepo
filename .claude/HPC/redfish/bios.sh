@@ -85,7 +85,7 @@ usage() {
   ucsm      [-user ucsm.txt] ...       Cisco UCSM(XML API) BIOS 점검     = bash ucsm_check.sh
   check     -retry-from <폴더> | -dry-run ...  옛 점검 (재시도·dry-run)  = bash bios_check.sh
   allcheck  [-ref 서버 | -diff diff.txt] ...   옛 전체비교              = bash all_bios_check.sh
-  encrypt   [2]                        비밀번호 암호화 (2: 두 번째 계정 → pass2.enc) = bash encrypt.sh
+  encrypt   [2|rf [벤더]]              비밀번호 암호화 (2: 두 번째 계정 → pass2.enc, rf: 2순위 벤더 계정 → rf.enc) = bash encrypt.sh
   update    [ZIP 경로]                 새 버전으로 설치 폴더 갱신         = bash update.sh
 
 옛 이름: bios_check.sh (점검), all_bios_check.sh (전체비교) 는 그대로 쓸 수 있습니다 (옛 옵션은 옛 방식으로 동작).

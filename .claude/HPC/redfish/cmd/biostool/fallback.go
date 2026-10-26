@@ -19,7 +19,9 @@ import (
 //   - 벤더를 식별하지 못하거나 rf.conf 에 그 벤더 계정이 없으면 시도하지 않음 (다른 벤더 계정을 돌려가며 시험하지 않음)
 //   - 예비 계정 로그인은 Retries=0 (재시도 없음) → 같은 BMC 에 로그인 시도는 최대 2회
 //
-// rf.conf 는 평문이지만 비밀번호는 클로저 안에만 두고 어떤 출력·로그·결과 파일·오류 메시지에도 싣지 않습니다.
+// rf.conf 에는 계정명(<vendor>_user)만 두고 비밀번호는 암호화 파일 rf.enc(rfenc.go, key.bin 으로 복호화)에 둡니다.
+// rf.conf 의 평문 <vendor>_pass 는 과도기 호환으로 경고 후 씁니다 (rf.enc 우선).
+// 비밀번호는 클로저 안에만 두고 어떤 출력·로그·결과 파일·오류 메시지에도 싣지 않습니다.
 
 // rf.conf 경로: 플래그 -rf-conf > 환경변수 RF_TOOL_CONF > 기본값.
 const (
@@ -79,47 +81,83 @@ func rfConfPath(flagVal string) (string, bool) {
 	return defaultRFConf, false
 }
 
-// loadRFConf 는 rf.conf 를 읽습니다. 파일이 없으면 (nil, "", nil) — 기능 꺼짐.
-// 읽을 수 없거나 형식 오류면 오류입니다. warn 은 그룹/기타 권한이 열려 있을 때의 경고 한 줄입니다 (비밀번호 없음).
 // rfConfMaxBytes 는 rf.conf 크기 상한입니다 (벤더 5개 계정에는 충분).
 const rfConfMaxBytes = 64 * 1024
 
 // reRFKeyShape 는 rf.conf 의 키 모양(소문자·숫자·밑줄)입니다. 오류 메시지에 키를 보여 줄지 정할 때만 씁니다.
 var reRFKeyShape = regexp.MustCompile(`^[a-z0-9]{1,16}(_[a-z0-9]{1,16})?$`)
 
+// loadRFConf 는 rf.conf 만 읽습니다 (rf.enc 미사용, 평문 경고 없음 — 예전 동작). 실제 실행은 loadRFConfEnc 를 씁니다.
+// 파일이 없으면 (nil, "", nil) — 기능 꺼짐. 읽을 수 없거나 형식 오류면 오류입니다.
+// warn 은 그룹/기타 권한이 열려 있을 때의 경고 한 줄입니다 (비밀번호 없음).
 func loadRFConf(path string) (fb *fallbackCreds, warn string, err error) {
+	fb, warns, err := loadRFConfEnc(path, "", "")
+	return fb, strings.Join(warns, "\n"), err
+}
+
+// loadRFConfEnc 는 rf.conf(계정명)와 rf.enc(암호화된 비밀번호, keyFile 로 복호화)를 합쳐 2순위 계정을 만듭니다.
+// rf.conf 가 없으면 (nil, nil, nil) — 기능 꺼짐 (rf.enc 는 읽지 않음). encPath 가 "" 이면 rf.enc 를 쓰지 않고 평문 경고도 하지 않습니다.
+// rf.enc 가 없으면 rf.conf 의 평문 <vendor>_pass 만 씁니다. 둘 다 있으면 rf.enc 가 우선입니다.
+// warns 는 경고 줄들입니다 (권한, 평문 비밀번호 줄 — 비밀번호 값은 없음).
+func loadRFConfEnc(path, encPath, keyFile string) (fb *fallbackCreds, warns []string, err error) {
 	st, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, "", nil
+			return nil, nil, nil
 		}
-		return nil, "", fmt.Errorf("2순위 계정 파일 %s: %w", path, err)
+		return nil, nil, fmt.Errorf("2순위 계정 파일 %s: %w", path, err)
 	}
 	if !st.Mode().IsRegular() {
-		return nil, "", fmt.Errorf("2순위 계정 파일 %s 은(는) 일반 파일이 아닙니다", path)
+		return nil, nil, fmt.Errorf("2순위 계정 파일 %s 은(는) 일반 파일이 아닙니다", path)
 	}
 	if st.Size() > rfConfMaxBytes {
-		return nil, "", fmt.Errorf("2순위 계정 파일 %s 이(가) 너무 큽니다 (%d 바이트 초과)", path, rfConfMaxBytes)
+		return nil, nil, fmt.Errorf("2순위 계정 파일 %s 이(가) 너무 큽니다 (%d 바이트 초과)", path, rfConfMaxBytes)
 	}
 	if st.IsDir() {
-		return nil, "", fmt.Errorf("2순위 계정 파일 %s 이(가) 폴더입니다", path)
+		return nil, nil, fmt.Errorf("2순위 계정 파일 %s 이(가) 폴더입니다", path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, "", fmt.Errorf("2순위 계정 파일 %s 을(를) 읽을 수 없습니다: %w", path, err)
+		return nil, nil, fmt.Errorf("2순위 계정 파일 %s 을(를) 읽을 수 없습니다: %w", path, err)
 	}
 	if runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
-		warn = fmt.Sprintf("2순위 계정 파일 %s 권한이 그룹/기타에 열려 있습니다 (%04o). chmod 600 을 권장합니다", path, st.Mode().Perm())
+		warns = append(warns, fmt.Sprintf("2순위 계정 파일 %s 권한이 그룹/기타에 열려 있습니다 (%04o). chmod 600 을 권장합니다", path, st.Mode().Perm()))
 	}
-	fb, err = parseRFConf(string(data), path)
-	return fb, warn, err
+	var enc map[string]string
+	if encPath != "" {
+		var w string
+		if enc, w, err = loadRFEnc(encPath, keyFile); err != nil {
+			return nil, warns, err
+		}
+		if w != "" {
+			warns = append(warns, w)
+		}
+	}
+	fb, plain, err := parseRFConfEnc(string(data), path, enc)
+	if err == nil && encPath != "" && len(plain) > 0 {
+		keys := make([]string, len(plain))
+		for i, v := range plain {
+			keys[i] = v + "_pass"
+		}
+		warns = append(warns, fmt.Sprintf("2순위 계정 파일 %s 에 평문 비밀번호 줄이 있습니다 (%s). bash encrypt.sh rf 로 %s 에 저장한 뒤 그 줄을 지우십시오 (%s 에 있는 벤더는 그것을 씁니다)",
+			path, strings.Join(keys, ", "), encPath, encPath))
+	}
+	return fb, warns, err
 }
 
-// parseRFConf 는 rf.conf 텍스트를 해석합니다 (순수 함수). 형식은 bios.conf 와 같은 key=value, # 주석.
-// 키는 <vendor>_user, <vendor>_pass (vendor 는 fallbackVendors, 대소문자 무시)이고 그 밖의 키는 오류입니다.
-// user 가 빈 벤더는 예비 계정이 없습니다. user 가 있는데 pass 가 비면 오류입니다.
-// 오류 메시지에는 키 이름과 줄 번호만 넣고 값은 넣지 않습니다.
+// parseRFConf 는 rf.conf 텍스트를 해석합니다 (순수 함수, rf.enc 없이 평문 <vendor>_pass 만 씀).
 func parseRFConf(text, name string) (*fallbackCreds, error) {
+	fb, _, err := parseRFConfEnc(text, name, nil)
+	return fb, err
+}
+
+// parseRFConfEnc 는 rf.conf 텍스트를 해석합니다 (순수 함수). 형식은 bios.conf 와 같은 key=value, # 주석.
+// 키는 <vendor>_user, <vendor>_pass (vendor 는 fallbackVendors, 대소문자 무시)이고 그 밖의 키는 오류입니다.
+// 비밀번호는 enc(rf.enc 복호화 결과)에 그 벤더가 있으면 그것을, 없으면 평문 <vendor>_pass 를 씁니다.
+// user 가 빈 벤더는 예비 계정이 없습니다. user 가 있는데 비밀번호가 둘 다 없으면 오류입니다.
+// plain 은 평문 <vendor>_pass 값이 적힌 벤더 목록입니다 (fallbackVendors 순서, 경고용).
+// 오류 메시지에는 키 이름과 줄 번호만 넣고 값은 넣지 않습니다.
+func parseRFConfEnc(text, name string, enc map[string]string) (fb *fallbackCreds, plain []string, err error) {
 	known := map[string]bool{}
 	for _, v := range fallbackVendors {
 		known[v] = true
@@ -134,7 +172,7 @@ func parseRFConf(text, name string) (*fallbackCreds, error) {
 		}
 		eq := strings.Index(line, "=")
 		if eq < 0 {
-			return nil, fmt.Errorf("%s:%d: key=value 형식이 아닙니다", name, lineNo)
+			return nil, nil, fmt.Errorf("%s:%d: key=value 형식이 아닙니다", name, lineNo)
 		}
 		key := strings.ToLower(strings.TrimSpace(line[:eq]))
 		val := strings.TrimSpace(line[eq+1:])
@@ -147,7 +185,7 @@ func parseRFConf(text, name string) (*fallbackCreds, error) {
 			if reRFKeyShape.MatchString(key) {
 				shown = fmt.Sprintf("%q", key)
 			}
-			return nil, fmt.Errorf("%s:%d: 알 수 없는 키 %s (<vendor>_user, <vendor>_pass 만, vendor=%s)", name, lineNo, shown, strings.Join(fallbackVendors, ","))
+			return nil, nil, fmt.Errorf("%s:%d: 알 수 없는 키 %s (<vendor>_user, <vendor>_pass 만, vendor=%s)", name, lineNo, shown, strings.Join(fallbackVendors, ","))
 		}
 		if field == "user" {
 			users[vendor] = val
@@ -157,15 +195,22 @@ func parseRFConf(text, name string) (*fallbackCreds, error) {
 	}
 	m := map[string]fallbackAcct{}
 	for _, v := range fallbackVendors {
+		if passes[v] != "" {
+			plain = append(plain, v)
+		}
 		if users[v] == "" {
 			continue
 		}
-		if passes[v] == "" {
-			return nil, fmt.Errorf("%s: %s_user 가 있는데 %s_pass 가 비어 있습니다", name, v, v)
+		pass := enc[v] // rf.enc 우선
+		if pass == "" {
+			pass = passes[v]
 		}
-		m[v] = fallbackAcct{user: users[v], pass: passes[v]}
+		if pass == "" {
+			return nil, nil, fmt.Errorf("%s: %s_user 가 있는데 %s_pass 가 비어 있고 rf.enc 에도 없습니다 (bash encrypt.sh rf %s 로 저장)", name, v, v, v)
+		}
+		m[v] = fallbackAcct{user: users[v], pass: pass}
 	}
-	return &fallbackCreds{accts: func() map[string]fallbackAcct { return m }}, nil
+	return &fallbackCreds{accts: func() map[string]fallbackAcct { return m }}, plain, nil
 }
 
 // fallbackVendorKey 는 벤더 문자열을 rf.conf 벤더 키(소문자)로 바꿉니다. 5개 벤더가 아니면 "".

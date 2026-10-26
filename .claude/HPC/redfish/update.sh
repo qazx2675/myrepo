@@ -16,7 +16,7 @@ set -euo pipefail
 TARGET="/root/server_vm_python/redhfish/V2"   # 설치 폴더 (고정)
 BACKUP_DIR="/root/server_vm_python/redhfish/backup"
 # 현장에서만 만드는 항목 — 새 버전으로 덮지 않는다
-KEEP="bios.conf pass.enc pass2.enc key.bin user.txt diff.txt ignore_attrs.txt refs results dumps"
+KEEP="bios.conf pass.enc pass2.enc rf.enc key.bin user.txt diff.txt ignore_attrs.txt refs results dumps"
 PROFILE_SUMS=".update_profiles.sha" # 마지막 업데이트로 설치한 profiles 의 sha256 (현장 수정 여부 판단용)
 
 work="" # ZIP 을 푼 임시 폴더 (끝나면 지움)

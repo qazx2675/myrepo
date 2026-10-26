@@ -3,6 +3,7 @@ user.txt
 bios.conf
 pass.enc
 pass2.enc
+rf.enc
 key.bin
 /results/
 /dumps/

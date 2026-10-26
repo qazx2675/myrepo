@@ -36,7 +36,8 @@ usage() {
   cp bios.conf.example bios.conf      # user= 에 만들 1순위 계정 ID 입력
   cp user.txt.example  user.txt       # 대상 (hostname / hostname-m / IP) 한 줄씩
   bash encrypt.sh                     # 만들 계정의 비밀번호 입력 -> pass.enc + key.bin 생성
-  /etc/rf_tool/rf.conf                # <vendor>_user / <vendor>_pass (평문, chmod 600) — 계정을 만들 admin 계정
+  /etc/rf_tool/rf.conf                # <vendor>_user (chmod 600) — 계정을 만들 admin 계정명
+  bash encrypt.sh rf [벤더]           # 그 admin 비밀번호 입력 -> rf.enc (벤더별, 같은 key.bin)
 EOF
 }
 
@@ -96,7 +97,7 @@ if [ ! -f "$passfile" ] || [ ! -f "$keyfile" ]; then
   missing=1
 fi
 if [ ! -f "$rfconf" ]; then
-  echo "[없음] $rfconf  -> 계정을 만들 벤더 admin 계정(<vendor>_user / <vendor>_pass)을 평문으로 적고 chmod 600" >&2
+  echo "[없음] $rfconf  -> 계정을 만들 벤더 admin 계정명(<vendor>_user)을 적고 chmod 600, 비밀번호는 bash encrypt.sh rf [벤더] (rf.enc)" >&2
   missing=1
 fi
 if [ "$missing" = "1" ]; then

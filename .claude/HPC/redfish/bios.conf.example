@@ -16,6 +16,10 @@ key_file=key.bin
 #user2_role=Operator
 #pass2_file=pass2.enc
 
+# (선택) 2순위(벤더 admin) 계정 비밀번호 파일 — 계정명은 /etc/rf_tool/rf.conf 의 <vendor>_user, 비밀번호는
+# bash encrypt.sh rf [벤더] 로 rf_enc_file(기본 rf.enc) 에 저장합니다 (key_file 은 같은 것을 씀).
+#rf_enc_file=rf.enc
+
 # 동시에 접속할 호스트 수
 concurrency=100
 

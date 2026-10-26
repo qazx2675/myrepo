@@ -481,12 +481,24 @@ awk -F'\t' '$13=="FAIL"' results/<일시>/ucsm_result.tsv
 # 12. 2순위(예비) 계정 — /etc/rf_tool/rf.conf (공용 계정이 없는 BMC 용, 파일이 없으면 기능 꺼짐)
 ########################################################################
 
-# rf.conf 를 만든다 (root 만 읽기). 형식: <vendor>_user=..., <vendor>_pass=... (vendor = dell hpe lenovo supermicro cisco), # 주석
+# rf.conf 를 만든다 (root 만 읽기). 형식: <vendor>_user=... (계정명만, vendor = dell hpe lenovo supermicro cisco cray), # 주석
+# 비밀번호는 rf.conf 에 적지 않는다 (아래 encrypt.sh rf 로 rf.enc 에 암호화 저장)
 sudo mkdir -p /etc/rf_tool
 sudo vi /etc/rf_tool/rf.conf
 
-# 권한을 600 으로 (그룹/기타에 열려 있으면 실행할 때 경고가 나온다. 평문이므로 git 에 올리지 말 것)
+# 권한을 600 으로 (그룹/기타에 열려 있으면 실행할 때 경고가 나온다. git 에 올리지 말 것)
 sudo chmod 600 /etc/rf_tool/rf.conf
+
+# 벤더별 비밀번호를 암호화해 도구 폴더의 rf.enc 에 저장 (pass.enc 와 같은 key.bin, 권한 600)
+# 터미널에서 직접 입력: 글자마다 * 표시, 붙여넣기 거부, 두 번 입력이 같을 때만 저장. 인자로 비밀번호를 주지 않는다
+bash encrypt.sh rf                 # rf.conf 에 <vendor>_user 가 있는 벤더를 차례로 묻는다
+bash encrypt.sh rf dell            # Dell 비밀번호만 갱신 (다른 벤더 항목은 그대로)
+bash encrypt.sh rf hpe             # HPE 비밀번호만 갱신
+bash encrypt.sh rf cisco           # Cisco 비밀번호만 갱신 (UCSM 계정 생성도 이 값)
+bash bios.sh encrypt rf lenovo     # bios.sh 로도 같음
+
+# 예전 형식(rf.conf 에 평문 <vendor>_pass=...)이 남아 있으면 실행 때 "경고:" 한 줄(키 이름만) 후 그대로 쓴다.
+# rf.enc 에 같은 벤더가 있으면 rf.enc 가 우선. encrypt.sh rf 로 옮긴 뒤 평문 줄을 지운다
 
 # 평소처럼 점검한다. 1순위(bios.conf 의 user + pass.enc)가 401 로 거부된 BMC 만 벤더를 식별해 그 벤더 예비 계정으로 1회 더 시도한다
 bash bios_check.sh --profile VM
@@ -531,7 +543,7 @@ bash testcase/demo_env.sh stop
 # 14. 1순위 계정 생성 — 공용 계정이 없는 BMC 에 계정 만들기 (rf.conf 의 벤더 admin 으로 로그인, 재부팅·BIOS 변경 없음)
 ########################################################################
 
-# 필요한 것: bios.conf 의 user = 만들 계정 ID, pass.enc = 그 비밀번호, /etc/rf_tool/rf.conf = 벤더 admin (평문, chmod 600)
+# 필요한 것: bios.conf 의 user = 만들 계정 ID, pass.enc = 그 비밀번호, /etc/rf_tool/rf.conf = 벤더 admin 계정명 + rf.enc = 그 비밀번호 (bash encrypt.sh rf, 12절)
 bash encrypt.sh
 
 # 먼저 계획만 본다 (BMC 에 쓰지 않음. 대상 목록과 보낼 본문(비밀번호는 *****) 이 나온다)
@@ -544,6 +556,12 @@ bash account_create.sh
 bash bios_check.sh --profile VM
 
 # bios.sh 점검(TUI·-plain) 끝에서도 같은 질문이 나온다 (TUI 를 닫은 뒤, 그냥 Enter = Y)
+#   질문 전에 결과 폴더에 목록을 따로 남긴다 (호스트 이름·IP 만, 0600):
+#     results/<일시>/account_targets.txt    생성 대상 (2순위로 점검한 호스트, 그대로 -user 대상 목록으로 다시 쓸 수 있음)
+#     results/<일시>/account_unfixable.txt  생성 불가 (1순위 인증 실패 + rf.conf 계정도 없거나 거부 = AUTH_FAIL)
+#   Y 로 만든 뒤에는 1순위 계정을 만든(CREATED) 호스트만 1순위 계정으로 자동 재점검해 원래 결과와 합쳐 보여 준다
+#     results/<일시>/recheck/<일시>/ (result.tsv 등 + 합친 결과 CSV profile_merged_*). 이미 있어 건너뛴 호스트는 재점검 안 함
+#   -dry-run(bios_check.sh) 이면 계획만, 재점검 없음
 bash bios.sh -profile VM
 
 # bios.sh 로 바로 계정 생성 (= bash account_create.sh, 옵션도 같음)
@@ -557,7 +575,7 @@ bash encrypt.sh 2
 bash bios.sh account -dry-run
 bash bios.sh account
 
-# 대상이 Cisco UCSM(XML API) 일 때 (대상 목록은 UCSM 주소, rf.conf 의 cisco_user/cisco_pass 사용)
+# 대상이 Cisco UCSM(XML API) 일 때 (대상 목록은 UCSM 주소, rf.conf 의 cisco_user + rf.enc 의 cisco 비밀번호 사용)
 bash account_create.sh -ucsm -user ucsm.txt
 
 # 동시 처리 수 조정 (기본 100, 최대 300), 상태별로 나열할 호스트 수

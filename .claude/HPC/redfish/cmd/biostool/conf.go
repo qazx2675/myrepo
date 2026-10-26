@@ -20,6 +20,7 @@ type Config struct {
 	KeyFile      string        // AES-256 키 파일
 	User2        string        // 두 번째 공용 계정 ID (선택). 계정 생성에서만 쓰고 점검 접속에는 쓰지 않는다
 	Pass2File    string        // 두 번째 계정의 암호화된 비밀번호 파일 (기본 pass2.enc, key_file 로 복호화)
+	RFEncFile    string        // 2순위(rf.conf 벤더 admin) 계정의 암호화된 비밀번호 파일 (기본 rf.enc, key_file 로 복호화)
 	User2Role    string        // 두 번째 계정 권한: Administrator | Operator | ReadOnly (user2 가 있으면 필수)
 	Concurrency  int           // 동시 접속 호스트 수
 	Timeout      time.Duration // 요청 1건당 타임아웃
@@ -44,6 +45,7 @@ func defaultConfig() Config {
 		PassFile:      "pass.enc",
 		KeyFile:       "key.bin",
 		Pass2File:     "pass2.enc",
+		RFEncFile:     "rf.enc",
 		Concurrency:   100,
 		Timeout:       20 * time.Second,
 		Insecure:      true,
@@ -98,6 +100,8 @@ func parseConf(text, name string) (*Config, error) {
 			c.User2 = val
 		case "pass2_file":
 			setIfNotEmpty(&c.Pass2File, val)
+		case "rf_enc_file":
+			setIfNotEmpty(&c.RFEncFile, val)
 		case "user2_role":
 			if c.User2Role = acctRoleName(val); val != "" && c.User2Role == "" {
 				err = fmt.Errorf("%s:%d: user2_role 은 Administrator, Operator, ReadOnly 중 하나여야 합니다", name, lineNo)

@@ -19,6 +19,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `modelnorm.go` | 모델명 정규화 `normalizeModel`(프로파일의 model 열과 BMC 가 보고한 Model 을 같은 키로 맞추는 **한곳의 규칙**, allcheck 도 사용) |
 | `resolve.go` | 대상 목록 해석: `user.txt` 파싱, `/etc/hosts` 에서 `이름-m` 조회, `:포트`, 재시도 목록(`loadRetryList`), `NO_HOSTS_ENTRY`. `classifyTargets` 가 대상을 Redfish / XML 로 나눔(`xml_host_prefix` 로 시작하는 이름과 `-user-xml` 목록 = XML, IP 는 `-user-xml` 에 있을 때만) |
 | `cryptutil.go` | AES-256-GCM 비밀번호 암복호화(`pass.enc`+`key.bin`, 0600), `encrypt` 서브커맨드의 본체 |
+| `rfenc.go` | 2순위 계정 비밀번호 파일 `rf.enc`(bios.conf `rf_enc_file`): 벤더마다 한 줄 `<vendor>=<base64 암호문>`, `key.bin` 으로 복호화(`loadRFEnc`), 한 벤더 항목만 갱신(`saveRFEncVendor`, 0600 임시 파일 후 rename). `encrypt -rf <벤더>` 의 본체(터미널이면 `readNewPassword` 로 * 입력·붙여넣기 거부) |
 | `redfish.go` | **BMC 와 통신하는 유일한 HTTP 클라이언트.** 세션 1회·`checkAllowed`(호출 허용목록)·`checkBody`(본문 검사)·타임아웃·재시도·백오프·401 즉시 중단·오류 상태 분류(`UNREACHABLE`·`TIMEOUT`·`BMC_ERROR`·`AUTH_FAIL`·`UNSUPPORTED`·`HTTP_ERROR`)·비밀번호 마스킹. PATCH 본문 검사 `checkAttributes` 가 위험 속성명 외에 내장 보호 속성(`protect.go`)도 거부 |
 | `inspect.go` | 시스템 판별 `detectSystem`(ServiceRoot → Systems → Bios → Settings 경로 → 속성 레지스트리 위치), Bios 속성·레지스트리 해석, 벤더 정규화 `normalizeVendor`, **표준 4항목 이름 후보 키워드 `stdKeywords`** |
 | `sweep.go` | 호스트 순회 워커풀과 **AUTH_FAIL 차단기**(웜업 직렬 → 병렬, `SKIPPED_AUTH_STOP`). check·dump·allcheck·set·ucsm 이 공유. 호스트 처리 중 패닉은 `onPanic` 으로 그 호스트만 오류(`BMC_ERROR`, `panicDetail`)로 남기고 나머지를 계속함(콜백이 없으면 모두 끝낸 뒤 호출한 goroutine 에서 다시 패닉) |
@@ -47,7 +48,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `tui_flow.go` | `biostool bios` 대화형 흐름: 대상 입력 → 프로파일 선택 → 접속·조회 → 결과 화면(Tab 으로 [프로파일 점검] ↔ [전체 설정 비교], 처음 넘어갈 때 기준 선택·비교, r 로 기준 다시 선택) → 벤더 줄에서 q 두 번(또는 e) → 수정 확인 1(차이 항목 전부 `현재값 -> 변경값 (수정대상)`/`(수정제외: 사유)`, “위 수정대상을 적용할까요?”) → 수정 확인 2(수정제외가 있을 때만, “수정제외 항목을 확인했습니다. 진행할까요?”) → 남의 Pending 질문 → 설정·재조회 → 요약. `setStep` 이 이 순서를 맡고 n/Esc/Ctrl+X 면 아무것도 쓰지 않고 결과 보기로 돌아옴. `declined`/`applied` 로 종료 때 재질문·재설정을 막고, 흐름 중 패닉이어도 터미널을 되돌림 |
 | `setplan.go` | **설정 계획·적용**: `buildSetPlan`(BMC 접속 없음. 프로파일 `verified=Y` difference + `allcheck_set=on` 일 때만 전체비교 difference, 충돌 `[충돌]`, **보호 속성(`protect.go`)은 항목이 되지 않고 수정제외**, 제외 목록·위험 속성·N/A·쓰기 불가 벤더·BIOS 버전이 다른 비교서버(`BIOS_VER_DIFF`) 제외, 시스템 프로파일 성격 속성이 여럿이면 프로파일 행만, 남의 Pending 목록(Dell 은 남의 Pending 이 있으면 호스트 제외). 확인 화면 줄 `ConfirmLines`/`ExcludedLines`) / `applySetPlan`(`set.go` 의 `runHost` 를 그대로 타서 재조회·레지스트리 검사·PATCH 1회·Pending 재조회. 재부팅 없음, TUI 흐름에서만 호출) |
 | `protect.go` | **절대 바꾸지 않는 속성(보호 속성)**: 내장 패턴 `builtinProtect`(iSCSI/IQN·IP/네트워크·이름/식별·부팅(BootMode·PXE·URL/HTTP 부팅 포함)·보안(SecureBoot·TPM·비밀번호)·스토리지(RAID·SATA·NVMe·VMD)·NIC/LOM/OCP/WoL/OptionRom/Slot)은 코드에 고정이라 conf 로 끌 수 없고, `bios.conf` `protect_attrs` 는 `newProtectSet` 으로 더하기만 함. `match`/`why` 가 `setplan.go`·`set.go`·`redfish.go` 세 곳에서 쓰임 |
-| `fallback.go` | **2순위(예비) 계정.** `/etc/rf_tool/rf.conf`(`-rf-conf`·`RF_TOOL_CONF`) 로드·검증(`loadRFConf`·`parseRFConf`), 비인증 ServiceRoot 로 벤더 식별(`vendorFromServiceRoot`), 1순위가 401 일 때만 1회 재로그인하는 `loginWithFallback`. 비밀번호는 클로저 안에만 두고 출력하지 않음 |
+| `fallback.go` | **2순위(예비) 계정.** `/etc/rf_tool/rf.conf`(`-rf-conf`·`RF_TOOL_CONF`, 계정명) 로드·검증하고 `rf.enc` 비밀번호와 합침(`loadRFConfEnc`·`parseRFConfEnc`, 평문 `<vendor>_pass` 는 경고 후 호환·rf.enc 우선), 비인증 ServiceRoot 로 벤더 식별(`vendorFromServiceRoot`), 1순위가 401 일 때만 1회 재로그인하는 `loginWithFallback`. 비밀번호는 클로저 안에만 두고 출력하지 않음 |
 | `retry.go` | `-retry-from`: 이전 결과 읽기·검증, 재시도 대상만 다시 실행한 결과를 이전 결과와 병합(`merged_*`) |
 | `*_test.go` | 단위·통합 테스트. 보안 규칙은 `redfish_security_test.go`·`set_security_test.go`·`protect_test.go`(보호 패턴이 `profiles/*.tsv` 속성을 막지 않는지 포함), 수정 확인 흐름은 `setstep_test.go`·`setplan_test.go`·`tui_flow_test.go`, 수천 대 시험은 `scale_test.go`, mock 연동은 `mock_integration_test.go` |
 
@@ -78,7 +79,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `ucsm_check.sh` | Cisco UCSM 읽기 전용 점검 래퍼 → `biostool ucsm` (위 “Cisco UCSM” 단락 참고) |
 | `all_bios_check.sh` | 전체 비교 래퍼 → `biostool allcheck`. 인자 없이 터미널에서 실행하면 `bios.sh` TUI 로 넘김(옛 1.체크/2.전체비교 메뉴는 `-diff-max`·`-list-max`·`-export-attrs` 를 줄 때만) |
 | `bios_export.sh` | 비교서버·대상 BIOS 속성 JSON 추출 래퍼 → `biostool allcheck -ref -export-attrs` |
-| `encrypt.sh` | 비밀번호 암호화 래퍼(비밀번호는 파이프로만 전달) → `biostool encrypt` |
+| `encrypt.sh` | 비밀번호 암호화 래퍼(비밀번호는 파이프로만 전달) → `biostool encrypt`. `rf [벤더]` 는 rf.conf 의 벤더별 2순위 비밀번호 → `rf.enc` (`biostool encrypt -rf`, 터미널 직접 입력) |
 | `lib.sh` | 래퍼 공용 함수: OS(커널 메이저)별 바이너리 선택 `select_bin`, `conf_val`. bash 4.1 호환 |
 | `mockbmc.sh` | mock BMC 기동 래퍼(`bin/mockbmc`(`_os6`) 가 있으면 그대로 사용, 없을 때만 go 로 빌드) |
 | `testcase/rf_fallback_case.sh` | 2순위 계정·접속불가 구분·설정 표기 선택을 mock 으로 직접 시험하는 케이스(Go 불필요, `bin/mockbmc` 사용). 설명 `testcase/README.md` |
