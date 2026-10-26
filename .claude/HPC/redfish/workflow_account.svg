@@ -1,2 +1,337 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg id="wf_workflow_account" width="1296" xmlns="http://www.w3.org/2000/svg" height="1889" viewBox="-8 -8 1296 1889" role="graphics-document document" aria-roledescription="flowchart-v2"><rect x="-8" y="-8" width="1296" height="1889" fill="#ffffff"/><style>#wf_workflow_account{font-family:Malgun Gothic,Noto Sans KR,Noto Sans CJK KR,sans-serif;font-size:16px;fill:#333;}#wf_workflow_account .error-icon{fill:#552222;}#wf_workflow_account .error-text{fill:#552222;stroke:#552222;}#wf_workflow_account .edge-thickness-normal{stroke-width:2px;}#wf_workflow_account .edge-thickness-thick{stroke-width:3.5px;}#wf_workflow_account .edge-pattern-solid{stroke-dasharray:0;}#wf_workflow_account .edge-pattern-dashed{stroke-dasharray:3;}#wf_workflow_account .edge-pattern-dotted{stroke-dasharray:2;}#wf_workflow_account .marker{fill:#333333;stroke:#333333;}#wf_workflow_account .marker.cross{stroke:#333333;}#wf_workflow_account svg{font-family:Malgun Gothic,Noto Sans KR,Noto Sans CJK KR,sans-serif;font-size:16px;}#wf_workflow_account .label{font-family:Malgun Gothic,Noto Sans KR,Noto Sans CJK KR,sans-serif;color:#333;}#wf_workflow_account .cluster-label text{fill:#333;}#wf_workflow_account .cluster-label span,#wf_workflow_account p{color:#333;}#wf_workflow_account .label text,#wf_workflow_account span,#wf_workflow_account p{fill:#333;color:#333;}#wf_workflow_account .node rect,#wf_workflow_account .node circle,#wf_workflow_account .node ellipse,#wf_workflow_account .node polygon,#wf_workflow_account .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#wf_workflow_account .flowchart-label text{text-anchor:middle;}#wf_workflow_account .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#wf_workflow_account .node .label{text-align:center;}#wf_workflow_account .node.clickable{cursor:pointer;}#wf_workflow_account .arrowheadPath{fill:#333333;}#wf_workflow_account .edgePath .path{stroke:#333333;stroke-width:2.0px;}#wf_workflow_account .flowchart-link{stroke:#333333;fill:none;}#wf_workflow_account .edgeLabel{background-color:#e8e8e8;text-align:center;}#wf_workflow_account .edgeLabel rect{opacity:0.5;background-color:#e8e8e8;fill:#e8e8e8;}#wf_workflow_account .labelBkg{background-color:rgba(232, 232, 232, 0.5);}#wf_workflow_account .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#wf_workflow_account .cluster text{fill:#333;}#wf_workflow_account .cluster span,#wf_workflow_account p{color:#333;}#wf_workflow_account div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:Malgun Gothic,Noto Sans KR,Noto Sans CJK KR,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#wf_workflow_account .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#333;}#wf_workflow_account :root{--mermaid-font-family:Malgun Gothic,Noto Sans KR,Noto Sans CJK KR,sans-serif;}</style><g><marker id="wf_workflow_account_flowchart-pointEnd" class="marker flowchart" viewBox="0 0 10 10" refX="6" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"></path></marker><marker id="wf_workflow_account_flowchart-pointStart" class="marker flowchart" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"></path></marker><marker id="wf_workflow_account_flowchart-circleEnd" class="marker flowchart" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"></circle></marker><marker id="wf_workflow_account_flowchart-circleStart" class="marker flowchart" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"></circle></marker><marker id="wf_workflow_account_flowchart-crossEnd" class="marker cross flowchart" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"></path></marker><marker id="wf_workflow_account_flowchart-crossStart" class="marker cross flowchart" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"></path></marker><g class="root"><g class="clusters"></g><g class="edgePaths"><path d="M319.813,64L319.813,67.75C319.813,71.5,319.813,79,319.813,85.617C319.813,92.233,319.813,97.967,319.813,100.833L319.813,103.7" id="L-S-P-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-S LE-P" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M319.813,190L319.813,193.75C319.813,197.5,319.813,205,319.877,211.7C319.942,218.4,320.07,224.301,320.134,227.251L320.198,230.201" id="L-P-C-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-P LE-C" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M283.24,303.427L254.691,315.189C226.142,326.951,169.044,350.476,140.495,367.021C111.946,383.567,111.946,393.133,111.946,397.917L111.946,402.7" id="L-C-OK-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-C LE-OK" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M320.313,340.5L320.23,346.083C320.147,351.667,319.98,362.833,319.897,374.617C319.813,386.4,319.813,398.8,319.813,405L319.813,411.2" id="L-C-NC-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-C LE-NC" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M360.26,300.553L399.398,312.794C438.536,325.035,516.811,349.518,555.949,367.959C595.087,386.4,595.087,398.8,595.087,405L595.087,411.2" id="L-C-HE-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-C LE-HE" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M319.813,463.5L319.813,468.667C319.813,473.833,319.813,484.167,319.877,492.284C319.942,500.4,320.07,506.301,320.134,509.251L320.198,512.201" id="L-NC-Q-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-NC LE-Q" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M248.987,690.173L224.194,707.644C199.401,725.116,149.816,760.058,125.024,782.312C100.231,804.567,100.231,814.133,100.231,818.917L100.231,823.7" id="L-Q-NO-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-Q LE-NO" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M331.725,750.088L332.423,757.574C333.12,765.059,334.516,780.029,335.213,793.715C335.911,807.4,335.911,819.8,335.911,826L335.911,832.2" id="L-Q-DR-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-Q LE-DR" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M402.319,679.494L441.88,698.745C481.441,717.996,560.563,756.498,600.123,781.949C639.684,807.4,639.684,819.8,639.684,826L639.684,832.2" id="L-Q-W-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-Q LE-W" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M639.684,884.5L639.684,889.667C639.684,894.833,639.684,905.167,639.748,913.284C639.813,921.4,639.941,927.301,640.005,930.251L640.069,933.201" id="L-W-EX-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-W LE-EX" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M590.288,1093.963L576.987,1107.863C563.686,1121.762,537.084,1149.561,523.783,1169.66C510.482,1189.759,510.482,1202.159,510.482,1208.359L510.482,1214.559" id="L-EX-SK-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-EX LE-SK" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M690.08,1093.963L703.215,1107.863C716.349,1121.762,742.618,1149.561,755.752,1168.243C768.886,1186.926,768.886,1196.493,768.886,1201.276L768.886,1206.059" id="L-EX-CR-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-EX LE-CR" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M768.886,1292.359L768.886,1296.109C768.886,1299.859,768.886,1307.359,768.95,1314.06C769.015,1320.76,769.143,1326.66,769.207,1329.61L769.271,1332.561" id="L-CR-V-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-CR LE-V" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M693.434,1533.267L670.048,1551.509C646.662,1569.751,599.889,1606.235,576.503,1630.677C553.117,1655.119,553.117,1667.519,553.117,1673.719L553.117,1679.919" id="L-V-CD-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-V LE-CD" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M757.63,1597.462L756.823,1605.005C756.016,1612.548,754.402,1627.633,753.595,1639.959C752.789,1652.285,752.789,1661.852,752.789,1666.635L752.789,1671.419" id="L-V-VU-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-V LE-VU" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M855.132,1523.473L889.32,1543.347C923.507,1563.222,991.882,1602.97,1026.07,1629.044C1060.257,1655.119,1060.257,1667.519,1060.257,1673.719L1060.257,1679.919" id="L-V-RB-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-V LE-RB" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M1014.293,1732.219L1000.439,1739.302C986.584,1746.385,958.875,1760.552,945.021,1773.835C931.167,1787.119,931.167,1799.519,931.167,1805.719L931.167,1811.919" id="L-RB-RO-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-RB LE-RO" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path><path d="M1106.221,1732.219L1120.076,1739.302C1133.93,1746.385,1161.639,1760.552,1175.494,1772.419C1189.348,1784.285,1189.348,1793.852,1189.348,1798.635L1189.348,1803.419" id="L-RB-RF-0" class=" edge-thickness-normal edge-pattern-solid flowchart-link LS-RB LE-RF" style="fill:none;" marker-end="url(#wf_workflow_account_flowchart-pointEnd)"></path></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><rect rx="0" ry="0" width="0" height="0"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row"></tspan></text></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><rect rx="0" ry="0" width="0" height="0"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row"></tspan></text></g></g><g class="edgeLabel" transform="translate(111.946044921875, 374)"><g class="label" transform="translate(-58.671875, -11.5)"><rect rx="0" ry="0" width="117.28234100341797" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">1순위로 접속됨</tspan></text></g></g><g class="edgeLabel" transform="translate(319.813232421875, 374)"><g class="label" transform="translate(-67.171875, -11.5)"><rect rx="0" ry="0" width="134.26687622070312" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">2순위로만 접속됨</tspan></text></g></g><g class="edgeLabel" transform="translate(595.086669921875, 374)"><g class="label" transform="translate(-78.828125, -11.5)"><rect rx="0" ry="0" width="157.5670623779297" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">둘 다 거부·접속 불가</tspan></text></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><rect rx="0" ry="0" width="0" height="0"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row"></tspan></text></g></g><g class="edgeLabel" transform="translate(100.231201171875, 795)"><g class="label" transform="translate(-100.231201171875, -11.5)"><rect rx="0" ry="0" width="200.3497314453125" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">n · 비대화형 · -no-prompt</tspan></text></g></g><g class="edgeLabel" transform="translate(335.910888671875, 795)"><g class="label" transform="translate(-32.4921875, -11.5)"><rect rx="0" ry="0" width="64.93810272216797" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">-dry-run</tspan></text></g></g><g class="edgeLabel" transform="translate(639.684326171875, 795)"><g class="label" transform="translate(-5.5, -11.5)"><rect rx="0" ry="0" width="11.000102043151855" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">Y</tspan></text></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><rect rx="0" ry="0" width="0" height="0"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row"></tspan></text></g></g><g class="edgeLabel" transform="translate(510.482421875, 1177.359375)"><g class="label" transform="translate(-8.5, -11.5)"><rect rx="0" ry="0" width="17.000158309936523" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">예</tspan></text></g></g><g class="edgeLabel" transform="translate(768.88623046875, 1177.359375)"><g class="label" transform="translate(-25.5, -11.5)"><rect rx="0" ry="0" width="50.98484802246094" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">아니오</tspan></text></g></g><g class="edgeLabel"><g class="label" transform="translate(0, 0)"><rect rx="0" ry="0" width="0" height="0"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row"></tspan></text></g></g><g class="edgeLabel" transform="translate(553.11669921875, 1642.71875)"><g class="label" transform="translate(-17, -11.5)"><rect rx="0" ry="0" width="33.99030685424805" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">성공</tspan></text></g></g><g class="edgeLabel" transform="translate(752.78857421875, 1642.71875)"><g class="label" transform="translate(-36.9921875, -11.5)"><rect rx="0" ry="0" width="73.94369506835938" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">통신 오류</tspan></text></g></g><g class="edgeLabel" transform="translate(1060.25732421875, 1642.71875)"><g class="label" transform="translate(-36.9921875, -11.5)"><rect rx="0" ry="0" width="73.94369506835938" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">인증 거부</tspan></text></g></g><g class="edgeLabel" transform="translate(931.1666259765625, 1774.71875)"><g class="label" transform="translate(-17, -11.5)"><rect rx="0" ry="0" width="33.99030685424805" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">성공</tspan></text></g></g><g class="edgeLabel" transform="translate(1189.3480224609375, 1774.71875)"><g class="label" transform="translate(-17, -11.5)"><rect rx="0" ry="0" width="33.98469161987305" height="22.00020408630371"></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">실패</tspan></text></g></g></g><g class="nodes"><g class="node default default flowchart-label" id="flowchart-S-187" data-node="true" data-id="S" transform="translate(319.813232421875, 32)"><rect style="" rx="32" ry="32" x="-124.9375" y="-32" width="249.875" height="64"></rect><g class="label" style="" transform="translate(0, -20)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">bash account_create.sh</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">또는 bios_check.sh 끝 [Y/n]</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-P-188" data-node="true" data-id="P" transform="translate(319.813232421875, 149.5)"><rect class="basic label-container" style="" rx="0" ry="0" x="-295.0546875" y="-40.5" width="590.109375" height="81"></rect><g class="label" style="" transform="translate(0, -28.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">1. 점검 (읽기 전용)</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">1순위 계정 로그인</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">거부(401)면 비인증 ServiceRoot 로 벤더 식별 후 rf.conf admin 로그인 1회</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-C-190" data-node="true" data-id="C" transform="translate(319.813232421875, 287.5)"><polygon points="52.5,0 105,-52.5 52.5,-105 0,-52.5" class="label-container" transform="translate(-52.5,52.5)" style=""></polygon><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">결과</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-OK-192" data-node="true" data-id="OK" transform="translate(111.946044921875, 440)"><rect style="" rx="32" ry="32" x="-76.9765625" y="-32" width="153.953125" height="64"></rect><g class="label" style="" transform="translate(0, -20)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">PRIMARY_OK</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">만들 필요 없음</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-NC-194" data-node="true" data-id="NC" transform="translate(319.813232421875, 440)"><rect class="basic label-container" style="" rx="0" ry="0" x="-85.890625" y="-23.5" width="171.78125" height="47"></rect><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">NEED_CREATE 목록</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-HE-196" data-node="true" data-id="HE" transform="translate(595.086669921875, 440)"><rect style="" rx="23.5" ry="23.5" x="-144.3828125" y="-23.5" width="288.765625" height="47"></rect><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">호스트 오류 상태 (AUTH_FAIL 등)</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-Q-198" data-node="true" data-id="Q" transform="translate(319.813232421875, 639)"><polygon points="122,0 244,-122 122,-244 0,-122" class="label-container" transform="translate(-122,122)" style=""></polygon><g class="label" style="" transform="translate(0, -20)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">2. 대상 목록 표시 후</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">Y/n (빈 입력 = Y)</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-NO-200" data-node="true" data-id="NO" transform="translate(100.231201171875, 861)"><rect style="" rx="32" ry="32" x="-85.4765625" y="-32" width="170.953125" height="64"></rect><g class="label" style="" transform="translate(0, -20)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">만들지 않고 종료</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">안내만</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-DR-202" data-node="true" data-id="DR" transform="translate(335.910888671875, 861)"><rect style="" rx="23.5" ry="23.5" x="-105.203125" y="-23.5" width="210.40625" height="47"></rect><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">계획만 출력, 쓰기 없음</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-W-204" data-node="true" data-id="W" transform="translate(639.684326171875, 861)"><rect class="basic label-container" style="" rx="0" ry="0" x="-153.5703125" y="-23.5" width="307.140625" height="47"></rect><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">3. admin 로그인 → 계정 컬렉션 읽기</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-EX-206" data-node="true" data-id="EX" transform="translate(639.684326171875, 1040.6796875)"><polygon points="102.6796875,0 205.359375,-102.6796875 102.6796875,-205.359375 0,-102.6796875" class="label-container" transform="translate(-102.6796875,102.6796875)" style=""></polygon><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">같은 id 가 있는가</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-SK-208" data-node="true" data-id="SK" transform="translate(510.482421875, 1251.859375)"><rect style="" rx="32" ry="32" x="-73.9921875" y="-32" width="147.984375" height="64"></rect><g class="label" style="" transform="translate(0, -20)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">SKIP_EXISTS</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">덮어쓰지 않음</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-CR-210" data-node="true" data-id="CR" transform="translate(768.88623046875, 1251.859375)"><rect class="basic label-container" style="" rx="0" ry="0" x="-139.41162109375" y="-40.5" width="278.8232421875" height="81"></rect><g class="label" style="" transform="translate(0, -28.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">관리자 역할로 생성</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">Dell 빈 슬롯 PATCH / 그 밖 POST</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">UCSM: aaaUser created</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-V-212" data-node="true" data-id="V" transform="translate(768.88623046875, 1473.0390625)"><polygon points="135.6796875,0 271.359375,-135.6796875 135.6796875,-271.359375 0,-135.6796875" class="label-container" transform="translate(-135.6796875,135.6796875)" style=""></polygon><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">4. 새 계정으로 로그인 1회</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-CD-214" data-node="true" data-id="CD" transform="translate(553.11669921875, 1708.71875)"><rect style="" rx="23.5" ry="23.5" x="-52.859375" y="-23.5" width="105.71875" height="47"></rect><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">CREATED</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-VU-216" data-node="true" data-id="VU" transform="translate(752.78857421875, 1708.71875)"><rect style="" rx="32" ry="32" x="-101.8125" y="-32" width="203.625" height="64"></rect><g class="label" style="" transform="translate(0, -20)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">VERIFY_UNKNOWN</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">롤백 안 함, 수동 확인</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-RB-218" data-node="true" data-id="RB" transform="translate(1060.25732421875, 1708.71875)"><rect class="basic label-container" style="" rx="0" ry="0" x="-160.65625" y="-23.5" width="321.3125" height="47"></rect><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">5. 이번 실행이 만든 계정만 삭제 (롤백)</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-RO-220" data-node="true" data-id="RO" transform="translate(931.1666259765625, 1840.71875)"><rect style="" rx="23.5" ry="23.5" x="-122.782958984375" y="-23.5" width="245.56591796875" height="47"></rect><g class="label" style="" transform="translate(0, -11.5)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">VERIFY_FAIL_ROLLED_BACK</tspan></text></g></g><g class="node default default flowchart-label" id="flowchart-RF-222" data-node="true" data-id="RF" transform="translate(1189.3480224609375, 1840.71875)"><rect style="" rx="32" ry="32" x="-90.3984375" y="-32" width="180.796875" height="64"></rect><g class="label" style="" transform="translate(0, -20)"><rect></rect><text style=""><tspan xml:space="preserve" dy="1em" x="0" class="row">ROLLBACK_FAILED</tspan><tspan xml:space="preserve" dy="1em" x="0" class="row">수동 조치</tspan></text></g></g></g></g></g></svg>
+<svg viewBox="0 0 1340 1660" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="계정 생성 · 비밀번호 변경 내부 처리 흐름">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="1340" height="1660" class="bg"/>
+  <text x="670" y="30" class="t ttl" text-anchor="middle">계정 생성 · 비밀번호 변경 내부 처리 흐름 (bash bios.sh 기준)</text>
+
+  <!-- ===================== A. 점검 중 2순위 접속 → 점검 끝 계정 생성 · 재점검 ===================== -->
+  <rect x="20" y="48" width="740" height="30" rx="6" class="ext"/>
+  <text x="390" y="68" class="t tb" text-anchor="middle">A. bash bios.sh (TUI · -plain) — ① 점검 중 2순위 접속 → ② 점검 끝 계정 생성 · 재점검</text>
+  <text x="45" y="132" class="t tb" text-anchor="middle">①</text>
+  <text x="45" y="468" class="t tb" text-anchor="middle">②</text>
+
+  <rect x="70" y="94" width="440" height="68" rx="6" class="box"/>
+  <text x="290" y="114" class="t tb" text-anchor="middle">prepare — 비밀번호 복호화 (메모리에서만)</text>
+  <text x="290" y="131" class="t" text-anchor="middle">pass.enc → key.bin 으로 AES-256-GCM 복호화 (1순위)</text>
+  <text x="290" y="148" class="t" text-anchor="middle">loadRFConfEnc: rf.conf 계정명 + rf.enc 벤더별 복호화</text>
+
+  <rect x="70" y="186" width="440" height="52" rx="6" class="dec"/>
+  <text x="290" y="207" class="t tb" text-anchor="middle">호스트마다 1순위 로그인 (bios.conf user + pass.enc)</text>
+  <text x="290" y="224" class="t" text-anchor="middle">성공 → 1순위로 점검 · 401 이 아닌 실패 → 그 오류 그대로</text>
+
+  <rect x="70" y="262" width="440" height="68" rx="6" class="dec"/>
+  <text x="290" y="282" class="t tb" text-anchor="middle">벤더 식별 + rf.conf 에 그 벤더 계정 ?</text>
+  <text x="290" y="299" class="t" text-anchor="middle">비인증 ServiceRoot: Vendor → Oem 키 → Product → Name</text>
+  <text x="290" y="316" class="t" text-anchor="middle">아니오 → AUTH_FAIL (다른 벤더 계정은 넣어 보지 않음)</text>
+
+  <rect x="70" y="354" width="440" height="52" rx="6" class="ldap"/>
+  <text x="290" y="375" class="t tb" text-anchor="middle">2순위 계정으로 정확히 1회 로그인 (재시도 0)</text>
+  <text x="290" y="392" class="t" text-anchor="middle">성공 → 2순위로 점검 (읽기 전용) · 실패 → AUTH_FAIL</text>
+
+  <rect x="70" y="430" width="440" height="68" rx="6" class="box"/>
+  <text x="290" y="450" class="t tb" text-anchor="middle">점검 끝 offerAccountCreate (TUI 는 닫은 뒤 · -plain)</text>
+  <text x="290" y="467" class="t" text-anchor="middle">AUTH_FAIL → account_unfixable.txt (생성 불가, 사유 10대 표시)</text>
+  <text x="290" y="484" class="t" text-anchor="middle">2순위로 점검한 호스트 → account_targets.txt (생성 대상)</text>
+
+  <rect x="70" y="522" width="440" height="52" rx="6" class="dec"/>
+  <text x="290" y="543" class="t tb" text-anchor="middle">생성 대상 있음 · 2순위 계정 로드됨 ?</text>
+  <text x="290" y="560" class="t" text-anchor="middle">없음 → 끝 (생성 불가 목록만 남김)</text>
+
+  <rect x="70" y="598" width="440" height="52" rx="6" class="box"/>
+  <text x="290" y="619" class="t tb" text-anchor="middle">newAcctEnv — user2 있으면 pass2.enc 복호화</text>
+  <text x="290" y="636" class="t" text-anchor="middle">복호화 실패 → 만들지 않음 · 대상 · 계정(권한)별 대수 표시</text>
+
+  <rect x="70" y="674" width="440" height="68" rx="6" class="dec"/>
+  <text x="290" y="694" class="t tb" text-anchor="middle">계정을 만들까요? [계정(권한) N대 …] [Y/n]</text>
+  <text x="290" y="711" class="t" text-anchor="middle">터미널 입력일 때만 · 빈 입력 = Y · 미리 눌린 Enter 는 버림</text>
+  <text x="290" y="728" class="t" text-anchor="middle">n · -no-prompt · 터미널 아님 → 만들지 않음</text>
+
+  <rect x="70" y="766" width="440" height="52" rx="6" class="box"/>
+  <text x="290" y="787" class="t tb" text-anchor="middle">createHosts — 처음 10대는 한 대씩 (웜업)</text>
+  <text x="290" y="804" class="t" text-anchor="middle">절반 이상 실패 → 나머지 SKIPPED_WARMUP_FAIL · 그 뒤 병렬</text>
+
+  <rect x="70" y="842" width="440" height="68" rx="6" class="ldap"/>
+  <text x="290" y="862" class="t tb" text-anchor="middle">호스트마다 admin 로그인 1회 (openAdmin, 계정 모드)</text>
+  <text x="290" y="879" class="t" text-anchor="middle">비인증 ServiceRoot 로 벤더 → rf.conf 그 벤더 admin 계정</text>
+  <text x="290" y="896" class="t" text-anchor="middle">실패 → 그 호스트의 모든 칸 NO_ADMIN / AUTH_FAIL 등</text>
+
+  <rect x="70" y="934" width="440" height="52" rx="6" class="box"/>
+  <text x="290" y="955" class="t tb" text-anchor="middle">계정 칸 차례로: 계정1 user → 계정2 user2 (같은 세션)</text>
+  <text x="290" y="972" class="t" text-anchor="middle">칸마다 계정 목록 다시 읽기 (앞 계정이 빈 슬롯을 썼을 수 있음)</text>
+
+  <rect x="70" y="1010" width="440" height="52" rx="6" class="dec"/>
+  <text x="290" y="1031" class="t tb" text-anchor="middle">같은 id 가 이미 있음 ?</text>
+  <text x="290" y="1048" class="t" text-anchor="middle">예 → SKIP_EXISTS (덮어쓰지 않음) · 아니오 → 빈 슬롯 · Role 고름</text>
+
+  <rect x="70" y="1086" width="440" height="68" rx="6" class="sec"/>
+  <text x="290" y="1106" class="t tb" text-anchor="middle">생성 요청 — 허용 RoleId · 고정 본문만 (account_gate.go)</text>
+  <text x="290" y="1123" class="t" text-anchor="middle">RoleId: Administrator · Operator · ReadOnly 후보만</text>
+  <text x="290" y="1140" class="t" text-anchor="middle">Dell 빈 슬롯 PATCH 또는 POST · HPE iLO4 는 Oem 권한</text>
+
+  <rect x="70" y="1178" width="440" height="52" rx="6" class="dec"/>
+  <text x="290" y="1199" class="t tb" text-anchor="middle">새 계정으로 1회 로그인 검증 (읽기 전용)</text>
+  <text x="290" y="1216" class="t" text-anchor="middle">성공 → CREATED · 통신 오류 → VERIFY_UNKNOWN (롤백 안 함)</text>
+
+  <rect x="70" y="1254" width="440" height="68" rx="6" class="sec"/>
+  <text x="290" y="1274" class="t tb" text-anchor="middle">인증 거부 → 롤백: 이번 실행이 만든 계정만</text>
+  <text x="290" y="1291" class="t" text-anchor="middle">POST 로 만듦 → DELETE (안 되면 비활성 → 이름 비움)</text>
+  <text x="290" y="1308" class="t" text-anchor="middle">슬롯 PATCH 로 만듦 → 비활성 → 이름 비움 (원래 계정은 손대지 않음)</text>
+
+  <rect x="70" y="1376" width="440" height="52" rx="6" class="box"/>
+  <text x="290" y="1397" class="t tb" text-anchor="middle">결과 요약 · account_result.tsv (0600)</text>
+  <text x="290" y="1414" class="t" text-anchor="middle">비밀번호·해시 없음 · 랜덤 서버 몇 대 직접 로그인 확인 안내</text>
+
+  <rect x="70" y="1452" width="440" height="52" rx="6" class="dec"/>
+  <text x="290" y="1473" class="t tb" text-anchor="middle">dry-run 아님 · 1순위 계정 CREATED 호스트 있음 ?</text>
+  <text x="290" y="1490" class="t" text-anchor="middle">아니오 → 끝 (SKIP_EXISTS · 실패 호스트는 다시 접속 안 함)</text>
+
+  <rect x="70" y="1528" width="440" height="68" rx="6" class="box"/>
+  <text x="290" y="1548" class="t tb" text-anchor="middle">1순위 CREATED 호스트만 1순위 계정으로 재점검</text>
+  <text x="290" y="1565" class="t" text-anchor="middle">doCheck (읽기 전용, 쓰기 없음) → 결과 폴더/recheck/&lt;일시&gt;/</text>
+  <text x="290" y="1582" class="t" text-anchor="middle">원래 결과에 바꿔 끼움 → profile_merged_* CSV · 대수 요약</text>
+
+  <!-- A 세로 흐름 -->
+  <path d="M290 162 L290 186" class="ln"/>
+  <path d="M290 238 L290 262" class="ln"/>
+  <text x="298" y="254" class="t tm">401 (AUTH_FAIL)</text>
+  <path d="M290 330 L290 354" class="ln"/>
+  <text x="298" y="346" class="t tm">예</text>
+  <path d="M290 406 L290 430" class="ln"/>
+  <text x="298" y="422" class="t tm">점검 끝</text>
+  <path d="M290 498 L290 522" class="ln"/>
+  <path d="M290 574 L290 598" class="ln"/>
+  <text x="298" y="590" class="t tm">있음</text>
+  <path d="M290 650 L290 674" class="ln"/>
+  <path d="M290 742 L290 766" class="ln"/>
+  <text x="298" y="758" class="t tm">Y · 빈 입력</text>
+  <path d="M290 818 L290 842" class="ln"/>
+  <path d="M290 910 L290 934" class="ln"/>
+  <text x="298" y="926" class="t tm">로그인 성공</text>
+  <path d="M290 986 L290 1010" class="ln"/>
+  <path d="M290 1062 L290 1086" class="ln"/>
+  <text x="298" y="1078" class="t tm">아니오</text>
+  <path d="M290 1154 L290 1178" class="ln"/>
+  <text x="298" y="1170" class="t tm">생성됨</text>
+  <path d="M290 1230 L290 1254" class="ln"/>
+  <text x="298" y="1246" class="t tm">인증 거부</text>
+  <path d="M290 1428 L290 1452" class="ln"/>
+  <path d="M290 1504 L290 1528" class="ln"/>
+  <text x="298" y="1520" class="t tm">예</text>
+
+  <!-- A 오른쪽: 입력 파일 · 분기 · 칸 결과 -->
+  <rect x="540" y="94" width="220" height="110" rx="6" class="ext"/>
+  <text x="650" y="114" class="t tb" text-anchor="middle">rf.conf · rf.enc (2순위)</text>
+  <text x="650" y="132" class="t tm" text-anchor="middle">rf.conf: &lt;vendor&gt;_user (계정명만)</text>
+  <text x="650" y="148" class="t tm" text-anchor="middle">rf.enc: 벤더당 한 줄 암호문</text>
+  <text x="650" y="164" class="t tm" text-anchor="middle">평문 &lt;vendor&gt;_pass → 경고 후 사용</text>
+  <text x="650" y="180" class="t tm" text-anchor="middle">(같은 벤더는 rf.enc 우선)</text>
+  <text x="650" y="196" class="t tm" text-anchor="middle">rf.conf 없음 → 2순위 기능 꺼짐</text>
+  <path d="M540 128 L512 128" class="dash"/>
+
+  <text x="540" y="384" class="t tm">같은 BMC 인증 시도 최대 2회</text>
+  <text x="540" y="458" class="t tm">-auto · -auto-check 는</text>
+  <text x="540" y="474" class="t tm">이 질문 단계를 부르지 않음</text>
+
+  <rect x="540" y="602" width="220" height="52" rx="6" class="ext"/>
+  <text x="650" y="623" class="t tb" text-anchor="middle">만들지 않고 끝</text>
+  <text x="650" y="640" class="t tm" text-anchor="middle">나중에: bash bios.sh account</text>
+  <path d="M510 548 L650 548 L650 602" class="ln"/>
+  <text x="518" y="542" class="t tm">없음</text>
+  <path d="M510 708 L650 708 L650 654" class="ln"/>
+  <text x="518" y="702" class="t tm">아니오</text>
+
+  <rect x="540" y="716" width="220" height="116" rx="6" class="ext"/>
+  <text x="650" y="736" class="t tb" text-anchor="middle">bash bios.sh account (단독)</text>
+  <text x="650" y="754" class="t tm" text-anchor="middle">1순위 → 2순위 1회로 읽기 점검</text>
+  <text x="650" y="770" class="t tm" text-anchor="middle">user2 는 계정 목록으로만 확인</text>
+  <text x="650" y="786" class="t tm" text-anchor="middle">같은 [Y/n] → 아래 생성 흐름</text>
+  <text x="650" y="802" class="t tm" text-anchor="middle">재점검 없음 (점검 끝 질문만 함)</text>
+  <text x="650" y="818" class="t tm" text-anchor="middle">-dry-run: 계획만 · 쓰기 없음</text>
+  <path d="M540 792 L512 792" class="dash"/>
+
+  <rect x="540" y="846" width="220" height="476" rx="6" class="box"/>
+  <text x="650" y="866" class="t tb" text-anchor="middle">칸(계정)별 결과 상태</text>
+  <text x="650" y="884" class="t tm" text-anchor="middle">NO_ADMIN · AUTH_FAIL 등</text>
+  <text x="650" y="900" class="t tm" text-anchor="middle">(admin 로그인 실패)</text>
+  <text x="650" y="1032" class="t tm" text-anchor="middle">SKIP_EXISTS</text>
+  <text x="650" y="1048" class="t tm" text-anchor="middle">이미 있음 — 덮어쓰지 않음</text>
+  <text x="650" y="1112" class="t tm" text-anchor="middle">WOULD_CREATE (dry-run)</text>
+  <text x="650" y="1128" class="t tm" text-anchor="middle">REJECTED · NO_FREE_SLOT</text>
+  <text x="650" y="1144" class="t tm" text-anchor="middle">(BMC 거부 · 빈 슬롯 없음)</text>
+  <text x="650" y="1198" class="t tm" text-anchor="middle">CREATED (검증 통과)</text>
+  <text x="650" y="1214" class="t tm" text-anchor="middle">VERIFY_UNKNOWN (수동 확인)</text>
+  <text x="650" y="1282" class="t tm" text-anchor="middle">VERIFY_FAIL_ROLLED_BACK</text>
+  <text x="650" y="1298" class="t tm" text-anchor="middle">ROLLBACK_FAILED (수동 조치)</text>
+  <path d="M510 876 L540 876" class="ln"/>
+  <path d="M510 1036 L540 1036" class="ln"/>
+  <path d="M510 1120 L540 1120" class="ln"/>
+  <path d="M510 1204 L540 1204" class="ln"/>
+  <path d="M510 1288 L540 1288" class="ln"/>
+  <path d="M650 1322 L650 1402 L510 1402" class="ln"/>
+  <text x="658" y="1356" class="t tm">모든 호스트 끝</text>
+  <path d="M590 1322 L590 1342 L40 1342 L40 960 L70 960" class="ln"/>
+  <text x="80" y="1360" class="t tm">다음 계정 칸 (user2) — 같은 admin 세션</text>
+
+  <rect x="540" y="1440" width="220" height="100" rx="6" class="sec"/>
+  <text x="650" y="1460" class="t tb" text-anchor="middle">비밀번호 출력 금지</text>
+  <text x="650" y="1478" class="t tm" text-anchor="middle">argv·환경변수·로그·결과 파일</text>
+  <text x="650" y="1494" class="t tm" text-anchor="middle">오류 메시지 어디에도 싣지 않음</text>
+  <text x="650" y="1510" class="t tm" text-anchor="middle">AddSecret: BMC 응답에서도 가림</text>
+  <text x="650" y="1526" class="t tm" text-anchor="middle">dry-run 본문은 Password=*****</text>
+
+  <!-- ===================== B. passwd ===================== -->
+  <rect x="790" y="48" width="530" height="30" rx="6" class="ext"/>
+  <text x="1055" y="68" class="t tb" text-anchor="middle">B. bash bios.sh passwd — 1순위 비밀번호 변경 (account change)</text>
+
+  <rect x="800" y="94" width="330" height="68" rx="6" class="box"/>
+  <text x="965" y="114" class="t tb" text-anchor="middle">passwd → biostool account change</text>
+  <text x="965" y="131" class="t" text-anchor="middle">참고용 안내 → 바이너리 직접 실행 (래퍼 없음)</text>
+  <text x="965" y="148" class="t" text-anchor="middle">pass.enc 복호화 = 현재(이전) 비밀번호</text>
+
+  <rect x="800" y="186" width="330" height="84" rx="6" class="sec"/>
+  <text x="965" y="206" class="t tb" text-anchor="middle">새 비밀번호 직접 입력 (raw 터미널)</text>
+  <text x="965" y="223" class="t" text-anchor="middle">글자마다 * 만 표시 · 두 번 입력이 같아야 함</text>
+  <text x="965" y="240" class="t" text-anchor="middle">붙여넣기 거부: 여러 글자 동시 · 8ms 미만 간격 ·</text>
+  <text x="965" y="257" class="t" text-anchor="middle">ESC[200~ (bracketed paste) · 비터미널 거부</text>
+
+  <rect x="800" y="294" width="330" height="52" rx="6" class="dec"/>
+  <text x="965" y="315" class="t tb" text-anchor="middle">N대의 user 비밀번호를 지금 바꿉니다 [y/N]</text>
+  <text x="965" y="332" class="t" text-anchor="middle">기본 N — 명시적 y 만 진행 · -no-prompt 면 끝</text>
+
+  <rect x="800" y="370" width="330" height="52" rx="6" class="box"/>
+  <text x="965" y="391" class="t tb" text-anchor="middle">웜업 10대 순차 → 병렬 (create 와 같은 풀)</text>
+  <text x="965" y="408" class="t" text-anchor="middle">절반 이상 실패 → 나머지 SKIPPED_WARMUP_FAIL</text>
+
+  <rect x="800" y="446" width="330" height="52" rx="6" class="dec"/>
+  <text x="965" y="467" class="t tb" text-anchor="middle">1순위 계정으로 로그인 (계정 모드) ?</text>
+  <text x="965" y="484" class="t" text-anchor="middle">실패 → 변경 안 함 (admin 세션은 쓰지 않음)</text>
+
+  <rect x="800" y="522" width="330" height="52" rx="6" class="box"/>
+  <text x="965" y="543" class="t tb" text-anchor="middle">계정 목록에서 이름이 정확히 같은 계정 찾기</text>
+  <text x="965" y="560" class="t" text-anchor="middle">없음 → NO_ACCOUNT · -dry-run 은 여기서 멈춤</text>
+
+  <rect x="800" y="598" width="330" height="52" rx="6" class="sec"/>
+  <text x="965" y="619" class="t tb" text-anchor="middle">PATCH {"Password"} 만 허용 (본문 고정 검사)</text>
+  <text x="965" y="636" class="t" text-anchor="middle">AllowAccountTarget 로 등록한 자기 계정 경로에만</text>
+
+  <rect x="800" y="674" width="330" height="52" rx="6" class="dec"/>
+  <text x="965" y="695" class="t tb" text-anchor="middle">새 비밀번호로 1회 로그인 검증</text>
+  <text x="965" y="712" class="t" text-anchor="middle">성공 → CHANGED · 통신 오류 → VERIFY_UNKNOWN</text>
+
+  <rect x="800" y="750" width="330" height="68" rx="6" class="sec"/>
+  <text x="965" y="770" class="t tb" text-anchor="middle">인증 거부 → 열린 세션으로 이전 비밀번호 PATCH</text>
+  <text x="965" y="787" class="t" text-anchor="middle">재로그인 OK → VERIFY_FAIL_ROLLED_BACK</text>
+  <text x="965" y="804" class="t" text-anchor="middle">되돌리기 실패 → ROLLBACK_FAILED (수동 확인)</text>
+
+  <rect x="800" y="842" width="330" height="68" rx="6" class="box"/>
+  <text x="965" y="862" class="t tb" text-anchor="middle">결과 · account_result.tsv · pass.enc 는 그대로</text>
+  <text x="965" y="879" class="t" text-anchor="middle">자동 갱신 안 함 → cd &lt;폴더&gt;; bash encrypt.sh 안내</text>
+  <text x="965" y="896" class="t" text-anchor="middle">실패 N대 있으면 옛 비밀번호 유지 경고</text>
+
+  <path d="M965 162 L965 186" class="ln"/>
+  <path d="M965 270 L965 294" class="ln"/>
+  <path d="M965 346 L965 370" class="ln"/>
+  <text x="973" y="362" class="t tm">y</text>
+  <path d="M965 422 L965 446" class="ln"/>
+  <path d="M965 498 L965 522" class="ln"/>
+  <text x="973" y="514" class="t tm">성공</text>
+  <path d="M965 574 L965 598" class="ln"/>
+  <text x="973" y="590" class="t tm">있음</text>
+  <path d="M965 650 L965 674" class="ln"/>
+  <path d="M965 726 L965 750" class="ln"/>
+  <text x="973" y="742" class="t tm">인증 거부</text>
+  <path d="M965 818 L965 842" class="ln"/>
+  <path d="M800 700 L780 700 L780 876 L800 876" class="ln"/>
+
+  <rect x="1150" y="186" width="170" height="100" rx="6" class="ext"/>
+  <text x="1235" y="206" class="t tb" text-anchor="middle">-dry-run</text>
+  <text x="1235" y="224" class="t tm" text-anchor="middle">입력 · y/N 확인 건너뜀</text>
+  <text x="1235" y="240" class="t tm" text-anchor="middle">로그인 · 목록만 읽고</text>
+  <text x="1235" y="256" class="t tm" text-anchor="middle">변경 직전 멈춤</text>
+  <text x="1235" y="272" class="t tm" text-anchor="middle">→ WOULD_CHANGE</text>
+  <path d="M1235 286 L1235 396 L1130 396" class="dash"/>
+
+  <rect x="1150" y="446" width="170" height="68" rx="6" class="ext"/>
+  <text x="1235" y="466" class="t tb" text-anchor="middle">-ucsm (UCSM XML)</text>
+  <text x="1235" y="484" class="t tm" text-anchor="middle">configConfMo 로 같은 순서</text>
+  <text x="1235" y="500" class="t tm" text-anchor="middle">UCSM 한 대씩 순차</text>
+  <path d="M1150 472 L1130 472" class="dash"/>
+
+  <!-- ===================== C. encrypt rf ===================== -->
+  <rect x="790" y="940" width="530" height="30" rx="6" class="ext"/>
+  <text x="1055" y="960" class="t tb" text-anchor="middle">C. bash encrypt.sh rf [벤더] — 2순위 비밀번호 → rf.enc</text>
+
+  <rect x="800" y="986" width="330" height="68" rx="6" class="box"/>
+  <text x="965" y="1006" class="t tb" text-anchor="middle">encrypt.sh rf [벤더] — 벤더 이름 검사</text>
+  <text x="965" y="1023" class="t" text-anchor="middle">dell · hpe · lenovo · supermicro · cisco · cray</text>
+  <text x="965" y="1040" class="t" text-anchor="middle">표준입력이 터미널이 아니면 오류 (직접 입력만)</text>
+
+  <rect x="800" y="1078" width="330" height="68" rx="6" class="dec"/>
+  <text x="965" y="1098" class="t tb" text-anchor="middle">벤더를 지정했나 ?</text>
+  <text x="965" y="1115" class="t" text-anchor="middle">예 → 그 벤더만 (rf.conf 에 _user 없으면 주의만)</text>
+  <text x="965" y="1132" class="t" text-anchor="middle">아니오 → rf.conf 의 _user 있는 벤더를 차례로</text>
+
+  <rect x="800" y="1170" width="330" height="52" rx="6" class="sec"/>
+  <text x="965" y="1191" class="t tb" text-anchor="middle">벤더마다 biostool encrypt -rf &lt;벤더&gt;</text>
+  <text x="965" y="1208" class="t" text-anchor="middle">* 표시 · 붙여넣기 거부 · 두 번 입력 일치</text>
+
+  <rect x="800" y="1246" width="330" height="68" rx="6" class="dec"/>
+  <text x="965" y="1266" class="t tb" text-anchor="middle">rf.enc 에 이미 벤더 줄이 있나 ?</text>
+  <text x="965" y="1283" class="t" text-anchor="middle">예 → 기존 key.bin 으로 모든 줄이 풀리는지 확인</text>
+  <text x="965" y="1300" class="t" text-anchor="middle">아니오 → key.bin 읽기 (없으면 새로 만듦, 0600)</text>
+
+  <rect x="800" y="1338" width="330" height="68" rx="6" class="box"/>
+  <text x="965" y="1358" class="t tb" text-anchor="middle">AES-256-GCM 암호화 (key.bin, 32바이트 키)</text>
+  <text x="965" y="1375" class="t" text-anchor="middle">한 줄 = &lt;vendor&gt;=&lt;base64(nonce‖암호문)&gt;</text>
+  <text x="965" y="1392" class="t" text-anchor="middle">그 벤더 줄만 교체 · 없으면 추가 · 다른 줄 · 주석 유지</text>
+
+  <rect x="800" y="1430" width="330" height="68" rx="6" class="box"/>
+  <text x="965" y="1450" class="t tb" text-anchor="middle">임시 파일에 쓰고 rename · 권한 0600</text>
+  <text x="965" y="1467" class="t" text-anchor="middle">encrypt.sh: rf.enc · key.bin 권한 600 보정</text>
+  <text x="965" y="1484" class="t" text-anchor="middle">rf.conf 에 평문 _pass 남아 있으면 지우라고 주의</text>
+  <text x="800" y="1522" class="t tm">다음 실행부터 A ① 의 2순위 로그인에 쓰임 (평문 _pass 보다 rf.enc 우선)</text>
+
+  <path d="M965 1054 L965 1078" class="ln"/>
+  <path d="M965 1146 L965 1170" class="ln"/>
+  <path d="M965 1222 L965 1246" class="ln"/>
+  <path d="M965 1314 L965 1338" class="ln"/>
+  <text x="973" y="1330" class="t tm">확인 통과 / 새 키</text>
+  <path d="M965 1406 L965 1430" class="ln"/>
+
+  <rect x="1150" y="1246" width="170" height="68" rx="6" class="sec"/>
+  <text x="1235" y="1266" class="t tb" text-anchor="middle">키 불일치</text>
+  <text x="1235" y="1284" class="t tm" text-anchor="middle">한 줄이라도 안 풀림 →</text>
+  <text x="1235" y="1300" class="t tm" text-anchor="middle">덮어쓰기 거부 (그대로)</text>
+  <path d="M1130 1280 L1150 1280" class="ln"/>
+
+  <!-- 범례 -->
+  <rect x="70" y="1626" width="14" height="14" class="box"/><text x="90" y="1637" class="t tm">처리</text>
+  <rect x="150" y="1626" width="14" height="14" class="dec"/><text x="170" y="1637" class="t tm">판정·분기</text>
+  <rect x="250" y="1626" width="14" height="14" class="ldap"/><text x="270" y="1637" class="t tm">2순위(rf.conf) 계정 접속</text>
+  <rect x="430" y="1626" width="14" height="14" class="sec"/><text x="450" y="1637" class="t tm">안전장치 (허용 RoleId·롤백·입력·비밀번호 숨김)</text>
+  <rect x="800" y="1626" width="14" height="14" class="ext"/><text x="820" y="1637" class="t tm">외부 파일·옵션·구역 제목 (점선 = 보조 경로)</text>
+</svg>
