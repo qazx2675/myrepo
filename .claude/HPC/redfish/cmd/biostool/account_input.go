@@ -119,68 +119,11 @@ const pasteNotice = "※ 복사·붙여넣기는 사용할 수 없습니다. 붙
 // readNewPassword 는 새 비밀번호를 2번 입력받아 같을 때 돌려줍니다 (최대 maxSecretTry 번 다시 시도).
 // 터미널이 아니거나 raw 입력을 지원하지 않으면 오류입니다. 비밀번호는 어디에도 기록하지 않습니다.
 func readNewPassword(in *os.File, out io.Writer) (string, error) {
-	fd := int(in.Fd())
-	if !ttyIsTerminal(fd) {
-		return "", errNotTerminal
-	}
-	restore, err := ttyMakeRaw(fd)
+	ask, done, err := openSecretInput(in, out)
 	if err != nil {
-		return "", fmt.Errorf("터미널을 raw 모드로 바꿀 수 없습니다: %v", err)
+		return "", err
 	}
-	// 어떤 경로로 끝나도 터미널을 되돌린다 (신호 포함).
-	done := make(chan struct{})
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		select {
-		case <-sigc:
-			fmt.Fprint(out, "\x1b[?2004l")
-			restore()
-			fmt.Fprintln(out)
-			os.Exit(130)
-		case <-done:
-		}
-	}()
-	defer func() {
-		close(done)
-		signal.Stop(sigc)
-		fmt.Fprint(out, "\x1b[?2004l") // bracketed paste 끄기
-		restore()
-	}()
-	fmt.Fprint(out, "\x1b[?2004h") // bracketed paste 켜기 (지원 터미널은 붙여넣기를 ESC[200~ 로 감싸 보냄)
-
-	rbuf := make([]byte, 256)
-	next := func() ([]byte, time.Time, error) {
-		n, err := in.Read(rbuf)
-		at := time.Now()
-		if n > 0 {
-			return append([]byte(nil), rbuf[:n]...), at, nil
-		}
-		if err == nil {
-			err = io.EOF
-		}
-		return nil, at, err
-	}
-	ask := func(label string) (string, error) {
-		for pasteTry := 0; ; pasteTry++ {
-			fmt.Fprint(out, label)
-			s, pasted, err := scanSecret(next, out, pasteMinGap)
-			if err != nil {
-				return "", err
-			}
-			if !pasted {
-				return s, nil
-			}
-			// 남은 붙여넣기 잔여 입력을 비운다
-			drainPending(in)
-			fmt.Fprintln(out)
-			fmt.Fprintln(out, "거부됨: 붙여넣기로 보이는 입력입니다. 키보드로 직접 입력하십시오.")
-			if pasteTry+1 >= maxSecretTry {
-				return "", errors.New("붙여넣기로 보이는 입력이 반복되어 중단합니다. 직접 입력하십시오")
-			}
-		}
-	}
-
+	defer done()
 	fmt.Fprintln(out, pasteNotice)
 	for try := 0; try < maxSecretTry; try++ {
 		a, err := ask("새 비밀번호: ")
@@ -201,6 +144,85 @@ func readNewPassword(in *os.File, out io.Writer) (string, error) {
 		fmt.Fprintln(out, "두 입력이 다릅니다. 다시 입력하십시오.")
 	}
 	return "", errors.New("새 비밀번호 입력이 일치하지 않아 중단합니다")
+}
+
+// readAdminPassword 는 관리자 계정 비밀번호를 1번 입력받습니다 (점검 끝 계정 생성의 직접 입력, readNewPassword 와 같은
+// * 표시·붙여넣기 거부). 비밀번호는 어디에도 기록하지 않습니다. 테스트가 바꿔 쓸 수 있도록 변수입니다.
+var readAdminPassword = func(in *os.File, out io.Writer, label string) (string, error) {
+	ask, done, err := openSecretInput(in, out)
+	if err != nil {
+		return "", err
+	}
+	defer done()
+	fmt.Fprintln(out, pasteNotice)
+	return ask(label)
+}
+
+// openSecretInput 은 터미널을 raw 모드로 바꾸고 비밀 입력 1회를 읽는 ask 와 터미널을 되돌리는 done 을 돌려줍니다
+// (붙여넣기는 버리고 maxSecretTry 번까지 다시 묻음). 터미널이 아니거나 raw 입력을 지원하지 않으면 오류입니다.
+func openSecretInput(in *os.File, out io.Writer) (ask func(label string) (string, error), done func(), err error) {
+	fd := int(in.Fd())
+	if !ttyIsTerminal(fd) {
+		return nil, nil, errNotTerminal
+	}
+	restore, err := ttyMakeRaw(fd)
+	if err != nil {
+		return nil, nil, fmt.Errorf("터미널을 raw 모드로 바꿀 수 없습니다: %v", err)
+	}
+	// 어떤 경로로 끝나도 터미널을 되돌린다 (신호 포함, 호출자가 done 을 defer).
+	quit := make(chan struct{})
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		select {
+		case <-sigc:
+			fmt.Fprint(out, "\x1b[?2004l")
+			restore()
+			fmt.Fprintln(out)
+			os.Exit(130)
+		case <-quit:
+		}
+	}()
+	done = func() {
+		close(quit)
+		signal.Stop(sigc)
+		fmt.Fprint(out, "\x1b[?2004l") // bracketed paste 끄기
+		restore()
+	}
+	fmt.Fprint(out, "\x1b[?2004h") // bracketed paste 켜기 (지원 터미널은 붙여넣기를 ESC[200~ 로 감싸 보냄)
+
+	rbuf := make([]byte, 256)
+	next := func() ([]byte, time.Time, error) {
+		n, err := in.Read(rbuf)
+		at := time.Now()
+		if n > 0 {
+			return append([]byte(nil), rbuf[:n]...), at, nil
+		}
+		if err == nil {
+			err = io.EOF
+		}
+		return nil, at, err
+	}
+	ask = func(label string) (string, error) {
+		for pasteTry := 0; ; pasteTry++ {
+			fmt.Fprint(out, label)
+			s, pasted, err := scanSecret(next, out, pasteMinGap)
+			if err != nil {
+				return "", err
+			}
+			if !pasted {
+				return s, nil
+			}
+			// 남은 붙여넣기 잔여 입력을 비운다
+			drainPending(in)
+			fmt.Fprintln(out)
+			fmt.Fprintln(out, "거부됨: 붙여넣기로 보이는 입력입니다. 키보드로 직접 입력하십시오.")
+			if pasteTry+1 >= maxSecretTry {
+				return "", errors.New("붙여넣기로 보이는 입력이 반복되어 중단합니다. 직접 입력하십시오")
+			}
+		}
+	}
+	return ask, done, nil
 }
 
 // cshQuote 는 csh/tcsh 에서 그대로 복사해 실행할 수 있도록 문자열을 작은따옴표로 감쌉니다.

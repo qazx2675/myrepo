@@ -123,6 +123,8 @@ type acctEnv struct {
 	dryRun   bool
 	gap      time.Duration // 0 이면 Client 기본값 (테스트에서 -1)
 	specs    []acctSpec    // create 로 만들 계정 (비면 1순위 계정 하나, newAcctEnv 가 채움)
+	// admin 이 있으면 create 가 rf.conf 대신 이 계정으로 로그인합니다 (점검 끝: 1순위 계정 또는 운영자가 직접 입력한 관리자 계정).
+	admin *fallbackAcct
 }
 
 // newAcctEnv 는 계정 작업 환경을 만듭니다. bios.conf 에 user2 가 있으면 pass2_file 을 key_file 로 복호화해
@@ -315,6 +317,10 @@ func lightInfo(c *Client) (vendor, model string) {
 // openAdmin 은 대상 BMC 의 벤더를 비인증 ServiceRoot 로 식별하고 rf.conf 의 그 벤더 admin 계정으로
 // ModeAccount Client 를 로그인해 돌려줍니다 (로그인 1회, 재시도 없음). 실패해도 Client 는 nil 이 아닙니다.
 func (e *acctEnv) openAdmin(t Target) (*Client, string, error) {
+	if e.admin != nil { // 지정한 계정: 벤더와 무관하게 그 계정으로 로그인 1회 (벤더는 로그인 뒤 lightInfo 로)
+		c := NewClient(e.opts(t, e.admin.user, e.admin.pass, ModeAccount, 0))
+		return c, "", c.Login()
+	}
 	probe := NewClient(e.opts(t, "", "", ModeReadOnly, 0))
 	b, err := probe.ServiceRootNoAuth()
 	_ = probe.Close()
@@ -413,7 +419,7 @@ func (e *acctEnv) createGroup(hs []*acctHost) {
 	}()
 	if err != nil {
 		for _, h := range hs {
-			if vendor == "" || strings.Contains(err.Error(), "admin 계정 없음") {
+			if e.admin == nil && (vendor == "" || strings.Contains(err.Error(), "admin 계정 없음")) {
 				h.Status, h.Detail = acctNoAdmin, errDetail(err)
 			} else {
 				h.setErr(err)
@@ -999,7 +1005,21 @@ func writeAcctReport(w io.Writer, hosts []*acctHost, listMax int, p painter) {
 // askYesNo 는 한 줄을 읽어 y/n 을 판정합니다. defaultYes 면 빈 입력도 y 입니다. EOF 는 n 입니다.
 func askYesNo(in io.Reader, w io.Writer, prompt string, defaultYes bool) bool {
 	fmt.Fprint(w, prompt)
-	// 한 줄만 바이트 단위로 읽는다 (버퍼링하면 뒤이은 확인 질문의 입력을 삼킬 수 있음).
+	line := readRawLine(in)
+	if !strings.HasSuffix(line, "\n") {
+		fmt.Fprintln(w)
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	case "":
+		return defaultYes && strings.HasSuffix(line, "\n")
+	}
+	return false
+}
+
+// readRawLine 은 한 줄만 바이트 단위로 읽습니다 (버퍼링하면 뒤이은 질문의 입력을 삼킬 수 있음, 256바이트까지). 줄 끝 \n 포함.
+func readRawLine(in io.Reader) string {
 	var sb strings.Builder
 	one := make([]byte, 1)
 	for sb.Len() < 256 {
@@ -1014,17 +1034,7 @@ func askYesNo(in io.Reader, w io.Writer, prompt string, defaultYes bool) bool {
 			break
 		}
 	}
-	line := sb.String()
-	if !strings.HasSuffix(line, "\n") {
-		fmt.Fprintln(w)
-	}
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return true
-	case "":
-		return defaultYes && strings.HasSuffix(line, "\n")
-	}
-	return false
+	return sb.String()
 }
 
 // acctWorkers 는 -j 값을 정합니다 (0 이면 min(conf.Concurrency, 100), 상한 300).

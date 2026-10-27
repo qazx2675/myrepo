@@ -201,7 +201,7 @@ func cmdCheck(args []string) error {
 	}
 	printSummary(rc, o, profilePath)
 
-	run, err := doCheck(rc, checkOpts{Profile: prof, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, RetryFromDir: o.retryFrom})
+	run, err := doCheck(rc, checkOpts{Profile: prof, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, RetryFromDir: o.retryFrom, ProbeUser2: true})
 	if run == nil {
 		return err
 	}

@@ -187,7 +187,7 @@ func cmdBios(args []string) error {
 	var warns []string
 	u, err := runUnified(rc, unifiedOpts{
 		Profile: prof, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, HostsPath: o.hosts, Ignore: ign,
-		Collect: progStage{P: p, Idx: 2, Name: "접속·조회"},
+		Collect: progStage{P: p, Idx: 2, Name: "접속·조회"}, ProbeUser2: autoUser == "",
 	})
 	if u == nil {
 		return err

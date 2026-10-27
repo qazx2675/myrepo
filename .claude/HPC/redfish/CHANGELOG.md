@@ -6,6 +6,10 @@
 
 ### 추가
 
+- **점검 끝 계정 생성 확대**(`account_check.go` `manualCreate`·`probeUser2`, `account.go` `acctEnv.admin`, `account_input.go` `readAdminPassword`):
+  - **AUTH_FAIL 호스트**(1순위 거부 + 벤더에 맞는 `rf.conf` 계정도 거부·없음·벤더 미식별): 목록(hostname·IP·벤더·사유)을 보인 뒤 관리자 ID 와 비밀번호(숨김 입력, 붙여넣기 거부, 저장·출력 안 함)를 직접 입력받아, 호스트마다 로그인 1번으로 1순위 계정·user2 중 **없는 것만** 만듭니다(있는 것은 건너뜀). 그래도 실패한 호스트는 다시 나열하고 다른 ID 를 넣거나 빈 입력으로 끝냅니다(최대 3번). 다른 벤더의 `rf.conf` 계정은 시도하지 않습니다(잠금 방지). 웜업 차단(처음 10대 순차, 절반 이상 실패면 중단) 그대로.
+  - **1순위로 로그인되지만 user2 가 없는 호스트**(bios.conf 에 user2 가 있을 때): 점검 세션에서 계정 목록을 읽어(읽기 전용 GET, 호스트당 계정 수+2건, 최대 64) 없으면 1순위 계정으로 로그인해 user2 만 만듭니다. 목록 `account_user2_targets.txt`. `-auto`/`-auto-check`·재점검에서는 확인하지 않습니다.
+  - 2순위 대상과 user2 대상은 한 번의 [Y/n] 으로 묻고, 수동 입력 단계는 그다음입니다. 1순위 계정을 만든 호스트(수동 입력으로 만든 호스트 포함)만 자동 재점검. `-dry-run` 은 계획만(수동 단계 없음), `-no-prompt`·터미널 아님은 목록만.
 - **수정 단계 “BIOS 값 직접 입력”**(`setdirect.go`, `tui_flow.go` `editStep`·`directStep`): 결과 보기에서 `e` 를 누르면 “점검 결과 기준 수정”(기존) / “BIOS 값 직접 입력” 을 고릅니다. 직접 입력은 프로파일과 관계없이 `<Redfish 속성 이름><공백 또는 탭><설정값>` 을 한 줄에 하나씩 붙여 넣고 Ctrl+D 로 끝내면(빈 줄·`#` 줄 무시, 속성 이름 대소문자 무시) 이번에 점검한 Redfish 호스트 전부에 대해 항목별로 판단합니다.
   - 건너뜀(그 항목만, 남은 항목이 없으면 그 호스트만): 보호 속성(`protect.go` + `protect_attrs`, 항상), 그 호스트에 없는 속성(“미지원 속성”), 제외 목록, 현재값 형식과 맞지 않는 값, **이미 같은 값**. Cisco XML 호스트·점검 오류 호스트는 통째로 건너뜀. 나머지는 진행합니다.
   - “직접 입력 미리보기”(`현재값 -> 변경값 (수정대상)` / `(건너뜀: 사유)`) 뒤 “위 수정대상을 적용할까요?”, 남의 Pending 질문은 기존과 같습니다. 적용은 기존 설정 경로(`applySetPlan` → `runHost` → `send`, Dell Job·중복 BMC·AUTH_FAIL 중단 포함)를 그대로 탑니다. 레지스트리의 허용값·ReadOnly·정수 범위는 적용 때 다시 확인해 맞지 않는 항목만 `INVALID_VALUE`/`SKIPPED_READONLY` 로 빼고 나머지는 보냅니다(값은 레지스트리 표기로 보냄). Pending 까지만, 재부팅 없음.
@@ -76,8 +80,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8220834 | a3d30203a719629843b990540e7f97aae5d45fa74546d2f80c2a6bb2461d1fcb |
-| bin/biostool_os6 | go1.20.14 | 6819840 | 986677a0767708cf4d85f61a757912e3ea20d922dcf57c3d64394a0fce799b07 |
+| bin/biostool | go1.26.5 | 8237218 | 5f6785c100e4286c748e3a93f8aa7b2e5474b2530e0e943664f7a14238fdec02 |
+| bin/biostool_os6 | go1.20.14 | 6840320 | 98b76c9cb32a5fb2833cccc631ecd115b004436ed11497a5445bee93be367976 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 

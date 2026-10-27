@@ -68,6 +68,8 @@ type unifiedOpts struct {
 	Collect   progStage  // 접속·조회 단계 (호스트마다 Add: OK / difference / N/A / 오류)
 	// Cancel 이 닫히면 아직 시작하지 않은 호스트는 접속하지 않고 CANCELED (TUI Ctrl+X). nil 이면 취소 없음
 	Cancel <-chan struct{}
+	// ProbeUser2 는 checkOpts.ProbeUser2 와 같습니다 (점검 끝 계정 생성 제안이 있는 대화형·-plain 만 켬)
+	ProbeUser2 bool
 }
 
 // unifiedRun 은 수집 1회의 결과입니다.
@@ -93,7 +95,7 @@ func runUnified(rc *runContext, o unifiedOpts) (*unifiedRun, error) {
 	}
 	o.Collect.start(len(rc.Targets))
 	run, err := doCheck(rc, checkOpts{
-		Profile: o.Profile, FromDump: o.FromDump, ResultDir: o.ResultDir, Now: o.Now, KeepAttrs: true, Cancel: o.Cancel,
+		Profile: o.Profile, FromDump: o.FromDump, ResultDir: o.ResultDir, Now: o.Now, KeepAttrs: true, Cancel: o.Cancel, ProbeUser2: o.ProbeUser2,
 		OnHost: func(i int, h *hostCheck) {
 			u.Snaps[i] = snapFromCheck(h)
 			o.Collect.add(hostProgTag(h))

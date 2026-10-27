@@ -79,6 +79,10 @@ type hostCheck struct {
 
 	// CredSource 는 로그인에 성공한 계정 출처입니다: credPrimary / credFallback(rf.conf 2순위) / "" (로그인 안 함·실패).
 	CredSource string
+	// user2 는 1순위 세션으로 본 두 번째 계정(bios.conf user2) 상태입니다: acctPresent / acctNeedCreate / "" (보지 않음·모름).
+	user2 string
+	// authVendor 는 AUTH_FAIL 때 2순위 계정을 시도한 벤더 키입니다 (시도하지 않았으면 "", 계정 생성 불가 목록 표시용).
+	authVendor string
 
 	// XML 은 XML API(UCSM/CIMC, xmlhost.go)로 점검했음을 뜻합니다: 읽기 전용 — 전체비교(StatusXMLReadOnly)·설정에서 빠집니다.
 	XML bool
@@ -250,6 +254,9 @@ type checkOpts struct {
 	Now          time.Time // 결과 폴더 이름·리포트 시각 (0 이면 지금)
 	// KeepAttrs 가 true 면 판정한 호스트의 Bios Attributes 전체를 hostCheck.attrs 에 남깁니다 (추가 GET 없음, unified.go).
 	KeepAttrs bool
+	// ProbeUser2 가 true 이고 bios.conf 에 user2 가 있으면, 1순위 계정으로 점검을 마친 호스트는 같은 세션으로
+	// 계정 목록을 읽어(GET 만) user2 가 있는지 hostCheck.user2 에 남깁니다 (점검 끝 계정 생성 제안용, -auto 는 끔).
+	ProbeUser2 bool
 	// OnHost 는 i 번째(rc.Targets 순서) 호스트 결과가 정해진 직후 불립니다 (건너뛴 호스트 포함). 여러 고루틴에서
 	// 불리므로 i 번째 칸에만 쓸 것. nil 이면 안 부름.
 	OnHost func(i int, h *hostCheck)
@@ -284,6 +291,7 @@ type checkEnv struct {
 	mm       *mmDumper
 	excl     *ignoreSet // bios.conf exclude_attrs (ignore_attrs.txt 는 프로파일 점검에 쓰지 않음)
 	keep     bool       // checkOpts.KeepAttrs
+	probeU2  string     // checkOpts.ProbeUser2 일 때 찾아볼 두 번째 계정 이름 (비면 보지 않음)
 }
 
 // newRunDir 은 results/<YYYYMMDD_HHMMSS> 를 만듭니다 (같은 초에 또 실행하면 _2, _3 ...).
@@ -333,6 +341,9 @@ func doCheck(rc *runContext, o checkOpts) (*checkRun, error) {
 		regs: &regCache{m: map[string]*regEntry{}},
 		excl: newIgnoreSet(rc.Conf.ExcludeAttrs, "bios.conf exclude_attrs"),
 		keep: o.KeepAttrs,
+	}
+	if o.ProbeUser2 {
+		env.probeU2 = rc.Conf.User2
 	}
 	run := &checkRun{Profile: o.Profile.Name, Now: now, Dir: dir, FromDump: o.FromDump, prof: o.Profile, RetryFromDir: prevDir, prevResult: prev,
 		FallbackOn: rc.Fallback != nil && o.FromDump == ""}
@@ -424,10 +435,14 @@ func (e *checkEnv) checkOnline(t Target) *hostCheck {
 	}()
 	if lerr != nil {
 		h.setErr(lerr)
+		h.authVendor = li.Vendor
 		return h
 	}
 	h.CredSource = li.Source
 	e.evaluate(h, newMemoGet(c.GetRaw))
+	if e.probeU2 != "" && h.Status == "" && li.Source == credPrimary {
+		h.user2 = probeUser2(c, e.probeU2)
+	}
 
 	// 매핑 없는 모델은 같은 세션으로 덤프를 모델당 1대만 저장한다 (사람이 요약을 보고 프로파일을 채운다).
 	if h.Status == "" && h.hasStatus(StatusMappingMissing) && h.Info != nil && e.mm.claim(h.Info) {

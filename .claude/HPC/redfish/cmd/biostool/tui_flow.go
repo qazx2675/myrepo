@@ -410,7 +410,7 @@ func (f *biosFlow) collect(prof *Profile) error {
 		defer p.Stop()
 		f.u, err = runUnified(f.rc, unifiedOpts{
 			Profile: prof, FromDump: f.a.O.fromDump, ResultDir: f.rc.Conf.ResultDir, HostsPath: f.a.O.hosts, Ignore: f.a.Ignore,
-			Collect: progStage{P: p, Idx: 2, Name: "접속·조회"}, Cancel: j.Canceled(),
+			Collect: progStage{P: p, Idx: 2, Name: "접속·조회"}, Cancel: j.Canceled(), ProbeUser2: true,
 		})
 		return nil
 	})
