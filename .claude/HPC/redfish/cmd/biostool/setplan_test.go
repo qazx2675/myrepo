@@ -275,6 +275,9 @@ func TestSetPlanPendingIncludeExclude(t *testing.T) {
 	if out.OK != 1 || out.Skipped != 2 || out.Fail != 0 {
 		t.Errorf("결과 OK %d 제외 %d 실패 %d\n%s", out.OK, out.Skipped, out.Fail, strings.Join(out.Lines, "\n"))
 	}
+	if fmt.Sprint(out.Tried) != "[2]" { // PATCH 를 보낸 d 만 (건너뛴 b·c 는 재점검 대상 아님)
+		t.Errorf("Tried = %v, 기대 [2]", out.Tried)
+	}
 	if st, _ := itemStatus(t, u, ub, "ProcHyperthreading"); st != StatusPendingExists {
 		t.Errorf("b = %s", st)
 	}
@@ -305,6 +308,9 @@ func TestSetPlanPendingIncludeExclude(t *testing.T) {
 	}
 	if out.OK != 2 || out.Fail != 1 {
 		t.Errorf("결과 OK %d 실패 %d\n%s", out.OK, out.Fail, strings.Join(out.Lines, "\n"))
+	}
+	if fmt.Sprint(out.Tried) != "[0]" { // b 만 PATCH (c 는 거부, d 는 이미 Pending=목표값이라 보내지 않음)
+		t.Errorf("Tried = %v, 기대 [0]", out.Tried)
 	}
 	for _, s := range []*mockbmc.Server{b, c, d} {
 		assertSetSafe(t, s)
@@ -422,7 +428,7 @@ func TestApplySetPlanCancelEmptyMismatch(t *testing.T) {
 	closed := make(chan struct{})
 	close(closed)
 	out, reps := applyT(t, rc, u, p, true, closed, nil)
-	if fmt.Sprint(callCounts(h1, h2)) != fmt.Sprint(before) || out.Cancelled != 2 || !hasLine(reps, u1, "[취소]") {
+	if fmt.Sprint(callCounts(h1, h2)) != fmt.Sprint(before) || out.Cancelled != 2 || !hasLine(reps, u1, "[취소]") || len(out.Tried) != 0 {
 		t.Errorf("취소된 적용: 요청 %v→%v, 결과 %+v, report %v", before, callCounts(h1, h2), out, reps)
 	}
 
@@ -440,7 +446,7 @@ func TestApplySetPlanCancelEmptyMismatch(t *testing.T) {
 	if h2.CallCount() != before[1] {
 		t.Error("취소 뒤 h2 에 접속함")
 	}
-	if st, _ := itemStatus(t, u, u2, "ProcHyperthreading"); st != StatusCanceled || out.OK != 1 || out.Cancelled != 1 {
+	if st, _ := itemStatus(t, u, u2, "ProcHyperthreading"); st != StatusCanceled || out.OK != 1 || out.Cancelled != 1 || fmt.Sprint(out.Tried) != "[0]" {
 		t.Errorf("h2 = %s, 결과 %+v", st, out)
 	}
 	assertClean(t, h2)

@@ -68,6 +68,7 @@ type applyItem struct {
 	Std, Attr, Expected string
 	Unverified          bool // dry-run 시험 출력용 UNVERIFIED 항목 (실제 설정 대상이 아님)
 	Compare             bool // 전체비교 항목 (setplan.go): 프로파일 행 대신 Expected(비교서버 값) 하나만 보낸다
+	Direct              bool // 값 직접 입력 항목 (setdirect.go): 프로파일 행 대신 Expected(입력값) 하나만 보낸다
 	Value               string
 	Status              string // 비어 있으면 아직 보낼 후보
 	Detail              string
@@ -398,6 +399,16 @@ func (e *setEnv) verifyItem(h *setHost, it *applyItem) {
 		it.allowed, it.Value = []string{it.Expected}, it.Expected
 		return
 	}
+	if it.Direct {
+		// 값 직접 입력: 프로파일 재대조는 해당 없다. 보호 속성은 runHost·send, 모델 재확인은 planHost(changedWhy),
+		// ReadOnly·허용값·형식은 typedValue 가 그대로 검사한다. 보낼 값은 입력값 하나뿐이다.
+		if h.Info != nil && normalizeModel(h.Info.Model) == "" {
+			it.set(StatusUnverified, "BMC 가 보고한 모델명이 비어 있어 설정하지 않음")
+			return
+		}
+		it.allowed, it.Value = []string{it.Expected}, it.Expected
+		return
+	}
 	if h.Info != nil {
 		if !it.Unverified && normalizeModel(h.Info.Model) == "" {
 			it.set(StatusUnverified, "BMC 가 보고한 모델명이 비어 있어 설정하지 않음 (모델을 지정한 verified=Y 행만 쓴다)")
@@ -590,6 +601,16 @@ func (e *setEnv) planHost(h *setHost, m *memoGet) bool {
 				continue
 			case ra.Type != "Enumeration" && ra.Type != "Integer" && ra.Type != "Boolean":
 				it.set(StatusInvalidValue, "수정제외: 문자열/형식 불명 ("+bv(orDefault(ra.Type, "형식 없음"))+") — 비교서버 값은 Enumeration·Integer·Boolean 만 설정")
+				continue
+			}
+		}
+		if it.Direct {
+			// 값 직접 입력: 대소문자만 다른 값은 이 BMC 의 표기(레지스트리 Enumeration 값, 불리언은 소문자)로 바꿔 보낸다.
+			// 바꾼 값이 현재값과 같으면 보내지 않는다. ReadOnly·허용값·형식 검사는 아래 typedValue 그대로.
+			it.Value = directCanon(it.Value, reg.lookup(it.Attr), bios.Attributes[it.Attr])
+			it.allowed = []string{it.Value}
+			if matchAny(it.allowed, cur[it.Attr]) {
+				it.set(StatusAlreadyOK, "현재값이 이미 입력값 ("+bv(cur[it.Attr])+")")
 				continue
 			}
 		}

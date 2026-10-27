@@ -6,6 +6,11 @@
 
 ### 추가
 
+- **수정 단계 “BIOS 값 직접 입력”**(`setdirect.go`, `tui_flow.go` `editStep`·`directStep`): 결과 보기에서 `e` 를 누르면 “점검 결과 기준 수정”(기존) / “BIOS 값 직접 입력” 을 고릅니다. 직접 입력은 프로파일과 관계없이 `<Redfish 속성 이름><공백 또는 탭><설정값>` 을 한 줄에 하나씩 붙여 넣고 Ctrl+D 로 끝내면(빈 줄·`#` 줄 무시, 속성 이름 대소문자 무시) 이번에 점검한 Redfish 호스트 전부에 대해 항목별로 판단합니다.
+  - 건너뜀(그 항목만, 남은 항목이 없으면 그 호스트만): 보호 속성(`protect.go` + `protect_attrs`, 항상), 그 호스트에 없는 속성(“미지원 속성”), 제외 목록, 현재값 형식과 맞지 않는 값, **이미 같은 값**. Cisco XML 호스트·점검 오류 호스트는 통째로 건너뜀. 나머지는 진행합니다.
+  - “직접 입력 미리보기”(`현재값 -> 변경값 (수정대상)` / `(건너뜀: 사유)`) 뒤 “위 수정대상을 적용할까요?”, 남의 Pending 질문은 기존과 같습니다. 적용은 기존 설정 경로(`applySetPlan` → `runHost` → `send`, Dell Job·중복 BMC·AUTH_FAIL 중단 포함)를 그대로 탑니다. 레지스트리의 허용값·ReadOnly·정수 범위는 적용 때 다시 확인해 맞지 않는 항목만 `INVALID_VALUE`/`SKIPPED_READONLY` 로 빼고 나머지는 보냅니다(값은 레지스트리 표기로 보냄). Pending 까지만, 재부팅 없음.
+  - 적용 뒤 자동 재점검 후 “직접 입력 확인” 화면에 호스트별로 입력한 속성의 현재값·Pending 을 보입니다.
+- **설정 뒤 자동 재점검**(`tui_flow.go` `recheckHosts`, `setOutcome.Tried`): 수정 단계에서 설정(PATCH)을 보낸 호스트만 묻지 않고 다시 점검해 프로파일 점검 화면에 바꿔 끼웁니다(보통 `PENDING_OK`). 결과는 `results/<일시>/recheck/<일시>/` 와 합친 CSV `profile_merged_*`. 전체 설정 비교 결과는 비우고 다음 Tab 에 다시 비교합니다. 재점검이 끝나면 같은 세션에서 다시 `e` 로 수정할 수 있습니다(재점검하지 못한 호스트가 있으면 그때만 막음). 처음 결과 폴더의 `result.tsv`·`retry.txt` 는 설정 전 기록으로 그대로 둡니다.
 - **Cisco XML 혼합 대상**(`xmlhost.go`, `resolve.go` `classifyTargets`): hostname(`-m`·포트를 뗀 이름)이 `bios.conf` 의 `xml_host_prefix`(기본 `c`, 쉼표로 여러 개, 대소문자 무시, 비우면 이름 기준 XML 끔)로 시작하는 대상은 Redfish 대신 UCSM/CIMC XML API 로 점검합니다(`aaaLogin`·`configResolveClass`·`aaaLogout` 만, 읽기 전용). 접속 주소는 `hostname-m`. IP 대상은 `-user` 면 Redfish, **`-user-xml <파일>`** 이면 Cisco(XML). `bios.sh` 도움말·`-auto` 도 `-user-xml` 을 받습니다.
 - **TUI**: 대상에 IP 가 있으면 Cisco(XML) 대상 파일/붙여넣기를 따로 묻습니다(`targets-xml-file`·`targets-xml-paste` 단계, 안내 “Cisco 장비는 XML 로 점검”). hostname 만 있으면 접두어로 자동 분류되므로 묻지 않고, `xml_host_prefix` 가 비면 hostname 도 묻습니다.
 - **서버 선택**: XML 응답에 서버가 1대면 그 호스트, 여러 대면 서비스 프로파일(`lsServer`) 이름이 hostname 과 같은 서버를 고릅니다. 같은 것이 없으면 모든 서버를 `<호스트>/<서버 dn>` 으로 나열하고 비고에 `[XML SP=...]` 를 남깁니다.
@@ -71,8 +76,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8175778 | 95743a7f196e46267f3e8baa545c4395b8b2cf8ec09016eddc4a8969f3cf5277 |
-| bin/biostool_os6 | go1.20.14 | 6782976 | 7896f0922d52723a0d1cdba4d2b52d95f124c843f4c402e38d4f990bb60ae618 |
+| bin/biostool | go1.26.5 | 8220834 | a3d30203a719629843b990540e7f97aae5d45fa74546d2f80c2a6bb2461d1fcb |
+| bin/biostool_os6 | go1.20.14 | 6819840 | 986677a0767708cf4d85f61a757912e3ea20d922dcf57c3d64394a0fce799b07 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 

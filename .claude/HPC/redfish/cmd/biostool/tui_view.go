@@ -638,7 +638,12 @@ func (u *TUI) InputLine(prompt, initial string) (string, bool) {
 
 // InputLines 는 여러 줄 입력(붙여넣기)입니다: Enter 줄 추가, Backspace 지우기(빈 줄이면 앞 줄로), Ctrl+D 완료,
 // Ctrl+X 취소. 앞뒤 공백을 지운 빈 줄이 아닌 줄만 돌려준다.
-func (u *TUI) InputLines(title string) ([]string, bool) {
+func (u *TUI) InputLines(title string) ([]string, bool) { return u.inputLines(title, false) }
+
+// InputLinesTab 은 InputLines 와 같되 Tab 을 공백으로 넣습니다 (탭으로 나눈 "이름<Tab>값" 붙여넣기용 — 화면 탭으로 나가지 않음).
+func (u *TUI) InputLinesTab(title string) ([]string, bool) { return u.inputLines(title, true) }
+
+func (u *TUI) inputLines(title string, tabText bool) ([]string, bool) {
 	p := &tuiPrompt{kind: tpLines, title: title}
 	u.prompt = p
 	defer func() { u.prompt = nil }()
@@ -659,6 +664,8 @@ func (u *TUI) InputLines(title string) ([]string, bool) {
 			return true
 		case k.isRune(tuiCtrlX):
 			return true
+		case k.isRune(tuiTab) && tabText:
+			p.buf = append(p.buf, ' ')
 		case (k.isRune(tuiTab) || k.k == tkBackTab) && len(u.tabs) > 1:
 			u.tabOut = true
 			return true

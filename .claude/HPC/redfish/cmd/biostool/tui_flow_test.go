@@ -142,6 +142,7 @@ func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 		{"ref", "1"},
 		{"ref-host", ua + "\x04"},
 		{"compare-result", "e"},
+		{"edit-menu", "1"}, // 점검 결과 기준 수정
 		{"ask-set", "n"},
 		{"compare-result", "qq"}, // 거절하면 결과 보기로 돌아오고, 다시 q 두 번이면 묻지 않고 끝
 	}
@@ -216,6 +217,7 @@ func TestBiosFlowViewTabsAndReRef(t *testing.T) {
 		{"ref", "1"},
 		{"ref-host", ub + "\x04"},
 		{"compare-result", "e"}, // 11
+		{"edit-menu", "1"},
 		{"ask-set", "n"},
 		{"compare-result", "qq"},
 	}
@@ -441,7 +443,7 @@ func TestBiosFlowEditPendingBranches(t *testing.T) {
 				report(ua, "Pending 설정")
 				return &setOutcome{Lines: []string{ua + ": 설정 확인 OK"}, OK: 1}, nil
 			})
-			script := []flowStep{{"profile-result", "e"}, {"ask-set", "y"}, {"ask-pending", c.key}}
+			script := []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"ask-set", "y"}, {"ask-pending", c.key}}
 			if c.applied {
 				script = append(script, flowStep{"set-result", "q"}) // 설정 결과 q → 결과 보기로
 			}
@@ -606,6 +608,7 @@ func TestBiosFlowOneShotOptionsAutoCompare(t *testing.T) {
 		{"compare-auto", ""},
 		{"profile-result", "\t"}, // 1
 		{"compare-result", "e"},  // 2
+		{"edit-menu", "1"},
 		{"ask-set", "n"},
 		{"compare-result", "qq"},
 	}
@@ -670,11 +673,12 @@ func TestBiosFlowQuitBackAndSetLoop(t *testing.T) {
 				{"targets-xml-paste", "\x04"},
 				{"profile", "2"},
 				{"profile-result", c.first},
-				{"ask-set", "\x18"}, // 9: 수정 단계 취소 → 결과 보기로
+				{"edit-menu", "1"},
+				{"ask-set", "\x18"}, // 10: 수정 단계 취소 → 결과 보기로
 				{"profile-result", "qq"},
 			}
 			fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
-				if i == 9 && builds != c.builds {
+				if i == 10 && builds != c.builds {
 					t.Errorf("ask-set 까지 계획 %d번, 기대 %d (e 경로면 q/Esc/N/Ctrl+X 로 끝나지 않았음)", builds, c.builds)
 				}
 			})

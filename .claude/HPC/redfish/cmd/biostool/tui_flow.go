@@ -7,11 +7,13 @@ package main
 //	  r (전체 설정 비교 화면) → 기준 다시 선택 → 다시 비교
 //	  -ref/-ref-json/-diff 를 줬으면 수집 직후 바로 전체 설정 비교까지 (Tab 을 기다리지 않음)
 //	  q 는 한 단계 뒤로 (관리망 그룹 줄 → 벤더 줄, 미리보기·설정 결과 → 결과 보기, 프로파일 고르기 → 대상 입력)
-//	  벤더 줄에서 q 두 번 → 묻지 않고 끝. e → 어디서든 수정 단계
+//	  벤더 줄에서 q 두 번 → 묻지 않고 끝. e → 어디서든 수정 단계 (수정 방법: 점검 결과 기준 수정 / BIOS 값 직접 입력)
+//	→ (BIOS 값 직접 입력이면 "속성 이름 설정값" 붙여넣기 → 점검한 Redfish 호스트별 미리보기·확인 → 아래 Pending 질문부터 같음, setdirect.go)
 //	→ 수정 확인 1: 차이 항목 전부를 "현재값 -> 변경값 (수정대상)" / "(수정제외: 사유)" 로 보이고
 //	  "위 수정대상을 적용할까요?" (프로파일 + 전체비교(했으면) difference 를 함께)
 //	→ 수정 확인 2: 수정제외 항목이 있을 때만 그것만 다시 보이고 "수정제외 항목을 확인했습니다. 진행할까요?"
 //	→ Pending 장비가 있으면 포함 여부(y 포함 / n 제외 / Ctrl+X 취소) → 설정 적용 → 설정 결과
+//	  → 설정을 보낸 호스트만 묻지 않고 재점검해 프로파일 점검 화면에 합침 (PENDING_OK 확인, 다시 e 로 수정 가능)
 //	  (확인 1·2 에서 n/Esc/Ctrl+X 면 아무것도 쓰지 않고 결과 보기로 돌아옴)
 //	→ TUI 를 닫고 표준출력에 짧은 요약 (결과 폴더·CSV·건수)
 //
@@ -64,7 +66,9 @@ type biosFlow struct {
 	setNote  string // 요약의 "설정:" 줄 (비면 찍지 않음)
 	canceled bool   // 대상·프로파일 고르기에서 취소
 	declined bool   // 수정 단계에서 취소·거절함 → 다음 종료(q q)는 다시 묻지 않고 끝 (새로 비교하면 다시 물음)
-	applied  bool   // 설정 적용을 시도함 → 다시 설정하지 않음 (결과가 적용 전 값이라)
+	applied  bool   // 설정 적용을 시도함 → 종료 때 요약의 "설정:" 줄을 settable() 로 덮어쓰지 않음
+	// unchecked 는 설정을 보냈지만 재점검 결과를 아직 합치지 못한 호스트(점검 결과 순번)입니다. 있으면 결과가 적용 전 값이라 다시 설정하지 않음.
+	unchecked map[int]bool
 }
 
 // runBiosTUI 는 열린 TUI 로 대화형 흐름을 돌리고, TUI 를 닫은 뒤 out 에 요약을 찍습니다.
@@ -172,8 +176,8 @@ func (f *biosFlow) run() error {
 		if ui.Quit() {
 			break
 		}
-		if act == TUIEdit && f.applied {
-			ui.SetMessage("설정은 이미 적용했습니다 — 다시 점검한 뒤 설정하십시오")
+		if act == TUIEdit && len(f.unchecked) > 0 {
+			ui.SetMessage(fmt.Sprintf("설정을 보낸 %d대를 재점검하지 못했습니다 — 결과가 적용 전 값이라 다시 점검한 뒤 설정하십시오", len(f.unchecked)))
 			continue
 		}
 		if act != TUIEdit { // q 두 번은 묻지 않고 끝 (수정 단계는 e 로만). 요약의 "설정:" 줄만 남긴다
@@ -182,14 +186,14 @@ func (f *biosFlow) run() error {
 			}
 			break
 		}
-		if f.setStep() {
+		if f.editStep() {
 			f.applied = true
 		} else {
 			f.declined = true
 		}
 		ui.SwitchTab(ui.Tab()) // 미리보기·설정 결과 글 보기 → 결과 보기
 		if f.applied {
-			ui.SetMessage("설정: " + f.setNote + " — q 두 번 누르면 끝납니다")
+			ui.SetMessage("설정: " + f.setNote + " — q 두 번: 종료, e: 수정 단계")
 		} else if f.setNote != "" {
 			ui.SetMessage(f.setNote + " — 결과 보기로 돌아왔습니다 (q 두 번: 종료, e: 수정 단계)")
 		}
@@ -421,7 +425,12 @@ func (f *biosFlow) collect(prof *Profile) error {
 
 // writeCSV 는 결과 폴더에 CSV 를 씁니다. cancel 이 닫히면 남은 파일은 쓰지 않고 경고로 남긴다.
 func (f *biosFlow) writeCSV(prefix string, lines []ResultLine, cancel <-chan struct{}) {
-	paths, err := writeResultCSVsCancel(f.u.Check.Dir, prefix, lines, cancel)
+	f.writeCSVIn(f.u.Check.Dir, prefix, lines, cancel)
+}
+
+// writeCSVIn 은 writeCSV 를 dir 폴더에 쓰는 것입니다 (재점검 결과 폴더용).
+func (f *biosFlow) writeCSVIn(dir, prefix string, lines []ResultLine, cancel <-chan struct{}) {
+	paths, err := writeResultCSVsCancel(dir, prefix, lines, cancel)
 	for _, p := range paths { // 기준을 다시 골라 덮어쓴 파일은 한 번만 센다
 		if !inList(f.csvs, p) {
 			f.csvs = append(f.csvs, p)
@@ -516,8 +525,29 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 	return compareRef{DiffFile: flowDiffFile}, true
 }
 
+// flowEditMenu 는 수정 단계(e)의 수정 방법입니다: 0 점검 결과 기준 수정(setStep), 1 BIOS 값 직접 입력(directStep).
+var flowEditMenu = []string{"점검 결과 기준 수정", "BIOS 값 직접 입력"}
+
+// editStep 은 수정 단계 입구입니다: 수정 방법을 고른다. 덤프 읽기면 고르지 않고 false, 고르기 취소면 false (결과 보기로).
+func (f *biosFlow) editStep() bool {
+	if f.a.O.fromDump != "" {
+		f.setNote = "덤프 읽기 모드라 설정하지 않았습니다"
+		return false
+	}
+	f.wait("edit-menu")
+	i, ok := f.ui.Choose("수정 방법 선택", flowEditMenu)
+	if !ok {
+		f.ui.TakeTabOut() // Tab 으로 접었어도 결과 보기로 (화면 탭은 그대로)
+		return false
+	}
+	if i == 1 {
+		return f.directStep()
+	}
+	return f.setStep()
+}
+
 // setStep 은 마지막 수정 단계입니다: 프로파일 + 전체비교 difference 를 한 계획으로 미리 보이고 한 번만 묻는다.
-// true 면 설정 적용을 시도하고 결과를 보임 (흐름은 결과 보기로 돌아가되 다시 설정하지 않음).
+// true 면 설정 적용을 시도하고 결과를 보인 뒤 설정을 보낸 호스트를 재점검함 (recheckHosts, 흐름은 결과 보기로 돌아감).
 // false 면 취소·거절·설정할 항목 없음·덤프 읽기 — 결과 보기로 돌아간다.
 func (f *biosFlow) setStep() bool {
 	ui := f.ui
@@ -552,6 +582,14 @@ func (f *biosFlow) setStep() bool {
 			return false
 		}
 	}
+	_, ok := f.applyStep(plan)
+	return ok
+}
+
+// applyStep 은 확인을 마친 계획을 적용합니다: 남의 Pending 포함 여부 → 설정 적용 → 설정 결과 → 설정을 보낸 호스트 재점검
+// (setStep·directStep 공용). Pending 질문에서 취소하면 (nil, false), 적용을 시도했으면 ok=true (결과는 오류면 nil).
+func (f *biosFlow) applyStep(plan *setPlan) (*setOutcome, bool) {
+	ui := f.ui
 	include := false
 	if len(plan.Pending) > 0 {
 		ui.SetText("Pending 이 있는 장비", plan.PendingLines())
@@ -562,7 +600,7 @@ func (f *biosFlow) setStep() bool {
 		case TUINo:
 		default:
 			f.setNote = "설정을 취소했습니다"
-			return false
+			return nil, false
 		}
 	}
 	var mu sync.Mutex
@@ -599,7 +637,188 @@ func (f *biosFlow) setStep() bool {
 	ui.SetText("설정 결과", lines)
 	f.wait("set-result")
 	ui.Browse()
+	if res != nil { // 설정을 보낸 호스트만 묻지 않고 다시 점검해 결과 화면에 합친다 (Pending 반영 확인)
+		ui.SwitchTab(ui.Tab())
+		f.recheckHosts(res.Tried)
+	}
+	return res, true
+}
+
+// flowDirectGuide 는 BIOS 값 직접 입력 화면의 안내입니다.
+var flowDirectGuide = []string{
+	"한 줄에 하나: <Redfish 속성 이름><공백 또는 탭><설정값>   예) SysProfile PerfOptimized · WorkloadProfile Virtualization-MaxPerformance",
+	"속성 이름은 BMC 가 보고하는 Redfish 이름입니다 (대소문자 무시). 값은 첫 공백 뒤 전부 (앞뒤 공백 제외). 빈 줄·# 줄은 무시.",
+	"대상: 이번에 점검한 Redfish 호스트 전부 (Cisco(XML)·점검 오류 호스트는 건너뜀). 프로파일과 상관없습니다.",
+	"보호 속성(서버 고유값·부팅·보안·RAID·PXE·NIC)·ReadOnly·허용값 밖·이미 같은 값은 건너뜁니다. BMC Pending 까지만 설정, 재부팅 없음.",
+}
+
+// directStep 은 BIOS 값 직접 입력입니다: 붙여넣기 → 호스트별 미리보기 → "적용할까요?" → applyStep(Pending 질문·적용·결과·재점검)
+// → 재점검한 호스트의 입력 속성 현재값·Pending (directCheck). true 면 적용을 시도함, false 면 취소·거절·설정할 항목 없음.
+func (f *biosFlow) directStep() bool {
+	ui := f.ui
+	ui.SetText("BIOS 값 직접 입력", flowDirectGuide)
+	var reqs []directReq
+	for len(reqs) == 0 {
+		f.wait("direct-input")
+		lines, ok := ui.InputLinesTab("BIOS 값 직접 입력 (속성 이름 설정값, Ctrl+D 완료 · Ctrl+X 취소)")
+		if !ok {
+			ui.TakeTabOut()
+			f.setNote = "설정하지 않았습니다"
+			return false
+		}
+		r, errs := parseDirectLines(lines)
+		if len(errs) == 0 && len(r) == 0 {
+			errs = []string{"입력한 속성이 없습니다"}
+		}
+		if len(errs) > 0 { // 잘못된 줄이 하나라도 있으면 아무것도 쓰지 않고 다시 입력받는다
+			ui.SetText("BIOS 값 직접 입력 — 입력 오류", append(append([]string{}, errs...), append([]string{""}, flowDirectGuide...)...))
+			ui.SetMessage(fmt.Sprintf("입력 오류 %d건 — 고쳐서 다시 입력하십시오 (Ctrl+X 취소)", len(errs)))
+			continue
+		}
+		reqs = r
+	}
+	plan := buildDirectPlan(f.rc.Conf, f.u, reqs)
+	ui.SetText("직접 입력 미리보기", plan.DirectLines())
+	if plan.Empty() {
+		f.setNote = "설정할 항목이 없습니다"
+		ui.SetMessage("설정할 항목이 없습니다 — q 를 누르면 결과 보기로 돌아갑니다")
+		f.wait("direct-empty")
+		ui.Browse()
+		return false
+	}
+	f.wait("direct-ask")
+	if ui.Ask("위 수정대상을 적용할까요?") != TUIYes {
+		f.setNote = "설정하지 않았습니다"
+		return false
+	}
+	res, ok := f.applyStep(plan)
+	if !ok {
+		return false
+	}
+	f.directCheck(plan, res)
 	return true
+}
+
+// directCheck 는 재점검을 마친 호스트의 직접 입력 속성 현재값·Pending 을 보입니다 (프로파일 점검 화면에 없는 속성일 수 있어서).
+// 재점검하지 못한 호스트(f.unchecked)는 처음 값이라 빼고, 보일 줄이 없으면 아무것도 하지 않습니다.
+func (f *biosFlow) directCheck(plan *setPlan, res *setOutcome) {
+	if res == nil || f.ui.Quit() {
+		return
+	}
+	done := map[int]bool{}
+	for _, i := range res.Tried {
+		done[i] = !f.unchecked[i]
+	}
+	var lines []string
+	n, good := 0, 0
+	for _, it := range plan.Items {
+		if !done[it.hostIdx] {
+			continue
+		}
+		n++
+		hc, s := f.u.Check.Hosts[it.hostIdx], f.u.Snaps[it.hostIdx]
+		if hc == nil || hc.Status != "" || s == nil {
+			st := "결과 없음"
+			if hc != nil {
+				st = hc.Status
+			}
+			lines = append(lines, fmt.Sprintf("%s  %s: 재점검 오류 (%s)", it.Host, sanitizeDetail(it.Attr), st))
+			continue
+		}
+		cur := s.Attrs[it.Attr]
+		pend, hasP := hc.pendDiff[it.Attr]
+		tag := "목표값 아님"
+		switch {
+		case hasP && directSame(pend, it.To):
+			tag, good = "Pending 목표값 확인, 재부팅 대기", good+1
+		case !hasP && directSame(cur, it.To):
+			tag, good = "현재값이 목표값", good+1
+		}
+		if !hasP {
+			pend = "-"
+		}
+		lines = append(lines, fmt.Sprintf("%s  %s: 현재값 %s · Pending %s (%s)", it.Host, sanitizeDetail(it.Attr), fullVal(cur), fullVal(pend), tag))
+	}
+	if n == 0 {
+		return
+	}
+	f.setNote += fmt.Sprintf(" · 직접 입력 재점검 목표값 %d/%d건", good, n)
+	head := fmt.Sprintf("직접 입력 확인 (재점검): 목표값 확인 %d/%d건 — %s", good, n, flowNoReboot)
+	f.ui.SetText("직접 입력 확인", append([]string{head}, lines...))
+	f.wait("direct-check")
+	f.ui.Browse()
+}
+
+// recheckHosts 는 설정을 보낸 호스트(idx: 점검 결과 순번 = setOutcome.Tried)만 다시 점검해 f.u 의 해당 호스트 결과
+// (프로파일 판정·스냅샷)를 바꾸고 프로파일 점검 화면에 새 결과를 보입니다. 쓰기는 없습니다 (check 와 같은 읽기 전용).
+//   - 재점검 결과 파일은 결과 폴더/recheck/<일시>/ 에 두고, 합친 전체 결과 CSV(profile_merged_*)를 거기에 씁니다.
+//     처음 점검 파일(profile_* CSV·result.tsv)은 적용 전 기록이라 덮어쓰지 않습니다.
+//   - 전체 설정 비교는 적용 전 스냅샷 기준이라 비웁니다 (f.cmp=nil) → 다음 Tab 에 다시 비교합니다.
+//   - Ctrl+X 로 취소했거나 접속하지 못한 호스트(CANCELED·SKIPPED_AUTH_STOP)는 처음 결과를 그대로 두고 f.unchecked 에 남깁니다
+//     (남아 있는 동안 다시 설정하지 않음). 요약 줄은 f.setNote 에 붙입니다.
+//
+// 설정을 보내는 다른 경로(값 직접 입력)도 보낸 호스트 순번으로 이 함수를 부릅니다.
+func (f *biosFlow) recheckHosts(idx []int) {
+	ui := f.ui
+	if len(idx) == 0 || f.u == nil || f.u.Check == nil || f.u.Check.prof == nil || f.a.O.fromDump != "" || ui.Quit() {
+		return
+	}
+	if f.unchecked == nil {
+		f.unchecked = map[int]bool{}
+	}
+	sub := *f.rc
+	sub.Targets = make([]Target, len(idx))
+	for k, i := range idx {
+		sub.Targets[k] = f.rc.Targets[i]
+		f.unchecked[i] = true
+	}
+	var re *unifiedRun
+	var err error
+	ui.Progress("재점검 (설정을 보낸 호스트)", func(j *TUIJob) error {
+		p := newSinkProgress(1, j.Set)
+		p.Start()
+		defer p.Stop()
+		re, err = runUnified(&sub, unifiedOpts{
+			Profile: f.u.Check.prof, ResultDir: filepath.Join(f.u.Check.Dir, "recheck"), HostsPath: f.a.O.hosts, Ignore: f.a.Ignore,
+			Collect: progStage{P: p, Idx: 1, Name: "접속·조회"}, Cancel: j.Canceled(),
+		})
+		return nil
+	})
+	if re == nil {
+		f.warns = append(f.warns, "재점검 실패: "+err.Error())
+		f.setNote += " · 재점검 실패: " + err.Error()
+		return
+	}
+	if err != nil {
+		f.warns = append(f.warns, "재점검 결과 파일 기록 중 오류: "+err.Error())
+	}
+	done := 0
+	for k, i := range idx {
+		if h := re.Check.Hosts[k]; h.Status != StatusCanceled && h.Status != StatusSkippedAuthStop {
+			f.u.Check.Hosts[i], f.u.Snaps[i] = h, re.Snaps[k]
+			delete(f.unchecked, i)
+			done++
+		}
+	}
+	f.setNote += fmt.Sprintf(" · 재점검 %d대 완료", done)
+	if n := len(idx) - done; n > 0 {
+		f.setNote += fmt.Sprintf(" (%d대는 재점검하지 못해 처음 결과 그대로)", n)
+	}
+	if done == 0 {
+		return
+	}
+	if f.cmp != nil {
+		f.cmp = nil
+		ui.SwitchTab(1)
+		ui.SetResults(flowTabs[1], nil)
+	}
+	plines := f.u.ProfileLines()
+	ui.SwitchTab(0)
+	ui.SetResults("BIOS 점검 결과 — 프로파일 "+f.profName, groupLines(plines))
+	ui.Progress("CSV 저장 (재점검)", func(j *TUIJob) error {
+		f.writeCSVIn(re.Check.Dir, "profile_merged_", plines, j.Canceled())
+		return nil
+	})
 }
 
 // countStatus 는 프로파일 점검에서 호스트 상태가 st 인 대수입니다.

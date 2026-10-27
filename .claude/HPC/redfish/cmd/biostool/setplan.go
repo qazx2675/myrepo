@@ -20,6 +20,8 @@ package main
 //     비교서버 값은 레지스트리 형식이 Enumeration·Integer·Boolean 일 때만 보낸다 (문자열·형식 불명은 수정제외).
 //  6. 비대화형(bios -auto / -auto-check)은 설정하지 않는다: applySetPlan 은 TUI 흐름(tui_flow.go)에서만 부르며
 //     setplan_test.go 가 그 밖의 호출을 막는다.
+//  7. BIOS 값 직접 입력(setdirect.go)도 같은 계획(addItems)·적용(applySetPlan → runHost) 경로를 탄다:
+//     보호 속성·제외 목록·위험 속성·남의 Pending·모델 재확인·레지스트리 검사·허용목록이 그대로 걸린다.
 
 import (
 	"encoding/json"
@@ -35,6 +37,7 @@ import (
 const (
 	SetSrcProfile = "profile" // 프로파일 FAIL (verified=Y)
 	SetSrcCompare = "compare" // 전체비교 difference (allcheck_set=on 일 때만)
+	SetSrcDirect  = "direct"  // BIOS 값 직접 입력 (TUI 수정 단계, 프로파일과 상관없음 — setdirect.go)
 )
 
 // setItem 은 호스트 1대의 속성 1개를 To 값으로 바꾸는 계획입니다 (Protected·Excluded 에서는 바꾸지 않는 차이 항목).
@@ -43,7 +46,7 @@ type setItem struct {
 	Attr   string
 	From   string // 현재값
 	To     string // 목표값 (프로파일은 value 원문 A|B — 보낼 값은 적용 때 BMC 가 받는 표기로 고름)
-	Source string // SetSrcProfile / SetSrcCompare
+	Source string // SetSrcProfile / SetSrcCompare / SetSrcDirect
 
 	PendingHost bool   // 이 호스트에 남의 Pending 이 있음 → includePending=false 면 이 호스트는 설정하지 않음
 	Note        string // 미리보기 참고 (PENDING_NO_JOB, Pending 이 이미 목표값 등)
@@ -323,6 +326,18 @@ func (p *setPlan) addHost(u *unifiedRun, i int, hc *hostCheck, ch *allHost, useC
 	if len(items) == 0 {
 		return
 	}
+	p.addItems(u, i, hc, items)
+}
+
+// addItems 는 호스트 1대의 설정 항목(비어 있지 않음)을 쓰기 가능 여부·남의 Pending 을 본 뒤 계획에 넣습니다
+// (addHost 의 4·5단계, 값 직접 입력 addDirectHost 도 같이 씀).
+func (p *setPlan) addItems(u *unifiedRun, i int, hc *hostCheck, items []setItem) {
+	name := hc.Target.Hostname
+	hostNote := func(format string, a ...interface{}) string {
+		s := fmt.Sprintf(format, a...)
+		p.note(name + "  " + s)
+		return s
+	}
 	excludeAll := func(why string) {
 		for _, it := range items {
 			p.exclude(it, why)
@@ -378,7 +393,7 @@ func (p *setPlan) addHost(u *unifiedRun, i int, hc *hostCheck, ch *allHost, useC
 	p.Pending = append(p.Pending, foreign...)
 	for j := range items {
 		items[j].PendingHost = len(foreign) > 0
-		if v, ok := hc.pendDiff[items[j].Attr]; ok && items[j].Source == SetSrcCompare && matchAny(items[j].allowed(), v) {
+		if v, ok := hc.pendDiff[items[j].Attr]; ok && items[j].Source != SetSrcProfile && matchAny(items[j].allowed(), v) {
 			items[j].Note = "Pending 이 이미 목표값 (재부팅 대기)"
 		}
 		if items[j].Source == SetSrcCompare {
@@ -637,6 +652,9 @@ type setOutcome struct {
 	Fail      int      // 실패·미반영 호스트 수
 	Cancelled int      // 취소로 시작하지 않은 호스트 수
 	Skipped   int      // 남의 Pending 제외·같은 BMC 중복·쓰기 대상 아닌 벤더로 건너뛴 호스트 수
+	// Tried 는 PATCH 를 시도한 호스트(성공·실패 모두)의 점검 결과 순번입니다 (u.Check.Hosts 인덱스, 오름차순).
+	// 보내기 전에 건너뛴 호스트(취소·제외·중복·막힘)는 없습니다. TUI 가 이 호스트만 다시 점검합니다.
+	Tried []int
 }
 
 var errPlanMismatch = errors.New("설정 계획이 점검 결과와 맞지 않습니다 (다시 점검하십시오) — 아무것도 설정하지 않음")
@@ -666,9 +684,10 @@ func applySetPlan(rc *runContext, u *unifiedRun, p *setPlan, includePending bool
 	}
 	var hosts []*setHost
 	byIdx := map[int]*setHost{}
+	idxOf := map[*setHost]int{}
 	userSkip := map[*setHost]bool{}
 	for _, it := range p.Items {
-		if it.hostIdx < 0 || it.hostIdx >= len(u.Check.Hosts) || (it.Source != SetSrcProfile && it.Source != SetSrcCompare) {
+		if it.hostIdx < 0 || it.hostIdx >= len(u.Check.Hosts) || (it.Source != SetSrcProfile && it.Source != SetSrcCompare && it.Source != SetSrcDirect) {
 			return nil, errPlanMismatch
 		}
 		hc := u.Check.Hosts[it.hostIdx]
@@ -679,6 +698,7 @@ func applySetPlan(rc *runContext, u *unifiedRun, p *setPlan, includePending bool
 		if h == nil {
 			h = &setHost{Target: hc.Target, Info: hc.Info}
 			byIdx[it.hostIdx] = h
+			idxOf[h] = it.hostIdx
 			hosts = append(hosts, h)
 		}
 		if it.PendingHost {
@@ -689,7 +709,7 @@ func applySetPlan(rc *runContext, u *unifiedRun, p *setPlan, includePending bool
 				h.okPend = pend[it.Host]
 			}
 		}
-		h.Items = append(h.Items, &applyItem{Std: it.std, Attr: it.Attr, Expected: it.To, Compare: it.Source == SetSrcCompare})
+		h.Items = append(h.Items, &applyItem{Std: it.std, Attr: it.Attr, Expected: it.To, Compare: it.Source == SetSrcCompare, Direct: it.Source == SetSrcDirect})
 	}
 	e, err := newSetEnv(rc, u.Check, true)
 	if err != nil {
@@ -739,6 +759,9 @@ func applySetPlan(rc *runContext, u *unifiedRun, p *setPlan, includePending bool
 		})
 
 	for _, h := range hosts {
+		if h.Tried {
+			out.Tried = append(out.Tried, idxOf[h])
+		}
 		switch hostKind(h, userSkip[h]) {
 		case "완료":
 			out.OK++
@@ -754,6 +777,7 @@ func applySetPlan(rc *runContext, u *unifiedRun, p *setPlan, includePending bool
 			out.Lines = append(out.Lines, fmt.Sprintf("    %s → %s  %s (%s)", sanitizeDetail(it.Attr), planVal(it.Expected), it.Status, it.Detail))
 		}
 	}
+	sort.Ints(out.Tried)
 	out.Lines = append(out.Lines, fmt.Sprintf("설정 결과: 완료 %d대, 실패·미반영 %d대, 취소 %d대, 제외 %d대", out.OK, out.Fail, out.Cancelled, out.Skipped))
 	ferr := writeApplyFiles(u.Check.Dir, hosts)
 	out.Lines = append(out.Lines, "설정 결과 파일: "+filepath.ToSlash(u.Check.Dir)+"/ (apply_result.tsv, applied.txt, apply_failed.txt, apply_requests.txt)")
