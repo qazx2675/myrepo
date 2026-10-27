@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -441,5 +442,66 @@ func TestRunLogPauseBuffers(t *testing.T) {
 	l.Resume()
 	if !strings.Contains(out.String(), "[a] hello") {
 		t.Fatalf("%q", out.String())
+	}
+}
+
+// 실행 중 질문에 답이 없으면(input_timeout_sec) 계속 기다리지 않는다 ---------------------------
+
+// timeoutRunner 는 실제 askLine(공용 LineReader + 제한 시간)으로 묻는 Runner 다. 입력은 영영 오지 않는다.
+func timeoutRunner(t *testing.T, f *fakeOps, d time.Duration) (*Runner, *bytes.Buffer) {
+	t.Helper()
+	r, out, _ := testRunner(f)
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { pw.Close() })
+	r.Cfg.InputTimeout = d
+	r.Ask = askLine(NewLineReader(pr), out, d)
+	return r, out
+}
+
+func TestOffForceAskTimeout(t *testing.T) {
+	f := newFake()
+	r, out := timeoutRunner(t, f, 60*time.Millisecond)
+	vms := vmsOf("poweredOn", true, "svr1ev01", "svr1ev02")
+	vms[1].ToolsRunning = false // 강제 PowerOff 질문이 나온다
+	f.offAfter["svr1ev01"] = 1
+	start := time.Now()
+	rs := r.RunOff(context.Background(), vms)
+	if el := time.Since(start); el > 2*time.Second {
+		t.Fatalf("질문에서 계속 기다림: %v", el)
+	}
+	if statusOf(rs, "svr1ev01").Status != StOK {
+		t.Fatalf("정상 종료 VM 은 그대로 성공: %+v", rs)
+	}
+	x := statusOf(rs, "svr1ev02")
+	if x.Status != StFail || !strings.HasPrefix(x.Note, "강제 PowerOff 안 함(입력 시간 초과) — VMware Tools 미실행") {
+		t.Fatalf("시간 초과는 No(강제 PowerOff 안 함): %+v", x)
+	}
+	if idx(f.events, "poweroff:svr1ev02") >= 0 {
+		t.Fatalf("시간 초과인데 강제 PowerOff 함: %v", f.events)
+	}
+	if !strings.Contains(out.String(), "강제 PowerOff 하시겠습니까? (YeS/No): \n[안내] 입력 시간 60ms 초과 — 강제 PowerOff 하지 않습니다 (No 로 처리)") {
+		t.Fatalf("시간 초과 안내 없음:\n%s", out.String())
+	}
+}
+
+func TestOnSeqAskTimeout(t *testing.T) {
+	f := newFake()
+	r, out := timeoutRunner(t, f, 60*time.Millisecond)
+	r.WaitBoot = func(ctx context.Context, vm *VMInfo, d time.Duration) BootResult {
+		f.ev("boot:" + vm.Name)
+		if vm.Name == "svr1ev01" {
+			return BootResult{Detail: "22: 응답없음"}
+		}
+		return BootResult{OK: true, Via: "22 직접"}
+	}
+	rs := r.RunOnSeq(context.Background(), vmsOf("poweredOff", true, "svr1ev01", "svr1ev02"))
+	if idx(f.events, "on:svr1ev02") >= 0 {
+		t.Fatalf("시간 초과는 순차 부팅 중단(q) — 다음 ev 를 켜면 안 됨: %v", f.events)
+	}
+	if statusOf(rs, "svr1ev01").Status != StFail || statusOf(rs, "svr1ev02").Status != StFail {
+		t.Fatalf("%+v", rs)
+	}
+	if !strings.Contains(out.String(), "[안내] 입력 시간 60ms 초과 — 순차 부팅을 중단합니다 (q 로 처리)") {
+		t.Fatalf("시간 초과 안내 없음:\n%s", out.String())
 	}
 }

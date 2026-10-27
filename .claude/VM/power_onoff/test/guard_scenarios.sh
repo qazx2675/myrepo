@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # test/guard_scenarios.sh — vm_power_onoff --demo 에 파이프 입력으로 안전장치 취소/통과 시나리오를 확인한다.
 # --demo 는 데몬이 없으므로 기존 방식(2/5 Enter, 3/5 VM 이름 입력)이다. 4/5 의 ls(대상 보기)도 확인한다.
+# 입력 제한 시간(계속 대기 금지)은 시험 전용 환경변수(데모에서만 읽음)로 줄여 확인한다:
+#   PWONOFF_TEST_INPUT_TIMEOUT = 3/5 전체 제한(초), PWONOFF_TEST_STEP_TIMEOUT = 1/5·2/5·4/5 질문마다의 제한(초, input_timeout_sec 에 해당)
 #   bash test/guard_scenarios.sh [바이너리 경로(기본 ./vm_power_onoff)]
 # 결과: PASS=N FAIL=M, FAIL 이 있으면 exit 1
 set -u
@@ -8,7 +10,7 @@ BIN="${1:-./vm_power_onoff}"
 [ -x "$BIN" ] || { echo "실행 파일 없음: $BIN" >&2; exit 2; }
 
 export PWONOFF_COLOR=never PWONOFF_TEST_TICK_MS=10
-unset PWONOFF_TEST_INPUT_TIMEOUT
+unset PWONOFF_TEST_INPUT_TIMEOUT PWONOFF_TEST_STEP_TIMEOUT
 PASS=0; FAIL=0
 OK_HOSTS='web-prd-01\nweb-prd-02\nwas-prd-01\n'
 
@@ -60,6 +62,27 @@ fi
 # 입력 시간 초과: 3단계에서 입력 없이 stdin 을 열어 둔다
 out=$( { printf 'woqnxldwkrdjq\n\n'; sleep 4; } | PWONOFF_TEST_INPUT_TIMEOUT=2 "$BIN" --demo 2>&1 ); rc=$?
 check "입력 시간 초과" 1 "[취소] 입력 시간 2초 초과" "$out" "$rc"
+
+# 질문마다의 입력 제한(실제 실행의 input_timeout_sec, 데모는 PWONOFF_TEST_STEP_TIMEOUT 초): 1/5·2/5·4/5 에서 자리를 비우면 취소
+# step 이름 앞입력 다음단계문구(나오면 안 됨)
+step_timeout() {
+  local name="$1" first="$2" notin="$3" out rc t0 el
+  t0=$(date +%s)
+  out=$( { printf "$first"; sleep 5; } | PWONOFF_TEST_STEP_TIMEOUT=1 "$BIN" --demo 2>&1 ); rc=$?
+  el=$(( $(date +%s) - t0 ))
+  check "$name" 1 "[취소] 입력 시간 1초 초과" "$out" "$rc"
+  if grep -qF -- "$notin" <<<"$out"; then
+    FAIL=$((FAIL+1)); echo "[FAIL] $name: 시간 초과인데 다음 단계($notin) 진행"
+  fi
+  # 바이너리는 1초 뒤 끝나고, 파이프 앞쪽 sleep 5 때문에 전체는 약 5초. 그보다 오래 걸리면 대기가 남은 것
+  if [ "$el" -gt 8 ]; then
+    FAIL=$((FAIL+1)); echo "[FAIL] $name: ${el}초 걸림(계속 대기)"
+  fi
+}
+step_timeout "1/5 입력 시간 초과" ""                          "작업 대상 호스트 목록"
+step_timeout "2/5 입력 시간 초과" "woqnxldwkrdjq\n"           "[3/5]"
+step_timeout "4/5 입력 시간 초과" "woqnxldwkrdjq\n\n${OK_HOSTS}" "[5/5]"
+step_timeout "4/5 ls 뒤 입력 시간 초과" "woqnxldwkrdjq\n\n${OK_HOSTS}ls\n" "[5/5]"
 
 # 카운트다운 중 SIGINT
 tmp=$(mktemp)

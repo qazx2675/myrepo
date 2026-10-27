@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -105,6 +106,25 @@ func (r *LineReader) ReadLineTimeout(ctx context.Context, d time.Duration) (stri
 	defer t.Stop()
 	return r.read(ctx, t.C)
 }
+
+// ReadLineLimit 은 질문 한 번의 제한 시간 d 로 읽는다(d <= 0 이면 제한 없음 = ReadLine). 시간 초과는 ErrTimeout.
+func (r *LineReader) ReadLineLimit(ctx context.Context, d time.Duration) (string, error) {
+	if d <= 0 {
+		return r.ReadLine(ctx)
+	}
+	return r.ReadLineTimeout(ctx, d)
+}
+
+// durText 는 제한 시간을 "10분" / "90초" 형태로(분 단위로 떨어지면 분).
+func durText(d time.Duration) string {
+	if d >= time.Minute && d%time.Minute == 0 {
+		return strconv.Itoa(int(d/time.Minute)) + "분"
+	}
+	return secs(d)
+}
+
+// inputTimeoutReason 은 입력 제한 시간 초과의 취소 사유("입력 시간 10분 초과")다.
+func inputTimeoutReason(d time.Duration) string { return "입력 시간 " + durText(d) + " 초과" }
 
 func (r *LineReader) read(ctx context.Context, timeout <-chan time.Time) (string, error) {
 	if r.err != nil {

@@ -506,7 +506,7 @@ func (a *adminScreen) renderLogin(w, h int, color bool) string {
 }
 
 func ttlText(info daemon.Info) string {
-	segs := ttlSegs(info.ApprovalTTL, info.WorkTimeout, true)
+	segs := ttlSegs(info.WaitTimeout, info.ApprovalTTL, info.WorkTimeout, true)
 	return segsText(segs)
 }
 
@@ -519,7 +519,7 @@ func (a *adminScreen) renderList(w, h int, color bool) string {
 		rows = append(rows, tableRow{id: j.ID, worker: j.User, checker: j.Checker, label: daemon.StatusLabel(j.Status, j.Phase),
 			caller: callerText(j.Caller), at: shortTime(j.UpdatedAt, a.loc), extra: strconv.Itoa(len(j.Targets)), kind: k})
 	}
-	head := titleLines(color, w, "cross_check 관리자 상태 리포트", "admin", a.ds, a.loc, counterSegs(kinds), ttlSegs(a.info.ApprovalTTL, a.info.WorkTimeout, true))
+	head := titleLines(color, w, "cross_check 관리자 상태 리포트", "admin", a.ds, a.loc, counterSegs(kinds), ttlSegs(a.info.WaitTimeout, a.info.ApprovalTTL, a.info.WorkTimeout, true))
 	head = append(head, sepLine(w))
 	var body [][]string
 	cursor := 0

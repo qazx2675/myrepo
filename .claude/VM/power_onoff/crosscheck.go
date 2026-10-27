@@ -184,18 +184,35 @@ type CrossCheckGate struct {
 	User       string   // 작업자
 	OptChecker string   // -c 값 (비우면 번호 메뉴)
 	Targets    []string // 승인 받을 VM 이름 = 실제 전원 작업 대상
+	// InputTimeout 은 2단계 확인자 번호 입력 한 번의 제한(input_timeout_sec). 0 이면 제한 없음
+	InputTimeout time.Duration
 
 	// Approve 가 채우고 Start·Finish 가 쓴다. token 은 화면·로그에 내지 않고 --finish 를 보냈거나(성공·실패 모두)
 	// 보낼 필요가 없어지면(--start 거부) 지운다. started 는 --start 가 통과했는지(두 번 시작 방지).
 	checker, job, token string
 	started             bool
+	// deadline 은 승인 안내(cross_check --run 의 "승인 유효시간: … — HH:MM:SS 까지")에서 읽은 마감 시각(모르면 0).
+	deadline time.Time
 }
+
+// ccConfirmMargin 은 4/5 입력을 승인 마감보다 이만큼 먼저 끊는 여유다. 안내의 마감 시각은 초 단위로 잘려 실제보다
+// 최대 1초 이르고, 여기에 1초를 더 빼서 데몬이 승인을 만료시키기 전에 --finish aborted(승인/작업중단)를 보낼 수 있게 한다.
+const ccConfirmMargin = time.Second
 
 // Hook 은 RunGuard 가 교차검증 방식으로 돌도록 opts 에 관문 단계를 건다.
 func (g *CrossCheckGate) Hook(opts *GuardOpts) {
 	opts.Checker = g.SelectChecker
 	opts.CrossCheck = g.Approve
 	opts.AfterCountdown = g.Start
+	opts.ConfirmDeadline = g.ConfirmDeadline
+}
+
+// ConfirmDeadline 은 4/5 YeS 입력의 마감(승인 마감 - ccConfirmMargin)이다. 마감 시각을 모르면 0(→ input_timeout_sec).
+func (g *CrossCheckGate) ConfirmDeadline() time.Time {
+	if g.deadline.IsZero() {
+		return time.Time{}
+	}
+	return g.deadline.Add(-ccConfirmMargin)
 }
 
 // SelectChecker 는 2단계: -c 가 있으면 그 확인자(미리 선택), 없으면 본인을 뺀 users 번호 메뉴.
@@ -225,13 +242,17 @@ func (g *CrossCheckGate) SelectChecker(ctx context.Context, in *LineReader, out 
 	}
 	for try := 1; ; try++ {
 		fmt.Fprint(out, "번호 입력: ")
-		s, err := in.ReadLine(ctx)
+		s, err := in.ReadLineLimit(ctx, g.InputTimeout)
 		if err != nil {
 			if ctx.Err() != nil {
 				g.Audit.Printf("교차검증 확인자 선택 중 Ctrl+C")
 				return "", ctx.Err()
 			}
 			fmt.Fprintln(out)
+			if errors.Is(err, ErrTimeout) {
+				why := inputTimeoutReason(g.InputTimeout)
+				return fail(why, errors.New(why))
+			}
 			return fail("입력 종료(EOF)", errors.New("입력 종료(EOF)"))
 		}
 		s = strings.TrimSpace(s)
@@ -250,12 +271,14 @@ func (g *CrossCheckGate) SelectChecker(ctx context.Context, in *LineReader, out 
 // Approve 는 3단계: 확인자에게 승인을 요청하고 승인될 때까지 기다린다(VM 이름 입력 대신). 승인되면 nil.
 // 미승인이면 감사 기록까지 남긴 오류를 돌려주고, 화면의 "[취소] 교차검증 미승인" 은 RunGuard 가 출력한다.
 func (g *CrossCheckGate) Approve(ctx context.Context, checker string) error {
-	g.checker, g.job, g.token, g.started = checker, "", "", false
+	g.checker, g.job, g.token, g.started, g.deadline = checker, "", "", false, time.Time{}
 	// 대기 전에 승인 유효시간 정책부터 알린다
 	fmt.Fprintln(g.Out, Yellow(crossCheckNotice))
 	fmt.Fprintf(g.Out, "[INFO] 확인자 %s 에게 교차검증을 요청합니다 (대상 %d대). 승인을 기다리는 중... (Ctrl+C 로 취소)\n", checker, len(g.Targets))
 	g.Audit.Printf("교차검증 요청 작업자=%s 확인자=%s 대상=%d대", g.User, checker, len(g.Targets))
-	jobID, token, err := g.CC.Run(ctx, g.User, checker, g.Targets, g.Out, g.ErrOut)
+	// cross_check 의 진행 출력(stderr)은 그대로 화면에 흘리면서 승인 안내의 마감 시각 줄만 읽어 둔다
+	sn := &ccDeadlineSniffer{w: g.ErrOut}
+	jobID, token, err := g.CC.Run(ctx, g.User, checker, g.Targets, g.Out, sn)
 	if err == nil && (jobID == "" || token == "" || !ccJobRe.MatchString(jobID)) {
 		err = &CrossCheckError{Code: ccExitError, Msg: "승인 응답에 작업 ID/토큰이 없거나 올바르지 않습니다"}
 	}
@@ -271,7 +294,86 @@ func (g *CrossCheckGate) Approve(ctx context.Context, checker string) error {
 	g.Audit.Printf("교차검증 승인 확인자=%s job=%s", checker, jobID)
 	fmt.Fprintln(g.Out, Green(fmt.Sprintf("[INFO] 교차검증 승인됨 (확인자 %s, 작업 ID %s)", checker, jobID)))
 	fmt.Fprintln(g.Out, Yellow("[INFO] 승인 유효시간 안에 4/5 YeS 입력과 5/5 카운트다운을 마쳐야 전원 작업이 시작됩니다 (cross_check --start 는 카운트다운 직후 자동 호출, 넘기면 승인 자동 취소)"))
+	if dl, ok := sn.deadline(time.Now()); ok {
+		g.deadline = dl
+		g.Audit.Printf("교차검증 승인 마감 %s (4/5 입력은 그 전까지)", dl.Format("15:04:05"))
+		fmt.Fprintln(g.Out, Yellow(fmt.Sprintf("[INFO] 4/5 입력 마감: %s — 그때까지 YeS 를 입력하지 않으면 자동 취소(승인/작업중단)", dl.Format("15:04:05"))))
+	} else {
+		g.Audit.Printf("교차검증 승인 마감 시각을 알 수 없음 — 4/5 입력 제한은 input_timeout_sec(%s)", durText(g.InputTimeout))
+	}
 	return nil
+}
+
+// ccDeadlineRe 는 cross_check --run 이 승인 직후 stderr 에 내는 마감 안내 줄이다.
+//
+//	"  승인 유효시간: 2분 — 15:04:05 까지 아래 --start 를 호출해야 합니다"
+var (
+	ccDeadlineRe = regexp.MustCompile(`승인 유효시간: .*?(\d{1,2}):(\d{2}):(\d{2}) 까지`)
+	ansiRe       = regexp.MustCompile("\x1b\\[[0-9;]*m")
+)
+
+// ccDeadlineSniffer 는 받은 출력을 그대로 w 로 넘기면서 줄 단위로 마감 안내를 찾아 마지막 것을 기억한다.
+type ccDeadlineSniffer struct {
+	w       io.Writer
+	partial []byte
+	h, m, s int
+	found   bool
+}
+
+func (c *ccDeadlineSniffer) Write(p []byte) (int, error) {
+	if c.w != nil {
+		c.w.Write(p)
+	}
+	c.partial = append(c.partial, p...)
+	for {
+		i := bytes.IndexByte(c.partial, '\n')
+		if i < 0 {
+			break
+		}
+		c.scan(c.partial[:i])
+		c.partial = c.partial[i+1:]
+	}
+	if len(c.partial) > 4096 { // 줄바꿈 없는 긴 출력은 버린다
+		c.partial = c.partial[:0]
+	}
+	return len(p), nil
+}
+
+func (c *ccDeadlineSniffer) scan(line []byte) {
+	m := ccDeadlineRe.FindSubmatch(ansiRe.ReplaceAll(line, nil))
+	if m == nil {
+		return
+	}
+	h, _ := strconv.Atoi(string(m[1]))
+	mi, _ := strconv.Atoi(string(m[2]))
+	s, _ := strconv.Atoi(string(m[3]))
+	if h > 23 || mi > 59 || s > 59 {
+		return
+	}
+	c.h, c.m, c.s, c.found = h, mi, s, true
+}
+
+// deadline 은 찾은 시:분:초를 now 기준의 가장 가까운 시각으로 바꾼다(자정 넘김 처리).
+// 승인 유효시간 허용 범위(최대 1시간)를 크게 벗어나면 믿지 않는다(ok=false → input_timeout_sec 사용).
+func (c *ccDeadlineSniffer) deadline(now time.Time) (time.Time, bool) {
+	if len(c.partial) > 0 { // 줄바꿈 없이 끝난 마지막 줄
+		c.scan(c.partial)
+		c.partial = c.partial[:0]
+	}
+	if !c.found {
+		return time.Time{}, false
+	}
+	t := time.Date(now.Year(), now.Month(), now.Day(), c.h, c.m, c.s, 0, now.Location())
+	switch {
+	case t.Sub(now) > 12*time.Hour:
+		t = t.Add(-24 * time.Hour)
+	case now.Sub(t) > 12*time.Hour:
+		t = t.Add(24 * time.Hour)
+	}
+	if d := t.Sub(now); d > time.Hour+time.Minute || d < -time.Minute {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // Start 는 5단계 카운트다운 직후: 승인 유효시간 창이 아직 열려 있는지 cross_check --start 로 확인하며 시작을 알린다.
@@ -403,6 +505,14 @@ func (c *execCrossChecker) Run(ctx context.Context, user, checker string, target
 	f := &ccFilter{out: out}
 	cmd.Stdout = f
 	cmd.Stderr = errOut
+	// stderr 를 마감 시각을 읽으려고 파이프로 받으면 cross_check 가 색을 끄므로, 원래 터미널이었다면 색을 그대로 켜 둔다
+	if sn, ok := errOut.(*ccDeadlineSniffer); ok {
+		if tf, ok := sn.w.(*os.File); ok && isTerminal(tf) && os.Getenv("CROSS_CHECK_COLOR") == "" {
+			if _, no := os.LookupEnv("NO_COLOR"); !no {
+				cmd.Env = append(os.Environ(), "CROSS_CHECK_COLOR=always")
+			}
+		}
+	}
 	err := cmd.Run()
 	f.flush()
 	if err != nil {

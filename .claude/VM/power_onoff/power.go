@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -19,7 +20,8 @@ type VMOps interface {
 	Refresh(ctx context.Context, vm *VMInfo) error
 }
 
-// AskFunc 는 사용자에게 한 줄을 묻는다(공용 stdin 리더로 구현). 에러(EOF, Ctrl+C)는 호출자가 "중단"으로 본다.
+// AskFunc 는 사용자에게 한 줄을 묻는다(공용 stdin 리더로 구현, input_timeout_sec 제한).
+// 에러(EOF, Ctrl+C, 시간 초과 ErrTimeout)는 호출자가 "No/중단"으로 본다.
 type AskFunc func(ctx context.Context, prompt string) (string, error)
 
 // WaitBootFunc 는 부팅 완료 판정이다. *BootChecker.WaitBoot 가 구현한다.
@@ -139,6 +141,10 @@ func (r *Runner) RunOff(ctx context.Context, vms []*VMInfo) []Result {
 			r.Log.Raw("  %-20s %s\n", f.vm.Name, f.reason)
 		}
 		ans, err := r.ask(ctx, "강제 PowerOff 하시겠습니까? (YeS/No): ")
+		timedOut := errors.Is(err, ErrTimeout)
+		if timedOut { // 계속 기다리지 않는다: No 로 처리하고 결과표·결과 보고는 정상 흐름대로
+			r.Log.Logf("", "[안내] %s — 강제 PowerOff 하지 않습니다 (No 로 처리)", inputTimeoutReason(r.Cfg.InputTimeout))
+		}
 		if err == nil && ans == "YeS" {
 			targets := make([]*VMInfo, len(force))
 			for i, f := range force {
@@ -159,8 +165,12 @@ func (r *Runner) RunOff(ctx context.Context, vms []*VMInfo) []Result {
 				r.Log.Logf(vm.Name, "강제 PowerOff 완료")
 			})
 		} else {
+			why := "강제 PowerOff 안 함 — "
+			if timedOut {
+				why = "강제 PowerOff 안 함(입력 시간 초과) — "
+			}
 			for _, f := range force {
-				res.set(f.vm.Name, StFail, "강제 PowerOff 안 함 — "+f.reason, 0)
+				res.set(f.vm.Name, StFail, why+f.reason, 0)
 			}
 		}
 	}
@@ -417,7 +427,7 @@ func (r *Runner) ask(ctx context.Context, prompt string) (string, error) {
 	return r.Ask(ctx, prompt)
 }
 
-// askChoice : allowed 중 하나가 올 때까지 다시 묻는다. 입력 에러(EOF, Ctrl+C)는 "q".
+// askChoice : allowed 중 하나가 올 때까지 다시 묻는다. 입력 에러(EOF, Ctrl+C, 입력 시간 초과)는 "q".
 func (r *Runner) askChoice(ctx context.Context, prompt, allowed string) string {
 	r.askMu.Lock()
 	defer r.askMu.Unlock()
@@ -425,6 +435,10 @@ func (r *Runner) askChoice(ctx context.Context, prompt, allowed string) string {
 	defer r.Log.Resume()
 	for {
 		ans, err := r.Ask(ctx, prompt)
+		if errors.Is(err, ErrTimeout) { // 계속 기다리지 않는다: 가장 안전한 중단(q)으로 처리
+			r.Log.Logf("", "[안내] %s — 순차 부팅을 중단합니다 (q 로 처리)", inputTimeoutReason(r.Cfg.InputTimeout))
+			return "q"
+		}
 		if err != nil {
 			return "q"
 		}

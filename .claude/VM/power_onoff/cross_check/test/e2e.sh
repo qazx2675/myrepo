@@ -55,6 +55,8 @@ unset CROSS_CHECK_TOKEN || true
 export CROSS_CHECK_TEST_MIN_TTL_SEC=3
 # 시험 전용: work_timeout_sec 최소값(원래 600초)을 3초로 낮춰 "작업자 응답 없음"(작업중 kill -9) 시험을 짧게 한다.
 export CROSS_CHECK_TEST_MIN_WORK_TIMEOUT_SEC=3
+# 시험 전용: wait_timeout_sec 최소값(원래 30초)을 2초로 낮춰 "승인 대기 시간 초과"(대기 방치) 시험을 짧게 한다(7c 에서 SIGHUP 으로 4초로 줄임).
+export CROSS_CHECK_TEST_MIN_WAIT_TIMEOUT_SEC=2
 unset CROSS_CHECK_CALLER || true
 
 mkdir -p "$T/run" "$T/etc" "$T/lib" "$T/targets" "$T/out"
@@ -66,6 +68,7 @@ auth=required
 users=alice,bob,carol,dave
 approval_ttl_sec=3
 work_timeout_sec=3
+wait_timeout_sec=600
 EOF
 printf 'vm01ev01\nvm02ev01\nvm03ev01\n# 주석\n' >"$T/targets/on_off_alice.txt"
 printf 'vm01ev01\n' >"$T/targets/on_off_dave.txt"
@@ -635,6 +638,106 @@ fi
 kill "$DPID2" 2>/dev/null || true
 wait "$DPID2" 2>/dev/null || true
 DPID2=""
+
+# ---- 7c. 승인 대기 제한(wait_timeout_sec): 화면 표시 · SIGHUP · 대기 방치 → 중단(--run exit 1) · 승인된 작업 영향 없음 · 범위 ----
+# 이 데몬은 conf 의 wait_timeout_sec=600(기본값과 같음)으로 떠 있다. SIGHUP 으로 4초로 줄여 방치된 대기 작업이 중단되는지 본다.
+conf_wait() { sed -i "s/^wait_timeout_sec=.*/wait_timeout_sec=$1/" "$CROSS_CHECK_CONF"; }
+# wait_is <표시 문구> <초> : 사용자 화면(줄 입력) 머리말이 그 값이 될 때까지(최대 3초)
+wait_is() {
+	local n=0 o want="승인 대기 제한: $1 (wait_timeout_sec=$2)"
+	while o=$(printf 'q\n' | "$BIN" --user alice 2>&1 || true); [ "${o#*"$want"}" = "$o" ]; do
+		n=$((n + 1))
+		if [ "$n" -gt 30 ]; then return 1; fi
+		sleep 0.1
+	done
+}
+ok=1
+wait_is 10분 600 || ok=0
+admin "$T/out/wait_adm.txt" "$ADMIN_PW" q
+grep -q '승인 대기 제한: 10분 (wait_timeout_sec=600)' "$T/out/wait_adm.txt" || ok=0
+raw_has '{"op":"ping"}' '"wait_timeout_sec":600' || ok=0
+if [ $ok = 1 ]; then pass "사용자·관리자 화면 머리말과 ping(wait_timeout_sec)에 승인 대기 제한(10분) 표시"; else fail "대기 제한 표시" "$T/out/wait_adm.txt"; fi
+
+conf_wait 4
+kill -HUP "$DPID"
+ok=1
+wait_is 4초 4 || ok=0
+grep -q '승인 대기 제한 시간 10분(600초) → 4초(4초)' "$T/daemon.log" || ok=0
+if [ $ok = 1 ]; then pass "SIGHUP: wait_timeout_sec 다시 읽음(600→4초) + 로그"; else fail "SIGHUP wait_timeout_sec" "$T/daemon.log"; fi
+
+# 대기 방치: 아무도 승인하지 않으면 4초 뒤 데몬이 중단 → --run 은 사유를 받고 exit 1, stdout 의 JOB/TOKEN 없음
+start_worker wwait "$T/t_alice3.txt"
+JW=$JOB
+WWP=$WPID
+RC=0
+n=0
+while kill -0 "$WWP" 2>/dev/null && [ "$n" -lt 100 ]; do
+	n=$((n + 1))
+	sleep 0.1
+done
+wait "$WWP" || RC=$?
+ok=1
+[ -n "$JW" ] || ok=0
+[ "$RC" -eq 1 ] || ok=0
+grep -q '승인 대기 제한 4초 — [0-9][0-9]:[0-9][0-9] 까지 (이 시각까지 승인되지 않으면 자동 중단)' "$T/out/wwait.err" || ok=0
+grep -q "\[중단\] 작업 $JW — 승인 대기 시간 초과(4초)" "$T/out/wwait.err" || ok=0
+[ ! -s "$T/out/wwait.out" ] || ok=0
+job_row alice "$JW" | grep -q '승인 대기 시간 초과(4초)' || ok=0
+job_row alice "$JW" | grep -qx '  상태      : 중단' || ok=0
+if [ $ok = 1 ]; then pass "대기 방치 → 4초 뒤 중단(승인 대기 시간 초과(4초)), --run exit 1·안내문에 'HH:MM 까지'·stdout 비어 있음"; else
+	fail "대기 방치 (rc=$RC job=$JW)" "$T/out/wwait.err" "$T/out/wwait.out" "$T/daemon.log"
+	job_row alice "$JW"
+fi
+
+# 승인된 작업은 대기 제한의 영향을 받지 않음: 바로 승인 → --run exit 0 → (승인 유효시간 3초 안에) --start → --finish done
+# → 대기 제한(4초)보다 오래 기다려도 승인/작업완료 그대로(작업 제한 3초와 겹치지 않게 바로 끝낸다)
+start_worker wwok "$T/t_alice3.txt"
+JWO=$JOB
+approve_as_bob "$JWO" "$T/out/approve_wwok.txt" vm03ev01
+RC=0
+wait "$WPID" || RC=$?
+RC2=0
+(eval "$(cat "$T/out/wwok.out")" && export CROSS_CHECK_TOKEN && "$BIN" --start --job "$CROSS_CHECK_JOB" &&
+	"$BIN" --finish --job "$CROSS_CHECK_JOB" --result done) >"$T/out/start_wwok.txt" 2>&1 || RC2=$?
+sleep 4.5 # 대기 제한(4초)보다 오래
+ok=1
+[ "$RC" -eq 0 ] && [ "$RC2" -eq 0 ] || ok=0
+job_row alice "$JWO" | grep -qx '  상태      : 승인/작업완료' || ok=0
+! job_row alice "$JWO" | grep -q '대기 시간 초과' || ok=0
+if [ $ok = 1 ]; then pass "제한 안에 승인된 작업은 대기 제한(4초)이 지나도 그대로(승인 → 작업중 → 승인/작업완료)"; else
+	fail "승인된 작업 영향 (run=$RC start/finish=$RC2)" "$T/out/approve_wwok.txt" "$T/out/wwok.err" "$T/out/start_wwok.txt"
+	job_row alice "$JWO"
+fi
+
+# 잘못된 값(시험 최소 2초 미만·범위 밖)은 기존(4초) 유지, 그 뒤 600 으로 복귀
+ok=1
+for bad in 1 86401 abc; do
+	conf_wait "$bad"
+	kill -HUP "$DPID"
+	sleep 0.4
+	wait_is 4초 4 || ok=0
+done
+grep -q '승인 대기 제한 4초 유지' "$T/daemon.log" || ok=0
+conf_wait 600
+kill -HUP "$DPID"
+wait_is 10분 600 || ok=0
+kill -0 "$DPID" 2>/dev/null || ok=0
+if [ $ok = 1 ]; then pass "SIGHUP: 잘못된 wait_timeout_sec(1/86401/abc)는 기존 값 유지+로그, 다시 600초로 복귀"; else fail "wait_timeout_sec 잘못된 값" "$T/daemon.log"; fi
+
+# 범위 검증: 최소 30 · 최대 86400 (시험용 최소값 변수를 지우고 실제 규칙으로). 데몬은 뜨지 않고 exit 3
+ok=1
+for v in 29 86401 0 abc; do
+	printf 'target_dir=%s\nusers=alice,bob\nwait_timeout_sec=%s\n' "$T/targets" "$v" >"$ttl_conf"
+	RC=0
+	env -u CROSS_CHECK_TEST_MIN_WAIT_TIMEOUT_SEC CROSS_CHECK_CONF="$ttl_conf" CROSS_CHECK_SOCKET="$T/run2/cc.sock" CROSS_CHECK_LOCK="$T/run2/daemon.lock" \
+		CROSS_CHECK_STATE="$T/lib2/jobs.json" CROSS_CHECK_LOG="$T/daemon2.log" "$BIN" --daemon >"$T/out/badwait.txt" 2>&1 || RC=$?
+	if [ "$RC" -ne 3 ] || ! grep -q 'wait_timeout_sec 는 30~86400 사이의 정수' "$T/out/badwait.txt" || [ -S "$T/run2/cc.sock" ]; then
+		ok=0
+		echo "  (wait_timeout_sec=$v 가 거부되지 않음 rc=$RC)"
+		cat "$T/out/badwait.txt"
+	fi
+done
+if [ $ok = 1 ]; then pass "wait_timeout_sec 29·86401·0·abc 는 데몬 기동 거부(exit 3, '30~86400 사이의 정수')"; else fail "wait_timeout_sec 범위 검증"; fi
 
 # ---- 8. 데몬 강제 종료 → 동시 --ensure 3개 → 하나만 기동, 재시작 처리 ----
 # 작업중인 작업 하나(J8: 시작 직후 데몬이 죽음 → 재시작 때 승인/작업중단). 작업 제한(3초)·승인 유효시간(3초) 안에 데몬을 죽인다

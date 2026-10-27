@@ -8,8 +8,9 @@
 #   bash playground.sh start [--ttl 초]   빌드(필요하면) → 폴더·설정·계정·대상 파일 준비 → 데몬을 백그라운드로 기동
 #   bash playground.sh stop               놀이터 데몬 중지
 #   bash playground.sh restart [--ttl 초] 중지 후 다시 기동
-#   bash playground.sh reload             데몬을 죽이지 않고 conf 의 approval_ttl_sec 만 다시 읽게 함(SIGHUP)
+#   bash playground.sh reload             데몬을 죽이지 않고 conf 의 approval_ttl_sec·work_timeout_sec·wait_timeout_sec 만 다시 읽게 함(SIGHUP)
 #   bash playground.sh ttl <초>           conf 의 approval_ttl_sec 를 바꾸고 바로 반영(실행 중이면 SIGHUP)
+#   bash playground.sh wait <초>          conf 의 wait_timeout_sec(승인 대기 제한)를 바꾸고 바로 반영(실행 중이면 SIGHUP)
 #   bash playground.sh status             데몬·승인 유효시간·작업 기록 요약
 #   bash playground.sh reset [--hard]     중지 + 작업 기록·로그 삭제(설정·계정 유지). --hard 는 설정·계정·대상 파일도 처음 상태로
 #   bash playground.sh env                다른 터미널에서 쓰는 export 줄 출력:  eval "$(bash playground.sh env)"
@@ -59,6 +60,9 @@ PW_ADMIN="admin123"
 DEFAULT_TTL=120
 MIN_TTL=10
 MAX_TTL=3600
+MIN_WAIT=30
+MAX_WAIT=86400
+DEFAULT_WAIT=600
 
 say() { printf '%s\n' "$*"; }
 err() { printf '[오류] %s\n' "$*" >&2; }
@@ -109,6 +113,50 @@ live_ttl() {
 wait_live_ttl() { # <기대 초> [최대 0.1초 횟수]
   local want=$1 max=${2:-40} n=0
   while [ "$(live_ttl)" != "$want" ]; do
+    n=$((n + 1))
+    [ "$n" -gt "$max" ] && return 1
+    sleep 0.1
+  done
+  return 0
+}
+
+
+# ---- 승인 대기 제한(wait_timeout_sec) 도우미 ----
+check_wait() {
+  case "${1:-}" in
+    ""|*[!0-9]*) die "승인 대기 제한은 ${MIN_WAIT}~${MAX_WAIT} 사이의 정수(초)여야 합니다: '${1:-}'  (예: 600 = 10분, 30 = 30초)" ;;
+  esac
+  if [ "${#1}" -gt 6 ] || [ "$((10#$1))" -lt "$MIN_WAIT" ] || [ "$((10#$1))" -gt "$MAX_WAIT" ]; then
+    die "승인 대기 제한은 ${MIN_WAIT}~${MAX_WAIT} 사이의 정수(초)여야 합니다: '$1'  (예: 600 = 10분, 30 = 30초)"
+  fi
+}
+
+# conf 의 wait_timeout_sec (없으면 빈 값 = 데몬 기본 600초)
+conf_wait() {
+  [ -f "$P_CONF" ] || return 0
+  sed -n 's/^wait_timeout_sec=\([0-9][0-9]*\).*/\1/p' "$P_CONF" | head -1 || true
+}
+
+set_conf_wait() {
+  if grep -q '^wait_timeout_sec=' "$P_CONF"; then
+    sed "s/^wait_timeout_sec=.*/wait_timeout_sec=$1/" "$P_CONF" > "$P_CONF.tmp"
+    cat "$P_CONF.tmp" > "$P_CONF"
+    rm -f "$P_CONF.tmp"
+  else
+    printf '# 승인 대기 제한(초, 30~86400): 작업 등록 후 이 시간 안에 승인되지 않으면 작업이 자동 중단(승인 대기 시간 초과)\nwait_timeout_sec=%s\n' "$1" >> "$P_CONF"
+  fi
+}
+
+# 놀이터 화면 머리말의 "승인 대기 제한: 10분 (wait_timeout_sec=600)" 의 초 = 데몬이 실제로 적용 중인 값(구버전 데몬이면 빈 값)
+live_wait() {
+  local o
+  o="$("$P_WRAP" --user alice 2>&1 < <(printf 'q\n') || true)"
+  sed -n 's/.*(wait_timeout_sec=\([0-9][0-9]*\)).*/\1/p' <<<"$o" | head -1 || true
+}
+
+wait_live_wait() { # <기대 초> [최대 0.1초 횟수]
+  local want=$1 max=${2:-40} n=0
+  while [ "$(live_wait)" != "$want" ]; do
     n=$((n + 1))
     [ "$n" -gt "$max" ] && return 1
     sleep 0.1
@@ -176,7 +224,7 @@ write_files() {
   chmod 700 "$P_STATE_DIR" 2>/dev/null || true
   if [ ! -f "$P_CONF" ]; then
     cat > "$P_CONF" <<EOF
-# cc_playground 의 cross_check 설정(놀이터 전용). 고친 뒤:  bash playground.sh reload  (approval_ttl_sec 만) 또는 restart
+# cc_playground 의 cross_check 설정(놀이터 전용). 고친 뒤:  bash playground.sh reload  (approval_ttl_sec·work_timeout_sec·wait_timeout_sec 만) 또는 restart
 target_dir=$P_TARGETS
 auth=required
 users=$DEMO_USERS
@@ -184,6 +232,8 @@ users=$DEMO_USERS
 approval_ttl_sec=$ttl
 # 본 작업 제한 시간(초, 600~604800): 작업중(--start 후)으로 이 시간 안에 --finish 가 없으면 승인/작업중단(작업자 응답 없음)
 work_timeout_sec=86400
+# 승인 대기 제한(초, 30~86400): 작업 등록 후 이 시간 안에 승인되지 않으면 작업이 자동 중단(승인 대기 시간 초과)
+wait_timeout_sec=$DEFAULT_WAIT
 EOF
     say "[준비] 설정: $P_CONF  (users=$DEMO_USERS, approval_ttl_sec=$ttl)"
   fi
@@ -285,6 +335,29 @@ cmd_ttl() {
   if daemon_up; then cmd_reload; else say "       (데몬이 꺼져 있어 다음 start 때 적용됩니다)"; fi
 }
 
+cmd_wait() {
+  [ $# -eq 1 ] || die "사용법: bash playground.sh wait <초>   (예: bash playground.sh wait 30)"
+  check_wait "$1"
+  [ -f "$P_CONF" ] || die "아직 준비되지 않았습니다 — 먼저 bash playground.sh start"
+  local want=$((10#$1))
+  set_conf_wait "$want"
+  say "[완료] $P_CONF : wait_timeout_sec=$want"
+  if ! daemon_up; then
+    say "       (데몬이 꺼져 있어 다음 start 때 적용됩니다)"
+    return 0
+  fi
+  # shellcheck disable=SC2046
+  kill -HUP $(daemon_pids)
+  if wait_live_wait "$want" 30; then
+    say "[완료] SIGHUP: 데몬이 승인 대기 제한 ${want}초로 다시 읽었습니다 (이미 대기 중인 작업에도 등록 시각 + ${want}초로 적용)"
+  else
+    say "[경고] conf 의 wait_timeout_sec=$want 가 반영되지 않았습니다 — 로그를 확인하세요:"
+    tail -3 "$P_LOG" 2>/dev/null | sed 's/^/        /' || true
+    say "       (잘못된 값이면 데몬은 이전 값 $(live_wait)초를 그대로 씁니다)"
+    return 1
+  fi
+}
+
 cmd_restart() {
   cmd_stop
   cmd_start "$@"
@@ -295,9 +368,17 @@ cmd_status() {
   if daemon_up; then
     say "데몬        : 실행 중 (pid $(daemon_pids | tr '\n' ' '))"
     say "승인 유효시간: 데몬 적용 중 $(live_ttl)초 / conf $(conf_ttl)초   (다르면 bash playground.sh reload)"
+    local cw
+    cw="$(conf_wait)"
+    say "승인 대기 제한: 데몬 적용 중 $(live_wait)초 / conf ${cw:-없음(기본 $DEFAULT_WAIT)}초"
   else
     say "데몬        : 꺼져 있음 (bash playground.sh start)"
-    [ -f "$P_CONF" ] && say "승인 유효시간: conf $(conf_ttl)초"
+    if [ -f "$P_CONF" ]; then
+      say "승인 유효시간: conf $(conf_ttl)초"
+      local cw
+      cw="$(conf_wait)"
+      say "승인 대기 제한: conf ${cw:-없음(기본 $DEFAULT_WAIT)}초"
+    fi
   fi
   if [ -f "$P_STATE" ]; then
     local s
@@ -336,14 +417,16 @@ cmd_env() {
 }
 
 cmd_help() {
-  local self="$SCRIPT_DIR/playground.sh" worker="$SCRIPT_DIR/playground_worker.sh" ttl
+  local self="$SCRIPT_DIR/playground.sh" worker="$SCRIPT_DIR/playground_worker.sh" ttl wait
   ttl="$(conf_ttl)"; ttl="${ttl:-$DEFAULT_TTL}"
+  wait="$(conf_wait)"; wait="${wait:-$DEFAULT_WAIT}"
   cat <<EOF
 ==============================================================================
  cross_check 놀이터(cc_playground) — 손으로 직접 해 보는 시험 안내
 ==============================================================================
  폴더   : $PLAY   (실제 /etc, /var, crontab 은 건드리지 않습니다)
  승인 유효시간: ${ttl}초   (conf 의 approval_ttl_sec — 아래 "3) 유효시간 바꾸기" 참고)
+ 승인 대기 제한: ${wait}초   (conf 의 wait_timeout_sec — 승인 전 대기로 이보다 오래 있으면 자동 중단, "bash playground.sh wait <초>" 로 변경)
  시험용 계정  : alice / $PW_ALICE    bob / $PW_BOB    carol / $PW_CAROL    관리자 admin / $PW_ADMIN
  (이 패스워드들은 놀이터 전용 가짜 값입니다.)
  대상 파일 : alice → svr1ev01 svr1ev02 svr2ev01 / bob → svr3ev01 svr3ev02 / carol → svr4ev01
@@ -395,6 +478,10 @@ cmd_help() {
                           (천천히 하려면 CC_PLAY_WORK_SEC=10 bash playground_worker.sh alice bob)
    (i) 작업 중 kill -9  : 작업 중에 다른 터미널에서 pkill -9 -f playground_worker.sh → 아무것도 보고되지 않으므로
                           conf 의 work_timeout_sec(기본 86400초 = 24시간) 뒤 데몬이 "승인/작업중단"(작업자 응답 없음)으로 바꿉니다
+   (n) 승인 대기 방치    : 대기 제한을 짧게 →  bash $self wait 30
+                          터미널 1 에서 작업자를 실행하면 "승인 대기 제한 30초 — HH:MM 까지" 안내가 나오고,
+                          아무도 승인하지 않으면 30초 뒤 "[중단] … 승인 대기 시간 초과(30초)" 로 종료(종료 코드 1).
+                          끝나면 원래대로: bash $self wait $DEFAULT_WAIT
    (j) users 밖 사용자    : cross_check --user dave          → "users= 목록에 없어 등록할 수 없음"
                           bash playground_worker.sh alice dave → "확인자 dave 는 … users= 목록에 없음"
    (k) 대상 파일 밖의 대상 : bash playground_worker.sh alice bob svr9ev99   → "등록되지 않은 대상" 으로 거부(종료 코드 3)
@@ -410,6 +497,8 @@ cmd_help() {
    - 완전히 다시:   bash $self restart --ttl 300   (열려 있던 대기/승인 작업은 '데몬 재시작' 으로 중단됨)
    - 범위는 10~3600초. 5 나 99999 를 넣으면 reload 는 이전 값을 유지하고(로그에 이유), restart 는 기동을 거부합니다.
    - 실제 서버에서는 pkill -HUP -f 'cross_check --daemon' 으로 같은 일을 합니다(놀이터는 이 스크립트를 쓰세요).
+   - 승인 대기 제한(승인 전 대기로 머무를 수 있는 시간, 지금 ${wait}초):  bash $self wait 30
+     (범위 30~86400초. conf 의 wait_timeout_sec 수정 + SIGHUP. 이미 대기 중인 작업에도 등록 시각 + 새 값으로 적용)
 
 4) 관리 명령
    bash $self status          # 데몬·유효시간·작업 기록 요약
@@ -433,6 +522,7 @@ case "$sub" in
   restart) cmd_restart "$@" ;;
   reload) cmd_reload ;;
   ttl) cmd_ttl "$@" ;;
+  wait) cmd_wait "$@" ;;
   status) cmd_status ;;
   reset) cmd_reset "$@" ;;
   env) cmd_env ;;

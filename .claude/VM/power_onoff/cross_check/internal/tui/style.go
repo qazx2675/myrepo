@@ -159,6 +159,15 @@ func ttlHeader(ttl time.Duration) string {
 	return s
 }
 
+// waitHeader 는 줄 입력 화면 머리말의 승인 대기 제한 시간 한 줄. wait 가 0 이하면(구버전 데몬: 대기 제한 없음) "".
+func waitHeader(wait time.Duration) string {
+	if wait <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("  승인 대기 제한: %s (wait_timeout_sec=%d) — 작업 등록 후 이 시간 안에 승인되지 않으면 작업이 자동 중단됩니다",
+		daemon.FormatTTLDuration(wait), int(wait/time.Second))
+}
+
 // jobTTL 은 작업 하나에 적용되는 승인 유효시간: 데몬이 준 값(JobView.TTLSec)을 우선하고, 없으면 def(그것도 없으면 기본값).
 func jobTTL(j daemon.JobView, def time.Duration) time.Duration {
 	if j.TTLSec > 0 {

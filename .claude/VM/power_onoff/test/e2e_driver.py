@@ -437,9 +437,35 @@ def s_menus():
         sim.close()
 
 
+@scenario("입력 제한: 기능 번호 방치(30초) → 취소·감사")
+def s_input_timeout_menu():
+    # input_timeout_sec 최솟값(30초). 비밀번호까지 넣고 기능 번호에서 자리를 비우면 계속 기다리지 않고 취소(exit 1).
+    # 기능을 고르기 전이라 감사 로그는 run_tester/<시각>_unknown.log 에 사유를 남긴다.
+    sim = Sim("on")
+    try:
+        write_conf(sim.addr, "input_timeout_sec=30\n")
+        write_targets(["svr1ev01"])
+        before = set(os.listdir(os.path.join(WORK, "run_tester"))) if os.path.isdir(os.path.join(WORK, "run_tester")) else set()
+        pr = Proc([BIN, "-u", "tester", "-v", sim.addr])
+        pr.expect(r"비밀번호: ")
+        pr.send("pw\n")
+        pr.expect(r"번호 입력: ")
+        t0 = time.time()
+        pr.expect(r"\[취소\] 입력 시간 30초 초과", 40)
+        assert pr.wait(10) == 1
+        assert 28 <= time.time() - t0 <= 40, "제한 시간이 30초가 아님: %.1f" % (time.time() - t0)
+        assert "[1/5]" not in pr.buf and "접속 중" not in pr.buf, pr.buf[-600:]
+        new = sorted(set(os.listdir(os.path.join(WORK, "run_tester"))) - before)
+        assert len(new) == 1 and new[0].endswith("_unknown.log"), new
+        au = open(os.path.join(WORK, "run_tester", new[0])).read()
+        assert "입력 취소 단계=기능 선택 사유=입력 시간 30초 초과" in au and "user=tester" in au, au
+    finally:
+        sim.close()
+
+
 def main():
     for fn in [s_plan, s_menus, s_off, s_off_refuse, s_on_all, s_on_seq, s_wrong_code, s_wrong_hosts, s_not_yes,
-               s_missing_vm, s_outside, s_bad_user, s_symlink, s_conf_perm, s_cc_missing]:
+               s_missing_vm, s_outside, s_bad_user, s_symlink, s_conf_perm, s_cc_missing, s_input_timeout_menu]:
         fn()
     fails = [n for n, ok in results if not ok]
     print("\nE2E PASS=%d FAIL=%d" % (len(results) - len(fails), len(fails)))

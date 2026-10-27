@@ -215,14 +215,25 @@ func jobTable(color bool, width int, rows []tableRow, sel int, extraHead string)
 	return out
 }
 
-// ttlSeg 는 머리말 오른쪽의 "승인 유효시간 2분" (+ 관리자는 작업 제한).
-func ttlSegs(ttl, work time.Duration, admin bool) []seg {
+// ttlSegs 는 머리말 오른쪽의 "승인 대기 10분 · 승인 유효시간 2분" (+ 관리자는 키 이름과 작업 제한).
+// wait 가 0 이하면(구버전 데몬: 대기 제한 없음) 승인 대기 부분을 빼고 그린다.
+func ttlSegs(wait, ttl, work time.Duration, admin bool) []seg {
 	if ttl <= 0 {
 		ttl = daemon.DefaultApprovalTTL
 	}
-	out := []seg{{"승인 유효시간 " + daemon.FormatTTLDuration(ttl), stGray}}
+	var out []seg
+	if wait > 0 {
+		t, sep := "승인 대기 "+daemon.FormatTTLDuration(wait), " · "
+		if admin {
+			// 관리자 줄은 길어서 좁은 화면에서 항목 단위로 접히도록 두 칸(wrapSegs 의 gap)으로 구분한다
+			t, sep = t+" (wait_timeout_sec="+strconv.Itoa(int(wait/time.Second))+")", "  "
+		}
+		out = append(out, seg{t, stGray}, seg{sep, stGray})
+	}
+	ti := len(out)
+	out = append(out, seg{"승인 유효시간 " + daemon.FormatTTLDuration(ttl), stGray})
 	if admin {
-		out[0].t += " (approval_ttl_sec=" + strconv.Itoa(int(ttl/time.Second)) + ")"
+		out[ti].t += " (approval_ttl_sec=" + strconv.Itoa(int(ttl/time.Second)) + ")"
 		if work <= 0 {
 			work = daemon.DefaultWorkTimeout
 		}

@@ -124,6 +124,7 @@ func usage() {
       ... 본 작업 ...
       cross_check --finish --job "$CROSS_CHECK_JOB" --result done     (중단하면 --result aborted)
   작업중으로 work_timeout_sec(기본 86400초 = 24시간)를 넘기면 데몬이 승인/작업중단("작업자 응답 없음")으로 바꾼다.
+  대기로 wait_timeout_sec(기본 600초 = 10분) 안에 승인되지 않으면 데몬이 중단("승인 대기 시간 초과")하고 --run 은 종료 코드 1.
 
 종료 코드: 0 승인·성공, 1 중단·거부, 2 사용법 오류, 3 연결·데몬·입력 오류, 130 Ctrl+C
 
@@ -290,11 +291,17 @@ func signalContext() (context.Context, context.CancelFunc) {
 // ---- --user / --admin ----
 
 func tuiOptions(c *daemon.Client) tui.Options {
-	return tui.Options{
+	opt := tui.Options{
 		Color:       tui.ColorEnabled(os.Stdout),
 		HideInput:   tui.EchoOff,
 		ApprovalTTL: effectiveTTL(c, 0),
 	}
+	if c != nil {
+		if info, err := c.Info(); err == nil {
+			opt.WaitTimeout = info.WaitTimeout // 구버전 데몬은 0(표시 안 함)
+		}
+	}
+	return opt
 }
 
 // fullScreen 은 전체 화면을 쓸지: --plain 이 아니고, stdin·stdout 이 모두 터미널이고, linux 이고, TERM 이 dumb 가 아님.
@@ -438,6 +445,9 @@ func cmdRun(user, checker, targetsFile, callerFlag string) int {
 	ctx, stop := signalContext()
 	defer stop()
 	fmt.Fprintf(os.Stderr, "%s 작업 %s — 확인자 %s 의 승인을 기다립니다 (Ctrl+C 로 취소, 호출: %s)\n", errP.Yellow("[대기]"), h.ID, checker, caller)
+	if line := waitLimitLine(h, time.Now()); line != "" {
+		fmt.Fprintln(os.Stderr, line)
+	}
 	// 확인자에게 그대로 전달해 붙여넣게 하는 목록: 쉼표 없이 공백·줄바꿈으로만 구분(확인자 화면은 공백·탭·줄바꿈을 구분자로 본다)
 	fmt.Fprintf(os.Stderr, "  대상 %d개:\n", len(targets))
 	for i := 0; i < len(targets); i += 8 {
@@ -479,6 +489,21 @@ func cmdRun(user, checker, targetsFile, callerFlag string) int {
 			}
 		}
 	}
+}
+
+// waitLimitLine 은 --run 대기 안내의 "승인 대기 제한 10분 — 15:04 까지 …" 한 줄.
+// 만료 시각은 데몬이 준 wait_expires_at 을 우선하고, 없으면 now + wait_timeout_sec. 구버전 데몬(값 없음)이면 "".
+func waitLimitLine(h *daemon.RunHandle, now time.Time) string {
+	if h == nil || h.WaitSec <= 0 {
+		return ""
+	}
+	wait := time.Duration(h.WaitSec) * time.Second
+	exp := now.Add(wait)
+	if h.WaitExpiresAt != nil {
+		exp = *h.WaitExpiresAt
+	}
+	return fmt.Sprintf("  승인 대기 제한 %s — %s 까지 (이 시각까지 승인되지 않으면 자동 중단)",
+		daemon.FormatTTLDuration(wait), exp.Local().Format("15:04"))
 }
 
 // runSameUser 는 작업자 = 확인자: 기다리지 않고 바로 중단(종료 코드 1). 데몬이 떠 있으면 중단 기록을 남긴다.

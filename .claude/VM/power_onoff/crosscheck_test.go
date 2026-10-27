@@ -41,15 +41,19 @@ type fakeCC struct {
 	finishErr  error
 	block      bool                            // true 면 ctx 가 취소될 때까지 대기
 	onStart    func(ctx context.Context) error // nil 이 아니면 Start 가 startErr 대신 이것을 부른다
+	errLines   string                          // Run 이 errOut(cross_check 의 stderr)으로 내는 진행 출력(승인 마감 안내 등)
 }
 
 func (f *fakeCC) Run(ctx context.Context, user, checker string, targets []string, out, errOut io.Writer) (string, string, error) {
 	f.mu.Lock()
 	f.runs = append(f.runs, fakeRunCall{user, checker, append([]string(nil), targets...)})
 	f.order = append(f.order, "run")
-	block, job, token, err := f.block, f.job, f.token, f.runErr
+	block, job, token, err, errLines := f.block, f.job, f.token, f.runErr, f.errLines
 	f.mu.Unlock()
 	io.WriteString(out, "가짜 cross_check 진행 출력\n")
+	if errLines != "" {
+		io.WriteString(errOut, errLines)
+	}
 	if block {
 		<-ctx.Done()
 		return "", "", ctx.Err()
@@ -1096,5 +1100,144 @@ func TestCrossCheckCallerName(t *testing.T) {
 	c, ok := newCrossChecker("/usr/local/bin/cross_check").(*execCrossChecker)
 	if !ok || c.Bin != "/usr/local/bin/cross_check" || c.Caller != filepath.Base(exe) {
 		t.Errorf("newCrossChecker: %+v", c)
+	}
+}
+
+// 입력 제한 시간(계속 대기 금지) -------------------------------------------------
+
+// deadlineLine 은 cross_check --run 이 승인 직후 stderr 에 내는 마감 안내 줄(시각은 초 단위로 잘림)이다.
+func deadlineLine(t time.Time) string {
+	return "  승인 유효시간: 2분 — " + t.Format("15:04:05") + " 까지 아래 --start 를 호출해야 합니다\n"
+}
+
+func TestCCDeadlineSniffer(t *testing.T) {
+	now := time.Date(2026, 10, 26, 13, 0, 0, 0, time.Local)
+	var w strings.Builder
+	sn := &ccDeadlineSniffer{w: &w}
+	// 조각난 쓰기·색 코드가 섞여도 줄 단위로 찾고, 원래 출력은 그대로 넘긴다
+	full := "[승인] 작업 J — other 가 승인했습니다\n\x1b[1m정책\x1b[0m\n  승인 유효시간: \x1b[33m2분\x1b[0m — 13:02:00 까지 아래 --start 를 호출해야 합니다\n  본 작업 직전에: …\n"
+	for i := 0; i < len(full); i += 7 {
+		end := i + 7
+		if end > len(full) {
+			end = len(full)
+		}
+		sn.Write([]byte(full[i:end]))
+	}
+	if w.String() != full {
+		t.Fatalf("출력이 그대로 넘어가지 않음:\n%q", w.String())
+	}
+	if dl, ok := sn.deadline(now); !ok || !dl.Equal(now.Add(2*time.Minute)) {
+		t.Fatalf("마감 13:02:00 기대: %v %v", dl, ok)
+	}
+	// 자정 넘김: 23:59:30 에 승인, 마감 00:01:30 → 다음 날
+	late := time.Date(2026, 10, 26, 23, 59, 30, 0, time.Local)
+	sn = &ccDeadlineSniffer{}
+	sn.Write([]byte("  승인 유효시간: 2분 — 00:01:30 까지 아래 --start 를 호출해야 합니다")) // 줄바꿈 없이 끝나도 읽는다
+	if dl, ok := sn.deadline(late); !ok || !dl.Equal(late.Add(2*time.Minute)) {
+		t.Fatalf("자정 넘김: %v %v", dl, ok)
+	}
+	// 안내가 없거나, 시각이 이상하거나, 허용 범위(1시간)를 크게 벗어나면 모름(→ input_timeout_sec)
+	for _, s := range []string{"", "승인 유효시간 없음\n", "  승인 유효시간: 2분 — 25:00:00 까지\n", "  승인 유효시간: 9시간 — 22:00:00 까지\n"} {
+		sn = &ccDeadlineSniffer{}
+		sn.Write([]byte(s))
+		if dl, ok := sn.deadline(now); ok {
+			t.Errorf("%q: 모름이어야 함: %v", s, dl)
+		}
+	}
+}
+
+// 2/5 확인자 번호를 input_timeout_sec 안에 입력하지 않으면 취소(사유·감사 로그).
+func TestCrossCheckSelectCheckerTimeout(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	e := newGateEnv(t, approvedFake(), "ljh", "")
+	e.g.InputTimeout = 60 * time.Millisecond
+	start := time.Now()
+	c, err := e.g.SelectChecker(context.Background(), NewLineReader(pr), e.out)
+	if err == nil || c != "" || err.Error() != "입력 시간 60ms 초과" {
+		t.Fatalf("시간 초과 취소 기대: %q %v", c, err)
+	}
+	if el := time.Since(start); el > time.Second {
+		t.Fatalf("계속 기다림: %v", el)
+	}
+	if !strings.Contains(e.auditText(t), "교차검증 확인자 선택 실패: 입력 시간 60ms 초과") {
+		t.Errorf("감사 로그에 사유 없음:\n%s", e.auditText(t))
+	}
+}
+
+// guardPipe 는 관문을 건 RunGuard 를 파이프 입력(first 를 넣은 뒤 열어 둠)으로 돌린다.
+func (e *gateEnv) guardPipe(t *testing.T, first string, step time.Duration) (error, time.Duration) {
+	t.Helper()
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { pw.Close() })
+	go io.WriteString(pw, first)
+	o := testOpts()
+	o.StepTimeout = step
+	e.g.Hook(&o)
+	start := time.Now()
+	err := RunGuard(context.Background(), NewLineReader(pr), e.out, ccTargets, o)
+	return err, time.Since(start)
+}
+
+// 승인 뒤 4/5 에서 승인 마감까지 YeS 가 없으면 "[취소] 승인 유효시간 초과" → Abort 가 aborted(승인/작업중단)를 보고.
+// ls 를 해도 마감은 늘어나지 않는다. --start 는 부르지 않는다.
+func TestCrossCheckConfirmDeadline(t *testing.T) {
+	f := approvedFake()
+	f.errLines = deadlineLine(time.Now().Add(3 * time.Second)) // 4/5 마감 = 이 시각(초 단위) - 1초 → 1~2초 뒤
+	e := newGateEnv(t, f, "lsh", "dhk")
+	e.g.InputTimeout = time.Hour
+	err, el := e.guardPipe(t, WorkPhrase+"\nls\n", time.Hour)
+	wantCancel(t, err, e.out.String(), "승인 유효시간 초과")
+	if el < 900*time.Millisecond || el > 3*time.Second {
+		t.Fatalf("승인 마감(1~2초)에 끊겨야 함: %v", el)
+	}
+	out := e.out.String()
+	if !strings.Contains(out, "[INFO] 4/5 입력 마감: ") || strings.Count(out, "총 3대") != 2 {
+		t.Errorf("마감 안내 또는 ls 목록 이상:\n%s", out)
+	}
+	if !strings.Contains(e.errw.String(), "승인 유효시간: 2분 — ") {
+		t.Errorf("cross_check 진행 출력이 화면(stderr)으로 그대로 가지 않음:\n%s", e.errw.String())
+	}
+	if !strings.Contains(e.auditText(t), "교차검증 승인 마감 ") {
+		t.Errorf("감사 로그에 승인 마감 없음:\n%s", e.auditText(t))
+	}
+	e.g.Abort() // main.go: RunGuard 취소 → gate.Abort()
+	if len(f.starts) != 0 {
+		t.Errorf("--start 를 부르면 안 됨: %+v", f.starts)
+	}
+	wantFinish(t, f, e, "aborted")
+}
+
+// 마감 시각을 모르면(안내 줄 없음) 4/5 는 input_timeout_sec 로 끊는다.
+func TestCrossCheckConfirmNoDeadlineUsesInputTimeout(t *testing.T) {
+	f := approvedFake()
+	e := newGateEnv(t, f, "lsh", "dhk")
+	err, el := e.guardPipe(t, WorkPhrase+"\n", 80*time.Millisecond)
+	wantCancel(t, err, e.out.String(), "입력 시간 80ms 초과")
+	if el > 2*time.Second {
+		t.Fatalf("계속 기다림: %v", el)
+	}
+	if !strings.Contains(e.auditText(t), "교차검증 승인 마감 시각을 알 수 없음") {
+		t.Errorf("감사 로그에 마감 모름 기록 없음:\n%s", e.auditText(t))
+	}
+	e.g.Abort()
+	wantFinish(t, f, e, "aborted")
+}
+
+// 3/5 승인 대기 중 데몬이 작업을 중단 처리하면(cross_check --run exit 1) 작업자 쪽도 곧바로 "[취소] 교차검증 미승인".
+func TestCrossCheckDaemonAbortsWaiting(t *testing.T) {
+	f := &fakeCC{runErr: &CrossCheckError{Code: ccExitRefused, Msg: "--run 종료 코드 1"}}
+	e := newGateEnv(t, f, "lsh", "dhk")
+	err, el := e.guardPipe(t, WorkPhrase+"\n", time.Hour)
+	wantCancel(t, err, e.out.String(), "교차검증 미승인")
+	if el > time.Second || strings.Contains(e.out.String(), "[4/5]") {
+		t.Fatalf("미승인인데 진행/대기: %v\n%s", el, e.out.String())
+	}
+	if !strings.Contains(e.auditText(t), "교차검증 미승인 확인자=dhk 분류=거부/중단(exit 1)") {
+		t.Errorf("감사 로그:\n%s", e.auditText(t))
+	}
+	e.g.Abort()
+	if len(f.finishes) != 0 {
+		t.Errorf("승인 전이면 --finish 를 보내지 않음: %+v", f.finishes)
 	}
 }

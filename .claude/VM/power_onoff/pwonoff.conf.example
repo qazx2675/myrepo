@@ -28,7 +28,14 @@ os6_user=root
 cross_check=on
 cross_check_bin=/usr/local/bin/cross_check
 
-concurrency=200         # 한 번에 vCenter 로 보내는 최대 동시 작업 수 (대상이 이보다 많으면 나머지는 이어서). Off/일괄 On/재부팅은 대상 전체를 한꺼번에 보냄
+# 입력 제한 시간(초): 계속 대기 상태로 남지 않도록 사용자 입력 한 질문마다 이 시간 안에 답해야 한다 (기본 600 = 10분, 허용 30~3600, 비우면 기본).
+#   user·vCenter·기능 번호, 비밀번호, VWP 담당자 확인 문구, 1/5 작업 문구, 2/5(확인자 번호 / Enter), 4/5 YeS(교차검증 방식은 승인 마감 시각을 모를 때만)
+#   → 넘기면 "[취소] 입력 시간 N분 초과" 로 끝나고(exit 1) 감사 로그에 사유가 남는다.
+#   실행 중 질문(강제 PowerOff YeS/No, 순차 부팅 c/s/q)은 넘기면 No / q(중단)로 처리하고 결과표까지 정상 진행한다.
+#   기존 방식의 3/5 VM 이름 입력은 따로 60초 전체 제한, 교차검증 4/5 는 승인 유효시간 마감까지, 3/5 승인 대기는 cross_check 데몬의 wait_timeout_sec.
+input_timeout_sec=600
+
+concurrency=200        # 한 번에 vCenter 로 보내는 최대 동시 작업 수 (대상이 이보다 많으면 나머지는 이어서). Off/일괄 On/재부팅은 대상 전체를 한꺼번에 보냄
 shutdown_timeout=300      # Guest 종료 대기(초)
 boot_timeout=600          # VM 1대 부팅 완료 대기(초)
 boot_poll_interval=10     # 부팅 상태 확인 간격(초)

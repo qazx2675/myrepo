@@ -233,3 +233,29 @@ func TestCheckAllowedDirAt(t *testing.T) {
 		t.Error("없는 allowed_dir 은 오류")
 	}
 }
+
+func TestParseConfigInputTimeout(t *testing.T) {
+	base := "allowed_dir=/a\nusers=x\n"
+	for in, want := range map[string]time.Duration{
+		base:                            600 * time.Second, // 키 없음 = 기본 10분
+		base + "input_timeout_sec=\n":   600 * time.Second, // 비우면 기본
+		base + "input_timeout_sec=30\n": 30 * time.Second,
+		base + "input_timeout_sec=3600  # 1시간\n": time.Hour,
+		base + "input_timeout_sec=300\n":         300 * time.Second,
+	} {
+		cfg, err := ParseConfig(strings.NewReader(in))
+		if err != nil || cfg.InputTimeout != want {
+			t.Errorf("%q: %v %v (기대 %v)", in, cfg, err, want)
+		}
+	}
+	for _, v := range []string{"29", "3601", "0", "-1", "abc", "10m", "60.5"} {
+		_, err := ParseConfig(strings.NewReader(base + "input_timeout_sec=" + v + "\n"))
+		if err == nil || !strings.Contains(err.Error(), "3번째 줄") || !strings.Contains(err.Error(), "input_timeout_sec") ||
+			!strings.Contains(err.Error(), "30~3600") {
+			t.Errorf("%q: 범위 오류(줄 번호·키·범위 포함)여야 함: %v", v, err)
+		}
+	}
+	if _, err := ParseConfig(strings.NewReader(base + "input_timeout_sec=60\ninput_timeout_sec=90\n")); err == nil {
+		t.Error("중복 키는 오류")
+	}
+}

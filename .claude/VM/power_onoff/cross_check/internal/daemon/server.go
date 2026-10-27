@@ -33,6 +33,7 @@ type Config struct {
 	AllowedUsers      []string                          // users= 목록. AuthRequired 에서는 필수(register·run·승인·취소·비밀번호 변경은 이 이름만). AuthOff 는 무시
 	ApprovalTTL       time.Duration                     // 승인 후 start 허용 시간(기본 2분 = 120초, cross_check.conf 의 approval_ttl_sec). 실행 중 SIGHUP 으로 바꿀 수 있음(ReloadApprovalTTL)
 	WorkTimeout       time.Duration                     // 본 작업(작업중) 제한 시간(기본 24시간, cross_check.conf 의 work_timeout_sec). SIGHUP 으로 바꿀 수 있음
+	WaitTimeout       time.Duration                     // 승인 대기(대기) 제한 시간(기본 10분, cross_check.conf 의 wait_timeout_sec). SIGHUP 으로 바꿀 수 있음
 	SweepInterval     time.Duration                     // 승인 만료·작업 제한 검사 주기(기본 1초)
 	AuthMaxFailures   int                               // 이 횟수만큼 연속 실패하면 그 이름의 시도를 지연(기본 5)
 	AuthDelay         time.Duration                     // 지연 시간(기본 1초)
@@ -89,6 +90,9 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if c.WorkTimeout <= 0 {
 		c.WorkTimeout = DefaultWorkTimeout
+	}
+	if c.WaitTimeout <= 0 {
+		c.WaitTimeout = DefaultWaitTimeout
 	}
 	if c.SweepInterval <= 0 {
 		c.SweepInterval = DefaultSweepInterval
@@ -151,7 +155,9 @@ type Server struct {
 	mu      sync.Mutex
 	ttl     time.Duration                // 지금 적용 중인 승인 유효시간(cfg.ApprovalTTL 로 시작, SIGHUP 으로 바뀔 수 있어 mu 로 보호)
 	work    time.Duration                // 지금 적용 중인 본 작업 제한 시간(cfg.WorkTimeout 로 시작, SIGHUP 으로 바뀔 수 있음)
+	wait    time.Duration                // 지금 적용 중인 승인 대기 제한 시간(cfg.WaitTimeout 로 시작, SIGHUP 으로 바뀔 수 있음)
 	waiters map[string]*waiter           // 작업 ID → 이벤트를 받을 작업자(run) 연결
+	waiting map[string]time.Time         // 대기(승인 전)인 작업 ID → 등록 시각(승인 대기 제한 시간 대상)
 	pending map[string]time.Time         // 승인됐지만 아직 start 안 한 작업 ID → 승인 시각(스위퍼 대상)
 	working map[string]time.Time         // 작업중(start 받음, finish 전)인 작업 ID → 시작 시각(작업 제한 시간 대상)
 	tokens  map[string][sha256.Size]byte // 작업 ID → sha256(token). run 부터 finish 까지 유지. 메모리에만 두고 파일·로그에 남기지 않음
@@ -207,7 +213,9 @@ func NewServer(cfg Config) (*Server, error) {
 		ln:      ln,
 		ttl:     cfg.ApprovalTTL,
 		work:    cfg.WorkTimeout,
+		wait:    cfg.WaitTimeout,
 		waiters: map[string]*waiter{},
+		waiting: map[string]time.Time{},
 		pending: map[string]time.Time{},
 		working: map[string]time.Time{},
 		tokens:  map[string][sha256.Size]byte{},
@@ -222,7 +230,8 @@ func NewServer(cfg Config) (*Server, error) {
 	} else if ok, err := auth.Registered(AdminUser); err == nil && !ok {
 		s.logf("[경고] auth.conf 에 admin 항목이 없음 — 관리자 기능은 모두 거부됨(install.sh 실행 또는 admin=<패스워드> 줄 추가)")
 	}
-	s.logf("데몬 시작(pid %d): 소켓 %s, 저장소 %s, 승인 유효 %s(%d초), 작업 제한 %s(%d초), 허용 사용자 %d명", os.Getpid(), cfg.SocketPath, cfg.StorePath,
+	s.logf("데몬 시작(pid %d): 소켓 %s, 저장소 %s, 승인 대기 제한 %s(%d초), 승인 유효 %s(%d초), 작업 제한 %s(%d초), 허용 사용자 %d명", os.Getpid(), cfg.SocketPath, cfg.StorePath,
+		FormatTTLDuration(cfg.WaitTimeout), int(cfg.WaitTimeout/time.Second),
 		FormatTTLDuration(cfg.ApprovalTTL), int(cfg.ApprovalTTL/time.Second), FormatTTLDuration(cfg.WorkTimeout), int(cfg.WorkTimeout/time.Second),
 		len(cfg.AllowedUsers))
 	return s, nil
@@ -245,6 +254,13 @@ func (s *Server) WorkTimeout() time.Duration {
 	return s.work
 }
 
+// WaitTimeout 은 지금 적용 중인 승인 대기 제한 시간.
+func (s *Server) WaitTimeout() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.wait
+}
+
 // approvedEventLocked 는 승인 이벤트(만료 시각 포함)를 만든다. mu 를 잡고 부른다.
 func (s *Server) approvedEventLocked(reason, by string, at time.Time) Event {
 	exp := at.Add(s.ttl)
@@ -252,24 +268,32 @@ func (s *Server) approvedEventLocked(reason, by string, at time.Time) Event {
 		TTLSec: int(s.ttl / time.Second), ExpiresAt: &exp}
 }
 
-// ReloadApprovalTTL 은 confPath 를 다시 읽어 approval_ttl_sec 와 work_timeout_sec 만 바꾼다(SIGHUP 처리용).
+// ReloadApprovalTTL 은 confPath 를 다시 읽어 approval_ttl_sec·work_timeout_sec·wait_timeout_sec 만 바꾼다(SIGHUP 처리용).
 // 설정 파일에 오류가 있거나 값이 범위 밖이면 기존 값을 그대로 두고 오류를 돌려준다(로그에도 남김).
 // users·target_dir·auth 는 바뀌어도 반영하지 않고(재시작 필요) 달라졌다는 경고만 남긴다.
-// 이미 승인되어 start 를 기다리는 작업에도 새 값이 적용된다(만료 시각 = 승인 시각 + 새 값). 작업 제한 시간도 같다.
+// 이미 승인되어 start 를 기다리는 작업에도 새 값이 적용된다(만료 시각 = 승인 시각 + 새 값). 작업 제한 시간과
+// 승인 대기 제한 시간도 같다(이미 대기 중인 작업의 만료 시각 = 등록 시각 + 새 값).
 // 돌려주는 old/now 는 승인 유효시간이다.
 func (s *Server) ReloadApprovalTTL(confPath string) (old, now time.Duration, err error) {
 	c, err := LoadConf(confPath)
 	s.mu.Lock()
 	old = s.ttl
 	oldWork := s.work
+	oldWait := s.wait
 	if err != nil {
 		s.mu.Unlock()
-		s.logf("[경고] 설정 다시 읽기(SIGHUP) 실패 — 승인 유효시간 %s 유지, 작업 제한 %s 유지: %v", FormatTTLDuration(old), FormatTTLDuration(oldWork), err)
+		s.logf("[경고] 설정 다시 읽기(SIGHUP) 실패 — 승인 대기 제한 %s 유지, 승인 유효시간 %s 유지, 작업 제한 %s 유지: %v",
+			FormatTTLDuration(oldWait), FormatTTLDuration(old), FormatTTLDuration(oldWork), err)
 		return old, old, err
 	}
 	s.ttl = c.ApprovalTTL
 	s.work = c.WorkTimeout
+	s.wait = c.WaitTimeout
 	s.mu.Unlock()
+	if oldWait != c.WaitTimeout {
+		s.logf("설정 다시 읽기(SIGHUP): 승인 대기 제한 시간 %s(%d초) → %s(%d초)",
+			FormatTTLDuration(oldWait), int(oldWait/time.Second), FormatTTLDuration(c.WaitTimeout), int(c.WaitTimeout/time.Second))
+	}
 	if oldWork != c.WorkTimeout {
 		s.logf("설정 다시 읽기(SIGHUP): 작업 제한 시간 %s(%d초) → %s(%d초)",
 			FormatTTLDuration(oldWork), int(oldWork/time.Second), FormatTTLDuration(c.WorkTimeout), int(c.WorkTimeout/time.Second))
@@ -532,7 +556,8 @@ func (s *Server) handleConn(c net.Conn) {
 func (s *Server) dispatch(req Request, uid int) Response {
 	switch req.Op {
 	case OpPing:
-		return Response{OK: true, TTLSec: s.ttlSec(), WorkSec: int(s.WorkTimeout() / time.Second), PID: os.Getpid()}
+		return Response{OK: true, TTLSec: s.ttlSec(), WorkSec: int(s.WorkTimeout() / time.Second),
+			WaitSec: int(s.WaitTimeout() / time.Second), PID: os.Getpid()}
 	case OpList:
 		if !ValidName(req.User) {
 			return fail("사용자 이름이 올바르지 않음(영소문자·숫자·_ 만): " + clip(req.User))
@@ -794,8 +819,12 @@ func (s *Server) handleRun(c net.Conn, r *bufio.Reader, req Request, uid int) {
 		return
 	}
 	j, err := s.st.Add(base)
+	var waitSec int
+	var waitExp time.Time
 	if err == nil {
 		s.waiters[j.ID] = w
+		s.waiting[j.ID] = j.CreatedAt
+		waitSec, waitExp = int(s.wait/time.Second), j.CreatedAt.Add(s.wait)
 		s.tokens[j.ID] = sha256.Sum256([]byte(token))
 		// 등록 이벤트는 mu 안에서 넣어야 곧바로 들어온 승인 이벤트보다 앞선다.
 		w.push(Event{Event: EventStatus, Status: StatusWaiting, Reason: reasonWaiting(req.Checker), By: BySystem}, false)
@@ -814,7 +843,7 @@ func (s *Server) handleRun(c net.Conn, r *bufio.Reader, req Request, uid int) {
 		io.Copy(io.Discard, r)
 		close(readDone)
 	}()
-	if err := s.writeLine(c, Response{OK: true, ID: j.ID, Token: token, TTLSec: s.ttlSec()}); err != nil {
+	if err := s.writeLine(c, Response{OK: true, ID: j.ID, Token: token, TTLSec: s.ttlSec(), WaitSec: waitSec, WaitExpiresAt: &waitExp}); err != nil {
 		s.workerGone(j.ID, w)
 		return
 	}
@@ -909,6 +938,7 @@ func (s *Server) abortLocked(id, reason, by string, extra func(*store.Job)) erro
 		s.logf("작업 %s 중단 저장 실패(%s): %v", id, reason, err)
 		return err
 	}
+	delete(s.waiting, id)
 	delete(s.pending, id)
 	delete(s.working, id)
 	// token 은 지우지 않는다: 중단된 작업은 어차피 시작할 수 없고, 작업자가 나중에 start 하면
@@ -971,6 +1001,7 @@ func (s *Server) opApprove(req Request, uid int) Response {
 	}); err != nil {
 		return fail("저장 실패: " + err.Error())
 	}
+	delete(s.waiting, j.ID)
 	s.pending[j.ID] = now
 	s.notifyLocked(j.ID, s.approvedEventLocked(reasonApproved(j.Checker), j.Checker, now), false)
 	s.logf("작업 %s 승인: 확인자 %s", j.ID, j.Checker)
@@ -1131,7 +1162,8 @@ func (s *Server) finishPhaseLocked(id string, phase store.Phase, reason string) 
 	return nil
 }
 
-// sweepLoop 는 주기적으로 승인 후 유효시간(approval_ttl_sec)이 지나도록 start 가 없는 작업을 중단하고,
+// sweepLoop 는 주기적으로 대기로 승인 대기 제한 시간(wait_timeout_sec)을 넘긴 작업을 중단("승인 대기 시간 초과(…)")하고,
+// 승인 후 유효시간(approval_ttl_sec)이 지나도록 start 가 없는 작업을 중단하고,
 // 작업중으로 작업 제한 시간(work_timeout_sec)을 넘긴 작업을 승인/작업중단("작업자 응답 없음")으로 바꾼다.
 // (본 작업을 시작한 작업은 승인 유효시간으로 만료되지 않는다.)
 func (s *Server) sweepLoop() {
@@ -1151,6 +1183,15 @@ func (s *Server) sweepLoop() {
 func (s *Server) sweep() {
 	now := s.cfg.Now()
 	s.mu.Lock()
+	for id, at := range s.waiting {
+		if j, ok := s.st.Get(id); !ok || j.Status != StatusWaiting {
+			delete(s.waiting, id) // 다른 경로로 이미 대기를 벗어남(방어)
+			continue
+		}
+		if now.Sub(at) > s.wait {
+			s.abortLocked(id, ReasonWaitTimeout(s.wait), BySystem, nil)
+		}
+	}
 	for id, at := range s.pending {
 		if now.Sub(at) > s.ttl {
 			s.abortLocked(id, ReasonExpired(s.ttl), BySystem, nil)
@@ -1208,6 +1249,7 @@ func (s *Server) opAdminSet(req Request) Response {
 		}); err != nil {
 			return fail("저장 실패: " + err.Error())
 		}
+		delete(s.waiting, j.ID)
 		s.pending[j.ID] = now
 		s.notifyLocked(j.ID, s.approvedEventLocked(reason, ByAdmin, now), false)
 		s.logf("작업 %s 관리자 승인", j.ID)
@@ -1305,6 +1347,7 @@ func (s *Server) prune() int {
 	}
 	for _, id := range ids {
 		delete(s.tokens, id)
+		delete(s.waiting, id)
 		delete(s.pending, id)
 		delete(s.working, id)
 	}
@@ -1324,6 +1367,7 @@ func (s *Server) opAdminDelete(req Request) Response {
 		}
 		return fail("저장 실패: " + err.Error())
 	}
+	delete(s.waiting, req.ID)
 	delete(s.pending, req.ID)
 	delete(s.working, req.ID)
 	delete(s.tokens, req.ID)
@@ -1343,6 +1387,7 @@ func (s *Server) opAdminClear() Response {
 	for id := range s.waiters {
 		s.notifyLocked(id, Event{Event: EventStatus, Status: StatusAborted, Reason: ReasonAdminClear, By: ByAdmin}, true)
 	}
+	s.waiting = map[string]time.Time{}
 	s.pending = map[string]time.Time{}
 	s.working = map[string]time.Time{}
 	s.tokens = map[string][sha256.Size]byte{}

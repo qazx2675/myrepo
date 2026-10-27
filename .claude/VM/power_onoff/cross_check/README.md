@@ -43,7 +43,7 @@ GOPROXY=off GOFLAGS=-mod=mod go build -o bin/cross_check ./cmd/cross_check
 |---|---|
 | 빌드 | `cross_check/bin/cross_check` (Go 1.20 이상, `GOPROXY=off`). vm_power_onoff 는 Go 1.26.5 이상 필요 |
 | 실행파일 | `/usr/local/bin/cross_check` |
-| `/etc/cross_check/cross_check.conf` | **없을 때만** 생성: `target_dir`=허용디렉터리(vm_power_onoff 의 `allowed_dir` 과 같은 값), `users`=설치된 `pwonoff.conf` 의 `users` **(처음 한 번만 복사 — 이후 `pwonoff.conf` 의 users 를 바꿔도 따라가지 않으므로 직접 수정)**, `auth=required`, `approval_ttl_sec=120`(또는 `--approval-ttl <초>` 로 준 값, 키 설명은 주석으로 들어감). `work_timeout_sec` 줄은 만들지 않으므로 기본값(86400초)이 쓰입니다 — 바꾸려면 직접 추가. **이미 파일이 있으면 `--approval-ttl` 을 줘도 덮어쓰지 않고** 고치는 방법만 출력 |
+| `/etc/cross_check/cross_check.conf` | **없을 때만** 생성: `target_dir`=허용디렉터리(vm_power_onoff 의 `allowed_dir` 과 같은 값), `users`=설치된 `pwonoff.conf` 의 `users` **(처음 한 번만 복사 — 이후 `pwonoff.conf` 의 users 를 바꿔도 따라가지 않으므로 직접 수정)**, `auth=required`, `approval_ttl_sec=120`(또는 `--approval-ttl <초>` 로 준 값, 키 설명은 주석으로 들어감). `wait_timeout_sec=600`(승인 대기 제한 10분)·`work_timeout_sec=86400`(본 작업 제한 24시간)도 주석과 함께 넣습니다(예전 install.sh 가 만든 conf 에 `wait_timeout_sec` 줄이 없으면 기본값 600초가 쓰인다는 안내만 출력). **이미 파일이 있으면 `--approval-ttl` 을 줘도 덮어쓰지 않고** 고치는 방법만 출력 |
 | `/etc/cross_check/auth.conf` | **없을 때만** 생성(0600, root): `admin=abc135!!` — **관리자 패스워드의 기본값은 `abc135!!`** 입니다(무작위 값 아님, 설치 완료 문구에도 안내). 보안을 위해 root 가 이 파일의 `admin=` 줄을 고쳐 바꾸세요(6~128자). 이미 있으면 권한만 0600 root 로 바로잡고 `admin=` 줄이 없으면 경고 |
 | `/var/lib/cross_check` | 작업 기록 디렉터리(0700) |
 | `/etc/tmpfiles.d/cross_check.conf` | 재부팅 후 `/run/cross_check`(소켓 디렉터리) 생성 |
@@ -58,7 +58,7 @@ GOPROXY=off GOFLAGS=-mod=mod go build -o bin/cross_check ./cmd/cross_check
 
 ### 설정 후 해야 할 일
 
-1. `/etc/cross_check/cross_check.conf` 의 `users=` 가 실제 작업자·확인자 전원을 포함하는지 확인합니다(**설정 파일은 데몬 시작 때 읽습니다.** `users`·`target_dir`·`auth` 는 수정 후 데몬을 다시 띄워야 반영되며, 다시 뜨는 순간 열려 있던 대기/승인 작업은 `데몬 재시작` 으로 중단됩니다 — 작업이 없을 때 하세요: `sudo pkill -f 'cross_check --daemon'` 후 최대 1분 안에 crontab 이 다시 띄움, 바로 띄우려면 `sudo cross_check --ensure`. **`approval_ttl_sec`·`work_timeout_sec` 만은 재시작 없이** `sudo pkill -HUP -f 'cross_check --daemon'` 으로 반영할 수 있습니다 → [승인 유효시간 바꾸기](#승인-유효시간-바꾸기)).
+1. `/etc/cross_check/cross_check.conf` 의 `users=` 가 실제 작업자·확인자 전원을 포함하는지 확인합니다(**설정 파일은 데몬 시작 때 읽습니다.** `users`·`target_dir`·`auth` 는 수정 후 데몬을 다시 띄워야 반영되며, 다시 뜨는 순간 열려 있던 대기/승인 작업은 `데몬 재시작` 으로 중단됩니다 — 작업이 없을 때 하세요: `sudo pkill -f 'cross_check --daemon'` 후 최대 1분 안에 crontab 이 다시 띄움, 바로 띄우려면 `sudo cross_check --ensure`. **`approval_ttl_sec`·`wait_timeout_sec`·`work_timeout_sec` 만은 재시작 없이** `sudo pkill -HUP -f 'cross_check --daemon'` 으로 반영할 수 있습니다 → [승인 유효시간 바꾸기](#승인-유효시간-바꾸기)).
 2. **각 사람이 한 번씩 등록**합니다([최초 등록](#최초-등록-패스워드)). 등록은 선착순이므로 가능한 한 빨리.
 3. 교차검증은 vm_power_onoff 에서 **기본 on** 입니다(`pwonoff.conf` 에 키가 없거나 `cross_check=on`). 끄려면 `cross_check=off` (또는 `install.sh --disable-cross-check`).
 
@@ -72,6 +72,7 @@ GOPROXY=off GOFLAGS=-mod=mod go build -o bin/cross_check ./cmd/cross_check
 | `users` | (`auth=required` 면 필수) | 쉼표로 구분한 작업자·확인자 이름 목록. 이 목록 밖의 이름은 등록·작업·승인·취소·패스워드 변경이 모두 거부됨. 빈 항목·중복·`admin` 은 오류 |
 | `auth` | `required` | `required` = 패스워드·token·users 검사(fail closed). `off` = **검사 안 함(시험용)** — 관리자 기능도 누구에게나 열리므로 운영에서 쓰지 마세요 |
 | `approval_ttl_sec` | `120` | **승인 유효시간**: 확인자 승인 후 `--start` 를 허용하는 시간(초). **10~3600 의 정수**(그 밖의 값은 데몬이 시작하지 않음). 필수 정책의 기준이 2분(=120)이므로 바꾸면 정책과 달라집니다. 화면·메시지는 이 값으로 표기됩니다(`2분`, `90초`→`1분 30초`, `3600`→`1시간`) |
+| `wait_timeout_sec` | `600` | **승인 대기 제한 시간**: 작업자의 `--run` 으로 `대기` 가 된 뒤 이 시간(초) 안에 확인자가 승인(또는 취소)하지 않으면 데몬이 작업을 `중단`(사유 `승인 대기 시간 초과(10분)`)하고, 기다리던 `--run` 은 그 사유를 받아 **종료 코드 1** 로 끝납니다(아무도 처리하지 않은 `대기` 가 영원히 남는 것을 막음). 이미 승인된 작업에는 적용되지 않습니다. **30~86400 의 정수**(30초~24시간, 그 밖은 데몬이 시작하지 않음). SIGHUP 으로도 반영(이미 대기 중인 작업에도 등록 시각 + 새 값) |
 | `work_timeout_sec` | `86400` | **본 작업 제한 시간**: `--start` 로 `승인/작업중` 이 된 뒤 `--finish` 가 이 시간(초) 안에 오지 않으면 데몬이 `승인/작업중단`(사유 `작업자 응답 없음`)으로 바꿉니다(작업자 `kill -9`·세션 끊김 등으로 `작업중` 이 영원히 남는 것을 막음). **600~604800 의 정수**(10분~7일, 그 밖은 데몬이 시작하지 않음). SIGHUP 으로도 반영 |
 
 ### 승인 유효시간 바꾸기
@@ -80,11 +81,11 @@ GOPROXY=off GOFLAGS=-mod=mod go build -o bin/cross_check ./cmd/cross_check
 
 1. `/etc/cross_check/cross_check.conf` 의 `approval_ttl_sec=<초>` 를 고칩니다(10~3600). 처음 설치할 때는 `sudo bash install.sh --approval-ttl 300` 으로 새 conf 에 바로 넣을 수 있습니다(기존 conf 는 덮어쓰지 않음).
 2. 반영합니다 — 둘 중 하나:
-   - **재시작 없이(권장)**: `sudo pkill -HUP -f 'cross_check --daemon'` — 데몬이 `approval_ttl_sec` 와 `work_timeout_sec` **만** 다시 읽습니다. 값이 범위 밖이거나 파일에 오류가 있으면 **이전 값을 그대로 쓰고** 로그(`/var/log/cross_check.log`)에 이유를 남깁니다. 이미 승인되어 `--start` 를 기다리는 작업에도 새 값이 적용됩니다(만료 시각 = 승인 시각 + 새 값). `users`·`target_dir`·`auth` 의 변경은 이 방법으로 반영되지 않습니다(로그에 알림).
+   - **재시작 없이(권장)**: `sudo pkill -HUP -f 'cross_check --daemon'` — 데몬이 `approval_ttl_sec`·`wait_timeout_sec`·`work_timeout_sec` **만** 다시 읽습니다. 값이 범위 밖이거나 파일에 오류가 있으면 **이전 값을 그대로 쓰고** 로그(`/var/log/cross_check.log`)에 이유를 남깁니다. 이미 승인되어 `--start` 를 기다리는 작업에도 새 값이 적용됩니다(만료 시각 = 승인 시각 + 새 값). `wait_timeout_sec` 도 같아서 이미 `대기` 인 작업의 만료 시각 = 등록 시각 + 새 값입니다. `users`·`target_dir`·`auth` 의 변경은 이 방법으로 반영되지 않습니다(로그에 알림).
    - **재시작**: `sudo pkill -f 'cross_check --daemon'` 후 crontab 이 1분 안에 다시 띄우거나(`sudo cross_check --ensure` 로 바로). 다시 뜨는 순간 열려 있던 대기/승인(시작 전) 작업은 `데몬 재시작` 으로 중단되고 `작업중` 이던 작업은 `승인/작업중단` 이 됩니다.
-3. 확인: 사용자·관리자 화면(`cross_check --user <나>`, `--admin`) 머리말의 `승인 유효시간 … (approval_ttl_sec=N)` 가 **데몬이 지금 쓰는 값**입니다(데몬에 물어서 표시).
+3. 확인: 사용자·관리자 화면(`cross_check --user <나>`, `--admin`) 머리말의 `승인 유효시간 … (approval_ttl_sec=N)` 가 **데몬이 지금 쓰는 값**입니다(데몬에 물어서 표시). 승인 대기 제한도 같은 줄에 보입니다(사용자 화면 `승인 대기 10분 · 승인 유효시간 2분`, 관리자 화면 `승인 대기 10분 (wait_timeout_sec=600)  승인 유효시간 2분 (approval_ttl_sec=120)`).
 
-통신 호환: `ping` 응답에 `ttl_sec`·`work_timeout_sec`·`pid`, `run` 응답과 승인 이벤트에 `ttl_sec`(+승인 이벤트·`list`/`get` 의 승인 후 미시작 작업에 만료 시각 `expires_at`)가 **선택 필드**로 들어 있습니다. 이 필드가 없는 구버전 데몬/클라이언트와도 그대로 동작하며, 클라이언트는 값이 없으면 설정 파일 → 기본 2분 순으로 대신 표시합니다.
+통신 호환: `ping` 응답에 `ttl_sec`·`work_timeout_sec`·`wait_timeout_sec`·`pid`, `run` 응답에 `wait_timeout_sec`·`wait_expires_at`(승인 대기 만료 시각), `run` 응답과 승인 이벤트에 `ttl_sec`(+승인 이벤트·`list`/`get` 의 승인 후 미시작 작업에 만료 시각 `expires_at`)가 **선택 필드**로 들어 있습니다. 이 필드가 없는 구버전 데몬/클라이언트와도 그대로 동작하며, 클라이언트는 값이 없으면 설정 파일 → 기본 2분 순으로 대신 표시합니다. 승인 대기 제한은 구버전 데몬에는 없는 기능이므로, 데몬이 `wait_timeout_sec` 를 주지 않으면 화면·`--run` 안내에서 그 표기를 **빼고** 보여 줍니다.
 
 ### 최초 등록 (패스워드)
 
@@ -141,7 +142,7 @@ bash setup.sh                              # 자동으로 bin_os6/*.gz 를 풀�
 
 | 상태(화면 표기) | 의미 |
 |---|---|
-| **대기** | 작업자의 `--run` 이 등록되어 확인자 처리를 기다리는 상태 |
+| **대기** | 작업자의 `--run` 이 등록되어 확인자 처리를 기다리는 상태. 등록 시각부터 **승인 대기 제한**(`wait_timeout_sec`, 기본 **10분**) 안에 승인·취소가 없으면 `중단`(`승인 대기 시간 초과`). `--run` 은 `승인 대기 제한 10분 — HH:MM 까지` 로 그 시각을 알려 줍니다 |
 | **승인** | 확인자가 대상을 정확히 붙여넣고 패스워드로 승인한 상태(본 작업 전). 승인 시각부터 **승인 유효시간**(`approval_ttl_sec`, 기본 **2분**) 안에 `--start` 가 와야 함 |
 | **승인/작업중** | `--start` 를 받아 작업자의 본 작업이 시작됨 |
 | **승인/작업완료** | `--finish --result done`: **작업자 스크립트가 취소 없이 끝까지 실행됐다**는 뜻입니다. **일부 VM 의 실패 여부는 검사하지 않습니다**(그것은 작업 스크립트의 결과 표·로그에서 확인) |
@@ -154,6 +155,7 @@ bash setup.sh                              # 자동으로 bin_os6/*.gz 를 풀�
 | `확인자 <이름> 가 취소` | 확인자가 `c` + 패스워드로 취소 |
 | `붙여넣은 대상 불일치(빠짐 N·남음 N·중복 N)` / `(붙여넣은 대상 없음)` | 확인자가 붙여넣은 대상이 작업 대상과 다름 |
 | `작업자 스크립트 종료` | 대기 중 작업자의 `--run` 이 Ctrl+C·세션 끊김·`kill -9` 등으로 끝남(연결이 끊기면 데몬이 즉시 감지) |
+| `승인 대기 시간 초과({시간})` (기본 설정이면 `승인 대기 시간 초과(10분)`) | `대기` 인 채 `wait_timeout_sec`(기본 10분) 안에 승인·취소가 없음. 작업자의 `--run` 은 이 사유로 종료 코드 1 |
 | `승인 후 {TTL} 내 미진행` (기본 설정이면 `승인 후 2분 내 미진행`, 설정이 90초면 `승인 후 1분 30초 내 미진행`) | 승인 후 유효시간 안에 `--start` 가 없거나, 늦게 `--start` 함 |
 | `작업자가 본 작업 전에 중단` | 승인 뒤 `--start` 전에 `--finish --result aborted` (→ `승인/작업중단`) |
 | `작업자가 작업을 중단` | `작업중` 에서 `--finish --result aborted` (→ `승인/작업중단`) |
@@ -174,6 +176,7 @@ flowchart TD
     C -->|"거부 (동일인은 중단 기록, exit 1 / 그 밖의 등록 거부 exit 3)"| X["작업 등록 안 됨"]
     C -->|통과| D["작업 '대기' 기록 + 작업자 연결 유지<br/>호출 스크립트 이름 기록"]
     D -->|"작업자 Ctrl+C·세션 끊김"| X
+    D -.->|"wait_timeout_sec(기본 10분) 안에 승인·취소 없음"| XW["중단: 승인 대기 시간 초과 (--run exit 1)"]
     D --> E["확인자: cross_check --user 확인자 (전체 화면)<br/>대기 작업 선택 → 전달받은 대상 붙여넣기 → 패스워드<br/>(확인자 화면에는 대상이 보이지 않음)"]
     E -->|"c + 패스워드: 취소"| X
     E -->|"패스워드 틀림: 인증 실패, 상태 그대로 재시도"| E
@@ -279,7 +282,7 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 | `cross_check --start --job <ID> [--token <T>]` | 본 작업 직전 신호. 승인 후 유효시간(`approval_ttl_sec`, 기본 2분) 이내 1회만 통과 → `승인/작업중`. token 은 환경변수 `CROSS_CHECK_TOKEN` 으로 주는 것을 권장(`--token` 은 `ps` 에 보임) |
 | `cross_check --finish --job <ID> --result done\|aborted [--token <T>]` | 본 작업 결과. `done` = 작업중 → `승인/작업완료`(스크립트가 취소 없이 끝까지 실행됨), `aborted` = 시작 전 또는 작업중 → `승인/작업중단`(Ctrl+C·최종 확인에서 No). 끝나면 token 폐기 |
 | `cross_check --admin [--plain]` | 관리자 화면 |
-| `cross_check --daemon` | 데몬을 포그라운드로 실행(보통 `--ensure` 가 대신 띄움). SIGHUP 을 받으면 종료하지 않고 `approval_ttl_sec`·`work_timeout_sec` 만 다시 읽음 |
+| `cross_check --daemon` | 데몬을 포그라운드로 실행(보통 `--ensure` 가 대신 띄움). SIGHUP 을 받으면 종료하지 않고 `approval_ttl_sec`·`wait_timeout_sec`·`work_timeout_sec` 만 다시 읽음 |
 | `cross_check --ensure` | 데몬이 응답하면 조용히 종료, 없으면 `--daemon` 을 세션에서 떼어 띄우고 최대 3초 확인. 동시에 여러 번 불려도 잠금(flock) 때문에 데몬은 하나만 남음 |
 | `cross_check --version`, `-h` | 버전 / 사용법 |
 
@@ -349,7 +352,7 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 
 ### 관리자 화면 키
 
-`auth.conf` 의 `admin=` 패스워드로 로그인합니다(최대 3번). `admin=` 줄이 없으면 안내 문구를 출력하고 종료 코드 1 로 끝나며(데몬도 관리자 기능을 모두 거부), `admin` 은 소켓으로 등록할 수 없으므로 `install.sh` 를 실행하거나 root 가 `admin=<패스워드>`(6자 이상, 파일 0600) 줄을 추가해야 합니다. admin 의 기본 패스워드는 `abc135!!` 입니다(`install.sh` 가 `auth.conf` 가 없을 때만 넣고, 이미 `admin=` 줄이 있으면 덮어쓰지 않음). 관리자 화면의 `p` 는 users= 목록 사용자의 패스워드 재설정이며 admin 은 바꾸지 못하므로, admin 패스워드 변경은 root 가 `auth.conf` 의 `admin=` 줄을 직접 고칩니다. 화면 머리말에 데몬이 지금 쓰는 **승인 유효시간**(`approval_ttl_sec=120`)과 **작업 제한**(`work_timeout_sec=86400`)이 표시됩니다.
+`auth.conf` 의 `admin=` 패스워드로 로그인합니다(최대 3번). `admin=` 줄이 없으면 안내 문구를 출력하고 종료 코드 1 로 끝나며(데몬도 관리자 기능을 모두 거부), `admin` 은 소켓으로 등록할 수 없으므로 `install.sh` 를 실행하거나 root 가 `admin=<패스워드>`(6자 이상, 파일 0600) 줄을 추가해야 합니다. admin 의 기본 패스워드는 `abc135!!` 입니다(`install.sh` 가 `auth.conf` 가 없을 때만 넣고, 이미 `admin=` 줄이 있으면 덮어쓰지 않음). 관리자 화면의 `p` 는 users= 목록 사용자의 패스워드 재설정이며 admin 은 바꾸지 못하므로, admin 패스워드 변경은 root 가 `auth.conf` 의 `admin=` 줄을 직접 고칩니다. 화면 머리말에 데몬이 지금 쓰는 **승인 대기 제한**(`wait_timeout_sec=600`), **승인 유효시간**(`approval_ttl_sec=120`)과 **작업 제한**(`work_timeout_sec=86400`)이 표시됩니다(구버전 데몬이면 승인 대기 제한은 빠짐).
 
 | 키 | 동작 |
 |---|---|
@@ -378,7 +381,7 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 |---|---|
 | `cross_check 데몬에 연결할 수 없습니다` | 데몬이 없음. `sudo cross_check --ensure` 로 띄우고, `sudo bash cross_check/scripts/cc_cron.sh status` 로 crontab 줄과 `crond` 동작을 확인. 로그: `/var/log/cross_check.log` |
 | 데몬이 계속 안 뜸 / 로그에 `설정 파일 … 줄` | `cross_check.conf` 오류(모르는 키·중복 키·`target_dir`/`users` 없음·`users` 에 `admin` 포함 등). `sudo cross_check --daemon` 을 터미널에서 직접 띄우면 원인이 화면에 나옴 |
-| `approval_ttl_sec 는 10~3600 사이의 정수(초)여야 함` / `work_timeout_sec 는 600~604800 사이의 정수(초)여야 함` (데몬 기동 실패 / SIGHUP 후 로그의 `설정 다시 읽기(SIGHUP) 실패`) | `cross_check.conf` 의 값이 범위 밖이거나 숫자가 아님. 범위 안의 정수(초)로 고치세요(기본 120 = 2분 / 86400 = 24시간). SIGHUP 으로 다시 읽다 실패하면 데몬은 **이전 값을 그대로** 쓰고 있으므로 고친 뒤 다시 `pkill -HUP -f 'cross_check --daemon'` |
+| `approval_ttl_sec 는 10~3600 사이의 정수(초)여야 함` / `wait_timeout_sec 는 30~86400 사이의 정수(초)여야 함` / `work_timeout_sec 는 600~604800 사이의 정수(초)여야 함` (데몬 기동 실패 / SIGHUP 후 로그의 `설정 다시 읽기(SIGHUP) 실패`) | `cross_check.conf` 의 값이 범위 밖이거나 숫자가 아님. 범위 안의 정수(초)로 고치세요(기본 120 = 2분 / 600 = 10분 / 86400 = 24시간). SIGHUP 으로 다시 읽다 실패하면 데몬은 **이전 값을 그대로** 쓰고 있으므로 고친 뒤 다시 `pkill -HUP -f 'cross_check --daemon'` |
 | `인증 실패` | 패스워드 오타이거나, 해당 이름이 `users=` 목록에 없음(같은 문구로 답함). 같은 이름으로 5번 연속 실패하면 이후 시도는 한 번에 하나씩 약 1초 지연되며 올바른 패스워드는 그대로 통과. 분실 시 관리자가 `p` 로 재설정(그 이름의 연속 실패 기록도 지워짐). 잠기는 것이 아니라 늦게 처리될 뿐입니다 |
 | `붙여넣은 대상 불일치(빠짐 N·남음 N·중복 N)` | 확인자가 붙여넣은 목록이 작업 대상과 다름(작업은 이미 중단됨). 작업자가 화면(stderr)에 출력한 대상 목록을 **그대로** 전달받아 붙여넣고, 작업자는 다시 `--run` 으로 올려야 함. 대소문자 구분, 중복도 불일치 |
 | `인증 불가: 비밀번호 파일 … 권한이 … 라 다른 사용자가 읽을 수 있음` | `sudo chmod 600 /etc/cross_check/auth.conf; sudo chown root:root /etc/cross_check/auth.conf`. 고치면 자동으로 다시 읽음 |
@@ -388,6 +391,7 @@ bash playground.sh ttl 300 | reload | restart | status | reset [--hard] | stop
 | `작업자 … 의 대상 파일이 없음/비어 있음` | `<target_dir>/on_off_<user>.txt` 를 만들거나 `target_dir` 확인(심볼릭 링크는 거부됨) |
 | `승인 후 {TTL} 내 미진행` (승인 만료) | 승인 후 유효시간(`approval_ttl_sec`, 기본 2분) 안에 `--start` 가 없었음. 작업을 다시 `--run` 으로 올려 재승인 필요. 시간이 너무 짧다면 [승인 유효시간 바꾸기](#승인-유효시간-바꾸기) |
 | `이미 시작 신호를 받은 작업` | token 은 1회용. 같은 작업을 다시 시작할 수 없음 |
+| `승인 대기 시간 초과(10분)` (`중단`, `--run` 종료 코드 1) | `대기` 인 채 `wait_timeout_sec`(기본 10분) 안에 확인자가 승인·취소하지 않았음. 확인자에게 연락한 뒤 작업을 다시 실행하세요(제한을 바꾸려면 `wait_timeout_sec` + SIGHUP) |
 | `작업자 응답 없음` (`승인/작업중단`) | `작업중` 인 채 `work_timeout_sec`(기본 24시간) 안에 `--finish` 가 없었음. 작업자가 죽었거나 스크립트가 `--finish` 를 부르지 못함. 실제 작업 결과는 작업 스크립트의 로그로 확인 |
 | `작업자 스크립트 종료` | 대기 중 `--run` 이 끝났음(Ctrl+C·세션 끊김). 다시 올릴 것 |
 | `데몬 재시작` / `데몬 종료` | 데몬이 다시 뜨면서 열려 있던 작업이 중단됨. 다시 올릴 것 |
@@ -433,7 +437,7 @@ bash cross_check/test/pty_e2e.sh cross_check/bin/cross_check     # 전체 화면
 ```
 
 - `go test` 는 순수 로직(저장소·인증·설정·상태 전이·단계·TUI 화면)과, 임시 소켓 경로로 고루틴 데몬을 띄우는 통합 시험을 돌립니다.
-- `test/e2e.sh` 는 임시 디렉터리 하나 안에서 `CROSS_CHECK_*` 환경변수로 소켓·설정·패스워드·기록·잠금·로그 경로를 모두 바꿔 **실제 데몬 프로세스**를 띄우므로 `/etc`, `/var` 의 실제 파일을 건드리지 않습니다. 첫 실행 등록, 거부되는 `run`, 정상 흐름(대기→틀린 패스워드→제3자→붙여넣기 불일치→승인→`--start`→`--finish`), 확인자 취소, 대기 중 작업자 `kill -9`/Ctrl+C, 승인 후 유효시간 초과, 작업 제한 시간 초과, 관리자, 데몬 강제 종료 후 동시 `--ensure`, 승인 유효시간·작업 제한 설정(SIGHUP 반영·범위 검증)을 다루며 하나라도 실패하면 0 이 아닌 코드로 끝납니다. (시험 전용 환경변수 `CROSS_CHECK_TEST_MIN_TTL_SEC`·`CROSS_CHECK_TEST_MIN_WORK_TIMEOUT_SEC` 로 최소값 검증만 낮춰 짧은 시간으로 시험하며, 운영 설정이 아닙니다.)
+- `test/e2e.sh` 는 임시 디렉터리 하나 안에서 `CROSS_CHECK_*` 환경변수로 소켓·설정·패스워드·기록·잠금·로그 경로를 모두 바꿔 **실제 데몬 프로세스**를 띄우므로 `/etc`, `/var` 의 실제 파일을 건드리지 않습니다. 첫 실행 등록, 거부되는 `run`, 정상 흐름(대기→틀린 패스워드→제3자→붙여넣기 불일치→승인→`--start`→`--finish`), 확인자 취소, 대기 중 작업자 `kill -9`/Ctrl+C, 승인 후 유효시간 초과, 작업 제한 시간 초과, 관리자, 승인 대기 제한(대기 방치 → 중단·`--run` exit 1, 승인된 작업은 영향 없음, SIGHUP·범위 검증), 데몬 강제 종료 후 동시 `--ensure`, 승인 유효시간·작업 제한 설정(SIGHUP 반영·범위 검증)을 다루며 하나라도 실패하면 0 이 아닌 코드로 끝납니다. (시험 전용 환경변수 `CROSS_CHECK_TEST_MIN_TTL_SEC`·`CROSS_CHECK_TEST_MIN_WORK_TIMEOUT_SEC`·`CROSS_CHECK_TEST_MIN_WAIT_TIMEOUT_SEC` 로 최소값 검증만 낮춰 짧은 시간으로 시험하며, 운영 설정이 아닙니다.)
 
 ## 주의사항 (Disclaimer)
 
@@ -470,14 +474,14 @@ bash cross_check/test/pty_e2e.sh cross_check/bin/cross_check     # 전체 화면
 - **패스워드는 평문으로 저장**됩니다(`/etc/cross_check/auth.conf`, 0600 root). 사용자 요구에 따른 설계이며 해시하지 않습니다.
 - **`run` / `list` 는 패스워드가 없습니다.** `run` 은 스크립트에서 불러야 하기 때문이고, `list`·`get` 은 상태를 바꾸지 않는다는 이유입니다. 그래서 **사용자 이름만 알면 누구나 그 사람이 작업자인 작업과 대상 VM 목록을 볼 수 있습니다**(확인자에게는 대상이 표시되지 않지만, 작업자 이름으로 조회하면 보입니다).
 - **호출 스크립트(caller) 이름은 정보용·위조 가능**합니다(`--caller`·환경변수로 누구나 정할 수 있고, 자동 감지도 부모 프로세스 이름일 뿐).
-- **`승인/작업완료` 는 스크립트가 끝까지 실행됐다는 기록**이며 VM 별 성공 여부를 검사하지 않습니다. `--finish` 를 부르지 않는 작업자는 `work_timeout_sec` 뒤에 `승인/작업중단` 으로 남습니다.
+- **`승인/작업완료` 는 스크립트가 끝까지 실행됐다는 기록**이며 VM 별 성공 여부를 검사하지 않습니다. `--finish` 를 부르지 않는 작업자는 `work_timeout_sec` 뒤에 `승인/작업중단` 으로 남습니다. 데몬 쪽에서 끝없이 머무르는 상태는 없습니다: `대기` 는 `wait_timeout_sec`(또는 작업자 연결 끊김 즉시), `승인`(시작 전)은 `approval_ttl_sec`, `작업중` 은 `work_timeout_sec` 안에 끝납니다. 단, 데몬 프로세스 자체가 멈추면(예: SIGSTOP) `--run` 은 데몬 응답을 계속 기다립니다.
 - **등록은 `users=` 에 적힌 이름 사이의 선착순**입니다. 다른 사람이 먼저 그 이름으로 등록하면 그 사람이 이름을 선점한 상태가 되며(관리자 재설정으로만 복구), 등록 직후 직접 확인하는 운영 절차가 필요합니다.
 - 오답 지연은 **잠금이 아니라 지연**이므로, 패스워드가 짧거나 약하면 느리게나마 추측할 수 있습니다(최소 6자). 충분히 길게 정하세요.
 - 확인자 지정은 작업자가 합니다. 협의한 두 사람이 서로 승인하는 것은 기술적으로 막을 수 없는 **운영상의 통제**입니다. 대상 목록을 확인자에게 전달하는 경로(메신저 등)도 이 도구 밖입니다.
 - 데몬은 승인된 작업과 **실제 전원 작업의 대상이 같은지** 검증하지 않습니다(`--start` 는 시간 창과 token 만 확인). 같은 이름 목록을 넘기는 것은 vm_power_onoff 쪽 구현에 의존합니다.
 - 소켓은 0666 이므로 같은 서버의 누구나 연결을 시도할 수 있습니다(패스워드·token·`users` 로만 보호).
 - `SO_PEERCRED` uid 는 Linux 에서만 기록되고 root 만 쓰는 환경에서는 사실상 항상 같은 값입니다.
-- `auth.conf` 는 수정되면 다음 인증 때 자동으로 다시 읽지만, `cross_check.conf` 의 `users`·`target_dir`·`auth` 는 데몬을 다시 띄워야 반영됩니다(`approval_ttl_sec`·`work_timeout_sec` 만은 `pkill -HUP -f 'cross_check --daemon'` 으로 재시작 없이 반영 — [승인 유효시간 바꾸기](#승인-유효시간-바꾸기)).
+- `auth.conf` 는 수정되면 다음 인증 때 자동으로 다시 읽지만, `cross_check.conf` 의 `users`·`target_dir`·`auth` 는 데몬을 다시 띄워야 반영됩니다(`approval_ttl_sec`·`wait_timeout_sec`·`work_timeout_sec` 만은 `pkill -HUP -f 'cross_check --daemon'` 으로 재시작 없이 반영 — [승인 유효시간 바꾸기](#승인-유효시간-바꾸기)).
 - 커널 2.6.32 인 OS6 실기에서의 동작과, Linux 가 아닌 환경(개발용 Windows)에서의 전체 화면·소켓 동작은 확인하지 못했습니다(Linux 에서 `go test`·`test/e2e.sh`·`test/pty_e2e.sh` 로 확인).
 
 ## 5. 전역 명령어로 사용하기 (선택 사항)

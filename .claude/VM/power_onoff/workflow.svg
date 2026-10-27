@@ -28,7 +28,7 @@ path.l{stroke:#555;stroke-width:1.5;fill:none}
 <path class="l" d="M470 174 L470 198" marker-end="url(#a)"/>
 <rect class="b" x="280" y="198" width="380" height="48" rx="8"/>
 <text x="470" y="218.0" text-anchor="middle" font-size="13">user → vCenter → 비밀번호 → 기능 선택</text>
-<text x="470" y="235.0" text-anchor="middle" font-size="11.5" class="s">1 Off / 2 순차 On / 3 일괄 On / 4 재부팅</text>
+<text x="470" y="235.0" text-anchor="middle" font-size="11.5" class="s">1 Off / 2 순차 On / 3 일괄 On / 4 재부팅 · 입력마다 10분</text>
 <path class="l" d="M470 246 L470 270" marker-end="url(#a)"/>
 <rect class="b" x="280" y="270" width="380" height="48" rx="8"/>
 <text x="470" y="290.0" text-anchor="middle" font-size="13">vCenter 에서 대상 VM 조회 → 계획표</text>
@@ -55,7 +55,7 @@ path.l{stroke:#555;stroke-width:1.5;fill:none}
 <text x="470" y="573.0" text-anchor="middle" font-size="11.5" class="s">통과하면 대상 호스트 목록(BM별) + 총 N대</text>
 <path class="l" d="M660 560 L700 560" marker-end="url(#a)"/>
 <rect class="r" x="700" y="546" width="180" height="28" rx="14"/>
-<text x="790.0" y="564.0" text-anchor="middle" font-size="11.5" class="rt">불일치/Ctrl+C → 취소</text>
+<text x="790.0" y="564.0" text-anchor="middle" font-size="11.5" class="rt">불일치/시간 초과/Ctrl+C</text>
 <path class="l" d="M470 590 L470 622" marker-end="url(#a)"/>
 <polygon class="d" points="470,622 595,660 470,698 345,660"/>
 <text x="470" y="656.5" text-anchor="middle" font-size="12.5">conf cross_check</text>
@@ -83,7 +83,7 @@ path.l{stroke:#555;stroke-width:1.5;fill:none}
 <path class="l" d="M970 824 L1000 824" marker-end="url(#a)"/>
 <rect class="r" x="1000" y="802" width="180" height="44" rx="22"/>
 <text x="1090.0" y="820.5" text-anchor="middle" font-size="11.5" class="rt">Ctrl+C·세션 끊김</text>
-<text x="1090.0" y="835.5" text-anchor="middle" font-size="11.5" class="rt">→ 즉시 중단</text>
+<text x="1090.0" y="835.5" text-anchor="middle" font-size="11.5" class="rt">승인 대기 10분 초과 → 중단</text>
 <path class="l" d="M800 862 L800 890" marker-end="url(#a)"/>
 <rect class="o" x="630" y="890" width="340" height="88" rx="8"/>
 <text x="800" y="913.0" text-anchor="middle" font-size="13">확인자: cross_check --user 확인자</text>
@@ -114,7 +114,7 @@ path.l{stroke:#555;stroke-width:1.5;fill:none}
 <path class="l" d="M800 1186 L800 1250 L660 1250" marker-end="url(#a)"/>
 <rect class="b" x="280" y="1226" width="380" height="54" rx="8"/>
 <text x="470" y="1249.0" text-anchor="middle" font-size="13">안전장치 4/5: 정말 진행? (YeS/No, ls)</text>
-<text x="470" y="1266.0" text-anchor="middle" font-size="11.5" class="s">YeS 만 진행 · ls = 대상 다시 보기 · 그 밖은 취소 (exit 1)</text>
+<text x="470" y="1266.0" text-anchor="middle" font-size="11.5" class="s">YeS 만 진행 · ls = 대상 보기 · 그 밖·마감 초과는 취소 (exit 1)</text>
 <path class="l" d="M470 1280 L470 1308" marker-end="url(#a)"/>
 <rect class="b" x="280" y="1308" width="380" height="54" rx="8"/>
 <text x="470" y="1331.0" text-anchor="middle" font-size="13">안전장치 5/5: 10초 카운트다운</text>
@@ -131,7 +131,7 @@ path.l{stroke:#555;stroke-width:1.5;fill:none}
 <path class="l" d="M470 1466 L470 1496" marker-end="url(#a)"/>
 <rect class="b" x="280" y="1496" width="380" height="62" rx="8"/>
 <text x="470" y="1514.5" text-anchor="middle" font-size="13">전원 작업 실행</text>
-<text x="470" y="1531.5" text-anchor="middle" font-size="11.5" class="s">1 Off / 2 순차 On / 3 일괄 On / 4 재부팅</text>
+<text x="470" y="1531.5" text-anchor="middle" font-size="11.5" class="s">1 Off / 2 순차 On / 3 일괄 On / 4 재부팅 · 질문 방치 시 No/q</text>
 <text x="470" y="1548.5" text-anchor="middle" font-size="11.5" class="s">(작업중이 work_timeout_sec 를 넘기면 승인/작업중단)</text>
 <path class="l" d="M470 1558 L470 1586" marker-end="url(#a)"/>
 <rect class="b" x="280" y="1586" width="380" height="40" rx="8"/>

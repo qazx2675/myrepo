@@ -688,7 +688,7 @@ func (u *userScreen) render(w, h int, color bool) string {
 }
 
 func (u *userScreen) head(w int, color bool, kinds []stateKind) []string {
-	head := titleLines(color, w, "cross_check 상태 리포트", "user: "+u.user, u.ds, u.loc, counterSegs(kinds), ttlSegs(u.info.ApprovalTTL, 0, false))
+	head := titleLines(color, w, "cross_check 상태 리포트", "user: "+u.user, u.ds, u.loc, counterSegs(kinds), ttlSegs(u.info.WaitTimeout, u.info.ApprovalTTL, 0, false))
 	return append(head, sepLine(w))
 }
 

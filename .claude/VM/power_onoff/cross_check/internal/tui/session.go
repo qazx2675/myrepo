@@ -58,6 +58,7 @@ type Options struct {
 	Now           func() time.Time        // 시계(기본 time.Now)
 	WatchInterval time.Duration           // w 감시 모드 갱신 주기(기본 2초)
 	ApprovalTTL   time.Duration           // 데몬 승인 유효시간(표시용, 기본 2분)
+	WaitTimeout   time.Duration           // 데몬 승인 대기 제한 시간(표시용). 0 이면(구버전 데몬) 표시 안 함
 	MaxRows       int                     // 표 하나에 보여줄 최근 작업 수(기본 20)
 }
 

@@ -19,18 +19,21 @@
 //
 // op 목록과 규칙:
 //
-//	ping                            → {"ok":true,"ttl_sec":120,"work_timeout_sec":86400,"pid":1234}
-//	                                  (ttl_sec: 승인 유효시간, work_timeout_sec: 본 작업 제한 시간, pid: 데몬 pid. 모두 선택 필드 — 구버전 데몬은 없음)
+//	ping                            → {"ok":true,"ttl_sec":120,"work_timeout_sec":86400,"wait_timeout_sec":600,"pid":1234}
+//	                                  (ttl_sec: 승인 유효시간, work_timeout_sec: 본 작업 제한 시간, wait_timeout_sec: 승인 대기 제한 시간,
+//	                                  pid: 데몬 pid. 모두 선택 필드 — 구버전 데몬은 없음)
 //	status_user {user}              → {"ok":true,"registered":bool}  (첫 실행 등록 안내용, 인증 없음)
 //	register {user,password}        → users= 목록에 있고 auth.conf 에 아직 없는 user 만 등록(admin 은 항상 거부)
 //	change_password {user,password,new_password} → 현재 비밀번호 확인 후 변경
 //	run     {user,checker,targets[,caller]} → 작업자·확인자 모두 users= 목록에 있고 등록되어 있으며, targets 가
 //	                                  <target_dir>/on_off_<user>.txt 의 부분집합일 때만 등록.
-//	                                  {"ok":true,"id":"...","token":"...","ttl_sec":120} 후 연결 유지. 이후 상태가 바뀔 때마다
+//	                                  {"ok":true,"id":"...","token":"...","ttl_sec":120,"wait_timeout_sec":600,"wait_expires_at":"..."}
+//	                                  후 연결 유지(wait_* 는 선택 필드). 이후 상태가 바뀔 때마다
 //	                                  {"event":"status","status":"대기|승인|중단","reason":"...","by":"..."} 한 줄씩
 //	                                  (승인 이벤트에는 선택 필드 ttl_sec, expires_at(RFC3339) 가 붙는다).
 //	                                  중단 또는 본 작업 시작 이벤트 뒤 데몬이 연결을 닫는다.
 //	                                  대기 중 작업자 연결이 끊기면(Ctrl+C·세션 끊김·kill -9) 즉시 중단.
+//	                                  대기로 wait_timeout_sec(기본 600초)를 넘기면 중단("승인 대기 시간 초과(10분)").
 //	                                  caller 는 --run 을 부른 스크립트 이름(정보용·위조 가능, 권한 판단에 쓰지 않음. 제어문자 제거, 64자까지)
 //	list    {user}                  → user 가 작업자/확인자인 작업. 대상 목록(targets, target_count)은 user 가 그 작업의
 //	                                  작업자일 때만 담는다(확인자는 대상을 볼 수 없다 — 전달받은 대상을 붙여넣어 대조).
@@ -82,9 +85,10 @@ const (
 
 // 기본값과 한도.
 const (
-	DefaultApprovalTTL   = 2 * time.Minute // 승인 후 start 까지 허용 시간 기본값(계획서 4-2 필수 정책). cross_check.conf 의 approval_ttl_sec 로 바꾼다
-	DefaultSweepInterval = time.Second     // 승인 만료 검사 주기
-	DefaultWorkTimeout   = 24 * time.Hour  // 본 작업(작업중) 제한 시간 기본값. cross_check.conf 의 work_timeout_sec 로 바꾼다
+	DefaultApprovalTTL   = 2 * time.Minute  // 승인 후 start 까지 허용 시간 기본값(계획서 4-2 필수 정책). cross_check.conf 의 approval_ttl_sec 로 바꾼다
+	DefaultSweepInterval = time.Second      // 승인 만료 검사 주기
+	DefaultWorkTimeout   = 24 * time.Hour   // 본 작업(작업중) 제한 시간 기본값. cross_check.conf 의 work_timeout_sec 로 바꾼다
+	DefaultWaitTimeout   = 10 * time.Minute // 승인 대기(대기) 제한 시간 기본값. cross_check.conf 의 wait_timeout_sec 로 바꾼다
 
 	MaxLineSize  = 1 << 20 // 요청 한 줄 최대 크기(줄바꿈 제외). 넘으면 오류 응답 후 연결 종료
 	MaxTargets   = 100000  // run 대상 최대 개수(실제로는 MaxLineSize 가 먼저 걸릴 수 있음)
@@ -259,17 +263,20 @@ type Request struct {
 
 // Response 는 응답 한 줄. ok/error 는 항상 들어가고 나머지는 op 에 따라 채운다.
 type Response struct {
-	OK      bool        `json:"ok"`
-	Error   string      `json:"error"`
-	TTLSec  int         `json:"ttl_sec,omitempty"`          // ping/run: 이 데몬의 승인 유효시간(초). 구버전 데몬은 안 줌
-	PID     int         `json:"pid,omitempty"`              // ping: 데몬 pid(화면 머리말 표시용). 구버전 데몬은 안 줌
-	WorkSec int         `json:"work_timeout_sec,omitempty"` // ping: 본 작업 제한 시간(초). 구버전 데몬은 안 줌
-	ID      string      `json:"id,omitempty"`               // run: 등록된 작업 ID(동일인 중단 때도 기록용으로 채움)
-	Token   string      `json:"token,omitempty"`            // run: start 에 쓸 1회용 token(128비트 hex). 작업자에게만 한 번 준다
-	Jobs    []JobView   `json:"jobs,omitempty"`             // list
-	Job     *JobView    `json:"job,omitempty"`              // get
-	AllJobs []store.Job `json:"all_jobs,omitempty"`         // admin_list
-	Count   int         `json:"count,omitempty"`            // admin_clear: 지운 개수
+	OK      bool   `json:"ok"`
+	Error   string `json:"error"`
+	TTLSec  int    `json:"ttl_sec,omitempty"`          // ping/run: 이 데몬의 승인 유효시간(초). 구버전 데몬은 안 줌
+	PID     int    `json:"pid,omitempty"`              // ping: 데몬 pid(화면 머리말 표시용). 구버전 데몬은 안 줌
+	WorkSec int    `json:"work_timeout_sec,omitempty"` // ping: 본 작업 제한 시간(초). 구버전 데몬은 안 줌
+	WaitSec int    `json:"wait_timeout_sec,omitempty"` // ping/run: 승인 대기 제한 시간(초). 구버전 데몬은 안 줌(대기 제한 없음)
+	// run: 이 시각까지 승인(또는 취소)되지 않으면 데몬이 중단한다(등록 시각 + wait_timeout_sec). 구버전 데몬은 안 줌
+	WaitExpiresAt *time.Time  `json:"wait_expires_at,omitempty"`
+	ID            string      `json:"id,omitempty"`       // run: 등록된 작업 ID(동일인 중단 때도 기록용으로 채움)
+	Token         string      `json:"token,omitempty"`    // run: start 에 쓸 1회용 token(128비트 hex). 작업자에게만 한 번 준다
+	Jobs          []JobView   `json:"jobs,omitempty"`     // list
+	Job           *JobView    `json:"job,omitempty"`      // get
+	AllJobs       []store.Job `json:"all_jobs,omitempty"` // admin_list
+	Count         int         `json:"count,omitempty"`    // admin_clear: 지운 개수
 	// status_user: auth.conf 에 항목이 있는지(다른 op 에서는 빠짐)
 	Registered *bool `json:"registered,omitempty"`
 }

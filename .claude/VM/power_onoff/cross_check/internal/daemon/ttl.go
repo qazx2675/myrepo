@@ -52,6 +52,37 @@ func minWorkTimeoutSec() int {
 	return MinWorkTimeoutSec
 }
 
+// wait_timeout_sec(승인 대기 제한 시간) 허용 범위(초). 대기로 이보다 오래 승인·취소가 없으면 중단("승인 대기 시간 초과({시간})").
+const (
+	MinWaitTimeoutSec = 30    // 30초
+	MaxWaitTimeoutSec = 86400 // 24시간
+)
+
+// EnvMinWaitTimeoutSec 는 시험 전용: wait_timeout_sec 검증의 최소값(초)을 낮춘다(격리 E2E 가 몇 초짜리 제한을 쓰기 위함).
+// 운영에서는 설정하지 않는다. 문서화된 설정이 아니다.
+const EnvMinWaitTimeoutSec = "CROSS_CHECK_TEST_MIN_WAIT_TIMEOUT_SEC"
+
+// minWaitTimeoutSec 는 LoadConf 가 받아들이는 wait_timeout_sec 의 최소값(기본 MinWaitTimeoutSec).
+func minWaitTimeoutSec() int {
+	if v := os.Getenv(EnvMinWaitTimeoutSec); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n < MinWaitTimeoutSec {
+			return n
+		}
+	}
+	return MinWaitTimeoutSec
+}
+
+// 승인 대기 만료 사유는 "승인 대기 시간 초과({시간})" (시간은 FormatTTLDuration 표기).
+const reasonWaitTimeoutPrefix = "승인 대기 시간 초과("
+
+// ReasonWaitTimeout 은 대기로 wait_timeout_sec 를 넘겨 중단될 때의 사유 "승인 대기 시간 초과(10분)".
+func ReasonWaitTimeout(wait time.Duration) string {
+	return reasonWaitTimeoutPrefix + FormatTTLDuration(wait) + ")"
+}
+
+// IsWaitTimeoutReason 은 msg 가 어떤 제한값이든 승인 대기 시간 초과 사유인지 알려준다.
+func IsWaitTimeoutReason(msg string) bool { return strings.HasPrefix(msg, reasonWaitTimeoutPrefix) }
+
 // FormatTTL 은 초 단위 시간을 사람이 읽는 한국어로 바꾼다.
 //
 //	120 → "2분"   45 → "45초"   90 → "1분 30초"   3600 → "1시간"   3720 → "1시간 2분"

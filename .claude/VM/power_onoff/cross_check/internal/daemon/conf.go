@@ -13,6 +13,8 @@ package daemon
 //	                                             (pkill -HUP -f 'cross_check --daemon') 또는 재시작으로 반영
 //	work_timeout_sec=86400                     ← 본 작업(작업중) 제한 시간(초, 600~604800, 기본 86400 = 24시간). 이보다 오래
 //	                                             --finish 가 없으면 승인/작업중단("작업자 응답 없음"). SIGHUP 으로도 반영
+//	wait_timeout_sec=600                       ← 승인 대기(대기) 제한 시간(초, 30~86400, 기본 600 = 10분). 등록 후 이보다 오래
+//	                                             승인·취소가 없으면 중단("승인 대기 시간 초과(10분)"). SIGHUP 으로도 반영
 //
 // 대상 파일(<target_dir>/on_off_<user>.txt, vm_power_onoff 와 같은 형식): 한 줄에 이름 하나, '#' 주석·빈 줄 무시.
 // run 의 대상은 이 파일에 있는 이름의 부분집합이어야 한다(작업자는 자기에게 등록된 대상만 작업).
@@ -39,6 +41,7 @@ type Conf struct {
 	Users       []string      // users: 허용 사용자 이름(파일에 적힌 순서)
 	ApprovalTTL time.Duration // approval_ttl_sec
 	WorkTimeout time.Duration // work_timeout_sec
+	WaitTimeout time.Duration // wait_timeout_sec
 }
 
 // ParseUsers 는 users= 값(쉼표 구분)을 이름 목록으로 바꾼다. 각 이름은 ValidName 이고 admin 이 아니며 중복이 없어야 한다.
@@ -77,7 +80,7 @@ func checkAllowedName(name string) error {
 // LoadConf 는 설정 파일을 읽는다. 파일이 없으면 기본값(auth=required, 120초)으로 보지만,
 // auth=required 인데 target_dir 나 users 가 없으면 오류다(fail closed). 모르는 키·중복 키·형식 오류도 오류.
 func LoadConf(path string) (Conf, error) {
-	c := Conf{AuthMode: AuthRequired, ApprovalTTL: DefaultApprovalTTL, WorkTimeout: DefaultWorkTimeout}
+	c := Conf{AuthMode: AuthRequired, ApprovalTTL: DefaultApprovalTTL, WorkTimeout: DefaultWorkTimeout, WaitTimeout: DefaultWaitTimeout}
 	b, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return c, fmt.Errorf("설정 파일 %s 읽기 실패: %v", path, err)
@@ -131,6 +134,13 @@ func LoadConf(path string) (Conf, error) {
 					path, ln, min, MaxWorkTimeoutSec, int(DefaultWorkTimeout/time.Second), FormatTTLDuration(DefaultWorkTimeout), clip(v))
 			}
 			c.WorkTimeout = time.Duration(n) * time.Second
+		case "wait_timeout_sec":
+			n, err := strconv.Atoi(v)
+			if min := minWaitTimeoutSec(); err != nil || n < min || n > MaxWaitTimeoutSec {
+				return c, fmt.Errorf("설정 파일 %s %d번째 줄: wait_timeout_sec 는 %d~%d 사이의 정수(초)여야 함(기본 %d = %s): %q",
+					path, ln, min, MaxWaitTimeoutSec, int(DefaultWaitTimeout/time.Second), FormatTTLDuration(DefaultWaitTimeout), clip(v))
+			}
+			c.WaitTimeout = time.Duration(n) * time.Second
 		default:
 			return c, fmt.Errorf("설정 파일 %s %d번째 줄: 알 수 없는 키 %q", path, ln, k)
 		}
@@ -154,6 +164,7 @@ func (c Conf) Apply(cfg *Config) {
 	cfg.AllowedUsers = append([]string(nil), c.Users...)
 	cfg.ApprovalTTL = c.ApprovalTTL
 	cfg.WorkTimeout = c.WorkTimeout
+	cfg.WaitTimeout = c.WaitTimeout
 }
 
 // TargetFilePath 는 user 의 대상 파일 경로 <dir>/on_off_<user>.txt.

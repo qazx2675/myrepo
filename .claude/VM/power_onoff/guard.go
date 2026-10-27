@@ -19,6 +19,7 @@ func (e *GuardError) Error() string { return "[취소] " + e.Reason }
 // GuardOpts 는 안전장치 설정. 0/nil 이면 기본값.
 type GuardOpts struct {
 	InputTimeout time.Duration     // 3단계 전체 입력 제한(기본 60s, 기존 방식에서만)
+	StepTimeout  time.Duration     // 1단계·2단계(기존 방식 Enter)·4단계 질문 한 번의 제한(기본 input_timeout_sec 기본값 10분). 넘기면 취소
 	Countdown    int               // 5단계 카운트다운 시작 숫자(기본 10)
 	Tick         time.Duration     // 카운트다운 간격(기본 1s)
 	ShowTargets  func(w io.Writer) // 1단계 통과 후·4단계 ls 때 대상 목록 출력(nil 이면 한 줄에 하나씩). "총 N대" 는 RunGuard 가 출력
@@ -31,17 +32,24 @@ type GuardOpts struct {
 	CrossCheck func(ctx context.Context, checker string) error                          // 승인 대기. nil 이 아니면 미승인
 	// AfterCountdown 은 5단계 카운트다운이 끝난 직후 호출된다(교차검증의 --start). 오류면 취소.
 	AfterCountdown func(ctx context.Context) error
+	// ConfirmDeadline 은 교차검증 방식 4단계(YeS) 입력의 마감 시각(승인 유효시간 마감)이다.
+	// nil 이거나 0 시각을 돌려주면(마감을 모름) StepTimeout 을 쓴다. 마감을 넘기면 "승인 유효시간 초과" 로 취소.
+	ConfirmDeadline func() time.Time
 }
 
 // 교차검증 방식의 취소 사유
 const (
 	reasonCCNotApproved = "교차검증 미승인"
 	reasonCCStartFailed = "교차검증 승인 유효시간 초과 또는 거부"
+	reasonCCExpired     = "승인 유효시간 초과" // 4/5 에서 승인 마감까지 YeS 를 받지 못함
 )
 
 func (o GuardOpts) withDefaults() GuardOpts {
 	if o.InputTimeout <= 0 {
 		o.InputTimeout = 60 * time.Second
+	}
+	if o.StepTimeout <= 0 {
+		o.StepTimeout = DefaultInputTimeout
 	}
 	if o.Countdown <= 0 {
 		o.Countdown = 10
@@ -111,12 +119,15 @@ func RunGuard(ctx context.Context, in *LineReader, out io.Writer, targets []stri
 	// 1단계: 작업 확인 문구(고정, 작업 종류와 무관)
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s %s(%s)을 그대로 입력하세요.\n > ", Bold("[1/5]"), Bold(Yellow(WorkPhrase)), WorkPhraseHint)
-	line, err := in.ReadLine(ctx)
+	line, err := in.ReadLineLimit(ctx, opts.StepTimeout)
 	if interrupted(err) {
 		return cancelGuard(out, reasonInterrupt)
 	}
 	if err != nil {
 		fmt.Fprintln(out)
+	}
+	if errors.Is(err, ErrTimeout) {
+		return cancelGuard(out, inputTimeoutReason(opts.StepTimeout))
 	}
 	if err != nil || strings.TrimSpace(line) != WorkPhrase {
 		return cancelGuard(out, reasonWorkPhrase)
@@ -133,11 +144,29 @@ func RunGuard(ctx context.Context, in *LineReader, out io.Writer, targets []stri
 	}
 
 	// 4단계: YeS (ls = 대상 목록 다시 보기, 몇 번이든 취소 없이 다시 묻는다)
+	// 제한: 교차검증 방식은 승인 마감 시각까지(ls 를 해도 늘어나지 않음), 마감을 모르거나 기존 방식이면 질문마다 StepTimeout.
+	var deadline time.Time
+	if ccMode && opts.ConfirmDeadline != nil {
+		deadline = opts.ConfirmDeadline()
+	}
 	for {
 		fmt.Fprintf(out, "%s 정말 작업을 진행하시겠습니까? (YeS/No, ls=대상 보기): ", Bold("[4/5]"))
-		ans, err := in.ReadLine(ctx)
+		var ans string
+		var err error
+		if !deadline.IsZero() {
+			ans, err = in.ReadLineTimeout(ctx, time.Until(deadline))
+		} else {
+			ans, err = in.ReadLineLimit(ctx, opts.StepTimeout)
+		}
 		if interrupted(err) {
 			return cancelGuard(out, reasonInterrupt)
+		}
+		if errors.Is(err, ErrTimeout) {
+			fmt.Fprintln(out)
+			if !deadline.IsZero() {
+				return cancelGuard(out, reasonCCExpired)
+			}
+			return cancelGuard(out, inputTimeoutReason(opts.StepTimeout))
 		}
 		if err != nil {
 			fmt.Fprintln(out)
@@ -219,12 +248,15 @@ func ccStages(ctx context.Context, in *LineReader, out io.Writer, opts GuardOpts
 
 // classicStages 는 기존 방식의 2·3단계: 준비 확인(Enter) → 제한 시간 안에 VM 이름 입력.
 func classicStages(ctx context.Context, in *LineReader, out io.Writer, targets []string, opts GuardOpts, interrupted func(error) bool) error {
-	// 2단계: 준비 확인(시간 제한 없음, 입력 내용은 버림)
+	// 2단계: 준비 확인(제한 StepTimeout, 입력 내용은 버림)
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s 다음 단계는 1분(60초)의 입력 제한 시간이 있습니다. 호스트명을 입력할 준비가 완료되면 Enter를 눌러 다음 단계로 진행하세요.\n", Bold("[2/5]"))
-	if _, err := in.ReadLine(ctx); err != nil {
+	if _, err := in.ReadLineLimit(ctx, opts.StepTimeout); err != nil {
 		if interrupted(err) {
 			return cancelGuard(out, reasonInterrupt)
+		}
+		if errors.Is(err, ErrTimeout) {
+			return cancelGuard(out, inputTimeoutReason(opts.StepTimeout))
 		}
 		return cancelGuard(out, "입력 종료(EOF)")
 	}
@@ -321,14 +353,18 @@ func contains(ss []string, s string) bool {
 }
 
 // ConfirmPhrase 는 VWP 담당자 확인용: prompt 출력 후 한 줄(앞뒤 공백 무시)이 phrase 와 같으면 nil.
-func ConfirmPhrase(ctx context.Context, in *LineReader, out io.Writer, prompt string, phrase string) error {
+// timeout(> 0) 안에 입력이 없으면 "입력 시간 N분 초과" 로 취소한다.
+func ConfirmPhrase(ctx context.Context, in *LineReader, out io.Writer, prompt string, phrase string, timeout time.Duration) error {
 	fmt.Fprint(out, prompt)
-	line, err := in.ReadLine(ctx)
-	if err != nil && ctx.Err() != nil && !errors.Is(err, io.EOF) {
+	line, err := in.ReadLineLimit(ctx, timeout)
+	if err != nil && ctx.Err() != nil && !errors.Is(err, io.EOF) && !errors.Is(err, ErrTimeout) {
 		return cancelGuard(out, reasonInterrupt)
 	}
 	if err != nil {
 		fmt.Fprintln(out)
+	}
+	if errors.Is(err, ErrTimeout) {
+		return cancelGuard(out, inputTimeoutReason(timeout))
 	}
 	if err != nil || strings.TrimSpace(line) != phrase {
 		return cancelGuard(out, reasonVWPPhrase)
@@ -348,6 +384,10 @@ func RunDemo(ctx context.Context, in *LineReader, out io.Writer) int {
 	}
 	if v, err := strconv.Atoi(os.Getenv("PWONOFF_TEST_TICK_MS")); err == nil && v > 0 {
 		opts.Tick = time.Duration(v) * time.Millisecond
+	}
+	// 1/5·2/5·4/5 질문마다의 제한(실제 실행의 input_timeout_sec 에 해당, 데모 기본 10분)
+	if v, err := strconv.Atoi(os.Getenv("PWONOFF_TEST_STEP_TIMEOUT")); err == nil && v > 0 {
+		opts.StepTimeout = time.Duration(v) * time.Second
 	}
 	fmt.Fprintln(out, Cyan("[DEMO] vCenter 없이 샘플 대상 3대로 안전장치만 시험합니다"))
 	fmt.Fprintln(out, Cyan("[DEMO] 데모는 기존 방식입니다. 실제 실행에서 cross_check=on(기본)이면 2/5 는 확인자 번호 선택, 3/5 는 VM 이름 입력 대신 확인자 승인 대기입니다"))

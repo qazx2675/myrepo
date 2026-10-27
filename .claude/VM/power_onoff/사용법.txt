@@ -8,6 +8,8 @@ bash setup.sh
 sudo bash install.sh /home/power_onoff
 
 # [설정] users / vcenters 를 환경에 맞게 수정 (필요하면 secret_lib, os6_host 채움)
+# 입력 제한 input_timeout_sec(기본 600초 = 10분, 30~3600): 질문마다 이 시간 안에 답하지 않으면 '[취소] 입력 시간 10분 초과'(exit 1).
+# 교차검증 4/5 는 승인 마감까지(넘기면 '[취소] 승인 유효시간 초과'), 실행 중 강제 PowerOff 질문은 No, 순차 부팅 c/s/q 는 q 로 처리 — 계속 대기 상태로 남지 않음
 sudo vi /etc/vcetner_pwon_off/pwonoff.conf
 
 # [대상 파일] 허용 디렉터리에 on_off_<user>.txt 작성 — VM 이름만 한 줄에 하나 (예: svr1ev01)
@@ -73,8 +75,14 @@ ls -l /home/power_onoff/run_hong/ && tail -n 40 /home/power_onoff/run_hong/*.log
 # [전체 시험] vet + 단위 + race + vcsim + 안전장치 시나리오 + E2E. 마지막 줄 PASS=N FAIL=M
 bash test/run_tests.sh
 
-# [안전장치 시나리오만] 빌드한 바이너리로 --demo 파이프 입력 시나리오 실행
+# [안전장치 시나리오만] 빌드한 바이너리로 --demo 파이프 입력 시나리오 실행 (입력 제한 시간 초과 시나리오 포함)
 bash test/guard_scenarios.sh ./vm_power_onoff
+
+# [입력 제한 체험] 데모에서만 질문마다의 제한을 3초로 줄여 1/5 에서 자리를 비우면 '[취소] 입력 시간 3초 초과' 로 끝나는지 확인
+PWONOFF_TEST_STEP_TIMEOUT=3 vm_power_onoff --demo
+
+# [교차검증 E2E] vcsim + 격리 cross_check 데몬 (4/5 방치 자동 취소, 강제 OFF 질문 방치 30초, 승인 대기 제한 포함)
+bash test/e2e_vcsim_crosscheck.sh
 
 # [E2E만] vcsim 위에서 처음부터 끝까지(conf 임시 교체 후 복원)
 bash test/e2e_vcsim.sh

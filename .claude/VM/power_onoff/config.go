@@ -29,7 +29,24 @@ func defaultConfig() *Config {
 		PortCheckTimeout: 3 * time.Second,
 		CrossCheck:       true, // 0.3.0 부터 기본 on (끄려면 conf 에 cross_check=off)
 		CrossCheckBin:    DefaultCrossCheckBin,
+		InputTimeout:     DefaultInputTimeout,
 	}
+}
+
+// input_timeout_sec 의 기본값과 허용 범위(초).
+const (
+	DefaultInputTimeout = 600 * time.Second
+	minInputTimeoutSec  = 30
+	maxInputTimeoutSec  = 3600
+)
+
+// parseRange 는 lo~hi 범위의 정수를 읽는다.
+func parseRange(val string, lo, hi int) (int, error) {
+	n, err := strconv.Atoi(val)
+	if err != nil || n < lo || n > hi {
+		return 0, fmt.Errorf("%d~%d 사이의 정수여야 합니다: %q", lo, hi, val)
+	}
+	return n, nil
 }
 
 // splitList 는 콤마 목록을 공백 제거 후 나눈다. 빈 항목/중복은 오류.
@@ -144,6 +161,15 @@ func ParseConfig(r io.Reader) (*Config, error) {
 					return bad(fmt.Errorf("절대경로여야 합니다: %q", val))
 				}
 				cfg.CrossCheckBin = filepath.Clean(val)
+			}
+		case "input_timeout_sec":
+			// 비우면 기본값(600초=10분)
+			if val != "" {
+				n, err := parseRange(val, minInputTimeoutSec, maxInputTimeoutSec)
+				if err != nil {
+					return bad(err)
+				}
+				cfg.InputTimeout = time.Duration(n) * time.Second
 			}
 		case "concurrency":
 			n, err := parsePositive(val)

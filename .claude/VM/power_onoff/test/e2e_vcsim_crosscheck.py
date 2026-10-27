@@ -34,14 +34,16 @@ dproc = None
 results = d.results
 
 
-def daemon_start(ttl):
-    """격리 데몬을 approval_ttl_sec=ttl 로 (다시) 띄운다. 10초 미만은 시험 전용 하한(CROSS_CHECK_TEST_MIN_TTL_SEC)으로만 허용."""
+def daemon_start(ttl, wait=None):
+    """격리 데몬을 approval_ttl_sec=ttl 로 (다시) 띄운다. 10초 미만은 시험 전용 하한(CROSS_CHECK_TEST_MIN_TTL_SEC)으로만 허용.
+    wait 를 주면 wait_timeout_sec(승인 대기 제한)도 그 값으로(30초 미만은 시험 전용 하한 CROSS_CHECK_TEST_MIN_WAIT_TIMEOUT_SEC)."""
     global dproc
     daemon_stop()
     for sub in ("run", "etc", "lib"):
         os.makedirs(os.path.join(ISO, sub), exist_ok=True)
     open(ISO + "/etc/cross_check.conf", "w").write(
-        "target_dir=%s\nauth=required\nusers=tester,other\napproval_ttl_sec=%d\n" % (d.WORK, ttl))
+        "target_dir=%s\nauth=required\nusers=tester,other\napproval_ttl_sec=%d\n" % (d.WORK, ttl)
+        + ("wait_timeout_sec=%d\n" % wait if wait else ""))
     if not os.path.exists(ISO + "/etc/auth.conf"):
         fd = os.open(ISO + "/etc/auth.conf", os.O_WRONLY | os.O_CREAT, 0o600)
         os.write(fd, b"admin=adm_pw_1\n")
@@ -50,6 +52,8 @@ def daemon_start(ttl):
     env = dict(CCENV)
     if ttl < 10:
         env["CROSS_CHECK_TEST_MIN_TTL_SEC"] = str(ttl)
+    if wait and wait < 30:
+        env["CROSS_CHECK_TEST_MIN_WAIT_TIMEOUT_SEC"] = str(wait)
     dproc = subprocess.Popen([CC, "--daemon"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
         if os.path.exists(ISO + "/run/cc.sock"):
@@ -157,10 +161,10 @@ def run_audit(pr):
     return new_audit(pr.audit_before)
 
 
-def to_wait(menu=True, targets=("svr1ev01",), action=1, power="on"):
+def to_wait(menu=True, targets=("svr1ev01",), action=1, power="on", extra=""):
     """1/5 작업 확인 문구 → 2/5 확인자(menu=True 면 번호 메뉴에서 1번=other, 아니면 -c other) → 3/5 승인 대기 까지."""
     sim = d.Sim(power)
-    d.write_conf(sim.addr, "cross_check_bin=%s\n" % CC, cc="on")
+    d.write_conf(sim.addr, "cross_check_bin=%s\n" % CC + extra, cc="on")
     d.write_targets(list(targets))
     args = [d.BIN, "-u", "tester", "-v", sim.addr] + ([] if menu else ["-c", "other"])
     before = audit_files()
@@ -382,17 +386,18 @@ def s_cc_sigint_running():
         sim.close()
 
 
-@d.scenario("cc: 4/5 에서 승인 유효시간(3초) 초과 → --start 거부, 중단")
+@d.scenario("cc: 카운트다운 중 승인 유효시간(6초) 초과 → --start 거부, 중단")
 def s_cc_expire():
-    daemon_start(3)
+    # 4/5 는 승인 마감 전에 YeS 를 넣었지만 5/5 카운트다운(10초)이 승인 유효시간(6초)을 넘긴다 → --start 거부
+    daemon_start(6)
     sim, pr = to_wait(menu=False)
     try:
         jid = wait_job_id()
         approve(jid)
         pr.expect(r"교차검증 승인됨", 20)
+        pr.expect(r"\[INFO\] 4/5 입력 마감: \d\d:\d\d:\d\d", 10)
         pr.expect(d.YES_PROMPT, 10)
-        time.sleep(4.5)  # 4/5 에서 머무는 사이 승인 유효시간(3초)이 지난다
-        pr.send("ls\n")  # ls 는 여전히 취소 없이 목록만
+        pr.send("ls\n")  # ls 는 취소 없이 목록만
         pr.expect(r"총 1대\n", 10)
         pr.expect(d.YES_PROMPT, 10)
         pr.send("YeS\n")
@@ -406,6 +411,78 @@ def s_cc_expire():
         no_token(pr)
         d.check_states("on", ["svr1ev01"])
         assert_job(jid, "중단", reason_re=r"^승인 후 .+ 내 미진행$")
+    finally:
+        sim.close()
+        daemon_start(120)
+
+
+@d.scenario("cc: 4/5 방치 → 승인 마감에 자동 취소, 작업중단")
+def s_cc_confirm_timeout():
+    # 승인 뒤 4/5 에서 아무것도 입력하지 않으면 계속 기다리지 않고 승인 마감(유효시간 3초, 안내 시각 - 1초)에
+    # "[취소] 승인 유효시간 초과" 로 끝내고 --finish aborted(승인/작업중단)를 보고한다(데몬 만료보다 먼저).
+    daemon_start(3)
+    sim, pr = to_wait(menu=False)
+    try:
+        jid = wait_job_id()
+        approve(jid)
+        pr.expect(r"교차검증 승인됨", 20)
+        pr.expect(r"\[INFO\] 4/5 입력 마감: \d\d:\d\d:\d\d", 10)
+        pr.expect(d.YES_PROMPT, 10)
+        t0 = time.time()
+        pr.expect(r"\[취소\] 승인 유효시간 초과\n", 10)
+        assert time.time() - t0 <= 4, "승인 마감보다 늦게 끊김: %.1f" % (time.time() - t0)
+        assert pr.wait(10) == 1
+        assert "[5/5]" not in pr.buf and "교차검증 시작" not in pr.buf and "합계" not in pr.buf, pr.buf[-800:]
+        au = assert_reported(pr, "aborted")
+        assert "교차검증 승인 마감 " in au and "안전장치 취소: [취소] 승인 유효시간 초과" in au, au[-1200:]
+        no_token(pr)
+        d.check_states("on", ["svr1ev01"])
+        assert_job(jid, "승인", "작업중단", reason="작업자가 본 작업 전에 중단")
+    finally:
+        sim.close()
+        daemon_start(120)
+
+
+@d.scenario("cc: 강제OFF 질문 방치(30초) → No 처리, 작업완료")
+def s_cc_force_timeout():
+    # 본 작업 중 질문(강제 PowerOff YeS/No)도 input_timeout_sec(최솟값 30초) 뒤 No 로 처리하고
+    # 결과표 → --finish done(끝까지 실행) 의 정상 흐름을 탄다. VM 은 꺼지지 않아 실패 1건, exit 1.
+    sim, pr = to_wait(menu=False, extra="input_timeout_sec=30\n")
+    try:
+        jid = wait_job_id()
+        to_countdown(pr, jid)
+        pr.expect(r"교차검증 통과 — 전원 작업을 시작합니다", 20)
+        pr.expect(r"강제 PowerOff 하시겠습니까\? \(YeS/No\): ", 40)
+        t0 = time.time()
+        pr.expect(r"\[안내\] 입력 시간 30초 초과 — 강제 PowerOff 하지 않습니다 \(No 로 처리\)", 45)
+        assert 28 <= time.time() - t0 <= 40, "제한 시간이 30초가 아님: %.1f" % (time.time() - t0)
+        pr.expect(r"합계 1건: 성공 0 / 스킵 0 / 실패 1", 20)
+        assert pr.wait(10) == 1
+        assert "강제 PowerOff 안 함(입력 시간 초과)" in pr.buf, pr.buf[-800:]
+        d.check_states("on", ["svr1ev01"])
+        au = assert_reported(pr, "done")
+        assert "입력 시간 30초 초과 — 강제 PowerOff 하지 않습니다" in au, au[-1200:]
+        assert_job(jid, "승인", "작업완료")
+        no_token(pr)
+    finally:
+        sim.close()
+
+
+@d.scenario("cc: 3/5 승인 대기 방치 → 데몬 대기 제한(3초)으로 취소")
+def s_cc_wait_timeout():
+    # 확인자가 승인하지 않으면 데몬(wait_timeout_sec)이 대기 작업을 중단하고, 작업자 쪽도 곧바로 끝난다(4/5 로 가지 않음).
+    daemon_start(120, wait=3)
+    sim, pr = to_wait(menu=False)
+    try:
+        jid = pr.expect(r"\[대기\] 작업 (\S+) — 확인자 other", 20).group(1)  # 확인자 화면을 기다리지 않고 바로 읽는다(대기 3초)
+        pr.expect(r"\[취소\] 교차검증 미승인", 20)
+        assert pr.wait(10) == 1
+        assert "[4/5]" not in pr.buf and "합계" not in pr.buf, pr.buf[-800:]
+        assert "승인 대기 시간 초과" in pr.buf, "데몬의 중단 사유가 화면에 없음:\n" + pr.buf[-800:]
+        au = assert_not_reported(pr)
+        assert "교차검증 미승인 확인자=other 분류=거부/중단(exit 1)" in au and "안전장치 취소: [취소] 교차검증 미승인" in au, au[-1200:]
+        d.check_states("on", ["svr1ev01"])
+        assert_job(jid, "중단", reason_re=r"^승인 대기 시간 초과")
     finally:
         sim.close()
         daemon_start(120)
@@ -434,7 +511,8 @@ def main():
         daemon_start(120)
         register()
         for fn in [s_cc_approve, s_cc_vm_fail_done, s_cc_cancel, s_cc_mismatch, s_cc_lower_yes, s_cc_wrongpw,
-                   s_cc_sigint_countdown, s_cc_sigint_running, s_cc_expire, s_cc_nodaemon]:
+                   s_cc_sigint_countdown, s_cc_sigint_running, s_cc_expire, s_cc_confirm_timeout, s_cc_force_timeout, s_cc_wait_timeout,
+                   s_cc_nodaemon]:
             fn()
     finally:
         daemon_stop()

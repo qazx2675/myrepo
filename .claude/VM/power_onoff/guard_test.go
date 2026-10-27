@@ -407,12 +407,12 @@ func TestGuardCrossCheckMode(t *testing.T) {
 func TestConfirmPhrase(t *testing.T) {
 	out := &syncBuf{}
 	in := NewLineReader(strings.NewReader("  " + VWPPhrase + " \n" + strings.ToLower(VWPPhrase) + "\n"))
-	if err := ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase); err != nil {
+	if err := ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase, 0); err != nil {
 		t.Fatal(err)
 	}
-	err := ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase)
+	err := ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase, 0)
 	wantCancel(t, err, out.String(), reasonVWPPhrase)
-	err = ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase) // EOF
+	err = ConfirmPhrase(context.Background(), in, out, "VWP 확인: ", VWPPhrase, 0) // EOF
 	wantCancel(t, err, out.String(), reasonVWPPhrase)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -420,7 +420,7 @@ func TestConfirmPhrase(t *testing.T) {
 	pr, pw := io.Pipe()
 	defer pw.Close()
 	out2 := &syncBuf{}
-	err = ConfirmPhrase(ctx, NewLineReader(pr), out2, "VWP 확인: ", VWPPhrase)
+	err = ConfirmPhrase(ctx, NewLineReader(pr), out2, "VWP 확인: ", VWPPhrase, 0)
 	wantCancel(t, err, out2.String(), "Ctrl+C 로 중단")
 }
 
@@ -493,5 +493,150 @@ func TestColorDisabled(t *testing.T) {
 	t.Setenv("PWONOFF_COLOR", "always")
 	if Red("x") == "x" {
 		t.Fatal("always 인데 색상 없음")
+	}
+}
+
+// 입력 제한 시간(계속 대기 금지) -------------------------------------------------
+
+// runGuardPipe 는 first 를 넣은 뒤 입력을 열어 둔 채(사용자가 자리를 비운 상태) RunGuard 를 돌린다.
+func runGuardPipe(t *testing.T, first string, opts GuardOpts) (error, string, time.Duration) {
+	t.Helper()
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	go io.WriteString(pw, first)
+	out := &syncBuf{}
+	start := time.Now()
+	err := RunGuard(context.Background(), NewLineReader(pr), out, tTargets, opts)
+	return err, out.String(), time.Since(start)
+}
+
+func TestGuardStepTimeout(t *testing.T) {
+	cases := map[string]struct {
+		first, notIn string
+	}{
+		"1단계":        {"", "총 3대"},
+		"2단계(Enter)": {WorkPhrase + "\n", "[3/5]"},
+		"4단계":        {WorkPhrase + "\n\n" + okHosts, "[5/5]"},
+		"4단계 ls 뒤":   {WorkPhrase + "\n\n" + okHosts + "ls\n", "[5/5]"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			o := testOpts()
+			o.StepTimeout = 80 * time.Millisecond
+			err, out, el := runGuardPipe(t, c.first, o)
+			wantCancel(t, err, out, "입력 시간 80ms 초과")
+			if el > 2*time.Second {
+				t.Fatalf("계속 기다림: %v", el)
+			}
+			if strings.Contains(out, c.notIn) {
+				t.Fatalf("시간 초과인데 다음 단계(%s) 진행:\n%s", c.notIn, out)
+			}
+			if !strings.Contains(out, "\n[취소] 입력 시간 80ms 초과") {
+				t.Fatalf("프롬프트 줄을 끝내고 취소 출력해야 함:\n%q", out)
+			}
+		})
+	}
+	// 질문마다 따로 잰다: 각 단계가 제한보다 짧으면 합이 길어도 통과
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	go func() {
+		for _, s := range []string{WorkPhrase + "\n", "\n", okHosts, "ls\n", "YeS\n"} {
+			time.Sleep(60 * time.Millisecond)
+			io.WriteString(pw, s)
+		}
+	}()
+	o := testOpts()
+	o.StepTimeout = 150 * time.Millisecond
+	out := &syncBuf{}
+	if err := RunGuard(context.Background(), NewLineReader(pr), out, tTargets, o); err != nil {
+		t.Fatalf("질문마다 제한 안이면 통과: %v\n%s", err, out)
+	}
+}
+
+// 교차검증 방식 4단계: 마감 시각까지만 기다리고(ls 로 늘어나지 않음) 넘기면 "승인 유효시간 초과", 모르면 StepTimeout.
+func TestGuardConfirmDeadline(t *testing.T) {
+	h := &ccHooks{checker: "dhk"}
+	o := h.opts()
+	o.StepTimeout = time.Hour
+	dl := time.Now().Add(200 * time.Millisecond)
+	o.ConfirmDeadline = func() time.Time { return dl }
+	err, out, el := runGuardPipe(t, WorkPhrase+"\nls\n", o)
+	wantCancel(t, err, out, "승인 유효시간 초과")
+	if el > time.Second || strings.Contains(out, "[5/5]") || strings.Count(out, "총 3대") != 2 {
+		t.Fatalf("마감에 끊겨야 함(ls 1회 포함): %v\n%s", el, out)
+	}
+	if strings.Join(h.calls, ",") != "checker,approve:dhk" {
+		t.Errorf("--start 를 부르면 안 됨: %v", h.calls)
+	}
+	// 이미 지난 마감 → 바로 취소(이미 온 YeS 보다 시간 초과가 우선)
+	h = &ccHooks{checker: "dhk"}
+	o = h.opts()
+	o.ConfirmDeadline = func() time.Time { return time.Now().Add(-time.Second) }
+	err, out = runGuardStr(t, WorkPhrase+"\nYeS\n", o)
+	wantCancel(t, err, out, "승인 유효시간 초과")
+	// 마감 모름(0) → StepTimeout
+	h = &ccHooks{checker: "dhk"}
+	o = h.opts()
+	o.StepTimeout = 80 * time.Millisecond
+	o.ConfirmDeadline = func() time.Time { return time.Time{} }
+	err, out, _ = runGuardPipe(t, WorkPhrase+"\n", o)
+	wantCancel(t, err, out, "입력 시간 80ms 초과")
+	// 마감 안이면 그대로 통과
+	h = &ccHooks{checker: "dhk"}
+	o = h.opts()
+	o.ConfirmDeadline = func() time.Time { return time.Now().Add(time.Minute) }
+	if err, out := runGuardStr(t, WorkPhrase+"\nYeS\n", o); err != nil {
+		t.Fatalf("마감 전 YeS 는 통과: %v\n%s", err, out)
+	}
+	// 기존 방식에서는 ConfirmDeadline 을 쓰지 않는다
+	o = testOpts()
+	o.ConfirmDeadline = func() time.Time { return time.Now().Add(-time.Second) }
+	if err, out := runGuardStr(t, WorkPhrase+"\n\n"+okHosts+"YeS\n", o); err != nil {
+		t.Fatalf("기존 방식은 마감 무시: %v\n%s", err, out)
+	}
+}
+
+func TestConfirmPhraseTimeout(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	out := &syncBuf{}
+	start := time.Now()
+	err := ConfirmPhrase(context.Background(), NewLineReader(pr), out, "VWP 확인: ", VWPPhrase, 80*time.Millisecond)
+	wantCancel(t, err, out.String(), "입력 시간 80ms 초과")
+	if time.Since(start) > time.Second {
+		t.Fatal("계속 기다림")
+	}
+}
+
+func TestDurText(t *testing.T) {
+	for d, w := range map[time.Duration]string{
+		600 * time.Second: "10분", time.Minute: "1분", 90 * time.Second: "90초", 30 * time.Second: "30초", 3600 * time.Second: "60분",
+	} {
+		if got := durText(d); got != w {
+			t.Errorf("%v: %q 기대, 실제 %q", d, w, got)
+		}
+	}
+	if inputTimeoutReason(600*time.Second) != "입력 시간 10분 초과" {
+		t.Error(inputTimeoutReason(600 * time.Second))
+	}
+	if (GuardOpts{}).withDefaults().StepTimeout != DefaultInputTimeout {
+		t.Error("StepTimeout 기본값은 10분")
+	}
+}
+
+// 데모: PWONOFF_TEST_STEP_TIMEOUT(초)로 질문마다의 제한을 줄여 시험한다(실제 실행에서는 읽지 않음).
+func TestRunDemoStepTimeout(t *testing.T) {
+	t.Setenv("PWONOFF_TEST_STEP_TIMEOUT", "1")
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	go io.WriteString(pw, WorkPhrase+"\n")
+	out := &syncBuf{}
+	start := time.Now()
+	rc := RunDemo(context.Background(), NewLineReader(pr), out)
+	if rc != ExitFail || !strings.Contains(out.String(), "[취소] 입력 시간 1초 초과") {
+		t.Fatalf("rc=%d\n%s", rc, out)
+	}
+	if el := time.Since(start); el > 3*time.Second {
+		t.Fatalf("계속 기다림: %v", el)
 	}
 }

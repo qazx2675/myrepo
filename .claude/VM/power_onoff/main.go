@@ -50,6 +50,7 @@ func usage() {
 대상: <allowed_dir>/on_off_<user>.txt  — 한 줄에 VM 이름 하나 (예: svr1ev01), '#' 주석
 안전장치 4/5 단계에서 ls 를 입력하면 대상 VM 목록과 대수를 다시 보여 줍니다(취소되지 않음).
 교차검증(cross_check)은 기본 on — 끄려면 conf 에 cross_check=off
+입력 질문은 conf 의 input_timeout_sec(기본 600초 = 10분) 안에 답해야 합니다(넘기면 취소, 실행 중 질문은 No/중단으로 처리)
 `, version, ConfPath)
 }
 
@@ -106,10 +107,10 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 		}
 	}
 
-	// 1. user
+	// 1. user (이 단계부터 사용자 입력은 질문마다 input_timeout_sec 제한 — 넘기면 [취소] 입력 시간 N분 초과, exit 1)
 	user, err := pickUser(ctx, in, out, cfg, optUser)
 	if err != nil {
-		fatal("%v", err)
+		return failInput(out, "", "", "", "user 선택", err) // user 를 모르므로 감사 로그 없음
 	}
 	if useCross { // 잘못된 -c 나 고를 확인자가 없는 conf 는 vCenter 접속 전에 바로 알린다
 		if optChecker != "" {
@@ -131,17 +132,20 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	runDir := filepath.Join(cfg.AllowedDir, "run_"+user)
 	vc, err := pickVCenter(ctx, in, out, cfg, runDir, user, optVC)
 	if err != nil {
-		fatal("%v", err)
+		return failInput(out, runDir, user, "", "vCenter 선택", err)
 	}
 	// 4. 비밀번호 (암호 파일 → 직접 입력). VC_PASSWORD/VC_PASS 환경변수는 쓰지 않는다.
-	pass, err := GetPassword(cfg, vc, cfg.VCID, hiddenPrompt(ctx, in))
+	pass, err := GetPassword(cfg, vc, cfg.VCID, hiddenPrompt(ctx, in, cfg.InputTimeout))
+	if errors.Is(err, ErrTimeout) {
+		return failInput(out, runDir, user, vc, "비밀번호", &GuardError{Reason: inputTimeoutReason(cfg.InputTimeout)})
+	}
 	if err != nil || pass == "" {
 		fatal("vCenter 비밀번호를 얻지 못했습니다: %v", err)
 	}
 	// 5. 기능
-	act, err := pickAction(ctx, in, out)
+	act, err := pickAction(ctx, in, out, cfg.InputTimeout)
 	if err != nil {
-		fatal("%v", err)
+		return failInput(out, runDir, user, vc, "기능 선택", err)
 	}
 
 	audit := openAuditOrWarn(out, runDir, act)
@@ -183,7 +187,7 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	if hits := FindVWP(vms); len(hits) > 0 {
 		audit.Printf("VWP 해당 %d대/%d대", len(hits), len(vms))
 		PrintVWPBanner(out, hits, len(vms), ColorEnabled())
-		if err := ConfirmPhrase(ctx, in, out, fmt.Sprintf(" 담당자 확인이 완료되었다면 %s(%s)을 그대로 입력하세요.\n > ", Bold(VWPPhrase), VWPPhraseHint), VWPPhrase); err != nil {
+		if err := ConfirmPhrase(ctx, in, out, fmt.Sprintf(" 담당자 확인이 완료되었다면 %s(%s)을 그대로 입력하세요.\n > ", Bold(VWPPhrase), VWPPhraseHint), VWPPhrase, cfg.InputTimeout); err != nil {
 			audit.Printf("VWP 확인 취소: %v", err)
 			return ExitFail
 		}
@@ -196,11 +200,11 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 		names[i] = v.Name
 	}
 	lsCount := 0
-	gopts := GuardOpts{ShowTargets: func(w io.Writer) { printTargetsByBM(w, vms) }, OnList: func() { lsCount++ }}
+	gopts := GuardOpts{ShowTargets: func(w io.Writer) { printTargetsByBM(w, vms) }, OnList: func() { lsCount++ }, StepTimeout: cfg.InputTimeout}
 	var gate *CrossCheckGate
 	if useCross {
 		gate = &CrossCheckGate{Cfg: cfg, CC: newCrossChecker(cfg.CrossCheckBin), Out: out, ErrOut: os.Stderr, Audit: audit,
-			User: user, OptChecker: optChecker, Targets: names}
+			User: user, OptChecker: optChecker, Targets: names, InputTimeout: cfg.InputTimeout}
 		gate.Hook(&gopts)
 	}
 	err = RunGuard(ctx, in, out, names, gopts)
@@ -219,7 +223,7 @@ func run(ctx context.Context, in *LineReader, out io.Writer, optUser, optVC, opt
 	}
 
 	// 10. 실행
-	r := &Runner{Cfg: cfg, Ops: NewGovmomiOps(cli), Log: NewRunLog(out, audit), Ask: askLine(in, out)}
+	r := &Runner{Cfg: cfg, Ops: NewGovmomiOps(cli), Log: NewRunLog(out, audit), Ask: askLine(in, out, cfg.InputTimeout)}
 	r.WaitBoot = NewBootChecker(cfg, cli.Refresh, func(vm, f string, a ...any) { r.Log.Logf(vm, f, a...) }).WaitBoot
 	t0 := time.Now()
 	results := executeRun(ctx, r, act, vms, gate)
@@ -261,22 +265,47 @@ func executeRun(ctx context.Context, r *Runner, act Action, vms []*VMInfo, gate 
 
 // 선택 메뉴 ---------------------------------------------------------------
 
-func readChoice(ctx context.Context, in *LineReader, prompt string) (string, error) {
+// readChoice 는 메뉴 번호 한 줄을 읽는다. d(> 0) 안에 입력이 없으면 *GuardError("입력 시간 N분 초과").
+func readChoice(ctx context.Context, in *LineReader, prompt string, d time.Duration) (string, error) {
 	fmt.Print(prompt)
-	s, err := in.ReadLine(ctx)
+	s, err := in.ReadLineLimit(ctx, d)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", errors.New("Ctrl+C 로 중단")
+		}
+		if errors.Is(err, ErrTimeout) {
+			return "", &GuardError{Reason: inputTimeoutReason(d)}
 		}
 		return "", fmt.Errorf("입력을 읽지 못했습니다: %v", err)
 	}
 	return strings.TrimSpace(s), nil
 }
 
-// hiddenPrompt 는 에코를 끄고 비밀번호를 공용 LineReader 로 읽는다.
+// failInput 은 vCenter 접속 전 입력 단계(user·vCenter 선택, 비밀번호, 기능 선택)의 실패를 처리한다.
+// 입력 시간 초과(*GuardError)면 "[취소] 입력 시간 N분 초과" 를 출력하고, user 를 알면(runDir != "") 감사 로그
+// (run_<user>/<시각>_unknown.log — 기능을 고르기 전이라 기능 이름 대신 unknown)에 사유를 남긴 뒤 ExitFail.
+// 그 밖의 오류는 기존처럼 "[오류] …" 로 바로 종료한다.
+func failInput(out io.Writer, runDir, user, vc, stage string, err error) int {
+	var ge *GuardError
+	if !errors.As(err, &ge) {
+		fatal("%v", err)
+	}
+	fmt.Fprintln(out) // 프롬프트 줄을 끝낸다
+	fmt.Fprintln(out, Red("[취소] "+ge.Reason))
+	if runDir != "" {
+		if a := openAuditOrWarn(out, runDir, Action(0)); a != nil {
+			a.Printf("시작 os계정=%s user=%s vCenter=%s 기능=(선택 전)", osUser(), user, vc)
+			a.Printf("입력 취소 단계=%s 사유=%s", stage, ge.Reason)
+			a.Close()
+		}
+	}
+	return ExitFail
+}
+
+// hiddenPrompt 는 에코를 끄고 비밀번호를 공용 LineReader 로 읽는다(d > 0 이면 그 안에 입력이 없을 때 ErrTimeout).
 // NewLineReader 의 고루틴이 stdin 을 계속 읽고 있으므로 ReadHidden(os.Stdin 직접 읽기)을 쓰면
 // 그 줄을 리더가 가로채 다음 메뉴 입력으로 흘러 들어간다 — 반드시 같은 리더로 읽는다.
-func hiddenPrompt(ctx context.Context, in *LineReader) func(string) (string, error) {
+func hiddenPrompt(ctx context.Context, in *LineReader, d time.Duration) func(string) (string, error) {
 	return func(msg string) (string, error) {
 		fmt.Fprint(os.Stderr, msg)
 		if isTerminal(os.Stdin) {
@@ -284,14 +313,19 @@ func hiddenPrompt(ctx context.Context, in *LineReader) func(string) (string, err
 				defer func() { _ = sttyRun(saved); fmt.Fprintln(os.Stderr) }()
 			}
 		}
-		return in.ReadLine(ctx)
+		return in.ReadLineLimit(ctx, d)
 	}
 }
 
-func askLine(in *LineReader, out io.Writer) AskFunc {
+// askLine 은 실행 중(Runner) 질문용. d(> 0) 안에 입력이 없으면 프롬프트 줄을 끝내고 ErrTimeout(Runner 가 No/중단으로 처리).
+func askLine(in *LineReader, out io.Writer, d time.Duration) AskFunc {
 	return func(ctx context.Context, prompt string) (string, error) {
 		fmt.Fprint(out, prompt)
-		return in.ReadLine(ctx)
+		s, err := in.ReadLineLimit(ctx, d)
+		if errors.Is(err, ErrTimeout) {
+			fmt.Fprintln(out)
+		}
+		return s, err
 	}
 }
 
@@ -306,7 +340,7 @@ func pickUser(ctx context.Context, in *LineReader, out io.Writer, cfg *Config, o
 	for i, u := range cfg.Users {
 		fmt.Fprintf(out, "  %d) %s\n", i+1, u)
 	}
-	s, err := readChoice(ctx, in, "번호 입력: ")
+	s, err := readChoice(ctx, in, "번호 입력: ", cfg.InputTimeout)
 	if err != nil {
 		return "", err
 	}
@@ -337,7 +371,7 @@ func pickVCenter(ctx context.Context, in *LineReader, out io.Writer, cfg *Config
 		fmt.Fprintf(out, "  %d) %s%s\n", i+1, v, mark)
 	}
 	fmt.Fprintln(out, "  0) 직접 입력")
-	s, err := readChoice(ctx, in, "번호 입력 (Enter = 이전 vCenter): ")
+	s, err := readChoice(ctx, in, "번호 입력 (Enter = 이전 vCenter): ", cfg.InputTimeout)
 	if err != nil {
 		return "", err
 	}
@@ -347,7 +381,7 @@ func pickVCenter(ctx context.Context, in *LineReader, out io.Writer, cfg *Config
 	case s == "":
 		return "", errors.New("이전 실행 vCenter 가 없습니다. 번호를 입력하세요")
 	case s == "0":
-		v, err := readChoice(ctx, in, "vCenter 주소: ")
+		v, err := readChoice(ctx, in, "vCenter 주소: ", cfg.InputTimeout)
 		if err != nil {
 			return "", err
 		}
@@ -363,13 +397,13 @@ func pickVCenter(ctx context.Context, in *LineReader, out io.Writer, cfg *Config
 	return cfg.VCenters[n-1], nil
 }
 
-func pickAction(ctx context.Context, in *LineReader, out io.Writer) (Action, error) {
+func pickAction(ctx context.Context, in *LineReader, out io.Writer, d time.Duration) (Action, error) {
 	fmt.Fprintln(out, "\n수행할 기능을 선택하세요:")
 	fmt.Fprintln(out, "  1) Power Off          (Guest 종료, 안 꺼지면 강제 여부 확인)")
 	fmt.Fprintln(out, "  2) Power On (순차)    (lpage 사용 BM: 같은 ev 번호를 동시에 켜고 전부 부팅된 뒤 다음 ev)")
 	fmt.Fprintln(out, "  3) 일괄 Power On      (OS 설치용: 순서 없이 한 번에)")
 	fmt.Fprintln(out, "  4) 재부팅             (전부 병렬: Power Off 완료 확인 후 한 번에 Power On)")
-	s, err := readChoice(ctx, in, "번호 입력: ")
+	s, err := readChoice(ctx, in, "번호 입력: ", d)
 	if err != nil {
 		return 0, err
 	}

@@ -158,6 +158,7 @@ type Info struct {
 	PID         int           // 데몬 pid
 	ApprovalTTL time.Duration // 승인 유효시간(approval_ttl_sec)
 	WorkTimeout time.Duration // 본 작업 제한 시간(work_timeout_sec)
+	WaitTimeout time.Duration // 승인 대기 제한 시간(wait_timeout_sec). 구버전 데몬은 0(대기 제한 없음)
 }
 
 // Info 는 ping 으로 데몬 pid·승인 유효시간·작업 제한 시간을 알아낸다(화면 머리말 표시용).
@@ -167,7 +168,7 @@ func (c *Client) Info() (Info, error) {
 		return Info{}, err
 	}
 	return Info{PID: resp.PID, ApprovalTTL: time.Duration(resp.TTLSec) * time.Second,
-		WorkTimeout: time.Duration(resp.WorkSec) * time.Second}, nil
+		WorkTimeout: time.Duration(resp.WorkSec) * time.Second, WaitTimeout: time.Duration(resp.WaitSec) * time.Second}, nil
 }
 
 // ApprovalTTL 은 데몬이 지금 적용 중인 승인 유효시간을 ping 으로 알아낸다.
@@ -307,6 +308,10 @@ type RunHandle struct {
 	ID     string // 작업 ID
 	Token  string // Start 에 넘길 1회용 token(화면·로그에 출력하지 말 것)
 	TTLSec int    // run 시점에 데몬이 알려 준 승인 유효시간(초). 구버전 데몬이면 0
+	// WaitSec·WaitExpiresAt 은 run 시점에 데몬이 알려 준 승인 대기 제한 시간(초)과 그 만료 시각
+	// (이 시각까지 승인되지 않으면 데몬이 중단). 구버전 데몬이면 0·nil(대기 제한 없음)
+	WaitSec       int
+	WaitExpiresAt *time.Time
 
 	conn    net.Conn
 	events  chan Event
@@ -359,7 +364,7 @@ func (c *Client) RunCaller(user, checker string, targets []string, caller string
 		return nil, &DaemonError{Op: OpRun, Msg: resp.Error, ID: resp.ID}
 	}
 	h := &RunHandle{
-		ID: resp.ID, Token: resp.Token, TTLSec: resp.TTLSec, conn: conn,
+		ID: resp.ID, Token: resp.Token, TTLSec: resp.TTLSec, WaitSec: resp.WaitSec, WaitExpiresAt: resp.WaitExpiresAt, conn: conn,
 		events: make(chan Event, 64), decided: make(chan struct{}),
 	}
 	go h.readLoop(r)

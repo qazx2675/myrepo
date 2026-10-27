@@ -27,6 +27,7 @@ type fakeClient struct {
 	connErr   error       // 모든 호출이 통신 오류
 	pasted    []string    // Approve 로 받은 붙여넣기 글
 	ttl       time.Duration
+	noWait    bool // Info 에 승인 대기 제한을 주지 않음(구버전 데몬 흉내)
 }
 
 func newFake() *fakeClient {
@@ -45,7 +46,11 @@ func (f *fakeClient) Info() (daemon.Info, error) {
 	if f.connErr != nil {
 		return daemon.Info{}, f.connErr
 	}
-	return daemon.Info{PID: 4128, ApprovalTTL: f.ttl, WorkTimeout: 24 * time.Hour}, nil
+	info := daemon.Info{PID: 4128, ApprovalTTL: f.ttl, WorkTimeout: 24 * time.Hour, WaitTimeout: 10 * time.Minute}
+	if f.noWait {
+		info.WaitTimeout = 0
+	}
+	return info, nil
 }
 
 func (f *fakeClient) UserRegistered(user string) (bool, error) {
@@ -787,4 +792,45 @@ func TestHeadersShowEffectiveTTL(t *testing.T) {
 	s = New(strings.NewReader("pw_admin_4\nq\n"), &buf, f, Options{Now: func() time.Time { return t0 }})
 	s.RunAdmin(context.Background())
 	mustContain(t, buf.String(), "승인 유효시간: 2분 (approval_ttl_sec=120)")
+}
+
+// ---- 승인 대기 제한(wait_timeout_sec) 표시 ----
+
+func TestHeadersShowWaitTimeout(t *testing.T) {
+	// 전체 화면: 데몬이 값을 주면 "승인 대기 10분 · 승인 유효시간 2분"
+	f := newFake()
+	f.pw["bob"] = "pw_bob_22"
+	r, _ := runUserKeys(t, f, "bob", "q")
+	if all := strings.Join(frames(r), "\n"); !strings.Contains(all, "승인 대기 10분 · 승인 유효시간 2분") {
+		t.Fatalf("사용자 머리말에 승인 대기 제한 없음:\n%s", all)
+	}
+	// 구버전 데몬(값 없음): 승인 대기 부분을 빼고 승인 유효시간만
+	old := newFake()
+	old.noWait = true
+	old.pw["bob"] = "pw_bob_22"
+	r, _ = runUserKeys(t, old, "bob", "q")
+	all := strings.Join(frames(r), "\n")
+	if strings.Contains(all, "승인 대기 10분") || !strings.Contains(all, "승인 유효시간 2분") {
+		t.Fatalf("구버전 데몬 머리말:\n%s", all)
+	}
+	if segs := segsText(ttlSegs(0, 0, 0, true)); strings.Contains(segs, "wait_timeout_sec") || !strings.Contains(segs, "approval_ttl_sec=120") {
+		t.Fatalf("관리자 구버전 머리말: %q", segs)
+	}
+	if segs := segsText(ttlSegs(90*time.Second, time.Minute, time.Hour, true)); !strings.Contains(segs, "승인 대기 1분 30초 (wait_timeout_sec=90)  승인 유효시간 1분 (approval_ttl_sec=60)") {
+		t.Fatalf("관리자 머리말: %q", segs)
+	}
+
+	// 줄 입력 화면: Options.WaitTimeout 이 있으면 한 줄, 없으면 안 보임
+	f.pw["alice"] = "pw_alice_1"
+	out, _, _ := runUser(t, f, "alice", "q\n", Options{WaitTimeout: 10 * time.Minute})
+	mustContain(t, out, "승인 대기 제한: 10분 (wait_timeout_sec=600)")
+	out, _, _ = runUser(t, f, "alice", "q\n", Options{})
+	if strings.Contains(out, "승인 대기 제한") {
+		t.Fatalf("값이 없으면 줄 입력 화면에 표시 안 함:\n%s", out)
+	}
+	f.pw["admin"] = "pw_admin_4"
+	var buf bytes.Buffer
+	s := New(strings.NewReader("pw_admin_4\nq\n"), &buf, f, Options{Now: func() time.Time { return t0 }})
+	s.RunAdmin(context.Background())
+	mustContain(t, buf.String(), "승인 대기 제한: 10분 (wait_timeout_sec=600)")
 }

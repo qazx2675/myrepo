@@ -25,6 +25,9 @@ type Config struct {
 	PortCheckTimeout time.Duration
 	CrossCheck       bool   // cross_check=on(기본) 이면 안전장치 2단계 확인자 선택·3단계 확인자 승인(VM 이름 입력 대신)·카운트다운 뒤 --start. off 면 기존 방식
 	CrossCheckBin    string // cross_check 실행 파일 절대경로 (기본 /usr/local/bin/cross_check)
+	// InputTimeout 은 사용자 입력 한 질문의 제한 시간(input_timeout_sec, 기본 600초=10분, 30~3600).
+	// 메뉴·비밀번호·VWP 문구·1/5·2/5·4/5(교차검증은 승인 마감을 모를 때만)·실행 중 질문에 쓴다. 넘기면 취소(실행 중 질문은 No/중단으로 처리).
+	InputTimeout time.Duration
 }
 
 // VMInfo 는 vCenter 에서 조회한 대상 VM 한 대의 상태다.

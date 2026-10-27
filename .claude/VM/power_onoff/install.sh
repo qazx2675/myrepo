@@ -261,9 +261,23 @@ auth=required
 # 바꾸면 정책과 달라집니다. 바꾼 뒤 반영: pkill -HUP -f 'cross_check --daemon' (재시작 없이 이 값만 다시 읽음)
 # 또는 데몬 재시작(열려 있던 대기/승인 작업은 중단됨). 이미 승인되어 대기 중인 작업에도 새 값이 적용됩니다.
 approval_ttl_sec=${APPROVAL_TTL:-120}
+
+# 승인 대기 제한(초): 작업자가 작업을 등록(--run)한 뒤 이 시간 안에 확인자가 승인(또는 취소)하지 않으면
+# 데몬이 작업을 자동 중단합니다(사유 "승인 대기 시간 초과(10분)", 작업자 스크립트는 종료 코드 1).
+# 허용 30~86400, 기본 600(= 10분). SIGHUP 으로 반영(이미 대기 중인 작업에도 등록 시각 + 새 값으로 적용).
+wait_timeout_sec=600
+
+# 본 작업 제한 시간(초): --start 로 작업중이 된 뒤 이 시간 안에 --finish 가 없으면
+# 승인/작업중단(사유 "작업자 응답 없음")으로 바꿉니다(작업자 kill -9 등으로 작업중이 영원히 남는 것을 막음).
+# 허용 600~604800, 기본 86400(= 24시간). SIGHUP 으로 반영.
+work_timeout_sec=86400
 EOF
   install -m 644 -o root -g root "$CC_CONF.tmp" "$CC_CONF"; rm -f "$CC_CONF.tmp"
-  echo "[완료] $CC_CONF (target_dir=$CC_TARGET, users=$CC_USERS, approval_ttl_sec=${APPROVAL_TTL:-120})"
+  echo "[완료] $CC_CONF (target_dir=$CC_TARGET, users=$CC_USERS, approval_ttl_sec=${APPROVAL_TTL:-120}, wait_timeout_sec=600, work_timeout_sec=86400)"
+fi
+# 예전 install.sh 가 만든 conf 에는 wait_timeout_sec 줄이 없다(데몬 기본값 600초 = 10분이 적용됨). 고치지 않고 안내만.
+if [ -f "$CC_CONF" ] && ! grep -q '^[[:space:]]*wait_timeout_sec[[:space:]]*=' "$CC_CONF"; then
+  echo "[INFO] $CC_CONF 에 wait_timeout_sec 줄이 없어 기본값(600초 = 10분, 승인 대기 제한)이 적용됩니다 — 바꾸려면 'wait_timeout_sec=<30~86400>' 줄을 추가한 뒤 pkill -HUP -f 'cross_check --daemon'"
 fi
 
 # auth.conf — 없을 때만. admin 은 기본 패스워드(abc135!!)로 만든다. 이미 있으면 덮어쓰지 않는다.
@@ -321,6 +335,8 @@ echo "  2) 각 사람이 한 번씩 등록: cross_check --user <이름>   (선�
 echo "  3) 관리자 화면: cross_check --admin   (기본 admin 패스워드: abc135!! — 바꾸려면 $CC_AUTH 의 admin= 줄 수정)"
 CC_TTL_NOW="$(sed -n 's/^approval_ttl_sec=\([0-9][0-9]*\).*/\1/p' "$CC_CONF" 2>/dev/null | head -1 || true)"
 echo "     승인 유효시간(승인 후 본 작업 시작 허용 시간): ${CC_TTL_NOW:-120}초 — 바꾸려면 $CC_CONF 의 approval_ttl_sec= 수정 후 pkill -HUP -f 'cross_check --daemon'"
+CC_WAIT_NOW="$(sed -n 's/^wait_timeout_sec=\([0-9][0-9]*\).*/\1/p' "$CC_CONF" 2>/dev/null | head -1 || true)"
+echo "     승인 대기 제한(등록 후 승인까지 허용 시간): ${CC_WAIT_NOW:-600}초 — 바꾸려면 $CC_CONF 의 wait_timeout_sec= 수정 후 pkill -HUP -f 'cross_check --daemon'"
 if [ "$CC_STATE_KEY" = off ]; then
   echo "  4) 교차검증은 꺼져 있음 (pwonoff.conf cross_check=off — 안전장치 2/5 Enter, 3/5 VM 이름 입력) — 켜려면 $CONF 의 cross_check=on"
 else

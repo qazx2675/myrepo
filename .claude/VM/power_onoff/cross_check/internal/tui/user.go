@@ -153,6 +153,9 @@ func (s *Session) renderUser(user string, v userView) {
 	now := s.opt.Now()
 	s.println()
 	s.println(s.p.Cyan(fmt.Sprintf("==== cross_check — 사용자 %s — %s ====", user, now.Format("2006-01-02 15:04:05"))))
+	if h := waitHeader(s.opt.WaitTimeout); h != "" {
+		s.println(h)
+	}
 	s.println(ttlHeader(s.opt.ApprovalTTL))
 	if v.err != nil {
 		if msg, ok := isDaemonErr(v.err); ok {

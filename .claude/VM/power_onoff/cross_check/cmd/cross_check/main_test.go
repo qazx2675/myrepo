@@ -5,6 +5,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"cross_check/internal/daemon"
 )
 
 func TestParseTargets(t *testing.T) {
@@ -125,5 +128,21 @@ func TestResolveCallerOrder(t *testing.T) {
 	long := strings.Repeat("x", 100)
 	if got := resolveCaller(long); len(got) != 64 {
 		t.Fatalf("64자 제한: %d", len(got))
+	}
+}
+
+// --run 대기 안내의 승인 대기 제한 줄: 데몬이 준 만료 시각(HH:MM)을 쓰고, 구버전 데몬(값 없음)이면 줄을 내지 않는다.
+func TestWaitLimitLine(t *testing.T) {
+	now := time.Date(2026, 10, 24, 9, 0, 30, 0, time.Local)
+	exp := time.Date(2026, 10, 24, 9, 10, 30, 0, time.Local)
+	got := waitLimitLine(&daemon.RunHandle{WaitSec: 600, WaitExpiresAt: &exp}, now)
+	if got != "  승인 대기 제한 10분 — 09:10 까지 (이 시각까지 승인되지 않으면 자동 중단)" {
+		t.Fatalf("got %q", got)
+	}
+	if got := waitLimitLine(&daemon.RunHandle{WaitSec: 90}, now); !strings.Contains(got, "승인 대기 제한 1분 30초 — 09:02 까지") {
+		t.Fatalf("만료 시각이 없으면 now+제한: %q", got)
+	}
+	if got := waitLimitLine(&daemon.RunHandle{}, now); got != "" {
+		t.Fatalf("구버전 데몬이면 빈 줄: %q", got)
 	}
 }

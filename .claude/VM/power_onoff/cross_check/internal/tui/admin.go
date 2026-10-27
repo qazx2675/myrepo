@@ -35,8 +35,16 @@ const AdminMissingText = `관리자(admin) 항목이 auth.conf 에 없어 관리
 // admin 항목이 없으면 안내만 하고 종료 1, 있으면 세션마다 한 번 패스워드를 묻는다(최대 3번).
 func (s *Session) RunAdmin(ctx context.Context) int {
 	s.println(s.p.Cyan(fmt.Sprintf("==== cross_check 관리자 — %s ====", s.opt.Now().Format("2006-01-02 15:04:05"))))
+	info, ierr := s.c.Info()
+	wait := s.opt.WaitTimeout
+	if ierr == nil && info.WaitTimeout > 0 {
+		wait = info.WaitTimeout
+	}
+	if h := waitHeader(wait); h != "" {
+		s.println(h)
+	}
 	s.println(ttlHeader(s.opt.ApprovalTTL))
-	if info, err := s.c.Info(); err == nil && info.WorkTimeout > 0 {
+	if err := ierr; err == nil && info.WorkTimeout > 0 {
 		s.printf("  작업 제한 시간: %s (work_timeout_sec=%d) — 본 작업(작업중)이 이보다 오래 끝나지 않으면 승인/작업중단(작업자 응답 없음)\n",
 			daemon.FormatTTLDuration(info.WorkTimeout), int(info.WorkTimeout/time.Second))
 	}
