@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	ole "github.com/go-ole/go-ole"
@@ -332,7 +333,16 @@ func main() {
 }
 
 func checkShapesViaCOM(filePath string) int {
-	ole.CoInitialize(0)
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
+		oleErr, ok := err.(*ole.OleError)
+		if !ok || (oleErr.Code() != 0x00000001 && oleErr.Code() != 0x80010106) {
+			fmt.Printf("      [checkShapes COM] CoInitializeEx err: %v\n", err)
+			return 0
+		}
+	}
 	defer ole.CoUninitialize()
 
 	unknown, err := oleutil.CreateObject("Excel.Application")
