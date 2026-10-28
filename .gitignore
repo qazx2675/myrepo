@@ -1,0 +1,10 @@
+# Temporary and office lock files
+*.tmp
+*.bak
+~$*
+.DS_Store
+Thumbs.db
+
+# Do NOT ignore vendor or executables (Required for air-gapped closed network build & run)
+!vendor/
+!*.exe

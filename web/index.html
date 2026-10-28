@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOP 표준운영절차서 자동 생성기</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Header Bar -->
+    <header class="navbar">
+      <div class="nav-brand">
+        <span class="brand-icon">📑</span>
+        <span class="brand-title">SOP 자동 생성 프로그램</span>
+        <span class="badge badge-version">v1.2 최종본</span>
+      </div>
+
+      <div class="nav-right">
+        <div class="worker-badge-box">
+          <span class="worker-icon">👤</span>
+          <span class="worker-label">작업자:</span>
+          <span id="currentWorkerName" class="worker-name">미설정</span>
+          <button id="btnChangeWorker" class="btn btn-sm btn-outline" title="작업자 이름 변경">작업자 변경</button>
+        </div>
+        <button id="btnRefreshAll" class="btn-icon" title="새로고침">🔄</button>
+        <button id="btnExitApp" class="btn-icon btn-danger-icon" title="프로그램 종료">✕</button>
+      </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="main-container">
+      <div class="grid-layout">
+        
+        <!-- Left Column: Source & Work Items (Sheets) -->
+        <div class="col-left">
+          
+          <!-- Section 1: Target File Selection -->
+          <section class="card">
+            <div class="card-header">
+              <span class="card-icon">📂</span>
+              <span class="card-title">1. 작업 원본(Target) 엑셀 지정</span>
+            </div>
+            <div class="card-body">
+              <div class="form-row">
+                <label for="inputTargetFile">Target 파일명:</label>
+                <div class="input-group">
+                  <input type="text" id="inputTargetFile" value="target.xlsx" placeholder="예: target.xlsx">
+                  <button id="btnScanSheets" class="btn btn-primary btn-sm">시트 조회</button>
+                  <button id="btnCreateSampleTarget" class="btn btn-secondary btn-sm" title="테스트용 3개 시트가 포함된 샘플 target.xlsx 자동 생성">🧪 샘플생성</button>
+                </div>
+              </div>
+              <p class="help-text">각 시트의 H2 병합 셀에 작성된 작업방법과 이미지/도형을 읽어옵니다.</p>
+            </div>
+          </section>
+
+          <!-- Section 2: Sheet Checklist with Order Badges -->
+          <section class="card">
+            <div class="card-header flex-between">
+              <div class="header-left">
+                <span class="card-icon">📋</span>
+                <span class="card-title">2. 작업(시트) 선택 및 순서 지정</span>
+              </div>
+              <div class="header-actions">
+                <button id="btnClearOrder" class="btn btn-xs btn-outline">선택 초기화</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="sheetsLoading" class="loading-state hidden">
+                <span class="spinner"></span>
+                <span>Target 시트 목록을 스캔하고 있습니다...</span>
+              </div>
+
+              <div id="sheetsEmpty" class="empty-state">
+                <p>Target 파일을 조회하면 시트 목록이 나타납니다.</p>
+                <button id="btnScanInitial" class="btn btn-sm btn-outline">지금 시트 조회하기</button>
+              </div>
+
+              <div id="sheetsList" class="sheet-checklist">
+                <!-- Dynamically populated sheet items -->
+              </div>
+
+              <!-- Order Queue Summary -->
+              <div class="order-summary-box">
+                <span class="summary-label">조합 순서:</span>
+                <div id="orderQueueText" class="order-queue-text">선택된 작업이 없습니다 (체크박스를 클릭하여 순서를 정하세요)</div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+        <!-- Right Column: Template & Category Inputs -->
+        <div class="col-right">
+
+          <!-- Section 3: Template Selection & Management -->
+          <section class="card">
+            <div class="card-header flex-between">
+              <div class="header-left">
+                <span class="card-icon">📐</span>
+                <span class="card-title">3. 양식(Template) 선택 및 관리</span>
+              </div>
+              <div class="header-actions">
+                <button id="btnCreateDefaultTmpl" class="btn btn-xs btn-outline" title="B8, C8, G8, H8 기준 기본 표준 양식 생성">기본 양식 생성</button>
+                <label for="fileUploadTemplate" class="btn btn-xs btn-outline cursor-pointer" title="사용자 커스텀 엑셀 양식 파일 등록">양식 업로드</label>
+                <input type="file" id="fileUploadTemplate" accept=".xlsx" class="hidden">
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-row">
+                <label for="selectTemplate">적용할 양식:</label>
+                <select id="selectTemplate" class="select-input">
+                  <option value="default_template">기본 표준 양식 (B8,C8,G8,H8)</option>
+                </select>
+              </div>
+              <p class="help-text">상단 헤더는 유지하고, 하단에 위치한 '대분류', '중분류', '상세내용', '작업방법' 병합 셀을 자동으로 찾아 교체합니다.</p>
+            </div>
+          </section>
+
+          <!-- Section 4: Classifications & Detail Inputs -->
+          <section class="card">
+            <div class="card-header">
+              <span class="card-icon">✏️</span>
+              <span class="card-title">4. 분류 및 상세내용 입력</span>
+            </div>
+            <div class="card-body">
+              <!-- Major Category -->
+              <div class="form-row">
+                <label for="selectMajor">대분류:</label>
+                <div class="combo-group">
+                  <select id="selectMajor" class="select-input">
+                    <!-- Populated from config -->
+                  </select>
+                  <input type="text" id="inputCustomMajor" placeholder="직접 입력 시 여기에 타이핑">
+                </div>
+              </div>
+
+              <!-- Minor Category -->
+              <div class="form-row">
+                <label for="selectMinor">중분류:</label>
+                <div class="combo-group">
+                  <select id="selectMinor" class="select-input">
+                    <!-- Populated from config -->
+                  </select>
+                  <input type="text" id="inputCustomMinor" placeholder="직접 입력 시 여기에 타이핑">
+                </div>
+              </div>
+
+              <!-- Detail Description -->
+              <div class="form-row">
+                <label for="textareaDetail">상세내용:</label>
+                <textarea id="textareaDetail" rows="4" placeholder="상세내용을 입력하세요. (줄바꿈이 그대로 보존되어 엑셀 셀에 기록됩니다)"></textarea>
+              </div>
+
+              <!-- Destination File Name -->
+              <div class="form-row">
+                <label for="inputDstFilename">생성 파일명:</label>
+                <div class="input-group">
+                  <input type="text" id="inputDstFilename" value="SOP_완료.xlsx" placeholder="예: SOP_VM설치.xlsx">
+                </div>
+                <span class="help-text">프로그램(.exe)이 위치한 폴더에 신규 엑셀 파일로 생성됩니다.</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 5: Generation Action & Result -->
+          <section class="card cta-card">
+            <div class="card-body text-center">
+              <button id="btnGenerateSOP" class="btn btn-hero">
+                <span class="hero-icon">🚀</span>
+                <span class="hero-text">SOP 엑셀 자동 생성 시작</span>
+              </button>
+
+              <div id="genStatusBox" class="status-box hidden">
+                <div class="status-indicator">
+                  <span id="genSpinner" class="spinner"></span>
+                  <span id="genStatusText">생성 작업을 진행하고 있습니다...</span>
+                </div>
+              </div>
+
+              <div id="genResultCard" class="result-success-card hidden">
+                <div class="result-badge">✓ 생성 완료</div>
+                <div class="result-info">
+                  <p><strong>생성 파일:</strong> <span id="resDstFile"></span></p>
+                  <p><strong>파일 크기:</strong> <span id="resFileSize"></span> | <strong>소요 시간:</strong> <span id="resExecTime"></span></p>
+                </div>
+                <div class="result-actions">
+                  <button id="btnOpenGeneratedFile" class="btn btn-success btn-sm">📂 생성된 엑셀 파일 열기</button>
+                  <button id="btnOpenFolder" class="btn btn-secondary btn-sm">📁 저장 폴더 열기</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+      </div>
+
+      <!-- Execution Log Console -->
+      <section class="card log-card">
+        <div class="card-header flex-between">
+          <span class="card-title">📜 실행 로그 콘솔</span>
+          <button id="btnClearLog" class="btn btn-xs btn-outline">로그 비우기</button>
+        </div>
+        <div class="card-body">
+          <div id="logConsole" class="log-console">
+            <div class="log-entry log-info">[시스템] SOP 자동 생성 프로그램이 준비되었습니다.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal: Worker Name Setup / Change -->
+    <div id="modalWorker" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <span class="modal-icon">👤</span>
+          <span id="modalWorkerTitle" class="modal-title">작업자 이름 설정</span>
+        </div>
+        <div class="modal-body">
+          <p id="modalWorkerDesc" class="modal-desc">SOP 관리를 위해 작업자 이름을 등록해주세요. (설정 파일에 영구 보관됩니다)</p>
+          <div class="form-row">
+            <input type="text" id="inputModalWorkerName" class="input-full" placeholder="작업자 이름 입력 (예: 홍길동)" autofocus>
+          </div>
+          <div id="modalWorkerError" class="modal-error hidden">작업자 이름을 입력해주세요.</div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnCancelWorkerModal" class="btn btn-outline hidden">취소</button>
+          <button id="btnSaveWorkerName" class="btn btn-primary">저장 및 계속</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
