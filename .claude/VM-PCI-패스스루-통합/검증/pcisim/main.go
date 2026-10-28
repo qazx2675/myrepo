@@ -323,7 +323,8 @@ func (b *envBrowser) QueryConfigTarget(ctx *simulator.Context, req *types.QueryC
 
 type pciVM struct {
 	*simulator.VirtualMachine
-	s *sim
+	s          *sim
+	rejectEdit bool // -rejectPciEdit
 }
 
 type pciUse struct {
@@ -528,13 +529,20 @@ func (v *pciVM) PowerOnVMTask(ctx *simulator.Context, req *types.PowerOnVM_Task)
 	return res
 }
 
-// ReconfigVMTask 는 -rejectPciEdit 일 때만 거친다: 패스스루 장치의 Edit(backing 수정)을 거부한다.
-// 실 vCenter 가 Edit 을 받지 않는 경우 pci_passthrough 가 "제거 후 다시 연결"로 넘어가는지 확인하는 용도다.
+// ReconfigVMTask 는 패스스루 backing 의 deviceName 을 비우고 저장한다 — 실 ESXi 8.0.3 이 그렇게 돌려준다(실측).
+// 이름이 없어도 도구들이 장치명 기준 vendor 를 판정하는지 보려는 것이다.
+// -rejectPciEdit 이면 패스스루 장치의 Edit(backing 수정)을 거부한다: 실 vCenter 가 Edit 을 받지 않는 경우
+// pci_passthrough 가 "제거 후 다시 연결"로 넘어가는지 확인하는 용도다.
 func (v *pciVM) ReconfigVMTask(ctx *simulator.Context, req *types.ReconfigVM_Task) soap.HasFault {
 	unwrap(ctx, v.Self)
 	for _, dc := range req.Spec.DeviceChange {
 		ds := dc.GetVirtualDeviceConfigSpec()
-		if _, ok := ds.Device.(*types.VirtualPCIPassthrough); ok && ds.Operation == types.VirtualDeviceConfigSpecOperationEdit {
+		if p, ok := ds.Device.(*types.VirtualPCIPassthrough); ok {
+			if b, ok := p.Backing.(*types.VirtualPCIPassthroughDeviceBackingInfo); ok {
+				b.DeviceName = ""
+			}
+		}
+		if _, ok := ds.Device.(*types.VirtualPCIPassthrough); ok && v.rejectEdit && ds.Operation == types.VirtualDeviceConfigSpecOperationEdit {
 			msg := "Editing the backing of a PCI passthrough device is not supported (pcisim -rejectPciEdit)"
 			log.Printf("[RECONFIG] 거부 vm=%s 사유=패스스루 장치 Edit (-rejectPciEdit)", v.Name)
 			return &methods.ReconfigVM_TaskBody{
@@ -718,8 +726,8 @@ func main() {
 				w = &pciVM{VirtualMachine: vm, s: s}
 			}
 		case "ReconfigVM_Task":
-			if vm, ok := ctx.Map.Get(m.This).(*simulator.VirtualMachine); ok && *rejectPciEdit {
-				w = &pciVM{VirtualMachine: vm, s: s}
+			if vm, ok := ctx.Map.Get(m.This).(*simulator.VirtualMachine); ok {
+				w = &pciVM{VirtualMachine: vm, s: s, rejectEdit: *rejectPciEdit}
 			}
 		case "QueryConfigTarget":
 			if b, ok := ctx.Map.Get(m.This).(*simulator.EnvironmentBrowser); ok {

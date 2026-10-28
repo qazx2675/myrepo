@@ -76,7 +76,7 @@ g·h 의 근거: 64bit MMIO 는 EFI 에서만 동작하고, 창은 GPU BAR 합�
 
 판정은 모두 로그에 남는다: `[POWERON] 허용 vm=... host=... 장치=[...]`, `[POWERON] 거부 vm=... 사유=...`, 패스스루가 없는 VM 은 `[POWERON] 허용 ... (패스스루 장치 없음)`.
 
-`ReconfigVM_Task` 로 `VirtualPCIPassthrough` 를 붙이거나 backing 을 고치는(Edit) 것은 vcsim 이 그대로 받는다. `start -rejectPciEdit` 로 띄우면 패스스루 장치의 Edit 을 `NotSupported` 로 거부한다(로그 `[RECONFIG] 거부`) — 실 vCenter 가 Edit 을 받지 않을 때 `pci_passthrough` 가 "제거 후 다시 연결"로 넘어가는지 보는 용도.
+`ReconfigVM_Task` 로 `VirtualPCIPassthrough` 를 붙이거나 backing 을 고치는(Edit) 것은 vcsim 이 그대로 받는다. 단 backing 의 `deviceName` 은 비우고 저장한다 — 실 ESXi 8.0.3 이 그렇게 돌려준다(2026-10-28 실측, 장치명 기준 vendor 판정은 호스트 `hardware.pciDevice` 로 해야 함). `start -rejectPciEdit` 로 띄우면 패스스루 장치의 Edit 을 `NotSupported` 로 거부한다(로그 `[RECONFIG] 거부`) — 실 vCenter 가 Edit 을 받지 않을 때 `pci_passthrough` 가 "제거 후 다시 연결"로 넘어가는지 보는 용도.
 
 ## 시나리오 예
 

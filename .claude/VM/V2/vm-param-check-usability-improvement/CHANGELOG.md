@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-10-29 — "PCI 패스스루" 장치 이름 판정 수정 (실 ESXi 8.0.3)
+
+- **문제**: 실 ESXi 8.0.3 은 VM 의 `VirtualPCIPassthrough` backing 에서 `deviceName` 을 비워 돌려준다(랩 실측). 그래서 장치 이름 일부로 준 벤더(`pci-ev01=connectx`, `82574L` 등)는 장치가 붙어 있어도 FAIL 이었다(실제값 `0000:13:00.0(8086:)`). `mellanox`/`nvidia`/VendorId 로 준 값은 영향 없음.
+- **수정**: backing 의 장치 이름이나 VendorId 가 비어 있으면, 그 VM 이 올라간 호스트의 `hardware.pciDevice` 에서 PCI 주소로 찾아 채운다(`vcenter/client.go`, 필요한 호스트만 1번씩 조회, 조회 실패 시 backing 값만으로 판정).
+- **검증**: 랩 ESXi 직접 `82574L` OK·`0x8086` OK·`mellanox` FAIL, pcisim(deviceName 을 비우게 보강)에서 `ConnectX`·`mellanox` OK·`nvidia` FAIL. `go vet`, `go test` 통과. `bin_os6`/`bin_os8` 의 `vm-param-check.gz` 교체.
+
+---
+
 ## 2026-10-28 — 스펙 `pci-evNN` + 체크 항목 "PCI 패스스루"
 
 - **스펙 키 `pci-evNN=<벤더>`** (NN=01~99): VM 에 PCI 패스스루 장치를 붙이는 스펙용 옵션. `-specExport` 는 다른 키처럼 `pci-evNN=<값>` 줄을 그대로 내보내고(`VMsetup/vm_setup.sh` 의 PCI 단계가 읽음), 체크 모드는 `-pci-ev01`~`-pci-ev99` 플래그로 받는다(스펙 파일에서 지정 가능한 옵션에 추가 — 이전에는 "알 수 없는 옵션 이름"으로 중단).
