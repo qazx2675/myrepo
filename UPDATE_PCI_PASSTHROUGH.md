@@ -52,9 +52,9 @@ V2 폴더 전체를 다시 배치할 수 있으면 그게 더 간단합니다(`R
 
 | 파일 | SHA-256 | 크기(바이트) |
 |---|---|---|
-| `bin_os8/pci_passthrough.gz` | `3be160c4eb7a49410014122d220bd635b05aad2b6bea83f5b3def5ae408a6d58` | 4318562 |
+| `bin_os8/pci_passthrough.gz` | `abec75c4e67c91bcbdfd315568d03fda2dc6f6ffb562bc6c689d096bc31c197c` | 4321148 |
 | `bin_os8/vm-param-check.gz` | `9044f7373a258851459815253ac5eecb6aac92796e5ccfa9046d322bf46eb230` | 4339256 |
-| `bin_os6/pci_passthrough.gz` | `00d34eb7700e31da26268e506ddbe4a832ca374d975ef82f050469667b9dc136` | 3679543 |
+| `bin_os6/pci_passthrough.gz` | `d045305c0430335dc56688580978909c308c8c382f5b5d42d3671c610d181594` | 3680727 |
 | `bin_os6/vm-param-check.gz` | `2c658ccbb37905570867b1f1b11749d24725241f0443ec461e74e387ea95e46b` | 3689938 |
 
 ## 3. 적용 절차

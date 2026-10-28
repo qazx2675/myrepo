@@ -56,7 +56,7 @@ cd V2/VMsetup
 
 ## 4. 동작 순서 (BM 1대 기준, BM 끼리는 병렬)
 
-1. **수집** — 호스트의 `hardware.pciDevice`, `config.network.pnic`(업링크 vmnic 의 PCI 주소), `configManager.pciPassthruSystem` → `pciPassthruInfo`, 호스트 위 VM 전부와 그 VM 에 붙은 패스스루 장치.
+1. **수집** — 호스트의 `hardware.pciDevice`, `config.network.pnic`·`vswitch`·`proxySwitch`(스위치에 업링크로 연결된 vmnic 의 PCI 주소), `configManager.pciPassthruSystem` → `pciPassthruInfo`, 호스트 위 VM 전부와 그 VM 에 붙은 패스스루 장치.
 2. **배분** — 값이 있는 ev 를 오름차순으로:
    - VM `<짧은이름>evNN` 이 이 호스트에 없으면 → **실패** `VM 없음`.
    - VM 에 vendor 에 맞는 패스스루 장치가 이미 붙어 있으면 → 그 장치를 그대로 씀(새로 붙이지 않음).
@@ -129,7 +129,7 @@ OS 를 아직 설치하지 않은 VM 이면 EFI 로 바꾸고(`vm_create -firmwa
 
 ## 7. 안전장치
 
-- 호스트 업링크로 쓰이는 물리 NIC(`config.network.pnic[].pci`, 관리망 vmnic 포함)는 배분하지 않고 패스스루로 켜지 않습니다(켜면 호스트 네트워크가 끊김). 켜기 직전에도 한 번 더 막습니다.
+- 호스트 업링크로 쓰이는 물리 NIC — 표준 vSwitch 나 DVS(proxySwitch) 에 업링크로 연결된 vmnic(관리망 포함) — 는 배분하지 않고 패스스루로 켜지 않습니다(켜면 호스트 네트워크가 끊김). 켜기 직전에도 한 번 더 막습니다. 드라이버가 잡아 vmnic 으로 보이기만 하고 어느 스위치에도 연결되지 않은 NIC(예: 쓰지 않는 Mellanox 포트)는 배분 대상입니다 — 2026-10-28 실 랩(ESXi 8.0.3)에서 스위치에 연결되지 않은 vmnic1(e1000e) 이 패스스루 가능 장치로 잡히는 것을 보고, vmnic 전체 제외에서 바꿨습니다.
 - 활성화는 이번에 배분한 장치에만 합니다.
 - 다른 VM(켜짐·꺼짐 무관)에 이미 붙은 장치는 배분하지 않습니다.
 - 실패는 VM·BM 단위로 기록하고 나머지는 계속 진행합니다.

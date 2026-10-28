@@ -477,7 +477,7 @@ func (p *hostProc) run() []vmResult {
 
 	// 1. 수집: PCI 장치, 업링크(vmnic) PCI 주소, 패스스루 상태, 호스트 위 VM 과 그 패스스루 장치
 	var h mo.HostSystem
-	err := p.pc.RetrieveOne(p.ctx, p.ref, []string{"name", "hardware.pciDevice", "config.network.pnic", "configManager.pciPassthruSystem", "vm"}, &h)
+	err := p.pc.RetrieveOne(p.ctx, p.ref, []string{"name", "hardware.pciDevice", "config.network.pnic", "config.network.vswitch", "config.network.proxySwitch", "configManager.pciPassthruSystem", "vm"}, &h)
 	if err != nil {
 		why := fmt.Sprintf("호스트 '%s' 정보 조회 실패: %v", p.name, err)
 		p.logf("[에러] %s\n", why)
@@ -497,10 +497,23 @@ func (p *hostProc) run() []vmResult {
 	for _, d := range devs {
 		devByID[d.Id] = d
 	}
-	// 호스트 업링크로 쓰는 물리 NIC(관리망 vmnic 등)는 절대 패스스루로 켜지 않는다 (켜면 호스트 네트워크가 끊김).
+	// 호스트 업링크로 쓰는 물리 NIC(표준 vSwitch / DVS(proxySwitch) 에 연결된 vmnic — 관리망 포함)는 절대 패스스루로 켜지 않는다
+	// (켜면 호스트 네트워크가 끊김). 드라이버가 잡아 vmnic 으로만 보이고 어느 스위치에도 연결되지 않은 NIC(예: 쓰지 않는
+	// Mellanox 포트)는 배분 대상이다 — vmnic 전체를 막으면 ESXi 가 vmnic 으로 잡는 Mellanox 카드를 하나도 못 쓴다.
+	uplinkKey := map[string]bool{}
+	for _, vs := range h.Config.Network.Vswitch {
+		for _, k := range vs.Pnic {
+			uplinkKey[k] = true
+		}
+	}
+	for _, ps := range h.Config.Network.ProxySwitch {
+		for _, k := range ps.Pnic {
+			uplinkKey[k] = true
+		}
+	}
 	pnicByPci := map[string]string{}
 	for _, pn := range h.Config.Network.Pnic {
-		if pn.Pci != "" {
+		if pn.Pci != "" && uplinkKey[pn.Key] {
 			pnicByPci[pn.Pci] = pn.Device
 		}
 	}
