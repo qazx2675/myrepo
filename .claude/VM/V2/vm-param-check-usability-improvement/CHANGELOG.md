@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-10-28 — 스펙 `pci-evNN` + 체크 항목 "PCI 패스스루"
+
+- **스펙 키 `pci-evNN=<벤더>`** (NN=01~99): VM 에 PCI 패스스루 장치를 붙이는 스펙용 옵션. `-specExport` 는 다른 키처럼 `pci-evNN=<값>` 줄을 그대로 내보내고(`VMsetup/vm_setup.sh` 의 PCI 단계가 읽음), 체크 모드는 `-pci-ev01`~`-pci-ev99` 플래그로 받는다(스펙 파일에서 지정 가능한 옵션에 추가 — 이전에는 "알 수 없는 옵션 이름"으로 중단).
+- **체크 항목 "PCI 패스스루"** (`PCI 패스스루 (config.hardware.device)`, 소스 = ev 그룹): 기대값이 있는 ev 의 VM 에 `VirtualPCIPassthrough`(장치 직접 backing) 가 붙어 있고 그 벤더가 맞으면 OK, 아니면 FAIL — 실제값은 `PCI주소(벤더:장치이름)` 목록 또는 `없음`. `pci-evNN` 이 없는 ev 는 체크하지 않는다. ev02 이상은 조사 대상이 1대뿐이면 스킵(Shares/affinity 와 같은 규칙). `-fix` 대상이 아니라 FAIL 은 수동조치로 표시.
+- **벤더 매칭 규칙**(대소문자 무시, `checker.MatchPCIVendor`): `mellanox`=0x15b3, `nvidia`=0x10de, 숫자만=10진 VendorId, `0x`16진 또는 a-f 가 든 4자리 16진=16진 VendorId, 그 밖=장치 이름 부분 문자열. VM 에 PCI 를 연결하는 도구(`pci_passthrough`)와 같은 규칙. govmomi 의 VendorId 는 int16(0x8086 은 음수)이라 uint16 으로 바꿔 비교.
+- **`-specExport` 동작**: `pci-evNN` 만 있고 그 ev 의 `cpu/mem/disk/shares` 가 없으면 다른 키(`affinity-evNN` 등)와 똑같이 에러(그 ev 를 정의된 그룹으로 본다). 따옴표째 빈 값(`pci-ev02=""`)은 지정 안 함.
+- **영향 범위**: `vm-param-check-usability-improvement/vm-param-check/` — `main.go`, `checker/pci.go`(신규), `model/types.go`, `vcenter/client.go`(VM 장치 목록은 기존에 이미 조회하던 `config.hardware` 에서 읽음), `README.md`, 샘플 스펙(`SPEC_DIR/TST-CAE001-SAMP48c-QRST`, 주석 예시만). V2 복사본만 변경.
+- **검증**: `go vet`, `go test -mod=vendor ./...` 통과(`checker/pci_test.go`, `config/pci_test.go`, `main_test.go` 추가: 파싱·export·벤더 매칭 전 분기·int16 음수 VendorId·PASS/FAIL), `-specExport` 로 `pci-ev01=mellanox`/`pci-ev02=nvidia` 출력 확인, vcsim 대상 체크에서 스펙 적용 + FAIL(없음) 확인.
+
+---
+
 ## 2026-10-19 — 래퍼 스크립트 이름을 01.vm_setting_check_insert.sh 로 변경
 
 - **파일명**: `vm-param-check/vm_setting_check_insert.sh` → `vm-param-check/01.vm_setting_check_insert.sh` (실서버에서 쓰는 이름과 맞춤). 내용 변경 없음. README·워크플로·`passwd_update.sh`·`vm_setup.sh` 주석의 참조도 새 이름으로 갱신.

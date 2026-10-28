@@ -7,7 +7,7 @@
 #      → 못 정한 BM 만 SPEC_DIR 목록에서 선택, 목록에 없으면 vim으로 새 스펙 입력(+ev별 affinity)
 #   3) VM(evNN)별 포트그룹(네트워크 어댑터 1) 자동 할당 → VM 표 확인(y/n) → 수동 선택 → 목록에 없으면 vim
 #   4) CAE 번호 변경 질문(숫자변경기능) → vCenter 선택 (-v 가 없으면 vcenter.txt 번호, Enter = 이 user 의 이전 실행 vCenter)
-#   5) vswitch_setting(BM에 포트그룹 생성, 호스트 병렬) → vm_create → affinity_setting → lpage_setting (스펙별로, 도구 안에서 병렬)
+#   5) vswitch_setting(BM에 포트그룹 생성, 호스트 병렬) → vm_create → affinity_setting → lpage_setting → pci_passthrough (스펙별로, 도구 안에서 병렬. pci_passthrough 는 스펙에 pci-* 가 있을 때만)
 #   6) license_assign(평가판 호스트에 라이선스 — 선택 입력) → vm-param-check 로 만든 VM 이 스펙과 같은지 체크
 #
 # 5)~6) 실행 단계는 터미널이면 단계별 진행 모니터(↑↓ 이동, Enter 실행 결과 보기, 끝나면 Enter 두 번 종료)로 보여준다.
@@ -59,7 +59,7 @@ usage() {
                 셸의 VC_PASSWORD/VC_PASS 는 지우고 시작하므로 남아있는 값을 쓰지 않는다)
   -s <dir>      SPEC_DIR 경로 (기본: vm-param-check 폴더에 SPEC_DIR 이 있으면 그것, 없으면 ${HERE}/../SPEC_DIR)
   -w <vswitch>  포트그룹을 만들 가상 스위치 (기본: vswitch_setting 기본값 vSwitch0)
-  -c <n>        vswitch/affinity/lpage 동시 처리 수 (기본: 각 도구 기본값)
+  -c <n>        vswitch/affinity/lpage/pci 동시 처리 수 (기본: 각 도구 기본값)
   -del_affinity affinity 단계를 "설정" 대신 "삭제"로 실행 (VM 의 affinity 설정값을 모두 지움 — affinity 파일과 무관)
   -del_lpage    lpage 단계를 "설정" 대신 "삭제"로 실행 (HugePage 설정값 5개만 빼고(numa.vcpu.maxPerVirtualNode 는 유지) 지움 — CPU 토폴로지는 평소처럼 적용)
   -n            확인만: 스펙·포트그룹 할당까지 정하고 실행 계획을 보여준 뒤 vCenter는 변경하지 않고 종료
@@ -183,7 +183,7 @@ ensure_bin() {
   bash "$HERE/../setup.sh" "$name" >/dev/null || die "준비 실패: $name — bash $HERE/../setup.sh $name 로 확인하세요"
 }
 ensure_bin "$CHECK_BIN" vm-param-check
-for t in main_conn vm_create vswitch_setting affinity_setting lpage_setting nic_assign mac_info power_setting license_assign; do
+for t in main_conn vm_create vswitch_setting affinity_setting lpage_setting pci_passthrough nic_assign mac_info power_setting license_assign; do
   ensure_bin "$HERE/${t}-source/$t" "$t"
 done
 
@@ -270,13 +270,13 @@ folder_of_pg() { printf '%s' "$1" | sed -nE 's/^(.+)-[cC][aA][eE]-[0-9]{1,3}-[0-
 is_uint() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -gt 0 ]; }
 vm_name() { printf '%sev%02d' "${1%%.*}" "$2"; }
 
-# build_flags <스펙 폴더> [noaff] — 스펙 값을 각 도구 옵션으로 바꿔 CREATE_ARGS/AFF_ARGS/LP_ARGS 에 담는다. 잘못된 값이면 FLAG_ERR 를 채우고 실패.
+# build_flags <스펙 폴더> [noaff] — 스펙 값을 각 도구 옵션으로 바꿔 CREATE_ARGS/AFF_ARGS/LP_ARGS/PCI_ARGS 에 담는다. 잘못된 값이면 FLAG_ERR 를 채우고 실패.
 # affinity 는 ev 마다 파일이 있어야 한다(자동 계산은 삭제). 여러 ev 가 같은 파일을 가리켜도 된다.
 # noaff: vim 으로 새 스펙을 만드는 중(affinity 는 저장 뒤에 고름)이라 affinity 가 없어도 통과시킨다.
-CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
+CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); PCI_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
 build_flags() {
   local d="$1" noaff="${2:-}" g n nn cpu mem disk sh aff cps numa v t flag list any
-  CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
+  CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); PCI_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
   g="$(exp_get "$d" groups)"; is_uint "$g" || { FLAG_ERR="스펙에서 ev 개수를 읽지 못했습니다"; return 1; }
   CREATE_ARGS+=("-vmCount=$g"); AFF_ARGS+=("-vm_cnt=$g")
   for n in $(seq 1 "$g"); do
@@ -310,6 +310,10 @@ build_flags() {
         LP_ARGS+=("-ev${nn}Numa=$((cpu / numa))")
       fi
     fi
+
+    # PCI 패스스루: 스펙의 pci-evNN=<vendor> → pci_passthrough 의 -evNNPci. 값 검증은 도구가 한다.
+    v="$(exp_get "$d" "pci-ev$nn")"
+    [ -n "$v" ] && PCI_ARGS+=("-ev${nn}Pci=$v")
   done
   # 태그(사용자 지정 특성): 스펙의 tag-<이름> 줄을 vm-param-check 가 ev 별로 펼쳐 준다 → tag_setting 의 ev01,ev02.. 콤마 목록으로.
   # 값이 없는 ev 는 빈 칸으로 두면 tag_setting 이 그 ev 만 건너뛴다. 체크(vm-param-check)는 태그를 보지 않는다.
@@ -901,6 +905,11 @@ for d in "${SPEC_ORDER[@]}"; do
   say "   power_setting    BM $(grep -c . "$RUN_DIR/worklist_$k.txt")대 → 고성능 전원 정책(이미 고성능이면 스킵)"
   say "   affinity_setting ${AFF_ARGS[*]}"
   [ "${#LP_ARGS[@]}" -gt 0 ] && print_ev_kv "lpage_setting" "${LP_ARGS[@]}" || say "   lpage_setting: 스펙에 cores 가 없어 건너뜀"
+  if [ "${#PCI_ARGS[@]}" -gt 0 ]; then
+    print_ev_kv "pci_passthrough (패스스루 활성화·VM 연결·전원 ON — VM 은 켜 둠, lpage 다음)" "${PCI_ARGS[@]}"
+  else
+    say "   PCI 패스스루: 스펙에 pci-* 없음 — 건너뜀"
+  fi
   # vm-param-check 는 ev01 의 cores/numa 가 필수라, 없으면 생성 뒤 스펙 체크(6단계)를 할 수 없다
   [ -n "$(exp_get "$LOOKUP_DIR" cores-ev01)" ] && [ -n "$(exp_get "$LOOKUP_DIR" numa-ev01)" ] \
     || warn "스펙 $(basename "$d") 에 ev01 cores/numa 가 없어 생성 뒤 vm-param-check 스펙 체크는 건너뜁니다 (VM 생성은 진행)."
@@ -968,7 +977,7 @@ rm -rf logs; mkdir -p logs; : > run.log; rm -f check_fail check_summary.txt
 STEP_NOTE="/dev/null"
 
 note() { printf '%s\n' "$1" > "$STEP_NOTE"; }
-# spec_flags <k> — k번째 스펙으로 CREATE_ARGS/AFF_ARGS/LP_ARGS 를 채운다
+# spec_flags <k> — k번째 스펙으로 CREATE_ARGS/AFF_ARGS/LP_ARGS/PCI_ARGS 를 채운다
 spec_flags() {
   local d="${SPEC_ORDER[$(($1 - 1))]}"
   spec_lookup "$(basename "$d")" && build_flags "$LOOKUP_DIR" && return 0
@@ -1015,6 +1024,38 @@ step_lpage() {
   spec_flags "$1" || return 1
   [ "${#LP_ARGS[@]}" -gt 0 ] || { say "스펙에 cores 가 없어 lpage_setting 을 건너뜁니다."; note "skip:스펙에 cores 가 없음"; return 0; }
   run "$HERE/lpage_setting-source/lpage_setting" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="vmbase_$1.txt" "${LP_ARGS[@]}" "${DEL_LP_ARG[@]}" "${CONC_ARG[@]}"
+}
+# step_pci — 스펙에 pci-evNN 이 있을 때만. 패스스루 활성화 + VM 에 장치 연결 + 전원 ON(켜 둠).
+# 종료코드 3 = "호스트 재부팅 필요"만 있는 경우: 실패가 아니므로 전체 실행은 계속하고, 재부팅 뒤 이어하는 스크립트를 남긴다.
+# (전체 vm_setup 을 다시 돌리면 이미 켜진 VM 을 affinity/lpage 단계가 다시 설정하므로 이어하기 경로가 아니다.)
+step_pci() {
+  spec_flags "$1" || return 1
+  [ "${#PCI_ARGS[@]}" -gt 0 ] || { say "스펙에 pci-* 가 없어 PCI 패스스루를 건너뜁니다."; note "skip:스펙에 pci-* 가 없음"; return 0; }
+  local cmd=("$HERE/pci_passthrough-source/pci_passthrough" -vcTargetIP="$VC_IP" -id="$VC_ID" -worklistFile="worklist_$1.txt" "${PCI_ARGS[@]}" "${CONC_ARG[@]}")
+  local rc bms resume="$RUN_DIR/pci_resume_$1.sh"
+  say; say "${C_DIM}\$ ${cmd[*]}${C_RST}"
+  "${cmd[@]}" 2>&1 | tee "pci_out_$1.txt"; rc=${PIPESTATUS[0]}
+  [ "$rc" -eq 0 ] && return 0
+  if [ "$rc" -ne 3 ]; then
+    printf '%s[오류] 실패: %s (종료코드 %s) — 원인을 고친 뒤 다시 실행하면 이미 연결·켜진 VM 은 건너뜁니다.%s\n' "$C_RED" "$(basename "${cmd[0]}")" "$rc" "$C_RST" >&2
+    return 1
+  fi
+  bms="$(sed -n 's/^\[경고\] 호스트 재부팅 필요: \([^ ]*\).*/\1/p' "pci_out_$1.txt" | sort -u | paste -sd, -)"
+  # 이어하기 스크립트 — 명령줄만 담고 비밀번호는 담지 않는다(실행할 때 환경변수 → 암호 파일 → 직접 입력 순으로 받는다).
+  {
+    printf '#!/usr/bin/env bash\n# vm_setup 이 만든 PCI 패스스루 이어하기 (스펙 %s). 재부팅이 필요했던 호스트를 재부팅한 뒤 실행한다.\n' "$1"
+    printf '# 이미 연결·켜진 VM 은 건너뛰고 남은 것만 이어서 한다. 비밀번호는 저장하지 않는다.\n'
+    printf 'cd %q || exit 1\n' "$RUN_DIR"
+    printf 'if [ -z "${VC_PASSWORD:-}" ] && [ -f %q ]; then\n  . %q\n  VC_PASSWORD="$(secret_get vcenter %q)" || VC_PASSWORD=""\nfi\n' "$HERE/../secret_lib.sh" "$HERE/../secret_lib.sh" "$VC_ID"
+    printf 'if [ -z "${VC_PASSWORD:-}" ]; then printf "%%s 비밀번호: " %q >&2; IFS= read -r -s VC_PASSWORD; echo >&2; fi\n' "$VC_ID"
+    printf 'export VC_PASSWORD\nexec'
+    printf ' %q' "${cmd[@]}"; printf '\n'
+  } > "$resume"
+  chmod +x "$resume"
+  warn "호스트 재부팅이 필요한 BM: ${bms:-(위 출력 참고)} — 그 호스트의 VM 은 아직 장치 연결·전원 ON 이 끝나지 않았습니다. 이후 단계는 계속합니다."
+  warn "호스트 재부팅 후 bash $resume 로 이어서 진행하세요 (그때까지 스펙 체크의 PCI 항목은 FAIL 로 나올 수 있습니다)."
+  note "재부팅 필요: ${bms:-BM} — 재부팅 후 bash $resume"
+  return 0
 }
 # step_license — 모든 BM 대상 1회. 평가판 호스트가 있으면 license_assign 이 라이선스 번호를 표준입력으로 묻는다
 # (라이선스가 1개여도 묻는다. q = 취소, 종료코드 0). 평가판 호스트가 없으면 묻지 않고 끝난다.
@@ -1153,6 +1194,7 @@ for d in "${SPEC_ORDER[@]}"; do
   add_step run "전원 고성능" step_power "$k"
   add_step run "affinity" step_affinity "$k"
   add_step run "lpage" step_lpage "$k"
+  add_step run "PCI 패스스루" step_pci "$k"
 done
 add_step sep ""
 add_step run "라이선스 할당" step_license "" 1

@@ -1,5 +1,7 @@
 # PCI 패스스루 (임시 보관)
 
+> **이 폴더는 기록용으로만 남겨 둔 것입니다.** 통합·관리되는 버전은 [`V2/VMsetup/pci_passthrough-source`](../V2/VMsetup/pci_passthrough-source/README.md) 입니다(활성화 + VM 연결 + 전원 ON 을 Go 하나로, `vm_setup.sh` 가 스펙의 `pci-evNN` 키로 실행). 아래 두 스크립트는 더 고치지 않습니다. 예전 부팅 실패 원인(backing `SystemId` 에 하드웨어 UUID 사용)도 통합 버전에서 고쳤습니다.
+
 Gmail(aisoki2675@gmail.com)에서 찾은 스크립트를 일단 그대로 보관한 것. 실장비 검증 전.
 
 | 기능 | 파일 | 출처 메일 |

@@ -24,6 +24,11 @@ numa-ev02=2
 # affinity 는 ev 마다 필수(자동 계산 없음). 여러 ev 가 같은 파일을 써도 된다 — 예: affinity-ev02=affinity_ev01.txt
 affinity-ev02=affinity_ev02.txt
 
+# --- PCI 패스스루 (선택, ev 별) ---
+# 벤더 = mellanox | nvidia | VendorId(5555, 15b3, 0x15b3) | 장치 이름 일부 (값에 공백 불가)
+# pci-ev01=mellanox  # ev01 VM 에 Mellanox PCI 패스스루 1개(VMsetup 이 연결·전원 ON, 체크가 연결 여부 확인)
+# pci-ev02=nvidia
+
 # --- ev03~ev99 (선택, ev01부터 연속으로) ---
 # cpu-ev03=
 # mem-ev03=

@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-10-28 — PCI 패스스루 단계 추가 (스펙 pci-evNN, `pci_passthrough` 신규)
+
+- **`pci_passthrough-source`(신규)**: 예전에 둘로 나뉘어 있던 패스스루 활성화(Go, `VM/passthrough/enable-go`)와 VM 연결(PowerShell, `attach_pci.ps1`)을 Go 도구 하나로 합쳤다. BM 마다 `<짧은이름>evNN` VM 에 vendor 에 맞는 PCI 장치(function)를 **1개씩, PCI 주소 순서로** 배분 → 이번에 배분한 장치만 패스스루 활성화 → VM 이 켜져 있으면 끄고 연결 → 전원 ON 후 **켜 둠**. 옵션 `-ev01Pci`~`-ev99Pci`, `-mmioSizeGB`, `-concurrency`. 종료코드 0 / 3(실패 없이 호스트 재부팅 필요만) / 1.
+- **부팅 실패 원인 수정**: 예전 Go 연결본은 backing `SystemId` 에 `host.hardware.systemInfo.uuid`(하드웨어 UUID)를 넣어 VM 전원이 켜지지 않았다(사용자 확인). 이제 backing(`Id`/`SystemId`/`VendorId`/`DeviceId`/`DeviceName`)을 모두 `EnvironmentBrowser.QueryConfigTarget(host).PciPassthrough` 에서 받는다(= `esxcli system uuid get`, PowerCLI `Add-PassthroughDevice` 와 같은 출처). 이미 붙어 있는 장치의 SystemId·VendorId·DeviceId 가 다르면 교정한다(Edit, 거부되면 제거 후 다시 연결).
+- **전원 ON 전 점검**: 메모리 100% 예약(`memoryReservationLockedToMax`), NVIDIA 등 큰 BAR 장치의 `pciPassthru.use64bitMMIO`/`64bitMMIOSizeGB`(자동: 장치 수×32 를 2의 거듭제곱으로 올림, 최소 64), 큰 BAR 장치 + BIOS 펌웨어는 실패(자동으로 EFI 로 바꾸지 않음). 전원 ON 실패 시 vCenter 메시지 전체와 원인 진단을 보여 준다.
+- **안전장치**: 호스트 업링크(vmnic, 관리망 포함) NIC 는 배분·활성화하지 않음, 다른 VM 이 쓰는 장치 제외, 같은 벤더라도 남는 장치는 건드리지 않음, 실패는 VM·BM 단위로 기록하고 나머지는 계속.
+- **`vm_setup.sh`**: 스펙마다 lpage 다음에 "PCI 패스스루" 단계(`step_pci`). 스펙의 `pci-evNN=<벤더>` 를 `-evNNPci` 로 넘긴다(`build_flags` 의 `PCI_ARGS`). `pci-*` 가 없으면 건너뜀. 종료코드 3 이면 경고 후 계속하고 `run_<user>/pci_resume_<번호>.sh`(명령줄만, 비밀번호 저장 안 함)를 남긴다 — 호스트 재부팅 뒤 이 스크립트로 이어서 연결·전원 ON. 실행 계획에 PCI 줄 표시, `ensure_bin` 대상 추가, `-c` 가 pci 에도 적용.
+- **`vm-param-check`(V2 복사본)**: 스펙 키 `pci-evNN`, `-specExport` 내보내기, 체크 항목 "PCI 패스스루 (config.hardware.device)" — 자세한 내용은 `vm-param-check-usability-improvement/CHANGELOG.md`. 벤더 판정 `MatchPCIVendor` 는 도구와 같은 복사본.
+- **빌드**: V2 `setup.sh`·`build_os6.sh` 대상에 `pci_passthrough` 추가(13개). `bin_os6/{pci_passthrough,vm-param-check}.gz` 를 Go 1.20(.60)으로 다시 빌드(나머지 11개는 다시 빌드해도 바이트까지 같아 그대로 둠). **`bin_os8/`(신규)** 에 바뀐 도구만(`pci_passthrough.gz`, `vm-param-check.gz`, Go 1.26.5 정적 빌드). Go 없는 기존 설치 서버에 변경분만 반영하는 방법은 `../UPDATE_PCI_PASSTHROUGH.md`.
+- **영향 범위**: `VMsetup/{vm_setup.sh,README.md,CHANGELOG.md,workflow.mmd}`, `VMsetup/pci_passthrough-source/*`(신규), `vm-param-check/{main.go,model/types.go,vcenter/client.go,checker/pci.go,README.md}`, `setup.sh`, `build_os6.sh`, `.gitignore`, `bin_os6/{pci_passthrough,vm-param-check}.gz`, `bin_os8/*`, 샘플 스펙(주석 예시), V2 `README.md`/`WORKFLOW.md`/`ARCHITECTURE.md`.
+- **검증**: 실 vCenter 가 꺼져 있어 PCI 패스스루를 흉내 낸 vcsim(`VM-PCI-패스스루-통합/검증/pcisim`, 자체 점검 30항목)으로 확인 — 정상 연결·전원 ON, 재부팅 필요 → 재부팅 → 재실행 이어하기, 재실행 스킵, 하드웨어 UUID 로 붙은 장치 SystemId 교정, `vm_setup.sh` 종단 실행(정상 / pci 없는 스펙 건너뜀 / 재부팅 필요 → `pci_resume_<번호>.sh` → OK / 재실행 스킵). OS6 실행파일은 CentOS 6.10 컨테이너에서 `-h`·`-specExport` 실행 확인.
+- **미확인(보류)**: 실 vCenter/ESXi 8.0.3 에서 활성화 직후 재부팅 필요 여부, 전원 ON·게스트 장치 인식, backing Edit 수용 여부, GPU 64bit MMIO 크기 적정값, QueryConfigTarget SystemId = `esxcli system uuid get` 값. `workflow.svg` 는 mermaid CLI 가 없어 다시 그리지 않았다(`workflow.mmd` 만 갱신).
+
 ## 2026-10-01 — 태그 설정 단계 추가 (스펙 tag-*), 문서·흐름도 갱신
 
 - **`vm_setup.sh`**: 라이선스 할당 다음, 스펙 체크 앞에 스펙별 "태그 설정" 단계(`step_tag`). 스펙의 `tag-DEPT_NAME` / `tag-PURPOSE` / `tag-VM_TYPE` 를 `tag_setting -deptNames/-purposes/-vmTypes` 로 전달한다. `tag-*` 가 없으면 건너뛰고, 실패하면 경고만 하고 다음 단계로 간다. 실행 계획·모니터 표시에도 반영.

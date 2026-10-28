@@ -207,6 +207,15 @@ shares-ev01=4000,normal
 disk=1024,1026
 ```
 
+VM 에 PCI 패스스루 장치(예: Mellanox NIC)를 붙이는 스펙이라면 ev 별로 `pci-evNN=<벤더>` 를 적습니다(옵션). 이 값은 `VMsetup/vm_setup.sh` 의 "PCI 패스스루" 단계가 읽어 그 VM 에 해당 벤더의 PCI 장치 1개를 연결하고, 이 도구는 **그 VM 에 그 벤더의 패스스루 장치가 실제로 붙어 있는지**만 확인합니다. 적지 않은 ev 는 이 항목을 체크하지 않습니다(출력에도 나오지 않음).
+
+```
+pci-ev01=mellanox     # ev01 VM 에 Mellanox 패스스루 장치가 붙어 있어야 OK
+pci-ev02=nvidia
+```
+
+벤더 값 규칙(대소문자 구분 없음, 위에서부터 먼저 맞는 것): `mellanox` → VendorId `0x15b3`(5555), `nvidia` → `0x10de`(4318), 숫자만 있으면 10진 VendorId(`5555`), `0x` 로 시작하거나 영문자(a-f)가 들어간 4자리 16진수면 16진 VendorId(`0x15b3`, `15b3`), 그 밖의 값은 **장치 이름의 부분 문자열**(예: `connectx`). 스펙 파일은 공백으로 값을 나누므로 값 안에 공백을 넣을 수 없습니다. VM 을 만드는 `pci-evNN` 은 그 ev 의 `cpu/mem/disk/shares-evNN` 이 정의돼 있어야 하고(없으면 `-specExport` 가 에러), `ev02~ev99` 는 다른 ev 옵션처럼 조사 대상 VM 이 1대뿐이면 체크하지 않습니다.
+
 이미 비슷한 스펙이 있다면 `-template`으로 그 값을 그대로 복사해서 시작할 수도 있습니다(다른 부분만 고치면 됨):
 
 ```bash
@@ -303,6 +312,7 @@ VM이 위 규칙에 맞는 정식 CAE 폴더가 아니라 `Task`처럼 임시로
 | `-shares-ev01 <N\|normal\|N,normal,...>` / `-shares-ev02` / `-shares-ev03` | 필수/옵션/옵션 | 기대값: CPU/메모리 Shares. ratio 숫자(예: `4000`) 또는 `normal`, 쉼표로 여러 개 나열 가능(예: `4000,normal`) — **목록 중 하나만 맞아도 OK**(CPU/메모리 각각 독립 판정). `normal`은 Level 자체가 `normal`인지, 숫자는 Level이 `custom`이고 ratio가 일치하는지를 봅니다. 세 플래그 모두 동일한 문법 |
 | `-affinity-ev01 <path>` | (옵션) | ev01 기대 affinity 파일. 안 주면 `-ht`/`-cores` 기반 자동계산 |
 | `-affinity-ev02 <path>` / `-affinity-ev03 <path>` | (옵션) | ev02/ev03 기대 affinity 파일. 안 주면 해당 그룹 affinity 체크 스킵 |
+| `-pci-ev01 <벤더>` ~ `-pci-ev99` | (옵션) | 기대값: 그 ev VM 에 붙은 **PCI 패스스루 장치의 벤더**. `mellanox` / `nvidia` / VendorId(10진 `5555`, 16진 `15b3`·`0x15b3`) / 장치 이름 일부. VM 의 패스스루 장치(`VirtualPCIPassthrough`) 중 하나라도 맞으면 OK, 없거나 다른 벤더면 FAIL(실제값에 `PCI주소(벤더:장치이름)` 목록 또는 `없음`). 안 주면 체크하지 않음(출력 없음). 스펙 파일에서는 `pci-ev01=mellanox` 형태. 수동조치 항목(`-fix` 가 고치지 않음) |
 
 > **affinity 비교는 순서를 무시합니다.** `sched.vcpuN.affinity`는 "이 vCPU를 돌릴 수 있는 물리 CPU 목록"이라 순서에 의미가 없으므로(우선순위가 아니고, ESXi 스케줄러가 그 안에서 배치), `31,29,27,25,23,21,19,17`과 `17,19,21,23,25,27,29,31`은 **같은 설정으로 보고 OK**입니다. 단 개수는 맞춰서 보므로 `16,17`과 `16,17,17`은 다른 것으로 판정합니다(잘못 들어간 중복을 조용히 통과시키지 않기 위해). 리포트에는 vCenter에 실제로 박힌 원본 문자열이 그대로 표시됩니다.
 | `-out <path>` | 타임스탬프 자동생성 | 상세 CSV 경로. `_summary` 붙은 요약 CSV가 하나 더 생성됨 |
@@ -387,6 +397,7 @@ CSV 2종(상세/요약)이 생성됩니다.
 | `host` | VM이 돌고 있는 ESXi 호스트의 전원 정책 (기대값 항상 High Performance) |
 | `ev01` | hostname에 `ev01` 포함 — affinity(자동계산), Shares — 항상 필수 체크 |
 | `ev02` / `ev03` | hostname에 `ev02`/`ev03` 포함 — affinity(파일 기반), Shares — 옵션 줬을 때만, VM 1대뿐이면 스킵 |
+| `ev01` ~ `ev99` | 위 두 줄의 그룹별 항목에 **PCI 패스스루**(`pci-evNN` 을 줬을 때만, 항목 Key `PCI 패스스루 (config.hardware.device)`)가 더해진다. ev01 은 조사 대상이 1대여도 체크, ev02 이상은 1대뿐이면 스킵 |
 | `network` | 네트워크 어댑터 포트그룹 이름 (판정 없음, 정보성) |
 
 ### 4.4 폴더명 기반 스펙 자동매칭 상세

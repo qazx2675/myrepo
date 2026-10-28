@@ -319,6 +319,15 @@ func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, t
 			switch d := dev.(type) {
 			case *types.VirtualDisk:
 				diskKB += float64(d.CapacityInKB)
+			case *types.VirtualPCIPassthrough:
+				// 패스스루 장치를 직접 가리키는 backing 만 본다(동적 DirectPath 등 다른 backing 은 대상 아님).
+				if b, ok := d.Backing.(*types.VirtualPCIPassthroughDeviceBackingInfo); ok {
+					info.PCIPassthrough = append(info.PCIPassthrough, model.PCIPassthroughDevice{
+						ID:         b.Id,
+						VendorID:   uint16(b.VendorId), // int16 -> uint16 (0x8086 이 음수로 오는 것을 되돌림)
+						DeviceName: b.DeviceName,
+					})
+				}
 			default:
 				if nic, ok := dev.(types.BaseVirtualEthernetCard); ok {
 					card := nic.GetVirtualEthernetCard()

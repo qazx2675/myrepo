@@ -29,6 +29,7 @@ TARGETS=(
   "vswitch_setting:VMsetup/vswitch_setting-source:vswitch_setting"
   "affinity_setting:VMsetup/affinity_setting-source:affinity_setting"
   "lpage_setting:VMsetup/lpage_setting-source:lpage_setting"
+  "pci_passthrough:VMsetup/pci_passthrough-source:pci_passthrough"
   "nic_assign:VMsetup/nic_assign-source:nic_assign"
   "tag_setting:VMsetup/tag_setting-source:tag_setting"
   "numa_preferht_setting:VMsetup/numa_preferht_setting-source:numa_preferht_setting"
