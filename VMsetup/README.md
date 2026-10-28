@@ -1,6 +1,6 @@
 # VMsetup — VM 생성·설정 도구 모음 (V2)
 
-호스트(BM)당 VM을 **1~99대(ev01~ev99)** 만들고 affinity/lpage/포트그룹까지 설정하는 도구 모음입니다.
+호스트(BM)당 VM을 **1~99대(ev01~ev99)** 만들고 affinity/lpage/포트그룹(스펙에 있으면 PCI 패스스루까지) 설정하는 도구 모음입니다.
 `vm_setup.sh`가 `../SPEC_DIR`(vm-param-check와 공유)의 스펙을 읽어 전체 과정을 한 번에 진행하며,
 각 도구(`*-source/`)는 단독으로도 쓸 수 있습니다. 모든 도구는 내부적으로 병렬(워커풀) 처리합니다.
 
@@ -64,7 +64,7 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 3. **포트그룹 할당(네트워크 어댑터 1)** — BM에 포트그룹이 1개면 그 BM의 모든 VM에, 여러 개면 스펙 폴더명과 이름이 맞는 것을 자동 선택. **VM → 스펙 / 포트그룹 표**를 `(y/n)`으로 확인, 자동으로 못 정한 VM/`n`이면 **번호 선택**, 목록에 없으면 `0`으로 **vim**(`hostname=""`, `portgroup=""`)에서 지정.
 4. **CAE 번호 변경**(숫자변경기능) — "CAE 번호를 바꾸시겠습니까? (y/N)". y 면 포트그룹 이름의 폴더별로 새 번호를 받아, 이번에 BM 에 만들 포트그룹과 VM 어댑터 1 의 포트그룹 이름에 반영한다(스펙은 그대로). 이 기능이 필요 없으면 `vm_setup.sh` 의 `# 숫자변경기능` 주석 아래 `ask_cae_number` 한 줄을 주석처리한다.
 5. **vCenter 선택**(`-v`가 없을 때) — `vcenter.txt` 목록에서 번호로 고른다. `0`은 직접 입력, Enter는 이 user의 이전 실행 vCenter.
-6. **실행 계획 확인 후 실행**(한 번 더 y) — 계획에는 스펙별 **affinity 설정값**도 나온다(내용이 같은 파일은 이름이 달라도 한 번만, 쓰는 ev 를 `[ev01~ev20]` 식으로). `main_conn`(BM 을 vCenter 의 `Task` 위치에 등록 — `ESXI_FOLDER` 로 바꿈, 이미 등록된 호스트는 통과, ESXi root 비밀번호를 한 번 더 물음) → `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting`.
+6. **실행 계획 확인 후 실행**(한 번 더 y) — 계획에는 스펙별 **affinity 설정값**도 나온다(내용이 같은 파일은 이름이 달라도 한 번만, 쓰는 ev 를 `[ev01~ev20]` 식으로). `main_conn`(BM 을 vCenter 의 `Task` 위치에 등록 — `ESXI_FOLDER` 로 바꿈, 이미 등록된 호스트는 통과, ESXi root 비밀번호를 한 번 더 물음) → `vswitch_setting`(호스트 병렬) → 스펙별로 `vm_create` → `affinity_setting` → `lpage_setting` → `pci_passthrough`(스펙에 `pci-evNN` 이 있을 때만, 아래 "PCI 패스스루" 참고).
    - 호스트를 못 찾거나 포트그룹/VM 생성에 실패하면 **그 단계에서 멈추고** `[완료]`를 출력하지 않습니다. 이미 있는 포트그룹/VM은 실패가 아니라 건너뜁니다 — 원인을 고친 뒤 다시 실행하면 이어서 진행됩니다.
    - 스펙별 단계가 모두 끝나면 **`license_assign`을 BM 전체 대상으로 1회** 실행한다. 평가판 호스트가 있으면 라이선스 번호를 묻고(라이선스가 1개여도 묻는다), `q`면 할당하지 않고 다음 단계로 넘어간다. 평가판 호스트가 없으면 묻지 않고 끝난다.
    - 이어서 스펙마다 **`tag_setting`(태그 설정)** 을 실행한다. 스펙에 `tag-*` 줄이 없으면 건너뛰고, 실패해도(대개 vCenter 에 사용자 지정 특성이 없음) 경고만 하고 다음 단계로 간다. 아래 "태그 설정(`tag-*`)" 참고.
@@ -114,6 +114,23 @@ tag-VM_TYPE=가상서버
 - vCenter 에 사용자 지정 특성이 미리 정의돼 있어야 합니다. 없으면 `tag_setting` 이 실패하고 `vm_setup.sh` 는 경고 후 계속합니다.
 - `tag_setting` 단독 실행: `-hostListFile`(BM 이름 앞부분), `-vmCount`, `-deptNames` / `-purposes` / `-vmTypes`(ev01,ev02.. 콤마 목록, 빈 칸은 그 ev 건너뜀).
 
+#### PCI 패스스루(`pci-evNN`)
+
+스펙 파일에 ev 별로 한 줄씩 적으면, 스펙마다 **lpage 다음** "PCI 패스스루" 단계가 `pci_passthrough` 로 그 ev VM 에 패스스루 장치를 붙이고 전원을 켭니다.
+
+```
+pci-ev01=mellanox      # ev01 VM 마다 Mellanox 장치(PCI function) 1개
+pci-ev02=nvidia        # ev02 VM 마다 NVIDIA GPU 1개 (EFI 펌웨어 필요, 64bit MMIO 자동)
+```
+
+- 벤더 값: `mellanox`, `nvidia`, VendorId(10진 `5555`, 16진 `15b3`/`0x15b3` — Intel 은 `0x8086`), 그 밖의 값은 장치 이름 일부(대소문자 무시, 공백 불가). `pci-evNN` 이 있는 ev 는 그 ev 의 `cpu/mem/disk/shares-evNN` 도 있어야 합니다.
+- ev 마다 **PCI 장치(function) 1개**를 PCI 주소 순서로 배분합니다(ev01 이 첫 장치). 관리망 등 vmnic 으로 쓰는 NIC, 다른 VM 이 쓰는 장치는 배분하지 않고, 활성화는 이번에 배분한 장치에만 합니다.
+- VM 이 켜져 있으면 끄고 연결한 뒤 **전원을 켜서 켜 둔 채로** 둡니다. backing `SystemId` 는 vCenter `QueryConfigTarget` 이 돌려주는 ESXi system uuid 를 씁니다(예전 부팅 실패 원인 — 하드웨어 UUID 를 넣었었음). 이미 붙은 장치의 SystemId 가 틀렸으면 고칩니다. 메모리 100% 예약, NVIDIA 64bit MMIO 도 이 단계가 맞춥니다.
+- 스펙에 `pci-*` 가 없으면 건너뜁니다. 실패(종료코드 1)는 다른 단계처럼 그 단계에서 멈춥니다 — 원인을 고쳐 다시 실행하면 이미 연결·켜진 VM 은 건너뜁니다.
+- **호스트 재부팅이 필요한 장치**(패스스루를 켰지만 아직 활성 아님, 종료코드 3)만 있으면 실패로 보지 않고 경고 후 다음 단계로 갑니다. 이때 `run_<user>/pci_resume_<스펙번호>.sh` 를 남기므로, 해당 호스트를 재부팅한 뒤 `bash run_<user>/pci_resume_<번호>.sh` 로 이어서 연결·전원 ON 합니다(비밀번호는 파일에 저장하지 않고 실행할 때 암호 파일 → 직접 입력 순으로 받음). 그때까지 스펙 체크의 PCI 항목은 FAIL 로 나올 수 있습니다.
+- 스펙 체크(vm-param-check)는 "PCI 패스스루 (config.hardware.device)" 항목으로 그 벤더 장치가 붙어 있는지 봅니다(`-fix` 대상 아님).
+- 도구 옵션·동작·전원 ON 실패 진단은 [pci_passthrough-source/README.md](pci_passthrough-source/README.md) 참고.
+
 ### 단독 실행
 
 도구별 옵션은 `*-source/README.md`(또는 `-h`)를 참고하세요. 공통 규칙은 다음과 같습니다.
@@ -127,6 +144,7 @@ tag-VM_TYPE=가상서버
 | `vm_create-source` | 호스트별 VM 생성(+CPU/메모리 예약/Shares/부트 순서). `-mapFile`에 VM 이름을 키로 포트그룹 지정 가능 | `-vmCount` 1~99, `-ev01Cpu`~`-ev99Share` |
 | `affinity_setting-source` | affinity 일괄 적용. `-vm_cnt` 범위의 ev마다 파일 필수(자동 계산 삭제, `-ht`는 받기만 하고 무시), 여러 ev에 같은 파일 지정 가능 | `-vm_cnt` 1~99, `-affinityFile01~99` |
 | `lpage_setting-source` | HugePage/CPU 토폴로지 | `-ev01Cores/Sockets/Numa`~`-ev99...` |
+| `pci_passthrough-source` | PCI 패스스루 활성화 + VM 연결 + 전원 ON(켜 둠). 종료코드 0 / 3(호스트 재부팅 필요만) / 1 | `-ev01Pci`~`-ev99Pci` (값 있는 ev 만) |
 | `tag_setting-source` | 사용자 지정 특성(DEPT_NAME/PURPOSE/VM_TYPE). 지정하지 않은 태그·빈 칸은 건너뛰고 일부 실패하면 종료코드 1 | `-vmCount` 1~99 |
 | `vswitch_setting-source` | BM vSwitch에 포트그룹 생성(호스트 병렬, `-concurrency`) | — |
 | `nic_assign-source` | 만들어진 VM의 네트워크 어댑터 1 포트그룹 교체 + **연결됨/전원을 켤 때 연결** 체크 | — |
@@ -149,7 +167,7 @@ tag-VM_TYPE=가상서버
 | `-id <계정>` | vCenter 계정 (기본 `lscsystems@vsphere.local`, `-i` 도 같음). 비밀번호는 `VC_PASSWORD` → 암호 파일 → 입력 |
 | `-s <dir>` | SPEC_DIR 경로 (기본: `vm-param-check/SPEC_DIR` 가 있으면 그것, 없으면 `../SPEC_DIR`) |
 | `-w <vswitch>` | 포트그룹을 만들 가상 스위치 (기본 `vSwitch0`) |
-| `-c <n>` | vswitch/affinity/lpage 동시 처리 수 |
+| `-c <n>` | vswitch/affinity/lpage/pci 동시 처리 수 |
 | `-del_affinity` | affinity 단계를 설정 대신 삭제로 실행 — VM 의 affinity 설정값을 모두 지움(affinity 파일과 무관). 스펙 체크는 `-expectNoAffinity` 로 "값이 없어야 OK" |
 | `-del_lpage` | lpage 단계를 설정 대신 삭제로 실행 — HugePage 설정값 5개만 빼고(numa.vcpu.maxPerVirtualNode 는 유지) CPU 토폴로지(소켓당 코어·NUMA)는 평소처럼 적용. 스펙 체크는 `-expectNoLpage` 로 "HugePage 값이 없어야 OK" |
 | `-n` | 확인만 — 스펙·포트그룹 할당과 실행 계획까지 보여 주고 종료(vCenter 변경 없음) |
@@ -165,6 +183,7 @@ tag-VM_TYPE=가상서버
 | `ht` | VM 생성에는 쓰지 않음 (vm-param-check 체크용) |
 | `tag-DEPT_NAME` / `tag-PURPOSE` / `tag-VM_TYPE` | `tag_setting -deptNames/-purposes/-vmTypes` (ev 별로 펼쳐 ev01,ev02.. 콤마 목록). 체크에는 쓰지 않음 |
 | `cores`(소켓당 코어 수), `numa`(NUMA 노드당 vCPU 수) | `lpage_setting`의 총 코어(=cpu)/소켓 수/NUMA 노드 수 |
+| `pci-evNN` | `pci_passthrough -evNNPci` (값 검증은 도구가 함). 체크는 "PCI 패스스루" 항목 |
 
 ## 4. 문서별 고유 설명
 
@@ -177,6 +196,7 @@ VMsetup/
 ├── mac_ip_resolve.sh           # mac_all.txt 의 _DNS_AND_TOOLS_NOT_FOUND 를 DNS 조회 IP 로 변환
 ├── <user>.txt                  # (사용자 파일, git 제외) BM 목록
 ├── run_<user>/                 # (자동 생성, git 제외) 이번 실행의 worklist/hostgroup/vswitch 입력 사본 + last_vcenter(이전 실행 vCenter)
+│                               #   + pci_resume_<번호>.sh (PCI 단계에서 호스트 재부팅이 필요했을 때만, 재부팅 뒤 이어하기)
 └── *-source/                   # 도구별 Go 소스 + setup.sh (+ README.md)
 ```
 
@@ -184,6 +204,7 @@ VMsetup/
 
 - `lpage_setting`은 NUMA 노드당 코어 수를 스펙의 numa 값에 맞추지만, `numa.vcpu.maxPerVirtualNode`는 기존 동작(코어 수)대로 씁니다. `vm-param-check` 결과에 FAIL이 나오면 `-fix`로 교정하세요.
 - 전원이 켜진 VM의 "연결됨" 체크는 vcsim에서 재현되지 않아 실제 vCenter(home-test)에서만 확인할 수 있습니다.
+- PCI 패스스루 단계는 PCI 패스스루를 흉내 낸 vcsim(pcisim)으로만 검증했습니다. 실 vCenter/ESXi 8.0.3 에서의 활성화 직후 재부팅 필요 여부, 연결 후 전원 ON·게스트 장치 인식, GPU 64bit MMIO 크기는 아직 확인 전입니다.
 - `vm-param-check/folder_setup.sh`는 ev01~ev03까지만 묻습니다. ev04~ev99 스펙은 `vm_setup.sh`의 vim 입력(스펙 수동 입력)으로 만들거나 `_spec.txt`를 직접 편집하세요.
 - `vm_setup.sh`의 vim 스펙 템플릿에는 ev10까지만 빈 틀이 있습니다. ev11~ev99는 같은 규칙의 줄(`cpu-ev11="4"` 등)을 직접 추가하면 저장됩니다.
 - 각 도구의 `-h` 도움말은 ev02~ev99 옵션을 `-ev02~99Cpu`처럼 한 줄로 묶어 보여 줍니다(실제 옵션 이름은 `-ev02Cpu`, `-ev57Cpu` … 그대로).

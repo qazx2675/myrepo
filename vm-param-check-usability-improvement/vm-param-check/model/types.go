@@ -55,6 +55,10 @@ type VMInfo struct {
 	// 어댑터가 없는 게 아니라 vSphere에서 연결만 꺼둔 것뿐이라서다.
 	Networks []NetworkAdapter
 
+	// PCIPassthrough는 VM 장치 중 PCI 패스스루(VirtualPCIPassthrough, 장치 직접 backing)로 붙은 것 전부다.
+	// 없으면 nil. spec 의 pci-evNN 체크(checker.CheckPCI)가 쓴다.
+	PCIPassthrough []PCIPassthroughDevice
+
 	HostName        string // 이 VM이 돌고 있는 ESXi 호스트 이름
 	HostPowerPolicy string // 그 호스트의 현재 전원 정책 표시 이름 (예: "High Performance")
 }
@@ -63,6 +67,13 @@ type VMInfo struct {
 type NetworkAdapter struct {
 	Portgroup string
 	Connected bool
+}
+
+// PCIPassthroughDevice는 VM에 붙은 PCI 패스스루 장치 1개 — backing(VirtualPCIPassthroughDeviceBackingInfo)에서 읽은 값이다.
+type PCIPassthroughDevice struct {
+	ID         string // backing.Id — PCI 주소(예: 0000:3b:00.0)
+	VendorID   uint16 // backing.VendorId. govmomi 는 int16 으로 주므로(0x8086 은 음수) uint16 으로 바꿔 담는다
+	DeviceName string // backing.DeviceName — 장치 이름(예: ConnectX-5 ...)
 }
 
 // Finding은 체크 항목 1건의 결과 — CSV 한 줄에 대응한다.

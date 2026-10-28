@@ -5,6 +5,7 @@
 기존 `.claude/VM/VM_setup`, `.claude/VM/vm-param-check-usability-improvement`(V1)는 그대로 두고, V2는 이 폴더에 새로 구성했습니다.
 
 > 작업 흐름은 [WORKFLOW.md](WORKFLOW.md), 폴더·파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
+> 이미 V2 를 설치해 쓰는 서버에 **PCI 패스스루 변경분만** 반영하려면 [UPDATE_PCI_PASSTHROUGH.md](UPDATE_PCI_PASSTHROUGH.md)를 보세요(Go 없는 폐쇄망용, `bin_os8/`·`bin_os6/` 실행파일 사용).
 
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 설정 변경 스크립트의 경우, 설정 변경 후 무작위로 서버 몇 대를 골라 실제로 변경되었는지 직접 확인하는 절차가 반드시 필요합니다.
@@ -29,7 +30,7 @@ bash setup.sh
 
 | 명령 | 동작 |
 |---|---|
-| `bash setup.sh` | 12개 도구 전체 빌드 후 성공/실패 요약 (하나라도 실패하면 종료코드 1). OS6 면 빌드 대신 `bin_os6/*.gz` 를 푼다 |
+| `bash setup.sh` | 13개 도구 전체 빌드 후 성공/실패 요약 (하나라도 실패하면 종료코드 1). OS6 면 빌드 대신 `bin_os6/*.gz` 를 푼다 |
 | `bash setup.sh vm_create nic_assign` | 지정한 도구만 |
 | `bash setup.sh --os6` | OS 와 상관없이 `bin_os6/` 실행파일을 설치 |
 | `bash setup.sh -l` | 빌드 대상과 실행파일 경로 목록 |
@@ -43,6 +44,8 @@ OS6 판단은 `--os6` 옵션, `VMSETUP_OS6=1`, 커널 2.6.x, `/etc/redhat-releas
 
 **OS6 실행파일 다시 만들기** (소스가 바뀌었을 때, Go 1.20 이 있는 빌드 서버에서): `bash build_os6.sh [/opt/go1.20/bin/go]` → `bin_os6/<이름>.gz`.
 RHEL 6 커널(2.6.32)은 Go 1.21+ 실행파일을 못 띄워서, govmomi vendor 사본을 Go 1.20 호환으로 고쳐 빌드한다(원본 `govendor/` 는 그대로).
+
+**`bin_os8/`** 에는 OS8 용으로 미리 빌드한 실행파일 중 **최근에 바뀐 것만**(지금은 `pci_passthrough`, `vm-param-check`) 들어 있다(Go 1.26.5, 정적 빌드, gzip). Go 가 없는 OS8 서버에 변경분만 반영할 때 쓰며, `setup.sh` 는 이 폴더를 읽지 않는다 — 방법은 [UPDATE_PCI_PASSTHROUGH.md](UPDATE_PCI_PASSTHROUGH.md).
 
 ### 비밀번호 (암호 파일)
 
@@ -85,6 +88,8 @@ cd /home/V2/VMsetup
 
 스펙 파일 맨 아래에 `tag-DEPT_NAME` / `tag-PURPOSE` / `tag-VM_TYPE` 줄을 쓰면 라이선스 할당 다음에 VM 사용자 지정 특성이 설정됩니다(체크에는 영향 없음). 형식은 [VMsetup/README.md](VMsetup/README.md)의 "태그 설정" 참고.
 
+스펙에 `pci-evNN=<벤더>`(예: `pci-ev01=mellanox`) 줄을 쓰면 lpage 다음 "PCI 패스스루" 단계가 그 ev VM 마다 패스스루 장치를 1개씩 연결하고 전원을 켜 둡니다(체크도 연결 여부를 봄). 형식은 [VMsetup/README.md](VMsetup/README.md)의 "PCI 패스스루" 참고.
+
 스펙이 VM 생성용 값으로 어떻게 바뀌는지 미리 확인하려면:
 
 ```bash
@@ -107,10 +112,12 @@ V2/
 ├── ARCHITECTURE.md / PR_CHECKLIST.md      # 폴더별 역할 / 수정·배포 전 체크리스트
 ├── setup.sh                               # 전체 오프라인 빌드 (OS6 면 bin_os6/ 설치)
 ├── build_os6.sh / bin_os6/                # OS6 용 실행파일 빌드 스크립트 / 미리 빌드한 실행파일(.gz)
+├── bin_os8/                               # OS8 용 미리 빌드한 실행파일(.gz) — 최근 바뀐 도구만 (pci_passthrough, vm-param-check)
+├── UPDATE_PCI_PASSTHROUGH.md              # 기존 설치 서버에 PCI 패스스루 변경분만 반영하는 방법
 ├── passwd_update.sh / secret_lib.sh       # 비밀번호 암호화 등록·갱신 / 풀기 함수 (secret/ 는 git 제외)
 ├── govendor/                              # 공유 의존성 (govmomi 0.55.1 = VMsetup, 0.39.0 = vm-param-check)
 ├── SPEC_DIR/                              # 공유 스펙 (git에는 예시만)
-├── VMsetup/                               # VM 생성·설정 도구 (vm_create, affinity, lpage, tag, vswitch, nic_assign ...)
+├── VMsetup/                               # VM 생성·설정 도구 (vm_create, affinity, lpage, pci_passthrough, tag, vswitch, nic_assign ...)
 └── vm-param-check-usability-improvement/  # 체크·교정 도구 (-specRoot, -specExport)
 ```
 

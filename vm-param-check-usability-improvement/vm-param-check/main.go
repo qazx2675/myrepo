@@ -59,6 +59,9 @@ func main() {
 
 	affinityPaths := registerAffinityFlags()
 
+	// pci-ev01~ev99: 그룹별 기대 PCI 패스스루 벤더. 값을 안 주면 그 그룹의 PCI 패스스루 체크는 스킵.
+	pciFlags := registerPCIFlags()
+
 	specRoot := flag.String("specRoot", "", "스펙 정의 파일들이 모여 있는 루트 경로. 지정하면 체크 대상 VM이 속한 vCenter 인벤토리 폴더 이름을 조회해서, 같은 스펙으로 간주되는 하위 디렉터리의 '<디렉터리명>_spec.txt'를 찾아 기대값 옵션(-cpu/-cores/-numa/...)을 자동으로 채운다. 직접 준 옵션이 항상 우선하며, 적용 전에 확인을 한 번 받는다")
 
 	specFolder := flag.String("specFolder", "", "-specRoot 와 함께: VM 폴더/포트그룹으로 스펙을 찾지 않고, 대상 VM 전부에 이 폴더명(CAE 번호는 무시하고 매칭)의 스펙을 적용한다 — VMsetup/vm_setup.sh 가 방금 만든 VM 을 그 스펙으로 체크할 때 쓴다")
@@ -269,8 +272,14 @@ func main() {
 			Disk:     checker.DiskExpect{Base: diskBase, Groups: map[string][]int{}},
 			Shares:   checker.SharesExpect{EV01: sharesEV01, Groups: map[string][]checker.SharesItem{}},
 			Affinity: map[string]map[string]string{},
+			PCI:      map[string]string{},
 			HTOn:     *ht == "on",
 			PreferHT: *preferHT,
+		}
+		for _, g := range model.GroupNames() {
+			if v := strings.TrimSpace(*pciFlags[g]); v != "" {
+				e.PCI[g] = v
+			}
 		}
 		for _, g := range model.GroupNames()[1:] {
 			for kind, dst := range map[string]map[string]*int{
@@ -394,6 +403,9 @@ type expectSet struct {
 	// ev02~ev99는 없으면 그 그룹의 affinity 체크를 스킵한다.
 	Affinity map[string]map[string]string
 
+	// PCI는 그룹("ev01"~"ev99")별 기대 PCI 패스스루 벤더(spec 의 pci-evNN 값)다. 없으면 그 그룹은 체크하지 않는다.
+	PCI map[string]string
+
 	HTOn bool
 
 	// PreferHT는 numa.vcpu.preferHT 기대값(예: "TRUE")이다. 모든 VM에 공통 적용되는
@@ -446,6 +458,7 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 	f = append(f, checker.CheckTopology(vm, coresExpect, numaExpect, group, singleVMMode, isVcsim)...)
 	f = append(f, checker.CheckPreferHT(vm, e.PreferHT)...)
 	f = append(f, checker.CheckHardware(vm, cpuExpect, memExpect, diskExpect, shares, group, singleVMMode, isVcsim)...)
+	f = append(f, checker.CheckPCI(vm, e.PCI, group, singleVMMode)...)
 	f = append(f, checker.CheckHostPower(vm))
 	f = append(f, checker.CheckNetwork(vm)...)
 
@@ -612,6 +625,7 @@ var specSettableFlags = func() map[string]bool {
 	}
 	for _, g := range model.GroupNames() {
 		m["affinity-"+g] = true
+		m["pci-"+g] = true
 		if g == "ev01" {
 			continue
 		}
@@ -654,6 +668,17 @@ func registerAffinityFlags() map[string]*string {
 			usage = "ev01 그룹 기대 affinity 파일 (옵션. 안 주면 기존과 동일하게 -ht/-cores 기반 자동계산을 사용. 주면 파일값으로 대체)"
 		}
 		out[g] = flag.String("affinity-"+g, "", usage)
+	}
+	return out
+}
+
+// registerPCIFlags는 -pci-ev01~ev99 플래그를 등록한다(그룹별 기대 PCI 패스스루 벤더).
+// 값 규칙은 checker.MatchPCIVendor 참고(mellanox / nvidia / VendorId 10진·16진 / 장치 이름 부분 문자열).
+func registerPCIFlags() map[string]*string {
+	out := map[string]*string{}
+	for _, g := range model.GroupNames() {
+		out[g] = flag.String("pci-"+g, "",
+			fmt.Sprintf("기대값: %s VM 에 붙은 PCI 패스스루 장치의 벤더 (옵션, 안 주면 %s PCI 패스스루 체크 스킵). mellanox | nvidia | VendorId(10진 5555, 16진 15b3 / 0x15b3) | 장치 이름 일부", g, g))
 	}
 	return out
 }
