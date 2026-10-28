@@ -185,4 +185,6 @@ VM 마다 한 줄, 끝에 요약 표가 나옵니다. `설정 변경[...]` 안�
 ## 9. 앞으로 (메모)
 
 - **PCI function 단위 배분** — 지금은 ev 마다 PCI 장치(function) 1개씩 줍니다(예: 듀얼 포트 카드의 `3b:00.0` 은 ev01, `3b:00.1` 은 ev02). 카드 단위(같은 슬롯 `bus:slot` 의 function 전부)를 한 VM 에 줘야 하는 경우가 생기면, 배분 단계에서 장치를 `도메인:버스:슬롯` 으로 묶어 묶음째 배분하고, 활성화·연결도 묶음의 function 전부에 하도록 바꿔야 합니다(`pciPassthruInfo.dependentDevice` 도 함께 확인).
-- 실장비 확인이 필요한 것: 패스스루 backing Edit 을 vCenter 8.0.3 이 받는지(안 받으면 제거 후 다시 연결로 넘어감), QueryConfigTarget SystemId = `esxcli system uuid get` 값, GPU 64bit MMIO 크기 적정값과 BIOS 펌웨어에서의 실제 동작.
+- 랩 ESXi 8.0.3 에서 확인한 것(2026-10-29, ESXi 직접 접속, 가상 e1000e 장치): 활성화 직후 바로 Active, QueryConfigTarget SystemId = `esxcli system uuid get` 값, 하드웨어 UUID 로 붙이면 `Module 'DevicePowerOn' power on failed`, backing Edit(SystemId 교정)을 받음, 업링크 vmnic 거부.
+- 실장비 확인이 필요한 것: vCenter 경유에서도 backing Edit 을 받는지(안 받으면 제거 후 다시 연결로 넘어감), Mellanox 활성화 직후 재부팅 필요 여부, GPU 64bit MMIO 크기 적정값과 BIOS 펌웨어에서의 실제 동작.
+- 도구는 네트워크 업링크 vmnic 만 막는다. 디스크 컨트롤러와 겹치는 벤더 값(예: 랩의 VMware `0x15ad`)은 주지 마세요.

@@ -204,7 +204,7 @@ VMsetup/
 
 - `lpage_setting`은 NUMA 노드당 코어 수를 스펙의 numa 값에 맞추지만, `numa.vcpu.maxPerVirtualNode`는 기존 동작(코어 수)대로 씁니다. `vm-param-check` 결과에 FAIL이 나오면 `-fix`로 교정하세요.
 - 전원이 켜진 VM의 "연결됨" 체크는 vcsim에서 재현되지 않아 실제 vCenter(home-test)에서만 확인할 수 있습니다.
-- PCI 패스스루 단계는 PCI 패스스루를 흉내 낸 vcsim(pcisim)으로만 검증했습니다. 실 vCenter/ESXi 8.0.3 에서의 활성화 직후 재부팅 필요 여부, 연결 후 전원 ON·게스트 장치 인식, GPU 64bit MMIO 크기는 아직 확인 전입니다.
+- PCI 패스스루 단계는 pcisim(PCI 패스스루를 흉내 낸 vcsim)과 랩 ESXi 8.0.3 직접 접속(가상 e1000e 장치, 2026-10-29)으로 검증했습니다. vCenter 경유 실행, Mellanox 활성화 직후 재부팅 필요 여부, 게스트 장치 인식, GPU 64bit MMIO 크기는 아직 확인 전입니다.
 - `vm-param-check/folder_setup.sh`는 ev01~ev03까지만 묻습니다. ev04~ev99 스펙은 `vm_setup.sh`의 vim 입력(스펙 수동 입력)으로 만들거나 `_spec.txt`를 직접 편집하세요.
 - `vm_setup.sh`의 vim 스펙 템플릿에는 ev10까지만 빈 틀이 있습니다. ev11~ev99는 같은 규칙의 줄(`cpu-ev11="4"` 등)을 직접 추가하면 저장됩니다.
 - 각 도구의 `-h` 도움말은 ev02~ev99 옵션을 `-ev02~99Cpu`처럼 한 줄로 묶어 보여 줍니다(실제 옵션 이름은 `-ev02Cpu`, `-ev57Cpu` … 그대로).

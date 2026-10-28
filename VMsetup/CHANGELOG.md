@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-10-29 — PCI 패스스루 실 ESXi 8.0.3 시험, vm-param-check 장치 이름 판정 수정
+
+- **실 ESXi 시험**(랩, ESXi 직접 접속, 가상 e1000e 장치): `pci_passthrough` 정상 연결·재실행 SKIP·하드웨어 UUID SystemId 로 예전 부팅 실패 재현 → 도구가 교정 후 전원 ON·업링크 vmnic 거부를 확인. 도구 코드는 바뀌지 않음.
+- **`vm-param-check` 수정**: 실 ESXi 는 VM 패스스루 backing 의 `deviceName` 을 비워 돌려줘서, 장치 이름 기준 벤더(`connectx` 등)가 붙어 있어도 FAIL 이었다. 비어 있으면 VM 이 올라간 호스트의 `hardware.pciDevice` 에서 채운다. `bin_os6`/`bin_os8` 의 `vm-param-check.gz` 교체.
+
+---
+
 ## 2026-10-28 — PCI 패스스루 단계 추가 (스펙 pci-evNN, `pci_passthrough` 신규)
 
 - **`pci_passthrough-source`(신규)**: 예전에 둘로 나뉘어 있던 패스스루 활성화(Go, `VM/passthrough/enable-go`)와 VM 연결(PowerShell, `attach_pci.ps1`)을 Go 도구 하나로 합쳤다. BM 마다 `<짧은이름>evNN` VM 에 vendor 에 맞는 PCI 장치(function)를 **1개씩, PCI 주소 순서로** 배분 → 이번에 배분한 장치만 패스스루 활성화 → VM 이 켜져 있으면 끄고 연결 → 전원 ON 후 **켜 둠**. 옵션 `-ev01Pci`~`-ev99Pci`, `-mmioSizeGB`, `-concurrency`. 종료코드 0 / 3(실패 없이 호스트 재부팅 필요만) / 1.

@@ -83,6 +83,26 @@ func fetchHostPower(ctx context.Context, client *govmomi.Client) (map[types.Mana
 	return result, nil
 }
 
+// hostPCICache는 호스트별 PCI 장치(주소 -> 장치) 맵이다. 패스스루 장치명이 비어 있는 VM 이 있을 때만,
+// 그 VM 이 올라간 호스트를 1번씩 조회한다 (hardware.pciDevice 는 커서 전체 호스트 벌크조회는 하지 않음).
+// 조회에 실패하면 빈 맵으로 두고 backing 값만으로 판정한다.
+type hostPCICache map[types.ManagedObjectReference]map[string]types.HostPciDevice
+
+func (c hostPCICache) lookup(ctx context.Context, client *govmomi.Client, host types.ManagedObjectReference) map[string]types.HostPciDevice {
+	if m, ok := c[host]; ok {
+		return m
+	}
+	m := map[string]types.HostPciDevice{}
+	var h mo.HostSystem
+	if err := property.DefaultCollector(client.Client).RetrieveOne(ctx, host, []string{"hardware.pciDevice"}, &h); err == nil && h.Hardware != nil {
+		for _, d := range h.Hardware.PciDevice {
+			m[d.Id] = d
+		}
+	}
+	c[host] = m
+	return m
+}
+
 // fetchDVPortgroupNames는 분산 포트그룹(key -> name) 맵을 만든다.
 // vSphere에서 DVPortgroup의 moref Value가 곧 PortgroupKey와 같다는 관례에 의존한다
 // (실측 환경에서 분산 스위치를 안 쓰면 이 맵은 비어 있어도 무방 — 표준 vSwitch 포트그룹은
@@ -246,6 +266,7 @@ func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, t
 		return nil, err
 	}
 
+	hostPCI := hostPCICache{}
 	var result []model.VMInfo
 	for _, vm := range vms {
 		if vm.Config == nil {
@@ -322,11 +343,24 @@ func FetchVMs(ctx context.Context, client *govmomi.Client, vcenterAddr string, t
 			case *types.VirtualPCIPassthrough:
 				// 패스스루 장치를 직접 가리키는 backing 만 본다(동적 DirectPath 등 다른 backing 은 대상 아님).
 				if b, ok := d.Backing.(*types.VirtualPCIPassthroughDeviceBackingInfo); ok {
-					info.PCIPassthrough = append(info.PCIPassthrough, model.PCIPassthroughDevice{
+					pd := model.PCIPassthroughDevice{
 						ID:         b.Id,
 						VendorID:   uint16(b.VendorId), // int16 -> uint16 (0x8086 이 음수로 오는 것을 되돌림)
 						DeviceName: b.DeviceName,
-					})
+					}
+					// 실 ESXi 8.0.3 은 backing.deviceName 을 비워 돌려준다(실측) — 장치명 기준 vendor
+					// (예: 82574L, ConnectX) 가 항상 FAIL 이 되지 않게 VM 이 올라간 호스트의 PCI 목록에서 채운다.
+					if (pd.DeviceName == "" || pd.VendorID == 0) && vm.Runtime.Host != nil {
+						if hd, ok := hostPCI.lookup(ctx, client, *vm.Runtime.Host)[b.Id]; ok {
+							if pd.DeviceName == "" {
+								pd.DeviceName = hd.DeviceName
+							}
+							if pd.VendorID == 0 {
+								pd.VendorID = uint16(hd.VendorId)
+							}
+						}
+					}
+					info.PCIPassthrough = append(info.PCIPassthrough, pd)
 				}
 			default:
 				if nic, ok := dev.(types.BaseVirtualEthernetCard); ok {
