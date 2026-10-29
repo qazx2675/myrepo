@@ -89,6 +89,18 @@
 ### 다음 단계
 - 6단계: [S4] `pxe` — 인프라·OS 버전·Boot Mode·Splunk 설치 여부 4개 옵션 조합 실행, 완료 후 대상 인벤토리 호스트 수 리포트("총 N대의 호스트가 등록 완료되었습니다").
 
+## 2026-10-30 — invsync 404 시 인벤토리 소스 ID 재입력·conf 자동 갱신
+
+- **배경**: `s2_inventory_source`에 고정한 소스 ID가 AWX 웹에서 바뀌면 소스 필드 저장(PATCH)이나 동기화 요청이 HTTP 404로 실패하고 바로 종료되던 문제.
+- **변경 내용**:
+  - 404 시 `inventories/inventory/[s2_inventory 값]/숫자/details`의 숫자 입력 안내 출력 → 숫자 입력(숫자가 아니면 최대 3번 재입력).
+  - `s2_inventory_source를 <기존> → <새> 으로 업데이트할까요? (y/n)` 확인 후 `y`면 사용자 conf(`${user}_setting.conf`)의 `s2_inventory_source` 줄만 제자리 수정(백업 없음, 주석·다른 줄 유지) 후 같은 단계를 새 ID로 한 번 재시도.
+  - `n`·빈 입력·EOF·재시도 실패는 종전과 같이 종료 코드 1. 자동 탐색 상태와 404가 아닌 오류는 종전 동작 유지.
+  - 이력(`history_file`)에 `action=invsync status=source_updated old=.. new=..` 한 줄 기록.
+  - 부수 수정: `cli.PromptLine`이 한 번에 여러 줄을 붙여넣으면 다음 프롬프트가 입력을 잃던 문제를 공용 reader로 해결.
+- **검증**: 랩 Rocky Linux(192.168.0.58)에서 Go 1.20.14 / 1.26.5 모두 `go vet`·`go test` 통과. 스텁 서버로 404 시나리오 5개(정상 재입력, 숫자 아님 재입력, `n` 종료, 재시도 실패, conf 줄만 갱신 확인) 통과. 검증 후 VM 임시 파일 정리함.
+- **파일**: `cmd/invsync/main.go`, `cli/color.go`(Highlight), `cli/prompt.go`, `config/setkey.go`, `config/setkey_test.go`, `cmd/invsync/main_test.go`.
+
 ## 2026-08-19 (계속) — 6단계 구현 (4대 시나리오 전부 완료)
 
 - `config/config.go`: `s4_infra_choices`/`s4_osver_choices`/`s4_bootmode_choices`/`s4_splunk_choices`(전부 선택 사항) 필드 추가.

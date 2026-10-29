@@ -7,11 +7,13 @@ import (
 	"strings"
 )
 
+// 여러 번 호출해도 한 번에 붙여넣은 입력이 버려지지 않도록 reader를 공유한다.
+var stdinReader = bufio.NewReader(os.Stdin)
+
 // PromptLine은 프롬프트를 출력하고 표준입력에서 한 줄을 읽어 반환한다.
 func PromptLine(prompt string) string {
 	fmt.Print(prompt)
-	reader := bufio.NewReader(os.Stdin)
-	line, _ := reader.ReadString('\n')
+	line, _ := stdinReader.ReadString('\n')
 	return strings.TrimSpace(line)
 }
 

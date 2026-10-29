@@ -27,3 +27,8 @@ func ColorStatus(status string) string {
 		return colorYellow + status + colorReset
 	}
 }
+
+// Highlight는 안내문 속 강조할 단어에 색(노랑)을 입힌다.
+func Highlight(s string) string {
+	return colorYellow + s + colorReset
+}

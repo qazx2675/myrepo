@@ -166,6 +166,9 @@ bash invsync.sh -file hong_nodeinfo.yaml
 ```
 - `-file`은 필수입니다. yaml 파일 자체를 git에 올리는 건 이 스크립트가 하지 않고, 이미 올라가 있다는 전제로 파일명만 넘깁니다.
 - 사용할 소스는 `s2_inventory_source`가 채워져 있으면 그 ID를 고정으로 쓰고, 비어 있으면 `s2_inventory` 아래 소스 목록 중 첫 번째(ID 오름차순)를 자동 선택합니다.
+- AWX 웹에서 인벤토리 소스 ID가 바뀌어 AWX가 HTTP 404를 돌려주면 바로 실패하지 않고, `inventories/inventory/[s2_inventory 값]/숫자/details`의 숫자(새 소스 ID)를 입력받습니다. 숫자가 아니면 최대 3번까지 다시 입력받습니다.
+- 새 ID로 `s2_inventory_source`를 바꿀지 `y/n`으로 확인하며, `y`이면 사용자 conf(`${user}_setting.conf`)의 `s2_inventory_source` 줄만 제자리에서 고치고(백업 없음, 주석·다른 줄 유지) 같은 단계를 새 ID로 한 번 재시도합니다.
+- `n`, 빈 입력, 입력이 없는 환경(EOF), 재시도 실패는 종전과 같이 종료 코드 1로 끝나며, 변경은 이력(`history_file`)에 `action=invsync status=source_updated old=.. new=..`로 남습니다. 자동 탐색 중이거나 404가 아닌 오류는 종전과 같이 동작합니다.
 - `s2_source_field`가 실제 AWX 필드명과 다르면(기본 추정값은 `source_path`) 저장이 무의미해질 수 있으니, 최초 1회는 AWX 웹 UI에서 값이 실제로 바뀌었는지 확인하는 걸 권장합니다.
 - `s2_inventory`를 비워두면 동기화만 하고 호스트 목록 조회는 건너뜁니다. 필드 저장 실패, 동기화가 `successful`이 아닌 경우 등은 종료 코드 1로 끝납니다.
 
