@@ -206,7 +206,7 @@ func CreateSampleTarget(destPath string) error {
 	})
 
 	headers := []string{"Step", "작업내용", "작업자에 의한 사전 작업 내용", "작업대상", "검증방법", "작업자", "검증자", "작업결과"}
-	widths := []float64{8, 30, 28.25, 14, 30, 10, 10, 12}
+	widths := []float64{8, 30, 28, 14, 30, 10, 10, 12}
 	stackIdx := []int{1, 2, 4} // headers 내 작업내용/사전 작업 내용/검증방법 위치
 
 	for i, sh := range sheets {
@@ -1217,11 +1217,17 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 		return fmt.Errorf("기준 시트 '%s'에서 사전작업/본작업/사후작업 섹션을 찾지 못했습니다", srcs[0].name)
 	}
 
-	// 3. 새 통합문서에 기준 시트(첫 선택 시트) 통째 복사, 나머지 기본 시트 삭제
-	newWb, err := callDisp(workbooks, "Add")
-	if err != nil {
-		return fmt.Errorf("새 통합문서 생성 실패: %w", err)
+	// 3. 기준 시트(첫 선택 시트)를 단독 복사하여 새 통합문서 생성
+	// Worksheet.Copy 를 인수 없이 호출하면 원본 서식·글꼴·열 너비를 100% 유지한 채
+	// 해당 시트 1개만을 포함하는 새 통합문서가 ActiveWorkbook으로 생성됨
+	if _, err := oleutil.CallMethod(srcs[0].ws, "Copy"); err != nil {
+		return fmt.Errorf("기준 시트 '%s' 복사 실패: %w", srcs[0].name, err)
 	}
+	newWbVar, err := oleutil.GetProperty(app, "ActiveWorkbook")
+	if err != nil || newWbVar == nil {
+		return fmt.Errorf("새 통합문서 획득 실패: %v", err)
+	}
+	newWb := newWbVar.ToIDispatch()
 	defer closeWorkbook(newWb)
 
 	newSheets, err := getDisp(newWb, "Worksheets")
@@ -1230,21 +1236,6 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 	}
 	defer newSheets.Release()
 
-	first, err := getDisp(newSheets, "Item", 1)
-	if err != nil {
-		return fmt.Errorf("새 통합문서 시트 획득 실패: %w", err)
-	}
-	_, err = oleutil.CallMethod(srcs[0].ws, "Copy", first)
-	first.Release()
-	if err != nil {
-		return fmt.Errorf("기준 시트 '%s' 복사 실패: %w", srcs[0].name, err)
-	}
-	for i := int(getNum(newSheets, "Count")); i >= 2; i-- {
-		if sh, err := getDisp(newSheets, "Item", i); err == nil {
-			oleutil.CallMethod(sh, "Delete")
-			sh.Release()
-		}
-	}
 	dstWs, err := getDisp(newSheets, "Item", 1)
 	if err != nil {
 		return fmt.Errorf("결과 시트 획득 실패: %w", err)
