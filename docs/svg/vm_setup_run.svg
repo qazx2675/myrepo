@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 780" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="./vm_setup.sh — 실행 단계 (진행 모니터)">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="780" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">./vm_setup.sh — 실행 단계 (진행 모니터)</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">실행 계획에서 y 를 누른 뒤 — 단계마다 로그를 남기고, 실패하면 그 자리에서 멈춤</text>
+
+  <rect x="40" y="56" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">터미널인가? (VMSETUP_MONITOR≠0)</text>
+  <text x="265" y="92" class="t" text-anchor="middle">예 : 진행 모니터 (↑↓ · Enter 로그 · Ctrl+C 3번)</text>
+  <text x="265" y="108" class="t" text-anchor="middle">아니오 : 줄줄이 출력 (파이프 · nohup · cron)</text>
+  <path d="M265 118 L265 146" class="ln"/>
+  <rect x="40" y="146" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="166" class="t tb" text-anchor="middle">호스트 등록 (main_conn) → 포트그룹 생성 (vswitch_setting)</text>
+  <text x="265" y="182" class="t" text-anchor="middle">BM 전체 1회 · 포트그룹이 없으면 건너뜀</text>
+  <path d="M265 192 L265 220" class="ln"/>
+  <rect x="40" y="220" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="240" class="t tb" text-anchor="middle">스펙마다 : VM 생성 → MAC 조사 → 전원 고성능</text>
+  <text x="265" y="256" class="t" text-anchor="middle">vm_create · mac_info (디스크 자동 매칭) · power_setting</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <rect x="40" y="294" width="450" height="62" rx="6" class="ldap"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">스펙마다 : affinity → lpage → PCI 패스스루</text>
+  <text x="265" y="330" class="t" text-anchor="middle">제외 ev : -del_affinity_evs / -del_lpage_evs</text>
+  <text x="265" y="346" class="t" text-anchor="middle">PCI 는 pci-evNN 이 있을 때만</text>
+  <rect x="560" y="294" width="310" height="62" rx="6" class="dec"/>
+  <text x="715" y="314" class="t tb" text-anchor="middle">PCI 종료코드 3 (재부팅 필요)</text>
+  <text x="715" y="330" class="t" text-anchor="middle">경고 후 계속</text>
+  <text x="715" y="346" class="t" text-anchor="middle">run_&lt;user&gt;/pci_resume_N.sh 남김</text>
+  <path d="M490 325 L560 325" class="ln"/>
+  <text x="498" y="320" class="t tm">3</text>
+  <path d="M265 356 L265 384" class="ln"/>
+  <rect x="40" y="384" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="404" class="t tb" text-anchor="middle">라이선스 할당 (license_assign)</text>
+  <text x="265" y="420" class="t" text-anchor="middle">평가판 호스트만 번호 선택 · q = 취소</text>
+  <text x="265" y="436" class="t" text-anchor="middle">모니터를 잠시 닫고 전경에서 실행</text>
+  <path d="M265 446 L265 474" class="ln"/>
+  <rect x="40" y="474" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="494" class="t tb" text-anchor="middle">스펙마다 : 태그 설정 (tag_setting)</text>
+  <text x="265" y="510" class="t" text-anchor="middle">tag-* 없으면 건너뜀 · 실패는 경고만</text>
+  <path d="M265 520 L265 548" class="ln"/>
+  <rect x="40" y="548" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="568" class="t tb" text-anchor="middle">스펙 체크 → MAC 목록 복사</text>
+  <text x="265" y="584" class="t" text-anchor="middle">vm_setup_check.svg 참고</text>
+  <path d="M265 594 L265 622" class="ln"/>
+  <rect x="40" y="622" width="450" height="62" rx="6" class="sec"/>
+  <text x="265" y="642" class="t tb" text-anchor="middle">[완료] / [오류] / [중단] 요약</text>
+  <text x="265" y="658" class="t" text-anchor="middle">단계별 시간 · 스펙 체크 · MAC 목록</text>
+  <text x="265" y="674" class="t" text-anchor="middle">run_&lt;user&gt;/logs/ · run.log</text>
+  <rect x="560" y="622" width="310" height="62" rx="6" class="ext"/>
+  <text x="715" y="642" class="t tb" text-anchor="middle">실패한 단계에서 멈춤</text>
+  <text x="715" y="658" class="t" text-anchor="middle">고친 뒤 재실행 →</text>
+  <text x="715" y="674" class="t" text-anchor="middle">이미 만든 포트그룹 · VM 은 건너뜀</text>
+  <path d="M490 653 L560 653" class="ln"/>
+  <text x="498" y="648" class="t tm">실패</text>
+  <text x="40" y="721" class="t tm">범례</text>
+  <rect x="80" y="710" width="14" height="14" class="box"/>
+  <text x="100" y="721" class="t tm">동작 (vm_setup.sh)</text>
+  <rect x="228" y="710" width="14" height="14" class="dec"/>
+  <text x="248" y="721" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="364" y="710" width="14" height="14" class="ldap"/>
+  <text x="384" y="721" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="549" y="710" width="14" height="14" class="sec"/>
+  <text x="569" y="721" class="t tm">기록 · 결과</text>
+  <rect x="650" y="710" width="14" height="14" class="ext"/>
+  <text x="670" y="721" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="738" class="t tm">코드: vm_setup.sh add_step 목록 · step_bm_register · step_vswitch · step_vm_create · step_mac_info · step_power · step_affinity · step_lpage</text>
+  <text x="40" y="755" class="t tm">      step_pci · step_license · step_tag · step_check · step_mac_copy · run_steps_monitor · print_final</text>
+</svg>

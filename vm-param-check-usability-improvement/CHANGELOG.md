@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-10-30 — 흐름도 SVG 다시 그림 (auto_setup 양식)
+
+- `workflow.svg`(체크 → 교정 → 재검증), `workflow-deploy.svg`(배포·갱신)를 `HPC/auto_setup` 흐름도 양식으로 교체하고, 명령별 흐름도를 `../docs/svg/`(`check_insert_01` · `vm_param_check` · `vm_param_check_fix` · `update_deploy` · `update_package`)에 두었다. 스펙 제외 키 ev 별 판정과 `-fromSetup` 반영. 코드 변경 없음 — 자세한 내용은 `VMsetup/CHANGELOG.md` 같은 날짜 항목.
+
+---
+
 ## 2026-10-30 — 스펙 키 `evNN_del_affinity=y` / `evNN_del_lpage=y` (`all_*` 포함) 로 ev 별 "없어야 OK" 체크
 
 - 스펙에 `all_del_affinity=y`, `all_del_lpage=y`, `evNN_del_affinity=y`, `evNN_del_lpage=y` 가 있으면 제외한 ev 만 affinity 키 / HugePage 키가 **없어야 OK**(남아 있으면 FAIL)로 자동 판정하고, 나머지 ev 는 평소처럼 스펙과 비교한다. `-expectNoAffinity` / `-expectNoLpage` 는 이전처럼 전체 ev 에 적용(그대로 유지).

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 747" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="bash setup.sh [도구…] · -l · -c · --os6">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="747" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">bash setup.sh [도구…] · -l · -c · --os6</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">V2 전체 도구 빌드 (폐쇄망 · 오프라인) — OS6 는 빌드 대신 bin_os6 설치</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">bash setup.sh [도구 이름…]</text>
+  <text x="265" y="92" class="t" text-anchor="middle">V2 폴더 전체(govendor 포함)와 함께 있어야 함</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">옵션이 -l / -c 인가?</text>
+  <rect x="560" y="130" width="310" height="46" rx="6" class="sec"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">-l 목록 출력 / -c 정리</text>
+  <text x="715" y="166" class="t" text-anchor="middle">-c : 실행파일 + vendor 링크 삭제</text>
+  <path d="M490 145 L560 145" class="ln"/>
+  <text x="498" y="140" class="t tm">예</text>
+  <path d="M265 160 L265 204" class="ln"/>
+  <text x="273" y="185" class="t tm">아니오</text>
+  <rect x="40" y="204" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">도구 고르기</text>
+  <text x="265" y="240" class="t" text-anchor="middle">인자가 없으면 13개 전부 · 모르는 이름이면 오류</text>
+  <path d="M265 250 L265 278" class="ln"/>
+  <rect x="40" y="278" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="298" class="t tb" text-anchor="middle">OS6 인가?</text>
+  <text x="265" y="314" class="t" text-anchor="middle">--os6 · VMSETUP_OS6=1 · 커널 2.6.x</text>
+  <text x="265" y="330" class="t" text-anchor="middle">redhat-release 6 · 호스트 이름이 OS6_hostname</text>
+  <rect x="560" y="278" width="310" height="62" rx="6" class="sec"/>
+  <text x="715" y="298" class="t tb" text-anchor="middle">bin_os6/&lt;이름&gt;.gz 를 제자리에 풀기</text>
+  <text x="715" y="314" class="t" text-anchor="middle">Go 1.20 정적 빌드 (build_os6.sh 로 만듦)</text>
+  <text x="715" y="330" class="t" text-anchor="middle">[결과] 성공 N / 실패 N</text>
+  <path d="M490 309 L560 309" class="ln"/>
+  <text x="498" y="304" class="t tm">예</text>
+  <path d="M265 340 L265 368" class="ln"/>
+  <text x="273" y="357" class="t tm">아니오</text>
+  <rect x="40" y="368" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="388" class="t tb" text-anchor="middle">사전 점검</text>
+  <text x="265" y="404" class="t" text-anchor="middle">go 1.26.5 이상 · govendor/ 완전한가</text>
+  <rect x="560" y="368" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="388" class="t tb" text-anchor="middle">[오류] 종료</text>
+  <text x="715" y="404" class="t" text-anchor="middle">Go 를 설치하거나 V2 폴더 전체를 복사</text>
+  <path d="M490 391 L560 391" class="ln"/>
+  <text x="498" y="386" class="t tm">아니오</text>
+  <path d="M265 414 L265 442" class="ln"/>
+  <text x="273" y="431" class="t tm">예</text>
+  <rect x="40" y="442" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="462" class="t tb" text-anchor="middle">오프라인 강제</text>
+  <text x="265" y="478" class="t" text-anchor="middle">GOFLAGS=-mod=vendor · GOPROXY=off</text>
+  <text x="265" y="494" class="t" text-anchor="middle">GOTOOLCHAIN=local · GOSUMDB=off · CGO_ENABLED=0</text>
+  <path d="M265 504 L265 532" class="ln"/>
+  <rect x="40" y="532" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="552" class="t tb" text-anchor="middle">도구마다 (cd &lt;폴더&gt; &amp;&amp; bash setup.sh)</text>
+  <text x="265" y="568" class="t" text-anchor="middle">govendor 를 vendor 로 링크 → go build</text>
+  <text x="265" y="584" class="t" text-anchor="middle">실패하면 로그 끝 8줄 출력</text>
+  <path d="M265 594 L265 622" class="ln"/>
+  <rect x="40" y="622" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="642" class="t tb" text-anchor="middle">[결과] 성공 N / 실패 N</text>
+  <text x="265" y="658" class="t" text-anchor="middle">다음 : cd VMsetup &amp;&amp; ./vm_setup.sh … -n (계획만 확인)</text>
+  <text x="40" y="705" class="t tm">범례</text>
+  <rect x="80" y="694" width="14" height="14" class="box"/>
+  <text x="100" y="705" class="t tm">동작 (setup.sh)</text>
+  <rect x="207" y="694" width="14" height="14" class="dec"/>
+  <text x="227" y="705" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="343" y="694" width="14" height="14" class="sec"/>
+  <text x="363" y="705" class="t tm">기록 · 결과</text>
+  <rect x="444" y="694" width="14" height="14" class="ext"/>
+  <text x="464" y="705" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="722" class="t tm">코드: setup.sh TARGETS · OS6 판단 · 사전 점검 · 도구별 &lt;도구&gt;/setup.sh</text>
+</svg>

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 828" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="스펙 제외 키 — all_del_affinity · all_del_lpage · evNN_del_affinity · evNN_del_lpage">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="828" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">스펙 제외 키 — all_del_affinity · all_del_lpage · evNN_del_affinity · evNN_del_lpage</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">SPEC_DIR 스펙에 키를 넣으면 그 ev(또는 전체)만 affinity / lpage 설정을 제외 — vm_setup 과 vm-param-check 가 같은 규칙</text>
+
+  <rect x="40" y="56" width="450" height="62" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">&lt;폴더&gt;_spec.txt</text>
+  <text x="265" y="92" class="t" text-anchor="middle">ev01_del_affinity=y  (예: ev03 까지 있으면 ev01 만 제외)</text>
+  <text x="265" y="108" class="t" text-anchor="middle">all_del_lpage=y  (모든 ev)</text>
+  <path d="M265 118 L265 146" class="ln"/>
+  <rect x="40" y="146" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="166" class="t tb" text-anchor="middle">키 검사 (DelGroups)</text>
+  <text x="265" y="182" class="t" text-anchor="middle">값은 y 만 · ev 번호는 01~99 이고 그룹 수 이내</text>
+  <rect x="560" y="146" width="310" height="62" rx="6" class="ext"/>
+  <text x="715" y="166" class="t tb" text-anchor="middle">[오류] 스펙을 쓸 수 없음</text>
+  <text x="715" y="182" class="t" text-anchor="middle">VM 을 만들기 전에 멈춤</text>
+  <text x="715" y="198" class="t" text-anchor="middle">(예: =n, ev05 인데 ev03 까지)</text>
+  <path d="M490 169 L560 169" class="ln"/>
+  <text x="498" y="164" class="t tm">아니오</text>
+  <path d="M265 192 L265 236" class="ln"/>
+  <text x="273" y="217" class="t tm">예</text>
+  <rect x="40" y="236" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="256" class="t tb" text-anchor="middle">-specExport 가 ev 로 펼침</text>
+  <text x="265" y="272" class="t" text-anchor="middle">del_affinity-evNN=y · del_lpage-evNN=y</text>
+  <text x="265" y="288" class="t" text-anchor="middle">(all_* 는 모든 ev 줄로)</text>
+  <path d="M265 298 L265 326" class="ln"/>
+  <rect x="40" y="326" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="346" class="t tb" text-anchor="middle">vm_setup.sh build_flags</text>
+  <text x="265" y="362" class="t" text-anchor="middle">DEL_AFF_EVS=ev01 · DEL_LP_EVS=ev03</text>
+  <text x="265" y="378" class="t" text-anchor="middle">제외 ev 는 affinity-evNN 파일이 없어도 됨</text>
+  <rect x="560" y="326" width="310" height="62" rx="6" class="dec"/>
+  <text x="715" y="346" class="t tb" text-anchor="middle">명령줄 -del_affinity / -del_lpage ?</text>
+  <text x="715" y="362" class="t" text-anchor="middle">있으면 그쪽이 우선 (모든 ev)</text>
+  <text x="715" y="378" class="t" text-anchor="middle">목록은 넘기지 않음</text>
+  <path d="M490 357 L560 357" class="ln"/>
+  <text x="498" y="352" class="t tm">우선</text>
+  <path d="M265 388 L265 416" class="ln"/>
+  <rect x="40" y="416" width="450" height="62" rx="6" class="ldap"/>
+  <text x="265" y="436" class="t tb" text-anchor="middle">affinity_setting -del_affinity_evs=ev01</text>
+  <text x="265" y="452" class="t" text-anchor="middle">그 ev 의 VM 만 sched.cpu.affinity · sched.vcpuN.affinity 삭제</text>
+  <text x="265" y="468" class="t" text-anchor="middle">나머지 ev 는 파일 값 적용</text>
+  <path d="M265 478 L265 506" class="ln"/>
+  <rect x="40" y="506" width="450" height="62" rx="6" class="ldap"/>
+  <text x="265" y="526" class="t tb" text-anchor="middle">lpage_setting -del_lpage_evs=ev03</text>
+  <text x="265" y="542" class="t" text-anchor="middle">그 ev 만 HugePage 5개 키 삭제</text>
+  <text x="265" y="558" class="t" text-anchor="middle">CPU 토폴로지 · numa.vcpu.maxPerVirtualNode 는 적용</text>
+  <path d="M265 568 L265 596" class="ln"/>
+  <rect x="40" y="596" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="616" class="t tb" text-anchor="middle">vm-param-check 가 같은 스펙을 읽어 ev 별 판정</text>
+  <text x="265" y="632" class="t" text-anchor="middle">[스펙적용] 제외: affinity=ev01 lpage=ev03</text>
+  <text x="265" y="648" class="t" text-anchor="middle">제외 ev 의 VM 만 &quot;값이 없어야 OK&quot; — Expected=(없음)</text>
+  <path d="M265 658 L265 686" class="ln"/>
+  <rect x="40" y="686" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="706" class="t tb" text-anchor="middle">체크 결과 · 교정</text>
+  <text x="265" y="722" class="t" text-anchor="middle">-fix 는 (없음) 항목을 수동 조치로 분류 (자동으로 지우지 않음)</text>
+  <text x="40" y="769" class="t tm">범례</text>
+  <rect x="80" y="758" width="14" height="14" class="box"/>
+  <text x="100" y="769" class="t tm">동작 (vm-param-check · vm_setup.sh)</text>
+  <rect x="332" y="758" width="14" height="14" class="dec"/>
+  <text x="352" y="769" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="468" y="758" width="14" height="14" class="ldap"/>
+  <text x="488" y="769" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="653" y="758" width="14" height="14" class="sec"/>
+  <text x="673" y="769" class="t tm">기록 · 결과</text>
+  <rect x="754" y="758" width="14" height="14" class="ext"/>
+  <text x="774" y="769" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="786" class="t tm">코드: config/del.go IsDelOption · DelGroups · SpecGroupCount · config/export.go ExportSpec · vm_setup.sh build_flags · main.go applyFolderSpecs</text>
+  <text x="40" y="803" class="t tm">      evaluateVM</text>
+</svg>

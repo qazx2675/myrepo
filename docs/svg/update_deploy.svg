@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 551" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="bash update_deploy.sh [-n] [배포경로]">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="551" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">bash update_deploy.sh [-n] [배포경로]</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">인터넷 되는 서버 — vm-param-check-standalone 브랜치로 배포 경로를 제자리 갱신</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">git · go 가 있고 배포 경로가 맞나?</text>
+  <text x="265" y="92" class="t" text-anchor="middle">비어 있지 않은데 go.mod / 실행파일이 없으면 중단</text>
+  <rect x="560" y="56" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="76" class="t tb" text-anchor="middle">[오류] 종료</text>
+  <path d="M490 71 L560 71" class="ln"/>
+  <text x="498" y="66" class="t tm">아니오</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <text x="273" y="119" class="t tm">예</text>
+  <rect x="40" y="130" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">[1/5] git clone --depth 1 (REPO_BRANCH)</text>
+  <text x="265" y="166" class="t" text-anchor="middle">vendor/modules.txt 가 없으면 중단</text>
+  <path d="M265 176 L265 204" class="ln"/>
+  <rect x="40" y="204" width="450" height="30" rx="6" class="box"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">[2/5] 임시 폴더에서 빌드</text>
+  <rect x="560" y="204" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="224" class="t tb" text-anchor="middle">중단 — 배포 경로 그대로</text>
+  <path d="M490 219 L560 219" class="ln"/>
+  <text x="498" y="214" class="t tm">실패</text>
+  <path d="M265 234 L265 262" class="ln"/>
+  <rect x="40" y="262" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="282" class="t tb" text-anchor="middle">[3/5] 바뀔 내용 · 배포 경로에만 있는 파일 표시</text>
+  <rect x="560" y="262" width="310" height="46" rx="6" class="sec"/>
+  <text x="715" y="282" class="t tb" text-anchor="middle">-n : 여기서 종료</text>
+  <text x="715" y="298" class="t" text-anchor="middle">아무것도 안 바꿈</text>
+  <path d="M490 277 L560 277" class="ln"/>
+  <text x="498" y="272" class="t tm">-n</text>
+  <path d="M265 292 L265 336" class="ln"/>
+  <rect x="40" y="336" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="356" class="t tb" text-anchor="middle">[4/5] 덮어쓸 파일 백업</text>
+  <text x="265" y="372" class="t" text-anchor="middle">&lt;배포경로&gt;.update_backup.&lt;시각&gt;/</text>
+  <path d="M265 382 L265 410" class="ln"/>
+  <rect x="40" y="410" width="450" height="62" rx="6" class="sec"/>
+  <text x="265" y="430" class="t tb" text-anchor="middle">[5/5] 반영</text>
+  <text x="265" y="446" class="t" text-anchor="middle">01.* · vcenter.txt · SPEC_DIR/ · *.csv · *.log 보존</text>
+  <text x="265" y="462" class="t" text-anchor="middle">템플릿이 다르면 &lt;이름&gt;.new</text>
+  <text x="40" y="509" class="t tm">범례</text>
+  <rect x="80" y="498" width="14" height="14" class="box"/>
+  <text x="100" y="509" class="t tm">동작 (update_deploy.sh)</text>
+  <rect x="253" y="498" width="14" height="14" class="dec"/>
+  <text x="273" y="509" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="389" y="498" width="14" height="14" class="ldap"/>
+  <text x="409" y="509" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="574" y="498" width="14" height="14" class="sec"/>
+  <text x="594" y="509" class="t tm">기록 · 결과</text>
+  <rect x="675" y="498" width="14" height="14" class="ext"/>
+  <text x="695" y="509" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="526" class="t tm">코드: vm-param-check-usability-improvement/update_deploy.sh</text>
+</svg>

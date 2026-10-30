@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 657" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="affinity_setting -worklistFile -vm_cnt -affinityFileNN [-del_affinity | -del_affinity_evs]">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="657" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">affinity_setting -worklistFile -vm_cnt -affinityFileNN [-del_affinity | -del_affinity_evs]</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">ev 별 affinity 파일 값을 VM 에 적용 — 삭제 모드면 affinity 값을 지움 (vm_setup 이 스펙마다 호출)</text>
+
+  <rect x="40" y="56" width="450" height="62" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">옵션 읽기</text>
+  <text x="265" y="92" class="t" text-anchor="middle">-vm_cnt = 호스트당 VM 수 (ev01~evNN)</text>
+  <text x="265" y="108" class="t" text-anchor="middle">-del_affinity_evs=ev01,ev03 → parseEvList</text>
+  <path d="M265 118 L265 146" class="ln"/>
+  <rect x="40" y="146" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="166" class="t tb" text-anchor="middle">ev 마다 삭제인가?</text>
+  <text x="265" y="182" class="t" text-anchor="middle">-del_affinity = 모든 ev (우선) · 목록에 있는 ev</text>
+  <rect x="560" y="146" width="310" height="46" rx="6" class="box"/>
+  <text x="715" y="166" class="t tb" text-anchor="middle">삭제 ev : 파일 검사 안 함</text>
+  <text x="715" y="182" class="t" text-anchor="middle">affinity 파일이 없어도 됨</text>
+  <path d="M490 169 L560 169" class="ln"/>
+  <text x="498" y="164" class="t tm">예</text>
+  <path d="M265 192 L265 220" class="ln"/>
+  <text x="273" y="209" class="t tm">아니오</text>
+  <rect x="40" y="220" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="240" class="t tb" text-anchor="middle">설정 ev : affinity 파일이 있나?</text>
+  <text x="265" y="256" class="t" text-anchor="middle">-affinityFileNN (여러 ev 가 같은 파일이어도 됨)</text>
+  <rect x="560" y="220" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="240" class="t tb" text-anchor="middle">[오류] 종료</text>
+  <text x="715" y="256" class="t" text-anchor="middle">자동 계산은 삭제됨</text>
+  <path d="M490 243 L560 243" class="ln"/>
+  <text x="498" y="238" class="t tm">아니오</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <text x="273" y="283" class="t tm">예</text>
+  <rect x="40" y="294" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">worklist 의 BM × ev → 대상 VM 이름</text>
+  <text x="265" y="330" class="t" text-anchor="middle">&lt;BM 의 . 앞부분&gt;evNN</text>
+  <path d="M265 340 L265 368" class="ln"/>
+  <rect x="40" y="368" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="388" class="t tb" text-anchor="middle">데이터센터마다 동시에 VM 목록 조회</text>
+  <text x="265" y="404" class="t" text-anchor="middle">-concurrency 제한</text>
+  <path d="M265 414 L265 442" class="ln"/>
+  <rect x="40" y="442" width="450" height="62" rx="6" class="ldap"/>
+  <text x="265" y="462" class="t tb" text-anchor="middle">워커풀 : VM 마다 Reconfigure 전송 + 완료 대기</text>
+  <text x="265" y="478" class="t" text-anchor="middle">설정 : 파일의 sched.vcpuN.affinity 값</text>
+  <text x="265" y="494" class="t" text-anchor="middle">삭제 : 지금 있는 affinity 키를 빈 값으로 보냄</text>
+  <path d="M265 504 L265 532" class="ln"/>
+  <rect x="40" y="532" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="552" class="t tb" text-anchor="middle">적용 여부 배치 검증 (extraConfig 재조회)</text>
+  <text x="265" y="568" class="t" text-anchor="middle">성공한 Task 만 · 결과 요약</text>
+  <text x="40" y="615" class="t tm">범례</text>
+  <rect x="80" y="604" width="14" height="14" class="box"/>
+  <text x="100" y="615" class="t tm">동작 (affinity_setting)</text>
+  <rect x="250" y="604" width="14" height="14" class="dec"/>
+  <text x="270" y="615" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="386" y="604" width="14" height="14" class="ldap"/>
+  <text x="406" y="615" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="571" y="604" width="14" height="14" class="sec"/>
+  <text x="591" y="615" class="t tm">기록 · 결과</text>
+  <rect x="672" y="604" width="14" height="14" class="ext"/>
+  <text x="692" y="615" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="632" class="t tm">코드: VMsetup/affinity_setting-source/main.go main · loadAffinitySpec · buildExtraConfig · parseEvList · affinityKeysToDelete</text>
+</svg>

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 673" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="01.vm_setting_check_insert.sh [-u user] [-specFolder] [-expectNo*] [-fromSetup] [-fix]">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="673" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">01.vm_setting_check_insert.sh [-u user] [-specFolder] [-expectNo*] [-fromSetup] [-fix]</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">vm-param-check 를 -specRoot 로 실행하는 보조 스크립트 — 단독 실행은 vm_setup 기록과 분리</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">비밀번호 · user</text>
+  <text x="265" y="92" class="t" text-anchor="middle">../../secret 암호 파일 → 직접 입력 · -u 없으면 번호 메뉴</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">-fromSetup 이고 -specFolder 가 없나?</text>
+  <rect x="560" y="130" width="310" height="78" rx="6" class="box"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">vm_setup 직후 자동 체크</text>
+  <text x="715" y="166" class="t" text-anchor="middle">run_&lt;user&gt;/check_specs.txt 의</text>
+  <text x="715" y="182" class="t" text-anchor="middle">스펙 · 대상 목록 · vcenter_check.txt</text>
+  <text x="715" y="198" class="t" text-anchor="middle">check_del_* 표시 → -expectNo*</text>
+  <path d="M490 145 L560 145" class="ln"/>
+  <text x="498" y="140" class="t tm">예</text>
+  <path d="M265 160 L265 236" class="ln"/>
+  <text x="273" y="201" class="t tm">아니오 (단독)</text>
+  <rect x="40" y="236" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="256" class="t tb" text-anchor="middle">&lt;user&gt;.txt 가 있나?</text>
+  <text x="265" y="272" class="t" text-anchor="middle">한 줄에 VM 이름 하나</text>
+  <rect x="560" y="236" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="256" class="t tb" text-anchor="middle">[오류] 종료</text>
+  <path d="M490 251 L560 251" class="ln"/>
+  <text x="498" y="246" class="t tm">아니오</text>
+  <path d="M265 282 L265 310" class="ln"/>
+  <text x="273" y="299" class="t tm">예</text>
+  <rect x="40" y="310" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="330" class="t tb" text-anchor="middle">스펙 폴더명</text>
+  <text x="265" y="346" class="t" text-anchor="middle">-specFolder 로 주거나 입력 · Enter = 자동 매칭</text>
+  <path d="M265 356 L265 384" class="ln"/>
+  <rect x="40" y="384" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="404" class="t tb" text-anchor="middle">-fix 여부</text>
+  <text x="265" y="420" class="t" text-anchor="middle">-specFolder 로 줬으면 -fix 옵션으로만</text>
+  <text x="265" y="436" class="t" text-anchor="middle">아니면 y/N 질문</text>
+  <path d="M265 446 L265 474" class="ln"/>
+  <rect x="40" y="474" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="494" class="t tb" text-anchor="middle">./vm-param-check -specRoot -f &lt;user&gt;.txt -out result_&lt;user&gt;.csv</text>
+  <text x="265" y="510" class="t" text-anchor="middle">run_&lt;user&gt;/ 기록은 보지 않음 (이전 실행 서버와 섞이지 않음)</text>
+  <path d="M265 520 L265 548" class="ln"/>
+  <rect x="40" y="548" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="568" class="t tb" text-anchor="middle">result_&lt;user&gt;.csv · _summary</text>
+  <text x="265" y="584" class="t" text-anchor="middle">스펙 제외 키는 vm-param-check 가 ev 별로 판정</text>
+  <text x="40" y="631" class="t tm">범례</text>
+  <rect x="80" y="620" width="14" height="14" class="box"/>
+  <text x="100" y="631" class="t tm">동작 (01 스크립트)</text>
+  <rect x="221" y="620" width="14" height="14" class="dec"/>
+  <text x="241" y="631" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="357" y="620" width="14" height="14" class="ldap"/>
+  <text x="377" y="631" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="542" y="620" width="14" height="14" class="sec"/>
+  <text x="562" y="631" class="t tm">기록 · 결과</text>
+  <rect x="643" y="620" width="14" height="14" class="ext"/>
+  <text x="663" y="631" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="648" class="t tm">코드: vm-param-check/01.vm_setting_check_insert.sh (from_setup · RUN_SPECS · spec_args · fix_args)</text>
+</svg>

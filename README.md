@@ -109,6 +109,7 @@ cd /home/vm-param-check-usability-improvement/vm-param-check
 V2/
 ├── README.md                              # 이 문서
 ├── WORKFLOW.md / workflow.svg             # 전체 작업 흐름도 (mermaid / SVG)
+├── docs/svg/                              # 명령·도구별 흐름도 SVG (목록: docs/svg/README.md)
 ├── ARCHITECTURE.md / PR_CHECKLIST.md      # 폴더별 역할 / 수정·배포 전 체크리스트
 ├── setup.sh                               # 전체 오프라인 빌드 (OS6 면 bin_os6/ 설치)
 ├── build_os6.sh / bin_os6/                # OS6 용 실행파일 빌드 스크립트 / 미리 빌드한 실행파일(.gz)
