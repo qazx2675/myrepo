@@ -21,9 +21,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnCancelWorkerModal = document.getElementById("btnCancelWorkerModal");
   const btnSaveWorkerName = document.getElementById("btnSaveWorkerName");
 
+  // Basic Info Elements
+  const targetObject = document.getElementById("targetObject");
+  const verifierName = document.getElementById("verifierName");
+
   // Target Elements
   const inputTargetFile = document.getElementById("inputTargetFile");
-  const btnScanSheets = document.getElementById("btnScanSheets");
+  const btnLoadTarget = document.getElementById("btnLoadTarget");
+  const fileUploadTarget = document.getElementById("fileUploadTarget");
   const btnCreateSampleTarget = document.getElementById("btnCreateSampleTarget");
   const btnScanInitial = document.getElementById("btnScanInitial");
   const sheetsLoading = document.getElementById("sheetsLoading");
@@ -32,18 +37,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnClearOrder = document.getElementById("btnClearOrder");
   const orderQueueText = document.getElementById("orderQueueText");
 
-  // Template Elements
-  const selectTemplate = document.getElementById("selectTemplate");
-  const btnCreateDefaultTmpl = document.getElementById("btnCreateDefaultTmpl");
-  const fileUploadTemplate = document.getElementById("fileUploadTemplate");
-
-  // Classification & Detail Elements
-  const selectMajor = document.getElementById("selectMajor");
-  const inputCustomMajor = document.getElementById("inputCustomMajor");
-  const selectMinor = document.getElementById("selectMinor");
-  const inputCustomMinor = document.getElementById("inputCustomMinor");
-  const textareaDetail = document.getElementById("textareaDetail");
-  const inputDstFilename = document.getElementById("inputDstFilename");
+  // Output Elements
+  const inputOutputFile = document.getElementById("inputOutputFile");
 
   // Generation Elements
   const btnGenerateSOP = document.getElementById("btnGenerateSOP");
@@ -97,51 +92,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const wName = appConfig.worker_name ? appConfig.worker_name.trim() : "";
     currentWorkerName.textContent = wName || "미설정";
 
-    // Categories (Major)
-    selectMajor.innerHTML = '<option value="">-- 대분류 선택 --</option>';
-    (appConfig.major_categories || []).forEach(cat => {
-      const opt = document.createElement("option");
-      opt.value = cat;
-      opt.textContent = cat;
-      selectMajor.appendChild(opt);
-    });
-    if (appConfig.major_categories && appConfig.major_categories.length > 0) {
-      selectMajor.value = appConfig.major_categories[0];
-    }
-
-    // Categories (Minor)
-    selectMinor.innerHTML = '<option value="">-- 중분류 선택 --</option>';
-    (appConfig.minor_categories || []).forEach(cat => {
-      const opt = document.createElement("option");
-      opt.value = cat;
-      opt.textContent = cat;
-      selectMinor.appendChild(opt);
-    });
-    if (appConfig.minor_categories && appConfig.minor_categories.length > 0) {
-      selectMinor.value = appConfig.minor_categories[0];
-    }
-
-    // Templates
-    selectTemplate.innerHTML = "";
-    (appConfig.templates || []).forEach(tmpl => {
-      const opt = document.createElement("option");
-      opt.value = tmpl.id;
-      opt.textContent = tmpl.name;
-      selectTemplate.appendChild(opt);
-    });
-    if (appConfig.selected_template) {
-      selectTemplate.value = appConfig.selected_template;
-    }
-
-    // Last used inputs
-    if (appConfig.last_target_file) {
-      inputTargetFile.value = appConfig.last_target_file;
-    }
-    if (appConfig.last_dst_filename) {
-      inputDstFilename.value = appConfig.last_dst_filename;
-    }
-    if (appConfig.last_detail) {
-      textareaDetail.value = appConfig.last_detail;
+    // Basic info & last target
+    targetObject.value = appConfig.target_object || "";
+    verifierName.value = appConfig.verifier_name || "";
+    if (appConfig.last_target) {
+      inputTargetFile.value = appConfig.last_target;
     }
   }
 
@@ -182,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const res = await fetch("/api/config/worker", {
+      const res = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ worker_name: name })
@@ -210,28 +165,41 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 3. Scan Target Sheets
-  async function scanSheets() {
+  // 3. Load Target Sheets (path or uploaded file)
+  async function loadTarget(formData) {
     const target = inputTargetFile.value.trim() || "target.xlsx";
     sheetsLoading.classList.remove("hidden");
     sheetsEmpty.classList.add("hidden");
     sheetsList.innerHTML = "";
 
     try {
-      log(`Target 엑셀 시트 스캔 중: ${target}...`, "info");
-      const res = await fetch(`/api/target/sheets?target=${encodeURIComponent(target)}`);
+      log(`Target 엑셀 시트 스캔 중: ${formData ? formData.get("target_file").name : target}...`, "info");
+      const opts = formData
+        ? { method: "POST", body: formData }
+        : {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ target_path: target })
+          };
+      const res = await fetch("/api/target/load", opts);
       const data = await res.json();
 
       sheetsLoading.classList.add("hidden");
 
       if (data.success && data.sheets && data.sheets.length > 0) {
         targetSheets = data.sheets;
+        inputTargetFile.value = data.target_path;
+        // Drop selections that no longer exist in the loaded file
+        selectedQueue = selectedQueue.filter(n => targetSheets.some(s => s.name === n));
         renderSheetsList();
         log(`시트 ${data.count}개 스캔 완료.`, "success");
       } else {
+        targetSheets = [];
+        selectedQueue = [];
+        updateOrderSummary();
         sheetsEmpty.classList.remove("hidden");
         sheetsEmpty.querySelector("p").textContent = data.message || "시트를 찾을 수 없습니다.";
-        log(`시트 스캔 실패: ${data.message}`, "error");
+        log(`시트 스캔 실패: ${data.message || "시트 없음"}`, "error");
       }
     } catch (err) {
       sheetsLoading.classList.add("hidden");
@@ -262,14 +230,15 @@ document.addEventListener("DOMContentLoaded", () => {
       item.innerHTML = `
         <div class="sheet-item-left">
           <input type="checkbox" class="sheet-checkbox" ${isSelected ? "checked" : ""}>
-          <span class="order-badge ${isSelected ? "" : "empty"}">${isSelected ? (orderIdx + 1) : ""}</span>
+          <span class="order-badge ${isSelected ? "" : "empty"}">${isSelected ? (orderIdx + 1) + "순위" : ""}</span>
           <div class="sheet-info-col">
             <span class="sheet-name">${escapeHtml(sheet.name)}</span>
-            <span class="sheet-summary">${escapeHtml(sheet.h2_summary || "(H2 본문 없음)")}</span>
+            <span class="sheet-summary">섹션: ${escapeHtml((sheet.sections || []).join(" / ") || "없음")} | 글꼴 크기: ${sheet.font_size || "-"}pt</span>
           </div>
         </div>
         <div class="sheet-badges">
-          ${sheet.shape_count > 0 ? `<span class="shape-badge">🖼️ 도형/이미지 ${sheet.shape_count}개</span>` : ""}
+          ${sheet.has_all_sections ? "" : `<span class="warn-badge">⚠ 섹션 누락</span>`}
+          ${sheet.image_count > 0 ? `<span class="shape-badge">🖼️ 이미지 ${sheet.image_count}개</span>` : ""}
         </div>
       `;
 
@@ -315,8 +284,17 @@ document.addEventListener("DOMContentLoaded", () => {
     log("선택된 작업 순서가 초기화되었습니다.", "info");
   });
 
-  btnScanSheets.addEventListener("click", scanSheets);
-  btnScanInitial.addEventListener("click", scanSheets);
+  btnLoadTarget.addEventListener("click", () => loadTarget());
+  btnScanInitial.addEventListener("click", () => loadTarget());
+
+  fileUploadTarget.addEventListener("change", async () => {
+    const file = fileUploadTarget.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("target_file", file);
+    await loadTarget(formData);
+    fileUploadTarget.value = "";
+  });
 
   // 4. Sample Target Generation
   btnCreateSampleTarget.addEventListener("click", async () => {
@@ -327,7 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.success) {
         log("샘플 target.xlsx 파일 생성 완료! 시트를 자동으로 스캔합니다.", "success");
         inputTargetFile.value = "target.xlsx";
-        await scanSheets();
+        await loadTarget();
       } else {
         log(`샘플 생성 실패: ${data.message}`, "error");
       }
@@ -336,96 +314,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 5. Template Actions
-  btnCreateDefaultTmpl.addEventListener("click", async () => {
-    try {
-      log("기본 표준 양식 파일(default_template.xlsx) 생성 중...", "info");
-      const res = await fetch("/api/templates/create-default", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        log(data.message, "success");
-        await loadConfig();
-      } else {
-        log(`양식 생성 실패: ${data.message}`, "error");
-      }
-    } catch (err) {
-      log(`양식 생성 통신 오류: ${err.message}`, "error");
-    }
-  });
-
-  fileUploadTemplate.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("template_file", file);
-
-    try {
-      log(`양식 파일 업로드 중: ${file.name}...`, "info");
-      const res = await fetch("/api/templates/upload", {
-        method: "POST",
-        body: formData
-      });
-      const data = await res.json();
-      if (data.success) {
-        log(data.message, "success");
-        await loadConfig();
-      } else {
-        log(`양식 업로드 실패: ${data.message}`, "error");
-      }
-    } catch (err) {
-      log(`양식 업로드 오류: ${err.message}`, "error");
-    }
-    fileUploadTemplate.value = "";
-  });
-
-  selectTemplate.addEventListener("change", async () => {
-    const tmplId = selectTemplate.value;
-    try {
-      await fetch("/api/templates/select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template_id: tmplId })
-      });
-      log(`양식 선택 변경: ${tmplId}`, "info");
-    } catch (err) {
-      console.error(err);
-    }
-  });
-
   // 6. SOP Generation Action
   btnGenerateSOP.addEventListener("click", async () => {
     if (selectedQueue.length === 0) {
-      alert("작업방법에 포함할 시트를 1개 이상 선택해주세요.");
-      return;
-    }
-
-    // Category values (custom text overrides select if provided)
-    const major = inputCustomMajor.value.trim() || selectMajor.value.trim();
-    if (!major) {
-      alert("대분류를 선택하거나 직접 입력해주세요.");
-      inputCustomMajor.focus();
-      return;
-    }
-
-    const minor = inputCustomMinor.value.trim() || selectMinor.value.trim();
-    if (!minor) {
-      alert("중분류를 선택하거나 직접 입력해주세요.");
-      inputCustomMinor.focus();
+      alert("SOP에 포함할 시트를 1개 이상 선택해주세요.");
       return;
     }
 
     const targetFile = inputTargetFile.value.trim() || "target.xlsx";
-    const dstFilename = inputDstFilename.value.trim() || "SOP_완료.xlsx";
-    const detailText = textareaDetail.value;
+    const outputFileName = inputOutputFile.value.trim() || "SOP_결과본.xlsx";
 
     const reqPayload = {
       target_path: targetFile,
-      major_category: major,
-      minor_category: minor,
-      detail_text: detailText,
       selected_sheets: selectedQueue,
-      dst_filename: dstFilename
+      worker_name: appConfig?.worker_name || "",
+      verifier_name: verifierName.value.trim(),
+      target_object: targetObject.value.trim(),
+      output_file_name: outputFileName
     };
 
     // UI State: Loading
@@ -434,7 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
     genResultCard.classList.add("hidden");
     genStatusText.textContent = `SOP 엑셀 생성 중... (${selectedQueue.length}개 작업 조합)`;
 
-    log(`[SOP 생성 시작] 대분류: ${major}, 중분류: ${minor}, 파일명: ${dstFilename}`, "info");
+    log(`[SOP 생성 시작] 작업대상: ${reqPayload.target_object}, 검증자: ${reqPayload.verifier_name}, 파일명: ${outputFileName}`, "info");
     log(`작업 순서: ${selectedQueue.map((s, i) => `${i + 1}.${s}`).join(" -> ")}`, "info");
 
     try {
@@ -458,7 +363,6 @@ document.addEventListener("DOMContentLoaded", () => {
         log(`✓ ${data.message} (소요 시간: ${data.result.execution_time})`, "success");
         if (data.config) {
           appConfig = data.config;
-          renderConfigUI();
         }
       } else {
         log(`❌ SOP 생성 실패: ${data.message}`, "error");
@@ -504,7 +408,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 8. General Actions
   btnRefreshAll.addEventListener("click", async () => {
     await loadConfig();
-    await scanSheets();
+    await loadTarget();
     log("전체 상태 새로고침 완료.", "info");
   });
 
@@ -554,6 +458,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize
   (async function init() {
     await loadConfig();
-    await scanSheets();
+    await loadTarget();
   })();
 });

@@ -1,2 +1,2 @@
 @echo off
-start "" "%~dp0excel-test-runner.exe"
+start "" "%~dp0sop-generator.exe"

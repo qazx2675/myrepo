@@ -11,49 +11,59 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf16"
 
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	"github.com/xuri/excelize/v2"
 )
 
-// TargetSheetInfo represents information about a sheet in the target Excel file
-type TargetSheetInfo struct {
-	Index       int    `json:"index"`
-	Name        string `json:"name"`
-	H2Summary   string `json:"h2_summary"`
-	ShapeCount  int    `json:"shape_count"`
-	HasH2       bool   `json:"has_h2"`
-	H2MergeArea string `json:"h2_merge_area"`
+// SectionColumns holds the 1-based column numbers of the 8 section headers
+type SectionColumns struct {
+	StepCol          int // "Step"
+	TaskNameCol      int // "작업내용"
+	PreTaskDetailCol int // "작업자에 의한 사전 작업 내용"
+	TargetObjCol     int // "작업대상"
+	VerifyMethodCol  int // "검증방법"
+	WorkerCol        int // "작업자"
+	VerifierCol      int // "검증자"
+	ResultCol        int // "작업결과"
 }
 
-// TemplatePlaceholders stores references to the placeholder cells in the template
-type TemplatePlaceholders struct {
-	MajorRow    int
-	MajorCol    int
-	MajorRange  string
-	MinorRow    int
-	MinorCol    int
-	MinorRange  string
-	DetailRow   int
-	DetailCol   int
-	DetailRange string
-	MethodRow   int
-	MethodCol   int
-	MethodRange string
+// SectionInfo describes one discovered section (title, header and data merged block)
+type SectionInfo struct {
+	Name         string // "사전작업" | "본작업" | "사후작업"
+	StepNumber   string // "1" | "2" | "3"
+	TitleRow     int
+	HeaderRow    int
+	DataStartRow int // HeaderRow+1
+	DataEndRow   int
+	Cols         SectionColumns
+}
+
+// TargetSheetInfo is the per-sheet summary returned by POST /api/target/load
+type TargetSheetInfo struct {
+	Index          int      `json:"index"` // 1-based 시트 순서
+	Name           string   `json:"name"`
+	Sections       []string `json:"sections"` // 찾은 섹션 이름들 (순서: 사전/본/사후)
+	HasAllSections bool     `json:"has_all_sections"`
+	FontName       string   `json:"font_name"` // 사전작업 작업내용 데이터 셀 기준
+	FontSize       float64  `json:"font_size"`
+	ImageCount     int      `json:"image_count"` // 시트 전체 Shapes.Count
 }
 
 // SOPGenerateRequest encapsulates all parameters required to generate an SOP Excel
 type SOPGenerateRequest struct {
-	TargetPath     string   `json:"target_path"`
-	TemplatePath   string   `json:"template_path"`
-	MajorCategory  string   `json:"major_category"`
-	MinorCategory  string   `json:"minor_category"`
-	DetailText     string   `json:"detail_text"`
-	SelectedSheets []string `json:"selected_sheets"`
-	DstFilename    string   `json:"dst_filename"`
+	TargetPath     string   `json:"target_path"`     // 상대경로면 GetAppDir() 기준
+	SelectedSheets []string `json:"selected_sheets"` // 체크한 순서
+	WorkerName     string   `json:"worker_name"`
+	VerifierName   string   `json:"verifier_name"`
+	TargetObject   string   `json:"target_object"`
+	OutputFileName string   `json:"output_file_name"` // 빈값이면 "SOP_결과본.xlsx"
 }
 
 // SOPGenerateResult contains the outcome of the SOP generation
@@ -67,254 +77,218 @@ type SOPGenerateResult struct {
 	Message        string   `json:"message"`
 }
 
-// CreateDefaultTemplate generates a standard SOP template Excel file
-// matching the user specification:
-// Row 2: B2="작업자", C2:D2
-// Row 3: B3="확인자", C3:D3
-// Row 8 (Header): B8="대분류", C8="중분류", G8="상세내용", H8="작업방법"
-// Below Row 8 (Data merged cells):
-// B9:B15="대분류", C9:F15="중분류", G9:G15="상세내용", H9:K15="작업방법"
-func CreateDefaultTemplate(destPath string) error {
-	_ = os.MkdirAll(filepath.Dir(destPath), 0755)
-
-	f := excelize.NewFile()
-	defer f.Close()
-
-	sheet := "SOP_양식"
-	defaultSheet := f.GetSheetName(0)
-	f.SetSheetName(defaultSheet, sheet)
-
-	// Column widths
-	_ = f.SetColWidth(sheet, "A", "A", 4)
-	_ = f.SetColWidth(sheet, "B", "B", 15)
-	_ = f.SetColWidth(sheet, "C", "C", 16)
-	_ = f.SetColWidth(sheet, "D", "F", 12)
-	_ = f.SetColWidth(sheet, "G", "G", 32)
-	_ = f.SetColWidth(sheet, "H", "K", 22)
-
-	// Styles
-	headerStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 11, Color: "#1E293B", Family: "맑은 고딕"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#E2E8F0"}, Pattern: 1},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
-		Border: []excelize.Border{
-			{Type: "left", Color: "#94A3B8", Style: 1},
-			{Type: "top", Color: "#94A3B8", Style: 1},
-			{Type: "bottom", Color: "#94A3B8", Style: 1},
-			{Type: "right", Color: "#94A3B8", Style: 1},
-		},
-	})
-
-	metaHeaderStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 10, Color: "#334155", Family: "맑은 고딕"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#F1F5F9"}, Pattern: 1},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "#CBD5E1", Style: 1},
-			{Type: "top", Color: "#CBD5E1", Style: 1},
-			{Type: "bottom", Color: "#CBD5E1", Style: 1},
-			{Type: "right", Color: "#CBD5E1", Style: 1},
-		},
-	})
-
-	metaValueStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 10, Color: "#0F172A", Family: "맑은 고딕"},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
-		Border: []excelize.Border{
-			{Type: "left", Color: "#CBD5E1", Style: 1},
-			{Type: "top", Color: "#CBD5E1", Style: 1},
-			{Type: "bottom", Color: "#CBD5E1", Style: 1},
-			{Type: "right", Color: "#CBD5E1", Style: 1},
-		},
-	})
-
-	centerPlaceholderStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 11, Color: "#64748B", Family: "맑은 고딕"},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
-		Border: []excelize.Border{
-			{Type: "left", Color: "#CBD5E1", Style: 1},
-			{Type: "top", Color: "#CBD5E1", Style: 1},
-			{Type: "bottom", Color: "#CBD5E1", Style: 1},
-			{Type: "right", Color: "#CBD5E1", Style: 1},
-		},
-	})
-
-	topPlaceholderStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 10, Color: "#64748B", Family: "맑은 고딕"},
-		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "top", WrapText: true},
-		Border: []excelize.Border{
-			{Type: "left", Color: "#CBD5E1", Style: 1},
-			{Type: "top", Color: "#CBD5E1", Style: 1},
-			{Type: "bottom", Color: "#CBD5E1", Style: 1},
-			{Type: "right", Color: "#CBD5E1", Style: 1},
-		},
-	})
-
-	// Row 2: 작업자 (Worker)
-	_ = f.SetRowHeight(sheet, 2, 24)
-	_ = f.SetCellValue(sheet, "B2", "작업자")
-	_ = f.SetCellStyle(sheet, "B2", "B2", metaHeaderStyle)
-	_ = f.MergeCell(sheet, "C2", "D2")
-	_ = f.SetCellStyle(sheet, "C2", "D2", metaValueStyle)
-
-	// Row 3: 확인자 (Checker)
-	_ = f.SetRowHeight(sheet, 3, 24)
-	_ = f.SetCellValue(sheet, "B3", "확인자")
-	_ = f.SetCellStyle(sheet, "B3", "B3", metaHeaderStyle)
-	_ = f.MergeCell(sheet, "C3", "D3")
-	_ = f.SetCellStyle(sheet, "C3", "D3", metaValueStyle)
-
-	// Row 8: Table Header
-	_ = f.SetRowHeight(sheet, 8, 30)
-	_ = f.SetCellValue(sheet, "B8", "대분류")
-	_ = f.SetCellStyle(sheet, "B8", "B8", headerStyle)
-
-	_ = f.MergeCell(sheet, "C8", "F8")
-	_ = f.SetCellValue(sheet, "C8", "중분류")
-	_ = f.SetCellStyle(sheet, "C8", "F8", headerStyle)
-
-	_ = f.SetCellValue(sheet, "G8", "상세내용")
-	_ = f.SetCellStyle(sheet, "G8", "G8", headerStyle)
-
-	_ = f.MergeCell(sheet, "H8", "K8")
-	_ = f.SetCellValue(sheet, "H8", "작업방법")
-	_ = f.SetCellStyle(sheet, "H8", "K8", headerStyle)
-
-	// Rows 9..15: Data Placeholder Merged Cells
-	for r := 9; r <= 15; r++ {
-		_ = f.SetRowHeight(sheet, r, 20)
-	}
-
-	// B9:B15 -> 대분류
-	_ = f.MergeCell(sheet, "B9", "B15")
-	_ = f.SetCellValue(sheet, "B9", "대분류")
-	_ = f.SetCellStyle(sheet, "B9", "B15", centerPlaceholderStyle)
-
-	// C9:F15 -> 중분류
-	_ = f.MergeCell(sheet, "C9", "F15")
-	_ = f.SetCellValue(sheet, "C9", "중분류")
-	_ = f.SetCellStyle(sheet, "C9", "F15", centerPlaceholderStyle)
-
-	// G9:G15 -> 상세내용
-	_ = f.MergeCell(sheet, "G9", "G15")
-	_ = f.SetCellValue(sheet, "G9", "상세내용")
-	_ = f.SetCellStyle(sheet, "G9", "G15", topPlaceholderStyle)
-
-	// H9:K15 -> 작업방법
-	_ = f.MergeCell(sheet, "H9", "K15")
-	_ = f.SetCellValue(sheet, "H9", "작업방법")
-	_ = f.SetCellStyle(sheet, "H9", "K15", topPlaceholderStyle)
-
-	return f.SaveAs(destPath)
+// Section names in canonical order with their fixed Step numbers
+var sectionDefs = []struct{ Name, Step string }{
+	{"사전작업", "1"},
+	{"본작업", "2"},
+	{"사후작업", "3"},
 }
 
-// CreateSampleTarget creates a multi-sheet target.xlsx file
-// containing H2 merged cells with text and embedded images/shapes for testing
+// Columns whose contents are stacked from every selected sheet
+var stackColumns = []func(SectionColumns) int{
+	func(c SectionColumns) int { return c.TaskNameCol },
+	func(c SectionColumns) int { return c.PreTaskDetailCol },
+	func(c SectionColumns) int { return c.VerifyMethodCol },
+}
+
+const (
+	defaultOutputName = "SOP_결과본.xlsx"
+	resultSheetName   = "SOP"
+	blockHeaderFormat = "%d. [%s]" // 적재 블록 헤더: "1. [시트이름]"
+
+	xlTop             = -4160
+	xlOpenXMLWorkbook = 51
+	msoComment        = 4
+
+	maxRowHeight     = 409.0 // Excel 최대 행 높이(pt)
+	maxRichTextChars = 5000  // 글자별 글꼴 조회 상한(초과 시 단일 글꼴)
+	maxScanRows      = 2000  // UsedRange 스캔 상한
+	maxScanCols      = 100
+	headerLookdown   = 5   // 타이틀 아래 헤더 탐색 행 수
+	blockPadding     = 8.0 // 적재 블록 사이 여백(pt)
+	cellInnerPad     = 4.0 // 셀 안쪽 여백(pt)
+)
+
+// ---------------------------------------------------------------------------
+// Sample target (excelize, no COM)
+// ---------------------------------------------------------------------------
+
+// CreateSampleTarget creates a v2 sample target.xlsx: 3 sheets, each with
+// 사전작업/본작업/사후작업 sections at different row positions, 14pt data cells
+// and PNG images inside some data merged cells
 func CreateSampleTarget(destPath string) error {
 	_ = os.MkdirAll(filepath.Dir(destPath), 0755)
 
 	f := excelize.NewFile()
 	defer f.Close()
 
-	// Sheet 1: 1_OS설치
-	s1 := "1_OS설치"
-	defaultSheet := f.GetSheetName(0)
-	f.SetSheetName(defaultSheet, s1)
+	type sampleSheet struct {
+		name     string
+		topRow   int     // 사전작업 타이틀 행
+		gap      int     // 섹션 사이 빈 행 수
+		spacer   [3]bool // 타이틀과 헤더 사이 빈 병합 행 여부
+		dataRows [3]int  // 데이터 병합 블록 행 수
+		texts    [3][3]string
+		color    color.RGBA
+		// 이미지를 넣을 (섹션 인덱스, 적재열 인덱스) 목록
+		images [][2]int
+	}
 
-	// Sheet 2: 2_네트워크구성
-	s2 := "2_네트워크구성"
-	_, _ = f.NewSheet(s2)
-
-	// Sheet 3: 3_보안점검
-	s3 := "3_보안점검"
-	_, _ = f.NewSheet(s3)
-
-	sheets := []struct {
-		name    string
-		title   string
-		content string
-		color   color.RGBA
-	}{
+	sheets := []sampleSheet{
 		{
-			name:  s1,
-			title: "1. OS 설치 및 기본 환경 구성",
-			content: "1. ISO 이미지 마운트 및 UEFI 부팅\n" +
-				"2. 파티션 구성:\n" +
-				"   - /boot: 1024MB (xfs)\n" +
-				"   - swap: 4096MB\n" +
-				"   - /: 나머지 전체 용량 할당\n" +
-				"3. 관리자(root) 패스워드 설정 및 설치 시작",
-			color: color.RGBA{R: 59, G: 130, B: 246, A: 255}, // Blue
+			name: "1_OS설치", topRow: 2, gap: 3,
+			spacer: [3]bool{false, true, true}, dataRows: [3]int{4, 6, 6},
+			texts: [3][3]string{
+				{"OS 설치 사전 준비\n- ISO 이미지 무결성 확인", "설치 대상 서버 전원/콘솔 확인\n- iDRAC 접속 계정 확인", "sha256sum 결과 비교"},
+				{"OS 설치 진행\n- UEFI 부팅 후 파티션 구성\n- /boot 1GB, swap 4GB", "설치 화면 캡처 첨부", "설치 완료 후 재부팅 확인"},
+				{"OS 기본 설정\n- 호스트명/시간대 설정", "설정 파일 백업\n- /etc/hosts 백업", "hostnamectl 결과 확인"},
+			},
+			color:  color.RGBA{R: 59, G: 130, B: 246, A: 255},
+			images: [][2]int{{1, 1}},
 		},
 		{
-			name:  s2,
-			title: "2. 네트워크 및 본딩(Bonding) 구성",
-			content: "1. 물리 NIC 확인 (ens192, ens224)\n" +
-				"2. LACP(Mode 4) 본딩 bond0 생성\n" +
-				"   - IP: 192.168.10.50/24\n" +
-				"   - Gateway: 192.168.10.1\n" +
-				"   - DNS: 168.126.63.1, 8.8.8.8\n" +
-				"3. 게이트웨이 핑 테스트 및 외부 통신 확인",
-			color: color.RGBA{R: 16, G: 185, B: 129, A: 255}, // Green
+			name: "2_네트워크설정", topRow: 4, gap: 2,
+			spacer: [3]bool{true, false, true}, dataRows: [3]int{4, 5, 6},
+			texts: [3][3]string{
+				{"네트워크 사전 점검\n- 물리 NIC 링크 상태 확인", "스위치 포트 VLAN 확인 요청", "ethtool 링크 Up 확인"},
+				{"본딩 구성\n- bond0 (LACP mode 4)\n- IP 192.168.10.50/24", "구성도 첨부", "게이트웨이 ping 응답 확인"},
+				{"네트워크 설정 저장\n- nmcli 연결 프로필 저장", "기존 설정 백업 파일 보관", "재부팅 후 IP 유지 확인"},
+			},
+			color:  color.RGBA{R: 16, G: 185, B: 129, A: 255},
+			images: [][2]int{{1, 1}},
 		},
 		{
-			name:  s3,
-			title: "3. 시스템 보안 및 방화벽 설정",
-			content: "1. SSH 원격 접속 보안 설정:\n" +
-				"   - /etc/ssh/sshd_config -> PermitRootLogin no\n" +
-				"2. firewalld 방화벽 활성화 및 포트 제어:\n" +
-				"   - 허용 포트: 22(SSH), 443(HTTPS)\n" +
-				"3. SELinux enforcing 상태 확인 완료",
-			color: color.RGBA{R: 245, G: 158, B: 11, A: 255}, // Orange
+			name: "3_보안점검", topRow: 6, gap: 4,
+			spacer: [3]bool{true, true, false}, dataRows: [3]int{5, 6, 5},
+			texts: [3][3]string{
+				{"보안 점검 사전 준비\n- 점검 스크립트 배포", "점검 일정 공지\n- 담당자 승인 확인", "스크립트 실행 권한 확인"},
+				{"보안 설정 적용\n- PermitRootLogin no\n- firewalld 22/443 허용", "적용 전 설정 화면 첨부", "sshd -T 결과 확인"},
+				{"보안 점검 결과 정리\n- SELinux enforcing 확인", "점검 결과 보고서 작성", "점검 결과 화면 확인"},
+			},
+			color:  color.RGBA{R: 245, G: 158, B: 11, A: 255},
+			images: [][2]int{{1, 1}, {2, 2}},
 		},
 	}
 
-	h2Style, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 11, Color: "#1E293B", Family: "맑은 고딕"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#F8FAFC"}, Pattern: 1},
+	border := func(c string) []excelize.Border {
+		return []excelize.Border{
+			{Type: "left", Color: c, Style: 1},
+			{Type: "top", Color: c, Style: 1},
+			{Type: "bottom", Color: c, Style: 1},
+			{Type: "right", Color: c, Style: 1},
+		}
+	}
+	titleStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Family: "맑은 고딕"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#DCE6F1"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:    border("#000000"),
+	})
+	spacerStyle, _ := f.NewStyle(&excelize.Style{
+		Font:   &excelize.Font{Size: 11, Family: "맑은 고딕"},
+		Border: border("#000000"),
+	})
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Family: "맑은 고딕"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#F2F2F2"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
+		Border:    border("#000000"),
+	})
+	dataStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 14, Family: "맑은 고딕"},
 		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "top", WrapText: true},
-		Border: []excelize.Border{
-			{Type: "left", Color: "#94A3B8", Style: 1},
-			{Type: "top", Color: "#94A3B8", Style: 1},
-			{Type: "bottom", Color: "#94A3B8", Style: 1},
-			{Type: "right", Color: "#94A3B8", Style: 1},
-		},
+		Border:    border("#000000"),
+	})
+	dataCenterStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 14, Family: "맑은 고딕"},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
+		Border:    border("#000000"),
 	})
 
-	for _, item := range sheets {
-		// Set column widths
-		_ = f.SetColWidth(item.name, "A", "G", 10)
-		_ = f.SetColWidth(item.name, "H", "K", 24)
+	headers := []string{"Step", "작업내용", "작업자에 의한 사전 작업 내용", "작업대상", "검증방법", "작업자", "검증자", "작업결과"}
+	widths := []float64{8, 30, 28.25, 14, 30, 10, 10, 12}
+	stackIdx := []int{1, 2, 4} // headers 내 작업내용/사전 작업 내용/검증방법 위치
 
-		for r := 2; r <= 8; r++ {
-			_ = f.SetRowHeight(item.name, r, 22)
+	for i, sh := range sheets {
+		if i == 0 {
+			f.SetSheetName(f.GetSheetName(0), sh.name)
+		} else if _, err := f.NewSheet(sh.name); err != nil {
+			return fmt.Errorf("샘플 시트 생성 실패 (%s): %w", sh.name, err)
+		}
+		_ = f.SetColWidth(sh.name, "A", "A", 3)
+		for c, w := range widths {
+			col, _ := excelize.ColumnNumberToName(c + 2)
+			_ = f.SetColWidth(sh.name, col, col, w)
 		}
 
-		// Merge H2:K8
-		_ = f.MergeCell(item.name, "H2", "K8")
-		_ = f.SetCellValue(item.name, "H2", item.content)
-		_ = f.SetCellStyle(item.name, "H2", "K8", h2Style)
+		row := sh.topRow
+		for s, def := range sectionDefs {
+			// 섹션 타이틀 (B:I 병합)
+			_ = f.MergeCell(sh.name, cell(2, row), cell(9, row))
+			_ = f.SetCellValue(sh.name, cell(2, row), def.Name)
+			_ = f.SetCellStyle(sh.name, cell(2, row), cell(9, row), titleStyle)
+			_ = f.SetRowHeight(sh.name, row, 22)
+			row++
+			if sh.spacer[s] {
+				_ = f.MergeCell(sh.name, cell(2, row), cell(9, row))
+				_ = f.SetCellStyle(sh.name, cell(2, row), cell(9, row), spacerStyle)
+				row++
+			}
 
-		// Create a sample badge image and insert into H2 area
-		imgData := generateSampleBadge(item.title, item.color)
-		if len(imgData) > 0 {
-			_ = f.AddPictureFromBytes(item.name, "J3", &excelize.Picture{
-				Extension: ".png",
-				File:      imgData,
-				Format: &excelize.GraphicOptions{
-					ScaleX:  0.8,
-					ScaleY:  0.8,
-					OffsetX: 10,
-					OffsetY: 10,
-				},
-			})
+			// 8개 컬럼 헤더
+			for c, h := range headers {
+				_ = f.SetCellValue(sh.name, cell(c+2, row), h)
+			}
+			_ = f.SetCellStyle(sh.name, cell(2, row), cell(9, row), headerStyle)
+			_ = f.SetRowHeight(sh.name, row, 33)
+			row++
+
+			// 데이터 병합 블록
+			start, end := row, row+sh.dataRows[s]-1
+			for r := start; r <= end; r++ {
+				_ = f.SetRowHeight(sh.name, r, 24)
+			}
+			values := []string{def.Step, sh.texts[s][0], sh.texts[s][1], "샘플대상", sh.texts[s][2], "샘플작업자", "샘플검증자", ""}
+			for c, v := range values {
+				col := c + 2
+				_ = f.MergeCell(sh.name, cell(col, start), cell(col, end))
+				style := dataStyle
+				if c == 0 || c == 3 || c == 5 || c == 6 || c == 7 {
+					style = dataCenterStyle
+				}
+				_ = f.SetCellStyle(sh.name, cell(col, start), cell(col, end), style)
+				if v != "" {
+					_ = f.SetCellValue(sh.name, cell(col, start), v)
+				}
+			}
+
+			// 데이터 병합 셀 안 이미지 (본문 텍스트 아래쪽)
+			for _, im := range sh.images {
+				if im[0] != s {
+					continue
+				}
+				if err := f.AddPictureFromBytes(sh.name, cell(stackIdx[im[1]]+2, start+3), &excelize.Picture{
+					Extension: ".png",
+					File:      generateSampleBadge(sh.color),
+					Format:    &excelize.GraphicOptions{ScaleX: 0.6, ScaleY: 0.6, OffsetX: 6, OffsetY: 4},
+				}); err != nil {
+					return fmt.Errorf("샘플 이미지 삽입 실패 (%s): %w", sh.name, err)
+				}
+			}
+			row = end + 1 + sh.gap
 		}
 	}
 
 	return f.SaveAs(destPath)
 }
 
-func generateSampleBadge(label string, col color.RGBA) []byte {
+func cell(col, row int) string {
+	name, _ := excelize.CoordinatesToCellName(col, row)
+	return name
+}
+
+// generateSampleBadge renders a solid colored PNG badge with a dark border
+func generateSampleBadge(col color.RGBA) []byte {
 	width := 240
 	height := 60
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -338,765 +312,106 @@ func generateSampleBadge(label string, col color.RGBA) []byte {
 	return buf.Bytes()
 }
 
-// ScanTargetSheets reads sheet names, H2 text, and shape count from targetPath using Excel COM
-func ScanTargetSheets(targetPath string) ([]TargetSheetInfo, error) {
+// ---------------------------------------------------------------------------
+// COM helpers
+// ---------------------------------------------------------------------------
+
+// withExcel starts a hidden Excel instance on a locked OS thread, runs fn and quits Excel
+func withExcel(fn func(app, workbooks *ole.IDispatch) error) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
+	// go-ole returns S_FALSE as *ole.OleError(code 1); S_OK/S_FALSE must be balanced
+	// with CoUninitialize, RPC_E_CHANGED_MODE must not be
+	needUninit := true
 	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
 		oleErr, ok := err.(*ole.OleError)
-		// S_FALSE or RPC_E_CHANGED_MODE can be safely ignored
-		if !ok || (oleErr.Code() != 0x00000001 && oleErr.Code() != 0x80010106) {
-			return nil, fmt.Errorf("OLE 초기화 실패: %w", err)
+		switch {
+		case ok && oleErr.Code() == 0x00000001: // S_FALSE
+		case ok && oleErr.Code() == 0x80010106: // RPC_E_CHANGED_MODE
+			needUninit = false
+		default:
+			return fmt.Errorf("OLE 초기화 실패: %w", err)
 		}
 	}
-	defer ole.CoUninitialize()
+	if needUninit {
+		defer ole.CoUninitialize()
+	}
 
 	unknown, err := oleutil.CreateObject("Excel.Application")
 	if err != nil {
-		return nil, fmt.Errorf("Excel Application 실행 실패: %w", err)
+		return fmt.Errorf("Excel Application 실행 실패: %w", err)
 	}
-	excelApp := unknown.MustQueryInterface(ole.IID_IDispatch)
-	defer excelApp.Release()
-
-	oleutil.PutProperty(excelApp, "Visible", false)
-	oleutil.PutProperty(excelApp, "DisplayAlerts", false)
-	defer oleutil.CallMethod(excelApp, "Quit")
-
-	workbooksVar, err := oleutil.GetProperty(excelApp, "Workbooks")
+	app, err := unknown.QueryInterface(ole.IID_IDispatch)
+	unknown.Release()
 	if err != nil {
-		return nil, fmt.Errorf("Workbooks 객체 획득 실패: %w", err)
+		return fmt.Errorf("Excel Application 인터페이스 획득 실패: %w", err)
 	}
-	workbooks := workbooksVar.ToIDispatch()
+	defer app.Release()
+
+	oleutil.PutProperty(app, "Visible", false)
+	oleutil.PutProperty(app, "DisplayAlerts", false)
+	defer oleutil.CallMethod(app, "Quit")
+
+	workbooks, err := getDisp(app, "Workbooks")
+	if err != nil {
+		return fmt.Errorf("Workbooks 객체 획득 실패: %w", err)
+	}
 	defer workbooks.Release()
 
-	absTargetPath, err := filepath.Abs(targetPath)
-	if err != nil {
-		absTargetPath = targetPath
-	}
-
-	// Open target file ReadOnly
-	wbVar, err := oleutil.CallMethod(workbooks, "Open", absTargetPath, 0, true)
-	if err != nil {
-		return nil, fmt.Errorf("Target 엑셀 열기 실패 (%s): %w", targetPath, err)
-	}
-	wb := wbVar.ToIDispatch()
-	defer func() {
-		oleutil.CallMethod(wb, "Close", false)
-		wb.Release()
-	}()
-
-	sheetsVar, err := oleutil.GetProperty(wb, "Worksheets")
-	if err != nil {
-		return nil, fmt.Errorf("Worksheets 획득 실패: %w", err)
-	}
-	sheets := sheetsVar.ToIDispatch()
-	defer sheets.Release()
-
-	countVar, _ := oleutil.GetProperty(sheets, "Count")
-	sheetCount := 1
-	if countVar != nil && countVar.Value() != nil {
-		sheetCount = int(countVar.Value().(int32))
-	}
-
-	var results []TargetSheetInfo
-	for i := 1; i <= sheetCount; i++ {
-		wsVar, err := oleutil.GetProperty(sheets, "Item", i)
-		if err != nil || wsVar == nil {
-			continue
-		}
-		ws := wsVar.ToIDispatch()
-
-		nameVar, _ := oleutil.GetProperty(ws, "Name")
-		sheetName := fmt.Sprintf("Sheet%d", i)
-		if nameVar != nil && nameVar.Value() != nil {
-			sheetName = nameVar.ToString()
-		}
-
-		info := TargetSheetInfo{
-			Index: i,
-			Name:  sheetName,
-		}
-
-		// Inspect H2 cell and its merge area
-		h2Var, err := oleutil.GetProperty(ws, "Range", "H2")
-		if err == nil && h2Var != nil {
-			h2 := h2Var.ToIDispatch()
-			mergeAreaVar, _ := oleutil.GetProperty(h2, "MergeArea")
-			var targetArea *ole.IDispatch
-			if mergeAreaVar != nil && mergeAreaVar.ToIDispatch() != nil {
-				targetArea = mergeAreaVar.ToIDispatch()
-			} else {
-				targetArea = h2
-			}
-
-			// Get address
-			addrVar, _ := oleutil.GetProperty(targetArea, "Address")
-			if addrVar != nil && addrVar.Value() != nil {
-				info.H2MergeArea = addrVar.ToString()
-			}
-
-			// Get text from H2 (top-left cell of merge area)
-			textVar, _ := oleutil.GetProperty(h2, "Text")
-			var fullText string
-			if textVar != nil && textVar.Value() != nil {
-				fullText = textVar.ToString()
-			}
-			if fullText == "" {
-				valVar, _ := oleutil.GetProperty(h2, "Value2")
-				if valVar != nil && valVar.Value() != nil {
-					fullText = fmt.Sprintf("%v", valVar.Value())
-				}
-			}
-
-			fullText = strings.TrimSpace(fullText)
-			info.HasH2 = (fullText != "")
-			if len([]rune(fullText)) > 60 {
-				info.H2Summary = string([]rune(fullText)[:60]) + "..."
-			} else {
-				info.H2Summary = fullText
-			}
-
-			// Count shapes overlapping H2
-			mLeft := toFloat64(oleutil.MustGetProperty(targetArea, "Left"))
-			mTop := toFloat64(oleutil.MustGetProperty(targetArea, "Top"))
-			mWidth := toFloat64(oleutil.MustGetProperty(targetArea, "Width"))
-			mHeight := toFloat64(oleutil.MustGetProperty(targetArea, "Height"))
-
-			shapesVar, _ := oleutil.GetProperty(ws, "Shapes")
-			if shapesVar != nil {
-				shapes := shapesVar.ToIDispatch()
-				sCountVar, _ := oleutil.GetProperty(shapes, "Count")
-				sCount := 0
-				if sCountVar != nil && sCountVar.Value() != nil {
-					sCount = int(sCountVar.Value().(int32))
-				}
-
-				for sIdx := 1; sIdx <= sCount; sIdx++ {
-					shapeVar, _ := oleutil.CallMethod(shapes, "Item", sIdx)
-					if shapeVar == nil {
-						shapeVar, _ = oleutil.GetProperty(shapes, "Item", sIdx)
-					}
-					if shapeVar == nil {
-						continue
-					}
-					shape := shapeVar.ToIDispatch()
-
-					sLeft := toFloat64(oleutil.MustGetProperty(shape, "Left"))
-					sTop := toFloat64(oleutil.MustGetProperty(shape, "Top"))
-					sWidth := toFloat64(oleutil.MustGetProperty(shape, "Width"))
-					sHeight := toFloat64(oleutil.MustGetProperty(shape, "Height"))
-
-					if isShapeOverlapping(sLeft, sTop, sWidth, sHeight, mLeft, mTop, mWidth, mHeight) {
-						info.ShapeCount++
-					}
-					shape.Release()
-				}
-				shapes.Release()
-			}
-
-			if targetArea != h2 {
-				targetArea.Release()
-			}
-			h2.Release()
-		}
-
-		ws.Release()
-		results = append(results, info)
-	}
-
-	return results, nil
+	return fn(app, workbooks)
 }
 
-// FindTemplatePlaceholders scans the template worksheet and finds the bottom-most
-// occurrence of '대분류', '중분류', '상세내용', '작업방법' to preserve the header
-// and identify the data placeholder merged cells
-func FindTemplatePlaceholders(ws *ole.IDispatch) (*TemplatePlaceholders, error) {
-	usedRangeVar, err := oleutil.GetProperty(ws, "UsedRange")
+func getDisp(obj *ole.IDispatch, name string, args ...interface{}) (*ole.IDispatch, error) {
+	v, err := oleutil.GetProperty(obj, name, args...)
 	if err != nil {
-		return nil, fmt.Errorf("UsedRange 접근 실패: %w", err)
+		return nil, err
 	}
-	usedRange := usedRangeVar.ToIDispatch()
-	defer usedRange.Release()
-
-	rowsVar, _ := oleutil.GetProperty(usedRange, "Rows")
-	rowsObj := rowsVar.ToIDispatch()
-	totalRows := int(toFloat64(oleutil.MustGetProperty(rowsObj, "Count")))
-	startRow := int(toFloat64(oleutil.MustGetProperty(rowsObj, "Row")))
-	rowsObj.Release()
-
-	colsVar, _ := oleutil.GetProperty(usedRange, "Columns")
-	colsObj := colsVar.ToIDispatch()
-	totalCols := int(toFloat64(oleutil.MustGetProperty(colsObj, "Count")))
-	startCol := int(toFloat64(oleutil.MustGetProperty(colsObj, "Column")))
-	colsObj.Release()
-
-	tp := &TemplatePlaceholders{}
-
-	// We scan row by row (up to 100 rows is typical for template header+data)
-	endRow := startRow + totalRows - 1
-	endCol := startCol + totalCols - 1
-
-	for r := startRow; r <= endRow; r++ {
-		for c := startCol; c <= endCol; c++ {
-			cellVar, err := oleutil.GetProperty(ws, "Cells", r, c)
-			if err != nil || cellVar == nil {
-				continue
-			}
-			cell := cellVar.ToIDispatch()
-
-			textVar, _ := oleutil.GetProperty(cell, "Text")
-			var txt string
-			if textVar != nil {
-				txt = strings.TrimSpace(textVar.ToString())
-			}
-			if txt == "" {
-				valVar, _ := oleutil.GetProperty(cell, "Value2")
-				if valVar != nil && valVar.Value() != nil {
-					txt = strings.TrimSpace(fmt.Sprintf("%v", valVar.Value()))
-				}
-			}
-
-			if txt == "" {
-				cell.Release()
-				continue
-			}
-
-			// Get MergeArea address
-			mergeAreaVar, _ := oleutil.GetProperty(cell, "MergeArea")
-			var targetArea *ole.IDispatch
-			if mergeAreaVar != nil && mergeAreaVar.ToIDispatch() != nil {
-				targetArea = mergeAreaVar.ToIDispatch()
-			} else {
-				targetArea = cell
-			}
-
-			addrVar, _ := oleutil.GetProperty(targetArea, "Address")
-			addr := ""
-			if addrVar != nil && addrVar.Value() != nil {
-				addr = addrVar.ToString()
-			}
-
-			// We pick the bottom-most (highest r) for each placeholder
-			switch txt {
-			case "대분류":
-				if r >= tp.MajorRow {
-					tp.MajorRow = r
-					tp.MajorCol = c
-					tp.MajorRange = addr
-				}
-			case "중분류":
-				if r >= tp.MinorRow {
-					tp.MinorRow = r
-					tp.MinorCol = c
-					tp.MinorRange = addr
-				}
-			case "상세내용":
-				if r >= tp.DetailRow {
-					tp.DetailRow = r
-					tp.DetailCol = c
-					tp.DetailRange = addr
-				}
-			case "작업방법":
-				if r >= tp.MethodRow {
-					tp.MethodRow = r
-					tp.MethodCol = c
-					tp.MethodRange = addr
-				}
-			}
-
-			if targetArea != cell {
-				targetArea.Release()
-			}
-			cell.Release()
-		}
+	d := v.ToIDispatch()
+	if d == nil {
+		return nil, fmt.Errorf("%s 객체가 없습니다", name)
 	}
-
-	// Fallback to standard cells B8/B9, C8/C9, G8/G9, H8/H9 if not discovered
-	if tp.MajorRange == "" {
-		tp.MajorRange = "$B$9:$B$15"
-		tp.MajorRow = 9
-		tp.MajorCol = 2
-	}
-	if tp.MinorRange == "" {
-		tp.MinorRange = "$C$9:$F$15"
-		tp.MinorRow = 9
-		tp.MinorCol = 3
-	}
-	if tp.DetailRange == "" {
-		tp.DetailRange = "$G$9:$G$15"
-		tp.DetailRow = 9
-		tp.DetailCol = 7
-	}
-	if tp.MethodRange == "" {
-		tp.MethodRange = "$H$9:$K$15"
-		tp.MethodRow = 9
-		tp.MethodCol = 8
-	}
-
-	return tp, nil
+	return d, nil
 }
 
-// GenerateSOPExcel builds a complete SOP Excel document using Excel COM
-// - Creates a brand new workbook from template (leaving template untouched)
-// - Leaves top header intact and updates the bottom placeholder merged cells
-// - Combines checked target sheets' H2 merged text and shapes in specified order into single 작업방법 cell
-// - Stacks shapes vertically without overlap
-// - Adjusts row heights to fit content
-// - Saves as new file in program folder with user-specified name
-func GenerateSOPExcel(req SOPGenerateRequest) (*SOPGenerateResult, error) {
-	startTime := time.Now()
-
-	appDir := GetAppDir()
-
-	// Normalize destination filename
-	dstFilename := strings.TrimSpace(req.DstFilename)
-	if dstFilename == "" {
-		dstFilename = "SOP_완료.xlsx"
-	}
-	if !strings.HasSuffix(strings.ToLower(dstFilename), ".xlsx") {
-		dstFilename += ".xlsx"
-	}
-	destFullPath := filepath.Join(appDir, dstFilename)
-
-	// Validate target and template paths
-	targetPath := req.TargetPath
-	if !filepath.IsAbs(targetPath) {
-		targetPath = filepath.Join(appDir, targetPath)
-	}
-	if _, err := os.Stat(targetPath); err != nil {
-		return nil, fmt.Errorf("Target 엑셀 파일을 찾을 수 없습니다 (%s): %w", targetPath, err)
-	}
-
-	templatePath := req.TemplatePath
-	if !filepath.IsAbs(templatePath) {
-		templatePath = filepath.Join(appDir, templatePath)
-	}
-	if _, err := os.Stat(templatePath); err != nil {
-		// If template file does not exist, attempt to auto-create default template
-		if strings.Contains(templatePath, "default_template.xlsx") {
-			_ = CreateDefaultTemplate(templatePath)
-		} else {
-			return nil, fmt.Errorf("양식(Template) 엑셀 파일을 찾을 수 없습니다 (%s): %w", templatePath, err)
-		}
-	}
-
-	if len(req.SelectedSheets) == 0 {
-		return nil, fmt.Errorf("선택된 작업(시트)이 없습니다. 최소 1개 이상의 시트를 선택하세요.")
-	}
-
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	if err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED); err != nil {
-		oleErr, ok := err.(*ole.OleError)
-		if !ok || (oleErr.Code() != 0x00000001 && oleErr.Code() != 0x80010106) {
-			return nil, fmt.Errorf("OLE 초기화 실패: %w", err)
-		}
-	}
-	defer ole.CoUninitialize()
-
-	unknown, err := oleutil.CreateObject("Excel.Application")
+func callDisp(obj *ole.IDispatch, name string, args ...interface{}) (*ole.IDispatch, error) {
+	v, err := oleutil.CallMethod(obj, name, args...)
 	if err != nil {
-		return nil, fmt.Errorf("Excel Application 실행 실패: %w", err)
+		return nil, err
 	}
-	excelApp := unknown.MustQueryInterface(ole.IID_IDispatch)
-	defer excelApp.Release()
-
-	oleutil.PutProperty(excelApp, "Visible", false)
-	oleutil.PutProperty(excelApp, "DisplayAlerts", false)
-	defer oleutil.CallMethod(excelApp, "Quit")
-
-	workbooksVar, err := oleutil.GetProperty(excelApp, "Workbooks")
-	if err != nil {
-		return nil, fmt.Errorf("Workbooks 객체 획득 실패: %w", err)
+	d := v.ToIDispatch()
+	if d == nil {
+		return nil, fmt.Errorf("%s 결과 객체가 없습니다", name)
 	}
-	workbooks := workbooksVar.ToIDispatch()
-	defer workbooks.Release()
-
-	// 1. Open template in ReadOnly mode
-	tmplWbVar, err := oleutil.CallMethod(workbooks, "Open", templatePath, 0, true)
-	if err != nil {
-		return nil, fmt.Errorf("양식 파일 열기 실패 (%s): %w", templatePath, err)
-	}
-	tmplWb := tmplWbVar.ToIDispatch()
-	defer func() {
-		oleutil.CallMethod(tmplWb, "Close", false)
-		tmplWb.Release()
-	}()
-
-	tmplSheetsVar, err := oleutil.GetProperty(tmplWb, "Worksheets")
-	if err != nil {
-		return nil, fmt.Errorf("양식 Worksheets 획득 실패: %w", err)
-	}
-	tmplSheets := tmplSheetsVar.ToIDispatch()
-	defer tmplSheets.Release()
-
-	tmplWsVar, err := oleutil.GetProperty(tmplSheets, "Item", 1)
-	if err != nil {
-		return nil, fmt.Errorf("양식 기본 시트 획득 실패: %w", err)
-	}
-	tmplWs := tmplWsVar.ToIDispatch()
-	defer tmplWs.Release()
-
-	// 2. Clone template sheet to create a new, separate workbook (leaving template 100% untouched)
-	oleutil.CallMethod(tmplWs, "Copy")
-	time.Sleep(50 * time.Millisecond)
-
-	newWbVar, err := oleutil.GetProperty(excelApp, "ActiveWorkbook")
-	if err != nil || newWbVar == nil {
-		return nil, fmt.Errorf("신규 통합문서 생성 실패: %v", err)
-	}
-	dstWb := newWbVar.ToIDispatch()
-	defer func() {
-		oleutil.CallMethod(dstWb, "Close", false)
-		dstWb.Release()
-	}()
-
-	dstWsVar, err := oleutil.GetProperty(dstWb, "ActiveSheet")
-	if err != nil || dstWsVar == nil {
-		return nil, fmt.Errorf("신규 시트 획득 실패: %v", err)
-	}
-	dstWs := dstWsVar.ToIDispatch()
-	defer dstWs.Release()
-
-	// 3. Find placeholders in the new sheet (preserves top header, targets bottom placeholder cells)
-	placeholders, err := FindTemplatePlaceholders(dstWs)
-	if err != nil {
-		return nil, fmt.Errorf("양식 플레이스홀더 분석 실패: %w", err)
-	}
-
-	// 4. Update 대분류 (Major Category)
-	if placeholders.MajorRange != "" {
-		majorRangeVar, _ := oleutil.GetProperty(dstWs, "Range", placeholders.MajorRange)
-		if majorRangeVar != nil {
-			mr := majorRangeVar.ToIDispatch()
-			oleutil.PutProperty(mr, "Value2", req.MajorCategory)
-			oleutil.PutProperty(mr, "VerticalAlignment", -4108)   // xlCenter
-			oleutil.PutProperty(mr, "HorizontalAlignment", -4108) // xlCenter
-			mr.Release()
-		}
-	}
-
-	// 5. Update 중분류 (Minor Category)
-	if placeholders.MinorRange != "" {
-		minorRangeVar, _ := oleutil.GetProperty(dstWs, "Range", placeholders.MinorRange)
-		if minorRangeVar != nil {
-			mr := minorRangeVar.ToIDispatch()
-			oleutil.PutProperty(mr, "Value2", req.MinorCategory)
-			oleutil.PutProperty(mr, "VerticalAlignment", -4108)   // xlCenter
-			oleutil.PutProperty(mr, "HorizontalAlignment", -4108) // xlCenter
-			mr.Release()
-		}
-	}
-
-	// 6. Update 상세내용 (Detail Description)
-	if placeholders.DetailRange != "" {
-		detailRangeVar, _ := oleutil.GetProperty(dstWs, "Range", placeholders.DetailRange)
-		if detailRangeVar != nil {
-			dr := detailRangeVar.ToIDispatch()
-			oleutil.PutProperty(dr, "Value2", req.DetailText)
-			oleutil.PutProperty(dr, "WrapText", true)
-			oleutil.PutProperty(dr, "VerticalAlignment", -4160) // xlTop
-			dr.Release()
-		}
-	}
-
-	// 7. Open target workbook in ReadOnly mode
-	srcWbVar, err := oleutil.CallMethod(workbooks, "Open", targetPath, 0, true)
-	if err != nil {
-		return nil, fmt.Errorf("Target 파일 열기 실패 (%s): %w", targetPath, err)
-	}
-	srcWb := srcWbVar.ToIDispatch()
-	defer func() {
-		oleutil.CallMethod(srcWb, "Close", false)
-		srcWb.Release()
-	}()
-
-	// 8. Access Destination 작업방법 (Work Method) merged area
-	methodRangeVar, err := oleutil.GetProperty(dstWs, "Range", placeholders.MethodRange)
-	if err != nil || methodRangeVar == nil {
-		return nil, fmt.Errorf("작업방법 대상 영역 접근 실패 (%s): %v", placeholders.MethodRange, err)
-	}
-	dstMethodArea := methodRangeVar.ToIDispatch()
-	defer dstMethodArea.Release()
-
-	dstMethodLeft := toFloat64(oleutil.MustGetProperty(dstMethodArea, "Left"))
-	dstMethodTop := toFloat64(oleutil.MustGetProperty(dstMethodArea, "Top"))
-	dstMethodWidth := toFloat64(oleutil.MustGetProperty(dstMethodArea, "Width"))
-	dstMethodHeight := toFloat64(oleutil.MustGetProperty(dstMethodArea, "Height"))
-
-	// 9. Combine checked sheets in order: 1, 2, 3...
-	var combinedTextParts []string
-	cumulativeOffsetY := float64(0)
-	handledShapes := make(map[string]bool)
-
-	for idx, sheetName := range req.SelectedSheets {
-		orderNum := idx + 1
-		sheetClean := strings.TrimSpace(sheetName)
-		if sheetClean == "" {
-			continue
-		}
-
-		wsSrcVar, err := oleutil.GetProperty(srcWb, "Worksheets", sheetClean)
-		if err != nil || wsSrcVar == nil {
-			continue
-		}
-		wsSrc := wsSrcVar.ToIDispatch()
-
-		// Read H2 cell and its merge area
-		h2Var, err := oleutil.GetProperty(wsSrc, "Range", "H2")
-		if err != nil || h2Var == nil {
-			wsSrc.Release()
-			continue
-		}
-		srcH2 := h2Var.ToIDispatch()
-
-		mergeAreaVar, _ := oleutil.GetProperty(srcH2, "MergeArea")
-		var srcArea *ole.IDispatch
-		if mergeAreaVar != nil && mergeAreaVar.ToIDispatch() != nil {
-			srcArea = mergeAreaVar.ToIDispatch()
-		} else {
-			srcArea = srcH2
-		}
-
-		// Read text from srcH2 (top-left cell of merge area)
-		textVar, _ := oleutil.GetProperty(srcH2, "Text")
-		var h2Text string
-		if textVar != nil && textVar.Value() != nil {
-			h2Text = textVar.ToString()
-		}
-		if h2Text == "" {
-			valVar, _ := oleutil.GetProperty(srcH2, "Value2")
-			if valVar != nil && valVar.Value() != nil {
-				h2Text = fmt.Sprintf("%v", valVar.Value())
-			}
-		}
-
-		// Format sequential order block text
-		headerTitle := fmt.Sprintf("%d. [%s]", orderNum, sheetClean)
-		blockFullText := headerTitle
-		if strings.TrimSpace(h2Text) != "" {
-			blockFullText += "\n" + strings.TrimSpace(h2Text)
-		}
-		combinedTextParts = append(combinedTextParts, blockFullText)
-
-		// Geometric bounds of source H2 area
-		srcLeft := toFloat64(oleutil.MustGetProperty(srcArea, "Left"))
-		srcTop := toFloat64(oleutil.MustGetProperty(srcArea, "Top"))
-		srcWidth := toFloat64(oleutil.MustGetProperty(srcArea, "Width"))
-		srcHeight := toFloat64(oleutil.MustGetProperty(srcArea, "Height"))
-
-		// Calculate text occupied height estimate
-		lines := strings.Split(blockFullText, "\n")
-		textEstimatedHeight := float64(len(lines)) * 18.0
-
-		maxShapeBottomRelative := float64(0)
-		copiedShapeCount := 0
-
-		// Find shapes anchored to or overlapping source H2 area
-		shapesVar, _ := oleutil.GetProperty(wsSrc, "Shapes")
-		if shapesVar != nil {
-			shapes := shapesVar.ToIDispatch()
-			sCountVar, _ := oleutil.GetProperty(shapes, "Count")
-			sCount := 0
-			if sCountVar != nil && sCountVar.Value() != nil {
-				sCount = int(sCountVar.Value().(int32))
-			}
-
-			for sIdx := 1; sIdx <= sCount; sIdx++ {
-				shapeVar, err := oleutil.CallMethod(shapes, "Item", sIdx)
-				if err != nil || shapeVar == nil {
-					shapeVar, _ = oleutil.GetProperty(shapes, "Item", sIdx)
-				}
-				if shapeVar == nil {
-					continue
-				}
-				shape := shapeVar.ToIDispatch()
-
-				nameVar, _ := oleutil.GetProperty(shape, "Name")
-				shapeName := fmt.Sprintf("%s_Shape_%d", sheetClean, sIdx)
-				if nameVar != nil && nameVar.Value() != nil {
-					shapeName = fmt.Sprintf("%s_%s", sheetClean, nameVar.ToString())
-				}
-
-				if handledShapes[shapeName] {
-					shape.Release()
-					continue
-				}
-
-				sLeft := toFloat64(oleutil.MustGetProperty(shape, "Left"))
-				sTop := toFloat64(oleutil.MustGetProperty(shape, "Top"))
-				sWidth := toFloat64(oleutil.MustGetProperty(shape, "Width"))
-				sHeight := toFloat64(oleutil.MustGetProperty(shape, "Height"))
-
-				if isShapeOverlapping(sLeft, sTop, sWidth, sHeight, srcLeft, srcTop, srcWidth, srcHeight) {
-					// Relative offsets from top-left of H2
-					offsetL := sLeft - srcLeft
-					offsetT := sTop - srcTop
-					if offsetT < 0 {
-						offsetT = 0
-					}
-					if offsetL < 0 {
-						offsetL = 0
-					}
-
-					// Copy shape to destination sheet with vertical stacking
-					oleutil.CallMethod(wsSrc, "Activate")
-					oleutil.CallMethod(shape, "Copy")
-					time.Sleep(30 * time.Millisecond)
-
-					oleutil.CallMethod(dstWs, "Activate")
-					oleutil.CallMethod(dstWs, "Paste")
-
-					// Retrieve pasted shape from destination shapes collection
-					dstShapesVar, _ := oleutil.GetProperty(dstWs, "Shapes")
-					if dstShapesVar != nil {
-						dstShapes := dstShapesVar.ToIDispatch()
-						newCountVar, _ := oleutil.GetProperty(dstShapes, "Count")
-						if newCountVar != nil && newCountVar.Value() != nil {
-							newCount := int(newCountVar.Value().(int32))
-							pastedVar, _ := oleutil.CallMethod(dstShapes, "Item", newCount)
-							if pastedVar == nil {
-								pastedVar, _ = oleutil.GetProperty(dstShapes, "Item", newCount)
-							}
-							if pastedVar != nil {
-								pastedShape := pastedVar.ToIDispatch()
-
-								// Calculate stacked target coordinates
-								targetTop := dstMethodTop + cumulativeOffsetY + offsetT + 22.0 // Add title header clearance
-								targetLeft := dstMethodLeft + offsetL
-
-								// Ensure shape stays within horizontal bounds if too wide
-								if targetLeft+sWidth > dstMethodLeft+dstMethodWidth && dstMethodWidth > 50 {
-									targetLeft = dstMethodLeft + 10
-								}
-
-								oleutil.PutProperty(pastedShape, "Left", targetLeft)
-								oleutil.PutProperty(pastedShape, "Top", targetTop)
-								oleutil.PutProperty(pastedShape, "Width", sWidth)
-								oleutil.PutProperty(pastedShape, "Height", sHeight)
-								pastedShape.Release()
-							}
-						}
-						dstShapes.Release()
-					}
-
-					handledShapes[shapeName] = true
-					copiedShapeCount++
-
-					bottomRelative := offsetT + sHeight + 22.0
-					if bottomRelative > maxShapeBottomRelative {
-						maxShapeBottomRelative = bottomRelative
-					}
-				}
-
-				shape.Release()
-			}
-			shapes.Release()
-		}
-
-		if srcArea != srcH2 {
-			srcArea.Release()
-		}
-		srcH2.Release()
-		wsSrc.Release()
-
-		// Calculate block height for vertical stacking
-		blockHeight := math.Max(srcHeight, math.Max(textEstimatedHeight, maxShapeBottomRelative))
-		if blockHeight < 60 {
-			blockHeight = 60
-		}
-		// Add spacer between sequential sections
-		cumulativeOffsetY += blockHeight + 20.0
-	}
-
-	// 10. Write combined text into single destination 작업방법 merged cell
-	finalCombinedText := strings.Join(combinedTextParts, "\n\n")
-	oleutil.PutProperty(dstMethodArea, "Value2", finalCombinedText)
-	oleutil.PutProperty(dstMethodArea, "WrapText", true)
-	oleutil.PutProperty(dstMethodArea, "VerticalAlignment", -4160) // xlTop
-
-	// 11. Adjust destination row heights if cumulative content exceeds default merged area height
-	if cumulativeOffsetY > dstMethodHeight {
-		// Expand row heights across the merged rows proportionally
-		rowsVar, _ := oleutil.GetProperty(dstMethodArea, "Rows")
-		if rowsVar != nil {
-			rowsObj := rowsVar.ToIDispatch()
-			rowCount := int(toFloat64(oleutil.MustGetProperty(rowsObj, "Count")))
-			startRow := int(toFloat64(oleutil.MustGetProperty(rowsObj, "Row")))
-			rowsObj.Release()
-
-			if rowCount > 0 {
-				extraNeeded := cumulativeOffsetY - dstMethodHeight + 30.0
-				addPerRow := extraNeeded / float64(rowCount)
-				for r := startRow; r < startRow+rowCount; r++ {
-					rowVar, _ := oleutil.GetProperty(dstWs, "Rows", r)
-					if rowVar != nil {
-						rowObj := rowVar.ToIDispatch()
-						curHeight := toFloat64(oleutil.MustGetProperty(rowObj, "RowHeight"))
-						oleutil.PutProperty(rowObj, "RowHeight", curHeight+addPerRow)
-						rowObj.Release()
-					}
-				}
-			}
-		}
-	}
-
-	// 12. Save newly created workbook as destination file (in program folder)
-	_ = os.Remove(destFullPath) // Remove if previously exists
-	oleutil.CallMethod(dstWb, "SaveAs", destFullPath, 51)
-	time.Sleep(100 * time.Millisecond)
-
-	stat, err := os.Stat(destFullPath)
-	if err != nil {
-		return nil, fmt.Errorf("결과 엑셀 파일 저장 확인 실패 (%s): %w", destFullPath, err)
-	}
-
-	elapsed := time.Since(startTime).Round(time.Millisecond).String()
-
-	return &SOPGenerateResult{
-		Success:        true,
-		DstPath:        destFullPath,
-		DstFilename:    dstFilename,
-		FileSize:       stat.Size(),
-		SelectedSheets: req.SelectedSheets,
-		ExecutionTime:  elapsed,
-		Message:        fmt.Sprintf("SOP 엑셀 생성이 완료되었습니다 (%s, %d개 작업 조합)", dstFilename, len(req.SelectedSheets)),
-	}, nil
+	return d, nil
 }
 
-func isShapeOverlapping(sLeft, sTop, sWidth, sHeight, mLeft, mTop, mWidth, mHeight float64) bool {
-	if sWidth <= 0 || sHeight <= 0 || mWidth <= 0 || mHeight <= 0 {
-		return false
+// getVal reads a scalar property (nil on error / VT_NULL)
+func getVal(obj *ole.IDispatch, name string, args ...interface{}) interface{} {
+	v, err := oleutil.GetProperty(obj, name, args...)
+	if err != nil || v == nil {
+		return nil
 	}
-	// Center point inside bounding box
-	centerX := sLeft + sWidth/2.0
-	centerY := sTop + sHeight/2.0
-	if centerX >= mLeft && centerX <= mLeft+mWidth && centerY >= mTop && centerY <= mTop+mHeight {
-		return true
-	}
-
-	// Area overlap check
-	x1 := math.Max(sLeft, mLeft)
-	x2 := math.Min(sLeft+sWidth, mLeft+mWidth)
-	y1 := math.Max(sTop, mTop)
-	y2 := math.Min(sTop+sHeight, mTop+mHeight)
-	if x2 > x1 && y2 > y1 {
-		overlapArea := (x2 - x1) * (y2 - y1)
-		shapeArea := sWidth * sHeight
-		if overlapArea >= 0.15*shapeArea || overlapArea >= 0.15*(mWidth*mHeight) {
-			return true
-		}
-	}
-	return false
+	defer v.Clear()
+	return v.Value()
 }
 
-func toFloat64(v *ole.VARIANT) float64 {
-	if v == nil || v.Value() == nil {
+func getNum(obj *ole.IDispatch, name string, args ...interface{}) float64 {
+	return asFloat(getVal(obj, name, args...))
+}
+
+// getSubNum reads obj.sub.name (e.g. range.Rows.Count)
+func getSubNum(obj *ole.IDispatch, sub, name string) float64 {
+	d, err := getDisp(obj, sub)
+	if err != nil {
 		return 0
 	}
-	switch val := v.Value().(type) {
+	defer d.Release()
+	return getNum(d, name)
+}
+
+func asFloat(v interface{}) float64 {
+	switch val := v.(type) {
 	case float64:
 		return val
 	case float32:
@@ -1111,7 +426,1115 @@ func toFloat64(v *ole.VARIANT) float64 {
 		return float64(val)
 	case int8:
 		return float64(val)
+	case uint8:
+		return float64(val)
+	case uint16:
+		return float64(val)
+	case uint32:
+		return float64(val)
 	default:
 		return 0
 	}
+}
+
+func asText(v interface{}) string {
+	switch val := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return val
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case bool:
+		if val {
+			return "TRUE"
+		}
+		return "FALSE"
+	default:
+		if n := asFloat(val); n != 0 {
+			return strconv.FormatFloat(n, 'f', -1, 64)
+		}
+		return fmt.Sprintf("%v", val)
+	}
+}
+
+// normalizeKey removes every whitespace character for header/title comparison
+func normalizeKey(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func openReadOnly(workbooks *ole.IDispatch, path string) (*ole.IDispatch, error) {
+	wb, err := callDisp(workbooks, "Open", path, 0, true)
+	if err != nil {
+		return nil, fmt.Errorf("Target 엑셀 열기 실패 (%s): %w", path, err)
+	}
+	return wb, nil
+}
+
+func closeWorkbook(wb *ole.IDispatch) {
+	oleutil.CallMethod(wb, "Close", false)
+	wb.Release()
+}
+
+func resolveTargetPath(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", fmt.Errorf("Target 엑셀 파일 경로가 비어 있습니다")
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(GetAppDir(), p)
+	}
+	if _, err := os.Stat(p); err != nil {
+		return "", fmt.Errorf("Target 엑셀 파일을 찾을 수 없습니다 (%s): %w", p, err)
+	}
+	return p, nil
+}
+
+// ---------------------------------------------------------------------------
+// Section discovery
+// ---------------------------------------------------------------------------
+
+// sheetGrid holds the text of the worksheet UsedRange (1-based sheet coordinates)
+type sheetGrid struct {
+	row0, col0 int
+	cells      [][]string
+}
+
+func (g *sheetGrid) text(r, c int) string {
+	r -= g.row0
+	c -= g.col0
+	if r < 0 || r >= len(g.cells) || c < 0 || c >= len(g.cells[r]) {
+		return ""
+	}
+	return g.cells[r][c]
+}
+
+// readUsedGrid reads all cell texts of UsedRange. Each row is read with one
+// WorksheetFunction.TextJoin call when available, otherwise cell by cell.
+func readUsedGrid(ws *ole.IDispatch) (*sheetGrid, error) {
+	used, err := getDisp(ws, "UsedRange")
+	if err != nil {
+		return nil, fmt.Errorf("UsedRange 접근 실패: %w", err)
+	}
+	g := &sheetGrid{row0: int(getNum(used, "Row")), col0: int(getNum(used, "Column"))}
+	nRows := int(getSubNum(used, "Rows", "Count"))
+	nCols := int(getSubNum(used, "Columns", "Count"))
+	used.Release()
+	if g.row0 < 1 || g.col0 < 1 {
+		return nil, fmt.Errorf("UsedRange 위치 확인 실패")
+	}
+	nRows = min(nRows, maxScanRows)
+	nCols = min(nCols, maxScanCols)
+
+	var wf *ole.IDispatch
+	if app, err := getDisp(ws, "Application"); err == nil {
+		wf, _ = getDisp(app, "WorksheetFunction")
+		app.Release()
+	}
+	if wf != nil {
+		defer wf.Release()
+	}
+
+	const sep = "\x1f"
+	for i := 0; i < nRows; i++ {
+		r := g.row0 + i
+		var row []string
+		if wf != nil && nCols > 1 {
+			if rng, err := getDisp(ws, "Range", cell(g.col0, r)+":"+cell(g.col0+nCols-1, r)); err == nil {
+				if v, err := oleutil.CallMethod(wf, "TextJoin", sep, false, rng); err == nil {
+					if s, ok := v.Value().(string); ok {
+						if parts := strings.Split(s, sep); len(parts) == nCols {
+							row = parts
+						}
+					}
+					v.Clear()
+				}
+				rng.Release()
+			}
+		}
+		if row == nil {
+			row = make([]string, nCols)
+			for j := 0; j < nCols; j++ {
+				row[j] = cellText(ws, r, g.col0+j)
+			}
+		}
+		g.cells = append(g.cells, row)
+	}
+	return g, nil
+}
+
+func cellText(ws *ole.IDispatch, r, c int) string {
+	cl, err := getDisp(ws, "Cells", r, c)
+	if err != nil {
+		return ""
+	}
+	defer cl.Release()
+	return asText(getVal(cl, "Value2"))
+}
+
+// matchHeaderRow maps the 8 headers of row r; ok when Step and 작업내용 exist
+func matchHeaderRow(g *sheetGrid, r int) (SectionColumns, bool) {
+	var cols SectionColumns
+	set := func(dst *int, c int) {
+		if *dst == 0 {
+			*dst = c
+		}
+	}
+	i := r - g.row0
+	if i < 0 || i >= len(g.cells) {
+		return cols, false
+	}
+	for j, txt := range g.cells[i] {
+		c := g.col0 + j
+		key := normalizeKey(txt)
+		switch {
+		case strings.EqualFold(key, "step"):
+			set(&cols.StepCol, c)
+		case key == "작업내용":
+			set(&cols.TaskNameCol, c)
+		case key == "작업자에의한사전작업내용":
+			set(&cols.PreTaskDetailCol, c)
+		case key == "작업대상":
+			set(&cols.TargetObjCol, c)
+		case key == "검증방법":
+			set(&cols.VerifyMethodCol, c)
+		case key == "작업자":
+			set(&cols.WorkerCol, c)
+		case key == "검증자":
+			set(&cols.VerifierCol, c)
+		case key == "작업결과":
+			set(&cols.ResultCol, c)
+		}
+	}
+	return cols, cols.StepCol > 0 && cols.TaskNameCol > 0
+}
+
+// FindSections discovers 사전작업/본작업/사후작업 sections without fixed coordinates.
+// Titles without a valid header row (TitleRow+1..+5) are skipped.
+func FindSections(ws *ole.IDispatch) ([]SectionInfo, error) {
+	g, err := readUsedGrid(ws)
+	if err != nil {
+		return nil, err
+	}
+	if len(g.cells) == 0 {
+		return []SectionInfo{}, nil
+	}
+
+	found := make(map[string]SectionInfo)
+	for i, row := range g.cells {
+		r := g.row0 + i
+		for _, txt := range row {
+			key := normalizeKey(txt)
+			for _, def := range sectionDefs {
+				if key != def.Name {
+					continue
+				}
+				if _, dup := found[def.Name]; dup {
+					continue
+				}
+				for hr := r + 1; hr <= r+headerLookdown; hr++ {
+					cols, ok := matchHeaderRow(g, hr)
+					if !ok {
+						continue
+					}
+					sec := SectionInfo{
+						Name:         def.Name,
+						StepNumber:   def.Step,
+						TitleRow:     r,
+						HeaderRow:    hr,
+						DataStartRow: hr + 1,
+						Cols:         cols,
+					}
+					sec.DataEndRow = sec.DataStartRow
+					for _, col := range []int{cols.StepCol, cols.TaskNameCol, cols.PreTaskDetailCol, cols.TargetObjCol, cols.VerifyMethodCol, cols.WorkerCol, cols.VerifierCol, cols.ResultCol} {
+						if col == 0 {
+							continue
+						}
+						box, err := readMergeBox(ws, sec.DataStartRow, col)
+						if err != nil {
+							return nil, fmt.Errorf("%s 데이터 병합 영역 확인 실패: %w", def.Name, err)
+						}
+						sec.DataEndRow = max(sec.DataEndRow, box.Row2)
+					}
+					found[def.Name] = sec
+					break
+				}
+			}
+		}
+	}
+
+	result := make([]SectionInfo, 0, len(found))
+	for _, def := range sectionDefs {
+		if sec, ok := found[def.Name]; ok {
+			result = append(result, sec)
+		}
+	}
+	return result, nil
+}
+
+// mergeBox is the cell/point geometry of a merge area (or single cell)
+type mergeBox struct {
+	Row1, Col1, Row2, Col2   int
+	Left, Top, Width, Height float64
+}
+
+func (b mergeBox) contains(r, c int) bool {
+	return r >= b.Row1 && r <= b.Row2 && c >= b.Col1 && c <= b.Col2
+}
+
+func readMergeBox(ws *ole.IDispatch, r, c int) (mergeBox, error) {
+	cl, err := getDisp(ws, "Cells", r, c)
+	if err != nil {
+		return mergeBox{}, err
+	}
+	defer cl.Release()
+	area, err := getDisp(cl, "MergeArea")
+	if err != nil {
+		return mergeBox{}, err
+	}
+	defer area.Release()
+
+	b := mergeBox{
+		Row1:   int(getNum(area, "Row")),
+		Col1:   int(getNum(area, "Column")),
+		Left:   getNum(area, "Left"),
+		Top:    getNum(area, "Top"),
+		Width:  getNum(area, "Width"),
+		Height: getNum(area, "Height"),
+	}
+	b.Row2 = b.Row1 + max(1, int(getSubNum(area, "Rows", "Count"))) - 1
+	b.Col2 = b.Col1 + max(1, int(getSubNum(area, "Columns", "Count"))) - 1
+	return b, nil
+}
+
+// shapeInfo is a worksheet shape with its TopLeftCell position
+type shapeInfo struct {
+	Index                    int
+	Row, Col                 int
+	Left, Top, Width, Height float64
+}
+
+func listShapes(ws *ole.IDispatch) ([]shapeInfo, error) {
+	shapes, err := getDisp(ws, "Shapes")
+	if err != nil {
+		return nil, fmt.Errorf("Shapes 접근 실패: %w", err)
+	}
+	defer shapes.Release()
+
+	n := int(getNum(shapes, "Count"))
+	var list []shapeInfo
+	for i := 1; i <= n; i++ {
+		sh, err := callDisp(shapes, "Item", i)
+		if err != nil {
+			continue
+		}
+		if int(getNum(sh, "Type")) != msoComment {
+			if tl, err := getDisp(sh, "TopLeftCell"); err == nil {
+				list = append(list, shapeInfo{
+					Index:  i,
+					Row:    int(getNum(tl, "Row")),
+					Col:    int(getNum(tl, "Column")),
+					Left:   getNum(sh, "Left"),
+					Top:    getNum(sh, "Top"),
+					Width:  getNum(sh, "Width"),
+					Height: getNum(sh, "Height"),
+				})
+				tl.Release()
+			}
+		}
+		sh.Release()
+	}
+	return list, nil
+}
+
+// ---------------------------------------------------------------------------
+// Target scan
+// ---------------------------------------------------------------------------
+
+// ScanTargetSheets lists every sheet of the target workbook (opened ReadOnly)
+// with its discovered sections, data font and shape count
+func ScanTargetSheets(targetPath string) ([]TargetSheetInfo, error) {
+	path, err := resolveTargetPath(targetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	results := []TargetSheetInfo{}
+	err = withExcel(func(app, workbooks *ole.IDispatch) error {
+		wb, err := openReadOnly(workbooks, path)
+		if err != nil {
+			return err
+		}
+		defer closeWorkbook(wb)
+
+		sheets, err := getDisp(wb, "Worksheets")
+		if err != nil {
+			return fmt.Errorf("Worksheets 획득 실패: %w", err)
+		}
+		defer sheets.Release()
+
+		count := int(getNum(sheets, "Count"))
+		for i := 1; i <= count; i++ {
+			ws, err := getDisp(sheets, "Item", i)
+			if err != nil {
+				continue
+			}
+			info := TargetSheetInfo{Index: i, Name: asText(getVal(ws, "Name")), Sections: []string{}}
+
+			secs, err := FindSections(ws)
+			if err != nil {
+				ws.Release()
+				return fmt.Errorf("시트 '%s' 섹션 탐색 실패: %w", info.Name, err)
+			}
+			for _, s := range secs {
+				info.Sections = append(info.Sections, s.Name)
+			}
+			info.HasAllSections = len(secs) == len(sectionDefs)
+			if len(secs) > 0 {
+				if cl, err := getDisp(ws, "Cells", secs[0].DataStartRow, secs[0].Cols.TaskNameCol); err == nil {
+					fs := readCellFont(cl)
+					info.FontName, info.FontSize = fs.Name, fs.Size
+					cl.Release()
+				}
+			}
+			if shapes, err := getDisp(ws, "Shapes"); err == nil {
+				info.ImageCount = int(getNum(shapes, "Count"))
+				shapes.Release()
+			}
+			ws.Release()
+			results = append(results, info)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// ---------------------------------------------------------------------------
+// Font handling
+// ---------------------------------------------------------------------------
+
+type fontSpec struct {
+	Name     string
+	Size     float64
+	Bold     bool
+	Color    float64
+	hasBold  bool
+	hasColor bool
+}
+
+func (f *fontSpec) fillFrom(font *ole.IDispatch) {
+	if f.Name == "" {
+		f.Name, _ = getVal(font, "Name").(string)
+	}
+	if f.Size <= 0 {
+		f.Size = getNum(font, "Size")
+	}
+	if !f.hasBold {
+		f.Bold, f.hasBold = getVal(font, "Bold").(bool)
+	}
+	if !f.hasColor {
+		if v := getVal(font, "Color"); v != nil {
+			f.Color, f.hasColor = asFloat(v), true
+		}
+	}
+}
+
+func (f *fontSpec) complete() bool {
+	return f.Name != "" && f.Size > 0 && f.hasBold && f.hasColor
+}
+
+// readCellFont reads the cell font; mixed (rich text) properties fall back to the first character
+func readCellFont(cl *ole.IDispatch) fontSpec {
+	var fs fontSpec
+	if font, err := getDisp(cl, "Font"); err == nil {
+		fs.fillFrom(font)
+		font.Release()
+	}
+	if !fs.complete() {
+		if ch, err := getDisp(cl, "Characters", 1, 1); err == nil {
+			if font, err := getDisp(ch, "Font"); err == nil {
+				fs.fillFrom(font)
+				font.Release()
+			}
+			ch.Release()
+		}
+	}
+	return fs
+}
+
+// readFontRuns returns the per-character font runs of body (the cell text after
+// CRLF→LF normalisation and right-trim), 1-based UTF-16 positions relative to body.
+// Returns nil when the cell font is uniform or the text is too long to walk.
+func readFontRuns(cl *ole.IDispatch, raw, body string) []fontRun {
+	font, err := getDisp(cl, "Font")
+	if err != nil {
+		return nil
+	}
+	_, nameOK := getVal(font, "Name").(string)
+	_, boldOK := getVal(font, "Bold").(bool)
+	uniform := nameOK && boldOK && getVal(font, "Size") != nil && getVal(font, "Color") != nil
+	font.Release()
+	bodyLen := utf16Len(body)
+	if uniform || bodyLen == 0 || utf16Len(raw) > maxRichTextChars {
+		return nil
+	}
+
+	var runs []fontRun
+	src, dst := 1, 1 // raw / body 기준 UTF-16 위치
+	rs := []rune(raw)
+	for i := 0; i < len(rs) && dst <= bodyLen; i++ {
+		n := utf16.RuneLen(rs[i])
+		if n < 1 {
+			n = 1
+		}
+		if rs[i] == '\r' && i+1 < len(rs) && rs[i+1] == '\n' { // CRLF → LF: CR은 제거됨
+			src += n
+			continue
+		}
+		var fs fontSpec
+		if ch, err := getDisp(cl, "Characters", src, 1); err == nil {
+			if f, err := getDisp(ch, "Font"); err == nil {
+				fs.fillFrom(f)
+				f.Release()
+			}
+			ch.Release()
+		}
+		if k := len(runs) - 1; k >= 0 && runs[k].font == fs && runs[k].start+runs[k].length == dst {
+			runs[k].length += n
+		} else {
+			runs = append(runs, fontRun{start: dst, length: n, font: fs, bold: fs.Bold})
+		}
+		src += n
+		dst += n
+	}
+	if k := len(runs) - 1; k >= 0 && runs[k].start+runs[k].length > bodyLen+1 {
+		runs[k].length = bodyLen + 1 - runs[k].start
+	}
+	return runs
+}
+
+// applyFont formats Characters(start, length) of the cell (1-based, UTF-16 units)
+func applyFont(cl *ole.IDispatch, start, length int, fs fontSpec, bold bool) {
+	if length <= 0 {
+		return
+	}
+	ch, err := getDisp(cl, "Characters", start, length)
+	if err != nil {
+		return
+	}
+	defer ch.Release()
+	font, err := getDisp(ch, "Font")
+	if err != nil {
+		return
+	}
+	defer font.Release()
+	if fs.Name != "" {
+		oleutil.PutProperty(font, "Name", fs.Name)
+	}
+	if fs.Size > 0 {
+		oleutil.PutProperty(font, "Size", fs.Size)
+	}
+	oleutil.PutProperty(font, "Bold", bold)
+	if fs.hasColor {
+		oleutil.PutProperty(font, "Color", fs.Color)
+	}
+}
+
+func fontSizeOr(fs fontSpec) float64 {
+	if fs.Size > 0 {
+		return fs.Size
+	}
+	return 11
+}
+
+// lineHeight estimates the height of one text line in points
+func lineHeight(fs fontSpec) float64 {
+	return fontSizeOr(fs) * 1.35
+}
+
+// textHeight estimates the wrapped height of s rendered with fs in a cell of the given width
+func textHeight(s string, fs fontSpec, width float64) float64 {
+	size := fontSizeOr(fs)
+	usable := math.Max(width-2*cellInnerPad, size)
+	lines := 0
+	for _, line := range strings.Split(s, "\n") {
+		w := 0.0
+		for _, r := range line {
+			if r >= 0x1100 { // 한글/CJK 등 전각 문자
+				w += size * 0.95
+			} else {
+				w += size * 0.55
+			}
+		}
+		lines += max(1, int(math.Ceil(w/usable)))
+	}
+	return float64(lines) * lineHeight(fs)
+}
+
+func utf16Len(s string) int {
+	return len(utf16.Encode([]rune(s)))
+}
+
+// ---------------------------------------------------------------------------
+// SOP generation
+// ---------------------------------------------------------------------------
+
+// srcSheet caches what is read from one selected target sheet
+type srcSheet struct {
+	name     string
+	ws       *ole.IDispatch
+	sections map[string]SectionInfo
+	shapes   []shapeInfo
+}
+
+// stackBlock is one "{idx}. [sheet]" block inside a destination merged cell
+type stackBlock struct {
+	header string
+	body   string
+	font   fontSpec
+	runs   []fontRun // 원본 서식 있는 텍스트의 글꼴 구간(body 기준), 없으면 font 단일 적용
+	src    *srcSheet
+	srcBox mergeBox
+	shapes []shapeInfo
+}
+
+type fontRun struct {
+	start, length int
+	font          fontSpec
+	bold          bool
+}
+
+type shapePlan struct {
+	src           *srcSheet
+	index         int
+	relX, relY    float64 // 결과 병합 셀 Left/Top 기준
+	width, height float64
+}
+
+// columnPlan is the computed content of one destination stacking merged cell
+type columnPlan struct {
+	row, col int
+	text     string
+	runs     []fontRun
+	shapes   []shapePlan
+	height   float64 // 필요한 총 높이(pt)
+}
+
+// buildColumnPlan stacks blocks vertically: text gets blank-line padding so each
+// block header starts below the previous block's text and images
+func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock) columnPlan {
+	plan := columnPlan{row: dst.Row1, col: dst.Col1}
+	var sb strings.Builder
+	pos := 0         // 지금까지 기록한 UTF-16 길이
+	textY := 0.0     // 추정 텍스트 끝 Y
+	nextStart := 0.0 // 다음 블록이 시작해야 하는 Y
+	padH := lineHeight(base)
+	maxShapeW := dst.Width - 2*cellInnerPad
+
+	for i, b := range blocks {
+		blockStart := 0.0
+		if i > 0 {
+			k := max(1, int(math.Ceil((nextStart-textY)/padH)))
+			sb.WriteString(strings.Repeat("\n", k+1))
+			pos += k + 1
+			blockStart = textY + float64(k)*padH
+		}
+
+		hl := utf16Len(b.header)
+		plan.runs = append(plan.runs, fontRun{start: pos + 1, length: hl, font: base, bold: true})
+		sb.WriteString(b.header)
+		pos += hl
+		headerH := textHeight(b.header, base, dst.Width)
+
+		bodyH := 0.0
+		if b.body != "" {
+			sb.WriteString("\n")
+			pos++
+			bl := utf16Len(b.body)
+			if len(b.runs) > 0 {
+				for _, r := range b.runs {
+					r.start += pos
+					plan.runs = append(plan.runs, r)
+				}
+			} else {
+				plan.runs = append(plan.runs, fontRun{start: pos + 1, length: bl, font: b.font, bold: b.font.Bold})
+			}
+			sb.WriteString(b.body)
+			pos += bl
+			bodyH = textHeight(b.body, b.font, dst.Width)
+		}
+		textY = blockStart + headerH + bodyH
+
+		shapeBottom := 0.0
+		for _, s := range b.shapes {
+			w, h := s.Width, s.Height
+			if w > maxShapeW && maxShapeW > 0 { // 열보다 넓으면 비율 유지 축소
+				h *= maxShapeW / w
+				w = maxShapeW
+			}
+			relX := math.Max(0, s.Left-b.srcBox.Left)
+			if relX+w > dst.Width-cellInnerPad {
+				relX = math.Max(0, dst.Width-cellInnerPad-w)
+			}
+			relY := math.Max(0, s.Top-b.srcBox.Top)
+			plan.shapes = append(plan.shapes, shapePlan{
+				src: b.src, index: s.Index,
+				relX: relX, relY: blockStart + headerH + relY,
+				width: w, height: h,
+			})
+			shapeBottom = math.Max(shapeBottom, relY+h)
+		}
+		nextStart = blockStart + headerH + math.Max(bodyH, shapeBottom) + blockPadding
+	}
+
+	plan.text = sb.String()
+	plan.height = math.Max(textY, nextStart)
+	return plan
+}
+
+func normalizeOutputName(name string) string {
+	name = strings.TrimSpace(name)
+	if name != "" {
+		name = filepath.Base(strings.ReplaceAll(name, "\\", "/"))
+	}
+	if name == "" || name == "." || name == "/" {
+		return defaultOutputName
+	}
+	if !strings.EqualFold(filepath.Ext(name), ".xlsx") {
+		name += ".xlsx"
+	}
+	return name
+}
+
+// GenerateSOPExcel builds the SOP workbook:
+//   - opens target ReadOnly and copies the first selected sheet into a new workbook
+//   - clears the data merged cells (format preserved) and their shapes
+//   - writes Step 1/2/3, 작업대상/작업자/검증자
+//   - stacks 작업내용/작업자에 의한 사전 작업 내용/검증방법 text (with fonts) and shapes
+//     of every selected sheet in order into one merged cell per section
+//   - grows row heights to fit and saves to the program folder
+func GenerateSOPExcel(req SOPGenerateRequest) (*SOPGenerateResult, error) {
+	startTime := time.Now()
+
+	var selected []string
+	for _, s := range req.SelectedSheets {
+		if s = strings.TrimSpace(s); s != "" {
+			selected = append(selected, s)
+		}
+	}
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("선택된 작업(시트)이 없습니다. 최소 1개 이상의 시트를 선택하세요.")
+	}
+
+	targetPath, err := resolveTargetPath(req.TargetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	dstFilename := normalizeOutputName(req.OutputFileName)
+	destFullPath := filepath.Join(GetAppDir(), dstFilename)
+	if absT, e1 := filepath.Abs(targetPath); e1 == nil {
+		if absD, e2 := filepath.Abs(destFullPath); e2 == nil && strings.EqualFold(absT, absD) {
+			return nil, fmt.Errorf("결과 파일 이름이 Target 파일과 같습니다. 다른 이름을 지정하세요 (%s)", dstFilename)
+		}
+	}
+	if _, err := os.Stat(destFullPath); err == nil {
+		if err := os.Remove(destFullPath); err != nil {
+			return nil, fmt.Errorf("기존 결과 파일을 삭제할 수 없습니다. 파일이 열려 있는지 확인하세요 (%s): %w", destFullPath, err)
+		}
+	}
+
+	var warnings []string
+	err = withExcel(func(app, workbooks *ole.IDispatch) error {
+		return generateWithExcel(app, workbooks, req, selected, targetPath, destFullPath, &warnings)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	stat, err := os.Stat(destFullPath)
+	if err != nil {
+		return nil, fmt.Errorf("결과 엑셀 파일 저장 확인 실패 (%s): %w", destFullPath, err)
+	}
+
+	return &SOPGenerateResult{
+		Success:        true,
+		DstPath:        destFullPath,
+		DstFilename:    dstFilename,
+		FileSize:       stat.Size(),
+		SelectedSheets: selected,
+		ExecutionTime:  time.Since(startTime).Round(time.Millisecond).String(),
+		Message:        strings.Join(append([]string{fmt.Sprintf("SOP 엑셀 생성이 완료되었습니다 (%s, %d개 작업 조합)", dstFilename, len(selected))}, warnings...), "\n"),
+	}, nil
+}
+
+func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, selected []string, targetPath, destFullPath string, warnings *[]string) error {
+	// 1. Target ReadOnly 열기 (저장하지 않고 닫음)
+	srcWb, err := openReadOnly(workbooks, targetPath)
+	if err != nil {
+		return err
+	}
+	defer closeWorkbook(srcWb)
+
+	srcSheets, err := getDisp(srcWb, "Worksheets")
+	if err != nil {
+		return fmt.Errorf("Target Worksheets 획득 실패: %w", err)
+	}
+	defer srcSheets.Release()
+
+	// 2. 선택 시트별 섹션/도형 분석
+	srcs := make([]*srcSheet, 0, len(selected))
+	for _, name := range selected {
+		ws, err := getDisp(srcSheets, "Item", name)
+		if err != nil {
+			return fmt.Errorf("선택한 시트 '%s'를 Target 파일에서 찾을 수 없습니다", name)
+		}
+		defer ws.Release()
+
+		secs, err := FindSections(ws)
+		if err != nil {
+			return fmt.Errorf("시트 '%s' 섹션 탐색 실패: %w", name, err)
+		}
+		shapes, err := listShapes(ws)
+		if err != nil {
+			return fmt.Errorf("시트 '%s' 도형 조회 실패: %w", name, err)
+		}
+		s := &srcSheet{name: name, ws: ws, sections: map[string]SectionInfo{}, shapes: shapes}
+		for _, sec := range secs {
+			s.sections[sec.Name] = sec
+		}
+		srcs = append(srcs, s)
+	}
+	if len(srcs[0].sections) == 0 {
+		return fmt.Errorf("기준 시트 '%s'에서 사전작업/본작업/사후작업 섹션을 찾지 못했습니다", srcs[0].name)
+	}
+
+	// 3. 새 통합문서에 기준 시트(첫 선택 시트) 통째 복사, 나머지 기본 시트 삭제
+	newWb, err := callDisp(workbooks, "Add")
+	if err != nil {
+		return fmt.Errorf("새 통합문서 생성 실패: %w", err)
+	}
+	defer closeWorkbook(newWb)
+
+	newSheets, err := getDisp(newWb, "Worksheets")
+	if err != nil {
+		return fmt.Errorf("새 통합문서 Worksheets 획득 실패: %w", err)
+	}
+	defer newSheets.Release()
+
+	first, err := getDisp(newSheets, "Item", 1)
+	if err != nil {
+		return fmt.Errorf("새 통합문서 시트 획득 실패: %w", err)
+	}
+	_, err = oleutil.CallMethod(srcs[0].ws, "Copy", first)
+	first.Release()
+	if err != nil {
+		return fmt.Errorf("기준 시트 '%s' 복사 실패: %w", srcs[0].name, err)
+	}
+	for i := int(getNum(newSheets, "Count")); i >= 2; i-- {
+		if sh, err := getDisp(newSheets, "Item", i); err == nil {
+			oleutil.CallMethod(sh, "Delete")
+			sh.Release()
+		}
+	}
+	dstWs, err := getDisp(newSheets, "Item", 1)
+	if err != nil {
+		return fmt.Errorf("결과 시트 획득 실패: %w", err)
+	}
+	defer dstWs.Release()
+	oleutil.PutProperty(dstWs, "Name", resultSheetName)
+
+	dstSecs, err := FindSections(dstWs)
+	if err != nil {
+		return fmt.Errorf("결과 시트 섹션 탐색 실패: %w", err)
+	}
+
+	// 4. 데이터 병합 셀 내용 초기화 (서식/병합/테두리/글꼴 유지) + 데이터 영역 도형 삭제
+	var dataAreas []mergeBox
+	for _, sec := range dstSecs {
+		c := sec.Cols
+		area := mergeBox{Row1: sec.DataStartRow, Row2: sec.DataEndRow, Col1: math.MaxInt32}
+		for _, col := range []int{c.StepCol, c.TaskNameCol, c.PreTaskDetailCol, c.TargetObjCol, c.VerifyMethodCol, c.WorkerCol, c.VerifierCol, c.ResultCol} {
+			if col == 0 {
+				continue
+			}
+			box, err := readMergeBox(dstWs, sec.DataStartRow, col)
+			if err != nil {
+				return fmt.Errorf("%s 데이터 셀 확인 실패: %w", sec.Name, err)
+			}
+			area.Col1 = min(area.Col1, box.Col1)
+			area.Col2 = max(area.Col2, box.Col2)
+		}
+		dataAreas = append(dataAreas, area)
+
+		for _, col := range []int{c.TaskNameCol, c.PreTaskDetailCol, c.VerifyMethodCol, c.TargetObjCol, c.WorkerCol, c.VerifierCol} {
+			if col == 0 {
+				continue
+			}
+			if cl, err := getDisp(dstWs, "Cells", sec.DataStartRow, col); err == nil {
+				if ma, err := getDisp(cl, "MergeArea"); err == nil {
+					oleutil.CallMethod(ma, "ClearContents")
+					ma.Release()
+				}
+				cl.Release()
+			}
+		}
+	}
+	if err := deleteShapesIn(dstWs, dataAreas); err != nil {
+		return err
+	}
+
+	// 5. 적재 계획 계산 (행 높이 변경 전에 모든 위치를 상대 좌표로 계산)
+	type sectionPlan struct {
+		sec     SectionInfo
+		columns []columnPlan
+	}
+	var plans []sectionPlan
+	for _, sec := range dstSecs {
+		sp := sectionPlan{sec: sec}
+		for _, colOf := range stackColumns {
+			dstCol := colOf(sec.Cols)
+			if dstCol == 0 {
+				continue
+			}
+			dstBox, err := readMergeBox(dstWs, sec.DataStartRow, dstCol)
+			if err != nil {
+				return fmt.Errorf("%s 결과 병합 셀 확인 실패: %w", sec.Name, err)
+			}
+			var base fontSpec
+			if cl, err := getDisp(dstWs, "Cells", dstBox.Row1, dstBox.Col1); err == nil {
+				base = readCellFont(cl)
+				cl.Release()
+			}
+
+			var blocks []stackBlock
+			for idx, s := range srcs {
+				ssec, ok := s.sections[sec.Name]
+				if !ok {
+					continue
+				}
+				srcCol := colOf(ssec.Cols)
+				if srcCol == 0 {
+					continue
+				}
+				srcBox, err := readMergeBox(s.ws, ssec.DataStartRow, srcCol)
+				if err != nil {
+					return fmt.Errorf("시트 '%s' %s 병합 셀 확인 실패: %w", s.name, sec.Name, err)
+				}
+				b := stackBlock{header: fmt.Sprintf(blockHeaderFormat, idx+1, s.name), src: s, srcBox: srcBox}
+				if cl, err := getDisp(s.ws, "Cells", srcBox.Row1, srcBox.Col1); err == nil {
+					src := asText(getVal(cl, "Value2"))
+					raw := strings.ReplaceAll(strings.ReplaceAll(src, "\r\n", "\n"), "\r", "\n")
+					b.body = strings.TrimRight(raw, " \t\n")
+					b.font = readCellFont(cl)
+					b.runs = readFontRuns(cl, src, b.body)
+					cl.Release()
+				}
+				for _, sh := range s.shapes {
+					if srcBox.contains(sh.Row, sh.Col) {
+						b.shapes = append(b.shapes, sh)
+					}
+				}
+				blocks = append(blocks, b)
+			}
+			if len(blocks) > 0 {
+				sp.columns = append(sp.columns, buildColumnPlan(dstBox, base, blocks))
+			}
+		}
+		plans = append(plans, sp)
+	}
+
+	// 6. 행 높이 확장 (도형 배치 전에 확정해야 위치가 밀리지 않음)
+	for _, sp := range plans {
+		need := 0.0
+		for _, cp := range sp.columns {
+			need = math.Max(need, cp.height)
+		}
+		if need > 0 {
+			if !fitRowHeights(dstWs, sp.sec, need*1.15+blockPadding) { // 줄 높이 추정 오차 여유
+				*warnings = append(*warnings, fmt.Sprintf("경고: [%s] 내용이 행 높이 최대치(409pt)를 초과하여 일부가 잘릴 수 있습니다", sp.sec.Name))
+			}
+		}
+	}
+
+	// 7. 값 기입 + 텍스트/서식 적재 + 도형 복사
+	for _, sp := range plans {
+		sec := sp.sec
+		writeCell(dstWs, sec.DataStartRow, sec.Cols.StepCol, sec.StepNumber)
+		writeCell(dstWs, sec.DataStartRow, sec.Cols.TargetObjCol, literalText(req.TargetObject)) // ' 접두: 수식/숫자 변환 없이 텍스트로 저장
+		writeCell(dstWs, sec.DataStartRow, sec.Cols.WorkerCol, literalText(req.WorkerName))
+		writeCell(dstWs, sec.DataStartRow, sec.Cols.VerifierCol, literalText(req.VerifierName))
+
+		for _, cp := range sp.columns {
+			if err := writeColumnPlan(dstWs, cp); err != nil {
+				return fmt.Errorf("%s 적재 실패: %w", sec.Name, err)
+			}
+		}
+	}
+	oleutil.PutProperty(app, "CutCopyMode", false)
+
+	// 8. 프로그램 폴더에 저장
+	oleutil.CallMethod(dstWs, "Activate")
+	if a1, err := getDisp(dstWs, "Range", "A1"); err == nil {
+		oleutil.CallMethod(a1, "Select")
+		a1.Release()
+	}
+	if _, err := oleutil.CallMethod(newWb, "SaveAs", destFullPath, xlOpenXMLWorkbook); err != nil {
+		return fmt.Errorf("결과 엑셀 저장 실패 (%s): %w", destFullPath, err)
+	}
+	return nil
+}
+
+// deleteShapesIn removes shapes whose top-left cell lies inside any of the areas
+func deleteShapesIn(ws *ole.IDispatch, areas []mergeBox) error {
+	list, err := listShapes(ws)
+	if err != nil {
+		return err
+	}
+	shapes, err := getDisp(ws, "Shapes")
+	if err != nil {
+		return fmt.Errorf("Shapes 접근 실패: %w", err)
+	}
+	defer shapes.Release()
+
+	for i := len(list) - 1; i >= 0; i-- { // 뒤에서부터 삭제해야 인덱스 유지
+		s := list[i]
+		for _, a := range areas {
+			if a.contains(s.Row, s.Col) {
+				if sh, err := callDisp(shapes, "Item", s.Index); err == nil {
+					oleutil.CallMethod(sh, "Delete")
+					sh.Release()
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// fitRowHeights spreads the needed height evenly over the data rows (max 409pt each).
+// Returns false when need exceeds 409pt*rows (content may be clipped).
+func fitRowHeights(ws *ole.IDispatch, sec SectionInfo, need float64) bool {
+	n := sec.DataEndRow - sec.DataStartRow + 1
+	if n <= 0 {
+		return true
+	}
+	per := math.Min(maxRowHeight, math.Ceil(need/float64(n)))
+	for r := sec.DataStartRow; r <= sec.DataEndRow; r++ {
+		row, err := getDisp(ws, "Rows", r)
+		if err != nil {
+			continue
+		}
+		cur := getNum(row, "RowHeight")
+		oleutil.PutProperty(row, "RowHeight", math.Max(cur, per))
+		row.Release()
+	}
+	return need <= maxRowHeight*float64(n)
+}
+
+func writeCell(ws *ole.IDispatch, r, c int, value string) {
+	if c == 0 {
+		return
+	}
+	if cl, err := getDisp(ws, "Cells", r, c); err == nil {
+		oleutil.PutProperty(cl, "Value2", value)
+		cl.Release()
+	}
+}
+
+// writeColumnPlan writes the stacked text with per-run fonts and pastes the shapes
+func writeColumnPlan(ws *ole.IDispatch, cp columnPlan) error {
+	box, err := readMergeBox(ws, cp.row, cp.col)
+	if err != nil {
+		return err
+	}
+	cl, err := getDisp(ws, "Cells", cp.row, cp.col)
+	if err != nil {
+		return err
+	}
+	defer cl.Release()
+
+	if _, err := oleutil.PutProperty(cl, "Value2", cp.text); err != nil {
+		return fmt.Errorf("텍스트 기입 실패: %w", err)
+	}
+	for _, run := range cp.runs {
+		applyFont(cl, run.start, run.length, run.font, run.bold)
+	}
+	if ma, err := getDisp(cl, "MergeArea"); err == nil {
+		oleutil.PutProperty(ma, "WrapText", true)
+		oleutil.PutProperty(ma, "VerticalAlignment", xlTop)
+		ma.Release()
+	}
+
+	for _, sp := range cp.shapes {
+		if err := copyShape(sp.src.ws, sp.index, ws, box.Left+sp.relX, box.Top+sp.relY, sp.width, sp.height); err != nil {
+			return fmt.Errorf("시트 '%s' 도형 복사 실패: %w", sp.src.name, err)
+		}
+	}
+	return nil
+}
+
+// copyShape copies a shape across workbooks via the clipboard and positions it
+func copyShape(srcWs *ole.IDispatch, index int, dstWs *ole.IDispatch, left, top, width, height float64) error {
+	srcShapes, err := getDisp(srcWs, "Shapes")
+	if err != nil {
+		return err
+	}
+	defer srcShapes.Release()
+	shape, err := callDisp(srcShapes, "Item", index)
+	if err != nil {
+		return err
+	}
+	defer shape.Release()
+	dstShapes, err := getDisp(dstWs, "Shapes")
+	if err != nil {
+		return err
+	}
+	defer dstShapes.Release()
+
+	before := int(getNum(dstShapes, "Count"))
+	after := before
+	for attempt := 0; attempt < 3 && after <= before; attempt++ {
+		oleutil.CallMethod(srcWs, "Activate")
+		if _, err := oleutil.CallMethod(shape, "Copy"); err == nil {
+			time.Sleep(30 * time.Millisecond)
+			oleutil.CallMethod(dstWs, "Activate")
+			oleutil.CallMethod(dstWs, "Paste")
+		}
+		after = int(getNum(dstShapes, "Count"))
+		if after <= before {
+			time.Sleep(150 * time.Millisecond)
+		}
+	}
+	if after <= before {
+		return fmt.Errorf("클립보드 붙여넣기 실패")
+	}
+
+	pasted, err := callDisp(dstShapes, "Item", after)
+	if err != nil {
+		return err
+	}
+	defer pasted.Release()
+	oleutil.PutProperty(pasted, "LockAspectRatio", 0) // msoFalse: 계산된 크기 그대로 적용
+	oleutil.PutProperty(pasted, "Width", width)
+	oleutil.PutProperty(pasted, "Height", height)
+	oleutil.PutProperty(pasted, "Left", left)
+	oleutil.PutProperty(pasted, "Top", top)
+	return nil
+}
+
+// literalText prefixes ' so Excel stores the value as text (empty stays empty)
+func literalText(v string) string {
+	if v == "" {
+		return ""
+	}
+	return "'" + v
 }

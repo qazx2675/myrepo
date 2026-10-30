@@ -1,31 +1,6 @@
 {
   "worker_name": "이수석엔지니어",
-  "major_categories": [
-    "VM설치",
-    "점검",
-    "백업",
-    "설정",
-    "네트워크",
-    "보안패치"
-  ],
-  "minor_categories": [
-    "공통",
-    "서버",
-    "스토리지",
-    "네트워크",
-    "데이터베이스",
-    "보안"
-  ],
-  "templates": [
-    {
-      "id": "default_template",
-      "name": "기본 표준 양식 (B8,C8,G8,H8)",
-      "file_path": "C:\\Users\\qazx2\\.gemini\\antigravity-ide\\scratch\\excel-test-runner\\templates\\default_template.xlsx",
-      "is_default": true
-    }
-  ],
-  "selected_template": "default_template",
-  "last_target_file": "target.xlsx",
-  "last_dst_filename": "SOP_완료.xlsx",
-  "last_detail": ""
+  "verifier_name": "",
+  "target_object": "",
+  "last_target": "target.xlsx"
 }

@@ -92,16 +92,13 @@ func main() {
 	// Flags
 	cliMode := flag.Bool("cli", false, "명령줄(CLI)에서 즉시 실행")
 	createSampleFlag := flag.Bool("create-sample", false, "테스트용 원본 파일(target.xlsx) 자동 생성")
-	createDefaultTmplFlag := flag.Bool("create-default-template", false, "기본 양식 파일(default_template.xlsx) 자동 생성")
 
 	targetFlag := flag.String("target", "target.xlsx", "Target 엑셀 파일명")
-	templateFlag := flag.String("template", "", "양식(Template) 엑셀 파일명")
-	majorFlag := flag.String("major", "", "대분류")
-	minorFlag := flag.String("minor", "", "중분류")
-	detailFlag := flag.String("detail", "", "상세내용")
 	sheetsFlag := flag.String("sheets", "", "선택할 시트 목록 (순서대로 쉼표 구분: 예 '3_보안점검,1_OS설치')")
-	outFlag := flag.String("out", "SOP_완료.xlsx", "생성할 결과 엑셀 파일명")
-	workerFlag := flag.String("worker", "", "작업자 이름 설정")
+	outFlag := flag.String("out", "SOP_결과본.xlsx", "생성할 결과 엑셀 파일명")
+	workerFlag := flag.String("worker", "", "작업자 이름 (config에도 저장)")
+	verifierFlag := flag.String("verifier", "", "검증자 이름")
+	objectFlag := flag.String("object", "", "작업대상")
 	getWorkerFlag := flag.Bool("get-worker", false, "현재 등록된 작업자 이름 확인")
 
 	flag.Parse()
@@ -114,16 +111,10 @@ func main() {
 
 	appDir := GetAppDir()
 
-	// Ensure default template is created in templates folder
-	defaultTmplPath := filepath.Join(appDir, "templates", "default_template.xlsx")
-	if _, err := os.Stat(defaultTmplPath); err != nil {
-		_ = CreateDefaultTemplate(defaultTmplPath)
-	}
-
 	// CLI Mode Execution
 	if *cliMode {
-		runCLI(cfgMgr, appDir, *createSampleFlag, *createDefaultTmplFlag, *workerFlag, *getWorkerFlag,
-			*targetFlag, *templateFlag, *majorFlag, *minorFlag, *detailFlag, *sheetsFlag, *outFlag)
+		runCLI(cfgMgr, appDir, *createSampleFlag, *workerFlag, *verifierFlag, *objectFlag, *getWorkerFlag,
+			*targetFlag, *sheetsFlag, *outFlag)
 		return
 	}
 
@@ -141,13 +132,8 @@ func main() {
 	mux.Handle("/", http.FileServer(http.FS(webSubFS)))
 
 	// API routes
-	mux.HandleFunc("/api/config", serverState.handleGetConfig)
-	mux.HandleFunc("/api/config/worker", serverState.handleSetWorker)
-	mux.HandleFunc("/api/config/category", serverState.handleAddCategory)
-	mux.HandleFunc("/api/target/sheets", serverState.handleScanTargetSheets)
-	mux.HandleFunc("/api/templates/create-default", serverState.handleCreateDefaultTemplate)
-	mux.HandleFunc("/api/templates/upload", serverState.handleUploadTemplate)
-	mux.HandleFunc("/api/templates/select", serverState.handleSelectTemplate)
+	mux.HandleFunc("/api/config", serverState.handleConfig)
+	mux.HandleFunc("/api/target/load", serverState.handleLoadTarget)
 	mux.HandleFunc("/api/generate", serverState.handleGenerateSOP)
 	mux.HandleFunc("/api/create-sample-target", serverState.handleCreateSampleTarget)
 	mux.HandleFunc("/api/open-file", serverState.handleOpenFile)
@@ -196,9 +182,9 @@ func main() {
 	_ = server.Shutdown(ctx)
 }
 
-func runCLI(cfgMgr *ConfigManager, appDir string, createSample, createDefaultTmpl bool,
-	worker string, getWorker bool,
-	target, template, major, minor, detail, sheets, out string) {
+func runCLI(cfgMgr *ConfigManager, appDir string, createSample bool,
+	worker, verifier, object string, getWorker bool,
+	target, sheets, out string) {
 
 	if getWorker {
 		fmt.Printf("작업자: %s\n", cfgMgr.GetConfig().WorkerName)
@@ -222,23 +208,13 @@ func runCLI(cfgMgr *ConfigManager, appDir string, createSample, createDefaultTmp
 		fmt.Printf("[성공] 테스트용 target.xlsx 생성 완료: %s\n", targetPath)
 	}
 
-	if createDefaultTmpl {
-		tmplPath := filepath.Join(appDir, "templates", "default_template.xlsx")
-		if err := CreateDefaultTemplate(tmplPath); err != nil {
-			fmt.Printf("[오류] 기본 양식 생성 실패: %v\n", err)
-			os.Exit(1)
-		}
-		_ = cfgMgr.AddTemplate("default_template", "기본 표준 양식 (B8,C8,G8,H8)", tmplPath, true)
-		fmt.Printf("[성공] 기본 양식(default_template.xlsx) 생성 완료: %s\n", tmplPath)
-	}
-
 	if sheets == "" {
-		if !createSample && !createDefaultTmpl && worker == "" && !getWorker {
+		if !createSample && worker == "" {
 			fmt.Println("SOP 자동 생성 프로그램 CLI 모드")
 			fmt.Println("사용법 예시:")
-			fmt.Println("  excel-test-runner.exe -cli -create-sample")
-			fmt.Println("  excel-test-runner.exe -cli -worker=\"홍길동\"")
-			fmt.Println("  excel-test-runner.exe -cli -major=\"VM설치\" -minor=\"서버\" -detail=\"점검내용\" -sheets=\"3_보안점검,1_OS설치\" -out=\"SOP_결과.xlsx\"")
+			fmt.Println("  sop-generator.exe -cli -create-sample")
+			fmt.Println("  sop-generator.exe -cli -worker=\"홍길동\"")
+			fmt.Println("  sop-generator.exe -cli -target=target.xlsx -sheets=\"3_보안점검,1_OS설치\" -worker=\"홍길동\" -verifier=\"김검증\" -object=\"서버01\" -out=\"SOP_결과본.xlsx\"")
 		}
 		return
 	}
@@ -250,18 +226,13 @@ func runCLI(cfgMgr *ConfigManager, appDir string, createSample, createDefaultTmp
 		os.Exit(1)
 	}
 
-	tmplPath := template
-	if tmplPath == "" {
-		cfg := cfgMgr.GetConfig()
-		for _, t := range cfg.Templates {
-			if t.ID == cfg.SelectedTemplate {
-				tmplPath = t.FilePath
-				break
-			}
-		}
-		if tmplPath == "" {
-			tmplPath = filepath.Join(appDir, "templates", "default_template.xlsx")
-		}
+	workerName := strings.TrimSpace(worker)
+	if workerName == "" {
+		workerName = strings.TrimSpace(cfgMgr.GetConfig().WorkerName)
+	}
+	if workerName == "" {
+		fmt.Println("[오류] 작업자 이름이 없습니다. -worker=\"이름\" 으로 지정하세요.")
+		os.Exit(1)
 	}
 
 	targetPath := target
@@ -269,28 +240,19 @@ func runCLI(cfgMgr *ConfigManager, appDir string, createSample, createDefaultTmp
 		targetPath = filepath.Join(appDir, targetPath)
 	}
 
-	if major == "" {
-		major = "VM설치"
-	}
-	if minor == "" {
-		minor = "공통"
-	}
-
 	req := SOPGenerateRequest{
 		TargetPath:     targetPath,
-		TemplatePath:   tmplPath,
-		MajorCategory:  major,
-		MinorCategory:  minor,
-		DetailText:     detail,
 		SelectedSheets: sheetList,
-		DstFilename:    out,
+		WorkerName:     workerName,
+		VerifierName:   verifier,
+		TargetObject:   object,
+		OutputFileName: out,
 	}
 
 	fmt.Printf("[실행] SOP 엑셀 생성 중...\n")
 	fmt.Printf(" - 원본 파일: %s\n", targetPath)
-	fmt.Printf(" - 양식 파일: %s\n", tmplPath)
-	fmt.Printf(" - 대분류: %s | 중분류: %s\n", major, minor)
 	fmt.Printf(" - 시트 순서: %s\n", strings.Join(sheetList, " -> "))
+	fmt.Printf(" - 작업자: %s | 검증자: %s | 작업대상: %s\n", workerName, verifier, object)
 	fmt.Printf(" - 출력 파일명: %s\n", out)
 
 	res, err := GenerateSOPExcel(req)
@@ -298,6 +260,8 @@ func runCLI(cfgMgr *ConfigManager, appDir string, createSample, createDefaultTmp
 		fmt.Printf("[실행 실패] %v\n", err)
 		os.Exit(1)
 	}
+
+	_ = cfgMgr.UpdateInputs(verifier, object, target)
 
 	fmt.Println("==================================================")
 	fmt.Printf("[성공] %s\n", res.Message)

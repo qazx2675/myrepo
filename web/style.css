@@ -189,7 +189,7 @@ body {
   gap: 8px;
 }
 
-input[type="text"], textarea, .select-input {
+input[type="text"] {
   width: 100%;
   padding: 8px 12px;
   background-color: var(--bg-card-inner);
@@ -202,26 +202,8 @@ input[type="text"], textarea, .select-input {
   transition: border-color 0.15s ease;
 }
 
-input[type="text"]:focus, textarea:focus, .select-input:focus {
+input[type="text"]:focus {
   border-color: var(--border-focus);
-}
-
-textarea {
-  resize: vertical;
-  line-height: 1.6;
-}
-
-.combo-group {
-  display: flex;
-  gap: 8px;
-}
-
-.combo-group .select-input {
-  flex: 1;
-}
-
-.combo-group input[type="text"] {
-  flex: 1;
 }
 
 .help-text {
@@ -368,9 +350,10 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
+  min-width: 44px;
   height: 22px;
-  border-radius: 50%;
+  padding: 0 8px;
+  border-radius: 11px;
   background-color: var(--primary);
   color: #FFF;
   font-weight: 700;
@@ -378,6 +361,8 @@ textarea {
 }
 
 .order-badge.empty {
+  min-width: 22px;
+  padding: 0;
   background-color: transparent;
   border: 1px dashed var(--border-color);
   color: transparent;
@@ -412,6 +397,20 @@ textarea {
   border: 1px solid rgba(245, 158, 11, 0.3);
   color: #FBBF24;
   border-radius: 12px;
+}
+
+.warn-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #F87171;
+  border-radius: 12px;
+}
+
+.note-text {
+  margin-top: 10px;
+  line-height: 1.5;
 }
 
 .order-summary-box {

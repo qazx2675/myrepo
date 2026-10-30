@@ -55,239 +55,169 @@ func respondError(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
-// Handler: GET /api/config
-func (s *ServerState) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+// Handler: GET/POST /api/config
+type ConfigUpdateRequest struct {
+	WorkerName   *string `json:"worker_name"`
+	VerifierName *string `json:"verifier_name"`
+	TargetObject *string `json:"target_object"`
+}
+
+func (s *ServerState) handleConfig(w http.ResponseWriter, r *http.Request) {
 	s.recordHeartbeat()
-	cfg := s.cfgMgr.GetConfig()
-	respondJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"config":  cfg,
-		"app_dir": GetAppDir(),
-	})
+	switch r.Method {
+	case http.MethodGet:
+		respondJSON(w, http.StatusOK, map[string]any{
+			"success": true,
+			"config":  s.cfgMgr.GetConfig(),
+			"app_dir": GetAppDir(),
+		})
+	case http.MethodPost:
+		var req ConfigUpdateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "요청 파싱 실패: "+err.Error())
+			return
+		}
+		if req.WorkerName != nil {
+			name := strings.TrimSpace(*req.WorkerName)
+			if name == "" {
+				respondError(w, http.StatusBadRequest, "작업자 이름을 입력해주세요.")
+				return
+			}
+			if err := s.cfgMgr.SetWorkerName(name); err != nil {
+				respondError(w, http.StatusInternalServerError, "작업자 이름 저장 실패: "+err.Error())
+				return
+			}
+		}
+		if req.VerifierName != nil || req.TargetObject != nil {
+			cfg := s.cfgMgr.GetConfig()
+			verifier, object := cfg.VerifierName, cfg.TargetObject
+			if req.VerifierName != nil {
+				verifier = strings.TrimSpace(*req.VerifierName)
+			}
+			if req.TargetObject != nil {
+				object = strings.TrimSpace(*req.TargetObject)
+			}
+			if err := s.cfgMgr.UpdateInputs(verifier, object, ""); err != nil {
+				respondError(w, http.StatusInternalServerError, "설정 저장 실패: "+err.Error())
+				return
+			}
+		}
+		respondJSON(w, http.StatusOK, map[string]any{
+			"success": true,
+			"config":  s.cfgMgr.GetConfig(),
+		})
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	}
 }
 
-// Handler: POST /api/config/worker
-type WorkerRequest struct {
-	WorkerName string `json:"worker_name"`
-}
-
-func (s *ServerState) handleSetWorker(w http.ResponseWriter, r *http.Request) {
+// Handler: POST /api/target/load (JSON {target_path} or multipart target_file)
+func (s *ServerState) handleLoadTarget(w http.ResponseWriter, r *http.Request) {
 	s.recordHeartbeat()
 	if r.Method != http.MethodPost {
 		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	var req WorkerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "요청 파싱 실패: "+err.Error())
-		return
-	}
+	var targetPath string
+	locked := false // 업로드 파일 쓰기~스캔 동안 muGen 보유 (생성 중 Target 덮어쓰기 방지)
+	defer func() {
+		if locked {
+			s.muGen.Unlock()
+		}
+	}()
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		// 32 MB max
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			respondError(w, http.StatusBadRequest, "파일 업로드 처리 실패: "+err.Error())
+			return
+		}
+		file, header, err := r.FormFile("target_file")
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "Target 파일 수신 실패: "+err.Error())
+			return
+		}
+		defer file.Close()
 
-	name := strings.TrimSpace(req.WorkerName)
-	if name == "" {
-		respondError(w, http.StatusBadRequest, "작업자 이름을 입력해주세요.")
-		return
-	}
+		name := filepath.Base(header.Filename)
+		if !strings.HasSuffix(strings.ToLower(name), ".xlsx") {
+			respondError(w, http.StatusBadRequest, "엑셀 파일(.xlsx)만 업로드 가능합니다.")
+			return
+		}
 
-	if err := s.cfgMgr.SetWorkerName(name); err != nil {
-		respondError(w, http.StatusInternalServerError, "작업자 이름 저장 실패: "+err.Error())
-		return
-	}
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"success":     true,
-		"message":     "작업자 이름이 저장되었습니다.",
-		"worker_name": name,
-	})
-}
-
-// Handler: POST /api/config/category
-type CategoryRequest struct {
-	Type string `json:"type"` // "major" or "minor"
-	Name string `json:"name"`
-}
-
-func (s *ServerState) handleAddCategory(w http.ResponseWriter, r *http.Request) {
-	s.recordHeartbeat()
-	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	var req CategoryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "요청 파싱 실패: "+err.Error())
-		return
-	}
-
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		respondError(w, http.StatusBadRequest, "분류명을 입력해주세요.")
-		return
-	}
-
-	if req.Type == "major" {
-		_ = s.cfgMgr.AddMajorCategory(name)
-	} else if req.Type == "minor" {
-		_ = s.cfgMgr.AddMinorCategory(name)
+		targetPath = filepath.Join(GetAppDir(), name)
+		s.muGen.Lock()
+		locked = true
+		dst, err := os.Create(targetPath)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "파일 저장 실패: "+err.Error())
+			return
+		}
+		if _, err := io.Copy(dst, file); err != nil {
+			dst.Close()
+			respondError(w, http.StatusInternalServerError, "파일 쓰기 실패: "+err.Error())
+			return
+		}
+		if err := dst.Close(); err != nil {
+			respondError(w, http.StatusInternalServerError, "파일 저장 실패: "+err.Error())
+			return
+		}
 	} else {
-		respondError(w, http.StatusBadRequest, "유효하지 않은 분류 타입입니다.")
-		return
+		var req struct {
+			TargetPath string `json:"target_path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "요청 파싱 실패: "+err.Error())
+			return
+		}
+		targetPath = strings.TrimSpace(req.TargetPath)
+		if targetPath == "" {
+			targetPath = "target.xlsx"
+		}
+		if !filepath.IsAbs(targetPath) {
+			targetPath = filepath.Join(GetAppDir(), targetPath)
+		}
+		if _, err := os.Stat(targetPath); err != nil {
+			respondError(w, http.StatusNotFound, fmt.Sprintf("Target 파일이 존재하지 않습니다: %s", targetPath))
+			return
+		}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"config":  s.cfgMgr.GetConfig(),
-	})
-}
-
-// Handler: GET /api/target/sheets
-func (s *ServerState) handleScanTargetSheets(w http.ResponseWriter, r *http.Request) {
-	s.recordHeartbeat()
-	targetFile := r.URL.Query().Get("target")
-	if targetFile == "" {
-		targetFile = "target.xlsx"
+	if !locked {
+		s.muGen.Lock()
+		locked = true
 	}
-
-	appDir := GetAppDir()
-	targetPath := targetFile
-	if !filepath.IsAbs(targetPath) {
-		targetPath = filepath.Join(appDir, targetPath)
-	}
-
-	if _, err := os.Stat(targetPath); err != nil {
-		respondError(w, http.StatusNotFound, fmt.Sprintf("Target 파일이 존재하지 않습니다: %s", targetPath))
-		return
-	}
-
 	sheets, err := ScanTargetSheets(targetPath)
+	s.muGen.Unlock()
+	locked = false
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "시트 스캔 실패: "+err.Error())
 		return
 	}
+	if sheets == nil {
+		sheets = []TargetSheetInfo{}
+	}
+
+	cfg := s.cfgMgr.GetConfig()
+	_ = s.cfgMgr.UpdateInputs(cfg.VerifierName, cfg.TargetObject, targetPath)
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"success":     true,
-		"target_file": targetFile,
 		"target_path": targetPath,
 		"sheets":      sheets,
 		"count":       len(sheets),
 	})
 }
 
-// Handler: POST /api/templates/create-default
-func (s *ServerState) handleCreateDefaultTemplate(w http.ResponseWriter, r *http.Request) {
-	s.recordHeartbeat()
-	appDir := GetAppDir()
-	tmplPath := filepath.Join(appDir, "templates", "default_template.xlsx")
-
-	if err := CreateDefaultTemplate(tmplPath); err != nil {
-		respondError(w, http.StatusInternalServerError, "기본 양식 파일 생성 실패: "+err.Error())
-		return
-	}
-
-	_ = s.cfgMgr.AddTemplate("default_template", "기본 표준 양식 (B8,C8,G8,H8)", tmplPath, true)
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"success":   true,
-		"message":   "기본 양식(default_template.xlsx)이 성공적으로 생성되었습니다.",
-		"file_path": tmplPath,
-		"templates": s.cfgMgr.GetConfig().Templates,
-	})
-}
-
-// Handler: POST /api/templates/upload
-func (s *ServerState) handleUploadTemplate(w http.ResponseWriter, r *http.Request) {
-	s.recordHeartbeat()
-	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	// 32 MB max
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		respondError(w, http.StatusBadRequest, "파일 업로드 처리 실패: "+err.Error())
-		return
-	}
-
-	file, header, err := r.FormFile("template_file")
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "양식 파일 수신 실패: "+err.Error())
-		return
-	}
-	defer file.Close()
-
-	name := header.Filename
-	if !strings.HasSuffix(strings.ToLower(name), ".xlsx") {
-		respondError(w, http.StatusBadRequest, "엑셀 파일(.xlsx)만 업로드 가능합니다.")
-		return
-	}
-
-	appDir := GetAppDir()
-	templatesDir := filepath.Join(appDir, "templates")
-	_ = os.MkdirAll(templatesDir, 0755)
-
-	destPath := filepath.Join(templatesDir, name)
-	dst, err := os.Create(destPath)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "파일 저장 실패: "+err.Error())
-		return
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, file); err != nil {
-		respondError(w, http.StatusInternalServerError, "파일 쓰기 실패: "+err.Error())
-		return
-	}
-
-	tmplID := "custom_" + strings.TrimSuffix(name, filepath.Ext(name))
-	displayName := strings.TrimSuffix(name, filepath.Ext(name))
-	_ = s.cfgMgr.AddTemplate(tmplID, displayName, destPath, false)
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"success":     true,
-		"message":     fmt.Sprintf("양식 파일 '%s' 업로드가 완료되었습니다.", name),
-		"template_id": tmplID,
-		"file_path":   destPath,
-		"templates":   s.cfgMgr.GetConfig().Templates,
-	})
-}
-
-// Handler: POST /api/templates/select
-type SelectTemplateRequest struct {
-	TemplateID string `json:"template_id"`
-}
-
-func (s *ServerState) handleSelectTemplate(w http.ResponseWriter, r *http.Request) {
-	s.recordHeartbeat()
-	var req SelectTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "요청 파싱 실패: "+err.Error())
-		return
-	}
-
-	if err := s.cfgMgr.SelectTemplate(req.TemplateID); err != nil {
-		respondError(w, http.StatusInternalServerError, "양식 선택 저장 실패: "+err.Error())
-		return
-	}
-
-	respondJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"config":  s.cfgMgr.GetConfig(),
-	})
-}
-
 // Handler: POST /api/generate
 func (s *ServerState) handleGenerateSOP(w http.ResponseWriter, r *http.Request) {
 	s.recordHeartbeat()
-	s.muGen.Lock()
-	defer s.muGen.Unlock()
-
 	if r.Method != http.MethodPost {
 		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
+	s.muGen.Lock()
+	defer s.muGen.Unlock()
 
 	var req SOPGenerateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -295,55 +225,32 @@ func (s *ServerState) handleGenerateSOP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if strings.TrimSpace(req.MajorCategory) == "" {
-		respondError(w, http.StatusBadRequest, "대분류를 선택하거나 직접 입력해주세요.")
-		return
+	cfg := s.cfgMgr.GetConfig()
+	req.WorkerName = strings.TrimSpace(req.WorkerName)
+	if req.WorkerName == "" {
+		req.WorkerName = cfg.WorkerName
 	}
-	if strings.TrimSpace(req.MinorCategory) == "" {
-		respondError(w, http.StatusBadRequest, "중분류를 선택하거나 직접 입력해주세요.")
+	if strings.TrimSpace(req.WorkerName) == "" {
+		respondError(w, http.StatusBadRequest, "작업자 이름을 먼저 등록해주세요.")
 		return
 	}
 	if len(req.SelectedSheets) == 0 {
-		respondError(w, http.StatusBadRequest, "작업 순서에 포함할 시트를 1개 이상 선택해주세요.")
+		respondError(w, http.StatusBadRequest, "SOP에 포함할 시트를 1개 이상 선택해주세요.")
 		return
 	}
-
-	// Resolve template path
-	appDir := GetAppDir()
-	cfg := s.cfgMgr.GetConfig()
-	templatePath := req.TemplatePath
-	if templatePath == "" {
-		for _, t := range cfg.Templates {
-			if t.ID == cfg.SelectedTemplate {
-				templatePath = t.FilePath
-				break
-			}
-		}
-	}
-	if templatePath == "" {
-		templatePath = filepath.Join(appDir, "templates", "default_template.xlsx")
-	}
-	req.TemplatePath = templatePath
-
-	if req.TargetPath == "" {
+	if strings.TrimSpace(req.TargetPath) == "" {
 		req.TargetPath = "target.xlsx"
 	}
+	req.VerifierName = strings.TrimSpace(req.VerifierName)
+	req.TargetObject = strings.TrimSpace(req.TargetObject)
 
-	if req.DstFilename == "" {
-		req.DstFilename = "SOP_완료.xlsx"
-	}
-
-	// Auto-persist new categories if typed
-	_ = s.cfgMgr.AddMajorCategory(req.MajorCategory)
-	_ = s.cfgMgr.AddMinorCategory(req.MinorCategory)
-	_ = s.cfgMgr.UpdateLastUsed(req.TargetPath, req.DstFilename, req.DetailText)
-
-	// Execute SOP Generation
 	res, err := GenerateSOPExcel(req)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "SOP 엑셀 생성 실패: "+err.Error())
 		return
 	}
+
+	_ = s.cfgMgr.UpdateInputs(req.VerifierName, req.TargetObject, req.TargetPath)
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
@@ -387,7 +294,7 @@ func (s *ServerState) handleOpenFile(w http.ResponseWriter, r *http.Request) {
 
 	filePath := req.Path
 	if filePath == "" {
-		filePath = filepath.Join(GetAppDir(), "SOP_완료.xlsx")
+		filePath = filepath.Join(GetAppDir(), "SOP_결과본.xlsx")
 	}
 	if !filepath.IsAbs(filePath) {
 		filePath = filepath.Join(GetAppDir(), filePath)

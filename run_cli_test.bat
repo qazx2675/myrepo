@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 > nul
 echo ========================================================
-echo   Excel Sheet Cloner - CLI 즉시 테스트 실행
-echo   - 원본: target.xlsx (시트: test1)
-echo   - 대상 셀: A3 (병합+이미지), A6 (2x2병합+이미지)
-echo   - 신규: test2.xlsx (시트: test_sheet2)
+echo   SOP Generator v2 - CLI 즉시 테스트 실행
+echo   - 샘플 target.xlsx 생성 (시트: 1_OS설치, 2_네트워크설정, 3_보안점검)
+echo   - 시트 "3_보안점검,1_OS설치" 순서로 SOP_CLI_결과.xlsx 생성
 echo ========================================================
-"%~dp0excel-test-runner.exe" -cli -target=target.xlsx -src-sheet=test1 -dst-file=test2.xlsx -dst-sheet=test_sheet2 -cells="A3,A6"
+"%~dp0sop-generator.exe" -cli -create-sample
+"%~dp0sop-generator.exe" -cli -target=target.xlsx -sheets="3_보안점검,1_OS설치" -worker=홍길동 -verifier=김검증 -object=서버01 -out=SOP_CLI_결과.xlsx
 echo.
 pause

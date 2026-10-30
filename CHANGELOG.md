@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## [v2.0.0] - 2026-10-30
+
+### 변경 사항 (Breaking Change)
+- **실행 파일명 변경**: `excel-test-runner.exe` -> `sop-generator.exe` (구 실행 파일 삭제). 빌드 명령도 `-o sop-generator.exe`로 변경.
+- **대분류 / 중분류 / 상세내용 입력 삭제**: 웹 UI 입력란, `/api/config/category` API, `config.json`의 분류 정보, CLI 플래그(`-major`, `-minor`, `-detail`)를 모두 제거.
+- **양식(Template) 기능 삭제**: `templates/` 폴더, 기본 양식 생성(`-create-default-template`), 양식 업로드/선택 UI 및 `/api/templates/*` API, 플래그 `-template` 제거.
+- **CLI 플래그 정리**: `-cli -create-sample -target -sheets -out -worker -verifier -object -get-worker` 만 사용.
+- **API 정리**: `/api/config/worker`, `/api/target/sheets` 제거. 설정은 `/api/config`, 시트 조회는 `/api/target/load`, 생성은 `/api/generate`로 통합.
+
+### 추가된 기능
+- **작업대상 / 검증자 입력 (`web/index.html`, `web/app.js`)**: 작업대상(`target_object`), 검증자(`verifier_name`) 입력란 추가. 입력값은 다음 실행 시 복원.
+- **작업자 / 작업대상 / 검증자 영구 저장 (`config.go`)**: `config.json`에 `worker_name`, `verifier_name`, `target_object`, `last_target` 저장. 생성 성공 시 검증자, 작업대상, 마지막 Target 경로 갱신.
+- **섹션 동적 탐색 (`excel_com.go` `FindSections`)**: 고정 좌표 없이 `사전작업` / `본작업` / `사후작업` 섹션과 8개 헤더(Step, 작업내용, 작업자에 의한 사전 작업 내용, 작업대상, 검증방법, 작업자, 검증자, 작업결과)를 시트마다 찾음.
+- **Step 번호 고정**: 사전작업=1, 본작업=2, 사후작업=3.
+- **선택 시트 적재 (`GenerateSOPExcel`)**: 체크한 시트들의 `작업내용`, `작업자에 의한 사전 작업 내용`, `검증방법`을 각 섹션의 병합 셀에 선택 순서대로 세로 적재. 각 블록 앞에 `1. [시트이름]` 헤더 표기.
+- **글꼴 및 이미지 보존**: 원본 시트의 글꼴/크기와 병합 셀 내 이미지/도형을 결과 파일에 그대로 복사하고, 행 높이를 자동 확장하여 겹치지 않게 배치.
+- **기준 시트 복제 방식**: 첫 번째 선택 시트를 새 통합문서로 통째 복사한 뒤 데이터 병합 셀만 비우고 채움. 원본 Target 파일은 ReadOnly로 열어 읽기만 하며 수정하지 않음.
+- **결과 파일명 처리**: 빈 값이면 `SOP_결과본.xlsx`, 확장자가 없으면 `.xlsx` 부착, 경로 성분은 제거하고 실행 파일 폴더에 저장.
+- **샘플 Target 생성 (`CreateSampleTarget`)**: 시트 3개(`1_OS설치`, `2_네트워크설정`, `3_보안점검`), 시트마다 다른 행 위치의 3섹션, 14pt 글꼴, 이미지 포함.
+- **DoD v2.0 검증 스크립트**: `test_dod.go`, `run_dod_test.bat` (Windows + Excel 필요). 실행 결과(E2E)는 Windows 환경에서 확인 필요.
+
+### 유지 / 기타
+- 폐쇄망 오프라인 빌드 지원 (`vendor/`, `go build -mod=vendor`) 유지. 외부 의존성 추가 없음.
+- CI (`.github/workflows/ci.yml`): `windows-latest`에서 vendor 기준 빌드 및 `go vet` 실행 (대상 브랜치: `sop`, `master`, `main`).
+
+---
+
 ## [v1.2.0] - 2026-10-28
 
 ### 추가 및 완성된 기능 (Definition of Done v1.2 16개 항목 전체 통과)
