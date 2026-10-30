@@ -5,6 +5,7 @@
 
 # 서드파티 벤더 코드 (직접 작성한 코드가 아님)
 vendor/
+govendor/
 
 # 생성기가 만든 현장 conf 패치 스크립트 (직접 수정 금지, 원본은 vars.manifest / setup_guide 템플릿)
 update_v*.sh
