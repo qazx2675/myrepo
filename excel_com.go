@@ -683,10 +683,6 @@ type mergeBox struct {
 	Left, Top, Width, Height float64
 }
 
-func (b mergeBox) contains(r, c int) bool {
-	return r >= b.Row1 && r <= b.Row2 && c >= b.Col1 && c <= b.Col2
-}
-
 func readMergeBox(ws *ole.IDispatch, r, c int) (mergeBox, error) {
 	cl, err := getDisp(ws, "Cells", r, c)
 	if err != nil {
@@ -717,6 +713,13 @@ type shapeInfo struct {
 	Index                    int
 	Row, Col                 int
 	Left, Top, Width, Height float64
+}
+
+// centerIn reports whether the shape's center lies inside the box, so a shape that
+// sticks partly out of its merged cell still belongs to the cell holding most of it
+func (s shapeInfo) centerIn(b mergeBox) bool {
+	cx, cy := s.Left+s.Width/2, s.Top+s.Height/2
+	return cx >= b.Left && cx < b.Left+b.Width && cy >= b.Top && cy < b.Top+b.Height
 }
 
 func listShapes(ws *ole.IDispatch) ([]shapeInfo, error) {
@@ -979,6 +982,101 @@ func textHeight(s string, fs fontSpec, width float64) float64 {
 	return float64(lines) * lineHeight(fs)
 }
 
+// textMeasurer measures wrapped text height with Excel itself (row AutoFit on a
+// scratch sheet) instead of estimating it from character counts
+type textMeasurer struct {
+	ws, cl *ole.IDispatch
+	width  float64 // 현재 측정 열 너비(pt)
+}
+
+func newTextMeasurer(wb *ole.IDispatch) *textMeasurer {
+	sheets, err := getDisp(wb, "Worksheets")
+	if err != nil {
+		return nil
+	}
+	defer sheets.Release()
+	ws, err := callDisp(sheets, "Add")
+	if err != nil {
+		return nil
+	}
+	cl, err := getDisp(ws, "Cells", 1, 1)
+	if err != nil {
+		oleutil.CallMethod(ws, "Delete")
+		ws.Release()
+		return nil
+	}
+	oleutil.PutProperty(cl, "WrapText", true)
+	oleutil.PutProperty(cl, "VerticalAlignment", xlTop)
+	return &textMeasurer{ws: ws, cl: cl}
+}
+
+// close deletes the scratch sheet; safe to call more than once
+func (m *textMeasurer) close() {
+	if m == nil || m.ws == nil {
+		return
+	}
+	m.cl.Release()
+	oleutil.CallMethod(m.ws, "Delete")
+	m.ws.Release()
+	m.ws, m.cl = nil, nil
+}
+
+func (m *textMeasurer) setWidth(width float64) {
+	if m.width == width {
+		return
+	}
+	col, err := getDisp(m.ws, "Columns", 1)
+	if err != nil {
+		return
+	}
+	defer col.Release()
+	// 열 너비(문자 단위)와 pt 는 선형 관계이므로 두 점으로 환산
+	oleutil.PutProperty(col, "ColumnWidth", 10)
+	w10 := getNum(col, "Width")
+	oleutil.PutProperty(col, "ColumnWidth", 20)
+	w20 := getNum(col, "Width")
+	if w20 > w10 {
+		oleutil.PutProperty(col, "ColumnWidth", math.Max(0, math.Min(255, 10+(width-w10)*10/(w20-w10))))
+	}
+	m.width = width
+}
+
+// height returns the wrapped height of s in a cell of the given width; falls back
+// to the estimate when Excel cannot measure it (no measurer, row height cap)
+func (m *textMeasurer) height(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
+	est := textHeight(s, fs, width)
+	if m == nil || m.ws == nil {
+		return est
+	}
+	m.setWidth(width)
+	if _, err := oleutil.PutProperty(m.cl, "Value2", literalText(s)); err != nil { // ' 접두: "- ..." 가 수식으로 해석되지 않도록
+		return est
+	}
+	applyFont(m.cl, 1, utf16Len(s), fs, bold)
+	for _, r := range runs {
+		applyFont(m.cl, r.start, r.length, r.font, r.bold)
+	}
+	row, err := getDisp(m.ws, "Rows", 1)
+	if err != nil {
+		return est
+	}
+	defer row.Release()
+	oleutil.CallMethod(row, "AutoFit")
+	h := getNum(row, "RowHeight")
+	if h <= 0 || h >= maxRowHeight {
+		return math.Max(h, est)
+	}
+	return h
+}
+
+// lineHeight returns the height of one text line rendered with fs
+func (m *textMeasurer) lineHeight(fs fontSpec) float64 {
+	if m == nil || m.ws == nil {
+		return lineHeight(fs)
+	}
+	return m.height("가", fs, nil, fs.Bold, math.Max(m.width, 100))
+}
+
 func utf16Len(s string) int {
 	return len(utf16.Encode([]rune(s)))
 }
@@ -1030,13 +1128,13 @@ type columnPlan struct {
 
 // buildColumnPlan stacks blocks vertically: text gets blank-line padding so each
 // block header starts below the previous block's text and images
-func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock) columnPlan {
+func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock, m *textMeasurer) columnPlan {
 	plan := columnPlan{row: dst.Row1, col: dst.Col1}
 	var sb strings.Builder
 	pos := 0         // 지금까지 기록한 UTF-16 길이
-	textY := 0.0     // 추정 텍스트 끝 Y
+	textY := 0.0     // 텍스트 끝 Y
 	nextStart := 0.0 // 다음 블록이 시작해야 하는 Y
-	padH := lineHeight(base)
+	padH := m.lineHeight(base)
 	maxShapeW := dst.Width - 2*cellInnerPad
 
 	for i, b := range blocks {
@@ -1052,7 +1150,7 @@ func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock) columnPla
 		plan.runs = append(plan.runs, fontRun{start: pos + 1, length: hl, font: base, bold: true})
 		sb.WriteString(b.header)
 		pos += hl
-		headerH := textHeight(b.header, base, dst.Width)
+		headerH := m.height(b.header, base, nil, true, dst.Width)
 
 		bodyH := 0.0
 		if b.body != "" {
@@ -1069,9 +1167,16 @@ func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock) columnPla
 			}
 			sb.WriteString(b.body)
 			pos += bl
-			bodyH = textHeight(b.body, b.font, dst.Width)
+			bodyH = m.height(b.body, b.font, b.runs, b.font.Bold, dst.Width)
 		}
 		textY = blockStart + headerH + bodyH
+
+		// 원본에서 본문 텍스트와 겹치거나 붙어 있던 도형 묶음은 본문 아래 여백 뒤로 내린다 (묶음 내부 배치는 유지)
+		minRelY := math.Inf(1)
+		for _, s := range b.shapes {
+			minRelY = math.Min(minRelY, math.Max(0, s.Top-b.srcBox.Top))
+		}
+		shift := math.Max(0, bodyH+blockPadding-minRelY)
 
 		shapeBottom := 0.0
 		for _, s := range b.shapes {
@@ -1084,7 +1189,7 @@ func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock) columnPla
 			if relX+w > dst.Width-cellInnerPad {
 				relX = math.Max(0, dst.Width-cellInnerPad-w)
 			}
-			relY := math.Max(0, s.Top-b.srcBox.Top)
+			relY := math.Max(0, s.Top-b.srcBox.Top) + shift
 			plan.shapes = append(plan.shapes, shapePlan{
 				src: b.src, index: s.Index,
 				relX: relX, relY: blockStart + headerH + relY,
@@ -1264,6 +1369,11 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 			area.Col1 = min(area.Col1, box.Col1)
 			area.Col2 = max(area.Col2, box.Col2)
 		}
+		if rg, err := getDisp(dstWs, "Range", cell(area.Col1, area.Row1)+":"+cell(area.Col2, area.Row2)); err == nil {
+			area.Left, area.Top = getNum(rg, "Left"), getNum(rg, "Top")
+			area.Width, area.Height = getNum(rg, "Width"), getNum(rg, "Height")
+			rg.Release()
+		}
 		dataAreas = append(dataAreas, area)
 
 		for _, col := range []int{c.TaskNameCol, c.PreTaskDetailCol, c.VerifyMethodCol, c.TargetObjCol, c.WorkerCol, c.VerifierCol} {
@@ -1289,6 +1399,8 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 		columns []columnPlan
 	}
 	var plans []sectionPlan
+	measurer := newTextMeasurer(newWb) // 임시 측정 시트, 저장 전에 삭제
+	defer measurer.close()
 	for _, sec := range dstSecs {
 		sp := sectionPlan{sec: sec}
 		for _, colOf := range stackColumns {
@@ -1330,18 +1442,19 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 					cl.Release()
 				}
 				for _, sh := range s.shapes {
-					if srcBox.contains(sh.Row, sh.Col) {
+					if sh.centerIn(srcBox) {
 						b.shapes = append(b.shapes, sh)
 					}
 				}
 				blocks = append(blocks, b)
 			}
 			if len(blocks) > 0 {
-				sp.columns = append(sp.columns, buildColumnPlan(dstBox, base, blocks))
+				sp.columns = append(sp.columns, buildColumnPlan(dstBox, base, blocks, measurer))
 			}
 		}
 		plans = append(plans, sp)
 	}
+	measurer.close()
 
 	// 6. 행 높이 확장 (도형 배치 전에 확정해야 위치가 밀리지 않음)
 	for _, sp := range plans {
@@ -1384,7 +1497,7 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 	return nil
 }
 
-// deleteShapesIn removes shapes whose top-left cell lies inside any of the areas
+// deleteShapesIn removes shapes whose center lies inside any of the areas
 func deleteShapesIn(ws *ole.IDispatch, areas []mergeBox) error {
 	list, err := listShapes(ws)
 	if err != nil {
@@ -1399,7 +1512,7 @@ func deleteShapesIn(ws *ole.IDispatch, areas []mergeBox) error {
 	for i := len(list) - 1; i >= 0; i-- { // 뒤에서부터 삭제해야 인덱스 유지
 		s := list[i]
 		for _, a := range areas {
-			if a.contains(s.Row, s.Col) {
+			if s.centerIn(a) {
 				if sh, err := callDisp(shapes, "Item", s.Index); err == nil {
 					oleutil.CallMethod(sh, "Delete")
 					sh.Release()
