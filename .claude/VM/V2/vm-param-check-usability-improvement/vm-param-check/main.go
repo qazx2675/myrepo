@@ -406,6 +406,11 @@ type expectSet struct {
 	// PCI는 그룹("ev01"~"ev99")별 기대 PCI 패스스루 벤더(spec 의 pci-evNN 값)다. 없으면 그 그룹은 체크하지 않는다.
 	PCI map[string]string
 
+	// DelAffinity / DelLpage는 스펙의 *_del_affinity / *_del_lpage 로 검사에서 제외된 그룹("ev01"~"ev99")이다.
+	// 제외된 그룹의 VM 은 해당 값이 "없어야" 정상으로 본다(전역 -expectNoAffinity/-expectNoLpage 와 같은 판정).
+	DelAffinity map[string]bool
+	DelLpage    map[string]bool
+
 	HTOn bool
 
 	// PreferHT는 numa.vcpu.preferHT 기대값(예: "TRUE")이다. 모든 VM에 공통 적용되는
@@ -454,7 +459,7 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 	// vcsim (127.0.0.1:54321)에서는 일부 필드를 지원하지 않으므로 플래그 계산
 	isVcsim := strings.HasPrefix(vm.VCenter, "127.0.0.1")
 	var f []model.Finding
-	f = append(f, checker.CheckFixed(vm)...)
+	f = append(f, checker.CheckFixed(vm, checker.ExpectNoLpage || e.DelLpage[group])...)
 	f = append(f, checker.CheckTopology(vm, coresExpect, numaExpect, group, singleVMMode, isVcsim)...)
 	f = append(f, checker.CheckPreferHT(vm, e.PreferHT)...)
 	f = append(f, checker.CheckHardware(vm, cpuExpect, memExpect, diskExpect, shares, group, singleVMMode, isVcsim)...)
@@ -462,7 +467,7 @@ func evaluateVM(vm model.VMInfo, e expectSet, singleVMMode bool) []model.Finding
 	f = append(f, checker.CheckHostPower(vm))
 	f = append(f, checker.CheckNetwork(vm)...)
 
-	if checker.ExpectNoAffinity {
+	if checker.ExpectNoAffinity || (group != "" && e.DelAffinity[group]) {
 		if group != "" {
 			f = append(f, checker.CheckAffinityAbsent(vm, group)...)
 		}
@@ -748,7 +753,13 @@ func applyFolderSpecs(specRoot, specFolder string, vms []model.VMInfo, setFlags 
 		// 앞 스펙에서 채운 값이 남아 새어 들어가지 않도록, 매번 사용자가 준 상태로 되돌린 뒤 적용한다.
 		restoreFlags(baseFlagValues)
 		applySpecOptions(match, setFlags)
-		expectBySpec[specFile] = buildExpect()
+		e := buildExpect()
+		var err error
+		if e.DelAffinity, e.DelLpage, err = config.DelGroups(match.Options, config.SpecGroupCount(match.Options)); err != nil {
+			log.Fatalf("%s: %v", specFile, err)
+		}
+		printDelGroups(e.DelAffinity, e.DelLpage)
+		expectBySpec[specFile] = e
 	}
 
 	if autoYes {
@@ -934,6 +945,9 @@ func applySpecOptions(match *config.SpecMatch, setFlags map[string]bool) {
 		if config.IsTagOption(opt.Name) { // 태그는 vm_setup.sh 의 태그 설정용 — 체크에는 쓰지 않는다
 			continue
 		}
+		if config.IsDelOption(opt.Name) { // all_/evNN_del_* 제외 옵션은 플래그가 아니다 — 검사 단계에서 따로 읽는다
+			continue
+		}
 		f := flag.Lookup(opt.Name)
 		if f == nil {
 			log.Fatalf("%s 에 알 수 없는 옵션 이름이 있습니다: %q", match.SpecFile, opt.Name)
@@ -955,6 +969,26 @@ func applySpecOptions(match *config.SpecMatch, setFlags map[string]bool) {
 		}
 		fmt.Printf("    [스펙적용] -%s=%s\n", opt.Name, value)
 	}
+}
+
+// printDelGroups는 스펙에서 affinity / lpage 검사가 제외된 ev 그룹을 한 줄로 알린다(제외가 있을 때만).
+func printDelGroups(aff, lp map[string]bool) {
+	if len(aff) == 0 && len(lp) == 0 {
+		return
+	}
+	list := func(m map[string]bool) string {
+		var gs []string
+		for _, g := range model.GroupNames() {
+			if m[g] {
+				gs = append(gs, g)
+			}
+		}
+		if len(gs) == 0 {
+			return "(없음)"
+		}
+		return strings.Join(gs, ",")
+	}
+	fmt.Printf("    [스펙적용] 제외: affinity=%s lpage=%s\n", list(aff), list(lp))
 }
 
 // runInitFolder는 vCenter에 연결하지 않고 -specRoot 아래에 신규 스펙 디렉터리 틀을 만든다.

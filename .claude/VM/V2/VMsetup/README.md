@@ -98,6 +98,19 @@ user 별로 마지막으로 실행한 vCenter를 `run_<user>/last_vcenter`에 �
 - 로그: 단계별 `run_<user>/logs/NN_<단계>.log`, 전체 `run_<user>/run.log`, 실행 계획 `run_<user>/plan.txt`("작업 시작" 줄에서 Enter).
 - 표준입력이 파이프이거나(nohup·cron·자동 시험) `VMSETUP_MONITOR=0` 이면 모니터 없이 예전처럼 줄줄이 출력합니다. 이때 표준입력이 터미널이 아니면 라이선스 선택은 남은 입력을 쓰고, 입력이 끝나면 `q`(취소)로 처리합니다.
 
+#### ev 별 affinity / lpage 제외 (`evNN_del_affinity` / `evNN_del_lpage`)
+
+`-del_affinity` / `-del_lpage` 와 같은 동작을 스펙 파일에서 ev 별로 지정합니다. 값은 `y` 만 쓸 수 있습니다(범위·`n` 없음, 다른 값이나 스펙 ev 개수를 넘는 번호는 VM 생성 전에 오류).
+
+```
+ev01_del_affinity=y     # ev01: affinity 설정값 전부 삭제, lpage 는 적용 (ev02~ev03 은 affinity·lpage 모두 적용)
+# ev03_del_lpage=y      # ev03: HugePage 설정값 삭제 (CPU 토폴로지는 평소처럼 적용)
+# all_del_affinity=y    # 모든 ev 에 -del_affinity 와 같음 (all_del_lpage=y 도 마찬가지)
+```
+
+- CLI `-del_affinity` / `-del_lpage` 를 같이 주면 CLI 가 우선(모든 ev). 제외한 ev 는 `affinity-evNN` 줄이 없어도 됩니다(CLI `-del_affinity` 일 때도 마찬가지).
+- 실행 계획에 `제외(스펙)` 줄이 표시되고, 스펙 체크는 제외한 ev 만 "값이 없어야 OK" 로 판정합니다. 도구 직접 호출은 `affinity_setting -del_affinity_evs ev01,ev03`, `lpage_setting -del_lpage_evs ev01,ev03`.
+
 #### 태그 설정(`tag-*`)
 
 스펙 파일(`SPEC_DIR/<폴더>/<폴더>_spec.txt`) 맨 아래에 태그당 한 줄로 적습니다. 태그는 vCenter 사용자 지정 특성 `DEPT_NAME` / `PURPOSE` / `VM_TYPE` 입니다.
@@ -184,6 +197,7 @@ pci-ev02=nvidia        # ev02 VM 마다 NVIDIA GPU 1개 (EFI 펌웨어 필요, 6
 | `tag-DEPT_NAME` / `tag-PURPOSE` / `tag-VM_TYPE` | `tag_setting -deptNames/-purposes/-vmTypes` (ev 별로 펼쳐 ev01,ev02.. 콤마 목록). 체크에는 쓰지 않음 |
 | `cores`(소켓당 코어 수), `numa`(NUMA 노드당 vCPU 수) | `lpage_setting`의 총 코어(=cpu)/소켓 수/NUMA 노드 수 |
 | `pci-evNN` | `pci_passthrough -evNNPci` (값 검증은 도구가 함). 체크는 "PCI 패스스루" 항목 |
+| `evNN_del_affinity=y` / `evNN_del_lpage=y` / `all_del_affinity=y` / `all_del_lpage=y` | `affinity_setting -del_affinity_evs` / `lpage_setting -del_lpage_evs` (제외한 ev 목록). 체크는 제외한 ev 만 "값이 없어야 OK" |
 
 ## 4. 문서별 고유 설명
 

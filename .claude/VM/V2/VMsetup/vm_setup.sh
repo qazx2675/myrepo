@@ -273,10 +273,12 @@ vm_name() { printf '%sev%02d' "${1%%.*}" "$2"; }
 # build_flags <스펙 폴더> [noaff] — 스펙 값을 각 도구 옵션으로 바꿔 CREATE_ARGS/AFF_ARGS/LP_ARGS/PCI_ARGS 에 담는다. 잘못된 값이면 FLAG_ERR 를 채우고 실패.
 # affinity 는 ev 마다 파일이 있어야 한다(자동 계산은 삭제). 여러 ev 가 같은 파일을 가리켜도 된다.
 # noaff: vim 으로 새 스펙을 만드는 중(affinity 는 저장 뒤에 고름)이라 affinity 가 없어도 통과시킨다.
-CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); PCI_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
+# 제외: 스펙의 del_affinity/del_lpage 키(all_*·evNN_*)는 -specExport 의 del_affinity-evNN=y / del_lpage-evNN=y 로 온다.
+# 제외된 ev 는 affinity-evNN 파일이 없어도 된다(CLI -del_affinity 면 전체). DEL_AFF_EVS/DEL_LP_EVS = 스펙으로 제외된 ev 목록(ev01,ev03 형식).
+CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); PCI_ARGS=(); TAG_ARGS=(); FLAG_ERR=""; DEL_AFF_EVS=""; DEL_LP_EVS=""
 build_flags() {
-  local d="$1" noaff="${2:-}" g n nn cpu mem disk sh aff cps numa v t flag list any
-  CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); PCI_ARGS=(); TAG_ARGS=(); FLAG_ERR=""
+  local d="$1" noaff="${2:-}" g n nn cpu mem disk sh aff cps numa v t flag list any affx
+  CREATE_ARGS=(); AFF_ARGS=(); LP_ARGS=(); PCI_ARGS=(); TAG_ARGS=(); FLAG_ERR=""; DEL_AFF_EVS=""; DEL_LP_EVS=""
   g="$(exp_get "$d" groups)"; is_uint "$g" || { FLAG_ERR="스펙에서 ev 개수를 읽지 못했습니다"; return 1; }
   CREATE_ARGS+=("-vmCount=$g"); AFF_ARGS+=("-vm_cnt=$g")
   for n in $(seq 1 "$g"); do
@@ -290,8 +292,14 @@ build_flags() {
     case "${sh,,}" in normal|nomal) sh="nomal" ;; *) is_uint "$sh" || { FLAG_ERR="shares-ev$nn 값은 숫자 또는 normal 이어야 합니다: '$sh'"; return 1; } ;; esac
     CREATE_ARGS+=("-ev${nn}Cpu=$cpu" "-ev${nn}Mem=$mem" "-ev${nn}Disk=$disk" "-ev${nn}Share=$sh")
 
+    affx=0
+    [ "$(exp_get "$d" "del_affinity-ev$nn")" = y ] && { DEL_AFF_EVS+="${DEL_AFF_EVS:+,}ev$nn"; affx=1; }
+    [ "$(exp_get "$d" "del_lpage-ev$nn")" = y ] && DEL_LP_EVS+="${DEL_LP_EVS:+,}ev$nn"
+    [ "$DEL_AFFINITY" = 1 ] && affx=1
     aff="$(exp_get "$d" "affinity-ev$nn")"
-    if [ -n "$aff" ]; then
+    if [ "$affx" = 1 ]; then
+      [ -n "$aff" ] && [ -f "$aff" ] && AFF_ARGS+=("-affinityFile$nn=$aff")    # 제외된 ev: 파일이 있을 때만 넘김(없어도 통과)
+    elif [ -n "$aff" ]; then
       [ -f "$aff" ] || { FLAG_ERR="affinity-ev$nn 파일이 없습니다: $aff"; return 1; }
       AFF_ARGS+=("-affinityFile$nn=$aff")
     elif [ -z "$noaff" ]; then
@@ -315,6 +323,9 @@ build_flags() {
     v="$(exp_get "$d" "pci-ev$nn")"
     [ -n "$v" ] && PCI_ARGS+=("-ev${nn}Pci=$v")
   done
+  # 스펙으로 제외된 ev 목록 — 전역 -del_affinity/-del_lpage(CLI)가 있으면 그쪽이 이기므로 목록은 넘기지 않는다
+  [ -n "$DEL_AFF_EVS" ] && [ "$DEL_AFFINITY" != 1 ] && AFF_ARGS+=("-del_affinity_evs=$DEL_AFF_EVS")
+  [ -n "$DEL_LP_EVS" ] && [ "$DEL_LPAGE" != 1 ] && LP_ARGS+=("-del_lpage_evs=$DEL_LP_EVS")
   # 태그(사용자 지정 특성): 스펙의 tag-<이름> 줄을 vm-param-check 가 ev 별로 펼쳐 준다 → tag_setting 의 ev01,ev02.. 콤마 목록으로.
   # 값이 없는 ev 는 빈 칸으로 두면 tag_setting 이 그 ev 만 건너뛴다. 체크(vm-param-check)는 태그를 보지 않는다.
   for t in DEPT_NAME:deptNames PURPOSE:purposes VM_TYPE:vmTypes; do
@@ -802,13 +813,14 @@ print_affinity() {
   for a in "${AFF_ARGS[@]}"; do
     [[ "$a" =~ ^-affinityFile([0-9]+)=(.+)$ ]] || continue
     nn="${BASH_REMATCH[1]}"; f="${BASH_REMATCH[2]}"
+    [[ ",$DEL_AFF_EVS," == *",ev$nn,"* ]] && continue # 스펙으로 affinity 제외된 ev 는 설정하지 않으니 보여주지 않는다
     key="$(sed -e 's/\r$//' -e 's/#.*$//' -e 's/[[:space:]]//g' "$f" | awk 'NF' | cksum)"
     if [ -z "${evs_of[$key]:-}" ]; then order+=("$key"); file_of[$key]="$f"; fi
     evs_of[$key]+=" $nn"
     [[ " ${names_of[$key]:-} " == *" $(basename "$f") "* ]] || names_of[$key]+="${names_of[$key]:+ }$(basename "$f")"
   done
   say "   affinity 설정값 (내용이 같은 파일은 한 번만):"
-  for key in "${order[@]}"; do
+  for key in ${order[@]+"${order[@]}"}; do
     printf '     %s[%s]%s %s\n' "$C_BLD" "$(ev_ranges "${evs_of[$key]}")" "$C_RST" "${names_of[$key]// /, }"
     sed -e 's/\r$//' -e 's/#.*$//' "${file_of[$key]}" | awk 'NF' | sed 's/^/        /'
   done
@@ -904,6 +916,9 @@ for d in "${SPEC_ORDER[@]}"; do
   print_ev_kv "MAC 디스크(sda5, 자동매칭)" "${MAC_DISK_ARGS[@]}"
   say "   power_setting    BM $(grep -c . "$RUN_DIR/worklist_$k.txt")대 → 고성능 전원 정책(이미 고성능이면 스킵)"
   say "   affinity_setting ${AFF_ARGS[*]}"
+  if [ -n "$DEL_AFF_EVS$DEL_LP_EVS" ]; then
+    say "   제외(스펙): affinity=${DEL_AFF_EVS:-(없음)} / lpage=${DEL_LP_EVS:-(없음)}"
+  fi
   [ "${#LP_ARGS[@]}" -gt 0 ] && print_ev_kv "lpage_setting" "${LP_ARGS[@]}" || say "   lpage_setting: 스펙에 cores 가 없어 건너뜀"
   if [ "${#PCI_ARGS[@]}" -gt 0 ]; then
     print_ev_kv "pci_passthrough (패스스루 활성화·VM 연결·전원 ON — VM 은 켜 둠, lpage 다음)" "${PCI_ARGS[@]}"

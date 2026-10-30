@@ -168,6 +168,7 @@ func main() {
 	htMode := flag.String("ht", "", "[사용 안 함] AUTO 자동 계산 삭제로 무시된다 (예전 명령줄 호환용)")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (VM 목록 조회 / Reconfigure 전송+대기 전 구간에 적용)")
 	delAffinity := flag.Bool("del_affinity", false, "affinity 설정값을 설정하지 않고 전부 삭제한다 (VM 의 sched.cpu.affinity / sched.vcpuN.affinity 전체, affinity 파일은 필요 없고 주어도 무시)")
+	delAffinityEvs := flag.String("del_affinity_evs", "", "지정한 ev 의 VM 만 affinity 설정값을 전부 삭제한다 (쉼표 구분, 예: ev01,ev03 — -vm_cnt 범위 안. 나머지 ev 는 정상 설정이라 affinity 파일 필수. -del_affinity 와 같이 주면 -del_affinity(전체 삭제)가 우선)")
 	collapseEvUsage(regexp.MustCompile(`^affinityFile(\d{2})$`))
 
 	flag.Parse()
@@ -203,6 +204,22 @@ func main() {
 		*filePtrs[1] = *affinityLegacy
 	}
 
+	// ---- ev 별 삭제 대상 (-del_affinity 가 있으면 전체 삭제가 우선) ----
+	delEv, evErr := parseEvList(*delAffinityEvs, *vmCnt)
+	if evErr != nil {
+		log.Fatalf("-del_affinity_evs 값이 올바르지 않습니다: %v", evErr)
+	}
+	if *delAffinity {
+		for i := range delEv {
+			delEv[i] = true
+		}
+	}
+	anyDel, allDel := false, true
+	for _, d := range delEv {
+		anyDel = anyDel || d
+		allDel = allDel && d
+	}
+
 	// ---- vm_cnt 기준 필수 파라미터 검증 ----
 	fileFlags := make([]string, maxVMCount)
 	for i, p := range filePtrs {
@@ -211,7 +228,7 @@ func main() {
 
 	specs := make([]*affinitySpec, *vmCnt)
 	for i := 0; i < *vmCnt; i++ {
-		if *delAffinity {
+		if delEv[i] {
 			continue // 삭제 모드: affinity 파일은 보지 않는다(specs[i] == nil) — VM 의 affinity 항목을 전부 지운다
 		}
 		if strings.TrimSpace(fileFlags[i]) == "" {
@@ -259,9 +276,16 @@ func main() {
 		len(hostlistLines), *vmCnt, strings.Join(suffixes[:*vmCnt], ", "))
 	if *delAffinity {
 		fmt.Println("  모드      : affinity 삭제 (-del_affinity) — 설정하지 않고 VM 의 affinity 설정값을 모두 지웁니다 (affinity 파일은 사용하지 않음)")
+		if strings.TrimSpace(*delAffinityEvs) != "" {
+			fmt.Println("  알림      : -del_affinity 가 있으므로 -del_affinity_evs 는 무시됩니다 (전체 삭제).")
+		}
 	} else {
 		for i := 0; i < *vmCnt; i++ {
-			fmt.Printf("  %s 설정  : %s [%d개 항목]\n", suffixes[i], specs[i].fileName, len(specs[i].pairs))
+			if delEv[i] {
+				fmt.Printf("  %s 모드  : affinity 삭제 (-del_affinity_evs) — 설정하지 않고 affinity 설정값을 모두 지웁니다\n", suffixes[i])
+			} else {
+				fmt.Printf("  %s 설정  : %s [%d개 항목]\n", suffixes[i], specs[i].fileName, len(specs[i].pairs))
+			}
 		}
 	}
 	fmt.Println()
@@ -370,10 +394,12 @@ func main() {
 
 	// 삭제 모드: 지금 VM 에 들어 있는 extraConfig 를 한 번에 읽어 둔다(어떤 항목이 실제로 있는지 알아야 지울 수 있다).
 	currentExtra := map[string]map[string]string{}
-	if *delAffinity {
+	if anyDel {
 		refs := make([]types.ManagedObjectReference, 0, len(jobs))
 		for _, j := range jobs {
-			refs = append(refs, j.vm.Reference())
+			if j.specI == nil {
+				refs = append(refs, j.vm.Reference())
+			}
 		}
 		var cur []mo.VirtualMachine
 		if retErr := property.DefaultCollector(client.Client).Retrieve(ctx, refs, []string{"name", "config.extraConfig"}, &cur); retErr != nil {
@@ -405,7 +431,8 @@ func main() {
 			defer func() { <-sem }()
 
 			var extraConfig []types.BaseOptionValue
-			if *delAffinity {
+			isDel := j.specI == nil // 삭제 대상 VM (전체 -del_affinity 또는 -del_affinity_evs)
+			if isDel {
 				// 값을 빈 문자열로 보내면 vCenter 가 그 항목을 VM 설정에서 지운다.
 				for _, key := range affinityKeysToDelete(currentExtra[j.vmName]) {
 					extraConfig = append(extraConfig, &types.OptionValue{Key: key, Value: ""})
@@ -435,7 +462,7 @@ func main() {
 				return
 			}
 
-			if *delAffinity {
+			if isDel {
 				safePrintf("[%s] affinity 삭제 명령 전송 완료 (%d개 항목)\n", j.vmName, len(extraConfig))
 			} else {
 				safePrintf("[%s] %s 기반 병렬 설정 명령 전송 완료 (%d개 항목)\n",
@@ -532,8 +559,12 @@ func main() {
 	if failed > 0 || skipped > 0 || mismatched > 0 {
 		os.Exit(2)
 	}
-	if *delAffinity {
+	if allDel {
 		fmt.Println("모든 VM 의 affinity 삭제가 끝났습니다 (재조회로 검증 완료).")
+		return
+	}
+	if anyDel {
+		fmt.Println("지정한 ev 의 affinity 삭제와 나머지 ev 의 어피니티 설정이 정상 적용되었습니다 (재조회로 검증 완료).")
 		return
 	}
 	fmt.Println("모든 VM 의 어피니티 설정이 정상 적용되었습니다 (재조회로 검증 완료).")
@@ -579,4 +610,25 @@ func affinityKeysToDelete(current map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// parseEvList: "ev01,ev03" 형태의 목록을 ev 번호(1..vmCnt) 기준 bool 슬라이스(인덱스 = 번호-1)로 바꾼다.
+// 빈 문자열이면 전부 false. evNN 형식(대소문자 무관)만 받고, 범위 밖/형식 오류는 에러.
+func parseEvList(list string, vmCnt int) ([]bool, error) {
+	out := make([]bool, vmCnt)
+	for _, tok := range strings.Split(list, ",") {
+		tok = strings.ToLower(strings.TrimSpace(tok))
+		if tok == "" {
+			continue
+		}
+		if !strings.HasPrefix(tok, "ev") {
+			return nil, fmt.Errorf("%q 는 evNN 형식이 아닙니다 (예: ev01)", tok)
+		}
+		n, err := strconv.Atoi(tok[2:])
+		if err != nil || n < 1 || n > vmCnt {
+			return nil, fmt.Errorf("%q 는 -vm_cnt 범위(ev01~ev%02d)를 벗어났거나 형식 오류입니다", tok, vmCnt)
+		}
+		out[n-1] = true
+	}
+	return out, nil
 }

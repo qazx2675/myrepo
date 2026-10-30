@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-10-30 — 스펙 키 `evNN_del_affinity=y` / `evNN_del_lpage=y` (`all_*` 포함) 로 ev 별 "없어야 OK" 체크
+
+- 스펙에 `all_del_affinity=y`, `all_del_lpage=y`, `evNN_del_affinity=y`, `evNN_del_lpage=y` 가 있으면 제외한 ev 만 affinity 키 / HugePage 키가 **없어야 OK**(남아 있으면 FAIL)로 자동 판정하고, 나머지 ev 는 평소처럼 스펙과 비교한다. `-expectNoAffinity` / `-expectNoLpage` 는 이전처럼 전체 ev 에 적용(그대로 유지).
+- `-fix` 는 "(없음)" 으로 기대하는 항목을 되살리지 않고 수동 조치로만 표시한다.
+- `-specExport` 도 이 키를 그대로 내보낸다. 검증: `go test`, vcsim 시나리오(`VMsetup/CHANGELOG.md` 2026-10-30 참고). `bin_os6/vm-param-check.gz` 교체.
+
+---
+
 ## 2026-10-29 — "PCI 패스스루" 장치 이름 판정 수정 (실 ESXi 8.0.3)
 
 - **문제**: 실 ESXi 8.0.3 은 VM 의 `VirtualPCIPassthrough` backing 에서 `deviceName` 을 비워 돌려준다(랩 실측). 그래서 장치 이름 일부로 준 벤더(`pci-ev01=connectx`, `82574L` 등)는 장치가 붙어 있어도 FAIL 이었다(실제값 `0000:13:00.0(8086:)`). `mellanox`/`nvidia`/VendorId 로 준 값은 영향 없음.
