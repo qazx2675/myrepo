@@ -11,7 +11,8 @@ import (
 // account_ucsm.go 는 Cisco UCSM(XML API) 로컬 사용자 생성·비밀번호 변경입니다 (biostool account -ucsm).
 // 대상은 UCSM 주소이며 블레이드 BMC 가 아닙니다. 요청은 ucsmxml 의 계정 모드(configConfMo 로 aaaUser
 // 하나의 생성·비밀번호 변경·삭제만)를 지납니다. UCSM 은 단일 엔드포인트라 대상을 한 대씩 처리합니다.
-// 1순위 계정의 역할은 admin 이고, 두 번째 계정(user2)은 user2_role 에 맞춰 operations / read-only / admin 입니다.
+// 1순위 계정의 역할은 admin 이고, 두 번째 계정(user2)은 user2_role_cisco(없으면 user2_role)에 맞춰 operations / read-only / admin 입니다.
+// 이미 있는 user2 의 역할은 읽거나 바꾸지 않습니다 (SKIP_EXISTS 에 사유를 적음).
 
 // ucsmRole 은 권한 이름을 UCSM 역할로 바꿉니다.
 func ucsmRole(role string) string {
@@ -52,6 +53,7 @@ func (e *acctEnv) ucsmProbe(t Target) []*acctHost {
 	for _, x := range hs {
 		x.Vendor, x.Model = "Cisco", "UCSM"
 	}
+	e.setRoles(hs, "cisco") // user2 권한: user2_role_cisco, 없으면 user2_role
 	h := hs[0]
 	if t.Err != "" {
 		for _, x := range hs {
@@ -120,6 +122,7 @@ func (e *acctEnv) ucsmCreate(hs []*acctHost) {
 	for _, s := range e.accounts() {
 		c.AddSecret(s.Pass)
 	}
+	e.setRoles(hs, "cisco")
 	for _, h := range hs {
 		e.ucsmCreateOne(c, h)
 	}
@@ -137,6 +140,9 @@ func (e *acctEnv) ucsmCreateOne(c *ucsmxml.Client, h *acctHost) {
 	}
 	if containsStr(users, sp.User) {
 		h.Status, h.Detail = acctExists, "UCSM 에 사용자가 이미 있음 — 덮어쓰지 않음. 비밀번호가 다르면 change 또는 UCSM 에서 확인"
+		if sp.Second {
+			h.Detail += ". UCSM 은 기존 사용자의 역할을 읽거나 바꾸지 않음 (역할이 여러 개일 수 있고 XML 관문이 aaaUserRole 변경을 허용하지 않음) — 역할 " + role + " 이 맞는지 UCSM 에서 확인"
+		}
 		return
 	}
 	h.Method = "configConfMo sys/user-ext/user-" + sp.User + " (aaaUser created, role " + role + ")"

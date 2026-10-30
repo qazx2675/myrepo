@@ -53,6 +53,33 @@ var allowedRoleIDs = func() map[string]bool {
 	return m
 }()
 
+// acctRoleOf 는 BMC 의 RoleId 가 어느 권한 계열인지 돌려줍니다 (acctRoleIDs 후보와 정확히 같을 때만, 아니면 "").
+// "" 인 RoleId(사용자 정의 역할·None·빈 값 등)는 허용 범위 밖이라 권한 변경·되돌리기 대상이 아닙니다.
+func acctRoleOf(id string) string {
+	for _, r := range []string{roleAdministrator, roleOperator, roleReadOnly} {
+		for _, c := range acctRoleIDs[r] {
+			if id == c {
+				return r
+			}
+		}
+	}
+	return ""
+}
+
+// checkAccountRolePatchBody 는 두 번째 계정(user2) 권한 변경 PATCH 본문을 검사합니다: 정확히 {"RoleId": R} (R 은 allowedRoleIDs)만.
+// 이 본문은 Client.AllowAccountRoleTarget 로 등록한 멤버에만 보낼 수 있고, 그 멤버에는 이 본문만 보낼 수 있습니다 (redfish.go do).
+func checkAccountRolePatchBody(body []byte) ([]byte, error) {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(body, &m) != nil || len(m) != 1 || m["RoleId"] == nil {
+		return nil, errors.New(`권한 변경 PATCH 는 {"RoleId": R} 만 허용`)
+	}
+	var r string
+	if json.Unmarshal(m["RoleId"], &r) != nil || !allowedRoleIDs[r] {
+		return nil, errors.New("RoleId 는 Administrator/Operator/ReadOnly 계열만 허용")
+	}
+	return json.Marshal(map[string]string{"RoleId": r})
+}
+
 // validAcctText 는 계정 이름·비밀번호 문자열 검사입니다: UTF-8, 제어문자 없음, 길이 상한.
 // 비밀번호는 특수문자(@ ! # $ % ^ & * 등)를 그대로 허용합니다 (JSON 이스케이프는 encoding/json 이 처리).
 func validAcctText(s string, max int, allowEmpty bool) error {

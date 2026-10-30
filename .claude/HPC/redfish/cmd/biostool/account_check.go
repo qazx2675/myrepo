@@ -14,6 +14,7 @@ import (
 //     bios.conf 에 user2 가 있으면 같은 호스트에 두 번째 계정도 함께 만듭니다 (이미 있으면 건너뜀).
 //  2. 1순위 계정으로 접속했지만 user2 가 없는 호스트 (bios.conf 에 user2 가 있을 때, 점검 중 같은 세션의 계정 목록 GET 으로 확인)
 //     → 1순위 계정으로 로그인해 user2 만 만듭니다. 목록을 읽지 못한 호스트는 추측하지 않고 뺍니다.
+//     user2 는 있지만 권한(RoleId)이 설정(user2_role_<vendor>, 없으면 user2_role)과 다른 호스트도 같은 방식으로 권한만 바꿉니다.
 //  3. 1순위·2순위 모두 인증 실패(AUTH_FAIL) → 목록을 보여 주고, 운영자가 관리자 ID·비밀번호를 직접 입력하면 그 계정으로
 //     호스트마다 1회만 로그인해 없는 계정만 만듭니다. 다른 벤더의 rf.conf 계정은 돌려가며 시험하지 않습니다 (계정 잠금 위험).
 //     입력한 계정으로도 로그인되지 않은 호스트는 다시 보여 주고 다른 계정을 받습니다 (빈 입력이면 끝, 최대 manualMaxRounds 번).
@@ -61,6 +62,9 @@ func offerAccountCreate(rc *runContext, run *checkRun, dryRun, noPrompt, stdinOK
 			}
 		case h.Status == "" && h.CredSource == credPrimary && h.user2 == acctNeedCreate && rc.Conf.User2 != "":
 			u2 = append(u2, h)
+		case h.Status == "" && h.CredSource == credPrimary && h.user2 == acctPresent && rc.Conf.User2 != "" &&
+			user2RoleDiffers(&acctMember{RoleID: h.user2Role}, rc.Conf.user2RoleFor(hostVendor(h))):
+			u2 = append(u2, h) // user2 는 있지만 권한이 설정과 다름 → 권한만 바꿀 대상
 		case h.Status == StatusAuthFail:
 			unfix = append(unfix, h)
 		}
@@ -93,7 +97,18 @@ func offerAccountCreate(rc *runContext, run *checkRun, dryRun, noPrompt, stdinOK
 		}
 	}
 	if len(u2) > 0 {
-		fmt.Fprintf(w, "\n%s\n", p.cyan(fmt.Sprintf("※ 1순위 계정(%s)으로 점검했지만 두 번째 계정 %s 가 없는 호스트 %d대 — 1순위 계정으로 로그인해 %s 만 만들 수 있습니다.", rc.Conf.User, rc.Conf.User2, len(u2), rc.Conf.User2)))
+		miss := 0
+		for _, h := range u2 {
+			if h.user2 == acctNeedCreate {
+				miss++
+			}
+		}
+		if miss > 0 {
+			fmt.Fprintf(w, "\n%s\n", p.cyan(fmt.Sprintf("※ 1순위 계정(%s)으로 점검했지만 두 번째 계정 %s 가 없는 호스트 %d대 — 1순위 계정으로 로그인해 %s 만 만들 수 있습니다.", rc.Conf.User, rc.Conf.User2, miss, rc.Conf.User2)))
+		}
+		if len(u2) > miss {
+			fmt.Fprintf(w, "\n%s\n", p.cyan(fmt.Sprintf("※ 두 번째 계정 %s 의 권한이 설정(%s)과 다른 호스트 %d대 — 1순위 계정으로 로그인해 %s 의 권한(RoleId)만 바꿀 수 있습니다.", rc.Conf.User2, rc.Conf.user2RolesText(), len(u2)-miss, rc.Conf.User2)))
+		}
 		if path, err := writeAcctHostList(run.Dir, acctUser2File, u2); err != nil {
 			fmt.Fprintln(w, "경고: "+acctUser2File+" 기록 실패: "+err.Error())
 		} else {
@@ -116,22 +131,25 @@ func offerAccountCreate(rc *runContext, run *checkRun, dryRun, noPrompt, stdinOK
 	// 1·2: 확인 한 번으로 함께 만든다.
 	var needFB, needU2 [][]*acctHost
 	for _, h := range fb {
-		needFB = append(needFB, markNeed(newCreateHosts(h.Target, specs), h, credFallback))
+		g := markNeed(newCreateHosts(h.Target, specs), h, credFallback)
+		env.setRoles(g, hostVendor(h))
+		needFB = append(needFB, g)
 	}
 	if len(specs) > 1 {
 		for _, h := range u2 {
-			needU2 = append(needU2, markNeed(newCreateHosts(h.Target, specs[1:]), h, credPrimary))
+			g := markNeed(newCreateHosts(h.Target, specs[1:]), h, credPrimary)
+			env.setRoles(g, hostVendor(h))
+			if h.user2 == acctPresent {
+				g[0].Status, g[0].curRole = acctNeedRoleUpdate, h.user2Role
+			}
+			needU2 = append(needU2, g)
 		}
 	}
 	if both := append(append([][]*acctHost(nil), needFB...), needU2...); len(both) > 0 {
 		if len(needFB) > 0 && len(specs) > 1 {
-			fmt.Fprintf(w, "두 번째 계정 %s(%s)도 같은 호스트에 함께 만듭니다 (이미 있으면 건너뜀).\n", specs[1].User, specs[1].Role)
+			fmt.Fprintf(w, "두 번째 계정 %s(%s)도 같은 호스트에 함께 만듭니다 (이미 있으면 건너뜀, 권한이 다르면 권한만 바꿈).\n", specs[1].User, rc.Conf.user2RolesText())
 		}
-		firsts := make([]*acctHost, len(both))
-		for i, g := range both {
-			firsts[i] = g[0]
-		}
-		printAcctTargets(w, firsts, 10)
+		printAcctTargets(w, flattenAcct(both), 10)
 		proceed := true
 		switch {
 		case dryRun:
@@ -192,6 +210,14 @@ func markNeed(g []*acctHost, h *hostCheck, src string) []*acctHost {
 		}
 	}
 	return g
+}
+
+// hostVendor 는 점검 결과 h 의 벤더입니다 (Info 가 없으면 AUTH_FAIL 때 식별한 벤더 키, 모르면 "").
+func hostVendor(h *hostCheck) string {
+	if h.Info != nil && h.Info.Vendor != "" {
+		return h.Info.Vendor
+	}
+	return h.authVendor
 }
 
 // manualCreate 는 AUTH_FAIL 호스트에 운영자가 직접 입력한 관리자 계정으로 없는 계정을 만듭니다 (위 3).
@@ -258,6 +284,7 @@ func manualCreate(env *acctEnv, hs []*hostCheck, af *accountFlags, dryRun bool, 
 		groups := make([][]*acctHost, len(remain))
 		for k, i := range remain {
 			groups[k] = markNeed(newCreateHosts(hs[i].Target, specs), hs[i], credManual)
+			env.setRoles(groups[k], hostVendor(hs[i])) // 로그인 뒤 확인한 벤더로 다시 정함 (createGroup)
 		}
 		fmt.Fprintf(w, "관리자 계정 %s 로 %d대에 로그인해 없는 계정만 만듭니다 (이미 있는 계정은 건너뜀).\n", sanitizeDetail(id), len(remain))
 		ok, err := confirmCreate(in, w, createWhat(groups), af)
@@ -290,21 +317,25 @@ func manualCreate(env *acctEnv, hs []*hostCheck, af *accountFlags, dryRun bool, 
 
 // probeUser2 는 점검 세션 c(1순위 계정, 읽기 전용)로 계정 목록을 읽어 name 이 있는지 봅니다 (account create 의 점검과 같은
 // accountsCollection + listAccounts: AccountService·컬렉션 GET 2회 + 멤버마다 GET 1회, 멤버 상한 acctMaxMembers).
-// 있으면 acctPresent, 없으면 acctNeedCreate. 목록을 읽지 못했거나 읽지 못한 멤버가 있는데 찾지 못했으면 "" (추측하지 않음).
-func probeUser2(c *Client, name string) string {
+// 있으면 acctPresent 와 그 계정의 RoleId (이름이 정확히 같을 때만, 권한 변경 판단용), 없으면 acctNeedCreate.
+// 목록을 읽지 못했거나 읽지 못한 멤버가 있는데 찾지 못했으면 "" (추측하지 않음).
+func probeUser2(c *Client, name string) (state, roleID string) {
 	ms, err := listAccounts(c, accountsCollection(c))
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	if findAccount(ms, name) != nil {
-		return acctPresent
+		if m := findAccountExact(ms, name); m != nil {
+			roleID = m.RoleID
+		}
+		return acctPresent, roleID
 	}
 	for _, m := range ms {
 		if m.Unknown {
-			return ""
+			return "", ""
 		}
 	}
-	return acctNeedCreate
+	return acctNeedCreate, ""
 }
 
 // readLine 은 한 줄을 읽어 앞뒤 공백을 지워 돌려줍니다 (askYesNo 와 같은 바이트 단위 읽기). 줄 끝 없이 EOF 면 "".

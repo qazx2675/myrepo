@@ -576,6 +576,8 @@ bash bios.sh account -dry-run
 bash bios.sh account
 
 # (선택) 두 번째 공용 계정: bios.conf 에 user2=<ID> 와 user2_role=Operator (또는 Administrator / ReadOnly) 를 적은 뒤 비밀번호 저장 -> pass2.enc
+#   벤더별 권한: bios.conf 에 user2_role_hpe=Administrator 처럼 (dell hpe lenovo supermicro cisco cray, 없는 벤더는 user2_role)
+#   이미 있는 user2 의 권한이 다르면 계정 생성 때 권한만 바꾼다 (결과 ROLE_UPDATED)
 bash encrypt.sh 2
 
 # 두 번째 계정까지 계획 확인 → 생성 (두 계정 모두 없는 곳에만 만든다. 결과 파일 맨 끝 열 account 에 계정 id)

@@ -51,7 +51,8 @@ func TestCreateGroupMakesBothAccounts(t *testing.T) {
 			t.Errorf("결과 행에 비밀 값 노출: %q", secret)
 		}
 	}
-	if hs[1].row()[len(acctResultHeader)-1] != user2Name || hs[1].name() != hs[1].Target.Hostname+"("+user2Name+")" {
+	if hs[1].row()[len(acctResultHeader)-2] != user2Name || hs[1].row()[len(acctResultHeader)-1] != roleOperator ||
+		hs[1].name() != hs[1].Target.Hostname+"("+user2Name+")" {
 		t.Errorf("account 열/이름: %v %q", hs[1].row(), hs[1].name())
 	}
 }

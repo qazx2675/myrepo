@@ -6,6 +6,9 @@
 
 ### 추가
 
+- **두 번째 계정(user2) 벤더별 권한**(`conf.go`, `account.go` `updateRole`, `account_check.go`, `account_gate.go` `roleCandidates`, `redfish.go` `AllowAccountRoleTarget`): `bios.conf` 에 `user2_role_<벤더>`(dell hpe lenovo supermicro cisco cray, 값 Administrator|Operator|ReadOnly, 모르는 벤더·값은 conf 오류)를 두면 장비 벤더에 맞는 권한으로 user2 를 만듭니다. 없으면 `user2_role`(user2 를 쓰면 여전히 필수). ID·`pass2.enc` 는 하나 그대로. 점검 끝 생성(2순위·user2 만 없음·AUTH_FAIL 수동)·`bash bios.sh account`·UCSM 모두 적용.
+  - **이미 있는 user2 의 권한이 다르면 권한만 변경**(`NEED_ROLE_UPDATE` → `ROLE_UPDATED`): user2 슬롯만, 현재·목표 RoleId 모두 허용 범위일 때만, 본문은 정확히 `{"RoleId": R}` 만 허용(그 멤버 전용 게이트), 다시 읽어 확인하고 틀리면 원래 권한으로 되돌림(`ROLE_UPDATE_FAIL`/`ROLLBACK_FAILED`). 비밀번호·Enabled·Locked 는 건드리지 않음. `-dry-run` 은 `WOULD_ROLE_UPDATE`. UCSM(사용자당 여러 역할)·HPE iLO4(Oem 권한)는 바꾸지 않고 `SKIP_EXISTS` 사유로 안내.
+  - 확인 질문·대상 목록·보고 줄에 호스트별 실제 권한(`ops1(Administrator)`, `권한 변경 Operator → Administrator`), `account_result.tsv` 끝에 `role` 열 추가(기존 열 순서 그대로).
 - **점검 끝 계정 생성 확대**(`account_check.go` `manualCreate`·`probeUser2`, `account.go` `acctEnv.admin`, `account_input.go` `readAdminPassword`):
   - **AUTH_FAIL 호스트**(1순위 거부 + 벤더에 맞는 `rf.conf` 계정도 거부·없음·벤더 미식별): 목록(hostname·IP·벤더·사유)을 보인 뒤 관리자 ID 와 비밀번호(숨김 입력, 붙여넣기 거부, 저장·출력 안 함)를 직접 입력받아, 호스트마다 로그인 1번으로 1순위 계정·user2 중 **없는 것만** 만듭니다(있는 것은 건너뜀). 그래도 실패한 호스트는 다시 나열하고 다른 ID 를 넣거나 빈 입력으로 끝냅니다(최대 3번). 다른 벤더의 `rf.conf` 계정은 시도하지 않습니다(잠금 방지). 웜업 차단(처음 10대 순차, 절반 이상 실패면 중단) 그대로.
   - **1순위로 로그인되지만 user2 가 없는 호스트**(bios.conf 에 user2 가 있을 때): 점검 세션에서 계정 목록을 읽어(읽기 전용 GET, 호스트당 계정 수+2건, 최대 64) 없으면 1순위 계정으로 로그인해 user2 만 만듭니다. 목록 `account_user2_targets.txt`. `-auto`/`-auto-check`·재점검에서는 확인하지 않습니다.
@@ -80,8 +83,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8237218 | 5f6785c100e4286c748e3a93f8aa7b2e5474b2530e0e943664f7a14238fdec02 |
-| bin/biostool_os6 | go1.20.14 | 6840320 | 98b76c9cb32a5fb2833cccc631ecd115b004436ed11497a5445bee93be367976 |
+| bin/biostool | go1.26.5 | 8269986 | d0b4415efc54aab5d435a79b3fb169339b64cb0123d25973ee6652d08d996470 |
+| bin/biostool_os6 | go1.20.14 | 6868992 | be87b9bf026724f75f60a4c306425907010150dc5be35a974c88d930119f099a |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 

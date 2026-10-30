@@ -81,6 +81,8 @@ type hostCheck struct {
 	CredSource string
 	// user2 는 1순위 세션으로 본 두 번째 계정(bios.conf user2) 상태입니다: acctPresent / acctNeedCreate / "" (보지 않음·모름).
 	user2 string
+	// user2Role 은 user2 가 있을 때 그 계정의 BMC RoleId 입니다 (같은 목록 GET 에서, 권한 변경 판단용. 모르면 "").
+	user2Role string
 	// authVendor 는 AUTH_FAIL 때 2순위 계정을 시도한 벤더 키입니다 (시도하지 않았으면 "", 계정 생성 불가 목록 표시용).
 	authVendor string
 
@@ -441,7 +443,7 @@ func (e *checkEnv) checkOnline(t Target) *hostCheck {
 	h.CredSource = li.Source
 	e.evaluate(h, newMemoGet(c.GetRaw))
 	if e.probeU2 != "" && h.Status == "" && li.Source == credPrimary {
-		h.user2 = probeUser2(c, e.probeU2)
+		h.user2, h.user2Role = probeUser2(c, e.probeU2)
 	}
 
 	// 매핑 없는 모델은 같은 세션으로 덤프를 모델당 1대만 저장한다 (사람이 요약을 보고 프로파일을 채운다).

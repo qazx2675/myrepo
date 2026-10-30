@@ -866,7 +866,8 @@ RF_FORCE_OS6=1 bash testcase/rf_fallback_case.sh   # 커널과 무관하게 *_os
 
 ```text
 user2=operator1          # 두 번째 계정 id (user 와 달라야 함)
-user2_role=Operator      # Administrator / Operator / ReadOnly 중 하나 (user2 를 쓰면 필수)
+user2_role=Operator      # Administrator / Operator / ReadOnly 중 하나 (user2 를 쓰면 필수, 기본 권한)
+user2_role_hpe=Administrator   # (선택) 벤더별 권한: dell hpe lenovo supermicro cisco cray, 그 벤더만 덮어씀
 #pass2_file=pass2.enc    # 기본값. key_file(key.bin) 은 pass.enc 와 같은 것을 씀
 ```
 
@@ -1135,6 +1136,7 @@ $ bin/biostool account change
 | `key_file` | `key.bin` | | AES-256 키 파일 |
 | `user2` | (없음) | | 두 번째 공용 계정 ID. 계정 생성에서만 씀(점검 접속은 `user`). `user` 와 달라야 함. 2.12절 |
 | `user2_role` | (없음) | `user2` 가 있으면 **예** | 두 번째 계정 권한: `Administrator` / `Operator` / `ReadOnly` (대소문자 무시) |
+| `user2_role_<벤더>` | (없음) | | 벤더별 두 번째 계정 권한(벤더 `dell` `hpe` `lenovo` `supermicro` `cisco` `cray`, 값은 `user2_role` 과 같음). 장비 벤더로 고르고 없으면 `user2_role`. 이미 있는 user2 의 권한이 다르면 RoleId 만 바꾸고 다시 읽어 확인, 틀리면 원래 권한으로 되돌림(`ROLE_UPDATED`/`ROLE_UPDATE_FAIL`). UCSM·HPE iLO4(Oem 권한)는 바꾸지 않음 |
 | `pass2_file` | `pass2.enc` | | 두 번째 계정의 암호화된 비밀번호 파일 (`bash encrypt.sh 2`, `key_file` 로 복호화) |
 | `concurrency` | `100` | | 동시에 접속할 호스트 수(1 이상). ulimit 은 3.5절 참고 |
 | `timeout` | `20` | | 요청 1건당 타임아웃(초, 1 이상) |

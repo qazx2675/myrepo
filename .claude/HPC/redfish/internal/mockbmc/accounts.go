@@ -31,6 +31,9 @@ type AccountOptions struct {
 	// DenyNewLogin 이면 API 로 만들었거나 비밀번호를 바꾼 계정(처음 비밀번호와 다른 것)은 로그인을 거부합니다
 	// (생성·변경 후 검증 실패 → 롤백 시험). 처음 비밀번호로 되돌리면 다시 로그인됩니다.
 	DenyNewLogin bool
+	// IgnoreRoleChange 면 RoleId 만 담은 PATCH 를 200 으로 받지만 실제로는 바꾸지 않습니다
+	// (권한 변경 뒤 다시 읽어 확인 실패 → 이전 권한으로 되돌리기 시험).
+	IgnoreRoleChange bool
 }
 
 const (
@@ -225,6 +228,10 @@ func (s *Host) acctPatch(w *statusWriter, np string, body []byte) {
 		return
 	}
 	a := s.accts[i]
+	if _, ok := req["RoleId"]; ok && len(req) == 1 && s.opts.Accounts.IgnoreRoleChange {
+		writeJSON(w, http.StatusOK, s.acctMemberJSON(i))
+		return
+	}
 	for k, v := range req {
 		switch k {
 		case "UserName":

@@ -21,7 +21,7 @@ type Config struct {
 	User2        string        // 두 번째 공용 계정 ID (선택). 계정 생성에서만 쓰고 점검 접속에는 쓰지 않는다
 	Pass2File    string        // 두 번째 계정의 암호화된 비밀번호 파일 (기본 pass2.enc, key_file 로 복호화)
 	RFEncFile    string        // 2순위(rf.conf 벤더 admin) 계정의 암호화된 비밀번호 파일 (기본 rf.enc, key_file 로 복호화)
-	User2Role    string        // 두 번째 계정 권한: Administrator | Operator | ReadOnly (user2 가 있으면 필수)
+	User2Role    string        // 두 번째 계정 권한: Administrator | Operator | ReadOnly (user2 가 있으면 필수, 벤더별 값이 없을 때의 기본)
 	Concurrency  int           // 동시 접속 호스트 수
 	Timeout      time.Duration // 요청 1건당 타임아웃
 	Insecure     bool          // true 면 TLS 인증서 검증 생략 (자체서명 BMC)
@@ -38,6 +38,8 @@ type Config struct {
 	// XMLHostPrefix 는 bios 에서 XML API(UCSM/CIMC, 읽기 전용)로 점검할 hostname 접두어입니다 (소문자, 쉼표 구분, 기본 c).
 	// 비면(xml_host_prefix=) 이름으로는 XML 로 보내지 않습니다 (-user-xml 목록만 XML). IP 대상은 접두어와 관계없이 Redfish.
 	XMLHostPrefix []string
+	// User2Roles 는 벤더별 두 번째 계정 권한입니다 (user2_role_<vendor>, 키는 fallbackVendors 소문자). 없는 벤더·모르는 벤더는 User2Role.
+	User2Roles map[string]string
 }
 
 func defaultConfig() Config {
@@ -148,7 +150,11 @@ func parseConf(text, name string) (*Config, error) {
 			// 값은 메시지에 싣지 않는다.
 			return nil, fmt.Errorf("%s:%d: 비밀번호는 conf 에 둘 수 없습니다. encrypt.sh 로 pass.enc 를 만드십시오", name, lineNo)
 		default:
-			return nil, fmt.Errorf("%s:%d: 알 수 없는 키 %q", name, lineNo, key)
+			v := strings.TrimPrefix(key, "user2_role_")
+			if v == key {
+				return nil, fmt.Errorf("%s:%d: 알 수 없는 키 %q", name, lineNo, key)
+			}
+			err = c.setUser2VendorRole(name, lineNo, key, v, val)
 		}
 		if err != nil {
 			return nil, err
@@ -166,6 +172,51 @@ func parseConf(text, name string) (*Config, error) {
 		}
 	}
 	return &c, nil
+}
+
+// setUser2VendorRole 은 user2_role_<vendor> 한 줄을 읽습니다. 벤더는 rf.conf 와 같은 fallbackVendors, 값은 user2_role 과 같은
+// 세 가지입니다. 빈 값이면 그 벤더 설정을 지웁니다 (user2_role= 과 같음).
+func (c *Config) setUser2VendorRole(name string, lineNo int, key, vendor, val string) error {
+	known := false
+	for _, v := range fallbackVendors {
+		known = known || v == vendor
+	}
+	if !known {
+		return fmt.Errorf("%s:%d: %s 의 벤더는 %s 중 하나여야 합니다", name, lineNo, key, strings.Join(fallbackVendors, ", "))
+	}
+	if val == "" {
+		delete(c.User2Roles, vendor)
+		return nil
+	}
+	r := acctRoleName(val)
+	if r == "" {
+		return fmt.Errorf("%s:%d: %s 은 Administrator, Operator, ReadOnly 중 하나여야 합니다", name, lineNo, key)
+	}
+	if c.User2Roles == nil {
+		c.User2Roles = map[string]string{}
+	}
+	c.User2Roles[vendor] = r
+	return nil
+}
+
+// user2RoleFor 는 벤더(아무 표기, fallbackVendorKey 로 바꿈)에 적용할 두 번째 계정 권한입니다:
+// user2_role_<vendor> 가 있으면 그 값, 없거나 모르는 벤더면 user2_role.
+func (c *Config) user2RoleFor(vendor string) string {
+	if r := c.User2Roles[fallbackVendorKey(vendor)]; r != "" {
+		return r
+	}
+	return c.User2Role
+}
+
+// user2RolesText 는 설정 요약용 "기본권한, 벤더=권한 ..." 입니다 (벤더별 값이 없으면 기본 권한만).
+func (c *Config) user2RolesText() string {
+	parts := []string{c.User2Role}
+	for _, v := range fallbackVendors {
+		if r := c.User2Roles[v]; r != "" {
+			parts = append(parts, v+"="+r)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func setIfNotEmpty(dst *string, val string) {

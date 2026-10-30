@@ -45,6 +45,11 @@ const (
 	acctWouldChange    = "WOULD_CHANGE"            // dry-run
 	acctNoAccount      = "NO_ACCOUNT"              // 변경할 id 가 BMC 에 없음 (create 필요)
 	acctSkippedWarmup  = "SKIPPED_WARMUP_FAIL"     // 웜업에서 실패가 많아 건너뜀
+	// 두 번째 계정(user2)이 이미 있는데 권한이 설정(user2_role / user2_role_<vendor>)과 다를 때 (1순위 계정 권한은 바꾸지 않음).
+	acctNeedRoleUpdate  = "NEED_ROLE_UPDATE"  // 점검: user2 권한이 설정과 다름 (권한 변경 대상)
+	acctRoleUpdated     = "ROLE_UPDATED"      // RoleId 만 PATCH 하고 다시 읽어 확인까지 통과
+	acctWouldRoleUpdate = "WOULD_ROLE_UPDATE" // dry-run: 권한 변경 계획 (전송 안 함)
+	acctRoleUpdateFail  = "ROLE_UPDATE_FAIL"  // BMC 가 거부했거나 확인 실패 → 이전 권한으로 되돌림 (rollback 열)
 )
 
 const (
@@ -73,9 +78,44 @@ type acctHost struct {
 	spec          *acctSpec // create: 만들 계정 (nil 이면 1순위 계정)
 	createdMember string    // POST 로 만든 멤버 경로 (롤백용)
 	slotPath      string    // 슬롯 PATCH 로 만든 슬롯 경로 (롤백용)
+	// Role 은 이 호스트에 적용할 권한입니다 (setRoles: user2 는 벤더별 user2_role_<vendor>, 비면 spec 권한).
+	Role    string
+	curRole string // 이미 있는 user2 의 BMC RoleId (점검에서 읽은 값, 표시용)
 }
 
 func newAcctHost(t Target, op string) *acctHost { return &acctHost{Target: t, Op: op, Rollback: "-"} }
+
+// acctRole 은 이 칸에 적용할 권한입니다 (Role → spec 권한 → 관리자).
+func (h *acctHost) acctRole() string {
+	switch {
+	case h.Role != "":
+		return h.Role
+	case h.spec != nil:
+		return h.spec.Role
+	}
+	return roleAdministrator
+}
+
+// roleFor 는 계정 sp 를 벤더 vendor(아무 표기) 호스트에 만들 때의 권한입니다. 1순위 계정은 늘 sp.Role(관리자),
+// 두 번째 계정은 user2_role_<vendor> 가 있으면 그 값, 없거나 벤더를 모르면 sp.Role(user2_role).
+func (e *acctEnv) roleFor(sp acctSpec, vendor string) string {
+	if !sp.Second || e.conf == nil {
+		return sp.Role
+	}
+	if r := e.conf.User2Roles[fallbackVendorKey(vendor)]; r != "" {
+		return r
+	}
+	return sp.Role
+}
+
+// setRoles 는 같은 호스트의 계정 칸들에 벤더 vendor 기준 권한을 정합니다 (벤더를 알게 된 뒤마다 다시 부름).
+func (e *acctEnv) setRoles(hs []*acctHost, vendor string) {
+	for _, h := range hs {
+		if h.spec != nil {
+			h.Role = e.roleFor(*h.spec, vendor)
+		}
+	}
+}
 
 // acctSpec 은 만들 공용 계정 1개입니다: 1순위(bios.conf user + pass.enc, 관리자) 또는
 // 두 번째(user2 + pass2.enc, 권한 user2_role). Pass 는 메모리에서만 쓴다.
@@ -150,12 +190,16 @@ func (e *acctEnv) accounts() []acctSpec {
 	return []acctSpec{{User: e.conf.User, Pass: e.password, Role: roleAdministrator}}
 }
 
-// specOf 는 결과 칸 h 가 만들 계정입니다.
+// specOf 는 결과 칸 h 가 만들 계정입니다 (권한은 이 호스트에 정한 h.Role 이 있으면 그 값).
 func (e *acctEnv) specOf(h *acctHost) acctSpec {
+	sp := e.accounts()[0]
 	if h.spec != nil {
-		return *h.spec
+		sp = *h.spec
 	}
-	return e.accounts()[0]
+	if h.Role != "" {
+		sp.Role = h.Role
+	}
+	return sp
 }
 
 func (e *acctEnv) opts(t Target, user, pass string, mode Mode, retries int) ClientOpts {
@@ -287,6 +331,19 @@ func pickRole(c *Client, role string) string {
 	return ""
 }
 
+// roleCandidates 는 보낼 RoleId 를 시도 순서대로 돌려줍니다: BMC Roles 에서 고른 picked 가 있으면 그것 하나,
+// 없으면 권한 role 의 후보 전체 (Cisco CIMC 는 소문자 이름 admin / user / read-only 먼저). 생성·권한 변경이 같이 씁니다.
+func roleCandidates(role, vendor, picked string) []string {
+	if picked != "" {
+		return []string{picked}
+	}
+	ids := acctRoleIDs[role]
+	if strings.EqualFold(vendor, "Cisco") {
+		return []string{ids[len(ids)-1], ids[0]}
+	}
+	return ids
+}
+
 // lightInfo 는 벤더·모델만 가볍게 읽습니다 (ServiceRoot 와 Systems 첫 멤버, GET 2~3회).
 func lightInfo(c *Client) (vendor, model string) {
 	b, err := c.GetRaw(rootPath)
@@ -377,6 +434,7 @@ func (e *acctEnv) probeCreateAll(t Target) []*acctHost {
 	}
 	h.Source = li.Source
 	h.Vendor, h.Model = lightInfo(c)
+	e.setRoles(hs, h.Vendor)
 	h.Status = acctNeedCreate
 	if li.Source == credPrimary {
 		h.Status = acctPrimaryOK
@@ -390,12 +448,26 @@ func (e *acctEnv) probeCreateAll(t Target) []*acctHost {
 				x.Status, x.Detail = acctNeedCreate, "계정 목록을 읽지 못함 — 생성 단계에서 다시 확인"
 			case findAccount(members, x.User) != nil:
 				x.Status = acctPresent
+				x.curRole = findAccount(members, x.User).RoleID
+				if user2RoleDiffers(findAccountExact(members, x.User), x.acctRole()) {
+					x.Status = acctNeedRoleUpdate
+				}
 			default:
 				x.Status = acctNeedCreate
 			}
 		}
 	}
 	return hs
+}
+
+// user2RoleDiffers 는 이미 있는 user2 멤버 m(이름이 정확히 같은 것, 없으면 nil)의 권한이 want 와 달라 바꿀 대상인지 봅니다.
+// 현재 RoleId 가 허용 범위(acctRoleIDs) 밖이거나 모르면 바꾸지 않습니다 (되돌릴 값도 허용 범위여야 하므로).
+func user2RoleDiffers(m *acctMember, want string) bool {
+	if m == nil {
+		return false
+	}
+	cur := acctRoleOf(m.RoleID)
+	return cur != "" && cur != want
 }
 
 // ---- 생성 (create 의 2단계) ----
@@ -442,6 +514,7 @@ func (e *acctEnv) createGroup(hs []*acctHost) {
 	if vendor == "" {
 		vendor = fallbackVendorKey(h0.Vendor)
 	}
+	e.setRoles(hs, vendor) // 로그인 뒤 확인한 벤더로 user2 권한을 다시 정한다
 	coll := accountsCollection(c)
 	for _, h := range hs {
 		if h.Vendor == "" {
@@ -468,6 +541,10 @@ func (e *acctEnv) createOne(c *Client, h *acctHost, vendor, coll string) {
 	if m := findAccount(members, sp.User); m != nil {
 		h.Status = acctExists
 		h.Detail = fmt.Sprintf("id 가 이미 있음 (slot %s, enabled=%t, role=%s) — 덮어쓰지 않음. 비밀번호가 다르면 change 또는 BMC 에서 확인", m.ID, m.Enabled, orDefault(m.RoleID, "-"))
+		if sp.Second {
+			h.curRole = m.RoleID
+			e.updateRole(c, h, findAccountExact(members, sp.User), sp, vendor)
+		}
 		return
 	}
 	var slots []acctMember
@@ -520,6 +597,97 @@ func (e *acctEnv) createOne(c *Client, h *acctHost, vendor, coll string) {
 	}
 }
 
+// updateRole 은 이미 있는 두 번째 계정(user2) m 의 권한이 sp.Role 과 다르면 RoleId 만 바꿉니다 (h 는 SKIP_EXISTS 로 채워져 들어옴).
+// 이름이 정확히 같은 user2 멤버(m)만, 현재·새 RoleId 모두 허용 범위(acctRoleIDs)일 때만, 로그인한 관리자 계정이 아닐 때만 바꿉니다.
+// 그 멤버를 AllowAccountRoleTarget 로 등록해 {"RoleId": R} PATCH 만 보내고 (비밀번호·Enabled·잠금은 건드리지 않음),
+// 다시 읽어 권한 계열이 맞는지 확인합니다. 맞지 않으면 이전 RoleId 로 되돌리고 다시 읽어 확인합니다. dry-run 이면 계획만.
+func (e *acctEnv) updateRole(c *Client, h *acctHost, m *acctMember, sp acctSpec, vendor string) {
+	if m == nil {
+		if h.curRole != "" && acctRoleOf(h.curRole) != sp.Role {
+			h.Detail += " — 이름의 대소문자가 달라 권한을 바꾸지 않음"
+		}
+		return
+	}
+	cur := acctRoleOf(m.RoleID)
+	switch {
+	case cur == sp.Role:
+		return
+	case cur == "":
+		h.Detail += " — 현재 권한이 Administrator/Operator/ReadOnly 계열이 아니라 권한을 바꾸지 않음 (BMC 에서 확인)"
+		return
+	case strings.EqualFold(e.loginUser(vendor), sp.User):
+		h.Detail += " — 로그인한 관리자 계정과 같아 권한을 바꾸지 않음"
+		return
+	}
+	cands := roleCandidates(sp.Role, vendor, pickRole(c, sp.Role))
+	h.Method = "PATCH " + m.Path + " RoleId"
+	if e.dryRun {
+		h.Status = acctWouldRoleUpdate
+		h.Detail = fmt.Sprintf("권한 변경 계획 %s → %s: PATCH %s {\"RoleId\":%q} (RoleId 만, 다른 속성은 보내지 않음)", m.RoleID, sp.Role, m.Path, cands[0])
+		return
+	}
+	if err := c.AllowAccountRoleTarget(m.Path); err != nil {
+		h.Status, h.Detail = acctRoleUpdateFail, "내부 오류: "+err.Error()
+		return
+	}
+	sent, last := "", ""
+	for i, r := range cands {
+		st, _, err := c.AccountPatch(m.Path, map[string]interface{}{"RoleId": r})
+		if err == nil || (st >= 200 && st < 300) { // 2xx 인데 응답을 끝까지 못 받았어도 다시 읽어 확인한다
+			sent = r
+			break
+		}
+		last = writeBrief(st, err)
+		if (st == http.StatusBadRequest || st == http.StatusMethodNotAllowed || st == http.StatusNotImplemented || st == http.StatusNotFound) && i+1 < len(cands) {
+			continue
+		}
+		break
+	}
+	if sent == "" {
+		h.Status, h.Detail = acctRoleUpdateFail, "권한 변경 거부 ("+last+") — 권한은 그대로 "+m.RoleID
+		return
+	}
+	h.Method = "PATCH " + m.Path + " RoleId=" + sent
+	got, rerr := readRoleID(c, m.Path)
+	if rerr != nil {
+		h.Status = acctVerifyUnknown
+		h.Detail = "권한 변경을 보냈으나 다시 읽지 못함 (" + errBrief(rerr) + ") — 되돌리지 않음, BMC 에서 " + sp.User + " 권한을 수동 확인"
+		return
+	}
+	if acctRoleOf(got) == sp.Role {
+		h.Status, h.Detail = acctRoleUpdated, "권한 "+m.RoleID+" → "+got
+		return
+	}
+	// 다시 읽은 권한이 다르다 → 이전 RoleId 로 되돌리고 확인한다.
+	if _, _, perr := c.AccountPatch(m.Path, map[string]interface{}{"RoleId": m.RoleID}); perr == nil {
+		if back, berr := readRoleID(c, m.Path); berr == nil && back == m.RoleID {
+			h.Status, h.Rollback = acctRoleUpdateFail, "완료"
+			h.Detail = "권한 변경 확인 실패 (다시 읽은 RoleId=" + orDefault(got, "-") + ") — 이전 권한 " + m.RoleID + " 으로 되돌림"
+			return
+		}
+	}
+	h.Status, h.Rollback = acctRollbackFailed, "실패"
+	h.Detail = "권한 변경 확인 실패 + 되돌리기 실패 — BMC 에서 계정 " + sp.User + " 의 권한을 수동 확인하십시오 (이전 " + m.RoleID + ")"
+}
+
+// loginUser 는 createGroup 이 로그인한 관리자 계정 이름입니다 (openAdmin 과 같은 선택: 지정 계정, 없으면 rf.conf 의 벤더 계정).
+func (e *acctEnv) loginUser(vendor string) string {
+	if e.admin != nil {
+		return e.admin.user
+	}
+	u, _, _ := e.fb.lookup(vendor)
+	return u
+}
+
+// readRoleID 는 계정 멤버의 RoleId 를 다시 읽습니다 (GET 1회).
+func readRoleID(c *Client, member string) (string, error) {
+	var m struct {
+		RoleID string `json:"RoleId"`
+	}
+	err := c.GetJSON(member, &m)
+	return m.RoleID, err
+}
+
 func errDetail(err error) string {
 	var rf *RFError
 	if errors.As(err, &rf) && rf.Detail != "" {
@@ -551,14 +719,7 @@ type createPlan struct {
 // 미확인 방식(실장비 검증 전)은 warn 에 사유를 적고 그대로 적용을 허용한다 (사양: 경고만).
 // role 은 BMC Roles 에서 고른 RoleId (비면 sp.Role 의 후보를 순서대로, Cisco CIMC 는 소문자 이름 먼저).
 func (e *acctEnv) planCreate(sp acctSpec, vendor, coll string, slots []acctMember, role string) *createPlan {
-	roles := []string{role}
-	if role == "" {
-		ids := acctRoleIDs[sp.Role]
-		roles = ids
-		if strings.EqualFold(vendor, "Cisco") {
-			roles = []string{ids[len(ids)-1], ids[0]} // admin / user / read-only 먼저
-		}
-	}
+	roles := roleCandidates(sp.Role, vendor, role)
 	postBody := func(r string) map[string]interface{} {
 		b := map[string]interface{}{"UserName": sp.User, "Password": sp.Pass, "RoleId": r}
 		if !strings.EqualFold(vendor, "HPE") {
@@ -829,7 +990,7 @@ func (e *acctEnv) changeOnHost(h *acctHost) {
 // isAcctFailure 는 웜업에서 "이상 징후"로 세는 상태입니다.
 func isAcctFailure(st string) bool {
 	switch st {
-	case acctRejected, acctVerifyFailRB, acctRollbackFailed, StatusAuthFail:
+	case acctRejected, acctVerifyFailRB, acctRollbackFailed, acctRoleUpdateFail, StatusAuthFail:
 		return true
 	}
 	return false
@@ -884,8 +1045,9 @@ func runAcctPool(n, workers, warm int, fn func(i int) string, skip func(i int)) 
 
 // ---- 결과 출력 ----
 
-// account 열은 맨 끝에 둔다 (result 가 7번째 열인 기존 awk 명령이 그대로 맞게).
-var acctResultHeader = []string{"hostname", "ip", "vendor", "model", "op", "method", "result", "rollback", "detail", "warn", "account"}
+// account·role 열은 맨 끝에 둔다 (result 가 7번째 열인 기존 awk 명령이 그대로 맞게).
+// role 은 create 에서 이 호스트에 적용한(적용할) 권한입니다 (user2 는 벤더별 값, change 는 "-").
+var acctResultHeader = []string{"hostname", "ip", "vendor", "model", "op", "method", "result", "rollback", "detail", "warn", "account", "role"}
 
 func (h *acctHost) row() []string {
 	f := func(s string) string {
@@ -895,7 +1057,19 @@ func (h *acctHost) row() []string {
 		}
 		return s
 	}
-	return []string{h.Target.Hostname, f(h.Target.IP), f(h.Vendor), f(h.Model), h.Op, f(h.Method), f(h.Status), f(h.Rollback), f(h.Detail), f(h.Warn), f(h.User)}
+	role := "-"
+	if h.Op == "create" {
+		role = h.acctRole()
+	}
+	return []string{h.Target.Hostname, f(h.Target.IP), f(h.Vendor), f(h.Model), h.Op, f(h.Method), f(h.Status), f(h.Rollback), f(h.Detail), f(h.Warn), f(h.User), role}
+}
+
+// label 은 요약에 보일 이름입니다: 두 번째 계정 칸은 "호스트(계정/권한)", 그 밖은 name().
+func (h *acctHost) label() string {
+	if h.spec != nil && h.spec.Second {
+		return sanitizeDetail(h.Target.Hostname) + "(" + sanitizeDetail(h.spec.User) + "/" + h.acctRole() + ")"
+	}
+	return h.name()
 }
 
 // writeAcctResult 는 account_result.tsv 를 씁니다 (0600). 비밀번호·계정 해시는 어디에도 없다.
@@ -912,8 +1086,9 @@ func writeAcctResult(dir string, hosts []*acctHost) (string, error) {
 
 // acctSummaryOrder 는 요약에 보여 줄 상태 순서입니다.
 var acctSummaryOrder = []string{
-	acctCreated, acctChanged, acctWouldCreate, acctWouldChange, acctPrimaryOK, acctPresent, acctExists, acctNeedCreate,
-	acctVerifyFailRB, acctRollbackFailed, acctVerifyUnknown, acctRejected, acctNoSlot, acctNoAdmin, acctNoAccount,
+	acctCreated, acctChanged, acctRoleUpdated, acctWouldCreate, acctWouldChange, acctWouldRoleUpdate, acctPrimaryOK, acctPresent,
+	acctExists, acctNeedCreate, acctNeedRoleUpdate,
+	acctVerifyFailRB, acctRollbackFailed, acctRoleUpdateFail, acctVerifyUnknown, acctRejected, acctNoSlot, acctNoAdmin, acctNoAccount,
 	acctSkippedWarmup,
 }
 
@@ -950,11 +1125,11 @@ func writeAcctReport(w io.Writer, hosts []*acctHost, listMax int, p painter) {
 		hs := by[s]
 		label := fmt.Sprintf("[%s] %d대", s, len(hs))
 		switch s {
-		case acctCreated, acctChanged:
+		case acctCreated, acctChanged, acctRoleUpdated:
 			label = p.green(label)
 		case acctRollbackFailed, acctVerifyUnknown:
 			label = p.boldRed(label)
-		case acctVerifyFailRB, acctRejected, acctNoSlot, acctNoAdmin, acctNoAccount, StatusAuthFail:
+		case acctVerifyFailRB, acctRoleUpdateFail, acctRejected, acctNoSlot, acctNoAdmin, acctNoAccount, StatusAuthFail:
 			label = p.red(label)
 		case acctExists, acctSkippedWarmup:
 			label = p.yellow(label)
@@ -962,7 +1137,7 @@ func writeAcctReport(w io.Writer, hosts []*acctHost, listMax int, p painter) {
 		fmt.Fprintln(w, label)
 		names := make([]string, 0, len(hs))
 		for _, h := range hs {
-			names = append(names, h.name())
+			names = append(names, h.label())
 		}
 		sort.Strings(names)
 		shown := names
@@ -977,7 +1152,8 @@ func writeAcctReport(w io.Writer, hosts []*acctHost, listMax int, p painter) {
 		}
 		// 원인이 있는 상태는 첫 몇 건의 사유를 보여 준다.
 		switch s {
-		case acctRejected, acctVerifyFailRB, acctRollbackFailed, acctVerifyUnknown, acctNoSlot, acctNoAdmin, acctNoAccount, acctExists, StatusAuthFail:
+		case acctRejected, acctVerifyFailRB, acctRollbackFailed, acctVerifyUnknown, acctNoSlot, acctNoAdmin, acctNoAccount, acctExists, StatusAuthFail,
+			acctRoleUpdated, acctRoleUpdateFail, acctWouldRoleUpdate:
 			shownN := 0
 			for _, h := range hs {
 				if h.Detail == "" {
@@ -987,7 +1163,7 @@ func writeAcctReport(w io.Writer, hosts []*acctHost, listMax int, p painter) {
 					break
 				}
 				shownN++
-				fmt.Fprintf(w, "    - %s: %s\n", h.name(), sanitizeDetail(h.Detail))
+				fmt.Fprintf(w, "    - %s: %s\n", h.label(), sanitizeDetail(h.Detail))
 			}
 		}
 	}
@@ -1057,6 +1233,7 @@ func acctWorkers(flagVal, confConc int) int {
 const accountUsage = `사용법:
   biostool account create [옵션]   1순위 계정이 없는 BMC 에 계정 생성 (점검 → 목록 → Y/n → 생성·검증·롤백)
                                    bios.conf 에 user2(+pass2.enc, user2_role)가 있으면 두 번째 계정도 없는 곳에 만든다
+                                   (벤더별 user2_role_<vendor> 우선, 이미 있는 user2 의 권한이 다르면 권한만 바꾼다)
   biostool account change [옵션]   1순위 계정의 비밀번호 변경 (새 비밀번호는 터미널에서 직접 2번 입력)
 
 옵션:
@@ -1121,6 +1298,9 @@ func cmdAccount(args []string) error {
 	ids := rc.Conf.User
 	if op == "create" {
 		ids = acctSpecsText(env.accounts())
+		if len(rc.Conf.User2Roles) > 0 && rc.Conf.User2 != "" {
+			ids += " [" + rc.Conf.User2 + " 벤더별 권한: " + rc.Conf.user2RolesText() + "]"
+		}
 	}
 	fmt.Printf("설정: %s (id=%s, 동시 %d, dry-run=%t)\n", co.conf, ids, workers, co.dryRun)
 	fmt.Printf("대상: %d개, 결과 폴더: %s\n", len(rc.Targets), dir)
@@ -1178,7 +1358,8 @@ func runAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir string
 		for _, g := range groups {
 			t2[g[1].Status]++
 		}
-		fmt.Printf("두 번째 계정 %s(%s): 이미 있음 %d대, 생성 대상 %d대\n", specs[1].User, specs[1].Role, t2[acctPresent], t2[acctNeedCreate])
+		fmt.Printf("두 번째 계정 %s(%s): 이미 있음 %d대, 생성 대상 %d대, 권한 변경 대상 %d대\n", specs[1].User, rc.Conf.user2RolesText(),
+			t2[acctPresent], t2[acctNeedCreate], t2[acctNeedRoleUpdate])
 	}
 	if len(need) == 0 {
 		writeAcctReport(os.Stdout, hosts, af.listMax, p)
@@ -1217,13 +1398,13 @@ func flattenAcct(groups [][]*acctHost) []*acctHost {
 	return out
 }
 
-// needCreateGroups 는 호스트마다 생성 대상(NEED_CREATE) 칸만 남깁니다 (없는 호스트는 뺌).
+// needCreateGroups 는 호스트마다 생성 대상(NEED_CREATE)·user2 권한 변경 대상(NEED_ROLE_UPDATE) 칸만 남깁니다 (없는 호스트는 뺌).
 func needCreateGroups(groups [][]*acctHost) [][]*acctHost {
 	var out [][]*acctHost
 	for _, g := range groups {
 		var keep []*acctHost
 		for _, h := range g {
-			if h != nil && h.Status == acctNeedCreate {
+			if h != nil && (h.Status == acctNeedCreate || h.Status == acctNeedRoleUpdate) {
 				keep = append(keep, h)
 			}
 		}
@@ -1234,24 +1415,24 @@ func needCreateGroups(groups [][]*acctHost) [][]*acctHost {
 	return out
 }
 
-// createWhat 은 확인 질문에 넣을 "계정(권한) N대" 목록입니다 (계정 순서는 처음 나온 순서).
+// createWhat 은 확인 질문에 넣을 "계정(권한) N대" 목록입니다 (계정·권한 조합은 처음 나온 순서).
+// user2 권한이 벤더별로 다르면 권한마다 따로 세고, 권한 변경 대상은 "계정 권한 변경(새 권한) N대" 로 셉니다.
 func createWhat(groups [][]*acctHost) string {
 	cnt := map[string]int{}
-	role := map[string]string{}
 	var order []string
 	for _, h := range flattenAcct(groups) {
-		if _, ok := cnt[h.User]; !ok {
-			order = append(order, h.User)
-			role[h.User] = roleAdministrator
-			if h.spec != nil {
-				role[h.User] = h.spec.Role
-			}
+		k := fmt.Sprintf("%s(%s)", sanitizeDetail(h.User), h.acctRole())
+		if h.Status == acctNeedRoleUpdate {
+			k = fmt.Sprintf("%s 권한 변경(%s)", sanitizeDetail(h.User), h.acctRole())
 		}
-		cnt[h.User]++
+		if _, ok := cnt[k]; !ok {
+			order = append(order, k)
+		}
+		cnt[k]++
 	}
 	parts := make([]string, 0, len(order))
-	for _, u := range order {
-		parts = append(parts, fmt.Sprintf("%s(%s) %d대", sanitizeDetail(u), role[u], cnt[u]))
+	for _, k := range order {
+		parts = append(parts, fmt.Sprintf("%s %d대", k, cnt[k]))
 	}
 	return strings.Join(parts, ", ")
 }
@@ -1291,8 +1472,16 @@ func printAcctTargets(w io.Writer, hs []*acctHost, max int) {
 			fmt.Fprintf(w, "  ... 외 %d대\n", len(hs)-max)
 			return
 		}
-		fmt.Fprintf(w, "  %-28s %-12s %s\n", h.name(), orDefault(sanitizeDetail(h.Vendor), "-"), orDefault(sanitizeDetail(h.Model), "-"))
+		fmt.Fprintf(w, "  %-28s %-12s %-20s %s\n", h.name(), orDefault(sanitizeDetail(h.Vendor), "-"), orDefault(sanitizeDetail(h.Model), "-"), h.planText())
 	}
+}
+
+// planText 는 대상 목록에 보일 할 일입니다: "권한 X" (만들 때) 또는 "권한 변경 현재 → 새" (user2 권한 변경).
+func (h *acctHost) planText() string {
+	if h.Status == acctNeedRoleUpdate {
+		return "권한 변경 " + orDefault(sanitizeDetail(h.curRole), "-") + " → " + h.acctRole()
+	}
+	return "권한 " + h.acctRole()
 }
 
 // confirmCreate 는 생성 여부를 묻습니다 (기본 Y: 빈 입력도 생성). 터미널이 아니면 -stdin-ok 없이는 묻지 않고 N.
@@ -1309,7 +1498,11 @@ func confirmCreate(in *os.File, w io.Writer, what string, af *accountFlags) (boo
 	if stdinIsTerminal(in) {
 		ttyFlushInput(int(in.Fd())) // 점검 중 눌러 둔 Enter 가 기본 Y 로 읽히지 않게 비운다
 	}
-	prompt := fmt.Sprintf("\n계정을 만들까요? [%s] 재부팅·BIOS 변경은 없습니다. [Y/n]: ", what)
+	q := "계정을 만들까요?"
+	if strings.Contains(what, "권한 변경") {
+		q = "계정을 만들거나 권한을 바꿀까요?"
+	}
+	prompt := fmt.Sprintf("\n%s [%s] 재부팅·BIOS 변경은 없습니다. [Y/n]: ", q, what)
 	return askYesNo(in, w, prompt, true), nil
 }
 

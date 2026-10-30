@@ -28,7 +28,7 @@ func TestParseConfAllKeys(t *testing.T) {
 	text := "\ufeff# 주석\r\n\r\n" +
 		"user = root \r\n" +
 		"pass_file=a.enc\r\nkey_file=a.key\r\n" +
-		"user2=ops1\r\nuser2_role=operator\r\npass2_file=b.enc\r\nrf_enc_file=c.enc\r\n" +
+		"user2=ops1\r\nuser2_role=operator\r\nuser2_role_HPE=readonly\r\npass2_file=b.enc\r\nrf_enc_file=c.enc\r\n" +
 		"concurrency=7\r\ntimeout=5\r\ninsecure=false\r\nretries=0\r\nauth_fail_stop=5\r\n" +
 		"result_dir=r\r\ndump_dir=d\r\nprofile_dir=p\r\n" +
 		"exclude_attrs= A | *Uuid* ||B \r\nallcheck_set=ON\r\nrefs_dir=myrefs\r\n"
@@ -37,7 +37,7 @@ func TestParseConfAllKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Config{
-		User: "root", PassFile: "a.enc", KeyFile: "a.key", User2: "ops1", Pass2File: "b.enc", RFEncFile: "c.enc", User2Role: "Operator", Concurrency: 7,
+		User: "root", PassFile: "a.enc", KeyFile: "a.key", User2: "ops1", Pass2File: "b.enc", RFEncFile: "c.enc", User2Role: "Operator", User2Roles: map[string]string{"hpe": "ReadOnly"}, Concurrency: 7,
 		Timeout: 5 * time.Second, Insecure: false, Retries: 0, AuthFailStop: 5,
 		ResultDir: "r", DumpDir: "d", ProfileDir: "p",
 		ExcludeAttrs: []string{"A", "*Uuid*", "B"}, AllcheckSet: true, RefsDir: "myrefs", XMLHostPrefix: []string{"c"},

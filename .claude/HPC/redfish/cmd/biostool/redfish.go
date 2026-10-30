@@ -262,6 +262,16 @@ func checkAttributes(attrs map[string]json.RawMessage) error {
 	return nil
 }
 
+// checkPayload 는 이 Client 의 본문 검사입니다: 권한 변경으로 등록한 계정 멤버(acctRole)의 PATCH 는
+// {"RoleId": R} 만 지나고 (checkAccountRolePatchBody, checkAccountPatchBody 의 형태는 쓰지 않음), 그 밖은 checkBody 와 같습니다.
+// do 와 roundTrip 이 같은 검사를 하도록 둘 다 이것을 부릅니다 (c.mu 보유).
+func (c *Client) checkPayload(method, send string, body []byte) ([]byte, error) {
+	if c.rfMode == ModeAccount && method == http.MethodPatch && c.acctRole[strings.ToLower(path.Clean(send))] {
+		return checkAccountRolePatchBody(body)
+	}
+	return checkBody(method, send, body)
+}
+
 // checkBody 는 설정 요청 본문을 검사하고, 중복 키 등을 없앤 정규형 본문을 돌려줍니다.
 //   - PATCH: {"Attributes":{...}} 필수, "@Redfish.SettingsApplyTime" 은 {"ApplyTime":"OnReset"} 만.
 //     (ApplyTime=Immediate 는 BMC 가 즉시 재부팅할 수 있어 금지)
@@ -390,6 +400,9 @@ type Client struct {
 	acctOK    map[string]bool // ModeAccount: PATCH/DELETE 해도 되는 계정 멤버 경로 (소문자 정규형). AllowAccountTarget 이나 자기가 만든 POST 로만 채움
 	extra     []string        // 오류 Detail 에서 지울 추가 비밀(새 계정 비밀번호)
 	authMode  string          // "session" | "basic" (세션 생성 404/405/501 폴백) | "" (로그인 전). 읽기는 Stats().AuthMode 로만
+	// acctRole 은 ModeAccount 에서 {"RoleId": R} PATCH 만 해도 되는 계정 멤버 경로입니다 (소문자 정규형, AllowAccountRoleTarget 로만 채움).
+	// 이 경로에는 다른 본문·DELETE 를 보내지 않고, 이 본문은 이 경로에만 보냅니다 (user2 권한 변경 전용).
+	acctRole map[string]bool
 }
 
 // NewClient 는 클라이언트를 만듭니다. 접속은 하지 않습니다.
@@ -536,6 +549,26 @@ func (c *Client) AllowAccountTarget(p string) error {
 		c.acctOK = map[string]bool{}
 	}
 	c.acctOK[lc] = true
+	return nil
+}
+
+// AllowAccountRoleTarget 은 ModeAccount 에서 권한(RoleId)만 PATCH 해도 되는 계정 멤버 경로를 등록합니다
+// (호출자가 이름이 정확히 user2 인 기존 계정임을 확인한 뒤에만 부른다). 이 경로에는 {"RoleId": R} 외의 PATCH·DELETE 를 보내지 않습니다.
+func (c *Client) AllowAccountRoleTarget(p string) error {
+	clean, _, err := normalizePath(p)
+	lc := strings.ToLower(clean)
+	if err != nil || !reAcctMember.MatchString(lc) {
+		return notAllowed("ALLOW", p, "계정 멤버 경로가 아님")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.rfMode != ModeAccount {
+		return notAllowed("ALLOW", p, "계정 모드가 아님")
+	}
+	if c.acctRole == nil {
+		c.acctRole = map[string]bool{}
+	}
+	c.acctRole[lc] = true
 	return nil
 }
 
@@ -686,14 +719,15 @@ func (c *Client) do(method, p string, body interface{}) (int, http.Header, []byt
 		if payload, err = json.Marshal(body); err != nil {
 			return 0, nil, nil, fmt.Errorf("요청 본문 JSON 변환 실패: %v", err)
 		}
-		if payload, err = checkBody(method, send, payload); err != nil {
+		if payload, err = c.checkPayload(method, send, payload); err != nil {
 			return 0, nil, nil, notAllowed(method, p, err.Error())
 		}
 	}
 	clean := path.Clean(send)
 	isSession := method == http.MethodPost && strings.EqualFold(clean, sessionsPath)
 	lcClean := strings.ToLower(clean)
-	if c.rfMode == ModeAccount && (method == http.MethodPatch || method == http.MethodDelete) && reAcctMember.MatchString(lcClean) && !c.acctOK[lcClean] {
+	if c.rfMode == ModeAccount && (method == http.MethodPatch || method == http.MethodDelete) && reAcctMember.MatchString(lcClean) &&
+		!c.acctOK[lcClean] && !(method == http.MethodPatch && c.acctRole[lcClean]) {
 		return 0, nil, nil, notAllowed(method, p, "이번 실행이 허용 등록하지 않은 계정 멤버 (빈 슬롯·생성한 계정·대상 계정만)")
 	}
 	// 세션 삭제(DELETE)는 로그인 상태와 무관하게 보낸다: 토큰 인증이라 계정 잠금 위험이 없고,
@@ -826,7 +860,7 @@ func (c *Client) roundTrip(method, send string, payload []byte, noAuth bool) (st
 		return 0, nil, nil, false, err
 	}
 	if payload != nil {
-		if payload, err = checkBody(method, send, payload); err != nil {
+		if payload, err = c.checkPayload(method, send, payload); err != nil {
 			return 0, nil, nil, false, notAllowed(method, send, err.Error())
 		}
 	}
