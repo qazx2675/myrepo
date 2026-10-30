@@ -57,15 +57,15 @@
           <section class="card">
             <div class="card-header">
               <span class="card-icon">📂</span>
-              <span class="card-title">2. 작업 원본(Target) 엑셀 지정</span>
+              <span class="card-title">2. SOP 파일 지정</span>
             </div>
             <div class="card-body">
               <div class="form-row">
-                <label for="inputTargetFile">Target 파일 경로:</label>
+                <label for="inputTargetFile">SOP 파일 경로:</label>
                 <div class="input-group">
                   <input type="text" id="inputTargetFile" value="target.xlsx" placeholder="예: target.xlsx">
                   <button id="btnLoadTarget" class="btn btn-primary btn-sm">불러오기</button>
-                  <button id="btnCreateSampleTarget" class="btn btn-secondary btn-sm" title="테스트용 3개 시트가 포함된 샘플 target.xlsx 자동 생성">🧪 샘플 생성</button>
+                  <button id="btnCreateSampleTarget" class="btn btn-secondary btn-sm" title="연습용 3개 시트가 포함된 샘플 SOP 파일(target.xlsx) 자동 생성">🧪 샘플 생성</button>
                 </div>
               </div>
               <div class="form-row">
@@ -90,11 +90,11 @@
             <div class="card-body">
               <div id="sheetsLoading" class="loading-state hidden">
                 <span class="spinner"></span>
-                <span>Target 시트 목록을 스캔하고 있습니다...</span>
+                <span>SOP 파일의 시트 목록을 스캔하고 있습니다...</span>
               </div>
 
               <div id="sheetsEmpty" class="empty-state">
-                <p>Target 파일을 불러오면 시트 목록이 나타납니다.</p>
+                <p>SOP 파일을 불러오면 시트 목록이 나타납니다.</p>
                 <button id="btnScanInitial" class="btn btn-sm btn-outline">지금 불러오기</button>
               </div>
 

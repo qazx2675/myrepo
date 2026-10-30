@@ -173,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
     sheetsList.innerHTML = "";
 
     try {
-      log(`Target 엑셀 시트 스캔 중: ${formData ? formData.get("target_file").name : target}...`, "info");
+      log(`SOP 파일 시트 스캔 중: ${formData ? formData.get("target_file").name : target}...`, "info");
       const opts = formData
         ? { method: "POST", body: formData }
         : {
@@ -299,11 +299,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // 4. Sample Target Generation
   btnCreateSampleTarget.addEventListener("click", async () => {
     try {
-      log("3개 시트가 포함된 테스트용 target.xlsx 생성 중...", "info");
+      log("3개 시트가 포함된 샘플 SOP 파일(target.xlsx) 생성 중...", "info");
       const res = await fetch("/api/create-sample-target", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        log("샘플 target.xlsx 파일 생성 완료! 시트를 자동으로 스캔합니다.", "success");
+        log("샘플 SOP 파일(target.xlsx) 생성 완료! 시트를 자동으로 스캔합니다.", "success");
         inputTargetFile.value = "target.xlsx";
         await loadTarget();
       } else {

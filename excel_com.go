@@ -514,7 +514,7 @@ func normalizeKey(s string) string {
 func openReadOnly(workbooks *ole.IDispatch, path string) (*ole.IDispatch, error) {
 	wb, err := callDisp(workbooks, "Open", path, 0, true)
 	if err != nil {
-		return nil, fmt.Errorf("Target 엑셀 열기 실패 (%s): %w", path, err)
+		return nil, fmt.Errorf("SOP 파일 열기 실패 (%s): %w", path, err)
 	}
 	return wb, nil
 }
@@ -527,13 +527,13 @@ func closeWorkbook(wb *ole.IDispatch) {
 func resolveTargetPath(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	if p == "" {
-		return "", fmt.Errorf("Target 엑셀 파일 경로가 비어 있습니다")
+		return "", fmt.Errorf("SOP 파일 경로가 비어 있습니다")
 	}
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(GetAppDir(), p)
 	}
 	if _, err := os.Stat(p); err != nil {
-		return "", fmt.Errorf("Target 엑셀 파일을 찾을 수 없습니다 (%s): %w", p, err)
+		return "", fmt.Errorf("SOP 파일을 찾을 수 없습니다 (%s): %w", p, err)
 	}
 	return p, nil
 }
@@ -1291,7 +1291,7 @@ func GenerateSOPExcel(req SOPGenerateRequest) (*SOPGenerateResult, error) {
 	destFullPath := filepath.Join(GetAppDir(), dstFilename)
 	if absT, e1 := filepath.Abs(targetPath); e1 == nil {
 		if absD, e2 := filepath.Abs(destFullPath); e2 == nil && strings.EqualFold(absT, absD) {
-			return nil, fmt.Errorf("결과 파일 이름이 Target 파일과 같습니다. 다른 이름을 지정하세요 (%s)", dstFilename)
+			return nil, fmt.Errorf("결과 파일 이름이 SOP 파일과 같습니다. 다른 이름을 지정하세요 (%s)", dstFilename)
 		}
 	}
 	if _, err := os.Stat(destFullPath); err == nil {
@@ -1334,7 +1334,7 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 
 	srcSheets, err := getDisp(srcWb, "Worksheets")
 	if err != nil {
-		return fmt.Errorf("Target Worksheets 획득 실패: %w", err)
+		return fmt.Errorf("SOP 파일 Worksheets 획득 실패: %w", err)
 	}
 	defer srcSheets.Release()
 
@@ -1343,7 +1343,7 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 	for _, name := range selected {
 		ws, err := getDisp(srcSheets, "Item", name)
 		if err != nil {
-			return fmt.Errorf("선택한 시트 '%s'를 Target 파일에서 찾을 수 없습니다", name)
+			return fmt.Errorf("선택한 시트 '%s'를 SOP 파일에서 찾을 수 없습니다", name)
 		}
 		defer ws.Release()
 

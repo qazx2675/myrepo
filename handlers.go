@@ -134,7 +134,7 @@ func (s *ServerState) handleLoadTarget(w http.ResponseWriter, r *http.Request) {
 		}
 		file, header, err := r.FormFile("target_file")
 		if err != nil {
-			respondError(w, http.StatusBadRequest, "Target 파일 수신 실패: "+err.Error())
+			respondError(w, http.StatusBadRequest, "SOP 파일 수신 실패: "+err.Error())
 			return
 		}
 		defer file.Close()
@@ -178,7 +178,7 @@ func (s *ServerState) handleLoadTarget(w http.ResponseWriter, r *http.Request) {
 			targetPath = filepath.Join(GetAppDir(), targetPath)
 		}
 		if _, err := os.Stat(targetPath); err != nil {
-			respondError(w, http.StatusNotFound, fmt.Sprintf("Target 파일이 존재하지 않습니다: %s", targetPath))
+			respondError(w, http.StatusNotFound, fmt.Sprintf("SOP 파일이 존재하지 않습니다: %s", targetPath))
 			return
 		}
 	}
@@ -267,7 +267,7 @@ func (s *ServerState) handleCreateSampleTarget(w http.ResponseWriter, r *http.Re
 	targetPath := filepath.Join(appDir, "target.xlsx")
 
 	if err := CreateSampleTarget(targetPath); err != nil {
-		respondError(w, http.StatusInternalServerError, "샘플 Target 파일 생성 실패: "+err.Error())
+		respondError(w, http.StatusInternalServerError, "샘플 SOP 파일 생성 실패: "+err.Error())
 		return
 	}
 
