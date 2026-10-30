@@ -18,13 +18,13 @@ flowchart TD
     H -- n --> Z1["종료 (vCenter 변경 없음)"]
     H -- y --> I["vswitch_setting<br/>BM 포트그룹 생성 (호스트 병렬)"]
     I --> J["vm_create<br/>스펙별 VM 생성 ev01~ev99"]
-    J --> K["affinity_setting<br/>ev별 affinity 파일 적용<br/>-del_affinity 면 affinity 값을 모두 삭제"]
-    K --> L["lpage_setting<br/>HugePage / CPU 토폴로지<br/>-del_lpage 면 HugePage 값만 삭제"]
+    J --> K["affinity_setting<br/>ev별 affinity 파일 적용<br/>-del_affinity 면 affinity 값을 모두 삭제<br/>스펙 evNN_del_affinity=y / all_del_affinity=y 면 그 ev(전체)만 삭제"]
+    K --> L["lpage_setting<br/>HugePage / CPU 토폴로지<br/>-del_lpage 면 HugePage 값만 삭제<br/>스펙 evNN_del_lpage=y / all_del_lpage=y 면 그 ev(전체)만"]
     L --> LP["PCI 패스스루 (스펙에 pci-evNN 있을 때만)<br/>활성화 → VM 연결(ESXi SystemId) → 전원 ON, 켜 둠<br/>호스트 재부팅 필요면 경고 후 계속, run_{user}/pci_resume_번호.sh 로 이어하기"]
     LP --> LT["태그 설정 (스펙마다, 라이선스 다음)<br/>스펙 tag-DEPT_NAME / tag-PURPOSE / tag-VM_TYPE<br/>없으면 건너뜀, 실패해도 경고 후 계속"]
     LT --> M{"단계 실패?"}
     M -- 예 --> M1["그 단계에서 멈춤<br/>원인 수정 후 재실행 → 이미 있는 것은 건너뜀"] --> D
-    M -- 아니오 --> N["6. 스펙 체크<br/>vm-param-check -specFolder 로 만든 VM 체크 (태그는 체크 안 함)<br/>-del_* 를 썼으면 지운 항목은 값이 없어야 OK<br/>[일치] / [차이] → [완료]"]
+    M -- 아니오 --> N["6. 스펙 체크<br/>vm-param-check -specFolder 로 만든 VM 체크 (태그는 체크 안 함)<br/>-del_* 또는 스펙 *_del_* 로 지운 항목은 값이 없어야 OK (스펙 키는 ev 별)<br/>[일치] / [차이] → [완료]"]
     N --> P{"차이 있음?"}
     P -- 아니오 --> Q["끝"]
     P -- 예 --> R["vm-param-check -fix<br/>게이트(동질성·전원 OFF) → dry-run → y/N → 적용 → 재검증"]
@@ -36,6 +36,8 @@ flowchart TD
 ![작업 흐름도](workflow.svg)
 
 </details>
+
+명령·도구별 흐름도(입력·실행 단계, 스펙 제외 키, affinity/lpage/PCI, 01 스크립트, `-fix`, 배포)는 [docs/svg/](docs/svg/README.md)에 있습니다.
 
 ## 단계 설명
 

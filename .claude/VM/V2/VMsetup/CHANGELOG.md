@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-10-30 — 흐름도 SVG 를 auto_setup 양식으로 다시 그림 + 명령별 흐름도(`docs/svg/`) 신설
+
+- **전체 흐름도 4종 교체**: `V2/workflow.svg`, `VMsetup/workflow.svg`, `vm-param-check-usability-improvement/workflow.svg`, `workflow-deploy.svg` 를 mermaid 렌더링 대신 `HPC/auto_setup/workflow.svg` 와 같은 양식(단계 밴드 · ⌨ 작업자 입력 · 보충 설명 점선 상자)으로 다시 그렸다. 내용은 지금 코드 기준 — 호스트 등록(`main_conn`)·MAC 조사·전원 고성능·라이선스·태그·MAC 목록 복사 단계, 스펙 제외 키(`all_del_*` / `evNN_del_*`), `01.vm_setting_check_insert.sh -fromSetup` 반영.
+- **`docs/svg/`(신규)**: 명령·도구별 흐름도 17개 + 목록 `README.md`. `HPC/auto_setup/docs/svg` 와 같은 양식(라이트/다크 CSS 변수, 맨 아래 범례·"코드:" 구현 위치).
+- **문서**: `WORKFLOW.md`·`VMsetup/workflow.mmd`·`vm-param-check/workflow.mmd` 에 스펙 제외 키 한 줄씩, README 3곳에 `docs/svg/` 링크, `PR_CHECKLIST.md` 에 SVG 갱신 항목. 코드 변경 없음.
+- **검증**: 21개 SVG XML 파싱 통과, 브라우저에서 렌더링해 글자가 상자를 넘지 않는지·상자끼리 겹치지 않는지 확인.
+
+---
+
 ## 2026-10-30 — 스펙 키로 ev 별 affinity/lpage 제외 (`evNN_del_affinity=y`, `all_del_*`)
 
 - **요약**: 스펙 파일에 `all_del_affinity=y`, `all_del_lpage=y`, `evNN_del_affinity=y`, `evNN_del_lpage=y` 를 쓸 수 있다(값은 `y` 만 — 범위·`n` 없음). 동작은 `vm_setup.sh -del_affinity` / `-del_lpage` 와 같되 ev 단위다: 제외한 ev 의 VM 은 affinity 설정값을 모두 지우거나(`_del_affinity`), HugePage 5개 키를 지운다(`_del_lpage`, CPU 토폴로지는 평소처럼 적용). `all_*` 는 모든 ev. CLI 옵션 `-del_affinity` / `-del_lpage` 는 그대로 두고 **우선**한다(전체 ev). affinity 를 제외한 ev 는 `affinity-evNN` 줄이 없어도 되고(CLI `-del_affinity` 일 때도 마찬가지), 실행 계획에 `제외(스펙)` 줄이 나온다.

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 657" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="vm-param-check -fix">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="657" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">vm-param-check -fix</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">체크 결과의 FAIL / 설정없음 → 게이트 → dry-run → 확인 → 적용 → 재검증</text>
+
+  <rect x="40" y="56" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">교정 계획 (BuildPlan)</text>
+  <text x="265" y="92" class="t" text-anchor="middle">자동 : CPU · 토폴로지 · affinity · HugePage 등</text>
+  <text x="265" y="108" class="t" text-anchor="middle">수동 : 메모리 · 디스크 · Shares · 네트워크 · 전원정책 · (없음)</text>
+  <rect x="560" y="56" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="76" class="t tb" text-anchor="middle">자동 교정 대상 없음</text>
+  <text x="715" y="92" class="t" text-anchor="middle">수동 조치 개수만 알리고 끝</text>
+  <path d="M490 79 L560 79" class="ln"/>
+  <text x="498" y="74" class="t tm">0건</text>
+  <path d="M265 118 L265 146" class="ln"/>
+  <rect x="40" y="146" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="166" class="t tb" text-anchor="middle">게이트 (CheckGatesBySpec)</text>
+  <text x="265" y="182" class="t" text-anchor="middle">스펙별 그룹 동질성 · 대상 전원 OFF</text>
+  <text x="265" y="198" class="t" text-anchor="middle">ev 짝이 안 맞는 것은 경고만</text>
+  <rect x="560" y="146" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="166" class="t tb" text-anchor="middle">중단 (변경 없음)</text>
+  <path d="M490 161 L560 161" class="ln"/>
+  <text x="498" y="156" class="t tm">실패</text>
+  <path d="M265 208 L265 236" class="ln"/>
+  <rect x="40" y="236" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="256" class="t tb" text-anchor="middle">dry-run (Describe)</text>
+  <text x="265" y="272" class="t" text-anchor="middle">VM 별 변경 내역 · 수동 조치는 개수만</text>
+  <path d="M265 282 L265 310" class="ln"/>
+  <rect x="40" y="310" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="330" class="t tb" text-anchor="middle">실제로 변경할까요? (y/N)</text>
+  <text x="265" y="346" class="t" text-anchor="middle">-yes 여도 항상 물음 · 입력이 없으면 N</text>
+  <rect x="560" y="310" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="330" class="t tb" text-anchor="middle">취소 (변경 없음)</text>
+  <path d="M490 325 L560 325" class="ln"/>
+  <text x="498" y="320" class="t tm">N</text>
+  <path d="M265 356 L265 384" class="ln"/>
+  <text x="273" y="373" class="t tm">y</text>
+  <rect x="40" y="384" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="404" class="t tb" text-anchor="middle">Apply — VM 당 Reconfigure 1회</text>
+  <text x="265" y="420" class="t" text-anchor="middle">워커풀 -fixConcurrency (기본 20)</text>
+  <rect x="560" y="384" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="404" class="t tb" text-anchor="middle">적용 실패 VM 이 있음</text>
+  <text x="715" y="420" class="t" text-anchor="middle">재검증 생략하고 종료</text>
+  <path d="M490 407 L560 407" class="ln"/>
+  <text x="498" y="402" class="t tm">실패</text>
+  <path d="M265 430 L265 458" class="ln"/>
+  <rect x="40" y="458" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="478" class="t tb" text-anchor="middle">재검증 — 교정한 VM 만 재조회 → evaluateVM</text>
+  <text x="265" y="494" class="t" text-anchor="middle">처음 체크와 같은 기대값</text>
+  <path d="M265 504 L265 532" class="ln"/>
+  <rect x="40" y="532" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="552" class="t tb" text-anchor="middle">_recheck_&lt;시각&gt;.csv (상세 · 요약)</text>
+  <text x="265" y="568" class="t" text-anchor="middle">남은 FAIL / 설정없음 수 안내 → 몇 대 직접 확인</text>
+  <text x="40" y="615" class="t tm">범례</text>
+  <rect x="80" y="604" width="14" height="14" class="box"/>
+  <text x="100" y="615" class="t tm">동작 (vm-param-check)</text>
+  <rect x="252" y="604" width="14" height="14" class="dec"/>
+  <text x="272" y="615" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="388" y="604" width="14" height="14" class="ldap"/>
+  <text x="408" y="615" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="573" y="604" width="14" height="14" class="sec"/>
+  <text x="593" y="615" class="t tm">기록 · 결과</text>
+  <rect x="674" y="604" width="14" height="14" class="ext"/>
+  <text x="694" y="615" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="632" class="t tm">코드: main.go runFix · recheckVMs · fixer/plan.go BuildPlan · fixer/gates.go CheckGatesBySpec · fixer/describe.go Describe · fixer/apply.go Apply</text>
+</svg>

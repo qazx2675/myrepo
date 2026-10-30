@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 641" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="lpage_setting -evNNCores -evNNSockets -evNNNuma [-del_lpage | -del_lpage_evs]">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="641" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">lpage_setting -evNNCores -evNNSockets -evNNNuma [-del_lpage | -del_lpage_evs]</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">HugePage 5개 키 + CPU 토폴로지 적용 — 삭제 모드면 HugePage 만 지우고 토폴로지는 그대로 적용</text>
+
+  <rect x="40" y="56" width="450" height="62" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">옵션 읽기</text>
+  <text x="265" y="92" class="t" text-anchor="middle">ev 별 Cores · Sockets · Numa (Cores 가 없는 ev 는 건너뜀)</text>
+  <text x="265" y="108" class="t" text-anchor="middle">-del_lpage_evs=ev03 → parseEvList</text>
+  <path d="M265 118 L265 146" class="ln"/>
+  <rect x="40" y="146" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="166" class="t tb" text-anchor="middle">RootFolder 부터 ContainerView 로 VM 이름 1회 조회</text>
+  <text x="265" y="182" class="t" text-anchor="middle">데이터센터가 여러 개여도 모두 찾음</text>
+  <path d="M265 192 L265 220" class="ln"/>
+  <rect x="40" y="220" width="450" height="30" rx="6" class="box"/>
+  <text x="265" y="240" class="t tb" text-anchor="middle">작업 목록 : BM × 지정된 그룹</text>
+  <path d="M265 250 L265 278" class="ln"/>
+  <rect x="40" y="278" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="298" class="t tb" text-anchor="middle">그 ev 가 삭제 대상인가?</text>
+  <text x="265" y="314" class="t" text-anchor="middle">-del_lpage = 모든 ev (우선) · 목록에 있는 ev</text>
+  <rect x="560" y="278" width="310" height="62" rx="6" class="box"/>
+  <text x="715" y="298" class="t tb" text-anchor="middle">HugePage 5개 키를 빈 값으로</text>
+  <text x="715" y="314" class="t" text-anchor="middle">Cores 가 있으면 토폴로지 ·</text>
+  <text x="715" y="330" class="t" text-anchor="middle">numa.vcpu.maxPerVirtualNode 는 적용</text>
+  <path d="M490 301 L560 301" class="ln"/>
+  <text x="498" y="296" class="t tm">예</text>
+  <path d="M265 324 L265 368" class="ln"/>
+  <text x="273" y="349" class="t tm">아니오</text>
+  <rect x="40" y="368" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="388" class="t tb" text-anchor="middle">평소 : HugePage 5개 키 + 토폴로지</text>
+  <text x="265" y="404" class="t" text-anchor="middle">lpage.enable1GPage · mem.pin · mem.prealloc</text>
+  <text x="265" y="420" class="t" text-anchor="middle">prealloc.pinnedMainMem · swap.vmxSwapEnabled</text>
+  <path d="M265 430 L265 458" class="ln"/>
+  <rect x="40" y="458" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="478" class="t tb" text-anchor="middle">워커풀 : VM 마다 Reconfigure + 완료 대기</text>
+  <text x="265" y="494" class="t" text-anchor="middle">-concurrency 제한 · -applyTopology</text>
+  <path d="M265 504 L265 532" class="ln"/>
+  <rect x="40" y="532" width="450" height="30" rx="6" class="sec"/>
+  <text x="265" y="552" class="t tb" text-anchor="middle">결과 요약</text>
+  <text x="40" y="599" class="t tm">범례</text>
+  <rect x="80" y="588" width="14" height="14" class="box"/>
+  <text x="100" y="599" class="t tm">동작 (lpage_setting)</text>
+  <rect x="235" y="588" width="14" height="14" class="dec"/>
+  <text x="255" y="599" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="371" y="588" width="14" height="14" class="ldap"/>
+  <text x="391" y="599" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="556" y="588" width="14" height="14" class="sec"/>
+  <text x="576" y="599" class="t tm">기록 · 결과</text>
+  <rect x="657" y="588" width="14" height="14" class="ext"/>
+  <text x="677" y="599" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="616" class="t tm">코드: VMsetup/lpage_setting-source/main.go main · parseEvList</text>
+</svg>

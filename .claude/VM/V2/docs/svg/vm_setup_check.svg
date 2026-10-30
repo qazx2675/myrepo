@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 747" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="./vm_setup.sh — 스펙 체크 · MAC 목록 복사">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="747" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">./vm_setup.sh — 스펙 체크 · MAC 목록 복사</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">실행 단계 마지막 — 방금 만든 VM 만 실행한 스펙으로 체크하고, MAC 목록을 AWX 쪽으로 넘김</text>
+
+  <rect x="40" y="56" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">체크 옵션 준비</text>
+  <text x="265" y="92" class="t" text-anchor="middle">-del_lpage → -expectNoLpage + check_del_lpage 표시</text>
+  <text x="265" y="108" class="t" text-anchor="middle">-del_affinity → -expectNoAffinity + check_del_affinity 표시</text>
+  <path d="M265 118 L265 146" class="ln"/>
+  <rect x="40" y="146" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="166" class="t tb" text-anchor="middle">스펙마다 : ev01 cores / numa 가 있나?</text>
+  <rect x="560" y="146" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="166" class="t tb" text-anchor="middle">[건너뜀]</text>
+  <text x="715" y="182" class="t" text-anchor="middle">체크할 수 없음</text>
+  <path d="M490 161 L560 161" class="ln"/>
+  <text x="498" y="156" class="t tm">아니오</text>
+  <path d="M265 176 L265 220" class="ln"/>
+  <text x="273" y="201" class="t tm">예</text>
+  <rect x="40" y="220" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="240" class="t tb" text-anchor="middle">check_targets_N.txt · check_specs.txt 기록</text>
+  <text x="265" y="256" class="t" text-anchor="middle">01 -fromSetup 이 그대로 가져다 씀</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <rect x="40" y="294" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">vm-param-check -specFolder -yes -onlyFail</text>
+  <text x="265" y="330" class="t" text-anchor="middle">스펙 제외 키는 vm-param-check 가 스펙에서 직접 읽음</text>
+  <path d="M265 340 L265 368" class="ln"/>
+  <rect x="40" y="368" width="450" height="62" rx="6" class="sec"/>
+  <text x="265" y="388" class="t tb" text-anchor="middle">[OK] / [FAIL] / [미완료] 한 줄씩</text>
+  <text x="265" y="404" class="t" text-anchor="middle">check_N.log · check_N.csv · check_summary.txt</text>
+  <text x="265" y="420" class="t" text-anchor="middle">체크 결과는 실행 실패로 치지 않음</text>
+  <path d="M265 430 L265 458" class="ln"/>
+  <rect x="40" y="458" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="478" class="t tb" text-anchor="middle">MAC 목록 : IP 칸 채우기</text>
+  <text x="265" y="494" class="t" text-anchor="middle">&lt;VM&gt;_DNS_AND_TOOLS_NOT_FOUND → DNS · /etc/hosts</text>
+  <text x="265" y="510" class="t" text-anchor="middle">못 찾으면 &lt;VM&gt;.&lt;MAC_DOMAIN&gt; 으로 한 번 더</text>
+  <path d="M265 520 L265 548" class="ln"/>
+  <rect x="40" y="548" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="568" class="t tb" text-anchor="middle">awx_route 가 있나?</text>
+  <rect x="560" y="548" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="568" class="t tb" text-anchor="middle">복사 안 함</text>
+  <text x="715" y="584" class="t" text-anchor="middle">run_&lt;user&gt;/mac_all.txt 에만</text>
+  <path d="M490 563 L560 563" class="ln"/>
+  <text x="498" y="558" class="t tm">아니오</text>
+  <path d="M265 578 L265 622" class="ln"/>
+  <text x="273" y="603" class="t tm">예</text>
+  <rect x="40" y="622" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="642" class="t tb" text-anchor="middle">awx_route/&lt;user&gt;.txt 로 복사</text>
+  <text x="265" y="658" class="t" text-anchor="middle">FAIL 이 있으면 마지막 요약에 -fix 명령 안내</text>
+  <text x="40" y="705" class="t tm">범례</text>
+  <rect x="80" y="694" width="14" height="14" class="box"/>
+  <text x="100" y="705" class="t tm">동작 (vm_setup.sh)</text>
+  <rect x="228" y="694" width="14" height="14" class="dec"/>
+  <text x="248" y="705" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="364" y="694" width="14" height="14" class="ldap"/>
+  <text x="384" y="705" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="549" y="694" width="14" height="14" class="sec"/>
+  <text x="569" y="705" class="t tm">기록 · 결과</text>
+  <rect x="650" y="694" width="14" height="14" class="ext"/>
+  <text x="670" y="705" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="722" class="t tm">코드: vm_setup.sh step_check · resolve_mac_ips · step_mac_copy · print_final</text>
+</svg>

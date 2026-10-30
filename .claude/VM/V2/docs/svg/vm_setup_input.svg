@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 944" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="./vm_setup.sh — 입력 · 할당 · 실행 계획">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="944" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">./vm_setup.sh — 입력 · 할당 · 실행 계획</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">vCenter 를 바꾸기 전 단계 — 여기까지는 언제 끊어도 변경이 없음 (-n 이면 계획만 보고 종료)</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">./vm_setup.sh [-u -v -s -w -c] [-del_affinity] [-del_lpage] [-n]</text>
+  <text x="265" y="92" class="t" text-anchor="middle">VC_PASSWORD · MAC_ARGSTR · MAC_ARG1 는 매번 지우고 시작</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">user 선택 · 파일 확인</text>
+  <text x="265" y="166" class="t" text-anchor="middle">-u 없으면 번호 메뉴 (0 = 직접 입력)</text>
+  <text x="265" y="182" class="t" text-anchor="middle">&lt;user&gt;.txt · vswitch_&lt;user&gt;.txt 가 없으면 오류</text>
+  <path d="M265 192 L265 220" class="ln"/>
+  <rect x="40" y="220" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="240" class="t tb" text-anchor="middle">설치 정보 입력</text>
+  <text x="265" y="256" class="t" text-anchor="middle">OS 버전 (예: 8.10) · 인프라 (공백 없음)</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <rect x="40" y="294" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">실행파일 확인 · 포트그룹 이름 변환</text>
+  <text x="265" y="330" class="t" text-anchor="middle">없으면 ../setup.sh &lt;도구&gt; · IP 포트그룹 → vswitch_pgname.sh</text>
+  <path d="M265 340 L265 368" class="ln"/>
+  <rect x="40" y="368" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="388" class="t tb" text-anchor="middle">스펙 자동 할당 (auto_assign_specs)</text>
+  <text x="265" y="404" class="t" text-anchor="middle">포트그룹 폴더명 → -specExport → 후보 1개면 할당</text>
+  <text x="265" y="420" class="t" text-anchor="middle">build_flags 로 검증 (affinity 없으면 추가 제안)</text>
+  <rect x="560" y="368" width="310" height="62" rx="6" class="ldap"/>
+  <text x="715" y="388" class="t tb" text-anchor="middle">vm-param-check -specExport</text>
+  <text x="715" y="404" class="t" text-anchor="middle">스펙 → key=value 로 펼침</text>
+  <text x="715" y="420" class="t" text-anchor="middle">del_affinity-evNN=y · del_lpage-evNN=y</text>
+  <path d="M490 399 L560 399" class="ln"/>
+  <path d="M265 430 L265 458" class="ln"/>
+  <rect x="40" y="458" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="478" class="t tb" text-anchor="middle">못 정한 BM 만 스펙 선택 (pick_spec)</text>
+  <text x="265" y="494" class="t" text-anchor="middle">번호 / Enter = 이전 선택 / 0 → vim 새 스펙</text>
+  <text x="265" y="510" class="t" text-anchor="middle">제외된 ev 는 affinity 파일이 없어도 통과</text>
+  <path d="M265 520 L265 548" class="ln"/>
+  <rect x="40" y="548" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="568" class="t tb" text-anchor="middle">VM → 스펙 / 포트그룹 표 (y/n)</text>
+  <text x="265" y="584" class="t" text-anchor="middle">n / 미정 → 번호 선택, 0 → vim</text>
+  <path d="M265 594 L265 622" class="ln"/>
+  <rect x="40" y="622" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="642" class="t tb" text-anchor="middle">CAE 번호 변경? · vCenter 선택</text>
+  <text x="265" y="658" class="t" text-anchor="middle">vcenter.txt 번호 · Enter = run_&lt;user&gt;/last_vcenter</text>
+  <text x="265" y="674" class="t" text-anchor="middle">비밀번호 : ../secret → 직접 입력</text>
+  <path d="M265 684 L265 712" class="ln"/>
+  <rect x="40" y="712" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="732" class="t tb" text-anchor="middle">실행 계획 확인 (y/n)</text>
+  <text x="265" y="748" class="t" text-anchor="middle">스펙별 사양 · affinity 값 · MAC 디스크</text>
+  <text x="265" y="764" class="t" text-anchor="middle">&quot;제외(스펙): affinity=… / lpage=…&quot;</text>
+  <rect x="560" y="712" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="732" class="t tb" text-anchor="middle">종료 (vCenter 변경 없음)</text>
+  <text x="715" y="748" class="t" text-anchor="middle">n 또는 -n</text>
+  <path d="M490 735 L560 735" class="ln"/>
+  <text x="498" y="730" class="t tm">n</text>
+  <path d="M265 774 L265 802" class="ln"/>
+  <text x="273" y="791" class="t tm">y</text>
+  <rect x="40" y="802" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="822" class="t tb" text-anchor="middle">실행 단계로 → vm_setup_run.svg</text>
+  <text x="265" y="838" class="t" text-anchor="middle">plan.txt · run_&lt;user&gt;/ 실행 폴더</text>
+  <text x="40" y="885" class="t tm">범례</text>
+  <rect x="80" y="874" width="14" height="14" class="box"/>
+  <text x="100" y="885" class="t tm">동작 (vm_setup.sh)</text>
+  <rect x="228" y="874" width="14" height="14" class="dec"/>
+  <text x="248" y="885" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="364" y="874" width="14" height="14" class="ldap"/>
+  <text x="384" y="885" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="549" y="874" width="14" height="14" class="sec"/>
+  <text x="569" y="885" class="t tm">기록 · 결과</text>
+  <rect x="650" y="874" width="14" height="14" class="ext"/>
+  <text x="670" y="885" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="902" class="t tm">코드: vm_setup.sh select_user · 설치 정보 · ensure_bin · auto_assign_specs · build_flags · offer_missing_affinity · pick_spec · auto_assign_nics</text>
+  <text x="40" y="919" class="t tm">      ask_cae_number · select_vcenter · print_plan</text>
+</svg>

@@ -25,6 +25,7 @@ V2(VMsetup + vm-param-check + SPEC_DIR)를 배포하거나 수정하기 전 확�
 - [ ] `VMsetup/CHANGELOG.md` 또는 `vm-param-check-usability-improvement/CHANGELOG.md` 항목 추가 (날짜, 영향 범위, 검증)
 - [ ] README.md 관련 표/설명 갱신 필요 여부 확인 (옵션 표, 사용 순서, 알려진 한계)
 - [ ] 동작이 바뀌는 곳(예: 값 없는 ev는 만들지 않음)은 CHANGELOG에 "동작 변경"으로 명시
+- [ ] 흐름이 바뀌면 해당 흐름도 SVG(`workflow.svg` 4종, `docs/svg/*.svg`)의 단계와 맨 아래 "코드:" 줄도 함께 고침 (`docs/svg/README.md` "고칠 때")
 - [ ] 작업기록을 `.claude/VM-10대-확장-및-SPEC_DIR-공유/`(또는 새 작업 폴더)에 남김
 
 ## 저장소

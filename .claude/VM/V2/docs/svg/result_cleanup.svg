@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 419" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="result_cleanup.sh (crontab 매시)">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="419" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">result_cleanup.sh (crontab 매시)</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">1시간 넘게 수정이 없는 실행 결과물만 삭제 — 사용자 파일 · 설정 · 암호는 건드리지 않음</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">DRY_RUN=1 ./result_cleanup.sh (먼저 확인) → ./result_cleanup.sh</text>
+  <text x="265" y="92" class="t" text-anchor="middle">NCI_DIR 이 있으면 망변경 폴더도</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">대상 경로만 스캔</text>
+  <text x="265" y="166" class="t" text-anchor="middle">VMsetup/run_&lt;user&gt;/ (last_vcenter 제외)</text>
+  <text x="265" y="182" class="t" text-anchor="middle">vm-param-check 의 *.csv · *.log · *_test_out/</text>
+  <path d="M265 192 L265 220" class="ln"/>
+  <rect x="40" y="220" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="240" class="t tb" text-anchor="middle">mtime 이 1시간 넘었나?</text>
+  <text x="265" y="256" class="t" text-anchor="middle">atime 은 쓰지 않음</text>
+  <rect x="560" y="220" width="310" height="30" rx="6" class="ext"/>
+  <text x="715" y="240" class="t tb" text-anchor="middle">남김</text>
+  <path d="M490 235 L560 235" class="ln"/>
+  <text x="498" y="230" class="t tm">아니오</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <text x="273" y="283" class="t tm">예</text>
+  <rect x="40" y="294" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">삭제 (DRY_RUN 이면 목록만)</text>
+  <text x="265" y="330" class="t" text-anchor="middle">&lt;user&gt;.txt · vcenter.txt · SPEC_DIR/ · secret/ 는 대상 아님</text>
+  <text x="40" y="377" class="t tm">범례</text>
+  <rect x="80" y="366" width="14" height="14" class="box"/>
+  <text x="100" y="377" class="t tm">동작 (result_cleanup.sh)</text>
+  <rect x="256" y="366" width="14" height="14" class="dec"/>
+  <text x="276" y="377" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="392" y="366" width="14" height="14" class="sec"/>
+  <text x="412" y="377" class="t tm">기록 · 결과</text>
+  <rect x="493" y="366" width="14" height="14" class="ext"/>
+  <text x="513" y="377" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="394" class="t tm">코드: result_cleanup.sh</text>
+</svg>

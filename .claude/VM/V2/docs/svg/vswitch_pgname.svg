@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 551" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="vswitch_pgname.sh &lt;vswitch_user.txt&gt;">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="551" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">vswitch_pgname.sh &lt;vswitch_user.txt&gt;</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">포트그룹 칸의 IP 를 &lt;폴더명&gt;-cae-a-b-c-0 으로 변환 — vm_setup.sh 가 IP 를 발견하면 자동 호출</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">vswitch_&lt;user&gt;.txt 읽기</text>
+  <text x="265" y="92" class="t" text-anchor="middle">한 줄 : BM  포트그룹  VLAN</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">2번째 칸이 이미 &lt;폴더명&gt;-cae-a-b-c-d ?</text>
+  <rect x="560" y="130" width="310" height="30" rx="6" class="sec"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">그대로 둠</text>
+  <path d="M490 145 L560 145" class="ln"/>
+  <text x="498" y="140" class="t tm">예</text>
+  <path d="M265 160 L265 188" class="ln"/>
+  <text x="273" y="177" class="t tm">아니오</text>
+  <rect x="40" y="188" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="208" class="t tb" text-anchor="middle">IP (a.b.c.d) 인가?</text>
+  <rect x="560" y="188" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="208" class="t tb" text-anchor="middle">그대로 두고 경고</text>
+  <text x="715" y="224" class="t" text-anchor="middle">판단할 수 없는 줄</text>
+  <path d="M490 203 L560 203" class="ln"/>
+  <text x="498" y="198" class="t tm">아니오</text>
+  <path d="M265 218 L265 262" class="ln"/>
+  <text x="273" y="243" class="t tm">예</text>
+  <rect x="40" y="262" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="282" class="t tb" text-anchor="middle">폴더명 입력 (처음 한 번만)</text>
+  <text x="265" y="298" class="t" text-anchor="middle">IP 로 적힌 모든 줄에 같은 폴더명</text>
+  <path d="M265 308 L265 336" class="ln"/>
+  <rect x="40" y="336" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="356" class="t tb" text-anchor="middle">&lt;폴더명&gt;-cae-&lt;a&gt;-&lt;b&gt;-&lt;c&gt;-0 으로 변환</text>
+  <text x="265" y="372" class="t" text-anchor="middle">/24 가정이라 마지막 옥텟은 항상 0</text>
+  <text x="265" y="388" class="t" text-anchor="middle">인라인 주석은 사라짐</text>
+  <path d="M265 398 L265 426" class="ln"/>
+  <rect x="40" y="426" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="446" class="t tb" text-anchor="middle">파일을 그 자리에서 바꿈</text>
+  <text x="265" y="462" class="t" text-anchor="middle">원본은 &lt;파일&gt;.bak</text>
+  <text x="40" y="509" class="t tm">범례</text>
+  <rect x="80" y="498" width="14" height="14" class="box"/>
+  <text x="100" y="509" class="t tm">동작 (vswitch_pgname.sh)</text>
+  <rect x="265" y="498" width="14" height="14" class="dec"/>
+  <text x="285" y="509" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="401" y="498" width="14" height="14" class="sec"/>
+  <text x="421" y="509" class="t tm">기록 · 결과</text>
+  <rect x="502" y="498" width="14" height="14" class="ext"/>
+  <text x="522" y="509" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="526" class="t tm">코드: VMsetup/vswitch_pgname.sh · vm_setup.sh (포트그룹 이름 변환 블록)</text>
+</svg>

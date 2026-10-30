@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 461" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="bash lpage_from_spec.sh -spec &lt;폴더&gt; -w &lt;BM 목록&gt; -vc &lt;vCenter&gt; [-n]">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="461" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">bash lpage_from_spec.sh -spec &lt;폴더&gt; -w &lt;BM 목록&gt; -vc &lt;vCenter&gt; [-n]</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">스펙만 읽어 lpage 단계만 단독 실행 — vm_setup.sh -del_lpage 의 lpage 단계와 같은 동작</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">옵션 · 비밀번호</text>
+  <text x="265" y="92" class="t" text-anchor="middle">VC_PASSWORD → ../secret → 직접 입력</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">vm-param-check -specExport &lt;폴더&gt;</text>
+  <text x="265" y="166" class="t" text-anchor="middle">CAE 번호 무시하고 매칭 (vm_setup 과 같은 규칙)</text>
+  <path d="M265 176 L265 204" class="ln"/>
+  <rect x="40" y="204" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">ev 별 -evNNCores / Sockets / Numa 만들기</text>
+  <text x="265" y="240" class="t" text-anchor="middle">+ -del_lpage (HugePage 삭제)</text>
+  <path d="M265 250 L265 278" class="ln"/>
+  <rect x="40" y="278" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="298" class="t tb" text-anchor="middle">-n 인가?</text>
+  <rect x="560" y="278" width="310" height="30" rx="6" class="sec"/>
+  <text x="715" y="298" class="t tb" text-anchor="middle">명령만 출력</text>
+  <path d="M490 293 L560 293" class="ln"/>
+  <text x="498" y="288" class="t tm">예</text>
+  <path d="M265 308 L265 336" class="ln"/>
+  <text x="273" y="325" class="t tm">아니오</text>
+  <rect x="40" y="336" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="356" class="t tb" text-anchor="middle">lpage_setting 실행</text>
+  <text x="265" y="372" class="t" text-anchor="middle">HugePage 삭제 · 토폴로지와 numa.vcpu.maxPerVirtualNode 적용</text>
+  <text x="40" y="419" class="t tm">범례</text>
+  <rect x="80" y="408" width="14" height="14" class="box"/>
+  <text x="100" y="419" class="t tm">동작 (lpage_from_spec.sh)</text>
+  <rect x="268" y="408" width="14" height="14" class="dec"/>
+  <text x="288" y="419" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="404" y="408" width="14" height="14" class="ldap"/>
+  <text x="424" y="419" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="589" y="408" width="14" height="14" class="sec"/>
+  <text x="609" y="419" class="t tm">기록 · 결과</text>
+  <rect x="690" y="408" width="14" height="14" class="ext"/>
+  <text x="710" y="419" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="436" class="t tm">코드: VMsetup/lpage_from_spec.sh</text>
+</svg>

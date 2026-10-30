@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 715" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="vm-param-check — 체크">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="715" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">vm-param-check — 체크</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">기대값(옵션 · 스펙)을 정하고 vCenter 에서 VM 을 조회해 항목별로 판정</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">vm-param-check [옵션]</text>
+  <text x="265" y="92" class="t" text-anchor="middle">VC_USER / VC_PASS · -vcenterList · -f 대상 목록</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">-initFolder / -specExport / -demo / -scale ?</text>
+  <rect x="560" y="130" width="310" height="46" rx="6" class="sec"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">vCenter 연결 없이 끝</text>
+  <text x="715" y="166" class="t" text-anchor="middle">스펙 만들기 · 스펙 펼치기 · 시험</text>
+  <path d="M490 145 L560 145" class="ln"/>
+  <text x="498" y="140" class="t tm">예</text>
+  <path d="M265 160 L265 204" class="ln"/>
+  <text x="273" y="185" class="t tm">아니오</text>
+  <rect x="40" y="204" width="450" height="46" rx="6" class="ldap"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">vCenter 마다 동시에 2단계 조회</text>
+  <text x="265" y="240" class="t" text-anchor="middle">이름만 → 대상 VM 만 속성 · 못 찾은 대상은 경고</text>
+  <path d="M265 250 L265 278" class="ln"/>
+  <rect x="40" y="278" width="450" height="62" rx="6" class="dec"/>
+  <text x="265" y="298" class="t tb" text-anchor="middle">-specRoot 인가?</text>
+  <text x="265" y="314" class="t" text-anchor="middle">폴더명 → 스펙 · Task 폴더면 포트그룹 → 입력</text>
+  <text x="265" y="330" class="t" text-anchor="middle">-specFolder 면 대상 전부에 그 스펙</text>
+  <rect x="560" y="278" width="310" height="62" rx="6" class="box"/>
+  <text x="715" y="298" class="t tb" text-anchor="middle">스펙별 기대값 + 제외 ev</text>
+  <text x="715" y="314" class="t" text-anchor="middle">직접 준 옵션이 우선</text>
+  <text x="715" y="330" class="t" text-anchor="middle">DelGroups → [스펙적용] 제외: …</text>
+  <path d="M490 309 L560 309" class="ln"/>
+  <text x="498" y="304" class="t tm">예</text>
+  <path d="M265 340 L265 368" class="ln"/>
+  <rect x="40" y="368" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="388" class="t tb" text-anchor="middle">매칭 확인 (y/N)</text>
+  <text x="265" y="404" class="t" text-anchor="middle">-yes 면 생략</text>
+  <path d="M265 414 L265 442" class="ln"/>
+  <rect x="40" y="442" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="462" class="t tb" text-anchor="middle">VM 마다 evaluateVM (워커풀)</text>
+  <text x="265" y="478" class="t" text-anchor="middle">HugePage · 토폴로지 · preferHT · 하드웨어 · PCI</text>
+  <text x="265" y="494" class="t" text-anchor="middle">전원정책 · 네트워크 · affinity</text>
+  <rect x="560" y="442" width="310" height="62" rx="6" class="dec"/>
+  <text x="715" y="462" class="t tb" text-anchor="middle">값이 없어야 OK 인가?</text>
+  <text x="715" y="478" class="t" text-anchor="middle">-expectNo* = 모든 VM</text>
+  <text x="715" y="494" class="t" text-anchor="middle">스펙 제외 키 = 그 ev 만</text>
+  <path d="M490 473 L560 473" class="ln"/>
+  <path d="M265 504 L265 532" class="ln"/>
+  <rect x="40" y="532" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="552" class="t tb" text-anchor="middle">콘솔 요약 + CSV (상세 · _summary)</text>
+  <text x="265" y="568" class="t" text-anchor="middle">-onlyFail 은 상세만 좁힘</text>
+  <path d="M265 578 L265 606" class="ln"/>
+  <rect x="40" y="606" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="626" class="t tb" text-anchor="middle">-fix ?</text>
+  <rect x="560" y="606" width="310" height="30" rx="6" class="box"/>
+  <text x="715" y="626" class="t tb" text-anchor="middle">교정 → vm_param_check_fix.svg</text>
+  <path d="M490 621 L560 621" class="ln"/>
+  <text x="498" y="616" class="t tm">예</text>
+  <text x="40" y="673" class="t tm">범례</text>
+  <rect x="80" y="662" width="14" height="14" class="box"/>
+  <text x="100" y="673" class="t tm">동작 (vm-param-check)</text>
+  <rect x="252" y="662" width="14" height="14" class="dec"/>
+  <text x="272" y="673" class="t tm">판정 · 입력 · 확인</text>
+  <rect x="388" y="662" width="14" height="14" class="ldap"/>
+  <text x="408" y="673" class="t tm">외부 호출 (vCenter · 도구)</text>
+  <rect x="573" y="662" width="14" height="14" class="sec"/>
+  <text x="593" y="673" class="t tm">기록 · 결과</text>
+  <rect x="674" y="662" width="14" height="14" class="ext"/>
+  <text x="694" y="673" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="690" class="t tm">코드: main.go main · applyFolderSpecs · resolveVMFolders · applySpecOptions · printDelGroups · evaluateVM · findMissingTargets · report/*</text>
+</svg>
