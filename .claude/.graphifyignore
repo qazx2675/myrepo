@@ -1,0 +1,11 @@
+# graphify 제외 규칙 (코드 그래프 대상에서 뺄 것)
+
+# 보관본 폴더: 그래프 대상 아님
+보관폴더_삭제X/
+
+# 서드파티 벤더 코드 (직접 작성한 코드가 아님)
+vendor/
+
+# 생성기가 만든 현장 conf 패치 스크립트 (직접 수정 금지, 원본은 vars.manifest / setup_guide 템플릿)
+update_v*.sh
+update_unreleased_*.sh
