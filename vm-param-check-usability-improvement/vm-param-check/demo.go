@@ -42,7 +42,7 @@ func runDemo(out, user string, onlyFail, noColor bool) {
 	for _, vm := range vms {
 		group := classifyGroup(vm.Name)
 
-		findings = append(findings, checker.CheckFixed(vm)...)
+		findings = append(findings, checker.CheckFixed(vm, checker.ExpectNoLpage)...)
 		findings = append(findings, checker.CheckTopology(vm, checker.CoresExpect{Base: demoExpectCores}, checker.NumaExpect{Base: demoExpectNuma}, group, singleVMMode, false)...)
 		findings = append(findings, checker.CheckHardware(vm, checker.CPUExpect{Base: demoExpectCPU}, checker.MemExpect{Base: demoExpectMemGB}, checker.DiskExpect{Base: []int{demoExpectDiskGB}}, shares, group, singleVMMode, false)...)
 		findings = append(findings, checker.CheckHostPower(vm))

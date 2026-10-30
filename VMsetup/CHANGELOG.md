@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-30 — 스펙 키로 ev 별 affinity/lpage 제외 (`evNN_del_affinity=y`, `all_del_*`)
+
+- **요약**: 스펙 파일에 `all_del_affinity=y`, `all_del_lpage=y`, `evNN_del_affinity=y`, `evNN_del_lpage=y` 를 쓸 수 있다(값은 `y` 만 — 범위·`n` 없음). 동작은 `vm_setup.sh -del_affinity` / `-del_lpage` 와 같되 ev 단위다: 제외한 ev 의 VM 은 affinity 설정값을 모두 지우거나(`_del_affinity`), HugePage 5개 키를 지운다(`_del_lpage`, CPU 토폴로지는 평소처럼 적용). `all_*` 는 모든 ev. CLI 옵션 `-del_affinity` / `-del_lpage` 는 그대로 두고 **우선**한다(전체 ev). affinity 를 제외한 ev 는 `affinity-evNN` 줄이 없어도 되고(CLI `-del_affinity` 일 때도 마찬가지), 실행 계획에 `제외(스펙)` 줄이 나온다.
+- **도구 옵션(신규)**: `affinity_setting -del_affinity_evs ev01,ev03`, `lpage_setting -del_lpage_evs ev01,ev03` (쉼표 구분, `-vm_cnt` 범위 안). 각각 `-del_affinity` / `-del_lpage` 와 같이 주면 전체 삭제가 우선. 나머지 ev 는 정상 설정이라 affinity 파일이 필요하다.
+- **체크**: `vm-param-check` 가 스펙 키를 읽어 제외한 ev 만 "값이 없어야 OK"로 판정한다(`-expectNoAffinity` / `-expectNoLpage` 는 이전처럼 전체 ev). 자세한 내용은 `vm-param-check-usability-improvement/CHANGELOG.md`.
+- **영향 범위**: `VMsetup/{vm_setup.sh,README.md,CHANGELOG.md}`, `VMsetup/affinity_setting-source/main.go`, `VMsetup/lpage_setting-source/main.go`, `vm-param-check/*`, `bin_os6/{affinity_setting,lpage_setting,vm-param-check}.gz`.
+- **검증**: 랩 .58 에서 `go test`. vcsim 시나리오 — A `ev01_del_affinity=y`(ev01 affinity 키 0개, ev02/03 은 2개, HugePage 는 전 ev 5개), A2 `ev03_del_lpage=y` 에 `affinity-ev01` 줄 없음, B `all_del_lpage=y`(HugePage 0개, 토폴로지 유지), C 기준선(키 없음) 변화 없음, D 값 `n` / 범위 밖 `ev05` 는 VM 생성 전에 거부. OS6 실행파일 3개를 Go 1.20(.60)으로 다시 빌드하고 CentOS 6 컨테이너에서 `-h` 로 새 옵션(`-del_affinity_evs`, `-del_lpage_evs`) 확인.
+
+---
+
 ## 2026-10-29 — PCI 패스스루 실 ESXi 8.0.3 시험, vm-param-check 장치 이름 판정 수정
 
 - **실 ESXi 시험**(랩, ESXi 직접 접속, 가상 e1000e 장치): `pci_passthrough` 정상 연결·재실행 SKIP·하드웨어 UUID SystemId 로 예전 부팅 실패 재현 → 도구가 교정 후 전원 ON·업링크 vmnic 거부를 확인. 도구 코드는 바뀌지 않음.

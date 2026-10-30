@@ -33,11 +33,12 @@ func isDeleted(vm model.VMInfo, key string) (actual string, deleted bool) {
 	return actual, !exists || strings.TrimSpace(actual) == ""
 }
 
-// CheckFixed는 3-2 고정값 체크를 수행한다.
-func CheckFixed(vm model.VMInfo) []model.Finding {
+// CheckFixed는 3-2 고정값 체크를 수행한다. noLpage 가 true 면 HugePage 키는 "없어야" 정상이다
+// (전역 -expectNoLpage 이거나 스펙의 del_lpage 로 이 VM 의 ev 그룹이 제외된 경우 — 호출한 쪽이 정한다).
+func CheckFixed(vm model.VMInfo, noLpage bool) []model.Finding {
 	var findings []model.Finding
 	for _, f := range fixedExpect {
-		if ExpectNoLpage {
+		if noLpage {
 			finding := model.Finding{VM: vm.Name, Source: "-", Key: f.Key, Expected: model.ExpectNone, Result: "OK"}
 			if actual, deleted := isDeleted(vm, f.Key); !deleted {
 				finding.Actual = actual

@@ -14,7 +14,7 @@ func TestExpectNoLpage(t *testing.T) {
 		"sched.swap.vmxSwapEnabled": "  ",   // 빈 값 -> 삭제로 본다
 	}}
 	got := map[string]string{}
-	for _, f := range CheckFixed(vm) {
+	for _, f := range CheckFixed(vm, ExpectNoLpage) {
 		got[f.Key] = f.Result
 		if f.Expected != model.ExpectNone {
 			t.Errorf("%s 기대값이 %q", f.Key, f.Expected)
@@ -28,7 +28,7 @@ func TestExpectNoLpage(t *testing.T) {
 
 func TestExpectNoLpageOffKeepsOld(t *testing.T) {
 	vm := model.VMInfo{Name: "vm1", ExtraConfig: map[string]string{}}
-	for _, f := range CheckFixed(vm) {
+	for _, f := range CheckFixed(vm, ExpectNoLpage) {
 		if f.Result != "설정없음" {
 			t.Errorf("옵션 없이는 기존대로 설정없음이어야 함: %v", f)
 		}

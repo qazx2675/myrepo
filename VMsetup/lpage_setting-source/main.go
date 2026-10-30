@@ -38,6 +38,7 @@ type evGroup struct {
 	numa             int
 	coresPerSocket   int
 	coresPerNumaNode int
+	del              bool // HugePage 항목 삭제 대상 (-del_lpage 전체 또는 -del_lpage_evs 에 든 그룹)
 }
 
 // vmJob: 워커풀에 넘기는 작업 단위 (VM 1대 = Reconfigure 전송 + Wait 를 한 워커가 전부 처리)
@@ -48,6 +49,7 @@ type vmJob struct {
 	coresPerSocket   int
 	numa             int
 	coresPerNumaNode int
+	del              bool
 }
 
 // printMu: 여러 고루틴이 동시에 fmt.Printf 를 호출할 때 줄이 섞이지 않도록 보호
@@ -96,6 +98,7 @@ func main() {
 	applyTopology := flag.Bool("applyTopology", true, "설정 편집 > CPU 토폴로지(소켓당 코어 수/NUMA 노드) 적용 여부")
 	concurrency := flag.Int("concurrency", defaultConcurrency, "동시 처리 개수 제한 (Reconfigure 전송+대기 전 구간에 적용)")
 	delLpage := flag.Bool("del_lpage", false, "HugePage 설정값(sched.mem.lpage.enable1GPage / sched.mem.pin / sched.mem.prealloc / sched.mem.prealloc.pinnedMainMem / sched.swap.vmxSwapEnabled)만 넣지 않고 삭제한다(numa.vcpu.maxPerVirtualNode·cpuid.coresPerSocket 은 지우지 않음). -evNNCores/Sockets/Numa 를 주면 CPU 토폴로지는 평소처럼 적용, 코어 값 없이 주면 ev01~ev99 의 HugePage 항목만 지운다")
+	delLpageEvs := flag.String("del_lpage_evs", "", "지정한 ev 그룹만 -del_lpage 처럼 HugePage 설정값을 삭제한다 (쉼표 구분, 예: ev01,ev03). 그 그룹에 -evNNCores 를 주면 CPU 토폴로지는 평소처럼 적용, 안 주면 HugePage 항목만 지운다. 나머지 그룹은 정상 설정. -del_lpage 와 같이 주면 -del_lpage(전체 삭제)가 우선")
 	collapseEvUsage(regexp.MustCompile(`^ev(\d{2})`))
 
 	flag.Parse()
@@ -107,6 +110,14 @@ func main() {
 		log.Fatalf("-concurrency 값이 올바르지 않습니다: %d (1 이상)", *concurrency)
 	}
 
+	delEv, evErr := parseEvList(*delLpageEvs, maxGroup)
+	if evErr != nil {
+		log.Fatalf("-del_lpage_evs 값이 올바르지 않습니다: %v", evErr)
+	}
+	for i := range delEv {
+		delEv[i] = delEv[i] || *delLpage // -del_lpage 가 있으면 전체 삭제가 우선
+	}
+
 	rawGroups := make([]evGroup, maxGroup)
 	for i, f := range flagsByGroup {
 		rawGroups[i] = evGroup{suffix: fmt.Sprintf("ev%02d", i+1), cores: *f.cores, sockets: *f.sockets, numa: *f.numa}
@@ -114,8 +125,12 @@ func main() {
 
 	// ev01~ev99 전부 선택사항 — Cores를 안 주면 그 그룹은 통째로 건너뛴다(필수 입력값 아님).
 	var groups []evGroup
-	for _, g := range rawGroups {
+	for gi, g := range rawGroups {
+		g.del = delEv[gi]
 		if g.cores == 0 {
+			if g.del && !*delLpage { // -del_lpage_evs 로 지정한 그룹은 코어 값 없이도 삭제 대상
+				groups = append(groups, evGroup{suffix: g.suffix, del: true})
+			}
 			continue
 		}
 		if g.sockets == 0 {
@@ -136,7 +151,7 @@ func main() {
 
 	if *delLpage && len(groups) == 0 { // 그룹을 안 주면 ev01~ev99 전부가 삭제 대상(코어 값이 없으니 토폴로지는 안 건드림)
 		for _, g := range rawGroups {
-			groups = append(groups, evGroup{suffix: g.suffix})
+			groups = append(groups, evGroup{suffix: g.suffix, del: true})
 		}
 	}
 	if len(groups) == 0 {
@@ -164,11 +179,25 @@ func main() {
 	for i, g := range groups {
 		groupNames[i] = g.suffix
 	}
+	anyDel := false
+	var delNames []string
+	for _, g := range groups {
+		if g.del {
+			anyDel = true
+			delNames = append(delNames, g.suffix)
+		}
+	}
 	if *delLpage {
 		fmt.Printf("HugePage 설정값 삭제(-del_lpage)를 시작합니다. (접속 계정: %s, 대상 그룹: %d개, 동시 처리 제한: %d)\n", *vcId, len(groupNames), *concurrency)
+		if strings.TrimSpace(*delLpageEvs) != "" {
+			fmt.Println("알림: -del_lpage 가 있으므로 -del_lpage_evs 는 무시됩니다 (전체 삭제).")
+		}
 	} else {
 		fmt.Printf("병렬(워커풀) 방식 성능 최적화(VMX) 파라미터 주입을 시작합니다. (접속 계정: %s, 대상 그룹: %s, 동시 처리 제한: %d)\n",
 			*vcId, strings.Join(groupNames, ","), *concurrency)
+		if anyDel {
+			fmt.Printf("  HugePage 삭제 그룹(-del_lpage_evs): %s — 나머지 그룹은 정상 설정\n", strings.Join(delNames, ","))
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -214,7 +243,7 @@ func main() {
 	}
 	var allVms []mo.VirtualMachine
 	vmProps := []string{"name"}
-	if *delLpage {
+	if anyDel {
 		vmProps = append(vmProps, "config.extraConfig") // 지울 항목이 실제로 있는지 알아야 한다
 	}
 	err = vmView.Retrieve(ctx, []string{"VirtualMachine"}, vmProps, &allVms)
@@ -228,7 +257,7 @@ func main() {
 	for _, vm := range allVms {
 		if regexMatcher.MatchString(vm.Name) {
 			targetVmMap[vm.Name] = object.NewVirtualMachine(client.Client, vm.Self)
-			if *delLpage && vm.Config != nil {
+			if anyDel && vm.Config != nil {
 				ks := map[string]bool{}
 				for _, ov := range vm.Config.ExtraConfig {
 					if opt, ok := ov.(*types.OptionValue); ok && fmt.Sprintf("%v", opt.Value) != "" {
@@ -259,7 +288,7 @@ func main() {
 			jobs = append(jobs, vmJob{
 				vmName: vmName, vm: vm,
 				cores: g.cores, coresPerSocket: g.coresPerSocket,
-				numa: g.numa, coresPerNumaNode: g.coresPerNumaNode,
+				numa: g.numa, coresPerNumaNode: g.coresPerNumaNode, del: g.del,
 			})
 		}
 		if !foundAny {
@@ -289,7 +318,7 @@ func main() {
 
 			// 삭제 모드: HugePage 항목만 값을 빈 문자열로 보내 지운다(vCenter 가 항목을 제거).
 			var del []types.BaseOptionValue
-			if *delLpage {
+			if j.del {
 				for _, key := range lpageKeys {
 					if currentKeys[j.vmName][key] {
 						del = append(del, &types.OptionValue{Key: key, Value: ""})
@@ -297,7 +326,7 @@ func main() {
 				}
 			}
 			// 코어 값 없이 -del_lpage 만 준 경우: HugePage 항목만 지우고 끝낸다.
-			if *delLpage && j.cores == 0 {
+			if j.del && j.cores == 0 {
 				if len(del) == 0 {
 					safePrintf("[%s] 지울 HugePage 항목이 없습니다 (이미 없음, PASS)\n", j.vmName)
 					mu.Lock()
@@ -332,7 +361,7 @@ func main() {
 				&types.OptionValue{Key: "sched.swap.vmxSwapEnabled", Value: "FALSE"},
 				&types.OptionValue{Key: "numa.vcpu.maxPerVirtualNode", Value: coresStr},
 			}
-			if *delLpage {
+			if j.del {
 				// 코어 값이 있으면 평소처럼 CPU 토폴로지(소켓당 코어 수 / NUMA 노드)는 적용하고,
 				// HugePage 항목만 넣지 않고 지운다 — 사용자가 뺀 설정값만 빠지게 한다.
 				// numa.vcpu.maxPerVirtualNode 는 CPU 토폴로지와 함께 쓰는 값이라 지우지 않고 평소처럼 넣는다.
@@ -392,6 +421,10 @@ func main() {
 		fmt.Println("모든 VM의 HugePage 설정값 삭제가 끝났습니다.")
 		return
 	}
+	if anyDel {
+		fmt.Println("지정한 그룹의 HugePage 설정값 삭제와 나머지 그룹의 VMX 성능 파라미터 주입이 끝났습니다.")
+		return
+	}
 	fmt.Println("모든 VM의 VMX 성능 파라미터가 완벽하게 주입되었습니다!")
 }
 
@@ -429,4 +462,25 @@ var lpageKeys = []string{
 	"sched.mem.prealloc",
 	"sched.mem.prealloc.pinnedMainMem",
 	"sched.swap.vmxSwapEnabled",
+}
+
+// parseEvList: "ev01,ev03" 형태의 목록을 ev 번호(1..max) 기준 bool 슬라이스(인덱스 = 번호-1)로 바꾼다.
+// 빈 문자열이면 전부 false. evNN 형식(대소문자 무관)만 받고, 범위 밖/형식 오류는 에러.
+func parseEvList(list string, max int) ([]bool, error) {
+	out := make([]bool, max)
+	for _, tok := range strings.Split(list, ",") {
+		tok = strings.ToLower(strings.TrimSpace(tok))
+		if tok == "" {
+			continue
+		}
+		if !strings.HasPrefix(tok, "ev") {
+			return nil, fmt.Errorf("%q 는 evNN 형식이 아닙니다 (예: ev01)", tok)
+		}
+		n, err := strconv.Atoi(tok[2:])
+		if err != nil || n < 1 || n > max {
+			return nil, fmt.Errorf("%q 는 ev01~ev%02d 범위를 벗어났거나 형식 오류입니다", tok, max)
+		}
+		out[n-1] = true
+	}
+	return out, nil
 }

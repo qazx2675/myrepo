@@ -42,6 +42,9 @@ func ExportSpec(m *SpecMatch) ([]ExportLine, error) {
 	var tagOrder []string
 	for _, opt := range m.Options {
 		name := opt.Name
+		if IsDelOption(name) { // 제외 옵션은 그룹 수를 알고 난 뒤 DelGroups 로 펼친다
+			continue
+		}
 		if IsTagOption(name) {
 			if !TagNames[strings.TrimPrefix(name, "tag-")] {
 				return nil, fmt.Errorf("%s: 알 수 없는 태그 %q (DEPT_NAME / PURPOSE / VM_TYPE 만 쓸 수 있습니다)", m.SpecFile, name)
@@ -108,6 +111,19 @@ func ExportSpec(m *SpecMatch) ([]ExportLine, error) {
 	out := []ExportLine{{Name: "groups", Value: fmt.Sprint(groups)}, {Name: "specdir", Value: specDirAbs}}
 	for _, name := range order {
 		out = append(out, ExportLine{Name: name, Value: values[name]})
+	}
+	// 제외 옵션은 all_* 를 펼쳐서 "del_affinity-evNN=y" / "del_lpage-evNN=y" 로 내보낸다.
+	delAff, delLp, err := DelGroups(m.Options, groups)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %v", m.SpecFile, err)
+	}
+	for _, g := range model.GroupNames()[:groups] {
+		if delAff[g] {
+			out = append(out, ExportLine{Name: "del_affinity-" + g, Value: "y"})
+		}
+		if delLp[g] {
+			out = append(out, ExportLine{Name: "del_lpage-" + g, Value: "y"})
+		}
 	}
 	// tag-* 는 ev 별로 펼쳐서 "tag-<이름>-evNN=값" 으로 내보낸다(값이 있는 ev 만). 체크는 이 값을 쓰지 않는다.
 	for _, name := range tagOrder {
