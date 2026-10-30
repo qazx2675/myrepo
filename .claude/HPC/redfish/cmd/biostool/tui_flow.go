@@ -477,11 +477,55 @@ func (f *biosFlow) compareStep(again bool) bool {
 	f.declined = false // 설정 계획이 바뀌었을 수 있어 종료 때 다시 묻는다
 	ui.SetResults("전체비교 — 기준 "+cmp.Label, groupLines(cmp.Lines))
 	ui.SetRefKey(true)
+	xmsg := f.xmodelStep(cmp)
 	if cmp.RefCanceled > 0 {
-		ui.SetMessage(fmt.Sprintf("취소했습니다 — 비교서버 %d대 조회 안 함 (비교하지 못한 대상 %d대는 %s, 설정 제외)",
-			cmp.RefCanceled, f.countCmp(StatusRefCanceled), StatusRefCanceled))
+		msg := fmt.Sprintf("취소했습니다 — 비교서버 %d대 조회 안 함 (비교하지 못한 대상 %d대는 %s, 설정 제외)",
+			cmp.RefCanceled, f.countCmp(StatusRefCanceled), StatusRefCanceled)
+		if xmsg != "" {
+			msg += " / " + xmsg
+		}
+		ui.SetMessage(msg)
+	} else if xmsg != "" {
+		ui.SetMessage(xmsg)
 	}
 	return true
+}
+
+// xmodelStep 은 기준과 모델이 다른 대상이 있으면 모델이 달라도 비교할지 묻고, y 면 참고용 CSV(compare_xmodel_*)를 씁니다.
+// 전체 비교 결과(f.cmp)·설정 계획은 건드리지 않는다 (그 대상은 계속 NO_REFERENCE). 안내 문구를 돌려줍니다 (안 물었거나 N 이면 "").
+// r 로 기준을 다시 고를 때마다 다시 묻는다. -auto/-auto-check 는 이 흐름을 지나지 않으므로 묻지 않는다.
+func (f *biosFlow) xmodelStep(cmp *compareResult) string {
+	p := xmodelPlanFor(cmp, f.u.Snaps)
+	if p == nil {
+		return ""
+	}
+	f.wait("xmodel")
+	if f.ui.Ask(p.Question()) != TUIYes {
+		return ""
+	}
+	prot := protectFor(f.rc.Conf)
+	var parts []string
+	f.ui.Progress("CSV 저장 (모델이 다른 비교)", func(j *TUIJob) error {
+		for _, g := range p.Groups {
+			select {
+			case <-j.Canceled(): // Ctrl+X: 남은 파일은 쓰지 않음
+				return nil
+			default:
+			}
+			c := buildXModel(p.B, g, f.u.Ignore, prot)
+			path := filepath.Join(f.u.Check.Dir, c.FileName())
+			if err := writeCSVFile(path, c.Rows(p.BHost)); err != nil {
+				f.warns = append(f.warns, err.Error())
+				continue
+			}
+			if !inList(f.csvs, path) {
+				f.csvs = append(f.csvs, path)
+			}
+			parts = append(parts, fmt.Sprintf("모델이 다른 비교 (%s %d대 ↔ %s): %s → %s", c.AName, len(g), c.BName, c.Summary(), path))
+		}
+		return nil
+	})
+	return strings.Join(parts, " / ")
 }
 
 // chooseRef 는 전체비교 기준입니다: -ref/-ref-json/-diff 를 줬으면 그것(again 이면 무시하고 메뉴), 아니면 메뉴

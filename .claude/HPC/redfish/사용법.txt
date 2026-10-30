@@ -180,6 +180,11 @@ bash bios.sh -plain -profile VM -ref <비교서버 hostname>
 # 기준 1 을 TUI 에서: Tab -> [전체 설정 비교] 에서 기준 선택 "비교서버 hostname 입력" (비워 두면 diff.txt). -ref 를 주면 묻지 않고 바로 비교
 bash bios.sh -profile VM -ref <비교서버 hostname>
 
+# 비교서버(1대)·refs JSON 과 모델이 다른 대상이 있으면 TUI 가 "모델이 달라도 비교할까요? (y/N)" 를 묻는다
+# y: Attribute 합집합 기준 같음/다름/<모델>에만 판정 → results/<일시>/compare_xmodel_<A>_vs_<B>.csv (비교만, 설정 안 함)
+# N(기본): 같은 모델끼리만. -auto/-auto-check 는 묻지 않고 N
+bash bios.sh -profile VM -ref <모델이 다른 비교서버 hostname>
+
 # 기준 2: refs 폴더의 JSON (bios_export.sh 로 뽑은 속성 JSON). 파일 이름만 주면 bios.conf 의 refs_dir 에서 찾는다
 bash bios.sh -plain -profile VM -ref-json <파일이름>.json
 

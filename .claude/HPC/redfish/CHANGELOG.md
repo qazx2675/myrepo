@@ -6,6 +6,7 @@
 
 ### 추가
 
+- **모델이 다른 대상끼리 비교**(`xmodel.go`, `tui_flow.go` `xmodelStep`): TUI 전체 설정 비교에서 기준(비교서버 1대 또는 refs JSON)과 모델이 다른 대상이 있으면 “모델이 달라도 비교할까요? (y/N)” 를 묻습니다(`diff.txt`·비교서버 여러 대·`-auto`/`-auto-check` 는 묻지 않음 = N). y 면 기존 비교 결과(모델이 다른 대상은 `NO_REFERENCE`)는 그대로 두고, 대상 모델마다 기준과 Attribute 이름 합집합을 비교해 `results/<일시>/compare_xmodel_<A모델>_vs_<B모델>.csv`(`Attribute | 판정 | 기준값 | 대상 관리망 IP 별 값`)를 쓰고 안내 줄에 판정별 개수를 보입니다. 판정은 `같음`/`다름`/`<A모델>에만`/`<B모델>에만`. 내장 보호 목록·`protect_attrs`·`ignore_attrs.txt`·`exclude_attrs` 는 제외하고 개수만 셉니다. 비교만 하며 설정 계획에는 넣지 않습니다.
 - **두 번째 계정(user2) 벤더별 권한**(`conf.go`, `account.go` `updateRole`, `account_check.go`, `account_gate.go` `roleCandidates`, `redfish.go` `AllowAccountRoleTarget`): `bios.conf` 에 `user2_role_<벤더>`(dell hpe lenovo supermicro cisco cray, 값 Administrator|Operator|ReadOnly, 모르는 벤더·값은 conf 오류)를 두면 장비 벤더에 맞는 권한으로 user2 를 만듭니다. 없으면 `user2_role`(user2 를 쓰면 여전히 필수). ID·`pass2.enc` 는 하나 그대로. 점검 끝 생성(2순위·user2 만 없음·AUTH_FAIL 수동)·`bash bios.sh account`·UCSM 모두 적용.
   - **이미 있는 user2 의 권한이 다르면 권한만 변경**(`NEED_ROLE_UPDATE` → `ROLE_UPDATED`): user2 슬롯만, 현재·목표 RoleId 모두 허용 범위일 때만, 본문은 정확히 `{"RoleId": R}` 만 허용(그 멤버 전용 게이트), 다시 읽어 확인하고 틀리면 원래 권한으로 되돌림(`ROLE_UPDATE_FAIL`/`ROLLBACK_FAILED`). 비밀번호·Enabled·Locked 는 건드리지 않음. `-dry-run` 은 `WOULD_ROLE_UPDATE`. UCSM(사용자당 여러 역할)·HPE iLO4(Oem 권한)는 바꾸지 않고 `SKIP_EXISTS` 사유로 안내.
   - 확인 질문·대상 목록·보고 줄에 호스트별 실제 권한(`ops1(Administrator)`, `권한 변경 Operator → Administrator`), `account_result.tsv` 끝에 `role` 열 추가(기존 열 순서 그대로).
@@ -83,8 +84,8 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8269986 | d0b4415efc54aab5d435a79b3fb169339b64cb0123d25973ee6652d08d996470 |
-| bin/biostool_os6 | go1.20.14 | 6868992 | be87b9bf026724f75f60a4c306425907010150dc5be35a974c88d930119f099a |
+| bin/biostool | go1.26.5 | 8282274 | 484caeb7c84045201bc655e0e41b959d810a1c038782ad436df121a2d2da9837 |
+| bin/biostool_os6 | go1.20.14 | 6885376 | 37e8de9de182e06893b30305a455de25005f1b6d804f5979cb926c5e36fc3923 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
 
