@@ -132,6 +132,8 @@ func CreateSampleTarget(destPath string) error {
 		color    color.RGBA
 		// 이미지를 넣을 (섹션 인덱스, 적재열 인덱스) 목록
 		images [][2]int
+		// 병합 셀 밖으로 40% 삐져나온 이미지 (섹션 인덱스, 적재열 인덱스, 방향)
+		overhangs []sampleOverhang
 	}
 
 	sheets := []sampleSheet{
@@ -140,11 +142,12 @@ func CreateSampleTarget(destPath string) error {
 			spacer: [3]bool{false, true, true}, dataRows: [3]int{4, 6, 6},
 			texts: [3][3]string{
 				{"OS 설치 사전 준비\n- ISO 이미지 무결성 확인", "설치 대상 서버 전원/콘솔 확인\n- iDRAC 접속 계정 확인", "sha256sum 결과 비교"},
-				{"OS 설치 진행\n- UEFI 부팅 후 파티션 구성\n- /boot 1GB, swap 4GB", "설치 화면 캡처 첨부", "설치 완료 후 재부팅 확인"},
+				{"OS 설치 진행\n- UEFI 부팅 후 파티션 구성\n- /boot 1GB, swap 4GB\n- 3단계: RAID 1 구성 확인\n- 4단계: 커널 파라미터 적용\n- 5단계: NTP 동기화", "설치 화면 캡처 첨부", "설치 완료 후 재부팅 확인"},
 				{"OS 기본 설정\n- 호스트명/시간대 설정", "설정 파일 백업\n- /etc/hosts 백업", "hostnamectl 결과 확인"},
 			},
-			color:  color.RGBA{R: 59, G: 130, B: 246, A: 255},
-			images: [][2]int{{1, 1}},
+			color:     color.RGBA{R: 59, G: 130, B: 246, A: 255},
+			images:    [][2]int{{1, 1}, {1, 0}},
+			overhangs: []sampleOverhang{{0, 2, "right"}, {2, 0, "down"}},
 		},
 		{
 			name: "2_네트워크설정", topRow: 4, gap: 2,
@@ -163,10 +166,11 @@ func CreateSampleTarget(destPath string) error {
 			texts: [3][3]string{
 				{"보안 점검 사전 준비\n- 점검 스크립트 배포", "점검 일정 공지\n- 담당자 승인 확인", "스크립트 실행 권한 확인"},
 				{"보안 설정 적용\n- PermitRootLogin no\n- firewalld 22/443 허용", "적용 전 설정 화면 첨부", "sshd -T 결과 확인"},
-				{"보안 점검 결과 정리\n- SELinux enforcing 확인", "점검 결과 보고서 작성", "점검 결과 화면 확인"},
+				{"보안 점검 결과 정리\n- SELinux enforcing 확인", "점검 결과 보고서 작성", "점검 결과 화면 확인\n- 추가: auditd 규칙 재로딩\n- 추가: 결과 스크린샷 보관"},
 			},
-			color:  color.RGBA{R: 245, G: 158, B: 11, A: 255},
-			images: [][2]int{{1, 1}, {2, 2}},
+			color:     color.RGBA{R: 245, G: 158, B: 11, A: 255},
+			images:    [][2]int{{1, 1}, {2, 2}},
+			overhangs: []sampleOverhang{{0, 0, "left"}, {2, 1, "up"}},
 		},
 	}
 
@@ -275,11 +279,50 @@ func CreateSampleTarget(destPath string) error {
 					return fmt.Errorf("샘플 이미지 삽입 실패 (%s): %w", sh.name, err)
 				}
 			}
+
+			// 병합 셀 경계 밖으로 40% 삐져나온 이미지 (이웃 열·행에 앵커를 두고 오프셋으로 맞춤)
+			for _, ov := range sh.overhangs {
+				if ov.sec != s {
+					continue
+				}
+				col := stackIdx[ov.stack] + 2
+				anchorCol, anchorRow, offX, offY := col, start+1, 6.0, 4.0
+				switch ov.dir {
+				case "right":
+					offX = colPx(widths[col-2]) - 0.6*sampleImgW
+				case "left":
+					anchorCol, offX = col-1, colPx(widths[col-3])-0.4*sampleImgW
+				case "up":
+					anchorRow, offY = start-1, 33*4.0/3-0.4*sampleImgH
+				case "down":
+					anchorRow, offY = end, 24*4.0/3-0.6*sampleImgH
+				}
+				if err := f.AddPictureFromBytes(sh.name, cell(anchorCol, anchorRow), &excelize.Picture{
+					Extension: ".png",
+					File:      generateSampleBadge(sh.color),
+					Format:    &excelize.GraphicOptions{ScaleX: 0.6, ScaleY: 0.6, OffsetX: int(offX), OffsetY: int(offY)},
+				}); err != nil {
+					return fmt.Errorf("샘플 이미지 삽입 실패 (%s): %w", sh.name, err)
+				}
+			}
 			row = end + 1 + sh.gap
 		}
 	}
 
 	return f.SaveAs(destPath)
+}
+
+type sampleOverhang struct {
+	sec, stack int
+	dir        string // right / left / up / down
+}
+
+// 샘플 배지 이미지 크기(px, 240x60 의 0.6배)
+const sampleImgW, sampleImgH = 144.0, 36.0
+
+// colPx converts a column width (characters) to pixels the way excelize does (기본 글꼴 최대 숫자 폭 7px)
+func colPx(w float64) float64 {
+	return math.Ceil(w*7 + 5.5)
 }
 
 func cell(col, row int) string {

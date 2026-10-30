@@ -261,8 +261,14 @@ func num(v *ole.VARIANT) float64 {
 }
 
 type shapeInfo struct {
-	Row, Col                 int
 	Left, Top, Width, Height float64
+}
+
+// 도형 중심점이 영역 안에 있는지 — 병합 셀 밖으로 일부 삐져나온 도형도 대부분이 걸친 블록에 속한 것으로 센다
+// (TopLeftCell 기준이면 왼쪽·위로 삐져나온 도형이 이웃 셀 소속으로 잘못 집계됨)
+func (s shapeInfo) centerIn(l, t, w, h float64) bool {
+	cx, cy := s.Left+s.Width/2, s.Top+s.Height/2
+	return cx >= l && cx < l+w && cy >= t && cy < t+h
 }
 
 func comWorksheet(wb *ole.IDispatch, name string) (*ole.IDispatch, error) {
@@ -299,16 +305,6 @@ func comShapes(ws *ole.IDispatch) ([]shapeInfo, error) {
 		}
 		sh := iv.ToIDispatch()
 		var si shapeInfo
-		if tl, err := oleutil.GetProperty(sh, "TopLeftCell"); err == nil {
-			d := tl.ToIDispatch()
-			if r, err := oleutil.GetProperty(d, "Row"); err == nil {
-				si.Row = int(num(r))
-			}
-			if c, err := oleutil.GetProperty(d, "Column"); err == nil {
-				si.Col = int(num(c))
-			}
-			d.Release()
-		}
 		for _, p := range []struct {
 			n string
 			d *float64
@@ -433,8 +429,8 @@ func runCOMChecks(resultPath, targetPath string, selected []string, srcScans map
 			return nil, 0, fmt.Errorf("target sheet %s: %v", sn, e)
 		}
 		shapes, e := comShapes(ws)
-		ws.Release()
 		if e != nil {
+			ws.Release()
 			return nil, 0, e
 		}
 		srcShapesAll += len(shapes)
@@ -445,14 +441,19 @@ func runCOMChecks(resultPath, targetPath string, selected []string, srcScans map
 				continue
 			}
 			for _, h := range stackHeaders {
-				b := sec.Blocks[h]
+				bl, bt, bw, bh, ge := comRangeGeom(ws, sec.Blocks[h])
+				if ge != nil {
+					ws.Release()
+					return nil, 0, fmt.Errorf("target %s/%s/%s geom: %v", sn, secName, h, ge)
+				}
 				for _, s := range shapes {
-					if b.contains(s.Col, s.Row) {
+					if s.centerIn(bl, bt, bw, bh) {
 						cnt++
 					}
 				}
 			}
 		}
+		ws.Release()
 		srcInBlocks += cnt
 		srcDetail = append(srcDetail, fmt.Sprintf("%s=%d", sn, cnt))
 	}
@@ -496,7 +497,7 @@ func runCOMChecks(resultPath, targetPath string, selected []string, srcScans map
 		for _, h := range stackHeaders {
 			b := sec.Blocks[h]
 			secRect = b
-			ml, mt, mw, _, ge := comRangeGeom(ws, b)
+			ml, mt, mw, mh, ge := comRangeGeom(ws, b)
 			if ge != nil {
 				horizOK = false
 				dH = append(dH, fmt.Sprintf("%s/%s geom err %v", secName, h, ge))
@@ -505,7 +506,7 @@ func runCOMChecks(resultPath, targetPath string, selected []string, srcScans map
 			secTop = mt
 			var in []shapeInfo
 			for _, s := range shapes {
-				if b.contains(s.Col, s.Row) {
+				if s.centerIn(ml, mt, mw, mh) {
 					in = append(in, s)
 				}
 			}
