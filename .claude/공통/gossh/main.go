@@ -828,15 +828,23 @@ func printCommandResult(host, stdout, stderr string, runErr error, bunchMode boo
 			bunchOutputs[host] = outText
 			mu.Unlock()
 		} else {
+			// ★ [속도] 호스트 한 대의 줄들을 모아 emit 한 번(쓰기 1회)으로 출력한다. 예전엔 줄마다 emit 해서
+			// 출력이 많으면(호스트당 수백 줄) 줄 수만큼 write 시스템콜·진행률 줄 재그리기(터미널 크기 조회)가
+			// 반복됐다. 각 줄의 내용·색상·순서는 그대로이고, 한 호스트의 줄들이 연속으로 찍힐 뿐이다.
+			// (랩 측정: 1000대×300줄 터미널 출력 5.74초→4.86초, 단계3 보고 참고)
+			var b strings.Builder
 			for _, line := range strings.Split(outText, "\n") {
-				emit(os.Stdout, colorizeOut(colorGreen, fmt.Sprintf("%s: %s", host, line))+"\n")
+				b.WriteString(colorizeOut(colorGreen, host+": "+line) + "\n")
 			}
+			emit(os.Stdout, b.String())
 		}
 	}
 	if errText := renderResultLines(stderr, nil); errText != "" {
+		var b strings.Builder
 		for _, line := range strings.Split(errText, "\n") {
-			emit(os.Stderr, colorize(colorRed, fmt.Sprintf("%s: %s", host, line))+"\n")
+			b.WriteString(colorize(colorRed, host+": "+line) + "\n")
 		}
+		emit(os.Stderr, b.String())
 	}
 	if runErr != nil {
 		msg := runErr.Error()
@@ -1300,8 +1308,8 @@ var optionDocs = []optionDoc{
 		"실행 파일 이름이 pdsh이면 기본으로 켜집니다(-script=false로 끌 수 있음).",
 	}},
 	{"dnlgjawkrdjqghkrdls", "", "위험 명령 실행 허용 (재부팅/종료 등)", []string{
-		"reboot, poweroff, shutdown, halt, init 0, init 6, ddc 가 들어간 명령은 기본적으로 실행을 거부합니다.",
-		"이 옵션을 주면 대상 호스트 목록을 보여주고 y/N 확인을 받은 뒤 실행합니다.",
+		"reboot, poweroff, shutdown, halt, init 0, init 6, ddc 가 들어간 명령과, 독립 명령으로 쓰인 mkfs/wipefs/fdisk/parted/dd of=/dev/ 등 디스크 파괴·ifdown 등 접속 끊김·kexec 등 즉시 재시작 명령은 기본적으로 실행을 거부합니다.",
+		"이 옵션을 주면 대상 호스트 목록을 보여주고, 대상 호스트를 다시 입력받아 완전히 일치하는지 대조(빈 줄로 입력 종료, 불일치·빈 입력이면 종료코드 1로 취소)한 뒤 y/N 확인을 받고 실행합니다.",
 	}},
 	{"tmp", "", "/tmp 자동정리 시간 변경/삭제 (custom-tmp.conf)", []string{
 		"대상 서버의 /etc/tmpfiles.d/custom-tmp.conf 에서 \"q /tmp 1777 root root @@h\" 줄을 수정합니다. 명령어는 쓰지 않습니다.",
@@ -1474,18 +1482,12 @@ func main() {
 		}
 	}
 
-	lowerCmd := strings.ToLower(command)
-	isDangerous := strings.Contains(lowerCmd, "reboot") ||
-		strings.Contains(lowerCmd, "poweroff") ||
-		strings.Contains(lowerCmd, "shutdown") ||
-		strings.Contains(lowerCmd, "halt") ||
-		strings.Contains(lowerCmd, "init 0") ||
-		strings.Contains(lowerCmd, "init 6") ||
-		strings.Contains(lowerCmd, "ddc")
+	// ★ 위험어 판정은 danger.go 의 isDangerousCommand (기존 7개는 부분일치, 새 위험어는 독립 명령일 때만).
+	isDangerous := isDangerousCommand(command)
 
 	if isDangerous && !*dangerConfirm {
 		fmt.Fprintln(os.Stderr, colorize(colorRed, "================================================================"))
-		fmt.Fprintln(os.Stderr, colorize(colorRed, " [경고] 위험 작업(시스템 종료/재부팅)이 감지되었습니다!"))
+		fmt.Fprintln(os.Stderr, colorize(colorRed, " [경고] 위험 작업(종료·재부팅·디스크 파괴·접속 끊김 등)이 감지되었습니다!"))
 		fmt.Fprintln(os.Stderr, colorize(colorRed, "================================================================"))
 		fmt.Fprintf(os.Stderr, " 감지된 명령어 : %s\n", command)
 		fmt.Fprintln(os.Stderr, " 실행을 원하신다면 명령어에 '-dnlgjawkrdjqghkrdls' 옵션을 추가하세요.")
@@ -1549,6 +1551,26 @@ func main() {
 		}
 		fmt.Fprintln(os.Stderr, "================================================================")
 		fmt.Fprintln(os.Stderr, " 작업대상이 맞는지 다시한번더 확인하세요. 실수를 하게되면 회사 전체직원의 100만원이 증발됩니다.")
+		// ★ 호스트 재입력 대조: 목록을 눈으로만 확인하고 넘어가지 못하게, 대상 호스트를 다시 입력받아
+		// 순서·중복 무시하고 완전일치할 때만 y/N 단계로 간다. 다르거나 비어 있으면 차이를 보이고 종료코드 1.
+		fmt.Fprintln(os.Stderr, "확인을 위해 대상 호스트를 다시 입력하세요 (공백/쉼표/|/탭/줄바꿈 구분, 입력을 마치려면 빈 줄):")
+		inputHosts := parseConfirmHosts(readConfirmLines(stdinReader))
+		onlyInput, onlyTarget := diffHostSets(hosts, inputHosts)
+		if len(inputHosts) == 0 || len(onlyInput) > 0 || len(onlyTarget) > 0 {
+			fmt.Fprintln(os.Stderr, colorize(colorRed, "[확인 실패] 입력한 호스트가 대상과 일치하지 않습니다."))
+			if len(inputHosts) == 0 {
+				fmt.Fprintln(os.Stderr, " 입력이 비어 있습니다.")
+			}
+			if len(onlyInput) > 0 {
+				fmt.Fprintf(os.Stderr, " 입력에만 있음 (%d대): %s\n", len(onlyInput), strings.Join(compressHosts(onlyInput), " "))
+			}
+			if len(onlyTarget) > 0 {
+				fmt.Fprintf(os.Stderr, " 대상에만 있음 (%d대): %s\n", len(onlyTarget), strings.Join(compressHosts(onlyTarget), " "))
+			}
+			fmt.Fprintln(os.Stderr, "작업이 취소되었습니다.")
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "입력한 %d대가 대상과 일치합니다.\n", len(inputHosts))
 		fmt.Fprint(os.Stderr, "정말로 위 서버들에 명령을 실행하시겠습니까? (y/N): ")
 
 		response, _ := stdinReader.ReadString('\n')

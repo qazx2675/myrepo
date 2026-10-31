@@ -725,3 +725,11 @@ Ctrl+C 진행 중 목록)의 압축 표기는 그대로 유지(이번 변경 대
 '` 목록만 수집(기존 실행 흐름, 결과는 항상 수집) → `writeRPMReport`(로컬 집합 비교, 같은 결과 묶음, 보고서/탭 구분/차이 목록 저장). `main.go` 는 플래그, 동시 사용 거부, 결과 파일 정리, 도움말만 변경.
 
 검증: CHANGELOG 2026-09-30 항목 참고. OS6 빌드 확인.
+
+## v2 23번째 업데이트: 위험 작업 확인 강화, 출력 속도 개선, 바이너리 배포 (2026-10-31)
+
+요청: 레드햇 위험 명령 추가, y/N 전에 대상 호스트를 다시 입력받아 대조(다르면 즉시 취소, 입력 규칙은 `01.AWX_nodeinfo_V2.sh` 와 동일), vendor 삭제·os6/os8 바이너리 배포, workflow.svg 를 auto_setup 양식으로 재작성, 기존 기능을 유지한 채 10% 이상 빨라질 때만 최적화. `Yes` 입력 방식은 auto_setup 이 같은 플래그를 쓰므로 하지 않고 y/N 유지.
+
+구현: 신규 `danger.go` — `isDangerousCommand`(기존 부분일치 + 새 위험어는 명령 위치 판정), `parseConfirmHosts`(구분자 분리·`expandHostLine` 펼침·중복 제거), `diffHostSets`, `readConfirmLines`(빈 줄 종료). `main.go` 는 판정 호출 교체, 재입력 단계, 도움말, `printCommandResult` 호스트별 일괄 출력.
+
+검증: CHANGELOG 2026-10-31 항목 참고. OS6·OS8 빌드 확인.

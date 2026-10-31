@@ -15,35 +15,43 @@
 
 ## 1. 빌드 및 설치 방법
 
-### 1.1 폐쇄망(오프라인) 빌드
+### 1.1 폐쇄망(오프라인): 빌드된 바이너리 사용
 
-이 저장소에는 의존성(`golang.org/x/crypto`, `golang.org/x/sys`)을 미리 내려받아 둔 **`vendor/` 디렉토리가
-포함**되어 있습니다. 인터넷이 연결되지 않는 폐쇄망(air-gapped) 환경에서도 즉시 빌드할 수 있습니다.
+이 저장소에는 `vendor/` 디렉토리가 **없습니다**. 폐쇄망(air-gapped)에는 Go 빌드 도구가 없으므로
+소스를 빌드하지 않고, 저장소에 포함된 **사전 빌드 정적 바이너리**를 그대로 복사해 씁니다.
+
+| 바이너리 | 대상 OS | 빌드 환경 |
+|---|---|---|
+| `gossh_os6` | RHEL 6 / CentOS 6 | Go 1.20, `CGO_ENABLED=0` 정적 링크 |
+| `gossh_os8` | RHEL 8 / Rocky 8 등 | Go 1.26, `CGO_ENABLED=0` 정적 링크 |
+
+소스를 고치면 인터넷이 되는 곳에서 다시 빌드해 두 바이너리를 갱신하고 함께 커밋해야 합니다.
+
+### 1.2 소스 빌드 (인터넷이 되는 곳에서만)
+
+인터넷이 되는 곳에서 `go mod download` 로 의존성(`golang.org/x/crypto`, `golang.org/x/sys`)을 받은 뒤
+`go build` 합니다.
 
 ```bash
 # 1. 디렉토리 이동
 cd ".claude/공통/gossh"
 
-# 2. 실행 편의 스크립트로 빌드 (내부적으로 go build -mod=vendor -o gossh . 실행)
+# 2. 실행 편의 스크립트로 빌드 (내부적으로 go mod download 후 go build -o gossh . 실행)
 ./setup.sh
-```
 
-수동으로 빌드하거나 오프라인 환경을 강제하려면:
-
-```bash
-GOPROXY=off GOFLAGS=-mod=vendor go build -o gossh .
+# 또는 수동으로
+go mod download
+CGO_ENABLED=0 go build -o gossh .
 ```
 
 빌드가 끝나면 현재 디렉토리에 `gossh`(Windows는 `gossh.exe`) 단일 실행 파일이 생성됩니다.
+OS6용은 Go 1.20 으로, OS8용은 Go 1.26 으로 각각 빌드합니다(`-o gossh_os6`, `-o gossh_os8`).
 
-### 1.2 RHEL 6 / CentOS 6 (OS6) 호환 정적 바이너리
-
-구형 커널(2.6.32) 및 glibc 환경인 RHEL/CentOS 6을 위해 Go 1.20 정적 링크(`CGO_ENABLED=0`)로 빌드된
-**`gossh_os6` 바이너리가 기본 포함**되어 있습니다. 별도의 컴파일 과정 없이 대상 서버에 이 파일만
-복사해 바로 실행할 수 있습니다.
+사전 빌드 바이너리는 대상 서버에 복사해 바로 실행할 수 있습니다.
 
 ```bash
-./gossh_os6 -w hosts.txt "uname -r"
+./gossh_os6 -w hosts.txt "uname -r"   # RHEL/CentOS 6
+./gossh_os8 -w hosts.txt "uname -r"   # RHEL/Rocky 8
 ```
 
 ### 1.3 전역 명령어로 사용하기 (선택 사항)
@@ -58,8 +66,8 @@ sudo ln -sf /usr/local/bin/gossh /usr/local/bin/pdsh
 
 ### 1.4 `update.sh`로 배포하기
 
-특정 서버(대상서버) 위에서 직접 실행해서, 그 서버 환경 기준으로 새로 빌드한 일반 빌드와 저장소에
-포함된 OS6용 사전 빌드 바이너리(`gossh_os6`)를 시스템 경로 여러 곳에 한 번에 배포하는 스크립트입니다.
+특정 서버(대상서버) 위에서 직접 실행해서, 저장소에 포함된 사전 빌드 바이너리(`gossh_os6`, `gossh_os8`)를
+시스템 경로 여러 곳에 한 번에 배포하는 스크립트입니다. 빌드는 하지 않습니다.
 
 ```bash
 # update.sh 상단의 TARGET_SERVER/DEST1/DEST2/DEST3 값을 먼저 채운 뒤 실행
@@ -67,9 +75,9 @@ sudo ln -sf /usr/local/bin/gossh /usr/local/bin/pdsh
 ```
 
 - `TARGET_SERVER`(대상서버)와 다른 서버에서 실행하면 즉시 거부됩니다(호스트명/IP로 확인).
-- `DEST1`(복사될위치1): OS6 사전 빌드 바이너리를 `gossh`라는 이름으로 복사.
-- `DEST2`(복사될위치2, 기본 `/usr/local/bin`): 이 서버 환경 기준 일반 빌드를 `gossh`라는 이름으로 복사.
-- `DEST3`(복사될위치3, 기본 `/usr/bin/`): 같은 일반 빌드를 `pdsh`라는 이름으로 복사.
+- `DEST1`(복사될위치1): OS6 사전 빌드 바이너리(`gossh_os6`)를 `gossh`라는 이름으로 복사.
+- `DEST2`(복사될위치2, 기본 `/usr/local/bin`): OS8 사전 빌드 바이너리(`gossh_os8`)를 `gossh`라는 이름으로 복사.
+- `DEST3`(복사될위치3, 기본 `/usr/bin/`): 같은 OS8 바이너리를 `pdsh`라는 이름으로 복사.
 - 모두 강제 복사(기존 파일 삭제 후 새로 복사)라서, 이미 실행 중인 바이너리를 덮어써도 실행 중이던
   프로세스에는 영향이 없습니다.
 
@@ -186,14 +194,31 @@ Rocky Linux release 8.10 (Green Obsidian)
 ### 3.6 위험 명령 가드
 
 실수로 대량의 노드에 시스템 종료나 재부팅을 날리는 사고를 방지합니다.
-명령어에 `reboot`, `poweroff`, `shutdown`, `halt`, `init 0`, `init 6`, `ddc` 문자열이 포함되어 있으면
-실행이 즉시 차단됩니다.
+아래 위험 명령이 들어 있으면 실행이 즉시 차단됩니다(종료코드 1).
 
-실제 실행하려면 오타 방지 플래그인 `-dnlgjawkrdjqghkrdls`를 추가하고 프롬프트 확인을 거쳐야 합니다:
+| 구분 | 위험어 | 판정 방식 |
+|---|---|---|
+| 기존 | `reboot` `poweroff` `shutdown` `halt` `init 0` `init 6` `ddc` | 문자열이 들어 있기만 하면 (부분일치) |
+| 즉시 재시작·정지 | `kexec`, `systemctl kexec/rescue/emergency`, `isolate rescue.target/emergency.target`, `init 1`/`telinit 1`, `sysrq-trigger`, `ipmitool ... power off/reset/cycle` | 독립된 명령 단어일 때만 |
+| 디스크·데이터 파괴 | `mkfs*`, `dd ... of=/dev/`, `wipefs`, `fdisk`, `parted`, `sgdisk`, `shred`, `rm -rf /`(루트 자체), `lvremove`, `vgremove`, `pvremove` | 독립된 명령 단어일 때만 |
+| 접속 끊김 | `ifdown`, `nmcli ... down`, `ip link set ... down`, `systemctl stop sshd/network/NetworkManager` | 독립된 명령 단어일 때만 |
+
+"독립된 명령 단어"는 명령 맨 앞이나 `;` `|` `&` `(` `` ` `` `$(` 뒤에 오는 경우입니다(`sudo`·`xargs`·`env` 같은 감싸는 명령, `VAR=값`, 전체 경로 `/usr/sbin/` 앞붙임 허용).
+그래서 호스트명 `departed01` 이나 base64 데이터에 우연히 섞인 글자로는 걸리지 않습니다.
+읽기 전용인 `fdisk -l`, `parted -l` 도 위험으로 판정됩니다.
+
+실제 실행하려면 오타 방지 플래그인 `-dnlgjawkrdjqghkrdls`를 추가하고 두 단계 확인을 거쳐야 합니다:
+
+1. 실행 명령과 대상 호스트 목록 출력
+2. **대상 호스트 재입력** — 대상 호스트를 직접 입력하고 빈 줄(Enter)로 끝냅니다.
+   - 구분자: 공백·탭·쉼표·`|`·줄바꿈. 범위식(`node[01-05]`)은 `-w` 와 같은 규칙으로 펼칩니다.
+   - 순서·중복과 상관없이 **대상과 완전히 같을 때만** 다음 단계로 갑니다.
+   - 비었거나 하나라도 다르면 "입력에만 있음 / 대상에만 있음" 차이를 보여주고 즉시 취소합니다(종료코드 1).
+3. `정말로 위 서버들에 명령을 실행하시겠습니까? (y/N)` — `y` 만 실행, 그 외는 취소(종료코드 0)
 
 ```bash
 ./gossh -dnlgjawkrdjqghkrdls -w hosts.txt "reboot"
-# ==> 대상 호스트 목록 출력 후 (y/N) 최종 확인 단계 진행
+# ==> 대상 호스트 목록 출력 → 호스트 재입력 대조 → (y/N) 최종 확인
 ```
 
 ### 3.7 대량 실행 시 DNS 조회 안정화
@@ -359,7 +384,7 @@ Rocky Linux release 8.10 (Green Obsidian)
 | `-script` | `false`* | 작업 요약 및 ANSI 색상을 끄고 순수 호스트 결과만 출력 (`*`실행 파일명이 `pdsh`일 때는 기본값이 `true`로 동작). |
 | `-t <초>` | `15` | SSH 접속(TCP 연결 + 핸드셰이크 + 인증) 제한시간(초). 로그인에 성공하면 해제되어, 명령 실행 시간(10분 이상 걸리는 드라이버 설치 등)에는 적용되지 않음. |
 | `-pm` | `false` | `~/.profile` 내 anaconda 감지 시 "OS 설치중" 제외 및 특정 autofs 계정 접근 점검. 두 점검을 본 명령 전에 세션 하나로 실행하며, 점검에만 10초 제한(autofs가 멈추면 미접근으로 분류하고 본 명령은 그대로 실행). |
-| `-dnlgjawkrdjqghkrdls` | `false` | 위험 명령(재부팅, 종료 등) 강제 실행 승인 플래그. |
+| `-dnlgjawkrdjqghkrdls` | `false` | 위험 명령(재부팅·종료·디스크 파괴·접속 끊김 등) 강제 실행 승인 플래그. 대상 호스트 재입력 대조와 y/N 확인을 거침 (3.6 참고). |
 | `-tmp` | `false` | 대상 서버의 `/etc/tmpfiles.d/custom-tmp.conf` 의 `/tmp` 정리 시간 변경/삭제 (3.12 참고). 명령어 없이 사용. |
 | `-limit` | `false` | 비교서버의 `/etc/security/limits.conf` 를 대상 서버로 복사(`.bak` 백업, sha256 동일 확인) (3.12 참고). 명령어 없이 사용. |
 | `-tl` | `false` | `-tmp` 와 `-limit` 을 질문 한 번에 받아 함께 진행 (3.12 참고). |
@@ -399,13 +424,14 @@ gossh/
 ├── main.go            # gossh v2 메인 소스코드 (진행률/stdout 분리/키 우선/autofs 가드 내장)
 ├── tmplimit.go        # -tmp/-limit/-tl (질문 수집, 원격 스크립트 생성, 비교서버 파일 읽기)
 ├── rpmcmp.go          # -rpm (rpm 목록 비교, 보고서·탭 구분 파일 저장)
+├── danger.go          # 위험 명령 판정, 대상 호스트 재입력 대조 (danger_test.go 단위 테스트)
 ├── term_linux.go      # 터미널 크기 조회·키 입력 모드(-m) — Linux 전용
 ├── term_other.go      # Linux 외 OS용 대체 구현(-m 미지원, 빌드만 가능하게)
 ├── go.mod / go.sum      # Go 모듈 정의 (Go 1.20 호환)
-├── setup.sh           # vendor 의존성을 이용한 오프라인 빌드 스크립트
-├── update.sh          # 대상서버 전용 배포 스크립트
+├── setup.sh           # 소스 빌드 스크립트 (인터넷 되는 곳 전용, go mod download 후 빌드)
+├── update.sh          # 대상서버 전용 배포 스크립트 (빌드 없이 바이너리 복사)
 ├── gossh_os6          # RHEL 6 / CentOS 6 대상 사전 정적 빌드 바이너리
-├── vendor/            # 오프라인 빌드용 Go 서드파티 패키지 모음
+├── gossh_os8          # RHEL 8 / Rocky 8 대상 사전 정적 빌드 바이너리
 └── old/               # 구버전(v1) 소스 및 테스트 파일 아카이브
     ├── main.go        # gossh v1 레거시 소스코드
     ├── go.mod / go.sum
