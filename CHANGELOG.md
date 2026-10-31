@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-10-31 — 위험 작업 확인 강화, 출력 속도 개선, 바이너리 배포
+
+- **변경(위험어)**: 기존 7개(`reboot` `poweroff` `shutdown` `halt` `init 0` `init 6` `ddc`, 부분일치)에 더해 즉시 재시작·정지(`kexec`, `systemctl rescue/emergency`, `init 1`, `sysrq-trigger`, `ipmitool power off/reset/cycle` 등), 디스크·데이터 파괴(`mkfs*`, `dd of=/dev/`, `wipefs`, `fdisk`, `parted`, `sgdisk`, `shred`, `rm -rf /`, `lv/vg/pvremove`), 접속 끊김(`ifdown`, `nmcli ... down`, `ip link set ... down`, `systemctl stop sshd/network/NetworkManager`)을 추가. 새 위험어는 독립된 명령 단어일 때만 감지(호스트명·base64 오탐 방지).
+- **신규(호스트 재입력 대조)**: `-dnlgjawkrdjqghkrdls` 흐름에서 대상 목록 출력 뒤, y/N 앞에 대상 호스트를 다시 입력받음. 공백·탭·쉼표·`|`·줄바꿈 구분, 빈 줄로 종료, 범위식은 `-w` 와 같은 규칙으로 펼침. 순서·중복 무시 완전일치일 때만 계속, 다르거나 비면 차이(입력에만/대상에만)를 출력하고 즉시 취소(종료코드 1). y/N 문구와 취소 종료코드 0 은 그대로.
+- **속도(출력)**: 결과 출력 시 호스트별 줄을 모아 한 번에 씀. 랩 측정(가짜 SSH 서버, 3회 평균)에서 터미널 출력 기준 15~53% 단축, 표준출력을 파일로 돌리면 약 8%. 출력 내용·순서는 동일. 짧은 출력·`-b` 는 차이 없음. GOGC 조정은 5% 미만이라 미반영.
+- **배포**: `vendor/` 삭제. `gossh_os6`(Go 1.20) 와 신규 `gossh_os8`(Go 1.26) 정적 바이너리를 커밋. `update.sh` 는 빌드 없이 바이너리만 복사, `setup.sh` 는 인터넷 되는 곳 전용 소스 빌드.
+- **참고**: auto_setup 은 수정하지 않음 — s 메뉴에서 새 위험어 명령은 gossh 가 거부함(의도). `fdisk -l` 처럼 읽기 전용이어도 위험으로 판정.
+- **영향 범위**: `danger.go`/`danger_test.go`(신규), `main.go`, `gossh_os6`, `gossh_os8`(신규), `update.sh`, `setup.sh`, `workflow.svg`(auto_setup 양식으로 재작성), README 1·3.6·4·6장, ARCHITECTURE.md, WORKFLOW.md, PR_CHECKLIST.md.
+- **검증**: 위험/정상 명령 표 단위 테스트(Go 1.26.5·1.20.14). 192.168.0.58/60에서 플래그 없음 거부, 재입력 일치(순서 섞음·구분자 혼합·중복)→y 실행, n 취소(0), 누락·추가·빈 입력 취소(1), `echo` 로 감싼 명령만 사용. 바이너리 두 개 실행 확인, update.sh 복사 `cmp` 확인.
+
 ## 2026-09-30 — -rpm 옵션 추가
 
 - **신규(`-rpm`)**: 비교서버를 물어본 뒤 대상 서버들의 설치 rpm 을 `이름.아키텍처` 로만 비교(버전·릴리스 무시, `gpg-pubkey` 제외). 화면에는 한 줄 요약만 출력하고 `<hostfile>_rpm_report.txt`(보고서, 같은 결과 호스트끼리 묶음), `<hostfile>_rpm_tab.txt`(탭 구분·UTF-8 BOM, 엑셀용), `<hostfile>_rpm_diff`(차이 호스트 목록)를 저장. 시작할 때 같은 이름의 이전 파일은 완전일치로 삭제.

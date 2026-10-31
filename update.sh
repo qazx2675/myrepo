@@ -1,7 +1,7 @@
 #!/bin/bash
 # gossh/pdsh 배포(업데이트) 스크립트.
-# 이 스크립트가 놓인 서버(대상서버) 위에서 직접 실행해서, 최신 소스로 새로 빌드한 gossh와
-# 저장소에 이미 들어있는 OS6용 사전 빌드 바이너리(gossh_os6)를 시스템 경로로 배포한다.
+# 이 스크립트가 놓인 서버(대상서버) 위에서 직접 실행해서, 저장소에 이미 들어있는
+# 사전 빌드 바이너리(OS6용 gossh_os6, OS8용 gossh_os8)를 시스템 경로로 배포한다. (빌드는 하지 않는다)
 #
 # ★ bash는 변수명에 한글을 쓸 수 없어서(영문/숫자/밑줄만 허용) 변수명은 영문으로 뒀다.
 # 아래 4개 값만 채우면 된다.
@@ -10,9 +10,9 @@
 TARGET_SERVER=""
 # 복사될위치1: OS6용 빌드(gossh_os6)가 "gossh"라는 이름으로 복사될 경로
 DEST1=""
-# 복사될위치2: 일반 빌드(이 서버 환경 기준으로 새로 빌드)가 "gossh"라는 이름으로 복사될 경로
+# 복사될위치2: OS8용 빌드(gossh_os8)가 "gossh"라는 이름으로 복사될 경로
 DEST2="/usr/local/bin"
-# 복사될위치3: 일반 빌드가 "pdsh"라는 이름으로 복사될 경로
+# 복사될위치3: OS8용 빌드(gossh_os8)가 "pdsh"라는 이름으로 복사될 경로
 DEST3="/usr/bin/"
 
 set -euo pipefail
@@ -39,13 +39,12 @@ if [ "$current_host" != "$TARGET_SERVER" ] && [ "$current_short_host" != "$TARGE
     exit 1
 fi
 
-if [ ! -f gossh_os6 ]; then
-    echo "gossh_os6(OS6용 사전 빌드 바이너리)를 찾을 수 없습니다: ${SCRIPT_DIR}/gossh_os6" >&2
-    exit 1
-fi
-
-echo "[1/3] 일반 빌드(gossh)를 이 서버 환경 기준으로 새로 빌드합니다..."
-GOPROXY=off go build -mod=vendor -o gossh .
+for bin in gossh_os6 gossh_os8; do
+    if [ ! -f "$bin" ]; then
+        echo "${bin}(사전 빌드 바이너리)를 찾을 수 없습니다: ${SCRIPT_DIR}/${bin}" >&2
+        exit 1
+    fi
+done
 
 # ★ 강제 복사: 실행 중인 바이너리 경로에 그냥 덮어쓰면 "Text file busy"가 날 수 있다.
 # 기존 파일을 지우고 새로 복사하면, 이미 실행 중인 프로세스는 지워지기 전 inode를 그대로
@@ -63,13 +62,13 @@ force_copy() {
     echo "  -> $dst"
 }
 
-echo "[2/3] 복사될위치1 (OS6 빌드 -> gossh): ${DEST1}"
+echo "[1/3] 복사될위치1 (OS6 빌드 -> gossh): ${DEST1}"
 force_copy "${SCRIPT_DIR}/gossh_os6" "${DEST1%/}/gossh"
 
-echo "[2/3] 복사될위치2 (일반 빌드 -> gossh): ${DEST2}"
-force_copy "${SCRIPT_DIR}/gossh" "${DEST2%/}/gossh"
+echo "[2/3] 복사될위치2 (OS8 빌드 -> gossh): ${DEST2}"
+force_copy "${SCRIPT_DIR}/gossh_os8" "${DEST2%/}/gossh"
 
-echo "[3/3] 복사될위치3 (일반 빌드 -> pdsh): ${DEST3}"
-force_copy "${SCRIPT_DIR}/gossh" "${DEST3%/}/pdsh"
+echo "[3/3] 복사될위치3 (OS8 빌드 -> pdsh): ${DEST3}"
+force_copy "${SCRIPT_DIR}/gossh_os8" "${DEST3%/}/pdsh"
 
 echo "완료."

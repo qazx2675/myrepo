@@ -5,11 +5,13 @@
 | `main.go` | gossh v2 전체: `-w` 파싱·범위 확장, 워커풀, DNS 선행 조회, SSH(키 우선), stdout/stderr 분리, 진행률, `-b` 그룹, 위험 명령 가드, autofs 가드, 재검증, 결과 파일 |
 | `tmplimit.go` | `-tmp`/`-limit`/`-tl`: 질문 수집, 비교서버 파일 읽기·가드, 원격 스크립트(base64) 생성 |
 | `rpmcmp.go` | `-rpm`: 비교서버 rpm 목록 읽기, 대상 목록 비교, 보고서·탭 구분 파일 저장 |
+| `danger.go` | 위험 명령 판정(`isDangerousCommand`), 대상 호스트 재입력 읽기·펼치기·대조(`readConfirmLines`/`parseConfirmHosts`/`diffHostSets`). 단위 테스트는 `danger_test.go` |
 | `term_linux.go` | 터미널 크기 조회·키 입력 모드(`-m`) — Linux 전용 |
 | `term_other.go` | Linux 외 OS용 대체 구현(`-m` 미지원, 빌드만 가능) |
-| `setup.sh` | 오프라인 빌드 (`vendor/`) |
-| `update.sh` | 대상 서버 배포 스크립트 |
-| `gossh_os6` | RHEL 6 / CentOS 6용 사전 정적 빌드 바이너리 |
+| `setup.sh` | 소스 빌드 (인터넷 되는 곳 전용, `go mod download` 후 빌드. `vendor/` 없음) |
+| `update.sh` | 대상 서버 배포 스크립트 (빌드 없이 `gossh_os6`/`gossh_os8` 강제 복사) |
+| `gossh_os6` | RHEL 6 / CentOS 6용 사전 정적 빌드 바이너리 (Go 1.20) |
+| `gossh_os8` | RHEL 8 / Rocky 8용 사전 정적 빌드 바이너리 (Go 1.26) |
 | `old/` | 구버전(v1) 소스 아카이브 |
 | `PLAN.md` / `CHANGELOG.md` | 개선 계획 / 버전별 변경 이력 |
 
@@ -28,8 +30,10 @@
 flowchart TD
     A["gossh -w hosts/범위식 [옵션] '명령'"] --> B["-w 파싱 · 호스트명 범위 확장<br/>(pdsh / clush NodeSet 문법)"]
     B --> C["이전 결과 파일 중 이번 실행 이름과 같은 것만 삭제"]
-    C --> D{"위험 명령? (재부팅 등)"}
-    D -- 예 --> D1["대상 출력 후 y/N 최종 확인"]
+    C --> D{"위험 명령? (재부팅·디스크 파괴·접속 끊김 등)"}
+    D -- 예 --> D0{"대상 출력 → 호스트 재입력<br/>대상과 완전일치?"}
+    D0 -- 다름/빈 입력 --> Z1["차이 출력 후 취소 (종료코드 1)"]
+    D0 -- 일치 --> D1["y/N 최종 확인"]
     D1 -- N --> Z["중단"]
     D1 -- y --> E
     D -- 아니오 --> E{"/user/ 경로 사용? (autofs)"}
