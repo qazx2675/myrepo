@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -105,7 +106,7 @@ const (
 	maxRichTextChars = 5000  // 글자별 글꼴 조회 상한(초과 시 단일 글꼴)
 	maxScanRows      = 2000  // UsedRange 스캔 상한
 	maxScanCols      = 100
-	headerLookdown   = 5   // 타이틀 아래 헤더 탐색 행 수
+	headerLookdown   = 10  // 타이틀 아래 헤더 탐색 행 수 (다음 섹션 제목 전까지)
 	blockPadding     = 8.0 // 적재 블록 사이 여백(pt)
 	cellInnerPad     = 4.0 // 셀 안쪽 여백(pt)
 	maxAnchorLines   = 300 // 도형 기준 줄 계산 상한(초과 시 도형은 본문 뒤)
@@ -660,6 +661,35 @@ func matchHeaderRow(g *sheetGrid, r int) (SectionColumns, bool) {
 	return cols, cols.StepCol > 0 && cols.TaskNameCol > 0
 }
 
+// sectionTitleKey strips numbering/bullets and a trailing note from a whitespace-free
+// title, e.g. "3.사후작업", "■사후작업", "사후작업(복구)" → "사후작업"
+func sectionTitleKey(key string) string {
+	key = strings.TrimLeftFunc(key, func(r rune) bool {
+		return unicode.IsDigit(r) || unicode.IsPunct(r) || unicode.IsSymbol(r) || (r >= 'Ⅰ' && r <= 'ⅿ')
+	})
+	if i := strings.IndexAny(key, "([{<（［【"); i > 0 {
+		key = key[:i]
+	}
+	return strings.TrimRightFunc(key, func(r rune) bool { return unicode.IsPunct(r) || unicode.IsSymbol(r) })
+}
+
+// rowHasSectionTitle reports whether row r contains any section title
+func rowHasSectionTitle(g *sheetGrid, r int) bool {
+	i := r - g.row0
+	if i < 0 || i >= len(g.cells) {
+		return false
+	}
+	for _, txt := range g.cells[i] {
+		k := sectionTitleKey(normalizeKey(txt))
+		for _, def := range sectionDefs {
+			if k == def.Name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // FindSections discovers 사전작업/본작업/사후작업 sections without fixed coordinates.
 // Titles without a valid header row (TitleRow+1..+5) are skipped.
 func FindSections(ws *ole.IDispatch) ([]SectionInfo, error) {
@@ -677,13 +707,16 @@ func FindSections(ws *ole.IDispatch) ([]SectionInfo, error) {
 		for _, txt := range row {
 			key := normalizeKey(txt)
 			for _, def := range sectionDefs {
-				if key != def.Name {
+				if sectionTitleKey(key) != def.Name {
 					continue
 				}
 				if _, dup := found[def.Name]; dup {
 					continue
 				}
 				for hr := r + 1; hr <= r+headerLookdown; hr++ {
+					if hr > r+1 && rowHasSectionTitle(g, hr) {
+						break // 다음 섹션 제목을 만나면 이 제목에는 헤더가 없는 것
+					}
 					cols, ok := matchHeaderRow(g, hr)
 					if !ok {
 						continue
@@ -1087,9 +1120,29 @@ func (m *textMeasurer) setWidth(width float64) {
 	m.width = width
 }
 
-// height returns the wrapped height of s in a cell of the given width; falls back
-// to the estimate when Excel cannot measure it (no measurer, row height cap)
+// height returns the wrapped height of s in a cell of the given width. Text taller
+// than one row can hold (409pt) is measured in halves and summed; falls back to the
+// estimate when Excel cannot measure it
 func (m *textMeasurer) height(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
+	h := m.measure(s, fs, runs, bold, width)
+	if h < maxRowHeight {
+		return h
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) < 2 {
+		return math.Max(h, textHeight(s, fs, width))
+	}
+	mid := len(lines) / 2
+	first := strings.Join(lines[:mid], "\n")
+	cut := utf16Len(first) + 1 // 두 번째 조각 시작(1-based)
+	second := strings.Join(lines[mid:], "\n")
+	pad := math.Max(0, m.measure("가", fs, nil, bold, width)-m.lineHeight(fs)) // 측정마다 붙는 셀 여백
+	return m.height(first, fs, sliceRuns(runs, 1, cut-1), bold, width) +
+		m.height(second, fs, sliceRuns(runs, cut+1, utf16Len(s)), bold, width) - pad
+}
+
+// measure is one AutoFit measurement (capped at the row height limit)
+func (m *textMeasurer) measure(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
 	est := textHeight(s, fs, width)
 	if m == nil || m.ws == nil {
 		return est
@@ -1109,18 +1162,43 @@ func (m *textMeasurer) height(s string, fs fontSpec, runs []fontRun, bold bool, 
 	defer row.Release()
 	oleutil.CallMethod(row, "AutoFit")
 	h := getNum(row, "RowHeight")
-	if h <= 0 || h >= maxRowHeight {
+	if h <= 0 {
+		return est
+	}
+	if h >= maxRowHeight {
 		return math.Max(h, est)
 	}
 	return h
 }
 
-// lineHeight returns the height of one text line rendered with fs
+// lineHeight returns the line pitch of fs (height added by one more line), which
+// is smaller than a single-line row height because that includes the cell margins
 func (m *textMeasurer) lineHeight(fs fontSpec) float64 {
 	if m == nil || m.ws == nil {
 		return lineHeight(fs)
 	}
-	return m.height("가", fs, nil, fs.Bold, math.Max(m.width, 100))
+	const n = 10
+	w := math.Max(m.width, 100)
+	one := m.measure("가", fs, nil, fs.Bold, w)
+	many := m.measure(strings.Repeat("가\n", n)+"가", fs, nil, fs.Bold, w)
+	if p := (many - one) / n; p > 0 && many < maxRowHeight {
+		return p
+	}
+	return lineHeight(fs)
+}
+
+// sliceRuns returns the runs inside [from, to] (1-based UTF-16), rebased to start at 1
+func sliceRuns(runs []fontRun, from, to int) []fontRun {
+	var out []fontRun
+	for _, r := range runs {
+		s, e := max(r.start, from), min(r.start+r.length-1, to)
+		if s > e {
+			continue
+		}
+		r.start, r.length = s-from+1, e-s+1
+		out = append(out, r)
+	}
+	return out
 }
 
 func utf16Len(s string) int {
@@ -1173,33 +1251,42 @@ type columnPlan struct {
 }
 
 // buildColumnPlan stacks blocks vertically: text gets blank-line padding so each
-// block header starts below the previous block's text and images
+// block header starts below the previous block's text and images. Positions are
+// measured on the accumulated cell text itself, so they do not drift block by block.
 func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock, m *textMeasurer) columnPlan {
 	plan := columnPlan{row: dst.Row1, col: dst.Col1}
 	var sb strings.Builder
 	pos := 0         // 지금까지 기록한 UTF-16 길이
-	textY := 0.0     // 텍스트 끝 Y
 	nextStart := 0.0 // 다음 블록이 시작해야 하는 Y
 	padH := m.lineHeight(base)
+	oneLine := m.measure("가", base, nil, false, dst.Width)
 	maxShapeW := dst.Width - 2*cellInnerPad
 
+	// startAfter is the Y where a line starts after the current text plus nl line breaks
+	startAfter := func(nl int) float64 {
+		if pos == 0 && nl == 0 {
+			return 0
+		}
+		return m.height(sb.String()+strings.Repeat("\n", nl)+"가", base, plan.runs, false, dst.Width) - oneLine
+	}
+
 	for i, b := range blocks {
-		blockStart := 0.0
 		if i > 0 {
-			k := max(1, int(math.Ceil((nextStart-textY)/padH)))
-			sb.WriteString(strings.Repeat("\n", k+1))
-			pos += k + 1
-			blockStart = textY + float64(k)*padH
+			nl := max(2, int(math.Ceil((nextStart-startAfter(1))/padH))+1)
+			for tries := 0; tries < 20 && startAfter(nl) < nextStart; tries++ {
+				nl++
+			}
+			sb.WriteString(strings.Repeat("\n", nl))
+			pos += nl
 		}
 
 		hl := utf16Len(b.header)
 		plan.runs = append(plan.runs, fontRun{start: pos + 1, length: hl, font: base, bold: true})
 		sb.WriteString(b.header)
 		pos += hl
-		headerH := m.height(b.header, base, nil, true, dst.Width)
 
 		lb := layoutBody(b, dst.Width, maxShapeW, m)
-		bodyH := 0.0
+		bodyStart := startAfter(1)
 		if lb.body != "" {
 			sb.WriteString("\n")
 			pos++
@@ -1214,22 +1301,21 @@ func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock, m *textMe
 			}
 			sb.WriteString(lb.body)
 			pos += bl
-			bodyH = m.height(lb.body, b.font, lb.runs, b.font.Bold, dst.Width)
 		}
-		textY = blockStart + headerH + bodyH
+		textY := m.height(sb.String(), base, plan.runs, false, dst.Width)
 
 		// 도형은 원본에서 놓여 있던 줄 위치에 배치 (layoutBody 가 그 자리에 빈 줄을 확보)
 		shapeBottom := 0.0
 		for _, sp := range lb.shapes {
+			sp.relY += bodyStart
 			shapeBottom = math.Max(shapeBottom, sp.relY+sp.height)
-			sp.relY += blockStart + headerH
 			plan.shapes = append(plan.shapes, sp)
 		}
-		nextStart = blockStart + headerH + math.Max(bodyH, shapeBottom) + blockPadding
+		nextStart = math.Max(textY, shapeBottom) + blockPadding
 	}
 
 	plan.text = sb.String()
-	plan.height = math.Max(textY, nextStart)
+	plan.height = nextStart
 	return plan
 }
 
@@ -1242,7 +1328,8 @@ type bodyLayout struct {
 
 // layoutBody keeps each shape at the text line it sat on in the source: the shape
 // group is placed after the lines that end above it, and blank lines are added so
-// the following text starts below the shapes (existing blank lines are reused)
+// the following text starts below the shapes (existing blank lines are reused).
+// Heights are measured on the final text with its fonts so text is never hidden.
 func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) bodyLayout {
 	out := bodyLayout{body: b.body, runs: b.runs}
 	if len(b.shapes) == 0 {
@@ -1254,6 +1341,9 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 	}
 	n := len(lines)
 	bold := b.font.Bold
+	if len(b.runs) == 0 && b.body != "" { // 단일 글꼴 본문도 구간으로 다뤄 빈 줄 삽입 후에도 글꼴 유지
+		b.runs = []fontRun{{start: 1, length: utf16Len(b.body), font: b.font, bold: bold}}
+	}
 
 	// 원본 셀에서 앞쪽 k줄이 차지하는 높이 (k=0 → 0)
 	srcH := make([]float64, n+1)
@@ -1262,7 +1352,8 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 			srcH[k] = math.Inf(1) // 너무 긴 본문은 도형을 모두 맨 앞 기준으로 둔다
 			continue
 		}
-		srcH[k] = m.height(strings.Join(lines[:k], "\n"), b.font, nil, bold, b.srcBox.Width)
+		t := strings.Join(lines[:k], "\n")
+		srcH[k] = m.height(t, b.font, sliceRuns(b.runs, 1, utf16Len(t)), bold, b.srcBox.Width)
 	}
 
 	// 도형마다 기준 줄 수(anchor): 도형 위쪽보다 위에서 끝나는 줄 수
@@ -1287,18 +1378,77 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 		lineOff[i+1] = lineOff[i] + utf16Len(lines[i]) + 1
 	}
 	added := make([]int, n) // 각 줄 앞에 추가한 빈 줄 수
-	prefix := func(k int) string {
+	lh := m.lineHeight(b.font)
+
+	// build returns the text and runs of the first k lines with the blank lines added so far;
+	// added blank lines get the block font so their height is exactly lh
+	build := func(k int) (string, []fontRun) {
 		var sb strings.Builder
+		var runs []fontRun
+		shiftAt := func(off int) int { // 원본 위치 off 앞에 추가된 줄바꿈 수
+			c := 0
+			for i := 0; i < n && lineOff[i] <= off; i++ {
+				c += added[i]
+			}
+			return c
+		}
+		pos := 0
 		for i := 0; i < k; i++ {
 			if i > 0 {
 				sb.WriteString("\n")
+				pos++
 			}
-			sb.WriteString(strings.Repeat("\n", added[i]))
+			if added[i] > 0 {
+				runs = append(runs, fontRun{start: pos + 1, length: added[i], font: b.font, bold: bold})
+				sb.WriteString(strings.Repeat("\n", added[i]))
+				pos += added[i]
+			}
 			sb.WriteString(lines[i])
+			pos += utf16Len(lines[i])
 		}
-		return sb.String()
+		end := 0
+		if k > 0 {
+			end = lineOff[k] - 1
+		}
+		for _, r := range b.runs {
+			s0, e0 := r.start-1, min(r.start-1+r.length, end)
+			if s0 >= e0 {
+				continue
+			}
+			// 줄 시작 앞에 끼운 빈 줄은 위 runs 가 담당하므로 원본 구간은 잘라서 옮긴다
+			for i := 0; i < n; i++ {
+				ls, le := lineOff[i], lineOff[i]+utf16Len(lines[i])+1 // 줄 + 뒤 줄바꿈
+				ps, pe := max(s0, ls), min(e0, le)
+				if ps >= pe {
+					continue
+				}
+				d := shiftAt(ls)
+				runs = append(runs, fontRun{start: ps + d + 1, length: pe - ps, font: r.font, bold: r.bold})
+			}
+		}
+		return sb.String(), runs
 	}
-	lh := m.lineHeight(b.font)
+	textTo := func(k int) float64 { // 결과 셀에서 앞쪽 k줄이 끝나는 높이
+		if k == 0 {
+			return 0
+		}
+		t, rs := build(k)
+		return m.height(t, b.font, rs, bold, dstWidth)
+	}
+	oneLine := m.measure("가", b.font, nil, bold, dstWidth)
+	startOf := func(idx int) float64 { // 결과 셀에서 줄 idx 가 시작하는 높이
+		t, rs := build(idx)
+		var sb strings.Builder
+		sb.WriteString(t)
+		if idx > 0 {
+			sb.WriteString("\n")
+		}
+		at := utf16Len(sb.String()) + 1
+		sb.WriteString(strings.Repeat("\n", added[idx]))
+		sb.WriteString("가")
+		rs = append(rs, fontRun{start: at, length: added[idx] + 1, font: b.font, bold: bold})
+		return m.height(sb.String(), b.font, rs, bold, dstWidth) - oneLine
+	}
 
 	for i := 0; i < len(items); {
 		k := items[i].anchor
@@ -1309,16 +1459,12 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 		group := items[i:j]
 		i = j
 
-		// 결과 셀에서 앞쪽 k줄이 끝나는 위치 + 원본의 줄-도형 간격 유지
-		dstY := 0.0
-		if k > 0 {
-			dstY = m.height(prefix(k), b.font, nil, bold, dstWidth)
-		}
+		dstY := textTo(k)
 		groupTop := math.Inf(1)
 		for _, it := range group {
 			groupTop = math.Min(groupTop, it.relTop)
 		}
-		gap := 0.0
+		gap := 0.0 // 원본의 줄-도형 간격 유지
 		if !math.IsInf(srcH[k], 0) {
 			gap = math.Max(0, groupTop-srcH[k])
 		}
@@ -1344,7 +1490,7 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 			bottom = math.Max(bottom, relY+h)
 		}
 
-		// 뒤따르는 첫 글자 줄이 도형 아래에서 시작하도록 빈 줄 보충
+		// 뒤따르는 첫 글자 줄이 도형 아래에서 시작하도록 빈 줄 보충 (+1줄 여유)
 		next := k
 		for next < n && strings.TrimSpace(lines[next]) == "" {
 			next++
@@ -1352,40 +1498,17 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 		if next >= n {
 			continue // 뒤에 글이 없으면 다음 블록 간격으로 처리됨
 		}
-		// 빈 줄 하나가 한 줄 높이만큼 다음 글을 내린다 (앞 줄 끝의 줄바꿈은 높이 없음)
-		need := int(math.Ceil((bottom + blockPadding - dstY) / lh))
+		need := int(math.Ceil((bottom+blockPadding-dstY)/lh)) + 1
 		if extra := need - (next - k); extra > 0 {
 			added[next] += extra
 		}
+		// 실측 확인: 다음 글이 도형 하단 아래에서 시작할 때까지 보충
+		for tries := 0; tries < 20 && startOf(next) < bottom+blockPadding; tries++ {
+			added[next]++
+		}
 	}
 
-	var inserts [][2]int // {원본 위치, 삽입한 줄바꿈 수}
-	for i, c := range added {
-		if c > 0 {
-			inserts = append(inserts, [2]int{lineOff[i], c})
-		}
-	}
-	if len(inserts) == 0 {
-		return out
-	}
-	out.body = prefix(n)
-	if len(b.runs) > 0 {
-		out.runs = make([]fontRun, 0, len(b.runs))
-		for _, r := range b.runs {
-			s0, e0 := r.start-1, r.start-1+r.length
-			ns, ne := s0, e0
-			for _, in := range inserts {
-				if in[0] <= s0 {
-					ns += in[1]
-				}
-				if in[0] < e0 {
-					ne += in[1]
-				}
-			}
-			r.start, r.length = ns+1, ne-ns
-			out.runs = append(out.runs, r)
-		}
-	}
+	out.body, out.runs = build(n)
 	return out
 }
 
@@ -1606,6 +1729,10 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 			for idx, s := range srcs {
 				ssec, ok := s.sections[sec.Name]
 				if !ok {
+					msg := fmt.Sprintf("경고: 시트 '%s'에서 [%s] 섹션(제목 + Step/작업내용 헤더)을 찾지 못해 해당 내용이 제외되었습니다", s.name, sec.Name)
+					if !slices.Contains(*warnings, msg) {
+						*warnings = append(*warnings, msg)
+					}
 					continue
 				}
 				srcCol := colOf(ssec.Cols)
