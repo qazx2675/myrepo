@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -107,6 +108,8 @@ const (
 	headerLookdown   = 5   // 타이틀 아래 헤더 탐색 행 수
 	blockPadding     = 8.0 // 적재 블록 사이 여백(pt)
 	cellInnerPad     = 4.0 // 셀 안쪽 여백(pt)
+	maxAnchorLines   = 300 // 도형 기준 줄 계산 상한(초과 시 도형은 본문 뒤)
+	anchorTolerance  = 2.0 // 도형 위쪽과 줄 끝 비교 허용 오차(pt)
 )
 
 // ---------------------------------------------------------------------------
@@ -1195,50 +1198,32 @@ func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock, m *textMe
 		pos += hl
 		headerH := m.height(b.header, base, nil, true, dst.Width)
 
+		lb := layoutBody(b, dst.Width, maxShapeW, m)
 		bodyH := 0.0
-		if b.body != "" {
+		if lb.body != "" {
 			sb.WriteString("\n")
 			pos++
-			bl := utf16Len(b.body)
-			if len(b.runs) > 0 {
-				for _, r := range b.runs {
+			bl := utf16Len(lb.body)
+			if len(lb.runs) > 0 {
+				for _, r := range lb.runs {
 					r.start += pos
 					plan.runs = append(plan.runs, r)
 				}
 			} else {
 				plan.runs = append(plan.runs, fontRun{start: pos + 1, length: bl, font: b.font, bold: b.font.Bold})
 			}
-			sb.WriteString(b.body)
+			sb.WriteString(lb.body)
 			pos += bl
-			bodyH = m.height(b.body, b.font, b.runs, b.font.Bold, dst.Width)
+			bodyH = m.height(lb.body, b.font, lb.runs, b.font.Bold, dst.Width)
 		}
 		textY = blockStart + headerH + bodyH
 
-		// 원본에서 본문 텍스트와 겹치거나 붙어 있던 도형 묶음은 본문 아래 여백 뒤로 내린다 (묶음 내부 배치는 유지)
-		minRelY := math.Inf(1)
-		for _, s := range b.shapes {
-			minRelY = math.Min(minRelY, math.Max(0, s.Top-b.srcBox.Top))
-		}
-		shift := math.Max(0, bodyH+blockPadding-minRelY)
-
+		// 도형은 원본에서 놓여 있던 줄 위치에 배치 (layoutBody 가 그 자리에 빈 줄을 확보)
 		shapeBottom := 0.0
-		for _, s := range b.shapes {
-			w, h := s.Width, s.Height
-			if w > maxShapeW && maxShapeW > 0 { // 열보다 넓으면 비율 유지 축소
-				h *= maxShapeW / w
-				w = maxShapeW
-			}
-			relX := math.Max(0, s.Left-b.srcBox.Left)
-			if relX+w > dst.Width-cellInnerPad {
-				relX = math.Max(0, dst.Width-cellInnerPad-w)
-			}
-			relY := math.Max(0, s.Top-b.srcBox.Top) + shift
-			plan.shapes = append(plan.shapes, shapePlan{
-				src: b.src, index: s.Index,
-				relX: relX, relY: blockStart + headerH + relY,
-				width: w, height: h,
-			})
-			shapeBottom = math.Max(shapeBottom, relY+h)
+		for _, sp := range lb.shapes {
+			shapeBottom = math.Max(shapeBottom, sp.relY+sp.height)
+			sp.relY += blockStart + headerH
+			plan.shapes = append(plan.shapes, sp)
 		}
 		nextStart = blockStart + headerH + math.Max(bodyH, shapeBottom) + blockPadding
 	}
@@ -1246,6 +1231,162 @@ func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock, m *textMe
 	plan.text = sb.String()
 	plan.height = math.Max(textY, nextStart)
 	return plan
+}
+
+// bodyLayout is one block's body text with blank lines inserted for its shapes
+type bodyLayout struct {
+	body   string
+	runs   []fontRun   // body 기준(1-based) 글꼴 구간
+	shapes []shapePlan // relY 는 본문 시작 기준
+}
+
+// layoutBody keeps each shape at the text line it sat on in the source: the shape
+// group is placed after the lines that end above it, and blank lines are added so
+// the following text starts below the shapes (existing blank lines are reused)
+func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) bodyLayout {
+	out := bodyLayout{body: b.body, runs: b.runs}
+	if len(b.shapes) == 0 {
+		return out
+	}
+	var lines []string
+	if b.body != "" {
+		lines = strings.Split(b.body, "\n")
+	}
+	n := len(lines)
+	bold := b.font.Bold
+
+	// 원본 셀에서 앞쪽 k줄이 차지하는 높이 (k=0 → 0)
+	srcH := make([]float64, n+1)
+	for k := 1; k <= n; k++ {
+		if n > maxAnchorLines {
+			srcH[k] = math.Inf(1) // 너무 긴 본문은 도형을 모두 맨 앞 기준으로 둔다
+			continue
+		}
+		srcH[k] = m.height(strings.Join(lines[:k], "\n"), b.font, nil, bold, b.srcBox.Width)
+	}
+
+	// 도형마다 기준 줄 수(anchor): 도형 위쪽보다 위에서 끝나는 줄 수
+	type item struct {
+		s      shapeInfo
+		anchor int
+		relTop float64
+	}
+	items := make([]item, 0, len(b.shapes))
+	for _, s := range b.shapes {
+		relTop := math.Max(0, s.Top-b.srcBox.Top)
+		k := 0
+		for k < n && srcH[k+1] <= relTop+anchorTolerance {
+			k++
+		}
+		items = append(items, item{s: s, anchor: k, relTop: relTop})
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].anchor < items[j].anchor })
+
+	lineOff := make([]int, n+1) // 원본 body 에서 각 줄의 시작 UTF-16 위치
+	for i := 0; i < n; i++ {
+		lineOff[i+1] = lineOff[i] + utf16Len(lines[i]) + 1
+	}
+	added := make([]int, n) // 각 줄 앞에 추가한 빈 줄 수
+	prefix := func(k int) string {
+		var sb strings.Builder
+		for i := 0; i < k; i++ {
+			if i > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString(strings.Repeat("\n", added[i]))
+			sb.WriteString(lines[i])
+		}
+		return sb.String()
+	}
+	lh := m.lineHeight(b.font)
+
+	for i := 0; i < len(items); {
+		k := items[i].anchor
+		j := i
+		for j < len(items) && items[j].anchor == k {
+			j++
+		}
+		group := items[i:j]
+		i = j
+
+		// 결과 셀에서 앞쪽 k줄이 끝나는 위치 + 원본의 줄-도형 간격 유지
+		dstY := 0.0
+		if k > 0 {
+			dstY = m.height(prefix(k), b.font, nil, bold, dstWidth)
+		}
+		groupTop := math.Inf(1)
+		for _, it := range group {
+			groupTop = math.Min(groupTop, it.relTop)
+		}
+		gap := 0.0
+		if !math.IsInf(srcH[k], 0) {
+			gap = math.Max(0, groupTop-srcH[k])
+		}
+
+		bottom := 0.0
+		for _, it := range group {
+			s := it.s
+			w, h := s.Width, s.Height
+			if w > maxShapeW && maxShapeW > 0 { // 열보다 넓으면 비율 유지 축소
+				h *= maxShapeW / w
+				w = maxShapeW
+			}
+			relX := math.Max(0, s.Left-b.srcBox.Left)
+			if relX+w > dstWidth-cellInnerPad {
+				relX = math.Max(0, dstWidth-cellInnerPad-w)
+			}
+			relY := dstY + gap + (it.relTop - groupTop) // 묶음 내부 배치 유지
+			out.shapes = append(out.shapes, shapePlan{
+				src: b.src, index: s.Index,
+				relX: relX, relY: relY,
+				width: w, height: h,
+			})
+			bottom = math.Max(bottom, relY+h)
+		}
+
+		// 뒤따르는 첫 글자 줄이 도형 아래에서 시작하도록 빈 줄 보충
+		next := k
+		for next < n && strings.TrimSpace(lines[next]) == "" {
+			next++
+		}
+		if next >= n {
+			continue // 뒤에 글이 없으면 다음 블록 간격으로 처리됨
+		}
+		// 빈 줄 하나가 한 줄 높이만큼 다음 글을 내린다 (앞 줄 끝의 줄바꿈은 높이 없음)
+		need := int(math.Ceil((bottom + blockPadding - dstY) / lh))
+		if extra := need - (next - k); extra > 0 {
+			added[next] += extra
+		}
+	}
+
+	var inserts [][2]int // {원본 위치, 삽입한 줄바꿈 수}
+	for i, c := range added {
+		if c > 0 {
+			inserts = append(inserts, [2]int{lineOff[i], c})
+		}
+	}
+	if len(inserts) == 0 {
+		return out
+	}
+	out.body = prefix(n)
+	if len(b.runs) > 0 {
+		out.runs = make([]fontRun, 0, len(b.runs))
+		for _, r := range b.runs {
+			s0, e0 := r.start-1, r.start-1+r.length
+			ns, ne := s0, e0
+			for _, in := range inserts {
+				if in[0] <= s0 {
+					ns += in[1]
+				}
+				if in[0] < e0 {
+					ne += in[1]
+				}
+			}
+			r.start, r.length = ns+1, ne-ns
+			out.runs = append(out.runs, r)
+		}
+	}
+	return out
 }
 
 func normalizeOutputName(name string) string {
