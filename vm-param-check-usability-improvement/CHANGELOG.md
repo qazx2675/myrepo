@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-11-02 — `bin_os8/vm-param-check.gz` 가 스펙 제외 키를 몰라 체크가 멈추던 문제 (OS8 실행파일 재빌드)
+
+- **증상**: 스펙에 `all_del_affinity=y` / `all_del_lpage=y` 를 넣고 `01.vm_setting_check_insert.sh` 를 실행하면 `<스펙> 에 알 수 없는 옵션 이름이 있습니다: "all_del_affinity"` 로 종료. `-expectNoAffinity` 같은 명령줄 옵션은 정상.
+- **원인**: 2026-10-30 스펙 제외 키 작업 때 `bin_os6/` 만 다시 빌드하고 `bin_os8/vm-param-check.gz` 는 그 전(PCI 패스스루) 버전으로 남았다. Go 없는 OS8 서버는 이 파일을 풀어 쓰므로 예전 바이너리가 스펙 키를 플래그로 해석하다 멈췄다. 소스는 정상(`applySpecOptions` 가 `IsDelOption` 키를 건너뜀).
+- **수정**: Go 1.26.5(.58)로 `bin_os8/vm-param-check.gz` 재빌드. `vm_setup.sh` 가 넘기는 `-del_affinity_evs` / `-del_lpage_evs` 도 OS8 에서 쓰도록 `bin_os8/affinity_setting.gz`, `bin_os8/lpage_setting.gz` 추가. 코드 변경 없음.
+- **영향 범위**: `bin_os8/{vm-param-check,affinity_setting,lpage_setting}.gz`, `README.md`·`ARCHITECTURE.md`(bin_os8 목록), `UPDATE_PCI_PASSTHROUGH.md`(체크섬).
+- **검증**: 랩 vcsim, 스펙에 `all_del_affinity=y`·`all_del_lpage=y` + `01 … -specFolder` — 예전 바이너리는 위 오류로 종료(재현), 새 바이너리는 `[스펙적용] 제외: affinity=ev01,ev02 lpage=ev01,ev02` 후 `sched.mem.lpage.enable1GPage`·affinity 가 기대값 `(없음)` 으로 OK 판정, 종료코드 0. `affinity_setting -h` 에 `-del_affinity_evs` 확인.
+
+---
+
 ## 2026-10-30 — 흐름도 SVG 다시 그림 (auto_setup 양식)
 
 - `workflow.svg`(체크 → 교정 → 재검증), `workflow-deploy.svg`(배포·갱신)를 `HPC/auto_setup` 흐름도 양식으로 교체하고, 명령별 흐름도를 `../docs/svg/`(`check_insert_01` · `vm_param_check` · `vm_param_check_fix` · `update_deploy` · `update_package`)에 두었다. 스펙 제외 키 ev 별 판정과 `-fromSetup` 반영. 코드 변경 없음 — 자세한 내용은 `VMsetup/CHANGELOG.md` 같은 날짜 항목.

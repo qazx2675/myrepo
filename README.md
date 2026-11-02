@@ -45,7 +45,7 @@ OS6 판단은 `--os6` 옵션, `VMSETUP_OS6=1`, 커널 2.6.x, `/etc/redhat-releas
 **OS6 실행파일 다시 만들기** (소스가 바뀌었을 때, Go 1.20 이 있는 빌드 서버에서): `bash build_os6.sh [/opt/go1.20/bin/go]` → `bin_os6/<이름>.gz`.
 RHEL 6 커널(2.6.32)은 Go 1.21+ 실행파일을 못 띄워서, govmomi vendor 사본을 Go 1.20 호환으로 고쳐 빌드한다(원본 `govendor/` 는 그대로).
 
-**`bin_os8/`** 에는 OS8 용으로 미리 빌드한 실행파일 중 **최근에 바뀐 것만**(지금은 `pci_passthrough`, `vm-param-check`) 들어 있다(Go 1.26.5, 정적 빌드, gzip). Go 가 없는 OS8 서버에 변경분만 반영할 때 쓰며, `setup.sh` 는 이 폴더를 읽지 않는다 — 방법은 [UPDATE_PCI_PASSTHROUGH.md](UPDATE_PCI_PASSTHROUGH.md).
+**`bin_os8/`** 에는 OS8 용으로 미리 빌드한 실행파일 중 **최근에 바뀐 것만**(지금은 `pci_passthrough`, `vm-param-check`, `affinity_setting`, `lpage_setting`) 들어 있다(Go 1.26.5, 정적 빌드, gzip). Go 가 없는 OS8 서버에 변경분만 반영할 때 쓰며, `setup.sh` 는 이 폴더를 읽지 않는다 — 방법은 [UPDATE_PCI_PASSTHROUGH.md](UPDATE_PCI_PASSTHROUGH.md).
 
 ### 비밀번호 (암호 파일)
 
@@ -113,7 +113,7 @@ V2/
 ├── ARCHITECTURE.md / PR_CHECKLIST.md      # 폴더별 역할 / 수정·배포 전 체크리스트
 ├── setup.sh                               # 전체 오프라인 빌드 (OS6 면 bin_os6/ 설치)
 ├── build_os6.sh / bin_os6/                # OS6 용 실행파일 빌드 스크립트 / 미리 빌드한 실행파일(.gz)
-├── bin_os8/                               # OS8 용 미리 빌드한 실행파일(.gz) — 최근 바뀐 도구만 (pci_passthrough, vm-param-check)
+├── bin_os8/                               # OS8 용 미리 빌드한 실행파일(.gz) — 최근 바뀐 도구만 (pci_passthrough, vm-param-check, affinity/lpage_setting)
 ├── UPDATE_PCI_PASSTHROUGH.md              # 기존 설치 서버에 PCI 패스스루 변경분만 반영하는 방법
 ├── passwd_update.sh / secret_lib.sh       # 비밀번호 암호화 등록·갱신 / 풀기 함수 (secret/ 는 git 제외)
 ├── govendor/                              # 공유 의존성 (govmomi 0.55.1 = VMsetup, 0.39.0 = vm-param-check)
