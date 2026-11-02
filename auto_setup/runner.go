@@ -63,12 +63,8 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	if err := ensureDirs(); err != nil {
 		return RunResult{}, err
 	}
-	code, err := newCode()
+	code, dir, err := reserveCode()
 	if err != nil {
-		return RunResult{}, err
-	}
-	dir := filepath.Join(runsDir(), code)
-	if err := os.MkdirAll(dir, 0755); err != nil {
 		return RunResult{}, err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "targets.txt"), []byte(strings.Join(hosts, "\n")+"\n"), 0644); err != nil {
@@ -120,7 +116,13 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	cmd.Stdout = lf
 	cmd.Stderr = lf
 	logf("os_check 실행: code=%s user=%s %d대 os6=%v 모드=%s", code, j.User, len(hosts), hasOS6, modeLabel(j.RunMode))
-	if err := cmd.Run(); err != nil {
+	err = cmd.Start()
+	if err == nil {
+		stopWatch := watchGossh(code, cmd.Process.Pid) // hang_min 을 넘긴 gossh 호출은 걸린 호스트만 취소 (hang.go)
+		err = cmd.Wait()
+		stopWatch()
+	}
+	if err != nil {
 		logf("[X] os_check 종료 오류: code=%s: %v", code, err)
 	}
 	lf.Close()
@@ -140,6 +142,25 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 		logf("[!] os_check 비정상 종료(결과 리포트 없음): code=%s", code)
 	}
 	return RunResult{Processed: processed, Abnormal: abnormal, Code: code, Failed: parsePostapplyFailed(string(post), hosts)}, nil
+}
+
+// reserveCode: 새 code 와 runs/<code> 디렉터리. 동시에 도는 run 끼리 같은 code 를 고르지 않도록 디렉터리를 Mkdir(이미 있으면 실패)로 선점한다.
+func reserveCode() (string, string, error) {
+	for i := 0; i < 100; i++ {
+		code, err := newCode()
+		if err != nil {
+			return "", "", err
+		}
+		dir := filepath.Join(runsDir(), code)
+		err = os.Mkdir(dir, 0755)
+		if err == nil {
+			return code, dir, nil
+		}
+		if !os.IsExist(err) {
+			return "", "", err
+		}
+	}
+	return "", "", errors.New("사용 가능한 code 없음")
 }
 
 // postRunHook: run 전/후 단계 확장 지점(GPU 드라이버 등). 현재는 아무 것도 하지 않는다.
@@ -199,6 +220,11 @@ func remoteTmpSh(v string, dir, keep bool) string {
 //   - AUTO_SETUP_OS6_HOSTS(이번 run 의 os6 경로 호스트 목록 파일)가 있고 이 서버의 gossh(realGossh)를 찾았으면 -w 목록을 경로별로 나눠
 //     os8 호스트는 이 서버의 gossh 로, os6 호스트만 os6_mgmt 경유로 실행하고 출력·결과 파일을 합친다
 //     (전에는 run 에 os6 호스트가 하나라도 있으면 os8 호스트까지 전부 os6_mgmt 경유 — os6_mgmt 에서 안 닿는 os8 호스트는 실패).
+//
+// gossh 멈춤 감시(hang.go): 래퍼는 INT 를 무시한 채 실행되고(체크스크립트 gsh 의 INT 무시 트랩) os6_mgmt 의 gossh 는 ssh 너머에 있어
+// 감시가 직접 시그널을 줄 수 없다. 원격 명령이 표지(AUTO_SETUP_GW=…)를 export 한 뒤 gossh 를 띄우고, 래퍼는 USR1 을 받으면
+// ssh 로 그 표지를 가진 os6_mgmt 의 gossh 에 INT×2(걸린 호스트 취소), USR2 면 TERM 을 보낸다. bash 는 전경 명령이 끝나야
+// 트랩을 실행하므로 원격 ssh 는 백그라운드로 띄우고 wait(트랩에 끊기면 다시 wait)로 기다린다 — 출력·결과 파일은 종전과 같다.
 func os6WrapperScript(realGossh string) string {
 	return `#!/bin/bash
 # gossh - os6_mgmt 경유 gossh 래퍼 (auto_setup 이 생성, 직접 수정 금지)
@@ -207,6 +233,26 @@ gossh=` + shq(shq(os6_gossh)) + `
 real=` + shq(realGossh) + `
 mark='==AUTO_SETUP_GOSSH_RES=='
 pre=` + shq(remoteTmpSh("f", false, false)) + `
+tok=AUTO_SETUP_GW=w$$.$(date +%s).$RANDOM
+kint=` + shq(gosshPidsSh("@KV@", commName(os6_gossh))+gosshSigSh(false)) + `
+kterm=` + shq(gosshPidsSh("@KV@", commName(os6_gossh))+gosshSigSh(true)) + `
+# cancel <원격 조각> : os6_mgmt 에서 이 래퍼의 표지를 가진 gossh 에 시그널 (auto_setup 데몬의 멈춤 감시가 USR1/USR2 로 요청)
+cancel() {
+	local k=${1//@KV@/$tok}
+	ssh -o BatchMode=yes -o ConnectTimeout=10 "$mgmt" "bash -c '$k'" < /dev/null > /dev/null 2>&1
+}
+trap 'cancel "$kint"' USR1
+trap 'cancel "$kterm"' USR2
+# wt <pid> : 끝날 때까지 기다려 종료코드 반환 (트랩으로 wait 가 끊기면 다시 기다림)
+wt() {
+	local r
+	while :; do
+		wait "$1"
+		r=$?
+		[ $r -gt 128 ] && kill -0 "$1" 2>/dev/null && continue
+		return $r
+	done
+}
 args=("$@")
 wi=-1
 for ((i = 0; i < ${#args[@]}; i++)); do
@@ -218,7 +264,7 @@ done
 
 # remote <목록> <결과 접두> : 목록을 stdin 으로 넘겨 os6_mgmt 에서 gossh 실행. 출력은 그대로, 결과 파일은 <결과 접두>_* 로 가져온다
 remote() {
-	local list=$1 dest=$2 q="" i c bq e res rc suf b
+	local list=$1 dest=$2 q="" i c bq e res rc suf b rcf
 	for ((i = 0; i < ${#args[@]}; i++)); do
 		if [ $i -eq $wi ]; then
 			q="$q"' "$f"'
@@ -226,19 +272,21 @@ remote() {
 		fi
 		q="$q $(printf '%q' "${args[i]}")"
 	done
-	c="$pre"'cat > "$f"; '"$gossh$q; "'rc=$?; echo '"$mark"'; for x in "$f"_*; do [ -f "$x" ] && echo "${x#$f} $(base64 -w0 < "$x")"; done; rm -f "$f" "$f"_*; exit $rc'
-	res=$(mktemp) || return 1
+	c="$pre"'export '"$tok"'; cat > "$f"; '"$gossh$q; "'rc=$?; echo '"$mark"'; for x in "$f"_*; do [ -f "$x" ] && echo "${x#$f} $(base64 -w0 < "$x")"; done; rm -f "$f" "$f"_*; exit $rc'
+	res=$(mktemp) && rcf=$(mktemp) || return 1
 	if [[ $c == *'!'* ]]; then
 		# ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
 		bq=$'\x60'
 		e=$(printf %s "$c" | base64 -w0 | sed 's/../&./g')
-		ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
-		rc=${PIPESTATUS[0]}
+		{ ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$list"; echo $? > "$rcf"; } | awk -v m="$mark" -v o="$res" "$filt" &
 	else
 		c=${c//\'/\'\\\'\'}
-		ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c '$c'" < "$list" | awk -v m="$mark" -v o="$res" "$filt"
-		rc=${PIPESTATUS[0]}
+		{ ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c '$c'" < "$list"; echo $? > "$rcf"; } | awk -v m="$mark" -v o="$res" "$filt" &
 	fi
+	wt $!
+	rc=$(cat "$rcf" 2>/dev/null)
+	rc=${rc:-1}
+	rm -f "$rcf"
 	if [ $wi -ge 0 ]; then
 		while read -r suf b; do
 			case "$suf" in _*) printf '%s' "$b" | base64 -d > "${dest}${suf}" 2>/dev/null ;; esac
@@ -279,7 +327,7 @@ largs[wi]=$L
 lp=$!
 remote "$R" "$R"
 rrc=$?
-wait $lp
+wt $lp
 lrc=$?
 cat "$lo"
 cat "$le" >&2

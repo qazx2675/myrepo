@@ -54,6 +54,10 @@ var (
 
 	// 종료된 job(jobs/done)을 화면·status 에 보여 주는 기간(일). 1 이상의 정수, 비우거나 잘못되면 1일(24시간) (conf.go 의 closedKeepDur)
 	closed_keep_days = ""
+
+	// run 동시 실행·gossh 멈춤 감시 (conf.go 의 maxRuns·hangLimit)
+	max_runs = "" // 동시에 실행하는 run(설정체크) 최대 개수. 1 이상의 정수(1 미만 숫자는 1 = 이전처럼 한 번에 하나), 비우거나 숫자가 아니면 4
+	hang_min = "" // run 의 gossh 호출 1회가 이 시간(분)을 넘기면 걸린 호스트만 취소(INT×2)하고 계속. 0 이면 끔, 비우거나 숫자가 아니면 7
 )
 
 // adminMode: `auto_setup --admin` 으로 TUI 를 띄웠을 때만 true. 변경 메뉴를 conf 와 무관하게 켠다 (데몬·request 에는 영향 없음).
