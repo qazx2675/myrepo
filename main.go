@@ -63,6 +63,11 @@ func findBrowserExecutable() (string, string) {
 	return "", ""
 }
 
+const (
+	heartbeatTimeoutSec = 600 // 하트비트 무응답 자동 종료 한도(초)
+	closeGraceSec       = 10  // 창 닫힘 신호 후 새 요청이 없으면 종료까지 대기(초), 새로고침 구분용
+)
+
 // launchAppWindow opens the GUI in a standalone application window
 func launchAppWindow(url string) (*exec.Cmd, error) {
 	browserPath, _ := findBrowserExecutable()
@@ -138,6 +143,7 @@ func main() {
 	mux.HandleFunc("/api/create-sample-target", serverState.handleCreateSampleTarget)
 	mux.HandleFunc("/api/open-file", serverState.handleOpenFile)
 	mux.HandleFunc("/api/exit", serverState.handleExit)
+	mux.HandleFunc("/api/closing", serverState.handleClosing)
 	mux.HandleFunc("/api/heartbeat", func(w http.ResponseWriter, r *http.Request) {
 		serverState.recordHeartbeat()
 		respondJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -162,13 +168,20 @@ func main() {
 	fmt.Printf("[SOP Generator] 서버 시작됨: %s\n", appURL)
 	_, _ = launchAppWindow(appURL)
 
-	// Heartbeat watcher: Auto-shutdown if UI is closed and no heartbeat for 45s
+	// Heartbeat watcher: 창이 백그라운드/최소화되면 브라우저가 타이머를 1분에 1번 수준으로 늦추므로
+	// 하트비트 무응답 한도는 넉넉히(10분) 두고, 정상 종료는 /api/exit·/api/closing(창 닫힘) 신호에 맡긴다.
+	// 생성/스캔 중(muGen 잠김)에는 절대 종료하지 않는다.
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			diff := time.Now().Unix() - serverState.lastHeartbeat.Load()
-			if diff > 45 {
+			if !serverState.muGen.TryLock() {
+				continue // 생성/스캔 진행 중
+			}
+			serverState.muGen.Unlock()
+			now := time.Now().Unix()
+			closed := serverState.closedAt.Load()
+			if now-serverState.lastHeartbeat.Load() > heartbeatTimeoutSec || (closed > 0 && now-closed > closeGraceSec) {
 				serverState.requestExit()
 				return
 			}

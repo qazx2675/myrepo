@@ -1896,14 +1896,30 @@ func generateWithExcel(app, workbooks *ole.IDispatch, req SOPGenerateRequest, se
 	measurer.close()
 
 	// 6. 행 높이 확장 (도형 배치 전에 확정해야 위치가 밀리지 않음)
-	for _, sp := range plans {
+	// 데이터 행이 모자라면(행 높이 409pt 상한) 데이터 블록 밑에 행을 덧붙이므로, 아래 섹션 행 번호를 그만큼 민다
+	for i := range plans {
+		sp := &plans[i]
 		need := 0.0
 		for _, cp := range sp.columns {
 			need = math.Max(need, cp.height)
 		}
 		if need > 0 {
-			if !fitRowHeights(dstWs, sp.sec, need*1.15+blockPadding) { // 줄 높이 추정 오차 여유
+			added, ok := fitRowHeights(dstWs, sp.sec, need*1.15+blockPadding) // 줄 높이 추정 오차 여유
+			if !ok {
 				*warnings = append(*warnings, fmt.Sprintf("경고: [%s] 내용이 행 높이 최대치(409pt)를 초과하여 일부가 잘릴 수 있습니다", sp.sec.Name))
+			}
+			if added > 0 {
+				sp.sec.DataEndRow += added
+				for j := i + 1; j < len(plans); j++ {
+					below := &plans[j]
+					below.sec.TitleRow += added
+					below.sec.HeaderRow += added
+					below.sec.DataStartRow += added
+					below.sec.DataEndRow += added
+					for k := range below.columns {
+						below.columns[k].row += added
+					}
+				}
 			}
 		}
 	}
@@ -1964,14 +1980,19 @@ func deleteShapesIn(ws *ole.IDispatch, areas []mergeBox) error {
 }
 
 // fitRowHeights spreads the needed height evenly over the data rows (max 409pt each).
-// Returns false when need exceeds 409pt*rows (content may be clipped).
-func fitRowHeights(ws *ole.IDispatch, sec SectionInfo, need float64) bool {
+// 행 높이는 409pt 가 상한이라 데이터 블록이 모자라면 블록 밑에 행을 먼저 덧붙인다(added).
+// ok 는 그래도 need 가 409pt*rows 를 넘어 내용이 잘릴 수 있으면 false.
+func fitRowHeights(ws *ole.IDispatch, sec SectionInfo, need float64) (added int, ok bool) {
 	n := sec.DataEndRow - sec.DataStartRow + 1
 	if n <= 0 {
-		return true
+		return 0, true
+	}
+	if want := int(math.Ceil(need / maxRowHeight)); want > n {
+		added = insertDataRows(ws, sec, want-n)
+		n += added
 	}
 	per := math.Min(maxRowHeight, math.Ceil(need/float64(n)))
-	for r := sec.DataStartRow; r <= sec.DataEndRow; r++ {
+	for r := sec.DataStartRow; r <= sec.DataEndRow+added; r++ {
 		row, err := getDisp(ws, "Rows", r)
 		if err != nil {
 			continue
@@ -1980,7 +2001,43 @@ func fitRowHeights(ws *ole.IDispatch, sec SectionInfo, need float64) bool {
 		oleutil.PutProperty(row, "RowHeight", math.Max(cur, per))
 		row.Release()
 	}
-	return need <= maxRowHeight*float64(n)
+	return added, need <= maxRowHeight*float64(n)
+}
+
+// insertDataRows adds k rows right below the data block (서식은 위 행을 따름) and
+// merges each data cell of the section down over them. Returns the rows really added.
+func insertDataRows(ws *ole.IDispatch, sec SectionInfo, k int) int {
+	c := sec.Cols
+	var boxes []mergeBox
+	seen := map[int]bool{}
+	for _, col := range []int{c.StepCol, c.TaskNameCol, c.PreTaskDetailCol, c.TargetObjCol, c.VerifyMethodCol, c.WorkerCol, c.VerifierCol, c.ResultCol} {
+		if col == 0 {
+			continue
+		}
+		box, err := readMergeBox(ws, sec.DataStartRow, col)
+		if err != nil || seen[box.Col1] {
+			continue
+		}
+		seen[box.Col1] = true
+		boxes = append(boxes, box)
+	}
+
+	first := sec.DataEndRow + 1
+	rows, err := getDisp(ws, "Rows", fmt.Sprintf("%d:%d", first, first+k-1))
+	if err != nil {
+		return 0
+	}
+	defer rows.Release()
+	if _, err := oleutil.CallMethod(rows, "Insert"); err != nil {
+		return 0
+	}
+	for _, b := range boxes {
+		if rg, err := getDisp(ws, "Range", cell(b.Col1, sec.DataStartRow)+":"+cell(b.Col2, sec.DataEndRow+k)); err == nil {
+			oleutil.CallMethod(rg, "Merge")
+			rg.Release()
+		}
+	}
+	return k
 }
 
 func writeCell(ws *ole.IDispatch, r, c int, value string) {

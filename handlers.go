@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,7 @@ type ServerState struct {
 	exitChan      chan struct{}
 	onceExit      sync.Once
 	muGen         sync.Mutex
+	closedAt      atomic.Int64 // 창 닫힘(pagehide) 신호 시각(Unix초), 0이면 없음
 }
 
 func NewServerState(cfgMgr *ConfigManager) *ServerState {
@@ -33,6 +35,16 @@ func NewServerState(cfgMgr *ConfigManager) *ServerState {
 
 func (s *ServerState) recordHeartbeat() {
 	s.lastHeartbeat.Store(time.Now().Unix())
+	s.closedAt.Store(0) // 새로 요청이 오면(새로고침 등) 창 닫힘 신호는 취소
+}
+
+// recoverPanic 핸들러 패닉을 JSON 오류로 돌려준다 (net/http 가 연결을 끊어 "Failed to fetch" 가 되는 것을 방지)
+// 반드시 defer s.recoverPanic(w) 형태로 직접 호출해야 한다.
+func (s *ServerState) recoverPanic(w http.ResponseWriter) {
+	if rec := recover(); rec != nil {
+		fmt.Printf("[오류] 핸들러 패닉: %v\n%s\n", rec, debug.Stack())
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("내부 오류(패닉): %v", rec))
+	}
 }
 
 func (s *ServerState) requestExit() {
@@ -113,6 +125,7 @@ func (s *ServerState) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 // Handler: POST /api/target/load (JSON {target_path} or multipart target_file)
 func (s *ServerState) handleLoadTarget(w http.ResponseWriter, r *http.Request) {
+	defer s.recoverPanic(w)
 	s.recordHeartbeat()
 	if r.Method != http.MethodPost {
 		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -211,6 +224,7 @@ func (s *ServerState) handleLoadTarget(w http.ResponseWriter, r *http.Request) {
 
 // Handler: POST /api/generate
 func (s *ServerState) handleGenerateSOP(w http.ResponseWriter, r *http.Request) {
+	defer s.recoverPanic(w)
 	s.recordHeartbeat()
 	if r.Method != http.MethodPost {
 		respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -312,6 +326,12 @@ func (s *ServerState) handleOpenFile(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"path":    filePath,
 	})
+}
+
+// Handler: POST /api/closing — 창이 닫힐 때 sendBeacon 으로 호출 (새로고침이면 곧바로 오는 다음 요청이 취소)
+func (s *ServerState) handleClosing(w http.ResponseWriter, r *http.Request) {
+	s.closedAt.Store(time.Now().Unix())
+	respondJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // Handler: POST /api/exit

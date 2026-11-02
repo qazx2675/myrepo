@@ -436,6 +436,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 5000);
 
+  // 창 닫힘(pagehide) 시 서버에 알림 — 새로고침이면 서버가 곧 오는 다음 요청으로 취소 처리
+  window.addEventListener("pagehide", () => {
+    try { navigator.sendBeacon("/api/closing"); } catch (e) { /* ignore */ }
+  });
+
   function escapeHtml(str) {
     if (!str) return "";
     return str.replace(/[&<>"']/g, (m) => ({
