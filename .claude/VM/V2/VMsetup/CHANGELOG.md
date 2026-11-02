@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-11-02 — pci_passthrough: vCenter 클러스터에서 `QueryConfigTarget 실패: ... parameter was not correct: host` 대응
+
+- **증상**: 회사 vCenter(클러스터 `Task_Maintenance` 안 호스트)에서 `pci_passthrough -ev01Pci mellanox -vcTargetIP <vCenter>` 가 `BMev01 실패: 0000:06:00.0 QueryConfigTarget 실패: ServerFaultCode: A specified parameter was not correct: host` 로 멈춤. 같은 명령을 ESXi 직접 접속(`-vcTargetIP <ESXi IP> -id root`)으로 하면 연결·부팅 정상, vSphere Client 의 PCI 디바이스 추가도 정상 → vCenter 가 VM EnvironmentBrowser 의 호스트 지정 조회만 거부.
+- **수정(`pci_passthrough-source/main.go`)**: 장치 조회를 `queryTargets` 로 바꿔, 실패하면 VM EnvironmentBrowser 호스트 미지정 → 클러스터 EnvironmentBrowser + 호스트 → 클러스터 호스트 미지정 순으로 다시 묻는다. 호스트 미지정 결과는 `SystemId` 가 한 가지일 때만 쓴다(다른 호스트 값으로 붙이지 않게). 첫 방식이 아닌 것으로 성공하면 `[정보]` 한 줄, 모두 실패하면 방식별 사유를 결과 비고에 남긴다. 호스트 조회에 `parent`(클러스터) 속성 하나 추가. 나머지 동작은 같음.
+- **검증 도구**: `.claude/VM-PCI-패스스루-통합/검증/pcisim` 에 `-rejectHostArg`(호스트 지정 조회를 같은 메시지로 거부) 추가.
+- **영향 범위**: `VMsetup/pci_passthrough-source/{main.go,README.md}`, `bin_os6/pci_passthrough.gz`, `bin_os8/pci_passthrough.gz`, `UPDATE_PCI_PASSTHROUGH.md`(체크섬), pcisim `main.go`·`README.md`. `vm_setup.sh` 변경 없음.
+- **검증**: 랩 .58 `go vet`/빌드. pcisim 시나리오 — A 기준선(거부 없음): 기존처럼 1번째 방식으로 성공, `[정보]` 없음. B `-rejectHostArg` 1호스트: 2번째 방식으로 성공 → 연결·전원 ON. C 2호스트(bm02 장치 비활성): 성공. D 2호스트 모두 장치 활성: bm01 성공, bm02 는 결과가 섞여(vcsim 은 VM·클러스터 EnvironmentBrowser 공유) 방식별 사유와 함께 실패 — 잘못된 SystemId 로 붙이지 않음 확인. OS6 실행파일(Go 1.20, .58 의 `/opt/go1.20` — .60 접속 불가)로 B 재실행 통과, CentOS 6 컨테이너 `-h` 확인. **실 vCenter 에서는 아직 확인 전.**
+
+---
+
 ## 2026-10-30 — 흐름도 SVG 를 auto_setup 양식으로 다시 그림 + 명령별 흐름도(`docs/svg/`) 신설
 
 - **전체 흐름도 4종 교체**: `V2/workflow.svg`, `VMsetup/workflow.svg`, `vm-param-check-usability-improvement/workflow.svg`, `workflow-deploy.svg` 를 mermaid 렌더링 대신 `HPC/auto_setup/workflow.svg` 와 같은 양식(단계 밴드 · ⌨ 작업자 입력 · 보충 설명 점선 상자)으로 다시 그렸다. 내용은 지금 코드 기준 — 호스트 등록(`main_conn`)·MAC 조사·전원 고성능·라이선스·태그·MAC 목록 복사 단계, 스펙 제외 키(`all_del_*` / `evNN_del_*`), `01.vm_setting_check_insert.sh -fromSetup` 반영.

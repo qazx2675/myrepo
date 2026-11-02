@@ -24,6 +24,7 @@ bash selftest.sh                                      # 자체 점검 (새로 �
 | 호스트 | `bm01.saccae.com`, `bm02.saccae.com` (클러스터 `DC0_C0`) | `PCISIM_HOSTS` (쉼표 구분) |
 | 재부팅 필요 장치 | 없음 | `start -rebootDevs=0000:3b:00.1,bm02.saccae.com/0000:3b:00.0` |
 | 패스스루 backing Edit 거부 | 받음 | `start -rejectPciEdit` |
+| QueryConfigTarget 호스트 지정 거부 | 받음 | `start -rejectHostArg` |
 
 V2 도구는 `-vcTargetIP=127.0.0.1:8989 -id=lscsystems@vsphere.local` 과 `VC_PASSWORD=pcisim-pass` 로 붙는다. 로그는 `pcisim.log`.
 
@@ -77,6 +78,8 @@ g·h 의 근거: 64bit MMIO 는 EFI 에서만 동작하고, 창은 GPU BAR 합�
 판정은 모두 로그에 남는다: `[POWERON] 허용 vm=... host=... 장치=[...]`, `[POWERON] 거부 vm=... 사유=...`, 패스스루가 없는 VM 은 `[POWERON] 허용 ... (패스스루 장치 없음)`.
 
 `ReconfigVM_Task` 로 `VirtualPCIPassthrough` 를 붙이거나 backing 을 고치는(Edit) 것은 vcsim 이 그대로 받는다. 단 backing 의 `deviceName` 은 비우고 저장한다 — 실 ESXi 8.0.3 이 그렇게 돌려준다(2026-10-28 실측, 장치명 기준 vendor 판정은 호스트 `hardware.pciDevice` 로 해야 함). `start -rejectPciEdit` 로 띄우면 패스스루 장치의 Edit 을 `NotSupported` 로 거부한다(로그 `[RECONFIG] 거부`) — 실 vCenter 가 Edit 을 받지 않을 때 `pci_passthrough` 가 "제거 후 다시 연결"로 넘어가는지 보는 용도.
+
+`start -rejectHostArg` 로 띄우면 `QueryConfigTarget` 에 host 를 지정한 호출을 `InvalidArgument`(`A specified parameter was not correct: host`)로 거부한다(로그 `[QUERYCONFIGTARGET] 거부`) — 실 vCenter 클러스터에서 본 실패(2026-11-02)를 재현해 `pci_passthrough` 가 호스트 미지정 조회로 넘어가는지 보는 용도. vcsim 은 VM 과 클러스터가 같은 EnvironmentBrowser 를 쓰므로, 장치가 활성인 호스트가 2대 이상이면 호스트 미지정 결과가 섞여 도구가 실패로 끝나는 것이 정상이다.
 
 ## 시나리오 예
 

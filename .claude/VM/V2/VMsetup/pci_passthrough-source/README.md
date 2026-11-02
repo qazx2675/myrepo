@@ -86,6 +86,17 @@ cd V2/VMsetup
 
 **SSH·`esxcli` 는 필요 없습니다.** QueryConfigTarget 은 vCenter API 라서 vCenter 계정만으로 ESXi system uuid 를 얻습니다(호스트마다 SSH 를 열거나 root 비밀번호를 쓸 일이 없음). 호스트 쪽 `esxcli system uuid get` 값과 같은지는 실장비에서 한 번 맞춰 보면 됩니다(보류 목록).
 
+**vCenter 클러스터에서 `QueryConfigTarget 실패: ... A specified parameter was not correct: host`**: 회사 vCenter(클러스터 안 호스트)에서 VM 의 EnvironmentBrowser 에 호스트를 지정하면 이렇게 거부됐습니다(2026-11-02, 같은 VM 을 ESXi 직접 접속으로는 정상). 그래서 조회가 실패하면 다음 순서로 다시 묻습니다. 첫 번째가 아닌 방식으로 성공하면 `[정보] <VM> 장치 조회(QueryConfigTarget): <방식> 방식으로 성공 (앞선 시도 실패: ...)` 한 줄을 남깁니다.
+
+| 순서 | 방식 | 비고 |
+|---|---|---|
+| 1 | VM 의 EnvironmentBrowser + 호스트 | 기본 (ESXi 직접 접속·vcsim) |
+| 2 | VM 의 EnvironmentBrowser, 호스트 미지정 | govc `device.pci.add` 와 같은 방식 |
+| 3 | 호스트가 속한 클러스터의 EnvironmentBrowser + 호스트 | |
+| 4 | 클러스터의 EnvironmentBrowser, 호스트 미지정 | |
+
+호스트를 지정하지 않은 2·4 는 여러 호스트의 장치가 섞여 나올 수 있어서, 결과의 `SystemId` 가 한 가지일 때만 씁니다(섞여 있으면 다른 호스트 SystemId 로 붙여 부팅 실패하는 것을 막으려고 그 방식을 실패로 봄). 네 가지가 모두 실패하면 결과 비고에 방식별 사유를 `/` 로 이어 보여 줍니다 — 이때는 ESXi 에 직접 접속(`-vcTargetIP <ESXi IP> -id root`)해서 호스트 단위로 실행하면 됩니다.
+
 ### 이미 붙어 있는 장치 교정
 
 예전 스크립트(하드웨어 UUID 사용)로 붙였거나, VM 을 다른 호스트로 옮겨서 backing 값이 지금 호스트와 맞지 않는 VM 도 고칩니다. 전원 ON 전에 **VM 에 붙은 패스스루 장치 전부**(이번에 배분한 장치만이 아님)를 QueryConfigTarget 의 같은 `Id` 항목과 비교합니다.
@@ -186,5 +197,5 @@ VM 마다 한 줄, 끝에 요약 표가 나옵니다. `설정 변경[...]` 안�
 
 - **PCI function 단위 배분** — 지금은 ev 마다 PCI 장치(function) 1개씩 줍니다(예: 듀얼 포트 카드의 `3b:00.0` 은 ev01, `3b:00.1` 은 ev02). 카드 단위(같은 슬롯 `bus:slot` 의 function 전부)를 한 VM 에 줘야 하는 경우가 생기면, 배분 단계에서 장치를 `도메인:버스:슬롯` 으로 묶어 묶음째 배분하고, 활성화·연결도 묶음의 function 전부에 하도록 바꿔야 합니다(`pciPassthruInfo.dependentDevice` 도 함께 확인).
 - 랩 ESXi 8.0.3 에서 확인한 것(2026-10-29, ESXi 직접 접속, 가상 e1000e 장치): 활성화 직후 바로 Active, QueryConfigTarget SystemId = `esxcli system uuid get` 값, 하드웨어 UUID 로 붙이면 `Module 'DevicePowerOn' power on failed`, backing Edit(SystemId 교정)을 받음, 업링크 vmnic 거부.
-- 실장비 확인이 필요한 것: vCenter 경유에서도 backing Edit 을 받는지(안 받으면 제거 후 다시 연결로 넘어감), Mellanox 활성화 직후 재부팅 필요 여부, GPU 64bit MMIO 크기 적정값과 BIOS 펌웨어에서의 실제 동작.
+- 실장비 확인이 필요한 것: vCenter 클러스터에서 위 재시도 중 어느 방식이 통하는지(2026-11-02 수정, `[정보]` 줄로 확인), vCenter 경유에서도 backing Edit 을 받는지(안 받으면 제거 후 다시 연결로 넘어감), Mellanox 활성화 직후 재부팅 필요 여부, GPU 64bit MMIO 크기 적정값과 BIOS 펌웨어에서의 실제 동작.
 - 도구는 네트워크 업링크 vmnic 만 막는다. 디스크 컨트롤러와 겹치는 벤더 값(예: 랩의 VMware `0x15ad`)은 주지 마세요.

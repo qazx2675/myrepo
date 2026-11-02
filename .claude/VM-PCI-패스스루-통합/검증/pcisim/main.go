@@ -253,7 +253,8 @@ func (s *sim) lookup(name string) *hostState {
 
 type envBrowser struct {
 	*simulator.EnvironmentBrowser
-	s *sim
+	s          *sim
+	rejectHost bool // -rejectHostArg
 }
 
 // Get 은 PropertyCollector 가 감싼 객체 대신 원래 객체를 읽게 한다.
@@ -268,6 +269,11 @@ func unwrap(ctx *simulator.Context, ref types.ManagedObjectReference) {
 
 func (b *envBrowser) QueryConfigTarget(ctx *simulator.Context, req *types.QueryConfigTarget) soap.HasFault {
 	unwrap(ctx, b.Self)
+	// -rejectHostArg: 실 vCenter 클러스터에서 본 "A specified parameter was not correct: host" 흉내
+	if b.rejectHost && req.Host != nil {
+		log.Printf("[QUERYCONFIGTARGET] 거부 eb=%s host=%s (-rejectHostArg)", b.Self.Value, req.Host.Value)
+		return &methods.QueryConfigTargetBody{Fault_: simulator.Fault("A specified parameter was not correct: host", &types.InvalidArgument{InvalidProperty: "host"})}
+	}
 	res := b.EnvironmentBrowser.QueryConfigTarget(ctx, req)
 	body, ok := res.(*methods.QueryConfigTargetBody)
 	if !ok || body.Res == nil || body.Res.Returnval == nil {
@@ -608,6 +614,7 @@ func main() {
 	hostsFlag := flag.String("hosts", "bm01.saccae.com,bm02.saccae.com", "만들 호스트 이름 (쉼표 구분, 클러스터 DC0_C0 안에 만든다)")
 	rebootDevs := flag.String("rebootDevs", "", "켠 뒤 호스트 재부팅이 있어야 활성이 되는 장치 (쉼표 구분). 예: 0000:3b:00.1 또는 bm02.saccae.com/0000:3b:00.0")
 	rejectPciEdit := flag.Bool("rejectPciEdit", false, "ReconfigVM 에서 패스스루 장치의 Edit(backing 수정)을 거부한다 (제거 후 다시 연결 경로 시험용)")
+	rejectHostArg := flag.Bool("rejectHostArg", false, "QueryConfigTarget 에 host 를 지정하면 InvalidArgument(host) 로 거부한다 (실 vCenter 클러스터 재현용)")
 	flag.Parse()
 
 	var hostNames []string
@@ -731,7 +738,7 @@ func main() {
 			}
 		case "QueryConfigTarget":
 			if b, ok := ctx.Map.Get(m.This).(*simulator.EnvironmentBrowser); ok {
-				w = &envBrowser{EnvironmentBrowser: b, s: s}
+				w = &envBrowser{EnvironmentBrowser: b, s: s, rejectHost: *rejectHostArg}
 			}
 		}
 		if w != nil && ctx.Session != nil {
