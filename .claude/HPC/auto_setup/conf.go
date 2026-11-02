@@ -72,6 +72,10 @@ func confVars() map[string]*string {
 
 		// 종료 job 표시 기간(일)
 		"closed_keep_days": &closed_keep_days,
+
+		// run 동시 실행 개수·gossh 멈춤 감시
+		"max_runs": &max_runs,
+		"hang_min": &hang_min,
 	}
 }
 
@@ -139,6 +143,35 @@ func closedKeepDur() time.Duration {
 		return time.Duration(v) * 24 * time.Hour
 	}
 	return closedKeep
+}
+
+// max_runs·hang_min 이 비었거나 숫자가 아닐 때 쓰는 값
+const (
+	maxRunsDefault = 4
+	hangMinDefault = 7
+)
+
+// maxRuns: 동시에 실행하는 run 최대 개수 — conf max_runs (1 이상의 정수). 1 미만 숫자는 1(이전처럼 한 번에 하나),
+// 비우거나 숫자가 아니면 4. 자동 1차·늦은 묶음·수동 run 이 같은 상한을 나눠 쓴다.
+func maxRuns() int {
+	v, err := strconv.Atoi(strings.TrimSpace(max_runs))
+	if err != nil {
+		return maxRunsDefault
+	}
+	if v < 1 {
+		return 1
+	}
+	return v
+}
+
+// hangLimit: run 의 gossh 호출 1회 멈춤 판정 시간 — conf hang_min(분, 0 이상의 정수). 0 이면 감시 끔(0 반환),
+// 비우거나 음수·숫자가 아니면 7분.
+func hangLimit() time.Duration {
+	v, err := strconv.Atoi(strings.TrimSpace(hang_min))
+	if err != nil || v < 0 {
+		return hangMinDefault * time.Minute
+	}
+	return time.Duration(v) * time.Minute
 }
 
 // ipChangeEnabled: IP 변경 메뉴 가시성 = --admin 이거나 conf enable_ip_change 가 켜짐

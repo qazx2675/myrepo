@@ -70,6 +70,7 @@ func TestWriteRequest(t *testing.T) {
 // manual-run: 완료 여부와 상관없이 수락·수동 run(그룹 호스트만, runs 에 manual 기록, wall), 미완료 그룹(b.yml)은 접속불가로 알림, 중복·알 수 없는 종류 거부
 func TestManualRunRequest(t *testing.T) {
 	setupDir(t)
+	withMaxRuns(t, "1") // 직렬(종전) 순서 확인 — 병렬은 daemon_par_test.go
 	x := newX(map[string]*simHost{"h1": install(60, 125, 400, 600), "h2": oldOS()})
 	id := submitBody(t, 0, fmt.Sprintf(groupJobBody, base))
 	d := drive(t, x.world, newXDaemon(x, false, false), 0, 95)

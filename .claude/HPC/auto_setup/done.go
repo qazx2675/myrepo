@@ -82,19 +82,14 @@ func (d *Daemon) acceptDoneRecords(now time.Time) {
 			owner[name] = j
 		}
 	}
-	inRun := map[string]bool{}
-	if d.cur != nil {
-		for _, n := range d.cur.hosts {
-			inRun[n] = true
-		}
-	}
+	inRun := d.busyHosts() // 실행 중인 run(여러 개)의 대상 호스트 → 그 run
 	for _, e := range ents {
 		name := e.Name()
 		if e.IsDir() || strings.HasPrefix(name, ".") {
 			continue
 		}
 		j := owner[name]
-		if j == nil || inRun[name] && d.cur.jobID == j.ID {
+		if j == nil || inRun[name] != nil && inRun[name].jobID == j.ID {
 			continue
 		}
 		h := j.Hosts[name]

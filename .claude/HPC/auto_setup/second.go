@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func init() { newSecond = func() Second { return NewRealSecond() } }
@@ -34,11 +36,16 @@ func secondSSH(stdin, remote string) (string, error) {
 	return runExternal(stdin, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30", os6_mgmt, remoteBash(remote))
 }
 
-// secondRunScript: 원격 임시 디렉터리 생성 → 목록 수신(stdin) → os_check -auto 실행 (sh 호환 문법)
-func secondRunScript(user string) string {
+// secondRunScript: 원격 임시 디렉터리 생성 → 목록 수신(stdin) → os_check -auto 실행 (sh 호환 문법).
+// env(이름=값, [A-Za-z0-9_.=] 만)는 함께 export 한다 — gossh 멈춤 감시의 표지 (secondHangWatch)
+func secondRunScript(user string, env ...string) string {
 	oc := os6OSCheckPath()
+	ex := ""
+	for _, kv := range env {
+		ex += " " + kv
+	}
 	// TMPDIR=$d: 체크스크립트(config_check)의 작업 디렉터리도 이 안에 — 회수 뒤 rm -rf 로 함께 지워진다
-	return remoteTmpSh("d", true, true) + "export TMPDIR=\"$d\"; echo " + secondDirMarker + "$d; cat > \"$d/targets.txt\" && cd \"$d\" && " +
+	return remoteTmpSh("d", true, true) + "export TMPDIR=\"$d\"" + ex + "; echo " + secondDirMarker + "$d; cat > \"$d/targets.txt\" && cd \"$d\" && " +
 		dhcpLinkSh(dhcpCandidates(oc)) + " && " +
 		"bash " + shq(oc) + " -auto " + shq(user) + " targets.txt > os_check.log 2>&1; echo " + secondRCMarker + "$?"
 }
@@ -64,7 +71,14 @@ func (realSecond) Run(j *Job, first RunResult, targets []string) (SecondResult, 
 	}
 	logf("2차 체크 실행: code=%s user=%s %d대", first.Code, j.User, len(targets))
 
-	out, err := secondSSH(hostList(targets), secondRunScript(j.User))
+	// os6_mgmt 의 체크스크립트가 띄우는 gossh 는 표지로 찾는다 (hang_min 을 넘기면 걸린 호스트 취소)
+	kv := fmt.Sprintf("AUTO_SETUP_2ND=c%s.%d.%d", first.Code, os.Getpid(), time.Now().UnixNano())
+	stopWatch := func() {}
+	if lim := hangLimit(); lim > 0 {
+		stopWatch = secondHangWatch(first.Code, kv, lim, hangTermAfter(lim), secondHangPoll)
+	}
+	out, err := secondSSH(hostList(targets), secondRunScript(j.User, kv))
+	stopWatch()
 	rdir := ""
 	for _, l := range strings.Split(out, "\n") {
 		if strings.HasPrefix(l, secondDirMarker) {
@@ -110,6 +124,74 @@ func (realSecond) Run(j *Job, first RunResult, targets []string) (SecondResult, 
 		logf("[X] 2차 결과 code 병합 실패: code=%s: %v", first.Code, err)
 	}
 	return res, nil
+}
+
+// secondHangPoll: 2차 체크 gossh 멈춤 확인 주기 (ssh 1회씩이라 1차보다 길게, 테스트는 줄인다)
+var secondHangPoll = 30 * time.Second
+
+// secondHangWatch: 2차 체크(os6_mgmt 의 체크스크립트 1회) 동안 표지 kv 를 가진 os6_mgmt 의 gossh 를 감시한다.
+// 시작 후 limit 이 지나야 걸릴 수 있으므로 그때부터 poll 마다 ssh 로 목록(pid, 경과 시간 etime)을 받고,
+// limit 을 넘긴 gossh 에 INT×2(한 번만), 그 뒤 term 을 넘겨 남아 있으면 TERM 을 보낸다 (1차 hangWatch 와 같은 규칙).
+// 돌려준 함수가 감시를 끝내고 고루틴 종료까지 기다린다 (진행 중인 ssh 는 checkTimeout 안에 끝난다).
+func secondHangWatch(code, kv string, limit, term, poll time.Duration) func() {
+	stop, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		select {
+		case <-stop:
+			return
+		case <-time.After(limit):
+		}
+		intAt := map[int]time.Time{}
+		termed := map[int]bool{}
+		list := gosshPidsSh(kv, "gossh") + `for p in $pl; do echo "==G== $p $(ps -o etime= -p "$p" 2>/dev/null)"; done`
+		for {
+			out, _ := secondSSHWatch(list)
+			now := time.Now()
+			var toInt, toTerm []int
+			for _, l := range strings.Split(out, "\n") {
+				f := strings.Fields(l)
+				if len(f) != 3 || f[0] != "==G==" {
+					continue
+				}
+				pid, err := strconv.Atoi(f[1])
+				age := parseEtime(f[2])
+				if err != nil || age < 0 {
+					continue
+				}
+				switch at, ok := intAt[pid]; {
+				case !ok && time.Duration(age)*time.Second >= limit:
+					intAt[pid] = now
+					toInt = append(toInt, pid)
+					logf("[!] 2차 체크 gossh hang 감지: code=%s os6_mgmt pid=%d %d분 경과 → 걸린 호스트 취소(INT×2)", code, pid, age/60)
+				case ok && !termed[pid] && now.Sub(at) >= term:
+					termed[pid] = true
+					toTerm = append(toTerm, pid)
+					logf("[!] 2차 체크 gossh 가 취소 후에도 %d분 남음: code=%s os6_mgmt pid=%d → 종료(TERM)", int(now.Sub(at)/time.Minute), code, pid)
+				}
+			}
+			if len(toInt) > 0 {
+				secondSSHWatch(gosshCheckPidsSh(kv, toInt) + gosshSigSh(false))
+			}
+			if len(toTerm) > 0 {
+				secondSSHWatch(gosshCheckPidsSh(kv, toTerm) + gosshSigSh(true))
+			}
+			select {
+			case <-stop:
+				return
+			case <-time.After(poll):
+			}
+		}
+	}()
+	return func() {
+		close(stop)
+		<-done
+	}
+}
+
+// secondSSHWatch: 감시용 ssh (시간 제한 있음 — 감시가 2차 체크 종료를 붙잡지 않게)
+func secondSSHWatch(remote string) (string, error) {
+	return runExternalDiag("", "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(remote))
 }
 
 // extractSecondTar: 회수한 tar 에서 os_check.log / check.res_* 일반 파일만 dir 에 푼다 (경로 성분 무시)

@@ -1,4 +1,4 @@
-// daemon.go - 데몬: queue·requests·완료기록 수거, 이름 해석·경로 판별·ping 감시·준비확인, stage/정체, LDAP·2차 훅, 7분/3분 스케줄·run 직렬 실행·재기동 복원, pid 제어
+// daemon.go - 데몬: queue·requests·완료기록 수거, 이름 해석·경로 판별·ping 감시·준비확인, stage/정체, LDAP·2차 훅, 7분/3분 스케줄·run 병렬 실행(max_runs)·재기동 복원, pid 제어
 package main
 
 import (
@@ -49,8 +49,9 @@ type Daemon struct {
 	dirty         map[string]bool    // 저장이 필요한 job id
 	lastPing      time.Time
 	lastCheck     time.Time
-	lastWaitCheck time.Time // 대기 호스트 전체 준비확인(waitCheck 주기) 마지막 시각
-	cur           *inflight // 실행 중인 run (동시에 1개)
+	lastWaitCheck time.Time         // 대기 호스트 전체 준비확인(waitCheck 주기) 마지막 시각
+	runs          map[int]*inflight // 실행 중인 run (run id → run, 동시에 maxRuns() 개까지. 한 호스트는 한 run 에만 들어간다)
+	runSeq        int               // run id 발급
 	doneCh        chan runDone
 	progCh        chan runProgress // run 고루틴 → 2차 체크 시작 알림
 	runRetry      time.Time        // Runner 오류 후 재시도 가능 시각
@@ -76,6 +77,7 @@ type hostRT struct {
 }
 
 type inflight struct {
+	id    int // run id (runDone·runProgress 가 어느 run 의 것인지)
 	jobID string
 	user  string
 	hosts []string        // Runner 에 넘긴 목록
@@ -91,6 +93,7 @@ type inflight struct {
 }
 
 type runDone struct {
+	id        int // inflight.id
 	res       RunResult
 	err       error
 	targets   []string      // 2차 대상 (없으면 2차 안 함)
@@ -98,7 +101,13 @@ type runDone struct {
 	secondErr error
 }
 
-type runProgress struct{ targets []string }
+type runProgress struct {
+	id      int // inflight.id
+	targets []string
+}
+
+// runChanCap: run 결과·2차 시작 알림 채널 크기 (동시 run 여러 개가 막히지 않고 넣을 수 있게, step 이 매번 모두 꺼낸다)
+const runChanCap = 64
 
 func newDefaultDaemon() *Daemon {
 	return &Daemon{
@@ -379,8 +388,9 @@ func (d *Daemon) init() {
 	d.jobs = map[string]*Job{}
 	d.rt = map[string]*hostRT{}
 	d.dirty = map[string]bool{}
-	d.doneCh = make(chan runDone, 1)
-	d.progCh = make(chan runProgress, 1)
+	d.runs = map[int]*inflight{}
+	d.doneCh = make(chan runDone, runChanCap)
+	d.progCh = make(chan runProgress, runChanCap)
 	d.checkErr = map[string]string{}
 	d.forceCheck = map[string]bool{}
 	d.doneLogged = map[string]bool{}
@@ -486,15 +496,22 @@ func (d *Daemon) step(now time.Time) {
 	if d.fenced() {
 		return
 	}
-	select {
-	case p := <-d.progCh:
-		d.onProgress(p, now)
-	default:
+	// 동시에 도는 run 여러 개의 알림·결과를 모두 반영 (2차 시작 알림이 먼저 — 같은 run 의 결과보다 앞서 보내진다)
+	for drained := false; !drained; {
+		select {
+		case p := <-d.progCh:
+			d.onProgress(p, now)
+		default:
+			drained = true
+		}
 	}
-	select {
-	case r := <-d.doneCh:
-		d.finishRun(r, now)
-	default:
+	for drained := false; !drained; {
+		select {
+		case r := <-d.doneCh:
+			d.finishRun(r, now)
+		default:
+			drained = true
+		}
 	}
 	if n, err := d.collectQueue(); err != nil {
 		logf("[X] queue 수거 실패: %v", err)
@@ -531,12 +548,13 @@ func (d *Daemon) step(now time.Time) {
 	}
 }
 
-// onProgress: 1차 run 이 끝나고 2차 체크가 시작됨 → 대상 호스트 stage=second
+// onProgress: 1차 run 이 끝나고 2차 체크가 시작됨 → 대상 호스트 stage=second (이미 끝나 반영된 run 의 늦은 알림은 버림)
 func (d *Daemon) onProgress(p runProgress, now time.Time) {
-	if d.cur == nil {
+	c := d.runs[p.id]
+	if c == nil {
 		return
 	}
-	j := d.jobs[d.cur.jobID]
+	j := d.jobs[c.jobID]
 	if j == nil {
 		return
 	}
@@ -545,7 +563,7 @@ func (d *Daemon) onProgress(p runProgress, now time.Time) {
 		if h := j.Hosts[n]; h != nil {
 			h.Second = SecondRunning
 			d.dirty[j.ID] = true
-			if !d.cur.manual {
+			if !c.manual {
 				d.setStage(j, n, StageSecond, now.Unix())
 			}
 		}
@@ -985,25 +1003,62 @@ func (d *Daemon) applyCheck(j *Job, name string, cr CheckResult, t int64) {
 		if j.FirstReady == 0 {
 			j.FirstReady = t
 		}
-	} else if j.LateFirstReady == 0 && (d.cur == nil || d.cur.jobID != j.ID) {
+	} else if j.LateFirstReady == 0 && !d.jobRunning(j.ID) { // 이 job 의 run 이 실행 중이면 schedule·finishRun 이 정한다
 		j.LateFirstReady = t
 	}
 	d.ldapApply(j, name, t)
 	d.setStage(j, name, StageReady, t)
 }
 
-// schedule: run 이 없을 때만 다음 run 을 결정 (직렬). 1차: 전부 READY 또는 첫 READY+bootWait,
-// 이후: 첫 늦은 READY+lateWait 에 새로 READY 된 미처리 호스트만.
+// busyHosts: 실행 중인 run 들의 대상 호스트 → 그 run (한 호스트는 동시에 한 run 에만 들어간다)
+func (d *Daemon) busyHosts() map[string]*inflight {
+	out := map[string]*inflight{}
+	for _, c := range d.runs {
+		for _, n := range c.hosts {
+			out[n] = c
+		}
+	}
+	return out
+}
+
+// jobRunning: job 의 run(자동·수동)이 실행 중인지
+func (d *Daemon) jobRunning(id string) bool {
+	for _, c := range d.runs {
+		if c.jobID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// autoRunAt: job 의 실행 중인 자동 run 중 가장 늦게 시작한 run 의 시작 시각 (없으면 0), first 는 그중 1차 run 이 있는지
+func (d *Daemon) autoRunAt(id string) (at int64, first bool) {
+	for _, c := range d.runs {
+		if c.jobID == id && !c.manual {
+			if c.at > at {
+				at = c.at
+			}
+			first = first || c.first
+		}
+	}
+	return at, first
+}
+
+// schedule: 실행 중인 run 이 maxRuns() 보다 적으면 다음 run 을 결정 (max_runs=1 이면 종전처럼 직렬).
+// 1차: 전부 READY 또는 첫 READY+bootWait, 이후: 첫 늦은 READY+lateWait 에 새로 READY 된 미처리 호스트만.
+// 다른 run 에 들어가 있는 호스트는 빼고 고른다 — 같은 job 의 앞 묶음(1차 포함)이 실행 중이어도 그 뒤 READY 된 호스트는
+// 늦은 묶음 규칙대로 따로 시작한다 (job 당 한 step 에 run 하나).
 func (d *Daemon) schedule(now time.Time) {
-	if d.cur != nil || now.Before(d.runRetry) {
+	if len(d.runs) >= maxRuns() || now.Before(d.runRetry) {
 		return
 	}
 	t := now.Unix()
+	busy := d.busyHosts()
 	for _, j := range d.sortedJobs() {
 		pending := 0
 		var ready []string
 		for name, h := range j.Hosts {
-			if !active(h) {
+			if !active(h) || busy[name] != nil {
 				continue
 			}
 			pending++
@@ -1015,7 +1070,8 @@ func (d *Daemon) schedule(now time.Time) {
 			continue
 		}
 		sort.Strings(ready)
-		if !j.FirstRunDone {
+		runAt, firstRunning := d.autoRunAt(j.ID)
+		if !j.FirstRunDone && !firstRunning {
 			if j.FirstReady == 0 {
 				j.FirstReady = t
 				d.dirty[j.ID] = true
@@ -1025,23 +1081,40 @@ func (d *Daemon) schedule(now time.Time) {
 			}
 			all := make([]string, 0, len(j.Hosts))
 			for name, h := range j.Hosts {
-				if h.Processed == "" { // 완료기록으로 이미 처리된 호스트는 제외
+				if h.Processed == "" && busy[name] == nil { // 완료기록으로 이미 처리된 호스트·다른 run 의 호스트는 제외
 					all = append(all, name)
 				}
 			}
 			sort.Strings(all)
 			d.startRun(j, all, ready, true, t)
+		} else {
+			late := j.LateFirstReady
+			if runAt > 0 && runAt >= late {
+				// 저장된 기준은 이미 실행 중인 run 이 가져간 호스트의 것 → 그 run 시작 뒤 READY 된 호스트의 가장 이른 READY 부터 센다
+				// (그 run 이 끝나면 finishRun 이 같은 규칙으로 LateFirstReady 를 다시 정한다)
+				late = 0
+				for _, n := range ready {
+					if r := j.Hosts[n].ReadyAt; late == 0 || r < late {
+						late = r
+					}
+				}
+				if late < runAt {
+					late = runAt
+				}
+			} else if late == 0 {
+				j.LateFirstReady = t
+				d.dirty[j.ID] = true
+				late = t
+			}
+			if t < late+secs(lateWait) {
+				continue
+			}
+			d.startRun(j, ready, ready, false, t)
+		}
+		if len(d.runs) >= maxRuns() {
 			return
 		}
-		if j.LateFirstReady == 0 {
-			j.LateFirstReady = t
-			d.dirty[j.ID] = true
-		}
-		if t < j.LateFirstReady+secs(lateWait) {
-			continue
-		}
-		d.startRun(j, ready, ready, false, t)
-		return
+		busy = d.busyHosts()
 	}
 }
 
@@ -1067,9 +1140,15 @@ func (d *Daemon) startRun(j *Job, hosts, ready []string, first bool, t int64) {
 	d.launch(c, j, hasOS6)
 }
 
-// launch: run 고루틴 시작 (동시 1개). 1차 Runner.Run → (조건 충족 시) 2차 Second.Run 1회 → doneCh.
+// launch: run 고루틴 시작 (동시 maxRuns() 개까지, id 를 붙여 runs 에 등록). 1차 Runner.Run → (조건 충족 시) 2차 Second.Run 1회 → doneCh.
 func (d *Daemon) launch(c *inflight, j *Job, hasOS6 bool) {
-	d.cur = c
+	if d.runs == nil {
+		d.runs = map[int]*inflight{}
+	}
+	d.runSeq++
+	c.id = d.runSeq
+	d.runs[c.id] = c
+	id := c.id
 	snap := cloneJob(j)
 	snap.RunMode = c.mode
 	hosts := c.hosts
@@ -1081,7 +1160,7 @@ func (d *Daemon) launch(c *inflight, j *Job, hasOS6 bool) {
 	r, sec, ch, prog := d.Runner, d.secondImpl(), d.doneCh, d.progCh
 	go func() {
 		res, err := r.Run(snap, hosts, hasOS6)
-		out := runDone{res: res, err: err}
+		out := runDone{id: id, res: res, err: err}
 		if err == nil && sec != nil && snap.RunMode != ModeCheck { // 설정체크만 실행은 2차 체크를 하지 않음
 			routes := map[string]string{}
 			for n, h := range snap.Hosts {
@@ -1089,7 +1168,7 @@ func (d *Daemon) launch(c *inflight, j *Job, hasOS6 bool) {
 			}
 			if tg := selectSecondTargets(res, ready, routes); len(tg) > 0 {
 				select {
-				case prog <- runProgress{targets: tg}:
+				case prog <- runProgress{id: id, targets: tg}:
 				default:
 				}
 				sr, serr := sec.Run(snap, res, tg)
@@ -1110,12 +1189,8 @@ func cloneJob(j *Job) *Job {
 
 // finishRun: run 결과 반영 → processed/fails, runs 기록, 다음 늦은 묶음 시각, wall
 func (d *Daemon) finishRun(r runDone, now time.Time) {
-	select { // 같은 run 의 늦게 도착한 2차 시작 알림은 버림
-	case <-d.progCh:
-	default:
-	}
-	c := d.cur
-	d.cur = nil
+	c := d.runs[r.id] // 같은 run 의 늦게 도착한 2차 시작 알림은 이 run 이 runs 에서 빠져 onProgress 가 버린다
+	delete(d.runs, r.id)
 	if c == nil {
 		return
 	}
@@ -1168,10 +1243,11 @@ func (d *Daemon) finishRun(r runDone, now time.Time) {
 			j.FirstRunDone = true
 		}
 		j.Runs = append(j.Runs, Run{Code: res.Code, Hosts: c.hosts, At: c.at})
-		// 다음 늦은 묶음: run 중 새로 READY 된 호스트는 그 READY 시각, 재시도 호스트는 지금부터
+		// 다음 늦은 묶음: run 중 새로 READY 된 호스트는 그 READY 시각, 재시도 호스트는 지금부터 (다른 run 에서 실행 중인 호스트는 제외)
 		var late int64
+		busy := d.busyHosts()
 		for name, h := range j.Hosts {
-			if !active(h) || h.ReadyAt == 0 {
+			if !active(h) || h.ReadyAt == 0 || busy[name] != nil {
 				continue
 			}
 			t := h.ReadyAt
@@ -1344,7 +1420,7 @@ func wallMessage(user string, hosts []string, code string, abnormal bool) string
 // closeFinished: 모든 호스트가 processed 또는 제외된 job → jobs/done
 func (d *Daemon) closeFinished() {
 	for id, j := range d.jobs {
-		if d.cur != nil && d.cur.jobID == id {
+		if d.jobRunning(id) {
 			continue
 		}
 		nProc, nFail := 0, 0
