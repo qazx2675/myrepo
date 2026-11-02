@@ -102,15 +102,16 @@ const (
 	xlOpenXMLWorkbook = 51
 	msoComment        = 4
 
-	maxRowHeight     = 409.0 // Excel 최대 행 높이(pt)
-	maxRichTextChars = 5000  // 글자별 글꼴 조회 상한(초과 시 단일 글꼴)
-	maxScanRows      = 2000  // UsedRange 스캔 상한
-	maxScanCols      = 100
-	headerLookdown   = 10  // 타이틀 아래 헤더 탐색 행 수 (다음 섹션 제목 전까지)
-	blockPadding     = 8.0 // 적재 블록 사이 여백(pt)
-	cellInnerPad     = 4.0 // 셀 안쪽 여백(pt)
-	maxAnchorLines   = 300 // 도형 기준 줄 계산 상한(초과 시 도형은 본문 뒤)
-	anchorTolerance  = 2.0 // 도형 위쪽과 줄 끝 비교 허용 오차(pt)
+	maxRowHeight       = 409.0 // Excel 최대 행 높이(pt)
+	measureChunkHeight = 250.0 // 한 번에 재는 글 높이 상한(추정치, 행 높이 제한보다 여유 있게)
+	maxRichTextChars   = 5000  // 글자별 글꼴 조회 상한(초과 시 단일 글꼴)
+	maxScanRows        = 2000  // UsedRange 스캔 상한
+	maxScanCols        = 100
+	headerLookdown     = 10  // 타이틀 아래 헤더 탐색 행 수 (다음 섹션 제목 전까지)
+	blockPadding       = 8.0 // 적재 블록 사이 여백(pt)
+	cellInnerPad       = 4.0 // 셀 안쪽 여백(pt)
+	maxAnchorLines     = 300 // 도형 기준 줄 계산 상한(초과 시 도형은 본문 뒤)
+	anchorTolerance    = 2.0 // 도형 위쪽과 줄 끝 비교 허용 오차(pt)
 )
 
 // ---------------------------------------------------------------------------
@@ -398,6 +399,7 @@ func withExcel(fn func(app, workbooks *ole.IDispatch) error) error {
 
 	oleutil.PutProperty(app, "Visible", false)
 	oleutil.PutProperty(app, "DisplayAlerts", false)
+	oleutil.PutProperty(app, "ScreenUpdating", false) // 숨김 상태여도 화면 갱신을 끄면 서식·높이 변경이 빨라진다
 	defer oleutil.CallMethod(app, "Quit")
 
 	workbooks, err := getDisp(app, "Workbooks")
@@ -969,36 +971,60 @@ func readFontRuns(cl *ole.IDispatch, raw, body string) []fontRun {
 		return nil
 	}
 
+	// raw 위치(1-based UTF-16) → body 위치: CRLF 의 CR 은 body 에서 빠진다
+	units := utf16.Encode([]rune(raw))
+	dstOf := make([]int, len(units)+2)
+	d := 1
+	for p := 1; p <= len(units); p++ {
+		dstOf[p] = d
+		if !(units[p-1] == '\r' && p < len(units) && units[p] == '\n') {
+			d++
+		}
+	}
+	dstOf[len(units)+1] = d
+
+	// 줄 단위로 글꼴을 묻고, 한 줄 안에서 글꼴이 섞여 있을 때만 반씩 나눠 묻는다
+	// (글자마다 묻던 방식은 긴 셀에서 수천 번의 COM 호출로 수 분이 걸렸다)
 	var runs []fontRun
-	src, dst := 1, 1 // raw / body 기준 UTF-16 위치
-	rs := []rune(raw)
-	for i := 0; i < len(rs) && dst <= bodyLen; i++ {
-		n := utf16.RuneLen(rs[i])
-		if n < 1 {
-			n = 1
-		}
-		if rs[i] == '\r' && i+1 < len(rs) && rs[i+1] == '\n' { // CRLF → LF: CR은 제거됨
-			src += n
-			continue
-		}
+	var walk func(start, length int)
+	walk = func(start, length int) {
 		var fs fontSpec
-		if ch, err := getDisp(cl, "Characters", src, 1); err == nil {
+		if ch, err := getDisp(cl, "Characters", start, length); err == nil {
 			if f, err := getDisp(ch, "Font"); err == nil {
 				fs.fillFrom(f)
 				f.Release()
 			}
 			ch.Release()
 		}
-		if k := len(runs) - 1; k >= 0 && runs[k].font == fs && runs[k].start+runs[k].length == dst {
-			runs[k].length += n
-		} else {
-			runs = append(runs, fontRun{start: dst, length: n, font: fs, bold: fs.Bold})
+		if !fs.complete() && length > 1 {
+			half := length / 2
+			walk(start, half)
+			walk(start+half, length-half)
+			return
 		}
-		src += n
-		dst += n
+		s, e := dstOf[start], min(dstOf[start+length], bodyLen+1)
+		if s >= e {
+			return
+		}
+		if k := len(runs) - 1; k >= 0 && runs[k].font == fs && runs[k].start+runs[k].length == s {
+			runs[k].length += e - s
+		} else {
+			runs = append(runs, fontRun{start: s, length: e - s, font: fs, bold: fs.Bold})
+		}
 	}
-	if k := len(runs) - 1; k >= 0 && runs[k].start+runs[k].length > bodyLen+1 {
-		runs[k].length = bodyLen + 1 - runs[k].start
+	// 줄바꿈 글자는 앞뒤 어느 줄의 글꼴을 따를지 정해져 있지 않아 줄 글자와 따로 묻는다
+	lineStart := 1
+	for p := 1; p <= len(units); p++ {
+		if units[p-1] == '\r' || units[p-1] == '\n' {
+			if p > lineStart {
+				walk(lineStart, p-lineStart)
+			}
+			walk(p, 1)
+			lineStart = p + 1
+		}
+	}
+	if lineStart <= len(units) {
+		walk(lineStart, len(units)-lineStart+1)
 	}
 	return runs
 }
@@ -1065,7 +1091,9 @@ func textHeight(s string, fs fontSpec, width float64) float64 {
 // scratch sheet) instead of estimating it from character counts
 type textMeasurer struct {
 	ws, cl *ole.IDispatch
-	width  float64 // 현재 측정 열 너비(pt)
+	width  float64            // 현재 측정 열 너비(pt)
+	minH   float64            // AutoFit 최소 높이(시트 기본 행 높이), 이 이하로 나온 값은 실제보다 크다
+	cache  map[string]float64 // 같은 글·글꼴·너비는 다시 재지 않는다
 }
 
 func newTextMeasurer(wb *ole.IDispatch) *textMeasurer {
@@ -1086,7 +1114,7 @@ func newTextMeasurer(wb *ole.IDispatch) *textMeasurer {
 	}
 	oleutil.PutProperty(cl, "WrapText", true)
 	oleutil.PutProperty(cl, "VerticalAlignment", xlTop)
-	return &textMeasurer{ws: ws, cl: cl}
+	return &textMeasurer{ws: ws, cl: cl, minH: getNum(ws, "StandardHeight"), cache: map[string]float64{}}
 }
 
 // close deletes the scratch sheet; safe to call more than once
@@ -1120,10 +1148,42 @@ func (m *textMeasurer) setWidth(width float64) {
 	m.width = width
 }
 
-// height returns the wrapped height of s in a cell of the given width. Text taller
-// than one row can hold (409pt) is measured in halves and summed; falls back to the
-// estimate when Excel cannot measure it
+// height returns the wrapped height of s in a cell of the given width. The text is
+// measured in chunks of lines (estimated below measureChunkHeight) and summed, so
+// a chunk never hits the row height limit and text that only grows at the end
+// reuses the cached measurements of its earlier chunks
 func (m *textMeasurer) height(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
+	lines := strings.Split(s, "\n")
+	var cuts []int // 각 조각의 시작 줄
+	est, hasText := 0.0, false
+	for i, ln := range lines {
+		le := textHeight(ln, fs, width)
+		if i > 0 && hasText && est+le > measureChunkHeight {
+			cuts = append(cuts, i)
+			est, hasText = 0, false
+		}
+		est += le
+		hasText = hasText || strings.TrimSpace(ln) != ""
+	}
+	if len(cuts) > 0 && !hasText { // 빈 줄만 남은 마지막 조각은 앞 조각에 붙인다
+		cuts = cuts[:len(cuts)-1]
+	}
+	if len(cuts) == 0 {
+		return m.split(s, fs, runs, bold, width)
+	}
+	pad := math.Max(0, m.measure("가", fs, nil, bold, width)-m.lineHeight(fs)) // 측정마다 붙는 셀 여백
+	total, from, start := 0.0, 1, 0
+	for _, end := range append(cuts, len(lines)) {
+		part := strings.Join(lines[start:end], "\n")
+		to := from + utf16Len(part) - 1
+		total += m.split(part, fs, sliceRuns(runs, from, to), bold, width)
+		from, start = to+2, end // 조각 사이 줄바꿈 건너뜀
+	}
+	return total - pad*float64(len(cuts))
+}
+
+// split measures s at once, or in halves when it reaches the row height limit (409pt)
+func (m *textMeasurer) split(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
 	h := m.measure(s, fs, runs, bold, width)
 	if h < maxRowHeight {
 		return h
@@ -1137,16 +1197,62 @@ func (m *textMeasurer) height(s string, fs fontSpec, runs []fontRun, bold bool, 
 	cut := utf16Len(first) + 1 // 두 번째 조각 시작(1-based)
 	second := strings.Join(lines[mid:], "\n")
 	pad := math.Max(0, m.measure("가", fs, nil, bold, width)-m.lineHeight(fs)) // 측정마다 붙는 셀 여백
-	return m.height(first, fs, sliceRuns(runs, 1, cut-1), bold, width) +
-		m.height(second, fs, sliceRuns(runs, cut+1, utf16Len(s)), bold, width) - pad
+	return m.split(first, fs, sliceRuns(runs, 1, cut-1), bold, width) +
+		m.split(second, fs, sliceRuns(runs, cut+1, utf16Len(s)), bold, width) - pad
 }
 
-// measure is one AutoFit measurement (capped at the row height limit)
+// measure is one AutoFit measurement (capped at the row height limit). AutoFit
+// never goes below the sheet's standard row height, so short text is measured
+// below a few reference lines whose pitch is then subtracted.
 func (m *textMeasurer) measure(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
-	est := textHeight(s, fs, width)
 	if m == nil || m.ws == nil {
-		return est
+		return textHeight(s, fs, width)
 	}
+	h := m.raw(s, fs, runs, bold, width)
+	if h > m.minH+0.01 || s == "" {
+		return h
+	}
+	k := m.refLines(fs)
+	prefix := strings.Repeat("가\n", k)
+	shifted := make([]fontRun, len(runs))
+	for i, r := range runs {
+		r.start += utf16Len(prefix)
+		shifted[i] = r
+	}
+	return m.raw(prefix+s, fs, shifted, bold, width) - float64(k)*m.pitch(fs, bold, width)
+}
+
+// raw is a cached AutoFit measurement as Excel reports it
+func (m *textMeasurer) raw(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
+	runs = mergeRuns(runs)
+	key := fmt.Sprintf("%v|%v|%v|%v|%s", width, fs, bold, runs, s)
+	if h, ok := m.cache[key]; ok {
+		return h
+	}
+	h := m.autoFit(s, fs, runs, bold, width)
+	m.cache[key] = h
+	return h
+}
+
+// refLines is the number of reference lines that is surely taller than minH
+func (m *textMeasurer) refLines(fs fontSpec) int {
+	return max(2, int(math.Ceil(m.minH*1.5/lineHeight(fs))))
+}
+
+// pitch is the height one more line of fs adds, from two multi-line measurements
+// (a single line is clamped to minH, which made the pitch and margins wrong)
+func (m *textMeasurer) pitch(fs fontSpec, bold bool, width float64) float64 {
+	k := m.refLines(fs)
+	a := m.raw(strings.Repeat("가\n", k-1)+"가", fs, nil, bold, width)
+	b := m.raw(strings.Repeat("가\n", 2*k-1)+"가", fs, nil, bold, width)
+	if p := (b - a) / float64(k); p > 0 && a > m.minH+0.01 && b < maxRowHeight {
+		return p
+	}
+	return lineHeight(fs)
+}
+
+func (m *textMeasurer) autoFit(s string, fs fontSpec, runs []fontRun, bold bool, width float64) float64 {
+	est := textHeight(s, fs, width)
 	m.setWidth(width)
 	if _, err := oleutil.PutProperty(m.cl, "Value2", literalText(s)); err != nil { // ' 접두: "- ..." 가 수식으로 해석되지 않도록
 		return est
@@ -1171,20 +1277,12 @@ func (m *textMeasurer) measure(s string, fs fontSpec, runs []fontRun, bold bool,
 	return h
 }
 
-// lineHeight returns the line pitch of fs (height added by one more line), which
-// is smaller than a single-line row height because that includes the cell margins
+// lineHeight returns the line pitch of fs (height added by one more line)
 func (m *textMeasurer) lineHeight(fs fontSpec) float64 {
 	if m == nil || m.ws == nil {
 		return lineHeight(fs)
 	}
-	const n = 10
-	w := math.Max(m.width, 100)
-	one := m.measure("가", fs, nil, fs.Bold, w)
-	many := m.measure(strings.Repeat("가\n", n)+"가", fs, nil, fs.Bold, w)
-	if p := (many - one) / n; p > 0 && many < maxRowHeight {
-		return p
-	}
-	return lineHeight(fs)
+	return m.pitch(fs, fs.Bold, math.Max(m.width, 100))
 }
 
 // sliceRuns returns the runs inside [from, to] (1-based UTF-16), rebased to start at 1
@@ -1196,6 +1294,26 @@ func sliceRuns(runs []fontRun, from, to int) []fontRun {
 			continue
 		}
 		r.start, r.length = s-from+1, e-s+1
+		out = append(out, r)
+	}
+	return out
+}
+
+// mergeRuns sorts runs by position and joins adjacent runs with the same font, so
+// each font change costs one Characters call instead of one per line
+func mergeRuns(runs []fontRun) []fontRun {
+	if len(runs) < 2 {
+		return runs
+	}
+	sorted := slices.Clone(runs)
+	slices.SortStableFunc(sorted, func(a, b fontRun) int { return a.start - b.start })
+	out := sorted[:1]
+	for _, r := range sorted[1:] {
+		last := &out[len(out)-1]
+		if last.start+last.length == r.start && last.font == r.font && last.bold == r.bold {
+			last.length += r.length
+			continue
+		}
 		out = append(out, r)
 	}
 	return out
@@ -1273,8 +1391,12 @@ func buildColumnPlan(dst mergeBox, base fontSpec, blocks []stackBlock, m *textMe
 	for i, b := range blocks {
 		if i > 0 {
 			nl := max(2, int(math.Ceil((nextStart-startAfter(1))/padH))+1)
-			for tries := 0; tries < 20 && startAfter(nl) < nextStart; tries++ {
-				nl++
+			for tries := 0; tries < 5; tries++ { // 모자란 높이만큼 줄을 한 번에 보충
+				d := nextStart - startAfter(nl)
+				if d <= 0 {
+					break
+				}
+				nl += max(1, int(math.Ceil(d/padH)))
 			}
 			sb.WriteString(strings.Repeat("\n", nl))
 			pos += nl
@@ -1345,15 +1467,19 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 		b.runs = []fontRun{{start: 1, length: utf16Len(b.body), font: b.font, bold: bold}}
 	}
 
-	// 원본 셀에서 앞쪽 k줄이 차지하는 높이 (k=0 → 0)
-	srcH := make([]float64, n+1)
-	for k := 1; k <= n; k++ {
-		if n > maxAnchorLines {
-			srcH[k] = math.Inf(1) // 너무 긴 본문은 도형을 모두 맨 앞 기준으로 둔다
-			continue
+	// 원본 셀에서 앞쪽 k줄이 차지하는 높이 (k=0 → 0), 필요한 k 만 측정
+	srcMemo := map[int]float64{0: 0}
+	srcH := func(k int) float64 {
+		if h, ok := srcMemo[k]; ok {
+			return h
 		}
-		t := strings.Join(lines[:k], "\n")
-		srcH[k] = m.height(t, b.font, sliceRuns(b.runs, 1, utf16Len(t)), bold, b.srcBox.Width)
+		h := math.Inf(1) // 너무 긴 본문은 도형을 모두 맨 앞 기준으로 둔다
+		if n <= maxAnchorLines {
+			t := strings.Join(lines[:k], "\n")
+			h = m.height(t, b.font, sliceRuns(b.runs, 1, utf16Len(t)), bold, b.srcBox.Width)
+		}
+		srcMemo[k] = h
+		return h
 	}
 
 	// 도형마다 기준 줄 수(anchor): 도형 위쪽보다 위에서 끝나는 줄 수
@@ -1365,10 +1491,8 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 	items := make([]item, 0, len(b.shapes))
 	for _, s := range b.shapes {
 		relTop := math.Max(0, s.Top-b.srcBox.Top)
-		k := 0
-		for k < n && srcH[k+1] <= relTop+anchorTolerance {
-			k++
-		}
+		// 줄이 늘수록 높이가 커지므로 이분 탐색
+		k := sort.Search(n, func(i int) bool { return srcH(i+1) > relTop+anchorTolerance })
 		items = append(items, item{s: s, anchor: k, relTop: relTop})
 	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].anchor < items[j].anchor })
@@ -1465,8 +1589,8 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 			groupTop = math.Min(groupTop, it.relTop)
 		}
 		gap := 0.0 // 원본의 줄-도형 간격 유지
-		if !math.IsInf(srcH[k], 0) {
-			gap = math.Max(0, groupTop-srcH[k])
+		if !math.IsInf(srcH(k), 0) {
+			gap = math.Max(0, groupTop-srcH(k))
 		}
 
 		bottom := 0.0
@@ -1503,8 +1627,12 @@ func layoutBody(b stackBlock, dstWidth, maxShapeW float64, m *textMeasurer) body
 			added[next] += extra
 		}
 		// 실측 확인: 다음 글이 도형 하단 아래에서 시작할 때까지 보충
-		for tries := 0; tries < 20 && startOf(next) < bottom+blockPadding; tries++ {
-			added[next]++
+		for tries := 0; tries < 5; tries++ {
+			d := bottom + blockPadding - startOf(next)
+			if d <= 0 {
+				break
+			}
+			added[next] += max(1, int(math.Ceil(d/lh)))
 		}
 	}
 
@@ -1880,7 +2008,7 @@ func writeColumnPlan(ws *ole.IDispatch, cp columnPlan) error {
 	if _, err := oleutil.PutProperty(cl, "Value2", cp.text); err != nil {
 		return fmt.Errorf("텍스트 기입 실패: %w", err)
 	}
-	for _, run := range cp.runs {
+	for _, run := range mergeRuns(cp.runs) {
 		applyFont(cl, run.start, run.length, run.font, run.bold)
 	}
 	if ma, err := getDisp(cl, "MergeArea"); err == nil {
