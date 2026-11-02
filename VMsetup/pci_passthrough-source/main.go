@@ -405,6 +405,8 @@ type hostProc struct {
 	bm   string // worklist 에 적힌 이름
 	evs  []evReq
 	sys  types.ManagedObjectReference // HostPciPassthruSystem
+	// crEB 는 호스트가 속한 클러스터/ComputeResource 의 EnvironmentBrowser 다 (장치 조회 재시도용, 모르면 비어 있음)
+	crEB types.ManagedObjectReference
 	// mmioGB 는 -mmioSizeGB 값(0 이면 자동)이다
 	mmioGB int
 	out    *strings.Builder
@@ -477,7 +479,7 @@ func (p *hostProc) run() []vmResult {
 
 	// 1. 수집: PCI 장치, 업링크(vmnic) PCI 주소, 패스스루 상태, 호스트 위 VM 과 그 패스스루 장치
 	var h mo.HostSystem
-	err := p.pc.RetrieveOne(p.ctx, p.ref, []string{"name", "hardware.pciDevice", "config.network.pnic", "config.network.vswitch", "config.network.proxySwitch", "configManager.pciPassthruSystem", "vm"}, &h)
+	err := p.pc.RetrieveOne(p.ctx, p.ref, []string{"name", "hardware.pciDevice", "config.network.pnic", "config.network.vswitch", "config.network.proxySwitch", "configManager.pciPassthruSystem", "vm", "parent"}, &h)
 	if err != nil {
 		why := fmt.Sprintf("호스트 '%s' 정보 조회 실패: %v", p.name, err)
 		p.logf("[에러] %s\n", why)
@@ -490,6 +492,12 @@ func (p *hostProc) run() []vmResult {
 	}
 	sysRef := *h.ConfigManager.PciPassthruSystem
 	p.sys = sysRef
+	if h.Parent != nil {
+		var cr mo.ComputeResource
+		if err := p.pc.RetrieveOne(p.ctx, *h.Parent, []string{"environmentBrowser"}, &cr); err == nil && cr.EnvironmentBrowser != nil {
+			p.crEB = *cr.EnvironmentBrowser
+		}
+	}
 
 	devByID := map[string]types.HostPciDevice{}
 	devs := append([]types.HostPciDevice(nil), h.Hardware.PciDevice...)
@@ -686,7 +694,7 @@ func (p *hostProc) attachAndPowerOn(pl *vmPlan, info types.HostPciPassthruInfo) 
 	if !pl.attached {
 		addID = pl.devID
 	}
-	qct, err := queryPassthroughTargets(p.ctx, p.c, vm, p.ref)
+	qct, err := p.queryTargets(vm)
 	if err != nil {
 		p.result(pl, stFail, err.Error())
 		return
@@ -743,7 +751,7 @@ func (p *hostProc) attachAndPowerOn(pl *vmPlan, info types.HostPciPassthruInfo) 
 
 // checkOnly 는 켜져 있는 VM 을 건드리지 않고, 다음 전원 ON 때 걸릴 설정을 한 줄로 돌려준다 (없으면 "").
 func (p *hostProc) checkOnly(vm *mo.VirtualMachine) string {
-	qct, err := queryPassthroughTargets(p.ctx, p.c, vm, p.ref)
+	qct, err := p.queryTargets(vm)
 	if err != nil {
 		return err.Error()
 	}
@@ -778,7 +786,7 @@ func (p *hostProc) diagnose(ref types.ManagedObjectReference) []string {
 		}
 	}
 	// 2. backing(SystemId·Vendor/DeviceId)·메모리 예약·64bit MMIO·펌웨어
-	if qct, err := queryPassthroughTargets(p.ctx, p.c, &vm, p.ref); err == nil {
+	if qct, err := p.queryTargets(&vm); err == nil {
 		if _, changes, err := planBoot(&vm, qct, "", p.mmioGB, false); err != nil {
 			diag = append(diag, err.Error())
 		} else {
@@ -839,31 +847,71 @@ func mmioSizeFor(n int) int {
 	return size
 }
 
-// queryPassthroughTargets 는 VM 의 EnvironmentBrowser.QueryConfigTarget(host).PciPassthrough 를 장치 Id -> 정보로 돌려준다.
-// 패스스루가 활성(Active)인 장치만 나오며, SystemId 는 ESXi system uuid(`esxcli system uuid get` 값)다.
-func queryPassthroughTargets(ctx context.Context, c *vim25.Client, vm *mo.VirtualMachine, host types.ManagedObjectReference) (map[string]*types.VirtualMachinePciPassthroughInfo, error) {
-	if vm.EnvironmentBrowser.Value == "" {
+// queryTargets 는 이 호스트에서 패스스루가 활성(Active)인 장치를 장치 Id -> 정보로 돌려준다 (EnvironmentBrowser.QueryConfigTarget).
+// SystemId 는 ESXi system uuid(`esxcli system uuid get` 값)다.
+// vCenter 클러스터에서는 VM 의 EnvironmentBrowser 에 호스트를 지정하면 "A specified parameter was not correct: host" 로
+// 거부되는 경우가 있어(ESXi 직접 접속에서는 정상), 실패하면 아래 순서로 다시 묻는다. 성공한 방식이 첫 번째가 아니면 한 줄 남긴다.
+//  1. VM 의 EnvironmentBrowser + 호스트
+//  2. VM 의 EnvironmentBrowser, 호스트 미지정 (govc device.pci.add 와 같은 방식 — VM 이 있는 호스트 기준)
+//  3. 호스트가 속한 클러스터/ComputeResource 의 EnvironmentBrowser + 호스트
+//  4. 클러스터/ComputeResource 의 EnvironmentBrowser, 호스트 미지정
+//
+// 2·4 는 여러 호스트의 장치가 섞여 나올 수 있으므로, 결과의 SystemId 가 한 가지일 때만 쓴다.
+func (p *hostProc) queryTargets(vm *mo.VirtualMachine) (map[string]*types.VirtualMachinePciPassthroughInfo, error) {
+	type try struct {
+		label string
+		eb    types.ManagedObjectReference
+		host  bool
+	}
+	var tries []try
+	if vm.EnvironmentBrowser.Value != "" {
+		tries = append(tries, try{"VM+호스트", vm.EnvironmentBrowser, true}, try{"VM(호스트 미지정)", vm.EnvironmentBrowser, false})
+	}
+	if p.crEB.Value != "" {
+		tries = append(tries, try{"클러스터+호스트", p.crEB, true})
+	}
+	if p.crEB.Value != "" {
+		tries = append(tries, try{"클러스터(호스트 미지정)", p.crEB, false})
+	}
+	if len(tries) == 0 {
 		return nil, fmt.Errorf("VM 의 EnvironmentBrowser 를 알 수 없어 장치 정보(QueryConfigTarget)를 조회하지 못했습니다")
 	}
-	eb := object.NewEnvironmentBrowser(c, vm.EnvironmentBrowser)
-	ct, err := eb.QueryConfigTarget(ctx, object.NewHostSystem(c, host))
-	if err != nil {
-		return nil, fmt.Errorf("QueryConfigTarget 실패: %v", err)
-	}
-	m := map[string]*types.VirtualMachinePciPassthroughInfo{}
-	if ct != nil {
-		for _, b := range ct.PciPassthrough {
-			if b == nil {
-				continue
-			}
-			i := b.GetVirtualMachinePciPassthroughInfo()
-			// 같은 Id 가 SR-IOV 정보로도 나오면 일반 패스스루 항목을 쓴다
-			if _, plain := b.(*types.VirtualMachinePciPassthroughInfo); plain || m[i.PciDevice.Id] == nil {
-				m[i.PciDevice.Id] = i
+	var errs []string
+	for i, t := range tries {
+		var host *object.HostSystem
+		if t.host {
+			host = object.NewHostSystem(p.c, p.ref)
+		}
+		ct, err := object.NewEnvironmentBrowser(p.c, t.eb).QueryConfigTarget(p.ctx, host)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", t.label, err))
+			continue
+		}
+		m := map[string]*types.VirtualMachinePciPassthroughInfo{}
+		sysIDs := map[string]bool{}
+		if ct != nil {
+			for _, b := range ct.PciPassthrough {
+				if b == nil {
+					continue
+				}
+				i := b.GetVirtualMachinePciPassthroughInfo()
+				sysIDs[i.SystemId] = true
+				// 같은 Id 가 SR-IOV 정보로도 나오면 일반 패스스루 항목을 쓴다
+				if _, plain := b.(*types.VirtualMachinePciPassthroughInfo); plain || m[i.PciDevice.Id] == nil {
+					m[i.PciDevice.Id] = i
+				}
 			}
 		}
+		if !t.host && len(sysIDs) > 1 {
+			errs = append(errs, fmt.Sprintf("%s: 여러 호스트(%d대)의 장치가 섞여 나와 이 호스트 것을 가릴 수 없음", t.label, len(sysIDs)))
+			continue
+		}
+		if i > 0 {
+			p.logf("[정보] %s 장치 조회(QueryConfigTarget): %s 방식으로 성공 (앞선 시도 실패: %s)\n", vm.Name, t.label, strings.Join(errs, " / "))
+		}
+		return m, nil
 	}
-	return m, nil
+	return nil, fmt.Errorf("QueryConfigTarget 실패: %s", strings.Join(errs, " / "))
 }
 
 // newBacking 은 QueryConfigTarget 항목으로 패스스루 backing 을 만든다. 하드웨어 UUID 는 어디에도 쓰지 않는다.
