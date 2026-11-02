@@ -1,3 +1,0 @@
-# 체크할 BM(VM) hostname을 한 줄씩
-192ev01
-192ev02
