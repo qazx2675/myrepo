@@ -295,17 +295,28 @@ func rejectRequest(p, name string, body []byte, reason string) {
 	os.Remove(p) // 기록 실패해도 반복 처리하지 않음
 }
 
-// scheduleManual: run 이 없을 때 active/ 의 가장 오래된 수동 run 을 시작 (자동 run 이 우선)
+// scheduleManual: 실행 중인 run 이 maxRuns() 보다 적으면 active/ 의 오래된 수동 run 부터 시작 (자동 run 이 우선 — step 에서 schedule 다음).
+// 이미 실행 중인 요청은 건너뛰고, 대상 호스트 중 다른 run 에서 실행 중인 호스트가 있으면 그 요청은 다음 주기로 미룬다.
 func (d *Daemon) scheduleManual(now time.Time) {
-	if d.cur != nil || now.Before(d.runRetry) {
+	if now.Before(d.runRetry) {
 		return
 	}
-	names := listReqFiles(reqActiveDir())
-	if len(names) == 0 {
-		return
+	for _, name := range listReqFiles(reqActiveDir()) {
+		if len(d.runs) >= maxRuns() {
+			return
+		}
+		d.startManual(name, now)
 	}
-	name := names[0]
+}
+
+// startManual: requests/active/<name> 수동 run 1건 시작 (실행 중이거나 대상 호스트가 다른 run 에 있으면 그대로 둠)
+func (d *Daemon) startManual(name string, now time.Time) {
 	p := filepath.Join(reqActiveDir(), name)
+	for _, c := range d.runs {
+		if c.manual && c.reqPath == p {
+			return
+		}
+	}
 	b, err := os.ReadFile(p)
 	if err != nil {
 		return
@@ -320,6 +331,12 @@ func (d *Daemon) scheduleManual(now time.Time) {
 	if !ok || len(hosts) == 0 {
 		rejectRequest(p, name, b, "job/그룹 없음 (수락 후 사라짐)")
 		return
+	}
+	busy := d.busyHosts()
+	for _, n := range hosts {
+		if busy[n] != nil {
+			return
+		}
 	}
 	if pl["state"] != "running" {
 		_ = os.WriteFile(p+".tmp", append(b, []byte("state=running\n")...), 0644)

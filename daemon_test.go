@@ -228,8 +228,8 @@ func drive(t *testing.T, w *world, d *Daemon, from, to int64, restarts ...int64)
 		now := time.Unix(base+o, 0)
 		w.clock.Set(now)
 		d.step(now)
-		if d.cur != nil { // 가짜 runner 가 끝날 때까지 기다림 (결과 반영은 다음 step)
-			for i := 0; len(d.doneCh) == 0; i++ {
+		if len(d.runs) > 0 { // 가짜 runner 가 모두 끝날 때까지 기다림 (결과 반영은 다음 step)
+			for i := 0; len(d.doneCh) < len(d.runs); i++ {
 				if i > 5000 {
 					t.Fatal("runner 응답 없음")
 				}

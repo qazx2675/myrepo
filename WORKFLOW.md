@@ -30,7 +30,7 @@ flowchart TD
     LDQ -->|diff| LR["공유경로(ldap_share_dir) 경유로<br/>백업 파일 세트 복원 + 서비스 재시작<br/>(변수 비면 수동 복원 필요)"]
     LR --> O["[루프 ③] 스케줄 7분/3분<br/>전부 READY 면 즉시"]
 
-    O --> R["[run] os_check -auto user targets.txt<br/>동시 1개, runs/<code>/<br/>os6 서버는 os6_mgmt, 나머지는 os8 에서 동시에"]
+    O --> R["[run] os_check -auto user targets.txt<br/>최대 max_runs(4)개 병렬·gossh hang_min(7분) 넘으면 멈춘 호스트만 취소, runs/<code>/<br/>os6 서버는 os6_mgmt, 나머지는 os8 에서 동시에"]
     R --> S2{"2차 대상 있음?<br/>route=local 의 접속불가·FAIL<br/>(os6_mgmt·os6_os_check_sh 설정 시)"}
     S2 -->|Yes| S3["os6_mgmt 에서 os_check -auto 1회<br/>결과 tar 회수 → runs/<code>/second/"]
     S2 -->|No| V
@@ -169,6 +169,8 @@ jobs/<jobid>.json 생성
 # cd /tmp/auto_setup/runs/<code>
 # os6 호스트 포함 시: /tmp/auto_setup/bin/gossh 래퍼 PATH 앞에 삽입
 #   래퍼는 목록을 나눠 os6 서버는 os6_mgmt 에서, 나머지는 os8 gossh 로 동시에 실행하고 출력·결과 파일을 합침 (0.8.7)
+#   gossh 호출 하나가 hang_min(기본 7분) 넘게 멈추면 SIGINT×2 로 멈춘 호스트만 취소(접속 실패로 기록, 다음 배치 재시도), +1분 뒤에도 살아 있으면 SIGTERM
+#   run 은 max_runs(기본 4)개까지 병렬 (한 호스트는 한 run 에만)
 #   체크 결과에 ERROR / SSH 접속 실패가 있는 서버는 완료(processed)로 치지 않음
 # bash os_check_sh -auto <user> targets.txt > os_check.log 2>&1
 # os_check 는 정상 종료 시 (빈 변수 auto_done_* 가 채워진 경우) 완료기록을 남김
@@ -222,7 +224,7 @@ codes/<code>.txt
 
 ```bash
 # requests/<epoch>_<kind>.req (manual-run | cancel) → 데몬 5초 주기 수거
-# manual-run 은 완료 여부와 상관없이 수락(접속불가는 결과에 표시) → 데몬 run 큐에서 실행(동시 1개), code 동일
+# manual-run 은 완료 여부와 상관없이 수락(접속불가는 결과에 표시) → 데몬 run 큐에서 실행(max_runs 풀 공유, 기본 동시 4개), code 동일
 # TUI 에서는 h → c (설정체크 + 설정수정) / h → t (설정체크만, mode=check) / h → g (recheck)
 ```
 

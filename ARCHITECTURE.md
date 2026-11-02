@@ -53,6 +53,7 @@
 | `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |
 | `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel / refresh / recheck(g 재확인: os8 → os6)), 수동 run 스케줄. 수거 전 `claimRequest` 로 `requests/claimed/` 에 rename 선점 (데몬이 둘이어도 1회 처리) | 2차 |
 | `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교·공유경로(`ldap_share_dir`) 경유 백업 세트 복원 | 2차 |
+| `hang.go` | gossh hang 감시: `hang_min` 넘은 호출에 SIGINT×2, +1분 뒤 SIGTERM (os6 래퍼는 SIGUSR1/2 로 원격 취소 중계), `max_runs` 병렬 run 풀과 함께 동작 | 설정체크 |
 | `second.go` | 2차(이중) 체크: os6_mgmt 실행·결과 회수·code 섹션 병합 | 2차 |
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
 | `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route·change*·oneoff·awx*·menu·newhost*·dnscheck·work*·sessionuser·userfilter·pgkeys·dupdaemon), TUI 골든 파일 — `go test ./...` 398 PASS, 7 SKIP | 검증 |
