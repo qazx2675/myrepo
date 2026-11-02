@@ -5,7 +5,7 @@
 | `README.md` | V2 전체 소개, 빌드/배치/사용 순서 |
 | `setup.sh` | **전체 오프라인 빌드** — 각 도구의 setup.sh 를 한 번에 돌리고 요약 (`-l` 목록, `-c` 정리, 도구 이름으로 일부만). OS6(또는 `--os6`)면 빌드 대신 `bin_os6/*.gz` 를 제자리에 푼다 |
 | `build_os6.sh`, `bin_os6/` | OS6(커널 2.6.32)용 빌드 — Go 1.20 + govmomi vendor 사본 패치(slices/min/reflect.TypeFor). 결과는 gzip 으로 커밋 |
-| `bin_os8/`, `UPDATE_PCI_PASSTHROUGH.md` | OS8 용 미리 빌드한 실행파일 중 **바뀐 도구만**(pci_passthrough, vm-param-check, gzip) / Go 없는 기존 설치 서버에 변경분만 반영하는 방법. `setup.sh` 는 `bin_os8/` 를 읽지 않는다 |
+| `bin_os8/`, `UPDATE_PCI_PASSTHROUGH.md` | OS8 용 미리 빌드한 실행파일 중 **바뀐 도구만**(pci_passthrough, vm-param-check, affinity_setting, lpage_setting, gzip) / Go 없는 기존 설치 서버에 변경분만 반영하는 방법. `setup.sh` 는 `bin_os8/` 를 읽지 않는다 |
 | `passwd_update.sh`, `secret_lib.sh` | vCenter/ESXi 비밀번호를 `secret/key` 로 암호화(`openssl enc -aes-256-cbc -md sha256`) 저장·갱신 / 풀기 함수. `secret/` 은 git 제외 |
 | `govendor/govmomi-0.55.1-standard/` | VMsetup 도구들이 공유하는 오프라인 의존성 (각 `setup.sh`가 `vendor`로 링크) |
 | `govendor/govmomi-0.39.0/` | vm-param-check 의존성 |
