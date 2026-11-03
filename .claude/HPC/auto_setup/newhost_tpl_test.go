@@ -39,7 +39,7 @@ func TestParseNewhostTpl(t *testing.T) {
 		{"별칭 비어 있음 (| 만)", "|sec bond sda 500 8.10 uefi",
 			NewhostTpl{Infra: "sec", NIC: "bond", Disk: "sda", Size: "500", OS: "8.10", Boot: "uefi", Part: "sda5"}, ""},
 		{"| 생략", "mec eth0 nvme 400 9.6 uefi",
-			NewhostTpl{Infra: "mec", NIC: "eth0", Disk: "nvme", Size: "400", OS: "9.6", Boot: "uefi", Part: "nvme0n1p8"}, ""},
+			NewhostTpl{Infra: "mec", NIC: "eth0", Disk: "nvme0n1", Size: "400", OS: "9.6", Boot: "uefi", Part: "nvme0n1p8"}, ""},
 		{"레거시 허용, 여러 칸 공백·탭", "  L |  tmp\teth0   sda 300 8.10 레거시 ",
 			NewhostTpl{Alias: "L", Infra: "tmp", NIC: "eth0", Disk: "sda", Size: "300", OS: "8.10", Boot: "레거시", Part: "sda5"}, ""},
 		{"disk·boot 대문자는 소문자로", "sec bond SDA 500 8.10 LEGACY",
@@ -48,7 +48,8 @@ func TestParseNewhostTpl(t *testing.T) {
 		{"필드 초과", "sec bond sda 500 8.10 uefi extra", NewhostTpl{}, "6개"},
 		{"빈 값", "", NewhostTpl{}, "6개"},
 		{"disk 불허", "sec bond sdb 500 8.10 uefi", NewhostTpl{}, "disk"},
-		{"nvme0n1 같은 값도 불허 (nvme 만)", "sec bond nvme0n1 500 8.10 uefi", NewhostTpl{}, "disk"},
+		{"nvme0n1 허용", "sec bond nvme0n1 500 8.10 uefi", NewhostTpl{Infra: "sec", NIC: "bond", Disk: "nvme0n1", Size: "500", OS: "8.10", Boot: "uefi", Part: "nvme0n1p8"}, ""},
+		{"nvme1n1 불허 (sda·nvme0n1 만)", "sec bond nvme1n1 500 8.10 uefi", NewhostTpl{}, "disk"},
 		{"용량 숫자 아님", "sec bond sda 5G 8.10 uefi", NewhostTpl{}, "용량"},
 		{"용량 소수 불허", "sec bond sda 5.5 8.10 uefi", NewhostTpl{}, "용량"},
 		{"boot 불허", "sec bond sda 500 8.10 bios", NewhostTpl{}, "boot"},
@@ -91,7 +92,7 @@ func TestNewhostTplNameAndSpec(t *testing.T) {
 		t.Errorf("round trip: %+v err=%v", back, err)
 	}
 	noAlias, _ := parseNewhostTpl("mec eth0 nvme 400 9.6 uefi")
-	if noAlias.Spec() != "mec eth0 nvme 400 9.6 uefi" || noAlias.Name() != "mec-eth0-nvme-400-9.6-uefi" {
+	if noAlias.Spec() != "mec eth0 nvme0n1 400 9.6 uefi" || noAlias.Name() != "mec-eth0-nvme0n1-400-9.6-uefi" {
 		t.Errorf("별칭 없음: spec=%q name=%q", noAlias.Spec(), noAlias.Name())
 	}
 }

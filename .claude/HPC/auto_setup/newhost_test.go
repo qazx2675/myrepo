@@ -180,7 +180,7 @@ func TestNewhostTemplatesAddReloadConflict(t *testing.T) {
 	if i, ok := nhFindTpl(list, "MEC"); !ok || i != 1 {
 		t.Errorf("별칭 MEC → %d %v", i, ok)
 	}
-	if i, ok := nhFindTpl(list, "Mec-Eth0-NVME-400-9.6-uefi"); !ok || i != 2 {
+	if i, ok := nhFindTpl(list, "Mec-Eth0-NVME0N1-400-9.6-uefi"); !ok || i != 2 {
 		t.Errorf("자동이름 → %d %v", i, ok)
 	}
 	if _, ok := nhFindTpl(list, "4"); ok {
@@ -195,7 +195,7 @@ func TestNewhostTemplatesAddReloadConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(p); string(b) != "B|gpu bond nvme 900 8.10 legacy\n" {
+	if b, _ := os.ReadFile(p); string(b) != "B|gpu bond nvme0n1 900 8.10 legacy\n" {
 		t.Errorf("templates 내용 %q", b)
 	}
 	if fi, _ := os.Stat(p); fi.Mode().Perm() != 0600 {
@@ -243,7 +243,7 @@ func TestNewhostTemplatesAddReloadConflict(t *testing.T) {
 
 func TestNhCheckCol(t *testing.T) {
 	for _, c := range []struct{ col, val, want string }{
-		{"disk", "NVME", "nvme"}, {"boot", "Legacy", "legacy"}, {"boot", "레거시", "레거시"}, {"size", "960", "960"}, {"os", "9.6", "9.6"},
+		{"disk", "NVME", "nvme0n1"}, {"disk", "nvme0n1", "nvme0n1"}, {"boot", "Legacy", "legacy"}, {"boot", "레거시", "레거시"}, {"size", "960", "960"}, {"os", "9.6", "9.6"},
 	} {
 		if v, err := nhCheckCol(c.col, c.val); err != nil || v != c.want {
 			t.Errorf("%s=%s → %q %v", c.col, c.val, v, err)
@@ -395,7 +395,7 @@ func TestNewhostSave(t *testing.T) {
 func TestNhLine(t *testing.T) {
 	tp, _ := parseNewhostTpl("sec bond nvme 400 9.6 legacy")
 	got := nhLine(nhRow{Host: "svr001", IP: "10.0.0.1", MAC: "aa:bb:cc:dd:ee:01"}, tp)
-	if got != "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond nvme nvme0n1p8 400 9.6 legacy" || len(strings.Fields(got)) != 12 {
+	if got != "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond nvme0n1 nvme0n1p8 400 9.6 legacy" || len(strings.Fields(got)) != 12 {
 		t.Errorf("12필드: %q", got)
 	}
 }

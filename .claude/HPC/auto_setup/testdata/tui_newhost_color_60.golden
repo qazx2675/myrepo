@@ -27,13 +27,14 @@
 \e[1m 신규 설치 양식 [user: alice] - 2/5 템플릿 지정\e[0m
 ------------------------------------------------------------
 \e[1m 템플릿 — 번호·별칭·이름으로 지정합니다\e[0m
-   1 [A]    tmp tmp sec <hostname> <ip> <mac> bond sda  sda5
-       500 8.10 uefi\e[90m   (sec-bond-sda-500-8.10-uefi)\e[0m
-   2 [mec]  tmp tmp mec <hostname> <ip> <mac> eth0 sda  sda5
-       500 9.6  uefi\e[90m   (mec-eth0-sda-500-9.6-uefi)\e[0m
-   3        tmp tmp mec <hostname> <ip> <mac> eth0 nvme
+   1 [A]    tmp tmp sec <hostname> <ip> <mac> bond sda
+       sda5      500 8.10 uefi
+       \e[90m(sec-bond-sda-500-8.10-uefi)\e[0m
+   2 [mec]  tmp tmp mec <hostname> <ip> <mac> eth0 sda
+       sda5      500 9.6  uefi\e[90m   (mec-eth0-sda-500-9.6-uefi)\e[0m
+   3        tmp tmp mec <hostname> <ip> <mac> eth0 nvme0n1
        nvme0n1p8 400 9.6  uefi
-       \e[90m(mec-eth0-nvme-400-9.6-uefi)\e[0m
+       \e[90m(mec-eth0-nvme0n1-400-9.6-uefi)\e[0m
 
 \e[1m 총 4대 · 지정 3\e[0m\e[33m · 추천 1\e[0m
  \e[1m#  hostname   ip        mac                템플릿\e[0m
@@ -45,8 +46,7 @@
  3  spice-a01  10.0.0.3  aa:bb:cc:dd:ee:03  \e[32m2 [mec]\e[0m
       mec eth0 sda 500 9.6 uefi
  4  gpu0001    10.0.0.4  aa:bb:cc:dd:ee:04  \e[33m추천\e[0m
-      \e[33mgpu bond nvme 900 8.10 uefi\e[0m\e[90m  ← gpu0100\e[0m
-
+      \e[33mgpu bond nvme0n1 900 8.10 uefi\e[0m\e[90m  ← gpu0100\e[0m
 
 
 
@@ -101,17 +101,17 @@
 
 \e[1m ■ sec-bond-sda-500-8.10-uefi = 1 [A] — 1대\e[0m
    \e[36mtmp tmp sec svr001\e[0m
-      \e[36m10.0.0.11 aa:bb:cc:dd:ee:01 bond sda  sda5\e[0m
+      \e[36m10.0.0.11 aa:bb:cc:dd:ee:01 bond sda     sda5\e[0m
       \e[36m500 8.10 uefi  (DNS 로 바꿈 10.0.0.1 → 10.0.0.11)\e[0m
 \e[1m ■ sec-bond-sda-500-9.6-uefi — 1대\e[0m
    tmp tmp sec svr002    10.0.0.2
-      aa:bb:cc:dd:ee:02 bond sda  sda5      500 9.6  uefi
+      aa:bb:cc:dd:ee:02 bond sda     sda5      500 9.6  uefi
 \e[1m ■ mec-eth0-sda-500-9.6-uefi = 2 [mec] — 1대\e[0m
    tmp tmp mec spice-a01 10.0.0.3
-      aa:bb:cc:dd:ee:03 eth0 sda  sda5      500 9.6  uefi
-\e[1m ■ gpu-bond-nvme-900-8.10-uefi — 1대\e[0m
+      aa:bb:cc:dd:ee:03 eth0 sda     sda5      500 9.6  uefi
+\e[1m ■ gpu-bond-nvme0n1-900-8.10-uefi — 1대\e[0m
    \e[33mtmp tmp gpu gpu0001   10.0.0.4\e[0m
-      \e[33maa:bb:cc:dd:ee:04 bond nvme nvme0n1p8 900 8.10 uefi\e[0m
+      \e[33maa:bb:cc:dd:ee:04 bond nvme0n1 nvme0n1p8 900 8.10 uefi\e[0m
       \e[33m(추천 ← gpu0100)\e[0m
 
 
@@ -135,7 +135,7 @@
    500 9.6 uefi
  tmp tmp mec spice-a01 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda
    sda5 500 9.6 uefi
- tmp tmp gpu gpu0001 10.0.0.4 aa:bb:cc:dd:ee:04 bond nvme
+ tmp tmp gpu gpu0001 10.0.0.4 aa:bb:cc:dd:ee:04 bond nvme0n1
    nvme0n1p8 900 8.10 uefi
 
 
@@ -157,11 +157,11 @@
 
 \e[1m ■ sec-bond-sda-500-8.10-uefi = 1 [A] — 1대\e[0m
    \e[36mtmp tmp sec svr001\e[0m
-      \e[36m10.0.0.11 aa:bb:cc:dd:ee:01 bond sda  sda5\e[0m
+      \e[36m10.0.0.11 aa:bb:cc:dd:ee:01 bond sda     sda5\e[0m
       \e[36m500 8.10 uefi  (DNS 로 바꿈 10.0.0.1 → 10.0.0.11)\e[0m
 \e[1m ■ sec-bond-sda-500-9.6-uefi — 1대\e[0m
    tmp tmp sec svr002    10.0.0.2
-      aa:bb:cc:dd:ee:02 bond sda  sda5      500 9.6  uefi
+      aa:bb:cc:dd:ee:02 bond sda     sda5      500 9.6  uefi
 \e[1m ■ mec-eth0-sda-500-9.6-uefi = 2 [mec] — 1대\e[0m
    tmp tmp mec spice-a01 10.0.0.3
 \e[90m   (아래 5줄 — ↓ PgDn)\e[0m

@@ -410,7 +410,7 @@ func nhColName(s string) string {
 // nhCheckCol: 열 하나의 값 검사 — parseNewhostTpl 과 같은 규칙을 쓰기 위해 나머지를 정상값으로 채워 검사하고 정규화된 값을 돌려준다
 func nhCheckCol(col, val string) (string, error) {
 	if col == "part" {
-		return "", errors.New("part 는 disk 로 자동 결정됩니다 (sda → sda5, nvme → nvme0n1p8)")
+		return "", errors.New("part 는 disk 로 자동 결정됩니다 (sda → sda5, nvme0n1 → nvme0n1p8)")
 	}
 	if val == "" {
 		return "", fmt.Errorf("%s 값이 비어 있음", col)

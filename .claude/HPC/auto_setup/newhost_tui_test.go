@@ -127,8 +127,8 @@ func TestNewhostFlowFull(t *testing.T) {
 		t.Fatalf("빈 줄 뒤 템플릿 지정이어야 함: step=%d msg=%q", n.step, n.msg)
 	}
 	f := h.frame()
-	for _, s := range []string{"1 [A]    tmp tmp sec <hostname> <ip> <mac> bond sda  sda5      500 8.10 uefi", "(sec-bond-sda-500-8.10-uefi)",
-		"3        tmp tmp mec <hostname> <ip> <mac> eth0 nvme nvme0n1p8 400 9.6  uefi", "값 없음 3", "지정 > _"} {
+	for _, s := range []string{"1 [A]    tmp tmp sec <hostname> <ip> <mac> bond sda     sda5      500 8.10 uefi", "(sec-bond-sda-500-8.10-uefi)",
+		"3        tmp tmp mec <hostname> <ip> <mac> eth0 nvme0n1 nvme0n1p8 400 9.6  uefi", "값 없음 3", "지정 > _"} {
 		if !strings.Contains(f, s) {
 			t.Errorf("지정 화면에 %q 없음:\n%s", s, f)
 		}
@@ -405,7 +405,7 @@ func TestNewhostAssignLanguage(t *testing.T) {
 		t.Errorf("덮어쓰기: %s %s %s %s %s", lbl(1), lbl(5), lbl(21), lbl(24), lbl(20))
 	}
 	h.keys("svr001-003 disk=nvme boot=legacy\r")
-	if v := n.eff(n.rows[1]); v.T.Disk != "nvme" || v.T.Part != "nvme0n1p8" || v.T.Boot != "legacy" || v.Label != "1 [A]*" {
+	if v := n.eff(n.rows[1]); v.T.Disk != "nvme0n1" || v.T.Part != "nvme0n1p8" || v.T.Boot != "legacy" || v.Label != "1 [A]*" {
 		t.Errorf("열 수정: %+v", v)
 	}
 	before := n.eff(n.rows[9]).T
@@ -425,7 +425,7 @@ func TestNewhostAssignLanguage(t *testing.T) {
 	if !strings.Contains(n.msg, "템플릿 4 [G] 추가") || len(n.tpls) != 4 {
 		t.Fatalf("+ 템플릿: %q", n.msg)
 	}
-	if b, err := os.ReadFile(filepath.Join(h.state, "newhost", "alice", "templates")); err != nil || string(b) != "G|gpu bond nvme 900 8.10 legacy\n" {
+	if b, err := os.ReadFile(filepath.Join(h.state, "newhost", "alice", "templates")); err != nil || string(b) != "G|gpu bond nvme0n1 900 8.10 legacy\n" {
 		t.Errorf("templates 파일: %q %v", b, err)
 	}
 	h.keys("svr025=g\r")
@@ -438,7 +438,7 @@ func TestNewhostAssignLanguage(t *testing.T) {
 	}
 	n.sc = flowScroll{} // 오류 행으로 스크롤됐을 수 있으므로 맨 위로
 	h.st.draw()
-	if !strings.Contains(h.frame(), "4 [G]    tmp tmp gpu") || !strings.Contains(h.frame(), "(gpu-bond-nvme-900-8.10-legacy) user") {
+	if !strings.Contains(h.frame(), "4 [G]    tmp tmp gpu") || !strings.Contains(h.frame(), "(gpu-bond-nvme0n1-900-8.10-legacy) user") {
 		t.Errorf("목록에 새 템플릿:\n%s", h.frame())
 	}
 	// 다시 열면 user 템플릿이 그대로 보임
@@ -460,7 +460,7 @@ func TestNewhostRecommendFlow(t *testing.T) {
 		t.Fatalf("추천: %+v", v)
 	}
 	f := h.frame()
-	if !strings.Contains(f, "추천    gpu bond nvme 900 8.10 uefi  ← svr0100") || !strings.Contains(f, "(값 없음)") || !strings.Contains(f, "추천 1") {
+	if !strings.Contains(f, "추천    gpu bond nvme0n1 900 8.10 uefi  ← svr0100") || !strings.Contains(f, "(값 없음)") || !strings.Contains(f, "추천 1") {
 		t.Errorf("추천 표시:\n%s", f)
 	}
 	h.keys("node01=mec\r\r")
@@ -821,7 +821,7 @@ func TestNewhostPasteTemplateColumn(t *testing.T) {
 	h.keys("y")
 	want := "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond sda sda5 500 8.10 uefi\n" +
 		"tmp tmp mec svr002 10.0.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 500 9.6 uefi\n" +
-		"tmp tmp mec svr003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 nvme nvme0n1p8 400 9.6 uefi\n"
+		"tmp tmp mec svr003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 nvme0n1 nvme0n1p8 400 9.6 uefi\n"
 	if b, _ := os.ReadFile(filepath.Join(h.awx, "alice.txt")); string(b) != want {
 		t.Errorf("alice.txt:\n%s", b)
 	}

@@ -439,15 +439,15 @@ nodeinfo 를 쓸 수 없는 **신규 설치 서버**용입니다. 엔지니어�
 **템플릿** — 한 줄 형식 `별칭|infra nic disk 용량 os boot` (예 `A|sec bond sda 500 8.10 uefi`)
 
 ```
-1 [A]   tmp tmp sec <hostname> <ip> <mac> bond sda sda5       500 8.10 uefi   (sec-bond-sda-500-8.10-uefi)
-2 [mec] tmp tmp mec <hostname> <ip> <mac> eth0 sda sda5       500 9.6  uefi   (mec-eth0-sda-500-9.6-uefi)
-3       tmp tmp mec <hostname> <ip> <mac> eth0 nvme nvme0n1p8 400 9.6  uefi   (mec-eth0-nvme-400-9.6-uefi)
+1 [A]   tmp tmp sec <hostname> <ip> <mac> bond sda     sda5      500 8.10 uefi   (sec-bond-sda-500-8.10-uefi)
+2 [mec] tmp tmp mec <hostname> <ip> <mac> eth0 sda     sda5      500 9.6  uefi   (mec-eth0-sda-500-9.6-uefi)
+3       tmp tmp mec <hostname> <ip> <mac> eth0 nvme0n1 nvme0n1p8 400 9.6  uefi   (mec-eth0-nvme0n1-400-9.6-uefi)
 ```
 
 - 저장되는 줄은 `tmp tmp infra hostname ip mac nic disk part 용량 os boot` (01 의 12필드). `1.1T→1200` 변환·MAC 짝수 보정·infra 별칭은 01 이 하므로 여기서는 하지 않습니다.
-- 이름은 값으로 자동 생성됩니다 (`sec-bond-sda-500-8.10-uefi`). 짧은 별칭(`A`, `mec` 등)은 선택입니다. **root 파티션은 disk 로 고정**: `sda` → `sda5`, `nvme` → `nvme0n1p8`.
+- 이름은 값으로 자동 생성됩니다 (`sec-bond-sda-500-8.10-uefi`). 짧은 별칭(`A`, `mec` 등)은 선택입니다. **root 파티션은 disk 로 고정**: `sda` → `sda5`, `nvme0n1` → `nvme0n1p8`.
 - 출처 두 곳: **conf 공용** `newhost_template_1`~`9` + **user 별** `<AUTO_SETUP_DIR>/newhost/<user>/templates` (화면에서 `+ infra nic disk 용량 os boot [별칭]` 으로 추가하면 자동 저장되어 다음에도 보임. 값이 겹치면 거부).
-- 값 검사: disk 는 `sda`/`nvme` 만, 용량은 숫자만, boot 는 `uefi`/`legacy`/`레거시` 만 (01 이 `레거시` 를 legacy 로 바꾸므로 둘 다 허용), infra·nic·os 는 공백만 불가. 틀린 conf 템플릿은 목록에서 빠지고 사유가 표시됩니다.
+- 값 검사: disk 는 `sda`/`nvme0n1` 만(예전 값 `nvme` 도 받아 `nvme0n1` 로 바꿈), 용량은 숫자만, boot 는 `uefi`/`legacy`/`레거시` 만 (01 이 `레거시` 를 legacy 로 바꾸므로 둘 다 허용), infra·nic·os 는 공백만 불가. 틀린 conf 템플릿은 목록에서 빠지고 사유가 표시됩니다.
 
 **지정 (미니 언어)** — 표 아래 한 줄에 적고 Enter
 
