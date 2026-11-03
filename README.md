@@ -117,6 +117,7 @@ ls -l bundles/
 - `/etc/nsswitch.conf`: 기존 `sudoers:` 줄을 지우고 마지막 줄에 `sudoers: ldap files` 추가 (변경 시 `.bak.<시각>` 백업).
 - `/opt/localrepo/rhel<ver>`에 번들 압축 해제.
 - 재실행해도 안전합니다(멱등).
+- 검증 시 이미 설치된 패키지는 제외하고, 미설치 패키지만 `dnf --assumeno`로 의존성 해결을 확인합니다. 6개 모두 설치되어 있으면 검증을 건너뜁니다(repo 구성은 동일하게 진행).
 
 ### 의존성 해결
 

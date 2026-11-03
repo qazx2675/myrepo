@@ -34,7 +34,7 @@
   2. `rscp`로 번들 전송 -> `REMOTE_EXTRACT` (`/opt/localrepo/rhel<ver>`에 압축 해제)
   3. `REMOTE_CONFIG` 실행
      - `move_old_repos` -> `write_local_repo` -> `disable_subscription_plugin`(`disable_plugin_file`) -> `fix_nsswitch`
-     - 검증: `verify_repolist` -> `verify_resolve`(`dnf --assumeno`) -> `verify_nsswitch`
+     - 검증: `verify_repolist` -> `verify_resolve`(이미 설치된 패키지 제외 후 `dnf --assumeno`) -> `verify_nsswitch`
   4. 결과를 `logs/.results/<host>`에 `OK|...` 또는 `FAIL|사유`로 기록
 - `print_summary` : 성공/실패 수와 실패 사유 출력, 실패가 있으면 종료코드 1
 

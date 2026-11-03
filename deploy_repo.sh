@@ -295,11 +295,23 @@ verify_repolist() {
   fi
 }
 
-# e-2. dnf --assumeno 로 의존성 해결 여부 확인
+# e-2. 미설치 패키지만 dnf --assumeno 로 의존성 해결 여부 확인 (이미 설치된 패키지는 제외)
 verify_resolve() {
-  local -a pkgs
-  local out rc=0
-  read -r -a pkgs <<<"$PKGS_STR"
+  local -a all pkgs=()
+  local p out rc=0
+  read -r -a all <<<"$PKGS_STR"
+  for p in "${all[@]}"; do
+    if rpm -q --quiet "$p"; then
+      log "이미 설치됨 (제외): $p"
+    else
+      pkgs+=("$p")
+    fi
+  done
+  if (( ${#pkgs[@]} == 0 )); then
+    log "모든 패키지가 이미 설치되어 있어 의존성 검증을 건너뜁니다"
+    return 0
+  fi
+  log "검증 대상(미설치): ${pkgs[*]}"
   out=$(LC_ALL=C dnf --assumeno install "${pkgs[@]}" 2>&1) || rc=$?
   echo "$out"
   if echo "$out" | grep -Eqi 'No match for argument|nothing provides|^Error:|^Problem|Unable to find a match|Failed to download'; then
