@@ -1,0 +1,323 @@
+#!/bin/bash
+# mn - 디렉토리 안내 + 이동 도구 (RHEL6 bash 4.1 호환)
+# 설정 파일: ${MN_CONF:-/etc/dir/dir.conf}
+# 부모 셸의 cd 는 직접 할 수 없으므로 "$HOME/.mn_cd" 에 `cd "경로"` 한 줄을 써 두고,
+# 셸 함수/alias 가 이를 source 해서 이동한다. (bash/csh 모두 유효한 문법)
+
+# 실행 시작 즉시 이동 파일을 비운다 (이전 실행의 cd 가 재실행되는 것을 방지)
+if [ -n "${HOME:-}" ]; then
+    ( umask 077; : > "$HOME/.mn_cd" ) 2>/dev/null
+fi
+
+CONF="${MN_CONF:-/etc/dir/dir.conf}"
+
+# ---- 색상 (tty 이고 NO_COLOR 가 비어 있을 때만) ----
+C_R=""; C_SEC=""; C_NUM=""; C_PATH=""; C_DESC=""; C_PLAIN=""; C_DIM=""
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    C_R=$'\033[0m'
+    C_SEC=$'\033[1;33m'
+    C_NUM=$'\033[35m'
+    C_PATH=$'\033[36m'
+    C_DESC=$'\033[32m'
+    C_PLAIN=$'\033[94m'
+    C_DIM=$'\033[2m'
+fi
+
+# 파싱 결과 (병렬 배열)
+E_SEC=(); E_NAME=(); E_ISP=(); E_NUM=(); E_DESC=(); PIDX=()
+NE=0; NP=0
+TRIMMED=""
+
+# 사용법 출력
+usage() {
+    cat <<'EOF'
+사용법: mn [명령]
+
+  mn, mn ls, mn -l        전체 목록 출력
+  mn <번호>               해당 번호의 디렉토리로 이동
+  mn <키워드...>          경로/설명(도구는 이름/설명)에서 검색
+                          경로 항목이 1개만 일치하면 바로 이동,
+                          여러 개면 일치 목록만 출력
+  mn add <섹션> <이름> <설명...>
+                          설정 파일에 항목 추가 (섹션이 없으면 새로 만듦)
+  mn edit                 설정 파일을 편집기($EDITOR, 기본 vi)로 열기
+  mn -h, --help, help     이 도움말
+
+설정 파일: ${MN_CONF:-/etc/dir/dir.conf}  (MN_CONF 환경변수로 변경)
+EOF
+}
+
+# 앞뒤 공백 제거 -> TRIMMED
+trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    TRIMMED="$s"
+}
+
+# 설정 파일을 한 번 읽어 배열로 파싱
+parse_conf() {
+    local line t sec="기타" cur=-1 name desc isp
+    NE=0; NP=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        trim "$line"; t="$TRIMMED"
+        [ -z "$t" ] && continue
+        case "$line" in \#*) continue ;; esac
+
+        # 공백으로 시작: 직전 항목의 추가 설명 줄
+        if [[ $line == [[:blank:]]* ]]; then
+            if [ "$cur" -ge 0 ]; then
+                if [ -n "${E_DESC[$cur]}" ]; then
+                    E_DESC[$cur]="${E_DESC[$cur]}"$'\n'"$t"
+                else
+                    E_DESC[$cur]="$t"
+                fi
+            fi
+            continue
+        fi
+
+        # [섹션] 또는 [섹션/하위]
+        if [[ $t == \[*\] ]]; then
+            sec="${t:1:${#t}-2}"
+            trim "$sec"; sec="$TRIMMED"
+            cur=-1
+            continue
+        fi
+
+        # 항목: 이름 | 설명 (첫 번째 | 에서 분리)
+        if [[ $t == *"|"* ]]; then
+            name="${t%%|*}"; desc="${t#*|}"
+        else
+            name="$t"; desc=""
+        fi
+        trim "$name"; name="$TRIMMED"
+        trim "$desc"; desc="$TRIMMED"
+        [ -z "$name" ] && continue
+
+        isp=0
+        case "$name" in
+            /*) isp=1 ;;
+            \~*) isp=1; name="${HOME:-}${name:1}" ;;
+        esac
+
+        E_SEC[$NE]="$sec"
+        E_NAME[$NE]="$name"
+        E_ISP[$NE]="$isp"
+        E_DESC[$NE]="$desc"
+        E_NUM[$NE]=0
+        if [ "$isp" = 1 ]; then
+            NP=$((NP + 1))
+            E_NUM[$NE]=$NP
+            PIDX[$NP]=$NE
+        fi
+        cur=$NE
+        NE=$((NE + 1))
+    done < "$CONF"
+}
+
+# 지정한 항목 인덱스들을 목록 형식으로 출력
+show_entries() {
+    local i sec top sub ind pad dl first last_top="" last_sec=$'\001'
+    for i in "$@"; do
+        sec="${E_SEC[$i]}"
+        top="${sec%%/*}"
+        sub=""
+        [[ $sec == */* ]] && sub="${sec#*/}"
+
+        if [ "$top" != "$last_top" ]; then
+            printf '%s\n' "${C_SEC}${top}${C_R}"
+            last_top="$top"
+        fi
+        if [ "$sec" != "$last_sec" ] && [ -n "$sub" ]; then
+            printf '%s\n' " ${C_SEC}${sub}${C_R}"
+        fi
+        last_sec="$sec"
+
+        if [ -n "$sub" ]; then ind="   "; else ind=" "; fi
+        if [ "${E_ISP[$i]}" = 1 ]; then
+            printf '%s\n' "${ind}- ${C_NUM}[${E_NUM[$i]}]${C_R} ${C_PATH}${E_NAME[$i]}${C_R}"
+        else
+            printf '%s\n' "${ind}- ${C_PLAIN}${E_NAME[$i]}${C_R}"
+        fi
+
+        if [ -n "${E_DESC[$i]}" ]; then
+            pad="${ind}     "
+            first=1
+            while IFS= read -r dl; do
+                if [ "$first" = 1 ]; then
+                    printf '%s\n' "${pad}${C_DIM}|_${C_R} ${C_DESC}${dl}${C_R}"
+                    first=0
+                else
+                    printf '%s\n' "${pad}   ${C_DESC}${dl}${C_R}"
+                fi
+            done <<< "${E_DESC[$i]}"
+        fi
+    done
+}
+
+# 이동 요청: 경로 검증 후 ~/.mn_cd 에 cd 한 줄 기록
+do_cd() {
+    local p="$1"
+    case "$p" in
+        *\"*|*\`*|*\$*|*\\*|*$'\n'*)
+            echo "오류: 경로에 사용할 수 없는 문자(\" \` \$ \\ 줄바꿈)가 있어 이동하지 않습니다: $p" >&2
+            return 1 ;;
+    esac
+    if [ -z "${HOME:-}" ]; then
+        echo "오류: HOME 환경변수가 없어 이동 정보를 기록할 수 없습니다." >&2
+        return 1
+    fi
+    ( umask 077; printf 'cd "%s"\n' "$p" > "$HOME/.mn_cd" ) 2>/dev/null
+    if [ $? -ne 0 ]; then
+        echo "오류: $HOME/.mn_cd 파일에 기록할 수 없습니다." >&2
+        return 1
+    fi
+    printf '이동: %s\n' "${C_PATH}${p}${C_R}"
+    return 0
+}
+
+# 번호로 이동
+go_number() {
+    local n
+    if [ "${#1}" -gt 9 ]; then
+        echo "오류: 번호가 범위를 벗어났습니다 (1~$NP)." >&2
+        return 1
+    fi
+    n=$((10#$1))
+    if [ "$n" -lt 1 ] || [ "$n" -gt "$NP" ]; then
+        echo "오류: 번호 $1 은(는) 범위를 벗어났습니다 (1~$NP)." >&2
+        return 1
+    fi
+    do_cd "${E_NAME[${PIDX[$n]}]}"
+}
+
+# 키워드 검색 (대소문자 무시, 부분 일치)
+do_search() {
+    local kw hay i hits=() pm=0 qm=0 only=-1
+    kw="$(printf '%s' "$*" | LC_ALL=C tr 'A-Z' 'a-z')"
+    for ((i = 0; i < NE; i++)); do
+        hay="$(printf '%s' "${E_NAME[$i]} ${E_DESC[$i]}" | LC_ALL=C tr 'A-Z' 'a-z')"
+        if [[ $hay == *"$kw"* ]]; then
+            hits[${#hits[@]}]=$i
+            if [ "${E_ISP[$i]}" = 1 ]; then
+                pm=$((pm + 1)); only=$i
+            else
+                qm=$((qm + 1))
+            fi
+        fi
+    done
+
+    if [ "${#hits[@]}" -eq 0 ]; then
+        echo "일치하는 항목이 없습니다: $*" >&2
+        return 1
+    fi
+    if [ "$pm" -eq 1 ] && [ "$qm" -eq 0 ]; then
+        do_cd "${E_NAME[$only]}"
+        return $?
+    fi
+    show_entries "${hits[@]}"
+    if [ "$pm" -ge 1 ]; then
+        echo "번호로 이동: mn <번호>"
+    fi
+    return 0
+}
+
+# 항목 추가: mn add <섹션> <이름> <설명...>
+do_add() {
+    local sec="$1" name="$2" desc newline
+    shift 2
+    desc="$*"
+    sec="${sec#\[}"; sec="${sec%\]}"
+    if [ ! -w "$CONF" ]; then
+        echo "오류: 설정 파일에 쓸 수 없습니다: $CONF" >&2
+        return 1
+    fi
+
+    local L=() n=0 line k h=-1 last t
+    while IFS= read -r line || [ -n "$line" ]; do
+        L[$n]="${line%$'\r'}"
+        n=$((n + 1))
+    done < "$CONF"
+
+    newline="$name | $desc"
+
+    # 섹션 헤더 찾기
+    for ((k = 0; k < n; k++)); do
+        trim "${L[$k]}"; t="$TRIMMED"
+        if [ "$t" = "[$sec]" ]; then h=$k; break; fi
+    done
+
+    if [ "$h" -ge 0 ]; then
+        # 섹션의 마지막 내용 줄(빈 줄/주석 제외) 찾기
+        last=$h
+        for ((k = h + 1; k < n; k++)); do
+            line="${L[$k]}"
+            trim "$line"; t="$TRIMMED"
+            if [[ $line != [[:blank:]]* ]] && [[ $t == \[*\] ]]; then break; fi
+            [ -z "$t" ] && continue
+            case "$line" in \#*) continue ;; esac
+            last=$k
+        done
+        {
+            for ((k = 0; k <= last; k++)); do printf '%s\n' "${L[$k]}"; done
+            printf '%s\n' "$newline"
+            for ((k = last + 1; k < n; k++)); do printf '%s\n' "${L[$k]}"; done
+        } > "$CONF" || { echo "오류: 설정 파일 쓰기에 실패했습니다: $CONF" >&2; return 1; }
+    else
+        {
+            for ((k = 0; k < n; k++)); do printf '%s\n' "${L[$k]}"; done
+            if [ "$n" -gt 0 ]; then
+                trim "${L[$((n - 1))]}"
+                [ -n "$TRIMMED" ] && printf '\n'
+            fi
+            printf '%s\n' "[$sec]"
+            printf '%s\n' "$newline"
+        } > "$CONF" || { echo "오류: 설정 파일 쓰기에 실패했습니다: $CONF" >&2; return 1; }
+    fi
+    echo "추가됨: [$sec] $newline"
+    return 0
+}
+
+# ---- 메인 ----
+case "${1:-}" in
+    -h|--help|help)
+        usage
+        exit 0 ;;
+    edit)
+        exec ${EDITOR:-vi} "$CONF" ;;
+esac
+
+if [ ! -f "$CONF" ] || [ ! -r "$CONF" ]; then
+    echo "오류: 설정 파일을 읽을 수 없습니다: $CONF (다른 경로는 MN_CONF 환경변수로 지정)" >&2
+    exit 1
+fi
+
+case "${1:-}" in
+    add)
+        if [ $# -lt 4 ]; then
+            echo "사용법: mn add <섹션> <이름> <설명...>" >&2
+            exit 1
+        fi
+        shift
+        do_add "$@"
+        exit $? ;;
+esac
+
+parse_conf
+
+case "${1:-}" in
+    ""|ls|-l)
+        all=()
+        for ((i = 0; i < NE; i++)); do all[$i]=$i; done
+        [ "$NE" -gt 0 ] && show_entries "${all[@]}"
+        exit 0 ;;
+esac
+
+if [ $# -eq 1 ] && [[ $1 =~ ^[0-9]+$ ]]; then
+    go_number "$1"
+    exit $?
+fi
+
+do_search "$@"
+exit $?
