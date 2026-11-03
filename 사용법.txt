@@ -1,0 +1,46 @@
+# 수동 실행용 명령 모음 (관리서버, root)
+
+# 0-1. 코드를 관리서버로 받기
+git clone -b rhel-localrepo --single-branch https://github.com/qazx2675/myrepo.git rhel-localrepo
+
+# 0-2. 폴더로 이동
+cd rhel-localrepo
+
+# (이미 clone 했다면) 최신 내용으로 갱신
+git fetch origin rhel-localrepo && git reset --hard origin/rhel-localrepo
+
+# 1. 실행 권한 부여
+chmod +x build_bundle.sh deploy_repo.sh
+
+# 2. 번들 생성 (ISO 경로는 실제 본인 경로로 바꾸세요)
+./build_bundle.sh -8 /path/rhel-8.10-x86_64-dvd.iso -9 /path/rhel-9.6-x86_64-dvd.iso
+
+# 3. 번들 확인
+ls -l bundles
+
+# 4. 대상 호스트 목록 만들기
+cp hosts.txt.example hosts.txt
+
+# 5. 호스트 목록 편집 (예시 줄을 실제 IP/hostname으로 교체)
+vi hosts.txt
+
+# 6. 배포 실행 (비밀번호 1회 입력 후 요약 확인)
+./deploy_repo.sh
+
+# 7. 호스트별 로그 확인
+ls logs && tail -n 30 logs/*.log
+
+# 8. 임의의 VM에 접속해 직접 확인 (<VM_IP>는 실제 값)
+ssh -p 8022 root@<VM_IP>
+
+# 8-1. VM에서: repo 목록 (local repo만 나와야 함)
+dnf repolist
+
+# 8-2. VM에서: nsswitch.conf 마지막 줄이 "sudoers: ldap files" 인지
+tail -1 /etc/nsswitch.conf
+
+# 8-3. VM에서: subscription-manager 플러그인 비활성화 확인 (RHEL 9)
+grep enabled /etc/dnf/plugins/subscription-manager.conf
+
+# 8-4. VM에서: subscription-manager 플러그인 비활성화 확인 (RHEL 8)
+grep enabled /etc/yum/pluginconf.d/subscription-manager.conf

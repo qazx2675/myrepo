@@ -1,0 +1,17 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck build_bundle.sh deploy_repo.sh
+      - name: bash -n
+        run: |
+          bash -n build_bundle.sh
+          bash -n deploy_repo.sh
