@@ -27,13 +27,14 @@
  신규 설치 양식 [user: alice] - 2/5 템플릿 지정
 ------------------------------------------------------------
  템플릿 — 번호·별칭·이름으로 지정합니다
-   1 [A]    tmp tmp sec <hostname> <ip> <mac> bond sda  sda5
-       500 8.10 uefi   (sec-bond-sda-500-8.10-uefi)
-   2 [mec]  tmp tmp mec <hostname> <ip> <mac> eth0 sda  sda5
-       500 9.6  uefi   (mec-eth0-sda-500-9.6-uefi)
-   3        tmp tmp mec <hostname> <ip> <mac> eth0 nvme
+   1 [A]    tmp tmp sec <hostname> <ip> <mac> bond sda
+       sda5      500 8.10 uefi
+       (sec-bond-sda-500-8.10-uefi)
+   2 [mec]  tmp tmp mec <hostname> <ip> <mac> eth0 sda
+       sda5      500 9.6  uefi   (mec-eth0-sda-500-9.6-uefi)
+   3        tmp tmp mec <hostname> <ip> <mac> eth0 nvme0n1
        nvme0n1p8 400 9.6  uefi
-       (mec-eth0-nvme-400-9.6-uefi)
+       (mec-eth0-nvme0n1-400-9.6-uefi)
 
  총 4대 · 지정 3 · 추천 1
  #  hostname   ip        mac                템플릿
@@ -45,8 +46,7 @@
  3  spice-a01  10.0.0.3  aa:bb:cc:dd:ee:03  2 [mec]
       mec eth0 sda 500 9.6 uefi
  4  gpu0001    10.0.0.4  aa:bb:cc:dd:ee:04  추천
-      gpu bond nvme 900 8.10 uefi  ← gpu0100
-
+      gpu bond nvme0n1 900 8.10 uefi  ← gpu0100
 
 
 
@@ -101,17 +101,17 @@
 
  ■ sec-bond-sda-500-8.10-uefi = 1 [A] — 1대
    tmp tmp sec svr001
-      10.0.0.11 aa:bb:cc:dd:ee:01 bond sda  sda5
+      10.0.0.11 aa:bb:cc:dd:ee:01 bond sda     sda5
       500 8.10 uefi  (DNS 로 바꿈 10.0.0.1 → 10.0.0.11)
  ■ sec-bond-sda-500-9.6-uefi — 1대
    tmp tmp sec svr002    10.0.0.2
-      aa:bb:cc:dd:ee:02 bond sda  sda5      500 9.6  uefi
+      aa:bb:cc:dd:ee:02 bond sda     sda5      500 9.6  uefi
  ■ mec-eth0-sda-500-9.6-uefi = 2 [mec] — 1대
    tmp tmp mec spice-a01 10.0.0.3
-      aa:bb:cc:dd:ee:03 eth0 sda  sda5      500 9.6  uefi
- ■ gpu-bond-nvme-900-8.10-uefi — 1대
+      aa:bb:cc:dd:ee:03 eth0 sda     sda5      500 9.6  uefi
+ ■ gpu-bond-nvme0n1-900-8.10-uefi — 1대
    tmp tmp gpu gpu0001   10.0.0.4
-      aa:bb:cc:dd:ee:04 bond nvme nvme0n1p8 900 8.10 uefi
+      aa:bb:cc:dd:ee:04 bond nvme0n1 nvme0n1p8 900 8.10 uefi
       (추천 ← gpu0100)
 
 
@@ -135,7 +135,7 @@
    500 9.6 uefi
  tmp tmp mec spice-a01 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda
    sda5 500 9.6 uefi
- tmp tmp gpu gpu0001 10.0.0.4 aa:bb:cc:dd:ee:04 bond nvme
+ tmp tmp gpu gpu0001 10.0.0.4 aa:bb:cc:dd:ee:04 bond nvme0n1
    nvme0n1p8 900 8.10 uefi
 
 
@@ -157,11 +157,11 @@
 
  ■ sec-bond-sda-500-8.10-uefi = 1 [A] — 1대
    tmp tmp sec svr001
-      10.0.0.11 aa:bb:cc:dd:ee:01 bond sda  sda5
+      10.0.0.11 aa:bb:cc:dd:ee:01 bond sda     sda5
       500 8.10 uefi  (DNS 로 바꿈 10.0.0.1 → 10.0.0.11)
  ■ sec-bond-sda-500-9.6-uefi — 1대
    tmp tmp sec svr002    10.0.0.2
-      aa:bb:cc:dd:ee:02 bond sda  sda5      500 9.6  uefi
+      aa:bb:cc:dd:ee:02 bond sda     sda5      500 9.6  uefi
  ■ mec-eth0-sda-500-9.6-uefi = 2 [mec] — 1대
    tmp tmp mec spice-a01 10.0.0.3
    (아래 5줄 — ↓ PgDn)

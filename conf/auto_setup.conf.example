@@ -55,10 +55,10 @@ ldap_engine=
 
 # (v0.8.0) 신규 설치 양식 템플릿 (선택, 최대 9개) — TUI 에서 w → 2 (CLI: auto_setup newhost) 로 01 의 12필드 양식을 만들 때 고르는 설치 값 묶음
 # 형식: newhost_template_N=별칭|infra nic disk 용량 os boot   (별칭은 비워도 되고 `|` 자체를 생략해도 된다)
-#   disk: sda 또는 nvme (root 파티션은 sda → sda5, nvme → nvme0n1p8 로 정해짐) / 용량: 숫자 / boot: uefi, legacy, 레거시 / 나머지는 공백 없는 문자열
+#   disk: sda 또는 nvme0n1 (예전 값 nvme 도 nvme0n1 로 받음, root 파티션은 sda → sda5, nvme0n1 → nvme0n1p8 로 정해짐) / 용량: 숫자 / boot: uefi, legacy, 레거시 / 나머지는 공백 없는 문자열
 #   이름은 값으로 자동 생성된다: infra-nic-disk-용량-os-boot (예 sec-bond-sda-500-8.10-uefi). 형식이 틀린 템플릿은 목록에서 빠지고 사유가 표시됨
 #   예) newhost_template_1=A|sec bond sda 500 8.10 uefi
-#   예) newhost_template_2=mec eth0 nvme 400 9.6 uefi
+#   예) newhost_template_2=mec eth0 nvme0n1 400 9.6 uefi
 newhost_template_1=
 newhost_template_2=
 newhost_template_3=

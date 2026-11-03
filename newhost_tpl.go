@@ -26,19 +26,19 @@ type NewhostTpl struct {
 	Alias string // 짧은 별칭 (없으면 "")
 	Infra string
 	NIC   string
-	Disk  string // sda | nvme
+	Disk  string // sda | nvme0n1 (예전 값 nvme 는 nvme0n1 로 바꿔 저장)
 	Size  string // 용량 (숫자만)
 	OS    string
 	Boot  string // uefi | legacy | 레거시 (입력한 그대로, 소문자)
-	Part  string // root 파티션 — Disk 로 유도: sda→sda5, nvme→nvme0n1p8
+	Part  string // root 파티션 — Disk 로 유도: sda→sda5, nvme0n1→nvme0n1p8
 }
 
-// newhostPart: disk 에서 root 파티션을 유도 (sda/nvme 가 아니면 "")
+// newhostPart: disk 에서 root 파티션을 유도 (sda/nvme0n1/nvme 가 아니면 "")
 func newhostPart(disk string) string {
 	switch disk {
 	case "sda":
 		return newhostPartSda
-	case "nvme":
+	case "nvme0n1", "nvme":
 		return newhostPartNvme
 	}
 	return ""
@@ -60,7 +60,7 @@ func (t NewhostTpl) Spec() string {
 
 // parseNewhostTpl: 템플릿 한 줄을 검사해 돌려준다 (No 는 호출자가 채움). 오류는 사유 문자열.
 //   - 필드 6개(infra nic disk 용량 os boot), 각 토큰은 공백·`|` 없음
-//   - disk 는 sda/nvme, 용량은 숫자, boot 는 uefi/legacy/레거시 (disk·boot 는 대소문자 무시, 소문자로 저장)
+//   - disk 는 sda/nvme0n1 (예전 값 nvme 도 받아 nvme0n1 로 저장), 용량은 숫자, boot 는 uefi/legacy/레거시 (disk·boot 는 대소문자 무시, 소문자로 저장)
 //   - 별칭은 공백 없음, 숫자만으로는 불가(행 번호와 구분되지 않음)
 func parseNewhostTpl(raw string) (NewhostTpl, error) {
 	var t NewhostTpl
@@ -90,7 +90,10 @@ func parseNewhostTpl(raw string) (NewhostTpl, error) {
 	t.Infra, t.NIC, t.Size, t.OS = f[0], f[1], f[3], f[4]
 	t.Disk, t.Boot = strings.ToLower(f[2]), strings.ToLower(f[5])
 	if t.Part = newhostPart(t.Disk); t.Part == "" {
-		return t, fmt.Errorf("disk %q 은 허용되지 않음 (sda 또는 nvme)", f[2])
+		return t, fmt.Errorf("disk %q 은 허용되지 않음 (sda 또는 nvme0n1)", f[2])
+	}
+	if t.Disk == "nvme" {
+		t.Disk = "nvme0n1"
 	}
 	if _, err := strconv.ParseUint(t.Size, 10, 32); err != nil {
 		return t, fmt.Errorf("용량 %q 은 숫자여야 함", t.Size)
