@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 959" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TUI s — gossh 작업 기록">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="959" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">TUI s — gossh 작업 기록</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">키 · 화면 1 · 2 어디서나 (메뉴 없이 작업 화면이 바로 열림)</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">s</text>
+  <text x="265" y="92" class="t" text-anchor="middle">CLI auto_setup s 와 같은 화면</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="78" rx="6" class="box"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">세션 user 정하기 → 작업 목록 (openWork)</text>
+  <text x="265" y="166" class="t" text-anchor="middle">&lt;상태&gt;/work/&lt;user&gt;/{index.jsonl, lists/, out/} — 파일(lists/&lt;3자리&gt;)별로</text>
+  <text x="265" y="182" class="t" text-anchor="middle">묶고 최근 실행이 위</text>
+  <text x="265" y="198" class="t" text-anchor="middle">열 때 가볍게 정리: 출력 7일 · user 당 200MB · 목록 파일 7일</text>
+  <path d="M265 208 L265 260" class="ln"/>
+  <rect x="40" y="260" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="280" class="t tb" text-anchor="middle">목록에서 누른 키는?  (n / Enter / /)</text>
+  <rect x="560" y="236" width="310" height="78" rx="6" class="box"/>
+  <text x="715" y="256" class="t tb" text-anchor="middle">n 새 작업 → 붙여넣기 (빈 줄 무시, Ctrl+D 로 끝)</text>
+  <text x="715" y="272" class="t" text-anchor="middle">같은 목록이 있으면 "재사용? y/n", 새 목록이면</text>
+  <text x="715" y="288" class="t" text-anchor="middle">/tmp/auto_setup/lists/&lt;소문자 3자리&gt; 이름 정함</text>
+  <text x="715" y="304" class="t" text-anchor="middle">명령 한 줄 입력</text>
+  <path d="M490 275 L560 275" class="ln"/>
+  <text x="498" y="270" class="t tm">n</text>
+  <path d="M265 290 L265 342" class="ln"/>
+  <text x="273" y="307" class="t tm">Enter</text>
+  <rect x="40" y="342" width="450" height="94" rx="6" class="box"/>
+  <text x="265" y="362" class="t tb" text-anchor="middle">Enter → 실행 결과 + 아래에 항목 메뉴 (번호로 선택)</text>
+  <text x="265" y="378" class="t" text-anchor="middle">1 같은 파일로 새 명령  ·  2 재실행  ·  3 실패·접속불가만 재실행 (새</text>
+  <text x="265" y="394" class="t" text-anchor="middle">파일, 파생 표시)</text>
+  <text x="265" y="410" class="t" text-anchor="middle">4 결과 보기 (less -R)  ·  5 메모  ·  6 호스트 목록 보기</text>
+  <text x="265" y="426" class="t" text-anchor="middle">/ 호스트 검색: 그 호스트가 들어 있던 작업과 명령을 시간순으로</text>
+  <path d="M265 436 L265 472" class="ln"/>
+  <rect x="40" y="472" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="492" class="t tb" text-anchor="middle">위험어(reboot · halt 등)가 있거나 전량 os6 대상인데 os6_mgmt</text>
+  <text x="265" y="508" class="t tb" text-anchor="middle">미설정?</text>
+  <rect x="560" y="464" width="310" height="62" rx="6" class="dec"/>
+  <text x="715" y="484" class="t tb" text-anchor="middle">추가 확인 후 진행</text>
+  <text x="715" y="500" class="t" text-anchor="middle">gossh 의 위험 작업 확인(대상 목록 + y/N)을 거쳐</text>
+  <text x="715" y="516" class="t" text-anchor="middle">실행</text>
+  <path d="M490 495 L560 495" class="ln"/>
+  <text x="498" y="490" class="t tm">예</text>
+  <path d="M265 518 L265 554" class="ln"/>
+  <text x="273" y="535" class="t tm">아니오</text>
+  <rect x="40" y="554" width="450" height="94" rx="6" class="box"/>
+  <text x="265" y="574" class="t tb" text-anchor="middle">실행 위치 결정 (workPlan)</text>
+  <text x="265" y="590" class="t" text-anchor="middle">os8_mgmt: 대수 ≤ work_os6_over(비면 1000) → os8 gossh, 접속불가만</text>
+  <text x="265" y="606" class="t" text-anchor="middle">os6_mgmt 경유 재실행 / 초과 → 전량 os6_mgmt 경유</text>
+  <text x="265" y="622" class="t" text-anchor="middle">os6_mgmt 에서 열었으면 대수와 상관없이 os6 gossh 로 바로 실행,</text>
+  <text x="265" y="638" class="t" text-anchor="middle">기록은 os8_mgmt 로 중계</text>
+  <path d="M265 648 L265 676" class="ln"/>
+  <rect x="40" y="676" width="450" height="78" rx="6" class="ldap"/>
+  <text x="265" y="696" class="t tb" text-anchor="middle">TUI 를 잠시 떠나 터미널에서 gossh 실행</text>
+  <text x="265" y="712" class="t" text-anchor="middle">gossh -w lists/&lt;3자리&gt; "&lt;명령&gt;" (os6 경유는 ssh -t + bash -c). script</text>
+  <text x="265" y="728" class="t" text-anchor="middle">-q -f -c 로 tty 유지 — 출력 · 색 · 위험어 확인 그대로</text>
+  <text x="265" y="744" class="t" text-anchor="middle">끝나면 Enter 로 목록으로 돌아옴</text>
+  <path d="M265 754 L265 782" class="ln"/>
+  <rect x="40" y="782" width="450" height="78" rx="6" class="sec"/>
+  <text x="265" y="802" class="t tb" text-anchor="middle">기록: 요약(index.jsonl) 영구 · 전체 출력(out/&lt;id&gt;.log.gz) 7일</text>
+  <text x="265" y="818" class="t" text-anchor="middle">시각 · 터미널(pts) · 서버 · 경로(os8 / os6 / os6 전량) · 명령 ·</text>
+  <text x="265" y="834" class="t" text-anchor="middle">성공/실패/접속불가 호스트</text>
+  <text x="265" y="850" class="t" text-anchor="middle">성공/실패는 ERROR: 종료코드 · SSH 접속 실패 줄과 결과 파일로 판정</text>
+  <text x="40" y="897" class="t tm">범례</text>
+  <rect x="80" y="886" width="14" height="14" class="box"/>
+  <text x="100" y="897" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="886" width="14" height="14" class="dec"/>
+  <text x="237" y="897" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="886" width="14" height="14" class="ldap"/>
+  <text x="395" y="897" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="886" width="14" height="14" class="sec"/>
+  <text x="699" y="897" class="t tm">기록 · 결과</text>
+  <rect x="80" y="906" width="14" height="14" class="ext"/>
+  <text x="100" y="917" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="934" class="t tm">코드: menu_tui.go startWork · work_tui.go openWork · work.go workPlan · work.go judgeWork · work.go workCleanAll</text>
+</svg>

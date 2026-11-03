@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 497" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="auto_setup cancel &lt;jobid&gt;">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="497" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">auto_setup cancel &lt;jobid&gt;</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">CLI · 무기한 감시 중인 작업 종료</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">auto_setup cancel &lt;jobid&gt;</text>
+  <text x="265" y="92" class="t" text-anchor="middle">jobid 는 auto_setup status 로 확인</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">원격 클라이언트인가?</text>
+  <rect x="560" y="130" width="310" height="30" rx="6" class="ldap"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">relayRemote — os8_mgmt 에서 실행</text>
+  <path d="M490 145 L560 145" class="ln"/>
+  <text x="498" y="140" class="t tm">예</text>
+  <path d="M265 160 L265 188" class="ln"/>
+  <text x="273" y="177" class="t tm">아니오(로컬)</text>
+  <rect x="40" y="188" width="450" height="46" rx="6" class="box"/>
+  <text x="265" y="208" class="t tb" text-anchor="middle">cancelJob() = archiveJob(id)</text>
+  <text x="265" y="224" class="t" text-anchor="middle">jobs/&lt;jobid&gt;.json 을 jobs/done/ 으로 이동</text>
+  <path d="M265 234 L265 270" class="ln"/>
+  <rect x="40" y="270" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="290" class="t tb" text-anchor="middle">이동했는가?</text>
+  <rect x="560" y="262" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="282" class="t tb" text-anchor="middle">[X] 사유 출력, 종료코드 1</text>
+  <text x="715" y="298" class="t" text-anchor="middle">(jobid 없음 등)</text>
+  <path d="M490 285 L560 285" class="ln"/>
+  <text x="498" y="280" class="t tm">실패</text>
+  <path d="M265 300 L265 336" class="ln"/>
+  <text x="273" y="317" class="t tm">예</text>
+  <rect x="40" y="336" width="450" height="62" rx="6" class="sec"/>
+  <text x="265" y="356" class="t tb" text-anchor="middle">로그 "cancel &lt;jobid&gt;" + [O] 작업 종료: &lt;jobid&gt;</text>
+  <text x="265" y="372" class="t" text-anchor="middle">데몬은 다음 step(5초)의 dropCancelled 에서 이 작업의 감시를 멈춤</text>
+  <text x="265" y="388" class="t" text-anchor="middle">이미 끝난 run 의 결과(codes/)는 그대로 남음</text>
+  <text x="40" y="435" class="t tm">범례</text>
+  <rect x="80" y="424" width="14" height="14" class="box"/>
+  <text x="100" y="435" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="424" width="14" height="14" class="dec"/>
+  <text x="237" y="435" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="424" width="14" height="14" class="ldap"/>
+  <text x="395" y="435" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="424" width="14" height="14" class="sec"/>
+  <text x="699" y="435" class="t tm">기록 · 결과</text>
+  <rect x="80" y="444" width="14" height="14" class="ext"/>
+  <text x="100" y="455" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="472" class="t tm">코드: main.go runCancel · state.go cancelJob · daemon.go dropCancelled</text>
+</svg>

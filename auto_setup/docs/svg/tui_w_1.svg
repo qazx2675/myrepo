@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 783" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TUI w → 1 — AWX 실행">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="783" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">TUI w → 1 — AWX 실행</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">메뉴 항목 · 화면 1 · 2 (01.AWX_nodeinfo_V2.sh 를 이 터미널에서 실행)</text>
+
+  <rect x="40" y="56" width="450" height="30" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">w → 1  (또는 ww · w Enter)</text>
+  <path d="M265 86 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">awx_dir 가 있고 01.AWX_nodeinfo_V2.sh 가 있는가?</text>
+  <rect x="560" y="114" width="310" height="62" rx="6" class="ext"/>
+  <text x="715" y="134" class="t tb" text-anchor="middle">안내만 표시</text>
+  <text x="715" y="150" class="t" text-anchor="middle">"awx_dir 가 비었거나 01.AWX_nodeinfo_V2.sh</text>
+  <text x="715" y="166" class="t" text-anchor="middle">가 없습니다"</text>
+  <path d="M490 145 L560 145" class="ln"/>
+  <text x="498" y="140" class="t tm">아니오</text>
+  <path d="M265 160 L265 204" class="ln"/>
+  <text x="273" y="177" class="t tm">예</text>
+  <rect x="40" y="204" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">유효한 awx_profile_N 이 있는가?</text>
+  <rect x="560" y="204" width="310" height="30" rx="6" class="box"/>
+  <text x="715" y="224" class="t tb" text-anchor="middle">질문 없이 일반 실행으로</text>
+  <path d="M490 219 L560 219" class="ln"/>
+  <text x="498" y="214" class="t tm">없음</text>
+  <path d="M265 234 L265 262" class="ln"/>
+  <text x="273" y="251" class="t tm">있음</text>
+  <rect x="40" y="262" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="282" class="t tb" text-anchor="middle">AWX auto 실행? [y/n]</text>
+  <text x="265" y="298" class="t" text-anchor="middle">yml 마다 OS 버전이 다르면 n</text>
+  <rect x="560" y="270" width="310" height="30" rx="6" class="box"/>
+  <text x="715" y="290" class="t tb" text-anchor="middle">n → 일반 실행 (01 의 질문에 직접 응답)</text>
+  <path d="M490 285 L560 285" class="ln"/>
+  <text x="498" y="280" class="t tm">n</text>
+  <path d="M265 308 L265 336" class="ln"/>
+  <text x="273" y="325" class="t tm">y → 프로파일 번호(1~9)</text>
+  <rect x="40" y="336" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="356" class="t tb" text-anchor="middle">user 선택</text>
+  <text x="265" y="372" class="t" text-anchor="middle">x 와 같은 메뉴 (01 의 user_route → info_mn.sh), -user 로 실행했으면</text>
+  <text x="265" y="388" class="t" text-anchor="middle">생략</text>
+  <path d="M265 398 L265 426" class="ln"/>
+  <rect x="40" y="426" width="450" height="78" rx="6" class="box"/>
+  <text x="265" y="446" class="t tb" text-anchor="middle">작업 대상 서버 목록 붙여넣기 → Ctrl+D</text>
+  <text x="265" y="462" class="t" text-anchor="middle">hostname 또는 12필드 줄을 섞어 입력 가능. 비우고 Ctrl+D 면 건너뜀(기존</text>
+  <text x="265" y="478" class="t" text-anchor="middle">&lt;user&gt;.txt 사용)</text>
+  <text x="265" y="494" class="t" text-anchor="middle">awx_dir/&lt;user&gt;.txt 를 덮어씀(백업 없음), 01 의 등록 후 확인에 자동 입력</text>
+  <path d="M265 504 L265 532" class="ln"/>
+  <rect x="40" y="532" width="450" height="78" rx="6" class="ldap"/>
+  <text x="265" y="552" class="t tb" text-anchor="middle">TUI 를 떠나 awx_dir 에서 bash 01.AWX_nodeinfo_V2.sh 실행</text>
+  <text x="265" y="568" class="t" text-anchor="middle">AWX_USER · AWX_VERIFY_FILE (+ auto 면 AWX_AUTO=1</text>
+  <text x="265" y="584" class="t" text-anchor="middle">AWX_AUTO_NODEINFO AWX_AUTO_OS)</text>
+  <text x="265" y="600" class="t" text-anchor="middle">취소: Ctrl+X (즉시, 01 이 SIGINT)</text>
+  <path d="M265 610 L265 638" class="ln"/>
+  <rect x="40" y="638" width="450" height="46" rx="6" class="sec"/>
+  <text x="265" y="658" class="t tb" text-anchor="middle">TUI 로 돌아와 메시지 표시</text>
+  <text x="265" y="674" class="t" text-anchor="middle">AWX 종료 (rc=N)  /  AWX 취소됨 (Ctrl+X)</text>
+  <text x="40" y="721" class="t tm">범례</text>
+  <rect x="80" y="710" width="14" height="14" class="box"/>
+  <text x="100" y="721" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="710" width="14" height="14" class="dec"/>
+  <text x="237" y="721" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="710" width="14" height="14" class="ldap"/>
+  <text x="395" y="721" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="710" width="14" height="14" class="sec"/>
+  <text x="699" y="721" class="t tm">기록 · 결과</text>
+  <rect x="80" y="730" width="14" height="14" class="ext"/>
+  <text x="100" y="741" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="758" class="t tm">코드: awxrun.go startAwx · awxrun.go handleAwx · awxrun.go runAwxEnv · awxrun.go awxEnv</text>
+</svg>

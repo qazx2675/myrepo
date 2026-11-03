@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 571" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TUI r — 새로고침">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="571" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">TUI r — 새로고침</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">키 · 화면 1·2 공통 (자동 갱신: 로컬 2초 / 원격 10초)</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">r  (화면 1 · 2 어디서나)</text>
+  <text x="265" y="92" class="t" text-anchor="middle">? 도움말, 메뉴, 입력 화면이 열려 있지 않을 때</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">마지막 요청 후 5초가 지났는가?</text>
+  <text x="265" y="166" class="t" text-anchor="middle">연타로 요청 파일이 쌓이지 않게 함 (refreshReqHold)</text>
+  <rect x="560" y="130" width="310" height="46" rx="6" class="box"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">요청은 생략</text>
+  <text x="715" y="166" class="t" text-anchor="middle">화면만 다시 읽음 (결과는 다음 자동 갱신에 보임)</text>
+  <path d="M490 153 L560 153" class="ln"/>
+  <text x="498" y="148" class="t tm">아니오</text>
+  <path d="M265 176 L265 204" class="ln"/>
+  <text x="273" y="193" class="t tm">예</text>
+  <rect x="40" y="204" width="450" height="62" rx="6" class="box"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">requestRefresh — Request(ReqRefresh)</text>
+  <text x="265" y="240" class="t" text-anchor="middle">requests/&lt;epoch&gt;_refresh.req 기록 (원격이면 gossh 로 os8_mgmt 에)</text>
+  <text x="265" y="256" class="t" text-anchor="middle">실패하면 [X] 즉시 갱신 요청 실패 메시지</text>
+  <path d="M265 266 L265 294" class="ln"/>
+  <rect x="40" y="294" width="450" height="30" rx="6" class="box"/>
+  <text x="265" y="314" class="t tb" text-anchor="middle">st.refresh() — 스냅샷을 바로 다시 읽어 그림</text>
+  <path d="M265 324 L265 352" class="ln"/>
+  <rect x="40" y="352" width="450" height="62" rx="6" class="ldap"/>
+  <text x="265" y="372" class="t tb" text-anchor="middle">데몬이 5초 안에 수거 → 즉시 ping · 준비확인</text>
+  <text x="265" y="388" class="t" text-anchor="middle">os8 에서 안 보이는 호스트는 os6_mgmt 경유로 확인, 정체 호스트는 ping</text>
+  <text x="265" y="404" class="t" text-anchor="middle">상태와 상관없이 다시 확인</text>
+  <path d="M265 414 L265 442" class="ln"/>
+  <rect x="40" y="442" width="450" height="30" rx="6" class="sec"/>
+  <text x="265" y="462" class="t tb" text-anchor="middle">다음 자동 갱신에서 변화가 화면에 보임</text>
+  <text x="40" y="509" class="t tm">범례</text>
+  <rect x="80" y="498" width="14" height="14" class="box"/>
+  <text x="100" y="509" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="498" width="14" height="14" class="dec"/>
+  <text x="237" y="509" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="498" width="14" height="14" class="ldap"/>
+  <text x="395" y="509" class="t tm">외부 호출 (gossh · ssh · 01 · 엔진 · os_check)</text>
+  <rect x="679" y="498" width="14" height="14" class="sec"/>
+  <text x="699" y="509" class="t tm">기록 · 결과</text>
+  <rect x="80" y="518" width="14" height="14" class="ext"/>
+  <text x="100" y="529" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="546" class="t tm">코드: tui.go requestRefresh · requests.go ReqRefresh · tui.go refreshReqHold</text>
+</svg>

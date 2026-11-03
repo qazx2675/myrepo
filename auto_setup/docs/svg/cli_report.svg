@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 663" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="auto_setup (인자 없음 / --plain) — 상태 리포트">
+  <defs>
+    <style>
+      :root { --bg:#ffffff; --tx:#222222; --mute:#555555; --bx:#e8f4ff; --bxs:#0066cc; --dc:#fff3e0; --dcs:#c25e00; --ld:#f3e8ff; --lds:#7b3fb0; --sc:#e6f6ea; --scs:#1f7a3a; --ex:#f4f4f4; --exs:#777777; --ln:#444444; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#1e1e1e; --tx:#ececec; --mute:#b5b5b5; --bx:#22344a; --bxs:#5aa9ff; --dc:#40331f; --dcs:#ffb455; --ld:#35264a; --lds:#c79cff; --sc:#1f3a28; --scs:#6fd08c; --ex:#2c2c2c; --exs:#999999; --ln:#cccccc; }
+      }
+      .bg { fill: var(--bg); }
+      .t { font-family: "Malgun Gothic","Noto Sans CJK KR",sans-serif; font-size: 12px; fill: var(--tx); }
+      .tb { font-weight: bold; }
+      .tm { fill: var(--mute); font-size: 11px; }
+      .ttl { font-size: 18px; font-weight: bold; }
+      .box { fill: var(--bx); stroke: var(--bxs); stroke-width: 1.5; }
+      .dec { fill: var(--dc); stroke: var(--dcs); stroke-width: 1.5; }
+      .ldap { fill: var(--ld); stroke: var(--lds); stroke-width: 1.5; }
+      .sec { fill: var(--sc); stroke: var(--scs); stroke-width: 1.5; }
+      .ext { fill: var(--ex); stroke: var(--exs); stroke-width: 1.5; }
+      .ln { stroke: var(--ln); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+      .dash { stroke: var(--exs); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; marker-end: url(#ahd); }
+      .ahf { fill: var(--ln); }
+      .ahd { fill: var(--exs); }
+    </style>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahf"/></marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><polygon points="0 0, 10 3, 0 6" class="ahd"/></marker>
+  </defs>
+
+  <rect width="900" height="663" class="bg"/>
+  <text x="450" y="28" class="t ttl" text-anchor="middle">auto_setup (인자 없음 / --plain) — 상태 리포트</text>
+  <text x="450" y="46" class="t tm" text-anchor="middle">CLI · 로컬(os8_mgmt)과 원격(os6_mgmt)에서 화면이 같습니다</text>
+
+  <rect x="40" y="56" width="450" height="46" rx="6" class="ext"/>
+  <text x="265" y="76" class="t tb" text-anchor="middle">auto_setup  [--plain] [--admin] [-user 이름]</text>
+  <text x="265" y="92" class="t" text-anchor="middle">옵션은 splitUser / splitAdmin 이 앞쪽에서 떼어 냅니다</text>
+  <path d="M265 102 L265 130" class="ln"/>
+  <rect x="40" y="130" width="450" height="46" rx="6" class="dec"/>
+  <text x="265" y="150" class="t tb" text-anchor="middle">-user 이름이 올바른가?</text>
+  <text x="265" y="166" class="t" text-anchor="middle">영문·숫자·. _ - 만, . 와 .. 는 거부</text>
+  <rect x="560" y="130" width="310" height="46" rx="6" class="ext"/>
+  <text x="715" y="150" class="t tb" text-anchor="middle">[X] user 이름이 올바르지 않습니다</text>
+  <text x="715" y="166" class="t" text-anchor="middle">종료코드 1</text>
+  <path d="M490 153 L560 153" class="ln"/>
+  <text x="498" y="148" class="t tm">아니오</text>
+  <path d="M265 176 L265 204" class="ln"/>
+  <text x="273" y="193" class="t tm">예</text>
+  <rect x="40" y="204" width="450" height="78" rx="6" class="box"/>
+  <text x="265" y="224" class="t tb" text-anchor="middle">newSource() — 데이터 원본 선택</text>
+  <text x="265" y="240" class="t" text-anchor="middle">os8_mgmt 변수가 비어 있으면 /tmp/auto_setup 파일을 직접</text>
+  <text x="265" y="256" class="t" text-anchor="middle">읽고(BuildSnapshot),</text>
+  <text x="265" y="272" class="t" text-anchor="middle">채워져 있으면 gossh 원샷 snapshot 으로 os8_mgmt 에서 가져옵니다</text>
+  <path d="M265 282 L265 334" class="ln"/>
+  <rect x="40" y="334" width="450" height="30" rx="6" class="dec"/>
+  <text x="265" y="354" class="t tb" text-anchor="middle">stdout 이 터미널이고 --plain 이 아닌가?</text>
+  <rect x="560" y="310" width="310" height="78" rx="6" class="sec"/>
+  <text x="715" y="330" class="t tb" text-anchor="middle">텍스트 표 한 번 출력 (색 없음)</text>
+  <text x="715" y="346" class="t" text-anchor="middle">renderPlain: 화면 1 전체 + 정체·실패가 있는</text>
+  <text x="715" y="362" class="t" text-anchor="middle">그룹의 호스트표</text>
+  <text x="715" y="378" class="t" text-anchor="middle">종료코드 0</text>
+  <path d="M490 349 L560 349" class="ln"/>
+  <text x="498" y="344" class="t tm">아니오</text>
+  <path d="M265 364 L265 416" class="ln"/>
+  <text x="273" y="381" class="t tm">예</text>
+  <rect x="40" y="416" width="450" height="78" rx="6" class="box"/>
+  <text x="265" y="436" class="t tb" text-anchor="middle">TUI 시작 (runTUI)</text>
+  <text x="265" y="452" class="t" text-anchor="middle">raw tty + 대체 화면, 자동 갱신: 로컬 2초 / 원격 10초</text>
+  <text x="265" y="468" class="t" text-anchor="middle">-user 면 해당 user 의 job 만 보이고 x·w·m·s 의 user 질문을 건너뜀</text>
+  <text x="265" y="484" class="t" text-anchor="middle">--admin 이면 m 변경 메뉴를 conf 와 상관없이 켬</text>
+  <path d="M265 494 L265 522" class="ln"/>
+  <rect x="40" y="522" width="450" height="62" rx="6" class="sec"/>
+  <text x="265" y="542" class="t tb" text-anchor="middle">키 입력 처리</text>
+  <text x="265" y="558" class="t" text-anchor="middle">화면 1(그룹) ↔ 화면 2(호스트표), r f a h w m s x ? q</text>
+  <text x="265" y="574" class="t" text-anchor="middle">각 키의 흐름은 tui_*.svg 참고</text>
+  <text x="40" y="621" class="t tm">범례</text>
+  <rect x="80" y="610" width="14" height="14" class="box"/>
+  <text x="100" y="621" class="t tm">동작 (auto_setup)</text>
+  <rect x="217" y="610" width="14" height="14" class="dec"/>
+  <text x="237" y="621" class="t tm">판정 · 키 입력 · 확인</text>
+  <rect x="375" y="610" width="14" height="14" class="sec"/>
+  <text x="395" y="621" class="t tm">기록 · 결과</text>
+  <rect x="478" y="610" width="14" height="14" class="ext"/>
+  <text x="498" y="621" class="t tm">시작 · 종료 · 참고 (점선)</text>
+  <text x="40" y="638" class="t tm">코드: main.go splitAdmin · ctl.go cmdReport · tui.go runTUI · render.go renderPlain · userfilter.go splitUser</text>
+</svg>
