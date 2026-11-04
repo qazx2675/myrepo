@@ -33,7 +33,7 @@ func TestNhParseLine(t *testing.T) {
 	}
 	bad := []struct{ in, want string }{
 		{"svr001 10.0.0.1", "값이 2개"},
-		{"svr001 10.0.0.1 aa:bb:cc:dd:ee:01 x y", "값이 5개"},
+		{"svr001 10.0.0.1 aa:bb:cc:dd:ee:01 x y z", "값이 6개"},
 		{"svr001 10.0.0.300 aa:bb:cc:dd:ee:01", "IP 형식 오류"},
 		{"svr001 10.0.1 aa:bb:cc:dd:ee:01", "IP 형식 오류"},
 		{"svr001 svr002 aa:bb:cc:dd:ee:01", "IP 가 없음"},
@@ -46,6 +46,19 @@ func TestNhParseLine(t *testing.T) {
 	for _, c := range bad {
 		if r := nhParseLine(c.in); !strings.Contains(r.Err, c.want) {
 			t.Errorf("%q: Err=%q, %q 기대", c.in, r.Err, c.want)
+		}
+	}
+	// 템플릿·13번째: 13번째는 네 번째 값 뒤 전체 (쉼표·괄호·슬래시 그대로)
+	extra := []struct{ in, tpl, extra string }{
+		{"svr001 10.0.0.1 aa:bb:cc:dd:ee:01", "", ""},
+		{"svr001 10.0.0.1 aa:bb:cc:dd:ee:01 tmplA", "tmplA", ""},
+		{"svr001 10.0.0.1 aa:bb:cc:dd:ee:01 tmplA rhel810(TEST/SR)", "tmplA", "rhel810(TEST/SR)"},
+		{"svr001,10.0.0.1,aa:bb:cc:dd:ee:01,tmplA,rhel810(TEST,SR)|x", "tmplA", "rhel810(TEST,SR)|x"},
+		{"svr001	10.0.0.1 aa:bb:cc:dd:ee:01	2 ,a/b ", "2", "a/b"},
+	}
+	for _, c := range extra {
+		if r := nhParseLine(c.in); r.Err != "" || r.Tpl != c.tpl || r.Extra != c.extra || r.Host != "svr001" {
+			t.Errorf("%q → %+v", c.in, r)
 		}
 	}
 }
@@ -397,6 +410,10 @@ func TestNhLine(t *testing.T) {
 	got := nhLine(nhRow{Host: "svr001", IP: "10.0.0.1", MAC: "aa:bb:cc:dd:ee:01"}, tp)
 	if got != "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond nvme0n1 nvme0n1p8 400 9.6 legacy" || len(strings.Fields(got)) != 12 {
 		t.Errorf("12필드: %q", got)
+	}
+	got = nhLine(nhRow{Host: "svr001", IP: "10.0.0.1", MAC: "aa:bb:cc:dd:ee:01", Extra: "rhel810(TEST/SR)"}, tp)
+	if got != "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond nvme0n1 nvme0n1p8 400 9.6 legacy rhel810(TEST/SR)" || len(strings.Fields(got)) != 13 {
+		t.Errorf("13필드: %q", got)
 	}
 }
 
