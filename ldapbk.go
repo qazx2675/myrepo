@@ -244,7 +244,7 @@ func gosshBatch(route string, hosts []string, cmd string, timeout time.Duration)
 		}
 		// 원격은 bash 가 해석하도록 remoteBash 로 감싼다 (os6_mgmt 로그인 셸이 csh 여도 동작)
 		remote := remoteTmpSh("f", false, false) + "cat > $f; " + shq(os6_gossh) + " -pm -script -w $f " + shq(cmd) + "; rm -f $f ${f}_*"
-		out, err = ldapExec(timeout, hostList(hosts), "ssh", os6_mgmt, remoteBash(remote))
+		out, err = ldapExec(sshLimit(timeout), hostList(hosts), "ssh", os6_mgmt, remoteBash(remote))
 	} else {
 		f, e := os.CreateTemp("", "as_ldap_")
 		if e != nil {
@@ -262,6 +262,9 @@ func gosshBatch(route string, hosts []string, cmd string, timeout time.Duration)
 	g := parseGossh(out, hosts)
 	logGosshUnparsed("LDAP", g, false) // 수집 응답에는 설정 파일 base64 가 있어 원본 줄은 남기지 않는다
 	res := g.Lines
+	if route == "os6" && len(res) == 0 {
+		logSSHReason("LDAP", out) // os6_mgmt ssh 자체가 실패했으면 원인을 한 번 로그에
+	}
 	if err != nil && len(res) == 0 {
 		if _, ok := err.(*exec.ExitError); !ok {
 			return nil, errors.New("gossh 실행 실패")

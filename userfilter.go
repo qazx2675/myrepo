@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -47,13 +48,14 @@ type userFilterSource struct{ SnapshotSource }
 
 func (u userFilterSource) Snapshot() (Snapshot, error) {
 	s, err := u.SnapshotSource.Snapshot()
-	if err != nil {
+	var ce *snapCachedErr
+	if err != nil && !errors.As(err, &ce) { // 저장된 스냅샷(os8_mgmt 접속 불가)은 걸러서 그대로 돌려준다
 		return s, err
 	}
 	if showAllUsers {
-		return s, nil
+		return s, err
 	}
-	return filterSnapshotUser(s, forceUser), nil
+	return filterSnapshotUser(s, forceUser), err
 }
 
 // filterSnapshotUser: user 의 job 만 남기고 진행 중 합계를 다시 계산

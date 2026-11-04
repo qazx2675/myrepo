@@ -91,7 +91,7 @@ func TestCheckOS6(t *testing.T) {
 	t.Cleanup(func() { os6_mgmt, os6_gossh = oldM, oldG })
 
 	fakeExternal(t, func(stdin, name string, args ...string) (string, error) {
-		if name != "ssh" || len(args) != 6 || strings.Join(args[:5], " ") != "-o BatchMode=yes -o ConnectTimeout=10 mgmtstub" {
+		if name != "ssh" || len(args) != 6 || strings.Join(args[:5], " ") != "-o BatchMode=yes -o ConnectTimeout=30 mgmtstub" {
 			t.Fatalf("호출: %s %v", name, args)
 		}
 		if stdin != "a\nb\n" {
@@ -288,11 +288,18 @@ func TestCheckTimeoutKillsGroup(t *testing.T) {
 	old := checkTimeout
 	checkTimeout = 500 * time.Millisecond
 	t.Cleanup(func() { checkTimeout = old })
+	oldSSH := ssh_timeout
+	ssh_timeout = "10" // 10초 이하면 ssh 상한도 checkTimeout 그대로 (sshLimit)
+	t.Cleanup(func() { ssh_timeout = oldSSH })
 	oldM, oldG := os6_mgmt, os6_gossh
 	os6_mgmt, os6_gossh = "mgmtstub", gossh
 	t.Cleanup(func() { os6_mgmt, os6_gossh = oldM, oldG })
 
 	for _, route := range []string{"local", "os6"} {
+		wantWhy := whyTimeout
+		if route == "os6" {
+			wantWhy = whyTimeoutOS6()
+		}
 		pidf := filepath.Join(t.TempDir(), "child")
 		t.Setenv("HANG", pidf)
 		start := time.Now()
@@ -303,7 +310,7 @@ func TestCheckTimeoutKillsGroup(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: 시간 초과는 에러가 아니라 호스트별 사유: %v", route, err)
 		}
-		if !res["a"].Responded || res["a"].Uptime != 3.5 || res["c"].Responded || res["c"].Why != whyTimeout {
+		if !res["a"].Responded || res["a"].Uptime != 3.5 || res["c"].Responded || res["c"].Why != wantWhy {
 			t.Fatalf("%s: %+v", route, res)
 		}
 		pid, _ := os.ReadFile(pidf)

@@ -198,7 +198,7 @@ func TestWorkOS6CommandQuoting(t *testing.T) {
 		for _, c := range cmds {
 			danger := workDanger(c)
 			argv := workOS6Argv(hosts, c, danger)
-			if argv[0] != "ssh" || argv[1] != "-t" || strings.Join(argv[2:6], " ") != "-o BatchMode=yes -o ConnectTimeout=10" || argv[6] != "os6mgmt" {
+			if argv[0] != "ssh" || argv[1] != "-t" || strings.Join(argv[2:6], " ") != "-o BatchMode=yes -o ConnectTimeout=30" || argv[6] != "os6mgmt" {
 				t.Fatalf("ssh 인자: %q", argv[:7])
 			}
 			remote := argv[7]

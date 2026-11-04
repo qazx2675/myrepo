@@ -486,3 +486,26 @@ AS_TEST_LOGIN_MGMT=ascsh@localhost go test -run ViaLoginShell -v .
 
 # [60초 제한·gossh 출력 해석] 단위 테스트만 따로 (가짜 hang·FQDN·ANSI·bash -c 인용)
 go test -run 'TestCheckTimeoutKillsGroup|TestParseGossh|TestParseCheckFQDNAndMismatch|TestRemoteBash' -v .
+
+# [os6_mgmt 경유 장애 점검] os8_mgmt 에서 root 로 — 읽기 전용 (conf 경로·-t 대상호스트·-p 병렬수 는 생략 가능)
+./os6_truble.sh
+./os6_truble.sh /etc/auto_setup/auto_setup.conf -t <대상호스트> -p 8
+
+# [호스트 키 변경 조치] os6_mgmt 재설치 후 BatchMode 로 조용히 거부될 때: 옛 키 삭제 후 한 번 접속해 등록
+ssh-keygen -R <os6_mgmt>
+ssh <os6_mgmt> true
+
+# [ssh 접속 제한] conf 의 ssh_timeout(초, 기본 30·최소 5)을 늘린 뒤 데몬 재시작
+grep '^ssh_timeout=' /etc/auto_setup/auto_setup.conf
+auto_setup --restart
+
+# [os6_mgmt 직접 실행] os6_mgmt 에서 root 로 TUI 실행 후 호스트표에서 g(준비확인) / c(설정체크+설정수정) / t(설정체크만) — 데몬 없음
+auto_setup
+
+# [os6_mgmt 직접 실행 기록 확인] 잠금(active), run 기록(runs), 완료기록(done), 스냅샷 캐시(cache)
+ls -l <os6_autosetup>/os6_run/active/ <os6_autosetup>/os6_run/runs/ <os6_autosetup>/os6_run/done/
+cat <os6_autosetup>/os6_run/runs/<id>.txt
+grep 'os6 직접' /tmp/auto_setup/auto_setup.log
+
+# [바이너리 배치] auto_setup_os8 은 os8_mgmt·os6_mgmt 공용 (os6_mgmt 에는 os6_autosetup 경로에 auto_setup 이름으로)
+cp auto_setup_os8 <os6_autosetup>/auto_setup && chmod 755 <os6_autosetup>/auto_setup

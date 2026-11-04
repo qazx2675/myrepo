@@ -327,15 +327,18 @@ func BuildSnapshot(dir string, now time.Time) Snapshot {
 	}
 	s.Daemon.Procs = len(findDaemonPids("/proc", dir, os.Getpid()))
 	manual := readActiveRequests(dir)
+	o6 := readOS6SnapInfo(now) // os6_mgmt 직접 실행 중·결과 → 호스트 비고 (os6_autosetup 이 비면 nil)
 	for _, j := range readJobsIn(filepath.Join(dir, "jobs"), time.Time{}) {
 		sj := buildSnapJob(j, t, false, manual[j.ID])
 		sj.Recheck = readRecheck(dir, j.ID)
+		annotateOS6(&sj, o6)
 		s.Totals.merge(sj.Counts)
 		s.Jobs = append(s.Jobs, sj)
 	}
 	for _, j := range readJobsIn(filepath.Join(dir, "jobs", "done"), now.Add(-closedKeepDur())) {
 		sj := buildSnapJob(j, t, true, manual[j.ID])
 		sj.Recheck = readRecheck(dir, j.ID)
+		annotateOS6(&sj, o6)
 		s.Jobs = append(s.Jobs, sj)
 	}
 	return s

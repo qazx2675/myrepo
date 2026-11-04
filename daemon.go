@@ -61,6 +61,10 @@ type Daemon struct {
 	doneLogged    map[string]bool // 거부한 완료기록(호스트+내용) — 로그 1회
 	lastWork      time.Time       // 마지막 gossh 작업 기록 정리 (하루 한 번, work.go workCleanAll)
 
+	os6Seen map[string]*os6Seen // os6_mgmt 직접 실행 잠금(파일 이름 → 본 상태), nil = 아직 안 읽음 (os6run.go)
+	os6Hold map[string]string   // 응답 중인 os6 직접 실행 잠금이 잡은 호스트 → 잠금 id (매 주기 os6Scan 이 다시 만듦, 이 호스트는 run 에서 제외)
+	os6Err  string              // 마지막 잠금 읽기 오류 (같은 오류 반복 로그 방지)
+
 	ownerCheck func() string // 이 데몬이 아직 유일한 데몬인지 확인 (문제 사유, 정상이면 ""). nil 이면 확인 안 함 — runDaemon 이 lockHeldCheck 로 채움
 	lost       bool          // ownerCheck 실패 → 다른 데몬이 같은 디렉터리를 사용 중이라 저장하지 않고 loop 를 끝냄
 }
@@ -530,6 +534,7 @@ func (d *Daemon) step(now time.Time) {
 		d.lastCheck = now
 		d.check(now)
 	}
+	d.os6Scan(now)
 	d.acceptDoneRecords(now)
 	d.refreshStages(now)
 	d.schedule(now)
@@ -1047,7 +1052,7 @@ func (d *Daemon) autoRunAt(id string) (at int64, first bool) {
 // schedule: 실행 중인 run 이 maxRuns() 보다 적으면 다음 run 을 결정 (max_runs=1 이면 종전처럼 직렬).
 // 1차: 전부 READY 또는 첫 READY+bootWait, 이후: 첫 늦은 READY+lateWait 에 새로 READY 된 미처리 호스트만.
 // 다른 run 에 들어가 있는 호스트는 빼고 고른다 — 같은 job 의 앞 묶음(1차 포함)이 실행 중이어도 그 뒤 READY 된 호스트는
-// 늦은 묶음 규칙대로 따로 시작한다 (job 당 한 step 에 run 하나).
+// 늦은 묶음 규칙대로 따로 시작한다 (job 당 한 step 에 run 하나). os6_mgmt 직접 실행이 잡은 호스트(os6Hold)도 뺀다.
 func (d *Daemon) schedule(now time.Time) {
 	if len(d.runs) >= maxRuns() || now.Before(d.runRetry) {
 		return
@@ -1058,7 +1063,7 @@ func (d *Daemon) schedule(now time.Time) {
 		pending := 0
 		var ready []string
 		for name, h := range j.Hosts {
-			if !active(h) || busy[name] != nil {
+			if !active(h) || busy[name] != nil || d.os6Hold[name] != "" {
 				continue
 			}
 			pending++
@@ -1081,7 +1086,7 @@ func (d *Daemon) schedule(now time.Time) {
 			}
 			all := make([]string, 0, len(j.Hosts))
 			for name, h := range j.Hosts {
-				if h.Processed == "" && busy[name] == nil { // 완료기록으로 이미 처리된 호스트·다른 run 의 호스트는 제외
+				if h.Processed == "" && busy[name] == nil && d.os6Hold[name] == "" { // 완료기록으로 이미 처리된 호스트·다른 run·os6 직접 실행의 호스트는 제외
 					all = append(all, name)
 				}
 			}
