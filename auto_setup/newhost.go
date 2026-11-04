@@ -59,6 +59,7 @@ type nhRow struct {
 	Raw           string
 	Host, IP, MAC string
 	Tpl           string // 네 번째 값(번호·별칭·이름), 없으면 "" — 템플릿 지정 단계에서 따로 지정
+	Extra         string // 다섯 번째 값(13번째 레코드, AWX 분류용) — 해석하지 않고 12필드 줄 뒤에 그대로 붙임, 없으면 ""
 	Err, Dup      string
 }
 
@@ -97,12 +98,27 @@ func nhNormMAC(s string) (mac string, bare, ok bool) {
 	return strings.Join(parts, ":"), bare, true
 }
 
-// nhParseLine: 한 줄 → hostname·ip·mac (구분자 공백·탭·쉼표, 앞 3개는 순서 무관) + 선택적 네 번째 템플릿 값. 실패하면 Err 에 사유.
+// nhParseLine: 한 줄 → hostname·ip·mac (구분자 공백·탭·쉼표, 앞 3개는 순서 무관) + 선택적 네 번째 템플릿 값
+// + 선택적 다섯 번째 값(13번째 레코드 — 네 번째 값 뒤 전체, 쉼표·괄호·슬래시 포함, 공백 없는 한 단어). 실패하면 Err 에 사유.
 func nhParseLine(line string) nhRow {
 	r := nhRow{Raw: strings.TrimSpace(line)}
-	tok := strings.FieldsFunc(r.Raw, func(c rune) bool { return unicode.IsSpace(c) || c == ',' })
+	sep := func(c rune) bool { return unicode.IsSpace(c) || c == ',' }
+	tok := strings.FieldsFunc(r.Raw, sep)
+	if len(tok) >= 5 {
+		rest := r.Raw
+		for i := 0; i < 4; i++ {
+			rest = strings.TrimLeftFunc(rest, sep)
+			rest = rest[len(tok[i]):]
+		}
+		r.Extra = strings.TrimLeftFunc(rest, sep)
+		if n := len(strings.Fields(r.Extra)); n > 1 {
+			r.Err = fmt.Sprintf("값이 %d개 (hostname ip mac [템플릿] [13번째] 필요 — 13번째는 공백 없는 한 단어)", 4+n)
+			return r
+		}
+		tok = tok[:4]
+	}
 	if len(tok) != 3 && len(tok) != 4 {
-		r.Err = fmt.Sprintf("값이 %d개 (hostname ip mac [템플릿] 필요)", len(tok))
+		r.Err = fmt.Sprintf("값이 %d개 (hostname ip mac [템플릿] [13번째] 필요)", len(tok))
 		return r
 	}
 	if len(tok) == 4 {
@@ -652,7 +668,7 @@ func loadNewhostHistory(files []string) *nhHistIndex {
 		f.Close()
 		for _, ln := range strings.Split(string(b), "\n") {
 			fl := strings.Fields(ln)
-			if len(fl) != 12 {
+			if len(fl) != 12 && len(fl) != 13 { // 13번째(AWX 분류용)는 추천에 쓰지 않음
 				continue
 			}
 			t, err := parseNewhostTpl(strings.Join([]string{fl[2], fl[6], fl[7], fl[9], fl[10], fl[11]}, " "))
@@ -694,9 +710,13 @@ func (ix *nhHistIndex) recommend(host string) (nhHist, bool) {
 
 // ---------------------------------------------------------------- 12필드 · 저장 · AWX
 
-// nhLine: 01 의 ${user}.txt 한 줄 `tmp tmp infra hostname ip mac nic disk part 용량 os boot`
+// nhLine: 01 의 ${user}.txt 한 줄 `tmp tmp infra hostname ip mac nic disk part 용량 os boot [13번째]`
 func nhLine(r nhRow, t NewhostTpl) string {
-	return strings.Join([]string{"tmp", "tmp", t.Infra, r.Host, r.IP, r.MAC, t.NIC, t.Disk, t.Part, t.Size, t.OS, t.Boot}, " ")
+	l := strings.Join([]string{"tmp", "tmp", t.Infra, r.Host, r.IP, r.MAC, t.NIC, t.Disk, t.Part, t.Size, t.OS, t.Boot}, " ")
+	if r.Extra != "" {
+		l += " " + r.Extra
+	}
+	return l
 }
 
 // nhSaveResult: 저장 결과 경로 (Backup 은 기존 파일이 없었으면 ""). HistoryErr = 저장은 됐지만 이력 사본을 못 남긴 사유.

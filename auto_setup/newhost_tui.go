@@ -574,7 +574,7 @@ func (n *newhostState) previewKey(ev keyEv) {
 	}
 }
 
-// lines: 저장할 12필드 줄 (붙여넣은 순서)
+// lines: 저장할 12필드 줄 (13번째가 있으면 13필드, 붙여넣은 순서)
 func (n *newhostState) lines() []string {
 	out := make([]string, len(n.rows))
 	for i, r := range n.rows {
@@ -782,8 +782,8 @@ func renderNewhost(n *newhostState, now time.Time, width, height int, color bool
 			}
 			f.Head = append(f.Head, ln(stGray, fmt.Sprintf("템플릿 %d개: %s  (전체 내용은 다음 단계)", len(n.tpls), strings.Join(names, ", ")))...)
 		}
-		f.Head = append(f.Head, ln("", "hostname ip mac [템플릿] 을 한 줄에 한 대씩 붙여넣으세요 — 앞 3개는 구분자(공백·탭·쉼표)·순서 무관")...)
-		f.Head = append(f.Head, ln(stGray, "템플릿(번호·별칭·이름)을 맨 뒤에 붙이면 한 번에 지정, 생략하면 다음 단계에서 지정   예) svr001 10.0.0.1 aa:bb:cc:dd:ee:01 A")...)
+		f.Head = append(f.Head, ln("", "hostname ip mac [템플릿] [13번째] 를 한 줄에 한 대씩 붙여넣으세요 — 앞 3개는 구분자(공백·탭·쉼표)·순서 무관")...)
+		f.Head = append(f.Head, ln(stGray, "템플릿(번호·별칭·이름)을 네 번째에 붙이면 한 번에 지정, 생략하면 다음 단계에서 지정 · 다섯 번째(13번째, AWX 분류용)는 줄 끝에 그대로 붙음   예) svr001 10.0.0.1 aa:bb:cc:dd:ee:01 A rhel810(TEST/SR)")...)
 		f.Head = append(f.Head, ln(stGray, "MAC: aa:bb:cc:dd:ee:ff · aa-bb-… · aabb.ccdd.eeff · aabbccddeeff → 소문자 aa:bb:… 로 저장")...)
 		f.Head = append(f.Head, ln(stGray, "끝내기: 빈 줄 또는 . (Ctrl+D)   고치기: d 번호 삭제(d 3-5,8) · e 번호 다시 입력 · 빈 줄에서 Backspace = 앞 줄")...)
 		segs := []seg{{fmt.Sprintf(" 입력 %d대", len(n.rows)), stBold}}
@@ -924,6 +924,9 @@ func (n *newhostState) pasteBody(width int, color bool) []string {
 				if ti, ok := nhFindTpl(n.tpls, r.Tpl); r.Tpl != "" && ok {
 					tail = "  → " + nhTplLabel(ti, n.tpls[ti])
 				}
+				if r.Extra != "" {
+					tail += " + " + cleanText(r.Extra)
+				}
 				n.rowLines[i] = wrapSegs(color, width, 2, "      ", seg{num + nhPad(r.Host, 16) + "  " + nhPad(r.IP, 15) + "  " + r.MAC + tail, ""})
 			}
 		}
@@ -1014,7 +1017,11 @@ func (n *newhostState) confirmBody(width int, color bool) []string {
 		out = append(out, "")
 		out = append(out, wrapSegs(color, width, 1, "   ", seg{" 입력   : " + cleanText(r.Raw), ""})...)
 		out = append(out, wrapSegs(color, width, 1, "   ", seg{" 저장될 줄: " + nhLine(r, t), stGreen})...)
-		out = append(out, wrapSegs(color, width, 1, "   ", seg{"            (tmp tmp infra hostname ip mac nic disk part 용량 os boot)", stGray})...)
+		hdr := "            (tmp tmp infra hostname ip mac nic disk part 용량 os boot"
+		if r.Extra != "" {
+			hdr += " 13번째"
+		}
+		out = append(out, wrapSegs(color, width, 1, "   ", seg{hdr + ")", stGray})...)
 	}
 	return out
 }
@@ -1083,6 +1090,9 @@ func (n *newhostState) assignBody(width int, color bool) []string {
 		}
 		segs := []seg{{fmt.Sprintf(" %s  %s  %s  %s  ", nhPad(strconv.Itoa(i+1), wn), nhPad(r.Host, wh), nhPad(r.IP, wi), nhPad(r.MAC, 17)), ""},
 			{nhPad(v.Label, wl), lst}, {"  ", ""}, {vt, vst}}
+		if r.Extra != "" {
+			segs = append(segs, seg{" + " + cleanText(r.Extra), ""})
+		}
 		if v.Src == nhSrcRec && v.From != "" && !strings.EqualFold(v.From, r.Host) {
 			segs = append(segs, seg{"  ← " + v.From, stGray})
 		}
@@ -1151,7 +1161,7 @@ func (n *newhostState) previewBody(width int, color bool) []string {
 		}
 	}
 	lines := n.lines()
-	var w [12]int
+	var w [13]int // 12필드 + 13번째
 	for _, l := range lines {
 		for c, v := range strings.Fields(l) {
 			w[c] = rMax(w[c], strWidth(v))
