@@ -322,6 +322,24 @@ func readHostSet(path string) map[string]bool {
 // gossh 실행
 // ---------------------------------------------------------------------------
 
+// resolveGosshPath 는 설정의 GOSSH 값을 실제 실행 경로로 바꾼다.
+// ★ 셸 변수처럼 GOSSH="/path/gossh" 로 따옴표를 쓰거나 ~/ 로 시작하거나 폴더(/path/gossh/)만
+// 적으면 그대로는 exec 가 실패하므로(no such file or directory / permission denied) 여기서 풀어 준다.
+func resolveGosshPath(v string) string {
+	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		v = strings.TrimSpace(v[1 : len(v)-1])
+	}
+	if strings.HasPrefix(v, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			v = filepath.Join(home, v[2:])
+		}
+	}
+	if fi, err := os.Stat(v); err == nil && fi.IsDir() {
+		v = filepath.Join(v, "gossh")
+	}
+	return v
+}
+
 // runGossh 는 gossh 를 실행해 stdout+stderr 를 로그에 이어 붙이고 stdout 을 돌려준다.
 // 비정상 종료(ExitError)는 오류로 보지 않는다(결과 파일로 판정). 실행 자체가 안 되면 오류.
 func runGossh(gossh string, args []string, log io.Writer) (string, error) {
@@ -389,13 +407,15 @@ func main() {
 		fail(2, "오류: 설정 문구에 gossh 위험어(reboot, poweroff, shutdown, halt, init 0, init 6, ddc 등)가 들어 있어 실행할 수 없습니다: %s", strings.Join(bad, " | "))
 	}
 
-	gossh := conf.Gossh
+	gossh := resolveGosshPath(conf.Gossh)
 	if gossh == "" {
 		p, err := exec.LookPath("gossh")
 		if err != nil {
 			fail(2, "오류: gossh 를 찾을 수 없습니다. 설정 파일의 GOSSH= 에 경로를 쓰거나 PATH 에 추가하세요.")
 		}
 		gossh = p
+	} else if _, err := os.Stat(gossh); err != nil {
+		fail(2, "오류: 설정 파일의 GOSSH 경로에 gossh 가 없습니다: %s", gossh)
 	}
 
 	raw, err := os.ReadFile(cleanHostFile)
