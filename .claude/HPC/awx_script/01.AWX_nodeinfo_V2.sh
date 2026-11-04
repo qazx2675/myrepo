@@ -68,6 +68,7 @@ all_yml=""                   # 전체(_all) yml 파일명 (그룹 yml 이 2개 �
 declare -A yml_opt           # yml 파일명 → "infra os boot splunk"
 declare -A yml_boot          # yml 파일명 → boot (ls 표시용)
 declare -A yml_hosts         # yml 파일명 → 호스트 목록(쉼표 구분, .job 그룹 줄용)
+declare -A yml_tag           # yml 파일명 → 분류 태그 (없으면 빈 값, ls/02 인자용)
 hostfile=$(mktemp)           # 호스트명 목록(gossh -w / 작업 리스트 출력용)
 splitdir=$(mktemp -d)        # 분할/전체 입력 파일 임시 디렉터리
 add_tmp "$hostfile" "$splitdir"
@@ -122,9 +123,16 @@ if [[ $AWX_AUTO == 1 && $AWX_AUTO_NODEINFO == [YyNn] ]]; then
 	fi
 
 	[[ -f ${user}.txt ]] || { err "[X] ${user}.txt 없음"; exit 1; }
-	sed -i 's/1.1T/1200/g' ${user}.txt
-	sed -i 's/7T/7600/g' ${user}.txt
-	sed -i 's/test1234/offchip/g' ${user}.txt
+	# 값 치환은 1~12번째 필드에만 적용 (13번째 분류 태그는 그대로 둠)
+	local content
+	content=$(awk '
+	function sub12(s) { gsub(/1.1T/, "1200", s); gsub(/7T/, "7600", s); gsub(/test1234/, "offchip", s); return s }
+	NF != 13 { print sub12($0); next }
+	{
+		tag = $13; h = $1
+		for (i = 2; i <= 12; i++) h = h " " $i
+		print sub12(h) " " tag
+	}' "${user}.txt") && printf '%s\n' "$content" > "${user}.txt"
 }
 
 # [3] msg 파싱 / 12필드 검사
@@ -133,9 +141,9 @@ parse_msg() {
 		sed -i -n 's/^.*"msg"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "${user}.txt"
 	fi
 	[[ -s ${user}.txt ]] || { err "[X] ${user}.txt 에 유효한 내용이 없습니다"; exit 1; }
-	# 모든 줄이 12필드(vendor model infra hostname ip mac nic disk part 용량 os boot)여야 함
-	awk 'NF != 12 { bad=1; print "[X] 12필드 아님: " NR ": " $0 } END { exit bad }' "${user}.txt" || {
-		err "[X] ${user}.txt 는 12필드 형식(msg 값 또는 vendor model infra hostname ip mac nic disk part 용량 os boot)이어야 합니다"
+	# 모든 줄이 12필드(vendor model infra hostname ip mac nic disk part 용량 os boot)여야 함 (13번째는 분류용 선택 항목)
+	awk 'NF != 12 && NF != 13 { bad=1; print "[X] 12필드(13번째는 분류용 선택 항목) 아님: " NR ": " $0 } END { exit bad }' "${user}.txt" || {
+		err "[X] ${user}.txt 는 12필드(13번째는 분류용 선택 항목) 형식(msg 값 또는 vendor model infra hostname ip mac nic disk part 용량 os boot [분류])이어야 합니다"
 		exit 1
 	}
 }
@@ -578,16 +586,20 @@ inventory_delete() {
 
 # [8] 분할 파일 + 전체 파일 생성: $splitdir 안에만
 split_files() {
-	# groups: 번호|infra|nic|disk|용량|os|boot|splunk  (D 단계가 yml_opt/yml_boot 구성에 사용)
+	# groups: 번호|infra|nic|disk|용량|os|boot|splunk|tag  (D 단계가 yml_opt/yml_boot/yml_tag 구성에 사용, tag 는 '|' 포함 가능)
+	# yaml 에는 13번째(tag) 를 뺀 12필드만 기록 (원격 custom_inventory.sh 는 12필드 기준)
 	awk -v d="$splitdir" -v u="$user" '
 	function splunk(h) { if (h ~ /ev/) return "no"; if (h ~ /^s/) return "Cloud"; return "On-premise" }
 	{
 		b = ($12 == "레거시") ? "legacy" : $12
-		key = $3 "|" $7 "|" $8 "|" $10 "|" $11 "|" b "|" splunk($4)
+		tag = (NF >= 13) ? $13 : ""
+		key = $3 "|" $7 "|" $8 "|" $10 "|" $11 "|" b "|" splunk($4) "|" tag
 		if (!(key in n)) { n[key] = ++g; print n[key] "|" key > (d "/groups") }
-		print > (d "/" u "_" n[key] ".yaml")
+		if (NF >= 13) { line = $1; for (i = 2; i <= 12; i++) line = line " " $i } else line = $0
+		print line > (d "/" u "_" n[key] ".yaml")
 	}' "${user}.txt"
-	cp "${user}.txt" "$splitdir/${user}_all.yaml"
+	# all yaml 도 12필드만
+	awk '{ if (NF >= 13) { line = $1; for (i = 2; i <= 12; i++) line = line " " $i; print line } else print }' "${user}.txt" > "$splitdir/${user}_all.yaml"
 }
 
 # [9] dhcp_pool/dhcp_pool_delete_info.txt 기록
@@ -600,13 +612,13 @@ dhcp_info() {
 gen_inventory() {
 	require_var repohost svr_dir
 	local -a files=()
-	local -A g_infra g_os g_boot g_splunk
-	local num infra os boot splunk f before after new lines n
+	local -A g_infra g_os g_boot g_splunk g_tag
+	local num infra os boot splunk tag f before after new lines n
 
-	# groups: 번호|infra|nic|disk|용량|os|boot|splunk → 번호별 옵션 (파일은 번호순으로 이미 기록됨)
-	while IFS='|' read -r num infra _ _ _ os boot splunk; do
+	# groups: 번호|infra|nic|disk|용량|os|boot|splunk|tag → 번호별 옵션 (파일은 번호순으로 이미 기록됨)
+	while IFS='|' read -r num infra _ _ _ os boot splunk tag; do
 		[[ -n $num ]] || continue
-		g_infra[$num]=$infra; g_os[$num]=$os; g_boot[$num]=$boot; g_splunk[$num]=$splunk
+		g_infra[$num]=$infra; g_os[$num]=$os; g_boot[$num]=$boot; g_splunk[$num]=$splunk; g_tag[$num]=$tag
 		files+=("${user}_${num}.yaml")
 	done < "$splitdir/groups"
 	files+=("${user}_all.yaml")
@@ -637,6 +649,7 @@ gen_inventory() {
 			group_yml="${group_yml:+$group_yml }$new"
 			yml_opt[$new]="${g_infra[$num]} ${g_os[$num]} ${g_boot[$num]} ${g_splunk[$num]}"
 			yml_boot[$new]="${g_boot[$num]}"
+			yml_tag[$new]="${g_tag[$num]}"
 			yml_hosts[$new]=$(awk 'NF { print $4 }' "$splitdir/$f" | paste -sd, -)
 		else
 			all_yml=$new
@@ -818,7 +831,7 @@ while true; do
 	case $sel in
 		su)   break ;;
 		exit) exit 0 ;;
-		ls)   for i in $yaml; do echo "${CYAN}${i}${RST} [${yml_boot[$i]:-all}]"; done ;;
+		ls)   for i in $yaml; do echo "${CYAN}${i}${RST} [${yml_boot[$i]:-all}]${yml_tag[$i]:+ ${yml_tag[$i]}}"; done ;;
 		"")   ;;
 		*)    if [[ -f $svr_dir/$sel ]]; then cat "$svr_dir/$sel"; else warn "[!] $sel 없음"; fi ;;
 	esac
@@ -828,7 +841,7 @@ done
 for ((;;)); do
 	echo "${BOLD}작업 리스트${RST}"
 	paste -sd'|' "$hostfile"
-	args=(); for f in $group_yml; do args+=("$f=${yml_opt[$f]// /,}"); done   # yml=infra,os,boot,splunk
+	args=(); for f in $group_yml; do args+=("$f=${yml_opt[$f]// /,}${yml_tag[$f]:+,${yml_tag[$f]}}"); done   # yml=infra,os,boot,splunk[,tag]
 	[[ -n $all_yml ]] && args+=("--all=$all_yml")   # 그룹 yml 이 여러 개면 02 가 마지막에 전체 yml 로 invsync 만 수행
 	log "[14] 02.source_dhcp_pxe.sh ${user}"
 	bash 02.source_dhcp_pxe.sh ${user} "${args[@]}" && break

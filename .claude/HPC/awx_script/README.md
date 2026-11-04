@@ -107,6 +107,8 @@ shellcheck -S warning 01.AWX_nodeinfo_V2.sh 02.source_dhcp_pxe.sh
 
 - **Y (nodeinfo 사용)**: `${user}.txt` 에 호스트명을 한 줄에 하나씩 적습니다. `awxkit/nodeinfo.sh -hosts` 의 입력으로 쓰이고, 수집 결과(`awxkit/output/${user}_nodeinfo.yaml`)가 `${user}.txt` 를 덮어씁니다(nodeinfo 가 실패하면 덮어쓰지 않음).
 - **N (nodeinfo 미사용)**: `${user}.txt` 가 이미 `"msg": "…"` 가 들어 있는 nodeinfo 출력이거나 12필드 줄(`vendor model infra hostname ip mac nic disk part 용량 os boot`)이어야 합니다. 호스트명만 있으면 12필드 검사에서 종료합니다.
+  - **13번째 필드 (분류 태그, 선택)**: 12필드 뒤에 공백 없는 한 단어를 덧붙일 수 있습니다(줄마다 선택, 없으면 빈 태그). 예: `… 용량 os boot rhel810(TEST/SR)`. 태그는 **yml 분류용**으로만 쓰이며 검사·치환하지 않습니다(`a|b`, `x,y`, 슬래시, 괄호 등 모든 문자 허용). 같은 사양이라도 태그가 다르면(빈 태그 포함) 다른 yml 로 나뉘고, 같은 태그면 한 yml 에 묶입니다. 12필드 또는 13필드만 허용되며 다른 개수(예: 14필드)는 원격 작업 전에 오류로 중단합니다. 치환(`1.1T`→`1200`, `7T`→`7600`, `test1234`→`offchip`)은 1~12필드에만 적용되고 13번째는 그대로 둡니다. repohost 로 보내는 yml 에는 12필드만 들어갑니다.
+  - **태그 붙이는 순서 (N 과 함께)**: 태그는 nodeinfo 결과(12필드)에는 없으므로, 먼저 `Y` 로 한 번 실행해 정렬된 `${user}.txt` 가 만들어지면 `Ctrl+C` 로 중단하고, 그 파일의 줄 끝에 13번째 필드를 직접 붙인 뒤 `N` 으로 다시 실행합니다.
 
 ### Step 3: 테스트 실행
 
@@ -201,7 +203,7 @@ AWX 인벤토리 소스 : su exit : 종료 ls : yaml 파일출력 : <명령>
 |---|---|
 | `su` | 02 진입 (yml별 인벤토리 등록) |
 | `exit` | 종료 (exit 0) |
-| `ls` | 생성된 yml 파일 + boot 옵션 출력 |
+| `ls` | 생성된 yml 파일 + boot 옵션 출력 (13번째 분류 태그가 있는 그룹은 `[boot]` 뒤에 태그도 출력) |
 | `<파일명>` | yml 파일 내용 출력 (예: `INFRA-A_inventory-1234_3ea.yml`) |
 | (Enter) | 무시 (다시 프롬프트) |
 
@@ -221,7 +223,7 @@ bash 02.source_dhcp_pxe.sh testuser \
   INFRA-B_inventory-1234_3ea.yml=INFRA-B,RHEL9,legacy,Cloud
 ```
 
-#### 옵션 형식: `<yml>=<infra>,<os>,<boot>,<splunk>`
+#### 옵션 형식: `<yml>=<infra>,<os>,<boot>,<splunk>[,<tag>]` (`<tag>` 는 13번째 필드가 있을 때만 전달되는 선택 값)
 
 | 필드 | 설명 | 예 |
 |---|---|---|
@@ -230,6 +232,7 @@ bash 02.source_dhcp_pxe.sh testuser \
 | os | 인자로 받지만 **02 가 무시하고** 아래 "OS 버전 선택"으로 정함 | (아무 값) |
 | boot | 부트 방식 | `UEFI`, `legacy`, `BIOS` |
 | splunk | Splunk 설치 여부 선택값 | `On-premise`, `Cloud`, `no` |
+| tag | (선택) 13번째 필드 분류 태그, 01 이 있을 때만 5번째 콤마 부분으로 전달 | `rhel810(TEST/SR)` |
 
 
 - **infra 는 소문자로 변환해 전달**합니다(`INFRA-A` → `infra-a`). awxkit 은 conf 의 `*_choices` 와 **대소문자까지 정확히 일치**해야 하고(번호 또는 값 그대로 사용 가능), os/boot/splunk 는 변환하지 않습니다. 확인표에서 `N` 으로 직접 입력한 infra 도 소문자로 변환됩니다.
@@ -254,6 +257,8 @@ bash 02.source_dhcp_pxe.sh testuser \
 옵션이 맞습니까 (Y|N) : n
 ```
 
+확인표 마지막에 `13번째` 열이 추가되며, 태그가 없는 그룹은 `-` 로 표시합니다. 태그는 dhcp/pxe/invsync 호출에 영향을 주지 않습니다.
+
 **N 선택 시 값 재입력** (Enter = 현재값 유지):
 
 ```
@@ -264,7 +269,7 @@ bash 02.source_dhcp_pxe.sh testuser \
   splunk [On-premise] :
 ```
 
-### 분할 키 (infra + nic + disk + 용량 + os + boot + splunk)
+### 분할 키 (infra + nic + disk + 용량 + os + boot + splunk + 13번째 태그)
 
 yml 파일은 다음 조합으로 분할됩니다. 같은 조합의 호스트는 같은 파일에 묶입니다.
 
@@ -277,8 +282,9 @@ yml 파일은 다음 조합으로 분할됩니다. 같은 조합의 호스트는
 | os | 분할 키에는 포함되나, 02 의 OS 버전은 별도 선택 |
 | boot | UEFI, legacy, BIOS |
 | splunk | On-premise, Cloud, no |
+| 13번째 태그 (선택) | 태그가 다르면(빈 태그 포함) 다른 yml, 같으면 같은 yml. 태그 없는 줄은 빈 값 |
 
-part(9번째 필드)는 분할 키에서 제외됩니다. boot 의 `레거시` 는 `legacy` 로 바꿔 전달합니다. 분할 파일 외에 모든 줄을 담은 전체(`_all`) 파일도 하나 만들어 yml 로 등록·git 업로드하지만, 02 의 등록 대상(DHCP/PXE)에서는 제외됩니다.
+part(9번째 필드)는 분할 키에서 제외됩니다. 13번째 태그는 분할 키에 포함되지만 yml 파일에는 들어가지 않습니다(12필드로 잘라 전송). boot 의 `레거시` 는 `legacy` 로 바꿔 전달합니다. 분할 파일 외에 모든 줄을 담은 전체(`_all`) 파일도 하나 만들어 yml 로 등록·git 업로드하지만, 02 의 등록 대상(DHCP/PXE)에서는 제외됩니다.
 
 ### splunk 값 자동 결정 규칙
 
