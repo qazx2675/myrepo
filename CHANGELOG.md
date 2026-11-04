@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-11-04 — gossh_os6 삭제, update.sh 는 os8 만 복사
+
+- **삭제**: `gossh_os6`(OS6 용 바이너리). OS6 빌드는 더 이상 하지 않음.
+- **변경(`update.sh`)**: `gossh_os8` 만 복사. 변수는 `DEST1`(→`gossh`, 기본 `/usr/local/bin`), `DEST2`(→`pdsh`, 기본 `/usr/bin/`) 두 개로 줄임 — **이전의 DEST2/DEST3 가 DEST1/DEST2 로 바뀜**.
+- **영향 범위**: `update.sh`, `setup.sh`(주석), README 1.1·1.2·1.4·6장, ARCHITECTURE.md, PR_CHECKLIST.md.
+- **검증**: 192.168.0.58 에서 임시 경로로 update.sh 실행 → 두 경로 `cmp` 일치, 빈 변수·다른 서버 거부 확인.
+
 ## 2026-11-04 — 구형 SSH 서버 접속 (arcfour, diffie-hellman-group1-sha1)
 
 - **버그 수정**: OS8 관리 서버의 gossh 가 OS6 서버에 `ssh: handshake failed: ssh: no common algorithm for client to server cipher ... server offered: [arcfour blowfish-cbc]` 로 접속하지 못하던 문제. x/crypto 기본 제안 목록에 옛 알고리즘이 빠져 있어서였음. 대상 서버 설정 변경 없이 클라이언트에서 옛 암호(`aes128-cbc` `3des-cbc` `arcfour*`)와 옛 키 교환(`diffie-hellman-group1-sha1` 등)을 기본 목록 **뒤에** 추가 제안 — 최신 서버는 협상 결과 그대로.
