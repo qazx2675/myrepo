@@ -22,10 +22,9 @@
 
 | 바이너리 | 대상 OS | 빌드 환경 |
 |---|---|---|
-| `gossh_os6` | RHEL 6 / CentOS 6 | Go 1.20, `CGO_ENABLED=0` 정적 링크 — **2026-11-04부터 더 이상 갱신하지 않음** (2026-10-31 버전, 구형 서버 호환 미포함) |
 | `gossh_os8` | RHEL 8 / Rocky 8 등 | Go 1.26, `CGO_ENABLED=0` 정적 링크 |
 
-소스를 고치면 인터넷이 되는 곳에서 `gossh_os8` 을 다시 빌드해 함께 커밋해야 합니다. OS6 용은 빌드하지 않습니다.
+소스를 고치면 인터넷이 되는 곳에서 `gossh_os8` 을 다시 빌드해 함께 커밋해야 합니다. OS6 용 바이너리는 2026-11-04부터 제공하지 않습니다.
 `gossh_os8` 은 관리 서버(OS8)에서 OS6 같은 구형 서버로 접속할 수 있습니다(3.14 참고).
 
 ### 1.2 소스 빌드 (인터넷이 되는 곳에서만)
@@ -46,12 +45,11 @@ CGO_ENABLED=0 go build -o gossh .
 ```
 
 빌드가 끝나면 현재 디렉토리에 `gossh`(Windows는 `gossh.exe`) 단일 실행 파일이 생성됩니다.
-OS6용은 Go 1.20 으로, OS8용은 Go 1.26 으로 각각 빌드합니다(`-o gossh_os6`, `-o gossh_os8`).
+배포용 바이너리는 Go 1.26 으로 빌드합니다(`-o gossh_os8`).
 
 사전 빌드 바이너리는 대상 서버에 복사해 바로 실행할 수 있습니다.
 
 ```bash
-./gossh_os6 -w hosts.txt "uname -r"   # RHEL/CentOS 6
 ./gossh_os8 -w hosts.txt "uname -r"   # RHEL/Rocky 8
 ```
 
@@ -67,18 +65,17 @@ sudo ln -sf /usr/local/bin/gossh /usr/local/bin/pdsh
 
 ### 1.4 `update.sh`로 배포하기
 
-특정 서버(대상서버) 위에서 직접 실행해서, 저장소에 포함된 사전 빌드 바이너리(`gossh_os6`, `gossh_os8`)를
+특정 서버(대상서버) 위에서 직접 실행해서, 저장소에 포함된 사전 빌드 바이너리(`gossh_os8`)를
 시스템 경로 여러 곳에 한 번에 배포하는 스크립트입니다. 빌드는 하지 않습니다.
 
 ```bash
-# update.sh 상단의 TARGET_SERVER/DEST1/DEST2/DEST3 값을 먼저 채운 뒤 실행
+# update.sh 상단의 TARGET_SERVER/DEST1/DEST2 값을 먼저 채운 뒤 실행
 ./update.sh
 ```
 
 - `TARGET_SERVER`(대상서버)와 다른 서버에서 실행하면 즉시 거부됩니다(호스트명/IP로 확인).
-- `DEST1`(복사될위치1): OS6 사전 빌드 바이너리(`gossh_os6`)를 `gossh`라는 이름으로 복사.
-- `DEST2`(복사될위치2, 기본 `/usr/local/bin`): OS8 사전 빌드 바이너리(`gossh_os8`)를 `gossh`라는 이름으로 복사.
-- `DEST3`(복사될위치3, 기본 `/usr/bin/`): 같은 OS8 바이너리를 `pdsh`라는 이름으로 복사.
+- `DEST1`(복사될위치1, 기본 `/usr/local/bin`): OS8 사전 빌드 바이너리(`gossh_os8`)를 `gossh`라는 이름으로 복사.
+- `DEST2`(복사될위치2, 기본 `/usr/bin/`): 같은 OS8 바이너리를 `pdsh`라는 이름으로 복사.
 - 모두 강제 복사(기존 파일 삭제 후 새로 복사)라서, 이미 실행 중인 바이너리를 덮어써도 실행 중이던
   프로세스에는 영향이 없습니다.
 
@@ -441,7 +438,6 @@ gossh/
 ├── go.mod / go.sum      # Go 모듈 정의 (Go 1.20 호환)
 ├── setup.sh           # 소스 빌드 스크립트 (인터넷 되는 곳 전용, go mod download 후 빌드)
 ├── update.sh          # 대상서버 전용 배포 스크립트 (빌드 없이 바이너리 복사)
-├── gossh_os6          # RHEL 6 / CentOS 6 대상 사전 정적 빌드 바이너리
 ├── gossh_os8          # RHEL 8 / Rocky 8 대상 사전 정적 빌드 바이너리
 └── old/               # 구버전(v1) 소스 및 테스트 파일 아카이브
     ├── main.go        # gossh v1 레거시 소스코드

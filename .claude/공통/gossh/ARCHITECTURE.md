@@ -9,8 +9,7 @@
 | `term_linux.go` | 터미널 크기 조회·키 입력 모드(`-m`) — Linux 전용 |
 | `term_other.go` | Linux 외 OS용 대체 구현(`-m` 미지원, 빌드만 가능) |
 | `setup.sh` | 소스 빌드 (인터넷 되는 곳 전용, `go mod download` 후 빌드. `vendor/` 없음) |
-| `update.sh` | 대상 서버 배포 스크립트 (빌드 없이 `gossh_os6`/`gossh_os8` 강제 복사) |
-| `gossh_os6` | RHEL 6 / CentOS 6용 사전 정적 빌드 바이너리 (Go 1.20) |
+| `update.sh` | 대상 서버 배포 스크립트 (빌드 없이 `gossh_os8` 을 `gossh`·`pdsh` 로 강제 복사) |
 | `gossh_os8` | RHEL 8 / Rocky 8용 사전 정적 빌드 바이너리 (Go 1.26) |
 | `old/` | 구버전(v1) 소스 아카이브 |
 | `PLAN.md` / `CHANGELOG.md` | 개선 계획 / 버전별 변경 이력 |
