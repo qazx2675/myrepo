@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -142,5 +144,32 @@ func TestClassify(t *testing.T) {
 	want := []string{stDone, stUnreach, stNoDisk, stStopped, stInstall, stInstall, stInstall, stUnreach}
 	if got := classify(hosts, off, cand, retry); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v want %v", got, want)
+	}
+}
+
+func TestResolveGosshPath(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "gossh")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"":               "",
+		bin:              bin,
+		`"` + bin + `"`:  bin,
+		"'" + bin + "'":  bin,
+		dir:              bin,
+		dir + "/":        bin,
+		`"` + dir + `/"`: bin,
+		"/no/such/gossh": "/no/such/gossh",
+	}
+	for in, want := range cases {
+		if got := resolveGosshPath(in); got != want {
+			t.Errorf("resolveGosshPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+	home, _ := os.UserHomeDir()
+	if got := resolveGosshPath("~/x/gossh"); got != filepath.Join(home, "x/gossh") {
+		t.Errorf("~ 확장 실패: %q", got)
 	}
 }
