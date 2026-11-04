@@ -22,10 +22,11 @@
 
 | 바이너리 | 대상 OS | 빌드 환경 |
 |---|---|---|
-| `gossh_os6` | RHEL 6 / CentOS 6 | Go 1.20, `CGO_ENABLED=0` 정적 링크 |
+| `gossh_os6` | RHEL 6 / CentOS 6 | Go 1.20, `CGO_ENABLED=0` 정적 링크 — **2026-11-04부터 더 이상 갱신하지 않음** (2026-10-31 버전, 구형 서버 호환 미포함) |
 | `gossh_os8` | RHEL 8 / Rocky 8 등 | Go 1.26, `CGO_ENABLED=0` 정적 링크 |
 
-소스를 고치면 인터넷이 되는 곳에서 다시 빌드해 두 바이너리를 갱신하고 함께 커밋해야 합니다.
+소스를 고치면 인터넷이 되는 곳에서 `gossh_os8` 을 다시 빌드해 함께 커밋해야 합니다. OS6 용은 빌드하지 않습니다.
+`gossh_os8` 은 관리 서버(OS8)에서 OS6 같은 구형 서버로 접속할 수 있습니다(3.14 참고).
 
 ### 1.2 소스 빌드 (인터넷이 되는 곳에서만)
 
@@ -364,6 +365,16 @@ Rocky Linux release 8.10 (Green Obsidian)
 - **가드**: 비교서버의 패키지 목록이 비어 있으면 중단합니다. `-tmp`/`-limit`/`-tl` 과 함께 쓸 수 없습니다.
 
 ---
+
+### 3.14 구형 SSH 서버 접속 (RHEL6 등)
+
+대상 서버 설정을 바꿀 수 없는 구형 서버가 `arcfour` 같은 옛 암호나 `diffie-hellman-group1-sha1` 같은 옛 키 교환만 제공해도 접속됩니다.
+기본(최신) 알고리즘을 먼저 제안하고 옛 알고리즘은 뒤에 붙여 제안하므로, 최신 서버는 지금과 같은 알고리즘으로 접속합니다.
+
+- 추가로 허용하는 암호: `aes128-cbc`, `3des-cbc`, `arcfour256`, `arcfour128`, `arcfour`
+- 추가로 허용하는 키 교환: `diffie-hellman-group16-sha512`, `diffie-hellman-group-exchange-sha256/sha1`, `diffie-hellman-group1-sha1`
+- `blowfish-cbc` 는 Go SSH 라이브러리에 구현이 없어 쓸 수 없습니다. 서버가 `blowfish-cbc` **만** 제공하면 여전히 접속되지 않습니다.
+- 옵션 없이 항상 적용됩니다(본 명령, `-tmp`/`-limit`/`-tl`/`-rpm` 비교서버 접속 모두).
 
 ## 4. 옵션 전체 목록
 

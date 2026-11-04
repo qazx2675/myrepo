@@ -103,7 +103,7 @@ func fetchRemoteCmd(host, cmd, user string, auth []ssh.AuthMethod, port string, 
 		return nil, err
 	}
 	conn.SetDeadline(time.Now().Add(timeout))
-	cfg := &ssh.ClientConfig{User: user, Auth: auth, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: timeout}
+	cfg := newSSHClientConfig(user, auth, timeout)
 	c, chans, reqs, err := ssh.NewClientConn(conn, target, cfg)
 	if err != nil {
 		conn.Close()

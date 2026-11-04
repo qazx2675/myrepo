@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-11-04 — 구형 SSH 서버 접속 (arcfour, diffie-hellman-group1-sha1)
+
+- **버그 수정**: OS8 관리 서버의 gossh 가 OS6 서버에 `ssh: handshake failed: ssh: no common algorithm for client to server cipher ... server offered: [arcfour blowfish-cbc]` 로 접속하지 못하던 문제. x/crypto 기본 제안 목록에 옛 알고리즘이 빠져 있어서였음. 대상 서버 설정 변경 없이 클라이언트에서 옛 암호(`aes128-cbc` `3des-cbc` `arcfour*`)와 옛 키 교환(`diffie-hellman-group1-sha1` 등)을 기본 목록 **뒤에** 추가 제안 — 최신 서버는 협상 결과 그대로.
+- **참고**: `blowfish-cbc` 는 x/crypto 미구현이라 불가(서버가 그것만 주면 여전히 실패). 2026-11-04부터 `gossh_os6` 은 빌드하지 않음(이번 수정 미포함, 이전 버전 유지).
+- **영향 범위**: `main.go`(`newSSHClientConfig`, `sshCiphers`, `sshKeyExchanges`), `tmplimit.go`(같은 설정 사용), `gossh_os8`(재빌드), README 1.1·3.14.
+- **검증**: 192.168.0.58 에 arcfour + diffie-hellman-group1-sha1 + ssh-rsa 만 받는 테스트 SSH 서버를 띄워 확인 — 기존 `gossh_os8` 은 `no common algorithm` 실패, 새 바이너리는 명령 실행·`-rpm` 비교서버 접속 성공. 최신 서버 192.168.0.60 접속 정상. `go vet`/`go test` 통과.
+
 ## 2026-10-31 — 위험 작업 확인 강화, 출력 속도 개선, 바이너리 배포
 
 - **변경(위험어)**: 기존 7개(`reboot` `poweroff` `shutdown` `halt` `init 0` `init 6` `ddc`, 부분일치)에 더해 즉시 재시작·정지(`kexec`, `systemctl rescue/emergency`, `init 1`, `sysrq-trigger`, `ipmitool power off/reset/cycle` 등), 디스크·데이터 파괴(`mkfs*`, `dd of=/dev/`, `wipefs`, `fdisk`, `parted`, `sgdisk`, `shred`, `rm -rf /`, `lv/vg/pvremove`), 접속 끊김(`ifdown`, `nmcli ... down`, `ip link set ... down`, `systemctl stop sshd/network/NetworkManager`)을 추가. 새 위험어는 독립된 명령 단어일 때만 감지(호스트명·base64 오탐 방지).
