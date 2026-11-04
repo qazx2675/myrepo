@@ -653,8 +653,8 @@ case7() {
 	t_has "최종 수량 no(ev)" "$OUT" '^no ib 2026-ECAD_TCAD : 1대$'
 	t_has "최종 수량 합계" "$OUT" '^합계 : 4대$'
 	t_eq "invsync -file 의 _Nea (IA=2,IB=1,IC=1, 전체 IA=4)" "$(grep '^invsync ' "$CALLS" | sed 's/.*-file \(I.\)_inventory-[0-9]*_\([0-9]*\)ea.yml/\1=\2/' | paste -sd' ')" "IA=2 IB=1 IC=1 IA=4"
-	t_has "확인표 헤더" "$OUT" '^번호 \| yml \| infra \| os \| boot \| splunk \| 호스트 수$'
-	t_has "확인표 IC 행(infra 소문자화)" "$OUT" '^3 \| IC_inventory-[0-9]+_1ea\.yml \| ic \| 2026-ECAD_TCAD \| legacy \| Cloud \| 1$'
+	t_has "확인표 헤더" "$OUT" '^번호 \| yml \| infra \| os \| boot \| splunk \| 호스트 수 \| 13번째$'
+	t_has "확인표 IC 행(infra 소문자화)" "$OUT" '^3 \| IC_inventory-[0-9]+_1ea\.yml \| ic \| 2026-ECAD_TCAD \| legacy \| Cloud \| 1 \| -$'
 	t_has "요약" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
 	t_notmp
 	case_end
@@ -669,8 +669,8 @@ case7() {
 	t_rc "01 종료코드" "$RC" 0
 	verify_chain "7b"
 	t_has "옵션 확정 출력" "$OUT" '^옵션 확정$'
-	t_has "확정표 IA 행(수동 os)" "$OUT" '^1 \| IA_inventory-[0-9]+_2ea\.yml \| ia \| RHEL7 \| UEFI \| On-premise \| 2$'
-	t_has "확정표 IB 행(수동 infra/boot/splunk)" "$OUT" '^2 \| IB_inventory-[0-9]+_1ea\.yml \| ibx \| 2026-ECAD_TCAD \| UEFI \| Cloud \| 1$'
+	t_has "확정표 IA 행(수동 os)" "$OUT" '^1 \| IA_inventory-[0-9]+_2ea\.yml \| ia \| RHEL7 \| UEFI \| On-premise \| 2 \| -$'
+	t_has "확정표 IB 행(수동 infra/boot/splunk)" "$OUT" '^2 \| IB_inventory-[0-9]+_1ea\.yml \| ibx \| 2026-ECAD_TCAD \| UEFI \| Cloud \| 1 \| -$'
 	t_notmp
 	case_end
 
@@ -846,7 +846,7 @@ STUB
 	t_has "선택지 목록 출력" "$S/out.txt" '^  4\) 2026-OPC_MDP$'
 	t_has "잘못된 번호(9) 재질문" "$S/out.txt" '^\[!\] 1~5 중에서 선택하세요$'
 	t_eq "pxe -os (A=3 B=4 C=5)" "$(grep '^pxe ' "$CALLS" | sed 's/.*-os \([^ ]*\) .*/\1/' | paste -sd' ')" "2026 2026-OPC_MDP 2026-ECAD_TCAD"
-	t_has "확인표에 선택 반영" "$S/out.txt" '^2 \| .*B_inv-2_1ea\.yml.* \| i2 \| 2026-OPC_MDP \| B2 \| S2 \| 1$'
+	t_has "확인표에 선택 반영" "$S/out.txt" '^2 \| .*B_inv-2_1ea\.yml.* \| i2 \| 2026-OPC_MDP \| B2 \| S2 \| 1 \| -$'
 	t_has "OS 질문이 옵션 확인표보다 먼저" "$S/out.txt" 'OS 버전 선택'
 	t_eq "os 선택 질문이 확인표 헤더보다 앞" "$(grep -n 'OS 버전 선택\|^번호 | yml' "$S/out.txt" | head -2 | cut -d: -f2 | cut -c1-8 | paste -sd'|')" "OS 버전 선택|번호 | yml"
 	case_end
@@ -916,7 +916,7 @@ case8() {
 	D6 | awk '{print $4}' > "$W/$TU.txt"
 	run01 'N\nY\n'
 	t_rc "종료코드≠0" "$RC" nz
-	t_has "12필드 오류 메시지" "$OUT" '^\[X\] 12필드 아님: 1: host01$'
+	t_has "12필드 오류 메시지" "$OUT" '^\[X\] 12필드\(13번째는 분류용 선택 항목\) 아님: 1: host01$'
 	t_eq "ssh/scp 미호출(delhost 포함)" "$(grep -cE '^(ssh|scp) ' "$CALLS")" 0
 	t_notmp
 	case_end
@@ -1170,7 +1170,7 @@ ext_cases() {
 	t_rc "02 종료코드" "$RC" 0
 	t_eq "pxe -os (2025→2, 2026→3, 2026-OPC_MDP 그대로)" "$(grep '^pxe ' "$CALLS" | sed 's/.*-os \([^ ]*\) .*/\1/' | paste -sd' ')" "2 3 2026-OPC_MDP"
 	t_has "번호 변환 안내" "$S/out.txt" '^\[os 번호 변환\] pxe -os 2025 -> 2 '
-	t_has "확인표에는 원래 OS 값" "$S/out.txt" '^1 \| .*A_inv-1_1ea\.yml.* \| i1 \| 2025 \| B1 \| S1 \| 1$'
+	t_has "확인표에는 원래 OS 값" "$S/out.txt" '^1 \| .*A_inv-1_1ea\.yml.* \| i1 \| 2025 \| B1 \| S1 \| 1 \| -$'
 	case_end
 
 	local sc
@@ -2152,6 +2152,194 @@ real_dns_cases() {
 	kill "${pids[@]}" 2>/dev/null
 }
 
+# ===================== 케이스 24: 13번째 필드(분류 태그) =====================
+tl() {   # vendor tag infra host nic disk part cap os boot   (tag 가 빈 값이면 12필드 줄, 아니면 13필드. IP·MAC 자동, IPC 필요)
+	local v=$1 t=$2; shift 2
+	IPC=$((IPC+1))
+	printf '%s R750 %s %s 10.9.0.%d aa:bb:cc:dd:ee:%02x %s %s %s %s %s %s%s\n' "$v" "$1" "$2" "$IPC" "$IPC" "$3" "$4" "$5" "$6" "$7" "$8" "${t:+ $t}"
+}
+tag_ls() {   # OUT 의 ls 출력("<yml> [<boot>] <tag>")에서 yml 앞부분(infra_inventory-<epoch>_)을 떼고 정렬
+	grep -E '^[^ ]+\.yml \[' "$OUT" | sed 's/^[^ ]*_\([0-9]*ea\.yml\)/\1/' | LC_ALL=C sort
+}
+tag_cases() {
+	local f sets exp qf
+	local MENU='N\nY\nls\nsu\n1\nY\n'
+
+	# 24a: 같은 사양 + 태그 둘 → 2그룹, 원격 yaml 은 12필드·태그 없음
+	case_begin "24a" "13필드: 같은 사양·태그만 다름(rhel810(TEST/SR) vs rhel89) → 2그룹, scp 된 yaml 12필드·태그 없음, 02 에 5번째 인자 전달"
+	setup_case
+	{ IPC=0
+	  tl Dell 'rhel810(TEST/SR)' INFRA-A hostA1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell rhel89 INFRA-A hostB1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'rhel810(TEST/SR)' INFRA-A hostA2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell rhel89 INFRA-A hostB2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell rhel89 INFRA-A hostB3 eth0 sda sda5 1.1T RHEL8 UEFI
+	} > "$W/$TU.txt"
+	run01 "$MENU"
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "scp 된 그룹 yaml 2개 + all 1개" "$(ls "$REMOTE_DIR" | grep -c "^${TU}_.*\.yaml$")" 3
+	sets=$(for f in "$REMOTE_DIR/${TU}"_[0-9]*.yaml; do awk '{print $4}' "$f" | LC_ALL=C sort | paste -sd,; done | LC_ALL=C sort)
+	exp=$(printf '%s\n' hostA1,hostA2 hostB1,hostB2,hostB3 | LC_ALL=C sort)
+	t_eq "그룹 파일 호스트 집합(태그별)" "$sets" "$exp"
+	t_eq "원격 yaml 전부 정확히 12필드" "$(cat "$REMOTE_DIR/${TU}"_*.yaml | awk '{print NF}' | sort -u | paste -sd' ')" 12
+	t_eq "원격 yaml 에 태그 문자열 없음" "$(cat "$REMOTE_DIR/${TU}"_*.yaml | grep -cE 'rhel810|rhel89|TEST')" 0
+	t_eq "all yaml 5줄·전부 12필드" "$(wc -l < "$REMOTE_DIR/${TU}_all.yaml")|$(awk '{print NF}' "$REMOTE_DIR/${TU}_all.yaml" | sort -u | paste -sd' ')" "5|12"
+	t_eq "svr_dir yml 수(그룹 2 + all 1)" "$(yml_list | wc -l)" 3
+	t_eq "svr_dir yml 본문(주석 제외)은 12필드" "$(cat "$W/svr_dir"/*.yml | grep -v '^#' | awk 'NF != 12' | wc -l)" 0
+	t_eq "invsync 3회(그룹 2 + 전체 1), dhcp/pxe 2회씩" "$(grep -c '^invsync ' "$CALLS")|$(grep -c '^dhcp ' "$CALLS")|$(grep -c '^pxe ' "$CALLS")" "3|2|2"
+	t_no "awxkit 호출에 태그 전달 안 됨" "$CALLS" 'rhel810|rhel89|TEST'
+	t_has "02 표 머리글(13번째 열)" "$OUT" '^번호 \| yml \| infra \| os \| boot \| splunk \| 호스트 수 \| 13번째$'
+	t_has "02 표: rhel810(TEST/SR) 그룹(2대)" "$OUT" '^[0-9] \| [^ ]+_2ea\.yml \| infra-a \| 2026-ECAD_TCAD \| UEFI \| On-premise \| 2 \| rhel810\(TEST/SR\)$'
+	t_has "02 표: rhel89 그룹(3대)" "$OUT" '^[0-9] \| [^ ]+_3ea\.yml \| infra-a \| 2026-ECAD_TCAD \| UEFI \| On-premise \| 3 \| rhel89$'
+	t_has "02 요약" "$OUT" '요약 : 전체 2 / 성공 2 / 실패 0'
+	t_notmp
+	case_end
+
+	# 24b: 12필드 줄과 13필드 줄 혼재 → 빈 태그도 별개 그룹
+	case_begin "24b" "혼재(12필드·13필드 줄 섞임, 같은 사양): 태그 없음 / rhel89 / grpX 는 서로 다른 3그룹"
+	setup_case
+	{ IPC=0
+	  tl Dell "" INFRA-A hostU1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell rhel89 INFRA-A hostT1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostU2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell rhel89 INFRA-A hostT2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostU3 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell grpX INFRA-A hostG1 eth0 sda sda5 1.1T RHEL8 UEFI
+	} > "$W/$TU.txt"
+	run01 "$MENU"
+	t_rc "01 종료코드" "$RC" 0
+	sets=$(for f in "$REMOTE_DIR/${TU}"_[0-9]*.yaml; do awk '{print $4}' "$f" | LC_ALL=C sort | paste -sd,; done | LC_ALL=C sort)
+	exp=$(printf '%s\n' hostU1,hostU2,hostU3 hostT1,hostT2 hostG1 | LC_ALL=C sort)
+	t_eq "그룹 3개 = 태그 없음 / rhel89 / grpX" "$sets" "$exp"
+	t_eq "원격 yaml 전부 12필드" "$(cat "$REMOTE_DIR/${TU}"_*.yaml | awk '{print NF}' | sort -u | paste -sd' ')" 12
+	t_eq "svr_dir yml 수(그룹 3 + all 1)" "$(yml_list | wc -l)" 4
+	t_has "02 표: 태그 없음 → -" "$OUT" '^[0-9] \| [^ ]+_3ea\.yml \| infra-a \| 2026-ECAD_TCAD \| UEFI \| On-premise \| 3 \| -$'
+	t_has "02 표: rhel89" "$OUT" '^[0-9] \| [^ ]+_2ea\.yml \| infra-a \| 2026-ECAD_TCAD \| UEFI \| On-premise \| 2 \| rhel89$'
+	t_has "02 표: grpX" "$OUT" '^[0-9] \| [^ ]+_1ea\.yml \| infra-a \| 2026-ECAD_TCAD \| UEFI \| On-premise \| 1 \| grpX$'
+	t_has "02 요약" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
+	t_notmp
+	case_end
+
+	# 24c: 특수문자 태그
+	case_begin "24c" "특수문자 태그 a|b / x,y / r/s(1): 그룹 분할·02 표 원문 그대로·오류 없음"
+	setup_case
+	{ IPC=0
+	  tl Dell 'a|b' INFRA-A hostP1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'x,y' INFRA-A hostQ1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'r/s(1)' INFRA-A hostR1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'x,y' INFRA-A hostQ2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'r/s(1)' INFRA-A hostR2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'r/s(1)' INFRA-A hostR3 eth0 sda sda5 1.1T RHEL8 UEFI
+	} > "$W/$TU.txt"
+	run01 "$MENU"
+	t_rc "01 종료코드" "$RC" 0
+	t_no "[X] 오류 없음" "$OUT" '^\[X\]'
+	sets=$(for f in "$REMOTE_DIR/${TU}"_[0-9]*.yaml; do awk '{print $4}' "$f" | LC_ALL=C sort | paste -sd,; done | LC_ALL=C sort)
+	exp=$(printf '%s\n' hostP1 hostQ1,hostQ2 hostR1,hostR2,hostR3 | LC_ALL=C sort)
+	t_eq "그룹 3개 호스트 집합" "$sets" "$exp"
+	t_eq "원격 yaml 전부 12필드·태그 문자 없음" "$(cat "$REMOTE_DIR/${TU}"_*.yaml | awk '{print NF}' | sort -u | paste -sd' ')|$(cat "$REMOTE_DIR/${TU}"_*.yaml | grep -cE 'a\|b|x,y|r/s')" "12|0"
+	t_has "02 표: a|b" "$OUT" '^[0-9] \| [^ ]+_1ea\.yml \| .* \| 1 \| a[|]b$'
+	t_has "02 표: x,y" "$OUT" '^[0-9] \| [^ ]+_2ea\.yml \| .* \| 2 \| x,y$'
+	t_has "02 표: r/s(1)" "$OUT" '^[0-9] \| [^ ]+_3ea\.yml \| .* \| 3 \| r/s\(1\)$'
+	t_has "02 요약" "$OUT" '요약 : 전체 3 / 성공 3 / 실패 0'
+	t_eq "pxe 3회·dhcp 3회" "$(grep -c '^pxe ' "$CALLS")|$(grep -c '^dhcp ' "$CALLS")" "3|3"
+	t_notmp
+	case_end
+
+	# 24d: ls
+	case_begin "24d" "메뉴 ls: 태그 있는 그룹은 '<yml> [boot] <tag>', 없는 그룹·전체 yml 은 태그 없음"
+	setup_case
+	{ IPC=0
+	  tl Dell 'rhel810(TEST/SR)' INFRA-A hostD1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostD2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell lg INFRA-A hostD3 eth0 sda sda5 1.1T RHEL8 레거시
+	  tl Dell "" INFRA-A hostD4 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell lg INFRA-A hostD5 eth0 sda sda5 1.1T RHEL8 레거시
+	  tl Dell lg INFRA-A hostD6 eth0 sda sda5 1.1T RHEL8 레거시
+	} > "$W/$TU.txt"
+	run01 "$MENU"
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "ls 출력(정렬, yml 앞부분 생략)" "$(tag_ls)" "$(printf '%s\n' '1ea.yml [UEFI] rhel810(TEST/SR)' '2ea.yml [UEFI]' '3ea.yml [legacy] lg' '6ea.yml [all]' | LC_ALL=C sort)"
+	t_eq "ls 줄 끝에 공백 없음" "$(grep -E '^[^ ]+\.yml \[' "$OUT" | grep -c ' $')" 0
+	t_notmp
+	case_end
+
+	# 24e: 02 직접 실행
+	case_begin "24e" "02 직접 실행: 5번째 값 있는 인자 → 표 끝 열에 태그, 없는 인자 → '-', 쉼표 포함 태그도 원문"
+	setup_case
+	run02 '1\nY\n' "$TU" A_inv-1_1ea.yml=I1,O1,B1,S1,'rhel810(TEST/SR)' B_inv-2_1ea.yml=I2,O2,B2,S2 C_inv-3_1ea.yml=I3,O3,B3,S3,x,y
+	t_rc "02 종료코드" "$RC" 0
+	t_has "표 머리글" "$S/out.txt" '^번호 \| yml \| infra \| os \| boot \| splunk \| 호스트 수 \| 13번째$'
+	t_has "태그 있는 행" "$S/out.txt" '^1 \| .*A_inv-1_1ea\.yml.* \| i1 \| 2026-ECAD_TCAD \| B1 \| S1 \| 1 \| rhel810\(TEST/SR\)$'
+	t_has "태그 없는 행 → -" "$S/out.txt" '^2 \| .*B_inv-2_1ea\.yml.* \| i2 \| 2026-ECAD_TCAD \| B2 \| S2 \| 1 \| -$'
+	t_has "쉼표 포함 태그 행" "$S/out.txt" '^3 \| .*C_inv-3_1ea\.yml.* \| i3 \| 2026-ECAD_TCAD \| B3 \| S3 \| 1 \| x,y$'
+	t_eq "pxe 인자(infra:boot:splunk)에 태그 미전달" "$(grep '^pxe ' "$CALLS" | sed 's/.*-infra \([^ ]*\) .*-boot \([^ ]*\) -splunk \(.*\)$/\1:\2:\3/' | paste -sd' ')" "i1:B1:S1 i2:B2:S2 i3:B3:S3"
+	t_has "요약" "$S/out.txt" '요약 : 전체 3 / 성공 3 / 실패 0'
+	case_end
+
+	# 24f: 14필드 줄
+	case_begin "24f" "14필드 줄 → 01 오류 종료, 아무것도 scp/ssh 로 보내지 않음"
+	setup_case
+	D6 | sed '2s/$/ tagA extra/' > "$W/$TU.txt"
+	run01 'N\nY\n'
+	t_rc "종료코드≠0" "$RC" nz
+	t_has "12필드(13번째는 분류용 선택 항목) 오류 메시지" "$OUT" '12필드\(13번째는 분류용 선택 항목\)'
+	t_has "오류 줄 번호·내용 표시" "$OUT" '^\[X\] 12필드\(13번째는 분류용 선택 항목\) 아님: 2: '
+	t_eq "scp/ssh 호출 없음" "$(grep -cE '^(scp|ssh) ' "$CALLS")" 0
+	t_eq "02 호출 없음" "$(grep -cE '^(invsync|dhcp|pxe) ' "$CALLS")" 0
+	t_notmp
+	case_end
+
+	# 24g: 값 치환은 1~12번째 필드만
+	case_begin "24g" "태그가 7T / test1234 여도 치환 안 됨, 1~12번째 필드의 1.1T·7T·test1234 는 그대로 치환"
+	setup_case
+	{ IPC=0
+	  tl Dell 7T INFRA-A hostG1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell test1234 INFRA-A hostG2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostG3 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell test1234 INFRA-A hostG4 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostG5 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostG6 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl test1234 "" INFRA-D hostG7 eth0 sda sda5 7T RHEL8 UEFI
+	} > "$W/$TU.txt"
+	run01 "$MENU"
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "13번째 필드 원문 보존(호스트=태그)" "$(awk 'NF == 13 {print $4 "=" $13}' "$W/$TU.txt" | paste -sd' ')" "hostG1=7T hostG2=test1234 hostG4=test1234"
+	t_eq "1~12번째: 1.1T → 1200 (태그 줄 포함)" "$(awk '$4 != "hostG7" {print $10}' "$W/$TU.txt" | sort -u | paste -sd' ')" 1200
+	t_eq "1~12번째: test1234 → offchip, 7T → 7600" "$(awk '$4 == "hostG7" {print $1 " " $10}' "$W/$TU.txt")" "offchip 7600"
+	t_eq "원격 yaml 12필드·태그 문자열 없음" "$(cat "$REMOTE_DIR/${TU}"_*.yaml | awk '{print NF}' | sort -u | paste -sd' ')|$(cat "$REMOTE_DIR/${TU}"_*.yaml | grep -cE ' (7T|test1234)( |$)')" "12|0"
+	t_eq "ls: 태그 7T / test1234 원문(그룹: 1대·2대·3대)" "$(tag_ls | grep -E '^[123]ea\.yml' | paste -sd'/')" "1ea.yml [UEFI]/1ea.yml [UEFI] 7T/2ea.yml [UEFI] test1234/3ea.yml [UEFI]"
+	t_has "02 표: 태그 7T" "$OUT" '^[0-9] \| [^ ]+_1ea\.yml \| infra-a \| .* \| 1 \| 7T$'
+	t_has "02 표: 태그 test1234" "$OUT" '^[0-9] \| [^ ]+_2ea\.yml \| infra-a \| .* \| 2 \| test1234$'
+	t_has "02 표: 태그 없는 그룹" "$OUT" '^[0-9] \| [^ ]+_3ea\.yml \| infra-a \| .* \| 3 \| -$'
+	t_notmp
+	case_end
+
+	# 24h: .job 그룹 줄에는 태그 없음
+	case_begin "24h" "auto_setup .job 그룹 줄(yml= infra= os= boot= splunk= hosts=)에 태그가 들어가지 않음"
+	setup_case
+	{ IPC=0
+	  tl Dell 'rhel810(TEST/SR)' INFRA-A hostA1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'rhel810(TEST/SR)' INFRA-A hostA2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell 'x,y' INFRA-A hostB1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostC1 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostC2 eth0 sda sda5 1.1T RHEL8 UEFI
+	  tl Dell "" INFRA-A hostC3 eth0 sda sda5 1.1T RHEL8 UEFI
+	} > "$W/$TU.txt"
+	run01 "$MENU"
+	t_rc "01 종료코드" "$RC" 0
+	qf=$(find "$S/as/queue" -name '*.job' 2>/dev/null)
+	t_eq "queue 파일 1개" "$(grep -c . <<< "$qf")" 1
+	t_eq "그룹 줄 수(yml= 3 + all= 1)" "$(grep -c '^yml=' "$qf")|$(grep -c '^all=' "$qf")" "3|1"
+	t_has "그룹 줄: rhel810 그룹(2대) — 기존 형식" "$qf" '^yml=[^ ]+_2ea\.yml infra=INFRA-A os=RHEL8 boot=UEFI splunk=On-premise hosts=hostA1,hostA2$'
+	t_has "그룹 줄: x,y 그룹(1대)" "$qf" '^yml=[^ ]+_1ea\.yml infra=INFRA-A os=RHEL8 boot=UEFI splunk=On-premise hosts=hostB1$'
+	t_has "그룹 줄: 태그 없는 그룹(3대)" "$qf" '^yml=[^ ]+_3ea\.yml infra=INFRA-A os=RHEL8 boot=UEFI splunk=On-premise hosts=hostC1,hostC2,hostC3$'
+	t_no ".job 전체에 태그 문자열 없음" "$qf" 'rhel810|TEST|x,y'
+	t_eq "그룹 줄 필드 수 전부 6(yml infra os boot splunk hosts)" "$(grep '^yml=' "$qf" | awk '{print NF}' | sort -u | paste -sd' ')" 6
+	t_notmp
+	case_end
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -2173,6 +2361,7 @@ os6_cases
 auto_cases
 dns_cases
 real_dns_cases
+tag_cases
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="

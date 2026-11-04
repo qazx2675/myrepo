@@ -52,6 +52,11 @@ bash test/run_tests.sh
 # 호스트명(nodeinfo Y) 또는 12필드/msg 내용(nodeinfo N)을 ${user}.txt 에 준비
 vi <user>.txt
 
+# (선택) 13번째 필드 = 분류 태그: 12필드 뒤에 공백 없는 한 단어를 붙이면 그 줄만 다른 yml 로 나뉨 (yml 분류용, 값은 검증·치환하지 않음)
+# 같은 사양이라도 태그가 다르면(빈 태그 포함) 다른 yml, 같으면 같은 yml. 13번째가 없는 줄은 빈 태그. 12필드 또는 13필드만 허용
+# 예: vendor model infra hostname ip mac nic disk part 용량 os boot rhel810(TEST/SR)
+# 태그는 N(직접 준비한 파일)에서만 씀. Y 로 한 번 실행해 정렬된 ${user}.txt 가 생기면 Ctrl+C 로 중단 → 13번째를 줄 끝에 붙인 뒤 N 으로 다시 실행
+
 # 01 실행: awx 사용여부 → 작업진행여부 → (메뉴) su → 02 자동 실행
 bash 01.AWX_nodeinfo_V2.sh
 

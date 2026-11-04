@@ -16,10 +16,10 @@ flowchart TD
     E2 --> END2["exit 1"]
     E1 -->|성공| E3["결과를 ${user}.txt"]
     E -->|N| E3
-    E3 --> F["[3] msg 파싱<br/>또는 12필드 검증"]
+    E3 --> F["[3] msg 파싱<br/>또는 12필드(13번째 선택) 검증"]
     
     F -->|msg 있음| F1["값만 남김"]
-    F -->|msg 없음| F2["12필드 검증"]
+    F -->|msg 없음| F2["12필드(13번째 선택) 검증"]
     F -->|실패| F3["[X] 오류 종료"]
     F3 --> END3["exit 1"]
     F1 --> G
@@ -49,7 +49,7 @@ flowchart TD
     P --> Q["[13] 메뉴 루프<br/>while true"]
     Q -->|su| Q1["break"]
     Q -->|exit| END9["exit 0"]
-    Q -->|ls| Q2["yml 파일 + boot"]
+    Q -->|ls| Q2["yml 파일 + boot (+ 태그)"]
     Q2 --> Q
     Q -->|파일명| Q3["내용 출력"]
     Q3 --> Q
@@ -112,7 +112,7 @@ flowchart TD
     D1 --> END2["exit 1"]
     D -->|성공| E["배열 구성<br/>ymls/infras/oss/boots/splunks"]
     
-    E --> F["옵션 확인표 출력<br/>번호|yml|infra|os|boot|splunk|호스트수"]
+    E --> F["옵션 확인표 출력<br/>번호|yml|infra|os|boot|splunk|호스트수|13번째(태그)"]
     F --> G["프롬프트: 맞습니까"]
     G -->|Y| H["직접 실행 시작"]
     G -->|N| H1["yml별 값 재입력<br/>Enter=유지"]
