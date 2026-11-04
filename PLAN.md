@@ -733,3 +733,11 @@ Ctrl+C 진행 중 목록)의 압축 표기는 그대로 유지(이번 변경 대
 구현: 신규 `danger.go` — `isDangerousCommand`(기존 부분일치 + 새 위험어는 명령 위치 판정), `parseConfirmHosts`(구분자 분리·`expandHostLine` 펼침·중복 제거), `diffHostSets`, `readConfirmLines`(빈 줄 종료). `main.go` 는 판정 호출 교체, 재입력 단계, 도움말, `printCommandResult` 호스트별 일괄 출력.
 
 검증: CHANGELOG 2026-10-31 항목 참고. OS6·OS8 빌드 확인.
+
+## v2 24번째 업데이트: 구형 SSH 서버 접속 (2026-11-04)
+
+요청: OS8 관리 서버의 gossh 가 OS6 서버(`arcfour`·`blowfish-cbc` 만 제공)에 접속하지 못함. 관리 대상 서버 설정은 바꿀 수 없으니 gossh 쪽에서 가능하게. 이제 OS6 버전은 빌드하지 않음.
+
+구현: `main.go` `newSSHClientConfig` — 기본 암호·키 교환 목록 뒤에 옛 알고리즘(`aes128-cbc` `3des-cbc` `arcfour*`, `diffie-hellman-group1-sha1` 등)을 붙여 제안. 본 명령과 `tmplimit.go` 의 파일 읽기 접속이 같이 사용. `blowfish-cbc` 는 x/crypto 미구현이라 제외.
+
+검증: CHANGELOG 2026-11-04 항목 참고. OS8 빌드만.

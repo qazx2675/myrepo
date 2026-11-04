@@ -954,12 +954,7 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 		return
 	}
 
-	config := &ssh.ClientConfig{
-		User:            user,
-		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         timeout,
-	}
+	config := newSSHClientConfig(user, authMethods, timeout)
 
 	// 1. SSH 접속 시도
 	// ssh.Dial과 동일한 동작(TCP 접속 후 SSH 핸드셰이크)이지만, Ctrl+C로 걸린 접속을 끊을 수
@@ -1063,6 +1058,38 @@ const dnsLookupConcurrency = 50
 
 // 재검증 단계의 접속(로그인) 제한시간 상한.
 const retryConnectTimeout = 8 * time.Second
+
+// ★ [구형 서버 호환] x/crypto 기본값은 arcfour·CBC 암호와 diffie-hellman-group1-sha1 같은 옛 키
+// 교환을 빼고 제안해서, 그것만 받는 서버(RHEL6 등 설정 변경 불가 서버)에 "no common algorithm"
+// 으로 접속하지 못한다. 기본값을 앞에 그대로 두고 옛 알고리즘을 뒤에 붙여, 최신 서버는 지금과
+// 같은 알고리즘으로 협상하고 옛 서버만 뒤쪽 알고리즘으로 협상하게 한다.
+// (blowfish-cbc 는 x/crypto 에 구현이 없어 쓸 수 없다. 라이브러리가 모르는 이름은 SetDefaults 가 걸러냄)
+var sshCiphers = []string{
+	"aes128-gcm@openssh.com", "aes256-gcm@openssh.com", "chacha20-poly1305@openssh.com",
+	"aes128-ctr", "aes192-ctr", "aes256-ctr",
+	"aes128-cbc", "3des-cbc", "arcfour256", "arcfour128", "arcfour",
+}
+
+var sshKeyExchanges = []string{
+	"curve25519-sha256", "curve25519-sha256@libssh.org",
+	"ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
+	"diffie-hellman-group14-sha256", "diffie-hellman-group14-sha1",
+	"diffie-hellman-group16-sha512", "diffie-hellman-group-exchange-sha256",
+	"diffie-hellman-group-exchange-sha1", "diffie-hellman-group1-sha1",
+}
+
+// newSSHClientConfig는 모든 SSH 접속(본 명령·-tmp/-limit/-rpm 파일 읽기)이 같이 쓰는 접속 설정을 만든다.
+func newSSHClientConfig(user string, auth []ssh.AuthMethod, timeout time.Duration) *ssh.ClientConfig {
+	cfg := &ssh.ClientConfig{
+		User:            user,
+		Auth:            auth,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         timeout,
+	}
+	cfg.Ciphers = sshCiphers
+	cfg.KeyExchanges = sshKeyExchanges
+	return cfg
+}
 
 // lookupHostWithRetry는 SSH 접속(ssh.Dial) 전에 이름 해석만 먼저 수행한다. 대량 동시 실행 시
 // 간헐적으로 DNS 조회가 실패/타임아웃되는 경우가 있어(리졸버 혼잡), 실제 접속 타임아웃(-t, 기본
