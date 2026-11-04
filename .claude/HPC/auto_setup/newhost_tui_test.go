@@ -337,7 +337,7 @@ func TestNewhostPasteFix(t *testing.T) {
 		t.Fatalf("오류가 있으면 진행 불가: step=%d msg=%q", n.step, n.msg)
 	}
 	f := h.frame()
-	if !strings.Contains(f, "✗ 값이 2개 (hostname ip mac [템플릿] 필요)") || !strings.Contains(f, "✗ hostname 중복 (행 1,3)") || !strings.Contains(f, "오류 3줄 (빨강)") {
+	if !strings.Contains(f, "✗ 값이 2개 (hostname ip mac [템플릿] [13번째] 필요)") || !strings.Contains(f, "✗ hostname 중복 (행 1,3)") || !strings.Contains(f, "오류 3줄 (빨강)") {
 		t.Errorf("오류 표시:\n%s", f)
 	}
 	h.keys("d 2\r")
@@ -822,6 +822,38 @@ func TestNewhostPasteTemplateColumn(t *testing.T) {
 	want := "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond sda sda5 500 8.10 uefi\n" +
 		"tmp tmp mec svr002 10.0.0.2 aa:bb:cc:dd:ee:02 eth0 sda sda5 500 9.6 uefi\n" +
 		"tmp tmp mec svr003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 nvme0n1 nvme0n1p8 400 9.6 uefi\n"
+	if b, _ := os.ReadFile(filepath.Join(h.awx, "alice.txt")); string(b) != want {
+		t.Errorf("alice.txt:\n%s", b)
+	}
+}
+
+// 다섯 번째 값(13번째 레코드): 템플릿 + 13번째 로 보이고, 12필드 줄 뒤에 그대로 붙어 13필드로 저장. 13번째 없는 줄은 종전대로 12필드.
+func TestNewhostPasteExtraColumn(t *testing.T) {
+	h := nhSetup(t, "alice")
+	h.keys("w2")
+	h.keys("svr001 10.0.0.1 aa:bb:cc:dd:ee:01 A rhel810(TEST/SR)\rsvr002,10.0.0.2,aa:bb:cc:dd:ee:02,A,rhel810(TEST,SR)\rsvr003 10.0.0.3 aa:bb:cc:dd:ee:03 A\r")
+	n := h.n()
+	if f := h.frame(); !strings.Contains(f, "→ 1 [A] + rhel810(TEST/SR)") || !strings.Contains(f, "→ 1 [A] + rhel810(TEST,SR)") {
+		t.Fatalf("붙여넣기 목록에 템플릿 + 13번째 가 없음:\n%s", f)
+	}
+	h.keys("svr004 10.0.0.4 aa:bb:cc:dd:ee:04 A x y\r")
+	if !strings.Contains(n.rows[3].Err, "값이 6개") {
+		t.Fatalf("6개는 오류: %+v", n.rows[3])
+	}
+	h.keys("d 4\r\r")
+	if n.step != nhConfirm || !strings.Contains(strings.Join(strings.Fields(h.frame()), " "), "저장될 줄: tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond sda sda5 500 8.10 uefi rhel810(TEST/SR) (tmp tmp infra hostname ip mac nic disk part 용량 os boot 13번째)") {
+		t.Fatalf("확인 화면: step=%d\n%s", n.step, h.frame())
+	}
+	h.keys("y")
+	if f := h.frame(); n.step != nhAssign || !strings.Contains(f, "+ rhel810(TEST/SR)") {
+		t.Fatalf("지정 화면에 13번째가 없음: step=%d\n%s", n.step, f)
+	}
+	h.keys("\r")
+	h.waitStep(nhPreview)
+	h.keys("y")
+	want := "tmp tmp sec svr001 10.0.0.1 aa:bb:cc:dd:ee:01 bond sda sda5 500 8.10 uefi rhel810(TEST/SR)\n" +
+		"tmp tmp sec svr002 10.0.0.2 aa:bb:cc:dd:ee:02 bond sda sda5 500 8.10 uefi rhel810(TEST,SR)\n" +
+		"tmp tmp sec svr003 10.0.0.3 aa:bb:cc:dd:ee:03 bond sda sda5 500 8.10 uefi\n"
 	if b, _ := os.ReadFile(filepath.Join(h.awx, "alice.txt")); string(b) != want {
 		t.Errorf("alice.txt:\n%s", b)
 	}
