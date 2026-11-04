@@ -364,8 +364,6 @@ Rocky Linux release 8.10 (Green Obsidian)
 - **상태**: `동일` / `차이`(구분 = `부족(비교서버에만 있음)` 또는 `추가(대상에만 있음)`) / `확인불가`(접속은 됐으나 rpm 목록을 못 받음) / `접속불가`.
 - **가드**: 비교서버의 패키지 목록이 비어 있으면 중단합니다. `-tmp`/`-limit`/`-tl` 과 함께 쓸 수 없습니다.
 
----
-
 ### 3.14 구형 SSH 서버 접속 (RHEL6 등)
 
 대상 서버 설정을 바꿀 수 없는 구형 서버가 `arcfour` 같은 옛 암호나 `diffie-hellman-group1-sha1` 같은 옛 키 교환만 제공해도 접속됩니다.
@@ -375,6 +373,8 @@ Rocky Linux release 8.10 (Green Obsidian)
 - 추가로 허용하는 키 교환: `diffie-hellman-group16-sha512`, `diffie-hellman-group-exchange-sha256/sha1`, `diffie-hellman-group1-sha1`
 - `blowfish-cbc` 는 Go SSH 라이브러리에 구현이 없어 쓸 수 없습니다. 서버가 `blowfish-cbc` **만** 제공하면 여전히 접속되지 않습니다.
 - 옵션 없이 항상 적용됩니다(본 명령, `-tmp`/`-limit`/`-tl`/`-rpm` 비교서버 접속 모두).
+
+---
 
 ## 4. 옵션 전체 목록
 
