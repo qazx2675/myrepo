@@ -1,0 +1,46 @@
+name: new_setup CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck gawk
+
+      - name: gofmt check
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "gofmt 필요:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: Bash syntax check
+        run: |
+          for f in *.sh test/*.sh; do bash -n "$f"; done
+
+      - name: ShellCheck lint
+        run: |
+          shellcheck -S warning *.sh test/*.sh
+
+      - name: Scenario test suite (fake gossh)
+        run: bash test/run_tests.sh
