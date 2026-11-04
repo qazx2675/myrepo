@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -171,5 +172,150 @@ func TestResolveGosshPath(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	if got := resolveGosshPath("~/x/gossh"); got != filepath.Join(home, "x/gossh") {
 		t.Errorf("~ 확장 실패: %q", got)
+	}
+}
+
+func TestParseConfV2(t *testing.T) {
+	d := parseConf("")
+	if d.CPUIntelLog != "/var/cpudiag/result.log" || d.CPUIntelOK != "Completed successfully. No issues detected." ||
+		d.CPUAMDLog != "" || d.CPUAMDOK != "" || d.OSCheckSh != "" || d.OSCheckExclude != "" {
+		t.Errorf("v2 기본값 오류: %+v", d)
+	}
+	c := parseConf("OS_CHECK_SH = ~/cc.sh \nOS_CHECK_EXCLUDE=a|b\nCPU_INTEL_LOG=/x\nCPU_INTEL_OK=fine=ok\nCPU_AMD_LOG=/y\nCPU_AMD_OK=amd ok\n")
+	if c.OSCheckSh != "~/cc.sh" || c.OSCheckExclude != "a|b" || c.CPUIntelLog != "/x" || c.CPUIntelOK != "fine=ok" ||
+		c.CPUAMDLog != "/y" || c.CPUAMDOK != "amd ok" {
+		t.Errorf("v2 키 오류: %+v", c)
+	}
+}
+
+func TestExpandPath(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	cases := map[string]string{
+		`"/a/b.sh"`: "/a/b.sh",
+		"'/a/b.sh'": "/a/b.sh",
+		"~/c.sh":    filepath.Join(home, "c.sh"),
+		"/a/b.sh":   "/a/b.sh",
+		"":          "",
+	}
+	for in, want := range cases {
+		if got := expandPath(in); got != want {
+			t.Errorf("expandPath(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
+func TestBuildInfoCmd(t *testing.T) {
+	c := parseConf("")
+	cmd := buildInfoCmd(c)
+	for _, w := range []string{
+		"grep -m1 vendor_id /proc/cpuinfo;",
+		"grep -qF -e 'Completed successfully. No issues detected.' '/var/cpudiag/result.log' && echo NS_CPU_INTEL;",
+		"grep -rqs --include='messages*' --exclude='*.gz' stress-ng /var/log && echo NS_STRESS;",
+		"lscpu | grep -i 'per core';",
+		"echo NS_KERNEL `uname -r`",
+	} {
+		if !strings.Contains(cmd, w) {
+			t.Errorf("누락 %q in %s", w, cmd)
+		}
+	}
+	if strings.Contains(cmd, "NS_CPU_AMD") {
+		t.Errorf("AMD 미설정이면 AMD 줄이 없어야 함: %s", cmd)
+	}
+	// csh 안전: 중괄호·! ·exit·변수 대입 없음
+	for _, bad := range []string{"{", "}", "!", "exit", "uptime"} {
+		if strings.Contains(cmd, bad) {
+			t.Errorf("csh 비호환 문자열 %q: %s", bad, cmd)
+		}
+	}
+	if regexp.MustCompile(`(^|[;&|\s])\w+=`).MatchString(cmd) {
+		t.Errorf("변수 대입 형태 포함: %s", cmd)
+	}
+	if isDangerousCommand(cmd) {
+		t.Errorf("기본 정보수집 명령이 위험어로 판정됨")
+	}
+	c.CPUAMDLog, c.CPUAMDOK = "/a/log", "it's ok"
+	cmd = buildInfoCmd(c)
+	if !strings.Contains(cmd, `grep -qF -e 'it'\''s ok' '/a/log' && echo NS_CPU_AMD;`) {
+		t.Errorf("AMD 줄 오류: %s", cmd)
+	}
+	c.CPUAMDOK = ""
+	if strings.Contains(buildInfoCmd(c), "NS_CPU_AMD") {
+		t.Errorf("AMD 문구가 비면 줄이 없어야 함")
+	}
+	c.CPUIntelOK = ""
+	if strings.Contains(buildInfoCmd(c), "NS_CPU_INTEL") {
+		t.Errorf("Intel 문구가 비면 줄이 없어야 함")
+	}
+}
+
+func TestParseInfoOutput(t *testing.T) {
+	out := "a: vendor_id\t: GenuineIntel\na: NS_CPU_INTEL\na: NS_STRESS\na: Thread(s) per core:                     2\na: NS_KERNEL 4.18.0-1.el8\r\n" +
+		"b: vendor_id\t: AuthenticAMD\nb: Thread(s) per core:  1\nb: NS_KERNEL \nb: banner text\n" +
+		"c: Welcome\nnoise\n"
+	got := parseInfoOutput(out)
+	a := got["a"]
+	if a == nil || a.vendor != "GenuineIntel" || !a.cpuIntel || a.cpuAMD || !a.stress || a.tpc != 2 || a.kernel != "4.18.0-1.el8" {
+		t.Errorf("a=%+v", a)
+	}
+	b := got["b"]
+	if b == nil || b.vendor != "AuthenticAMD" || b.cpuIntel || b.stress || b.tpc != 1 || b.kernel != "" {
+		t.Errorf("b=%+v", b)
+	}
+	if c := got["c"]; c == nil || c.vendor != "" || c.tpc != 0 {
+		t.Errorf("c=%+v", c)
+	}
+}
+
+func TestHostInfoResults(t *testing.T) {
+	cases := []struct {
+		name                 string
+		h                    *hostInfo
+		cpu, stress, ht, osv string
+	}{
+		{"Intel ok", &hostInfo{vendor: "GenuineIntel", cpuIntel: true, stress: true, tpc: 2, kernel: "k1"}, "O", "O", "ON", "k1"},
+		{"Intel ng", &hostInfo{vendor: "GenuineIntel", tpc: 1}, "X", "X", "OFF", "-"},
+		{"Intel 인데 AMD 표식", &hostInfo{vendor: "GenuineIntel", cpuAMD: true}, "X", "X", "-", "-"},
+		{"AMD ok", &hostInfo{vendor: "AuthenticAMD", cpuAMD: true, tpc: 4}, "O", "X", "ON", "-"},
+		{"AMD 미설정", &hostInfo{vendor: "AuthenticAMD"}, "X", "X", "-", "-"},
+		{"벤더 없음", &hostInfo{cpuIntel: true, cpuAMD: true}, "X", "X", "-", "-"},
+		{"nil", nil, "X", "X", "-", "-"},
+	}
+	for _, c := range cases {
+		if c.h.cpuResult() != c.cpu || c.h.stressResult() != c.stress || c.h.htResult() != c.ht || c.h.osResult() != c.osv {
+			t.Errorf("%s: %s %s %s %s", c.name, c.h.cpuResult(), c.h.stressResult(), c.h.htResult(), c.h.osResult())
+		}
+	}
+}
+
+func TestParseCheckRes(t *testing.T) {
+	text := "a: OK something\na: PASS x\nb: OK\nb:   FAIL net\nc: warn FAIL inside\nd: FAIL\r\nnoise\n"
+	// 체크 스크립트 경로가 마운트되지 않은 경우: 셸 오류 줄만 있음 → 출력없음 (O 로 나오면 안 됨)
+	text += "f: bash: /user/svrauto/SA/check/os/run.sh: No such file or directory\n"
+	hosts := []string{"a", "b", "c", "d", "e", "f", "ex-1", "ex-2"}
+	text += "ex-1: FAIL zz\n"
+	got := parseCheckRes(text, " ex-1 | |qq", hosts)
+	want := map[string]string{"a": "O", "b": "X", "c": noOutput, "d": "X", "e": noOutput, "f": noOutput, "ex-1": "O", "ex-2": noOutput}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v want %v", got, want)
+	}
+	// 제외 문자열이 비면 아무것도 제외하지 않는다
+	if got := parseCheckRes(text, "|  |", hosts); got["ex-1"] != "X" || got["ex-2"] != noOutput {
+		t.Errorf("빈 제외 처리 오류: %v", got)
+	}
+}
+
+func TestFormatRow(t *testing.T) {
+	h := &hostInfo{vendor: "GenuineIntel", cpuIntel: true, stress: true, tpc: 2, kernel: "4.18"}
+	if got, want := formatRow("n1", stDone, "O", h), "n1\t완료\tO\tO\tO\tON\t4.18"; got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+	if got, want := formatRow("n2", stDone, "-", nil), "n2\t완료\t-\tX\tX\t-\t-"; got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+	for _, st := range []string{stNoDisk, stStopped, stInstall, stUnreach} {
+		got := formatRow("n3", st, "O", h)
+		if got != "n3\t"+st+"\t-\t-\t-\t-\t-" || strings.Count(got, "\t") != 6 {
+			t.Errorf("미완료 행 오류: %q", got)
+		}
 	}
 }

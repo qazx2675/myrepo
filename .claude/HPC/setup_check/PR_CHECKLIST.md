@@ -14,3 +14,6 @@
 - [ ] 래퍼와 바이너리 이름 일치 확인 (`new_setup.sh` ↔ `bin/new_setup`, `bin/new_setup_os6`), 실행 권한(`100755`) 유지
 - [ ] README.md 관련 표/설명 갱신 필요 여부 확인 (상태값·설정 키·종료코드·한계)
 - [ ] 판정 흐름이 바뀌었으면 ARCHITECTURE.md 흐름도와 계획서.md 갱신
+- [ ] 원격 명령(1차 정보수집·2차 anaconda.log)이 csh/tcsh 로그인 셸에서도 동작 — 변수 대입·`{ }`·`exit`·`!`·글롭 없이 `;` `&&` `||` 와 작은따옴표만 사용, 랩 .60(csh)에서 실제 gossh 로 확인
+- [ ] 설정체크: config_check.sh 가 `-auto-check` 를 지원하는지 확인 (미지원 구버전이면 실행하지 않고 `-` + 경고), 실제 config_check.sh 를 랩에 두고 `run.sh` 대역으로 `-auto-check` 경로 확인 (운영 run.sh 로는 확인 불가 — 보고에 명시)
+- [ ] 설정 키를 추가·변경했다면 `new_setup.conf.sample`, README 설정 키 표, 계획서.md 를 함께 갱신

@@ -12,3 +12,21 @@ DISK_PATTERN=Disk "" given in clearpart command does not exist
 # 판정 우선순위: 디스크미인식 > 설치정지 > OS설치중
 # ※ 문구에 reboot/poweroff/shutdown/halt/init 0/init 6/ddc 등 gossh 위험어가 들어 있으면 실행이 거부된다.
 #ERROR_PATTERN=
+
+# ---- v2: 설정체크 / CPU / stress-ng / H/T / OS 열 ----
+
+# config_check.sh 경로 (관리서버에 있는 파일). 비우면 설정체크 열은 '-'.
+# -auto-check 를 지원하는 버전이어야 한다(없으면 실행하지 않고 '-' + 경고).
+OS_CHECK_SH=
+
+# 설정체크 제외 hostname 문자열('|' 로 구분). 하나라도 hostname 에 포함되면 FAIL 이어도 'O'.
+# 예: OS_CHECK_EXCLUDE=asdf|qwer
+OS_CHECK_EXCLUDE=
+
+# Intel CPU 진단 로그 경로와 성공 문구(고정 문자열). 로그에 문구가 있으면 CPU테스트 'O'.
+CPU_INTEL_LOG=/var/cpudiag/result.log
+CPU_INTEL_OK=Completed successfully. No issues detected.
+
+# AMD CPU 진단 로그 경로와 성공 문구. 아직 모름 — 나중에 채운다. 비어 있으면 AMD 장비는 'X'.
+CPU_AMD_LOG=
+CPU_AMD_OK=

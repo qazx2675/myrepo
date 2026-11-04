@@ -1,8 +1,12 @@
 #!/bin/bash
 # fake_gossh.sh - new_setup 시험용 가짜 gossh
-#   FAKE_GOSSH_SCENARIO=<파일>  각 줄 "host<TAB>시나리오" (없는 호스트는 ok)
+#   FAKE_GOSSH_SCENARIO=<파일>  각 줄 "host<TAB>시나리오[<TAB>key=value ...]" (없는 호스트는 ok)
 #   FAKE_GOSSH_LOG=<파일>       (선택) 받은 호출과 원격 명령을 이어 붙여 기록
 # 시나리오: ok off refused install_disk install_err install_none install_nolog install_retry_off cancel
+# 시나리오 파일 3번째 열 이후(탭/공백 구분)에 key=value 로 ok 장비의 1차 정보수집 출력을 흉내 낸다.
+#   vendor=intel|amd|none  cpu=ok|ng  stress=1|0  tpc=1|2|none  kernel=<값>
+#   기본: vendor=intel cpu=ok stress=1 tpc=2 kernel=4.18.0-test
+#   NS_CPU_INTEL / NS_CPU_AMD 는 받은 원격 명령에 해당 표식이 있을 때만 낸다(진짜 grep 처럼).
 # 호출에 -pm 이 있으면 1차, 없으면 2차로 본다. 진짜 gossh 와 같이 시작할 때 결과 파일 5개를 지우고
 # 내용이 있는 것만 만든다. 호스트 목록은 한 줄에 하나(빈 줄·# 무시, 범위 확장은 흉내 내지 않음).
 set -u
@@ -40,21 +44,57 @@ fi
 # 시작할 때 결과 파일 5개 삭제 (진짜 gossh 동작)
 for s in _res_off _res_refsed _os_install _nosvrauto _res_cancel; do rm -f "${hf}${s}"; done
 
-scn() { # 호스트의 시나리오 (기본 ok)
-	local v=""
+SCN_S=ok
+SCN_OPTS=()
+scn() { # 호스트의 시나리오(기본 ok)는 SCN_S, 3열 이후 key=value 는 SCN_OPTS 에 담는다
+	local l="" a=()
+	SCN_S=ok
+	SCN_OPTS=()
 	if [ -n "${FAKE_GOSSH_SCENARIO:-}" ] && [ -f "$FAKE_GOSSH_SCENARIO" ]; then
-		v=$(awk -F'\t' -v h="$1" '$1==h {print $2; exit}' "$FAKE_GOSSH_SCENARIO")
+		l=$(awk -v h="$1" '$1==h {print; exit}' "$FAKE_GOSSH_SCENARIO")
 	fi
-	echo "${v:-ok}"
+	read -r -a a <<< "$l"
+	SCN_S=${a[1]:-ok}
+	[ "${#a[@]}" -gt 2 ] && SCN_OPTS=("${a[@]:2}")
+	return 0
+}
+
+info() { # 호스트 [key=value ...]: ok 장비의 1차 정보수집 출력
+	local h=$1 kv vendor=intel cpu=ok stress=1 tpc=2 kernel=4.18.0-test
+	shift
+	for kv in "$@"; do
+		case $kv in
+			vendor=*) vendor=${kv#vendor=} ;;
+			cpu=*) cpu=${kv#cpu=} ;;
+			stress=*) stress=${kv#stress=} ;;
+			tpc=*) tpc=${kv#tpc=} ;;
+			kernel=*) kernel=${kv#kernel=} ;;
+		esac
+	done
+	echo "$h:  13:00:00 up 1 day, load average: 0.00, 0.01, 0.05"
+	case $vendor in
+		intel) printf '%s: vendor_id\t: GenuineIntel\n' "$h" ;;
+		amd) printf '%s: vendor_id\t: AuthenticAMD\n' "$h" ;;
+	esac
+	if [ "$cpu" = ok ]; then
+		case $vendor in
+			intel) case $cmd in *NS_CPU_INTEL*) echo "$h: NS_CPU_INTEL" ;; esac ;;
+			amd) case $cmd in *NS_CPU_AMD*) echo "$h: NS_CPU_AMD" ;; esac ;;
+		esac
+	fi
+	if [ "$stress" = 1 ]; then echo "$h: NS_STRESS"; fi
+	if [ "$tpc" != none ]; then echo "$h: Thread(s) per core:    $tpc"; fi
+	echo "$h: NS_KERNEL $kernel"
 }
 
 while IFS= read -r line || [ -n "$line" ]; do
 	h=$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 	case $h in '' | '#'*) continue ;; esac
-	s=$(scn "$h")
+	scn "$h"
+	s=$SCN_S
 	if [ "$pm" = 1 ]; then
 		case $s in
-			ok) echo "$h:  13:00:00 up 1 day, load average: 0.00, 0.01, 0.05" ;;
+			ok) info "$h" ${SCN_OPTS[@]+"${SCN_OPTS[@]}"} ;;
 			off) echo "$h: SSH 접속 실패: i/o timeout" >&2; echo "$h" >> "${hf}_res_off" ;;
 			refused) echo "$h: dial tcp: connection refused" >&2; echo "$h" >> "${hf}_res_refsed" ;;
 			cancel) echo "$h: 취소됨" >&2; echo "$h" >> "${hf}_res_cancel" ;;
