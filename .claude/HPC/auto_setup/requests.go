@@ -309,7 +309,7 @@ func (d *Daemon) scheduleManual(now time.Time) {
 	}
 }
 
-// startManual: requests/active/<name> 수동 run 1건 시작 (실행 중이거나 대상 호스트가 다른 run 에 있으면 그대로 둠)
+// startManual: requests/active/<name> 수동 run 1건 시작 (실행 중이거나 대상 호스트가 다른 run·os6 직접 실행에 있으면 그대로 둠)
 func (d *Daemon) startManual(name string, now time.Time) {
 	p := filepath.Join(reqActiveDir(), name)
 	for _, c := range d.runs {
@@ -334,7 +334,7 @@ func (d *Daemon) startManual(name string, now time.Time) {
 	}
 	busy := d.busyHosts()
 	for _, n := range hosts {
-		if busy[n] != nil {
+		if busy[n] != nil || d.os6Hold[n] != "" { // os6_mgmt 직접 실행 중인 호스트도 끝날 때까지 미룬다
 			return
 		}
 	}

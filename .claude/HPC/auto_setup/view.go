@@ -105,7 +105,7 @@ func recheckTarget(yml string) string {
 // updateView: 새 스냅샷으로 보기 내용 갱신 (refresh 마다)
 func (st *tuiState) updateView() {
 	v := st.view
-	if v == nil || v.done || v.kind == viewOneoff {
+	if v == nil || v.done || v.kind == viewOneoff || v.kind == viewOS6 { // 단독 실행·os6 직접 실행은 각자 채운다
 		return
 	}
 	j := findSnapJob(st.snap, v.jobID)
@@ -240,6 +240,8 @@ func renderView(v *viewState, width, height int, color bool) string {
 	switch {
 	case v.kind == viewRecheck && v.done:
 		hint += "  g 다시 재확인"
+	case !v.done && v.kind == viewOS6:
+		hint += "  (닫아도 실행은 계속됩니다. 끝나면 결과가 다시 열리며, 끝날 때까지 종료할 수 없습니다)"
 	case !v.done:
 		hint += "  (닫아도 데몬은 계속 진행합니다. 결과는 v 로 다시 볼 수 있습니다)"
 	}

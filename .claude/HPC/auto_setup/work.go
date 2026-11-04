@@ -572,7 +572,7 @@ func workOS6Inner(hosts []string, cmd string, danger bool) string {
 
 // workOS6Argv: os6_mgmt 경유 실행 — ssh -t (원격 tty: 출력·색·위험어 y/N 확인 그대로), 로그인 셸이 csh 여도 remoteBash 로 bash 실행
 func workOS6Argv(hosts []string, cmd string, danger bool) []string {
-	return []string{"ssh", "-t", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(workOS6Inner(hosts, cmd, danger))}
+	return []string{"ssh", "-t", "-o", "BatchMode=yes", "-o", sshConnectOpt(), os6_mgmt, remoteBash(workOS6Inner(hosts, cmd, danger))}
 }
 
 // workShellLine: script -c 에 넘길 /bin/sh 한 줄 — 인자를 하나씩 인용해 실행하고 종료코드를 rcPath 에 쓴다.

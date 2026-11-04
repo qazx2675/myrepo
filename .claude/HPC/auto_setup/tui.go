@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -216,6 +217,8 @@ type tuiState struct {
 	wk          *workState       // s gossh 작업 화면, nil = 없음 (work_tui.go)
 	oneShot     bool             // CLI auto_setup newhost: 흐름이 닫히면(AWX 실행 포함) 루프를 끝낸다
 	nhSaved     bool             // 이번 실행에서 신규 설치 양식을 저장했음 (CLI 종료 코드)
+	o6          *os6DirState     // os6_mgmt 직접 실행(g/c/t) 진행 중, nil = 없음 (os6run_tui.go) — 실행 중에는 종료하지 않는다
+	quitAfter   bool             // 직접 실행 중 입력 끝(EOF)·시그널 → 끝나면 종료
 	restore     func()           // 현재 raw 모드를 되돌리는 함수 (AWX 실행 후 raw 재진입 때 교체됨)
 	inMu        sync.Mutex       // 키 읽기 goroutine 이 poll+Read 하는 동안 잡고 있음 — AWX 실행 중 Lock 으로 멈춘다
 }
@@ -292,9 +295,15 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 		start(st)
 	}
 	st.draw()
-	// key: 키 하나 처리, 끝내야 하면 true (oneShot 은 흐름이 닫히면 끝)
+	// key: 키 하나 처리, 끝내야 하면 true (oneShot 은 흐름이 닫히면 끝).
+	// os6_mgmt 직접 실행 중에는 끝내지 않고 안내만 한다 (입력이 끝났으면 실행이 끝난 뒤 종료)
 	key := func(ev keyEv) bool {
 		if ev.k == kEOF || st.handle(ev) {
+			if st.o6 != nil {
+				st.sel.Msg = os6BusyMsg
+				st.quitAfter = st.quitAfter || ev.k == kEOF
+				return false
+			}
 			return true
 		}
 		return st.oneShot && st.nh == nil && st.awx == nil && st.oo == nil && st.wk == nil
@@ -320,15 +329,25 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 		case <-tick:
 			st.refresh()
 		case <-st.fastTick:
+		case <-st.os6Tick():
+		case <-st.os6Wake():
 		case <-env.Resize: // 터미널이 이전 프레임을 reflow 한 채로 남지 않게 지우고 새 폭으로 바로 다시 그림
 			io.WriteString(env.Out, "\x1b[2J")
 		case <-env.Signals:
-			return 0
+			if st.o6 == nil {
+				return 0
+			}
+			st.sel.Msg, st.quitAfter = os6BusyMsg+" (끝나면 종료합니다)", true
 		}
 		st.pollOneoff()
 		st.pollChange()
 		st.pollNewhost()
 		st.pollWork()
+		st.pollOS6()
+		if st.quitAfter && st.o6 == nil { // 마지막 결과를 한 번 그리고 끝낸다
+			st.draw()
+			return 0
+		}
 		if st.oneShot && st.nh == nil && st.awx == nil && st.oo == nil && st.wk == nil {
 			return 0
 		}
@@ -338,7 +357,10 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 
 func (st *tuiState) refresh() {
 	s, err := st.src.Snapshot()
-	if err != nil {
+	var ce *snapCachedErr
+	if errors.As(err, &ce) { // os8_mgmt 접속 불가 — os6 에 저장된 스냅샷을 쓰고 안내 줄에 그 사실을 표시
+		st.snap, st.err = s, ce.Error()
+	} else if err != nil {
 		st.err = err.Error()
 	} else {
 		st.snap, st.err = s, ""
@@ -414,6 +436,7 @@ func (st *tuiState) inlineSel(w, h int) selection {
 func (st *tuiState) withErr() selection {
 	sel := st.sel
 	sel.Change = st.changeAvailable()
+	sel.Direct = os6Direct()
 	if st.err != "" && sel.Msg == "" {
 		sel.Msg = "[X] 상태 갱신 실패: " + st.err
 	}
@@ -634,8 +657,13 @@ func (st *tuiState) handleDetail(ev keyEv) {
 	}
 }
 
-// requestRecheck: g 키 — 이 그룹(전체 보기면 job 전체)의 완료 제외 호스트를 데몬이 지금 직접 재확인 (os8 → os6_mgmt → 접속불가)
+// requestRecheck: g 키 — 이 그룹(전체 보기면 job 전체)의 완료 제외 호스트를 데몬이 지금 직접 재확인 (os8 → os6_mgmt → 접속불가).
+// os6_mgmt(원격 클라이언트)에서는 요청 대신 이 서버의 gossh 로 바로 확인한다 (os6run_tui.go)
 func (st *tuiState) requestRecheck() {
+	if os6Direct() {
+		st.startOS6Check()
+		return
+	}
 	now := st.env.Now()
 	if !st.lastRecheck.IsZero() && now.Sub(st.lastRecheck) < refreshReqHold {
 		st.sel.Msg = "방금 재확인을 요청했습니다 — 잠시 후 다시 눌러 주세요"
@@ -657,6 +685,7 @@ func (st *tuiState) startManual(g *SnapGroup, mode string) {
 	}
 	j, _ := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 	switch {
+	case os6Direct() && st.os6Busy():
 	case j != nil && hasManual(j, g.Yml):
 		st.sel.Msg = "이미 이 그룹의 수동 run 이 대기·진행 중입니다"
 	case st.recentlyRequested():
@@ -695,8 +724,13 @@ func (st *tuiState) requestRefresh() {
 	}
 }
 
-// requestManual: y 확인 후 manual-run 요청 (요청 파일만 남김 — 데몬이 5초 주기로 수거)
+// requestManual: y 확인 후 manual-run 요청 (요청 파일만 남김 — 데몬이 5초 주기로 수거).
+// os6_mgmt(원격 클라이언트)에서는 요청 대신 이 서버에서 바로 실행한다 (os6run_tui.go)
 func (st *tuiState) requestManual() {
+	if os6Direct() {
+		st.startOS6Run()
+		return
+	}
 	payload := map[string]string{"jobid": st.sel.JobID, "yml": st.sel.Yml}
 	if st.sel.Mode != "" {
 		payload["mode"] = st.sel.Mode

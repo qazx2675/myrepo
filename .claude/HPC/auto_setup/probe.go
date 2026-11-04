@@ -250,7 +250,7 @@ func (s *os6Sessions) killLocked() {
 
 func (s *os6Sessions) startLocked(key string) {
 	stop := make(chan struct{})
-	cmd := sshCommand("ssh", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=30", s.mgmt, probeRemote(s.dir, s.interval))
+	cmd := sshCommand("ssh", "-o", "BatchMode=yes", "-o", sshConnectOpt(), "-o", "ServerAliveInterval=30", s.mgmt, probeRemote(s.dir, s.interval))
 	cmd.Stdin = io.MultiReader(strings.NewReader(key+"\n\n"), blockReader{stop})
 	errBuf := &bytes.Buffer{}
 	cmd.Stderr = errBuf // 세션이 출력 없이 끝나면 사유(Permission denied, No such file 등)를 로그에 남긴다
@@ -316,7 +316,7 @@ func (s *os6Sessions) reader(gen int, cmd *exec.Cmd, out io.Reader, stop chan st
 	_ = cmd.Wait() // stderr 를 다 받은 뒤 사유를 로그에
 	if report {
 		why := ""
-		if h := diagHead(errBuf.String()); h != "" {
+		if h := diagReason(errBuf.String()); h != "" {
 			why = " — " + h
 		}
 		logf("os6 probe 세션 종료 (다음 주기에 재시작)%s", why)

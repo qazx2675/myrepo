@@ -410,6 +410,7 @@ type selection struct {
 	Date       string   // 화면 1: 보고 있는 날짜 YYYYMMDD ("" = 가장 최근 날짜를 따라감)
 	Change     bool     // 안내 줄에 `m 변경` 표시 (v0.7.0 변경 메뉴가 켜져 있고 로컬 데몬일 때만 TUI 가 켠다)
 	Inline     []string // 키 안내 줄 바로 아래에 붙는 줄들 (v0.7.1: m 변경 메뉴, d 수동 완료 프롬프트). 비면 화면은 종전과 같다
+	Direct     bool     // os6_mgmt(원격 클라이언트): c/t/g 를 이 서버에서 직접 실행 — 확인 질문에 표시
 }
 
 type grpRef struct{ Job, Grp int }
@@ -1124,6 +1125,9 @@ func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
 		}
 		segs := []seg{{fmt.Sprintf(" %s (%d대%s)에 ", g.Yml, g.Counts.Total, extra), stYellow}}
 		segs = append(segs, what...)
+		if sel.Direct {
+			segs = append(segs, seg{" 를 os6_mgmt 에서 직접", stYellow})
+		}
 		segs = append(segs, seg{" 실행. 계속? [y/n]", stYellow})
 		return wrapLine(color, width, segs...)
 	}
