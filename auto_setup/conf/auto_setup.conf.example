@@ -13,6 +13,8 @@ os6_mgmt=
 # os6_mgmt 위 gossh 실행 파일 전체 경로
 os6_gossh=
 # os6_mgmt 위 auto_setup(os6 빌드) 이 있는 디렉터리
+# 이 디렉터리 아래 os6_run/ 이 os6_mgmt 직접 실행(TUI g·c·t)의 공유 기록이다 — autofs 공유 경로여야 os8 데몬이 같은 경로로 읽는다.
+#   os8_mgmt: 비우면 os6 직접 실행 결과·잠금을 보지 않음 / os6_mgmt: 비우면 실행 중인 auto_setup 실행 파일의 디렉터리
 os6_autosetup=
 # 이 서버의 os_check_final_annotated.sh 전체 경로 (autofs 공유 경로면 os8_mgmt·os6_mgmt 동일)
 os_check_sh=
@@ -84,3 +86,8 @@ max_runs=
 # 취소된 호스트는 접속불가와 같이 처리되어 다음 run 에서 다시 시도된다. 취소 후에도 (이 값 + 1)분 동안 끝나지 않으면 그 gossh 를 종료(TERM)한다.
 # 0 이면 감시하지 않음(이전 동작). 비우거나 숫자가 아니면 7
 hang_min=
+
+# os6_mgmt 로 ssh 접속할 때의 접속 제한(초) — 모든 ssh 의 ConnectTimeout. 숫자 (5 이상, 5 미만은 5). 비우거나 숫자가 아니면 30
+# os6_mgmt 를 RHEL8 로 올린 뒤 ssh 로그인이 느려졌다면 늘린다. 준비확인·LDAP 처럼 접속 시간이 포함된 호출의 전체 시간 상한도 함께 늘어난다
+# (접속 제한이 10초를 넘는 만큼의 2배를 더함 — 기본 30초면 준비확인 60초 → 100초). 원인 점검은 os6_truble.sh
+ssh_timeout=

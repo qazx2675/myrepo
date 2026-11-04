@@ -39,9 +39,11 @@ auto_setup/
 │   └── v0.8.0 새 파일 묶음: userfilter.go · sessionuser.go (user) / menu_tui.go · flow_tui.go (메뉴·흐름 화면 공통)
 │       / newhost.go · newhost_tpl.go · newhost_tui.go (신규 설치 양식) / dnscheck.go (DNS 점검) / work.go · work_tui.go (gossh 작업)
 │       / tcsh_live_test.go (랩 전용 tcsh 시험)
-├── auto_setup_os6        ← 빌드 완료 os6 용 정적 바이너리 (Go 1.20, 변수 빈 값 — 회사 환경에는 Go 가 없으므로 저장소에 포함)
+├── auto_setup_os8        ← 빌드 완료 정적 바이너리 (Go 1.26.5, CGO_ENABLED=0, 변수 빈 값) — os8_mgmt·os6_mgmt 양쪽에서 사용 (회사 환경에는 Go 가 없으므로 저장소에 포함)
+├── auto_setup_os6        ← 옛 os6 용 정적 바이너리 (Go 1.20) — 2026-11-04 이후 갱신하지 않음, 기존 파일 유지
+├── os6_truble.sh         ← os6_mgmt 경유 장애 점검 (읽기 전용, os8_mgmt 에서 root 로 실행)
 ├── setup.sh              ← 빌드 + 설치 + cron + tmpfiles 등록
-├── build_os6.sh          ← os6 용 정적 빌드 (Go 1.20 서버에서)
+├── build_os6.sh          ← (RHEL6 빌드 중단, 옛 스크립트) 새 빌드는 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o auto_setup_os8 .`
 ├── conf/
 │   ├── auto_setup.conf.example ← 빈 변수 설정 파일 예시 (복사해 auto_setup.conf 로 사용)
 │   ├── setup_guide.sh    ← 빈 변수 입력 가이드 (역할 선택 → 변수별 설명·예시·검증 → setup.sh 이어서 실행)
@@ -91,7 +93,7 @@ vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
 
 - 설정 파일 위치(먼저 발견된 **하나만** 사용): ① `$AUTO_SETUP_CONF/auto_setup.conf` ② `<auto_setup 실행 파일 디렉터리>/conf/auto_setup.conf` ③ `/etc/auto_setup/auto_setup.conf` (`setup.sh` 가 `conf/auto_setup.conf` 를 여기에 설치, 0600)
 - **빌드 때 `-ldflags -X` 로 넣은 값이 있으면 그 값이 우선**하고, 설정 파일은 비어 있는 변수만 채웁니다. 알 수 없는 키·형식이 틀린 줄은 무시합니다.
-- 예) 저장소의 빌드 완료 `auto_setup_os6` 를 os6_mgmt 에 두고 같은 디렉터리의 `conf/auto_setup.conf` 에 `os8_mgmt=<호스트>` 만 적으면 원격 클라이언트로 동작합니다.
+- 예) 저장소의 빌드 완료 `auto_setup_os8` (os6_mgmt 도 RHEL8 로 올라가 같은 바이너리를 씀. `auto_setup_os6` 는 옛 파일로 더 이상 갱신하지 않음) 를 os6_mgmt 에 `auto_setup` 이름으로 두고 같은 디렉터리의 `conf/auto_setup.conf` 에 `os8_mgmt=<호스트>` 만 적으면 원격 클라이언트로 동작합니다.
 - 실제 `conf/auto_setup.conf` 는 `.gitignore` 로 커밋에서 제외됩니다(예시 파일만 커밋). 01·os_check 쪽 빈 변수(`auto_done_dir` 등)는 쉘 스크립트이므로 기존 방식대로 채웁니다.
 
 #### 빈 변수 목록 (main.go 9개 + AWX 프로파일 9개 + 변경 4개 + 신규 설치·작업 10개)
@@ -115,6 +117,7 @@ vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
 | `closed_keep_days` | (선택) **종료된 작업(`jobs/done`)을 화면·`status` 에 보여 주는 기간(일)**. 1 이상의 정수. 지난 작업은 파일이 지워지는 게 아니라 화면에서만 빠지며, 값을 늘리면 그 기간의 작업이 날짜별 보기(`←` `→`)에 다시 나옵니다. 종료 후 수동 run·`g` 재확인도 이 기간 안의 작업만 화면에서 고를 수 있습니다 | `1` (24시간, 비우거나 숫자가 아니면 1) |
 | `max_runs` | (선택) **동시에 돌 수 있는 run(os_check 실행) 수**. 1 이상의 정수. 서로 다른 작업·같은 작업의 늦은 배치·수동 `c`/`t` run 이 같은 풀을 나눠 쓰며, 한 호스트는 두 run 에 동시에 들어가지 않습니다. 1 이면 종전처럼 한 번에 하나. 멈춘 run 은 슬롯 하나만 차지합니다. 데몬 재시작 필요 | `4` (비우거나 숫자가 아니면 4) |
 | `hang_min` | (선택) **gossh 멈춤(hang) 감지 시간(분)**. run 안의 gossh 호출(체크·적용·재확인) 하나가 이 시간을 넘으면 gossh 에 Ctrl+C 를 두 번 보내 아직 실행 중인 호스트만 취소하고(접속 실패·`ping X` 로 기록, 실패로 세어 다음 배치에서 재시도) 나머지는 계속 진행합니다. 1분 뒤에도 살아 있으면 SIGTERM. os6_mgmt 경유 호스트·2차 체크도 같습니다. 로그 `gossh hang 감지`. 0 이면 끔. 예: `hang_min=10`. 데몬 재시작 필요 | `7` (비우거나 숫자가 아니면 7) |
+| `ssh_timeout` | (선택) **os6_mgmt 로 ssh 접속할 때의 접속 제한(초)** — 모든 ssh 의 `ConnectTimeout`. 5 이상의 정수(5 미만은 5), 비우거나 숫자가 아니면 30(이전 고정값은 10). 접속 시간이 들어가는 호출의 전체 상한(준비확인 60초, LDAP 백업 90초·적용 45초)은 접속 제한이 10초를 넘는 만큼의 2배가 더해진다(기본 30초면 100초·130초·85초). os6_mgmt 를 RHEL8 로 올린 뒤 ssh 로그인이 느려졌을 때 늘린다. 원인 점검: `os6_truble.sh` |
 
 #### os_check 2개, 01 1개
 
@@ -174,11 +177,11 @@ go build -o auto_setup .
 # 3. 빌드 + /usr/local/bin 설치 + cron(매분 ensure) + tmpfiles 등록 + 변경 엔진 2개·conf 샘플 (root, 멱등)
 bash setup.sh
 
-# 4. os6 용 빌드 (Go 1.20 서버 .60 에서, 정적 바이너리 — Go 1.20 문법만 쓰므로 1.26.5 와 1.20 양쪽에서 빌드됨)
-bash build_os6.sh
-# → auto_setup_os6 생성 (os6_mgmt 의 os6_autosetup 경로에 'auto_setup' 이름으로 배치, probe 용)
-# (v0.7.0) 같은 실행에서 ../ip_change/bin/ip-change-engine_os6, ../ldap_setting/bin/ldap-config-engine_os6 도 빌드 (소스가 있을 때)
-# (Go 가 없는 회사 환경은 빌드 불필요: 저장소에 빌드 완료된 auto_setup_os6 (go1.20 정적, 변수 빈 값) 가 있으니 probe 용으로 그대로 배치)
+# 4. os8·os6 공용 정적 빌드 (RHEL6 빌드 중단 2026-11-04 — Go 1.26.5)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o auto_setup_os8 .
+# → auto_setup_os8 생성 (os6_mgmt 의 os6_autosetup 경로에 "auto_setup" 이름으로 복사, chmod 755). 옛 build_os6.sh(Go 1.20)는 남겨 두었으나 auto_setup_os6 는 더 갱신하지 않음
+# (참고) 엔진 os6 바이너리(../ip_change/bin, ../ldap_setting/bin)는 옛 build_os6.sh 로만 다시 빌드됨 — 저장소의 기존 파일을 그대로 사용
+# (Go 가 없는 회사 환경은 빌드 불필요: 저장소에 빌드 완료된 auto_setup_os8 (go1.26.5 정적, 변수 빈 값) 를 os6_mgmt 에 그대로 배치. auto_setup_os6 는 옛 파일)
 ```
 
 ### 폐쇄망 현장 사본 업데이트
@@ -193,7 +196,7 @@ bash conf/update_v0.4.0.sh
 # 3. (os8_mgmt) 재빌드·설치 후 데몬 재기동 — 실행 중인 데몬은 옛 바이너리이므로 재기동해야 새 동작이 적용됨
 bash setup.sh
 auto_setup --restart
-# 4. (os6_mgmt) 새 auto_setup_os6 를 os6_autosetup 경로에 'auto_setup' 이름으로 다시 복사
+# 4. (os6_mgmt) 새 auto_setup_os8 를 os6_autosetup 경로에 'auto_setup' 이름으로 다시 복사
 # 되돌리기 (설정 파일만, 가장 최근 백업)
 bash conf/update_v0.4.0.sh --undo
 ```
@@ -214,7 +217,7 @@ bash conf/update_v0.8.0.sh           # 실행 — 변수 10개 질문에는 Ente
 # 3. (os8_mgmt) 재빌드·설치 후 데몬 재기동 (실행 중인 데몬은 옛 바이너리)
 bash setup.sh
 auto_setup --restart
-# 4. (os6_mgmt) 저장소의 새 auto_setup_os6 를 os6_autosetup 경로에 'auto_setup' 이름으로 교체
+# 4. (os6_mgmt) 저장소의 새 auto_setup_os8 를 os6_autosetup 경로에 'auto_setup' 이름으로 교체
 #    (원격 클라이언트·probe 가 이 바이너리를 씀)
 # 5. (awx_script 가 있는 서버) 01 의 DNS 점검 — 현장 01 은 0.6.1 이상이어야 하며 현장 값·주석은 보존됨
 bash <awx_script>/setup/update_unreleased_dns.sh --dry
@@ -249,6 +252,7 @@ os6_mgmt (RHEL6) : 데몬 없음. 01/os_check 실행 가능, auto_setup 은 "원
 - os6_mgmt 에서 `auto_setup`(os8_mgmt 변수를 채워 빌드한 클라이언트)을 실행하면 `status`·`snapshot`·`code`·`cancel`·`done`·`request`·리포트/TUI 가 모두 **os8_mgmt 에 요청**되고, 출력은 어디서 실행해도 같습니다.
 - 전달·조회·요청은 ssh 세션이 아니라 **gossh 원샷**(`gossh -pm -script -w <목록> "<os8_autosetup> <하위명령>"`)입니다. 이유: RHEL6 의 ssh 클라이언트는 RHEL8 sshd 와 호환 문제가 있고, 세션을 유지하면 서버 부담이 되기 때문입니다.
 - `--start/--stop/--restart`, `daemon`, `ensure` 는 **os8_mgmt 에서만** 동작합니다(원격 클라이언트에서는 `[X] 데몬은 os8_mgmt 에서만 실행합니다` 로 거부).
+- 예외: os6_mgmt TUI 의 `g`(준비확인)·`c`(설정체크+설정수정)·`t`(설정체크만)는 os8_mgmt 에 요청하지 않고 **os6_mgmt 에서 바로 실행**합니다 (데몬 없이 TUI 안에서 1회, 아래 「os6_mgmt 직접 실행」).
 - os8 → os6 방향(ping 감시 probe 장기 ssh 세션, os6 gossh 래퍼, 준비확인)은 1차 그대로입니다.
 
 ### 01 과의 연계 흐름
@@ -696,6 +700,51 @@ os_check 는 정상 종료 시 이번 실행의 `check.res_<user>_postapply` 에
 - 수동: `auto_setup done <host...>` — 출처 `manual`, **부팅 시각 검증 없음**(경고 표시, 전달 이전 기록만 거부). 정말 끝난 호스트에만 사용.
 - 기록 실패는 os_check 가 경고 1줄만 출력하며 결과·종료코드는 불변입니다. 두 변수가 모두 비면 기존과 100% 동일합니다.
 
+### os6_mgmt 직접 실행 (TUI g·c·t)
+
+os6_mgmt(원격 클라이언트, conf `os8_mgmt` 를 채운 서버)에서 `auto_setup` TUI 를 열고 호스트표(화면 2)에서 `g` → `c` 또는 `t` 를 누르면 **os6_mgmt 에서 바로 실행**합니다. 데몬을 띄우지 않고 TUI 프로세스 안에서 한 번 실행합니다(os6_mgmt 는 공유 서버라 상주 프로세스 금지). os8_mgmt 에 접속이 되든 안 되든 쓸 수 있습니다.
+
+| 키 | os6_mgmt 에서 하는 일 |
+|---|---|
+| `g` | 그룹(전체 보기면 job)의 완료 제외 호스트를 **이 서버의 gossh** 로 준비확인 → 응답·uptime·설치중(anaconda)·접속불가 표. os8 데몬의 상태는 바꾸지 않습니다 |
+| `c` / `t` | y 확인 후 그룹 호스트를 **이 서버의 체크스크립트**(`os6_os_check_sh`, 비거나 `-` 면 `os_check_sh`)로 실행. 데몬 run 과 같은 코드(`hang_min` 멈춤 감시 포함, os6 경유 없이 이 서버의 gossh). 진행 창에 경과 시간·대상·제외 호스트, 끝나면 결과 본문 |
+
+- **사용하는 바이너리**: os6_mgmt 도 os8 과 같은 빌드(`auto_setup_os8`, 정적 바이너리)를 씁니다. conf 의 `os8_mgmt` 가 채워져 있으면 원격 클라이언트 + 직접 실행입니다. gossh 는 PATH 에서 찾고, 없으면 `os6_gossh` 경로를 씁니다.
+- **기록 위치**: `<os6 auto_setup 디렉터리>/os6_run/` — os6_mgmt 에서는 conf `os6_autosetup`(실행 파일 경로를 적었으면 그 디렉터리), 비면 실행 중인 auto_setup 실행 파일의 디렉터리. os8_mgmt 데몬은 자기 conf 의 `os6_autosetup` 아래 같은 경로를 **로컬 파일로 직접** 읽습니다(autofs 공유라 두 서버에서 같은 경로여야 함, 비면 사용 안 함). 데몬 기동 후 첫 주기에 `os6 직접 실행 기록 경로: …` 를 로그에 남깁니다(없으면 `아직 없음 — … 공유 경로가 아님`).
+
+```
+os6_run/active/<id>.lock    실행 중 잠금 (호스트·pid·서버·시작 시각, 30초마다 갱신, 끝나면 삭제)
+os6_run/runs/<id>.json|.txt run 기록(상태·처리·FAIL·오류) / 결과 본문
+os6_run/done/<host>         완료기록 "epoch user sha256 os6_direct" (설정체크+설정수정 정상 종료 때만)
+os6_run/cache/snapshot.json 마지막으로 받은 os8 스냅샷
+```
+
+- **os8 반영**: 데몬이 매 주기(5초) `done/` 을 「완료기록」과 같은 규칙(전달 이후·마지막 부팅 이후, 미래 +5분 거부, 재설치 증거 전 보류)으로 인정해 완료 처리하고 `done/applied/` 로 옮깁니다(로그 `완료기록 인정: … 출처 os6_direct`). os8 TUI 의 비고에 실행 중이면 `os6_mgmt 직접 실행 중`, 끝나면 `os6 직접 MM-DD HH:MM OK|FAIL|접속불가|비정상 종료|실행 실패` (설정체크만은 `os6 직접(체크만) …`) 가 붙습니다. 결과 본문은 `os6_run/runs/<id>.txt`.
+- **겹침 방지**: 데몬은 잠금이 잡은 호스트를 자동 run·수동 run(`c`)에서 빼고(로그 `os6 직접 실행 감지 … → os8 run 에서 제외`), 잠금이 풀리면 다시 넣습니다. os6 쪽은 시작 직전 os8 스냅샷에서 **체크중·2차체크·실행 중 수동 run** 호스트와 다른 os6 직접 실행이 잡은 호스트를 빼고 실행합니다(진행 창 `제외(…) N대`, 모두 빠지면 거부). os8_mgmt 접속이 안 되면 이 확인은 생략되고 잠금으로만 막습니다.
+- **응답 없는 잠금**: TUI 가 강제 종료되는 등으로 잠금이 남으면, 데몬은 잠금 파일의 mtime 이 **3분 동안 바뀌지 않으면** 무시합니다(로그 `[!] os6 직접 실행 잠금 응답 없음 … → 무시` 1회). 서버 간 시계 차의 영향을 받지 않도록 mtime 의 값이 아니라 "바뀌었는지"를 데몬 시계로 잽니다. 상태를 기억하지 않는 쪽(os8 화면 비고·다른 os6 TUI)은 지금 − mtime 이 15분을 넘거나, 같은 서버에서 그 pid 가 없으면 응답 없음으로 봅니다(같은 서버의 죽은 잠금은 os6 TUI 가 지움).
+- **실행 중 종료 금지**: 실행 중에 `q`(·Ctrl+C 는 종전처럼 무시)를 누르면 종료하지 않고 `실행 중입니다 — 끝날 때까지 기다리세요` 를 표시합니다. 진행 창은 닫아도 실행은 계속되고 끝나면 결과 창이 다시 열립니다. 입력이 끊기거나(EOF) TERM·HUP 시그널을 받으면 끝난 뒤 종료합니다(터미널을 닫으면 같은 프로세스 그룹의 체크스크립트도 HUP 을 받을 수 있으니 끝날 때까지 창을 닫지 마세요).
+- **os8_mgmt 접속 불가**: 스냅샷을 받을 때마다 `cache/snapshot.json` 에 저장해 두고, 못 받으면 그 스냅샷으로 화면을 그리며 안내 줄에 `os8_mgmt 접속 불가 — 저장된 스냅샷(<시각>, N분 전) 표시 중 …` 을 보여 줍니다(그룹·호스트 선택 가능, 단계·진행률은 그 시각 기준). 저장된 스냅샷이 없으면 `(저장된 스냅샷 없음: <경로>)` 를 붙여 오류만 표시합니다.
+- **권한·오류**: 두 서버 모두 root 로 실행하는 것을 전제로 디렉터리 0755·파일 0644 로 만들고, 모든 파일은 같은 디렉터리의 임시 파일 → rename 으로 원자 기록합니다. `os6_run` 에 쓸 수 없으면(권한·공유 아님·경로 없음) os6 TUI 는 `[X] os6_mgmt 직접 실행 불가: … 에 쓸 수 없습니다` 로 실행하지 않습니다(잠금 없이 돌면 os8 과 겹칠 수 있음). 데몬은 잠금 디렉터리를 못 읽으면 같은 오류를 한 번만 로그에 남기고 잠금이 없는 것으로 봅니다.
+- **시계 차**: 완료기록 시각은 os6_mgmt 시계입니다. 데몬은 「완료기록」 규칙대로 5분 넘게 미래인 기록을 거부하므로 두 서버 시계 차가 5분을 넘으면 완료가 반영되지 않습니다(NTP 확인).
+- 2차 체크(os8 데몬이 os6_mgmt 에서 config_check 한 번 더)와 os8 데몬의 os6 gossh 래퍼는 그대로입니다. `r`·`d`·`v` 와 CLI(`request recheck` 등)는 종전처럼 os8_mgmt 로 중계됩니다.
+
+- **한계**: 실제 NFS/autofs 에서는 시험하지 않았습니다(랩은 한 디렉터리를 두 서버가 공유하는 것으로 흉내). os6 `g` 는 더 이상 os8 에 재확인을 요청하지 않습니다(필요하면 CLI `request recheck`). `os6_run/runs/` 는 자동으로 지워지지 않습니다. os8 `v` 에는 os6 직접 실행 결과가 나오지 않습니다(`runs/<id>.txt` 참고). root 가 아니면 os6 에서 `os6_run` 에 쓰지 못합니다.
+
+### os6_mgmt 경유 장애 점검 (os6_truble.sh)
+
+os6_mgmt 를 RHEL8 로 올린 뒤 ssh 가 느리거나 os6_mgmt 경유 호스트가 진행되지 않을 때, **os8_mgmt 에서 root 로** 실행하는 읽기 전용 점검 스크립트입니다(설정·파일을 바꾸지 않음). conf 읽기 → 이름 풀이 → ssh 시간/원인 분류 → 로그인 셸 → os6_autosetup·gossh → sshd 한도 → 병렬 접속 → 데몬 로그의 9단계를 점검하고 마지막에 요약과 Disclaimer 를 출력합니다.
+
+```bash
+./os6_truble.sh                      # 기본 conf 사용
+./os6_truble.sh /etc/auto_setup/auto_setup.conf   # conf 지정
+./os6_truble.sh -t <대상호스트>   # os6_mgmt 에서 gossh 한 번을 이 대상에게 실행해 봄 (생략하면 gossh 실행 확인만)
+./os6_truble.sh -p 8                 # 병렬 ssh 접속 시험 개수 (기본 8)
+```
+
+- **가장 흔한 원인 — os6_mgmt 재설치로 호스트 키가 바뀜**: `BatchMode` 라 접속이 조용히 거부됩니다(로그 사유 `호스트 키 변경`). 조치: os8_mgmt 에서 `ssh-keygen -R <os6_mgmt>` 후 `ssh <os6_mgmt>` 로 한 번 접속해 키를 등록합니다.
+- 로그인이 느려 옛 60초 제한을 넘는 경우: conf `ssh_timeout` 을 늘립니다(기본 30초, 전체 상한도 함께 늘어남). 병렬 접속이 많아 sshd `MaxStartups` 에 걸리면(`kex 중 끊김`) os6_mgmt 의 sshd 한도를 올립니다.
+- ssh 실패 사유는 `auto_setup.log` 에도 원인별로 한 번씩 남습니다(2차 체크 ssh 포함).
+
 ### 이중체크 (2차 체크)
 
 1차 run 이 끝난 뒤 **route=local 호스트 중 접속불가(결과에 없음) 또는 FAIL 인 호스트만** os6_mgmt 에서 `os_check -auto` 를 **한 번 더** 실행합니다(역방향 재시도 없음, route=os6 호스트는 이미 os6 경유이므로 제외).
@@ -859,7 +908,9 @@ bash ../awx_script/test/run_tests.sh
 | `dnscheck.go` | DNS 점검 엔진: resolv.conf 서버에 직접 A 질의(UDP/TCP, 표준 라이브러리만)·판정 5종·중복 경고·교체 (v0.8.0) |
 | `work.go` · `work_tui.go` | gossh 작업 기록: 붙여넣기·`/tmp/auto_setup/lists/<3자리>`·실행 경로·`script` 래퍼·판정·저장·정리·os6→os8 중계(`work-relay`) / 작업 화면·`s` CLI (v0.8.0) |
 | `tcsh_live_test.go` | 랩 전용: 로그인 셸이 tcsh 인 계정으로 os6 경로·원격 클라이언트·gossh 작업 확인 (`AS_TEST_LOGIN_MGMT`, 없으면 SKIP) |
-| `auto_setup_os6` | 빌드 완료 os6 용 정적 바이너리 (Go 1.20, 변수 빈 값). 소스 변경 때 `build_os6.sh` 로 재빌드해 커밋 |
+| `auto_setup_os8` | 빌드 완료 정적 바이너리 (Go 1.26.5, 변수 빈 값). os8_mgmt·os6_mgmt 공용. 소스 변경 때 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o auto_setup_os8 .` 로 재빌드해 커밋 |
+| `os6_truble.sh` | os6_mgmt 경유 장애 점검 스크립트 (읽기 전용) |
+| `auto_setup_os6` | 옛 os6 용 정적 바이너리 (Go 1.20). 2026-11-04 이후 갱신하지 않음 |
 | `conf/update_v0.4.0.sh` · `update_v0.6.0.sh` · `update_v0.7.0.sh` · `update_v0.8.0.sh` | 현장 conf 업데이트 (생성 스크립트, 직접 고치지 말고 `vars.manifest` 수정 후 재생성) |
 | `docs/svg/*.svg` · `docs/svg/README.md` | 명령·키별 흐름도 31개와 목록 표 (v0.8.0) |
 | `계획서_v0.6.md` · `수정계획서.md` | v0.6.x 명세 / v0.8.0 수정계획서(인터뷰 결과, 확정 사항 §9) — 참고용 |

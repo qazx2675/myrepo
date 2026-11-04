@@ -71,8 +71,17 @@ func judgeDoneRecord(rec doneRecord, j *Job, h *Host) (ok, pending bool, reason 
 // acceptDoneRecords: done/<host> 를 읽어 진행 중 job 의 미처리 호스트에 대해 판정.
 // 인정 → processed(done_src=external|manual), 기록은 done/applied/ 로 이동. 거부 → 그대로 두고 같은 내용은 로그 1회.
 // 진행 중 run 대상 호스트는 run 결과 반영 후 판단(자기 run 의 기록을 external 로 오인하지 않도록).
+// os6_mgmt 직접 실행의 완료기록(<os6_run>/done/<host>, 출처 os6_direct)도 같은 규칙으로 수거한다 (os6run.go).
 func (d *Daemon) acceptDoneRecords(now time.Time) {
-	ents, err := os.ReadDir(doneRecDir())
+	d.acceptDoneIn(doneRecDir(), doneAppliedDir(), now)
+	if o := os6RunDir(); o != "" {
+		d.acceptDoneIn(filepath.Join(o, "done"), filepath.Join(o, "done", "applied"), now)
+	}
+}
+
+// acceptDoneIn: 완료기록 디렉터리 하나 (dir/<host> → 인정되면 applied/ 로 이동)
+func (d *Daemon) acceptDoneIn(dir, applied string, now time.Time) {
+	ents, err := os.ReadDir(dir)
 	if err != nil || len(ents) == 0 {
 		return
 	}
@@ -96,7 +105,7 @@ func (d *Daemon) acceptDoneRecords(now time.Time) {
 		if h.Processed != "" {
 			continue
 		}
-		p := filepath.Join(doneRecDir(), name)
+		p := filepath.Join(dir, name)
 		b, err := os.ReadFile(p)
 		if err != nil {
 			continue
@@ -130,8 +139,8 @@ func (d *Daemon) acceptDoneRecords(now time.Time) {
 		d.setStage(j, name, StageDone, now.Unix())
 		d.dirty[j.ID] = true
 		delete(d.doneLogged, key)
-		if err := os.MkdirAll(doneAppliedDir(), 0755); err == nil {
-			if err := os.Rename(p, filepath.Join(doneAppliedDir(), name)); err != nil {
+		if err := os.MkdirAll(applied, 0755); err == nil {
+			if err := os.Rename(p, filepath.Join(applied, name)); err != nil {
 				logf("[X] 완료기록 이동 실패(%s): %v", name, err)
 			}
 		}
@@ -184,11 +193,16 @@ func validHostName(h string) bool {
 
 // writeDoneRecord: done/<host> 에 tmp → rename 원자 기록
 func writeDoneRecord(host string, r doneRecord) error {
-	if err := os.MkdirAll(doneRecDir(), 0755); err != nil {
+	return writeDoneRecordIn(doneRecDir(), host, r)
+}
+
+// writeDoneRecordIn: dir/<host> 에 tmp → rename 원자 기록 (os6 직접 실행은 <os6_run>/done)
+func writeDoneRecordIn(dir, host string, r doneRecord) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	p := filepath.Join(doneRecDir(), host)
-	tmp := filepath.Join(doneRecDir(), "."+host+".tmp")
+	p := filepath.Join(dir, host)
+	tmp := filepath.Join(dir, "."+host+".tmp")
 	line := fmt.Sprintf("%d %s %s %s\n", r.Epoch, r.User, r.Sha, r.Source)
 	if err := os.WriteFile(tmp, []byte(line), 0644); err != nil {
 		return err

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 )
 
 // 실행 모드: 자동 흐름(배포 → 완료)과 수동 c 는 설정체크 + 설정수정, 수동 t 는 설정체크만 (환경설정 수정 안 함)
@@ -33,27 +34,37 @@ var (
 	ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 )
 
-type realRunner struct{}
+// realRunner: osCheck 가 비면 os_check_sh (os6_mgmt 직접 실행은 그 서버의 체크스크립트를 넣는다 — os6run.go)
+type realRunner struct {
+	osCheck string
+	detach  bool // true: 체크스크립트를 새 세션(setsid)에서 실행 — 터미널을 닫아도(SIGHUP) 끝까지 돈다 (os6_mgmt 직접 실행)
+}
 
 func NewRealRunner() Runner { return realRunner{} }
 
 // checkModeUnsupported: 설정체크만(t, -auto-check) 을 이 체크스크립트가 지원하지 않으면 사유, 아니면 "".
 // -auto 만 아는 스크립트(config_check.sh 등)에 -auto-check 를 주면 사용자 선택 메뉴에서 멈춘다.
 // 스크립트를 읽을 수 없으면 판단하지 않는다 (막지 않음).
-func checkModeUnsupported() string {
-	b, err := os.ReadFile(os_check_sh)
+func checkModeUnsupported() string { return checkModeUnsupportedIn(os_check_sh) }
+
+func checkModeUnsupportedIn(sh string) string {
+	b, err := os.ReadFile(sh)
 	if err != nil || strings.Contains(string(b), "-auto-check") {
 		return ""
 	}
 	return "os_check_sh 가 -auto-check 를 지원하지 않음 (설정체크만 t 불가 — c 로 실행하거나 -auto-check 를 지원하는 체크스크립트로 교체)"
 }
 
-func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
-	if os_check_sh == "" {
+func (rr realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
+	sh := os_check_sh
+	if rr.osCheck != "" {
+		sh = rr.osCheck
+	}
+	if sh == "" {
 		return RunResult{}, errors.New("os_check_sh 가 비어 있습니다")
 	}
 	if j.RunMode == ModeCheck {
-		if m := checkModeUnsupported(); m != "" {
+		if m := checkModeUnsupportedIn(sh); m != "" {
 			return RunResult{}, errors.New(m)
 		}
 	}
@@ -71,7 +82,7 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 		return RunResult{}, err
 	}
 	// os_check 가 현재 디렉터리의 dhcp.sh 를 쓰므로 원본 위치로 링크 (없으면 생략)
-	if src := firstExisting(dhcpCandidates(os_check_sh)); src != "" {
+	if src := firstExisting(dhcpCandidates(sh)); src != "" {
 		_ = os.Symlink(src, filepath.Join(dir, "dhcp.sh"))
 	}
 
@@ -110,9 +121,12 @@ func (realRunner) Run(j *Job, hosts []string, hasOS6 bool) (RunResult, error) {
 	if j.RunMode == ModeCheck { // 설정체크만: 환경설정 수정·재점검 없음 → 점검 결과 파일을 본다
 		flag, resFile = "-auto-check", "check.res_"+j.User
 	}
-	cmd := exec.Command("bash", os_check_sh, flag, j.User, "targets.txt")
+	cmd := exec.Command("bash", sh, flag, j.User, "targets.txt")
 	cmd.Dir = dir
 	cmd.Env = env
+	if rr.detach { // 새 세션 → 제어 터미널 없음: 터미널을 닫아도 SIGHUP 을 받지 않는다 (감시는 /proc 자손 탐색이라 영향 없음)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	}
 	cmd.Stdout = lf
 	cmd.Stderr = lf
 	logf("os_check 실행: code=%s user=%s %d대 os6=%v 모드=%s", code, j.User, len(hosts), hasOS6, modeLabel(j.RunMode))
@@ -239,7 +253,7 @@ kterm=` + shq(gosshPidsSh("@KV@", commName(os6_gossh))+gosshSigSh(true)) + `
 # cancel <원격 조각> : os6_mgmt 에서 이 래퍼의 표지를 가진 gossh 에 시그널 (auto_setup 데몬의 멈춤 감시가 USR1/USR2 로 요청)
 cancel() {
 	local k=${1//@KV@/$tok}
-	ssh -o BatchMode=yes -o ConnectTimeout=10 "$mgmt" "bash -c '$k'" < /dev/null > /dev/null 2>&1
+	ssh -o BatchMode=yes -o ` + sshConnectOpt() + ` "$mgmt" "bash -c '$k'" < /dev/null > /dev/null 2>&1
 }
 trap 'cancel "$kint"' USR1
 trap 'cancel "$kterm"' USR2
@@ -278,10 +292,10 @@ remote() {
 		# ! 가 있으면 tcsh 로그인 셸이 작은따옴표 안에서도 history 치환하므로 base64 로 보낸다 (runner.go remoteBash 와 같은 형태)
 		bq=$'\x60'
 		e=$(printf %s "$c" | base64 -w0 | sed 's/../&./g')
-		{ ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$list"; echo $? > "$rcf"; } | awk -v m="$mark" -v o="$res" "$filt" &
+		{ ssh -o BatchMode=yes -o ` + sshConnectOpt() + ` -o ServerAliveInterval=30 "$mgmt" "bash -c \"${bq}echo $e | tr -d . | base64 -d${bq}\"" < "$list"; echo $? > "$rcf"; } | awk -v m="$mark" -v o="$res" "$filt" &
 	else
 		c=${c//\'/\'\\\'\'}
-		{ ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 "$mgmt" "bash -c '$c'" < "$list"; echo $? > "$rcf"; } | awk -v m="$mark" -v o="$res" "$filt" &
+		{ ssh -o BatchMode=yes -o ` + sshConnectOpt() + ` -o ServerAliveInterval=30 "$mgmt" "bash -c '$c'" < "$list"; echo $? > "$rcf"; } | awk -v m="$mark" -v o="$res" "$filt" &
 	fi
 	wt $!
 	rc=$(cat "$rcf" 2>/dev/null)

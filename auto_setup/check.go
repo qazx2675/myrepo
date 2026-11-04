@@ -20,15 +20,22 @@ import (
 // osiMarker: os6 원격 출력에서 gossh stdout 과 _os_install 내용을 나누는 구분선
 const osiMarker = "==OSI=="
 
-// runExternal: 외부 명령 실행 (테스트에서 가짜로 교체). stdout 만 돌려준다(stderr 는 버림).
+// runExternal: 외부 명령 실행 (테스트에서 가짜로 교체). stdout 만 돌려준다(stderr 는 돌려주지 않음).
+// ssh 가 실패(종료코드≠0)했고 stderr 에서 접속 실패 원인을 알아보면 그 원인만 로그에 남긴다 (2차 체크의 ssh 호출).
 var runExternal = func(stdin string, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
-	var out bytes.Buffer
+	var out, errb bytes.Buffer
 	cmd.Stdout = &out
+	if name == "ssh" {
+		cmd.Stderr = &errb
+	}
 	err := cmd.Run()
+	if err != nil && name == "ssh" {
+		logSSHReason("2차 체크", errb.String())
+	}
 	return out.String(), err
 }
 
@@ -40,7 +47,8 @@ const readyCmd = "cat /proc/uptime; date +%s; stat -c %Y /root/anaconda-ks.cfg; 
 // oldOSSlack: 설치 기록 나이가 uptime 보다 이만큼 이상 길면 기존 OS (설치기·OS 의 시간대 차이·%post 시간을 넉넉히 흡수)
 const oldOSSlack = 48 * 3600
 
-// checkTimeout: 준비확인 호출(gossh / ssh os6_mgmt) 1회 전체 상한. 60초 고정(conf 변수 없음) — 테스트만 줄인다.
+// checkTimeout: 준비확인 호출(gossh / ssh os6_mgmt) 1회 전체 상한의 기본값 60초 (테스트만 줄인다).
+// os6_mgmt 로의 ssh 는 conf ssh_timeout 에 따라 sshLimit 만큼 더 늘어난다 (기본 30초면 100초).
 var checkTimeout = 60 * time.Second
 
 const (
@@ -57,7 +65,11 @@ var errCheckTimeout = errors.New("시간 초과")
 // 같은 실패 사유는 stderr 로 나오므로 진단에 쓴다). checkTimeout 을 넘기면 프로세스 그룹 전체(gossh/ssh 와 자식)를 죽이고
 // 그때까지의 출력과 errCheckTimeout 을 돌려준다 (데몬 tick·g 가 동기로 부르므로 hang 방지). 테스트에서 가짜로 교체.
 var runExternalDiag = func(stdin string, name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
+	limit := checkTimeout
+	if name == "ssh" { // 접속 시간이 들어가는 ssh 는 ssh_timeout 만큼 상한을 늘린다 (sshLimit)
+		limit = sshLimit(checkTimeout)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.SysProcAttr = oneoffSysProcAttr() // 별도 프로세스 그룹 → 시간 초과 때 그룹째 종료
@@ -126,10 +138,17 @@ func checkLocal(hosts []string) (map[string]CheckResult, error) {
 }
 
 // markTimeout: 시간 초과로 끝난 호출에서 응답을 못 받은 호스트(gossh 가 따로 사유를 내지 않은 호스트)의 사유를 시간 초과로
-func markTimeout(res map[string]CheckResult) {
+func markTimeout(res map[string]CheckResult) { markTimeoutWhy(res, whyTimeout) }
+
+// whyTimeoutOS6: os6_mgmt 경유 준비확인의 시간 초과 사유 (상한이 ssh_timeout 에 따라 달라 초를 계산해 적는다)
+func whyTimeoutOS6() string {
+	return fmt.Sprintf("시간 초과(%d초)", int(sshLimit(checkTimeout)/time.Second))
+}
+
+func markTimeoutWhy(res map[string]CheckResult, why string) {
 	for h, r := range res {
 		if !r.Responded && (r.Why == "" || r.Why == whyMismatch) {
-			r.Why = whyTimeout
+			r.Why = why
 			res[h] = r
 		}
 	}
@@ -153,18 +172,23 @@ func checkOS6(hosts []string) (map[string]CheckResult, error) {
 	// (os6_mgmt 의 로그인 셸이 csh 계열이어도 동작: $(...) 는 csh 에서 오류). os6_gossh 경로는 shq 로 인용.
 	inner := remoteTmpSh("f", false, false) + "cat > $f; " + shq(os6_gossh) + ` -pm -script -w $f ` + shq(readyCmd) + `; ` +
 		"echo " + osiMarker + "; cat ${f}_os_install 2>/dev/null; rm -f $f ${f}_*"
-	out, err := runExternalDiag(hostList(hosts), "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(inner))
+	out, err := runExternalDiag(hostList(hosts), "ssh", "-o", "BatchMode=yes", "-o", sshConnectOpt(), os6_mgmt, remoteBash(inner))
 	if !strings.Contains(out, osiMarker) {
 		if err == errCheckTimeout { // 구분선 전에 끊김: 받은 데까지 해석하고 나머지는 시간 초과
 			res := parseCheck(hosts, out, "")
-			markTimeout(res)
+			markTimeoutWhy(res, whyTimeoutOS6())
+			if sshReason(out) != "" {
+				logSSHReason("준비확인", out)
+			} else { // ssh 가 아무 말 없이 시간만 넘김 — 로그인 지연(DNS 역조회·GSSAPI·원격 셸 초기화 등)이 흔한 원인
+				logSSHOnce("준비확인", fmt.Sprintf("[%s 안에 응답 없음 — 로그인/응답 지연 의심(ssh_timeout, os6_truble.sh)]", whyTimeoutOS6()))
+			}
 			return res, nil
 		}
 		if err == nil {
 			err = errors.New("os6 응답 형식 오류")
 		}
 		// ssh 가 낸 실패 사유(Permission denied, Could not resolve hostname, 원격 bash 오류 등)는 out 에 있다 — 함께 보여 준다
-		if h := diagHead(out); h != "" {
+		if h := diagReason(out); h != "" {
 			return nil, fmt.Errorf("os6 준비확인 실패: %v — %s", err, h)
 		}
 		return nil, fmt.Errorf("os6 준비확인 실패: %v", err)
@@ -172,7 +196,7 @@ func checkOS6(hosts []string) (map[string]CheckResult, error) {
 	parts := strings.SplitN(out, osiMarker, 2)
 	res := parseCheck(hosts, parts[0], parts[1])
 	if err == errCheckTimeout {
-		markTimeout(res)
+		markTimeoutWhy(res, whyTimeoutOS6())
 	}
 	return res, nil
 }
@@ -388,5 +412,90 @@ func logGosshUnparsed(what string, g gosshOut, showLines bool) {
 	gosshLogMu.Unlock()
 	if !dup {
 		logf("%s", msg)
+	}
+}
+
+// sshReasons: ssh stderr 에서 os6_mgmt 접속·실행 실패 원인을 알아보는 규칙 (앞이 우선). 같은 줄에 여러 문구가 겹치므로
+// 더 구체적인 것(호스트 키 변경)을 앞에 둔다.
+var sshReasons = []struct{ pat, why string }{
+	{"REMOTE HOST IDENTIFICATION HAS CHANGED", "호스트 키 변경(known_hosts 의 해당 줄 확인: ssh-keygen -R)"},
+	{"Host key verification failed", "호스트 키 미등록 또는 불일치(known_hosts 확인, BatchMode 라 질문 불가)"},
+	{"Permission denied", "인증 실패(키 인증 설정 확인)"},
+	{"Could not resolve hostname", "이름 해석 실패(os6_mgmt 이름)"},
+	{"Connection timed out", "접속 시간 초과(ssh_timeout·방화벽·망 확인)"},
+	{"timed out during banner exchange", "접속 시간 초과(배너 교환, sshd 지연·MaxStartups 확인)"},
+	{"Connection refused", "접속 거부(sshd 미기동·포트 확인)"},
+	{"No route to host", "경로 없음(망 확인)"},
+	{"kex_exchange_identification", "접속 직후 끊김(sshd MaxStartups 한도 가능)"},
+	{"Connection closed by", "접속 직후 끊김(sshd MaxStartups 한도 가능)"},
+	{"Connection reset by", "접속 직후 끊김(sshd MaxStartups 한도 가능)"},
+	{"exec request failed on channel", "원격 셸 실행 실패(프로세스 한도 nproc·로그인 셸 오류 확인)"},
+	{"Resource temporarily unavailable", "원격 프로세스 한도(fork 실패, nproc 확인)"},
+	{"Cannot fork", "원격 프로세스 한도(fork 실패, nproc 확인)"},
+	{"Is a directory", "실행 경로가 디렉터리(os6_autosetup/os6_gossh 확인)"},
+	{"Exec format error", "실행 파일 형식 오류(os6_mgmt 의 구조·OS 에 맞지 않는 바이너리)"},
+	{"No such file or directory", "실행 파일 없음(os6_autosetup/os6_gossh 경로 확인)"},
+	{"command not found", "실행 파일 없음(os6_autosetup/os6_gossh 경로 확인)"},
+}
+
+// sshReason: ssh 출력에서 알아본 원인 (없으면 ""). 로그·TUI 에 짧게 덧붙일 한국어 문구.
+func sshReason(out string) string {
+	why, _ := sshReasonMatch(out)
+	return why
+}
+
+// sshReasonMatch: 원인과, 그 원인을 알아본 문구(sshReasons 의 pat)
+func sshReasonMatch(out string) (why, pat string) {
+	for _, r := range sshReasons {
+		if strings.Contains(out, r.pat) {
+			return r.why, r.pat
+		}
+	}
+	return "", ""
+}
+
+// diagReason: 원인을 알면 "[원인] 그 문구가 있는 원문 줄", 모르면 diagHead (ssh 가 앞에 @@@ 경고 틀을 찍어도 핵심 줄이 보이게).
+func diagReason(out string) string {
+	why, pat := sshReasonMatch(out)
+	if why == "" {
+		return diagHead(out)
+	}
+	for _, l := range strings.Split(ansiRe.ReplaceAllString(out, ""), "\n") {
+		if strings.Contains(l, pat) {
+			l = strings.Trim(strings.TrimSpace(l), "@ ")
+			if r := []rune(l); len(r) > 160 {
+				l = string(r[:160]) + "…"
+			}
+			return "[" + why + "] " + l
+		}
+	}
+	return "[" + why + "]"
+}
+
+var (
+	sshReasonMu   sync.Mutex
+	sshReasonSeen = map[string]string{}
+)
+
+// logSSHReason: os6_mgmt ssh 가 시간 초과 등으로 끝났을 때 원인이 보이면 로그에 한 번만 남긴다 (같은 원인이면 반복하지 않고,
+// 원인이 바뀌어야 다시 남긴다). what 별(준비확인·probe 등)로 구분.
+func logSSHReason(what, out string) {
+	if sshReason(out) == "" {
+		return
+	}
+	logSSHOnce(what, diagReason(out))
+}
+
+// logSSHOnce: logSSHReason 의 기록부 — what 별로 마지막과 같은 문구면 남기지 않는다.
+func logSSHOnce(what, w string) {
+	if w == "" {
+		return
+	}
+	sshReasonMu.Lock()
+	same := sshReasonSeen[what] == w
+	sshReasonSeen[what] = w
+	sshReasonMu.Unlock()
+	if !same {
+		logf("[!] os6_mgmt ssh 문제(%s): %s", what, w)
 	}
 }

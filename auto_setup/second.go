@@ -33,7 +33,7 @@ func NewRealSecond() Second { return realSecond{} }
 // secondSSH: os6_mgmt 로의 ssh 호출 (1차 probe/래퍼와 같은 BatchMode, 접속 제한시간 추가).
 // 원격 명령은 remoteBash 로 감싸 bash 가 해석한다 (os6_mgmt 로그인 셸이 csh 여도 동작).
 func secondSSH(stdin, remote string) (string, error) {
-	return runExternal(stdin, "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30", os6_mgmt, remoteBash(remote))
+	return runExternal(stdin, "ssh", "-o", "BatchMode=yes", "-o", sshConnectOpt(), "-o", "ServerAliveInterval=30", os6_mgmt, remoteBash(remote))
 }
 
 // secondRunScript: 원격 임시 디렉터리 생성 → 목록 수신(stdin) → os_check -auto 실행 (sh 호환 문법).
@@ -191,7 +191,7 @@ func secondHangWatch(code, kv string, limit, term, poll time.Duration) func() {
 
 // secondSSHWatch: 감시용 ssh (시간 제한 있음 — 감시가 2차 체크 종료를 붙잡지 않게)
 func secondSSHWatch(remote string) (string, error) {
-	return runExternalDiag("", "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", os6_mgmt, remoteBash(remote))
+	return runExternalDiag("", "ssh", "-o", "BatchMode=yes", "-o", sshConnectOpt(), os6_mgmt, remoteBash(remote))
 }
 
 // extractSecondTar: 회수한 tar 에서 os_check.log / check.res_* 일반 파일만 dir 에 푼다 (경로 성분 무시)

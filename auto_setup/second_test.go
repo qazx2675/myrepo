@@ -74,7 +74,7 @@ func TestSecondRunEndToEnd(t *testing.T) {
 	}
 	// 원격 명령 형식
 	lg, _ := os.ReadFile(os.Getenv("SSH_LOG"))
-	if strings.Count(string(lg), "-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 mgmtstub") != 2 {
+	if strings.Count(string(lg), "-o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=30 mgmtstub") != 2 {
 		t.Fatalf("ssh 호출:\n%s", lg)
 	}
 	run := ""

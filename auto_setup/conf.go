@@ -76,6 +76,9 @@ func confVars() map[string]*string {
 		// run 동시 실행 개수·gossh 멈춤 감시
 		"max_runs": &max_runs,
 		"hang_min": &hang_min,
+
+		// os6_mgmt ssh 접속 제한(초)
+		"ssh_timeout": &ssh_timeout,
 	}
 }
 
@@ -217,3 +220,35 @@ func changeConfDir() string {
 
 // changeConfPath: changeConfDir()/<name> (name = ip_change.conf | ldap_config.conf | assets.txt)
 func changeConfPath(name string) string { return filepath.Join(changeConfDir(), name) }
+
+// ssh_timeout 이 비었거나 숫자가 아닐 때 쓰는 값·최솟값(초)
+const (
+	sshTimeoutDefault = 30
+	sshTimeoutMin     = 5
+)
+
+// sshTimeoutSec: os6_mgmt 로의 ssh 접속 제한(초) — conf ssh_timeout.
+// 비우거나 숫자가 아니면 30, 5 미만이면 5. RHEL8 이후 느린 로그인(DNS 역조회·GSSAPI 등)에서 10초로는 부족해 늘렸다.
+func sshTimeoutSec() int {
+	v, err := strconv.Atoi(strings.TrimSpace(ssh_timeout))
+	if err != nil {
+		return sshTimeoutDefault
+	}
+	if v < sshTimeoutMin {
+		return sshTimeoutMin
+	}
+	return v
+}
+
+// sshConnectOpt: ssh 에 넘기는 `-o` 값 (ConnectTimeout=<초>)
+func sshConnectOpt() string { return "ConnectTimeout=" + strconv.Itoa(sshTimeoutSec()) }
+
+// sshLimit: ssh 접속 시간이 들어가는 호출 1회 전체 상한. base(준비확인 60초·LDAP 45/90초)는 접속 제한이 이전 기본값(10초)일 때의
+// 값이고, 접속 제한이 10초를 넘으면 그 초과분의 2배를 더한다 (접속 지연이 길 때 첫 접속과 이어지는 원격 로그인 지연이 함께 늘기 때문).
+// 기본(30초)이면 +40초: 준비확인 100초, LDAP 백업 130초, 적용 85초. 접속 제한이 10초 이하면 base 그대로.
+func sshLimit(base time.Duration) time.Duration {
+	if extra := sshTimeoutSec() - 10; extra > 0 {
+		return base + 2*time.Duration(extra)*time.Second
+	}
+	return base
+}

@@ -30,6 +30,7 @@ func newSource() SnapshotSource {
 	var src SnapshotSource = localSource{}
 	if os8_mgmt != "" {
 		src = remoteSource{}
+		os6EnsureGossh() // os6_mgmt: PATH 에 gossh 가 없으면 os6_gossh (스냅샷 중계·직접 실행 공용, os6run.go)
 	}
 	if forceUser != "" { // auto_setup -user: 해당 user 의 job 만
 		return userFilterSource{src}
@@ -65,7 +66,17 @@ func (localSource) Local() bool { return true }
 
 type remoteSource struct{}
 
+// Snapshot: 받으면 os6 쪽 캐시(<os6_run>/cache/snapshot.json)에 저장, 못 받으면 캐시를 *snapCachedErr 와 함께 돌려준다 (os6run.go)
 func (remoteSource) Snapshot() (Snapshot, error) {
+	s, err := remoteSnapshot()
+	if err != nil {
+		return cachedSnapshot(err)
+	}
+	saveSnapCache(s)
+	return s, nil
+}
+
+func remoteSnapshot() (Snapshot, error) {
 	r, err := remoteRun([]string{"snapshot"})
 	if err != nil {
 		return Snapshot{}, err

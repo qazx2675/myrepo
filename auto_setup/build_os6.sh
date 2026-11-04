@@ -1,5 +1,9 @@
 #!/bin/bash
-# build_os6.sh - os6_mgmt(RHEL6) 용 정적 빌드 → auto_setup_os6 (Go 1.20 서버에서 실행)
+# build_os6.sh - (옛 스크립트) os6_mgmt(RHEL6) 용 정적 빌드 → auto_setup_os6 (Go 1.20 서버에서 실행)
+#
+# [2026-11-04] RHEL6 빌드는 중단되었다. os6_mgmt 도 RHEL8 로 올라가 os8_mgmt 와 같은 auto_setup_os8 을
+# 양쪽 서버에서 사용한다. auto_setup_os6 은 더 이상 갱신하지 않는다(기존 파일 유지). 새 빌드 방법 (Go 1.26.5):
+#   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o auto_setup_os8 .
 set -euo pipefail
 
 cd "$(dirname "$0")"

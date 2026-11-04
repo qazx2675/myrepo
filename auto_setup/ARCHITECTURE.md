@@ -50,7 +50,10 @@
 | `계획서_v0.7.md` | v0.7.0 명세 (확정 사항 §1, 단계 §3, 불변 조건 §0) | 구현 기준 |
 | `render.go` | 순수 렌더 함수(상태→문자열): 화면 1·2·도움말·plain, 색 규칙. 0.8.0: 안내 줄 둘째 묶음 `menuHint`(`h 호스트 작업  w AWX·신규설치  m 변경  s gossh 작업  x 단독 체크`)·`hintStyles`(h·s 색)·도움말(항목별 메뉴) | 2차, 골든 테스트 |
 | `tty_linux.go` / `tty_other.go` / `tui_hook.go` | raw 터미널(termios ioctl)·창 크기 / 비 Linux 대체 / 리포트 진입 훅 | 2차 |
-| `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`), 수동 완료(`markDone`) | 2차 |
+| `done.go` | 완료기록 인정 규칙·수거(`acceptDoneRecords`, `<os6_run>/done` 도 같은 규칙), 수동 완료(`markDone`) | 2차 |
+| `os6run.go` | os6_mgmt 직접 실행의 공유 기록 `<os6 auto_setup 디렉터리>/os6_run/`: 잠금(`active/`, `os6Acquire`·30초 mtime 갱신)·run 기록(`runs/`)·완료기록(`done/`, `os6WriteDone`)·스냅샷 캐시(`cache/`), 데몬 `os6Scan`(잠금 호스트 → `os6Hold`, 3분 갱신 없으면 무시), 스냅샷 비고(`annotateOS6`) | 0.8.x, `os6run_test.go` |
+| `os6run_tui.go` | os6_mgmt(원격 클라이언트) TUI 의 `g`·`c`·`t` 를 이 서버에서 바로 실행(데몬 없이 TUI 안에서 1회, `realRunner` 재사용·hasOS6=false), 진행·결과 보기, 실행 중 종료 막기 | 0.8.x, `newOS6Runner`·`newOS6Checker` 주입 |
+| `os6_truble.sh` | os6_mgmt 경유 장애 점검(읽기 전용, os8_mgmt 에서 root): conf·이름·ssh 시간/원인 분류·로그인 셸·os6_autosetup/gossh·sshd 한도·병렬 접속·데몬 로그. 원인 분류 규칙은 `check.go` `sshReasons` 와 같은 문구 | 0.8.x |
 | `requests.go` | 요청 채널 `requests/*.req` 기록·수거(manual-run / cancel / refresh / recheck(g 재확인: os8 → os6)), 수동 run 스케줄. 수거 전 `claimRequest` 로 `requests/claimed/` 에 rename 선점 (데몬이 둘이어도 1회 처리) | 2차 |
 | `ldapbk.go` | LDAP 백업(전달 시점)·binddn uid 비교·공유경로(`ldap_share_dir`) 경유 백업 세트 복원 | 2차 |
 | `hang.go` | gossh hang 감시: `hang_min` 넘은 호출에 SIGINT×2, +1분 뒤 SIGTERM (os6 래퍼는 SIGUSR1/2 로 원격 취소 중계), `max_runs` 병렬 run 풀과 함께 동작 | 설정체크 |
@@ -58,10 +61,11 @@
 | `iface.go` | Pinger/Checker/Runner/Notifier/Clock + (2차) LdapBackup/Second 인터페이스 | 테스트 주입점 |
 | `*_test.go` / `testdata/` | 단위 테스트(state·daemon·daemon2·icmp·probe·check·runner·client·ctl·done·ldapbk·model·render·requests·second·tui·paths·route·change*·oneoff·awx*·menu·newhost*·dnscheck·work*·sessionuser·userfilter·pgkeys·dupdaemon), TUI 골든 파일 — `go test ./...` 398 PASS, 7 SKIP | 검증 |
 | `setup.sh` | 빌드 + /usr/local/bin 설치 + cron + tmpfiles 등록 (멱등). 0.7.0: 변경 엔진 2개 빌드·설치, conf 샘플을 `/etc/auto_setup` 에 복사(기존 파일 유지) | 설치 도구 |
-| `build_os6.sh` | Go 1.20 정적 빌드 → auto_setup_os6 (CGO_ENABLED=0). 0.7.0: 엔진 os6 바이너리 2개(`../ip_change/bin`, `../ldap_setting/bin`) 도 빌드 | os6 빌드 |
+| `build_os6.sh` | **RHEL6 빌드 중단(2026-11-04)** — 옛 Go 1.20 빌드 스크립트로 남겨 둠(auto_setup_os6 갱신 안 함). 새 빌드는 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o auto_setup_os8 .` (Go 1.26.5). 0.7.0: 엔진 os6 바이너리 2개(`../ip_change/bin`, `../ldap_setting/bin`) 도 빌드 | os6 빌드 |
 | `../ip_change/bin/ip-change-engine_os6` · `../ldap_setting/bin/ldap-config-engine_os6` | RHEL 6 에서 엔진을 단독 실행할 때 쓰는 정적 바이너리 (0.7.0). 소스 변경 때 `build_os6.sh` 로 재빌드해 커밋 | 엔진 소스 옆 |
 | `test/` | 대화형 점검(manual_check.sh 1~17단계), 목업 E2E(run_e2e.sh 86건, run_e2e2.sh 194건), 가이드·업데이트(run_setup_scripts.sh 54건), 변경 메뉴(run_change_os.sh 173건, run_change_lab.sh 18건), 공용(lib_e2e.sh), 스텁(gossh/ssh/wall), 모의 데모(demo_flow.sh 가짜 작업·데몬·스텁 / make_demo_jobs.sh 화면용 가짜 작업 — 데몬 없이 파일만) | 검증 하네스 |
-| `auto_setup_os6` | 빌드 완료 os6 용 정적 바이너리(Go 1.20, 변수 빈 값). 회사 환경에는 Go 가 없어 저장소에 포함. **소스를 고치면 `build_os6.sh` 로 재빌드해 커밋** | 배포 필수 |
+| `auto_setup_os8` | 빌드 완료 정적 바이너리(Go 1.26.5, CGO_ENABLED=0, 변수 빈 값). **os8_mgmt·os6_mgmt 양쪽에서 사용**(RHEL6 빌드 중단). 회사 환경에는 Go 가 없어 저장소에 포함. **소스를 고치면 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o auto_setup_os8 .` 로 재빌드해 커밋** | 배포 필수 |
+| `auto_setup_os6` | 옛 os6 용 정적 바이너리(Go 1.20). 2026-11-04 이후 갱신하지 않음(기존 파일 유지) | 구버전 |
 | `README.md` | 설치·사용·옵션 가이드 | 배포 필수 |
 | `CHANGELOG.md` | 변경 이력 | 배포 필수 |
 | `ARCHITECTURE.md` | 이 문서 — 폴더 구조, 함수 역할, 수정 가이드 | 개발 참고 |
@@ -116,6 +120,17 @@
 ```
 
 - `/tmp/auto_setup/bin/gossh`: runner 에서 동적 생성, 실제로는 ssh 래퍼 (os6_mgmt 로 파일 전송)
+- os6_mgmt 직접 실행 공유 기록 `<os6_autosetup>/os6_run/` (autofs 로 두 서버가 같은 경로, root 0755/0644, 모두 임시 파일 → rename):
+
+```
+<os6_autosetup>/os6_run/
+├── active/<id>.lock   # 실행 중 잠금 JSON(id server pid login job user yml mode hosts started). os6 TUI 가 30초마다 mtime 갱신, 끝나면 삭제
+├── runs/<id>.json     # run 기록 (state running → done|error, ended, code, abnormal, processed, failed, error, result)
+├── runs/<id>.txt      # 결과 본문 (os6_mgmt 로컬 codes/<code>.txt 사본)
+├── done/<host>        # 완료기록 "epoch user sha256 os6_direct" (설정체크+설정수정 정상 종료 때만) → 데몬이 인정하면 done/applied/
+└── cache/snapshot.json # os6 TUI 가 마지막으로 받은 os8 스냅샷 (os8_mgmt 접속 불가 때 대신 표시)
+```
+  id = `<epoch>_<서버 짧은 이름>_<pid>`. os6 의 run 작업 파일(runs/<code>/, codes/, auto_setup.log)은 os6_mgmt 로컬 `${AUTO_SETUP_DIR:-/tmp/auto_setup}` 에 남는다.
 - tmpfiles 등록(`x /tmp/auto_setup`): 무기한 감시 작업이 10일 tmp 정리로 삭제되지 않도록 제외
 
 ## 주요 함수 및 단계 매핑
@@ -189,6 +204,13 @@
 
 - os_check 의 `auto_record_done()` (빈 변수 `auto_done_dir`/`auto_done_host` 가 있을 때만)가 `done/<host>` 에 `epoch user sha256 source` 한 줄을 원자 기록(`auto_done_host` 는 gossh 원샷 500대 단위, base64 에 2글자마다 `.` 삽입).
 - 데몬 `acceptDoneRecords()` + `judgeDoneRecord()`: 전달 이후 · 마지막 부팅 이후만 인정, 미래 시각 +5분 초과 거부, 재설치 증거 전이면 보류. 인정 시 `done_src=external|manual`, 기록은 `done/applied/` 로 이동.
+
+### os6_mgmt 직접 실행 (os6run.go / os6run_tui.go)
+
+- os6_mgmt TUI(`os8_mgmt` 설정 = 원격 클라이언트)의 `g`·`c`·`t` 는 요청을 보내지 않고 TUI 프로세스 안에서 1회 실행한다 (데몬 없음). `c`/`t` 는 `realRunner{osCheck: os6_os_check_sh 또는 os_check_sh}.Run(job 사본, 호스트, hasOS6=false)` — 데몬 run 과 같은 코드(hang_min 감시·run 임시 디렉터리 정리·code 파일). `g` 는 `Checker.Check("local")`(이 서버의 gossh)로 준비확인 결과만 보여 준다.
+- 겹침: os6 은 시작 전 최신 os8 스냅샷의 체크중·2차체크·실행 중 수동 run 호스트와 다른 os6 잠금 호스트를 뺀다. 데몬은 매 step `os6Scan` → `os6Hold` 호스트를 `schedule`·`startManual` 에서 뺀다. 응답 판정은 데몬 시계로 "mtime 이 바뀌었는지"만 보므로 서버 간 시계 차의 영향이 없다 (3분 갱신 없음 = 무시, 로그 1회). 상태 없이 읽는 쪽(스냅샷 비고·다른 os6 TUI)은 지금 − mtime > 15분, 또는 같은 서버이고 pid 가 없으면 응답 없음.
+- 완료: config_check 의 `auto_done_dir` 은 스크립트 안 빈 변수라(환경변수로 못 줌) auto_setup 이 postapply 결과로 같은 형식의 기록을 직접 쓴다 → 데몬 `acceptDoneRecords` 가 같은 규칙(전달 이후·마지막 부팅 이후·미래 +5분 거부·증거 전 보류)으로 인정.
+- 실행 중 종료 막기: 루프의 `key`(q·EOF)·시그널 경로에서 `st.o6 != nil` 이면 끝내지 않고 `실행 중입니다 — 끝날 때까지 기다리세요`, EOF·시그널이면 끝난 뒤 종료(`quitAfter`). 끝나면 `o6.wake` 가 닫혀 루프를 깨운다.
 
 ### LDAP 백업/복원 (ldapbk.go, daemon.go `ldapBackup`/`ldapApply`)
 
