@@ -1,0 +1,5 @@
+# 12필드 레코드 + hostname 한 줄 혼합
+node1 aa bb rocky 192.168.0.58 aa:bb:cc:dd:ee:01 eth0 sda sda5 100 8.10 uefi
+testserver0002
+rocky10
+no-such-host-xyz.invalid
