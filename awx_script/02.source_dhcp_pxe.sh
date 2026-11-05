@@ -68,26 +68,26 @@ if [[ $# -eq 0 ]]; then
 fi
 
 # 인자 파싱: <yml>=<infra>,<os>,<boot>,<splunk>
-ymls=(); infras=(); oss=(); boots=(); splunks=()
+ymls=(); infras=(); oss=(); boots=(); splunks=(); tags=()
 for spec in "$@"; do
 	if [[ $spec != *=* ]]; then
 		err "[X] 인자 형식 오류(<yml>=<infra>,<os>,<boot>,<splunk>): $spec"
 		exit 1
 	fi
 	ymls+=("${spec%%=*}")
-	IFS=, read -r f_infra f_os f_boot f_splunk <<< "${spec#*=}"
-	infras+=("${f_infra,,}"); oss+=("$f_os"); boots+=("$f_boot"); splunks+=("$f_splunk")
+	IFS=, read -r f_infra f_os f_boot f_splunk f_tag <<< "${spec#*=}"
+	infras+=("${f_infra,,}"); oss+=("$f_os"); boots+=("$f_boot"); splunks+=("$f_splunk"); tags+=("$f_tag")
 done
 total=${#ymls[@]}
 
 # 옵션 확인표 (호스트 수는 yml 이름의 <N>ea 에서 추출)
 print_table(){
 	local i cnt
-	echo "${BOLD}번호 | yml | infra | os | boot | splunk | 호스트 수${RST}"
+	echo "${BOLD}번호 | yml | infra | os | boot | splunk | 호스트 수 | 13번째${RST}"
 	for ((i=0; i<total; i++)); do
 		cnt="-"
 		[[ ${ymls[i]} =~ _([0-9]+)ea(\.|$) ]] && cnt=${BASH_REMATCH[1]}
-		echo "$((i+1)) | ${CYAN}${ymls[i]}${RST} | ${infras[i]} | ${oss[i]} | ${boots[i]} | ${splunks[i]} | $cnt"
+		echo "$((i+1)) | ${CYAN}${ymls[i]}${RST} | ${infras[i]} | ${oss[i]} | ${boots[i]} | ${splunks[i]} | $cnt | ${tags[i]:--}"
 	done
 }
 

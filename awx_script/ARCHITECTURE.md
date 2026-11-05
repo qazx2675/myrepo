@@ -30,19 +30,19 @@
 | [0] | (초기화) | | `trap cleanup EXIT`, 변수/로그 준비 |
 | [1] | `user()` | (현장 코드) | `$user` 설정, 로그 파일 열기 |
 | [2] | `download_txt()` | 프롬프트 Y/N | `${user}.txt` (12필드 또는 nodeinfo YAML) |
-| [3] | `parse_msg()` | `${user}.txt` | msg 행 파싱, 12필드 검증 또는 종료 |
+| [3] | `parse_msg()` | `${user}.txt` | msg 행 파싱, 12필드(13번째 분류 태그 선택) 검증 또는 종료. 13번째는 치환 없이 그대로 보관 |
 | [3-1] | `apply_infra_alias()` | `${user}.txt`, `infra_alias` | 3번째 필드(infra)의 미등록 이름을 치환하고 건수 출력 |
 | [4] | `fix_mac()` | `${user}.txt` | MAC 짝수 보정 (spice/pice/dspr/pspr + ev 미포함) |
 | [4-1] | `dns_check()` (+ `dns_server_spec`·`dns_read_conf`·`dns_cands`·`dns_ask`·`dns_lookup_a`·`dns_worker`·`dns_batch`·`dns_ptr_worker`) | `${user}.txt`, `/etc/resolv.conf`(`AWX_RESOLV_CONF`) | resolv.conf 의 DNS 서버(최대 3)에 직접 A 질의(dig → nslookup, `xargs -P 32`, 질의당 2초·재시도 1회)해 판정 5종·중복 경고(목록·DNS·PTR) 표 출력, 불일치면 a/n/s/q (auto 모드는 `/dev/tty` y/N, `AWX_DNS_CHECKED=1` 은 표만), 교체는 5번째 필드만 + LOG `[DNS]`. auto_setup `dnscheck.go` 와 같은 규칙 |
 | [5] | `show_targets()` | `${user}.txt` | 호스트명 20개씩 세로 다단 출력 + 총 대수 |
 | [6] | (메인 루프) | 프롬프트 Y/N | N → 종료, Y → 계속 |
 | [7] | `inventory_delete()` | ssh 설정 | 원격 호스트에서 삭제 스크립트 실행 |
-| [8] | `split_files()` | `${user}.txt` | 임시 디렉터리에 분할/전체 yaml 파일 생성 |
+| [8] | `split_files()` | `${user}.txt` | 임시 디렉터리에 분할/전체 yaml 파일 생성. `groups` 줄은 `번호\|infra\|nic\|disk\|용량\|os\|boot\|splunk\|tag` (tag 는 마지막, `\|` 포함 가능) |
 | [9] | `dhcp_info()` | `${user}.txt` | `dhcp_pool/dhcp_pool_delete_info.txt` 누적 |
-| [10] | `gen_inventory()` | 임시 yaml | scp → custom_inventory.sh → `svr_dir` yml 수집 |
+| [10] | `gen_inventory()` | 임시 yaml | scp → custom_inventory.sh → `svr_dir` yml 수집. 태그는 배열 `yml_tag` 에 보관(yml 에는 12필드만 전송) |
 | [11] | `git_upload()` | `$yaml` 목록 | git 블록 원문 실행 + `cd "$now_pwd"` |
 | [12] | `check_servers()` (+ `os6_enabled/os6_run/os6_failed`) | `${user}.txt` | LDAP(ldap.conf URI)·LACP·응답없음 점검, `tmp/all_${user}` 생성. os8_mgmt 접속 불가 호스트는 os6_mgmt 재조사로 교체(02 `check_partitions` 도 동일 함수 사용) |
-| [13] | (메뉴 루프) | 프롬프트 | su/exit/ls/파일명 명령 처리 |
+| [13] | (메뉴 루프) | 프롬프트 | su/exit/ls/파일명 명령 처리. `ls` 는 그룹에 태그가 있으면 `[boot]` 뒤에 태그도 출력 |
 | [14] | (02 호출) | `$group_yml` + 옵션 + `--all=$all_yml` | `bash 02.source_dhcp_pxe.sh` 실행 후 break 또는 재시도 (02: OS 선택 → 그룹 yml 등록 → 그룹 2개 이상이면 전체 yml invsync → 최종 수량) |
 | [15] | `verify_hosts()` | 붙여넣은 서버 목록 | 등록 대상(`$hostfile`)과 비교해 "모두 존재함" 또는 없는 서버 보고(exit 1) |
 
@@ -52,7 +52,7 @@
 |---|---|---|---|
 | (인자) | `user=$1; shift` | `$1` = user, `$@` = yml 사양 | `$user` 설정 |
 | (호환) | 인자 0개 → 대화형 | `ls *.yml`, 프롬프트 | invsync/dhcp/pxe 3회 호출 → exit 0 |
-| (파싱) | `<yml>=<infra>,<os>,<boot>,<splunk>` | `"$@"` | 배열: `ymls`, `infras`, `oss`, `boots`, `splunks` |
+| (파싱) | `<yml>=<infra>,<os>,<boot>,<splunk>[,<tag>]` | `"$@"` | 배열: `ymls`, `infras`, `oss`, `boots`, `splunks` (태그는 `yml_tag`, `yml_opt` 는 4값 유지) |
 | (표) | `print_table` | 배열 | 옵션 확인표 출력 (Y/N 프롬프트) |
 | (수정) | N → 값 재입력 | 프롬프트 Enter/입력 | 배열 갱신 (Enter = 유지) |
 | (실행) | yml별 invsync → (dhcp ∥ pxe 동시) | 배열 순회, 임시 디렉터리에 출력 보관 | dhcp·pxe 가 모두 끝나야 다음 yml, 실패 여부 누적 |

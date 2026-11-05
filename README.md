@@ -1,11 +1,12 @@
-# auto_setup + awx_script
+# auto_setup + awx_script + awxkit
 
-HPC 서버 OS 설치 자동 연계 도구 묶음입니다. 용량을 줄이려고 네 프로젝트만 담았습니다 (원본은 master 의 `.claude/HPC/`).
+HPC 서버 OS 설치 자동 연계 도구 묶음입니다. 용량을 줄이려고 다섯 프로젝트만 담았습니다 (원본은 master 의 `.claude/HPC/`).
 
 | 폴더 | 내용 | 시작 문서 |
 |---|---|---|
 | [auto_setup/](auto_setup/) | OS 설치(01) → OS 설정체크 자동 연계 데몬·상태 화면(TUI). 화면에서 체크스크립트 단독 실행(`x`), AWX 실행(`w`) | [auto_setup/README.md](auto_setup/README.md), [사용법.txt](auto_setup/사용법.txt) |
 | [awx_script/](awx_script/) | AWX 인벤토리/DHCP/PXE 등록 스크립트 (`01.AWX_nodeinfo_V2.sh`, `02.source_dhcp_pxe.sh`) | [awx_script/README.md](awx_script/README.md), [사용법.txt](awx_script/사용법.txt) |
+| [awxkit/](awxkit/) | awxkit — AWX 조회·등록 Go 도구(nodeinfo·ls·dhcp·pxe·invsync·survey·doctor), 폐쇄망 빌드용 vendor 포함 | [awxkit/README.md](awxkit/README.md), [UPDATE.txt](awxkit/UPDATE.txt) |
 | [ip_change/](ip_change/) | IP·게이트웨이 일괄 변경 엔진 (auto_setup `m` 메뉴가 호출, 단독 실행도 가능) | [ip_change/README.md](ip_change/README.md) |
 | [ldap_setting/](ldap_setting/) | LDAP·DNS·NTP·autofs 일괄 설정 엔진 (auto_setup `m` 메뉴가 호출, 단독 실행도 가능) | [ldap_setting/README.md](ldap_setting/README.md) |
 
