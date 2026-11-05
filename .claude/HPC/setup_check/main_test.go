@@ -348,9 +348,10 @@ func TestFormatRow(t *testing.T) {
 }
 
 func TestParseErrorList(t *testing.T) {
-	text := "\xef\xbb\xbf# 주석\r\nnode01 메모리 불량\r\n\r\nNODE02\t전원 | 케이블\nnode01   디스크 교체\nnode03\nnode04 \t \n"
+	// 탭으로만 구분: 사유 안의 공백은 그대로, 공백으로만 구분한 줄(node05)은 무시
+	text := "\xef\xbb\xbf# 주석\r\nnode01\t메모리 불량 (DIMM A1)\r\n\r\nNODE02\t전원 | 케이블\nnode01\t디스크 교체\nnode03\nnode04\t \nnode05 공백 구분\n"
 	got := parseErrorList(text)
-	want := map[string]string{"node01": "메모리 불량, 디스크 교체", "node02": "전원 / 케이블"}
+	want := map[string]string{"node01": "메모리 불량 (DIMM A1), 디스크 교체", "node02": "전원 / 케이블"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v want %v", got, want)
 	}

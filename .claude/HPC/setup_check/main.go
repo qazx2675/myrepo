@@ -409,8 +409,9 @@ func formatRow(host, status, check string, h *hostInfo, note string) string {
 // defaultErrorList 는 -er 를 주지 않았을 때 현재 경로에서 찾는 장애 목록 파일 이름.
 const defaultErrorList = "error_list.txt"
 
-// parseErrorList 는 "hostname 장애사유" 줄들을 읽어 호스트(소문자) → 비고 맵을 만든다.
-//   - 첫 공백(스페이스/탭) 앞이 호스트, 뒤 전체가 사유. 빈 줄·# 주석·사유 없는 줄은 건너뜀
+// parseErrorList 는 "hostname<탭>장애사유" 줄들을 읽어 호스트(소문자) → 비고 맵을 만든다.
+//   - ★ 구분자는 탭만(사용자 결정: 사유에 공백이 섞임). 첫 탭 앞이 호스트, 뒤 전체가 사유
+//   - 빈 줄·# 주석·탭 없는 줄·사유 없는 줄은 건너뜀
 //   - 같은 호스트가 여러 줄이면 ", " 로 이어 붙임(사용자 결정)
 //   - ★ 사유 안의 '|' 는 열이 밀리지 않도록 '/' 로 바꾼다. 윈도우 메모장 파일의 BOM·CR 도 뗀다.
 func parseErrorList(text string) map[string]string {
@@ -421,11 +422,11 @@ func parseErrorList(text string) map[string]string {
 		if ln == "" || strings.HasPrefix(ln, "#") {
 			continue
 		}
-		i := strings.IndexAny(ln, " \t")
+		i := strings.IndexByte(ln, '\t')
 		if i < 0 {
 			continue
 		}
-		host := strings.ToLower(ln[:i])
+		host := strings.ToLower(strings.TrimSpace(ln[:i]))
 		why := strings.ReplaceAll(strings.TrimSpace(ln[i+1:]), sep, "/")
 		if why == "" {
 			continue
@@ -749,7 +750,7 @@ func main() {
 	fs := flag.NewFlagSet("new_setup", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	confPath := fs.String("c", "", "설정 파일 경로 (기본: 현재 경로 → 실행 파일 옆 new_setup.conf)")
-	errPath := fs.String("er", "", "장애 목록 파일(줄마다 \"hostname 장애사유\", 비고 열에 표시) (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
+	errPath := fs.String("er", "", "장애 목록 파일(줄마다 \"hostname<탭>장애사유\", 비고 열에 표시) (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "사용법: new_setup [-c <설정파일>] [-er <장애목록파일>] <호스트파일>")
 	}
