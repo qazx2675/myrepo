@@ -1,0 +1,3 @@
+# hostname 장애사유
+rocky10	전원|꺼짐 확인필요
+testserver0002	팬 경고
