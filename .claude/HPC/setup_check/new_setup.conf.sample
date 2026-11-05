@@ -17,6 +17,7 @@ DISK_PATTERN=Disk "" given in clearpart command does not exist
 
 # config_check.sh 경로 (관리서버에 있는 파일). 비우면 설정체크 열은 '-'.
 # -auto-check 를 지원하는 버전이어야 한다(없으면 실행하지 않고 '-' + 경고).
+# ※ -run 에서는 이 값이 비어 있을 때의 '-' 만 통과로 본다. 값이 있는데 '-'(실행 실패)이면 통과가 아니다.
 OS_CHECK_SH=
 
 # 설정체크 제외 hostname 문자열('|' 로 구분). 하나라도 hostname 에 포함되면 FAIL 이어도 'O'.
@@ -38,3 +39,25 @@ CPU_INTEL_OK=Completed successfully. No issues detected.
 CPU_AMD_LOG=/var/cpudiag/results.json
 CPU_AMD_OK=PASS
 CPU_AMD_LINE=Result
+
+# ---- -run (설정수정·CPU·stress-ng 자동 진행) 용 ----
+
+# stress-test 바이너리 경로. 비우면 부하 단계에서 오류 안내.
+#STRESS_TEST=
+
+# stress-test 의 -conf 로 넘길 설정 파일. 비우면 stress-test 기본 탐색.
+#STRESS_TEST_CONF=
+
+# info_mn.sh / info.sh 가 있는 폴더(user 선택 메뉴). 비우면 -user → $USER.
+#USER_ROUTE=
+
+# 시간 값: Go 형식(47m, 30s, 1h30m) 또는 숫자만(분). 잘못된 값은 경고 후 기본값을 쓴다.
+# CPU 테스트 launch 후 완료 확인을 시작할 때까지 / 확인·꺼짐 감시 간격 / 확인 시작 후 최대 대기
+#CPU_WAIT_START=47m
+#CPU_WAIT_INTERVAL=2m
+#CPU_WAIT_MAX=30m
+
+# 외부 명령 시간 제한(넘으면 프로세스 그룹에 SIGTERM, 5초 뒤 SIGKILL, 시간초과 처리)
+#GOSSH_TIMEOUT=10m
+#CHECK_TIMEOUT=40m
+#STRESS_TIMEOUT=60m
