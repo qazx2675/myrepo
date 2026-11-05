@@ -82,6 +82,14 @@ func startLoad(hosts []string) {
 func main() {
 	flag.Parse()
 	mux := http.NewServeMux()
+	// setup.sh 접속 점검용: 비밀번호가 test 일 때만 200
+	mux.HandleFunc("/api/v2/me/", func(w http.ResponseWriter, r *http.Request) {
+		if u, p, ok := r.BasicAuth(); !ok || u == "" || p != "test" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Write([]byte(`{"count":1}`))
+	})
 	mux.HandleFunc("/api/v2/job_templates/", func(w http.ResponseWriter, r *http.Request) {
 		p := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v2/job_templates/"), "/")
 		if p == "" {

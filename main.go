@@ -90,7 +90,7 @@ func run(args []string) int {
 	hostsFlag := fs.String("hosts", "", "입력 파일 (hostname 한 줄 또는 12/13필드 설치양식)")
 	stepsFlag := fs.String("steps", "", "실행할 단계: a=cpu, b=stress (예: ab, ba)")
 	retryFlag := fs.Int("retry", 0, "비대화형에서 미실행 호스트 자동 재실행 횟수")
-	erFlag := fs.String("er", "", "장애 목록 파일 (줄마다 \"hostname 장애사유\") (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
+	erFlag := fs.String("er", "", "장애 목록 파일 (줄마다 \"hostname<TAB>장애사유\") (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
 	confFlag := fs.String("conf", "", "설정 파일 경로 (기본: ./conf → ~/.stress-test → <바이너리 위치>/conf 의 ${user}_setting.conf)")
 	batchFlag := fs.Bool("batch", false, "비대화형 실행 (프롬프트 없음, 감시는 한 줄 요약)")
 	fs.Usage = usage(fs)

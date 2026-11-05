@@ -42,4 +42,4 @@ jobs:
 
       - name: ShellCheck lint
         run: |
-          shellcheck -S warning stress_run.sh build.sh
+          shellcheck -S warning stress_run.sh build.sh setup.sh

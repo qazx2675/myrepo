@@ -121,11 +121,11 @@ func parseErrorList(text string) map[string]string {
 		if ln == "" || strings.HasPrefix(ln, "#") {
 			continue
 		}
-		i := strings.IndexAny(ln, " \t")
+		i := strings.IndexByte(ln, '\t') // setup_check 와 같은 규칙: 탭으로만 구분(사유에 공백 허용)
 		if i < 0 {
 			continue
 		}
-		host := strings.ToLower(ln[:i])
+		host := strings.ToLower(strings.TrimSpace(ln[:i]))
 		why := strings.ReplaceAll(strings.TrimSpace(ln[i+1:]), "|", "/")
 		if why == "" {
 			continue

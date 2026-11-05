@@ -11,7 +11,7 @@
 - [ ] 결과표 형식 확인 — 각 줄 5필드(`awk -F'|' 'NF!=5'` 결과 없음), 첫 줄 제목 줄 `hostname|CPU벤더|cpu|stress-ng|비고`, 입력 순서 유지, 단계 값은 `실행/미실행/실패/접속불가/DNS실패/-` 만 사용
 - [ ] 종료코드 규약 유지 — 0 전부 실행, 1 미실행/실패 있음, 2 설정·입력 오류 (setup_check 등 호출자가 의존)
 - [ ] 비대화형 호출(`-batch`)에서 프롬프트·stdin 읽기가 없음을 확인
-- [ ] `bash -n stress_run.sh build.sh test/*.sh` 통과, `shellcheck -S warning stress_run.sh build.sh` 경고 없음
+- [ ] `bash -n stress_run.sh build.sh test/*.sh` 통과, `shellcheck -S warning stress_run.sh build.sh setup.sh` 경고 없음, conf 키를 추가했으면 `setup.sh` 로 새 키가 질문되는지 확인
 - [ ] 래퍼와 바이너리 이름 일치 확인 (`stress_run.sh` ↔ `stress-test`), 실행 권한(`100755`) 유지
 - [ ] conf 키를 추가·변경했다면 `conf/sample_setting.conf`, README 설정 키 표(3.3), `config.go` 기본값·`validate` 를 함께 갱신
 - [ ] 옵션·결과·종료코드·한계가 바뀌었으면 README.md 해당 표/설명 갱신

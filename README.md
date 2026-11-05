@@ -44,6 +44,18 @@ bash build.sh      # CGO_ENABLED=0 go build -o stress-test .
 
 `conf/sample_setting.conf` 를 `conf/${user}_setting.conf` 로 복사해 값을 채웁니다(예: user 가 `hong` 이면 `conf/hong_setting.conf`). 키 설명은 3.3 을 참고하세요.
 
+직접 복사하는 대신 대화형 설정 스크립트를 써도 됩니다(최초 실행 시 권장, setup_check 의 `setup.sh` 도 이 스크립트를 호출합니다).
+
+```bash
+bash setup.sh [--user <사용자>] [--conf <설정파일>]
+```
+
+- `--user` 생략 시 `STRESS_USER` → `$USER`, `--conf` 생략 시 `<스크립트 폴더>/conf/${user}_setting.conf`
+- 파일이 있으면 기존 값을, 없으면 샘플 값을 기본값으로 보여 주며 키마다 묻습니다(Enter = 유지, `-` = 비우기). 비밀번호는 화면에 표시되지 않습니다. 숫자·true/false 값은 형식을 검사합니다.
+- 저장 시 샘플의 순서·주석을 유지하고, 기존 파일은 `.bak.<시각>` 으로 백업, 샘플에 없는 기존 키는 파일 끝에 보존, 권한 600.
+- 저장 후 선택 점검(y/N): AWX 로그인(`/api/v2/me/`), 템플릿 3종 조회, repohost 에 비밀번호 없이 ssh + `custom_inventory.sh` 존재, `svr_dir`·`git_dir/.git_upload.sh` 존재. 점검 실패는 경고만 하고 저장은 유지합니다.
+- 종료코드: `0` 저장 완료 / `1` 사용자 중단(저장 안 함, Ctrl-C·입력 끝 포함) / `2` 오류(터미널 아님, 인자·user 오류, 샘플 없음, 쓰기 실패)
+
 ## 2. 사용 방법
 
 ### 2.1 대화형 (사람이 실행)
@@ -138,9 +150,9 @@ a b c node0003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 100 8.10 uefi
 
 ### 2.5 장애 목록 `error_list.txt` (`-er`)
 
-줄마다 `hostname 장애사유` 형식입니다. `-er <파일>` 로 지정하고, 생략하면 **현재 경로의 `error_list.txt`** 가 있으면 자동으로 씁니다(없으면 무시). 지정한 파일이 없으면 종료코드 2. 규칙은 setup_check `-er` 와 같습니다.
+줄마다 `hostname<TAB>장애사유` 형식입니다(**탭으로만** 구분). `-er <파일>` 로 지정하고, 생략하면 **현재 경로의 `error_list.txt`** 가 있으면 자동으로 씁니다(없으면 무시). 지정한 파일이 없으면 종료코드 2. 규칙은 setup_check `-er` 와 같습니다.
 
-- 첫 공백(스페이스/탭) 앞 = 호스트(대소문자 무시, 정확 일치), 뒤 전체 = 사유
+- 첫 탭 앞 = 호스트(대소문자 무시, 정확 일치), 뒤 전체 = 사유(공백 허용). 탭이 없는 줄(공백 구분)은 무시
 - 같은 호스트가 여러 줄이면 `, ` 로 이어 붙임
 - 사유 안의 `|` 는 `/` 로 바꿈 (결과표 구분자와 충돌 방지)
 - 빈 줄, `#` 주석, 사유 없는 줄은 무시
@@ -267,6 +279,7 @@ node0005|unknown|-|실행|
 | `*_test.go` | 단위 테스트(`awx_test.go`, `logic_test.go`) |
 | `stress_run.sh` | 대화형 래퍼 (user 선택, 단계 선택, 바이너리 실행) |
 | `build.sh` | 바이너리 빌드 |
+| `setup.sh` | 대화형 설정 (`conf/${user}_setting.conf` 생성·수정, 선택 점검) |
 | `stress-test` | 빌드 완료 바이너리 (os8, 폐쇄망 배포용, 커밋 대상) |
 | `conf/sample_setting.conf` | 설정 파일 샘플 |
 | `test/` | 랩 e2e 스크립트와 대역: `fake_awx/`(가짜 AWX 서버), `fake_repo/`(가짜 custom_inventory.sh·.git_upload.sh), `fake_user/`(user 선택 대역), `e2e.sh`, `e2e_c.sh`, 샘플 호스트·설정·error_list |
