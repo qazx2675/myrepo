@@ -1,6 +1,6 @@
 # new_setup — 신규 OS 배포 후 설치 상태 판정 도구
 
-신규 OS 배포 후 대상 장비 전체를 `gossh` 로 한 번에 점검해(설정체크는 관리서버에서 `config_check.sh` 실행), 장비마다 상태 하나(`완료` / `디스크미인식` / `설치정지` / `OS설치중` / `접속불가`)를 판정하고, 완료된 장비는 설정체크·CPU 테스트·stress-ng·H/T·OS 까지 7열로 출력하는 Go 기반 도구입니다. Go 바이너리 + bash 래퍼(`new_setup.sh`) 한 쌍으로 구성되며, 표준 라이브러리만 사용하므로 `vendor/` 가 필요 없습니다.
+신규 OS 배포 후 대상 장비 전체를 `gossh` 로 한 번에 점검해(설정체크는 관리서버에서 `config_check.sh` 실행), 장비마다 상태 하나(`완료` / `디스크미인식` / `설치정지` / `OS설치중` / `접속불가`)를 판정하고, 완료된 장비는 설정체크·CPU 테스트·stress-ng·H/T·OS 와 비고(장애 목록 사유)까지 8열로 출력하는 Go 기반 도구입니다. Go 바이너리 + bash 래퍼(`new_setup.sh`) 한 쌍으로 구성되며, 표준 라이브러리만 사용하므로 `vendor/` 가 필요 없습니다.
 
 > 폴더·파일별 역할과 판정 흐름은 [ARCHITECTURE.md](ARCHITECTURE.md), 변경 시 점검 목록은 [PR_CHECKLIST.md](PR_CHECKLIST.md)를 참고하세요.
 
@@ -16,7 +16,7 @@
 | 파일 | 대상 서버 |
 |---|---|
 | `bin/new_setup` | os8_mgmt (linux/amd64) |
-| `bin/new_setup_os6` | os6_mgmt (RHEL6, Go 1.20 으로 빌드) |
+| `bin/new_setup_os6` | os6_mgmt (RHEL6) 용 **옛 버전**(v2 시기 빌드: 탭 출력, 제목 줄·`NOTRUN`·AMD `Result`/`PASS` 규칙 없음). 저장소에는 남아 있지만 **더 이상 다시 빌드하지 않습니다**(2026-11-04 결정: OS6 빌드 중단) |
 
 `new_setup.sh` 가 `/etc/redhat-release` 를 보고 RHEL 6.x 이면 `bin/new_setup_os6`, 그 외에는 `bin/new_setup` 을 자동으로 골라 실행하므로 사용자가 바이너리를 고를 필요는 없습니다.
 
@@ -36,11 +36,11 @@ chmod +x new_setup.sh bin/new_setup bin/new_setup_os6   # 실행 권한이 빠�
 
 ```bash
 bash build.sh        # os8 용 → bin/new_setup
-bash build.sh os6    # os6 용 → bin/new_setup_os6 (Go 1.20 이 있는 빌드 서버에서)
+# bash build.sh os6  # (옛 방식·사용 안 함) os6 빌드는 2026-11-04 부터 중단
 ```
 
-- `go.mod` 는 `go 1.20` 기준입니다(os6 빌드 서버의 Go 1.20 에 맞춤). 그보다 새로운 문법·표준 라이브러리 API 를 쓰지 마세요.
-- **소스를 바꿨다면 두 바이너리를 모두 재빌드해 함께 커밋**해야 합니다(회사에 Go 가 없으므로). `.gitignore` 로 `bin/` 을 제외하지 마세요.
+- `go.mod` 는 `go 1.20` 기준입니다. 그보다 새로운 문법·표준 라이브러리 API 를 쓰지 마세요.
+- **소스를 바꿨다면 `bin/new_setup`(os8) 만 재빌드해 함께 커밋**해야 합니다(회사에 Go 가 없으므로). `bin/new_setup_os6` 는 재빌드하지 않고 옛 버전 그대로 둡니다. `.gitignore` 로 `bin/` 을 제외하지 마세요.
 
 ### 1.3 전역 명령어로 사용하기 (선택 사항)
 
@@ -56,14 +56,14 @@ ln -s "$(pwd)/new_setup.sh" /usr/local/bin/new_setup
 
 ```bash
 bash new_setup.sh <호스트파일>               # 화면에 결과 출력 (현재 경로의 new_setup.conf 자동 사용)
-bash new_setup.sh <호스트파일> > result.tsv   # 결과만 파일로 저장
+bash new_setup.sh <호스트파일> > result.txt   # 결과만 파일로 저장
 bash new_setup.sh -c /경로/my.conf <호스트파일>   # 설정 파일 직접 지정
 ```
 
 - `<호스트파일>` 은 gossh `-w` 에 그대로 넘기는 파일입니다(한 줄에 hostname 하나). 형식은 gossh 와 같습니다: 줄 앞뒤 공백 제거, 빈 줄·`#` 시작 줄 무시, 한 줄 안의 쉼표/공백 분리, `node[01-10]` 범위 확장(파일에서는 쉼표 분리가 먼저라 `a[1,3,5-7]` 은 gossh 도 깨지므로 쓰지 마세요), 중복은 먼저 나온 것만 유지.
 - 현재 경로에 `new_setup.conf` 가 있으면 `new_setup.sh <호스트파일>` 은 `new_setup.sh -c ./new_setup.conf <호스트파일>` 과 같습니다.
-- 출력은 **입력 파일 순서 그대로**, 헤더 없이 한 줄에 7열(`hostname<TAB>상태<TAB>설정체크<TAB>CPU테스트<TAB>stress-ng<TAB>H/T<TAB>OS`) 입니다.
-- stdout 에는 이 결과 줄만 나갑니다. 진행 안내·상태별 대수 요약·경고는 모두 stderr 로 나가므로 `> result.tsv` 로 저장해도 결과 파일이 깨끗합니다.
+- 출력은 열을 `|` 로 구분한 8열이며, **첫 줄은 항상 제목 줄**(`hostname|상태|설정체크|CPU테스트|stress-ng|H/T|OS|비고`), 그 아래에 **입력 파일 순서 그대로** 장비당 한 줄입니다.
+- stdout 에는 제목 줄과 결과 줄만 나갑니다. 진행 안내·상태별 대수 요약·경고는 모두 stderr 로 나가므로 `> result.txt` 로 저장해도 결과 파일이 깨끗합니다.
 - 작업 폴더는 호스트파일이 있는 폴더 그대로 쓰며, gossh 결과 파일(`<호스트파일>_res_off` 등)과 로그도 그 옆에 생깁니다.
 
 ### 2.1 출력 예시
@@ -82,30 +82,36 @@ node05
 
 ```
 $ bash new_setup.sh a
-node01	완료	O	O	O	ON	4.18.0-553.el8_10.x86_64
-node02	OS설치중	-	-	-	-	-
-node03	디스크미인식	-	-	-	-	-
-node04	접속불가	-	-	-	-	-
-node05	설치정지	-	-	-	-	-
+hostname|상태|설정체크|CPU테스트|stress-ng|H/T|OS|비고
+node01|완료|O|O|O|ON|4.18.0-553.el8_10.x86_64|
+node02|완료|O|NOTRUN|X|ON|4.18.0-553.el8_10.x86_64|메모리 불량
+node03|OS설치중|-|-|-|-|-|
+node04|접속불가|-|-|-|-|-|전원 케이블 불량
+node05|설치정지|-|-|-|-|-|
 ```
 
-열 사이는 공백이 아니라 **탭 문자 1개**입니다(위 예시는 탭이 포함된 출력 형태이며 값은 예시). 한 줄을 정확히 7필드로 검증하려면 `awk -F'	' 'NF!=7' result.tsv` 결과가 비어 있어야 합니다. 상태가 `완료` 가 아닌 장비는 나머지 5열을 모두 `-` 로 채우므로 열 수는 항상 7개입니다.
+열 사이는 공백이 아니라 **세로선 `|` 1개**이고, 첫 줄은 항상 제목 줄입니다(위 예시 값은 예시). 제목 줄과 모든 결과 줄이 정확히 8필드인지 검증하려면 `awk -F'|' 'NF!=8' result.txt` 결과가 비어 있어야 합니다. 상태가 `완료` 가 아닌 장비는 3~7열을 모두 `-` 로 채우고, 비고(8열)는 장애 목록에 없으면 빈칸이므로 열 수는 항상 8개입니다.
 
 | 열 | 값 |
 |---|---|
 | 1 hostname | 호스트파일의 이름 |
 | 2 상태 | `완료` / `디스크미인식` / `설치정지` / `OS설치중` / `접속불가` |
 | 3 설정체크 | `O` / `X` / `출력없음` / `-` |
-| 4 CPU테스트 | `O` / `X` |
+| 4 CPU테스트 | `O` / `X` / `NOTRUN` |
 | 5 stress-ng | `O` / `X` |
 | 6 H/T | `ON` / `OFF` / `-` |
 | 7 OS | `uname -r` 값 / `-` |
+| 8 비고 | `-er` 장애 목록(생략 시 현재 경로 `error_list.txt`)의 사유. 목록에 없으면 빈칸 |
 
 각 열의 의미와 판정 규칙은 3.4 를 참고하세요.
 
 ### 2.2 엑셀에 붙여넣기
 
-탭 구분이므로 터미널에서 출력을 드래그해 복사한 뒤 엑셀 셀에 붙여넣으면 7열로 바로 들어갑니다. 또는 `> result.tsv` 로 저장한 파일을 엑셀에서 열면(구분 기호: 탭) 같은 결과를 얻습니다.
+`|` 구분이므로 터미널에서 출력을 드래그해 복사한 뒤 엑셀 셀에 붙여넣고, **데이터 > 텍스트 나누기 > 구분 기호 > 기타 `|`** 로 나누면 8열로 들어갑니다(탭은 복사 때 공백으로 바뀌는 경우가 있어 `|` 를 씁니다).
+
+저장한 파일(`> result.txt`)을 엑셀에서 열 때는 **더블클릭으로 열지 마세요.** 엑셀이 CP949 로 읽어 한글이 깨집니다. 대신 **데이터 > 텍스트/CSV에서 가져오기** 에서 파일을 고르고 **파일 원본: 65001: 유니코드(UTF-8)**, **구분 기호: `|`** 를 선택하세요.
+
+터미널(PuTTY/MobaXterm 등)에서 한글이 깨져 보이면 터미널의 문자 인코딩(Character set)을 **UTF-8** 로 바꾸세요.
 
 ### 2.3 종료코드
 
@@ -123,6 +129,7 @@ node05	설치정지	-	-	-	-	-
 |---|---|
 | `<호스트파일>` | 필수. gossh `-w` 에 그대로 전달하는 호스트 목록 파일 |
 | `-c <설정파일>` | 선택. 설정 파일 경로. 생략하면 `new_setup.conf` 를 **현재 실행 경로 → 실행 파일 폴더 → (`bin/` 안이면) 그 위 폴더(래퍼 옆)** 순서로 찾아 처음 찾은 것을 쓰고(사용한 파일은 stderr 에 표시), 어디에도 없으면 기본값으로 동작. 즉 현재 경로에 `new_setup.conf` 가 있으면 `new_setup.sh <호스트파일>` 은 `new_setup.sh -c ./new_setup.conf <호스트파일>` 과 같음 |
+| `-er <장애목록파일>` | 선택. 줄마다 `hostname 장애사유` 형식인 파일. 해당 호스트 줄의 마지막 **비고** 열에 사유를 적음. 생략하면 **현재 실행 경로의 `error_list.txt`** 가 있으면 자동 사용(stderr 에 `장애 목록: error_list.txt` 표시), 없으면 비고는 모두 빈칸. 지정한 파일이 없으면 종료코드 2. 첫 공백(스페이스/탭) 앞이 호스트, 뒤 전체가 사유이며 호스트는 대소문자 무시로 정확히 일치해야 함. 같은 호스트가 여러 줄이면 `, ` 로 이어 붙이고, 사유 안의 `|` 는 `/` 로 바꿈. 빈 줄·`#` 주석·사유 없는 줄은 무시 |
 
 그 밖의 옵션은 없습니다.
 
@@ -137,12 +144,17 @@ node05	설치정지	-	-	-	-	-
 | `ERROR_PATTERN=` | `설치정지` 판정 문구(고정 문자열, 여러 줄 가능). **처음엔 비어 있고** 현장에서 실제 오류 문구를 확인해 채웁니다. 비어 있으면 `설치정지` 는 판정되지 않습니다 |
 | `OS_CHECK_SH=` | (v2) 관리서버의 `config_check.sh` 경로. **기본 빈 값 — 비우면 설정체크 열은 `-`**. `-auto-check` 를 지원하는 버전이어야 합니다 |
 | `OS_CHECK_EXCLUDE=` | (v2) `\|` 로 이은 제외 문자열(예: `asdf\|qwer`). **기본 빈 값**. 하나라도 hostname 에 포함되면 FAIL 이어도 설정체크 `O` |
-| `CPU_INTEL_LOG=` | (v2) Intel CPU 진단 로그 경로. 기본 `/var/cpudiag/result.log` |
-| `CPU_INTEL_OK=` | (v2) 위 로그에 있어야 할 성공 문구(고정 문자열). 기본 `Completed successfully. No issues detected.` |
-| `CPU_AMD_LOG=` | (v2) AMD CPU 진단 로그 경로. **기본 빈 값**(아직 모름 — 나중에 기록) |
-| `CPU_AMD_OK=` | (v2) AMD 성공 문구. **기본 빈 값**. 비어 있으면 AMD 장비의 CPU테스트는 `X` |
+| `CPU_INTEL_LOG=` | (v2) Intel CPU 진단 로그 경로. 기본 `/var/cpudiag/result.log`. 파일 이름에 `*`/`?` 를 쓰면 그 폴더에서 이름이 맞는 **가장 최근 파일**을 씁니다(폴더 부분에는 와일드카드·공백 불가) |
+| `CPU_INTEL_OK=` | (v2) 위 로그에 있어야 할 성공 문구(고정 문자열, 대소문자 무시). 기본 `Completed successfully. No issues detected.` |
+| `CPU_INTEL_LINE=` | (v3) Intel 판정 대상 줄을 고르는 문자열. **기본 빈 값** — 비어 있으면 로그 어디에든 성공 문구가 있으면 `O`. 값이 있으면 그 문자열이 든 줄만 검사해 **모든 줄**에 성공 문구가 있어야 `O` |
+| `CPU_AMD_LOG=` | (v3) AMD CPU 진단 로그 경로. 기본 `/var/cpudiag/results.json`. 와일드카드 규칙은 Intel 과 같음 |
+| `CPU_AMD_OK=` | (v3) AMD 성공 문구. 기본 `PASS` |
+| `CPU_AMD_LINE=` | (v3) AMD 판정 대상 줄 문자열. 기본 `Result` — 현장 수동 확인(`grep Result /var/cpudiag/results.json` 결과가 모두 PASS)과 같은 규칙: `Result` 가 든 줄이 1개 이상이고 모두 `PASS` 를 포함해야 `O` |
 
-값은 앞뒤 공백만 제거합니다.
+- `CPU_*` 값은 앞뒤 따옴표를 붙여도 됩니다(`GOSSH` 처럼 떼어 줍니다). 줄 검색·성공 문구 비교는 대소문자를 구분하지 않습니다.
+- 특정 벤더의 CPU 검사를 끄려면 그 벤더의 `LOG` 를 비웁니다(예: `CPU_AMD_LOG=`) — 그 벤더 장비는 `X` 입니다.
+
+그 밖의 값은 앞뒤 공백만 제거합니다.
 
 ```ini
 GOSSH=
@@ -154,8 +166,10 @@ OS_CHECK_SH=
 OS_CHECK_EXCLUDE=
 CPU_INTEL_LOG=/var/cpudiag/result.log
 CPU_INTEL_OK=Completed successfully. No issues detected.
-CPU_AMD_LOG=
-CPU_AMD_OK=
+#CPU_INTEL_LINE=
+CPU_AMD_LOG=/var/cpudiag/results.json
+CPU_AMD_OK=PASS
+CPU_AMD_LINE=Result
 ```
 
 - 문구는 정규식이 아닌 **고정 문자열**로 비교합니다.
@@ -196,7 +210,7 @@ CPU_AMD_OK=
 | 열 | 의미 | 판정 규칙 |
 |---|---|---|
 | 설정체크 | 관리서버에서 `config_check.sh -auto-check` 로 점검한 결과 | 해당 호스트 결과 줄 중 첫 토큰이 `FAIL` 인 줄이 있으면 `X`, 줄이 있고 FAIL 이 없으면 `O`, 줄이 하나도 없으면 `출력없음`. `OS_CHECK_EXCLUDE` 문자열이 hostname 에 포함되면 위와 무관하게 `O`. `OS_CHECK_SH` 가 비었거나 `-auto-check` 미지원 스크립트면 `-` |
-| CPU테스트 | CPU 진단 로그에 성공 문구가 있는지 | `/proc/cpuinfo` 의 `vendor_id` 로 벤더 판별 → Intel 이면 `CPU_INTEL_LOG` 에 `CPU_INTEL_OK` 가 있을 때 `O`, AMD 면 `CPU_AMD_LOG`/`CPU_AMD_OK` 가 설정돼 있고 문구가 있을 때 `O`, 그 외(문구 없음·로그 없음·AMD 미설정·벤더 불명)는 `X` |
+| CPU테스트 | CPU 진단 로그에 성공 문구가 있는지 | `/proc/cpuinfo` 의 `vendor_id` 로 벤더 판별. 그 벤더의 로그 파일이 **없으면 `NOTRUN`**(부하테스트를 아직 안 함). Intel: `CPU_INTEL_LOG` 에 `CPU_INTEL_OK` 가 있으면 `O`(`CPU_INTEL_LINE` 을 지정하면 그 문자열이 든 줄만 검사해 모두 성공 문구 포함). AMD: 기본 규칙은 `CPU_AMD_LOG`(`/var/cpudiag/results.json`)에서 `Result` 가 든 줄이 1개 이상이고 모두 `PASS` 를 포함하면 `O`. 그 외(문구 없음·줄 없음·LOG 비움·벤더 불명)는 `X` |
 | stress-ng | 부하 테스트를 돌린 흔적 | `/var/log/messages` 와 로테이션된 `messages-*`(압축 안 된 것)에 `stress-ng` 가 있으면 `O`, 없으면 `X` |
 | H/T | 하이퍼스레딩 | `lscpu` 의 `Thread(s) per core:` 가 2 이상이면 `ON`, 1 이면 `OFF`, 값을 못 얻으면 `-` |
 | OS | 커널 버전 | `uname -r` 값 그대로, 못 얻으면 `-` |
@@ -223,7 +237,7 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 - 로그 문구 기반 판정이므로 anaconda 의 출력 문구가 바뀌면 `DISK_PATTERN` 을 갱신해야 합니다.
 - `OS_CHECK_EXCLUDE` 에 걸린 호스트는 설정체크 출력이 없어도 `O` 로 봅니다.
 - stress-ng 검색은 `/var/log` 아래 이름이 `messages` 로 시작하는 일반 파일만 대상이며 압축(`.gz`) 로테이션분은 보지 않습니다.
-- AMD CPU 진단 로그 경로·문구는 아직 모르므로 `CPU_AMD_LOG`/`CPU_AMD_OK` 를 채우기 전까지 AMD 장비의 CPU테스트는 `X` 입니다.
+- AMD CPU 진단은 현장 수동 확인 방식(`grep Result /var/cpudiag/results.json` 이 모두 PASS)을 기본 규칙으로 구현했습니다. 실제 AMD 장비의 로그 형식과 다르면 `CPU_AMD_*` 로 조정하세요.
 - 실제 anaconda 설치 환경, 회사 운영 `run.sh`, AMD CPU 진단 로그는 랩에서 재현할 수 없어 실장비에서 확인하지 못했습니다.
 - 범위 밖: 자동 재설치·조치, AWX 연동.
 
@@ -235,8 +249,8 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 | `go.mod` | `go 1.20`, 외부 의존성 없음 |
 | `new_setup.sh` | bash 래퍼. OS 를 판별해 `bin/` 의 맞는 바이너리를 실행하고 인자를 그대로 전달 |
 | `new_setup.conf.sample` | 설정 파일 예시 |
-| `build.sh` | 바이너리 빌드 (`build.sh` = os8, `build.sh os6` = os6) |
-| `bin/new_setup`, `bin/new_setup_os6` | 빌드 완료 바이너리 (폐쇄망 배포용, 커밋 대상) |
+| `build.sh` | 바이너리 빌드 (`build.sh` = os8. `build.sh os6` 는 옛 방식으로 현재 사용 안 함) |
+| `bin/new_setup`, `bin/new_setup_os6` | 빌드 완료 바이너리 (폐쇄망 배포용, 커밋 대상). `new_setup_os6` 는 옛 버전이며 더 이상 재빌드하지 않음 |
 | `test/fake_gossh.sh`, `test/fake_config_check.sh`, `test/run_tests.sh` | gossh·config_check.sh 대역과 시나리오 테스트 (`bash test/run_tests.sh`) |
 | `ARCHITECTURE.md` | 폴더·파일 역할과 판정 흐름 |
 | `PR_CHECKLIST.md` | 변경 시 점검 목록 |

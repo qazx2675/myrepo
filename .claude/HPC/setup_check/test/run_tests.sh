@@ -21,7 +21,7 @@ echo "== 빌드"
 (cd "$ROOT" && go build -o "$T/new_setup" .) || { echo "FAIL: go build 실패"; exit 1; }
 BIN=$T/new_setup
 
-TAB=$'\t'
+SEP='|'   # 출력 열 구분자
 HF=$T/hosts
 SC=$T/scenario
 printf '%s\n' "# 주석 줄" "h_ok" "h_off" "h_ref" "" "h_disk" "h_err" "h_ok" "h_none" "h_nolog" "h_retryoff" "h_cancel" > "$HF"
@@ -47,13 +47,14 @@ mkconf() { # 파일 [ERROR_PATTERN 줄...]
 	} > "$f"
 }
 
-# 7열: host 상태 설정체크 CPU stress-ng H/T OS. 완료가 아니면 나머지 5열은 '-'
-D5="-${TAB}-${TAB}-${TAB}-${TAB}-"
-OKROW="h_ok${TAB}완료${TAB}-${TAB}O${TAB}O${TAB}ON${TAB}4.18.0-test" # OS_CHECK_SH 없음 -> 설정체크 '-'
-EXPECT=$(printf '%s\n' \
-	"$OKROW" "h_off${TAB}접속불가${TAB}$D5" "h_ref${TAB}접속불가${TAB}$D5" "h_disk${TAB}디스크미인식${TAB}$D5" \
-	"h_err${TAB}설치정지${TAB}$D5" "h_none${TAB}OS설치중${TAB}$D5" "h_nolog${TAB}OS설치중${TAB}$D5" \
-	"h_retryoff${TAB}OS설치중${TAB}$D5" "h_cancel${TAB}접속불가${TAB}$D5")
+# 8열: host 상태 설정체크 CPU stress-ng H/T OS 비고. 완료가 아니면 3~7열은 '-'
+D5="-${SEP}-${SEP}-${SEP}-${SEP}-${SEP}" # 끝의 빈 칸은 비고
+OKROW="h_ok${SEP}완료${SEP}-${SEP}O${SEP}O${SEP}ON${SEP}4.18.0-test${SEP}" # OS_CHECK_SH 없음 -> 설정체크 '-'
+HEADER="hostname|상태|설정체크|CPU테스트|stress-ng|H/T|OS|비고"
+EXPECT=$(printf '%s\n' "$HEADER" \
+	"$OKROW" "h_off${SEP}접속불가${SEP}$D5" "h_ref${SEP}접속불가${SEP}$D5" "h_disk${SEP}디스크미인식${SEP}$D5" \
+	"h_err${SEP}설치정지${SEP}$D5" "h_none${SEP}OS설치중${SEP}$D5" "h_nolog${SEP}OS설치중${SEP}$D5" \
+	"h_retryoff${SEP}OS설치중${SEP}$D5" "h_cancel${SEP}접속불가${SEP}$D5")
 
 export FAKE_GOSSH_SCENARIO=$SC
 export FAKE_GOSSH_LOG=$T/gossh_calls.log
@@ -67,9 +68,10 @@ OUT=$("$BIN" -c "$T/a.conf" "$HF" 2> "$T/a.err")
 RC=$?
 check "종료코드 0" 0 "$RC"
 check "stdout 기대값(입력 순서, 중복 제거, 주석 무시, 잔여 파일 무시)" "$EXPECT" "$OUT"
-BAD=$(printf '%s\n' "$OUT" | awk -F'\t' 'NF!=7')
-check "모든 줄이 7필드" "" "$BAD"
-check "헤더 없음" "$OKROW" "$(printf '%s\n' "$OUT" | head -n1)"
+BAD=$(printf '%s\n' "$OUT" | awk -F'|' 'NF!=8')
+check "모든 줄이 8필드" "" "$BAD"
+check "첫 줄은 제목 줄" "$HEADER" "$(printf '%s\n' "$OUT" | head -n1)"
+check "둘째 줄부터 결과" "$OKROW" "$(printf '%s\n' "$OUT" | sed -n 2p)"
 if [ -f "${HF}_new_setup.log" ]; then ok "로그 파일 생성"; else ng "로그 파일 생성"; fi
 if [ -e "${HF}_new_setup_retry" ]; then ng "재시도 임시 파일 정리"; else ok "재시도 임시 파일 정리"; fi
 RL=$(find "$T" -maxdepth 1 -name 'hosts_new_setup_retry*')
@@ -84,7 +86,7 @@ mkconf "$T/b.conf"
 OUT=$("$BIN" -c "$T/b.conf" "$HF" 2> /dev/null)
 RC=$?
 check "종료코드 0" 0 "$RC"
-check "install_err 가 OS설치중" "h_err${TAB}OS설치중${TAB}$D5" "$(printf '%s\n' "$OUT" | grep '^h_err')"
+check "install_err 가 OS설치중" "h_err${SEP}OS설치중${SEP}$D5" "$(printf '%s\n' "$OUT" | grep '^h_err')"
 if grep -q NS_ERR "$FAKE_GOSSH_LOG"; then ng "2차 명령에 NS_ERR grep 없음"; else ok "2차 명령에 NS_ERR grep 없음"; fi
 
 echo "== 현재 경로의 new_setup.conf 자동 사용 (-c 생략)"
@@ -95,7 +97,7 @@ OUT=$(cd "$T/cwd" && "$BIN" "$HF" 2> "$T/cwd.err")
 check "-c 생략 결과가 -c ./new_setup.conf 와 동일" "$OUT_C" "$OUT"
 if grep -q "설정 파일: new_setup.conf" "$T/cwd.err"; then ok "사용한 설정 파일 표시"; else ng "사용한 설정 파일 표시"; fi
 OUT=$(cd "$T/cwd" && "$BIN" -c "$T/b.conf" "$HF" 2> /dev/null)
-check "-c 가 현재 경로 설정보다 우선" "h_err${TAB}OS설치중${TAB}$D5" "$(printf '%s\n' "$OUT" | grep '^h_err')"
+check "-c 가 현재 경로 설정보다 우선" "h_err${SEP}OS설치중${SEP}$D5" "$(printf '%s\n' "$OUT" | grep '^h_err')"
 rm -rf "$T/cwd" "${HF}_new_setup.log"
 
 echo "== 오류 경로"
@@ -110,13 +112,13 @@ check "gossh 없음 -> 종료코드 2" 2 "$?"
 
 # ---------------------------------------------------------------- v2
 fld() { # 출력 호스트 열번호
-	printf '%s\n' "$1" | awk -F'\t' -v h="$2" -v n="$3" '$1==h {print $n; exit}'
+	printf '%s\n' "$1" | awk -F'|' -v h="$2" -v n="$3" '$1==h {print $n; exit}'
 }
 SC2=$T/scenario2
 HF2=$T/hosts2
 CCS=$T/cc_scenario
 CCLOG=$T/cc.log
-printf '%s\n' a_intel b_intelng c_amd d_none e_off h_skipme_fail > "$HF2"
+printf '%s\n' a_intel b_intelng c_amd d_none e_off h_skipme_fail g_nolog > "$HF2"
 {
 	printf 'a_intel\tok\n'
 	printf 'b_intelng\tok\tcpu=ng\tstress=0\ttpc=1\tkernel=5.14.0-x\n'
@@ -124,6 +126,7 @@ printf '%s\n' a_intel b_intelng c_amd d_none e_off h_skipme_fail > "$HF2"
 	printf 'd_none\tok\tvendor=none\ttpc=none\tstress=0\tkernel=3.10.0-d\n'
 	printf 'e_off\toff\n'
 	printf 'h_skipme_fail\tok\n'
+	printf 'g_nolog\tok\tcpu=nolog\n'
 } > "$SC2"
 printf 'a_intel\tpass\nb_intelng\tfail\nc_amd\tnone\nh_skipme_fail\tfail\n' > "$CCS"
 export FAKE_GOSSH_SCENARIO=$SC2
@@ -142,7 +145,7 @@ mkconf2() { # 파일 OS_CHECK_SH값 [추가 conf 줄...]
 	} >> "$f"
 }
 
-echo "== v2: CPU(AMD 설정 없음)·stress-ng·H/T·OS·설정체크"
+echo "== v2: CPU(AMD 기본 규칙)·stress-ng·H/T·OS·설정체크"
 mkconf2 "$T/v2a.conf" "$FAKECC"
 : > "$FAKE_GOSSH_LOG"
 rm -f "$CCLOG"
@@ -150,14 +153,15 @@ mkdir -p "$T/work2"
 cp "$HF2" "$T/work2/hosts2"
 OUT=$(cd "$T/work2" && "$BIN" -c "$T/v2a.conf" "$T/work2/hosts2" 2> "$T/v2a.err")
 check "종료코드 0" 0 "$?"
-BAD=$(printf '%s\n' "$OUT" | awk -F'\t' 'NF!=7')
-check "모든 줄이 7필드" "" "$BAD"
-check "입력 순서" "a_intel b_intelng c_amd d_none e_off h_skipme_fail" "$(printf '%s\n' "$OUT" | cut -f1 | tr '\n' ' ' | sed 's/ $//')"
-check "미완료 장비 5열 모두 -" "e_off${TAB}접속불가${TAB}$D5" "$(printf '%s\n' "$OUT" | grep '^e_off')"
+BAD=$(printf '%s\n' "$OUT" | awk -F'|' 'NF!=8')
+check "모든 줄이 8필드" "" "$BAD"
+check "입력 순서" "hostname a_intel b_intelng c_amd d_none e_off h_skipme_fail g_nolog" "$(printf '%s\n' "$OUT" | cut -d'|' -f1 | tr '\n' ' ' | sed 's/ $//')"
+check "미완료 장비 5열 모두 -" "e_off${SEP}접속불가${SEP}$D5" "$(printf '%s\n' "$OUT" | grep '^e_off')"
 check "CPU Intel ok -> O" O "$(fld "$OUT" a_intel 4)"
 check "CPU Intel ng -> X" X "$(fld "$OUT" b_intelng 4)"
-check "CPU AMD(설정 없음) -> X" X "$(fld "$OUT" c_amd 4)"
-if grep -q NS_CPU_AMD "$FAKE_GOSSH_LOG"; then ng "AMD 미설정이면 명령에 NS_CPU_AMD 없음"; else ok "AMD 미설정이면 명령에 NS_CPU_AMD 없음"; fi
+check "CPU AMD(기본 규칙: results.json Result 줄 모두 PASS) -> O" O "$(fld "$OUT" c_amd 4)"
+if grep -q "results.json" "$FAKE_GOSSH_LOG"; then ok "기본 설정에 AMD results.json 확인 포함"; else ng "기본 설정에 AMD results.json 확인 포함"; fi
+check "CPU 테스트 로그 없음 -> NOTRUN" NOTRUN "$(fld "$OUT" g_nolog 4)"
 check "stress-ng 1 -> O" O "$(fld "$OUT" a_intel 5)"
 check "stress-ng 0 -> X" X "$(fld "$OUT" b_intelng 5)"
 check "H/T 2 -> ON" ON "$(fld "$OUT" a_intel 6)"
@@ -171,7 +175,7 @@ check "설정체크 fail -> X" X "$(fld "$OUT" b_intelng 3)"
 check "설정체크 출력 없음 -> 출력없음" 출력없음 "$(fld "$OUT" c_amd 3)"
 check "시나리오에 없는 호스트는 pass -> O" O "$(fld "$OUT" d_none 3)"
 check "OS_CHECK_EXCLUDE 포함 호스트는 fail 이어도 O" O "$(fld "$OUT" h_skipme_fail 3)"
-check "config_check 목록 = 완료 장비만" "LIST=a_intel b_intelng c_amd d_none h_skipme_fail" "$(grep '^LIST=' "$CCLOG")"
+check "config_check 목록 = 완료 장비만" "LIST=a_intel b_intelng c_amd d_none h_skipme_fail g_nolog" "$(grep '^LIST=' "$CCLOG")"
 CCPWD=$(sed -n 's/^PWD=//p' "$CCLOG" | head -n1)
 CCTMP=$(sed -n 's/^TMPDIR=//p' "$CCLOG" | head -n1)
 if [ -n "$CCPWD" ] && [ "$CCPWD" != "$T/work2" ]; then ok "config_check 작업 폴더가 호스트파일 폴더와 다름"; else ng "config_check 작업 폴더가 호스트파일 폴더와 다름" "PWD=$CCPWD"; fi
@@ -187,6 +191,13 @@ OUT=$(cd "$T/work2" && "$BIN" -c "$T/v2b.conf" "$T/work2/hosts2" 2> /dev/null)
 check "CPU AMD(설정 있음, ok) -> O" O "$(fld "$OUT" c_amd 4)"
 check "Intel 은 그대로" O "$(fld "$OUT" a_intel 4)"
 if grep -q NS_CPU_AMD "$FAKE_GOSSH_LOG"; then ok "AMD 설정 시 명령에 NS_CPU_AMD 포함"; else ng "AMD 설정 시 명령에 NS_CPU_AMD 포함"; fi
+
+echo "== v2: AMD 확인 끔 (CPU_AMD_LOG= 빈 값)"
+mkconf2 "$T/v2d.conf" "$FAKECC" "CPU_AMD_LOG="
+: > "$FAKE_GOSSH_LOG"
+OUT=$(cd "$T/work2" && "$BIN" -c "$T/v2d.conf" "$T/work2/hosts2" 2> /dev/null)
+check "CPU AMD(확인 끔) -> X" X "$(fld "$OUT" c_amd 4)"
+if grep -q NS_CPU_AMD "$FAKE_GOSSH_LOG"; then ng "AMD 끄면 명령에 NS_CPU_AMD 없음"; else ok "AMD 끄면 명령에 NS_CPU_AMD 없음"; fi
 
 echo "== v2: OS_CHECK_SH 비움"
 mkconf2 "$T/v2c.conf" ""
@@ -206,6 +217,27 @@ check "미지원이면 설정체크 -" - "$(fld "$OUT" a_intel 3)"
 if [ -e "$CCLOG" ]; then ng "미지원 스크립트는 실행 안 함"; else ok "미지원 스크립트는 실행 안 함"; fi
 rm -rf "$T/work2"
 
+
+echo "== v4: 장애 목록(-er) -> 비고 열"
+mkdir -p "$T/er"
+# 같은 호스트 여러 줄, 대소문자, '|' 포함 사유, 주석·빈 줄·사유 없는 줄, CRLF
+printf '# 주석\r\nh_ok 메모리 불량\r\n\r\nH_OFF 전원 | 케이블\r\nh_ok   디스크 교체 예정\r\nh_disk\r\n' > "$T/er/list.txt"
+OUT=$("$BIN" -c "$T/a.conf" -er "$T/er/list.txt" "$HF" 2> /dev/null)
+check "종료코드 0" 0 "$?"
+BAD=$(printf '%s\n' "$OUT" | awk -F'|' 'NF!=8')
+check "모든 줄이 8필드" "" "$BAD"
+check "여러 줄은 이어 붙임" "메모리 불량, 디스크 교체 예정" "$(fld "$OUT" h_ok 8)"
+check "대소문자 무시, '|' 는 '/'" "전원 / 케이블" "$(fld "$OUT" h_off 8)"
+check "사유 없는 줄은 빈칸" "" "$(fld "$OUT" h_disk 8)"
+check "목록에 없는 호스트는 빈칸" "" "$(fld "$OUT" h_ref 8)"
+check "제목 줄 마지막은 비고" "비고" "$(printf '%s\n' "$OUT" | head -n1 | cut -d'|' -f8)"
+cp "$T/er/list.txt" "$T/er/error_list.txt"
+OUT2=$(cd "$T/er" && "$BIN" -c "$T/a.conf" "$HF" 2> "$T/er.err")
+check "-er 생략 시 현재 경로 error_list.txt 자동 사용" "$OUT" "$OUT2"
+if grep -q "장애 목록: error_list.txt" "$T/er.err"; then ok "사용한 장애 목록 표시"; else ng "사용한 장애 목록 표시"; fi
+"$BIN" -c "$T/a.conf" -er "$T/er/없음.txt" "$HF" > /dev/null 2>&1
+check "-er 파일 없음 -> 종료코드 2" 2 "$?"
+rm -rf "$T/er" "${HF}_new_setup.log"
 echo
 echo "결과: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

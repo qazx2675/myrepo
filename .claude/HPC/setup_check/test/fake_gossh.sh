@@ -4,7 +4,7 @@
 #   FAKE_GOSSH_LOG=<파일>       (선택) 받은 호출과 원격 명령을 이어 붙여 기록
 # 시나리오: ok off refused install_disk install_err install_none install_nolog install_retry_off cancel
 # 시나리오 파일 3번째 열 이후(탭/공백 구분)에 key=value 로 ok 장비의 1차 정보수집 출력을 흉내 낸다.
-#   vendor=intel|amd|none  cpu=ok|ng  stress=1|0  tpc=1|2|none  kernel=<값>
+#   vendor=intel|amd|none  cpu=ok|ng|nolog  stress=1|0  tpc=1|2|none  kernel=<값>
 #   기본: vendor=intel cpu=ok stress=1 tpc=2 kernel=4.18.0-test
 #   NS_CPU_INTEL / NS_CPU_AMD 는 받은 원격 명령에 해당 표식이 있을 때만 낸다(진짜 grep 처럼).
 # 호출에 -pm 이 있으면 1차, 없으면 2차로 본다. 진짜 gossh 와 같이 시작할 때 결과 파일 5개를 지우고
@@ -80,6 +80,13 @@ info() { # 호스트 [key=value ...]: ok 장비의 1차 정보수집 출력
 		case $vendor in
 			intel) case $cmd in *NS_CPU_INTEL*) echo "$h: NS_CPU_INTEL" ;; esac ;;
 			amd) case $cmd in *NS_CPU_AMD*) echo "$h: NS_CPU_AMD" ;; esac ;;
+		esac
+	fi
+	# cpu=nolog: CPU 테스트 로그 파일 없음 (진짜 명령의 "[ -f 로그 ] || echo <표식>_NOLOG" 흉내)
+	if [ "$cpu" = nolog ]; then
+		case $vendor in
+			intel) case $cmd in *NS_CPU_INTEL_NOLOG*) echo "$h: NS_CPU_INTEL_NOLOG" ;; esac ;;
+			amd) case $cmd in *NS_CPU_AMD_NOLOG*) echo "$h: NS_CPU_AMD_NOLOG" ;; esac ;;
 		esac
 	fi
 	if [ "$stress" = 1 ]; then echo "$h: NS_STRESS"; fi

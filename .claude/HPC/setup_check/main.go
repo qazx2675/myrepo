@@ -3,7 +3,7 @@ package main
 // new_setup — 신규 OS 배포 후 설치 상태 판정 도구.
 // gossh 를 두 번 호출해(1차: -pm 정보수집, 2차: 설치중 후보의 anaconda.log 확인),
 // 완료 장비는 config_check.sh -auto-check 로 설정체크까지 해서
-// 장비마다 "hostname 상태 설정체크 CPU stress-ng H/T OS" 7열(탭) 한 줄을 입력 순서대로 stdout 에 낸다. 안내·요약은 전부 stderr.
+// 장비마다 "hostname 상태 설정체크 CPU stress-ng H/T OS" 7열("|" 구분, 첫 줄은 제목) 한 줄을 입력 순서대로 stdout 에 낸다. 안내·요약은 전부 stderr.
 // 표준 라이브러리만 사용(Go 1.20, RHEL6 빌드 호환).
 
 import (
@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -130,17 +131,25 @@ type config struct {
 	CPUIntelOK     string
 	CPUAMDLog      string
 	CPUAMDOK       string
+	CPUIntelLine   string // 비어 있지 않으면 이 문자열이 든 줄만 보고, 그 줄이 모두 OK 문구를 포함해야 O
+	CPUAMDLine     string
 }
 
 const (
 	defaultIntelLog = "/var/cpudiag/result.log"
 	defaultIntelOK  = "Completed successfully. No issues detected."
+	// ★ AMD: 현장 확인 방식 "grep Result /var/cpudiag/results.json 결과가 모두 PASS 면 정상"과 같게 한다.
+	defaultAMDLog  = "/var/cpudiag/results.json"
+	defaultAMDOK   = "PASS"
+	defaultAMDLine = "Result"
 )
 
 // parseConf 는 KEY=VALUE 줄을 읽는다. '#' 주석·빈 줄 무시, 값은 첫 '=' 뒤 전체(앞뒤 공백만 제거).
-// DISK_PATTERN 이 하나도 없으면 기본 문구 1개를 쓴다. CPU_INTEL_LOG/OK 는 기본값이 있다.
+// DISK_PATTERN 이 하나도 없으면 기본 문구 1개를 쓴다. CPU_INTEL_LOG/OK, CPU_AMD_LOG/OK/LINE 은 기본값이 있다.
+// ★ CPU_* 값은 GOSSH 처럼 앞뒤 따옴표를 떼어 준다(CPU_AMD_LOG="/path" 로 적어도 동작).
 func parseConf(text string) config {
-	c := config{CPUIntelLog: defaultIntelLog, CPUIntelOK: defaultIntelOK}
+	c := config{CPUIntelLog: defaultIntelLog, CPUIntelOK: defaultIntelOK,
+		CPUAMDLog: defaultAMDLog, CPUAMDOK: defaultAMDOK, CPUAMDLine: defaultAMDLine}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -160,13 +169,17 @@ func parseConf(text string) config {
 		case "OS_CHECK_EXCLUDE":
 			c.OSCheckExclude = val
 		case "CPU_INTEL_LOG":
-			c.CPUIntelLog = val
+			c.CPUIntelLog = expandPath(val)
 		case "CPU_INTEL_OK":
-			c.CPUIntelOK = val
+			c.CPUIntelOK = unquote(val)
+		case "CPU_INTEL_LINE":
+			c.CPUIntelLine = unquote(val)
 		case "CPU_AMD_LOG":
-			c.CPUAMDLog = val
+			c.CPUAMDLog = expandPath(val)
 		case "CPU_AMD_OK":
-			c.CPUAMDOK = val
+			c.CPUAMDOK = unquote(val)
+		case "CPU_AMD_LINE":
+			c.CPUAMDLine = unquote(val)
 		case "DISK_PATTERN":
 			if val != "" {
 				c.DiskPatterns = append(c.DiskPatterns, val)
@@ -217,6 +230,7 @@ func buildRemoteCmd(disk, errp []string) string {
 const (
 	mkCPUIntel = "NS_CPU_INTEL"
 	mkCPUAMD   = "NS_CPU_AMD"
+	mkNoLogSfx = "_NOLOG" // NS_CPU_INTEL_NOLOG / NS_CPU_AMD_NOLOG: CPU 테스트 로그 파일이 없음
 	mkStress   = "NS_STRESS"
 	mkKernel   = "NS_KERNEL"
 )
@@ -227,16 +241,51 @@ const (
 // CPU 로그/문구가 하나라도 비면 그 벤더의 CPU 테스트 줄은 넣지 않는다(빈 -e ” 는 모든 줄에 일치).
 func buildInfoCmd(c config) string {
 	s := "grep -m1 vendor_id /proc/cpuinfo; "
-	if c.CPUIntelLog != "" && c.CPUIntelOK != "" {
-		s += "grep -qF -e " + shQuote(c.CPUIntelOK) + " " + shQuote(c.CPUIntelLog) + " && echo " + mkCPUIntel + "; "
-	}
-	if c.CPUAMDLog != "" && c.CPUAMDOK != "" {
-		s += "grep -qF -e " + shQuote(c.CPUAMDOK) + " " + shQuote(c.CPUAMDLog) + " && echo " + mkCPUAMD + "; "
-	}
+	s += cpuCheckCmd(c.CPUIntelLog, c.CPUIntelOK, c.CPUIntelLine, mkCPUIntel)
+	s += cpuCheckCmd(c.CPUAMDLog, c.CPUAMDOK, c.CPUAMDLine, mkCPUAMD)
 	s += "grep -rqs --include='messages*' --exclude='*.gz' stress-ng /var/log && echo " + mkStress + "; "
 	s += "lscpu | grep -i 'per core'; "
 	s += "echo " + mkKernel + " `uname -r`"
 	return s
+}
+
+// cpuCheckCmd 는 CPU 테스트 로그 확인 조각을 만든다(대소문자 무시). 로그/문구가 비면 "".
+//
+//	로그 파일이 없으면 <표식>_NOLOG
+//	line 이 비면: 로그 어디에든 ok 문구가 있으면 표식
+//	line 이 있으면: line 이 든 줄이 1개 이상이고 그 줄이 모두 ok 문구를 포함하면 표식
+//	  (예: AMD results.json 의 "Result" 줄이 전부 PASS)
+//
+// ★ awk 프로그램은 작은따옴표 안에만 중괄호·== 가 있어 csh 에서도 안전하다. 값은 awk 문자열로 넣는다(-v 대입 안 씀).
+func cpuCheckCmd(log, ok, line, mark string) string {
+	if log == "" || ok == "" {
+		return ""
+	}
+	f := logFileExpr(log)
+	s := "[ -f " + f + " ] || echo " + mark + mkNoLogSfx + "; "
+	if line == "" {
+		return s + "grep -qiF -e " + shQuote(ok) + " " + f + " && echo " + mark + "; "
+	}
+	prog := "index(tolower($0)," + awkStr(strings.ToLower(line)) + "){n++; if (index(tolower($0)," +
+		awkStr(strings.ToLower(ok)) + ")) p++} END{if (n>0 && n==p) print " + awkStr(mark) + "}"
+	return s + "awk " + shQuote(prog) + " " + f + "; "
+}
+
+// awkStr 은 awk 문자열 리터럴로 만든다.
+func awkStr(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+}
+
+// logFileExpr 는 원격 명령에 넣을 로그 경로. 파일 이름에 * 나 ? 가 있으면 그 폴더에서 이름이 맞는
+// 가장 최근 파일을 쓴다. ★ csh 는 일치하는 파일이 없는 글롭에서 명령 줄을 멈추므로 셸 글롭 대신
+// `ls -t 폴더 | grep -x 정규식` 으로 고른다(폴더 부분에는 와일드카드를 쓸 수 없음, 공백 없는 경로만).
+func logFileExpr(p string) string {
+	dir, base := path.Dir(p), path.Base(p)
+	if !strings.ContainsAny(base, "*?") {
+		return shQuote(p)
+	}
+	re := strings.NewReplacer(`\`, `\\`, ".", `\.`, "[", `\[`, "]", `\]`, "^", `\^`, "$", `\$`, "*", ".*", "?", ".").Replace(base)
+	return dir + "/`ls -t " + shQuote(dir) + " | grep -m1 -x -e " + shQuote(re) + "`"
 }
 
 // hostInfo 는 1차 출력에서 뽑은 장비 한 대의 정보.
@@ -244,6 +293,8 @@ type hostInfo struct {
 	vendor   string // GenuineIntel / AuthenticAMD / ""
 	cpuIntel bool
 	cpuAMD   bool
+	noIntel  bool // Intel CPU 테스트 로그 없음
+	noAMD    bool // AMD CPU 테스트 로그 없음
 	stress   bool
 	tpc      int    // Thread(s) per core, 못 읽으면 0
 	kernel   string // uname -r, 못 읽으면 ""
@@ -269,6 +320,10 @@ func parseInfoOutput(out string) map[string]*hostInfo {
 			h.cpuIntel = true
 		case val == mkCPUAMD:
 			h.cpuAMD = true
+		case val == mkCPUIntel+mkNoLogSfx:
+			h.noIntel = true
+		case val == mkCPUAMD+mkNoLogSfx:
+			h.noAMD = true
 		case val == mkStress:
 			h.stress = true
 		case strings.HasPrefix(val, "vendor_id"):
@@ -296,13 +351,22 @@ func ox(b bool) string {
 	return "X"
 }
 
-// cpuResult: Intel 이고 NS_CPU_INTEL, 또는 AMD 이고 NS_CPU_AMD 면 O, 그 외 X.
+// cpuResult: Intel 이고 NS_CPU_INTEL, 또는 AMD 이고 NS_CPU_AMD 면 O.
+// 그 벤더의 CPU 테스트 로그 파일이 없으면 NOTRUN(부하테스트 아직 안 함), 그 외 X.
 func (h *hostInfo) cpuResult() string {
 	if h == nil {
 		return "X"
 	}
-	return ox((h.vendor == "GenuineIntel" && h.cpuIntel) || (h.vendor == "AuthenticAMD" && h.cpuAMD))
+	switch {
+	case (h.vendor == "GenuineIntel" && h.cpuIntel) || (h.vendor == "AuthenticAMD" && h.cpuAMD):
+		return "O"
+	case (h.vendor == "GenuineIntel" && h.noIntel) || (h.vendor == "AuthenticAMD" && h.noAMD):
+		return cpuNotRun
+	}
+	return "X"
 }
+
+const cpuNotRun = "NOTRUN"
 
 func (h *hostInfo) stressResult() string {
 	return ox(h != nil && h.stress)
@@ -326,13 +390,53 @@ func (h *hostInfo) osResult() string {
 	return h.kernel
 }
 
-// formatRow 는 7열(탭 구분) 한 줄을 만든다. 완료가 아니면 나머지 5열은 모두 '-'.
-// check 는 설정체크 열 값(O/X/출력없음/-).
-func formatRow(host, status, check string, h *hostInfo) string {
+// ★ 열 구분자는 '|'. 터미널에서 복사하면 탭이 공백으로 바뀌는 경우가 있어, 엑셀에서는
+// 데이터 > 텍스트 나누기 > 구분 기호 '|' 로 나눈다(사용자 요청).
+const sep = "|"
+
+// header 는 출력 맨 위 제목 줄(8열).
+const header = "hostname" + sep + "상태" + sep + "설정체크" + sep + "CPU테스트" + sep + "stress-ng" + sep + "H/T" + sep + "OS" + sep + "비고"
+
+// formatRow 는 8열('|' 구분) 한 줄을 만든다. 완료가 아니면 3~7열은 모두 '-'.
+// check 는 설정체크 열 값(O/X/출력없음/-), note 는 비고(장애 목록의 사유, 없으면 빈칸).
+func formatRow(host, status, check string, h *hostInfo, note string) string {
 	if status != stDone {
-		return host + "\t" + status + "\t-\t-\t-\t-\t-"
+		return strings.Join([]string{host, status, "-", "-", "-", "-", "-", note}, sep)
 	}
-	return strings.Join([]string{host, status, check, h.cpuResult(), h.stressResult(), h.htResult(), h.osResult()}, "\t")
+	return strings.Join([]string{host, status, check, h.cpuResult(), h.stressResult(), h.htResult(), h.osResult(), note}, sep)
+}
+
+// defaultErrorList 는 -er 를 주지 않았을 때 현재 경로에서 찾는 장애 목록 파일 이름.
+const defaultErrorList = "error_list.txt"
+
+// parseErrorList 는 "hostname 장애사유" 줄들을 읽어 호스트(소문자) → 비고 맵을 만든다.
+//   - 첫 공백(스페이스/탭) 앞이 호스트, 뒤 전체가 사유. 빈 줄·# 주석·사유 없는 줄은 건너뜀
+//   - 같은 호스트가 여러 줄이면 ", " 로 이어 붙임(사용자 결정)
+//   - ★ 사유 안의 '|' 는 열이 밀리지 않도록 '/' 로 바꾼다. 윈도우 메모장 파일의 BOM·CR 도 뗀다.
+func parseErrorList(text string) map[string]string {
+	m := map[string]string{}
+	text = strings.TrimPrefix(text, "\xef\xbb\xbf") // UTF-8 BOM
+	for _, ln := range strings.Split(text, "\n") {
+		ln = strings.TrimSpace(ln)
+		if ln == "" || strings.HasPrefix(ln, "#") {
+			continue
+		}
+		i := strings.IndexAny(ln, " \t")
+		if i < 0 {
+			continue
+		}
+		host := strings.ToLower(ln[:i])
+		why := strings.ReplaceAll(strings.TrimSpace(ln[i+1:]), sep, "/")
+		if why == "" {
+			continue
+		}
+		if m[host] != "" {
+			m[host] += ", " + why
+		} else {
+			m[host] = why
+		}
+	}
+	return m
 }
 
 // ---------------------------------------------------------------------------
@@ -591,13 +695,19 @@ func readHostSet(path string) map[string]bool {
 
 // expandPath 는 설정 값의 양끝 따옴표를 벗기고 앞의 ~/ 를 홈 폴더로 바꾼다(GOSSH·OS_CHECK_SH 공통).
 func expandPath(v string) string {
-	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
-		v = strings.TrimSpace(v[1 : len(v)-1])
-	}
+	v = unquote(v)
 	if strings.HasPrefix(v, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
 			v = filepath.Join(home, v[2:])
 		}
+	}
+	return v
+}
+
+// unquote 는 값 전체를 감싼 따옴표("…" 또는 '…')를 뗀다.
+func unquote(v string) string {
+	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		v = strings.TrimSpace(v[1 : len(v)-1])
 	}
 	return v
 }
@@ -639,8 +749,9 @@ func main() {
 	fs := flag.NewFlagSet("new_setup", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	confPath := fs.String("c", "", "설정 파일 경로 (기본: 현재 경로 → 실행 파일 옆 new_setup.conf)")
+	errPath := fs.String("er", "", "장애 목록 파일(줄마다 \"hostname 장애사유\", 비고 열에 표시) (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "사용법: new_setup [-c <설정파일>] <호스트파일>")
+		fmt.Fprintln(os.Stderr, "사용법: new_setup [-c <설정파일>] [-er <장애목록파일>] <호스트파일>")
 	}
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		os.Exit(1)
@@ -684,6 +795,19 @@ func main() {
 				break
 			}
 		}
+	}
+
+	// 장애 목록: -er 지정 시 반드시 있어야 한다. 생략하면 현재 경로의 error_list.txt 를 있으면 쓴다.
+	notes := map[string]string{}
+	if *errPath != "" {
+		b, err := os.ReadFile(*errPath)
+		if err != nil {
+			fail(2, "오류: 장애 목록 파일을 읽을 수 없습니다: %v", err)
+		}
+		notes = parseErrorList(string(b))
+	} else if b, err := os.ReadFile(defaultErrorList); err == nil {
+		notes = parseErrorList(string(b))
+		fmt.Fprintf(os.Stderr, "장애 목록: %s\n", defaultErrorList)
 	}
 
 	remoteCmd := buildRemoteCmd(conf.DiskPatterns, conf.ErrPatterns)
@@ -804,6 +928,7 @@ func main() {
 
 	info := parseInfoOutput(infoOut)
 	var w bytes.Buffer
+	w.WriteString(header + "\n")
 	cc := map[string]int{}
 	for i, h := range hosts {
 		c := "-"
@@ -811,7 +936,7 @@ func main() {
 			c = check[h]
 		}
 		cc[c]++
-		w.WriteString(formatRow(h, statuses[i], c, info[h]) + "\n")
+		w.WriteString(formatRow(h, statuses[i], c, info[h], notes[strings.ToLower(h)]) + "\n")
 	}
 	os.Stdout.Write(w.Bytes())
 
