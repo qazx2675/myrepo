@@ -6,6 +6,8 @@
 # 시나리오 파일 3번째 열 이후(탭/공백 구분)에 key=value 로 ok 장비의 1차 정보수집 출력을 흉내 낸다.
 #   vendor=intel|amd|none  cpu=ok|ng|nolog  stress=1|0  tpc=1|2|none  kernel=<값>
 #   기본: vendor=intel cpu=ok stress=1 tpc=2 kernel=4.18.0-test
+#   FAKE_MARK_DIR=<폴더>  (선택) cpu_<호스트>/ng_<호스트> 파일이 있으면 그 호스트의 CPU/stress-ng 를 성공으로, reboot_<호스트> 가 있으면
+#   "grep btime" 명령에 다른 부팅 시각을 낸다(-run 시험용).
 #   NS_CPU_INTEL / NS_CPU_AMD 는 받은 원격 명령에 해당 표식이 있을 때만 낸다(진짜 grep 처럼).
 # 호출에 -pm 이 있으면 1차, 없으면 2차로 본다. 진짜 gossh 와 같이 시작할 때 결과 파일 5개를 지우고
 # 내용이 있는 것만 만든다. 호스트 목록은 한 줄에 하나(빈 줄·# 무시, 범위 확장은 흉내 내지 않음).
@@ -71,6 +73,14 @@ info() { # 호스트 [key=value ...]: ok 장비의 1차 정보수집 출력
 			kernel=*) kernel=${kv#kernel=} ;;
 		esac
 	done
+	# FAKE_MARK_DIR: 시험 중 상태 변화 표식 (cpu_<호스트>=CPU 성공, ng_<호스트>=stress-ng 성공, reboot_<호스트>=btime 변경)
+	local bt=1700000000
+	if [ -n "${FAKE_MARK_DIR:-}" ]; then
+		[ -e "$FAKE_MARK_DIR/cpu_$h" ] && cpu=ok
+		[ -e "$FAKE_MARK_DIR/ng_$h" ] && stress=1
+		[ -e "$FAKE_MARK_DIR/reboot_$h" ] && bt=1700009999
+	fi
+	case $cmd in *"grep btime"*) echo "$h: btime $bt" ;; esac
 	echo "$h:  13:00:00 up 1 day, load average: 0.00, 0.01, 0.05"
 	case $vendor in
 		intel) printf '%s: vendor_id\t: GenuineIntel\n' "$h" ;;

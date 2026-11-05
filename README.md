@@ -4,6 +4,15 @@
 
 > 폴더·파일별 역할과 판정 흐름은 [ARCHITECTURE.md](ARCHITECTURE.md), 변경 시 점검 목록은 [PR_CHECKLIST.md](PR_CHECKLIST.md)를 참고하세요.
 
+**목차**: 1 빌드·설치 / 2 사용 방법(**2.0 처음 설치 후 — `setup.sh` 대화형 설정**) / 3 옵션·상태별 상세 / 4 제약·한계 / 5 문서별 설명 / 6 `-run` 자동 진행 / **7 문제가 생겼을 때 — `troubleshoot.sh` 읽기 전용 진단**
+
+| 하고 싶은 일 | 명령 |
+|---|---|
+| 처음 설치한 뒤 설정 파일 만들기 | `bash setup.sh` (2.0) |
+| 설치 상태 판정 | `bash new_setup.sh <호스트파일>` (2장) |
+| 설정수정·CPU·stress-ng 까지 자동 진행 | `bash new_setup.sh -run <호스트파일>` (6장) |
+| 뭔가 이상할 때 원인 진단(읽기 전용) | `bash troubleshoot.sh ...` (7장) |
+
 ⚠️ **주의사항 (Disclaimer)**
 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 참고용(보조 도구)으로 사용하는 것을 권장합니다. 이 도구는 설정을 변경하지 않고 상태만 조회하지만, `OS설치중` 등 판정은 로그 문구 일치 여부에 기댄 추정이므로 중요한 장비는 무작위로 몇 대를 골라 직접 접속해 실제 상태를 확인하는 절차를 권장합니다.
 
@@ -54,6 +63,42 @@ ln -s "$(pwd)/new_setup.sh" /usr/local/bin/new_setup
 
 ## 2. 사용 방법
 
+### 2.0 처음 설치 후 — 대화형 설정 `setup.sh`
+
+폴더를 옮겨 처음 쓸 때는 설정 파일(`new_setup.conf`)부터 만듭니다. 직접 편집하지 않고 질문에 답하면 됩니다.
+
+```bash
+bash setup.sh                  # setup.sh 옆의 new_setup.conf 를 만들거나 수정
+bash setup.sh -c /경로/my.conf   # 다른 설정 파일 지정
+bash setup.sh --yes            # 확인 질문 생략(시험·자동화용)
+bash setup.sh --help
+```
+
+| 인자 | 설명 |
+|---|---|
+| `-c <설정파일>` | 쓸 설정 파일. 생략하면 `setup.sh` 옆의 `new_setup.conf` (new_setup 이 자동으로 찾는 위치) |
+| `--yes` | 확인 질문 생략: 저장 확인=예, 경고 후 다시 입력=아니오(입력값 유지), stress-test 설정 이어하기=아니오 |
+| `--help` | 도움말 |
+
+- 설정 파일이 없으면 `new_setup.conf.sample` 을 복사해서 시작하고(주석 유지), 있으면 현재 값을 기본값으로 보여 줍니다.
+- 입력 규칙: **Enter = 현재 값 유지, `-` = 값 비우기**. 경로가 없거나 실행할 수 없는 등 문제가 있으면 경고를 보이고 다시 입력할지 묻습니다(`n` 이면 입력값 그대로 유지).
+- 질문은 세 묶음입니다.
+
+| 묶음 | 키 |
+|---|---|
+| 기본 | `GOSSH`, `OS_CHECK_SH`, `OS_CHECK_EXCLUDE` |
+| 부하(`-run`) | `STRESS_TEST`, `STRESS_TEST_CONF`, `USER_ROUTE` |
+| 고급 (`y/N`, 기본 아니오) | CPU 판정(`CPU_INTEL_LOG/OK/LINE`, `CPU_AMD_LOG/OK/LINE`), CPU 감시 시간(`CPU_WAIT_START/INTERVAL/MAX`), 시간 제한(`GOSSH_TIMEOUT`, `CHECK_TIMEOUT`, `STRESS_TIMEOUT`) |
+
+- 질문이 끝나면 **바뀐 값을 `이전 → 새 값` 으로 요약**해 보여 주고 저장할지 확인합니다. 저장은 임시 파일에 만든 뒤 `mv` 로 바꾸는 원자적 방식이며, 이전 파일은 `<설정파일>.bak` 로 남깁니다.
+- 관리서버는 여러 사용자가 같이 쓰므로 **설정 파일이 있는 폴더 밖에는 아무것도 쓰지 않습니다**(`/etc` 등 공용 경로 없음).
+- 배포 브랜치 `setup-check` 에는 부하테스트 도구가 `stress-test/` 폴더로 함께 들어 있습니다(원본은 master 의 `.claude/HPC/stress-test`, 단독 실행 가능). `STRESS_TEST` 가 비어 있고 `stress-test/stress-test` 가 있으면 그 경로를 기본값으로 보여 줍니다.
+- 마지막에 `STRESS_TEST` 폴더에 `setup.sh` 가 있으면 stress-test 도구 자체 설정을 이어서 할지 묻습니다. `y` 면 `bash <STRESS_TEST 폴더>/setup.sh --user <사용자> [--conf <STRESS_TEST_CONF>]` 를 실행합니다. 이 스크립트는 **stress-test 도구의 것**이며(수정하지 않음) 터미널(tty)이 필요하고, AWX·repohost·템플릿 설정을 `<폴더>/conf/<사용자>_setting.conf` 에 채웁니다.
+- 종료코드: 0 완료/변경 없음, 1 사용자 중단, 2 인자·파일 오류.
+- **첫 실행 제안**: 래퍼 `new_setup.sh` 는 설정 파일을 찾지 못했고(`-c` 도 없음) 표준입력·표준오류가 터미널이면 `설정 파일이 없습니다. 지금 설정할까요? (Y/n)` 로 `setup.sh` 를 바로 실행하자고 합니다. 터미널이 아니면(파이프·cron·리다이렉트) 묻지 않고 기본값으로 진행하며, 환경변수 `NEW_SETUP_NO_PROMPT=1` 이면 항상 묻지 않습니다.
+
+### 2.0.1 판정 실행
+
 ```bash
 bash new_setup.sh <호스트파일>               # 화면에 결과 출력 (현재 경로의 new_setup.conf 자동 사용)
 bash new_setup.sh <호스트파일> > result.txt   # 결과만 파일로 저장
@@ -65,6 +110,8 @@ bash new_setup.sh -c /경로/my.conf <호스트파일>   # 설정 파일 직접 
 - 출력은 열을 `|` 로 구분한 8열이며, **첫 줄은 항상 제목 줄**(`hostname|상태|설정체크|CPU테스트|stress-ng|H/T|OS|비고`), 그 아래에 **입력 파일 순서 그대로** 장비당 한 줄입니다.
 - stdout 에는 제목 줄과 결과 줄만 나갑니다. 진행 안내·상태별 대수 요약·경고는 모두 stderr 로 나가므로 `> result.txt` 로 저장해도 결과 파일이 깨끗합니다.
 - 작업 폴더는 호스트파일이 있는 폴더 그대로 쓰며, gossh 결과 파일(`<호스트파일>_res_off` 등)과 로그도 그 옆에 생깁니다.
+- 설정수정·CPU 테스트·stress-ng 까지 이어서 자동 진행하려면 `bash new_setup.sh -run <호스트파일>` 을 씁니다(6장).
+- 결과가 이상하거나 `-run` 이 멈춘 것 같으면 `bash troubleshoot.sh ...` 로 원인을 확인합니다(7장, 읽기 전용).
 
 ### 2.1 출력 예시
 
@@ -98,7 +145,7 @@ node05|설치정지|-|-|-|-|-|
 | 2 상태 | `완료` / `디스크미인식` / `설치정지` / `OS설치중` / `접속불가` |
 | 3 설정체크 | `O` / `X` / `출력없음` / `-` |
 | 4 CPU테스트 | `O` / `X` / `NOTRUN` |
-| 5 stress-ng | `O` / `X` |
+| 5 stress-ng | `O` / `NOTRUN` |
 | 6 H/T | `ON` / `OFF` / `-` |
 | 7 OS | `uname -r` 값 / `-` |
 | 8 비고 | `-er` 장애 목록(생략 시 현재 경로 `error_list.txt`)의 사유. 목록에 없으면 빈칸 |
@@ -130,6 +177,8 @@ node05|설치정지|-|-|-|-|-|
 | `<호스트파일>` | 필수. gossh `-w` 에 그대로 전달하는 호스트 목록 파일 |
 | `-c <설정파일>` | 선택. 설정 파일 경로. 생략하면 `new_setup.conf` 를 **현재 실행 경로 → 실행 파일 폴더 → (`bin/` 안이면) 그 위 폴더(래퍼 옆)** 순서로 찾아 처음 찾은 것을 쓰고(사용한 파일은 stderr 에 표시), 어디에도 없으면 기본값으로 동작. 즉 현재 경로에 `new_setup.conf` 가 있으면 `new_setup.sh <호스트파일>` 은 `new_setup.sh -c ./new_setup.conf <호스트파일>` 과 같음 |
 | `-er <장애목록파일>` | 선택. 줄마다 `hostname<탭>장애사유` 형식인 파일. 해당 호스트 줄의 마지막 **비고** 열에 사유를 적음. 생략하면 **현재 실행 경로의 `error_list.txt`** 가 있으면 자동 사용(stderr 에 `장애 목록: error_list.txt` 표시), 없으면 비고는 모두 빈칸. 지정한 파일이 없으면 종료코드 2. **탭으로만 구분**하며(사유에 공백이 들어가도 됨) 첫 탭 앞이 호스트, 뒤 전체가 사유이고 호스트는 대소문자 무시로 정확히 일치해야 함. 같은 호스트가 여러 줄이면 `, ` 로 이어 붙이고, 사유 안의 `|` 는 `/` 로 바꿈. 빈 줄·`#` 주석·탭 없는 줄(공백으로만 구분한 줄)·사유 없는 줄은 무시 |
+| `-run` | 선택. 판정 뒤 설정수정·CPU·stress-ng 까지 자동 진행하는 TUI 모드(6장). 상태는 현재 경로의 `./<호스트파일>_run/` |
+| `-user <사용자>` | `-run` 전용. config_check `-auto` / stress-test `-user` 에 쓸 사용자(설정 `USER_ROUTE` 가 있으면 메뉴로 고름, 기본 `$USER`) |
 
 그 밖의 옵션은 없습니다.
 
@@ -150,6 +199,7 @@ node05|설치정지|-|-|-|-|-|
 | `CPU_AMD_LOG=` | (v3) AMD CPU 진단 로그 경로. 기본 `/var/cpudiag/results.json`. 와일드카드 규칙은 Intel 과 같음 |
 | `CPU_AMD_OK=` | (v3) AMD 성공 문구. 기본 `PASS` |
 | `CPU_AMD_LINE=` | (v3) AMD 판정 대상 줄 문자열. 기본 `Result` — 현장 수동 확인(`grep Result /var/cpudiag/results.json` 결과가 모두 PASS)과 같은 규칙: `Result` 가 든 줄이 1개 이상이고 모두 `PASS` 를 포함해야 `O` |
+| `STRESS_TEST=` 외 | (`-run`) `STRESS_TEST`, `STRESS_TEST_CONF`, `USER_ROUTE`, `CPU_WAIT_START`/`CPU_WAIT_INTERVAL`/`CPU_WAIT_MAX`, `GOSSH_TIMEOUT`/`CHECK_TIMEOUT`/`STRESS_TIMEOUT` — 6.5 의 표 참고. `-run` 이 아니면 쓰이지 않음(`CHECK_TIMEOUT` 은 기본 모드의 설정체크에도 적용) |
 
 - `CPU_*` 값은 앞뒤 따옴표를 붙여도 됩니다(`GOSSH` 처럼 떼어 줍니다). 줄 검색·성공 문구 비교는 대소문자를 구분하지 않습니다.
 - 특정 벤더의 CPU 검사를 끄려면 그 벤더의 `LOG` 를 비웁니다(예: `CPU_AMD_LOG=`) — 그 벤더 장비는 `X` 입니다.
@@ -209,9 +259,9 @@ CPU_AMD_LINE=Result
 
 | 열 | 의미 | 판정 규칙 |
 |---|---|---|
-| 설정체크 | 관리서버에서 `config_check.sh -auto-check` 로 점검한 결과 | 해당 호스트 결과 줄 중 첫 토큰이 `FAIL` 인 줄이 있으면 `X`, 줄이 있고 FAIL 이 없으면 `O`, 줄이 하나도 없으면 `출력없음`. `OS_CHECK_EXCLUDE` 문자열이 hostname 에 포함되면 위와 무관하게 `O`. `OS_CHECK_SH` 가 비었거나 `-auto-check` 미지원 스크립트면 `-` |
+| 설정체크 | 관리서버에서 `config_check.sh -auto-check` 로 점검한 결과 | 해당 호스트 결과 줄 중 첫 토큰이 `FAIL` 인 줄이 있으면 `X`, 줄이 있고 FAIL 이 없으면 `O`, 줄이 하나도 없으면 `출력없음`. `OS_CHECK_EXCLUDE` 문자열이 hostname 에 포함되면 위와 무관하게 `O`. `OS_CHECK_SH` 가 비었거나 `-auto-check` 미지원·실행 실패면 `-`. `-run` 에서는 `OS_CHECK_SH` 가 비었을 때의 `-` 만 통과로 보고, 있는데 `-` 이면 실행 실패라 통과가 아님 |
 | CPU테스트 | CPU 진단 로그에 성공 문구가 있는지 | `/proc/cpuinfo` 의 `vendor_id` 로 벤더 판별. 그 벤더의 로그 파일이 **없으면 `NOTRUN`**(부하테스트를 아직 안 함). Intel: `CPU_INTEL_LOG` 에 `CPU_INTEL_OK` 가 있으면 `O`(`CPU_INTEL_LINE` 을 지정하면 그 문자열이 든 줄만 검사해 모두 성공 문구 포함). AMD: 기본 규칙은 `CPU_AMD_LOG`(`/var/cpudiag/results.json`)에서 `Result` 가 든 줄이 1개 이상이고 모두 `PASS` 를 포함하면 `O`. 그 외(문구 없음·줄 없음·LOG 비움·벤더 불명)는 `X` |
-| stress-ng | 부하 테스트를 돌린 흔적 | `/var/log/messages` 와 로테이션된 `messages-*`(압축 안 된 것)에 `stress-ng` 가 있으면 `O`, 없으면 `X` |
+| stress-ng | 부하 테스트를 돌린 흔적 | `/var/log/messages` 와 로테이션된 `messages-*`(압축 안 된 것)에 `stress-ng` 가 있으면 `O`, 없으면 `NOTRUN` |
 | H/T | 하이퍼스레딩 | `lscpu` 의 `Thread(s) per core:` 가 2 이상이면 `ON`, 1 이면 `OFF`, 값을 못 얻으면 `-` |
 | OS | 커널 버전 | `uname -r` 값 그대로, 못 얻으면 `-` |
 
@@ -239,19 +289,27 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 - stress-ng 검색은 `/var/log` 아래 이름이 `messages` 로 시작하는 일반 파일만 대상이며 압축(`.gz`) 로테이션분은 보지 않습니다.
 - AMD CPU 진단은 현장 수동 확인 방식(`grep Result /var/cpudiag/results.json` 이 모두 PASS)을 기본 규칙으로 구현했습니다. 실제 AMD 장비의 로그 형식과 다르면 `CPU_AMD_*` 로 조정하세요.
 - 실제 anaconda 설치 환경, 회사 운영 `run.sh`, AMD CPU 진단 로그는 랩에서 재현할 수 없어 실장비에서 확인하지 못했습니다.
-- 범위 밖: 자동 재설치·조치, AWX 연동.
+- 범위 밖: 자동 재설치·조치, AWX 연동. (설정수정·부하 테스트 자동 진행은 `-run` 모드만 하며 기본 모드는 여전히 조회만 합니다.)
 
 ## 5. 문서별 설명
 
 | 파일 | 설명 |
 |---|---|
 | `main.go` / `main_test.go` | 판정 로직 / 결과 파일 분류·2차 출력 파싱·문구 이스케이프 단위 테스트 |
+| `run.go` `worker.go` `state.go` `stress.go` `execx*.go` `daemon_*.go` | `-run` 진입·재접속 / 백그라운드 워커 상태기계 / 상태 파일(state.json 등) / stress-test 호출·CPU 감시 확인 / 외부 명령 시간 제한(프로세스 그룹 kill) / setsid·lock |
+| `tui.go` `render.go` `tty_*.go` | `-run` 화면(raw 모드 TUI, 상태 → 문자열 순수 함수)·키 처리·tty |
+| `*_test.go` | 단위 시험(워커 상태기계는 가짜 실행기·가짜 시각으로) |
 | `go.mod` | `go 1.20`, 외부 의존성 없음 |
-| `new_setup.sh` | bash 래퍼. OS 를 판별해 `bin/` 의 맞는 바이너리를 실행하고 인자를 그대로 전달 |
+| `new_setup.sh` | bash 래퍼. OS 를 판별해 `bin/` 의 맞는 바이너리를 실행하고 인자를 그대로 전달. 설정 파일이 없고 터미널이면 `setup.sh` 실행을 제안(`NEW_SETUP_NO_PROMPT=1` 로 끔) |
+| `setup.sh` | 최초 설정 도우미(대화형, 2.0). `new_setup.conf` 를 질문으로 만들거나 수정 |
+| `troubleshoot.sh` | 읽기 전용 문제 진단 래퍼(7장). `new_setup -doctor ...` 실행 |
+| `doctor.go` `doctor_host.go` `doctor_test.go` | `-doctor` 진단 본체(환경 점검·`-run` 작업 진단) / 호스트 단건 점검·진입점 / 단위 시험 |
+| `test/run_setup_tests.sh` | `setup.sh`·`new_setup.sh` 첫 실행 제안 비대화형 시험 (`bash test/run_setup_tests.sh`) |
 | `new_setup.conf.sample` | 설정 파일 예시 |
 | `build.sh` | 바이너리 빌드 (`build.sh` = os8. `build.sh os6` 는 옛 방식으로 현재 사용 안 함) |
 | `bin/new_setup`, `bin/new_setup_os6` | 빌드 완료 바이너리 (폐쇄망 배포용, 커밋 대상). `new_setup_os6` 는 옛 버전이며 더 이상 재빌드하지 않음 |
 | `test/fake_gossh.sh`, `test/fake_config_check.sh`, `test/run_tests.sh` | gossh·config_check.sh 대역과 시나리오 테스트 (`bash test/run_tests.sh`) |
+| `test/fake_stress_test.sh`, `test/run_flow_tests.sh` | stress-test 대역과 `-run` 전체 흐름 시험 (`bash test/run_flow_tests.sh`, 약 40초) |
 | `ARCHITECTURE.md` | 폴더·파일 역할과 판정 흐름 |
 | `PR_CHECKLIST.md` | 변경 시 점검 목록 |
 | `.github/workflows/ci.yml` | gofmt·vet·test·shellcheck CI |
@@ -262,6 +320,132 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 ```bash
 go test ./...
 bash test/run_tests.sh   # fake gossh 로 모든 상태 시나리오 확인
+bash test/run_flow_tests.sh   # -run 전체 흐름(설정수정→CPU/stress-ng→재부팅 감지→재기동→시간초과→중지)
+bash test/run_setup_tests.sh  # setup.sh 대화형 설정(답을 파이프로 입력)·new_setup.sh 첫 실행 제안
 ```
 
 실제 gossh 가 있는 환경(랩)에서 `완료`/`접속불가` 몇 대로 한 번 더 확인하는 것을 권장합니다. 설치중 계열 상태는 대상 장비에 임시로 `~/.profile` 에 `anaconda` 한 줄과 `/tmp/anaconda.log` 를 만들어 재현할 수 있으며(끝나면 반드시 원복), 랩에서 이 방식으로 확인했습니다.
+
+## 6. `-run` — 설정수정·CPU·stress-ng 자동 진행 (TUI)
+
+```bash
+bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>
+```
+
+### 6.1 목적
+
+접속 가능한 서버(상태 `완료`)의 **설정체크 / CPU테스트 / stress-ng** 세 열을 모두 `O` 로 만드는 과정을 한 도구로 진행합니다. 단계가 넘어갈 때마다 결과를 다시 체크(재판정)하고 사용자에게 **계속 / 재시도 / 제외하고 계속 / 중지** 를 묻습니다. 기본 사용(`new_setup <호스트파일>`, 결과표 출력)은 그대로이며 `-run` 은 별도 모드입니다. **stress-test 는 소스를 고치지 않고 `-batch` 로 호출만 하므로 stress-test 는 단독으로도 그대로 쓸 수 있습니다.**
+
+### 6.2 흐름
+
+```
+[1 판정]  기존 판정(1차 정보수집·2차 anaconda·설정체크 -auto-check) → 표 갱신 → 질문
+[2 설정수정] 설정체크가 O 아닌 완료 호스트: config_check.sh -auto <user> <목록> → 재판정 → 질문
+[3 부하]  CPU 대상: stress-test -steps a   /   stress-ng 대상: stress-test -steps b
+          (CPU 의 등록·launch 가 끝난 뒤 stress-ng 시작, 감시는 동시) → 재판정 → 질문
+[4 stress-ng] 이번 CPU 대상 중 CPU O 가 된 호스트 → stress-test -steps b → 재판정 → 질문
+[5 완료]  접속 가능 호스트 3열이 모두 O(또는 제외) → ./<호스트파일>_run/result.txt 저장
+```
+
+- 질문 선택지: `c` 계속(다음 단계) / `r` 재시도(같은 단계 다시) / `x` O 아닌 호스트를 제외하고 계속(비고에 `제외`) / `s` 작업 중지. 대상이 없는 단계는 질문 없이 건너뜁니다.
+- 대상 선정: **CPU** = 설정체크 O 이고 CPU `NOTRUN`. **stress-ng(3단계)** = 설정체크 O, CPU `O`, stress-ng 가 O 아님, **이번 CPU 대상 아님(겹치지 않음)**. **4단계** = 3단계에서 CPU 를 돌려 `O` 가 된 호스트 중 stress-ng 가 O 아님. 접속불가·OS설치중 등 `완료` 가 아닌 호스트는 표에만 보이고 아무 작업도 하지 않습니다.
+- **설정체크 `-` 의 의미**: `OS_CHECK_SH` 가 **비어 있을 때만** 통과(O 와 같이 취급)입니다. `OS_CHECK_SH` 가 있는데 `-` 이면 판정 중 config_check 실행이 실패한 것이므로 통과가 아니며, 설정수정·재시도 대상이고 `x`(제외) 목록에 듭니다.
+- **CPU 완료 확인·꺼짐 감시**: CPU launch 후 `CPU_WAIT_INTERVAL`(기본 2분)마다 가벼운 확인(부팅 시각 btime + 응답)을 하고, `CPU_WAIT_START`(기본 47분)부터는 CPU 열 값도 확인하다가 모두 `O` 가 되거나 `CPU_WAIT_MAX`(기본 30분)가 지나면 끝냅니다. btime 이 60초 넘게 바뀌면 비고 `실행도중 재부팅됨`, 응답이 없으면 `실행도중 응답없음` 입니다.
+- **stress-ng 값**은 `O` / `NOTRUN` 만 있습니다(X 없음). stress-test 감시가 load 기준 이상이면 실행된 것으로 보고, 다음 재체크에서 `/var/log/messages` 에 문자열이 보이면 `O` 가 됩니다.
+- **행(hang) 대응**: 모든 외부 명령(gossh·config_check·stress-test)에 시간 제한(`GOSSH_TIMEOUT` / `CHECK_TIMEOUT` / `STRESS_TIMEOUT`)을 둡니다. 넘으면 프로세스 그룹에 SIGTERM, 5초 뒤 SIGKILL 하고 그 단계를 `시간초과` 로 질문(`r`/`s`)합니다.
+- user 는 stress-test 와 같은 방식입니다: 설정 `USER_ROUTE` 가 있으면 `info_mn.sh` 메뉴 → `info.sh <번호>` 출력, 없으면 `-user`, 그것도 없으면 `$USER`. 처음 한 번 정해 상태에 저장합니다.
+
+### 6.3 작업 상태 폴더와 재접속
+
+작업은 `setsid` 로 띄운 **백그라운드 워커**가 하고, TUI 는 상태를 보여 주며 질문에 답합니다. **터미널이 끊겨도 작업은 계속**됩니다. 상태는 **현재 실행 경로**의 `./<호스트파일이름>_run/` 에 기록하고 그 밖(`/etc` 등)에는 아무것도 만들지 않습니다.
+
+| 파일 | 내용 |
+|---|---|
+| `state.json` | 단계·질문·호스트별 열 값·진행 비고·user·시각(임시파일 → rename 원자 기록) |
+| `answer.json` | TUI 가 쓴 답 `{"id":"<질문 id>","choice":"c"}`. 워커가 1초마다 읽고 지움 |
+| `stop.req` | 중지 요청. 워커가 보면 실행 중인 외부 명령을 끝내고 중지 |
+| `worker.pid` / `lock` | 워커 pid / flock(중복 워커 방지) |
+| `worker.log` | 워커 진행 로그·외부 명령 출력 |
+| `lists/` | 단계별 대상 호스트 파일(config_check·stress-test·감시 입력) |
+| `result.txt` | 최종 결과표(`\|` 8열) |
+
+- **다시 붙기**: 같은 경로에서 같은 명령(`new_setup -run <호스트파일>`)을 실행합니다. 워커가 살아 있으면 화면만 붙고(`-user` 무시), 워커가 죽었는데 미완료면 "이어서 진행할까요? (y/N)" 후 워커를 다시 띄웁니다(진행 중이던 외부 명령은 다시 실행하지 않고 재체크부터. CPU launch 가 기록돼 있고 감시가 안 끝났으면 다시 launch 하지 않고 감시를 이어 감). 끝난 작업이면 결과를 보여 줍니다. 처음부터 다시 하려면 `<호스트파일>_run/` 을 지우세요.
+- tty 가 아니면(파이프·리다이렉트·cron 등) TUI 없이 현재 상태를 글로 한 번 출력하고 끝납니다.
+- 중지: 질문 중 `s`, 질문이 없을 때 `S`(둘 다 y/N 확인) 또는 `stop.req` 파일 생성. 중지해도 그때까지의 표를 `result.txt` 로 저장합니다.
+
+### 6.4 TUI 키
+
+| 키 | 동작 |
+|---|---|
+| `c` `r` `x` `s` | 질문에 답(질문이 떠 있을 때. `s` 는 y/N 확인) |
+| `S` | 질문이 없을 때 작업 중지(y/N 확인) |
+| `f` | O 아닌 호스트만 보기 토글 |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | 호스트표 스크롤 |
+| `q` | 화면만 나가기(작업은 계속) |
+| `?` | 도움말 |
+
+화면은 외부 라이브러리 없이 termios raw 모드로 그리며 1초마다 갱신하고 창 크기를 반영합니다. `NO_COLOR` 가 있으면 색을 쓰지 않습니다.
+
+### 6.5 `-run` 설정 키
+
+`new_setup.conf` 에 아래 키를 추가로 씁니다(모두 선택). 시간 값은 Go 형식(`47m`, `30s`, `1h30m`) 또는 숫자(분)이며, 잘못된 값은 경고 후 기본값을 씁니다.
+
+| 키 | 기본 | 설명 |
+|---|---|---|
+| `STRESS_TEST` | (없음) | stress-test 바이너리 경로. 비면 부하 단계에서 오류 안내 후 질문. 호출은 바이너리 폴더에서 `-user <u> -hosts <목록> -steps a\|b -batch [-conf <파일>]` |
+| `STRESS_TEST_CONF` | (없음) | stress-test 의 `-conf` 로 넘김(비면 stress-test 기본 탐색) |
+| `USER_ROUTE` | (없음) | `info_mn.sh`/`info.sh` 가 있는 폴더(user 선택 메뉴) |
+| `CPU_WAIT_START` | `47m` | CPU launch 후 완료 확인(CPU 열 값)을 시작할 때까지 |
+| `CPU_WAIT_INTERVAL` | `2m` | 확인(btime·응답)·꺼짐 감시 간격 |
+| `CPU_WAIT_MAX` | `30m` | 완료 확인 시작 후 최대 대기 |
+| `GOSSH_TIMEOUT` | `10m` | gossh 호출 시간 제한 |
+| `CHECK_TIMEOUT` | `40m` | config_check.sh 시간 제한 |
+| `STRESS_TIMEOUT` | `60m` | stress-test 시간 제한 |
+
+### 6.6 한계와 미확인
+
+- **실제 AWX 템플릿, 실제 CPU 45분 테스트, 실장비 재부팅은 확인하지 못했습니다.** 랩에서는 fake gossh·config_check·stress-test 로 1→5 단계 전체와 재기동·시간초과·중지를, 실제 gossh(.58/.60, .60 은 csh)로 판정·감시 확인만 검증했습니다(`test/run_flow_tests.sh`).
+- 설정수정은 `config_check.sh -auto <user>` 가 체크와 수정을 함께 한다는 가정(auto_setup 과 같은 방식)입니다. 수정 결과는 항상 `-auto-check` 재판정으로 확인합니다.
+- stress-test `-batch` 가 감시에 들어갈 때 내는 `[감시] ...` 줄을 "등록·launch 끝남" 신호로 씁니다. stress-test 출력 형식이 바뀌면 이 신호가 안 잡힐 수 있습니다(그 경우 CPU 가 launch 되지 않은 것으로 보고 `r`/`s` 질문).
+- 장애 목록(`-er`/`error_list.txt`)은 비고 표시용일 뿐 대상 선정에 영향을 주지 않습니다.
+- Linux 전용(os8 바이너리). 다른 OS 용 빌드는 개발·단위 시험용이며 중복 워커 방지(lock)·TUI 가 없습니다. os6 바이너리(`bin/new_setup_os6`)에는 `-run` 과 `-doctor` 가 없습니다.
+
+## 7. 문제가 생겼을 때 — `troubleshoot.sh` (읽기 전용 진단)
+
+`new_setup` 결과가 이상하거나 `-run` 이 멈춘 것 같을 때 원인을 찾아 주는 보고서를 만듭니다. `troubleshoot.sh` 는 `new_setup.sh` 와 같은 방식으로 바이너리를 골라 `new_setup -doctor ...` 를 실행하는 래퍼입니다.
+
+```bash
+bash troubleshoot.sh [-c 설정파일] [-user 사용자]                 # 환경 점검만
+bash troubleshoot.sh [-c 설정파일] <호스트파일>                    # 환경 점검 + 그 경로의 -run 작업 진단
+bash troubleshoot.sh [-c 설정파일] -host <호스트> [-check]         # 환경 점검 + 호스트 한 대 점검
+```
+
+- **읽기 전용**입니다. 설정 파일·`-run` 상태 폴더·원격 호스트를 바꾸지 않습니다(원격에는 읽기 명령만 보냄). `-check` 도 config_check `-auto-check`(조회)만 돌리며 수정 모드(`-auto`)는 절대 실행하지 않습니다.
+- 보고서는 화면에 나오고 `./new_setup_doctor_<시각>.txt` 에도 저장됩니다. 저장본은 **비밀번호가 마스킹**됩니다.
+- 줄 머리표: `[O]` 정상, `[!]` 주의, `[X]` 오류, `[i]` 참고. 문제 항목에는 `-> 해결:` 안내가 붙고, 끝의 요약에 모아 보여 줍니다.
+- 종료코드: 0 문제 없음, 1 문제(`[!]`·`[X]`) 있음, 2 인자 오류.
+- `-user` 는 stress-test conf(`<사용자>_setting.conf`)를 찾을 사용자를 알려 줍니다(없으면 `STRESS_USER` → `$USER`).
+
+### 7.1 세 부분
+
+| 부분 | 언제 | 내용 |
+|---|---|---|
+| 1. 환경 점검 | 항상 | 바이너리·설정 파일(경고)·`gossh`(경로·실행·필요 옵션)·`OS_CHECK_SH`(`-auto-check`/`-auto` 지원)·`bash`·`STRESS_TEST`·`STRESS_TEST_CONF`·`USER_ROUTE`·현재 경로 쓰기 권한·설정 문구의 gossh 위험어(reboot 등)와 csh 에서 깨지는 `!`·CPU 판정 문구 비어 있음 |
+| 2. `-run` 작업 진단 | `<호스트파일>` 을 줬고 `./<호스트파일>_run/` 이 있을 때 | `state.json`·워커 생존·heartbeat·진행 단계·대기 중인 질문과 `answer.json`·`stop.req`·CPU 등록/감시 시간표·호스트별 상태·`worker.log`·stress-test 이력 |
+| 3. 호스트 단건 점검 | `-host <호스트>` | 실제 1차·2차 명령과 부팅 시각(btime)·uptime·CPU 로그 `ls` 를 gossh 로 그 한 대에만 보내고, **각 열이 왜 그 값인지** 판정 근거를 설명. `-check` 를 더하면 `-auto-check` 도 실행 |
+
+### 7.2 자주 만나는 상황과 안내
+
+| 보고서 내용 | 뜻과 조치 |
+|---|---|
+| 워커가 죽어 있습니다(○○ 단계 진행 중이었음) | 단계 도중 워커가 죽은 것(서버 재부팅·kill 등). **같은 명령(`new_setup.sh -run <호스트파일>`)을 다시 실행하면 이어서 진행**(끝난 외부 명령은 다시 하지 않고 재체크부터) |
+| 질문 ○○ 에 대한 답을 기다리는 중 | TUI 에서 현재 질문에 답해야 진행됨. 질문 내용·선택지를 보고서에 보여 줌. `answer.json` 이 깨졌거나 질문 id 가 달라 무시되는 경우도 알려 줌 |
+| heartbeat 가 오래됨(15초 이상) | 워커가 멈춘(hang) 듯함. 보고서의 pid 를 `kill -9` 한 뒤 남은 `gossh`·`stress-test`·`config_check` 프로세스를 확인하고 다시 실행 |
+| 중지 요청(`stop.req`)이 있습니다 | 곧 중지됨. 이어서 하려면 `stop.req` 를 지우고 같은 명령으로 재실행(그대로 두면 재기동 즉시 중지) |
+| CPU 마감이 지났는데 감시가 안 끝남 / 다음 확인 시각 지연 | `CPU_WAIT_MAX` 마감·gossh 응답 지연. `worker.log` 의 `CPU 감시 확인 실패` 줄과 `GOSSH_TIMEOUT` 확인 |
+| stress-test 출력에 `[감시]` 줄이 없음 | CPU 등록·launch 가 끝나지 않음(AWX 등록·launch 오류). `worker.log` 의 stress-test 출력과 stress-test 이력의 `error=` 확인 |
+| CPU 테스트 중 재부팅된 호스트 / 응답 없는 호스트 | 부팅 이유(`last -x`)·전원·네트워크 확인. 응답이 돌아오면 다음 확인 때 자동 해제 |
+| 접속불가 호스트(결과 파일에 없음·`_res_off` 등) | `-host` 단건 점검이 `ping`·이름 풀이·22 포트·root 키 인증 확인 순서를 안내 |
+| `state.json` 버전·경로 불일치 | 같은 버전 바이너리로, 작업을 시작한 경로에서 재실행 |
+
+주의: `bin/new_setup_os6`(옛 버전)에는 `-run` 도 `-doctor` 도 없으므로 `troubleshoot.sh` 는 RHEL6 에서 쓸 수 없습니다(os8 바이너리 전용).

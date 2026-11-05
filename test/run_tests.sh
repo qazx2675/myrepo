@@ -163,7 +163,7 @@ check "CPU AMD(기본 규칙: results.json Result 줄 모두 PASS) -> O" O "$(fl
 if grep -q "results.json" "$FAKE_GOSSH_LOG"; then ok "기본 설정에 AMD results.json 확인 포함"; else ng "기본 설정에 AMD results.json 확인 포함"; fi
 check "CPU 테스트 로그 없음 -> NOTRUN" NOTRUN "$(fld "$OUT" g_nolog 4)"
 check "stress-ng 1 -> O" O "$(fld "$OUT" a_intel 5)"
-check "stress-ng 0 -> X" X "$(fld "$OUT" b_intelng 5)"
+check "stress-ng 0 -> NOTRUN" NOTRUN "$(fld "$OUT" b_intelng 5)"
 check "H/T 2 -> ON" ON "$(fld "$OUT" a_intel 6)"
 check "H/T 1 -> OFF" OFF "$(fld "$OUT" b_intelng 6)"
 check "H/T 줄 없음 -> -" - "$(fld "$OUT" d_none 6)"

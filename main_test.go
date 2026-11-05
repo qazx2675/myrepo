@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseHostLines(t *testing.T) {
@@ -294,14 +295,14 @@ func TestHostInfoResults(t *testing.T) {
 		cpu, stress, ht, osv string
 	}{
 		{"Intel ok", &hostInfo{vendor: "GenuineIntel", cpuIntel: true, stress: true, tpc: 2, kernel: "k1"}, "O", "O", "ON", "k1"},
-		{"Intel ng", &hostInfo{vendor: "GenuineIntel", tpc: 1}, "X", "X", "OFF", "-"},
-		{"Intel 인데 AMD 표식", &hostInfo{vendor: "GenuineIntel", cpuAMD: true}, "X", "X", "-", "-"},
-		{"AMD ok", &hostInfo{vendor: "AuthenticAMD", cpuAMD: true, tpc: 4}, "O", "X", "ON", "-"},
-		{"AMD ng", &hostInfo{vendor: "AuthenticAMD"}, "X", "X", "-", "-"},
-		{"Intel 로그 없음", &hostInfo{vendor: "GenuineIntel", noIntel: true}, "NOTRUN", "X", "-", "-"},
-		{"AMD 로그 없음", &hostInfo{vendor: "AuthenticAMD", noAMD: true}, "NOTRUN", "X", "-", "-"},
-		{"AMD 인데 Intel 로그만 없음", &hostInfo{vendor: "AuthenticAMD", noIntel: true}, "X", "X", "-", "-"},
-		{"벤더 없음", &hostInfo{cpuIntel: true, cpuAMD: true}, "X", "X", "-", "-"},
+		{"Intel ng", &hostInfo{vendor: "GenuineIntel", tpc: 1}, "X", "NOTRUN", "OFF", "-"},
+		{"Intel 인데 AMD 표식", &hostInfo{vendor: "GenuineIntel", cpuAMD: true}, "X", "NOTRUN", "-", "-"},
+		{"AMD ok", &hostInfo{vendor: "AuthenticAMD", cpuAMD: true, tpc: 4}, "O", "NOTRUN", "ON", "-"},
+		{"AMD ng", &hostInfo{vendor: "AuthenticAMD"}, "X", "NOTRUN", "-", "-"},
+		{"Intel 로그 없음", &hostInfo{vendor: "GenuineIntel", noIntel: true}, "NOTRUN", "NOTRUN", "-", "-"},
+		{"AMD 로그 없음", &hostInfo{vendor: "AuthenticAMD", noAMD: true}, "NOTRUN", "NOTRUN", "-", "-"},
+		{"AMD 인데 Intel 로그만 없음", &hostInfo{vendor: "AuthenticAMD", noIntel: true}, "X", "NOTRUN", "-", "-"},
+		{"벤더 없음", &hostInfo{cpuIntel: true, cpuAMD: true}, "X", "NOTRUN", "-", "-"},
 		{"nil", nil, "X", "X", "-", "-"},
 	}
 	for _, c := range cases {
@@ -358,6 +359,46 @@ func TestParseErrorList(t *testing.T) {
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("%s: got %q want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestParseConfRunKeys(t *testing.T) {
+	c := parseConf("")
+	if c.CPUWaitStart != 47*time.Minute || c.CPUWaitInt != 2*time.Minute || c.CPUWaitMax != 30*time.Minute ||
+		c.GosshTimeout != 10*time.Minute || c.CheckTimeout != 40*time.Minute || c.StressTimeout != 60*time.Minute ||
+		c.StressTest != "" || len(c.Warnings) != 0 {
+		t.Errorf("기본값 오류: %+v", c)
+	}
+	c = parseConf("STRESS_TEST=/opt/st/stress-test\nSTRESS_TEST_CONF=\"/opt/st/a.conf\"\nUSER_ROUTE=/opt/route\n" +
+		"CPU_WAIT_START=90s\nCPU_WAIT_INTERVAL=3\nCPU_WAIT_MAX=1h\nGOSSH_TIMEOUT=5m\nCHECK_TIMEOUT=1.5\nSTRESS_TIMEOUT=\"2h\"\n")
+	if c.StressTest != "/opt/st/stress-test" || c.StressTestConf != "/opt/st/a.conf" || c.UserRoute != "/opt/route" ||
+		c.CPUWaitStart != 90*time.Second || c.CPUWaitInt != 3*time.Minute || c.CPUWaitMax != time.Hour ||
+		c.GosshTimeout != 5*time.Minute || c.CheckTimeout != 90*time.Second || c.StressTimeout != 2*time.Hour ||
+		len(c.Warnings) != 0 {
+		t.Errorf("지정값 오류: %+v", c)
+	}
+	// 잘못된 값·0·음수는 기본값 유지 + 경고
+	c = parseConf("CPU_WAIT_START=abc\nCPU_WAIT_INTERVAL=0\nGOSSH_TIMEOUT=-5m\nCHECK_TIMEOUT=10m\n")
+	if c.CPUWaitStart != 47*time.Minute || c.CPUWaitInt != 2*time.Minute || c.GosshTimeout != 10*time.Minute ||
+		c.CheckTimeout != 10*time.Minute || len(c.Warnings) != 3 {
+		t.Errorf("잘못된 값 처리 오류: %+v", c)
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	cases := []struct {
+		in   string
+		want time.Duration
+		ok   bool
+	}{
+		{"47m", 47 * time.Minute, true}, {"30s", 30 * time.Second, true}, {"5", 5 * time.Minute, true},
+		{" 2 ", 2 * time.Minute, true}, {"1h30m", 90 * time.Minute, true},
+		{"", 0, false}, {"x", 0, false}, {"0", 0, false}, {"-1m", 0, false},
+	}
+	for _, c := range cases {
+		if d, ok := parseDuration(c.in); ok != c.ok || (ok && d != c.want) {
+			t.Errorf("%q: got %v,%v want %v,%v", c.in, d, ok, c.want, c.ok)
 		}
 	}
 }

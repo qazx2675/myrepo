@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -133,6 +134,19 @@ type config struct {
 	CPUAMDOK       string
 	CPUIntelLine   string // 비어 있지 않으면 이 문자열이 든 줄만 보고, 그 줄이 모두 OK 문구를 포함해야 O
 	CPUAMDLine     string
+
+	// -run 용(워커가 쓴다)
+	StressTest     string        // stress-test 바이너리 경로
+	StressTestConf string        // stress-test -conf 로 넘길 설정
+	UserRoute      string        // info_mn.sh / info.sh 폴더
+	CPUWaitStart   time.Duration // launch 후 CPU 완료 확인 시작
+	CPUWaitInt     time.Duration // 확인·꺼짐 감시 간격
+	CPUWaitMax     time.Duration // 확인 시작 후 최대 대기
+	GosshTimeout   time.Duration // gossh 한 번의 시간 제한
+	CheckTimeout   time.Duration // config_check 한 번의 시간 제한
+	StressTimeout  time.Duration // stress-test 한 번의 시간 제한
+
+	Warnings []string // 설정 해석 중 나온 경고(잘못된 시간 값 등). 호출한 쪽이 stderr 에 낸다
 }
 
 const (
@@ -144,12 +158,37 @@ const (
 	defaultAMDLine = "Result"
 )
 
+// -run 용 시간 값 기본값
+const (
+	defaultCPUWaitStart  = 47 * time.Minute
+	defaultCPUWaitInt    = 2 * time.Minute
+	defaultCPUWaitMax    = 30 * time.Minute
+	defaultGosshTimeout  = 10 * time.Minute
+	defaultCheckTimeout  = 40 * time.Minute
+	defaultStressTimeout = 60 * time.Minute
+)
+
+// parseDuration 은 설정의 시간 값을 읽는다. Go duration(47m, 30s) 또는 숫자만(분).
+// 0 이하이거나 해석할 수 없으면 ok=false.
+func parseDuration(v string) (time.Duration, bool) {
+	v = unquote(strings.TrimSpace(v))
+	if n, err := strconv.ParseFloat(v, 64); err == nil {
+		d := time.Duration(n * float64(time.Minute))
+		return d, d > 0
+	}
+	d, err := time.ParseDuration(v)
+	return d, err == nil && d > 0
+}
+
 // parseConf 는 KEY=VALUE 줄을 읽는다. '#' 주석·빈 줄 무시, 값은 첫 '=' 뒤 전체(앞뒤 공백만 제거).
+// STRESS_TEST·STRESS_TEST_CONF·USER_ROUTE 는 경로, *_WAIT_*·*_TIMEOUT 은 시간(47m·30s 또는 숫자=분, 잘못되면 기본값 + Warnings).
 // DISK_PATTERN 이 하나도 없으면 기본 문구 1개를 쓴다. CPU_INTEL_LOG/OK, CPU_AMD_LOG/OK/LINE 은 기본값이 있다.
 // ★ CPU_* 값은 GOSSH 처럼 앞뒤 따옴표를 떼어 준다(CPU_AMD_LOG="/path" 로 적어도 동작).
 func parseConf(text string) config {
 	c := config{CPUIntelLog: defaultIntelLog, CPUIntelOK: defaultIntelOK,
-		CPUAMDLog: defaultAMDLog, CPUAMDOK: defaultAMDOK, CPUAMDLine: defaultAMDLine}
+		CPUAMDLog: defaultAMDLog, CPUAMDOK: defaultAMDOK, CPUAMDLine: defaultAMDLine,
+		CPUWaitStart: defaultCPUWaitStart, CPUWaitInt: defaultCPUWaitInt, CPUWaitMax: defaultCPUWaitMax,
+		GosshTimeout: defaultGosshTimeout, CheckTimeout: defaultCheckTimeout, StressTimeout: defaultStressTimeout}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -180,6 +219,32 @@ func parseConf(text string) config {
 			c.CPUAMDOK = unquote(val)
 		case "CPU_AMD_LINE":
 			c.CPUAMDLine = unquote(val)
+		case "STRESS_TEST":
+			c.StressTest = expandPath(val)
+		case "STRESS_TEST_CONF":
+			c.StressTestConf = expandPath(val)
+		case "USER_ROUTE":
+			c.UserRoute = expandPath(val)
+		case "CPU_WAIT_START", "CPU_WAIT_INTERVAL", "CPU_WAIT_MAX", "GOSSH_TIMEOUT", "CHECK_TIMEOUT", "STRESS_TIMEOUT":
+			d, ok := parseDuration(val)
+			if !ok {
+				c.Warnings = append(c.Warnings, fmt.Sprintf("설정 %s 값 %q 을(를) 시간으로 읽을 수 없어 기본값을 씁니다(예: 47m, 30s, 숫자만 쓰면 분)", key, val))
+				break
+			}
+			switch key {
+			case "CPU_WAIT_START":
+				c.CPUWaitStart = d
+			case "CPU_WAIT_INTERVAL":
+				c.CPUWaitInt = d
+			case "CPU_WAIT_MAX":
+				c.CPUWaitMax = d
+			case "GOSSH_TIMEOUT":
+				c.GosshTimeout = d
+			case "CHECK_TIMEOUT":
+				c.CheckTimeout = d
+			case "STRESS_TIMEOUT":
+				c.StressTimeout = d
+			}
 		case "DISK_PATTERN":
 			if val != "" {
 				c.DiskPatterns = append(c.DiskPatterns, val)
@@ -344,13 +409,6 @@ func parseInfoOutput(out string) map[string]*hostInfo {
 	return res
 }
 
-func ox(b bool) string {
-	if b {
-		return "O"
-	}
-	return "X"
-}
-
 // cpuResult: Intel 이고 NS_CPU_INTEL, 또는 AMD 이고 NS_CPU_AMD 면 O.
 // 그 벤더의 CPU 테스트 로그 파일이 없으면 NOTRUN(부하테스트 아직 안 함), 그 외 X.
 func (h *hostInfo) cpuResult() string {
@@ -368,8 +426,15 @@ func (h *hostInfo) cpuResult() string {
 
 const cpuNotRun = "NOTRUN"
 
+// stressResult: messages 에 stress-ng 흔적이 있으면 O, 없으면 NOTRUN(부하테스트 아직 안 함). 정보 자체가 없으면(nil) X.
 func (h *hostInfo) stressResult() string {
-	return ox(h != nil && h.stress)
+	switch {
+	case h == nil:
+		return "X"
+	case h.stress:
+		return "O"
+	}
+	return cpuNotRun
 }
 
 // htResult: 2 이상 ON, 1 OFF, 못 읽으면 '-'.
@@ -397,13 +462,24 @@ const sep = "|"
 // header 는 출력 맨 위 제목 줄(8열).
 const header = "hostname" + sep + "상태" + sep + "설정체크" + sep + "CPU테스트" + sep + "stress-ng" + sep + "H/T" + sep + "OS" + sep + "비고"
 
+// hostResult 는 장비 한 대의 판정 결과(출력되는 문자열 그대로). 완료가 아니면 Check~OS 는 모두 "-".
+type hostResult struct {
+	Host, Status, Check, CPU, Stress, HT, OS string
+}
+
 // formatRow 는 8열('|' 구분) 한 줄을 만든다. 완료가 아니면 3~7열은 모두 '-'.
 // check 는 설정체크 열 값(O/X/출력없음/-), note 는 비고(장애 목록의 사유, 없으면 빈칸).
 func formatRow(host, status, check string, h *hostInfo, note string) string {
-	if status != stDone {
-		return strings.Join([]string{host, status, "-", "-", "-", "-", "-", note}, sep)
+	r := hostResult{Host: host, Status: status, Check: "-", CPU: "-", Stress: "-", HT: "-", OS: "-"}
+	if status == stDone {
+		r.Check, r.CPU, r.Stress, r.HT, r.OS = check, h.cpuResult(), h.stressResult(), h.htResult(), h.osResult()
 	}
-	return strings.Join([]string{host, status, check, h.cpuResult(), h.stressResult(), h.htResult(), h.osResult(), note}, sep)
+	return r.row(note)
+}
+
+// row 는 note(비고)를 붙여 8열 한 줄로 만든다.
+func (r hostResult) row(note string) string {
+	return strings.Join([]string{r.Host, r.Status, r.Check, r.CPU, r.Stress, r.HT, r.OS, note}, sep)
 }
 
 // defaultErrorList 는 -er 를 주지 않았을 때 현재 경로에서 찾는 장애 목록 파일 이름.
@@ -506,15 +582,23 @@ func parseCheckRes(text, exclude string, hosts []string) map[string]string {
 	return res
 }
 
-// runConfigCheck 는 완료 장비에 대해 config_check.sh -auto-check 를 임시 폴더에서 돌려 호스트별 값을 돌려준다.
-// 실행하지 못하면(-auto-check 미지원 등) nil 과 사유를 돌려주고, 호출한 쪽이 열을 '-' 로 둔다.
-func runConfigCheck(conf config, script, gossh string, hosts []string, log io.Writer) (map[string]string, error) {
+// config_check.sh 실행 방식: 체크만(-auto-check) / 체크 + 수정(-auto, auto_setup 과 같음).
+const (
+	ccCheck = "-auto-check"
+	ccFix   = "-auto"
+)
+
+// runConfigCheck 는 완료 장비에 대해 config_check.sh 를 mode(ccCheck/ccFix)·user 로 임시 폴더에서 돌려 호스트별 값을 돌려준다.
+// user 는 config_check.sh 의 두 번째 인자이자 결과 파일(check.res_<user>) 이름(판정은 new_setup, -run 설정수정은 선택한 user).
+// 실행하지 못하면(-auto-check 미지원, 시간 초과 등) nil 과 사유를 돌려주고, 호출한 쪽이 열을 '-' 로 둔다.
+func runConfigCheck(conf config, script, gossh string, hosts []string, mode, user string, log io.Writer) (map[string]string, error) {
 	b, err := os.ReadFile(script)
 	if err != nil {
 		return nil, fmt.Errorf("OS_CHECK_SH 를 읽을 수 없습니다: %v", err)
 	}
 	// ★ -auto-check 를 모르는 구버전에 인자를 주면 사용자 선택 메뉴에서 멈추므로 실행하지 않는다(auto_setup 과 같은 검사).
-	if !strings.Contains(string(b), "-auto-check") {
+	// -auto 는 auto_setup 이 체크+수정에 쓰는 기본 인자라 검사하지 않는다.
+	if mode == ccCheck && !strings.Contains(string(b), "-auto-check") {
 		return nil, fmt.Errorf("OS_CHECK_SH 가 -auto-check 를 지원하지 않습니다(구버전)")
 	}
 	if abs, err := filepath.Abs(script); err == nil {
@@ -540,18 +624,18 @@ func runConfigCheck(conf config, script, gossh string, hosts []string, log io.Wr
 	if abs, err := filepath.Abs(gdir); err == nil {
 		gdir = abs
 	}
-	cmd := exec.Command("bash", script, "-auto-check", "new_setup", "targets.txt")
+	cmd := exec.Command("bash", script, mode, user, "targets.txt")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "TMPDIR="+tmp, "PATH="+gdir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	cmd.Stdout = log
 	cmd.Stderr = log
-	if err := cmd.Run(); err != nil {
+	if _, err := runCmd(cmd, conf.CheckTimeout); err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
 			return nil, err
 		}
 		fmt.Fprintf(os.Stderr, "경고: 설정체크 스크립트가 비정상 종료했습니다(%v). 결과 파일 기준으로 계속 판정합니다.\n", err)
 	}
-	res, _ := os.ReadFile(filepath.Join(dir, "check.res_new_setup")) // 없으면 빈 내용 → 출력없음
+	res, _ := os.ReadFile(filepath.Join(dir, "check.res_"+user)) // 없으면 빈 내용 → 출력없음
 	return parseCheckRes(string(res), conf.OSCheckExclude, hosts), nil
 }
 
@@ -726,12 +810,13 @@ func resolveGosshPath(v string) string {
 
 // runGossh 는 gossh 를 실행해 stdout+stderr 를 로그에 이어 붙이고 stdout 을 돌려준다.
 // 비정상 종료(ExitError)는 오류로 보지 않는다(결과 파일로 판정). 실행 자체가 안 되면 오류.
-func runGossh(gossh string, args []string, log io.Writer) (string, error) {
+// timeout 을 넘기면 errTimeout 을 감싼 오류를 돌려준다.
+func runGossh(gossh string, args []string, log io.Writer, timeout time.Duration) (string, error) {
 	var stdout bytes.Buffer
 	cmd := exec.Command(gossh, args...)
 	cmd.Stdout = io.MultiWriter(log, &stdout)
 	cmd.Stderr = log
-	err := cmd.Run()
+	_, err := runCmd(cmd, timeout)
 	if _, ok := err.(*exec.ExitError); ok {
 		fmt.Fprintf(os.Stderr, "경고: gossh 가 비정상 종료했습니다(%v). 결과 파일 기준으로 계속 판정합니다.\n", err)
 		err = nil
@@ -741,18 +826,91 @@ func runGossh(gossh string, args []string, log io.Writer) (string, error) {
 
 var resSuffixes = []string{"_res_off", "_res_refsed", "_os_install", "_nosvrauto", "_res_cancel"}
 
+// loadConf 는 설정 파일을 찾아 읽는다. 읽은 파일의 절대 경로를 함께 돌려준다("" = 기본값 사용).
+// explicit(-c)가 있으면 반드시 읽을 수 있어야 한다. 비면 현재 경로 → 실행 파일 폴더 → (bin/ 이면) 그 위
+// 폴더 순서로 new_setup.conf 를 찾고, 어디에도 없으면 기본값을 쓴다.
+// ★ 래퍼(new_setup.sh)로 실행하면 실제 실행 파일은 bin/ 안이라, 래퍼 옆의 설정도 찾도록 위 폴더를 본다.
+func loadConf(explicit string) (config, string, error) {
+	abs := func(p string) string {
+		if a, err := filepath.Abs(p); err == nil {
+			return a
+		}
+		return p
+	}
+	if explicit != "" {
+		b, err := os.ReadFile(explicit)
+		if err != nil {
+			return config{}, "", fmt.Errorf("설정 파일을 읽을 수 없습니다: %v", err)
+		}
+		return parseConf(string(b)), abs(explicit), nil
+	}
+	cands := []string{"new_setup.conf"}
+	if exe, err := os.Executable(); err == nil {
+		if r, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = r
+		}
+		d := filepath.Dir(exe)
+		cands = append(cands, filepath.Join(d, "new_setup.conf"))
+		if filepath.Base(d) == "bin" {
+			cands = append(cands, filepath.Join(filepath.Dir(d), "new_setup.conf"))
+		}
+	}
+	for _, c := range cands {
+		if b, err := os.ReadFile(c); err == nil {
+			fmt.Fprintf(os.Stderr, "설정 파일: %s\n", c)
+			return parseConf(string(b)), abs(c), nil
+		}
+	}
+	return parseConf(""), "", nil
+}
+
+// loadErrList 는 장애 목록을 읽는다. 읽은 파일의 절대 경로를 함께 돌려준다("" = 없음).
+// explicit(-er)가 있으면 반드시 읽을 수 있어야 한다. 비면 현재 경로의 error_list.txt 를 있으면 쓴다.
+func loadErrList(explicit string) (map[string]string, string, error) {
+	abs := func(p string) string {
+		if a, err := filepath.Abs(p); err == nil {
+			return a
+		}
+		return p
+	}
+	if explicit != "" {
+		b, err := os.ReadFile(explicit)
+		if err != nil {
+			return nil, "", fmt.Errorf("장애 목록 파일을 읽을 수 없습니다: %v", err)
+		}
+		return parseErrorList(string(b)), abs(explicit), nil
+	}
+	if b, err := os.ReadFile(defaultErrorList); err == nil {
+		fmt.Fprintf(os.Stderr, "장애 목록: %s\n", defaultErrorList)
+		return parseErrorList(string(b)), abs(defaultErrorList), nil
+	}
+	return map[string]string{}, "", nil
+}
+
 func fail(code int, format string, a ...interface{}) {
 	fmt.Fprintf(os.Stderr, format+"\n", a...)
 	os.Exit(code)
 }
 
 func main() {
+	// ★ 숨은 진입점: -run 이 setsid 로 띄우는 백그라운드 워커(사용법에는 표시하지 않음)
+	if len(os.Args) == 3 && os.Args[1] == "-run-worker" {
+		os.Exit(runWorker(os.Args[2]))
+	}
+	// 읽기 전용 점검 보고서(-doctor ...)는 자체 옵션 해석을 한다(doctor.go)
+	if hasDoctorFlag(os.Args[1:]) {
+		os.Exit(doctorMain(os.Args[1:]))
+	}
 	fs := flag.NewFlagSet("new_setup", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	confPath := fs.String("c", "", "설정 파일 경로 (기본: 현재 경로 → 실행 파일 옆 new_setup.conf)")
 	errPath := fs.String("er", "", "장애 목록 파일(줄마다 \"hostname<탭>장애사유\", 비고 열에 표시) (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
+	runMode := fs.Bool("run", false, "설정수정·CPU·stress-ng 까지 자동 진행(TUI). 같은 경로에서 다시 실행하면 진행 중 작업에 다시 붙는다")
+	userFlag := fs.String("user", "", "-run 에서 쓸 사용자(설정 USER_ROUTE 가 있으면 메뉴로 고름, 기본: 환경변수 USER)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "사용법: new_setup [-c <설정파일>] [-er <장애목록파일>] <호스트파일>")
+		fmt.Fprintln(os.Stderr, "        new_setup -run [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>")
+		fmt.Fprintln(os.Stderr, "        new_setup -doctor [-c <설정파일>] [<호스트파일> | -host <호스트> [-check]]   (읽기 전용 문제 진단)")
 	}
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		os.Exit(1)
@@ -762,69 +920,23 @@ func main() {
 		os.Exit(1)
 	}
 	hostFile := fs.Arg(0)
+	if *runMode {
+		os.Exit(runCommand(hostFile, *confPath, *errPath, *userFlag))
+	}
 	// ★ gossh 와 같이 앞의 '^' 를 뗀 이름으로 결과 파일 이름을 만든다.
 	cleanHostFile := strings.TrimPrefix(hostFile, "^")
 
-	// 설정 읽기: -c 지정 시 반드시 있어야 한다. 생략하면 현재 경로 → 실행 파일 폴더 → (bin/ 이면) 그 위
-	// 폴더 순서로 new_setup.conf 를 찾고, 어디에도 없으면 기본값 사용.
-	// ★ 래퍼(new_setup.sh)로 실행하면 실제 실행 파일은 bin/ 안이라, 래퍼 옆의 설정도 찾도록 위 폴더를 본다.
-	var conf config
-	cp := *confPath
-	if cp != "" {
-		b, err := os.ReadFile(cp)
-		if err != nil {
-			fail(2, "오류: 설정 파일을 읽을 수 없습니다: %v", err)
-		}
-		conf = parseConf(string(b))
-	} else {
-		cands := []string{"new_setup.conf"}
-		if exe, err := os.Executable(); err == nil {
-			if r, err := filepath.EvalSymlinks(exe); err == nil {
-				exe = r
-			}
-			d := filepath.Dir(exe)
-			cands = append(cands, filepath.Join(d, "new_setup.conf"))
-			if filepath.Base(d) == "bin" {
-				cands = append(cands, filepath.Join(filepath.Dir(d), "new_setup.conf"))
-			}
-		}
-		conf = parseConf("")
-		for _, c := range cands {
-			if b, err := os.ReadFile(c); err == nil {
-				conf = parseConf(string(b))
-				fmt.Fprintf(os.Stderr, "설정 파일: %s\n", c)
-				break
-			}
-		}
+	conf, _, err := loadConf(*confPath)
+	if err != nil {
+		fail(2, "오류: %v", err)
+	}
+	for _, w := range conf.Warnings {
+		fmt.Fprintf(os.Stderr, "경고: %s\n", w)
 	}
 
-	// 장애 목록: -er 지정 시 반드시 있어야 한다. 생략하면 현재 경로의 error_list.txt 를 있으면 쓴다.
-	notes := map[string]string{}
-	if *errPath != "" {
-		b, err := os.ReadFile(*errPath)
-		if err != nil {
-			fail(2, "오류: 장애 목록 파일을 읽을 수 없습니다: %v", err)
-		}
-		notes = parseErrorList(string(b))
-	} else if b, err := os.ReadFile(defaultErrorList); err == nil {
-		notes = parseErrorList(string(b))
-		fmt.Fprintf(os.Stderr, "장애 목록: %s\n", defaultErrorList)
-	}
-
-	remoteCmd := buildRemoteCmd(conf.DiskPatterns, conf.ErrPatterns)
-	infoCmd := buildInfoCmd(conf)
-	// ★ gossh 는 위험어가 든 명령을 거부하므로, 시작 전에 설정 문구를 검사해 알려 준다.
-	pats := append(append([]string{}, conf.DiskPatterns...), conf.ErrPatterns...)
-	pats = append(pats, conf.CPUIntelLog, conf.CPUIntelOK, conf.CPUAMDLog, conf.CPUAMDOK)
-	bad := dangerousPatterns(pats)
-	if len(bad) == 0 && isDangerousCommand(remoteCmd) {
-		bad = []string{remoteCmd}
-	}
-	if len(bad) == 0 && isDangerousCommand(infoCmd) {
-		bad = []string{infoCmd}
-	}
-	if len(bad) > 0 {
-		fail(2, "오류: 설정 문구에 gossh 위험어(reboot, poweroff, shutdown, halt, init 0, init 6, ddc 등)가 들어 있어 실행할 수 없습니다: %s", strings.Join(bad, " | "))
+	notes, _, err := loadErrList(*errPath)
+	if err != nil {
+		fail(2, "오류: %v", err)
 	}
 
 	gossh := resolveGosshPath(conf.Gossh)
@@ -842,8 +954,7 @@ func main() {
 	if err != nil {
 		fail(2, "오류: 호스트 파일을 읽을 수 없습니다: %v", err)
 	}
-	hosts := parseHostLines(string(raw))
-	if len(hosts) == 0 {
+	if len(parseHostLines(string(raw))) == 0 {
 		fmt.Fprintf(os.Stderr, "경고: %s 에 등록된 호스트가 없습니다.\n", cleanHostFile)
 		return
 	}
@@ -855,6 +966,66 @@ func main() {
 	}
 	defer logf.Close()
 
+	jr, err := judge(conf, gossh, hostFile, logf)
+	if err != nil {
+		fail(2, "오류: %v", err)
+	}
+
+	var w bytes.Buffer
+	w.WriteString(header + "\n")
+	for _, r := range jr.Hosts {
+		w.WriteString(r.row(notes[strings.ToLower(r.Host)]) + "\n")
+	}
+	os.Stdout.Write(w.Bytes())
+
+	count, cc := jr.Count, jr.CheckCount
+	fmt.Fprintf(os.Stderr, "요약: 총 %d대 — 완료 %d, 디스크미인식 %d, 설치정지 %d, OS설치중 %d, 접속불가 %d (gossh 로그: %s)\n",
+		len(jr.Hosts), count[stDone], count[stNoDisk], count[stStopped], count[stInstall], count[stUnreach], logPath)
+	if conf.OSCheckSh != "" {
+		fmt.Fprintf(os.Stderr, "설정체크: O %d, X %d, 출력없음 %d\n", cc["O"], cc["X"], cc[noOutput])
+	}
+}
+
+// judgeResult 는 judge 의 결과. Hosts 는 호스트파일 순서 그대로.
+type judgeResult struct {
+	Hosts      []hostResult
+	Count      map[string]int // 상태별 대수
+	CheckCount map[string]int // 설정체크 열 값별 대수(전체 호스트 기준, 완료가 아니거나 안 돌렸으면 "-")
+}
+
+// judge 는 판정 전체(1차 정보수집 → 2차 anaconda.log → 설정체크 -auto-check → 호스트별 결과)를 한 번 돌린다.
+// gossh 는 실제 실행 경로, hostFile 은 gossh -w 에 넘기는 이름('^' 접두 가능), logw 는 gossh·config_check 출력 로그.
+// 진행 안내·경고는 stderr 로 낸다. 설정 문구에 gossh 위험어가 있거나 gossh 실행이 실패하면 오류.
+func judge(conf config, gossh, hostFile string, logw io.Writer) (*judgeResult, error) {
+	// ★ gossh 와 같이 앞의 '^' 를 뗀 이름으로 결과 파일 이름을 만든다.
+	cleanHostFile := strings.TrimPrefix(hostFile, "^")
+
+	remoteCmd := buildRemoteCmd(conf.DiskPatterns, conf.ErrPatterns)
+	infoCmd := buildInfoCmd(conf)
+	// ★ gossh 는 위험어가 든 명령을 거부하므로, 시작 전에 설정 문구를 검사해 알려 준다.
+	pats := append(append([]string{}, conf.DiskPatterns...), conf.ErrPatterns...)
+	pats = append(pats, conf.CPUIntelLog, conf.CPUIntelOK, conf.CPUAMDLog, conf.CPUAMDOK)
+	bad := dangerousPatterns(pats)
+	if len(bad) == 0 && isDangerousCommand(remoteCmd) {
+		bad = []string{remoteCmd}
+	}
+	if len(bad) == 0 && isDangerousCommand(infoCmd) {
+		bad = []string{infoCmd}
+	}
+	if len(bad) > 0 {
+		return nil, fmt.Errorf("설정 문구에 gossh 위험어(reboot, poweroff, shutdown, halt, init 0, init 6, ddc 등)가 들어 있어 실행할 수 없습니다: %s", strings.Join(bad, " | "))
+	}
+
+	raw, err := os.ReadFile(cleanHostFile)
+	if err != nil {
+		return nil, fmt.Errorf("호스트 파일을 읽을 수 없습니다: %v", err)
+	}
+	hosts := parseHostLines(string(raw))
+	jr := &judgeResult{Count: map[string]int{}, CheckCount: map[string]int{}}
+	if len(hosts) == 0 {
+		return jr, nil
+	}
+
 	// ★ 실제 gossh 는 시작할 때 결과 파일을 항상 지우지는 않는다(랩에서 지난 실행의 _os_install 이 남아 이번 결과에 섞임을 확인).
 	//   그래서 이 도구가 1차 실행 전에 직접 지운다.
 	for _, s := range resSuffixes {
@@ -862,9 +1033,9 @@ func main() {
 	}
 	// --- 1차 ---
 	fmt.Fprintf(os.Stderr, "[1/3] 전체 %d대 접속 확인·정보 수집 중...\n", len(hosts))
-	infoOut, err := runGossh(gossh, []string{"-w", hostFile, "-pm", "-script", infoCmd}, logf)
+	infoOut, err := runGossh(gossh, []string{"-w", hostFile, "-pm", "-script", infoCmd}, logw, conf.GosshTimeout)
 	if err != nil {
-		fail(2, "오류: gossh 실행 실패: %v", err)
+		return nil, fmt.Errorf("gossh 실행 실패: %v", err)
 	}
 	// ★ 접속불가 = 타임아웃·DNS 실패·세션 실패(_res_off), 포트 닫힘(_res_refsed), 취소(_res_cancel)
 	off := map[string]bool{}
@@ -887,15 +1058,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "[2/3] 설치중 후보 %d대 로그 확인 중...\n", len(cands))
 		retryFile := cleanHostFile + "_new_setup_retry"
 		if err := os.WriteFile(retryFile, []byte(strings.Join(cands, "\n")+"\n"), 0o644); err != nil {
-			fail(2, "오류: 임시 파일을 만들 수 없습니다: %v", err)
+			return nil, fmt.Errorf("임시 파일을 만들 수 없습니다: %v", err)
 		}
-		out, err := runGossh(gossh, []string{"-w", retryFile, "-script", remoteCmd}, logf)
+		out, err := runGossh(gossh, []string{"-w", retryFile, "-script", remoteCmd}, logw, conf.GosshTimeout)
 		os.Remove(retryFile)
 		for _, s := range resSuffixes {
 			os.Remove(retryFile + s)
 		}
 		if err != nil {
-			fail(2, "오류: gossh 2차 실행 실패: %v", err)
+			return nil, fmt.Errorf("gossh 2차 실행 실패: %v", err)
 		}
 		retry = parseRetryOutput(out)
 		for _, h := range cands {
@@ -906,10 +1077,9 @@ func main() {
 	}
 
 	statuses := classify(hosts, off, candSet, retry)
-	count := map[string]int{}
 	var doneHosts []string
 	for i, h := range hosts {
-		count[statuses[i]]++
+		jr.Count[statuses[i]]++
 		if statuses[i] == stDone {
 			doneHosts = append(doneHosts, h)
 		}
@@ -919,7 +1089,7 @@ func main() {
 	check := map[string]string{} // 없으면 '-'
 	if conf.OSCheckSh != "" && len(doneHosts) > 0 {
 		fmt.Fprintf(os.Stderr, "[3/3] 완료 %d대 설정체크 중...\n", len(doneHosts))
-		res, err := runConfigCheck(conf, expandPath(conf.OSCheckSh), gossh, doneHosts, logf)
+		res, err := runConfigCheck(conf, expandPath(conf.OSCheckSh), gossh, doneHosts, ccCheck, "new_setup", logw)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "경고: 설정체크를 건너뜁니다(열은 '-'): %v\n", err)
 		} else {
@@ -928,22 +1098,19 @@ func main() {
 	}
 
 	info := parseInfoOutput(infoOut)
-	var w bytes.Buffer
-	w.WriteString(header + "\n")
-	cc := map[string]int{}
 	for i, h := range hosts {
 		c := "-"
 		if statuses[i] == stDone && check[h] != "" {
 			c = check[h]
 		}
-		cc[c]++
-		w.WriteString(formatRow(h, statuses[i], c, info[h], notes[strings.ToLower(h)]) + "\n")
+		jr.CheckCount[c]++
+		// notes(비고)는 출력할 때 붙이므로 여기서는 비워 formatRow 의 열 값만 뽑는다.
+		r := hostResult{Host: h, Status: statuses[i], Check: "-", CPU: "-", Stress: "-", HT: "-", OS: "-"}
+		if statuses[i] == stDone {
+			ih := info[h]
+			r.Check, r.CPU, r.Stress, r.HT, r.OS = c, ih.cpuResult(), ih.stressResult(), ih.htResult(), ih.osResult()
+		}
+		jr.Hosts = append(jr.Hosts, r)
 	}
-	os.Stdout.Write(w.Bytes())
-
-	fmt.Fprintf(os.Stderr, "요약: 총 %d대 — 완료 %d, 디스크미인식 %d, 설치정지 %d, OS설치중 %d, 접속불가 %d (gossh 로그: %s)\n",
-		len(hosts), count[stDone], count[stNoDisk], count[stStopped], count[stInstall], count[stUnreach], logPath)
-	if conf.OSCheckSh != "" {
-		fmt.Fprintf(os.Stderr, "설정체크: O %d, X %d, 출력없음 %d\n", cc["O"], cc["X"], cc[noOutput])
-	}
+	return jr, nil
 }

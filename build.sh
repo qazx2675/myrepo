@@ -1,7 +1,7 @@
 #!/bin/bash
 # build.sh - new_setup 빌드
 #   ./build.sh       로컬 go 로 bin/new_setup (linux/amd64) 빌드
-#   ./build.sh os6   192.168.0.60 의 /opt/go1.20/bin/go 로 bin/new_setup_os6 빌드 (ssh root 필요)
+#   ./build.sh os6   (옛 방식·2026-11-04 부터 사용 안 함) 192.168.0.60 의 /opt/go1.20/bin/go 로 bin/new_setup_os6 빌드 (ssh root 필요). 모든 *.go 와 go.mod 를 복사
 set -eu
 cd "$(dirname "$0")"
 mkdir -p bin
@@ -12,7 +12,7 @@ if [ "${1:-}" = "os6" ]; then
 	REMOTE=/root/work/new_setup_build
 	echo "[os6] 소스를 $HOST:$REMOTE 로 복사"
 	ssh "$HOST" "rm -rf $REMOTE && mkdir -p $REMOTE"
-	tar czf - main.go go.mod | ssh "$HOST" "tar xzf - -C $REMOTE"
+	tar czf - ./*.go go.mod | ssh "$HOST" "tar xzf - -C $REMOTE"
 	echo "[os6] 원격 빌드"
 	# 원격 root 셸이 csh 일 수 있어(랩 .60) VAR=값 접두어가 안 먹으므로 sh -c 로 감싼다
 	ssh "$HOST" "sh -c 'cd $REMOTE && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $GO build -o new_setup_os6 .'"

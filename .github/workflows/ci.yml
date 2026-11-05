@@ -44,3 +44,9 @@ jobs:
 
       - name: Scenario test suite (fake gossh)
         run: bash test/run_tests.sh
+
+      - name: -run flow test suite (fake gossh / config_check / stress-test)
+        run: bash test/run_flow_tests.sh
+
+      - name: setup.sh / 첫 실행 제안 test suite
+        run: bash test/run_setup_tests.sh

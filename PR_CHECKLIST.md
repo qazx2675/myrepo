@@ -9,10 +9,22 @@
 - [ ] 랩 호스트(.58)에서 `bash test/run_tests.sh` 통과 (fake gossh 로 완료/접속불가/디스크미인식/설치정지/OS설치중, 이전 실행 `_os_install` 잔존 무시 확인)
 - [ ] 출력 형식 확인 — 각 줄이 `|` 로 8필드 (`awk -F'|' 'NF!=8'` 결과 없음), 첫 줄은 제목 줄(`hostname|상태|설정체크|CPU테스트|stress-ng|H/T|OS|비고`), 이후 입력 순서 유지, stdout 에 안내문 없음
 - [ ] 실제 gossh 로 랩 VM 몇 대에 실행해 `완료`/`접속불가` 확인 (설치중 계열은 fake 로만 확인했다면 보고에 명시)
-- [ ] `shellcheck new_setup.sh build.sh test/*.sh` 경고 없음
+- [ ] `shellcheck *.sh test/*.sh` 경고 없음 (CI 는 `-S warning`, 로컬은 info 도 없게 유지)
 - [ ] 래퍼와 바이너리 이름 일치 확인 (`new_setup.sh` ↔ `bin/new_setup`, 옛 `bin/new_setup_os6`), 실행 권한(`100755`) 유지
 - [ ] README.md 관련 표/설명 갱신 필요 여부 확인 (상태값·설정 키·종료코드·한계)
 - [ ] 판정 흐름이 바뀌었으면 ARCHITECTURE.md 흐름도와 계획서.md 갱신
 - [ ] 원격 명령(1차 정보수집·2차 anaconda.log)이 csh/tcsh 로그인 셸에서도 동작 — 변수 대입·`{ }`·`exit`·`!`·글롭 없이 `;` `&&` `||` 와 작은따옴표만 사용, 랩 .60(csh)에서 실제 gossh 로 확인
 - [ ] 설정체크: config_check.sh 가 `-auto-check` 를 지원하는지 확인 (미지원 구버전이면 실행하지 않고 `-` + 경고), 실제 config_check.sh 를 랩에 두고 `run.sh` 대역으로 `-auto-check` 경로 확인 (운영 run.sh 로는 확인 불가 — 보고에 명시)
 - [ ] 설정 키를 추가·변경했다면 `new_setup.conf.sample`, README 설정 키 표, 계획서.md 를 함께 갱신
+- [ ] **`-run` 을 바꿨다면** 랩 호스트(.58)에서 `bash test/run_flow_tests.sh` 통과 (fake gossh·config_check·stress-test 로 1→5 단계, 설정수정 `-auto`, CPU/stress 대상 분리·순서, 재부팅 감지, 시간초과, `stop.req`, 워커 kill -9 → 재기동)
+- [ ] `-run` 변경 시 실제 gossh(랩 .58/.60)로 비 tty 실행해 접속불가 호스트가 표에만 보이고 작업 대상이 아닌지, `.60`(csh)에서 감시 확인 명령(btime)이 동작하는지 확인 (실제 AWX 템플릿·45분 CPU 테스트·실장비 재부팅은 확인 못 했다면 보고에 명시)
+- [ ] 워커·TUI 변경 시 설정체크 `-` 규칙 유지 — `OS_CHECK_SH` 비었을 때만 `-` 가 통과 (`checkPass`), 단위 시험 `TestWorkerCheckDashWithOSCheck`
+- [ ] stress-test 폴더(`.claude/HPC/stress-test`)는 수정하지 않음 — `-batch` 호출과 `[감시]` 줄 감지에만 의존 (stress-test 출력이 바뀌면 `stress.go` 의 `stressMonitorMark` 확인)
+- [ ] `-run` 상태 파일 형식(state.json 키)을 바꿨다면 `stateVersion`·README 6.3·ARCHITECTURE.md 갱신
+- [ ] 외부 명령 호출을 추가했다면 시간 제한(`runCmd`)과 중지 요청 취소(`runCmdCancel`)를 거치는지 확인
+- [ ] **`setup.sh`·`new_setup.sh` 첫 실행 제안을 바꿨다면** 랩 호스트(.58)에서 `bash test/run_setup_tests.sh` 통과 (새로 만들기·값 지정·유지·`-` 비우기·경고/다시 입력·원자 저장/`.bak`·종료코드 0/1/2·stress-test 이어하기·비 tty 에서 제안 생략)
+- [ ] `setup.sh` 는 설정 파일이 있는 폴더 밖(/etc 등 공용 경로)에 아무것도 쓰지 않고, 임시 파일은 `mv`/정리로 남기지 않음. 질문·키를 바꿨다면 `new_setup.conf.sample`·README 2.0 표·`test/run_setup_tests.sh` 의 입력 줄 수 갱신
+- [ ] stress-test 폴더의 `setup.sh` 는 호출만 하고 수정하지 않음 (`--user`·`--conf` 인자 규약 유지)
+- [ ] **`-doctor`(`doctor*.go`) 를 바꿨다면** `go test ./...` 의 `doctor_test.go` 통과, **읽기 전용 보장 유지** — 설정 파일·상태 폴더·원격 호스트를 쓰지 않음(보고서 파일 `./new_setup_doctor_<시각>.txt` 와 임시 폴더만 씀), `-check` 는 `-auto-check` 만(수정 `-auto` 금지), 보고서 저장본의 비밀번호 마스킹
+- [ ] doctor 가 원격에 보내는 명령(1차·2차 + btime·uptime·`ls`)이 csh/tcsh 로그인 셸에서도 동작 — 변수 대입·`{ }`·`exit`·`!`·글롭 없이 `;` `&&` `||` 와 작은따옴표만 사용, 랩 .60(csh)에서 `bash troubleshoot.sh -host <호스트>` 로 확인
+- [ ] 점검·안내 항목을 추가했다면 README 7.2 표와 ARCHITECTURE.md 진단 흐름 갱신, `troubleshoot.sh` 와 `new_setup.sh` 의 바이너리 선택 로직이 같은지 확인
