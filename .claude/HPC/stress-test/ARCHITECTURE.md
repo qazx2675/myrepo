@@ -12,6 +12,7 @@
 | `awx_test.go` | fake AWX(httptest)·가짜 ssh/scp 로 `launchBatch` 성공·job 실패, 새 yml 없음, 고정 소스 invsync 검증 |
 | `logic_test.go` | 파서(입력·장애목록·steps·conf·벤더·로드)·결과표·yaml 이름·`_Nea` 경고·감시 루프·화면 단위 테스트 |
 | `go.mod` | `go 1.20`, 표준 라이브러리만 사용 (vendor 불필요) |
+| `setup.sh` | 대화형 설정: 샘플 키 순서대로 묻고 `conf/${user}_setting.conf` 저장(백업·600), 선택 점검(curl AWX, ssh repohost). `--user`/`--conf`, 종료코드 0/1/2 — setup_check `setup.sh` 가 호출 |
 | `stress_run.sh` | bash 래퍼: 상단 `GOSSH`/`USER_ROUTE` 변수, user 메뉴, `a/b` 단계 입력, 바이너리가 없으면 `build.sh`, 나머지 인자 그대로 전달 |
 | `build.sh` | `CGO_ENABLED=0 go build -o stress-test .` |
 | `stress-test` | os8(Rocky 8) 빌드 완료 바이너리 (커밋 대상, os6 빌드 없음) |

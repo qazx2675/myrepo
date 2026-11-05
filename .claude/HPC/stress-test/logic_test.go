@@ -62,7 +62,7 @@ func TestMacFromLine(t *testing.T) {
 }
 
 func TestParseErrorList(t *testing.T) {
-	text := "\xef\xbb\xbf# 주석\nNode01 팬 소음\r\nnode01\tPSU|교체\nnode02\n\nnode03   \n"
+	text := "\xef\xbb\xbf# 주석\nNode01\t팬 소음\r\nnode01\tPSU|교체\nnode02\n\nnode03\t  \nnode04 공백 구분은 무시\n"
 	got := parseErrorList(text)
 	want := map[string]string{"node01": "팬 소음, PSU/교체"}
 	if !reflect.DeepEqual(got, want) {
