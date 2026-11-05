@@ -220,8 +220,8 @@ rm -rf "$T/work2"
 
 echo "== v4: 장애 목록(-er) -> 비고 열"
 mkdir -p "$T/er"
-# 같은 호스트 여러 줄, 대소문자, '|' 포함 사유, 주석·빈 줄·사유 없는 줄, CRLF
-printf '# 주석\r\nh_ok 메모리 불량\r\n\r\nH_OFF 전원 | 케이블\r\nh_ok   디스크 교체 예정\r\nh_disk\r\n' > "$T/er/list.txt"
+# 탭 구분(공백 구분 줄은 무시), 같은 호스트 여러 줄, 대소문자, '|' 포함 사유, 주석·빈 줄·사유 없는 줄, CRLF
+printf '# 주석\r\nh_ok\t메모리 불량\r\n\r\nH_OFF\t전원 | 케이블\r\nh_ok\t디스크 교체 예정\r\nh_disk\r\nh_ref 공백 구분은 무시\r\n' > "$T/er/list.txt"
 OUT=$("$BIN" -c "$T/a.conf" -er "$T/er/list.txt" "$HF" 2> /dev/null)
 check "종료코드 0" 0 "$?"
 BAD=$(printf '%s\n' "$OUT" | awk -F'|' 'NF!=8')
@@ -229,7 +229,7 @@ check "모든 줄이 8필드" "" "$BAD"
 check "여러 줄은 이어 붙임" "메모리 불량, 디스크 교체 예정" "$(fld "$OUT" h_ok 8)"
 check "대소문자 무시, '|' 는 '/'" "전원 / 케이블" "$(fld "$OUT" h_off 8)"
 check "사유 없는 줄은 빈칸" "" "$(fld "$OUT" h_disk 8)"
-check "목록에 없는 호스트는 빈칸" "" "$(fld "$OUT" h_ref 8)"
+check "공백으로만 구분한 줄은 무시(빈칸)" "" "$(fld "$OUT" h_ref 8)"
 check "제목 줄 마지막은 비고" "비고" "$(printf '%s\n' "$OUT" | head -n1 | cut -d'|' -f8)"
 cp "$T/er/list.txt" "$T/er/error_list.txt"
 OUT2=$(cd "$T/er" && "$BIN" -c "$T/a.conf" "$HF" 2> "$T/er.err")
