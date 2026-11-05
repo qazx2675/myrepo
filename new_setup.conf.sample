@@ -23,10 +23,18 @@ OS_CHECK_SH=
 # 예: OS_CHECK_EXCLUDE=asdf|qwer
 OS_CHECK_EXCLUDE=
 
-# Intel CPU 진단 로그 경로와 성공 문구(고정 문자열). 로그에 문구가 있으면 CPU테스트 'O'.
+# CPU테스트: 'O' / 'X' / 'NOTRUN'. 그 벤더의 CPU 테스트 로그 파일이 없으면 NOTRUN(부하테스트 아직 안 함).
+# CPU_* 값은 따옴표로 감싸도 된다. LOG 파일 이름에 * ? 를 쓰면 그 폴더에서 가장 최근 파일을 쓴다
+# (폴더 부분에는 와일드카드·공백 불가). 벤더 검사를 끄려면 LOG 를 비운다(예: CPU_AMD_LOG=) -> 그 벤더는 'X'.
+
+# Intel CPU 진단 로그 경로와 성공 문구(고정 문자열, 대소문자 무시). 로그에 문구가 있으면 CPU테스트 'O'.
 CPU_INTEL_LOG=/var/cpudiag/result.log
 CPU_INTEL_OK=Completed successfully. No issues detected.
+# 지정하면 이 문자열이 든 줄만 검사하고 그 줄이 모두 성공 문구를 포함해야 'O'. 비우면 문구가 로그 어디에든 있으면 'O'.
+#CPU_INTEL_LINE=
 
-# AMD CPU 진단 로그 경로와 성공 문구. 아직 모름 — 나중에 채운다. 비어 있으면 AMD 장비는 'X'.
-CPU_AMD_LOG=
-CPU_AMD_OK=
+# AMD: 현장 수동 확인 'grep Result /var/cpudiag/results.json' 결과가 모두 PASS 인지와 같은 규칙.
+# LINE(Result) 이 든 줄이 1개 이상이고 모두 OK(PASS) 문구를 포함하면 CPU테스트 'O'.
+CPU_AMD_LOG=/var/cpudiag/results.json
+CPU_AMD_OK=PASS
+CPU_AMD_LINE=Result

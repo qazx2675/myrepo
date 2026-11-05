@@ -178,13 +178,19 @@ func TestResolveGosshPath(t *testing.T) {
 func TestParseConfV2(t *testing.T) {
 	d := parseConf("")
 	if d.CPUIntelLog != "/var/cpudiag/result.log" || d.CPUIntelOK != "Completed successfully. No issues detected." ||
-		d.CPUAMDLog != "" || d.CPUAMDOK != "" || d.OSCheckSh != "" || d.OSCheckExclude != "" {
+		d.CPUAMDLog != "/var/cpudiag/results.json" || d.CPUAMDOK != "PASS" || d.CPUAMDLine != "Result" ||
+		d.CPUIntelLine != "" || d.OSCheckSh != "" || d.OSCheckExclude != "" {
 		t.Errorf("v2 기본값 오류: %+v", d)
 	}
 	c := parseConf("OS_CHECK_SH = ~/cc.sh \nOS_CHECK_EXCLUDE=a|b\nCPU_INTEL_LOG=/x\nCPU_INTEL_OK=fine=ok\nCPU_AMD_LOG=/y\nCPU_AMD_OK=amd ok\n")
 	if c.OSCheckSh != "~/cc.sh" || c.OSCheckExclude != "a|b" || c.CPUIntelLog != "/x" || c.CPUIntelOK != "fine=ok" ||
 		c.CPUAMDLog != "/y" || c.CPUAMDOK != "amd ok" {
 		t.Errorf("v2 키 오류: %+v", c)
+	}
+	// 따옴표를 쓴 CPU 값도 동작해야 한다
+	q := parseConf("CPU_AMD_LOG=\"/var/x.json\"\nCPU_AMD_OK='PASS'\nCPU_AMD_LINE=\"Result\"\nCPU_INTEL_LINE=x\n")
+	if q.CPUAMDLog != "/var/x.json" || q.CPUAMDOK != "PASS" || q.CPUAMDLine != "Result" || q.CPUIntelLine != "x" {
+		t.Errorf("CPU 따옴표 처리 오류: %+v", q)
 	}
 }
 
@@ -209,7 +215,10 @@ func TestBuildInfoCmd(t *testing.T) {
 	cmd := buildInfoCmd(c)
 	for _, w := range []string{
 		"grep -m1 vendor_id /proc/cpuinfo;",
-		"grep -qF -e 'Completed successfully. No issues detected.' '/var/cpudiag/result.log' && echo NS_CPU_INTEL;",
+		"[ -f '/var/cpudiag/result.log' ] || echo NS_CPU_INTEL_NOLOG;",
+		"grep -qiF -e 'Completed successfully. No issues detected.' '/var/cpudiag/result.log' && echo NS_CPU_INTEL;",
+		"[ -f '/var/cpudiag/results.json' ] || echo NS_CPU_AMD_NOLOG;",
+		`awk 'index(tolower($0),"result"){n++; if (index(tolower($0),"pass")) p++} END{if (n>0 && n==p) print "NS_CPU_AMD"}' '/var/cpudiag/results.json';`,
 		"grep -rqs --include='messages*' --exclude='*.gz' stress-ng /var/log && echo NS_STRESS;",
 		"lscpu | grep -i 'per core';",
 		"echo NS_KERNEL `uname -r`",
@@ -218,25 +227,33 @@ func TestBuildInfoCmd(t *testing.T) {
 			t.Errorf("누락 %q in %s", w, cmd)
 		}
 	}
-	if strings.Contains(cmd, "NS_CPU_AMD") {
-		t.Errorf("AMD 미설정이면 AMD 줄이 없어야 함: %s", cmd)
+	// csh 안전: 작은따옴표 밖에는 중괄호·변수 대입이 없고, 어디에도 ! ·exit 가 없음
+	bare := regexp.MustCompile(`'[^']*'`).ReplaceAllString(cmd, "''")
+	for _, bad := range []string{"{", "}"} {
+		if strings.Contains(bare, bad) {
+			t.Errorf("따옴표 밖 csh 비호환 문자열 %q: %s", bad, cmd)
+		}
 	}
-	// csh 안전: 중괄호·! ·exit·변수 대입 없음
-	for _, bad := range []string{"{", "}", "!", "exit", "uptime"} {
+	for _, bad := range []string{"!", "exit", "uptime"} {
 		if strings.Contains(cmd, bad) {
 			t.Errorf("csh 비호환 문자열 %q: %s", bad, cmd)
 		}
 	}
-	if regexp.MustCompile(`(^|[;&|\s])\w+=`).MatchString(cmd) {
+	if regexp.MustCompile(`(^|[;&|\s])\w+=`).MatchString(bare) {
 		t.Errorf("변수 대입 형태 포함: %s", cmd)
 	}
 	if isDangerousCommand(cmd) {
 		t.Errorf("기본 정보수집 명령이 위험어로 판정됨")
 	}
-	c.CPUAMDLog, c.CPUAMDOK = "/a/log", "it's ok"
+	c.CPUAMDLog, c.CPUAMDOK, c.CPUAMDLine = "/a/log", "it's ok", ""
 	cmd = buildInfoCmd(c)
-	if !strings.Contains(cmd, `grep -qF -e 'it'\''s ok' '/a/log' && echo NS_CPU_AMD;`) {
+	if !strings.Contains(cmd, `grep -qiF -e 'it'\''s ok' '/a/log' && echo NS_CPU_AMD;`) {
 		t.Errorf("AMD 줄 오류: %s", cmd)
+	}
+	// 파일 이름 와일드카드: 셸 글롭 대신 ls -t | grep -x 로 최신 파일
+	c.CPUAMDLog = "/var/cpudiag/run_*.json"
+	if w := "/var/cpudiag/`ls -t '/var/cpudiag' | grep -m1 -x -e 'run_.*\\.json'`"; !strings.Contains(buildInfoCmd(c), w) {
+		t.Errorf("와일드카드 경로 오류: %s", buildInfoCmd(c))
 	}
 	c.CPUAMDOK = ""
 	if strings.Contains(buildInfoCmd(c), "NS_CPU_AMD") {
@@ -252,7 +269,11 @@ func TestParseInfoOutput(t *testing.T) {
 	out := "a: vendor_id\t: GenuineIntel\na: NS_CPU_INTEL\na: NS_STRESS\na: Thread(s) per core:                     2\na: NS_KERNEL 4.18.0-1.el8\r\n" +
 		"b: vendor_id\t: AuthenticAMD\nb: Thread(s) per core:  1\nb: NS_KERNEL \nb: banner text\n" +
 		"c: Welcome\nnoise\n"
+	out += "d: NS_CPU_INTEL_NOLOG\nd: NS_CPU_AMD_NOLOG\n"
 	got := parseInfoOutput(out)
+	if d := got["d"]; d == nil || !d.noIntel || !d.noAMD || d.cpuIntel || d.cpuAMD {
+		t.Errorf("d=%+v", d)
+	}
 	a := got["a"]
 	if a == nil || a.vendor != "GenuineIntel" || !a.cpuIntel || a.cpuAMD || !a.stress || a.tpc != 2 || a.kernel != "4.18.0-1.el8" {
 		t.Errorf("a=%+v", a)
@@ -276,7 +297,10 @@ func TestHostInfoResults(t *testing.T) {
 		{"Intel ng", &hostInfo{vendor: "GenuineIntel", tpc: 1}, "X", "X", "OFF", "-"},
 		{"Intel 인데 AMD 표식", &hostInfo{vendor: "GenuineIntel", cpuAMD: true}, "X", "X", "-", "-"},
 		{"AMD ok", &hostInfo{vendor: "AuthenticAMD", cpuAMD: true, tpc: 4}, "O", "X", "ON", "-"},
-		{"AMD 미설정", &hostInfo{vendor: "AuthenticAMD"}, "X", "X", "-", "-"},
+		{"AMD ng", &hostInfo{vendor: "AuthenticAMD"}, "X", "X", "-", "-"},
+		{"Intel 로그 없음", &hostInfo{vendor: "GenuineIntel", noIntel: true}, "NOTRUN", "X", "-", "-"},
+		{"AMD 로그 없음", &hostInfo{vendor: "AuthenticAMD", noAMD: true}, "NOTRUN", "X", "-", "-"},
+		{"AMD 인데 Intel 로그만 없음", &hostInfo{vendor: "AuthenticAMD", noIntel: true}, "X", "X", "-", "-"},
 		{"벤더 없음", &hostInfo{cpuIntel: true, cpuAMD: true}, "X", "X", "-", "-"},
 		{"nil", nil, "X", "X", "-", "-"},
 	}
@@ -306,16 +330,33 @@ func TestParseCheckRes(t *testing.T) {
 
 func TestFormatRow(t *testing.T) {
 	h := &hostInfo{vendor: "GenuineIntel", cpuIntel: true, stress: true, tpc: 2, kernel: "4.18"}
-	if got, want := formatRow("n1", stDone, "O", h), "n1\t완료\tO\tO\tO\tON\t4.18"; got != want {
+	if got, want := formatRow("n1", stDone, "O", h, "메모리 불량"), "n1|완료|O|O|O|ON|4.18|메모리 불량"; got != want {
 		t.Errorf("got %q want %q", got, want)
 	}
-	if got, want := formatRow("n2", stDone, "-", nil), "n2\t완료\t-\tX\tX\t-\t-"; got != want {
+	if got, want := formatRow("n2", stDone, "-", nil, ""), "n2|완료|-|X|X|-|-|"; got != want {
 		t.Errorf("got %q want %q", got, want)
 	}
 	for _, st := range []string{stNoDisk, stStopped, stInstall, stUnreach} {
-		got := formatRow("n3", st, "O", h)
-		if got != "n3\t"+st+"\t-\t-\t-\t-\t-" || strings.Count(got, "\t") != 6 {
+		got := formatRow("n3", st, "O", h, "x")
+		if got != "n3|"+st+"|-|-|-|-|-|x" || strings.Count(got, "|") != 7 {
 			t.Errorf("미완료 행 오류: %q", got)
+		}
+	}
+	if header != "hostname|상태|설정체크|CPU테스트|stress-ng|H/T|OS|비고" {
+		t.Errorf("제목 줄 오류: %q", header)
+	}
+}
+
+func TestParseErrorList(t *testing.T) {
+	text := "\xef\xbb\xbf# 주석\r\nnode01 메모리 불량\r\n\r\nNODE02\t전원 | 케이블\nnode01   디스크 교체\nnode03\nnode04 \t \n"
+	got := parseErrorList(text)
+	want := map[string]string{"node01": "메모리 불량, 디스크 교체", "node02": "전원 / 케이블"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: got %q want %q", k, got[k], v)
 		}
 	}
 }
