@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,16 +11,37 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
 
-// fakeAWX 는 launch/poll/invsync 에 필요한 엔드포인트만 흉내 낸다.
+// fakeAWX 는 launch/poll/invsync·템플릿 인벤토리 변경에 필요한 엔드포인트만 흉내 낸다.
+// 인벤토리: 1=DEFAULT, 2=admin(username), 9=kim(다른 사용자)
 type fakeAWX struct {
 	mu       sync.Mutex
 	calls    map[string]int
 	patch    map[string]interface{}
 	launches map[string]map[string]interface{}
+
+	tmplInv     map[int]int // 템플릿 → 현재 인벤토리
+	busyGets    int         // 남은 횟수만큼 템플릿 GET 이 kim(9) 인벤토리를 보여 준다
+	stealPatch  bool        // PATCH 직후 다른 사람이 kim 으로 바꾼 것처럼
+	failLaunch  bool        // launch 가 500
+	failRestore bool        // DEFAULT 로 되돌리는 PATCH 가 500
+	events      []string    // "patch 5→2", "launch 5" 순서 기록
+}
+
+var fakeInvNames = map[int]string{1: "DEFAULT", 2: "admin", 9: "kim"}
+
+func (f *fakeAWX) tmplJSON(id int, name string) map[string]interface{} {
+	inv := f.tmplInv[id]
+	if f.busyGets > 0 {
+		f.busyGets--
+		inv = 9
+	}
+	return map[string]interface{}{"id": id, "name": name, "inventory": inv,
+		"summary_fields": map[string]interface{}{"inventory": map[string]interface{}{"id": inv, "name": fakeInvNames[inv]}}}
 }
 
 func (f *fakeAWX) handler(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +62,47 @@ func (f *fakeAWX) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		return final
 	}
+	tmplNames := map[string]string{"5": "stress-ng", "6": "cpu-test"}
+	if p := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v2/job_templates/"), "/"), "/"); strings.HasPrefix(r.URL.Path, "/api/v2/job_templates/") && len(p) == 1 && tmplNames[p[0]] != "" {
+		id := 5
+		if p[0] == "6" {
+			id = 6
+		}
+		switch r.Method {
+		case http.MethodGet:
+			write(f.tmplJSON(id, tmplNames[p[0]]))
+		case http.MethodPatch:
+			var b struct {
+				Inventory int `json:"inventory"`
+			}
+			json.Unmarshal(body, &b)
+			f.events = append(f.events, fmt.Sprintf("patch %d→%d", id, b.Inventory))
+			if b.Inventory == 1 && f.failRestore {
+				w.WriteHeader(500)
+				return
+			}
+			f.tmplInv[id] = b.Inventory
+			if f.stealPatch {
+				f.tmplInv[id] = 9
+			}
+			write(map[string]interface{}{"id": id})
+		}
+		return
+	}
 	switch key {
+	case "GET /api/v2/inventories/":
+		name := r.URL.Query().Get("name")
+		var res []map[string]interface{}
+		for id, n := range fakeInvNames {
+			if name == "" || n == name {
+				res = append(res, map[string]interface{}{"id": id, "name": n})
+			}
+		}
+		write(map[string]interface{}{"count": len(res), "results": res})
+	case "GET /api/v2/job_templates/5/survey_spec/":
+		write(map[string]interface{}{"spec": []map[string]interface{}{
+			{"variable": "end_year", "type": "integer"}, {"variable": "end_month", "type": "integer"},
+			{"variable": "end_day", "type": "text"}, {"variable": "end_hour", "type": "float"}}})
 	case "GET /api/v2/inventories/7/inventory_sources/":
 		write(map[string]interface{}{"results": []map[string]interface{}{{"id": 11, "name": "src"}, {"id": 12, "name": "src2"}}})
 	case "PATCH /api/v2/inventory_sources/11/":
@@ -50,10 +113,14 @@ func (f *fakeAWX) handler(w http.ResponseWriter, r *http.Request) {
 	case "GET /api/v2/inventory_updates/21/":
 		write(map[string]interface{}{"id": 21, "status": status("successful")})
 	case "GET /api/v2/job_templates/":
-		write(map[string]interface{}{"results": []map[string]interface{}{{"id": 5, "name": "stress-ng"}, {"id": 6, "name": "cpu-intel"}}})
-	case "GET /api/v2/job_templates/6/":
-		write(map[string]interface{}{"id": 6, "name": "cpu-intel"})
+		write(map[string]interface{}{"results": []map[string]interface{}{{"id": 5, "name": "stress-ng"}, {"id": 6, "name": "cpu-test"}}})
 	case "POST /api/v2/job_templates/5/launch/", "POST /api/v2/job_templates/6/launch/":
+		f.events = append(f.events, "launch "+strings.Split(r.URL.Path, "/")[4])
+		if f.failLaunch {
+			w.WriteHeader(500)
+			io.WriteString(w, "launch 거부")
+			return
+		}
 		var m map[string]map[string]interface{}
 		json.Unmarshal(body, &m)
 		f.launches[r.URL.Path] = m["extra_vars"]
@@ -83,7 +150,7 @@ func writeScript(t *testing.T, path, body string) {
 
 // newTestApp 은 가짜 AWX·가짜 ssh/scp 로 등록·launch 를 시험할 app 을 만든다.
 func newTestApp(t *testing.T) (*app, *fakeAWX, string) {
-	f := &fakeAWX{calls: map[string]int{}, launches: map[string]map[string]interface{}{}}
+	f := &fakeAWX{calls: map[string]int{}, launches: map[string]map[string]interface{}{}, tmplInv: map[int]int{5: 1, 6: 1}}
 	srv := httptest.NewServer(http.HandlerFunc(f.handler))
 	t.Cleanup(srv.Close)
 
@@ -109,16 +176,32 @@ func newTestApp(t *testing.T) (*app, *fakeAWX, string) {
 	}
 	cfg.Repohost, cfg.SvrDir, cfg.Inventory = "repohost", svr, "7"
 	cfg.HistoryFile = filepath.Join(dir, "history.log")
+	cfg.Username = "admin"
 	cfg.Stress = TemplateConf{Template: "stress-ng", HostnameKey: "target_hosts", ExtraVars: "duration=60, mode=all"}
-	cfg.CPUIntel = TemplateConf{Template: "6", HostnameKey: "hosts"}
+	cfg.CPU = TemplateConf{Template: "6", HostnameKey: "hosts"}
 	a := &app{
 		cfg:     cfg,
 		client:  newAWXClient(srv.URL, "admin", "pw", false, 5*time.Second),
 		user:    "hong",
 		workDir: dir,
 		out:     io.Discard,
+		in:      bufio.NewReader(strings.NewReader("")),
+		end:     &endTime{Vals: [5]string{"2099", "07", "08", "09", "05"}, T: time.Date(2099, 7, 8, 9, 5, 0, 0, time.Local)},
+	}
+	if err := a.prepareAWX([]string{stageCPU, stageStress}); err != nil {
+		t.Fatal(err)
+	}
+	if a.userInvID != 2 || a.defInvID != 1 || a.tmpl[stageStress].ID != 5 || a.tmpl[stageCPU].ID != 6 {
+		t.Fatalf("prepareAWX: user=%d def=%d tmpl=%v", a.userInvID, a.defInvID, a.tmpl)
 	}
 	return a, f, repo
+}
+
+func twoTargets() []*target {
+	return []*target{
+		{Host: "n1", Fields: strings.Fields("tmp tmp tmp n1 10.0.0.1 02:00:00:00:00:01 eth0 sda sda5 100 8.10 uefi"), Res: map[string]string{}},
+		{Host: "n2", Fields: strings.Fields("tmp tmp tmp n2 10.0.0.2 02:00:00:00:00:02 eth0 sda sda5 100 8.10 uefi"), Res: map[string]string{}},
+	}
 }
 
 func TestLaunchBatchSuccess(t *testing.T) {
@@ -141,6 +224,14 @@ func TestLaunchBatchSuccess(t *testing.T) {
 	if ev["target_hosts"] != "n1\nn2" || ev["duration"] != "60" || ev["mode"] != "all" {
 		t.Errorf("extra_vars = %v", ev)
 	}
+	// survey type 변환: integer/float → 숫자(JSON 에서 float64), text·survey 에 없음 → 입력 글자 그대로
+	if ev["end_year"] != float64(2099) || ev["end_month"] != float64(7) || ev["end_day"] != "08" || ev["end_hour"] != float64(9) || ev["end_min"] != "05" {
+		t.Errorf("종료 시각 extra_vars = %v", ev)
+	}
+	// 인벤토리: admin 으로 바꾸고 launch 뒤 곧바로 DEFAULT 로
+	if strings.Join(f.events, ",") != "patch 5→2,launch 5,patch 5→1" || f.tmplInv[5] != 1 {
+		t.Errorf("events = %v inv=%d", f.events, f.tmplInv[5])
+	}
 	if f.calls["GET /api/v2/inventory_updates/21/"] != 2 || f.calls["GET /api/v2/jobs/31/"] != 2 {
 		t.Errorf("poll 횟수 = %v", f.calls)
 	}
@@ -149,21 +240,184 @@ func TestLaunchBatchSuccess(t *testing.T) {
 func TestLaunchBatchJobFail(t *testing.T) {
 	a, _, _ := newTestApp(t)
 	ts := []*target{{Host: "n1", Fields: strings.Fields("a b c n1 e f g h i j k l"), Res: map[string]string{}}}
-	if a.launchBatch(stageCPU, batch{name: "intel", tc: a.cfg.CPUIntel, list: ts}, 1) {
+	if a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 1) {
 		t.Fatal("실패여야 함")
 	}
 	if ts[0].Res[stageCPU] != resFail || len(ts[0].Notes) != 1 || !strings.Contains(ts[0].Notes[0], "실패(job 32)") {
 		t.Errorf("결과 = %v %v", ts[0].Res, ts[0].Notes)
 	}
-	if _, err := os.Stat(filepath.Join(os.Getenv("FAKE_REPO"), "hong_retry1_intel.yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(os.Getenv("FAKE_REPO"), "hong_retry1_cpu.yaml")); err != nil {
 		t.Errorf("재실행 yaml 이름: %v", err)
+	}
+}
+
+// hostname_key 를 비우면 hostname 목록을 넘기지 않는다. cpu 는 종료 시각·survey 조회 없음.
+func TestLaunchBatchNoHostnameKey(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	a.cfg.CPU = TemplateConf{Template: "6"}
+	ts := []*target{{Host: "n1", Fields: strings.Fields("a b c n1 e f g h i j k l"), Res: map[string]string{}}}
+	a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 0)
+	ev := f.launches["/api/v2/job_templates/6/launch/"]
+	if ev != nil || f.calls["GET /api/v2/job_templates/6/survey_spec/"] != 0 {
+		t.Errorf("extra_vars 가 없어야 함: %v calls=%v", ev, f.calls)
+	}
+}
+
+// launch 가 실패해도 인벤토리는 되돌린다.
+func TestLaunchFailRestores(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	f.failLaunch = true
+	ts := twoTargets()
+	if a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+		t.Fatal("실패여야 함")
+	}
+	if strings.Join(f.events, ",") != "patch 5→2,launch 5,patch 5→1" || f.tmplInv[5] != 1 {
+		t.Errorf("events = %v", f.events)
+	}
+	if ts[0].Res[stageStress] != resFail || !strings.Contains(strings.Join(ts[0].Notes, ","), "launch 실패") {
+		t.Errorf("결과 = %v %v", ts[0].Res, ts[0].Notes)
+	}
+}
+
+// 되돌리기 실패: 비고에 남기고 job 은 계속 감시 대상.
+func TestRestoreFail(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	f.failRestore = true
+	var out strings.Builder
+	a.out = &out
+	ts := twoTargets()
+	if !a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+		t.Fatal("job 은 성공이어야 함")
+	}
+	if len(ts[0].Notes) != 1 || ts[0].Notes[0] != "인벤토리 복원 실패 — 수동으로 DEFAULT 로" {
+		t.Errorf("비고 = %v", ts[0].Notes)
+	}
+	if !strings.Contains(out.String(), "✗✗✗") {
+		t.Errorf("경고 없음:\n%s", out.String())
+	}
+	b, _ := os.ReadFile(a.cfg.HistoryFile)
+	if !strings.Contains(string(b), "action=restore") {
+		t.Errorf("이력 = %s", b)
+	}
+}
+
+// 사용 중(batch): [인벤토리사용중] 줄 → stdin "r" → 다시 확인 후 실행. 등록은 한 번만.
+func TestBusyThenRetry(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	f.busyGets = 1
+	var out strings.Builder
+	a.out = &out
+	a.in = bufio.NewReader(strings.NewReader("r\n"))
+	ts := twoTargets()
+	if !a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+		t.Fatalf("성공이어야 함:\n%s", out.String())
+	}
+	want := busyPrefix + "템플릿 stress-ng(5) 인벤토리가 kim 입니다(DEFAULT 아님) — 그 인벤토리 사용자에게 DEFAULT 로 바꿔 달라고 요청하세요\n"
+	if strings.Count(out.String(), busyPrefix) != 1 || !strings.Contains(out.String(), "\n"+want) {
+		t.Errorf("출력:\n%s", out.String())
+	}
+	if f.calls["POST /api/v2/inventory_sources/11/update/"] != 1 || strings.Join(f.events, ",") != "patch 5→2,launch 5,patch 5→1" {
+		t.Errorf("calls=%v events=%v", f.calls, f.events)
+	}
+}
+
+// 사용 중 + stdin EOF → 그 묶음 중단, 인벤토리는 건드리지 않음.
+func TestBusyThenEOF(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	f.busyGets = 100
+	ts := twoTargets()
+	if a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+		t.Fatal("실패여야 함")
+	}
+	if len(f.events) != 0 || ts[1].Res[stageStress] != resFail || ts[1].Notes[0] != "템플릿 인벤토리 사용 중" {
+		t.Errorf("events=%v res=%v notes=%v", f.events, ts[1].Res, ts[1].Notes)
+	}
+}
+
+// 대화형: 질문 문구, x 면 중단.
+func TestBusyInteractiveX(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	f.busyGets = 100
+	a.interactive = true
+	var out strings.Builder
+	a.out = &out
+	a.in = bufio.NewReader(strings.NewReader("x\n"))
+	if a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: twoTargets()}, 0) {
+		t.Fatal("실패여야 함")
+	}
+	if !strings.Contains(out.String(), "r=다시 확인, x=이 묶음 중단: ") || strings.Contains(out.String(), busyPrefix) {
+		t.Errorf("출력:\n%s", out.String())
+	}
+}
+
+// PATCH 직후 다른 사람이 바꿨으면 되돌리지 않고 사용 중으로 처리.
+func TestSwitchStolen(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	f.stealPatch = true
+	ts := twoTargets()
+	if a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+		t.Fatal("실패여야 함")
+	}
+	if strings.Join(f.events, ",") != "patch 5→2" || ts[0].Notes[0] != "템플릿 인벤토리 사용 중" {
+		t.Errorf("events=%v notes=%v", f.events, ts[0].Notes)
+	}
+}
+
+// batch 에서 종료 시각이 지났으면 등록 없이 묶음 실패.
+func TestEndPassedBatch(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	a.end.T = time.Now().Add(-time.Minute)
+	ts := twoTargets()
+	if a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 1) {
+		t.Fatal("실패여야 함")
+	}
+	if ts[0].Notes[0] != "종료 시각이 지남" || f.calls["POST /api/v2/inventory_sources/11/update/"] != 0 {
+		t.Errorf("notes=%v calls=%v", ts[0].Notes, f.calls)
+	}
+}
+
+// 신호를 받으면 바꿔 둔 인벤토리를 되돌리고 128+신호번호로 끝낸다.
+func TestOnSignalRestores(t *testing.T) {
+	a, f, _ := newTestApp(t)
+	f.tmplInv[5] = 2
+	s := &invSwitch{}
+	s.begin(a.client, 5, 1)
+	code := -1
+	old := exitFn
+	exitFn = func(c int) { code = c }
+	defer func() { exitFn = old }()
+	var out strings.Builder
+	s.onSignal(syscall.SIGTERM, &out)
+	s.mu.Unlock() // onSignal 은 종료 전까지 잠금을 쥔다
+	if code != 143 || f.tmplInv[5] != 1 || !strings.Contains(out.String(), "되돌렸습니다") {
+		t.Errorf("code=%d inv=%d out=%s", code, f.tmplInv[5], out.String())
+	}
+	s.onSignal(syscall.SIGINT, io.Discard) // 바꾼 게 없으면 PATCH 없이 종료
+	if code != 130 || len(f.events) != 1 {
+		t.Errorf("code=%d events=%v", code, f.events)
+	}
+}
+
+func TestPrepareAWXMissingInventory(t *testing.T) {
+	a, _, _ := newTestApp(t)
+	a.cfg.Username = "nobody"
+	if err := a.prepareAWX([]string{stageCPU}); err == nil || !strings.Contains(err.Error(), "nobody") {
+		t.Errorf("err = %v", err)
+	}
+	a.cfg.Username, a.cfg.DefaultInventory = "admin", "DEF2"
+	if err := a.prepareAWX([]string{stageCPU}); err == nil || !strings.Contains(err.Error(), "default_inventory") {
+		t.Errorf("err = %v", err)
+	}
+	a.cfg.DefaultInventory, a.cfg.CPU.Template = "DEFAULT", "nope"
+	if err := a.prepareAWX([]string{stageCPU}); err == nil || !strings.Contains(err.Error(), "cpu 템플릿") {
+		t.Errorf("err = %v", err)
 	}
 }
 
 func TestRegisterNoNewYML(t *testing.T) {
 	a, _, _ := newTestApp(t)
 	writeScript(t, sshBin, "exit 0\n") // yml 을 만들지 않음
-	_, err := a.register("hong_amd.yaml", []*target{{Host: "n1", Fields: strings.Fields("a b c n1 e f g h i j k l")}})
+	_, err := a.register("hong_cpu.yaml", []*target{{Host: "n1", Fields: strings.Fields("a b c n1 e f g h i j k l")}})
 	if err == nil || !strings.Contains(err.Error(), "0개") {
 		t.Errorf("err = %v", err)
 	}

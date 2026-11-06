@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"reflect"
 	"strings"
@@ -210,5 +211,91 @@ func TestRenderScreen(t *testing.T) {
 		if !strings.Contains(s, w) {
 			t.Errorf("화면에 %q 없음:\n%s", w, s)
 		}
+	}
+}
+
+func TestConfigTemplateKeys(t *testing.T) {
+	c, err := parseConfig("cpu_template = cpu-test\ncpu_hostname_key =\nstress_template = stress-ng\n", "t.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.CPU.Template != "cpu-test" || c.DefaultInventory != "DEFAULT" || !reflect.DeepEqual(c.StressEndKeys, defaultEndKeys) {
+		t.Errorf("cfg = %+v", c)
+	}
+	c.AWXURL, c.Username, c.Password, c.Repohost, c.SvrDir, c.Inventory = "u", "admin", "p", "r", "/s", "3"
+	if err := c.validate("ab"); err != nil { // hostname_key 는 선택
+		t.Errorf("validate = %v", err)
+	}
+	c.CPU.Template = ""
+	if err := c.validate("ab"); err == nil || !strings.Contains(err.Error(), "cpu_template") {
+		t.Errorf("validate = %v", err)
+	}
+	for _, old := range []string{"cpu_intel_template = x\n", "cpu_amd_hostname_key =\n"} {
+		if _, err := parseConfig(old, "t.conf"); err == nil || !strings.Contains(err.Error(), "cpu_template 하나로 바뀌었습니다") {
+			t.Errorf("%q → %v", old, err)
+		}
+	}
+	c, err = parseConfig("stress_end_keys = y , m,d,h,mi\ndefault_inventory = BASE\n", "t.conf")
+	if err != nil || !reflect.DeepEqual(c.StressEndKeys, []string{"y", "m", "d", "h", "mi"}) || c.DefaultInventory != "BASE" {
+		t.Errorf("cfg = %+v %v", c, err)
+	}
+	for _, bad := range []string{"a,b,c,d", "a,b,c,d,e,f", "a,,c,d,e"} {
+		if _, err := parseConfig("stress_end_keys = "+bad+"\n", "t.conf"); err == nil {
+			t.Errorf("%q 는 오류여야 함", bad)
+		}
+	}
+}
+
+func TestParseEnd(t *testing.T) {
+	now := time.Date(2026, 11, 6, 10, 0, 0, 0, time.Local)
+	e, err := parseEndFlag("2026,11,06,10,01", now)
+	if err != nil || e.Vals != [5]string{"2026", "11", "06", "10", "01"} || e.T.Minute() != 1 {
+		t.Fatalf("e=%v err=%v", e, err)
+	}
+	for _, bad := range []string{
+		"2026,11,06,10,00", // 지금과 같음
+		"2026,11,06,09,59", // 과거
+		"2025,12,31,23,59", // 올해 이전
+		"26,12,1,0,0",      // 연 4자리 아님
+		"2027,13,1,0,0", "2027,0,1,0,0", "2027,1,32,0,0", "2027,1,0,0,0",
+		"2027,1,1,24,0", "2027,1,1,0,60", "2027,1,1,-1,0", "2027,1,1,a,0",
+		"2027,2,30,0,0", // 없는 날짜
+		"2027,1,1,0", "2027,1,1,0,0,0", "",
+	} {
+		if _, err := parseEndFlag(bad, now); err == nil {
+			t.Errorf("%q 는 오류여야 함", bad)
+		}
+	}
+}
+
+func TestEndVars(t *testing.T) {
+	e := &endTime{Vals: [5]string{"2027", "01", "02", "03", "04"}}
+	got := endVars([]string{"y", "m", "d", "h", "mi"}, e, map[string]string{"y": "integer", "m": "text", "d": "float", "h": "multiplechoice"})
+	want := map[string]interface{}{"y": 2027, "m": "01", "d": 2.0, "h": "03", "mi": "04"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v", got)
+	}
+}
+
+// 대화형 입력: 잘못된 값은 그 키만 다시, 합친 시각이 과거면 처음부터 다시.
+func TestAskEnd(t *testing.T) {
+	old := nowFn
+	nowFn = func() time.Time { return time.Date(2026, 11, 6, 10, 0, 0, 0, time.Local) }
+	defer func() { nowFn = old }()
+	cfg, _ := parseConfig("", "t.conf")
+	var out strings.Builder
+	in := "2026\n11\n06\n09\n00\n" + // 과거 → 처음부터
+		"abc\n2026\n13\n11\n07\n25\n18\n30\n"
+	a := &app{cfg: cfg, out: &out, in: bufio.NewReader(strings.NewReader(in))}
+	e, err := a.askEnd()
+	if err != nil || e.Vals != [5]string{"2026", "11", "07", "18", "30"} {
+		t.Fatalf("e=%v err=%v\n%s", e, err, out.String())
+	}
+	if strings.Count(out.String(), "end_year: ") != 3 || strings.Count(out.String(), "end_month: ") != 3 || !strings.Contains(out.String(), "처음부터") {
+		t.Errorf("출력:\n%s", out.String())
+	}
+	a.in = bufio.NewReader(strings.NewReader("2027\n"))
+	if _, err := a.askEnd(); err == nil {
+		t.Error("입력이 끊기면 오류")
 	}
 }
