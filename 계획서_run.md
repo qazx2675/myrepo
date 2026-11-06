@@ -113,3 +113,11 @@ tty 가 아니면 TUI 대신 현재 상태 한 번 출력 후 종료.
 | os8 바이너리 `bin/new_setup` 재빌드 | 완료 (os6 는 빌드 안 함) |
 
 미검증: 실제 AWX 템플릿·실제 CPU 45분 테스트·실장비 재부팅·실제 config_check.sh `-auto`(수정) 동작·실제 stress-test `[감시]` 줄(소스 기준으로만 확인).
+
+## 9. 추가 (2026-11-06): stress-test 템플릿 변경 연동
+
+stress-test 가 CPU 용 템플릿 하나만 쓰고 실행 중 템플릿 인벤토리를 `DEFAULT` ↔ 사용자 인벤토리로 바꾸게 되어(stress-test `계획서_템플릿변경.md`) `-run` 이 다음을 맡는다.
+
+- **종료 시각 입력**: 3단계(stress-ng 대상이 있을 때, CPU launch 전)와 4단계 실행 전에 `end_year end_month end_day end_hour end_min` 을 묻는다. 질문에 `Inputs`, 답에 `values`(answer.json) 추가. TUI 줄 입력 모드(`i`/Enter → 숫자·Backspace·Enter 다음·Esc 취소, 항목별 범위 검사·오류 표시·재입력, 마지막에 `c` 제출/`s` 중지). 값은 `stress_end` 로 저장·표시하고 `stress-test -steps b -end y,m,d,h,min` 으로만 넘긴다.
+- **인벤토리 사용 중 질문**: stress-test 가 `[인벤토리사용중] <메시지>` 를 내고 stdin 을 기다리면 단계는 그대로 `r`(다시 확인)/`x`(이 묶음 중단) 질문을 띄우고 답을 stdin 으로 넣는다. 질문은 한 번에 하나(CPU·stress-ng 동시), 대기 중 `STRESS_TIMEOUT` 일시정지(재개하면 처음부터), 중지 요청은 `x`.
+- 시험: 단위(`input_test.go` `hold_test.go` `worker_input_test.go` `tui_input_test.go` `doctor_input_test.go`), 통합(`run_flow_tests.sh` H~L, fake stress-test 의 `-end` 필수·`FAKE_ST_BUSY`). 실제 AWX 에서의 인벤토리 바꿈·되돌림은 미확인.

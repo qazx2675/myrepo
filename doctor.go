@@ -697,6 +697,7 @@ func docRun(r *docReport, a doctorArgs, d doctorDeps, env *docEnvInfo) {
 
 	docWorker(r, st, dir, a, d, now, fin)
 	docQuestion(r, st, dir, a, d, fin)
+	docStressEnd(r, st)
 	docStopReq(r, st, dir, a, d, fin)
 	docTimeline(r, st, dir, env, d, now, fin)
 	if st.LastError != "" {
@@ -833,6 +834,12 @@ func docQuestion(r *docReport, st *runState, dir string, a doctorArgs, d doctorD
 		fix = "워커가 죽어 있으니 먼저 같은 명령으로 다시 실행하세요(이어서 진행 y). 재기동하면 이 질문은 다시 나옵니다: new_setup -run " + a.hostFile
 	}
 	r.warn(fix, "질문 %s 에 대한 답을 기다리는 중입니다(%s 단계, %s 질문)\n%s\n선택지: %s", q.ID, stageName(q.Stage), agoText(now, q.Asked), q.Text, strings.Join(ch, " / "))
+	if len(q.Inputs) > 0 {
+		r.info("입력 질문입니다: TUI 에서 i 또는 Enter 로 %s 를 차례로 입력한 뒤 c 로 제출합니다(비대화형이면 answer.json 에 {\"id\":\"%s\",\"choice\":\"c\",\"values\":{\"end_year\":\"2026\",...}} 형식으로 씁니다)", endFieldNames(), q.ID)
+	}
+	if q.Kind == "busy" {
+		r.info("stress-test 가 템플릿 인벤토리 사용 중이라 멈춰 있습니다(단계는 그대로, 이 동안 STRESS_TIMEOUT 은 일시정지). 그 인벤토리 사용자가 DEFAULT 로 되돌린 뒤 r(다시 확인), 포기하려면 x(이 묶음 중단)")
+	}
 	switch {
 	case !ans.exists:
 	case ans.err != nil:
@@ -1075,4 +1082,12 @@ func docHistory(r *docReport, st *runState, env *docEnvInfo, now time.Time) {
 	if failSince > 0 {
 		r.warn("이력의 error= 내용(AWX 템플릿·인벤토리·권한)을 확인하세요", "이 작업 시작 이후 stress-test launch 실패 기록이 %d건 있습니다", failSince)
 	}
+}
+
+// docStressEnd 는 입력받아 stress-test -end 로 넘긴 stress-ng 종료 시각을 보여 준다(읽기 전용).
+func docStressEnd(r *docReport, st *runState) {
+	if st.StressEnd == "" {
+		return
+	}
+	r.info("stress-ng 종료 시각(stress-test -end): %s  (입력값 %s)", endText(st.StressEnd), st.StressEnd)
 }

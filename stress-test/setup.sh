@@ -63,6 +63,22 @@ if [[ -f $conf ]]; then
 		cur[$L_KEY]=$L_VAL
 	done < "$conf"
 	echo "[i] 기존 설정을 기본값으로 보여 줍니다: $conf"
+	# cpu_intel_*/cpu_amd_* 는 없어짐(cpu_template 하나) → Intel 값(Intel 템플릿이 비면 AMD)을 cpu_* 기본값으로 옮기고 저장할 때 뺀다
+	old_cpu=""; keep=()
+	for k in "${extra[@]}"; do
+		case $k in cpu_intel_*|cpu_amd_*) old_cpu+=" $k" ;; *) keep+=("$k") ;; esac
+	done
+	extra=("${keep[@]}")
+	if [[ -n $old_cpu ]]; then
+		echo "[!] 없어진 키:$old_cpu — cpu 템플릿은 cpu_template 하나로 바뀌었습니다 (Intel/AMD 는 템플릿 안에서 구분)"
+		if [[ -z ${cur[cpu_template]+x} ]]; then
+			g=intel; [[ -z ${cur[cpu_intel_template]} ]] && g=amd
+			for f in template hostname_key extra_vars; do cur[cpu_$f]=${cur[cpu_${g}_$f]}; done
+			echo "    cpu_${g}_* 값을 cpu_template/cpu_hostname_key/cpu_extra_vars 기본값으로 옮겼습니다 (Intel 템플릿이 비어 있으면 AMD). 저장하면 옛 키는 빠집니다"
+		fi
+	fi
+	# 기존 설정에 없는 (새로 생긴) 키는 샘플 값을 기본값으로
+	for k in "${keys[@]}"; do [[ -n ${cur[$k]+x} ]] || cur[$k]=${def[$k]}; done
 else
 	echo "[i] 새 설정 파일을 만듭니다: $conf (값은 샘플 기준)"
 	for k in "${keys[@]}"; do cur[$k]=${def[$k]}; done
@@ -78,6 +94,7 @@ check_val() {   # key value → 오류 메시지(문제 없으면 빈 값)
 		monitor_sec|monitor_interval|poll_interval) [[ $v =~ ^[1-9][0-9]*$ ]] || echo "1 이상의 정수여야 합니다" ;;
 		load_threshold) [[ $v =~ ^[0-9]*\.?[0-9]+$ && ! $v =~ ^0*\.?0*$ ]] || echo "0 보다 큰 숫자여야 합니다" ;;
 		insecure_tls) [[ $v =~ ^(true|false|yes|no|1|0|on|off)$ ]] || echo "true 또는 false 로 입력하세요" ;;
+		stress_end_keys) [[ $v =~ ^[[:space:]]*[^,[:space:]]+[[:space:]]*(,[[:space:]]*[^,[:space:]]+[[:space:]]*){4}$ ]] || echo "쉼표로 구분한 5개(연,월,일,시,분 순 survey 변수명)여야 합니다. 예: end_year,end_month,end_day,end_hour,end_min" ;;
 	esac
 }
 
@@ -85,7 +102,8 @@ section=""
 for k in "${keys[@]}"; do
 	case $k in
 		awx_url) s="AWX 접속" ;; gossh) s="gossh" ;; repohost) s="인벤토리 등록 (AWX 01 방식)" ;;
-		inventory_source) s="인벤토리 소스" ;; cpu_intel_template) s="템플릿 (cpu: Intel/AMD, stress: stress-ng)" ;;
+		inventory_source) s="인벤토리 소스" ;; cpu_template) s="템플릿 (cpu: 하나, stress: stress-ng) — survey key 는 stress-test -inspect 로 확인" ;;
+		default_inventory) s="템플릿 인벤토리 (실행 때 username 인벤토리로 바꿨다가 되돌림)" ;;
 		monitor_sec) s="감시" ;; output_dir) s="공통" ;; *) s="" ;;
 	esac
 	[[ -n $s && $s != "$section" ]] && { section=$s; echo "── $s ──"; }
@@ -112,6 +130,7 @@ done
 miss=""
 for k in awx_url username password repohost repo_dir svr_dir; do [[ -n ${cur[$k]} ]] || miss+=" $k"; done
 [[ -n $miss ]] && echo "[!] 비어 있는 필수 값:$miss (stress-test 실행 시 오류가 납니다)"
+echo "[i] 템플릿 survey 변수명(*_hostname_key, stress_end_keys)은 stress-test -inspect 로 key 확인"
 
 echo
 echo "── 저장할 값 ──"
@@ -148,6 +167,7 @@ fi
 chmod 600 "$tmp"
 mv -f "$tmp" "$conf" || { rm -f "$tmp"; die "설정 파일을 쓸 수 없습니다: $conf"; }
 echo "[✔] 저장했습니다: $conf (권한 600)"
+echo "[i] 템플릿 key·인벤토리 확인: stress-test -inspect -conf $conf   (survey 변수명, stress_end_keys 점검)"
 
 # ==== 선택 점검 (실패해도 저장은 유지, 경고만) ====
 read -r -p "접속 점검(AWX·템플릿·repohost·폴더)을 할까요? (y/N): " yn || exit 0
@@ -159,19 +179,27 @@ curl_awx() {   # 경로 → HTTP 본문 (마지막 줄에 상태코드). 비밀�
 	[[ ${cur[insecure_tls]} =~ ^(true|yes|1|on)$ ]] && k="-k"
 	curl -s $k -m 10 -K <(printf 'user = "%s:%s"\n' "$u" "$p") -w '\n%{http_code}' "${cur[awx_url]%/}$1"
 }
+urlenc() { printf '%s' "$1" | od -An -tx1 | tr -d ' \n' | sed 's/../%&/g'; }
 if ! command -v curl >/dev/null; then
 	echo "[!] curl 이 없어 AWX 점검을 건너뜁니다"
 elif [[ -n ${cur[awx_url]} ]]; then
 	code=$(curl_awx /api/v2/me/ | tail -n1)
 	case $code in
 		200) echo "[✔] AWX 접속·로그인 성공"
-			for t in cpu_intel_template cpu_amd_template stress_template; do
+			for t in cpu_template stress_template; do
 				name=${cur[$t]}; [[ -n $name ]] || continue
 				if [[ $name =~ ^[0-9]+$ ]]; then path="/api/v2/job_templates/$name/"
-				else path="/api/v2/job_templates/?name=$(printf '%s' "$name" | od -An -tx1 | tr -d ' \n' | sed 's/../%&/g')"; fi
+				else path="/api/v2/job_templates/?name=$(urlenc "$name")"; fi
 				res=$(curl_awx "$path"); c=$(tail -n1 <<<"$res")
 				if [[ $c == 200 && ! $res =~ \"count\":[[:space:]]*0[,}] ]]; then echo "[✔] $t: $name 조회됨"
 				else echo "[!] $t: $name 을 찾지 못했습니다 (HTTP $c)"; fi
+			done
+			# 템플릿 실행 때 바꿀 인벤토리(username)와 되돌릴 인벤토리(default_inventory)
+			for t in username default_inventory; do
+				name=${cur[$t]}; [[ -n $name ]] || continue
+				res=$(curl_awx "/api/v2/inventories/?name=$(urlenc "$name")"); c=$(tail -n1 <<<"$res")
+				if [[ $c == 200 && ! $res =~ \"count\":[[:space:]]*0[,}] ]]; then echo "[✔] 인벤토리 $name ($t) 조회됨"
+				else echo "[!] 인벤토리 $name ($t) 을 찾지 못했습니다 (HTTP $c) — 없으면 stress-test 가 종료코드 2"; fi
 			done ;;
 		401|403) echo "[!] AWX 로그인 실패 (HTTP $code): username/password 확인" ;;
 		*) echo "[!] AWX 접속 실패 (HTTP ${code:-없음}): awx_url/insecure_tls 확인" ;;

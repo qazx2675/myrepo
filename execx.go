@@ -33,6 +33,13 @@ func runCmd(cmd *exec.Cmd, timeout time.Duration) (string, error) {
 
 // runCmdCancel 은 runCmd 에 취소 채널을 더한 것: cancel 이 닫히면 같은 방식(SIGTERM → 5초 뒤 SIGKILL)으로 끝내고 errCanceled 를 돌려준다.
 func runCmdCancel(cmd *exec.Cmd, timeout time.Duration, cancel <-chan struct{}) (string, error) {
+	return runCmdHold(cmd, timeout, cancel, nil)
+}
+
+// runCmdHold 는 runCmdCancel 에 시간 제한 일시정지 채널을 더한 것: hold 로 true 가 오면 시간 제한 타이머를 멈추고,
+// false 가 오면 처음부터 다시 timeout 만큼 잰다(사용자 답을 기다리는 동안 stress-test 시간 제한이 흐르지 않게).
+// hold 는 버퍼가 있는 채널이어야 하고(보내는 쪽이 막히지 않게), nil 이면 쓰지 않는다.
+func runCmdHold(cmd *exec.Cmd, timeout time.Duration, cancel <-chan struct{}, hold <-chan bool) (string, error) {
 	var out bytes.Buffer
 	if cmd.Stdout != nil {
 		cmd.Stdout = io.MultiWriter(cmd.Stdout, &out)
@@ -50,19 +57,39 @@ func runCmdCancel(cmd *exec.Cmd, timeout time.Duration, cancel <-chan struct{}) 
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	var tm *time.Timer
 	var timer <-chan time.Time
-	if timeout > 0 {
-		t := time.NewTimer(timeout)
-		defer t.Stop()
-		timer = t.C
+	startTimer := func() {
+		if timeout > 0 {
+			tm = time.NewTimer(timeout)
+			timer = tm.C
+		}
 	}
+	stopTimer := func() {
+		if tm != nil {
+			tm.Stop()
+			tm, timer = nil, nil
+		}
+	}
+	startTimer()
+	defer stopTimer()
 	reason := errTimeout
-	select {
-	case err := <-done:
-		return out.String(), err
-	case <-timer:
-	case <-cancel:
-		reason = errCanceled
+wait:
+	for {
+		select {
+		case err := <-done:
+			return out.String(), err
+		case <-timer:
+			break wait
+		case <-cancel:
+			reason = errCanceled
+			break wait
+		case h := <-hold:
+			stopTimer()
+			if !h {
+				startTimer()
+			}
+		}
 	}
 	signalGroup(cmd, false)
 	select {

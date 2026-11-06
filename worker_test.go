@@ -49,6 +49,15 @@ type fakeExec struct {
 	sleeps    int
 	blockA    chan struct{} // nil 아니면 CPU stress-test 가 시작 때 이 채널을 닫고 취소될 때까지 멈춘다
 	stopOnAsk bool          // 질문이 뜨면 답 대신 stop.req 를 쓴다
+
+	endSeq    []map[string]string // 입력 질문에 차례로 할 답의 값(다 쓰면 endVals)
+	endChoice string              // 입력 질문에 할 선택(기본 c)
+	endVals   map[string]string   // 입력 질문(종료 시각)에 자동으로 하는 답의 값(nil 이면 가짜 시각 다음 날)
+	endAsked  []string            // 받은 입력 질문의 "단계:선택지"
+	ends      []string            // StressTest 호출마다 "steps:end"
+	busyMsg   map[string]string   // steps -> stress-test 가 낼 인벤토리 사용 중 메시지(이 호출은 busy 답을 기다린다)
+	busyAns   []string            // busy 콜백이 받은 답 "steps:답"
+	lastQ     string              // 마지막으로 답한 질문 id(같은 질문에 두 번 답하지 않게)
 }
 
 func newFake(t *testing.T, order []string, world map[string]*fakeHost, answers ...string) *fakeExec {
@@ -71,26 +80,54 @@ func (f *fakeExec) Sleep(d time.Duration) {
 	if n > 200000 {
 		f.t.Fatalf("Sleep 이 너무 많음(무한 루프?)")
 	}
+	f.w.mu.Lock() // 락 순서: 워커 mu -> f.mu (update 가 mu 를 잡은 채 Now 를 부름)
 	q := f.w.st.Question
+	f.w.mu.Unlock()
 	if q == nil {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if q.Kind == "busy" && q.ID == f.lastQ { // 인벤토리 사용 중 질문은 두 고루틴이 Sleep 하므로 한 번만 답한다(일반·입력 질문은 혼자 뜨고, 답이 무시되면 다시 답한다)
 		return
 	}
 	if f.stopOnAsk {
 		_ = os.WriteFile(filepath.Join(f.w.dir, stopReqFile), []byte("x"), 0o644)
 		return
 	}
-	if len(f.answers) == 0 {
-		f.t.Fatalf("답이 남아 있지 않은 질문: [%d] %s", q.Stage, q.Text)
-	}
-	a := f.answers[0]
-	f.answers = f.answers[1:]
 	var keys []string
 	for _, c := range q.Choices {
 		keys = append(keys, c.Key)
 	}
+	f.lastQ = q.ID
+	if len(q.Inputs) > 0 { // 종료 시각 입력 질문: 답 목록을 쓰지 않고 자동으로 c + 값
+		f.endAsked = append(f.endAsked, stageName(q.Stage)+":"+strings.Join(keys, ""))
+		f.events = append(f.events, "endq:"+stageName(q.Stage))
+		if f.endChoice == ansStop {
+			_ = writeAnswer(f.w.dir, q.ID, ansStop)
+			return
+		}
+		vals := f.endVals
+		if len(f.endSeq) > 0 {
+			vals, f.endSeq = f.endSeq[0], f.endSeq[1:]
+		}
+		if vals == nil {
+			vals = map[string]string{"end_year": "2026", "end_month": "11", "end_day": "06", "end_hour": "18", "end_min": "00"}
+		}
+		if err := writeAnswerValues(f.w.dir, q.ID, "c", vals); err != nil {
+			f.t.Error(err)
+		}
+		return
+	}
+	if len(f.answers) == 0 {
+		f.t.Errorf("답이 남아 있지 않은 질문: [%d] %s", q.Stage, q.Text)
+		return
+	}
+	a := f.answers[0]
+	f.answers = f.answers[1:]
 	f.asked = append(f.asked, stageName(q.Stage)+":"+strings.Join(keys, "")+"="+a)
 	if err := writeAnswer(f.w.dir, q.ID, a); err != nil {
-		f.t.Fatal(err)
+		f.t.Error(err)
 	}
 }
 
@@ -148,12 +185,27 @@ func (f *fakeExec) ConfigFix(hosts []string) error {
 	return nil
 }
 
-func (f *fakeExec) StressTest(steps, listFile string, hosts []string, launched func()) (int, error) {
+func (f *fakeExec) StressTest(steps, listFile string, hosts []string, end string, launched func(), busy func(msg string) string) (int, error) {
 	b, err := os.ReadFile(listFile)
 	if err != nil || strings.Join(parseHostLines(string(b)), ",") != strings.Join(hosts, ",") {
 		f.t.Errorf("목록 파일 %s 내용이 대상과 다름: %q / %v", listFile, b, hosts)
 	}
 	f.mu.Lock()
+	m := f.busyMsg[steps]
+	delete(f.busyMsg, steps)
+	f.mu.Unlock()
+	if m != "" && busy != nil {
+		ans := busy(m)
+		f.mu.Lock()
+		f.busyAns = append(f.busyAns, steps+":"+ans)
+		f.events = append(f.events, "busy:"+steps+":"+ans)
+		f.mu.Unlock()
+		if ans != "r" {
+			return 1, nil
+		}
+	}
+	f.mu.Lock()
+	f.ends = append(f.ends, steps+":"+end)
 	f.events = append(f.events, "start:"+steps+":"+strings.Join(hosts, ","))
 	if steps == "a" {
 		if f.blockA != nil {

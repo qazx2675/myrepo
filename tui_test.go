@@ -14,7 +14,7 @@ type sent struct {
 
 func (s *sent) actions() tuiActions {
 	return tuiActions{
-		answer: func(id, ch string) error {
+		answer: func(id, ch string, vals map[string]string) error {
 			if s.fail {
 				return errors.New("쓰기 실패")
 			}
