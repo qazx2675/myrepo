@@ -276,7 +276,7 @@ func TestInspectRunMismatch(t *testing.T) {
 	// username / default 인벤토리 없음 → 1
 	s, cfg, c = newInspect(t)
 	cfg.Username, cfg.DefaultInventory = "nobody", "NODEF"
-	if code, out = runInsp(t, cfg, c); code != 1 || !strings.Contains(out, "username(nobody) 과 같은 이름의 인벤토리가 AWX 에 없음") || !strings.Contains(out, "default_inventory(NODEF) 인벤토리가 AWX 에 없음") {
+	if code, out = runInsp(t, cfg, c); code != 1 || !strings.Contains(out, "username(nobody) 이거나 이름에 그것이 들어간 인벤토리가 AWX 에 없음") || !strings.Contains(out, "default_inventory(NODEF) 인벤토리가 AWX 에 없음") {
 		t.Errorf("인벤토리 없음 code=%d\n%s", code, out)
 	}
 	// conf 템플릿이 아닌 템플릿 인자는 키 점검 없이 보이기만 → 0
@@ -337,5 +337,25 @@ func TestTemplateRoles(t *testing.T) {
 	}
 	if r := templateRoles(cfg, &jobTemplate{ID: 9, Name: "x"}); len(r) != 0 {
 		t.Errorf("none = %v", r)
+	}
+}
+
+func TestMatchUserInventory(t *testing.T) {
+	invs := []invInfo{{1, "DEFAULT"}, {2, "I_donghyun97.kim"}, {3, "kim"}, {4, "I_KIM2"}}
+	if v, ex, _ := matchUserInventory(invs, "kim"); v.ID != 3 || !ex {
+		t.Fatalf("정확히 같은 이름 우선: %v %v", v, ex)
+	}
+	if v, ex, _ := matchUserInventory(invs, "donghyun97.kim"); v.ID != 2 || ex {
+		t.Fatalf("이름에 포함(I_ 접두): %v %v", v, ex)
+	}
+	if v, _, c := matchUserInventory(invs, "KIM2"); v.ID != 4 || len(c) != 1 {
+		t.Fatalf("대소문자 무시 포함: %v %v", v, c)
+	}
+	invs = append(invs, invInfo{5, "I_donghyun97.kim_old"})
+	if v, _, c := matchUserInventory(invs, "donghyun97.kim"); v.ID != 0 || len(c) != 2 {
+		t.Fatalf("후보 여러 개면 고르지 않음: %v %v", v, c)
+	}
+	if v, _, c := matchUserInventory(invs, "nobody"); v.ID != 0 || len(c) != 0 {
+		t.Fatalf("없음: %v %v", v, c)
 	}
 }

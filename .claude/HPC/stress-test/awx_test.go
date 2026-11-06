@@ -29,6 +29,7 @@ type fakeAWX struct {
 	stealPatch  bool        // PATCH 직후 다른 사람이 kim 으로 바꾼 것처럼
 	failLaunch  bool        // launch 가 500
 	failRestore bool        // DEFAULT 로 되돌리는 PATCH 가 500
+	failCPUJob  bool        // cpu 템플릿(6) job 을 failed(32)로
 	events      []string    // "patch 5→2", "launch 5" 순서 기록
 }
 
@@ -124,7 +125,7 @@ func (f *fakeAWX) handler(w http.ResponseWriter, r *http.Request) {
 		var m map[string]map[string]interface{}
 		json.Unmarshal(body, &m)
 		f.launches[r.URL.Path] = m["extra_vars"]
-		if strings.Contains(r.URL.Path, "/5/") {
+		if !(strings.Contains(r.URL.Path, "/6/") && f.failCPUJob) {
 			write(map[string]interface{}{"job": 31})
 		} else {
 			write(map[string]interface{}{"job": 32})
@@ -228,8 +229,8 @@ func TestLaunchBatchSuccess(t *testing.T) {
 	if ev["end_year"] != float64(2099) || ev["end_month"] != float64(7) || ev["end_day"] != "08" || ev["end_hour"] != float64(9) || ev["end_min"] != "05" {
 		t.Errorf("종료 시각 extra_vars = %v", ev)
 	}
-	// 인벤토리: admin 으로 바꾸고 launch 뒤 곧바로 DEFAULT 로
-	if strings.Join(f.events, ",") != "patch 5→2,launch 5,patch 5→1" || f.tmplInv[5] != 1 {
+	// stress-ng 템플릿은 개인 인벤토리를 그대로 쓰므로 인벤토리를 바꾸지 않는다
+	if strings.Join(f.events, ",") != "launch 5" || f.tmplInv[5] != 1 {
 		t.Errorf("events = %v inv=%d", f.events, f.tmplInv[5])
 	}
 	if f.calls["GET /api/v2/inventory_updates/21/"] != 2 || f.calls["GET /api/v2/jobs/31/"] != 2 {
@@ -238,7 +239,8 @@ func TestLaunchBatchSuccess(t *testing.T) {
 }
 
 func TestLaunchBatchJobFail(t *testing.T) {
-	a, _, _ := newTestApp(t)
+	a, f, _ := newTestApp(t)
+	f.failCPUJob = true
 	ts := []*target{{Host: "n1", Fields: strings.Fields("a b c n1 e f g h i j k l"), Res: map[string]string{}}}
 	if a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 1) {
 		t.Fatal("실패여야 함")
@@ -268,13 +270,13 @@ func TestLaunchFailRestores(t *testing.T) {
 	a, f, _ := newTestApp(t)
 	f.failLaunch = true
 	ts := twoTargets()
-	if a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+	if a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 0) {
 		t.Fatal("실패여야 함")
 	}
-	if strings.Join(f.events, ",") != "patch 5→2,launch 5,patch 5→1" || f.tmplInv[5] != 1 {
+	if strings.Join(f.events, ",") != "patch 6→2,launch 6,patch 6→1" || f.tmplInv[6] != 1 {
 		t.Errorf("events = %v", f.events)
 	}
-	if ts[0].Res[stageStress] != resFail || !strings.Contains(strings.Join(ts[0].Notes, ","), "launch 실패") {
+	if ts[0].Res[stageCPU] != resFail || !strings.Contains(strings.Join(ts[0].Notes, ","), "launch 실패") {
 		t.Errorf("결과 = %v %v", ts[0].Res, ts[0].Notes)
 	}
 }
@@ -286,7 +288,7 @@ func TestRestoreFail(t *testing.T) {
 	var out strings.Builder
 	a.out = &out
 	ts := twoTargets()
-	if !a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+	if !a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 0) {
 		t.Fatal("job 은 성공이어야 함")
 	}
 	if len(ts[0].Notes) != 1 || ts[0].Notes[0] != "인벤토리 복원 실패 — 수동으로 DEFAULT 로" {
@@ -309,14 +311,14 @@ func TestBusyThenRetry(t *testing.T) {
 	a.out = &out
 	a.in = bufio.NewReader(strings.NewReader("r\n"))
 	ts := twoTargets()
-	if !a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+	if !a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 0) {
 		t.Fatalf("성공이어야 함:\n%s", out.String())
 	}
-	want := busyPrefix + "템플릿 stress-ng(5) 인벤토리가 kim 입니다(DEFAULT 아님) — 그 인벤토리 사용자에게 DEFAULT 로 바꿔 달라고 요청하세요\n"
+	want := busyPrefix + "템플릿 cpu-test(6) 인벤토리가 kim 입니다(DEFAULT 아님) — 그 인벤토리 사용자에게 DEFAULT 로 바꿔 달라고 요청하세요\n"
 	if strings.Count(out.String(), busyPrefix) != 1 || !strings.Contains(out.String(), "\n"+want) {
 		t.Errorf("출력:\n%s", out.String())
 	}
-	if f.calls["POST /api/v2/inventory_sources/11/update/"] != 1 || strings.Join(f.events, ",") != "patch 5→2,launch 5,patch 5→1" {
+	if f.calls["POST /api/v2/inventory_sources/11/update/"] != 1 || strings.Join(f.events, ",") != "patch 6→2,launch 6,patch 6→1" {
 		t.Errorf("calls=%v events=%v", f.calls, f.events)
 	}
 }
@@ -326,10 +328,10 @@ func TestBusyThenEOF(t *testing.T) {
 	a, f, _ := newTestApp(t)
 	f.busyGets = 100
 	ts := twoTargets()
-	if a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+	if a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 0) {
 		t.Fatal("실패여야 함")
 	}
-	if len(f.events) != 0 || ts[1].Res[stageStress] != resFail || ts[1].Notes[0] != "템플릿 인벤토리 사용 중" {
+	if len(f.events) != 0 || ts[1].Res[stageCPU] != resFail || ts[1].Notes[0] != "템플릿 인벤토리 사용 중" {
 		t.Errorf("events=%v res=%v notes=%v", f.events, ts[1].Res, ts[1].Notes)
 	}
 }
@@ -355,10 +357,10 @@ func TestSwitchStolen(t *testing.T) {
 	a, f, _ := newTestApp(t)
 	f.stealPatch = true
 	ts := twoTargets()
-	if a.launchBatch(stageStress, batch{name: "stress", tc: a.cfg.Stress, list: ts}, 0) {
+	if a.launchBatch(stageCPU, batch{name: "cpu", tc: a.cfg.CPU, list: ts}, 0) {
 		t.Fatal("실패여야 함")
 	}
-	if strings.Join(f.events, ",") != "patch 5→2" || ts[0].Notes[0] != "템플릿 인벤토리 사용 중" {
+	if strings.Join(f.events, ",") != "patch 6→2" || ts[0].Notes[0] != "템플릿 인벤토리 사용 중" {
 		t.Errorf("events=%v notes=%v", f.events, ts[0].Notes)
 	}
 }

@@ -81,6 +81,7 @@ func (c *awxClient) getSource(id int) (map[string]interface{}, error) {
 // 점검 결과 종류
 const (
 	fOK   = iota // 정상
+	fOKY         // 통과지만 확인 필요 (노란 체크, 종료코드에 영향 없음)
 	fInfo        // 참고
 	fNote        // 경고 표시만 (종료코드에 영향 없음)
 	fWarn        // 경고 (종료코드 1)
@@ -178,6 +179,8 @@ func checkKeys(role string, tc TemplateConf, endKeys []string, surveyOn bool, sp
 		covered[key] = true
 		q, ok := byVar[key]
 		switch {
+		case !ok && !end:
+			add(fBad, "%s = %s 가 survey 에 없습니다 — hostname 목록이 필요 없으면 conf 에서 %s 값을 비우세요(인벤토리 전체 대상)", label, key, label)
 		case !ok:
 			add(fBad, "%s = %s 가 survey 에 없습니다", label, key)
 		case end:
@@ -307,8 +310,10 @@ type inspector struct {
 	w      io.Writer
 	cfg    *Config
 	c      *awxClient
-	bad    bool // 불일치·경고 있음 → 종료코드 1
-	apiErr bool // 템플릿 조회 등 API 오류 → 종료코드 2
+	bad    bool    // 불일치·경고 있음 → 종료코드 1
+	user   invInfo // username 인벤토리 (matchUserInventory)
+	userEx bool    // 이름이 username 과 정확히 같음
+	apiErr bool    // 템플릿 조회 등 API 오류 → 종료코드 2
 }
 
 func (n *inspector) pf(format string, a ...interface{}) { fmt.Fprintf(n.w, format+"\n", a...) }
@@ -319,6 +324,8 @@ func (n *inspector) show(indent string, fs []finding) {
 		switch f.kind {
 		case fOK:
 			m = markOK
+		case fOKY:
+			m = markOKY
 		case fInfo:
 			m = markInfo
 		case fNote, fWarn:
@@ -368,9 +375,21 @@ func (n *inspector) template(arg string) []string {
 	n.pf("\n===== 템플릿 %s (id %d)  [%s] =====", t.Name, t.ID, label)
 
 	def := n.cfg.DefaultInventory
-	if t.invName() == def {
+	switch {
+	case len(roles) == 1 && roles[0] == stageStress:
+		// stress-ng 템플릿은 인벤토리를 바꾸지 않고 개인 인벤토리를 그대로 쓴다
+		msg := fmt.Sprintf("현재 인벤토리: %s (id %d) — stress-ng 템플릿은 인벤토리를 바꾸지 않음", t.invName(), t.Inventory)
+		switch {
+		case n.user.ID != 0 && t.Inventory == n.user.ID && n.userEx:
+			n.show("  ", []finding{{fOK, msg + ", username 인벤토리"}})
+		case n.user.ID != 0 && t.Inventory == n.user.ID:
+			n.show("  ", []finding{{fOKY, msg + fmt.Sprintf(", 이름에 username(%s)이 들어간 인벤토리", n.cfg.Username)}})
+		default:
+			n.show("  ", []finding{{fNote, msg + fmt.Sprintf(" — username(%s) 인벤토리가 아님: 등록한 호스트가 실행 대상에 없을 수 있음", n.cfg.Username)}})
+		}
+	case t.invName() == def:
 		n.show("  ", []finding{{fOK, fmt.Sprintf("현재 인벤토리: %s (id %d) — default_inventory 와 같음", t.invName(), t.Inventory)}})
-	} else {
+	default:
 		n.show("  ", []finding{{fWarn, fmt.Sprintf("현재 인벤토리: %s (id %d) — default_inventory(%s) 가 아님: 다른 사용자가 사용 중일 수 있음", t.invName(), t.Inventory, def)}})
 	}
 	n.pf("  ask_inventory_on_launch: %v", t.AskInventory)
@@ -415,9 +434,8 @@ func (n *inspector) inventories(invs []invInfo) (userID int) {
 			marks = append(marks, "default_inventory")
 			defFound = true
 		}
-		if v.Name == n.cfg.Username {
+		if n.user.ID != 0 && v.ID == n.user.ID {
 			marks = append(marks, "username")
-			userID = v.ID
 		}
 		rows = append(rows, []string{strconv.Itoa(v.ID), v.Name, strings.Join(marks, ", ")})
 	}
@@ -427,10 +445,17 @@ func (n *inspector) inventories(invs []invInfo) (userID int) {
 	} else {
 		n.show("  ", []finding{{fBad, fmt.Sprintf("default_inventory(%s) 인벤토리가 AWX 에 없음", n.cfg.DefaultInventory)}})
 	}
-	if userID != 0 {
-		n.show("  ", []finding{{fOK, fmt.Sprintf("username(%s) 인벤토리가 있음 (id %d) — 실행 때 템플릿에 붙일 인벤토리", n.cfg.Username, userID)}})
-	} else {
-		n.show("  ", []finding{{fBad, fmt.Sprintf("username(%s) 과 같은 이름의 인벤토리가 AWX 에 없음 — 템플릿 실행 때 바꿀 인벤토리", n.cfg.Username)}})
+	userID = n.user.ID
+	_, _, cands := matchUserInventory(invs, n.cfg.Username)
+	switch {
+	case userID != 0 && n.userEx:
+		n.show("  ", []finding{{fOK, fmt.Sprintf("username(%s) 인벤토리가 있음 (id %d) — CPU 템플릿 실행 때 붙일 인벤토리", n.cfg.Username, userID)}})
+	case userID != 0:
+		n.show("  ", []finding{{fOKY, fmt.Sprintf("username(%s) 이 이름에 들어간 인벤토리 %s (id %d) 를 씀 — CPU 템플릿 실행 때 붙일 인벤토리", n.cfg.Username, n.user.Name, userID)}})
+	case len(cands) > 1:
+		n.show("  ", []finding{{fBad, fmt.Sprintf("이름에 username(%s)이 들어간 인벤토리가 여러 개라 고를 수 없음: %s", n.cfg.Username, strings.Join(cands, ", "))}})
+	default:
+		n.show("  ", []finding{{fBad, fmt.Sprintf("username(%s) 이거나 이름에 그것이 들어간 인벤토리가 AWX 에 없음 — CPU 템플릿 실행 때 바꿀 인벤토리", n.cfg.Username)}})
 	}
 	return userID
 }
@@ -540,6 +565,7 @@ func inspectRun(w io.Writer, cfg *Config, client *awxClient, args []string) int 
 		n.pf("%s AWX 접속·조회 실패 (%s): %v", markFail, cfg.AWXURL, err)
 		return 2
 	}
+	n.user, n.userEx, _ = matchUserInventory(invs, cfg.Username)
 	var sug []string
 	for _, a := range args {
 		sug = append(sug, n.template(a)...)

@@ -30,6 +30,7 @@ var (
 	markFail = "[X]"
 	markWarn = "[!]"
 	markInfo = "[i]"
+	markOKY  = "[✔]" // 통과지만 확인 필요(터미널에서는 노란색)
 )
 
 func isTerminal(f *os.File) bool {
@@ -41,6 +42,7 @@ func setColor() {
 	markOK = "\033[32m[✔]\033[0m"
 	markFail = "\033[31m[X]\033[0m"
 	markWarn = "\033[33m[!]\033[0m"
+	markOKY = "\033[33m[✔]\033[0m"
 }
 
 // app 은 한 번의 실행 상태다.
@@ -57,7 +59,8 @@ type app struct {
 	in          *bufio.Reader // 대화형 입력, -batch 에서는 [인벤토리사용중] 답 읽기
 
 	tmpl      map[string]*jobTemplate // 단계 → 템플릿 (prepareAWX)
-	userInvID int                     // conf username 과 같은 이름의 인벤토리 ID
+	userInvID int                     // conf username 인벤토리 ID (이름이 같거나 이름에 username 이 들어간 것)
+	userInv   string                  // 그 인벤토리 이름
 	defInvID  int                     // default_inventory ID
 	end       *endTime                // stress-ng 종료 시각 (b 단계가 있을 때)
 }
@@ -458,7 +461,14 @@ func (a *app) launchBatch(stage string, b batch, round int) bool {
 			vars[k] = v
 		}
 	}
-	job, rerr, err := a.launchSwitched(tmpl.ID, vars)
+	var job int
+	var rerr error
+	if stage == stageStress {
+		// stress-ng 템플릿은 이미 개인 인벤토리를 쓰므로 인벤토리를 바꾸지 않는다
+		job, err = a.client.launch(tmpl.ID, vars)
+	} else {
+		job, rerr, err = a.launchSwitched(tmpl.ID, vars)
+	}
 	if rerr != nil {
 		note := fmt.Sprintf("인벤토리 복원 실패 — 수동으로 %s 로", a.cfg.DefaultInventory)
 		a.logf("%s ✗✗✗ 템플릿 %s(%d) 인벤토리를 %s 로 되돌리지 못했습니다: %v", markFail, tmpl.Name, tmpl.ID, a.cfg.DefaultInventory, rerr)

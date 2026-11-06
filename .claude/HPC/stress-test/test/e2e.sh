@@ -83,7 +83,7 @@ esac
 case ${1:-all} in F|all)
   echo "######## F1 템플릿 인벤토리 사용 중 → [인벤토리사용중] 줄 → stdin r → 실행"; wait_idle; echo kim > $BUSY; start_fake -busyfile $BUSY
   OUT=/root/work/f1.out; FIFO=/root/work/f1.fifo; rm -f $FIFO; mkfifo $FIFO; exec 3<>$FIFO
-  ./stress-test -user tester -hosts $T/hosts_mixed.txt -steps b -end $END -batch <$FIFO >$OUT 2>&1 & pid=$!
+  ./stress-test -user tester -hosts $T/hosts_mixed.txt -steps a -batch <$FIFO >$OUT 2>&1 & pid=$!
   for i in $(seq 1 60); do grep -q '^\[인벤토리사용중\] ' $OUT && break; sleep 1; done
   grep '^\[인벤토리사용중\] ' $OUT
   : > $BUSY; echo r >&3
@@ -92,13 +92,13 @@ case ${1:-all} in F|all)
   show_switch
   stop_fake; wait_idle
   echo "######## F2 사용 중 + stdin EOF → 묶음 중단(exit 1), PATCH 없음"; echo kim > $BUSY; start_fake -busyfile $BUSY
-  st -hosts $T/hosts_mixed.txt -steps b -end $END -batch </dev/null
+  st -hosts $T/hosts_mixed.txt -steps a -batch </dev/null
   echo "PATCH 횟수: $(grep -c 'PATCH template' $FLOG)"
   stop_fake; : > $BUSY
   echo "######## F3 인벤토리를 바꿔 둔 사이 SIGTERM → 되돌리고 종료(143)"; wait_idle; start_fake -launchdelay 5s
   OUT=/root/work/f3.out
-  ./stress-test -user tester -hosts $T/hosts_mixed.txt -steps b -end $END -batch </dev/null >$OUT 2>&1 & pid=$!
-  for i in $(seq 1 120); do grep -q 'PATCH template=stress-ng inventory=2' $FLOG && break; sleep 0.5; done
+  ./stress-test -user tester -hosts $T/hosts_mixed.txt -steps a -batch </dev/null >$OUT 2>&1 & pid=$!
+  for i in $(seq 1 120); do grep -q 'PATCH template=cpu-test inventory=2' $FLOG && break; sleep 0.5; done
   kill -TERM $pid; wait $pid; echo "[exit=$?]"
   tail -3 $OUT
   show_switch
@@ -122,6 +122,9 @@ case ${1:-all} in G|all)
   echo kim > $BUSY
   st -inspect cpu-test
   : > $BUSY
+  echo "--- G7 username(dh.kim) 이 이름에 들어간 인벤토리 I_dh.kim → 노란 체크, exit 0"
+  sed "s/^username = .*/username = dh.kim/" conf/tester_setting.conf > /tmp/st_part.conf
+  st -inspect -conf /tmp/st_part.conf
   echo "PATCH/launch 요청 횟수: $(grep -cE 'PATCH|launch tmpl' $FLOG)"
   stop_fake;;
 esac
