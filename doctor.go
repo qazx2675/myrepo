@@ -661,7 +661,7 @@ func docRun(r *docReport, a doctorArgs, d doctorDeps, env *docEnvInfo) {
 		if os.IsNotExist(err) {
 			r.bad("-run 이 처음 시작되기 전에 실패했거나 state.json 이 지워졌습니다. worker.log 를 확인하고, 상태 폴더를 지운 뒤 다시 -run 하세요", "state.json 이 없습니다")
 		} else {
-			r.bad("상태 폴더를 백업(mv)한 뒤 지우고 다시 -run 하세요(진행 상황은 복구되지 않음)", "state.json 을 읽을 수 없습니다: %v", err)
+			r.bad("new_setup -run -new <호스트파일> 로 이전 상태를 .old-<시각> 으로 보관하고 다시 시작하세요(진행 상황은 복구되지 않음)", "state.json 을 읽을 수 없습니다: %v", err)
 		}
 		docWorkerLog(r, dir, nil, d)
 		return
@@ -681,7 +681,7 @@ func docRun(r *docReport, a doctorArgs, d doctorDeps, env *docEnvInfo) {
 	}
 	if len(hosts) > 0 {
 		if diff := hostDiff(hosts, st.Hosts); diff != "" {
-			r.warn("호스트 파일이 바뀌었습니다. 새 목록으로 하려면 상태 폴더를 지우고 다시 -run 하세요", "호스트 파일의 호스트가 작업 상태와 다릅니다: %s", diff)
+			r.warn("호스트 파일이 바뀌었습니다. 새 목록으로 하려면 new_setup -run -new <호스트파일> 로 다시 시작하세요(이전 상태는 .old-<시각> 으로 보관)", "호스트 파일의 호스트가 작업 상태와 다릅니다: %s", diff)
 		}
 	}
 
@@ -765,7 +765,7 @@ func lastErrorAdvice(e string) string {
 	case strings.Contains(e, "gossh"):
 		return "설정 파일의 GOSSH= 경로나 PATH 를 고친 뒤 같은 명령으로 다시 실행하세요(워커 재기동)"
 	case strings.Contains(e, "설정 파일"):
-		return "state 에 기록된 설정 파일 경로를 복원하거나 상태 폴더를 지우고 -c 로 다시 시작하세요"
+		return "state 에 기록된 설정 파일 경로를 복원하거나 -new 로 다시 시작하세요(new_setup -run -new -c <설정파일> <호스트파일>)"
 	case strings.Contains(e, "작업 경로"):
 		return "작업을 시작한 경로가 지워졌거나 접근할 수 없습니다. 경로를 복원하거나 새 경로에서 다시 시작하세요"
 	case strings.Contains(e, "시간초과"):
@@ -998,7 +998,7 @@ func docHostRows(r *docReport, st *runState, fin bool) {
 		r.warn("호스트 전원·네트워크를 확인하세요(`ping`, `ssh`). 다시 응답하면 다음 확인 때 자동으로 풀립니다. 호스트 단건 점검: new_setup -doctor -host <호스트>", "CPU 테스트 중 응답 없는 호스트 %d대", noresp)
 	}
 	if fin && notOK > 0 {
-		r.warn("O 가 아닌 열의 원인을 확인하세요(호스트 단건 점검: new_setup -doctor -host <호스트>). 다시 하려면 상태 폴더를 백업 후 지우고 -run", "작업이 끝났지만 세 열이 모두 O 가 아닌 호스트가 %d대 있습니다", notOK)
+		r.warn("O 가 아닌 열의 원인을 확인하세요(호스트 단건 점검: new_setup -doctor -host <호스트>). 다시 하려면 new_setup -run -new <호스트파일>", "작업이 끝났지만 세 열이 모두 O 가 아닌 호스트가 %d대 있습니다", notOK)
 	}
 }
 

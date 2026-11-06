@@ -13,12 +13,14 @@ import (
 
 // viewState 는 화면에서만 쓰는 상태(스크롤·필터·도움말·확인 등).
 type viewState struct {
-	Scroll   int    // 표 첫 줄 위치(0 부터)
-	OnlyBad  bool   // f: O 아닌 호스트만
-	Help     bool   // ? 도움말 겹쳐 보이기
-	Confirm  string // "" / "s"(질문에서 중지 선택, 확인 중) / "S"(질문 없이 작업 중지, 확인 중)
-	ConfirmQ string // 확인 중인 질문 id
-	Flash    string // 잠깐 보이는 알림
+	Scroll   int      // 표 첫 줄 위치(0 부터)
+	OnlyBad  bool     // f: O 아닌 호스트만
+	Help     bool     // ? 도움말 겹쳐 보이기
+	Confirm  string   // "" / "s"(질문에서 중지 선택, 확인 중) / "S"(질문 없이 작업 중지, 확인 중)
+	ConfirmQ string   // 확인 중인 질문 id
+	Flash    string   // 잠깐 보이는 알림
+	NoLog    bool     // l: 아래 로그 창 끄기(기본은 켜짐)
+	LogLines []string // worker.log 끝부분(runTUI 가 읽어 넣는다. 화면 그리기는 이 값만 본다)
 	NoColor  bool
 
 	// 입력 질문(question.Inputs)의 값 입력 상태
@@ -338,14 +340,75 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 	} else if alive && !st.Finished() {
 		keys = append(keys, "S 작업 중지")
 	}
-	keys = append(keys, "f O 아닌 것만", "↑↓ PgUp/PgDn 스크롤", "q 나가기(작업은 계속)", "? 도움말")
+	keys = append(keys, "f O 아닌 것만", "l 로그 켜기/끄기", "↑↓ PgUp/PgDn 스크롤", "q 나가기(작업은 계속)", "? 도움말")
 	out = append(out, lineOf(w, nc, seg{strings.Join(keys, "  "), cDim}))
+	return out
+}
+
+// 로그 창: 제목 한 줄 + 로그 끝 최대 maxLogLines 줄. 표가 최소 minTableRows 줄은 보이도록 남는 자리만 쓴다.
+const (
+	maxLogLines  = 8
+	minTableRows = 3
+)
+
+// logHeight 는 로그 창이 차지할 줄 수(제목 포함, 0 이면 창을 그리지 않음).
+// top·bottom 은 표 위·아래 줄 수. 질문·선택지(bottom)는 밀어내지 않고 모자라면 로그 창을 줄이거나 뺀다.
+func logHeight(view viewState, h, top, bottom int) int {
+	if view.NoLog {
+		return 0
+	}
+	n := 1 + maxLogLines
+	if avail := h - top - bottom - 2 - minTableRows; avail < n { // 표 제목·아래 안내 한 줄씩(2) 과 표 최소 줄 수를 남긴다
+		n = avail
+	}
+	if n < 2 {
+		return 0
+	}
+	return n
+}
+
+// cleanLogLine 은 로그 한 줄을 화면에 안전하게 보이도록 탭을 공백으로, 그 밖의 제어 문자(ESC 포함)를 뺀다.
+func cleanLogLine(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '\t':
+			b.WriteString("  ")
+		case r < 0x20 || r == 0x7f || r == 0xfffd:
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// logPane 은 로그 창을 정확히 n 줄(제목 + n-1 줄)로 만든다. 줄은 폭 w 칸(전각 2칸)에 맞춰 자른다.
+func logPane(view viewState, w, n int) []string {
+	if n < 1 {
+		return nil
+	}
+	nc := view.NoColor
+	out := []string{lineOf(w, nc, seg{"-- worker.log (l 로 끄기) --", cDim})}
+	body := view.LogLines
+	if len(body) > n-1 {
+		body = body[len(body)-(n-1):]
+	}
+	if len(body) == 0 && n > 1 {
+		out = append(out, lineOf(w, nc, seg{"(로그 없음)", cDim}))
+	}
+	for _, l := range body {
+		out = append(out, lineOf(w, nc, seg{cleanLogLine(l), ""}))
+	}
+	for len(out) < n {
+		out = append(out, "")
+	}
 	return out
 }
 
 // tableCapacity 는 이 화면 크기에서 표 데이터가 보일 수 있는 줄 수.
 func tableCapacity(st *runState, view viewState, w, h int, now time.Time, alive bool) int {
-	n := h - len(topLines(st, view, w, now, alive)) - len(bottomLines(st, view, w, alive)) - 2 // 표 제목·아래 안내 한 줄씩
+	top, bottom := len(topLines(st, view, w, now, alive)), len(bottomLines(st, view, w, alive))
+	n := h - top - bottom - 2 - logHeight(view, h, top, bottom) // 표 제목·아래 안내 한 줄씩
 	if n < 1 {
 		return 1
 	}
@@ -476,11 +539,13 @@ func helpLines(w int, noColor bool) []string {
 		"  c  계속(다음 단계)      r  재시도(같은 단계 다시)",
 		"  x  O 아닌 호스트를 제외하고 계속      s  작업 중지(y/N 확인)",
 		"  i 또는 Enter  값 입력 질문(stress-ng 종료 시각)에서 값을 입력 - 숫자, Enter 다음 항목, Backspace 지움, Esc 취소; 끝나면 c 로 제출",
+		"  y  CPU X 호스트 재실행 질문: 부하 낮은 X 호스트 모두 CPU 재실행에 포함      n  모두 제외(이번엔 X 그대로)",
 		"  r  인벤토리 사용 중 질문: 다시 확인      x  그 묶음 중단(S 로 작업 전체 중지)",
 		"질문이 없을 때",
 		"  S  작업 중지(y/N 확인) - 실행 중인 외부 명령을 끝내고 결과를 저장합니다",
 		"화면",
 		"  f  O 아닌 호스트만 보기(다시 누르면 전체)",
+		"  l  아래 worker.log 끝부분 창 켜기/끄기(기본 켜짐, 화면이 작으면 줄이거나 숨김)",
 		"  ↑ ↓ PgUp PgDn Home End  표 스크롤",
 		"  q  화면만 나가기(작업은 계속됨. 같은 경로에서 같은 명령으로 다시 붙음)",
 		"  ?  이 도움말(아무 키나 누르면 닫힘)",
@@ -514,12 +579,14 @@ func renderRun(st *runState, view viewState, w, h int, now time.Time, alive bool
 		top := topLines(st, view, w, now, alive)
 		bottom := bottomLines(st, view, w, alive)
 		table := tableLines(st, view, w, tableCapacity(st, view, w, h, now, alive))
+		logH := logHeight(view, h, len(top), len(bottom))
 		lines = append(lines, top...)
 		lines = append(lines, table...)
-		for len(lines)+len(bottom) < h { // 질문·안내 줄은 맨 아래에 붙인다
+		for len(lines)+len(bottom)+logH < h { // 질문·안내 줄은 로그 창 바로 위에 붙이고, 로그 창은 맨 아래에 둔다
 			lines = append(lines, "")
 		}
 		lines = append(lines, bottom...)
+		lines = append(lines, logPane(view, w, logH)...)
 	}
 	if len(lines) > h {
 		lines = lines[:h]

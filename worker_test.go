@@ -58,6 +58,10 @@ type fakeExec struct {
 	busyMsg   map[string]string   // steps -> stress-test 가 낼 인벤토리 사용 중 메시지(이 호출은 busy 답을 기다린다)
 	busyAns   []string            // busy 콜백이 받은 답 "steps:답"
 	lastQ     string              // 마지막으로 답한 질문 id(같은 질문에 두 번 답하지 않게)
+
+	loads     map[string]float64 // Loads 가 낼 1분 부하(없는 호스트는 응답 없음)
+	loadErr   error
+	loadCalls int
 }
 
 func newFake(t *testing.T, order []string, world map[string]*fakeHost, answers ...string) *fakeExec {
@@ -803,4 +807,21 @@ func TestWorkerCheckDashWithOSCheck(t *testing.T) {
 	if r := row(t, ww, "a"); r.Check != "O" || ww.st.Stage != stageFinish {
 		t.Errorf("a=%+v stage=%d", *r, ww.st.Stage)
 	}
+}
+
+func (f *fakeExec) Loads(hosts []string) (map[string]float64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.loadCalls++
+	f.events = append(f.events, "loads:"+strings.Join(hosts, ","))
+	if f.loadErr != nil {
+		return nil, f.loadErr
+	}
+	res := map[string]float64{}
+	for _, h := range hosts {
+		if l, ok := f.loads[h]; ok {
+			res[h] = l
+		}
+	}
+	return res, nil
 }

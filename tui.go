@@ -7,8 +7,10 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -122,6 +124,9 @@ func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now
 	case "f":
 		v.OnlyBad = !v.OnlyBad
 		v.Scroll = 0
+		return false
+	case "l":
+		v.NoLog = !v.NoLog
 		return false
 	case "up", "down", "pgup", "pgdn", "home", "end":
 		if st == nil {
@@ -274,6 +279,11 @@ func runTUI(dir string) error {
 			st = s
 		}
 		alive = workerAlive(dir)
+		if view.NoLog {
+			view.LogLines = nil
+		} else {
+			view.LogLines = tailLines(filepath.Join(dir, workerLog), maxLogLines)
+		}
 	}
 	draw := func() {
 		w, h := termSize(fd)
@@ -303,12 +313,63 @@ func runTUI(dir string) error {
 			if handleKey(&view, st, alive, k, w, h, time.Now(), act) {
 				return nil
 			}
+			if k == "l" { // 로그 창을 켠 직후 바로 내용이 보이게
+				refresh()
+			}
 			if view.Flash != "" {
 				flashAt = time.Now()
 			}
 			draw()
 		}
 	}
+}
+
+// logTailBytes 는 로그 끝에서 읽을 최대 바이트(줄 n 개를 얻기에 넉넉한 만큼만 읽는다).
+const logTailBytes = 64 * 1024
+
+// tailLines 는 path 의 마지막 n 줄을 돌려준다. 파일 끝쪽 logTailBytes 만 읽으므로 로그가 아무리 커도 가볍다.
+// 파일이 없거나 읽을 수 없으면 nil. 중간에서 잘린 첫 줄은 버린다.
+func tailLines(path string, n int) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	off := fi.Size() - logTailBytes
+	if off < 0 {
+		off = 0
+	}
+	if _, err := f.Seek(off, io.SeekStart); err != nil {
+		return nil
+	}
+	b, err := io.ReadAll(io.LimitReader(f, logTailBytes))
+	if err != nil {
+		return nil
+	}
+	return tailOf(string(b), n, off > 0)
+}
+
+// tailOf 는 s 의 마지막 n 줄. partial 이면 s 가 파일 중간에서 시작한 것이므로 첫 줄(잘렸을 수 있음)을 버린다.
+func tailOf(s string, n int, partial bool) []string {
+	lines := strings.Split(s, "\n")
+	if partial && len(lines) > 0 {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && strings.TrimRight(lines[len(lines)-1], "\r") == "" { // 끝의 빈 줄(마지막 개행)
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = strings.TrimRight(l, "\r")
+	}
+	return out
 }
 
 func hasChoice(q *question, key string) bool {
