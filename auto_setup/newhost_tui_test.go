@@ -601,8 +601,8 @@ func (s *slowReader) Read(p []byte) (int, error) {
 func TestNewhostOneShotLoop(t *testing.T) {
 	h := nhSetup(t, "alice")
 	newhostDNS = nhFakeDNS(map[string]string{"svr001": "10.0.0.11"}, nil, nil)
-	env, rg := newRig(&slowReader{gap: 30 * time.Millisecond, parts: []string{
-		"svr001 10.0.0.1 aa:bb:cc:dd:ee:01\r\r", "*=A\r", "\r", "a", "y", "y", "q"}})
+	env, rg := newRig(&slowReader{gap: 2 * pasteGap, parts: []string{
+		"svr001 10.0.0.1 aa:bb:cc:dd:ee:01\r", "\r", "*=A\r", "\r", "a", "y", "y", "q"}})
 	env.Tick = func(time.Duration) (<-chan time.Time, func()) { // 실제처럼 tick 이 와야 DNS 결과를 꺼낸다
 		tk := time.NewTicker(10 * time.Millisecond)
 		return tk.C, tk.Stop
@@ -636,8 +636,8 @@ func TestNewhostBigPaste(t *testing.T) {
 			strings.Repeat("0", 2-len(strconv.FormatInt(int64(i/256), 16))) + strconv.FormatInt(int64(i/256), 16) + ":" +
 			strings.Repeat("0", 2-len(strconv.FormatInt(int64(i%256), 16))) + strconv.FormatInt(int64(i%256), 16) + "\n")
 	}
-	sb.WriteString("\n\x18y")
-	env, rg := newRig(strings.NewReader(sb.String()))
+	// 붙여넣기 덩어리 안의 빈 줄은 끝이 아니다 — 끝내는 빈 Enter 는 사람이 따로 누르듯 뒤늦게 도착시킨다
+	env, rg := newRig(io.MultiReader(strings.NewReader(sb.String()), &lateReader{s: "\n\x18y", wait: 2 * pasteGap}))
 	var n *newhostState
 	t0 := time.Now()
 	rc := runTUILoopWith(&fakeSrc{snap: twoGroupSnap(), local: true}, env, func(s *tuiState) {
@@ -867,4 +867,80 @@ func TestNewhostPasteNoTemplateColumn(t *testing.T) {
 	if h.n().step != nhAssign {
 		t.Fatalf("step=%d", h.n().step)
 	}
+}
+
+// keysRaw: 실제 stdin 읽기처럼 조각(<=256바이트)을 keyReader 로 거쳐 넣는다 (gap 은 조각 사이 간격)
+func (h *nhH) keysRaw(gap time.Duration, chunks ...string) {
+	h.t.Helper()
+	var kr keyReader
+	now := time.Unix(1000, 0)
+	for _, c := range chunks {
+		now = now.Add(gap)
+		for _, ev := range kr.events([]byte(c), now) {
+			h.st.handle(ev)
+			h.st.pollNewhost()
+			h.st.draw()
+		}
+	}
+}
+
+// 엑셀 붙여넣기 회귀: TAB 구분 4열(템플릿 포함)·CRLF 4행이 읽기 경계(CR/LF 사이 포함)에서 갈려도 4행이 모두 들어간다
+func TestNewhostExcelPasteSplitReads(t *testing.T) {
+	rows := []string{
+		"svr001\t10.0.0.1\taa:bb:cc:dd:ee:01\tA",
+		"svr002\t10.0.0.2\taa:bb:cc:dd:ee:02\tmec",
+		"svr003\t10.0.0.3\taa:bb:cc:dd:ee:03\tA",
+		"svr004\t10.0.0.4\taa:bb:cc:dd:ee:04\tmec",
+	}
+	whole := strings.Join(rows, "\r\n") + "\r\n"
+	// 여러 분할: 모든 바이트 위치에서 둘로 가르기 + 7바이트 조각 + 1바이트 조각
+	var splits [][]string
+	for i := 1; i < len(whole); i++ {
+		splits = append(splits, []string{whole[:i], whole[i:]})
+	}
+	for _, size := range []int{1, 7, 40} {
+		var cs []string
+		for i := 0; i < len(whole); i += size {
+			e := i + size
+			if e > len(whole) {
+				e = len(whole)
+			}
+			cs = append(cs, whole[i:e])
+		}
+		splits = append(splits, cs)
+	}
+	for _, cs := range splits {
+		h := nhSetup(t, "alice")
+		h.keys("w2")
+		h.keysRaw(time.Millisecond, cs...)
+		n := h.n()
+		if n.step != nhPaste || len(n.rows) != 4 {
+			t.Fatalf("분할 %q: step=%d rows=%d\n%s", cs, n.step, len(n.rows), h.frame())
+		}
+		for i, r := range n.rows {
+			if want := "svr00" + strconv.Itoa(i+1); r.Host != want {
+				t.Fatalf("분할 %q: %d행 호스트 %q, 기대 %q", cs, i+1, r.Host, want)
+			}
+		}
+		h.keysRaw(time.Second, "\r") // 사람이 따로 누른 빈 Enter = 붙여넣기 끝
+		if h.n().step == nhPaste {
+			t.Fatalf("분할 %q: 느린 빈 Enter 로 붙여넣기가 끝나지 않음", cs)
+		}
+	}
+}
+
+// lateReader: 첫 Read 에서 wait 만큼 기다린 뒤 s 를 한 번에 돌려주는 stdin 대역
+type lateReader struct {
+	s    string
+	wait time.Duration
+	done bool
+}
+
+func (r *lateReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.done = true
+	time.Sleep(r.wait)
+	return copy(p, r.s), nil
 }
