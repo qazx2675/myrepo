@@ -28,3 +28,5 @@
 - [ ] **`-doctor`(`doctor*.go`) 를 바꿨다면** `go test ./...` 의 `doctor_test.go` 통과, **읽기 전용 보장 유지** — 설정 파일·상태 폴더·원격 호스트를 쓰지 않음(보고서 파일 `./new_setup_doctor_<시각>.txt` 와 임시 폴더만 씀), `-check` 는 `-auto-check` 만(수정 `-auto` 금지), 보고서 저장본의 비밀번호 마스킹
 - [ ] doctor 가 원격에 보내는 명령(1차·2차 + btime·uptime·`ls`)이 csh/tcsh 로그인 셸에서도 동작 — 변수 대입·`{ }`·`exit`·`!`·글롭 없이 `;` `&&` `||` 와 작은따옴표만 사용, 랩 .60(csh)에서 `bash troubleshoot.sh -host <호스트>` 로 확인
 - [ ] 점검·안내 항목을 추가했다면 README 7.2 표와 ARCHITECTURE.md 진단 흐름 갱신, `troubleshoot.sh` 와 `new_setup.sh` 의 바이너리 선택 로직이 같은지 확인
+- [ ] **종료 시각 입력·인벤토리 사용 중 질문을 바꿨다면** — 검사 규칙은 `input.go` 한 곳(TUI·워커 공유, stress-test `-end` 규칙과 같음)이고 `input_test.go` 로 시험, `-steps` 에 b 가 있을 때만 `-end` 전달(CPU 에는 안 넘김), 질문 중 `STRESS_TIMEOUT` 일시정지(`runCmdHold`, `hold_test.go`), 동시에 걸려도 질문은 하나씩(`busyAsk` 의 `qmu`), `go test -race ./...` 통과, `test/run_flow_tests.sh` 의 H~L(입력값 -end·r·x·중지·시간제한 일시정지) 통과
+- [ ] stress-test 쪽 약속 변경(`-end` 형식, `[인벤토리사용중] ` 머리말, stdin 의 r/x)이 있으면 `stress.go` 의 `stressBusyMark`·`StressTest` 인자와 `test/fake_stress_test.sh` 를 같이 맞춤 (stress-test 폴더는 수정하지 않음)

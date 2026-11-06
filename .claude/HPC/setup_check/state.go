@@ -68,17 +68,26 @@ type choice struct {
 
 // question 은 워커가 사용자 답을 기다리는 질문. 답은 answer.json 으로 받는다.
 type question struct {
-	ID      string    `json:"id"`      // 질문마다 새 값(q1, q2 …). 답의 id 가 같아야 받아들인다
-	Stage   int       `json:"stage"`   // 질문을 낸 단계
-	Text    string    `json:"text"`    // 결과 요약 + 묻는 말(여러 줄 가능)
-	Choices []choice  `json:"choices"` // 고를 수 있는 것
-	Asked   time.Time `json:"asked"`   // 질문 시각
+	ID      string       `json:"id"`               // 질문마다 새 값(q1, q2 …). 답의 id 가 같아야 받아들인다
+	Stage   int          `json:"stage"`            // 질문을 낸 단계
+	Text    string       `json:"text"`             // 결과 요약 + 묻는 말(여러 줄 가능)
+	Choices []choice     `json:"choices"`          // 고를 수 있는 것
+	Asked   time.Time    `json:"asked"`            // 질문 시각
+	Kind    string       `json:"kind,omitempty"`   // "busy" = 단계 중간의 인벤토리 사용 중 질문(단계는 그대로)
+	Inputs  []inputField `json:"inputs,omitempty"` // 있으면 TUI 가 값을 입력받아 answer.values 로 보낸다
+}
+
+// inputField 는 질문에서 입력받을 값 하나(키와 화면용 설명).
+type inputField struct {
+	Key   string `json:"key"`   // 예: end_year
+	Label string `json:"label"` // 예: 연도(4자리)
 }
 
 // answer 는 answer.json 내용.
 type answer struct {
-	ID     string `json:"id"`     // question.id
-	Choice string `json:"choice"` // c / r / x / s
+	ID     string            `json:"id"`               // question.id
+	Choice string            `json:"choice"`           // c / r / x / s
+	Values map[string]string `json:"values,omitempty"` // 입력 질문의 값(키 → 입력한 글자 그대로)
 }
 
 // hostRow 는 호스트 한 대의 표 행. 앞 7개는 판정 결과(hostResult) 그대로.
@@ -156,13 +165,14 @@ type runState struct {
 	QSeq     int       `json:"q_seq"` // 질문 ID 일련번호
 
 	// 부하 단계
-	CPUList     []string  `json:"cpu_list"`      // 이번 부하 단계 CPU 대상
-	StressList  []string  `json:"stress_list"`   // 이번 부하/stress-ng 단계 stress-ng 대상
-	CPULaunch   time.Time `json:"cpu_launch"`    // CPU launch 시각(0 = 아직/해당 없음)
-	NextCheck   time.Time `json:"next_check"`    // 다음 btime·응답(·CPU 완료) 확인 시각
-	CheckStart  time.Time `json:"check_start"`   // CPU 완료 확인 시작 시각(launch + CPU_WAIT_START)
-	Deadline    time.Time `json:"deadline"`      // CPU 완료 확인 마감(확인 시작 + CPU_WAIT_MAX)
-	CPUWaitDone bool      `json:"cpu_wait_done"` // CPU 감시 끝남
+	CPUList     []string  `json:"cpu_list"`             // 이번 부하 단계 CPU 대상
+	StressList  []string  `json:"stress_list"`          // 이번 부하/stress-ng 단계 stress-ng 대상
+	CPULaunch   time.Time `json:"cpu_launch"`           // CPU launch 시각(0 = 아직/해당 없음)
+	NextCheck   time.Time `json:"next_check"`           // 다음 btime·응답(·CPU 완료) 확인 시각
+	CheckStart  time.Time `json:"check_start"`          // CPU 완료 확인 시작 시각(launch + CPU_WAIT_START)
+	Deadline    time.Time `json:"deadline"`             // CPU 완료 확인 마감(확인 시작 + CPU_WAIT_MAX)
+	CPUWaitDone bool      `json:"cpu_wait_done"`        // CPU 감시 끝남
+	StressEnd   string    `json:"stress_end,omitempty"` // stress-ng 종료 시각 "연,월,일,시,분"(stress-test -end 로 넘긴 값, 입력한 글자 그대로)
 
 	LastError string    `json:"last_error"` // 마지막 오류(없으면 빈 값)
 	Updated   time.Time `json:"updated"`    // 마지막 기록 시각
@@ -276,8 +286,11 @@ func loadState(dir string) (*runState, error) {
 }
 
 // writeAnswer 는 TUI 가 질문 id 에 대한 답을 answer.json 에 쓴다.
-func writeAnswer(dir, id, ch string) error {
-	b, _ := json.Marshal(answer{ID: id, Choice: ch})
+func writeAnswer(dir, id, ch string) error { return writeAnswerValues(dir, id, ch, nil) }
+
+// writeAnswerValues 는 입력값(values)을 함께 담은 답을 쓴다.
+func writeAnswerValues(dir, id, ch string, values map[string]string) error {
+	b, _ := json.Marshal(answer{ID: id, Choice: ch, Values: values})
 	return writeFileAtomic(filepath.Join(dir, answerFile), append(b, '\n'))
 }
 
