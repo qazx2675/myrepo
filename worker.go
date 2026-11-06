@@ -41,6 +41,8 @@ type worker struct {
 	qmu   sync.Mutex // 단계 중간(인벤토리 사용 중) 질문을 한 번에 하나만 띄우려고(CPU·stress-ng 프로세스가 동시에 걸릴 수 있음)
 	logMu sync.Mutex // log 쓰기 보호(인벤토리 질문 고루틴도 로그를 쓴다)
 
+	reload func() // 단계 시작(재시도 포함)마다 설정 파일을 다시 읽는다(실행 중 고친 값 반영). nil 이면 안 함
+
 	info []string // 이번 단계에서 질문 문구에 덧붙일 안내(stress-test 종료코드 1 등)
 
 	stopCh   chan struct{} // 중지 요청을 받으면 닫힘(실행 중인 외부 명령 취소에도 쓰인다)
@@ -251,6 +253,9 @@ func (w *worker) run() {
 // runStage 는 한 단계(동작 → 재체크 → 질문 → 답 처리)를 한 번 한다. 다음에 할 단계는 상태에 기록된다.
 func (w *worker) runStage(stage int, resume bool) {
 	w.info = nil
+	if w.reload != nil {
+		w.reload()
+	}
 	var actErr string
 	switch stage {
 	case stageFix:
@@ -1021,7 +1026,7 @@ func loadRunConf(p string) (config, error) {
 	if err != nil {
 		return config{}, fmt.Errorf("설정 파일을 읽을 수 없습니다: %v", err)
 	}
-	return parseConf(string(b)), nil
+	return relToConf(parseConf(string(b)), p), nil
 }
 
 // runWorker 는 `new_setup -run-worker <상태폴더>` 진입점. stdout·stderr 는 worker.log 로 이어져 있다.
@@ -1080,6 +1085,17 @@ func runWorker(dir string) int {
 	}
 	ex.conf, ex.gossh = conf, gossh
 	w.conf = conf
+	w.reload = func() {
+		c, err := loadRunConf(st.ConfPath)
+		if err != nil {
+			w.logf("경고: 설정 파일을 다시 읽지 못해 이전 값을 씁니다: %v", err)
+			return
+		}
+		if c.StressTest != w.conf.StressTest || c.StressTestConf != w.conf.StressTestConf {
+			w.logf("설정 파일 다시 읽음: STRESS_TEST=%s STRESS_TEST_CONF=%s", c.StressTest, c.StressTestConf)
+		}
+		ex.conf, w.conf = c, c
+	}
 	cancelCh = w.stopCh
 	if err := os.MkdirAll(filepath.Join(dir, listsDir), 0o755); err != nil {
 		return setupFail(err.Error())

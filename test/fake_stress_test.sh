@@ -2,6 +2,7 @@
 # fake_stress_test.sh - new_setup -run 시험용 가짜 stress-test (진짜 -batch 모드 흉내)
 # 사용: fake_stress_test.sh -user <u> -hosts <목록파일> -steps a|b -batch [-end y,m,d,h,min] [-conf <파일>]
 #   -steps 에 b 가 있는데 -end 가 없거나 형식이 틀리면 종료코드 2(진짜 stress-test 와 같음)
+#   -conf 파일이 없으면 종료코드 2(진짜와 같음)
 #   FAKE_ST_LOG=<파일>      호출 기록(시각은 ns). 줄 형식:
 #                           START <steps> <ns> user=<u> hosts=<쉼표목록> batch=<0|1> conf=<값> end=<값|none>
 #                           MON <steps> <ns>        ([감시] 줄을 낸 시각)
@@ -54,6 +55,11 @@ now() { date +%s%N; }
 log() { [ -n "${FAKE_ST_LOG:-}" ] && echo "$*" >> "$FAKE_ST_LOG"; return 0; }
 
 log "START $steps $(now) user=$user hosts=$hl batch=$batch conf=${conf:-none} end=${end:-none}"
+# 진짜 stress-test: -conf 로 준 파일이 없으면 종료코드 2
+if [ -n "$conf" ] && [ ! -f "$conf" ]; then
+	echo "오류: 지정한 설정 파일이 없습니다: $conf" >&2
+	exit 2
+fi
 [ -n "${FAKE_ST_PIDFILE:-}" ] && echo "$$" >> "$FAKE_ST_PIDFILE"
 echo "fake stress-test: steps=$steps hosts=$hl"
 
