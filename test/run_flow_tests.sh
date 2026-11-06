@@ -63,6 +63,7 @@ scn_new() {
 	unset FAKE_ST_REBOOT FAKE_ST_EXIT FAKE_ST_DELAY FAKE_ST_BUSY FAKE_ST_BUSY_TIMES FAKE_ST_BUSY_SLEEP BADFIRST
 	: > "$S/st.log"
 	: > "$S/st.pids"
+	: > "$S/st.conf"
 }
 
 # mkconf <추가 줄...> : $S/conf (시간 값을 초 단위로)
@@ -453,6 +454,27 @@ drive "$RUND" 40 pick_c
 check "L: 답한 뒤 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
 if grep -q '시간초과' "$RUND/worker.log"; then ng "L: 시간초과가 나지 않아야 함"; else ok "L: 시간초과 없음"; fi
 check "L: 최종 stress-ng O" "O" "$(rowf "$RUND/result.txt" h_ng 5)"
+
+# ================================================================ M. 실행 중 설정을 고치고 재시도하면 반영
+echo "== M. STRESS_TEST_CONF 상대경로(설정 파일 폴더 기준) 없음 → 오류 질문 → 설정에서 비우고 r → 다시 읽어 진행"
+# 첫 r/s 질문에서 설정 파일의 STRESS_TEST_CONF 를 지우고 r
+pick_fixconf() {
+	case $2 in
+		rs) sed -i '/^STRESS_TEST_CONF=/d' "$S/conf"; echo r ;;
+		*) echo c ;;
+	esac
+}
+scn_new M
+printf '%s\n' h_m > "$S/hosts"
+addscn h_m ok cpu=nolog stress=0
+mkconf "STRESS_TEST_CONF=stress.conf"
+start_run
+drive "$RUND" 60 pick_fixconf
+check "M: 첫 호출은 설정 파일 폴더 기준 절대경로" "conf=$S/stress.conf" "$(sed -n 's/^START a [0-9]* .* \(conf=[^ ]*\) .*/\1/p' "$S/st.log" | head -n1)"
+check "M: 재시도 호출은 -conf 없음(고친 설정 반영)" "conf=none" "$(sed -n 's/^START a [0-9]* .* \(conf=[^ ]*\) .*/\1/p' "$S/st.log" | sed -n 2p)"
+has "M: 워커가 설정을 다시 읽음" "$RUND/worker.log" '설정 파일 다시 읽음'
+check "M: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+check "M: 최종 CPU O" "O" "$(rowf "$RUND/result.txt" h_m 4)"
 
 echo
 echo "결과: PASS $PASS, FAIL $FAIL"

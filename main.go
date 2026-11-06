@@ -826,6 +826,21 @@ func runGossh(gossh string, args []string, log io.Writer, timeout time.Duration)
 
 var resSuffixes = []string{"_res_off", "_res_refsed", "_os_install", "_nosvrauto", "_res_cancel"}
 
+// relToConf 는 STRESS_TEST·STRESS_TEST_CONF 가 상대경로면 설정 파일이 있는 폴더 기준 절대경로로 바꾼다
+// (명령을 실행한 폴더가 아니라). confPath 가 비면(기본값) 그대로 둔다.
+func relToConf(c config, confPath string) config {
+	if confPath == "" {
+		return c
+	}
+	d := filepath.Dir(confPath)
+	for _, p := range []*string{&c.StressTest, &c.StressTestConf} {
+		if *p != "" && !filepath.IsAbs(*p) {
+			*p = filepath.Join(d, *p)
+		}
+	}
+	return c
+}
+
 // loadConf 는 설정 파일을 찾아 읽는다. 읽은 파일의 절대 경로를 함께 돌려준다("" = 기본값 사용).
 // explicit(-c)가 있으면 반드시 읽을 수 있어야 한다. 비면 현재 경로 → 실행 파일 폴더 → (bin/ 이면) 그 위
 // 폴더 순서로 new_setup.conf 를 찾고, 어디에도 없으면 기본값을 쓴다.
@@ -842,7 +857,7 @@ func loadConf(explicit string) (config, string, error) {
 		if err != nil {
 			return config{}, "", fmt.Errorf("설정 파일을 읽을 수 없습니다: %v", err)
 		}
-		return parseConf(string(b)), abs(explicit), nil
+		return relToConf(parseConf(string(b)), abs(explicit)), abs(explicit), nil
 	}
 	cands := []string{"new_setup.conf"}
 	if exe, err := os.Executable(); err == nil {
@@ -858,7 +873,7 @@ func loadConf(explicit string) (config, string, error) {
 	for _, c := range cands {
 		if b, err := os.ReadFile(c); err == nil {
 			fmt.Fprintf(os.Stderr, "설정 파일: %s\n", c)
-			return parseConf(string(b)), abs(c), nil
+			return relToConf(parseConf(string(b)), abs(c)), abs(c), nil
 		}
 	}
 	return parseConf(""), "", nil
