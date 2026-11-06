@@ -1,6 +1,6 @@
 # stress-test — HPC 부하테스트 자동화 도구 (AWX + gossh)
 
-HPC 서버 대상 부하테스트(`a) cpu`, `b) stress-ng`)를 AWX 로 실행하고, 대상 서버의 1분 로드(`/proc/loadavg`)를 `gossh` 로 감시해 **실제로 부하가 걸렸는지**(실행/미실행)를 판정하는 Go 기반 도구입니다. 대상 호스트를 gossh 로 접속체크하며 CPU 벤더(Intel/AMD, 결과표 표시용)를 확인하고, AWX 01 스크립트와 같은 방식(yaml → scp → `custom_inventory.sh` → 새 yml → git 업로드 → 인벤토리 소스 동기화)으로 인벤토리를 등록한 뒤, job template 의 인벤토리를 **`DEFAULT` → conf `username` 인벤토리로 바꿔 launch 하고 곧바로 `DEFAULT` 로 되돌립니다**. stress-ng 는 종료 시각(연·월·일·시·분)을 survey 로 함께 넘깁니다. 감시 화면은 `top` 처럼 갱신되고, 끝나면 호스트별 결과표를 `|` 구분으로 출력·저장합니다. Go 바이너리 + bash 래퍼(`stress_run.sh`) 한 쌍이며, 표준 라이브러리만 사용하므로 `vendor/` 가 필요 없습니다.
+HPC 서버 대상 부하테스트(`a) cpu`, `b) stress-ng`)를 AWX 로 실행하고, 대상 서버의 1분 로드(`/proc/loadavg`)를 `gossh` 로 감시해 **실제로 부하가 걸렸는지**(실행/미실행)를 판정하는 Go 기반 도구입니다. 대상 호스트를 gossh 로 접속체크하며 CPU 벤더(Intel/AMD, 결과표 표시용)를 확인하고, AWX 01 스크립트와 같은 방식(yaml → scp → `custom_inventory.sh` → 새 yml → git 업로드 → 인벤토리 소스 동기화)으로 인벤토리를 등록한 뒤, **CPU** job template 의 인벤토리를 **`DEFAULT` → conf `username` 인벤토리로 바꿔 launch 하고 곧바로 `DEFAULT` 로 되돌립니다**(stress-ng 템플릿은 이미 개인 인벤토리를 쓰므로 바꾸지 않음). stress-ng 는 종료 시각(연·월·일·시·분)을 survey 로 함께 넘깁니다. 감시 화면은 `top` 처럼 갱신되고, 끝나면 호스트별 결과표를 `|` 구분으로 출력·저장합니다. Go 바이너리 + bash 래퍼(`stress_run.sh`) 한 쌍이며, 표준 라이브러리만 사용하므로 `vendor/` 가 필요 없습니다.
 
 > 폴더·파일별 역할과 실행 흐름은 [ARCHITECTURE.md](ARCHITECTURE.md), 변경 시 점검 목록은 [PR_CHECKLIST.md](PR_CHECKLIST.md), 설계 결정은 [계획서.md](계획서.md)·[계획서_템플릿변경.md](계획서_템플릿변경.md)(2026-11-06 템플릿 실행 방식 변경)를 참고하세요.
 
@@ -28,7 +28,7 @@ chmod +x stress_run.sh build.sh stress-test   # 실행 권한이 빠졌을 때�
 - `gossh` — 실행 서버에 설치(PATH, `stress_run.sh` 의 `GOSSH`, 또는 conf 의 `gossh` 키로 지정)
 - 실행 서버에서 `repohost`(custom_inventory.sh 가 있는 서버)로 **비밀번호 없이** `ssh`/`scp` 가능해야 함 (`BatchMode=yes` 로 호출)
 - AWX 접속 정보와 job template(cpu 템플릿 1개 — Intel/AMD 는 템플릿 안에서 구분, `stress-ng` 템플릿) — 설정 파일에 기입
-- AWX 에 **conf `username` 과 같은 이름의 인벤토리**와 평소 인벤토리(`default_inventory`, 기본 `DEFAULT`)가 있어야 함 (없으면 종료코드 2)
+- AWX 에 **conf `username` 인벤토리** (이름이 같으면 그것, 없으면 이름에 username 이 들어간 인벤토리 하나 — 예: `I_donghyun97.kim`. 이 경우 노란 [✔] 로 표시)와 평소 인벤토리(`default_inventory`, 기본 `DEFAULT`)가 있어야 함 (없으면 종료코드 2)
 - `git_dir` 을 쓰면 그 폴더에 `.git_upload.sh` 가 있어야 함 (AWX 01 스크립트의 git_upload 와 동일)
 
 ### 1.2 소스를 고쳐서 다시 빌드할 때 (Go 가 있는 호스트)
@@ -93,7 +93,7 @@ USER_ROUTE=""   # user 선택 스크립트 폴더 (info_mn.sh, info.sh). 비우�
    end_min: 30
    ```
 
-실행 중에는 AWX 사전 확인 → gossh 접속체크 → (단계별) 등록 → 템플릿 인벤토리 확인·변경 → launch → 되돌림 → 감시 화면이 이어지고, 미실행 호스트가 남으면 `미실행 N대를 재실행할까요? (y/N):` 를 묻습니다. 템플릿 인벤토리가 `DEFAULT` 가 아니면(다른 사용자가 사용 중) 안내를 보여 주고 `r=다시 확인, x=이 묶음 중단:` 을 묻습니다. 마지막에 결과표가 출력됩니다.
+실행 중에는 AWX 사전 확인 → gossh 접속체크 → (단계별) 등록 → 템플릿 인벤토리 확인·변경 → launch → 되돌림 → 감시 화면이 이어지고, 미실행 호스트가 남으면 `미실행 N대를 재실행할까요? (y/N):` 를 묻습니다. CPU 템플릿 인벤토리가 `DEFAULT` 가 아니면(다른 사용자가 사용 중) 안내를 보여 주고 `r=다시 확인, x=이 묶음 중단:` 을 묻습니다. 마지막에 결과표가 출력됩니다.
 
 ### 2.2 비대화형 (setup_check 등이 Go 에서 직접 호출)
 
@@ -290,6 +290,11 @@ stress-test -inspect [-user <u> | -conf <설정파일>] [템플릿 ID/이름 ...
 [✔] 모든 점검 통과 (종료코드 0)
 ```
 
+자주 나오는 점검 결과:
+- **`stress_hostname_key = … 가 survey 에 없습니다`** — 그 템플릿 survey 에 hostname 목록 질문이 없다는 뜻입니다. stress-ng 템플릿처럼 개인 인벤토리 전체를 대상으로 도는 템플릿이면 hostname 목록이 필요 없으므로 conf 에서 값을 **비우세요**(`stress_hostname_key =`). 비우면 목록을 넘기지 않고 이 점검도 `[i]` 안내로 바뀝니다. 꼭 일부 호스트만 돌려야 한다면 AWX 에서 템플릿 → Survey 에 질문을 추가(변수명 예 `target_hosts`, 타입 Textarea)하고 플레이북이 그 변수로 대상을 고르게 고친 뒤 그 변수명을 넣습니다.
+- **노란 `[✔]` username 인벤토리** — conf `username`(예 `donghyun97.kim`)과 이름이 같은 인벤토리가 없고, 이름에 그것이 들어간 인벤토리(예 `I_donghyun97.kim`)가 하나 있어 그것을 쓴다는 뜻입니다(통과, 종료코드에 영향 없음). 후보가 여러 개면 `[X]` 로 목록을 보여 주고 실행도 멈춥니다.
+- stress-ng 템플릿은 인벤토리를 바꾸지 않으므로 현재 인벤토리가 `DEFAULT` 가 아니어도 됩니다. username 인벤토리가 아니면 `[!]` 참고 표시만 합니다.
+
 ## 3. 옵션 및 설정 상세 설명
 
 ### 3.1 `stress_run.sh`
@@ -324,7 +329,7 @@ stress-test -inspect [-user <u> | -conf <설정파일>] [템플릿 ID/이름 ...
 | 키 | 기본값 | 의미 |
 |---|---|---|
 | `awx_url` | (필수) | AWX 주소 |
-| `username` / `password` | (필수) | AWX Basic 인증 계정. **같은 이름의 인벤토리**가 AWX 에 있어야 함(템플릿 실행 때 이 인벤토리로 바꿈) |
+| `username` / `password` | (필수) | AWX Basic 인증 계정. 이 이름의 인벤토리(없으면 이름에 username 이 들어간 인벤토리 하나, 노란 [✔])가 AWX 에 있어야 함(CPU 템플릿 실행 때 이 인벤토리로 바꿈) |
 | `insecure_tls` | false | `true`/`yes`/`y`/`1`/`on` 이면 https 인증서 검증 생략 |
 | `gossh` | (빈 값) | gossh 경로(폴더 또는 파일). 비우면 환경변수 `GOSSH` → PATH |
 | `repohost` | (필수) | `custom_inventory.sh` 가 있는 서버(ssh/scp 대상, 비밀번호 없이 접속) |
@@ -341,7 +346,7 @@ stress-test -inspect [-user <u> | -conf <설정파일>] [템플릿 ID/이름 ...
 | `stress_hostname_key` | (빈 값) | hostname 변수명. **선택** — 비우면 넘기지 않음 |
 | `stress_extra_vars` | (빈 값) | 추가 survey 항목 |
 | `stress_end_keys` | `end_year,end_month,end_day,end_hour,end_min` | stress-ng 종료 시각 survey 변수명 5개(연,월,일,시,분 순). 정확히 5개가 아니면 종료코드 2. key 는 `stress-test -inspect` 로 확인 |
-| `default_inventory` | `DEFAULT` | 평소 템플릿 인벤토리 이름. launch 직전 이 이름이 아니면 "사용 중", launch 뒤 이 인벤토리로 되돌림 |
+| `default_inventory` | `DEFAULT` | 평소 CPU 템플릿 인벤토리 이름. launch 직전 이 이름이 아니면 "사용 중", launch 뒤 이 인벤토리로 되돌림 (stress-ng 템플릿은 해당 없음) |
 | ~~`cpu_intel_*` / `cpu_amd_*`~~ | — | **없어짐.** conf 에 있으면 종료코드 2 ("cpu_template 하나로 바뀌었습니다"). `bash setup.sh` 로 다시 저장하면 옮겨 줌 |
 | `monitor_sec` | 120 | job 완료 후 최대 감시 시간(초). 1 이상 정수 |
 | `monitor_interval` | 10 | 1분 로드 확인 간격(초). 1 이상 정수 |

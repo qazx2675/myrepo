@@ -123,7 +123,7 @@ func (a *app) launchSwitched(tmplID int, vars map[string]interface{}) (job int, 
 		}
 		curSwitch.begin(a.client, t.ID, a.defInvID)
 		if err := a.client.setTemplateInventory(t.ID, a.userInvID); err != nil {
-			return 0, curSwitch.restore(), fmt.Errorf("템플릿 인벤토리를 %s 로 바꾸지 못했습니다: %w", a.cfg.Username, err)
+			return 0, curSwitch.restore(), fmt.Errorf("템플릿 인벤토리를 %s 로 바꾸지 못했습니다: %w", a.userInv, err)
 		}
 		v, err := a.client.getTemplate(t.ID)
 		if err != nil {
@@ -133,7 +133,7 @@ func (a *app) launchSwitched(tmplID int, vars map[string]interface{}) (job int, 
 			// 다른 사람과 경합: 지금 인벤토리는 우리 것이 아니므로 되돌리지 않는다
 			curSwitch.cancel()
 			if v.invName() == def {
-				return 0, nil, fmt.Errorf("템플릿 인벤토리를 %s 로 바꿨지만 반영되지 않았습니다(%s 그대로)", a.cfg.Username, def)
+				return 0, nil, fmt.Errorf("템플릿 인벤토리를 %s 로 바꿨지만 반영되지 않았습니다(%s 그대로)", a.userInv, def)
 			}
 			a.appendBusyHistory(v)
 			if a.askBusy(busyMessage(v, def)) {
@@ -141,7 +141,7 @@ func (a *app) launchSwitched(tmplID int, vars map[string]interface{}) (job int, 
 			}
 			return 0, nil, errBusy
 		}
-		a.logf("%s 템플릿 %s(%d) 인벤토리 %s → %s", markInfo, t.Name, t.ID, def, a.cfg.Username)
+		a.logf("%s 템플릿 %s(%d) 인벤토리 %s → %s", markInfo, t.Name, t.ID, def, a.userInv)
 		job, lerr := a.client.launch(t.ID, vars)
 		rerr := curSwitch.restore()
 		if rerr == nil {
@@ -166,14 +166,22 @@ func (a *app) prepareAWX(steps []string) error {
 		}
 		a.tmpl[s] = t
 	}
-	var err error
-	if a.userInvID, err = a.client.findInventory(a.cfg.Username); err != nil {
-		return fmt.Errorf("%v (템플릿 실행 때 바꿀 인벤토리 = conf 의 username)", err)
+	if !contains(steps, stageCPU) {
+		return nil // 인벤토리를 바꾸는 것은 CPU 템플릿뿐 (stress-ng 템플릿은 개인 인벤토리를 그대로 씀)
 	}
+	inv, exact, err := a.client.findUserInventory(a.cfg.Username)
+	if err != nil {
+		return fmt.Errorf("%v (CPU 템플릿 실행 때 바꿀 인벤토리 = conf 의 username)", err)
+	}
+	a.userInvID, a.userInv = inv.ID, inv.Name
 	if a.defInvID, err = a.client.findInventory(a.cfg.DefaultInventory); err != nil {
 		return fmt.Errorf("%v (conf 의 default_inventory)", err)
 	}
-	a.logf("%s AWX 확인: 인벤토리 %s(%d) ↔ %s(%d)", markInfo, a.cfg.DefaultInventory, a.defInvID, a.cfg.Username, a.userInvID)
+	if exact {
+		a.logf("%s AWX 확인: CPU 템플릿 인벤토리 %s(%d) ↔ %s(%d)", markOK, a.cfg.DefaultInventory, a.defInvID, a.userInv, a.userInvID)
+	} else {
+		a.logf("%s AWX 확인: CPU 템플릿 인벤토리 %s(%d) ↔ %s(%d) — 이름에 username(%s)이 들어간 인벤토리로 판단", markOKY, a.cfg.DefaultInventory, a.defInvID, a.userInv, a.userInvID, a.cfg.Username)
+	}
 	return nil
 }
 

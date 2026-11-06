@@ -1,6 +1,6 @@
 // fake_awx: stress-test 랩 검증용 AWX 대역 (표준 라이브러리만).
 // 사용: go run . -addr :18080 [-skipfile f] [-skiponce h1,h2] [-failtmpl stress-ng] [-busyfile f] [-launchdelay 5s] [-loops 8] [-key target_hosts]
-// 인벤토리: 1=DEFAULT, 2=admin(tester conf username), 3=src-inv(소스 7), 9=다른 사용자(-busyfile)
+// 인벤토리: 1=DEFAULT, 2=admin(tester conf username), 3=src-inv(소스 7), 4=I_dh.kim(username 포함 판정용), 9=다른 사용자(-busyfile)
 // -inspect 시험용: 템플릿 survey(stress-ng: end_* 5개+호스트+mode, cpu-test: 호스트+intensity), 소스 상세 필드
 package main
 
@@ -34,8 +34,8 @@ var (
 var (
 	mu       sync.Mutex
 	tmpls    = map[int]string{1: "cpu-test", 3: "stress-ng"}
-	tmplInv  = map[int]int{1: 1, 3: 1} // 템플릿 → 현재 인벤토리
-	invs     = map[int]string{1: "DEFAULT", 2: "admin", 3: "src-inv"}
+	tmplInv  = map[int]int{1: 1, 3: 2} // 템플릿 → 현재 인벤토리 (stress-ng 은 개인 인벤토리 admin)
+	invs     = map[int]string{1: "DEFAULT", 2: "admin", 3: "src-inv", 4: "I_dh.kim"}
 	jobs     = map[int]string{} // job id -> status
 	jobOut   = map[int]string{}
 	nextJob  = 100

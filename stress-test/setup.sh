@@ -103,7 +103,7 @@ for k in "${keys[@]}"; do
 	case $k in
 		awx_url) s="AWX 접속" ;; gossh) s="gossh" ;; repohost) s="인벤토리 등록 (AWX 01 방식)" ;;
 		inventory_source) s="인벤토리 소스" ;; cpu_template) s="템플릿 (cpu: 하나, stress: stress-ng) — survey key 는 stress-test -inspect 로 확인" ;;
-		default_inventory) s="템플릿 인벤토리 (실행 때 username 인벤토리로 바꿨다가 되돌림)" ;;
+		default_inventory) s="CPU 템플릿 평소 인벤토리 (실행 때 username 인벤토리로 바꿨다가 되돌림)" ;;
 		monitor_sec) s="감시" ;; output_dir) s="공통" ;; *) s="" ;;
 	esac
 	[[ -n $s && $s != "$section" ]] && { section=$s; echo "── $s ──"; }

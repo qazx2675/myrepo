@@ -151,6 +151,45 @@ func (c *awxClient) findInventory(name string) (int, error) {
 	return 0, fmt.Errorf("AWX 에 이름이 %q 인 인벤토리가 없습니다", name)
 }
 
+// matchUserInventory 는 username 인벤토리를 고른다: 이름이 username 과 같으면 그것(exact=true),
+// 없으면 이름에 username 이 들어간(대소문자 무시) 인벤토리가 하나뿐일 때 그것(exact=false, 예: I_donghyun97.kim).
+// 못 고르면 ID 0, cands 는 이름에 username 이 들어간 후보들.
+func matchUserInventory(invs []invInfo, username string) (inv invInfo, exact bool, cands []string) {
+	u := strings.ToLower(username)
+	var hit []invInfo
+	for _, v := range invs {
+		if v.Name == username {
+			return v, true, nil
+		}
+		if u != "" && strings.Contains(strings.ToLower(v.Name), u) {
+			hit = append(hit, v)
+		}
+	}
+	for _, h := range hit {
+		cands = append(cands, h.Name)
+	}
+	if len(hit) == 1 {
+		return hit[0], false, cands
+	}
+	return invInfo{}, false, cands
+}
+
+// findUserInventory 는 matchUserInventory 로 username 인벤토리를 찾는다.
+func (c *awxClient) findUserInventory(username string) (invInfo, bool, error) {
+	invs, err := c.listInventories()
+	if err != nil {
+		return invInfo{}, false, fmt.Errorf("인벤토리 목록 조회 실패: %w", err)
+	}
+	inv, exact, cands := matchUserInventory(invs, username)
+	switch {
+	case inv.ID != 0:
+		return inv, exact, nil
+	case len(cands) > 1:
+		return invInfo{}, false, fmt.Errorf("이름에 %q 가 들어간 인벤토리가 여러 개라 고를 수 없습니다: %s", username, strings.Join(cands, ", "))
+	}
+	return invInfo{}, false, fmt.Errorf("AWX 에 이름이 %q 이거나 %q 가 들어간 인벤토리가 없습니다", username, username)
+}
+
 // surveyTypes 는 템플릿 survey 의 변수명 → type(text/integer/float …) 이다. survey 가 없으면 빈 맵.
 func (c *awxClient) surveyTypes(tmplID int) (map[string]string, error) {
 	var s struct {
