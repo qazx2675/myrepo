@@ -60,7 +60,8 @@ scn_new() {
 	: > "$S/cc_scenario"
 	export FAKE_MARK_DIR=$S/mark FAKE_CC_STATE=$S/ccstate FAKE_ST_LOG=$S/st.log FAKE_ST_PIDFILE=$S/st.pids
 	export FAKE_CC_LOG=$S/cc.log FAKE_GOSSH_LOG=$S/gossh.log FAKE_GOSSH_SCENARIO=$S/scenario FAKE_CC_SCENARIO=$S/cc_scenario
-	unset FAKE_ST_REBOOT FAKE_ST_EXIT FAKE_ST_DELAY FAKE_ST_BUSY FAKE_ST_BUSY_TIMES FAKE_ST_BUSY_SLEEP BADFIRST
+	unset FAKE_ST_REBOOT FAKE_ST_EXIT FAKE_ST_DELAY FAKE_ST_BUSY FAKE_ST_BUSY_TIMES FAKE_ST_BUSY_SLEEP BADFIRST FAKE_YML_TAMPER FAKE_YS_EXIT
+	export FAKE_YML_DIR=$S/yml
 	: > "$S/st.log"
 	: > "$S/st.pids"
 	: > "$S/st.conf"
@@ -550,6 +551,105 @@ wait_for 15 is_stopped "$RUND"
 wait_for 8 bash -c "! kill -0 $PWP 2> /dev/null"
 (cd "$S" && "$BIN" -new -c "$S/conf" "$S/hosts" < /dev/null > /dev/null 2> "$S/new3.err")
 check "P: -new 는 -run 없이 쓰면 오류(종료코드 1)" 1 "$?"
+
+# ================================================================ Q. -auto: 질문 없이 끝까지
+echo "== Q. -run -auto (설정수정 자동 → CPU 묶음 → stress-ng 종료 시각 자동 → 늦게 접속된 호스트도 처리 → 질문 없이 완료)"
+pick_none() { echo s; } # -auto 는 질문을 내면 안 된다(나오면 .asked 에 남고 중지)
+scn_new Q
+printf '%s\n' h_off h_fix h_cpu h_both h_done > "$S/hosts"
+addscn h_off off
+addscn h_fix ok cpu=nolog stress=0
+addscn h_cpu ok cpu=nolog stress=0
+addscn h_both ok stress=0
+addscn h_done ok
+printf 'h_fix\tfail\n' > "$S/cc_scenario"
+mkconf "AUTO_CPU_WAIT=3s" "AUTO_CPU_INTERVAL=1s" "AUTO_CPU_MAX=3s" "AUTO_RECHECK=4s" "AUTO_LIMIT=60s"
+(cd "$S" && "$BIN" -run -auto -c "$S/conf" -user tester "$S/hosts" < /dev/null > "$S/start.out" 2> "$S/start.err")
+check "Q: -run -auto 시작 종료코드 0" 0 "$?"
+RUND=$S/hosts_run
+has "Q: state.json 에 auto 상태" "$RUND/state.json" '^  "auto": \{'
+# 첫 CPU 묶음이 뜨면 접속불가였던 h_off 를 살린다(⑥ 재판정으로 대기열 뒤에 붙는지)
+if wait_for 30 grep -q '^START a' "$S/st.log"; then ok "Q: 첫 CPU 묶음 launch"; else ng "Q: 첫 CPU 묶음 launch"; fi
+sed -i 's/^h_off off$/h_off ok cpu=nolog stress=0/' "$S/scenario"
+drive "$RUND" 70 pick_none
+check "Q: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+if [ -s "$RUND.asked" ]; then ng "Q: 질문 없음" "$(cat "$RUND.asked")"; else ok "Q: 질문 없음"; fi
+check "Q: config_check -auto 1회(h_fix)" "LIST=h_fix" "$(grep -A4 'argv=-auto tester' "$FAKE_CC_LOG" | grep '^LIST=')"
+check "Q: CPU 묶음 2개(대기열 순서: 처음부터 O 인 h_cpu, 수정 뒤 붙은 h_fix / 늦게 붙은 h_off)" "h_cpu,h_fix
+h_off" "$(st_hosts a)"
+check "Q: stress-ng 3번(h_both 먼저, CPU O 가 된 묶음 차례로)" "h_both
+h_fix,h_cpu
+h_off" "$(st_hosts b)"
+QEND=$(date -d '+2 days' '+%Y,%m,%d,00,00')
+check "Q: stress-ng 종료 시각은 +2일 00:00 자동" 3 "$(nlines "$S/st.log" "^START b .* end=$QEND gossh=")"
+R=$RUND/result.txt
+fileok "Q: result.txt 저장" "$R"
+check "Q: 모든 호스트 완료|O|O|O" "" "$(awk -F'|' '/^$/{exit} NR>1 && ($2!="완료" || $3!="O" || $4!="O" || $5!="O")' "$R" 2> /dev/null)"
+check "Q: 결과 행 5개" 5 "$(awk '/^$/{exit} NR>1' "$R" | wc -l)"
+has "Q: result.txt 에 대수 요약" "$R" '^완료\(OOO\) 5대[|]남음 0대[|]포기 0대$'
+has "Q: 끝 사유 기록" "$RUND/worker.log" '자동 진행 끝\(할 일이 끝남\): 모두 O 5대, 남음 0대, 포기 0대'
+check "Q: launch 직전 yaml 확인 4회(첫 launch 제외, 바뀐 것 없어 질문 없음)" 4 "$(grep -c '^YAMLSTATE' "$S/st.log")"
+check "Q: 등록 5회(CPU 2 + stress-ng 3)" 5 "$(grep -c '^REG' "$S/st.log")"
+has "Q: stress-ng launch 즉시 O 표시" "$RUND/state.json" '"ng_launched": true'
+QWP=$(tr -d '[:space:]' < "$RUND/worker.pid")
+if wait_for 10 bash -c "! kill -0 $QWP 2> /dev/null"; then ok "Q: 워커 종료"; else ng "Q: 워커 종료"; fi
+(cd "$S" && "$BIN" -auto -c "$S/conf" "$S/hosts" < /dev/null > /dev/null 2> "$S/auto2.err")
+check "Q: -auto 는 -run 없이 쓰면 오류(종료코드 1)" 1 "$?"
+
+# ================================================================ R. -auto: launch 직전 yaml 바뀜 질문(y 로 덮어쓰고 계속 / s 로 중지)
+echo "== R. -run -auto (첫 launch 는 묻지 않고, 다른 사람이 인벤토리를 바꾸면 CPU launch 직전에 y/s 질문 → 기다리는 동안 재판정 계속 → y 로 덮어쓰고 완료 / s 로 중지)"
+q_up() { [ -n "$(qinfo "$1")" ]; }
+q_clear() { [ -z "$(qinfo "$1")" ]; }
+host_done() { grep -A4 "\"host\": \"$2\"" "$1/state.json" | grep -q '"status": "완료"'; }
+setup_r() { # <이름> : h_c 는 stress-ng 대상(먼저 launch, 직후 인벤토리가 바뀜), h_a 는 CPU 대상, h_off 는 처음에 접속불가
+	scn_new "$1"
+	printf '%s\n' h_off h_a h_c > "$S/hosts"
+	addscn h_off off
+	addscn h_a ok cpu=nolog stress=0
+	addscn h_c ok stress=0
+	mkconf "AUTO_CPU_WAIT=3s" "AUTO_CPU_INTERVAL=1s" "AUTO_CPU_MAX=3s" "AUTO_RECHECK=2s" "AUTO_LIMIT=60s"
+	export FAKE_YML_TAMPER=b
+	(cd "$S" && "$BIN" -run -auto -c "$S/conf" -user tester "$S/hosts" < /dev/null > "$S/start.out" 2> "$S/start.err")
+	RUND=$S/hosts_run
+}
+setup_r R
+check "R: -run -auto 시작 종료코드 0" 0 "$?"
+if wait_for 40 q_up "$RUND"; then ok "R: yaml 바뀜 질문이 나옴"; else ng "R: yaml 바뀜 질문이 나옴" "$(tail -5 "$RUND/worker.log")"; fi
+read -r RQ _ RKEYS _ <<< "$(qinfo "$RUND")"
+check "R: 선택지는 y(덮어쓰고 계속)·s(중지)" ys "$RKEYS"
+has "R: 질문에 바뀐 yml 이름" "$RUND/state.json" 'os_install.yml'
+has "R: 질문에 우리가 등록한 yml 이름" "$RUND/state.json" 'fake_b_1ea.yml'
+has "R: 질문에 호스트 수(지금 3대 / 우리 1대)" "$RUND/state.json" '지금 3대 / 우리가 등록한 1대'
+check "R: 첫 launch(stress-ng)는 묻지 않고 실행, CPU 는 아직 launch 전" "1 0" "$(nlines "$S/st.log" '^START b') $(nlines "$S/st.log" '^START a')"
+# 답을 기다리는 동안에도 접속불가였던 h_off 의 10분(시험은 2초) 재판정이 계속된다
+sed -i 's/^h_off off$/h_off ok cpu=nolog stress=0/' "$S/scenario"
+if wait_for 30 host_done "$RUND" h_off; then ok "R: 질문 대기 중에도 재판정이 계속됨(h_off 완료)"; else ng "R: 질문 대기 중에도 재판정이 계속됨(h_off 완료)"; fi
+if q_up "$RUND"; then ok "R: 그동안 질문은 그대로"; else ng "R: 그동안 질문은 그대로"; fi
+check "R: 답 전에는 CPU launch 안 함" 0 "$(nlines "$S/st.log" '^START a')"
+send_answer "$RUND" "$RQ" y
+if wait_for 30 q_clear "$RUND"; then ok "R: y 답을 받아 질문이 걷힘"; else ng "R: y 답을 받아 질문이 걷힘"; fi
+drive "$RUND" 70 pick_none
+check "R: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+if [ -s "$RUND.asked" ]; then ng "R: 그 밖의 질문 없음" "$(cat "$RUND.asked")"; else ok "R: 그 밖의 질문 없음"; fi
+has "R: 답 y 기록" "$RUND/worker.log" "답 $RQ: y"
+has "R: 덮어쓰기 전 다른 작업의 호스트를 로그에 남김" "$RUND/worker.log" '지금 인벤토리 호스트 3대\(y 로 덮어쓰기 전 기록\): x y z'
+check "R: y 뒤 CPU 묶음 1회(대기열 전체 h_a,h_off)" "h_a,h_off" "$(st_hosts a)"
+check "R: 등록 3회(stress-ng, CPU 묶음, stress-ng)" "fake_b_1ea.yml fake_a_2ea.yml fake_b_3ea.yml" "$(sed -n 's/^REG [ab] [0-9]* yml=//p' "$S/st.log" | tr '\n' ' ' | sed 's/ $//')"
+check "R: 끝난 뒤 AWX 소스는 마지막으로 등록한 우리 yml" fake_b_3ea.yml "$(cat "$S/yml/yml")"
+check "R: 질문은 걷혀 있음" "" "$(qinfo "$RUND")"
+R=$RUND/result.txt
+check "R: 모든 호스트 완료|O|O|O" "" "$(awk -F'|' '/^$/{exit} NR>1 && ($2!="완료" || $3!="O" || $4!="O" || $5!="O")' "$R" 2> /dev/null)"
+
+setup_r S
+check "S: -run -auto 시작 종료코드 0" 0 "$?"
+if wait_for 40 q_up "$RUND"; then ok "S: yaml 바뀜 질문이 나옴"; else ng "S: yaml 바뀜 질문이 나옴" "$(tail -5 "$RUND/worker.log")"; fi
+read -r SQ _ <<< "$(qinfo "$RUND")"
+send_answer "$RUND" "$SQ" s
+if wait_for 30 is_stopped "$RUND"; then ok "S: s 로 작업 중지"; else ng "S: s 로 작업 중지"; fi
+check "S: CPU 는 launch 하지 않음" 0 "$(nlines "$S/st.log" '^START a')"
+check "S: 질문은 걷혀 있음" "" "$(qinfo "$RUND")"
+SWP=$(tr -d '[:space:]' < "$RUND/worker.pid")
+if wait_for 10 bash -c "! kill -0 $SWP 2> /dev/null"; then ok "S: 워커 종료"; else ng "S: 워커 종료"; fi
 
 echo
 echo "결과: PASS $PASS, FAIL $FAIL"

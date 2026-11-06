@@ -215,3 +215,29 @@ func TestHandleKeyViewKeys(t *testing.T) {
 	// 상태가 아직 없어도(nil) 죽지 않음
 	press(&viewState{}, nil, false, s.actions(), "down", "c", "S")
 }
+
+func TestToggleResultKey(t *testing.T) {
+	st := sampleState()
+	v := viewState{}
+	press(&v, st, true, (&sent{}).actions(), "v")
+	if !v.Result {
+		t.Errorf("v 로 켜져야 함")
+	}
+	press(&v, st, true, (&sent{}).actions(), "v")
+	if v.Result {
+		t.Errorf("v 로 다시 꺼져야 함")
+	}
+	// 질문이 떠 있어도 v 는 화면 토글이고 답으로 가지 않는다(선택지 키 c r x s y n 과 겹치지 않음)
+	st.Question = &question{ID: "q4", Stage: stageLoad, Choices: []choice{{Key: "c"}, {Key: "r"}, {Key: "x"}, {Key: "s"}}}
+	s := &sent{}
+	press(&v, st, true, s.actions(), "v")
+	if !v.Result || len(s.answers) != 0 {
+		t.Errorf("질문 중 v: Result=%v answers=%v", v.Result, s.answers)
+	}
+	// 상태를 아직 못 읽었어도(st == nil) 토글된다
+	v = viewState{}
+	press(&v, nil, true, (&sent{}).actions(), "v")
+	if !v.Result {
+		t.Errorf("st nil 에서도 v 가 켜져야 함")
+	}
+}

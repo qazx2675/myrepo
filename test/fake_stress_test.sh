@@ -19,6 +19,11 @@
 #                           r 이면 계속(FAKE_ST_BUSY_TIMES 번 반복, 기본 1), 그 밖·EOF 면 `BUSYANS` 기록 뒤 종료코드 1
 #                           기록: BUSY <steps> <ns> / BUSYANS <steps> <답>
 #   FAKE_ST_BUSY_SLEEP=<초> 인벤토리 사용 중 줄을 찍은 뒤 stdin 을 읽기 전에 쉬는 시간(없으면 바로 읽음)
+#   FAKE_YML_DIR=<폴더>     가짜 AWX 인벤토리 소스(진짜 -yaml-state 흉내). 폴더 안 yml(소스 yml 한 줄)·hosts(호스트 한 줄씩)·seq(등록 번호)
+#                           * 등록(-steps ...): -end 검사 뒤에 yml=fake_<steps>_<번호>ea.yml, hosts=대상 으로 덮어쓰고 "[등록] yml=<yml> hosts=<쉼표>" 줄을 찍는다
+#                             기록: REG <steps> <ns> yml=<yml>
+#                           * -yaml-state [-user u] [-conf f]: 현재 값을 "[yaml상태] key=value" 4줄로 찍는다(기록: YAMLSTATE <ns>). FAKE_YS_EXIT=<코드> 면 오류로 끝남
+#   FAKE_YML_TAMPER=<steps> 이 steps 의 첫 등록 직후 다른 사람이 소스를 바꾼 것처럼 yml=os_install.yml, hosts=x,y,z 로 덮어쓴다(한 번만)
 set -u
 
 user=""
@@ -27,8 +32,10 @@ steps=""
 batch=0
 conf=""
 end=""
+yamlstate=0
 while [ $# -gt 0 ]; do
 	case $1 in
+		-yaml-state) yamlstate=1; shift ;;
 		-user) user=$2; shift 2 ;;
 		-hosts) hostsf=$2; shift 2 ;;
 		-steps) steps=$2; shift 2 ;;
@@ -38,6 +45,22 @@ while [ $# -gt 0 ]; do
 		*) echo "fake_stress_test: 알 수 없는 인자 $1" >&2; exit 2 ;;
 	esac
 done
+if [ "$yamlstate" = 1 ]; then
+	[ -n "${FAKE_ST_LOG:-}" ] && echo "YAMLSTATE $(date +%s%N)" >> "$FAKE_ST_LOG"
+	if [ "${FAKE_YS_EXIT:-0}" != 0 ]; then
+		echo "오류: 가짜 AWX 조회 실패" >&2
+		exit "$FAKE_YS_EXIT"
+	fi
+	yml=$(cat "${FAKE_YML_DIR:-/nonexistent}/yml" 2> /dev/null)
+	hs=$(sort "${FAKE_YML_DIR:-/nonexistent}/hosts" 2> /dev/null | paste -sd, -)
+	n=0
+	[ -n "$hs" ] && n=$(printf '%s' "$hs" | tr ',' '\n' | wc -l)
+	echo "[yaml상태] yml=$yml"
+	echo "[yaml상태] source=11 inventory=7"
+	echo "[yaml상태] count=$n"
+	echo "[yaml상태] hosts=$hs"
+	exit 0
+fi
 if [ -z "$user" ] || [ -z "$hostsf" ] || [ -z "$steps" ] || [ ! -f "$hostsf" ]; then
 	echo "fake_stress_test: -user -hosts -steps 필요(목록 파일 없음?)" >&2
 	exit 2
@@ -72,6 +95,24 @@ case $steps in
 		fi
 		;;
 esac
+
+# 등록(invsync) 흉내: 소스 yml·호스트를 이 묶음의 것으로 바꾸고 [등록] 줄을 찍는다(진짜는 템플릿 인벤토리 확인보다 먼저)
+if [ -n "${FAKE_YML_DIR:-}" ]; then
+	mkdir -p "$FAKE_YML_DIR"
+	seq=$(cat "$FAKE_YML_DIR/seq" 2> /dev/null || echo 0)
+	seq=$((seq + 1))
+	echo "$seq" > "$FAKE_YML_DIR/seq"
+	regyml="fake_${steps}_${seq}ea.yml"
+	printf '%s\n' "$regyml" > "$FAKE_YML_DIR/yml"
+	printf '%s\n' "${hosts[@]}" > "$FAKE_YML_DIR/hosts"
+	echo "[등록] yml=$regyml hosts=$hl"
+	log "REG $steps $(now) yml=$regyml"
+	if [ "${FAKE_YML_TAMPER:-}" = "$steps" ] && [ ! -e "$FAKE_YML_DIR/tampered" ]; then
+		: > "$FAKE_YML_DIR/tampered"
+		echo os_install.yml > "$FAKE_YML_DIR/yml"
+		printf '%s\n' x y z > "$FAKE_YML_DIR/hosts"
+	fi
+fi
 
 MARK=${FAKE_MARK_DIR:-}
 if [ -n "$MARK" ] && [ -e "$MARK/hang_$steps" ]; then

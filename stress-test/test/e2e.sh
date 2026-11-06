@@ -128,4 +128,23 @@ case ${1:-all} in G|all)
   echo "PATCH/launch 요청 횟수: $(grep -cE 'PATCH|launch tmpl' $FLOG)"
   stop_fake;;
 esac
+case ${1:-all} in H|all)
+  echo "######## H -yaml-state (읽기 전용) + 등록 직후 [등록] 줄 (cpu 템플릿 job 은 실패시켜 부하를 걸지 않음)"; : > $BUSY; rm -f /root/work/st-svr/tester_*; start_fake -busyfile $BUSY -failtmpl cpu-test
+  echo "--- H1 등록 전(처음 상태): yml 은 가짜 AWX 초기값, 호스트 0대"
+  st -yaml-state
+  echo "--- H2 -steps a 로 등록 → [등록] yml=<등록한 yml> hosts=<등록 직후 인벤토리 호스트>"
+  ./stress-test -user tester -hosts $T/hosts_mixed.txt -steps a -batch | grep '^\[등록\]'
+  echo "--- H3 -yaml-state 가 등록한 값을 그대로 보임 (yml 이름·호스트가 [등록] 줄과 같아야 함)"
+  st -yaml-state
+  echo "--- H4 다른 사용자가 호스트를 넣고 소스 yml 을 바꿈 → 달라진 값이 보임"
+  curl -s -o /dev/null -X POST -d '{"name":"intruder"}' http://127.0.0.1:18080/api/v2/inventories/3/hosts/
+  curl -s -o /dev/null -X PATCH -d '{"source_path":"os_install.yml"}' http://127.0.0.1:18080/api/v2/inventory_sources/7/
+  st -yaml-state
+  echo "--- H5 접속 불가 URL → exit 2 / 알 수 없는 추가 인자 → exit 2"
+  sed 's#^awx_url = .*#awx_url = http://127.0.0.1:1#' conf/tester_setting.conf > /tmp/st_badurl2.conf
+  st -yaml-state -conf /tmp/st_badurl2.conf
+  st -yaml-state extra
+  echo "템플릿 인벤토리 PATCH·launch 요청 횟수: $(grep -cE 'PATCH template|launch tmpl' $FLOG) (H2 의 cpu launch 1회 + 인벤토리 변경·복원 2회 = 3 이어야 함)"
+  stop_fake;;
+esac
 cleanup_load

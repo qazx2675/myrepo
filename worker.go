@@ -45,6 +45,9 @@ type worker struct {
 
 	info []string // 이번 단계에서 질문 문구에 덧붙일 안내(stress-test 종료코드 1 등)
 
+	yamlQ  string // -auto: 답을 기다리는 'yaml 바뀜' 질문의 id(없으면 "")
+	yamlOK bool   // -auto: 그 질문에 y 를 답함 — 다음 launch 한 번은 yaml 확인 없이 진행(launch 가 우리 yaml 을 다시 등록한다)
+
 	stopCh   chan struct{} // 중지 요청을 받으면 닫힘(실행 중인 외부 명령 취소에도 쓰인다)
 	stopOnce sync.Once
 }
@@ -136,8 +139,8 @@ func (w *worker) heartbeat(stop <-chan struct{}) {
 // 대상 선정
 // ---------------------------------------------------------------------------
 
-// active 는 작업 대상이 될 수 있는 행(상태 완료, 제외 아님).
-func active(r *hostRow) bool { return r.Status == stDone && !r.Excluded }
+// active 는 작업 대상이 될 수 있는 행(상태 완료, 제외 아님, -auto 에서 포기 아님).
+func active(r *hostRow) bool { return r.Status == stDone && !r.Excluded && r.GaveUp == "" }
 
 func (w *worker) pick(f func(r *hostRow) bool) []string {
 	var out []string
@@ -246,6 +249,11 @@ func (w *worker) run() {
 	go w.watchStop(done)
 	if resume {
 		w.logf("재기동: %s 단계 — 진행 중이던 명령은 다시 실행하지 않고 재체크부터 합니다", stageName(w.st.Stage))
+	}
+	if w.st.Auto != nil { // -auto: 단계·질문 대신 스케줄러(auto.go)
+		w.runAuto()
+		w.logf("워커 종료: %s", w.st.Detail)
+		return
 	}
 	for !w.st.Finished() {
 		if w.stopped() {
@@ -749,6 +757,9 @@ func (w *worker) apply(s *runState, jr *judgeResult) {
 		if r.CPU == "O" {
 			r.CPURetry = false
 		}
+		if r.NGLaunched && r.Status == stDone { // -auto: stress-ng 는 launch 되면 O 로 둔다(로그가 아직 없어도)
+			r.Stress = "O"
+		}
 		rows = append(rows, r)
 	}
 	s.Hosts = rows
@@ -829,7 +840,7 @@ func (w *worker) doNG() string {
 		}
 	})
 	w.logf("stress-ng 단계 시작 %d대", len(hosts))
-	code, err := w.ex.StressTest("b", list, hosts, end, nil, w.busyFn("stress-ng"))
+	code, err := w.ex.StressTest("b", list, hosts, end, nil, nil, w.busyFn("stress-ng"))
 	w.clearRunning(hosts)
 	fatal, info := stressOutcome("stress-ng", code, err)
 	if info != "" {
@@ -912,7 +923,7 @@ func (w *worker) doLoad(resume bool) string {
 			var once sync.Once
 			cpuCh = make(chan stressRes, 1)
 			go func() {
-				c, e := w.ex.StressTest("a", list, cpu, "", func() { once.Do(func() { close(launched) }) }, w.busyFn("CPU"))
+				c, e := w.ex.StressTest("a", list, cpu, "", func() { once.Do(func() { close(launched) }) }, nil, w.busyFn("CPU"))
 				cpuCh <- stressRes{c, e}
 			}()
 			ok := false
@@ -954,7 +965,7 @@ func (w *worker) doLoad(resume bool) string {
 			} else {
 				ngCh = make(chan stressRes, 1)
 				go func() {
-					c, e := w.ex.StressTest("b", list, stress, end, nil, w.busyFn("stress-ng"))
+					c, e := w.ex.StressTest("b", list, stress, end, nil, nil, w.busyFn("stress-ng"))
 					ngCh <- stressRes{c, e}
 				}()
 			}

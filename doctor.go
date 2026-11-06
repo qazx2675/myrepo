@@ -788,6 +788,9 @@ func docWorker(r *docReport, st *runState, dir string, a doctorArgs, d doctorDep
 	r.info("워커: lock %s, worker.pid=%d(프로세스 %s), state.worker_pid=%d",
 		map[bool]string{true: "잡혀 있음(살아 있음)", false: "안 잡힘"}[alive], filePID,
 		map[bool]string{true: "있음", false: "없음"}[d.pidRunning(filePID)], st.WorkerPID)
+	if st.Auto != nil {
+		r.info("-auto 작업입니다: TUI 에서 v 키로 결과 판(호스트별 시도 횟수·마지막 오류·지금 하는 일·다음 확인·남은 시간)을 볼 수 있습니다. 사람이 답하는 질문은 yaml 바뀜(y/s)과 인벤토리 사용 중(r/x) 둘뿐입니다. 재개하면 시도 횟수·시작 시각을 이어 가고, 처음부터는 new_setup -run -new -auto %s", a.hostFile)
+	}
 	rerun := "같은 경로(" + d.cwd + ")에서 같은 명령으로 다시 실행하세요: new_setup -run " + a.hostFile + "\n→ '이어서 진행할까요?' 에 y 를 답하면 저장된 단계부터 이어서 진행합니다(진행 중이던 명령은 다시 실행하지 않고 재체크부터)"
 	switch {
 	case fin && !alive:
@@ -839,6 +842,9 @@ func docQuestion(r *docReport, st *runState, dir string, a doctorArgs, d doctorD
 	}
 	if q.Kind == "busy" {
 		r.info("stress-test 가 템플릿 인벤토리 사용 중이라 멈춰 있습니다(단계는 그대로, 이 동안 STRESS_TIMEOUT 은 일시정지). 그 인벤토리 사용자가 DEFAULT 로 되돌린 뒤 r(다시 확인), 포기하려면 x(이 묶음 중단)")
+	}
+	if q.Kind == "yaml" {
+		r.info("-auto 가 launch 직전에 AWX 인벤토리(yml·호스트)가 우리가 등록한 것과 다른 것을 발견해 launch 를 보류 중입니다(설정수정·재판정은 계속). y 면 우리 yaml 로 덮어쓰고 launch, s 면 중지")
 	}
 	switch {
 	case !ans.exists:

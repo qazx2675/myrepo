@@ -189,7 +189,7 @@ func (f *fakeExec) ConfigFix(hosts []string) error {
 	return nil
 }
 
-func (f *fakeExec) StressTest(steps, listFile string, hosts []string, end string, launched func(), busy func(msg string) string) (int, error) {
+func (f *fakeExec) StressTest(steps, listFile string, hosts []string, end string, launched func(), registered func(yml string, hosts []string), busy func(msg string) string) (int, error) {
 	b, err := os.ReadFile(listFile)
 	if err != nil || strings.Join(parseHostLines(string(b)), ",") != strings.Join(hosts, ",") {
 		f.t.Errorf("목록 파일 %s 내용이 대상과 다름: %q / %v", listFile, b, hosts)
@@ -825,3 +825,6 @@ func (f *fakeExec) Loads(hosts []string) (map[string]float64, error) {
 	}
 	return res, nil
 }
+
+// YamlState 는 -auto 가 아닌 시험에서는 쓰이지 않는다(빈 값).
+func (f *fakeExec) YamlState() (yamlInfo, error) { return yamlInfo{}, nil }

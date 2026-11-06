@@ -146,6 +146,13 @@ type config struct {
 	CheckTimeout   time.Duration // config_check 한 번의 시간 제한
 	StressTimeout  time.Duration // stress-test 한 번의 시간 제한
 
+	// -run -auto 용(auto.go)
+	AutoLimit   time.Duration // 시작 후 이 시간이 지나면 새 작업을 시작하지 않음
+	AutoRecheck time.Duration // 접속 안 되는 호스트 재판정 간격
+	AutoCPUWait time.Duration // CPU launch 후 첫 판정까지
+	AutoCPUInt  time.Duration // 첫 판정이 O 가 아니면 다시 판정하는 간격(launch 실패 뒤 다시 시도까지도 이만큼 쉼)
+	AutoCPUMax  time.Duration // 첫 판정 뒤 더 기다리는 최대 시간
+
 	Warnings []string // 설정 해석 중 나온 경고(잘못된 시간 값 등). 호출한 쪽이 stderr 에 낸다
 }
 
@@ -166,6 +173,12 @@ const (
 	defaultGosshTimeout  = 10 * time.Minute
 	defaultCheckTimeout  = 40 * time.Minute
 	defaultStressTimeout = 60 * time.Minute
+
+	defaultAutoLimit   = 12 * time.Hour
+	defaultAutoRecheck = 10 * time.Minute
+	defaultAutoCPUWait = 50 * time.Minute // 45분 + 여유 5분
+	defaultAutoCPUInt  = 5 * time.Minute
+	defaultAutoCPUMax  = 30 * time.Minute
 )
 
 // parseDuration 은 설정의 시간 값을 읽는다. Go duration(47m, 30s) 또는 숫자만(분).
@@ -188,7 +201,9 @@ func parseConf(text string) config {
 	c := config{CPUIntelLog: defaultIntelLog, CPUIntelOK: defaultIntelOK,
 		CPUAMDLog: defaultAMDLog, CPUAMDOK: defaultAMDOK, CPUAMDLine: defaultAMDLine,
 		CPUWaitStart: defaultCPUWaitStart, CPUWaitInt: defaultCPUWaitInt, CPUWaitMax: defaultCPUWaitMax,
-		GosshTimeout: defaultGosshTimeout, CheckTimeout: defaultCheckTimeout, StressTimeout: defaultStressTimeout}
+		GosshTimeout: defaultGosshTimeout, CheckTimeout: defaultCheckTimeout, StressTimeout: defaultStressTimeout,
+		AutoLimit: defaultAutoLimit, AutoRecheck: defaultAutoRecheck, AutoCPUWait: defaultAutoCPUWait,
+		AutoCPUInt: defaultAutoCPUInt, AutoCPUMax: defaultAutoCPUMax}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -225,7 +240,8 @@ func parseConf(text string) config {
 			c.StressTestConf = expandPath(val)
 		case "USER_ROUTE":
 			c.UserRoute = expandPath(val)
-		case "CPU_WAIT_START", "CPU_WAIT_INTERVAL", "CPU_WAIT_MAX", "GOSSH_TIMEOUT", "CHECK_TIMEOUT", "STRESS_TIMEOUT":
+		case "CPU_WAIT_START", "CPU_WAIT_INTERVAL", "CPU_WAIT_MAX", "GOSSH_TIMEOUT", "CHECK_TIMEOUT", "STRESS_TIMEOUT",
+			"AUTO_LIMIT", "AUTO_RECHECK", "AUTO_CPU_WAIT", "AUTO_CPU_INTERVAL", "AUTO_CPU_MAX":
 			d, ok := parseDuration(val)
 			if !ok {
 				c.Warnings = append(c.Warnings, fmt.Sprintf("설정 %s 값 %q 을(를) 시간으로 읽을 수 없어 기본값을 씁니다(예: 47m, 30s, 숫자만 쓰면 분)", key, val))
@@ -244,6 +260,16 @@ func parseConf(text string) config {
 				c.CheckTimeout = d
 			case "STRESS_TIMEOUT":
 				c.StressTimeout = d
+			case "AUTO_LIMIT":
+				c.AutoLimit = d
+			case "AUTO_RECHECK":
+				c.AutoRecheck = d
+			case "AUTO_CPU_WAIT":
+				c.AutoCPUWait = d
+			case "AUTO_CPU_INTERVAL":
+				c.AutoCPUInt = d
+			case "AUTO_CPU_MAX":
+				c.AutoCPUMax = d
 			}
 		case "DISK_PATTERN":
 			if val != "" {
@@ -923,9 +949,10 @@ func main() {
 	runMode := fs.Bool("run", false, "설정수정·CPU·stress-ng 까지 자동 진행(TUI). 같은 경로에서 다시 실행하면 진행 중 작업에 다시 붙는다")
 	userFlag := fs.String("user", "", "-run 에서 쓸 사용자(설정 USER_ROUTE 가 있으면 메뉴로 고름, 기본: 환경변수 USER)")
 	newFlag := fs.Bool("new", false, "-run 과 함께: 이전 상태 폴더(./<호스트파일>_run)를 지우지 않고 .old-<시각> 으로 이름을 바꿔 보관한 뒤 처음부터 시작(워커가 살아 있으면 거절)")
+	autoFlag := fs.Bool("auto", false, "-run 과 함께: 질문 없이 자동 진행(설정수정 3회·CPU 묶음·stress-ng 종료 시각 자동, 12시간 뒤 끝냄). 인벤토리 사용 중 질문만 사람이 답한다")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "사용법: new_setup [-c <설정파일>] [-er <장애목록파일>] <호스트파일>")
-		fmt.Fprintln(os.Stderr, "        new_setup -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>   (-new: 이전 상태를 .old-<시각> 으로 보관하고 처음부터)")
+		fmt.Fprintln(os.Stderr, "        new_setup -run [-new] [-auto] [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>   (-new: 이전 상태를 .old-<시각> 으로 보관하고 처음부터, -auto: 질문 없이 자동 진행)")
 		fmt.Fprintln(os.Stderr, "        new_setup -doctor [-c <설정파일>] [<호스트파일> | -host <호스트> [-check]]   (읽기 전용 문제 진단)")
 	}
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -939,8 +966,11 @@ func main() {
 	if *newFlag && !*runMode {
 		fail(1, "오류: -new 는 -run 과 함께만 쓸 수 있습니다: new_setup -run -new <호스트파일>")
 	}
+	if *autoFlag && !*runMode {
+		fail(1, "오류: -auto 는 -run 과 함께만 쓸 수 있습니다: new_setup -run -auto <호스트파일>")
+	}
 	if *runMode {
-		os.Exit(runCommand(hostFile, *confPath, *errPath, *userFlag, *newFlag))
+		os.Exit(runCommand(hostFile, *confPath, *errPath, *userFlag, *newFlag, *autoFlag))
 	}
 	// ★ gossh 와 같이 앞의 '^' 를 뗀 이름으로 결과 파일 이름을 만든다.
 	cleanHostFile := strings.TrimPrefix(hostFile, "^")

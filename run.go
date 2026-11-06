@@ -24,11 +24,12 @@ type runDeps struct {
 	show     func(dir string)                                   // 화면(TUI 또는 글) 보이기
 	tty      bool                                               // 대화형 터미널인지(안내 문구를 낼지)
 	fresh    bool                                               // -new: 이전 상태 폴더가 있으면 보관(이름 바꿈)하고 처음부터
+	auto     bool                                               // -auto: 새 작업을 질문 없는 자동 진행으로 만든다(이미 있는 작업에는 쓰지 않음)
 	out, err io.Writer                                          // 안내(표준 출력, 표준 오류)
 }
 
 // runCommand 는 `new_setup -run` 의 실제 진입점이다. 종료 코드를 돌려준다.
-func runCommand(hostArg, confFlag, errFlag, userFlag string, fresh bool) int {
+func runCommand(hostArg, confFlag, errFlag, userFlag string, fresh, auto bool) int {
 	tty := isTerminal(int(os.Stdin.Fd())) && isTerminal(int(os.Stdout.Fd()))
 	d := runDeps{
 		alive:    workerAlive,
@@ -37,6 +38,7 @@ func runCommand(hostArg, confFlag, errFlag, userFlag string, fresh bool) int {
 		confirm:  askYesNo,
 		tty:      tty,
 		fresh:    fresh,
+		auto:     auto,
 		out:      os.Stdout,
 		err:      os.Stderr,
 	}
@@ -174,6 +176,9 @@ func runNew(dir, hostArg, confFlag, errFlag, userFlag string, d runDeps) int {
 		return 2
 	}
 	st.Detail = "워커 시작 중"
+	if d.auto {
+		st.Auto = &autoState{}
+	}
 	if err := saveState(dir, st); err != nil {
 		fmt.Fprintf(d.err, "오류: 상태 파일을 쓸 수 없습니다: %v\n", err)
 		return 2
@@ -190,6 +195,9 @@ func runNew(dir, hostArg, confFlag, errFlag, userFlag string, d runDeps) int {
 }
 
 func runExisting(dir, hostArg string, st *runState, userFlag string, d runDeps) int {
+	if d.auto && st.Auto == nil {
+		fmt.Fprintf(d.err, "알림: 이미 있는 작업은 -auto 없이 시작돼 -auto 를 무시합니다. 자동 진행으로 처음부터 하려면: new_setup -run -new -auto %s\n", hostArg)
+	}
 	switch {
 	case d.alive(dir):
 		if userFlag != "" && userFlag != st.User {

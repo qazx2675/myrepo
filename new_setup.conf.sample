@@ -57,6 +57,14 @@ CPU_AMD_LINE=Result
 #CPU_WAIT_INTERVAL=2m
 #CPU_WAIT_MAX=30m
 
+# -run -auto 전용: 시작 후 새 작업을 멈추는 시각 / 접속 안 되는 호스트 재판정 간격 /
+# CPU launch 후 첫 판정까지 / O 가 아니면 다시 판정하는 간격(launch 실패 뒤 다시 시도까지도) / 첫 판정 뒤 더 기다리는 최대 시간
+#AUTO_LIMIT=12h
+#AUTO_RECHECK=10m
+#AUTO_CPU_WAIT=50m
+#AUTO_CPU_INTERVAL=5m
+#AUTO_CPU_MAX=30m
+
 # 외부 명령 시간 제한(넘으면 프로세스 그룹에 SIGTERM, 5초 뒤 SIGKILL, 시간초과 처리)
 #GOSSH_TIMEOUT=10m
 #CHECK_TIMEOUT=40m
