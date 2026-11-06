@@ -13,12 +13,15 @@ import (
 	"time"
 )
 
-// TemplateConf 는 템플릿 하나(cpu_intel / cpu_amd / stress)의 설정이다.
+// TemplateConf 는 템플릿 하나(cpu / stress)의 설정이다.
 type TemplateConf struct {
 	Template    string // AWX job template ID 또는 이름
-	HostnameKey string // hostname 목록(줄바꿈 텍스트)을 넘길 survey 변수명
+	HostnameKey string // hostname 목록(줄바꿈 텍스트)을 넘길 survey 변수명 (비우면 넘기지 않음 = 인벤토리 전체 대상)
 	ExtraVars   string // "key=value, key2=value2"
 }
+
+// defaultEndKeys 는 stress-ng 종료 시각 survey 변수명 기본값(연,월,일,시,분 순)이다.
+var defaultEndKeys = []string{"end_year", "end_month", "end_day", "end_hour", "end_min"}
 
 // Config 는 ${user}_setting.conf 의 값을 담는다.
 type Config struct {
@@ -38,9 +41,11 @@ type Config struct {
 	Inventory       string
 	SourceField     string
 
-	CPUIntel TemplateConf
-	CPUAMD   TemplateConf
-	Stress   TemplateConf
+	CPU    TemplateConf
+	Stress TemplateConf
+
+	DefaultInventory string   // 평소 템플릿 인벤토리 이름 (실행 때 username 인벤토리로 바꿨다가 되돌림)
+	StressEndKeys    []string // stress-ng 종료 시각 survey 변수명 5개 (연,월,일,시,분)
 
 	MonitorSec      int
 	MonitorInterval int
@@ -82,15 +87,27 @@ func (c *Config) setters() map[string]func(string) error {
 		"inventory":        str(&c.Inventory),
 		"source_field":     str(&c.SourceField),
 
-		"cpu_intel_template":     str(&c.CPUIntel.Template),
-		"cpu_intel_hostname_key": str(&c.CPUIntel.HostnameKey),
-		"cpu_intel_extra_vars":   str(&c.CPUIntel.ExtraVars),
-		"cpu_amd_template":       str(&c.CPUAMD.Template),
-		"cpu_amd_hostname_key":   str(&c.CPUAMD.HostnameKey),
-		"cpu_amd_extra_vars":     str(&c.CPUAMD.ExtraVars),
-		"stress_template":        str(&c.Stress.Template),
-		"stress_hostname_key":    str(&c.Stress.HostnameKey),
-		"stress_extra_vars":      str(&c.Stress.ExtraVars),
+		"cpu_template":        str(&c.CPU.Template),
+		"cpu_hostname_key":    str(&c.CPU.HostnameKey),
+		"cpu_extra_vars":      str(&c.CPU.ExtraVars),
+		"stress_template":     str(&c.Stress.Template),
+		"stress_hostname_key": str(&c.Stress.HostnameKey),
+		"stress_extra_vars":   str(&c.Stress.ExtraVars),
+		"default_inventory":   str(&c.DefaultInventory),
+		"stress_end_keys": func(v string) error {
+			var keys []string
+			for _, k := range strings.Split(v, ",") {
+				if k = strings.TrimSpace(k); k == "" {
+					return fmt.Errorf("stress_end_keys 에 빈 항목이 있습니다: %q", v)
+				}
+				keys = append(keys, k)
+			}
+			if len(keys) != 5 {
+				return fmt.Errorf("stress_end_keys 는 연,월,일,시,분 순서로 5개여야 합니다 (%d개): %q", len(keys), v)
+			}
+			c.StressEndKeys = keys
+			return nil
+		},
 
 		"monitor_sec":      num("monitor_sec", &c.MonitorSec),
 		"monitor_interval": num("monitor_interval", &c.MonitorInterval),
@@ -128,6 +145,9 @@ func parseConfig(text, path string) (*Config, error) {
 		PollInterval:    3,
 		HistoryFile:     "./stress-test_history.log",
 		SourcePath:      path,
+
+		DefaultInventory: "DEFAULT",
+		StressEndKeys:    append([]string(nil), defaultEndKeys...),
 	}
 	set := c.setters()
 	sc := bufio.NewScanner(strings.NewReader(strings.TrimPrefix(text, "\xef\xbb\xbf")))
@@ -148,6 +168,9 @@ func parseConfig(text, path string) (*Config, error) {
 		}
 		key := strings.TrimSpace(line[:eq])
 		val := strings.TrimSpace(line[eq+1:])
+		if strings.HasPrefix(key, "cpu_intel_") || strings.HasPrefix(key, "cpu_amd_") {
+			return nil, fmt.Errorf("%s:%d: %s 키는 없어졌습니다 — cpu_template 하나로 바뀌었습니다 (cpu_template, cpu_hostname_key, cpu_extra_vars 로 옮기고 cpu_intel_*/cpu_amd_* 줄은 지우세요. bash setup.sh 로 다시 저장해도 됩니다)", path, lineNo, key)
+		}
 		if s, ok := set[key]; ok && val != "" {
 			if err := s(val); err != nil {
 				return nil, fmt.Errorf("%s:%d: %v", path, lineNo, err)
@@ -167,7 +190,7 @@ func loadConfig(path string) (*Config, error) {
 }
 
 // validate 는 선택한 단계에 꼭 필요한 키가 비어 있지 않은지 확인한다.
-// cpu 템플릿은 벤더 확인 뒤 실제로 필요한 벤더만 검사한다(checkCPUTemplates).
+// *_hostname_key 는 선택(비우면 hostname 목록을 넘기지 않음).
 func (c *Config) validate(steps string) error {
 	var miss []string
 	need := func(key, v string) {
@@ -184,12 +207,12 @@ func (c *Config) validate(steps string) error {
 	if c.InventorySource == "" && c.Inventory == "" {
 		miss = append(miss, "inventory_source 또는 inventory")
 	}
+	need("default_inventory", c.DefaultInventory)
+	if strings.Contains(steps, "a") {
+		need("cpu_template", c.CPU.Template)
+	}
 	if strings.Contains(steps, "b") {
 		need("stress_template", c.Stress.Template)
-		need("stress_hostname_key", c.Stress.HostnameKey)
-	}
-	if strings.Contains(steps, "a") && c.CPUIntel.Template == "" && c.CPUAMD.Template == "" {
-		miss = append(miss, "cpu_intel_template 또는 cpu_amd_template")
 	}
 	if len(miss) > 0 {
 		return fmt.Errorf("설정 파일(%s)에 비어 있는 값이 있습니다: %s", c.SourcePath, strings.Join(miss, ", "))
@@ -197,10 +220,7 @@ func (c *Config) validate(steps string) error {
 	for _, t := range []struct {
 		name string
 		tc   TemplateConf
-	}{{"cpu_intel", c.CPUIntel}, {"cpu_amd", c.CPUAMD}, {"stress", c.Stress}} {
-		if t.tc.Template != "" && t.tc.HostnameKey == "" {
-			return fmt.Errorf("설정 파일(%s)에 %s_hostname_key 가 비어 있습니다", c.SourcePath, t.name)
-		}
+	}{{"cpu", c.CPU}, {"stress", c.Stress}} {
 		if _, err := parseKeyValues(t.tc.ExtraVars); err != nil {
 			return fmt.Errorf("설정 파일(%s)의 %s_extra_vars %v", c.SourcePath, t.name, err)
 		}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -91,8 +92,81 @@ func (c *awxClient) do(method, path string, body, out interface{}) error {
 }
 
 type jobTemplate struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Inventory int    `json:"inventory"` // 현재 인벤토리 ID (없으면 0)
+	// -inspect 에서만 쓰는 필드
+	AskInventory  bool   `json:"ask_inventory_on_launch"`
+	SurveyEnabled bool   `json:"survey_enabled"`
+	ExtraVars     string `json:"extra_vars"`
+	SummaryFields struct {
+		Inventory struct {
+			ID   int    `json:"id"`
+			Name string `json:"name"`
+		} `json:"inventory"`
+	} `json:"summary_fields"`
+}
+
+// invName 은 템플릿의 현재 인벤토리 이름이다 (없으면 "(없음)").
+func (t *jobTemplate) invName() string {
+	switch {
+	case t.SummaryFields.Inventory.Name != "":
+		return t.SummaryFields.Inventory.Name
+	case t.Inventory != 0:
+		return fmt.Sprintf("(id %d)", t.Inventory)
+	}
+	return "(없음)"
+}
+
+// getTemplate 은 템플릿 하나를 ID 로 다시 조회한다 (현재 인벤토리 확인용).
+func (c *awxClient) getTemplate(id int) (*jobTemplate, error) {
+	var t jobTemplate
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/v2/job_templates/%d/", id), nil, &t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// setTemplateInventory 는 템플릿의 인벤토리를 invID 로 바꾼다(PATCH).
+func (c *awxClient) setTemplateInventory(tmplID, invID int) error {
+	return c.do(http.MethodPatch, fmt.Sprintf("/api/v2/job_templates/%d/", tmplID), map[string]interface{}{"inventory": invID}, nil)
+}
+
+// findInventory 는 이름이 정확히 같은 인벤토리의 ID 를 찾는다.
+func (c *awxClient) findInventory(name string) (int, error) {
+	var list struct {
+		Results []struct {
+			ID   int    `json:"id"`
+			Name string `json:"name"`
+		} `json:"results"`
+	}
+	if err := c.do(http.MethodGet, "/api/v2/inventories/?page_size=200&name="+url.QueryEscape(name), nil, &list); err != nil {
+		return 0, fmt.Errorf("인벤토리 %q 조회 실패: %w", name, err)
+	}
+	for _, r := range list.Results {
+		if r.Name == name {
+			return r.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("AWX 에 이름이 %q 인 인벤토리가 없습니다", name)
+}
+
+// surveyTypes 는 템플릿 survey 의 변수명 → type(text/integer/float …) 이다. survey 가 없으면 빈 맵.
+func (c *awxClient) surveyTypes(tmplID int) (map[string]string, error) {
+	var s struct {
+		Spec []struct {
+			Variable string `json:"variable"`
+			Type     string `json:"type"`
+		} `json:"spec"`
+	}
+	if err := c.do(http.MethodGet, fmt.Sprintf("/api/v2/job_templates/%d/survey_spec/", tmplID), nil, &s); err != nil {
+		return nil, err
+	}
+	res := map[string]string{}
+	for _, q := range s.Spec {
+		res[q.Variable] = q.Type
+	}
+	return res, nil
 }
 
 // resolveTemplate 는 ID(숫자) 또는 이름으로 job template 을 찾는다.

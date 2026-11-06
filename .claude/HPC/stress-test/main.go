@@ -1,6 +1,7 @@
 // stress-test 는 HPC 서버 부하테스트(cpu / stress-ng)를 AWX 로 실행하고 1분 로드로 실행 여부를 감시한다.
 //
-//	stress-test -user <u> -hosts <file> -steps <ab> [-retry N] [-er file] [-conf file] [-batch]
+//	stress-test -user <u> -hosts <file> -steps <ab> [-end y,m,d,h,min] [-retry N] [-er file] [-conf file] [-batch]
+//	stress-test -inspect [-user <u> | -conf file] [템플릿 ID/이름 ...]   (읽기 전용 조사)
 //
 // 종료코드: 0 전부 실행, 1 미실행/실패 있음, 2 설정·입력 오류.
 package main
@@ -11,8 +12,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -51,7 +54,12 @@ type app struct {
 	retry       int
 	targets     []*target
 	out         io.Writer
-	in          *bufio.Reader
+	in          *bufio.Reader // 대화형 입력, -batch 에서는 [인벤토리사용중] 답 읽기
+
+	tmpl      map[string]*jobTemplate // 단계 → 템플릿 (prepareAWX)
+	userInvID int                     // conf username 과 같은 이름의 인벤토리 ID
+	defInvID  int                     // default_inventory ID
+	end       *endTime                // stress-ng 종료 시각 (b 단계가 있을 때)
 }
 
 func (a *app) logf(format string, args ...interface{}) {
@@ -67,9 +75,13 @@ func (a *app) pollInterval() time.Duration {
 
 func usage(fs *flag.FlagSet) func() {
 	return func() {
-		fmt.Fprintln(os.Stderr, "사용법: stress-test -user <사용자> -hosts <입력파일> -steps <ab> [-retry N] [-er <장애목록>] [-conf <설정파일>] [-batch]")
+		fmt.Fprintln(os.Stderr, "사용법: stress-test -user <사용자> -hosts <입력파일> -steps <ab> [-end <연>,<월>,<일>,<시>,<분>] [-retry N] [-er <장애목록>] [-conf <설정파일>] [-batch]")
 		fmt.Fprintln(os.Stderr, "  -steps : a=cpu, b=stress (적은 순서대로 실행, 예: a, b, ab, ba)")
+		fmt.Fprintln(os.Stderr, "  -end   : stress-ng 종료 시각 (b 가 있을 때). -batch 에서는 필수, 대화형은 생략하면 시작할 때 묻는다")
+		fmt.Fprintln(os.Stderr, "  -batch 에서 템플릿 인벤토리가 사용 중이면 stdout 에 \""+busyPrefix+"<안내>\" 한 줄을 찍고 stdin 에서 한 줄을 읽는다 (r=다시 확인, 그 밖·EOF=그 묶음 중단)")
 		fmt.Fprintln(os.Stderr, "  종료코드: 0 전부 실행, 1 미실행/실패 있음, 2 설정·입력 오류")
+		fmt.Fprintln(os.Stderr, "  조사: stress-test -inspect [-user <사용자> | -conf <설정파일>] [템플릿 ID/이름 ...]   (AWX 템플릿·인벤토리 조사, 읽기 전용)")
+		fmt.Fprintln(os.Stderr, "  -inspect : survey 변수·인벤토리·소스를 조회해 conf 키를 점검하고 넣을 줄을 제안. 템플릿 인자가 없으면 conf 의 cpu_template·stress_template. 종료코드 0 정상, 1 불일치·경고, 2 설정·접속 오류")
 		fs.PrintDefaults()
 	}
 }
@@ -92,13 +104,26 @@ func run(args []string) int {
 	retryFlag := fs.Int("retry", 0, "비대화형에서 미실행 호스트 자동 재실행 횟수")
 	erFlag := fs.String("er", "", "장애 목록 파일 (줄마다 \"hostname<TAB>장애사유\") (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
 	confFlag := fs.String("conf", "", "설정 파일 경로 (기본: ./conf → ~/.stress-test → <바이너리 위치>/conf 의 ${user}_setting.conf)")
+	endFlag := fs.String("end", "", "stress-ng 종료 시각 \"<연>,<월>,<일>,<시>,<분>\" (예: 2026,11,07,18,30)")
+	inspectFlag := fs.Bool("inspect", false, "AWX 템플릿·인벤토리 조사 (읽기 전용): 인자로 템플릿 ID/이름을 줄 수 있음 (없으면 conf 의 cpu_template·stress_template)")
 	batchFlag := fs.Bool("batch", false, "비대화형 실행 (프롬프트 없음, 감시는 한 줄 요약)")
 	fs.Usage = usage(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() > 0 {
-		return fail2("알 수 없는 인자: %s", strings.Join(fs.Args(), " "))
+	// 위치 인자(-inspect 의 템플릿)는 플래그 사이에 있어도 받는다
+	var pos []string
+	for fs.NArg() > 0 {
+		pos = append(pos, fs.Arg(0))
+		if err := fs.Parse(fs.Args()[1:]); err != nil {
+			return 2
+		}
+	}
+	if *inspectFlag {
+		return runInspect(*userFlag, *confFlag, pos)
+	}
+	if len(pos) > 0 {
+		return fail2("알 수 없는 인자: %s", strings.Join(pos, " "))
 	}
 	if *retryFlag < 0 {
 		return fail2("-retry 는 0 이상이어야 합니다")
@@ -124,6 +149,15 @@ func run(args []string) int {
 	}
 	if err := cfg.validate(*stepsFlag); err != nil {
 		return fail2("%v", err)
+	}
+	interactive := !*batchFlag && isTerminal(os.Stdin) && isTerminal(os.Stdout)
+	var end *endTime
+	if *endFlag != "" {
+		if end, err = parseEndFlag(*endFlag, nowFn()); err != nil {
+			return fail2("-end %v", err)
+		}
+	} else if contains(steps, stageStress) && !interactive {
+		return fail2("-steps 에 b(stress) 가 있으면 -end <연>,<월>,<일>,<시>,<분> 이 필요합니다 (예: -end 2026,11,07,18,30)")
 	}
 
 	raw, err := os.ReadFile(*hostsFlag)
@@ -173,7 +207,6 @@ func run(args []string) int {
 	}
 	defer logf.Close()
 
-	interactive := !*batchFlag && isTerminal(os.Stdin) && isTerminal(os.Stdout)
 	if isTerminal(os.Stdout) {
 		setColor()
 	}
@@ -187,20 +220,29 @@ func run(args []string) int {
 		retry:       *retryFlag,
 		targets:     targets,
 		out:         os.Stdout,
+		in:          bufio.NewReader(os.Stdin),
+		end:         end,
 	}
-	if interactive {
-		a.in = bufio.NewReader(os.Stdin)
-	}
+	// 템플릿 인벤토리를 바꿔 둔 사이에 중단되면 되돌린 뒤 종료한다
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() { curSwitch.onSignal(<-sigCh, os.Stdout) }()
+
 	a.logf("%s user=%s  설정=%s  대상 %d대  단계=%s  gossh 로그=%s", markInfo, user, confPath, len(targets), strings.Join(steps, ","), logPath)
 	appendHistory(cfg, fmt.Sprintf("user=%s action=start hosts=%s steps=%s count=%d", user, *hostsFlag, *stepsFlag, len(targets)))
 
+	if contains(steps, stageStress) && a.end == nil {
+		if a.end, err = a.askEnd(); err != nil {
+			return fail2("%v", err)
+		}
+	}
+	if err := a.prepareAWX(steps); err != nil {
+		return fail2("%v", err)
+	}
 	if err := a.checkVendors(); err != nil {
 		return fail2("%v", err)
 	}
 	a.initResults(steps)
-	if err := a.checkCPUTemplates(steps); err != nil {
-		return fail2("%v", err)
-	}
 	for _, s := range steps {
 		a.runStage(s)
 	}
@@ -252,32 +294,11 @@ func (a *app) initResults(steps []string) {
 				t.Res[s] = resDNSFail
 			case t.Offline:
 				t.Res[s] = resOffline
-			case s == stageCPU && t.Vendor == vendorUnknown:
-				t.Res[s] = resNone
 			default:
 				t.Res[s] = resNotRun
 			}
 		}
 	}
-}
-
-// checkCPUTemplates 는 cpu 단계에서 실제로 대상이 있는 벤더의 템플릿이 설정돼 있는지 확인한다.
-func (a *app) checkCPUTemplates(steps []string) error {
-	if !contains(steps, stageCPU) {
-		return nil
-	}
-	for _, t := range a.targets {
-		if t.Res[stageCPU] != resNotRun {
-			continue
-		}
-		if t.Vendor == vendorIntel && a.cfg.CPUIntel.Template == "" {
-			return fmt.Errorf("Intel 대상이 있는데 설정 파일(%s)의 cpu_intel_template 가 비어 있습니다", a.cfg.SourcePath)
-		}
-		if t.Vendor == vendorAMD && a.cfg.CPUAMD.Template == "" {
-			return fmt.Errorf("AMD 대상이 있는데 설정 파일(%s)의 cpu_amd_template 가 비어 있습니다", a.cfg.SourcePath)
-		}
-	}
-	return nil
 }
 
 func contains(l []string, s string) bool {
@@ -291,32 +312,17 @@ func contains(l []string, s string) bool {
 
 // batch 는 yaml 하나·템플릿 하나로 실행하는 묶음이다.
 type batch struct {
-	name string // stress / intel / amd (yaml 이름에 쓰임)
+	name string // stress / cpu (yaml 이름에 쓰임)
 	tc   TemplateConf
 	list []*target
 }
 
-// split 은 단계별로 묶음을 나눈다. cpu 는 Intel → AMD 순, 없는 벤더는 건너뜀.
+// split 은 단계별 묶음을 만든다. 단계마다 묶음 하나(cpu 는 벤더 구분 없이 접속된 전체 — Intel/AMD 는 템플릿 안에서 구분).
 func (a *app) split(stage string, list []*target) []batch {
 	if stage == stageStress {
 		return []batch{{name: "stress", tc: a.cfg.Stress, list: list}}
 	}
-	var intel, amd []*target
-	for _, t := range list {
-		if t.Vendor == vendorIntel {
-			intel = append(intel, t)
-		} else if t.Vendor == vendorAMD {
-			amd = append(amd, t)
-		}
-	}
-	var out []batch
-	if len(intel) > 0 {
-		out = append(out, batch{name: "intel", tc: a.cfg.CPUIntel, list: intel})
-	}
-	if len(amd) > 0 {
-		out = append(out, batch{name: "amd", tc: a.cfg.CPUAMD, list: amd})
-	}
-	return out
+	return []batch{{name: "cpu", tc: a.cfg.CPU, list: list}}
 }
 
 // yamlName 은 등록용 yaml 이름이다. 재실행은 ${user}_retryN_<묶음>.yaml.
@@ -402,7 +408,7 @@ func (a *app) checkLoads(hosts []string) (map[string]float64, error) {
 	return parseLoads(out), nil
 }
 
-// launchBatch 는 묶음 하나를 등록·launch·poll 한다. 실패하면 묶음 전체를 실패로 표시하고 false.
+// launchBatch 는 묶음 하나를 등록·(템플릿 인벤토리 변경)launch(되돌림)·poll 한다. 실패하면 묶음 전체를 실패로 표시하고 false.
 func (a *app) launchBatch(stage string, b batch, round int) bool {
 	failAll := func(note string, err error) bool {
 		a.logf("%s %s: %v", markFail, note, err)
@@ -414,26 +420,57 @@ func (a *app) launchBatch(stage string, b batch, round int) bool {
 		return false
 	}
 	label := fmt.Sprintf("%s(%s)", stageLabel(stage), b.name)
+	if stage == stageStress && !a.end.T.After(nowFn()) {
+		if !a.interactive {
+			return failAll("종료 시각이 지남", fmt.Errorf("stress-ng 종료 시각 %s 이 지났습니다", a.end))
+		}
+		a.logf("%s stress-ng 종료 시각 %s 이 지났습니다. 다시 입력하세요", markWarn, a.end)
+		e, err := a.askEnd()
+		if err != nil {
+			return failAll("종료 시각이 지남", err)
+		}
+		a.end = e
+	}
 	a.logf("%s %s 묶음 %d대 등록 시작", markInfo, label, len(b.list))
 	yml, err := a.register(yamlName(a.user, b.name, round), b.list)
 	if err != nil {
 		return failAll(label+" 등록 실패", err)
 	}
-	tmpl, err := a.client.resolveTemplate(b.tc.Template)
-	if err != nil {
-		return failAll(label+" 템플릿 조회 실패", err)
-	}
+	tmpl := a.tmpl[stage]
 	vars := map[string]interface{}{}
 	kv, _ := parseKeyValues(b.tc.ExtraVars) // validate 에서 이미 검사
 	for k, v := range kv {
 		vars[k] = v
 	}
-	hosts := make([]string, len(b.list))
-	for i, t := range b.list {
-		hosts[i] = t.Host
+	if b.tc.HostnameKey != "" { // 비우면 hostname 목록을 넘기지 않음(인벤토리 전체 대상)
+		hosts := make([]string, len(b.list))
+		for i, t := range b.list {
+			hosts[i] = t.Host
+		}
+		vars[b.tc.HostnameKey] = strings.Join(hosts, "\n")
 	}
-	vars[b.tc.HostnameKey] = strings.Join(hosts, "\n")
-	job, err := a.client.launch(tmpl.ID, vars)
+	if stage == stageStress {
+		types, err := a.client.surveyTypes(tmpl.ID)
+		if err != nil {
+			return failAll(label+" survey 조회 실패", err)
+		}
+		for k, v := range endVars(a.cfg.StressEndKeys, a.end, types) {
+			vars[k] = v
+		}
+	}
+	job, rerr, err := a.launchSwitched(tmpl.ID, vars)
+	if rerr != nil {
+		note := fmt.Sprintf("인벤토리 복원 실패 — 수동으로 %s 로", a.cfg.DefaultInventory)
+		a.logf("%s ✗✗✗ 템플릿 %s(%d) 인벤토리를 %s 로 되돌리지 못했습니다: %v", markFail, tmpl.Name, tmpl.ID, a.cfg.DefaultInventory, rerr)
+		a.logf("%s ✗✗✗ AWX 에서 템플릿 %s(%d) 의 인벤토리를 직접 %s 로 바꾸세요 (다른 사용자가 쓰지 못합니다)", markFail, tmpl.Name, tmpl.ID, a.cfg.DefaultInventory)
+		appendHistory(a.cfg, fmt.Sprintf("user=%s action=restore stage=%s batch=%s round=%d template=%d status=fail error=%q", a.user, stage, b.name, round, tmpl.ID, rerr.Error()))
+		for _, t := range b.list {
+			t.addNote(note)
+		}
+	}
+	if err == errBusy {
+		return failAll("템플릿 인벤토리 사용 중", fmt.Errorf("템플릿 %s(%d) 인벤토리가 %s 가 아니어서 이 묶음을 중단했습니다", tmpl.Name, tmpl.ID, a.cfg.DefaultInventory))
+	}
 	if err != nil {
 		return failAll(label+" launch 실패", err)
 	}
