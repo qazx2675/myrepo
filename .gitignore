@@ -1,0 +1,7 @@
+# 실제 작업 대상(계정 정보, 호스트 목록)이 들어가는 파일은 커밋하지 않습니다.
+info.txt
+hosts.txt
+!*.example
+!*.sample
+# 로컬 빌드 산출물 제외 (단, RHEL6/정적 배포용 바이너리 bin/account-mount-engine 은 커밋에 포함)
+*.bak.*
