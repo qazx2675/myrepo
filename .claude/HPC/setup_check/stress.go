@@ -142,6 +142,11 @@ func (e *realExec) StressTest(steps, listFile string, hosts []string, end string
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = filepath.Dir(bin)
+	// stress-test 는 gossh 를 conf gossh → 환경변수 GOSSH → PATH 순으로 찾는다. 단독 실행은 stress_run.sh 가 GOSSH 를
+	// 넘기지만 여기서는 바이너리를 직접 부르므로, GOSSH 가 비어 있으면 new_setup 이 쓰는 gossh 경로를 넘긴다.
+	if os.Getenv("GOSSH") == "" && e.gossh != "" {
+		cmd.Env = append(os.Environ(), "GOSSH="+e.gossh)
+	}
 	// stdin 은 인벤토리 사용 중 질문의 답(r / x)을 넣는 통로. 프로세스가 끝나면 exec 이 닫는다(읽던 쪽은 EOF = 중단).
 	in, err := cmd.StdinPipe()
 	if err != nil {

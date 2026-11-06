@@ -118,7 +118,7 @@ func TestWorkerBusyExclude(t *testing.T) {
 	f := newFake(t, []string{"b"}, world, "c", "x", "s")
 	f.busyMsg = map[string]string{"b": "사용 중"}
 	w := runFake(t, f, nil)
-	eqList(t, "질문", f.asked, []string{"판정:crs=c", "부하:rx=x", "부하:crxs=s"})
+	eqList(t, "질문", f.asked, []string{"판정:crs=c", "부하:rx=x", "부하:rxs=s"})
 	if !w.st.Stopped || row(t, w, "b").Stress != cpuNotRun {
 		t.Errorf("stopped=%v stress=%s", w.st.Stopped, row(t, w, "b").Stress)
 	}

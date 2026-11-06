@@ -4,7 +4,7 @@
 #   -steps 에 b 가 있는데 -end 가 없거나 형식이 틀리면 종료코드 2(진짜 stress-test 와 같음)
 #   -conf 파일이 없으면 종료코드 2(진짜와 같음)
 #   FAKE_ST_LOG=<파일>      호출 기록(시각은 ns). 줄 형식:
-#                           START <steps> <ns> user=<u> hosts=<쉼표목록> batch=<0|1> conf=<값> end=<값|none>
+#                           START <steps> <ns> user=<u> hosts=<쉼표목록> batch=<0|1> conf=<값> end=<값|none>  gossh=<환경변수 GOSSH|none>
 #                           MON <steps> <ns>        ([감시] 줄을 낸 시각)
 #                           END <steps> <ns>
 #   FAKE_ST_PIDFILE=<파일>  시작할 때 자기 pid 를 이어 붙임(시험이 kill 여부를 확인)
@@ -54,7 +54,7 @@ hl=$(IFS=,; echo "${hosts[*]-}")
 now() { date +%s%N; }
 log() { [ -n "${FAKE_ST_LOG:-}" ] && echo "$*" >> "$FAKE_ST_LOG"; return 0; }
 
-log "START $steps $(now) user=$user hosts=$hl batch=$batch conf=${conf:-none} end=${end:-none}"
+log "START $steps $(now) user=$user hosts=$hl batch=$batch conf=${conf:-none} end=${end:-none} gossh=${GOSSH:-none}"
 # 진짜 stress-test: -conf 로 준 파일이 없으면 종료코드 2
 if [ -n "$conf" ] && [ ! -f "$conf" ]; then
 	echo "오류: 지정한 설정 파일이 없습니다: $conf" >&2

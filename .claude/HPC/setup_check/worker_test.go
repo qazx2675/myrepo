@@ -449,7 +449,7 @@ func TestWorkerRebootNoRespDeadline(t *testing.T) {
 	f := newFake(t, []string{"a", "b"}, world, "c", "s")
 	w := runFake(t, f, nil)
 
-	eqList(t, "질문", f.asked, []string{"판정:crs=c", "부하:crxs=s"})
+	eqList(t, "질문", f.asked, []string{"판정:crs=c", "부하:rxs=s"})
 	a, b := row(t, w, "a"), row(t, w, "b")
 	if !a.Rebooted || a.NoResp || a.CPU != "O" {
 		t.Errorf("a: %+v", *a)
@@ -525,7 +525,7 @@ func TestWorkerStressExitCodes(t *testing.T) {
 	f = newFake(t, []string{"b"}, world, "c", "s")
 	f.ngExit = 1
 	runFake(t, f, nil)
-	eqList(t, "질문(1)", f.asked, []string{"판정:crs=c", "부하:crxs=s"})
+	eqList(t, "질문(1)", f.asked, []string{"판정:crs=c", "부하:rxs=s"})
 }
 
 // CPU 가 launch 되지 않고 끝나면(묶음 모두 실패) 감시 없이 r/s
