@@ -168,7 +168,7 @@ func TestRunCaseResume(t *testing.T) {
 	if h2.asked != 1 || h2.started != 0 || h2.shown != 1 {
 		t.Errorf("N: asked=%d started=%d shown=%d", h2.asked, h2.started, h2.shown)
 	}
-	if !strings.Contains(h2.errBuf.String(), "상태 폴더를 지우세요") {
+	if !strings.Contains(h2.errBuf.String(), "-new") {
 		t.Errorf("처음부터 다시 하는 법 안내가 없음: %s", h2.errBuf.String())
 	}
 }

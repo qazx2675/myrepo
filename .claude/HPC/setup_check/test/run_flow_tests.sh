@@ -477,6 +477,80 @@ has "M: 워커가 설정을 다시 읽음" "$RUND/worker.log" '설정 파일 다
 check "M: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
 check "M: 최종 CPU O" "O" "$(rowf "$RUND/result.txt" h_m 4)"
 
+# ================================================================ N. CPU X 호스트 재실행 질문: y
+echo "== N. CPU X 호스트 중 부하 낮은 것만 묻고 재실행(y), 부하 높은 것은 건너뜀"
+pick_y() {
+	case $2 in
+		yns) echo y ;;
+		*) echo c ;;
+	esac
+}
+scn_new N
+printf '%s\n' h_low h_high h_ok > "$S/hosts"
+addscn h_low ok cpu=ng stress=0 load=0.5
+addscn h_high ok cpu=ng stress=0 load=5
+addscn h_ok ok
+mkconf
+start_run
+drive "$RUND" 80 pick_y
+check "N: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+check "N: 질문 순서(부하 단계에서 y/n/s 질문이 먼저)" "1:crs=c 3:yns=y 3:crs=c 4:cs=c 4:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "N: 부하 확인(cat /proc/loadavg) 호출" 1 "$(grep -c '^cat /proc/loadavg$' "$FAKE_GOSSH_LOG")"
+check "N: CPU(-steps a) 대상은 부하 낮은 h_low 뿐" "h_low" "$(st_hosts a)"
+if grep -q 'h_high' "$S/st.log"; then ng "N: 부하 높은 h_high 는 stress-test 대상이 아님"; else ok "N: 부하 높은 h_high 는 stress-test 대상이 아님"; fi
+has "N: 질문에 부하 표시" "$RUND/worker.log" 'h_low\(0\.50\)'
+has "N: 건너뜀 기록" "$RUND/worker.log" '낮음 1, 높음\(아직 도는 중\) 1, 응답 없음 0'
+R=$RUND/result.txt
+check "N: h_low CPU O (재실행됨)" "O" "$(rowf "$R" h_low 4)"
+check "N: h_high CPU X 그대로" "X" "$(rowf "$R" h_high 4)"
+check "N: h_low 비고 없음(재실행 표시 꺼짐)" "" "$(rowf "$R" h_low 8)"
+has "N: state.json 에 cpu_retry 가 남지 않음" "$RUND/state.json" '^  "stage": 5'
+if grep -q '"cpu_retry": true' "$RUND/state.json"; then ng "N: cpu_retry 표시가 끝난 뒤 꺼짐"; else ok "N: cpu_retry 표시가 끝난 뒤 꺼짐"; fi
+
+# ================================================================ O. CPU X 호스트 재실행 질문: n → 할 일 없으면 부하 단계 건너뜀
+echo "== O. n → 모두 제외(X 그대로), 돌릴 것이 없으면 부하 단계를 질문 없이 넘어감"
+pick_n() {
+	case $2 in
+		yns) echo n ;;
+		*) echo c ;;
+	esac
+}
+scn_new O
+printf '%s\n' h_low h_high > "$S/hosts"
+addscn h_low ok cpu=ng load=0.5
+addscn h_high ok cpu=ng load=5
+mkconf
+start_run
+drive "$RUND" 40 pick_n
+check "O: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+check "O: 질문은 판정과 y/n 질문뿐" "1:crs=c 3:yns=n" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "O: stress-test 호출 없음" 0 "$(nlines "$S/st.log" '^START')"
+check "O: h_low CPU X 그대로" "X" "$(rowf "$RUND/result.txt" h_low 4)"
+OWP=$(tr -d '[:space:]' < "$RUND/worker.pid")
+wait_for 8 bash -c "! kill -0 $OWP 2> /dev/null"
+
+# ================================================================ P. -new: 이전 상태를 .old-<시각> 으로 보관하고 처음부터
+echo "== P. -new (끝난 상태는 보관 후 새로 시작, 워커가 살아 있으면 거절)"
+(cd "$S" && "$BIN" -run -new -c "$S/conf" -user tester "$S/hosts" < /dev/null > "$S/new.out" 2> "$S/new.err")
+check "P: -new 시작 종료코드 0" 0 "$?"
+OLDS=$(ls -d "$S"/hosts_run.old-* 2> /dev/null | wc -l)
+check "P: 이전 상태 폴더 보관 1개" 1 "$OLDS"
+OLD1=$(ls -d "$S"/hosts_run.old-* 2> /dev/null | head -n1)
+check "P: 보관본은 끝난 상태(5단계) 그대로" 5 "$(top_stage "$OLD1")"
+has "P: 보관 위치 안내" "$S/new.err" '이전 상태를 지우지 않고 보관했습니다'
+if wait_q "$RUND" 30 crs; then ok "P: 새 작업이 1단계 질문부터 시작"; else ng "P: 새 작업이 1단계 질문부터 시작"; fi
+PWP=$(tr -d '[:space:]' < "$RUND/worker.pid")
+(cd "$S" && "$BIN" -run -new -c "$S/conf" -user tester "$S/hosts" < /dev/null > "$S/new2.out" 2> "$S/new2.err")
+check "P: 워커가 살아 있으면 -new 거절(종료코드 2)" 2 "$?"
+has "P: 거절 안내" "$S/new2.err" 'S 로 작업을 중지'
+check "P: 거절 시 보관 폴더가 늘지 않음" 1 "$(ls -d "$S"/hosts_run.old-* 2> /dev/null | wc -l)"
+check "P: 거절 시 진행 중 작업의 상태가 그대로" 1 "$(top_stage "$RUND")"
+send_answer "$RUND" "$QID" s
+wait_for 15 is_stopped "$RUND"
+wait_for 8 bash -c "! kill -0 $PWP 2> /dev/null"
+(cd "$S" && "$BIN" -new -c "$S/conf" "$S/hosts" < /dev/null > /dev/null 2> "$S/new3.err")
+check "P: -new 는 -run 없이 쓰면 오류(종료코드 1)" 1 "$?"
+
 echo
 echo "결과: PASS $PASS, FAIL $FAIL"
 [ "$FAIL" -eq 0 ]

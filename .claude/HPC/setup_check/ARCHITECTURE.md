@@ -99,10 +99,11 @@ main (new_setup [-c 설정파일] [-er 장애목록파일] <호스트파일>)
 gossh·config_check 의 stdout/stderr 는 모두 <호스트파일>_new_setup.log 로 (화면에 섞지 않음)
 ```
 
-## -run 흐름 (new_setup -run [-c conf] [-er 파일] [-user u] <호스트파일>)
+## -run 흐름 (new_setup -run [-new] [-c conf] [-er 파일] [-user u] <호스트파일>)
 
 ```
 new_setup -run  (run.go)
+  ├ -new 이면 먼저(archiveOldState): 상태 폴더가 있고 워커 살아 있음 → 거절(종료코드 2) / 있고 워커 없음 → <폴더>.old-<YYYYMMDD-HHMMSS> 로 이름 바꿔 보관(삭제 안 함) → 아래 "없음" 경로
   ├ ./<호스트파일>_run/ 없음 → 사용자 선택(USER_ROUTE 메뉴 | -user | $USER) → state.json 생성 → 워커 기동 → 화면
   ├ 있고 워커 살아 있음(lock) → 화면만 붙음
   ├ 있고 워커 없음·미완료     → "이어서 진행할까요?(y/N)" → 워커 재기동 → 화면
@@ -111,7 +112,9 @@ new_setup -run  (run.go)
 워커 (new_setup -run-worker <상태폴더>, setsid, flock, worker.go)  ── executor 로만 외부 동작
   1 판정      judge(): 1차·2차·설정체크(-auto-check) → 표 갱신 → 질문(c/r/x/s)
   2 설정수정  config_check.sh -auto <user> <설정체크 O 아님> → 재판정 → 질문
-  3 부하      CPU 대상(설정체크 통과·CPU NOTRUN): stress-test -steps a
+  3 부하      [진입 시 한 번, XAsked] CPU X(설정체크 통과) 호스트: executor.Loads(gossh "cat /proc/loadavg") → 1분 부하 < cpuRetryMaxLoad(3) 이면 후보,
+              높음·응답 없음은 건너뜀(안내만). 후보가 있으면 질문 y(모두 포함: hostRow.CPURetry)/n(모두 제외)/s. 대상이 없으면 부하 단계 건너뜀
+              CPU 대상(설정체크 통과·CPU NOTRUN 또는 CPURetry): stress-test -steps a
               └ stdout 의 "[감시]" 줄이 처음 보이면(등록·launch 끝) launch 시각 기록 + btime 기록
               stress-ng 대상(CPU O·stress-ng O 아님·CPU 대상 아님): 그 뒤에 stress-test -steps b (감시는 동시)
               CPU 감시: CPU_WAIT_INTERVAL 마다 btime·응답, CPU_WAIT_START 부터 CPU 열 값도 확인, CPU_WAIT_MAX 에 마감
@@ -129,7 +132,7 @@ new_setup -run  (run.go)
      중지 요청이면 x. stdin 은 exec.StdinPipe 라 프로세스가 끝나면 닫힘(stress-test 쪽은 EOF = x).
 
 상태 폴더: state.json(워커만 씀, 원자 기록) / answer.json(TUI → 워커) / stop.req / worker.pid·lock / worker.log / lists/ / result.txt
-TUI (tui.go, render.go): state.json 을 1초마다 읽어 그림, 키 c r x s S f q ? ↑↓ i/Enter(값 입력 모드: 숫자·Backspace·Enter·Esc) — 답은 answer.json(입력 질문은 values 포함), 중지는 stop.req 도 가능
+TUI (tui.go, render.go): state.json 을 1초마다 읽어 그림, 맨 아래에 worker.log 끝 8줄 로그 창(tailLines: 끝 64KB 만 읽음, logHeight/logPane 순수 함수, l 로 토글), 키 c r x s y n S f l q ? ↑↓ i/Enter(값 입력 모드: 숫자·Backspace·Enter·Esc) — 답은 answer.json(입력 질문은 values 포함), 중지는 stop.req 도 가능
 ```
 
 ## 설정 도우미 흐름 (setup.sh [-c conf] [--yes])

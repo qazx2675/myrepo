@@ -922,9 +922,10 @@ func main() {
 	errPath := fs.String("er", "", "장애 목록 파일(줄마다 \"hostname<탭>장애사유\", 비고 열에 표시) (기본: 현재 경로의 "+defaultErrorList+", 없으면 생략)")
 	runMode := fs.Bool("run", false, "설정수정·CPU·stress-ng 까지 자동 진행(TUI). 같은 경로에서 다시 실행하면 진행 중 작업에 다시 붙는다")
 	userFlag := fs.String("user", "", "-run 에서 쓸 사용자(설정 USER_ROUTE 가 있으면 메뉴로 고름, 기본: 환경변수 USER)")
+	newFlag := fs.Bool("new", false, "-run 과 함께: 이전 상태 폴더(./<호스트파일>_run)를 지우지 않고 .old-<시각> 으로 이름을 바꿔 보관한 뒤 처음부터 시작(워커가 살아 있으면 거절)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "사용법: new_setup [-c <설정파일>] [-er <장애목록파일>] <호스트파일>")
-		fmt.Fprintln(os.Stderr, "        new_setup -run [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>")
+		fmt.Fprintln(os.Stderr, "        new_setup -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>   (-new: 이전 상태를 .old-<시각> 으로 보관하고 처음부터)")
 		fmt.Fprintln(os.Stderr, "        new_setup -doctor [-c <설정파일>] [<호스트파일> | -host <호스트> [-check]]   (읽기 전용 문제 진단)")
 	}
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -935,8 +936,11 @@ func main() {
 		os.Exit(1)
 	}
 	hostFile := fs.Arg(0)
+	if *newFlag && !*runMode {
+		fail(1, "오류: -new 는 -run 과 함께만 쓸 수 있습니다: new_setup -run -new <호스트파일>")
+	}
 	if *runMode {
-		os.Exit(runCommand(hostFile, *confPath, *errPath, *userFlag))
+		os.Exit(runCommand(hostFile, *confPath, *errPath, *userFlag, *newFlag))
 	}
 	// ★ gossh 와 같이 앞의 '^' 를 뗀 이름으로 결과 파일 이름을 만든다.
 	cleanHostFile := strings.TrimPrefix(hostFile, "^")

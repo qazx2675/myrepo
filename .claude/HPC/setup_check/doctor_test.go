@@ -331,7 +331,7 @@ func TestDoctorBrokenStateJSON(t *testing.T) {
 	hf, dir := x.state(nil)
 	os.WriteFile(filepath.Join(dir, stateFile), []byte("{broken"), 0o644)
 	r, text := x.run(hf)
-	mustContain(t, text, "state.json 을 읽을 수 없습니다", "백업(mv)")
+	mustContain(t, text, "state.json 을 읽을 수 없습니다", "-new")
 	if len(r.Problems) == 0 {
 		t.Error("문제 기대")
 	}

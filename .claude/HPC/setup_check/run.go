@@ -23,11 +23,12 @@ type runDeps struct {
 	confirm  func(prompt string) bool                           // y/N 질문
 	show     func(dir string)                                   // 화면(TUI 또는 글) 보이기
 	tty      bool                                               // 대화형 터미널인지(안내 문구를 낼지)
+	fresh    bool                                               // -new: 이전 상태 폴더가 있으면 보관(이름 바꿈)하고 처음부터
 	out, err io.Writer                                          // 안내(표준 출력, 표준 오류)
 }
 
 // runCommand 는 `new_setup -run` 의 실제 진입점이다. 종료 코드를 돌려준다.
-func runCommand(hostArg, confFlag, errFlag, userFlag string) int {
+func runCommand(hostArg, confFlag, errFlag, userFlag string, fresh bool) int {
 	tty := isTerminal(int(os.Stdin.Fd())) && isTerminal(int(os.Stdout.Fd()))
 	d := runDeps{
 		alive:    workerAlive,
@@ -35,6 +36,7 @@ func runCommand(hostArg, confFlag, errFlag, userFlag string) int {
 		pickUser: selectUser,
 		confirm:  askYesNo,
 		tty:      tty,
+		fresh:    fresh,
 		out:      os.Stdout,
 		err:      os.Stderr,
 	}
@@ -81,6 +83,11 @@ func printPlain(w io.Writer, dir string, alive func(string) bool) {
 //	(d) 완료(또는 중지됨)          → 최종 표 화면과 결과 파일 경로
 func runEntry(hostArg, confFlag, errFlag, userFlag string, d runDeps) int {
 	dir := stateDirFor(hostArg)
+	if d.fresh {
+		if code := archiveOldState(dir, d); code != 0 {
+			return code
+		}
+	}
 	st, err := loadState(dir)
 	switch {
 	case err == nil:
@@ -88,8 +95,48 @@ func runEntry(hostArg, confFlag, errFlag, userFlag string, d runDeps) int {
 	case os.IsNotExist(err):
 		return runNew(dir, hostArg, confFlag, errFlag, userFlag, d)
 	}
-	fmt.Fprintf(d.err, "오류: %v\n처음부터 다시 하려면 상태 폴더를 지우세요: %s\n", err, dir)
+	fmt.Fprintf(d.err, "오류: %v\n처음부터 다시 하려면 -new 를 붙여 실행하세요(이전 상태는 .old-<시각> 으로 보관): new_setup -run -new %s  (상태 폴더 %s)\n", err, hostArg, dir)
 	return 2
+}
+
+// archiveOldState 는 -new 처리: 이전 상태 폴더가 있으면 워커가 살아 있을 때는 거절(종료코드 2)하고,
+// 아니면 지우지 않고 <폴더>.old-<YYYYMMDD-HHMMSS> 로 이름을 바꿔 보관한다(같은 이름이 있으면 -2, -3 …). 폴더가 없으면 아무것도 안 한다.
+func archiveOldState(dir string, d runDeps) int {
+	if _, err := os.Lstat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return 0
+		}
+		fmt.Fprintf(d.err, "오류: 상태 폴더를 확인할 수 없습니다: %v\n", err)
+		return 2
+	}
+	if d.alive(dir) {
+		fmt.Fprintf(d.err, "오류: -new 를 쓸 수 없습니다. 이 호스트파일의 작업이 아직 진행 중입니다(워커 실행 중): %s\n"+
+			"먼저 같은 명령(-new 없이)으로 화면에 붙어 S 로 작업을 중지하고 워커가 끝난 뒤 다시 -new 로 실행하세요.\n", dir)
+		return 2
+	}
+	dst, err := archiveDir(dir, time.Now())
+	if err != nil {
+		fmt.Fprintf(d.err, "오류: 이전 상태 폴더를 보관할 수 없습니다: %v\n", err)
+		return 2
+	}
+	fmt.Fprintf(d.err, "알림: 이전 상태를 지우지 않고 보관했습니다: %s\n처음부터 새로 시작합니다.\n", dst)
+	return 0
+}
+
+// archiveDir 는 dir 을 <dir>.old-<YYYYMMDD-HHMMSS> 로 이름을 바꾸고 새 이름을 돌려준다.
+func archiveDir(dir string, now time.Time) (string, error) {
+	base := dir + ".old-" + now.Format("20060102-150405")
+	dst := base
+	for i := 2; ; i++ {
+		if _, err := os.Lstat(dst); os.IsNotExist(err) {
+			break
+		}
+		dst = fmt.Sprintf("%s-%d", base, i)
+	}
+	if err := os.Rename(dir, dst); err != nil {
+		return "", err
+	}
+	return dst, nil
 }
 
 func runNew(dir, hostArg, confFlag, errFlag, userFlag string, d runDeps) int {
@@ -149,9 +196,9 @@ func runExisting(dir, hostArg string, st *runState, userFlag string, d runDeps) 
 			fmt.Fprintf(d.err, "알림: 이미 진행 중인 작업이라 -user 는 무시합니다(사용자: %s)\n", st.User)
 		}
 	case st.Finished():
-		fmt.Fprintf(d.err, "알림: 끝난 작업입니다(%s). 처음부터 다시 하려면 상태 폴더를 지우세요: %s\n", st.Detail, dir)
+		fmt.Fprintf(d.err, "알림: 끝난 작업입니다(%s). 처음부터 다시 하려면 -new 를 붙여 실행하세요(이전 상태는 .old-<시각> 으로 보관): new_setup -run -new %s\n", st.Detail, hostArg)
 	default:
-		fmt.Fprintf(d.err, "알림: 작업이 중단되어 있습니다(%s 단계). 처음부터 다시 하려면 상태 폴더를 지우세요: %s\n", stageName(st.Stage), dir)
+		fmt.Fprintf(d.err, "알림: 작업이 중단되어 있습니다(%s 단계). 처음부터 다시 하려면 -new 를 붙여 실행하세요(이전 상태는 .old-<시각> 으로 보관): new_setup -run -new %s\n", stageName(st.Stage), hostArg)
 		if d.confirm("작업이 중단되어 있습니다. 이어서 진행할까요? (y/N) ") {
 			pid, err := d.start(dir)
 			if err != nil {

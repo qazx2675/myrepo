@@ -49,6 +49,8 @@ const (
 	ansRetry   = "r" // 재시도(같은 단계 다시)
 	ansExclude = "x" // O 아닌 호스트 제외하고 계속
 	ansStop    = "s" // 작업 중지
+	ansYes     = "y" // 예(CPU X 호스트 재실행 질문: 모두 포함)
+	ansNo      = "n" // 아니오(CPU X 호스트 재실행 질문: 모두 제외)
 )
 
 // 진행 비고 문구
@@ -103,12 +105,13 @@ type hostRow struct {
 	Note     string `json:"note"`     // 장애 목록(error_list)의 사유
 	Progress string `json:"progress"` // 진행 비고(아래 값들을 ", " 로 이은 화면용 문자열, 저장할 때 다시 만든다)
 
-	Excluded  bool   `json:"excluded"`        // 제외(이후 단계에서 빠짐)
-	CPUTarget bool   `json:"cpu_target"`      // 부하 단계에서 CPU 테스트를 돌린 적 있음(stress-ng 단계 대상 후보)
-	Rebooted  bool   `json:"rebooted"`        // CPU 테스트 중 btime 이 바뀜
-	NoResp    bool   `json:"no_resp"`         // CPU 테스트 감시 중 마지막 확인에 응답 없음
-	Running   string `json:"running"`         // 진행 중 작업: "CPU 실행중" / "stress-ng 실행중" / ""
-	Btime     int64  `json:"btime,omitempty"` // CPU launch 때 기록한 부팅 시각(/proc/stat btime)
+	Excluded  bool   `json:"excluded"`            // 제외(이후 단계에서 빠짐)
+	CPUTarget bool   `json:"cpu_target"`          // 부하 단계에서 CPU 테스트를 돌린 적 있음(stress-ng 단계 대상 후보)
+	CPURetry  bool   `json:"cpu_retry,omitempty"` // CPU X 호스트를 사용자가 골라 이번 부하 단계 CPU 대상에 포함(O 가 되거나 부하 단계가 끝나면 꺼짐)
+	Rebooted  bool   `json:"rebooted"`            // CPU 테스트 중 btime 이 바뀜
+	NoResp    bool   `json:"no_resp"`             // CPU 테스트 감시 중 마지막 확인에 응답 없음
+	Running   string `json:"running"`             // 진행 중 작업: "CPU 실행중" / "stress-ng 실행중" / ""
+	Btime     int64  `json:"btime,omitempty"`     // CPU launch 때 기록한 부팅 시각(/proc/stat btime)
 }
 
 // progressText 는 진행 비고 화면 문자열을 만든다.
@@ -173,6 +176,7 @@ type runState struct {
 	Deadline    time.Time `json:"deadline"`             // CPU 완료 확인 마감(확인 시작 + CPU_WAIT_MAX)
 	CPUWaitDone bool      `json:"cpu_wait_done"`        // CPU 감시 끝남
 	StressEnd   string    `json:"stress_end,omitempty"` // stress-ng 종료 시각 "연,월,일,시,분"(stress-test -end 로 넘긴 값, 입력한 글자 그대로)
+	XAsked      bool      `json:"x_asked,omitempty"`    // 이번 부하 단계 진입에서 CPU X 호스트 재실행 질문(부하 확인)을 이미 함(부하 단계로 들어갈 때마다 꺼짐)
 
 	LastError string    `json:"last_error"` // 마지막 오류(없으면 빈 값)
 	Updated   time.Time `json:"updated"`    // 마지막 기록 시각

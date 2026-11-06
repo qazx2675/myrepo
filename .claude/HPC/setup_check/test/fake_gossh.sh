@@ -4,8 +4,8 @@
 #   FAKE_GOSSH_LOG=<파일>       (선택) 받은 호출과 원격 명령을 이어 붙여 기록
 # 시나리오: ok off refused install_disk install_err install_none install_nolog install_retry_off cancel
 # 시나리오 파일 3번째 열 이후(탭/공백 구분)에 key=value 로 ok 장비의 1차 정보수집 출력을 흉내 낸다.
-#   vendor=intel|amd|none  cpu=ok|ng|nolog  stress=1|0  tpc=1|2|none  kernel=<값>
-#   기본: vendor=intel cpu=ok stress=1 tpc=2 kernel=4.18.0-test
+#   vendor=intel|amd|none  cpu=ok|ng|nolog  stress=1|0  tpc=1|2|none  kernel=<값>  load=<`cat /proc/loadavg` 1분 부하>
+#   기본: vendor=intel cpu=ok stress=1 tpc=2 kernel=4.18.0-test load=0.10 (load= 는 원격 명령이 cat /proc/loadavg 일 때만 쓰임)
 #   FAKE_MARK_DIR=<폴더>  (선택) cpu_<호스트>/ng_<호스트> 파일이 있으면 그 호스트의 CPU/stress-ng 를 성공으로, reboot_<호스트> 가 있으면
 #   "grep btime" 명령에 다른 부팅 시각을 낸다(-run 시험용).
 #   NS_CPU_INTEL / NS_CPU_AMD 는 받은 원격 명령에 해당 표식이 있을 때만 낸다(진짜 grep 처럼).
@@ -104,6 +104,14 @@ info() { # 호스트 [key=value ...]: ok 장비의 1차 정보수집 출력
 	echo "$h: NS_KERNEL $kernel"
 }
 
+loadavg() { # 호스트 [key=value ...]: `cat /proc/loadavg` 출력 흉내(load=<1분 부하>, 기본 0.10)
+	local h=$1 kv load=0.10
+	shift
+	for kv in "$@"; do
+		case $kv in load=*) load=${kv#load=} ;; esac
+	done
+	echo "$h: $load 0.05 0.01 1/123 4567"
+}
 while IFS= read -r line || [ -n "$line" ]; do
 	h=$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 	case $h in '' | '#'*) continue ;; esac
@@ -111,7 +119,12 @@ while IFS= read -r line || [ -n "$line" ]; do
 	s=$SCN_S
 	if [ "$pm" = 1 ]; then
 		case $s in
-			ok) info "$h" ${SCN_OPTS[@]+"${SCN_OPTS[@]}"} ;;
+			ok)
+				case $cmd in
+					*/proc/loadavg*) loadavg "$h" ${SCN_OPTS[@]+"${SCN_OPTS[@]}"} ;;
+					*) info "$h" ${SCN_OPTS[@]+"${SCN_OPTS[@]}"} ;;
+				esac
+				;;
 			off) echo "$h: SSH 접속 실패: i/o timeout" >&2; echo "$h" >> "${hf}_res_off" ;;
 			refused) echo "$h: dial tcp: connection refused" >&2; echo "$h" >> "${hf}_res_refsed" ;;
 			cancel) echo "$h: 취소됨" >&2; echo "$h" >> "${hf}_res_cancel" ;;

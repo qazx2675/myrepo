@@ -37,6 +37,8 @@ type executor interface {
 	StressTest(steps, listFile string, hosts []string, end string, launched func(), busy func(msg string) string) (int, error)
 	// Probe 는 hosts 의 btime·CPU·stress-ng 값을 한 번 확인한다. 응답 없는 호스트는 맵에 없다.
 	Probe(hosts []string) (map[string]probeInfo, error)
+	// Loads 는 hosts 의 1분 부하(/proc/loadavg 첫 값)를 한 번 확인한다. 응답 없는 호스트는 맵에 없다.
+	Loads(hosts []string) (map[string]float64, error)
 	Now() time.Time
 	Sleep(d time.Duration)
 }
@@ -239,4 +241,42 @@ func writeList(path string, hosts []string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(strings.Join(hosts, "\n")+"\n"), 0o644)
+}
+
+// loadCmd 는 부하 확인 명령. csh 에서도 안전하게 중괄호·느낌표·따옴표 없이 쓴다.
+const loadCmd = "cat /proc/loadavg"
+
+// parseLoadOutput 은 "호스트: 0.52 0.30 0.20 1/234 5678" 꼴 줄에서 호스트별 1분 부하를 읽는다(읽을 수 없는 줄은 무시).
+func parseLoadOutput(out string) map[string]float64 {
+	res := map[string]float64{}
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		i := strings.Index(line, ": ")
+		if i <= 0 {
+			continue
+		}
+		f := strings.Fields(line[i+2:])
+		if len(f) < 4 || !strings.Contains(f[3], "/") { // /proc/loadavg 는 "1분 5분 15분 실행/전체 마지막pid"
+			continue
+		}
+		if v, err := strconv.ParseFloat(f[0], 64); err == nil && v >= 0 {
+			res[line[:i]] = v
+		}
+	}
+	return res
+}
+
+func (e *realExec) Loads(hosts []string) (map[string]float64, error) {
+	list := filepath.Join(e.dir, listsDir, "load.txt")
+	if err := writeList(list, hosts); err != nil {
+		return nil, err
+	}
+	out, err := runGossh(e.gossh, []string{"-w", list, "-pm", "-script", loadCmd}, e.log, e.conf.GosshTimeout)
+	for _, s := range resSuffixes {
+		os.Remove(list + s)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return parseLoadOutput(out), nil
 }

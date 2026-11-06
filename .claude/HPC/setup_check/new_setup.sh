@@ -3,7 +3,7 @@
 #   RHEL/Rocky 6.x  -> bin/new_setup_os6
 #   그 외           -> bin/new_setup
 # 사용법은 바이너리와 같다:  new_setup.sh [-c <설정파일>] [-er <장애목록파일>] <호스트파일>
-#                         new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>   (설정수정·CPU·stress-ng 자동 진행 TUI)
+#                         new_setup.sh -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-user <사용자>] <호스트파일>   (설정수정·CPU·stress-ng 자동 진행 TUI, -new: 이전 상태를 .old-<시각> 으로 보관하고 처음부터)
 
 # 심볼릭 링크를 따라 실제 폴더를 찾는다
 SELF=$0
