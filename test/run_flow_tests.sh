@@ -215,8 +215,9 @@ check "A: CPU(-steps a) 대상" "h_fix,h_cpu,h_reb" "$(st_hosts a)"
 check "A: stress-ng 대상(CPU 대상과 겹치지 않음 → 3단계 h_both, 4단계 CPU 대상)" "h_both
 h_fix,h_cpu,h_reb" "$(st_hosts b)"
 has "A: -user tester -batch -conf 전달" "$S/st.log" "^START a [0-9]+ user=tester hosts=.* batch=1 conf=$S/st.conf"
-has "A: stress-ng(-steps b)에는 -end 전달" "$S/st.log" "^START b [0-9]+ user=tester .* end=$ENDARG\$"
-check "A: CPU(-steps a)에는 -end 없음" 1 "$(nlines "$S/st.log" '^START a .* end=none$')"
+has "A: new_setup 의 gossh 경로를 GOSSH 로 넘김" "$S/st.log" "^START a [0-9]+ .* gossh=$GB/gossh$"
+has "A: stress-ng(-steps b)에는 -end 전달" "$S/st.log" "^START b [0-9]+ user=tester .* end=$ENDARG gossh=.*$"
+check "A: CPU(-steps a)에는 -end 없음" 1 "$(nlines "$S/st.log" '^START a .* end=none gossh=.*$')"
 A_MON=$(st_ns MON a 1)
 B_START=$(st_ns START b 1)
 if [ -n "$A_MON" ] && [ -n "$B_START" ] && [ "$B_START" -ge "$A_MON" ]; then
@@ -353,7 +354,7 @@ drive "$RUND" 60 pick_c
 check "H: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
 check "H: 질문 순서(종료 시각 입력 질문이 stress-ng 실행보다 먼저)" "1:crs=c 3:cs=c 3:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 has "H: 틀린 값(연도 2020)은 무시" "$RUND/worker.log" '무시한 답: 입력값 오류'
-check "H: stress-test b 에 -end 전달" "$ENDARG" "$(sed -n 's/^START b [0-9]* .* end=\(.*\)$/\1/p' "$S/st.log" | head -n1)"
+check "H: stress-test b 에 -end 전달" "$ENDARG" "$(sed -n 's/^START b [0-9]* .* end=\([^ ]*\) .*$/\1/p' "$S/st.log" | head -n1)"
 has "H: state.json 에 stress_end 기록" "$RUND/state.json" "\"stress_end\": \"$ENDARG\""
 check "H: 최종 stress-ng O" "O" "$(rowf "$RUND/result.txt" h_ng 5)"
 unset BADFIRST
@@ -378,7 +379,7 @@ check "I: 최종 stress-ng O" "O" "$(rowf "$RUND/result.txt" h_ng 5)"
 
 # ================================================================ J. 인벤토리 사용 중 → x → 이 묶음 중단(미실행)
 echo "== J. 인벤토리 사용 중 질문 → x → 그 묶음 중단, 단계 질문에 안내"
-pick_busy_x() { case $2 in rx) echo x ;; crxs) echo s ;; *) echo c ;; esac; }
+pick_busy_x() { case $2 in rx) echo x ;; rxs) echo s ;; *) echo c ;; esac; }
 scn_new J
 printf '%s\n' h_ng > "$S/hosts"
 addscn h_ng ok stress=0
@@ -386,7 +387,7 @@ mkconf
 export FAKE_ST_BUSY=b
 start_run
 drive "$RUND" 60 pick_busy_x
-check "J: 질문 순서(x → 3단계 질문에 x 선택지)" "1:crs=c 3:cs=c 3:rx=x 3:crxs=s" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "J: 질문 순서(x → 3단계 질문에 x 선택지)" "1:crs=c 3:cs=c 3:rx=x 3:rxs=s" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 check "J: stress-test 가 x 를 받고 중단" "b:x" "$(sed -n 's/^BUSYANS \(b\) \(.*\)$/\1:\2/p' "$S/st.log")"
 check "J: [감시] 줄 없음(묶음 미실행)" 0 "$(nlines "$S/st.log" '^MON b')"
 has "J: 종료코드 1 안내가 질문에 붙음" "$RUND/worker.log" '미실행/실패 호스트가 있습니다'

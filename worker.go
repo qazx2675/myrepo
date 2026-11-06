@@ -289,14 +289,25 @@ func (w *worker) runStage(stage int, resume bool) {
 		}
 		return
 	}
-	keys := []string{ansCont, ansRetry}
-	if len(w.notOK(stage)) > 0 {
+	bad := w.notOK(stage)
+	// ★ 부하·stress-ng 단계는 대상이 모두 O 가 돼야 다음으로 간다: O 아닌 호스트가 있으면 '계속'은 없고
+	// 다시(r) / O 아닌 호스트 제외하고 계속(x) / 중지(s) 만 고른다. (CPU 가 O 가 돼야 stress-ng 를 돌린다)
+	blocked := len(bad) > 0 && (stage == stageLoad || stage == stageNG)
+	var keys []string
+	if !blocked {
+		keys = append(keys, ansCont)
+	}
+	keys = append(keys, ansRetry)
+	if len(bad) > 0 {
 		keys = append(keys, ansExclude)
 	}
 	keys = append(keys, ansStop)
 	text := w.summary(stage)
 	if len(w.info) > 0 {
 		text += "\n" + strings.Join(w.info, "\n")
+	}
+	if blocked {
+		text += fmt.Sprintf("\nO 가 아닌 호스트 %d대가 있어 다음 단계로 그냥 넘어갈 수 없습니다 — r 로 다시 하거나 x 로 그 호스트를 빼고 계속하세요", len(bad))
 	}
 	switch w.ask(stage, text, keys...) {
 	case ansCont:
