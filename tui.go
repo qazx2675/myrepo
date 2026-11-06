@@ -128,6 +128,9 @@ func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now
 	case "l":
 		v.NoLog = !v.NoLog
 		return false
+	case "v":
+		v.Result = !v.Result
+		return false
 	case "up", "down", "pgup", "pgdn", "home", "end":
 		if st == nil {
 			return false

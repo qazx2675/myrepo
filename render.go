@@ -20,6 +20,7 @@ type viewState struct {
 	ConfirmQ string   // 확인 중인 질문 id
 	Flash    string   // 잠깐 보이는 알림
 	NoLog    bool     // l: 아래 로그 창 끄기(기본은 켜짐)
+	Result   bool     // v: 호스트표 자리에 결과 판 보이기(기본은 꺼짐)
 	LogLines []string // worker.log 끝부분(runTUI 가 읽어 넣는다. 화면 그리기는 이 값만 본다)
 	NoColor  bool
 
@@ -234,13 +235,20 @@ func topLines(st *runState, view viewState, w int, now time.Time, alive bool) []
 	if st.Finished() && !st.Updated.IsZero() {
 		end = st.Updated
 	}
+	title := "new_setup -run"
+	if st.Auto != nil {
+		title += " -auto"
+	}
 	out = append(out, lineOf(w, nc,
-		seg{"new_setup -run", cBold}, seg{" | 사용자 " + st.User, ""},
+		seg{title, cBold}, seg{" | 사용자 " + st.User, ""},
 		seg{" | 호스트파일 " + filepath.Base(strings.TrimPrefix(st.HostArg, "^")), ""},
 		seg{" | 워커 ", ""}, seg{wt, wc}, seg{" | 경과 " + fmtDur(end.Sub(st.Created)), ""}))
 
+	if st.Auto != nil { // -auto 는 단계가 판정에 머물러 있으므로 단계 줄 대신 자동 진행 줄(남은 시간·대수)을 보인다
+		out = append(out, lineOf(w, nc, seg{"[자동 진행]", cRev}, seg{" " + autoRemain(st, now) + " | " + strings.ReplaceAll(countsText(st), sep, " | "), ""}))
+	}
 	var bar []seg
-	for n := stageJudge; n <= stageFinish; n++ {
+	for n := stageJudge; n <= stageFinish && st.Auto == nil; n++ {
 		label := fmt.Sprintf("%d %s", n, stageName(n))
 		if n > stageJudge {
 			bar = append(bar, seg{" > ", cDim})
@@ -254,7 +262,9 @@ func topLines(st *runState, view viewState, w int, now time.Time, alive bool) []
 			bar = append(bar, seg{" " + label + " ", ""})
 		}
 	}
-	out = append(out, lineOf(w, nc, bar...))
+	if st.Auto == nil {
+		out = append(out, lineOf(w, nc, bar...))
+	}
 
 	detail := []seg{{"진행: " + st.Detail, ""}}
 	if st.LastError != "" {
@@ -340,7 +350,7 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 	} else if alive && !st.Finished() {
 		keys = append(keys, "S 작업 중지")
 	}
-	keys = append(keys, "f O 아닌 것만", "l 로그 켜기/끄기", "↑↓ PgUp/PgDn 스크롤", "q 나가기(작업은 계속)", "? 도움말")
+	keys = append(keys, "f O 아닌 것만", "l 로그 켜기/끄기", "v 결과 판 켜기/끄기", "↑↓ PgUp/PgDn 스크롤", "q 나가기(작업은 계속)", "? 도움말")
 	out = append(out, lineOf(w, nc, seg{strings.Join(keys, "  "), cDim}))
 	return out
 }
@@ -409,6 +419,9 @@ func logPane(view viewState, w, n int) []string {
 func tableCapacity(st *runState, view viewState, w, h int, now time.Time, alive bool) int {
 	top, bottom := len(topLines(st, view, w, now, alive)), len(bottomLines(st, view, w, alive))
 	n := h - top - bottom - 2 - logHeight(view, h, top, bottom) // 표 제목·아래 안내 한 줄씩
+	if view.Result {
+		n -= panelFixed(st)
+	}
 	if n < 1 {
 		return 1
 	}
@@ -518,6 +531,140 @@ func tableLines(st *runState, view viewState, w, capacity int) []string {
 	return out
 }
 
+// autoLimitOf 는 -auto 제한 시간(기록이 없으면 기본값).
+func autoLimitOf(au *autoState) time.Duration {
+	if au.Limit > 0 {
+		return au.Limit
+	}
+	return defaultAutoLimit
+}
+
+// autoRemain 은 -auto 의 남은 시간 문구.
+func autoRemain(st *runState, now time.Time) string {
+	au := st.Auto
+	switch {
+	case st.Finished():
+		return "자동 진행 끝"
+	case au.Ending:
+		return "제한 시간 지남(진행 중인 것만 마치는 중)"
+	case au.Start.IsZero():
+		return "시작 중"
+	}
+	left := au.Start.Add(autoLimitOf(au)).Sub(now)
+	if left < 0 {
+		left = 0
+	}
+	return "남은 시간 " + fmtDur(left) + "(제한 " + fmtDur(autoLimitOf(au)) + ")"
+}
+
+// autoNextCheck 는 -auto 가 다음에 확인할 시각(CPU 묶음 판정 / 미완료 재판정 / CPU 대기열 / stress-ng 재시도 중 가장 이른 것).
+func autoNextCheck(st *runState, now time.Time) (time.Time, bool) {
+	au := st.Auto
+	var best time.Time
+	soon := func(t time.Time) {
+		if t.After(now) && (best.IsZero() || t.Before(best)) {
+			best = t
+		}
+	}
+	if len(au.Batch) > 0 {
+		soon(au.BatchNext)
+	}
+	if !au.Ending && !st.Finished() {
+		for i := range st.Hosts {
+			if st.Hosts[i].Status != stDone && st.Hosts[i].GaveUp == "" {
+				soon(au.NextRecheck)
+				break
+			}
+		}
+		if len(au.Queue) > 0 {
+			soon(au.QueueWait)
+		}
+		soon(au.NGWait)
+	}
+	return best, !best.IsZero()
+}
+
+// panelFixed 는 결과 판에서 표 위에 고정으로 쓰는 줄 수(대수 줄, -auto 면 시간·지금 하는 일 두 줄 더).
+func panelFixed(st *runState) int {
+	if st.Auto != nil {
+		return 3
+	}
+	return 1
+}
+
+// resultPanel 은 v 결과 판: 호스트표 자리(표 제목 + 행 capacity 줄 이내 + 아래 안내 한 줄)에 대수와 `|` 구분 표를 그린다.
+// 열은 공백이 아니라 `|` 로만 나누고(result.txt 와 같은 모양, H/T·OS 열은 뺌) -auto 이면 시도(수정/CPU/stress-ng)·마지막 오류 열이 붙는다.
+func resultPanel(st *runState, view viewState, w, capacity int, now time.Time) []string {
+	nc := view.NoColor
+	out := []string{lineOf(w, nc, seg{countsText(st), cBold})}
+	auto := st.Auto != nil
+	if auto {
+		next := "다음 확인 -"
+		if t, ok := autoNextCheck(st, now); ok {
+			next = "다음 확인 " + t.Format("15:04") + "(" + after(t, now) + ")"
+		}
+		out = append(out, lineOf(w, nc, seg{autoRemain(st, now) + sep + next, cCyan}))
+		out = append(out, lineOf(w, nc, seg{"지금 하는 일: " + st.Detail, ""}))
+	}
+	cols := []string{"hostname", "상태", "설정체크", "CPU테스트", "stress-ng"}
+	if auto {
+		cols = append(cols, "시도(수정/CPU/ng)")
+	}
+	cols = append(cols, "비고")
+	if auto {
+		cols = append(cols, "마지막오류")
+	}
+	out = append(out, lineOf(w, nc, seg{strings.Join(cols, sep), cBold}))
+
+	rows := visibleRows(st, view.OnlyBad)
+	max := len(rows) - capacity
+	if max < 0 {
+		max = 0
+	}
+	start := view.Scroll
+	if start > max {
+		start = max
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + capacity
+	if end > len(rows) {
+		end = len(rows)
+	}
+	for _, r := range rows[start:end] {
+		cells := []string{r.Host, r.Status, r.Check, r.CPU, r.Stress}
+		codes := []string{"", "", valColor(r.Check), valColor(r.CPU), valColor(r.Stress)}
+		if auto {
+			cells = append(cells, r.autoTryText())
+			codes = append(codes, "")
+		}
+		cells = append(cells, strings.ReplaceAll(r.noteText(), sep, "/"))
+		codes = append(codes, "")
+		if auto {
+			cells = append(cells, strings.ReplaceAll(strings.ReplaceAll(r.AutoErr, "\n", " / "), sep, "/"))
+			codes = append(codes, cRed)
+		}
+		var sg []seg
+		for i, c := range cells {
+			if i > 0 {
+				sg = append(sg, seg{sep, cDim})
+			}
+			sg = append(sg, seg{c, codes[i]})
+		}
+		out = append(out, lineOf(w, nc, sg...))
+	}
+	info := fmt.Sprintf("호스트 %d대", len(rows))
+	if len(rows) > 0 {
+		info = fmt.Sprintf("%d-%d / %d대", start+1, end, len(rows))
+	}
+	info += " (결과 판, v 로 호스트표)"
+	if view.OnlyBad {
+		info += " (O 아닌 호스트만, f 로 전체)"
+	}
+	return append(out, lineOf(w, nc, seg{info, cDim}))
+}
+
 func valColor(v string) string {
 	switch v {
 	case "O":
@@ -546,6 +693,7 @@ func helpLines(w int, noColor bool) []string {
 		"화면",
 		"  f  O 아닌 호스트만 보기(다시 누르면 전체)",
 		"  l  아래 worker.log 끝부분 창 켜기/끄기(기본 켜짐, 화면이 작으면 줄이거나 숨김)",
+		"  v  결과 판 켜기/끄기(호스트표 자리에 | 구분 표·완료/남음/포기 대수 표시. -auto 이면 단계별 시도 횟수·마지막 오류·지금 하는 일·다음 확인·남은 시간도)",
 		"  ↑ ↓ PgUp PgDn Home End  표 스크롤",
 		"  q  화면만 나가기(작업은 계속됨. 같은 경로에서 같은 명령으로 다시 붙음)",
 		"  ?  이 도움말(아무 키나 누르면 닫힘)",
@@ -579,6 +727,9 @@ func renderRun(st *runState, view viewState, w, h int, now time.Time, alive bool
 		top := topLines(st, view, w, now, alive)
 		bottom := bottomLines(st, view, w, alive)
 		table := tableLines(st, view, w, tableCapacity(st, view, w, h, now, alive))
+		if view.Result {
+			table = resultPanel(st, view, w, tableCapacity(st, view, w, h, now, alive), now)
+		}
 		logH := logHeight(view, h, len(top), len(bottom))
 		lines = append(lines, top...)
 		lines = append(lines, table...)

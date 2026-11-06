@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1380" font-family="Malgun Gothic, Noto Sans KR, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#444"/></marker>
+    <style>
+      .box{fill:#f4f7fb;stroke:#4a6fa5;stroke-width:1.5}
+      .dec{fill:#fff8e6;stroke:#c08a00;stroke-width:1.5}
+      .ask{fill:#fdecec;stroke:#c0392b;stroke-width:1.8}
+      .ok{fill:#eaf7ea;stroke:#2e8b57;stroke-width:1.5}
+      .side{fill:#f2f2f2;stroke:#888;stroke-width:1;stroke-dasharray:4 3}
+      .t{font-weight:bold;font-size:15}
+      .s{font-size:12.5;fill:#333}
+      .l{stroke:#444;stroke-width:1.5;fill:none;marker-end:url(#a)}
+      .lab{font-size:12;fill:#a33;font-weight:bold}
+      .h{font-size:22;font-weight:bold}
+    </style>
+  </defs>
+  <rect width="1200" height="1380" fill="#fff"/>
+  <text x="30" y="40" class="h">new_setup -run -auto 흐름 (안)</text>
+  <text x="30" y="64" class="s">목표: 모든 호스트를 완료 · 체크 O · CPU O · stress-ng O 로 만든다. 질문은 빨간 상자 두 종류만(yaml 바뀜 Y, 인벤토리 사용 중 r/x). 나머지는 자동으로 답한다.</text>
+
+  <!-- start -->
+  <rect x="330" y="85" width="420" height="62" rx="10" class="box"/>
+  <text x="540" y="110" text-anchor="middle" class="t">시작: new_setup -run -auto hosts</text>
+  <text x="540" y="132" text-anchor="middle" class="s">12시간 타이머 시작 · TUI(l 로그, v 결과 판)</text>
+  <path d="M540,147 V180" class="l"/>
+
+  <!-- judge -->
+  <rect x="330" y="180" width="420" height="62" rx="6" class="box"/>
+  <text x="540" y="205" text-anchor="middle" class="t">① 판정: 호스트마다 4열 확인</text>
+  <text x="540" y="227" text-anchor="middle" class="s">접속가능(완료) / 미완료로 나눔</text>
+  <path d="M540,242 V275" class="l"/>
+  <path d="M750,211 H905 V300" class="l"/>
+  <text x="760" y="203" class="s">미완료 호스트</text>
+
+  <!-- recheck side loop -->
+  <rect x="820" y="300" width="340" height="120" rx="6" class="box"/>
+  <text x="990" y="325" text-anchor="middle" class="t">⑥ 미완료 재체크 (처음부터 10분마다)</text>
+  <text x="990" y="348" text-anchor="middle" class="s">다른 작업과 상관없이 계속 돈다</text>
+  <text x="990" y="370" text-anchor="middle" class="s">완료가 되면 → 대기열 맨 뒤에 붙여</text>
+  <text x="990" y="390" text-anchor="middle" class="s">②~⑤ 를 똑같이 거친다</text>
+  <text x="990" y="410" text-anchor="middle" class="s">아직 미완료면 10분 뒤 다시</text>
+  <path d="M820,360 H760" class="l"/>
+
+  <!-- fix -->
+  <rect x="330" y="275" width="420" height="110" rx="6" class="box"/>
+  <text x="540" y="300" text-anchor="middle" class="t">② 체크스크립트 X → 설정수정 자동 실행</text>
+  <text x="540" y="323" text-anchor="middle" class="s">수정 → 다시 체크, O 가 될 때까지 호스트당 최대 3회</text>
+  <text x="540" y="345" text-anchor="middle" class="s">3회 넘으면 '포기'로 표시, 결과 판에 남기고 이후 단계 제외</text>
+  <text x="540" y="367" text-anchor="middle" class="s">CPU 50분 대기 중에도 진행</text>
+  <path d="M540,385 V420" class="l"/>
+
+  <!-- CPU queue -->
+  <rect x="330" y="420" width="420" height="80" rx="6" class="box"/>
+  <text x="540" y="445" text-anchor="middle" class="t">③ CPU 대기열 (체크 O · CPU X/NORUN)</text>
+  <text x="540" y="467" text-anchor="middle" class="s">묶음은 한 번에 하나(CPU 템플릿 인벤토리가 하나라서)</text>
+  <text x="540" y="487" text-anchor="middle" class="s">묶음 = 그 시점 대기열 전체, yaml 등록(yaml을 기억)</text>
+  <path d="M540,500 V530" class="l"/>
+
+  <!-- yaml check (shared) -->
+  <polygon points="540,530 700,580 540,630 380,580" class="dec"/>
+  <text x="540" y="575" text-anchor="middle" class="t">launch 직전 yaml 확인</text>
+  <text x="540" y="595" text-anchor="middle" class="s">소스 경로 + 인벤토리 호스트</text>
+  <path d="M380,580 H250" class="l"/>
+  <text x="270" y="570" class="lab">달라짐</text>
+
+  <rect x="20" y="540" width="230" height="160" rx="6" class="ask"/>
+  <text x="135" y="565" text-anchor="middle" class="t">질문: yaml 이 바뀌었습니다</text>
+  <text x="135" y="588" text-anchor="middle" class="s">바뀐 yml 이름·호스트 수 표시</text>
+  <text x="135" y="610" text-anchor="middle" class="s">Y: 기억한 yml 을 소스에 다시</text>
+  <text x="135" y="628" text-anchor="middle" class="s">넣고 invsync(덮어씀, 로그 남김)</text>
+  <text x="135" y="650" text-anchor="middle" class="s">s: 중지</text>
+  <text x="135" y="675" text-anchor="middle" class="s">답 기다리는 동안 ②⑥ 은 계속</text>
+  <path d="M135,540 V515 H360 V560" class="l"/>
+  <text x="150" y="508" class="lab">Y 후 다시 확인</text>
+
+  <path d="M540,630 V665" class="l"/>
+  <text x="550" y="652" class="lab">같음</text>
+
+  <!-- inventory busy -->
+  <polygon points="540,665 700,710 540,755 380,710" class="dec"/>
+  <text x="540" y="705" text-anchor="middle" class="t">CPU 템플릿 인벤토리</text>
+  <text x="540" y="725" text-anchor="middle" class="s">DEFAULT 인가?</text>
+  <path d="M700,710 H820" class="l"/>
+  <text x="712" y="700" class="lab">아님</text>
+  <rect x="820" y="660" width="340" height="100" rx="6" class="ask"/>
+  <text x="990" y="685" text-anchor="middle" class="t">질문(기존과 같음): 인벤토리 사용 중</text>
+  <text x="990" y="708" text-anchor="middle" class="s">r: 다시 확인 · x: 이 묶음 중단</text>
+  <text x="990" y="730" text-anchor="middle" class="s">(-auto 에서도 사람이 답한다)</text>
+  <text x="990" y="750" text-anchor="middle" class="s">x 면 그 묶음은 실패 1회</text>
+  <path d="M540,755 V785" class="l"/>
+  <text x="550" y="775" class="lab">DEFAULT</text>
+
+  <!-- CPU launch + wait -->
+  <rect x="330" y="785" width="420" height="125" rx="6" class="box"/>
+  <text x="540" y="810" text-anchor="middle" class="t">④ CPU launch (DEFAULT → username → DEFAULT)</text>
+  <text x="540" y="833" text-anchor="middle" class="s">launch 성공한 호스트: 45분 + 여유 5분 = 50분 뒤 판정</text>
+  <text x="540" y="855" text-anchor="middle" class="s">아직 O 아니면 5분마다 최대 30분 더 확인</text>
+  <text x="540" y="877" text-anchor="middle" class="s">그래도 아니면 실패 1회 → 대기열로 돌아감 (최대 3회, 넘으면 포기)</text>
+  <text x="540" y="899" text-anchor="middle" class="s">부하 &lt; 3 재실행 질문은 자동으로 '다시'</text>
+  <path d="M330,850 H290 V460 H330" class="l"/>
+  <text x="200" y="760" class="lab">실패(3회 미만)</text>
+  <path d="M540,910 V945" class="l"/>
+  <text x="550" y="935" class="lab">CPU O</text>
+
+  <!-- stress-ng -->
+  <rect x="330" y="945" width="420" height="125" rx="6" class="box"/>
+  <text x="540" y="970" text-anchor="middle" class="t">⑤ stress-ng (CPU O · stress-ng X/NORUN 만)</text>
+  <text x="540" y="993" text-anchor="middle" class="s">launch 직전 yaml 확인(위와 같은 질문 Y)</text>
+  <text x="540" y="1015" text-anchor="middle" class="s">종료 시각 자동: launch 하는 날 +2일 00:00 (묻지 않음)</text>
+  <text x="540" y="1037" text-anchor="middle" class="s">정상 launch 되면 바로 O 로 표기</text>
+  <text x="540" y="1059" text-anchor="middle" class="s">launch 실패는 실패 1회 (최대 3회, 넘으면 포기)</text>
+  <path d="M540,1070 V1105" class="l"/>
+
+  <!-- end check -->
+  <polygon points="540,1105 730,1155 540,1205 350,1155" class="dec"/>
+  <text x="540" y="1150" text-anchor="middle" class="t">모두 완료 OOO (또는 포기)?</text>
+  <text x="540" y="1170" text-anchor="middle" class="s">미완료 호스트가 남았으면 ⑥ 대기</text>
+  <path d="M730,1155 H990 V420" class="l"/>
+  <text x="745" y="1145" class="lab">아니오</text>
+  <path d="M540,1205 V1240" class="l"/>
+  <text x="550" y="1228" class="lab">예</text>
+  <rect x="330" y="1240" width="420" height="60" rx="10" class="ok"/>
+  <text x="540" y="1265" text-anchor="middle" class="t">종료: 결과 기록(result.txt · 결과 판)</text>
+  <text x="540" y="1287" text-anchor="middle" class="s">열 구분 | · OOO 대수 · 포기 호스트와 마지막 오류</text>
+
+  <!-- 12h -->
+  <rect x="20" y="960" width="280" height="190" rx="6" class="side"/>
+  <text x="160" y="985" text-anchor="middle" class="t">12시간 제한</text>
+  <text x="160" y="1010" text-anchor="middle" class="s">12시간이 지나면 새 작업 시작 안 함</text>
+  <text x="160" y="1032" text-anchor="middle" class="s">진행 중인 것은 끝까지:</text>
+  <text x="160" y="1054" text-anchor="middle" class="s">· 실행 중 설정수정·stress-ng</text>
+  <text x="160" y="1076" text-anchor="middle" class="s">· launch 한 CPU 는 50분(+30분)</text>
+  <text x="160" y="1098" text-anchor="middle" class="s">  판정까지</text>
+  <text x="160" y="1122" text-anchor="middle" class="s">끝나면 결과 기록 후 자동 종료</text>
+  <path d="M300,1100 H330 V1270" class="l"/>
+
+  <!-- v panel -->
+  <rect x="820" y="945" width="340" height="190" rx="6" class="side"/>
+  <text x="990" y="970" text-anchor="middle" class="t">v 키: 결과 판 (다시 누르면 숨김)</text>
+  <text x="835" y="995" class="s">· 호스트별 표, 열 구분은 | (기존 결과와 같음)</text>
+  <text x="835" y="1017" class="s">· OOO 대수 / 남은 대수 / 포기 대수</text>
+  <text x="835" y="1039" class="s">· 호스트별 단계별 시도 횟수, 마지막 오류</text>
+  <text x="835" y="1061" class="s">· 지금 하는 일, 다음 확인 시각</text>
+  <text x="835" y="1083" class="s">· 남은 시간(12시간 기준)</text>
+  <text x="835" y="1105" class="s">· -auto 가 아닐 때도 사용 가능</text>
+
+  <!-- assumptions -->
+  <rect x="20" y="1315" width="1160" height="55" rx="6" class="side"/>
+  <text x="35" y="1338" class="s">가정(확인 필요): yaml 질문은 Y(원복 후 계속) / s(중지) 두 가지 · 답을 기다리는 동안 12시간 타이머는 계속 흐름 · stress-ng 도 같은 개인 인벤토리를 쓰므로 launch 직전에 yaml 확인</text>
+  <text x="35" y="1358" class="s">· 시도 횟수는 -auto 실행 안에서만 셈(다시 실행하면 0부터) · 기존 -run(자동 아님) 동작은 바뀌지 않음</text>
+</svg>
