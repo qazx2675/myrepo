@@ -154,9 +154,17 @@ func (w *worker) fixTargets() []string {
 	return w.pick(func(r *hostRow) bool { return r.Check == "X" || r.Check == noOutput || !w.checkOK(r.Check) })
 }
 
-// cpuTargets: 설정체크 O(또는 안 함 '-')이고 CPU NOTRUN.
+// cpuRetryMaxLoad 는 CPU X 호스트의 1분 부하가 이 값 미만이어야 "이전 CPU 테스트가 멈춘 것"으로 보고 재실행 후보로 삼는다.
+const cpuRetryMaxLoad = 3.0
+
+// cpuTargets: 설정체크 O(또는 안 함 '-')이고 CPU NOTRUN, 또는 사용자가 재실행을 고른(CPURetry) 호스트.
 func (w *worker) cpuTargets() []string {
-	return w.pick(func(r *hostRow) bool { return w.checkOK(r.Check) && r.CPU == cpuNotRun })
+	return w.pick(func(r *hostRow) bool { return w.checkOK(r.Check) && (r.CPU == cpuNotRun || r.CPURetry) })
+}
+
+// xCandidates: 설정체크 O(또는 안 함)이고 CPU X 인데 아직 재실행으로 고르지 않은 호스트(부하 확인 전 후보).
+func (w *worker) xCandidates() []string {
+	return w.pick(func(r *hostRow) bool { return w.checkOK(r.Check) && r.CPU == "X" && !r.CPURetry })
 }
 
 // stressTargets: 설정체크 O, CPU O, stress-ng O 아님, 이번 CPU 대상 아님.
@@ -198,7 +206,7 @@ func (w *worker) nextStage(from int) int {
 			}
 		case stageLoad:
 			cpu := w.cpuTargets()
-			if len(cpu) > 0 || len(w.stressTargets(cpu)) > 0 {
+			if len(cpu) > 0 || len(w.stressTargets(cpu)) > 0 || len(w.xCandidates()) > 0 {
 				return n
 			}
 		case stageNG:
@@ -263,6 +271,17 @@ func (w *worker) runStage(stage int, resume bool) {
 			actErr = w.doFix()
 		}
 	case stageLoad:
+		if !resume && !w.st.XAsked { // 부하 단계를 새로 시작: CPU X 호스트 재실행 여부를 한 번 묻는다
+			if !w.askCPURetry() {
+				return
+			}
+			cpu := w.cpuTargets()
+			if len(cpu) == 0 && len(w.stressTargets(cpu)) == 0 { // 할 일이 없으면(모두 n·부하 높음) 부하 단계는 건너뜀
+				w.logf("부하 단계: 돌릴 대상이 없어 건너뜁니다")
+				w.advance(stage)
+				return
+			}
+		}
 		if !resume || (!w.st.CPULaunch.IsZero() && !w.st.CPUWaitDone) {
 			actErr = w.doLoad(resume)
 		}
@@ -331,12 +350,25 @@ func (w *worker) runStage(stage int, resume bool) {
 
 // advance 는 다음 단계로 넘어간다(완료면 결과 저장).
 func (w *worker) advance(stage int) {
+	if stage == stageLoad { // 부하 단계가 끝나면 CPU 재실행 표시를 끈다
+		w.update(func(s *runState) {
+			for i := range s.Hosts {
+				s.Hosts[i].CPURetry = false
+			}
+		})
+	}
 	n := w.nextStage(stage)
 	if n == stageFinish {
 		w.finish()
 		return
 	}
-	w.update(func(s *runState) { s.Stage = n; s.Detail = stageName(n) + " 단계 시작" })
+	w.update(func(s *runState) {
+		s.Stage = n
+		s.Detail = stageName(n) + " 단계 시작"
+		if n == stageLoad {
+			s.XAsked = false
+		}
+	})
 	w.logf("단계 %d %s → %d %s", stage, stageName(stage), n, stageName(n))
 }
 
@@ -540,10 +572,88 @@ func (w *worker) choiceLabel(stage int, k string) string {
 		return "재시도(" + []string{"", "재판정", "설정수정 다시", "부하 다시", "stress-ng 다시", ""}[stage] + ")"
 	case ansExclude:
 		return fmt.Sprintf("O 아닌 %d대 제외하고 계속", len(w.notOK(stage)))
+	case ansYes:
+		return "모두 CPU 재실행에 포함"
+	case ansNo:
+		return "모두 제외(이번엔 X 그대로)"
 	case ansStop:
 		return "중지"
 	}
 	return k
+}
+
+// askCPURetry 는 부하 단계를 새로 시작할 때 한 번, CPU 열이 X 인 호스트(강제 중지된 이전 CPU 테스트 흔적)의 1분 부하를
+// gossh 로 재서 부하가 cpuRetryMaxLoad 미만인 호스트를 CPU 재실행에 넣을지 y/n 으로 묻는다.
+// 부하가 높거나 응답 없는 호스트는 묻지 않고 건너뛰며 안내만 남긴다. 중지했으면 false(이미 stop() 을 불렀다).
+func (w *worker) askCPURetry() bool {
+	w.update(func(s *runState) { s.XAsked = true })
+	cand := w.xCandidates()
+	if len(cand) == 0 {
+		return true
+	}
+	w.update(func(s *runState) {
+		s.Busy = true
+		s.Detail = fmt.Sprintf("CPU X 호스트 %d대 부하 확인 중", len(cand))
+	})
+	loads, err := w.ex.Loads(cand)
+	w.update(func(s *runState) { s.Busy = false })
+	if err != nil {
+		w.logf("CPU X 호스트 부하 확인 실패: %v", err)
+		loads = nil
+	}
+	if w.stopped() {
+		w.stop()
+		return false
+	}
+	var low, busy, noResp []string
+	for _, h := range cand {
+		l, ok := loads[h]
+		switch {
+		case !ok:
+			noResp = append(noResp, h)
+		case l < cpuRetryMaxLoad:
+			low = append(low, fmt.Sprintf("%s(%.2f)", h, l))
+		default:
+			busy = append(busy, fmt.Sprintf("%s(%.2f)", h, l))
+		}
+	}
+	w.logf("CPU X 호스트 %d대 부하 확인: 낮음 %d, 높음(아직 도는 중) %d, 응답 없음 %d", len(cand), len(low), len(busy), len(noResp))
+	if len(busy) > 0 {
+		w.info = append(w.info, fmt.Sprintf("CPU X 이지만 부하 %.0f 이상이라 아직 도는 중으로 보고 건너뜀: %s", cpuRetryMaxLoad, strings.Join(busy, " ")))
+	}
+	if len(noResp) > 0 {
+		w.info = append(w.info, "CPU X 이지만 부하 확인에 응답이 없어 건너뜀: "+strings.Join(noResp, " "))
+	}
+	if len(low) == 0 {
+		return true
+	}
+	text := fmt.Sprintf("CPU 열이 X 인 호스트 중 1분 부하가 %.0f 미만인 %d대가 있습니다(이전 CPU 테스트가 강제로 멈춘 것으로 보임): %s", cpuRetryMaxLoad, len(low), strings.Join(low, " "))
+	if len(busy)+len(noResp) > 0 {
+		text += fmt.Sprintf("\n건너뜀: 부하 높음 %d대, 응답 없음 %d대", len(busy), len(noResp))
+	}
+	text += "\n이 호스트들을 이번 CPU 테스트에 다시 포함할까요? y = 모두 포함, n = 모두 제외(이번엔 X 그대로)"
+	switch w.ask(stageLoad, text, ansYes, ansNo, ansStop) {
+	case ansYes:
+		var set = map[string]bool{}
+		for _, h := range cand {
+			l, ok := loads[h]
+			set[h] = ok && l < cpuRetryMaxLoad
+		}
+		w.update(func(s *runState) {
+			for i := range s.Hosts {
+				if set[s.Hosts[i].Host] {
+					s.Hosts[i].CPURetry = true
+				}
+			}
+		})
+		w.logf("CPU X 호스트 %d대를 CPU 재실행에 포함", len(low))
+	case ansStop:
+		w.stop()
+		return false
+	default:
+		w.logf("CPU X 호스트 %d대는 이번엔 제외(X 그대로)", len(low))
+	}
+	return true
 }
 
 // summary 는 질문에 넣을 단계 결과 요약.
@@ -636,6 +746,9 @@ func (w *worker) apply(s *runState, jr *judgeResult) {
 		r := old[h.Host]
 		r.Host, r.Status, r.Check, r.CPU, r.Stress, r.HT, r.OS = h.Host, h.Status, h.Check, h.CPU, h.Stress, h.HT, h.OS
 		r.Note = w.notes[strings.ToLower(h.Host)]
+		if r.CPU == "O" {
+			r.CPURetry = false
+		}
 		rows = append(rows, r)
 	}
 	s.Hosts = rows
@@ -981,6 +1094,7 @@ func (w *worker) cpuTick(now time.Time) {
 				r.CPU = p.CPU
 				if p.CPU == "O" {
 					r.Running = ""
+					r.CPURetry = false
 				}
 			}
 		}

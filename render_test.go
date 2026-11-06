@@ -69,8 +69,8 @@ func TestRenderBasic(t *testing.T) {
 			t.Errorf("%d번째 줄\n got: %q\nwant: %q", i+1, lines[i], w)
 		}
 	}
-	if !strings.HasPrefix(lines[len(lines)-1], "f O 아닌 것만") && !strings.Contains(lines[len(lines)-1], "S 작업 중지") {
-		t.Errorf("마지막 줄이 안내 줄이 아님: %q", lines[len(lines)-1])
+	if j := strings.Join(lines, "\n"); !strings.Contains(j, "f O 아닌 것만") && !strings.Contains(j, "S 작업 중지") {
+		t.Errorf("안내 줄이 없음:\n%s", j)
 	}
 }
 
