@@ -355,7 +355,7 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 - **행(hang) 대응**: 모든 외부 명령(gossh·config_check·stress-test)에 시간 제한(`GOSSH_TIMEOUT` / `CHECK_TIMEOUT` / `STRESS_TIMEOUT`)을 둡니다. 넘으면 프로세스 그룹에 SIGTERM, 5초 뒤 SIGKILL 하고 그 단계를 `시간초과` 로 질문(`r`/`s`)합니다.
 - user 는 stress-test 와 같은 방식입니다: 설정 `USER_ROUTE` 가 있으면 `info_mn.sh` 메뉴 → `info.sh <번호>` 출력, 없으면 `-user`, 그것도 없으면 `$USER`. 처음 한 번 정해 상태에 저장합니다.
 - **stress-ng 종료 시각 입력**: stress-ng 를 돌리기 **전에**(3단계는 CPU 를 띄우기 전, 4단계도 실행 전) 종료 시각 5개 값(`end_year` `end_month` `end_day` `end_hour` `end_min`)을 묻습니다. 3단계에서 stress-ng 대상이 없으면(CPU 만) 묻지 않습니다. 재시도(`r`)로 단계를 다시 하면 다시 묻습니다. 값은 입력한 글자 그대로(`07` 등) `stress-test -steps b -end <연>,<월>,<일>,<시>,<분>` 으로 넘기고(CPU `-steps a` 에는 넘기지 않음) `state.json` 의 `stress_end` 와 화면 머리에 `stress-ng 종료 시각: 2026-11-07 18:00` 으로 보입니다. 검사 규칙은 stress-test `-batch` 와 같습니다: 연 4자리(올해 이상), 월 1-12, 일 1-31(없는 날짜 거절), 시 0-23, 분 0-59, 합친 시각이 지금보다 뒤. 키 이름은 setup_check 의 고정 표시이고, 실제 AWX survey 변수는 stress-test conf 가 정합니다.
-- **인벤토리 사용 중 질문**: stress-test 는 CPU·stress-ng 템플릿이 하나라서, 작업 전에 템플릿의 인벤토리를 사용자 인벤토리로 바꿨다가 launch 직후 `DEFAULT` 로 되돌립니다(자세한 동작은 stress-test README). 템플릿 인벤토리가 이미 `DEFAULT` 가 아니면(다른 사람이 사용 중) stress-test 가 `[인벤토리사용중] <메시지>` 줄을 내고 stdin 을 기다립니다. 워커는 이 줄을 보면 **단계는 그대로 둔 채** 질문을 띄웁니다(어느 쪽 실행인지 CPU / stress-ng 와 메시지 포함): `r` 다시 확인(그 인벤토리 사용자가 `DEFAULT` 로 돌려놓은 뒤) / `x` 이 묶음 중단(stress-test 가 그 묶음을 실패 처리, 종료코드 1 → 단계 질문에 안내). 답은 stress-test stdin 으로 `r` / `x` 한 줄로 전달됩니다. 이 질문에 답을 기다리는 동안은 `STRESS_TIMEOUT` 이 **멈추고**, 답하면 처음부터 다시 잽니다. CPU 와 stress-ng 가 동시에 걸리면 질문은 한 번에 하나씩 차례로 뜹니다. 작업 중지(`S` / `stop.req`)는 이 질문 중에도 되며 `x` 로 처리됩니다.
+- **인벤토리 사용 중 질문**: stress-test 는 CPU 템플릿을 실행할 때 템플릿의 인벤토리를 사용자 인벤토리로 바꿨다가 launch 직후 `DEFAULT` 로 되돌립니다(자세한 동작은 stress-test README). 템플릿 인벤토리가 이미 `DEFAULT` 가 아니면(다른 사람이 사용 중) stress-test 가 `[인벤토리사용중] <메시지>` 줄을 내고 stdin 을 기다립니다. 워커는 이 줄을 보면 **단계는 그대로 둔 채** 질문을 띄웁니다(메시지 포함, stress-ng 템플릿은 개인 인벤토리를 그대로 써서 이 질문이 없음): `r` 다시 확인(그 인벤토리 사용자가 `DEFAULT` 로 돌려놓은 뒤) / `x` 이 묶음 중단(stress-test 가 그 묶음을 실패 처리, 종료코드 1 → 단계 질문에 안내). 답은 stress-test stdin 으로 `r` / `x` 한 줄로 전달됩니다. 이 질문에 답을 기다리는 동안은 `STRESS_TIMEOUT` 이 **멈추고**, 답하면 처음부터 다시 잽니다. CPU 와 stress-ng 가 동시에 걸리면 질문은 한 번에 하나씩 차례로 뜹니다. 작업 중지(`S` / `stop.req`)는 이 질문 중에도 되며 `x` 로 처리됩니다.
 
 ### 6.3 작업 상태 폴더와 재접속
 
@@ -375,7 +375,7 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 - tty 가 아니면(파이프·리다이렉트·cron 등) TUI 없이 현재 상태를 글로 한 번 출력하고 끝납니다.
 - 중지: 질문 중 `s`, 질문이 없을 때 `S`(둘 다 y/N 확인) 또는 `stop.req` 파일 생성. 중지해도 그때까지의 표를 `result.txt` 로 저장합니다.
 - 입력 질문의 답 형식(비대화형·시험용): `answer.json` = `{"id":"q5","choice":"c","values":{"end_year":"2026","end_month":"11","end_day":"07","end_hour":"18","end_min":"00"}}`. 워커도 같은 규칙으로 다시 검사해 틀린 값은 무시하고(`worker.log` 에 `무시한 답: 입력값 오류`) 계속 기다립니다. 비 tty 의 글 출력(`new_setup -run`)에는 질문과 `입력 항목:` 만 보이고 답하지는 않습니다.
-- stress-test 는 이제 **CPU 용 템플릿 하나**를 쓰고, 실행하는 동안 템플릿의 인벤토리를 `DEFAULT` ↔ 사용자 이름(`username`) 인벤토리로 바꿨다 되돌립니다. 이 도구는 그 동작을 `-end` 전달과 `[인벤토리사용중]` 줄 응답으로만 연동하며, 자세한 내용(설정 키·되돌리기 실패 처리 등)은 stress-test 의 README 를 보세요.
+- stress-test 는 이제 **CPU 용 템플릿 하나**를 쓰고, CPU 템플릿을 실행하는 동안 그 인벤토리를 `DEFAULT` ↔ 사용자 이름(`username`, 이름에 포함돼도 됨) 인벤토리로 바꿨다 되돌립니다(stress-ng 템플릿은 바꾸지 않음). 이 도구는 그 동작을 `-end` 전달과 `[인벤토리사용중]` 줄 응답으로만 연동하며, 자세한 내용(설정 키·되돌리기 실패 처리 등)은 stress-test 의 README 를 보세요.
 
 ### 6.4 TUI 키
 
