@@ -2,8 +2,9 @@
 // 읽어들여 형식을 검증하고 렌더링 데이터를 생성합니다.
 //
 // info.txt 양식 (줄바꿈 단위, 공백/탭 구분):
-//   계정 GID/UID(둘다값이같음) 스토리지
-//   예) asdf 1234 qwer12345:/asdf/asdf
+//
+//	계정 GID/UID(둘다값이같음) 스토리지
+//	예) asdf 1234 qwer12345:/asdf/asdf
 package info
 
 import (

@@ -47,3 +47,4 @@ func BoldRed(s string) string { return wrap(bold+red, s) }
 
 // BoldCyan 은 제목/구간 헤더에 씁니다.
 func BoldCyan(s string) string { return wrap(bold+cyan, s) }
+

@@ -130,7 +130,22 @@ OK           2대
 NOCHANGE     2대
 ```
 
-### 2.3 되돌리기 (Rollback)
+### 2.3 DRY-RUN 변경 내역 읽는 법
+
+`-dry-run` 출력의 변경 내역(diff)은 한글 표기로 바뀌어 나옵니다.
+
+| 표기 | 원래 diff 기호 | 의미 |
+|---|---|---|
+| `[변경 전 파일] /etc/group` | `--- /etc/group 날짜` | 현재(변경 전) 파일 |
+| `[변경 후 내용] (적용될 새 내용)` | `+++ /tmp/tmp.xxx 날짜` | 적용 후 들어갈 새 내용 |
+| `[위치] 변경 전 66번째 줄부터 10줄 → 변경 후 66번째 줄부터 12줄` | `@@ -66,10 +66,12 @@` | 바뀌는 구간의 줄 번호와 줄 수 |
+| `[삭제] 내용` | `-내용` | 빠지는 줄 |
+| `[추가] 내용` | `+내용` | 새로 들어가는 줄 |
+| `[유지] 내용` | ` 내용` (공백 시작) | 바뀌지 않는 주변 줄 (참고용) |
+
+> 기존 계정 정보를 갱신하는 경우 `[삭제]`(이전 값)와 `[추가]`(새 값)가 한 쌍으로 나옵니다.
+
+### 2.4 되돌리기 (Rollback)
 
 적용 시 생성된 `<파일>.bak.<STAMP>` 백업을 이용해 변경 전 상태로 안전하게 복원할 수 있습니다.
 
@@ -219,3 +234,4 @@ sudo cp bin/account-mount-engine /usr/local/bin/account-mount-engine
 account-mount-engine -info /path/to/info.txt -hosts /path/to/hosts.txt -dry-run
 account-mount-engine -info /path/to/info.txt -hosts /path/to/hosts.txt
 ```
+

@@ -3,11 +3,11 @@
 // 일괄 적용합니다.
 //
 // 적용 내용:
-//   1. /etc/auto.master : `/user /etc/auto.home` 이 없으면 가장 아랫줄에 추가 (공백 무관 중복 제외)
-//   2. /etc/passwd      : `계정:x:UID:GID:r계정:/user/계정:/bin/csh` 추가 또는 갱신
-//   3. /etc/group       : `계정:x:UID:` 추가 또는 갱신
-//   4. /etc/auto.home   : `계정 -rw,hard,actimeo=1,proto=tcp,vers=3 스토리지/계정` 추가 또는 갱신
-//   5. 변경 전 `<파일>.bak.<STAMP>` 백업 생성 및 autofs 설정 변경 시 autofs 리로드/재시작
+//  1. /etc/auto.master : `/user /etc/auto.home` 이 없으면 가장 아랫줄에 추가 (공백 무관 중복 제외)
+//  2. /etc/passwd      : `계정:x:UID:GID:r계정:/user/계정:/bin/csh` 추가 또는 갱신
+//  3. /etc/group       : `계정:x:UID:` 추가 또는 갱신
+//  4. /etc/auto.home   : `계정 -rw,hard,actimeo=1,proto=tcp,vers=3 스토리지/계정` 추가 또는 갱신
+//  5. 변경 전 `<파일>.bak.<STAMP>` 백업 생성 및 autofs 설정 변경 시 autofs 리로드/재시작
 package main
 
 import (
@@ -331,7 +331,7 @@ func printResults(hosts []string, results []remote.Result, dryRun bool, isRollba
 					continue
 				}
 				if strings.HasPrefix(l, "DIFF|") {
-					fmt.Println("      " + strings.TrimPrefix(l, "DIFF|"))
+					fmt.Println("      " + formatDiffLine(strings.TrimPrefix(l, "DIFF|")))
 				} else {
 					fmt.Println(color.Yellow("      " + l))
 				}
@@ -364,6 +364,55 @@ func printResults(hosts []string, results []remote.Result, dryRun bool, isRollba
 		os.Exit(2)
 	}
 	return nil
+}
+
+// formatDiffLine 은 diff -u 한 줄을 이해하기 쉬운 한글 표기로 바꿉니다.
+//
+//	--- 파일 날짜            -> [변경 전 파일] 파일
+//	+++ 임시파일 날짜        -> [변경 후 내용] (적용될 새 내용)
+//	@@ -66,10 +66,12 @@     -> [위치] 변경 전 66번째 줄부터 10줄 → 변경 후 66번째 줄부터 12줄
+//	-내용                    -> [삭제] 내용
+//	+내용                    -> [추가] 내용
+//	 내용(공백 시작)         -> [유지] 내용
+func formatDiffLine(l string) string {
+	switch {
+	case strings.HasPrefix(l, "--- "):
+		f := strings.Fields(strings.TrimPrefix(l, "--- "))
+		name := ""
+		if len(f) > 0 {
+			name = f[0]
+		}
+		return color.Cyan("[변경 전 파일] " + name)
+	case strings.HasPrefix(l, "+++ "):
+		return color.Cyan("[변경 후 내용] (적용될 새 내용)")
+	case strings.HasPrefix(l, "@@"):
+		var os1, oc, ns, nc int
+		oc, nc = 1, 1
+		inner := strings.TrimSpace(strings.Trim(strings.TrimSpace(l), "@"))
+		parts := strings.Fields(inner)
+		parse := func(s string, start, count *int) {
+			s = strings.TrimLeft(s, "-+")
+			if a, b, ok := strings.Cut(s, ","); ok {
+				fmt.Sscanf(a, "%d", start)
+				fmt.Sscanf(b, "%d", count)
+			} else {
+				fmt.Sscanf(s, "%d", start)
+			}
+		}
+		if len(parts) >= 2 {
+			parse(parts[0], &os1, &oc)
+			parse(parts[1], &ns, &nc)
+			return color.Cyan(fmt.Sprintf("[위치] 변경 전 %d번째 줄부터 %d줄 → 변경 후 %d번째 줄부터 %d줄", os1, oc, ns, nc))
+		}
+		return color.Cyan("[위치] " + l)
+	case strings.HasPrefix(l, "-"):
+		return color.BoldRed("[삭제] " + l[1:])
+	case strings.HasPrefix(l, "+"):
+		return color.Green("[추가] " + l[1:])
+	case strings.HasPrefix(l, " "):
+		return "[유지] " + l[1:]
+	}
+	return l
 }
 
 func modeLabel(dryRun bool) string {

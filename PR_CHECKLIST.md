@@ -8,3 +8,4 @@
 - [ ] `info.txt`, `hosts.txt` 실물 데이터가 커밋에 포함되지 않았는지 확인 (`.gitignore` 확인)
 - [ ] CHANGELOG.md 항목 추가
 - [ ] README.md 관련 표/설명 갱신 필요 여부 확인
+

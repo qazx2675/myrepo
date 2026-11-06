@@ -18,3 +18,4 @@ jobs:
         run: go test -v ./...
       - name: Bash syntax check
         run: bash -n setup.sh run.sh internal/render/lib_common.sh internal/render/apply_body.sh internal/render/rollback_body.sh
+

@@ -150,3 +150,4 @@ func TestApplyAndRollbackEndToEnd(t *testing.T) {
 		t.Errorf("passwd not restored properly:\n%s", pwRestored)
 	}
 }
+

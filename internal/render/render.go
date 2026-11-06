@@ -80,3 +80,4 @@ func RollbackScript(mode RollbackMode, stamp string) (string, error) {
 func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+

@@ -212,3 +212,4 @@ func (r Result) ResultLine() string {
 	}
 	return ""
 }
+

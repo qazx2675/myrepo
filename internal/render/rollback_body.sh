@@ -135,3 +135,4 @@ else
     echo "RESULT|$NODE_HOST|OK|$STAMP|restored:$(echo $CHANGED | tr ' ' ',')"
 fi
 exit 0
+

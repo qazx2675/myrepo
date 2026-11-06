@@ -33,3 +33,4 @@ echo '  1) cp info.txt.example info.txt     (계정 UID/GID 스토리지 목록 
 echo '  2) cp hosts.txt.example hosts.txt   (작업 대상 호스트 목록 작성)'
 echo '  3) ./run.sh -dry-run                (변경 예정 사항 먼저 확인)'
 echo '  4) ./run.sh                         (실제 일괄 적용)'
+

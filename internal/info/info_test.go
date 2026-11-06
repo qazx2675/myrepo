@@ -94,3 +94,4 @@ func TestLoadHostsRejectsInvalid(t *testing.T) {
 		t.Fatal("expected extra field error")
 	}
 }
+

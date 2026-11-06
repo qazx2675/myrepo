@@ -37,3 +37,4 @@ flowchart TD
     J --> L["관리 노드: 호스트별 OK / NOCHANGE / FAIL 집계 출력"]
     K --> L
 ```
+
