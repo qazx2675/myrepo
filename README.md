@@ -296,7 +296,7 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 | 파일 | 설명 |
 |---|---|
 | `main.go` / `main_test.go` | 판정 로직 / 결과 파일 분류·2차 출력 파싱·문구 이스케이프 단위 테스트 |
-| `run.go` `worker.go` `state.go` `stress.go` `execx*.go` `daemon_*.go` | `-run` 진입·재접속 / 백그라운드 워커 상태기계 / 상태 파일(state.json 등) / stress-test 호출·CPU 감시 확인 / 외부 명령 시간 제한(프로세스 그룹 kill) / setsid·lock |
+| `run.go` `worker.go` `state.go` `input.go` `stress.go` `execx*.go` `daemon_*.go` | `-run` 진입·재접속 / 백그라운드 워커 상태기계 / 상태 파일(state.json 등) / stress-ng 종료 시각 검사 / stress-test 호출·CPU 감시 확인 / 외부 명령 시간 제한(프로세스 그룹 kill) / setsid·lock |
 | `tui.go` `render.go` `tty_*.go` | `-run` 화면(raw 모드 TUI, 상태 → 문자열 순수 함수)·키 처리·tty |
 | `*_test.go` | 단위 시험(워커 상태기계는 가짜 실행기·가짜 시각으로) |
 | `go.mod` | `go 1.20`, 외부 의존성 없음 |
@@ -309,7 +309,7 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 | `build.sh` | 바이너리 빌드 (`build.sh` = os8. `build.sh os6` 는 옛 방식으로 현재 사용 안 함) |
 | `bin/new_setup`, `bin/new_setup_os6` | 빌드 완료 바이너리 (폐쇄망 배포용, 커밋 대상). `new_setup_os6` 는 옛 버전이며 더 이상 재빌드하지 않음 |
 | `test/fake_gossh.sh`, `test/fake_config_check.sh`, `test/run_tests.sh` | gossh·config_check.sh 대역과 시나리오 테스트 (`bash test/run_tests.sh`) |
-| `test/fake_stress_test.sh`, `test/run_flow_tests.sh` | stress-test 대역과 `-run` 전체 흐름 시험 (`bash test/run_flow_tests.sh`, 약 40초) |
+| `test/fake_stress_test.sh`, `test/run_flow_tests.sh` | stress-test 대역과 `-run` 전체 흐름 시험 (`bash test/run_flow_tests.sh`, 종료 시각 입력·인벤토리 사용 중 질문 시나리오 포함, 약 1분 30초) |
 | `ARCHITECTURE.md` | 폴더·파일 역할과 판정 흐름 |
 | `PR_CHECKLIST.md` | 변경 시 점검 목록 |
 | `.github/workflows/ci.yml` | gofmt·vet·test·shellcheck CI |
@@ -320,7 +320,7 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 ```bash
 go test ./...
 bash test/run_tests.sh   # fake gossh 로 모든 상태 시나리오 확인
-bash test/run_flow_tests.sh   # -run 전체 흐름(설정수정→CPU/stress-ng→재부팅 감지→재기동→시간초과→중지)
+bash test/run_flow_tests.sh   # -run 전체 흐름(설정수정→CPU/stress-ng→재부팅 감지→재기동→시간초과→중지, 종료 시각 입력 -end, 인벤토리 사용 중 r/x/중지/시간제한 일시정지)
 bash test/run_setup_tests.sh  # setup.sh 대화형 설정(답을 파이프로 입력)·new_setup.sh 첫 실행 제안
 ```
 
@@ -341,9 +341,9 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 ```
 [1 판정]  기존 판정(1차 정보수집·2차 anaconda·설정체크 -auto-check) → 표 갱신 → 질문
 [2 설정수정] 설정체크가 O 아닌 완료 호스트: config_check.sh -auto <user> <목록> → 재판정 → 질문
-[3 부하]  CPU 대상: stress-test -steps a   /   stress-ng 대상: stress-test -steps b
+[3 부하]  (stress-ng 대상이 있으면 먼저 종료 시각 5개 값 입력) CPU 대상: stress-test -steps a   /   stress-ng 대상: stress-test -steps b -end y,m,d,h,min
           (CPU 의 등록·launch 가 끝난 뒤 stress-ng 시작, 감시는 동시) → 재판정 → 질문
-[4 stress-ng] 이번 CPU 대상 중 CPU O 가 된 호스트 → stress-test -steps b → 재판정 → 질문
+[4 stress-ng] (종료 시각 입력) 이번 CPU 대상 중 CPU O 가 된 호스트 → stress-test -steps b -end … → 재판정 → 질문
 [5 완료]  접속 가능 호스트 3열이 모두 O(또는 제외) → ./<호스트파일>_run/result.txt 저장
 ```
 
@@ -354,6 +354,8 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 - **stress-ng 값**은 `O` / `NOTRUN` 만 있습니다(X 없음). stress-test 감시가 load 기준 이상이면 실행된 것으로 보고, 다음 재체크에서 `/var/log/messages` 에 문자열이 보이면 `O` 가 됩니다.
 - **행(hang) 대응**: 모든 외부 명령(gossh·config_check·stress-test)에 시간 제한(`GOSSH_TIMEOUT` / `CHECK_TIMEOUT` / `STRESS_TIMEOUT`)을 둡니다. 넘으면 프로세스 그룹에 SIGTERM, 5초 뒤 SIGKILL 하고 그 단계를 `시간초과` 로 질문(`r`/`s`)합니다.
 - user 는 stress-test 와 같은 방식입니다: 설정 `USER_ROUTE` 가 있으면 `info_mn.sh` 메뉴 → `info.sh <번호>` 출력, 없으면 `-user`, 그것도 없으면 `$USER`. 처음 한 번 정해 상태에 저장합니다.
+- **stress-ng 종료 시각 입력**: stress-ng 를 돌리기 **전에**(3단계는 CPU 를 띄우기 전, 4단계도 실행 전) 종료 시각 5개 값(`end_year` `end_month` `end_day` `end_hour` `end_min`)을 묻습니다. 3단계에서 stress-ng 대상이 없으면(CPU 만) 묻지 않습니다. 재시도(`r`)로 단계를 다시 하면 다시 묻습니다. 값은 입력한 글자 그대로(`07` 등) `stress-test -steps b -end <연>,<월>,<일>,<시>,<분>` 으로 넘기고(CPU `-steps a` 에는 넘기지 않음) `state.json` 의 `stress_end` 와 화면 머리에 `stress-ng 종료 시각: 2026-11-07 18:00` 으로 보입니다. 검사 규칙은 stress-test `-batch` 와 같습니다: 연 4자리(올해 이상), 월 1-12, 일 1-31(없는 날짜 거절), 시 0-23, 분 0-59, 합친 시각이 지금보다 뒤. 키 이름은 setup_check 의 고정 표시이고, 실제 AWX survey 변수는 stress-test conf 가 정합니다.
+- **인벤토리 사용 중 질문**: stress-test 는 CPU·stress-ng 템플릿이 하나라서, 작업 전에 템플릿의 인벤토리를 사용자 인벤토리로 바꿨다가 launch 직후 `DEFAULT` 로 되돌립니다(자세한 동작은 stress-test README). 템플릿 인벤토리가 이미 `DEFAULT` 가 아니면(다른 사람이 사용 중) stress-test 가 `[인벤토리사용중] <메시지>` 줄을 내고 stdin 을 기다립니다. 워커는 이 줄을 보면 **단계는 그대로 둔 채** 질문을 띄웁니다(어느 쪽 실행인지 CPU / stress-ng 와 메시지 포함): `r` 다시 확인(그 인벤토리 사용자가 `DEFAULT` 로 돌려놓은 뒤) / `x` 이 묶음 중단(stress-test 가 그 묶음을 실패 처리, 종료코드 1 → 단계 질문에 안내). 답은 stress-test stdin 으로 `r` / `x` 한 줄로 전달됩니다. 이 질문에 답을 기다리는 동안은 `STRESS_TIMEOUT` 이 **멈추고**, 답하면 처음부터 다시 잽니다. CPU 와 stress-ng 가 동시에 걸리면 질문은 한 번에 하나씩 차례로 뜹니다. 작업 중지(`S` / `stop.req`)는 이 질문 중에도 되며 `x` 로 처리됩니다.
 
 ### 6.3 작업 상태 폴더와 재접속
 
@@ -361,8 +363,8 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 
 | 파일 | 내용 |
 |---|---|
-| `state.json` | 단계·질문·호스트별 열 값·진행 비고·user·시각(임시파일 → rename 원자 기록) |
-| `answer.json` | TUI 가 쓴 답 `{"id":"<질문 id>","choice":"c"}`. 워커가 1초마다 읽고 지움 |
+| `state.json` | 단계·질문·호스트별 열 값·진행 비고·user·stress-ng 종료 시각(`stress_end`)·시각(임시파일 → rename 원자 기록) |
+| `answer.json` | TUI 가 쓴 답 `{"id":"<질문 id>","choice":"c"}`(입력 질문이면 `"values":{…}` 추가). 워커가 1초마다 읽고 지움 |
 | `stop.req` | 중지 요청. 워커가 보면 실행 중인 외부 명령을 끝내고 중지 |
 | `worker.pid` / `lock` | 워커 pid / flock(중복 워커 방지) |
 | `worker.log` | 워커 진행 로그·외부 명령 출력 |
@@ -372,6 +374,8 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 - **다시 붙기**: 같은 경로에서 같은 명령(`new_setup -run <호스트파일>`)을 실행합니다. 워커가 살아 있으면 화면만 붙고(`-user` 무시), 워커가 죽었는데 미완료면 "이어서 진행할까요? (y/N)" 후 워커를 다시 띄웁니다(진행 중이던 외부 명령은 다시 실행하지 않고 재체크부터. CPU launch 가 기록돼 있고 감시가 안 끝났으면 다시 launch 하지 않고 감시를 이어 감). 끝난 작업이면 결과를 보여 줍니다. 처음부터 다시 하려면 `<호스트파일>_run/` 을 지우세요.
 - tty 가 아니면(파이프·리다이렉트·cron 등) TUI 없이 현재 상태를 글로 한 번 출력하고 끝납니다.
 - 중지: 질문 중 `s`, 질문이 없을 때 `S`(둘 다 y/N 확인) 또는 `stop.req` 파일 생성. 중지해도 그때까지의 표를 `result.txt` 로 저장합니다.
+- 입력 질문의 답 형식(비대화형·시험용): `answer.json` = `{"id":"q5","choice":"c","values":{"end_year":"2026","end_month":"11","end_day":"07","end_hour":"18","end_min":"00"}}`. 워커도 같은 규칙으로 다시 검사해 틀린 값은 무시하고(`worker.log` 에 `무시한 답: 입력값 오류`) 계속 기다립니다. 비 tty 의 글 출력(`new_setup -run`)에는 질문과 `입력 항목:` 만 보이고 답하지는 않습니다.
+- stress-test 는 이제 **CPU 용 템플릿 하나**를 쓰고, 실행하는 동안 템플릿의 인벤토리를 `DEFAULT` ↔ 사용자 이름(`username`) 인벤토리로 바꿨다 되돌립니다. 이 도구는 그 동작을 `-end` 전달과 `[인벤토리사용중]` 줄 응답으로만 연동하며, 자세한 내용(설정 키·되돌리기 실패 처리 등)은 stress-test 의 README 를 보세요.
 
 ### 6.4 TUI 키
 
@@ -379,6 +383,9 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 |---|---|
 | `c` `r` `x` `s` | 질문에 답(질문이 떠 있을 때. `s` 는 y/N 확인) |
 | `S` | 질문이 없을 때 작업 중지(y/N 확인) |
+| `i` `Enter` | 값 입력 질문(stress-ng 종료 시각)에서 입력 시작 |
+| 입력 중: 숫자 / `Backspace` / `Enter` / `Esc` | 숫자 입력(연도 4자리) / 지움 / 다음 항목(틀리면 그 자리에서 오류를 보이고 같은 항목을 다시 묻고, 마지막 뒤 합친 시각이 틀리면 처음부터) / 입력 취소. 끝나면 화면에 `입력됨: …` 이 보이고 `c` 로 그 값을 제출(`i` 다시 입력, `s` 중지) |
+| `r` `x` (인벤토리 사용 중 질문) | 다시 확인 / 이 묶음 중단. 이 질문에는 `s` 가 없으므로 작업 전체를 멈추려면 `S` |
 | `f` | O 아닌 호스트만 보기 토글 |
 | `↑` `↓` `PgUp` `PgDn` `Home` `End` | 호스트표 스크롤 |
 | `q` | 화면만 나가기(작업은 계속) |
@@ -392,7 +399,7 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 
 | 키 | 기본 | 설명 |
 |---|---|---|
-| `STRESS_TEST` | (없음) | stress-test 바이너리 경로. 비면 부하 단계에서 오류 안내 후 질문. 호출은 바이너리 폴더에서 `-user <u> -hosts <목록> -steps a\|b -batch [-conf <파일>]` |
+| `STRESS_TEST` | (없음) | stress-test 바이너리 경로. 비면 부하 단계에서 오류 안내 후 질문. 호출은 바이너리 폴더에서 `-user <u> -hosts <목록> -steps a|b -batch [-end <연,월,일,시,분>(b 일 때)] [-conf <파일>]`. stdin 은 인벤토리 사용 중 질문의 답(`r`/`x`) 통로 |\|b -batch [-conf <파일>]` |
 | `STRESS_TEST_CONF` | (없음) | stress-test 의 `-conf` 로 넘김(비면 stress-test 기본 탐색) |
 | `USER_ROUTE` | (없음) | `info_mn.sh`/`info.sh` 가 있는 폴더(user 선택 메뉴) |
 | `CPU_WAIT_START` | `47m` | CPU launch 후 완료 확인(CPU 열 값)을 시작할 때까지 |
@@ -406,6 +413,7 @@ bash new_setup.sh -run [-c <설정파일>] [-er <장애목록파일>] [-user <�
 
 - **실제 AWX 템플릿, 실제 CPU 45분 테스트, 실장비 재부팅은 확인하지 못했습니다.** 랩에서는 fake gossh·config_check·stress-test 로 1→5 단계 전체와 재기동·시간초과·중지를, 실제 gossh(.58/.60, .60 은 csh)로 판정·감시 확인만 검증했습니다(`test/run_flow_tests.sh`).
 - 설정수정은 `config_check.sh -auto <user>` 가 체크와 수정을 함께 한다는 가정(auto_setup 과 같은 방식)입니다. 수정 결과는 항상 `-auto-check` 재판정으로 확인합니다.
+- stress-test `-batch` 의 `[인벤토리사용중] ...` 줄(+ stdin 응답)과 `-end` 인자도 같은 방식의 약속입니다. 실제 AWX 에서의 인벤토리 바꿈·되돌림은 확인하지 못했고 fake stress-test 로만 시험했습니다.
 - stress-test `-batch` 가 감시에 들어갈 때 내는 `[감시] ...` 줄을 "등록·launch 끝남" 신호로 씁니다. stress-test 출력 형식이 바뀌면 이 신호가 안 잡힐 수 있습니다(그 경우 CPU 가 launch 되지 않은 것으로 보고 `r`/`s` 질문).
 - 장애 목록(`-er`/`error_list.txt`)은 비고 표시용일 뿐 대상 선정에 영향을 주지 않습니다.
 - Linux 전용(os8 바이너리). 다른 OS 용 빌드는 개발·단위 시험용이며 중복 워커 방지(lock)·TUI 가 없습니다. os6 바이너리(`bin/new_setup_os6`)에는 `-run` 과 `-doctor` 가 없습니다.
@@ -431,7 +439,7 @@ bash troubleshoot.sh [-c 설정파일] -host <호스트> [-check]         # 환�
 | 부분 | 언제 | 내용 |
 |---|---|---|
 | 1. 환경 점검 | 항상 | 바이너리·설정 파일(경고)·`gossh`(경로·실행·필요 옵션)·`OS_CHECK_SH`(`-auto-check`/`-auto` 지원)·`bash`·`STRESS_TEST`·`STRESS_TEST_CONF`·`USER_ROUTE`·현재 경로 쓰기 권한·설정 문구의 gossh 위험어(reboot 등)와 csh 에서 깨지는 `!`·CPU 판정 문구 비어 있음 |
-| 2. `-run` 작업 진단 | `<호스트파일>` 을 줬고 `./<호스트파일>_run/` 이 있을 때 | `state.json`·워커 생존·heartbeat·진행 단계·대기 중인 질문과 `answer.json`·`stop.req`·CPU 등록/감시 시간표·호스트별 상태·`worker.log`·stress-test 이력 |
+| 2. `-run` 작업 진단 | `<호스트파일>` 을 줬고 `./<호스트파일>_run/` 이 있을 때 | `state.json`·워커 생존·heartbeat·진행 단계·stress-ng 종료 시각·대기 중인 질문(입력·인벤토리 사용 중 포함)과 `answer.json`·`stop.req`·CPU 등록/감시 시간표·호스트별 상태·`worker.log`·stress-test 이력 |
 | 3. 호스트 단건 점검 | `-host <호스트>` | 실제 1차·2차 명령과 부팅 시각(btime)·uptime·CPU 로그 `ls` 를 gossh 로 그 한 대에만 보내고, **각 열이 왜 그 값인지** 판정 근거를 설명. `-check` 를 더하면 `-auto-check` 도 실행 |
 
 ### 7.2 자주 만나는 상황과 안내

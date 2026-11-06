@@ -5,9 +5,10 @@
 | `main.go` | 판정 로직 전체: 인자·설정 파싱, 호스트파일 파싱(출력 순서용), gossh 1차(정보수집)/2차(anaconda.log) 실행, 결과 파일 분류, 1차·2차 출력 파싱(CPU·stress-ng·H/T·OS), config_check.sh `-auto-check` 실행·판정(설정체크), 장애 목록(-er/error_list.txt) 읽기, 8열 출력 |
 | `main_test.go` | 결과 파일 분류·2차 출력 파싱·문구 이스케이프 단위 테스트 |
 | `execx.go` `execx_linux.go` `execx_other.go` | 외부 명령 실행(`runCmd`, gossh 는 `main.go` 의 `runGossh` 가 이를 사용): 시간 제한, 프로세스 그룹 SIGTERM → 5초 뒤 SIGKILL, 중지 요청 시 취소(`errTimeout`/`errCanceled`) |
-| `state.go` | `-run` 상태 파일: `state.json` 원자 기록·읽기, `answer.json`·`stop.req`, 호스트 행·질문 구조, 결과표(`result.txt`) 문자열 |
+| `state.go` | `-run` 상태 파일: `state.json` 원자 기록·읽기, `answer.json`(입력 질문의 `values` 포함)·`stop.req`, 호스트 행·질문(`Inputs`·`Kind`) 구조, `stress_end`, 결과표(`result.txt`) 문자열 |
+| `input.go` | stress-ng 종료 시각 5개 값 검사(`checkEndField`/`checkEndAll`/`endArg`) — TUI 입력과 워커 재검사가 같은 함수를 씀 |
 | `worker.go` | `-run` 백그라운드 워커 상태기계(판정→설정수정→부하→stress-ng→완료). `executor` 인터페이스로만 외부 동작을 하므로 시험은 가짜 실행기·가짜 시각으로 돌림. 대상 선정, 질문/답, 재기동, 중지, 설정체크 `-` 규칙(`checkPass`) |
-| `stress.go` | 실제 `executor`: 판정 재사용, `config_check -auto`, stress-test `-batch` 호출(`[감시]` 줄로 launch 완료 감지), CPU 감시 확인(btime + 1차 명령) |
+| `stress.go` | 실제 `executor`: 판정 재사용, `config_check -auto`, stress-test `-batch` 호출(`[감시]` 줄로 launch 완료 감지, `-end` 전달, `[인벤토리사용중]` 줄 → busy 콜백 → stdin `r`/`x`, 질문 동안 시간 제한 일시정지), CPU 감시 확인(btime + 1차 명령) |
 | `daemon_linux.go` `daemon_other.go` | setsid 로 워커 분리, flock 으로 중복 워커 방지·생존 확인(리눅스 외는 단순 대체) |
 | `run.go` | `-run` 진입: 새로 시작 / 다시 붙기 / 이어서 진행(y/N) / 결과 보기, user 선택(`USER_ROUTE`), 비 tty 일 때 글 출력 |
 | `tui.go` `render.go` `tty_linux.go` `tty_other.go` | TUI: termios raw 모드·키 읽기·화면 갱신 / 상태 → 화면 문자열 순수 함수(골든 시험) / tty·창 크기 |
@@ -27,8 +28,8 @@
 | `test/fake_gossh.sh` | gossh 대역. `FAKE_GOSSH_SCENARIO=<파일>` 의 `host<TAB>시나리오` 대로 결과 파일·출력을 흉내. 1차 `ok` 장비는 3번째 열 이후 `vendor= cpu= stress= tpc= kernel=` 로 정보수집 출력 흉내 |
 | `test/fake_config_check.sh` | config_check.sh 대역. `-auto-check` 또는 `-auto` 를 `<user> <목록>` 과 함께 받아 (`FAKE_CC_STATE` 폴더가 있으면 `-auto` 가 그 호스트의 fail 을 pass 로 바꿈) `FAKE_CC_SCENARIO=<파일>`(`host<TAB>pass|fail|none`)대로 현재 폴더에 `check.res_<user>` 를 씀 (`-auto-check` 문자열 포함) |
 | `test/run_tests.sh` | fake gossh 로 전체 시나리오·출력 형식 검증 |
-| `test/fake_stress_test.sh` | stress-test 대역. `-user -hosts -steps a 또는 b -batch [-conf]` 를 받아 호출을 `FAKE_ST_LOG` 에 기록, `[감시]` 줄을 낸 뒤 `FAKE_MARK_DIR` 표식(`cpu_`/`ng_`/`reboot_`/`hang_<steps>`)으로 fake gossh 의 CPU·stress-ng·btime 값을 바꿈 |
-| `test/run_flow_tests.sh` | `-run` 전체 흐름 시험(비 tty 로 워커를 띄우고 `answer.json` 으로 답): 1→5 단계, 설정수정 `-auto`, CPU/stress 대상 분리·순서, 재부팅 감지, 접속불가 무시, stress-test 멈춤→시간초과, `stop.req`, 워커 kill -9→재기동 |
+| `test/fake_stress_test.sh` | stress-test 대역. `-user -hosts -steps a 또는 b -batch [-end y,m,d,h,min] [-conf]`(steps b 에 `-end` 없으면 종료코드 2, `FAKE_ST_BUSY=<steps>` 이면 `[인벤토리사용중]` 줄을 찍고 stdin 에서 r/그 밖을 읽음) 를 받아 호출을 `FAKE_ST_LOG` 에 기록, `[감시]` 줄을 낸 뒤 `FAKE_MARK_DIR` 표식(`cpu_`/`ng_`/`reboot_`/`hang_<steps>`)으로 fake gossh 의 CPU·stress-ng·btime 값을 바꿈 |
+| `test/run_flow_tests.sh` | `-run` 전체 흐름 시험(비 tty 로 워커를 띄우고 `answer.json` 으로 답): 1→5 단계, 설정수정 `-auto`, CPU/stress 대상 분리·순서, 재부팅 감지, 접속불가 무시, stress-test 멈춤→시간초과, `stop.req`, 워커 kill -9→재기동, 종료 시각 입력→`-end`, 인벤토리 사용 중 r/x/중지/시간제한 일시정지 |
 | `.github/workflows/ci.yml` | gofmt·vet·test·shellcheck·run_tests.sh·run_flow_tests.sh·run_setup_tests.sh |
 | `README.md` / `PR_CHECKLIST.md` | 사용 설명 / 변경 점검 목록 |
 | `계획서.md` | 설계 결정, 가정·미확인 사항 |
@@ -44,7 +45,8 @@
 - **"호스트파일 형식 변경"** → `main.go` 호스트 파싱 (gossh 와 같은 규칙을 유지해야 함)
 - **"`-run` 단계·대상 선정·질문 변경"** → `worker.go` + `worker_test.go` (+ `test/run_flow_tests.sh`), 화면은 `render.go`/`tui.go`
 - **"stress-test 호출·CPU 감시 변경"** → `stress.go` + `worker.go` 의 `doLoad` + `test/fake_stress_test.sh`
-- **"`-run` 시간 제한·중지 변경"** → `execx.go`, `worker.go`(`watchStop`)
+- **"`-run` 시간 제한·중지 변경"** → `execx.go`(`runCmdHold` 일시정지 포함), `worker.go`(`watchStop`)
+- **"종료 시각 입력·인벤토리 사용 중 질문 변경"** → `input.go`·`worker.go`(`askEnd`/`busyAsk`)·`stress.go`(`lineWatch` busy)·`tui.go`(`handleInputKey`)·`render.go`(`inputLines`) + `worker_input_test.go`·`tui_input_test.go`·`test/fake_stress_test.sh`
 - **"래퍼의 바이너리 선택 변경"** → `new_setup.sh` + `troubleshoot.sh` (같은 선택 로직 두 곳)
 - **"설정 도우미 질문·검증·저장 방식 변경"** → `setup.sh` + `test/run_setup_tests.sh` (+ `new_setup.conf.sample`)
 - **"진단(-doctor) 점검·안내 문구 변경"** → `doctor.go`(환경·`-run`) / `doctor_host.go`(단건) + `doctor_test.go`. 읽기 전용 유지
@@ -119,9 +121,15 @@ new_setup -run  (run.go)
   ※ 대상이 없는 단계는 건너뜀. 각 외부 명령은 시간 제한(→ 시간초과 질문 r/s), stop.req 가 오면 즉시 취소.
   ※ 설정체크 통과 = O, 또는 OS_CHECK_SH 가 비어 있을 때의 '-'. OS_CHECK_SH 가 있는데 '-' 이면 통과 아님(설정수정·x 대상).
   ※ 재기동(kill -9 등): 진행 중이던 외부 명령은 다시 실행하지 않고 재체크부터. CPU launch 기록이 있고 감시 미완이면 감시만 이어 감.
+  ※ 입력 질문: 3단계(stress-ng 대상이 있을 때, CPU 를 띄우기 전)·4단계(실행 전)에 question.Inputs(end_year…end_min) 질문(c/s)을 띄움.
+     TUI 가 줄 입력 모드로 값을 받아(checkEndField/checkEndAll) answer.json {"choice":"c","values":{…}} 로 답 → 워커가 다시 검사(틀리면 무시)
+     → state.stress_end 기록 → stress-test -steps b -end y,m,d,h,min (CPU -steps a 에는 안 넘김).
+  ※ 인벤토리 사용 중: stress-test stdout 의 "[인벤토리사용중] <메시지>" 줄 → lineWatch.busy → worker.busyAsk(CPU|stress-ng):
+     단계는 그대로 question{Kind:"busy", r/x} 를 띄움(qmu 로 한 번에 하나) → 답을 stdin 에 "r\n"/"x\n" → 질문 동안 runCmdHold 로 STRESS_TIMEOUT 일시정지(재개하면 처음부터 다시 잼).
+     중지 요청이면 x. stdin 은 exec.StdinPipe 라 프로세스가 끝나면 닫힘(stress-test 쪽은 EOF = x).
 
 상태 폴더: state.json(워커만 씀, 원자 기록) / answer.json(TUI → 워커) / stop.req / worker.pid·lock / worker.log / lists/ / result.txt
-TUI (tui.go, render.go): state.json 을 1초마다 읽어 그림, 키 c r x s S f q ? ↑↓ — 답은 answer.json, 중지는 stop.req 도 가능
+TUI (tui.go, render.go): state.json 을 1초마다 읽어 그림, 키 c r x s S f q ? ↑↓ i/Enter(값 입력 모드: 숫자·Backspace·Enter·Esc) — 답은 answer.json(입력 질문은 values 포함), 중지는 stop.req 도 가능
 ```
 
 ## 설정 도우미 흐름 (setup.sh [-c conf] [--yes])

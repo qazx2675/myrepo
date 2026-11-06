@@ -55,6 +55,9 @@ func parseKeys(b []byte) []string {
 		case c == 0x03:
 			keys = append(keys, "ctrl-c")
 			i++
+		case c == 0x7f || c == 0x08:
+			keys = append(keys, "backspace")
+			i++
 		case c == '\r' || c == '\n':
 			keys = append(keys, "enter")
 			i++
@@ -75,14 +78,17 @@ func parseKeys(b []byte) []string {
 
 // tuiActions 는 키 처리가 밖에 내는 동작(시험에서는 가짜를 넣는다).
 type tuiActions struct {
-	answer func(id, choice string) error // answer.json 쓰기
-	stop   func() error                  // stop.req 쓰기
+	answer func(id, choice string, values map[string]string) error // answer.json 쓰기(values 는 입력 질문의 값, 없으면 nil)
+	stop   func() error                                            // stop.req 쓰기
 }
 
 // handleKey 는 키 하나를 처리해 view 를 바꾼다. quit 이 true 면 TUI 를 끝낸다(작업은 계속).
 // st 는 마지막으로 읽은 상태(nil 가능), alive 는 워커 생존 여부, w·h 는 화면 크기(스크롤 단위 계산용).
 func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now time.Time, act tuiActions) (quit bool) {
 	v.Flash = ""
+	if v.InputQ != "" { // 값 입력 중(줄 입력 모드)
+		return handleInputKey(v, st, key, now)
+	}
 	if v.Help { // 도움말은 아무 키나 누르면 닫힘
 		v.Help = false
 		return false
@@ -96,7 +102,7 @@ func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now
 		}
 		var err error
 		if kind == "s" {
-			err = act.answer(qid, ansStop)
+			err = act.answer(qid, ansStop, nil)
 		} else {
 			err = act.stop()
 		}
@@ -161,15 +167,45 @@ func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now
 				v.Confirm, v.ConfirmQ = "s", q.ID
 				return false
 			}
-			if err := act.answer(q.ID, key); err != nil {
+			var vals map[string]string
+			if len(q.Inputs) > 0 && key == ansCont { // 입력 질문은 값을 다 입력한 뒤에만 제출
+				if v.ReadyQ != q.ID {
+					v.Flash = "먼저 값을 입력하세요(i 또는 Enter)"
+					return false
+				}
+				vals = v.ReadyVals
+				v.ReadyQ, v.ReadyVals = "", nil
+				if err := checkEndAll(vals, now); err != nil {
+					v.Flash = "입력값 오류: " + err.Error() + " (i 로 다시 입력)"
+					return false
+				}
+			}
+			if err := act.answer(q.ID, key, vals); err != nil {
 				v.Flash = "답 전송 실패: " + err.Error()
 			} else {
 				v.Flash = "답을 보냈습니다: [" + key + "] " + c.Label
 			}
 			return false
 		}
-		if key == "S" {
-			v.Flash = "질문에 답하세요(중지는 s)"
+		switch {
+		case (key == "i" || key == "enter") && len(q.Inputs) > 0:
+			if !alive {
+				v.Flash = "워커가 실행 중이 아니어서 답을 받을 수 없습니다"
+			} else {
+				v.InputQ, v.InputIdx, v.InputBuf, v.InputErr, v.InputVals = q.ID, 0, "", "", map[string]string{}
+				v.ReadyQ, v.ReadyVals = "", nil
+			}
+		case key == "S":
+			switch {
+			case hasChoice(q, ansStop):
+				v.Flash = "질문에 답하세요(중지는 s)"
+			case st.Finished():
+				v.Flash = "이미 끝난 작업입니다"
+			case !alive:
+				v.Flash = "워커가 실행 중이 아닙니다"
+			default: // 인벤토리 사용 중 질문처럼 s 선택지가 없으면 S 로 작업 전체를 중지
+				v.Confirm = "S"
+			}
 		}
 		return false
 	}
@@ -226,7 +262,7 @@ func runTUI(dir string) error {
 	notifyResize(winch)
 
 	act := tuiActions{
-		answer: func(id, ch string) error { return writeAnswer(dir, id, ch) },
+		answer: func(id, ch string, vals map[string]string) error { return writeAnswerValues(dir, id, ch, vals) },
 		stop:   func() error { return writeStopReq(dir) },
 	}
 	view := viewState{NoColor: os.Getenv("NO_COLOR") != ""}
@@ -273,4 +309,71 @@ func runTUI(dir string) error {
 			draw()
 		}
 	}
+}
+
+func hasChoice(q *question, key string) bool {
+	for _, c := range q.Choices {
+		if c.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// clearInput 은 값 입력 모드를 끝낸다(확정한 값 ReadyVals 는 건드리지 않는다).
+func (v *viewState) clearInput() {
+	v.InputQ, v.InputIdx, v.InputBuf, v.InputErr, v.InputVals = "", 0, "", "", nil
+}
+
+// handleInputKey 는 값 입력 모드(InputQ != "")의 키 처리: 숫자 입력, Backspace 지우기, Enter 다음 항목, Esc 취소.
+// 항목마다 checkEndField 로 검사해 틀리면 오류를 보이고 같은 항목을 다시 묻는다. 마지막 항목 뒤에는 합친 시각도 검사해
+// 틀리면 처음부터 다시 묻고, 통과하면 입력 모드를 끝내고 ReadyQ/ReadyVals 에 두어 c 로 제출할 수 있게 한다.
+func handleInputKey(v *viewState, st *runState, key string, now time.Time) (quit bool) {
+	var q *question
+	if st != nil {
+		q = st.Question
+	}
+	if key == "ctrl-c" {
+		return true
+	}
+	if q == nil || q.ID != v.InputQ || v.InputIdx >= len(q.Inputs) {
+		v.clearInput()
+		v.Flash = "질문이 바뀌어 입력을 취소했습니다"
+		return false
+	}
+	f := q.Inputs[v.InputIdx]
+	switch key {
+	case "esc":
+		v.clearInput()
+		v.Flash = "입력을 취소했습니다(i 또는 Enter 로 다시 입력)"
+	case "backspace":
+		if r := []rune(v.InputBuf); len(r) > 0 {
+			v.InputBuf = string(r[:len(r)-1])
+		}
+	case "enter":
+		if err := checkEndField(f.Key, v.InputBuf, now); err != nil {
+			v.InputErr = f.Key + ": " + err.Error()
+			v.InputBuf = ""
+			return false
+		}
+		v.InputVals[f.Key] = v.InputBuf
+		v.InputBuf, v.InputErr = "", ""
+		v.InputIdx++
+		if v.InputIdx < len(q.Inputs) {
+			return false
+		}
+		if err := checkEndAll(v.InputVals, now); err != nil {
+			v.InputErr = err.Error() + " — 처음부터 다시 입력하세요"
+			v.InputIdx, v.InputVals = 0, map[string]string{}
+			return false
+		}
+		v.ReadyQ, v.ReadyVals = q.ID, v.InputVals
+		v.clearInput()
+		v.Flash = "입력을 마쳤습니다. c 로 이 값으로 계속, i 로 다시 입력, s 로 중지"
+	default:
+		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' && len(v.InputBuf) < 4 {
+			v.InputBuf += key
+		}
+	}
+	return false
 }

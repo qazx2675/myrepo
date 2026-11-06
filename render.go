@@ -20,6 +20,15 @@ type viewState struct {
 	ConfirmQ string // 확인 중인 질문 id
 	Flash    string // 잠깐 보이는 알림
 	NoColor  bool
+
+	// 입력 질문(question.Inputs)의 값 입력 상태
+	InputQ    string            // 값을 입력받는 중(줄 입력 모드)인 질문 id (빈 값 = 입력 모드 아님)
+	InputIdx  int               // 지금 묻는 항목 번호
+	InputBuf  string            // 지금 항목에 입력한 글자
+	InputErr  string            // 방금 입력의 오류(다음 입력까지 보임)
+	InputVals map[string]string // 지금까지 확정한 항목 값
+	ReadyQ    string            // 모든 항목을 입력해 제출 준비가 된 질문 id (ReadyVals 가 그 값)
+	ReadyVals map[string]string
 }
 
 // heartbeatStale 은 heartbeat 가 이보다 오래되면 워커를 중단된 것으로 본다.
@@ -251,6 +260,9 @@ func topLines(st *runState, view viewState, w int, now time.Time, alive bool) []
 	}
 	out = append(out, lineOf(w, nc, detail...))
 
+	if st.StressEnd != "" {
+		out = append(out, lineOf(w, nc, seg{"stress-ng 종료 시각: " + endText(st.StressEnd), cCyan}))
+	}
 	if st.Stage == stageLoad && !st.CPULaunch.IsZero() {
 		if st.CPUWaitDone {
 			out = append(out, lineOf(w, nc, seg{"CPU: launch " + st.CPULaunch.Format("15:04") + " | 감시 끝", cCyan}))
@@ -298,6 +310,7 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 			curW += cw
 		}
 		flush()
+		out = append(out, inputLines(q, view, w)...)
 	} else if st.Finished() {
 		out = append(out, lineOf(w, nc, seg{"-- 작업 끝 -- 결과 파일: " + resultPathOf(st), cGreen}))
 	}
@@ -311,8 +324,17 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 		out = append(out, lineOf(w, nc, seg{view.Flash, cYellow}))
 	}
 	var keys []string
+	if view.InputQ != "" {
+		keys = append(keys, "숫자 입력", "Enter 다음 항목", "Backspace 지움", "Esc 입력 취소")
+		return append(out, lineOf(w, nc, seg{strings.Join(keys, "  "), cDim}))
+	}
 	if st.Question != nil {
 		keys = append(keys, "[선택지 키] 답하기")
+		if len(st.Question.Inputs) > 0 {
+			keys = append(keys, "i/Enter 값 입력")
+		} else if !hasChoice(st.Question, ansStop) {
+			keys = append(keys, "S 작업 중지")
+		}
 	} else if alive && !st.Finished() {
 		keys = append(keys, "S 작업 중지")
 	}
@@ -453,6 +475,8 @@ func helpLines(w int, noColor bool) []string {
 		"질문이 떠 있을 때",
 		"  c  계속(다음 단계)      r  재시도(같은 단계 다시)",
 		"  x  O 아닌 호스트를 제외하고 계속      s  작업 중지(y/N 확인)",
+		"  i 또는 Enter  값 입력 질문(stress-ng 종료 시각)에서 값을 입력 - 숫자, Enter 다음 항목, Backspace 지움, Esc 취소; 끝나면 c 로 제출",
+		"  r  인벤토리 사용 중 질문: 다시 확인      x  그 묶음 중단(S 로 작업 전체 중지)",
 		"질문이 없을 때",
 		"  S  작업 중지(y/N 확인) - 실행 중인 외부 명령을 끝내고 결과를 저장합니다",
 		"화면",
@@ -519,6 +543,9 @@ func renderPlain(st *runState, alive bool, now time.Time) string {
 	if st.LastError != "" {
 		fmt.Fprintf(&b, "오류: %s\n", strings.ReplaceAll(st.LastError, "\n", " / "))
 	}
+	if st.StressEnd != "" {
+		fmt.Fprintf(&b, "stress-ng 종료 시각: %s\n", endText(st.StressEnd))
+	}
 	if st.Stage == stageLoad && !st.CPULaunch.IsZero() {
 		if st.CPUWaitDone {
 			fmt.Fprintf(&b, "CPU: launch %s, 감시 끝\n", st.CPULaunch.Format("15:04"))
@@ -534,10 +561,49 @@ func renderPlain(st *runState, alive bool, now time.Time) string {
 			ch = append(ch, "["+c.Key+"] "+c.Label)
 		}
 		fmt.Fprintf(&b, "선택지: %s\n", strings.Join(ch, "  "))
+		if len(q.Inputs) > 0 {
+			fmt.Fprintf(&b, "입력 항목: %s (TUI 에서 i 또는 Enter 로 입력, 비대화형이면 answer.json 의 values 로 답)\n", endFieldNames())
+		}
 	}
 	if st.Finished() {
 		fmt.Fprintf(&b, "결과 파일: %s\n", resultPathOf(st))
 	}
 	b.WriteString(resultText(st))
 	return b.String()
+}
+
+// inputLines 는 입력 질문의 입력 칸(입력 중이면 지금 항목과 오류, 아니면 입력 안내·확정한 값).
+func inputLines(q *question, view viewState, w int) []string {
+	if len(q.Inputs) == 0 {
+		return nil
+	}
+	nc := view.NoColor
+	var out []string
+	switch {
+	case view.InputQ == q.ID && view.InputIdx < len(q.Inputs):
+		f := q.Inputs[view.InputIdx]
+		if view.InputErr != "" {
+			out = append(out, lineOf(w, nc, seg{"  ! " + view.InputErr, cRed}))
+		}
+		var done []string
+		for _, g := range q.Inputs[:view.InputIdx] {
+			done = append(done, g.Key+"="+view.InputVals[g.Key])
+		}
+		if len(done) > 0 {
+			out = append(out, lineOf(w, nc, seg{"  " + strings.Join(done, " "), cDim}))
+		}
+		out = append(out, lineOf(w, nc, seg{"  " + f.Key + ": ", cBold}, seg{view.InputBuf + "_", cRev}, seg{"  " + f.Label, cDim}))
+	case view.ReadyQ == q.ID:
+		var p []string
+		for _, g := range q.Inputs {
+			p = append(p, g.Key+"="+view.ReadyVals[g.Key])
+		}
+		out = append(out, lineOf(w, nc, seg{"  입력됨: " + strings.Join(p, " ") + "  (c 로 제출, i 로 다시 입력)", cGreen}))
+	default:
+		if view.InputErr != "" {
+			out = append(out, lineOf(w, nc, seg{"  ! " + view.InputErr, cRed}))
+		}
+		out = append(out, lineOf(w, nc, seg{"  [i/Enter] 값 입력: " + endFieldNames(), cBold}))
+	}
+	return out
 }

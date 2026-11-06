@@ -38,6 +38,9 @@ type worker struct {
 	mu sync.Mutex // st 쓰기·저장 보호(heartbeat 고루틴과 공유)
 	st *runState
 
+	qmu   sync.Mutex // 단계 중간(인벤토리 사용 중) 질문을 한 번에 하나만 띄우려고(CPU·stress-ng 프로세스가 동시에 걸릴 수 있음)
+	logMu sync.Mutex // log 쓰기 보호(인벤토리 질문 고루틴도 로그를 쓴다)
+
 	info []string // 이번 단계에서 질문 문구에 덧붙일 안내(stress-test 종료코드 1 등)
 
 	stopCh   chan struct{} // 중지 요청을 받으면 닫힘(실행 중인 외부 명령 취소에도 쓰인다)
@@ -91,6 +94,8 @@ func checkPass(off bool, c string) bool { return c == "O" || (off && c == "-") }
 func (w *worker) checkOK(c string) bool { return checkPass(w.conf.OSCheckSh == "", c) }
 
 func (w *worker) logf(format string, a ...interface{}) {
+	w.logMu.Lock()
+	defer w.logMu.Unlock()
 	fmt.Fprintf(w.log, "%s %s\n", w.ex.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, a...))
 }
 
@@ -261,6 +266,9 @@ func (w *worker) runStage(stage int, resume bool) {
 			actErr = w.doNG()
 		}
 	}
+	if w.st.Stopped { // 동작 중 질문에서 중지를 골랐음(이미 stop() 처리됨)
+		return
+	}
 	if w.stopped() { // 동작 중 중지 요청: 재체크·질문 없이 중지
 		w.stop()
 		return
@@ -363,14 +371,24 @@ func (w *worker) saveResult() {
 
 // ask 는 질문을 기록하고 answer.json 에 같은 id·허용된 선택이 올 때까지 기다린다.
 func (w *worker) ask(stage int, text string, keys ...string) string {
+	c, _ := w.askQ(stage, text, nil, keys...)
+	return c
+}
+
+// askQ 는 ask 에 입력 항목(inputs)을 더한 것: inputs 가 있으면 계속(c)은 검사를 통과한 값이 담긴 답일 때만 받아들이고 그 값을 돌려준다.
+func (w *worker) askQ(stage int, text string, inputs []inputField, keys ...string) (string, map[string]string) {
 	os.Remove(filepath.Join(w.dir, answerFile)) // 지난 답이 남아 있으면 버림
 	var id string
 	w.update(func(s *runState) {
 		s.QSeq++
 		id = fmt.Sprintf("q%d", s.QSeq)
-		q := &question{ID: id, Stage: stage, Text: text, Asked: w.ex.Now()}
+		q := &question{ID: id, Stage: stage, Text: text, Asked: w.ex.Now(), Inputs: inputs}
 		for _, k := range keys {
-			q.Choices = append(q.Choices, choice{Key: k, Label: w.choiceLabel(stage, k)})
+			label := w.choiceLabel(stage, k)
+			if len(inputs) > 0 && k == ansCont {
+				label = "입력한 값으로 계속"
+			}
+			q.Choices = append(q.Choices, choice{Key: k, Label: label})
 		}
 		s.Question = q
 		s.Busy = false
@@ -381,7 +399,7 @@ func (w *worker) ask(stage int, text string, keys ...string) string {
 	for {
 		w.ex.Sleep(answerPoll)
 		if w.stopped() {
-			return ansStop
+			return ansStop, nil
 		}
 		a := takeAnswer(w.dir)
 		if a == nil {
@@ -391,10 +409,107 @@ func (w *worker) ask(stage int, text string, keys ...string) string {
 			w.logf("무시한 답: id=%s choice=%s (기다리는 질문 %s)", a.ID, a.Choice, id)
 			continue
 		}
+		if len(inputs) > 0 && a.Choice == ansCont {
+			if err := checkEndAll(a.Values, w.ex.Now()); err != nil {
+				w.logf("무시한 답: 입력값 오류(%v)", err)
+				w.update(func(s *runState) { s.LastError = "입력값 오류: " + err.Error() })
+				continue
+			}
+		}
 		w.update(func(s *runState) { s.Question = nil })
+		w.logf("답 %s: %s", id, a.Choice)
+		return a.Choice, a.Values
+	}
+}
+
+// askEnd 는 stress-ng 종료 시각(5개 값)을 묻는다. 값을 stress_end 에 기록해 "연,월,일,시,분" 으로 돌려준다.
+// 중지를 고르면(또는 중지 요청) ok=false 이고 이미 stop() 을 불렀다.
+func (w *worker) askEnd(stage int, n int, name string) (end string, ok bool) {
+	text := fmt.Sprintf("%s 대상 %d대에 stress-ng 를 돌립니다. stress-ng 종료 시각을 입력하세요(연·월·일·시·분, 지금보다 뒤).\n"+
+		"입력 항목: %s\n입력한 글자 그대로 stress-test -end 로 넘깁니다.", name, n, endFieldNames())
+	c, vals := w.askQ(stage, text, endFields, ansCont, ansStop)
+	if c != ansCont {
+		w.stop()
+		return "", false
+	}
+	end = endArg(vals)
+	w.update(func(s *runState) {
+		s.StressEnd = end
+		if strings.HasPrefix(s.LastError, "입력값 오류") {
+			s.LastError = ""
+		}
+	})
+	w.logf("stress-ng 종료 시각: %s", endText(end))
+	return end, true
+}
+
+func endFieldNames() string {
+	var p []string
+	for _, f := range endFields {
+		p = append(p, f.Key+"("+f.Label+")")
+	}
+	return strings.Join(p, " ")
+}
+
+// busyAsk 는 stress-test 가 템플릿 인벤토리 사용 중이라 멈췄을 때(단계는 그대로) r(다시 확인)/x(이 묶음 중단)를 묻고 답을 돌려준다.
+// 질문은 한 번에 하나만 띄운다(다른 프로세스가 걸리면 앞 질문이 끝날 때까지 기다린다). 중지 요청이 오면 x.
+func (w *worker) busyAsk(name, msg string) string {
+	w.qmu.Lock()
+	defer w.qmu.Unlock()
+	if w.stopped() {
+		return ansExclude
+	}
+	os.Remove(filepath.Join(w.dir, answerFile))
+	var id, saved, waitDetail string
+	w.update(func(s *runState) {
+		s.QSeq++
+		id = fmt.Sprintf("q%d", s.QSeq)
+		saved = s.Detail
+		waitDetail = stageName(s.Stage) + " 단계 — " + name + " 템플릿 인벤토리 사용 중, 답을 기다리는 중"
+		s.Question = &question{ID: id, Stage: s.Stage, Kind: "busy", Asked: w.ex.Now(),
+			Text: name + " 테스트: 작업 템플릿의 인벤토리가 DEFAULT 가 아니어서 멈췄습니다(시간 제한은 멈춰 있습니다).\n" + msg +
+				"\n그 인벤토리 사용자가 DEFAULT 로 되돌린 뒤 r(다시 확인), 이 묶음을 포기하려면 x.",
+			Choices: []choice{{Key: ansRetry, Label: "다시 확인"}, {Key: ansExclude, Label: "이 묶음 중단"}}}
+		s.Busy = false
+		s.Detail = waitDetail
+	})
+	w.logf("질문 %s (r/x, %s 인벤토리 사용 중): %s", id, name, strings.ReplaceAll(msg, "\n", " / "))
+	clear := func(resume bool) {
+		w.update(func(s *runState) {
+			if s.Question != nil && s.Question.ID == id {
+				s.Question = nil
+			}
+			if resume && !s.Stopped {
+				s.Busy = true
+				if s.Detail == waitDetail {
+					s.Detail = saved
+				}
+			}
+		})
+	}
+	for {
+		w.ex.Sleep(answerPoll)
+		if w.stopped() {
+			clear(false)
+			return ansExclude
+		}
+		a := takeAnswer(w.dir)
+		if a == nil {
+			continue
+		}
+		if a.ID != id || (a.Choice != ansRetry && a.Choice != ansExclude) {
+			w.logf("무시한 답: id=%s choice=%s (기다리는 질문 %s)", a.ID, a.Choice, id)
+			continue
+		}
+		clear(true)
 		w.logf("답 %s: %s", id, a.Choice)
 		return a.Choice
 	}
+}
+
+// busyFn 은 name(CPU / stress-ng) 프로세스용 busy 콜백.
+func (w *worker) busyFn(name string) func(string) string {
+	return func(msg string) string { return w.busyAsk(name, msg) }
 }
 
 func (w *worker) choiceLabel(stage int, k string) string {
@@ -569,6 +684,10 @@ func (w *worker) doNG() string {
 	if err := writeList(list, hosts); err != nil {
 		return "목록 파일을 쓸 수 없습니다: " + err.Error()
 	}
+	end, ok := w.askEnd(stageNG, len(hosts), "stress-ng")
+	if !ok {
+		return ""
+	}
 	set := toSet(hosts)
 	w.update(func(s *runState) {
 		s.StressList = hosts
@@ -581,7 +700,7 @@ func (w *worker) doNG() string {
 		}
 	})
 	w.logf("stress-ng 단계 시작 %d대", len(hosts))
-	code, err := w.ex.StressTest("b", list, hosts, nil)
+	code, err := w.ex.StressTest("b", list, hosts, end, nil, w.busyFn("stress-ng"))
 	w.clearRunning(hosts)
 	fatal, info := stressOutcome("stress-ng", code, err)
 	if info != "" {
@@ -622,10 +741,17 @@ func (w *worker) doLoad(resume bool) string {
 	}
 	var cpuCh, ngCh chan stressRes
 	cpu, stress := w.st.CPUList, w.st.StressList
+	end := ""
 
 	if !resume {
 		cpu = w.cpuTargets()
 		stress = w.stressTargets(cpu)
+		if len(stress) > 0 { // CPU 를 띄우기 전에 stress-ng 종료 시각부터 받는다
+			var ok bool
+			if end, ok = w.askEnd(stageLoad, len(stress), "stress-ng"); !ok {
+				return ""
+			}
+		}
 		cpuSet, ngSet := toSet(cpu), toSet(stress)
 		w.update(func(s *runState) {
 			s.CPUList, s.StressList = cpu, stress
@@ -657,7 +783,7 @@ func (w *worker) doLoad(resume bool) string {
 			var once sync.Once
 			cpuCh = make(chan stressRes, 1)
 			go func() {
-				c, e := w.ex.StressTest("a", list, cpu, func() { once.Do(func() { close(launched) }) })
+				c, e := w.ex.StressTest("a", list, cpu, "", func() { once.Do(func() { close(launched) }) }, w.busyFn("CPU"))
 				cpuCh <- stressRes{c, e}
 			}()
 			ok := false
@@ -699,7 +825,7 @@ func (w *worker) doLoad(resume bool) string {
 			} else {
 				ngCh = make(chan stressRes, 1)
 				go func() {
-					c, e := w.ex.StressTest("b", list, stress, nil)
+					c, e := w.ex.StressTest("b", list, stress, end, nil, w.busyFn("stress-ng"))
 					ngCh <- stressRes{c, e}
 				}()
 			}

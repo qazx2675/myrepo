@@ -31,8 +31,10 @@ type executor interface {
 	// ConfigFix 는 hosts 에 config_check.sh -auto <user> 를 돌린다(체크 + 수정).
 	ConfigFix(hosts []string) error
 	// StressTest 는 stress-test -steps <steps> 를 listFile(hosts 한 줄씩)로 실행하고 끝날 때까지 기다린다.
-	// 등록·launch 가 끝나 감시에 들어가면 launched 를 (한 번) 부른다. 종료코드와 오류(errTimeout 등)를 돌려준다.
-	StressTest(steps, listFile string, hosts []string, launched func()) (int, error)
+	// end("연,월,일,시,분")는 steps 에 b 가 있을 때 -end 로 넘긴다. 등록·launch 가 끝나 감시에 들어가면 launched 를 (한 번) 부른다.
+	// stress-test 가 "[인벤토리사용중] <메시지>" 줄을 내고 stdin 을 기다리면 busy(메시지)를 불러 "r"(다시 확인) 또는 "x"(이 묶음 중단)를 받아 stdin 에 넣는다
+	// (busy 가 답을 기다리는 동안 시간 제한은 멈춘다). 종료코드와 오류(errTimeout 등)를 돌려준다.
+	StressTest(steps, listFile string, hosts []string, end string, launched func(), busy func(msg string) string) (int, error)
 	// Probe 는 hosts 의 btime·CPU·stress-ng 값을 한 번 확인한다. 응답 없는 호스트는 맵에 없다.
 	Probe(hosts []string) (map[string]probeInfo, error)
 	Now() time.Time
@@ -45,13 +47,20 @@ type executor interface {
 // 그 단계의 등록·launch 가 모두 끝난 것이다. 묶음이 모두 실패하면 감시 없이 끝나므로 프로세스 종료도 함께 본다.
 const stressMonitorMark = "[감시]"
 
-// lineWatch 는 받은 출력을 w 로 넘기면서 줄 머리말이 mark 인 줄이 처음 보이면 fn 을 부른다.
+// stressBusyMark 는 stress-test -batch 가 템플릿 인벤토리가 DEFAULT 가 아니어서 멈출 때 stdout 에 찍는 줄의 머리말.
+// 이 줄 뒤에 stdin 에서 한 줄(r = 다시 확인, 그 밖·EOF = 이 묶음 중단)을 읽는다.
+const stressBusyMark = "[인벤토리사용중] "
+
+// lineWatch 는 받은 출력을 w 로 넘기면서 줄 머리말이 mark 인 줄이 처음 보이면 fn 을 부르고,
+// 머리말이 busyMark 인 줄마다 (머리말을 뗀 메시지로) busy 를 부른다(busy 가 돌아올 때까지 출력 읽기는 멈춘다).
 type lineWatch struct {
-	w    io.Writer
-	mark []byte
-	fn   func()
-	buf  []byte
-	once sync.Once
+	w        io.Writer
+	mark     []byte
+	fn       func()
+	busyMark []byte
+	busy     func(msg string)
+	buf      []byte
+	once     sync.Once
 }
 
 func (l *lineWatch) Write(p []byte) (int, error) {
@@ -64,10 +73,14 @@ func (l *lineWatch) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		if bytes.HasPrefix(bytes.TrimSpace(l.buf[:i]), l.mark) && l.fn != nil {
+		line := bytes.TrimSpace(l.buf[:i])
+		l.buf = l.buf[i+1:]
+		if len(l.mark) > 0 && bytes.HasPrefix(line, l.mark) && l.fn != nil {
 			l.once.Do(l.fn)
 		}
-		l.buf = l.buf[i+1:]
+		if len(l.busyMark) > 0 && bytes.HasPrefix(line, bytes.TrimSpace(l.busyMark)) && l.busy != nil {
+			l.busy(string(bytes.TrimSpace(line[len(bytes.TrimSpace(l.busyMark)):])))
+		}
 	}
 	return len(p), nil
 }
@@ -107,7 +120,7 @@ func (e *realExec) ConfigFix(hosts []string) error {
 }
 
 // StressTest 는 stress-test 를 바이너리 폴더에서 실행한다(그 폴더의 ./conf, ./output 이 단독 실행과 같게 쓰이도록).
-func (e *realExec) StressTest(steps, listFile string, hosts []string, launched func()) (int, error) {
+func (e *realExec) StressTest(steps, listFile string, hosts []string, end string, launched func(), busy func(msg string) string) (int, error) {
 	if e.conf.StressTest == "" {
 		return 2, errors.New("설정 파일의 STRESS_TEST(stress-test 경로)가 비어 있습니다")
 	}
@@ -120,16 +133,42 @@ func (e *realExec) StressTest(steps, listFile string, hosts []string, launched f
 		return 2, err
 	}
 	args := []string{"-user", e.user, "-hosts", list, "-steps", steps, "-batch"}
+	if strings.Contains(steps, "b") && end != "" {
+		args = append(args, "-end", end)
+	}
 	if e.conf.StressTestConf != "" {
 		c, _ := filepath.Abs(e.conf.StressTestConf)
 		args = append(args, "-conf", c)
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = filepath.Dir(bin)
-	cmd.Stdout = &lineWatch{w: e.log, mark: []byte(stressMonitorMark), fn: launched}
+	// stdin 은 인벤토리 사용 중 질문의 답(r / x)을 넣는 통로. 프로세스가 끝나면 exec 이 닫는다(읽던 쪽은 EOF = 중단).
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return 2, err
+	}
+	hold := make(chan bool, 64) // 질문에 답하는 동안 시간 제한 일시정지(true) / 재개(false)
+	cmd.Stdout = &lineWatch{w: e.log, mark: []byte(stressMonitorMark), fn: launched, busyMark: []byte(stressBusyMark), busy: func(msg string) {
+		select {
+		case hold <- true:
+		default:
+		}
+		ans := "x"
+		if busy != nil {
+			ans = busy(msg)
+		}
+		if ans != "r" {
+			ans = "x"
+		}
+		io.WriteString(in, ans+"\n")
+		select {
+		case hold <- false:
+		default:
+		}
+	}}
 	cmd.Stderr = e.log
 	fmt.Fprintf(e.log, "+ (cd %s && %s %s)\n", cmd.Dir, bin, strings.Join(args, " "))
-	_, err = runCmd(cmd, e.conf.StressTimeout)
+	_, err = runCmdHold(cmd, e.conf.StressTimeout, cancelCh, hold)
 	if err == nil {
 		return 0, nil
 	}
