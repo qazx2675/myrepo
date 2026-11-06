@@ -317,6 +317,7 @@ stress-test -inspect [-user <u> | -conf <설정파일>] [템플릿 ID/이름 ...
 | `-retry N` | 비대화형에서 `미실행` 호스트 자동 재실행 횟수 (기본 0). 대화형에서는 y/N 으로 묻기 때문에 무시 |
 | `-er <파일>` | 장애 목록 (2.5). 생략 시 현재 경로 `error_list.txt` |
 | `-conf <파일>` | 설정 파일 직접 지정. 생략 시 `./conf` → `~/.stress-test` → `<바이너리 위치>/conf` 의 `${user}_setting.conf` 를 순서대로 탐색 |
+| `-yaml-state` | invsync 가 쓰는 인벤토리 소스의 현재 yml(`source_field` 값)과 그 인벤토리의 호스트 이름을 읽기 전용으로 `[yaml상태] yml=… / source=… inventory=… / count=N / hosts=a,b` 줄로 출력. new_setup `-run -auto` 가 launch 직전에 다른 사람이 인벤토리를 바꿨는지 보려고 부른다. 등록(`register`)이 끝나면 `[등록] yml=<등록한 yml> hosts=<등록 직후 인벤토리 호스트>` 한 줄도 낸다(호스트를 못 읽으면 `yml=` 만). `-hosts`/`-steps` 불필요, 종료코드 0 정상 / 2 설정·접속 오류 |
 | `-inspect [템플릿 ...]` | AWX 템플릿·인벤토리를 읽기 전용으로 조사해 conf 키를 점검 (2.8). 이 옵션이면 `-hosts`/`-steps` 불필요. 종료코드 0 정상 / 1 불일치·경고 / 2 설정·접속 오류 |
 | `-batch` | 비대화형 실행 (프롬프트 없음, 감시는 한 줄 요약, 템플릿 인벤토리 사용 중이면 `[인벤토리사용중]` 줄 + stdin 한 줄 — 2.2) |
 
@@ -374,6 +375,7 @@ stress-test -inspect [-user <u> | -conf <설정파일>] [템플릿 ID/이름 ...
 | `gossh.go` | gossh 경로 결정·실행, 벤더·로드 출력 파싱 |
 | `register.go` | yaml 생성 → scp → custom_inventory.sh → 새 yml 확인 → git 업로드 → invsync |
 | `awx.go` | AWX REST 클라이언트(템플릿 조회·인벤토리 PATCH, 인벤토리 이름 조회, survey_spec, launch, job poll, 인벤토리 소스 PATCH+update) |
+| `yamlstate.go` | `-yaml-state`: 소스 yml·인벤토리 호스트 조회(GET 만), 등록 직후 `[등록]` 줄 |
 | `inspect.go` | `-inspect`: 템플릿 survey·인벤토리·소스 조회(GET 만), conf 키 점검(`checkKeys`)·제안 줄(`suggestLines`) |
 | `invswitch.go` | AWX 사전 확인, 템플릿 인벤토리 바꾸기·되돌리기, 사용 중 질문(대화형/`[인벤토리사용중]`+stdin), 신호 시 복원 |
 | `endtime.go` | stress-ng 종료 시각 5값 검증·대화형 입력·`-end` 파싱·survey type 변환 |
@@ -401,6 +403,7 @@ bash test/e2e_c.sh   # 랩에서: TTY 대화형(종료 시각 입력, 화면 갱
 
 - `test/e2e.sh` 는 `/root/work/stress-test` 에 바이너리가 있고 `test/` 가 그 아래 있는 상태를 전제로 하며, 가짜 repohost 는 랩 자신(`root@192.168.0.58`)입니다. 대상 서버에 `while :; do :; done` 으로 부하를 직접 올려 감시를 확인하고 끝나면 정리합니다.
 - 시나리오: A(정상 `ba`, 인벤토리 바꾸기·되돌리기·종료 시각 type 변환), B(미실행 → 자동 재실행 / `-retry 0` 종료코드 1), D(템플릿 job 실패), E(인자·설정·입력·`-end`·옛 키·인벤토리/템플릿 없음 종료코드 2), F(`[인벤토리사용중]` → stdin `r` / EOF 중단 / 인벤토리 바꾼 사이 SIGTERM → 되돌리고 143).
+- 시나리오 H(`-yaml-state`): 등록 전·후 상태, `[등록]` 줄과 같은 값, 다른 사용자가 호스트·yml 을 바꾼 뒤의 값, 접속 불가·여분 인자 종료코드 2, 템플릿 PATCH 가 늘지 않는지(읽기 전용) 확인.
 - 시나리오 G(`-inspect`): 정상 conf 종료코드 0 / 템플릿 인자 / `hostname_key` 가 survey 에 없으면 1 / 접속 불가 URL·없는 템플릿 2 / 템플릿 인벤토리 사용 중 1, 그리고 가짜 AWX 로그에 PATCH·launch 요청이 없는지(읽기 전용) 확인.
 - 가짜 AWX 플래그: `-busyfile <파일>`(파일에 이름이 있으면 템플릿 인벤토리가 그 이름인 것처럼 보임), `-launchdelay 5s`(launch 응답 지연), `-skipfile`/`-skiponce`/`-failtmpl`.
 

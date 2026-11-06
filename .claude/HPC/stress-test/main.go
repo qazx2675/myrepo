@@ -2,6 +2,7 @@
 //
 //	stress-test -user <u> -hosts <file> -steps <ab> [-end y,m,d,h,min] [-retry N] [-er file] [-conf file] [-batch]
 //	stress-test -inspect [-user <u> | -conf file] [템플릿 ID/이름 ...]   (읽기 전용 조사)
+//	stress-test -yaml-state [-user <u> | -conf file]   (인벤토리 소스의 현재 yml·호스트 출력, 읽기 전용)
 //
 // 종료코드: 0 전부 실행, 1 미실행/실패 있음, 2 설정·입력 오류.
 package main
@@ -85,6 +86,7 @@ func usage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "  종료코드: 0 전부 실행, 1 미실행/실패 있음, 2 설정·입력 오류")
 		fmt.Fprintln(os.Stderr, "  조사: stress-test -inspect [-user <사용자> | -conf <설정파일>] [템플릿 ID/이름 ...]   (AWX 템플릿·인벤토리 조사, 읽기 전용)")
 		fmt.Fprintln(os.Stderr, "  -inspect : survey 변수·인벤토리·소스를 조회해 conf 키를 점검하고 넣을 줄을 제안. 템플릿 인자가 없으면 conf 의 cpu_template·stress_template. 종료코드 0 정상, 1 불일치·경고, 2 설정·접속 오류")
+		fmt.Fprintln(os.Stderr, "  -yaml-state : 인벤토리 소스의 현재 yml 과 인벤토리 호스트 이름을 \""+yamlStateMark+"key=value\" 줄로 출력 (읽기 전용, new_setup -auto 가 launch 직전에 부름). 종료코드 0 정상, 2 설정·접속 오류")
 		fs.PrintDefaults()
 	}
 }
@@ -109,6 +111,7 @@ func run(args []string) int {
 	confFlag := fs.String("conf", "", "설정 파일 경로 (기본: ./conf → ~/.stress-test → <바이너리 위치>/conf 의 ${user}_setting.conf)")
 	endFlag := fs.String("end", "", "stress-ng 종료 시각 \"<연>,<월>,<일>,<시>,<분>\" (예: 2026,11,07,18,30)")
 	inspectFlag := fs.Bool("inspect", false, "AWX 템플릿·인벤토리 조사 (읽기 전용): 인자로 템플릿 ID/이름을 줄 수 있음 (없으면 conf 의 cpu_template·stress_template)")
+	yamlStateFlag := fs.Bool("yaml-state", false, "인벤토리 소스의 현재 yml 과 인벤토리 호스트 이름 출력 (읽기 전용)")
 	batchFlag := fs.Bool("batch", false, "비대화형 실행 (프롬프트 없음, 감시는 한 줄 요약)")
 	fs.Usage = usage(fs)
 	if err := fs.Parse(args); err != nil {
@@ -124,6 +127,12 @@ func run(args []string) int {
 	}
 	if *inspectFlag {
 		return runInspect(*userFlag, *confFlag, pos)
+	}
+	if *yamlStateFlag {
+		if len(pos) > 0 {
+			return fail2("알 수 없는 인자: %s", strings.Join(pos, " "))
+		}
+		return runYamlState(*userFlag, *confFlag)
 	}
 	if len(pos) > 0 {
 		return fail2("알 수 없는 인자: %s", strings.Join(pos, " "))

@@ -135,5 +135,16 @@ func (a *app) register(yamlName string, list []*target) (string, error) {
 		return "", fmt.Errorf("invsync 실패: %v", err)
 	}
 	a.logf("%s 인벤토리 동기화 완료: %s", markOK, yml)
+	// new_setup -auto 가 읽는 줄: 방금 등록한 yml 과 그 직후의 인벤토리 호스트(launch 직전 변경 감시의 기준값)
+	var seen []string
+	if st, err := a.client.yamlState(cfg); err != nil {
+		a.logf("%s 등록 직후 인벤토리 호스트를 읽지 못했습니다(변경 감시 기준에서 호스트 제외): %v", markWarn, err)
+	} else {
+		seen = st.Hosts
+		if seen == nil {
+			seen = []string{}
+		}
+	}
+	a.logf("%s", registeredLine(yml, seen))
 	return yml, nil
 }

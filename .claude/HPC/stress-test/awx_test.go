@@ -31,6 +31,11 @@ type fakeAWX struct {
 	failRestore bool        // DEFAULT 로 되돌리는 PATCH 가 500
 	failCPUJob  bool        // cpu 템플릿(6) job 을 failed(32)로
 	events      []string    // "patch 5→2", "launch 5" 순서 기록
+
+	srcPath   string   // 소스 11 의 source_path (-yaml-state 시험)
+	hosts     []string // 인벤토리 7 의 호스트 이름
+	hostPages bool     // true 면 호스트 목록을 2쪽(next)으로 나눠 준다
+	failSrc   bool     // 소스 11 조회가 500
 }
 
 var fakeInvNames = map[int]string{1: "DEFAULT", 2: "admin", 9: "kim"}
@@ -106,6 +111,26 @@ func (f *fakeAWX) handler(w http.ResponseWriter, r *http.Request) {
 			{"variable": "end_day", "type": "text"}, {"variable": "end_hour", "type": "float"}}})
 	case "GET /api/v2/inventories/7/inventory_sources/":
 		write(map[string]interface{}{"results": []map[string]interface{}{{"id": 11, "name": "src"}, {"id": 12, "name": "src2"}}})
+	case "GET /api/v2/inventory_sources/11/":
+		if f.failSrc {
+			w.WriteHeader(500)
+			return
+		}
+		write(map[string]interface{}{"id": 11, "inventory": 7, "source": "scm", "source_path": f.srcPath})
+	case "GET /api/v2/inventories/7/hosts/":
+		var res []map[string]interface{}
+		for _, h := range f.hosts {
+			res = append(res, map[string]interface{}{"name": h})
+		}
+		if f.hostPages && len(res) > 1 {
+			if r.URL.Query().Get("page") == "2" {
+				write(map[string]interface{}{"next": nil, "results": res[1:]})
+			} else {
+				write(map[string]interface{}{"next": "/api/v2/inventories/7/hosts/?page=2&page_size=200", "results": res[:1]})
+			}
+			return
+		}
+		write(map[string]interface{}{"next": nil, "results": res})
 	case "PATCH /api/v2/inventory_sources/11/":
 		json.Unmarshal(body, &f.patch)
 		write(map[string]interface{}{"id": 11})

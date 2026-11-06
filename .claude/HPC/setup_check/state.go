@@ -112,6 +112,14 @@ type hostRow struct {
 	NoResp    bool   `json:"no_resp"`             // CPU 테스트 감시 중 마지막 확인에 응답 없음
 	Running   string `json:"running"`             // 진행 중 작업: "CPU 실행중" / "stress-ng 실행중" / ""
 	Btime     int64  `json:"btime,omitempty"`     // CPU launch 때 기록한 부팅 시각(/proc/stat btime)
+
+	// -auto 전용(이번 -auto 실행 안에서만 센다. -auto 가 아니면 늘 빈 값)
+	FixTries   int    `json:"fix_tries,omitempty"`   // 설정수정 시도 횟수
+	CPUTries   int    `json:"cpu_tries,omitempty"`   // CPU launch 시도 횟수(launch 실패 포함)
+	NGTries    int    `json:"ng_tries,omitempty"`    // stress-ng launch 시도 횟수(launch 실패 포함)
+	GaveUp     string `json:"gave_up,omitempty"`     // 포기한 단계(설정수정 / CPU / stress-ng). 비어 있지 않으면 이후 작업에서 빠진다
+	AutoErr    string `json:"auto_err,omitempty"`    // 마지막 오류(-auto 결과 판에 보일 것)
+	NGLaunched bool   `json:"ng_launched,omitempty"` // stress-ng launch 성공(재판정해도 stress-ng 를 O 로 둔다)
 }
 
 // progressText 는 진행 비고 화면 문자열을 만든다.
@@ -119,6 +127,9 @@ func (r *hostRow) progressText() string {
 	var p []string
 	if r.Excluded {
 		p = append(p, prgExcluded)
+	}
+	if r.GaveUp != "" {
+		p = append(p, "포기("+r.GaveUp+")")
 	}
 	if r.Rebooted {
 		p = append(p, prgRebooted)
@@ -178,6 +189,9 @@ type runState struct {
 	StressEnd   string    `json:"stress_end,omitempty"` // stress-ng 종료 시각 "연,월,일,시,분"(stress-test -end 로 넘긴 값, 입력한 글자 그대로)
 	XAsked      bool      `json:"x_asked,omitempty"`    // 이번 부하 단계 진입에서 CPU X 호스트 재실행 질문(부하 확인)을 이미 함(부하 단계로 들어갈 때마다 꺼짐)
 
+	// -auto 로 시작한 작업이면 nil 이 아니다(옛 state.json 에는 없음 = -auto 아님)
+	Auto *autoState `json:"auto,omitempty"`
+
 	LastError string    `json:"last_error"` // 마지막 오류(없으면 빈 값)
 	Updated   time.Time `json:"updated"`    // 마지막 기록 시각
 	WorkerPID int       `json:"worker_pid"`
@@ -185,6 +199,22 @@ type runState struct {
 }
 
 const stateVersion = 1
+
+// autoState 는 -auto 스케줄러의 상태(auto.go). 시각이 0 이면 아직/해당 없음.
+type autoState struct {
+	Start       time.Time     `json:"start"`               // -auto 시작 시각(12시간 제한 기준)
+	Limit       time.Duration `json:"limit,omitempty"`     // 제한 시간(워커가 시작할 때마다 AUTO_LIMIT 로 기록. 화면의 남은 시간 계산용, 0 = 기본값)
+	Ending      bool          `json:"ending,omitempty"`    // 제한 시간이 지나 새 작업을 시작하지 않음
+	Queue       []string      `json:"queue"`               // CPU 대기열(들어온 순서). 묶음은 그 시점의 대기열 전체
+	Batch       []string      `json:"batch"`               // launch 한 CPU 묶음(빈 값 = 도는 묶음 없음)
+	BatchLaunch time.Time     `json:"batch_launch"`        // 묶음 launch 시각
+	BatchNext   time.Time     `json:"batch_next"`          // 묶음의 다음 CPU 판정 시각
+	QueueWait   time.Time     `json:"queue_wait"`          // 이 시각 전에는 새 CPU 묶음을 띄우지 않음(launch 실패·띄울 호스트 없음 뒤)
+	NGWait      time.Time     `json:"ng_wait"`             // 이 시각 전에는 stress-ng 를 다시 띄우지 않음(launch 실패 뒤)
+	NextRecheck time.Time     `json:"next_recheck"`        // 접속 안 되는 호스트의 다음 재판정 시각
+	Yml         string        `json:"yml,omitempty"`       // (3단계) 등록한 yml 이름
+	YmlHosts    []string      `json:"yml_hosts,omitempty"` // (3단계) 등록한 인벤토리 호스트 목록
+}
 
 // Finished 는 더 진행할 것이 없는지(완료 또는 중지).
 func (s *runState) Finished() bool {
@@ -332,7 +362,35 @@ func stopRequested(dir string) bool {
 	return err == nil
 }
 
+// counts 는 호스트 수를 센다: all = 완료 + 3열 O(포기 아님), gave = 포기, left = 나머지.
+func (s *runState) counts() (all, left, gave int) {
+	for i := range s.Hosts {
+		r := &s.Hosts[i]
+		switch {
+		case r.GaveUp != "":
+			gave++
+		case r.Status == stDone && checkPass(s.CheckOff, r.Check) && r.CPU == "O" && r.Stress == "O":
+			all++
+		default:
+			left++
+		}
+	}
+	return
+}
+
+// countsText 는 결과 요약 한 줄(`|` 구분): "완료(OOO) 3대|남음 1대|포기 0대".
+func countsText(s *runState) string {
+	all, left, gave := s.counts()
+	return fmt.Sprintf("완료(OOO) %d대%s남음 %d대%s포기 %d대", all, sep, left, sep, gave)
+}
+
+// autoTryText 는 -auto 호스트별 시도 횟수 "수정/CPU/stress-ng".
+func (r *hostRow) autoTryText() string {
+	return fmt.Sprintf("%d/%d/%d", r.FixTries, r.CPUTries, r.NGTries)
+}
+
 // resultText 는 최종 결과표(header + 8열)를 문자열로 만든다.
+// -auto 작업이면 표 아래에 빈 줄, 완료·남음·포기 대수, 호스트별 시도 횟수·포기 단계·마지막 오류(`|` 구분)를 덧붙인다.
 func resultText(s *runState) string {
 	var b strings.Builder
 	b.WriteString(header + "\n")
@@ -340,6 +398,18 @@ func resultText(s *runState) string {
 		r := &s.Hosts[i]
 		hr := hostResult{Host: r.Host, Status: r.Status, Check: r.Check, CPU: r.CPU, Stress: r.Stress, HT: r.HT, OS: r.OS}
 		b.WriteString(hr.row(strings.ReplaceAll(r.noteText(), sep, "/")) + "\n")
+	}
+	if s.Auto != nil {
+		b.WriteString("\n" + countsText(s) + "\n")
+		b.WriteString(strings.Join([]string{"hostname", "설정수정시도", "CPU시도", "stress-ng시도", "포기", "마지막오류"}, sep) + "\n")
+		for i := range s.Hosts {
+			r := &s.Hosts[i]
+			if r.FixTries+r.CPUTries+r.NGTries == 0 && r.GaveUp == "" && r.AutoErr == "" {
+				continue
+			}
+			e := strings.ReplaceAll(strings.ReplaceAll(r.AutoErr, "\n", " / "), sep, "/")
+			b.WriteString(strings.Join([]string{r.Host, fmt.Sprint(r.FixTries), fmt.Sprint(r.CPUTries), fmt.Sprint(r.NGTries), r.GaveUp, e}, sep) + "\n")
+		}
 	}
 	return b.String()
 }
