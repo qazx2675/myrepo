@@ -1,7 +1,8 @@
 // fake_awx: stress-test 랩 검증용 AWX 대역 (표준 라이브러리만).
-// 사용: go run . -addr :18080 [-skipfile f] [-skiponce h1,h2] [-failtmpl stress-ng] [-busyfile f] [-launchdelay 5s] [-loops 8] [-key target_hosts]
+// 사용: go run . -addr :18080 [-svrdir d] [-skipfile f] [-skiponce h1,h2] [-failtmpl stress-ng] [-busyfile f] [-launchdelay 5s] [-loops 8] [-key target_hosts]
 // 인벤토리: 1=DEFAULT, 2=admin(tester conf username), 3=src-inv(소스 7), 4=I_dh.kim(username 포함 판정용), 9=다른 사용자(-busyfile)
 // -inspect 시험용: 템플릿 survey(stress-ng: end_* 5개+호스트+mode, cpu-test: 호스트+intensity), 소스 상세 필드
+// -yaml-state 시험용: 소스 7 의 source_path 는 PATCH 로 바뀌고, 소스 동기화(update) 때 -svrdir 의 그 yml(줄마다 4번째 필드 = 호스트)로 인벤토리 3 호스트가 채워진다. POST /api/v2/inventories/3/hosts/ 로 호스트 추가(다른 사용자 흉내)
 package main
 
 import (
@@ -29,6 +30,7 @@ var (
 	delay    = flag.Duration("launchdelay", 0, "launch 응답을 이만큼 늦춤 (인벤토리를 바꿔 둔 사이 신호 시험용)")
 	hostKey  = flag.String("key", "target_hosts", "survey 변수명")
 	gossh    = flag.String("gossh", "/usr/local/bin/gossh", "gossh")
+	svrDir   = flag.String("svrdir", "/root/work/st-svr", "소스 동기화(update) 때 source_path 의 yml 을 읽는 폴더(줄마다 4번째 필드 = 호스트 이름)")
 )
 
 var (
@@ -42,7 +44,24 @@ var (
 	nextUpd  = 500
 	once     = map[string]bool{}
 	srcField = map[string]interface{}{}
+	srcPath  = "tester_stress_2ea.yml" // 소스 7 의 source_path (PATCH 로 바뀜, 다른 사용자가 바꾼 것도 흉내)
+	invHosts []string                  // 인벤토리 3 의 호스트 이름 (소스 동기화 때 yml 로 다시 채움, POST .../3/hosts/ 로 추가)
 )
+
+// syncHosts 는 소스 동기화(update)를 흉내 낸다: svrdir 의 srcPath yml 을 읽을 수 있으면 호스트를 그 파일의 4번째 필드로 바꾼다.
+// 읽을 수 없으면(다른 사용자가 만든 yml 등) 호스트는 그대로 둔다. mu 를 잡고 부른다.
+func syncHosts() {
+	b, err := os.ReadFile(*svrDir + "/" + srcPath)
+	if err != nil {
+		return
+	}
+	invHosts = nil
+	for _, l := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(l); len(f) >= 4 {
+			invHosts = append(invHosts, f[3])
+		}
+	}
+}
 
 func js(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -71,7 +90,7 @@ func tmplJSON(id int) map[string]interface{} {
 
 // srcJSON 은 인벤토리 소스 7 (인벤토리 3) 상세다.
 func srcJSON() map[string]interface{} {
-	return map[string]interface{}{"id": 7, "name": "src1", "inventory": 3, "source": "scm", "source_path": "tester_stress_2ea.yml", "overwrite": true, "overwrite_vars": true}
+	return map[string]interface{}{"id": 7, "name": "src1", "inventory": 3, "source": "scm", "source_path": srcPath, "overwrite": true, "overwrite_vars": true}
 }
 
 func skipped(h string) bool {
@@ -244,10 +263,34 @@ func main() {
 			js(w, map[string]interface{}{"count": len(res), "results": res})
 			return
 		}
+		// 3/hosts/ : 인벤토리 3 의 호스트 (GET 목록, POST {"name":..} 추가 = 다른 사용자가 호스트를 넣은 것 흉내)
+		if p == "3/hosts" {
+			mu.Lock()
+			defer mu.Unlock()
+			if r.Method == http.MethodPost {
+				var b struct {
+					Name string `json:"name"`
+				}
+				json.NewDecoder(r.Body).Decode(&b)
+				log.Printf("POST host %s", b.Name)
+				invHosts = append(invHosts, b.Name)
+				w.WriteHeader(201)
+				js(w, map[string]interface{}{"name": b.Name})
+				return
+			}
+			res := []map[string]interface{}{}
+			for _, h := range invHosts {
+				res = append(res, map[string]interface{}{"name": h})
+			}
+			js(w, map[string]interface{}{"count": len(res), "next": nil, "results": res})
+			return
+		}
 		// <id>/inventory_sources/ (소스 7 은 인벤토리 3 에만 있음)
 		var res []map[string]interface{}
 		if strings.HasPrefix(p, "3/") {
+			mu.Lock()
 			res = append(res, srcJSON())
+			mu.Unlock()
 		}
 		js(w, map[string]interface{}{"count": len(res), "results": res})
 	})
@@ -256,6 +299,7 @@ func main() {
 		if strings.HasSuffix(p, "/update") && r.Method == http.MethodPost {
 			mu.Lock()
 			nextUpd++
+			syncHosts()
 			mu.Unlock()
 			w.WriteHeader(202)
 			js(w, map[string]interface{}{"inventory_update": nextUpd})
@@ -265,9 +309,16 @@ func main() {
 			var b map[string]interface{}
 			json.NewDecoder(r.Body).Decode(&b)
 			log.Printf("PATCH %s %v", p, b)
+			if s, ok := b["source_path"].(string); ok {
+				mu.Lock()
+				srcPath = s
+				mu.Unlock()
+			}
 			js(w, b)
 			return
 		}
+		mu.Lock()
+		defer mu.Unlock()
 		js(w, srcJSON())
 	})
 	mux.HandleFunc("/api/v2/inventory_updates/", func(w http.ResponseWriter, r *http.Request) {
