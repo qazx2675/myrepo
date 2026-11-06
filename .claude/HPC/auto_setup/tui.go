@@ -105,6 +105,41 @@ func parseKeys(b []byte) []keyEv {
 	return out
 }
 
+// pasteGap: 앞 읽기가 줄바꿈으로 끝나고 이 시간 안에 다음 읽기가 줄바꿈으로 시작하면 한 번의 붙여넣기로 보고 Enter 를 합친다
+// (사람이 Enter 를 두 번 누르는 간격은 이보다 훨씬 길다)
+const pasteGap = 50 * time.Millisecond
+
+// keyReader: 실제 stdin 읽기 전용 — parseKeys 앞에서 붙여넣기의 줄바꿈 덩어리(CR·LF·CRLF·CRCR…)를 Enter 하나로 합친다.
+// 엑셀 붙여넣기는 행마다 CRLF 인데 256바이트 읽기 경계에서 CR/LF 가 갈라지거나 터미널이 줄바꿈을 CR+LF 두 번으로 보내면
+// 빈 Enter 가 생겨 붙여넣기가 끝나 버린다. parseKeys 자체는 그대로 둔다 (테스트가 "\r\r" 를 '줄 + 빈 줄' 로 쓴다)
+type keyReader struct {
+	endNL bool      // 앞 읽기가 줄바꿈으로 끝났는지
+	at    time.Time // 앞 읽기 시각
+}
+
+// events: 읽은 바이트 b (읽은 시각 now) 를 키 이벤트로
+func (k *keyReader) events(b []byte, now time.Time) []keyEv {
+	if len(b) == 0 {
+		return nil
+	}
+	isNL := func(c byte) bool { return c == '\r' || c == '\n' }
+	skip := k.endNL && isNL(b[0]) && now.Sub(k.at) < pasteGap // 앞 읽기에서 이어지는 줄바꿈
+	out := make([]byte, 0, len(b))
+	for i := 0; i < len(b); i++ {
+		if !isNL(b[i]) {
+			skip = false
+			out = append(out, b[i])
+			continue
+		}
+		if !skip { // 줄바꿈 덩어리의 첫 바이트만 Enter 로
+			out = append(out, '\r')
+			skip = true
+		}
+	}
+	k.endNL, k.at = isNL(b[len(b)-1]), now
+	return parseKeys(out)
+}
+
 // ---- 환경 주입 ----
 
 // tuiEnv: 테스트에서 가짜로 바꿀 수 있는 외부 의존
@@ -253,6 +288,7 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 	defer close(done)
 	go func() {
 		buf := make([]byte, 256)
+		var kr keyReader
 		for {
 			select {
 			case <-done:
@@ -266,7 +302,7 @@ func runTUILoopWith(src SnapshotSource, env tuiEnv, start func(st *tuiState)) in
 			}
 			n, err := env.In.Read(buf)
 			st.inMu.Unlock()
-			for _, ev := range parseKeys(buf[:n]) {
+			for _, ev := range kr.events(buf[:n], time.Now()) {
 				select {
 				case keys <- ev:
 				case <-done:
