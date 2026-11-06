@@ -108,7 +108,7 @@ main.run
 
 - **단일 정적 바이너리, 표준 라이브러리만** — 폐쇄망·Go 없는 환경에서 빌드 없이 쓰려고 vendor 대신 빌드된 os8 바이너리를 커밋합니다. awxkit·setup_check 의 필요한 코드(AWX 클라이언트, conf 파서, gossh 처리, `-er` 규칙)는 **복사**해서 이 폴더 안에서 단독 빌드되게 했습니다.
 - **user 선택은 bash 래퍼, Go 에는 `-user`** — AWX 01 스크립트와 같은 메뉴 방식을 유지하고, Go 는 프롬프트 없이도(비대화형) 같은 값을 받도록 했습니다. 비대화형(`-batch`)은 프롬프트를 띄우지 않으며, stdin 은 템플릿 인벤토리 사용 중일 때 `[인벤토리사용중]` 줄을 찍은 뒤 한 줄만 읽습니다(setup_check `-run` 이 TUI 질문으로 바꿔 답을 넣음).
-- **템플릿 인벤토리는 launch 순간에만 바꾼다** — 템플릿은 평소 `default_inventory`(DEFAULT) 에 두고, launch 직전 conf `username` 인벤토리로 바꿨다가 launch 응답 직후(실패해도) 되돌립니다. AWX 는 job 생성 때 인벤토리를 고정하므로 실행에 영향이 없고, 다른 사용자가 바꿔 둔 상태(DEFAULT 아님)면 덮어쓰지 않고 사람에게 묻습니다. PATCH 직후 확인 GET 으로 경합을 감지하면 남의 설정을 되돌리지 않습니다. PATCH 전에 `curSwitch` 에 기록해 두어 신호를 받으면 되돌린 뒤 종료합니다(잠금을 쥔 채 종료해 본 흐름과 겹치지 않음).
+- **CPU 템플릿 인벤토리는 launch 순간에만 바꾼다**(stress-ng 템플릿은 이미 개인 인벤토리를 쓰므로 그대로 launch) — 템플릿은 평소 `default_inventory`(DEFAULT) 에 두고, launch 직전 conf `username` 인벤토리(같은 이름, 없으면 이름에 username 이 들어간 것 하나 — `matchUserInventory`)로 바꿨다가 launch 응답 직후(실패해도) 되돌립니다. AWX 는 job 생성 때 인벤토리를 고정하므로 실행에 영향이 없고, 다른 사용자가 바꿔 둔 상태(DEFAULT 아님)면 덮어쓰지 않고 사람에게 묻습니다. PATCH 직후 확인 GET 으로 경합을 감지하면 남의 설정을 되돌리지 않습니다. PATCH 전에 `curSwitch` 에 기록해 두어 신호를 받으면 되돌린 뒤 종료합니다(잠금을 쥔 채 종료해 본 흐름과 겹치지 않음).
 - **종료 시각은 입력 글자 그대로, survey type 만 맞춤** — 사용자가 친 `07` 같은 글자를 기억해 두고, 템플릿 survey 가 integer/float 일 때만 숫자로 바꿉니다. 재실행·다음 단계에서 이미 지났으면 대화형은 다시 묻고 비대화형은 그 묶음을 실패로 둡니다.
 - **등록은 01 스크립트와 같은 방식(삭제 없음)** — yaml → scp → `custom_inventory.sh` → 새 yml → git_upload → invsync. 새 yml 은 이름이 아니라 `svr_dir` 의 *.yml 수정 시각 비교로 찾아 같은 이름 덮어쓰기도 인식하고, 정확히 1개가 아니면 실패로 봅니다.
 - **접속 여부와 벤더를 한 번에** — uptime 대신 `grep -m1 vendor_id /proc/cpuinfo` 한 번으로 접속체크와 Intel/AMD 확인을 함께 합니다. 벤더는 결과표 표시용이며(템플릿이 Intel/AMD 를 구분), `unknown` 도 cpu 대상입니다.
