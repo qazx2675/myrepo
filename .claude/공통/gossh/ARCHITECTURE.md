@@ -5,6 +5,7 @@
 | `main.go` | gossh v2 전체: `-w` 파싱·범위 확장, 워커풀, DNS 선행 조회, SSH(키 우선), stdout/stderr 분리, 진행률, `-b` 그룹, 위험 명령 가드, autofs 가드, 재검증, 결과 파일 |
 | `tmplimit.go` | `-tmp`/`-limit`/`-tl`: 질문 수집, 비교서버 파일 읽기·가드, 원격 스크립트(base64) 생성 |
 | `rpmcmp.go` | `-rpm`: 비교서버 rpm 목록 읽기, 대상 목록 비교, 보고서·탭 구분 파일 저장 |
+| `interactive.go` | `-i <호스트>` 대화형 접속(`runInteractive`): 키→`-p`→비밀번호 질문, pty·raw 모드·창 크기 전달. raw 모드·창 크기·비밀번호 입력은 `term_linux.go` |
 | `danger.go` | 위험 명령 판정(`isDangerousCommand`), 대상 호스트 재입력 읽기·펼치기·대조(`readConfirmLines`/`parseConfirmHosts`/`diffHostSets`). 단위 테스트는 `danger_test.go` |
 | `term_linux.go` | 터미널 크기 조회·키 입력 모드(`-m`) — Linux 전용 |
 | `term_other.go` | Linux 외 OS용 대체 구현(`-m` 미지원, 빌드만 가능) |

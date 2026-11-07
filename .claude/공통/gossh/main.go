@@ -1299,8 +1299,11 @@ var optionDocs = []optionDoc{
 	{"p", "<비밀번호>", "SSH 비밀번호 (키 인증 실패 시에만 사용)", []string{
 		"SSH 키 인증을 항상 먼저 시도하고, 키로 접속되지 않는 호스트에만 이 비밀번호를 사용합니다.",
 	}},
-	{"i", "<키파일>", "SSH 개인키 경로 (미지정 시 자동 탐색)", []string{
+	{"i", "<키파일|호스트>", "SSH 개인키 경로 (미지정 시 자동 탐색) / -w 없이 쓰면 대화형 접속", []string{
 		"지정하지 않으면 ~/.ssh/id_ed25519 → id_ecdsa → id_rsa 순서로 찾습니다.",
+		"-w 와 명령 없이 \"gossh -i <호스트>\" 로 쓰면 ssh <호스트> 처럼 그 서버에 대화형으로 접속합니다.",
+		"  이때 키는 자동 탐색만 쓰고, 키로 안 되면 -p 비밀번호, -p 도 없으면 비밀번호를 물어봅니다.",
+		"  -u 계정, -P 포트, host:포트 표기를 쓸 수 있고, 구형 서버(arcfour 등)에도 접속됩니다. exit 로 나옵니다.",
 	}},
 	{"P", "<포트>", "SSH 포트 (기본 22)", []string{
 		"호스트 파일에 host:포트 형태로 적은 호스트는 그 포트를 우선 사용합니다.",
@@ -1366,7 +1369,8 @@ func printUsage() {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s - 여러 서버에 동시에 SSH 명령을 실행합니다 (pdsh 방식 출력: 호스트명: 결과)\n\n", name)
 	fmt.Fprintf(&b, "사용법: %s -w <호스트파일> [옵션] \"명령어\"\n", name)
-	fmt.Fprintf(&b, "  예) %s -w hosts.txt \"cat /etc/os-release\"\n\n", name)
+	fmt.Fprintf(&b, "  예) %s -w hosts.txt \"cat /etc/os-release\"\n", name)
+	fmt.Fprintf(&b, "대화형 접속: %s -i <호스트>   (ssh <호스트> 와 같음)\n\n", name)
 
 	label := func(d optionDoc) string {
 		if d.arg == "" {
@@ -1442,6 +1446,13 @@ func main() {
 	colorOutEnabled = !*scriptMode && stdoutTTY
 
 	args := flag.Args()
+
+	// ★ [대화형 접속] -w 와 명령 없이 "-i <호스트>" 만 주면 ssh <호스트> 처럼 셸로 접속한다.
+	// -w 가 있으면 -i 는 지금처럼 키 파일 경로다(ip_change·ldap_setting 이 -w ... -i <키> 로 부름).
+	if *hostFile == "" && *keyPath != "" && len(args) == 0 {
+		os.Exit(runInteractive(*keyPath, *user, *port, *password, time.Duration(*timeoutSec)*time.Second))
+	}
+
 	doTmp := *tmpMode || *tlMode
 	doLimit := *limitMode || *tlMode
 	special := doTmp || doLimit

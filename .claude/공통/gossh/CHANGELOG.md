@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-11-04 — -i <호스트> 대화형 접속, gossh_os8 Go 1.26.5 재빌드
+
+- **신규(`-i <호스트>`)**: `-w`·명령 없이 쓰면 `ssh <호스트>` 처럼 셸에 접속. 키(자동 탐색) → `-p` → 비밀번호 질문(에코 끔) 순서, 터미널이면 pty·raw 모드·창 크기 전달, 파이프 입력이면 pty 없이 셸. 종료코드는 원격 셸 값(접속 실패 255). 구형 서버 호환 설정(`newSSHClientConfig`) 그대로 사용.
+- **호환**: `-w` 가 있으면 `-i` 는 기존처럼 키 파일 경로 — `ip_change`·`ldap_setting` 의 `-w ... -i <키>` 호출 영향 없음.
+- **영향 범위**: `interactive.go`(신규), `term_linux.go`(`enableRaw`/`watchResize`/`promptPassword`), `term_other.go`(대체 구현), `main.go`(분기·도움말), `gossh_os8`(Go 1.26.5), README 3.15/4/6장, ARCHITECTURE.md.
+- **검증**: 192.168.0.58 → .60 에서 pty 접속(`tty`=/dev/pts/0, `stty size` 24 80, exit 5 전달), 파이프 입력(exit 3 전달). arcfour·비밀번호 전용 테스트 서버에 비밀번호 질문·`-p`·틀린 비밀번호(255) 확인. 접속불가(255), 기존 `-w ... -i 키파일` 실행, 도움말, `go vet`/`go test`, windows·darwin 크로스 빌드 확인. 창 크기 변경(SIGWINCH)은 실제 터미널에서 확인 못 함.
+
 ## 2026-11-04 — gossh_os6 삭제, update.sh 는 os8 만 복사
 
 - **삭제**: `gossh_os6`(OS6 용 바이너리). OS6 빌드는 더 이상 하지 않음.
