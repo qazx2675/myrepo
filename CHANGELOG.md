@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-11-07 — gossh -h <옵션>: 옵션별 사용법·출력 예시
+
+- **신규(`gossh -h <옵션> [...]`)**: 옵션 설명 + 사용법(살펴보는 옵션만 강조색, 표준출력이 터미널일 때만) + 출력결과 예시. `-b`/`b`/`--b` 모두 인식, 여러 개면 순서대로. 모르는 옵션은 사용 가능한 목록을 보이고 종료코드 1. `gossh -h` 단독은 기존 전체 도움말 그대로(머리말에 안내 한 줄만 추가).
+- **예시 생성 방식**: 서버 접속 없이 가짜 결과(svr1~10, 응답 없는 svr11)를 실제 출력 함수(`printCommandResult`·`printPdshStyle`·`printBunched`·`printUnreachableGroup`·`printSummary`·`writeRPMReport`·`askSpecial`·`askRPMRef`·`confirmDanger`·`renderHangListLocked`)에 넣고 표준출력/표준에러를 파이프로 모아 보여줌. 소요시간·보고서 실행시각은 고정값. 질문 입력은 한 줄씩 에코하는 가짜 표준입력. `-rpm` 보고서는 임시 폴더에 만들고 내용 표시 후 삭제.
+- **리팩터(동작 동일)**: `main.go` 의 작업 요약 블록 → `printSummary`, 위험 명령 거부/확인 → `printDangerBlocked`/`confirmDanger`, autofs 안내 → `printAutofsLimitNotice`, 진행률 문구 → `progressLabel`, 재검증 안내 → `printRetryNotice`, OS 설치중 안내 → `printOSInstalling`, 접속 실패 문구 → `connectFailErr`, 결과 파일 접미어 → `suf*` 상수, 도움말 옵션 표기 → `optionLabel`. `tmplimit.go` 질문 → `askSpecial`, `rpmcmp.go` 질문 → `askRPMRef`, `interactive.go` 종료 문구 → `connClosedFmt`.
+- **영향 범위**: `helpexample.go`·`helpexample_test.go`(신규), `main.go`, `tmplimit.go`, `rpmcmp.go`, `interactive.go`, `gossh_os8`(Go 1.26.5), README 4.1·6장, ARCHITECTURE.md.
+- **검증(192.168.0.58)**: `gofmt`(변경 파일), `go vet`, `go test`, `GOOS=windows` 빌드. 17개 옵션 예시 전부 실행, `-h b`/`-h -b`/`-h --b` 동일, `-h -xyz` 종료코드 1. `-h` 단독 출력은 이전 바이너리와 안내 한 줄만 다름. 실제 실행(.60 + 응답 없는 .249, `-b`·기본)을 이전 바이너리와 터미널(`script`)에서 비교 — 소요시간 외 바이트 동일, `-h -b` 예시와 형식 일치. 예시 실행 후 현재 폴더에 파일 안 남음.
+
 ## 2026-11-04 — -i <호스트> 대화형 접속, gossh_os8 Go 1.26.5 재빌드
 
 - **신규(`-i <호스트>`)**: `-w`·명령 없이 쓰면 `ssh <호스트>` 처럼 셸에 접속. 키(자동 탐색) → `-p` → 비밀번호 질문(에코 끔) 순서, 터미널이면 pty·raw 모드·창 크기 전달, 파이프 입력이면 pty 없이 셸. 종료코드는 원격 셸 값(접속 실패 255). 구형 서버 호환 설정(`newSSHClientConfig`) 그대로 사용.

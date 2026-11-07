@@ -982,7 +982,7 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 			handleCanceled(host)
 			return
 		}
-		printPdshStyle(host, "", fmt.Errorf("SSH 접속 실패: %v", err))
+		printPdshStyle(host, "", connectFailErr(err))
 		mu.Lock()
 		if strings.Contains(strings.ToLower(err.Error()), "connection refused") {
 			*refusedHosts = append(*refusedHosts, host)
@@ -1003,7 +1003,7 @@ func runSSHCommand(host string, command string, user string, authMethods []ssh.A
 			return
 		}
 		if osInstall {
-			emit(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: OS 설치중 (~/.profile anaconda 감지)", host))+"\n")
+			printOSInstalling(host)
 			mu.Lock()
 			*osInstallHosts = append(*osInstallHosts, host)
 			mu.Unlock()
@@ -1364,20 +1364,24 @@ var optionDocs = []optionDoc{
 	}},
 }
 
+// optionLabel은 도움말에 쓰는 옵션 표기("-w <파일>", "-b")를 만든다(-h <옵션> 예시와 같이 씀).
+func optionLabel(d optionDoc) string {
+	if d.arg == "" {
+		return "-" + d.flag
+	}
+	return "-" + d.flag + " " + d.arg
+}
+
 func printUsage() {
 	name := filepath.Base(os.Args[0])
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s - 여러 서버에 동시에 SSH 명령을 실행합니다 (pdsh 방식 출력: 호스트명: 결과)\n\n", name)
 	fmt.Fprintf(&b, "사용법: %s -w <호스트파일> [옵션] \"명령어\"\n", name)
 	fmt.Fprintf(&b, "  예) %s -w hosts.txt \"cat /etc/os-release\"\n", name)
-	fmt.Fprintf(&b, "대화형 접속: %s -i <호스트>   (ssh <호스트> 와 같음)\n\n", name)
+	fmt.Fprintf(&b, "대화형 접속: %s -i <호스트>   (ssh <호스트> 와 같음)\n", name)
+	fmt.Fprintf(&b, "옵션별 사용법·출력 예시: %s -h <옵션> [<옵션> ...]   (예: %s -h -b)\n\n", name, name)
 
-	label := func(d optionDoc) string {
-		if d.arg == "" {
-			return "-" + d.flag
-		}
-		return "-" + d.flag + " " + d.arg
-	}
+	label := optionLabel
 	b.WriteString("[옵션 요약]\n")
 	width := 0
 	for _, d := range optionDocs {
@@ -1411,8 +1415,168 @@ func printUsage() {
 	fmt.Fprint(os.Stderr, b.String())
 }
 
+// ★ 결과 파일 이름 = <호스트파일> + 접미어. -h 예시의 "목록 저장됨" 안내도 같은 접미어를 쓴다.
+const (
+	sufResOff     = "_res_off"
+	sufResRefused = "_res_refsed"
+	sufOSInstall  = "_os_install"
+	sufNoSvrAuto  = "_nosvrauto"
+	sufResCancel  = "_res_cancel"
+	sufRPMReport  = "_rpm_report.txt"
+	sufRPMTab     = "_rpm_tab.txt"
+	sufRPMDiff    = "_rpm_diff"
+)
+
 func isAutofsUserPath(command string) bool {
 	return autofsUserPathRegex.MatchString(command)
+}
+
+// printAutofsLimitNotice는 /user/ 경로 감지로 병렬 수를 자동 제한할 때의 안내다(-h -c 예시와 같이 씀).
+func printAutofsLimitNotice(concurrency int) {
+	fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf("[안전장치] 명령어에 \"/user/\" 경로가 감지되어 병렬 실행 수를 %d대로 자동 제한합니다. (원래 지정값 무시: -c %d)", autofsSafeConcurrency, concurrency)))
+	fmt.Fprintln(os.Stderr, colorize(colorYellow, "           이 경로가 autofs 마운트가 아니거나 더 높은 병렬 수가 필요하면 -cf <숫자> 옵션으로 강제 지정하세요."))
+}
+
+// printDangerBlocked는 위험 명령을 -dnlgjawkrdjqghkrdls 없이 실행하려 할 때의 거부 안내다(호출한 쪽이 종료코드 1로 끝냄).
+func printDangerBlocked(command string) {
+	fmt.Fprintln(os.Stderr, colorize(colorRed, "================================================================"))
+	fmt.Fprintln(os.Stderr, colorize(colorRed, " [경고] 위험 작업(종료·재부팅·디스크 파괴·접속 끊김 등)이 감지되었습니다!"))
+	fmt.Fprintln(os.Stderr, colorize(colorRed, "================================================================"))
+	fmt.Fprintf(os.Stderr, " 감지된 명령어 : %s\n", command)
+	fmt.Fprintln(os.Stderr, " 실행을 원하신다면 명령어에 '-dnlgjawkrdjqghkrdls' 옵션을 추가하세요.")
+	fmt.Fprintln(os.Stderr, " 예시) ./gossh -dnlgjawkrdjqghkrdls -w kdh.txt reboot")
+}
+
+// confirmDanger는 -dnlgjawkrdjqghkrdls 의 대상 목록 표시 → 호스트 재입력 대조 → y/N 확인을 한다.
+// 진행하면 -1, 멈춰야 하면 종료코드(불일치·빈 입력 1, y 가 아니면 0)를 돌려준다(-h 예시와 같이 씀).
+func confirmDanger(command string, hosts []string) int {
+	fmt.Fprintln(os.Stderr, "\n================================================================")
+	fmt.Fprintf(os.Stderr, " [주의] 위험 작업 옵션이 활성화되었습니다. 실행 명령어: %s\n", command)
+	fmt.Fprintf(os.Stderr, " 대상 호스트 (총 %d대):\n", len(hosts))
+	fmt.Fprintln(os.Stderr, "================================================================")
+	for _, h := range hosts {
+		fmt.Fprintf(os.Stderr, " - %s\n", h)
+	}
+	fmt.Fprintln(os.Stderr, "================================================================")
+	fmt.Fprintln(os.Stderr, " 작업대상이 맞는지 다시한번더 확인하세요. 실수를 하게되면 회사 전체직원의 100만원이 증발됩니다.")
+	// ★ 호스트 재입력 대조: 목록을 눈으로만 확인하고 넘어가지 못하게, 대상 호스트를 다시 입력받아
+	// 순서·중복 무시하고 완전일치할 때만 y/N 단계로 간다. 다르거나 비어 있으면 차이를 보이고 종료코드 1.
+	fmt.Fprintln(os.Stderr, "확인을 위해 대상 호스트를 다시 입력하세요 (공백/쉼표/|/탭/줄바꿈 구분, 입력을 마치려면 빈 줄):")
+	inputHosts := parseConfirmHosts(readConfirmLines(stdinReader))
+	onlyInput, onlyTarget := diffHostSets(hosts, inputHosts)
+	if len(inputHosts) == 0 || len(onlyInput) > 0 || len(onlyTarget) > 0 {
+		fmt.Fprintln(os.Stderr, colorize(colorRed, "[확인 실패] 입력한 호스트가 대상과 일치하지 않습니다."))
+		if len(inputHosts) == 0 {
+			fmt.Fprintln(os.Stderr, " 입력이 비어 있습니다.")
+		}
+		if len(onlyInput) > 0 {
+			fmt.Fprintf(os.Stderr, " 입력에만 있음 (%d대): %s\n", len(onlyInput), strings.Join(compressHosts(onlyInput), " "))
+		}
+		if len(onlyTarget) > 0 {
+			fmt.Fprintf(os.Stderr, " 대상에만 있음 (%d대): %s\n", len(onlyTarget), strings.Join(compressHosts(onlyTarget), " "))
+		}
+		fmt.Fprintln(os.Stderr, "작업이 취소되었습니다.")
+		return 1
+	}
+	fmt.Fprintf(os.Stderr, "입력한 %d대가 대상과 일치합니다.\n", len(inputHosts))
+	fmt.Fprint(os.Stderr, "정말로 위 서버들에 명령을 실행하시겠습니까? (y/N): ")
+
+	response, _ := stdinReader.ReadString('\n')
+	response = strings.ToLower(strings.TrimSpace(response))
+
+	if response != "y" && response != "yes" {
+		fmt.Fprintln(os.Stderr, "작업이 취소되었습니다.")
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "\n승인되었습니다. 작업을 시작합니다...")
+	return -1
+}
+
+// ★ 작업 요약 블록(-script 가 아닐 때 표준에러로 출력)에 필요한 값. -h 예시도 같은 함수로 찍는다.
+type runSummary struct {
+	total, concurrency, success int
+	elapsed                     time.Duration
+	pmMode                      bool
+	osInstallHosts              []string
+	noSvrAutoHosts              []string
+	failedHosts, refusedHosts   []string
+
+	// 목록 저장 안내에 쓰는 결과 파일 이름
+	osInstallFile, noSvrAutoFile, offFile, refusedFile, cancelFile string
+}
+
+func printSummary(s runSummary) {
+	fmt.Fprintln(os.Stderr, colorize(colorCyanB, "\n================= 작업 요약 ================="))
+	fmt.Fprintf(os.Stderr, "총 대상 서버 : %d 대 (소요시간: %v)\n", s.total, s.elapsed)
+	fmt.Fprintf(os.Stderr, " 동시 접속 수 : %d\n", s.concurrency)
+	fmt.Fprintln(os.Stderr, colorize(colorGreen, fmt.Sprintf(" 정상 접속 가능 : %d 대", s.success)))
+
+	// OS 설치 중 출력 (-pm 옵션을 준 경우에만 기록되므로 바로 출력)
+	if len(s.osInstallHosts) > 0 {
+		fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" OS 설치중 : %d 대", len(s.osInstallHosts))))
+		for _, h := range s.osInstallHosts {
+			fmt.Fprintf(os.Stderr, "   - %s\n", h)
+		}
+		fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", s.osInstallFile)
+	}
+
+	// ★ pm 옵션을 사용했고, 미접근 서버가 존재하는 경우 출력
+	if s.pmMode && len(s.noSvrAutoHosts) > 0 {
+		fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" svrauto미접근 : 접속가능 %d대 중 %d대", s.success, len(s.noSvrAutoHosts))))
+		fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", s.noSvrAutoFile)
+	}
+
+	failLine := fmt.Sprintf(" 접속 불가(Timeout 등) : %d 대", len(s.failedHosts))
+	if len(s.failedHosts) > 0 {
+		fmt.Fprintln(os.Stderr, colorize(colorRed, failLine))
+		fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", s.offFile)
+	} else {
+		fmt.Fprintln(os.Stderr, failLine)
+	}
+
+	refusedLine := fmt.Sprintf(" Refused(포트 닫힘) : %d 대", len(s.refusedHosts))
+	if len(s.refusedHosts) > 0 {
+		fmt.Fprintln(os.Stderr, colorize(colorRed, refusedLine))
+		fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", s.refusedFile)
+	} else {
+		fmt.Fprintln(os.Stderr, refusedLine)
+	}
+	if len(canceledHosts) > 0 {
+		fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" 사용자 취소(Ctrl+C) : %d 대", len(canceledHosts))))
+		fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", s.cancelFile)
+	}
+	if atomic.LoadInt32(&aborted) == 1 {
+		fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" 전체 중단됨 : 미실행 %d 대", atomic.LoadInt64(&notRunCount))))
+	}
+	fmt.Fprintln(os.Stderr, colorize(colorCyanB, "============================================="))
+}
+
+// progressLabel은 진행률 줄 내용이다(-m 이면 행리스트 안내를 붙임). -h 예시와 같이 쓴다.
+func progressLabel(c, total int64) string {
+	pct := int64(0)
+	if total > 0 {
+		pct = c * 100 / total
+	}
+	text := fmt.Sprintf("진행: %d/%d (%d%%)", c, total, pct)
+	if monitorOn {
+		text += fmt.Sprintf("  [Enter: 행리스트보기 - %d초 이상 실행 중 %d대]", int(hangThreshold.Seconds()), countHangRunning())
+	}
+	return text
+}
+
+// printRetryNotice는 재검증 시작 안내다(-script 가 아닐 때만, 호출한 쪽이 판단).
+func printRetryNotice(n int) {
+	fmt.Fprintf(os.Stderr, "재검증 중(%d대, 낮은 동시성으로 재시도)...\n", n)
+}
+
+// printOSInstalling은 -pm 에서 OS 설치중으로 판단된 호스트 안내다.
+func printOSInstalling(host string) {
+	emit(os.Stderr, colorize(colorYellow, fmt.Sprintf("%s: OS 설치중 (~/.profile anaconda 감지)", host))+"\n")
+}
+
+// connectFailErr는 SSH 접속 실패 메시지 형식이다(-h 예시의 접속불가 호스트도 같은 형식).
+func connectFailErr(err error) error {
+	return fmt.Errorf("SSH 접속 실패: %v", err)
 }
 
 func main() {
@@ -1435,6 +1599,12 @@ func main() {
 	limitMode := flag.Bool("limit", false, "비교서버의 /etc/security/limits.conf 를 대상 서버로 복사(.bak 백업, 동일 확인)")
 	tlMode := flag.Bool("tl", false, "-tmp 와 -limit 을 질문 한 번에 받아 함께 진행")
 	rpmMode := flag.Bool("rpm", false, "비교서버와 설치된 rpm 패키지(이름.아키텍처, 버전 무시) 비교 후 보고서 저장")
+
+	// ★ "gossh -h <옵션> ..." 은 그 옵션의 설명·사용법·출력 예시를 보여준다(helpexample.go).
+	// "-h" 단독은 지금처럼 flag 패키지가 전체 도움말(printUsage)을 출력한다.
+	if len(os.Args) > 2 && isHelpArg(os.Args[1]) {
+		os.Exit(runHelpExamples(os.Args[2:]))
+	}
 
 	// ★ pdsh 스타일 "-w^file"/"-wfile" 붙여쓰기 지원을 위해 flag.Parse() 대신 전처리한 인자로 파싱
 	flag.Usage = printUsage
@@ -1481,14 +1651,14 @@ func main() {
 	// writeHostsToFile은 대상이 없으면 파일을 만들지 않으므로 옛 파일이 그대로 남는다).
 	// 실행 시작 시점에 이번 실행이 만들 수 있는 5개 결과 파일명과 정확히 일치하는 파일만
 	// (와일드카드 없이 완전일치로) 미리 지운다.
-	offFilename := cleanHostFile + "_res_off"
-	refusedFilename := cleanHostFile + "_res_refsed"
-	osInstallFilename := cleanHostFile + "_os_install"
-	noSvrAutoFilename := cleanHostFile + "_nosvrauto"
-	cancelFilename := cleanHostFile + "_res_cancel"
-	rpmReportFilename := cleanHostFile + "_rpm_report.txt"
-	rpmTabFilename := cleanHostFile + "_rpm_tab.txt"
-	rpmDiffFilename := cleanHostFile + "_rpm_diff"
+	offFilename := cleanHostFile + sufResOff
+	refusedFilename := cleanHostFile + sufResRefused
+	osInstallFilename := cleanHostFile + sufOSInstall
+	noSvrAutoFilename := cleanHostFile + sufNoSvrAuto
+	cancelFilename := cleanHostFile + sufResCancel
+	rpmReportFilename := cleanHostFile + sufRPMReport
+	rpmTabFilename := cleanHostFile + sufRPMTab
+	rpmDiffFilename := cleanHostFile + sufRPMDiff
 	for _, f := range []string{offFilename, refusedFilename, osInstallFilename, noSvrAutoFilename, cancelFilename} {
 		os.Remove(f)
 	}
@@ -1515,8 +1685,7 @@ func main() {
 		// ★ 실행 파일 이름이 pdsh면 이 안내 메시지를 찍지 않는다(위험 작업 경고 메시지만 예외).
 		// pdsh 대체용으로 쓸 때는 pdsh에 없는 gossh 전용 메시지가 섞이면 안 되기 때문.
 		if !isPdshName {
-			fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf("[안전장치] 명령어에 \"/user/\" 경로가 감지되어 병렬 실행 수를 %d대로 자동 제한합니다. (원래 지정값 무시: -c %d)", autofsSafeConcurrency, *concurrency)))
-			fmt.Fprintln(os.Stderr, colorize(colorYellow, "           이 경로가 autofs 마운트가 아니거나 더 높은 병렬 수가 필요하면 -cf <숫자> 옵션으로 강제 지정하세요."))
+			printAutofsLimitNotice(*concurrency)
 		}
 	}
 
@@ -1524,12 +1693,7 @@ func main() {
 	isDangerous := isDangerousCommand(command)
 
 	if isDangerous && !*dangerConfirm {
-		fmt.Fprintln(os.Stderr, colorize(colorRed, "================================================================"))
-		fmt.Fprintln(os.Stderr, colorize(colorRed, " [경고] 위험 작업(종료·재부팅·디스크 파괴·접속 끊김 등)이 감지되었습니다!"))
-		fmt.Fprintln(os.Stderr, colorize(colorRed, "================================================================"))
-		fmt.Fprintf(os.Stderr, " 감지된 명령어 : %s\n", command)
-		fmt.Fprintln(os.Stderr, " 실행을 원하신다면 명령어에 '-dnlgjawkrdjqghkrdls' 옵션을 추가하세요.")
-		fmt.Fprintln(os.Stderr, " 예시) ./gossh -dnlgjawkrdjqghkrdls -w kdh.txt reboot")
+		printDangerBlocked(command)
 		os.Exit(1)
 	}
 
@@ -1580,45 +1744,9 @@ func main() {
 	hosts = uniqueHosts
 
 	if *dangerConfirm {
-		fmt.Fprintln(os.Stderr, "\n================================================================")
-		fmt.Fprintf(os.Stderr, " [주의] 위험 작업 옵션이 활성화되었습니다. 실행 명령어: %s\n", command)
-		fmt.Fprintf(os.Stderr, " 대상 호스트 (총 %d대):\n", len(hosts))
-		fmt.Fprintln(os.Stderr, "================================================================")
-		for _, h := range hosts {
-			fmt.Fprintf(os.Stderr, " - %s\n", h)
+		if code := confirmDanger(command, hosts); code >= 0 {
+			os.Exit(code)
 		}
-		fmt.Fprintln(os.Stderr, "================================================================")
-		fmt.Fprintln(os.Stderr, " 작업대상이 맞는지 다시한번더 확인하세요. 실수를 하게되면 회사 전체직원의 100만원이 증발됩니다.")
-		// ★ 호스트 재입력 대조: 목록을 눈으로만 확인하고 넘어가지 못하게, 대상 호스트를 다시 입력받아
-		// 순서·중복 무시하고 완전일치할 때만 y/N 단계로 간다. 다르거나 비어 있으면 차이를 보이고 종료코드 1.
-		fmt.Fprintln(os.Stderr, "확인을 위해 대상 호스트를 다시 입력하세요 (공백/쉼표/|/탭/줄바꿈 구분, 입력을 마치려면 빈 줄):")
-		inputHosts := parseConfirmHosts(readConfirmLines(stdinReader))
-		onlyInput, onlyTarget := diffHostSets(hosts, inputHosts)
-		if len(inputHosts) == 0 || len(onlyInput) > 0 || len(onlyTarget) > 0 {
-			fmt.Fprintln(os.Stderr, colorize(colorRed, "[확인 실패] 입력한 호스트가 대상과 일치하지 않습니다."))
-			if len(inputHosts) == 0 {
-				fmt.Fprintln(os.Stderr, " 입력이 비어 있습니다.")
-			}
-			if len(onlyInput) > 0 {
-				fmt.Fprintf(os.Stderr, " 입력에만 있음 (%d대): %s\n", len(onlyInput), strings.Join(compressHosts(onlyInput), " "))
-			}
-			if len(onlyTarget) > 0 {
-				fmt.Fprintf(os.Stderr, " 대상에만 있음 (%d대): %s\n", len(onlyTarget), strings.Join(compressHosts(onlyTarget), " "))
-			}
-			fmt.Fprintln(os.Stderr, "작업이 취소되었습니다.")
-			os.Exit(1)
-		}
-		fmt.Fprintf(os.Stderr, "입력한 %d대가 대상과 일치합니다.\n", len(inputHosts))
-		fmt.Fprint(os.Stderr, "정말로 위 서버들에 명령을 실행하시겠습니까? (y/N): ")
-
-		response, _ := stdinReader.ReadString('\n')
-		response = strings.ToLower(strings.TrimSpace(response))
-
-		if response != "y" && response != "yes" {
-			fmt.Fprintln(os.Stderr, "작업이 취소되었습니다.")
-			os.Exit(0)
-		}
-		fmt.Fprintln(os.Stderr, "\n승인되었습니다. 작업을 시작합니다...")
 	}
 
 	// ★ glibc 리졸버는 대량 동시 조회 시 내부 스레드풀 제약으로 간헐적 실패/지연이 날 수 있어,
@@ -1684,15 +1812,7 @@ func main() {
 		monitorStart = startTime
 		startTerminalGuard()
 		printProgress := func() {
-			c := atomic.LoadInt64(&completed)
-			pct := int64(0)
-			if total > 0 {
-				pct = c * 100 / total
-			}
-			text := fmt.Sprintf("진행: %d/%d (%d%%)", c, total, pct)
-			if monitorOn {
-				text += fmt.Sprintf("  [Enter: 행리스트보기 - %d초 이상 실행 중 %d대]", int(hangThreshold.Seconds()), countHangRunning())
-			}
+			text := progressLabel(atomic.LoadInt64(&completed), total)
 			outMu.Lock()
 			progressText = text
 			if listActive {
@@ -1758,7 +1878,7 @@ func main() {
 		retryHosts := append(append([]string{}, failedHosts...), refusedHosts...)
 		if len(retryHosts) > 0 {
 			if !*scriptMode {
-				fmt.Fprintf(os.Stderr, "재검증 중(%d대, 낮은 동시성으로 재시도)...\n", len(retryHosts))
+				printRetryNotice(len(retryHosts))
 			}
 			failedHosts = nil
 			refusedHosts = nil
@@ -1805,49 +1925,14 @@ func main() {
 	// -script 옵션이 없을 때만 요약 출력. 표준에러로 보낸다 — 이 블록은 데이터가 아니라
 	// 상태 요약이라, "gossh -w a cmd > res" 같은 단순 리다이렉션에서 res에 섞이면 안 된다.
 	if !*scriptMode {
-		fmt.Fprintln(os.Stderr, colorize(colorCyanB, "\n================= 작업 요약 ================="))
-		fmt.Fprintf(os.Stderr, "총 대상 서버 : %d 대 (소요시간: %v)\n", len(hosts), time.Since(startTime))
-		fmt.Fprintf(os.Stderr, " 동시 접속 수 : %d\n", effectiveConcurrency)
-		fmt.Fprintln(os.Stderr, colorize(colorGreen, fmt.Sprintf(" 정상 접속 가능 : %d 대", successCount)))
-
-		// OS 설치 중 출력 (-pm 옵션을 준 경우에만 기록되므로 바로 출력)
-		if len(osInstallHosts) > 0 {
-			fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" OS 설치중 : %d 대", len(osInstallHosts))))
-			for _, h := range osInstallHosts {
-				fmt.Fprintf(os.Stderr, "   - %s\n", h)
-			}
-			fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", osInstallFilename)
-		}
-
-		// ★ pm 옵션을 사용했고, 미접근 서버가 존재하는 경우 출력
-		if *pmMode && len(noSvrAutoHosts) > 0 {
-			fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" svrauto미접근 : 접속가능 %d대 중 %d대", successCount, len(noSvrAutoHosts))))
-			fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", noSvrAutoFilename)
-		}
-
-		failLine := fmt.Sprintf(" 접속 불가(Timeout 등) : %d 대", len(failedHosts))
-		if len(failedHosts) > 0 {
-			fmt.Fprintln(os.Stderr, colorize(colorRed, failLine))
-			fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", offFilename)
-		} else {
-			fmt.Fprintln(os.Stderr, failLine)
-		}
-
-		refusedLine := fmt.Sprintf(" Refused(포트 닫힘) : %d 대", len(refusedHosts))
-		if len(refusedHosts) > 0 {
-			fmt.Fprintln(os.Stderr, colorize(colorRed, refusedLine))
-			fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", refusedFilename)
-		} else {
-			fmt.Fprintln(os.Stderr, refusedLine)
-		}
-		if len(canceledHosts) > 0 {
-			fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" 사용자 취소(Ctrl+C) : %d 대", len(canceledHosts))))
-			fmt.Fprintf(os.Stderr, "  -> %s 에 목록 저장됨\n", cancelFilename)
-		}
-		if atomic.LoadInt32(&aborted) == 1 {
-			fmt.Fprintln(os.Stderr, colorize(colorYellow, fmt.Sprintf(" 전체 중단됨 : 미실행 %d 대", atomic.LoadInt64(&notRunCount))))
-		}
-		fmt.Fprintln(os.Stderr, colorize(colorCyanB, "============================================="))
+		printSummary(runSummary{
+			total: len(hosts), concurrency: effectiveConcurrency, success: successCount,
+			elapsed: time.Since(startTime), pmMode: *pmMode,
+			osInstallHosts: osInstallHosts, noSvrAutoHosts: noSvrAutoHosts,
+			failedHosts: failedHosts, refusedHosts: refusedHosts,
+			osInstallFile: osInstallFilename, noSvrAutoFile: noSvrAutoFilename,
+			offFile: offFilename, refusedFile: refusedFilename, cancelFile: cancelFilename,
+		})
 	}
 }
 

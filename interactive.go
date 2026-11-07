@@ -12,6 +12,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// 대화형 접속이 끝났을 때의 안내(ssh 와 같은 문구). -h -i 예시도 이 문구를 쓴다.
+const connClosedFmt = "Connection to %s closed.\n"
+
 // runInteractive는 "gossh -i <호스트>" 처럼 -w·명령 없이 호스트 하나만 주면 "ssh <호스트>" 처럼
 // 대화형 셸로 접속한다. 키 인증을 먼저 쓰고(자동 탐색), 키로 안 되면 -p 비밀번호, -p 도 없으면
 // ssh 처럼 비밀번호를 물어본다. 접속 설정은 newSSHClientConfig 를 같이 써서 구형 서버(arcfour 등)
@@ -130,13 +133,13 @@ func runInteractive(host, user, port, password string, timeout time.Duration) in
 	var missing *ssh.ExitMissingError
 	switch {
 	case err == nil:
-		fmt.Fprintf(os.Stderr, "Connection to %s closed.\n", host)
+		fmt.Fprintf(os.Stderr, connClosedFmt, host)
 		return 0
 	case errors.As(err, &exitErr):
-		fmt.Fprintf(os.Stderr, "Connection to %s closed.\n", host)
+		fmt.Fprintf(os.Stderr, connClosedFmt, host)
 		return exitErr.ExitStatus()
 	case errors.As(err, &missing):
-		fmt.Fprintf(os.Stderr, "Connection to %s closed.\n", host)
+		fmt.Fprintf(os.Stderr, connClosedFmt, host)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "%s: 연결이 끊어졌습니다: %v\n", host, err)

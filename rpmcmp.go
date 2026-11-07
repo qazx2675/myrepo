@@ -46,11 +46,7 @@ func diffPkgs(ref, cur map[string]bool) (missing, extra []string) {
 
 // planRPM은 비교서버를 물어보고 그 서버의 패키지 목록을 읽어, 대상 서버에서 실행할 명령과 기준 목록을 돌려준다.
 func planRPM(user string, auth []ssh.AuthMethod, port string, timeout time.Duration) (cmd, refHost string, ref map[string]bool) {
-	refHost = promptLine("비교서버 입력 (rpm 패키지 목록 기준) : ")
-	if refHost == "" {
-		fmt.Fprintln(os.Stderr, "비교서버가 입력되지 않았습니다.")
-		os.Exit(1)
-	}
+	refHost = askRPMRef()
 	out, err := fetchRemoteCmd(refHost, rpmListCmd, user, auth, port, timeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "비교서버(%s)에서 rpm 목록을 읽을 수 없습니다: %v\n", refHost, err)
@@ -62,6 +58,16 @@ func planRPM(user string, auth []ssh.AuthMethod, port string, timeout time.Durat
 		os.Exit(1)
 	}
 	return rpmListCmd, refHost, ref
+}
+
+// askRPMRef는 -rpm 비교서버를 물어본다(빈 입력이면 종료). -h 예시도 같은 함수로 프롬프트를 보여준다.
+func askRPMRef() string {
+	refHost := promptLine("비교서버 입력 (rpm 패키지 목록 기준) : ")
+	if refHost == "" {
+		fmt.Fprintln(os.Stderr, "비교서버가 입력되지 않았습니다.")
+		os.Exit(1)
+	}
+	return refHost
 }
 
 type rpmGroup struct {
