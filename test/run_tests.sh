@@ -170,6 +170,12 @@ check "H/T 줄 없음 -> -" - "$(fld "$OUT" d_none 6)"
 check "벤더 없음 -> CPU X" X "$(fld "$OUT" d_none 4)"
 check "OS 값 (기본)" 4.18.0-test "$(fld "$OUT" a_intel 7)"
 check "OS 값 (지정)" 5.14.0-x "$(fld "$OUT" b_intelng 7)"
+# KERNEL_NAME: 같은 커널은 표시 이름, 없는 커널은 그대로
+cp "$T/v2a.conf" "$T/v2k.conf"
+printf 'KERNEL_NAME=4.18.0-test=RHEL8.10 OPC/Test\n' >> "$T/v2k.conf"
+OUTK=$(cd "$T/work2" && FAKE_CC_LOG=$T/cc_k.log "$BIN" -c "$T/v2k.conf" "$T/work2/hosts2" 2> /dev/null)
+check "KERNEL_NAME 표시 이름" "RHEL8.10 OPC/Test" "$(fld "$OUTK" a_intel 7)"
+check "KERNEL_NAME 에 없는 커널은 그대로" 5.14.0-x "$(fld "$OUTK" b_intelng 7)"
 check "설정체크 pass -> O" O "$(fld "$OUT" a_intel 3)"
 check "설정체크 fail -> X" X "$(fld "$OUT" b_intelng 3)"
 check "설정체크 출력 없음 -> 출력없음" 출력없음 "$(fld "$OUT" c_amd 3)"
