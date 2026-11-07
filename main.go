@@ -134,6 +134,7 @@ type config struct {
 	CPUAMDOK       string
 	CPUIntelLine   string // 비어 있지 않으면 이 문자열이 든 줄만 보고, 그 줄이 모두 OK 문구를 포함해야 O
 	CPUAMDLine     string
+	KernelNames    map[string]string // KERNEL_NAME: uname -r 출력 → OS 열 표시 이름(없으면 커널 그대로)
 
 	// -run 용(워커가 쓴다)
 	StressTest     string        // stress-test 바이너리 경로
@@ -271,6 +272,21 @@ func parseConf(text string) config {
 			case "AUTO_CPU_MAX":
 				c.AutoCPUMax = d
 			}
+		case "KERNEL_NAME":
+			// KERNEL_NAME=<uname -r 그대로>=<표시 이름> (여러 줄). 커널 버전에는 '=' 가 없으므로 첫 '=' 로 나눈다.
+			j := strings.Index(val, "=")
+			k, name := "", ""
+			if j > 0 {
+				k, name = strings.TrimSpace(val[:j]), strings.TrimSpace(val[j+1:])
+			}
+			if k == "" || name == "" {
+				c.Warnings = append(c.Warnings, fmt.Sprintf("설정 KERNEL_NAME 값 %q 을(를) 읽을 수 없어 무시합니다(형식: KERNEL_NAME=<uname -r 출력>=<표시 이름>)", val))
+				break
+			}
+			if c.KernelNames == nil {
+				c.KernelNames = map[string]string{}
+			}
+			c.KernelNames[k] = name
 		case "DISK_PATTERN":
 			if val != "" {
 				c.DiskPatterns = append(c.DiskPatterns, val)
@@ -479,6 +495,17 @@ func (h *hostInfo) osResult() string {
 		return "-"
 	}
 	return h.kernel
+}
+
+// nameKernels 는 KERNEL_NAME 설정에 있는 커널을 표시 이름으로 바꾼다(정확히 같을 때만, 없으면 그대로).
+func nameKernels(info map[string]*hostInfo, names map[string]string) {
+	for _, h := range info {
+		if h != nil {
+			if n, ok := names[h.kernel]; ok {
+				h.kernel = n
+			}
+		}
+	}
 }
 
 // ★ 열 구분자는 '|'. 터미널에서 복사하면 탭이 공백으로 바뀌는 경우가 있어, 엑셀에서는
@@ -1147,6 +1174,7 @@ func judge(conf config, gossh, hostFile string, logw io.Writer) (*judgeResult, e
 	}
 
 	info := parseInfoOutput(infoOut)
+	nameKernels(info, conf.KernelNames)
 	for i, h := range hosts {
 		c := "-"
 		if statuses[i] == stDone && check[h] != "" {

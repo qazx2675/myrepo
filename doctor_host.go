@@ -130,6 +130,7 @@ func docHost(r *docReport, a doctorArgs, d doctorDeps, env *docEnvInfo) {
 		r.warn("gossh 가 접속은 했으나 출력이 비었습니다. 위 원본 출력과 `<호스트파일>_new_setup.log` 를 보고, 대상 장비에서 `grep -m1 vendor_id /proc/cpuinfo` 가 도는지 확인하세요", "1차 출력에 이 호스트의 줄이 없습니다")
 	}
 	info := parseInfoOutput(out1)
+	nameKernels(info, conf.KernelNames)
 	h := info[a.host]
 	if h == nil && len(info) == 1 {
 		for _, v := range info {

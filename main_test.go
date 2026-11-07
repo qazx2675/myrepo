@@ -176,6 +176,22 @@ func TestResolveGosshPath(t *testing.T) {
 	}
 }
 
+func TestKernelName(t *testing.T) {
+	c := parseConf("KERNEL_NAME=4.18.0-553.el8_10.x86_64=RHEL8.10 OPC/Test\nKERNEL_NAME = 5.14.0-427.el9.x86_64 = RHEL9.4 계산\nKERNEL_NAME=bad\nKERNEL_NAME==x\n")
+	want := map[string]string{"4.18.0-553.el8_10.x86_64": "RHEL8.10 OPC/Test", "5.14.0-427.el9.x86_64": "RHEL9.4 계산"}
+	if !reflect.DeepEqual(c.KernelNames, want) {
+		t.Errorf("KernelNames=%v", c.KernelNames)
+	}
+	if len(c.Warnings) != 2 {
+		t.Errorf("warnings=%v", c.Warnings)
+	}
+	info := map[string]*hostInfo{"a": {kernel: "4.18.0-553.el8_10.x86_64"}, "b": {kernel: "4.18.0-999.el8.x86_64"}, "c": nil}
+	nameKernels(info, c.KernelNames)
+	if info["a"].osResult() != "RHEL8.10 OPC/Test" || info["b"].osResult() != "4.18.0-999.el8.x86_64" {
+		t.Errorf("a=%s b=%s", info["a"].osResult(), info["b"].osResult())
+	}
+}
+
 func TestParseConfV2(t *testing.T) {
 	d := parseConf("")
 	if d.CPUIntelLog != "/var/cpudiag/result.log" || d.CPUIntelOK != "Completed successfully. No issues detected." ||
