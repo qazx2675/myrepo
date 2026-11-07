@@ -192,6 +192,7 @@ node05|설치정지|-|-|-|-|-|
 | `GOSSH=` | gossh 실행 파일 경로(따옴표·`~/`·폴더만 적어도 됨 — 폴더면 그 안의 `gossh`). **비우면 PATH 에서 찾음**. 경로에 파일이 없으면 그 경로를 알려 주고 종료코드 2. 어디에서도 못 찾으면 stderr 오류 후 종료코드 2 |
 | `DISK_PATTERN=` | `디스크미인식` 판정 문구(고정 문자열, 여러 줄 가능). 하나도 없으면 기본 문구 `Disk "" given in clearpart command does not exist` 1개 사용 |
 | `ERROR_PATTERN=` | `설치정지` 판정 문구(고정 문자열, 여러 줄 가능). **처음엔 비어 있고** 현장에서 실제 오류 문구를 확인해 채웁니다. 비어 있으면 `설치정지` 는 판정되지 않습니다 |
+| `KERNEL_NAME=` | OS 열 표시 이름. 형식 `KERNEL_NAME=<uname -r 출력 그대로>=<표시 이름>`, 여러 줄 가능(예: `KERNEL_NAME=4.18.0-553.el8_10.x86_64=RHEL8.10 OPC/Test`). 커널이 정확히 같으면 OS 열에 표시 이름만 나오고, 설정에 없는 커널은 `uname -r` 값 그대로. 형식이 틀린 줄은 경고 후 무시 |
 | `OS_CHECK_SH=` | (v2) 관리서버의 `config_check.sh` 경로. **기본 빈 값 — 비우면 설정체크 열은 `-`**. `-auto-check` 를 지원하는 버전이어야 합니다 |
 | `OS_CHECK_EXCLUDE=` | (v2) `\|` 로 이은 제외 문자열(예: `asdf\|qwer`). **기본 빈 값**. 하나라도 hostname 에 포함되면 FAIL 이어도 설정체크 `O` |
 | `CPU_INTEL_LOG=` | (v2) Intel CPU 진단 로그 경로. 기본 `/var/cpudiag/result.log`. 파일 이름에 `*`/`?` 를 쓰면 그 폴더에서 이름이 맞는 **가장 최근 파일**을 씁니다(폴더 부분에는 와일드카드·공백 불가) |

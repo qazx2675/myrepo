@@ -15,6 +15,10 @@ DISK_PATTERN=Disk "" given in clearpart command does not exist
 
 # ---- v2: 설정체크 / CPU / stress-ng / H/T / OS 열 ----
 
+# OS 열 표시 이름(여러 줄 가능): KERNEL_NAME=<uname -r 출력 그대로>=<표시 이름>
+# 커널이 정확히 같을 때만 바꾸고, 없는 커널은 uname -r 그대로 나온다.
+#KERNEL_NAME=4.18.0-553.el8_10.x86_64=RHEL8.10 OPC/Test
+
 # config_check.sh 경로 (관리서버에 있는 파일). 비우면 설정체크 열은 '-'.
 # -auto-check 를 지원하는 버전이어야 한다(없으면 실행하지 않고 '-' + 경고).
 # ※ -run 에서는 이 값이 비어 있을 때의 '-' 만 통과로 본다. 값이 있는데 '-'(실행 실패)이면 통과가 아니다.
