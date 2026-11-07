@@ -1,0 +1,29 @@
+load_check: pid=1 표본 569초(요청 600초)
+CPU(1코어 기준 %): 평균 1.95  최고 11.6  p50 1.0
+CPU idle(회차 사이, 꼬리 3초 제외) 표본 189초: 평균 0.20  최고 1.9   [참고] busy 아닌 모든 초 255초 평균 0.23
+RSS 최대 30.5 MB (31264 kB)
+fd 최대 106
+threads: 처음 8, 마지막 9, 최소 8, 최대 9, 처음 120초 최대 9, 마지막 120초 최대 9
+동시 자식(gossh) 최대 1, 본 nice 값: 10 
+ICMP echo 송신 속도(InEchos 증가분/초) 최고 527  (OutEchos 최고 531), 5초 평균 최고 506, ping_pps 상한 500
+TCP: 연결 시도 속도 최고 847/초, 22번 SYN-SENT+ESTAB 동시 최대 100 (tcp_parallel 상한 100)
+--- 판정 (계획서 7.5) ---
+PASS CPU 10분 평균 < 5%   : 1.95
+PASS CPU 최고 < 30%       : 11.6
+PASS CPU idle 평균 < 1%   : 0.20 (idle 189초)
+PASS RSS < 50MB           : 30.5 MB
+PASS fd < 200             : 106
+PASS threads 늘지 않음    : 처음 구간 최대 9, 마지막 구간 최대 9
+PASS ICMP 송신 <= ping_pps : 527/초 (상한 500, 1초 표본 경계 오차 10% 허용)
+PASS TCP 동시 <= tcp_parallel: 100 (상한 100)
+PASS gossh 동시 <= 1       : 1
+PASS nice = 10            : 10 
+총 0 항목 FAIL
+
+--- 화면·키 반응 (pty_drive.py, 120x40 xterm, 30초마다 키 사이클: 스크롤/검색/필터/c/r/d/l) ---
+--- 요약 ---
+실행 600초, 종료코드 0, 화면 그리기(\x1b[H) 859번, 마지막 본 회차 10
+키 667개, 화면이 반응한 것 667개, 반응 시간 최대 27 ms, 평균 2 ms, 100ms 초과 0개
+터미널 복구 시퀀스(\x1b[?1049l) 출력: 예
+수집 회차: 마지막 본 회차 10 (interval_sec=60, 스텁 gossh 호출 22 회)
+세부: load_report.txt.csv(1초 표본), load_drive.log(키별 반응 시간), func_report.txt(기능 점검 26항목)

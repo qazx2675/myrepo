@@ -1,0 +1,5 @@
+# 상태 파일 (호스트파일마다 하나씩 생김)
+*.pm_state.json
+# 현장 설정 (샘플은 pm_monitor.conf.sample)
+/pm_monitor.conf
+# install_mn_os8 바이너리는 커밋한다(회사에 Go 없음) - 제외하지 말 것

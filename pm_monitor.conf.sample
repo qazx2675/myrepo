@@ -1,0 +1,41 @@
+# pm_monitor.conf - install_mn 설정 (key=value, # 은 주석)
+# 기본으로 실행한 디렉터리의 pm_monitor.conf 를 읽는다. install_mn -c <경로> <호스트파일> 로 다른 파일 지정.
+# 파일이 없으면 아래 기본값을 쓰고 화면에 경고를 띄운다.
+
+# gossh 경로 (기본: PATH 에서 찾음)
+#gossh=gossh
+
+# 갱신 주기(초)
+#interval_sec=60
+
+# 지연 기준(분): 설치중으로 처음 본 뒤 이 시간이 지나도 완료가 아니면 지연
+#delay_min=60
+
+# 디스크미인식 판정 문구 (/tmp/anaconda.log 에서 찾음). 여러 줄 가능(첫 줄이 기본값을 대체, 이후 줄은 추가)
+#disk_pattern=Disk "" given in clearpart command does not exist
+
+# 벤더 규칙: vendor=<hostname 정규식>=<표시 이름>, 위에서부터 처음 맞는 줄을 쓴다.
+# vendor 줄을 하나라도 쓰면 아래 기본 규칙 전체를 대체한다. 표시 이름은 아무 문자열이나 된다.
+#vendor=^(c|h|sh|s2h|s3h|s4h)=D
+#vendor=^s=sds
+#vendor=^p=L
+#vendor=^l=j
+#vendor=^d=t
+#vendor=^m=W
+# 어느 규칙에도 안 맞을 때의 이름
+#vendor_other=기타
+
+# DHCP 서버 (d 키). 비어 있으면 "dhcp_server 미설정" 표시
+#dhcp_server=
+
+# ldap_check.sh 경로 (l 키). 비어 있으면 "미설정" 표시
+#ldap_check_sh=
+
+# raw ICMP 응답 대기 시간(ms)
+#ping_timeout_ms=1500
+
+# 초당 보내는 ICMP 패킷 수 상한 (관리서버 부하 제한)
+#ping_pps=500
+
+# 22번 포트 동시 연결 수 상한
+#tcp_parallel=100

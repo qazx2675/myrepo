@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 760" font-family="'Malgun Gothic','Noto Sans KR',sans-serif">
+  <style>
+    .bg{fill:#ffffff}.t{fill:#0f172a}.s{fill:#475569}.box{fill:#f1f5f9;stroke:#64748b}
+    .col{fill:#e0f2fe;stroke:#0284c7}.st{fill:#fef3c7;stroke:#d97706}.tui{fill:#ede9fe;stroke:#7c3aed}
+    .ln{stroke:#64748b;fill:none;stroke-width:1.5}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0f172a}.t{fill:#e2e8f0}.s{fill:#94a3b8}.box{fill:#1e293b;stroke:#94a3b8}
+      .col{fill:#0c4a6e;stroke:#38bdf8}.st{fill:#451a03;stroke:#fbbf24}.tui{fill:#2e1065;stroke:#a78bfa}
+      .ln{stroke:#94a3b8}
+    }
+  </style>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#64748b"/></marker></defs>
+  <rect class="bg" width="960" height="760"/>
+  <text class="t" x="480" y="34" text-anchor="middle" font-size="20" font-weight="bold">pm_monitor (install_mn) 흐름</text>
+  <text class="s" x="480" y="56" text-anchor="middle" font-size="12">install_mn &lt;호스트파일&gt; · 설정: ./pm_monitor.conf · 상태: &lt;호스트파일&gt;.pm_state.json</text>
+
+  <!-- 수집 고루틴 -->
+  <rect class="col" x="30" y="80" width="420" height="420" rx="10"/>
+  <text class="t" x="240" y="104" text-anchor="middle" font-size="15" font-weight="bold">수집 고루틴 (interval_sec=60, 겹치지 않음)</text>
+  <rect class="box" x="55" y="120" width="370" height="54" rx="6"/>
+  <text class="t" x="240" y="142" text-anchor="middle" font-size="13">① raw ICMP ping (완료·완료후꺼짐 제외)</text>
+  <text class="s" x="240" y="161" text-anchor="middle" font-size="11">무응답 → ping X(접속불가)</text>
+  <rect class="box" x="55" y="190" width="370" height="54" rx="6"/>
+  <text class="t" x="240" y="212" text-anchor="middle" font-size="13">② 22번 포트 TCP 연결 (ping O 미완료)</text>
+  <text class="s" x="240" y="231" text-anchor="middle" font-size="11">refused → 설치중</text>
+  <rect class="box" x="55" y="260" width="370" height="54" rx="6"/>
+  <text class="t" x="240" y="282" text-anchor="middle" font-size="13">③ gossh -pm "echo PM_OK"</text>
+  <text class="s" x="240" y="301" text-anchor="middle" font-size="11">PM_OK → 설치완료 · anaconda → 설치중</text>
+  <rect class="box" x="55" y="330" width="370" height="54" rx="6"/>
+  <text class="t" x="240" y="352" text-anchor="middle" font-size="13">④ gossh: /tmp/anaconda.log 에서 DISK_PATTERN</text>
+  <text class="s" x="240" y="371" text-anchor="middle" font-size="11">문구 있음 → 디스크미인식 (setup_check 방식)</text>
+  <rect class="box" x="55" y="400" width="370" height="80" rx="6"/>
+  <text class="t" x="240" y="422" text-anchor="middle" font-size="13">⑤ 상태기계 갱신 · 저장</text>
+  <text class="s" x="240" y="441" text-anchor="middle" font-size="11">처음 본 뒤 delay_min(60분) 넘으면 지연</text>
+  <text class="s" x="240" y="458" text-anchor="middle" font-size="11">이력 → pm_state.json · 스냅샷 → TUI</text>
+  <text class="s" x="240" y="494" text-anchor="middle" font-size="11">관리서버 부하 제한: ICMP 500pps · TCP 동시 100 · gossh 1개씩 · nice 10</text>
+  <line class="ln" x1="240" y1="174"x2="240" y2="188" marker-end="url(#a)"/>
+  <line class="ln" x1="240" y1="244" x2="240" y2="258" marker-end="url(#a)"/>
+  <line class="ln" x1="240" y1="314" x2="240" y2="328" marker-end="url(#a)"/>
+  <line class="ln" x1="240" y1="384" x2="240" y2="398" marker-end="url(#a)"/>
+
+  <!-- 상태 -->
+  <rect class="st" x="480" y="80" width="450" height="200" rx="10"/>
+  <text class="t" x="705" y="104" text-anchor="middle" font-size="15" font-weight="bold">상태 (우선순위: 디스크미인식 &gt; 지연 &gt; 설치중)</text>
+  <text class="t" x="500" y="132" font-size="12">설치중 · 지연 ── 벤더 안 나눔</text>
+  <text class="t" x="500" y="156" font-size="12">디스크미인식 · ping X(접속불가) ── 벤더별</text>
+  <text class="t" x="500" y="180" font-size="12">설치완료 ── 평소엔 ping·ssh 안 함</text>
+  <text class="t" x="500" y="204" font-size="12">완료후꺼짐 ── c 누를 때 완료 서버 ping X</text>
+  <text class="t" x="500" y="228" font-size="12">재부팅됨 ── 완료후꺼짐이 다시 ping O (완료에 포함)</text>
+  <text class="s" x="500" y="258" font-size="11">벤더: 설정 vendor=정규식=이름, 위에서부터 처음 맞는 줄, 없으면 기타</text>
+
+  <!-- TUI -->
+  <rect class="tui" x="480" y="300" width="450" height="200" rx="10"/>
+  <text class="t" x="705" y="324" text-anchor="middle" font-size="15" font-weight="bold">TUI (raw tty · 순수 렌더 · 가상 스크롤)</text>
+  <text class="t" x="500" y="350" font-size="12">기본: 상태별 개수 + hostname·벤더·상태·경과 표</text>
+  <text class="t" x="500" y="372" font-size="12">↑↓ PgUp/PgDn 스크롤 · / 검색 · 1~7 필터 · 0 해제</text>
+  <text class="t" x="500" y="396" font-size="12">c 설치현황 코멘트 (켤 때 완료 서버 ping)</text>
+  <text class="t" x="500" y="418" font-size="12">r 지연 서버 벤더별 점검요청 코멘트</text>
+  <text class="t" x="500" y="440" font-size="12">d DHCP 조회 (ping X → dhcp_server a.sh)</text>
+  <text class="t" x="500" y="462" font-size="12">l LDAP · DNS·NTP · autofs · H/T (미조사 완료 서버만)</text>
+  <text class="s" x="500" y="486" font-size="11">같은 키를 한 번 더 누르면 닫힘 · q 종료</text>
+
+  <line class="ln" x1="450" y1="440" x2="478" y2="400" marker-end="url(#a)"/>
+  <line class="ln" x1="450" y1="200" x2="478" y2="180" marker-end="url(#a)"/>
+
+  <!-- 코멘트 예시 -->
+  <rect class="box" x="30" y="525" width="900" height="210" rx="10"/>
+  <text class="t" x="50" y="550" font-size="14" font-weight="bold">c 코멘트 예시</text>
+  <g font-family="Consolas,'D2Coding',monospace" font-size="12" class="t">
+    <text x="50" y="575">설치현황</text>
+    <text x="50" y="593">300대 중 30대 설치완료, 265대 설치중, 3대 디스크 미인식, ping X 2대</text>
+    <text x="50" y="611">sds</text>
+    <text x="50" y="629">디스크 미인식 3대</text>
+    <text x="50" y="647">svr1 svr2 svr3</text>
+    <text x="50" y="665">접속불가 2대</text>
+    <text x="50" y="683">svr5 svr7</text>
+  </g>
+  <text class="s" x="560" y="575" font-size="12">r 점검요청 예시</text>
+  <g font-family="Consolas,'D2Coding',monospace" font-size="12" class="t">
+    <text x="560" y="595">안녕하세요 D 담당자님</text>
+    <text x="560" y="613">하기서버 2대는 OS 설치가 지연되고 있습니다.</text>
+    <text x="560" y="631">점검부탁드립니다.</text>
+    <text x="560" y="649">감사합니다.</text>
+    <text x="560" y="667">h001 c014</text>
+  </g>
+  <text class="s" x="560" y="710" font-size="11">코드: comment.go · tui.go · render.go · state.go</text>
+</svg>

@@ -1,0 +1,74 @@
+# pm_monitor (install_mn) - 직접 칠 명령어 모음 (각 명령 위에 설명)
+#
+# 주의: 관리서버에서 root 로 실행한다(raw ICMP). 호스트파일은 한 줄에 hostname 하나.
+
+# ===== 0. 코드 받기 =====
+
+# 저장소 폴더로 이동 (예: os8_mgmt)
+cd /root/saccae-src
+
+# 최신 코드로 맞추기 (브랜치 이름은 상황에 맞게)
+git fetch && git reset --hard origin/master
+
+# master 가 sparse-checkout 이면 pm_monitor 경로를 추가 (처음 한 번)
+git sparse-checkout add .claude/HPC/pm_monitor
+
+# 배포용 orphan 브랜치 pm_monitor 를 받을 때는 파일이 저장소 루트에 있다
+git fetch && git reset --hard origin/pm_monitor
+
+# 작업 폴더로 이동 (master 기준)
+cd /root/saccae-src/.claude/HPC/pm_monitor
+
+# ===== 1. 빌드 (Go 가 있을 때만, 평소엔 커밋된 install_mn_os8 사용) =====
+
+# vet + test 후 빌드
+bash build.sh
+
+# vet·test 없이 빌드만
+bash build.sh -n
+
+# ===== 2. 설정 =====
+
+# 설정 샘플 복사 (실행한 디렉터리의 pm_monitor.conf 를 읽는다)
+cp pm_monitor.conf.sample pm_monitor.conf
+
+# 필요한 줄만 # 을 지우고 수정 (gossh, dhcp_server, ldap_check_sh 등)
+vi pm_monitor.conf
+
+# 호스트파일 만들기 (한 줄에 hostname 하나)
+vi hosts.txt
+
+# ===== 3. 실행 =====
+
+# 인자 없이 실행하면 사용법을 출력하고 종료 코드 2
+bash install_mn.sh
+
+# 실행 (root)
+bash install_mn.sh hosts.txt
+
+# 다른 설정 파일 지정
+bash install_mn.sh -c /경로/pm_monitor.conf hosts.txt
+
+# 전역 명령어로 연결 (선택)
+ln -s "$(pwd)/install_mn.sh" /usr/local/bin/install_mn
+
+# 어디서든 실행
+install_mn hosts.txt
+
+# ===== 4. 화면 키 =====
+# 화살표 PgUp PgDn Home End : 표 스크롤
+# /  : hostname 검색
+# 1~7 : 상태 필터 (1 설치중 2 지연 3 디스크미인식 4 설치완료 5 ping X 6 재부팅됨 7 완료후꺼짐), 0 : 해제
+# c  : 설치현황 코멘트 (완료 서버에 ping 해서 완료후꺼짐·재부팅됨 판정)
+# r  : 지연 서버 벤더별 점검요청 코멘트
+# d  : DHCP 조회 (dhcp_server 설정 필요)
+# l  : 완료 서버 LDAP·DNS·NTP·autofs·H/T 점검 (ldap_check_sh 설정 필요)
+# q 또는 Ctrl+C : 종료
+
+# ===== 5. 상태 파일 =====
+
+# 이력 확인 (호스트파일 이름 뒤에 .pm_state.json)
+ls -l hosts.txt.pm_state.json
+
+# 처음부터 다시 하려면 상태 파일 삭제
+rm -f hosts.txt.pm_state.json
