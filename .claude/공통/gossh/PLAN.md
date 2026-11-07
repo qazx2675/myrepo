@@ -741,3 +741,11 @@ Ctrl+C 진행 중 목록)의 압축 표기는 그대로 유지(이번 변경 대
 구현: `main.go` `newSSHClientConfig` — 기본 암호·키 교환 목록 뒤에 옛 알고리즘(`aes128-cbc` `3des-cbc` `arcfour*`, `diffie-hellman-group1-sha1` 등)을 붙여 제안. 본 명령과 `tmplimit.go` 의 파일 읽기 접속이 같이 사용. `blowfish-cbc` 는 x/crypto 미구현이라 제외.
 
 검증: CHANGELOG 2026-11-04 항목 참고. OS8 빌드만.
+
+## v2 25번째 업데이트: gossh -h <옵션> 사용법·출력 예시 (2026-11-07)
+
+요청: `gossh -h` 단독은 그대로 두고, `gossh -h -b` 처럼 옵션을 주면 그 옵션의 설명, 사용법(살펴보는 옵션은 다른 색), 실제 실행과 똑같은 출력결과 예시(작업 요약 포함)를 보여줌. 17개 옵션 전부, 질문형 옵션은 질문·예시 입력·결과까지.
+
+구현: 신규 `helpexample.go` — 예시 출력은 문자열로 적지 않고 가짜 호스트 결과를 실제 출력 함수에 넣어 만들고(`captureOutput` 으로 표준출력/표준에러를 순서대로 모음), 질문은 한 줄씩 에코하는 가짜 표준입력으로 실제 질문 함수를 부름. 이를 위해 `main.go`·`tmplimit.go`·`rpmcmp.go`·`interactive.go` 의 출력/질문 부분을 동작 그대로 함수·상수로 분리(`printSummary`, `confirmDanger`, `askSpecial`, `askRPMRef` 등).
+
+검증: CHANGELOG 2026-11-07 항목 참고. OS8 빌드만.

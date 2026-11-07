@@ -7,6 +7,7 @@
 | `rpmcmp.go` | `-rpm`: 비교서버 rpm 목록 읽기, 대상 목록 비교, 보고서·탭 구분 파일 저장 |
 | `interactive.go` | `-i <호스트>` 대화형 접속(`runInteractive`): 키→`-p`→비밀번호 질문, pty·raw 모드·창 크기 전달. raw 모드·창 크기·비밀번호 입력은 `term_linux.go` |
 | `danger.go` | 위험 명령 판정(`isDangerousCommand`), 대상 호스트 재입력 읽기·펼치기·대조(`readConfirmLines`/`parseConfirmHosts`/`diffHostSets`). 단위 테스트는 `danger_test.go` |
+| `helpexample.go` | `gossh -h <옵션>`: 옵션 설명·사용법(옵션 강조)·출력 예시. 가짜 호스트 결과를 실제 출력 함수(`printCommandResult`·`printBunched`·`printSummary`·`writeRPMReport`·`askSpecial`·`confirmDanger` 등)에 넣어 만듦 — 출력 형식을 바꾸면 예시도 같이 바뀜. 단위 테스트는 `helpexample_test.go` |
 | `term_linux.go` | 터미널 크기 조회·키 입력 모드(`-m`) — Linux 전용 |
 | `term_other.go` | Linux 외 OS용 대체 구현(`-m` 미지원, 빌드만 가능) |
 | `setup.sh` | 소스 빌드 (인터넷 되는 곳 전용, `go mod download` 후 빌드. `vendor/` 없음) |
@@ -17,7 +18,7 @@
 
 수정 요청별로 볼 곳 (모두 `main.go`):
 
-- **"옵션 추가"** → flag 정의 + README 4장 옵션 표
+- **"옵션 추가"** → flag 정의 + README 4장 옵션 표 + `helpexample.go` 의 `helpExamples`(빠지면 `go test` 가 실패)
 - **"접속불가 판정·재검증 조정"** → DNS 선행 조회 / 재검증 부분
 - **"결과 파일 추가"** → 결과 파일 기록·시작 시 정리 부분 (README 5장 표도 갱신)
 - gossh를 부르는 도구(`esxi-log-check`, `OS 환경설정 체크`, `ip_change`, `ldap_setting`, `조사`)가 출력 형식(`호스트: 줄`)에 의존하므로, 출력 형식을 바꾸면 그 도구들도 함께 확인하세요.

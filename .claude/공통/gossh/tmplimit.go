@@ -128,35 +128,8 @@ func fetchRemoteCmd(host, cmd, user string, auth []ssh.AuthMethod, port string, 
 
 // planSpecial은 -tmp/-limit/-tl 의 질문을 한 번에 모두 받고, 대상 서버에서 실행할 명령(스크립트)을 돌려준다.
 func planSpecial(doTmp, doLimit bool, user string, auth []ssh.AuthMethod, port string, timeout time.Duration) string {
-	var tmpHours string
-	var tmpDel bool
-	var refHost string
-	limitOK := false
-
 	// 1) 질문은 순서대로 전부 먼저 받는다.
-	if doTmp {
-		ans := strings.ToLower(promptLine("변경할 설정값 (시간 또는 d (삭제)) : "))
-		if ans == "d" {
-			tmpDel = true
-		} else if n, err := strconv.Atoi(ans); tmpValueRegex.MatchString(ans) && err == nil && n > 0 {
-			tmpHours = strconv.Itoa(n)
-		} else {
-			fmt.Fprintln(os.Stderr, "설정값은 1 이상의 숫자(시간) 또는 d(삭제) 만 입력할 수 있습니다.")
-			os.Exit(1)
-		}
-	}
-	if doLimit {
-		refHost = promptLine("비교서버 입력 ( " + limitsConfPath + ") : ")
-		if refHost == "" {
-			fmt.Fprintln(os.Stderr, "비교서버가 입력되지 않았습니다.")
-			os.Exit(1)
-		}
-		yn := strings.ToLower(promptLine("비교서버의 " + limitsConfPath + "를 대상서버로 복사 진행 (y,n) : "))
-		limitOK = yn == "y" || yn == "yes"
-		if !limitOK {
-			fmt.Fprintln(os.Stderr, "limits.conf 복사는 취소되었습니다.")
-		}
-	}
+	tmpHours, tmpDel, refHost, limitOK := askSpecial(doTmp, doLimit)
 
 	// 2) 비교서버 파일을 읽고 가드(비어 있거나 너무 크면 중단)
 	var limitScript string
@@ -189,4 +162,33 @@ func planSpecial(doTmp, doLimit bool, user string, auth []ssh.AuthMethod, port s
 	script.WriteString("true\n")
 	b64 := base64.StdEncoding.EncodeToString([]byte(script.String()))
 	return "printf '%s' '" + b64 + "' | base64 -d | sh"
+}
+
+// askSpecial은 -tmp/-limit/-tl 의 질문(설정값, 비교서버, 복사 여부)을 표준입력으로 받는다.
+// 잘못된 입력이면 종료한다. -h 예시도 같은 함수로 프롬프트를 보여준다.
+func askSpecial(doTmp, doLimit bool) (tmpHours string, tmpDel bool, refHost string, limitOK bool) {
+	if doTmp {
+		ans := strings.ToLower(promptLine("변경할 설정값 (시간 또는 d (삭제)) : "))
+		if ans == "d" {
+			tmpDel = true
+		} else if n, err := strconv.Atoi(ans); tmpValueRegex.MatchString(ans) && err == nil && n > 0 {
+			tmpHours = strconv.Itoa(n)
+		} else {
+			fmt.Fprintln(os.Stderr, "설정값은 1 이상의 숫자(시간) 또는 d(삭제) 만 입력할 수 있습니다.")
+			os.Exit(1)
+		}
+	}
+	if doLimit {
+		refHost = promptLine("비교서버 입력 ( " + limitsConfPath + ") : ")
+		if refHost == "" {
+			fmt.Fprintln(os.Stderr, "비교서버가 입력되지 않았습니다.")
+			os.Exit(1)
+		}
+		yn := strings.ToLower(promptLine("비교서버의 " + limitsConfPath + "를 대상서버로 복사 진행 (y,n) : "))
+		limitOK = yn == "y" || yn == "yes"
+		if !limitOK {
+			fmt.Fprintln(os.Stderr, "limits.conf 복사는 취소되었습니다.")
+		}
+	}
+	return
 }
