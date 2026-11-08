@@ -690,11 +690,11 @@ func withChecks(s Snapshot) *Snapshot {
 		}
 		switch n % 4 {
 		case 0:
-			recs[i].Check = Check{Ver: 2, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "nas01:/export/appl", HT: "ON"}
+			recs[i].Check = Check{Ver: ldapCmdVer, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "nas01:/export/appl", HT: "ON"}
 		case 1:
-			recs[i].Check = Check{Ver: 2, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "다름", HT: "OFF", Note: "/appl nas01:/export/appl /wappl nas02:/export/wappl"}
+			recs[i].Check = Check{Ver: ldapCmdVer, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "다름", HT: "OFF", Note: "/appl nas01:/export/appl /wappl nas02:/export/wappl"}
 		case 2:
-			recs[i].Check = Check{Ver: 2, LDAP: "FAIL", DNSNTP: "다름", Autofs: "nas01:/export/appl", HT: "-", Note: "ldap_check UNDEFINED; DNS 10.1.1.10/10.1.1.11 NTP 10.1.2.20"}
+			recs[i].Check = Check{Ver: ldapCmdVer, LDAP: "FAIL", DNSNTP: "다름", Autofs: "nas01:/export/appl", HT: "-", Note: "ldap_check UNDEFINED; DNS 10.1.1.10/10.1.1.11 NTP 10.1.2.20"}
 		}
 		n++
 	}
