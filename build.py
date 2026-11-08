@@ -27,3 +27,4 @@ with open(dist_path, 'w', encoding='utf-8') as f:
     f.write(url)
 
 print(f"Built bookmarklet! Original: {len(code)} chars, Minified: {len(minified)} chars, URL: {len(url)} chars")
+

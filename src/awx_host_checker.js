@@ -2,9 +2,11 @@
     // 기본 제외 호스트 패턴 (실제 환경 소스 진행 시 자동 추가되는 6~7대 필수 서버를 미리 지정 가능)
     const DEFAULT_EXCLUDE_HOSTS = "prd-db-0295|prd-db-0296|prd-db-0297|prd-db-0298|prd-db-0299|prd-db-0300";
 
-    // 기존 패널이 열려 있다면 안전하게 제거
+    // 기존 패널 및 스타일시트가 열려 있다면 제거 후 최신 상태로 렌더링
     const prevPanel = document.getElementById('awx-validator-panel');
     if (prevPanel) prevPanel.remove();
+    const prevStyle = document.getElementById('awx-validator-styles');
+    if (prevStyle) prevStyle.remove();
 
     // 상태 저장 객체
     window.awxValidatorState = window.awxValidatorState || {
@@ -15,7 +17,9 @@
         detailText: '',
         incidentText: '',
         targetText: '',
-        isStandalone: false
+        isStandalone: false,
+        isPinned: false,
+        guideExpanded: false
     };
 
     const state = window.awxValidatorState;
@@ -80,112 +84,306 @@
         return Array.from(resultSet);
     }
 
-    // HTML UI 생성 함수 (패널 또는 독립 창 공용)
-    function buildUIHTML(ctx) {
+    // 작업 권장 안내 펼치기 시 표시할 작업대상 호스트 추출 (인시던트 호스트 우선, 없으면 작업대상/상세목록현황)
+    function getGuideTargetHosts(txtIncidentVal, txtTargetVal, txtDetailVal) {
+        const inc = parseHostText(txtIncidentVal);
+        if (inc.length > 0) return inc;
+        const tgt = parseHostText(txtTargetVal);
+        if (tgt.length > 0) return tgt;
+        const dtl = parseHostText(txtDetailVal);
+        if (dtl.length > 0) return dtl;
+        return [];
+    }
+
+    // 선명한 가독성과 엔터프라이즈 디자인을 위한 전용 스타일시트
+    function getStylesheet() {
         return `
-        <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:10px 14px; font-weight:700; display:flex; justify-content:space-between; align-items:center; cursor:move; user-select:none; border-bottom:1px solid #1e293b;">
-            <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:13px; letter-spacing:-0.3px;">작업대상 호스트 교차 검증기</span>
-                <span id="awx-vld-ctx-badge" style="background:#1e293b; color:#94a3b8; font-size:11px; padding:2px 6px; border-radius:3px; font-weight:500;">${ctx.label}</span>
+        #awx-validator-panel, .awx-vld-popup-root {
+            font-family: "Pretendard Variable", "Pretendard", "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+            -webkit-font-smoothing: antialiased !important;
+            -moz-osx-font-smoothing: grayscale !important;
+            text-rendering: optimizeLegibility !important;
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.5;
+            box-sizing: border-box;
+        }
+        #awx-validator-panel *, .awx-vld-popup-root * {
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .awx-vld-mono {
+            font-family: "JetBrains Mono", "D2Coding", "Consolas", "Malgun Gothic", "맑은 고딕", monospace !important;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.1px;
+        }
+        .awx-vld-card {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 14px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+        }
+        .awx-vld-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #111827;
+            letter-spacing: -0.2px;
+        }
+        .awx-vld-input, .awx-vld-textarea {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            padding: 7px 10px;
+            font-size: 12.5px;
+            line-height: 1.5;
+            color: #111827;
+            background: #ffffff;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            outline: none;
+        }
+        .awx-vld-input:focus, .awx-vld-textarea:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+        .awx-vld-input::placeholder, .awx-vld-textarea::placeholder {
+            color: #9ca3af;
+            font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", sans-serif !important;
+        }
+        .awx-vld-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 7px 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+            line-height: 1.2;
+        }
+        .awx-vld-btn-secondary {
+            background: #ffffff;
+            color: #1f2937;
+            border: 1px solid #cbd5e1;
+        }
+        .awx-vld-btn-secondary:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+        }
+        .awx-vld-btn-dark {
+            background: #1e293b;
+            color: #ffffff;
+            border: 1px solid #0f172a;
+        }
+        .awx-vld-btn-dark:hover {
+            background: #0f172a;
+        }
+        .awx-vld-btn-primary {
+            background: #2563eb;
+            color: #ffffff;
+            border: 1px solid #1d4ed8;
+            font-size: 13.5px;
+            font-weight: 700;
+            padding: 11px 16px;
+            box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+        }
+        .awx-vld-btn-primary:hover {
+            background: #1d4ed8;
+        }
+        .awx-vld-btn-sm {
+            padding: 4px 8px;
+            font-size: 11.5px;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+        .awx-vld-header-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #1e293b;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            padding: 4px 9px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: all 0.15s ease;
+        }
+        .awx-vld-header-btn:hover {
+            background: #334155;
+            color: #ffffff;
+        }
+        .awx-vld-header-btn.pinned {
+            background: #2563eb;
+            color: #ffffff;
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+        }
+        .awx-vld-badge-req {
+            display: inline-block;
+            background: #fee2e2;
+            color: #b91c1c;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin-left: 4px;
+        }
+        .awx-vld-badge-opt {
+            display: inline-block;
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin-left: 4px;
+        }
+        `;
+    }
+
+    // 핀 아이콘 SVG (고정 상태에 따라 회전 및 채우기 변경)
+    function getPinSvg(isPinned) {
+        const transform = isPinned ? 'rotate(0)' : 'rotate(45 8 8)';
+        const fill = isPinned ? 'currentColor' : 'none';
+        return `<svg width="12" height="12" viewBox="0 0 16 16" fill="${fill}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="transform:${transform}; transition:transform 0.15s ease;"><path d="M9.5 2.5L13.5 6.5L12 8L10 6L6.5 9.5L8.5 11.5L7 13L4.5 10.5L2 13L3 14L2 14L2 13L4.5 10.5L2 8L3.5 6.5L5.5 8.5L9 5L7 3L8.5 1.5Z"/></svg>`;
+    }
+
+    // HTML UI 생성 함수 (패널 및 독립 창 공용)
+    function buildUIHTML(ctx, isPopup = false) {
+        const pinClass = state.isPinned ? 'awx-vld-header-btn pinned' : 'awx-vld-header-btn';
+        const pinLabel = state.isPinned ? '상단 고정됨' : '상단 고정';
+        return `
+        <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:11px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:${isPopup ? 'default' : 'move'}; user-select:none; border-bottom:1px solid #1e293b;">
+            <div style="display:flex; align-items:center; gap:7px; flex-shrink:0;">
+                <span style="font-size:13.5px; font-weight:700; letter-spacing:-0.3px; color:#ffffff; white-space:nowrap;">작업대상 호스트 교차 검증기</span>
+                <span id="awx-vld-ctx-badge" style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; white-space:nowrap;">${ctx.label}</span>
             </div>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <button id="awx-vld-btn-detach" style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; padding:3px 8px; border-radius:3px; font-size:11px; cursor:pointer;" title="패널 크기 맞춤 독립 브라우저 팝업 창으로 띄우기">독립 창으로 분리</button>
-                <button id="awx-vld-btn-close" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer; line-height:1; padding:0 4px;">&times;</button>
+            <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
+                <button id="awx-vld-btn-pin" class="${pinClass}" title="창을 항상 가장 위에 고정 (포커스 유지)">
+                    ${getPinSvg(state.isPinned)}
+                    <span id="awx-vld-pin-text">${pinLabel}</span>
+                </button>
+                <button id="awx-vld-btn-detach" class="awx-vld-header-btn" title="패널 크기 맞춤 독립 브라우저 팝업 창으로 띄우기">${isPopup ? '페이지 내로 복귀' : '독립 창으로 분리'}</button>
+                <button id="awx-vld-btn-close" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; line-height:1; padding:0 4px;" title="닫기">&times;</button>
             </div>
         </div>
 
-        <div style="padding:14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px; background:#f8fafc;">
+        <div style="padding:14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px; background:#f3f4f6;">
             <!-- 1. AWX 호스트 수집 및 제외 섹션 -->
-            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:4px; padding:12px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="font-weight:700; font-size:12px; color:#0f172a;">1. AWX 호스트 수집 (선택 - 1대 이상 시 비교 참여)</span>
-                    <button id="awx-vld-btn-reset-awx" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:2px 6px; border-radius:3px; cursor:pointer; font-size:11px;">수집 초기화</button>
+            <div class="awx-vld-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div>
+                        <span class="awx-vld-section-title">1. AWX 호스트 수집</span>
+                        <span class="awx-vld-badge-opt">선택 - 1대 이상 시 비교 참여</span>
+                    </div>
+                    <button id="awx-vld-btn-reset-awx" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm">수집 초기화</button>
                 </div>
 
                 <!-- 제외 패턴 입력란 -->
-                <div style="margin-bottom:8px;">
-                    <label style="display:block; font-size:11px; font-weight:600; color:#334155; margin-bottom:3px;">제외 호스트 설정 (| 구분)</label>
-                    <input id="awx-vld-input-exclude" type="text" value="${state.excludePattern}" placeholder="예: host01|host02|bastion" style="width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:3px; padding:5px 8px; font-size:11px; font-family:monospace; color:#0f172a; background:#ffffff;">
-                    <div id="awx-vld-exclude-hint" style="font-size:10px; color:#64748b; margin-top:3px; ${state.excludePattern ? 'display:none;' : ''}">OS설치에 필요한 서버명은 이미 제외되어 있음</div>
+                <div style="margin-bottom:10px;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#374151; margin-bottom:4px;">제외 호스트 설정 (| 구분)</label>
+                    <input id="awx-vld-input-exclude" class="awx-vld-input awx-vld-mono" type="text" value="${state.excludePattern}" placeholder="예: host01|host02|bastion">
+                    <div id="awx-vld-exclude-hint" style="font-size:11.5px; color:#6b7280; margin-top:4px; font-weight:500; ${state.excludePattern ? 'display:none;' : ''}">OS설치에 필요한 서버명은 이미 제외되어 있음</div>
                 </div>
 
                 <!-- 수집 액션 버튼 -->
-                <div style="display:flex; gap:6px; margin-bottom:8px;">
-                    <button id="awx-vld-btn-page" style="flex:1; background:#ffffff; color:#0f172a; border:1px solid #cbd5e1; padding:6px; border-radius:3px; font-size:11px; font-weight:600; cursor:pointer;">현재 화면 수집</button>
-                    <button id="awx-vld-btn-collect-all" style="flex:1; background:#0f172a; color:#ffffff; border:1px solid #0f172a; padding:6px; border-radius:3px; font-size:11px; font-weight:600; cursor:pointer;">현재 인벤토리 전체 수집</button>
+                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                    <button id="awx-vld-btn-page" class="awx-vld-btn awx-vld-btn-secondary" style="flex:1;">현재 화면 수집</button>
+                    <button id="awx-vld-btn-collect-all" class="awx-vld-btn awx-vld-btn-dark" style="flex:1;">현재 인벤토리 전체 수집</button>
                 </div>
 
                 <!-- AWX 수집 결과 상태 및 제외 요약 -->
-                <div id="awx-vld-awx-status" style="font-size:11px; line-height:1.5; color:#334155; background:#f1f5f9; padding:8px; border-radius:3px; border:1px solid #e2e8f0;">
-                    현재 수집된 호스트: <b id="awx-vld-count-awx" style="color:#0f172a;">${state.collectedHosts.size}</b> 대
+                <div id="awx-vld-awx-status" style="font-size:12px; line-height:1.5; color:#1f2937; background:#f8fafc; padding:9px 11px; border-radius:5px; border:1px solid #e2e8f0;">
+                    현재 수집된 호스트: <b id="awx-vld-count-awx" class="awx-vld-mono" style="color:#111827; font-size:13px;">${state.collectedHosts.size}</b> 대
                     <div id="awx-vld-awx-summary" style="margin-top:4px;"></div>
                 </div>
             </div>
 
             <!-- 2. 비교 대상 텍스트 입력창 (상세목록현황, 인시던트, 작업대상) -->
-            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:4px; padding:12px; display:flex; flex-direction:column; gap:10px;">
-                <div style="font-weight:700; font-size:12px; color:#0f172a;">2. 비교 대상 호스트 입력</div>
+            <div class="awx-vld-card" style="display:flex; flex-direction:column; gap:12px;">
+                <div class="awx-vld-section-title">2. 비교 대상 호스트 입력</div>
 
                 <!-- 입력 1: 상세목록현황 [필수] -->
                 <div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <span style="font-size:11px; font-weight:700; color:#0f172a;">상세목록현황 호스트 <span style="color:#dc2626;">[필수]</span></span>
-                        <span style="font-size:10px; color:#64748b;">인식: <b id="awx-vld-cnt-detail" style="color:#0f172a;">0</b>대</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:12px; font-weight:700; color:#111827;">상세목록현황 호스트 <span class="awx-vld-badge-req">[필수]</span></span>
+                        <span style="font-size:11.5px; color:#4b5563;">인식: <b id="awx-vld-cnt-detail" class="awx-vld-mono" style="color:#111827;">0</b>대</span>
                     </div>
-                    <textarea id="awx-vld-txt-detail" placeholder="상세목록현황 호스트 붙여넣기 (개행/공백/콤마/탭/시리얼 자동 분리)" style="width:100%; height:64px; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:3px; padding:6px; font-size:11px; font-family:monospace; resize:vertical;">${state.detailText}</textarea>
+                    <textarea id="awx-vld-txt-detail" class="awx-vld-textarea awx-vld-mono" placeholder="상세목록현황 호스트 붙여넣기 (개행/공백/콤마/탭/시리얼 자동 분리)" style="height:68px; resize:vertical;">${state.detailText}</textarea>
                 </div>
 
                 <!-- 입력 2: 인시던트 [필수] -->
                 <div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <span style="font-size:11px; font-weight:700; color:#0f172a;">인시던트 호스트 <span style="color:#dc2626;">[필수]</span></span>
-                        <span style="font-size:10px; color:#64748b;">인식: <b id="awx-vld-cnt-incident" style="color:#0f172a;">0</b>대</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:12px; font-weight:700; color:#111827;">인시던트 호스트 <span class="awx-vld-badge-req">[필수]</span></span>
+                        <span style="font-size:11.5px; color:#4b5563;">인식: <b id="awx-vld-cnt-incident" class="awx-vld-mono" style="color:#111827;">0</b>대</span>
                     </div>
-                    <textarea id="awx-vld-txt-incident" placeholder="인시던트 작업대상 호스트 붙여넣기 (개행/공백/콤마/탭/시리얼 자동 분리)" style="width:100%; height:64px; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:3px; padding:6px; font-size:11px; font-family:monospace; resize:vertical;">${state.incidentText}</textarea>
+                    <textarea id="awx-vld-txt-incident" class="awx-vld-textarea awx-vld-mono" placeholder="인시던트 작업대상 호스트 붙여넣기 (개행/공백/콤마/탭/시리얼 자동 분리)" style="height:68px; resize:vertical;">${state.incidentText}</textarea>
                 </div>
 
                 <!-- 입력 3: 작업대상 [선택] -->
                 <div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <span style="font-size:11px; font-weight:600; color:#334155;">작업대상 호스트 <span style="color:#64748b; font-weight:normal;">[선택 - 1대 이상 시 비교 참여]</span></span>
-                        <span style="font-size:10px; color:#64748b;">인식: <b id="awx-vld-cnt-target" style="color:#0f172a;">0</b>대</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:12px; font-weight:700; color:#111827;">작업대상 호스트 <span class="awx-vld-badge-opt">[선택 - 1대 이상 시 비교 참여]</span></span>
+                        <span style="font-size:11.5px; color:#4b5563;">인식: <b id="awx-vld-cnt-target" class="awx-vld-mono" style="color:#111827;">0</b>대</span>
                     </div>
-                    <textarea id="awx-vld-txt-target" placeholder="작업대상 호스트 붙여넣기 (선택사항, 비어있으면 비교 제외)" style="width:100%; height:54px; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:3px; padding:6px; font-size:11px; font-family:monospace; resize:vertical;">${state.targetText}</textarea>
+                    <textarea id="awx-vld-txt-target" class="awx-vld-textarea awx-vld-mono" placeholder="작업대상 호스트 붙여넣기 (선택사항, 비어있으면 비교 제외)" style="height:58px; resize:vertical;">${state.targetText}</textarea>
                 </div>
             </div>
 
             <!-- 3. 비교 실행 버튼 -->
-            <button id="awx-vld-btn-compare" style="width:100%; background:#1d4ed8; color:#ffffff; border:none; padding:10px; border-radius:4px; font-size:13px; font-weight:700; cursor:pointer; letter-spacing:-0.2px;">
+            <button id="awx-vld-btn-compare" class="awx-vld-btn awx-vld-btn-primary" style="width:100%;">
                 교차 비교 실행 (2개 소스)
             </button>
 
             <!-- 4. 검증 결과 리포트 영역 -->
-            <div id="awx-vld-result-box" style="display:none; background:#ffffff; border:1px solid #cbd5e1; border-radius:4px; padding:12px; font-size:12px; line-height:1.5;"></div>
+            <div id="awx-vld-result-box" style="display:none; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:14px; font-size:12.5px; line-height:1.5;"></div>
 
-            <!-- 5. 고정 완료 권장 코멘트 (결과 표시 여부와 무관하게 상시 확인 가능하도록 하단 배치) -->
-            <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; padding:8px 10px; font-size:11px; color:#0f172a; line-height:1.4;">
-                <div style="font-weight:700; color:#475569; margin-bottom:2px; font-size:10px;">작업 권장 안내</div>
-                <div style="font-family:Consolas, monospace; word-break:break-all;">
+            <!-- 5. 작업 권장 안내 (펼치기 시 작업대상 호스트 표시 포함) -->
+            <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:11px 13px; font-size:12px; color:#111827; line-height:1.5;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <span style="font-weight:700; color:#1e293b; font-size:12px;">작업 권장 안내</span>
+                    <button id="awx-vld-btn-guide-toggle" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:2px 8px; font-size:11px;">${state.guideExpanded ? '접기' : '펼치기'}</button>
+                </div>
+                <div class="awx-vld-mono" style="font-size:12px; color:#0f172a; background:#f8fafc; padding:7px 9px; border-radius:4px; border:1px solid #e2e8f0; word-break:break-all;">
                     인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
+                </div>
+                <div id="awx-vld-guide-targets" style="display:${state.guideExpanded ? 'block' : 'none'}; margin-top:8px; padding-top:8px; border-top:1px dashed #cbd5e1;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:11.5px; font-weight:700; color:#334155;">작업대상 호스트 명단 (<span id="awx-vld-guide-target-count">0</span>대)</span>
+                    </div>
+                    <div id="awx-vld-guide-target-list" class="awx-vld-mono" style="max-height:130px; overflow-y:auto; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:8px; font-size:12px; color:#111827; white-space:pre-wrap; word-break:break-all;"></div>
                 </div>
             </div>
         </div>
         `;
     }
 
+    // 스타일 주입
+    const styleEl = document.createElement('style');
+    styleEl.id = 'awx-validator-styles';
+    styleEl.textContent = getStylesheet();
+    document.head.appendChild(styleEl);
+
     // 메인 패널 엘리먼트 생성
     const panel = document.createElement('div');
     panel.id = 'awx-validator-panel';
     panel.style.cssText = `
-        position: fixed; top: 60px; right: 20px; width: 480px; max-height: 88vh;
-        background: #ffffff; border: 1px solid #0f172a; border-radius: 6px;
-        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25); z-index: 9999999;
-        font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, sans-serif;
-        font-size: 12px; color: #0f172a; display: flex; flex-direction: column; overflow: hidden;
+        position: fixed; top: 50px; right: 20px; width: 550px; max-height: 90vh;
+        background: #ffffff; border: 1px solid #0f172a; border-radius: 8px;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22); z-index: 9999999;
+        display: flex; flex-direction: column; overflow: hidden;
     `;
 
     const ctx = getContext();
-    panel.innerHTML = buildUIHTML(ctx);
+    panel.innerHTML = buildUIHTML(ctx, false);
     document.body.appendChild(panel);
 
     // 이벤트 및 로직 바인딩 함수
@@ -193,6 +391,8 @@
         const getEl = id => rootDoc.getElementById(id);
 
         const headerEl = getEl('awx-vld-header');
+        const btnPin = getEl('awx-vld-btn-pin');
+        const pinTextEl = getEl('awx-vld-pin-text');
         const btnClose = getEl('awx-vld-btn-close');
         const btnDetach = getEl('awx-vld-btn-detach');
         const inputExclude = getEl('awx-vld-input-exclude');
@@ -210,13 +410,84 @@
         const cntTarget = getEl('awx-vld-cnt-target');
         const btnCompare = getEl('awx-vld-btn-compare');
         const resultBox = getEl('awx-vld-result-box');
+        const btnGuideToggle = getEl('awx-vld-btn-guide-toggle');
+        const guideTargetsBox = getEl('awx-vld-guide-targets');
+        const guideTargetCount = getEl('awx-vld-guide-target-count');
+        const guideTargetList = getEl('awx-vld-guide-target-list');
+
+        // 상단 고정(Pin) 상태 업데이트 및 포커스 유지 동작
+        function applyPinState() {
+            if (!btnPin) return;
+            if (state.isPinned) {
+                btnPin.classList.add('pinned');
+                btnPin.innerHTML = `${getPinSvg(true)} <span id="awx-vld-pin-text">상단 고정됨</span>`;
+                if (!isPopup) {
+                    panel.style.zIndex = '2147483647';
+                } else if (popupWin) {
+                    popupWin.focus();
+                }
+            } else {
+                btnPin.classList.remove('pinned');
+                btnPin.innerHTML = `${getPinSvg(false)} <span id="awx-vld-pin-text">상단 고정</span>`;
+                if (!isPopup) {
+                    panel.style.zIndex = '9999999';
+                }
+            }
+        }
+
+        if (btnPin) {
+            btnPin.onclick = () => {
+                state.isPinned = !state.isPinned;
+                applyPinState();
+            };
+        }
+
+        // 독립 팝업 창에서 상단 고정(Pin) 시 포커스 유지 핸들러
+        if (isPopup && popupWin) {
+            popupWin.addEventListener('blur', () => {
+                if (state.isPinned && !popupWin.closed) {
+                    setTimeout(() => {
+                        try { popupWin.focus(); } catch (e) {}
+                    }, 50);
+                }
+            });
+            // 부모 창 클릭 시에도 핀 고정 상태이면 팝업 창을 위로 유지
+            window.addEventListener('mousedown', () => {
+                if (state.isPinned && popupWin && !popupWin.closed) {
+                    setTimeout(() => {
+                        try { popupWin.focus(); } catch (e) {}
+                    }, 80);
+                }
+            });
+        }
+
+        // 작업 권장 안내 [펼치기] / [접기] 내용 갱신
+        function updateGuideTargetsView() {
+            if (!guideTargetList || !guideTargetCount) return;
+            const hosts = getGuideTargetHosts(txtIncident.value, txtTarget.value, txtDetail.value);
+            guideTargetCount.innerText = hosts.length;
+            if (hosts.length > 0) {
+                guideTargetList.innerText = hosts.join('\n');
+            } else {
+                guideTargetList.innerText = '입력된 작업대상 호스트가 없습니다. 인시던트 또는 작업대상 입력란에 호스트를 입력해주세요.';
+            }
+        }
+
+        if (btnGuideToggle && guideTargetsBox) {
+            btnGuideToggle.onclick = () => {
+                state.guideExpanded = !state.guideExpanded;
+                guideTargetsBox.style.display = state.guideExpanded ? 'block' : 'none';
+                btnGuideToggle.innerText = state.guideExpanded ? '접기' : '펼치기';
+                updateGuideTargetsView();
+            };
+        }
 
         // 드래그 기능 (페이지 내 패널일 때만 적용)
         if (!isPopup && headerEl) {
             let isDragging = false;
             let startX, startY, initialLeft, initialTop;
             headerEl.addEventListener('mousedown', (e) => {
-                if (e.target.tagName === 'BUTTON') return;
+                if (e.target.closest('button')) return;
                 isDragging = true;
                 startX = e.clientX;
                 startY = e.clientY;
@@ -248,7 +519,6 @@
 
         // 독립 창 분리 / 복귀 버튼
         if (isPopup) {
-            btnDetach.innerText = '페이지 내로 복귀';
             btnDetach.onclick = () => {
                 if (popupWin) popupWin.close();
                 panel.style.display = 'flex';
@@ -257,13 +527,13 @@
         } else {
             btnDetach.onclick = () => {
                 panel.style.display = 'none';
-                const popup = window.open('', 'AWXHostValidatorPopup', 'width=540,height=820,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
+                const popup = window.open('', 'AWXHostValidatorPopup', 'width=540,height=840,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
                 if (!popup) {
                     alert('팝업 차단이 감지되었습니다. 팝업 허용 후 다시 시도해주세요.');
                     panel.style.display = 'flex';
                     return;
                 }
-                popup.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>작업대상 호스트 교차 검증기</title></head><body style="margin:0; padding:0; background:#f8fafc; font-family:-apple-system, BlinkMacSystemFont, 'Pretendard', sans-serif;">${buildUIHTML(ctx)}</body></html>`);
+                popup.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>작업대상 호스트 교차 검증기</title><style>${getStylesheet()}</style></head><body class="awx-vld-popup-root" style="margin:0; padding:0; background:#f3f4f6; display:flex; flex-direction:column; height:100vh; overflow:hidden;">${buildUIHTML(ctx, true)}</body></html>`);
                 popup.document.close();
                 bindEvents(popup.document, true, popup);
             };
@@ -301,6 +571,7 @@
             if (state.collectedHosts.size > 0) sourceCount++;
 
             btnCompare.innerText = `교차 비교 실행 (${Math.max(2, sourceCount)}개 소스)`;
+            updateGuideTargetsView();
         }
 
         txtDetail.oninput = updateCountsAndButton;
@@ -316,27 +587,27 @@
             updateCountsAndButton();
         };
 
-        // 1) 화면 UI에서 현재 페이지 수집
+        // 1) 화면 UI에서 현재 페이지 수집 (중복 호스트 수집 시 카운트가 증가하지 않도록 중복 제거)
         btnPage.onclick = () => {
             const filters = getExcludeFilters(inputExclude.value.trim());
-            let pageRaw = 0;
-            let pageExcluded = [];
             document.querySelectorAll('table tbody tr').forEach(tr => {
                 const nameEl = tr.querySelector('td[data-label="이름"] a, td[data-label="Name"] a, td a[href*="/hosts/"]') || tr.querySelector('td:nth-child(2) a');
                 if (nameEl) {
                     const h = nameEl.innerText.trim().toLowerCase();
                     if (h) {
-                        pageRaw++;
                         if (isHostExcluded(h, filters)) {
-                            pageExcluded.push(h);
+                            state.collectedHosts.delete(h);
+                            if (!state.excludedHosts.includes(h)) {
+                                state.excludedHosts.push(h);
+                            }
                         } else {
+                            state.excludedHosts = state.excludedHosts.filter(x => x !== h);
                             state.collectedHosts.add(h);
                         }
                     }
                 }
             });
-            state.rawCount += pageRaw;
-            state.excludedHosts.push(...pageExcluded);
+            state.rawCount = state.collectedHosts.size + state.excludedHosts.length;
             renderAwxSummary();
             updateCountsAndButton();
         };
@@ -350,7 +621,6 @@
 
             state.collectedHosts.clear();
             state.excludedHosts = [];
-            let totalRaw = 0;
 
             try {
                 let nextUrl = currentContext.url;
@@ -360,9 +630,10 @@
                     if (data.results) {
                         data.results.forEach(item => {
                             const name = item.name.trim().toLowerCase();
-                            totalRaw++;
                             if (isHostExcluded(name, filters)) {
-                                state.excludedHosts.push(name);
+                                if (!state.excludedHosts.includes(name)) {
+                                    state.excludedHosts.push(name);
+                                }
                             } else {
                                 state.collectedHosts.add(name);
                             }
@@ -370,10 +641,10 @@
                     }
                     nextUrl = data.next;
                 }
-                state.rawCount = totalRaw;
+                state.rawCount = state.collectedHosts.size + state.excludedHosts.length;
                 renderAwxSummary();
             } catch (err) {
-                awxSummaryEl.innerHTML = `<span style="color:#dc2626;">수집 실패: ${err.message}</span>`;
+                awxSummaryEl.innerHTML = `<span style="color:#dc2626; font-weight:600;">수집 실패: ${err.message}</span>`;
             } finally {
                 btnCollectAll.disabled = false;
                 btnCollectAll.innerText = '현재 인벤토리 전체 수집';
@@ -394,15 +665,15 @@
             const exCount = state.excludedHosts.length;
             if (exCount > 0) {
                 awxSummaryEl.innerHTML = `
-                    <div style="font-weight:700; color:#b45309; margin-top:4px;">
+                    <div style="font-weight:700; color:#b45309; margin-top:4px; font-size:12px;">
                         ${state.rawCount}대 중 ${exCount}대 제외됨 (수집 대상: ${state.collectedHosts.size}대)
                     </div>
-                    <div style="font-family:monospace; font-size:10px; color:#475569; margin-top:2px; word-break:break-all;">
+                    <div class="awx-vld-mono" style="font-size:11.5px; color:#374151; margin-top:3px; word-break:break-all; background:#ffffff; padding:5px 7px; border-radius:4px; border:1px solid #e5e7eb;">
                         ${state.excludedHosts.join(' ')}
                     </div>
                 `;
             } else {
-                awxSummaryEl.innerHTML = `<div style="color:#0f172a; margin-top:2px;">${state.rawCount}대 수집 완료 (제외 0대)</div>`;
+                awxSummaryEl.innerHTML = `<div style="color:#111827; margin-top:3px; font-weight:500;">${state.collectedHosts.size}대 수집 완료 (제외 0대)</div>`;
             }
         }
 
@@ -419,8 +690,8 @@
                 resultBox.style.background = '#fef2f2';
                 resultBox.style.borderColor = '#fca5a5';
                 resultBox.innerHTML = `
-                    <div style="font-weight:700; color:#dc2626; margin-bottom:4px;">오류: 필수 입력 항목 누락</div>
-                    <div style="color:#991b1b; font-size:11px;">
+                    <div style="font-weight:700; color:#dc2626; margin-bottom:4px; font-size:13px;">오류: 필수 입력 항목 누락</div>
+                    <div style="color:#991b1b; font-size:12px;">
                         상세목록현황과 인시던트 호스트는 필수 입력 대상입니다. 두 입력창에 호스트를 입력해주세요.
                     </div>
                 `;
@@ -448,7 +719,7 @@
             const diffs = [];
 
             activeSources.forEach(source => {
-                const missingInSource = []; // 전체 집합에는 있으나 이 소스에는 없는 호스트
+                const missingInSource = [];
                 unionSet.forEach(h => {
                     if (!source.hosts.has(h)) missingInSource.push(h);
                 });
@@ -477,12 +748,12 @@
                     isAllMatch = false;
                     const toggleId = 'awx-toggle-' + Date.now();
                     awxSpecialReport = `
-                        <div style="margin-top:8px; padding:8px; background:#fff1f2; border:1px solid #fecdd3; border-radius:3px;">
+                        <div style="margin-top:8px; padding:9px 11px; background:#fff1f2; border:1px solid #fecdd3; border-radius:5px;">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-weight:700; color:#be123c;">대상에 없음: ${notInTargetFromAwx.length}대 (AWX ${state.collectedHosts.size}대 중 ${targetRef.size}대만 존재)</span>
-                                <button id="btn-${toggleId}" style="background:#ffffff; border:1px solid #f43f5e; color:#be123c; font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer;">명단 펼치기</button>
+                                <span style="font-weight:700; color:#be123c; font-size:12px;">대상에 없음: ${notInTargetFromAwx.length}대 (AWX ${state.collectedHosts.size}대 중 ${targetRef.size}대만 존재)</span>
+                                <button id="btn-${toggleId}" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="border-color:#f43f5e; color:#be123c;">명단 펼치기</button>
                             </div>
-                            <div id="${toggleId}" style="display:none; margin-top:6px; max-height:110px; overflow-y:auto; font-family:monospace; font-size:10px; color:#881337; background:#ffffff; padding:6px; border:1px solid #fda4af; word-break:break-all;">
+                            <div id="${toggleId}" class="awx-vld-mono" style="display:none; margin-top:7px; max-height:120px; overflow-y:auto; font-size:11.5px; color:#881337; background:#ffffff; padding:8px; border:1px solid #fda4af; border-radius:4px; word-break:break-all;">
                                 ${notInTargetFromAwx.join(' ')}
                             </div>
                         </div>
@@ -491,10 +762,19 @@
             }
 
             resultBox.style.display = 'block';
+            const resultGuideId = 'res-guide-toggle-' + Date.now();
+            const guideHosts = getGuideTargetHosts(txtIncident.value, txtTarget.value, txtDetail.value);
 
             const mandatoryCommentHtml = `
-                <div style="margin-top:10px; padding:8px 10px; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:3px; font-family:Consolas, monospace; font-size:11px; color:#0f172a; word-break:break-all;">
-                    인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
+                <div style="margin-top:10px; padding:9px 11px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:5px; color:#0f172a;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-size:11.5px; font-weight:700; color:#334155;">작업 권장 안내</span>
+                        <button id="btn-${resultGuideId}" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:2px 7px; font-size:11px;">펼치기</button>
+                    </div>
+                    <div class="awx-vld-mono" style="font-size:11.5px; word-break:break-all;">
+                        인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
+                    </div>
+                    <div id="${resultGuideId}" class="awx-vld-mono" style="display:none; margin-top:7px; max-height:120px; overflow-y:auto; background:#ffffff; border:1px solid #cbd5e1; border-radius:4px; padding:7px; font-size:11.5px; color:#111827; white-space:pre-wrap; word-break:break-all;">${guideHosts.join('\n')}</div>
                 </div>
             `;
 
@@ -502,10 +782,10 @@
                 resultBox.style.background = '#f0fdf4';
                 resultBox.style.borderColor = '#86efac';
                 resultBox.innerHTML = `
-                    <div style="font-weight:700; color:#15803d; font-size:13px; margin-bottom:6px;">
+                    <div style="font-weight:700; color:#15803d; font-size:13.5px; margin-bottom:6px;">
                         [MATCH] 비교 대상 전수 일치 확인 완료
                     </div>
-                    <div style="color:#166534; font-size:11px;">
+                    <div style="color:#166534; font-size:12px;">
                         • 참여 소스: <b>${activeSources.map(s => `${s.name}(${s.hosts.size}대)`).join(', ')}</b><br>
                         • 불일치 및 누락 호스트: <b>0대</b>
                         ${state.excludedHosts.length > 0 ? `<br>• AWX 제외: <b>${state.rawCount}대 중 ${state.excludedHosts.length}대 제외됨</b> (${state.excludedHosts.join(' ')})` : ''}
@@ -519,12 +799,12 @@
                 diffs.forEach((d, idx) => {
                     const tid = `diff-toggle-${idx}-${Date.now()}`;
                     diffHtml += `
-                        <div style="margin-top:6px; padding:6px; background:#ffffff; border:1px solid #fecaca; border-radius:3px;">
+                        <div style="margin-top:6px; padding:8px 10px; background:#ffffff; border:1px solid #fecaca; border-radius:5px;">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-weight:600; color:#991b1b;">• ${d.sourceName}: 누락 ${d.missingCount}대 (보유: ${d.sourceCount}대)</span>
-                                <button id="btn-${tid}" style="background:#f8fafc; border:1px solid #cbd5e1; font-size:10px; padding:1px 5px; border-radius:3px; cursor:pointer;">명단 펼치기</button>
+                                <span style="font-weight:700; color:#991b1b; font-size:12px;">• ${d.sourceName}: 누락 ${d.missingCount}대 (보유: ${d.sourceCount}대)</span>
+                                <button id="btn-${tid}" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm">명단 펼치기</button>
                             </div>
-                            <div id="${tid}" style="display:none; margin-top:4px; max-height:90px; overflow-y:auto; font-family:monospace; font-size:10px; color:#b91c1c; word-break:break-all;">
+                            <div id="${tid}" class="awx-vld-mono" style="display:none; margin-top:6px; max-height:100px; overflow-y:auto; font-size:11.5px; color:#b91c1c; background:#fef2f2; padding:7px; border-radius:4px; word-break:break-all;">
                                 ${d.missingList.join(' ')}
                             </div>
                         </div>
@@ -532,30 +812,34 @@
                 });
 
                 resultBox.innerHTML = `
-                    <div style="font-weight:700; color:#dc2626; font-size:13px; margin-bottom:4px;">
+                    <div style="font-weight:700; color:#dc2626; font-size:13.5px; margin-bottom:4px;">
                         [MISMATCH] 소스 간 불일치 감지 (${activeSources.length}개 소스 비교)
                     </div>
-                    <div style="color:#7f1d1d; font-size:11px; margin-bottom:6px;">
+                    <div style="color:#7f1d1d; font-size:12px; margin-bottom:6px;">
                         참여 소스 현황: ${activeSources.map(s => `<b>${s.name}</b>(${s.hosts.size}대)`).join(' vs ')}
                     </div>
                     ${awxSpecialReport}
                     ${diffHtml}
                     ${mandatoryCommentHtml}
                 `;
+            }
 
-                // 토글 버튼 리스너 바인딩
-                rootDoc.querySelectorAll('button[id^="btn-"]').forEach(btn => {
-                    btn.onclick = () => {
-                        const targetId = btn.id.replace('btn-', '');
-                        const targetEl = rootDoc.getElementById(targetId);
-                        if (targetEl) {
-                            const isHidden = targetEl.style.display === 'none';
-                            targetEl.style.display = isHidden ? 'block' : 'none';
+            // 결과 영역 내 토글 버튼(명단 펼치기 및 작업 권장 안내 펼치기) 바인딩
+            resultBox.querySelectorAll('button[id^="btn-"]').forEach(btn => {
+                btn.onclick = () => {
+                    const targetId = btn.id.replace('btn-', '');
+                    const targetEl = rootDoc.getElementById(targetId);
+                    if (targetEl) {
+                        const isHidden = targetEl.style.display === 'none';
+                        targetEl.style.display = isHidden ? 'block' : 'none';
+                        if (targetId.startsWith('res-guide-toggle-')) {
+                            btn.innerText = isHidden ? '접기' : '펼치기';
+                        } else {
                             btn.innerText = isHidden ? '명단 접기' : '명단 펼치기';
                         }
-                    };
-                });
-            }
+                    }
+                };
+            });
         }
 
         btnCompare.onclick = doCompare;
@@ -563,6 +847,7 @@
 
         updateCountsAndButton();
         renderAwxSummary();
+        applyPinState();
     }
 
     bindEvents(document, false, null);
