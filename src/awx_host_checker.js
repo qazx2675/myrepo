@@ -24,6 +24,19 @@
     if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = true;
     if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
     if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
+    if (!state.collectedHosts) state.collectedHosts = new Set();
+    if (!Array.isArray(state.excludedHosts)) state.excludedHosts = [];
+    if (typeof state.rawCount !== 'number') state.rawCount = 0;
+    if (typeof state.excludePattern !== 'string') state.excludePattern = DEFAULT_EXCLUDE_HOSTS;
+    if (typeof state.detailText !== 'string') state.detailText = '';
+    if (typeof state.incidentText !== 'string') state.incidentText = '';
+    if (typeof state.targetText !== 'string') state.targetText = '';
+    if (typeof state.isStandalone !== 'boolean') state.isStandalone = false;
+    if (typeof state.isPinned !== 'boolean') state.isPinned = false;
+    if (typeof state.guideExpanded !== 'boolean') state.guideExpanded = false;
+    if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = true;
+    if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
+    if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
 
     // 현재 접속 중인 AWX 화면 컨텍스트 분석 (인벤토리 ID, 그룹 ID, 또는 전역)
     function getContext() {
@@ -300,7 +313,9 @@
         const pinClass = state.isPinned ? 'awx-vld-header-btn pinned' : 'awx-vld-header-btn';
         const pinLabel = state.isPinned ? '상단 고정됨' : '상단 고정';
         const opToggleClass = state.opacityEnabled ? 'awx-vld-opacity-toggle active' : 'awx-vld-opacity-toggle';
-        const opToggleLabel = state.opacityEnabled ? '투명도 ON' : '투명도 OFF';
+        const opToggleLabel = isPopup
+            ? (state.opacityEnabled ? '자동 접기 ON' : '자동 접기 OFF')
+            : (state.opacityEnabled ? '투명도 ON' : '투명도 OFF');
         return `
         <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:11px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:${isPopup ? 'default' : 'move'}; user-select:none; border-bottom:1px solid #1e293b;">
             <div style="display:flex; align-items:center; gap:7px; flex-shrink:0;">
@@ -319,17 +334,17 @@
 
         <div id="awx-vld-opacity-bar" class="awx-vld-opacity-bar">
             <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-weight:600; color:#cbd5e1;">투명도 자동 조절</span>
-                <button id="awx-vld-btn-opacity-toggle" class="${opToggleClass}" title="투명도 기능 켜기/끄기">${opToggleLabel}</button>
+                <span style="font-weight:600; color:#cbd5e1;">${isPopup ? '마우스 이탈 시 자동 접기 (아래 창 보기)' : '투명도 자동 조절'}</span>
+                <button id="awx-vld-btn-opacity-toggle" class="${opToggleClass}" title="기능 켜기/끄기">${opToggleLabel}</button>
             </div>
             <div style="display:flex; align-items:center; gap:7px;">
-                <span style="color:#94a3b8; font-size:11px;">${isPopup ? '창 투명도' : '마우스 이탈 시'}</span>
+                <span style="color:#94a3b8; font-size:11px;">${isPopup ? '페이지 내 투명도' : '마우스 이탈 시'}</span>
                 <input id="awx-vld-range-opacity" type="range" min="10" max="100" step="5" value="${state.opacityValue}" ${state.opacityEnabled ? '' : 'disabled'}>
                 <span id="awx-vld-lbl-opacity" class="awx-vld-mono" style="font-weight:700; color:#ffffff; min-width:34px; text-align:right;">${state.opacityValue}%</span>
             </div>
         </div>
 
-        <div style="padding:14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px; background:#f3f4f6;">
+        <div id="awx-vld-body-wrap" style="padding:14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px; background:#f3f4f6;">
             <!-- 1. AWX 호스트 수집 및 제외 섹션 -->
             <div class="awx-vld-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -429,6 +444,8 @@
         const getEl = id => rootDoc.getElementById(id);
 
         const headerEl = getEl('awx-vld-header');
+        const opacityBarEl = getEl('awx-vld-opacity-bar');
+        const bodyWrapEl = getEl('awx-vld-body-wrap');
         const btnPin = getEl('awx-vld-btn-pin');
         const btnClose = getEl('awx-vld-btn-close');
         const btnDetach = getEl('awx-vld-btn-detach');
@@ -451,18 +468,21 @@
         const btnCompare = getEl('awx-vld-btn-compare');
         const resultBox = getEl('awx-vld-result-box');
 
-        // 투명도(Opacity) 적용 함수 (페이지 내 패널 및 독립 창 모두 지원)
-        function applyOpacity(forcePreview = false) {
-            const targetContainer = isPopup ? rootDoc.body : panel;
-            if (!targetContainer) return;
+        // 독립 창(Popup)에서 마우스 이탈 시 아래 창이 보이도록 헤더 줄로 자동 축소(미니 모드) 상태 관리
+        let popupExpandedWidth = 540;
+        let popupExpandedHeight = 840;
+        let popupCollapsed = false;
+        let popupCollapseTimer = null;
 
+        // 투명도(페이지 내) 및 자동 접기 미니 모드(독립 창) 적용 함수
+        function applyOpacity(forcePreview = false) {
             if (btnOpacityToggle) {
                 if (state.opacityEnabled) {
                     btnOpacityToggle.classList.add('active');
-                    btnOpacityToggle.innerText = '투명도 ON';
+                    btnOpacityToggle.innerText = isPopup ? '자동 접기 ON' : '투명도 ON';
                 } else {
                     btnOpacityToggle.classList.remove('active');
-                    btnOpacityToggle.innerText = '투명도 OFF';
+                    btnOpacityToggle.innerText = isPopup ? '자동 접기 OFF' : '투명도 OFF';
                 }
             }
             if (rangeOpacity) {
@@ -473,20 +493,52 @@
                 lblOpacity.innerText = `${state.opacityValue}%`;
             }
 
+            // 1) 독립 창(Popup) 모드: 내부 글자를 흐리게 하지 않고(항상 선명도 100%), 마우스 이탈 시 창 높이를 헤더 줄로 축소하여 아래 창을 노출
+            if (isPopup && popupWin) {
+                rootDoc.body.style.opacity = '1';
+                const shouldCollapse = state.opacityEnabled && !state.isMouseInside && !forcePreview;
+                if (shouldCollapse) {
+                    if (!popupCollapsed) {
+                        if (popupWin.outerHeight && popupWin.outerHeight > 220) {
+                            popupExpandedWidth = popupWin.outerWidth || 540;
+                            popupExpandedHeight = popupWin.outerHeight || 840;
+                        }
+                        const frameDiff = Math.max(60, (popupWin.outerHeight || 840) - (popupWin.innerHeight || 760));
+                        const headerBarsHeight = (headerEl ? headerEl.offsetHeight : 44) + (opacityBarEl ? opacityBarEl.offsetHeight : 32) + 4;
+                        popupCollapsed = true;
+                        popupWin.awxPopupCollapsed = true;
+                        if (bodyWrapEl) bodyWrapEl.style.display = 'none';
+                        try {
+                            popupWin.resizeTo(popupExpandedWidth, frameDiff + headerBarsHeight);
+                        } catch (e) {}
+                    }
+                } else {
+                    if (popupCollapsed) {
+                        popupCollapsed = false;
+                        popupWin.awxPopupCollapsed = false;
+                        if (bodyWrapEl) bodyWrapEl.style.display = 'flex';
+                        try {
+                            popupWin.resizeTo(popupExpandedWidth, popupExpandedHeight);
+                        } catch (e) {}
+                    }
+                }
+                return;
+            }
+
+            // 2) 페이지 내 패널 모드: 마우스 진입 시 100%('1'), 마우스 이탈 시 설정 투명도%(기본 30%)로 뒤의 AWX 화면 투과
+            if (!panel) return;
             if (!state.opacityEnabled) {
-                targetContainer.style.opacity = '1';
+                panel.style.opacity = '1';
                 return;
             }
-
             if (forcePreview) {
-                targetContainer.style.opacity = String(state.opacityValue / 100);
+                panel.style.opacity = String(state.opacityValue / 100);
                 return;
             }
-
             if (state.isMouseInside) {
-                targetContainer.style.opacity = '1';
+                panel.style.opacity = '1';
             } else {
-                targetContainer.style.opacity = String(state.opacityValue / 100);
+                panel.style.opacity = String(state.opacityValue / 100);
             }
         }
 
@@ -501,15 +553,16 @@
             rangeOpacity.oninput = () => {
                 state.opacityValue = Number(rangeOpacity.value);
                 if (lblOpacity) lblOpacity.innerText = `${state.opacityValue}%`;
-                // 슬라이더 조절 중에는 현재 설정 투명도를 즉시 미리보기/적용
-                applyOpacity(true);
+                if (!isPopup) {
+                    applyOpacity(true);
+                }
             };
             rangeOpacity.onchange = () => {
-                applyOpacity(isPopup ? true : false);
+                applyOpacity(false);
             };
         }
 
-        // 마우스 진입/이탈 감지 (페이지 내 패널: 마우스 진입 시 100%, 이탈 시 설정값% / 독립 창에서도 동일 지원)
+        // 마우스 진입/이탈 감지
         const hoverTarget = isPopup ? rootDoc.documentElement : panel;
         if (hoverTarget) {
             hoverTarget.addEventListener('mouseenter', () => {
@@ -608,13 +661,16 @@
         if (isPopup) {
             btnDetach.onclick = () => {
                 if (popupWin) popupWin.close();
+                state.isMouseInside = true;
                 panel.style.display = 'flex';
+                panel.style.opacity = '1';
                 updateCountsAndButton();
             };
         } else {
             btnDetach.onclick = () => {
                 panel.style.display = 'none';
-                const popup = window.open('', 'AWXHostValidatorPopup', 'width=540,height=840,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
+                state.isMouseInside = true;
+                const popup = window.open('', 'AWXHostValidatorPopup', 'width=560,height=840,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
                 if (!popup) {
                     alert('팝업 차단이 감지되었습니다. 팝업 허용 후 다시 시도해주세요.');
                     panel.style.display = 'flex';
@@ -623,6 +679,7 @@
                 popup.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>작업대상 호스트 교차 검증기</title><style>${getStylesheet()}</style></head><body class="awx-vld-popup-root" style="margin:0; padding:0; background:#f3f4f6; display:flex; flex-direction:column; height:100vh; overflow:hidden;">${buildUIHTML(ctx, true)}</body></html>`);
                 popup.document.close();
                 bindEvents(popup.document, true, popup);
+                window.awxPopupWindow = popup;
             };
         }
 

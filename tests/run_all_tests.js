@@ -82,6 +82,7 @@ class CDPClient {
     async evaluate(expr) {
         const res = await this.send('Runtime.evaluate', {
             expression: expr,
+            userGesture: true,
             awaitPromise: true,
             returnByValue: true
         });
@@ -448,7 +449,7 @@ async function runOneTakeTests() {
             })()
         `);
 
-        // 상단 고정(Pin), 투명도(마우스 진입 100%, 이탈 30%, 슬라이더 50% 조절, ON/OFF 토글), 독립 창 분리 검증
+        // 상단 고정(Pin), 투명도(마우스 진입 100%, 이탈 30%, 슬라이더 50% 조절, ON/OFF 토글), 독립 창 분리 및 자동 접기(미니 모드) 검증
         const pinOpacityDetachValid = await cdp.evaluate(`
             (() => {
                 const panel = document.getElementById('awx-validator-panel');
@@ -480,12 +481,30 @@ async function runOneTakeTests() {
                 const opWhenOff = panel.style.opacity;
                 const toggleOffText = btnOpToggle.innerText;
 
-                // 다시 ON으로 켜고 마우스 진입 상태로 설정 (선명한 캡처용)
+                // 다시 ON으로 켜고 마우스 진입 상태로 설정
                 btnOpToggle.click();
                 panel.dispatchEvent(new MouseEvent('mouseenter'));
 
+                // 5. 독립 창으로 분리 후 마우스 이탈 시 헤더 줄로 자동 축소(미니 모드) 및 마우스 진입 시 펼치기 검증
                 const btnDetach = document.getElementById('awx-vld-btn-detach');
-                const detachOk = btnDetach && btnDetach.innerText === '독립 창으로 분리' && typeof btnDetach.onclick === 'function';
+                btnDetach.click();
+                const popup = window.awxPopupWindow;
+                let popupMiniModeOk = false;
+                if (popup && popup.document) {
+                    popup.document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                    const collapsedState = popup.awxPopupCollapsed === true &&
+                        popup.document.getElementById('awx-vld-body-wrap').style.display === 'none' &&
+                        popup.document.body.style.opacity === '1';
+
+                    popup.document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+                    const expandedState = popup.awxPopupCollapsed === false &&
+                        popup.document.getElementById('awx-vld-body-wrap').style.display === 'flex';
+
+                    popupMiniModeOk = collapsedState && expandedState;
+                    // 페이지 내로 복귀 클릭
+                    const popupReturnBtn = popup.document.getElementById('awx-vld-btn-detach');
+                    if (popupReturnBtn) popupReturnBtn.click();
+                }
 
                 return {
                     isPinned,
@@ -494,7 +513,7 @@ async function runOneTakeTests() {
                     opSlider50,
                     opWhenOff,
                     toggleOffText,
-                    detachOk
+                    popupMiniModeOk
                 };
             })()
         `);
@@ -507,9 +526,9 @@ async function runOneTakeTests() {
             pinOpacityDetachValid.opSlider50 === '0.5' &&
             pinOpacityDetachValid.opWhenOff === '1' &&
             pinOpacityDetachValid.toggleOffText === '투명도 OFF' &&
-            pinOpacityDetachValid.detachOk
+            pinOpacityDetachValid.popupMiniModeOk
         ) {
-            recordLog('TC-10', '이동 & 상단고정 & 투명도(호버/슬라이더/ON-OFF) & 독립창', 'PASS', `드래그 이동, 상단 고정, 투명도(진입 100%/이탈 30%/슬라이더 50%/OFF 시 100%) 및 독립 창 분리 정상 확인`);
+            recordLog('TC-10', '이동 & 상단고정 & 페이지 투명도 & 독립창 자동접기(미니모드)', 'PASS', `드래그 이동, 상단 고정, 페이지 투명도(100%/30%/50%/OFF) 및 독립 창 이탈 시 헤더 줄 자동 축소(아래 창 보기)/복원 확인`);
         } else {
             throw new Error(`TC-10 FAILED: drag=${JSON.stringify(dragTest)}, details=${JSON.stringify(pinOpacityDetachValid)}`);
         }
