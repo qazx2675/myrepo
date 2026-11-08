@@ -43,7 +43,68 @@
 
 ---
 
-## 3. 파일 구성
+## 3. 작업대상 확인 프로세스 (업무 흐름도)
+
+```mermaid
+flowchart TD
+    S["<b>1. 인시던트 상세현황 등록</b>"] --> TYPE{"<b>2. 어떤 작업인가요?</b>"}
+
+    %% AWX 작업 경로 (왼쪽)
+    subgraph AWX ["🅰️ AWX 작업"]
+        direction TB
+        A1["① AWX 작업 호스트 등록"]
+        A2["② '작업대상 비교' 북마크 실행"]
+        A3["③ 인벤토리 홈페이지 이동 후<br/>'현재 인벤토리 전체 수집' 클릭"]
+        A1 --> A2 --> A3
+    end
+
+    %% 일반 작업 경로 (오른쪽)
+    subgraph GEN ["🅱️ 일반 작업"]
+        direction TB
+        B1["① (AWX 수집 호스트가 있으면) 초기화"]
+        B2["② 인시던트 작업대상 파일 복사"]
+        B1 --> B2
+    end
+
+    TYPE -->|"AWX 작업"| A1
+    TYPE -->|"일반 작업"| B1
+
+    %% 공통 단계
+    A3 --> COMMON
+    B2 --> COMMON
+
+    COMMON["<b>3. 상세현황에서 호스트 그대로 복사</b> (시리얼 포함 무관)<br/>↓<br/><b>4. '교차 비교 실행' 클릭</b>"]
+    COMMON --> RES{"<b>비교 결과는?</b>"}
+
+    %% MISMATCH
+    RES -->|"❌ 6. MISMATCH (불일치)"| RETRY["<b>대상 재점검 후 다시 진행</b>"]
+    RETRY -.-> COMMON
+
+    %% MATCH
+    RES -->|"⭕ 5. MATCH (일치)"| AFTER{"<b>작업 유형별 마무리</b>"}
+
+    AFTER -->|"🅰️ AWX 작업"| AWX_END["인벤토리 변동 없는지 확인 후 진행<br/><i>(⚠️ 변동 있었다면 반드시 재확인)</i>"]
+    AFTER -->|"🅱️ 일반 작업"| GEN_END["인시던트 대상리스트를 그대로 복사해<br/><b>크로스체크 확인자 보는 앞에서</b> 붙여넣기<br/><i>(vim → esc → :set paste → 붙여넣기)</i>"]
+
+    AWX_END --> DONE(["<b>✅ 작업 시작</b>"])
+    GEN_END --> DONE
+
+    classDef step fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+    classDef point fill:#fef9c3,stroke:#ca8a04,stroke-width:1.5px,color:#0f172a
+    classDef match fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#0f172a
+    classDef mismatch fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#0f172a
+    classDef done fill:#16a34a,stroke:#15803d,color:#ffffff
+
+    class S,A1,A2,A3,B1,B2,COMMON step
+    class TYPE,RES,AFTER point
+    class AWX_END,GEN_END match
+    class RETRY mismatch
+    class DONE done
+```
+
+---
+
+## 4. 파일 구성
 
 ```text
 ├── src/
@@ -65,7 +126,7 @@
 
 ---
 
-## 4. 신뢰성 증명 및 원테이크 테스트 통과 결과
+## 5. 신뢰성 증명 및 원테이크 테스트 통과 결과
 
 * **실행 명령**: `node tests/run_all_tests.js`
 * **결과**: **10개 테스트케이스 전원 100% 통과 (One-Take Pass)**
