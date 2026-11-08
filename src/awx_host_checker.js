@@ -24,19 +24,14 @@
     if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = true;
     if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
     if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
-    if (!state.collectedHosts) state.collectedHosts = new Set();
-    if (!Array.isArray(state.excludedHosts)) state.excludedHosts = [];
-    if (typeof state.rawCount !== 'number') state.rawCount = 0;
-    if (typeof state.excludePattern !== 'string') state.excludePattern = DEFAULT_EXCLUDE_HOSTS;
-    if (typeof state.detailText !== 'string') state.detailText = '';
-    if (typeof state.incidentText !== 'string') state.incidentText = '';
-    if (typeof state.targetText !== 'string') state.targetText = '';
-    if (typeof state.isStandalone !== 'boolean') state.isStandalone = false;
-    if (typeof state.isPinned !== 'boolean') state.isPinned = false;
-    if (typeof state.guideExpanded !== 'boolean') state.guideExpanded = false;
-    if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = true;
-    if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
-    if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
+    if (!state.resetTargets || typeof state.resetTargets !== 'object') {
+        state.resetTargets = {
+            detail: true,
+            incident: true,
+            target: true
+        };
+    }
+    if (typeof state.showResetConfig !== 'boolean') state.showResetConfig = false;
 
     // 현재 접속 중인 AWX 화면 컨텍스트 분석 (인벤토리 ID, 그룹 ID, 또는 전역)
     function getContext() {
@@ -308,6 +303,11 @@
         return `<svg width="12" height="12" viewBox="0 0 16 16" fill="${fill}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="transform:${transform}; transition:transform 0.15s ease;"><path d="M9.5 2.5L13.5 6.5L12 8L10 6L6.5 9.5L8.5 11.5L7 13L4.5 10.5L2 13L3 14L2 14L2 13L4.5 10.5L2 8L3.5 6.5L5.5 8.5L9 5L7 3L8.5 1.5Z"/></svg>`;
     }
 
+    // 톱니바퀴 아이콘 SVG (초기화 대상 설정용)
+    function getGearSvg() {
+        return `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="display:block;"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.86z"/></svg>`;
+    }
+
     // HTML UI 생성 함수 (패널 및 독립 창 공용)
     function buildUIHTML(ctx, isPopup = false) {
         const pinClass = state.isPinned ? 'awx-vld-header-btn pinned' : 'awx-vld-header-btn';
@@ -352,7 +352,34 @@
                         <span class="awx-vld-section-title">1. AWX 호스트 수집</span>
                         <span class="awx-vld-badge-opt">선택 - 1대 이상 시 비교 참여</span>
                     </div>
-                    <button id="awx-vld-btn-reset-awx" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm">수집 초기화</button>
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <button id="awx-vld-btn-reset-awx" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" title="수집된 AWX 및 설정된 비교 대상을 초기화합니다">수집 초기화</button>
+                        <button id="awx-vld-btn-reset-config" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:4px 6px; ${state.showResetConfig ? 'background:#e2e8f0;' : ''}" title="초기화 대상 설정 (톱니바퀴)">
+                            ${getGearSvg()}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 톱니바퀴 설정 패널: 2번 비교 대상 호스트 초기화 여부 체크박스 -->
+                <div id="awx-vld-reset-config-panel" style="display:${state.showResetConfig ? 'block' : 'none'}; background:#f8fafc; border:1px solid #cbd5e1; border-radius:5px; padding:8px 10px; margin-bottom:10px; font-size:11.5px;">
+                    <div style="font-weight:700; color:#334155; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>수집 초기화 시 함께 초기화할 항목</span>
+                        <span style="font-size:10.5px; color:#64748b; font-weight:normal;">(체크된 항목이 함께 초기화됩니다)</span>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:12px; color:#1e293b;">
+                        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; user-select:none;">
+                            <input id="awx-vld-chk-reset-detail" type="checkbox" ${state.resetTargets.detail ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+                            <span>상세목록현황 호스트</span>
+                        </label>
+                        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; user-select:none;">
+                            <input id="awx-vld-chk-reset-incident" type="checkbox" ${state.resetTargets.incident ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+                            <span>인시던트 호스트</span>
+                        </label>
+                        <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; user-select:none;">
+                            <input id="awx-vld-chk-reset-target" type="checkbox" ${state.resetTargets.target ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+                            <span>작업대상 호스트</span>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- 제외 패턴 입력란 -->
@@ -455,6 +482,11 @@
         const inputExclude = getEl('awx-vld-input-exclude');
         const hintExclude = getEl('awx-vld-exclude-hint');
         const btnResetAwx = getEl('awx-vld-btn-reset-awx');
+        const btnResetConfig = getEl('awx-vld-btn-reset-config');
+        const panelResetConfig = getEl('awx-vld-reset-config-panel');
+        const chkResetDetail = getEl('awx-vld-chk-reset-detail');
+        const chkResetIncident = getEl('awx-vld-chk-reset-incident');
+        const chkResetTarget = getEl('awx-vld-chk-reset-target');
         const btnPage = getEl('awx-vld-btn-page');
         const btnCollectAll = getEl('awx-vld-btn-collect-all');
         const countAwxEl = getEl('awx-vld-count-awx');
@@ -721,12 +753,57 @@
         txtIncident.oninput = updateCountsAndButton;
         txtTarget.oninput = updateCountsAndButton;
 
-        // AWX 수집 초기화
+        // 톱니바퀴 초기화 대상 설정 패널 토글 및 체크박스 상태 변경 바인딩
+        if (btnResetConfig && panelResetConfig) {
+            btnResetConfig.onclick = () => {
+                state.showResetConfig = !state.showResetConfig;
+                panelResetConfig.style.display = state.showResetConfig ? 'block' : 'none';
+                btnResetConfig.style.background = state.showResetConfig ? '#e2e8f0' : '#ffffff';
+            };
+        }
+
+        if (chkResetDetail) {
+            chkResetDetail.onchange = () => {
+                state.resetTargets.detail = chkResetDetail.checked;
+            };
+        }
+        if (chkResetIncident) {
+            chkResetIncident.onchange = () => {
+                state.resetTargets.incident = chkResetIncident.checked;
+            };
+        }
+        if (chkResetTarget) {
+            chkResetTarget.onchange = () => {
+                state.resetTargets.target = chkResetTarget.checked;
+            };
+        }
+
+        // 수집 초기화 (AWX 수집 초기화 + 톱니바퀴 설정에 따라 2번 비교 대상 호스트 입력 연동 초기화)
         btnResetAwx.onclick = () => {
             state.collectedHosts.clear();
             state.excludedHosts = [];
             state.rawCount = 0;
             awxSummaryEl.innerHTML = '';
+
+            if (state.resetTargets.detail) {
+                txtDetail.value = '';
+                state.detailText = '';
+            }
+            if (state.resetTargets.incident) {
+                txtIncident.value = '';
+                state.incidentText = '';
+            }
+            if (state.resetTargets.target) {
+                txtTarget.value = '';
+                state.targetText = '';
+            }
+
+            // 비교 결과창 초기화
+            if (resultBox) {
+                resultBox.style.display = 'none';
+                resultBox.innerHTML = '';
+            }
+
             updateCountsAndButton();
         };
 

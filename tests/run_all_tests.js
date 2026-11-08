@@ -404,6 +404,10 @@ async function runOneTakeTests() {
         const matchGuideCheck = await cdp.evaluate(`
             (() => {
                 document.getElementById('awx-vld-btn-reset-awx').click();
+                const sampleMatch = "prd-db-0001\\nprd-db-0002\\nprd-db-0003";
+                document.getElementById('awx-vld-txt-detail').value = sampleMatch;
+                document.getElementById('awx-vld-txt-incident').value = sampleMatch;
+                document.getElementById('awx-vld-txt-detail').dispatchEvent(new Event('input'));
                 window.awxDoCompare();
                 const guideBtns = document.querySelectorAll('#awx-vld-btn-guide-toggle');
                 const msgEl = document.getElementById('awx-vld-guide-msg');
@@ -533,10 +537,90 @@ async function runOneTakeTests() {
             throw new Error(`TC-10 FAILED: drag=${JSON.stringify(dragTest)}, details=${JSON.stringify(pinOpacityDetachValid)}`);
         }
 
-        await cdp.screenshot("C:\\Users\\qazx2\\.gemini\\antigravity\\scratch\\host-cross-checker\\tests\\screenshot_onetake_success.png");
+        // -------------------------------------------------------------
+        // TC-11: 수집 초기화 연동 및 톱니바퀴 설정(체크박스) 검증
+        // -------------------------------------------------------------
+        console.log("\n>>> Executing TC-11: 수집 초기화 연동 및 톱니바퀴 설정(체크박스) 검증");
+        const resetConfigTest = await cdp.evaluate(`
+            (() => {
+                const btnConfig = document.getElementById('awx-vld-btn-reset-config');
+                const panelConfig = document.getElementById('awx-vld-reset-config-panel');
+                const chkDetail = document.getElementById('awx-vld-chk-reset-detail');
+                const chkIncident = document.getElementById('awx-vld-chk-reset-incident');
+                const chkTarget = document.getElementById('awx-vld-chk-reset-target');
+                const btnReset = document.getElementById('awx-vld-btn-reset-awx');
+                const txtDetail = document.getElementById('awx-vld-txt-detail');
+                const txtIncident = document.getElementById('awx-vld-txt-incident');
+                const txtTarget = document.getElementById('awx-vld-txt-target');
+
+                // 1. 톱니바퀴 클릭 시 패널 표시 토글 검증
+                const initialPanelDisplay = panelConfig.style.display;
+                btnConfig.click();
+                const openedPanelDisplay = panelConfig.style.display;
+                btnConfig.click();
+                const closedPanelDisplay = panelConfig.style.display;
+
+                // 2. 기본 상태(3개 모두 체크됨): 초기화 시 상세, 인시던트, 작업대상 모두 빈 문자열로 초기화
+                txtDetail.value = 'server-a1 server-a2';
+                txtIncident.value = 'server-b1 server-b2';
+                txtTarget.value = 'server-c1 server-c2';
+                txtDetail.dispatchEvent(new Event('input'));
+                btnReset.click();
+                const fullResetOk = (txtDetail.value === '' && txtIncident.value === '' && txtTarget.value === '');
+
+                // 3. 작업대상 호스트만 체크 해제: 작업대상은 유지되고 상세/인시던트만 초기화
+                chkTarget.click(); // 체크 해제
+                txtDetail.value = 'server-d1';
+                txtIncident.value = 'server-e1';
+                txtTarget.value = 'server-preserve';
+                txtDetail.dispatchEvent(new Event('input'));
+                btnReset.click();
+                const targetPreservedOk = (txtDetail.value === '' && txtIncident.value === '' && txtTarget.value === 'server-preserve');
+
+                // 4. 모든 체크박스 해제: 2번 입력란 전체 보존되고 AWX 수집만 초기화
+                chkDetail.click(); // 체크 해제
+                chkIncident.click(); // 체크 해제
+                txtDetail.value = 'keep-detail';
+                txtIncident.value = 'keep-incident';
+                txtTarget.value = 'keep-target';
+                txtDetail.dispatchEvent(new Event('input'));
+                btnReset.click();
+                const allPreservedOk = (txtDetail.value === 'keep-detail' && txtIncident.value === 'keep-incident' && txtTarget.value === 'keep-target');
+
+                // 원복: 기본 체크 상태로 복원
+                chkDetail.click();
+                chkIncident.click();
+                chkTarget.click();
+                btnReset.click();
+
+                return {
+                    initialPanelDisplay,
+                    openedPanelDisplay,
+                    closedPanelDisplay,
+                    fullResetOk,
+                    targetPreservedOk,
+                    allPreservedOk
+                };
+            })()
+        `);
+
+        if (
+            resetConfigTest.initialPanelDisplay === 'none' &&
+            resetConfigTest.openedPanelDisplay === 'block' &&
+            resetConfigTest.closedPanelDisplay === 'none' &&
+            resetConfigTest.fullResetOk &&
+            resetConfigTest.targetPreservedOk &&
+            resetConfigTest.allPreservedOk
+        ) {
+            recordLog('TC-11', '수집 초기화 연동 및 톱니바퀴 설정(체크박스) 검증', 'PASS', `톱니바퀴 패널 토글, 기본 전체 연동 초기화, 선택적 초기화(작업대상 보존), 전체 보존 모드 정상 검증 완료`);
+        } else {
+            throw new Error(`TC-11 FAILED: ${JSON.stringify(resetConfigTest)}`);
+        }
+
+        await cdp.screenshot(path.join(__dirname, "screenshot_onetake_success.png"));
 
         console.log("\n==================================================================");
-        console.log("  [ONE-TAKE SUCCESS] 10개 테스트케이스 전원 100% 연속 통과!");
+        console.log("  [ONE-TAKE SUCCESS] 11개 테스트케이스 전원 100% 연속 통과!");
         console.log("==================================================================");
 
         return testLogs;
