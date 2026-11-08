@@ -365,52 +365,73 @@ async function runOneTakeTests() {
         }
 
         // -------------------------------------------------------------
-        // TC-09: 고정 완료 코멘트 & [펼치기] 작업대상 표시 & UI 무결성 (이모티콘 0건)
+        // TC-09: MISMATCH/MATCH 별 작업 권장 안내 문구 분기 & 중복 제거 & [펼치기] & 이모티콘 0건 검증
         // -------------------------------------------------------------
-        console.log("\n>>> Executing TC-09: 고정 완료 코멘트 & [펼치기] 작업대상 표시 & 이모티콘 0건 검증");
-        const panelText = await cdp.evaluate(`document.getElementById('awx-validator-panel').innerText`);
-        const expectedComment = "인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -> esc -> :set paste 입력(붙여넣기 모드) -> 붙여넣기";
-
-        if (!panelText.includes(expectedComment)) {
-            throw new Error(`TC-09 FAILED: 필수 완료 코멘트 누락. panelText snippet: ${panelText.substring(panelText.length - 200)}`);
-        }
-
-        // 작업 권장 안내 [펼치기] 클릭 시 작업대상 30대가 표시되는지 확인
-        const guideToggleRes = await cdp.evaluate(`
+        console.log("\n>>> Executing TC-09: MISMATCH/MATCH 작업 권장 안내 분기 & 중복 제거 & [펼치기] 검증");
+        // 1) 현재 MISMATCH 상태(TC-08 직후)에서 작업 권장 안내 중복 여부(1개만 존재) 및 재확인 안내 문구 검증
+        const mismatchGuideCheck = await cdp.evaluate(`
             (() => {
+                const guideBtns = document.querySelectorAll('#awx-vld-btn-guide-toggle');
+                const msgEl = document.getElementById('awx-vld-guide-msg');
                 const btn = document.getElementById('awx-vld-btn-guide-toggle');
                 const box = document.getElementById('awx-vld-guide-targets');
                 const cnt = document.getElementById('awx-vld-guide-target-count');
                 const list = document.getElementById('awx-vld-guide-target-list');
-                if (!btn || !box) return null;
-                btn.click();
+                if (btn) btn.click();
                 return {
-                    btnText: btn.innerText,
-                    visible: box.style.display === 'block',
-                    count: cnt ? cnt.innerText : '',
+                    guideBoxCount: guideBtns.length,
+                    mismatchMsg: msgEl ? msgEl.innerText.trim() : '',
+                    expandedVisible: box ? box.style.display === 'block' : false,
+                    targetCount: cnt ? cnt.innerText : '',
                     hasHost: list ? list.innerText.includes('prd-db-0001') : false
                 };
             })()
         `);
 
-        if (!guideToggleRes || !guideToggleRes.visible || guideToggleRes.count !== '30' || !guideToggleRes.hasHost) {
-            throw new Error(`TC-09 FAILED (guide toggle): ${JSON.stringify(guideToggleRes)}`);
+        if (
+            mismatchGuideCheck.guideBoxCount !== 1 ||
+            !mismatchGuideCheck.mismatchMsg.includes("작업대상을 다시 확인하고") ||
+            !mismatchGuideCheck.expandedVisible ||
+            mismatchGuideCheck.targetCount !== '30' ||
+            !mismatchGuideCheck.hasHost
+        ) {
+            throw new Error(`TC-09 FAILED (MISMATCH guide check): ${JSON.stringify(mismatchGuideCheck)}`);
         }
 
+        // 2) MATCH 상태에서 vim :set paste 권장 문구 출력 검증
+        const expectedMatchComment = "인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -> esc -> :set paste 입력(붙여넣기 모드) -> 붙여넣기";
+        const matchGuideCheck = await cdp.evaluate(`
+            (() => {
+                document.getElementById('awx-vld-btn-reset-awx').click();
+                window.awxDoCompare();
+                const guideBtns = document.querySelectorAll('#awx-vld-btn-guide-toggle');
+                const msgEl = document.getElementById('awx-vld-guide-msg');
+                return {
+                    guideBoxCount: guideBtns.length,
+                    matchMsg: msgEl ? msgEl.innerText.trim() : ''
+                };
+            })()
+        `);
+
+        if (matchGuideCheck.guideBoxCount !== 1 || !matchGuideCheck.matchMsg.includes(expectedMatchComment)) {
+            throw new Error(`TC-09 FAILED (MATCH guide check): ${JSON.stringify(matchGuideCheck)}`);
+        }
+
+        const panelText = await cdp.evaluate(`document.getElementById('awx-validator-panel').innerText`);
         // 이모티콘 검사 정규식
         const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
         const hasEmoji = emojiRegex.test(panelText);
 
         if (!hasEmoji && !panelText.includes("v2.2")) {
-            recordLog('TC-09', '완료 코멘트 & 작업대상 펼치기 & UI 무결성', 'PASS', `필수 권장 코멘트, [펼치기] 작업대상 30대 명단 표시, 이모티콘/구버전 배지 0건 확인`);
+            recordLog('TC-09', 'MISMATCH/MATCH 안내문구 분기 & 중복 제거 & 펼치기', 'PASS', `중복 박스 제거(단일 출력), MISMATCH 시 재확인 문구 / MATCH 시 vim 붙여넣기 문구 분기 및 [펼치기] 정상 확인`);
         } else {
             throw new Error(`TC-09 FAILED: hasEmoji=${hasEmoji}`);
         }
 
         // -------------------------------------------------------------
-        // TC-10: 페이지 내 이동 & 상단 고정(Pin) & 독립 팝업 창 전환
+        // TC-10: 페이지 내 이동 & 상단 고정(Pin) & 투명도(마우스 진입 100%/이탈 30%/슬라이더/ON-OFF) & 독립 창 전환
         // -------------------------------------------------------------
-        console.log("\n>>> Executing TC-10: 페이지 내 이동 & 상단 고정(Pin) & 독립 팝업 창 전환");
+        console.log("\n>>> Executing TC-10: 이동 & 상단 고정(Pin) & 투명도 조절(ON/OFF, 슬라이더, 마우스 호버) & 독립 창 전환");
         const dragTest = await cdp.evaluate(`
             (() => {
                 const panel = document.getElementById('awx-validator-panel');
@@ -427,22 +448,70 @@ async function runOneTakeTests() {
             })()
         `);
 
-        // 상단 고정(Pin) 버튼 토글 및 독립 창 분리 버튼 핸들러 유효성 확인
-        const pinAndDetachValid = await cdp.evaluate(`
+        // 상단 고정(Pin), 투명도(마우스 진입 100%, 이탈 30%, 슬라이더 50% 조절, ON/OFF 토글), 독립 창 분리 검증
+        const pinOpacityDetachValid = await cdp.evaluate(`
             (() => {
+                const panel = document.getElementById('awx-validator-panel');
                 const btnPin = document.getElementById('awx-vld-btn-pin');
                 if (btnPin) btnPin.click();
                 const isPinned = window.awxValidatorState.isPinned === true && btnPin.innerText.includes('상단 고정됨');
+
+                // 1. 마우스 진입 시 투명도 100% ('1')
+                panel.dispatchEvent(new MouseEvent('mouseenter'));
+                const opInside = panel.style.opacity;
+
+                // 2. 마우스 이탈 시 기본 투명도 30% ('0.3')
+                panel.dispatchEvent(new MouseEvent('mouseleave'));
+                const opOutside30 = panel.style.opacity;
+
+                // 3. 슬라이더 바로 50% 조절 시 ('0.5')
+                const range = document.getElementById('awx-vld-range-opacity');
+                range.value = '50';
+                range.dispatchEvent(new Event('input'));
+                const opSlider50 = panel.style.opacity;
+
+                // 다시 30%로 원복
+                range.value = '30';
+                range.dispatchEvent(new Event('input'));
+
+                // 4. 투명도 기능 OFF 토글 시 마우스 이탈 상태여도 100% ('1')
+                const btnOpToggle = document.getElementById('awx-vld-btn-opacity-toggle');
+                btnOpToggle.click();
+                const opWhenOff = panel.style.opacity;
+                const toggleOffText = btnOpToggle.innerText;
+
+                // 다시 ON으로 켜고 마우스 진입 상태로 설정 (선명한 캡처용)
+                btnOpToggle.click();
+                panel.dispatchEvent(new MouseEvent('mouseenter'));
+
                 const btnDetach = document.getElementById('awx-vld-btn-detach');
                 const detachOk = btnDetach && btnDetach.innerText === '독립 창으로 분리' && typeof btnDetach.onclick === 'function';
-                return { isPinned, detachOk };
+
+                return {
+                    isPinned,
+                    opInside,
+                    opOutside30,
+                    opSlider50,
+                    opWhenOff,
+                    toggleOffText,
+                    detachOk
+                };
             })()
         `);
 
-        if (dragTest.moved && pinAndDetachValid.isPinned && pinAndDetachValid.detachOk) {
-            recordLog('TC-10', '페이지 내 이동 & 상단 고정(Pin) & 독립 창 전환', 'PASS', `패널 드래그 이동, 상단 고정(Pin) 활성화 및 [독립 창으로 분리] 핸들러 정상 확인`);
+        if (
+            dragTest.moved &&
+            pinOpacityDetachValid.isPinned &&
+            pinOpacityDetachValid.opInside === '1' &&
+            pinOpacityDetachValid.opOutside30 === '0.3' &&
+            pinOpacityDetachValid.opSlider50 === '0.5' &&
+            pinOpacityDetachValid.opWhenOff === '1' &&
+            pinOpacityDetachValid.toggleOffText === '투명도 OFF' &&
+            pinOpacityDetachValid.detachOk
+        ) {
+            recordLog('TC-10', '이동 & 상단고정 & 투명도(호버/슬라이더/ON-OFF) & 독립창', 'PASS', `드래그 이동, 상단 고정, 투명도(진입 100%/이탈 30%/슬라이더 50%/OFF 시 100%) 및 독립 창 분리 정상 확인`);
         } else {
-            throw new Error(`TC-10 FAILED: dragTest=${JSON.stringify(dragTest)}, pinAndDetachValid=${JSON.stringify(pinAndDetachValid)}`);
+            throw new Error(`TC-10 FAILED: drag=${JSON.stringify(dragTest)}, details=${JSON.stringify(pinOpacityDetachValid)}`);
         }
 
         await cdp.screenshot("C:\\Users\\qazx2\\.gemini\\antigravity\\scratch\\host-cross-checker\\tests\\screenshot_onetake_success.png");

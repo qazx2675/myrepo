@@ -8,21 +8,22 @@
     const prevStyle = document.getElementById('awx-validator-styles');
     if (prevStyle) prevStyle.remove();
 
-    // 상태 저장 객체
-    window.awxValidatorState = window.awxValidatorState || {
-        collectedHosts: new Set(),
-        excludedHosts: [],
-        rawCount: 0,
-        excludePattern: DEFAULT_EXCLUDE_HOSTS,
-        detailText: '',
-        incidentText: '',
-        targetText: '',
-        isStandalone: false,
-        isPinned: false,
-        guideExpanded: false
-    };
-
+    // 상태 저장 객체 (재실행 시 기존 상태 유지 및 신규 필드 기본값 보장)
+    window.awxValidatorState = window.awxValidatorState || {};
     const state = window.awxValidatorState;
+    if (!state.collectedHosts) state.collectedHosts = new Set();
+    if (!Array.isArray(state.excludedHosts)) state.excludedHosts = [];
+    if (typeof state.rawCount !== 'number') state.rawCount = 0;
+    if (typeof state.excludePattern !== 'string') state.excludePattern = DEFAULT_EXCLUDE_HOSTS;
+    if (typeof state.detailText !== 'string') state.detailText = '';
+    if (typeof state.incidentText !== 'string') state.incidentText = '';
+    if (typeof state.targetText !== 'string') state.targetText = '';
+    if (typeof state.isStandalone !== 'boolean') state.isStandalone = false;
+    if (typeof state.isPinned !== 'boolean') state.isPinned = false;
+    if (typeof state.guideExpanded !== 'boolean') state.guideExpanded = false;
+    if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = true;
+    if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
+    if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
 
     // 현재 접속 중인 AWX 화면 컨텍스트 분석 (인벤토리 ID, 그룹 ID, 또는 전역)
     function getContext() {
@@ -245,6 +246,45 @@
             border-radius: 3px;
             margin-left: 4px;
         }
+        .awx-vld-opacity-bar {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 6px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid #334155;
+            font-size: 11.5px;
+            user-select: none;
+        }
+        .awx-vld-opacity-toggle {
+            background: #334155;
+            color: #94a3b8;
+            border: 1px solid #475569;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .awx-vld-opacity-toggle.active {
+            background: #10b981;
+            color: #ffffff;
+            border-color: #34d399;
+        }
+        #awx-vld-range-opacity {
+            width: 110px;
+            height: 5px;
+            accent-color: #3b82f6;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        #awx-vld-range-opacity:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
         `;
     }
 
@@ -259,6 +299,8 @@
     function buildUIHTML(ctx, isPopup = false) {
         const pinClass = state.isPinned ? 'awx-vld-header-btn pinned' : 'awx-vld-header-btn';
         const pinLabel = state.isPinned ? '상단 고정됨' : '상단 고정';
+        const opToggleClass = state.opacityEnabled ? 'awx-vld-opacity-toggle active' : 'awx-vld-opacity-toggle';
+        const opToggleLabel = state.opacityEnabled ? '투명도 ON' : '투명도 OFF';
         return `
         <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:11px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:${isPopup ? 'default' : 'move'}; user-select:none; border-bottom:1px solid #1e293b;">
             <div style="display:flex; align-items:center; gap:7px; flex-shrink:0;">
@@ -272,6 +314,18 @@
                 </button>
                 <button id="awx-vld-btn-detach" class="awx-vld-header-btn" title="패널 크기 맞춤 독립 브라우저 팝업 창으로 띄우기">${isPopup ? '페이지 내로 복귀' : '독립 창으로 분리'}</button>
                 <button id="awx-vld-btn-close" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; line-height:1; padding:0 4px;" title="닫기">&times;</button>
+            </div>
+        </div>
+
+        <div id="awx-vld-opacity-bar" class="awx-vld-opacity-bar">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:600; color:#cbd5e1;">투명도 자동 조절</span>
+                <button id="awx-vld-btn-opacity-toggle" class="${opToggleClass}" title="투명도 기능 켜기/끄기">${opToggleLabel}</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:7px;">
+                <span style="color:#94a3b8; font-size:11px;">${isPopup ? '창 투명도' : '마우스 이탈 시'}</span>
+                <input id="awx-vld-range-opacity" type="range" min="10" max="100" step="5" value="${state.opacityValue}" ${state.opacityEnabled ? '' : 'disabled'}>
+                <span id="awx-vld-lbl-opacity" class="awx-vld-mono" style="font-weight:700; color:#ffffff; min-width:34px; text-align:right;">${state.opacityValue}%</span>
             </div>
         </div>
 
@@ -343,25 +397,8 @@
                 교차 비교 실행 (2개 소스)
             </button>
 
-            <!-- 4. 검증 결과 리포트 영역 -->
+            <!-- 4. 검증 결과 및 작업 권장 안내 리포트 영역 (중복 방지를 위해 단일 영역으로 통합) -->
             <div id="awx-vld-result-box" style="display:none; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:14px; font-size:12.5px; line-height:1.5;"></div>
-
-            <!-- 5. 작업 권장 안내 (펼치기 시 작업대상 호스트 표시 포함) -->
-            <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:11px 13px; font-size:12px; color:#111827; line-height:1.5;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                    <span style="font-weight:700; color:#1e293b; font-size:12px;">작업 권장 안내</span>
-                    <button id="awx-vld-btn-guide-toggle" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:2px 8px; font-size:11px;">${state.guideExpanded ? '접기' : '펼치기'}</button>
-                </div>
-                <div class="awx-vld-mono" style="font-size:12px; color:#0f172a; background:#f8fafc; padding:7px 9px; border-radius:4px; border:1px solid #e2e8f0; word-break:break-all;">
-                    인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
-                </div>
-                <div id="awx-vld-guide-targets" style="display:${state.guideExpanded ? 'block' : 'none'}; margin-top:8px; padding-top:8px; border-top:1px dashed #cbd5e1;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <span style="font-size:11.5px; font-weight:700; color:#334155;">작업대상 호스트 명단 (<span id="awx-vld-guide-target-count">0</span>대)</span>
-                    </div>
-                    <div id="awx-vld-guide-target-list" class="awx-vld-mono" style="max-height:130px; overflow-y:auto; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:8px; font-size:12px; color:#111827; white-space:pre-wrap; word-break:break-all;"></div>
-                </div>
-            </div>
         </div>
         `;
     }
@@ -380,6 +417,7 @@
         background: #ffffff; border: 1px solid #0f172a; border-radius: 8px;
         box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22); z-index: 9999999;
         display: flex; flex-direction: column; overflow: hidden;
+        transition: opacity 0.18s ease;
     `;
 
     const ctx = getContext();
@@ -392,9 +430,11 @@
 
         const headerEl = getEl('awx-vld-header');
         const btnPin = getEl('awx-vld-btn-pin');
-        const pinTextEl = getEl('awx-vld-pin-text');
         const btnClose = getEl('awx-vld-btn-close');
         const btnDetach = getEl('awx-vld-btn-detach');
+        const btnOpacityToggle = getEl('awx-vld-btn-opacity-toggle');
+        const rangeOpacity = getEl('awx-vld-range-opacity');
+        const lblOpacity = getEl('awx-vld-lbl-opacity');
         const inputExclude = getEl('awx-vld-input-exclude');
         const hintExclude = getEl('awx-vld-exclude-hint');
         const btnResetAwx = getEl('awx-vld-btn-reset-awx');
@@ -410,10 +450,78 @@
         const cntTarget = getEl('awx-vld-cnt-target');
         const btnCompare = getEl('awx-vld-btn-compare');
         const resultBox = getEl('awx-vld-result-box');
-        const btnGuideToggle = getEl('awx-vld-btn-guide-toggle');
-        const guideTargetsBox = getEl('awx-vld-guide-targets');
-        const guideTargetCount = getEl('awx-vld-guide-target-count');
-        const guideTargetList = getEl('awx-vld-guide-target-list');
+
+        // 투명도(Opacity) 적용 함수 (페이지 내 패널 및 독립 창 모두 지원)
+        function applyOpacity(forcePreview = false) {
+            const targetContainer = isPopup ? rootDoc.body : panel;
+            if (!targetContainer) return;
+
+            if (btnOpacityToggle) {
+                if (state.opacityEnabled) {
+                    btnOpacityToggle.classList.add('active');
+                    btnOpacityToggle.innerText = '투명도 ON';
+                } else {
+                    btnOpacityToggle.classList.remove('active');
+                    btnOpacityToggle.innerText = '투명도 OFF';
+                }
+            }
+            if (rangeOpacity) {
+                rangeOpacity.disabled = !state.opacityEnabled;
+                rangeOpacity.value = String(state.opacityValue);
+            }
+            if (lblOpacity) {
+                lblOpacity.innerText = `${state.opacityValue}%`;
+            }
+
+            if (!state.opacityEnabled) {
+                targetContainer.style.opacity = '1';
+                return;
+            }
+
+            if (forcePreview) {
+                targetContainer.style.opacity = String(state.opacityValue / 100);
+                return;
+            }
+
+            if (state.isMouseInside) {
+                targetContainer.style.opacity = '1';
+            } else {
+                targetContainer.style.opacity = String(state.opacityValue / 100);
+            }
+        }
+
+        if (btnOpacityToggle) {
+            btnOpacityToggle.onclick = () => {
+                state.opacityEnabled = !state.opacityEnabled;
+                applyOpacity(false);
+            };
+        }
+
+        if (rangeOpacity) {
+            rangeOpacity.oninput = () => {
+                state.opacityValue = Number(rangeOpacity.value);
+                if (lblOpacity) lblOpacity.innerText = `${state.opacityValue}%`;
+                // 슬라이더 조절 중에는 현재 설정 투명도를 즉시 미리보기/적용
+                applyOpacity(true);
+            };
+            rangeOpacity.onchange = () => {
+                applyOpacity(isPopup ? true : false);
+            };
+        }
+
+        // 마우스 진입/이탈 감지 (페이지 내 패널: 마우스 진입 시 100%, 이탈 시 설정값% / 독립 창에서도 동일 지원)
+        const hoverTarget = isPopup ? rootDoc.documentElement : panel;
+        if (hoverTarget) {
+            hoverTarget.addEventListener('mouseenter', () => {
+                state.isMouseInside = true;
+                applyOpacity(false);
+            });
+            hoverTarget.addEventListener('mouseleave', () => {
+                state.isMouseInside = false;
+                applyOpacity(false);
+            });
+        }
+        window.awxApplyOpacity = applyOpacity;
 
         // 상단 고정(Pin) 상태 업데이트 및 포커스 유지 동작
         function applyPinState() {
@@ -459,27 +567,6 @@
                     }, 80);
                 }
             });
-        }
-
-        // 작업 권장 안내 [펼치기] / [접기] 내용 갱신
-        function updateGuideTargetsView() {
-            if (!guideTargetList || !guideTargetCount) return;
-            const hosts = getGuideTargetHosts(txtIncident.value, txtTarget.value, txtDetail.value);
-            guideTargetCount.innerText = hosts.length;
-            if (hosts.length > 0) {
-                guideTargetList.innerText = hosts.join('\n');
-            } else {
-                guideTargetList.innerText = '입력된 작업대상 호스트가 없습니다. 인시던트 또는 작업대상 입력란에 호스트를 입력해주세요.';
-            }
-        }
-
-        if (btnGuideToggle && guideTargetsBox) {
-            btnGuideToggle.onclick = () => {
-                state.guideExpanded = !state.guideExpanded;
-                guideTargetsBox.style.display = state.guideExpanded ? 'block' : 'none';
-                btnGuideToggle.innerText = state.guideExpanded ? '접기' : '펼치기';
-                updateGuideTargetsView();
-            };
         }
 
         // 드래그 기능 (페이지 내 패널일 때만 적용)
@@ -571,7 +658,6 @@
             if (state.collectedHosts.size > 0) sourceCount++;
 
             btnCompare.innerText = `교차 비교 실행 (${Math.max(2, sourceCount)}개 소스)`;
-            updateGuideTargetsView();
         }
 
         txtDetail.oninput = updateCountsAndButton;
@@ -762,19 +848,27 @@
             }
 
             resultBox.style.display = 'block';
-            const resultGuideId = 'res-guide-toggle-' + Date.now();
             const guideHosts = getGuideTargetHosts(txtIncident.value, txtTarget.value, txtDetail.value);
+            const guideMessage = isAllMatch
+                ? '인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기'
+                : '소스 간 불일치가 감지되었습니다. 작업대상을 다시 확인하고 일치시킨 후 작업을 진행하시기 바랍니다.';
+            const guideTextColor = isAllMatch ? '#0f172a' : '#b91c1c';
+            const guideBorderColor = isAllMatch ? '#cbd5e1' : '#fca5a5';
+            const guideBgColor = isAllMatch ? '#f8fafc' : '#fff1f2';
 
             const mandatoryCommentHtml = `
-                <div style="margin-top:10px; padding:9px 11px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:5px; color:#0f172a;">
+                <div style="margin-top:10px; padding:9px 11px; background:${guideBgColor}; border:1px solid ${guideBorderColor}; border-radius:5px; color:${guideTextColor};">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <span style="font-size:11.5px; font-weight:700; color:#334155;">작업 권장 안내</span>
-                        <button id="btn-${resultGuideId}" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:2px 7px; font-size:11px;">펼치기</button>
+                        <span style="font-size:11.5px; font-weight:700; color:${isAllMatch ? '#334155' : '#991b1b'};">작업 권장 안내</span>
+                        <button id="awx-vld-btn-guide-toggle" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:2px 7px; font-size:11px;">펼치기</button>
                     </div>
-                    <div class="awx-vld-mono" style="font-size:11.5px; word-break:break-all;">
-                        인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
+                    <div id="awx-vld-guide-msg" class="awx-vld-mono" style="font-size:11.5px; font-weight:${isAllMatch ? '500' : '700'}; word-break:break-all;">
+                        ${guideMessage}
                     </div>
-                    <div id="${resultGuideId}" class="awx-vld-mono" style="display:none; margin-top:7px; max-height:120px; overflow-y:auto; background:#ffffff; border:1px solid #cbd5e1; border-radius:4px; padding:7px; font-size:11.5px; color:#111827; white-space:pre-wrap; word-break:break-all;">${guideHosts.join('\n')}</div>
+                    <div id="awx-vld-guide-targets" style="display:none; margin-top:7px; padding-top:7px; border-top:1px dashed ${guideBorderColor};">
+                        <div style="font-size:11px; font-weight:700; color:#334155; margin-bottom:4px;">작업대상 호스트 명단 (<span id="awx-vld-guide-target-count">${guideHosts.length}</span>대)</div>
+                        <div id="awx-vld-guide-target-list" class="awx-vld-mono" style="max-height:120px; overflow-y:auto; background:#ffffff; border:1px solid #cbd5e1; border-radius:4px; padding:7px; font-size:11.5px; color:#111827; white-space:pre-wrap; word-break:break-all;">${guideHosts.join('\n')}</div>
+                    </div>
                 </div>
             `;
 
@@ -824,7 +918,7 @@
                 `;
             }
 
-            // 결과 영역 내 토글 버튼(명단 펼치기 및 작업 권장 안내 펼치기) 바인딩
+            // 결과 영역 내 명단 펼치기 토글 바인딩
             resultBox.querySelectorAll('button[id^="btn-"]').forEach(btn => {
                 btn.onclick = () => {
                     const targetId = btn.id.replace('btn-', '');
@@ -832,14 +926,21 @@
                     if (targetEl) {
                         const isHidden = targetEl.style.display === 'none';
                         targetEl.style.display = isHidden ? 'block' : 'none';
-                        if (targetId.startsWith('res-guide-toggle-')) {
-                            btn.innerText = isHidden ? '접기' : '펼치기';
-                        } else {
-                            btn.innerText = isHidden ? '명단 접기' : '명단 펼치기';
-                        }
+                        btn.innerText = isHidden ? '명단 접기' : '명단 펼치기';
                     }
                 };
             });
+
+            // 작업 권장 안내 [펼치기] 버튼 바인딩
+            const btnGuideToggleEl = getEl('awx-vld-btn-guide-toggle');
+            const guideTargetsEl = getEl('awx-vld-guide-targets');
+            if (btnGuideToggleEl && guideTargetsEl) {
+                btnGuideToggleEl.onclick = () => {
+                    const isHidden = guideTargetsEl.style.display === 'none';
+                    guideTargetsEl.style.display = isHidden ? 'block' : 'none';
+                    btnGuideToggleEl.innerText = isHidden ? '접기' : '펼치기';
+                };
+            }
         }
 
         btnCompare.onclick = doCompare;
@@ -848,6 +949,7 @@
         updateCountsAndButton();
         renderAwxSummary();
         applyPinState();
+        applyOpacity(false);
     }
 
     bindEvents(document, false, null);
