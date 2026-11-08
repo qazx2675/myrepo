@@ -53,6 +53,14 @@ bash install_mn.sh -c /경로/pm_monitor.conf <호스트파일>
 - 설정 파일이 없으면 기본값으로 진행하고 화면에 경고 한 줄을 띄웁니다.
 - 수동 시험 명령 모음은 [사용법.txt](사용법.txt) 를 참고하세요.
 
+### 2.1 데모로 먼저 보기 (실제 서버 접속 없음)
+
+```bash
+bash demo/demo.sh      # root 로 실행. 안내 화면에서 Enter
+```
+
+가짜 gossh·ssh 와 가짜 호스트 27대(벤더별 이름)로 데모 환경을 `/tmp/pm_demo` 에 만들고 바로 `install_mn` 을 띄웁니다. 시간이 지나면 설치완료·지연·완료후꺼짐·재부팅됨이 차례로 나타나므로 키(`c r d l / 1~7`)를 눌러 출력을 확인할 수 있습니다. `q` 로 끝내면 잠깐 넣었던 `/etc/hosts` 줄과 lo 주소, `/tmp/pm_demo` 를 모두 되돌립니다.
+
 ## 3. 옵션별 상세 설명
 
 ### 3.1 설정 키 (`pm_monitor.conf`, `key=value`, `#` 주석)
@@ -120,6 +128,7 @@ bash install_mn.sh -c /경로/pm_monitor.conf <호스트파일>
 | `build.sh` / `install_mn.sh` | 빌드 스크립트 / 실행 래퍼 |
 | `install_mn_os8` | 빌드된 os8 바이너리(커밋 대상) |
 | `test/` | 스텁 gossh·ssh, 부하 측정 스크립트 |
+| `demo/demo.sh` | 데모 환경 한 번에 구성·실행 (2.1 참고) |
 | `testdata/` | 렌더 골든 파일 |
 
 ## 5. 전역 명령어로 사용하기 (선택 사항)

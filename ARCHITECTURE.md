@@ -19,6 +19,7 @@ pm_monitor(`install_mn`) 의 파일별 역할. 표준 라이브러리만 사용,
 | `tty_linux.go` / `tty_other.go` | raw tty(termios) 진입·복구 / 그 외 OS 대체 |
 | `*_test.go`, `testdata/` | 단위 테스트와 렌더 골든 파일 |
 | `test/stub_gossh.sh`, `test/stub_ssh.sh` | 스텁 gossh·ssh(시험용) |
+| `demo/demo.sh` | 데모 환경 한 번에 구성·실행·정리(가짜 호스트 27대, 시간별 시나리오) |
 | `build.sh` | `install_mn_os8` 빌드(vet+test 후, `-n` 은 생략) |
 | `install_mn.sh` | 실행 래퍼(심볼릭 링크 해석, root 확인) |
 | `pm_monitor.conf.sample` | 설정 샘플 |
