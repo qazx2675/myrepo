@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## [0.2.0] - 2026-11-08
+
+### 변경
+- `l` 패널 칸 형식: LDAP 은 ldap_check 의 infra 만, DNS · NTP 는 resolv.conf nameserver 와 chrony.conf(없으면 ntp.conf) server 를 순서 무시로 비교해 같으면 `ip1/ip2`(숫자 오름차순)·다르면 `다름`, autofs 는 auto.appl 의 `/appl`·`/wappl` 마운트 위치(같으면 `/appl` 값, 다르면 `다름`), 머리줄에 `비고` 칸 추가. 옛 형식 캐시는 다시 조사.
+- `q`: 패널(c r d l)에서는 뒤로가기(기본 화면), 기본 화면에서는 종료. Ctrl+C 는 어디서든 종료.
+- 메모리 상한을 지키도록 GC 비율을 25 로 낮춤(8000대 RSS 54.4MB → 38.9MB).
+- 원격 명령이 작은따옴표로 끝나지 않게 함(옛 gossh 가 끝 따옴표를 잘라 명령이 깨지던 문제).
+
+### 추가
+- `demo/demo.sh -n <대수>`(8000대 등)·`-name <이름>`(데모 여러 개 동시 실행), 실행 중인 같은 이름의 데모가 있으면 지우지 않고 거부.
+- 8000대 부하 측정(`test/load_run.sh [초] [대수]`, `test/load_report.txt`): CPU 평균 3.30%, RSS 38.9MB.
+
 ## [0.1.1] - 2026-11-08
 
 ### 추가

@@ -1,29 +1,29 @@
-load_check: pid=1 표본 569초(요청 600초)
-CPU(1코어 기준 %): 평균 1.95  최고 11.6  p50 1.0
-CPU idle(회차 사이, 꼬리 3초 제외) 표본 189초: 평균 0.20  최고 1.9   [참고] busy 아닌 모든 초 255초 평균 0.23
-RSS 최대 30.5 MB (31264 kB)
+# pm_monitor v0.2.0 부하 시험: 8000대 (계획서 7.5 기준, test/load_run.sh 600 8000)
+# 환경: 랩 .58 (Rocky 8.10, 2코어), 호스트 8000대(127.1.x.y 실제 ICMP·TCP, gossh 스텁), interval_sec=60 ping_pps=500 tcp_parallel=100
+# 주의: 측정 중 사용자의 27대 소형 데모(demo.sh, install_mn 1개)가 같은 서버에서 함께 돌고 있었다(부하는 작음).
+# 참고: 첫 시도(GC 기본값)는 RSS 최대 54.4 MB 로 50MB 기준 FAIL(나머지 PASS). main.go 에 debug.SetGCPercent(25) 를 넣은 뒤 아래 결과로 전부 PASS.
+
+load_check: pid=1474822 표본 577초(요청 600초)
+CPU(1코어 기준 %): 평균 3.30  최고 16.5  p50 1.9
+CPU idle(회차 사이, 꼬리 3초 제외) 표본 49초: 평균 0.30  최고 1.9   [참고] busy 아닌 모든 초 135초 평균 0.31
+RSS 최대 38.9 MB (39792 kB)
 fd 최대 106
-threads: 처음 8, 마지막 9, 최소 8, 최대 9, 처음 120초 최대 9, 마지막 120초 최대 9
+threads: 처음 8, 마지막 10, 최소 8, 최대 10, 처음 120초 최대 10, 마지막 120초 최대 10
 동시 자식(gossh) 최대 1, 본 nice 값: 10 
-ICMP echo 송신 속도(InEchos 증가분/초) 최고 527  (OutEchos 최고 531), 5초 평균 최고 506, ping_pps 상한 500
-TCP: 연결 시도 속도 최고 847/초, 22번 SYN-SENT+ESTAB 동시 최대 100 (tcp_parallel 상한 100)
+ICMP echo 송신 속도(InEchos 증가분/초) 최고 513  (OutEchos 최고 516), 5초 평균 최고 504, ping_pps 상한 500
+TCP: 연결 시도 속도 최고 910/초, 22번 SYN-SENT+ESTAB 동시 최대 100 (tcp_parallel 상한 100)
 --- 판정 (계획서 7.5) ---
-PASS CPU 10분 평균 < 5%   : 1.95
-PASS CPU 최고 < 30%       : 11.6
-PASS CPU idle 평균 < 1%   : 0.20 (idle 189초)
-PASS RSS < 50MB           : 30.5 MB
+PASS CPU 10분 평균 < 5%   : 3.30
+PASS CPU 최고 < 30%       : 16.5
+PASS CPU idle 평균 < 1%   : 0.30 (idle 49초)
+PASS RSS < 50MB           : 38.9 MB
 PASS fd < 200             : 106
-PASS threads 늘지 않음    : 처음 구간 최대 9, 마지막 구간 최대 9
-PASS ICMP 송신 <= ping_pps : 527/초 (상한 500, 1초 표본 경계 오차 10% 허용)
+PASS threads 늘지 않음    : 처음 구간 최대 10, 마지막 구간 최대 10
+PASS ICMP 송신 <= ping_pps : 513/초 (상한 500, 1초 표본 경계 오차 10% 허용)
 PASS TCP 동시 <= tcp_parallel: 100 (상한 100)
 PASS gossh 동시 <= 1       : 1
 PASS nice = 10            : 10 
 총 0 항목 FAIL
 
---- 화면·키 반응 (pty_drive.py, 120x40 xterm, 30초마다 키 사이클: 스크롤/검색/필터/c/r/d/l) ---
---- 요약 ---
-실행 600초, 종료코드 0, 화면 그리기(\x1b[H) 859번, 마지막 본 회차 10
-키 667개, 화면이 반응한 것 667개, 반응 시간 최대 27 ms, 평균 2 ms, 100ms 초과 0개
-터미널 복구 시퀀스(\x1b[?1049l) 출력: 예
-수집 회차: 마지막 본 회차 10 (interval_sec=60, 스텁 gossh 호출 22 회)
-세부: load_report.txt.csv(1초 표본), load_drive.log(키별 반응 시간), func_report.txt(기능 점검 26항목)
+수집 회차: 마지막 본 회차 10 (interval_sec=60)
+세부: load_report.txt.csv(1초 표본), load_drive.log(키별 반응 시간)

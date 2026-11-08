@@ -382,7 +382,7 @@ func (v *ViewState) footerLines(w int) []string {
 	case v.Searching:
 		items = []string{"Enter 적용", "Esc 취소", "Backspace 지움"}
 	case v.Panel != 0:
-		items = []string{"↑↓ PgUp PgDn Home End 스크롤", fmt.Sprintf("%c 닫기", v.Panel), "c r d l 전환", "q 종료"}
+		items = []string{"↑↓ PgUp PgDn Home End 스크롤", fmt.Sprintf("%c 닫기", v.Panel), "c r d l 전환", "q 뒤로"}
 	default:
 		items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~7 필터", "0 해제",
 			"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "q 종료"}

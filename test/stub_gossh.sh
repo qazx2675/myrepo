@@ -18,11 +18,14 @@
 #         disk       -> stdout "host: NS_DISK" "host: NS_DONE"
 #         down       -> stderr 접속 실패
 #   명령에 ldap_check 가 있으면(LDAP 점검, 상태 done/installing/disk 모두 응답):
-#         파일별 OK 줄 7개(README 형식) + "host: Thread(s) per core:    2"
-#         STUB_LDAP_FAIL    공백 구분 호스트: autofs.conf 줄을 FAIL 로
+#         파일별 OK 줄 7개(README 형식, STUB_LDAP_FAIL 이면 ldap.conf 가 FAIL) + "host: Thread(s) per core:    2"
+#         STUB_LDAP_FAIL    공백 구분 호스트: ldap.conf 줄을 FAIL 로(ONELINE 이면 FAIL LDAP UNDEFINED)
 #         STUB_LDAP_UNKNOWN 공백 구분 호스트: /unknown infra-mismatch 줄
 #         STUB_LDAP_ONELINE 1 이면 현재 ldap_check.sh 처럼 한 줄 요약(INFO LDAP infra site)
 #         STUB_HT_OFF       공백 구분 호스트: Thread(s) per core 를 1 로
+#         STUB_DNS_DIFF     공백 구분 호스트: NTP 집합을 DNS 와 다르게(10.10.2.20)
+#         STUB_APPL_DIFF    공백 구분 호스트: auto.appl 의 wappl 값을 appl 과 다르게
+#         (모든 호스트에 PM_DNS/PM_CHRONY/PM_NTPC/PM_APPL 줄도 낸다: DNS 10.10.1.10 10.10.1.11, NTP 같은 집합 다른 순서, appl=wappl=nas01:/export/appl)
 #   STUB_GOSSH_LOG (선택) 이 파일에 호출마다 명령 줄(인자)을 한 줄 덧붙임
 # 호스트 5천 대도 awk 한 번으로 처리한다(호스트별 프로세스 없음).
 [ -n "$STUB_GOSSH_LOG" ] && echo "$*" >> "$STUB_GOSSH_LOG"
@@ -52,7 +55,7 @@ case "$cmd" in *NS_DISK*) disk=1 ;; esac
 ldap=0
 case "$cmd" in *ldap_check*) ldap=1 ;; esac
 
-awk -v pm="$pm" -v disk="$disk" -v ldap="$ldap" -v lfail=" $STUB_LDAP_FAIL " -v lunk=" $STUB_LDAP_UNKNOWN " -v lone="${STUB_LDAP_ONELINE:-0}" -v htoff=" $STUB_HT_OFF " -v inst="${list}_os_install" -v off="${list}_res_off" '
+awk -v pm="$pm" -v disk="$disk" -v ldap="$ldap" -v lfail=" $STUB_LDAP_FAIL " -v lunk=" $STUB_LDAP_UNKNOWN " -v lone="${STUB_LDAP_ONELINE:-0}" -v htoff=" $STUB_HT_OFF " -v dnsdiff=" $STUB_DNS_DIFF " -v appldiff=" $STUB_APPL_DIFF " -v inst="${list}_os_install" -v off="${list}_res_off" '
 NR == FNR { st[$1] = $2; next }
 {
   h = $1
@@ -74,13 +77,20 @@ NR == FNR { st[$1] = $2; next }
     } else {
       print h ": OK\t/zxcv\tresolv.conf"
       print h ": OK\t/zxcv\tchrony.conf\tchrony"
-      print h ": OK\t/zxcv\tldap.conf\ta1"
-      print h ": " (index(lfail, key) ? "FAIL" : "OK") "\t/zxcv\tautofs.conf"
+      print h ": " (index(lfail, key) ? "FAIL" : "OK") "\t/zxcv\tldap.conf\ta1"
+      print h ": OK\t/zxcv\tautofs.conf"
       print h ": OK\t/zxcv\tautofs_ldap_auth.conf"
       print h ": OK\t/zxcv\tsssd.conf"
       print h ": OK\t/zxcv\tauto.appl\ta1"
     }
     print h ": Thread(s) per core:    " (index(htoff, key) ? "1" : "2")
+    print h ": PM_DNS nameserver 10.10.1.10"
+    print h ": PM_DNS nameserver 10.10.1.11"
+    print h ": PM_CHRONY"
+    print h ": PM_NTPC server " (index(dnsdiff, key) ? "10.10.2.20" : "10.10.1.11") " iburst"
+    print h ": PM_NTPC server 10.10.1.10 iburst"
+    print h ": PM_APPL appl	-rw,soft	nas01:/export/appl"
+    print h ": PM_APPL /wappl	-rw,soft	" (index(appldiff, key) ? "nas02:/export/wappl" : "nas01:/export/appl")
     next
   }
   if (pm) {

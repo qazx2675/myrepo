@@ -62,12 +62,16 @@ func (s Status) CountsAsDone() bool { return s == StatusDone || s == StatusReboo
 
 // Check 는 LDAP·DNS·NTP·autofs·H/T 점검 결과다(7단계에서 채운다). state.json 에 같이 저장한다.
 type Check struct {
+	Ver    int    `json:"ver,omitempty"` // 형식 버전. ldapCmdVer 보다 작으면 다시 조사한다
 	LDAP   string `json:"ldap,omitempty"`
 	DNSNTP string `json:"dns_ntp,omitempty"`
 	Autofs string `json:"autofs,omitempty"`
 	HT     string `json:"ht,omitempty"`
 	Note   string `json:"note,omitempty"`
 }
+
+// current 는 현재 형식으로 채워진 결과인지 알려준다(v0.1.x 로 저장된 값은 false).
+func (c Check) current() bool { return c.Ver >= ldapCmdVer }
 
 // Record 는 서버 하나의 상태와 이력이다.
 type Record struct {

@@ -10,12 +10,19 @@ import (
 
 func TestLdapCmdCshSafe(t *testing.T) {
 	got := ldapCmd("/user/asdf/ldap_check.sh")
-	want := "bash /user/asdf/ldap_check.sh; lscpu | grep -i 'per core'"
-	if got != want {
-		t.Errorf("got %s", got)
+	if !strings.HasPrefix(got, "bash /user/asdf/ldap_check.sh; lscpu | grep -i 'per core'; ") {
+		t.Errorf("앞부분: %s", got)
 	}
-	if strings.ContainsAny(got, "${}!*()") {
-		t.Errorf("csh 에서 문제될 문자: %s", got)
+	// csh/tcsh 에서 문제되는 것: 변수, 중괄호, 명령 치환, stderr 만 리다이렉트, 히스토리 !
+	for _, bad := range []string{"$", "{", "}", "2>", "!", "`"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("%q 포함: %s", bad, got)
+		}
+	}
+	for _, want := range []string{"PM_DNS", "PM_NTPC", "PM_NTPN", "PM_CHRONY", "PM_APPL", "test -f /etc/resolv.conf &&", "test -f /etc/auto.appl &&"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%q 없음: %s", want, got)
+		}
 	}
 	if got := ldapCmd("/a b/x.sh"); !strings.HasPrefix(got, "bash '/a b/x.sh';") {
 		t.Errorf("공백 경로: %s", got)
@@ -24,75 +31,150 @@ func TestLdapCmdCshSafe(t *testing.T) {
 
 func lines(s ...string) string { return strings.Join(s, "\n") + "\n" }
 
-func TestParseSummarizeLdap(t *testing.T) {
-	out := lines(
-		// ok1: 전부 OK, H/T 2
-		"ok1: OK\t/zxcv\tresolv.conf",
-		"ok1: OK\t/zxcv\tchrony.conf\tchrony",
-		"ok1: OK\t/zxcv\tldap.conf\ta1",
-		"ok1: OK\t/zxcv\tautofs.conf",
-		"ok1: OK\t/zxcv\tautofs_ldap_auth.conf",
-		"ok1: OK\t/zxcv\tsssd.conf",
-		"ok1: OK\t/zxcv\tauto.appl\ta1",
-		"ok1: Thread(s) per core:    2",
-		// bad: autofs.conf FAIL, nslcd/ntp, H/T 1
-		"bad: OK\t/zxcv\tresolv.conf",
-		"bad: OK\t/zxcv\tntp.conf\tntp",
-		"bad: OK\t/zxcv\tldap.conf\ta1",
-		"bad: FAIL\t/zxcv\tautofs.conf",
-		"bad: OK\t/zxcv\tautofs_ldap_auth.conf",
-		"bad: OK\t/zxcv\tnslcd.conf",
-		"bad: OK\t/zxcv\tauto.appl\ta1",
-		"bad: Thread(s) per core:    1",
-		// missing: ldap_check 출력 없음(스크립트 없음), H/T 만
-		"missing: bash: /user/asdf/ldap_check.sh: No such file or directory",
-		"missing: Thread(s) per core:    4",
-		// ldap FAIL 한 줄(sssd) + auto.appl-wappl FAIL
-		"two: FAIL\t/zxcv\tsssd.conf",
-		"two: OK\t/zxcv\tldap.conf\ta1",
-		"two: FAIL\t/zxcv\tauto.appl-wappl\ta1",
-		"two: OK\t/zxcv\tauto.appl\ta1",
-		// /unknown 불일치
-		"mix: FAIL\t/unknown\tinfra-mismatch\tdns+ntp=zxcv ldap=zxcv appl=qwer",
-		"mix: FAIL\t/unknown\tresolv.conf",
-		"mix: Thread(s) per core:    2",
-		// 현재 ldap_check.sh 한 줄 요약 + gossh ERROR 접두사
-		"one: INFO\tLDAP\tzxcv\ta1",
-		"one: Thread(s) per core:    2",
-		"onefail: ERROR: FAIL\tLDAP\tUNDEFINED",
-		"onefail: Thread(s) per core:    1",
-		// H/T 를 못 읽음
-		"noht: OK\t/zxcv\tresolv.conf",
+// sum 은 한 호스트의 출력 줄들을 요약한다.
+func sum(t *testing.T, ls ...string) Check {
+	t.Helper()
+	var sb strings.Builder
+	for _, l := range ls {
+		sb.WriteString("h: " + l + "\n")
+	}
+	a := parseLdapOutput(sb.String())["h"]
+	if a == nil {
+		t.Fatalf("호스트 없음: %q", ls)
+	}
+	return a.summarize()
+}
+
+func TestSummarizeLdapColumn(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		ldap string
+		note string
+	}{
+		{"INFO 한 줄: infra 만", []string{"INFO\tLDAP\tzxcv\ta1"}, "zxcv", ""},
+		{"OK 한 줄", []string{"OK\tLDAP\tqwer\ta1"}, "qwer", ""},
+		{"infra 만(site 없음)", []string{"INFO\tLDAP\tqwer"}, "qwer", ""},
+		{"FAIL UNDEFINED", []string{"FAIL\tLDAP\tUNDEFINED"}, "FAIL", "ldap_check UNDEFINED"},
+		{"gossh ERROR 접두사", []string{"ERROR: FAIL\tLDAP\tUNDEFINED"}, "FAIL", "ldap_check UNDEFINED"},
+		{"출력 없음", []string{"bash: /x/ldap_check.sh: No such file or directory", "Thread(s) per core: 2"}, "-", ""},
+		{"옛 형식: ldap.conf 의 infra", []string{"OK\t/zxcv\tresolv.conf", "OK\t/qwer\tldap.conf\ta1", "OK\t/zxcv\tautofs.conf"}, "qwer", ""},
+		{"옛 형식: sssd 만", []string{"OK\t/zxcv\tsssd.conf"}, "zxcv", ""},
+		{"옛 형식: FAIL 하나", []string{"OK\t/zxcv\tldap.conf\ta1", "FAIL\t/zxcv\tsssd.conf"}, "FAIL", ""},
+		{"옛 형식: LDAP 아닌 파일의 FAIL 은 무시", []string{"OK\t/zxcv\tldap.conf\ta1", "FAIL\t/zxcv\tautofs.conf"}, "zxcv", ""},
+		{"옛 형식: unknown", []string{"FAIL\t/unknown\tinfra-mismatch\ta=1 b=2", "FAIL\t/unknown\tresolv.conf"}, "FAIL", "인프라 불일치 (a=1 b=2)"},
+	}
+	for _, tc := range tests {
+		got := sum(t, tc.in...)
+		if got.LDAP != tc.ldap || got.Note != tc.note {
+			t.Errorf("%s: LDAP=%q note=%q, want %q %q", tc.name, got.LDAP, got.Note, tc.ldap, tc.note)
+		}
+		if got.Ver != 2 {
+			t.Errorf("%s: Ver=%d", tc.name, got.Ver)
+		}
+	}
+}
+
+func TestSummarizeDnsNtp(t *testing.T) {
+	d := func(ips ...string) []string {
+		var o []string
+		for _, ip := range ips {
+			o = append(o, "PM_DNS nameserver "+ip)
+		}
+		return o
+	}
+	n := func(ips ...string) []string {
+		o := []string{"PM_CHRONY"}
+		for _, ip := range ips {
+			o = append(o, "PM_NTPC server "+ip+" iburst")
+		}
+		return o
+	}
+	cat := func(parts ...[]string) []string {
+		var o []string
+		for _, p := range parts {
+			o = append(o, p...)
+		}
+		return o
+	}
+	tests := []struct {
+		name string
+		in   []string
+		want string
+		note string
+	}{
+		{"같음", cat(d("10.1.1.10", "10.1.1.11"), n("10.1.1.10", "10.1.1.11")), "10.1.1.10/10.1.1.11", ""},
+		{"순서 무시", cat(d("10.1.1.11", "10.1.1.10"), n("10.1.1.10", "10.1.1.11")), "10.1.1.10/10.1.1.11", ""},
+		{"중복 무시", cat(d("10.1.1.10", "10.1.1.10", "10.1.1.11"), n("10.1.1.11", "10.1.1.10", "10.1.1.11")), "10.1.1.10/10.1.1.11", ""},
+		{"IPv4 숫자 정렬", cat(d("10.10.1.10", "10.10.1.9"), n("10.10.1.9", "10.10.1.10")), "10.10.1.9/10.10.1.10", ""},
+		{"하나씩 같음", cat(d("1.1.1.1"), n("1.1.1.1")), "1.1.1.1", ""},
+		{"집합이 다름", cat(d("10.1.1.10", "10.1.1.11"), n("10.1.2.20")), "다름", "DNS 10.1.1.10/10.1.1.11 NTP 10.1.2.20"},
+		{"다름: 각 쪽 오름차순", cat(d("10.0.0.20", "10.0.0.3"), n("9.9.9.9", "10.0.0.1")), "다름", "DNS 10.0.0.3/10.0.0.20 NTP 9.9.9.9/10.0.0.1"},
+		{"NTP 비어 있음", d("10.1.1.10"), "다름", "DNS 10.1.1.10 NTP -"},
+		{"DNS 비어 있음", n("10.1.1.10"), "다름", "DNS - NTP 10.1.1.10"},
+		{"둘 다 비어 있음", []string{"Thread(s) per core: 2"}, "-", ""},
+		{"chrony 있고 server 없음 + DNS", cat(d("10.1.1.10"), []string{"PM_CHRONY"}), "다름", "DNS 10.1.1.10 NTP -"},
+		{"IP 아닌 이름은 IP 뒤에 사전순", cat(d("b.example", "10.1.1.10", "a.example"), n("a.example", "b.example", "10.1.1.10")), "10.1.1.10/a.example/b.example", ""},
+		{"chrony.conf 없으면 ntp.conf", []string{"PM_DNS nameserver 10.1.1.10", "PM_NTPN server 10.1.1.10"}, "10.1.1.10", ""},
+		{"chrony.conf 가 있으면 ntp.conf 무시", []string{"PM_DNS nameserver 10.1.1.10", "PM_CHRONY", "PM_NTPC pool 10.1.1.10", "PM_NTPN server 9.9.9.9"}, "10.1.1.10", ""},
+	}
+	for _, tc := range tests {
+		got := sum(t, tc.in...)
+		if got.DNSNTP != tc.want || got.Note != tc.note {
+			t.Errorf("%s: DNSNTP=%q note=%q, want %q %q", tc.name, got.DNSNTP, got.Note, tc.want, tc.note)
+		}
+	}
+}
+
+func TestSummarizeAutofsAndNote(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want string
+		note string
+	}{
+		{"둘 다 같음: appl 값", []string{"PM_APPL appl -rw nas01:/export/appl", "PM_APPL wappl -rw nas01:/export/appl"}, "nas01:/export/appl", ""},
+		{"앞의 / 있어도 됨", []string{"PM_APPL /appl\t-rw\tnas01:/a", "PM_APPL /wappl\t-rw\tnas01:/a"}, "nas01:/a", ""},
+		{"다름", []string{"PM_APPL appl -rw nas01:/export/appl", "PM_APPL /wappl -rw nas02:/export/wappl"}, "다름", "/appl nas01:/export/appl /wappl nas02:/export/wappl"},
+		{"appl 만", []string{"PM_APPL appl -rw nas01:/export/appl"}, "nas01:/export/appl", ""},
+		{"wappl 만", []string{"PM_APPL wappl -rw nas03:/w"}, "nas03:/w", ""},
+		{"없음", []string{"INFO\tLDAP\tzxcv"}, "-", ""},
+		{"다른 키는 무시", []string{"PM_APPL site1 -rw nas:/x"}, "-", ""},
+	}
+	for _, tc := range tests {
+		got := sum(t, tc.in...)
+		if got.Autofs != tc.want || got.Note != tc.note {
+			t.Errorf("%s: autofs=%q note=%q, want %q %q", tc.name, got.Autofs, got.Note, tc.want, tc.note)
+		}
+	}
+	// 비고는 원인들을 "; " 로 잇고 순서는 LDAP, DNS·NTP, autofs
+	got := sum(t, "FAIL\tLDAP\tUNDEFINED", "PM_DNS nameserver 10.1.1.10", "PM_CHRONY", "PM_NTPC server 10.1.2.20",
+		"PM_APPL appl -rw a:/x", "PM_APPL wappl -rw b:/y", "Thread(s) per core: 1")
+	want := Check{Ver: 2, LDAP: "FAIL", DNSNTP: "다름", Autofs: "다름", HT: "OFF",
+		Note: "ldap_check UNDEFINED; DNS 10.1.1.10 NTP 10.1.2.20; /appl a:/x /wappl b:/y"}
+	if got != want {
+		t.Errorf("got %+v\nwant %+v", got, want)
+	}
+	// H/T
+	for tpc, ht := range map[string]string{"2": "ON", "4": "ON", "1": "OFF"} {
+		if g := sum(t, "Thread(s) per core:    "+tpc); g.HT != ht {
+			t.Errorf("tpc %s: %s", tpc, g.HT)
+		}
+	}
+	if g := sum(t, "INFO\tLDAP\tzxcv"); g.HT != "-" {
+		t.Errorf("H/T 모름: %s", g.HT)
+	}
+}
+
+func TestParseLdapOutputHostsAndGarbage(t *testing.T) {
+	res := parseLdapOutput(lines(
+		"a: INFO\tLDAP\tzxcv\ta1",
+		"a: Thread(s) per core:    2",
 		"garbage line",
 		"down: SSH 접속 실패: dial tcp down:22: i/o timeout",
-	)
-	res := parseLdapOutput(out)
-	if _, ok := res["down"]; ok {
-		t.Error("접속 실패 호스트가 결과에 있음")
-	}
-	want := map[string]Check{
-		"ok1":     {LDAP: "OK", DNSNTP: "OK", Autofs: "OK", HT: "ON"},
-		"bad":     {LDAP: "OK", DNSNTP: "OK", Autofs: "FAIL", HT: "OFF"},
-		"missing": {LDAP: "-", DNSNTP: "-", Autofs: "-", HT: "ON"},
-		"two":     {LDAP: "FAIL", DNSNTP: "-", Autofs: "FAIL", HT: "-"},
-		"mix": {LDAP: "FAIL", DNSNTP: "FAIL", Autofs: "FAIL", HT: "ON",
-			Note: "인프라 불일치 (dns+ntp=zxcv ldap=zxcv appl=qwer)"},
-		"one":     {LDAP: "OK", DNSNTP: "OK", Autofs: "OK", HT: "ON"},
-		"onefail": {LDAP: "FAIL", DNSNTP: "FAIL", Autofs: "FAIL", HT: "OFF", Note: "ldap_check UNDEFINED"},
-		"noht":    {LDAP: "-", DNSNTP: "OK", Autofs: "-", HT: "-"},
-	}
-	if len(res) != len(want) {
-		t.Errorf("호스트 수 %d, want %d", len(res), len(want))
-	}
-	for h, w := range want {
-		a := res[h]
-		if a == nil {
-			t.Errorf("%s 없음", h)
-			continue
-		}
-		if got := a.summarize(); got != w {
-			t.Errorf("%s: got %+v want %+v", h, got, w)
-		}
+	))
+	if len(res) != 1 || res["a"] == nil {
+		t.Errorf("hosts: %v", res)
 	}
 }
 
@@ -126,20 +208,43 @@ func doneCollector(t *testing.T, cfg *Config, hosts []string, done ...string) (*
 }
 
 func TestLdapQueryStub(t *testing.T) {
-	cfg, _ := ldapEnv(t, "a done\nb done\nc done\nd done\n")
+	cfg, _ := ldapEnv(t, "a done\nb done\nc done\nd done\nf done\ng done\n")
 	t.Setenv("STUB_LDAP_FAIL", "b")
 	t.Setenv("STUB_LDAP_UNKNOWN", "c")
 	t.Setenv("STUB_HT_OFF", "a")
-	res, err := LdapQuery(cfg, []string{"a", "b", "c", "d", "e"}) // e 는 ssh 실패
+	t.Setenv("STUB_DNS_DIFF", "f")
+	t.Setenv("STUB_APPL_DIFF", "g")
+	res, err := LdapQuery(cfg, []string{"a", "b", "c", "d", "e", "f", "g"}) // e 는 ssh 실패
 	if err != nil {
 		t.Fatal(err)
 	}
+	const ips, mnt = "10.10.1.10/10.10.1.11", "nas01:/export/appl"
 	want := map[string]Check{
-		"a": {LDAP: "OK", DNSNTP: "OK", Autofs: "OK", HT: "OFF"},
-		"b": {LDAP: "OK", DNSNTP: "OK", Autofs: "FAIL", HT: "ON"},
-		"c": {LDAP: "FAIL", DNSNTP: "FAIL", Autofs: "FAIL", HT: "ON",
+		"a": {Ver: 2, LDAP: "zxcv", DNSNTP: ips, Autofs: mnt, HT: "OFF"},
+		"b": {Ver: 2, LDAP: "FAIL", DNSNTP: ips, Autofs: mnt, HT: "ON"},
+		"c": {Ver: 2, LDAP: "FAIL", DNSNTP: ips, Autofs: mnt, HT: "ON",
 			Note: "인프라 불일치 (dns+ntp=zxcv ldap=zxcv appl=qwer)"},
-		"d": {LDAP: "OK", DNSNTP: "OK", Autofs: "OK", HT: "ON"},
+		"d": {Ver: 2, LDAP: "zxcv", DNSNTP: ips, Autofs: mnt, HT: "ON"},
+		"f": {Ver: 2, LDAP: "zxcv", DNSNTP: "다름", Autofs: mnt, HT: "ON", Note: "DNS 10.10.1.10/10.10.1.11 NTP 10.10.1.10/10.10.2.20"},
+		"g": {Ver: 2, LDAP: "zxcv", DNSNTP: ips, Autofs: "다름", HT: "ON", Note: "/appl nas01:/export/appl /wappl nas02:/export/wappl"},
+	}
+	if !reflect.DeepEqual(res, want) {
+		t.Errorf("got %+v\nwant %+v", res, want)
+	}
+}
+
+func TestLdapQueryStubOneline(t *testing.T) {
+	cfg, _ := ldapEnv(t, "a done\nb done\n")
+	t.Setenv("STUB_LDAP_ONELINE", "1")
+	t.Setenv("STUB_LDAP_FAIL", "b")
+	res, err := LdapQuery(cfg, []string{"a", "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const ips, mnt = "10.10.1.10/10.10.1.11", "nas01:/export/appl"
+	want := map[string]Check{
+		"a": {Ver: 2, LDAP: "zxcv", DNSNTP: ips, Autofs: mnt, HT: "ON"},
+		"b": {Ver: 2, LDAP: "FAIL", DNSNTP: ips, Autofs: mnt, HT: "ON", Note: "ldap_check UNDEFINED"},
 	}
 	if !reflect.DeepEqual(res, want) {
 		t.Errorf("got %+v\nwant %+v", res, want)
@@ -158,9 +263,9 @@ func TestLDAPReportCache(t *testing.T) {
 		t.Errorf("busy = %q", got)
 	}
 	out := col.LDAPReport()
-	want := "hostname\tLDAP\tDNS · NTP\tautofs\tH/T\n" +
-		"a\tOK\tOK\tOK\tON\n" +
-		"b\tOK\tOK\tFAIL\tON\n" +
+	want := "hostname\tLDAP\tDNS · NTP\tautofs\tH/T\t비고\n" +
+		"a\tzxcv\t10.10.1.10/10.10.1.11\tnas01:/export/appl\tON\t\n" +
+		"b\tFAIL\t10.10.1.10/10.10.1.11\tnas01:/export/appl\tON\t\n" +
 		"(점검 결과 없음 1대 - ssh 실패 등, 다시 열면 재시도)"
 	if out != want {
 		t.Errorf("1차 표:\n%q\nwant\n%q", out, want)
@@ -172,7 +277,7 @@ func TestLDAPReportCache(t *testing.T) {
 	if n := col.LDAPPending(); n != 1 || col.ldapTargets()[0] != "d" {
 		t.Fatalf("남은 대상 %v", col.ldapTargets())
 	}
-	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `"autofs": "FAIL"`) {
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `"ldap": "FAIL"`) || !strings.Contains(string(b), `"ver": 2`) {
 		t.Errorf("state.json 에 결과가 저장되지 않음:\n%s", b)
 	}
 	// d 가 살아나면 d 만 점검한다(a, b 는 캐시)
@@ -182,10 +287,10 @@ func TestLDAPReportCache(t *testing.T) {
 	if calls() != 2 {
 		t.Fatalf("gossh %d 번, want 2", calls())
 	}
-	if b, _ := os.ReadFile(os.Getenv("STUB_GOSSH_LOG")); !strings.HasSuffix(strings.TrimSpace(string(b)), "ldap_check.sh; lscpu | grep -i 'per core'") {
+	if b, _ := os.ReadFile(os.Getenv("STUB_GOSSH_LOG")); !strings.Contains(strings.TrimSpace(string(b)), "ldap_check.sh; lscpu | grep -i 'per core'; test -f /etc/resolv.conf") {
 		t.Errorf("gossh 호출: %s", b)
 	}
-	if !strings.Contains(out, "\nd\tOK\tOK\tOK\tON") || strings.Contains(out, "점검 결과 없음") {
+	if !strings.Contains(out, "\nd\tzxcv\t") || strings.Contains(out, "점검 결과 없음") {
 		t.Errorf("2차 표:\n%s", out)
 	}
 	// 모두 캐시되면 gossh 를 실행하지 않는다
@@ -203,6 +308,32 @@ func TestLDAPReportCache(t *testing.T) {
 	}
 }
 
+// v0.1.x 로 저장된 결과(Ver 없음)는 새 형식이 아니므로 다시 조사한다.
+func TestLDAPReportOldVersionRequery(t *testing.T) {
+	cfg, calls := ldapEnv(t, "a done\nb done\n")
+	col, _ := doneCollector(t, cfg, []string{"a", "b"}, "a", "b")
+	col.mu.Lock()
+	r := col.recs["a"]
+	r.Check = Check{LDAP: "OK", DNSNTP: "OK", Autofs: "OK", HT: "ON"} // 옛 형식
+	col.recs["a"] = r
+	r = col.recs["b"]
+	r.Check = Check{Ver: 2, LDAP: "zxcv", DNSNTP: "-", Autofs: "-", HT: "ON"}
+	col.recs["b"] = r
+	col.mu.Unlock()
+	col.publish(false)
+	if tg := col.ldapTargets(); len(tg) != 1 || tg[0] != "a" {
+		t.Fatalf("대상 %v, want [a]", tg)
+	}
+	// 옛 형식 값은 표에 나오지 않고 (결과 없음)으로 센다
+	if tbl := ldapTable(col.Snapshot()); strings.Contains(tbl, "\na\t") || !strings.Contains(tbl, "점검 결과 없음 1대") {
+		t.Errorf("표:\n%s", tbl)
+	}
+	out := col.LDAPReport()
+	if calls() != 1 || !strings.Contains(out, "\na\tzxcv\t10.10.1.10/10.10.1.11\t") || !strings.Contains(out, "\nb\tzxcv\t-\t-\tON\t") {
+		t.Errorf("calls=%d\n%s", calls(), out)
+	}
+}
+
 func TestLDAPReportUnsetAndEmpty(t *testing.T) {
 	cfg, calls := ldapEnv(t, "a done\n")
 	cfg.LdapCheckSh = ""
@@ -212,7 +343,7 @@ func TestLDAPReportUnsetAndEmpty(t *testing.T) {
 	}
 	cfg.LdapCheckSh = "/x/ldap_check.sh"
 	col2, _ := doneCollector(t, cfg, []string{"a"})
-	want := "hostname\tLDAP\tDNS · NTP\tautofs\tH/T\n(설치완료 서버가 없습니다)"
+	want := "hostname\tLDAP\tDNS · NTP\tautofs\tH/T\t비고\n(설치완료 서버가 없습니다)"
 	if got := col2.LDAPReport(); got != want || calls() != 0 {
 		t.Errorf("대상 없음: %q gossh %d 번", got, calls())
 	}
@@ -220,23 +351,31 @@ func TestLDAPReportUnsetAndEmpty(t *testing.T) {
 
 func TestLdapTableSortedWithNote(t *testing.T) {
 	snap := &Snapshot{Records: []Record{
-		{Name: "z", Status: StatusDone, Check: Check{LDAP: "OK", DNSNTP: "OK", Autofs: "OK", HT: "ON"}},
-		{Name: "m", Status: StatusRebooted, Check: Check{LDAP: "FAIL", DNSNTP: "FAIL", Autofs: "FAIL", HT: "-", Note: "인프라 불일치 (x)"}},
-		{Name: "o", Status: StatusOff, Check: Check{LDAP: "OK"}}, // 완료후꺼짐은 표에서 제외
+		{Name: "z", Status: StatusDone, Check: Check{Ver: 2, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "nas01:/export/appl", HT: "ON"}},
+		{Name: "m", Status: StatusRebooted, Check: Check{Ver: 2, LDAP: "FAIL", DNSNTP: "다름", Autofs: "nas01:/export/appl", HT: "-", Note: "ldap_check UNDEFINED; DNS 10.1.1.10 NTP -"}},
+		{Name: "o", Status: StatusOff, Check: Check{Ver: 2, LDAP: "zxcv"}}, // 완료후꺼짐은 표에서 제외
 		{Name: "i", Status: StatusInstalling},
 	}}
-	want := "hostname\tLDAP\tDNS · NTP\tautofs\tH/T\n" +
-		"m\tFAIL\tFAIL\tFAIL\t-\t인프라 불일치 (x)\n" +
-		"z\tOK\tOK\tOK\tON"
+	want := "hostname\tLDAP\tDNS · NTP\tautofs\tH/T\t비고\n" +
+		"m\tFAIL\t다름\tnas01:/export/appl\t-\tldap_check UNDEFINED; DNS 10.1.1.10 NTP -\n" +
+		"z\tzxcv\t10.1.1.10/10.1.1.11\tnas01:/export/appl\tON\t"
 	if got := ldapTable(snap); got != want {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestExpandTabsWrapText(t *testing.T) {
-	got := wrapText("hostname\tLDAP\tDNS · NTP\tautofs\tH/T\nsvr001\tOK\tOK\tOK\tON", 40)
-	want := []string{" hostname  LDAP  DNS · NTP  autofs  H/T", " svr001    OK    OK         OK      ON"}
+	got := wrapText("hostname\tLDAP\tDNS · NTP\tautofs\tH/T\t비고\nsvr001\tOK\tOK\tOK\tON\t", 40)
+	want := []string{" hostname  LDAP  DNS · NTP  autofs  H/T  비고", " svr001    OK    OK         OK      ON   "}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %q", got)
+	}
+}
+
+// 옛 gossh 는 명령 앞뒤의 따옴표를 잘라 내므로 명령이 따옴표로 끝나면 안 된다.
+func TestLdapCmdNoTrailingQuote(t *testing.T) {
+	got := ldapCmd("/user/asdf/ldap_check.sh")
+	if strings.HasSuffix(got, "'") || strings.HasPrefix(got, "'") {
+		t.Errorf("따옴표로 끝남: %s", got)
 	}
 }

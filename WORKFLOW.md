@@ -18,5 +18,5 @@ TUI 는 스냅샷만 받아 그리므로 수집 중에도 키 입력에 즉시 �
 - **`c` 설치현황**: 완료 서버에 ping → ping X 면 완료후꺼짐, 완료후꺼짐이 ping O 면 재부팅됨 → 요약 + 벤더별(디스크미인식·접속불가·완료후꺼짐) 목록 출력.
 - **`r` 점검요청**: 지연 서버를 벤더별로 묶어 점검 요청 문구 출력.
 - **`d` DHCP**: ping X 목록을 stdin 으로 `ssh <dhcp_server>` 에 넘겨 원격 `a.sh` 결과를 스크롤 창에 표시(로컬·원격에 파일 안 남김).
-- **`l` LDAP·H/T**: 결과가 비어 있는 설치완료 서버만 `gossh -script` 로 ldap_check.sh 와 H/T 를 실행 → 열별 요약, 값은 state.json 에 보관.
+- **`l` LDAP·H/T**: 결과가 비어 있는 설치완료 서버만 `gossh -script` 로 ldap_check.sh 와 H/T 를 실행 (DNS·NTP·auto.appl 값도 함께 수집) → LDAP infra · DNS·NTP ip1/ip2 또는 다름 · autofs 마운트 위치 · H/T · 비고로 요약, 값은 state.json 에 보관.
 - **`/` 검색, `1`~`7` 필터, `0` 해제, ↑↓ PgUp PgDn Home End 스크롤, `q`/Ctrl+C 종료(터미널 복구)**.

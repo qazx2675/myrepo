@@ -246,8 +246,57 @@ func TestKeySequences(t *testing.T) {
 	}
 	v = newTestView(80, 24)
 	press(v, snap, "c")
+	if press(v, snap, "q") != actNone || v.Panel != 0 {
+		t.Fatal("패널 열린 상태에서 q 는 뒤로가기여야 함")
+	}
 	if press(v, snap, "q") != actQuit {
-		t.Fatal("패널 열린 상태에서 q 종료 안 됨")
+		t.Fatal("기본 화면에서 q 종료 안 됨")
+	}
+}
+
+func TestQBack(t *testing.T) {
+	snap := tuiSnap()
+	for _, p := range []string{"c", "r", "d", "l"} {
+		v := newTestView(80, 24)
+		press(v, snap, "3", "[B") // 필터·스크롤 상태
+		press(v, snap, "/", "x", "")
+		filter, scroll, search := v.Filter, v.Scroll, v.Search
+		press(v, snap, p)
+		if v.Panel != rune(p[0]) {
+			t.Fatalf("%s 패널 안 열림", p)
+		}
+		if act := press(v, snap, "q"); act != actNone || v.Panel != 0 {
+			t.Fatalf("%s 뒤 q: act=%v panel=%c", p, act, v.Panel)
+		}
+		if v.Filter != filter || v.Scroll != scroll || v.Search != search {
+			t.Fatalf("%s 뒤 q 로 표 상태가 바뀜", p)
+		}
+		if press(v, snap, "q") != actQuit {
+			t.Fatalf("%s 뒤 q, q 종료 안 됨", p)
+		}
+		v = newTestView(80, 24)
+		press(v, snap, p)
+		if press(v, snap, "") != actQuit {
+			t.Fatalf("%s 패널에서 Ctrl+C 종료 안 됨", p)
+		}
+	}
+	// 검색 입력 중 q 는 글자
+	v := newTestView(80, 24)
+	press(v, snap, "c", "/")
+	if act := press(v, snap, "q"); act != actNone || v.SearchBuf != "q" {
+		t.Fatalf("검색 중 q: act=%v buf=%q", act, v.SearchBuf)
+	}
+	// q 로 뒤로간 뒤 늦게 온 결과가 패널을 다시 열지 않는다
+	v = newTestView(80, 24)
+	press(v, snap, "d")
+	press(v, snap, "q")
+	v.setReport('d', "늦은 결과", false)
+	v.checkDone(nil)
+	if v.Panel != 0 {
+		t.Fatal("늦은 결과가 패널을 다시 열었음")
+	}
+	if v.Reports['d'] != "늦은 결과" {
+		t.Fatal("결과는 저장되어야 함")
 	}
 }
 
@@ -552,7 +601,7 @@ func TestLoopCheckFlowAndRestore(t *testing.T) {
 	}
 	close(src.release)
 	waitFor(t, "확인 끝난 설치현황", func() bool { return strings.Contains(le.out.String(), "40대 중 14대 설치완료") })
-	le.in.Write([]byte("q"))
+	le.in.Write([]byte("qq")) // 패널에서 뒤로, 기본 화면에서 종료
 	if code := wait(t, res); code != 0 {
 		t.Fatalf("종료 코드 %d", code)
 	}
@@ -641,11 +690,11 @@ func withChecks(s Snapshot) *Snapshot {
 		}
 		switch n % 4 {
 		case 0:
-			recs[i].Check = Check{LDAP: "OK", DNSNTP: "OK", Autofs: "OK", HT: "ON"}
+			recs[i].Check = Check{Ver: 2, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "nas01:/export/appl", HT: "ON"}
 		case 1:
-			recs[i].Check = Check{LDAP: "OK", DNSNTP: "OK", Autofs: "FAIL", HT: "OFF"}
+			recs[i].Check = Check{Ver: 2, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "다름", HT: "OFF", Note: "/appl nas01:/export/appl /wappl nas02:/export/wappl"}
 		case 2:
-			recs[i].Check = Check{LDAP: "FAIL", DNSNTP: "FAIL", Autofs: "FAIL", HT: "-", Note: "인프라 불일치 (dns+ntp=zxcv ldap=zxcv appl=qwer)"}
+			recs[i].Check = Check{Ver: 2, LDAP: "FAIL", DNSNTP: "다름", Autofs: "nas01:/export/appl", HT: "-", Note: "ldap_check UNDEFINED; DNS 10.1.1.10/10.1.1.11 NTP 10.1.2.20"}
 		}
 		n++
 	}
@@ -690,7 +739,7 @@ func TestLoopReportPanels(t *testing.T) {
 	waitFor(t, "l 조회중", func() bool { return strings.Contains(le.out.String(), "조회중 l") })
 	close(src.release)
 	waitFor(t, "l 결과", func() bool { return strings.Contains(le.out.String(), "결과 l") })
-	le.in.Write([]byte("q"))
+	le.in.Write([]byte("qq")) // 패널에서 뒤로, 기본 화면에서 종료
 	if code := wait(t, res); code != 0 {
 		t.Fatalf("종료 코드 %d", code)
 	}

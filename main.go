@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strings"
 )
 
@@ -80,6 +81,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "설정 오류: %v\n", err)
 		os.Exit(1)
 	}
+	// 8000대에서 회차 중 쓰레기(GC 전 메모리)가 쌓여 RSS 가 50MB 를 넘지 않게 GC 를 더 자주 돌린다(계획서 7.5)
+	debug.SetGCPercent(25)
 	os.Exit(run(cfg, hostfile, hosts))
 }
 

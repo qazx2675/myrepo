@@ -1,11 +1,12 @@
 #!/bin/bash
-# load_run.sh - 랩(.58)에서 5천 대 부하 시험을 분리된 프로세스로 시작한다 (계획서 7.5)
-#   사용법: bash test/load_run.sh [초=600]      (pm_monitor 소스 폴더에서, install_mn_os8 이 빌드돼 있어야 함)
-#   /root/pm_load 에 호스트(127.1.x.y 5천 개, 모두 ping 응답·로컬 sshd 22번 열림)·설정·스텁을 만들고
+# load_run.sh - 랩(.58)에서 N대(기본 5천, v0.2.0 검증은 8천) 부하 시험을 분리된 프로세스로 시작한다 (계획서 7.5)
+#   사용법: bash test/load_run.sh [초=600] [호스트수=5000]      (pm_monitor 소스 폴더에서, install_mn_os8 이 빌드돼 있어야 함)
+#   /root/pm_load 에 호스트(127.1.x.y N개, 모두 ping 응답·로컬 sshd 22번 열림)·설정·스텁을 만들고
 #   pty_drive.py(가상 터미널 120x40 + 키 입력)와 load_check.sh 를 백그라운드로 띄운다.
 #   끝나면 /root/pm_load/load_report.txt, drive.log 를 보면 된다. 정리: rm -rf /root/pm_load
 set -eu
 DUR=${1:-600}
+NH=${2:-5000}
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 D=/root/pm_load
 rm -rf "$D"
@@ -15,8 +16,8 @@ cp "$SRC"/test/stub_gossh.sh "$SRC"/test/load_check.sh "$SRC"/test/pty_drive.py 
 chmod +x "$D"/*
 cd "$D"
 
-# 5천 대: 127.1.0.1 ~ 127.1.19.250. 상태 분포: 설치중 60%, 완료 30%, 디스크 3%, 접속불가(gossh 실패) 7%
-awk 'BEGIN { for (a = 0; a < 20; a++) for (b = 1; b <= 250; b++) print "127.1." a "." b }' >hosts.txt
+# N대: 127.1.0.1 ~ (250개씩 묶음, 5천=127.1.19.250, 8천=127.1.31.250). 상태 분포: 설치중 60%, 완료 30%, 디스크 3%, 접속불가(gossh 실패) 7%
+awk -v n="$NH" 'BEGIN { for (i = 0; i < n; i++) print "127.1." int(i / 250) "." (i % 250 + 1) }' >hosts.txt
 awk '{ m = (NR - 1) % 100; s = (m < 60) ? "installing" : (m < 90) ? "done" : (m < 93) ? "disk" : "down"; print $1, s }' hosts.txt >stub_state.txt
 echo '#!/bin/bash' >ldap_check.sh # 이름만 필요(스텁이 명령에 ldap_check 가 있으면 응답)
 cat >pm_monitor.conf <<EOF
