@@ -448,7 +448,7 @@
             const diffs = [];
 
             activeSources.forEach(source => {
-                const missingInSource = []; // 전체 집합에는 있으나 이 소스에는 없는 호스트
+                const missingInSource = [];
                 unionSet.forEach(h => {
                     if (!source.hosts.has(h)) missingInSource.push(h);
                 });
