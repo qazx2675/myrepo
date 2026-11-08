@@ -63,7 +63,8 @@ install_mn hosts.txt
 # r  : 지연 서버 벤더별 점검요청 코멘트
 # d  : DHCP 조회 (dhcp_server 설정 필요)
 # l  : 완료 서버 LDAP·DNS·NTP·autofs·H/T 점검 (ldap_check_sh 설정 필요)
-# q 또는 Ctrl+C : 종료
+# q : 패널에서는 뒤로(기본 화면), 기본 화면에서는 종료
+# Ctrl+C : 어디서든 바로 종료
 
 # ===== 5. 상태 파일 =====
 

@@ -182,6 +182,10 @@ func (v *ViewState) handleKey(k Key, snap Snapshot) action {
 func (v *ViewState) runeKey(r rune) action {
 	switch {
 	case r == 'q':
+		if v.Panel != 0 { // 패널에서는 뒤로가기(기본 화면), 기본 화면에서는 종료
+			v.Panel = 0
+			return actNone
+		}
 		return actQuit
 	case r == panelInstall || r == panelDelay || r == panelDHCP || r == panelLDAP:
 		if v.Panel == r { // 같은 키를 다시 누르면 닫는다

@@ -5,20 +5,20 @@
  경고: 설정 파일 pm_monitor.conf 없음 - 기본값 사용
 --------------------------------------------------------------------------------
  [l] LDAP·H/T  1-13/13줄
- hostname  LDAP  DNS · NTP  autofs  H/T
- c1001     OK    OK         OK      ON
- c1002     OK    OK         FAIL    OFF
- c1003     FAIL  FAIL       FAIL    -  인프라 불일치 (dns+ntp=zxcv ldap=zxcv ap…
- c1005     OK    OK         OK      ON
- c1006     OK    OK         FAIL    OFF
- c1007     FAIL  FAIL       FAIL    -  인프라 불일치 (dns+ntp=zxcv ldap=zxcv ap…
- d001      OK    OK         OK      ON
- d002      OK    OK         FAIL    OFF
- l001      OK    OK         OK      ON
- l002      OK    OK         FAIL    OFF
- l003      FAIL  FAIL       FAIL    -  인프라 불일치 (dns+ntp=zxcv ldap=zxcv ap…
+ hostname  LDAP  DNS · NTP            autofs              H/T  비고
+ c1001     zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
+ c1002     zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
+ c1003     FAIL  다름                 nas01:/export/appl  -    ldap_check UNDEF…
+ c1005     zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
+ c1006     zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
+ c1007     FAIL  다름                 nas01:/export/appl  -    ldap_check UNDEF…
+ d001      zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
+ d002      zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
+ l001      zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
+ l002      zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
+ l003      FAIL  다름                 nas01:/export/appl  -    ldap_check UNDEF…
  (점검 결과 없음 3대 - ssh 실패 등, 다시 열면 재시도)
 
 
 
- ↑↓ PgUp PgDn Home End 스크롤  l 닫기  c r d l 전환  q 종료
+ ↑↓ PgUp PgDn Home End 스크롤  l 닫기  c r d l 전환  q 뒤로

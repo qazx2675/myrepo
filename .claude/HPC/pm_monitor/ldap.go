@@ -3,53 +3,71 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"net"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-// ldapCmd 는 원격 명령이다. ldap_check 뒤에 H/T 줄(setup_check buildInfoCmd 와 같은 lscpu | grep -i 'per core')을 붙인다.
-// csh/tcsh 로그인 셸에서도 돌도록 변수 대입·중괄호·exit 없이 `;` 와 파이프, 작은따옴표만 쓴다.
-// `;` 로 이어 ldap_check 가 실패(종료코드 1)해도 H/T 가 나온다.
+// ldapCmdVer 는 Check.Ver 의 현재 값이다. 이보다 작은 값으로 저장된 결과는 새 형식이 아니므로 다시 조사한다.
+const ldapCmdVer = 2
+
+// ldapCmd 는 원격 명령이다. ldap_check 와 H/T 줄(setup_check buildInfoCmd 와 같은 lscpu | grep -i 'per core')에 더해
+// DNS·NTP·autofs 원본 줄을 PM_DNS / PM_NTPC / PM_NTPN / PM_APPL 표식을 붙여 한 번에 가져온다.
+// csh/tcsh 로그인 셸에서도 돌도록 변수·중괄호·$(...)·2> 없이 `;` `&&` 파이프, 작은따옴표만 쓴다.
+// 파일이 없을 때 오류 출력이 나오지 않게 `test -f 파일 && grep ...` 로 쓴다. `;` 로 이어 앞 명령이 실패해도 뒤가 돈다.
+// 옛 gossh 는 명령 앞뒤의 작은따옴표를 잘라 내므로 명령은 따옴표로 끝나지 않게 PM_CHRONY(echo)를 맨 끝에 둔다.
+// chrony.conf 가 있으면 PM_CHRONY 를 찍어 두고, 없을 때만 ntp.conf 줄(PM_NTPN)을 쓰는 판단은 Go 에서 한다.
 func ldapCmd(sh string) string {
 	if strings.ContainsAny(sh, " \t'\"") {
 		sh = shQuote(sh)
 	}
-	return "bash " + sh + "; lscpu | grep -i 'per core'"
-}
-
-// ldapAcc 는 호스트 한 대의 ldap_check·H/T 출력 누적이다.
-type ldapAcc struct {
-	n       [3][2]int // [LDAP, DNS·NTP, autofs][OK, FAIL] 줄 수
-	unknown bool      // /unknown (infra-mismatch)
-	note    string
-	one     int // 한 줄 요약 형식: 0 없음, 1 INFO(정상), 2 FAIL
-	tpc     int // Thread(s) per core, 못 읽으면 0
-}
-
-const (
-	catLDAP = iota
-	catDNS
-	catAutofs
-)
-
-// fileCat 은 ldap_check 파일 이름이 속한 열을 돌려준다(없으면 -1).
-func fileCat(name string) int {
-	switch {
-	case name == "ldap.conf", name == "sssd.conf", name == "nslcd.conf":
-		return catLDAP
-	case name == "resolv.conf", name == "chrony.conf", name == "ntp.conf":
-		return catDNS
-	case strings.HasPrefix(name, "autofs"), strings.HasPrefix(name, "auto.appl"):
-		return catAutofs
+	pick := func(file, tag string, pats ...string) string {
+		g := "grep"
+		for _, p := range pats {
+			g += " -e '" + p + "'"
+		}
+		return "test -f " + file + " && " + g + " " + file + " | sed 's/^/" + tag + " /'"
 	}
-	return -1
+	return strings.Join([]string{
+		"bash " + sh,
+		"lscpu | grep -i 'per core'",
+		pick("/etc/resolv.conf", "PM_DNS", "^nameserver[[:space:]]"),
+		pick("/etc/chrony.conf", "PM_NTPC", "^server[[:space:]]", "^pool[[:space:]]"),
+		pick("/etc/ntp.conf", "PM_NTPN", "^server[[:space:]]", "^pool[[:space:]]"),
+		pick("/etc/auto.appl", "PM_APPL", `^/\?appl[[:space:]]`, `^/\?wappl[[:space:]]`),
+		"test -f /etc/chrony.conf && echo PM_CHRONY",
+	}, "; ")
+}
+
+// ldapAcc 는 호스트 한 대의 ldap_check·H/T·DNS·NTP·autofs 출력 누적이다.
+type ldapAcc struct {
+	unknown  bool   // /unknown (infra-mismatch)
+	note     string // ldap_check 쪽 원인
+	one      int    // 한 줄 요약 형식: 0 없음, 1 INFO/OK(정상), 2 FAIL
+	infra    string // LDAP 칸에 쓸 인프라 이름
+	fileFail bool   // 파일별 형식: LDAP 파일(ldap/sssd/nslcd.conf)에 FAIL 이 있다
+	tpc      int    // Thread(s) per core, 못 읽으면 0
+	dns      []string
+	ntpC     []string // chrony.conf 의 server·pool
+	ntpN     []string // ntp.conf 의 server·pool
+	chrony   bool     // chrony.conf 가 있다
+	appl     string
+	wappl    string
+}
+
+// isLdapFile 은 ldap_check 파일별 형식의 LDAP 열 파일 이름인지 알려준다.
+func isLdapFile(name string) bool {
+	return name == "ldap.conf" || name == "sssd.conf" || name == "nslcd.conf"
 }
 
 // parseLdapOutput 은 gossh 출력의 "host: 내용" 줄을 호스트별로 모은다. 모르는 줄은 무시한다.
-// 줄 형식: 파일별 `<OK|FAIL>\t/<infra>\t<file>[\t부가]`, 한 줄 요약 `INFO\tLDAP\t<infra>\t<site>` /
-// `FAIL\tLDAP\tUNDEFINED`(현재 ldap_check.sh), H/T `Thread(s) per core:  2`.
+// 줄 형식: 한 줄 요약 `INFO|OK\tLDAP\t<infra>[\t<site>]` / `FAIL\tLDAP\tUNDEFINED`(현재 ldap_check.sh),
+// 파일별(옛 형식) `<OK|FAIL>\t/<infra>\t<file>[\t부가]`, H/T `Thread(s) per core:  2`,
+// 조사 명령의 `PM_DNS nameserver <ip>` `PM_NTPC|PM_NTPN server <ip> ...` `PM_CHRONY` `PM_APPL <key> ... <마운트>`.
 // gossh 가 종료코드 != 0 일 때 붙이는 `ERROR: ` 접두사는 떼고 읽는다.
 func parseLdapOutput(out string) map[string]*ldapAcc {
 	res := map[string]*ldapAcc{}
@@ -66,24 +84,50 @@ func parseLdapOutput(out string) map[string]*ldapAcc {
 			}
 			return res[host]
 		}
+		w := strings.Fields(val)
 		switch {
+		case len(w) >= 1 && w[0] == "PM_CHRONY":
+			get().chrony = true
+		case len(w) >= 3 && w[0] == "PM_DNS":
+			x := get()
+			x.dns = append(x.dns, w[2])
+		case len(w) >= 3 && w[0] == "PM_NTPC":
+			x := get()
+			x.ntpC = append(x.ntpC, w[2])
+		case len(w) >= 3 && w[0] == "PM_NTPN":
+			x := get()
+			x.ntpN = append(x.ntpN, w[2])
+		case len(w) >= 3 && w[0] == "PM_APPL":
+			x := get()
+			v := w[len(w)-1]
+			switch strings.TrimPrefix(w[1], "/") {
+			case "appl":
+				if x.appl == "" {
+					x.appl = v
+				}
+			case "wappl":
+				if x.wappl == "" {
+					x.wappl = v
+				}
+			}
 		case (f[0] == "OK" || f[0] == "FAIL") && len(f) >= 3 && strings.HasPrefix(f[1], "/"):
 			x := get()
-			fail := 0
-			if f[0] == "FAIL" {
-				fail = 1
-			}
 			name := strings.Fields(f[2] + " ")[0]
 			if f[1] == "/unknown" {
 				x.unknown = true
 				if name == "infra-mismatch" {
 					x.note = "인프라 불일치 (" + strings.TrimSpace(strings.Join(f[3:], " ")) + ")"
 				}
-			} else if c := fileCat(name); c >= 0 {
-				x.n[c][fail]++
+			} else if isLdapFile(name) {
+				if f[0] == "FAIL" {
+					x.fileFail = true
+				} else if name == "ldap.conf" || x.infra == "" {
+					x.infra = f[1][1:]
+				}
 			}
-		case f[0] == "INFO" && len(f) >= 2 && f[1] == "LDAP":
-			get().one = 1
+		case (f[0] == "INFO" || f[0] == "OK") && len(f) >= 3 && f[1] == "LDAP":
+			x := get()
+			x.one, x.infra = 1, strings.TrimSpace(f[2])
 		case f[0] == "FAIL" && len(f) >= 2 && f[1] == "LDAP":
 			x := get()
 			x.one = 2
@@ -99,34 +143,87 @@ func parseLdapOutput(out string) map[string]*ldapAcc {
 	return res
 }
 
-// summarize 는 호스트 한 대의 누적을 Check 로 만든다(4.6 요약 규칙).
-//
-//	열별: FAIL 줄이 있으면 FAIL, 모두 OK 면 OK, 줄이 없으면 -
-//	/unknown(인프라 불일치) 또는 FAIL LDAP UNDEFINED: 세 열 모두 FAIL, Note 에 원인
-//	INFO LDAP: 세 열 모두 OK
-//	H/T: 2 이상 ON, 1 OFF, 모르면 -
-func (a *ldapAcc) summarize() Check {
-	var v [3]string
-	for i := range v {
-		switch {
-		case a.n[i][1] > 0:
-			v[i] = "FAIL"
-		case a.n[i][0] > 0:
-			v[i] = "OK"
-		default:
-			v[i] = "-"
+// ipLess 는 IP 를 숫자 오름차순으로, IP 가 아닌 문자열은 그 뒤에 사전순으로 비교한다.
+func ipLess(a, b string) bool {
+	ia, ib := net.ParseIP(a), net.ParseIP(b)
+	switch {
+	case ia != nil && ib != nil:
+		return bytes.Compare(ia.To16(), ib.To16()) < 0
+	case ia != nil:
+		return true
+	case ib != nil:
+		return false
+	}
+	return a < b
+}
+
+// sortedSet 은 중복을 없애고 ipLess 순으로 정렬한 집합이다.
+func sortedSet(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
 		}
 	}
-	note := ""
+	sort.Slice(out, func(i, j int) bool { return ipLess(out[i], out[j]) })
+	return out
+}
+
+// joinOrDash 는 "/" 로 이은 값이고 비었으면 "-" 다.
+func joinOrDash(s []string) string {
+	if len(s) == 0 {
+		return "-"
+	}
+	return strings.Join(s, "/")
+}
+
+// summarize 는 호스트 한 대의 누적을 Check 로 만든다(4.6 열 규칙).
+func (a *ldapAcc) summarize() Check {
+	var notes []string
+	ldap := "-"
 	switch {
-	case a.unknown || a.one == 2:
-		v = [3]string{"FAIL", "FAIL", "FAIL"}
-		note = a.note
-		if note == "" {
-			note = "인프라 판별 불가 (/unknown)"
+	case a.unknown:
+		ldap = "FAIL"
+		n := a.note
+		if n == "" {
+			n = "인프라 판별 불가 (/unknown)"
 		}
-	case a.one == 1:
-		v = [3]string{"OK", "OK", "OK"}
+		notes = append(notes, n)
+	case a.one == 2:
+		ldap = "FAIL"
+		notes = append(notes, a.note)
+	case a.fileFail:
+		ldap = "FAIL"
+	case a.infra != "":
+		ldap = a.infra
+	}
+	// DNS · NTP: 순서·중복을 무시한 집합 비교
+	ntp := a.ntpC
+	if !a.chrony {
+		ntp = a.ntpN
+	}
+	d, n := sortedSet(a.dns), sortedSet(ntp)
+	dn := "다름"
+	switch {
+	case len(d) == 0 && len(n) == 0:
+		dn = "-"
+	case reflect.DeepEqual(d, n):
+		dn = strings.Join(d, "/")
+	default:
+		notes = append(notes, "DNS "+joinOrDash(d)+" NTP "+joinOrDash(n))
+	}
+	// autofs: appl·wappl 마운트 위치
+	af := "-"
+	switch {
+	case a.appl != "" && a.wappl != "" && a.appl != a.wappl:
+		af = "다름"
+		notes = append(notes, "/appl "+a.appl+" /wappl "+a.wappl)
+	case a.appl != "":
+		af = a.appl
+	case a.wappl != "":
+		af = a.wappl
 	}
 	ht := "-"
 	switch {
@@ -135,7 +232,7 @@ func (a *ldapAcc) summarize() Check {
 	case a.tpc == 1:
 		ht = "OFF"
 	}
-	return Check{LDAP: v[0], DNSNTP: v[1], Autofs: v[2], HT: ht, Note: note}
+	return Check{Ver: ldapCmdVer, LDAP: ldap, DNSNTP: dn, Autofs: af, HT: ht, Note: strings.Join(notes, "; ")}
 }
 
 // LdapQuery 는 hosts 에 ldap_check 와 H/T 를 gossh 로 실행해 응답한 호스트의 Check 를 돌려준다.
@@ -170,7 +267,7 @@ func (c *Collector) ldapTargets() []string {
 	defer c.mu.Unlock()
 	var out []string
 	for _, h := range c.hosts {
-		if r := c.recs[h]; ldapDone(r.Status) && r.Check == (Check{}) {
+		if r := c.recs[h]; ldapDone(r.Status) && !r.Check.current() {
 			out = append(out, h)
 		}
 	}
@@ -221,7 +318,7 @@ func (c *Collector) LDAPReport() string {
 }
 
 // ldapTable 은 완료 서버(설치완료·재부팅됨) 중 결과가 있는 서버의 탭 구분 표다(hostname 순).
-// 비고가 있는 줄에만 맨 끝에 비고 열을 붙인다.
+// 머리줄에 비고 칸이 항상 있고, 비고가 없는 줄은 빈 칸으로 둔다.
 func ldapTable(snap *Snapshot) string {
 	var recs []Record
 	n, empty := 0, 0
@@ -230,7 +327,7 @@ func ldapTable(snap *Snapshot) string {
 			continue
 		}
 		n++
-		if r.Check == (Check{}) {
+		if !r.Check.current() {
 			empty++
 			continue
 		}
@@ -238,14 +335,10 @@ func ldapTable(snap *Snapshot) string {
 	}
 	sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
 	var sb strings.Builder
-	sb.WriteString("hostname\tLDAP\tDNS · NTP\tautofs\tH/T\n")
+	sb.WriteString("hostname\tLDAP\tDNS · NTP\tautofs\tH/T\t비고\n")
 	for _, r := range recs {
 		ck := r.Check
-		fmt.Fprintf(&sb, "%s\t%s\t%s\t%s\t%s", r.Name, ck.LDAP, ck.DNSNTP, ck.Autofs, ck.HT)
-		if ck.Note != "" {
-			sb.WriteString("\t" + ck.Note)
-		}
-		sb.WriteByte('\n')
+		fmt.Fprintf(&sb, "%s\t%s\t%s\t%s\t%s\t%s\n", r.Name, ck.LDAP, ck.DNSNTP, ck.Autofs, ck.HT, ck.Note)
 	}
 	if n == 0 {
 		sb.WriteString("(설치완료 서버가 없습니다)\n")

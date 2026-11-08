@@ -56,7 +56,9 @@ bash install_mn.sh -c /경로/pm_monitor.conf <호스트파일>
 ### 2.1 데모로 먼저 보기 (실제 서버 접속 없음)
 
 ```bash
-bash demo/demo.sh      # root 로 실행. 안내 화면에서 Enter
+bash demo/demo.sh                 # root 로 실행. 안내 화면에서 Enter (27대)
+bash demo/demo.sh -n 8000         # 8000대로 렉·가독성 확인 (갱신 30초 간격)
+bash demo/demo.sh -name demo2     # 다른 이름으로 데모를 하나 더 (작업 폴더 /tmp/demo2)
 ```
 
 가짜 gossh·ssh 와 가짜 호스트 27대(벤더별 이름)로 데모 환경을 `/tmp/pm_demo` 에 만들고 바로 `install_mn` 을 띄웁니다. 시간이 지나면 설치완료·지연·완료후꺼짐·재부팅됨이 차례로 나타나므로 키(`c r d l / 1~7`)를 눌러 출력을 확인할 수 있습니다. `q` 로 끝내면 잠깐 넣었던 `/etc/hosts` 줄과 lo 주소, `/tmp/pm_demo` 를 모두 되돌립니다.
@@ -90,7 +92,8 @@ bash demo/demo.sh      # root 로 실행. 안내 화면에서 Enter
 | `r` | 지연 서버의 벤더별 점검요청 코멘트 |
 | `d` | DHCP 조회(ping X 서버를 `dhcp_server` 로 보냄) 결과 |
 | `l` | 완료 서버의 LDAP·DNS·NTP·autofs·H/T 점검 결과(아직 안 채워진 서버만 조회) |
-| `q` / Ctrl+C | 종료(터미널 복구) |
+| `q` | 패널(c r d l)에서는 뒤로(기본 화면), 기본 화면에서는 종료(터미널 복구) |
+| Ctrl+C | 어디서든 바로 종료(터미널 복구) |
 
 `c r d l` 은 다시 누르면 닫힙니다.
 
@@ -110,7 +113,17 @@ bash demo/demo.sh      # root 로 실행. 안내 화면에서 Enter
 
 ### 3.4 LDAP·H/T (`l`) 출력 형식
 
-`ldap_check.sh` 가 파일별 `OK/FAIL` 줄을 내면 LDAP·DNS·NTP·autofs 열로 나눠 요약합니다. **현재 ldap_check.sh(as_work 최신)는 세 항목을 교차 검증한 뒤 한 줄만 출력**(`INFO\tLDAP\t<infra>\t<site>` 또는 `FAIL\tLDAP\tUNDEFINED`)하므로, INFO 이면 세 열 모두 OK, FAIL 이면 세 열 모두 FAIL(비고 `ldap_check UNDEFINED`)로 표시합니다. H/T 는 Thread(s) per core 가 2 이상이면 ON, 1 이면 OFF 입니다.
+`l` 패널 칸 (v0.2.0):
+
+| 칸 | 내용 |
+|---|---|
+| LDAP | ldap_check.sh 출력 `INFO	LDAP	<infra>	<site>` 의 **infra** 만. FAIL 이면 `FAIL`(비고 `ldap_check UNDEFINED`) |
+| DNS · NTP | `/etc/resolv.conf` nameserver 와 `/etc/chrony.conf`(없으면 `/etc/ntp.conf`) server·pool 을 순서 무시로 비교. 같으면 `ip1/ip2`(숫자 오름차순), 다르면 `다름`(비고에 양쪽 값) |
+| autofs | `/etc/auto.appl` 의 `/appl`·`/wappl` 마운트 위치(예 `nas01:/export/appl`). 두 줄이 같으면 `/appl` 값, 다르면 `다름`(비고에 양쪽 값) |
+| H/T | Thread(s) per core 2 이상 ON, 1 OFF |
+| 비고 | 위 원인들을 `; ` 로 연결 |
+
+값이 없으면 `-` 입니다. chrony 에 IP 대신 호스트 이름이 적혀 있으면 DNS IP 와 글자가 달라 `다름` 으로 나옵니다.
 
 ## 4. 문서별 설명
 
