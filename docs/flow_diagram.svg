@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 680" width="100%" height="100%" font-family="-apple-system, BlinkMacSystemFont, 'Pretendard', 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#475569" />
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1d4ed8" />
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="980" height="680" fill="#f8fafc" rx="8"/>
+  <rect x="16" y="16" width="948" height="648" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" rx="6"/>
+
+  <!-- Header Title -->
+  <rect x="16" y="16" width="948" height="48" fill="#0f172a" rx="6"/>
+  <rect x="16" y="50" width="948" height="14" fill="#0f172a"/>
+  <text x="40" y="45" fill="#f8fafc" font-size="15" font-weight="700">작업대상 호스트 교차 검증 시스템 아키텍처 및 데이터 흐름도</text>
+  <text x="940" y="45" fill="#94a3b8" font-size="12" text-anchor="end">페이지 내 이동 패널 ↔ 창 크기 맞춤 독립 팝업 창 (window.open)</text>
+
+  <!-- Section 1: AWX Collection & Exclusion Filter -->
+  <text x="40" y="90" fill="#0f172a" font-size="13" font-weight="700">1. AWX 호스트 수집 및 제외 필터링 단계 (선택사항 - 1대 이상 수집 시 비교 참여)</text>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="102" width="430" height="96" fill="#ffffff" stroke="#475569" stroke-width="1.2" rx="6"/>
+    <rect x="40" y="102" width="430" height="26" fill="#f1f5f9" rx="6"/>
+    <text x="54" y="119" fill="#1e293b" font-size="12" font-weight="700">AWX 제외 항목 설정 (코드 내 기본 변수 + 추가 입력칸)</text>
+    <text x="54" y="144" fill="#334155" font-size="11">• 기본 변수(DEFAULT_EXCLUDE_HOSTS) + 입력칸('|' 구분, 부분/정확 일치 지원)</text>
+    <text x="54" y="164" fill="#94a3b8" font-size="11">• 미입력 시 회색 안내: "OS설치에 필요한 서버명은 이미 제외되어 있음"</text>
+    <text x="54" y="184" fill="#475569" font-size="10">• 소스 진행 시 필수로 추가되는 6~7대 서버를 수집 시점에 즉시 차감</text>
+  </g>
+
+  <line x1="470" y1="150" x2="504" y2="150" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="510" y="102" width="430" height="96" fill="#ffffff" stroke="#0f172a" stroke-width="1.2" rx="6"/>
+    <rect x="510" y="102" width="430" height="26" fill="#e2e8f0" rx="6"/>
+    <text x="524" y="119" fill="#0f172a" font-size="12" font-weight="700">AWX 현재 위치 호스트 수집 및 제외 요약 출력</text>
+    <text x="524" y="144" fill="#334155" font-size="11">• 현재 인벤토리 API 전수 수집 또는 현재 페이지 DOM 수집</text>
+    <text x="524" y="164" fill="#0f172a" font-size="11" font-weight="600">• 요약 표기 예: "1000대 중 6대 제외됨 (수집 대상: 994대)"</text>
+    <text x="524" y="184" fill="#475569" font-size="11" font-family="Consolas, monospace">• 제외 명단(공백 나열): host-a01 host-a02 host-a03 ...</text>
+  </g>
+
+  <!-- Section 2: 4 Comparison Sources -->
+  <text x="40" y="226" fill="#0f172a" font-size="13" font-weight="700">2. 비교 입력 소스 (필수 2개 + 선택 2개 = 최소 2개 ~ 최대 4개 동시 비교)</text>
+
+  <!-- Source 1: 상세목록현황 (필수) -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="238" width="210" height="86" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5" rx="6"/>
+    <rect x="40" y="238" width="210" height="24" fill="#eff6ff" rx="6"/>
+    <text x="52" y="254" fill="#1e3a8a" font-size="12" font-weight="700">상세목록현황 호스트</text>
+    <rect x="196" y="242" width="44" height="16" fill="#1d4ed8" rx="3"/>
+    <text x="218" y="253" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">필수</text>
+    <text x="52" y="278" fill="#475569" font-size="11">• 텍스트 입력창 1 (붙여넣기)</text>
+    <text x="52" y="296" fill="#475569" font-size="11">• 개행/공백/콤마/시리얼 자동 정제</text>
+    <text x="52" y="313" fill="#64748b" font-size="10">미입력 시 비교 실행 불가</text>
+  </g>
+
+  <!-- Source 2: 인시던트 (필수) -->
+  <g filter="url(#shadow)">
+    <rect x="270" y="238" width="210" height="86" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5" rx="6"/>
+    <rect x="270" y="238" width="210" height="24" fill="#eff6ff" rx="6"/>
+    <text x="282" y="254" fill="#1e3a8a" font-size="12" font-weight="700">인시던트 호스트</text>
+    <rect x="426" y="242" width="44" height="16" fill="#1d4ed8" rx="3"/>
+    <text x="448" y="253" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">필수</text>
+    <text x="282" y="278" fill="#475569" font-size="11">• 텍스트 입력창 2 (붙여넣기)</text>
+    <text x="282" y="296" fill="#475569" font-size="11">• 개행/공백/콤마/시리얼 자동 정제</text>
+    <text x="282" y="313" fill="#64748b" font-size="10">미입력 시 비교 실행 불가</text>
+  </g>
+
+  <!-- Source 3: 작업대상 (선택) -->
+  <g filter="url(#shadow)">
+    <rect x="500" y="238" width="210" height="86" fill="#ffffff" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4,2" rx="6"/>
+    <rect x="500" y="238" width="210" height="24" fill="#f1f5f9" rx="6"/>
+    <text x="512" y="254" fill="#334155" font-size="12" font-weight="700">작업대상 호스트</text>
+    <rect x="650" y="242" width="50" height="16" fill="#475569" rx="3"/>
+    <text x="675" y="253" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">선택</text>
+    <text x="512" y="278" fill="#475569" font-size="11">• 텍스트 입력창 3 (붙여넣기)</text>
+    <text x="512" y="296" fill="#475569" font-size="11">• 1대 이상 입력 시 비교 자동 포함</text>
+    <text x="512" y="313" fill="#64748b" font-size="10">비어 있으면 비교에서 제외</text>
+  </g>
+
+  <!-- Source 4: AWX 수집 목록 (선택) -->
+  <g filter="url(#shadow)">
+    <rect x="730" y="238" width="210" height="86" fill="#ffffff" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4,2" rx="6"/>
+    <rect x="730" y="238" width="210" height="24" fill="#f1f5f9" rx="6"/>
+    <text x="742" y="254" fill="#334155" font-size="12" font-weight="700">AWX 수집 호스트 (제외 반영)</text>
+    <rect x="880" y="242" width="50" height="16" fill="#475569" rx="3"/>
+    <text x="905" y="253" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">선택</text>
+    <text x="742" y="278" fill="#475569" font-size="11">• 제외 항목 차감 후 남은 호스트</text>
+    <text x="742" y="296" fill="#475569" font-size="11">• 1대 이상 존재 시 비교 자동 포함</text>
+    <text x="742" y="313" fill="#64748b" font-size="10">0대이면 텍스트 입력끼리만 비교</text>
+  </g>
+
+  <!-- Arrows to Engine -->
+  <line x1="145" y1="324" x2="145" y2="364" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+  <line x1="375" y1="324" x2="375" y2="364" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+  <line x1="605" y1="324" x2="605" y2="364" stroke="#475569" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+  <line x1="835" y1="324" x2="835" y2="364" stroke="#475569" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow)"/>
+
+  <!-- Section 3: Cross-Check Engine -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="370" width="900" height="96" fill="#ffffff" stroke="#0f172a" stroke-width="1.5" rx="6"/>
+    <rect x="40" y="370" width="900" height="26" fill="#0f172a" rx="6"/>
+    <text x="56" y="387" fill="#ffffff" font-size="12" font-weight="700">3. 2~4개 활성 소스 양방향(Symmetric) 전수 대조 엔진</text>
+    <text x="56" y="414" fill="#334155" font-size="11">• 활성화된 모든 소스(2~4개)의 전체 합집합(Union) 및 교집합(Intersection) 산출 후 양방향 차집합 계산</text>
+    <text x="56" y="434" fill="#334155" font-size="11">• AWX(1000대) vs 비교 대상(30대) 비교 시 → "30대 일치 / 970대 대상에 없음" 불일치 즉시 검출</text>
+    <text x="56" y="454" fill="#334155" font-size="11">• 대수 요약 먼저 표시 후 사용자가 [명단 펼치기] 클릭 시 누락/초과 호스트 전체 명단 토글 표시</text>
+  </g>
+
+  <line x1="265" y1="466" x2="265" y2="498" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="715" y1="466" x2="715" y2="498" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Section 4: Result Cards -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="504" width="430" height="82" fill="#f0fdf4" stroke="#15803d" stroke-width="1.2" rx="6"/>
+    <text x="56" y="524" fill="#166534" font-size="12" font-weight="700">검증 결과: 일치 (MATCH)</text>
+    <text x="56" y="544" fill="#15803d" font-size="11">• 활성 비교 대상(2~4개) 호스트 대수 및 명단 전수 일치</text>
+    <text x="56" y="562" fill="#15803d" font-size="11">• AWX 제외 요약 함께 표기 (예: 1000대 중 6대 제외됨 + 6대 공백 나열)</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="510" y="504" width="430" height="82" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.2" rx="6"/>
+    <text x="526" y="524" fill="#991b1b" font-size="12" font-weight="700">검증 결과: 불일치 (MISMATCH)</text>
+    <text x="526" y="544" fill="#b91c1c" font-size="11">• 소스별 수집 대수 및 누락 대수 요약 우선 표시 (예: 970대 대상에 없음)</text>
+    <text x="526" y="562" fill="#b91c1c" font-size="11">• 각 불일치 항목 우측 [명단 펼치기] 버튼 클릭 시 전체 호스트 명단 표시</text>
+  </g>
+
+  <!-- Mandatory Output Footer -->
+  <rect x="40" y="602" width="900" height="44" fill="#f8fafc" stroke="#64748b" stroke-width="1.2" rx="4"/>
+  <text x="56" y="620" fill="#475569" font-size="10" font-weight="700">비교 완료 시 고정 출력 문구</text>
+  <text x="56" y="636" fill="#0f172a" font-size="11" font-weight="600" font-family="Consolas, monospace">
+    인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
+  </text>
+</svg>
