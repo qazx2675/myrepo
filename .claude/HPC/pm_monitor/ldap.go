@@ -13,7 +13,7 @@ import (
 )
 
 // ldapCmdVer 는 Check.Ver 의 현재 값이다. 이보다 작은 값으로 저장된 결과는 새 형식이 아니므로 다시 조사한다.
-const ldapCmdVer = 2
+const ldapCmdVer = 3 // 3: NTP 호스트 이름을 노드에서 IP 로 풀어 비교
 
 // ldapCmd 는 원격 명령이다. ldap_check 와 H/T 줄(setup_check buildInfoCmd 와 같은 lscpu | grep -i 'per core')에 더해
 // DNS·NTP·autofs 원본 줄을 PM_DNS / PM_NTPC / PM_NTPN / PM_APPL 표식을 붙여 한 번에 가져온다.
@@ -32,12 +32,21 @@ func ldapCmd(sh string) string {
 		}
 		return "test -f " + file + " && " + g + " " + file + " | sed 's/^/" + tag + " /'"
 	}
+	// resolve 는 NTP 설정의 server·pool 두 번째 칸(이름 또는 IP)을 그 노드에서 getent hosts 로 IP 로 푼다.
+	// DNS 가 느린 노드에서 l 점검 전체가 묶이지 않도록 이름 하나당 5초(timeout)로 끊는다(못 풀면 비고에 '풀이 실패').
+	// 출력 "<tag> <ip> <정식이름> [별칭...]". xargs -r 이라 대상이 없으면 getent 를 돌리지 않는다(인자 없는 getent 는 hosts 전체를 출력).
+	resolve := func(file, tag string) string {
+		return "test -f " + file + " && grep -e '^server[[:space:]]' -e '^pool[[:space:]]' " + file +
+			" | sed 's/^[a-z]*[[:space:]]*//' | sed 's/[[:space:]].*//' | xargs -r -n1 timeout 5 getent hosts | sed 's/^/" + tag + " /'"
+	}
 	return strings.Join([]string{
 		"bash " + sh,
 		"lscpu | grep -i 'per core'",
 		pick("/etc/resolv.conf", "PM_DNS", "^nameserver[[:space:]]"),
 		pick("/etc/chrony.conf", "PM_NTPC", "^server[[:space:]]", "^pool[[:space:]]"),
 		pick("/etc/ntp.conf", "PM_NTPN", "^server[[:space:]]", "^pool[[:space:]]"),
+		resolve("/etc/chrony.conf", "PM_NTPRC"),
+		resolve("/etc/ntp.conf", "PM_NTPRN"),
 		pick("/etc/auto.appl", "PM_APPL", `^/\?appl[[:space:]]`, `^/\?wappl[[:space:]]`),
 		"test -f /etc/chrony.conf && echo PM_CHRONY",
 	}, "; ")
@@ -52,9 +61,11 @@ type ldapAcc struct {
 	fileFail bool   // 파일별 형식: LDAP 파일(ldap/sssd/nslcd.conf)에 FAIL 이 있다
 	tpc      int    // Thread(s) per core, 못 읽으면 0
 	dns      []string
-	ntpC     []string // chrony.conf 의 server·pool
-	ntpN     []string // ntp.conf 의 server·pool
-	chrony   bool     // chrony.conf 가 있다
+	ntpC     []string   // chrony.conf 의 server·pool
+	ntpN     []string   // ntp.conf 의 server·pool
+	chrony   bool       // chrony.conf 가 있다
+	resC     [][]string // chrony.conf 이름 풀이(getent hosts): [ip, 이름, 별칭...]
+	resN     [][]string // ntp.conf 이름 풀이
 	appl     string
 	wappl    string
 }
@@ -97,6 +108,12 @@ func parseLdapOutput(out string) map[string]*ldapAcc {
 		case len(w) >= 3 && w[0] == "PM_NTPN":
 			x := get()
 			x.ntpN = append(x.ntpN, w[2])
+		case len(w) >= 3 && w[0] == "PM_NTPRC":
+			x := get()
+			x.resC = append(x.resC, w[1:])
+		case len(w) >= 3 && w[0] == "PM_NTPRN":
+			x := get()
+			x.resN = append(x.resN, w[1:])
 		case len(w) >= 3 && w[0] == "PM_APPL":
 			x := get()
 			v := w[len(w)-1]
@@ -171,6 +188,45 @@ func sortedSet(in []string) []string {
 	return out
 }
 
+// resolveNames 는 NTP 설정 값 중 IP 가 아닌 이름을 노드의 getent hosts 결과(res: [ip, 정식이름, 별칭...])로 IP 로 바꾼다.
+// 이름은 대소문자를 무시하고, 짧은 이름과 FQDN 의 앞부분이 같아도 맞는 것으로 본다. 못 푼 이름은 그대로 두고 unres 로 알려준다.
+func resolveNames(vals []string, res [][]string) (out, unres []string) {
+	for _, v := range vals {
+		if net.ParseIP(v) != nil {
+			out = append(out, v)
+			continue
+		}
+		ip := ""
+		for _, r := range res {
+			for _, nm := range r[1:] {
+				if sameHost(nm, v) {
+					ip = r[0]
+					break
+				}
+			}
+			if ip != "" {
+				break
+			}
+		}
+		if ip == "" {
+			out = append(out, v)
+			unres = append(unres, v)
+			continue
+		}
+		out = append(out, ip)
+	}
+	return out, unres
+}
+
+// sameHost 는 두 호스트 이름이 같은지(대소문자 무시, 끝의 '.' 무시, 짧은 이름 = FQDN 첫 마디) 알려준다.
+func sameHost(a, b string) bool {
+	a, b = strings.ToLower(strings.TrimSuffix(a, ".")), strings.ToLower(strings.TrimSuffix(b, "."))
+	if a == b {
+		return true
+	}
+	return strings.HasPrefix(a, b+".") || strings.HasPrefix(b, a+".")
+}
+
 // joinOrDash 는 "/" 로 이은 값이고 비었으면 "-" 다.
 func joinOrDash(s []string) string {
 	if len(s) == 0 {
@@ -200,9 +256,13 @@ func (a *ldapAcc) summarize() Check {
 		ldap = a.infra
 	}
 	// DNS · NTP: 순서·중복을 무시한 집합 비교
-	ntp := a.ntpC
+	ntp, res := a.ntpC, a.resC
 	if !a.chrony {
-		ntp = a.ntpN
+		ntp, res = a.ntpN, a.resN
+	}
+	ntp, unres := resolveNames(ntp, res)
+	if len(unres) > 0 {
+		notes = append(notes, "NTP 이름 풀이 실패 "+strings.Join(unres, "/"))
 	}
 	d, n := sortedSet(a.dns), sortedSet(ntp)
 	dn := "다름"

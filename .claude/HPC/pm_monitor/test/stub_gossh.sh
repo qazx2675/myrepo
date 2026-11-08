@@ -25,7 +25,7 @@
 #         STUB_HT_OFF       공백 구분 호스트: Thread(s) per core 를 1 로
 #         STUB_DNS_DIFF     공백 구분 호스트: NTP 집합을 DNS 와 다르게(10.10.2.20)
 #         STUB_APPL_DIFF    공백 구분 호스트: auto.appl 의 wappl 값을 appl 과 다르게
-#         (모든 호스트에 PM_DNS/PM_CHRONY/PM_NTPC/PM_APPL 줄도 낸다: DNS 10.10.1.10 10.10.1.11, NTP 같은 집합 다른 순서, appl=wappl=nas01:/export/appl)
+#         (모든 호스트에 PM_DNS/PM_CHRONY/PM_NTPC/PM_APPL 줄도 낸다: DNS 10.10.1.10 10.10.1.11, NTP 같은 집합 다른 순서(하나는 이름 ntp01.demo 를 PM_NTPRC 로 IP 풀이), appl=wappl=nas01:/export/appl)
 #   STUB_GOSSH_LOG (선택) 이 파일에 호출마다 명령 줄(인자)을 한 줄 덧붙임
 # 호스트 5천 대도 awk 한 번으로 처리한다(호스트별 프로세스 없음).
 [ -n "$STUB_GOSSH_LOG" ] && echo "$*" >> "$STUB_GOSSH_LOG"
@@ -88,7 +88,9 @@ NR == FNR { st[$1] = $2; next }
     print h ": PM_DNS nameserver 10.10.1.11"
     print h ": PM_CHRONY"
     print h ": PM_NTPC server " (index(dnsdiff, key) ? "10.10.2.20" : "10.10.1.11") " iburst"
-    print h ": PM_NTPC server 10.10.1.10 iburst"
+    print h ": PM_NTPC server ntp01.demo iburst"
+    print h ": PM_NTPRC " (index(dnsdiff, key) ? "10.10.2.20 10.10.2.20" : "10.10.1.11 10.10.1.11")
+    print h ": PM_NTPRC 10.10.1.10 ntp01.demo"
     print h ": PM_APPL appl	-rw,soft	nas01:/export/appl"
     print h ": PM_APPL /wappl	-rw,soft	" (index(appldiff, key) ? "nas02:/export/wappl" : "nas01:/export/appl")
     next
