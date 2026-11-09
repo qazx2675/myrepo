@@ -147,6 +147,10 @@ type config struct {
 	CheckTimeout   time.Duration // config_check 한 번의 시간 제한
 	StressTimeout  time.Duration // stress-test 한 번의 시간 제한
 
+	// B서버 원격 실행 용(remote.go)
+	StressRemote        string // stress-test 를 실행할 B서버(비면 이 서버에서 로컬 실행). 있으면 STRESS_TEST·STRESS_TEST_CONF 는 B 의 절대경로
+	StressIgnoreOffline bool   // y 면 stress-test -steps 에 -ignore-offline(접속체크에 응답 없는 호스트도 launch)
+
 	// -run -auto 용(auto.go)
 	AutoLimit   time.Duration // 시작 후 이 시간이 지나면 새 작업을 시작하지 않음
 	AutoRecheck time.Duration // 접속 안 되는 호스트 재판정 간격
@@ -195,7 +199,8 @@ func parseDuration(v string) (time.Duration, bool) {
 }
 
 // parseConf 는 KEY=VALUE 줄을 읽는다. '#' 주석·빈 줄 무시, 값은 첫 '=' 뒤 전체(앞뒤 공백만 제거).
-// STRESS_TEST·STRESS_TEST_CONF·USER_ROUTE 는 경로, *_WAIT_*·*_TIMEOUT 은 시간(47m·30s 또는 숫자=분, 잘못되면 기본값 + Warnings).
+// STRESS_TEST·STRESS_TEST_CONF·USER_ROUTE 는 경로(STRESS_REMOTE 가 있으면 STRESS_TEST·STRESS_TEST_CONF 는 B 의 경로라 ~ 를 풀지 않음),
+// STRESS_IGNORE_OFFLINE 은 y/n, *_WAIT_*·*_TIMEOUT 은 시간(47m·30s 또는 숫자=분, 잘못되면 기본값 + Warnings).
 // DISK_PATTERN 이 하나도 없으면 기본 문구 1개를 쓴다. CPU_INTEL_LOG/OK, CPU_AMD_LOG/OK/LINE 은 기본값이 있다.
 // ★ CPU_* 값은 GOSSH 처럼 앞뒤 따옴표를 떼어 준다(CPU_AMD_LOG="/path" 로 적어도 동작).
 func parseConf(text string) config {
@@ -205,6 +210,7 @@ func parseConf(text string) config {
 		GosshTimeout: defaultGosshTimeout, CheckTimeout: defaultCheckTimeout, StressTimeout: defaultStressTimeout,
 		AutoLimit: defaultAutoLimit, AutoRecheck: defaultAutoRecheck, AutoCPUWait: defaultAutoCPUWait,
 		AutoCPUInt: defaultAutoCPUInt, AutoCPUMax: defaultAutoCPUMax}
+	var rawStress, rawStressConf string // 원격 모드면 이 서버 기준으로 ~ 를 풀지 않고 그대로 쓴다
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -236,9 +242,21 @@ func parseConf(text string) config {
 		case "CPU_AMD_LINE":
 			c.CPUAMDLine = unquote(val)
 		case "STRESS_TEST":
-			c.StressTest = expandPath(val)
+			c.StressTest, rawStress = expandPath(val), unquote(val)
 		case "STRESS_TEST_CONF":
-			c.StressTestConf = expandPath(val)
+			c.StressTestConf, rawStressConf = expandPath(val), unquote(val)
+		case "STRESS_REMOTE":
+			c.StressRemote = unquote(val)
+		case "STRESS_IGNORE_OFFLINE":
+			switch strings.ToLower(unquote(val)) {
+			case "y", "yes", "true", "1":
+				c.StressIgnoreOffline = true
+			case "", "n", "no", "false", "0":
+				c.StressIgnoreOffline = false
+			default:
+				c.Warnings = append(c.Warnings, fmt.Sprintf("설정 STRESS_IGNORE_OFFLINE 값 %q 을(를) 읽을 수 없어 n 으로 봅니다(y 또는 n)", val))
+				c.StressIgnoreOffline = false
+			}
 		case "USER_ROUTE":
 			c.UserRoute = expandPath(val)
 		case "CPU_WAIT_START", "CPU_WAIT_INTERVAL", "CPU_WAIT_MAX", "GOSSH_TIMEOUT", "CHECK_TIMEOUT", "STRESS_TIMEOUT",
@@ -296,6 +314,9 @@ func parseConf(text string) config {
 				c.ErrPatterns = append(c.ErrPatterns, val)
 			}
 		}
+	}
+	if c.StressRemote != "" {
+		c.StressTest, c.StressTestConf = rawStress, rawStressConf
 	}
 	if len(c.DiskPatterns) == 0 {
 		c.DiskPatterns = []string{defaultDisk}
@@ -881,8 +902,9 @@ var resSuffixes = []string{"_res_off", "_res_refsed", "_os_install", "_nosvrauto
 
 // relToConf 는 STRESS_TEST·STRESS_TEST_CONF 가 상대경로면 설정 파일이 있는 폴더 기준 절대경로로 바꾼다
 // (명령을 실행한 폴더가 아니라). confPath 가 비면(기본값) 그대로 둔다.
+// STRESS_REMOTE 가 있으면 두 값은 B서버의 경로이므로 바꾸지 않는다(절대경로인지는 remoteConfErr 가 본다).
 func relToConf(c config, confPath string) config {
-	if confPath == "" {
+	if confPath == "" || c.StressRemote != "" {
 		return c
 	}
 	d := filepath.Dir(confPath)
@@ -961,6 +983,11 @@ func fail(code int, format string, a ...interface{}) {
 }
 
 func main() {
+	// ★ 숨은 진입점: B서버 ssh 의 SSH_ASKPASS 로 불린 경우 비밀번호만 내고 끝낸다(다른 처리·옵션 해석보다 먼저, remote.go)
+	if askpassMode(os.Getenv) {
+		fmt.Println(remotePassword)
+		os.Exit(0)
+	}
 	// ★ 숨은 진입점: -run 이 setsid 로 띄우는 백그라운드 워커(사용법에는 표시하지 않음)
 	if len(os.Args) == 3 && os.Args[1] == "-run-worker" {
 		os.Exit(runWorker(os.Args[2]))

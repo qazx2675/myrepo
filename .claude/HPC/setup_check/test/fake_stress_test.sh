@@ -1,6 +1,7 @@
 #!/bin/bash
 # fake_stress_test.sh - new_setup -run 시험용 가짜 stress-test (진짜 -batch 모드 흉내)
-# 사용: fake_stress_test.sh -user <u> -hosts <목록파일> -steps a|b -batch [-end y,m,d,h,min] [-conf <파일>]
+# 사용: fake_stress_test.sh -user <u> -hosts <목록파일> -steps a|b -batch [-end y,m,d,h,min] [-conf <파일>] [-ignore-offline]
+#   -ignore-offline 을 받으면 FAKE_ST_LOG 에 "IGNOREOFF <steps>" 줄을 남긴다(동작은 같음)
 #   -steps 에 b 가 있는데 -end 가 없거나 형식이 틀리면 종료코드 2(진짜 stress-test 와 같음)
 #   -conf 파일이 없으면 종료코드 2(진짜와 같음)
 #   FAKE_ST_LOG=<파일>      호출 기록(시각은 ns). 줄 형식:
@@ -33,6 +34,7 @@ batch=0
 conf=""
 end=""
 yamlstate=0
+ignoreoff=0
 while [ $# -gt 0 ]; do
 	case $1 in
 		-yaml-state) yamlstate=1; shift ;;
@@ -42,6 +44,7 @@ while [ $# -gt 0 ]; do
 		-conf) conf=$2; shift 2 ;;
 		-end) end=$2; shift 2 ;;
 		-batch) batch=1; shift ;;
+		-ignore-offline) ignoreoff=1; shift ;;
 		*) echo "fake_stress_test: 알 수 없는 인자 $1" >&2; exit 2 ;;
 	esac
 done
@@ -78,6 +81,7 @@ now() { date +%s%N; }
 log() { [ -n "${FAKE_ST_LOG:-}" ] && echo "$*" >> "$FAKE_ST_LOG"; return 0; }
 
 log "START $steps $(now) user=$user hosts=$hl batch=$batch conf=${conf:-none} end=${end:-none} gossh=${GOSSH:-none}"
+[ "$ignoreoff" = 1 ] && log "IGNOREOFF $steps"
 # 진짜 stress-test: -conf 로 준 파일이 없으면 종료코드 2
 if [ -n "$conf" ] && [ ! -f "$conf" ]; then
 	echo "오류: 지정한 설정 파일이 없습니다: $conf" >&2

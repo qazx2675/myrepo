@@ -198,9 +198,13 @@ func (e *realExec) ConfigFix(hosts []string) error {
 }
 
 // StressTest 는 stress-test 를 바이너리 폴더에서 실행한다(그 폴더의 ./conf, ./output 이 단독 실행과 같게 쓰이도록).
+// STRESS_REMOTE 가 있으면 B서버에서 ssh 로 실행한다(remote.go).
 func (e *realExec) StressTest(steps, listFile string, hosts []string, end string, launched func(), registered func(yml string, hosts []string), busy func(msg string) string) (int, error) {
 	if e.conf.StressTest == "" {
 		return 2, errors.New("설정 파일의 STRESS_TEST(stress-test 경로)가 비어 있습니다")
+	}
+	if e.conf.StressRemote != "" {
+		return e.remoteStressTest(steps, listFile, end, launched, registered, busy)
 	}
 	bin, err := filepath.Abs(e.conf.StressTest)
 	if err != nil {
@@ -210,25 +214,38 @@ func (e *realExec) StressTest(steps, listFile string, hosts []string, end string
 	if err != nil {
 		return 2, err
 	}
-	args := []string{"-user", e.user, "-hosts", list, "-steps", steps, "-batch"}
-	if strings.Contains(steps, "b") && end != "" {
-		args = append(args, "-end", end)
-	}
+	conf := ""
 	if e.conf.StressTestConf != "" {
-		c, _ := filepath.Abs(e.conf.StressTestConf)
-		args = append(args, "-conf", c)
+		conf, _ = filepath.Abs(e.conf.StressTestConf)
 	}
+	args := stressArgs(e.user, list, steps, end, conf, e.conf.StressIgnoreOffline)
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = filepath.Dir(bin)
 	// stress-test 는 gossh 를 conf gossh → 환경변수 GOSSH → PATH 순으로 찾는다. 단독 실행은 stress_run.sh 가 GOSSH 를
 	// 넘기지만 여기서는 바이너리를 직접 부르므로, GOSSH 가 비어 있으면 new_setup 이 쓰는 gossh 경로를 넘긴다.
+	// (원격 모드에서는 넘기지 않는다: B 는 자기 conf·PATH 의 gossh 를 쓴다)
 	if os.Getenv("GOSSH") == "" && e.gossh != "" {
 		cmd.Env = append(os.Environ(), "GOSSH="+e.gossh)
 	}
+	fmt.Fprintf(e.log, "+ (cd %s && %s %s)\n", cmd.Dir, bin, strings.Join(args, " "))
+	err = e.watchStress(cmd, launched, registered, busy)
+	if err == nil {
+		return 0, nil
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode(), nil
+	}
+	return -1, err
+}
+
+// watchStress 는 stress-test 명령(로컬 또는 ssh)을 STRESS_TIMEOUT 안에 돌리며 stdout 의 감시·등록·인벤토리사용중 줄을 처리한다.
+// stdin 으로 인벤토리 사용 중 질문의 답(r / x)을 넣고, 답을 기다리는 동안은 시간 제한을 멈춘다. runCmdHold 의 오류를 그대로 돌려준다.
+func (e *realExec) watchStress(cmd *exec.Cmd, launched func(), registered func(yml string, hosts []string), busy func(msg string) string) error {
 	// stdin 은 인벤토리 사용 중 질문의 답(r / x)을 넣는 통로. 프로세스가 끝나면 exec 이 닫는다(읽던 쪽은 EOF = 중단).
 	in, err := cmd.StdinPipe()
 	if err != nil {
-		return 2, err
+		return err
 	}
 	hold := make(chan bool, 64) // 질문에 답하는 동안 시간 제한 일시정지(true) / 재개(false)
 	cmd.Stdout = &lineWatch{w: e.log, mark: []byte(stressMonitorMark), fn: launched, regMark: []byte(stressRegisteredMark), reg: func(rest string) {
@@ -256,40 +273,47 @@ func (e *realExec) StressTest(steps, listFile string, hosts []string, end string
 		}
 	}}
 	cmd.Stderr = e.log
-	fmt.Fprintf(e.log, "+ (cd %s && %s %s)\n", cmd.Dir, bin, strings.Join(args, " "))
 	_, err = runCmdHold(cmd, e.conf.StressTimeout, cancelCh, hold)
-	if err == nil {
-		return 0, nil
-	}
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
-		return ee.ExitCode(), nil
-	}
-	return -1, err
+	return err
 }
 
 // yamlStateTimeout 은 stress-test -yaml-state(AWX 조회 몇 번) 한 번의 시간 제한.
 const yamlStateTimeout = 2 * time.Minute
 
 // YamlState 는 stress-test -yaml-state 를 바이너리 폴더에서 실행해 인벤토리 소스의 현재 yml·호스트를 읽는다(읽기 전용).
+// STRESS_REMOTE 가 있으면 B서버에서 ssh 로 실행한다.
 func (e *realExec) YamlState() (yamlInfo, error) {
 	if e.conf.StressTest == "" {
 		return yamlInfo{}, errors.New("설정 파일의 STRESS_TEST(stress-test 경로)가 비어 있습니다")
 	}
-	bin, err := filepath.Abs(e.conf.StressTest)
-	if err != nil {
-		return yamlInfo{}, err
+	var cmd *exec.Cmd
+	if e.conf.StressRemote != "" {
+		script, disp := remoteYamlScript(e.conf, e.user)
+		c, err := sshCommand(e.conf.StressRemote, script)
+		if err != nil {
+			return yamlInfo{}, err
+		}
+		cmd = c
+		fmt.Fprintf(e.log, "+ %s\n", disp)
+	} else {
+		bin, err := filepath.Abs(e.conf.StressTest)
+		if err != nil {
+			return yamlInfo{}, err
+		}
+		args := []string{"-user", e.user, "-yaml-state"}
+		if e.conf.StressTestConf != "" {
+			c, _ := filepath.Abs(e.conf.StressTestConf)
+			args = append(args, "-conf", c)
+		}
+		cmd = exec.Command(bin, args...)
+		cmd.Dir = filepath.Dir(bin)
+		fmt.Fprintf(e.log, "+ (cd %s && %s %s)\n", cmd.Dir, bin, strings.Join(args, " "))
 	}
-	args := []string{"-user", e.user, "-yaml-state"}
-	if e.conf.StressTestConf != "" {
-		c, _ := filepath.Abs(e.conf.StressTestConf)
-		args = append(args, "-conf", c)
-	}
-	cmd := exec.Command(bin, args...)
-	cmd.Dir = filepath.Dir(bin)
-	fmt.Fprintf(e.log, "+ (cd %s && %s %s)\n", cmd.Dir, bin, strings.Join(args, " "))
 	out, err := runCmd(cmd, yamlStateTimeout)
 	io.WriteString(e.log, out)
+	if err != nil && e.conf.StressRemote != "" && isSSHFail(err) {
+		return yamlInfo{}, sshFailErr(e.conf.StressRemote)
+	}
 	if err != nil {
 		msg := strings.TrimSpace(out)
 		if i := strings.LastIndex(msg, "\n"); i >= 0 {
