@@ -28,7 +28,7 @@ func TestWorkerEndQuestion(t *testing.T) {
 	if w.st.Stage != stageFinish || w.st.Stopped {
 		t.Fatalf("완료가 아님: %d %v", w.st.Stage, w.st.Stopped)
 	}
-	eqList(t, "입력 질문", f.endAsked, []string{"부하:cs", "stress-ng:cs"})
+	eqList(t, "입력 질문", f.endAsked, []string{"부하:cks", "stress-ng:cks"})
 	eqList(t, "일반 질문", f.asked, []string{"판정:crs=c", "부하:crs=c", "stress-ng:crs=c"})
 	eqList(t, "-end 전달", f.ends, []string{"a:", "b:2026,11,06,18,00", "b:2026,11,06,18,00"})
 	if w.st.StressEnd != "2026,11,06,18,00" {
@@ -53,7 +53,7 @@ func TestWorkerEndQuestionOnlyWithStressNG(t *testing.T) {
 	f := newFake(t, []string{"a"}, world, "c", "c", "c")
 	f.endVals = map[string]string{"end_year": "2026", "end_month": "12", "end_day": "07", "end_hour": "08", "end_min": "05"}
 	w := runFake(t, f, nil)
-	eqList(t, "입력 질문(4단계만)", f.endAsked, []string{"stress-ng:cs"})
+	eqList(t, "입력 질문(4단계만)", f.endAsked, []string{"stress-ng:cks"})
 	eqList(t, "-end 전달", f.ends, []string{"a:", "b:2026,12,07,08,05"})
 	if w.st.StressEnd != "2026,12,07,08,05" {
 		t.Errorf("stress_end=%q", w.st.StressEnd)
@@ -165,4 +165,42 @@ func TestWorkerBusyStop(t *testing.T) {
 	if w.st.Question != nil {
 		t.Errorf("질문이 남음: %+v", w.st.Question)
 	}
+}
+
+// 부하 단계 종료 시각 질문에서 k: stress-ng(b) 는 띄우지 않고 CPU(a) 만 진행, 건너뛴 호스트는 stress-ng 단계에서 다시 묻는다.
+func TestWorkerEndQuestionSkipInLoad(t *testing.T) {
+	world, order := loadWorld()
+	f := newFake(t, order, world, "c", "c", "c")
+	f.endChoiceSeq = []string{ansSkip}
+	w := runFake(t, f, nil)
+	if w.st.Stage != stageFinish || w.st.Stopped {
+		t.Fatalf("완료가 아님: %d %v", w.st.Stage, w.st.Stopped)
+	}
+	eqList(t, "입력 질문", f.endAsked, []string{"부하:cks", "stress-ng:cks"})
+	// 부하 단계에는 CPU(a) 만, stress-ng(b) 는 stress-ng 단계에서 a·b 대상으로 한 번만
+	eqList(t, "-end 전달", f.ends, []string{"a:", "b:2026,11,06,18,00"})
+	if len(w.st.NGSkip) != 0 {
+		t.Errorf("stress-ng 를 돌린 뒤 ng_skip 이 비어야 함: %v", w.st.NGSkip)
+	}
+	if r := row(t, w, "b"); r.Stress != "O" {
+		t.Errorf("b stress-ng 열: %q", r.Stress)
+	}
+	if !strings.Contains(logText(w), "stress-ng 건너뜀 (1대)") {
+		t.Errorf("건너뜀 로그 없음:\n%s", logText(w))
+	}
+}
+
+// stress-ng 단계 종료 시각 질문에서 k: stress-ng 를 띄우지 않고, 단계 끝 질문은 c 없이(r/x/s) 다시 묻는다.
+func TestWorkerEndQuestionSkipInNG(t *testing.T) {
+	world, order := loadWorld()
+	f := newFake(t, order, world, "c", "c", "r", "c")
+	f.endChoiceSeq = []string{"c", ansSkip, "c"}
+	w := runFake(t, f, nil)
+	if w.st.Stage != stageFinish || w.st.Stopped {
+		t.Fatalf("완료가 아님: %d %v", w.st.Stage, w.st.Stopped)
+	}
+	eqList(t, "입력 질문", f.endAsked, []string{"부하:cks", "stress-ng:cks", "stress-ng:cks"})
+	eqList(t, "일반 질문", f.asked, []string{"판정:crs=c", "부하:crs=c", "stress-ng:rxs=r", "stress-ng:crs=c"})
+	// 부하 단계: a(CPU)·b(stress-ng), 건너뛴 stress-ng 단계는 호출 없음, 다시 한 stress-ng 단계에서 a
+	eqList(t, "-end 전달", f.ends, []string{"a:", "b:2026,11,06,18,00", "b:2026,11,06,18,00"})
 }

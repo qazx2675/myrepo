@@ -178,9 +178,10 @@ func (w *worker) stressTargets(cpu []string) []string {
 	})
 }
 
-// ngTargets: 부하 단계에서 CPU 를 돌린 호스트 중 CPU O 가 됐고 stress-ng O 아님.
+// ngTargets: 부하 단계에서 CPU 를 돌린(또는 stress-ng 를 건너뛴) 호스트 중 CPU O 가 됐고 stress-ng O 아님.
 func (w *worker) ngTargets() []string {
-	return w.pick(func(r *hostRow) bool { return r.CPUTarget && r.CPU == "O" && r.Stress != "O" })
+	skipped := toSet(w.st.NGSkip) // 부하 단계에서 stress-ng 만 건너뛴 호스트도 다시 대상
+	return w.pick(func(r *hostRow) bool { return (r.CPUTarget || skipped[r.Host]) && r.CPU == "O" && r.Stress != "O" })
 }
 
 // notOK 는 그 단계 기준으로 O 가 아닌(x 로 제외할) 호스트.
@@ -479,14 +480,20 @@ func (w *worker) askQ(stage int, text string, inputs []inputField, keys ...strin
 }
 
 // askEnd 는 stress-ng 종료 시각(5개 값)을 묻는다. 값을 stress_end 에 기록해 "연,월,일,시,분" 으로 돌려준다.
-// 중지를 고르면(또는 중지 요청) ok=false 이고 이미 stop() 을 불렀다.
-func (w *worker) askEnd(stage int, n int, name string) (end string, ok bool) {
+// 결과: endCont(값 받음) / endSkip(k: stress-ng 만 건너뜀, 기록 안 함) / endStop(중지 — 이미 stop() 을 불렀다).
+func (w *worker) askEnd(stage int, n int, name string) (end string, res int) {
 	text := fmt.Sprintf("%s 대상 %d대에 stress-ng 를 돌립니다. stress-ng 종료 시각을 입력하세요(연·월·일·시·분, 지금보다 뒤).\n"+
-		"입력 항목: %s\n입력한 글자 그대로 stress-test -end 로 넘깁니다.", name, n, endFieldNames())
-	c, vals := w.askQ(stage, text, endFields, ansCont, ansStop)
-	if c != ansCont {
+		"입력 항목: %s\n입력한 글자 그대로 stress-test -end 로 넘깁니다.\n"+
+		"k = stress-ng 만 건너뜀(다른 테스트는 그대로 진행), s = 작업 전체 중지", name, n, endFieldNames())
+	c, vals := w.askQ(stage, text, endFields, ansCont, ansSkip, ansStop)
+	switch c {
+	case ansSkip:
+		w.logf("stress-ng 건너뜀 (%d대)", n)
+		return "", endSkip
+	case ansCont:
+	default:
 		w.stop()
-		return "", false
+		return "", endStop
 	}
 	end = endArg(vals)
 	w.update(func(s *runState) {
@@ -496,7 +503,26 @@ func (w *worker) askEnd(stage int, n int, name string) (end string, ok bool) {
 		}
 	})
 	w.logf("stress-ng 종료 시각: %s", endText(end))
-	return end, true
+	return end, endCont
+}
+
+// askEnd 결과
+const (
+	endCont = iota // 종료 시각을 입력받음
+	endSkip        // k: stress-ng 만 건너뜀
+	endStop        // 중지
+)
+
+// clearNGSkip 은 stress-ng 를 실제로 띄우는 호스트를 건너뜀 목록에서 뺀다(w.update 안에서 부른다).
+func clearNGSkip(s *runState, hosts []string) {
+	set := toSet(hosts)
+	var rest []string
+	for _, h := range s.NGSkip {
+		if !set[h] {
+			rest = append(rest, h)
+		}
+	}
+	s.NGSkip = rest
 }
 
 func endFieldNames() string {
@@ -584,6 +610,8 @@ func (w *worker) choiceLabel(stage int, k string) string {
 		return "모두 CPU 재실행에 포함"
 	case ansNo:
 		return "모두 제외(이번엔 X 그대로)"
+	case ansSkip:
+		return "stress-ng 만 건너뜀(다른 테스트는 그대로)"
 	case ansStop:
 		return "중지"
 	}
@@ -824,13 +852,19 @@ func (w *worker) doNG() string {
 	if err := writeList(list, hosts); err != nil {
 		return "목록 파일을 쓸 수 없습니다: " + err.Error()
 	}
-	end, ok := w.askEnd(stageNG, len(hosts), "stress-ng")
-	if !ok {
+	end, res := w.askEnd(stageNG, len(hosts), "stress-ng")
+	switch res {
+	case endStop:
+		return ""
+	case endSkip:
+		// stress-ng 는 반드시 돌아야 하므로 열은 O 가 아닌 채 남고, 단계 끝 질문(r/x/s)을 한 번 더 한다.
+		w.update(func(s *runState) { s.StressList = hosts })
 		return ""
 	}
 	set := toSet(hosts)
 	w.update(func(s *runState) {
 		s.StressList = hosts
+		clearNGSkip(s, hosts)
 		s.Busy = true
 		s.Detail = fmt.Sprintf("stress-ng 등록·실행 중 (%d대)", len(hosts))
 		for i := range s.Hosts {
@@ -887,14 +921,28 @@ func (w *worker) doLoad(resume bool) string {
 		cpu = w.cpuTargets()
 		stress = w.stressTargets(cpu)
 		if len(stress) > 0 { // CPU 를 띄우기 전에 stress-ng 종료 시각부터 받는다
-			var ok bool
-			if end, ok = w.askEnd(stageLoad, len(stress), "stress-ng"); !ok {
+			var res int
+			end, res = w.askEnd(stageLoad, len(stress), "stress-ng")
+			switch res {
+			case endStop:
 				return ""
+			case endSkip: // stress-ng 만 건너뜀: CPU 는 그대로 진행, 건너뛴 호스트는 다음 stress-ng 단계에서 다시 묻는다
+				skipped := stress
+				stress = nil
+				w.update(func(s *runState) {
+					have := toSet(s.NGSkip)
+					for _, h := range skipped {
+						if !have[h] {
+							s.NGSkip = append(s.NGSkip, h)
+						}
+					}
+				})
 			}
 		}
 		cpuSet, ngSet := toSet(cpu), toSet(stress)
 		w.update(func(s *runState) {
 			s.CPUList, s.StressList = cpu, stress
+			clearNGSkip(s, stress)
 			s.CPULaunch, s.NextCheck, s.CheckStart, s.Deadline = time.Time{}, time.Time{}, time.Time{}, time.Time{}
 			s.CPUWaitDone = false
 			s.Busy = true

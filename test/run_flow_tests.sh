@@ -203,7 +203,7 @@ has "A: 워커 pid 기록" "$RUND/worker.pid" '^[0-9]+'
 fileok "A: state.json 생성" "$RUND/state.json"
 drive "$RUND" 80 pick_c
 check "A: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
-check "A: 질문 순서(1→2→3→4, 선택지; 3·4단계는 stress-ng 종료 시각 입력 질문이 먼저)" "1:crxs=c 2:crs=c 3:cs=c 3:crs=c 4:cs=c 4:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "A: 질문 순서(1→2→3→4, 선택지; 3·4단계는 stress-ng 종료 시각 입력 질문이 먼저)" "1:crxs=c 2:crs=c 3:cks=c 3:crs=c 4:cks=c 4:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 
 # 설정수정: -auto 와 선택한 사용자, 대상은 설정체크 X 인 h_fix 뿐
 check "A: config_check -auto 1회" 1 "$(nlines "$FAKE_CC_LOG" 'argv=-auto tester')"
@@ -287,7 +287,7 @@ pick_c_timeout() {
 }
 start_run
 drive "$RUND" 70 pick_c_timeout
-check "C: 질문 순서(시간초과 → 재시도; 4단계는 종료 시각 질문이 먼저)" "1:crs=c 3:rs=r 3:crs=c 4:cs=c 4:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "C: 질문 순서(시간초과 → 재시도; 4단계는 종료 시각 질문이 먼저)" "1:crs=c 3:rs=r 3:crs=c 4:cks=c 4:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 has "C: 질문 문구에 시간초과" "$RUND/worker.log" '시간초과'
 P1=$(head -n1 "$S/st.pids")
 if [ -n "$P1" ] && ! alive "$P1"; then ok "C: 멈춘 stress-test 프로세스가 정리됨"; else ng "C: 멈춘 stress-test 프로세스가 정리됨" "pid=$P1"; fi
@@ -353,7 +353,7 @@ export BADFIRST=1
 start_run
 drive "$RUND" 60 pick_c
 check "H: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
-check "H: 질문 순서(종료 시각 입력 질문이 stress-ng 실행보다 먼저)" "1:crs=c 3:cs=c 3:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "H: 질문 순서(종료 시각 입력 질문이 stress-ng 실행보다 먼저)" "1:crs=c 3:cks=c 3:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 has "H: 틀린 값(연도 2020)은 무시" "$RUND/worker.log" '무시한 답: 입력값 오류'
 check "H: stress-test b 에 -end 전달" "$ENDARG" "$(sed -n 's/^START b [0-9]* .* end=\([^ ]*\) .*$/\1/p' "$S/st.log" | head -n1)"
 has "H: state.json 에 stress_end 기록" "$RUND/state.json" "\"stress_end\": \"$ENDARG\""
@@ -371,7 +371,7 @@ export FAKE_ST_BUSY=b FAKE_ST_BUSY_TIMES=2
 start_run
 drive "$RUND" 60 pick_busy_r
 check "I: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
-check "I: 질문 순서(인벤토리 질문 r 두 번은 3단계 그대로)" "1:crs=c 3:cs=c 3:rx=r 3:rx=r 3:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "I: 질문 순서(인벤토리 질문 r 두 번은 3단계 그대로)" "1:crs=c 3:cks=c 3:rx=r 3:rx=r 3:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 check "I: stress-test 가 r 두 번을 stdin 으로 받음" "b:r b:r" "$(sed -n 's/^BUSYANS \(b\) \(.*\)$/\1:\2/p' "$S/st.log" | tr '\n' ' ' | sed 's/ $//')"
 check "I: 인벤토리 사용 중 줄 2회" 2 "$(nlines "$S/st.log" '^BUSY b')"
 check "I: [감시] 줄까지 갔음(계속 진행)" 1 "$(nlines "$S/st.log" '^MON b')"
@@ -388,7 +388,7 @@ mkconf
 export FAKE_ST_BUSY=b
 start_run
 drive "$RUND" 60 pick_busy_x
-check "J: 질문 순서(x → 3단계 질문에 x 선택지)" "1:crs=c 3:cs=c 3:rx=x 3:rxs=s" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "J: 질문 순서(x → 3단계 질문에 x 선택지)" "1:crs=c 3:cks=c 3:rx=x 3:rxs=s" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 check "J: stress-test 가 x 를 받고 중단" "b:x" "$(sed -n 's/^BUSYANS \(b\) \(.*\)$/\1:\2/p' "$S/st.log")"
 check "J: [감시] 줄 없음(묶음 미실행)" 0 "$(nlines "$S/st.log" '^MON b')"
 has "J: 종료코드 1 안내가 질문에 붙음" "$RUND/worker.log" '미실행/실패 호스트가 있습니다'
@@ -419,7 +419,7 @@ mkconf
 export FAKE_ST_BUSY=b
 start_run
 wait_q "$RUND" 30 crs && send_answer "$RUND" "$QID" c
-if wait_q "$RUND" 30 cs; then ok "K: 종료 시각 입력 질문"; else ng "K: 종료 시각 입력 질문"; fi
+if wait_q "$RUND" 30 cks; then ok "K: 종료 시각 입력 질문"; else ng "K: 종료 시각 입력 질문"; fi
 send_answer "$RUND" "$QID" c "$ENDVALS"
 if wait_q "$RUND" 30 rx; then ok "K: 인벤토리 사용 중 질문(3단계 그대로)"; else ng "K: 인벤토리 사용 중 질문"; fi
 check "K: 단계는 3 그대로" 3 "$(top_stage "$RUND")"
@@ -441,7 +441,7 @@ mkconf "STRESS_TIMEOUT=4s"
 export FAKE_ST_BUSY=b
 start_run
 wait_q "$RUND" 30 crs && send_answer "$RUND" "$QID" c
-wait_q "$RUND" 30 cs && send_answer "$RUND" "$QID" c "$ENDVALS"
+wait_q "$RUND" 30 cks && send_answer "$RUND" "$QID" c "$ENDVALS"
 if wait_q "$RUND" 30 rx; then ok "L: 인벤토리 사용 중 질문"; else ng "L: 인벤토리 사용 중 질문"; fi
 LQ=$QID
 sleep 7 # STRESS_TIMEOUT(4초)보다 오래 답하지 않는다
@@ -495,7 +495,7 @@ mkconf
 start_run
 drive "$RUND" 80 pick_y
 check "N: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
-check "N: 질문 순서(부하 단계에서 y/n/s 질문이 먼저)" "1:crs=c 3:yns=y 3:crs=c 4:cs=c 4:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
+check "N: 질문 순서(부하 단계에서 y/n/s 질문이 먼저)" "1:crs=c 3:yns=y 3:crs=c 4:cks=c 4:crs=c" "$(tr '\n' ' ' < "$RUND.asked" | sed 's/ $//')"
 check "N: 부하 확인(cat /proc/loadavg) 호출" 1 "$(grep -c '^cat /proc/loadavg$' "$FAKE_GOSSH_LOG")"
 check "N: CPU(-steps a) 대상은 부하 낮은 h_low 뿐" "h_low" "$(st_hosts a)"
 if grep -q 'h_high' "$S/st.log"; then ng "N: 부하 높은 h_high 는 stress-test 대상이 아님"; else ok "N: 부하 높은 h_high 는 stress-test 대상이 아님"; fi
