@@ -50,14 +50,15 @@ type fakeExec struct {
 	blockA    chan struct{} // nil 아니면 CPU stress-test 가 시작 때 이 채널을 닫고 취소될 때까지 멈춘다
 	stopOnAsk bool          // 질문이 뜨면 답 대신 stop.req 를 쓴다
 
-	endSeq    []map[string]string // 입력 질문에 차례로 할 답의 값(다 쓰면 endVals)
-	endChoice string              // 입력 질문에 할 선택(기본 c)
-	endVals   map[string]string   // 입력 질문(종료 시각)에 자동으로 하는 답의 값(nil 이면 가짜 시각 다음 날)
-	endAsked  []string            // 받은 입력 질문의 "단계:선택지"
-	ends      []string            // StressTest 호출마다 "steps:end"
-	busyMsg   map[string]string   // steps -> stress-test 가 낼 인벤토리 사용 중 메시지(이 호출은 busy 답을 기다린다)
-	busyAns   []string            // busy 콜백이 받은 답 "steps:답"
-	lastQ     string              // 마지막으로 답한 질문 id(같은 질문에 두 번 답하지 않게)
+	endSeq       []map[string]string // 입력 질문에 차례로 할 답의 값(다 쓰면 endVals)
+	endChoice    string              // 입력 질문에 할 선택(기본 c)
+	endChoiceSeq []string            // 입력 질문에 차례로 할 선택(다 쓰면 endChoice)
+	endVals      map[string]string   // 입력 질문(종료 시각)에 자동으로 하는 답의 값(nil 이면 가짜 시각 다음 날)
+	endAsked     []string            // 받은 입력 질문의 "단계:선택지"
+	ends         []string            // StressTest 호출마다 "steps:end"
+	busyMsg      map[string]string   // steps -> stress-test 가 낼 인벤토리 사용 중 메시지(이 호출은 busy 답을 기다린다)
+	busyAns      []string            // busy 콜백이 받은 답 "steps:답"
+	lastQ        string              // 마지막으로 답한 질문 id(같은 질문에 두 번 답하지 않게)
 
 	loads     map[string]float64 // Loads 가 낼 1분 부하(없는 호스트는 응답 없음)
 	loadErr   error
@@ -107,8 +108,12 @@ func (f *fakeExec) Sleep(d time.Duration) {
 	if len(q.Inputs) > 0 { // 종료 시각 입력 질문: 답 목록을 쓰지 않고 자동으로 c + 값
 		f.endAsked = append(f.endAsked, stageName(q.Stage)+":"+strings.Join(keys, ""))
 		f.events = append(f.events, "endq:"+stageName(q.Stage))
-		if f.endChoice == ansStop {
-			_ = writeAnswer(f.w.dir, q.ID, ansStop)
+		ch := f.endChoice
+		if len(f.endChoiceSeq) > 0 {
+			ch, f.endChoiceSeq = f.endChoiceSeq[0], f.endChoiceSeq[1:]
+		}
+		if ch == ansStop || ch == ansSkip {
+			_ = writeAnswer(f.w.dir, q.ID, ch)
 			return
 		}
 		vals := f.endVals
@@ -435,6 +440,8 @@ func TestWorkerTargets(t *testing.T) {
 	eqList(t, "stress(겹침)", w.stressTargets([]string{"n2"}), []string{"n8"})
 	eqList(t, "fix", w.fixTargets(), []string{"n4", "n9"})
 	eqList(t, "ng", w.ngTargets(), []string{"n8"})
+	w.st.NGSkip = []string{"n2"} // 부하 단계에서 stress-ng 를 건너뛴 호스트도 대상
+	eqList(t, "ng(건너뜀 포함)", w.ngTargets(), []string{"n2", "n8"})
 	if n := w.nextStage(stageJudge); n != stageFix {
 		t.Errorf("next(1)=%d", n)
 	}
