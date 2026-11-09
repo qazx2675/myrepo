@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 300" width="720" height="300" font-family="'Malgun Gothic','Pretendard',sans-serif">
+<defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 1L10 5L0 9z" fill="#475569"/></marker></defs>
+<rect width="720" height="300" fill="#ffffff" stroke="#cbd5e1" rx="6"/>
+<text x="20" y="30" font-size="15" font-weight="700" fill="#0f172a">기존: 일부 랜덤 확인  →  제안: 붙여넣기 후 전수 비교</text>
+<!-- 기존 -->
+<rect x="20" y="48" width="200" height="110" fill="#f8fafc" stroke="#94a3b8" rx="6"/>
+<text x="120" y="70" font-size="12" font-weight="700" fill="#475569" text-anchor="middle">기존 방식 (샘플 확인)</text>
+<g font-size="11" fill="#64748b">
+<rect x="36" y="82" width="36" height="16" fill="#16a34a" rx="2"/><rect x="78" y="82" width="36" height="16" fill="#e2e8f0" rx="2"/><rect x="120" y="82" width="36" height="16" fill="#e2e8f0" rx="2"/><rect x="162" y="82" width="36" height="16" fill="#16a34a" rx="2"/>
+<rect x="36" y="104" width="36" height="16" fill="#e2e8f0" rx="2"/><rect x="78" y="104" width="36" height="16" fill="#fca5a5" rx="2"/><rect x="120" y="104" width="36" height="16" fill="#16a34a" rx="2"/><rect x="162" y="104" width="36" height="16" fill="#e2e8f0" rx="2"/>
+<text x="120" y="145" text-anchor="middle">확인 안 한 대상의 오타·누락은 놓침</text></g>
+<!-- 소스 -->
+<g font-size="12" font-weight="700">
+<rect x="250" y="48" width="150" height="34" fill="#eff6ff" stroke="#1d4ed8" rx="5"/><text x="325" y="70" text-anchor="middle" fill="#1e3a8a">상세목록현황 (필수)</text>
+<rect x="250" y="90" width="150" height="34" fill="#eff6ff" stroke="#1d4ed8" rx="5"/><text x="325" y="112" text-anchor="middle" fill="#1e3a8a">인시던트 (필수)</text>
+<rect x="250" y="132" width="150" height="34" fill="#f1f5f9" stroke="#64748b" stroke-dasharray="4,2" rx="5"/><text x="325" y="154" text-anchor="middle" fill="#334155">작업대상 (선택)</text>
+<rect x="250" y="174" width="150" height="34" fill="#f1f5f9" stroke="#64748b" stroke-dasharray="4,2" rx="5"/><text x="325" y="196" text-anchor="middle" fill="#334155">AWX 인벤토리 (선택)</text></g>
+<g stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"><line x1="400" y1="65" x2="440" y2="118"/><line x1="400" y1="107" x2="440" y2="122"/><line x1="400" y1="149" x2="440" y2="134"/><line x1="400" y1="191" x2="440" y2="140"/></g>
+<rect x="444" y="96" width="120" height="66" fill="#0f172a" rx="6"/>
+<text x="504" y="124" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">전수 교차 비교</text>
+<text x="504" y="144" font-size="11" fill="#cbd5e1" text-anchor="middle">2~4개 소스 양방향</text>
+<g stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"><line x1="564" y1="118" x2="592" y2="86"/><line x1="564" y1="142" x2="592" y2="172"/></g>
+<rect x="596" y="62" width="106" height="44" fill="#dcfce7" stroke="#16a34a" rx="6"/><text x="649" y="82" font-size="13" font-weight="700" fill="#166534" text-anchor="middle">MATCH</text><text x="649" y="98" font-size="10" fill="#166534" text-anchor="middle">작업 진행</text>
+<rect x="596" y="150" width="106" height="44" fill="#fee2e2" stroke="#dc2626" rx="6"/><text x="649" y="170" font-size="13" font-weight="700" fill="#991b1b" text-anchor="middle">MISMATCH</text><text x="649" y="186" font-size="10" fill="#991b1b" text-anchor="middle">대상 재점검</text>
+<rect x="20" y="226" width="680" height="56" fill="#fef9c3" stroke="#ca8a04" rx="6"/>
+<text x="36" y="249" font-size="12" font-weight="700" fill="#713f12">각 화면의 호스트 목록을 그대로 복사해 붙여넣기만 하면 됩니다.</text>
+<text x="36" y="268" font-size="11" fill="#713f12">시리얼·공백·콤마가 섞여 있어도 자동 정제 / 북마크 1개로 실행, 별도 설치 없음</text>
+</svg>
