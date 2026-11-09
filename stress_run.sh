@@ -1,6 +1,6 @@
 #!/bin/bash
 # 부하테스트 자동화 래퍼 (stress-test)
-# 사용법: bash stress_run.sh user.txt [-retry N] [-er 파일] [-conf 파일]
+# 사용법: bash stress_run.sh user.txt [-retry N] [-er 파일] [-conf 파일] [-ignore-offline]
 #   user 선택(USER_ROUTE) → 단계 선택(a=cpu, b=stress) → ./stress-test 실행
 
 # ==== 사용자 설정 ====
