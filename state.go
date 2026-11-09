@@ -49,6 +49,7 @@ const (
 	ansRetry   = "r" // 재시도(같은 단계 다시)
 	ansExclude = "x" // O 아닌 호스트 제외하고 계속
 	ansStop    = "s" // 작업 중지
+	ansSkip    = "k" // stress-ng 만 건너뜀(CPU 등 다른 템플릿은 그대로)
 	ansYes     = "y" // 예(CPU X 호스트 재실행 질문: 모두 포함)
 	ansNo      = "n" // 아니오(CPU X 호스트 재실행 질문: 모두 제외)
 )
@@ -187,6 +188,7 @@ type runState struct {
 	Deadline    time.Time `json:"deadline"`             // CPU 완료 확인 마감(확인 시작 + CPU_WAIT_MAX)
 	CPUWaitDone bool      `json:"cpu_wait_done"`        // CPU 감시 끝남
 	StressEnd   string    `json:"stress_end,omitempty"` // stress-ng 종료 시각 "연,월,일,시,분"(stress-test -end 로 넘긴 값, 입력한 글자 그대로)
+	NGSkip      []string  `json:"ng_skip,omitempty"`    // 부하 단계에서 k 로 stress-ng 를 건너뛴 호스트(다음 stress-ng 단계에서 다시 물음)
 	XAsked      bool      `json:"x_asked,omitempty"`    // 이번 부하 단계 진입에서 CPU X 호스트 재실행 질문(부하 확인)을 이미 함(부하 단계로 들어갈 때마다 꺼짐)
 
 	// -auto 로 시작한 작업이면 nil 이 아니다(옛 state.json 에는 없음 = -auto 아님)

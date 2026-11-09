@@ -360,6 +360,7 @@ bash new_setup.sh -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-u
 - **행(hang) 대응**: 모든 외부 명령(gossh·config_check·stress-test)에 시간 제한(`GOSSH_TIMEOUT` / `CHECK_TIMEOUT` / `STRESS_TIMEOUT`)을 둡니다. 넘으면 프로세스 그룹에 SIGTERM, 5초 뒤 SIGKILL 하고 그 단계를 `시간초과` 로 질문(`r`/`s`)합니다.
 - user 는 stress-test 와 같은 방식입니다: 설정 `USER_ROUTE` 가 있으면 `info_mn.sh` 메뉴 → `info.sh <번호>` 출력, 없으면 `-user`, 그것도 없으면 `$USER`. 처음 한 번 정해 상태에 저장합니다.
 - **stress-ng 종료 시각 입력**: stress-ng 를 돌리기 **전에**(3단계는 CPU 를 띄우기 전, 4단계도 실행 전) 종료 시각 5개 값(`end_year` `end_month` `end_day` `end_hour` `end_min`)을 묻습니다. 3단계에서 stress-ng 대상이 없으면(CPU 만) 묻지 않습니다. 재시도(`r`)로 단계를 다시 하면 다시 묻습니다. 값은 입력한 글자 그대로(`07` 등) `stress-test -steps b -end <연>,<월>,<일>,<시>,<분>` 으로 넘기고(CPU `-steps a` 에는 넘기지 않음) `state.json` 의 `stress_end` 와 화면 머리에 `stress-ng 종료 시각: 2026-11-07 18:00` 으로 보입니다. 검사 규칙은 stress-test `-batch` 와 같습니다: 연 4자리(올해 이상), 월 1-12, 일 1-31(없는 날짜 거절), 시 0-23, 분 0-59, 합친 시각이 지금보다 뒤. 키 이름은 setup_check 의 고정 표시이고, 실제 AWX survey 변수는 stress-test conf 가 정합니다.
+- **stress-ng 만 건너뛰기(`k`)**: 종료 시각 질문의 선택지는 `c`(입력한 값으로 계속) / `k`(stress-ng 만 건너뜀) / `s`(작업 전체 중지)입니다. 3단계(부하)에서 `k` 를 고르면 stress-ng 는 띄우지 않고 CPU 테스트는 그대로 launch·감시하며, 건너뛴 호스트는 `state.json` 의 `ng_skip` 에 기록해 4단계(stress-ng)에서 다시 묻습니다. 4단계에서 `k` 를 고르면 stress-ng 를 돌리지 않고 열은 O 가 아닌 채 남아, 단계 끝 질문이 `c` 없이(`r` 다시 / `x` 제외하고 계속 / `s` 중지) 한 번 더 나옵니다. `-auto` 는 종료 시각을 자동으로 정하므로 해당 없음.
 - **CPU 가 O 가 돼야 stress-ng**: 부하 단계에서 CPU 는 `설정체크 O + CPU NOTRUN` 호스트(예 svr1·svr3), stress-ng 는 `CPU O + stress-ng O 아님` 호스트(예 svr2)에 함께 돌립니다. CPU 를 돌린 호스트의 stress-ng 는 CPU 가 O 가 된 뒤 stress-ng 단계(4)에서 돌립니다. 부하·stress-ng 단계가 끝났을 때 O 가 아닌 대상이 남아 있으면 질문에 `c`(계속)가 없고 `r` 다시 / `x` 그 호스트 빼고 계속 / `s` 중지만 고를 수 있습니다(NOTRUN 인데 다음 단계·완료로 넘어가지 않게).
 - **gossh 전달**: stress-test 를 부를 때 환경변수 `GOSSH` 가 비어 있으면 new_setup 이 쓰는 gossh 경로를 넘깁니다(단독 실행의 `stress_run.sh` 와 같은 효과). stress-test conf 의 `gossh` 키가 있으면 그것이 우선입니다.
 - **실행 중 설정 고치기**: 워커는 단계를 시작할 때마다(재시도 `r` 포함) new_setup.conf 를 다시 읽습니다. 예를 들어 `STRESS_TEST_CONF` 가 틀려 부하 단계가 실패하면 설정 파일을 고친 뒤 `r` 만 누르면 됩니다(워커 로그에 `설정 파일 다시 읽음`). `GOSSH` 경로는 워커 시작 때 값을 계속 씁니다. `STRESS_TEST`·`STRESS_TEST_CONF` 상대경로는 명령을 실행한 폴더가 아니라 **new_setup.conf 가 있는 폴더 기준**입니다.
@@ -390,7 +391,7 @@ bash new_setup.sh -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-u
 
 | 키 | 동작 |
 |---|---|
-| `c` `r` `x` `s` | 질문에 답(질문이 떠 있을 때. `s` 는 y/N 확인) |
+| `c` `r` `x` `s` `k` | 질문에 답(질문이 떠 있을 때. `s` 는 y/N 확인, `k` 는 종료 시각 질문에서 stress-ng 만 건너뜀) |
 | `y` `n` | CPU `X` 호스트 재실행 질문(부하 단계 시작): 모두 포함 / 모두 제외 (`s` 는 중지) |
 | `l` | 화면 맨 아래 **로그 창**(`worker.log` 끝 최대 8줄) 켜기/끄기 — 기본 켜짐 |
 | `S` | 질문이 없을 때 작업 중지(y/N 확인) |

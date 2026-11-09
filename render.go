@@ -683,7 +683,7 @@ func helpLines(w int, noColor bool) []string {
 		"new_setup -run 도움말",
 		"",
 		"질문이 떠 있을 때",
-		"  c  계속(다음 단계)      r  재시도(같은 단계 다시)",
+		"  c  계속(다음 단계)   r  재시도(같은 단계 다시)   k  stress-ng 만 건너뜀",
 		"  x  O 아닌 호스트를 제외하고 계속      s  작업 중지(y/N 확인)",
 		"  i 또는 Enter  값 입력 질문(stress-ng 종료 시각)에서 값을 입력 - 숫자, Enter 다음 항목, Backspace 지움, Esc 취소; 끝나면 c 로 제출",
 		"  y  CPU X 호스트 재실행 질문: 부하 낮은 X 호스트 모두 CPU 재실행에 포함      n  모두 제외(이번엔 X 그대로)",
