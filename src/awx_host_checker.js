@@ -73,20 +73,43 @@
         return filters.some(f => h === f || h.includes(f));
     }
 
-    // 텍스트 파서 (줄바꿈, 공백, 콤마, 세미콜론, 탭 분리 및 시리얼 제거)
+    // 텍스트 파서 (줄바꿈, 공백, 콤마, 세미콜론, 탭 분리 및 시리얼/비고 제거)
+    // / 앞뒤 공백 유무에 상관없이 hostname / AAAAAA 형태를 정상 인식하여 호스트명만 추출
     function parseHostText(rawText) {
         if (!rawText) return [];
         const normalized = rawText.replace(/\\n/g, '\n').trim();
         const resultSet = new Set();
         const lines = normalized.split(/[\r\n]+/);
         lines.forEach(line => {
-            const segments = line.replace(/[;,\t]+/g, ' ').split(/\s+/);
-            segments.forEach(seg => {
-                let clean = seg.trim();
-                if (!clean) return;
-                clean = clean.split('/')[0].split('(')[0].trim().toLowerCase();
-                if (clean && clean !== '/' && clean !== '-' && !clean.startsWith('sn:') && !clean.startsWith('sn=')) {
-                    resultSet.add(clean);
+            // 괄호 내용(비고/시리얼) 사전 제거: 'host1 ( AAAAAA )' -> 'host1'
+            let cleanLine = line.replace(/\s*\([^)]*\)/g, '');
+            // 콤마, 세미콜론, 탭으로 분리
+            const entries = cleanLine.split(/[,;\t]+/);
+            entries.forEach(entry => {
+                const trimmed = entry.trim();
+                if (!trimmed) return;
+                // 슬래시(/)가 포함된 경우 (예: "hostname / AAAAAA" 또는 "hostname/AAAAAA")
+                if (trimmed.includes('/')) {
+                    // / 앞뒤 공백 정규화: "hostname / AAAAAA" -> "hostname/AAAAAA"
+                    const slashNorm = trimmed.replace(/\s*\/\s*/g, '/');
+                    const tokens = slashNorm.split(/\s+/);
+                    tokens.forEach(tok => {
+                        if (tok.includes('/')) {
+                            let clean = tok.split('/')[0].trim().toLowerCase();
+                            if (clean && clean !== '/' && clean !== '-' && !clean.startsWith('sn:') && !clean.startsWith('sn=')) {
+                                resultSet.add(clean);
+                            }
+                        }
+                    });
+                } else {
+                    // 슬래시가 없는 일반 공백 분리
+                    const tokens = trimmed.split(/\s+/);
+                    tokens.forEach(tok => {
+                        let clean = tok.trim().toLowerCase();
+                        if (clean && clean !== '/' && clean !== '-' && !clean.startsWith('sn:') && !clean.startsWith('sn=')) {
+                            resultSet.add(clean);
+                        }
+                    });
                 }
             });
         });

@@ -617,10 +617,72 @@ async function runOneTakeTests() {
             throw new Error(`TC-11 FAILED: ${JSON.stringify(resetConfigTest)}`);
         }
 
+        // -------------------------------------------------------------
+        // TC-12: 슬래시(/) 앞뒤 공백 유무에 따른 시리얼 정제 및 호스트 2대 인식 검증
+        // -------------------------------------------------------------
+        console.log("\n>>> Executing TC-12: 슬래시(/) 앞뒤 공백 유무에 따른 호스트 인식 무결성");
+        const slashTest = await cdp.evaluate(`
+            (() => {
+                const txtDetail = document.getElementById('awx-vld-txt-detail');
+                const txtIncident = document.getElementById('awx-vld-txt-incident');
+                const txtTarget = document.getElementById('awx-vld-txt-target');
+                const cntDetail = document.getElementById('awx-vld-cnt-detail');
+                const cntIncident = document.getElementById('awx-vld-cnt-incident');
+                const cntTarget = document.getElementById('awx-vld-cnt-target');
+                const btnReset = document.getElementById('awx-vld-btn-reset-awx');
+
+                btnReset.click();
+
+                // 1. (스페이스)/(스페이스)시리얼 형태 2대 입력 (예: hostname / AAAAAA)
+                const inputWithSpaces = "pivy2351ev01 / AAAAAA\\npivy2351ev02 / BBBBBB";
+                txtDetail.value = inputWithSpaces;
+                txtDetail.dispatchEvent(new Event('input'));
+                const countSpaces = cntDetail.innerText;
+
+                // 2. 공백 없는 슬래시(/) 2대 입력 (예: hostname/AAAAAA)
+                const inputNoSpaces = "pivy2351ev01/AAAAAA\\npivy2351ev02/BBBBBB";
+                txtIncident.value = inputNoSpaces;
+                txtIncident.dispatchEvent(new Event('input'));
+                const countNoSpaces = cntIncident.innerText;
+
+                // 3. 앞/뒤 공백 비대칭 형태
+                const inputMixed = "pivy2351ev01 /AAAAAA\\npivy2351ev02/ BBBBBB";
+                txtTarget.value = inputMixed;
+                txtTarget.dispatchEvent(new Event('input'));
+                const countMixed = cntTarget.innerText;
+
+                // 4. 비교 실행하여 3개 소스가 모두 2대로 일치(MATCH) 판정되는지 확인
+                document.getElementById('awx-vld-btn-compare').click();
+                const resultBox = document.getElementById('awx-vld-result-box');
+                const matchSuccess = resultBox.innerText.includes('[MATCH]');
+                const resultText = resultBox.innerText;
+
+                return {
+                    countSpaces,
+                    countNoSpaces,
+                    countMixed,
+                    matchSuccess,
+                    resultText,
+                    awxSize: window.awxValidatorState.collectedHosts.size
+                };
+            })()
+        `);
+
+        if (
+            slashTest.countSpaces === '2' &&
+            slashTest.countNoSpaces === '2' &&
+            slashTest.countMixed === '2' &&
+            slashTest.matchSuccess
+        ) {
+            recordLog('TC-12', '슬래시(/) 앞뒤 공백 정제 무결성', 'PASS', `hostname / AAAAAA 형태 2대 입력 시 4대가 아닌 정확히 2대로 인식 및 [MATCH] 성공 확인`);
+        } else {
+            throw new Error(`TC-12 FAILED: ${JSON.stringify(slashTest)}`);
+        }
+
         await cdp.screenshot(path.join(__dirname, "screenshot_onetake_success.png"));
 
         console.log("\n==================================================================");
-        console.log("  [ONE-TAKE SUCCESS] 11개 테스트케이스 전원 100% 연속 통과!");
+        console.log("  [ONE-TAKE SUCCESS] 12개 테스트케이스 전원 100% 연속 통과!");
         console.log("==================================================================");
 
         return testLogs;
