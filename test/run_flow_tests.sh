@@ -651,6 +651,51 @@ check "S: 질문은 걷혀 있음" "" "$(qinfo "$RUND")"
 SWP=$(tr -d '[:space:]' < "$RUND/worker.pid")
 if wait_for 10 bash -c "! kill -0 $SWP 2> /dev/null"; then ok "S: 워커 종료"; else ng "S: 워커 종료"; fi
 
+# ================================================================ X. B서버 원격 실행(STRESS_REMOTE, 가짜 ssh)
+echo "== X. STRESS_REMOTE: stress-test 를 ssh 로 B 에서 실행(가짜 ssh 는 이 서버에서 sh -c), 목록 복사·askpass·-ignore-offline"
+FAKESSH=$HERE/fake_ssh.sh
+chmod +x "$FAKESSH"
+SB=$T/sshb
+mkdir -p "$SB"
+{
+	echo '#!/bin/bash'
+	echo "exec bash \"$FAKESSH\" \"\$@\""
+} > "$SB/ssh"
+chmod +x "$SB/ssh"
+XRD=/tmp/new_setup_tester
+rm -rf "$XRD"
+scn_new X
+export FAKE_SSH_LOG=$S/ssh.log
+: > "$S/ssh.log"
+printf '%s\n' h_cpu > "$S/hosts"
+addscn h_cpu ok cpu=nolog stress=0
+# 원격 모드에서는 상대경로가 거절된다
+mkconf "STRESS_REMOTE=b-test" "STRESS_TEST=stress-test/stress-test"
+start_run
+check "X: 원격 모드 STRESS_TEST 상대경로 → 시작 거절(종료코드 2)" 2 "$?"
+has "X: 거절 안내" "$S/start.err" 'STRESS_REMOTE 를 쓰면 STRESS_TEST 는 B서버의 절대경로'
+rm -rf "$S/hosts_run"
+mkconf "STRESS_REMOTE=b-test" "STRESS_IGNORE_OFFLINE=y"
+(cd "$S" && PATH="$SB:$PATH" "$BIN" -run -c "$S/conf" -user tester "$S/hosts" < /dev/null > "$S/start.out" 2> "$S/start.err")
+check "X: -run 시작 종료코드 0" 0 "$?"
+RUND=$S/hosts_run
+drive "$RUND" 80 pick_c
+check "X: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+check "X: CPU(-steps a) launch 1회(대상 h_cpu)" "h_cpu" "$(st_hosts a)"
+has "X: CPU 목록 파일을 B 의 /tmp/new_setup_<user>/ 로 복사" "$XRD/cpu.txt" '^h_cpu$'
+has "X: stress-test 는 복사한 목록을 받음" "$S/ssh.log" "^CALL root@b-test .*-hosts.*$XRD/cpu\\.txt"
+has "X: 원격 pid 파일 기록" "$XRD/a.pid" '^[0-9]+$'
+has "X: worker.log 의 원격 명령 줄" "$RUND/worker.log" "^\\+ ssh root@b-test \\(cd $HERE && $FAKEST -user tester -hosts $XRD/cpu\\.txt -steps a -batch -conf $S/st\\.conf -ignore-offline\\)$"
+has "X: -ignore-offline 전달(CPU)" "$S/st.log" '^IGNOREOFF a$'
+has "X: B 에는 A 의 gossh 경로를 넘기지 않음" "$S/st.log" '^START a [0-9]+ .* gossh=none$'
+has "X: ssh 가 SSH_ASKPASS 로 비밀번호를 받음" "$S/ssh.log" '^ASKPASS ok$'
+if grep -q 'ASKPASS \(fail\|none\)' "$S/ssh.log"; then ng "X: 모든 ssh 호출이 askpass 사용" "$(grep ASKPASS "$S/ssh.log" | sort | uniq -c)"; else ok "X: 모든 ssh 호출이 askpass 사용"; fi
+if grep -rqF 'abc135!!' "$RUND" "$S/ssh.log" "$S/st.log" "$S/start.out" "$S/start.err"; then ng "X: 비밀번호가 로그·상태에 없음"; else ok "X: 비밀번호가 로그·상태에 없음"; fi
+XWP=$(tr -d '[:space:]' < "$RUND/worker.pid")
+if wait_for 8 bash -c "! kill -0 $XWP 2> /dev/null"; then ok "X: 워커 종료"; else ng "X: 워커 종료"; fi
+unset FAKE_SSH_LOG
+rm -rf "$XRD"
+
 echo
 echo "결과: PASS $PASS, FAIL $FAIL"
 [ "$FAIL" -eq 0 ]

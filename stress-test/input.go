@@ -10,12 +10,13 @@ import (
 
 // 단계 결과 값
 const (
-	resDone    = "실행"
-	resNotRun  = "미실행"
-	resFail    = "실패"
-	resOffline = "접속불가"
-	resDNSFail = "DNS실패"
-	resNone    = "-"
+	resDone          = "실행"
+	resNotRun        = "미실행"
+	resFail          = "실패"
+	resOffline       = "접속불가"
+	resLaunchedNoMon = "실행(감시불가)" // -ignore-offline: 접속불가 호스트를 launch 만 하고 부하 감시는 못 함
+	resDNSFail       = "DNS실패"
+	resNone          = "-"
 )
 
 // target 은 입력 파일의 호스트 한 대다.

@@ -511,7 +511,13 @@ fi
 # ---------------------------------------------------------------------------
 
 ST=$(expand_path "${NEW[STRESS_TEST]}")
-if [ -z "$ST" ]; then
+# STRESS_REMOTE(B서버 원격 실행)면 STRESS_TEST 는 B 의 경로이므로 이 서버에서 확인·설정하지 않는다
+REMOTE=""
+[ -f "$CONF" ] && REMOTE=$(get_val "$CONF" STRESS_REMOTE)
+if [ -n "$REMOTE" ]; then
+	echo
+	echo "STRESS_REMOTE=$REMOTE → stress-test 는 B서버에서 실행합니다. stress-test 설정은 B서버의 그 도구 폴더에서 하세요: $(dirname "${NEW[STRESS_TEST]}")"
+elif [ -z "$ST" ]; then
 	echo
 	echo "STRESS_TEST 가 비어 있어 stress-test 설정은 건너뜁니다(-run 의 부하 단계에서 필요하면 나중에 지정)."
 else

@@ -298,7 +298,7 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 | 파일 | 설명 |
 |---|---|
 | `main.go` / `main_test.go` | 판정 로직 / 결과 파일 분류·2차 출력 파싱·문구 이스케이프 단위 테스트 |
-| `run.go` `worker.go` `state.go` `input.go` `stress.go` `execx*.go` `daemon_*.go` | `-run` 진입·재접속 / 백그라운드 워커 상태기계 / 상태 파일(state.json 등) / stress-ng 종료 시각 검사 / stress-test 호출·CPU 감시 확인 / 외부 명령 시간 제한(프로세스 그룹 kill) / setsid·lock |
+| `run.go` `worker.go` `state.go` `input.go` `stress.go` `remote.go` `execx*.go` `daemon_*.go` | `-run` 진입·재접속 / 백그라운드 워커 상태기계 / 상태 파일(state.json 등) / stress-ng 종료 시각 검사 / stress-test 호출·CPU 감시 확인 / B서버 원격 실행(ssh·askpass, 6.5.1) / 외부 명령 시간 제한(프로세스 그룹 kill) / setsid·lock |
 | `tui.go` `render.go` `tty_*.go` | `-run` 화면(raw 모드 TUI, 상태 → 문자열 순수 함수)·키 처리·tty |
 | `*_test.go` | 단위 시험(워커 상태기계는 가짜 실행기·가짜 시각으로) |
 | `go.mod` | `go 1.20`, 외부 의존성 없음 |
@@ -311,7 +311,7 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 | `build.sh` | 바이너리 빌드 (`build.sh` = os8. `build.sh os6` 는 옛 방식으로 현재 사용 안 함) |
 | `bin/new_setup`, `bin/new_setup_os6` | 빌드 완료 바이너리 (폐쇄망 배포용, 커밋 대상). `new_setup_os6` 는 옛 버전이며 더 이상 재빌드하지 않음 |
 | `test/fake_gossh.sh`, `test/fake_config_check.sh`, `test/run_tests.sh` | gossh·config_check.sh 대역과 시나리오 테스트 (`bash test/run_tests.sh`) |
-| `test/fake_stress_test.sh`, `test/run_flow_tests.sh` | stress-test 대역과 `-run` 전체 흐름 시험 (`bash test/run_flow_tests.sh`, 종료 시각 입력·인벤토리 사용 중 질문 시나리오 포함, 약 1분 30초) |
+| `test/fake_stress_test.sh`, `test/fake_ssh.sh`, `test/run_flow_tests.sh` | stress-test·ssh 대역과 `-run` 전체 흐름 시험 (`bash test/run_flow_tests.sh`, 종료 시각 입력·인벤토리 사용 중 질문·B서버 원격 실행 시나리오 포함, 약 2분) |
 | `ARCHITECTURE.md` | 폴더·파일 역할과 판정 흐름 |
 | `PR_CHECKLIST.md` | 변경 시 점검 목록 |
 | `.github/workflows/ci.yml` | gofmt·vet·test·shellcheck CI |
@@ -404,7 +404,7 @@ bash new_setup.sh -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-u
 | `q` | 화면만 나가기(작업은 계속) |
 | `?` | 도움말 |
 
-**로그 창**: 호스트표·질문 영역 아래(맨 아래)에 `worker.log` 의 최근 줄을 보여 줍니다. 터미널 높이에 맞춰 제목 포함 최대 9줄(로그 8줄)까지 쓰되 표가 최소 3줄은 보이도록 남는 자리만 쓰고, 질문·선택지는 절대 밀어내지 않으며 화면이 너무 작으면 창이 줄거나 빠집니다. 줄은 터미널 폭(한글 2칸)에 맞춰 잘리고 제어 문자는 제거됩니다. 파일은 끝 64KB 만 읽어 로그가 커도 가볍습니다. 비 tty 글 출력에는 로그 창이 없습니다.
+**로그 창**: 호스트표·질문 영역 아래(맨 아래)에 `worker.log` 의 최근 줄을 보여 줍니다. 터미널 높이에 맞춰 제목 포함 최대 9줄(로그 8줄)까지 쓰되 표가 최소 3줄은 보이도록 남는 자리만 쓰고, 질문·선택지는 절대 밀어내지 않으며 화면이 너무 작으면 창이 줄거나 빠집니다. 줄은 터미널 폭(한글 2칸)에 맞춰 잘리고 제어 문자는 제거됩니다. 파일은 끝 64KB 만 읽어 로그가 커도 가볍습니다. 비 tty 글 출력에는 로그 창이 없습니다. 색(NO_COLOR 면 없음): 실행 명령(`+ ...`)은 굵은 청록, worker 메시지는 기본색(경고 노랑·오류 빨강·질문/답 자홍), 외부 프로그램 출력은 회색.
 
 화면은 외부 라이브러리 없이 termios raw 모드로 그리며 1초마다 갱신하고 창 크기를 반영합니다. `NO_COLOR` 가 있으면 색을 쓰지 않습니다.
 
@@ -416,6 +416,8 @@ bash new_setup.sh -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-u
 |---|---|---|
 | `STRESS_TEST` | (없음) | stress-test 바이너리 경로. 비면 부하 단계에서 오류 안내 후 질문. 호출은 바이너리 폴더에서 `-user <u> -hosts <목록> -steps a|b -batch [-end <연,월,일,시,분>(b 일 때)] [-conf <파일>]`. stdin 은 인벤토리 사용 중 질문의 답(`r`/`x`) 통로 |\|b -batch [-conf <파일>]` |
 | `STRESS_TEST_CONF` | (없음) | stress-test 의 `-conf` 로 넘김. **비우는 것을 권장**: 비면 stress-test 가 자기 폴더의 `conf/<선택한 사용자>_setting.conf` 를 찾음(사용자를 고르면 파일 이름도 따라감). 상대경로는 new_setup.conf 가 있는 폴더 기준 |
+| `STRESS_REMOTE` | (없음) | stress-test 를 실행할 B서버(호스트 이름·IP). 비면 이 서버에서 로컬 실행(지금과 같음). 지정하면 `STRESS_TEST`·`STRESS_TEST_CONF` 는 **B서버의 절대경로**여야 함(아니면 `-run` 시작 거절). 6.5.1 참고 |
+| `STRESS_IGNORE_OFFLINE` | `n` | `y` 면 stress-test `-steps` 호출에 `-ignore-offline` 을 붙임(로컬·원격 모두, `-yaml-state` 에는 안 붙임). 6.5.1 참고 |
 | `USER_ROUTE` | (없음) | `info_mn.sh`/`info.sh` 가 있는 폴더(user 선택 메뉴) |
 | `CPU_WAIT_START` | `47m` | CPU launch 후 완료 확인(CPU 열 값)을 시작할 때까지 |
 | `CPU_WAIT_INTERVAL` | `2m` | 확인(btime·응답)·꺼짐 감시 간격 |
@@ -428,6 +430,31 @@ bash new_setup.sh -run [-new] [-c <설정파일>] [-er <장애목록파일>] [-u
 | `AUTO_CPU_WAIT` | `50m` | (`-auto`) CPU launch 후 첫 판정까지(45분 + 여유 5분) |
 | `AUTO_CPU_INTERVAL` | `5m` | (`-auto`) 첫 판정에서 O 가 아니면 다시 판정하는 간격(launch 실패 뒤 다시 시도까지도) |
 | `AUTO_CPU_MAX` | `30m` | (`-auto`) 첫 판정 뒤 더 기다리는 최대 시간(넘어도 O 가 아니면 실패 1회) |
+
+### 6.5.1 B서버에서 stress-test 실행 (`STRESS_REMOTE`)
+
+A서버(모든 망에 접근 가능)에서 `new_setup -run` 을 돌리고, AWX·git 업로드가 되는 B서버에서 stress-test 를 돌릴 때 씁니다.
+
+- **역할 나눔**: 판정·설정수정·CPU 감시(btime·부하 확인, gossh)는 지금처럼 **A** 에서, stress-test(CPU·stress-ng 등록·launch·감시)는 **B** 에서 실행합니다.
+- **설정**:
+
+  ```
+  # stress-test 를 돌릴 B서버, 그리고 B서버의 절대경로(STRESS_TEST_CONF 는 선택)
+  STRESS_REMOTE=192.168.0.20
+  STRESS_TEST=/root/stress-test/stress-test
+  STRESS_TEST_CONF=/root/stress-test/conf/hong_setting.conf
+  #STRESS_IGNORE_OFFLINE=y
+  ```
+
+  (값 뒤에 `#` 주석을 붙이지 마세요. 줄 끝까지가 값입니다.)
+
+  원격 모드에서는 `STRESS_TEST`·`STRESS_TEST_CONF` 를 설정 파일 폴더 기준으로 바꾸지 않고 `~` 도 풀지 않으며, A 에 그 파일이 있는지 보지 않습니다. 절대경로('/' 로 시작)가 아니면 `-run` 이 시작되지 않습니다(실행 중 다시 읽을 때는 경고 후 이전 값 유지). `setup.sh` 도 원격 모드면 stress-test 자체 설정을 이어 하지 않습니다(B 에서 하세요).
+- **접속 방식**: 계정은 `root` 고정, 비밀번호는 **바이너리에 들어 있습니다**(사용자 결정 2026-11-09, 공개 저장소 노출 감수). 비밀번호는 명령줄·worker.log·doctor 출력에 넣지 않고, ssh 의 `SSH_ASKPASS` 로 new_setup 바이너리 자신을 지정해(표식 환경변수 `NEW_SETUP_ASKPASS=1`) 그때만 비밀번호를 내게 합니다. 그래서 shell history·`ps` 에 보이지 않습니다. OpenSSH 8.0(RHEL8) 호환을 위해 `SSH_ASKPASS_REQUIRE=force`, `DISPLAY`(비어 있으면 `:0`), 제어 터미널 없는 새 세션(setsid)으로 ssh 를 띄웁니다. 호스트 키는 확인하지 않습니다(`StrictHostKeyChecking=no`, `UserKnownHostsFile=/dev/null`).
+- **실행 순서**: (1) 목록 파일을 B 의 `/tmp/new_setup_<user>/<파일이름>` 으로 복사(ssh stdin) → (2) `ssh root@B` 로 `cd <STRESS_TEST 폴더> && echo $$ > /tmp/new_setup_<user>/<steps>.pid && exec <STRESS_TEST> -user <u> -hosts <B의 목록> -steps a|b -batch [...]`. worker.log 에는 `+ ssh root@B (cd <폴더> && <바이너리> <인자>)` 로 남습니다. `[감시]`·`[등록]`·`[인벤토리사용중]` 줄 처리와 stdin 답(`r`/`x`)은 로컬과 같습니다. A 의 gossh 경로(`GOSSH`)는 넘기지 않습니다(B 는 자기 conf·PATH 의 gossh 사용). `-auto` 의 `-yaml-state` 확인도 같은 방식으로 B 에서 합니다.
+- **중지·시간초과**: A 의 ssh 를 끝낸 뒤 `ssh root@B 'kill -TERM <pid 파일의 pid>'` 를 한 번 더 보내 B 의 stress-test 가 템플릿 인벤토리를 되돌리고 끝나게 합니다(실패해도 무시).
+- **ssh 실패**: ssh 종료코드 255 는 `B서버(<주소>) ssh 접속 실패(종료코드 255)` 오류로 단계 질문에 나옵니다. `new_setup -doctor` 는 원격 모드에서 A 의 `STRESS_TEST` 대신 ssh 유무와 B 의 `test -x <STRESS_TEST>`(·`STRESS_TEST_CONF` 있음)를 읽기 전용으로 확인합니다.
+- **`STRESS_IGNORE_OFFLINE=y`**: stress-test 에 `-ignore-offline` 을 넘겨, (B 에서) 접속체크에 응답 없는 호스트도 AWX 로 launch 하게 합니다. 그 호스트는 stress-test 가 부하를 못 재므로 감시에서 빠지고 결과는 `실행(감시불가)` 입니다(자세한 동작은 stress-test README). DNS 실패 호스트는 지금처럼 제외됩니다. new_setup 의 판정·CPU 감시는 A 에서 하므로 A 에서 접속되면 그대로 판정됩니다.
+- 랩에서는 가짜 ssh(`test/fake_ssh.sh`, 원격 명령을 이 서버에서 `sh -c` 로 실행)로만 시험했습니다(`run_flow_tests.sh` X). 실제 B서버 ssh·askpass 동작은 확인하지 못했습니다.
 
 ### 6.6 한계와 미확인
 

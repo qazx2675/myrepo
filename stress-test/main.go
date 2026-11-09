@@ -1,6 +1,6 @@
 // stress-test 는 HPC 서버 부하테스트(cpu / stress-ng)를 AWX 로 실행하고 1분 로드로 실행 여부를 감시한다.
 //
-//	stress-test -user <u> -hosts <file> -steps <ab> [-end y,m,d,h,min] [-retry N] [-er file] [-conf file] [-batch]
+//	stress-test -user <u> -hosts <file> -steps <ab> [-end y,m,d,h,min] [-retry N] [-er file] [-conf file] [-batch] [-ignore-offline]
 //	stress-test -inspect [-user <u> | -conf file] [템플릿 ID/이름 ...]   (읽기 전용 조사)
 //	stress-test -yaml-state [-user <u> | -conf file]   (인벤토리 소스의 현재 yml·호스트 출력, 읽기 전용)
 //
@@ -48,16 +48,17 @@ func setColor() {
 
 // app 은 한 번의 실행 상태다.
 type app struct {
-	cfg         *Config
-	client      *awxClient
-	user        string
-	workDir     string
-	gossh       *gosshRunner
-	interactive bool
-	retry       int
-	targets     []*target
-	out         io.Writer
-	in          *bufio.Reader // 대화형 입력, -batch 에서는 [인벤토리사용중] 답 읽기
+	cfg           *Config
+	client        *awxClient
+	user          string
+	workDir       string
+	gossh         *gosshRunner
+	interactive   bool
+	retry         int
+	ignoreOffline bool // -ignore-offline: 접속불가 호스트도 launch (부하 감시 제외)
+	targets       []*target
+	out           io.Writer
+	in            *bufio.Reader // 대화형 입력, -batch 에서는 [인벤토리사용중] 답 읽기
 
 	tmpl      map[string]*jobTemplate // 단계 → 템플릿 (prepareAWX)
 	userInvID int                     // conf username 인벤토리 ID (이름이 같거나 이름에 username 이 들어간 것)
@@ -79,10 +80,11 @@ func (a *app) pollInterval() time.Duration {
 
 func usage(fs *flag.FlagSet) func() {
 	return func() {
-		fmt.Fprintln(os.Stderr, "사용법: stress-test -user <사용자> -hosts <입력파일> -steps <ab> [-end <연>,<월>,<일>,<시>,<분>] [-retry N] [-er <장애목록>] [-conf <설정파일>] [-batch]")
+		fmt.Fprintln(os.Stderr, "사용법: stress-test -user <사용자> -hosts <입력파일> -steps <ab> [-end <연>,<월>,<일>,<시>,<분>] [-retry N] [-er <장애목록>] [-conf <설정파일>] [-batch] [-ignore-offline]")
 		fmt.Fprintln(os.Stderr, "  -steps : a=cpu, b=stress (적은 순서대로 실행, 예: a, b, ab, ba)")
 		fmt.Fprintln(os.Stderr, "  -end   : stress-ng 종료 시각 (b 가 있을 때). -batch 에서는 필수, 대화형은 생략하면 시작할 때 묻는다")
 		fmt.Fprintln(os.Stderr, "  -batch 에서 템플릿 인벤토리가 사용 중이면 stdout 에 \""+busyPrefix+"<안내>\" 한 줄을 찍고 stdin 에서 한 줄을 읽는다 (r=다시 확인, 그 밖·EOF=그 묶음 중단)")
+		fmt.Fprintln(os.Stderr, "  -ignore-offline : 접속체크에 응답 없는(접속불가) 호스트도 제외하지 않고 AWX 로 launch. 이 서버가 닿지 못하는 노드는 부하 감시에서 빠지고 결과는 \""+resLaunchedNoMon+"\" (재실행·미실행 집계 제외). DNS 실패 호스트는 그대로 제외")
 		fmt.Fprintln(os.Stderr, "  종료코드: 0 전부 실행, 1 미실행/실패 있음, 2 설정·입력 오류")
 		fmt.Fprintln(os.Stderr, "  조사: stress-test -inspect [-user <사용자> | -conf <설정파일>] [템플릿 ID/이름 ...]   (AWX 템플릿·인벤토리 조사, 읽기 전용)")
 		fmt.Fprintln(os.Stderr, "  -inspect : survey 변수·인벤토리·소스를 조회해 conf 키를 점검하고 넣을 줄을 제안. 템플릿 인자가 없으면 conf 의 cpu_template·stress_template. 종료코드 0 정상, 1 불일치·경고, 2 설정·접속 오류")
@@ -113,6 +115,7 @@ func run(args []string) int {
 	inspectFlag := fs.Bool("inspect", false, "AWX 템플릿·인벤토리 조사 (읽기 전용): 인자로 템플릿 ID/이름을 줄 수 있음 (없으면 conf 의 cpu_template·stress_template)")
 	yamlStateFlag := fs.Bool("yaml-state", false, "인벤토리 소스의 현재 yml 과 인벤토리 호스트 이름 출력 (읽기 전용)")
 	batchFlag := fs.Bool("batch", false, "비대화형 실행 (프롬프트 없음, 감시는 한 줄 요약)")
+	ignoreOfflineFlag := fs.Bool("ignore-offline", false, "접속체크에 응답 없는(접속불가) 호스트도 launch (부하 감시 제외, 결과 \""+resLaunchedNoMon+"\")")
 	fs.Usage = usage(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -223,17 +226,18 @@ func run(args []string) int {
 		setColor()
 	}
 	a := &app{
-		cfg:         cfg,
-		client:      newAWXClient(cfg.AWXURL, cfg.Username, cfg.Password, cfg.InsecureTLS, 10*time.Second),
-		user:        user,
-		workDir:     workDir,
-		gossh:       &gosshRunner{path: gosshPath, workDir: workDir, log: logf},
-		interactive: interactive,
-		retry:       *retryFlag,
-		targets:     targets,
-		out:         os.Stdout,
-		in:          bufio.NewReader(os.Stdin),
-		end:         end,
+		cfg:           cfg,
+		client:        newAWXClient(cfg.AWXURL, cfg.Username, cfg.Password, cfg.InsecureTLS, 10*time.Second),
+		user:          user,
+		workDir:       workDir,
+		gossh:         &gosshRunner{path: gosshPath, workDir: workDir, log: logf},
+		interactive:   interactive,
+		retry:         *retryFlag,
+		ignoreOffline: *ignoreOfflineFlag,
+		targets:       targets,
+		out:           os.Stdout,
+		in:            bufio.NewReader(os.Stdin),
+		end:           end,
 	}
 	// 템플릿 인벤토리를 바꿔 둔 사이에 중단되면 되돌린 뒤 종료한다
 	sigCh := make(chan os.Signal, 1)
@@ -241,7 +245,7 @@ func run(args []string) int {
 	go func() { curSwitch.onSignal(<-sigCh, os.Stdout) }()
 
 	a.logf("%s user=%s  설정=%s  대상 %d대  단계=%s  gossh 로그=%s", markInfo, user, confPath, len(targets), strings.Join(steps, ","), logPath)
-	appendHistory(cfg, fmt.Sprintf("user=%s action=start hosts=%s steps=%s count=%d", user, *hostsFlag, *stepsFlag, len(targets)))
+	appendHistory(cfg, fmt.Sprintf("user=%s action=start hosts=%s steps=%s count=%d ignore_offline=%t", user, *hostsFlag, *stepsFlag, len(targets), *ignoreOfflineFlag))
 
 	if contains(steps, stageStress) && a.end == nil {
 		if a.end, err = a.askEnd(); err != nil {
@@ -294,6 +298,9 @@ func (a *app) checkVendors() error {
 		}
 	}
 	a.logf("%s 접속체크 결과: Intel %d, AMD %d, unknown %d, 접속불가 %d", markInfo, cnt[vendorIntel], cnt[vendorAMD], cnt[vendorUnknown], cnt["접속불가"])
+	if a.ignoreOffline {
+		a.logf("%s 접속불가 무시: 접속체크에 응답 없는 %d대도 launch (부하 감시 제외)", markWarn, cnt["접속불가"])
+	}
 	return nil
 }
 
@@ -304,7 +311,7 @@ func (a *app) initResults(steps []string) {
 			switch {
 			case t.DNSFail:
 				t.Res[s] = resDNSFail
-			case t.Offline:
+			case t.Offline && !a.ignoreOffline:
 				t.Res[s] = resOffline
 			default:
 				t.Res[s] = resNotRun
@@ -375,20 +382,40 @@ func (a *app) runStage(stage string) {
 		if round > 0 {
 			title += fmt.Sprintf(" 재실행%d", round)
 		}
-		remaining := monitorLoad(a.out, title, launched, a.checkLoads, a.cfg.MonitorSec, a.cfg.MonitorInterval, a.cfg.LoadThreshold, a.interactive)
+		// -ignore-offline 로 launch 한 접속불가 호스트는 이 서버가 닿지 못하므로 감시에서 뺀다
+		var monList, noMon []*target
+		for _, t := range launched {
+			if t.Offline && a.ignoreOffline {
+				noMon = append(noMon, t)
+			} else {
+				monList = append(monList, t)
+			}
+		}
+		var remaining []*target
+		if len(monList) > 0 {
+			remaining = monitorLoad(a.out, title, monList, a.checkLoads, a.cfg.MonitorSec, a.cfg.MonitorInterval, a.cfg.LoadThreshold, a.interactive)
+		}
 		rem := map[*target]bool{}
 		for _, t := range remaining {
 			rem[t] = true
 		}
-		for _, t := range launched {
+		for _, t := range monList {
 			if rem[t] {
 				t.Res[stage] = resNotRun
 			} else {
 				t.Res[stage] = resDone
 			}
 		}
-		a.logf("%s %s 감시 종료: 실행 %d대, 미실행 %d대", markInfo, title, len(launched)-len(remaining), len(remaining))
-		appendHistory(a.cfg, fmt.Sprintf("user=%s action=monitor stage=%s round=%d done=%d notrun=%d", a.user, stage, round, len(launched)-len(remaining), len(remaining)))
+		for _, t := range noMon {
+			t.Res[stage] = resLaunchedNoMon
+			t.addNote("접속불가 무시 launch (부하 감시 제외)")
+		}
+		if len(noMon) > 0 {
+			// new_setup 이 "[감시]" 줄로 launch 를 알아보므로 감시 대상이 없어도 한 줄은 낸다 (대화형 화면 갱신 뒤에 찍어 남긴다)
+			a.logf("[감시] %s 감시 제외(접속불가 무시) %d대 — 부하 확인 없이 실행으로 처리", title, len(noMon))
+		}
+		a.logf("%s %s 감시 종료: 실행 %d대, 미실행 %d대, 감시불가 %d대", markInfo, title, len(monList)-len(remaining), len(remaining), len(noMon))
+		appendHistory(a.cfg, fmt.Sprintf("user=%s action=monitor stage=%s round=%d done=%d notrun=%d nomon=%d", a.user, stage, round, len(monList)-len(remaining), len(remaining), len(noMon)))
 		if len(remaining) == 0 || !a.askRetry(len(remaining), round) {
 			return
 		}
