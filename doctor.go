@@ -138,6 +138,8 @@ type doctorDeps struct {
 	// gossh 는 gossh 를 한 번 돌려 stdout 과 stdout+stderr 를 돌려준다(비정상 종료는 오류가 아님, 실행 불가·시간 초과만 오류).
 	gossh    func(path string, args []string, timeout time.Duration) (stdout, all string, err error)
 	checkRun func(conf config, script, gossh string, hosts []string) (map[string]string, error)
+	// remoteRun 은 B서버(STRESS_REMOTE)에서 읽기 전용 스크립트를 ssh 로 한 번 돌려 stdout+stderr 를 돌려준다(nil 이면 접속 확인을 건너뜀).
+	remoteRun func(host, script string) (string, error)
 }
 
 func realDoctorDeps() doctorDeps {
@@ -165,8 +167,18 @@ func realDoctorDeps() doctorDeps {
 		checkRun: func(conf config, script, gossh string, hosts []string) (map[string]string, error) {
 			return runConfigCheck(conf, script, gossh, hosts, ccCheck, "new_setup", io.Discard)
 		},
+		remoteRun: func(host, script string) (string, error) {
+			cmd, err := sshCommand(host, script)
+			if err != nil {
+				return "", err
+			}
+			return runCmd(cmd, docRemoteTimeout)
+		},
 	}
 }
+
+// docRemoteTimeout 은 doctor 의 B서버 ssh 접속 확인 한 번의 시간 제한.
+const docRemoteTimeout = 30 * time.Second
 
 // procRunning 은 /proc/<pid> 가 있는지(리눅스 외에는 항상 false).
 func procRunning(pid int) bool {
@@ -359,6 +371,9 @@ func docEnv(r *docReport, a doctorArgs, d doctorDeps) *docEnvInfo {
 	for _, w := range conf.Warnings {
 		r.warn("설정 파일의 해당 값을 고치세요", "설정 경고: %s", w)
 	}
+	if err := remoteConfErr(conf); err != nil {
+		r.bad("STRESS_REMOTE·STRESS_TEST·STRESS_TEST_CONF 를 고치세요(원격 모드에서는 B서버의 절대경로)", "설정 오류: %v (-run 이 시작되지 않습니다)", err)
+	}
 	r.info("설정값:\n%s", confDump(conf))
 
 	// --- gossh
@@ -416,6 +431,7 @@ func confDump(c config) string {
 		{"STRESS_TEST", c.StressTest}, {"STRESS_TEST_CONF", c.StressTestConf}, {"USER_ROUTE", c.UserRoute},
 		{"CPU_WAIT_START", c.CPUWaitStart.String()}, {"CPU_WAIT_INTERVAL", c.CPUWaitInt.String()}, {"CPU_WAIT_MAX", c.CPUWaitMax.String()},
 		{"GOSSH_TIMEOUT", c.GosshTimeout.String()}, {"CHECK_TIMEOUT", c.CheckTimeout.String()}, {"STRESS_TIMEOUT", c.StressTimeout.String()},
+		{"STRESS_REMOTE", c.StressRemote}, {"STRESS_IGNORE_OFFLINE", yn(c.StressIgnoreOffline)},
 	}
 	var l []string
 	for _, kv := range rows {
@@ -509,6 +525,13 @@ func docStress(r *docReport, conf config, user string, d doctorDeps) string {
 		r.info("STRESS_TEST 비어 있음 → -run 부하 단계(CPU·stress-ng) 사용 불가")
 		return ""
 	}
+	if conf.StressIgnoreOffline {
+		r.info("STRESS_IGNORE_OFFLINE=y → stress-test 에 -ignore-offline 을 넘김(접속체크에 응답 없는 호스트도 launch)")
+	}
+	if conf.StressRemote != "" {
+		docStressRemote(r, conf, d)
+		return ""
+	}
 	bin, err := filepath.Abs(conf.StressTest)
 	if err != nil {
 		bin = conf.StressTest
@@ -560,6 +583,68 @@ func docStress(r *docReport, conf config, user string, d doctorDeps) string {
 	r.bad("conf/sample_setting.conf 를 복사해 "+name+" 을 만들거나 STRESS_TEST_CONF 로 경로를 지정하세요",
 		"stress-test conf(%s)를 찾지 못했습니다. 확인한 경로: %s", name, strings.Join(cands, ", "))
 	return ""
+}
+
+// docStressRemote 는 원격 모드(STRESS_REMOTE)의 stress-test 를 점검한다: 이 서버의 STRESS_TEST 는 보지 않고,
+// ssh 가 있는지와 B 에서 STRESS_TEST 가 실행 가능한지를 읽기 전용으로 확인한다(비밀번호는 출력하지 않음).
+func docStressRemote(r *docReport, conf config, d doctorDeps) {
+	host := conf.StressRemote
+	r.info("STRESS_REMOTE=%s → stress-test 는 B서버에서 %s 계정 ssh 로 실행(비밀번호는 바이너리 내장, SSH_ASKPASS 로 전달). STRESS_TEST=%s 는 B 의 경로", host, remoteUser, conf.StressTest)
+	if _, err := d.lookPath("ssh"); err != nil {
+		r.bad("openssh-clients 를 설치하거나 PATH 에 ssh 를 추가하세요", "ssh 를 찾을 수 없습니다(STRESS_REMOTE 원격 실행에 필요)")
+		return
+	}
+	if d.remoteRun == nil || remoteConfErr(conf) != nil {
+		return
+	}
+	script := "test -x " + shQuote(conf.StressTest) + " && echo ok"
+	if conf.StressTestConf != "" {
+		script += "; test -f " + shQuote(conf.StressTestConf) + " && echo conf_ok"
+	}
+	script += "; true" // 확인 결과는 출력으로 본다(종료코드 255 만 ssh 실패)
+	out, err := d.remoteRun(host, script)
+	switch {
+	case isSSHFail(err):
+		r.bad("B서버 주소·sshd·root 비밀번호(비밀번호 로그인 허용)를 확인하세요", "B서버(%s) ssh 접속 실패(종료코드 255): %s", host, lastLine(out))
+		return
+	case err != nil:
+		r.bad("B서버 접속·STRESS_TEST 경로를 확인하세요", "B서버(%s) 확인 실패: %s %s", host, errText(err), lastLine(out))
+		return
+	}
+	lines := strings.Fields(out)
+	has := func(w string) bool {
+		for _, l := range lines {
+			if l == w {
+				return true
+			}
+		}
+		return false
+	}
+	if has("ok") {
+		r.ok("B서버(%s) ssh 접속 확인, STRESS_TEST 실행 가능: %s", host, conf.StressTest)
+	} else {
+		r.bad("B서버의 STRESS_TEST 경로를 고치거나 chmod +x 하세요", "B서버(%s)에 STRESS_TEST 가 없거나 실행할 수 없습니다: %s", host, conf.StressTest)
+	}
+	if conf.StressTestConf != "" && !has("conf_ok") {
+		r.bad("B서버의 STRESS_TEST_CONF 경로를 고치세요", "B서버(%s)에 STRESS_TEST_CONF 파일이 없습니다: %s", host, conf.StressTestConf)
+	}
+}
+
+// yn 은 참/거짓을 설정 표기(y/n)로.
+func yn(b bool) string {
+	if b {
+		return "y"
+	}
+	return "n"
+}
+
+// lastLine 은 출력의 마지막 비어 있지 않은 줄.
+func lastLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.LastIndex(s, "\n"); i >= 0 {
+		s = s[i+1:]
+	}
+	return s
 }
 
 // stressHistoryPath 는 stress-test conf 본문에서 history_file 을 읽는다(기본 ./stress-test_history.log, 상대 경로는 바이너리 폴더 기준).

@@ -392,6 +392,78 @@ func cleanLogLine(s string) string {
 	return b.String()
 }
 
+// 로그 줄 종류. worker.log 에는 worker 자신의 메시지("2006-01-02 15:04:05 메시지"),
+// 외부 명령 줄("+ 명령"), 외부 프로그램 출력(접두 없음)이 섞여 있어 색으로 구분한다.
+const (
+	logOut  = iota // 외부 프로그램 출력 (회색)
+	logCmd         // "+ " 로 시작하는 실행 명령 (굵은 청록)
+	logMsg         // worker 메시지 (기본색)
+	logWarn        // 경고 (노랑)
+	logErr         // 오류 (빨강)
+	logQA          // 질문·답 (자홍)
+)
+
+// workerPrefixLen 은 logf 의 "2006-01-02 15:04:05 " 접두 길이(20). 접두가 없으면 0.
+func workerPrefixLen(l string) int {
+	if len(l) < 20 || l[4] != '-' || l[7] != '-' || l[10] != ' ' || l[13] != ':' || l[16] != ':' || l[19] != ' ' {
+		return 0
+	}
+	for _, i := range []int{0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18} {
+		if l[i] < '0' || l[i] > '9' {
+			return 0
+		}
+	}
+	return 20
+}
+
+// logLineKind 는 로그 한 줄의 종류를 판별한다. 우선순위: 명령 > 질문·답 > 오류 > 경고 > 메시지/출력.
+func logLineKind(l string) int {
+	if strings.HasPrefix(l, "+ ") {
+		return logCmd
+	}
+	p := workerPrefixLen(l)
+	msg := l[p:]
+	if p > 0 && (strings.HasPrefix(msg, "질문 ") || strings.HasPrefix(msg, "답 ")) {
+		return logQA
+	}
+	if containsAny(msg, "오류", "실패", "시간초과", "ERROR", "error", "launch 되지 않았", "중지") {
+		return logErr
+	}
+	if p == 0 {
+		return logOut // 외부 출력은 [감시] 등도 회색, 오류 낱말만 빨강
+	}
+	if containsAny(msg, "경고", "⚠", "무시한 답", "건너뜀", "응답 없음") {
+		return logWarn
+	}
+	return logMsg
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, t := range subs {
+		if strings.Contains(s, t) {
+			return true
+		}
+	}
+	return false
+}
+
+// logKindCode 는 로그 종류에 대응하는 SGR 코드(빈 값이면 기본색).
+func logKindCode(k int) string {
+	switch k {
+	case logCmd:
+		return "1;36"
+	case logQA:
+		return "35"
+	case logErr:
+		return cRed
+	case logWarn:
+		return cYellow
+	case logOut:
+		return "90"
+	}
+	return ""
+}
+
 // logPane 은 로그 창을 정확히 n 줄(제목 + n-1 줄)로 만든다. 줄은 폭 w 칸(전각 2칸)에 맞춰 자른다.
 func logPane(view viewState, w, n int) []string {
 	if n < 1 {
@@ -407,7 +479,8 @@ func logPane(view viewState, w, n int) []string {
 		out = append(out, lineOf(w, nc, seg{"(로그 없음)", cDim}))
 	}
 	for _, l := range body {
-		out = append(out, lineOf(w, nc, seg{cleanLogLine(l), ""}))
+		l = cleanLogLine(l)
+		out = append(out, lineOf(w, nc, seg{l, logKindCode(logLineKind(l))}))
 	}
 	for len(out) < n {
 		out = append(out, "")

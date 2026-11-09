@@ -160,6 +160,10 @@ func runNew(dir, hostArg, confFlag, errFlag, userFlag string, d runDeps) int {
 	for _, m := range conf.Warnings {
 		fmt.Fprintf(d.err, "경고: %s\n", m)
 	}
+	if err := remoteConfErr(conf); err != nil {
+		fmt.Fprintf(d.err, "오류: %v\n", err)
+		return 2
+	}
 	_, errPath, err := loadErrList(errFlag)
 	if err != nil {
 		fmt.Fprintf(d.err, "오류: %v\n", err)

@@ -1210,7 +1210,11 @@ func loadRunConf(p string) (config, error) {
 	if err != nil {
 		return config{}, fmt.Errorf("설정 파일을 읽을 수 없습니다: %v", err)
 	}
-	return relToConf(parseConf(string(b)), p), nil
+	c := relToConf(parseConf(string(b)), p)
+	if err := remoteConfErr(c); err != nil {
+		return config{}, err
+	}
+	return c, nil
 }
 
 // runWorker 는 `new_setup -run-worker <상태폴더>` 진입점. stdout·stderr 는 worker.log 로 이어져 있다.
@@ -1275,8 +1279,8 @@ func runWorker(dir string) int {
 			w.logf("경고: 설정 파일을 다시 읽지 못해 이전 값을 씁니다: %v", err)
 			return
 		}
-		if c.StressTest != w.conf.StressTest || c.StressTestConf != w.conf.StressTestConf {
-			w.logf("설정 파일 다시 읽음: STRESS_TEST=%s STRESS_TEST_CONF=%s", c.StressTest, c.StressTestConf)
+		if c.StressTest != w.conf.StressTest || c.StressTestConf != w.conf.StressTestConf || c.StressRemote != w.conf.StressRemote {
+			w.logf("설정 파일 다시 읽음: STRESS_TEST=%s STRESS_TEST_CONF=%s STRESS_REMOTE=%s", c.StressTest, c.StressTestConf, c.StressRemote)
 		}
 		ex.conf, w.conf = c, c
 	}
