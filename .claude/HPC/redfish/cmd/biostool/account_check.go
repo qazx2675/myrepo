@@ -355,7 +355,7 @@ func writeAcctHostList(dir, name string, hs []*hostCheck) (string, error) {
 	lines := []string{"# 대상(user.txt 원문)\t# 호스트이름 IP"}
 	for _, h := range hs {
 		t := h.Target
-		lines = append(lines, fmt.Sprintf("%s\t# %s %s", sanitizeDetail(t.Input), orDefault(sanitizeDetail(t.Hostname), "-"), orDefault(sanitizeDetail(t.IP), "-")))
+		lines = append(lines, fmt.Sprintf("%s\t# %s %s", sanitizeDetail(t.ListLine()), orDefault(sanitizeDetail(t.Hostname), "-"), orDefault(sanitizeDetail(t.IP), "-")))
 	}
 	p := filepath.Join(dir, name)
 	return p, writeLines(p, lines)

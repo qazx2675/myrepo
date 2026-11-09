@@ -103,7 +103,7 @@ bash encrypt.sh
 cp user.txt.example user.txt
 vi user.txt
 
-# (all_bios_check.sh 용) 정상 설정값을 가진 대표(기준) 호스트를 한 줄에 hostname 하나씩. 모델은 BMC 에서 자동 조회
+# (all_bios_check.sh 용) 정상 설정값을 가진 대표(기준) 호스트를 한 줄에 hostname 하나씩. 모델은 BMC 에서 자동 조회. 태그를 쓰면 "hostname 태그"
 cp diff.txt.example diff.txt
 vi diff.txt
 
@@ -190,6 +190,15 @@ bash bios.sh -plain -profile VM -ref-json <파일이름>.json
 
 # 기준 3: diff.txt (모델별 기준 호스트 목록)
 bash bios.sh -plain -profile VM -diff diff.txt
+
+# 호스트에 태그를 붙여 점검한다: user.txt 를 "호스트명 태그" 로 적어 두면(예: 192.168.1.1 asdf) 결과·CSV 가 벤더와 상관없이 태그끼리 묶인다
+bash bios.sh -profile VM -user user.txt
+
+# 태그를 붙인 전체비교: diff.txt 도 "호스트명 태그" 로 적어 두면 같은 태그의 기준하고만 비교한다 (기준 호스트 diff.txt 의 두 번째 칸 = 태그)
+bash bios.sh -plain -profile VM -user user.txt -diff diff.txt
+
+# 같은 방식으로 목록 파일 전체비교 (user.txt 에 태그가 하나라도 있으면 diff.txt 의 두 번째 칸을 태그로 읽는다)
+bash all_bios_check.sh -user user.txt -diff diff.txt
 
 # 전체비교에서 제외할 속성 목록 파일을 직접 지정한다 (없으면 내장 기본 목록. bios.conf 의 exclude_attrs 는 항상 합쳐서 적용)
 bash bios.sh -plain -profile VM -ref <비교서버 hostname> -ignore <제외속성 파일>

@@ -495,36 +495,41 @@ func (f *biosFlow) compareStep(again bool) bool {
 // 전체 비교 결과(f.cmp)·설정 계획은 건드리지 않는다 (그 대상은 계속 NO_REFERENCE). 안내 문구를 돌려줍니다 (안 물었거나 N 이면 "").
 // r 로 기준을 다시 고를 때마다 다시 묻는다. -auto/-auto-check 는 이 흐름을 지나지 않으므로 묻지 않는다.
 func (f *biosFlow) xmodelStep(cmp *compareResult) string {
-	p := xmodelPlanFor(cmp, f.u.Snaps)
-	if p == nil {
-		return ""
-	}
-	f.wait("xmodel")
-	if f.ui.Ask(p.Question()) != TUIYes {
-		return ""
-	}
+	// 태그 모드면 기준이 1대인 태그마다 따로 묻는다 (일반은 1건).
 	prot := protectFor(f.rc.Conf)
 	var parts []string
-	f.ui.Progress("CSV 저장 (모델이 다른 비교)", func(j *TUIJob) error {
-		for _, g := range p.Groups {
-			select {
-			case <-j.Canceled(): // Ctrl+X: 남은 파일은 쓰지 않음
-				return nil
-			default:
-			}
-			c := buildXModel(p.B, g, f.u.Ignore, prot)
-			path := filepath.Join(f.u.Check.Dir, c.FileName())
-			if err := writeCSVFile(path, c.Rows(p.BHost)); err != nil {
-				f.warns = append(f.warns, err.Error())
-				continue
-			}
-			if !inList(f.csvs, path) {
-				f.csvs = append(f.csvs, path)
-			}
-			parts = append(parts, fmt.Sprintf("모델이 다른 비교 (%s %d대 ↔ %s): %s → %s", c.AName, len(g), c.BName, c.Summary(), path))
+	for _, p := range xmodelPlansFor(cmp, f.u.Snaps) {
+		f.wait("xmodel")
+		if f.ui.Ask(p.Question()) != TUIYes {
+			continue
 		}
-		return nil
-	})
+		p := p
+		f.ui.Progress("CSV 저장 (모델이 다른 비교)", func(j *TUIJob) error {
+			for _, g := range p.Groups {
+				select {
+				case <-j.Canceled(): // Ctrl+X: 남은 파일은 쓰지 않음
+					return nil
+				default:
+				}
+				c := buildXModel(p.B, g, f.u.Ignore, prot)
+				c.Tag = p.Tag
+				path := filepath.Join(f.u.Check.Dir, c.FileName())
+				if err := writeCSVFile(path, c.Rows(p.BHost)); err != nil {
+					f.warns = append(f.warns, err.Error())
+					continue
+				}
+				if !inList(f.csvs, path) {
+					f.csvs = append(f.csvs, path)
+				}
+				pre := ""
+				if p.Tag != "" {
+					pre = "[태그 " + p.Tag + "] "
+				}
+				parts = append(parts, fmt.Sprintf("%s모델이 다른 비교 (%s %d대 ↔ %s): %s → %s", pre, c.AName, len(g), c.BName, c.Summary(), path))
+			}
+			return nil
+		})
+	}
 	return strings.Join(parts, " / ")
 }
 
@@ -555,11 +560,21 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 		return compareRef{}, false
 	case i == 0:
 		f.wait("ref-host")
-		hs, ok := f.ui.InputLines("비교서버 hostname (한 줄에 하나 또는 공백 구분, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")")
+		// 태그 모드(대상에 태그가 있음)면 한 줄이 "hostname 태그" 라 공백으로 쪼개지 않는다 (compareRefs 가 줄마다 parseRefList).
+		tagMode := f.u.tagMode()
+		prompt := "비교서버 hostname (한 줄에 하나 또는 공백 구분, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
+		if tagMode {
+			prompt = "비교서버 (한 줄에 \"hostname 태그\" 하나, 대상과 같은 태그끼리만 비교, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
+		}
+		hs, ok := f.ui.InputLines(prompt)
 		if !ok {
 			return compareRef{}, false
 		}
-		if h := splitTargets(strings.Join(hs, "\n")); len(h) > 0 {
+		h := splitTargets(strings.Join(hs, "\n"))
+		if tagMode {
+			h = parseList(strings.NewReplacer(",", "\n", ";", "\n").Replace(strings.Join(hs, "\n")))
+		}
+		if len(h) > 0 {
 			return compareRef{Hosts: h}, true
 		}
 		return compareRef{DiffFile: flowDiffFile}, true

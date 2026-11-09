@@ -201,6 +201,8 @@ type compareResult struct {
 	// REFERENCE·REF_UNREACHABLE·REF_CANCELED·접속 오류 상태. 설정 관문은 (*allHost).sameAttrNames().
 	Hosts []*allHost
 	Lines []ResultLine // compareLines (대상 순서, 대상 안에서는 속성 이름순)
+	// TagMode 는 태그 모드(대상에 태그가 있고 기준이 JSON 이 아님)로 기준을 골랐는지입니다 (xmodel 이 태그별로 묻는 데 씀).
+	TagMode bool
 	// RefCanceled 는 취소(Ctrl+X)로 조회하지 않은 비교서버 수입니다. 그 기준이 필요한 대상은 REF_CANCELED (N/A, 설정 제외).
 	RefCanceled int
 }
@@ -224,12 +226,15 @@ func (u *unifiedRun) CompareCancel(ref compareRef, st progStage, cancel <-chan s
 	if err != nil {
 		return nil, err
 	}
-	env := &allEnv{ign: u.Ignore, refByID: map[string]*allRef{}, byKey: map[string][]*allRef{}}
+	// 태그 모드(대상 중 태그가 있는 것이 있음)면 같은 태그의 기준만 쓴다. refs JSON 은 모두에게 쓰는 단일 기준이라
+	// 태그를 따지지 않는다 (JSON 에는 태그가 없고, 태그 있는 대상도 그 기준과 비교할 수 있어야 하므로).
+	tagMode := u.tagMode() && ref.JSONPath == ""
+	env := &allEnv{ign: u.Ignore, refByID: map[string]*allRef{}, byKey: map[string][]*allRef{}, tagMode: tagMode, refLabel: refLabelFor(len(ref.Hosts) > 0)}
 	for _, r := range refs {
 		env.refByID[r.ID] = r
 	}
 	env.indexRefs(refs)
-	res := &compareResult{Ref: ref, Label: label, Ignore: u.Ignore, Refs: refs}
+	res := &compareResult{Ref: ref, Label: label, Ignore: u.Ignore, Refs: refs, TagMode: tagMode}
 	for _, r := range refs {
 		if r.Snap != nil && r.Snap.Status == StatusCanceled {
 			res.RefCanceled++
@@ -237,13 +242,23 @@ func (u *unifiedRun) CompareCancel(ref compareRef, st progStage, cancel <-chan s
 	}
 	for _, s := range u.Snaps {
 		h := env.finish(&allHost{Target: s.Target, Snap: s})
-		if h.Status == StatusNoReference && ref.DiffFile == "" {
+		if h.Status == StatusNoReference && ref.DiffFile == "" && !tagMode { // 태그 모드의 상세(태그 기준 없음·모델 다름)는 그대로 둔다
 			h.Detail = "기준(" + label + ")과 모델이 다름 (대상 모델 키 " + s.Key + ")"
 		}
 		res.Hosts = append(res.Hosts, h)
 		res.Lines = append(res.Lines, compareLines(h, u.Ignore)...)
 	}
 	return res, nil
+}
+
+// tagMode 는 이번 실행의 대상 중 태그가 있는 것이 하나라도 있는지입니다.
+func (u *unifiedRun) tagMode() bool {
+	for _, s := range u.Snaps {
+		if s.Target.Tag != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // compareRefs 는 기준을 준비합니다: JSON 은 파일에서, 비교서버·diff.txt 는 대상 스냅샷을 재사용하거나 새로 읽습니다.
@@ -262,7 +277,16 @@ func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan str
 	var entries []refEntry
 	var label string
 	if len(ref.Hosts) > 0 {
-		entries = parseRefList(strings.NewReplacer(",", "\n", ";", "\n", " ", "\n", "\t", "\n").Replace(strings.Join(ref.Hosts, "\n")))
+		// 태그 모드에서는 한 줄이 "hostname 태그" 이므로 공백·탭으로 쪼개지 않는다 (쉼표·세미콜론만 줄바꿈으로).
+		// 태그 모드가 아니면 공백·탭도 구분자라 둘째 칸(태그)을 쓸 수 없다.
+		rep := strings.NewReplacer(",", "\n", ";", "\n", " ", "\n", "\t", "\n")
+		if u.tagMode() {
+			rep = strings.NewReplacer(",", "\n", ";", "\n")
+		}
+		var perr error
+		if entries, perr = parseRefList(rep.Replace(strings.Join(ref.Hosts, "\n"))); perr != nil {
+			return nil, "", perr
+		}
 		if len(entries) == 0 {
 			return nil, "", fmt.Errorf("비교서버 hostname 이 없습니다")
 		}
@@ -277,6 +301,9 @@ func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan str
 			return nil, "", err
 		}
 		label = ref.DiffFile
+	}
+	if err := refTagCheck(entries, u.tagMode()); err != nil {
+		return nil, "", err
 	}
 	refs, err := newAllRefs(entries, u.hostsPath)
 	if err != nil {

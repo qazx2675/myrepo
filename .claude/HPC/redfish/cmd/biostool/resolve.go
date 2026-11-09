@@ -22,7 +22,7 @@ const StatusNoHostsEntry = "NO_HOSTS_ENTRY"
 // 이때 Hostname 에도 ":포트" 가 붙어 같은 IP 의 다른 포트 대상이 구분됩니다 (mock 여러 대 시험용).
 // 포트가 없으면 Port 는 비고 접속은 기본 443 입니다.
 type Target struct {
-	Input    string // user.txt 에 적힌 원문
+	Input    string // user.txt 에 적힌 호스트 칸 (태그 제외)
 	Hostname string
 	IP       string // 접속 주소 (포트·대괄호 없음)
 	Port     string // 입력에 포트가 있을 때만
@@ -30,6 +30,16 @@ type Target struct {
 	// XML 은 bios 에서 Redfish 대신 XML API(UCSM/CIMC, 읽기 전용)로 점검할 대상입니다 (classifyTargets 가 정함).
 	// XML 대상은 전체비교·설정에서 빠집니다.
 	XML bool
+	// Tag 는 user.txt 2번째 칸의 분류 태그입니다 (같은 태그 = 한 그룹). 없으면 빈 값.
+	Tag string
+}
+
+// ListLine 은 대상 목록 파일(retry.txt 등)에 쓰는 한 줄입니다: 태그가 없으면 Input, 있으면 "Input 태그".
+func (t Target) ListLine() string {
+	if t.Tag == "" {
+		return t.Input
+	}
+	return t.Input + " " + t.Tag
 }
 
 // BaseURL 은 접속 기준 URL(`https://ip[:port]`)을 만듭니다. IPv6 는 대괄호로 감쌉니다.
@@ -77,7 +87,9 @@ func validPort(p string) bool {
 }
 
 // parseList 는 대상 목록 텍스트를 해석합니다.
-// 빈 줄과 # 주석은 무시하고 앞뒤 공백을 제거하며, 중복은 처음 것만 남깁니다.
+// 빈 줄과 # 주석은 무시하고 앞뒤 공백을 제거합니다. 한 줄은 "호스트" 또는 "호스트 태그"(공백·탭 구분)이며,
+// 중복은 첫 칸(호스트) 기준으로 처음 줄만 남깁니다. 남긴 줄은 "호스트" / "호스트 태그" 한 가지 모양으로 정리합니다.
+// 칸이 3개 이상인 줄은 그대로 남겨 resolveTargets 가 오류로 알리게 합니다.
 func parseList(text string) []string {
 	text = strings.TrimPrefix(text, "\ufeff")
 	var out []string
@@ -88,10 +100,17 @@ func parseList(text string) []string {
 			line = line[:i]
 		}
 		line = strings.TrimSpace(line) // CRLF 의 \r 도 함께 제거
-		if line == "" || seen[line] {
+		if line == "" {
 			continue
 		}
-		seen[line] = true
+		f := strings.Fields(line)
+		if len(f) == 2 {
+			line = f[0] + " " + f[1]
+		}
+		if seen[f[0]] {
+			continue
+		}
+		seen[f[0]] = true
 		out = append(out, line)
 	}
 	return out
@@ -189,9 +208,20 @@ func parseHosts(text string) map[string]string {
 func resolveTargets(inputs []string, hostsPath string) ([]Target, error) {
 	var hosts map[string]string
 	out := make([]Target, 0, len(inputs))
-	for _, in := range inputs {
+	for _, line := range inputs {
+		f := strings.Fields(line)
+		if len(f) == 0 {
+			continue
+		}
+		if len(f) > 2 {
+			return nil, fmt.Errorf("대상 목록 줄 %q: 칸이 3개 이상입니다 (hostname 또는 \"hostname 태그\" 만 허용)", line)
+		}
+		in, tag := f[0], ""
+		if len(f) == 2 {
+			tag = f[1]
+		}
 		if net.ParseIP(in) != nil {
-			out = append(out, Target{Input: in, Hostname: in, IP: in})
+			out = append(out, Target{Input: in, Hostname: in, IP: in, Tag: tag})
 			continue
 		}
 		name, port := in, ""
@@ -199,7 +229,7 @@ func resolveTargets(inputs []string, hostsPath string) ([]Target, error) {
 			name, port = h, p
 		}
 		if net.ParseIP(name) != nil {
-			out = append(out, Target{Input: in, Hostname: in, IP: name, Port: port})
+			out = append(out, Target{Input: in, Hostname: in, IP: name, Port: port, Tag: tag})
 			continue
 		}
 		if hosts == nil {
@@ -216,7 +246,7 @@ func resolveTargets(inputs []string, hostsPath string) ([]Target, error) {
 		} else {
 			mgmt = name + "-m"
 		}
-		t := Target{Input: in, Hostname: base, Port: port}
+		t := Target{Input: in, Hostname: base, Port: port, Tag: tag}
 		if port != "" {
 			t.Hostname = base + ":" + port
 		}
@@ -244,11 +274,11 @@ func hasSuffixFold(s, suffix string) bool {
 func classifyTargets(conf *Config, rfInputs, xmlInputs []string, hostsPath string) ([]Target, error) {
 	inXML := map[string]bool{}
 	for _, in := range xmlInputs {
-		inXML[in] = true
+		inXML[listHost(in)] = true
 	}
 	var rfIn []string
 	for _, in := range rfInputs {
-		if !inXML[in] {
+		if !inXML[listHost(in)] {
 			rfIn = append(rfIn, in)
 		}
 	}
@@ -295,4 +325,12 @@ func hasXMLPrefix(conf *Config, name string) bool {
 		}
 	}
 	return false
+}
+
+// listHost 는 대상 목록 줄("호스트" 또는 "호스트 태그")의 호스트 칸입니다.
+func listHost(line string) string {
+	if f := strings.Fields(line); len(f) > 0 {
+		return f[0]
+	}
+	return line
 }

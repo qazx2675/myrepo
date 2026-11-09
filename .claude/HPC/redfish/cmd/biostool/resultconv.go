@@ -11,7 +11,7 @@ func profileLines(hosts []*hostCheck) []ResultLine {
 	var out []ResultLine
 	for _, h := range hosts {
 		base := ResultLine{
-			Kind: KindProfile, Host: h.Target.Hostname, IP: dash(h.Target.IP),
+			Kind: KindProfile, Host: h.Target.Hostname, IP: dash(h.Target.IP), HostTag: h.Target.Tag,
 			Vendor: "-", Model: "-", BiosVersion: "-", MgmtModel: dash(h.MgmtModel), MgmtVersion: dash(h.MgmtVersion),
 		}
 		if h.Info != nil {
@@ -62,7 +62,7 @@ func withNote(status, note string) string {
 // allcheck 는 Manager 를 읽지 않아 "-" 입니다.
 func compareLines(h *allHost, ign *ignoreSet) []ResultLine {
 	base := ResultLine{
-		Kind: KindCompare, Host: h.Target.Hostname, IP: dash(h.Target.IP),
+		Kind: KindCompare, Host: h.Target.Hostname, IP: dash(h.Target.IP), HostTag: h.Target.Tag,
 		Vendor: "-", Model: "-", BiosVersion: "-", MgmtModel: "-", MgmtVersion: "-",
 	}
 	if s := h.Snap; s != nil {

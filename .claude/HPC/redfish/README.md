@@ -71,7 +71,7 @@ mkdir -p refs                        # (선택) 전체비교 기준으로 고를
 `bash bios.sh` 로 쓸 때는 대상을 TUI 화면에서 직접 입력(붙여넣기)해도 되므로 `user.txt` 가 꼭 필요하지는 않습니다(`-plain`·`-user` 를 줄 때만 필요). `bios.conf` 에는 점검에서 뺄 속성(`exclude_attrs`), 전체비교 차이를 수정 대상에 넣을지(`allcheck_set`), 절대 바꾸지 않을 속성 추가(`protect_attrs`), 기준 JSON 폴더(`refs_dir`), 비대화형 기본 프로파일(`auto_profile`) 키가 있습니다(3.3절).
 
 - **BMC 비밀번호는 평문으로 디스크·명령행·로그에 남지 않습니다.** `encrypt.sh` 가 화면에 보이지 않게 두 번 입력받아 파이프(표준입력)로만 넘기고, AES-256-GCM 으로 암호화한 `pass.enc` 와 키 `key.bin` 으로 나눠 보관합니다. 둘은 짝이므로 함께 보관하고 **git 에 올리지 마십시오**.
-- `user.txt` 한 줄에 대상 하나: `IP` / `hostname-m` / `hostname`(+ 선택적으로 `:포트`). `hostname` 은 `/etc/hosts` 에서 `hostname-m` 의 IP 를, `hostname-m` 은 그 이름의 IP 를 찾습니다(`/etc/hosts` 형식은 `IP  hostname-m`, 한 줄에 별칭이 여럿이어도 됨). 빈 줄·`#` 주석은 무시하고 중복은 한 번만 처리합니다.
+- `user.txt` 한 줄에 대상 하나: `IP` / `hostname-m` / `hostname`(+ 선택적으로 `:포트`). `hostname` 은 `/etc/hosts` 에서 `hostname-m` 의 IP 를, `hostname-m` 은 그 이름의 IP 를 찾습니다(`/etc/hosts` 형식은 `IP  hostname-m`, 한 줄에 별칭이 여럿이어도 됨). 빈 줄·`#` 주석은 무시하고 중복은 한 번만 처리합니다. `hostname` 뒤에 공백/탭 + 한 단어를 적으면 호스트 태그입니다(2.0절 “호스트 태그”).
 - `bios.conf`, `pass.enc`, `key.bin`, `user.txt`, `diff.txt`, `ignore_attrs.txt`, `results/`, `dumps/` 는 실제 호스트 이름·계정 정보가 들어가므로 `.gitignore` 로 커밋이 막혀 있습니다(예시 파일 `*.example` 만 저장소에 있습니다).
 
 ### 1.4 새 버전으로 업데이트 — `update.sh`
@@ -258,6 +258,20 @@ bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>
   - 판정: `같음`(기준과 모든 대상 값이 같음) / `다름`(한 대라도 값이 다르거나 없음) / `<A모델>에만` / `<B모델>에만`
   - 내장 보호 목록(IQN·IP·ServerName·BootMode·SecureBoot·RAID·PXE·NIC 등)·`protect_attrs`·`ignore_attrs.txt`·`exclude_attrs` 항목은 빼고 개수만 `(제외 N)` 으로 셉니다.
   - 이 결과는 **설정에 쓰지 않습니다**(모델이 다른 대상은 계속 설정 대상이 아님).
+
+**호스트 태그 (`user.txt` 두 번째 칸) — 벤더·모델과 상관없이 내가 정한 묶음으로 보기·비교하기**
+
+(아래 “태그”는 `[OK]`·`[difference]`·`[N/A]` 판정 태그가 아니라, 대상에 붙이는 묶음 이름입니다.)
+
+- `user.txt` 한 줄을 `호스트명` 또는 `호스트명 태그`(공백 또는 탭 하나)로 적습니다. 예) `192.168.1.1 asdf`. 태그는 한 단어(글자 제한 없음)이고 칸이 3개 이상이면 오류입니다. 같은 호스트가 또 나오면 처음 줄이 이기며, `-targets`(`trs`·`xml.sh` 등)와 `-ref` 에는 태그가 없습니다.
+- **묶음**: 태그가 있는 호스트는 벤더·iLO/iDRAC 모델과 상관없이 **태그끼리만** 묶이고(합치지 않음) 결과 화면에서 맨 위 탭 **“태그”** 아래 태그별 하위 탭으로 나옵니다. 태그가 없는 호스트는 기존처럼 벤더 → BMC 모델 탭입니다.
+- **CSV**: 태그별로 `*_wide_hosts_tag_<태그>.csv`·`*_wide_attrs_tag_<태그>.csv`(한글은 그대로, 파일명에 못 쓰는 글자는 `_`, 이름이 겹치면 `_2`). `summary`·`long` CSV 는 태그가 하나라도 있을 때만 끝에 `호스트태그` 열이 생깁니다(태그 없는 실행은 이전과 같은 열).
+- **전체비교(태그 모드 = 대상 중 태그가 하나라도 있을 때)**: `diff.txt` 의 두 번째 칸이 **태그**입니다(`호스트명 태그`). 태그가 있는 대상은 **같은 태그의 기준**만, 태그가 없는 대상은 태그 없는 기준만 쓰며 모델 키는 여전히 같아야 합니다(같은 모델·같은 태그 기준이 여럿이면 BIOS 버전이 같은 쪽 우선은 그대로). 기준이 없으면 `NO_REFERENCE`(N/A, 설정 대상 제외)이고 특이사항에 `태그 <태그> 의 기준이 <diff.txt|비교서버 입력> 에 없음` 또는 `태그 <태그> 기준과 모델이 다름 (대상 모델 키 <키>)` 가 남습니다. 태그 모드에서 `diff.txt` 줄에 칸이 3개 이상이면 오류입니다.
+- **태그 모드가 아니면** `diff.txt` 의 두 번째 칸 이후는 무시합니다(옛 모델 메모가 남아 있어도 됩니다). 그 모델 메모와 `DIFF_TXT_MODEL_MISMATCH` 경고는 없어졌습니다.
+- **비교서버 직접 입력**: TUI 에서 태그 모드로 직접 입력하면 한 줄에 `호스트명 태그` 하나이고(쉼표·세미콜론도 항목 구분), `-ref` 는 태그를 받지 않습니다. `refs` JSON(`-ref-json`)은 기준 한 대가 모든 대상에 쓰이며 태그는 무시합니다.
+- **모델이 다른 대상끼리 비교**: 태그 모드에서는 태그마다 따로 묻습니다(그 태그의 읽을 수 있는 기준이 정확히 1대일 때). 질문 앞에 `[태그 X]` 가 붙고 파일은 `compare_xmodel_<태그>_<A모델>_vs_<B모델>.csv` 입니다. `-auto`/`-auto-check` 는 묻지 않습니다.
+- **재시도**: `retry.txt`·`merged_retry.txt` 도 태그를 유지해 그대로 다시 `-user` 로 쓸 수 있습니다.
+- 적용 범위: TUI, `bash bios.sh` 평문·CLI, `all_bios_check.sh`(`-diff`), `-auto`/`-auto-check` 모두 같습니다.
 
 **수정 규칙** (확인 질문 1~3개 — 모두 통과해야 씁니다)
 
@@ -547,7 +561,7 @@ bash all_bios_check.sh -diff-max 10          # 나머지 인자는 biostool allc
 - 비교서버와 모델이 다른 대상은 비교하지 않고 `NO_REFERENCE` 로 알립니다(같은 모델끼리만 비교).
 - 리포트 전체는 화면과 같은 내용이 `results/<일시>_all/report.txt` 로도 저장됩니다(상한 없음, 색 없음).
 
-- `diff.txt` 에는 정상 설정값을 가진 대표 호스트의 **hostname 만** 한 줄에 하나씩 적습니다(모델은 BMC 에서 자동 조회). 모델마다 한 대 이상 적으십시오.
+- `diff.txt` 에는 정상 설정값을 가진 대표 호스트의 **hostname 만** 한 줄에 하나씩 적습니다(모델은 BMC 에서 자동 조회). 모델마다 한 대 이상 적으십시오. `user.txt` 에 태그를 쓴다면 `호스트명 태그` 로 적어 같은 태그끼리 비교합니다(2.0절 “호스트 태그”).
 - 기준·대상 모두 BMC 가 보고한 실제 모델을 정규화(`ProLiant DL360 Gen11` = `DL360Gen11`)해 **같은 모델끼리** 비교합니다.
 - 호스트마다 값이 달라야 하는 속성(서비스태그·부팅순서·MAC 등)은 `ignore_attrs.txt`(없으면 내장 기본 목록)로 비교에서 뺍니다.
 - BIOS 버전이 달라도 비교는 하고, 특이사항(`BIOS_VER_DIFF`)으로 따로 보여 줍니다.
@@ -1097,7 +1111,7 @@ $ bin/biostool account change
 | `-list-max <N>` | check 100 / allcheck 20 / ucsm 20 / account 20 | check allcheck ucsm account | check: `[OK]` 호스트 이름을 나열할 최대 대수. allcheck: 차이 상세·특이사항·오류에 나열할 호스트 수. ucsm: FAIL·UNVERIFIED 서버, MAPPING_MISSING·UNSUPPORTED 묶음을 나열할 최대 수 |
 | `-user-xml <파일>` | (없음) | bios, check, allcheck | XML API(UCSM/CIMC)로만 점검할 대상 목록 (IP·이름, 점검만 — 전체비교·설정 제외). 이름 대상은 bios.conf `xml_host_prefix`(기본 c)로도 XML 로 갑니다 |
 | `-fail-max <N>` | `200` | check | `[FAIL 상세]`·`[설정 불가]`·`[적용 안 됨]` 에 보여 줄 최대 줄 수(넘으면 `fail.tsv`·`apply_result.tsv` 안내) |
-| `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 모델을 적어도 확인용) |
+| `-diff <파일>` | `diff.txt` | allcheck | 기준(정상) 호스트 목록. 한 줄에 hostname(뒤에 태그를 적을 수 있음) |
 | `-ignore <파일>` | `ignore_attrs.txt` | allcheck | 비교 제외 속성 목록. 파일이 없으면 내장 기본 목록, `-ignore` 로 직접 준 파일이 없으면 오류 |
 | `-diff-max <N>` | `30` | allcheck | 호스트당 터미널에 보일 차이 속성 수(넘으면 `all_diff.tsv` 안내) |
 | `-conf`·`-user`·`-hosts`·`-profile`·`-from-dump` | 위와 같음 | bios | `bios` 에서도 같은 뜻. `-profile` 은 TUI 에서는 생략하면 화면에서 고르고, `-plain`·`-auto` 에서는 필수(`-auto` 는 `auto_profile` 로 대체 가능). `-user` 를 주면 TUI 가 대상을 묻지 않고, `-profile` 을 주면 프로파일도 묻지 않음 |
@@ -1215,8 +1229,8 @@ CISCO	UCS B200 M4	hyper_threading	biosVfIntelHyperThreadingTech.vpIntelHyperThre
 
 | 파일 | 형식 |
 |---|---|
-| `user.txt` | 한 줄에 대상 하나(`IP` / `이름-m` / `이름`, 뒤에 `:포트` 가능). `#` 주석·빈 줄 무시, 중복은 처음 것만 |
-| `diff.txt` | 한 줄에 기준 호스트 하나(`user.txt` 와 같은 이름 해석). 뒤에 공백/탭 뒤로 모델을 적어도 되지만 확인용(실제 모델과 다르면 `DIFF_TXT_MODEL_MISMATCH` 경고 후 실제 모델로 분류) |
+| `user.txt` | 한 줄에 대상 하나(`IP` / `이름-m` / `이름`, 뒤에 `:포트` 가능, 뒤에 공백/탭 + 태그 한 단어를 선택으로 적을 수 있음). `#` 주석·빈 줄 무시, 중복은 처음 것만 |
+| `diff.txt` | 한 줄에 기준 호스트 하나(`user.txt` 와 같은 이름 해석). 두 번째 칸은 태그(`user.txt` 에 태그가 있을 때만 쓰고 같은 태그의 대상과만 비교, 없으면 무시) |
 | `ignore_attrs.txt` | 한 줄에 패턴 하나, `#` 주석, 대소문자 무시, `*` 만 와일드카드. 파일이 있으면 그 파일만 씀(`allcheck`). `bios` 는 이 목록(없으면 내장 기본 목록)과 `bios.conf` 의 `exclude_attrs` 를 합쳐 씀 |
 | `refs/*.json` | `bios_export.sh`(`allcheck -export-attrs`)가 만든 호스트별 BIOS 속성 JSON(호스트·벤더·모델·BIOS 버전·속성 전체). 전체비교 기준으로 고르며 `refs_dir` 에 둠 |
 | `targets.txt` (`-auto`) | `user.txt` 와 같은 형식(한 줄에 대상 하나). 호출한 폴더 기준 경로 |
@@ -1294,7 +1308,7 @@ CISCO	UCS B200 M4	hyper_threading	biosVfIntelHyperThreadingTech.vpIntelHyperThre
 
 - `-ref <hostname>`(비교서버 직접 지정, `-diff` 와 함께 쓸 수 없음): `diff.txt` 를 읽지 않고, 리포트가 "기준" 대신 "비교서버" 로 표기하며 모두 같으면 `모두 동일` 한 줄을 냅니다. 화면 리포트 전체는 `report.txt` 로도 저장됩니다.
 - 속성 단위(`all_diff.tsv`): `DIFF`(값 다름), `ONLY_REF`(기준에만 존재), `ONLY_HOST`(대상에만 존재; BIOS 버전이 다르면 흔함).
-- 특이사항(`summary.tsv` 의 `notes`): `BIOS_VER_DIFF`(대상 버전 ≠ 기준 버전, 비교는 그대로 진행), `MULTI_REF`(같은 모델 기준이 여럿: BIOS 버전이 같은 쪽, 없으면 `diff.txt` 순서의 첫 기준), `DIFF_TXT_MODEL_MISMATCH`(`diff.txt` 의 모델 칸이 실제와 다름).
+- 특이사항(`summary.tsv` 의 `notes`): `BIOS_VER_DIFF`(대상 버전 ≠ 기준 버전, 비교는 그대로 진행), `MULTI_REF`(같은 모델 기준이 여럿: BIOS 버전이 같은 쪽, 없으면 `diff.txt` 순서의 첫 기준). 태그 모드의 `NO_REFERENCE` 는 `태그 <태그> 의 기준이 … 에 없음` / `태그 <태그> 기준과 모델이 다름` 을 남깁니다.
 
 #### 통합 점검(`bios`) — 화면·CSV 의 태그 3종
 

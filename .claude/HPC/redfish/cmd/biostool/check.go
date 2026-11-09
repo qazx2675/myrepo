@@ -1004,7 +1004,7 @@ func writeResultFiles(r *checkRun) error {
 		all = append(all, rows...)
 		if h.Status != "" {
 			if isRetryStatus(h.Status) {
-				retry = append(retry, h.Target.Input)
+				retry = append(retry, h.Target.ListLine())
 			}
 			continue
 		}

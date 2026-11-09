@@ -127,7 +127,7 @@ flowchart TD
     L --> R1["1단계: 기준 호스트 읽기<br/>호스트당 GET 4번: Root · Systems · System · Bios<br/>모델은 BMC 가 보고한 값을 정규화한 키"]
     R1 --> R2["2단계: 대상 호스트 읽기<br/>AUTH_FAIL 예산은 1단계와 공유, 읽는 즉시 비교하고 값은 버림"]
     R2 --> C{"대상과 같은 모델의<br/>기준 호스트가 있는가"}
-    C -->|"diff.txt 에 없음"| NR["NO_REFERENCE"]
+    C -->|"diff.txt 에 없음 (태그 모드면 같은 태그 기준만 후보)"| NR["NO_REFERENCE"]
     C -->|"기준을 읽지 못함"| RU["REF_UNREACHABLE<br/>retry.txt 대상"]
     C -->|"기준 자신뿐"| RF["REFERENCE<br/>비교 안 함"]
     C -->|"있음"| CP["기준이 여럿이면 BIOS 버전이 같은 쪽 선택<br/>Attributes 전체 비교 (제외 속성 뺌)<br/>SAME 또는 DIFF, 속성 단위는 DIFF · ONLY_REF · ONLY_HOST<br/>BIOS 버전이 다르면 BIOS_VER_DIFF 특이사항"]
@@ -214,7 +214,7 @@ flowchart TD
     E -->|"Tab (처음)"| R{"기준 선택<br/>-ref · -ref-json · -diff 를 줬으면 묻지 않음<br/>r 키로 다시 고를 때는 항상 메뉴"}
     R -->|"비교서버 hostname<br/>(비우면 diff.txt)"| CP
     R -->|"refs 폴더의 JSON<br/>(bios_export 결과)"| CP
-    R -->|"diff.txt (모델별 기준)"| CP
+    R -->|"diff.txt (모델별 기준, 태그 모드면 같은 태그끼리)"| CP
     R -->|"취소"| D
     CP["전체비교 (대상에는 다시 접속하지 않음)<br/>비교서버만 추가 조회 · 같은 모델끼리만 비교<br/>BIOS 버전이 달라도 속성 이름 목록이 같으면 허용<br/>기준 서버 자신은 자기 값으로 OK (REFERENCE)<br/>제외 = ignore_attrs.txt + exclude_attrs<br/>compare_ CSV 저장"] --> CT["[전체 설정 비교] 화면<br/>Tab 으로 두 화면을 오감 (화면마다 위치·필터 유지)"]
     CT -->|"Tab"| D

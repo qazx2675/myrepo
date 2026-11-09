@@ -910,14 +910,18 @@ func (u *TUI) frame(w, h int) []string {
 		}
 		head = append(head, tuiTabsLine(color, w, "벤더", names, u.vi, "", !u.inGroup))
 		hosts := fmt.Sprintf("호스트 %d대", len(g.Hosts))
+		sub := "관리망"
+		if g.Vendor == tagGroupVendor { // 태그 그룹: 두 번째 줄 탭은 관리망이 아니라 태그 이름
+			sub = tagGroupVendor
+		}
 		if gs := u.vgs[u.vi].Groups; len(gs) > 1 {
 			gn := make([]string, len(gs))
 			for i, x := range gs {
 				gn[i] = tuiDash(x.Name)
 			}
-			head = append(head, tuiTabsLine(color, w, "관리망", gn, u.gi, hosts, u.inGroup))
+			head = append(head, tuiTabsLine(color, w, sub, gn, u.gi, hosts, u.inGroup))
 		} else {
-			head = append(head, tuiSegLine(color, w, tuiSeg{"   관리망  ", tuiStBold}, tuiSeg{tuiDash(g.Name), ""}, tuiSeg{"   " + hosts, tuiStGray}))
+			head = append(head, tuiSegLine(color, w, tuiSeg{"   " + sub + "  ", tuiStBold}, tuiSeg{tuiDash(g.Name), ""}, tuiSeg{"   " + hosts, tuiStGray}))
 		}
 		c := u.tableWidths(w)
 		head = append(head, c.headLine)

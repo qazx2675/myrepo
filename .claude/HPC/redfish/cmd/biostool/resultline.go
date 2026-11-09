@@ -45,7 +45,14 @@ type ResultLine struct {
 	HostError   bool   // 호스트 단위 오류 줄 (접속·조회 실패)
 	RefHost     string // 비교한 기준 호스트 hostname (전체비교만. 기준 자신이면 자기 자신, 프로파일 점검은 빈 값)
 	RefIP       string // 기준 호스트 IP
+	HostTag     string // user.txt 의 그룹 태그 ("호스트 태그" 줄의 태그, 없으면 빈 값). Tag(OK/difference/N/A)와 다른 값입니다
 }
+
+// tagGroupVendor 는 태그가 있는 줄들을 모아 두는 최상위 항목(벤더 탭 자리)의 고정 이름입니다.
+const tagGroupVendor = "태그"
+
+// tagVendorKey 는 groupLines 안에서 태그 항목을 실제 벤더 이름과 구분하는 내부 키입니다.
+const tagVendorKey = "\x00tag"
 
 // tagFor 는 원래 상태명을 태그 3종으로 묶습니다. 모르는 상태(호스트 오류 등)는 N/A.
 func tagFor(status string) string {
@@ -68,11 +75,12 @@ func showValue(v string) string {
 }
 
 // LineGroup 은 TUI 탭 1개(= CSV wide 파일 1쌍)입니다: 같은 벤더 안에서 관리 컨트롤러 모델별로 나누되
-// BIOS 속성 이름 목록이 같으면 하나로 합친다.
+// BIOS 속성 이름 목록이 같으면 하나로 합친다. 태그가 있는 줄은 벤더·모델과 상관없이 태그 하나가 그룹 1개입니다
+// (Vendor = tagGroupVendor, Name = 태그).
 type LineGroup struct {
 	Vendor string
-	Name   string   // 관리 컨트롤러 모델 이름. 합쳐졌으면 "iLO 4+iLO 5" 처럼 + 로 잇는다
-	Mgmt   []string // 합쳐진 관리 컨트롤러 모델들
+	Name   string   // 관리 컨트롤러 모델 이름. 합쳐졌으면 "iLO 4+iLO 5" 처럼 + 로 잇는다. 태그 그룹이면 태그
+	Mgmt   []string // 합쳐진 관리 컨트롤러 모델들 (태그 그룹은 섞여 있는 모델들 — 참고용)
 	Hosts  []string // 입력 순서
 	Lines  []ResultLine
 }
@@ -85,7 +93,12 @@ type VendorGroups struct {
 
 // groupLines 는 줄을 벤더 → 관리 컨트롤러 그룹으로 나눕니다. 벤더·그룹 순서는 처음 나온 순서이고,
 // 같은 벤더 안에서 속성 이름 집합(호스트 오류 줄 제외)이 같은 관리 컨트롤러 모델끼리는 한 그룹으로 합친다.
+// HostTag 가 있는 줄은 이 규칙을 타지 않고 태그별 그룹 1개씩(처음 나온 순서)이 되어 하나의 최상위 항목(tagGroupVendor)
+// 아래에 모입니다. 그 항목은 벤더들과 같이 처음 나온 순서로 놓입니다.
 func groupLines(lines []ResultLine) []VendorGroups {
+	var tagGroups []LineGroup
+	tagAt := map[string]int{}
+	tagSeen := map[string]bool{} // 태그 그룹의 호스트 중복 방지: 태그 + "\x00" + 호스트
 	type mg struct {
 		mgmt  string
 		attrs map[string]bool
@@ -96,6 +109,31 @@ func groupLines(lines []ResultLine) []VendorGroups {
 	var vorder []string
 	byV := map[string][]*mg{}
 	for _, l := range lines {
+		if l.HostTag != "" {
+			if len(tagGroups) == 0 {
+				vorder = append(vorder, tagVendorKey)
+			}
+			i, ok := tagAt[l.HostTag]
+			if !ok {
+				i = len(tagGroups)
+				tagAt[l.HostTag] = i
+				tagGroups = append(tagGroups, LineGroup{Vendor: tagGroupVendor, Name: l.HostTag})
+			}
+			g := &tagGroups[i]
+			g.Lines = append(g.Lines, l)
+			if k := l.HostTag + "\x00" + l.Host; !tagSeen[k] {
+				tagSeen[k] = true
+				g.Hosts = append(g.Hosts, l.Host)
+			}
+			m, dup := l.MgmtModel, false
+			for _, x := range g.Mgmt {
+				dup = dup || x == m
+			}
+			if m != "" && !dup {
+				g.Mgmt = append(g.Mgmt, m)
+			}
+			continue
+		}
 		v := l.Vendor
 		if v == "" {
 			v = "-"
@@ -137,6 +175,10 @@ func groupLines(lines []ResultLine) []VendorGroups {
 	}
 	var out []VendorGroups
 	for _, v := range vorder {
+		if v == tagVendorKey {
+			out = append(out, VendorGroups{Vendor: tagGroupVendor, Groups: tagGroups})
+			continue
+		}
 		vg := VendorGroups{Vendor: v}
 		idx := map[string]int{} // 속성 집합 키 → vg.Groups 위치
 		for _, g := range byV[v] {

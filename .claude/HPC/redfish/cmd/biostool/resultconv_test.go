@@ -251,7 +251,7 @@ func TestAllCheckOnHostCompareLines(t *testing.T) {
 	})
 	fastCheck(t)
 	rc := checkRCFor(t, 2, "", dst, ref)
-	refs, err := newAllRefs(parseRefList(ref+"\n"), writeHosts(t, ""))
+	refs, err := newAllRefs(mustParseRefList(ref+"\n"), writeHosts(t, ""))
 	must(t, err)
 	lines := make([][]ResultLine, len(rc.Targets))
 	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: testIgnore, ResultDir: t.TempDir(), Now: checkNow,

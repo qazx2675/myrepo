@@ -386,13 +386,7 @@ func writeAllSpecial(w io.Writer, r *allRun, o allReportOpts, p painter) {
 			count[n.Code]++
 		}
 	}
-	var mismatches []*allRef
-	for _, ref := range r.Refs {
-		if len(ref.Notes) > 0 {
-			mismatches = append(mismatches, ref)
-		}
-	}
-	if len(groups) == 0 && len(mismatches) == 0 {
+	if len(groups) == 0 {
 		return
 	}
 	fmt.Fprintln(w)
@@ -431,16 +425,6 @@ func writeAllSpecial(w io.Writer, r *allRun, o allReportOpts, p painter) {
 		}
 		if tt.code == noteBiosVerDiff {
 			fmt.Fprintln(w, "    ※ BIOS 버전이 다르면 속성 목록 자체가 달라 ONLY_REF / ONLY_HOST 가 늘 수 있습니다 (버전 차이일 뿐 설정 오류가 아닐 수 있음).")
-		}
-	}
-	if len(mismatches) > 0 {
-		fmt.Fprintf(w, "  %s  diff.txt 에 적은 모델이 BMC 가 보고한 실제 모델과 다름 (실제 모델로 분류함): %d대\n", p.yellow(noteDiffTxtModelMismatch), len(mismatches))
-		for i, ref := range mismatches {
-			if i == o.ListMax {
-				fmt.Fprintf(w, "    … 외 %d대\n", len(mismatches)-i)
-				break
-			}
-			fmt.Fprintf(w, "    %s: %s\n", ref.Target.Hostname, ref.Notes[0].Detail)
 		}
 	}
 }

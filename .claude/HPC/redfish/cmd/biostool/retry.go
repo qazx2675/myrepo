@@ -337,7 +337,7 @@ func (r *checkRun) writeMergedResults(cur [][]string) error {
 		k := rowHostKey(tsvField(h.Target.Hostname))
 		retried[k] = true
 		if _, ok := inputOf[k]; !ok {
-			inputOf[k] = h.Target.Input
+			inputOf[k] = h.Target.ListLine()
 		}
 		switch {
 		case h.Status == "":
@@ -394,7 +394,7 @@ func (r *allRun) writeMergedResults() error {
 		k := rowHostKey(tsvField(h.Target.Hostname))
 		retried[k] = true
 		if _, ok := inputOf[k]; !ok {
-			inputOf[k] = h.Target.Input
+			inputOf[k] = h.Target.ListLine()
 		}
 		switch {
 		case isAllRetryStatus(h.Status):

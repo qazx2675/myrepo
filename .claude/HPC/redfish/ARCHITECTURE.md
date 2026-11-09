@@ -29,7 +29,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | `dump.go` | `dump`(`xml.sh`) 본체: GET 전용 좁은 순회, 호스트당 경로 상한, JSON 저장(`safeSeg`/`dirPart`), `index.tsv`, 사람이 읽는 요약 |
 | `trs_cisco.go` | `trs-cisco`(`trs_cisco.sh`) 본체: Cisco 장비 UNSUPPORTED·XML 실패 원인 진단 — trs 의 네트워크·인증 단계를 재사용(`trsMain`·`newTrsHost`)하고 Cisco Redfish 구조(System Bios 링크·Oem·Chassis·Manager·레지스트리·펌웨어 목록·하위 리소스 탐색)와 XML API(쿠키 없는 확인 요청 → 있을 때만 aaaLogin 1회)를 보고 `ciscoDiagnose` 가 종합. XML 진단 요청은 `ciscoRaw` 허용 3종만 |
 | `trs.go` | `trs`(`trs.sh`) 본체: BMC 접속 장애(403 등) 단계별 진단 — TCP/TLS → 비인증 ServiceRoot(헤더 변형) → 인증(Basic 1회+세션 1회, 401 중단) → 인증 후 읽기 → 403 경로 변형 비교. `trsDiagnose` 가 원인 추정 규칙(새 장애 유형은 여기에 추가), `trs4xx` 표가 4xx 코드별 설명(코드 추가는 이 표). GET/HEAD/OPTIONS·세션 생성/삭제만 허용 |
-| `allcheck.go` | `allcheck`(`all_bios_check.sh`) 본체: 기준(`diff.txt`)·제외 속성(`ignore_attrs.txt`)·모델별 분류·Attributes 전체 비교·`all_diff.tsv`·`summary.tsv` |
+| `allcheck.go` | `allcheck`(`all_bios_check.sh`) 본체: 기준(`diff.txt`, 두 번째 칸은 태그: 태그 모드면 같은 태그 기준만 선택)·제외 속성(`ignore_attrs.txt`)·모델별 분류·Attributes 전체 비교·`all_diff.tsv`·`summary.tsv` |
 | `allreport.go` | `allcheck` 의 터미널 리포트(모델 그룹·속성별 집계·특이사항·분류 불가) |
 | `allexport.go` | `allcheck -export-attrs`: 읽은 BIOS 속성을 호스트별 JSON(`attrs/<호스트>.json`)으로 저장 |
 | `unified_cmd.go` | **`biostool bios` 서브커맨드**(`bios.sh` 의 본체): 플래그(`-profile`·`-user`·`-ref`·`-ref-json`·`-diff`·`-ignore`·`-plain`·`-auto`/`-auto-check <user> <targets>`·`-res-dir`), 대화형이면 TUI 흐름으로, 아니면 평문 출력(읽기 전용), `-auto` 는 `check.res_<user>` 기록. 비대화형에는 설정 경로가 없음 |
@@ -110,7 +110,7 @@ BMC(Redfish)에 접속해 BIOS 표준값을 점검하고 승인된 항목만 Pen
 | **통합 점검(`bios.sh`) 화면·키** 수정 | 키·탭·필터·도움말 `tui_view.go`(`navKey`·`hintItems`)·`tui_keys.go`·`tui_render.go`(`tuiHelpLines`), 질문 순서·메뉴 문구·수정 확인 1·2(`setStep`) `tui_flow.go`, 확인 화면 줄 `setplan.go`(`ConfirmLines`·`ExcludedLines`) |
 | **색상 줄·태그 3종·`(N/A)` 표기** 수정 | `resultline.go`(`tagFor`·`showValue`), 색·열 순서 `lineout.go`, 상태→줄 변환 `resultconv.go` |
 | **CSV 열·파일 이름·그룹 합치기** 수정 | `csvout.go`(`summaryRows`·`wideHostsRows`·`wideAttrsRows`·`longRows`), 그룹 규칙 `resultline.go`(`groupLines`) |
-| **전체비교 기준**(비교서버 / refs JSON / `diff.txt`)·제외 속성 | `unified.go`(`Compare`·`compareRefs`·`readRefJSON`), conf 키 `conf.go`(`exclude_attrs`·`refs_dir`), 기준 선택 화면 `tui_flow.go`(`chooseRef`) |
+| **전체비교 기준**(비교서버 / refs JSON / `diff.txt`)·제외 속성·**호스트 태그**(`user.txt`/`diff.txt` 두 번째 칸: 결과 탭·CSV 묶음과 같은 태그 기준만 고르는 규칙) | `unified.go`(`Compare`·`compareRefs`·`readRefJSON`), conf 키 `conf.go`(`exclude_attrs`·`refs_dir`), 기준 선택 화면 `tui_flow.go`(`chooseRef`) |
 | **보호 속성(절대 바꾸지 않는 속성)** 패턴 추가·조정 | `protect.go`(`builtinProtect`), 막는 곳 `setplan.go`(`protect`)·`set.go`(`runHost`·`send`)·`redfish.go`(`checkAttributes`), 시험 `protect_test.go`(패턴을 넓히면 `profiles/*.tsv` 속성이 막히지 않는지 확인). 사용자가 더하는 쪽은 conf 키 `protect_attrs` |
 | **수정(설정) 규칙**: 대상 선정·충돌·Pending 질문·안전 | `setplan.go`(`buildSetPlan`·`applySetPlan`), 실제 쓰기는 `set.go`(코드 수정 시 `setplan_test.go`·`set_security_test.go`), 설정 관문 conf 키 `allcheck_set` |
 | **auto_setup 연동 결과(`check.res_<user>`)** 형식·`-auto` 동작 | `checkres.go`, `unified_cmd.go`(`-auto`·`-auto-check`·`-res-dir`), 래퍼 `bios.sh`(호출 폴더 처리) |

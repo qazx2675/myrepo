@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -150,8 +151,13 @@ func tallyHosts(lines []ResultLine) ([]string, map[string]*hostTally) {
 }
 
 // summaryRows 는 summary.csv 의 행들입니다 (헤더 포함).
+// 태그(user.txt 의 그룹 태그)가 하나라도 있으면 맨 끝에 "호스트태그" 열이 붙습니다 (없으면 예전 양식 그대로).
 func summaryRows(lines []ResultLine) [][]string {
+	withTag := anyHostTag(lines)
 	rows := [][]string{{"Hostname", "IP", "Vendor", "Model", "BIOS", "관리컨트롤러", "불일치 건수", "N/A 건수", "불일치 속성"}}
+	if withTag {
+		rows[0] = append(rows[0], hostTagHeader)
+	}
 	order, m := tallyHosts(lines)
 	for _, h := range order {
 		t := m[h]
@@ -163,8 +169,12 @@ func summaryRows(lines []ResultLine) [][]string {
 			detail = "모두 동일"
 		}
 		f := t.first
-		rows = append(rows, []string{h, f.IP, f.Vendor, f.Model, f.BiosVersion, mgmtText(f),
-			strconv.Itoa(t.diff), strconv.Itoa(t.na), detail})
+		row := []string{h, f.IP, f.Vendor, f.Model, f.BiosVersion, mgmtText(f),
+			strconv.Itoa(t.diff), strconv.Itoa(t.na), detail}
+		if withTag {
+			row = append(row, f.HostTag)
+		}
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -271,15 +281,64 @@ func wideAttrsRows(g LineGroup) [][]string {
 	return rows
 }
 
-// longRows 는 long.csv 행들입니다 (줄 하나가 행 하나).
+// longRows 는 long.csv 행들입니다 (줄 하나가 행 하나). 태그가 하나라도 있으면 맨 끝에 "호스트태그" 열이 붙습니다.
 func longRows(lines []ResultLine) [][]string {
+	withTag := anyHostTag(lines)
 	rows := make([][]string, 0, len(lines)+1)
-	rows = append(rows, csvLineHeader)
+	if withTag {
+		rows = append(rows, append(append([]string{}, csvLineHeader...), hostTagHeader))
+	} else {
+		rows = append(rows, csvLineHeader)
+	}
 	for _, l := range lines {
-		rows = append(rows, []string{l.Tag, l.Host, l.IP, l.Vendor, l.Model, l.BiosVersion, mgmtText(l),
-			l.Attr, showValue(l.Expected), showValue(l.Current), l.Note})
+		row := []string{l.Tag, l.Host, l.IP, l.Vendor, l.Model, l.BiosVersion, mgmtText(l),
+			l.Attr, showValue(l.Expected), showValue(l.Current), l.Note}
+		if withTag {
+			row = append(row, l.HostTag)
+		}
+		rows = append(rows, row)
 	}
 	return rows
+}
+
+// hostTagHeader 는 summary·long CSV 의 그룹 태그 열 이름입니다 ("태그" 열은 OK/difference/N/A 라 겹치지 않게).
+const hostTagHeader = "호스트태그"
+
+// anyHostTag 는 줄 중에 그룹 태그가 있는 것이 있는지 봅니다.
+func anyHostTag(lines []ResultLine) bool {
+	for _, l := range lines {
+		if l.HostTag != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// tagUnsafeFileChars 는 태그 파일 이름 조각에서 바꿀 글자입니다. 한글 등 문자·숫자는 알아볼 수 있게 남긴다.
+var tagUnsafeFileChars = regexp.MustCompile(`[^\p{L}\p{N}._-]`)
+
+// csvGroupTail 은 wide CSV 파일 이름의 "<벤더>_<그룹>.csv" 부분입니다. 태그 그룹은 "tag_<태그>.csv" (한글 유지).
+func csvGroupTail(g LineGroup) string {
+	if g.Vendor == tagGroupVendor {
+		n := tagUnsafeFileChars.ReplaceAllString(g.Name, "_")
+		if n == "" {
+			n = "-"
+		}
+		return "tag_" + n + ".csv"
+	}
+	return csvFileName(g.Vendor) + "_" + csvFileName(g.Name) + ".csv"
+}
+
+// uniqueTail 은 이미 쓴 이름(used, 소문자 키 — 윈도우·엑셀은 대소문자를 구분하지 않음)과 겹치면 "_2", "_3" ... 을
+// 확장자 앞에 붙입니다. 서로 다른 태그가 같은 파일 이름 조각이 되어도 덮어쓰지 않게 합니다.
+func uniqueTail(used map[string]bool, tail string) string {
+	base := strings.TrimSuffix(tail, ".csv")
+	name := tail
+	for n := 2; used[strings.ToLower(name)]; n++ {
+		name = base + "_" + strconv.Itoa(n) + ".csv"
+	}
+	used[strings.ToLower(name)] = true
+	return name
 }
 
 // writeResultCSVs 는 dir 에 <prefix>summary.csv, <prefix>wide_hosts_<벤더>_<그룹>.csv,
@@ -307,10 +366,11 @@ func writeResultCSVsCancel(dir, prefix string, lines []ResultLine, cancel <-chan
 	if err := write(prefix+"summary.csv", func() [][]string { return summaryRows(lines) }); err != nil {
 		return paths, err
 	}
+	used := map[string]bool{}
 	for _, vg := range groupLines(lines) {
 		for _, g := range vg.Groups {
 			g := g
-			tail := csvFileName(g.Vendor) + "_" + csvFileName(g.Name) + ".csv"
+			tail := uniqueTail(used, csvGroupTail(g))
 			if err := write(prefix+"wide_hosts_"+tail, func() [][]string { return wideHostsRows(g) }); err != nil {
 				return paths, err
 			}

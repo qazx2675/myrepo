@@ -103,7 +103,7 @@ func TestUnifiedMultiVendor100(t *testing.T) {
 	// ---- 전체비교: diff.txt 모델별 기준 ----
 	diffTxt := filepath.Join(t.TempDir(), "diff.txt")
 	must(t, os.WriteFile(diffTxt, []byte(strings.Join([]string{
-		refAddr["hpe-dl360gen10"], refAddr["hpe-dl360gen11"] + " ProLiant DL360 Gen11", refAddr["dell-r660"], refAddr["lenovo-sr650v3"],
+		refAddr["hpe-dl360gen10"], refAddr["hpe-dl360gen11"] + " gen11tag", refAddr["dell-r660"], refAddr["lenovo-sr650v3"],
 	}, "\n")+"\n"), 0o600))
 	t1 := time.Now()
 	cmp := compareT(t, u, compareRef{DiffFile: diffTxt})

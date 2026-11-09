@@ -5,6 +5,13 @@
 `bash bios.sh` 한 번에 Redfish 장비와 Cisco 장비(UCSM 블레이드·CIMC 랙서버)를 섞어 점검합니다. Cisco 는 XML API(읽기 전용)로 읽습니다. 아래 v0.3.0 항목과 sha256 표는 그대로 두었습니다(이 변경분의 바이너리 sha256 은 이 절 끝 표).
 
 ### 추가
+- **호스트 태그**(`user.txt` 두 번째 칸): `호스트명` 또는 `호스트명 태그`(공백/탭, 태그는 한 단어, 3칸 이상은 오류, 중복 호스트는 처음 줄). 태그가 있는 호스트는 벤더·BMC 모델과 상관없이 태그끼리만 묶여 결과·TUI 에서 최상위 탭 “태그” 아래 태그별 하위 탭으로 나오고(합치지 않음), 태그 없는 호스트는 기존 벤더 → BMC 모델 탭입니다. CSV 는 `*_wide_hosts_tag_<태그>.csv`·`*_wide_attrs_tag_<태그>.csv`(한글 유지, 못 쓰는 글자 `_`, 겹치면 `_2`), `summary`·`long` CSV 는 태그가 있을 때만 끝에 `호스트태그` 열을 붙입니다. `retry.txt`·`merged_retry.txt` 는 태그를 유지하고 `-targets`·`-ref` 에는 태그가 없습니다.
+  - **전체비교 태그 모드**(대상 중 태그가 하나라도 있을 때): `diff.txt` 두 번째 칸 = 태그. 태그 대상은 같은 태그의 기준만, 태그 없는 대상은 태그 없는 기준만 쓰고 모델 키는 여전히 같아야 합니다(BIOS 버전 우선 규칙 그대로). 기준이 없거나 모델이 다르면 `NO_REFERENCE`(N/A, 설정 제외) + 특이사항 `태그 <태그> 의 기준이 <diff.txt|비교서버 입력> 에 없음` / `태그 <태그> 기준과 모델이 다름 (대상 모델 키 <키>)`. TUI 비교서버 직접 입력은 한 줄에 `호스트명 태그`(쉼표·세미콜론도 구분). refs JSON 은 기준 한 대를 모든 대상에 쓰며 태그를 무시합니다. 모델이 다른 대상끼리 비교(y/N)는 그 태그의 읽을 수 있는 기준이 정확히 1대일 때 태그마다 `[태그 X]` 로 묻고 `compare_xmodel_<태그>_<A>_vs_<B>.csv` 를 씁니다(`-auto` 는 묻지 않음). TUI·`bios.sh` CLI·`all_bios_check.sh`(`-diff`)·`-auto`/`-auto-check` 모두 적용. `user.txt.example`·`diff.txt.example`·README·사용법.txt 에 설명 추가.
+
+### 변경 (호환성)
+
+- **`diff.txt` 모델 메모와 `DIFF_TXT_MODEL_MISMATCH` 경고를 없앴습니다.** `user.txt` 에 태그가 없으면 `diff.txt` 의 두 번째 칸 이후는 무시하므로(옛 모델 메모가 남아 있어도 그대로 동작) 기존 파일은 영향이 없습니다. `user.txt` 에 태그를 쓰면 `diff.txt` 두 번째 칸은 반드시 태그여야 하고(옛 모델 메모는 지울 것) 칸이 3개 이상이면 오류입니다.
+
 
 - **모델이 다른 대상끼리 비교**(`xmodel.go`, `tui_flow.go` `xmodelStep`): TUI 전체 설정 비교에서 기준(비교서버 1대 또는 refs JSON)과 모델이 다른 대상이 있으면 “모델이 달라도 비교할까요? (y/N)” 를 묻습니다(`diff.txt`·비교서버 여러 대·`-auto`/`-auto-check` 는 묻지 않음 = N). y 면 기존 비교 결과(모델이 다른 대상은 `NO_REFERENCE`)는 그대로 두고, 대상 모델마다 기준과 Attribute 이름 합집합을 비교해 `results/<일시>/compare_xmodel_<A모델>_vs_<B모델>.csv`(`Attribute | 판정 | 기준값 | 대상 관리망 IP 별 값`)를 쓰고 안내 줄에 판정별 개수를 보입니다. 판정은 `같음`/`다름`/`<A모델>에만`/`<B모델>에만`. 내장 보호 목록·`protect_attrs`·`ignore_attrs.txt`·`exclude_attrs` 는 제외하고 개수만 셉니다. 비교만 하며 설정 계획에는 넣지 않습니다.
 - **두 번째 계정(user2) 벤더별 권한**(`conf.go`, `account.go` `updateRole`, `account_check.go`, `account_gate.go` `roleCandidates`, `redfish.go` `AllowAccountRoleTarget`): `bios.conf` 에 `user2_role_<벤더>`(dell hpe lenovo supermicro cisco cray, 값 Administrator|Operator|ReadOnly, 모르는 벤더·값은 conf 오류)를 두면 장비 벤더에 맞는 권한으로 user2 를 만듭니다. 없으면 `user2_role`(user2 를 쓰면 여전히 필수). ID·`pass2.enc` 는 하나 그대로. 점검 끝 생성(2순위·user2 만 없음·AUTH_FAIL 수동)·`bash bios.sh account`·UCSM 모두 적용.
@@ -84,7 +91,7 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8282274 | 484caeb7c84045201bc655e0e41b959d810a1c038782ad436df121a2d2da9837 |
+| bin/biostool | go1.26.5 | 8298658 | 25367714ce4d2ffc2fbe20233f84cbc74a8a42037e24fd2903b7f94548c626ac |
 | bin/biostool_os6 | go1.20.14 | 6885376 | 37e8de9de182e06893b30305a455de25005f1b6d804f5979cb926c5e36fc3923 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |

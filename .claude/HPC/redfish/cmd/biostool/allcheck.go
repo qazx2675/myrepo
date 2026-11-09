@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode"
 )
 
 // allcheck.go 는 `biostool allcheck` (all_bios_check.sh) 의 본체입니다 (계획서 8장, 읽기 전용 ModeReadOnly).
@@ -45,9 +44,8 @@ const (
 
 // 특이사항 코드 (summary.tsv 의 notes, 터미널 [특이사항]).
 const (
-	noteBiosVerDiff          = "BIOS_VER_DIFF"
-	noteMultiRef             = "MULTI_REF"
-	noteDiffTxtModelMismatch = "DIFF_TXT_MODEL_MISMATCH"
+	noteBiosVerDiff = "BIOS_VER_DIFF"
+	noteMultiRef    = "MULTI_REF"
 )
 
 // absentMark 는 TSV·리포트에서 "그 호스트에는 이 속성이 없음" 을 나타냅니다 (빈 문자열 값은 "" 로 보여 구분).
@@ -55,15 +53,32 @@ const absentMark = "<없음>"
 
 // ---- diff.txt (기준 목록) ----
 
-// refEntry 는 diff.txt 한 줄입니다: hostname(또는 ip[:포트], 이름-m) + 선택적 모델 칸(첫 공백 뒤 나머지 전부).
-// 모델 칸은 확인용일 뿐이며 분류는 항상 BMC 가 보고한 실제 모델로 합니다.
+// refEntry 는 diff.txt 한 줄입니다: hostname(또는 ip[:포트], 이름-m) + 선택적 태그(둘째 칸).
+// 태그는 이번 실행의 대상 중 태그가 있는 것이 하나라도 있을 때(태그 모드)만 기준 고르기에 쓰이고,
+// 아니면 무시됩니다 (allEnv.tagMode). 분류는 항상 BMC 가 보고한 실제 모델로 합니다.
 type refEntry struct {
 	Input string
-	Model string
+	Tag   string
+	Extra string // 셋째 칸부터 (태그 이전 diff.txt 의 모델 메모 등). 태그 모드에서만 오류로 본다 (refTagCheck)
+}
+
+// refTagCheck 는 태그 모드에서 기준 목록 줄이 "hostname" 또는 "hostname 태그" 인지 확인합니다.
+// 태그 모드가 아니면 둘째 칸 이후는 쓰지 않으므로 예전 diff.txt(모델 메모, 공백 포함)도 그대로 받는다.
+func refTagCheck(es []refEntry, tagMode bool) error {
+	if !tagMode {
+		return nil
+	}
+	for _, e := range es {
+		if e.Extra != "" {
+			return fmt.Errorf("기준 목록 줄 %q: 칸이 3개 이상입니다 (hostname 또는 \"hostname 태그\" 만 허용)", e.Input+" "+e.Tag+" "+e.Extra)
+		}
+	}
+	return nil
 }
 
 // parseRefList 는 diff.txt 텍스트를 해석합니다. 빈 줄과 # 주석은 무시하고 같은 hostname 은 처음 것만 남깁니다.
-func parseRefList(text string) []refEntry {
+// 둘째 칸은 태그, 셋째 칸부터는 Extra 에 보관합니다 (태그 모드에서만 오류 — refTagCheck). 오류는 지금은 늘 nil 입니다.
+func parseRefList(text string) ([]refEntry, error) {
 	text = strings.TrimPrefix(text, "\ufeff")
 	var out []refEntry
 	seen := map[string]bool{}
@@ -72,13 +87,16 @@ func parseRefList(text string) []refEntry {
 		if i := strings.Index(line, "#"); i >= 0 {
 			line = line[:i]
 		}
-		line = strings.TrimSpace(line) // CRLF 의 \r 도 함께 제거
-		if line == "" {
+		f := strings.Fields(line) // CRLF 의 \r 도 공백으로 걸러진다
+		if len(f) == 0 {
 			continue
 		}
-		e := refEntry{Input: line}
-		if i := strings.IndexFunc(line, unicode.IsSpace); i >= 0 {
-			e.Input, e.Model = line[:i], strings.TrimSpace(line[i:])
+		e := refEntry{Input: f[0]}
+		if len(f) >= 2 {
+			e.Tag = f[1]
+		}
+		if len(f) > 2 {
+			e.Extra = strings.Join(f[2:], " ")
 		}
 		if seen[e.Input] {
 			continue
@@ -86,7 +104,7 @@ func parseRefList(text string) []refEntry {
 		seen[e.Input] = true
 		out = append(out, e)
 	}
-	return out
+	return out, nil
 }
 
 func loadRefList(path string) ([]refEntry, error) {
@@ -97,7 +115,10 @@ func loadRefList(path string) ([]refEntry, error) {
 		}
 		return nil, fmt.Errorf("기준 목록 %s: %w", path, err)
 	}
-	es := parseRefList(string(data))
+	es, err := parseRefList(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("기준 목록 %s: %w", path, err)
+	}
 	if len(es) == 0 {
 		return nil, fmt.Errorf("기준 목록 %s 이(가) 비어 있습니다 (정상 설정값을 가진 대표 hostname 을 한 줄씩 적으십시오)", path)
 	}
@@ -333,7 +354,6 @@ type allRef struct {
 	ID     string // targetID
 	Order  int    // diff.txt 순서
 	Snap   *biosSnap
-	Notes  []hostNote // DIFF_TXT_MODEL_MISMATCH
 }
 
 // newAllRefs 는 diff.txt 항목을 접속 대상으로 해석합니다 (user.txt 와 같은 이름 해석 규칙).
@@ -429,6 +449,11 @@ type allEnv struct {
 	refByID  map[string]*allRef
 	byKey    map[string][]*allRef // 모델 키 → 접속에 성공한 기준 (diff.txt 순서)
 	failed   []*allRef            // 읽지 못한 기준
+	// tagMode 는 이번 실행의 대상 중 태그(Target.Tag)가 있는 것이 하나라도 있으면 true 입니다 (anyTagged).
+	// 켜지면 태그 있는 대상은 같은 태그의 기준만, 태그 없는 대상은 태그 없는 기준만 씁니다. 끄면 기준의 태그는 무시합니다.
+	// refs JSON 은 모두에게 쓰는 단일 기준이라 태그를 따지지 않으므로 JSON 비교에서는 켜지 않습니다.
+	tagMode  bool
+	refLabel string // 태그 모드 안내 문구용 기준 출처 ("diff.txt" / "비교서버 입력")
 	// cancel 이 닫히면 sweepSnaps 는 아직 시작하지 않은 호스트에 접속하지 않고 CANCELED 스냅샷을 넘긴다 (nil 이면 취소 없음)
 	cancel <-chan struct{}
 }
@@ -545,6 +570,7 @@ type allOpts struct {
 	RetryFromDir string    // 단계 7: -retry-from 값 (이전 결과 폴더 또는 그 안의 retry.txt). 비면 일반 비교
 	Now          time.Time // 0 이면 지금
 	ExportAttrs  bool      // true 면 읽은 속성을 <결과 폴더>/attrs/<호스트>.json 으로 저장
+	RefLabel     string    // 태그 모드 안내 문구의 기준 출처 ("diff.txt" 기본, -ref 면 "비교서버 입력")
 	// OnHost 는 대상 i 번째(rc.Targets 순서)의 판정이 끝난 직후, 속성 값을 버리기 전에 불립니다
 	// (h.Snap.Attrs·h.Ref.Snap.Attrs 가 아직 있어 compareLines 를 부를 수 있음). 여러 고루틴에서 불리므로 i 번째 칸에만 쓸 것. nil 이면 안 부름.
 	OnHost func(i int, h *allHost)
@@ -559,6 +585,10 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 	env := &allEnv{
 		conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, ign: o.Ignore, offline: o.FromDump != "",
 		refByID: map[string]*allRef{}, byKey: map[string][]*allRef{},
+		tagMode: anyTagged(rc.Targets), refLabel: o.RefLabel,
+	}
+	if env.refLabel == "" {
+		env.refLabel = "diff.txt"
 	}
 	var err error
 	// 재시도 모드: 이전 결과를 먼저 읽어 검증한다 (접속·폴더 생성 전에 실패하면 아무것도 남기지 않는다).
@@ -646,8 +676,7 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 	return run, run.writeFiles()
 }
 
-// indexRefs 는 읽기를 마친 기준들을 모델 키별(byKey)·읽기 실패(failed)로 나누고, diff.txt 모델 칸이 실제 모델과
-// 다르면 DIFF_TXT_MODEL_MISMATCH 를 남깁니다 (refByID 는 호출 쪽이 미리 채움).
+// indexRefs 는 읽기를 마친 기준들을 모델 키별(byKey)·읽기 실패(failed)로 나눕니다 (refByID 는 호출 쪽이 미리 채움).
 func (e *allEnv) indexRefs(refs []*allRef) {
 	for _, r := range refs {
 		if !r.Snap.ok() {
@@ -655,11 +684,39 @@ func (e *allEnv) indexRefs(refs []*allRef) {
 			continue
 		}
 		e.byKey[r.Snap.Key] = append(e.byKey[r.Snap.Key], r)
-		if r.Entry.Model != "" && normalizeModel(r.Entry.Model) != normalizeModel(r.Snap.Model) {
-			r.Notes = append(r.Notes, hostNote{noteDiffTxtModelMismatch,
-				fmt.Sprintf("diff.txt 의 모델 %q ≠ BMC 가 보고한 %q (실제 모델로 분류)", r.Entry.Model, r.Snap.Model)})
+	}
+}
+
+// anyTagged 는 대상 중 태그가 있는 것이 하나라도 있는지(태그 모드) 알려 줍니다.
+func anyTagged(ts []Target) bool {
+	for _, t := range ts {
+		if t.Tag != "" {
+			return true
 		}
 	}
+	return false
+}
+
+// tagOK 는 태그 모드에서 태그가 tag 인 대상이 기준 r 을 쓸 수 있는지입니다 (태그 모드가 아니면 항상 true).
+// 기준의 태그는 기준 목록(diff.txt·비교서버 입력)에 적은 것이며, 기준이 대상에도 있어도 대상 쪽 태그는 보지 않습니다.
+func (e *allEnv) tagOK(tag string, r *allRef) bool {
+	return !e.tagMode || r.Entry.Tag == tag
+}
+
+// refLabelFor 는 태그 모드 안내 문구에 쓰는 기준 출처 이름입니다 (직접 입력한 비교서버면 "비교서버 입력").
+func refLabelFor(manual bool) string {
+	if manual {
+		return "비교서버 입력"
+	}
+	return "diff.txt"
+}
+
+// tagLabel 은 태그 모드 안내 문구의 "태그 X" 부분입니다 (태그 없는 대상은 "태그 없음").
+func tagLabel(tag string) string {
+	if tag == "" {
+		return "태그 없음"
+	}
+	return "태그 " + tag
 }
 
 // finish 는 읽은 스냅샷으로 호스트의 상태를 정합니다 (읽기 실패면 그 상태, 성공이면 비교).
@@ -678,7 +735,7 @@ func (e *allEnv) classify(h *allHost) {
 	self := e.refByID[targetID(h.Target)]
 	var cands []*allRef
 	for _, r := range e.byKey[s.Key] {
-		if r != self { // 자기 자신과는 비교하지 않는다
+		if r != self && e.tagOK(h.Target.Tag, r) { // 자기 자신과는 비교하지 않고, 태그 모드면 같은 태그의 기준만 쓴다
 			cands = append(cands, r)
 		}
 	}
@@ -696,6 +753,14 @@ func (e *allEnv) classify(h *allHost) {
 						h.Detail = "기준 조회를 취소해 비교하지 않음 (Ctrl+X): " + strings.Join(names, ", ")
 						break
 					}
+				}
+			} else if e.tagMode {
+				h.Status = StatusNoReference
+				tl := tagLabel(h.Target.Tag)
+				if e.hasTagRef(h.Target.Tag) {
+					h.Detail = tl + " 기준과 모델이 다름 (대상 모델 키 " + s.Key + ")"
+				} else {
+					h.Detail = tl + " 의 기준이 " + e.refLabel + " 에 없음"
 				}
 			} else {
 				h.Status, h.Detail = StatusNoReference, "모델 키 "+s.Key+" 의 기준이 diff.txt 에 없음"
@@ -729,13 +794,24 @@ func (e *allEnv) classify(h *allHost) {
 	}
 }
 
+// hasTagRef 는 태그 모드에서 이 태그의 기준이 (모델과 무관하게) 읽힌 것 중에 하나라도 있는지입니다.
+func (e *allEnv) hasTagRef(tag string) bool {
+	for _, rs := range e.byKey {
+		for _, r := range rs {
+			if e.tagOK(tag, r) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // failedFor 는 대상의 기준이었을 수 있는, 읽지 못한 기준 호스트의 "이름(상태)" 목록입니다.
-// 읽지 못한 기준은 모델을 알 수 없으므로, diff.txt 에 모델 칸이 없으면 모든 모델의 후보로 보고
-// 모델 칸이 있으면 그 모델과 같을 때만 후보로 봅니다.
+// 읽지 못한 기준은 모델을 알 수 없으므로 모든 모델의 후보로 봅니다. 태그 모드에서는 대상과 같은 태그의 기준만 셉니다.
 func (e *allEnv) failedFor(s *biosSnap) []string {
 	var out []string
 	for _, r := range e.failed {
-		if r.Entry.Model == "" || normalizeModel(r.Entry.Model) == normalizeModel(s.Model) {
+		if e.tagOK(s.Target.Tag, r) {
 			out = append(out, r.Target.Hostname+"("+r.Snap.Status+")")
 		}
 	}
@@ -875,7 +951,7 @@ func (r *allRun) writeFiles() error {
 	var retry []string
 	for _, h := range r.Hosts {
 		if isRetryStatus(h.Status) || h.Status == StatusRefUnreachable {
-			retry = append(retry, h.Target.Input)
+			retry = append(retry, h.Target.ListLine())
 		}
 	}
 	if err := writeLines(filepath.Join(r.Dir, "retry.txt"), retry); err != nil {
@@ -968,9 +1044,6 @@ func (r *allRun) runInfo() string {
 		} else {
 			fmt.Fprintf(&b, "  %s\t%s\n", ref.Target.Hostname, ref.Snap.Status)
 		}
-		for _, n := range ref.Notes {
-			fmt.Fprintf(&b, "    %s\n", n)
-		}
 	}
 	b.WriteString("호스트 기준 집계 (상태):\n")
 	for _, k := range sortedKeys(t) {
@@ -1023,7 +1096,10 @@ func cmdAllCheck(args []string) error {
 		if explicitDiff {
 			return fmt.Errorf("-ref 와 -diff 는 함께 쓸 수 없습니다 (비교서버를 직접 지정하거나 목록 파일을 쓰십시오)")
 		}
-		entries = parseRefList(strings.NewReplacer(",", "\n", ";", "\n").Replace(*ref))
+		// -ref 는 쉼표·세미콜론 구분 hostname 만 받는다 (태그 없음 — 태그 모드에서는 태그 있는 대상이 NO_REFERENCE 가 됨).
+		if entries, err = parseRefList(strings.NewReplacer(",", "\n", ";", "\n").Replace(*ref)); err != nil {
+			return err
+		}
 		if len(entries) == 0 {
 			return fmt.Errorf("-ref 에 비교서버 hostname 이 없습니다")
 		}
@@ -1040,6 +1116,9 @@ func cmdAllCheck(args []string) error {
 		return err
 	}
 	ign = mergeExclude(ign, rc.Conf.ExcludeAttrs) // ignore_attrs.txt ∪ bios.conf exclude_attrs
+	if err := refTagCheck(entries, anyTagged(rc.Targets)); err != nil {
+		return fmt.Errorf("%s: %w", refSrc, err)
+	}
 	refs, err := newAllRefs(entries, o.hosts)
 	if err != nil {
 		return err
@@ -1051,7 +1130,7 @@ func cmdAllCheck(args []string) error {
 		fmt.Printf("기준(정상) 호스트: %s 에서 %d개, 제외 속성: %s\n", refSrc, len(refs), ign.Source)
 	}
 
-	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: ign, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, RetryFromDir: o.retryFrom, ExportAttrs: *expAttrs})
+	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: ign, FromDump: o.fromDump, ResultDir: rc.Conf.ResultDir, RetryFromDir: o.retryFrom, ExportAttrs: *expAttrs, RefLabel: refLabelFor(refWord != "")})
 	if run == nil {
 		return err
 	}

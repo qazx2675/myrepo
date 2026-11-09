@@ -53,7 +53,7 @@ func runAllT(t *testing.T, conc int, diffText string, targets []string, fromDump
 		rc.Password = ""
 		rc.Conf.User = ""
 	}
-	refs, err := newAllRefs(parseRefList(diffText), writeHosts(t, ""))
+	refs, err := newAllRefs(mustParseRefList(diffText), writeHosts(t, ""))
 	must(t, err)
 	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: testIgnore, FromDump: fromDump, ResultDir: t.TempDir(), Now: checkNow})
 	if err != nil {
@@ -108,10 +108,13 @@ func diffKeys(h *allHost) []string {
 // ---- 단위 시험 ----
 
 func TestParseRefList(t *testing.T) {
-	text := "\ufeff# 기준 목록\n\ncheckhostname1\ncheckhostname2   DL360Gen11  \t# 주석\n  host3-m\tProLiant DL360 Gen10\r\ncheckhostname1\n127.0.0.1:8443\n"
-	got := parseRefList(text)
+	text := "\ufeff# 기준 목록\n\ncheckhostname1\ncheckhostname2   DL360Gen11  \t# 주석\n  host3-m\tasdf\r\ncheckhostname1\n127.0.0.1:8443\n"
+	got, perr := parseRefList(text)
+	if perr != nil {
+		t.Fatal(perr)
+	}
 	want := []refEntry{
-		{"checkhostname1", ""}, {"checkhostname2", "DL360Gen11"}, {"host3-m", "ProLiant DL360 Gen10"}, {"127.0.0.1:8443", ""},
+		{"checkhostname1", "", ""}, {"checkhostname2", "DL360Gen11", ""}, {"host3-m", "asdf", ""}, {"127.0.0.1:8443", "", ""},
 	}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("parseRefList =\n%v\n기대\n%v", got, want)
@@ -541,42 +544,6 @@ func TestAllCheckRefUnreachable(t *testing.T) {
 			t.Errorf("리포트에 %q 없음\n%s", want, rep.String())
 		}
 	}
-
-	// 모델 칸이 DL360Gen10 인 접속 불가 기준: Gen11 대상은 그 기준의 모델이 아니므로 NO_REFERENCE
-	run = runAllT(t, 2, dead+"   DL360Gen10\n", []string{t11, t10}, "")
-	if h := hostOf(t, run, t11); h.Status != StatusNoReference {
-		t.Errorf("t11 = %s (%s), 기대 NO_REFERENCE (접속 불가 기준의 모델 칸이 다른 모델)", h.Status, h.Detail)
-	}
-	if h := hostOf(t, run, t10); h.Status != StatusRefUnreachable {
-		t.Errorf("t10 = %s (%s), 기대 REF_UNREACHABLE (접속 불가 기준의 모델 칸과 같은 모델)", h.Status, h.Detail)
-	}
-}
-
-// (f) diff.txt 의 모델 칸이 실제와 다르면 경고만 하고 실제 모델로 분류한다 (맞는 칸은 표기가 달라도 경고 없음).
-func TestAllCheckDiffTxtModelMismatch(t *testing.T) {
-	_, ref := startAllSrv(t, "hpe-dl360gen11", nil)
-	_, ref2 := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) { setAttrs(t, s, map[string]interface{}{"Sriov": "Disabled"}) })
-	_, tgt := startAllSrv(t, "hpe-dl360gen11", nil)
-	run := runAllT(t, 2, ref+"  DL360Gen10\n"+ref2+"  ProLiant DL360 Gen11\n", []string{tgt}, "")
-	h := hostOf(t, run, tgt)
-	if h.Ref == nil || h.Ref.Target.Hostname != ref || !strings.Contains(h.notesText(), noteMultiRef) {
-		t.Errorf("대상 = %s 기준 %v notes %q, 실제 모델(Gen11)로 두 기준이 후보가 돼야 함", h.Status, h.Ref, h.notesText())
-	}
-	if len(run.Refs[0].Notes) != 1 || run.Refs[0].Notes[0].Code != noteDiffTxtModelMismatch ||
-		!strings.Contains(run.Refs[0].Notes[0].Detail, "DL360Gen10") || !strings.Contains(run.Refs[0].Notes[0].Detail, "ProLiant DL360 Gen11") {
-		t.Errorf("ref 노트 = %+v", run.Refs[0].Notes)
-	}
-	if len(run.Refs[1].Notes) != 0 {
-		t.Errorf("맞는 모델 칸(표기만 다름)에 경고가 붙음: %+v", run.Refs[1].Notes)
-	}
-	var rep bytes.Buffer
-	writeAllReport(&rep, run, allReportOpts{ListMax: 20, DiffMax: 30})
-	if !strings.Contains(rep.String(), "DIFF_TXT_MODEL_MISMATCH") || !strings.Contains(rep.String(), `diff.txt 의 모델 "DL360Gen10"`) {
-		t.Errorf("리포트:\n%s", rep.String())
-	}
-	if ri, _ := os.ReadFile(filepath.Join(run.Dir, "run_info.txt")); !strings.Contains(string(ri), "DIFF_TXT_MODEL_MISMATCH") {
-		t.Errorf("run_info.txt:\n%s", ri)
-	}
 }
 
 // (i) 같은 서버를 dump 로 저장한 뒤 서버 없이 -from-dump 로 비교한 결과가 온라인과 같다.
@@ -625,7 +592,7 @@ func TestAllCheckNoHostsEntry(t *testing.T) {
 	_, ref := startAllSrv(t, "hpe-dl360gen11", nil)
 	fastCheck(t)
 	rc := checkRCFor(t, 2, "127.0.0.1  있는호스트-m\n", ref, "없는호스트", "있는호스트")
-	refs, err := newAllRefs(parseRefList(ref+"\n기준없는이름\n"), writeHosts(t, ""))
+	refs, err := newAllRefs(mustParseRefList(ref+"\n기준없는이름\n"), writeHosts(t, ""))
 	must(t, err)
 	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: testIgnore, ResultDir: t.TempDir(), Now: checkNow})
 	must(t, err)
@@ -657,7 +624,7 @@ func TestAllCheckAuthStop(t *testing.T) {
 				fmt.Fprintf(&diff, "%s:%d\n", ip, port)
 			}
 			fastCheck(t)
-			refs, err := newAllRefs(parseRefList(diff.String()), writeHosts(t, ""))
+			refs, err := newAllRefs(mustParseRefList(diff.String()), writeHosts(t, ""))
 			must(t, err)
 			run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: testIgnore, ResultDir: t.TempDir(), Now: checkNow})
 			must(t, err)
@@ -702,7 +669,7 @@ func TestAllCheckConcurrentFarm(t *testing.T) {
 	}
 	rc := farmRC(t, ips[1:], port, 20, 3)
 	fastCheck(t)
-	refs, err := newAllRefs(parseRefList(fmt.Sprintf("%s:%d\n", ips[0], port)), writeHosts(t, ""))
+	refs, err := newAllRefs(mustParseRefList(fmt.Sprintf("%s:%d\n", ips[0], port)), writeHosts(t, ""))
 	must(t, err)
 	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: testIgnore, ResultDir: t.TempDir(), Now: checkNow})
 	must(t, err)
@@ -821,7 +788,7 @@ func TestAllCheckExportAttrs(t *testing.T) {
 	})
 	fastCheck(t)
 	rc := checkRCFor(t, 1, "", dst)
-	refs, err := newAllRefs(parseRefList(ref+"\n"), writeHosts(t, ""))
+	refs, err := newAllRefs(mustParseRefList(ref+"\n"), writeHosts(t, ""))
 	must(t, err)
 	run, err := doAllCheck(rc, allOpts{Refs: refs, Ignore: testIgnore, ResultDir: t.TempDir(), Now: checkNow, ExportAttrs: true})
 	if err != nil {
@@ -940,13 +907,13 @@ func TestIgnoreExampleMatchesDefault(t *testing.T) {
 	if fmt.Sprint(ex.Pats) != fmt.Sprint(def.Pats) {
 		t.Errorf("ignore_attrs.txt.example 패턴 %v\n내장 기본 목록        %v", ex.Pats, def.Pats)
 	}
-	// diff.txt.example 도 그대로 해석돼야 한다 (이름 3개, 마지막만 모델 칸).
+	// diff.txt.example 도 그대로 해석돼야 한다 (이름 4개, 3·4번째만 태그 칸).
 	b, err = os.ReadFile("../../diff.txt.example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	es := parseRefList(string(b))
-	if len(es) != 3 || es[0].Input != "checkhostname1" || es[0].Model != "" || es[2].Model != "DL360Gen11" {
+	es := mustParseRefList(string(b))
+	if len(es) != 4 || es[0].Input != "checkhostname1" || es[0].Tag != "" || es[2].Tag != "asdf" || es[3].Tag != "한글" || refTagCheck(es, true) != nil {
 		t.Errorf("diff.txt.example = %v", es)
 	}
 }
