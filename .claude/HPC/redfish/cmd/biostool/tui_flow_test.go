@@ -324,27 +324,24 @@ func TestBiosFlowViewTabOutOfRefChooser(t *testing.T) {
 		{"profile-result", "\t"},  // 0: 기준 목록이 뜬다
 		{"ref", "\t"},             // 1: 목록에서 Tab → 프로파일 화면
 		{"profile-result", "\t"},  // 2: 다시 Tab → 목록
-		{"ref", "1"},              // 3: 비교서버 hostname 입력
-		{"ref-host", "\t"},        // 4: 입력 줄에서 Tab → 프로파일 화면
-		{"profile-result", "\t"},  // 5
-		{"ref", "1"},              // 6
-		{"ref-host", ua + "\x04"}, // 7: 비교 실행
-		{"compare-result", "r"},   // 8: 기준 다시 고르기
-		{"ref", "\t"},             // 9: 목록에서 Tab → 프로파일 화면 (비교 결과 유지)
-		{"profile-result", "\t"},  // 10: Tab → 이미 비교한 화면 (다시 묻지 않음)
-		{"compare-result", "qq"},  // 11
+		{"ref", "1"},              // 3: 비교서버 hostname 입력 (Tab 은 붙여넣기용이라 화면 전환이 아님)
+		{"ref-host", ua + "\x04"}, // 4: 비교 실행
+		{"compare-result", "r"},   // 5: 기준 다시 고르기
+		{"ref", "\t"},             // 6: 목록에서 Tab → 프로파일 화면 (비교 결과 유지)
+		{"profile-result", "\t"},  // 7: Tab → 이미 비교한 화면 (다시 묻지 않음)
+		{"compare-result", "qq"},  // 8
 	}
 	fr, err := runFlowTC(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"}, func(i int, f *biosFlow) {
 		switch i {
-		case 2, 5:
+		case 2:
 			if f.ui.Tab() != 0 || f.cmp != nil || f.ui.tabOut {
 				t.Errorf("step %d: Tab 으로 나오면 프로파일 화면·비교 안 함: tab=%d cmp=%v tabOut=%v", i, f.ui.Tab(), f.cmp, f.ui.tabOut)
 			}
-		case 10:
+		case 7:
 			if f.ui.Tab() != 0 || f.cmp == nil || f.cmp.Label != "비교서버 "+ua {
 				t.Errorf("r 중 Tab: 프로파일 화면, 앞 비교 유지: tab=%d cmp=%v", f.ui.Tab(), f.cmp)
 			}
-		case 11:
+		case 8:
 			if f.ui.Tab() != 1 || f.cmp == nil {
 				t.Errorf("다시 Tab → 비교 화면: tab=%d", f.ui.Tab())
 			}
@@ -919,7 +916,7 @@ func TestSinkProgress(t *testing.T) {
 	}
 }
 
-// 비교서버는 공백·줄바꿈으로 여러 개를 줄 수 있고(대상 입력과 같은 규칙), q 두 번은 수정 여부를 묻지 않고 끝낸다 (수정은 e 로만).
+// 비교서버는 줄바꿈·쉼표로 여러 개를 줄 수 있고 (공백 뒤는 메모라 무시), q 두 번은 수정 여부를 묻지 않고 끝낸다 (수정은 e 로만).
 func TestBiosFlowRefSplitAndQuitWithoutAsking(t *testing.T) {
 	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
 	_, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
@@ -938,7 +935,7 @@ func TestBiosFlowRefSplitAndQuitWithoutAsking(t *testing.T) {
 		{"profile", "2"},
 		{"profile-result", "\t"},
 		{"ref", "1"},
-		{"ref-host", ua + " " + ub + "\x04"},
+		{"ref-host", ua + "\n" + ub + "\x04"},
 		{"compare-result", "qq"}, // 설정할 항목이 있어도 묻지 않고 끝 (ask-set 단계가 없어야 함)
 	}
 	fr, err := runFlowT(t, biosTUIArgs{O: o}, "", script, nil)
@@ -972,5 +969,75 @@ func TestBiosFlowTagRefPasteTab(t *testing.T) {
 	}
 	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
 		t.Errorf("단계 = %v", fr.steps)
+	}
+}
+
+// 대상 붙여넣기: Excel 복사("IP<Tab>태그")의 Tab 은 화면 전환이 아니라 공백이고, 태그가 대상에 남는다.
+// 칸이 3개 이상인 줄은 오류 안내 후 다시 묻는다. Cisco(XML) 붙여넣기도 같은 규칙.
+func TestBiosFlowTargetsPasteTabKeepsTag(t *testing.T) {
+	_, o := flowEnv(t, "")
+	flowNoPlan(t)
+	var got, gotArg string
+	var tags []string
+	script := []flowStep{
+		{"targets", "2"},
+		{"targets-paste", "10.0.0.1\tasdf 메모\x04"}, // 3칸 → 오류 후 대상 입력 메뉴로
+		{"targets", "2"},
+		{"targets-paste", "10.0.0.1\tasdf\nc201\tqwer\x04"},
+		{"targets-xml-paste", "10.0.0.2\tzzz\x04"},
+		{"profile", "q"},
+		{"targets", "\x18"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+		if i == 5 {
+			got, gotArg = flowTargetsOf(f.rc.Targets), f.a.O.userXMLArg
+			for _, x := range f.rc.Targets {
+				tags = append(tags, x.Input+":"+x.Tag)
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if got != "10.0.0.1=false c201=true 10.0.0.2=true" || gotArg != "10.0.0.2 zzz" {
+		t.Errorf("대상 = %s, 붙여넣은 Cisco = %q", got, gotArg)
+	}
+	if fmt.Sprint(tags) != "[10.0.0.1:asdf c201:qwer 10.0.0.2:zzz]" {
+		t.Errorf("태그 = %v", tags)
+	}
+	if sc := fr.screen(); !strings.Contains(sc, "칸이 3개 이상입니다") {
+		t.Errorf("3칸 오류 안내가 없음")
+	}
+}
+
+// -targets 플래그(splitTargets)는 그대로: 공백·쉼표로 쪼개고 태그는 없다.
+func TestSplitTargetsStillNoTags(t *testing.T) {
+	if got := fmt.Sprint(splitTargets("a t1,b\tc")); got != "[a t1 b c]" {
+		t.Errorf("splitTargets = %s", got)
+	}
+}
+
+// 태그 모드가 아닐 때의 비교서버 붙여넣기: Tab 은 화면 전환이 아니고, 뒤 칸(메모)은 호스트가 아니라 무시된다.
+func TestBiosFlowRefPasteTabNoTagMode(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, ub := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua+"\n"+ub+"\n"), "VM"
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+	script := []flowStep{
+		{"profile-result", "\t"},
+		{"ref", "1"},
+		{"ref-host", ua + "\t메모\x04"},
+		{"compare-result", "qq"},
+	}
+	fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	if h := pasteRefHosts([]string{"a\t메모, b;c x", "# 주석"}); fmt.Sprint(h) != "[a b c]" {
+		t.Errorf("pasteRefHosts = %v", h)
 	}
 }

@@ -45,6 +45,7 @@
 
 ### 변경 (사용성)
 - **결과 화면 태그 이동 안내**: 키는 그대로(Tab = 화면 전환, ←→ = 벤더, Enter 후 ←→ = 태그·관리망, q/Esc = 벤더 줄로)이고 안내만 분명히 했습니다. 화면 줄에 `Tab: 화면 전환 (태그 이동은 Enter 후 ←→)`, 벤더 줄에 `Enter: 아래 태그 줄로`, 태그 줄에 들어가면 `←→ 태그 이동 · q/Esc 벤더 줄로`, 하단 키 안내도 태그 그룹이면 `Enter 태그 고르기`·`←→ 태그`. 태그 줄에서 Tab 을 누르면 화면을 바꾸면서 `Tab 은 화면 전환입니다 — 태그 이동은 ←→` 를 띄웁니다.
+- **고침 (엑셀 붙여넣기)**: 대상 붙여넣기·Cisco(XML) 대상 붙여넣기·비교서버 직접 입력에서 엑셀의 `IP<Tab>태그` 를 붙여넣으면 Tab 이 화면 전환으로 처리돼 다른 화면으로 가던 문제 — 이제 모든 여러 줄 입력칸에서 Tab 은 공백입니다. 붙여넣은 대상은 `user.txt` 와 같은 줄 형식(`hostname` 또는 `hostname 태그`, 쉼표·세미콜론도 구분, 3칸 이상이면 안내 후 다시 입력)으로 읽어 태그가 유지됩니다(이전에는 공백으로 쪼개 태그가 호스트로 읽힘). 태그 모드가 아닌 비교서버 입력은 줄마다 첫 칸만 hostname(뒤 칸 무시)이라 한 줄에 공백으로 여러 대 적는 방식은 없어졌습니다(쉼표 구분은 됨, `-ref` 플래그는 그대로). `-targets` 플래그는 바뀌지 않았습니다.
 - **고침**: 태그 모드에서 전체 설정 비교 기준을 직접 입력할 때 `hostname<Tab>태그` 의 Tab 이 화면 전환으로 처리돼 프로파일 점검으로 넘어가던 문제 — 이제 Tab 은 공백으로 들어갑니다.
 
 - **2순위 계정(`rf.conf`) 비밀번호 암호화**(`rfenc.go`, `fallback.go` `loadRFConfEnc`, `encrypt.sh`): `rf.conf` 에는 `<vendor>_user` 만 두고 비밀번호는 `bash encrypt.sh rf [벤더]`(또는 `bash bios.sh encrypt rf [벤더]`)로 `rf.enc`(bios.conf `rf_enc_file`, 키는 `pass.enc` 와 같은 `key.bin`, 0600)에 벤더별로 암호화해 저장합니다. 한 벤더만 갱신해도 나머지 벤더 줄은 그대로. 평문 `<vendor>_pass` 줄이 남아 있으면 키 이름만 밝히는 경고 후 계속 동작(과도기), 같은 벤더가 `rf.enc` 에도 있으면 `rf.enc` 우선. `rf.enc` 에 항목이 있는데 키가 없거나 다르면 덮어쓰지 않고 오류. `update.sh` 유지 목록·`.gitignore` 에 `rf.enc` 추가.
@@ -93,7 +94,7 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8306850 | 33d8e363bbbc39db17d2cbdd2ea495416eafed05f36d148f234ac61dc94aa2c1 |
+| bin/biostool | go1.26.5 | 8306850 | 2fce966abf5a94d579abc89f0f742f8cdcd8958153b2dcb57020a8422c62e593 |
 | bin/biostool_os6 | go1.20.14 | 6885376 | 37e8de9de182e06893b30305a455de25005f1b6d804f5979cb926c5e36fc3923 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |

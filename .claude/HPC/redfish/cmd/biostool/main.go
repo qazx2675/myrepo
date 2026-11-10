@@ -127,6 +127,9 @@ type commonOpts struct {
 	userXML  string // -user-xml: 모두 XML 로 점검할 대상 목록 파일 (bios 만, 비면 없음)
 	// userXMLArg 는 TUI 에서 붙여넣은 Cisco(XML) 대상입니다 (비어 있지 않으면 userXML 파일 대신 씀).
 	userXMLArg string
+	// targetsPaste 가 true 면 prepare 의 targetsArg 를 줄 단위(user.txt 형식: "hostname" 또는 "hostname 태그")로 읽는다
+	// (TUI 붙여넣기용 — 태그 유지). false(-targets 플래그)면 공백·쉼표로 쪼갠 hostname 목록이라 태그가 없다.
+	targetsPaste bool
 }
 
 func newFlagSet(name string) (*flag.FlagSet, *commonOpts) {
@@ -287,7 +290,11 @@ func prepare(o *commonOpts, targetsArg string, retryFromPath string) (*runContex
 	}
 	var inputs []string
 	if targetsArg != "" {
-		inputs = splitTargets(targetsArg)
+		if o.targetsPaste {
+			inputs = parseList(targetsArg)
+		} else {
+			inputs = splitTargets(targetsArg)
+		}
 	} else if retryFromPath != "" {
 		inputs, err = loadRetryList(retryFromPath)
 		if err != nil {
@@ -300,7 +307,7 @@ func prepare(o *commonOpts, targetsArg string, retryFromPath string) (*runContex
 	}
 	var xmlInputs []string
 	if o.routeXML && o.userXMLArg != "" {
-		xmlInputs = splitTargets(o.userXMLArg)
+		xmlInputs = parseList(o.userXMLArg) // TUI 붙여넣기 전용이라 user_xml.txt 와 같은 줄 형식 (태그 유지)
 	} else if o.routeXML && o.userXML != "" {
 		if xmlInputs, err = loadList(o.userXML); err != nil {
 			return nil, err

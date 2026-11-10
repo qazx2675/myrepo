@@ -271,7 +271,7 @@ func flowCiscoHint(pfx []string) []string {
 // anyIPInput 은 입력 중 IP(포트 붙은 것 포함)가 하나라도 있는지 봅니다.
 func anyIPInput(inputs []string) bool {
 	for _, in := range inputs {
-		if isIPInput(in) {
+		if isIPInput(listHost(in)) { // 줄이 "호스트 태그" 일 수 있다
 			return true
 		}
 	}
@@ -299,6 +299,7 @@ func (f *biosFlow) askTargets() (string, bool) {
 		xmlFileTitle, xmlPasteTitle = "Cisco(XML) 대상 파일 (Cisco 장비, 비우면 없음)",
 			"Cisco(XML) 대상 붙여넣기 (Cisco 장비만, 없으면 바로 Ctrl+D)"
 	}
+	o.targetsPaste = false
 	o.userXML, o.userXMLArg = "", "" // 대상 입력으로 돌아오면 앞에서 넣은 Cisco(XML) 대상은 버린다
 	for {
 		f.wait("targets")
@@ -330,32 +331,74 @@ func (f *biosFlow) askTargets() (string, bool) {
 			return "", true
 		}
 		f.wait("targets-paste")
-		lines, ok := ui.InputLines("대상 붙여넣기 (한 줄에 하나, Ctrl+D 완료 · Ctrl+X 취소)")
+		// Excel 에서 복사한 "IP<Tab>태그" 가 들어오므로 Tab 은 화면 전환이 아니라 공백으로 받는다.
+		lines, ok := ui.InputLinesTab("대상 붙여넣기 (한 줄에 \"hostname\" 또는 \"hostname 태그\", Ctrl+D 완료 · Ctrl+X 취소)")
 		if !ok {
 			if ui.Quit() {
 				return "", false
 			}
 			continue
 		}
-		s := strings.Join(lines, "\n")
-		in := splitTargets(s)
+		in, err := pasteTargetLines(lines)
+		if err != nil {
+			ui.SetMessage(err.Error())
+			continue
+		}
 		if len(in) == 0 {
 			ui.SetMessage("입력한 대상이 없습니다")
 			continue
 		}
+		xmlArg, back := "", false
 		if askXML(in) {
-			f.wait("targets-xml-paste")
-			xl, ok := ui.InputLines(xmlPasteTitle)
-			if !ok {
+			for {
+				f.wait("targets-xml-paste")
+				xl, ok := ui.InputLinesTab(xmlPasteTitle)
+				if !ok {
+					back = true
+					break
+				}
+				xin, err := pasteTargetLines(xl)
+				if err != nil {
+					ui.SetMessage("Cisco(XML) " + err.Error())
+					continue
+				}
+				xmlArg = strings.Join(xin, "\n")
+				break
+			}
+			if back {
 				if ui.Quit() {
 					return "", false
 				}
 				continue
 			}
-			o.userXMLArg = strings.Join(xl, "\n")
 		}
-		return s, true
+		o.userXMLArg = xmlArg
+		o.targetsPaste = true
+		return strings.Join(in, "\n"), true
 	}
+}
+
+// pasteTargetLines 는 TUI 에 붙여넣은 대상 줄을 user.txt 형식의 목록으로 바꿉니다: 한 줄 = "hostname" 또는 "hostname 태그"
+// (Excel 복사의 Tab 은 입력 단계에서 공백이 됨). 쉼표·세미콜론은 줄바꿈처럼 나누고, 빈 줄·# 주석은 건너뛰며 같은 호스트는 처음 것만 남깁니다.
+// 칸이 3개 이상인 줄이 있으면 오류입니다 (resolveTargets 와 같은 규칙 — 미리 알리고 다시 묻는다).
+func pasteTargetLines(lines []string) ([]string, error) {
+	in := parseList(strings.NewReplacer(",", "\n", ";", "\n").Replace(strings.Join(lines, "\n")))
+	for _, l := range in {
+		if len(strings.Fields(l)) > 2 {
+			return nil, fmt.Errorf("대상 줄 %q: 칸이 3개 이상입니다 (hostname 또는 \"hostname 태그\" 만 허용)", l)
+		}
+	}
+	return in, nil
+}
+
+// pasteRefHosts 는 태그 모드가 아닐 때의 비교서버 붙여넣기를 hostname 목록으로 바꿉니다: 줄마다 첫 칸이 hostname 이고
+// 나머지(Excel 의 메모·태그 칸)는 무시합니다. 쉼표·세미콜론은 줄바꿈처럼 나눕니다 (공백은 구분자가 아님 — 메모가 호스트가 되지 않게).
+func pasteRefHosts(lines []string) []string {
+	var out []string
+	for _, l := range parseList(strings.NewReplacer(",", "\n", ";", "\n").Replace(strings.Join(lines, "\n"))) {
+		out = append(out, listHost(l))
+	}
+	return out
 }
 
 // askXMLFile 은 Cisco(XML) 대상 파일을 묻습니다. 비우면 없음(""). ok=false 는 취소 (대상 입력 처음으로).
@@ -562,23 +605,20 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 		f.wait("ref-host")
 		// 태그 모드(대상에 태그가 있음)면 한 줄이 "hostname 태그" 라 공백으로 쪼개지 않는다 (compareRefs 가 줄마다 parseRefList).
 		tagMode := f.u.tagMode()
-		prompt := "비교서버 hostname (한 줄에 하나 또는 공백 구분, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
+		prompt := "비교서버 hostname (한 줄에 하나, 뒤 칸은 무시, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
 		if tagMode {
 			prompt = "비교서버 (한 줄에 \"hostname 태그\" 하나, 대상과 같은 태그끼리만 비교, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
 		}
-		var hs []string
-		var ok bool
-		if tagMode { // "hostname<Tab>태그" 붙여넣기: Tab 을 화면 전환이 아니라 공백으로 받는다
-			hs, ok = f.ui.InputLinesTab(prompt)
-		} else {
-			hs, ok = f.ui.InputLines(prompt)
-		}
+		// Excel 복사("hostname<Tab>태그/메모") 의 Tab 은 화면 전환이 아니라 공백으로 받는다.
+		hs, ok := f.ui.InputLinesTab(prompt)
 		if !ok {
 			return compareRef{}, false
 		}
-		h := splitTargets(strings.Join(hs, "\n"))
+		var h []string
 		if tagMode {
 			h = parseList(strings.NewReplacer(",", "\n", ";", "\n").Replace(strings.Join(hs, "\n")))
+		} else {
+			h = pasteRefHosts(hs) // 첫 칸만 hostname (뒤 칸 무시)
 		}
 		if len(h) > 0 {
 			return compareRef{Hosts: h}, true
