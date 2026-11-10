@@ -125,6 +125,11 @@ async function runOneTakeTests() {
     }
 
     // 1. 테스트용 공유폴더 및 Go 에이전트 시작
+    try {
+        execSync('taskkill /F /IM cross-checker-agent.exe', { stdio: 'ignore' });
+    } catch (e) {}
+    await sleep(500);
+
     const testShareDir = path.join(__dirname, '..', 'test_share');
     fs.mkdirSync(testShareDir, { recursive: true });
     fs.mkdirSync(path.join(testShareDir, 'sessions'), { recursive: true });
@@ -1191,6 +1196,10 @@ async function runOneTakeTests() {
 
         // 파일 직접 수정 (공유폴더 SMB 파일 복제 시뮬레이션)
         const sessFilePath = path.join(testShareDir, 'sessions', `${t24Sid}.json`);
+        for (let w = 0; w < 20; w++) {
+            if (fs.existsSync(sessFilePath)) break;
+            await sleep(100);
+        }
         const sessContent = JSON.parse(fs.readFileSync(sessFilePath, 'utf8'));
         sessContent.status = "APPROVED";
         sessContent.decidedAt = new Date().toISOString();

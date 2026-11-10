@@ -178,8 +178,8 @@
     }
     if (typeof state.showResetConfig !== 'boolean') state.showResetConfig = false;
 
-    // 신규 크로스체크 연동 상태 필드
-    if (typeof state.activeTab !== 'string') state.activeTab = 'single'; // 'single' | 'worker' | 'checker'
+    // 신규 크로스체크 연동 상태 필드 ('single' | 'worker' | 'checker')
+    if (typeof state.activeTab !== 'string') state.activeTab = 'single';
     if (typeof state.incidentNo !== 'string') state.incidentNo = '';
     if (typeof state.specialNotes !== 'string') state.specialNotes = '';
     if (typeof state.selectedCheckerIp !== 'string') state.selectedCheckerIp = '';
@@ -1605,7 +1605,8 @@
             const buildOptions = (selectedVal) => {
                 let html = '<option value="">확인자를 선택하세요</option>';
                 state.usersList.forEach(u => {
-                    if (u.ip === currentMyIp) return; // 자기 자신 제외
+                    // 자기 자신 제외
+                    if (u.ip === currentMyIp) return;
                     const isSel = (u.ip === selectedVal) ? 'selected' : '';
                     html += `<option value="${u.ip}" data-name="${u.name}" ${isSel}>${u.name} (${u.ip})</option>`;
                 });

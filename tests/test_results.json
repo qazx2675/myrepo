@@ -135,12 +135,12 @@
     "tcId": "TC-23",
     "name": "실시간 연동 전송 속도 (Latency < 3000ms)",
     "result": "PASS",
-    "detail": "요청 생성 -> 확인자 수신 -> 비교 -> 승인 -> 작업자 화면 반영 전체 왕복 속도: 65ms (< 3,000ms 요구사항 통과)"
+    "detail": "요청 생성 -> 확인자 수신 -> 비교 -> 승인 -> 작업자 화면 반영 전체 왕복 속도: 43ms (< 3,000ms 요구사항 통과)"
   },
   {
     "tcId": "TC-24",
     "name": "공유폴더 파일 폴백(Fallback) 동기화 검증",
     "result": "PASS",
-    "detail": "Direct HTTP 차단 상태에서 공유폴더(sessions/req_20261110_163328_05367d.json) 파일 감시(500ms)로 385ms 만에 승인 상태 동기화 완료"
+    "detail": "Direct HTTP 차단 상태에서 공유폴더(sessions/req_20261110_215749_e4f3c4.json) 파일 감시(500ms)로 371ms 만에 승인 상태 동기화 완료"
   }
 ]
