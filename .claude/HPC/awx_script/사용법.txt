@@ -139,5 +139,28 @@ AWX_DNS_CHECKED=1 AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_no
 # AWX_AUTO 없이 nodeinfo 질문만 자동 답변 (auto_setup 신규 설치 양식 → AWX 실행, 프로파일 없을 때)
 AWX_AUTO_NODEINFO=n bash 01.AWX_nodeinfo_V2.sh
 
+# ===== Step 8. 접속 확인(LDAP/LACP)·파티션 확인 선택 실행 (Unreleased, 2026-11-10) =====
+# 01 [12] 접속 확인과 02 파티션 확인은 느리므로(gossh 전 호스트 점검) 실행 전에 "실행할까요? [Y/n]" 을 묻는다
+# Enter 또는 Y = 실행 (기존과 같음), n = 건너뛰고 한 줄 안내 후 계속 (gossh 호출 없음, 01 의 AI GPU 안내는 그대로 출력)
+# 대화형 예: 접속 확인(LDAP/LACP) 실행할까요? [Y/n] : n  →  [12] 접속 확인(LDAP/LACP) 건너뜀
+
+# 01 실행 중 [12] 에서 n 입력 → 접속 확인 건너뜀, 02 의 파티션 확인에서도 n 입력 → 건너뜀
+bash 01.AWX_nodeinfo_V2.sh
+
+# 답변 없이 바로 응답 (환경변수): AWX_CHECK=y 는 실행, AWX_CHECK=n 은 건너뜀. 01 과 02 의 두 질문에 모두 적용
+AWX_CHECK=n bash 01.AWX_nodeinfo_V2.sh
+
+# AWX_CHECK=y 로 실행 (질문 없이 두 확인 모두 실행)
+AWX_CHECK=y bash 01.AWX_nodeinfo_V2.sh
+
+# 02 단독 실행에서 파티션 확인만 건너뛰기 (배치 모드 인자 형식은 그대로)
+AWX_CHECK=n bash 02.source_dhcp_pxe.sh <user> <yml>=<infra>,<os>,<boot>,<splunk>
+
+# auto 모드(AWX_AUTO=1): 접속 확인·파티션 확인을 기본으로 건너뜀 (기존 auto 실행에서 두 확인이 빠진다, 변경된 동작)
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
+# auto 모드에서도 두 확인을 돌리려면 AWX_CHECK=y 를 준다
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 AWX_CHECK=y bash 01.AWX_nodeinfo_V2.sh
+
+# 입력 파이프·stdin EOF 는 실행으로 간주 (질문에 답하지 않으면 확인을 돈다)
 # DNS 점검 테스트 (케이스 21~23, 전체 108건) — 가짜 DNS 서버 test/fake_dns.py 는 랩·CI 전용 (python3 필요)
 bash test/run_tests.sh

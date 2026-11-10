@@ -261,6 +261,18 @@ check_partitions() {
 	echo "${BOLD}===== 파티션 표준 확인 =====${RST}"
 	if [[ ! -f ${user}.txt ]]; then warn "[!] ${user}.txt 가 없어 파티션 확인을 건너뜁니다"; return 0; fi
 	if ! command -v gossh >/dev/null 2>&1; then warn "[!] gossh 가 없어 파티션 확인을 건너뜁니다"; return 0; fi
+	# 느린 확인(전 호스트 lsblk + os6 재조사)을 건너뛸 수 있게 묻는다. AWX_CHECK(Y/n) > auto 모드(건너뜀) > 직접 입력(EOF/그 외 입력은 실행)
+	local chk
+	if [[ ${AWX_CHECK:-} == [YyNn] ]]; then
+		chk=$AWX_CHECK
+		echo "${YELLOW}파티션 확인 실행할까요? [Y/n] : ${RST}${chk} (AWX_CHECK)"
+	elif [[ ${AWX_AUTO:-} == 1 ]]; then
+		echo "${YELLOW}파티션 확인 건너뜀 (auto 모드)${RST}"
+		return 0
+	else
+		read -r -p "${YELLOW}파티션 확인 실행할까요? [Y/n] : ${RST}" chk || chk=y
+	fi
+	if [[ $chk == [Nn] ]]; then echo "${YELLOW}파티션 확인 건너뜀${RST}"; return 0; fi
 	awk '{print $4}' "${user}.txt" | grep . | LC_ALL=C sort -u > "$outdir/hosts"
 	local cmd="lsblk -nl -o NAME,TYPE,SIZE,MOUNTPOINT" retry n6 noresp_label="lsblk 응답 없음(확인 불가)"
 	gossh -script -w "$outdir/hosts" "$cmd" < /dev/null > "$outdir/lsblk" 2> "$outdir/lsblk.err"

@@ -96,8 +96,9 @@ setup_case() {
 	CALLS=$STUBLOG/calls.log; OUT=$S/out.txt
 	: > "$CALLS"
 	export STUBLOG SVR_DIR REMOTE_DIR
-	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_USER AWX_VERIFY_FILE AWX_DNS_CHECKED AWX_TTY AWX_RESOLV_CONF STUB_DNSDB
+	unset AWX_COLOR NO_COLOR STUB_SLEEP FAIL_CALL FAIL_ONCE_FILE NODEINFO_FAIL NODEINFO_MODE NODEINFO_DB GOSSH_SCENARIO OS6_SCENARIO OS6_LSBLK_SCENARIO LSBLK_SCENARIO OS6_SSH_FAIL AWX_AUTO AWX_AUTO_NODEINFO AWX_AUTO_OS AWX_USER AWX_VERIFY_FILE AWX_DNS_CHECKED AWX_TTY AWX_RESOLV_CONF STUB_DNSDB AWX_CHECK
 	export GOSSH_SCENARIO=same
+	export AWX_CHECK=y   # 01 [12] / 02 파티션 확인 질문: 기존 케이스는 "실행" 으로 고정(25 케이스만 해제)
 	export AUTO_SETUP_DIR="$S/as"   # 01 [14-1] auto_setup 전달 위치(스크래치)
 	export PATH="$S/bin:$ORIG_PATH"
 	export AWX_RESOLV_CONF="$S/no_resolv.conf"   # DNS 점검: 기본은 resolv.conf 없음 → "점검 생략" (기존 케이스가 실제 DNS 를 건드리지 않게). DNS 케이스는 dns_setup 이 바꾼다
@@ -2340,6 +2341,101 @@ tag_cases() {
 	case_end
 }
 
+# ===================== 케이스 25: 접속 확인(01 [12]) · 파티션 확인(02) 선택 질문 =====================
+case25() {
+	local pat_skip01='^\[12\] 접속 확인\(LDAP/LACP\) 건너뜀$' pat_auto01='^\[12\] 접속 확인\(LDAP/LACP\) 건너뜀 \(auto 모드\)$'
+	local a02=("$TU" "A_inv-1_1ea.yml=I1,O1,B1,S1")
+
+	case_begin "25a" "01: AWX_CHECK=n → gossh 호출 없음 + 건너뜀 줄 + AI 안내는 유지 + 메뉴 단계까지 계속"
+	setup_case ai_server_list='host02|zz99'
+	seed_raw D6; export AWX_CHECK=n
+	run01 'N\nY\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "gossh 호출 0회" "$(grep -c '^gossh ' "$CALLS")" 0
+	t_has "AWX_CHECK 에코" "$OUT" '접속 확인\(LDAP/LACP\) 실행할까요\? \[Y/n\] : n \(AWX_CHECK\)$'
+	t_has "건너뜀 줄" "$OUT" "$pat_skip01"
+	t_has "AI power limit 안내 유지" "$OUT" '^AI GPU서버는 power limit설정이 필요합니다'
+	t_no "LDAP 요약 없음" "$OUT" 'LDAP이 .* 동일'
+	t_has "02 작업 리스트까지 진행" "$OUT" '^host01\|host02\|host03$'
+	t_notmp
+	case_end
+
+	case_begin "25b" "01: AWX_CHECK 없음 + 질문에 n → 건너뜀"
+	setup_case
+	seed_raw D6
+	unset AWX_CHECK
+	run01 'N\nY\nn\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "gossh 호출 0회" "$(grep -c '^gossh ' "$CALLS")" 0
+	t_has "건너뜀 줄(auto 표시 없음)" "$OUT" "$pat_skip01"
+	t_no "AWX_CHECK 에코 없음" "$OUT" 'AWX_CHECK'
+	case_end
+
+	case_begin "25c" "01: AWX_CHECK 없음 + 질문에 Enter → 실행"
+	setup_case
+	seed_raw D6
+	unset AWX_CHECK
+	run01 'N\nY\n\nsu\n1\nY\n'
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "gossh 호출 1회" "$(grep -c '^gossh ' "$CALLS")" 1
+	t_has "LDAP 요약" "$OUT" '^모든 호스트의 LDAP이 INFO LDAP INFRA1 SITE1으로 동일함$'
+	t_no "건너뜀 없음" "$OUT" '접속 확인\(LDAP/LACP\) 건너뜀'
+	case_end
+
+	case_begin "25d" "01: AWX_AUTO=1, AWX_CHECK 없음 → 건너뜀 (auto 모드)"
+	setup_case
+	seed_raw D6
+	unset AWX_CHECK
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025
+	run01 ''
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "gossh 호출 0회" "$(grep -c '^gossh ' "$CALLS")" 0
+	t_has "건너뜀 (auto 모드)" "$OUT" "$pat_auto01"
+	case_end
+
+	case_begin "25e" "01: AWX_AUTO=1 + AWX_CHECK=y → 실행"
+	setup_case
+	seed_raw D6
+	export AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 AWX_CHECK=y
+	run01 ''
+	t_rc "01 종료코드" "$RC" 0
+	t_eq "gossh 호출 1회" "$(grep -c '^gossh ' "$CALLS")" 1
+	t_has "AWX_CHECK 에코" "$OUT" '접속 확인\(LDAP/LACP\) 실행할까요\? \[Y/n\] : y \(AWX_CHECK\)$'
+	t_has "LDAP 요약" "$OUT" '^모든 호스트의 LDAP이 INFO LDAP INFRA1 SITE1으로 동일함$'
+	case_end
+
+	case_begin "25f" "02: AWX_CHECK=n / 질문에 n → lsblk 호출 없음, 건너뜀, 종료코드 0"
+	setup_case
+	seed_raw D6
+	export AWX_CHECK=n
+	run02 '1\nY\n' "${a02[@]}"
+	t_rc "AWX_CHECK=n 종료코드" "$RC" 0
+	t_eq "AWX_CHECK=n lsblk 0회" "$(grep -c '^gossh-lsblk ' "$CALLS")" 0
+	t_has "AWX_CHECK 에코" "$S/out.txt" '파티션 확인 실행할까요\? \[Y/n\] : .*n \(AWX_CHECK\)'
+	t_has "건너뜀" "$S/out.txt" '^파티션 확인 건너뜀$'
+	: > "$CALLS"; unset AWX_CHECK
+	run02 '1\nY\nn\n' "${a02[@]}"
+	t_rc "stdin n 종료코드" "$RC" 0
+	t_eq "stdin n lsblk 0회" "$(grep -c '^gossh-lsblk ' "$CALLS")" 0
+	t_has "건너뜀" "$S/out.txt" '^파티션 확인 건너뜀$'
+	case_end
+
+	case_begin "25g" "02: AWX_AUTO=1 → 건너뜀 (auto 모드), Enter → 실행"
+	setup_case
+	seed_raw D6
+	unset AWX_CHECK
+	AWX_AUTO=1 run02 '1\nY\n' "${a02[@]}"
+	t_rc "auto 종료코드" "$RC" 0
+	t_eq "auto lsblk 0회" "$(grep -c '^gossh-lsblk ' "$CALLS")" 0
+	t_has "건너뜀 (auto 모드)" "$S/out.txt" '^파티션 확인 건너뜀 \(auto 모드\)$'
+	: > "$CALLS"
+	run02 '1\nY\n\n' "${a02[@]}"
+	t_rc "Enter 종료코드" "$RC" 0
+	t_eq "Enter lsblk 1회" "$(grep -c '^gossh-lsblk ' "$CALLS")" 1
+	t_has "표준 판정" "$S/out.txt" '^모든 호스트\(3대\)가 표준 파티션입니다$'
+	case_end
+}
+
 # ===================== 실행 =====================
 echo "===== 01/02 실제 실행 기반 테스트 ($(date '+%F %T')) ====="
 echo "SRC=$SRC  bash=${BASH_VERSION}  host=$(hostname)"
@@ -2362,6 +2458,7 @@ auto_cases
 dns_cases
 real_dns_cases
 tag_cases
+case25
 
 echo
 echo "===== 케이스별 결과 (근거: 실제 실행 출력) ====="
