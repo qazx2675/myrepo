@@ -37,6 +37,8 @@ type Config struct {
 	SvrDir   string
 	GitDir   string // 01 의 git_upload: 비우면 생략, ${user} 는 사용자로 치환
 
+	InventoryDeleteHost string // 01 의 inventory_delete: 첫 등록 전에 ssh <host> "bash /root/server/delhost_<user>" 1번. 비우면 생략
+
 	InventorySource string
 	Inventory       string
 	SourceField     string
@@ -82,6 +84,8 @@ func (c *Config) setters() map[string]func(string) error {
 		"repo_dir": str(&c.RepoDir),
 		"svr_dir":  str(&c.SvrDir),
 		"git_dir":  str(&c.GitDir),
+
+		"inventory_delete_host": str(&c.InventoryDeleteHost),
 
 		"inventory_source": str(&c.InventorySource),
 		"inventory":        str(&c.Inventory),

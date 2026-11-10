@@ -259,6 +259,12 @@ func run(args []string) int {
 		return fail2("%v", err)
 	}
 	a.initResults(steps)
+	// 인벤토리 삭제(inventory_delete_host): 등록할 대상이 있을 때만, 첫 yaml 등록 전에 한 번. 실패하면 등록·launch 를 하지 않는다
+	if a.needRegister() {
+		if err := a.inventoryDelete(); err != nil {
+			return fail2("%v", err)
+		}
+	}
 	for _, s := range steps {
 		a.runStage(s)
 	}
