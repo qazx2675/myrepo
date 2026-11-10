@@ -566,7 +566,13 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 		if tagMode {
 			prompt = "비교서버 (한 줄에 \"hostname 태그\" 하나, 대상과 같은 태그끼리만 비교, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
 		}
-		hs, ok := f.ui.InputLines(prompt)
+		var hs []string
+		var ok bool
+		if tagMode { // "hostname<Tab>태그" 붙여넣기: Tab 을 화면 전환이 아니라 공백으로 받는다
+			hs, ok = f.ui.InputLinesTab(prompt)
+		} else {
+			hs, ok = f.ui.InputLines(prompt)
+		}
 		if !ok {
 			return compareRef{}, false
 		}

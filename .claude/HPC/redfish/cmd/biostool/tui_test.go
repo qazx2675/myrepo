@@ -148,7 +148,7 @@ func TestTUITabSwitching(t *testing.T) {
 	f := tuiLastFrame(r)
 	if !strings.Contains(f, ">> 벤더  >[HPE] [DELL]") || !strings.Contains(f, "   관리망  >[iLO 4] [iLO 5]   호스트 1대") ||
 		!strings.Contains(f, "AttrB ") || strings.Contains(f, "AttrB5") || !strings.Contains(f, "←→ 벤더") ||
-		!strings.Contains(f, "Enter 관리망 고르기") || !strings.Contains(f, "q 두 번 종료") {
+		!strings.Contains(f, "Enter 관리망 고르기") || !strings.Contains(f, "Enter: 아래 관리망 줄로") || !strings.Contains(f, "q 두 번 종료") {
 		t.Errorf("첫 화면은 HPE / iLO 4, 벤더 줄이 움직이는 줄:\n%s", f)
 	}
 	// Enter 로 벤더 안에 들어가면 ←→ 는 관리망 그룹 (끝에서 멈춤, 벤더는 그대로)
@@ -156,7 +156,8 @@ func TestTUITabSwitching(t *testing.T) {
 	f = tuiLastFrame(r)
 	if !u.inGroup || u.vi != 0 || u.gi != 1 || act != TUIQuit || !strings.Contains(f, "   벤더  >[HPE] [DELL]") ||
 		!strings.Contains(f, ">> 관리망  [iLO 4] >[iLO 5]") || !strings.Contains(f, "AttrC5") || strings.Contains(f, "h1 ") ||
-		!strings.Contains(f, "←→ 관리망") || !strings.Contains(f, "q/Esc 벤더로") {
+		!strings.Contains(f, "←→ 관리망") || !strings.Contains(f, "q/Esc 벤더로") ||
+		!strings.Contains(f, "호스트 1대 · ←→ 관리망 이동 · q/Esc 벤더 줄로") || strings.Contains(f, "Enter: 아래") {
 		t.Errorf("Enter → ←→ 관리망: inGroup=%v vi=%d gi=%d\n%s", u.inGroup, u.vi, u.gi, f)
 	}
 	if u, _, _ := browseKeys(t, "\r\x1b[C\x1b[D\x1b[D", tuiSampleVGs()); u.gi != 0 || u.vi != 0 {
@@ -207,7 +208,10 @@ func TestTUIViewTabs(t *testing.T) {
 		t.Fatalf("그룹 줄에서 Tab: act=%v inGroup=%v gi=%d filter=%c", act, u.inGroup, u.gi, u.filter)
 	}
 	f := tuiLastFrame(r)
-	if !strings.Contains(f, "화면  >[프로파일 점검] [전체 설정 비교]   Tab 전환") || !strings.Contains(f, "Tab 화면 전환") || strings.Contains(f, "r 기준") {
+	if u.msg != "Tab 은 화면 전환입니다 — 관리망 이동은 ←→" {
+		t.Errorf("그룹 줄에서 Tab 안내 msg = %q", u.msg)
+	}
+	if !strings.Contains(f, "화면  >[프로파일 점검] [전체 설정 비교]   Tab: 화면 전환 (관리망 이동은 Enter 후 ←→)") || !strings.Contains(f, "Tab 화면 전환") || strings.Contains(f, "r 기준") {
 		t.Errorf("보기 탭 줄·안내:\n%s", f)
 	}
 	u.SwitchTab(1)
@@ -829,5 +833,28 @@ func TestTUIWritePlain(t *testing.T) {
 	tuiWritePlain(&b, "x", tuiSampleVGs(), true)
 	if !strings.Contains(b.String(), "\x1b[32m") {
 		t.Error("color=true 면 색")
+	}
+}
+
+// 태그 그룹: 두 번째 줄·안내가 관리망이 아니라 태그로 나오고, Tab 은 그대로 화면 전환이다.
+func TestTUITagHints(t *testing.T) {
+	tagVGs := func() []VendorGroups {
+		return groupLines([]ResultLine{gtLine("asdf", "HPE", "h1", "iLO 5", "A"), gtLine("qwer", "Dell", "d1", "iDRAC 9", "B")})
+	}
+	_, r, _ := browseKeys(t, "x", tagVGs())
+	f := tuiLastFrame(r)
+	if !strings.Contains(f, "Enter: 아래 태그 줄로") || !strings.Contains(f, "Enter 태그 고르기") || strings.Contains(f, "관리망") {
+		t.Errorf("태그 벤더 줄 안내:\n%s", f)
+	}
+	u, r, _ := browseKeys(t, "\r\x1b[C", tagVGs())
+	f = tuiLastFrame(r)
+	if !u.inGroup || u.gi != 1 || !strings.Contains(f, ">> 태그  [asdf] >[qwer]") || !strings.Contains(f, "←→ 태그") ||
+		!strings.Contains(f, "호스트 1대 · ←→ 태그 이동 · q/Esc 벤더 줄로") || strings.Contains(f, "관리망") {
+		t.Errorf("태그 줄 안내: inGroup=%v gi=%d\n%s", u.inGroup, u.gi, f)
+	}
+	// 그룹이 하나뿐인 태그 벤더의 Enter 안내
+	u, r, _ = browseKeys(t, "\r", groupLines([]ResultLine{gtLine("asdf", "HPE", "h1", "iLO 5", "A")}))
+	if f := tuiLastFrame(r); u.inGroup || !strings.Contains(f, "이 벤더는 태그 그룹이 하나뿐입니다") {
+		t.Errorf("태그 1개 Enter:\n%s", f)
 	}
 }

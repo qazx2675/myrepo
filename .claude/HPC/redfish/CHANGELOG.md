@@ -44,6 +44,8 @@
 - **`update.sh`**(설치 폴더 갱신): `bash update.sh [ZIP|폴더]` 로 `/tmp` 의 가장 최근 redfish ZIP(`lib.sh`+`bios_check.sh` 가 든 것만 고르고 다른 ZIP 은 건너뜀. 또는 지정한 ZIP·압축 푼 폴더)을 풀어 고정 설치 폴더 `/root/server_vm_python/redhfish/V2` 를 갱신합니다. `bios.conf`·`pass.enc`·`key.bin`·`user.txt`·`diff.txt`·`ignore_attrs.txt`·`refs/`·`results/`·`dumps/` 는 그대로 두고 나머지 항목만 바꿉니다. 바꾸기 전 `results/`·`dumps/` 를 뺀 전체를 `../backup/V2_<일시>.tgz` 로 백업합니다. `profiles/` 는 파일별로, 현장에서 고치지 않은 파일만 새 버전으로 바꾸고 고친 파일(`verified=Y` 등)은 두고 새 버전을 `<이름>.new` 로 둡니다(판단 기준 `.update_profiles.sha`, 첫 업데이트는 새 버전과 다르면 모두 고친 것으로 봄). 새 버전에 없는 기존 항목은 지우지 않고 알려 주고, `bios.conf` 에 없는 새 설정 키도 알려 줍니다.
 
 ### 변경 (사용성)
+- **결과 화면 태그 이동 안내**: 키는 그대로(Tab = 화면 전환, ←→ = 벤더, Enter 후 ←→ = 태그·관리망, q/Esc = 벤더 줄로)이고 안내만 분명히 했습니다. 화면 줄에 `Tab: 화면 전환 (태그 이동은 Enter 후 ←→)`, 벤더 줄에 `Enter: 아래 태그 줄로`, 태그 줄에 들어가면 `←→ 태그 이동 · q/Esc 벤더 줄로`, 하단 키 안내도 태그 그룹이면 `Enter 태그 고르기`·`←→ 태그`. 태그 줄에서 Tab 을 누르면 화면을 바꾸면서 `Tab 은 화면 전환입니다 — 태그 이동은 ←→` 를 띄웁니다.
+- **고침**: 태그 모드에서 전체 설정 비교 기준을 직접 입력할 때 `hostname<Tab>태그` 의 Tab 이 화면 전환으로 처리돼 프로파일 점검으로 넘어가던 문제 — 이제 Tab 은 공백으로 들어갑니다.
 
 - **2순위 계정(`rf.conf`) 비밀번호 암호화**(`rfenc.go`, `fallback.go` `loadRFConfEnc`, `encrypt.sh`): `rf.conf` 에는 `<vendor>_user` 만 두고 비밀번호는 `bash encrypt.sh rf [벤더]`(또는 `bash bios.sh encrypt rf [벤더]`)로 `rf.enc`(bios.conf `rf_enc_file`, 키는 `pass.enc` 와 같은 `key.bin`, 0600)에 벤더별로 암호화해 저장합니다. 한 벤더만 갱신해도 나머지 벤더 줄은 그대로. 평문 `<vendor>_pass` 줄이 남아 있으면 키 이름만 밝히는 경고 후 계속 동작(과도기), 같은 벤더가 `rf.enc` 에도 있으면 `rf.enc` 우선. `rf.enc` 에 항목이 있는데 키가 없거나 다르면 덮어쓰지 않고 오류. `update.sh` 유지 목록·`.gitignore` 에 `rf.enc` 추가.
 - **점검 끝 계정 생성: 대상 목록과 자동 재점검**(`account_check.go`): 점검 끝에 `account_targets.txt`(생성 대상)·`account_unfixable.txt`(1순위 인증 실패 + `rf.conf` 계정도 없거나 거부 = 생성 불가)를 결과 폴더에 씁니다(0600, 호스트·IP 만. `-user` 로 다시 쓸 수 있는 형식). [Y/n] 질문은 그대로이고, Y 로 1순위 계정을 새로 만든 호스트만 1순위 계정으로 다시 점검해 원래 결과에 바꿔 끼운 합친 결과 CSV 를 `recheck/` 에 씁니다. `-dry-run` 은 쓰기·재점검 없음.
@@ -91,7 +93,7 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8298658 | 25367714ce4d2ffc2fbe20233f84cbc74a8a42037e24fd2903b7f94548c626ac |
+| bin/biostool | go1.26.5 | 8306850 | 33d8e363bbbc39db17d2cbdd2ea495416eafed05f36d148f234ac61dc94aa2c1 |
 | bin/biostool_os6 | go1.20.14 | 6885376 | 37e8de9de182e06893b30305a455de25005f1b6d804f5979cb926c5e36fc3923 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |

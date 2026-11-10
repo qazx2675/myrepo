@@ -952,3 +952,25 @@ func TestBiosFlowRefSplitAndQuitWithoutAsking(t *testing.T) {
 		t.Errorf("비교서버 2개가 모두 쓰여야 함: %+v", gotCmp)
 	}
 }
+
+// 태그 모드의 비교서버 입력: "hostname<Tab>태그" 붙여넣기에서 Tab 이 화면 전환이 아니라 공백이 된다.
+func TestBiosFlowTagRefPasteTab(t *testing.T) {
+	_, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	_, ub := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua+" t1\n"+ub+" t1\n"), "VM"
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+	script := []flowStep{
+		{"profile-result", "\t"},
+		{"ref", "1"},
+		{"ref-host", ua + "\tt1\x04"}, // Tab 이 화면 전환이면 다음 단계가 profile-result 가 되어 어긋난다
+		{"compare-result", "qq"},
+	}
+	fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+}

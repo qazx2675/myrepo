@@ -496,6 +496,9 @@ func (u *TUI) Browse() TUIAction {
 			return true
 		case (k.isRune(tuiTab) || k.k == tkBackTab) && !u.textMode && len(u.tabs) > 1:
 			act = TUITab
+			if u.inGroup { // 태그·관리망 줄에서 Tab 을 누른 사람에게: 화면은 바뀌지만 이동 키는 ←→ (SwitchTab 은 msg 를 지우지 않는다)
+				u.msg = "Tab 은 화면 전환입니다 — " + u.subLabel() + " 이동은 ←→"
+			}
 			return true
 		case k.isRune('r', 'R') && !u.textMode && u.refKey:
 			act = TUIRef
@@ -770,7 +773,7 @@ func (u *TUI) navKey(k tuiKey) {
 		if len(u.vgs[u.vi].Groups) > 1 {
 			u.inGroup = true
 		} else {
-			u.msg = "이 벤더는 관리망 그룹이 하나뿐입니다"
+			u.msg = "이 벤더는 " + u.subLabel() + " 그룹이 하나뿐입니다"
 		}
 	case u.inGroup && k.k == tkLeft && u.gi > 0:
 		u.gi, u.top = u.gi-1, 0
@@ -784,6 +787,14 @@ func (u *TUI) navKey(k tuiKey) {
 		u.filter, u.top = k.r, 0
 	}
 	u.clampTop()
+}
+
+// subLabel 은 두 번째 줄 이름입니다: 태그 그룹이면 "태그", 아니면 "관리망".
+func (u *TUI) subLabel() string {
+	if g := u.group(); g != nil && g.Vendor == tagGroupVendor {
+		return tagGroupVendor
+	}
+	return "관리망"
 }
 
 // back 은 관리망 그룹 줄에서 벤더 줄로 한 단계 돌아갑니다 (돌아갔으면 true, 이미 맨 위 단계면 false).
@@ -894,7 +905,7 @@ func (u *TUI) frame(w, h int) []string {
 	var row func(i int) string
 	g := u.group()
 	if !u.textMode && len(u.tabs) > 1 {
-		head = append(head, tuiTabsLine(color, w, "화면", u.tabs, u.ti, "Tab 전환", false))
+		head = append(head, tuiTabsLine(color, w, "화면", u.tabs, u.ti, "Tab: 화면 전환 ("+u.subLabel()+" 이동은 Enter 후 ←→)", false))
 	}
 	switch {
 	case u.textMode:
@@ -908,18 +919,23 @@ func (u *TUI) frame(w, h int) []string {
 		for i, vg := range u.vgs {
 			names[i] = tuiDash(vg.Vendor)
 		}
-		head = append(head, tuiTabsLine(color, w, "벤더", names, u.vi, "", !u.inGroup))
-		hosts := fmt.Sprintf("호스트 %d대", len(g.Hosts))
-		sub := "관리망"
-		if g.Vendor == tagGroupVendor { // 태그 그룹: 두 번째 줄 탭은 관리망이 아니라 태그 이름
-			sub = tagGroupVendor
+		sub := u.subLabel() // 태그 그룹: 두 번째 줄 탭은 관리망이 아니라 태그 이름
+		vtail := ""
+		if !u.inGroup && len(u.vgs[u.vi].Groups) > 1 {
+			vtail = "Enter: 아래 " + sub + " 줄로"
 		}
+		head = append(head, tuiTabsLine(color, w, "벤더", names, u.vi, vtail, !u.inGroup))
+		hosts := fmt.Sprintf("호스트 %d대", len(g.Hosts))
 		if gs := u.vgs[u.vi].Groups; len(gs) > 1 {
+			gtail := hosts
+			if u.inGroup {
+				gtail += " · ←→ " + sub + " 이동 · q/Esc 벤더 줄로"
+			}
 			gn := make([]string, len(gs))
 			for i, x := range gs {
 				gn[i] = tuiDash(x.Name)
 			}
-			head = append(head, tuiTabsLine(color, w, sub, gn, u.gi, hosts, u.inGroup))
+			head = append(head, tuiTabsLine(color, w, sub, gn, u.gi, gtail, u.inGroup))
 		} else {
 			head = append(head, tuiSegLine(color, w, tuiSeg{"   " + sub + "  ", tuiStBold}, tuiSeg{tuiDash(g.Name), ""}, tuiSeg{"   " + hosts, tuiStGray}))
 		}
@@ -1009,11 +1025,11 @@ func (u *TUI) hintItems() []string {
 		}
 		switch {
 		case u.inGroup:
-			lv, quit = append(lv, "←→ 관리망"), "q/Esc 벤더로"
+			lv, quit = append(lv, "←→ "+u.subLabel()), "q/Esc 벤더로"
 		case len(u.vgs) > 0:
 			lv = append(lv, "←→ 벤더")
 			if u.vi < len(u.vgs) && len(u.vgs[u.vi].Groups) > 1 {
-				lv = append(lv, "Enter 관리망 고르기")
+				lv = append(lv, "Enter "+u.subLabel()+" 고르기")
 			}
 		}
 		nav = append(lv, nav...)
