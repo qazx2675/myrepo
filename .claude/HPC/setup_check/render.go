@@ -153,6 +153,8 @@ const (
 	cYellow = "33"
 	cCyan   = "36"
 	cRev    = "1;7"
+	cQText  = "1;36" // 질문 본문 (굵은 청록)
+	cQKey   = "1;33" // 선택지 키·입력 항목 이름 (굵은 노랑)
 )
 
 // ---------------------------------------------------------------------------
@@ -301,7 +303,7 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 			lines = append(lines[:maxQ-1], "...")
 		}
 		for _, l := range lines {
-			out = append(out, lineOf(w, nc, seg{"  " + l, ""}))
+			out = append(out, lineOf(w, nc, seg{"  " + l, cQText}))
 		}
 		// 선택지는 한 개씩 끊지 않고 줄을 채워 나열
 		var cur []seg
@@ -318,7 +320,7 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 			if curW+cw > w && len(cur) > 0 {
 				flush()
 			}
-			cur = append(cur, seg{key, cBold}, seg{label, ""})
+			cur = append(cur, seg{key, cQKey}, seg{label, cCyan})
 			curW += cw
 		}
 		flush()
@@ -881,9 +883,9 @@ func inputLines(q *question, view viewState, w int) []string {
 			done = append(done, g.Key+"="+view.InputVals[g.Key])
 		}
 		if len(done) > 0 {
-			out = append(out, lineOf(w, nc, seg{"  " + strings.Join(done, " "), cDim}))
+			out = append(out, lineOf(w, nc, seg{"  " + strings.Join(done, " "), cGreen}))
 		}
-		out = append(out, lineOf(w, nc, seg{"  " + f.Key + ": ", cBold}, seg{view.InputBuf + "_", cRev}, seg{"  " + f.Label, cDim}))
+		out = append(out, lineOf(w, nc, seg{"  " + f.Key + ": ", cQKey}, seg{view.InputBuf + "_", cRev}, seg{"  " + f.Label, cCyan}))
 	case view.ReadyQ == q.ID:
 		var p []string
 		for _, g := range q.Inputs {
@@ -894,7 +896,7 @@ func inputLines(q *question, view viewState, w int) []string {
 		if view.InputErr != "" {
 			out = append(out, lineOf(w, nc, seg{"  ! " + view.InputErr, cRed}))
 		}
-		out = append(out, lineOf(w, nc, seg{"  [i/Enter] 값 입력: " + endFieldNames(), cBold}))
+		out = append(out, lineOf(w, nc, seg{"  [i/Enter] 값 입력: " + endFieldNames(), cQKey}))
 	}
 	return out
 }

@@ -37,6 +37,8 @@ type Config struct {
 	SvrDir   string
 	GitDir   string // 01 의 git_upload: 비우면 생략, ${user} 는 사용자로 치환
 
+	InventoryMatchExclude []string // launch 전 인벤토리 완전일치 검사에서 뺄 호스트 ("a|b", 대소문자 무시)
+
 	InventoryDeleteHost string // 01 의 inventory_delete: 첫 등록 전에 ssh <host> "bash /root/server/delhost_<user>" 1번. 비우면 생략
 
 	InventorySource string
@@ -86,6 +88,15 @@ func (c *Config) setters() map[string]func(string) error {
 		"git_dir":  str(&c.GitDir),
 
 		"inventory_delete_host": str(&c.InventoryDeleteHost),
+		"inventory_match_exclude": func(v string) error {
+			c.InventoryMatchExclude = nil
+			for _, h := range strings.Split(v, "|") {
+				if h = strings.TrimSpace(h); h != "" {
+					c.InventoryMatchExclude = append(c.InventoryMatchExclude, h)
+				}
+			}
+			return nil
+		},
 
 		"inventory_source": str(&c.InventorySource),
 		"inventory":        str(&c.Inventory),
