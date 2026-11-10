@@ -1605,11 +1605,17 @@
             const buildOptions = (selectedVal) => {
                 let html = '<option value="">확인자를 선택하세요</option>';
                 state.usersList.forEach(u => {
-                    // 자기 자신 제외
+                    // 평소에는 자기 자신 제외 (정상 운영 규칙 엄격 준수)
                     if (u.ip === currentMyIp) return;
                     const isSel = (u.ip === selectedVal) ? 'selected' : '';
                     html += `<option value="${u.ip}" data-name="${u.name}" ${isSel}>${u.name} (${u.ip})</option>`;
                 });
+                // 이번 1인 테스트 전용: 나 자신에게 테스트 요청 옵션 제공 (단, 확인자 호출은 나 자신에게 발생하지 않음)
+                if (currentMyIp) {
+                    const myName = state.agentInfo.name || "나 자신";
+                    const isSel = (currentMyIp === selectedVal) ? 'selected' : '';
+                    html += `<option value="${currentMyIp}" data-name="${myName} (테스트)" ${isSel} style="color:#2563eb; font-weight:700;">[테스트] ${myName} (나 자신: ${currentMyIp})</option>`;
+                }
                 return html;
             };
 
@@ -1807,6 +1813,23 @@
                         </div>
                         <div style="color:#991b1b; font-size:11.5px;">
                             확인자: <b>${state.currentSession.checkerName}</b> | 사유: ${state.currentSession.decisionComment || '불일치 감지'}
+                        </div>
+                    `;
+                }
+            } else if (state.currentSession.checkerIp === state.agentInfo.ip && state.currentSession.status === 'PENDING') {
+                if (wResultReport) {
+                    wResultReport.style.display = 'block';
+                    wResultReport.style.background = '#eff6ff';
+                    wResultReport.style.border = '1px solid #bfdbfe';
+                    wResultReport.style.borderRadius = '5px';
+                    wResultReport.style.padding = '10px';
+                    wResultReport.innerHTML = `
+                        <div style="font-weight:700; color:#1d4ed8; font-size:12.5px; margin-bottom:4px;">
+                            [1인 테스트 모드 진행 안내]
+                        </div>
+                        <div style="color:#1e40af; font-size:11.5px; line-height:1.5;">
+                            나 자신에게 발송된 테스트 요청입니다. (확인자 외부 호출 없이 로컬 세션 생성 완료)<br>
+                            상단 탭에서 <b>[크로스체크 확인 (확인자)]</b> 탭을 클릭하여 확인자 화면에서 직접 검증 및 승인/반려를 진행하세요.
                         </div>
                     `;
                 }

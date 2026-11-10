@@ -845,8 +845,8 @@ func (s *AgentServer) handleSessionCreate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Async direct HTTP notification to checker
-	if sess.Checker.IP != "" {
+	// Async direct HTTP notification to checker (자기 자신 호출 방지)
+	if sess.Checker.IP != "" && sess.Checker.IP != s.detectedIP && sess.Checker.IP != "127.0.0.1" && sess.Checker.IP != sess.Worker.IP {
 		go func(checkerIP string, sessCopy Session) {
 			url := fmt.Sprintf("http://%s:%d/api/peer/notify", checkerIP, s.config.ListenPort)
 			payload, _ := json.Marshal(map[string]interface{}{
@@ -1066,8 +1066,8 @@ func (s *AgentServer) handleSessionReassign(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Notify old checker async
-	if oldChecker.IP != "" {
+	// Notify old checker async (자기 자신 호출 방지)
+	if oldChecker.IP != "" && oldChecker.IP != s.detectedIP && oldChecker.IP != "127.0.0.1" && oldChecker.IP != sess.Worker.IP {
 		go func(ip string, sid string) {
 			url := fmt.Sprintf("http://%s:%d/api/peer/notify", ip, s.config.ListenPort)
 			payload, _ := json.Marshal(map[string]interface{}{
@@ -1085,8 +1085,8 @@ func (s *AgentServer) handleSessionReassign(w http.ResponseWriter, r *http.Reque
 		}(oldChecker.IP, sess.SessionId)
 	}
 
-	// Notify new checker async
-	if req.NewChecker.IP != "" {
+	// Notify new checker async (자기 자신 호출 방지)
+	if req.NewChecker.IP != "" && req.NewChecker.IP != s.detectedIP && req.NewChecker.IP != "127.0.0.1" && req.NewChecker.IP != sess.Worker.IP {
 		go func(ip string, sessCopy Session) {
 			url := fmt.Sprintf("http://%s:%d/api/peer/notify", ip, s.config.ListenPort)
 			payload, _ := json.Marshal(map[string]interface{}{
