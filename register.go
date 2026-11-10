@@ -87,6 +87,41 @@ func runCmd(name string, args ...string) error {
 	return nil
 }
 
+// inventoryDeleteCmd 는 인벤토리 삭제 때 원격에서 실행할 명령이다 (AWX 01 스크립트의 inventory_delete 와 같다).
+func inventoryDeleteCmd(user string) string {
+	return "bash /root/server/delhost_" + user
+}
+
+// inventoryDelete 는 conf 의 inventory_delete_host 에서 삭제 스크립트를 실행한다. 값이 비면 아무것도 하지 않는다.
+// 실행 한 번에 한 번, 첫 yaml 등록 전에 부른다.
+func (a *app) inventoryDelete() error {
+	host := strings.TrimSpace(a.cfg.InventoryDeleteHost)
+	if host == "" {
+		return nil
+	}
+	remote := inventoryDeleteCmd(a.user)
+	a.logf("%s 인벤토리 삭제: ssh %s \"%s\"", markInfo, host, remote)
+	if err := runCmd(sshBin, "-o", "BatchMode=yes", host, remote); err != nil {
+		appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete host=%s status=fail error=%q", a.user, host, err.Error()))
+		return fmt.Errorf("inventory_delete 실패 (ssh %s \"%s\"): %v", host, remote, err)
+	}
+	appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete host=%s status=ok", a.user, host))
+	a.logf("%s 인벤토리 삭제 완료", markOK)
+	return nil
+}
+
+// needRegister 는 등록(launch)할 대상이 하나라도 있는지 알려준다.
+func (a *app) needRegister() bool {
+	for _, t := range a.targets {
+		for _, r := range t.Res {
+			if r == resNotRun {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // register 는 yaml 을 만들어 repohost 에 올리고 custom_inventory.sh 로 yml 을 만든 뒤 invsync 한다.
 // 성공하면 새로 생긴 yml 이름을 돌려준다.
 func (a *app) register(yamlName string, list []*target) (string, error) {
