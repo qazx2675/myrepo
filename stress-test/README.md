@@ -146,7 +146,11 @@ a b c node0003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 100 8.10 uefi
 2. **단계 실행** — 선택한 순서대로, **앞 단계의 감시가 끝난 뒤** 다음 단계를 시작합니다. 단계마다 묶음 하나입니다.
    - `b) stress`: 대상 전체 → yaml 1개 → 등록 → stress-ng 템플릿 launch(종료 시각 포함).
    - `a) cpu`: 접속된 **모든** 호스트(`unknown` 벤더 포함) → yaml 1개 → 등록 → cpu 템플릿 launch. Intel/AMD 구분은 템플릿 안에서 합니다.
-3. **등록**(묶음마다, AWX 01 스크립트 방식, 인벤토리 삭제는 하지 않음)
+3. **인벤토리 삭제**(선택, 실행 한 번에 한 번) — conf 의 `inventory_delete_host` 가 있으면 첫 yaml 등록 전에 `ssh <inventory_delete_host> "bash /root/server/delhost_<user>"` 를 한 번 실행합니다(AWX 01 스크립트의 inventory_delete 와 같음, 비밀번호 없이 접속돼야 함).
+   - 값이 비면 건너뜁니다. 등록할 대상이 없을 때(전부 접속불가·DNS실패)도 실행하지 않습니다.
+   - 실패하면 등록·launch 를 하지 않고 종료코드 2 로 끝납니다.
+   - 묶음·재실행(retry)마다 다시 하지 않습니다. `-inspect`·`-yaml-state` 에서는 실행하지 않습니다.
+4. **등록**(묶음마다, AWX 01 스크립트 방식)
    ```
    yaml 생성(12필드) → scp <yaml> <repohost>:<repo_dir>/
    → ssh <repohost> "bash <repo_dir>/custom_inventory.sh <repo_dir>/<yaml>"
@@ -158,7 +162,7 @@ a b c node0003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 100 8.10 uefi
    - 새 yml 이름이 `_<N>ea.yml` 형식이면 N 이 입력 대수와 다를 때 경고만 출력합니다.
    - 새 yml 이 0개 또는 2개 이상이면 그 묶음은 `실패` 입니다.
    - `git_dir` 의 `${user}` 는 user 로 치환됩니다. 비우면 git 업로드를 건너뜁니다.
-4. **템플릿 launch** — 묶음의 hostname 들을 **줄바꿈으로 이어** conf 의 `<tmpl>_hostname_key` survey 변수 하나로 넘기고(키를 비우면 넘기지 않음 = 인벤토리 전체 대상), `<tmpl>_extra_vars`(`k=v, k2=v2`)를 함께 보냅니다. 템플릿은 ID(숫자) 또는 이름으로 지정합니다.
+5. **템플릿 launch** — 묶음의 hostname 들을 **줄바꿈으로 이어** conf 의 `<tmpl>_hostname_key` survey 변수 하나로 넘기고(키를 비우면 넘기지 않음 = 인벤토리 전체 대상), `<tmpl>_extra_vars`(`k=v, k2=v2`)를 함께 보냅니다. 템플릿은 ID(숫자) 또는 이름으로 지정합니다.
    - **stress-ng 종료 시각**: 템플릿 `survey_spec` 을 조회해 `stress_end_keys` 각 변수의 type 이 `integer`/`float` 이면 숫자로, 그 밖(text 등)·survey 에 없으면 입력한 글자 그대로(`07` 등) extra_vars 에 넣습니다. launch 때 종료 시각이 이미 지났으면(cpu 단계·감시가 길어진 경우, 재실행 회차 등) 대화형은 다시 묻고, 비대화형은 그 묶음을 `실패`(비고 `종료 시각이 지남`)로 둡니다.
    - **템플릿 인벤토리 바꾸기·되돌리기** (launch 마다):
      ```
@@ -170,13 +174,13 @@ a b c node0003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 100 8.10 uefi
      ```
      AWX 는 job 을 만들 때 인벤토리를 고정하므로 launch 응답 직후 되돌려도 실행에는 영향이 없습니다. 되돌리기에 실패하면 `✗✗✗` 경고 2줄, 이력 `action=restore status=fail`, 결과 비고 `인벤토리 복원 실패 — 수동으로 DEFAULT 로` 를 남깁니다(job 은 그대로 감시).
    - job 은 부하를 백그라운드로 띄우고 바로 끝나므로 `successful` 이 될 때까지 `poll_interval` 간격으로 조회합니다. job 이 실패하면 stdout 마지막 20줄을 보여 주고 그 묶음 전체를 `실패`(비고 `... 실패(job N)`)로 표시한 뒤 감시에서 제외합니다.
-5. **감시** — job 완료 직후 시작. 최대 `monitor_sec` 초 동안 `monitor_interval` 초마다(첫 확인은 launch 후 interval 뒤) gossh 로 `cat /proc/loadavg` 를 실행해 **1분 로드 < `load_threshold`** 인 호스트 목록을 `top` 처럼 같은 화면에서 갱신합니다(ANSI 화면 지움, 프롬프트가 밀려 내려가지 않음).
+6. **감시** — job 완료 직후 시작. 최대 `monitor_sec` 초 동안 `monitor_interval` 초마다(첫 확인은 launch 후 interval 뒤) gossh 로 `cat /proc/loadavg` 를 실행해 **1분 로드 < `load_threshold`** 인 호스트 목록을 `top` 처럼 같은 화면에서 갱신합니다(ANSI 화면 지움, 프롬프트가 밀려 내려가지 않음).
    - 화면 열: `hostname | CPU벤더 | load | 비고`. 응답이 없는 호스트는 load 열에 `응답없음` 으로 남깁니다.
    - 로드가 기준 이상이 된 호스트는 목록에서 빠지고 `실행` 으로 확정됩니다. **목록이 비면 `monitor_sec` 가 안 됐어도 즉시 완료**합니다(조기 종료).
    - 감시 종료(시간 만료) 시 목록에 남은 호스트(로드 < 기준) = `미실행`.
    - 비대화형(`-batch` 또는 터미널 아님)은 화면 갱신 대신 회차마다 한 줄 요약을 출력합니다.
-6. **재실행** — 대화형은 `미실행 N대를 재실행할까요? (y/N):`. `y` 면 남은 호스트만으로 새 yaml → 등록 → 같은 템플릿 launch(인벤토리 바꾸기·되돌리기 포함) → 감시를 반복하고 `미실행` 이 남는 동안 계속 묻습니다. 비대화형은 `-retry N`(기본 0) 횟수만큼 자동 재실행합니다. `접속불가`·`DNS실패`·`실패`(job 실패) 호스트는 재실행 대상이 아닙니다.
-7. **결과** — 결과표를 화면에 출력하고 파일로 저장합니다. 마지막 줄에 결과 파일 경로를 안내합니다.
+7. **재실행** — 대화형은 `미실행 N대를 재실행할까요? (y/N):`. `y` 면 남은 호스트만으로 새 yaml → 등록 → 같은 템플릿 launch(인벤토리 바꾸기·되돌리기 포함) → 감시를 반복하고 `미실행` 이 남는 동안 계속 묻습니다. 비대화형은 `-retry N`(기본 0) 횟수만큼 자동 재실행합니다. `접속불가`·`DNS실패`·`실패`(job 실패) 호스트는 재실행 대상이 아닙니다.
+8. **결과** — 결과표를 화면에 출력하고 파일로 저장합니다. 마지막 줄에 결과 파일 경로를 안내합니다.
 
 ### 2.5 장애 목록 `error_list.txt` (`-er`)
 

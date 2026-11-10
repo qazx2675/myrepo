@@ -9,7 +9,7 @@
 | `config.go` | `Config` 구조체와 `key = value` 파서(기본값 포함, 옛 `cpu_intel_*`/`cpu_amd_*` 키 거부, `stress_end_keys` 5개 검사), 단계별 필수 키 검증 `validate`, user 결정(`-user` → `STRESS_USER` → `$USER`), conf 탐색(`./conf` → `~/.stress-test` → `<바이너리 위치>/conf`), `key=value, ...` 분해, 이력 파일 기록 |
 | `input.go` | 입력 파일 파싱(`parseHosts`: 1필드/12·13필드 줄 판정, DNS·MAC 생성), error_list.txt 파싱(`parseErrorList`), `-steps` 파싱, 단계 결과 값 상수(`실행` 등) |
 | `gossh.go` | gossh 경로 결정(conf → `GOSSH` → PATH), 임시 호스트 파일로 gossh 실행·결과 파일(`_res_off` 등) 수거, 출력(`host: 내용`) 파싱, 벤더(`parseVendors`)·1분 로드(`parseLoads`) 해석 |
-| `register.go` | 인벤토리 등록: yaml 생성 → scp → ssh `custom_inventory.sh` → `svr_dir` 새 yml 1개 확인(수정 시각 비교) → (git_dir) `.git_upload.sh` → invsync |
+| `register.go` | (inventory_delete_host 설정 시) 첫 등록 전 인벤토리 삭제 1회 · 인벤토리 등록: yaml 생성 → scp → ssh `custom_inventory.sh` → `svr_dir` 새 yml 1개 확인(수정 시각 비교) → (git_dir) `.git_upload.sh` → invsync |
 | `awx.go` | AWX REST(`/api/v2`) 최소 클라이언트: 템플릿 조회(ID/이름, 현재 인벤토리 `summary_fields.inventory`)·인벤토리 PATCH, 인벤토리 이름 조회(`?name=`), `survey_spec` type, launch, job poll·stdout tail, 인벤토리 소스 ID 결정·PATCH·update·완료 대기 (awxkit 에서 필요한 부분만 복사) |
 | `monitor.go` | 감시 루프 `monitorLoad`: interval 마다 로드 확인, 기준 이상 호스트 제거, 목록 비면 조기 종료, 대화형은 ANSI 화면 갱신/비대화형은 한 줄 요약, 한글 폭 맞춘 표 |
 | `awx_test.go` | fake AWX(httptest)·가짜 ssh/scp 로 `launchBatch` 성공(인벤토리 PATCH 순서·종료 시각 type 변환)·job 실패, hostname_key 없음, launch 실패 시 되돌림, 되돌리기 실패, 사용 중 → r / EOF / 대화형 x, PATCH 직후 경합, 종료 시각 지남, 신호 시 되돌림, 사전 확인 실패, 새 yml 없음, 고정 소스 invsync 검증 |
