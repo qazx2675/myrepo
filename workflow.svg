@@ -128,7 +128,7 @@
   <text class="h" x="550" y="1011">서버 상태 점검 (자동, 결과만 화면에 표시)</text>
   <text class="b" x="550" y="1030">LDAP 주소 · LACP(본딩) 서버 · 응답 없는 서버</text>
   <text class="b" x="550" y="1047">os8_mgmt 에서 접속이 안 되는 서버는 os6_mgmt 에서 한 번 더 확인</text>
-  <text class="s" x="550" y="1060">[12] check_servers</text>
+  <text class="s" x="550" y="1060">[12] check_servers (선택)</text>
   <path class="ln" d="M550 1068 V1092"/>
 
   <!-- 메뉴 -->
@@ -185,7 +185,7 @@
   <rect class="auto" x="270" y="1644" width="560" height="78" rx="10"/>
   <text class="h" x="550" y="1668">모든 yml 이 끝나면 결과 정리</text>
   <text class="b" x="550" y="1688">yml 이 2개 이상이고 모두 성공 → 전체 yml 로 인벤토리 소스 한 번 더 갱신</text>
-  <text class="b" x="550" y="1707">성공·실패 요약 · 최종 수량(HPC/SDS · infra · OS 별) · 파티션 표준 확인</text>
+  <text class="b" x="550" y="1707">성공·실패 요약 · 최종 수량(HPC/SDS · infra · OS 별) · 파티션 표준 확인(선택)</text>
   <path class="ln" d="M550 1722 V1746"/>
 
   <!-- 실패 시 재시도 -->
