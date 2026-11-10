@@ -1,0 +1,7 @@
+{
+  "sharedDir": ".",
+  "listenPort": 18080,
+  "pollIntervalMs": 500,
+  "autoOpenBrowserOnRequest": false
+}
+

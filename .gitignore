@@ -1,0 +1,7 @@
+# Temporary test folders
+test_share/
+.test_chrome_*
+
+# Ensure binaries and dist files are tracked for closed networks
+!dist/cross-checker-agent.exe
+!dist/bookmarklet.txt
