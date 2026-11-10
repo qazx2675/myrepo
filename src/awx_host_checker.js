@@ -1679,11 +1679,13 @@
                 return null;
             }
 
+            // 이벤트 객체(MouseEvent 등)가 인자로 넘어오는 경우 대비 엄격한 문자열 타입 검증
+            const explicitIp = (typeof overrideCheckerIp === 'string' && overrideCheckerIp.trim()) ? overrideCheckerIp.trim() : null;
             const checkerOpt = selChecker ? selChecker.selectedOptions[0] : null;
-            const checkerIp = overrideCheckerIp || (selChecker ? selChecker.value : '') || state.selectedCheckerIp || '';
+            const checkerIp = String(explicitIp || (selChecker ? selChecker.value : '') || (typeof state.selectedCheckerIp === 'string' ? state.selectedCheckerIp : '') || '').trim();
             let checkerName = '';
-            if (overrideCheckerIp && state.usersList) {
-                const u = state.usersList.find(x => x.ip === overrideCheckerIp);
+            if (explicitIp && state.usersList) {
+                const u = state.usersList.find(x => x.ip === explicitIp);
                 if (u) checkerName = u.name;
             }
             if (!checkerName && checkerOpt) {
@@ -1710,12 +1712,12 @@
 
             const payload = {
                 worker: {
-                    name: state.agentInfo.name || "작업자",
-                    ip: state.agentInfo.ip || "127.0.0.1"
+                    name: String(state.agentInfo.name || "작업자"),
+                    ip: String(state.agentInfo.ip || "127.0.0.1")
                 },
                 checker: {
-                    name: checkerName,
-                    ip: checkerIp
+                    name: String(checkerName),
+                    ip: String(checkerIp)
                 },
                 metadata: {
                     incidentId: workerIncidentNo ? workerIncidentNo.value.trim() : '',
@@ -1767,7 +1769,7 @@
             }
         }
 
-        if (btnSendRequest) btnSendRequest.onclick = sendCrossCheckRequest;
+        if (btnSendRequest) btnSendRequest.onclick = () => sendCrossCheckRequest();
         window.awxSendCrossCheckRequest = sendCrossCheckRequest;
 
         function renderWorkerSessionCard() {
@@ -1841,7 +1843,8 @@
         // 작업자: 확인자 즉시 변경 (쿨타임 0초)
         async function reassignChecker(newIp = null) {
             if (!state.currentSession) return;
-            const targetIp = newIp || (selReassign ? selReassign.value : '');
+            const explicitIp = (typeof newIp === 'string' && newIp.trim()) ? newIp.trim() : null;
+            const targetIp = String(explicitIp || (selReassign ? selReassign.value : '') || '').trim();
             if (!targetIp) {
                 alert("변경할 확인자를 선택해주세요.");
                 return;

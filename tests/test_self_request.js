@@ -197,9 +197,11 @@ async function runSelfRequestTest() {
             document.getElementById('awx-vld-sel-checker').dispatchEvent(new Event('change'));
         `);
 
-        console.log("Sending cross-check request to self (192.168.0.23)...");
-        const sessionInfo = await cdp.evaluate(`window.awxSendCrossCheckRequest('192.168.0.23')`);
-        console.log("✓ Session created:", sessionInfo);
+        console.log("Clicking [크로스체크 확인 요청 발송] button directly (simulating real user click)...");
+        await cdp.evaluate(`document.getElementById('awx-vld-btn-send-request').click()`);
+        await sleep(1500);
+        const sessionInfo = await cdp.evaluate(`window.awxValidatorState.currentSession`);
+        console.log("✓ Session created via DOM click:", sessionInfo);
 
         if (!sessionInfo || sessionInfo.status !== 'PENDING') {
             throw new Error(`Failed to create session: ${JSON.stringify(sessionInfo)}`);

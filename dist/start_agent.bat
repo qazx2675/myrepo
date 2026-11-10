@@ -7,3 +7,4 @@ echo   Working Directory: %~dp0
 echo ========================================================
 cross-checker-agent.exe -port=18080 -share="%~dp0"
 pause
+
