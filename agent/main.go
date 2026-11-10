@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
@@ -18,9 +19,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"host-cross-checker/internal/launcher"
+	"host-cross-checker/internal/webui"
 )
 
 // Config represents the agent configuration.
@@ -30,6 +36,10 @@ type Config struct {
 	PollIntervalMs           int    `json:"pollIntervalMs"`
 	AutoOpenBrowserOnRequest bool   `json:"autoOpenBrowserOnRequest"`
 	BindIP                   string `json:"bindIp,omitempty"`
+	AwxBaseURL               string `json:"awxBaseUrl,omitempty"`
+	AwxUsername              string `json:"awxUsername,omitempty"`
+	AwxPassword              string `json:"awxPassword,omitempty"`
+	Headless                 bool   `json:"headless,omitempty"`
 }
 
 // User represents a system user.
@@ -347,18 +357,33 @@ type WSResponseMsg struct {
 	Error  string      `json:"error,omitempty"`
 }
 
+// awxCacheEntry stores cached inventory hosts from AWX.
+type awxCacheEntry struct {
+	hosts     []string
+	fetchedAt time.Time
+}
+
 // AgentServer represents the main HTTP backend service.
 type AgentServer struct {
-	config      Config
-	usersMutex  sync.RWMutex
-	sessMutex   sync.RWMutex
-	sseBroker   *SSEBroker
-	wsHub       *WSHub
-	httpClient  *http.Client
-	stopChan    chan struct{}
-	fileModTime map[string]time.Time
-	modMu       sync.Mutex
-	detectedIP  string
+	config        Config
+	usersMutex    sync.RWMutex
+	sessMutex     sync.RWMutex
+	sseBroker     *SSEBroker
+	wsHub         *WSHub
+	httpClient    *http.Client
+	awxHttpClient *http.Client
+	awxCacheMu    sync.RWMutex
+	awxCache      map[string]awxCacheEntry
+	stopChan      chan struct{}
+	fileModTime   map[string]time.Time
+	modMu         sync.Mutex
+	detectedIP    string
+	lifecycleMu   sync.Mutex
+	hasSeenClient bool
+	lastPingTime  time.Time
+	byeReceived   bool
+	byeTime       time.Time
+	onShutdown    func()
 }
 
 // broadcastEvent sends events to both SSE clients and WebSocket clients.
@@ -384,6 +409,27 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 	if cfg.PollIntervalMs == 0 {
 		cfg.PollIntervalMs = 500
 	}
+	if cfg.AwxBaseURL == "" {
+		if envURL := os.Getenv("AWX_BASE_URL"); envURL != "" {
+			cfg.AwxBaseURL = strings.TrimRight(envURL, "/")
+		} else {
+			cfg.AwxBaseURL = "http://192.168.0.58:30080"
+		}
+	}
+	if cfg.AwxUsername == "" {
+		if envUser := os.Getenv("AWX_USERNAME"); envUser != "" {
+			cfg.AwxUsername = envUser
+		} else {
+			cfg.AwxUsername = "test.kim"
+		}
+	}
+	if cfg.AwxPassword == "" {
+		if envPass := os.Getenv("AWX_PASSWORD"); envPass != "" {
+			cfg.AwxPassword = envPass
+		} else {
+			cfg.AwxPassword = "11111111!"
+		}
+	}
 
 	sessionsDir := filepath.Join(cfg.SharedDir, "sessions")
 	if err := os.MkdirAll(sessionsDir, 0755); err != nil {
@@ -393,13 +439,15 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 	detectedIP := detectLocalIP(cfg.BindIP)
 
 	s := &AgentServer{
-		config:      cfg,
-		sseBroker:   newSSEBroker(),
-		wsHub:       newWSHub(),
-		httpClient:  &http.Client{Timeout: 1 * time.Second},
-		stopChan:    make(chan struct{}),
-		fileModTime: make(map[string]time.Time),
-		detectedIP:  detectedIP,
+		config:        cfg,
+		sseBroker:     newSSEBroker(),
+		wsHub:         newWSHub(),
+		httpClient:    &http.Client{Timeout: 1 * time.Second},
+		awxHttpClient: &http.Client{Timeout: 8 * time.Second},
+		awxCache:      make(map[string]awxCacheEntry),
+		stopChan:      make(chan struct{}),
+		fileModTime:   make(map[string]time.Time),
+		detectedIP:    detectedIP,
 	}
 
 	if err := s.ensureUsersFile(); err != nil {
@@ -705,6 +753,12 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 func (s *AgentServer) Routes() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("/", s.handleAppRoot)
+	mux.HandleFunc("/awx_host_checker.js", webui.ServeCheckerJS)
+	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/ping", s.handlePing)
+	mux.HandleFunc("/api/bye", s.handleBye)
+	mux.HandleFunc("/api/awx/hosts", s.handleAwxHosts)
 	mux.HandleFunc("/api/me", s.handleMe)
 	mux.HandleFunc("/api/users", s.handleUsers)
 	mux.HandleFunc("/api/users/register", s.handleRegister)
@@ -724,6 +778,313 @@ func (s *AgentServer) Routes() http.Handler {
 			return
 		}
 		mux.ServeHTTP(w, r)
+	})
+}
+
+// handleAppRoot serves the standalone desktop application UI on GET /.
+func (s *AgentServer) handleAppRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" && r.URL.Path != "/index.html" {
+		http.NotFound(w, r)
+		return
+	}
+	s.recordClientPing()
+	webui.ServeIndex(w, r)
+}
+
+// handleHealth: GET /api/health
+func (s *AgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "ok",
+		"port":   s.config.ListenPort,
+		"ip":     s.detectedIP,
+	})
+}
+
+func (s *AgentServer) recordClientPing() {
+	s.lifecycleMu.Lock()
+	s.hasSeenClient = true
+	s.lastPingTime = time.Now()
+	s.byeReceived = false
+	s.lifecycleMu.Unlock()
+}
+
+// handlePing: POST/GET /api/ping
+func (s *AgentServer) handlePing(w http.ResponseWriter, r *http.Request) {
+	s.recordClientPing()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true,
+	})
+}
+
+// handleBye: POST/GET /api/bye
+func (s *AgentServer) handleBye(w http.ResponseWriter, r *http.Request) {
+	s.lifecycleMu.Lock()
+	s.byeReceived = true
+	s.byeTime = time.Now()
+	onShutdown := s.onShutdown
+	s.lifecycleMu.Unlock()
+
+	if r.URL.Query().Get("force") == "true" && onShutdown != nil {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			onShutdown()
+		}()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true,
+	})
+}
+
+// StartLifecycleWatcher monitors standalone app window heartbeats and triggers
+// clean shutdown within ~1.2 seconds when the user closes the window.
+func (s *AgentServer) StartLifecycleWatcher(onShutdown func()) {
+	s.lifecycleMu.Lock()
+	s.onShutdown = onShutdown
+	s.lifecycleMu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.stopChan:
+				return
+			case <-ticker.C:
+				s.lifecycleMu.Lock()
+				seen := s.hasSeenClient
+				lastPing := s.lastPingTime
+				bye := s.byeReceived
+				byeAt := s.byeTime
+				s.lifecycleMu.Unlock()
+
+				if !seen {
+					continue
+				}
+				// Case 1: Explicit /api/bye received on window unload and no reload ping arrived within 1.2s
+				if bye && time.Since(byeAt) >= 1200*time.Millisecond {
+					if onShutdown != nil {
+						onShutdown()
+					}
+					return
+				}
+				// Case 2: Browser window closed abruptly without beacon (no ping for > 6s)
+				if !bye && time.Since(lastPing) >= 6*time.Second {
+					if onShutdown != nil {
+						onShutdown()
+					}
+					return
+				}
+			}
+		}
+	}()
+}
+
+// awxPageResponse models AWX /api/v2/inventories/{id}/hosts/ JSON payload.
+type awxPageResponse struct {
+	Count   int     `json:"count"`
+	Next    *string `json:"next"`
+	Results []struct {
+		Name string `json:"name"`
+	} `json:"results"`
+}
+
+func (s *AgentServer) fetchAwxPage(pageURL string) (*awxPageResponse, error) {
+	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if s.config.AwxUsername != "" {
+		req.SetBasicAuth(s.config.AwxUsername, s.config.AwxPassword)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.awxHttpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("AWX API returned HTTP %d", resp.StatusCode)
+	}
+	var parsed awxPageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
+// fetchAwxInventoryHosts retrieves and caches all hosts for an AWX inventory.
+func (s *AgentServer) fetchAwxInventoryHosts(invID string, refresh bool) ([]string, error) {
+	if invID == "" {
+		invID = "3"
+	}
+	if !refresh {
+		s.awxCacheMu.RLock()
+		entry, ok := s.awxCache[invID]
+		s.awxCacheMu.RUnlock()
+		if ok && time.Since(entry.fetchedAt) < 60*time.Second && len(entry.hosts) > 0 {
+			cp := make([]string, len(entry.hosts))
+			copy(cp, entry.hosts)
+			return cp, nil
+		}
+	}
+
+	var basePath string
+	if invID == "all" || invID == "0" {
+		basePath = fmt.Sprintf("%s/api/v2/hosts/?page_size=200", s.config.AwxBaseURL)
+	} else {
+		basePath = fmt.Sprintf("%s/api/v2/inventories/%s/hosts/?page_size=200", s.config.AwxBaseURL, invID)
+	}
+
+	page1, err := s.fetchAwxPage(basePath + "&page=1")
+	if err != nil {
+		return nil, err
+	}
+
+	totalPages := (page1.Count + 199) / 200
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	pageHosts := make([][]string, totalPages)
+	for _, item := range page1.Results {
+		h := strings.ToLower(strings.TrimSpace(item.Name))
+		if h != "" {
+			pageHosts[0] = append(pageHosts[0], h)
+		}
+	}
+
+	if totalPages > 1 {
+		var wg sync.WaitGroup
+		var firstErr error
+		var errMu sync.Mutex
+
+		for p := 2; p <= totalPages; p++ {
+			wg.Add(1)
+			go func(pageNum int) {
+				defer wg.Done()
+				u := fmt.Sprintf("%s&page=%d", basePath, pageNum)
+				pg, err := s.fetchAwxPage(u)
+				if err != nil {
+					errMu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					errMu.Unlock()
+					return
+				}
+				var list []string
+				for _, item := range pg.Results {
+					h := strings.ToLower(strings.TrimSpace(item.Name))
+					if h != "" {
+						list = append(list, h)
+					}
+				}
+				pageHosts[pageNum-1] = list
+			}(p)
+		}
+		wg.Wait()
+		if firstErr != nil {
+			return nil, firstErr
+		}
+	}
+
+	seen := make(map[string]struct{}, page1.Count)
+	allHosts := make([]string, 0, page1.Count)
+	for _, list := range pageHosts {
+		for _, h := range list {
+			if _, exists := seen[h]; !exists {
+				seen[h] = struct{}{}
+				allHosts = append(allHosts, h)
+			}
+		}
+	}
+	sort.Strings(allHosts)
+
+	s.awxCacheMu.Lock()
+	s.awxCache[invID] = awxCacheEntry{
+		hosts:     allHosts,
+		fetchedAt: time.Now(),
+	}
+	s.awxCacheMu.Unlock()
+
+	cp := make([]string, len(allHosts))
+	copy(cp, allHosts)
+	return cp, nil
+}
+
+// WarmupAwxCache preloads the specified inventory into memory in the background.
+func (s *AgentServer) WarmupAwxCache(invID string) {
+	_, _ = s.fetchAwxInventoryHosts(invID, false)
+}
+
+// handleAwxHosts: GET /api/awx/hosts?inventory=3&exclude=...&limit=...
+func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	invID := strings.TrimSpace(r.URL.Query().Get("inventory"))
+	if invID == "" {
+		invID = "3"
+	}
+	refresh := r.URL.Query().Get("refresh") == "true"
+	excludePattern := strings.TrimSpace(r.URL.Query().Get("exclude"))
+	limitStr := strings.TrimSpace(r.URL.Query().Get("limit"))
+
+	rawHosts, err := s.fetchAwxInventoryHosts(invID, refresh)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("AWX 호스트 수집 실패: %v", err)})
+		return
+	}
+
+	if limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit < len(rawHosts) {
+			rawHosts = rawHosts[:limit]
+		}
+	}
+
+	var filters []string
+	if excludePattern != "" {
+		for _, part := range strings.Split(excludePattern, "|") {
+			f := strings.ToLower(strings.TrimSpace(part))
+			if f != "" {
+				filters = append(filters, f)
+			}
+		}
+	}
+
+	filteredHosts := make([]string, 0, len(rawHosts))
+	excludedHosts := make([]string, 0)
+	results := make([]map[string]string, 0, len(rawHosts))
+
+	for _, h := range rawHosts {
+		results = append(results, map[string]string{"name": h})
+		excluded := false
+		for _, f := range filters {
+			if h == f || strings.Contains(h, f) {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			excludedHosts = append(excludedHosts, h)
+		} else {
+			filteredHosts = append(filteredHosts, h)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"count":         len(filteredHosts),
+		"rawCount":      len(rawHosts),
+		"next":          nil,
+		"inventoryId":   invID,
+		"hosts":         filteredHosts,
+		"excludedHosts": excludedHosts,
+		"results":       results,
 	})
 }
 
@@ -1728,6 +2089,8 @@ func main() {
 	shareFlag := flag.String("share", ".", "Shared directory path")
 	autoBrowserFlag := flag.Bool("auto-browser", false, "Auto open browser on peer notification")
 	bindIPFlag := flag.String("bind-ip", "", "Override detected IP address")
+	headlessFlag := flag.Bool("headless", false, "Run server only without launching desktop app window")
+	openAppFlag := flag.Bool("open-app", false, "Force open desktop app window even in test mode")
 	flag.Parse()
 
 	cfg := Config{
@@ -1736,6 +2099,7 @@ func main() {
 		PollIntervalMs:           500,
 		AutoOpenBrowserOnRequest: *autoBrowserFlag,
 		BindIP:                   *bindIPFlag,
+		Headless:                 *headlessFlag,
 	}
 
 	// Try reading config.json from sharedDir
@@ -1755,7 +2119,19 @@ func main() {
 			if fileCfg.PollIntervalMs > 0 {
 				cfg.PollIntervalMs = fileCfg.PollIntervalMs
 			}
+			if !isFlagPassed("headless") && fileCfg.Headless {
+				cfg.Headless = fileCfg.Headless
+			}
 		}
+	}
+
+	// Determine if app window should be launched:
+	// 1) Explicit --headless flag suppresses window.
+	// 2) If launched as cross-checker-agent.exe with -bind-ip and without -open-app (automated test scripts), run headless.
+	shouldOpenApp := !cfg.Headless
+	exeBase := strings.ToLower(filepath.Base(os.Args[0]))
+	if strings.Contains(exeBase, "agent") && isFlagPassed("bind-ip") && !*openAppFlag {
+		shouldOpenApp = false
 	}
 
 	server, err := NewAgentServer(cfg)
@@ -1767,12 +2143,56 @@ func main() {
 	defer server.Stop()
 
 	addr := fmt.Sprintf("0.0.0.0:%d", cfg.ListenPort)
-	log.Printf("AWX Host Cross-Checker Agent starting on http://%s (Share: %s, Detected IP: %s)\n",
+	log.Printf("AWX Host Cross-Checker starting on http://%s (Share: %s, Detected IP: %s)\n",
 		addr, cfg.SharedDir, server.detectedIP)
 
 	httpServer := &http.Server{
 		Addr:    addr,
 		Handler: server.Routes(),
+	}
+
+	// Warm up AWX inventory 3 cache in background
+	go server.WarmupAwxCache("3")
+
+	var shutdownOnce sync.Once
+	shutdownServer := func() {
+		shutdownOnce.Do(func() {
+			log.Println("Shutting down AWX Host Cross-Checker...")
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = httpServer.Shutdown(ctx)
+		})
+	}
+
+	if shouldOpenApp {
+		server.StartLifecycleWatcher(func() {
+			log.Println("Client window closed. Terminating process.")
+			shutdownServer()
+		})
+
+		go func() {
+			appURL := fmt.Sprintf("http://127.0.0.1:%d/", cfg.ListenPort)
+			// Wait for server to become ready
+			client := &http.Client{Timeout: 500 * time.Millisecond}
+			for i := 0; i < 30; i++ {
+				time.Sleep(100 * time.Millisecond)
+				resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort))
+				if err == nil && resp.StatusCode == http.StatusOK {
+					resp.Body.Close()
+					break
+				}
+				if resp != nil {
+					resp.Body.Close()
+				}
+			}
+
+			browserUsed, err := launcher.Open(appURL)
+			if err != nil {
+				log.Printf("Failed to open app window: %v\n", err)
+			} else {
+				log.Printf("Launched desktop app window via %s (%s)\n", browserUsed, appURL)
+			}
+		}()
 	}
 
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

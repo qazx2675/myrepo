@@ -4,9 +4,31 @@
 
 로컬 단독 검증뿐만 아니라, 사내 윈도우 공유폴더(SMB) 및 Go 백엔드 에이전트를 통해 **작업자 ↔ 크로스체크 확인자 간 실시간 원격 교차 검증**을 지원합니다.
 
+> [!TIP]
+> **🚀 단일 실행 파일 (Standalone Desktop App) 지원**:
+> `dist\host-cross-checker.exe` 파일을 더블클릭하면 별도의 브라우저 조작이나 북마크릿 등록 없이 **독립 데스크톱 애플리케이션 창(`--app` 모드)**이 즉시 실행되어 1~3번 탭의 모든 기능을 원클릭으로 사용할 수 있습니다. 창을 닫으면 백그라운드 프로세스도 깔끔하게 자동 종료됩니다.
+
 ---
 
-## 1. 주요 기능
+## 1. 실행 모드 안내
+
+### 모드 1: 단일 실행 파일 독립 앱 (추천 - 가장 간편함)
+1. `dist\host-cross-checker.exe`를 더블클릭하여 실행합니다.
+2. 시스템에 설치된 Edge 또는 Chrome이 주소창/탭 없는 순수 윈도우 앱 창(`--app`)으로 즉시 구동됩니다.
+3. AWX 브라우저 탭을 열 필요 없이 **[현재 인벤토리 전체 수집]** 버튼 클릭 한 번으로 인벤토리 1,000대 호스트를 즉시 자동 수집합니다.
+4. 사용을 마치고 창의 `X` (닫기) 버튼을 누르면 프로세스가 자동으로 안전하게 종료됩니다.
+
+### 모드 2: AWX 브라우저 북마크릿 연동 (기존 방식 100% 호환)
+1. 백엔드 에이전트 구동:
+   ```cmd
+   dist\cross-checker-agent.exe -share=\\192.168.0.23\share
+   ```
+2. Chrome / Edge 북마크 바에 [dist/bookmarklet.txt](dist/bookmarklet.txt)의 `javascript:...` 코드를 등록합니다.
+3. AWX 웹 콘솔(`http://192.168.0.58:30080`) 접속 후 북마크를 클릭하면 페이지 내 오버레이 패널로 실행됩니다.
+
+---
+
+## 2. 주요 기능
 
 ### 1) 단독 검증 모드 (내 PC 단독 확인)
 1. **2~4개 소스 동시 양방향(대칭) 교차 비교**:
@@ -140,39 +162,52 @@ flowchart TD
 
 ---
 
-## 5. 파일 구성
+## 6. 파일 구성
 
 ```text
 ├── agent/
-│   ├── main.go                   # Go 백엔드 에이전트 소스 (표준 라이브러리 100%, RFC 6455 WebSocket, 파일 감시)
-│   └── agent_test.go             # Go 백엔드 유닛 테스트 (12개 테스트케이스 전원 통과)
+│   ├── main.go                   # Go 백엔드 서버 소스 (RFC 6455 WebSocket, AWX 프록시, 하트비트 수명주기)
+│   └── agent_test.go             # Go 백엔드 유닛 테스트 스위트 (14개 테스트 전원 통과)
+├── internal/
+│   ├── launcher/
+│   │   └── launcher.go           # Edge/Chrome --app 독립 데스크톱 창 런처
+│   └── webui/
+│       ├── webui.go              # Go 1.16+ //go:embed 프론트엔드 에셋 임베딩
+│       ├── index.html            # 독립 데스크톱 창 루트 HTML (하트비트 & 라이프사이클)
+│       └── awx_host_checker.js   # 임베딩용 클라이언트 번들
 ├── config/
 │   ├── config.json               # 기본 에이전트 설정 템플릿
 │   └── users.json                # 사내 작업자/확인자 IP 명부 템플릿
 ├── src/
-│   ├── awx_host_checker.js       # 3개 탭 아키텍처 북마크릿 클라이언트 소스코드
+│   ├── awx_host_checker.js       # 3개 탭 아키텍처 클라이언트 소스코드 (독립 창 & 북마크릿 공용)
 │   └── awx_host_checker_prev.js  # 이전 UI 디자인 백업 소스코드
 ├── dist/
+│   ├── host-cross-checker.exe    # 단일 실행 파일 독립 데스크톱 앱 바이너리 (추천)
+│   ├── cross-checker-agent.exe   # 폐쇄망 데몬용 바이너리 (호환용)
 │   ├── bookmarklet.txt           # 북마크 등록용 1줄 압축 코드
-│   ├── bookmarklet_prev.txt      # 북마크 등록용 1줄 압축 코드 (이전 UI 백업)
-│   └── cross-checker-agent.exe   # 폐쇄망 배포용 사전 빌드 바이너리 (Windows x64)
+│   └── bookmarklet_prev.txt      # 북마크 등록용 1줄 압축 코드 (이전 UI 백업)
 ├── docs/
 │   └── flow_diagram.svg          # 시스템 아키텍처 및 데이터 흐름도 SVG
 ├── tests/
+│   ├── test_standalone_app.js    # 단독 실행 앱(--app 창 자동실행, 3탭, 원클릭수집, 자동종료) E2E 검증
+│   ├── test_self_request.js      # 1인 셀프 테스트 모드 자동화 검증
+│   ├── verify_built_bookmarklet.js# 빌드된 북마크릿 구문 및 브라우저 로딩 무결성 검증
 │   ├── run_all_tests.js          # 원테이크 24개 테스트케이스 자동화 검증 스위트
 │   ├── test_results.json         # 24개 테스트 결과 JSON
 │   └── screenshot_onetake_success.png # 원테이크 검증 성공 스크린샷
-├── build.py                      # 북마크릿 압축 및 Go 에이전트 컴파일 자동화 스크립트
+├── build.py                      # 북마크릿 압축 및 Go 단일 바이너리 컴파일 자동화 스크립트
 ├── WORK_LOG.md                   # 상세 작업 및 신뢰성 증명 테스트 로그
 └── README.md                     # 본 문서
 ```
 
 ---
 
-## 6. 신뢰성 증명 및 원테이크(One-Take) 테스트 결과
+## 7. 신뢰성 증명 및 테스트 스위트 검증 결과
 
-* **실행 명령**: `node tests/run_all_tests.js`
-* **검증 결과**: **24개 테스트케이스 전원 100% 원테이크 통과 (One-Take Pass)**
+* **단독 데스크톱 앱 검증**: `node tests/test_standalone_app.js` -> **100% PASS**
+* **1인 셀프 테스트 검증**: `node tests/test_self_request.js` -> **100% PASS**
+* **북마크릿 브라우저 검증**: `node tests/verify_built_bookmarklet.js` -> **100% PASS**
+* **원테이크 24개 통합 테스트**: `node tests/run_all_tests.js` -> **24개 테스트케이스 전원 100% 통과 (One-Take Pass)**
 
 | 번호 | 테스트케이스 항목 | 검증 결과 | 상세 내역 |
 |:---:|:---|:---:|:---|

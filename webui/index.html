@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>작업대상 호스트 교차 검증기</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #f3f4f6;
+    font-family: "Pretendard Variable", "Pretendard", "Malgun Gothic", "맑은 고딕", sans-serif;
+  }
+</style>
+</head>
+<body class="awx-vld-standalone-root">
+<script>
+  window.__AWX_STANDALONE_APP__ = true;
+
+  // 독립 앱 창 수명 주기(Lifecycle) 하트비트 및 종료 신호 전송
+  (function() {
+    function sendPing() {
+      fetch('/api/ping', { method: 'POST', cache: 'no-store' }).catch(function() {});
+    }
+    sendPing();
+    setInterval(sendPing, 2000);
+
+    function sendBye() {
+      try {
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/bye', 'bye');
+        } else {
+          fetch('/api/bye', { method: 'POST', keepalive: true }).catch(function() {});
+        }
+      } catch (e) {}
+    }
+    window.addEventListener('pagehide', sendBye);
+    window.addEventListener('beforeunload', sendBye);
+  })();
+</script>
+<script src="/awx_host_checker.js"></script>
+</body>
+</html>
+

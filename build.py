@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import re
 
@@ -7,6 +8,14 @@ src_path = os.path.join(base_dir, 'src', 'awx_host_checker.js')
 dist_dir = os.path.join(base_dir, 'dist')
 os.makedirs(dist_dir, exist_ok=True)
 dist_path = os.path.join(dist_dir, 'bookmarklet.txt')
+
+# Sync web assets to internal/webui for Go embed
+internal_webui_dir = os.path.join(base_dir, 'internal', 'webui')
+os.makedirs(internal_webui_dir, exist_ok=True)
+shutil.copy2(src_path, os.path.join(internal_webui_dir, 'awx_host_checker.js'))
+webui_html_path = os.path.join(base_dir, 'webui', 'index.html')
+if os.path.exists(webui_html_path):
+    shutil.copy2(webui_html_path, os.path.join(internal_webui_dir, 'index.html'))
 
 def strip_comments(code):
     result = []
@@ -83,15 +92,24 @@ prev_dist_path = os.path.join(dist_dir, 'bookmarklet_prev.txt')
 if os.path.exists(prev_src_path):
     minify_to_bookmarklet(prev_src_path, prev_dist_path)
 
-print(">>> [2/2] Compiling Go cross-checker-agent binary...")
+print(">>> [2/2] Compiling Go binaries (host-cross-checker.exe & cross-checker-agent.exe)...")
 agent_src_dir = os.path.join(base_dir, 'agent')
+standalone_exe_path = os.path.join(dist_dir, 'host-cross-checker.exe')
 agent_exe_path = os.path.join(dist_dir, 'cross-checker-agent.exe')
 if os.path.exists(agent_src_dir) and any(f.endswith('.go') for f in os.listdir(agent_src_dir)):
-    res = subprocess.run(['go', 'build', '-o', agent_exe_path, './agent'], cwd=base_dir, capture_output=True, text=True)
-    if res.returncode == 0:
-        print(f"Built binary: {agent_exe_path} ({os.path.getsize(agent_exe_path):,} bytes)")
+    # 1. Standalone Desktop App binary
+    res1 = subprocess.run(['go', 'build', '-o', standalone_exe_path, './agent'], cwd=base_dir, capture_output=True, text=True)
+    if res1.returncode == 0:
+        print(f"Built standalone binary: {standalone_exe_path} ({os.path.getsize(standalone_exe_path):,} bytes)")
     else:
-        print(f"Go build failed:\n{res.stderr}")
+        print(f"Go build failed for {standalone_exe_path}:\n{res1.stderr}")
+
+    # 2. Agent daemon binary for compatibility
+    res2 = subprocess.run(['go', 'build', '-o', agent_exe_path, './agent'], cwd=base_dir, capture_output=True, text=True)
+    if res2.returncode == 0:
+        print(f"Built agent binary:      {agent_exe_path} ({os.path.getsize(agent_exe_path):,} bytes)")
+    else:
+        print(f"Go build failed for {agent_exe_path}:\n{res2.stderr}")
 else:
     print("Agent source not yet ready, skipping Go compilation.")
 

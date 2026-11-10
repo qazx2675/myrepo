@@ -899,3 +899,132 @@ func TestWebSocketRPCAndBroadcast(t *testing.T) {
 		t.Fatalf("Expected event NEW_SESSION, got: %v", evtMap["event"])
 	}
 }
+
+// TestStandaloneEndpoints verifies root HTML serving, JS bundle serving, health, ping, and bye.
+func TestStandaloneEndpoints(t *testing.T) {
+	_, ts := setupTestServer(t)
+
+	// 1. GET / serves index.html
+	respRoot, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respRoot.Body.Close()
+	if respRoot.StatusCode != http.StatusOK {
+		t.Errorf("Expected 200 for /, got %d", respRoot.StatusCode)
+	}
+	bodyRoot, _ := io.ReadAll(respRoot.Body)
+	if !strings.Contains(string(bodyRoot), "awx-vld-standalone-root") {
+		t.Errorf("Expected standalone root markup, got: %s", string(bodyRoot[:min(200, len(bodyRoot))]))
+	}
+
+	// 2. GET /awx_host_checker.js serves JS script
+	respJS, err := http.Get(ts.URL + "/awx_host_checker.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respJS.Body.Close()
+	if respJS.StatusCode != http.StatusOK {
+		t.Errorf("Expected 200 for /awx_host_checker.js, got %d", respJS.StatusCode)
+	}
+	bodyJS, _ := io.ReadAll(respJS.Body)
+	if len(bodyJS) < 5000 || !strings.Contains(string(bodyJS), "awxValidatorState") {
+		t.Errorf("Expected awxValidatorState in checker JS, length was %d", len(bodyJS))
+	}
+
+	// 3. GET /api/health
+	respHealth, err := http.Get(ts.URL + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respHealth.Body.Close()
+	if respHealth.StatusCode != http.StatusOK {
+		t.Errorf("Expected 200 for /api/health, got %d", respHealth.StatusCode)
+	}
+	var healthMap map[string]interface{}
+	_ = json.NewDecoder(respHealth.Body).Decode(&healthMap)
+	if healthMap["status"] != "ok" {
+		t.Errorf("Expected status=ok, got: %v", healthMap)
+	}
+
+	// 4. POST /api/ping
+	respPing, err := http.Post(ts.URL+"/api/ping", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPing.Body.Close()
+	if respPing.StatusCode != http.StatusOK {
+		t.Errorf("Expected 200 for /api/ping, got %d", respPing.StatusCode)
+	}
+
+	// 5. POST /api/bye
+	respBye, err := http.Post(ts.URL+"/api/bye", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respBye.Body.Close()
+	if respBye.StatusCode != http.StatusOK {
+		t.Errorf("Expected 200 for /api/bye, got %d", respBye.StatusCode)
+	}
+}
+
+// TestAwxInventoryHostsAPI verifies the Go backend AWX proxy and cache endpoint.
+func TestAwxInventoryHostsAPI(t *testing.T) {
+	_, ts := setupTestServer(t)
+
+	// Fetch AWX inventory #3 hosts
+	resp, err := http.Get(ts.URL + "/api/awx/hosts?inventory=3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 from /api/awx/hosts, got %d", resp.StatusCode)
+	}
+
+	var data struct {
+		Count         int                 `json:"count"`
+		RawCount      int                 `json:"rawCount"`
+		InventoryId   string              `json:"inventoryId"`
+		Hosts         []string            `json:"hosts"`
+		ExcludedHosts []string            `json:"excludedHosts"`
+		Results       []map[string]string `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		t.Fatal(err)
+	}
+
+	if data.Count != 1000 || data.RawCount != 1000 {
+		t.Errorf("Expected 1000 hosts from inventory 3, got count=%d raw=%d", data.Count, data.RawCount)
+	}
+	if len(data.Results) != 1000 {
+		t.Errorf("Expected 1000 results items, got %d", len(data.Results))
+	}
+
+	// Test exclusion filter: exclude prd-db-0295 through prd-db-0300 (6 hosts)
+	pipe := "prd-db-0295|prd-db-0296|prd-db-0297|prd-db-0298|prd-db-0299|prd-db-0300"
+	respEx, err := http.Get(ts.URL + "/api/awx/hosts?inventory=3&exclude=" + url.QueryEscape(pipe))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respEx.Body.Close()
+
+	var dataEx struct {
+		Count         int      `json:"count"`
+		RawCount      int      `json:"rawCount"`
+		Hosts         []string `json:"hosts"`
+		ExcludedHosts []string `json:"excludedHosts"`
+	}
+	_ = json.NewDecoder(respEx.Body).Decode(&dataEx)
+	if dataEx.Count != 994 || len(dataEx.ExcludedHosts) != 6 {
+		t.Errorf("Expected 994 count and 6 excluded, got count=%d, excluded=%d", dataEx.Count, len(dataEx.ExcludedHosts))
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

@@ -153,6 +153,9 @@
     const prevStyle = document.getElementById('awx-validator-styles');
     if (prevStyle) prevStyle.remove();
 
+    // 독립 실행 앱(--app 모드) 여부 감지
+    const isStandaloneApp = Boolean(window.__AWX_STANDALONE_APP__);
+
     // 상태 저장 객체 (재실행 시 기존 상태 유지 및 신규 필드 기본값 보장)
     window.awxValidatorState = window.awxValidatorState || {};
     const state = window.awxValidatorState;
@@ -163,10 +166,10 @@
     if (typeof state.detailText !== 'string') state.detailText = '';
     if (typeof state.incidentText !== 'string') state.incidentText = '';
     if (typeof state.targetText !== 'string') state.targetText = '';
-    if (typeof state.isStandalone !== 'boolean') state.isStandalone = false;
+    state.isStandalone = isStandaloneApp;
     if (typeof state.isPinned !== 'boolean') state.isPinned = false;
     if (typeof state.guideExpanded !== 'boolean') state.guideExpanded = false;
-    if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = true;
+    if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = !isStandaloneApp;
     if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
     if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
     if (!state.resetTargets || typeof state.resetTargets !== 'object') {
@@ -192,13 +195,14 @@
     if (typeof state.chkIncidentText !== 'string') state.chkIncidentText = '';
     if (typeof state.chkTargetText !== 'string') state.chkTargetText = '';
 
-    // 현재 접속 중인 AWX 화면 컨텍스트 분석 (인벤토리 ID, 그룹 ID, 또는 전역)
+    // 현재 접속 중인 AWX 화면 컨텍스트 분석 (인벤토리 ID, 그룹 ID, 독립 앱 모드, 또는 전역)
     function getContext() {
         const hash = window.location.hash || '';
         const invMatch = hash.match(/\/inventories\/(?:inventory|smart_inventory)\/(\d+)/);
         if (invMatch) {
             return {
                 url: `/api/v2/inventories/${invMatch[1]}/hosts/?page_size=200`,
+                inventoryId: invMatch[1],
                 label: `인벤토리 #${invMatch[1]}`,
                 isScoped: true
             };
@@ -208,6 +212,16 @@
             return {
                 url: `/api/v2/groups/${grpMatch[1]}/all_hosts/?page_size=200`,
                 label: `그룹 #${grpMatch[1]}`,
+                isScoped: true
+            };
+        }
+        if (isStandaloneApp) {
+            const params = new URLSearchParams(window.location.search);
+            const invId = params.get('inventory') || '3';
+            return {
+                url: `${AGENT_BASE}/api/awx/hosts?inventory=${invId}`,
+                inventoryId: invId,
+                label: `인벤토리 #${invId}`,
                 isScoped: true
             };
         }
@@ -546,9 +560,11 @@
         const opToggleLabel = isPopup
             ? (state.opacityEnabled ? '자동 접기 ON' : '자동 접기 OFF')
             : (state.opacityEnabled ? '투명도 ON' : '투명도 OFF');
+        const detachLabel = isPopup ? '페이지 내로 복귀' : (isStandaloneApp ? '새로고침' : '독립 창으로 분리');
+        const detachTitle = isPopup ? '페이지 내로 복귀' : (isStandaloneApp ? '연결 및 세션 상태 새로고침' : '패널 크기 맞춤 독립 브라우저 팝업 창으로 띄우기');
 
         return `
-        <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:${isPopup ? 'default' : 'move'}; user-select:none; border-bottom:1px solid #1e293b;">
+        <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:${(isPopup || isStandaloneApp) ? 'default' : 'move'}; user-select:none; border-bottom:1px solid #1e293b;">
             <div style="display:flex; align-items:center; gap:7px; flex-shrink:0;">
                 <span style="font-size:13px; font-weight:700; letter-spacing:-0.3px; color:#ffffff; white-space:nowrap;">작업대상 호스트 교차 검증기</span>
                 <span id="awx-vld-ctx-badge" style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; font-size:11px; padding:1px 6px; border-radius:4px; font-weight:600; white-space:nowrap;">${ctx.label}</span>
@@ -558,7 +574,7 @@
                     ${getPinSvg(state.isPinned)}
                     <span id="awx-vld-pin-text">${pinLabel}</span>
                 </button>
-                <button id="awx-vld-btn-detach" class="awx-vld-header-btn" title="패널 크기 맞춤 독립 브라우저 팝업 창으로 띄우기">${isPopup ? '페이지 내로 복귀' : '독립 창으로 분리'}</button>
+                <button id="awx-vld-btn-detach" class="awx-vld-header-btn" title="${detachTitle}">${detachLabel}</button>
                 <button id="awx-vld-btn-close" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; line-height:1; padding:0 4px;" title="닫기">&times;</button>
             </div>
         </div>
@@ -870,13 +886,23 @@
     // 메인 패널 엘리먼트 생성
     const panel = document.createElement('div');
     panel.id = 'awx-validator-panel';
-    panel.style.cssText = `
-        position: fixed; top: 50px; right: 20px; width: 560px; max-height: 90vh;
-        background: #ffffff; border: 1px solid #0f172a; border-radius: 8px;
-        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22); z-index: 9999999;
-        display: flex; flex-direction: column; overflow: hidden;
-        transition: opacity 0.18s ease;
-    `;
+    if (isStandaloneApp) {
+        panel.style.cssText = `
+            position: relative; top: 0; left: 0; width: 100vw; height: 100vh; max-height: 100vh;
+            background: #ffffff; border: none; border-radius: 0;
+            box-shadow: none; z-index: 1;
+            display: flex; flex-direction: column; overflow: hidden;
+            transition: opacity 0.18s ease;
+        `;
+    } else {
+        panel.style.cssText = `
+            position: fixed; top: 50px; right: 20px; width: 560px; max-height: 90vh;
+            background: #ffffff; border: 1px solid #0f172a; border-radius: 8px;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22); z-index: 9999999;
+            display: flex; flex-direction: column; overflow: hidden;
+            transition: opacity 0.18s ease;
+        `;
+    }
 
     const ctx = getContext();
     panel.innerHTML = buildUIHTML(ctx, false);
@@ -1144,7 +1170,7 @@
         }
 
         // 드래그 기능 (페이지 내 패널일 때만 적용)
-        if (!isPopup && headerEl) {
+        if (!isPopup && !isStandaloneApp && headerEl) {
             let isDragging = false;
             let startX, startY, initialLeft, initialTop;
             headerEl.addEventListener('mousedown', (e) => {
@@ -1173,12 +1199,21 @@
         btnClose.onclick = () => {
             if (isPopup && popupWin) {
                 popupWin.close();
+            } else if (isStandaloneApp) {
+                try {
+                    if (navigator.sendBeacon) {
+                        navigator.sendBeacon('/api/bye', 'bye');
+                    } else {
+                        fetch('/api/bye', { method: 'POST', keepalive: true }).catch(() => {});
+                    }
+                } catch (e) {}
+                window.close();
             } else {
                 panel.style.display = 'none';
             }
         };
 
-        // 독립 창 분리 / 복귀 버튼
+        // 독립 창 분리 / 복귀 / 새로고침 버튼
         if (isPopup) {
             btnDetach.onclick = () => {
                 if (popupWin) popupWin.close();
@@ -1186,6 +1221,12 @@
                 panel.style.display = 'flex';
                 panel.style.opacity = '1';
                 bindEvents(document, false, null);
+                updateCountsAndButton();
+            };
+        } else if (isStandaloneApp) {
+            btnDetach.onclick = async () => {
+                await fetchUsersAndStatus();
+                await fetchPendingSessions();
                 updateCountsAndButton();
             };
         } else {
@@ -1297,29 +1338,60 @@
             updateCountsAndButton();
         };
 
-        // 화면 DOM 수집
-        btnPage.onclick = () => {
+        // 화면 DOM 수집 (독립 앱 모드에서는 1페이지 20대 API 수집 지원)
+        btnPage.onclick = async () => {
             const filters = getExcludeFilters(inputExclude.value.trim());
-            document.querySelectorAll('table tbody tr').forEach(tr => {
-                const nameEl = tr.querySelector('td[data-label="이름"] a, td[data-label="Name"] a, td a[href*="/hosts/"]') || tr.querySelector('td:nth-child(2) a');
-                if (nameEl) {
-                    const h = nameEl.innerText.trim().toLowerCase();
-                    if (h) {
-                        if (isHostExcluded(h, filters)) {
-                            state.collectedHosts.delete(h);
-                            if (!state.excludedHosts.includes(h)) {
-                                state.excludedHosts.push(h);
+            const rows = document.querySelectorAll('table tbody tr');
+            if (rows.length > 0) {
+                rows.forEach(tr => {
+                    const nameEl = tr.querySelector('td[data-label="이름"] a, td[data-label="Name"] a, td a[href*="/hosts/"]') || tr.querySelector('td:nth-child(2) a');
+                    if (nameEl) {
+                        const h = nameEl.innerText.trim().toLowerCase();
+                        if (h) {
+                            if (isHostExcluded(h, filters)) {
+                                state.collectedHosts.delete(h);
+                                if (!state.excludedHosts.includes(h)) {
+                                    state.excludedHosts.push(h);
+                                }
+                            } else {
+                                state.excludedHosts = state.excludedHosts.filter(x => x !== h);
+                                state.collectedHosts.add(h);
                             }
-                        } else {
-                            state.excludedHosts = state.excludedHosts.filter(x => x !== h);
-                            state.collectedHosts.add(h);
                         }
                     }
+                });
+                state.rawCount = state.collectedHosts.size + state.excludedHosts.length;
+                renderAwxSummary();
+                updateCountsAndButton();
+            } else if (isStandaloneApp) {
+                try {
+                    const currentContext = getContext();
+                    const invId = currentContext.inventoryId || '3';
+                    const res = await fetch(`${AGENT_BASE}/api/awx/hosts?inventory=${invId}&limit=20`);
+                    const data = await res.json();
+                    if (data.results) {
+                        data.results.forEach(item => {
+                            const h = (typeof item === 'string' ? item : item.name).trim().toLowerCase();
+                            if (h) {
+                                if (isHostExcluded(h, filters)) {
+                                    state.collectedHosts.delete(h);
+                                    if (!state.excludedHosts.includes(h)) {
+                                        state.excludedHosts.push(h);
+                                    }
+                                } else {
+                                    state.excludedHosts = state.excludedHosts.filter(x => x !== h);
+                                    state.collectedHosts.add(h);
+                                }
+                            }
+                        });
+                    }
+                    state.rawCount = state.collectedHosts.size + state.excludedHosts.length;
+                    renderAwxSummary();
+                    updateCountsAndButton();
+                } catch (err) {
+                    awxSummaryEl.innerHTML = `<span style="color:#dc2626; font-weight:600;">페이지 수집 실패: ${err.message}</span>`;
                 }
-            });
-            state.rawCount = state.collectedHosts.size + state.excludedHosts.length;
-            renderAwxSummary();
-            updateCountsAndButton();
+            }
         };
 
         // AWX API 전수 수집
@@ -1335,11 +1407,15 @@
             try {
                 let nextUrl = currentContext.url;
                 while (nextUrl) {
-                    const res = await fetch(nextUrl);
+                    let res = await fetch(nextUrl);
+                    if (!res.ok && !nextUrl.startsWith(AGENT_BASE)) {
+                        const invId = currentContext.inventoryId || '3';
+                        res = await fetch(`${AGENT_BASE}/api/awx/hosts?inventory=${invId}`);
+                    }
                     const data = await res.json();
                     if (data.results) {
                         data.results.forEach(item => {
-                            const name = item.name.trim().toLowerCase();
+                            const name = (typeof item === 'string' ? item : item.name).trim().toLowerCase();
                             if (isHostExcluded(name, filters)) {
                                 if (!state.excludedHosts.includes(name)) {
                                     state.excludedHosts.push(name);

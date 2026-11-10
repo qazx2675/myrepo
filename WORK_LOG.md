@@ -132,4 +132,36 @@
 
 * 최종 원테이크 성공 스크린샷: `tests/screenshot_onetake_success.png`
 
+---
+
+## 4. 단일 실행 파일(Standalone Desktop App) 변환 및 검증 (To-Be 완료)
+
+### (1) 아키텍처 개선 개요
+- **배경**: 기존 콘솔 에이전트 실행 후 브라우저에서 북마크릿을 클릭해야 하는 2단계 조작을, 실행 파일 하나만 더블클릭하면 즉시 독립 창으로 열리는 단일 데스크톱 앱 형태로 혁신.
+- **핵심 구현**:
+  1. `internal/launcher/launcher.go`: 시스템 기본 Edge/Chrome을 감지하여 독립 프로필(`--user-data-dir=%TEMP%\host-cross-checker-profile`) 및 앱 모드(`--app=http://127.0.0.1:18080/`, 640x920 크기)로 자동 실행.
+  2. `internal/webui/webui.go` & `webui/index.html`: Go 1.16+ `//go:embed`로 HTML/JS 클라이언트 전체를 단일 바이너리에 임베딩.
+  3. `agent/main.go`:
+     - 앱 런처 자동 구동 및 서버 헬스체크 연동.
+     - 수명 주기(Lifecycle Tracker) 관리: 창 언로드 시 `/api/bye` 비콘 및 주기적 `/api/ping` 감시로 창 닫기 시 1.2초 내 프로세스 자동 종료.
+     - AWX API 프록시/캐시(`/api/awx/hosts?inventory=3`): 백엔드에서 5개 페이지 병렬 수집, 제외 필터링 및 인메모리 캐싱 지원.
+  4. `src/awx_host_checker.js`:
+     - 독립 앱 모드(`window.__AWX_STANDALONE_APP__`) 자동 감지: 100vw x 100vh 반응형 전체 화면 맞춤.
+     - 헤더 '새로고침' 버튼 지원 및 닫기(`&times;`) 클릭 시 앱 창 종료.
+     - 독립 앱에서도 [현재 인벤토리 전체 수집] 클릭 한 번으로 1,000대 호스트 즉시 수집.
+
+### (2) 검증 스위트 실행 결과 (전체 PASS)
+1. **단독 데스크톱 앱 E2E 검증 (`tests/test_standalone_app.js`)**:
+   - `host-cross-checker.exe` 실행 시 Edge/Chrome `--app` 창 자동 실행: **PASS**
+   - 3개 탭 반응형 렌더링 및 '새로고침' 헤더 컨트롤 확인: **PASS**
+   - AWX 인벤토리 #3 1,000대 원클릭 수집 (994대 수집, 6대 제외 요약): **PASS**
+   - 단독 비교 [MATCH] 검증: **PASS**
+   - 작업자 요청 및 확인자 블라인드(상위 3대 노출, 2대 숨김) 및 최종 승인: **PASS**
+   - 창 닫기 시 백그라운드 프로세스 자동 클린 종료: **PASS**
+2. **1인 셀프 테스트 검증 (`tests/test_self_request.js`)**: **100% PASS**
+3. **북마크릿 브라우저 검증 (`tests/verify_built_bookmarklet.js`)**: **100% PASS**
+4. **전체 24개 테스트케이스 원테이크 통합 검증 (`tests/run_all_tests.js`)**: **24개 전원 100% 통과 (PASS: 24 / FAIL: 0)**
+5. **Go 백엔드 유닛 테스트 (`agent/agent_test.go`)**: **14개 테스트 전원 통과**
+
+
 
