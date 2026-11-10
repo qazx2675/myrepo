@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## [Unreleased] - 2026-11-10
+
+### 변경
+- **동작 변경 (auto_setup 연동)**: auto 모드(`AWX_AUTO=1`)에서는 01 [12] 접속 확인(LDAP/LACP)과 02 파티션 확인을 **기본으로 건너뜁니다**(이전에는 실행). 두 확인을 돌리려면 `AWX_CHECK=y` 를 함께 줍니다
+- 01 [12] `check_servers()`·02 `check_partitions()` 실행 전 질문 추가 — `접속 확인(LDAP/LACP) 실행할까요? [Y/n]`, `파티션 확인 실행할까요? [Y/n]`. Enter/Y = 실행(기존과 같음), n = gossh 를 호출하지 않고 한 줄 안내 후 계속(01 의 AI GPU 안내·후속 단계는 그대로). 입력 EOF 는 실행
+- 환경변수 `AWX_CHECK=y|n` — 질문 없이 답함 (01 과 02 모두 적용, 비대화형 실행·시험용). auto 모드의 기본 건너뜀보다 우선
+- 문서: README(01 [12] 절·auto 모드 표·파티션 확인), ARCHITECTURE(단계 표·수정 가이드), WORKFLOW(mermaid 의 [12]·파티션 확인 판단 노드), workflow.svg(라벨 "(선택)"), 사용법.txt(Step 8)
+
 ## [Unreleased]
 
 ### 수정

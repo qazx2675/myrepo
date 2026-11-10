@@ -44,9 +44,12 @@ flowchart TD
     N -->|성공| O["[11] git 업로드<br/>yml 각각<br/>cd 복귀"]
     
     O -->|실패| END8["[X] 오류 종료"]
-    O -->|성공| P["[12] LDAP/LACP 점검<br/>gossh -script<br/>tmp/all_${user}"]
+    O -->|성공| PQ{"접속 확인 실행할까요? Y/n<br/>AWX_CHECK 우선"}
+    PQ -->|"Y · Enter · EOF"| P["[12] LDAP/LACP 점검<br/>gossh -script<br/>tmp/all_${user}"]
+    PQ -->|"n · auto 모드 기본"| PS["[12] 건너뜀<br/>gossh 호출 없음"]
     
     P --> Q["[13] 메뉴 루프<br/>while true"]
+    PS --> Q
     Q -->|su| Q1["break"]
     Q -->|exit| END9["exit 0"]
     Q -->|ls| Q2["yml 파일 + boot (+ 태그)"]
@@ -129,7 +132,11 @@ flowchart TD
     L -->|둘 다 성공| M1["성공 기록"]
     M1 --> J
     J -->|모든 yml 완료| N["요약 출력<br/>전체/성공/실패"]
-    N --> O{"실패<br/>여부"}
+    N --> PT{"파티션 확인 실행할까요? Y/n<br/>AWX_CHECK 우선"}
+    PT -->|"Y · Enter · EOF"| PT1["lsblk 점검 (gossh)<br/>정보 출력만"]
+    PT -->|"n · auto 모드 기본"| PT2["파티션 확인 건너뜀<br/>gossh 호출 없음"]
+    PT1 --> O{"실패<br/>여부"}
+    PT2 --> O
     O -->|0| END3["exit 0"]
     O -->|1+| END4["exit 1"]
 ```
@@ -139,6 +146,7 @@ flowchart TD
 ### 01 흐름의 주요 분기
 - **노드정보 수집**: Y 선택 시 `awxkit/nodeinfo.sh` 호출, N 선택 시 기존 `${user}.txt` 사용
 - **작업 진행**: N 선택 시 즉시 종료 (사전 점검 목적), Y 선택 시 inventory_delete → 이후 진행
+- **접속 확인 [12]·파티션 확인 (선택)**: 느린 원격 점검을 실행할지 `Y/n` 으로 묻습니다. n 이면 gossh 를 호출하지 않고 건너뜁니다. 환경변수 `AWX_CHECK=y|n` 이 질문을 대신하며, auto 모드(`AWX_AUTO=1`)는 기본이 건너뜀이고 `AWX_CHECK=y` 일 때만 실행합니다
 - **메뉴 선택**: su(02 진입), exit(전체 종료), ls(yml 목록), 파일명(내용 출력)
 - **02 호출 재시도**: 02 실패 시 "재시도 Y|N" 프롬프트로 반복
 

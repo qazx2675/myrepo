@@ -715,6 +715,22 @@ check_servers() {
 		fi
 	fi
 
+	# 느린 원격 점검(gossh/os6 재조사/LACP·LDAP 출력)은 선택 사항. 우선순위: AWX_CHECK(y/n) > AWX_AUTO=1(건너뜀) > 질문
+	# 건너뛰어도 hostfile 은 위에서 이미 채워져 있어 이후 단계에 영향 없음. 그 외 입력·EOF 는 실행
+	local chk why=""
+	if [[ ${AWX_CHECK:-} == [YyNn] ]]; then
+		chk=$AWX_CHECK
+		echo "접속 확인(LDAP/LACP) 실행할까요? [Y/n] : ${chk} (AWX_CHECK)"
+	elif [[ ${AWX_AUTO:-} == 1 ]]; then
+		chk=n; why=" (auto 모드)"
+	else
+		read -r -p "${YELLOW}접속 확인(LDAP/LACP) 실행할까요? [Y/n] : ${RST}" chk || chk=y
+	fi
+	if [[ $chk == [Nn] ]]; then
+		echo "${YELLOW}[12] 접속 확인(LDAP/LACP) 건너뜀${why}${RST}"
+		return 0
+	fi
+
 	# gossh -script 출력(stdout)은 "호스트명: 줄" 형식. 접속불가/ERROR 는 stderr 라 파일에 없음
 	mkdir -p tmp
 	cmd="cat /etc/openldap/ldap.conf |grep -v '#' |grep -i uri |awk -F= '{print \$2}' |awk -F',' '{print \$1}';cat /proc/net/bonding/bond0 |grep -i mod"

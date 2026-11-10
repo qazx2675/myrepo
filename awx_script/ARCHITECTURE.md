@@ -41,7 +41,7 @@
 | [9] | `dhcp_info()` | `${user}.txt` | `dhcp_pool/dhcp_pool_delete_info.txt` 누적 |
 | [10] | `gen_inventory()` | 임시 yaml | scp → custom_inventory.sh → `svr_dir` yml 수집. 태그는 배열 `yml_tag` 에 보관(yml 에는 12필드만 전송) |
 | [11] | `git_upload()` | `$yaml` 목록 | git 블록 원문 실행 + `cd "$now_pwd"` |
-| [12] | `check_servers()` (+ `os6_enabled/os6_run/os6_failed`) | `${user}.txt` | LDAP(ldap.conf URI)·LACP·응답없음 점검, `tmp/all_${user}` 생성. os8_mgmt 접속 불가 호스트는 os6_mgmt 재조사로 교체(02 `check_partitions` 도 동일 함수 사용) |
+| [12] | `check_servers()` (+ `os6_enabled/os6_run/os6_failed`) | `${user}.txt`, 프롬프트 Y/n (`AWX_CHECK`) | 먼저 `접속 확인(LDAP/LACP) 실행할까요? [Y/n]` — n 이면 gossh 호출 없이 건너뜀(AI GPU 안내는 출력, hostfile 은 이미 채워짐). `AWX_CHECK=y\|n` 우선, auto 모드(`AWX_AUTO=1`)는 기본 건너뜀, EOF 는 실행. 실행 시 LDAP(ldap.conf URI)·LACP·응답없음 점검, `tmp/all_${user}` 생성. os8_mgmt 접속 불가 호스트는 os6_mgmt 재조사로 교체(02 `check_partitions` 도 동일 함수 사용) |
 | [13] | (메뉴 루프) | 프롬프트 | su/exit/ls/파일명 명령 처리. `ls` 는 그룹에 태그가 있으면 `[boot]` 뒤에 태그도 출력 |
 | [14] | (02 호출) | `$group_yml` + 옵션 + `--all=$all_yml` | `bash 02.source_dhcp_pxe.sh` 실행 후 break 또는 재시도 (02: OS 선택 → 그룹 yml 등록 → 그룹 2개 이상이면 전체 yml invsync → 최종 수량) |
 | [15] | `verify_hosts()` | 붙여넣은 서버 목록 | 등록 대상(`$hostfile`)과 비교해 "모두 존재함" 또는 없는 서버 보고(exit 1) |
@@ -57,6 +57,7 @@
 | (수정) | N → 값 재입력 | 프롬프트 Enter/입력 | 배열 갱신 (Enter = 유지) |
 | (실행) | yml별 invsync → (dhcp ∥ pxe 동시) | 배열 순회, 임시 디렉터리에 출력 보관 | dhcp·pxe 가 모두 끝나야 다음 yml, 실패 여부 누적 |
 | (요약) | 성공/실패 카운트 | 배열 | "요약 : 전체 X / 성공 Y / 실패 Z" + exit 코드 |
+| (파티션) | `check_partitions()` | 프롬프트 Y/n (`AWX_CHECK`), `${user}.txt` | 마지막 단계. `파티션 확인 실행할까요? [Y/n]` — n 또는 auto 모드 기본 건너뜀(gossh 호출 없음), 실행 시 전 호스트 `lsblk` 점검(정보 출력만, 종료코드 무관). 01 [12] 와 같은 `AWX_CHECK` 규칙 |
 
 ## 흐름도
 
@@ -71,6 +72,7 @@
 | 분할 키 추가/제거 (infra/nic/disk/용량/os/boot/splunk 조합) | `split_files()`, 계획서 §8 |
 | 출력 형식 변경 (다단 열/행, 총 대수) | `show_targets()`, 계획서 §5-6 |
 | LDAP/LACP 점검 로직 | `check_servers()`, 계획서 §5-12 |
+| 접속 확인·파티션 확인 실행 여부 질문 (`AWX_CHECK`, auto 모드 기본 건너뜀) | `check_servers()` 의 `AWX_CHECK`/`AWX_AUTO` 분기 (01 [12]), `check_partitions()` 의 같은 분기 (02). 두 함수의 분기 규칙은 같게 유지 |
 | 02 옵션 확인표 레이아웃 | `02` `print_table()`, 계획서 §5-15 |
 | DNS 점검 규칙(판정·중복 경고·속도·auto 모드 질문) | `dns_check()` 와 보조 `dns_*` 함수, **auto_setup `dnscheck.go` 와 같이 고칠 것**, 테스트 케이스 21~23 |
 | nodeinfo 질문 자동 답변 | `download_txt()` 의 `AWX_AUTO_NODEINFO` 분기 (`AWX_AUTO` 있을 때·없을 때) |
