@@ -94,7 +94,7 @@ func busyMessage(t *jobTemplate, def string) string {
 func (a *app) askBusy(msg string) bool {
 	if a.interactive {
 		a.logf("%s %s", markWarn, msg)
-		fmt.Fprint(a.out, "r=다시 확인, x=이 묶음 중단: ")
+		a.prompt("r=다시 확인, x=이 묶음 중단: ")
 	} else {
 		fmt.Fprintln(a.out, busyPrefix+msg) // os.Stdout 은 버퍼가 없어 바로 나간다
 	}
