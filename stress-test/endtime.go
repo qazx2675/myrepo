@@ -90,12 +90,12 @@ func (e *endTime) String() string {
 // 합친 시각이 지금 이전이거나 없는 날짜면 처음부터 다시 묻는다. 입력이 끊기면 오류.
 func (a *app) askEnd() (*endTime, error) {
 	keys := a.cfg.StressEndKeys
-	a.logf("%s stress-ng 종료 시각을 입력하세요 (survey %s)", markInfo, strings.Join(keys, ","))
+	a.logf("%s %sstress-ng 종료 시각을 입력하세요%s (survey %s)", markInfo, promptOn, promptOff, strings.Join(keys, ","))
 	for {
 		vals := make([]string, 5)
 		for i, k := range keys {
 			for {
-				fmt.Fprintf(a.out, "%s: ", k)
+				a.prompt(k + ": ")
 				line, err := a.in.ReadString('\n')
 				v := strings.TrimSpace(line)
 				if err != nil && v == "" {

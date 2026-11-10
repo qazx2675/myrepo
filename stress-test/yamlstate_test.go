@@ -79,8 +79,8 @@ func TestRegisterPrintsRegisteredLine(t *testing.T) {
 
 	out.Reset()
 	f.failSrc = true
-	if _, err := a.register("hong_cpu.yaml", twoTargets()); err != nil {
-		t.Fatal(err)
+	if _, err := a.register("hong_cpu.yaml", twoTargets()); err == nil || !strings.Contains(err.Error(), "완전일치 확인 불가") {
+		t.Fatalf("호스트를 못 읽으면 완전일치 확인 불가로 실패해야 함: %v", err)
 	}
 	if !strings.Contains(out.String(), "\n[등록] yml=hong_cpu_2ea.yml\n") || !strings.Contains(out.String(), "호스트를 읽지 못했습니다") {
 		t.Errorf("호스트를 못 읽을 때:\n%s", out.String())

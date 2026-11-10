@@ -172,7 +172,8 @@ func (a *app) register(yamlName string, list []*target) (string, error) {
 	a.logf("%s 인벤토리 동기화 완료: %s", markOK, yml)
 	// new_setup -auto 가 읽는 줄: 방금 등록한 yml 과 그 직후의 인벤토리 호스트(launch 직전 변경 감시의 기준값)
 	var seen []string
-	if st, err := a.client.yamlState(cfg); err != nil {
+	st, err := a.client.yamlState(cfg)
+	if err != nil {
 		a.logf("%s 등록 직후 인벤토리 호스트를 읽지 못했습니다(변경 감시 기준에서 호스트 제외): %v", markWarn, err)
 	} else {
 		seen = st.Hosts
@@ -181,5 +182,51 @@ func (a *app) register(yamlName string, list []*target) (string, error) {
 		}
 	}
 	a.logf("%s", registeredLine(yml, seen))
+	// 안전장치: 인벤토리 호스트가 이번 묶음 대상과 완전히 같아야 launch 한다 (inventory_match_exclude 호스트는 비교에서 뺌)
+	if err != nil {
+		return "", fmt.Errorf("인벤토리 완전일치 확인 불가 (호스트 조회 실패): %v", err)
+	}
+	want := make([]string, len(list))
+	for i, t := range list {
+		want[i] = t.Host
+	}
+	if extra, missing := inventoryDiff(seen, want, cfg.InventoryMatchExclude); len(extra)+len(missing) > 0 {
+		return "", fmt.Errorf("인벤토리가 대상과 완전히 일치하지 않습니다 — 인벤토리에만 있음 %d대 [%s], 인벤토리에 없음 %d대 [%s]",
+			len(extra), strings.Join(extra, " "), len(missing), strings.Join(missing, " "))
+	}
+	_, onlyWant := inventoryDiff(nil, want, cfg.InventoryMatchExclude)
+	a.logf("%s 인벤토리 완전일치 확인: %d대 (비교 제외 %d대)", markOK, len(onlyWant), len(want)-len(onlyWant))
 	return yml, nil
+}
+
+// inventoryDiff 는 인벤토리 호스트(inv)와 대상(want)을 대소문자 무시로 비교해
+// 인벤토리에만 있는 호스트와 인벤토리에 없는 대상을 돌려준다. exclude 호스트는 양쪽 모두에서 뺀다.
+func inventoryDiff(inv, want, exclude []string) (extra, missing []string) {
+	ex := map[string]bool{}
+	for _, h := range exclude {
+		ex[strings.ToLower(h)] = true
+	}
+	set := func(l []string) map[string]string {
+		m := map[string]string{}
+		for _, h := range l {
+			if k := strings.ToLower(strings.TrimSpace(h)); k != "" && !ex[k] {
+				m[k] = h
+			}
+		}
+		return m
+	}
+	im, wm := set(inv), set(want)
+	for k, h := range im {
+		if _, ok := wm[k]; !ok {
+			extra = append(extra, h)
+		}
+	}
+	for k, h := range wm {
+		if _, ok := im[k]; !ok {
+			missing = append(missing, h)
+		}
+	}
+	sort.Strings(extra)
+	sort.Strings(missing)
+	return extra, missing
 }

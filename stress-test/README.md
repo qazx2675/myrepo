@@ -161,6 +161,7 @@ a b c node0003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 100 8.10 uefi
    - yaml 이름: `${user}_stress.yaml`, `${user}_cpu.yaml`. 재실행은 `${user}_retryN_<stress|cpu>.yaml`.
    - 새 yml 이름이 `_<N>ea.yml` 형식이면 N 이 입력 대수와 다를 때 경고만 출력합니다.
    - 새 yml 이 0개 또는 2개 이상이면 그 묶음은 `실패` 입니다.
+   - **완전일치 확인(안전장치)**: invsync 뒤 인벤토리 호스트 목록이 이번 묶음 대상과 정확히 같아야 launch 합니다(대소문자 무시). 인벤토리에만 있는 호스트나 인벤토리에 없는 대상이 있으면 차이를 출력하고 그 묶음을 `실패` 로 둡니다(launch·템플릿 인벤토리 변경 없음). 호스트 조회가 실패해도 `실패` 입니다. conf `inventory_match_exclude = a|b` 의 호스트는 양쪽 모두 비교에서 뺍니다.
    - `git_dir` 의 `${user}` 는 user 로 치환됩니다. 비우면 git 업로드를 건너뜁니다.
 5. **템플릿 launch** — 묶음의 hostname 들을 **줄바꿈으로 이어** conf 의 `<tmpl>_hostname_key` survey 변수 하나로 넘기고(키를 비우면 넘기지 않음 = 인벤토리 전체 대상), `<tmpl>_extra_vars`(`k=v, k2=v2`)를 함께 보냅니다. 템플릿은 ID(숫자) 또는 이름으로 지정합니다.
    - **stress-ng 종료 시각**: 템플릿 `survey_spec` 을 조회해 `stress_end_keys` 각 변수의 type 이 `integer`/`float` 이면 숫자로, 그 밖(text 등)·survey 에 없으면 입력한 글자 그대로(`07` 등) extra_vars 에 넣습니다. launch 때 종료 시각이 이미 지났으면(cpu 단계·감시가 길어진 경우, 재실행 회차 등) 대화형은 다시 묻고, 비대화형은 그 묶음을 `실패`(비고 `종료 시각이 지남`)로 둡니다.

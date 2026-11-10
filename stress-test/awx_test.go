@@ -33,9 +33,10 @@ type fakeAWX struct {
 	events      []string    // "patch 5→2", "launch 5" 순서 기록
 
 	srcPath   string   // 소스 11 의 source_path (-yaml-state 시험)
-	hosts     []string // 인벤토리 7 의 호스트 이름
-	hostPages bool     // true 면 호스트 목록을 2쪽(next)으로 나눠 준다
-	failSrc   bool     // 소스 11 조회가 500
+	hosts     []string // 인벤토리 7 의 호스트 이름 (nil 이면 repoDir 의 가장 최근 yaml 4번째 필드 = 실제 등록처럼)
+	repoDir   string
+	hostPages bool // true 면 호스트 목록을 2쪽(next)으로 나눠 준다
+	failSrc   bool // 소스 11 조회가 500
 }
 
 var fakeInvNames = map[int]string{1: "DEFAULT", 2: "admin", 9: "kim"}
@@ -119,7 +120,11 @@ func (f *fakeAWX) handler(w http.ResponseWriter, r *http.Request) {
 		write(map[string]interface{}{"id": 11, "inventory": 7, "source": "scm", "source_path": f.srcPath})
 	case "GET /api/v2/inventories/7/hosts/":
 		var res []map[string]interface{}
-		for _, h := range f.hosts {
+		hosts := f.hosts
+		if hosts == nil && f.repoDir != "" {
+			hosts = lastYamlHosts(f.repoDir)
+		}
+		for _, h := range hosts {
 			res = append(res, map[string]interface{}{"name": h})
 		}
 		if f.hostPages && len(res) > 1 {
@@ -174,6 +179,29 @@ func writeScript(t *testing.T, path, body string) {
 	}
 }
 
+// lastYamlHosts 는 dir 에서 가장 최근에 바뀐 *.yaml 의 줄마다 4번째 필드(hostname)를 돌려준다.
+func lastYamlHosts(dir string) []string {
+	m, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	var best string
+	var bt time.Time
+	for _, p := range m {
+		if fi, err := os.Stat(p); err == nil && !fi.ModTime().Before(bt) {
+			best, bt = p, fi.ModTime()
+		}
+	}
+	if best == "" {
+		return nil
+	}
+	b, _ := os.ReadFile(best)
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(l); len(f) >= 4 {
+			out = append(out, f[3])
+		}
+	}
+	return out
+}
+
 // newTestApp 은 가짜 AWX·가짜 ssh/scp 로 등록·launch 를 시험할 app 을 만든다.
 func newTestApp(t *testing.T) (*app, *fakeAWX, string) {
 	f := &fakeAWX{calls: map[string]int{}, launches: map[string]map[string]interface{}{}, tmplInv: map[int]int{5: 1, 6: 1}}
@@ -186,6 +214,7 @@ func newTestApp(t *testing.T) (*app, *fakeAWX, string) {
 		os.MkdirAll(d, 0o755)
 	}
 	os.WriteFile(filepath.Join(svr, "old_1ea.yml"), nil, 0o644)
+	f.repoDir = repo
 	t.Setenv("FAKE_REPO", repo)
 	t.Setenv("FAKE_SVR", svr)
 	// scp -o BatchMode=yes <local> <host>:<dir>/

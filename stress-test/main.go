@@ -44,6 +44,15 @@ func setColor() {
 	markFail = "\033[31m[X]\033[0m"
 	markWarn = "\033[33m[!]\033[0m"
 	markOKY = "\033[33m[✔]\033[0m"
+	promptOn, promptOff = "\033[1;36m", "\033[0m"
+}
+
+// 대화형 입력 프롬프트 색 (터미널일 때 굵은 청록, setColor 가 켬)
+var promptOn, promptOff string
+
+// prompt 는 입력 프롬프트를 색을 입혀 출력한다.
+func (a *app) prompt(s string) {
+	fmt.Fprint(a.out, promptOn+s+promptOff)
 }
 
 // app 은 한 번의 실행 상태다.
@@ -432,7 +441,7 @@ func (a *app) runStage(stage string) {
 // askRetry 는 대화형이면 묻고, 비대화형이면 -retry 횟수만큼 자동으로 재실행한다.
 func (a *app) askRetry(n, round int) bool {
 	if a.interactive {
-		fmt.Fprintf(a.out, "미실행 %d대를 재실행할까요? (y/N): ", n)
+		a.prompt(fmt.Sprintf("미실행 %d대를 재실행할까요? (y/N): ", n))
 		line, _ := a.in.ReadString('\n')
 		ans := strings.ToLower(strings.TrimSpace(line))
 		return ans == "y" || ans == "yes"
