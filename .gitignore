@@ -1,0 +1,9 @@
+# Packages and bundle outputs
+/rhel810_packages/
+/bundle/
+/bundles/
+*.tar.gz
+*.rpm
+*.iso
+*.log
+.work.*
