@@ -252,6 +252,53 @@ func TestTUIViewTabs(t *testing.T) {
 	}
 }
 
+// x 키(TUIXModel)는 SetXKey 로 켠 탭의 결과 보기에서만 받고 힌트에도 그때만 나온다. 글 보기에서는 Enter 도 q/Esc 처럼 계속 (힌트 "Enter/q 계속").
+// 결과 보기의 Enter 는 그대로 벤더 안으로 들어간다.
+func TestTUIXKeyAndTextEnter(t *testing.T) {
+	u, r := newTUIRig(t, "x")
+	u.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+	u.SetResults("전체비교 — 기준 x", tuiSampleVGs())
+	if act := u.Browse(); act == TUIXModel {
+		t.Errorf("xKey 꺼짐인데 x → %v", act)
+	}
+	u, r = newTUIRig(t, "x")
+	u.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+	u.SwitchTab(1)
+	u.SetResults("전체비교 — 기준 x", tuiSampleVGs())
+	u.SetXKey(true)
+	if act := u.Browse(); act != TUIXModel {
+		t.Errorf("x → %v", act)
+	}
+	if f := tuiLastFrame(r); !strings.Contains(f, "x 모델 다른 비교") {
+		t.Errorf("xKey 힌트가 없음:\n%s", f)
+	}
+	u.SwitchTab(0)
+	if u.xKey {
+		t.Errorf("다른 탭으로 가면 xKey 는 그 탭 것")
+	}
+	u.SwitchTab(1)
+	if !u.xKey {
+		t.Errorf("탭에 돌아오면 xKey 복원")
+	}
+	u.SetResults("전체비교 — 기준 y", tuiSampleVGs())
+	if u.xKey {
+		t.Errorf("SetResults 는 xKey 를 끈다")
+	}
+	u, r = newTUIRig(t, "\r")
+	u.SetXKey(true)
+	u.SetText("수정 미리보기", []string{"x"})
+	if act := u.Browse(); act != TUIQuit || u.Quit() {
+		t.Errorf("글 보기 Enter: act=%v quit=%v", act, u.Quit())
+	}
+	if f := tuiLastFrame(r); !strings.Contains(f, "Enter/q 계속") || strings.Contains(f, "x 모델") {
+		t.Errorf("글 보기 힌트:\n%s", f)
+	}
+	u, _, act := browseKeys(t, "\r\x1b[Cqqq", tuiSampleVGs()) // 결과 보기의 Enter 는 벤더 안으로 (q 로 나와 q q 끝)
+	if act != TUIQuit || u.Quit() || u.inGroup {
+		t.Errorf("결과 보기 Enter: act=%v quit=%v inGroup=%v", act, u.Quit(), u.inGroup)
+	}
+}
+
 // 같은 벤더에서 속성 이름 목록이 같은 관리망은 한 탭으로 합쳐 보인다.
 func TestTUIMgmtGroupMerge(t *testing.T) {
 	vgs := groupLines([]ResultLine{
@@ -735,8 +782,9 @@ func TestTUISetResultsAndText(t *testing.T) {
 		t.Fatalf("그룹 줄에서 e: act=%v inGroup=%v gi=%d", act, u.inGroup, u.gi)
 	}
 	u.SetResults("전체비교 — 기준 ref01", groupLines([]ResultLine{tuiL(TagDiff, "DELL", "d9", "iDRAC 9", "SysProfile", "Perf", "Custom", "FAIL")}))
-	if u.gi != 0 || u.inGroup || u.filter != tuiFilterAll {
-		t.Errorf("내용 교체 시 그룹·단계·필터 처음으로")
+	// 새 결과에 HPE 가 없으면 벤더·그룹은 처음으로, 필터(f)는 그대로 (SetResults 는 이름으로 위치를 유지)
+	if u.vi != 0 || u.gi != 0 || u.inGroup || u.filter != tuiFilterDiff {
+		t.Errorf("내용 교체 시 없는 벤더는 처음으로, 필터 유지: vi=%d gi=%d inGroup=%v filter=%c", u.vi, u.gi, u.inGroup, u.filter)
 	}
 	u.Browse()
 	if f := tuiLastFrame(r); !strings.Contains(f, "전체비교 — 기준 ref01") || !strings.Contains(f, "SysProfile") || strings.Contains(f, "AttrA") {
@@ -841,20 +889,184 @@ func TestTUITagHints(t *testing.T) {
 	tagVGs := func() []VendorGroups {
 		return groupLines([]ResultLine{gtLine("asdf", "HPE", "h1", "iLO 5", "A"), gtLine("qwer", "Dell", "d1", "iDRAC 9", "B")})
 	}
-	_, r, _ := browseKeys(t, "x", tagVGs())
+	// 태그 화면은 벤더가 하나("태그")뿐이라 Enter 없이 처음부터 태그 줄이 움직이는 줄 (3단계: 벤더 하나면 ←→ 바로 이동)
+	u, r, _ := browseKeys(t, "x", tagVGs())
 	f := tuiLastFrame(r)
-	if !strings.Contains(f, "Enter: 아래 태그 줄로") || !strings.Contains(f, "Enter 태그 고르기") || strings.Contains(f, "관리망") {
-		t.Errorf("태그 벤더 줄 안내:\n%s", f)
+	if u.inGroup || !strings.Contains(f, ">> 태그  >[asdf] [qwer]") || !strings.Contains(f, "←→ 태그") || strings.Contains(f, "Enter: 아래") ||
+		strings.Contains(f, "Enter 태그 고르기") || strings.Contains(f, "관리망") || strings.Contains(f, "q/Esc 벤더") {
+		t.Errorf("태그 첫 화면: inGroup=%v\n%s", u.inGroup, f)
 	}
-	u, r, _ := browseKeys(t, "\r\x1b[C", tagVGs())
+	u, r, _ = browseKeys(t, "\x1b[C", tagVGs())
 	f = tuiLastFrame(r)
-	if !u.inGroup || u.gi != 1 || !strings.Contains(f, ">> 태그  [asdf] >[qwer]") || !strings.Contains(f, "←→ 태그") ||
-		!strings.Contains(f, "호스트 1대 · ←→ 태그 이동 · q/Esc 벤더 줄로") || strings.Contains(f, "관리망") {
+	if u.inGroup || u.gi != 1 || !strings.Contains(f, ">> 태그  [asdf] >[qwer]") || !strings.Contains(f, "←→ 태그") ||
+		!strings.Contains(f, "호스트 1대 · ←→ 태그 이동") || strings.Contains(f, "q/Esc 벤더 줄로") || strings.Contains(f, "관리망") {
 		t.Errorf("태그 줄 안내: inGroup=%v gi=%d\n%s", u.inGroup, u.gi, f)
 	}
 	// 그룹이 하나뿐인 태그 벤더의 Enter 안내
 	u, r, _ = browseKeys(t, "\r", groupLines([]ResultLine{gtLine("asdf", "HPE", "h1", "iLO 5", "A")}))
 	if f := tuiLastFrame(r); u.inGroup || !strings.Contains(f, "이 벤더는 태그 그룹이 하나뿐입니다") {
 		t.Errorf("태그 1개 Enter:\n%s", f)
+	}
+}
+
+// ---- 여러 줄 입력 상자: 빈 줄 Enter 완료·Esc·붙여넣기 표시 ----
+
+// newTUIRigChunks 는 chunks 를 읽기 한 번에 하나씩 넘깁니다 (사람이 키를 하나씩 치듯이 — 한 덩어리로 넣으면
+// 마지막 키를 뺀 모든 키가 붙여넣기(paste)로 취급된다). io.Pipe 의 Write 는 읽힐 때까지 막히므로 덩어리가 섞이지 않는다.
+func newTUIRigChunks(t *testing.T, chunks ...string) (*TUI, *tuiRig) {
+	t.Helper()
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { pw.Close() })
+	var once sync.Once
+	return newTUIRigReader(t, pr, func(e *tuiEnv, _ *tuiRig) {
+		e.Ready = func() {
+			once.Do(func() {
+				for _, c := range chunks {
+					pw.Write([]byte(c))
+				}
+				pw.Close()
+			})
+		}
+	})
+}
+
+func TestTUIParseKeysPasteMarkers(t *testing.T) {
+	got := tuiParseKeys([]byte("\x1b[200~a\r\x1b[201~"))
+	want := []tuiKey{{k: tkPasteStart}, {k: tkRune, r: 'a'}, {k: tkEnter}, {k: tkPasteEnd}}
+	if len(got) != len(want) {
+		t.Fatalf("붙여넣기 표시: %v want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("[%d]=%v want %v", i, got[i], want[i])
+		}
+	}
+	for _, c := range []struct {
+		in   string
+		tail int
+	}{{"ab", -1}, {"ab\x1b", -1}, {"ab\x1b[", 2}, {"ab\x1b[20", 2}, {"\x1b[200~", -1}, {"a\x1b[200~b", -1}, {"a\x1b[200~\x1b[2", 7}, {"\x1bO", 0}} {
+		if i := tuiIncompleteTail([]byte(c.in)); i != c.tail {
+			t.Errorf("tuiIncompleteTail(%q)=%d want %d", c.in, i, c.tail)
+		}
+	}
+}
+
+func TestTUIBracketedPasteOnOffAtOpenClose(t *testing.T) {
+	u, r := newTUIRigChunks(t)
+	u.Close()
+	u.Close()
+	o := r.out.String()
+	if !strings.Contains(o, "\x1b[?2004h") || strings.Count(o, "\x1b[?2004l") != 1 {
+		t.Errorf("붙여넣기 표시 켜기/끄기: %q", o)
+	}
+}
+
+func TestTUIInputLinesEmptyEnterCompletes(t *testing.T) {
+	u, _ := newTUIRigChunks(t, "a", "\r", "b", "\r", "\r")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "a,b" {
+		t.Errorf("빈 줄 Enter 완료: %q %v", got, ok)
+	}
+	u, _ = newTUIRigChunks(t, "\r")
+	if got, ok := u.InputLines("x"); !ok || got == nil || len(got) != 0 {
+		t.Errorf("아무것도 안 치고 Enter: %#v %v", got, ok)
+	}
+	u, _ = newTUIRigChunks(t, "a", "\r", "   ", "\r")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "a" {
+		t.Errorf("공백뿐인 줄도 빈 줄: %q %v", got, ok)
+	}
+}
+
+func TestTUIInputLinesBlankInPasteDoesNotComplete(t *testing.T) {
+	// 붙여넣기 표시가 있는 경우: 안의 빈 줄은 무시, 앞뒤 줄은 유지, 뒤에 따로 친 Enter 로 완료
+	u, _ := newTUIRigChunks(t, "\x1b[200~a\r\r\rb\x1b[201~", "\r", "\r")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "a,b" {
+		t.Errorf("표시 있는 붙여넣기: %q %v", got, ok)
+	}
+	// 표시가 둘로 갈라져 읽혀도 같다
+	u, _ = newTUIRigChunks(t, "\x1b[20", "0~a\r", "\rb\x1b[2", "01~", "\r", "\r")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "a,b" {
+		t.Errorf("갈라진 표시: %q %v", got, ok)
+	}
+	// 표시를 안 보내는 터미널: 한 덩어리 안의 빈 줄은 완료가 아니고, 따로 온 Enter 는 완료
+	u, _ = newTUIRigChunks(t, "a\r\rb\r", "\r")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "a,b" {
+		t.Errorf("표시 없는 한 덩어리: %q %v", got, ok)
+	}
+	// 같은 덩어리가 마지막 빈 줄 Enter 로 끝나면 사람이 친 것으로 본다 (마지막 키는 paste 가 아님)
+	u, _ = newTUIRigChunks(t, "a\r\r")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "a" {
+		t.Errorf("덩어리 끝 빈 줄: %q %v", got, ok)
+	}
+}
+
+func TestTUIInputLinesEsc(t *testing.T) {
+	// 아무것도 없으면 바로 취소
+	u, _ := newTUIRigChunks(t, "\x1b")
+	if got, ok := u.InputLines("x"); ok || got != nil {
+		t.Errorf("빈 상태 Esc: %q %v", got, ok)
+	}
+	// 입력이 있으면 한 번은 안내만, 바로 이어 한 번 더 누르면 취소
+	u, _ = newTUIRigChunks(t, "a", "\x1b")
+	u.InputLines("x") // 입력이 끝나 Quit (EOF 키는 안내를 지우지 않는다)
+	if !strings.Contains(u.msg, "입력한 내용을 버리려면 Esc 를 한 번 더 누르세요") {
+		t.Errorf("Esc 한 번: 안내 %q", u.msg)
+	}
+	u, _ = newTUIRigChunks(t, "a", "\r", "\x1b", "\x1b")
+	if got, ok := u.InputLines("x"); ok || got != nil {
+		t.Errorf("Esc 두 번 취소: %q %v", got, ok)
+	}
+	// 다른 키가 끼면 해제 — 다시 Esc 한 번은 취소가 아님
+	u, _ = newTUIRigChunks(t, "a", "\x1b", "b", "\x1b", "\r", "\r")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "ab" {
+		t.Errorf("Esc 후 다른 키: %q %v", got, ok)
+	}
+	// 붙여넣은 글에 섞인 Esc 는 무시
+	u, _ = newTUIRigChunks(t, "a\x1bb\x04")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "ab" {
+		t.Errorf("붙여넣기 속 Esc: %q %v", got, ok)
+	}
+	u, _ = newTUIRigChunks(t, "\x1b[200~a\x1b", "b\x1b[201~", "\x04")
+	if got, ok := u.InputLines("x"); !ok || strings.Join(got, ",") != "ab" {
+		t.Errorf("표시된 붙여넣기 속 Esc: %q %v", got, ok)
+	}
+	// Ctrl+X 는 바로 취소
+	u, _ = newTUIRigChunks(t, "a", "\x18")
+	if got, ok := u.InputLines("x"); ok || got != nil {
+		t.Errorf("Ctrl+X: %q %v", got, ok)
+	}
+}
+
+func TestTUIInputLinesInitialAndHelp(t *testing.T) {
+	u, _ := newTUIRigChunks(t, "\r")
+	if got, ok := u.InputLinesOpt("x", TUILinesOpt{Initial: []string{"h1", "h2"}}); !ok || strings.Join(got, ",") != "h1,h2" {
+		t.Errorf("Initial 그대로 Enter: %q %v", got, ok)
+	}
+	// 마지막 줄로 Backspace 해 고치고 줄을 더함
+	u, _ = newTUIRigChunks(t, "\x7f", "z", "\r", "n", "\r", "\r")
+	if got, ok := u.InputLinesOpt("x", TUILinesOpt{Initial: []string{"h1", "h2"}}); !ok || strings.Join(got, ",") != "h1,h2z,n" {
+		t.Errorf("Initial 고치기: %q %v", got, ok)
+	}
+	// 원본 Initial 슬라이스는 건드리지 않는다
+	init := []string{"a"}
+	u, _ = newTUIRigChunks(t, "b", "\r", "\r")
+	u.InputLinesOpt("x", TUILinesOpt{Initial: init})
+	if len(init) != 1 || init[0] != "a" {
+		t.Errorf("Initial 변형됨: %q", init)
+	}
+	// 안내 줄: 제목 바로 아래 3칸 들여쓰기
+	u, r := newTUIRigChunks(t, "q")
+	u.InputLinesOpt("붙여넣기 제목", TUILinesOpt{Help: []string{"안내 하나", "안내 둘"}})
+	f := tuiLastFrame(r)
+	if !strings.Contains(f, "붙여넣기 제목  (0줄 입력됨)\n   안내 하나\n   안내 둘\n") {
+		t.Errorf("안내 줄 위치:\n%s", f)
+	}
+	if !strings.Contains(f, "빈 줄에서 Enter 완료") || strings.Contains(f, "Ctrl+D") {
+		t.Errorf("여러 줄 입력 키 안내:\n%s", f)
+	}
+	// 한 줄 입력의 안내
+	u, r = newTUIRigChunks(t, "q")
+	u.InputLineHelp("파일", "init", []string{"경로를 적으세요"})
+	if f := tuiLastFrame(r); !strings.Contains(f, "파일: initq_\n   경로를 적으세요\n") {
+		t.Errorf("한 줄 입력 안내:\n%s", f)
 	}
 }

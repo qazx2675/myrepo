@@ -15,3 +15,7 @@ diff.txt
 ignore_attrs.txt
 # 비교서버 기준 JSON(bios_export 결과)도 실제 호스트 속성값이라 커밋하지 않습니다.
 /refs/
+
+# test.sh (mock 데모) 산출물
+/.testbin/
+/.testenv/

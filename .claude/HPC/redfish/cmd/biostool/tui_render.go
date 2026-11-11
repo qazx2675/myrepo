@@ -130,6 +130,11 @@ const (
 	tuiStCyan   = "1;36"
 	tuiStRev    = "7"
 	tuiStUnder  = "1;4" // 굵은 밑줄 (지금 움직이지 않는 탭 줄의 선택 탭)
+
+	tuiStDim        = "2"    // 흐리게 (키 안내 그룹 이름)
+	tuiStRedBold    = "1;31" // 오류 안내 표시 [!]
+	tuiStYellowBold = "1;33" // 안내 줄 글
+	tuiStStage      = "1;7"  // 단계 줄의 지금 단계 (굵게 + 반전)
 )
 
 // tuiSeg 는 색 하나를 가진 글자 조각입니다.
@@ -473,28 +478,99 @@ func tuiTabsLine(color bool, width int, label string, names []string, sel int, t
 	return tuiSegLine(color, width, segs...)
 }
 
+// tuiStages 는 맨 위 단계 줄의 단계 이름입니다 (TUI.SetStage 의 1~5).
+var tuiStages = []string{"대상", "프로파일", "조회", "결과", "수정"}
+
+// tuiStageLine 은 " 대상 › 프로파일 › 조회 › 결과 › 수정" 입니다. 지금 단계(1부터)는 색이 있으면 굵게 반전, 없으면 [결과] 처럼
+// 대괄호로 싸고 나머지는 회색입니다.
+func tuiStageLine(color bool, width, stage int) string {
+	segs := []tuiSeg{{" ", ""}}
+	for i, n := range tuiStages {
+		if i > 0 {
+			segs = append(segs, tuiSeg{" › ", tuiStGray})
+		}
+		switch {
+		case i+1 != stage:
+			segs = append(segs, tuiSeg{n, tuiStGray})
+		case color:
+			segs = append(segs, tuiSeg{n, tuiStStage})
+		default:
+			segs = append(segs, tuiSeg{"[" + n + "]", ""})
+		}
+	}
+	return tuiSegLine(color, width, segs...)
+}
+
+// tuiRule 은 본문과 키 안내 사이의 가는 구분선입니다 (색이 없으면 ASCII '-': 색을 끈 터미널·시험은 선 문자를 못 쓸 수 있다).
+func tuiRule(color bool, width int) string {
+	ch := "-"
+	if color {
+		ch = "─"
+	}
+	return tuiSegLine(color, width, tuiSeg{strings.Repeat(ch, tuiMaxInt(width, 1)), tuiStGray})
+}
+
+// tuiIsHintLabel 은 키 안내 항목이 "[이동]" 처럼 그룹 이름 표시인지 봅니다 (대괄호로 싼 공백 없는 글).
+func tuiIsHintLabel(it string) bool {
+	return len(it) > 2 && it[0] == '[' && it[len(it)-1] == ']' && !strings.Contains(it, " ")
+}
+
 // tuiWrapItems 는 키 안내 항목("q 종료" 처럼 첫 단어가 키)을 두 칸 간격으로 이어 폭에 맞춰 줄바꿈합니다.
-// 키 부분은 청록 굵게. 한 항목이 폭보다 길면 그 줄에서 잘린다.
+// 키 부분은 청록 굵게, 설명은 회색. "[이동]" 같은 그룹 이름 항목은 흐리게 그리고 안내 개수에 세지 않으며, 앞 그룹과는
+// " │ " 로 나눈다. 그룹 이름은 줄 끝에 혼자 남지 않게 그 그룹의 첫 안내와 함께 다음 줄로 넘긴다. 한 항목이 폭보다 길면 그 줄에서 잘린다.
 func tuiWrapItems(color bool, width int, items []string) []string {
+	gsep := " | "
+	if color {
+		gsep = " │ "
+	}
 	var out []string
 	var cur []tuiSeg
 	used := 0
+	label := "" // 아직 줄에 내지 못한 그룹 이름
 	for _, it := range items {
-		w := tuiStrWidth(it)
-		if len(cur) > 0 && used+2+w > width {
-			out = append(out, tuiSegLine(color, width, cur...))
-			cur, used = nil, 0
+		if tuiIsHintLabel(it) {
+			label = it
+			continue
 		}
-		sep := " "
-		if len(cur) > 0 {
-			sep = "  "
+		w := tuiStrWidth(it)
+		// 이 항목 앞에 붙는 조각 (줄 첫머리면 한 칸, 이어 붙이면 두 칸 간격 / 새 그룹이면 구분선 + 그룹 이름)
+		pre := func(first bool) (segs []tuiSeg, pw int) {
+			sep := " "
+			switch {
+			case label != "" && !first:
+				segs = append(segs, tuiSeg{gsep, tuiStGray})
+				pw = tuiStrWidth(gsep)
+			case label != "":
+				segs = append(segs, tuiSeg{sep, ""})
+				pw = 1
+			case first:
+				segs = append(segs, tuiSeg{sep, ""})
+				pw = 1
+			default:
+				segs = append(segs, tuiSeg{"  ", ""})
+				pw = 2
+			}
+			if label != "" {
+				segs = append(segs, tuiSeg{label, tuiStDim}, tuiSeg{" ", ""})
+				pw += tuiStrWidth(label) + 1
+			}
+			return
+		}
+		first := len(cur) == 0
+		segs, pw := pre(first)
+		if !first && used+pw+w > width {
+			out = append(out, tuiSegLine(color, width, cur...))
+			cur, used, first = nil, 0, true
+			segs, pw = pre(true)
 		}
 		key, rest := it, ""
 		if i := strings.IndexByte(it, ' '); i > 0 {
 			key, rest = it[:i], it[i:]
 		}
-		cur = append(cur, tuiSeg{sep, ""}, tuiSeg{key, tuiStCyan}, tuiSeg{rest, ""})
-		used += len(sep) + w
+		cur = append(cur, segs...)
+		cur = append(cur, tuiSeg{key, tuiStCyan}, tuiSeg{rest, tuiStGray})
+		used += pw + w
+		label = ""
 	}
 	if len(cur) > 0 {
 		out = append(out, tuiSegLine(color, width, cur...))
@@ -509,14 +585,16 @@ func tuiHelpLines() []string {
 		" BIOS 점검 결과 화면 — 도움말",
 		"",
 		"   Tab / Shift+Tab  화면 전환 (프로파일 점검 ↔ 전체 설정 비교, 처음이면 기준 고르고 비교)",
+		"   맨 위 줄       단계 줄: 대상 › 프로파일 › 조회 › 결과 › 수정 (지금 단계 반전, 색 없으면 [ ])",
 		"   ← →           벤더 이동 ('>>' 줄이 지금 움직이는 줄, 화면마다 위치·필터 유지)",
-		"   Enter         벤더 안으로 — ← → 로 관리망(관리 컨트롤러) 그룹 이동",
+		"   Enter         벤더 안으로 — ← → 로 관리망·태그 그룹 이동 (벤더가 하나뿐이면 Enter 없이 바로 ← →)",
 		"   q             한 단계 뒤로: 관리망 그룹 → 벤더 줄, 미리보기·설정 결과 → 결과 화면",
 		"   q q           벤더 줄(맨 위)에서 두 번 — 종료 (설정할 항목이 있으면 먼저 수정 단계, 거기서 취소하면 결과 화면으로)",
 		"   Esc           q 와 같이 뒤로, 벤더 줄에서는 종료 확인만 취소 (끝내지 않음)",
 		"   r             전체 설정 비교 기준 다시 선택 (전체 설정 비교 화면에서)",
+		"   x             (전체 설정 비교 화면) 모델이 다른 대상을 참고용으로 비교해 CSV 로 저장",
 		"   ↑ ↓ (k j)     한 줄 위/아래",
-		"   PgUp / PgDn   한 화면 위/아래",
+		"   PgUp / PgDn   한 페이지 위/아래",
 		"   Home / End (g G)  맨 위 / 맨 아래",
 		"   a o f n s     보기: 전체 / OK 만 / difference 만 / N/A 만(접속·조회 실패 포함) / 요약(호스트마다 한 줄 건수)",
 		"   e             수정 메뉴 (어디서든, 취소하면 결과 화면으로)",

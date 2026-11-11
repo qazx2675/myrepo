@@ -54,8 +54,8 @@ import (
 )
 
 const (
-	tuiEnterScreen = "\x1b[?1049h\x1b[?25l" // 대체 화면 + 커서 숨김
-	tuiLeaveScreen = "\x1b[?25h\x1b[?1049l"
+	tuiEnterScreen = "\x1b[?1049h\x1b[?25l\x1b[?2004h" // 대체 화면 + 커서 숨김 + 붙여넣기 표시(bracketed paste) 켬
+	tuiLeaveScreen = "\x1b[?2004l\x1b[?25h\x1b[?1049l"
 	tuiTickEvery   = 200 * time.Millisecond // Progress 중 다시 그리는 주기
 	tuiKeyBatch    = 256                    // 쌓인 키를 이만큼까지 처리하고 한 번 그림 (keys 채널 크기와 같음)
 )
@@ -87,10 +87,11 @@ const tuiQuitConfirm = "종료하려면 q 를 한 번 더 누르세요 (Esc: 계
 type TUIAction int
 
 const (
-	TUIQuit TUIAction = iota // 벤더 줄에서 q 두 번(종료 확인), 글 보기에서 q/Esc(돌아가기), 시그널, 입력 끝
-	TUIEdit                  // e 수정 메뉴
-	TUITab                   // Tab/Shift+Tab 보기 탭 전환 (탭이 2개라 방향은 따로 없음)
-	TUIRef                   // r 기준 다시 선택 (SetRefKey 로 켠 보기에서만)
+	TUIQuit   TUIAction = iota // 벤더 줄에서 q 두 번(종료 확인), 글 보기에서 q/Esc(돌아가기), 시그널, 입력 끝
+	TUIEdit                    // e 수정 메뉴
+	TUITab                     // Tab/Shift+Tab 보기 탭 전환 (탭이 2개라 방향은 따로 없음)
+	TUIRef                     // r 기준 다시 선택 (SetRefKey 로 켠 보기에서만)
+	TUIXModel                  // x 모델이 다른 대상 참고용 비교 (SetXKey 로 켠 보기에서만)
 )
 
 // TUIAnswer 는 Ask 의 답입니다. 0 값이 TUIAbort 라서 모르면 "취소" 로 다룬다.
@@ -120,6 +121,7 @@ type tuiPrompt struct {
 	items []string // 고르기 목록
 	cur   int      // 고르기 커서
 	num   string   // 숫자로 고르는 중
+	help  []string // 제목 줄 바로 아래 회색 안내 (한 줄·여러 줄 입력)
 }
 
 // TUIJob 은 Progress 로 돌리는 작업에 주는 손잡이입니다 (작업 goroutine 에서 불러도 된다).
@@ -181,11 +183,13 @@ type TUI struct {
 	filter   rune // tuiFilterAll ...
 	top      int  // 본문 첫 줄 위치
 	refKey   bool // r 키(기준 다시 선택)를 받음
+	xKey     bool // x 키(모델이 다른 비교)를 받음
 	quitArm  bool // 벤더 줄에서 q 를 한 번 눌러 종료 확인 중 (다음 q 면 종료, 다른 키면 취소)
 	tabOut   bool // 기준 고르기·입력 중 Tab 으로 빠져나옴 (TakeTabOut 으로 읽고 지움)
 	bodyH    int  // 마지막으로 그린 본문 높이 (PgUp/PgDn 단위)
 	help     bool
 	msg      string
+	stage    int // 맨 위 단계 줄의 지금 단계 (1 대상 … 5 수정, 0 이면 줄을 그리지 않음)
 	prompt   *tuiPrompt
 	job      *TUIJob
 
@@ -225,6 +229,7 @@ type tuiResState struct {
 	inGroup     bool
 	filter      rune
 	refKey      bool
+	xKey        bool
 }
 
 // tuiOpen 은 raw 모드·대체 화면으로 들어가고 키 읽기를 시작합니다. raw 모드 실패면 아무것도 쓰지 않고 오류.
@@ -299,9 +304,28 @@ func (u *TUI) Quit() bool { return u.quit }
 
 func (u *TUI) readKeys() {
 	buf := make([]byte, 4096)
+	inPaste := false // 붙여넣기 시작~끝 표시 사이 (읽기 덩어리를 넘어 유지)
+	var pending []byte
 	for {
 		n, err := u.env.In.Read(buf)
-		for _, k := range tuiParseKeys(buf[:n]) {
+		data := append(pending, buf[:n]...)
+		pending = nil
+		if i := tuiIncompleteTail(data); i >= 0 && err == nil { // 읽기 경계에서 잘린 ESC 시퀀스는 다음 읽기와 이어 파싱
+			pending = append([]byte(nil), data[i:]...)
+			data = data[:i]
+		}
+		ks := tuiParseKeys(data)
+		for i, k := range ks {
+			switch k.k {
+			case tkPasteStart:
+				inPaste = true
+				continue
+			case tkPasteEnd:
+				inPaste = false
+				continue
+			}
+			// 붙여넣기 표시 안에 있거나, 같은 덩어리에서 뒤에 키가 더 있으면 붙여넣기로 본다 (표시를 안 보내는 터미널용)
+			k.paste = inPaste || i < len(ks)-1
 			select {
 			case u.keys <- k:
 			case <-u.done:
@@ -320,15 +344,62 @@ func (u *TUI) readKeys() {
 
 // ---- 내용 ----
 
-// SetResults 는 지금 보기 탭의 결과 보기 내용을 바꿉니다 (벤더·그룹·단계·필터·스크롤은 처음으로, r 키 끔).
+// SetResults 는 지금 보기 탭의 결과 보기 내용을 바꿉니다 (r 키 끔). 앞에 결과가 있었으면 보던 벤더·그룹 이름과 필터를
+// 새 결과에서 같은 이름으로 찾아 그대로 두고(없으면 처음으로) 스크롤은 같은 그룹일 때만 유지합니다. 앞이 비어 있었으면 모두 처음으로.
 func (u *TUI) SetResults(title string, vgs []VendorGroups) {
+	var pv, pg string
+	keep := false
+	if g := u.group(); g != nil { // 앞 결과가 있을 때만 위치를 기억 (글 보기 중이어도 vi·gi 는 결과 보기 것)
+		pv, pg, keep = u.vgs[u.vi].Vendor, g.Name, true
+	}
+	pf, pin, ptop := u.filter, u.inGroup, u.top
+	if u.textMode {
+		ptop = u.resTop
+	}
 	u.title, u.vgs, u.text, u.textMode = title, vgs, nil, false
-	u.vi, u.gi, u.top, u.filter, u.inGroup, u.refKey = 0, 0, 0, tuiFilterAll, false, false
+	u.vi, u.gi, u.top, u.filter, u.inGroup, u.refKey, u.xKey = 0, 0, 0, tuiFilterAll, false, false, false
+	if keep {
+		u.filter = pf
+		for i, vg := range vgs {
+			if vg.Vendor != pv {
+				continue
+			}
+			u.vi = i
+			for j, g := range vg.Groups {
+				if g.Name == pg {
+					u.gi, u.top = j, ptop
+					u.inGroup = pin && len(vgs) > 1 && len(vg.Groups) > 1
+					break
+				}
+			}
+			break
+		}
+	}
 	u.gen++
+	if u.top > 0 {
+		u.clampTop()
+	}
+}
+
+// SetStage 는 맨 위 단계 줄의 지금 단계입니다 (1 대상, 2 프로파일, 3 조회, 4 결과, 5 수정. 0 이면 줄을 그리지 않음).
+// 바꾸기 전까지 그대로 유지된다.
+func (u *TUI) SetStage(stage int) {
+	if u != nil { // 화면 없이 부르는 시험(수정 단계 입구)용
+		u.stage = stage
+	}
+}
+
+// subActive 는 두 번째 줄(관리망·태그 그룹)이 지금 움직이는 줄인지입니다: Enter 로 들어간 경우(inGroup)이거나,
+// 벤더가 하나뿐이고 그 벤더에 그룹이 둘 이상이라 처음부터 두 번째 줄을 움직이는 경우.
+func (u *TUI) subActive() bool {
+	return u.inGroup || (len(u.vgs) == 1 && len(u.vgs[0].Groups) > 1)
 }
 
 // SetRefKey 는 지금 보기 탭에서 r 키(Browse → TUIRef)를 받을지 정합니다.
 func (u *TUI) SetRefKey(on bool) { u.refKey = on }
+
+// SetXKey 는 지금 보기 탭에서 x 키(Browse → TUIXModel)를 받을지 정합니다.
+func (u *TUI) SetXKey(on bool) { u.xKey = on }
 
 // SetTabs 는 결과 보기 위의 보기 탭입니다 (지금 내용은 0번 탭, 다른 탭은 빈 결과 보기로 시작).
 func (u *TUI) SetTabs(names []string) {
@@ -354,13 +425,13 @@ func (u *TUI) SwitchTab(i int) {
 		u.title, u.top = u.resTitle, u.resTop
 	}
 	if i != u.ti {
-		u.saved[u.ti] = tuiResState{u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey}
+		u.saved[u.ti] = tuiResState{u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey, u.xKey}
 		s := u.saved[i]
 		if s.title == "" {
 			s.title, s.filter = u.tabs[i], tuiFilterAll
 		}
 		u.ti = i
-		u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey = s.title, s.vgs, s.vi, s.gi, s.top, s.inGroup, s.filter, s.refKey
+		u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey, u.xKey = s.title, s.vgs, s.vi, s.gi, s.top, s.inGroup, s.filter, s.refKey, s.xKey
 		u.gen++
 	}
 	u.text, u.textMode = nil, false
@@ -488,6 +559,9 @@ func (u *TUI) Browse() TUIAction {
 			}
 			act = TUIQuit // 글 보기: 결과 보기로 돌아가기
 			return true
+		case k.k == tkEnter && u.textMode: // 글 보기: Enter 도 q/Esc 처럼 계속
+			act = TUIQuit
+			return true
 		case k.isRune(tuiCtrlX):
 			u.msg = "Ctrl+X 는 진행 중 작업 취소입니다 — 종료는 q 를 두 번 누르세요"
 			return false
@@ -496,12 +570,15 @@ func (u *TUI) Browse() TUIAction {
 			return true
 		case (k.isRune(tuiTab) || k.k == tkBackTab) && !u.textMode && len(u.tabs) > 1:
 			act = TUITab
-			if u.inGroup { // 태그·관리망 줄에서 Tab 을 누른 사람에게: 화면은 바뀌지만 이동 키는 ←→ (SwitchTab 은 msg 를 지우지 않는다)
+			if u.subActive() { // 태그·관리망 줄에서 Tab 을 누른 사람에게: 화면은 바뀌지만 이동 키는 ←→ (SwitchTab 은 msg 를 지우지 않는다)
 				u.msg = "Tab 은 화면 전환입니다 — " + u.subLabel() + " 이동은 ←→"
 			}
 			return true
 		case k.isRune('r', 'R') && !u.textMode && u.refKey:
 			act = TUIRef
+			return true
+		case k.isRune('x', 'X') && !u.textMode && u.xKey:
+			act = TUIXModel
 			return true
 		}
 		u.navKey(k) // Ctrl+X 등 나머지는 무시
@@ -614,7 +691,12 @@ func (u *TUI) drainKeys() {
 
 // InputLine 은 한 줄 입력입니다 (Enter 확인, Ctrl+X/Esc 취소). 앞뒤 공백은 지운다.
 func (u *TUI) InputLine(prompt, initial string) (string, bool) {
-	p := &tuiPrompt{kind: tpLine, title: prompt, buf: []rune(initial)}
+	return u.InputLineHelp(prompt, initial, nil)
+}
+
+// InputLineHelp 는 InputLine 에 제목 아래 회색 안내 줄(help)을 붙입니다.
+func (u *TUI) InputLineHelp(prompt, initial string, help []string) (string, bool) {
+	p := &tuiPrompt{kind: tpLine, title: prompt, buf: []rune(initial), help: help}
 	u.prompt = p
 	defer func() { u.prompt = nil }()
 	ok := false
@@ -639,18 +721,32 @@ func (u *TUI) InputLine(prompt, initial string) (string, bool) {
 	return strings.TrimSpace(string(p.buf)), true
 }
 
-// InputLines 는 여러 줄 입력(붙여넣기)입니다: Enter 줄 추가, Backspace 지우기(빈 줄이면 앞 줄로), Ctrl+D 완료,
-// Ctrl+X 취소. 앞뒤 공백을 지운 빈 줄이 아닌 줄만 돌려준다.
-func (u *TUI) InputLines(title string) ([]string, bool) { return u.inputLines(title, false) }
+// InputLines 는 여러 줄 입력(붙여넣기)입니다: Enter 줄 추가, 빈 줄에서 Enter(또는 Ctrl+D) 완료, Backspace 지우기
+// (빈 줄이면 앞 줄로), Esc 한 단계 뒤로(입력한 게 있으면 두 번), Ctrl+X 취소. 앞뒤 공백을 지운 빈 줄이 아닌 줄만 돌려준다.
+func (u *TUI) InputLines(title string) ([]string, bool) {
+	return u.InputLinesOpt(title, TUILinesOpt{})
+}
 
 // InputLinesTab 은 InputLines 와 같되 Tab 을 공백으로 넣습니다 (탭으로 나눈 "이름<Tab>값" 붙여넣기용 — 화면 탭으로 나가지 않음).
-func (u *TUI) InputLinesTab(title string) ([]string, bool) { return u.inputLines(title, true) }
+func (u *TUI) InputLinesTab(title string) ([]string, bool) {
+	return u.InputLinesOpt(title, TUILinesOpt{TabText: true})
+}
 
-func (u *TUI) inputLines(title string, tabText bool) ([]string, bool) {
-	p := &tuiPrompt{kind: tpLines, title: title}
+// TUILinesOpt 는 InputLinesOpt 의 선택 사항입니다.
+type TUILinesOpt struct {
+	TabText bool     // Tab 을 공백으로 넣음 (화면 탭으로 나가지 않음)
+	Help    []string // 제목 아래 회색 안내 줄
+	Initial []string // 미리 채워 둘 줄 (이전에 입력한 내용 — 빈 줄에서 Enter 만 쳐도 그대로 다시 제출됨)
+}
+
+// InputLinesOpt 는 여러 줄 입력입니다 (InputLines 와 같은 키). 붙여넣기 중의 빈 줄은 완료로 보지 않는다.
+func (u *TUI) InputLinesOpt(title string, o TUILinesOpt) ([]string, bool) {
+	tabText := o.TabText
+	p := &tuiPrompt{kind: tpLines, title: title, help: o.Help, lines: append([]string(nil), o.Initial...)}
 	u.prompt = p
 	defer func() { u.prompt = nil }()
 	ok := false
+	escArmed := false // 방금 Esc 로 "버리려면 한 번 더" 안내를 띄운 상태
 	push := func() {
 		if s := strings.TrimSpace(string(p.buf)); s != "" {
 			p.lines = append(p.lines, s)
@@ -658,8 +754,20 @@ func (u *TUI) inputLines(title string, tabText bool) ([]string, bool) {
 		p.buf = nil
 	}
 	u.run(func(k tuiKey) bool {
+		armed := escArmed
+		escArmed = false
 		switch {
 		case k.k == tkEnter:
+			if strings.TrimSpace(string(p.buf)) == "" {
+				if k.paste { // 붙여넣은 글 속의 빈 줄
+					break
+				}
+				ok = true
+				if p.lines == nil {
+					p.lines = []string{}
+				}
+				return true
+			}
 			push()
 		case k.isRune(tuiCtrlD):
 			push()
@@ -667,6 +775,16 @@ func (u *TUI) inputLines(title string, tabText bool) ([]string, bool) {
 			return true
 		case k.isRune(tuiCtrlX):
 			return true
+		case k.k == tkEsc:
+			switch {
+			case k.paste: // 붙여넣은 글에 섞인 Esc 는 무시 (취소되면 안 됨)
+				escArmed = armed
+			case len(p.lines) == 0 && strings.TrimSpace(string(p.buf)) == "", armed:
+				return true
+			default:
+				u.msg = "입력한 내용을 버리려면 Esc 를 한 번 더 누르세요 (계속 입력: 다른 키)"
+				escArmed = true
+			}
 		case k.isRune(tuiTab) && tabText:
 			p.buf = append(p.buf, ' ')
 		case (k.isRune(tuiTab) || k.k == tkBackTab) && len(u.tabs) > 1:
@@ -675,8 +793,6 @@ func (u *TUI) inputLines(title string, tabText bool) ([]string, bool) {
 		case k.isRune(tuiBackspace) && len(p.buf) == 0 && len(p.lines) > 0:
 			p.buf = []rune(p.lines[len(p.lines)-1])
 			p.lines = p.lines[:len(p.lines)-1]
-		case k.k == tkEsc:
-			u.msg = "완료는 Ctrl+D, 취소는 Ctrl+X 입니다"
 		default:
 			p.edit(k)
 		}
@@ -769,19 +885,19 @@ func (u *TUI) navKey(k tuiKey) {
 	case k.k == tkEnd || k.isRune('G'):
 		u.top = u.bodyCount()
 	case u.textMode || len(u.vgs) == 0:
-	case k.k == tkEnter && !u.inGroup: // 벤더 안으로: 이제 ←→ 가 관리망 그룹을 움직인다
+	case k.k == tkEnter && !u.subActive(): // 벤더 안으로: 이제 ←→ 가 관리망 그룹을 움직인다
 		if len(u.vgs[u.vi].Groups) > 1 {
 			u.inGroup = true
 		} else {
 			u.msg = "이 벤더는 " + u.subLabel() + " 그룹이 하나뿐입니다"
 		}
-	case u.inGroup && k.k == tkLeft && u.gi > 0:
+	case u.subActive() && k.k == tkLeft && u.gi > 0:
 		u.gi, u.top = u.gi-1, 0
-	case u.inGroup && k.k == tkRight && u.gi < len(u.vgs[u.vi].Groups)-1:
+	case u.subActive() && k.k == tkRight && u.gi < len(u.vgs[u.vi].Groups)-1:
 		u.gi, u.top = u.gi+1, 0
-	case !u.inGroup && k.k == tkLeft && u.vi > 0:
+	case !u.subActive() && k.k == tkLeft && u.vi > 0:
 		u.vi, u.gi, u.top = u.vi-1, 0, 0
-	case !u.inGroup && k.k == tkRight && u.vi < len(u.vgs)-1:
+	case !u.subActive() && k.k == tkRight && u.vi < len(u.vgs)-1:
 		u.vi, u.gi, u.top = u.vi+1, 0, 0
 	case k.isRune(tuiFilterAll, tuiFilterOK, tuiFilterDiff, tuiFilterNA, tuiFilterSum):
 		u.filter, u.top = k.r, 0
@@ -904,8 +1020,13 @@ func (u *TUI) frame(w, h int) []string {
 	var n int
 	var row func(i int) string
 	g := u.group()
+	act := u.subActive() // 두 번째 줄이 움직이는 줄 (Enter 로 들어갔거나 벤더가 하나뿐일 때)
 	if !u.textMode && len(u.tabs) > 1 {
-		head = append(head, tuiTabsLine(color, w, "화면", u.tabs, u.ti, "Tab: 화면 전환 ("+u.subLabel()+" 이동은 Enter 후 ←→)", false))
+		tail := "Tab: 화면 전환 (" + u.subLabel() + " 이동은 Enter 후 ←→)"
+		if act && !u.inGroup {
+			tail = "Tab: 화면 전환 (" + u.subLabel() + " 이동은 ←→)"
+		}
+		head = append(head, tuiTabsLine(color, w, "화면", u.tabs, u.ti, tail, false))
 	}
 	switch {
 	case u.textMode:
@@ -921,21 +1042,24 @@ func (u *TUI) frame(w, h int) []string {
 		}
 		sub := u.subLabel() // 태그 그룹: 두 번째 줄 탭은 관리망이 아니라 태그 이름
 		vtail := ""
-		if !u.inGroup && len(u.vgs[u.vi].Groups) > 1 {
+		if !act && len(u.vgs[u.vi].Groups) > 1 {
 			vtail = "Enter: 아래 " + sub + " 줄로"
 		}
-		head = append(head, tuiTabsLine(color, w, "벤더", names, u.vi, vtail, !u.inGroup))
+		head = append(head, tuiTabsLine(color, w, "벤더", names, u.vi, vtail, !act))
 		hosts := fmt.Sprintf("호스트 %d대", len(g.Hosts))
 		if gs := u.vgs[u.vi].Groups; len(gs) > 1 {
 			gtail := hosts
-			if u.inGroup {
-				gtail += " · ←→ " + sub + " 이동 · q/Esc 벤더 줄로"
+			if act {
+				gtail += " · ←→ " + sub + " 이동"
+				if u.inGroup {
+					gtail += " · q/Esc 벤더 줄로"
+				}
 			}
 			gn := make([]string, len(gs))
 			for i, x := range gs {
 				gn[i] = tuiDash(x.Name)
 			}
-			head = append(head, tuiTabsLine(color, w, sub, gn, u.gi, gtail, u.inGroup))
+			head = append(head, tuiTabsLine(color, w, sub, gn, u.gi, gtail, act))
 		} else {
 			head = append(head, tuiSegLine(color, w, tuiSeg{"   " + sub + "  ", tuiStBold}, tuiSeg{tuiDash(g.Name), ""}, tuiSeg{"   " + hosts, tuiStGray}))
 		}
@@ -945,11 +1069,15 @@ func (u *TUI) frame(w, h int) []string {
 		row = func(i int) string { return tuiTableRow(color, w, c.cw, c.rows[i]) }
 	}
 	foot := u.footLines(w, h)
-	bodyH := tuiMaxInt(h-1-len(head)-len(foot), 1)
+	var out []string
+	if u.stage >= 1 && u.stage <= len(tuiStages) { // 맨 위 단계 줄은 본문 높이에서 한 줄을 가져간다
+		out = append(out, tuiStageLine(color, w, u.stage))
+	}
+	bodyH := tuiMaxInt(h-1-len(out)-len(head)-len(foot), 1)
 	u.bodyH = bodyH
 	u.clampTop()
 	end := tuiMinInt(u.top+bodyH, n)
-	out := []string{u.titleLine(w, g, n, end)}
+	out = append(out, u.titleLine(w, g, n, end))
 	out = append(out, head...)
 	for i := u.top; i < end; i++ {
 		out = append(out, row(i))
@@ -981,7 +1109,7 @@ func (u *TUI) titleLine(w int, g *LineGroup, n, end int) string {
 // footLines 는 진행 줄 · 질문·입력 상자 · 키 안내 · 안내 줄입니다.
 func (u *TUI) footLines(w, h int) []string {
 	color := u.env.Color
-	var out []string
+	out := []string{tuiRule(color, w)} // 본문과 꼬리 사이 구분선
 	if u.job != nil {
 		out = append(out, tuiSegLine(color, w, tuiSeg{" [진행] ", tuiStCyan}, tuiSeg{u.job.text(), tuiStYellow}))
 	}
@@ -989,65 +1117,92 @@ func (u *TUI) footLines(w, h int) []string {
 		out = append(out, u.promptLines(w, h)...)
 	}
 	out = append(out, tuiWrapItems(color, w, u.hintItems())...)
-	out = append(out, tuiSegLine(color, w, tuiSeg{" " + u.msg, "1;33"}))
+	out = append(out, u.msgLine(w))
 	return out
 }
 
+// msgLine 은 맨 아래 안내 줄입니다: " [안내] 글" (노랑 굵게), 오류·실패·없음 안내는 " [!] 글" (앞 표시만 빨강 굵게).
+// 줄에만 표시를 붙일 뿐 u.msg 는 그대로다.
+func (u *TUI) msgLine(w int) string {
+	if u.msg == "" {
+		return " "
+	}
+	for _, k := range []string{"오류", "실패", "찾을 수 없", "없습니다"} {
+		if strings.Contains(u.msg, k) {
+			return tuiSegLine(u.env.Color, w, tuiSeg{" ", ""}, tuiSeg{"[!] ", tuiStRedBold}, tuiSeg{u.msg, tuiStYellowBold})
+		}
+	}
+	return tuiSegLine(u.env.Color, w, tuiSeg{" [안내] " + u.msg, tuiStYellowBold})
+}
+
+// hintItems 는 키 안내 항목입니다. "[이동]" 처럼 대괄호로 싼 공백 없는 항목은 그룹 이름 표시이고 (tuiWrapItems 가 흐리게 그린다),
+// 나머지는 "키 설명" 항목입니다. 결과 보기는 [이동] [보기] [작업] 순, 질문·입력은 [입력], 조회 중은 [이동] [보기] [진행].
 func (u *TUI) hintItems() []string {
 	if p := u.prompt; p != nil {
+		var h []string
 		switch p.kind {
 		case tpYesNo:
-			return []string{"y 예", "n 아니오", "Ctrl+X 취소", "↑↓/PgUp/PgDn 결과 보기"}
+			h = []string{"y 예", "n 아니오", "Ctrl+X 취소", "↑↓/PgUp/PgDn 결과 보기"}
 		case tpLine:
-			h := []string{"Enter 확인", "Backspace 지우기", "Ctrl+X 취소"}
+			h = []string{"Enter 확인", "Backspace 지우기", "Ctrl+X 취소"}
 			if len(u.tabs) > 1 {
 				h = append(h, "Tab 다른 화면")
 			}
-			return h
 		case tpLines:
-			return []string{"Enter 줄 추가", "Backspace 지우기", "Ctrl+D 완료", "Ctrl+X 취소"}
+			h = []string{"Enter 줄 추가", "빈 줄에서 Enter 완료", "Backspace 지우기", "Esc 뒤로", "Ctrl+X 취소"}
 		case tpChoose:
-			h := []string{"↑↓ 이동", "Enter 선택", "숫자 바로 선택", "Esc 취소"}
+			h = []string{"↑↓ 이동", "Enter 선택", "숫자 바로 선택", "Esc 취소"}
 			if len(u.tabs) > 1 {
 				h = append(h, "Tab 다른 화면")
 			}
-			return h
+		}
+		if h != nil {
+			return append([]string{"[입력]"}, h...)
 		}
 	}
-	nav := []string{"↑↓ 한 줄", "PgUp/PgDn 한 화면"}
+	mv := []string{"[이동]"}
 	quit := "q 두 번 종료" // 맨 위(벤더 줄)는 종료 확인
 	if u.textMode {
-		quit = "q/Esc 돌아가기"
+		quit = "Enter/q 계속"
 	} else {
-		var lv []string // 지금 단계(벤더 줄 / 관리망 그룹 줄)의 키를 앞에
-		if len(u.tabs) > 1 && u.job == nil {
-			lv = append(lv, "Tab 화면 전환")
+		if len(u.tabs) > 1 && u.job == nil { // 지금 단계(벤더 줄 / 두 번째 줄)의 키를 앞에
+			mv = append(mv, "Tab 화면 전환")
 		}
 		switch {
-		case u.inGroup:
-			lv, quit = append(lv, "←→ "+u.subLabel()), "q/Esc 벤더로"
+		case u.subActive():
+			mv = append(mv, "←→ "+u.subLabel())
+			if u.inGroup {
+				quit = "q/Esc 벤더로"
+			}
 		case len(u.vgs) > 0:
-			lv = append(lv, "←→ 벤더")
+			mv = append(mv, "←→ 벤더")
 			if u.vi < len(u.vgs) && len(u.vgs[u.vi].Groups) > 1 {
-				lv = append(lv, "Enter "+u.subLabel()+" 고르기")
+				mv = append(mv, "Enter "+u.subLabel()+" 고르기")
 			}
 		}
-		nav = append(lv, nav...)
-		nav = append(nav, "a 전체", "o OK만", "f difference만", "n N/A만", "s 요약")
-		if u.refKey && u.job == nil {
-			nav = append(nav, "r 기준 다시 선택")
-		}
+	}
+	out := append(mv, "↑↓ 한 줄", "PgUp/PgDn 페이지")
+	if !u.textMode {
+		out = append(out, "[보기]", "a 전체", "o OK만", "f difference만", "n N/A만", "s 요약")
 	}
 	if u.job != nil {
+		out = append(out, "[진행]")
 		if u.inGroup {
-			nav = append(nav, quit)
+			out = append(out, quit)
 		}
-		return append(nav, "Ctrl+X 작업 취소", "? 도움말")
+		return append(out, "Ctrl+X 작업 취소", "? 도움말")
 	}
-	if u.textMode { // 미리보기·설정 결과 같은 글 보기에서는 e 가 수정 단계로 가지 않는다 (Browse)
-		return append(nav, "? 도움말", quit)
+	out = append(out, "[작업]")
+	if !u.textMode { // 미리보기·설정 결과 같은 글 보기에서는 e 가 수정 단계로 가지 않는다 (Browse)
+		if u.refKey {
+			out = append(out, "r 기준 다시 선택")
+		}
+		if u.xKey {
+			out = append(out, "x 모델 다른 비교")
+		}
+		out = append(out, "e 수정 메뉴")
 	}
-	return append(nav, "e 수정 메뉴", "? 도움말", quit)
+	return append(out, "? 도움말", quit)
 }
 
 // promptLines 는 질문·입력 상자 줄입니다 (여러 줄 입력·고르기는 화면 높이의 1/3·1/2 까지).
@@ -1056,13 +1211,15 @@ func (u *TUI) promptLines(w, h int) []string {
 	p := u.prompt
 	switch p.kind {
 	case tpYesNo:
-		return []string{tuiSegLine(color, w, tuiSeg{" " + p.title + " [y/n] ", "1;33"})}
+		return []string{tuiSegLine(color, w, tuiSeg{" ", ""}, tuiSeg{"[질문] ", tuiStCyan}, tuiSeg{p.title + " [y/n] ", "1;33"})}
 	case tpLine:
-		lead := " " + p.title + ": "
-		return []string{tuiSegLine(color, w, tuiSeg{lead, tuiStBold}, tuiSeg{tuiTail(string(p.buf), w-tuiStrWidth(lead)-1) + "_", ""})}
+		lead := " [입력] " + p.title + ": "
+		out := []string{tuiSegLine(color, w, tuiSeg{" [입력] ", tuiStCyan}, tuiSeg{p.title + ": ", tuiStBold}, tuiSeg{tuiTail(string(p.buf), w-tuiStrWidth(lead)-1) + "_", ""})}
+		return append(out, u.helpLines(w)...) // 입력 줄 아래에 안내 (한 줄 입력은 제목과 입력이 한 줄이라)
 	case tpLines:
-		out := []string{tuiSegLine(color, w, tuiSeg{fmt.Sprintf(" %s  (%d줄 입력됨)", p.title, len(p.lines)), tuiStBold})}
-		k := tuiMaxInt(h/3-2, 1)
+		out := []string{tuiSegLine(color, w, tuiSeg{" [입력] ", tuiStCyan}, tuiSeg{fmt.Sprintf("%s  (%d줄 입력됨)", p.title, len(p.lines)), tuiStBold})}
+		out = append(out, u.helpLines(w)...)
+		k := tuiMaxInt(h/3-2-len(p.help), 1)
 		from := tuiMaxInt(len(p.lines)-k, 0)
 		for _, l := range p.lines[from:] {
 			out = append(out, tuiSegLine(color, w, tuiSeg{"   " + l, ""}))
@@ -1070,11 +1227,11 @@ func (u *TUI) promptLines(w, h int) []string {
 		return append(out, tuiSegLine(color, w, tuiSeg{" > ", tuiStCyan}, tuiSeg{tuiTail(string(p.buf), w-4) + "_", ""}))
 	}
 	// tpChoose
-	t := " " + p.title
+	t := p.title
 	if p.num != "" {
 		t += "  번호: " + p.num
 	}
-	out := []string{tuiSegLine(color, w, tuiSeg{t, tuiStBold})}
+	out := []string{tuiSegLine(color, w, tuiSeg{" ", ""}, tuiSeg{"[질문] ", tuiStCyan}, tuiSeg{t, tuiStBold})}
 	k := tuiMinInt(len(p.items), tuiMaxInt(h/2-1, 3))
 	from := tuiMaxInt(tuiMinInt(p.cur-k/2, len(p.items)-k), 0)
 	for i := from; i < from+k && i < len(p.items); i++ {
@@ -1087,6 +1244,15 @@ func (u *TUI) promptLines(w, h int) []string {
 		default:
 			out = append(out, tuiSegLine(color, w, tuiSeg{"   " + item, ""}))
 		}
+	}
+	return out
+}
+
+// helpLines 는 입력 상자의 회색 안내 줄입니다 (3칸 들여쓰기).
+func (u *TUI) helpLines(w int) []string {
+	var out []string
+	for _, l := range u.prompt.help {
+		out = append(out, tuiSegLine(u.env.Color, w, tuiSeg{"   " + l, tuiStGray}))
 	}
 	return out
 }

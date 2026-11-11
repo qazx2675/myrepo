@@ -257,7 +257,8 @@ func TestBiosFlowViewTabsAndReRef(t *testing.T) {
 				t.Errorf("다시 Tab → 비교 화면(다시 비교 안 함), 필터 유지: tab=%d filter=%c", ui.Tab(), ui.filter)
 			}
 		case 11:
-			if ui.Tab() != 1 || ui.filter != tuiFilterAll || f.cmp.Label != "비교서버 "+ub || !ui.refKey {
+			// 다시 비교해도 보던 필터(o)는 그대로 (SetResults 가 벤더·그룹·필터를 이름으로 유지)
+			if ui.Tab() != 1 || ui.filter != tuiFilterOK || f.cmp.Label != "비교서버 "+ub || !ui.refKey {
 				t.Errorf("r → 새 기준 결과: tab=%d filter=%c label=%q", ui.Tab(), ui.filter, f.cmp.Label)
 			}
 			refLines(f.cmp, ub)
@@ -831,7 +832,7 @@ func TestBiosFlowTargetsPasteAsksCisco(t *testing.T) {
 		t.Errorf("대상 = %s, 붙여넣은 Cisco = %q", got, gotArg)
 	}
 	sc := fr.screen()
-	for _, want := range []string{flowCiscoHintC, "Cisco(XML) 대상 붙여넣기 (IP 로 적은 Cisco 장비만, 없으면 바로 Ctrl+D)"} {
+	for _, want := range []string{flowCiscoHintC, "Cisco(XML) 대상 붙여넣기", "IP 로 적은 Cisco 장비만, 없으면 바로 Enter", "엑셀에서 복사한 IP·태그 칸을 그대로 붙여넣으면 됩니다"} {
 		if !strings.Contains(sc, want) {
 			t.Errorf("화면에 %q 없음", want)
 		}
@@ -981,15 +982,14 @@ func TestBiosFlowTargetsPasteTabKeepsTag(t *testing.T) {
 	var tags []string
 	script := []flowStep{
 		{"targets", "2"},
-		{"targets-paste", "10.0.0.1\tasdf 메모\x04"}, // 3칸 → 오류 후 대상 입력 메뉴로
-		{"targets", "2"},
-		{"targets-paste", "10.0.0.1\tasdf\nc201\tqwer\x04"},
+		{"targets-paste", "10.0.0.1\tasdf 메모\x04"},            // 3칸 → 오류, 같은 상자에 줄이 남음
+		{"targets-paste", "\x7f\x7f\x7f\x7f\nc201\tqwer\x04"}, // 그 줄을 꺼내 " 메모" 를 지우고 한 줄 더
 		{"targets-xml-paste", "10.0.0.2\tzzz\x04"},
 		{"profile", "q"},
 		{"targets", "\x18"},
 	}
 	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
-		if i == 5 {
+		if i == 4 {
 			got, gotArg = flowTargetsOf(f.rc.Targets), f.a.O.userXMLArg
 			for _, x := range f.rc.Targets {
 				tags = append(tags, x.Input+":"+x.Tag)
@@ -1007,6 +1007,70 @@ func TestBiosFlowTargetsPasteTabKeepsTag(t *testing.T) {
 	}
 	if sc := fr.screen(); !strings.Contains(sc, "칸이 3개 이상입니다") {
 		t.Errorf("3칸 오류 안내가 없음")
+	}
+}
+
+// 3칸 오류 뒤에는 대상 입력 메뉴가 아니라 같은 상자에 친 줄이 그대로 남는다: 마지막 줄을 Backspace 로 고치고 빈 줄에서 Enter.
+func TestBiosFlowTargetsPasteErrorKeepsLines(t *testing.T) {
+	_, o := flowEnv(t, "")
+	flowNoPlan(t)
+	var got string
+	script := []flowStep{
+		{"targets", "2"},
+		{"targets-paste", "10.0.0.1 asdf\n10.0.0.2 qwer 메모\x04"}, // 3칸 → 오류, 상자에 그대로
+		{"targets-paste", "\x7f\x7f\x7f\x7f\r\r"},                // 마지막 줄을 꺼내 " 메모" 를 지우고 Enter, 빈 줄에서 Enter
+		{"targets-xml-paste", "\x04"},
+		{"profile", "q"},
+		{"targets", "\x18"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+		if i == 4 {
+			got = flowTargetsOf(f.rc.Targets)
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if got != "10.0.0.1=false 10.0.0.2=false" {
+		t.Errorf("대상 = %s", got)
+	}
+	if sc := fr.screen(); !strings.Contains(sc, "칸이 3개 이상입니다") || !strings.Contains(sc, "(2줄 입력됨)") {
+		t.Errorf("오류 안내 또는 남은 줄이 화면에 없음")
+	}
+}
+
+// 프로파일 고르기를 취소해 대상 입력으로 돌아오면 앞에서 붙여넣은 줄이 미리 채워져 있어 빈 줄에서 Enter 만 쳐도 된다.
+func TestBiosFlowTargetsPasteKeptAfterProfileCancel(t *testing.T) {
+	_, o := flowEnv(t, "")
+	flowNoPlan(t)
+	var got, gotXML string
+	script := []flowStep{
+		{"targets", "2"},
+		{"targets-paste", "10.0.0.1 web\x04"},
+		{"targets-xml-paste", "10.0.0.9\x04"},
+		{"profile", "q"},
+		{"targets", "2"},
+		{"targets-paste", "\r"}, // 미리 채워진 줄 그대로 제출
+		{"targets-xml-paste", "\r"},
+		{"profile", "q"},
+		{"targets", "\x18"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o}, "", script, nil, func(i int, f *biosFlow) {
+		if i == 7 {
+			for _, x := range f.rc.Targets {
+				got += x.Input + ":" + x.Tag + " "
+			}
+			gotXML = f.a.O.userXMLArg
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if got != "10.0.0.1:web 10.0.0.9: " || gotXML != "10.0.0.9" {
+		t.Errorf("대상 = %q, Cisco = %q", got, gotXML)
+	}
+	if sc := fr.screen(); !strings.Contains(sc, "대상 붙여넣기  (1줄 입력됨)") {
+		t.Errorf("다시 열린 상자에 앞의 줄이 미리 채워져 있지 않음")
 	}
 }
 

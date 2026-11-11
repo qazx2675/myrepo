@@ -115,7 +115,7 @@ cp ignore_attrs.txt.example ignore_attrs.txt
 # 3. 통합 실행 bios.sh — 점검·전체비교·수정을 한 화면(TUI)에서 (기본 진입점, 재부팅은 하지 않음)
 ########################################################################
 
-# (터미널) TUI: 대상 입력(파일 지정 / 붙여넣기: Ctrl+D 완료, Ctrl+X 취소) -> 프로파일 선택 -> 접속·조회(호스트당 로그인 1회)
+# (터미널) TUI: 대상 입력(파일 지정 / 붙여넣기: 빈 줄에서 Enter 완료, Esc/Ctrl+X 취소) -> 프로파일 선택 -> 접속·조회(호스트당 로그인 1회)
 # -> 결과 화면 [프로파일 점검] -> Tab: [전체 설정 비교] (처음이면 기준 선택 후 비교, 다시 Tab 이면 프로파일 점검으로)
 # -> e -> 수정 단계 (벤더 줄에서 q 두 번은 묻지 않고 종료):
 #    확인 1) 차이 항목 전부를 "현재값 -> 변경값 (수정대상)" / "(수정제외: 사유)" 로 보이고 "위 수정대상을 적용할까요?" y/n
@@ -123,7 +123,7 @@ cp ignore_attrs.txt.example ignore_attrs.txt
 #    확인 3) 남의 Pending 이 있는 장비가 있으면 y 포함 / n 제외 / Ctrl+X 취소
 #    확인 1·2 에서 n / Esc / Ctrl+X 이면 아무것도 쓰지 않고 결과 화면으로 돌아온다
 #    e 를 누르면 먼저 "점검 결과 기준 수정" / "BIOS 값 직접 입력" 을 고른다
-#    BIOS 값 직접 입력: 속성 이름(공백 또는 탭)설정값 을 한 줄에 하나씩 붙여 넣고 Ctrl+D (예: SysProfile PerfOptimized)
+#    BIOS 값 직접 입력: 속성 이름(공백 또는 탭)설정값 을 한 줄에 하나씩 붙여 넣고 빈 줄에서 Enter (예: SysProfile PerfOptimized)
 #      -> 이미 같은 값·없는 속성·보호 속성·맞지 않는 값인 대상만 건너뛰고 미리보기 -> y 면 나머지 설정
 #    설정 뒤에는 설정을 보낸 호스트만 자동으로 다시 점검한다 (results/<일시>/recheck/<일시>/)
 # 화면 키: Tab 화면 전환(어느 위치에서나) / <- -> 벤더 / Enter 벤더 안으로(<- -> 가 관리망 그룹·태그, 태그 이동은 Tab 이 아님) / r 전체 설정 비교 기준 다시 선택
@@ -180,9 +180,9 @@ bash bios.sh -plain -profile VM -ref <비교서버 hostname>
 # 기준 1 을 TUI 에서: Tab -> [전체 설정 비교] 에서 기준 선택 "비교서버 hostname 입력" (비워 두면 diff.txt). -ref 를 주면 묻지 않고 바로 비교
 bash bios.sh -profile VM -ref <비교서버 hostname>
 
-# 비교서버(1대)·refs JSON 과 모델이 다른 대상이 있으면 TUI 가 "모델이 달라도 비교할까요? (y/N)" 를 묻는다
-# y: Attribute 합집합 기준 같음/다름/<모델>에만 판정 → results/<일시>/compare_xmodel_<A>_vs_<B>.csv (비교만, 설정 안 함)
-# N(기본): 같은 모델끼리만. -auto/-auto-check 는 묻지 않고 N
+# 비교서버(1대)·refs JSON 과 모델이 다른 대상이 있으면 TUI 가 안내 줄로 알려 주고 x 키를 누르면
+# x: Attribute 합집합 기준 같음/다름/<모델>에만 판정 → results/<일시>/compare_xmodel_<A>_vs_<B>.csv (비교만, 설정 안 함)
+# x 를 누르지 않으면 같은 모델끼리만. -auto/-auto-check 는 만들지 않음
 bash bios.sh -profile VM -ref <모델이 다른 비교서버 hostname>
 
 # 기준 2: refs 폴더의 JSON (bios_export.sh 로 뽑은 속성 JSON). 파일 이름만 주면 bios.conf 의 refs_dir 에서 찾는다

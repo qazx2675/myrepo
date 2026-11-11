@@ -21,11 +21,16 @@ const (
 	tkHome
 	tkEnd
 	tkBackTab // Shift+Tab
+
+	tkPasteStart // ESC [ 200 ~ (붙여넣기 시작 표시 — readKeys 가 먹고 전달하지 않는다)
+	tkPasteEnd   // ESC [ 201 ~ (붙여넣기 끝 표시)
 )
 
 type tuiKey struct {
 	k tuiKeyKind
 	r rune
+	// paste 는 이 키가 붙여넣기의 일부이거나 뒤에 이미 읽어 둔 입력이 더 있었다는 표시입니다 (사람이 친 Enter 와 구분).
+	paste bool
 }
 
 // Ctrl 키·특수 문자 (raw 모드에서 ISIG 를 껐으므로 Ctrl+C/Ctrl+Z 도 문자로 들어온다)
@@ -64,6 +69,10 @@ func tuiParseKeys(b []byte) []tuiKey {
 						out = append(out, tuiKey{k: tkHome})
 					case "4", "8":
 						out = append(out, tuiKey{k: tkEnd})
+					case "200":
+						out = append(out, tuiKey{k: tkPasteStart})
+					case "201":
+						out = append(out, tuiKey{k: tkPasteEnd})
 					}
 				case 'A':
 					out = append(out, tuiKey{k: tkUp})
@@ -109,6 +118,26 @@ func tuiParseKeys(b []byte) []tuiKey {
 		}
 	}
 	return out
+}
+
+// tuiIncompleteTail 은 b 끝이 잘린 ESC [ / ESC O 시퀀스로 끝나면 그 시작 위치를, 아니면 -1 을 돌려줍니다
+// (읽기 경계에서 ESC [ 200 ~ 가 둘로 갈라져도 이어 붙여 파싱하기 위함). 혼자 온 ESC 는 Esc 키라 해당 없음.
+func tuiIncompleteTail(b []byte) int {
+	for i := len(b) - 1; i >= 0 && i >= len(b)-16; i-- {
+		if b[i] != 0x1b {
+			continue
+		}
+		if i+1 >= len(b) || (b[i+1] != '[' && b[i+1] != 'O') {
+			return -1
+		}
+		for _, c := range b[i+2:] {
+			if c >= 0x40 && c <= 0x7e {
+				return -1
+			}
+		}
+		return i
+	}
+	return -1
 }
 
 // isRune 은 키가 문자 r 중 하나인지 봅니다.

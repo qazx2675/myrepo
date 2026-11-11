@@ -69,6 +69,12 @@ type biosFlow struct {
 	applied  bool   // 설정 적용을 시도함 → 종료 때 요약의 "설정:" 줄을 settable() 로 덮어쓰지 않음
 	// unchecked 는 설정을 보냈지만 재점검 결과를 아직 합치지 못한 호스트(점검 결과 순번)입니다. 있으면 결과가 적용 전 값이라 다시 설정하지 않음.
 	unchecked map[int]bool
+	// 대상 입력에서 마지막으로 친 내용 (오류·뒤로 가기 뒤 다시 열 때 미리 채워 둔다).
+	lastPaste, lastXMLPaste []string
+	lastFile                string
+	// 전체비교 뒤 모델이 다른 대상의 참고용 비교 계획 (x 키로 CSV 를 만들면 만든 계획은 뺀다).
+	xplans []*xmodelPlan
+	xdone  bool // x 로 한 번이라도 만들었음 (남은 계획이 없을 때 "이미 만들었습니다" 안내용)
 }
 
 // runBiosTUI 는 열린 TUI 로 대화형 흐름을 돌리고, TUI 를 닫은 뒤 out 에 요약을 찍습니다.
@@ -158,6 +164,7 @@ func (f *biosFlow) run() error {
 	})
 	ui.SetTabs(flowTabs)
 	ui.SetResults("BIOS 점검 결과 — 프로파일 "+f.profName, groupLines(plines))
+	ui.SetStage(4)
 	// -ref/-ref-json/-diff 를 줬으면 기다리지 않고 바로 전체 설정 비교까지 한다 (두 화면 모두 준비, 첫 화면은 프로파일 점검).
 	// 실패·취소면 안내만 남기고 다음 Tab 에 다시 시도한다. 설정은 하지 않는다 (수정 단계의 확인은 그대로).
 	if f.a.Ref.count() > 0 && !ui.Quit() {
@@ -243,6 +250,8 @@ func (f *biosFlow) browse() TUIAction {
 			if !f.compareStep(true) && ui.TakeTabOut() { // 기준을 다시 고르다 Tab 이면 프로파일 화면으로 (앞의 비교 결과는 그대로)
 				ui.SwitchTab(0)
 			}
+		case TUIXModel:
+			f.xmodelKey()
 		default:
 			return act
 		}
@@ -282,6 +291,7 @@ func anyIPInput(inputs []string) bool {
 // 대상에 IP 가 있으면(xml_host_prefix 가 비면 늘) Cisco(XML) 대상을 따로 묻는다: 파일은 o.userXML, 붙여넣기는 o.userXMLArg
 // (hostname 은 xml_host_prefix 로 자동으로 나뉘므로 묻지 않음).
 func (f *biosFlow) askTargets() (string, bool) {
+	f.ui.SetStage(1)
 	if f.a.UserSet {
 		return "", true
 	}
@@ -293,14 +303,18 @@ func (f *biosFlow) askTargets() (string, bool) {
 	}
 	ui.SetText("BIOS 점검", append(append(append([]string{}, flowIntro...), ""), flowCiscoHint(pfx)...))
 	askXML := func(inputs []string) bool { return len(pfx) == 0 || anyIPInput(inputs) }
-	xmlFileTitle, xmlPasteTitle := "Cisco(XML) 대상 파일 (IP 로 적은 Cisco 장비, 비우면 없음)",
-		"Cisco(XML) 대상 붙여넣기 (IP 로 적은 Cisco 장비만, 없으면 바로 Ctrl+D)"
+	xmlFileTitle, xmlPasteHelp := "Cisco(XML) 대상 파일 (IP 로 적은 Cisco 장비, 비우면 없음)",
+		"IP 로 적은 Cisco 장비만, 없으면 바로 Enter"
 	if len(pfx) == 0 {
-		xmlFileTitle, xmlPasteTitle = "Cisco(XML) 대상 파일 (Cisco 장비, 비우면 없음)",
-			"Cisco(XML) 대상 붙여넣기 (Cisco 장비만, 없으면 바로 Ctrl+D)"
+		xmlFileTitle, xmlPasteHelp = "Cisco(XML) 대상 파일 (Cisco 장비, 비우면 없음)",
+			"Cisco 장비만, 없으면 바로 Enter"
 	}
+	pasteHelp := []string{"한 줄에 하나: hostname 또는 hostname 태그 (예: 10.0.0.1 web)",
+		"엑셀에서 복사한 IP·태그 칸을 그대로 붙여넣으면 됩니다. 다 넣었으면 빈 줄에서 Enter"}
 	o.targetsPaste = false
 	o.userXML, o.userXMLArg = "", "" // 대상 입력으로 돌아오면 앞에서 넣은 Cisco(XML) 대상은 버린다
+	// 친 내용(f.lastPaste 등)은 오류·뒤로 가기(프로파일 고르기 취소 포함) 뒤에도 남겨 다시 열 때 미리 채운다.
+menu:
 	for {
 		f.wait("targets")
 		i, ok := ui.Choose("대상 입력", []string{"대상 파일 지정", "직접 입력 (붙여넣기: hostname / hostname-m / IP)"})
@@ -308,73 +322,86 @@ func (f *biosFlow) askTargets() (string, bool) {
 			return "", false
 		}
 		if i == 0 {
-			f.wait("targets-file")
-			p, ok := ui.InputLine("대상 파일", f.a.O.user)
-			if !ok {
-				continue
+			initial := f.lastFile
+			if initial == "" {
+				initial = f.a.O.user
 			}
-			if _, err := os.Stat(p); p == "" || err != nil {
-				ui.SetMessage("대상 파일을 찾을 수 없습니다: " + p)
-				continue
-			}
-			f.a.O.user = p
-			if in, _ := loadList(p); askXML(in) { // 읽기 오류는 prepare 가 알린다
-				x, ok := f.askXMLFile(xmlFileTitle)
+			for {
+				f.wait("targets-file")
+				p, ok := ui.InputLine("대상 파일", initial)
 				if !ok {
 					if ui.Quit() {
 						return "", false
 					}
-					continue
+					continue menu
 				}
-				o.userXML = x
-			}
-			return "", true
-		}
-		f.wait("targets-paste")
-		// Excel 에서 복사한 "IP<Tab>태그" 가 들어오므로 Tab 은 화면 전환이 아니라 공백으로 받는다.
-		lines, ok := ui.InputLinesTab("대상 붙여넣기 (한 줄에 \"hostname\" 또는 \"hostname 태그\", Ctrl+D 완료 · Ctrl+X 취소)")
-		if !ok {
-			if ui.Quit() {
-				return "", false
-			}
-			continue
-		}
-		in, err := pasteTargetLines(lines)
-		if err != nil {
-			ui.SetMessage(err.Error())
-			continue
-		}
-		if len(in) == 0 {
-			ui.SetMessage("입력한 대상이 없습니다")
-			continue
-		}
-		xmlArg, back := "", false
-		if askXML(in) {
-			for {
-				f.wait("targets-xml-paste")
-				xl, ok := ui.InputLinesTab(xmlPasteTitle)
-				if !ok {
-					back = true
-					break
+				initial, f.lastFile = p, p
+				if _, err := os.Stat(p); p == "" || err != nil {
+					ui.SetMessage("대상 파일을 찾을 수 없습니다: " + p)
+					continue // 친 경로를 둔 채 다시
 				}
-				xin, err := pasteTargetLines(xl)
-				if err != nil {
-					ui.SetMessage("Cisco(XML) " + err.Error())
-					continue
+				f.a.O.user = p
+				if in, _ := loadList(p); askXML(in) { // 읽기 오류는 prepare 가 알린다
+					x, ok := f.askXMLFile(xmlFileTitle)
+					if !ok {
+						if ui.Quit() {
+							return "", false
+						}
+						continue menu
+					}
+					o.userXML = x
 				}
-				xmlArg = strings.Join(xin, "\n")
-				break
+				return "", true
 			}
-			if back {
+		}
+		initial := f.lastPaste
+	paste:
+		for {
+			f.wait("targets-paste")
+			// Excel 에서 복사한 "IP<Tab>태그" 가 들어오므로 Tab 은 화면 전환이 아니라 공백으로 받는다.
+			lines, ok := ui.InputLinesOpt("대상 붙여넣기", TUILinesOpt{TabText: true, Help: pasteHelp, Initial: initial})
+			if !ok {
 				if ui.Quit() {
 					return "", false
 				}
+				continue menu
+			}
+			initial, f.lastPaste = lines, lines
+			in, err := pasteTargetLines(lines)
+			if err != nil {
+				ui.SetMessage(err.Error())
+				continue // 친 줄을 둔 채 상자에서 바로 고친다
+			}
+			if len(in) == 0 {
+				ui.SetMessage("입력한 대상이 없습니다")
 				continue
 			}
+			xmlArg := ""
+			if askXML(in) {
+				xinit := f.lastXMLPaste
+				for {
+					f.wait("targets-xml-paste")
+					xl, ok := ui.InputLinesOpt("Cisco(XML) 대상 붙여넣기", TUILinesOpt{TabText: true, Help: []string{xmlPasteHelp}, Initial: xinit})
+					if !ok {
+						if ui.Quit() {
+							return "", false
+						}
+						continue paste // 한 단계 뒤(대상 붙여넣기)로, 앞에서 친 줄은 그대로
+					}
+					xinit, f.lastXMLPaste = xl, xl
+					xin, err := pasteTargetLines(xl)
+					if err != nil {
+						ui.SetMessage("Cisco(XML) " + err.Error())
+						continue
+					}
+					xmlArg = strings.Join(xin, "\n")
+					break
+				}
+			}
+			o.userXMLArg = xmlArg
+			o.targetsPaste = true
+			return strings.Join(in, "\n"), true
 		}
-		o.userXMLArg = xmlArg
-		o.targetsPaste = true
-		return strings.Join(in, "\n"), true
 	}
 }
 
@@ -422,6 +449,7 @@ func (f *biosFlow) askXMLFile(title string) (string, bool) {
 
 // askProfile 은 -profile 이 없으면 profile_dir/*.tsv 에서 고르게 하고 프로파일을 읽습니다. ok=false 는 취소.
 func (f *biosFlow) askProfile() (*Profile, bool, error) {
+	f.ui.SetStage(2)
 	dir := f.rc.Conf.ProfileDir
 	name := f.a.O.profile
 	if name == "" {
@@ -447,6 +475,7 @@ func (f *biosFlow) askProfile() (*Profile, bool, error) {
 // collect 는 [2/4 접속·조회] 입니다. Ctrl+X 면 아직 시작하지 않은 호스트는 접속하지 않는다 (CANCELED).
 func (f *biosFlow) collect(prof *Profile) error {
 	var err error
+	f.ui.SetStage(3)
 	f.ui.Progress("[2/4 접속·조회]", func(j *TUIJob) error {
 		p := newSinkProgress(4, j.Set)
 		p.Start()
@@ -520,7 +549,7 @@ func (f *biosFlow) compareStep(again bool) bool {
 	f.declined = false // 설정 계획이 바뀌었을 수 있어 종료 때 다시 묻는다
 	ui.SetResults("전체비교 — 기준 "+cmp.Label, groupLines(cmp.Lines))
 	ui.SetRefKey(true)
-	xmsg := f.xmodelStep(cmp)
+	xmsg := f.xmodelNote(cmp)
 	if cmp.RefCanceled > 0 {
 		msg := fmt.Sprintf("취소했습니다 — 비교서버 %d대 조회 안 함 (비교하지 못한 대상 %d대는 %s, 설정 제외)",
 			cmp.RefCanceled, f.countCmp(StatusRefCanceled), StatusRefCanceled)
@@ -534,46 +563,91 @@ func (f *biosFlow) compareStep(again bool) bool {
 	return true
 }
 
-// xmodelStep 은 기준과 모델이 다른 대상이 있으면 모델이 달라도 비교할지 묻고, y 면 참고용 CSV(compare_xmodel_*)를 씁니다.
-// 전체 비교 결과(f.cmp)·설정 계획은 건드리지 않는다 (그 대상은 계속 NO_REFERENCE). 안내 문구를 돌려줍니다 (안 물었거나 N 이면 "").
-// r 로 기준을 다시 고를 때마다 다시 묻는다. -auto/-auto-check 는 이 흐름을 지나지 않으므로 묻지 않는다.
-func (f *biosFlow) xmodelStep(cmp *compareResult) string {
-	// 태그 모드면 기준이 1대인 태그마다 따로 묻는다 (일반은 1건).
+// xmodelNote 는 전체비교 직후 모델이 다른 대상 계획을 잡아 두고(f.xplans) x 키를 켭니다. 묻지 않는다 — 안내 문구만 돌려줍니다 (계획이 없으면 "").
+// CSV 는 x 키(xmodelKey)를 눌렀을 때만 씁니다. 전체 비교 결과(f.cmp)·설정 계획은 건드리지 않는다 (그 대상은 계속 NO_REFERENCE).
+// r 로 기준을 다시 고를 때마다 계획을 다시 잡는다. -auto/-auto-check 는 이 흐름을 지나지 않는다.
+func (f *biosFlow) xmodelNote(cmp *compareResult) string {
+	f.xplans, f.xdone = xmodelPlansFor(cmp, f.u.Snaps), false
+	f.ui.SetXKey(len(f.xplans) > 0)
+	n := 0
+	for _, p := range f.xplans {
+		for _, g := range p.Groups {
+			n += len(g)
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("모델이 다른 대상이 있습니다 (%d대) — x: 참고용 비교 CSV 만들기", n)
+}
+
+// xmodelKey 는 x 키입니다: 남은 계획마다 참고용 CSV(compare_xmodel_*)를 쓰고 안내를 바꿉니다. 만든 계획은 뺀다 (다시 누르면 "이미 만들었습니다").
+// Ctrl+X 로 취소하면 쓰지 못한 계획은 남겨 두어 x 로 다시 만들 수 있습니다.
+func (f *biosFlow) xmodelKey() {
+	ui := f.ui
+	if len(f.xplans) == 0 {
+		if f.xdone {
+			ui.SetMessage("이미 만들었습니다")
+		} else {
+			ui.SetMessage("모델이 다른 대상이 없습니다")
+		}
+		return
+	}
+	plans := f.xplans
+	var parts []string
+	ui.Progress("CSV 저장 (모델이 다른 비교)", func(j *TUIJob) error {
+		for k, p := range plans {
+			s, done := f.writeXModel(p, j.Canceled())
+			if s != "" {
+				parts = append(parts, s)
+			}
+			if !done {
+				f.xplans = plans[k:]
+				return nil
+			}
+			f.xplans = plans[k+1:]
+		}
+		return nil
+	})
+	f.xdone = true
+	msg := strings.Join(parts, " / ")
+	if msg == "" {
+		msg = "참고용 비교 CSV 를 만들지 못했습니다 (결과 폴더 쓰기 경고 확인)"
+	}
+	if len(f.xplans) > 0 {
+		msg += " / 취소했습니다 — 남은 계획은 x 로 다시 만들 수 있습니다"
+	}
+	ui.SetMessage(msg)
+}
+
+// writeXModel 은 모델이 다른 비교 계획 1건의 CSV 를 결과 폴더에 쓰고 안내 문구(파일마다 " / " 로 이은 것)를 돌려줍니다.
+// cancel 이 닫히면 남은 파일은 쓰지 않고 done=false 입니다. 쓰기 오류는 f.warns 에 남긴다.
+func (f *biosFlow) writeXModel(p *xmodelPlan, cancel <-chan struct{}) (string, bool) {
 	prot := protectFor(f.rc.Conf)
 	var parts []string
-	for _, p := range xmodelPlansFor(cmp, f.u.Snaps) {
-		f.wait("xmodel")
-		if f.ui.Ask(p.Question()) != TUIYes {
+	for _, g := range p.Groups {
+		select {
+		case <-cancel: // Ctrl+X: 남은 파일은 쓰지 않음
+			return strings.Join(parts, " / "), false
+		default:
+		}
+		c := buildXModel(p.B, g, f.u.Ignore, prot)
+		c.Tag = p.Tag
+		path := filepath.Join(f.u.Check.Dir, c.FileName())
+		if err := writeCSVFile(path, c.Rows(p.BHost)); err != nil {
+			f.warns = append(f.warns, err.Error())
 			continue
 		}
-		p := p
-		f.ui.Progress("CSV 저장 (모델이 다른 비교)", func(j *TUIJob) error {
-			for _, g := range p.Groups {
-				select {
-				case <-j.Canceled(): // Ctrl+X: 남은 파일은 쓰지 않음
-					return nil
-				default:
-				}
-				c := buildXModel(p.B, g, f.u.Ignore, prot)
-				c.Tag = p.Tag
-				path := filepath.Join(f.u.Check.Dir, c.FileName())
-				if err := writeCSVFile(path, c.Rows(p.BHost)); err != nil {
-					f.warns = append(f.warns, err.Error())
-					continue
-				}
-				if !inList(f.csvs, path) {
-					f.csvs = append(f.csvs, path)
-				}
-				pre := ""
-				if p.Tag != "" {
-					pre = "[태그 " + p.Tag + "] "
-				}
-				parts = append(parts, fmt.Sprintf("%s모델이 다른 비교 (%s %d대 ↔ %s): %s → %s", pre, c.AName, len(g), c.BName, c.Summary(), path))
-			}
-			return nil
-		})
+		if !inList(f.csvs, path) {
+			f.csvs = append(f.csvs, path)
+		}
+		pre := ""
+		if p.Tag != "" {
+			pre = "[태그 " + p.Tag + "] "
+		}
+		parts = append(parts, fmt.Sprintf("%s모델이 다른 비교 (%s %d대 ↔ %s): %s → %s", pre, c.AName, len(g), c.BName, c.Summary(), path))
 	}
-	return strings.Join(parts, " / ")
+	return strings.Join(parts, " / "), true
 }
 
 // chooseRef 는 전체비교 기준입니다: -ref/-ref-json/-diff 를 줬으면 그것(again 이면 무시하고 메뉴), 아니면 메뉴
@@ -605,12 +679,12 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 		f.wait("ref-host")
 		// 태그 모드(대상에 태그가 있음)면 한 줄이 "hostname 태그" 라 공백으로 쪼개지 않는다 (compareRefs 가 줄마다 parseRefList).
 		tagMode := f.u.tagMode()
-		prompt := "비교서버 hostname (한 줄에 하나, 뒤 칸은 무시, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
+		help := []string{"한 줄에 hostname 하나 (뒤 칸은 무시)", "바로 Enter 면 " + flowDiffFile + " 를 씁니다"}
 		if tagMode {
-			prompt = "비교서버 (한 줄에 \"hostname 태그\" 하나, 대상과 같은 태그끼리만 비교, Ctrl+D 완료 · Ctrl+X 취소, 바로 Ctrl+D 면 " + flowDiffFile + ")"
+			help[0] = "한 줄에 hostname 태그 하나 — 대상과 같은 태그끼리만 비교"
 		}
 		// Excel 복사("hostname<Tab>태그/메모") 의 Tab 은 화면 전환이 아니라 공백으로 받는다.
-		hs, ok := f.ui.InputLinesTab(prompt)
+		hs, ok := f.ui.InputLinesOpt("비교서버 입력", TUILinesOpt{TabText: true, Help: help})
 		if !ok {
 			return compareRef{}, false
 		}
@@ -635,6 +709,8 @@ var flowEditMenu = []string{"점검 결과 기준 수정", "BIOS 값 직접 입�
 
 // editStep 은 수정 단계 입구입니다: 수정 방법을 고른다. 덤프 읽기면 고르지 않고 false, 고르기 취소면 false (결과 보기로).
 func (f *biosFlow) editStep() bool {
+	f.ui.SetStage(5)
+	defer f.ui.SetStage(4) // 수정 단계에서 돌아오면 결과 보기
 	if f.a.O.fromDump != "" {
 		f.setNote = "덤프 읽기 모드라 설정하지 않았습니다"
 		return false
@@ -763,14 +839,17 @@ func (f *biosFlow) directStep() bool {
 	ui := f.ui
 	ui.SetText("BIOS 값 직접 입력", flowDirectGuide)
 	var reqs []directReq
+	var typed []string // 입력 오류 뒤 다시 열 때 미리 채울 줄
+	help := []string{"한 줄에 하나: 속성이름 설정값 (예: SysProfile PerfOptimized)", "다 넣었으면 빈 줄에서 Enter"}
 	for len(reqs) == 0 {
 		f.wait("direct-input")
-		lines, ok := ui.InputLinesTab("BIOS 값 직접 입력 (속성 이름 설정값, Ctrl+D 완료 · Ctrl+X 취소)")
+		lines, ok := ui.InputLinesOpt("BIOS 값 입력", TUILinesOpt{TabText: true, Help: help, Initial: typed})
 		if !ok {
 			ui.TakeTabOut()
 			f.setNote = "설정하지 않았습니다"
 			return false
 		}
+		typed = lines
 		r, errs := parseDirectLines(lines)
 		if len(errs) == 0 && len(r) == 0 {
 			errs = []string{"입력한 속성이 없습니다"}
@@ -914,8 +993,9 @@ func (f *biosFlow) recheckHosts(idx []int) {
 	}
 	if f.cmp != nil {
 		f.cmp = nil
+		f.xplans, f.xdone = nil, false
 		ui.SwitchTab(1)
-		ui.SetResults(flowTabs[1], nil)
+		ui.SetResults(flowTabs[1], nil) // r·x 키도 꺼진다
 	}
 	plines := f.u.ProfileLines()
 	ui.SwitchTab(0)
