@@ -106,15 +106,15 @@ agent_src_dir = os.path.join(base_dir, 'agent')
 standalone_exe_path = os.path.join(dist_dir, 'host-cross-checker.exe')
 agent_exe_path = os.path.join(dist_dir, 'cross-checker-agent.exe')
 if os.path.exists(agent_src_dir) and any(f.endswith('.go') for f in os.listdir(agent_src_dir)):
-    # 1. Standalone Desktop App binary
-    res1 = subprocess.run(['go', 'build', '-o', standalone_exe_path, './agent'], cwd=base_dir, capture_output=True, text=True)
+    # 1. Standalone Desktop App binary (No CMD console window: -H windowsgui)
+    res1 = subprocess.run(['go', 'build', '-ldflags', '-H windowsgui', '-o', standalone_exe_path, './agent'], cwd=base_dir, capture_output=True, text=True)
     if res1.returncode == 0:
         print(f"Built standalone binary: {standalone_exe_path} ({os.path.getsize(standalone_exe_path):,} bytes)")
     else:
         print(f"Go build failed for {standalone_exe_path}:\n{res1.stderr}")
 
-    # 2. Agent daemon binary for compatibility
-    res2 = subprocess.run(['go', 'build', '-o', agent_exe_path, './agent'], cwd=base_dir, capture_output=True, text=True)
+    # 2. Agent daemon binary (No CMD console window: -H windowsgui)
+    res2 = subprocess.run(['go', 'build', '-ldflags', '-H windowsgui', '-o', agent_exe_path, './agent'], cwd=base_dir, capture_output=True, text=True)
     if res2.returncode == 0:
         print(f"Built agent binary:      {agent_exe_path} ({os.path.getsize(agent_exe_path):,} bytes)")
     else:

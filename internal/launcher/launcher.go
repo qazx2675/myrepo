@@ -95,10 +95,8 @@ func Args(appURL, profileDir string) []string {
 	return args
 }
 
-// Open launches appURL in an Edge/Chrome app window. When no supported browser
-// is found it falls back to the system default browser. The returned string is
-// the browser executable used ("default" for the fallback).
-func Open(appURL string) (string, error) {
+// OpenWithExitCallback launches appURL in an Edge/Chrome app window and calls onExit when closed.
+func OpenWithExitCallback(appURL string, onExit func()) (string, error) {
 	browser := FindBrowser()
 	if browser == "" {
 		return "default", openDefault(appURL)
@@ -109,8 +107,18 @@ func Open(appURL string) (string, error) {
 	if err := cmd.Start(); err != nil {
 		return browser, openDefault(appURL)
 	}
-	go func() { _ = cmd.Wait() }()
+	go func() {
+		_ = cmd.Wait()
+		if onExit != nil {
+			onExit()
+		}
+	}()
 	return browser, nil
+}
+
+// Open launches appURL in an Edge/Chrome app window (backward compatibility).
+func Open(appURL string) (string, error) {
+	return OpenWithExitCallback(appURL, nil)
 }
 
 func openDefault(u string) error {

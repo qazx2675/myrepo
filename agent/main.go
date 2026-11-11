@@ -2175,9 +2175,11 @@ func main() {
 	shutdownServer := func() {
 		shutdownOnce.Do(func() {
 			log.Println("Shutting down AWX Host Cross-Checker...")
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
 			_ = httpServer.Shutdown(ctx)
+			server.Stop()
+			os.Exit(0)
 		})
 	}
 
@@ -2208,7 +2210,10 @@ func main() {
 				}
 			}
 
-			browserUsed, err := launcher.Open(appURL)
+			browserUsed, err := launcher.OpenWithExitCallback(appURL, func() {
+				log.Println("Desktop app window process closed. Terminating process.")
+				shutdownServer()
+			})
 			if err != nil {
 				log.Printf("Failed to open app window: %v\n", err)
 			} else {
