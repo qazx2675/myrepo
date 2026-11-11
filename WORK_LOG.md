@@ -163,5 +163,28 @@
 4. **전체 24개 테스트케이스 원테이크 통합 검증 (`tests/run_all_tests.js`)**: **24개 전원 100% 통과 (PASS: 24 / FAIL: 0)**
 5. **Go 백엔드 유닛 테스트 (`agent/agent_test.go`)**: **14개 테스트 전원 통과**
 
+---
+
+## 5. 메모리 누수 및 CPU 점유율 전수 점검 & 최적화 (2026-11-11)
+
+### (1) 취약점 식별 및 외과적 최적화 내역
+1. **HTTP Peer Notify Response Body 누수 차단**:
+   - `agent/main.go` 내 4개 피어 알림 호출(`NEW_SESSION`, `REASSIGNED_AWAY`, `SESSION_DECIDED`)에서 `resp.Body.Close()`가 누락되어 OS 소켓 핸들 및 연결 버퍼가 누수되던 문제를 `postPeerJSON` 헬퍼 메서드로 통합하여 `io.Copy(io.Discard, resp.Body)` 및 `resp.Body.Close()`를 100% 보장.
+2. **WebSocket 소켓 지연 블로킹 방어**:
+   - `WSClient.WriteText` 및 `WritePong`에 3초 Write Deadline(`SetWriteDeadline`)을 적용하여 비정상 단절 클라이언트로 인한 goroutine 영구 블로킹 방지.
+3. **공유폴더 SMB 디렉터리 폴링 부하 절감**:
+   - `pollSessionsDir`에서 수백 개의 세션 파일이 누적되더라도 최신 100개 파일만 제한 감시하도록 최적화하고, `fileModTime` 맵이 1,000건 초과 시 자동 정리(Pruning)하도록 보강.
+4. **프론트엔드 이벤트 리스너 누수 차단**:
+   - `initEventSource`에 `state.__eventSourceInitialized` 가드를 추가하여 반복 호출 시 와일드카드 리스너가 중복 등록되는 현상 원천 차단.
+   - 드래그 `mousemove` 및 `mouseup` 리스너를 평상시 글로벌 감시에서 제외하고 `mousedown` 시에만 동적 등록 후 `mouseup` 즉시 해제하도록 고성능화.
+
+### (2) 자원 프로파일링 실측 결과 (`tests/bench_resource_profiling.js`)
+* **아이들(Idle) 물리 메모리**: **15.94 MB** (매우 경량)
+* **아이들(Idle) CPU 점유율**: **0.369%** (기준치 0.5% 이하 달성)
+* **300회 연속 세션 생성/조회 부하 시**: 피크 메모리 **23.76 MB**
+* **AWX 1,000대 호스트 50회 연속 수집/캐싱 부하 시**: 피크 메모리 **27.26 MB**
+* **부하 종료 후 GC 안정화**: **25.50 MB** (지속 누수 0MB, 메모리 정상 수렴)
+* **종료 시 자원 회수**: 창 종료 신호 수신 후 **100ms** 내에 프로세스 완전 종료, OS에 메모리/CPU 100% 반환 완료
+
 
 

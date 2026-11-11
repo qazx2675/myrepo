@@ -191,6 +191,7 @@ func (c *WSClient) WriteText(payload []byte) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 	if _, err := c.conn.Write(header); err != nil {
 		return err
 	}
@@ -205,6 +206,7 @@ func (c *WSClient) WriteText(payload []byte) error {
 func (c *WSClient) WritePong(payload []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 	header := []byte{0x8A, byte(len(payload))}
 	if _, err := c.conn.Write(header); err != nil {
 		return err
@@ -630,6 +632,24 @@ func (s *AgentServer) Stop() {
 	}
 }
 
+// postPeerJSON sends an HTTP POST request to a peer, properly draining and closing response body.
+func (s *AgentServer) postPeerJSON(url string, payload interface{}) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.httpClient.Do(req)
+	if err == nil && resp != nil {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}
+}
+
 // pollSessionsDir checks for updated session files on disk.
 func (s *AgentServer) pollSessionsDir() {
 	pattern := filepath.Join(s.config.SharedDir, "sessions", "*.json")
@@ -637,6 +657,26 @@ func (s *AgentServer) pollSessionsDir() {
 	if err != nil {
 		return
 	}
+
+	// Limit check to the most recent 100 files to prevent unbounded disk/SMB stat overhead
+	if len(files) > 100 {
+		files = files[len(files)-100:]
+	}
+
+	// Periodic pruning of in-memory fileModTime map to prevent memory leak
+	s.modMu.Lock()
+	if len(s.fileModTime) > 1000 {
+		activeSet := make(map[string]struct{}, len(files))
+		for _, f := range files {
+			activeSet[f] = struct{}{}
+		}
+		for k := range s.fileModTime {
+			if _, ok := activeSet[k]; !ok {
+				delete(s.fileModTime, k)
+			}
+		}
+	}
+	s.modMu.Unlock()
 
 	for _, file := range files {
 		info, err := os.Stat(file)
@@ -824,10 +864,14 @@ func (s *AgentServer) handleBye(w http.ResponseWriter, r *http.Request) {
 	onShutdown := s.onShutdown
 	s.lifecycleMu.Unlock()
 
-	if r.URL.Query().Get("force") == "true" && onShutdown != nil {
+	if r.URL.Query().Get("force") == "true" {
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			onShutdown()
+			if onShutdown != nil {
+				onShutdown()
+			} else {
+				os.Exit(0)
+			}
 		}()
 	}
 
@@ -1210,16 +1254,11 @@ func (s *AgentServer) handleSessionCreate(w http.ResponseWriter, r *http.Request
 	if sess.Checker.IP != "" && sess.Checker.IP != s.detectedIP && sess.Checker.IP != "127.0.0.1" && sess.Checker.IP != sess.Worker.IP {
 		go func(checkerIP string, sessCopy Session) {
 			url := fmt.Sprintf("http://%s:%d/api/peer/notify", checkerIP, s.config.ListenPort)
-			payload, _ := json.Marshal(map[string]interface{}{
+			s.postPeerJSON(url, map[string]interface{}{
 				"type":      "NEW_SESSION",
 				"sessionId": sessCopy.SessionId,
 				"session":   sessCopy,
 			})
-			req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
-			if err == nil {
-				req.Header.Set("Content-Type", "application/json")
-				_, _ = s.httpClient.Do(req)
-			}
 		}(sess.Checker.IP, sess)
 	}
 
@@ -1431,18 +1470,13 @@ func (s *AgentServer) handleSessionReassign(w http.ResponseWriter, r *http.Reque
 	if oldChecker.IP != "" && oldChecker.IP != s.detectedIP && oldChecker.IP != "127.0.0.1" && oldChecker.IP != sess.Worker.IP {
 		go func(ip string, sid string) {
 			url := fmt.Sprintf("http://%s:%d/api/peer/notify", ip, s.config.ListenPort)
-			payload, _ := json.Marshal(map[string]interface{}{
+			s.postPeerJSON(url, map[string]interface{}{
 				"type":      "REASSIGNED_AWAY",
 				"sessionId": sid,
 				"data": map[string]interface{}{
 					"newChecker": req.NewChecker,
 				},
 			})
-			reqPost, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
-			if err == nil {
-				reqPost.Header.Set("Content-Type", "application/json")
-				_, _ = s.httpClient.Do(reqPost)
-			}
 		}(oldChecker.IP, sess.SessionId)
 	}
 
@@ -1450,16 +1484,11 @@ func (s *AgentServer) handleSessionReassign(w http.ResponseWriter, r *http.Reque
 	if req.NewChecker.IP != "" && req.NewChecker.IP != s.detectedIP && req.NewChecker.IP != "127.0.0.1" && req.NewChecker.IP != sess.Worker.IP {
 		go func(ip string, sessCopy Session) {
 			url := fmt.Sprintf("http://%s:%d/api/peer/notify", ip, s.config.ListenPort)
-			payload, _ := json.Marshal(map[string]interface{}{
+			s.postPeerJSON(url, map[string]interface{}{
 				"type":      "NEW_SESSION",
 				"sessionId": sessCopy.SessionId,
 				"session":   sessCopy,
 			})
-			reqPost, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
-			if err == nil {
-				reqPost.Header.Set("Content-Type", "application/json")
-				_, _ = s.httpClient.Do(reqPost)
-			}
 		}(req.NewChecker.IP, *sess)
 	}
 
@@ -1536,17 +1565,12 @@ func (s *AgentServer) handleSessionDecision(w http.ResponseWriter, r *http.Reque
 	if sess.Worker.IP != "" {
 		go func(workerIP string, sessCopy Session) {
 			url := fmt.Sprintf("http://%s:%d/api/peer/update", workerIP, s.config.ListenPort)
-			payload, _ := json.Marshal(map[string]interface{}{
+			s.postPeerJSON(url, map[string]interface{}{
 				"type":        "SESSION_DECIDED",
 				"sessionId":   sessCopy.SessionId,
 				"status":      sessCopy.Status,
 				"checkerData": sessCopy.CheckerData,
 			})
-			reqPost, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
-			if err == nil {
-				reqPost.Header.Set("Content-Type", "application/json")
-				_, _ = s.httpClient.Do(reqPost)
-			}
 		}(sess.Worker.IP, *sess)
 	}
 

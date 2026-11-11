@@ -1169,10 +1169,22 @@
             });
         }
 
-        // 드래그 기능 (페이지 내 패널일 때만 적용)
+        // 드래그 기능 (페이지 내 패널일 때만 적용, 드래그 중에만 리스너 바인딩하여 CPU/이벤트 누수 방지)
         if (!isPopup && !isStandaloneApp && headerEl) {
             let isDragging = false;
             let startX, startY, initialLeft, initialTop;
+            const onMouseMove = (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                panel.style.left = Math.max(10, Math.min(window.innerWidth - panel.offsetWidth - 10, initialLeft + dx)) + 'px';
+                panel.style.top = Math.max(10, Math.min(window.innerHeight - panel.offsetHeight - 10, initialTop + dy)) + 'px';
+            };
+            const onMouseUp = () => {
+                isDragging = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
             headerEl.addEventListener('mousedown', (e) => {
                 if (e.target.closest('button')) return;
                 isDragging = true;
@@ -1184,15 +1196,9 @@
                 panel.style.right = 'auto';
                 panel.style.left = initialLeft + 'px';
                 panel.style.top = initialTop + 'px';
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
             });
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                panel.style.left = Math.max(10, Math.min(window.innerWidth - panel.offsetWidth - 10, initialLeft + dx)) + 'px';
-                panel.style.top = Math.max(10, Math.min(window.innerHeight - panel.offsetHeight - 10, initialTop + dy)) + 'px';
-            });
-            document.addEventListener('mouseup', () => { isDragging = false; });
         }
 
         // 닫기 버튼
@@ -1700,6 +1706,8 @@
         }
 
         function initEventSource() {
+            if (state.__eventSourceInitialized) return;
+            state.__eventSourceInitialized = true;
             agentBridge.on('*', (data, msg) => {
                 if (msg && msg.event) {
                     handleAgentSSE({
