@@ -30,6 +30,7 @@
 | `test/run_tests.sh` | fake gossh 로 전체 시나리오·출력 형식 검증 |
 | `test/fake_stress_test.sh` | stress-test 대역. `-user -hosts -steps a 또는 b -batch [-end y,m,d,h,min] [-conf]`(steps b 에 `-end` 없으면 종료코드 2, `FAKE_ST_BUSY=<steps>` 이면 `[인벤토리사용중]` 줄을 찍고 stdin 에서 r/그 밖을 읽음) 를 받아 호출을 `FAKE_ST_LOG` 에 기록, `[감시]` 줄을 낸 뒤 `FAKE_MARK_DIR` 표식(`cpu_`/`ng_`/`reboot_`/`hang_<steps>`)으로 fake gossh 의 CPU·stress-ng·btime 값을 바꿈 |
 | `test/run_flow_tests.sh` | `-run` 전체 흐름 시험(비 tty 로 워커를 띄우고 `answer.json` 으로 답): 1→5 단계, 설정수정 `-auto`, CPU/stress 대상 분리·순서, 재부팅 감지, 접속불가 무시, stress-test 멈춤→시간초과, `stop.req`, 워커 kill -9→재기동, 종료 시각 입력→`-end`, 인벤토리 사용 중 r/x/중지/시간제한 일시정지 |
+| `test.sh` | TUI 조작감 데모: `test/fake_*.sh` 로 가짜 서버를 꾸미고 `bin/new_setup -run` 을 tty 로 바로 띄움(호스트 수 인자, 끝나면 워커·폴더 정리) |
 | `.github/workflows/ci.yml` | gofmt·vet·test·shellcheck·run_tests.sh·run_flow_tests.sh·run_setup_tests.sh |
 | `README.md` / `PR_CHECKLIST.md` | 사용 설명 / 변경 점검 목록 |
 | `계획서.md` | 설계 결정, 가정·미확인 사항 |

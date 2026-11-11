@@ -324,6 +324,7 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 go test ./...
 bash test/run_tests.sh   # fake gossh 로 모든 상태 시나리오 확인
 bash test/run_flow_tests.sh   # -run 전체 흐름(설정수정→CPU/stress-ng→재부팅 감지→재기동→시간초과→중지, 종료 시각 입력 -end, 인벤토리 사용 중 r/x/중지/시간제한 일시정지)
+bash test.sh                  # 화면(TUI) 조작감 데모: 가짜 서버로 -run 화면이 바로 뜸(`bash test.sh 8000` 은 8000대, 끝나면 정리, 실제 서버엔 손대지 않음)
 bash test/run_setup_tests.sh  # setup.sh 대화형 설정(답을 파이프로 입력)·new_setup.sh 첫 실행 제안
 ```
 
