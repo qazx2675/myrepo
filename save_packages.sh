@@ -2,7 +2,7 @@
 # ==============================================================================
 # save_packages.sh
 # RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 등록된 yum 레포지토리로부터
-# 필수 패키지 및 전체 의존성 RPM 저장 스크립트
+# 필수 패키지 및 전체 의존성 RPM 저장 스크립트 (x86_64 전용, 폐쇄망 최적화)
 #
 # 레포지토리: RHEL810-base (BaseOS), RHEL810-app (AppStream)
 # 대상 패키지: nscd, autofs, rpcbind, nfs-utils, tcsh
@@ -16,8 +16,11 @@ OUT_DIR="./rhel810_packages"
 CREATE_ARCHIVE=0
 TARGET_PACKAGES=("nscd" "autofs" "rpcbind" "nfs-utils" "tcsh")
 
-# 핵심 의존성 목록 (오프라인 타깃 서버 최소설치 대비)
+# 핵심 의존성 목록 (glibc 및 nscd 일치 버전, 64비트 라이브러리 포함)
 KNOWN_DEPENDENCIES=(
+  "glibc"
+  "glibc-common"
+  "glibc-all-langpacks"
   "libtirpc"
   "libevent"
   "gssproxy"
@@ -56,15 +59,10 @@ usage() {
 사용법: $0 [옵션]
 
 RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 yum/dnf 레포지토리(RHEL810-base, RHEL810-app)에서
-대상 패키지와 전체 의존성을 추출하여 폐쇄망 설치용 독립 번들 디렉터리로 저장합니다.
-(폐쇄망 환경에 맞게 GPG 검증 및 체크섬 생성을 제외하고 핵심 RPM만 간결하게 수집합니다)
+대상 패키지와 전체 의존성을 64비트(x86_64) 전용으로 추출하여 오프라인 설치용 번들로 저장합니다.
 
 대상 패키지:
-  - nscd, autofs, rpcbind, nfs-utils, tcsh (총 5개 및 하위 의존성 전체)
-
-사용 레포지토리:
-  - RHEL810-base (BaseOS)
-  - RHEL810-app  (AppStream)
+  - nscd, autofs, rpcbind, nfs-utils, tcsh (및 glibc 등 64비트 하위 의존성 전체)
 
 옵션:
   -m, --mount <경로>      RHEL 8.10 ISO 마운트 디렉터리 (기본값: /mnt/rhel810)
@@ -78,38 +76,16 @@ RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 yum/dnf 레포지토리(RHEL810-
 
   # 압축 번들(.tar.gz) 동시 생성
   sudo $0 -a
-
-  # 마운트 경로 및 출력 디렉터리 직접 지정
-  sudo $0 -m /mnt/rhel810 -o ./my_rhel8_bundle -a
 EOF
 }
 
 # 인자 파싱
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -m|--mount)
-      [[ $# -ge 2 ]] || { log_error "-m 옵션에는 경로가 필요합니다."; exit 1; }
-      MOUNT_DIR="$2"
-      shift 2
-      ;;
-    -o|--output)
-      [[ $# -ge 2 ]] || { log_error "-o 옵션에는 디렉터리 경로가 필요합니다."; exit 1; }
-      OUT_DIR="$2"
-      shift 2
-      ;;
-    -a|--archive)
-      CREATE_ARCHIVE=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      log_error "알 수 없는 옵션: $1"
-      usage
-      exit 1
-      ;;
+    -m|--mount)  MOUNT_DIR="$2"; shift 2 ;;
+    -o|--output) OUT_DIR="$2"; shift 2 ;;
+    -a|--archive) CREATE_ARCHIVE=1; shift ;;
+    *) echo "알 수 없는 옵션: $1"; exit 1 ;;
   esac
 done
 
@@ -120,55 +96,25 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
 fi
 
 log_info "=========================================================="
-log_info " RHEL 8.10 오프라인 패키지 수집 도구"
+log_info " RHEL 8.10 오프라인 패키지 수집 도구 (x86_64 전용)"
 log_info " 대상 패키지: ${TARGET_PACKAGES[*]}"
 log_info " 마운트 경로: $MOUNT_DIR"
 log_info " 출력 디렉터리: $OUT_DIR"
 log_info "=========================================================="
 
-# 패키지 매니저 확인
 PKG_MGR="dnf"
 if ! command -v dnf >/dev/null 2>&1; then
-  if command -v yum >/dev/null 2>&1; then
-    PKG_MGR="yum"
-  else
-    log_error "시스템에 'dnf' 또는 'yum' 명령어가 없습니다."
-    exit 1
-  fi
+  PKG_MGR="yum"
 fi
 
-# 레포지토리 인자 구성 (RHEL810-base, RHEL810-app)
 REPO_ARGS=()
-BASEOS_PATH=""
-APPSTREAM_PATH=""
-
-# 1. 마운트 디렉터리 확인
-if [[ -d "$MOUNT_DIR" ]]; then
-  if [[ -d "$MOUNT_DIR/BaseOS" ]]; then
-    BASEOS_PATH="$MOUNT_DIR/BaseOS"
-  elif [[ -d "$MOUNT_DIR/baseos" ]]; then
-    BASEOS_PATH="$MOUNT_DIR/baseos"
-  fi
-
-  if [[ -d "$MOUNT_DIR/AppStream" ]]; then
-    APPSTREAM_PATH="$MOUNT_DIR/AppStream"
-  elif [[ -d "$MOUNT_DIR/appstream" ]]; then
-    APPSTREAM_PATH="$MOUNT_DIR/appstream"
-  fi
+if [[ -d "$MOUNT_DIR/BaseOS" ]]; then
+  REPO_ARGS+=("--repofrompath=RHEL810-base,file://$MOUNT_DIR/BaseOS")
+fi
+if [[ -d "$MOUNT_DIR/AppStream" ]]; then
+  REPO_ARGS+=("--repofrompath=RHEL810-app,file://$MOUNT_DIR/AppStream")
 fi
 
-# 2. 마운트 경로 레포 연결 설정
-if [[ -n "$BASEOS_PATH" && -n "$APPSTREAM_PATH" ]]; then
-  log_info "마운트 디렉터리로부터 레포지토리 연결:"
-  log_info "  - RHEL810-base : $BASEOS_PATH"
-  log_info "  - RHEL810-app  : $APPSTREAM_PATH"
-  REPO_ARGS+=(
-    "--repofrompath=RHEL810-base,file://$BASEOS_PATH"
-    "--repofrompath=RHEL810-app,file://$APPSTREAM_PATH"
-  )
-fi
-
-# 3. GPG 체크 비활성화 및 외부 네트워크 레포 간섭 차단
 REPO_ARGS+=(
   "--disablerepo=*"
   "--enablerepo=RHEL810-base"
@@ -178,21 +124,18 @@ REPO_ARGS+=(
   "--disableplugin=subscription-manager,product-id"
 )
 
-# 출력 디렉터리 생성
 RPMS_OUT_DIR="$OUT_DIR/rpms"
 mkdir -p "$RPMS_OUT_DIR"
 
-log_info "----------------------------------------------------------"
-log_info "레포지토리로부터 패키지 및 의존성 다운로드 시작 (GPG 검증 비활성화)"
-log_info "----------------------------------------------------------"
+log_info "레포지토리로부터 x86_64 패키지 및 의존성 다운로드 시작..."
 
 DOWNLOADED_SOMETHING=0
 
-# 방법 1: repotrack 사용 (yum-utils가 있는 경우)
+# 방법 1: repotrack (반드시 -a x86_64 지정하여 32비트 i686 혼입 차단)
 if command -v repotrack >/dev/null 2>&1; then
-  log_info "repotrack 도구 감지: repotrack으로 전체 의존성 수집 시도..."
+  log_info "repotrack 도구 감지: 64비트(x86_64) 의존성 전수 수집 시도..."
   set +e
-  repotrack -p "$RPMS_OUT_DIR" \
+  repotrack -a x86_64 -p "$RPMS_OUT_DIR" \
     -r RHEL810-base -r RHEL810-app \
     "${TARGET_PACKAGES[@]}" 2>&1 | tail -n 5
   if [[ $? -eq 0 ]]; then
@@ -202,12 +145,13 @@ if command -v repotrack >/dev/null 2>&1; then
   set -e
 fi
 
-# 방법 2: dnf download 또는 yumdownloader 사용
+# 방법 2: dnf download 또는 yumdownloader (--arch=x86_64,noarch 지정)
 if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
   if $PKG_MGR download --help >/dev/null 2>&1; then
-    log_info "$PKG_MGR download --resolve --alldeps 명령으로 다운로드 시도..."
+    log_info "$PKG_MGR download --resolve --alldeps (--arch=x86_64,noarch) 시도..."
     set +e
     $PKG_MGR download -y \
+      --arch=x86_64,noarch \
       --destdir="$RPMS_OUT_DIR" \
       --resolve \
       --alldeps \
@@ -219,10 +163,11 @@ if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
     fi
     set -e
   elif command -v yumdownloader >/dev/null 2>&1; then
-    log_info "yumdownloader --resolve 명령으로 다운로드 시도..."
+    log_info "yumdownloader --resolve --archlist=x86_64,noarch 시도..."
     set +e
     yumdownloader --destdir="$RPMS_OUT_DIR" \
       --resolve \
+      --archlist=x86_64,noarch \
       --enablerepo=RHEL810-base \
       --enablerepo=RHEL810-app \
       "${TARGET_PACKAGES[@]}"
@@ -234,7 +179,7 @@ if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
   fi
 fi
 
-# 방법 3: dnf/yum reinstall/install --downloadonly
+# 방법 3: dnf install/reinstall --downloadonly
 if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
   log_info "$PKG_MGR install/reinstall --downloadonly 명령으로 수집 시도..."
   set +e
@@ -243,14 +188,15 @@ if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
   set -e
 fi
 
-# 방법 4: 마운트 디렉터리(/mnt/rhel810)에서 직접 탐색 및 복사 (누락 방지)
+# 방법 4: 마운트 디렉터리(/mnt/rhel810)에서 64비트 RPM 직접 탐색 및 복사 (누락 방지)
 if [[ -d "$MOUNT_DIR" ]]; then
-  log_info "마운트 디렉터리($MOUNT_DIR)에서 필수 패키지 및 주요 의존성 RPM 직접 복사 확인..."
+  log_info "마운트 디렉터리($MOUNT_DIR)에서 64비트 필수 패키지 및 glibc 등 의존성 확인..."
   ALL_SEARCH_PKGS=("${TARGET_PACKAGES[@]}" "${KNOWN_DEPENDENCIES[@]}")
 
   for pkg in "${ALL_SEARCH_PKGS[@]}"; do
-    if ! find "$RPMS_OUT_DIR" -maxdepth 1 -name "${pkg}-[0-9]*.rpm" 2>/dev/null | grep -q .; then
-      found_files=$(find "$MOUNT_DIR" -maxdepth 4 -name "${pkg}-[0-9]*.rpm" 2>/dev/null || true)
+    # 이미 x86_64 또는 noarch 파일이 있는지 확인
+    if ! find "$RPMS_OUT_DIR" -maxdepth 1 \( -name "${pkg}-[0-9]*.x86_64.rpm" -o -name "${pkg}-[0-9]*.noarch.rpm" \) 2>/dev/null | grep -q .; then
+      found_files=$(find "$MOUNT_DIR" -maxdepth 4 \( -name "${pkg}-[0-9]*.x86_64.rpm" -o -name "${pkg}-[0-9]*.noarch.rpm" \) 2>/dev/null || true)
       if [[ -n "$found_files" ]]; then
         while IFS= read -r f; do
           if [[ -f "$f" ]]; then
@@ -263,13 +209,20 @@ if [[ -d "$MOUNT_DIR" ]]; then
   done
 fi
 
+# 32비트(i686) RPM 혼입 원천 차단 (libc.so.6(GLIBC_2.28) 의존성 에러의 원인 제거)
+I686_FILES=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "*.i686.rpm" 2>/dev/null || true)
+if [[ -n "$I686_FILES" ]]; then
+  log_warn "32비트(i686) RPM 파일 감지: 64비트 시스템 GLIBC 충돌 방지를 위해 배제합니다."
+  rm -f "$RPMS_OUT_DIR"/*.i686.rpm
+fi
+
 # 필수 5개 패키지 수집 검증
 log_info "----------------------------------------------------------"
 log_info "필수 패키지 수집 검증"
 log_info "----------------------------------------------------------"
 MISSING=()
 for pkg in "${TARGET_PACKAGES[@]}"; do
-  found=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "${pkg}-[0-9]*.rpm" 2>/dev/null | head -n 1 || true)
+  found=$(find "$RPMS_OUT_DIR" -maxdepth 1 \( -name "${pkg}-[0-9]*.x86_64.rpm" -o -name "${pkg}-[0-9]*.noarch.rpm" \) 2>/dev/null | head -n 1 || true)
   if [[ -n "$found" ]]; then
     log_success "  [OK] $pkg -> $(basename "$found")"
   else
@@ -284,51 +237,21 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
 fi
 
 RPM_COUNT=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "*.rpm" | wc -l)
-log_success "총 ${RPM_COUNT}개의 RPM 파일이 성공적으로 준비되었습니다."
+log_success "총 ${RPM_COUNT}개의 64비트 RPM 파일 수집 완료!"
 
-# 패키지 목록 매니페스트 생성 (참고용 텍스트 목록)
-log_info "패키지 목록 매니페스트(package_manifest.txt) 작성 중..."
-{
-  printf "# RHEL 8.10 Saved Packages Manifest\n"
-  printf "# Generated: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')"
-  printf "# Source Mount: %s\n" "$MOUNT_DIR"
-  printf "# Repositories: RHEL810-base, RHEL810-app\n\n"
-  printf "%-30s %-25s %-10s\n" "PACKAGE NAME" "VERSION-RELEASE" "ARCH"
-  printf "%s\n" "----------------------------------------------------------------------"
-  for rpm_file in "$RPMS_OUT_DIR"/*.rpm; do
-    rpm -qp --queryformat "%-30{NAME} %-25{VERSION}-%{RELEASE} %-10{ARCH}\n" "$rpm_file" 2>/dev/null || \
-      printf "%-65s (info unavailable)\n" "$(basename "$rpm_file")"
-  done
-} > "$OUT_DIR/package_manifest.txt"
-
-# 설치 스크립트 번들링
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [[ -f "$SCRIPT_DIR/install_packages.sh" ]]; then
-  log_info "오프라인 설치 스크립트(install_packages.sh)를 번들에 복사 중..."
   cp -f "$SCRIPT_DIR/install_packages.sh" "$OUT_DIR/"
   chmod +x "$OUT_DIR/install_packages.sh"
 fi
 
-# 압축 번들 생성 옵션 (-a / --archive)
 if [[ $CREATE_ARCHIVE -eq 1 ]]; then
   TAR_NAME="$(basename "$OUT_DIR").tar.gz"
   PARENT_DIR=$(dirname "$OUT_DIR")
   DIR_NAME=$(basename "$OUT_DIR")
   log_info "압축 번들 생성 중 ($PARENT_DIR/$TAR_NAME)..."
   tar -czf "$PARENT_DIR/$TAR_NAME" -C "$PARENT_DIR" "$DIR_NAME"
-  ARCHIVE_SIZE=$(du -h "$PARENT_DIR/$TAR_NAME" | cut -f1)
-  log_success "압축 번들 완료: $PARENT_DIR/$TAR_NAME (${ARCHIVE_SIZE})"
+  log_success "압축 번들 완료: $PARENT_DIR/$TAR_NAME"
 fi
 
-log_info "=========================================================="
-log_success "패키지 저장 작업이 성공적으로 완료되었습니다!"
-log_info "저장 경로: $(realpath "$OUT_DIR")"
-log_info "총 파일 수: ${RPM_COUNT}개 RPM"
-log_info ""
-log_info "다른 서버(폐쇄망/오프라인)로 배포하는 방법:"
-log_info "  1. 저장된 디렉터리($OUT_DIR) 또는 압축본을 대상 서버로 복사:"
-log_info "     scp -r $OUT_DIR user@<대상서버_IP>:/tmp/"
-log_info "  2. 대상 서버에서 설치 실행:"
-log_info "     cd /tmp/$(basename "$OUT_DIR")"
-log_info "     sudo ./install_packages.sh -s"
-log_info "=========================================================="
+log_success "패키지 저장이 성공적으로 완료되었습니다! ($(realpath "$OUT_DIR"))"
