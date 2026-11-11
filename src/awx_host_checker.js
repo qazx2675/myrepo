@@ -2060,6 +2060,16 @@
         window.awxFetchPendingSessions = fetchPendingSessions;
 
         if (btnRefreshPending) btnRefreshPending.onclick = fetchPendingSessions;
+
+        // Periodic 3-second background sync safety net for sharedDir polling
+        setInterval(() => {
+            if (state.agentInfo && state.agentInfo.connected) {
+                fetchPendingSessions();
+                if (state.currentSession && (state.currentSession.status === 'PENDING' || state.currentSession.status === 'CHECKING')) {
+                    refreshWorkerSessionStatus(state.currentSession.sessionId);
+                }
+            }
+        }, 3000);
         if (selPendingSessions) {
             selPendingSessions.onchange = () => {
                 const sid = selPendingSessions.value;

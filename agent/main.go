@@ -436,7 +436,22 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 
 	sessionsDir := filepath.Join(cfg.SharedDir, "sessions")
 	if err := os.MkdirAll(sessionsDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create sessions directory: %w", err)
+		log.Printf("[경고] 공유폴더(%s) sessions 접근 실패: %v, 로컬 폴더로 폴백 시도합니다.\n", cfg.SharedDir, err)
+		if exePath, eErr := os.Executable(); eErr == nil {
+			fallbackDir := filepath.Dir(exePath)
+			if fallbackDir != cfg.SharedDir {
+				cfg.SharedDir = fallbackDir
+				sessionsDir = filepath.Join(cfg.SharedDir, "sessions")
+				if fErr := os.MkdirAll(sessionsDir, 0755); fErr != nil {
+					return nil, fmt.Errorf("공유폴더 및 로컬 세션 폴더 생성 실패: %w (원래 오류: %v)", fErr, err)
+				}
+				log.Printf("[안내] 로컬 세션 폴더 사용: %s\n", sessionsDir)
+			} else {
+				return nil, fmt.Errorf("세션 폴더 생성 실패: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to create sessions directory: %w", err)
+		}
 	}
 
 	detectedIP := detectLocalIP(cfg.BindIP)
@@ -451,6 +466,16 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 		stopChan:      make(chan struct{}),
 		fileModTime:   make(map[string]time.Time),
 		detectedIP:    detectedIP,
+	}
+
+	// Pre-populate existing session files modTime so we don't blast notifications for existing old files
+	initPattern := filepath.Join(cfg.SharedDir, "sessions", "*.json")
+	if initFiles, err := filepath.Glob(initPattern); err == nil {
+		for _, f := range initFiles {
+			if fi, err := os.Stat(f); err == nil {
+				s.fileModTime[f] = fi.ModTime()
+			}
+		}
 	}
 
 	if err := s.ensureUsersFile(); err != nil {
@@ -493,7 +518,18 @@ func (s *AgentServer) ensureUsersFile() error {
 
 	usersPath := filepath.Join(s.config.SharedDir, "users.json")
 	if _, err := os.Stat(usersPath); os.IsNotExist(err) {
-		// Check fallback from "config/users.json"
+		// 1. Check local users.json next to executable
+		if exePath, err := os.Executable(); err == nil {
+			localUsers := filepath.Join(filepath.Dir(exePath), "users.json")
+			if data, err := os.ReadFile(localUsers); err == nil {
+				if err := os.WriteFile(usersPath, data, 0644); err == nil {
+					log.Printf("[USERS] Copied local users.json to shared directory: %s\n", usersPath)
+					return nil
+				}
+			}
+		}
+
+		// 2. Check fallback from "config/users.json"
 		fallbackPath := filepath.Join("config", "users.json")
 		if data, err := os.ReadFile(fallbackPath); err == nil {
 			if err := os.WriteFile(usersPath, data, 0644); err == nil {
@@ -501,6 +537,7 @@ func (s *AgentServer) ensureUsersFile() error {
 			}
 		}
 
+		// 3. Default users
 		defaultUsers := UsersFile{
 			UpdatedAt: time.Now().Format(time.RFC3339),
 			Users: []User{
@@ -527,6 +564,16 @@ func (s *AgentServer) readUsers() (UsersFile, error) {
 	usersPath := filepath.Join(s.config.SharedDir, "users.json")
 	data, err := os.ReadFile(usersPath)
 	if err != nil {
+		// Fallback to local users.json next to exe if sharedDir is temporarily unreachable
+		if exePath, eErr := os.Executable(); eErr == nil {
+			localUsers := filepath.Join(filepath.Dir(exePath), "users.json")
+			if localData, lErr := os.ReadFile(localUsers); lErr == nil {
+				var uf UsersFile
+				if err := json.Unmarshal(localData, &uf); err == nil {
+					return uf, nil
+				}
+			}
+		}
 		return UsersFile{}, err
 	}
 	var uf UsersFile
@@ -696,26 +743,31 @@ func (s *AgentServer) pollSessionsDir() {
 		s.modMu.Lock()
 		prevTime, exists := s.fileModTime[file]
 		modTime := info.ModTime()
+		s.fileModTime[file] = modTime
+		s.modMu.Unlock()
+
 		if !exists {
-			s.fileModTime[file] = modTime
-			s.modMu.Unlock()
-			continue // Initial detection, do not blast duplicate SSE
-		}
-
-		if modTime.After(prevTime) {
-			s.fileModTime[file] = modTime
-			s.modMu.Unlock()
-
-			// File updated!
-			data, err := os.ReadFile(file)
-			if err == nil {
+			// A new session file appeared in sharedDir!
+			if data, err := os.ReadFile(file); err == nil {
 				var sess Session
 				if err := json.Unmarshal(data, &sess); err == nil {
-					s.broadcastEvent("SESSION_UPDATED", sess.SessionId, sess)
+					log.Printf("[POLL] New session detected in shared folder: %s (Worker: %s, Checker: %s, Status: %s)\n", sess.SessionId, sess.Worker.Name, sess.Checker.Name, sess.Status)
+					s.broadcastEvent("NEW_SESSION", sess.SessionId, sess)
 				}
 			}
-		} else {
-			s.modMu.Unlock()
+		} else if modTime.After(prevTime) {
+			// Existing file updated in sharedDir!
+			if data, err := os.ReadFile(file); err == nil {
+				var sess Session
+				if err := json.Unmarshal(data, &sess); err == nil {
+					log.Printf("[POLL] Session updated in shared folder: %s (Status: %s)\n", sess.SessionId, sess.Status)
+					if sess.Status == "APPROVED" || sess.Status == "REJECTED" {
+						s.broadcastEvent("SESSION_DECIDED", sess.SessionId, sess)
+					} else {
+						s.broadcastEvent("SESSION_REASSIGNED", sess.SessionId, sess)
+					}
+				}
+			}
 		}
 	}
 }
