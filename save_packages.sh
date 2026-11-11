@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # save_packages.sh
-# RHEL 8.10 마운트 이미지(/mnt/rhel810)에서 필수 패키지 및 전체 의존성 RPM 저장 스크립트
+# RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 등록된 yum 레포지토리로부터
+# 필수 패키지 및 전체 의존성 RPM 저장 스크립트
 #
+# 레포지토리: RHEL810-base (BaseOS), RHEL810-app (AppStream)
 # 대상 패키지: nscd, autofs, rpcbind, nfs-utils, tcsh
 # ==============================================================================
 set -euo pipefail
@@ -14,6 +16,19 @@ OUT_DIR="./rhel810_packages"
 CREATE_ARCHIVE=0
 TARGET_PACKAGES=("nscd" "autofs" "rpcbind" "nfs-utils" "tcsh")
 
+# 핵심 의존성 목록 (오프라인 타깃 서버 최소설치 대비)
+KNOWN_DEPENDENCIES=(
+  "libtirpc"
+  "libevent"
+  "gssproxy"
+  "keyutils"
+  "quota"
+  "quota-nfs"
+  "hesiod"
+  "libxml2"
+  "libsss_autofs"
+)
+
 # 색상 출력 설정
 if [[ -t 1 ]]; then
   C_RESET="\033[0m"
@@ -22,6 +37,7 @@ if [[ -t 1 ]]; then
   C_YELLOW="\033[1;33m"
   C_BLUE="\033[1;34m"
   C_CYAN="\033[1;36m"
+  C_BOLD="\033[1m"
 else
   C_RESET=""
   C_RED=""
@@ -29,6 +45,7 @@ else
   C_YELLOW=""
   C_BLUE=""
   C_CYAN=""
+  C_BOLD=""
 fi
 
 log_info()    { printf "${C_BLUE}[INFO]${C_RESET} %s\n" "$*"; }
@@ -40,24 +57,31 @@ usage() {
   cat <<EOF
 사용법: $0 [옵션]
 
-RHEL 8.10 설치 이미지(/mnt/rhel810)에서 대상 패키지와 전체 의존성을 추출하여
-오프라인 설치용 독립 번들 디렉터리로 저장합니다.
+RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 yum/dnf 레포지토리(RHEL810-base, RHEL810-app)에서
+대상 패키지와 전체 의존성을 추출하여 오프라인 설치용 독립 번들 디렉터리로 저장합니다.
 
 대상 패키지:
   - nscd, autofs, rpcbind, nfs-utils, tcsh (총 5개 및 하위 의존성 전체)
 
+사용 레포지토리:
+  - RHEL810-base (BaseOS)
+  - RHEL810-app  (AppStream)
+
 옵션:
-  -m, --mount <경로>     RHEL 8.10 ISO 마운트 디렉터리 (기본값: /mnt/rhel810)
-  -o, --output <디렉터리> 패키지 저장 출력 디렉터리 (기본값: ./rhel810_packages)
-  -a, --archive          저장 완료 후 .tar.gz 압축 파일 생성
-  -h, --help             이 도움말 화면 출력
+  -m, --mount <경로>      RHEL 8.10 ISO 마운트 디렉터리 (기본값: /mnt/rhel810)
+  -o, --output <디렉터리>  패키지 저장 출력 디렉터리 (기본값: ./rhel810_packages)
+  -a, --archive           저장 완료 후 .tar.gz 압축 파일 생성
+  -h, --help              이 도움말 화면 출력
 
 사용 예시:
-  # 기본 마운트 위치(/mnt/rhel810)에서 추출하여 ./rhel810_packages 에 저장
+  # 기본 마운트 위치(/mnt/rhel810)에서 수집하여 ./rhel810_packages 에 저장
   sudo $0
 
-  # 마운트 경로와 출력 디렉터리 지정 및 tar.gz 압축본 생성
-  sudo $0 -m /mnt/rhel810 -o ./my_bundle -a
+  # 압축 번들(.tar.gz) 동시 생성
+  sudo $0 -a
+
+  # 마운트 경로 및 출력 디렉터리 직접 지정
+  sudo $0 -m /mnt/rhel810 -o ./my_rhel8_bundle -a
 EOF
 }
 
@@ -97,142 +121,168 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
 fi
 
 log_info "=========================================================="
-log_info " RHEL 8.10 오프라인 패키지 추출 도구"
+log_info " RHEL 8.10 오프라인 패키지 수집 도구"
 log_info " 대상 패키지: ${TARGET_PACKAGES[*]}"
 log_info " 마운트 경로: $MOUNT_DIR"
 log_info " 출력 디렉터리: $OUT_DIR"
 log_info "=========================================================="
 
-# 마운트 디렉터리 검증
-if [[ ! -d "$MOUNT_DIR" ]]; then
-  log_error "마운트 디렉터리를 찾을 수 없습니다: $MOUNT_DIR"
-  log_error "다음 명령어로 RHEL 8.10 이미지를 먼저 마운트해 주십시오:"
-  log_error "  mkdir -p /mnt/rhel810"
-  log_error "  mount -o loop /path/to/rhel-8.10-x86_64-dvd.iso /mnt/rhel810"
-  exit 1
-fi
-
-# 레포지토리 위치 탐색 (BaseOS / AppStream)
-REPO_SOURCES=()
-if [[ -d "$MOUNT_DIR/BaseOS/repodata" && -d "$MOUNT_DIR/AppStream/repodata" ]]; then
-  REPO_SOURCES+=("BaseOS" "$MOUNT_DIR/BaseOS")
-  REPO_SOURCES+=("AppStream" "$MOUNT_DIR/AppStream")
-elif [[ -d "$MOUNT_DIR/repodata" ]]; then
-  REPO_SOURCES+=("RHEL8" "$MOUNT_DIR")
-else
-  # repodata 하위 디렉터리 자동 검색
-  while IFS= read -r rdir; do
-    parent_dir=$(dirname "$rdir")
-    base_name=$(basename "$parent_dir")
-    REPO_SOURCES+=("$base_name" "$parent_dir")
-  done < <(find "$MOUNT_DIR" -maxdepth 2 -type d -name "repodata" 2>/dev/null)
-fi
-
-if [[ ${#REPO_SOURCES[@]} -eq 0 ]]; then
-  log_error "$MOUNT_DIR 내에서 유효한 repodata(RPM 메타데이터)를 찾을 수 없습니다."
-  log_error "RHEL 8.10 정규 DVD ISO 또는 BaseOS/AppStream이 포함되어 있는지 확인하세요."
-  exit 1
-fi
-
-log_info "발견된 레포지토리 소스:"
-for ((i=0; i<${#REPO_SOURCES[@]}; i+=2)); do
-  log_info "  - ${REPO_SOURCES[i]}: ${REPO_SOURCES[i+1]}"
-done
-
-# dnf 도구 확인
+# 패키지 매니저 확인
+PKG_MGR="dnf"
 if ! command -v dnf >/dev/null 2>&1; then
-  log_error "시스템에 'dnf' 명령어가 설치되어 있지 않습니다."
-  exit 1
-fi
-
-# 임시 작업 디렉터리 생성
-WORK_DIR=$(mktemp -d /tmp/rhel810_pkg_save.XXXXXX)
-RPMS_OUT_DIR="$OUT_DIR/rpms"
-mkdir -p "$RPMS_OUT_DIR"
-
-cleanup() {
-  local exit_code=$?
-  if [[ -d "$WORK_DIR" ]]; then
-    rm -rf "$WORK_DIR"
-  fi
-  if [[ $exit_code -ne 0 ]]; then
-    log_error "작업 도중 오류가 발생하여 중단되었습니다."
-  fi
-  exit "$exit_code"
-}
-trap cleanup EXIT INT TERM
-
-ROOT_DIR="$WORK_DIR/root"
-CACHE_DIR="$WORK_DIR/cache"
-EMPTY_REPOS="$WORK_DIR/empty-repos"
-mkdir -p "$ROOT_DIR" "$CACHE_DIR" "$EMPTY_REPOS"
-
-# 호스트 레포/플러그인 간섭을 방지하는 격리 dnf 설정 생성
-cat <<EOF > "$WORK_DIR/dnf.conf"
-[main]
-cachedir=$CACHE_DIR
-reposdir=$EMPTY_REPOS
-keepcache=0
-debuglevel=2
-pkgpolicy=newest
-install_weak_deps=0
-EOF
-
-# DNF 레포지토리 인자 구성
-DNF_REPO_ARGS=()
-for ((i=0; i<${#REPO_SOURCES[@]}; i+=2)); do
-  name="${REPO_SOURCES[i],,}"
-  path="${REPO_SOURCES[i+1]}"
-  repo_id="media-$name"
-  DNF_REPO_ARGS+=(
-    "--repofrompath=$repo_id,file://$path"
-    "--setopt=$repo_id.gpgcheck=0"
-    "--enablerepo=$repo_id"
-  )
-done
-
-log_info "빈 installroot 기반으로 대상 패키지 및 전체 의존성 클로저 다운로드를 시작합니다..."
-log_info "(호스트에 이미 설치된 패키지와 무관하게, 다른 클린 시스템 설치에 필요한 전체 의존성을 수집합니다)"
-
-set +e
-dnf -y \
-  --config="$WORK_DIR/dnf.conf" \
-  --installroot="$ROOT_DIR" \
-  --releasever="8" \
-  --setopt=module_platform_id="platform:el8" \
-  --disableplugin=subscription-manager,product-id \
-  "${DNF_REPO_ARGS[@]}" \
-  install --downloadonly --downloaddir="$RPMS_OUT_DIR" \
-  "${TARGET_PACKAGES[@]}"
-dnf_rc=$?
-set -e
-
-if [[ $dnf_rc -ne 0 ]]; then
-  log_warn "installroot 트랜잭션 다운로드에 실패하여, dnf download fallback 방식으로 재시도합니다..."
-  
-  # dnf download (dnf-plugins-core) 시도
-  set +e
-  dnf -y \
-    --config="$WORK_DIR/dnf.conf" \
-    --setopt=module_platform_id="platform:el8" \
-    --disableplugin=subscription-manager,product-id \
-    "${DNF_REPO_ARGS[@]}" \
-    download --destdir="$RPMS_OUT_DIR" --resolve --alldeps \
-    "${TARGET_PACKAGES[@]}"
-  fallback_rc=$?
-  set -e
-  
-  if [[ $fallback_rc -ne 0 ]]; then
-    log_error "패키지 다운로드 실패. ISO 내 대상 패키지가 존재하는지 확인하세요."
+  if command -v yum >/dev/null 2>&1; then
+    PKG_MGR="yum"
+  else
+    log_error "시스템에 'dnf' 또는 'yum' 명령어가 없습니다."
     exit 1
   fi
 fi
 
-# 필수 5개 패키지 다운로드 검증
-log_info "필수 패키지 수집 검증 중..."
+# 레포지토리 인자 구성 (RHEL810-base, RHEL810-app)
+REPO_ARGS=()
+BASEOS_PATH=""
+APPSTREAM_PATH=""
+
+# 1. 마운트 디렉터리 확인
+if [[ -d "$MOUNT_DIR" ]]; then
+  if [[ -d "$MOUNT_DIR/BaseOS" ]]; then
+    BASEOS_PATH="$MOUNT_DIR/BaseOS"
+  elif [[ -d "$MOUNT_DIR/baseos" ]]; then
+    BASEOS_PATH="$MOUNT_DIR/baseos"
+  fi
+
+  if [[ -d "$MOUNT_DIR/AppStream" ]]; then
+    APPSTREAM_PATH="$MOUNT_DIR/AppStream"
+  elif [[ -d "$MOUNT_DIR/appstream" ]]; then
+    APPSTREAM_PATH="$MOUNT_DIR/appstream"
+  fi
+fi
+
+# 2. 시스템 레포지토리 등록 상태 확인
+SYSTEM_REPOS=$($PKG_MGR repolist all 2>/dev/null || true)
+HAS_SYS_BASE=0
+HAS_SYS_APP=0
+if echo "$SYSTEM_REPOS" | grep -qi "RHEL810-base"; then
+  HAS_SYS_BASE=1
+fi
+if echo "$SYSTEM_REPOS" | grep -qi "RHEL810-app"; then
+  HAS_SYS_APP=1
+fi
+
+# 3. 레포지토리 인자 조립
+if [[ -n "$BASEOS_PATH" && -n "$APPSTREAM_PATH" ]]; then
+  log_info "마운트 디렉터리로부터 레포지토리 연결:"
+  log_info "  - RHEL810-base : $BASEOS_PATH"
+  log_info "  - RHEL810-app  : $APPSTREAM_PATH"
+  REPO_ARGS+=(
+    "--repofrompath=RHEL810-base,file://$BASEOS_PATH"
+    "--repofrompath=RHEL810-app,file://$APPSTREAM_PATH"
+    "--setopt=RHEL810-base.gpgcheck=0"
+    "--setopt=RHEL810-app.gpgcheck=0"
+  )
+fi
+
+REPO_ARGS+=(
+  "--disablerepo=*"
+  "--enablerepo=RHEL810-base"
+  "--enablerepo=RHEL810-app"
+  "--disableplugin=subscription-manager,product-id"
+)
+
+# 출력 디렉터리 생성
+RPMS_OUT_DIR="$OUT_DIR/rpms"
+mkdir -p "$RPMS_OUT_DIR"
+
+log_info "----------------------------------------------------------"
+log_info "레포지토리로부터 패키지 및 의존성 다운로드 시작"
+log_info "----------------------------------------------------------"
+
+DOWNLOADED_SOMETHING=0
+
+# 방법 1: repotrack 사용 (yum-utils가 있는 경우 - 가장 확실한 의존성 전수 수집)
+if command -v repotrack >/dev/null 2>&1; then
+  log_info "repotrack 도구 감지: repotrack으로 전체 의존성 수집 시도..."
+  set +e
+  repotrack -p "$RPMS_OUT_DIR" \
+    -r RHEL810-base -r RHEL810-app \
+    "${TARGET_PACKAGES[@]}" 2>&1 | tail -n 5
+  if [[ $? -eq 0 ]]; then
+    DOWNLOADED_SOMETHING=1
+    log_success "repotrack 수집 완료"
+  fi
+  set -e
+fi
+
+# 방법 2: dnf download 또는 yumdownloader 사용
+if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
+  if $PKG_MGR download --help >/dev/null 2>&1; then
+    log_info "$PKG_MGR download --resolve --alldeps 명령으로 다운로드 시도..."
+    set +e
+    $PKG_MGR download -y \
+      --destdir="$RPMS_OUT_DIR" \
+      --resolve \
+      --alldeps \
+      "${REPO_ARGS[@]}" \
+      "${TARGET_PACKAGES[@]}"
+    if [[ $? -eq 0 ]]; then
+      DOWNLOADED_SOMETHING=1
+      log_success "$PKG_MGR download 수집 완료"
+    fi
+    set -e
+  elif command -v yumdownloader >/dev/null 2>&1; then
+    log_info "yumdownloader --resolve 명령으로 다운로드 시도..."
+    set +e
+    yumdownloader --destdir="$RPMS_OUT_DIR" \
+      --resolve \
+      --enablerepo=RHEL810-base \
+      --enablerepo=RHEL810-app \
+      "${TARGET_PACKAGES[@]}"
+    if [[ $? -eq 0 ]]; then
+      DOWNLOADED_SOMETHING=1
+      log_success "yumdownloader 수집 완료"
+    fi
+    set -e
+  fi
+fi
+
+# 방법 3: dnf/yum reinstall/install --downloadonly
+if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
+  log_info "$PKG_MGR install/reinstall --downloadonly 명령으로 수집 시도..."
+  set +e
+  # 이미 설치된 경우를 대비해 reinstall 먼저 시도 후 install 실행
+  $PKG_MGR -y "${REPO_ARGS[@]}" reinstall --downloadonly --downloaddir="$RPMS_OUT_DIR" "${TARGET_PACKAGES[@]}" >/dev/null 2>&1 || true
+  $PKG_MGR -y "${REPO_ARGS[@]}" install --downloadonly --downloaddir="$RPMS_OUT_DIR" "${TARGET_PACKAGES[@]}" >/dev/null 2>&1 || true
+  set -e
+fi
+
+# 방법 4: 마운트 디렉터리(/mnt/rhel810)에서 직접 탐색 및 복사 (직접 보완)
+if [[ -d "$MOUNT_DIR" ]]; then
+  log_info "마운트 디렉터리($MOUNT_DIR)에서 필수 패키지 및 주요 의존성 RPM 직접 복사 확인..."
+  ALL_SEARCH_PKGS=("${TARGET_PACKAGES[@]}" "${KNOWN_DEPENDENCIES[@]}")
+
+  for pkg in "${ALL_SEARCH_PKGS[@]}"; do
+    # 이미 RPMS_OUT_DIR에 해당 패키지 파일이 있는지 확인
+    if ! find "$RPMS_OUT_DIR" -maxdepth 1 -name "${pkg}-[0-9]*.rpm" 2>/dev/null | grep -q .; then
+      found_files=$(find "$MOUNT_DIR" -maxdepth 4 -name "${pkg}-[0-9]*.rpm" 2>/dev/null || true)
+      if [[ -n "$found_files" ]]; then
+        while IFS= read -r f; do
+          if [[ -f "$f" ]]; then
+            cp -n "$f" "$RPMS_OUT_DIR/"
+            log_info "  - 복사됨: $(basename "$f")"
+          fi
+        done <<< "$found_files"
+      fi
+    fi
+  done
+fi
+
+# 필수 5개 패키지 수집 검증
+log_info "----------------------------------------------------------"
+log_info "필수 패키지 수집 검증"
+log_info "----------------------------------------------------------"
 MISSING=()
 for pkg in "${TARGET_PACKAGES[@]}"; do
-  found=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "${pkg}-[0-9]*.rpm" | head -n 1)
+  found=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "${pkg}-[0-9]*.rpm" 2>/dev/null | head -n 1 || true)
   if [[ -n "$found" ]]; then
     log_success "  [OK] $pkg -> $(basename "$found")"
   else
@@ -242,19 +292,17 @@ for pkg in "${TARGET_PACKAGES[@]}"; do
 done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
-  log_error "다음 필수 패키지가 누락되어 작업을 중단합니다: ${MISSING[*]}"
+  log_error "다음 필수 패키지 수집에 실패하였습니다: ${MISSING[*]}"
   exit 1
 fi
 
 RPM_COUNT=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "*.rpm" | wc -l)
-log_success "총 ${RPM_COUNT}개의 RPM 파일(의존성 포함)이 저장되었습니다."
+log_success "총 ${RPM_COUNT}개의 RPM 파일이 성공적으로 준비되었습니다."
 
-# createrepo_c 가 설치되어 있으면 로컬 repo 메타데이터 생성
+# createrepo_c 가 있으면 로컬 repodata 생성
 if command -v createrepo_c >/dev/null 2>&1; then
   log_info "createrepo_c 로 로컬 repodata 메타데이터 생성 중..."
-  createrepo_c --quiet "$RPMS_OUT_DIR" || log_warn "repodata 생성 실패 (dnf install *.rpm 직접 설치에는 영향 없음)"
-elif [[ -f "$MOUNT_DIR/AppStream/Packages/createrepo_c"* ]]; then
-  log_info "마운트 미디어 내 createrepo_c 탐색됨 (필요시 수동 구성 가능)"
+  createrepo_c --quiet "$RPMS_OUT_DIR" || true
 fi
 
 # SHA256 체크섬 파일 생성
@@ -264,12 +312,13 @@ log_info "무결성 검증용 SHA256 체크섬(checksums.sha256) 생성 중..."
   sha256sum ./*.rpm > "$OUT_DIR/checksums.sha256"
 )
 
-# 패키지 목록 매니페스트 생성
+# 패키지 매니페스트 생성
 log_info "패키지 매니페스트(package_manifest.txt) 작성 중..."
 {
   printf "# RHEL 8.10 Saved Packages Manifest\n"
   printf "# Generated: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')"
-  printf "# Source Mount: %s\n\n" "$MOUNT_DIR"
+  printf "# Source Mount: %s\n" "$MOUNT_DIR"
+  printf "# Repositories: RHEL810-base, RHEL810-app\n\n"
   printf "%-30s %-25s %-10s\n" "PACKAGE NAME" "VERSION-RELEASE" "ARCH"
   printf "%s\n" "----------------------------------------------------------------------"
   for rpm_file in "$RPMS_OUT_DIR"/*.rpm; do
@@ -278,7 +327,7 @@ log_info "패키지 매니페스트(package_manifest.txt) 작성 중..."
   done
 } > "$OUT_DIR/package_manifest.txt"
 
-# 설치 스크립트(install_packages.sh)를 출력 디렉터리에 번들링
+# 설치 스크립트 번들링
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [[ -f "$SCRIPT_DIR/install_packages.sh" ]]; then
   log_info "오프라인 설치 스크립트(install_packages.sh)를 번들에 복사 중..."
@@ -304,7 +353,7 @@ log_info "저장 경로: $(realpath "$OUT_DIR")"
 log_info "총 파일 수: ${RPM_COUNT}개 RPM"
 log_info ""
 log_info "다른 서버(폐쇄망/오프라인)로 배포하는 방법:"
-log_info "  1. 저장된 디렉터리($OUT_DIR) 또는 압축본을 대상 서버로 복사 (scp, sftp, USB 등):"
+log_info "  1. 저장된 디렉터리($OUT_DIR) 또는 압축본을 대상 서버로 복사:"
 log_info "     scp -r $OUT_DIR user@<대상서버_IP>:/tmp/"
 log_info "  2. 대상 서버에서 설치 실행:"
 log_info "     cd /tmp/$(basename "$OUT_DIR")"

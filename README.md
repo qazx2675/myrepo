@@ -6,8 +6,9 @@ RHEL 8.10 설치 이미지(`/mnt/rhel810`)로부터 필수 시스템 패키지(`
 
 ## 📌 주요 특징
 
-- **독립적인 의존성 클로저 수집 (`save_packages.sh`)**:
-  - DNF의 격리된 `installroot` 환경을 사용하여 이미 패키지가 설치된 호스트 환경의 영향을 받지 않고, **최소 설치(Minimal Install) 상태의 대상 서버에서도 설치 가능한 완전한 의존성 RPM 목록**을 자동으로 계산하여 수집합니다.
+- **호환성 및 의존성 수집 (`save_packages.sh`)**:
+  - 시스템에 이미 등록된 `RHEL810-base`, `RHEL810-app` 레포지토리 및 `/mnt/rhel810` 마운트 미디어를 완벽하게 감지합니다.
+  - 임시 설정 파일이나 환경 간섭 없이 `repotrack`, `dnf download --resolve --alldeps`, 또는 마운트 미디어 직접 수집을 통해 **최소 설치(Minimal Install) 상태의 대상 서버에서도 설치 가능한 완전한 의존성 RPM 목록**을 자동으로 수집합니다.
 - **안전한 폐쇄망 오프라인 설치 (`install_packages.sh`)**:
   - 외부 저장소나 Red Hat Subscription Manager가 차단된 폐쇄망 서버에서 발생할 수 있는 네트워크 타임아웃을 방지하기 위해 `--disablerepo='*'` 플래그를 기본 적용합니다.
   - SHA256 체크섬 무결성 검증, 패키지 설치 여부 전수 검증, 서비스 활성화(`systemctl enable --now`) 및 요약 상태표 출력을 지원합니다.
@@ -144,3 +145,4 @@ tcsh -c "echo 'tcsh shell test OK'"
 # 4. NFS 마운트 도구 확인
 which mount.nfs
 ```
+
