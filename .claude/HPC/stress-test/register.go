@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ssh/scp 실행 파일 (테스트에서 가짜로 바꾼다)
@@ -92,13 +93,60 @@ func inventoryDeleteCmd(user string) string {
 	return "bash /root/server/delhost_" + user
 }
 
-// inventoryDelete 는 conf 의 inventory_delete_host 에서 삭제 스크립트를 실행한다. 값이 비면 아무것도 하지 않는다.
-// 실행 한 번에 한 번, 첫 yaml 등록 전에 부른다.
+// 삭제 확인에서 "삭제 전과 같음" 일 때 다시 조회하며 기다리는 최대 시간.
+const deleteCheckWait = 30 * time.Second
+
+// inventoryHostSet 은 인벤토리 호스트 목록에서 exclude 를 빼고 소문자 키 → 원래 이름 맵으로 만든다.
+func inventoryHostSet(list, exclude []string) map[string]string {
+	ex := map[string]bool{}
+	for _, h := range exclude {
+		ex[strings.ToLower(strings.TrimSpace(h))] = true
+	}
+	m := map[string]string{}
+	for _, h := range list {
+		if k := strings.ToLower(strings.TrimSpace(h)); k != "" && !ex[k] {
+			m[k] = h
+		}
+	}
+	return m
+}
+
+func sortedNames(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for _, h := range m {
+		out = append(out, h)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// readInventoryHosts 는 등록(register)·yamlState 와 같은 인벤토리의 호스트 목록을 읽는다.
+func (a *app) readInventoryHosts() ([]string, error) {
+	st, err := a.client.yamlState(a.cfg)
+	if err != nil {
+		return nil, err
+	}
+	return st.Hosts, nil
+}
+
+// inventoryDelete 는 conf 의 inventory_delete_host 에서 삭제 스크립트를 실행하고, 인벤토리가 실제로 비었는지 확인한다.
+// 값이 비면 아무것도 하지 않는다(조회도 안 함). 실행 한 번에 한 번, 첫 yaml 등록 전에만 부른다.
+// 확인은 삭제와 첫 등록 사이에서만 한다 (등록 뒤에는 같은 호스트가 다시 들어와 삭제 전과 같을 수 있으므로 register 는 쓰지 않는다).
 func (a *app) inventoryDelete() error {
 	host := strings.TrimSpace(a.cfg.InventoryDeleteHost)
 	if host == "" {
 		return nil
 	}
+	unverified := func(when string, err error) error {
+		appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete_check status=unverified error=%q", a.user, when+": "+err.Error()))
+		return fmt.Errorf("인벤토리 삭제 확인 불가 (%s 호스트 조회 실패): %v", when, err)
+	}
+	beforeRaw, err := a.readInventoryHosts()
+	if err != nil {
+		return unverified("삭제 전", err)
+	}
+	before := inventoryHostSet(beforeRaw, a.cfg.InventoryMatchExclude)
+
 	remote := inventoryDeleteCmd(a.user)
 	a.logf("%s 인벤토리 삭제: ssh %s \"%s\"", markInfo, host, remote)
 	if err := runCmd(sshBin, "-o", "BatchMode=yes", host, remote); err != nil {
@@ -107,7 +155,52 @@ func (a *app) inventoryDelete() error {
 	}
 	appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete host=%s status=ok", a.user, host))
 	a.logf("%s 인벤토리 삭제 완료", markOK)
-	return nil
+
+	pass := func(after int) {
+		appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete_check status=ok before=%d after=%d", a.user, len(before), after))
+		a.logf("%s 인벤토리 삭제 확인: 삭제 전 %d대 → 삭제 뒤 %d대", markOK, len(before), after)
+		a.emitDeleteCheck(len(before), after)
+	}
+	if len(before) == 0 {
+		pass(0) // 지울 것이 없었다
+		return nil
+	}
+	interval := a.pollInterval()
+	if interval <= 0 {
+		interval = time.Second
+	}
+	start := nowFn()
+	for {
+		afterRaw, err := a.readInventoryHosts()
+		if err != nil {
+			return unverified("삭제 뒤", err)
+		}
+		after := inventoryHostSet(afterRaw, a.cfg.InventoryMatchExclude)
+		if len(after) == 0 {
+			pass(0)
+			return nil
+		}
+		same := len(after) == len(before)
+		for k := range after {
+			if _, ok := before[k]; !ok {
+				same = false
+			}
+		}
+		if !same {
+			left := strings.Join(sortedNames(after), " ")
+			a.logf("%s 인벤토리 삭제 뒤에도 %d대가 남아 있습니다(삭제 전 %d대): %s — 등록 뒤 완전일치 확인에서 다시 걸러집니다", markWarn, len(after), len(before), left)
+			appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete_check status=warn before=%d after=%d left=%q", a.user, len(before), len(after), left))
+			a.emitDeleteCheck(len(before), len(after))
+			return nil
+		}
+		if nowFn().Sub(start) >= deleteCheckWait {
+			names := strings.Join(sortedNames(after), " ")
+			appendHistory(a.cfg, fmt.Sprintf("user=%s action=inventory_delete_check status=fail before=%d after=%d hosts=%q", a.user, len(before), len(after), names))
+			return fmt.Errorf("인벤토리가 삭제되지 않았습니다 — 삭제 스크립트(ssh %s \"%s\")는 끝났지만 %d초 뒤에도 삭제 전과 같은 %d대가 남아 있습니다: %s",
+				host, remote, int(deleteCheckWait/time.Second), len(after), names)
+		}
+		sleepFn(interval)
+	}
 }
 
 // needRegister 는 등록(launch)할 대상이 하나라도 있는지 알려준다.

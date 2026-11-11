@@ -60,7 +60,7 @@ scn_new() {
 	: > "$S/cc_scenario"
 	export FAKE_MARK_DIR=$S/mark FAKE_CC_STATE=$S/ccstate FAKE_ST_LOG=$S/st.log FAKE_ST_PIDFILE=$S/st.pids
 	export FAKE_CC_LOG=$S/cc.log FAKE_GOSSH_LOG=$S/gossh.log FAKE_GOSSH_SCENARIO=$S/scenario FAKE_CC_SCENARIO=$S/cc_scenario
-	unset FAKE_ST_REBOOT FAKE_ST_EXIT FAKE_ST_DELAY FAKE_ST_BUSY FAKE_ST_BUSY_TIMES FAKE_ST_BUSY_SLEEP BADFIRST FAKE_YML_TAMPER FAKE_YS_EXIT
+	unset FAKE_ST_REBOOT FAKE_ST_EXIT FAKE_ST_DELAY FAKE_ST_BUSY FAKE_ST_BUSY_TIMES FAKE_ST_BUSY_SLEEP BADFIRST FAKE_YML_TAMPER FAKE_YS_EXIT FAKE_ST_EVENTS FAKE_ST_NG_NOTRUN FAKE_ST_NG_NOTRUN_ONCE FAKE_ST_EXCLUDE FAKE_ST_ENV_FAIL FAKE_ST_DELCHECK_FAIL
 	export FAKE_YML_DIR=$S/yml
 	: > "$S/st.log"
 	: > "$S/st.pids"
@@ -182,6 +182,8 @@ st_ns() { # <종류 START|MON|END> <steps> <n번째>
 	awk -v k="$1" -v s="$2" -v n="$3" '$1==k && $2==s {c++; if (c==n) {print $3; exit}}' "$S/st.log"
 }
 
+# ONLY=Y bash test/run_flow_tests.sh : 맨 끝 Y 절(-auto 막힘 대응)만 돌린다(기본은 전부)
+if [ "${ONLY:-}" != Y ]; then
 # ================================================================ A. 전체 흐름
 echo "== A. 전체 흐름 (설정수정 → CPU/stress-ng 분리 → 재부팅 감지 → 모두 O)"
 scn_new A
@@ -695,6 +697,124 @@ XWP=$(tr -d '[:space:]' < "$RUND/worker.pid")
 if wait_for 8 bash -c "! kill -0 $XWP 2> /dev/null"; then ok "X: 워커 종료"; else ng "X: 워커 종료"; fi
 unset FAKE_SSH_LOG
 rm -rf "$XRD"
+fi # ONLY
+
+# ================================================================ Y. -auto 막힘 대응(환경 실패 재시도·CPU 벤더 미인식·stress-ng 미실행 재launch·삭제 확인 중지)
+echo "== Y. -run -auto 막힘 대응 (환경 실패는 시도 안 셈 / 벤더 미인식 즉시 포기 / [결과] notrun 재launch·3회 포기 / 삭제 확인 중지 = 환경 실패)"
+pick_none() { echo s; }
+yauto() { # <폴더 이름> : -auto 로 시작(AUTO_* 는 몇 초 단위, AUTO_LIMIT=$1)
+	(cd "$S" && "$BIN" -run -auto -c "$S/conf" -user tester "$S/hosts" < /dev/null > "$S/start.out" 2> "$S/start.err")
+	return $?
+}
+y_allO() { awk -F'|' '/^$/{exit} NR>1 && ($2!="완료" || $3!="O" || $4!="O" || $5!="O")' "$1/result.txt" 2> /dev/null; }
+y_gave() { grep -c '"gave_up"' "$1/state.json" 2> /dev/null; }
+y_stop() { # <상태폴더> [제한초] 워커가 끝날 때까지 기다린다
+	local p
+	p=$(tr -d '[:space:]' < "$1/worker.pid" 2> /dev/null)
+	[ -n "$p" ] && wait_for "${2:-15}" bash -c "! kill -0 $p 2> /dev/null"
+}
+
+# ---- Y1. 환경 실패 2회: 처음 두 launch 가 오류로 끝나도 시도에 세지 않아 포기 없이 모두 O
+scn_new Y1
+printf '%s\n' h1 h2 h3 h4 > "$S/hosts"
+addscn h1 ok cpu=nolog stress=0
+addscn h2 ok cpu=nolog stress=0
+addscn h3 ok stress=0
+addscn h4 ok
+mkconf "AUTO_CPU_WAIT=3s" "AUTO_CPU_INTERVAL=1s" "AUTO_CPU_MAX=3s" "AUTO_RECHECK=4s" "AUTO_LIMIT=90s"
+export FAKE_ST_ENV_FAIL=2
+yauto
+check "Y1: -run -auto 시작 종료코드 0" 0 "$?"
+RUND=$S/hosts_run
+drive "$RUND" 80 pick_none
+check "Y1: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+check "Y1: 환경 실패로 끝난 launch 2회(ENVFAIL 기록)" 2 "$(nlines "$S/st.log" '^ENVFAIL')"
+has "Y1: 환경 실패(시도 안 셈) 로그, 연속 2회까지" "$RUND/worker.log" '환경 실패\(시도 안 셈\).*연속 2회'
+check "Y1: 포기한 호스트 없음(gave_up 0)" 0 "$(y_gave "$RUND")"
+check "Y1: 모든 호스트 완료|O|O|O" "" "$(y_allO "$RUND")"
+if [ -s "$RUND.asked" ]; then ng "Y1: 질문 없음" "$(cat "$RUND.asked")"; else ok "Y1: 질문 없음"; fi
+y_stop "$RUND" && ok "Y1: 워커 종료" || ng "Y1: 워커 종료"
+
+# ---- Y2. CPU 벤더가 Intel/AMD 가 아닌 호스트: 설정체크 O 이면 CPU 테스트 없이 바로 포기, 나머지는 끝까지
+scn_new Y2
+printf '%s\n' v1 a1 a2 > "$S/hosts"
+addscn v1 ok vendor=other
+addscn a1 ok cpu=nolog stress=0
+addscn a2 ok stress=0
+mkconf "AUTO_CPU_WAIT=3s" "AUTO_CPU_INTERVAL=1s" "AUTO_CPU_MAX=3s" "AUTO_RECHECK=4s" "AUTO_LIMIT=90s"
+yauto
+check "Y2: -run -auto 시작 종료코드 0" 0 "$?"
+RUND=$S/hosts_run
+drive "$RUND" 80 pick_none
+check "Y2: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+has "Y2: v1 포기 사유 CPU 벤더 미인식(state.json)" "$RUND/state.json" '"auto_err": "CPU 벤더 미인식"'
+has "Y2: 포기 단계 CPU" "$RUND/state.json" '"gave_up": "CPU"'
+check "Y2: 포기는 v1 한 대뿐" 1 "$(y_gave "$RUND")"
+has "Y2: 로그에 벤더 미인식 포기 안내" "$RUND/worker.log" 'CPU 벤더가 Intel/AMD 가 아니어서 CPU 테스트 없이 포기 1대: v1'
+check "Y2: CPU 묶음에 v1 은 안 들어감(a1 만)" "a1" "$(st_hosts a)"
+check "Y2: a1·a2 는 완료|O|O|O" "" "$(awk -F'|' '/^$/{exit} $1=="a1" || $1=="a2" {if ($2!="완료" || $3!="O" || $4!="O" || $5!="O") print}' "$RUND/result.txt" 2> /dev/null)"
+has "Y2: result.txt 에 포기 1대" "$RUND/result.txt" '포기 1대$'
+y_stop "$RUND" && ok "Y2: 워커 종료" || ng "Y2: 워커 종료"
+
+# ---- Y3. [결과] notrun: 첫 stress-ng launch 에서 부하가 안 오른 호스트(n1)는 O 가 아니고 다시 launch, 두 번째에 O
+#      (FAKE_ST_NG_NOTRUN_ONCE=1: n1 만 첫 launch 한 번 notrun. 계속 notrun 이면 Y4 처럼 3회 뒤 포기)
+scn_new Y3
+printf '%s\n' n1 n2 > "$S/hosts"
+addscn n1 ok stress=0
+addscn n2 ok stress=0
+mkconf "AUTO_CPU_WAIT=3s" "AUTO_CPU_INTERVAL=1s" "AUTO_CPU_MAX=3s" "AUTO_RECHECK=4s" "AUTO_LIMIT=90s"
+export FAKE_ST_EVENTS=1 FAKE_ST_NG_NOTRUN=n1 FAKE_ST_NG_NOTRUN_ONCE=1
+yauto
+check "Y3: -run -auto 시작 종료코드 0" 0 "$?"
+RUND=$S/hosts_run
+drive "$RUND" 80 pick_none
+check "Y3: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+check "Y3: stress-ng launch 2번(n1,n2 → n1 만 다시)" "n1,n2
+n1" "$(st_hosts b)"
+has "Y3: 첫 감시 끝에 n1 미실행 1대([결과] notrun)" "$RUND/worker.log" 'stress-ng 감시 끝: O 1대\(감시 제외 0대 포함\), 미실행 1대'
+has "Y3: 미실행은 시도 1회로 셈 안내" "$RUND/worker.log" 'stress-ng 미실행\(부하 안 오름, 시도 1회로 셈.*: n1$'
+has "Y3: 두 번째 감시 끝에 O 1대" "$RUND/worker.log" 'stress-ng 감시 끝: O 1대\(감시 제외 0대 포함\), 미실행 0대'
+check "Y3: 포기 없음" 0 "$(y_gave "$RUND")"
+check "Y3: 모든 호스트 완료|O|O|O" "" "$(y_allO "$RUND")"
+y_stop "$RUND" && ok "Y3: 워커 종료" || ng "Y3: 워커 종료"
+
+# ---- Y4. 계속 notrun(ONCE 없음): 3회 launch 뒤 stress-ng 포기, 같은 묶음의 n2 는 O
+scn_new Y4
+printf '%s\n' n1 n2 > "$S/hosts"
+addscn n1 ok stress=0
+addscn n2 ok stress=0
+mkconf "AUTO_CPU_WAIT=3s" "AUTO_CPU_INTERVAL=1s" "AUTO_CPU_MAX=3s" "AUTO_RECHECK=4s" "AUTO_LIMIT=90s"
+export FAKE_ST_EVENTS=1 FAKE_ST_NG_NOTRUN=n1
+yauto
+check "Y4: -run -auto 시작 종료코드 0" 0 "$?"
+RUND=$S/hosts_run
+drive "$RUND" 80 pick_none
+check "Y4: 5단계(완료)까지 진행" 5 "$(top_stage "$RUND")"
+check "Y4: stress-ng launch 3번(n1,n2 → n1 → n1)" "n1,n2
+n1
+n1" "$(st_hosts b)"
+has "Y4: n1 은 stress-ng 3회 뒤 포기" "$RUND/worker.log" 'stress-ng 3회 시도 뒤 포기 1대: n1'
+has "Y4: 포기 단계 stress-ng" "$RUND/state.json" '"gave_up": "stress-ng"'
+check "Y4: 포기는 n1 한 대뿐" 1 "$(y_gave "$RUND")"
+y_stop "$RUND" && ok "Y4: 워커 종료" || ng "Y4: 워커 종료"
+
+# ---- Y5. 인벤토리 삭제 확인 중지(stress-test 종료코드 2, [job]/[감시] 전): 환경 실패라 launch 기록(MON) 없고 포기 없음
+scn_new Y5
+printf '%s\n' d1 d2 > "$S/hosts"
+addscn d1 ok cpu=nolog stress=0
+addscn d2 ok stress=0
+mkconf "AUTO_CPU_WAIT=3s" "AUTO_CPU_INTERVAL=1s" "AUTO_CPU_MAX=3s" "AUTO_RECHECK=4s" "AUTO_LIMIT=15s"
+export FAKE_ST_DELCHECK_FAIL=1 FAKE_ST_EVENTS=1
+yauto
+check "Y5: -run -auto 시작 종료코드 0" 0 "$?"
+RUND=$S/hosts_run
+if wait_for 30 grep -q '^DELCHECKFAIL' "$S/st.log"; then ok "Y5: 삭제 확인 실패로 stress-test 가 launch 전에 중지됨"; else ng "Y5: 삭제 확인 실패로 stress-test 가 launch 전에 중지됨" "$(tail -5 "$RUND/worker.log")"; fi
+y_stop "$RUND" 30 && ok "Y5: AUTO_LIMIT 으로 스스로 끝남(워커 종료)" || ng "Y5: AUTO_LIMIT 으로 스스로 끝남(워커 종료)"
+check "Y5: launch(MON)는 한 번도 없음" 0 "$(nlines "$S/st.log" '^MON')"
+check "Y5: 포기한 호스트 없음(환경 실패)" 0 "$(y_gave "$RUND")"
+has "Y5: 환경 실패(시도 안 셈) 로그" "$RUND/worker.log" '환경 실패\(시도 안 셈\)'
+has "Y5: 삭제 확인 실패 문구가 로그에 남음" "$RUND/worker.log" '인벤토리 삭제 확인 실패'
+unset FAKE_ST_EVENTS FAKE_ST_NG_NOTRUN FAKE_ST_NG_NOTRUN_ONCE FAKE_ST_ENV_FAIL FAKE_ST_DELCHECK_FAIL
 
 echo
 echo "결과: PASS $PASS, FAIL $FAIL"

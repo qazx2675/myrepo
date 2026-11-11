@@ -239,7 +239,7 @@ func (e *realExec) remoteKill(steps string) {
 
 // remoteStressTest 는 목록 파일을 B 로 복사한 뒤 B 에서 stress-test -steps 를 ssh 로 실행한다.
 // stdout 감시 표식·stdin 답은 로컬 실행과 같다. 중지·시간초과면 로컬 ssh 를 끝낸 뒤 B 의 stress-test 에도 SIGTERM 을 보낸다.
-func (e *realExec) remoteStressTest(steps, listFile, end string, launched func(), registered func(yml string, hosts []string), busy func(msg string) string) (int, error) {
+func (e *realExec) remoteStressTest(steps, listFile, end string, launched func(), registered func(yml string, hosts []string), busy func(msg string) string, ev func(stressEvent)) (int, error) {
 	host := e.conf.StressRemote
 	remoteList := remoteDir(e.user) + "/" + filepath.Base(listFile)
 	if err := e.remoteCopy(listFile, remoteList); err != nil {
@@ -251,7 +251,7 @@ func (e *realExec) remoteStressTest(steps, listFile, end string, launched func()
 		return 2, err
 	}
 	fmt.Fprintf(e.log, "+ %s\n", disp)
-	err = e.watchStress(cmd, launched, registered, busy)
+	err = e.watchStress(cmd, launched, registered, busy, ev)
 	if err == nil {
 		return 0, nil
 	}

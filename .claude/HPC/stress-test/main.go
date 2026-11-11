@@ -63,6 +63,7 @@ type app struct {
 	workDir       string
 	gossh         *gosshRunner
 	interactive   bool
+	batchMode     bool // -batch: new_setup 이 읽는 [제외]/[job]/[결과] 줄을 낸다
 	retry         int
 	ignoreOffline bool // -ignore-offline: 접속불가 호스트도 launch (부하 감시 제외)
 	targets       []*target
@@ -241,6 +242,7 @@ func run(args []string) int {
 		workDir:       workDir,
 		gossh:         &gosshRunner{path: gosshPath, workDir: workDir, log: logf},
 		interactive:   interactive,
+		batchMode:     *batchFlag,
 		retry:         *retryFlag,
 		ignoreOffline: *ignoreOfflineFlag,
 		targets:       targets,
@@ -383,6 +385,7 @@ func (a *app) runStage(stage string) {
 		}
 	}
 	a.logf("\n===== %s 단계: 대상 %d대 =====", stageLabel(stage), len(pending))
+	a.emitExcluded(stage)
 	for round := 0; len(pending) > 0; round++ {
 		var launched []*target
 		for _, b := range a.split(stage, pending) {
@@ -429,6 +432,7 @@ func (a *app) runStage(stage string) {
 			// new_setup 이 "[감시]" 줄로 launch 를 알아보므로 감시 대상이 없어도 한 줄은 낸다 (대화형 화면 갱신 뒤에 찍어 남긴다)
 			a.logf("[감시] %s 감시 제외(접속불가 무시) %d대 — 부하 확인 없이 실행으로 처리", title, len(noMon))
 		}
+		a.emitResult(stage, monList, remaining, noMon)
 		a.logf("%s %s 감시 종료: 실행 %d대, 미실행 %d대, 감시불가 %d대", markInfo, title, len(monList)-len(remaining), len(remaining), len(noMon))
 		appendHistory(a.cfg, fmt.Sprintf("user=%s action=monitor stage=%s round=%d done=%d notrun=%d nomon=%d", a.user, stage, round, len(monList)-len(remaining), len(remaining), len(noMon)))
 		if len(remaining) == 0 || !a.askRetry(len(remaining), round) {
@@ -536,6 +540,7 @@ func (a *app) launchBatch(stage string, b batch, round int) bool {
 		return failAll(label+" launch 실패", err)
 	}
 	a.logf("%s 템플릿 %s(%d) 실행: job %d", markInfo, tmpl.Name, tmpl.ID, job)
+	a.emitJob(stage, job)
 	st, err := a.client.pollJob(job, a.pollInterval(), a.logf)
 	if err != nil {
 		return failAll(fmt.Sprintf("%s 실패(job %d)", label, job), err)

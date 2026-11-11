@@ -27,8 +27,12 @@ import (
 )
 
 const (
-	yamlStateMark  = "[yaml상태] "
-	registeredMark = "[등록] "
+	yamlStateMark   = "[yaml상태] "
+	registeredMark  = "[등록] "
+	excludedMark    = "[제외] "   // -batch: stage=<a|b> hosts=<h1,h2> reason=<접속불가|DNS실패>
+	jobMark         = "[job] "  // -batch: stage=<a|b> id=<AWX job id>
+	resultMark      = "[결과] "   // -batch: stage=<a|b> done=<csv> notrun=<csv> nomon=<csv>
+	deleteCheckMark = "[삭제확인] " // -batch: before=<삭제 전 대수> after=<삭제 뒤 대수> (inventory_match_exclude 호스트 제외)
 )
 
 // yamlState 는 인벤토리 소스의 현재 모습이다.

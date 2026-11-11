@@ -24,6 +24,8 @@ type autoHost struct {
 	cpuAfter     time.Duration // launch 뒤 이만큼 지나면 CPU O(0 = 끝내 O 가 안 됨)
 	load         float64       // Loads 가 낼 1분 부하
 	ngFail       bool          // stress-ng 가 launch 되지 않음
+	vendorX      bool          // CPU 벤더가 Intel/AMD 가 아님(판정 결과 VendorUnknown)
+	cpuLateAt    time.Duration // >0 이면 시작 뒤 이 시각부터 launch 와 상관없이 CPU O(앞 테스트가 늦게 끝남)
 
 	fixes    int
 	launchAt time.Time
@@ -55,6 +57,23 @@ type autoFake struct {
 	qDetail    []string                       // 질문이 떠 있는 동안 본 진행 설명(중복 없이)
 	qTexts     []string                       // 본 질문 문구
 	logb       *strings.Builder               // 워커 로그(runAutoFake 가 채운다)
+
+	// 환경 실패 흉내(auto_env_test.go): StressTest 호출마다 앞에서 하나씩 꺼내 true 면 launch 전에 실행 오류로 끝난다.
+	failPlan []bool
+	fixErrN  int      // 앞의 이 횟수만큼 ConfigFix 가 오류를 낸다(고치지 않음)
+	seenErr  []string // 실패 흉내를 낸 StressTest 호출 때 첫 호스트의 AutoErr
+	seenTry  []int    // 그때 첫 호스트의 CPUTries+NGTries
+
+	// 조용히 남는 호스트 흉내(auto_stuck_test.go)
+	judgeFail []bool            // Judge 호출마다 앞에서 하나씩 꺼내 true 면 오류를 낸다(사건은 남긴다)
+	probeErrN int               // 앞의 이 횟수만큼 Probe 가 오류를 낸다
+	onProbe   func(f *autoFake) // Probe 호출 때(워커 고루틴에서) 부름
+
+	// 인벤토리 사용 중 흉내(auto_busy_test.go): busyN[steps] 번만큼 등록 전에 busy 를 부른다(답 하나마다 하나 줄어든다).
+	// r 이면 다시 확인, 그 밖(x)이면 그 묶음을 중단하고 종료코드 2 로 끝난다.
+	busyN   map[string]int
+	busyAns []string                       // "<steps>=<답>@<분>"
+	onBusy  func(f *autoFake, q *question) // 인벤토리 사용 중 질문이 떠 있는 동안 Sleep 마다 부름(답은 writeAnswer 로)
 }
 
 func (f *autoFake) mins() int { return int(f.now.Sub(f.start) / time.Minute) }
@@ -127,7 +146,13 @@ func (f *autoFake) Sleep(d time.Duration) {
 	if q == nil {
 		return
 	}
-	if q.Kind == "yaml" && f.onQ != nil { // 사람이 답하는 질문은 시험이 답한다
+	handler := f.onQ
+	if q.Kind == "busy" {
+		handler = f.onBusy
+	} else if q.Kind != "yaml" {
+		handler = nil
+	}
+	if handler != nil { // 사람이 답하는 질문은 시험이 답한다
 		f.mu.Lock()
 		if f.qFirst == nil {
 			f.qFirst = map[string]time.Time{}
@@ -140,7 +165,7 @@ func (f *autoFake) Sleep(d time.Duration) {
 			f.qDetail = append(f.qDetail, detail)
 		}
 		f.mu.Unlock()
-		f.onQ(f, q)
+		handler(f, q)
 		return
 	}
 	f.t.Errorf("-auto 에서 질문이 나옴: %s", q.Text)
@@ -150,6 +175,9 @@ func (f *autoFake) Sleep(d time.Duration) {
 func (f *autoFake) up(h *autoHost) bool { return f.now.Sub(f.start) >= h.unreachUntil }
 
 func (f *autoFake) cpuVal(h *autoHost) string {
+	if h.cpuLateAt > 0 && f.now.Sub(f.start) >= h.cpuLateAt {
+		return "O"
+	}
 	if !h.launchAt.IsZero() && h.cpuAfter > 0 && f.now.Sub(h.launchAt) >= h.cpuAfter {
 		return "O"
 	}
@@ -160,12 +188,20 @@ func (f *autoFake) Judge() (*judgeResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.ev("judge", nil)
+	if len(f.judgeFail) > 0 {
+		fail := f.judgeFail[0]
+		f.judgeFail = f.judgeFail[1:]
+		if fail {
+			return nil, fmt.Errorf("gossh 실행 실패")
+		}
+	}
 	jr := &judgeResult{Count: map[string]int{}, CheckCount: map[string]int{}}
 	for _, name := range f.order {
 		h := f.hosts[name]
 		r := hostResult{Host: name, Status: stUnreach, Check: "-", CPU: "-", Stress: "-", HT: "-", OS: "-"}
 		if f.up(h) {
 			r.Status, r.Check, r.CPU, r.Stress, r.HT, r.OS = stDone, h.check, f.cpuVal(h), h.stress, "ON", "4.18"
+			r.VendorUnknown = h.vendorX
 		}
 		jr.Hosts = append(jr.Hosts, r)
 	}
@@ -176,6 +212,10 @@ func (f *autoFake) ConfigFix(hosts []string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.ev("fix", hosts)
+	if f.fixErrN > 0 {
+		f.fixErrN--
+		return fmt.Errorf("config_check 시간초과")
+	}
 	for _, n := range hosts {
 		h := f.hosts[n]
 		h.fixes++
@@ -192,6 +232,39 @@ func (f *autoFake) StressTest(steps, listFile string, hosts []string, end string
 		f.t.Errorf("목록 파일 %s 내용이 대상과 다름: %q / %v", listFile, b, hosts)
 	}
 	f.mu.Lock()
+	if len(f.failPlan) > 0 {
+		fail := f.failPlan[0]
+		f.failPlan = f.failPlan[1:]
+		if fail {
+			steps2 := "ng"
+			if steps == "a" {
+				steps2 = "cpu"
+			}
+			f.ev(steps2, hosts)
+			f.mu.Unlock()
+			f.w.mu.Lock()
+			r := f.w.st.row(hosts[0])
+			ae, tr := r.AutoErr, r.CPUTries+r.NGTries
+			f.w.mu.Unlock()
+			f.mu.Lock()
+			f.seenErr = append(f.seenErr, ae)
+			f.seenTry = append(f.seenTry, tr)
+			f.mu.Unlock()
+			return 255, fmt.Errorf("ssh 접속 실패")
+		}
+	}
+	for f.busyN[steps] > 0 {
+		f.ev("busy", hosts)
+		f.mu.Unlock()
+		ans := busy("템플릿 stress_" + steps + " 의 인벤토리 inv_user1 을 다른 사용자가 쓰는 중")
+		f.mu.Lock()
+		f.busyN[steps]--
+		f.busyAns = append(f.busyAns, fmt.Sprintf("%s=%s@%d", steps, ans, f.mins()))
+		if ans != ansRetry {
+			f.mu.Unlock()
+			return 2, nil
+		}
+	}
 	yml, report := f.register(hosts) // 등록·동기화는 launch 보다 먼저(진짜 stress-test 와 같은 순서)
 	n := f.regSeq
 	f.mu.Unlock()
@@ -233,6 +306,13 @@ func (f *autoFake) Probe(hosts []string) (map[string]probeInfo, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.ev("probe", hosts)
+	if f.onProbe != nil {
+		f.onProbe(f)
+	}
+	if f.probeErrN > 0 {
+		f.probeErrN--
+		return nil, fmt.Errorf("gossh 시간초과")
+	}
 	res := map[string]probeInfo{}
 	for _, n := range hosts {
 		if h := f.hosts[n]; f.up(h) {
@@ -419,7 +499,7 @@ func TestAutoCPUXLoad(t *testing.T) {
 	conf := testConf()
 	conf.AutoLimit = 30 * time.Minute
 	w := runAutoFake(t, f, conf)
-	if got, want := f.pick("loads", "cpu", "probe"), "loads:x,y@0 cpu:x@0 probe:x@50"; got != want {
+	if got, want := f.pick("loads", "cpu", "probe"), "probe:x,y@0 loads:x,y@0 cpu:x@0 probe:x@50"; got != want { // 부하 확인 앞에서 CPU 열도 다시 읽는다(P6)
 		t.Errorf("사건\n기대: %s\n실제: %s", want, got)
 	}
 	if x := w.st.row("x"); x.CPU != "O" || x.CPUTries != 1 {

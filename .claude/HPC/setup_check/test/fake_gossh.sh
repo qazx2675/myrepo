@@ -4,10 +4,11 @@
 #   FAKE_GOSSH_LOG=<파일>       (선택) 받은 호출과 원격 명령을 이어 붙여 기록
 # 시나리오: ok off refused install_disk install_err install_none install_nolog install_retry_off cancel
 # 시나리오 파일 3번째 열 이후(탭/공백 구분)에 key=value 로 ok 장비의 1차 정보수집 출력을 흉내 낸다.
-#   vendor=intel|amd|none  cpu=ok|ng|nolog  stress=1|0  tpc=1|2|none  kernel=<값>  load=<`cat /proc/loadavg` 1분 부하>
+#   vendor=intel|amd|other|none  cpu=ok|ng|nolog  stress=1|0  tpc=1|2|none  kernel=<값>  load=<`cat /proc/loadavg` 1분 부하>
 #   기본: vendor=intel cpu=ok stress=1 tpc=2 kernel=4.18.0-test load=0.10 (load= 는 원격 명령이 cat /proc/loadavg 일 때만 쓰임)
 #   FAKE_MARK_DIR=<폴더>  (선택) cpu_<호스트>/ng_<호스트> 파일이 있으면 그 호스트의 CPU/stress-ng 를 성공으로, reboot_<호스트> 가 있으면
 #   "grep btime" 명령에 다른 부팅 시각을 낸다(-run 시험용).
+#   vendor=other 는 Intel/AMD 가 아닌 벤더(vendor_id : HygonGenuine)를 내고 NS_CPU 표식은 내지 않는다(-auto 가 `CPU 벤더 미인식` 으로 바로 포기).
 #   NS_CPU_INTEL / NS_CPU_AMD 는 받은 원격 명령에 해당 표식이 있을 때만 낸다(진짜 grep 처럼).
 # 호출에 -pm 이 있으면 1차, 없으면 2차로 본다. 진짜 gossh 와 같이 시작할 때 결과 파일 5개를 지우고
 # 내용이 있는 것만 만든다. 호스트 목록은 한 줄에 하나(빈 줄·# 무시, 범위 확장은 흉내 내지 않음).
@@ -85,6 +86,7 @@ info() { # 호스트 [key=value ...]: ok 장비의 1차 정보수집 출력
 	case $vendor in
 		intel) printf '%s: vendor_id\t: GenuineIntel\n' "$h" ;;
 		amd) printf '%s: vendor_id\t: AuthenticAMD\n' "$h" ;;
+		other) printf '%s: vendor_id\t: HygonGenuine\n' "$h" ;;
 	esac
 	if [ "$cpu" = ok ]; then
 		case $vendor in

@@ -134,6 +134,7 @@ type lineWatch struct {
 	busy     func(msg string)
 	regMark  []byte
 	reg      func(rest string)
+	ev       func(line string) // [제외]/[job]/[결과] 줄(머리말 포함, 앞뒤 공백 제거)마다 부른다
 	buf      []byte
 	once     sync.Once
 }
@@ -155,6 +156,9 @@ func (l *lineWatch) Write(p []byte) (int, error) {
 		}
 		if len(l.busyMark) > 0 && bytes.HasPrefix(line, bytes.TrimSpace(l.busyMark)) && l.busy != nil {
 			l.busy(string(bytes.TrimSpace(line[len(bytes.TrimSpace(l.busyMark)):])))
+		}
+		if l.ev != nil && isStressEventLine(line) {
+			l.ev(string(line))
 		}
 		if len(l.regMark) > 0 && bytes.HasPrefix(line, l.regMark) && l.reg != nil {
 			l.reg(string(bytes.TrimSpace(line[len(l.regMark):])))
@@ -200,11 +204,16 @@ func (e *realExec) ConfigFix(hosts []string) error {
 // StressTest 는 stress-test 를 바이너리 폴더에서 실행한다(그 폴더의 ./conf, ./output 이 단독 실행과 같게 쓰이도록).
 // STRESS_REMOTE 가 있으면 B서버에서 ssh 로 실행한다(remote.go).
 func (e *realExec) StressTest(steps, listFile string, hosts []string, end string, launched func(), registered func(yml string, hosts []string), busy func(msg string) string) (int, error) {
+	return e.StressTestEv(steps, listFile, hosts, end, launched, registered, busy, nil)
+}
+
+// StressTestEv 는 StressTest 와 같고, stress-test 가 내는 [제외]/[job]/[결과] 줄을 읽어 ev 로 넘긴다(ev 가 nil 이면 읽지 않는다).
+func (e *realExec) StressTestEv(steps, listFile string, hosts []string, end string, launched func(), registered func(yml string, hosts []string), busy func(msg string) string, ev func(stressEvent)) (int, error) {
 	if e.conf.StressTest == "" {
 		return 2, errors.New("설정 파일의 STRESS_TEST(stress-test 경로)가 비어 있습니다")
 	}
 	if e.conf.StressRemote != "" {
-		return e.remoteStressTest(steps, listFile, end, launched, registered, busy)
+		return e.remoteStressTest(steps, listFile, end, launched, registered, busy, ev)
 	}
 	bin, err := filepath.Abs(e.conf.StressTest)
 	if err != nil {
@@ -228,7 +237,7 @@ func (e *realExec) StressTest(steps, listFile string, hosts []string, end string
 		cmd.Env = append(os.Environ(), "GOSSH="+e.gossh)
 	}
 	fmt.Fprintf(e.log, "+ (cd %s && %s %s)\n", cmd.Dir, bin, strings.Join(args, " "))
-	err = e.watchStress(cmd, launched, registered, busy)
+	err = e.watchStress(cmd, launched, registered, busy, ev)
 	if err == nil {
 		return 0, nil
 	}
@@ -241,14 +250,20 @@ func (e *realExec) StressTest(steps, listFile string, hosts []string, end string
 
 // watchStress 는 stress-test 명령(로컬 또는 ssh)을 STRESS_TIMEOUT 안에 돌리며 stdout 의 감시·등록·인벤토리사용중 줄을 처리한다.
 // stdin 으로 인벤토리 사용 중 질문의 답(r / x)을 넣고, 답을 기다리는 동안은 시간 제한을 멈춘다. runCmdHold 의 오류를 그대로 돌려준다.
-func (e *realExec) watchStress(cmd *exec.Cmd, launched func(), registered func(yml string, hosts []string), busy func(msg string) string) error {
+func (e *realExec) watchStress(cmd *exec.Cmd, launched func(), registered func(yml string, hosts []string), busy func(msg string) string, ev func(stressEvent)) error {
 	// stdin 은 인벤토리 사용 중 질문의 답(r / x)을 넣는 통로. 프로세스가 끝나면 exec 이 닫는다(읽던 쪽은 EOF = 중단).
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
 	hold := make(chan bool, 64) // 질문에 답하는 동안 시간 제한 일시정지(true) / 재개(false)
-	cmd.Stdout = &lineWatch{w: e.log, mark: []byte(stressMonitorMark), fn: launched, regMark: []byte(stressRegisteredMark), reg: func(rest string) {
+	cmd.Stdout = &lineWatch{w: e.log, mark: []byte(stressMonitorMark), fn: launched, ev: func(line string) {
+		if ev != nil {
+			if se, ok := parseStressEvent(line); ok {
+				ev(se)
+			}
+		}
+	}, regMark: []byte(stressRegisteredMark), reg: func(rest string) {
 		if registered != nil {
 			if yml, hs, ok := parseRegistered(rest); ok {
 				registered(yml, hs)
@@ -421,3 +436,151 @@ func (e *realExec) Loads(hosts []string) (map[string]float64, error) {
 	}
 	return parseLoadOutput(out), nil
 }
+
+// stress-test -batch 가 내는 세 줄의 머리말 (stress-test events.go 와 같은 글자).
+//
+//	[제외] stage=a hosts=h1,h2 reason=접속불가|DNS실패   (launch 에서 뺀 호스트, 사유별로 한 줄)
+//	[job] stage=a id=123                                (AWX job 이 만들어진 직후)
+//	[결과] stage=b done=h1 notrun=h3 nomon=h4           (감시 종료 때. 빈 목록은 = 뒤가 빈다)
+//
+// 옛 stress-test 는 이 줄을 내지 않는다. 그러면 아무 이벤트도 오지 않으므로 이전 동작 그대로다.
+const (
+	stressExcludedMark = "[제외]"
+	stressJobMark      = "[job]"
+	stressResultMark   = "[결과]"
+)
+
+// stressEvent 는 세 줄 중 하나를 읽은 값. Kind 는 위 머리말 중 하나다.
+type stressEvent struct {
+	Kind   string   // stressExcludedMark / stressJobMark / stressResultMark
+	Stage  string   // "a"(CPU) 또는 "b"(stress-ng)
+	Hosts  []string // [제외] 의 호스트
+	Reason string   // [제외] 의 사유("접속불가" / "DNS실패")
+	JobID  int      // [job] 의 AWX job id
+	Done   []string // [결과] done
+	NotRun []string // [결과] notrun
+	NoMon  []string // [결과] nomon
+}
+
+func isStressEventLine(line []byte) bool {
+	for _, m := range []string{stressExcludedMark, stressJobMark, stressResultMark} {
+		if bytes.HasPrefix(line, []byte(m)) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseStressEvent 는 한 줄을 읽는다. 세 줄이 아니거나 모양이 틀리면(단계 없음·job id 가 숫자 아님 등) ok=false.
+func parseStressEvent(line string) (stressEvent, bool) {
+	line = strings.TrimSpace(line)
+	for _, kind := range []string{stressExcludedMark, stressJobMark, stressResultMark} {
+		if !strings.HasPrefix(line, kind) {
+			continue
+		}
+		m := kvFields(strings.TrimPrefix(line, kind))
+		ev := stressEvent{Kind: kind, Stage: m["stage"]}
+		if ev.Stage != "a" && ev.Stage != "b" {
+			return stressEvent{}, false
+		}
+		switch kind {
+		case stressExcludedMark:
+			ev.Hosts, ev.Reason = splitHosts(m["hosts"]), m["reason"]
+			if len(ev.Hosts) == 0 || ev.Reason == "" {
+				return stressEvent{}, false
+			}
+		case stressJobMark:
+			id, err := strconv.Atoi(m["id"])
+			if err != nil || id <= 0 {
+				return stressEvent{}, false
+			}
+			ev.JobID = id
+		case stressResultMark:
+			_, d := m["done"]
+			_, n := m["notrun"]
+			_, o := m["nomon"]
+			if !d || !n || !o {
+				return stressEvent{}, false
+			}
+			ev.Done, ev.NotRun, ev.NoMon = splitHosts(m["done"]), splitHosts(m["notrun"]), splitHosts(m["nomon"])
+		}
+		return ev, true
+	}
+	return stressEvent{}, false
+}
+
+// stageEvents 는 한 단계(a/b)에서 지금까지 받은 이벤트를 모은 값이다.
+type stageEvents struct {
+	Excluded []string          // [제외] 로 launch 에서 빠진 호스트
+	Reason   map[string]string // 호스트 → 사유
+	JobSeen  bool              // [job] 줄을 받았다(AWX job 이 만들어졌다)
+	JobID    int               // 마지막 [job] 의 id
+	Result   stressResult      // 마지막 [결과]
+}
+
+// stressResult 는 [결과] 줄의 값. Have 가 false 면 줄을 받지 못한 것이다.
+type stressResult struct {
+	Have   bool
+	Done   []string
+	NotRun []string
+	NoMon  []string
+}
+
+// stressEvents 는 stress-test 한 번 실행 동안의 이벤트를 단계별로 모은다. Add 는 ev 콜백에서, Stage 는 어느 고루틴에서든 부른다.
+type stressEvents struct {
+	mu     sync.Mutex
+	stages map[string]*stageEvents
+}
+
+// Add 는 이벤트 하나를 반영한다. [결과]·[job] 은 마지막 값으로 덮고, [제외] 는 호스트를 모은다.
+func (s *stressEvents) Add(ev stressEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stages == nil {
+		s.stages = map[string]*stageEvents{}
+	}
+	st := s.stages[ev.Stage]
+	if st == nil {
+		st = &stageEvents{Reason: map[string]string{}}
+		s.stages[ev.Stage] = st
+	}
+	switch ev.Kind {
+	case stressExcludedMark:
+		for _, h := range ev.Hosts {
+			if _, ok := st.Reason[h]; !ok {
+				st.Excluded = append(st.Excluded, h)
+			}
+			st.Reason[h] = ev.Reason
+		}
+	case stressJobMark:
+		st.JobSeen, st.JobID = true, ev.JobID
+	case stressResultMark:
+		st.Result = stressResult{Have: true, Done: ev.Done, NotRun: ev.NotRun, NoMon: ev.NoMon}
+	}
+}
+
+// Stage 는 단계("a"/"b")의 지금까지 값을 복사해 돌려준다(받은 것이 없으면 빈 값).
+func (s *stressEvents) Stage(stage string) stageEvents {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.stages[stage]
+	if st == nil {
+		return stageEvents{}
+	}
+	out := *st
+	out.Excluded = append([]string(nil), st.Excluded...)
+	out.Reason = map[string]string{}
+	for k, v := range st.Reason {
+		out.Reason[k] = v
+	}
+	out.Result = stressResult{Have: st.Result.Have, Done: append([]string(nil), st.Result.Done...), NotRun: append([]string(nil), st.Result.NotRun...), NoMon: append([]string(nil), st.Result.NoMon...)}
+	return out
+}
+
+// eventStresser 는 stress-test 이벤트를 받을 수 있는 실행기(realExec)가 함께 구현하는 선택 인터페이스다.
+// 가짜 실행기는 구현하지 않아도 되며, 호출하는 쪽은 `if es, ok := ex.(eventStresser); ok` 로 확인한다.
+type eventStresser interface {
+	StressTestEv(steps, listFile string, hosts []string, end string, launched func(), registered func(yml string, hosts []string), busy func(msg string) string, ev func(stressEvent)) (int, error)
+}
+
+var _ eventStresser = (*realExec)(nil)

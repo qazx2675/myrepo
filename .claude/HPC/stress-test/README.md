@@ -149,6 +149,7 @@ a b c node0003 10.0.0.3 aa:bb:cc:dd:ee:03 eth0 sda sda5 100 8.10 uefi
 3. **인벤토리 삭제**(선택, 실행 한 번에 한 번) — conf 의 `inventory_delete_host` 가 있으면 첫 yaml 등록 전에 `ssh <inventory_delete_host> "bash /root/server/delhost_<user>"` 를 한 번 실행합니다(AWX 01 스크립트의 inventory_delete 와 같음, 비밀번호 없이 접속돼야 함).
    - 값이 비면 건너뜁니다. 등록할 대상이 없을 때(전부 접속불가·DNS실패)도 실행하지 않습니다.
    - 실패하면 등록·launch 를 하지 않고 종료코드 2 로 끝납니다.
+   - **삭제 확인**: 삭제 전에 인벤토리 호스트 목록을 기억해 두었다가 삭제 뒤 목록과 비교합니다(`inventory_match_exclude` 호스트는 양쪽에서 뺌, 대소문자 무시). 삭제 전 0대면 그대로 진행, 삭제 뒤 0대면 진행, 일부만 남으면 경고하고 진행(등록 뒤 완전일치 확인이 잡음), **삭제 전과 같으면 `poll_interval` 간격으로 최대 30초 다시 조회한 뒤 종료코드 2 로 중지**합니다. 조회가 안 되면 "확인 불가" 로 중지합니다. 비교는 삭제와 등록 사이에서만 하므로, 같은 호스트를 다시 등록해 인벤토리가 삭제 전과 같아져도 오탐이 없습니다. 결과는 이력(`action=inventory_delete_check`)에 남고 `-batch` 에서는 `[삭제확인] before=<대수> after=<대수>` 줄이 나옵니다.
    - 묶음·재실행(retry)마다 다시 하지 않습니다. `-inspect`·`-yaml-state` 에서는 실행하지 않습니다.
 4. **등록**(묶음마다, AWX 01 스크립트 방식)
    ```
@@ -334,6 +335,7 @@ stress-test -inspect [-user <u> | -conf <설정파일>] [템플릿 ID/이름 ...
 
 - `-ignore-offline` 이면 `접속불가` 호스트도 대상으로 보고 다른 호스트와 같은 yaml·같은 템플릿 launch 에 넣습니다. 시작할 때 `접속불가 무시: 접속체크에 응답 없는 N대도 launch (부하 감시 제외)` 를 출력합니다. `DNS실패` 호스트는 그대로 제외됩니다.
 - 이 서버가 닿지 못하므로 부하 감시(gossh `cat /proc/loadavg`)에서는 뺍니다. launch(job `successful`)가 끝나면 결과는 `실행(감시불가)`, 비고에 `접속불가 무시 launch (부하 감시 제외)` 가 붙습니다. 재실행 대상이 아니며 `미실행` 으로 세지 않으므로 이 호스트 때문에 종료코드가 1 이 되지 않습니다.
+- `-batch` 에서만 new_setup 이 읽는 줄이 더 있습니다: `[제외] stage=<a|b> hosts=<csv> reason=<접속불가|DNS실패>`(접속체크·DNS 로 launch 에서 뺀 호스트, 단계마다 사유별 한 줄), `[job] stage=<a|b> id=<AWX job id>`(job 생성 직후), `[결과] stage=<a|b> done=<csv> notrun=<csv> nomon=<csv>`(감시가 끝날 때마다), `[삭제확인] before=<N> after=<M>`. 대화형에서는 나오지 않습니다.
 - 감시 대상이 하나도 없어도 `[감시] <단계> 감시 제외(접속불가 무시) N대 — 부하 확인 없이 실행으로 처리` 한 줄을 출력합니다(`new_setup` 이 `[감시]` 줄로 launch 를 알아보므로). 감시할 호스트가 있으면 그 호스트만 기존처럼 감시·재실행합니다.
 - 묶음 launch 가 실패하면 `접속불가` 였던 호스트도 같은 묶음의 다른 호스트와 똑같이 `실패` 가 됩니다.
 

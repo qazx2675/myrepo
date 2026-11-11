@@ -531,6 +531,14 @@ func endFieldNames() string {
 	return strings.Join(p, " ")
 }
 
+// busyQuestion 은 인벤토리 사용 중 질문(r/x)이다. 대화형 busyAsk 와 -auto 의 보류 질문(auto.go askBusy)이 같이 쓴다.
+func busyQuestion(id string, stage int, name, msg string, now time.Time) *question {
+	return &question{ID: id, Stage: stage, Kind: "busy", Asked: now,
+		Text: name + " 테스트: 작업 템플릿의 인벤토리가 DEFAULT 가 아니어서 멈췄습니다(시간 제한은 멈춰 있습니다).\n" + msg +
+			"\n그 인벤토리 사용자가 DEFAULT 로 되돌린 뒤 r(다시 확인), 이 묶음을 포기하려면 x.",
+		Choices: []choice{{Key: ansRetry, Label: "다시 확인"}, {Key: ansExclude, Label: "이 묶음 중단"}}}
+}
+
 // busyAsk 는 stress-test 가 템플릿 인벤토리 사용 중이라 멈췄을 때(단계는 그대로) r(다시 확인)/x(이 묶음 중단)를 묻고 답을 돌려준다.
 // 질문은 한 번에 하나만 띄운다(다른 프로세스가 걸리면 앞 질문이 끝날 때까지 기다린다). 중지 요청이 오면 x.
 func (w *worker) busyAsk(name, msg string) string {
@@ -546,10 +554,7 @@ func (w *worker) busyAsk(name, msg string) string {
 		id = fmt.Sprintf("q%d", s.QSeq)
 		saved = s.Detail
 		waitDetail = stageName(s.Stage) + " 단계 — " + name + " 템플릿 인벤토리 사용 중, 답을 기다리는 중"
-		s.Question = &question{ID: id, Stage: s.Stage, Kind: "busy", Asked: w.ex.Now(),
-			Text: name + " 테스트: 작업 템플릿의 인벤토리가 DEFAULT 가 아니어서 멈췄습니다(시간 제한은 멈춰 있습니다).\n" + msg +
-				"\n그 인벤토리 사용자가 DEFAULT 로 되돌린 뒤 r(다시 확인), 이 묶음을 포기하려면 x.",
-			Choices: []choice{{Key: ansRetry, Label: "다시 확인"}, {Key: ansExclude, Label: "이 묶음 중단"}}}
+		s.Question = busyQuestion(id, s.Stage, name, msg, w.ex.Now())
 		s.Busy = false
 		s.Detail = waitDetail
 	})
@@ -780,6 +785,7 @@ func (w *worker) apply(s *runState, jr *judgeResult) {
 		r := old[h.Host]
 		r.Host, r.Status, r.Check, r.CPU, r.Stress, r.HT, r.OS = h.Host, h.Status, h.Check, h.CPU, h.Stress, h.HT, h.OS
 		r.Note = w.notes[strings.ToLower(h.Host)]
+		r.VendorX = h.VendorUnknown
 		if r.CPU == "O" {
 			r.CPURetry = false
 		}
