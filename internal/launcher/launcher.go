@@ -55,6 +55,12 @@ func FindBrowser() string {
 			return p
 		}
 	}
+	if lp, err := exec.LookPath("msedge.exe"); err == nil {
+		return lp
+	}
+	if lp, err := exec.LookPath("chrome.exe"); err == nil {
+		return lp
+	}
 	return ""
 }
 
@@ -81,6 +87,7 @@ func Args(appURL, profileDir string) []string {
 		"--disable-features=Translate,msEdgeSidebarV2,BlockInsecurePrivateNetworkRequests",
 		"--disable-renderer-backgrounding",
 		"--disable-background-timer-throttling",
+		"--proxy-bypass-list=<-loopback>",
 	}
 	if dbgPort := os.Getenv("CROSS_CHECKER_DEBUG_PORT"); dbgPort != "" {
 		args = append(args, "--remote-debugging-port="+dbgPort)

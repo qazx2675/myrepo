@@ -2155,8 +2155,13 @@ func main() {
 	defer server.Stop()
 
 	addr := fmt.Sprintf("0.0.0.0:%d", cfg.ListenPort)
-	log.Printf("AWX Host Cross-Checker starting on http://%s (Share: %s, Detected IP: %s)\n",
-		addr, cfg.SharedDir, server.detectedIP)
+	log.Printf("========================================================\n")
+	log.Printf("  AWX Host Cross-Checker 서버 기동 완료\n")
+	log.Printf("  >> 브라우저 접속 주소: http://127.0.0.1:%d/\n", cfg.ListenPort)
+	log.Printf("  >> 감지된 내 PC IP:    %s\n", server.detectedIP)
+	log.Printf("  >> 공유폴더 경로:      %s\n", cfg.SharedDir)
+	log.Printf("  (주의: 0.0.0.0 이 아니라 반드시 127.0.0.1 로 접속해야 합니다)\n")
+	log.Printf("========================================================\n")
 
 	httpServer := &http.Server{
 		Addr:    addr,
@@ -2184,8 +2189,13 @@ func main() {
 
 		go func() {
 			appURL := fmt.Sprintf("http://127.0.0.1:%d/", cfg.ListenPort)
-			// Wait for server to become ready
-			client := &http.Client{Timeout: 500 * time.Millisecond}
+			// Wait for server to become ready using direct localhost connection (bypassing corporate proxy)
+			client := &http.Client{
+				Timeout: 500 * time.Millisecond,
+				Transport: &http.Transport{
+					Proxy: nil,
+				},
+			}
 			for i := 0; i < 30; i++ {
 				time.Sleep(100 * time.Millisecond)
 				resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort))
