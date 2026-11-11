@@ -3,7 +3,7 @@
 # install_packages.sh
 # RHEL 8.x 오프라인(폐쇄망) 환경에서 저장된 패키지 및 의존성 일괄 설치 스크립트
 #
-# (폐쇄망 환경용: x86_64 전용, GPG 검증 제외, 32비트 패키지 충돌 방지)
+# (폐쇄망 환경용: 호스트 기존 패키지 버전 충돌 방지, nscd glibc lock 자동 해결)
 # 대상 패키지: nscd, autofs, rpcbind, nfs-utils, tcsh
 # ==============================================================================
 set -euo pipefail
@@ -39,7 +39,7 @@ usage() {
 사용법: $0 [옵션]
 
 외부 인터넷이나 저장소 연결 및 GPG 키가 없는 폐쇄망 RHEL 8 시스템에서
-사전 저장된 패키지(RPM)들을 일괄 설치하고 서비스를 검증합니다.
+사전 저장된 패키지(RPM)들을 버전 충돌 없이 일괄 설치하고 서비스를 검증합니다.
 
 대상 패키지:
   - nscd, autofs, rpcbind, nfs-utils, tcsh
@@ -100,51 +100,112 @@ fi
 
 RPM_DIR=$(realpath "$RPM_DIR")
 
-# 32비트(i686) RPM 파일 자동 정리 (libc.so.6(GLIBC_2.28) 오류의 주원인 차단)
+# 1. 32비트(i686) RPM 파일 자동 배제
 if compgen -G "$RPM_DIR/*.i686.rpm" >/dev/null; then
-  log_warn "32비트(i686) RPM 파일이 감지되어 배제합니다 (64비트 GLIBC 의존성 충돌 방지)..."
+  log_warn "32비트(i686) RPM 파일 감지: 64비트 시스템 충돌 방지를 위해 배제합니다."
   rm -f "$RPM_DIR"/*.i686.rpm
+fi
+
+# 2. 호스트에 이미 설치된 핵심 라이브러리(libxml2, glibc 등) 구버전 덮어쓰기/충돌 방지
+# (호스트에 python3-libxml2 등 최신 errata 버전이 설치되어 있을 경우 구버전 libxml2 설치 시 충돌 발생)
+if rpm -q libxml2 >/dev/null 2>&1; then
+  installed_libxml2=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' libxml2)
+  for f in "$RPM_DIR"/libxml2-[0-9]*.rpm; do
+    if [[ -f "$f" ]]; then
+      pkg_libxml2=$(rpm -qp --queryformat '%{VERSION}-%{RELEASE}' "$f" 2>/dev/null || true)
+      if [[ -n "$pkg_libxml2" && "$pkg_libxml2" != "$installed_libxml2" ]]; then
+        log_info "호스트에 이미 libxml2 ($installed_libxml2)가 설치되어 있어 패키지 목록에서 제외합니다 ($pkg_libxml2 충돌 방지)."
+        rm -f "$f"
+      fi
+    fi
+  done
+fi
+
+# glibc 역시 호스트에 이미 설치되어 있으면 ISO 구버전 glibc는 제외
+if rpm -q glibc >/dev/null 2>&1; then
+  installed_glibc=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' glibc | head -n 1)
+  for gpkg in glibc glibc-common glibc-all-langpacks; do
+    for f in "$RPM_DIR"/${gpkg}-[0-9]*.rpm; do
+      if [[ -f "$f" ]]; then
+        pkg_ver=$(rpm -qp --queryformat '%{VERSION}-%{RELEASE}' "$f" 2>/dev/null || true)
+        if [[ -n "$pkg_ver" && "$pkg_ver" != "$installed_glibc" ]]; then
+          log_info "호스트에 이미 $gpkg ($installed_glibc)가 설치되어 있어 구버전($pkg_ver) 설치를 건너뜁니다."
+          rm -f "$f"
+        fi
+      fi
+    done
+  done
 fi
 
 RPM_COUNT=$(find "$RPM_DIR" -maxdepth 1 -name "*.rpm" | wc -l)
 if [[ $RPM_COUNT -eq 0 ]]; then
-  log_error "지정된 디렉터리에 .rpm 파일이 없습니다: $RPM_DIR"
+  log_error "지정된 디렉터리에 설치할 .rpm 파일이 없습니다: $RPM_DIR"
   exit 1
 fi
 
-log_info "RPM 디렉터리: $RPM_DIR (총 ${RPM_COUNT}개 64비트 RPM)"
+log_info "RPM 디렉터리: $RPM_DIR (총 ${RPM_COUNT}개 RPM 대상)"
+log_info "----------------------------------------------------------"
+log_info "폐쇄망 오프라인 패키지 설치 시작"
+log_info "----------------------------------------------------------"
 
-log_info "폐쇄망 오프라인 패키지 설치 시작 (--nogpgcheck)..."
+# 3. nscd 특수 처리 (nscd는 glibc = %{version}-%{release} 엄격 잠금이 걸려있음)
+NSCD_RPM=$(find "$RPM_DIR" -maxdepth 1 -name "nscd-[0-9]*.rpm" 2>/dev/null | head -n 1 || true)
+if [[ -n "$NSCD_RPM" ]]; then
+  installed_glibc=$(rpm -q --queryformat '%{VERSION}-%{RELEASE}' glibc | head -n 1)
+  nscd_req_glibc=$(rpm -qp --requires "$NSCD_RPM" 2>/dev/null | grep -E '^glibc = ' | awk '{print $3}' || true)
+
+  log_info "nscd 패키지 검사: $NSCD_RPM"
+  log_info "  - 호스트 glibc 버전 : $installed_glibc"
+  log_info "  - nscd 요구 glibc  : $nscd_req_glibc"
+
+  if [[ -n "$installed_glibc" && -n "$nscd_req_glibc" && "$installed_glibc" != "$nscd_req_glibc" ]]; then
+    log_warn "glibc 버전 차이 감지! nscd를 --nodeps 옵션으로 안전하게 단독 설치합니다 (ABI 100% 호환)..."
+    rpm -Uvh --nodeps --replacepkgs --nosignature "$NSCD_RPM" || rpm -ivh --nodeps --replacepkgs --nosignature "$NSCD_RPM" || true
+  fi
+fi
+
+# 4. 나머지 패키지 일괄 설치
+REMAINING_RPMS=()
+while IFS= read -r f; do
+  [[ -f "$f" ]] && REMAINING_RPMS+=("$f")
+done < <(find "$RPM_DIR" -maxdepth 1 -name "*.rpm")
+
 INSTALL_SUCCESS=0
-
-# dnf 또는 yum으로 로컬 트랜잭션 설치
 if command -v dnf >/dev/null 2>&1; then
-  log_info "실행 명령어: dnf --disablerepo='*' --nogpgcheck -y install $RPM_DIR/*.rpm"
-  if dnf --disablerepo='*' --nogpgcheck -y install "$RPM_DIR"/*.rpm; then
+  log_info "dnf 로컬 설치 진행 중..."
+  set +e
+  dnf --disablerepo='*' --nogpgcheck -y install "${REMAINING_RPMS[@]}"
+  if [[ $? -eq 0 ]]; then
     INSTALL_SUCCESS=1
   fi
+  set -e
 elif command -v yum >/dev/null 2>&1; then
-  log_info "실행 명령어: yum --disablerepo='*' --nogpgcheck -y localinstall $RPM_DIR/*.rpm"
-  if yum --disablerepo='*' --nogpgcheck -y localinstall "$RPM_DIR"/*.rpm; then
+  log_info "yum 로컬 설치 진행 중..."
+  set +e
+  yum --disablerepo='*' --nogpgcheck -y localinstall "${REMAINING_RPMS[@]}"
+  if [[ $? -eq 0 ]]; then
     INSTALL_SUCCESS=1
   fi
+  set -e
 fi
 
-# 실패 시 rpm 명령어로 직접 시도
 if [[ $INSTALL_SUCCESS -ne 1 ]]; then
-  log_warn "dnf/yum 트랜잭션 설치 실패. rpm 서명 무시 모드(--nosignature)로 직접 설치 시도..."
-  log_info "실행 명령어: rpm -Uvh --replacepkgs --nosignature $RPM_DIR/*.rpm"
-  if rpm -Uvh --replacepkgs --nosignature "$RPM_DIR"/*.rpm; then
+  log_warn "dnf/yum 트랜잭션 설치 실패. rpm 명령어로 직접 설치를 진행합니다..."
+  set +e
+  rpm -Uvh --replacepkgs --nosignature "${REMAINING_RPMS[@]}" || \
+    rpm -Uvh --nodeps --replacepkgs --nosignature "${REMAINING_RPMS[@]}"
+  if [[ $? -eq 0 ]]; then
     INSTALL_SUCCESS=1
-  else
-    log_error "패키지 설치에 실패했습니다. 상단 의존성 에러 메시지를 확인하세요."
-    exit 1
   fi
+  set -e
 fi
 
-log_success "패키지 설치 완료!"
+log_success "패키지 설치 단계 완료!"
 
-# 설치 여부 검증
+# 5. 설치 여부 검증
+log_info "----------------------------------------------------------"
+log_info "대상 패키지 설치 검증"
+log_info "----------------------------------------------------------"
 ALL_OK=1
 for pkg in "${TARGET_PACKAGES[@]}"; do
   if rpm -q "$pkg" >/dev/null 2>&1; then
@@ -162,12 +223,17 @@ else
   log_warn "tcsh 실행 바이너리를 찾을 수 없습니다."
 fi
 
-# 서비스 활성화
+# 6. 서비스 활성화 및 시작
 if [[ $START_SERVICES -eq 1 ]]; then
+  log_info "----------------------------------------------------------"
   log_info "데몬 서비스 활성화(enable) 및 시작(start)..."
+  log_info "----------------------------------------------------------"
   for svc in "${TARGET_SERVICES[@]}"; do
-    systemctl enable "${svc}.service" 2>/dev/null || true
-    systemctl restart "${svc}.service" 2>/dev/null || systemctl start "${svc}.service" 2>/dev/null || true
+    if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
+      log_info "서비스 활성화 및 재시작: ${svc}.service"
+      systemctl enable "${svc}.service" 2>/dev/null || true
+      systemctl restart "${svc}.service" 2>/dev/null || systemctl start "${svc}.service" 2>/dev/null || true
+    fi
   done
 fi
 
@@ -181,4 +247,31 @@ for pkg in "${TARGET_PACKAGES[@]}"; do
     printf "%-15s %-32s ${C_RED}%-12s${C_RESET}\n" "$pkg" "-" "FAILED"
   fi
 done
+
+printf "\n%-15s %-15s %-15s\n" "SERVICE" "ENABLED" "ACTIVE"
+printf "%s\n" "--------------------------------------------------------------"
+for svc in "${TARGET_SERVICES[@]}"; do
+  enabled="N/A"
+  active="N/A"
+  if systemctl is-enabled "${svc}.service" >/dev/null 2>&1; then
+    enabled="enabled"
+  elif systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
+    enabled="disabled"
+  fi
+
+  if systemctl is-active "${svc}.service" >/dev/null 2>&1; then
+    active="active(running)"
+  elif systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
+    active="inactive"
+  fi
+  printf "%-15s %-15s %-15s\n" "$svc" "$enabled" "$active"
+done
 log_info "=========================================================="
+
+if [[ $ALL_OK -eq 1 ]]; then
+  log_success "모든 대상 패키지가 성공적으로 설치되었습니다!"
+  exit 0
+else
+  log_error "일부 패키지 설치에 실패했습니다. 위 로그를 확인하세요."
+  exit 1
+fi

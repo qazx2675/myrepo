@@ -16,11 +16,10 @@ OUT_DIR="./rhel810_packages"
 CREATE_ARCHIVE=0
 TARGET_PACKAGES=("nscd" "autofs" "rpcbind" "nfs-utils" "tcsh")
 
-# 핵심 의존성 목록 (glibc 및 nscd 일치 버전, 64비트 라이브러리 포함)
+# 핵심 의존성 목록 (오프라인 타깃 서버 최소설치 대비)
+# ※ libxml2, glibc는 모든 RHEL 8 기본 설치에 포함되어 있으며 호스트의 최신 errata와
+#    충돌(downgrade conflict)을 방지하기 위해 강제 복사 목록에서 제외합니다.
 KNOWN_DEPENDENCIES=(
-  "glibc"
-  "glibc-common"
-  "glibc-all-langpacks"
   "libtirpc"
   "libevent"
   "gssproxy"
@@ -28,7 +27,6 @@ KNOWN_DEPENDENCIES=(
   "quota"
   "quota-nfs"
   "hesiod"
-  "libxml2"
   "libsss_autofs"
 )
 
