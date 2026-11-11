@@ -2155,20 +2155,27 @@ func main() {
 		Headless:                 *headlessFlag,
 	}
 
+	// Determine exe directory for robust relative path resolution (e.g. UNC shares, desktop shortcuts)
+	exeDir := "."
+	if exePath, err := os.Executable(); err == nil {
+		exeDir = filepath.Dir(exePath)
+	}
+
 	// If -share was not explicitly passed, check if config.json or users.json exists in the exe's directory
 	if !isFlagPassed("share") && (cfg.SharedDir == "." || cfg.SharedDir == "") {
-		if exePath, err := os.Executable(); err == nil {
-			exeDir := filepath.Dir(exePath)
-			if _, err := os.Stat(filepath.Join(exeDir, "config.json")); err == nil {
-				cfg.SharedDir = exeDir
-			} else if _, err := os.Stat(filepath.Join(exeDir, "users.json")); err == nil {
-				cfg.SharedDir = exeDir
-			}
+		if _, err := os.Stat(filepath.Join(exeDir, "config.json")); err == nil {
+			cfg.SharedDir = exeDir
+		} else if _, err := os.Stat(filepath.Join(exeDir, "users.json")); err == nil {
+			cfg.SharedDir = exeDir
 		}
 	}
 
-	// Try reading config.json from sharedDir
+	// Try reading config.json from sharedDir or exeDir
 	configPath := filepath.Join(cfg.SharedDir, "config.json")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		configPath = filepath.Join(exeDir, "config.json")
+	}
+
 	if fileBytes, err := os.ReadFile(configPath); err == nil {
 		var fileCfg Config
 		if err := json.Unmarshal(fileBytes, &fileCfg); err == nil {
@@ -2188,6 +2195,11 @@ func main() {
 				cfg.Headless = fileCfg.Headless
 			}
 		}
+	}
+
+	// If cfg.SharedDir is still relative (e.g. "." or empty), resolve it relative to exeDir
+	if !filepath.IsAbs(cfg.SharedDir) && !strings.HasPrefix(cfg.SharedDir, `\\`) {
+		cfg.SharedDir = filepath.Clean(filepath.Join(exeDir, cfg.SharedDir))
 	}
 
 	// Determine if app window should be launched:
@@ -2218,6 +2230,16 @@ func main() {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		// If another instance is already running on this port, bring up the window and exit cleanly
+		client := &http.Client{Timeout: 500 * time.Millisecond, Transport: &http.Transport{Proxy: nil}}
+		if resp, hErr := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort)); hErr == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			log.Printf("이미 포트 %d에서 실행 중입니다. 기존 실행 중인 앱 창을 엽니다.\n", cfg.ListenPort)
+			if shouldOpenApp {
+				_, _ = launcher.Open(fmt.Sprintf("http://127.0.0.1:%d/", cfg.ListenPort))
+			}
+			return
+		}
 		log.Fatalf("포트 바인딩 실패 (포트 %d 이미 사용 중): %v", cfg.ListenPort, err)
 	}
 
