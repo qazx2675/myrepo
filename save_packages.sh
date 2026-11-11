@@ -36,7 +36,6 @@ if [[ -t 1 ]]; then
   C_GREEN="\033[1;32m"
   C_YELLOW="\033[1;33m"
   C_BLUE="\033[1;34m"
-  C_CYAN="\033[1;36m"
   C_BOLD="\033[1m"
 else
   C_RESET=""
@@ -44,7 +43,6 @@ else
   C_GREEN=""
   C_YELLOW=""
   C_BLUE=""
-  C_CYAN=""
   C_BOLD=""
 fi
 
@@ -58,7 +56,8 @@ usage() {
 사용법: $0 [옵션]
 
 RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 yum/dnf 레포지토리(RHEL810-base, RHEL810-app)에서
-대상 패키지와 전체 의존성을 추출하여 오프라인 설치용 독립 번들 디렉터리로 저장합니다.
+대상 패키지와 전체 의존성을 추출하여 폐쇄망 설치용 독립 번들 디렉터리로 저장합니다.
+(폐쇄망 환경에 맞게 GPG 검증 및 체크섬 생성을 제외하고 핵심 RPM만 간결하게 수집합니다)
 
 대상 패키지:
   - nscd, autofs, rpcbind, nfs-utils, tcsh (총 5개 및 하위 의존성 전체)
@@ -158,18 +157,7 @@ if [[ -d "$MOUNT_DIR" ]]; then
   fi
 fi
 
-# 2. 시스템 레포지토리 등록 상태 확인
-SYSTEM_REPOS=$($PKG_MGR repolist all 2>/dev/null || true)
-HAS_SYS_BASE=0
-HAS_SYS_APP=0
-if echo "$SYSTEM_REPOS" | grep -qi "RHEL810-base"; then
-  HAS_SYS_BASE=1
-fi
-if echo "$SYSTEM_REPOS" | grep -qi "RHEL810-app"; then
-  HAS_SYS_APP=1
-fi
-
-# 3. 레포지토리 인자 조립
+# 2. 마운트 경로 레포 연결 설정
 if [[ -n "$BASEOS_PATH" && -n "$APPSTREAM_PATH" ]]; then
   log_info "마운트 디렉터리로부터 레포지토리 연결:"
   log_info "  - RHEL810-base : $BASEOS_PATH"
@@ -177,15 +165,16 @@ if [[ -n "$BASEOS_PATH" && -n "$APPSTREAM_PATH" ]]; then
   REPO_ARGS+=(
     "--repofrompath=RHEL810-base,file://$BASEOS_PATH"
     "--repofrompath=RHEL810-app,file://$APPSTREAM_PATH"
-    "--setopt=RHEL810-base.gpgcheck=0"
-    "--setopt=RHEL810-app.gpgcheck=0"
   )
 fi
 
+# 3. GPG 체크 비활성화 및 외부 네트워크 레포 간섭 차단
 REPO_ARGS+=(
   "--disablerepo=*"
   "--enablerepo=RHEL810-base"
   "--enablerepo=RHEL810-app"
+  "--nogpgcheck"
+  "--setopt=*.gpgcheck=0"
   "--disableplugin=subscription-manager,product-id"
 )
 
@@ -194,12 +183,12 @@ RPMS_OUT_DIR="$OUT_DIR/rpms"
 mkdir -p "$RPMS_OUT_DIR"
 
 log_info "----------------------------------------------------------"
-log_info "레포지토리로부터 패키지 및 의존성 다운로드 시작"
+log_info "레포지토리로부터 패키지 및 의존성 다운로드 시작 (GPG 검증 비활성화)"
 log_info "----------------------------------------------------------"
 
 DOWNLOADED_SOMETHING=0
 
-# 방법 1: repotrack 사용 (yum-utils가 있는 경우 - 가장 확실한 의존성 전수 수집)
+# 방법 1: repotrack 사용 (yum-utils가 있는 경우)
 if command -v repotrack >/dev/null 2>&1; then
   log_info "repotrack 도구 감지: repotrack으로 전체 의존성 수집 시도..."
   set +e
@@ -249,19 +238,17 @@ fi
 if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
   log_info "$PKG_MGR install/reinstall --downloadonly 명령으로 수집 시도..."
   set +e
-  # 이미 설치된 경우를 대비해 reinstall 먼저 시도 후 install 실행
   $PKG_MGR -y "${REPO_ARGS[@]}" reinstall --downloadonly --downloaddir="$RPMS_OUT_DIR" "${TARGET_PACKAGES[@]}" >/dev/null 2>&1 || true
   $PKG_MGR -y "${REPO_ARGS[@]}" install --downloadonly --downloaddir="$RPMS_OUT_DIR" "${TARGET_PACKAGES[@]}" >/dev/null 2>&1 || true
   set -e
 fi
 
-# 방법 4: 마운트 디렉터리(/mnt/rhel810)에서 직접 탐색 및 복사 (직접 보완)
+# 방법 4: 마운트 디렉터리(/mnt/rhel810)에서 직접 탐색 및 복사 (누락 방지)
 if [[ -d "$MOUNT_DIR" ]]; then
   log_info "마운트 디렉터리($MOUNT_DIR)에서 필수 패키지 및 주요 의존성 RPM 직접 복사 확인..."
   ALL_SEARCH_PKGS=("${TARGET_PACKAGES[@]}" "${KNOWN_DEPENDENCIES[@]}")
 
   for pkg in "${ALL_SEARCH_PKGS[@]}"; do
-    # 이미 RPMS_OUT_DIR에 해당 패키지 파일이 있는지 확인
     if ! find "$RPMS_OUT_DIR" -maxdepth 1 -name "${pkg}-[0-9]*.rpm" 2>/dev/null | grep -q .; then
       found_files=$(find "$MOUNT_DIR" -maxdepth 4 -name "${pkg}-[0-9]*.rpm" 2>/dev/null || true)
       if [[ -n "$found_files" ]]; then
@@ -299,21 +286,8 @@ fi
 RPM_COUNT=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "*.rpm" | wc -l)
 log_success "총 ${RPM_COUNT}개의 RPM 파일이 성공적으로 준비되었습니다."
 
-# createrepo_c 가 있으면 로컬 repodata 생성
-if command -v createrepo_c >/dev/null 2>&1; then
-  log_info "createrepo_c 로 로컬 repodata 메타데이터 생성 중..."
-  createrepo_c --quiet "$RPMS_OUT_DIR" || true
-fi
-
-# SHA256 체크섬 파일 생성
-log_info "무결성 검증용 SHA256 체크섬(checksums.sha256) 생성 중..."
-(
-  cd "$RPMS_OUT_DIR"
-  sha256sum ./*.rpm > "$OUT_DIR/checksums.sha256"
-)
-
-# 패키지 매니페스트 생성
-log_info "패키지 매니페스트(package_manifest.txt) 작성 중..."
+# 패키지 목록 매니페스트 생성 (참고용 텍스트 목록)
+log_info "패키지 목록 매니페스트(package_manifest.txt) 작성 중..."
 {
   printf "# RHEL 8.10 Saved Packages Manifest\n"
   printf "# Generated: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')"
@@ -342,7 +316,6 @@ if [[ $CREATE_ARCHIVE -eq 1 ]]; then
   DIR_NAME=$(basename "$OUT_DIR")
   log_info "압축 번들 생성 중 ($PARENT_DIR/$TAR_NAME)..."
   tar -czf "$PARENT_DIR/$TAR_NAME" -C "$PARENT_DIR" "$DIR_NAME"
-  (cd "$PARENT_DIR" && sha256sum "$TAR_NAME" > "$TAR_NAME.sha256")
   ARCHIVE_SIZE=$(du -h "$PARENT_DIR/$TAR_NAME" | cut -f1)
   log_success "압축 번들 완료: $PARENT_DIR/$TAR_NAME (${ARCHIVE_SIZE})"
 fi

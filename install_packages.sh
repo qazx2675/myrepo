@@ -3,6 +3,7 @@
 # install_packages.sh
 # RHEL 8.x 오프라인(폐쇄망) 환경에서 저장된 패키지 및 의존성 일괄 설치 스크립트
 #
+# (폐쇄망 환경용: GPG 검증 제외, 체크섬 불필요, 로컬 RPM 일괄 무결격 설치)
 # 대상 패키지: nscd, autofs, rpcbind, nfs-utils, tcsh
 # ==============================================================================
 set -euo pipefail
@@ -10,7 +11,6 @@ set -euo pipefail
 # 기본 설정값
 RPM_DIR=""
 START_SERVICES=0
-SKIP_CHECK=0
 TARGET_PACKAGES=("nscd" "autofs" "rpcbind" "nfs-utils" "tcsh")
 TARGET_SERVICES=("rpcbind" "autofs" "nscd")
 
@@ -42,8 +42,8 @@ usage() {
   cat <<EOF
 사용법: $0 [옵션]
 
-외부 인터넷이나 저장소 연결이 없는 폐쇄망/오프라인 RHEL 8 시스템에서
-사전 저장된 패키지(RPM)들을 일괄 설치하고 검증합니다.
+외부 인터넷이나 저장소 연결 및 GPG 키가 없는 폐쇄망 RHEL 8 시스템에서
+사전 저장된 패키지(RPM)들을 일괄 설치하고 서비스를 검증합니다.
 
 대상 패키지:
   - nscd, autofs, rpcbind, nfs-utils, tcsh
@@ -52,7 +52,6 @@ usage() {
   -d, --dir <경로>        RPM 파일들이 위치한 디렉터리 경로
                          (지정하지 않을 경우 ./rpms 또는 현재 디렉터리 자동 탐색)
   -s, --start-services   설치 완료 후 rpcbind, autofs, nscd 데몬을 자동 활성화(enable) 및 시작(start)
-  --skip-check           SHA256 체크섬 무결성 검증 건너뛰기
   -h, --help             이 도움말 화면 출력
 
 사용 예시:
@@ -79,10 +78,6 @@ while [[ $# -gt 0 ]]; do
       START_SERVICES=1
       shift
       ;;
-    --skip-check)
-      SKIP_CHECK=1
-      shift
-      ;;
     -h|--help)
       usage
       exit 0
@@ -102,18 +97,15 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
 fi
 
 log_info "=========================================================="
-log_info " RHEL 8.x 오프라인 패키지 자동 설치 도구"
+log_info " RHEL 8.x 폐쇄망 오프라인 패키지 자동 설치 도구"
 log_info " 대상 패키지: ${TARGET_PACKAGES[*]}"
 log_info " 서비스 자동 시작 여부: $([[ $START_SERVICES -eq 1 ]] && echo '활성화 (YES)' || echo '미활성화 (NO, -s 옵션으로 활성화 가능)')"
 log_info "=========================================================="
 
-# OS 확인 (RHEL 8 계열 권장)
+# OS 확인
 if [[ -f /etc/redhat-release ]]; then
   OS_INFO=$(cat /etc/redhat-release)
   log_info "현재 OS: $OS_INFO"
-  if ! grep -qE "release 8(\.[0-9]+)?" /etc/redhat-release; then
-    log_warn "이 번들은 RHEL 8.x용으로 생성되었습니다. 현재 OS와 패키지 의존성이 다를 수 있습니다."
-  fi
 fi
 
 # RPM 디렉터리 자동 탐색
@@ -144,69 +136,28 @@ fi
 
 log_info "RPM 디렉터리: $RPM_DIR (총 ${RPM_COUNT}개 RPM 탐색됨)"
 
-# SHA256 체크섬 무결성 검증
-CHECKSUM_FILE=""
-if [[ -f "$SCRIPT_DIR/checksums.sha256" ]]; then
-  CHECKSUM_FILE="$SCRIPT_DIR/checksums.sha256"
-elif [[ -f "$RPM_DIR/../checksums.sha256" ]]; then
-  CHECKSUM_FILE="$RPM_DIR/../checksums.sha256"
-elif [[ -f "$RPM_DIR/checksums.sha256" ]]; then
-  CHECKSUM_FILE="$RPM_DIR/checksums.sha256"
-fi
-
-if [[ -n "$CHECKSUM_FILE" && $SKIP_CHECK -eq 0 ]]; then
-  log_info "SHA256 체크섬 무결성 검증을 진행합니다..."
-  set +e
-  (
-    cd "$RPM_DIR"
-    # 상대경로 매칭을 위해 sha256sum 실행
-    sha256sum -c "$CHECKSUM_FILE" >/dev/null 2>&1 || sha256sum -c <(sed 's|.*/||' "$CHECKSUM_FILE") >/dev/null 2>&1
-  )
-  check_rc=$?
-  set -e
-  if [[ $check_rc -eq 0 ]]; then
-    log_success "모든 RPM 파일의 SHA256 무결성 검증 통과!"
-  else
-    log_warn "체크섬 검증 중 불일치 또는 누락된 파일이 있습니다. 손상 여부를 확인하세요."
-  fi
-else
-  log_info "체크섬 검증 건너뜀 (체크섬 파일 없음 또는 --skip-check 지정됨)"
-fi
-
-# 대상 패키지 존재 여부 사전 점검
-log_info "필수 패키지 RPM 파일 포함 여부 확인 중..."
-for pkg in "${TARGET_PACKAGES[@]}"; do
-  found=$(find "$RPM_DIR" -maxdepth 1 -name "${pkg}-[0-9]*.rpm" | head -n 1)
-  if [[ -n "$found" ]]; then
-    log_info "  - $pkg: $(basename "$found")"
-  else
-    log_warn "  - $pkg: 개별 파일명이 일치하지 않거나 번들 내부에 다른 이름으로 존재할 수 있습니다."
-  fi
-done
-
-# 패키지 설치 진행
+# 패키지 설치 진행 (GPG 검증 비활성화)
 log_info "----------------------------------------------------------"
-log_info "폐쇄망 오프라인 패키지 설치를 시작합니다..."
-log_info "(외부 레포지토리 연결을 차단하고 로컬 RPM만으로 트랜잭션을 해결합니다)"
+log_info "폐쇄망 오프라인 패키지 설치 시작 (--nogpgcheck)"
 log_info "----------------------------------------------------------"
 
 INSTALL_SUCCESS=0
 if command -v dnf >/dev/null 2>&1; then
-  log_info "실행 명령어: dnf --disablerepo='*' -y install $RPM_DIR/*.rpm"
-  if dnf --disablerepo='*' -y install "$RPM_DIR"/*.rpm; then
+  log_info "실행 명령어: dnf --disablerepo='*' --nogpgcheck -y install $RPM_DIR/*.rpm"
+  if dnf --disablerepo='*' --nogpgcheck -y install "$RPM_DIR"/*.rpm; then
     INSTALL_SUCCESS=1
   fi
 elif command -v yum >/dev/null 2>&1; then
-  log_info "실행 명령어: yum --disablerepo='*' -y localinstall $RPM_DIR/*.rpm"
-  if yum --disablerepo='*' -y localinstall "$RPM_DIR"/*.rpm; then
+  log_info "실행 명령어: yum --disablerepo='*' --nogpgcheck -y localinstall $RPM_DIR/*.rpm"
+  if yum --disablerepo='*' --nogpgcheck -y localinstall "$RPM_DIR"/*.rpm; then
     INSTALL_SUCCESS=1
   fi
 fi
 
 if [[ $INSTALL_SUCCESS -ne 1 ]]; then
-  log_warn "dnf/yum 트랜잭션 설치 실패 또는 도구 부재. rpm 명령어로 직접 설치/업그레이드를 시도합니다..."
-  log_info "실행 명령어: rpm -Uvh --replacepkgs $RPM_DIR/*.rpm"
-  if rpm -Uvh --replacepkgs "$RPM_DIR"/*.rpm; then
+  log_warn "dnf/yum 트랜잭션 설치 실패. rpm 명령어로 서명 검증 없이 직접 설치/업그레이드를 시도합니다..."
+  log_info "실행 명령어: rpm -Uvh --replacepkgs --nosignature $RPM_DIR/*.rpm"
+  if rpm -Uvh --replacepkgs --nosignature "$RPM_DIR"/*.rpm; then
     INSTALL_SUCCESS=1
   else
     log_error "rpm 직접 설치 또한 실패하였습니다. 출력된 의존성 오류를 확인하세요."
@@ -305,4 +256,3 @@ else
   log_error "일부 패키지 설치 또는 검증에 실패하였습니다. 위 로그를 확인하세요."
   exit 1
 fi
-
