@@ -84,10 +84,10 @@ func Args(appURL, profileDir string) []string {
 		"--disable-extensions",
 		"--disable-default-apps",
 		"--disable-sync",
-		"--disable-features=Translate,msEdgeSidebarV2,BlockInsecurePrivateNetworkRequests",
+		"--disable-background-mode",
+		"--disable-features=RendererCodeIntegrity,Translate,msEdgeSidebarV2,BlockInsecurePrivateNetworkRequests",
 		"--disable-renderer-backgrounding",
 		"--disable-background-timer-throttling",
-		"--proxy-bypass-list=<-loopback>",
 	}
 	if dbgPort := os.Getenv("CROSS_CHECKER_DEBUG_PORT"); dbgPort != "" {
 		args = append(args, "--remote-debugging-port="+dbgPort)
@@ -95,8 +95,8 @@ func Args(appURL, profileDir string) []string {
 	return args
 }
 
-// OpenWithExitCallback launches appURL in an Edge/Chrome app window and calls onExit when closed.
-func OpenWithExitCallback(appURL string, onExit func()) (string, error) {
+// Open launches appURL in an Edge/Chrome app window.
+func Open(appURL string) (string, error) {
 	browser := FindBrowser()
 	if browser == "" {
 		return "default", openDefault(appURL)
@@ -107,18 +107,12 @@ func OpenWithExitCallback(appURL string, onExit func()) (string, error) {
 	if err := cmd.Start(); err != nil {
 		return browser, openDefault(appURL)
 	}
-	go func() {
-		_ = cmd.Wait()
-		if onExit != nil {
-			onExit()
-		}
-	}()
+	// Reaping child process without terminating the Go server.
+	// Edge/Chrome Startup Boost delegates window creation to a background broker
+	// causing the spawned child to exit in ~100ms. Lifecycle is strictly managed
+	// via HTTP heartbeats (/api/ping and /api/bye) in the web UI.
+	go func() { _ = cmd.Wait() }()
 	return browser, nil
-}
-
-// Open launches appURL in an Edge/Chrome app window (backward compatibility).
-func Open(appURL string) (string, error) {
-	return OpenWithExitCallback(appURL, nil)
 }
 
 func openDefault(u string) error {

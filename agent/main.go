@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -887,6 +888,7 @@ func (s *AgentServer) StartLifecycleWatcher(onShutdown func()) {
 	s.onShutdown = onShutdown
 	s.lifecycleMu.Unlock()
 
+	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
@@ -902,22 +904,29 @@ func (s *AgentServer) StartLifecycleWatcher(onShutdown func()) {
 				byeAt := s.byeTime
 				s.lifecycleMu.Unlock()
 
-				if !seen {
-					continue
-				}
-				// Case 1: Explicit /api/bye received on window unload and no reload ping arrived within 1.2s
-				if bye && time.Since(byeAt) >= 1200*time.Millisecond {
-					if onShutdown != nil {
-						onShutdown()
+				if seen {
+					// Case 1: Explicit /api/bye received on window unload and no reload ping arrived within 1.2s
+					if bye && time.Since(byeAt) >= 1200*time.Millisecond {
+						if onShutdown != nil {
+							onShutdown()
+						}
+						return
 					}
-					return
-				}
-				// Case 2: Browser window closed abruptly without beacon (no ping for > 6s)
-				if !bye && time.Since(lastPing) >= 6*time.Second {
-					if onShutdown != nil {
-						onShutdown()
+					// Case 2: Browser window closed abruptly without beacon (no ping for > 6s)
+					if !bye && time.Since(lastPing) >= 6*time.Second {
+						if onShutdown != nil {
+							onShutdown()
+						}
+						return
 					}
-					return
+				} else {
+					// Case 3: Initial connect timeout (no client connected within 60s)
+					if time.Since(startTime) > 60*time.Second {
+						if onShutdown != nil {
+							onShutdown()
+						}
+						return
+					}
 				}
 			}
 		}
@@ -2108,6 +2117,26 @@ loadSession();
 </html>
 `
 
+func waitForServerReady(healthURL string, timeout time.Duration) {
+	client := &http.Client{
+		Timeout: 300 * time.Millisecond,
+		Transport: &http.Transport{
+			Proxy: nil,
+		},
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(healthURL)
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+}
+
 func main() {
 	portFlag := flag.Int("port", 18080, "Listen port for HTTP server")
 	shareFlag := flag.String("share", ".", "Shared directory path")
@@ -2187,6 +2216,11 @@ func main() {
 	log.Printf("  (주의: 0.0.0.0 이 아니라 반드시 127.0.0.1 로 접속해야 합니다)\n")
 	log.Printf("========================================================\n")
 
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("포트 바인딩 실패 (포트 %d 이미 사용 중): %v", cfg.ListenPort, err)
+	}
+
 	httpServer := &http.Server{
 		Addr:    addr,
 		Handler: server.Routes(),
@@ -2195,6 +2229,7 @@ func main() {
 	// Warm up AWX inventory 3 cache in background
 	go server.WarmupAwxCache("3")
 
+	shutdownChan := make(chan struct{})
 	var shutdownOnce sync.Once
 	shutdownServer := func() {
 		shutdownOnce.Do(func() {
@@ -2203,51 +2238,43 @@ func main() {
 			defer cancel()
 			_ = httpServer.Shutdown(ctx)
 			server.Stop()
+			close(shutdownChan)
 			os.Exit(0)
 		})
 	}
 
+	go func() {
+		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server stopped with error: %v", err)
+		}
+	}()
+
+	// 1) 로컬 HTTP 서버가 100% 응답 가능한 상태가 될 때까지 동기적으로 먼저 확인!
+	waitForServerReady(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort), 5*time.Second)
+
+	// 2) 앱 창 실행 및 라이프사이클 감시
 	if shouldOpenApp {
 		server.StartLifecycleWatcher(func() {
 			log.Println("Client window closed. Terminating process.")
 			shutdownServer()
 		})
 
-		go func() {
-			appURL := fmt.Sprintf("http://127.0.0.1:%d/", cfg.ListenPort)
-			// Wait for server to become ready using direct localhost connection (bypassing corporate proxy)
-			client := &http.Client{
-				Timeout: 500 * time.Millisecond,
-				Transport: &http.Transport{
-					Proxy: nil,
-				},
-			}
-			for i := 0; i < 30; i++ {
-				time.Sleep(100 * time.Millisecond)
-				resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort))
-				if err == nil && resp.StatusCode == http.StatusOK {
-					resp.Body.Close()
-					break
-				}
-				if resp != nil {
-					resp.Body.Close()
-				}
-			}
-
-			browserUsed, err := launcher.OpenWithExitCallback(appURL, func() {
-				log.Println("Desktop app window process closed. Terminating process.")
-				shutdownServer()
-			})
-			if err != nil {
-				log.Printf("Failed to open app window: %v\n", err)
-			} else {
-				log.Printf("Launched desktop app window via %s (%s)\n", browserUsed, appURL)
-			}
-		}()
+		appURL := fmt.Sprintf("http://127.0.0.1:%d/", cfg.ListenPort)
+		browserUsed, err := launcher.Open(appURL)
+		if err != nil {
+			log.Printf("Failed to open app window: %v\n", err)
+		} else {
+			log.Printf("Launched desktop app window via %s (%s)\n", browserUsed, appURL)
+		}
 	}
 
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server stopped with error: %v", err)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+
+	select {
+	case <-sig:
+		shutdownServer()
+	case <-shutdownChan:
 	}
 }
 
