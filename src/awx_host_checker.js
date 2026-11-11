@@ -1838,7 +1838,9 @@
                     sessionId: resData.sessionId,
                     checkerName: checkerName,
                     checkerIp: checkerIp,
-                    status: resData.status || "PENDING"
+                    status: resData.status || "PENDING",
+                    peerDelivered: resData.peerDelivered,
+                    peerError: resData.peerError
                 };
 
                 renderWorkerSessionCard();
@@ -1918,6 +1920,39 @@
                             상단 탭에서 <b>[크로스체크 확인 (확인자)]</b> 탭을 클릭하여 확인자 화면에서 직접 검증 및 승인/반려를 진행하세요.
                         </div>
                     `;
+                }
+            } else if (state.currentSession.status === 'PENDING') {
+                if (wResultReport) {
+                    wResultReport.style.display = 'block';
+                    if (state.currentSession.peerDelivered === false) {
+                        wResultReport.style.background = '#fffbeb';
+                        wResultReport.style.border = '1px solid #fcd34d';
+                        wResultReport.style.borderRadius = '5px';
+                        wResultReport.style.padding = '10px';
+                        wResultReport.innerHTML = `
+                            <div style="font-weight:700; color:#b45309; font-size:12.5px; margin-bottom:4px;">
+                                ⚠️ 확인자 PC(${state.currentSession.checkerIp}:18080) 직접 연결 불가 안내
+                            </div>
+                            <div style="color:#92400e; font-size:11.5px; line-height:1.5;">
+                                세션이 생성되었으나 확인자 PC 18080 포트로 직접 알림이 닿지 않았습니다.<br>
+                                • <b>공유폴더 방식(권장)</b>: config.json의 "sharedDir"를 공용 공유폴더(예: \\\\서버\\share)로 지정하면 방화벽과 무관하게 자동 동기화됩니다.<br>
+                                • <b>로컬 실행 방식</b>: 확인자 PC의 Windows 방화벽에서 18080 포트 인바운드 허용이 필요합니다.
+                            </div>
+                        `;
+                    } else {
+                        wResultReport.style.background = '#f0fdf4';
+                        wResultReport.style.border = '1px solid #86efac';
+                        wResultReport.style.borderRadius = '5px';
+                        wResultReport.style.padding = '10px';
+                        wResultReport.innerHTML = `
+                            <div style="font-weight:700; color:#15803d; font-size:12.5px; margin-bottom:4px;">
+                                ✓ 확인자 PC로 요청 전달 완료
+                            </div>
+                            <div style="color:#166534; font-size:11.5px; line-height:1.5;">
+                                확인자(<b>${state.currentSession.checkerName}</b>) PC의 [크로스체크 확인] 화면에 요청이 성공적으로 등록되었습니다.
+                            </div>
+                        `;
+                    }
                 }
             } else {
                 if (wResultReport) wResultReport.style.display = 'none';

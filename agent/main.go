@@ -634,21 +634,29 @@ func (s *AgentServer) Stop() {
 }
 
 // postPeerJSON sends an HTTP POST request to a peer, properly draining and closing response body.
-func (s *AgentServer) postPeerJSON(url string, payload interface{}) {
+func (s *AgentServer) postPeerJSON(url string, payload interface{}) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return
+		log.Printf("[PEER] JSON marshal error for %s: %v\n", url, err)
+		return err
 	}
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
-		return
+		log.Printf("[PEER] NewRequest error for %s: %v\n", url, err)
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.httpClient.Do(req)
-	if err == nil && resp != nil {
+	if err != nil {
+		log.Printf("[PEER] Failed to deliver peer notification to %s: %v\n", url, err)
+		return err
+	}
+	if resp != nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}
+	log.Printf("[PEER] Successfully delivered peer notification to %s\n", url)
+	return nil
 }
 
 // pollSessionsDir checks for updated session files on disk.
@@ -1259,24 +1267,34 @@ func (s *AgentServer) handleSessionCreate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Async direct HTTP notification to checker (자기 자신 호출 방지)
+	peerDelivered := true
+	var peerErrStr string
+
+	// Direct HTTP notification to checker (자기 자신 호출 방지)
 	if sess.Checker.IP != "" && sess.Checker.IP != s.detectedIP && sess.Checker.IP != "127.0.0.1" && sess.Checker.IP != sess.Worker.IP {
-		go func(checkerIP string, sessCopy Session) {
-			url := fmt.Sprintf("http://%s:%d/api/peer/notify", checkerIP, s.config.ListenPort)
-			s.postPeerJSON(url, map[string]interface{}{
-				"type":      "NEW_SESSION",
-				"sessionId": sessCopy.SessionId,
-				"session":   sessCopy,
-			})
-		}(sess.Checker.IP, sess)
+		url := fmt.Sprintf("http://%s:%d/api/peer/notify", sess.Checker.IP, s.config.ListenPort)
+		err := s.postPeerJSON(url, map[string]interface{}{
+			"type":      "NEW_SESSION",
+			"sessionId": sess.SessionId,
+			"session":   sess,
+		})
+		if err != nil {
+			peerDelivered = false
+			peerErrStr = err.Error()
+			log.Printf("[PEER] Warning: Checker at %s could not be reached directly: %v\n", url, err)
+		} else {
+			peerDelivered = true
+		}
 	}
 
 	// Broadcast event
 	s.broadcastEvent("NEW_SESSION", sess.SessionId, sess)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"sessionId": sess.SessionId,
-		"status":    sess.Status,
+		"sessionId":     sess.SessionId,
+		"status":        sess.Status,
+		"peerDelivered": peerDelivered,
+		"peerError":     peerErrStr,
 	})
 }
 
@@ -1608,10 +1626,18 @@ func (s *AgentServer) handlePeerNotify(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Type      string      `json:"type"`
 		SessionId string      `json:"sessionId"`
-		Session   interface{} `json:"session"`
+		Session   *Session    `json:"session"`
 		Data      interface{} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &payload); err == nil {
+		// Save received session to local disk so /api/session/list and /api/session/status find it
+		if payload.Session != nil {
+			if saveErr := s.saveSession(payload.Session); saveErr != nil {
+				log.Printf("[PEER] Error saving received session %s: %v\n", payload.SessionId, saveErr)
+			} else {
+				log.Printf("[PEER] Successfully saved received session %s from worker %s (%s)\n", payload.SessionId, payload.Session.Worker.Name, payload.Session.Worker.IP)
+			}
+		}
 		s.broadcastEvent(payload.Type, payload.SessionId, payload)
 
 		// Auto browser launch if requested and configured
@@ -1638,12 +1664,25 @@ func (s *AgentServer) handlePeerUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var payload struct {
-		Type      string      `json:"type"`
-		SessionId string      `json:"sessionId"`
-		Status    string      `json:"status"`
-		Data      interface{} `json:"data"`
+		Type        string       `json:"type"`
+		SessionId   string       `json:"sessionId"`
+		Status      string       `json:"status"`
+		Data        interface{}  `json:"data"`
+		CheckerData *CheckerData `json:"checkerData"`
 	}
 	if err := json.Unmarshal(body, &payload); err == nil {
+		// Update local session on disk if it exists
+		if sess, err := s.loadSession(payload.SessionId); err == nil {
+			if payload.Status != "" {
+				sess.Status = payload.Status
+			}
+			if payload.CheckerData != nil {
+				sess.CheckerData = payload.CheckerData
+			}
+			sess.DecidedAt = time.Now().Format(time.RFC3339)
+			_ = s.saveSession(sess)
+			log.Printf("[PEER] Updated local session %s on disk to status: %s\n", payload.SessionId, payload.Status)
+		}
 		s.broadcastEvent("PEER_UPDATE", payload.SessionId, payload)
 	}
 
