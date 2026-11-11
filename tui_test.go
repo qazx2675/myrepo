@@ -2,8 +2,11 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type sent struct {
@@ -79,10 +82,11 @@ func TestHandleKeyAnswer(t *testing.T) {
 	if len(s.answers) != 1 || s.answers[0] != "q7:c" || !strings.Contains(v.Flash, "답을 보냈습니다") {
 		t.Errorf("c: %v flash=%q", s.answers, v.Flash)
 	}
-	// 질문에 없는 선택지(대문자 등)는 무시
-	press(&v, st, true, s.actions(), "z", "C", "S")
-	if len(s.answers) != 1 || s.stops != 0 {
-		t.Errorf("엉뚱한 키가 전송됨: %v %d", s.answers, s.stops)
+	// 질문에 없는 선택지는 무시(알림만)
+	v = viewState{}
+	press(&v, st, true, s.actions(), "z", "w")
+	if len(s.answers) != 1 || s.stops != 0 || v.Flash != flashUnknownKey {
+		t.Errorf("엉뚱한 키가 전송됨: %v %d %q", s.answers, s.stops, v.Flash)
 	}
 	// 질문에 x 가 없으면 x 는 무시
 	st.Question.Choices = []choice{{"c", "계속"}, {"s", "중지"}}
@@ -91,6 +95,7 @@ func TestHandleKeyAnswer(t *testing.T) {
 		t.Errorf("없는 선택지가 전송됨: %v", s.answers)
 	}
 	// 워커가 없으면 보내지 않음
+	v = viewState{}
 	press(&v, st, false, s.actions(), "c")
 	if len(s.answers) != 1 || !strings.Contains(v.Flash, "워커가 실행 중이 아니어서") {
 		t.Errorf("워커 없음: %v %q", s.answers, v.Flash)
@@ -125,14 +130,10 @@ func TestHandleKeyStopWithoutQuestion(t *testing.T) {
 	var s sent
 	v := viewState{}
 	st := sampleState()
-	// 질문이 없으면 s 는 아무 일 없음, S 는 확인 후 stop.req
+	// 질문이 없으면 s(대문자 S 도 같음)는 확인 후 stop.req
 	press(&v, st, true, s.actions(), "s")
-	if v.Confirm != "" || s.stops != 0 {
-		t.Errorf("s: %+v", v)
-	}
-	press(&v, st, true, s.actions(), "S")
-	if v.Confirm != "S" {
-		t.Fatalf("S 확인 대기 아님: %+v", v)
+	if v.Confirm != "S" || s.stops != 0 {
+		t.Fatalf("s 확인 대기 아님: %+v", v)
 	}
 	press(&v, st, true, s.actions(), "x") // y 가 아니면 취소
 	if s.stops != 0 || v.Confirm != "" {
@@ -153,9 +154,9 @@ func TestHandleKeyStopWithoutQuestion(t *testing.T) {
 	if v.Confirm != "" || !strings.Contains(v.Flash, "끝난 작업") {
 		t.Errorf("끝난 작업: %+v", v)
 	}
-	// 질문이 떠 있을 때 S 는 안내만
+	// 중지 선택지가 있는 질문이 떠 있으면 S 는 그 질문의 중지(s)
 	press(&v, askState(), true, s.actions(), "S")
-	if v.Confirm != "" || !strings.Contains(v.Flash, "질문에 답하세요") {
+	if v.Confirm != "s" || v.ConfirmQ != "q7" {
 		t.Errorf("질문 중 S: %+v", v)
 	}
 }
@@ -188,6 +189,19 @@ func TestHandleKeyViewKeys(t *testing.T) {
 	press(&v, st, true, s.actions(), "home", "up")
 	if v.Scroll != 0 {
 		t.Errorf("home/up: %d", v.Scroll)
+	}
+	// B6: G 끝, g 처음, Space 한 화면 아래, b 위
+	press(&v, st, true, s.actions(), "G")
+	if v.Scroll != 40-capRows {
+		t.Errorf("G: %d", v.Scroll)
+	}
+	press(&v, st, true, s.actions(), "g", " ")
+	if v.Scroll != capRows {
+		t.Errorf("g, Space: %d", v.Scroll)
+	}
+	press(&v, st, true, s.actions(), "b")
+	if v.Scroll != 0 || v.Flash != "" {
+		t.Errorf("b: %d %q", v.Scroll, v.Flash)
 	}
 	press(&v, st, true, s.actions(), "down", "f")
 	if !v.OnlyBad || v.Scroll != 0 {
@@ -239,5 +253,65 @@ func TestToggleResultKey(t *testing.T) {
 	press(&v, nil, true, (&sent{}).actions(), "v")
 	if !v.Result {
 		t.Errorf("st nil 에서도 v 가 켜져야 함")
+	}
+}
+
+func TestStateCache(t *testing.T) {
+	dir := t.TempDir()
+	st := sampleState()
+	if err := saveState(dir, st); err != nil {
+		t.Fatal(err)
+	}
+	var c stateCache
+	a, err := c.load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := c.load(dir)
+	if err != nil || a != b {
+		t.Fatalf("파일이 그대로면 같은 포인터여야 함: %p %p %v", a, b, err)
+	}
+	// 내용·크기가 바뀌면 다시 읽는다.
+	st.Detail = "다른 진행 내용으로 바뀜"
+	if err := saveState(dir, st); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, stateFile)
+	if err := os.Chtimes(p, time.Now().Add(time.Hour), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	d, err := c.load(dir)
+	if err != nil || d == a || d.Detail != st.Detail {
+		t.Fatalf("바뀐 파일은 다시 읽어야 함: %v %+v", err, d)
+	}
+	// 지워지거나 깨지면 오류를 돌려주고 캐시를 버린다.
+	if err := os.WriteFile(p, []byte("{깨짐"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.load(dir); err == nil || c.st != nil {
+		t.Fatalf("깨진 파일은 오류여야 함: %v", err)
+	}
+	os.Remove(p)
+	if _, err := c.load(dir); err == nil {
+		t.Fatal("없는 파일은 오류여야 함")
+	}
+}
+
+func TestDrainKeys(t *testing.T) {
+	ch := make(chan string, 10)
+	for _, k := range []string{"b", "c", "d"} {
+		ch <- k
+	}
+	if got := strings.Join(drainKeys("a", ch, 10), ""); got != "abcd" {
+		t.Fatalf("쌓인 키를 순서대로 모아야 함: %q", got)
+	}
+	if got := drainKeys("x", ch, 10); len(got) != 1 {
+		t.Fatalf("빈 채널이면 첫 키만: %v", got)
+	}
+	for i := 0; i < 5; i++ {
+		ch <- "k"
+	}
+	if got := drainKeys("a", ch, 3); len(got) != 3 || len(ch) != 3 {
+		t.Fatalf("max 를 넘겨 가져오면 안 됨: %v 남은 %d", got, len(ch))
 	}
 }

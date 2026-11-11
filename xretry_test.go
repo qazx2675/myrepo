@@ -276,7 +276,9 @@ func TestToggleLogKey(t *testing.T) {
 	// y/n 선택지 질문에서도 키가 답으로 전달된다
 	st.Question = &question{ID: "q3", Stage: stageLoad, Choices: []choice{{Key: "y"}, {Key: "n"}, {Key: "s"}}}
 	s := &sent{}
-	press(&v, st, true, s.actions(), "y", "n")
+	press(&v, st, true, s.actions(), "y")
+	v = viewState{} // 보낸 답은 같은 질문에 5초 동안 다시 받지 않으므로 새 화면 상태로
+	press(&v, st, true, s.actions(), "n")
 	if strings.Join(s.answers, ",") != "q3:y,q3:n" {
 		t.Errorf("답 = %v", s.answers)
 	}

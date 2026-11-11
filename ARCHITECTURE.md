@@ -11,7 +11,7 @@
 | `stress.go` | 실제 `executor`: 판정 재사용, `config_check -auto`, stress-test `-batch` 호출(`[감시]` 줄로 launch 완료 감지, `-end` 전달, `[인벤토리사용중]` 줄 → busy 콜백 → stdin `r`/`x`, 질문 동안 시간 제한 일시정지), CPU 감시 확인(btime + 1차 명령) |
 | `daemon_linux.go` `daemon_other.go` | setsid 로 워커 분리, flock 으로 중복 워커 방지·생존 확인(리눅스 외는 단순 대체) |
 | `run.go` | `-run` 진입: 새로 시작 / 다시 붙기 / 이어서 진행(y/N) / 결과 보기, user 선택(`USER_ROUTE`), 비 tty 일 때 글 출력 |
-| `tui.go` `render.go` `tty_linux.go` `tty_other.go` | TUI: termios raw 모드·키 읽기·화면 갱신 / 상태 → 화면 문자열 순수 함수(골든 시험) / tty·창 크기 |
+| `tui.go` `render.go` `tty_linux.go` `tty_other.go` | TUI: termios raw 모드·키 읽기·화면 갱신 / 상태 → 화면 문자열 순수 함수(골든 시험) / tty·창 크기. `normKey`: 두벌식 자모·대문자·g/G·Space/b 를 같은 키로 맞춤. `splitKeys`: 끝이 덜 온 이스케이프·UTF-8 조각을 다음 읽기와 이어 붙이고, 50ms(`escWait`) 안에 안 오면 Esc 로 처리. `markSent`: 답을 보낸 질문은 워커가 받을 때까지(최대 5초) 다시 답하지 않는 잠금. `stateCache`: 수정 시각·크기가 같은 state.json 은 다시 파싱하지 않음. `drainKeys`: 쌓인 키를 모아 처리하고 한 번만 그림 |
 | `*_test.go` | 단위 시험: 판정·상태기계·렌더·TUI 키·실행기 시간 제한 |
 | `go.mod` | `go 1.20`, 표준 라이브러리만 사용 (vendor 불필요) |
 | `new_setup.sh` | bash 래퍼. `/etc/redhat-release` 가 6.x 이면 `bin/new_setup_os6`(옛 버전), 아니면 `bin/new_setup` 실행 (인자 그대로 전달). 설정 파일이 없고 `-c` 없고 stdin·stderr 가 tty 이면 `setup.sh` 실행을 제안(`NEW_SETUP_NO_PROMPT=1` 이면 생략) |
@@ -34,6 +34,7 @@
 | `README.md` / `PR_CHECKLIST.md` | 사용 설명 / 변경 점검 목록 |
 | `계획서.md` | 설계 결정, 가정·미확인 사항 |
 | `계획서_run.md` | `-run` 설계 결정(인터뷰 결과)·상태기계·검증 계획 |
+| `계획서_tui.md` | `-run` 화면 수정 계획(종료 시각 입력 한 줄 양식, 키 정리, 스크롤 렉 개선) |
 
 수정 요청별로 볼 곳:
 
@@ -125,14 +126,15 @@ new_setup -run  (run.go)
   ※ 설정체크 통과 = O, 또는 OS_CHECK_SH 가 비어 있을 때의 '-'. OS_CHECK_SH 가 있는데 '-' 이면 통과 아님(설정수정·x 대상).
   ※ 재기동(kill -9 등): 진행 중이던 외부 명령은 다시 실행하지 않고 재체크부터. CPU launch 기록이 있고 감시 미완이면 감시만 이어 감.
   ※ 입력 질문: 3단계(stress-ng 대상이 있을 때, CPU 를 띄우기 전)·4단계(실행 전)에 question.Inputs(end_year…end_min) 질문(c/s)을 띄움.
-     TUI 가 줄 입력 모드로 값을 받아(checkEndField/checkEndAll) answer.json {"choice":"c","values":{…}} 로 답 → 워커가 다시 검사(틀리면 무시)
+     TUI 가 입력 칸(`handleInputKey`, 별도 입력 모드 없음)으로 값을 받아(checkEndField/checkEndAll) answer.json {"choice":"c","values":{…}} 로 답 → 워커가 다시 검사(틀리면 무시)
      → state.stress_end 기록 → stress-test -steps b -end y,m,d,h,min (CPU -steps a 에는 안 넘김).
   ※ 인벤토리 사용 중: stress-test stdout 의 "[인벤토리사용중] <메시지>" 줄 → lineWatch.busy → worker.busyAsk(CPU|stress-ng):
      단계는 그대로 question{Kind:"busy", r/x} 를 띄움(qmu 로 한 번에 하나) → 답을 stdin 에 "r\n"/"x\n" → 질문 동안 runCmdHold 로 STRESS_TIMEOUT 일시정지(재개하면 처음부터 다시 잼).
      중지 요청이면 x. stdin 은 exec.StdinPipe 라 프로세스가 끝나면 닫힘(stress-test 쪽은 EOF = x).
 
 상태 폴더: state.json(워커만 씀, 원자 기록) / answer.json(TUI → 워커) / stop.req / worker.pid·lock / worker.log / lists/ / result.txt
-TUI (tui.go, render.go): state.json 을 1초마다 읽어 그림, 맨 아래에 worker.log 끝 8줄 로그 창(tailLines: 끝 64KB 만 읽음, logHeight/logPane 순수 함수, l 로 토글), 키 c r x s y n S f l q ? ↑↓ i/Enter(값 입력 모드: 숫자·Backspace·Enter·Esc) — 답은 answer.json(입력 질문은 values 포함), 중지는 stop.req 도 가능
+TUI (tui.go, render.go): state.json 을 1초마다 읽어 그림, 키를 누를 때는 다시 읽지 않음(stateCache 로 수정 시각·크기 같으면 재파싱 안 함), 맨 아래에 worker.log 끝 8줄 로그 창(tailLines: 끝 64KB 만 읽음, logHeight/logPane 순수 함수, l 로 토글), 키 c r x s y n S f l q ? g G Space b Ctrl-L, 입력 칸 Enter Tab ← → Backspace Esc
+render.go: keyHints 는 지금 쓸 수 있는 키만 주고 wrapItems 로 두 줄까지 줄바꿈, inputLines 는 종료 시각을 한 줄 양식(지금 칸 반전)으로 그림, helpLines 는 ? 도움말 문구
 ```
 
 ## 설정 도우미 흐름 (setup.sh [-c conf] [--yes])
