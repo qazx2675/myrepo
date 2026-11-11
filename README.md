@@ -110,7 +110,7 @@ sudo ./install_packages.sh -s
   -h, --help              도움말 화면 출력
 ```
 
-### `install_packages.sh`
+### `install_packages.sh` (또는 `install.sh`)
 ```text
 사용법: ./install_packages.sh [옵션]
 
@@ -119,4 +119,39 @@ sudo ./install_packages.sh -s
                           (지정하지 않을 경우 ./rpms 또는 현재 디렉터리 자동 탐색)
   -s, --start-services    설치 완료 후 rpcbind, autofs, nscd 서비스를 즉시 enable 및 start
   -h, --help              도움말 화면 출력
+```
+
+---
+
+## 📡 4. 기존 배포 스크립트 연동 및 원격 자동 배포 (`deploy_packages.sh`)
+
+기존에 사용하시던 배포 스크립트에 포함하여 **대상 서버로 RPM 디렉터리와 install.sh를 scp 전송 후 원격 설치**할 수 있도록 전용 함수 `deploy_and_install_packages` 및 단독 배포 스크립트를 제공합니다.
+
+* **SSH 포트**: `8022`
+* **인증 방식**: `sshpass` (평문 비밀번호 변수 사용)
+
+### 기존 스크립트에 함수로 삽입하는 방법
+기존 배포 스크립트 상단에 아래 설정과 함수를 그대로 복사해 넣고, 배포 단계 직전에 호출하시면 됩니다:
+
+```bash
+# [설정]
+SSH_PORT="8022"
+SSH_USER="root"
+SSH_PASS="대상서버비밀번호"  # 평문 저장
+
+# [함수 호출 예시]
+deploy_and_install_packages "192.168.1.50"
+```
+
+### 단독 실행 스크립트로 사용하는 방법
+```bash
+# 비밀번호 수정: deploy_packages.sh 내 SSH_PASS 변수 수정
+vi deploy_packages.sh
+
+# 단일 호스트 실행
+chmod +x deploy_packages.sh
+./deploy_packages.sh 192.168.1.10
+
+# 호스트 목록 파일(hosts.txt)로 일괄 실행
+./deploy_packages.sh -f hosts.txt
 ```
