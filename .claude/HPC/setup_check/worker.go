@@ -482,9 +482,7 @@ func (w *worker) askQ(stage int, text string, inputs []inputField, keys ...strin
 // askEnd 는 stress-ng 종료 시각(5개 값)을 묻는다. 값을 stress_end 에 기록해 "연,월,일,시,분" 으로 돌려준다.
 // 결과: endCont(값 받음) / endSkip(k: stress-ng 만 건너뜀, 기록 안 함) / endStop(중지 — 이미 stop() 을 불렀다).
 func (w *worker) askEnd(stage int, n int, name string) (end string, res int) {
-	text := fmt.Sprintf("%s 대상 %d대에 stress-ng 를 돌립니다. stress-ng 종료 시각을 입력하세요(연·월·일·시·분, 지금보다 뒤).\n"+
-		"입력 항목: %s\n입력한 글자 그대로 stress-test -end 로 넘깁니다.\n"+
-		"k = stress-ng 만 건너뜀(다른 테스트는 그대로 진행), s = 작업 전체 중지", name, n, endFieldNames())
+	text := fmt.Sprintf("%s 대상 %d대에 stress-ng 를 돌립니다.\n끝낼 시각을 입력하세요 (지금보다 뒤).", name, n)
 	c, vals := w.askQ(stage, text, endFields, ansCont, ansSkip, ansStop)
 	switch c {
 	case ansSkip:

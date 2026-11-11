@@ -69,7 +69,7 @@ func TestRenderBasic(t *testing.T) {
 			t.Errorf("%d번째 줄\n got: %q\nwant: %q", i+1, lines[i], w)
 		}
 	}
-	if j := strings.Join(lines, "\n"); !strings.Contains(j, "f O 아닌 것만") && !strings.Contains(j, "S 작업 중지") {
+	if j := strings.Join(lines, "\n"); !strings.Contains(j, "f O 아닌 것만") && !strings.Contains(j, "s 작업 중지") {
 		t.Errorf("안내 줄이 없음:\n%s", j)
 	}
 }
@@ -194,7 +194,7 @@ func TestRenderColorAndHelp(t *testing.T) {
 	}
 	h := renderRun(st, viewState{NoColor: true, Help: true}, 80, 16, t0, true)
 	checkFrame(t, "도움말", h, 80, 16)
-	if !strings.Contains(h, "S  작업 중지") || !strings.Contains(h, "q  화면만 나가기") {
+	if !strings.Contains(h, "s  작업 중지") || !strings.Contains(h, "q  화면만 나가기") || !strings.Contains(h, "Esc  모든 칸 기본값") {
 		t.Errorf("도움말 내용:\n%s", h)
 	}
 	if n := renderRun(nil, viewState{NoColor: true}, 40, 5, t0, false); !strings.Contains(n, "읽는 중") {
@@ -262,7 +262,7 @@ func TestResultPanelPlain(t *testing.T) {
 		"ev01|완료|O|O|O|팬 소음",
 		"ev02|완료|O|NOTRUN|NOTRUN|CPU 실행중",
 		"1-4 / 4대 (결과 판, v 로 호스트표)",
-		"v 결과 판 켜기/끄기",
+		"v 결과 판",
 	} {
 		if !strings.Contains(j, w) {
 			t.Errorf("%q 가 없음:\n%s", w, j)

@@ -24,14 +24,17 @@ type viewState struct {
 	LogLines []string // worker.log 끝부분(runTUI 가 읽어 넣는다. 화면 그리기는 이 값만 본다)
 	NoColor  bool
 
-	// 입력 질문(question.Inputs)의 값 입력 상태
-	InputQ    string            // 값을 입력받는 중(줄 입력 모드)인 질문 id (빈 값 = 입력 모드 아님)
-	InputIdx  int               // 지금 묻는 항목 번호
-	InputBuf  string            // 지금 항목에 입력한 글자
-	InputErr  string            // 방금 입력의 오류(다음 입력까지 보임)
-	InputVals map[string]string // 지금까지 확정한 항목 값
-	ReadyQ    string            // 모든 항목을 입력해 제출 준비가 된 질문 id (ReadyVals 가 그 값)
-	ReadyVals map[string]string
+	// 입력 질문(question.Inputs)의 칸 입력 상태. 질문이 뜨면 sync 가 기본값(지금 시각)으로 채운다(입력 모드 구분 없음).
+	InQ     string            // 칸 값이 속한 질문 id (빈 값 = 입력 질문 없음)
+	InIdx   int               // 지금 칸 번호
+	InVals  map[string]string // 칸마다 입력한 글자(키 = question.Inputs 의 Key, 입력한 그대로 보낸다)
+	InFresh bool              // 지금 칸에 아직 안 씀: 첫 숫자가 칸 값을 대신한다
+	InErr   string            // 칸·전체 검사 오류(고치면 사라짐)
+
+	// 답을 보낸 뒤 워커가 받을 때까지(같은 질문이 sentHold 안에 떠 있는 동안) 그 질문에 다시 답하지 않는다
+	SentQ   string    // 답을 보낸 질문 id
+	SentKey string    // 보낸 선택지 키
+	SentAt  time.Time // 보낸 시각
 }
 
 // heartbeatStale 은 heartbeat 가 이보다 오래되면 워커를 중단된 것으로 본다.
@@ -305,7 +308,11 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 		for _, l := range lines {
 			out = append(out, lineOf(w, nc, seg{"  " + l, cQText}))
 		}
-		// 선택지는 한 개씩 끊지 않고 줄을 채워 나열
+		// 선택지는 한 개씩 끊지 않고 줄을 채워 나열. 답을 보낸 뒤 워커가 받기 전이면 그 자리에 보낸 답을 보인다.
+		sent := view.SentQ == q.ID
+		if sent {
+			out = append(out, lineOf(w, nc, seg{"  답 [" + view.SentKey + "] 보냄 — 워커가 받는 중…", cYellow}))
+		}
 		var cur []seg
 		curW := 2
 		flush := func() {
@@ -315,6 +322,9 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 			cur, curW = nil, 2
 		}
 		for _, c := range q.Choices {
+			if sent {
+				break
+			}
 			key, label := "["+c.Key+"]", " "+c.Label+"  "
 			cw := displayWidth(key) + displayWidth(label)
 			if curW+cw > w && len(cur) > 0 {
@@ -337,23 +347,52 @@ func bottomLines(st *runState, view viewState, w int, alive bool) []string {
 	case view.Flash != "":
 		out = append(out, lineOf(w, nc, seg{view.Flash, cYellow}))
 	}
-	var keys []string
-	if view.InputQ != "" {
-		keys = append(keys, "숫자 입력", "Enter 다음 항목", "Backspace 지움", "Esc 입력 취소")
-		return append(out, lineOf(w, nc, seg{strings.Join(keys, "  "), cDim}))
+	for _, l := range wrapItems(keyHints(st, view, alive), w, 2) {
+		out = append(out, lineOf(w, nc, seg{l, cDim}))
 	}
-	if st.Question != nil {
-		keys = append(keys, "[선택지 키] 답하기")
-		if len(st.Question.Inputs) > 0 {
-			keys = append(keys, "i/Enter 값 입력")
-		} else if !hasChoice(st.Question, ansStop) {
-			keys = append(keys, "S 작업 중지")
+	return out
+}
+
+// keyHints 는 하단 안내 줄에 보일, 지금 쓸 수 있는 키(앞쪽이 먼저 보인다).
+func keyHints(st *runState, view viewState, alive bool) []string {
+	if view.Confirm != "" {
+		return []string{"y 중지", "다른 키 취소"}
+	}
+	keys := []string{"q 나가기", "? 도움말"}
+	q := st.Question
+	if q != nil && view.SentQ != q.ID {
+		if len(q.Inputs) > 0 {
+			keys = append(keys, "숫자 입력", "Enter·Tab·→ 다음 칸", "←·Shift-Tab 이전 칸", "Esc 기본값", "마지막 칸 Enter 또는 c 제출")
 		}
-	} else if alive && !st.Finished() {
-		keys = append(keys, "S 작업 중지")
+		keys = append(keys, "[선택지 키] 답하기")
 	}
-	keys = append(keys, "f O 아닌 것만", "l 로그 켜기/끄기", "v 결과 판 켜기/끄기", "↑↓ PgUp/PgDn 스크롤", "q 나가기(작업은 계속)", "? 도움말")
-	out = append(out, lineOf(w, nc, seg{strings.Join(keys, "  "), cDim}))
+	if alive && !st.Finished() && (q == nil || !hasChoice(q, ansStop)) {
+		keys = append(keys, "s 작업 중지")
+	}
+	return append(keys, "f O 아닌 것만", "l 로그 켜기/끄기", "v 결과 판", "↑↓ PgUp/PgDn 스크롤")
+}
+
+// wrapItems 는 항목들을 "  " 로 이어 폭 w 안에서 항목 단위로 줄바꿈한다(최대 maxLines 줄, 넘치는 항목은 뺀다).
+func wrapItems(items []string, w, maxLines int) []string {
+	var out []string
+	cur := ""
+	for _, it := range items {
+		switch {
+		case cur == "":
+			cur = it
+		case displayWidth(cur)+2+displayWidth(it) <= w:
+			cur += "  " + it
+		default:
+			out = append(out, cur)
+			if len(out) == maxLines {
+				return out
+			}
+			cur = it
+		}
+	}
+	if cur != "" && len(out) < maxLines {
+		out = append(out, cur)
+	}
 	return out
 }
 
@@ -755,23 +794,26 @@ func valColor(v string) string {
 // helpLines 는 ? 도움말 화면.
 func helpLines(w int, noColor bool) []string {
 	txt := []string{
-		"new_setup -run 도움말",
-		"",
+		"new_setup -run 도움말 (아무 키나 누르면 닫힘)",
+		"  q  화면만 나가기(작업은 계속됨. 같은 경로에서 같은 명령으로 다시 붙음)      ?  이 도움말",
 		"질문이 떠 있을 때",
 		"  c  계속(다음 단계)   r  재시도(같은 단계 다시)   k  stress-ng 만 건너뜀",
 		"  x  O 아닌 호스트를 제외하고 계속      s  작업 중지(y/N 확인)",
-		"  i 또는 Enter  값 입력 질문(stress-ng 종료 시각)에서 값을 입력 - 숫자, Enter 다음 항목, Backspace 지움, Esc 취소; 끝나면 c 로 제출",
 		"  y  CPU X 호스트 재실행 질문: 부하 낮은 X 호스트 모두 CPU 재실행에 포함      n  모두 제외(이번엔 X 그대로)",
-		"  r  인벤토리 사용 중 질문: 다시 확인      x  그 묶음 중단(S 로 작업 전체 중지)",
-		"질문이 없을 때",
-		"  S  작업 중지(y/N 확인) - 실행 중인 외부 명령을 끝내고 결과를 저장합니다",
+		"  r  인벤토리 사용 중 질문: 다시 확인      x  그 묶음 중단(s 로 작업 전체 중지)",
+		"  답을 보내면 워커가 받을 때까지(최대 5초) 같은 질문에는 다시 답하지 않습니다",
+		"stress-ng 종료 시각 입력 - 질문이 뜨면 칸이 지금 시각으로 채워져 있고 바로 입력합니다",
+		"  숫자  지금 칸에 입력(기본값은 첫 숫자로 바뀜, 칸이 차면 다음 칸)",
+		"  Enter Tab →  다음 칸(마지막 칸의 Enter 는 제출)   ← Shift-Tab  이전 칸",
+		"  Backspace  지움(빈 칸이면 이전 칸)   Esc  모든 칸 기본값   c  제출",
+		"질문이 없을 때(또는 중지 선택지가 없는 질문)",
+		"  s  작업 중지(y/N 확인) - 실행 중인 외부 명령을 끝내고 결과를 저장합니다",
 		"화면",
 		"  f  O 아닌 호스트만 보기(다시 누르면 전체)",
 		"  l  아래 worker.log 끝부분 창 켜기/끄기(기본 켜짐, 화면이 작으면 줄이거나 숨김)",
 		"  v  결과 판 켜기/끄기(호스트표 자리에 | 구분 표·완료/남음/포기 대수 표시. -auto 이면 단계별 시도 횟수·마지막 오류·지금 하는 일·다음 확인·남은 시간도)",
-		"  ↑ ↓ PgUp PgDn Home End  표 스크롤",
-		"  q  화면만 나가기(작업은 계속됨. 같은 경로에서 같은 명령으로 다시 붙음)",
-		"  ?  이 도움말(아무 키나 누르면 닫힘)",
+		"  ↑ ↓ PgUp PgDn Home End  표 스크롤      g / G  처음 / 끝      Space / b  한 화면 아래 / 위      Ctrl-L  화면 다시 그리기",
+		"키는 한글 입력 상태(두벌식, 예 ㅊ=c ㄴ=s)·Caps Lock 에서도 같게 동작합니다. 쓸 수 없는 키를 누르면 알림이 뜹니다",
 	}
 	out := make([]string, 0, len(txt))
 	for i, l := range txt {
@@ -792,6 +834,7 @@ func renderRun(st *runState, view viewState, w, h int, now time.Time, alive bool
 	if h < 1 {
 		h = 1
 	}
+	view.sync(st, now) // 첫 화면부터 입력 칸 기본값이 보이게(view 는 복사본)
 	var lines []string
 	switch {
 	case st == nil:
@@ -855,7 +898,7 @@ func renderPlain(st *runState, alive bool, now time.Time) string {
 		}
 		fmt.Fprintf(&b, "선택지: %s\n", strings.Join(ch, "  "))
 		if len(q.Inputs) > 0 {
-			fmt.Fprintf(&b, "입력 항목: %s (TUI 에서 i 또는 Enter 로 입력, 비대화형이면 answer.json 의 values 로 답)\n", endFieldNames())
+			fmt.Fprintf(&b, "입력 항목: %s (TUI 에서는 칸에 바로 입력, 비대화형이면 answer.json 의 values 로 답)\n", endFieldNames())
 		}
 	}
 	if st.Finished() {
@@ -865,38 +908,46 @@ func renderPlain(st *runState, alive bool, now time.Time) string {
 	return b.String()
 }
 
-// inputLines 는 입력 질문의 입력 칸(입력 중이면 지금 항목과 오류, 아니면 입력 안내·확정한 값).
+// inputLines 는 입력 질문의 입력 칸: 한 줄 양식(`종료 시각  [2026] - [11] - [11]   [18] : [05]`, 지금 칸은 반전),
+// 오류가 있으면 그 아래 오류 줄, 맨 아래 지금 칸 설명 줄. NoColor 이면 지금 칸을 > < 로 표시한다.
 func inputLines(q *question, view viewState, w int) []string {
 	if len(q.Inputs) == 0 {
 		return nil
 	}
 	nc := view.NoColor
-	var out []string
-	switch {
-	case view.InputQ == q.ID && view.InputIdx < len(q.Inputs):
-		f := q.Inputs[view.InputIdx]
-		if view.InputErr != "" {
-			out = append(out, lineOf(w, nc, seg{"  ! " + view.InputErr, cRed}))
+	segs := []seg{{"  종료 시각  ", cQKey}}
+	for i, f := range q.Inputs {
+		switch f.Key {
+		case "end_month", "end_day":
+			segs = append(segs, seg{" - ", ""})
+		case "end_hour":
+			segs = append(segs, seg{"   ", ""})
+		case "end_min":
+			segs = append(segs, seg{" : ", ""})
+		default:
+			if i > 0 {
+				segs = append(segs, seg{" ", ""})
+			}
 		}
-		var done []string
-		for _, g := range q.Inputs[:view.InputIdx] {
-			done = append(done, g.Key+"="+view.InputVals[g.Key])
+		val := view.InVals[f.Key]
+		if d := fieldWidth(f.Key) - len(val); d > 0 {
+			val += strings.Repeat("_", d)
 		}
-		if len(done) > 0 {
-			out = append(out, lineOf(w, nc, seg{"  " + strings.Join(done, " "), cGreen}))
+		switch {
+		case i != view.InIdx || view.InQ != q.ID:
+			segs = append(segs, seg{"[" + val + "]", cGreen})
+		case nc:
+			segs = append(segs, seg{">" + val + "<", ""})
+		default:
+			segs = append(segs, seg{"[" + val + "]", cRev})
 		}
-		out = append(out, lineOf(w, nc, seg{"  " + f.Key + ": ", cQKey}, seg{view.InputBuf + "_", cRev}, seg{"  " + f.Label, cCyan}))
-	case view.ReadyQ == q.ID:
-		var p []string
-		for _, g := range q.Inputs {
-			p = append(p, g.Key+"="+view.ReadyVals[g.Key])
-		}
-		out = append(out, lineOf(w, nc, seg{"  입력됨: " + strings.Join(p, " ") + "  (c 로 제출, i 로 다시 입력)", cGreen}))
-	default:
-		if view.InputErr != "" {
-			out = append(out, lineOf(w, nc, seg{"  ! " + view.InputErr, cRed}))
-		}
-		out = append(out, lineOf(w, nc, seg{"  [i/Enter] 값 입력: " + endFieldNames(), cQKey}))
+	}
+	out := []string{lineOf(w, nc, segs...)}
+	if view.InErr != "" {
+		out = append(out, lineOf(w, nc, seg{"  ! " + view.InErr, cRed}))
+	}
+	if view.InIdx < len(q.Inputs) {
+		out = append(out, lineOf(w, nc, seg{"  지금 칸: " + q.Inputs[view.InIdx].Label, cCyan}))
 	}
 	return out
 }
