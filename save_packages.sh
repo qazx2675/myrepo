@@ -2,10 +2,10 @@
 # ==============================================================================
 # save_packages.sh
 # RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 등록된 yum 레포지토리로부터
-# 필수 패키지 및 전체 의존성 RPM 저장 스크립트 (x86_64 전용, 폐쇄망 최적화)
+# 필수 패키지 및 전체 의존성 RPM 일괄 수집/저장 스크립트
 #
 # 레포지토리: RHEL810-base (BaseOS), RHEL810-app (AppStream)
-# 대상 패키지: nscd, autofs, rpcbind, nfs-utils, tcsh
+# 대상 패키지: nscd, autofs, rpcbind, nfs-utils, tcsh 및 전체 의존성
 # ==============================================================================
 set -euo pipefail
 
@@ -16,10 +16,12 @@ OUT_DIR="./rhel810_packages"
 CREATE_ARCHIVE=0
 TARGET_PACKAGES=("nscd" "autofs" "rpcbind" "nfs-utils" "tcsh")
 
-# 핵심 의존성 목록 (오프라인 타깃 서버 최소설치 대비)
-# ※ libxml2, glibc는 모든 RHEL 8 기본 설치에 포함되어 있으며 호스트의 최신 errata와
-#    충돌(downgrade conflict)을 방지하기 위해 강제 복사 목록에서 제외합니다.
+# 수집 대상 주요 의존성 (설치 대상 서버의 환경에 구애받지 않도록 전체 수집)
 KNOWN_DEPENDENCIES=(
+  "glibc"
+  "glibc-common"
+  "glibc-all-langpacks"
+  "libxml2"
   "libtirpc"
   "libevent"
   "gssproxy"
@@ -57,10 +59,15 @@ usage() {
 사용법: $0 [옵션]
 
 RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 yum/dnf 레포지토리(RHEL810-base, RHEL810-app)에서
-대상 패키지와 전체 의존성을 64비트(x86_64) 전용으로 추출하여 오프라인 설치용 번들로 저장합니다.
+대상 패키지와 전체 의존성 RPM을 빠짐없이 수집하여 오프라인 설치용 독립 번들로 저장합니다.
+(호스트와의 버전 차이나 충돌 해결은 install_packages.sh에서 지능적으로 자동 필터링합니다)
 
 대상 패키지:
-  - nscd, autofs, rpcbind, nfs-utils, tcsh (및 glibc 등 64비트 하위 의존성 전체)
+  - nscd, autofs, rpcbind, nfs-utils, tcsh 및 전체 하위 의존성
+
+사용 레포지토리:
+  - RHEL810-base (BaseOS)
+  - RHEL810-app  (AppStream)
 
 옵션:
   -m, --mount <경로>      RHEL 8.10 ISO 마운트 디렉터리 (기본값: /mnt/rhel810)
@@ -74,6 +81,9 @@ RHEL 8.10 마운트 이미지(/mnt/rhel810) 및 yum/dnf 레포지토리(RHEL810-
 
   # 압축 번들(.tar.gz) 동시 생성
   sudo $0 -a
+
+  # 마운트 경로 및 출력 디렉터리 직접 지정
+  sudo $0 -m /mnt/rhel810 -o ./my_rhel8_bundle -a
 EOF
 }
 
@@ -83,18 +93,18 @@ while [[ $# -gt 0 ]]; do
     -m|--mount)  MOUNT_DIR="$2"; shift 2 ;;
     -o|--output) OUT_DIR="$2"; shift 2 ;;
     -a|--archive) CREATE_ARCHIVE=1; shift ;;
+    -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $1"; exit 1 ;;
   esac
 done
 
-# root 권한 확인
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   log_error "이 스크립트는 root 권한(sudo)으로 실행해야 합니다."
   exit 1
 fi
 
 log_info "=========================================================="
-log_info " RHEL 8.10 오프라인 패키지 수집 도구 (x86_64 전용)"
+log_info " RHEL 8.10 오프라인 패키지 전체 수집 도구"
 log_info " 대상 패키지: ${TARGET_PACKAGES[*]}"
 log_info " 마운트 경로: $MOUNT_DIR"
 log_info " 출력 디렉터리: $OUT_DIR"
@@ -102,9 +112,15 @@ log_info "=========================================================="
 
 PKG_MGR="dnf"
 if ! command -v dnf >/dev/null 2>&1; then
-  PKG_MGR="yum"
+  if command -v yum >/dev/null 2>&1; then
+    PKG_MGR="yum"
+  else
+    log_error "시스템에 'dnf' 또는 'yum' 명령어가 없습니다."
+    exit 1
+  fi
 fi
 
+# 레포지토리 인자 구성 (RHEL810-base, RHEL810-app)
 REPO_ARGS=()
 if [[ -d "$MOUNT_DIR/BaseOS" ]]; then
   REPO_ARGS+=("--repofrompath=RHEL810-base,file://$MOUNT_DIR/BaseOS")
@@ -125,13 +141,13 @@ REPO_ARGS+=(
 RPMS_OUT_DIR="$OUT_DIR/rpms"
 mkdir -p "$RPMS_OUT_DIR"
 
-log_info "레포지토리로부터 x86_64 패키지 및 의존성 다운로드 시작..."
+log_info "레포지토리로부터 패키지 및 전체 의존성 수집 시작..."
 
 DOWNLOADED_SOMETHING=0
 
-# 방법 1: repotrack (반드시 -a x86_64 지정하여 32비트 i686 혼입 차단)
+# 방법 1: repotrack 사용 (yum-utils가 있는 경우)
 if command -v repotrack >/dev/null 2>&1; then
-  log_info "repotrack 도구 감지: 64비트(x86_64) 의존성 전수 수집 시도..."
+  log_info "repotrack 도구로 의존성 전수 수집 시도..."
   set +e
   repotrack -a x86_64 -p "$RPMS_OUT_DIR" \
     -r RHEL810-base -r RHEL810-app \
@@ -143,10 +159,10 @@ if command -v repotrack >/dev/null 2>&1; then
   set -e
 fi
 
-# 방법 2: dnf download 또는 yumdownloader (--arch=x86_64,noarch 지정)
+# 방법 2: dnf download 또는 yumdownloader 사용
 if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
   if $PKG_MGR download --help >/dev/null 2>&1; then
-    log_info "$PKG_MGR download --resolve --alldeps (--arch=x86_64,noarch) 시도..."
+    log_info "$PKG_MGR download --resolve --alldeps 명령으로 수집 시도..."
     set +e
     $PKG_MGR download -y \
       --arch=x86_64,noarch \
@@ -161,7 +177,7 @@ if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
     fi
     set -e
   elif command -v yumdownloader >/dev/null 2>&1; then
-    log_info "yumdownloader --resolve --archlist=x86_64,noarch 시도..."
+    log_info "yumdownloader --resolve 명령으로 수집 시도..."
     set +e
     yumdownloader --destdir="$RPMS_OUT_DIR" \
       --resolve \
@@ -186,32 +202,24 @@ if [[ $DOWNLOADED_SOMETHING -ne 1 ]]; then
   set -e
 fi
 
-# 방법 4: 마운트 디렉터리(/mnt/rhel810)에서 64비트 RPM 직접 탐색 및 복사 (누락 방지)
+# 방법 4: 마운트 디렉터리(/mnt/rhel810)에서 대상 패키지 및 의존성 전체 수집 (누락 방지)
 if [[ -d "$MOUNT_DIR" ]]; then
-  log_info "마운트 디렉터리($MOUNT_DIR)에서 64비트 필수 패키지 및 glibc 등 의존성 확인..."
+  log_info "마운트 디렉터리($MOUNT_DIR)에서 필수 패키지 및 주요 의존성 RPM 확보..."
   ALL_SEARCH_PKGS=("${TARGET_PACKAGES[@]}" "${KNOWN_DEPENDENCIES[@]}")
 
   for pkg in "${ALL_SEARCH_PKGS[@]}"; do
-    # 이미 x86_64 또는 noarch 파일이 있는지 확인
     if ! find "$RPMS_OUT_DIR" -maxdepth 1 \( -name "${pkg}-[0-9]*.x86_64.rpm" -o -name "${pkg}-[0-9]*.noarch.rpm" \) 2>/dev/null | grep -q .; then
       found_files=$(find "$MOUNT_DIR" -maxdepth 4 \( -name "${pkg}-[0-9]*.x86_64.rpm" -o -name "${pkg}-[0-9]*.noarch.rpm" \) 2>/dev/null || true)
       if [[ -n "$found_files" ]]; then
         while IFS= read -r f; do
           if [[ -f "$f" ]]; then
             cp -n "$f" "$RPMS_OUT_DIR/"
-            log_info "  - 복사됨: $(basename "$f")"
+            log_info "  - 수집됨: $(basename "$f")"
           fi
         done <<< "$found_files"
       fi
     fi
   done
-fi
-
-# 32비트(i686) RPM 혼입 원천 차단 (libc.so.6(GLIBC_2.28) 의존성 에러의 원인 제거)
-I686_FILES=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "*.i686.rpm" 2>/dev/null || true)
-if [[ -n "$I686_FILES" ]]; then
-  log_warn "32비트(i686) RPM 파일 감지: 64비트 시스템 GLIBC 충돌 방지를 위해 배제합니다."
-  rm -f "$RPMS_OUT_DIR"/*.i686.rpm
 fi
 
 # 필수 5개 패키지 수집 검증
@@ -235,21 +243,43 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
 fi
 
 RPM_COUNT=$(find "$RPMS_OUT_DIR" -maxdepth 1 -name "*.rpm" | wc -l)
-log_success "총 ${RPM_COUNT}개의 64비트 RPM 파일 수집 완료!"
+log_success "총 ${RPM_COUNT}개의 RPM 파일이 번들 디렉터리에 수집되었습니다."
 
+# 패키지 매니페스트 목록 작성
+log_info "패키지 매니페스트(package_manifest.txt) 작성 중..."
+{
+  printf "# RHEL 8.10 Saved Packages Manifest\n"
+  printf "# Generated: %s\n" "$(date '+%Y-%m-%d %H:%M:%S')"
+  printf "# Source Mount: %s\n" "$MOUNT_DIR"
+  printf "# Repositories: RHEL810-base, RHEL810-app\n\n"
+  printf "%-30s %-25s %-10s\n" "PACKAGE NAME" "VERSION-RELEASE" "ARCH"
+  printf "%s\n" "----------------------------------------------------------------------"
+  for rpm_file in "$RPMS_OUT_DIR"/*.rpm; do
+    rpm -qp --queryformat "%-30{NAME} %-25{VERSION}-%{RELEASE} %-10{ARCH}\n" "$rpm_file" 2>/dev/null || \
+      printf "%-65s (info unavailable)\n" "$(basename "$rpm_file")"
+  done
+} > "$OUT_DIR/package_manifest.txt"
+
+# 설치 스크립트 번들링
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [[ -f "$SCRIPT_DIR/install_packages.sh" ]]; then
   cp -f "$SCRIPT_DIR/install_packages.sh" "$OUT_DIR/"
   chmod +x "$OUT_DIR/install_packages.sh"
 fi
 
+# 압축 번들 생성 옵션 (-a / --archive)
 if [[ $CREATE_ARCHIVE -eq 1 ]]; then
   TAR_NAME="$(basename "$OUT_DIR").tar.gz"
   PARENT_DIR=$(dirname "$OUT_DIR")
   DIR_NAME=$(basename "$OUT_DIR")
   log_info "압축 번들 생성 중 ($PARENT_DIR/$TAR_NAME)..."
   tar -czf "$PARENT_DIR/$TAR_NAME" -C "$PARENT_DIR" "$DIR_NAME"
-  log_success "압축 번들 완료: $PARENT_DIR/$TAR_NAME"
+  ARCHIVE_SIZE=$(du -h "$PARENT_DIR/$TAR_NAME" | cut -f1)
+  log_success "압축 번들 완료: $PARENT_DIR/$TAR_NAME (${ARCHIVE_SIZE})"
 fi
 
-log_success "패키지 저장이 성공적으로 완료되었습니다! ($(realpath "$OUT_DIR"))"
+log_info "=========================================================="
+log_success "패키지 저장이 성공적으로 완료되었습니다!"
+log_info "저장 경로: $(realpath "$OUT_DIR")"
+log_info "총 수집 RPM 수: ${RPM_COUNT}개"
+log_info "=========================================================="

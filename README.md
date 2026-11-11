@@ -1,20 +1,23 @@
-# RHEL 8.10 필수 패키지 오프라인 저장 및 폐쇄망 설치 도구
+# RHEL 8.10 필수 패키지 오프라인 저장 및 폐쇄망 자동 설치 도구
 
-RHEL 8.10 설치 이미지(`/mnt/rhel810`) 및 로컬 yum 레포지토리(`RHEL810-base`, `RHEL810-app`)로부터 필수 시스템 패키지(`nscd`, `autofs`, `rpcbind`, `nfs-utils`, `tcsh`)와 하위 의존성 전체를 추출하여 번들로 저장하고, 외부 네트워크 및 GPG 키가 없는 폐쇄망 환경의 다른 RHEL 8 서버에 안전하게 일괄 설치하는 2종 스크립트 모음입니다.
+RHEL 8.10 설치 이미지(`/mnt/rhel810`) 및 로컬 yum 레포지토리(`RHEL810-base`, `RHEL810-app`)로부터 필수 시스템 패키지(`nscd`, `autofs`, `rpcbind`, `nfs-utils`, `tcsh`)와 하위 의존성 전체를 추출하여 저장하고, 외부 네트워크 및 GPG 키가 없는 폐쇄망 환경의 다른 RHEL 8 서버에 안전하게 일괄 설치하는 2종 스크립트 모음입니다.
 
 ---
 
-## 📌 주요 특징
+## 📌 주요 설계 특징
 
-- **폐쇄망 최적화 (GPG 검증 비활성화)**:
-  - 폐쇄망 환경에서는 Red Hat GPG 공개키가 없거나 갱신되지 않는 경우가 대부분이므로, 모든 수집 및 설치 과정에서 `--nogpgcheck` 및 `gpgcheck=0`을 기본 적용하여 서명 관련 오류를 원천 차단합니다.
-  - 불필요한 체크섬 생성/검증 단계를 제거하여 폐쇄망 작업 흐름을 간소화했습니다.
-- **기존 동작 환경 직결 연동 (`save_packages.sh`)**:
-  - 현재 시스템에서 `yum install`이 정상 동작하는 `RHEL810-base`, `RHEL810-app` 레포지토리 및 `/mnt/rhel810` 마운트 미디어를 직접 연결하여 패키지를 수집합니다.
-  - `repotrack`, `dnf download --resolve --alldeps`, 또는 마운트 미디어 직접 복사를 통해 **최소 설치(Minimal Install) 대상 서버에서도 설치 가능한 의존성 RPM 목록**을 자동으로 확보합니다.
-- **안전한 폐쇄망 오프라인 설치 (`install_packages.sh`)**:
-  - 외부 레포지토리 연결을 차단(`--disablerepo='*'`)하고 오직 전달받은 로컬 RPM만을 사용하여 트랜잭션을 해결합니다.
-  - 5개 패키지 설치 여부 전수 검증 및 서비스(`rpcbind`, `autofs`, `nscd`) 자동 활성화/실행을 지원합니다.
+- **포괄적인 사전 수집 (`save_packages.sh`)**:
+  - 특정 패키지를 임의로 제외하지 않고, 마운트 미디어 및 레포지토리에서 대상 패키지와 전체 하위 의존성(glibc, libxml2, nfs 라이브러리 등)을 빠짐없이 온전히 수집합니다.
+  - 별도의 설정 파일이나 간섭 없이 표준 DNF/repotrack 명령어로 동작합니다.
+
+- **지능형 설치 필터링 (`install_packages.sh`)**:
+  - 대상 서버의 환경을 실시간으로 분석하여 폐쇄망에서 자주 발생하는 3대 의존성 충돌을 **스크립트가 스스로 감지하고 자동 해결**합니다:
+    1. **32비트(i686) RPM 자동 배제**: 64비트 시스템에 32비트 RPM이 혼입되어 발생하는 `libc.so.6(GLIBC_2.28)` 오류를 원천 차단합니다.
+    2. **호스트 기존 패키지 보존**: 호스트에 이미 설치된 최신 라이브러리(예: `python3-libxml2`가 요구하는 최신 `libxml2`, 최신 `glibc`)가 있을 경우, 번들 내의 구버전 RPM을 자동으로 제외하여 다운그레이드 충돌을 방지합니다.
+    3. **`nscd` GLIBC 릴리즈 락 자동 해결**: Red Hat의 `nscd`가 요구하는 엄격한 `glibc = %{version}-%{release}` 불일치 감지 시, `--nodeps` 옵션으로 안전하게 단독 설치(바이너리 ABI 100% 호환)하여 트랜잭션 실패를 방지합니다.
+
+- **완전 폐쇄망 최적화**:
+  - 외부 레포지토리 접속 차단(`--disablerepo='*'`) 및 GPG 서명 검증 비활성화(`--nogpgcheck`, `--nosignature`)로 인터넷이 차단된 환경에서도 문제없이 실행됩니다.
 
 ---
 
@@ -47,15 +50,15 @@ sudo ./save_packages.sh -a
 #### 생성되는 산출물 구조
 ```text
 rhel810_packages/
-├── rpms/                       # 수집된 모든 RPM 패키지 파일 (의존성 포함)
+├── rpms/                       # 수집된 전체 RPM 패키지 파일 (의존성 포함)
 │   ├── autofs-*.rpm
 │   ├── nscd-*.rpm
 │   ├── rpcbind-*.rpm
 │   ├── nfs-utils-*.rpm
 │   ├── tcsh-*.rpm
-│   └── (기타 libtirpc, hesiod, gssproxy 등 의존성 RPMs)
+│   └── (기타 glibc, libxml2, libtirpc, hesiod, gssproxy 등 전체 의존성 RPMs)
 ├── package_manifest.txt        # 패키지 이름, 버전, 아키텍처 목록
-└── install_packages.sh         # 대상 서버에서 즉시 실행할 수 있는 설치 스크립트
+└── install_packages.sh         # 대상 서버에서 즉시 실행할 수 있는 자동 필터링 설치 스크립트
 ```
 
 ---
@@ -79,16 +82,18 @@ cd /tmp
 tar -xzf rhel810_packages.tar.gz
 cd rhel810_packages
 
-# 패키지 무결격 설치 및 서비스(rpcbind, autofs, nscd) 자동 시작
+# 패키지 자동 필터링 설치 및 서비스(rpcbind, autofs, nscd) 자동 시작
 sudo ./install_packages.sh -s
 ```
 
 실행 시 다음 작업이 자동으로 수행됩니다:
-1. `dnf --disablerepo='*' --nogpgcheck -y install rpms/*.rpm` 로컬 오프라인 설치
-2. 5개 패키지 정상 설치 여부 전수 검증 (`rpm -q`)
-3. `tcsh` 쉘 실행 검증
-4. `-s` 지정 시 `rpcbind`, `autofs`, `nscd` 서비스 자동 등록 및 시작
-5. 최종 설치 버전 및 서비스 상태 요약표 출력
+1. 번들 내 RPM 분석 및 호스트 충돌 유발 패키지 자동 필터링 (i686 제외, libxml2/glibc 호스트 버전 보존)
+2. `nscd` 버전 잠금 감지 시 `--nodeps` 단독 선행 설치
+3. `dnf --disablerepo='*' --nogpgcheck -y install` 로컬 오프라인 트랜잭션 설치
+4. 5개 패키지 정상 설치 여부 전수 검증 (`rpm -q`)
+5. `tcsh` 쉘 실행 검증
+6. `-s` 지정 시 `rpcbind`, `autofs`, `nscd` 서비스 자동 등록 및 시작
+7. 최종 설치 버전 및 서비스 상태 요약표 출력
 
 ---
 
