@@ -419,6 +419,7 @@ func logFileExpr(p string) string {
 // hostInfo 는 1차 출력에서 뽑은 장비 한 대의 정보.
 type hostInfo struct {
 	vendor   string // GenuineIntel / AuthenticAMD / ""
+	vendorX  bool   // vendor_id 줄은 읽었는데 Intel/AMD 가 아님(CPU 열이 늘 X: -auto 가 바로 포기한다)
 	cpuIntel bool
 	cpuAMD   bool
 	noIntel  bool // Intel CPU 테스트 로그 없음
@@ -459,6 +460,8 @@ func parseInfoOutput(out string) map[string]*hostInfo {
 				v := strings.TrimSpace(val[j+1:])
 				if v == "GenuineIntel" || v == "AuthenticAMD" {
 					h.vendor = v
+				} else {
+					h.vendorX = true
 				}
 			}
 		case strings.HasPrefix(val, "Thread(s) per core:"):
@@ -539,6 +542,7 @@ const header = "hostname" + sep + "상태" + sep + "설정체크" + sep + "CPU�
 // hostResult 는 장비 한 대의 판정 결과(출력되는 문자열 그대로). 완료가 아니면 Check~OS 는 모두 "-".
 type hostResult struct {
 	Host, Status, Check, CPU, Stress, HT, OS string
+	VendorUnknown                            bool // CPU 벤더를 읽었는데 Intel/AMD 가 아님(-auto 가 CPU 테스트 없이 바로 포기). 정보가 없으면 false
 }
 
 // formatRow 는 8열('|' 구분) 한 줄을 만든다. 완료가 아니면 3~7열은 모두 '-'.
@@ -1213,6 +1217,7 @@ func judge(conf config, gossh, hostFile string, logw io.Writer) (*judgeResult, e
 		if statuses[i] == stDone {
 			ih := info[h]
 			r.Check, r.CPU, r.Stress, r.HT, r.OS = c, ih.cpuResult(), ih.stressResult(), ih.htResult(), ih.osResult()
+			r.VendorUnknown = ih != nil && ih.vendorX && ih.vendor == ""
 		}
 		jr.Hosts = append(jr.Hosts, r)
 	}

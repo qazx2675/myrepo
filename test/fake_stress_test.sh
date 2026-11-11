@@ -25,6 +25,17 @@
 #                             기록: REG <steps> <ns> yml=<yml>
 #                           * -yaml-state [-user u] [-conf f]: 현재 값을 "[yaml상태] key=value" 4줄로 찍는다(기록: YAMLSTATE <ns>). FAKE_YS_EXIT=<코드> 면 오류로 끝남
 #   FAKE_YML_TAMPER=<steps> 이 steps 의 첫 등록 직후 다른 사람이 소스를 바꾼 것처럼 yml=os_install.yml, hosts=x,y,z 로 덮어쓴다(한 번만)
+#   --- -auto 막힘 대응 시험용(모두 환경 변수로 켬, 안 켜면 출력·동작이 예전과 같음) ---
+#   FAKE_ST_EVENTS=1        진짜 stress-test 의 이벤트 줄을 흉내: [감시] 줄 바로 앞에 "[job] stage=<a|b> id=<번호>"(번호는 $FAKE_MARK_DIR/jobseq),
+#                           끝날 때 "[결과] stage=<a|b> done=<쉼표> notrun=<쉼표> nomon=<쉼표>"(stage 는 -steps 값). 없으면 new_setup 은 launch 시점 O 로 대체
+#   FAKE_ST_NG_NOTRUN='h1,h2'  -steps b 에서 이 호스트는 [결과] 의 notrun 에 넣고 ng_<호스트> 표식을 만들지 않는다(부하가 안 오른 것). 나머지는 done
+#   FAKE_ST_NG_NOTRUN_ONCE=1   위 notrun 을 호스트마다 첫 launch 한 번만 적용(두 번째부터 정상) → 재launch 뒤 O 가 되는 것을 시험. 안 켜면 계속 notrun(3회 뒤 포기)
+#   FAKE_ST_EXCLUDE='h1,h2' 이 호스트는 launch 에서 뺀 것처럼 시작할 때 "[제외] stage=<s> hosts=<쉼표> reason=접속불가" 줄을 찍고 이후 감시·표식에서 제외
+#                           (START 기록의 hosts= 에는 받은 목록 그대로 남김)
+#   FAKE_ST_EXCLUDE_ONCE=1  위 [제외] 를 호스트마다 첫 launch 한 번만 적용(다음 launch 부터는 접속이 복구된 것으로 정상 처리)
+#   FAKE_ST_ENV_FAIL=<n>    처음 n 번의 launch(-steps 가 a 든 b 든, $FAKE_MARK_DIR/envfail_count 로 셈)는 "오류: AWX 조회 실패(가짜)" 를 찍고 종료코드 2 로 끝남
+#                           ([job]/[감시] 전 → 환경 실패). 기록: ENVFAIL <steps> <ns>
+#   FAKE_ST_DELCHECK_FAIL=1 인벤토리 삭제 확인 중지 흉내: 삭제 전과 같은 호스트가 남았다는 오류를 찍고 종료코드 2([job]/[감시] 전, 등록도 안 함). 기록: DELCHECKFAIL <steps> <ns>
 set -u
 
 user=""
@@ -77,10 +88,27 @@ while IFS= read -r line || [ -n "$line" ]; do
 done < "$hostsf"
 hl=$(IFS=,; echo "${hosts[*]-}")
 
+hl_in=$hl
+excluded=()
+if [ -n "${FAKE_ST_EXCLUDE:-}" ]; then # 접속체크로 뺀 호스트: START 기록(받은 목록)에는 남기고 이후 감시·표식에서는 뺀다
+	kept=()
+	for h in ${hosts[@]+"${hosts[@]}"}; do
+		case ",$FAKE_ST_EXCLUDE," in *",$h,"*) ;; *) kept+=("$h"); continue ;; esac
+		if [ "${FAKE_ST_EXCLUDE_ONCE:-}" = 1 ] && [ -n "${FAKE_MARK_DIR:-}" ]; then # 호스트마다 첫 launch 한 번만 뺀다(다음엔 접속 복구)
+			[ -e "$FAKE_MARK_DIR/excl_done_$h" ] && { kept+=("$h"); continue; }
+			: > "$FAKE_MARK_DIR/excl_done_$h"
+		fi
+		excluded+=("$h")
+	done
+	hosts=(${kept[@]+"${kept[@]}"})
+	hl=$(IFS=,; echo "${hosts[*]-}")
+fi
+csv() { local IFS=,; echo "$*"; }
+
 now() { date +%s%N; }
 log() { [ -n "${FAKE_ST_LOG:-}" ] && echo "$*" >> "$FAKE_ST_LOG"; return 0; }
 
-log "START $steps $(now) user=$user hosts=$hl batch=$batch conf=${conf:-none} end=${end:-none} gossh=${GOSSH:-none}"
+log "START $steps $(now) user=$user hosts=$hl_in batch=$batch conf=${conf:-none} end=${end:-none} gossh=${GOSSH:-none}"
 [ "$ignoreoff" = 1 ] && log "IGNOREOFF $steps"
 # 진짜 stress-test: -conf 로 준 파일이 없으면 종료코드 2
 if [ -n "$conf" ] && [ ! -f "$conf" ]; then
@@ -88,7 +116,8 @@ if [ -n "$conf" ] && [ ! -f "$conf" ]; then
 	exit 2
 fi
 [ -n "${FAKE_ST_PIDFILE:-}" ] && echo "$$" >> "$FAKE_ST_PIDFILE"
-echo "fake stress-test: steps=$steps hosts=$hl"
+echo "fake stress-test: steps=$steps hosts=$hl_in"
+[ "${#excluded[@]}" -gt 0 ] && echo "[제외] stage=$steps hosts=$(csv "${excluded[@]}") reason=접속불가"
 
 # 진짜 stress-test: steps 에 b 가 있으면 -end 필수(연 4자리, 월 1-12, 일 1-31, 시 0-23, 분 0-59)
 case $steps in
@@ -99,6 +128,22 @@ case $steps in
 		fi
 		;;
 esac
+
+# 환경 실패 흉내(등록·[job]·[감시] 전에 끝남)
+if [ -n "${FAKE_ST_ENV_FAIL:-}" ] && [ -n "${FAKE_MARK_DIR:-}" ]; then
+	efn=$(cat "$FAKE_MARK_DIR/envfail_count" 2> /dev/null || echo 0)
+	if [ "$efn" -lt "$FAKE_ST_ENV_FAIL" ]; then
+		echo $((efn + 1)) > "$FAKE_MARK_DIR/envfail_count"
+		log "ENVFAIL $steps $(now)"
+		echo "오류: AWX 조회 실패(가짜)" >&2
+		exit 2
+	fi
+fi
+if [ "${FAKE_ST_DELCHECK_FAIL:-}" = 1 ]; then
+	log "DELCHECKFAIL $steps $(now)"
+	echo "오류: 인벤토리 삭제 확인 실패: 삭제 전과 같은 호스트가 남아 있습니다(가짜)" >&2
+	exit 2
+fi
 
 # 등록(invsync) 흉내: 소스 yml·호스트를 이 묶음의 것으로 바꾸고 [등록] 줄을 찍는다(진짜는 템플릿 인벤토리 확인보다 먼저)
 if [ -n "${FAKE_YML_DIR:-}" ]; then
@@ -146,8 +191,27 @@ case "${FAKE_ST_BUSY:-}" in
 esac
 
 sleep "${FAKE_ST_DELAY:-1}"
+if [ "${FAKE_ST_EVENTS:-}" = 1 ]; then
+	jseq=$(cat "${MARK:-/nonexistent}/jobseq" 2> /dev/null || echo 0)
+	jseq=$((jseq + 1))
+	[ -n "$MARK" ] && echo "$jseq" > "$MARK/jobseq"
+	echo "[job] stage=$steps id=$jseq"
+fi
 echo "[감시] $steps 경과 1/60초 기준(3) 미만 ${#hosts[@]}대: $hl"
 log "MON $steps $(now)"
+
+# stress-ng 부하가 안 오른 호스트(notrun): -steps b 에서만. ONCE 면 호스트마다 첫 launch 한 번만
+notrun_l=()
+if [ "$steps" = b ] && [ -n "${FAKE_ST_NG_NOTRUN:-}" ]; then
+	for h in ${hosts[@]+"${hosts[@]}"}; do
+		case ",$FAKE_ST_NG_NOTRUN," in *",$h,"*) ;; *) continue ;; esac
+		if [ "${FAKE_ST_NG_NOTRUN_ONCE:-}" = 1 ] && [ -n "$MARK" ]; then
+			[ -e "$MARK/notrun_done_$h" ] && continue
+			: > "$MARK/notrun_done_$h"
+		fi
+		notrun_l+=("$h")
+	done
+fi
 
 case $steps in
 	a)
@@ -162,10 +226,20 @@ case $steps in
 		;;
 	b)
 		if [ -n "$MARK" ]; then
-			for h in ${hosts[@]+"${hosts[@]}"}; do : > "$MARK/ng_$h"; done
+			for h in ${hosts[@]+"${hosts[@]}"}; do
+				case " ${notrun_l[*]-} " in *" $h "*) continue ;; esac
+				: > "$MARK/ng_$h"
+			done
 		fi
 		sleep 1
 		;;
 esac
+if [ "${FAKE_ST_EVENTS:-}" = 1 ]; then
+	done_l=()
+	for h in ${hosts[@]+"${hosts[@]}"}; do
+		case " ${notrun_l[*]-} " in *" $h "*) ;; *) done_l+=("$h") ;; esac
+	done
+	echo "[결과] stage=$steps done=$(csv ${done_l[@]+"${done_l[@]}"}) notrun=$(csv ${notrun_l[@]+"${notrun_l[@]}"}) nomon="
+fi
 log "END $steps $(now)"
 exit "${FAKE_ST_EXIT:-0}"

@@ -35,8 +35,10 @@ type fakeAWX struct {
 	srcPath   string   // 소스 11 의 source_path (-yaml-state 시험)
 	hosts     []string // 인벤토리 7 의 호스트 이름 (nil 이면 repoDir 의 가장 최근 yaml 4번째 필드 = 실제 등록처럼)
 	repoDir   string
-	hostPages bool // true 면 호스트 목록을 2쪽(next)으로 나눠 준다
-	failSrc   bool // 소스 11 조회가 500
+	hostPages bool         // true 면 호스트 목록을 2쪽(next)으로 나눠 준다
+	failSrc   bool         // 소스 11 조회가 500
+	hostSeq   [][]string   // 값이 있으면 호스트 조회 n번째에 hostSeq[n-1] 을 준다 (끝을 넘으면 마지막 것)
+	hostFail  map[int]bool // 호스트 조회 n번째가 500
 }
 
 var fakeInvNames = map[int]string{1: "DEFAULT", 2: "admin", 9: "kim"}
@@ -121,6 +123,17 @@ func (f *fakeAWX) handler(w http.ResponseWriter, r *http.Request) {
 	case "GET /api/v2/inventories/7/hosts/":
 		var res []map[string]interface{}
 		hosts := f.hosts
+		if f.hostFail[n] {
+			w.WriteHeader(500)
+			return
+		}
+		if len(f.hostSeq) > 0 {
+			i := n - 1
+			if i >= len(f.hostSeq) {
+				i = len(f.hostSeq) - 1
+			}
+			hosts = f.hostSeq[i]
+		}
 		if hosts == nil && f.repoDir != "" {
 			hosts = lastYamlHosts(f.repoDir)
 		}

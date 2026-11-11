@@ -324,7 +324,8 @@ gossh 의 stdout·stderr 는 화면에 섞지 않고 `<호스트파일>_new_setu
 go test ./...
 bash test/run_tests.sh   # fake gossh 로 모든 상태 시나리오 확인
 bash test/run_flow_tests.sh   # -run 전체 흐름(설정수정→CPU/stress-ng→재부팅 감지→재기동→시간초과→중지, 종료 시각 입력 -end, 인벤토리 사용 중 r/x/중지/시간제한 일시정지)
-bash test.sh                  # 화면(TUI) 조작감 데모: 가짜 서버로 -run 화면이 바로 뜸(`bash test.sh 8000` 은 8000대, 끝나면 정리, 실제 서버엔 손대지 않음)
+bash test.sh                  # 데모 메뉴(Enter = 2): 1 조작감(-run 화면, `bash test.sh 1 8000` 은 8000대) / 2 -auto 막힘 대응 한 화면 데모(환경 실패 재시도·CPU 벤더 미인식·stress-ng 재launch) / 3 -auto 인벤토리 사용 중 질문 / 4 -auto 삭제 확인 중지(시뮬레이션). `bash test.sh 2` 처럼 번호를 바로 줄 수 있고(첫 인자가 5 이상이면 예전처럼 호스트 수), 끝나면 정리, 실제 서버엔 손대지 않음
+ONLY=Y bash test/run_flow_tests.sh   # 흐름 시험 중 -auto 막힘 대응 절(Y, 약 1분 반)만. 가짜 stress-test 의 FAKE_ST_EVENTS·NG_NOTRUN·EXCLUDE·ENV_FAIL·DELCHECK_FAIL 스위치는 test/fake_stress_test.sh 머리말 참고
 bash test/run_setup_tests.sh  # setup.sh 대화형 설정(답을 파이프로 입력)·new_setup.sh 첫 실행 제안
 ```
 
@@ -500,6 +501,13 @@ bash new_setup.sh -run -auto [-new] [-c <설정파일>] [-er <장애목록파일
 |---|---|---|
 | **yaml 바뀜** | `y` / `s` | launch 직전에 AWX 인벤토리의 yml·호스트가 우리가 등록한 것과 다르면(다른 사람이 같은 인벤토리를 쓴 경우) 바뀐 yml 이름과 호스트 수를 보이고 묻습니다. `y` = 우리 yaml 로 다시 등록해 덮어쓰고(다른 작업의 내용은 `worker.log` 에 남김) launch 계속, `s` = 작업 중지. 첫 launch 는 묻지 않습니다 |
 | **인벤토리 사용 중** | `r` / `x` | 기존 질문(6.2): 다시 확인 / 이 묶음 중단 |
+
+**막힘 대응** (장시간 무인 운전에서 호스트가 O 로 못 가는 일을 줄이는 규칙. 계획서 `계획서_auto_막힘.md`)
+
+- **환경 실패는 시도에 세지 않습니다.** stress-test 가 `[job]` 줄(AWX job 생성)을 내기 전에 끝난 launch, 설정수정 명령 자체의 오류·시간초과, 인벤토리 불일치·삭제 실패·ssh 실패는 호스트 탓이 아니므로 시도(3회)를 쓰지 않습니다. 재시도 간격은 연속 환경 실패마다 5분 → 10분 → 20분 → 30분(상한)으로 늘고, 성공하면 5분으로 돌아갑니다. 화면의 마지막오류 열에 `환경 실패 n회: 사유` 가 보입니다. job 이 만들어진 뒤의 실패, CPU 판정 마감까지 O 아님, 수정 뒤에도 설정체크 X 는 호스트 실패로 세어 3회면 포기합니다.
+- **인벤토리 사용 중 질문은 스케줄러를 멈추지 않습니다.** 질문(`r`/`x`)은 그대로 뜨지만 재판정·설정수정·다른 종류의 launch·12시간 제한은 계속 돌고, 답을 기다리는 그 launch 하나만 보류됩니다. 12시간이 지나면 질문은 취소되고 그 묶음은 중단됩니다. `x` 도 환경 실패로 세어 5분 뒤 다시 launch 합니다.
+- **조용히 남던 호스트**: `vendor_id` 가 Intel/AMD 가 아니면 CPU 대기열에 넣지 않고 바로 포기(`CPU 벤더 미인식`). stress-test 가 접속불가로 뺀 호스트(`[제외]` 줄)는 묶음에서 빼고 대기열 뒤로 보냅니다(환경 실패, `stress-test 접속불가`). launch 직전에 CPU X 호스트의 CPU 열도 다시 읽어, 늦게 O 가 된 호스트는 다시 돌리지 않고 stress-ng 대상으로 넘깁니다. 판정이 실패하면 `AUTO_RECHECK` 뒤에 다시 판정하고 그동안은 설정수정을 하지 않습니다. 부하가 계속 3 이상이라 건너뛴 CPU X 호스트에는 끝날 때 `부하 높아 재실행 안 함` 이 붙습니다.
+- **stress-ng O 는 실행 확인 뒤에**: launch 직후에는 `stress-ng 실행중` 으로만 보이고, stress-test 의 `[결과]` 줄에서 실행 확인된(`done`) 호스트와 감시 제외(`nomon`, 비고 `감시 제외`)만 O 가 됩니다. 미실행(`notrun`)은 시도 1회로 세고 다시 launch 하며 3회면 포기합니다. `[결과]` 줄이 없으면(옛 stress-test, 워커 재기동) 예전처럼 launch 된 호스트를 O 로 봅니다.
 
 **TUI**: 머리가 `new_setup -run -auto` 로 바뀌고, 단계 줄 대신 `[자동 진행] 남은 시간 … | 완료(OOO) n대 | 남음 n대 | 포기 n대` 줄이 보입니다(자동 진행 중에는 단계가 `판정` 에 머물러 있으므로 단계 줄을 쓰지 않음).
 
