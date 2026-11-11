@@ -17,6 +17,15 @@ webui_html_path = os.path.join(base_dir, 'webui', 'index.html')
 if os.path.exists(webui_html_path):
     shutil.copy2(webui_html_path, os.path.join(internal_webui_dir, 'index.html'))
 
+# Ensure config.json and users.json exist in dist/
+config_src_path = os.path.join(base_dir, 'config', 'config.json')
+if os.path.exists(config_src_path):
+    shutil.copy2(config_src_path, os.path.join(dist_dir, 'config.json'))
+
+users_src_path = os.path.join(base_dir, 'config', 'users.json')
+if os.path.exists(users_src_path) and not os.path.exists(os.path.join(dist_dir, 'users.json')):
+    shutil.copy2(users_src_path, os.path.join(dist_dir, 'users.json'))
+
 def strip_comments(code):
     result = []
     i = 0

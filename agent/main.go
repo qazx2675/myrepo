@@ -2102,6 +2102,18 @@ func main() {
 		Headless:                 *headlessFlag,
 	}
 
+	// If -share was not explicitly passed, check if config.json or users.json exists in the exe's directory
+	if !isFlagPassed("share") && (cfg.SharedDir == "." || cfg.SharedDir == "") {
+		if exePath, err := os.Executable(); err == nil {
+			exeDir := filepath.Dir(exePath)
+			if _, err := os.Stat(filepath.Join(exeDir, "config.json")); err == nil {
+				cfg.SharedDir = exeDir
+			} else if _, err := os.Stat(filepath.Join(exeDir, "users.json")); err == nil {
+				cfg.SharedDir = exeDir
+			}
+		}
+	}
+
 	// Try reading config.json from sharedDir
 	configPath := filepath.Join(cfg.SharedDir, "config.json")
 	if fileBytes, err := os.ReadFile(configPath); err == nil {
