@@ -13,7 +13,9 @@
 | `daemon_linux.go` `daemon_other.go` | setsid 로 워커 분리, flock 으로 중복 워커 방지·생존 확인(리눅스 외는 단순 대체) |
 | `run.go` | `-run` 진입: 새로 시작 / 다시 붙기 / 이어서 진행(y/N) / 결과 보기, user 선택(`USER_ROUTE`), 비 tty 일 때 글 출력 |
 | `tui.go` `render.go` `tty_linux.go` `tty_other.go` | TUI: termios raw 모드·키 읽기·화면 갱신 / 상태 → 화면 문자열 순수 함수(골든 시험) / tty·창 크기. `normKey`: 두벌식 자모·대문자·g/G·Space/b 를 같은 키로 맞춤. `splitKeys`: 끝이 덜 온 이스케이프·UTF-8 조각을 다음 읽기와 이어 붙이고, 50ms(`escWait`) 안에 안 오면 Esc 로 처리. `markSent`: 답을 보낸 질문은 워커가 받을 때까지(최대 5초) 다시 답하지 않는 잠금. `stateCache`: 수정 시각·크기가 같은 state.json 은 다시 파싱하지 않음. `drainKeys`: 쌓인 키를 모아 처리하고 한 번만 그림 |
-| `*_test.go` | 단위 시험: 판정·상태기계·렌더·TUI 키·실행기 시간 제한 |
+| `report.go` | 리포트(`p` 키)의 순수 부분: `vendorOf`(`VENDOR_*` glob 으로 벤더 판정), `buildReport`(현재 호스트 + 기준 → 글. 파일·시계·화면을 안 씀, 두 본), 스냅샷 `report_YYYYMMDD.json` 쓰기·읽기·고르기·호스트 목록 비교, `parseComment`(방식 2 코멘트 해석기, 어떤 글에도 오류 없음) |
+| `report_tui.go` | `handleReportKey`(상태 pick/input/confirm/show/err), `reportLines`(화면), `reportIO` 의 실제 구현(설정 파일 읽기·스냅샷 찾기·`@경로` 읽기·`.json`/`.txt`/`_B.txt` 쓰기) |
+| `*_test.go` | 단위 시험: 판정·상태기계·렌더·TUI 키·실행기 시간 제한·리포트 |
 | `go.mod` | `go 1.20`, 표준 라이브러리만 사용 (vendor 불필요) |
 | `new_setup.sh` | bash 래퍼. `/etc/redhat-release` 가 6.x 이면 `bin/new_setup_os6`(옛 버전), 아니면 `bin/new_setup` 실행 (인자 그대로 전달). 설정 파일이 없고 `-c` 없고 stdin·stderr 가 tty 이면 `setup.sh` 실행을 제안(`NEW_SETUP_NO_PROMPT=1` 이면 생략) |
 | `new_setup.conf.sample` | 설정 파일 예시 (`GOSSH`, `DISK_PATTERN`, `ERROR_PATTERN`, v2: `OS_CHECK_SH`, `OS_CHECK_EXCLUDE`, `CPU_INTEL_LOG/OK/LINE`, `CPU_AMD_LOG/OK/LINE`, `-run`: `STRESS_TEST`, `STRESS_TEST_CONF`, `USER_ROUTE`, `CPU_WAIT_START/INTERVAL/MAX`, `GOSSH_TIMEOUT`, `CHECK_TIMEOUT`, `STRESS_TIMEOUT`) |
@@ -31,7 +33,7 @@
 | `test/run_tests.sh` | fake gossh 로 전체 시나리오·출력 형식 검증 |
 | `test/fake_stress_test.sh` | stress-test 대역. `-user -hosts -steps a 또는 b -batch [-end y,m,d,h,min] [-conf]`(steps b 에 `-end` 없으면 종료코드 2, `FAKE_ST_BUSY=<steps>` 이면 `[인벤토리사용중]` 줄을 찍고 stdin 에서 r/그 밖을 읽음) 를 받아 호출을 `FAKE_ST_LOG` 에 기록, `[감시]` 줄을 낸 뒤 `FAKE_MARK_DIR` 표식(`cpu_`/`ng_`/`reboot_`/`hang_<steps>`)으로 fake gossh 의 CPU·stress-ng·btime 값을 바꿈 |
 | `test/run_flow_tests.sh` | `-run` 전체 흐름 시험(비 tty 로 워커를 띄우고 `answer.json` 으로 답): 1→5 단계, 설정수정 `-auto`, CPU/stress 대상 분리·순서, 재부팅 감지, 접속불가 무시, stress-test 멈춤→시간초과, `stop.req`, 워커 kill -9→재기동, 종료 시각 입력→`-end`, 인벤토리 사용 중 r/x/중지/시간제한 일시정지 |
-| `test.sh` | TUI 조작감 데모: `test/fake_*.sh` 로 가짜 서버를 꾸미고 `bin/new_setup -run` 을 tty 로 바로 띄움(호스트 수 인자, 끝나면 워커·폴더 정리) |
+| `test.sh` | TUI 조작감 데모: `test/fake_*.sh` 로 가짜 서버를 꾸미고 `bin/new_setup -run` 을 tty 로 바로 띄움(호스트 수 인자, 끝나면 워커·폴더 정리). 5번(`bash test.sh r`)은 리포트 데모: 벤더 규칙·어제 저장본·어제 글을 데모 폴더에 만들어 `p` 키를 써 봄 |
 | `.github/workflows/ci.yml` | gofmt·vet·test·shellcheck·run_tests.sh·run_flow_tests.sh·run_setup_tests.sh |
 | `README.md` / `PR_CHECKLIST.md` | 사용 설명 / 변경 점검 목록 |
 | `계획서.md` | 설계 결정, 가정·미확인 사항 |
@@ -50,6 +52,7 @@
 - **"stress-test 호출·CPU 감시 변경"** → `stress.go` + `worker.go` 의 `doLoad` + `test/fake_stress_test.sh`
 - **"`-run` 시간 제한·중지 변경"** → `execx.go`(`runCmdHold` 일시정지 포함), `worker.go`(`watchStop`)
 - **"종료 시각 입력·인벤토리 사용 중 질문 변경"** → `input.go`·`worker.go`(`askEnd`/`busyAsk`)·`stress.go`(`lineWatch` busy)·`tui.go`(`handleInputKey`)·`render.go`(`inputLines`) + `worker_input_test.go`·`tui_input_test.go`·`test/fake_stress_test.sh`
+- **"리포트(`p` 키) 양식·벤더 규칙·코멘트 해석 변경"** → `report.go` + `report_test.go`(양식·해석기 표), 키·화면은 `report_tui.go` + `report_tui_test.go`, 설정 키는 `main.go` 의 `parseConf` + `main_test.go`, 문서는 README 6.8. 워커·`state.json` 은 건드리지 않음
 - **"래퍼의 바이너리 선택 변경"** → `new_setup.sh` + `troubleshoot.sh` (같은 선택 로직 두 곳)
 - **"설정 도우미 질문·검증·저장 방식 변경"** → `setup.sh` + `test/run_setup_tests.sh` (+ `new_setup.conf.sample`)
 - **"진단(-doctor) 점검·안내 문구 변경"** → `doctor.go`(환경·`-run`) / `doctor_host.go`(단건) + `doctor_test.go`. 읽기 전용 유지
@@ -138,6 +141,20 @@ new_setup -run  (run.go)
 TUI (tui.go, render.go): state.json 을 1초마다 읽어 그림, 키를 누를 때는 다시 읽지 않음(stateCache 로 수정 시각·크기 같으면 재파싱 안 함), 맨 아래에 worker.log 끝 8줄 로그 창(tailLines: 끝 64KB 만 읽음, logHeight/logPane 순수 함수, l 로 토글), 키 c r x s y n S f l q ? g G Space b Ctrl-L, 입력 칸 Enter Tab ← → Backspace Esc
 render.go: keyHints 는 지금 쓸 수 있는 키만 주고 wrapItems 로 두 줄까지 줄바꿈, inputLines 는 종료 시각을 한 줄 양식(지금 칸 반전)으로 그림, helpLines 는 ? 도움말 문구
 ```
+
+## 리포트 흐름 (-run 화면의 p 키, 워커와 무관)
+
+```
+p (tui.go handleKey) → v.Rep = pick ─ 1 ─→ pickSnapshot(상태 폴더, 오늘) → 호스트 목록 비교 → repBase
+                                     └ 2 ─→ input(글·@경로) ─ Ctrl-D → parseComment → confirm ─ y → repBase
+os.ReadFile(st.ConfPath) + parseConf → 벤더 규칙·REPORT_ETA_DAYS   (loadConf 는 stderr 에 써서 화면이 깨지므로 안 씀)
+buildReport(현재 = runState.Hosts, 설정 순서, repBase, 오늘, etaDays) → 글 1개 또는 2개(본 A·본 B)
+상태 폴더에 쓰기(writeFileAtomic): report_YYYYMMDD.json(스냅샷) / report_YYYYMMDD.txt / report_YYYYMMDD_B.txt(두 본일 때)
+```
+
+- TUI 가 `state.json` 을 읽기만 한다. 워커·`state.json`·`stateVersion`·stress-test 는 바뀌지 않는다.
+- `buildReport`·`vendorOf`·`parseComment` 는 순수 함수이고, 파일 입출력은 `reportIO`(가짜로 바꿔 시험)로만 한다.
+- 리포트가 열린 동안은 `v.Rep` 를 먼저 보므로 숫자·`q` 가 질문 칸이나 종료로 가지 않는다. 입력 상태에서는 `normKey` 를 거치지 않은 원래 키를 쓴다.
 
 ## 설정 도우미 흐름 (setup.sh [-c conf] [--yes])
 

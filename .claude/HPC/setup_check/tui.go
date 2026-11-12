@@ -19,7 +19,7 @@ import (
 
 // parseKeys 는 터미널에서 읽은 바이트를 키 이름으로 나눈다.
 // 방향키 등은 "up" "down" "left" "right" "pgup" "pgdn" "home" "end", Shift-Tab 은 "shift-tab", 단독 ESC 는 "esc",
-// Ctrl-C 는 "ctrl-c", Ctrl-L 은 "ctrl-l", Tab 은 "tab", 엔터는 "enter", 그 밖에는 그 글자 그대로. 모르는 이스케이프 열은 버린다.
+// Ctrl-C 는 "ctrl-c", Ctrl-D 는 "ctrl-d"(리포트 코멘트 입력 끝), Ctrl-L 은 "ctrl-l", Tab 은 "tab", 엔터는 "enter", 그 밖에는 그 글자 그대로. 모르는 이스케이프 열은 버린다.
 func parseKeys(b []byte) []string {
 	var keys []string
 	for i := 0; i < len(b); {
@@ -68,6 +68,9 @@ func parseKeys(b []byte) []string {
 			i++
 		case c == 0x0c:
 			keys = append(keys, "ctrl-l")
+			i++
+		case c == 0x04:
+			keys = append(keys, "ctrl-d")
 			i++
 		case c == 0x7f || c == 0x08:
 			keys = append(keys, "backspace")
@@ -173,6 +176,7 @@ func normKey(key string) string {
 type tuiActions struct {
 	answer func(id, choice string, values map[string]string) error // answer.json 쓰기(values 는 입력 질문의 값, 없으면 nil)
 	stop   func() error                                            // stop.req 쓰기
+	report reportIO                                                // p 리포트의 파일·설정 접근(빈 값이면 설정 없음·저장 안 함)
 }
 
 // 화면 알림 문구
@@ -187,6 +191,9 @@ const (
 func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now time.Time, act tuiActions) (quit bool) {
 	v.Flash = ""
 	v.sync(st, now)
+	if v.Rep != "" { // 리포트 화면: 코멘트 입력은 공백·대소문자가 그대로여야 하므로 normKey 보다 먼저 가른다
+		return handleReportKey(v, st, key, h, now, act)
+	}
 	key = normKey(key)
 	if v.Help { // 도움말은 아무 키나 누르면 닫힘
 		v.Help = false
@@ -232,6 +239,11 @@ func handleKey(v *viewState, st *runState, alive bool, key string, w, h int, now
 		v.Result = !v.Result
 		return false
 	case "ctrl-l": // 화면 다시 그리기(runTUI 가 화면을 지우고 그린다)
+		return false
+	case "p": // 벤더별 리포트(상태를 아직 못 읽었으면 아무것도 안 함)
+		if st != nil {
+			startReport(v, st, now, act)
+		}
 		return false
 	case "up", "down", "pgup", "pgdn", "home", "end":
 		if st == nil {
@@ -625,6 +637,7 @@ func runTUI(dir string) error {
 	act := tuiActions{
 		answer: func(id, ch string, vals map[string]string) error { return writeAnswerValues(dir, id, ch, vals) },
 		stop:   func() error { return writeStopReq(dir) },
+		report: newReportIO(dir),
 	}
 	view := viewState{NoColor: os.Getenv("NO_COLOR") != ""}
 	var st *runState

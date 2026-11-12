@@ -158,8 +158,23 @@ type config struct {
 	AutoCPUInt  time.Duration // 첫 판정이 O 가 아니면 다시 판정하는 간격(launch 실패 뒤 다시 시도까지도 이만큼 쉼)
 	AutoCPUMax  time.Duration // 첫 판정 뒤 더 기다리는 최대 시간
 
+	// -run 화면의 리포트(p 키) 용(report.go)
+	Vendors       []vendorRule // VENDOR_<이름>=<패턴>,<패턴> 줄(설정 파일 순서)
+	ReportETADays int          // REPORT_ETA_DAYS: 부하테스트 완료예정일 = 오늘 + 이 일수(기본 2)
+
 	Warnings []string // 설정 해석 중 나온 경고(잘못된 시간 값 등). 호출한 쪽이 stderr 에 낸다
 }
+
+// vendorRule 은 설정의 VENDOR_<이름>=<패턴>,<패턴> 한 줄(같은 이름의 줄은 하나로 합친다).
+type vendorRule struct {
+	Name     string   // 리포트에 적을 이름(설정에 적은 글자 그대로)
+	Patterns []string // 소문자로 바꾼 glob(path.Match)
+}
+
+const (
+	defaultReportETADays = 2
+	vendorOther          = "기타" // 어느 벤더 규칙에도 맞지 않는 호스트의 벤더
+)
 
 const (
 	defaultIntelLog = "/var/cpudiag/result.log"
@@ -209,7 +224,7 @@ func parseConf(text string) config {
 		CPUWaitStart: defaultCPUWaitStart, CPUWaitInt: defaultCPUWaitInt, CPUWaitMax: defaultCPUWaitMax,
 		GosshTimeout: defaultGosshTimeout, CheckTimeout: defaultCheckTimeout, StressTimeout: defaultStressTimeout,
 		AutoLimit: defaultAutoLimit, AutoRecheck: defaultAutoRecheck, AutoCPUWait: defaultAutoCPUWait,
-		AutoCPUInt: defaultAutoCPUInt, AutoCPUMax: defaultAutoCPUMax}
+		AutoCPUInt: defaultAutoCPUInt, AutoCPUMax: defaultAutoCPUMax, ReportETADays: defaultReportETADays}
 	var rawStress, rawStressConf string // 원격 모드면 이 서버 기준으로 ~ 를 풀지 않고 그대로 쓴다
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
@@ -313,6 +328,18 @@ func parseConf(text string) config {
 			if val != "" {
 				c.ErrPatterns = append(c.ErrPatterns, val)
 			}
+		case "REPORT_ETA_DAYS":
+			v := unquote(val)
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || strings.HasPrefix(v, "+") {
+				c.Warnings = append(c.Warnings, fmt.Sprintf("설정 REPORT_ETA_DAYS 값 %q 을(를) 읽을 수 없어 기본값 %d 를 씁니다(0 이상의 정수)", val, defaultReportETADays))
+				break
+			}
+			c.ReportETADays = n
+		default:
+			if strings.HasPrefix(key, "VENDOR_") {
+				parseVendorLine(&c, key[len("VENDOR_"):], val)
+			}
 		}
 	}
 	if c.StressRemote != "" {
@@ -322,6 +349,49 @@ func parseConf(text string) config {
 		c.DiskPatterns = []string{defaultDisk}
 	}
 	return c
+}
+
+// parseVendorLine 은 VENDOR_<이름>=<패턴>,<패턴> 한 줄을 c.Vendors 에 더한다.
+// 이름이 빈 값·'기타' 이거나 패턴이 하나도 없으면 줄을 무시하고, 잘못된 glob 은 그 패턴만 버린다(모두 Warnings).
+// 같은 이름(대소문자 무시)의 줄은 첫 줄에 합친다.
+func parseVendorLine(c *config, name, val string) {
+	if name == "" {
+		c.Warnings = append(c.Warnings, "설정 VENDOR_ 줄에 벤더 이름이 없어 무시합니다(형식: VENDOR_<이름>=<패턴>,<패턴>)")
+		return
+	}
+	if name == vendorOther {
+		c.Warnings = append(c.Warnings, "설정 VENDOR_기타 는 쓸 수 없는 이름이어서 무시합니다('기타' 는 규칙에 없는 호스트의 자리입니다)")
+		return
+	}
+	var raw []string
+	for _, p := range strings.Split(unquote(val), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			raw = append(raw, p)
+		}
+	}
+	if len(raw) == 0 {
+		c.Warnings = append(c.Warnings, fmt.Sprintf("설정 VENDOR_%s 에 패턴이 없어 무시합니다(예: VENDOR_HPE=hpe*,dl3*)", name))
+		return
+	}
+	var pats []string
+	for _, p := range raw {
+		lp := strings.ToLower(p)
+		if _, err := path.Match(lp, ""); err != nil {
+			c.Warnings = append(c.Warnings, fmt.Sprintf("설정 VENDOR_%s 의 패턴 \"%s\" 을(를) 읽을 수 없어 뺍니다", name, p))
+			continue
+		}
+		pats = append(pats, lp)
+	}
+	if len(pats) == 0 {
+		return
+	}
+	for i := range c.Vendors {
+		if strings.EqualFold(c.Vendors[i].Name, name) {
+			c.Vendors[i].Patterns = append(c.Vendors[i].Patterns, pats...)
+			return
+		}
+	}
+	c.Vendors = append(c.Vendors, vendorRule{Name: name, Patterns: pats})
 }
 
 // ---------------------------------------------------------------------------

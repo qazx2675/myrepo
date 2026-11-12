@@ -9,6 +9,8 @@
 #   bash test.sh 3            3) -auto 인벤토리 사용 중 질문: r/x 질문이 뜨는 동안에도 나머지 호스트가 계속 진행되는 것을 봄(질문에 r 로 답)
 #   bash test.sh 4            4) -auto 삭제 확인 중지(시뮬레이션): stress-test 가 인벤토리 삭제 확인 실패로 launch 전에 멈춰도
 #                                포기하지 않고 환경 실패로 재시도하는 것을 봄(약 1분 반 뒤 스스로 끝남)
+#   bash test.sh r            5) 리포트 데모(메뉴에서는 5): 가짜 호스트 60대(HPE 24·DELL 20·기타 16) + 어제 저장본 + 어제 리포트 글 파일로 -run 화면의 p(리포트)를 써 봄.
+#                                DELL 은 접속불가 0대 + 조치완료 2대라 리포트가 본 A·본 B 두 본으로 나옴(약 1분 안에 호스트가 완료로 바뀜)
 #   bash test.sh 8000         (하위 호환) 첫 인자가 4 보다 큰 숫자면 메뉴 1 + 그 호스트 수. 1~4 는 메뉴 번호이므로 호스트 수 1~4대는 `bash test.sh 1 3` 처럼 씀
 #   KEEP=1 bash test.sh       끝난 뒤 데모 폴더를 지우지 않음(worker.log·state.json 구경)
 #   NEW_SETUP=/경로 bash test.sh   다른 바이너리로 시험 (기본: bin/new_setup, 없거나 실행 안 되면 go build)
@@ -27,9 +29,14 @@ fi
 # ---- 모드·호스트 수 정하기
 MODE=""
 N=60
-usage() { echo "사용: bash test.sh [1|2|3|4] [호스트수(1번만)]   또는 bash test.sh <5 이상의 호스트수>" >&2; exit 2; }
+usage() { echo "사용: bash test.sh [1|2|3|4|r] [호스트수(1번만)]   또는 bash test.sh <5 이상의 호스트수>   (r = 리포트 데모, 메뉴의 5번)" >&2; exit 2; }
 if [ $# -ge 1 ]; then
-	case $1 in '' | *[!0-9]*) usage ;; esac
+	case $1 in
+		r | R) MODE=5 ;; # 리포트 데모(5 와 같음)
+		'' | *[!0-9]*) usage ;;
+	esac
+fi
+if [ $# -ge 1 ] && [ -z "$MODE" ]; then
 	if [ "$1" -ge 1 ] && [ "$1" -le 4 ]; then
 		MODE=$1
 		if [ $# -ge 2 ]; then
@@ -48,12 +55,13 @@ new_setup 데모 — 가짜 서버로 돌립니다(실제 서버에는 아무 �
   2) -auto 데모             환경 실패 재시도·CPU 벤더 미인식 포기·설정수정 포기·stress-ng 재launch·제외 호스트 복귀 (몇 분)
   3) -auto 인벤토리 사용 중   r/x 질문이 떠 있는 동안에도 나머지가 계속 진행됨
   4) -auto 삭제 확인 중지     stress-test 가 launch 전에 멈춰도 포기하지 않고 환경 실패로 재시도(시뮬레이션)
+  5) 리포트 데모            p 키로 벤더별 리포트(어제 저장본·어제 글 기준, 본 A·본 B) 만들기 (호스트 60대)
 MENU
 	printf '번호를 누르세요 [2]: '
 	key=""
 	IFS= read -r -n1 key
 	echo
-	case $key in 1 | 2 | 3 | 4) MODE=$key ;; *) MODE=2 ;; esac
+	case $key in 1 | 2 | 3 | 4 | 5) MODE=$key ;; r | R) MODE=5 ;; *) MODE=2 ;; esac
 fi
 [ "$N" -ge 1 ] || { echo "호스트수는 1 이상" >&2; exit 2; }
 
@@ -215,6 +223,82 @@ AUTO_LIMIT=90s"
   - 제한 시간(90초)이 지나면 새 작업 없이 스스로 끝남. 실제 stress-test 에서는 이 상황이 인벤토리 삭제 스크립트가 안 먹었다는 뜻이므로 사람이 확인해야 합니다
   다시 해 보기: bash test.sh 4"
 		;;
+	5)
+		# 리포트 데모: 호스트 60대 = HPE 24(hpe-0001~) · DELL 20(dell-0001~) · 기타 16(demo-node-0001~). 벤더는 conf 의 VENDOR_* 줄로 나눈다.
+		#   오늘: hpe-0007·hpe-0019 만 접속불가(off) → HPE 는 접속불가 2대(본이 하나)
+		#   어제(저장본·글): HPE 접속불가 3(hpe-0007 hpe-0010 hpe-0019) → hpe-0010 조치완료
+		#                    DELL 접속불가 2(dell-0003 dell-0011) → 오늘 0대 + 조치완료 2대 = 본 A·본 B 두 본
+		i=1
+		while [ "$i" -le 24 ]; do printf 'hpe-%04d\n' "$i" >> "$D/hosts"; i=$((i + 1)); done
+		i=1
+		while [ "$i" -le 20 ]; do printf 'dell-%04d\n' "$i" >> "$D/hosts"; i=$((i + 1)); done
+		i=1
+		while [ "$i" -le 16 ]; do printf 'demo-node-%04d\n' "$i" >> "$D/hosts"; i=$((i + 1)); done
+		printf '%s\toff\n' hpe-0007 hpe-0019 >> "$D/scenario"
+		EXTRA_CONF="VENDOR_HPE=hpe*
+VENDOR_DELL=dell*
+REPORT_ETA_DAYS=3"
+		YDAY=$(date -d yesterday +%Y%m%d 2> /dev/null || date -v-1d +%Y%m%d)
+		YDASH="${YDAY%????}-$(echo "$YDAY" | cut -c5-6)-${YDAY#??????}"
+		RDIR=$D/hosts_run # -run 의 상태 폴더(<호스트파일>_run). 저장본만 미리 넣어 두면 새 작업으로 시작하면서 이 파일을 쓴다
+		mkdir -p "$RDIR"
+		# 어제 저장본: 호스트 목록은 오늘과 같다. 어제는 HPE 3대·DELL 2대 접속불가, 나머지는 앞쪽 일부만 OS 완료·부하 완료
+		{
+			printf '{\n  "version": 1,\n  "date": "%s",\n  "made": "%sT18:00:00+09:00",\n  "hosts": [\n' "$YDASH" "$YDASH"
+			first=1
+			while IFS= read -r h; do
+				n=$((10#${h##*-}))
+				case $h in
+					hpe-*)
+						case $h in hpe-0007 | hpe-0010 | hpe-0019) status=접속불가 ;; *) if [ "$n" -le 18 ]; then status=완료; else status=OS설치중; fi ;; esac
+						v=HPE
+						;;
+					dell-*)
+						case $h in dell-0003 | dell-0011) status=접속불가 ;; *) status=완료 ;; esac
+						v=DELL
+						;;
+					*)
+						if [ "$n" -le 10 ]; then status=완료; else status=OS설치중; fi
+						v=기타
+						;;
+				esac
+				ok=false
+				[ "$status" = 완료 ] && [ $((n % 3)) -ne 0 ] && ok=true
+				[ $first -eq 1 ] || printf ',\n'
+				first=0
+				printf '    {"host": "%s", "vendor": "%s", "status": "%s", "stress_ok": %s}' "$h" "$v" "$status" "$ok"
+			done < "$D/hosts"
+			printf '\n  ]\n}\n'
+		} > "$RDIR/report_$YDAY.json"
+		# 어제 리포트 글(방식 2 로 붙여넣거나 @경로 로 읽힘). 저장본과 숫자가 같지 않아도 됨 — 글에서 읽은 값이 기준이 된다
+		cat > "$D/yesterday.txt" <<YTXT
+HPE:
+    OS설치 24대 중 18대 완료, 6대 OS 설치 중 (전일대비 +4대)
+    부하테스트 18대 중 9대 완료, 전일대비 +3대, 11/14 완료예정
+    접속불가서버 3대 (전일대비 +1대)
+        접속불가
+          - hpe-0007
+          - hpe-0010
+          - hpe-0019
+
+DELL:
+    OS설치 20대 중 18대 완료, 0대 OS 설치 중 (전일대비 +2대)
+    부하테스트 18대 중 12대 완료, 전일대비 +4대, 11/14 완료예정
+    접속불가서버 2대 (전일대비 +0대)
+        접속불가
+          - dell-0003
+          - dell-0011
+
+기타:
+    OS설치 16대 중 10대 완료, 6대 OS 설치 중 (전일대비 +10대)
+    부하테스트 10대 중 7대 완료, 전일대비 +7대, 11/14 완료예정
+YTXT
+		TIP="[이 데모에서 볼 것] (리포트 파일은 데모 폴더가 지워지면 함께 사라집니다. 남기려면 KEEP=1 bash test.sh r)
+  - HPE: 오늘 접속불가 2대(hpe-0007 hpe-0019), 어제 3대 → 조치완료 hpe-0010. 접속불가가 남아 있어 두 본이 같습니다
+  - DELL: 오늘 접속불가 0대, 어제 2대 → 본 A(0대 줄과 조치완료 적음)와 본 B(접속불가 블록 적지 않음) 두 본
+  - 기타: 규칙에 없는 호스트(demo-node-*) 16대
+  다시 해 보기: bash test.sh r"
+		;;
 esac
 
 cat > "$D/conf" <<CONF
@@ -236,6 +320,18 @@ export FAKE_CC_LOG=$D/cc.log FAKE_GOSSH_LOG=$D/gossh.log FAKE_GOSSH_SCENARIO=$D/
 export FAKE_YML_DIR=$D/yml FAKE_ST_DELAY=${FAKE_ST_DELAY:-2}
 
 cd "$D" || exit 1
+if [ "$MODE" = 5 ]; then
+	cat <<GUIDE
+[리포트 데모] 가짜 호스트 60대(HPE 24·DELL 20·기타 16)로 -run 화면을 띄웁니다.
+  어제 저장본: $D/hosts_run/report_$YDAY.json
+  어제 리포트 글: $D/yesterday.txt
+  키: p(리포트) → 1(어제 저장본) 이면 바로 리포트
+      p → 2(코멘트 입력) → 첫 줄에 @$D/yesterday.txt → Ctrl-D → 읽은 내용 확인에서 y
+  리포트 화면은 위아래 키로 스크롤하고, 다른 키를 누르면 닫힙니다. 끝내려면 q. 호스트가 완료로 바뀔 때까지 1분쯤 걸립니다.
+GUIDE
+	printf '준비되면 Enter 를 누르세요: '
+	IFS= read -r _
+fi
 # shellcheck disable=SC2086
 "$BIN" -run $RUN_ARGS -c "$D/conf" -user demo "$D/hosts"
 rc=$?
