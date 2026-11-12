@@ -494,8 +494,9 @@ func detectLocalIP(bindIP string) string {
 	if bindIP != "" {
 		return bindIP
 	}
-	// Try outbound UDP connection to determine primary interface
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	// Try outbound UDP connection to determine primary interface with 200ms timeout
+	d := net.Dialer{Timeout: 200 * time.Millisecond}
+	conn, err := d.Dial("udp", "8.8.8.8:80")
 	if err == nil {
 		defer conn.Close()
 		localAddr := conn.LocalAddr().(*net.UDPAddr)
@@ -515,8 +516,20 @@ func detectLocalIP(bindIP string) string {
 	return "127.0.0.1"
 }
 
-// getAllHostIPs returns all IPv4 addresses of this machine along with hostname and loopback.
+var (
+	cachedHostIPs   []string
+	cachedHostIPsMu sync.Mutex
+	cachedHostIPsAt time.Time
+)
+
+// getAllHostIPs returns all IPv4 addresses of this machine along with hostname and loopback (cached 10s).
 func getAllHostIPs() []string {
+	cachedHostIPsMu.Lock()
+	defer cachedHostIPsMu.Unlock()
+	if len(cachedHostIPs) > 0 && time.Since(cachedHostIPsAt) < 10*time.Second {
+		return cachedHostIPs
+	}
+
 	ips := []string{"127.0.0.1", "localhost", "::1"}
 	addrs, err := net.InterfaceAddrs()
 	if err == nil {
@@ -531,6 +544,8 @@ func getAllHostIPs() []string {
 	if hostname, err := os.Hostname(); err == nil && hostname != "" {
 		ips = append(ips, hostname)
 	}
+	cachedHostIPs = ips
+	cachedHostIPsAt = time.Now()
 	return ips
 }
 
@@ -1034,7 +1049,6 @@ func (s *AgentServer) handleAppRoot(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.recordClientPing()
 	webui.ServeIndex(w, r)
 }
 
@@ -1088,7 +1102,7 @@ func (s *AgentServer) handleBye(w http.ResponseWriter, r *http.Request) {
 }
 
 // StartLifecycleWatcher monitors standalone app window heartbeats and triggers
-// clean shutdown within ~1.2 seconds when the user closes the window.
+// clean shutdown when the user closes the window.
 func (s *AgentServer) StartLifecycleWatcher(onShutdown func()) {
 	s.lifecycleMu.Lock()
 	s.onShutdown = onShutdown
@@ -1111,15 +1125,16 @@ func (s *AgentServer) StartLifecycleWatcher(onShutdown func()) {
 				s.lifecycleMu.Unlock()
 
 				if seen {
-					// Case 1: Explicit /api/bye received on window unload and no reload ping arrived within 1.2s
-					if bye && time.Since(byeAt) >= 1200*time.Millisecond {
+					// Case 1: Explicit /api/bye received on window unload and no reload ping arrived within 1.5s
+					if bye && time.Since(byeAt) >= 1500*time.Millisecond {
 						if onShutdown != nil {
 							onShutdown()
 						}
 						return
 					}
-					// Case 2: Browser window closed abruptly without beacon (no ping for > 6s)
-					if !bye && time.Since(lastPing) >= 6*time.Second {
+					// Case 2: Browser window closed abruptly without beacon (no ping for > 15s)
+					// Protect startup with a 30s grace period from server launch
+					if !bye && time.Since(startTime) > 30*time.Second && time.Since(lastPing) >= 15*time.Second {
 						if onShutdown != nil {
 							onShutdown()
 						}
@@ -1996,6 +2011,7 @@ func (s *AgentServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	s.recordClientPing()
 	client := &WSClient{conn: conn}
 	s.wsHub.Add(client)
 	defer func() {
@@ -2012,10 +2028,12 @@ func (s *AgentServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if opcode == 0x09 { // Ping frame
+			s.recordClientPing()
 			_ = client.WritePong(payload)
 			continue
 		}
 		if opcode == 0x01 { // Text frame
+			s.recordClientPing()
 			go s.processWSRequest(client, payload)
 		}
 	}
@@ -2413,17 +2431,39 @@ func flashAppWindow() {
 	}
 	user32 := syscall.NewLazyDLL("user32.dll")
 	enumWindows := user32.NewProc("EnumWindows")
-	getWindowText := user32.NewProc("GetWindowTextW")
+	sendMessageTimeout := user32.NewProc("SendMessageTimeoutW")
+	isWindowVisible := user32.NewProc("IsWindowVisible")
 	flashWindowEx := user32.NewProc("FlashWindowEx")
+
+	const (
+		WM_GETTEXT       = 0x000D
+		SMTO_ABORTIFHUNG = 0x0002
+		SMTO_NORMAL      = 0x0000
+	)
 
 	var hwnd uintptr
 	cb := syscall.NewCallback(func(h uintptr, lParam uintptr) uintptr {
+		vis, _, _ := isWindowVisible.Call(h)
+		if vis == 0 {
+			return 1 // continue
+		}
 		buf := make([]uint16, 256)
-		getWindowText.Call(h, uintptr(unsafe.Pointer(&buf[0])), 256)
-		t := syscall.UTF16ToString(buf)
-		if strings.Contains(t, "크로스체크") {
-			hwnd = h
-			return 0 // stop
+		var result uintptr
+		ret, _, _ := sendMessageTimeout.Call(
+			h,
+			uintptr(WM_GETTEXT),
+			uintptr(len(buf)),
+			uintptr(unsafe.Pointer(&buf[0])),
+			uintptr(SMTO_ABORTIFHUNG|SMTO_NORMAL),
+			uintptr(50),
+			uintptr(unsafe.Pointer(&result)),
+		)
+		if ret != 0 && result > 0 {
+			t := syscall.UTF16ToString(buf)
+			if strings.Contains(t, "크로스체크") || strings.Contains(t, "작업대상") {
+				hwnd = h
+				return 0 // stop
+			}
 		}
 		return 1 // continue
 	})
@@ -2457,18 +2497,40 @@ func restoreAppWindow() {
 	}
 	user32 := syscall.NewLazyDLL("user32.dll")
 	enumWindows := user32.NewProc("EnumWindows")
-	getWindowText := user32.NewProc("GetWindowTextW")
+	sendMessageTimeout := user32.NewProc("SendMessageTimeoutW")
+	isWindowVisible := user32.NewProc("IsWindowVisible")
 	showWindow := user32.NewProc("ShowWindow")
 	setForegroundWindow := user32.NewProc("SetForegroundWindow")
 
+	const (
+		WM_GETTEXT       = 0x000D
+		SMTO_ABORTIFHUNG = 0x0002
+		SMTO_NORMAL      = 0x0000
+	)
+
 	var hwnd uintptr
 	cb := syscall.NewCallback(func(h uintptr, lParam uintptr) uintptr {
+		vis, _, _ := isWindowVisible.Call(h)
+		if vis == 0 {
+			return 1 // continue
+		}
 		buf := make([]uint16, 256)
-		getWindowText.Call(h, uintptr(unsafe.Pointer(&buf[0])), 256)
-		t := syscall.UTF16ToString(buf)
-		if strings.Contains(t, "크로스체크") {
-			hwnd = h
-			return 0 // stop
+		var result uintptr
+		ret, _, _ := sendMessageTimeout.Call(
+			h,
+			uintptr(WM_GETTEXT),
+			uintptr(len(buf)),
+			uintptr(unsafe.Pointer(&buf[0])),
+			uintptr(SMTO_ABORTIFHUNG|SMTO_NORMAL),
+			uintptr(50),
+			uintptr(unsafe.Pointer(&result)),
+		)
+		if ret != 0 && result > 0 {
+			t := syscall.UTF16ToString(buf)
+			if strings.Contains(t, "크로스체크") || strings.Contains(t, "작업대상") {
+				hwnd = h
+				return 0 // stop
+			}
 		}
 		return 1 // continue
 	})
@@ -2493,7 +2555,7 @@ func (s *AgentServer) handleWindowRestore(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]interface{}{"restored": true})
 }
 
-func waitForServerReady(healthURL string, timeout time.Duration) {
+func waitForServerReady(healthURL string, timeout time.Duration) bool {
 	client := &http.Client{
 		Timeout: 300 * time.Millisecond,
 		Transport: &http.Transport{
@@ -2506,11 +2568,14 @@ func waitForServerReady(healthURL string, timeout time.Duration) {
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				return
+				log.Printf("[HEALTH] 로컬 HTTP 서버 준비 완료 (%s)\n", healthURL)
+				return true
 			}
 		}
 		time.Sleep(30 * time.Millisecond)
 	}
+	log.Printf("[경고] 로컬 HTTP 서버 준비 대기 시간 초과 (%v), 브라우저 실행을 계속 진행합니다.\n", timeout)
+	return false
 }
 
 func main() {
@@ -2651,7 +2716,7 @@ func main() {
 	}()
 
 	// 1) 로컬 HTTP 서버가 100% 응답 가능한 상태가 될 때까지 동기적으로 먼저 확인!
-	waitForServerReady(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort), 5*time.Second)
+	waitForServerReady(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort), 10*time.Second)
 
 	// 2) 앱 창 실행 및 라이프사이클 감시
 	if shouldOpenApp {

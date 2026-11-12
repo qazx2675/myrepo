@@ -88,6 +88,8 @@ func Args(appURL, profileDir string) []string {
 		"--disable-features=RendererCodeIntegrity,Translate,msEdgeSidebarV2,BlockInsecurePrivateNetworkRequests",
 		"--disable-renderer-backgrounding",
 		"--disable-background-timer-throttling",
+		"--proxy-server=direct://",
+		"--proxy-bypass-list=<-loopback>",
 	}
 	if dbgPort := os.Getenv("CROSS_CHECKER_DEBUG_PORT"); dbgPort != "" {
 		args = append(args, "--remote-debugging-port="+dbgPort)

@@ -31,6 +31,9 @@
                         this.connected = true;
                         this.connectPromise = null;
                         resolve(true);
+                        if (typeof window.awxFetchUsersAndStatus === 'function') {
+                            try { window.awxFetchUsersAndStatus(true); } catch(e) {}
+                        }
                     };
                     this.ws.onmessage = (event) => {
                         try {
@@ -1919,8 +1922,9 @@
         // 크로스체크 연동 로직 (Go 에이전트 연동: 작업자 & 확인자)
         // =========================================================================
         let eventSource = null;
+        let fetchStatusRetryTimer = null;
 
-        async function fetchUsersAndStatus() {
+        async function fetchUsersAndStatus(isRetry = false) {
             try {
                 const resMe = await agentFetch(`${AGENT_BASE}/api/me`, { cache: 'no-store' });
                 let meData = null;
@@ -1935,6 +1939,10 @@
                         if (meData.usersError) {
                             workerAgentMsg.innerHTML += `<div style="color:#ef4444; font-size:11px; margin-top:3px; padding:3px 6px; background:rgba(239,68,68,0.1); border-radius:4px; border:1px solid rgba(239,68,68,0.2);">⚠️ ${meData.usersError}</div>`;
                         }
+                    }
+                    if (fetchStatusRetryTimer) {
+                        clearTimeout(fetchStatusRetryTimer);
+                        fetchStatusRetryTimer = null;
                     }
                     initEventSource();
                 } else {
@@ -1954,6 +1962,25 @@
                 state.agentInfo = { connected: false, ip: '', name: '', registered: false };
                 if (workerAgentMsg) {
                     workerAgentMsg.innerHTML = `○ Go 에이전트 미연결 (host-cross-checker.exe 실행 시 연동)`;
+                }
+                // 앱 기동 직후 백엔드 소켓/캐시 준비 대기: 초기 3회 자동 재시도 (1s, 2s, 3s)
+                if (!isRetry && !fetchStatusRetryTimer) {
+                    let attempts = 0;
+                    const retryLoop = () => {
+                        attempts++;
+                        if (state.agentInfo.connected || attempts > 3) {
+                            fetchStatusRetryTimer = null;
+                            return;
+                        }
+                        fetchUsersAndStatus(true).then(() => {
+                            if (!state.agentInfo.connected && attempts <= 3) {
+                                fetchStatusRetryTimer = setTimeout(retryLoop, attempts * 1000);
+                            } else {
+                                fetchStatusRetryTimer = null;
+                            }
+                        });
+                    };
+                    fetchStatusRetryTimer = setTimeout(retryLoop, 1000);
                 }
             }
         }

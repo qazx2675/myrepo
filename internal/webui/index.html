@@ -28,6 +28,12 @@
     sendPing();
     setInterval(sendPing, 2000);
 
+    // 창 포커스 및 화면 복귀 시 즉시 핑 갱신
+    window.addEventListener('focus', sendPing);
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) sendPing();
+    });
+
     function sendBye() {
       try {
         if (navigator.sendBeacon) {
