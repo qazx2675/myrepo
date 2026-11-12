@@ -1294,7 +1294,18 @@
         if (tabChecker) tabChecker.onclick = () => switchTab('checker');
         window.awxSwitchTab = switchTab;
 
-        // 본문 영역 자동 숨김 (접기) 동작 관리 (기존 투명도 조절 대체)
+        // 독립 창(Popup) 및 단독 실행 앱(Standalone EXE) 물리적 창 크기 축소 상태 관리
+        let appExpandedWidth = 640;
+        let appExpandedHeight = 920;
+        let isWindowCollapsed = false;
+        let isProgrammaticResize = false;
+
+        if (isStandaloneApp && window.outerHeight && window.outerHeight > 350) {
+            appExpandedWidth = window.outerWidth || 640;
+            appExpandedHeight = window.outerHeight || 920;
+        }
+
+        // 본문 영역 자동 숨김 (접기) 동작 관리
         function applyCollapse() {
             if (!bodyWrapEl) return;
             if (chkCollapse) chkCollapse.checked = state.collapseEnabled;
@@ -1309,6 +1320,47 @@
                 sliderWrap.style.display = state.collapseEnabled ? 'flex' : 'none';
             }
 
+            // 1) 독립 창(Popup) 또는 단독 실행 앱(Standalone EXE): 물리적 창 크기 축소 (resizeTo)
+            if (isStandaloneApp || (isPopup && popupWin)) {
+                const targetWin = (isPopup && popupWin) ? popupWin : window;
+                const shouldCollapse = state.collapseEnabled && !state.isMouseInside;
+
+                // 항상 내부 본문은 작업 내용을 임의로 가리지 않고 정상 표시 (자연스러운 스크롤 유지)
+                bodyWrapEl.style.maxHeight = '';
+                bodyWrapEl.style.overflowY = 'auto';
+
+                if (shouldCollapse) {
+                    // 축소 전 원래 창 크기 기억 (충분한 높이일 때만)
+                    if (!isWindowCollapsed && targetWin.outerHeight && targetWin.outerHeight > 350) {
+                        appExpandedWidth = targetWin.outerWidth || appExpandedWidth;
+                        appExpandedHeight = targetWin.outerHeight || appExpandedHeight;
+                    }
+                    const minHeight = (headerEl ? headerEl.offsetHeight : 44) + 40;
+                    const targetHeight = Math.max(minHeight, Math.round(appExpandedHeight * (state.collapseRatio / 100)));
+                    isWindowCollapsed = true;
+                    try { targetWin.awxWindowCollapsed = true; } catch (e) {}
+                    try { targetWin.awxPopupCollapsed = true; } catch (e) {}
+                    isProgrammaticResize = true;
+                    try {
+                        targetWin.resizeTo(appExpandedWidth, targetHeight);
+                    } catch (e) {}
+                    setTimeout(() => { isProgrammaticResize = false; }, 400);
+                } else {
+                    if (isWindowCollapsed) {
+                        isWindowCollapsed = false;
+                        try { targetWin.awxWindowCollapsed = false; } catch (e) {}
+                        try { targetWin.awxPopupCollapsed = false; } catch (e) {}
+                        isProgrammaticResize = true;
+                        try {
+                            targetWin.resizeTo(appExpandedWidth, appExpandedHeight);
+                        } catch (e) {}
+                        setTimeout(() => { isProgrammaticResize = false; }, 400);
+                    }
+                }
+                return;
+            }
+
+            // 2) 페이지 내 인라인 패널 모드 (!isStandaloneApp && !isPopup):
             if (state.collapseEnabled && !state.isMouseInside) {
                 bodyWrapEl.style.maxHeight = `${state.collapseRatio}vh`;
                 bodyWrapEl.style.overflow = 'hidden';
@@ -1343,6 +1395,26 @@
             hoverTarget.addEventListener('mouseleave', () => {
                 state.isMouseInside = false;
                 applyCollapse();
+            });
+        }
+        if (isStandaloneApp || isPopup) {
+            const targetDoc = rootDoc || document;
+            targetDoc.addEventListener('mouseleave', (e) => {
+                if (!e.relatedTarget && !e.toElement) {
+                    state.isMouseInside = false;
+                    applyCollapse();
+                }
+            });
+            targetDoc.addEventListener('mouseenter', () => {
+                state.isMouseInside = true;
+                applyCollapse();
+            });
+            const targetWin = (isPopup && popupWin) ? popupWin : window;
+            targetWin.addEventListener('resize', () => {
+                if (!isWindowCollapsed && !isProgrammaticResize && targetWin.outerHeight > 350) {
+                    appExpandedWidth = targetWin.outerWidth || appExpandedWidth;
+                    appExpandedHeight = targetWin.outerHeight || appExpandedHeight;
+                }
             });
         }
         window.addEventListener('blur', () => {

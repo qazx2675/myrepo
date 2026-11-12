@@ -93,7 +93,10 @@ async function runStandaloneAppTest() {
         users: [
             { name: "김철수", ip: "192.168.0.23", role: "작업자" },
             { name: "이영희", ip: "192.168.0.102", role: "확인자" },
-            { name: "박민수", ip: "192.168.0.105", role: "확인자" }
+            { name: "박민수", ip: "192.168.0.105", role: "확인자" },
+            { name: "정관리", ip: "192.168.0.58", role: "엔지니어" },
+            { name: "최신규", ip: "192.168.0.199", role: "확인자" },
+            { name: "오프라인확인자", ip: "192.0.2.1", role: "작업자" }
         ]
     };
     fs.writeFileSync(path.join(testShareDir, 'users.json'), JSON.stringify(initialUsers, null, 2), 'utf8');
@@ -223,6 +226,71 @@ async function runStandaloneAppTest() {
             throw new Error(`Tab labels do not match expected guide names: ${JSON.stringify(envInfo.tabs)}`);
         }
         console.log("✓ Standalone UI validated: clean header with live user badge, 3 guide tabs with [?] icons, responsive layout, global status bar.");
+
+        // [3.5/7] Verify standalone window auto-collapse on mouseleave and expand on mouseenter
+        console.log("   Testing standalone window physical resizing (resizeTo) on mouseleave/mouseenter...");
+        const windowResizeResult = await cdp.evaluate(`
+            (async () => {
+                const initialH = window.outerHeight;
+                const initialW = window.outerWidth;
+                const bodyWrap = document.getElementById('awx-vld-body-wrap');
+
+                // 1. Mouse leave -> window collapses physically
+                document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                await new Promise(r => setTimeout(r, 450));
+                const collapsedH = window.outerHeight;
+                const isCollapsed = window.awxWindowCollapsed === true;
+                const bodyOverflowWhenCollapsed = bodyWrap ? bodyWrap.style.overflowY : '';
+                const bodyMaxHeightWhenCollapsed = bodyWrap ? bodyWrap.style.maxHeight : '';
+
+                // 2. Mouse enter -> window restores to original height
+                document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+                await new Promise(r => setTimeout(r, 450));
+                const restoredH = window.outerHeight;
+                const isRestored = window.awxWindowCollapsed === false;
+
+                // 3. Test settings modal slider adjustment (50%)
+                const btnSettings = document.getElementById('awx-vld-btn-header-settings');
+                btnSettings.click();
+                const rangeCollapse = document.getElementById('awx-vld-range-collapse');
+                rangeCollapse.value = '50';
+                rangeCollapse.dispatchEvent(new Event('input'));
+                document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                await new Promise(r => setTimeout(r, 450));
+                const collapsed50H = window.outerHeight;
+
+                // Restore slider to 30% and close modal
+                rangeCollapse.value = '30';
+                rangeCollapse.dispatchEvent(new Event('input'));
+                btnSettings.click();
+                document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+                await new Promise(r => setTimeout(r, 450));
+
+                return {
+                    initialH,
+                    initialW,
+                    collapsedH,
+                    isCollapsed,
+                    bodyOverflowWhenCollapsed,
+                    bodyMaxHeightWhenCollapsed,
+                    restoredH,
+                    isRestored,
+                    collapsed50H
+                };
+            })()
+        `);
+        console.log("   Window auto-collapse test result:", windowResizeResult);
+
+        if (!windowResizeResult.isCollapsed || windowResizeResult.collapsedH >= windowResizeResult.initialH - 100) {
+            throw new Error(`Window did not shrink on mouseleave: initialH=${windowResizeResult.initialH}, collapsedH=${windowResizeResult.collapsedH}`);
+        }
+        if (windowResizeResult.bodyMaxHeightWhenCollapsed !== '' || windowResizeResult.bodyOverflowWhenCollapsed !== 'auto') {
+            throw new Error(`Inner content was artificially masked with overflow/maxHeight: ${JSON.stringify(windowResizeResult)}`);
+        }
+        if (!windowResizeResult.isRestored || windowResizeResult.restoredH < 600) {
+            throw new Error(`Window did not expand back on mouseenter: initialH=${windowResizeResult.initialH}, restoredH=${windowResizeResult.restoredH}`);
+        }
+        console.log("✓ Physical window resizing verified: window collapses to mini height on mouseleave without masking content, and fully expands on mouseenter.");
 
         // [4/7] Verify AWX 1,000 hosts one-click collection via backend endpoint
         console.log("[4/7] Testing Tab 1: One-click 1,000 AWX hosts collection via Go backend...");
