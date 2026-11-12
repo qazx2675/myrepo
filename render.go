@@ -35,6 +35,20 @@ type viewState struct {
 	SentQ   string    // 답을 보낸 질문 id
 	SentKey string    // 보낸 선택지 키
 	SentAt  time.Time // 보낸 시각
+
+	// p 리포트(report_tui.go). Rep 이 빈 값이 아니면 화면 전체를 리포트가 쓴다.
+	Rep       string    // "" / "pick"(기준 고르기) / "input"(코멘트 입력) / "confirm"(읽은 내용 확인) / "show"(리포트) / "err"(오류)
+	RepInput  []rune    // 코멘트 입력 글
+	RepBase   *repBase  // 확인 중인 기준
+	RepNotes  []string  // 확인 화면의 알림
+	RepLines  []string  // 보이는 글(확인 화면·리포트·오류 문구)
+	RepScroll int       // 리포트 화면 스크롤
+	RepPath   string    // 저장한 report_YYYYMMDD.txt 경로(저장 실패면 "저장 실패: 사유", 저장 기능이 없으면 빈 값)
+	RepLabel  string    // 리포트 첫 줄에 보일 기준 이름
+	RepDate   time.Time // 리포트를 만든 시각(첫 줄의 날짜)
+	RepRules  []vendorRule
+	RepETA    int
+	RepWarns  []string // 리포트 화면 위쪽에 보일 설정 경고·알림
 }
 
 // heartbeatStale 은 heartbeat 가 이보다 오래되면 워커를 중단된 것으로 본다.
@@ -369,7 +383,7 @@ func keyHints(st *runState, view viewState, alive bool) []string {
 	if alive && !st.Finished() && (q == nil || !hasChoice(q, ansStop)) {
 		keys = append(keys, "s 작업 중지")
 	}
-	return append(keys, "f O 아닌 것만", "l 로그 켜기/끄기", "v 결과 판", "↑↓ PgUp/PgDn 스크롤")
+	return append(keys, "f O 아닌 것만", "l 로그 켜기/끄기", "v 결과 판", "p 리포트", "↑↓ 스크롤")
 }
 
 // wrapItems 는 항목들을 "  " 로 이어 폭 w 안에서 항목 단위로 줄바꿈한다(최대 maxLines 줄, 넘치는 항목은 뺀다).
@@ -812,6 +826,7 @@ func helpLines(w int, noColor bool) []string {
 		"  f  O 아닌 호스트만 보기(다시 누르면 전체)",
 		"  l  아래 worker.log 끝부분 창 켜기/끄기(기본 켜짐, 화면이 작으면 줄이거나 숨김)",
 		"  v  결과 판 켜기/끄기(호스트표 자리에 | 구분 표·완료/남음/포기 대수 표시. -auto 이면 단계별 시도 횟수·마지막 오류·지금 하는 일·다음 확인·남은 시간도)",
+		"  p  벤더별 리포트(전일대비 기준을 1 저장본 / 2 코멘트 붙여넣기(Ctrl-D 끝, 첫 줄 @파일)로 골라 만들고 report_날짜.txt 로 저장)",
 		"  ↑ ↓ PgUp PgDn Home End  표 스크롤      g / G  처음 / 끝      Space / b  한 화면 아래 / 위      Ctrl-L  화면 다시 그리기",
 		"키는 한글 입력 상태(두벌식, 예 ㅊ=c ㄴ=s)·Caps Lock 에서도 같게 동작합니다. 쓸 수 없는 키를 누르면 알림이 뜹니다",
 	}
@@ -841,6 +856,8 @@ func renderRun(st *runState, view viewState, w, h int, now time.Time, alive bool
 		lines = []string{lineOf(w, view.NoColor, seg{"상태 파일을 읽는 중...", ""})}
 	case view.Help:
 		lines = helpLines(w, view.NoColor)
+	case view.Rep != "":
+		lines = reportLines(st, view, w, h)
 	default:
 		top := topLines(st, view, w, now, alive)
 		bottom := bottomLines(st, view, w, alive)

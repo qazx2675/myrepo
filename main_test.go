@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -416,5 +417,101 @@ func TestParseDuration(t *testing.T) {
 		if d, ok := parseDuration(c.in); ok != c.ok || (ok && d != c.want) {
 			t.Errorf("%q: got %v,%v want %v,%v", c.in, d, ok, c.want, c.ok)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 리포트 설정(VENDOR_*, REPORT_ETA_DAYS)
+// ---------------------------------------------------------------------------
+
+func TestParseConfVendors(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []vendorRule
+		warn []string
+	}{
+		{"규칙 없음", "GOSSH=/x\n", nil, nil},
+		{"설정 파일 순서 유지·소문자 패턴·이름은 그대로", "VENDOR_HPE=HPE*, dl3*\nVENDOR_Dell=dell*\n",
+			[]vendorRule{{"HPE", []string{"hpe*", "dl3*"}}, {"Dell", []string{"dell*"}}}, nil},
+		{"값 따옴표는 뗀다·빈 패턴은 버린다", "VENDOR_A=\" a*, ,b? ,\"\n", []vendorRule{{"A", []string{"a*", "b?"}}}, nil},
+		{"같은 이름(대소문자 무시)은 첫 줄에 합친다", "VENDOR_HPE=a*\nVENDOR_X=x*\nVENDOR_hpe=b*\n",
+			[]vendorRule{{"HPE", []string{"a*", "b*"}}, {"X", []string{"x*"}}}, nil},
+		{"앞뒤 공백·=", "  VENDOR_HPE  =  hpe*=1 \n", []vendorRule{{"HPE", []string{"hpe*=1"}}}, nil},
+		{"이름 없음", "VENDOR_=hpe*\n", nil,
+			[]string{"설정 VENDOR_ 줄에 벤더 이름이 없어 무시합니다(형식: VENDOR_<이름>=<패턴>,<패턴>)"}},
+		{"이름 기타", "VENDOR_기타=x*\nVENDOR_HPE=h*\n", []vendorRule{{"HPE", []string{"h*"}}},
+			[]string{"설정 VENDOR_기타 는 쓸 수 없는 이름이어서 무시합니다('기타' 는 규칙에 없는 호스트의 자리입니다)"}},
+		{"패턴 없음", "VENDOR_HPE=\nVENDOR_DELL= , ,\n", nil,
+			[]string{"설정 VENDOR_HPE 에 패턴이 없어 무시합니다(예: VENDOR_HPE=hpe*,dl3*)", "설정 VENDOR_DELL 에 패턴이 없어 무시합니다(예: VENDOR_HPE=hpe*,dl3*)"}},
+		{"잘못된 패턴은 그 패턴만 뺀다", "VENDOR_HPE=hpe[,ok*\n", []vendorRule{{"HPE", []string{"ok*"}}},
+			[]string{"설정 VENDOR_HPE 의 패턴 \"hpe[\" 을(를) 읽을 수 없어 뺍니다"}},
+		{"패턴이 모두 잘못되면 벤더를 만들지 않는다", "VENDOR_HPE=[\n", nil,
+			[]string{"설정 VENDOR_HPE 의 패턴 \"[\" 을(를) 읽을 수 없어 뺍니다"}},
+		{"VENDOR_ 로 시작하지 않는 모르는 키는 무시", "XVENDOR_A=a*\nvendor_b=b*\n", nil, nil},
+	}
+	for _, tc := range cases {
+		c := parseConf(tc.in)
+		if !reflect.DeepEqual(c.Vendors, tc.want) {
+			t.Errorf("%s: Vendors=%+v want %+v", tc.name, c.Vendors, tc.want)
+		}
+		if !reflect.DeepEqual(c.Warnings, tc.warn) {
+			t.Errorf("%s: Warnings=%q want %q", tc.name, c.Warnings, tc.warn)
+		}
+	}
+}
+
+func TestParseConfReportETA(t *testing.T) {
+	bad := func(v string) string {
+		return "설정 REPORT_ETA_DAYS 값 " + strconv.Quote(v) + " 을(를) 읽을 수 없어 기본값 2 를 씁니다(0 이상의 정수)"
+	}
+	cases := []struct {
+		in   string
+		want int
+		warn []string
+	}{
+		{"", 2, nil},
+		{"REPORT_ETA_DAYS=5\n", 5, nil},
+		{"REPORT_ETA_DAYS=0\n", 0, nil},
+		{"REPORT_ETA_DAYS=\"3\"\n", 3, nil},
+		{"REPORT_ETA_DAYS=-1\n", 2, []string{bad("-1")}},
+		{"REPORT_ETA_DAYS=1.5\n", 2, []string{bad("1.5")}},
+		{"REPORT_ETA_DAYS=abc\n", 2, []string{bad("abc")}},
+		{"REPORT_ETA_DAYS=\n", 2, []string{bad("")}},
+		{"REPORT_ETA_DAYS=+3\n", 2, []string{bad("+3")}},
+		{"REPORT_ETA_DAYS=99999999999999999999\n", 2, []string{bad("99999999999999999999")}},
+		{"REPORT_ETA_DAYS=4\nREPORT_ETA_DAYS=x\n", 4, []string{bad("x")}},
+	}
+	for _, tc := range cases {
+		c := parseConf(tc.in)
+		if c.ReportETADays != tc.want || !reflect.DeepEqual(c.Warnings, tc.warn) {
+			t.Errorf("%q: eta=%d warn=%q want %d %q", tc.in, c.ReportETADays, c.Warnings, tc.want, tc.warn)
+		}
+	}
+}
+
+func TestVendorOf(t *testing.T) {
+	rules := parseConf("VENDOR_HPE=hpe*,dl3*\nVENDOR_DELL=dell*,hpe-x*\nVENDOR_Odd=n[0-9]\n").Vendors
+	cases := []struct{ host, want string }{
+		{"hpe-0001", "HPE"},
+		{"HPE-0001", "HPE"}, // 대소문자 무시
+		{"DL380-1", "HPE"},
+		{"dell01", "DELL"},
+		{"hpe-x1", "HPE"}, // 겹침: 먼저 적은 벤더
+		{"n5", "Odd"},
+		{"n55", vendorOther}, // 호스트 이름 전체와 맞아야 한다
+		{"xhpe-1", vendorOther},
+		{"", vendorOther},
+	}
+	for _, tc := range cases {
+		if got := vendorOf(tc.host, rules); got != tc.want {
+			t.Errorf("vendorOf(%q)=%q want %q", tc.host, got, tc.want)
+		}
+	}
+	if got := vendorOf("hpe-1", nil); got != "기타" {
+		t.Errorf("규칙 없음: %q", got)
+	}
+	if got := vendorOrder(rules); !reflect.DeepEqual(got, []string{"HPE", "DELL", "Odd"}) {
+		t.Errorf("vendorOrder=%v", got)
 	}
 }

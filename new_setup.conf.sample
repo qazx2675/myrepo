@@ -84,3 +84,13 @@ CPU_AMD_LINE=Result
 #GOSSH_TIMEOUT=10m
 #CHECK_TIMEOUT=40m
 #STRESS_TIMEOUT=60m
+
+# ---- -run 화면의 리포트(p 키) 용 ----
+# 벤더 규칙(여러 줄 가능): VENDOR_<이름>=<패턴>,<패턴>
+# 패턴은 호스트 이름 전체에 대한 glob(* ? [abc]) 이고 대소문자를 구분하지 않는다.
+# 한 호스트가 여러 벤더에 맞으면 먼저 적은 벤더가 이긴다. 어느 규칙에도 맞지 않으면 '기타'.
+# [ ] 는 glob 의 문자 묶음이다. 호스트파일의 범위 표기(node[01-10])와 뜻이 다르다.
+#VENDOR_HPE=hpe*,dl3*
+#VENDOR_DELL=dell*
+# 부하테스트 완료예정일 = 오늘 + 이 일수(0 이상의 정수, 기본 2)
+#REPORT_ETA_DAYS=2
