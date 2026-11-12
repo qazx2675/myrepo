@@ -91,7 +91,7 @@ func TestBuildReportSample(t *testing.T) {
 
 func TestBuildReportLines(t *testing.T) {
 	order := []string{"A"}
-	// 상태 5종과 stress 열을 섞은 호스트 표(N D I B U, 설치정지, 디스크미인식)
+	// 상태 5종과 stress 열을 섞은 호스트 표(N D I B U, 설치정지, 디스크미인식은 U 에 들어간다)
 	mixed := []repHost{
 		hh("A", "a1", stDone, true), hh("A", "a2", stDone, false), hh("A", "a3", stInstall, false),
 		hh("A", "a4", stUnreach, false), hh("A", "a5", stNoDisk, false), hh("A", "a6", stStopped, false),
@@ -105,18 +105,20 @@ func TestBuildReportLines(t *testing.T) {
 		want string
 	}{
 		{"기준 없음(nil)·상태 5종", mixed, nil, 2, `A:
-    OS설치 7대 중 2대 완료, 1대 OS 설치 중, 2대 설치정지, 1대 디스크미인식 (전일 정보 없음)
+    OS설치 7대 중 2대 완료, 1대 OS 설치 중, 2대 설치정지 (전일 정보 없음)
     부하테스트 2대 중 1대 완료, 전일 정보 없음, 11/14 완료예정
-    접속불가서버 1대 (전일 정보 없음)
+    접속불가서버 2대 (전일 정보 없음)
         접속불가
           - a4
+          - a5 디스크 미인식
 `},
 		{"기준에 벤더 없음도 같다", mixed, &repBase{Vendors: map[string]*repBaseVendor{"zzz": {}}}, 2, `A:
-    OS설치 7대 중 2대 완료, 1대 OS 설치 중, 2대 설치정지, 1대 디스크미인식 (전일 정보 없음)
+    OS설치 7대 중 2대 완료, 1대 OS 설치 중, 2대 설치정지 (전일 정보 없음)
     부하테스트 2대 중 1대 완료, 전일 정보 없음, 11/14 완료예정
-    접속불가서버 1대 (전일 정보 없음)
+    접속불가서버 2대 (전일 정보 없음)
         접속불가
           - a4
+          - a5 디스크 미인식
 `},
 		{"전일대비 +0·음수·양수와 값마다 nil", []repHost{hh("A", "a1", stDone, true), hh("A", "a2", stDone, true), hh("A", "a3", stUnreach, false)},
 			&repBase{Vendors: map[string]*repBaseVendor{"a": {OSDone: intp(5), LoadDone: intp(2), Unreach: nil}}}, 2, `A:
@@ -136,8 +138,11 @@ func TestBuildReportLines(t *testing.T) {
     부하테스트 1대 중 1대 완료, 전일 정보 없음, 11/12 완료예정
 `},
 		{"디스크미인식만", []repHost{hh("A", "a1", stDone, true), hh("A", "a2", stNoDisk, false)}, nil, 0, `A:
-    OS설치 2대 중 1대 완료, 0대 OS 설치 중, 1대 디스크미인식 (전일 정보 없음)
+    OS설치 2대 중 1대 완료, 0대 OS 설치 중 (전일 정보 없음)
     부하테스트 1대 중 1대 완료, 전일 정보 없음, 11/12 완료예정
+    접속불가서버 1대 (전일 정보 없음)
+        접속불가
+          - a2 디스크 미인식
 `},
 	}
 	for _, tc := range cases {
@@ -266,6 +271,48 @@ func TestBuildReportUnreachBlock(t *testing.T) {
 	a, _ = buildReport(big, order, nil, repToday, 2)
 	if strings.Count(a, "\n          - n") != 200 || !strings.Contains(a, "          - n000\n          - n001\n") || !strings.Contains(a, "접속불가서버 200대") {
 		t.Errorf("200대: 줄 수 %d", strings.Count(a, "\n"))
+	}
+}
+
+// 디스크미인식은 완료가 아니고 접속불가서버 N대에 들어간다. 명단에는 호스트파일 순서로 섞여 `- <이름> 디스크 미인식` 으로 나온다.
+func TestBuildReportNoDiskInUnreach(t *testing.T) {
+	order := []string{"A"}
+	cur := []repHost{hh("A", "a1", stDone, true), hh("A", "a2", stUnreach, false), hh("A", "a3", stNoDisk, false),
+		hh("A", "a4", stNoDisk, false), hh("A", "a5", stUnreach, false), hh("A", "a6", stDone, false)}
+	// 기준의 접속불가 이름: a3(지금은 디스크미인식이라 조치완료 아님), a2(그대로), a6(지금 완료라 조치완료), a9(현재 목록에 없음)
+	base := &repBase{Vendors: map[string]*repBaseVendor{"a": {OSDone: intp(2), LoadDone: intp(1), Unreach: intp(4), Names: []string{"a3", "a2", "a6", "a9"}, HasNames: true}}}
+	a, b := buildReport(cur, order, base, repToday, 2)
+	want := `A:
+    OS설치 6대 중 2대 완료, 0대 OS 설치 중 (전일대비 +0대)
+    부하테스트 2대 중 1대 완료, 전일대비 +0대, 11/14 완료예정
+    접속불가서버 4대 (전일대비 +0대)
+        - a6 조치완료
+        접속불가
+          - a2
+          - a3 디스크 미인식
+          - a4 디스크 미인식
+          - a5
+`
+	if a != want || b != "" {
+		t.Errorf("섞인 명단:\n--- got ---\n%s--- want ---\n%s(b=%q)", a, want, b)
+	}
+	// 설치정지는 그대로 줄 1 에 덧붙는다. 디스크미인식은 줄 1 에 없다
+	a, _ = buildReport([]repHost{hh("A", "a1", stStopped, false), hh("A", "a2", stNoDisk, false)}, order, nil, repToday, 2)
+	if !strings.Contains(a, "    OS설치 2대 중 0대 완료, 0대 OS 설치 중, 1대 설치정지 (전일 정보 없음)\n") || strings.Contains(a, "디스크미인식") ||
+		!strings.Contains(a, "    접속불가서버 1대 (전일 정보 없음)\n        접속불가\n          - a2 디스크 미인식\n") {
+		t.Errorf("설치정지+디스크미인식: %q", a)
+	}
+	// 접속불가 상태는 0대이고 디스크미인식만 있어도 U >= 1 이라 한 본이다(두 본 아님). 조치완료도 함께 나온다
+	a, b = buildReport([]repHost{hh("A", "a1", stDone, true), hh("A", "a2", stNoDisk, false)}, order,
+		&repBase{Vendors: map[string]*repBaseVendor{"a": {Unreach: intp(1), Names: []string{"a1"}, HasNames: true}}}, repToday, 2)
+	if b != "" || !strings.Contains(a, "    접속불가서버 1대 (전일대비 +0대)\n        - a1 조치완료\n        접속불가\n          - a2 디스크 미인식\n") {
+		t.Errorf("U>=1: %q b=%q", a, b)
+	}
+	// 접속불가였던 호스트가 디스크미인식이 되어도 조치완료가 아니다
+	a, b = buildReport([]repHost{hh("A", "a1", stNoDisk, false)}, order,
+		&repBase{Vendors: map[string]*repBaseVendor{"a": {Unreach: intp(1), Names: []string{"a1"}, HasNames: true}}}, repToday, 2)
+	if b != "" || strings.Contains(a, "조치완료") || !strings.Contains(a, "접속불가서버 1대 (전일대비 +0대)") {
+		t.Errorf("접속불가→디스크미인식: %q b=%q", a, b)
 	}
 }
 
@@ -497,6 +544,31 @@ func TestBaseFromSnapshotAndLoadBaseline(t *testing.T) {
 	}
 }
 
+// 저장본의 디스크미인식 호스트는 기준의 접속불가 대수·이름에 들어간다(오늘의 규칙과 같다).
+func TestBaseFromSnapshotNoDisk(t *testing.T) {
+	rules := parseConf("VENDOR_HPE=hpe*\n").Vendors
+	snapHosts := []repHost{
+		{Host: "hpe-1", Status: stDone, StressOK: true},
+		{Host: "hpe-2", Status: stUnreach},
+		{Host: "hpe-3", Status: stNoDisk},
+		{Host: "hpe-4", Status: stStopped},
+	}
+	rb, err := baseFromSnapshot(&repSnapshot{Version: 1, Date: "2026-11-11", Hosts: snapHosts}, snapHosts, rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := rb.Vendors["hpe"]
+	if v == nil || *v.OSDone != 1 || *v.LoadDone != 1 || *v.Unreach != 2 || !reflect.DeepEqual(v.Names, []string{"hpe-2", "hpe-3"}) || !v.HasNames {
+		t.Errorf("hpe: %+v", v)
+	}
+	// 오늘 hpe-3 이 완료가 되면 조치완료, hpe-2 가 디스크미인식이 되면 조치완료가 아니다
+	cur := []repHost{hh("HPE", "hpe-1", stDone, true), hh("HPE", "hpe-2", stNoDisk, false), hh("HPE", "hpe-3", stDone, false), hh("HPE", "hpe-4", stStopped, false)}
+	a, _ := buildReport(cur, []string{"HPE"}, rb, repToday, 2)
+	if !strings.Contains(a, "    접속불가서버 1대 (전일대비 -1대)\n        - hpe-3 조치완료\n        접속불가\n          - hpe-2 디스크 미인식\n") {
+		t.Errorf("조치완료: %q", a)
+	}
+}
+
 func TestSnapshotThenReport(t *testing.T) {
 	// 어제 저장본으로 만든 기준 → 오늘 리포트(+ 접속불가 해소로 두 본)
 	rules := parseConf("VENDOR_A=a*\n").Vendors
@@ -633,6 +705,9 @@ func TestParseCommentTable(t *testing.T) {
 		{19, "벤더 제목 없이 시작", dropLines(sampleReport, "HPE:", "DELL:"), "-", "-", "-", nil},
 		{20, "HPE 블록이 두 번", sampleReport + "\nHPE:\n    OS설치 600대 중 560대 완료\n", "os=560 load=- unr=0 names=[] has=true", dell1, "-", []string{"HPE: 블록이 두 번 나와 뒤의 블록 값을 씁니다"}},
 		{21, "명단에 한글 메모", repl(sampleReport, "          - hpe-0007\n", "          - hpe-0007 (전원 불량)\n"), hpe1, dell1, "-", nil},
+		{22, "명단에 디스크 미인식 줄(이름만 읽는다)", repl(repl(sampleReport, "          - hpe-0007\n", "          - hpe-0007 디스크 미인식\n"), "          - hpe-0440\n", "          - hpe-0440 디스크 미인식\n"), hpe1, dell1, "-", nil},
+		{23, "디스크 미인식 줄·전각 숫자·영문", fullwidth(repl(sampleReport, "          - hpe-0312\n", "          - hpe-0312 디스크 미인식\n")), hpe1, dell1, "-", nil},
+		{24, "디스크 미인식 줄에 쉼표·들여쓰기 없음", noIndent(repl(sampleReport, "          - hpe-0312\n", "          - hpe-0312, 디스크 미인식\n")), hpe1, dell1, "-", nil},
 	}
 	for _, tc := range cases {
 		rb, notes := parseComment(tc.text, commentKnown)
@@ -743,6 +818,28 @@ func TestReportRoundTrip(t *testing.T) {
 	rb, _ = parseComment(a2, []string{"A", "기타"})
 	if got := vsum(rb.Vendors["a"]); got != "os=2 load=1 unr=0 names=[] has=true" {
 		t.Errorf("본 A 접속불가: %s", got)
+	}
+}
+
+// 디스크미인식 호스트가 있는 글도 왕복한다: 이름은 호스트 이름, 대수는 `접속불가서버 N대` 의 N(디스크미인식 포함).
+func TestReportRoundTripNoDisk(t *testing.T) {
+	cur := []repHost{hh("HPE", "hpe-1", stDone, true), hh("HPE", "hpe-2", stUnreach, false), hh("HPE", "hpe-3", stNoDisk, false), hh("HPE", "hpe-4", stNoDisk, false)}
+	order := []string{"HPE"}
+	a, b := buildReport(cur, order, nil, repToday, 2)
+	if b != "" || !strings.Contains(a, "접속불가서버 3대 (전일 정보 없음)\n        접속불가\n          - hpe-2\n          - hpe-3 디스크 미인식\n          - hpe-4 디스크 미인식\n") {
+		t.Fatalf("글: %q b=%q", a, b)
+	}
+	rb, notes := parseComment(a, []string{"HPE", vendorOther})
+	if len(notes) != 0 {
+		t.Errorf("notes=%v", notes)
+	}
+	if got := vsum(rb.Vendors["hpe"]); got != "os=1 load=1 unr=3 names=[hpe-2 hpe-3 hpe-4] has=true" {
+		t.Errorf("hpe: %s", got)
+	}
+	// 읽은 기준으로 다시 만들면 접속불가 대수의 전일대비는 +0대, 조치완료는 없다
+	a2, _ := buildReport(cur, order, rb, repToday, 2)
+	if !strings.Contains(a2, "접속불가서버 3대 (전일대비 +0대)\n        접속불가\n") || strings.Contains(a2, "조치완료") {
+		t.Errorf("재작성: %q", a2)
 	}
 }
 
