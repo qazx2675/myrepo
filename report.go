@@ -96,13 +96,17 @@ func newRepHosts(rows []hostRow, rules []vendorRule) []repHost {
 // ---------------------------------------------------------------------------
 
 // repCounts 는 벤더 하나의 대수(계획서 3.5).
+// U 는 접속불가 대수이고 디스크미인식 호스트를 포함한다. Unreach 는 그 이름을 호스트파일 순서로 담고,
+// UnreachNoDisk[i] 는 Unreach[i] 가 디스크미인식이면 참이다.
 type repCounts struct {
-	N, D, I, B, U, NoDisk, Stopped int // A 는 D 와 같다
-	Unreach                        []string
+	N, D, I, B, U, Stopped int // A 는 D 와 같다
+	Unreach                []string
+	UnreachNoDisk          []bool
 }
 
 // buildReport 는 벤더별 리포트 글을 만든다. 같은 입력이면 같은 글이 나온다.
 //
+// 접속불가서버 대수(U)에는 디스크미인식 호스트도 들어간다. 명단에서는 그 이름 뒤에 ` 디스크 미인식` 을 적는다.
 // 벤더 하나라도 "접속불가 0대이고 조치완료 호스트가 있음" 이면 글이 두 본이다.
 // a 는 그 벤더에 `접속불가서버 0대 (전일대비 -N대)` 줄과 조치완료 줄을 적은 본, b 는 그 벤더의 접속불가 블록(줄 3 이하)을 적지 않은 본이다.
 // 그런 벤더가 없으면 글은 하나이고 b 는 빈 문자열이다.
@@ -134,8 +138,11 @@ func buildReport(cur []repHost, order []string, base *repBase, today time.Time, 
 		case stUnreach:
 			c.U++
 			c.Unreach = append(c.Unreach, h.Host)
-		case stNoDisk:
-			c.NoDisk++
+			c.UnreachNoDisk = append(c.UnreachNoDisk, false)
+		case stNoDisk: // 완료가 아니다. 접속불가서버에 넣고 이름 뒤에 '디스크 미인식' 을 적는다
+			c.U++
+			c.Unreach = append(c.Unreach, h.Host)
+			c.UnreachNoDisk = append(c.UnreachNoDisk, true)
 		case stStopped:
 			c.Stopped++
 		}
@@ -163,9 +170,6 @@ func buildReport(cur []repHost, order []string, base *repBase, today time.Time, 
 		l1 := fmt.Sprintf("    OS설치 %d대 중 %d대 완료, %d대 OS 설치 중", c.N, c.D, c.I)
 		if c.Stopped > 0 {
 			l1 += fmt.Sprintf(", %d대 설치정지", c.Stopped)
-		}
-		if c.NoDisk > 0 {
-			l1 += fmt.Sprintf(", %d대 디스크미인식", c.NoDisk)
 		}
 		l1 += " (" + diffText(c.D, bv.OSDone, "전일대비 ") + ")"
 		head = append(head, l1)
@@ -203,8 +207,12 @@ func buildReport(cur []repHost, order []string, base *repBase, today time.Time, 
 			}
 			if c.U > 0 {
 				block = append(block, "        접속불가")
-				for _, u := range c.Unreach {
-					block = append(block, "          - "+u)
+				for i, u := range c.Unreach {
+					line := "          - " + u
+					if c.UnreachNoDisk[i] {
+						line += " 디스크 미인식"
+					}
+					block = append(block, line)
 				}
 			}
 		}
@@ -367,7 +375,7 @@ func baseFromSnapshot(snap *repSnapshot, cur []repHost, rules []vendorRule) (*re
 			if h.StressOK {
 				load[k]++
 			}
-		case stUnreach:
+		case stUnreach, stNoDisk: // 디스크미인식도 접속불가서버로 센다(오늘의 규칙과 같다)
 			unr[k]++
 			v.Names = append(v.Names, h.Host)
 		}
@@ -606,7 +614,7 @@ func startBlock(blocks *[]*commentBlock, byKey map[string]*commentBlock, name st
 }
 
 // rosterNames 는 명단 줄에서 접속불가 이름을 뽑는다. 줄의 첫 토막이 호스트 이름 모양이어야 명단 줄로 본다.
-// 괄호 안 글자는 버린다. 쉼표·공백으로 나눈 토막 중 [A-Za-z0-9._-]+ 전체와 맞는 것이 이름이다.
+// 괄호 안 글자는 버린다. 줄 끝의 `디스크 미인식` 도 이름 모양이 아니라서 버린다. 쉼표·공백으로 나눈 토막 중 [A-Za-z0-9._-]+ 전체와 맞는 것이 이름이다.
 func rosterNames(line string) []string {
 	toks := reNameSplit.Split(strings.TrimSpace(reParen.ReplaceAllString(line, " ")), -1)
 	if len(toks) == 0 || !reHostToken.MatchString(toks[0]) {
