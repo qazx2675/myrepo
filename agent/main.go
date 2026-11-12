@@ -387,6 +387,8 @@ type AgentServer struct {
 	byeReceived   bool
 	byeTime       time.Time
 	onShutdown    func()
+	lastUsersSync time.Time
+	usersSource   string
 }
 
 // broadcastEvent sends events to both SSE clients and WebSocket clients.
@@ -511,33 +513,150 @@ func detectLocalIP(bindIP string) string {
 	return "127.0.0.1"
 }
 
-// ensureUsersFile creates or verifies users.json in sharedDir.
+// getAllHostIPs returns all IPv4 addresses of this machine along with hostname and loopback.
+func getAllHostIPs() []string {
+	ips := []string{"127.0.0.1", "localhost", "::1"}
+	addrs, err := net.InterfaceAddrs()
+	if err == nil {
+		for _, addr := range addrs {
+			if ipNet, ok := addr.(*net.IPNet); ok {
+				if ip4 := ipNet.IP.To4(); ip4 != nil {
+					ips = append(ips, ip4.String())
+				}
+			}
+		}
+	}
+	if hostname, err := os.Hostname(); err == nil && hostname != "" {
+		ips = append(ips, hostname)
+	}
+	return ips
+}
+
+// isLocalHostIP checks if targetIP matches detectedIP or any of this host machine's interface IPs or hostname.
+func isLocalHostIP(targetIP string, detectedIP string) bool {
+	if ipMatches(targetIP, detectedIP) {
+		return true
+	}
+	for _, ip := range getAllHostIPs() {
+		if strings.EqualFold(ip, targetIP) {
+			return true
+		}
+	}
+	return false
+}
+
+// safeWriteFile writes data to a file safely using atomic temporary file rename.
+func safeWriteFile(filePath string, data []byte) error {
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	tmpPath := fmt.Sprintf("%s.tmp.%d", filePath, time.Now().UnixNano())
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return os.WriteFile(filePath, data, 0644)
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return os.WriteFile(filePath, data, 0644)
+	}
+	return nil
+}
+
+// getUsersPaths returns the shared users.json path and local users.json path (next to exe).
+func (s *AgentServer) getUsersPaths() (sharedPath string, localPath string) {
+	sharedPath = filepath.Join(s.config.SharedDir, "users.json")
+	if exePath, err := os.Executable(); err == nil {
+		localPath = filepath.Join(filepath.Dir(exePath), "users.json")
+	} else {
+		localPath = filepath.Join(".", "users.json")
+	}
+	return filepath.Clean(sharedPath), filepath.Clean(localPath)
+}
+
+// syncUsersFilesLocked synchronizes users.json between local exeDir and remote sharedDir based on mtime.
+func (s *AgentServer) syncUsersFilesLocked() {
+	sharedPath, localPath := s.getUsersPaths()
+	if sharedPath == localPath {
+		return
+	}
+
+	fiShared, errS := os.Stat(sharedPath)
+	fiLocal, errL := os.Stat(localPath)
+
+	// 1. If shared doesn't exist, but local exists: copy local to shared
+	if os.IsNotExist(errS) && errL == nil {
+		if data, err := os.ReadFile(localPath); err == nil {
+			var uf UsersFile
+			if jsonErr := json.Unmarshal(data, &uf); jsonErr == nil && len(uf.Users) > 0 {
+				_ = safeWriteFile(sharedPath, data)
+				log.Printf("[USERS 동기화] 로컬 users.json(%s)을 공유폴더(%s)로 복사했습니다.\n", localPath, sharedPath)
+			}
+		}
+		return
+	}
+
+	// 2. If local doesn't exist, but shared exists: copy shared to local
+	if os.IsNotExist(errL) && errS == nil {
+		if data, err := os.ReadFile(sharedPath); err == nil {
+			var uf UsersFile
+			if jsonErr := json.Unmarshal(data, &uf); jsonErr == nil && len(uf.Users) > 0 {
+				_ = safeWriteFile(localPath, data)
+				log.Printf("[USERS 동기화] 공유폴더 users.json(%s)을 로컬(%s)로 복사했습니다.\n", sharedPath, localPath)
+			}
+		}
+		return
+	}
+
+	// 3. Both exist: compare modification times
+	if errS == nil && errL == nil {
+		// If local is newer than shared by at least 1 second
+		if fiLocal.ModTime().After(fiShared.ModTime().Add(1 * time.Second)) {
+			if dataL, err := os.ReadFile(localPath); err == nil {
+				var uf UsersFile
+				if jsonErr := json.Unmarshal(dataL, &uf); jsonErr == nil && len(uf.Users) > 0 {
+					_ = safeWriteFile(sharedPath, dataL)
+					log.Printf("[USERS 동기화] 로컬 users.json(%s)이 공유폴더보다 최신이어서 공유폴더(%s)로 자동 동기화했습니다.\n", localPath, sharedPath)
+				} else if jsonErr != nil {
+					log.Printf("[USERS 경고] 로컬 users.json 문법 오류로 공유폴더 덮어쓰기를 건너뜁니다: %v\n", jsonErr)
+				}
+			}
+		} else if fiShared.ModTime().After(fiLocal.ModTime().Add(1 * time.Second)) {
+			// Shared is newer than local
+			if dataS, err := os.ReadFile(sharedPath); err == nil {
+				var uf UsersFile
+				if jsonErr := json.Unmarshal(dataS, &uf); jsonErr == nil && len(uf.Users) > 0 {
+					_ = safeWriteFile(localPath, dataS)
+					log.Printf("[USERS 동기화] 공유폴더 users.json(%s)이 로컬보다 최신이어서 로컬(%s)로 자동 동기화했습니다.\n", sharedPath, localPath)
+				}
+			}
+		}
+	}
+}
+
+// ensureUsersFile creates or verifies users.json in sharedDir and syncs with local.
 func (s *AgentServer) ensureUsersFile() error {
 	s.usersMutex.Lock()
 	defer s.usersMutex.Unlock()
 
-	usersPath := filepath.Join(s.config.SharedDir, "users.json")
-	if _, err := os.Stat(usersPath); os.IsNotExist(err) {
-		// 1. Check local users.json next to executable
-		if exePath, err := os.Executable(); err == nil {
-			localUsers := filepath.Join(filepath.Dir(exePath), "users.json")
-			if data, err := os.ReadFile(localUsers); err == nil {
-				if err := os.WriteFile(usersPath, data, 0644); err == nil {
-					log.Printf("[USERS] Copied local users.json to shared directory: %s\n", usersPath)
-					return nil
-				}
-			}
-		}
+	s.syncUsersFilesLocked()
 
-		// 2. Check fallback from "config/users.json"
+	sharedPath, localPath := s.getUsersPaths()
+	if _, err := os.Stat(sharedPath); os.IsNotExist(err) {
+		// Fallback from config/users.json if exists in current working dir
 		fallbackPath := filepath.Join("config", "users.json")
 		if data, err := os.ReadFile(fallbackPath); err == nil {
-			if err := os.WriteFile(usersPath, data, 0644); err == nil {
+			var uf UsersFile
+			if jsonErr := json.Unmarshal(data, &uf); jsonErr == nil && len(uf.Users) > 0 {
+				_ = safeWriteFile(sharedPath, data)
+				if sharedPath != localPath {
+					_ = safeWriteFile(localPath, data)
+				}
+				s.usersSource = sharedPath
 				return nil
 			}
 		}
 
-		// 3. Default users
+		// Default users if nothing exists
 		defaultUsers := UsersFile{
 			UpdatedAt: time.Now().Format(time.RFC3339),
 			Users: []User{
@@ -551,58 +670,81 @@ func (s *AgentServer) ensureUsersFile() error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(usersPath, data, 0644)
+		_ = safeWriteFile(sharedPath, data)
+		if sharedPath != localPath {
+			_ = safeWriteFile(localPath, data)
+		}
 	}
+	s.usersSource = sharedPath
 	return nil
 }
 
-// readUsers reads users.json thread-safely.
+// readUsers reads users.json thread-safely with automatic local/shared sync and robust fallback.
 func (s *AgentServer) readUsers() (UsersFile, error) {
+	s.usersMutex.Lock()
+	if time.Since(s.lastUsersSync) > 1*time.Second {
+		s.syncUsersFilesLocked()
+		s.lastUsersSync = time.Now()
+	}
+	sharedPath, localPath := s.getUsersPaths()
+	s.usersMutex.Unlock()
+
 	s.usersMutex.RLock()
 	defer s.usersMutex.RUnlock()
 
-	usersPath := filepath.Join(s.config.SharedDir, "users.json")
-	data, err := os.ReadFile(usersPath)
-	if err != nil {
-		// Fallback to local users.json next to exe if sharedDir is temporarily unreachable
-		if exePath, eErr := os.Executable(); eErr == nil {
-			localUsers := filepath.Join(filepath.Dir(exePath), "users.json")
-			if localData, lErr := os.ReadFile(localUsers); lErr == nil {
-				var uf UsersFile
-				if err := json.Unmarshal(localData, &uf); err == nil {
-					return uf, nil
-				}
+	// 1. Try reading shared users.json
+	data, err := os.ReadFile(sharedPath)
+	if err == nil {
+		var uf UsersFile
+		if jsonErr := json.Unmarshal(data, &uf); jsonErr == nil {
+			s.usersSource = sharedPath
+			return uf, nil
+		} else {
+			log.Printf("[USERS 에러] 공유폴더 users.json(%s) 문법 오류: %v\n", sharedPath, jsonErr)
+			err = fmt.Errorf("공유폴더 users.json 문법 오류 (%v)", jsonErr)
+		}
+	}
+
+	// 2. If sharedDir failed or unmarshal failed, try local users.json next to exe
+	if localPath != "" && localPath != sharedPath {
+		if localData, lErr := os.ReadFile(localPath); lErr == nil {
+			var uf UsersFile
+			if jsonErr := json.Unmarshal(localData, &uf); jsonErr == nil {
+				s.usersSource = localPath
+				log.Printf("[USERS 안내] 공유폴더 대신 로컬 users.json(%s)을 사용합니다.\n", localPath)
+				return uf, nil
+			} else {
+				log.Printf("[USERS 에러] 로컬 users.json(%s) 문법 오류: %v\n", localPath, jsonErr)
+				return UsersFile{}, fmt.Errorf("로컬 users.json 문법 오류 (%v)", jsonErr)
 			}
 		}
+	}
+
+	if err != nil {
 		return UsersFile{}, err
 	}
-	var uf UsersFile
-	if err := json.Unmarshal(data, &uf); err != nil {
-		return UsersFile{}, err
-	}
-	return uf, nil
+	return UsersFile{}, fmt.Errorf("users.json 파일을 찾을 수 없습니다: %s", sharedPath)
 }
 
-// writeUsers writes users.json thread-safely.
+// writeUsers writes users.json thread-safely to both shared and local paths.
 func (s *AgentServer) writeUsers(uf UsersFile) error {
 	s.usersMutex.Lock()
 	defer s.usersMutex.Unlock()
 
-	usersPath := filepath.Join(s.config.SharedDir, "users.json")
+	sharedPath, localPath := s.getUsersPaths()
 	uf.UpdatedAt = time.Now().Format(time.RFC3339)
 	data, err := json.MarshalIndent(uf, "", "  ")
 	if err != nil {
 		return err
 	}
-	// Atomic write
-	tmpPath := fmt.Sprintf("%s.tmp.%d", usersPath, time.Now().UnixNano())
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+
+	if err := safeWriteFile(sharedPath, data); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, usersPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return os.WriteFile(usersPath, data, 0644)
+	if sharedPath != localPath {
+		_ = safeWriteFile(localPath, data)
 	}
+	s.usersSource = sharedPath
 	return nil
 }
 
@@ -1215,18 +1357,30 @@ func (s *AgentServer) handleMe(w http.ResponseWriter, r *http.Request) {
 	registered := false
 	if err == nil {
 		for _, u := range uf.Users {
-			if ipMatches(u.IP, myIP) {
+			if isLocalHostIP(u.IP, myIP) {
 				name = u.Name
 				registered = true
+				if s.detectedIP != u.IP && u.IP != "127.0.0.1" && u.IP != "localhost" {
+					s.detectedIP = u.IP
+					myIP = u.IP
+				}
 				break
 			}
 		}
 	}
 
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ip":         myIP,
-		"name":       name,
-		"registered": registered,
+		"ip":          myIP,
+		"name":        name,
+		"registered":  registered,
+		"sharedDir":   s.config.SharedDir,
+		"usersSource": s.usersSource,
+		"usersError":  errMsg,
 	})
 }
 
@@ -1239,11 +1393,22 @@ func (s *AgentServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 	uf, err := s.readUsers()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"updatedAt":  time.Now().Format(time.RFC3339),
+			"users":      []User{},
+			"sourcePath": s.usersSource,
+			"sharedDir":  s.config.SharedDir,
+			"error":      err.Error(),
+		})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, uf)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"updatedAt":  uf.UpdatedAt,
+		"users":      uf.Users,
+		"sourcePath": s.usersSource,
+		"sharedDir":  s.config.SharedDir,
+	})
 }
 
 // handleRegister: POST /api/users/register
@@ -2285,6 +2450,8 @@ func main() {
 			if !isFlagPassed("headless") && fileCfg.Headless {
 				cfg.Headless = fileCfg.Headless
 			}
+		} else {
+			log.Printf("[CONFIG 경고] %s 파싱 실패 (JSON 문법 오류): %v\n", configPath, err)
 		}
 	}
 
@@ -2316,6 +2483,7 @@ func main() {
 	log.Printf("  >> 브라우저 접속 주소: http://127.0.0.1:%d/\n", cfg.ListenPort)
 	log.Printf("  >> 감지된 내 PC IP:    %s\n", server.detectedIP)
 	log.Printf("  >> 공유폴더 경로:      %s\n", cfg.SharedDir)
+	log.Printf("  >> 사용자 명단 경로:   %s\n", server.usersSource)
 	log.Printf("  (주의: 0.0.0.0 이 아니라 반드시 127.0.0.1 로 접속해야 합니다)\n")
 	log.Printf("========================================================\n")
 

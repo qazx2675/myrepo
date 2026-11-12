@@ -17,14 +17,26 @@ webui_html_path = os.path.join(base_dir, 'webui', 'index.html')
 if os.path.exists(webui_html_path):
     shutil.copy2(webui_html_path, os.path.join(internal_webui_dir, 'index.html'))
 
-# Ensure config.json and users.json exist in dist/
+# Ensure config.json and users.json exist in dist/ and keep them in sync
 config_src_path = os.path.join(base_dir, 'config', 'config.json')
-if os.path.exists(config_src_path):
-    shutil.copy2(config_src_path, os.path.join(dist_dir, 'config.json'))
+config_dist_path = os.path.join(dist_dir, 'config.json')
+if os.path.exists(config_src_path) and not os.path.exists(config_dist_path):
+    shutil.copy2(config_src_path, config_dist_path)
+elif os.path.exists(config_src_path) and os.path.exists(config_dist_path):
+    if os.path.getmtime(config_src_path) > os.path.getmtime(config_dist_path):
+        shutil.copy2(config_src_path, config_dist_path)
+    elif os.path.getmtime(config_dist_path) > os.path.getmtime(config_src_path):
+        shutil.copy2(config_dist_path, config_src_path)
 
 users_src_path = os.path.join(base_dir, 'config', 'users.json')
-if os.path.exists(users_src_path) and not os.path.exists(os.path.join(dist_dir, 'users.json')):
-    shutil.copy2(users_src_path, os.path.join(dist_dir, 'users.json'))
+users_dist_path = os.path.join(dist_dir, 'users.json')
+if os.path.exists(users_src_path) and not os.path.exists(users_dist_path):
+    shutil.copy2(users_src_path, users_dist_path)
+elif os.path.exists(users_src_path) and os.path.exists(users_dist_path):
+    if os.path.getmtime(users_src_path) > os.path.getmtime(users_dist_path):
+        shutil.copy2(users_src_path, users_dist_path)
+    elif os.path.getmtime(users_dist_path) > os.path.getmtime(users_src_path):
+        shutil.copy2(users_dist_path, users_src_path)
 
 def strip_comments(code):
     result = []

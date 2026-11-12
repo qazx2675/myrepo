@@ -1652,12 +1652,18 @@
         async function fetchUsersAndStatus() {
             try {
                 const resMe = await agentFetch(`${AGENT_BASE}/api/me`, { cache: 'no-store' });
+                let meData = null;
                 if (resMe.ok) {
-                    const meData = await resMe.json();
+                    meData = await resMe.json();
                     state.agentInfo = { connected: true, ip: meData.ip, name: meData.name, registered: meData.registered };
                     if (workerAgentMsg) {
                         const myLabel = meData.name ? `${meData.name} (${meData.ip})` : `미등록 IP (${meData.ip})`;
-                        workerAgentMsg.innerHTML = `● Go 에이전트 연결됨: <b style="color:#38bdf8;">${myLabel}</b>`;
+                        const srcName = meData.usersSource ? meData.usersSource.replace(/^.*[\\\/]/, '') : 'users.json';
+                        const tipTitle = `설정 참조: ${meData.usersSource || '로컬'}`;
+                        workerAgentMsg.innerHTML = `● Go 에이전트 연결됨: <b style="color:#38bdf8;">${myLabel}</b> <span style="font-size:11px; color:#94a3b8; font-weight:normal;" title="${tipTitle}">[${srcName}]</span>`;
+                        if (meData.usersError) {
+                            workerAgentMsg.innerHTML += `<div style="color:#ef4444; font-size:11px; margin-top:3px; padding:3px 6px; background:rgba(239,68,68,0.1); border-radius:4px; border:1px solid rgba(239,68,68,0.2);">⚠️ ${meData.usersError}</div>`;
+                        }
                     }
                     initEventSource();
                 } else {
@@ -1667,13 +1673,16 @@
                 const resUsers = await agentFetch(`${AGENT_BASE}/api/users`, { cache: 'no-store' });
                 if (resUsers.ok) {
                     const uData = await resUsers.json();
+                    if (uData.error && workerAgentMsg && (!meData || !meData.usersError)) {
+                        workerAgentMsg.innerHTML += `<div style="color:#ef4444; font-size:11px; margin-top:3px; padding:3px 6px; background:rgba(239,68,68,0.1); border-radius:4px; border:1px solid rgba(239,68,68,0.2);">⚠️ ${uData.error}</div>`;
+                    }
                     state.usersList = uData.users || [];
                     populateCheckerDropdowns();
                 }
             } catch (err) {
                 state.agentInfo = { connected: false, ip: '', name: '', registered: false };
                 if (workerAgentMsg) {
-                    workerAgentMsg.innerHTML = `○ Go 에이전트 미연결 (공유폴더에서 cross-checker-agent.exe 실행 시 연동)`;
+                    workerAgentMsg.innerHTML = `○ Go 에이전트 미연결 (host-cross-checker.exe 실행 시 연동)`;
                 }
             }
         }
@@ -1686,12 +1695,16 @@
 
             const buildOptions = (selectedVal) => {
                 let html = '<option value="">확인자를 선택하세요</option>';
-                state.usersList.forEach(u => {
-                    // 평소에는 자기 자신 제외 (정상 운영 규칙 엄격 준수)
-                    if (u.ip === currentMyIp) return;
-                    const isSel = (u.ip === selectedVal) ? 'selected' : '';
-                    html += `<option value="${u.ip}" data-name="${u.name}" ${isSel}>${u.name} (${u.ip})</option>`;
-                });
+                if (!state.usersList || state.usersList.length === 0) {
+                    html += '<option value="" disabled style="color:#94a3b8;">(등록된 작업자 없음 - users.json 확인)</option>';
+                } else {
+                    state.usersList.forEach(u => {
+                        // 평소에는 자기 자신 제외 (정상 운영 규칙 엄격 준수)
+                        if (u.ip === currentMyIp) return;
+                        const isSel = (u.ip === selectedVal) ? 'selected' : '';
+                        html += `<option value="${u.ip}" data-name="${u.name}" ${isSel}>${u.name} (${u.ip})</option>`;
+                    });
+                }
                 // 이번 1인 테스트 전용: 나 자신에게 테스트 요청 옵션 제공 (단, 확인자 호출은 나 자신에게 발생하지 않음)
                 if (currentMyIp) {
                     const myName = state.agentInfo.name || "나 자신";
