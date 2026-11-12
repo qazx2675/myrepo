@@ -181,6 +181,14 @@
     }
     if (typeof state.showResetConfig !== 'boolean') state.showResetConfig = false;
 
+    // 알림 설정 (토스트 및 작업표시줄 깜빡임, 기본값 true)
+    let savedNotify = null;
+    try { savedNotify = localStorage.getItem('awx_notifications_enabled'); } catch (e) {}
+    if (typeof state.notificationsEnabled !== 'boolean') {
+        state.notificationsEnabled = (savedNotify === null) ? true : (savedNotify === 'true');
+    }
+    if (typeof state.showSettingsModal !== 'boolean') state.showSettingsModal = false;
+
     // 신규 크로스체크 연동 상태 필드 ('single' | 'worker' | 'checker')
     if (typeof state.activeTab !== 'string') state.activeTab = 'single';
     if (typeof state.incidentNo !== 'string') state.incidentNo = '';
@@ -570,12 +578,43 @@
                 <span id="awx-vld-ctx-badge" style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; font-size:11px; padding:1px 6px; border-radius:4px; font-weight:600; white-space:nowrap;">${ctx.label}</span>
             </div>
             <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
+                <button id="awx-vld-btn-header-settings" class="awx-vld-header-btn" style="padding:4px 7px; ${state.showSettingsModal ? 'background:#1e293b;' : ''}" title="환경설정 (알림 켜기/끄기 톱니바퀴)">
+                    ${getGearSvg()}
+                </button>
                 <button id="awx-vld-btn-pin" class="${pinClass}" title="창을 항상 가장 위에 고정 (포커스 유지)">
                     ${getPinSvg(state.isPinned)}
                     <span id="awx-vld-pin-text">${pinLabel}</span>
                 </button>
                 <button id="awx-vld-btn-detach" class="awx-vld-header-btn" title="${detachTitle}">${detachLabel}</button>
                 <button id="awx-vld-btn-close" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; line-height:1; padding:0 4px;" title="닫기">&times;</button>
+            </div>
+        </div>
+
+        <!-- 상단 환경설정(톱니바퀴) 팝업 패널 -->
+        <div id="awx-vld-settings-panel" style="display:${state.showSettingsModal ? 'block' : 'none'}; background:#0f172a; color:#f8fafc; border-bottom:1px solid #334155; padding:10px 14px; font-size:12px; z-index:9999;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #334155; padding-bottom:5px;">
+                <span style="font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:6px;">
+                    ${getGearSvg()} 환경설정 (알림 설정)
+                </span>
+                <button id="awx-vld-btn-close-settings" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer; line-height:1;" title="닫기">&times;</button>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:4px 0;">
+                <div>
+                    <div style="font-weight:600; color:#f1f5f9; display:flex; align-items:center; gap:6px;">
+                        <span>승인요청 / 승인완료 알림</span>
+                        <span id="awx-vld-txt-notify-status" style="font-size:11px; padding:1px 6px; border-radius:3px; background:${state.notificationsEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}; color:${state.notificationsEnabled ? '#4ade80' : '#f87171'}; font-weight:700;">
+                            ${state.notificationsEnabled ? '켜짐' : '꺼짐'}
+                        </span>
+                    </div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:3px;">창을 내려두더라도 윈도우 우측 하단 토스트 및 작업표시줄 깜빡임으로 인지</div>
+                </div>
+                <label style="display:inline-flex; align-items:center; cursor:pointer;">
+                    <input id="awx-vld-chk-notifications" type="checkbox" ${state.notificationsEnabled ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#2563eb;">
+                </label>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid #1e293b;">
+                <span style="font-size:10.5px; color:#64748b;">(무음 모드로 현재 작업에 방해되지 않음)</span>
+                <button id="awx-vld-btn-test-notify" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:3px 8px;">🔔 알림 테스트</button>
             </div>
         </div>
 
@@ -639,6 +678,15 @@
                                 <input id="awx-vld-chk-reset-target" type="checkbox" ${state.resetTargets.target ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
                                 <span>작업대상 호스트</span>
                             </label>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1;">
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+                                <input id="awx-vld-chk-notifications-tab1" type="checkbox" ${state.notificationsEnabled ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+                                <span style="font-weight:600; color:#1e293b;">승인요청 / 완료 알림 받기 (토스트 & 작업표시줄)</span>
+                            </label>
+                            <span id="awx-vld-txt-notify-status-tab1" style="font-size:10.5px; font-weight:700; color:${state.notificationsEnabled ? '#16a34a' : '#dc2626'};">
+                                ${state.notificationsEnabled ? '켜짐' : '꺼짐'}
+                            </span>
                         </div>
                     </div>
 
@@ -930,6 +978,16 @@
         const paneWorker = getEl('awx-vld-pane-worker');
         const paneChecker = getEl('awx-vld-pane-checker');
         const badgePendingCount = getEl('awx-vld-badge-pending-count');
+
+        // 상단 환경설정(알림 톱니바퀴) 엘리먼트
+        const btnHeaderSettings = getEl('awx-vld-btn-header-settings');
+        const panelSettings = getEl('awx-vld-settings-panel');
+        const btnCloseSettings = getEl('awx-vld-btn-close-settings');
+        const chkNotify = getEl('awx-vld-chk-notifications');
+        const chkNotifyTab1 = getEl('awx-vld-chk-notifications-tab1');
+        const txtNotifyStatus = getEl('awx-vld-txt-notify-status');
+        const txtNotifyStatusTab1 = getEl('awx-vld-txt-notify-status-tab1');
+        const btnTestNotify = getEl('awx-vld-btn-test-notify');
 
         // [탭 1] 단독 확인 엘리먼트
         const inputExclude = getEl('awx-vld-input-exclude');
@@ -1316,6 +1374,62 @@
         if (chkResetIncident) chkResetIncident.onchange = () => { state.resetTargets.incident = chkResetIncident.checked; };
         if (chkResetTarget) chkResetTarget.onchange = () => { state.resetTargets.target = chkResetTarget.checked; };
 
+        // 환경설정 (알림 켜기/끄기) 이벤트 바인딩
+        if (btnHeaderSettings && panelSettings) {
+            btnHeaderSettings.onclick = () => {
+                state.showSettingsModal = !state.showSettingsModal;
+                panelSettings.style.display = state.showSettingsModal ? 'block' : 'none';
+                btnHeaderSettings.style.background = state.showSettingsModal ? '#1e293b' : 'none';
+            };
+        }
+        if (btnCloseSettings && panelSettings) {
+            btnCloseSettings.onclick = () => {
+                state.showSettingsModal = false;
+                panelSettings.style.display = 'none';
+                if (btnHeaderSettings) btnHeaderSettings.style.background = 'none';
+            };
+        }
+
+        const updateNotifyToggleUI = (val) => {
+            state.notificationsEnabled = val;
+            try {
+                localStorage.setItem('awx_notifications_enabled', String(val));
+            } catch (e) {}
+            if (chkNotify) chkNotify.checked = val;
+            if (chkNotifyTab1) chkNotifyTab1.checked = val;
+            if (txtNotifyStatus) {
+                txtNotifyStatus.innerText = val ? '켜짐' : '꺼짐';
+                txtNotifyStatus.style.background = val ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)';
+                txtNotifyStatus.style.color = val ? '#4ade80' : '#f87171';
+            }
+            if (txtNotifyStatusTab1) {
+                txtNotifyStatusTab1.innerText = val ? '켜짐' : '꺼짐';
+                txtNotifyStatusTab1.style.color = val ? '#16a34a' : '#dc2626';
+            }
+            if (val) {
+                requestNotificationPermission();
+            }
+        };
+
+        if (chkNotify) chkNotify.onchange = (e) => updateNotifyToggleUI(e.target.checked);
+        if (chkNotifyTab1) chkNotifyTab1.onchange = (e) => updateNotifyToggleUI(e.target.checked);
+        if (btnTestNotify) {
+            btnTestNotify.onclick = () => {
+                if (!state.notificationsEnabled) {
+                    updateNotifyToggleUI(true);
+                }
+                notifyUser({
+                    title: "[크로스체크] 알림 테스트",
+                    body: "알림이 정상 작동 중입니다. (10초 후 자동 사라짐)",
+                    tag: "test_notify",
+                    blinkText: "알림 테스트",
+                    onClick: () => {
+                        alert("알림 테스트를 클릭하셨습니다.");
+                    }
+                });
+            };
+        }
+
         // 수집 초기화 (AWX 수집 초기화 + 톱니바퀴 설정에 따라 2번 비교 대상 호스트 입력 연동 초기화)
         btnResetAwx.onclick = () => {
             state.collectedHosts.clear();
@@ -1645,6 +1759,163 @@
         window.awxDoCompare = doCompare;
 
         // =========================================================================
+        // 비침해형(Non-intrusive) 알림 & 작업표시줄/타이틀 깜빡임 시스템
+        // =========================================================================
+        let activeBlinkTimer = null;
+        const originalDocTitle = document.title || "작업대상 호스트 교차 검증기";
+
+        function startTitleBlink(blinkText) {
+            stopTitleBlink();
+            let toggle = false;
+            document.title = `[🔔 ${blinkText}] ${originalDocTitle}`;
+            activeBlinkTimer = setInterval(() => {
+                toggle = !toggle;
+                document.title = toggle ? `[🔔 ${blinkText}] ${originalDocTitle}` : `(1) ${originalDocTitle}`;
+            }, 1000);
+        }
+
+        function stopTitleBlink() {
+            if (activeBlinkTimer) {
+                clearInterval(activeBlinkTimer);
+                activeBlinkTimer = null;
+            }
+            document.title = originalDocTitle;
+        }
+
+        window.addEventListener('focus', stopTitleBlink);
+        window.addEventListener('click', stopTitleBlink);
+
+        function requestNotificationPermission() {
+            if ("Notification" in window) {
+                if (Notification.permission === "default") {
+                    Notification.requestPermission().catch(() => {});
+                }
+            }
+        }
+
+        function isMe(userOrIp) {
+            if (!userOrIp) return false;
+            const myIp = state.agentInfo ? state.agentInfo.ip : '';
+            if (!myIp) return false;
+            const targetIp = (typeof userOrIp === 'string') ? userOrIp : userOrIp.ip;
+            if (targetIp === myIp) return true;
+            if ((targetIp === '127.0.0.1' || targetIp === 'localhost') && (myIp === '127.0.0.1' || myIp === 'localhost')) return true;
+            return false;
+        }
+
+        const notifiedSessions = new Set();
+
+        function notifyUser({ title, body, tag, onClick, blinkText }) {
+            if (!state.notificationsEnabled) {
+                console.log("[awxNotification] Notifications are disabled in settings.");
+                return;
+            }
+
+            // 1. Taskbar/Window flash via Go backend
+            agentFetch(`${AGENT_BASE}/api/window/flash`, { method: 'POST' }).catch(() => {});
+
+            // 2. Window title blinking if window is not currently active
+            if (document.hidden || !document.hasFocus()) {
+                startTitleBlink(blinkText || "새 알림");
+            }
+
+            // 3. Native Windows Toast Notification via Web Notification API
+            if ("Notification" in window) {
+                if (Notification.permission === "granted") {
+                    showNativeToast();
+                } else if (Notification.permission === "default") {
+                    Notification.requestPermission().then(perm => {
+                        if (perm === "granted") {
+                            showNativeToast();
+                        }
+                    }).catch(() => {});
+                }
+            }
+
+            function showNativeToast() {
+                try {
+                    const n = new Notification(title, {
+                        body: body,
+                        tag: tag || ("cross-check-" + Date.now()),
+                        silent: true // 100% 무음: 조용한 사무실 환경
+                    });
+
+                    // 10초간 표시 후 자동 사라짐 (사용자 지정 옵션)
+                    const autoCloseTimer = setTimeout(() => {
+                        try { n.close(); } catch (e) {}
+                    }, 10000);
+
+                    n.onclick = () => {
+                        clearTimeout(autoCloseTimer);
+                        // Windows 복원 및 포커스
+                        agentFetch(`${AGENT_BASE}/api/window/restore`, { method: 'POST' }).catch(() => {});
+                        try { window.focus(); } catch (e) {}
+                        stopTitleBlink();
+                        if (typeof onClick === 'function') {
+                            onClick();
+                        }
+                        try { n.close(); } catch (e) {}
+                    };
+                } catch (e) {
+                    console.warn("[awxNotification] Error creating notification:", e);
+                }
+            }
+        }
+
+        function checkAndNotifyNewSession(ev) {
+            const sess = ev.data?.session || ev.session || ev.data;
+            if (!sess || !sess.sessionId) return;
+            const sid = sess.sessionId;
+            if (notifiedSessions.has(sid + "_new")) return;
+
+            // 내가 확인자로 지정된 세션인지 확인
+            if (isMe(sess.checker)) {
+                notifiedSessions.add(sid + "_new");
+                const workerName = sess.worker?.name || "작업자";
+                const hostCount = sess.hosts ? (Array.isArray(sess.hosts) ? sess.hosts.length : 0) : 0;
+                const incNo = (sess.incidentNo || sess.metadata?.incidentId) ? ` (${sess.incidentNo || sess.metadata?.incidentId})` : '';
+
+                notifyUser({
+                    title: "[크로스체크] 새 승인 요청 도착",
+                    body: `${workerName}님이 호스트 ${hostCount}건 검증 승인을 요청했습니다.${incNo}`,
+                    tag: "req_" + sid,
+                    blinkText: "새 승인요청",
+                    onClick: () => {
+                        switchTab('checker');
+                        loadCheckerSession(sid);
+                    }
+                });
+            }
+        }
+
+        function checkAndNotifySessionDecided(ev) {
+            const sess = ev.data?.session || ev.session || ev.data;
+            if (!sess || !sess.sessionId) return;
+            const sid = sess.sessionId;
+            const status = sess.status || ev.status || ev.data?.status;
+            if (status !== 'APPROVED' && status !== 'REJECTED') return;
+            if (notifiedSessions.has(sid + "_" + status)) return;
+
+            // 내가 작업자(요청자)인 세션인지 확인
+            if (isMe(sess.worker) || (state.currentSession && state.currentSession.sessionId === sid)) {
+                notifiedSessions.add(sid + "_" + status);
+                const checkerName = sess.checker?.name || (state.currentSession?.checkerName) || "확인자";
+                const statusLabel = (status === 'APPROVED') ? "승인 완료" : "반려됨";
+
+                notifyUser({
+                    title: `[크로스체크] ${statusLabel}`,
+                    body: `${checkerName}님이 호스트 검증을 ${statusLabel}했습니다.`,
+                    tag: "decided_" + sid,
+                    blinkText: statusLabel,
+                    onClick: () => {
+                        switchTab('worker');
+                        refreshWorkerSessionStatus(sid);
+                    }
+                });
+            }
+        }
+
+        // =========================================================================
         // 크로스체크 연동 로직 (Go 에이전트 연동: 작업자 & 확인자)
         // =========================================================================
         let eventSource = null;
@@ -1733,13 +2004,24 @@
         }
 
         function handleAgentSSE(ev) {
-            if (ev.type === 'NEW_SESSION' || ev.type === 'PEER_NOTIFY' || ev.type === 'SESSION_REASSIGNED') {
+            if (ev.type === 'NEW_SESSION' || ev.type === 'PEER_NOTIFY') {
                 fetchPendingSessions();
+                checkAndNotifyNewSession(ev);
             } else if (ev.type === 'SESSION_DECIDED' || ev.type === 'PEER_UPDATE') {
                 if (state.currentSession && (state.currentSession.sessionId === ev.sessionId || ev.data?.sessionId === state.currentSession.sessionId)) {
                     refreshWorkerSessionStatus(state.currentSession.sessionId);
                 }
                 fetchPendingSessions();
+                checkAndNotifySessionDecided(ev);
+            } else if (ev.type === 'SESSION_REASSIGNED') {
+                // 1. 작업자의 화면이면 확인자 정보 즉시 갱신 (확인자 변경 시 작업자에게 실시간 업데이트)
+                if (state.currentSession && (state.currentSession.sessionId === ev.sessionId || ev.data?.sessionId === state.currentSession.sessionId)) {
+                    refreshWorkerSessionStatus(state.currentSession.sessionId);
+                }
+                // 2. 확인자 대기 목록 갱신
+                fetchPendingSessions();
+                // 3. 내가 새로 지정된 확인자이면 알림 발생
+                checkAndNotifyNewSession(ev);
             } else if (ev.type === 'REASSIGNED_AWAY') {
                 fetchPendingSessions();
             }
@@ -2029,11 +2311,17 @@
                 if (res.ok) {
                     const data = await res.json();
                     if (state.currentSession && state.currentSession.sessionId === sessionId) {
+                        const prevStatus = state.currentSession.status;
                         state.currentSession.status = data.status;
                         state.currentSession.checkerName = data.checker?.name || state.currentSession.checkerName;
                         state.currentSession.checkerIp = data.checker?.ip || state.currentSession.checkerIp;
                         state.currentSession.decisionComment = data.checkerData?.decisionComment || '';
                         renderWorkerSessionCard();
+
+                        // 승인/반려 결정 알림 트리거
+                        if (prevStatus !== data.status && (data.status === 'APPROVED' || data.status === 'REJECTED')) {
+                            checkAndNotifySessionDecided({ data: { ...data, sessionId: sessionId, worker: state.currentSession.worker || state.agentInfo } });
+                        }
                     }
                 }
             } catch (e) {}
@@ -2048,6 +2336,14 @@
                 if (res.ok) {
                     const data = await res.json();
                     const list = (data.sessions || []).filter(s => s.status === 'PENDING' || s.status === 'CHECKING');
+                    
+                    // 새 승인 요청 감지 및 알림 트리거
+                    list.forEach(s => {
+                        if (isMe(s.checker)) {
+                            checkAndNotifyNewSession({ data: s });
+                        }
+                    });
+
                     state.pendingSessions = list;
 
                     if (badgePendingCount) {

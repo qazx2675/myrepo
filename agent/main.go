@@ -24,7 +24,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"host-cross-checker/internal/launcher"
 	"host-cross-checker/internal/webui"
@@ -1013,6 +1015,8 @@ func (s *AgentServer) Routes() http.Handler {
 	mux.HandleFunc("/api/peer/notify", s.handlePeerNotify)
 	mux.HandleFunc("/api/peer/update", s.handlePeerUpdate)
 	mux.HandleFunc("/api/events", s.handleEvents)
+	mux.HandleFunc("/api/window/flash", s.handleWindowFlash)
+	mux.HandleFunc("/api/window/restore", s.handleWindowRestore)
 	mux.HandleFunc("/checker", s.handleCheckerUI)
 	mux.HandleFunc("/ws", s.handleWebSocket)
 
@@ -1736,6 +1740,20 @@ func (s *AgentServer) handleSessionReassign(w http.ResponseWriter, r *http.Reque
 		}(req.NewChecker.IP, *sess)
 	}
 
+	// Notify worker async so the requester's screen updates immediately!
+	if sess.Worker.IP != "" && sess.Worker.IP != s.detectedIP && sess.Worker.IP != "127.0.0.1" {
+		go func(workerIP string, sessCopy Session) {
+			url := fmt.Sprintf("http://%s:%d/api/peer/update", workerIP, s.config.ListenPort)
+			s.postPeerJSON(url, map[string]interface{}{
+				"type":      "SESSION_REASSIGNED",
+				"sessionId": sessCopy.SessionId,
+				"session":   sessCopy,
+				"checker":   sessCopy.Checker,
+				"status":    sessCopy.Status,
+			})
+		}(sess.Worker.IP, *sess)
+	}
+
 	// Broadcast event
 	s.broadcastEvent("SESSION_REASSIGNED", sess.SessionId, sess)
 
@@ -1886,6 +1904,8 @@ func (s *AgentServer) handlePeerUpdate(w http.ResponseWriter, r *http.Request) {
 		Status      string       `json:"status"`
 		Data        interface{}  `json:"data"`
 		CheckerData *CheckerData `json:"checkerData"`
+		Checker     *User        `json:"checker"`
+		Session     *Session     `json:"session"`
 	}
 	if err := json.Unmarshal(body, &payload); err == nil {
 		// Update local session on disk if it exists
@@ -1896,11 +1916,24 @@ func (s *AgentServer) handlePeerUpdate(w http.ResponseWriter, r *http.Request) {
 			if payload.CheckerData != nil {
 				sess.CheckerData = payload.CheckerData
 			}
-			sess.DecidedAt = time.Now().Format(time.RFC3339)
+			if payload.Checker != nil {
+				sess.Checker = *payload.Checker
+			}
+			if payload.Session != nil {
+				sess.Checker = payload.Session.Checker
+				sess.CheckerHistory = payload.Session.CheckerHistory
+			}
+			if payload.Status == "APPROVED" || payload.Status == "REJECTED" {
+				sess.DecidedAt = time.Now().Format(time.RFC3339)
+			}
 			_ = s.saveSession(sess)
-			log.Printf("[PEER] Updated local session %s on disk to status: %s\n", payload.SessionId, payload.Status)
+			log.Printf("[PEER] Updated local session %s on disk (type=%s, status=%s, checker=%s)\n", payload.SessionId, payload.Type, payload.Status, sess.Checker.Name)
 		}
-		s.broadcastEvent("PEER_UPDATE", payload.SessionId, payload)
+		eventType := "PEER_UPDATE"
+		if payload.Type != "" {
+			eventType = payload.Type
+		}
+		s.broadcastEvent(eventType, payload.SessionId, payload)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"received": true})
@@ -2372,6 +2405,93 @@ loadSession();
 </body>
 </html>
 `
+
+// flashAppWindow triggers a taskbar flash on Windows for the app window.
+func flashAppWindow() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	user32 := syscall.NewLazyDLL("user32.dll")
+	enumWindows := user32.NewProc("EnumWindows")
+	getWindowText := user32.NewProc("GetWindowTextW")
+	flashWindowEx := user32.NewProc("FlashWindowEx")
+
+	var hwnd uintptr
+	cb := syscall.NewCallback(func(h uintptr, lParam uintptr) uintptr {
+		buf := make([]uint16, 256)
+		getWindowText.Call(h, uintptr(unsafe.Pointer(&buf[0])), 256)
+		t := syscall.UTF16ToString(buf)
+		if strings.Contains(t, "크로스체크") {
+			hwnd = h
+			return 0 // stop
+		}
+		return 1 // continue
+	})
+	enumWindows.Call(cb, 0)
+
+	if hwnd != 0 {
+		type FLASHWINFO struct {
+			CbSize    uint32
+			Hwnd      uintptr
+			DwFlags   uint32
+			UCount    uint32
+			DwTimeout uint32
+		}
+		const FLASHW_ALL = 0x00000003
+		const FLASHW_TIMERNOFG = 0x0000000C
+		info := FLASHWINFO{
+			CbSize:    uint32(unsafe.Sizeof(FLASHWINFO{})),
+			Hwnd:      hwnd,
+			DwFlags:   FLASHW_ALL | FLASHW_TIMERNOFG,
+			UCount:    0,
+			DwTimeout: 0,
+		}
+		flashWindowEx.Call(uintptr(unsafe.Pointer(&info)))
+	}
+}
+
+// restoreAppWindow brings the app window to the front and restores it if minimized.
+func restoreAppWindow() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	user32 := syscall.NewLazyDLL("user32.dll")
+	enumWindows := user32.NewProc("EnumWindows")
+	getWindowText := user32.NewProc("GetWindowTextW")
+	showWindow := user32.NewProc("ShowWindow")
+	setForegroundWindow := user32.NewProc("SetForegroundWindow")
+
+	var hwnd uintptr
+	cb := syscall.NewCallback(func(h uintptr, lParam uintptr) uintptr {
+		buf := make([]uint16, 256)
+		getWindowText.Call(h, uintptr(unsafe.Pointer(&buf[0])), 256)
+		t := syscall.UTF16ToString(buf)
+		if strings.Contains(t, "크로스체크") {
+			hwnd = h
+			return 0 // stop
+		}
+		return 1 // continue
+	})
+	enumWindows.Call(cb, 0)
+
+	if hwnd != 0 {
+		const SW_RESTORE = 9
+		showWindow.Call(hwnd, SW_RESTORE)
+		setForegroundWindow.Call(hwnd)
+	}
+}
+
+// handleWindowFlash handles POST /api/window/flash
+func (s *AgentServer) handleWindowFlash(w http.ResponseWriter, r *http.Request) {
+	flashAppWindow()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"flashed": true})
+}
+
+// handleWindowRestore handles POST /api/window/restore
+func (s *AgentServer) handleWindowRestore(w http.ResponseWriter, r *http.Request) {
+	restoreAppWindow()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"restored": true})
+}
 
 func waitForServerReady(healthURL string, timeout time.Duration) {
 	client := &http.Client{
