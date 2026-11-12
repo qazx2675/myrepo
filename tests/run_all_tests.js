@@ -488,7 +488,7 @@ async function runOneTakeTests() {
         // -------------------------------------------------------------
         // TC-10: 이동 & 상단 고정(Pin) & 투명도 & 독립 창 전환
         // -------------------------------------------------------------
-        console.log("\n>>> Executing TC-10: 이동 & 상단 고정(Pin) & 투명도 조절 & 독립 창 전환");
+        console.log("\n>>> Executing TC-10: 이동 & 상단 고정(Pin) & 마우스 이탈 시 자동 접기 & [?] 워크플로우 팝오버");
         const dragTest = await cdp.evaluate(`
             (() => {
                 const panel = document.getElementById('awx-validator-panel');
@@ -505,79 +505,94 @@ async function runOneTakeTests() {
             })()
         `);
 
-        const pinOpacityDetachValid = await cdp.evaluate(`
+        const pinCollapseHelpValid = await cdp.evaluate(`
             (() => {
                 const panel = document.getElementById('awx-validator-panel');
+                const bodyWrap = document.getElementById('awx-vld-body-wrap');
                 const btnPin = document.getElementById('awx-vld-btn-pin');
                 if (btnPin) btnPin.click();
                 const isPinned = window.awxValidatorState.isPinned === true && btnPin.innerText.includes('상단 고정됨');
 
+                // 1. Mouse enter -> bodyWrap max-height is empty (expanded)
                 panel.dispatchEvent(new MouseEvent('mouseenter'));
-                const opInside = panel.style.opacity;
+                const wrapInside = bodyWrap.style.maxHeight;
 
+                // 2. Mouse leave -> bodyWrap max-height collapses to 30vh (default 30%)
                 panel.dispatchEvent(new MouseEvent('mouseleave'));
-                const opOutside30 = panel.style.opacity;
+                const wrapOutside30 = bodyWrap.style.maxHeight;
 
-                const range = document.getElementById('awx-vld-range-opacity');
-                range.value = '50';
-                range.dispatchEvent(new Event('input'));
-                const opSlider50 = panel.style.opacity;
+                // 3. Settings modal -> adjust slider to 50%
+                const btnSettings = document.getElementById('awx-vld-btn-header-settings');
+                btnSettings.click();
+                const rangeCollapse = document.getElementById('awx-vld-range-collapse');
+                rangeCollapse.value = '50';
+                rangeCollapse.dispatchEvent(new Event('input'));
+                panel.dispatchEvent(new MouseEvent('mouseleave'));
+                const wrapSlider50 = bodyWrap.style.maxHeight;
 
-                range.value = '30';
-                range.dispatchEvent(new Event('input'));
+                // 4. Toggle collapse off
+                const chkCollapse = document.getElementById('awx-vld-chk-collapse');
+                chkCollapse.click();
+                panel.dispatchEvent(new MouseEvent('mouseleave'));
+                const wrapWhenOff = bodyWrap.style.maxHeight;
+                const toggleOffText = document.getElementById('awx-vld-txt-collapse-status')?.innerText;
 
-                const btnOpToggle = document.getElementById('awx-vld-btn-opacity-toggle');
-                btnOpToggle.click();
-                const opWhenOff = panel.style.opacity;
-                const toggleOffText = btnOpToggle.innerText;
-
-                btnOpToggle.click();
+                // Restore toggle on & slider 30%
+                chkCollapse.click();
+                rangeCollapse.value = '30';
+                rangeCollapse.dispatchEvent(new Event('input'));
+                btnSettings.click(); // close settings
                 panel.dispatchEvent(new MouseEvent('mouseenter'));
 
+                // 5. Test [?] workflow help popover on Tab 2 and Tab 3
+                const helpWorker = document.querySelector('.awx-vld-tab-help[data-help="worker"]');
+                const helpChecker = document.querySelector('.awx-vld-tab-help[data-help="checker"]');
+                const popover = document.getElementById('awx-vld-workflow-popover');
+
+                helpWorker.dispatchEvent(new MouseEvent('mouseenter'));
+                const workerPopoverShown = popover.style.display === 'block' && popover.innerHTML.includes('작업자');
+                helpWorker.dispatchEvent(new MouseEvent('mouseleave'));
+                const workerPopoverHidden = popover.style.display === 'none';
+
+                helpChecker.dispatchEvent(new MouseEvent('mouseenter'));
+                const checkerPopoverShown = popover.style.display === 'block' && popover.innerHTML.includes('확인자');
+                helpChecker.dispatchEvent(new MouseEvent('mouseleave'));
+                const checkerPopoverHidden = popover.style.display === 'none';
+
+                // 6. Header cleanup validation: no inner [x] close button and no detach/refresh button
+                const btnClose = document.getElementById('awx-vld-btn-close');
                 const btnDetach = document.getElementById('awx-vld-btn-detach');
-                btnDetach.click();
-                const popup = window.awxPopupWindow;
-                let popupMiniModeOk = false;
-                if (popup && popup.document) {
-                    popup.document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
-                    const collapsedState = popup.awxPopupCollapsed === true &&
-                        popup.document.getElementById('awx-vld-body-wrap').style.display === 'none' &&
-                        popup.document.body.style.opacity === '1';
-
-                    popup.document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
-                    const expandedState = popup.awxPopupCollapsed === false &&
-                        popup.document.getElementById('awx-vld-body-wrap').style.display === 'flex';
-
-                    popupMiniModeOk = collapsedState && expandedState;
-                    const popupReturnBtn = popup.document.getElementById('awx-vld-btn-detach');
-                    if (popupReturnBtn) popupReturnBtn.click();
-                }
+                const userBadge = document.getElementById('awx-vld-user-badge');
 
                 return {
                     isPinned,
-                    opInside,
-                    opOutside30,
-                    opSlider50,
-                    opWhenOff,
+                    wrapInside,
+                    wrapOutside30,
+                    wrapSlider50,
+                    wrapWhenOff,
                     toggleOffText,
-                    popupMiniModeOk
+                    workerHelpOk: workerPopoverShown && workerPopoverHidden,
+                    checkerHelpOk: checkerPopoverShown && checkerPopoverHidden,
+                    headerCleanOk: !btnClose && !btnDetach && !!userBadge
                 };
             })()
         `);
 
         if (
             dragTest.moved &&
-            pinOpacityDetachValid.isPinned &&
-            pinOpacityDetachValid.opInside === '1' &&
-            pinOpacityDetachValid.opOutside30 === '0.3' &&
-            pinOpacityDetachValid.opSlider50 === '0.5' &&
-            pinOpacityDetachValid.opWhenOff === '1' &&
-            pinOpacityDetachValid.toggleOffText === '투명도 OFF' &&
-            pinOpacityDetachValid.popupMiniModeOk
+            pinCollapseHelpValid.isPinned &&
+            pinCollapseHelpValid.wrapInside === '' &&
+            pinCollapseHelpValid.wrapOutside30 === '30vh' &&
+            pinCollapseHelpValid.wrapSlider50 === '50vh' &&
+            pinCollapseHelpValid.wrapWhenOff === '' &&
+            pinCollapseHelpValid.toggleOffText === '꺼짐' &&
+            pinCollapseHelpValid.workerHelpOk &&
+            pinCollapseHelpValid.checkerHelpOk &&
+            pinCollapseHelpValid.headerCleanOk
         ) {
-            recordLog('TC-10', '이동 & 상단고정 & 페이지 투명도 & 독립창 자동접기(미니모드)', 'PASS', `드래그 이동, 상단 고정, 페이지 투명도(100%/30%/50%/OFF) 및 독립 창 이탈 시 헤더 줄 자동 축소(아래 창 보기)/복원 확인`);
+            recordLog('TC-10', '이동 & 상단고정 & 자동접기(본문숨김) & [?] 가이드 팝오버 & 헤더 명찰', 'PASS', `드래그 이동, 상단 고정, 설정 연동 자동접기(100%/30%/50%/OFF), 탭 [?] 워크플로우 팝오버 및 헤더 사용자 명찰 검증 완료`);
         } else {
-            throw new Error(`TC-10 FAILED: drag=${JSON.stringify(dragTest)}, details=${JSON.stringify(pinOpacityDetachValid)}`);
+            throw new Error(`TC-10 FAILED: drag=${JSON.stringify(dragTest)}, details=${JSON.stringify(pinCollapseHelpValid)}`);
         }
 
         // -------------------------------------------------------------

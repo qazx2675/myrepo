@@ -32,6 +32,10 @@ class CDPClient {
                 this.callbacks.delete(msg.id);
                 if (msg.error) cb.reject(msg.error);
                 else cb.resolve(msg.result);
+            } else if (msg.method === 'Runtime.exceptionThrown') {
+                console.error('[BROWSER EXCEPTION]', msg.params.exceptionDetails?.text, msg.params.exceptionDetails?.exception?.description);
+            } else if (msg.method === 'Runtime.consoleAPICalled') {
+                console.log('[BROWSER LOG]', ...msg.params.args.map(a => a.value || a.description));
             } else if (msg.method === 'Page.javascriptDialogOpening') {
                 this.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
             }
@@ -168,13 +172,24 @@ async function runStandaloneAppTest() {
                 const panel = document.getElementById('awx-validator-panel');
                 const detachBtn = document.getElementById('awx-vld-btn-detach');
                 const closeBtn = document.getElementById('awx-vld-btn-close');
+                const userBadge = document.getElementById('awx-vld-user-badge');
+                const userBadgeName = document.getElementById('awx-vld-user-badge-name');
+                const userBadgeDot = document.getElementById('awx-vld-user-badge-dot');
+                const globalStatusBar = document.getElementById('awx-vld-global-status-bar');
+                const helpWorker = document.querySelector('.awx-vld-tab-help[data-help="worker"]');
+                const helpChecker = document.querySelector('.awx-vld-tab-help[data-help="checker"]');
                 const tabs = Array.from(document.querySelectorAll('.awx-vld-tab-btn')).map(b => b.innerText.trim());
                 const isStandalone = Boolean(window.__AWX_STANDALONE_APP__);
                 const panelStyle = panel ? window.getComputedStyle(panel) : null;
                 return {
                     isStandalone,
-                    detachBtnText: detachBtn?.innerText?.trim(),
+                    hasDetachBtn: !!detachBtn,
                     hasCloseBtn: !!closeBtn,
+                    hasUserBadge: !!userBadge && !!userBadgeDot,
+                    userName: userBadgeName?.innerText,
+                    hasGlobalStatusBar: !!globalStatusBar,
+                    hasHelpWorker: !!helpWorker,
+                    hasHelpChecker: !!helpChecker,
                     tabCount: tabs.length,
                     tabs,
                     panelWidth: panelStyle?.width,
@@ -187,13 +202,27 @@ async function runStandaloneAppTest() {
         if (!envInfo.isStandalone) {
             throw new Error("window.__AWX_STANDALONE_APP__ is not true in standalone window");
         }
-        if (envInfo.detachBtnText !== '새로고침') {
-            throw new Error(`Expected detach button to be '새로고침', got: ${envInfo.detachBtnText}`);
+        if (envInfo.hasCloseBtn || envInfo.hasDetachBtn) {
+            throw new Error("Close button or Detach/Refresh button unexpectedly present in header");
+        }
+        if (!envInfo.hasUserBadge) {
+            throw new Error("User badge missing in header");
+        }
+        if (!envInfo.hasHelpWorker || !envInfo.hasHelpChecker) {
+            throw new Error("Workflow [?] help buttons missing on Tab 2 / Tab 3");
+        }
+        if (!envInfo.hasGlobalStatusBar) {
+            throw new Error("Global 6 o'clock status bar element missing");
         }
         if (envInfo.tabCount !== 3) {
             throw new Error(`Expected 3 tabs, got: ${envInfo.tabCount}`);
         }
-        console.log("✓ Standalone UI validated: 3 tabs loaded with '새로고침' header button and responsive full-window layout.");
+        if (!envInfo.tabs[0].includes('1. 작업 전 자체확인') ||
+            !envInfo.tabs[1].includes('2. 작업자 요청/승인대기') ||
+            !envInfo.tabs[2].includes('3. 확인자 검증/승인')) {
+            throw new Error(`Tab labels do not match expected guide names: ${JSON.stringify(envInfo.tabs)}`);
+        }
+        console.log("✓ Standalone UI validated: clean header with live user badge, 3 guide tabs with [?] icons, responsive layout, global status bar.");
 
         // [4/7] Verify AWX 1,000 hosts one-click collection via backend endpoint
         console.log("[4/7] Testing Tab 1: One-click 1,000 AWX hosts collection via Go backend...");
@@ -301,6 +330,54 @@ async function runStandaloneAppTest() {
             throw new Error(`Worker status was not APPROVED, got: ${finalStatus}`);
         }
         console.log("✓ Worker & Checker workflow in standalone app verified: APPROVED.");
+
+        // Verify bottom 6 o'clock global status bar
+        console.log("   Verifying 6 o'clock global status bar across all tabs...");
+        const statusBarInfo = await cdp.evaluate(`
+            (() => {
+                const bar = document.getElementById('awx-vld-global-status-bar');
+                const text = document.getElementById('awx-vld-global-status-text')?.innerText || '';
+                return {
+                    visible: bar && bar.style.display !== 'none',
+                    text
+                };
+            })()
+        `);
+        console.log("   Global status bar state:", statusBarInfo);
+        if (!statusBarInfo.visible || !statusBarInfo.text.includes('크로스체크 승인 완료')) {
+            throw new Error("Global status bar did not display approved status: " + JSON.stringify(statusBarInfo));
+        }
+
+        // Switch to Tab 1 and verify status bar is STILL visible at 6 o'clock
+        await cdp.evaluate(`document.getElementById('awx-vld-tab-single').click()`);
+        await sleep(300);
+        const statusBarOnTab1 = await cdp.evaluate(`
+            (() => {
+                const bar = document.getElementById('awx-vld-global-status-bar');
+                const pane1 = document.getElementById('awx-vld-pane-single');
+                return {
+                    pane1Visible: pane1 && pane1.style.display !== 'none',
+                    barVisible: bar && bar.style.display !== 'none'
+                };
+            })()
+        `);
+        if (!statusBarOnTab1.pane1Visible || !statusBarOnTab1.barVisible) {
+            throw new Error("Global status bar should remain visible on Tab 1: " + JSON.stringify(statusBarOnTab1));
+        }
+
+        // Click status bar and verify it returns to Tab 2
+        await cdp.evaluate(`document.getElementById('awx-vld-global-status-bar').click()`);
+        await sleep(300);
+        const pane2Visible = await cdp.evaluate(`
+            (() => {
+                const pane2 = document.getElementById('awx-vld-pane-worker');
+                return pane2 && pane2.style.display !== 'none';
+            })()
+        `);
+        if (!pane2Visible) {
+            throw new Error("Clicking global status bar did not navigate to Tab 2");
+        }
+        console.log("✓ 6 o'clock global status bar verified: visible across all tabs and clicks navigate to Tab 2.");
 
         // [7/7] Test Window Close & Process Termination Lifecycle
         console.log("[7/7] Testing Window Close & Auto-Exit Lifecycle...");

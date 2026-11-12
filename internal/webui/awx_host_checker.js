@@ -172,9 +172,23 @@
     state.isStandalone = isStandaloneApp;
     if (typeof state.isPinned !== 'boolean') state.isPinned = false;
     if (typeof state.guideExpanded !== 'boolean') state.guideExpanded = false;
-    if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = !isStandaloneApp;
+    if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = false;
     if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
     if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
+
+    // 마우스 이탈 시 자동 접기 (숨김) 설정 (기본값: true, 기본 표시 비율: 30%)
+    let savedCollapseEnabled = null;
+    let savedCollapseRatio = null;
+    try {
+        savedCollapseEnabled = localStorage.getItem('awx_collapse_enabled');
+        savedCollapseRatio = localStorage.getItem('awx_collapse_ratio');
+    } catch (e) {}
+    if (typeof state.collapseEnabled !== 'boolean') {
+        state.collapseEnabled = (savedCollapseEnabled === null) ? true : (savedCollapseEnabled === 'true');
+    }
+    if (typeof state.collapseRatio !== 'number') {
+        state.collapseRatio = (savedCollapseRatio === null) ? 30 : Math.max(10, Math.min(90, parseInt(savedCollapseRatio, 10) || 30));
+    }
     if (!state.resetTargets || typeof state.resetTargets !== 'object') {
         state.resetTargets = {
             detail: true,
@@ -466,44 +480,62 @@
             border-radius: 3px;
             margin-left: 4px;
         }
-        .awx-vld-opacity-bar {
-            background: #1e293b;
-            color: #e2e8f0;
-            padding: 6px 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            border-bottom: 1px solid #334155;
-            font-size: 11.5px;
-            user-select: none;
+        #awx-vld-body-wrap {
+            transition: max-height 0.22s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .awx-vld-opacity-toggle {
-            background: #334155;
-            color: #94a3b8;
-            border: 1px solid #475569;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 11px;
+        .awx-vld-tab-help {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #475569;
+            color: #f8fafc;
+            font-size: 10.5px;
             font-weight: 700;
-            cursor: pointer;
+            margin-left: 5px;
+            cursor: help;
+            vertical-align: middle;
             transition: all 0.15s ease;
         }
-        .awx-vld-opacity-toggle.active {
-            background: #10b981;
-            color: #ffffff;
-            border-color: #34d399;
+        .awx-vld-tab-help:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            transform: scale(1.15);
         }
-        #awx-vld-range-opacity {
-            width: 110px;
-            height: 5px;
-            accent-color: #3b82f6;
+        #awx-vld-workflow-popover {
+            position: fixed;
+            z-index: 2147483647;
+            width: 640px;
+            max-width: 94vw;
+            background: #ffffff;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.4);
+            padding: 8px;
+            pointer-events: none;
+            overflow: hidden;
+            display: none;
+        }
+        #awx-vld-global-status-bar {
+            user-select: none;
             cursor: pointer;
-            vertical-align: middle;
+            padding: 9px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-align: center;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.15);
+            transition: all 0.2s ease;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            flex-shrink: 0;
         }
-        #awx-vld-range-opacity:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
+        #awx-vld-global-status-bar:hover {
+            filter: brightness(1.08);
         }
         /* 탭 바 스타일 */
         .awx-vld-tab-bar {
@@ -563,33 +595,184 @@
         return `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="display:block;"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.86z"/></svg>`;
     }
 
+    function getWorkerWorkflowSvg() {
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" width="640" height="340" font-family="'Pretendard','Malgun Gothic',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 1L10 5L0 9z" fill="#475569"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="640" height="340" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow)"/>
+  
+  <rect x="0" y="0" width="640" height="42" fill="#0f172a" rx="10"/>
+  <rect x="0" y="32" width="640" height="10" fill="#0f172a"/>
+  <text x="20" y="26" font-size="14" font-weight="700" fill="#38bdf8">📌 [작업자] 크로스체크 요청 및 실시간 승인대기 흐름</text>
+
+  <g transform="translate(30, 60)">
+    <rect width="160" height="74" fill="#f8fafc" stroke="#3b82f6" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="160" height="24" fill="#3b82f6" rx="8"/>
+    <rect x="0" y="16" width="160" height="8" fill="#3b82f6"/>
+    <text x="80" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">1. 대상 정보 입력</text>
+    <text x="80" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">AWX 전체 수집</text>
+    <text x="80" y="58" font-size="10" fill="#64748b" text-anchor="middle">또는 상세/인시던트 입력</text>
+  </g>
+
+  <line x1="190" y1="97" x2="230" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g transform="translate(240, 60)">
+    <rect width="160" height="74" fill="#f8fafc" stroke="#6366f1" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="160" height="24" fill="#6366f1" rx="8"/>
+    <rect x="0" y="16" width="160" height="8" fill="#6366f1"/>
+    <text x="80" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">2. 확인자 지정 &amp; 전송</text>
+    <text x="80" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">동료 확인자 선택</text>
+    <text x="80" y="58" font-size="10" fill="#4338ca" text-anchor="middle">[크로스체크 요청 전송]</text>
+  </g>
+
+  <line x1="400" y1="97" x2="440" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g transform="translate(450, 60)">
+    <rect width="160" height="74" fill="#fefce8" stroke="#eab308" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="160" height="24" fill="#eab308" rx="8"/>
+    <rect x="0" y="16" width="160" height="8" fill="#eab308"/>
+    <text x="80" y="17" font-size="11" font-weight="700" fill="#713f12" text-anchor="middle">3. 실시간 승인 대기</text>
+    <text x="80" y="42" font-size="11" font-weight="600" fill="#854d0e" text-anchor="middle">하단 6시 상태바 감시</text>
+    <text x="80" y="58" font-size="10" fill="#a16207" text-anchor="middle">0초 쿨타임 확인자 변경 가능</text>
+  </g>
+
+  <path d="M530 134 V170" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g transform="translate(430, 180)">
+    <rect width="180" height="60" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8" rx="8"/>
+    <text x="90" y="24" font-size="12" font-weight="700" fill="#15803d" text-anchor="middle">✅ 크로스체크 승인 완료</text>
+    <text x="90" y="42" font-size="11" font-weight="600" fill="#166534" text-anchor="middle">하단 상태바 초록색 알림 갱신</text>
+  </g>
+
+  <g transform="translate(430, 260)">
+    <rect width="180" height="52" fill="#15803d" stroke="#166534" rx="8"/>
+    <text x="90" y="22" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">4. 안전 작업 착수</text>
+    <text x="90" y="38" font-size="10" fill="#bbf7d0" text-anchor="middle">vim 일괄 복사 가이드 출력</text>
+  </g>
+  <line x1="520" y1="240" x2="520" y2="258" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g transform="translate(140, 180)">
+    <rect width="220" height="60" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8" rx="8"/>
+    <text x="110" y="24" font-size="12" font-weight="700" fill="#b91c1c" text-anchor="middle">❌ 반려 / 재확인 요청 도착</text>
+    <text x="110" y="42" font-size="10" fill="#991b1b" text-anchor="middle">확인자 코멘트 확인 ➔ 대상 수정 후 재요청</text>
+  </g>
+  <path d="M450 115 H380 V180 H362" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M140 210 H110 V136" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow)"/>
+
+  <text x="30" y="315" font-size="11" font-weight="600" fill="#64748b">💡 팁: 창을 내려두어도 승인 완료 시 하단 6시 상태바 및 알림으로 즉시 확인 가능합니다.</text>
+</svg>`;
+    }
+
+    function getCheckerWorkflowSvg() {
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" width="640" height="340" font-family="'Pretendard','Malgun Gothic',sans-serif">
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 1L10 5L0 9z" fill="#475569"/>
+    </marker>
+    <filter id="shadow2" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="640" height="340" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow2)"/>
+  
+  <rect x="0" y="0" width="640" height="42" fill="#0f172a" rx="10"/>
+  <rect x="0" y="32" width="640" height="10" fill="#0f172a"/>
+  <text x="20" y="26" font-size="14" font-weight="700" fill="#38bdf8">🛡️ [확인자] 크로스체크 독립 검증 및 승인 흐름</text>
+
+  <g transform="translate(25, 60)">
+    <rect width="130" height="74" fill="#f8fafc" stroke="#f59e0b" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="130" height="24" fill="#f59e0b" rx="8"/>
+    <rect x="0" y="16" width="130" height="8" fill="#f59e0b"/>
+    <text x="65" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">1. 요청 알림 수신</text>
+    <text x="65" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">윈도우 무음 토스트</text>
+    <text x="65" y="58" font-size="10" fill="#d97706" text-anchor="middle">작업표시줄 주황 깜빡임</text>
+  </g>
+
+  <line x1="155" y1="97" x2="180" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow2)"/>
+
+  <g transform="translate(185, 60)">
+    <rect width="130" height="74" fill="#f8fafc" stroke="#6366f1" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="130" height="24" fill="#6366f1" rx="8"/>
+    <rect x="0" y="16" width="130" height="8" fill="#6366f1"/>
+    <text x="65" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">2. 세션 열기</text>
+    <text x="65" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">블라인드 데이터 확인</text>
+    <text x="65" y="58" font-size="10" fill="#4338ca" text-anchor="middle">(앞 3대 외 마스킹 보호)</text>
+  </g>
+
+  <line x1="315" y1="97" x2="340" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow2)"/>
+
+  <g transform="translate(345, 60)">
+    <rect width="130" height="74" fill="#f8fafc" stroke="#0ea5e9" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="130" height="24" fill="#0ea5e9" rx="8"/>
+    <rect x="0" y="16" width="130" height="8" fill="#0ea5e9"/>
+    <text x="65" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">3. 직접 독립 입력</text>
+    <text x="65" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">확인자 문서 데이터</text>
+    <text x="65" y="58" font-size="10" fill="#0284c7" text-anchor="middle">상세/인시던트 기입</text>
+  </g>
+
+  <line x1="475" y1="97" x2="500" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow2)"/>
+
+  <g transform="translate(505, 60)">
+    <rect width="115" height="74" fill="#f8fafc" stroke="#8b5cf6" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="115" height="24" fill="#8b5cf6" rx="8"/>
+    <rect x="0" y="16" width="115" height="8" fill="#8b5cf6"/>
+    <text x="57" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">4. 교차 검증</text>
+    <text x="57" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">[결과 비교하기]</text>
+    <text x="57" y="58" font-size="10" fill="#6d28d9" text-anchor="middle">전수 일치 자동대조</text>
+  </g>
+
+  <path d="M562 134 V170" stroke="#475569" stroke-width="2" marker-end="url(#arrow2)"/>
+
+  <g transform="translate(380, 185)">
+    <rect width="240" height="66" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8" rx="8"/>
+    <text x="120" y="24" font-size="12" font-weight="700" fill="#15803d" text-anchor="middle">전수 일치 [MATCH] ➔ 승인 완료</text>
+    <text x="120" y="44" font-size="11" font-weight="600" fill="#166534" text-anchor="middle">[확인 완료(승인)] 클릭 제출</text>
+    <text x="120" y="58" font-size="10" fill="#15803d" text-anchor="middle">작업자 화면에 실시간 [APPROVED] 통보</text>
+  </g>
+
+  <g transform="translate(80, 185)">
+    <rect width="240" height="66" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8" rx="8"/>
+    <text x="120" y="24" font-size="12" font-weight="700" fill="#b91c1c" text-anchor="middle">불일치 [MISMATCH] 적발 ➔ 반려</text>
+    <text x="120" y="44" font-size="11" font-weight="600" fill="#991b1b" text-anchor="middle">[반려 / 재확인 요청] 사유 기재</text>
+    <text x="120" y="58" font-size="10" fill="#b91c1c" text-anchor="middle">작업자 화면에 실시간 사유 전송 및 재요청 유도</text>
+  </g>
+  <path d="M562 155 H200 V183" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow2)"/>
+
+  <text x="25" y="315" font-size="11" font-weight="600" fill="#64748b">🔒 보안 원칙: 확인자가 직접 입력하여 대조하기 전까지 작업자 데이터는 블라인드 처리됩니다.</text>
+</svg>`;
+    }
+
+
     // HTML UI 생성 함수 (패널 및 독립 창 공용)
     function buildUIHTML(ctx, isPopup = false) {
         const pinClass = state.isPinned ? 'awx-vld-header-btn pinned' : 'awx-vld-header-btn';
         const pinLabel = state.isPinned ? '상단 고정됨' : '상단 고정';
-        const opToggleClass = state.opacityEnabled ? 'awx-vld-opacity-toggle active' : 'awx-vld-opacity-toggle';
-        const opToggleLabel = isPopup
-            ? (state.opacityEnabled ? '자동 접기 ON' : '자동 접기 OFF')
-            : (state.opacityEnabled ? '투명도 ON' : '투명도 OFF');
-        const detachLabel = isPopup ? '페이지 내로 복귀' : (isStandaloneApp ? '새로고침' : '독립 창으로 분리');
-        const detachTitle = isPopup ? '페이지 내로 복귀' : (isStandaloneApp ? '연결 및 세션 상태 새로고침' : '패널 크기 맞춤 독립 브라우저 팝업 창으로 띄우기');
 
         return `
         <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:${(isPopup || isStandaloneApp) ? 'default' : 'move'}; user-select:none; border-bottom:1px solid #1e293b;">
             <div style="display:flex; align-items:center; gap:7px; flex-shrink:0;">
                 <span style="font-size:13px; font-weight:700; letter-spacing:-0.3px; color:#ffffff; white-space:nowrap;">작업대상 호스트 교차 검증기</span>
-                <span id="awx-vld-ctx-badge" style="background:#1e293b; color:#cbd5e1; border:1px solid #334155; font-size:11px; padding:1px 6px; border-radius:4px; font-weight:600; white-space:nowrap;">${ctx.label}</span>
+                <div id="awx-vld-user-badge" style="display:inline-flex; align-items:center; gap:5px; background:#1e293b; border:1px solid #334155; padding:2px 8px; border-radius:4px; font-size:11.5px; color:#f1f5f9; cursor:default; user-select:none;" title="연결 확인 중...">
+                    <span id="awx-vld-user-badge-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; box-shadow:0 0 6px rgba(239,68,68,0.6);"></span>
+                    <span id="awx-vld-user-badge-name" style="font-weight:600; color:#e2e8f0;">연결 확인 중...</span>
+                </div>
             </div>
             <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
-                <button id="awx-vld-btn-header-settings" class="awx-vld-header-btn" style="padding:4px 7px; ${state.showSettingsModal ? 'background:#1e293b;' : ''}" title="환경설정 (알림 켜기/끄기 톱니바퀴)">
+                <button id="awx-vld-btn-header-settings" class="awx-vld-header-btn" style="padding:4px 7px; ${state.showSettingsModal ? 'background:#1e293b;' : ''}" title="환경설정 (알림 및 자동 접기 설정)">
                     ${getGearSvg()}
                 </button>
                 <button id="awx-vld-btn-pin" class="${pinClass}" title="창을 항상 가장 위에 고정 (포커스 유지)">
                     ${getPinSvg(state.isPinned)}
                     <span id="awx-vld-pin-text">${pinLabel}</span>
                 </button>
-                <button id="awx-vld-btn-detach" class="awx-vld-header-btn" title="${detachTitle}">${detachLabel}</button>
-                <button id="awx-vld-btn-close" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; line-height:1; padding:0 4px;" title="닫기">&times;</button>
             </div>
         </div>
 
@@ -597,7 +780,7 @@
         <div id="awx-vld-settings-panel" style="display:${state.showSettingsModal ? 'block' : 'none'}; background:#0f172a; color:#f8fafc; border-bottom:1px solid #334155; padding:10px 14px; font-size:12px; z-index:9999;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #334155; padding-bottom:5px;">
                 <span style="font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:6px;">
-                    ${getGearSvg()} 환경설정 (알림 설정)
+                    ${getGearSvg()} 환경설정 (알림 및 자동 접기 설정)
                 </span>
                 <button id="awx-vld-btn-close-settings" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer; line-height:1;" title="닫기">&times;</button>
             </div>
@@ -615,33 +798,50 @@
                     <input id="awx-vld-chk-notifications" type="checkbox" ${state.notificationsEnabled ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#2563eb;">
                 </label>
             </div>
+            <!-- 마우스 이탈 시 자동 숨김 (접기) 설정 -->
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:6px 0; border-top:1px solid #1e293b; margin-top:6px;">
+                <div>
+                    <div style="font-weight:600; color:#f1f5f9; display:flex; align-items:center; gap:6px;">
+                        <span>마우스 이탈 시 자동 숨김 (접기)</span>
+                        <span id="awx-vld-txt-collapse-status" style="font-size:11px; padding:1px 6px; border-radius:3px; background:${state.collapseEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}; color:${state.collapseEnabled ? '#4ade80' : '#f87171'}; font-weight:700;">
+                            ${state.collapseEnabled ? '켜짐' : '꺼짐'}
+                        </span>
+                    </div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:2px;">마우스가 창 밖으로 벗어나면 본문을 지정된 비율만 남기고 접어 작업 화면을 확인</div>
+                </div>
+                <label style="display:inline-flex; align-items:center; cursor:pointer;">
+                    <input id="awx-vld-chk-collapse" type="checkbox" ${state.collapseEnabled ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#2563eb;">
+                </label>
+            </div>
+            <div id="awx-vld-collapse-slider-wrap" style="display:${state.collapseEnabled ? 'flex' : 'none'}; align-items:center; justify-content:space-between; gap:10px; padding:4px 0 2px 0;">
+                <span style="font-size:11px; color:#cbd5e1;">숨김 시 표시 높이 (기본 30%):</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input id="awx-vld-range-collapse" type="range" min="10" max="90" step="5" value="${state.collapseRatio}" style="width:130px; height:5px; accent-color:#38bdf8; cursor:pointer;">
+                    <span id="awx-vld-lbl-collapse" class="awx-vld-mono" style="font-weight:700; color:#38bdf8; min-width:34px; text-align:right;">${state.collapseRatio}%</span>
+                </div>
+            </div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid #1e293b;">
                 <span style="font-size:10.5px; color:#64748b;">(무음 모드로 현재 작업에 방해되지 않음)</span>
                 <button id="awx-vld-btn-test-notify" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:3px 8px;">🔔 알림 테스트</button>
             </div>
         </div>
 
-        <div id="awx-vld-opacity-bar" class="awx-vld-opacity-bar">
-            <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-weight:600; color:#cbd5e1;">${isPopup ? '마우스 이탈 시 자동 접기 (아래 창 보기)' : '투명도 자동 조절'}</span>
-                <button id="awx-vld-btn-opacity-toggle" class="${opToggleClass}" title="기능 켜기/끄기">${opToggleLabel}</button>
-            </div>
-            <div style="display:flex; align-items:center; gap:7px;">
-                <span style="color:#94a3b8; font-size:11px;">${isPopup ? '페이지 내 투명도' : '마우스 이탈 시'}</span>
-                <input id="awx-vld-range-opacity" type="range" min="10" max="100" step="5" value="${state.opacityValue}" ${state.opacityEnabled ? '' : 'disabled'}>
-                <span id="awx-vld-lbl-opacity" class="awx-vld-mono" style="font-weight:700; color:#ffffff; min-width:34px; text-align:right;">${state.opacityValue}%</span>
-            </div>
-        </div>
-
-        <!-- 3개 모드 탭 바 -->
+        <!-- 3개 모드 탭 바 (가이드 안내형 명칭 및 [?] 워크플로우 팝오버) -->
         <div id="awx-vld-tab-bar" class="awx-vld-tab-bar">
-            <button id="awx-vld-tab-single" class="awx-vld-tab-btn ${state.activeTab === 'single' ? 'active' : ''}">내 PC 단독 확인</button>
-            <button id="awx-vld-tab-worker" class="awx-vld-tab-btn ${state.activeTab === 'worker' ? 'active' : ''}">크로스체크 요청 (작업자)</button>
+            <button id="awx-vld-tab-single" class="awx-vld-tab-btn ${state.activeTab === 'single' ? 'active' : ''}">1. 작업 전 자체확인</button>
+            <button id="awx-vld-tab-worker" class="awx-vld-tab-btn ${state.activeTab === 'worker' ? 'active' : ''}">
+                <span>2. 작업자 요청/승인대기</span>
+                <span class="awx-vld-tab-help" data-help="worker" title="작업자 프로세스 가이드 보기">?</span>
+            </button>
             <button id="awx-vld-tab-checker" class="awx-vld-tab-btn ${state.activeTab === 'checker' ? 'active' : ''}">
-                크로스체크 확인 (확인자)
+                <span>3. 확인자 검증/승인</span>
                 <span id="awx-vld-badge-pending-count" class="awx-vld-tab-badge" style="display:${state.pendingSessions.length > 0 ? 'inline-block' : 'none'};">${state.pendingSessions.length}</span>
+                <span class="awx-vld-tab-help" data-help="checker" title="확인자 프로세스 가이드 보기">?</span>
             </button>
         </div>
+
+        <!-- 탭 가이드 [?] 호버 플로팅 팝오버 -->
+        <div id="awx-vld-workflow-popover"></div>
 
         <div id="awx-vld-body-wrap" style="padding:14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px; background:#f3f4f6;">
             
@@ -925,6 +1125,11 @@
             </div>
 
         </div>
+
+        <!-- 하단 6시 방향 상시 크로스체크 승인/반려 상태바 (어느 탭에서나 실시간 확인 가능) -->
+        <div id="awx-vld-global-status-bar" style="display:none; padding:9px 16px; font-size:12px; font-weight:700; text-align:center; cursor:pointer; user-select:none; border-top:1px solid rgba(0,0,0,0.1); transition:all 0.2s ease; box-shadow:0 -2px 10px rgba(0,0,0,0.15); flex-shrink:0;">
+            <span id="awx-vld-global-status-text"></span>
+        </div>
         `;
     }
 
@@ -964,14 +1169,21 @@
         const getEl = id => rootDoc.getElementById(id);
 
         const headerEl = getEl('awx-vld-header');
-        const opacityBarEl = getEl('awx-vld-opacity-bar');
         const bodyWrapEl = getEl('awx-vld-body-wrap');
         const btnPin = getEl('awx-vld-btn-pin');
         const btnClose = getEl('awx-vld-btn-close');
         const btnDetach = getEl('awx-vld-btn-detach');
-        const btnOpacityToggle = getEl('awx-vld-btn-opacity-toggle');
-        const rangeOpacity = getEl('awx-vld-range-opacity');
-        const lblOpacity = getEl('awx-vld-lbl-opacity');
+        const userBadge = getEl('awx-vld-user-badge');
+        const userBadgeDot = getEl('awx-vld-user-badge-dot');
+        const userBadgeName = getEl('awx-vld-user-badge-name');
+        const popoverEl = getEl('awx-vld-workflow-popover');
+        const globalStatusBar = getEl('awx-vld-global-status-bar');
+        const globalStatusText = getEl('awx-vld-global-status-text');
+        const chkCollapse = getEl('awx-vld-chk-collapse');
+        const rangeCollapse = getEl('awx-vld-range-collapse');
+        const lblCollapse = getEl('awx-vld-lbl-collapse');
+        const txtCollapseStatus = getEl('awx-vld-txt-collapse-status');
+        const sliderWrap = getEl('awx-vld-collapse-slider-wrap');
 
         // 탭 버튼 및 패널
         const tabSingle = getEl('awx-vld-tab-single');
@@ -1082,109 +1294,148 @@
         if (tabChecker) tabChecker.onclick = () => switchTab('checker');
         window.awxSwitchTab = switchTab;
 
-        // 독립 창(Popup)에서 마우스 이탈 시 아래 창이 보이도록 헤더 줄로 자동 축소(미니 모드) 상태 관리
-        let popupExpandedWidth = 560;
-        let popupExpandedHeight = 840;
-        let popupCollapsed = false;
-
-        function applyOpacity(forcePreview = false) {
-            if (btnOpacityToggle) {
-                if (state.opacityEnabled) {
-                    btnOpacityToggle.classList.add('active');
-                    btnOpacityToggle.innerText = isPopup ? '자동 접기 ON' : '투명도 ON';
-                } else {
-                    btnOpacityToggle.classList.remove('active');
-                    btnOpacityToggle.innerText = isPopup ? '자동 접기 OFF' : '투명도 OFF';
-                }
+        // 본문 영역 자동 숨김 (접기) 동작 관리 (기존 투명도 조절 대체)
+        function applyCollapse() {
+            if (!bodyWrapEl) return;
+            if (chkCollapse) chkCollapse.checked = state.collapseEnabled;
+            if (rangeCollapse) rangeCollapse.value = String(state.collapseRatio);
+            if (lblCollapse) lblCollapse.innerText = `${state.collapseRatio}%`;
+            if (txtCollapseStatus) {
+                txtCollapseStatus.innerText = state.collapseEnabled ? '켜짐' : '꺼짐';
+                txtCollapseStatus.style.background = state.collapseEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)';
+                txtCollapseStatus.style.color = state.collapseEnabled ? '#4ade80' : '#f87171';
             }
-            if (rangeOpacity) {
-                rangeOpacity.disabled = !state.opacityEnabled;
-                rangeOpacity.value = String(state.opacityValue);
-            }
-            if (lblOpacity) {
-                lblOpacity.innerText = `${state.opacityValue}%`;
+            if (sliderWrap) {
+                sliderWrap.style.display = state.collapseEnabled ? 'flex' : 'none';
             }
 
-            if (isPopup && popupWin) {
-                rootDoc.body.style.opacity = '1';
-                const shouldCollapse = state.opacityEnabled && !state.isMouseInside && !forcePreview;
-                if (shouldCollapse) {
-                    if (!popupCollapsed) {
-                        if (popupWin.outerHeight && popupWin.outerHeight > 220) {
-                            popupExpandedWidth = popupWin.outerWidth || 560;
-                            popupExpandedHeight = popupWin.outerHeight || 840;
-                        }
-                        const frameDiff = Math.max(60, (popupWin.outerHeight || 840) - (popupWin.innerHeight || 760));
-                        const headerBarsHeight = (headerEl ? headerEl.offsetHeight : 44) + (opacityBarEl ? opacityBarEl.offsetHeight : 32) + 4;
-                        popupCollapsed = true;
-                        popupWin.awxPopupCollapsed = true;
-                        if (bodyWrapEl) bodyWrapEl.style.display = 'none';
-                        try {
-                            popupWin.resizeTo(popupExpandedWidth, frameDiff + headerBarsHeight);
-                        } catch (e) {}
-                    }
-                } else {
-                    if (popupCollapsed) {
-                        popupCollapsed = false;
-                        popupWin.awxPopupCollapsed = false;
-                        if (bodyWrapEl) bodyWrapEl.style.display = 'flex';
-                        try {
-                            popupWin.resizeTo(popupExpandedWidth, popupExpandedHeight);
-                        } catch (e) {}
-                    }
-                }
-                return;
-            }
-
-            if (!panel) return;
-            if (!state.opacityEnabled) {
-                panel.style.opacity = '1';
-                return;
-            }
-            if (forcePreview) {
-                panel.style.opacity = String(state.opacityValue / 100);
-                return;
-            }
-            if (state.isMouseInside) {
-                panel.style.opacity = '1';
+            if (state.collapseEnabled && !state.isMouseInside) {
+                bodyWrapEl.style.maxHeight = `${state.collapseRatio}vh`;
+                bodyWrapEl.style.overflow = 'hidden';
             } else {
-                panel.style.opacity = String(state.opacityValue / 100);
+                bodyWrapEl.style.maxHeight = '';
+                bodyWrapEl.style.overflowY = 'auto';
             }
         }
 
-        if (btnOpacityToggle) {
-            btnOpacityToggle.onclick = () => {
-                state.opacityEnabled = !state.opacityEnabled;
-                applyOpacity(false);
+        if (chkCollapse) {
+            chkCollapse.onchange = () => {
+                state.collapseEnabled = chkCollapse.checked;
+                try { localStorage.setItem('awx_collapse_enabled', String(state.collapseEnabled)); } catch(e) {}
+                applyCollapse();
             };
         }
-
-        if (rangeOpacity) {
-            rangeOpacity.oninput = () => {
-                state.opacityValue = Number(rangeOpacity.value);
-                if (lblOpacity) lblOpacity.innerText = `${state.opacityValue}%`;
-                if (!isPopup) {
-                    applyOpacity(true);
-                }
-            };
-            rangeOpacity.onchange = () => {
-                applyOpacity(false);
+        if (rangeCollapse) {
+            rangeCollapse.oninput = () => {
+                state.collapseRatio = parseInt(rangeCollapse.value, 10) || 30;
+                try { localStorage.setItem('awx_collapse_ratio', String(state.collapseRatio)); } catch(e) {}
+                applyCollapse();
             };
         }
 
         // 마우스 진입/이탈 감지
-        const hoverTarget = isPopup ? rootDoc.documentElement : panel;
+        const hoverTarget = isPopup ? rootDoc.documentElement : (isStandaloneApp ? rootDoc.documentElement : panel);
         if (hoverTarget) {
             hoverTarget.addEventListener('mouseenter', () => {
                 state.isMouseInside = true;
-                applyOpacity(false);
+                applyCollapse();
             });
             hoverTarget.addEventListener('mouseleave', () => {
                 state.isMouseInside = false;
-                applyOpacity(false);
+                applyCollapse();
             });
         }
-        window.awxApplyOpacity = applyOpacity;
+        window.addEventListener('blur', () => {
+            state.isMouseInside = false;
+            applyCollapse();
+        });
+        window.addEventListener('focus', () => {
+            state.isMouseInside = true;
+            applyCollapse();
+        });
+        window.awxApplyCollapse = applyCollapse;
+        window.awxApplyOpacity = applyCollapse; // 하위 호환
+
+        // 탭 가이드 [?] 호버 플로팅 팝오버 바인딩
+        const helpButtons = rootDoc.querySelectorAll('.awx-vld-tab-help');
+        helpButtons.forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+            };
+            btn.onmouseenter = () => {
+                const type = btn.getAttribute('data-help');
+                if (!popoverEl) return;
+                popoverEl.innerHTML = (type === 'worker') ? getWorkerWorkflowSvg() : getCheckerWorkflowSvg();
+                const rect = btn.getBoundingClientRect();
+                popoverEl.style.display = 'block';
+                let top = rect.bottom + 6;
+                if (top + 350 > window.innerHeight) {
+                    top = Math.max(10, rect.top - 355);
+                }
+                popoverEl.style.top = top + 'px';
+                let left = rect.left - 240;
+                if (left < 10) left = 10;
+                if (left + 650 > window.innerWidth) left = Math.max(10, window.innerWidth - 655);
+                popoverEl.style.left = left + 'px';
+            };
+            btn.onmouseleave = () => {
+                if (popoverEl) popoverEl.style.display = 'none';
+            };
+        });
+
+        // 하단 6시 방향 상시 크로스체크 승인/반려 상태바
+        function updateGlobalStatusBar() {
+            if (!globalStatusBar || !globalStatusText) return;
+            const sess = state.currentSession;
+            if (!sess || !sess.status) {
+                globalStatusBar.style.display = 'none';
+                return;
+            }
+            globalStatusBar.style.display = 'flex';
+            const assignedCheckerName = sess.checkerName || sess.assignedCheckerName || sess.assignedCheckerIp || '확인자';
+            const status = String(sess.status).toUpperCase();
+
+            if (status === 'APPROVED') {
+                globalStatusBar.style.background = '#16a34a'; // Emerald Green
+                globalStatusBar.style.color = '#ffffff';
+                const timeStr = sess.decidedAt ? new Date(sess.decidedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
+                globalStatusText.innerHTML = `✅ <b>[크로스체크 승인 완료]</b> 확인자: <b>${assignedCheckerName}</b> ${timeStr ? `(${timeStr})` : ''} · 클릭하여 확인`;
+            } else if (status === 'REJECTED') {
+                globalStatusBar.style.background = '#dc2626'; // Red
+                globalStatusBar.style.color = '#ffffff';
+                const reasonStr = (sess.rejectReason || sess.decisionComment) ? ` - "${sess.rejectReason || sess.decisionComment}"` : '';
+                globalStatusText.innerHTML = `❌ <b>[크로스체크 반려]</b> 확인자: <b>${assignedCheckerName}</b>${reasonStr} · 클릭하여 확인`;
+            } else { // PENDING / CHECKING
+                globalStatusBar.style.background = '#1e3a8a'; // Deep blue
+                globalStatusBar.style.color = '#bfdbfe';
+                globalStatusText.innerHTML = `⏳ <b>[승인 대기 중]</b> 확인자: <b>${assignedCheckerName}</b> 님 확인 중... · 클릭하여 확인`;
+            }
+        }
+
+        if (globalStatusBar) {
+            globalStatusBar.onclick = () => {
+                switchTab('worker');
+            };
+        }
+        window.awxUpdateGlobalStatusBar = updateGlobalStatusBar;
+
+        // 상단 헤더 사용자 명찰 및 실시간 연결 상태 갱신
+        function updateUserBadge() {
+            if (!userBadge || !userBadgeDot || !userBadgeName) return;
+            if (state.agentInfo && state.agentInfo.connected) {
+                userBadgeDot.style.background = '#22c55e';
+                userBadgeDot.style.boxShadow = '0 0 6px rgba(34,197,94,0.6)';
+                const displayName = state.agentInfo.name ? state.agentInfo.name : `미등록 (${state.agentInfo.ip})`;
+                userBadgeName.innerText = displayName;
+                userBadge.title = `내 IP: ${state.agentInfo.ip || '-'} (Go 에이전트 정상 연결됨)`;
+            } else {
+                userBadgeDot.style.background = '#ef4444';
+                userBadgeDot.style.boxShadow = '0 0 6px rgba(239,68,68,0.6)';
+                userBadgeName.innerText = '미연결';
+                userBadge.title = 'Go 에이전트 미연결 (host-cross-checker.exe 실행 필요)';
+            }
+        }
+        window.awxUpdateUserBadge = updateUserBadge;
 
         // 상단 고정(Pin) 상태 업데이트 및 포커스 유지 동작
         function applyPinState() {
@@ -1262,8 +1513,8 @@
             });
         }
 
-        // 닫기 버튼
-        btnClose.onclick = () => {
+        // 닫기 버튼 (헤더에서 제거되었으나 존재 시 안전 바인딩)
+        if (btnClose) btnClose.onclick = () => {
             if (isPopup && popupWin) {
                 popupWin.close();
             } else if (isStandaloneApp) {
@@ -1280,43 +1531,45 @@
             }
         };
 
-        // 독립 창 분리 / 복귀 / 새로고침 버튼
-        if (isPopup) {
-            btnDetach.onclick = () => {
-                if (popupWin) popupWin.close();
-                state.isMouseInside = true;
-                panel.style.display = 'flex';
-                panel.style.opacity = '1';
-                bindEvents(document, false, null);
-                updateCountsAndButton();
-            };
-        } else if (isStandaloneApp) {
-            btnDetach.onclick = async () => {
-                await fetchUsersAndStatus();
-                await fetchPendingSessions();
-                updateCountsAndButton();
-            };
-        } else {
-            btnDetach.onclick = () => {
-                panel.style.display = 'none';
-                state.isMouseInside = true;
-                const popup = window.open('', 'AWXHostValidatorPopup', 'width=580,height=860,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
-                if (!popup) {
-                    alert('팝업 차단이 감지되었습니다. 팝업 허용 후 다시 시도해주세요.');
-                    panel.style.display = 'flex';
-                    return;
-                }
-                popup.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>작업대상 호스트 교차 검증기</title><style>${getStylesheet()}</style></head><body class="awx-vld-popup-root" style="margin:0; padding:0; background:#f3f4f6; display:flex; flex-direction:column; height:100vh; overflow:hidden;">${buildUIHTML(ctx, true)}</body></html>`);
-                popup.document.close();
-                bindEvents(popup.document, true, popup);
-                window.awxPopupWindow = popup;
-                popup.addEventListener('unload', () => {
+        // 독립 창 분리 / 복귀 / 새로고침 버튼 (헤더에서 제거되었으나 존재 시 안전 바인딩)
+        if (btnDetach) {
+            if (isPopup) {
+                btnDetach.onclick = () => {
+                    if (popupWin) popupWin.close();
                     state.isMouseInside = true;
                     panel.style.display = 'flex';
                     panel.style.opacity = '1';
                     bindEvents(document, false, null);
-                });
-            };
+                    updateCountsAndButton();
+                };
+            } else if (isStandaloneApp) {
+                btnDetach.onclick = async () => {
+                    await fetchUsersAndStatus();
+                    await fetchPendingSessions();
+                    updateCountsAndButton();
+                };
+            } else {
+                btnDetach.onclick = () => {
+                    panel.style.display = 'none';
+                    state.isMouseInside = true;
+                    const popup = window.open('', 'AWXHostValidatorPopup', 'width=580,height=860,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes');
+                    if (!popup) {
+                        alert('팝업 차단이 감지되었습니다. 팝업 허용 후 다시 시도해주세요.');
+                        panel.style.display = 'flex';
+                        return;
+                    }
+                    popup.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>작업대상 호스트 교차 검증기</title><style>${getStylesheet()}</style></head><body class="awx-vld-popup-root" style="margin:0; padding:0; background:#f3f4f6; display:flex; flex-direction:column; height:100vh; overflow:hidden;">${buildUIHTML(ctx, true)}</body></html>`);
+                    popup.document.close();
+                    bindEvents(popup.document, true, popup);
+                    window.awxPopupWindow = popup;
+                    popup.addEventListener('unload', () => {
+                        state.isMouseInside = true;
+                        panel.style.display = 'flex';
+                        panel.style.opacity = '1';
+                        bindEvents(document, false, null);
+                    });
+                };
+            }
         }
 
         // 제외 입력 안내 문구 토글
@@ -1931,6 +2184,7 @@
                 if (resMe.ok) {
                     meData = await resMe.json();
                     state.agentInfo = { connected: true, ip: meData.ip, name: meData.name, registered: meData.registered };
+                    updateUserBadge();
                     if (workerAgentMsg) {
                         const myLabel = meData.name ? `${meData.name} (${meData.ip})` : `미등록 IP (${meData.ip})`;
                         const srcName = meData.usersSource ? meData.usersSource.replace(/^.*[\\\/]/, '') : 'users.json';
@@ -1960,6 +2214,7 @@
                 }
             } catch (err) {
                 state.agentInfo = { connected: false, ip: '', name: '', registered: false };
+                updateUserBadge();
                 if (workerAgentMsg) {
                     workerAgentMsg.innerHTML = `○ Go 에이전트 미연결 (host-cross-checker.exe 실행 시 연동)`;
                 }
@@ -2182,6 +2437,7 @@
 
         function renderWorkerSessionCard() {
             if (!state.currentSession || !workerSessionCard) return;
+            updateGlobalStatusBar();
             workerSessionCard.style.display = 'flex';
             if (wSessionId) wSessionId.innerText = state.currentSession.sessionId;
             if (wAssignedChecker) wAssignedChecker.innerText = `${state.currentSession.checkerName} (${state.currentSession.checkerIp})`;
@@ -2741,9 +2997,12 @@
         updateCountsAndButton();
         renderAwxSummary();
         applyPinState();
-        applyOpacity(false);
+        applyCollapse();
 
         // 에이전트 연결 시도
+        updateUserBadge();
+        updateGlobalStatusBar();
+        applyCollapse();
         fetchUsersAndStatus();
         if (btnCheckAgent) btnCheckAgent.onclick = fetchUsersAndStatus;
     }
