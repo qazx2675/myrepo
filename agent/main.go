@@ -471,6 +471,7 @@ type AgentServer struct {
 	awxNeedsReauth    bool
 	usersMutex        sync.RWMutex
 	sessMutex         sync.RWMutex
+	logMutex          sync.RWMutex
 	sseBroker         *SSEBroker
 	wsHub             *WSHub
 	httpClient        *http.Client
@@ -1485,10 +1486,10 @@ func ipMatches(ip1, ip2 string) bool {
 	return isLoopback1 && isLoopback2
 }
 
-// makeHostPreview creates a 3-item preview with total and blinded counts.
+// makeHostPreview creates a 1-item representative preview with total and blinded counts.
 func makeHostPreview(hosts []string) HostPreview {
 	total := len(hosts)
-	pLen := 3
+	pLen := 1
 	if total < pLen {
 		pLen = total
 	}
@@ -1547,6 +1548,7 @@ func (s *AgentServer) Routes() http.Handler {
 		mux.HandleFunc("/api/session/list", s.handleSessionList)
 		mux.HandleFunc("/api/session/reassign", s.handleSessionReassign)
 		mux.HandleFunc("/api/session/decision", s.handleSessionDecision)
+		mux.HandleFunc("/api/logs", s.handleApprovalLogs)
 		mux.HandleFunc("/api/peer/notify", s.handlePeerNotify)
 		mux.HandleFunc("/api/peer/update", s.handlePeerUpdate)
 		mux.HandleFunc("/api/events", s.handleEvents)
@@ -4597,13 +4599,19 @@ func (s *AgentServer) handleSessionDecision(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	now := time.Now()
 	sess.Status = req.CheckerData.Decision
-	sess.DecidedAt = time.Now().Format(time.RFC3339)
+	sess.DecidedAt = now.Format(time.RFC3339)
 	sess.CheckerData = &req.CheckerData
 
 	if err := s.saveSession(sess); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save decision: " + err.Error()})
 		return
+	}
+	if sess.Status == "APPROVED" {
+		if logErr := s.appendApprovalLog(sess, now); logErr != nil {
+			log.Printf("[LOG] Warning: failed to append approval log for session %s: %v\n", sess.SessionId, logErr)
+		}
 	}
 
 	// Direct HTTP POST update to worker
@@ -4625,6 +4633,181 @@ func (s *AgentServer) handleSessionDecision(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"status":  sess.Status,
+	})
+}
+
+// ApprovalLogEntry represents one approved cross-check log record.
+type ApprovalLogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Incident  string `json:"incident"`
+	Worker    string `json:"worker"`
+	Checker   string `json:"checker"`
+	RawLine   string `json:"rawLine,omitempty"`
+}
+
+var approvalLogDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+func sanitizeApprovalLogField(s string) string {
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "|", "/")
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
+func formatApprovalActor(u User) string {
+	name := sanitizeApprovalLogField(u.Name)
+	ip := sanitizeApprovalLogField(u.IP)
+	if name != "-" && ip != "-" {
+		return fmt.Sprintf("%s(%s)", name, ip)
+	}
+	if name != "-" {
+		return name
+	}
+	if ip != "-" {
+		return ip
+	}
+	return "-"
+}
+
+func (s *AgentServer) logsDirPath() string {
+	return filepath.Join(s.config.SharedDir, "logs")
+}
+
+// appendApprovalLog writes a single line ("YYYY-MM-DD HH:MM:SS | 인시던트 | 작업자(IP) | 확인자(IP)")
+// into sharedDir/logs/YYYY-MM-DD.log when a verification session is approved.
+func (s *AgentServer) appendApprovalLog(sess *Session, decidedAt time.Time) error {
+	if sess == nil {
+		return nil
+	}
+	localTime := decidedAt.Local()
+	dateStr := localTime.Format("2006-01-02")
+	tsStr := localTime.Format("2006-01-02 15:04:05")
+	incident := sanitizeApprovalLogField(sess.Metadata.IncidentId)
+	worker := formatApprovalActor(sess.Worker)
+	checker := formatApprovalActor(sess.Checker)
+	line := fmt.Sprintf("%s | %s | %s | %s", tsStr, incident, worker, checker)
+
+	s.logMutex.Lock()
+	defer s.logMutex.Unlock()
+
+	logsDir := s.logsDirPath()
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return err
+	}
+	filePath := filepath.Join(logsDir, dateStr+".log")
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(line + "\n")
+	return err
+}
+
+func (s *AgentServer) listApprovalLogDatesLocked() []string {
+	pattern := filepath.Join(s.logsDirPath(), "*.log")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return []string{}
+	}
+	dates := []string{}
+	for _, f := range files {
+		base := strings.TrimSuffix(filepath.Base(f), ".log")
+		if approvalLogDateRe.MatchString(base) {
+			dates = append(dates, base)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
+	return dates
+}
+
+func parseApprovalLogFile(filePath string) ([]ApprovalLogEntry, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	entries := []ApprovalLogEntry{}
+	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+	for _, raw := range strings.Split(normalized, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		entries = append(entries, ApprovalLogEntry{
+			Timestamp: strings.TrimSpace(parts[0]),
+			Incident:  strings.TrimSpace(parts[1]),
+			Worker:    strings.TrimSpace(parts[2]),
+			Checker:   strings.TrimSpace(parts[3]),
+			RawLine:   line,
+		})
+	}
+	// Reverse to show newest approvals first
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+	return entries, nil
+}
+
+// handleApprovalLogs: GET /api/logs?date=YYYY-MM-DD|all
+func (s *AgentServer) handleApprovalLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	if dateParam == "" {
+		dateParam = time.Now().Format("2006-01-02")
+	}
+	if dateParam != "all" && !approvalLogDateRe.MatchString(dateParam) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid date parameter: expected YYYY-MM-DD or all",
+		})
+		return
+	}
+
+	s.logMutex.RLock()
+	defer s.logMutex.RUnlock()
+
+	logsDir := s.logsDirPath()
+	dates := s.listApprovalLogDatesLocked()
+	entries := []ApprovalLogEntry{}
+
+	if dateParam == "all" {
+		for _, d := range dates {
+			dayEntries, err := parseApprovalLogFile(filepath.Join(logsDir, d+".log"))
+			if err != nil {
+				continue
+			}
+			entries = append(entries, dayEntries...)
+		}
+	} else {
+		filePath := filepath.Join(logsDir, dateParam+".log")
+		dayEntries, err := parseApprovalLogFile(filePath)
+		if err != nil && !os.IsNotExist(err) {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "failed to read log file: " + err.Error(),
+			})
+			return
+		}
+		if err == nil {
+			entries = dayEntries
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"date":    dateParam,
+		"dates":   dates,
+		"logsDir": logsDir,
+		"entries": entries,
 	})
 }
 
@@ -5103,14 +5286,14 @@ function renderSession(s) {
     document.getElementById('workerDetailCount').textContent = dp.totalCount + '대';
     document.getElementById('workerDetailPreview').innerHTML = dp.previewHosts.map(h => '<div class="preview-item">' + h + '</div>').join('');
     if (dp.blindedCount > 0) {
-      document.getElementById('detailBlindNote').textContent = '⚠️ 보안 블라인드 적용: 상위 3대만 표시 (나머지 ' + dp.blindedCount + '대 숨김)';
+      document.getElementById('detailBlindNote').textContent = '⚠️ 보안 블라인드 적용: 대표 1대만 표시 (' + dp.previewHosts[0] + ' 등 ' + dp.totalCount + '대, 나머지 ' + dp.blindedCount + '대 숨김)';
     }
   }
   if (ip) {
     document.getElementById('workerIncidentCount').textContent = ip.totalCount + '대';
     document.getElementById('workerIncidentPreview').innerHTML = ip.previewHosts.map(h => '<div class="preview-item">' + h + '</div>').join('');
     if (ip.blindedCount > 0) {
-      document.getElementById('incidentBlindNote').textContent = '⚠️ 보안 블라인드 적용: 상위 3대만 표시 (나머지 ' + ip.blindedCount + '대 숨김)';
+      document.getElementById('incidentBlindNote').textContent = '⚠️ 보안 블라인드 적용: 대표 1대만 표시 (' + ip.previewHosts[0] + ' 등 ' + ip.totalCount + '대, 나머지 ' + ip.blindedCount + '대 숨김)';
     }
   }
 

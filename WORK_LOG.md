@@ -221,6 +221,31 @@
   * **부하 후 4초 GC·유휴 정리 안정화 (Phase 5)**: Working Set **17.27 MB** (피크 **17.12 MB**, 순증 **+0.39 MB**), HeapAlloc **2.36 MB**, Goroutines **9개 (delta +0)**
   * **정상 종료 회수 (Phase 6)**: `/api/bye?force=true` 후 **100ms** 내 완전 종료
 
+---
+
+## 7. /grill-me 사용성 개선 · SVG 겹침 제거 · 승인 감사 로그 · 대표 1대 블라인드 (2026-11-13)
+
+### (1) 구현 내역 (`agent/main.go`, `src/awx_host_checker.js`, `agent/agent_test.go`, `docs/workflow_*.svg`)
+1. **마우스 이탈 시 자동 숨김(축소) 지연 시간 설정 (`src/awx_host_checker.js`)**:
+   - 설정 패널에 `이탈 지연 시간(초)` 숫자 입력(`#awx-vld-input-collapse-delay`, `min="0"`, 기본값 `5`, `localStorage` 키 `awx_collapse_delay_sec`)을 추가했습니다.
+   - `mouseleave`/`blur` 발생 시 지연 타이머 후 창을 축소하고, 대기 중 마우스 재진입(`mouseenter`)이나 포커스(`focus`) 복귀 시 대기 타이머를 취소하고 원래 창 높이로 복원합니다.
+2. **AWX 탭 우선 체크박스 기본 미체크 보장 (`src/awx_host_checker.js`)**:
+   - 초기 `awx_direct_config_v1` 및 업그레이드(`preferBridgeVersion: 2`) 시 `preferBridge` 를 `false` 로 보정해 **AWX 탭 우선**이 기본적으로 꺼진 상태에서 **직접 API 우선**으로 수집되도록 보장했습니다.
+3. **워크플로우 가이드 SVG 글자·화살표 겹침 제거 (`src/awx_host_checker.js`, `docs/workflow_worker.svg`, `docs/workflow_checker.svg`)**:
+   - 작업자/확인자 SVG `viewBox` 를 `0 0 640 360` 으로 확장하고, Box 4(y=232~294)와 하단 `💡 팁` 문구(y=316~344) 사이 여백을 확보했으며, 빨간 반려 점선 화살표가 Box 2를 관통하지 않고 Box 2 하단 아래(y=130~138)를 우회하도록 경로를 수정했습니다.
+4. **승인 로그 일별 파일 기록 및 달력 모달 조회 (`agent/main.go`, `src/awx_host_checker.js`)**:
+   - `handleSessionDecision` 에서 `APPROVED` 승인 완료 시 `sharedDir/logs/YYYY-MM-DD.log` 에 `시간 | 인시던트 | 작업자(IP) | 확인자(IP)` 형식으로 누적 기록합니다. (`REJECTED` 는 제외, `|` → `/` 정제)
+   - `GET /api/logs?date=YYYY-MM-DD|all` API 와 상단 헤더 `[📋 로그]` 버튼·모달(7열 월간 달력 + 로그 보유일 파란 점 표기 + `[전체]`/`[오늘]` 전환 + 검색 필터 + `[텍스트 복사]` + UTF-8 BOM `[CSV 저장]`)을 구현했습니다.
+5. **확인자 복사 방지 블라인드 대표 1대 노출 (`agent/main.go`, `src/awx_host_checker.js`)**:
+   - `makeHostPreview`, `formatHostBlindPreview`, `checkerHTMLTemplate` 를 `1대 노출` 기준으로 통일해 `svr01 등 5대` 형식으로만 노출되도록 강화했습니다.
+
+### (2) 검증 및 가이드 갱신 결과
+* **Go 유닛 테스트 (`go test -count=1 ./agent -v`)**: **29개 테스트 전원 PASS** (`TestBlindPreviewBeforeDecision` 대표 1대 검증, `TestApprovalLogsAndAPI` 일별 로그·API 검증 포함)
+* **단독 앱 E2E 검증 (`node tests/test_standalone_app.js`)**: **[1/7]~[8/8] 전원 PASS** (5s/1s/0s 이탈 지연 · `mouseenter`/`focus` 복원 · OS 상단 고정 · `[?]` SVG 무겹침 · DPAPI 재기동 · 1대 블라인드 · 승인 로그 & 달력 모달)
+* **오프라인 통합·배포 검증 (`test_hybrid_shared_dir.js`, `test_notification_and_reassign.js`, `test_p2p_direct_sync.js`, `test_users_sync.js`, `test_clean_deploy.js`)**: **전원 PASS**
+* **가이드 & Confluence XHTML (`docs/mail_guide/`)**: `fig1~fig7` 최신 화면 재캡처(무겹침 검수), Outlook용 `mail_draft_outlook.html`, Confluence `guide_confluence.xhtml` 및 미리보기 `guide_standalone.xhtml` 동기화 완료.
+
+
 
 
 

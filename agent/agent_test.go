@@ -344,20 +344,20 @@ func TestBlindPreviewBeforeDecision(t *testing.T) {
 		t.Fatalf("Expected workerData.awxHosts to be empty [], got %d hosts", len(awxHosts))
 	}
 
-	// Verify preview: only top 3 hosts visible
+	// Verify preview: only top 1 host visible
 	detailPrev, ok := wd["detailHostsPreview"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("Expected detailHostsPreview in blinded workerData")
 	}
 	previewHosts, _ := detailPrev["previewHosts"].([]interface{})
-	if len(previewHosts) != 3 {
-		t.Fatalf("Expected 3 previewHosts, got %d", len(previewHosts))
+	if len(previewHosts) != 1 {
+		t.Fatalf("Expected 1 previewHost, got %d", len(previewHosts))
 	}
 	if detailPrev["totalCount"].(float64) != 30 {
 		t.Errorf("Expected totalCount 30, got %v", detailPrev["totalCount"])
 	}
-	if detailPrev["blindedCount"].(float64) != 27 {
-		t.Errorf("Expected blindedCount 27, got %v", detailPrev["blindedCount"])
+	if detailPrev["blindedCount"].(float64) != 29 {
+		t.Errorf("Expected blindedCount 29, got %v", detailPrev["blindedCount"])
 	}
 	if wd["awxCount"].(float64) != 30 {
 		t.Errorf("Expected awxCount 30, got %v", wd["awxCount"])
@@ -3091,6 +3091,165 @@ func TestP15P32P53P54AdditionalContracts(t *testing.T) {
 	rl.Body.Close()
 	if len(rlMap.Sessions) > 100 {
 		t.Fatalf("Expected handleSessionList <= 100 items, got %d", len(rlMap.Sessions))
+	}
+}
+
+func TestApprovalLogsAndAPI(t *testing.T) {
+	server, ts := setupTestServer(t)
+	today := time.Now().Format("2006-01-02")
+
+	createSess := func(inc string) string {
+		req := Session{
+			Worker:   User{Name: "작업자A", IP: "192.168.1.10"},
+			Checker:  User{Name: "확인자B", IP: "192.168.1.20"},
+			Metadata: Metadata{IncidentId: inc},
+			WorkerData: WorkerData{
+				DetailHosts: []string{"web01"},
+			},
+		}
+		b, _ := json.Marshal(req)
+		resp, err := http.Post(ts.URL+"/api/session/create", "application/json", bytes.NewReader(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out["sessionId"].(string)
+	}
+
+	decideSess := func(sid, decision string) {
+		body := map[string]interface{}{
+			"sessionId": sid,
+			"checkerIp": "192.168.1.20",
+			"checkerData": map[string]interface{}{
+				"decision":      decision,
+				"isAllMatch":    decision == "APPROVED",
+				"rejectReason":  "test reason",
+				"checkedAt":     time.Now().Format(time.RFC3339),
+			},
+		}
+		b, _ := json.Marshal(body)
+		resp, err := http.Post(ts.URL+"/api/session/decision", "application/json", bytes.NewReader(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("decision %s failed (%d): %s", decision, resp.StatusCode, string(raw))
+		}
+	}
+
+	// 1. REJECTED must NOT write an approval log
+	sidReject := createSess("INC-2026-REJECT")
+	decideSess(sidReject, "REJECTED")
+
+	respEmpty, err := http.Get(ts.URL + "/api/logs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var emptyPayload struct {
+		Date    string             `json:"date"`
+		Dates   []string           `json:"dates"`
+		Entries []ApprovalLogEntry `json:"entries"`
+	}
+	if err := json.NewDecoder(respEmpty.Body).Decode(&emptyPayload); err != nil {
+		t.Fatal(err)
+	}
+	respEmpty.Body.Close()
+	if len(emptyPayload.Entries) != 0 {
+		t.Fatalf("Expected 0 entries after REJECTED, got %d", len(emptyPayload.Entries))
+	}
+
+	// 2. APPROVED with '|' in incident sanitizes '|' -> '/' and appends formatted line
+	sidApp1 := createSess("INC-2026|999")
+	decideSess(sidApp1, "APPROVED")
+
+	// 3. APPROVED with empty incident records "-"
+	sidApp2 := createSess("")
+	decideSess(sidApp2, "APPROVED")
+
+	logFilePath := filepath.Join(server.config.SharedDir, "logs", today+".log")
+	rawLog, err := os.ReadFile(logFilePath)
+	if err != nil {
+		t.Fatalf("Expected daily log file %s: %v", logFilePath, err)
+	}
+	lines := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(rawLog), "\r\n", "\n")), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("Expected 2 lines in %s, got %d:\n%s", logFilePath, len(lines), string(rawLog))
+	}
+	if !strings.Contains(lines[0], "| INC-2026/999 | 작업자A(192.168.1.10) | 확인자B(192.168.1.20)") {
+		t.Fatalf("Unexpected first log line format: %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "| - | 작업자A(192.168.1.10) | 확인자B(192.168.1.20)") {
+		t.Fatalf("Unexpected second log line format: %q", lines[1])
+	}
+
+	// 4. Add a past-day log file and verify default, specific date, all, and invalid date API queries
+	pastFile := filepath.Join(server.config.SharedDir, "logs", "2025-12-31.log")
+	if err := os.WriteFile(pastFile, []byte("2025-12-31 23:50:00 | INC-OLD-01 | 김철수(10.0.0.1) | 이영희(10.0.0.2)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	respToday, err := http.Get(ts.URL + "/api/logs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var todayPayload struct {
+		Date    string             `json:"date"`
+		Dates   []string           `json:"dates"`
+		Entries []ApprovalLogEntry `json:"entries"`
+	}
+	if err := json.NewDecoder(respToday.Body).Decode(&todayPayload); err != nil {
+		t.Fatal(err)
+	}
+	respToday.Body.Close()
+	if todayPayload.Date != today {
+		t.Errorf("Expected default date=%s, got %s", today, todayPayload.Date)
+	}
+	if len(todayPayload.Dates) != 2 || todayPayload.Dates[0] != today || todayPayload.Dates[1] != "2025-12-31" {
+		t.Errorf("Expected sorted dates [%s, 2025-12-31], got %v", today, todayPayload.Dates)
+	}
+	if len(todayPayload.Entries) != 2 || todayPayload.Entries[0].Incident != "-" || todayPayload.Entries[1].Incident != "INC-2026/999" {
+		t.Errorf("Expected newest-first today entries [-, INC-2026/999], got %+v", todayPayload.Entries)
+	}
+
+	respPast, err := http.Get(ts.URL + "/api/logs?date=2025-12-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pastPayload struct {
+		Entries []ApprovalLogEntry `json:"entries"`
+	}
+	_ = json.NewDecoder(respPast.Body).Decode(&pastPayload)
+	respPast.Body.Close()
+	if len(pastPayload.Entries) != 1 || pastPayload.Entries[0].Incident != "INC-OLD-01" {
+		t.Fatalf("Expected INC-OLD-01 for 2025-12-31, got %+v", pastPayload.Entries)
+	}
+
+	respAll, err := http.Get(ts.URL + "/api/logs?date=all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var allPayload struct {
+		Entries []ApprovalLogEntry `json:"entries"`
+	}
+	_ = json.NewDecoder(respAll.Body).Decode(&allPayload)
+	respAll.Body.Close()
+	if len(allPayload.Entries) != 3 {
+		t.Fatalf("Expected 3 total entries across all dates, got %d", len(allPayload.Entries))
+	}
+
+	respBad, err := http.Get(ts.URL + "/api/logs?date=../etc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	respBad.Body.Close()
+	if respBad.StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected 400 Bad Request for invalid date, got %d", respBad.StatusCode)
 	}
 }
 

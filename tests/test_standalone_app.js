@@ -223,6 +223,8 @@ async function runStandaloneAppTest() {
 
     const testShareDir = path.join(__dirname, '..', 'test_share');
     fs.rmSync(path.join(testShareDir, 'sessions'), { recursive: true, force: true });
+    fs.rmSync(path.join(testShareDir, 'logs'), { recursive: true, force: true });
+    try { fs.rmSync(USER_DATA_DIR, { recursive: true, force: true }); } catch (e) {}
     fs.mkdirSync(testShareDir, { recursive: true });
     fs.mkdirSync(path.join(testShareDir, 'sessions'), { recursive: true });
 
@@ -318,6 +320,9 @@ async function runStandaloneAppTest() {
                 const userBadge = document.getElementById('awx-vld-user-badge');
                 const userBadgeName = document.getElementById('awx-vld-user-badge-name');
                 const userBadgeDot = document.getElementById('awx-vld-user-badge-dot');
+                const logsBtn = document.getElementById('awx-vld-btn-logs');
+                const preferBridgeChk = document.getElementById('awx-vld-awx-prefer-bridge');
+                const collapseDelayInput = document.getElementById('awx-vld-input-collapse-delay');
                 const globalStatusBar = document.getElementById('awx-vld-global-status-bar');
                 const helpWorker = document.querySelector('.awx-vld-tab-help[data-help="worker"]');
                 const helpChecker = document.querySelector('.awx-vld-tab-help[data-help="checker"]');
@@ -329,6 +334,10 @@ async function runStandaloneAppTest() {
                     hasDetachBtn: !!detachBtn,
                     hasCloseBtn: !!closeBtn,
                     hasUserBadge: !!userBadge && !!userBadgeDot,
+                    hasLogsBtn: !!logsBtn,
+                    preferBridgeDefaultUnchecked: preferBridgeChk ? !preferBridgeChk.checked : null,
+                    preferBridgeState: window.awxValidatorState?.awxConfig?.preferBridge,
+                    collapseDelayDefault: collapseDelayInput ? collapseDelayInput.value : null,
                     userName: userBadgeName?.innerText,
                     hasGlobalStatusBar: !!globalStatusBar,
                     hasHelpWorker: !!helpWorker,
@@ -351,6 +360,15 @@ async function runStandaloneAppTest() {
         if (!envInfo.hasUserBadge) {
             throw new Error("User badge missing in header");
         }
+        if (!envInfo.hasLogsBtn) {
+            throw new Error("Logs button (#awx-vld-btn-logs) missing in header");
+        }
+        if (envInfo.preferBridgeDefaultUnchecked !== true || envInfo.preferBridgeState !== false) {
+            throw new Error(`Expected AWX Tab Prefer unchecked by default: ${JSON.stringify(envInfo)}`);
+        }
+        if (envInfo.collapseDelayDefault !== '5') {
+            throw new Error(`Expected default collapse delay '5', got: ${envInfo.collapseDelayDefault}`);
+        }
         if (!envInfo.hasHelpWorker || !envInfo.hasHelpChecker) {
             throw new Error("Workflow [?] help buttons missing on Tab 2 / Tab 3");
         }
@@ -367,15 +385,40 @@ async function runStandaloneAppTest() {
         }
         console.log("✓ Standalone UI validated: clean header with live user badge, 3 guide tabs with [?] icons, responsive layout, global status bar.");
 
-        // [3.5/7] Verify standalone window auto-collapse on mouseleave and expand on mouseenter
-        console.log("   Testing standalone window physical resizing (resizeTo) on mouseleave/mouseenter...");
+        // [3.5/7] Verify standalone window auto-collapse delay (default 5s, 0s+, mouseleave/blur + mouseenter/focus cancel)
+        console.log("   Testing standalone window physical resizing (resizeTo) & collapse delay (5s -> 1s -> 0s)...");
         const windowResizeResult = await cdp.evaluate(`
             (async () => {
                 const initialH = window.outerHeight;
                 const initialW = window.outerWidth;
                 const bodyWrap = document.getElementById('awx-vld-body-wrap');
+                const btnSettings = document.getElementById('awx-vld-btn-header-settings');
+                const delayInput = document.getElementById('awx-vld-input-collapse-delay');
 
-                // 1. Mouse leave -> window collapses physically
+                // 0. Default 5s delay: mouseleave does NOT collapse immediately within 450ms; mouseenter cancels timer
+                document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                await new Promise(r => setTimeout(r, 450));
+                const stayedExpandedOn5s = (window.awxWindowCollapsed === false && window.outerHeight === initialH);
+                document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+
+                // 1. Custom 1s delay: waits before collapsing, then collapses after 1.3s; window focus cancels/restores
+                btnSettings.click();
+                delayInput.value = '1';
+                delayInput.dispatchEvent(new Event('input'));
+                delayInput.dispatchEvent(new Event('change'));
+                document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+                await new Promise(r => setTimeout(r, 350));
+                const notYetAt350ms = (window.awxWindowCollapsed === false);
+                await new Promise(r => setTimeout(r, 950));
+                const collapsedAfter1s = (window.awxWindowCollapsed === true && window.outerHeight < initialH - 100);
+                window.dispatchEvent(new Event('focus'));
+                await new Promise(r => setTimeout(r, 350));
+                const restoredOnFocus = (window.awxWindowCollapsed === false);
+
+                // 2. 0s delay: immediate collapse on mouseleave and blur; restore on mouseenter and focus
+                delayInput.value = '0';
+                delayInput.dispatchEvent(new Event('input'));
+                delayInput.dispatchEvent(new Event('change'));
                 document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
                 await new Promise(r => setTimeout(r, 450));
                 const collapsedH = window.outerHeight;
@@ -383,15 +426,19 @@ async function runStandaloneAppTest() {
                 const bodyOverflowWhenCollapsed = bodyWrap ? bodyWrap.style.overflowY : '';
                 const bodyMaxHeightWhenCollapsed = bodyWrap ? bodyWrap.style.maxHeight : '';
 
-                // 2. Mouse enter -> window restores to original height
                 document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
                 await new Promise(r => setTimeout(r, 450));
                 const restoredH = window.outerHeight;
                 const isRestored = window.awxWindowCollapsed === false;
 
-                // 3. Test settings modal slider adjustment (50%)
-                const btnSettings = document.getElementById('awx-vld-btn-header-settings');
-                btnSettings.click();
+                window.dispatchEvent(new Event('blur'));
+                await new Promise(r => setTimeout(r, 450));
+                const collapsedOnBlur = (window.awxWindowCollapsed === true);
+                window.dispatchEvent(new Event('focus'));
+                await new Promise(r => setTimeout(r, 450));
+                const restoredAfterBlurFocus = (window.awxWindowCollapsed === false);
+
+                // 3. Test settings modal slider adjustment (50%) with 0s delay
                 const rangeCollapse = document.getElementById('awx-vld-range-collapse');
                 rangeCollapse.value = '50';
                 rangeCollapse.dispatchEvent(new Event('input'));
@@ -399,9 +446,12 @@ async function runStandaloneAppTest() {
                 await new Promise(r => setTimeout(r, 450));
                 const collapsed50H = window.outerHeight;
 
-                // Restore slider to 30% and close modal
+                // Restore slider to 30%, delay to default 5s, and close modal
                 rangeCollapse.value = '30';
                 rangeCollapse.dispatchEvent(new Event('input'));
+                delayInput.value = '5';
+                delayInput.dispatchEvent(new Event('input'));
+                delayInput.dispatchEvent(new Event('change'));
                 btnSettings.click();
                 document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
                 await new Promise(r => setTimeout(r, 450));
@@ -409,18 +459,30 @@ async function runStandaloneAppTest() {
                 return {
                     initialH,
                     initialW,
+                    stayedExpandedOn5s,
+                    notYetAt350ms,
+                    collapsedAfter1s,
+                    restoredOnFocus,
                     collapsedH,
                     isCollapsed,
                     bodyOverflowWhenCollapsed,
                     bodyMaxHeightWhenCollapsed,
                     restoredH,
                     isRestored,
+                    collapsedOnBlur,
+                    restoredAfterBlurFocus,
                     collapsed50H
                 };
             })()
         `);
         console.log("   Window auto-collapse test result:", windowResizeResult);
 
+        if (!windowResizeResult.stayedExpandedOn5s || !windowResizeResult.notYetAt350ms || !windowResizeResult.collapsedAfter1s || !windowResizeResult.restoredOnFocus) {
+            throw new Error(`Collapse delay timing verification failed: ${JSON.stringify(windowResizeResult)}`);
+        }
+        if (!windowResizeResult.collapsedOnBlur || !windowResizeResult.restoredAfterBlurFocus) {
+            throw new Error(`Window blur/focus collapse-restore failed: ${JSON.stringify(windowResizeResult)}`);
+        }
         if (!windowResizeResult.isCollapsed || windowResizeResult.collapsedH >= windowResizeResult.initialH - 100) {
             throw new Error(`Window did not shrink on mouseleave: initialH=${windowResizeResult.initialH}, collapsedH=${windowResizeResult.collapsedH}`);
         }
@@ -430,7 +492,7 @@ async function runStandaloneAppTest() {
         if (!windowResizeResult.isRestored || windowResizeResult.restoredH < 600) {
             throw new Error(`Window did not expand back on mouseenter: initialH=${windowResizeResult.initialH}, restoredH=${windowResizeResult.restoredH}`);
         }
-        console.log("✓ Physical window resizing verified: window collapses to mini height on mouseleave without masking content, and fully expands on mouseenter.");
+        console.log("✓ Physical window resizing & configurable delay (5s/1s/0s, mouseleave/blur + cancel/restore) verified.");
 
         //Helper: check zero horizontal overflow & unclipped visible UI elements
         async function assertNoLayoutClipping(stage) {
@@ -439,7 +501,7 @@ async function runStandaloneAppTest() {
                     const vw = window.innerWidth;
                     const vh = window.innerHeight;
                     const docOverflowX = document.documentElement.scrollWidth - document.documentElement.clientWidth;
-                    const headerIds = ['awx-vld-user-badge', 'awx-vld-btn-header-settings', 'awx-vld-btn-pin'];
+                    const headerIds = ['awx-vld-user-badge', 'awx-vld-btn-logs', 'awx-vld-btn-header-settings', 'awx-vld-btn-pin'];
                     const clippedHeaders = [];
                     for (const id of headerIds) {
                         const el = document.getElementById(id);
@@ -508,11 +570,25 @@ async function runStandaloneAppTest() {
             throw new Error(`OS topmost pin did not activate: ui=${pinUiText}, os=${JSON.stringify(pinAfter)}`);
         }
 
-        // Verify topmost stays active across physical window collapse/expand
-        await cdp.evaluate(`document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));`);
+        // Verify topmost stays active across physical window collapse/expand (temporarily set 0s delay then restore 5s)
+        await cdp.evaluate(`
+            (() => {
+                const di = document.getElementById('awx-vld-input-collapse-delay');
+                di.value = '0';
+                di.dispatchEvent(new Event('input'));
+                document.documentElement.dispatchEvent(new MouseEvent('mouseleave'));
+            })()
+        `);
         await sleep(500);
         const pinCollapsed = await (await fetch('http://127.0.0.1:18080/api/window/pin')).json();
-        await cdp.evaluate(`document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));`);
+        await cdp.evaluate(`
+            (() => {
+                document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));
+                const di = document.getElementById('awx-vld-input-collapse-delay');
+                di.value = '5';
+                di.dispatchEvent(new Event('input'));
+            })()
+        `);
         await sleep(500);
         if (!pinCollapsed.pinned) {
             throw new Error(`OS topmost was lost when window collapsed: ${JSON.stringify(pinCollapsed)}`);
@@ -544,6 +620,38 @@ async function runStandaloneAppTest() {
                     const popR = pop.getBoundingClientRect();
                     const svgR = svg ? svg.getBoundingClientRect() : null;
                     const txt = svg ? svg.textContent : '';
+                    let svgOverlapCheck = null;
+                    if (svg && "${helpType}" === 'worker') {
+                        const texts = Array.from(svg.querySelectorAll('text'));
+                        const tipText = texts.find(t => (t.textContent || '').includes('팁:'));
+                        const step4Text = texts.find(t => (t.textContent || '').includes('4. 안전 작업 착수'));
+                        const step4CardRect = Array.from(svg.querySelectorAll('rect')).find(r => r.getAttribute('fill') === '#15803d' && Number(r.getAttribute('height')) >= 40);
+                        const step2CardRect = Array.from(svg.querySelectorAll('rect')).find(r => r.getAttribute('stroke') === '#6366f1' && Number(r.getAttribute('height')) >= 50);
+                        const redDashedPath = Array.from(svg.querySelectorAll('path')).find(p => (p.getAttribute('stroke') || '') === '#dc2626' && p.getAttribute('stroke-dasharray'));
+                        const tipR = tipText ? tipText.getBoundingClientRect() : null;
+                        const s4R = step4CardRect ? step4CardRect.getBoundingClientRect() : null;
+                        const s2R = step2CardRect ? step2CardRect.getBoundingClientRect() : null;
+                        const redR = redDashedPath ? redDashedPath.getBoundingClientRect() : null;
+                        const s4TextR = step4Text ? step4Text.getBoundingClientRect() : null;
+                        const redD = redDashedPath ? redDashedPath.getAttribute('d') : '';
+                        const getGOffsetY = (el) => {
+                            const g = el ? el.closest('g[transform]') : null;
+                            const m = g ? (g.getAttribute('transform') || '').match(/translate\([^,]+,\s*([-\d.]+)\)/) : null;
+                            return m ? Number(m[1]) : 0;
+                        };
+                        const box4BottomVB = step4CardRect ? getGOffsetY(step4CardRect) + Number(step4CardRect.getAttribute('y') || 0) + Number(step4CardRect.getAttribute('height')) : null;
+                        const box2BottomVB = step2CardRect ? getGOffsetY(step2CardRect) + Number(step2CardRect.getAttribute('y') || 0) + Number(step2CardRect.getAttribute('height')) : null;
+                        const tipYVB = tipText ? Number(tipText.getAttribute('y')) : null;
+                        svgOverlapCheck = {
+                            tipAboveGapPx: (tipR && s4R) ? (tipR.top - s4R.bottom) : null,
+                            step4InsideCard: (s4TextR && s4R) ? (s4TextR.top >= s4R.top && s4TextR.bottom <= s4R.bottom) : false,
+                            box4BottomVB,
+                            tipYVB,
+                            box2BottomVB,
+                            redD,
+                            redTopBelowBox2Bottom: (redR && s2R) ? (redR.top >= s2R.bottom - 1) : false
+                        };
+                    }
                     const computedDisplay = window.getComputedStyle(pop).display;
                     btn.dispatchEvent(new MouseEvent('mouseleave'));
                     const hiddenAfterLeave = (window.getComputedStyle(pop).display === 'none');
@@ -554,7 +662,8 @@ async function runStandaloneAppTest() {
                         hiddenAfterLeave,
                         popRect: { left: popR.left, right: popR.right, top: popR.top, bottom: popR.bottom, width: popR.width, height: popR.height },
                         svgRect: svgR ? { left: svgR.left, right: svgR.right, top: svgR.top, bottom: svgR.bottom, width: svgR.width, height: svgR.height } : null,
-                        txt
+                        txt,
+                        svgOverlapCheck
                     };
                 })()
             `);
@@ -567,8 +676,14 @@ async function runStandaloneAppTest() {
                 s.width < 350 || s.height < 180) {
                 throw new Error(`[?] ${helpType} SVG is clipped or undersized: ${JSON.stringify(popCheck)}`);
             }
-            if (helpType === 'worker' && !popCheck.txt.includes('[크로스체크 확인 요청 발송]')) {
-                throw new Error(`Worker SVG label mismatch: ${popCheck.txt}`);
+            if (helpType === 'worker') {
+                if (!popCheck.txt.includes('[크로스체크 확인 요청 발송]')) {
+                    throw new Error(`Worker SVG label mismatch: ${popCheck.txt}`);
+                }
+                const oc = popCheck.svgOverlapCheck;
+                if (!oc || !oc.step4InsideCard || oc.tipAboveGapPx === null || oc.tipAboveGapPx < 5 || oc.tipYVB <= oc.box4BottomVB + 10 || !oc.redTopBelowBox2Bottom) {
+                    throw new Error(`Worker SVG overlap detected: ${JSON.stringify(oc)}`);
+                }
             }
             if (helpType === 'checker' && !popCheck.txt.includes('[교차 비교 실행]')) {
                 throw new Error(`Checker SVG label mismatch: ${popCheck.txt}`);
@@ -667,9 +782,28 @@ async function runStandaloneAppTest() {
             if (!diskCfgTxt.includes('"awxPasswordEnc"') || diskCfgTxt.includes('uipass123') || diskCfgTxt.includes('init-tok-1000')) {
                 throw new Error(`P2-1 config.json check failed: ${diskCfgTxt}`);
             }
-            const lsRaw = await cdp.evaluate(`localStorage.getItem('awx_validator_direct_config_v1') || ''`);
+            const lsRaw = await cdp.evaluate(`localStorage.getItem('awx_direct_config_v1') || ''`);
             if (lsRaw.includes('uipass123') || lsRaw.includes('"password"') || lsRaw.includes('"token"')) {
                 throw new Error(`P2-2 localStorage leaked secret fields: ${lsRaw}`);
+            }
+
+            // Verify "AWX 탭 우선" stays unchecked by default (v2) and persists only when user toggles it
+            const preferCheck = await cdp.evaluate(`
+                (() => {
+                    const chk = document.getElementById('awx-vld-awx-prefer-bridge');
+                    const initChecked = chk.checked;
+                    chk.click();
+                    const afterOn = chk.checked;
+                    const lsOn = JSON.parse(localStorage.getItem('awx_direct_config_v1') || '{}');
+                    chk.click();
+                    const afterOff = chk.checked;
+                    const lsOff = JSON.parse(localStorage.getItem('awx_direct_config_v1') || '{}');
+                    return { initChecked, afterOn, lsOn, afterOff, lsOff };
+                })()
+            `);
+            if (preferCheck.initChecked !== false || preferCheck.afterOn !== true || preferCheck.lsOn.preferBridge !== true ||
+                preferCheck.lsOn.preferBridgeVersion !== 2 || preferCheck.afterOff !== false || preferCheck.lsOff.preferBridge !== false) {
+                throw new Error(`preferBridge toggle/version persistence failed: ${JSON.stringify(preferCheck)}`);
             }
 
             await assertNoLayoutClipping('Settings Modal AWX Configured');
@@ -1107,12 +1241,12 @@ async function runStandaloneAppTest() {
         `);
         await sleep(600);
 
-        // Check blind masking (5 hosts -> top 3 shown, 2 blinded)
+        // Check blind masking (5 hosts -> only representative 1 host shown: "prd-web-0001 등 5대")
         const blindText = await cdp.evaluate(`document.getElementById('awx-vld-chk-blind-detail')?.innerText || ''`);
-        if (!blindText.includes('블라인드')) {
-            throw new Error("Blind masking missing in checker view: " + blindText);
+        if (!blindText.includes('블라인드') || !blindText.includes('prd-web-0001') || !blindText.includes('등 5대') || blindText.includes('prd-web-0002')) {
+            throw new Error("Blind masking (1 rep host) mismatch in checker view: " + blindText);
         }
-        console.log("   Blind masking verified:", blindText.replace(/\n/g, ' '));
+        console.log("   Blind masking (1 rep host) verified:", blindText.replace(/\n/g, ' '));
 
         // Checker fills in hosts and approves
         await cdp.evaluate(`
@@ -1191,6 +1325,85 @@ async function runStandaloneAppTest() {
             throw new Error("Clicking global status bar did not navigate to Tab 2");
         }
         console.log("✓ 6 o'clock global status bar verified: visible across all tabs and clicks navigate to Tab 2.");
+
+        // [6.5/7] Verify Approval Log Persistence (/api/logs + daily log file) & Calendar Log Modal UI
+        console.log("[6.5/7] Testing Approval Logs API, daily .log file, and Calendar Modal UI...");
+        const dNow = new Date();
+        const todayStr = `${dNow.getFullYear()}-${String(dNow.getMonth() + 1).padStart(2, '0')}-${String(dNow.getDate()).padStart(2, '0')}`;
+        const logsApiData = await (await fetch(`http://127.0.0.1:18080/api/logs?date=${todayStr}`)).json();
+        if (!logsApiData || !Array.isArray(logsApiData.entries) || logsApiData.entries.length < 1) {
+            throw new Error(`Expected >= 1 approval log entry for ${todayStr}, got: ${JSON.stringify(logsApiData)}`);
+        }
+        const diskLogFile = path.join(logsApiData.logsDir, `${todayStr}.log`);
+        if (!fs.existsSync(diskLogFile)) {
+            throw new Error(`Expected daily log file on disk at ${diskLogFile}`);
+        }
+        const diskLogTxt = fs.readFileSync(diskLogFile, 'utf8');
+        if (!diskLogTxt.includes(logsApiData.entries[0].worker) || !diskLogTxt.includes(logsApiData.entries[0].checker)) {
+            throw new Error(`Disk log content mismatch: ${diskLogTxt}`);
+        }
+
+        // Open Log Modal via [📋 로그] button
+        await cdp.evaluate(`document.getElementById('awx-vld-btn-logs').click()`);
+        await sleep(300);
+        const logModalCheck = await cdp.evaluate(`
+            (async () => {
+                const modal = document.getElementById('awx-vld-logs-modal');
+                const dateInput = document.getElementById('awx-vld-log-date');
+                const calGrid = document.getElementById('awx-vld-cal-grid');
+                const tbody = document.getElementById('awx-vld-log-tbody');
+                const search = document.getElementById('awx-vld-log-search');
+                const modalRect = modal ? modal.getBoundingClientRect() : null;
+                const initRows = tbody ? tbody.querySelectorAll('tr').length : 0;
+                const initText = tbody ? tbody.innerText : '';
+                const hasLogDot = calGrid ? !!calGrid.querySelector('.awx-vld-cal-day.has-log') : false;
+
+                search.value = '__NO_MATCH_9999__';
+                search.dispatchEvent(new Event('input'));
+                await new Promise(r => setTimeout(r, 80));
+                const emptyText = tbody ? tbody.innerText : '';
+
+                search.value = '';
+                search.dispatchEvent(new Event('input'));
+                await new Promise(r => setTimeout(r, 80));
+                const restoredRows = tbody ? tbody.querySelectorAll('tr').length : 0;
+
+                document.getElementById('awx-vld-btn-log-all').click();
+                await new Promise(r => setTimeout(r, 150));
+                const allModeRows = tbody ? tbody.querySelectorAll('tr').length : 0;
+
+                document.getElementById('awx-vld-btn-log-today').click();
+                await new Promise(r => setTimeout(r, 150));
+
+                return {
+                    visible: modal && window.getComputedStyle(modal).display !== 'none',
+                    dateVal: dateInput ? dateInput.value : '',
+                    hasLogDot,
+                    initRows,
+                    initText,
+                    emptyHasNoData: emptyText.includes('없습니다') || emptyText.includes('없음'),
+                    restoredRows,
+                    allModeRows,
+                    vw: window.innerWidth,
+                    vh: window.innerHeight,
+                    modalRect: modalRect ? { left: modalRect.left, right: modalRect.right, bottom: modalRect.bottom } : null
+                };
+            })()
+        `);
+        if (!logModalCheck.visible || logModalCheck.dateVal !== todayStr || !logModalCheck.hasLogDot ||
+            logModalCheck.initRows < 1 || !logModalCheck.initText.includes(logsApiData.entries[0].worker) ||
+            !logModalCheck.emptyHasNoData || logModalCheck.restoredRows < 1 || logModalCheck.allModeRows < 1 ||
+            logModalCheck.modalRect.right > logModalCheck.vw + 1 || logModalCheck.modalRect.bottom > logModalCheck.vh + 1) {
+            throw new Error(`Approval logs modal verification failed: ${JSON.stringify(logModalCheck)}`);
+        }
+        await assertNoLayoutClipping('Logs Modal Open');
+        await cdp.evaluate(`document.getElementById('awx-vld-btn-close-logs').click()`);
+        await sleep(150);
+        const logModalClosed = await cdp.evaluate(`window.getComputedStyle(document.getElementById('awx-vld-logs-modal')).display === 'none'`);
+        if (!logModalClosed) {
+            throw new Error("Logs modal did not close on close button click");
+        }
+        console.log(`✓ Approval logs verified (${logsApiData.entries.length} entry written to ${todayStr}.log, calendar dot + search + modal UI OK).`);
 
         // [7/7] Test Window Close & Process Termination Lifecycle
         console.log("[7/7] Testing Window Close & Auto-Exit Lifecycle...");

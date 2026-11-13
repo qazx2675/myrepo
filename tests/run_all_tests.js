@@ -875,9 +875,9 @@ async function runOneTakeTests() {
         recordLog('TC-15', '작업자 활성 항목(2~4개) 동적 동기화', 'PASS', `작업대상 미입력 시 확인자 화면 비활성화(제외), 작업대상 입력 시 필수 항목으로 자동 전환 확인`);
 
         // -------------------------------------------------------------
-        // TC-16: 작업자 호스트 블라인드(앞 3대만 노출) 검증
+        // TC-16: 작업자 호스트 블라인드(대표 1대만 노출) 검증
         // -------------------------------------------------------------
-        console.log("\n>>> Executing TC-16: 작업자 호스트 블라인드(앞 3대만 노출) 검증");
+        console.log("\n>>> Executing TC-16: 작업자 호스트 블라인드(대표 1대만 노출) 검증");
         const hosts30List = Array.from({ length: 30 }, (_, i) => `prd-app-${String(i + 1).padStart(4, '0')}`).join('\n');
         const t16Sid = await cdp.evaluate(`
             (async () => {
@@ -900,9 +900,9 @@ async function runOneTakeTests() {
         const t16ApiData = await t16ApiRes.json();
         if (
             !t16ApiData.blinded ||
-            t16ApiData.workerData.detailHostsPreview.previewHosts.length !== 3 ||
+            t16ApiData.workerData.detailHostsPreview.previewHosts.length !== 1 ||
             t16ApiData.workerData.detailHostsPreview.totalCount !== 30 ||
-            t16ApiData.workerData.detailHostsPreview.blindedCount !== 27 ||
+            t16ApiData.workerData.detailHostsPreview.blindedCount !== 29 ||
             t16ApiData.workerData.detailHosts.length !== 0
         ) {
             throw new Error(`TC-16 FAILED (blinded API data): ${JSON.stringify(t16ApiData.workerData)}`);
@@ -915,16 +915,16 @@ async function runOneTakeTests() {
                 const blindText = document.getElementById('awx-vld-chk-blind-detail').innerText;
                 return {
                     blindText,
-                    hasTop3: blindText.includes('prd-app-0001') && blindText.includes('prd-app-0002') && blindText.includes('prd-app-0003'),
-                    hasBlinded27: blindText.includes('외 27대') && blindText.includes('블라인드'),
+                    hasRep1: blindText.includes('prd-app-0001') && !blindText.includes('prd-app-0002') && !blindText.includes('prd-app-0003'),
+                    hasBlindedCount: blindText.includes('등 30대') && blindText.includes('블라인드'),
                     hasLastHost: blindText.includes('prd-app-0030')
                 };
             })()
         `);
-        if (!t16Dom.hasTop3 || !t16Dom.hasBlinded27 || t16Dom.hasLastHost) {
+        if (!t16Dom.hasRep1 || !t16Dom.hasBlindedCount || t16Dom.hasLastHost) {
             throw new Error(`TC-16 FAILED (blinded DOM): ${JSON.stringify(t16Dom)}`);
         }
-        recordLog('TC-16', '작업자 호스트 블라인드(앞 3대만 노출) 검증', 'PASS', `30대 중 앞 3대만 노출되고 나머지 27대는 블라인드 처리되어 복사 방지 무결성 증명 완료`);
+        recordLog('TC-16', '작업자 호스트 블라인드(대표 1대만 노출) 검증', 'PASS', `30대 중 대표 1대만 노출되고 나머지 29대는 블라인드 처리되어 복사 방지 무결성 증명 완료`);
 
         // -------------------------------------------------------------
         // TC-17: 확인자 필수 입력 누락 차단 검증

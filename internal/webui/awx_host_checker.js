@@ -182,18 +182,24 @@
     if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
     if (typeof state.isMouseInside !== 'boolean') state.isMouseInside = true;
 
-    // 마우스 이탈 시 자동 접기 (숨김) 설정 (기본값: true, 기본 표시 비율: 30%)
+    // 마우스 이탈 시 자동 접기 (숨김) 설정 (기본값: true, 기본 표시 비율: 30%, 기본 지연: 5초)
     let savedCollapseEnabled = null;
     let savedCollapseRatio = null;
+    let savedCollapseDelay = null;
     try {
         savedCollapseEnabled = localStorage.getItem('awx_collapse_enabled');
         savedCollapseRatio = localStorage.getItem('awx_collapse_ratio');
+        savedCollapseDelay = localStorage.getItem('awx_collapse_delay_sec');
     } catch (e) {}
     if (typeof state.collapseEnabled !== 'boolean') {
         state.collapseEnabled = (savedCollapseEnabled === null) ? true : (savedCollapseEnabled === 'true');
     }
     if (typeof state.collapseRatio !== 'number') {
         state.collapseRatio = (savedCollapseRatio === null) ? 30 : Math.max(10, Math.min(90, parseInt(savedCollapseRatio, 10) || 30));
+    }
+    if (typeof state.collapseDelaySec !== 'number' || !Number.isFinite(state.collapseDelaySec) || state.collapseDelaySec < 0) {
+        const parsedDelay = savedCollapseDelay !== null ? parseInt(savedCollapseDelay, 10) : NaN;
+        state.collapseDelaySec = (Number.isFinite(parsedDelay) && parsedDelay >= 0) ? parsedDelay : 5;
     }
     if (!state.resetTargets || typeof state.resetTargets !== 'object') {
         state.resetTargets = {
@@ -233,7 +239,14 @@
             const raw = localStorage.getItem(AWX_CONFIG_STORAGE_KEY);
             if (!raw) return null;
             const parsed = JSON.parse(raw);
-            return (parsed && typeof parsed === 'object') ? parsed : null;
+            if (!parsed || typeof parsed !== 'object') return null;
+            if (parsed.preferBridgeVersion !== 2) {
+                // Reset legacy saved preferBridge on upgrade so AWX 탭 우선 defaults unchecked (false)
+                parsed.preferBridge = false;
+                parsed.preferBridgeVersion = 2;
+                try { localStorage.setItem(AWX_CONFIG_STORAGE_KEY, JSON.stringify(parsed)); } catch (e) {}
+            }
+            return parsed;
         } catch (e) {
             return null;
         }
@@ -905,7 +918,7 @@
         #awx-vld-workflow-popover {
             position: fixed;
             z-index: 2147483647;
-            width: min(640px, calc(100vw - 20px), calc((100vh - 34px) * 640 / 340 + 14px));
+            width: min(640px, calc(100vw - 20px), calc((100vh - 34px) * 640 / 360 + 14px));
             max-width: calc(100vw - 20px);
             max-height: calc(100vh - 20px);
             box-sizing: border-box;
@@ -923,6 +936,121 @@
             height: auto !important;
             max-height: calc(100vh - 34px);
             display: block;
+        }
+        #awx-vld-logs-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            z-index: 2147483647;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 14px;
+            box-sizing: border-box;
+        }
+        .awx-vld-log-dialog {
+            width: 100%;
+            max-width: 600px;
+            max-height: 90vh;
+            background: #ffffff;
+            color: #1f2937;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            box-shadow: 0 20px 44px rgba(15, 23, 42, 0.35);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-size: 12px;
+        }
+        .awx-vld-cal-wrap {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
+        .awx-vld-cal-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 3px;
+            text-align: center;
+        }
+        .awx-vld-cal-dow {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #64748b;
+            padding: 2px 0;
+        }
+        .awx-vld-cal-day {
+            position: relative;
+            border: 1px solid transparent;
+            border-radius: 5px;
+            background: #ffffff;
+            color: #334155;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 4px 2px 6px 2px;
+            cursor: pointer;
+            line-height: 1.2;
+        }
+        .awx-vld-cal-day:hover {
+            background: #e0f2fe;
+            border-color: #7dd3fc;
+        }
+        .awx-vld-cal-day.today {
+            border-color: #94a3b8;
+            font-weight: 700;
+        }
+        .awx-vld-cal-day.has-log {
+            font-weight: 700;
+            color: #1d4ed8;
+            background: #eff6ff;
+        }
+        .awx-vld-cal-day.has-log::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #2563eb;
+        }
+        .awx-vld-cal-day.selected {
+            background: #2563eb !important;
+            color: #ffffff !important;
+            border-color: #1d4ed8 !important;
+        }
+        .awx-vld-cal-day.selected::after {
+            background: #ffffff;
+        }
+        .awx-vld-log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11.5px;
+            table-layout: fixed;
+        }
+        .awx-vld-log-table th {
+            position: sticky;
+            top: 0;
+            background: #f1f5f9;
+            color: #334155;
+            font-weight: 700;
+            text-align: left;
+            padding: 7px 8px;
+            border-bottom: 1px solid #cbd5e1;
+            z-index: 1;
+        }
+        .awx-vld-log-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #1e293b;
+            vertical-align: top;
+            word-break: break-word;
+            line-height: 1.35;
+        }
+        .awx-vld-log-table tbody tr:nth-child(even) {
+            background: #f8fafc;
         }
         #awx-vld-global-status-bar {
             user-select: none;
@@ -1003,7 +1131,7 @@
     }
 
     function getWorkerWorkflowSvg() {
-        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" preserveAspectRatio="xMidYMid meet" style="width:100%; height:auto; display:block;" font-family="'Pretendard','Malgun Gothic',sans-serif">
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid meet" style="width:100%; height:auto; display:block;" font-family="'Pretendard','Malgun Gothic',sans-serif">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M0 1L10 5L0 9z" fill="#475569"/>
@@ -1013,72 +1141,73 @@
     </filter>
   </defs>
 
-  <rect x="2" y="2" width="636" height="336" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow)"/>
+  <rect x="2" y="2" width="636" height="356" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow)"/>
   
-  <rect x="2" y="2" width="636" height="42" fill="#0f172a" rx="10"/>
-  <rect x="2" y="34" width="636" height="10" fill="#0f172a"/>
+  <rect x="2" y="2" width="636" height="40" fill="#0f172a" rx="10"/>
+  <rect x="2" y="32" width="636" height="10" fill="#0f172a"/>
   <text x="20" y="26" font-size="14" font-weight="700" fill="#38bdf8">📌 [작업자] 크로스체크 요청 및 실시간 승인대기 흐름</text>
 
-  <g transform="translate(30, 60)">
-    <rect width="160" height="74" fill="#f8fafc" stroke="#3b82f6" stroke-width="1.8" rx="8"/>
-    <rect x="0" y="0" width="160" height="24" fill="#3b82f6" rx="8"/>
-    <rect x="0" y="16" width="160" height="8" fill="#3b82f6"/>
-    <text x="80" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">1. 대상 정보 입력</text>
-    <text x="80" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">AWX 전체 수집</text>
-    <text x="80" y="58" font-size="10" fill="#64748b" text-anchor="middle">또는 상세/인시던트 입력</text>
+  <g transform="translate(30, 56)">
+    <rect width="160" height="70" fill="#f8fafc" stroke="#3b82f6" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="160" height="23" fill="#3b82f6" rx="8"/>
+    <rect x="0" y="15" width="160" height="8" fill="#3b82f6"/>
+    <text x="80" y="16" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">1. 대상 정보 입력</text>
+    <text x="80" y="41" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">AWX 전체 수집</text>
+    <text x="80" y="57" font-size="10" fill="#64748b" text-anchor="middle">또는 상세/인시던트 입력</text>
   </g>
 
-  <line x1="190" y1="97" x2="230" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="190" y1="91" x2="230" y2="91" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
 
-  <g transform="translate(240, 60)">
-    <rect width="160" height="74" fill="#f8fafc" stroke="#6366f1" stroke-width="1.8" rx="8"/>
-    <rect x="0" y="0" width="160" height="24" fill="#6366f1" rx="8"/>
-    <rect x="0" y="16" width="160" height="8" fill="#6366f1"/>
-    <text x="80" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">2. 확인자 지정 &amp; 전송</text>
-    <text x="80" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">동료 확인자 선택</text>
-    <text x="80" y="58" font-size="10" fill="#4338ca" text-anchor="middle">[크로스체크 확인 요청 발송]</text>
+  <g transform="translate(240, 56)">
+    <rect width="160" height="70" fill="#f8fafc" stroke="#6366f1" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="160" height="23" fill="#6366f1" rx="8"/>
+    <rect x="0" y="15" width="160" height="8" fill="#6366f1"/>
+    <text x="80" y="16" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">2. 확인자 지정 &amp; 전송</text>
+    <text x="80" y="41" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">동료 확인자 선택</text>
+    <text x="80" y="57" font-size="10" fill="#4338ca" text-anchor="middle">[크로스체크 확인 요청 발송]</text>
   </g>
 
-  <line x1="400" y1="97" x2="440" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="400" y1="91" x2="440" y2="91" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
 
-  <g transform="translate(450, 60)">
-    <rect width="160" height="74" fill="#fefce8" stroke="#eab308" stroke-width="1.8" rx="8"/>
-    <rect x="0" y="0" width="160" height="24" fill="#eab308" rx="8"/>
-    <rect x="0" y="16" width="160" height="8" fill="#eab308"/>
-    <text x="80" y="17" font-size="11" font-weight="700" fill="#713f12" text-anchor="middle">3. 실시간 승인 대기</text>
-    <text x="80" y="42" font-size="11" font-weight="600" fill="#854d0e" text-anchor="middle">하단 6시 상태바/알림</text>
-    <text x="80" y="58" font-size="10" fill="#a16207" text-anchor="middle">0초 쿨타임 확인자 변경 가능</text>
+  <g transform="translate(450, 56)">
+    <rect width="160" height="70" fill="#fefce8" stroke="#eab308" stroke-width="1.8" rx="8"/>
+    <rect x="0" y="0" width="160" height="23" fill="#eab308" rx="8"/>
+    <rect x="0" y="15" width="160" height="8" fill="#eab308"/>
+    <text x="80" y="16" font-size="11" font-weight="700" fill="#713f12" text-anchor="middle">3. 실시간 승인 대기</text>
+    <text x="80" y="41" font-size="11" font-weight="600" fill="#854d0e" text-anchor="middle">하단 6시 상태바/알림</text>
+    <text x="80" y="57" font-size="10" fill="#a16207" text-anchor="middle">0초 쿨타임 확인자 변경 가능</text>
   </g>
 
-  <path d="M530 134 V170" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M530 126 V164" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
 
-  <g transform="translate(430, 180)">
-    <rect width="180" height="60" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8" rx="8"/>
-    <text x="90" y="24" font-size="12" font-weight="700" fill="#15803d" text-anchor="middle">✅ 크로스체크 승인 완료</text>
+  <g transform="translate(430, 170)">
+    <rect width="180" height="56" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8" rx="8"/>
+    <text x="90" y="23" font-size="12" font-weight="700" fill="#15803d" text-anchor="middle">✅ 크로스체크 승인 완료</text>
     <text x="90" y="42" font-size="11" font-weight="600" fill="#166534" text-anchor="middle">하단 상태바 초록색 알림 갱신</text>
   </g>
 
-  <g transform="translate(430, 260)">
+  <g transform="translate(430, 246)">
     <rect width="180" height="52" fill="#15803d" stroke="#166534" rx="8"/>
     <text x="90" y="22" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">4. 안전 작업 착수</text>
-    <text x="90" y="38" font-size="10" fill="#bbf7d0" text-anchor="middle">vim 일괄 복사 가이드 출력</text>
+    <text x="90" y="39" font-size="10" fill="#bbf7d0" text-anchor="middle">vim 일괄 복사 가이드 출력</text>
   </g>
-  <line x1="520" y1="240" x2="520" y2="258" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="520" y1="226" x2="520" y2="244" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow)"/>
 
-  <g transform="translate(140, 180)">
-    <rect width="220" height="60" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8" rx="8"/>
-    <text x="110" y="24" font-size="12" font-weight="700" fill="#b91c1c" text-anchor="middle">❌ 반려 / 재확인 요청 도착</text>
+  <g transform="translate(140, 170)">
+    <rect width="220" height="56" fill="#fee2e2" stroke="#dc2626" stroke-width="1.8" rx="8"/>
+    <text x="110" y="23" font-size="12" font-weight="700" fill="#b91c1c" text-anchor="middle">❌ 반려 / 재확인 요청 도착</text>
     <text x="110" y="42" font-size="10" fill="#991b1b" text-anchor="middle">확인자 코멘트 확인 ➔ 대상 수정 후 재요청</text>
   </g>
-  <path d="M450 115 H380 V180 H362" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow)"/>
-  <path d="M140 210 H110 V136" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M485 126 V148 H250 V168" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M140 198 H110 V128" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow)"/>
 
-  <text x="30" y="315" font-size="11" font-weight="600" fill="#64748b">💡 팁: 창을 내려두어도 승인 완료 시 하단 6시 상태바 및 알림으로 즉시 확인 가능합니다.</text>
+  <rect x="20" y="314" width="600" height="30" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="32" y="333" font-size="11" font-weight="600" fill="#475569">💡 팁: 창을 내려두어도 승인 완료 시 하단 6시 상태바 및 알림으로 즉시 확인 가능합니다.</text>
 </svg>`;
     }
 
     function getCheckerWorkflowSvg() {
-        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" preserveAspectRatio="xMidYMid meet" style="width:100%; height:auto; display:block;" font-family="'Pretendard','Malgun Gothic',sans-serif">
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid meet" style="width:100%; height:auto; display:block;" font-family="'Pretendard','Malgun Gothic',sans-serif">
   <defs>
     <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M0 1L10 5L0 9z" fill="#475569"/>
@@ -1088,10 +1217,10 @@
     </filter>
   </defs>
 
-  <rect x="2" y="2" width="636" height="336" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow2)"/>
+  <rect x="2" y="2" width="636" height="356" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow2)"/>
   
-  <rect x="2" y="2" width="636" height="42" fill="#0f172a" rx="10"/>
-  <rect x="2" y="34" width="636" height="10" fill="#0f172a"/>
+  <rect x="2" y="2" width="636" height="40" fill="#0f172a" rx="10"/>
+  <rect x="2" y="32" width="636" height="10" fill="#0f172a"/>
   <text x="20" y="26" font-size="14" font-weight="700" fill="#38bdf8">🛡️ [확인자] 크로스체크 독립 검증 및 승인 흐름</text>
 
   <g transform="translate(25, 60)">
@@ -1111,7 +1240,7 @@
     <rect x="0" y="16" width="130" height="8" fill="#6366f1"/>
     <text x="65" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">2. 세션 열기</text>
     <text x="65" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">블라인드 데이터 확인</text>
-    <text x="65" y="58" font-size="10" fill="#4338ca" text-anchor="middle">(앞 3대 외 마스킹 보호)</text>
+    <text x="65" y="58" font-size="10" fill="#4338ca" text-anchor="middle">(대표 1대 외 마스킹 보호)</text>
   </g>
 
   <line x1="315" y1="97" x2="340" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow2)"/>
@@ -1136,7 +1265,7 @@
     <text x="57" y="58" font-size="10" fill="#6d28d9" text-anchor="middle">전수 일치 자동대조</text>
   </g>
 
-  <path d="M562 134 V170" stroke="#475569" stroke-width="2" marker-end="url(#arrow2)"/>
+  <path d="M562 134 V178" stroke="#475569" stroke-width="2" marker-end="url(#arrow2)"/>
 
   <g transform="translate(380, 185)">
     <rect width="240" height="66" fill="#dcfce7" stroke="#16a34a" stroke-width="1.8" rx="8"/>
@@ -1153,7 +1282,8 @@
   </g>
   <path d="M562 155 H200 V183" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow2)"/>
 
-  <text x="25" y="315" font-size="11" font-weight="600" fill="#64748b">🔒 보안 원칙: 확인자가 직접 입력하여 대조하기 전까지 작업자 데이터는 블라인드 처리됩니다.</text>
+  <rect x="20" y="314" width="600" height="30" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="32" y="333" font-size="11" font-weight="600" fill="#475569">🔒 보안 원칙: 확인자가 직접 입력하여 대조하기 전까지 작업자 데이터는 블라인드 처리됩니다.</text>
 </svg>`;
     }
 
@@ -1173,6 +1303,7 @@
                 </div>
             </div>
             <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
+                <button id="awx-vld-btn-logs" class="awx-vld-header-btn" style="padding:4px 8px;" title="크로스체크 승인 로그 조회 (날짜·달력)">📋 로그</button>
                 <button id="awx-vld-btn-header-settings" class="awx-vld-header-btn" style="padding:4px 7px; ${state.showSettingsModal ? 'background:#1e293b;' : ''}" title="환경설정 (알림 및 자동 접기 설정)">
                     ${getGearSvg()}
                 </button>
@@ -1220,11 +1351,20 @@
                     <input id="awx-vld-chk-collapse" type="checkbox" ${state.collapseEnabled ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#2563eb;">
                 </label>
             </div>
-            <div id="awx-vld-collapse-slider-wrap" style="display:${state.collapseEnabled ? 'flex' : 'none'}; align-items:center; justify-content:space-between; gap:10px; padding:4px 0 2px 0;">
-                <span style="font-size:11px; color:#cbd5e1;">숨김 시 표시 높이 (기본 30%):</span>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <input id="awx-vld-range-collapse" type="range" min="10" max="90" step="5" value="${state.collapseRatio}" style="width:130px; height:5px; accent-color:#38bdf8; cursor:pointer;">
-                    <span id="awx-vld-lbl-collapse" class="awx-vld-mono" style="font-weight:700; color:#38bdf8; min-width:34px; text-align:right;">${state.collapseRatio}%</span>
+            <div id="awx-vld-collapse-slider-wrap" style="display:${state.collapseEnabled ? 'flex' : 'none'}; flex-direction:column; gap:6px; padding:4px 0 2px 0;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                    <span style="font-size:11px; color:#cbd5e1;">숨김 시 표시 높이 (기본 30%):</span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input id="awx-vld-range-collapse" type="range" min="10" max="90" step="5" value="${state.collapseRatio}" style="width:130px; height:5px; accent-color:#38bdf8; cursor:pointer;">
+                        <span id="awx-vld-lbl-collapse" class="awx-vld-mono" style="font-weight:700; color:#38bdf8; min-width:34px; text-align:right;">${state.collapseRatio}%</span>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                    <span style="font-size:11px; color:#cbd5e1;">이탈 후 숨김 지연 (기본 5초, 0=즉시):</span>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <input id="awx-vld-input-collapse-delay" type="number" min="0" step="1" value="${state.collapseDelaySec}" style="width:60px; box-sizing:border-box; padding:2px 6px; font-size:11px; text-align:right; border-radius:4px; border:1px solid #334155; background:#1e293b; color:#38bdf8; font-weight:700;" />
+                        <span style="font-size:11px; color:#94a3b8;">초</span>
+                    </div>
                 </div>
             </div>
             ${buildAwxSettingsHTML(state)}
@@ -1487,7 +1627,7 @@
                         <div id="awx-vld-chk-awx-info" style="font-size:11.5px; color:#475569; margin-top:5px;"></div>
                     </div>
 
-                    <!-- 2. 작업자 호스트 블라인드 요약 (앞 3대만 노출 + 외 N대 블라인드) -->
+                    <!-- 2. 작업자 호스트 블라인드 요약 (대표 1대 노출 + 외 N대 블라인드) -->
                     <div class="awx-vld-card" style="background:#ffffff; border-color:#e2e8f0;">
                         <div style="font-size:12px; font-weight:700; color:#475569; margin-bottom:6px; display:flex; justify-content:space-between;">
                             <span>작업자 입력 요약 (복사 방지 블라인드 적용)</span>
@@ -1550,6 +1690,63 @@
         <div id="awx-vld-global-status-bar" style="display:none; padding:9px 16px; font-size:12px; font-weight:700; text-align:center; cursor:pointer; user-select:none; border-top:1px solid rgba(0,0,0,0.1); transition:all 0.2s ease; box-shadow:0 -2px 10px rgba(0,0,0,0.15); flex-shrink:0;">
             <span id="awx-vld-global-status-text"></span>
         </div>
+
+        <!-- 승인 로그 조회 팝업 모달 -->
+        <div id="awx-vld-logs-modal">
+            <div class="awx-vld-log-dialog">
+                <div style="background:#0f172a; color:#f8fafc; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <div style="min-width:0;">
+                        <div style="font-weight:700; font-size:13px; color:#38bdf8;">📋 크로스체크 승인 로그</div>
+                        <div id="awx-vld-log-dir-path" style="font-size:10px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">sharedDir/logs/YYYY-MM-DD.log</div>
+                    </div>
+                    <button id="awx-vld-btn-close-logs" type="button" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer; line-height:1; padding:0 4px;" title="닫기">&times;</button>
+                </div>
+                <div style="padding:10px 12px; display:flex; flex-direction:column; gap:8px; background:#ffffff; flex:1; min-height:0; overflow-y:auto;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+                            <input id="awx-vld-log-date" type="date" style="padding:4px 7px; font-size:11.5px; border:1px solid #cbd5e1; border-radius:5px; color:#1e293b; background:#f8fafc;" />
+                            <button id="awx-vld-btn-log-cal-toggle" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 8px;">📅 달력 접기</button>
+                            <button id="awx-vld-btn-log-today" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 8px;">오늘</button>
+                            <button id="awx-vld-btn-log-all" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 8px;">전체</button>
+                        </div>
+                        <button id="awx-vld-btn-log-refresh" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 8px;">새로고침</button>
+                    </div>
+                    <div id="awx-vld-log-calendar-wrap" class="awx-vld-cal-wrap">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <button id="awx-vld-cal-prev" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:2px 8px;">◀</button>
+                            <span id="awx-vld-cal-month-label" style="font-weight:700; font-size:12px; color:#0f172a;"></span>
+                            <button id="awx-vld-cal-next" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:2px 8px;">▶</button>
+                        </div>
+                        <div id="awx-vld-cal-grid" class="awx-vld-cal-grid"></div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:5px; font-size:10px; color:#64748b;">
+                            <span>● 파란 점 표시 날짜에 승인 로그 있음</span>
+                            <span id="awx-vld-log-dates-count"></span>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; flex-wrap:wrap;">
+                        <input id="awx-vld-log-search" type="text" placeholder="인시던트·작업자·확인자 검색..." style="flex:1; min-width:150px; padding:5px 8px; font-size:11.5px; border:1px solid #cbd5e1; border-radius:5px; box-sizing:border-box;" />
+                        <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
+                            <span id="awx-vld-log-count" style="font-size:11px; font-weight:700; color:#475569;">0건</span>
+                            <button id="awx-vld-btn-log-copy" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 8px;">텍스트 복사</button>
+                            <button id="awx-vld-btn-log-csv" type="button" class="awx-vld-btn awx-vld-btn-primary awx-vld-btn-sm" style="font-size:11px; padding:4px 8px;">CSV 저장</button>
+                        </div>
+                    </div>
+                    <div style="flex:1; min-height:140px; max-height:310px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px;">
+                        <table class="awx-vld-log-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:132px;">시간</th>
+                                    <th style="width:112px;">인시던트</th>
+                                    <th>작업자</th>
+                                    <th>확인자</th>
+                                </tr>
+                            </thead>
+                            <tbody id="awx-vld-log-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
         `;
     }
 
@@ -1600,8 +1797,29 @@
         const chkCollapse = getEl('awx-vld-chk-collapse');
         const rangeCollapse = getEl('awx-vld-range-collapse');
         const lblCollapse = getEl('awx-vld-lbl-collapse');
+        const inputCollapseDelay = getEl('awx-vld-input-collapse-delay');
         const txtCollapseStatus = getEl('awx-vld-txt-collapse-status');
         const sliderWrap = getEl('awx-vld-collapse-slider-wrap');
+        const btnLogs = getEl('awx-vld-btn-logs');
+        const logsModal = getEl('awx-vld-logs-modal');
+        const btnCloseLogs = getEl('awx-vld-btn-close-logs');
+        const logDirPathEl = getEl('awx-vld-log-dir-path');
+        const inputLogDate = getEl('awx-vld-log-date');
+        const btnLogCalToggle = getEl('awx-vld-btn-log-cal-toggle');
+        const logCalendarWrap = getEl('awx-vld-log-calendar-wrap');
+        const btnLogCalPrev = getEl('awx-vld-cal-prev');
+        const btnLogCalNext = getEl('awx-vld-cal-next');
+        const calMonthLabelEl = getEl('awx-vld-cal-month-label');
+        const calGridEl = getEl('awx-vld-cal-grid');
+        const logDatesCountEl = getEl('awx-vld-log-dates-count');
+        const btnLogToday = getEl('awx-vld-btn-log-today');
+        const btnLogAll = getEl('awx-vld-btn-log-all');
+        const btnLogRefresh = getEl('awx-vld-btn-log-refresh');
+        const inputLogSearch = getEl('awx-vld-log-search');
+        const logCountEl = getEl('awx-vld-log-count');
+        const btnLogCopy = getEl('awx-vld-btn-log-copy');
+        const btnLogCsv = getEl('awx-vld-btn-log-csv');
+        const logTbodyEl = getEl('awx-vld-log-tbody');
 
         // 탭 버튼 및 패널
         const tabSingle = getEl('awx-vld-tab-single');
@@ -1738,18 +1956,36 @@
         let appExpandedHeight = 920;
         let isWindowCollapsed = false;
         let isProgrammaticResize = false;
+        try {
+            const initTargetWin = (isPopup && popupWin) ? popupWin : window;
+            if (isStandaloneApp || (isPopup && popupWin)) {
+                initTargetWin.awxWindowCollapsed = false;
+                initTargetWin.awxPopupCollapsed = false;
+            }
+        } catch (e) {}
 
         if (isStandaloneApp && window.outerHeight && window.outerHeight > 350) {
             appExpandedWidth = window.outerWidth || 640;
             appExpandedHeight = window.outerHeight || 920;
         }
 
-        // 본문 영역 자동 숨김 (접기) 동작 관리
+        // 본문 영역 자동 숨김 (접기) 동작 및 지연 타이머 관리
+        let collapseTimerId = null;
+        function cancelCollapseTimer() {
+            if (collapseTimerId !== null) {
+                clearTimeout(collapseTimerId);
+                collapseTimerId = null;
+            }
+        }
+
         function applyCollapse() {
             if (!bodyWrapEl) return;
             if (chkCollapse) chkCollapse.checked = state.collapseEnabled;
             if (rangeCollapse) rangeCollapse.value = String(state.collapseRatio);
             if (lblCollapse) lblCollapse.innerText = `${state.collapseRatio}%`;
+            if (inputCollapseDelay && rootDoc.activeElement !== inputCollapseDelay) {
+                inputCollapseDelay.value = String(state.collapseDelaySec);
+            }
             if (txtCollapseStatus) {
                 txtCollapseStatus.innerText = state.collapseEnabled ? '켜짐' : '꺼짐';
                 txtCollapseStatus.style.background = state.collapseEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)';
@@ -1815,10 +2051,44 @@
             }
         }
 
+        function enterMouse() {
+            cancelCollapseTimer();
+            state.isMouseInside = true;
+            applyCollapse();
+        }
+
+        function scheduleCollapse() {
+            if (!state.collapseEnabled) {
+                cancelCollapseTimer();
+                state.isMouseInside = false;
+                applyCollapse();
+                return;
+            }
+            const delaySec = Math.max(0, Number.isFinite(Number(state.collapseDelaySec)) ? Math.floor(Number(state.collapseDelaySec)) : 5);
+            if (delaySec <= 0) {
+                cancelCollapseTimer();
+                state.isMouseInside = false;
+                applyCollapse();
+                return;
+            }
+            if (!state.isMouseInside || collapseTimerId !== null) {
+                return;
+            }
+            collapseTimerId = setTimeout(() => {
+                collapseTimerId = null;
+                state.isMouseInside = false;
+                applyCollapse();
+            }, delaySec * 1000);
+        }
+
         if (chkCollapse) {
             chkCollapse.onchange = () => {
                 state.collapseEnabled = chkCollapse.checked;
                 try { localStorage.setItem('awx_collapse_enabled', String(state.collapseEnabled)); } catch(e) {}
+                if (!state.collapseEnabled) {
+                    cancelCollapseTimer();
+                    state.isMouseInside = true;
+                }
                 applyCollapse();
             };
         }
@@ -1829,31 +2099,38 @@
                 applyCollapse();
             };
         }
+        if (inputCollapseDelay) {
+            inputCollapseDelay.oninput = () => {
+                const raw = inputCollapseDelay.value.trim();
+                if (/^\d+$/.test(raw)) {
+                    state.collapseDelaySec = parseInt(raw, 10);
+                    try { localStorage.setItem('awx_collapse_delay_sec', String(state.collapseDelaySec)); } catch(e) {}
+                }
+            };
+            const normalizeDelayInput = () => {
+                const parsed = parseInt(inputCollapseDelay.value.trim(), 10);
+                state.collapseDelaySec = (Number.isFinite(parsed) && parsed >= 0) ? parsed : 5;
+                inputCollapseDelay.value = String(state.collapseDelaySec);
+                try { localStorage.setItem('awx_collapse_delay_sec', String(state.collapseDelaySec)); } catch(e) {}
+            };
+            inputCollapseDelay.onchange = normalizeDelayInput;
+            inputCollapseDelay.onblur = normalizeDelayInput;
+        }
 
-        // 마우스 진입/이탈 감지
+        // 마우스 진입/이탈 및 창 포커스 감지
         const hoverTarget = isPopup ? rootDoc.documentElement : (isStandaloneApp ? rootDoc.documentElement : panel);
         if (hoverTarget) {
-            hoverTarget.addEventListener('mouseenter', () => {
-                state.isMouseInside = true;
-                applyCollapse();
-            });
-            hoverTarget.addEventListener('mouseleave', () => {
-                state.isMouseInside = false;
-                applyCollapse();
-            });
+            hoverTarget.addEventListener('mouseenter', enterMouse);
+            hoverTarget.addEventListener('mouseleave', scheduleCollapse);
         }
         if (isStandaloneApp || isPopup) {
             const targetDoc = rootDoc || document;
             targetDoc.addEventListener('mouseleave', (e) => {
                 if (!e.relatedTarget && !e.toElement) {
-                    state.isMouseInside = false;
-                    applyCollapse();
+                    scheduleCollapse();
                 }
             });
-            targetDoc.addEventListener('mouseenter', () => {
-                state.isMouseInside = true;
-                applyCollapse();
-            });
+            targetDoc.addEventListener('mouseenter', enterMouse);
             const targetWin = (isPopup && popupWin) ? popupWin : window;
             targetWin.addEventListener('resize', () => {
                 if (!isWindowCollapsed && !isProgrammaticResize && targetWin.outerHeight > 350) {
@@ -1861,15 +2138,13 @@
                     appExpandedHeight = targetWin.outerHeight || appExpandedHeight;
                 }
             });
+            targetWin.addEventListener('blur', scheduleCollapse);
+            targetWin.addEventListener('focus', enterMouse);
         }
-        window.addEventListener('blur', () => {
-            state.isMouseInside = false;
-            applyCollapse();
-        });
-        window.addEventListener('focus', () => {
-            state.isMouseInside = true;
-            applyCollapse();
-        });
+        if (!(isStandaloneApp || isPopup)) {
+            window.addEventListener('blur', scheduleCollapse);
+            window.addEventListener('focus', enterMouse);
+        }
         window.awxApplyCollapse = applyCollapse;
         window.awxApplyOpacity = applyCollapse; // 하위 호환
 
@@ -2164,6 +2439,249 @@
                 return await fetch(`${AGENT_BASE}${path}`, fetchOpts);
             }
             return await agentFetch(`${AGENT_BASE}${path}`, options);
+        }
+
+        // 승인 로그 조회 모달 (달력 날짜 선택 · 검색 · 복사 · CSV 저장)
+        function formatLocalDateStr(d) {
+            const yr = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const da = String(d.getDate()).padStart(2, '0');
+            return `${yr}-${mo}-${da}`;
+        }
+        let logSelectedDate = formatLocalDateStr(new Date());
+        let logAllDatesMode = false;
+        let logCalYear = new Date().getFullYear();
+        let logCalMonth = new Date().getMonth();
+        let logShowCalendar = true;
+        let logEntries = [];
+        let logAvailableDates = [];
+
+        function getFilteredLogEntries() {
+            const q = inputLogSearch ? inputLogSearch.value.trim().toLowerCase() : '';
+            if (!q) return logEntries;
+            return logEntries.filter(e => {
+                const hay = `${e.timestamp || ''} ${e.incident || ''} ${e.worker || ''} ${e.checker || ''}`.toLowerCase();
+                return hay.includes(q);
+            });
+        }
+
+        function renderLogCalendar() {
+            if (!calGridEl || !calMonthLabelEl) return;
+            calMonthLabelEl.innerText = `${logCalYear}년 ${logCalMonth + 1}월`;
+            const todayStr = formatLocalDateStr(new Date());
+            const availSet = new Set(logAvailableDates || []);
+            const firstDow = new Date(logCalYear, logCalMonth, 1).getDay();
+            const daysInMonth = new Date(logCalYear, logCalMonth + 1, 0).getDate();
+            const dows = ['일', '월', '화', '수', '목', '금', '토'];
+            let html = '';
+            dows.forEach((dLabel, idx) => {
+                const clr = idx === 0 ? '#dc2626' : (idx === 6 ? '#2563eb' : '#64748b');
+                html += `<div class="awx-vld-cal-dow" style="color:${clr};">${dLabel}</div>`;
+            });
+            for (let i = 0; i < firstDow; i++) {
+                html += '<div></div>';
+            }
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dStr = `${logCalYear}-${String(logCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const cls = ['awx-vld-cal-day'];
+                if (dStr === todayStr) cls.push('today');
+                if (availSet.has(dStr)) cls.push('has-log');
+                if (!logAllDatesMode && dStr === logSelectedDate) cls.push('selected');
+                html += `<button type="button" class="${cls.join(' ')}" data-log-date="${dStr}" title="${dStr}${availSet.has(dStr) ? ' (로그 있음)' : ''}">${day}</button>`;
+            }
+            calGridEl.innerHTML = html;
+            if (logDatesCountEl) {
+                logDatesCountEl.innerText = `기록된 날짜 ${logAvailableDates.length}일`;
+            }
+            if (btnLogAll) {
+                btnLogAll.style.background = logAllDatesMode ? '#2563eb' : '';
+                btnLogAll.style.color = logAllDatesMode ? '#ffffff' : '';
+                btnLogAll.style.borderColor = logAllDatesMode ? '#1d4ed8' : '';
+            }
+            if (btnLogToday) {
+                const isTodayActive = !logAllDatesMode && logSelectedDate === todayStr;
+                btnLogToday.style.background = isTodayActive ? '#0f172a' : '';
+                btnLogToday.style.color = isTodayActive ? '#ffffff' : '';
+            }
+        }
+
+        function renderLogTable() {
+            if (!logTbodyEl) return;
+            const filtered = getFilteredLogEntries();
+            if (logCountEl) logCountEl.innerText = `${filtered.length}건`;
+            if (filtered.length === 0) {
+                const msg = logAllDatesMode
+                    ? '저장된 크로스체크 승인 로그가 없습니다.'
+                    : `${escapeHTML(logSelectedDate)} 날짜에 승인된 크로스체크 로그가 없습니다.`;
+                logTbodyEl.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:22px; color:#64748b;">${msg}</td></tr>`;
+                return;
+            }
+            logTbodyEl.innerHTML = filtered.map(e => `
+                <tr>
+                    <td class="awx-vld-mono" style="white-space:nowrap; font-size:11px;">${escapeHTML(e.timestamp || '-')}</td>
+                    <td style="font-weight:600; color:#0f172a;">${escapeHTML(e.incident || '-')}</td>
+                    <td>${escapeHTML(e.worker || '-')}</td>
+                    <td>${escapeHTML(e.checker || '-')}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function fetchApprovalLogs() {
+            const qDate = logAllDatesMode ? 'all' : logSelectedDate;
+            try {
+                const res = await callAgentHttp(`/api/logs?date=${encodeURIComponent(qDate)}`, { timeoutMs: 8000 });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                logAvailableDates = Array.isArray(data.dates) ? data.dates : [];
+                logEntries = Array.isArray(data.entries) ? data.entries : [];
+                if (logDirPathEl && data.logsDir) {
+                    const targetName = logAllDatesMode ? '전체 (*.log)' : `${logSelectedDate}.log`;
+                    logDirPathEl.innerText = `${data.logsDir} (${targetName})`;
+                    logDirPathEl.title = data.logsDir;
+                }
+            } catch (err) {
+                logEntries = [];
+                if (logTbodyEl) {
+                    logTbodyEl.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px; color:#dc2626;">로그 조회 실패: ${escapeHTML(err.message || '에이전트 연결 확인 필요')}</td></tr>`;
+                    if (logCountEl) logCountEl.innerText = '0건';
+                    renderLogCalendar();
+                    return;
+                }
+            }
+            renderLogCalendar();
+            renderLogTable();
+        }
+        window.awxRefreshApprovalLogs = () => {
+            if (state.showLogsModal) fetchApprovalLogs();
+        };
+
+        function setSelectedLogDate(dateStr, syncCalendarMonth = true) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+            logAllDatesMode = false;
+            logSelectedDate = dateStr;
+            if (inputLogDate) inputLogDate.value = dateStr;
+            if (syncCalendarMonth) {
+                const parts = dateStr.split('-');
+                logCalYear = parseInt(parts[0], 10);
+                logCalMonth = parseInt(parts[1], 10) - 1;
+            }
+            fetchApprovalLogs();
+        }
+
+        function openLogsModal() {
+            if (!logsModal) return;
+            state.showLogsModal = true;
+            logsModal.style.display = 'flex';
+            if (inputLogDate) inputLogDate.value = logSelectedDate;
+            if (logCalendarWrap) logCalendarWrap.style.display = logShowCalendar ? 'block' : 'none';
+            if (btnLogCalToggle) btnLogCalToggle.innerText = logShowCalendar ? '📅 달력 접기' : '📅 달력 열기';
+            fetchApprovalLogs();
+        }
+
+        function closeLogsModal() {
+            if (!logsModal) return;
+            state.showLogsModal = false;
+            logsModal.style.display = 'none';
+        }
+
+        if (btnLogs) {
+            btnLogs.onclick = () => {
+                if (state.showLogsModal) closeLogsModal();
+                else openLogsModal();
+            };
+        }
+        if (btnCloseLogs) btnCloseLogs.onclick = closeLogsModal;
+        if (logsModal) {
+            logsModal.onclick = (e) => {
+                if (e.target === logsModal) closeLogsModal();
+            };
+        }
+        if (inputLogDate) {
+            inputLogDate.onchange = () => {
+                if (inputLogDate.value) setSelectedLogDate(inputLogDate.value, true);
+            };
+        }
+        if (calGridEl) {
+            calGridEl.onclick = (e) => {
+                const btn = e.target.closest('[data-log-date]');
+                if (!btn) return;
+                const picked = btn.getAttribute('data-log-date');
+                if (picked) setSelectedLogDate(picked, false);
+            };
+        }
+        if (btnLogCalPrev) {
+            btnLogCalPrev.onclick = () => {
+                logCalMonth -= 1;
+                if (logCalMonth < 0) { logCalMonth = 11; logCalYear -= 1; }
+                renderLogCalendar();
+            };
+        }
+        if (btnLogCalNext) {
+            btnLogCalNext.onclick = () => {
+                logCalMonth += 1;
+                if (logCalMonth > 11) { logCalMonth = 0; logCalYear += 1; }
+                renderLogCalendar();
+            };
+        }
+        if (btnLogCalToggle && logCalendarWrap) {
+            btnLogCalToggle.onclick = () => {
+                logShowCalendar = !logShowCalendar;
+                logCalendarWrap.style.display = logShowCalendar ? 'block' : 'none';
+                btnLogCalToggle.innerText = logShowCalendar ? '📅 달력 접기' : '📅 달력 열기';
+            };
+        }
+        if (btnLogToday) {
+            btnLogToday.onclick = () => {
+                setSelectedLogDate(formatLocalDateStr(new Date()), true);
+            };
+        }
+        if (btnLogAll) {
+            btnLogAll.onclick = () => {
+                logAllDatesMode = true;
+                fetchApprovalLogs();
+            };
+        }
+        if (btnLogRefresh) btnLogRefresh.onclick = fetchApprovalLogs;
+        if (inputLogSearch) inputLogSearch.oninput = renderLogTable;
+        if (btnLogCopy) {
+            btnLogCopy.onclick = async () => {
+                const rows = getFilteredLogEntries();
+                if (!rows.length) { alert('복사할 로그가 없습니다.'); return; }
+                const txt = rows.map(e => `${e.timestamp} | ${e.incident} | ${e.worker} | ${e.checker}`).join('\n');
+                try {
+                    await navigator.clipboard.writeText(txt);
+                } catch (e) {
+                    const ta = rootDoc.createElement('textarea');
+                    ta.value = txt;
+                    rootDoc.body.appendChild(ta);
+                    ta.select();
+                    try { rootDoc.execCommand('copy'); } catch (ex) {}
+                    ta.remove();
+                }
+                const orig = btnLogCopy.innerText;
+                btnLogCopy.innerText = '복사 완료';
+                setTimeout(() => { btnLogCopy.innerText = orig; }, 1500);
+            };
+        }
+        if (btnLogCsv) {
+            btnLogCsv.onclick = () => {
+                const rows = getFilteredLogEntries();
+                if (!rows.length) { alert('저장할 로그가 없습니다.'); return; }
+                const csvCell = (v) => `"${String(v || '').replace(/"/g, '""')}"`;
+                const csvLines = ['시간,인시던트,작업자,확인자'];
+                rows.forEach(e => {
+                    csvLines.push([csvCell(e.timestamp), csvCell(e.incident), csvCell(e.worker), csvCell(e.checker)].join(','));
+                });
+                const blob = new Blob(['\uFEFF' + csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = rootDoc.createElement('a');
+                a.href = url;
+                a.download = `cross_check_log_${logAllDatesMode ? 'all' : logSelectedDate}.csv`;
+                rootDoc.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            };
         }
 
         function getMergedAwxInventories() {
@@ -2482,6 +3000,7 @@
                     userCustomized: true,
                     scopePinned: !!payload.scopePinned,
                     preferBridge: !!payload.preferBridge,
+                    preferBridgeVersion: 2,
                     defaultScope: payload.defaultScope || '',
                     defaultPage: payload.defaultPage ? String(payload.defaultPage) : ''
                 }));
@@ -3886,6 +4405,7 @@
                 }
                 fetchPendingSessions();
                 checkAndNotifySessionDecided(ev);
+                if (typeof window.awxRefreshApprovalLogs === 'function') window.awxRefreshApprovalLogs();
             } else if (ev.type === 'SESSION_REASSIGNED') {
                 // 1. 작업자의 화면이면 확인자 정보 즉시 갱신 (확인자 변경 시 작업자에게 실시간 업데이트)
                 if (state.currentSession && (state.currentSession.sessionId === ev.sessionId || ev.data?.sessionId === state.currentSession.sessionId)) {
@@ -4304,18 +4824,21 @@
                     chkAwxInfo.innerHTML = `• AWX 연동: <b>${sess.activeFields?.awx ? '참여 (' + awxCnt + '대 수집됨)' : '미사용'}</b> (비교 시 자동 대조)`;
                 }
 
-                // 블라인드 요약 (앞 3대 노출 + 외 N대 블라인드)
+                // 블라인드 요약 (대표 1대 노출: 예 "svr01 등 5대")
                 const wData = sess.workerData || {};
                 const renderBlind = (name, prevObj, count) => {
                     if (!prevObj && !count) return `• ${name}: 미입력 (비교 제외)`;
                     const pList = prevObj?.previewHosts || [];
                     const total = prevObj?.totalCount || count || pList.length;
-                    const blinded = prevObj?.blindedCount || Math.max(0, total - pList.length);
-                    let text = `• ${name} (${total}대): `;
+                    const blinded = prevObj?.blindedCount !== undefined ? prevObj.blindedCount : Math.max(0, total - pList.length);
+                    if (total === 0 && pList.length === 0) return `• ${name}: 미입력 (비교 제외)`;
+                    let text = `• ${name}: `;
                     if (pList.length > 0) {
-                        text += `<b>${pList.join(', ')}</b>`;
+                        const rep = escapeHTML(pList[0]);
                         if (blinded > 0) {
-                            text += ` 외 ${blinded}대 <span style="color:#d97706; font-weight:600;">[블라인드 - 직접 입력 후 비교 시 공개]</span>`;
+                            text += `<b>${rep}</b> 등 ${total}대 <span style="color:#d97706; font-weight:600;">[블라인드 - 직접 입력 후 비교 시 공개]</span>`;
+                        } else {
+                            text = `• ${name} (${total}대): <b>${pList.map(escapeHTML).join(', ')}</b>`;
                         }
                     } else {
                         text += `총 ${total}대 <span style="color:#d97706; font-weight:600;">[블라인드 처리됨]</span>`;
