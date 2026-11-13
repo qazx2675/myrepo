@@ -171,9 +171,11 @@
     if (typeof state.targetText !== 'string') state.targetText = '';
     state.isStandalone = isStandaloneApp;
     let savedPinned = null;
-    try { savedPinned = localStorage.getItem('awx_pinned'); } catch (e) {}
+    if (isStandaloneApp) {
+        try { savedPinned = localStorage.getItem('awx_pinned'); } catch (e) {}
+    }
     if (typeof state.isPinned !== 'boolean') {
-        state.isPinned = (savedPinned === 'true');
+        state.isPinned = isStandaloneApp ? (savedPinned === 'true') : false;
     }
     if (typeof state.guideExpanded !== 'boolean') state.guideExpanded = false;
     if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = false;
@@ -793,7 +795,7 @@
         <div id="awx-vld-settings-panel" style="display:${state.showSettingsModal ? 'block' : 'none'}; background:#0f172a; color:#f8fafc; border-bottom:1px solid #334155; padding:10px 14px; font-size:12px; z-index:9999; max-height:calc(100vh - 110px); overflow-y:auto; box-sizing:border-box;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #334155; padding-bottom:5px;">
                 <span style="font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:6px;">
-                    ${getGearSvg()} 환경설정 (알림 및 자동 접기 설정)
+                    ${getGearSvg()} 환경설정 (알림 · 자동 숨김 · 셀프 테스트)
                 </span>
                 <button id="awx-vld-btn-close-settings" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer; line-height:1;" title="닫기">&times;</button>
             </div>
@@ -833,7 +835,15 @@
                     <span id="awx-vld-lbl-collapse" class="awx-vld-mono" style="font-weight:700; color:#38bdf8; min-width:34px; text-align:right;">${state.collapseRatio}%</span>
                 </div>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid #1e293b;">
+            <!-- 1인 셀프 크로스체크 테스트 -->
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:6px 0; border-top:1px solid #1e293b; margin-top:6px;">
+                <div style="min-width:0;">
+                    <div style="font-weight:600; color:#f1f5f9;">1인 셀프 크로스체크 테스트</div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:2px;">입력된 호스트(미입력 시 샘플 5대)로 나 자신에게 테스트 요청 발송</div>
+                </div>
+                <button id="awx-vld-btn-test-self" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 10px; white-space:nowrap; flex-shrink:0;">🧪 셀프 테스트</button>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; padding-top:6px; border-top:1px solid #1e293b;">
                 <span style="font-size:10.5px; color:#64748b;">(무음 모드로 현재 작업에 방해되지 않음)</span>
                 <button id="awx-vld-btn-test-notify" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:3px 8px;">🔔 알림 테스트</button>
             </div>
@@ -1216,6 +1226,7 @@
         const txtNotifyStatus = getEl('awx-vld-txt-notify-status');
         const txtNotifyStatusTab1 = getEl('awx-vld-txt-notify-status-tab1');
         const btnTestNotify = getEl('awx-vld-btn-test-notify');
+        const btnTestSelf = getEl('awx-vld-btn-test-self');
 
         // [탭 1] 단독 확인 엘리먼트
         const inputExclude = getEl('awx-vld-input-exclude');
@@ -1575,7 +1586,9 @@
         if (btnPin) {
             btnPin.onclick = () => {
                 state.isPinned = !state.isPinned;
-                try { localStorage.setItem('awx_pinned', String(state.isPinned)); } catch (e) {}
+                if (isStandaloneApp) {
+                    try { localStorage.setItem('awx_pinned', String(state.isPinned)); } catch (e) {}
+                }
                 applyPinState();
             };
         }
@@ -1799,6 +1812,47 @@
                         alert("알림 테스트를 클릭하셨습니다.");
                     }
                 });
+            };
+        }
+
+        async function runSelfCrossCheckTest() {
+            if (!state.agentInfo || !state.agentInfo.ip) {
+                await fetchUsersAndStatus(true);
+            }
+            const myIp = state.agentInfo && state.agentInfo.ip ? String(state.agentInfo.ip).trim() : '';
+            if (!myIp) {
+                alert("로컬 에이전트 연결 확인 후 셀프 테스트를 실행할 수 있습니다.");
+                return null;
+            }
+
+            const sampleHosts = "test-db-01\ntest-db-02\ntest-db-03\ntest-db-04\ntest-db-05";
+            const curDetail = parseHostText(txtDetail.value || state.detailText || '');
+            const curIncident = parseHostText(txtIncident.value || state.incidentText || '');
+            if (curDetail.length === 0 && curIncident.length === 0) {
+                txtDetail.value = sampleHosts;
+                txtIncident.value = sampleHosts;
+            } else if (curDetail.length > 0 && curIncident.length === 0) {
+                txtIncident.value = txtDetail.value;
+            } else if (curDetail.length === 0 && curIncident.length > 0) {
+                txtDetail.value = txtIncident.value;
+            }
+            updateCountsAndButton();
+
+            const myName = state.agentInfo.name || "나 자신";
+            const created = await sendCrossCheckRequest(myIp, `${myName} (테스트)`);
+            if (created) {
+                state.showSettingsModal = false;
+                if (panelSettings) panelSettings.style.display = 'none';
+                if (btnHeaderSettings) btnHeaderSettings.style.background = 'none';
+                await switchTab('worker');
+            }
+            return created;
+        }
+        window.awxRunSelfTest = runSelfCrossCheckTest;
+
+        if (btnTestSelf) {
+            btnTestSelf.onclick = () => {
+                runSelfCrossCheckTest();
             };
         }
 
@@ -2361,24 +2415,20 @@
         function populateCheckerDropdowns() {
             if (!selChecker && !selReassign) return;
             const currentMyIp = state.agentInfo.ip;
+            if (currentMyIp && state.selectedCheckerIp === currentMyIp) {
+                state.selectedCheckerIp = '';
+            }
 
             const buildOptions = (selectedVal) => {
                 let html = '<option value="">확인자를 선택하세요</option>';
-                if (!state.usersList || state.usersList.length === 0) {
-                    html += '<option value="" disabled style="color:#94a3b8;">(등록된 작업자 없음 - users.json 확인)</option>';
+                const peers = (state.usersList || []).filter(u => u.ip && u.ip !== currentMyIp);
+                if (peers.length === 0) {
+                    html += '<option value="" disabled style="color:#94a3b8;">(선택 가능한 동료 확인자 없음 - users.json 확인)</option>';
                 } else {
-                    state.usersList.forEach(u => {
-                        // 평소에는 자기 자신 제외 (정상 운영 규칙 엄격 준수)
-                        if (u.ip === currentMyIp) return;
+                    peers.forEach(u => {
                         const isSel = (u.ip === selectedVal) ? 'selected' : '';
                         html += `<option value="${u.ip}" data-name="${u.name}" ${isSel}>${u.name} (${u.ip})</option>`;
                     });
-                }
-                // 이번 1인 테스트 전용: 나 자신에게 테스트 요청 옵션 제공 (단, 확인자 호출은 나 자신에게 발생하지 않음)
-                if (currentMyIp) {
-                    const myName = state.agentInfo.name || "나 자신";
-                    const isSel = (currentMyIp === selectedVal) ? 'selected' : '';
-                    html += `<option value="${currentMyIp}" data-name="${myName} (테스트)" ${isSel} style="color:#2563eb; font-weight:700;">[테스트] ${myName} (나 자신: ${currentMyIp})</option>`;
                 }
                 return html;
             };
@@ -2444,7 +2494,7 @@
         }
 
         // 작업자: 요청 발송
-        async function sendCrossCheckRequest(overrideCheckerIp = null) {
+        async function sendCrossCheckRequest(overrideCheckerIp = null, overrideCheckerName = null) {
             const detailList = parseHostText(txtDetail.value || state.detailText || '');
             const incidentList = parseHostText(txtIncident.value || state.incidentText || '');
             const targetList = parseHostText(txtTarget.value || state.targetText || '');
@@ -2458,14 +2508,19 @@
 
             // 이벤트 객체(MouseEvent 등)가 인자로 넘어오는 경우 대비 엄격한 문자열 타입 검증
             const explicitIp = (typeof overrideCheckerIp === 'string' && overrideCheckerIp.trim()) ? overrideCheckerIp.trim() : null;
+            const explicitName = (typeof overrideCheckerName === 'string' && overrideCheckerName.trim()) ? overrideCheckerName.trim() : null;
+            const isSelfTestCall = !!(explicitIp && state.agentInfo.ip && explicitIp === state.agentInfo.ip);
             const checkerOpt = selChecker ? selChecker.selectedOptions[0] : null;
             const checkerIp = String(explicitIp || (selChecker ? selChecker.value : '') || (typeof state.selectedCheckerIp === 'string' ? state.selectedCheckerIp : '') || '').trim();
-            let checkerName = '';
-            if (explicitIp && state.usersList) {
+            let checkerName = explicitName || '';
+            if (!checkerName && isSelfTestCall) {
+                checkerName = `${state.agentInfo.name || '나 자신'} (테스트)`;
+            }
+            if (!checkerName && explicitIp && state.usersList) {
                 const u = state.usersList.find(x => x.ip === explicitIp);
                 if (u) checkerName = u.name;
             }
-            if (!checkerName && checkerOpt) {
+            if (!checkerName && checkerOpt && checkerOpt.value === checkerIp) {
                 checkerName = (checkerOpt.getAttribute('data-name') || checkerOpt.innerText.split(' ')[0]);
             }
             if (!checkerName && checkerIp && state.usersList) {
@@ -2473,7 +2528,7 @@
                 if (u) checkerName = u.name;
             }
             if (!checkerName) checkerName = "확인자";
-            if (selChecker && checkerIp) {
+            if (!isSelfTestCall && selChecker && checkerIp) {
                 selChecker.value = checkerIp;
                 state.selectedCheckerIp = checkerIp;
             }
@@ -2611,7 +2666,7 @@
                         </div>
                         <div style="color:#1e40af; font-size:11.5px; line-height:1.5;">
                             나 자신에게 발송된 테스트 요청입니다. (확인자 외부 호출 없이 로컬 세션 생성 완료)<br>
-                            상단 탭에서 <b>[크로스체크 확인 (확인자)]</b> 탭을 클릭하여 확인자 화면에서 직접 검증 및 승인/반려를 진행하세요.
+                            상단 탭에서 <b>[3. 확인자 검증/승인]</b> 탭을 클릭하여 확인자 화면에서 직접 검증 및 승인/반려를 진행하세요.
                         </div>
                     `;
                 }

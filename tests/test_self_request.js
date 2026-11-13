@@ -171,37 +171,87 @@ async function runSelfRequestTest() {
         await cdp.evaluate(`window.awxSwitchTab('worker')`);
         await sleep(1000);
 
-        // 2. 드롭다운 목록 검증
+        // 2. 드롭다운 목록에서 나 자신([테스트]) 옵션 완전히 숨겨졌는지 검증
         const dropdownOptions = await cdp.evaluate(`
-            Array.from(document.querySelectorAll('#awx-vld-sel-checker option')).map(o => ({
-                value: o.value,
-                text: o.innerText.trim()
-            }))
+            ({
+                checker: Array.from(document.querySelectorAll('#awx-vld-sel-checker option')).map(o => ({
+                    value: o.value,
+                    text: o.innerText.trim()
+                })),
+                reassign: Array.from(document.querySelectorAll('#awx-vld-sel-reassign option')).map(o => ({
+                    value: o.value,
+                    text: o.innerText.trim()
+                }))
+            })
         `);
         console.log("✓ Dropdown options loaded:", dropdownOptions);
 
-        const selfOption = dropdownOptions.find(o => o.value === '192.168.0.23');
-        if (!selfOption || !selfOption.text.includes('[테스트]')) {
-            throw new Error(`Self-option not found in dropdown: ${JSON.stringify(dropdownOptions)}`);
+        const forbiddenSelfChecker = dropdownOptions.checker.find(o => o.value === '192.168.0.23' || o.text.includes('[테스트]') || o.text.includes('나 자신'));
+        const forbiddenSelfReassign = dropdownOptions.reassign.find(o => o.value === '192.168.0.23' || o.text.includes('[테스트]') || o.text.includes('나 자신'));
+        if (forbiddenSelfChecker || forbiddenSelfReassign) {
+            throw new Error(`Self-option must NOT appear in dropdown lists: ${JSON.stringify({ forbiddenSelfChecker, forbiddenSelfReassign })}`);
         }
-        console.log("✓ Found self test option:", selfOption.text);
+        console.log("✓ Verified: Self-test option is hidden from checker and reassign dropdowns.");
 
-        // 3. 작업자 호스트 입력 및 나 자신에게 요청 발송
-        const testHosts = "test-db-01\\ntest-db-02\\ntest-db-03\\ntest-db-04\\ntest-db-05";
+        // 3A. 설정(톱니바퀴)에서 빈 입력 상태로 [셀프 테스트] 클릭 시 샘플 5대 자동 생성 확인
+        await cdp.evaluate(`
+            document.getElementById('awx-vld-txt-detail').value = "";
+            document.getElementById('awx-vld-txt-incident').value = "";
+            document.getElementById('awx-vld-txt-target').value = "";
+            document.getElementById('awx-vld-txt-detail').dispatchEvent(new Event('input'));
+            document.getElementById('awx-vld-btn-header-settings').click();
+        `);
+        await sleep(300);
+
+        const hasSelfTestBtn = await cdp.evaluate(`
+            (() => {
+                const btn = document.getElementById('awx-vld-btn-test-self');
+                const panel = document.getElementById('awx-vld-settings-panel');
+                return !!(btn && panel && window.getComputedStyle(panel).display !== 'none');
+            })()
+        `);
+        if (!hasSelfTestBtn) {
+            throw new Error("Settings self-test button not visible inside settings modal");
+        }
+
+        console.log("Clicking [🧪 셀프 테스트] with empty inputs (expecting sample 5 hosts)...");
+        await cdp.evaluate(`document.getElementById('awx-vld-btn-test-self').click()`);
+        await sleep(1200);
+
+        const sampleCheck = await cdp.evaluate(`
+            (() => {
+                const panel = document.getElementById('awx-vld-settings-panel');
+                const detailVal = document.getElementById('awx-vld-txt-detail').value;
+                const sess = window.awxValidatorState.currentSession;
+                return {
+                    settingsClosed: !panel || window.getComputedStyle(panel).display === 'none',
+                    activeTab: window.awxValidatorState.activeTab,
+                    detailLines: detailVal.split('\\n').filter(Boolean).length,
+                    sessionId: sess?.sessionId,
+                    status: sess?.status,
+                    checkerIp: sess?.checkerIp
+                };
+            })()
+        `);
+        if (!sampleCheck.settingsClosed || sampleCheck.activeTab !== 'worker' || sampleCheck.detailLines !== 5 || sampleCheck.status !== 'PENDING' || sampleCheck.checkerIp !== '192.168.0.23') {
+            throw new Error(`Sample self-test from settings failed: ${JSON.stringify(sampleCheck)}`);
+        }
+        console.log("✓ Sample self-test (5 hosts auto-fill) created via Settings:", sampleCheck.sessionId);
+
+        // 3B. 입력란에 호스트가 있는 상태에서 설정(톱니바퀴) [셀프 테스트] 실행 시 입력 데이터 그대로 사용 확인
+        const testHosts = "custom-db-01\\ncustom-db-02\\ncustom-db-03\\ncustom-db-04\\ncustom-db-05";
         await cdp.evaluate(`
             document.getElementById('awx-vld-txt-detail').value = "${testHosts}";
             document.getElementById('awx-vld-txt-incident').value = "${testHosts}";
             document.getElementById('awx-vld-txt-target').value = "";
             document.getElementById('awx-vld-txt-detail').dispatchEvent(new Event('input'));
-            document.getElementById('awx-vld-sel-checker').value = '192.168.0.23';
-            document.getElementById('awx-vld-sel-checker').dispatchEvent(new Event('change'));
+            document.getElementById('awx-vld-btn-header-settings').click();
         `);
-
-        console.log("Clicking [크로스체크 확인 요청 발송] button directly (simulating real user click)...");
-        await cdp.evaluate(`document.getElementById('awx-vld-btn-send-request').click()`);
-        await sleep(1500);
+        await sleep(250);
+        await cdp.evaluate(`document.getElementById('awx-vld-btn-test-self').click()`);
+        await sleep(1200);
         const sessionInfo = await cdp.evaluate(`window.awxValidatorState.currentSession`);
-        console.log("✓ Session created via DOM click:", sessionInfo);
+        console.log("✓ Session created via Settings self-test button:", sessionInfo);
 
         if (!sessionInfo || sessionInfo.status !== 'PENDING') {
             throw new Error(`Failed to create session: ${JSON.stringify(sessionInfo)}`);

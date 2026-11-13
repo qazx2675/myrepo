@@ -331,6 +331,15 @@ async function runStandaloneAppTest() {
                         if (r.right > vw + 0.5 || r.bottom > vh + 0.5) {
                             clippedSettings = { right: r.right, bottom: r.bottom, vw, vh };
                         }
+                        for (const sid of ['awx-vld-btn-test-self', 'awx-vld-btn-test-notify']) {
+                            const sb = document.getElementById(sid);
+                            if (!sb) { clippedSettings = { missing: sid }; break; }
+                            const sr = sb.getBoundingClientRect();
+                            if (sr.left < -0.5 || sr.right > vw + 0.5 || sr.bottom > vh + 0.5 || sr.width < 20) {
+                                clippedSettings = { btn: sid, rect: { left: sr.left, right: sr.right, bottom: sr.bottom }, vw, vh };
+                                break;
+                            }
+                        }
                     }
                     return { vw, vh, docOverflowX, clippedHeaders, clippedTabs, clippedStatusBar, clippedSettings };
                 })()
@@ -485,34 +494,60 @@ async function runStandaloneAppTest() {
         }
         console.log("✓ Tab 1 comparison ([MATCH], [MISMATCH], Reset) & layout verified.");
 
-        // [6/7] Test Tab 2 & Tab 3: Self-request & Approval workflow
-        console.log("[6/7] Testing Tab 2 & Tab 3: Worker request and Checker approval cycle...");
+        // [6/7] Test Tab 2 & Tab 3: Self-test hidden from dropdowns, executed via Settings gear
+        console.log("[6/7] Testing Tab 2 & Tab 3: Self-test via Settings & Checker approval cycle...");
+        await cdp.evaluate(`window.awxSwitchTab('worker')`);
+        await sleep(600);
+
+        const selOptions = await cdp.evaluate(`
+            ({
+                checker: Array.from(document.querySelectorAll('#awx-vld-sel-checker option')).map(o => ({ value: o.value, text: o.innerText.trim() })),
+                reassign: Array.from(document.querySelectorAll('#awx-vld-sel-reassign option')).map(o => ({ value: o.value, text: o.innerText.trim() }))
+            })
+        `);
+        console.log("   Worker peer checker options loaded:", selOptions.checker.length);
+        const selfInDropdown = selOptions.checker.find(o => o.value === '192.168.0.23' || o.text.includes('[테스트]') || o.text.includes('나 자신')) ||
+            selOptions.reassign.find(o => o.value === '192.168.0.23' || o.text.includes('[테스트]') || o.text.includes('나 자신'));
+        if (selfInDropdown) {
+            throw new Error(`Self-test option unexpectedly visible in dropdown: ${JSON.stringify(selfInDropdown)}`);
+        }
+
+        // Verify clicking Settings -> [🧪 셀프 테스트] with empty inputs auto-fills sample 5 hosts
+        await cdp.evaluate(`
+            document.getElementById('awx-vld-btn-header-settings').click();
+        `);
+        await sleep(200);
+        await cdp.evaluate(`document.getElementById('awx-vld-btn-test-self').click()`);
+        await sleep(800);
+        const sampleSelfSession = await cdp.evaluate(`
+            ({
+                sid: window.awxValidatorState.currentSession?.sessionId,
+                status: window.awxValidatorState.currentSession?.status,
+                detailCnt: document.getElementById('awx-vld-w-cnt-detail')?.innerText
+            })
+        `);
+        if (!sampleSelfSession.sid || sampleSelfSession.status !== 'PENDING' || sampleSelfSession.detailCnt !== '5') {
+            throw new Error(`Sample self-test failed with empty inputs: ${JSON.stringify(sampleSelfSession)}`);
+        }
+        console.log("   Verified: Empty input + Settings [셀프 테스트] auto-generated 5 sample hosts:", sampleSelfSession.sid);
+
+        // Now set specific 5 hosts and execute Settings [셀프 테스트] using entered data
         const worker5Hosts = "prd-web-0001\nprd-web-0002\nprd-web-0003\nprd-web-0004\nprd-web-0005";
         await cdp.evaluate(`
             document.getElementById('awx-vld-txt-detail').value = ${JSON.stringify(worker5Hosts)};
             document.getElementById('awx-vld-txt-incident').value = ${JSON.stringify(worker5Hosts)};
             document.getElementById('awx-vld-txt-detail').dispatchEvent(new Event('input'));
+            document.getElementById('awx-vld-btn-header-settings').click();
         `);
-        await cdp.evaluate(`window.awxSwitchTab('worker')`);
-        await sleep(600);
-
-        const selOptions = await cdp.evaluate(`
-            Array.from(document.querySelectorAll('#awx-vld-sel-checker option')).map(o => ({ value: o.value, text: o.innerText.trim() }))
-        `);
-        console.log("   Worker checker options loaded:", selOptions.length);
-
-        await cdp.evaluate(`
-            document.getElementById('awx-vld-sel-checker').value = '192.168.0.23';
-            document.getElementById('awx-vld-sel-checker').dispatchEvent(new Event('change'));
-            document.getElementById('awx-vld-btn-send-request').click();
-        `);
+        await sleep(200);
+        await cdp.evaluate(`document.getElementById('awx-vld-btn-test-self').click()`);
         await sleep(1000);
 
         const session = await cdp.evaluate(`window.awxValidatorState.currentSession`);
-        if (!session || session.status !== 'PENDING') {
-            throw new Error("Failed to create session from worker tab in standalone app");
+        if (!session || session.status !== 'PENDING' || session.sessionId === sampleSelfSession.sid) {
+            throw new Error("Failed to create self-test session from Settings modal with entered hosts");
         }
-        console.log("   Session created:", session.sessionId);
+        console.log("   Session created via Settings [셀프 테스트]:", session.sessionId);
 
         // Switch to checker tab
         await cdp.evaluate(`window.awxSwitchTab('checker')`);
