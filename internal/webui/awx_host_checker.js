@@ -170,7 +170,11 @@
     if (typeof state.incidentText !== 'string') state.incidentText = '';
     if (typeof state.targetText !== 'string') state.targetText = '';
     state.isStandalone = isStandaloneApp;
-    if (typeof state.isPinned !== 'boolean') state.isPinned = false;
+    let savedPinned = null;
+    try { savedPinned = localStorage.getItem('awx_pinned'); } catch (e) {}
+    if (typeof state.isPinned !== 'boolean') {
+        state.isPinned = (savedPinned === 'true');
+    }
     if (typeof state.guideExpanded !== 'boolean') state.guideExpanded = false;
     if (typeof state.opacityEnabled !== 'boolean') state.opacityEnabled = false;
     if (typeof state.opacityValue !== 'number') state.opacityValue = 30;
@@ -507,16 +511,24 @@
         #awx-vld-workflow-popover {
             position: fixed;
             z-index: 2147483647;
-            width: 640px;
-            max-width: 94vw;
+            width: min(640px, calc(100vw - 20px), calc((100vh - 34px) * 640 / 340 + 14px));
+            max-width: calc(100vw - 20px);
+            max-height: calc(100vh - 20px);
+            box-sizing: border-box;
             background: #ffffff;
             border: 1px solid #334155;
             border-radius: 10px;
             box-shadow: 0 16px 40px rgba(15, 23, 42, 0.4);
-            padding: 8px;
+            padding: 6px;
             pointer-events: none;
             overflow: hidden;
             display: none;
+        }
+        #awx-vld-workflow-popover svg {
+            width: 100% !important;
+            height: auto !important;
+            max-height: calc(100vh - 34px);
+            display: block;
         }
         #awx-vld-global-status-bar {
             user-select: none;
@@ -548,12 +560,13 @@
         }
         .awx-vld-tab-btn {
             flex: 1;
+            min-width: 0;
             background: #1e293b;
             color: #94a3b8;
             border: none;
             border-bottom: 2px solid transparent;
-            padding: 8px 6px;
-            font-size: 11.5px;
+            padding: 8px 4px;
+            font-size: 11px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.15s ease;
@@ -596,7 +609,7 @@
     }
 
     function getWorkerWorkflowSvg() {
-        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" width="640" height="340" font-family="'Pretendard','Malgun Gothic',sans-serif">
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" preserveAspectRatio="xMidYMid meet" style="width:100%; height:auto; display:block;" font-family="'Pretendard','Malgun Gothic',sans-serif">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M0 1L10 5L0 9z" fill="#475569"/>
@@ -606,10 +619,10 @@
     </filter>
   </defs>
 
-  <rect width="640" height="340" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow)"/>
+  <rect x="2" y="2" width="636" height="336" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow)"/>
   
-  <rect x="0" y="0" width="640" height="42" fill="#0f172a" rx="10"/>
-  <rect x="0" y="32" width="640" height="10" fill="#0f172a"/>
+  <rect x="2" y="2" width="636" height="42" fill="#0f172a" rx="10"/>
+  <rect x="2" y="34" width="636" height="10" fill="#0f172a"/>
   <text x="20" y="26" font-size="14" font-weight="700" fill="#38bdf8">📌 [작업자] 크로스체크 요청 및 실시간 승인대기 흐름</text>
 
   <g transform="translate(30, 60)">
@@ -629,7 +642,7 @@
     <rect x="0" y="16" width="160" height="8" fill="#6366f1"/>
     <text x="80" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">2. 확인자 지정 &amp; 전송</text>
     <text x="80" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">동료 확인자 선택</text>
-    <text x="80" y="58" font-size="10" fill="#4338ca" text-anchor="middle">[크로스체크 요청 전송]</text>
+    <text x="80" y="58" font-size="10" fill="#4338ca" text-anchor="middle">[크로스체크 확인 요청 발송]</text>
   </g>
 
   <line x1="400" y1="97" x2="440" y2="97" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
@@ -639,7 +652,7 @@
     <rect x="0" y="0" width="160" height="24" fill="#eab308" rx="8"/>
     <rect x="0" y="16" width="160" height="8" fill="#eab308"/>
     <text x="80" y="17" font-size="11" font-weight="700" fill="#713f12" text-anchor="middle">3. 실시간 승인 대기</text>
-    <text x="80" y="42" font-size="11" font-weight="600" fill="#854d0e" text-anchor="middle">하단 6시 상태바 감시</text>
+    <text x="80" y="42" font-size="11" font-weight="600" fill="#854d0e" text-anchor="middle">하단 6시 상태바/알림</text>
     <text x="80" y="58" font-size="10" fill="#a16207" text-anchor="middle">0초 쿨타임 확인자 변경 가능</text>
   </g>
 
@@ -671,7 +684,7 @@
     }
 
     function getCheckerWorkflowSvg() {
-        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" width="640" height="340" font-family="'Pretendard','Malgun Gothic',sans-serif">
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" preserveAspectRatio="xMidYMid meet" style="width:100%; height:auto; display:block;" font-family="'Pretendard','Malgun Gothic',sans-serif">
   <defs>
     <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M0 1L10 5L0 9z" fill="#475569"/>
@@ -681,10 +694,10 @@
     </filter>
   </defs>
 
-  <rect width="640" height="340" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow2)"/>
+  <rect x="2" y="2" width="636" height="336" fill="#ffffff" stroke="#e2e8f0" rx="10" filter="url(#shadow2)"/>
   
-  <rect x="0" y="0" width="640" height="42" fill="#0f172a" rx="10"/>
-  <rect x="0" y="32" width="640" height="10" fill="#0f172a"/>
+  <rect x="2" y="2" width="636" height="42" fill="#0f172a" rx="10"/>
+  <rect x="2" y="34" width="636" height="10" fill="#0f172a"/>
   <text x="20" y="26" font-size="14" font-weight="700" fill="#38bdf8">🛡️ [확인자] 크로스체크 독립 검증 및 승인 흐름</text>
 
   <g transform="translate(25, 60)">
@@ -725,7 +738,7 @@
     <rect x="0" y="0" width="115" height="24" fill="#8b5cf6" rx="8"/>
     <rect x="0" y="16" width="115" height="8" fill="#8b5cf6"/>
     <text x="57" y="17" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">4. 교차 검증</text>
-    <text x="57" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">[결과 비교하기]</text>
+    <text x="57" y="42" font-size="11" font-weight="600" fill="#1e293b" text-anchor="middle">[교차 비교 실행]</text>
     <text x="57" y="58" font-size="10" fill="#6d28d9" text-anchor="middle">전수 일치 자동대조</text>
   </g>
 
@@ -758,11 +771,11 @@
 
         return `
         <div id="awx-vld-header" style="background:#0f172a; color:#f8fafc; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:${(isPopup || isStandaloneApp) ? 'default' : 'move'}; user-select:none; border-bottom:1px solid #1e293b;">
-            <div style="display:flex; align-items:center; gap:7px; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:7px; min-width:0; flex:1;">
                 <span style="font-size:13px; font-weight:700; letter-spacing:-0.3px; color:#ffffff; white-space:nowrap;">작업대상 호스트 교차 검증기</span>
-                <div id="awx-vld-user-badge" style="display:inline-flex; align-items:center; gap:5px; background:#1e293b; border:1px solid #334155; padding:2px 8px; border-radius:4px; font-size:11.5px; color:#f1f5f9; cursor:default; user-select:none;" title="연결 확인 중...">
-                    <span id="awx-vld-user-badge-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; box-shadow:0 0 6px rgba(239,68,68,0.6);"></span>
-                    <span id="awx-vld-user-badge-name" style="font-weight:600; color:#e2e8f0;">연결 확인 중...</span>
+                <div id="awx-vld-user-badge" style="display:inline-flex; align-items:center; gap:5px; background:#1e293b; border:1px solid #334155; padding:2px 8px; border-radius:4px; font-size:11.5px; color:#f1f5f9; cursor:default; user-select:none; min-width:0; max-width:210px;" title="연결 확인 중...">
+                    <span id="awx-vld-user-badge-dot" style="display:inline-block; width:8px; height:8px; flex-shrink:0; border-radius:50%; background:#ef4444; box-shadow:0 0 6px rgba(239,68,68,0.6);"></span>
+                    <span id="awx-vld-user-badge-name" style="font-weight:600; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">연결 확인 중...</span>
                 </div>
             </div>
             <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
@@ -777,7 +790,7 @@
         </div>
 
         <!-- 상단 환경설정(톱니바퀴) 팝업 패널 -->
-        <div id="awx-vld-settings-panel" style="display:${state.showSettingsModal ? 'block' : 'none'}; background:#0f172a; color:#f8fafc; border-bottom:1px solid #334155; padding:10px 14px; font-size:12px; z-index:9999;">
+        <div id="awx-vld-settings-panel" style="display:${state.showSettingsModal ? 'block' : 'none'}; background:#0f172a; color:#f8fafc; border-bottom:1px solid #334155; padding:10px 14px; font-size:12px; z-index:9999; max-height:calc(100vh - 110px); overflow-y:auto; box-sizing:border-box;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #334155; padding-bottom:5px;">
                 <span style="font-weight:700; color:#38bdf8; display:flex; align-items:center; gap:6px;">
                     ${getGearSvg()} 환경설정 (알림 및 자동 접기 설정)
@@ -807,7 +820,7 @@
                             ${state.collapseEnabled ? '켜짐' : '꺼짐'}
                         </span>
                     </div>
-                    <div style="font-size:11px; color:#94a3b8; margin-top:2px;">마우스가 창 밖으로 벗어나면 본문을 지정된 비율만 남기고 접어 작업 화면을 확인</div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:2px;">마우스가 창 밖으로 벗어나면 창 높이를 지정된 비율만 남기고 줄여 작업 화면을 확인</div>
                 </div>
                 <label style="display:inline-flex; align-items:center; cursor:pointer;">
                     <input id="awx-vld-chk-collapse" type="checkbox" ${state.collapseEnabled ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#2563eb;">
@@ -1344,6 +1357,9 @@
                     try {
                         targetWin.resizeTo(appExpandedWidth, targetHeight);
                     } catch (e) {}
+                    if (state.isPinned) {
+                        setTimeout(() => { syncWindowPinState(true); }, 60);
+                    }
                     setTimeout(() => { isProgrammaticResize = false; }, 400);
                 } else {
                     if (isWindowCollapsed) {
@@ -1354,6 +1370,9 @@
                         try {
                             targetWin.resizeTo(appExpandedWidth, appExpandedHeight);
                         } catch (e) {}
+                        if (state.isPinned) {
+                            setTimeout(() => { syncWindowPinState(true); }, 60);
+                        }
                         setTimeout(() => { isProgrammaticResize = false; }, 400);
                     }
                 }
@@ -1440,14 +1459,15 @@
                 popoverEl.innerHTML = (type === 'worker') ? getWorkerWorkflowSvg() : getCheckerWorkflowSvg();
                 const rect = btn.getBoundingClientRect();
                 popoverEl.style.display = 'block';
+                const popRect = popoverEl.getBoundingClientRect();
                 let top = rect.bottom + 6;
-                if (top + 350 > window.innerHeight) {
-                    top = Math.max(10, rect.top - 355);
+                if (top + popRect.height > window.innerHeight - 10) {
+                    const aboveTop = rect.top - popRect.height - 6;
+                    top = (aboveTop >= 10) ? aboveTop : Math.max(10, window.innerHeight - popRect.height - 10);
                 }
                 popoverEl.style.top = top + 'px';
-                let left = rect.left - 240;
-                if (left < 10) left = 10;
-                if (left + 650 > window.innerWidth) left = Math.max(10, window.innerWidth - 655);
+                let left = rect.left + (rect.width / 2) - (popRect.width / 2);
+                left = Math.max(10, Math.min(window.innerWidth - popRect.width - 10, left));
                 popoverEl.style.left = left + 'px';
             };
             btn.onmouseleave = () => {
@@ -1509,22 +1529,45 @@
         }
         window.awxUpdateUserBadge = updateUserBadge;
 
-        // 상단 고정(Pin) 상태 업데이트 및 포커스 유지 동작
+        // 상단 고정(Pin) 상태 업데이트 및 OS Topmost / 포커스 유지 동작
+        let osPinActive = false;
+        function syncWindowPinState(pinned) {
+            if (!isStandaloneApp && !(isPopup && popupWin)) return Promise.resolve(false);
+            return agentFetch(`${AGENT_BASE}/api/window/pin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pinned: !!pinned })
+            }).then(res => res.json()).then(data => {
+                osPinActive = !!(data && data.found && data.pinned);
+                return osPinActive;
+            }).catch(() => {
+                osPinActive = false;
+                return false;
+            });
+        }
+
         function applyPinState() {
             if (!btnPin) return;
             if (state.isPinned) {
                 btnPin.classList.add('pinned');
                 btnPin.innerHTML = `${getPinSvg(true)} <span id="awx-vld-pin-text">상단 고정됨</span>`;
-                if (!isPopup) {
+                if (!isPopup && !isStandaloneApp) {
                     panel.style.zIndex = '2147483647';
-                } else if (popupWin) {
-                    popupWin.focus();
+                } else {
+                    syncWindowPinState(true).then(ok => {
+                        if (!ok && isPopup && popupWin) {
+                            try { popupWin.focus(); } catch (e) {}
+                        }
+                    });
                 }
             } else {
                 btnPin.classList.remove('pinned');
                 btnPin.innerHTML = `${getPinSvg(false)} <span id="awx-vld-pin-text">상단 고정</span>`;
-                if (!isPopup) {
+                if (!isPopup && !isStandaloneApp) {
                     panel.style.zIndex = '9999999';
+                } else {
+                    osPinActive = false;
+                    syncWindowPinState(false);
                 }
             }
         }
@@ -1532,20 +1575,21 @@
         if (btnPin) {
             btnPin.onclick = () => {
                 state.isPinned = !state.isPinned;
+                try { localStorage.setItem('awx_pinned', String(state.isPinned)); } catch (e) {}
                 applyPinState();
             };
         }
 
         if (isPopup && popupWin) {
             popupWin.addEventListener('blur', () => {
-                if (state.isPinned && !popupWin.closed) {
+                if (state.isPinned && !osPinActive && !popupWin.closed) {
                     setTimeout(() => {
                         try { popupWin.focus(); } catch (e) {}
                     }, 50);
                 }
             });
             window.addEventListener('mousedown', () => {
-                if (state.isPinned && popupWin && !popupWin.closed) {
+                if (state.isPinned && !osPinActive && popupWin && !popupWin.closed) {
                     setTimeout(() => {
                         try { popupWin.focus(); } catch (e) {}
                     }, 80);

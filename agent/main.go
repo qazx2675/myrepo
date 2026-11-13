@@ -1032,6 +1032,7 @@ func (s *AgentServer) Routes() http.Handler {
 	mux.HandleFunc("/api/events", s.handleEvents)
 	mux.HandleFunc("/api/window/flash", s.handleWindowFlash)
 	mux.HandleFunc("/api/window/restore", s.handleWindowRestore)
+	mux.HandleFunc("/api/window/pin", s.handleWindowPin)
 	mux.HandleFunc("/checker", s.handleCheckerUI)
 	mux.HandleFunc("/ws", s.handleWebSocket)
 
@@ -2424,16 +2425,16 @@ loadSession();
 </html>
 `
 
-// flashAppWindow triggers a taskbar flash on Windows for the app window.
-func flashAppWindow() {
+// findAppWindow locates the visible Chromium/Edge application window handle for the checker UI.
+func findAppWindow() uintptr {
 	if runtime.GOOS != "windows" {
-		return
+		return 0
 	}
 	user32 := syscall.NewLazyDLL("user32.dll")
 	enumWindows := user32.NewProc("EnumWindows")
 	sendMessageTimeout := user32.NewProc("SendMessageTimeoutW")
 	isWindowVisible := user32.NewProc("IsWindowVisible")
-	flashWindowEx := user32.NewProc("FlashWindowEx")
+	getClassName := user32.NewProc("GetClassNameW")
 
 	const (
 		WM_GETTEXT       = 0x000D
@@ -2445,6 +2446,11 @@ func flashAppWindow() {
 	cb := syscall.NewCallback(func(h uintptr, lParam uintptr) uintptr {
 		vis, _, _ := isWindowVisible.Call(h)
 		if vis == 0 {
+			return 1 // continue
+		}
+		clsBuf := make([]uint16, 128)
+		clsLen, _, _ := getClassName.Call(h, uintptr(unsafe.Pointer(&clsBuf[0])), uintptr(len(clsBuf)))
+		if clsLen == 0 || !strings.HasPrefix(syscall.UTF16ToString(clsBuf[:clsLen]), "Chrome_WidgetWin_") {
 			return 1 // continue
 		}
 		buf := make([]uint16, 256)
@@ -2460,7 +2466,7 @@ func flashAppWindow() {
 		)
 		if ret != 0 && result > 0 {
 			t := syscall.UTF16ToString(buf)
-			if strings.Contains(t, "크로스체크") || strings.Contains(t, "작업대상") {
+			if strings.Contains(t, "작업대상 호스트 교차 검증기") {
 				hwnd = h
 				return 0 // stop
 			}
@@ -2468,79 +2474,93 @@ func flashAppWindow() {
 		return 1 // continue
 	})
 	enumWindows.Call(cb, 0)
+	return hwnd
+}
 
-	if hwnd != 0 {
-		type FLASHWINFO struct {
-			CbSize    uint32
-			Hwnd      uintptr
-			DwFlags   uint32
-			UCount    uint32
-			DwTimeout uint32
-		}
-		const FLASHW_ALL = 0x00000003
-		const FLASHW_TIMERNOFG = 0x0000000C
-		info := FLASHWINFO{
-			CbSize:    uint32(unsafe.Sizeof(FLASHWINFO{})),
-			Hwnd:      hwnd,
-			DwFlags:   FLASHW_ALL | FLASHW_TIMERNOFG,
-			UCount:    0,
-			DwTimeout: 0,
-		}
-		flashWindowEx.Call(uintptr(unsafe.Pointer(&info)))
+// isWindowTopmost reads WS_EX_TOPMOST on hwnd.
+func isWindowTopmost(hwnd uintptr) bool {
+	if runtime.GOOS != "windows" || hwnd == 0 {
+		return false
 	}
+	user32 := syscall.NewLazyDLL("user32.dll")
+	getWindowLong := user32.NewProc("GetWindowLongW")
+	const gwlExStyle = ^uintptr(19) // -20 (GWL_EXSTYLE)
+	const wsExTopmost = uintptr(0x00000008)
+	exStyle, _, _ := getWindowLong.Call(hwnd, gwlExStyle)
+	return (exStyle & wsExTopmost) != 0
+}
+
+// getWindowTopmost returns whether the app window was found and whether WS_EX_TOPMOST is active.
+func getWindowTopmost() (found bool, pinned bool) {
+	hwnd := findAppWindow()
+	if hwnd == 0 {
+		return false, false
+	}
+	return true, isWindowTopmost(hwnd)
+}
+
+// setWindowTopmost toggles HWND_TOPMOST / HWND_NOTOPMOST without activating/stealing focus.
+func setWindowTopmost(pinned bool) (found bool, actualPinned bool) {
+	hwnd := findAppWindow()
+	if hwnd == 0 {
+		return false, false
+	}
+	user32 := syscall.NewLazyDLL("user32.dll")
+	setWindowPos := user32.NewProc("SetWindowPos")
+	const (
+		hwndTopmost   = ^uintptr(0) // -1 (HWND_TOPMOST)
+		hwndNotopmost = ^uintptr(1) // -2 (HWND_NOTOPMOST)
+		swpNosize     = uintptr(0x0001)
+		swpNomove     = uintptr(0x0002)
+		swpNoactivate = uintptr(0x0010)
+	)
+	targetZ := hwndNotopmost
+	if pinned {
+		targetZ = hwndTopmost
+	}
+	setWindowPos.Call(hwnd, targetZ, 0, 0, 0, 0, swpNomove|swpNosize|swpNoactivate)
+	return true, isWindowTopmost(hwnd)
+}
+
+// flashAppWindow triggers a taskbar flash on Windows for the app window.
+func flashAppWindow() {
+	hwnd := findAppWindow()
+	if hwnd == 0 {
+		return
+	}
+	user32 := syscall.NewLazyDLL("user32.dll")
+	flashWindowEx := user32.NewProc("FlashWindowEx")
+	type FLASHWINFO struct {
+		CbSize    uint32
+		Hwnd      uintptr
+		DwFlags   uint32
+		UCount    uint32
+		DwTimeout uint32
+	}
+	const FLASHW_ALL = 0x00000003
+	const FLASHW_TIMERNOFG = 0x0000000C
+	info := FLASHWINFO{
+		CbSize:    uint32(unsafe.Sizeof(FLASHWINFO{})),
+		Hwnd:      hwnd,
+		DwFlags:   FLASHW_ALL | FLASHW_TIMERNOFG,
+		UCount:    0,
+		DwTimeout: 0,
+	}
+	flashWindowEx.Call(uintptr(unsafe.Pointer(&info)))
 }
 
 // restoreAppWindow brings the app window to the front and restores it if minimized.
 func restoreAppWindow() {
-	if runtime.GOOS != "windows" {
+	hwnd := findAppWindow()
+	if hwnd == 0 {
 		return
 	}
 	user32 := syscall.NewLazyDLL("user32.dll")
-	enumWindows := user32.NewProc("EnumWindows")
-	sendMessageTimeout := user32.NewProc("SendMessageTimeoutW")
-	isWindowVisible := user32.NewProc("IsWindowVisible")
 	showWindow := user32.NewProc("ShowWindow")
 	setForegroundWindow := user32.NewProc("SetForegroundWindow")
-
-	const (
-		WM_GETTEXT       = 0x000D
-		SMTO_ABORTIFHUNG = 0x0002
-		SMTO_NORMAL      = 0x0000
-	)
-
-	var hwnd uintptr
-	cb := syscall.NewCallback(func(h uintptr, lParam uintptr) uintptr {
-		vis, _, _ := isWindowVisible.Call(h)
-		if vis == 0 {
-			return 1 // continue
-		}
-		buf := make([]uint16, 256)
-		var result uintptr
-		ret, _, _ := sendMessageTimeout.Call(
-			h,
-			uintptr(WM_GETTEXT),
-			uintptr(len(buf)),
-			uintptr(unsafe.Pointer(&buf[0])),
-			uintptr(SMTO_ABORTIFHUNG|SMTO_NORMAL),
-			uintptr(50),
-			uintptr(unsafe.Pointer(&result)),
-		)
-		if ret != 0 && result > 0 {
-			t := syscall.UTF16ToString(buf)
-			if strings.Contains(t, "크로스체크") || strings.Contains(t, "작업대상") {
-				hwnd = h
-				return 0 // stop
-			}
-		}
-		return 1 // continue
-	})
-	enumWindows.Call(cb, 0)
-
-	if hwnd != 0 {
-		const SW_RESTORE = 9
-		showWindow.Call(hwnd, SW_RESTORE)
-		setForegroundWindow.Call(hwnd)
-	}
+	const SW_RESTORE = 9
+	showWindow.Call(hwnd, SW_RESTORE)
+	setForegroundWindow.Call(hwnd)
 }
 
 // handleWindowFlash handles POST /api/window/flash
@@ -2553,6 +2573,35 @@ func (s *AgentServer) handleWindowFlash(w http.ResponseWriter, r *http.Request) 
 func (s *AgentServer) handleWindowRestore(w http.ResponseWriter, r *http.Request) {
 	restoreAppWindow()
 	writeJSON(w, http.StatusOK, map[string]interface{}{"restored": true})
+}
+
+// handleWindowPin handles GET/POST /api/window/pin to query or toggle OS topmost state.
+func (s *AgentServer) handleWindowPin(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		found, pinned := getWindowTopmost()
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"found":  found,
+			"pinned": pinned,
+		})
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method not allowed"})
+		return
+	}
+	var req struct {
+		Pinned bool `json:"pinned"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid json"})
+		return
+	}
+	found, actual := setWindowTopmost(req.Pinned)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"found":     found,
+		"pinned":    actual,
+		"requested": req.Pinned,
+	})
 }
 
 func waitForServerReady(healthURL string, timeout time.Duration) bool {

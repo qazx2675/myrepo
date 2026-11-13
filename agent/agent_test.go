@@ -1022,6 +1022,80 @@ func TestAwxInventoryHostsAPI(t *testing.T) {
 	}
 }
 
+// TestWindowPinAndFlashEndpoints verifies /api/window/pin and /api/window/flash JSON contracts.
+func TestWindowPinAndFlashEndpoints(t *testing.T) {
+	_, ts := setupTestServer(t)
+
+	// GET /api/window/pin
+	respGet, err := http.Get(ts.URL + "/api/window/pin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respGet.Body.Close()
+	if respGet.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on GET /api/window/pin, got %d", respGet.StatusCode)
+	}
+	var pinGet struct {
+		Found  bool `json:"found"`
+		Pinned bool `json:"pinned"`
+	}
+	if err := json.NewDecoder(respGet.Body).Decode(&pinGet); err != nil {
+		t.Fatal(err)
+	}
+
+	// POST /api/window/pin (pin=true)
+	respPostTrue, err := http.Post(ts.URL+"/api/window/pin", "application/json", strings.NewReader(`{"pinned":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPostTrue.Body.Close()
+	if respPostTrue.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on POST /api/window/pin, got %d", respPostTrue.StatusCode)
+	}
+	var pinPost struct {
+		Found     bool `json:"found"`
+		Pinned    bool `json:"pinned"`
+		Requested bool `json:"requested"`
+	}
+	if err := json.NewDecoder(respPostTrue.Body).Decode(&pinPost); err != nil {
+		t.Fatal(err)
+	}
+	if !pinPost.Requested {
+		t.Errorf("Expected requested=true, got false")
+	}
+
+	// Restore pin=false
+	respPostFalse, err := http.Post(ts.URL+"/api/window/pin", "application/json", strings.NewReader(`{"pinned":false}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPostFalse.Body.Close()
+	if respPostFalse.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on POST /api/window/pin unpin, got %d", respPostFalse.StatusCode)
+	}
+
+	// Invalid method returns 405
+	reqDel, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/window/pin", nil)
+	respDel, err := http.DefaultClient.Do(reqDel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respDel.Body.Close()
+	if respDel.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("Expected 405 on DELETE /api/window/pin, got %d", respDel.StatusCode)
+	}
+
+	// POST /api/window/flash
+	respFlash, err := http.Post(ts.URL+"/api/window/flash", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respFlash.Body.Close()
+	if respFlash.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on POST /api/window/flash, got %d", respFlash.StatusCode)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
