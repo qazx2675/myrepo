@@ -1,0 +1,6 @@
+# Excel temporary lock files & test temp files
+~$*.xlsx
+~$*.xlsm
+_tmp_*.xlsm
+*.tmp
+__pycache__/

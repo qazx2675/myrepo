@@ -1,0 +1,7 @@
+* text=auto
+*.xlsm binary
+*.xlsx binary
+*.bas -text
+*.ps1 text eol=crlf
+*.py text eol=lf
+*.md text eol=lf
