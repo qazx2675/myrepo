@@ -28,6 +28,8 @@ flowchart TD
     F -.->|Ctrl+C 1·2·3회| P["pdsh 방식 중단 처리"]
 ```
 
+`gossh -sv -w <hosts>`(조사)는 위 흐름과 별도 경로입니다: 호스트 목록을 읽은 뒤 명령어 질문 → 미리보기(첫 호스트 또는 지정 호스트 1대에서 실행) → 전체 실행(호스트마다 SSH 1회, 명령어마다 세션 1개, DNS·동시성·재검증은 위와 같음) → 표 출력과 `_survey.tsv`/`_survey.txt` 저장 (`survey.go`, README 3.16).
+
 <details><summary>SVG 이미지로 보기 (workflow.svg)</summary>
 
 ![작업 흐름도](workflow.svg)

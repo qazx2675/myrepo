@@ -465,6 +465,11 @@ func helpExamples() map[string][]helpExample {
 			note: "비교서버에 ref01 을 입력한 예시입니다(svr11 은 응답 없는 서버). 화면 출력 뒤에 보고서 파일 내용을 붙였습니다.",
 			run:  rpmExample,
 		}},
+		"sv": {{
+			args: []string{"-sv", "-w", exampleHostFile},
+			note: "명령어 3개를 입력하고, 엔터(첫 호스트로 확인) → next(전체 실행) → n(2줄 결과를 / 로 이음)을 입력한 예시입니다(svr4 는 응답 없는 서버).",
+			run:  svExample,
+		}},
 		"tl": {{
 			args: []string{"-w", exampleHostFile, "-tl"},
 			note: "설정값 24, 비교서버 ref01, 복사 진행 y 를 입력한 예시입니다.",
@@ -474,6 +479,58 @@ func helpExamples() map[string][]helpExample {
 			},
 		}},
 	}
+}
+
+// svExample은 -sv 예시다: 실제 질문·미리보기·경고·표 출력 함수에 가짜 결과를 넣는다(svr4 는 응답 없는 서버).
+// 결과 파일은 임시 폴더에 만들고 지운다(현재 폴더에 남기지 않음).
+func svExample() {
+	hosts := exampleHosts(4)
+	fake := func(hs, cmds []string, full bool) map[string]surveyHost {
+		res := map[string]surveyHost{}
+		for _, h := range hs {
+			if h == "svr4" {
+				res[h] = surveyHost{err: connectFailErr(exampleTimeoutErr).Error()}
+				continue
+			}
+			r := surveyHost{reachable: true}
+			for _, c := range cmds {
+				out := ""
+				switch c {
+				case "uname -r":
+					out = kernel8
+				case "cat /etc/redhat-release":
+					out = "Rocky Linux release 8.10 (Green Obsidian)"
+				case "ls /boot/vmlinuz-*":
+					out = "/boot/vmlinuz-" + kernel8
+					if h == "svr2" {
+						out += "\n/boot/vmlinuz-4.18.0-513.el8.x86_64"
+					}
+				}
+				r.cells = append(r.cells, surveyCell{out: out + "\n", ok: true})
+			}
+			res[h] = r
+		}
+		return res
+	}
+
+	dir, err := os.MkdirTemp("", "gossh-help-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "(예시용 임시 폴더를 만들 수 없습니다: %v)\n", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	cwd, err := os.Getwd()
+	if err != nil || os.Chdir(dir) != nil {
+		fmt.Fprintln(os.Stderr, "(예시용 임시 폴더로 이동할 수 없습니다)")
+		return
+	}
+	defer os.Chdir(cwd)
+
+	withInput([]string{"3", "uname -r", "cat /etc/redhat-release", "ls /boot/vmlinuz-*", "", "next", "n"}, func() {
+		cmds, res, join := surveyFlow(hosts, fake)
+		fmt.Fprintln(os.Stderr, "\n※ 아래부터 표준출력(표)입니다:")
+		printSurveyDone(cmds, hosts, res, join, exampleHostFile)
+	})
 }
 
 // monitorExample은 -m 예시다: 실행 중 진행률 줄 → Enter 로 본 행리스트 화면 → 끝난 뒤 화면.
