@@ -460,6 +460,191 @@ async function runStandaloneAppTest() {
         }
         console.log("✓ One-click collection succeeded: 1,000 hosts from AWX inventory #3 parsed, 6 default excluded, 994 collected.");
 
+        // [4.5/7] Verify custom AWX Settings (URL paste + API collection) & Live Open AWX Browser Tab Bridge
+        console.log("[4.5/7] Testing Settings AWX URL/API configuration & Live Edge AWX Tab Bridge...");
+        const mockAwxServer = http.createServer((req, res) => {
+            const u = new URL(req.url, 'http://127.0.0.1');
+            if (u.pathname === '/api/v2/inventories/15/hosts/') {
+                const page = parseInt(u.searchParams.get('page') || '1', 10);
+                const pageSize = parseInt(u.searchParams.get('page_size') || '200', 10);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                if (pageSize === 5) {
+                    res.end(JSON.stringify({ count: 25, next: null, results: [{ name: 'inv15-p1-01' }, { name: 'inv15-p1-02' }] }));
+                    return;
+                }
+                if (page === 2 && pageSize === 20) {
+                    const p2 = Array.from({ length: 20 }, (_, i) => ({ name: `inv15-p2-${String(i + 1).padStart(2, '0')}` }));
+                    res.end(JSON.stringify({ count: 25, next: null, results: p2 }));
+                    return;
+                }
+                if (page === 1) {
+                    const p1 = Array.from({ length: 20 }, (_, i) => ({ name: `inv15-h-${String(i + 1).padStart(2, '0')}` }));
+                    res.end(JSON.stringify({ count: 25, next: '/api/v2/inventories/15/hosts/?page=2&page_size=200', results: p1 }));
+                    return;
+                }
+                const p2All = Array.from({ length: 5 }, (_, i) => ({ name: `inv15-h-${String(i + 21).padStart(2, '0')}` }));
+                res.end(JSON.stringify({ count: 25, next: null, results: p2All }));
+                return;
+            }
+            if (u.pathname === '/api/v2/inventories/42/hosts/') {
+                const page = parseInt(u.searchParams.get('page') || '1', 10);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                if (page === 1) {
+                    res.end(JSON.stringify({
+                        count: 4,
+                        next: '/api/v2/inventories/42/hosts/?page=2',
+                        results: [{ name: 'sm42-api-01' }, { name: 'sm42-api-02' }]
+                    }));
+                } else {
+                    res.end(JSON.stringify({
+                        count: 4,
+                        next: null,
+                        results: [{ name: 'sm42-api-03' }, { name: 'prd-db-0296' }]
+                    }));
+                }
+                return;
+            }
+            // Mock open AWX browser console HTML page
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`<!doctype html><html><head><title>AWX Mock Console</title></head><body>
+                <table><tbody>
+                    <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/1">sm42-dom-01</a></td></tr>
+                    <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/2">sm42-dom-02</a></td></tr>
+                    <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/3">prd-db-0295</a></td></tr>
+                </tbody></table>
+            </body></html>`);
+        });
+        await new Promise(resolve => mockAwxServer.listen(0, '127.0.0.1', resolve));
+        const mockAwxPort = mockAwxServer.address().port;
+        const mockAwxBase = `http://127.0.0.1:${mockAwxPort}`;
+
+        let awxTabCdp = null;
+        let awxTabTargetId = null;
+        try {
+            // A) Open Settings, paste AWX browser URL, verify auto-parse & Test/Save + Collect
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
+            await sleep(250);
+            const pastedUrl = `${mockAwxBase}/#/inventories/inventory/15/hosts?page=2`;
+            await cdp.evaluate(`
+                (() => {
+                    const u = document.getElementById('awx-vld-awx-url');
+                    u.value = ${JSON.stringify(pastedUrl)};
+                    u.dispatchEvent(new Event('input'));
+                })()
+            `);
+            await sleep(100);
+            const parsedFields = await cdp.evaluate(`({
+                scope: document.getElementById('awx-vld-awx-scope').value,
+                page: document.getElementById('awx-vld-awx-page').value
+            })`);
+            if (parsedFields.scope !== 'inventory:15' || parsedFields.page !== '2') {
+                throw new Error(`AWX URL paste auto-parse failed: ${JSON.stringify(parsedFields)}`);
+            }
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-awx-save').click()`);
+            for (let i = 0; i < 20; i++) {
+                await sleep(150);
+                const r = await cdp.evaluate(`document.getElementById('awx-vld-awx-test-result')?.innerText || ''`);
+                if (r.includes('연결 성공')) break;
+            }
+            const saveTestMsg = await cdp.evaluate(`document.getElementById('awx-vld-awx-test-result')?.innerText || ''`);
+            if (!saveTestMsg.includes('연결 성공')) {
+                throw new Error(`Settings AWX test & save failed: ${saveTestMsg}`);
+            }
+            await assertNoLayoutClipping('Settings Modal AWX Configured');
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-close-settings').click()`);
+            await sleep(150);
+
+            // Collect configured page 2 (20 hosts) via [현재 화면 수집]
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-page').click()`);
+            await sleep(400);
+            const page2Cnt = await cdp.evaluate(`window.awxValidatorState.collectedHosts.size`);
+            if (page2Cnt !== 20) {
+                throw new Error(`Expected 20 hosts on configured AWX page 2, got ${page2Cnt}`);
+            }
+
+            // Collect full inventory #15 (25 hosts across 2 pages) via [현재 인벤토리 전체 수집]
+            const inv15Cnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            if (inv15Cnt !== 25) {
+                throw new Error(`Expected 25 hosts from custom AWX inventory #15, got ${inv15Cnt}`);
+            }
+            console.log("   Verified custom AWX URL paste auto-parse, test/save, page=2 (20), & full inventory #15 (25) collection.");
+
+            // B) Open a real second Edge tab with mock AWX console & run the generated bridge bookmarklet
+            const bridgeHref = await cdp.evaluate(`document.getElementById('awx-vld-btn-bridge-bookmark')?.getAttribute('href') || ''`);
+            if (!bridgeHref.startsWith('javascript:')) {
+                throw new Error(`Expected javascript: bookmarklet href, got: ${bridgeHref.slice(0, 60)}`);
+            }
+            const createdTarget = await cdp.send('Target.createTarget', {
+                url: `${mockAwxBase}/#/inventories/smart_inventory/42/hosts?page=1`
+            });
+            awxTabTargetId = createdTarget.targetId;
+
+            let awxTarget = null;
+            for (let i = 0; i < 20; i++) {
+                await sleep(200);
+                const tList = await (await fetch(`http://127.0.0.1:${DEBUG_PORT}/json`)).json();
+                awxTarget = tList.find(t => t.id === awxTabTargetId);
+                if (awxTarget && awxTarget.webSocketDebuggerUrl) break;
+            }
+            if (!awxTarget) throw new Error("Failed to open mock AWX browser tab via CDP");
+            awxTabCdp = new CDPClient(awxTarget.webSocketDebuggerUrl);
+            await awxTabCdp.connect();
+            await awxTabCdp.send('Runtime.enable');
+            await sleep(500);
+
+            // Inject the exact generated bookmarklet JS (strip leading 'javascript:')
+            const bridgeJS = bridgeHref.slice('javascript:'.length);
+            await awxTabCdp.evaluate(bridgeJS);
+
+            let bridgeConnectedUI = false;
+            for (let i = 0; i < 25; i++) {
+                await sleep(150);
+                const srcTxt = await cdp.evaluate(`document.getElementById('awx-vld-awx-source-label')?.innerText || ''`);
+                if (srcTxt.includes('열린 AWX 탭 연결됨') && srcTxt.includes('스마트 인벤토리 #42')) {
+                    bridgeConnectedUI = true;
+                    break;
+                }
+            }
+            if (!bridgeConnectedUI) {
+                const dbg = await cdp.evaluate(`document.getElementById('awx-vld-awx-source-label')?.innerText || ''`);
+                throw new Error(`Standalone app did not reflect live bridged AWX tab: ${dbg}`);
+            }
+
+            // Collect visible DOM screen from bridged AWX tab -> 3 DOM hosts, 1 excluded ('prd-db-0295') => 2 collected
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-page').click()`);
+            await sleep(500);
+            const brgPageRes = await cdp.evaluate(`({
+                collected: Array.from(window.awxValidatorState.collectedHosts),
+                excluded: window.awxValidatorState.excludedHosts
+            })`);
+            if (brgPageRes.collected.length !== 2 || brgPageRes.excluded.length !== 1) {
+                throw new Error(`Expected 2 kept & 1 excluded from bridged AWX DOM, got: ${JSON.stringify(brgPageRes)}`);
+            }
+
+            // Collect full smart_inventory #42 from bridged AWX tab API -> 4 total, 1 excluded ('prd-db-0296') => 3 collected
+            const brgAllCnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            if (brgAllCnt !== 3) {
+                throw new Error(`Expected 3 kept hosts from bridged AWX full inventory #42, got ${brgAllCnt}`);
+            }
+            console.log("   Verified live open Edge AWX tab bridge: auto-detected smart_inventory #42, collected DOM screen (2/3) & full API (3/4).");
+        } finally {
+            if (awxTabCdp) awxTabCdp.close();
+            if (awxTabTargetId) {
+                await cdp.send('Target.closeTarget', { targetId: awxTabTargetId }).catch(() => {});
+            }
+            await sleep(300);
+            await cdp.evaluate(`
+                (async () => {
+                    const r = document.getElementById('awx-vld-btn-awx-reset');
+                    if (r) r.click();
+                    const c = document.getElementById('awx-vld-btn-close-settings');
+                    if (c) c.click();
+                })()
+            `).catch(() => {});
+            await sleep(300);
+            mockAwxServer.close();
+        }
+
         // [5/7] Test Comparison in Tab 1
         console.log("[5/7] Testing Tab 1: Local cross-checking comparison...");
         const sampleMatchHosts = "prd-web-0001\nprd-web-0002\nprd-web-0003";

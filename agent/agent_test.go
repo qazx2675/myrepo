@@ -1096,6 +1096,297 @@ func TestWindowPinAndFlashEndpoints(t *testing.T) {
 	}
 }
 
+// TestAwxConfigTestAndTLSBearer verifies pasted URL parsing, Bearer auth, self-signed TLS bypass, and scoped/paged queries.
+func TestAwxConfigTestAndTLSBearer(t *testing.T) {
+	_, ts := setupTestServer(t)
+
+	tlsAWX := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer secret-awx-tok" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v2/groups/12/all_hosts/":
+			page := r.URL.Query().Get("page")
+			if page == "2" {
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"count": 2,
+					"next":  nil,
+					"results": []map[string]string{{"name": "grp12-p2-01"}, {"name": "grp12-p2-02"}},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"count":   2,
+				"next":    nil,
+				"results": []map[string]string{{"name": "grp12-01"}, {"name": "grp12-02"}},
+			})
+		case "/api/v2/inventories/9/hosts/":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"count":   2,
+				"next":    nil,
+				"results": []map[string]string{{"name": "inv9-01"}, {"name": "inv9-vip-02"}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer tlsAWX.Close()
+
+	// 1. POST /api/awx/config with pasted AWX browser URL & Bearer token
+	pastedURL := tlsAWX.URL + "/#/inventories/inventory/9/groups/12/nested_hosts?page=2"
+	cfgBody, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":     pastedURL,
+		"token":       "secret-awx-tok",
+		"insecureTls": true,
+	})
+	respCfg, err := http.Post(ts.URL+"/api/awx/config", "application/json", bytes.NewReader(cfgBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCfg.Body.Close()
+	if respCfg.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on POST /api/awx/config, got %d", respCfg.StatusCode)
+	}
+
+	// 2. GET /api/awx/config must reflect parsed baseUrl/scope and redact secret values
+	respGet, err := http.Get(ts.URL + "/api/awx/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respGet.Body.Close()
+	rawGetBytes, _ := io.ReadAll(respGet.Body)
+	if strings.Contains(string(rawGetBytes), "secret-awx-tok") {
+		t.Fatalf("GET /api/awx/config leaked raw Bearer token in response: %s", string(rawGetBytes))
+	}
+	var gotCfg struct {
+		BaseURL      string `json:"baseUrl"`
+		DefaultScope string `json:"defaultScope"`
+		HasToken     bool   `json:"hasToken"`
+		HasPassword  bool   `json:"hasPassword"`
+		InsecureTLS  bool   `json:"insecureTls"`
+	}
+	if err := json.Unmarshal(rawGetBytes, &gotCfg); err != nil {
+		t.Fatal(err)
+	}
+	if gotCfg.BaseURL != tlsAWX.URL || gotCfg.DefaultScope != "group:12" || !gotCfg.HasToken || gotCfg.HasPassword || !gotCfg.InsecureTLS {
+		t.Fatalf("Unexpected parsed config: %+v", gotCfg)
+	}
+
+	// 3. POST /api/awx/test verifies live TLS + Bearer connectivity
+	respTest, err := http.Post(ts.URL+"/api/awx/test", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respTest.Body.Close()
+	if respTest.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(respTest.Body)
+		t.Fatalf("Expected 200 on POST /api/awx/test, got %d: %s", respTest.StatusCode, string(b))
+	}
+	var testRes struct {
+		OK    bool `json:"ok"`
+		Count int  `json:"count"`
+	}
+	if err := json.NewDecoder(respTest.Body).Decode(&testRes); err != nil {
+		t.Fatal(err)
+	}
+	if !testRes.OK || testRes.Count != 2 {
+		t.Fatalf("Unexpected test result: %+v", testRes)
+	}
+
+	// 4. GET /api/awx/hosts?scope=group:12&page=2&limit=5 fetches exact page
+	respP2, err := http.Get(ts.URL + "/api/awx/hosts?scope=group:12&page=2&limit=5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respP2.Body.Close()
+	var p2Data struct {
+		Hosts []string `json:"hosts"`
+	}
+	if err := json.NewDecoder(respP2.Body).Decode(&p2Data); err != nil {
+		t.Fatal(err)
+	}
+	if len(p2Data.Hosts) != 2 || p2Data.Hosts[0] != "grp12-p2-01" {
+		t.Fatalf("Expected page 2 group:12 hosts, got: %+v", p2Data.Hosts)
+	}
+
+	// 5. GET /api/awx/hosts?scope=inventory:9&exclude=vip filters cleanly
+	respInv9, err := http.Get(ts.URL + "/api/awx/hosts?scope=inventory:9&exclude=vip&refresh=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respInv9.Body.Close()
+	var inv9Data struct {
+		Hosts         []string `json:"hosts"`
+		ExcludedHosts []string `json:"excludedHosts"`
+	}
+	if err := json.NewDecoder(respInv9.Body).Decode(&inv9Data); err != nil {
+		t.Fatal(err)
+	}
+	if len(inv9Data.Hosts) != 1 || inv9Data.Hosts[0] != "inv9-01" || len(inv9Data.ExcludedHosts) != 1 {
+		t.Fatalf("Expected filtered inventory:9 hosts, got: %+v", inv9Data)
+	}
+}
+
+// TestAwxBridgeCollectFlow verifies HTTP fallback cache & WebSocket live bridge tab collection.
+func TestAwxBridgeCollectFlow(t *testing.T) {
+	_, ts := setupTestServer(t)
+
+	// 1. Cached page mode fallback when only HTTP state was pushed
+	stateBody, _ := json.Marshal(map[string]interface{}{
+		"url":       "https://awx.example.local/#/inventories/inventory/7/hosts?page=1",
+		"label":     "인벤토리 #7",
+		"pageHosts": []string{"web-01", "svc-vip-02", "db-03"},
+	})
+	respSt, err := http.Post(ts.URL+"/api/awx/bridge/state", "application/json", bytes.NewReader(stateBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respSt.Body.Close()
+
+	respPageCol, err := http.Post(ts.URL+"/api/awx/bridge/collect", "application/json", strings.NewReader(`{"mode":"page","exclude":"svc"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respPageCol.Body.Close()
+	if respPageCol.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on bridge cache page collect, got %d", respPageCol.StatusCode)
+	}
+	var pageCol struct {
+		Source        string   `json:"source"`
+		Hosts         []string `json:"hosts"`
+		ExcludedHosts []string `json:"excludedHosts"`
+	}
+	if err := json.NewDecoder(respPageCol.Body).Decode(&pageCol); err != nil {
+		t.Fatal(err)
+	}
+	if pageCol.Source != "browser-bridge-cache" || len(pageCol.Hosts) != 2 || len(pageCol.ExcludedHosts) != 1 {
+		t.Fatalf("Unexpected cached page collect result: %+v", pageCol)
+	}
+
+	// 2. Connect WS bridge (?role=bridge) and complete live AWX_BRIDGE_COMMAND roundtrip
+	u, _ := url.Parse(ts.URL)
+	conn, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	wsReq := "GET /ws?role=bridge HTTP/1.1\r\n" +
+		"Host: " + u.Host + "\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+		"Sec-WebSocket-Version: 13\r\n\r\n"
+	if _, err := conn.Write([]byte(wsReq)); err != nil {
+		t.Fatal(err)
+	}
+	bufr := bufio.NewReader(conn)
+	statusLine, err := bufr.ReadString('\n')
+	if err != nil || !strings.Contains(statusLine, "101") {
+		t.Fatalf("Expected 101 Switching Protocols for bridge WS, got: %s", statusLine)
+	}
+	for {
+		line, err := bufr.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	// Verify /api/awx/bridge/state reports bridgeCount >= 1
+	respGetBrg, err := http.Get(ts.URL + "/api/awx/bridge/state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var brgSnap struct {
+		Connected   bool `json:"connected"`
+		BridgeCount int  `json:"bridgeCount"`
+	}
+	_ = json.NewDecoder(respGetBrg.Body).Decode(&brgSnap)
+	respGetBrg.Body.Close()
+	if !brgSnap.Connected || brgSnap.BridgeCount < 1 {
+		t.Fatalf("Expected connected bridge with count >= 1, got: %+v", brgSnap)
+	}
+
+	type colResp struct {
+		Status int
+		Body   map[string]interface{}
+		Err    error
+	}
+	doneCh := make(chan colResp, 1)
+	go func() {
+		r, e := http.Post(ts.URL+"/api/awx/bridge/collect", "application/json", strings.NewReader(`{"mode":"all","exclude":"vip"}`))
+		if e != nil {
+			doneCh <- colResp{Err: e}
+			return
+		}
+		defer r.Body.Close()
+		var m map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		doneCh <- colResp{Status: r.StatusCode, Body: m}
+	}()
+
+	// Read AWX_BRIDGE_COMMAND from WS
+	var cmdReqID string
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = conn.SetReadDeadline(deadline)
+		op, payload, rErr := wsReadMessage(bufr)
+		if rErr != nil {
+			t.Fatalf("Failed reading WS command frame: %v", rErr)
+		}
+		if op != 0x01 {
+			continue
+		}
+		var ev struct {
+			Event string `json:"event"`
+			Data  struct {
+				RequestID string `json:"requestId"`
+				Mode      string `json:"mode"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(payload, &ev) == nil && ev.Event == "AWX_BRIDGE_COMMAND" {
+			cmdReqID = ev.Data.RequestID
+			break
+		}
+	}
+	if cmdReqID == "" {
+		t.Fatalf("Did not receive AWX_BRIDGE_COMMAND over bridge WS")
+	}
+
+	// Send result back over WS RPC -> POST /api/awx/bridge/result
+	rpcRes, _ := json.Marshal(map[string]interface{}{
+		"id":     "res-1",
+		"method": "POST",
+		"path":   "/api/awx/bridge/result",
+		"body": map[string]interface{}{
+			"requestId": cmdReqID,
+			"ok":        true,
+			"hosts":     []string{"app-01", "app-vip-01", "app-02"},
+			"rawCount":  3,
+			"label":     "인벤토리 #7",
+		},
+	})
+	if _, err := conn.Write(makeWSClientFrame(0x01, rpcRes)); err != nil {
+		t.Fatal(err)
+	}
+
+	gotCol := <-doneCh
+	if gotCol.Err != nil {
+		t.Fatal(gotCol.Err)
+	}
+	if gotCol.Status != http.StatusOK || gotCol.Body["source"] != "browser-bridge" {
+		t.Fatalf("Unexpected bridge collect response: %+v", gotCol)
+	}
+	if int(gotCol.Body["count"].(float64)) != 2 || int(gotCol.Body["rawCount"].(float64)) != 3 {
+		t.Fatalf("Expected filtered count=2 & rawCount=3, got: %+v", gotCol.Body)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
