@@ -250,11 +250,12 @@
             hasPassword: false,
             hasToken: false,
             insecureTls: (savedAwx && typeof savedAwx.insecureTls === 'boolean') ? savedAwx.insecureTls : true,
-            userCustomized: !!(savedAwx && savedAwx.userCustomized)
+            userCustomized: !!(savedAwx && savedAwx.userCustomized),
+            scopePinned: !!(savedAwx && savedAwx.scopePinned)
         };
     }
     if (!state.awxBridge) {
-        state.awxBridge = { connected: false, bridgeCount: 0, url: '', origin: '', label: '', scopeType: '', scopeId: '', page: 1, pageCount: 0, inventories: [] };
+        state.awxBridge = { connected: false, bridgeVersion: 0, bridgeCount: 0, url: '', origin: '', label: '', scopeType: '', scopeId: '', page: 1, pageCount: 0, inventories: [] };
     }
     if (!Array.isArray(state.awxInventories)) {
         state.awxInventories = [];
@@ -271,6 +272,46 @@
             if (it && String(it.id) === targetId && it.name) return String(it.name);
         }
         return '';
+    }
+
+    function parseAwxScopeExpr(rawScope) {
+        const raw = String(rawScope || '').trim();
+        if (!raw) return { scopeType: '', scopeId: '', scopeKey: '' };
+        const low = raw.toLowerCase();
+        if (low === 'all' || low === '0') {
+            return { scopeType: 'all', scopeId: 'all', scopeKey: 'all' };
+        }
+        if (low.startsWith('group:')) {
+            const id = raw.slice(6).trim();
+            return { scopeType: 'group', scopeId: id, scopeKey: id ? `group:${id}` : '' };
+        }
+        if (low.startsWith('smart_inventory:')) {
+            const id = raw.slice(16).trim();
+            return { scopeType: 'smart_inventory', scopeId: id, scopeKey: id ? `smart_inventory:${id}` : '' };
+        }
+        if (low.startsWith('constructed_inventory:')) {
+            const id = raw.slice(22).trim();
+            return { scopeType: 'constructed_inventory', scopeId: id, scopeKey: id ? `constructed_inventory:${id}` : '' };
+        }
+        if (low.startsWith('inventory:')) {
+            const id = raw.slice(10).trim();
+            return { scopeType: 'inventory', scopeId: id, scopeKey: id ? `inventory:${id}` : '' };
+        }
+        return { scopeType: 'inventory', scopeId: raw, scopeKey: `inventory:${raw}` };
+    }
+
+    function buildAwxApiPath(scopeType, scopeId, pageSize = 200) {
+        if (scopeType === 'all') return `/api/v2/hosts/?page_size=${pageSize}`;
+        if (scopeType === 'group') return `/api/v2/groups/${scopeId}/all_hosts/?page_size=${pageSize}`;
+        return `/api/v2/inventories/${scopeId}/hosts/?page_size=${pageSize}`;
+    }
+
+    function withPageSizeAndNum(apiUrl, pageSize, pageNum) {
+        const u = String(apiUrl || '');
+        const sized = u.includes('page_size=')
+            ? u.replace(/page_size=\d+/, `page_size=${pageSize}`)
+            : `${u}${u.includes('?') ? '&' : '?'}page_size=${pageSize}`;
+        return `${sized}&page=${pageNum || 1}`;
     }
 
     function formatAwxScopeLabel(scope, pageNum) {
@@ -459,7 +500,7 @@
 
     function generateAwxBridgeBookmarklet(agentBase) {
         const wsBase = String(agentBase || AGENT_BASE).replace(/^http/i, 'ws') + '/ws?role=bridge';
-        const code = `(function(){if(window.__awxTabBridgeCleanup){try{window.__awxTabBridgeCleanup();}catch(e){}}var WS_URL=${JSON.stringify(wsBase)};var ws=null,alive=true,lastSig='',pill=null,rcTimer=null,hbTimer=null,invCache=null,invPromise=null;function findInvName(id){if(!invCache||!id)return '';for(var i=0;i<invCache.length;i++){if(String(invCache[i].id)===String(id))return invCache[i].name||'';}return '';}function parseCtx(){var l=location,h=l.hash||'',p=l.pathname||'',r=p+' '+h,qs=(h.indexOf('?')>=0?h.split('?')[1]:(l.search?l.search.slice(1):''));var ps=new URLSearchParams(qs),ext=[],pg=1;ps.forEach(function(v,k){if(!v)return;if(k==='search'||/\\.search$/.test(k))ext.push('search='+encodeURIComponent(v));else if(k==='host_filter'||/\\.host_filter$/.test(k))ext.push('host_filter='+encodeURIComponent(v));else if((k==='page'||/\\.page$/.test(k))&&parseInt(v,10)>0)pg=parseInt(v,10);});var eq=ext.length?'&'+ext.join('&'):'';var gm=r.match(/(?:^|[/])groups[/](\\d+)[/](?:nested_hosts|all_hosts|hosts)/i);if(gm)return{scopeType:'group',scopeId:gm[1],page:pg,eq:eq,label:'그룹 #'+gm[1],api:'/api/v2/groups/'+gm[1]+'/all_hosts/?page_size=200'+eq};var im=r.match(/[/]inventories[/](smart_inventory|constructed_inventory|inventory)[/](\\d+)/i);if(im){var st=im[1].toLowerCase(),nm=findInvName(im[2]),pfx=st==='smart_inventory'?'스마트 인벤토리 #':(st==='constructed_inventory'?'구성 인벤토리 #':'인벤토리 #');return{scopeType:st,scopeId:im[2],page:pg,eq:eq,label:nm?(pfx+im[2]+' ('+nm+')'):(pfx+im[2]),api:'/api/v2/inventories/'+im[2]+'/hosts/?page_size=200'+eq};}var lr=r.toLowerCase();if(/[/#]inventories[/]?(?:[?#]|$)/i.test(lr))return{scopeType:'inventories_list',scopeId:'',page:pg,eq:eq,label:'인벤토리 목록 (인벤토리 선택 필요)',api:''};if(/(?:^|[/#\\s])hosts(?:[/?#\\s]|$)/i.test(r)&&lr.indexOf('/inventories')<0&&lr.indexOf('/groups')<0)return{scopeType:'all',scopeId:'all',page:pg,eq:eq,label:'전체 호스트',api:'/api/v2/hosts/?page_size=200'+eq};return{scopeType:'non_host',scopeId:'',page:pg,eq:eq,label:'호스트 화면 아님 (인벤토리 선택 필요)',api:''};}function isNonHostHref(href){if(!href)return false;var s=String(href).toLowerCase();if(/[/](?:inventories|projects|templates|organizations|jobs|users|teams|credentials|schedules|execution_environments|notification_templates|workflow_job_templates)[/]/i.test(s)&&!/[/]hosts[/]/i.test(s))return true;if(/[/]groups[/]\\d+/i.test(s)&&!/[/](?:nested_hosts|all_hosts|hosts)/i.test(s))return true;return false;}function scrapeDom(c){if(!c)c=parseCtx();var r=((location.pathname||'')+' '+(location.hash||'')).toLowerCase();if(c.scopeType==='inventories_list')return[];if(/[/#](?:projects|templates|organizations|jobs|users|teams|credentials|execution_environments)[/?#]?/i.test(r))return[];if(/[/]inventories[/](?:smart_inventory|constructed_inventory|inventory)[/]\\d+[/](?:details|access|groups|sources|jobs|schedules)(?:[/?#]|$)/i.test(r))return[];var rows=document.querySelectorAll('table tbody tr'),out=[],seen={};for(var i=0;i<rows.length;i++){var tr=rows[i];var el=tr.querySelector('td[data-label="이름"] a, td[data-label="Name"] a, td a[href*="/hosts/"]')||tr.querySelector('td:nth-child(2) a')||tr.querySelector('td[data-label="Name"], td[data-label="이름"]');if(!el)continue;var anc=el.tagName==='A'?el:tr.querySelector('td a[href]');if(anc&&isNonHostHref(anc.getAttribute('href')||''))continue;var t=(el.innerText||el.textContent||'').trim().toLowerCase();if(t&&!/^\\d+$/.test(t)&&!seen[t]){seen[t]=1;out.push(t);}}return out;}async function fetchAwxJson(u){var r=await fetch(u,{credentials:'include'});if(r.status===404&&u.indexOf('/api/v2/')===0){r=await fetch('/api/controller/v2/'+u.slice(8),{credentials:'include'});}if(!r.ok)throw new Error('AWX API HTTP '+r.status);return await r.json();}async function ensureInvs(force){if(invCache&&!force)return invCache;if(invPromise)return invPromise;invPromise=(async function(){try{var d=await fetchAwxJson('/api/v2/inventories/?page_size=200&order_by=id');var list=(d.results||[]).map(function(x){return{id:x.id,name:x.name||'',kind:x.kind||'',totalHosts:typeof x.total_hosts==='number'?x.total_hosts:0};}).filter(function(x){return x.id&&x.name;});invCache=list;return list;}catch(e){if(!invCache)invCache=[];return invCache;}finally{invPromise=null;}})();return invPromise;}function setPill(txt,bg){if(!pill){pill=document.createElement('div');pill.id='__awx_bridge_pill';pill.style.cssText='position:fixed;bottom:14px;right:14px;z-index:2147483647;background:'+(bg||'#15803d')+';color:#fff;font:600 12px/1.3 -apple-system,Segoe UI,sans-serif;padding:7px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;cursor:pointer;';pill.onclick=function(e){if(e.target&&e.target.dataset&&e.target.dataset.close){pill.style.display='none';return;}pushState(true);};document.body.appendChild(pill);}if(bg)pill.style.background=bg;pill.innerHTML='<span>'+txt+'</span><span data-close="1" style="opacity:.85;padding-left:4px;">×</span>';}function sendWS(method,path,body){if(!ws||ws.readyState!==1)return;ws.send(JSON.stringify({id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),method:method,path:path,body:body}));}function pushState(force){if(!invCache&&!invPromise){ensureInvs(false).then(function(list){if(list&&list.length)pushState(true);});}var c=parseCtx(),hosts=scrapeDom(c);var sig=location.href+'|'+hosts.join(',')+'|'+((invCache&&invCache.length)||0);if(!force&&sig===lastSig)return;lastSig=sig;var payload={connected:true,source:'bookmarklet-bridge',url:location.href,origin:location.origin,hash:location.hash||location.pathname,label:c.label,scopeType:c.scopeType,scopeId:c.scopeId,page:c.page,pageHosts:hosts};if(invCache&&invCache.length)payload.inventories=invCache;sendWS('POST','/api/awx/bridge/state',payload);setPill('[연결됨] Cross-Checker ('+c.label+' / '+hosts.length+'대)','#15803d');}async function resolveCmdTarget(c,cmd){if(c.api)return{api:c.api,label:c.label,scopeType:c.scopeType,scopeId:c.scopeId,page:c.page,useDom:true};var rs=String((cmd&&cmd.scopeId)||'').trim(),rt=String((cmd&&cmd.scopeType)||'').trim().toLowerCase();if(!rs){var rawSc=String((cmd&&cmd.scope)||'').trim();if(rawSc==='all'||rawSc==='0'){rt='all';rs='all';}else if(rawSc.indexOf('inventory:')===0){rt='inventory';rs=rawSc.slice(10);}else if(rawSc.indexOf('smart_inventory:')===0){rt='smart_inventory';rs=rawSc.slice(16);}else if(rawSc.indexOf('constructed_inventory:')===0){rt='constructed_inventory';rs=rawSc.slice(22);}else if(rawSc.indexOf('group:')===0){rt='group';rs=rawSc.slice(6);}else if(rawSc){rt='inventory';rs=rawSc;}}if(rt==='all'){return{api:'/api/v2/hosts/?page_size=200'+(c.eq||''),label:'전체 호스트',scopeType:'all',scopeId:'all',page:1,useDom:false};}if(rs){if(!/^\\d+$/.test(rs)){var list=await ensureInvs(true),matched=null,lrs=rs.toLowerCase();for(var i=0;i<list.length;i++){if(list[i].name.toLowerCase()===lrs){matched=list[i];break;}}if(!matched){var part=[];for(var j=0;j<list.length;j++){if(list[j].name.toLowerCase().indexOf(lrs)>=0)part.push(list[j]);}if(part.length===1)matched=part[0];}if(matched){rs=String(matched.id);if(matched.kind==='smart')rt='smart_inventory';else if(matched.kind==='constructed')rt='constructed_inventory';else rt='inventory';}else{throw new Error('인벤토리 \"'+rs+'\"를 찾을 수 없습니다.');}}if(rt==='group')return{api:'/api/v2/groups/'+rs+'/all_hosts/?page_size=200'+(c.eq||''),label:'그룹 #'+rs,scopeType:'group',scopeId:rs,page:1,useDom:false};var invNm=findInvName(rs),ipfx=rt==='smart_inventory'?'스마트 인벤토리 #':(rt==='constructed_inventory'?'구성 인벤토리 #':'인벤토리 #');return{api:'/api/v2/inventories/'+rs+'/hosts/?page_size=200'+(c.eq||''),label:invNm?(ipfx+rs+' ('+invNm+')'):(ipfx+rs),scopeType:rt||'inventory',scopeId:rs,page:1,useDom:false};}throw new Error('AWX가 인벤토리 목록 화면입니다. [환경설정] 목록에서 인벤토리(예: Demo Inventory)를 선택하거나 AWX에서 대상 인벤토리 -> 호스트로 들어가세요.');}async function runCmd(cmd){var c=parseCtx(),reqId=cmd.requestId,mode=cmd.mode||'all',tgt=null;try{tgt=await resolveCmdTarget(c,cmd);if(mode==='page'){var dh=tgt.useDom?scrapeDom(c):[];if(dh.length>0){sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:true,hosts:dh,rawCount:dh.length,label:tgt.label,scopeType:tgt.scopeType,scopeId:tgt.scopeId,page:tgt.page});return;}var pUrl=tgt.api.replace(/page_size=\\d+/,'page_size=20')+'&page='+tgt.page;var pd=await fetchAwxJson(pUrl);var ph=(pd.results||[]).map(function(x){return(x.name||'').trim().toLowerCase();}).filter(Boolean);sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:true,hosts:ph,rawCount:ph.length,label:tgt.label,scopeType:tgt.scopeType,scopeId:tgt.scopeId,page:tgt.page});return;}var all=[],seen={},seenUrls={},nextUrl=tgt.api,guard=0;while(nextUrl&&guard<200){guard++;if(seenUrls[nextUrl])break;seenUrls[nextUrl]=1;var d=await fetchAwxJson(nextUrl);var res=d.results||[];for(var i=0;i<res.length;i++){var n=(res[i].name||'').trim().toLowerCase();if(n&&!seen[n]){seen[n]=1;all.push(n);}}setPill('[수집 중] '+all.length+'대...','#1d4ed8');if(d.next){try{var nu=new URL(d.next,location.origin);nextUrl=nu.pathname+nu.search;}catch(e){nextUrl=null;}}else{nextUrl=null;}}sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:true,hosts:all,rawCount:all.length,label:tgt.label,scopeType:tgt.scopeType,scopeId:tgt.scopeId,page:tgt.page});setPill('[전달 완료] '+all.length+'대 ('+tgt.label+')','#15803d');}catch(err){sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:false,error:err.message||'AWX 수집 오류',label:(tgt&&tgt.label)||c.label});setPill('[수집 실패] '+(err.message||'오류'),'#b91c1c');}}function connect(){if(!alive)return;try{ws=new WebSocket(WS_URL);}catch(e){setPill('[미실행] Cross-Checker','#b45309');rcTimer=setTimeout(connect,3000);return;}ws.onopen=function(){pushState(true);};ws.onmessage=function(ev){try{var m=JSON.parse(ev.data);if(m&&m.event==='AWX_BRIDGE_COMMAND'&&m.data)runCmd(m.data);}catch(e){}};ws.onclose=function(){if(!alive)return;setPill('[재연결 중] Cross-Checker...','#b45309');rcTimer=setTimeout(connect,3000);};ws.onerror=function(){};}function onNav(){setTimeout(function(){pushState(false);},250);}window.addEventListener('hashchange',onNav);window.addEventListener('popstate',onNav);hbTimer=setInterval(function(){if(ws&&ws.readyState===1)pushState(false);},2000);window.__awxTabBridgeCleanup=function(){alive=false;clearTimeout(rcTimer);clearInterval(hbTimer);window.removeEventListener('hashchange',onNav);window.removeEventListener('popstate',onNav);if(ws)try{ws.close();}catch(e){}if(pill&&pill.parentNode)pill.parentNode.removeChild(pill);};connect();})();`;
+        const code = `(function(){if(window.__awxTabBridgeCleanup){try{window.__awxTabBridgeCleanup();}catch(e){}}var WS_URL=${JSON.stringify(wsBase)};var ws=null,alive=true,lastSig='',pill=null,rcTimer=null,hbTimer=null,invCache=null,invPromise=null;function findInvName(id){if(!invCache||!id)return '';for(var i=0;i<invCache.length;i++){if(String(invCache[i].id)===String(id))return invCache[i].name||'';}return '';}function parseCtx(){var l=location,h=l.hash||'',p=l.pathname||'',r=p+' '+h,qs=(h.indexOf('?')>=0?h.split('?')[1]:(l.search?l.search.slice(1):''));var ps=new URLSearchParams(qs),ext=[],pg=1;ps.forEach(function(v,k){if(!v)return;if(k==='search'||/\\.search$/.test(k))ext.push('search='+encodeURIComponent(v));else if(k==='host_filter'||/\\.host_filter$/.test(k))ext.push('host_filter='+encodeURIComponent(v));else if((k==='page'||/\\.page$/.test(k))&&parseInt(v,10)>0)pg=parseInt(v,10);});var eq=ext.length?'&'+ext.join('&'):'';var gm=r.match(/(?:^|[/])groups[/](\\d+)[/](?:nested_hosts|all_hosts|hosts)/i);if(gm)return{scopeType:'group',scopeId:gm[1],page:pg,eq:eq,label:'그룹 #'+gm[1],api:'/api/v2/groups/'+gm[1]+'/all_hosts/?page_size=200'+eq};var im=r.match(/[/]inventories[/](smart_inventory|constructed_inventory|inventory)[/](\\d+)/i);if(im){var st=im[1].toLowerCase(),nm=findInvName(im[2]),pfx=st==='smart_inventory'?'스마트 인벤토리 #':(st==='constructed_inventory'?'구성 인벤토리 #':'인벤토리 #');return{scopeType:st,scopeId:im[2],page:pg,eq:eq,label:nm?(pfx+im[2]+' ('+nm+')'):(pfx+im[2]),api:'/api/v2/inventories/'+im[2]+'/hosts/?page_size=200'+eq};}var lr=r.toLowerCase();if(/[/#]inventories[/]?(?:[?#]|$)/i.test(lr))return{scopeType:'inventories_list',scopeId:'',page:pg,eq:eq,label:'인벤토리 목록 (인벤토리 선택 필요)',api:''};if(/(?:^|[/#\\s])hosts(?:[/?#\\s]|$)/i.test(r)&&lr.indexOf('/inventories')<0&&lr.indexOf('/groups')<0)return{scopeType:'all',scopeId:'all',page:pg,eq:eq,label:'전체 호스트',api:'/api/v2/hosts/?page_size=200'+eq};return{scopeType:'non_host',scopeId:'',page:pg,eq:eq,label:'호스트 화면 아님 (인벤토리 선택 필요)',api:''};}function isNonHostHref(href){if(!href)return false;var s=String(href).toLowerCase();if(/[/](?:inventories|projects|templates|organizations|jobs|users|teams|credentials|schedules|execution_environments|notification_templates|workflow_job_templates)[/]/i.test(s)&&!/[/]hosts[/]/i.test(s))return true;if(/[/]groups[/]\\d+/i.test(s)&&!/[/](?:nested_hosts|all_hosts|hosts)/i.test(s))return true;return false;}function scrapeDom(c){if(!c)c=parseCtx();var r=((location.pathname||'')+' '+(location.hash||'')).toLowerCase();if(c.scopeType==='inventories_list')return[];if(/[/#](?:projects|templates|organizations|jobs|users|teams|credentials|execution_environments)[/?#]?/i.test(r))return[];if(/[/]inventories[/](?:smart_inventory|constructed_inventory|inventory)[/]\\d+[/](?:details|access|groups|sources|jobs|schedules)(?:[/?#]|$)/i.test(r))return[];var rows=document.querySelectorAll('table tbody tr'),out=[],seen={};for(var i=0;i<rows.length;i++){var tr=rows[i];var el=tr.querySelector('td[data-label="이름"] a, td[data-label="Name"] a, td a[href*="/hosts/"]')||tr.querySelector('td:nth-child(2) a')||tr.querySelector('td[data-label="Name"], td[data-label="이름"]');if(!el)continue;var anc=el.tagName==='A'?el:tr.querySelector('td a[href]');if(anc&&isNonHostHref(anc.getAttribute('href')||''))continue;var t=(el.innerText||el.textContent||'').trim().toLowerCase();if(t&&!/^\\d+$/.test(t)&&!seen[t]){seen[t]=1;out.push(t);}}return out;}async function fetchAwxJson(u){var r=await fetch(u,{credentials:'include'});if(r.status===404&&u.indexOf('/api/v2/')===0){r=await fetch('/api/controller/v2/'+u.slice(8),{credentials:'include'});}if(!r.ok)throw new Error('AWX API HTTP '+r.status);return await r.json();}async function ensureInvs(force){if(invCache&&!force)return invCache;if(invPromise)return invPromise;invPromise=(async function(){try{var d=await fetchAwxJson('/api/v2/inventories/?page_size=200&order_by=id');var list=(d.results||[]).map(function(x){return{id:x.id,name:x.name||'',kind:x.kind||'',totalHosts:typeof x.total_hosts==='number'?x.total_hosts:0};}).filter(function(x){return x.id&&x.name;});invCache=list;return list;}catch(e){if(!invCache)invCache=[];return invCache;}finally{invPromise=null;}})();return invPromise;}function setPill(txt,bg){if(!pill){pill=document.createElement('div');pill.id='__awx_bridge_pill';pill.style.cssText='position:fixed;bottom:14px;right:14px;z-index:2147483647;background:'+(bg||'#15803d')+';color:#fff;font:600 12px/1.3 -apple-system,Segoe UI,sans-serif;padding:7px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;cursor:pointer;';pill.onclick=function(e){if(e.target&&e.target.dataset&&e.target.dataset.close){pill.style.display='none';return;}pushState(true);};document.body.appendChild(pill);}if(bg)pill.style.background=bg;pill.innerHTML='<span>'+txt+'</span><span data-close="1" style="opacity:.85;padding-left:4px;">×</span>';}function sendWS(method,path,body){if(!ws||ws.readyState!==1)return;ws.send(JSON.stringify({id:'b_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),method:method,path:path,body:body}));}function pushState(force){if(!invCache&&!invPromise){ensureInvs(false).then(function(list){if(list&&list.length)pushState(true);});}var c=parseCtx(),hosts=scrapeDom(c);var sig=location.href+'|'+hosts.join(',')+'|'+((invCache&&invCache.length)||0);if(!force&&sig===lastSig)return;lastSig=sig;var payload={connected:true,bridgeVersion:2,source:'bookmarklet-bridge',url:location.href,origin:location.origin,hash:location.hash||location.pathname,label:c.label,scopeType:c.scopeType,scopeId:c.scopeId,page:c.page,pageHosts:hosts};if(invCache&&invCache.length)payload.inventories=invCache;sendWS('POST','/api/awx/bridge/state',payload);setPill('[연결됨] Cross-Checker ('+c.label+' / '+hosts.length+'대)','#15803d');}async function resolveCmdTarget(c,cmd){var rs=String((cmd&&cmd.scopeId)||'').trim(),rt=String((cmd&&cmd.scopeType)||'').trim().toLowerCase(),rp=parseInt((cmd&&cmd.page)||0,10)||0;if(!rs&&!rt){var rawSc=String((cmd&&cmd.scope)||'').trim();if(rawSc==='all'||rawSc==='0'){rt='all';rs='all';}else if(rawSc.indexOf('inventory:')===0){rt='inventory';rs=rawSc.slice(10);}else if(rawSc.indexOf('smart_inventory:')===0){rt='smart_inventory';rs=rawSc.slice(16);}else if(rawSc.indexOf('constructed_inventory:')===0){rt='constructed_inventory';rs=rawSc.slice(22);}else if(rawSc.indexOf('group:')===0){rt='group';rs=rawSc.slice(6);}else if(rawSc){rt='inventory';rs=rawSc;}}if(rt==='all'){var sameAll=(c.scopeType==='all'),pgAll=rp>0?rp:(sameAll?c.page:1);return{api:'/api/v2/hosts/?page_size=200'+(sameAll?(c.eq||''):''),label:'전체 호스트',scopeType:'all',scopeId:'all',page:pgAll,useDom:sameAll&&pgAll===c.page};}if(rs){if(!/^\\d+$/.test(rs)){var list=await ensureInvs(true),matched=null,lrs=rs.toLowerCase();for(var i=0;i<list.length;i++){if(list[i].name.toLowerCase()===lrs){matched=list[i];break;}}if(!matched){var part=[];for(var j=0;j<list.length;j++){if(list[j].name.toLowerCase().indexOf(lrs)>=0)part.push(list[j]);}if(part.length===1)matched=part[0];}if(matched){rs=String(matched.id);if(matched.kind==='smart')rt='smart_inventory';else if(matched.kind==='constructed')rt='constructed_inventory';else rt='inventory';}else{throw new Error('인벤토리 \"'+rs+'\"를 찾을 수 없습니다.');}}var sameSc=(c.scopeType===rt&&String(c.scopeId)===String(rs))||(rt!=='group'&&c.scopeType!=='group'&&c.scopeType!=='all'&&c.scopeId&&String(c.scopeId)===String(rs));var pgSc=rp>0?rp:(sameSc?c.page:1);if(rt==='group')return{api:'/api/v2/groups/'+rs+'/all_hosts/?page_size=200'+(sameSc?(c.eq||''):''),label:'그룹 #'+rs,scopeType:'group',scopeId:rs,page:pgSc,useDom:sameSc&&pgSc===c.page};var invNm=findInvName(rs),ipfx=rt==='smart_inventory'?'스마트 인벤토리 #':(rt==='constructed_inventory'?'구성 인벤토리 #':'인벤토리 #');return{api:'/api/v2/inventories/'+rs+'/hosts/?page_size=200'+(sameSc?(c.eq||''):''),label:invNm?(ipfx+rs+' ('+invNm+')'):(ipfx+rs),scopeType:rt||'inventory',scopeId:rs,page:pgSc,useDom:sameSc&&pgSc===c.page};}if(c.api)return{api:c.api,label:c.label,scopeType:c.scopeType,scopeId:c.scopeId,page:rp>0?rp:c.page,useDom:!(rp>0&&rp!==c.page)};throw new Error('AWX가 인벤토리 목록 화면입니다. [환경설정] 목록에서 인벤토리(예: Demo Inventory)를 선택하거나 AWX에서 대상 인벤토리 -> 호스트로 들어가세요.');}async function runCmd(cmd){var c=parseCtx(),reqId=cmd.requestId,mode=cmd.mode||'all',tgt=null;try{tgt=await resolveCmdTarget(c,cmd);if(mode==='page'){var dh=tgt.useDom?scrapeDom(c):[];if(dh.length>0){sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:true,hosts:dh,rawCount:dh.length,label:tgt.label,scopeType:tgt.scopeType,scopeId:tgt.scopeId,page:tgt.page});setPill('[전달 완료] '+dh.length+'대 ('+tgt.label+')','#15803d');return;}var pUrl=(tgt.api.indexOf('page_size=')>=0?tgt.api.replace(/page_size=\\d+/,'page_size=20'):tgt.api+(tgt.api.indexOf('?')>=0?'&':'?')+'page_size=20')+'&page='+tgt.page;var pd=await fetchAwxJson(pUrl);var ph=(pd.results||[]).map(function(x){return(x.name||'').trim().toLowerCase();}).filter(Boolean);sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:true,hosts:ph,rawCount:ph.length,label:tgt.label,scopeType:tgt.scopeType,scopeId:tgt.scopeId,page:tgt.page});setPill('[전달 완료] '+ph.length+'대 ('+tgt.label+')','#15803d');return;}var all=[],seen={},seenUrls={},nextUrl=tgt.api,guard=0;while(nextUrl&&guard<200){guard++;if(seenUrls[nextUrl])break;seenUrls[nextUrl]=1;var d=await fetchAwxJson(nextUrl);var res=d.results||[];for(var i=0;i<res.length;i++){var n=(res[i].name||'').trim().toLowerCase();if(n&&!seen[n]){seen[n]=1;all.push(n);}}setPill('[수집 중] '+all.length+'대...','#1d4ed8');if(d.next){try{var nu=new URL(d.next,location.origin);nextUrl=nu.pathname+nu.search;}catch(e){nextUrl=null;}}else{nextUrl=null;}}sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:true,hosts:all,rawCount:all.length,label:tgt.label,scopeType:tgt.scopeType,scopeId:tgt.scopeId,page:tgt.page});setPill('[전달 완료] '+all.length+'대 ('+tgt.label+')','#15803d');}catch(err){sendWS('POST','/api/awx/bridge/result',{requestId:reqId,ok:false,error:err.message||'AWX 수집 오류',label:(tgt&&tgt.label)||c.label});setPill('[수집 실패] '+(err.message||'오류'),'#b91c1c');}}function connect(){if(!alive)return;try{ws=new WebSocket(WS_URL);}catch(e){setPill('[미실행] Cross-Checker','#b45309');rcTimer=setTimeout(connect,3000);return;}ws.onopen=function(){pushState(true);};ws.onmessage=function(ev){try{var m=JSON.parse(ev.data);if(m&&m.event==='AWX_BRIDGE_COMMAND'&&m.data)runCmd(m.data);}catch(e){}};ws.onclose=function(){if(!alive)return;setPill('[재연결 중] Cross-Checker...','#b45309');rcTimer=setTimeout(connect,3000);};ws.onerror=function(){};}function onNav(){setTimeout(function(){pushState(false);},250);}window.addEventListener('hashchange',onNav);window.addEventListener('popstate',onNav);hbTimer=setInterval(function(){if(ws&&ws.readyState===1)pushState(false);},2000);window.__awxTabBridgeCleanup=function(){alive=false;clearTimeout(rcTimer);clearInterval(hbTimer);window.removeEventListener('hashchange',onNav);window.removeEventListener('popstate',onNav);if(ws)try{ws.close();}catch(e){}if(pill&&pill.parentNode)pill.parentNode.removeChild(pill);};connect();})();`;
         return 'javascript:' + code;
     }
 
@@ -549,6 +590,31 @@
             };
         }
         const ctx = extractAwxContextFromLocation(window.location);
+        const cfg = state.awxConfig || {};
+        if (cfg.scopePinned && cfg.userCustomized && cfg.defaultScope) {
+            const parsed = parseAwxScopeExpr(cfg.defaultScope);
+            if (parsed.scopeType === 'all' || parsed.scopeType === 'group' || /^\d+$/.test(parsed.scopeId)) {
+                return {
+                    url: buildAwxApiPath(parsed.scopeType, parsed.scopeId, 200),
+                    inventoryId: parsed.scopeId !== 'all' && parsed.scopeType !== 'group' ? parsed.scopeId : undefined,
+                    scope: parsed.scopeKey,
+                    scopeType: parsed.scopeType,
+                    scopeId: parsed.scopeId,
+                    page: parseInt(cfg.defaultPage || '1', 10) || 1,
+                    label: formatAwxScopeLabel(parsed.scopeKey, cfg.defaultPage),
+                    isScoped: parsed.scopeType !== 'all'
+                };
+            }
+            return {
+                url: '',
+                scope: cfg.defaultScope,
+                scopeType: parsed.scopeType,
+                scopeId: parsed.scopeId,
+                page: parseInt(cfg.defaultPage || '1', 10) || 1,
+                label: formatAwxScopeLabel(cfg.defaultScope, cfg.defaultPage),
+                isScoped: true
+            };
+        }
         if (ctx.scopeType === 'inventories_list') {
             return {
                 url: '',
@@ -2247,12 +2313,111 @@
             }
         }
 
+        let prevBridgeSnapUrl = '';
+        let prevBridgeSnapScopeKey = '';
+        function isSpecificBridgeScopeType(st) {
+            const t = String(st || '').toLowerCase();
+            return t === 'inventory' || t === 'smart_inventory' || t === 'constructed_inventory' || t === 'group';
+        }
+        function applyBridgeSnapshot(nextBrg) {
+            if (!nextBrg || typeof nextBrg !== 'object') return;
+            const nextUrl = String(nextBrg.url || '').trim();
+            const nextType = String(nextBrg.scopeType || '').toLowerCase();
+            const nextId = String(nextBrg.scopeId || '').trim();
+            const nextKey = nextType ? `${nextType}:${nextId}` : '';
+            // Unpin Settings selection only when browser navigates to a different specific inventory/group
+            if (nextBrg.connected && isSpecificBridgeScopeType(nextType) &&
+                nextUrl && prevBridgeSnapUrl !== nextUrl && nextKey && nextKey !== prevBridgeSnapScopeKey) {
+                if (state.awxConfig && state.awxConfig.scopePinned) {
+                    state.awxConfig.scopePinned = false;
+                    if (state.awxConfig.userCustomized) {
+                        saveAwxDirectConfigLocal(state.awxConfig, true);
+                    }
+                }
+            }
+            if (nextBrg.connected && nextUrl) {
+                prevBridgeSnapUrl = nextUrl;
+                prevBridgeSnapScopeKey = nextKey;
+            } else if (!nextBrg.connected) {
+                prevBridgeSnapUrl = '';
+                prevBridgeSnapScopeKey = '';
+            }
+            state.awxBridge = { ...state.awxBridge, ...nextBrg };
+        }
+
+        async function fetchEmbeddedAwxJson(u) {
+            let res = await fetch(u, { credentials: 'include' });
+            if (res.status === 404 && String(u || '').startsWith('/api/v2/')) {
+                res = await fetch('/api/controller/v2/' + u.slice(8), { credentials: 'include' });
+            }
+            if (!res.ok) throw new Error(`AWX API HTTP ${res.status}`);
+            return await res.json();
+        }
+
+        async function resolveEmbeddedScopeTarget(rawScope, rawType, curCtx, reqPage = 0, invFetcher = null) {
+            let parsed = parseAwxScopeExpr(rawScope);
+            let rs = parsed.scopeId;
+            let rt = String(rawType || parsed.scopeType || '').trim().toLowerCase();
+            const rp = parseInt(reqPage || 0, 10) || 0;
+            if (rt === 'all') {
+                const sameAll = !!(curCtx && curCtx.scopeType === 'all');
+                const pgAll = rp > 0 ? rp : (sameAll ? (curCtx.page || 1) : 1);
+                const extra = (sameAll && curCtx.extraQS) ? curCtx.extraQS : '';
+                return { apiUrl: `/api/v2/hosts/?page_size=200${extra}`, label: '전체 호스트', scopeType: 'all', scopeId: 'all', page: pgAll, useDom: sameAll && pgAll === curCtx.page };
+            }
+            if (rs) {
+                if (!/^\d+$/.test(rs)) {
+                    let list = getMergedAwxInventories();
+                    if ((!list || list.length === 0) && typeof invFetcher === 'function') {
+                        list = await invFetcher(true);
+                    }
+                    if (!list || list.length === 0) {
+                        try {
+                            const d = await fetchEmbeddedAwxJson('/api/v2/inventories/?page_size=200&order_by=id');
+                            list = (d.results || []).map(x => ({
+                                id: x.id,
+                                name: x.name || '',
+                                kind: x.kind || '',
+                                totalHosts: typeof x.total_hosts === 'number' ? x.total_hosts : 0
+                            })).filter(x => x.id && x.name);
+                            if (list.length) state.awxInventories = list;
+                        } catch (e) {}
+                    }
+                    const lrs = rs.toLowerCase();
+                    let matched = (list || []).find(x => x.name.toLowerCase() === lrs) || null;
+                    if (!matched) {
+                        const partial = (list || []).filter(x => x.name.toLowerCase().includes(lrs));
+                        if (partial.length === 1) matched = partial[0];
+                    }
+                    if (!matched) throw new Error(`인벤토리 "${rs}"를 찾을 수 없습니다.`);
+                    rs = String(matched.id);
+                    rt = matched.kind === 'smart' ? 'smart_inventory' : (matched.kind === 'constructed' ? 'constructed_inventory' : 'inventory');
+                }
+                const sameScoped = !!(curCtx && (
+                    (curCtx.scopeType === rt && String(curCtx.scopeId) === String(rs)) ||
+                    (rt !== 'group' && curCtx.scopeType !== 'group' && curCtx.scopeType !== 'all' && curCtx.scopeId && String(curCtx.scopeId) === String(rs))
+                ));
+                const pgScoped = rp > 0 ? rp : (sameScoped ? (curCtx.page || 1) : 1);
+                const extra = (sameScoped && curCtx.extraQS) ? curCtx.extraQS : '';
+                if (rt === 'group') {
+                    return { apiUrl: `/api/v2/groups/${rs}/all_hosts/?page_size=200${extra}`, label: `그룹 #${rs}`, scopeType: 'group', scopeId: rs, page: pgScoped, useDom: sameScoped && pgScoped === curCtx.page };
+                }
+                const effType = rt || 'inventory';
+                return { apiUrl: `/api/v2/inventories/${rs}/hosts/?page_size=200${extra}`, label: formatAwxScopeLabel(`${effType}:${rs}`), scopeType: effType, scopeId: rs, page: pgScoped, useDom: sameScoped && pgScoped === curCtx.page };
+            }
+            if (curCtx && curCtx.apiUrl) {
+                return { apiUrl: curCtx.apiUrl, label: curCtx.label, scopeType: curCtx.scopeType, scopeId: curCtx.scopeId, page: rp > 0 ? rp : curCtx.page, useDom: !(rp > 0 && rp !== curCtx.page) };
+            }
+            throw new Error('AWX가 인벤토리 목록 화면입니다. [환경설정] 목록에서 인벤토리를 선택하거나 AWX에서 대상 인벤토리 -> 호스트로 이동하세요.');
+        }
+
         function syncAwxSettingsUI() {
             const cfg = state.awxConfig || {};
             const brg = state.awxBridge || {};
             if (awxBridgeStatus) {
+                const staleTag = (brg.connected && (!brg.bridgeVersion || brg.bridgeVersion < 2)) ? ' [구버전]' : '';
                 awxBridgeStatus.innerHTML = brg.connected
-                    ? `<span style="color:#4ade80; font-weight:700;">[연결됨] ${escapeHTML(brg.label || 'AWX 탭')} (${brg.pageCount || 0}대)</span>`
+                    ? `<span style="color:${staleTag ? '#fbbf24' : '#4ade80'}; font-weight:700;">[연결됨${staleTag}] ${escapeHTML(brg.label || 'AWX 탭')} (${brg.pageCount || 0}대)</span>`
                     : `<span style="color:#94a3b8;">[미연결]</span>`;
             }
             if (btnBridgeBookmark) {
@@ -2283,10 +2448,19 @@
             if (awxSourceLabel) {
                 if (brg.connected) {
                     const brgType = String(brg.scopeType || '').toLowerCase();
-                    if (brgType === 'inventories_list' || brgType === 'non_host') {
-                        const explicit = cfg.userCustomized && cfg.defaultScope;
+                    const explicit = !!(cfg.userCustomized && cfg.defaultScope);
+                    const pinned = !!(cfg.scopePinned && explicit);
+                    const staleBridge = !brg.bridgeVersion || brg.bridgeVersion < 2;
+                    if (pinned) {
+                        const selShown = escapeHTML(formatAwxScopeLabel(cfg.defaultScope, cfg.defaultPage));
+                        if (staleBridge && brgType !== 'inventories_list' && brgType !== 'non_host') {
+                            awxSourceLabel.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d97706;margin-right:4px;vertical-align:middle;"></span><span style="color:#b45309; font-weight:600;">열린 AWX 탭 (구버전 북마크)</span> · 선택 대상: ${selShown} · [AWX 탭 연결] 북마크 재실행 권장`;
+                        } else {
+                            awxSourceLabel.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;vertical-align:middle;"></span><span style="color:#15803d; font-weight:600;">열린 AWX 탭 연결됨</span> · 선택 대상: ${selShown}`;
+                        }
+                    } else if (brgType === 'inventories_list' || brgType === 'non_host') {
                         if (explicit) {
-                            const selShown = escapeHTML(formatAwxScopeLabel(cfg.defaultScope));
+                            const selShown = escapeHTML(formatAwxScopeLabel(cfg.defaultScope, cfg.defaultPage));
                             awxSourceLabel.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:4px;vertical-align:middle;"></span><span style="color:#15803d; font-weight:600;">열린 AWX 탭 연결됨</span> · 선택 대상: ${selShown}`;
                         } else {
                             awxSourceLabel.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d97706;margin-right:4px;vertical-align:middle;"></span><span style="color:#b45309; font-weight:600;">열린 AWX 탭: 인벤토리 목록</span> · [환경설정]에서 인벤토리 선택 또는 AWX 상세 진입 필요`;
@@ -2311,6 +2485,7 @@
                 }
                 localStorage.setItem(AWX_CONFIG_STORAGE_KEY, JSON.stringify({
                     userCustomized: true,
+                    scopePinned: !!payload.scopePinned,
                     baseUrl: payload.baseUrl || '',
                     defaultScope: payload.defaultScope || 'inventory:3',
                     defaultPage: payload.defaultPage ? String(payload.defaultPage) : '',
@@ -2348,9 +2523,10 @@
                             defaultPage: saved.defaultPage || '',
                             password: saved.password || '',
                             token: saved.token || '',
-                            userCustomized: true
+                            userCustomized: true,
+                            scopePinned: !!saved.scopePinned
                         });
-                        if (data.bridge) state.awxBridge = data.bridge;
+                        if (data.bridge) applyBridgeSnapshot(data.bridge);
                         syncAwxSettingsUI();
                         return state.awxConfig;
                     }
@@ -2366,7 +2542,7 @@
                     insecureTls: data.insecureTls !== false
                 };
                 if (data.bridge) {
-                    state.awxBridge = data.bridge;
+                    applyBridgeSnapshot(data.bridge);
                 }
                 syncAwxSettingsUI();
                 if (state.showSettingsModal && getMergedAwxInventories().length === 0 && (state.awxConfig.userCustomized || state.awxBridge.connected)) {
@@ -2385,20 +2561,42 @@
                 const chosen = selAwxInventory.value;
                 if (!chosen) return;
                 if (inputAwxScope) inputAwxScope.value = chosen;
+                if (inputAwxPage) inputAwxPage.value = '';
+                const typedBase = inputAwxUrl ? parseAwxWebUrl(inputAwxUrl.value).baseUrl : '';
+                const effBase = state.awxConfig.baseUrl || typedBase || '';
                 state.awxConfig = {
                     ...state.awxConfig,
+                    baseUrl: effBase,
                     defaultScope: chosen,
-                    userCustomized: true
+                    defaultPage: '',
+                    userCustomized: true,
+                    scopePinned: true
                 };
                 saveAwxDirectConfigLocal(state.awxConfig, true);
                 syncAwxSettingsUI();
-                await callAgentHttp('/api/awx/config', {
-                    method: 'POST',
-                    body: { defaultScope: chosen }
-                }).catch(() => {});
+                const cfgPayload = { defaultScope: chosen };
+                if (effBase) cfgPayload.baseUrl = effBase;
+                let saveErrMsg = '';
+                try {
+                    const cfgRes = await callAgentHttp('/api/awx/config', {
+                        method: 'POST',
+                        body: cfgPayload
+                    });
+                    if (!cfgRes.ok) {
+                        const errData = await cfgRes.json().catch(() => ({}));
+                        saveErrMsg = errData.error || `HTTP ${cfgRes.status}`;
+                    }
+                } catch (e) {
+                    saveErrMsg = e.message || '에이전트 설정 저장 실패';
+                }
                 if (awxTestResult) {
-                    awxTestResult.style.color = '#93c5fd';
-                    awxTestResult.innerText = `선택된 수집 범위: ${formatAwxScopeLabel(chosen)}`;
+                    if (saveErrMsg) {
+                        awxTestResult.style.color = '#fbbf24';
+                        awxTestResult.innerText = `선택됨: ${formatAwxScopeLabel(chosen)} (서버 동기화 지연: ${saveErrMsg})`;
+                    } else {
+                        awxTestResult.style.color = '#93c5fd';
+                        awxTestResult.innerText = `선택된 수집 범위: ${formatAwxScopeLabel(chosen)} (첫 페이지/전체 수집 적용됨)`;
+                    }
                 }
             };
         }
@@ -2508,7 +2706,8 @@
                         hasPassword: !!saveData.hasPassword,
                         hasToken: !!saveData.hasToken,
                         insecureTls: saveData.insecureTls !== false,
-                        userCustomized: true
+                        userCustomized: true,
+                        scopePinned: true
                     };
                     saveAwxDirectConfigLocal(state.awxConfig, true);
                     syncAwxSettingsUI();
@@ -2598,6 +2797,7 @@
                 state.awxConfig.token = '';
                 state.awxConfig.defaultPage = '';
                 state.awxConfig.userCustomized = false;
+                state.awxConfig.scopePinned = false;
                 state.awxInventories = [];
                 await callAgentHttp('/api/awx/config', {
                     method: 'POST',
@@ -2755,60 +2955,109 @@
 
         function getBridgeCollectScope() {
             const brgType = String((state.awxBridge && state.awxBridge.scopeType) || '').toLowerCase();
-            if (brgType !== 'inventories_list' && brgType !== 'non_host') return '';
-            return (state.awxConfig && state.awxConfig.userCustomized && state.awxConfig.defaultScope)
-                ? state.awxConfig.defaultScope
-                : '';
+            const cfg = state.awxConfig || {};
+            const chosen = String(cfg.defaultScope || '').trim();
+            if (cfg.scopePinned && cfg.userCustomized && chosen) {
+                return chosen;
+            }
+            if (brgType === 'inventories_list' || brgType === 'non_host') {
+                return (cfg.userCustomized && chosen) ? chosen : '';
+            }
+            if (brgType === 'all' && cfg.userCustomized && chosen && chosen.toLowerCase() !== 'all' && chosen !== '0') {
+                return chosen;
+            }
+            return '';
         }
 
-        // 화면 DOM 수집 (열린 AWX 탭 브리지 우선, 미연결 시 지정 페이지 20대 API 수집)
+        function hasConfiguredDirectAwxAuth() {
+            const cfg = state.awxConfig || {};
+            return !!(cfg.baseUrl && (cfg.hasPassword || cfg.hasToken || cfg.password || cfg.token));
+        }
+
+        // 화면 DOM 수집 (열린 AWX 탭 브리지 우선, 미연결 시 지정 인벤토리 첫 페이지 20대 API 수집)
         btnPage.onclick = async () => {
             const filters = getExcludeFilters(inputExclude.value.trim());
-            const domHosts = scrapeAwxTableHosts(document);
-            if (domHosts.length > 0) {
-                applyRawHostsToState(domHosts, filters, false);
-                renderAwxSummary();
-                updateCountsAndButton();
-                return;
-            }
-            if (!isStandaloneApp) {
-                const curCtx = extractAwxContextFromLocation(window.location);
-                if (curCtx.scopeType === 'inventories_list') {
-                    renderAwxCollectError('수집 안내', new Error('현재 AWX 화면은 인벤토리 목록입니다. 수집할 인벤토리(예: Demo Inventory) -> 호스트 화면으로 이동하세요.'));
-                    return;
-                }
-            }
-            if (isStandaloneApp) {
-                btnPage.disabled = true;
-                try {
-                    if (state.awxBridge && state.awxBridge.connected) {
-                        const res = await callAgentHttp('/api/awx/bridge/collect', {
-                            method: 'POST',
-                            body: { mode: 'page', exclude: inputExclude.value.trim(), scope: getBridgeCollectScope() },
-                            timeoutMs: 10000
-                        });
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        applyRawHostsToState([...(data.hosts || []), ...(data.excludedHosts || [])], filters, true);
+            const cfg = state.awxConfig || {};
+            const hasPinned = !!(cfg.scopePinned && cfg.userCustomized && cfg.defaultScope);
+            btnPage.disabled = true;
+            btnPage.innerText = '수집 중...';
+            try {
+                if (!isStandaloneApp) {
+                    const curCtx = extractAwxContextFromLocation(window.location);
+                    if (hasPinned) {
+                        const reqPage = parseInt(cfg.defaultPage || '1', 10) || 1;
+                        const tgt = await resolveEmbeddedScopeTarget(cfg.defaultScope, '', curCtx, reqPage);
+                        const domHosts = tgt.useDom ? scrapeAwxTableHosts(document) : [];
+                        if (domHosts.length > 0) {
+                            applyRawHostsToState(domHosts, filters, true);
+                        } else {
+                            const pd = await fetchEmbeddedAwxJson(withPageSizeAndNum(tgt.apiUrl, 20, tgt.page));
+                            applyRawHostsToState(pd.results || pd.hosts || [], filters, true);
+                        }
                     } else {
-                        const currentContext = getContext();
-                        const scope = (state.awxConfig && state.awxConfig.defaultScope) || currentContext.scope || `inventory:${currentContext.inventoryId || '3'}`;
-                        const pageNum = parseInt((state.awxConfig && state.awxConfig.defaultPage) || '1', 10) || 1;
-                        const res = await callAgentHttp(`/api/awx/hosts?scope=${encodeURIComponent(scope)}&page=${pageNum}&limit=20&exclude=${encodeURIComponent(inputExclude.value.trim())}`, {
-                            timeoutMs: 15000
-                        });
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        applyRawHostsToState([...(data.hosts || []), ...(data.excludedHosts || [])], filters, true);
+                        const domHosts = scrapeAwxTableHosts(document);
+                        if (domHosts.length > 0) {
+                            applyRawHostsToState(domHosts, filters, true);
+                        } else if (curCtx.apiUrl) {
+                            const pd = await fetchEmbeddedAwxJson(withPageSizeAndNum(curCtx.apiUrl, 20, curCtx.page || 1));
+                            applyRawHostsToState(pd.results || pd.hosts || [], filters, true);
+                        } else {
+                            throw new Error('현재 AWX 화면은 인벤토리 목록(또는 비호스트 화면)입니다. [환경설정] 목록에서 인벤토리를 선택하거나 AWX에서 대상 인벤토리 -> 호스트 화면으로 이동하세요.');
+                        }
                     }
                     renderAwxSummary();
                     updateCountsAndButton();
-                } catch (err) {
-                    renderAwxCollectError('페이지 수집 실패', err);
-                    fetchAwxConfigAndBridge();
-                } finally {
-                    btnPage.disabled = false;
+                    return;
                 }
+
+                const bridgeScope = getBridgeCollectScope();
+                const collectPageDirect = async () => {
+                    const currentContext = getContext();
+                    const scope = (state.awxConfig && state.awxConfig.defaultScope) || currentContext.scope || `inventory:${currentContext.inventoryId || '3'}`;
+                    const pageNum = parseInt((state.awxConfig && state.awxConfig.defaultPage) || '1', 10) || 1;
+                    const res = await callAgentHttp(`/api/awx/hosts?scope=${encodeURIComponent(scope)}&page=${pageNum}&limit=20&exclude=${encodeURIComponent(inputExclude.value.trim())}`, {
+                        timeoutMs: 15000
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                    applyRawHostsToState([...(data.hosts || []), ...(data.excludedHosts || [])], filters, true);
+                };
+
+                if (state.awxBridge && state.awxBridge.connected) {
+                    const body = { mode: 'page', exclude: inputExclude.value.trim(), scope: bridgeScope };
+                    if (bridgeScope) {
+                        body.page = parseInt((state.awxConfig && state.awxConfig.defaultPage) || '1', 10) || 1;
+                    }
+                    const res = await callAgentHttp('/api/awx/bridge/collect', {
+                        method: 'POST',
+                        body,
+                        timeoutMs: 12000
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        if (res.status === 503 && hasConfiguredDirectAwxAuth()) {
+                            try {
+                                await collectPageDirect();
+                            } catch (directErr) {
+                                throw new Error(data.error || directErr.message || `HTTP ${res.status}`);
+                            }
+                        } else {
+                            throw new Error(data.error || `HTTP ${res.status}`);
+                        }
+                    } else {
+                        applyRawHostsToState([...(data.hosts || []), ...(data.excludedHosts || [])], filters, true);
+                    }
+                } else {
+                    await collectPageDirect();
+                }
+                renderAwxSummary();
+                updateCountsAndButton();
+            } catch (err) {
+                renderAwxCollectError('페이지 수집 실패', err);
+                if (isStandaloneApp) fetchAwxConfigAndBridge();
+            } finally {
+                btnPage.disabled = false;
+                btnPage.innerText = '현재 화면 수집';
             }
         };
 
@@ -2824,16 +3073,8 @@
 
             try {
                 if (isStandaloneApp) {
-                    if (state.awxBridge && state.awxBridge.connected) {
-                        const res = await callAgentHttp('/api/awx/bridge/collect', {
-                            method: 'POST',
-                            body: { mode: 'all', exclude: inputExclude.value.trim(), scope: getBridgeCollectScope() },
-                            timeoutMs: 25000
-                        });
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        applyRawHostsToState([...(data.hosts || []), ...(data.excludedHosts || [])], filters, true);
-                    } else {
+                    const bridgeScope = getBridgeCollectScope();
+                    const collectAllDirect = async () => {
                         const scope = (state.awxConfig && state.awxConfig.defaultScope) || currentContext.scope || `inventory:${currentContext.inventoryId || '3'}`;
                         const res = await callAgentHttp(`/api/awx/hosts?scope=${encodeURIComponent(scope)}&refresh=true`, {
                             timeoutMs: 25000
@@ -2841,22 +3082,67 @@
                         const data = await res.json();
                         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                         applyRawHostsToState(data.hosts || data.results || [], filters, true);
+                    };
+
+                    if (state.awxBridge && state.awxBridge.connected) {
+                        const res = await callAgentHttp('/api/awx/bridge/collect', {
+                            method: 'POST',
+                            body: { mode: 'all', exclude: inputExclude.value.trim(), scope: bridgeScope },
+                            timeoutMs: 25000
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            if (res.status === 503 && hasConfiguredDirectAwxAuth()) {
+                                try {
+                                    await collectAllDirect();
+                                } catch (directErr) {
+                                    throw new Error(data.error || directErr.message || `HTTP ${res.status}`);
+                                }
+                            } else {
+                                throw new Error(data.error || `HTTP ${res.status}`);
+                            }
+                        } else {
+                            applyRawHostsToState([...(data.hosts || []), ...(data.excludedHosts || [])], filters, true);
+                        }
+                    } else {
+                        await collectAllDirect();
                     }
                 } else {
-                    if (!currentContext.url) {
-                        throw new Error('현재 AWX 화면은 인벤토리 목록입니다. 수집할 인벤토리(예: Demo Inventory) -> 호스트 화면으로 이동하세요.');
-                    }
+                    const cfg = state.awxConfig || {};
                     let nextUrl = currentContext.url;
+                    if (cfg.scopePinned && cfg.userCustomized && cfg.defaultScope) {
+                        const tgt = await resolveEmbeddedScopeTarget(cfg.defaultScope, '', extractAwxContextFromLocation(window.location), 1);
+                        nextUrl = tgt.apiUrl;
+                    }
+                    if (!nextUrl) {
+                        throw new Error('현재 AWX 화면은 인벤토리 목록입니다. [환경설정] 목록에서 인벤토리를 선택하거나 AWX에서 대상 인벤토리 -> 호스트 화면으로 이동하세요.');
+                    }
+                    const seenUrls = new Set();
                     while (nextUrl) {
-                        let res = await fetch(nextUrl);
-                        if (!res.ok && !nextUrl.startsWith(AGENT_BASE)) {
-                            const invId = currentContext.inventoryId || '3';
-                            res = await fetch(`${AGENT_BASE}/api/awx/hosts?inventory=${invId}`);
+                        if (seenUrls.has(nextUrl)) break;
+                        seenUrls.add(nextUrl);
+                        let data;
+                        try {
+                            data = await fetchEmbeddedAwxJson(nextUrl);
+                        } catch (fetchErr) {
+                            if (!nextUrl.startsWith(AGENT_BASE)) {
+                                const sc = (currentContext && currentContext.scope) || `inventory:${(currentContext && currentContext.inventoryId) || '3'}`;
+                                const fallbackRes = await fetch(`${AGENT_BASE}/api/awx/hosts?scope=${encodeURIComponent(sc)}`);
+                                if (!fallbackRes.ok) throw fetchErr;
+                                data = await fallbackRes.json();
+                            } else {
+                                throw fetchErr;
+                            }
                         }
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                        const data = await res.json();
                         applyRawHostsToState(data.results || data.hosts || [], filters, false);
-                        nextUrl = data.next;
+                        if (data.next) {
+                            try {
+                                const nu = new URL(data.next, window.location.origin);
+                                nextUrl = nu.pathname + nu.search;
+                            } catch (e) { nextUrl = null; }
+                        } else {
+                            nextUrl = null;
+                        }
                     }
                 }
                 state.rawCount = state.collectedHosts.size + state.excludedHosts.length;
@@ -3330,11 +3616,13 @@
             agentBridge.on('*', (data, msg) => {
                 if (msg && msg.event) {
                     if (msg.event === 'AWX_BRIDGE_UPDATED' && msg.data) {
-                        state.awxBridge = { ...state.awxBridge, ...msg.data };
+                        applyBridgeSnapshot(msg.data);
                         syncAwxSettingsUI();
                         return;
                     }
                     if (msg.event === 'AWX_CONFIG_UPDATED' && msg.data) {
+                        const isReset = !!msg.data.reset;
+                        const scopeChanged = msg.data.defaultScope && msg.data.defaultScope !== state.awxConfig.defaultScope;
                         state.awxConfig = {
                             ...state.awxConfig,
                             baseUrl: msg.data.baseUrl ?? state.awxConfig.baseUrl,
@@ -3342,7 +3630,9 @@
                             username: msg.data.username ?? state.awxConfig.username,
                             hasPassword: msg.data.hasPassword !== undefined ? !!msg.data.hasPassword : state.awxConfig.hasPassword,
                             hasToken: msg.data.hasToken !== undefined ? !!msg.data.hasToken : state.awxConfig.hasToken,
-                            insecureTls: msg.data.insecureTls !== undefined ? !!msg.data.insecureTls : state.awxConfig.insecureTls
+                            insecureTls: msg.data.insecureTls !== undefined ? !!msg.data.insecureTls : state.awxConfig.insecureTls,
+                            userCustomized: isReset ? false : (scopeChanged ? true : state.awxConfig.userCustomized),
+                            scopePinned: isReset ? false : state.awxConfig.scopePinned
                         };
                         syncAwxSettingsUI();
                         return;
@@ -3415,6 +3705,7 @@
                 lastSig = sig;
                 const payload = {
                     connected: true,
+                    bridgeVersion: 2,
                     source: 'full-bookmarklet',
                     url: window.location.href,
                     origin: window.location.origin,
@@ -3429,40 +3720,16 @@
                 sendWS('POST', '/api/awx/bridge/state', payload);
             };
             const resolveEmbeddedTarget = async (ctx, cmd) => {
+                const reqPage = parseInt((cmd && cmd.page) || 0, 10) || 0;
+                const cmdType = String((cmd && cmd.scopeType) || '').trim().toLowerCase();
+                const cmdId = String((cmd && cmd.scopeId) || '').trim();
+                const cmdRaw = String((cmd && cmd.scope) || '').trim();
+                const expr = cmdId ? (cmdType ? `${cmdType}:${cmdId}` : cmdId) : (cmdRaw || (cmdType === 'all' ? 'all' : ''));
+                if (expr || cmdType === 'all') {
+                    return await resolveEmbeddedScopeTarget(expr || 'all', cmdType, ctx, reqPage, ensureInvs);
+                }
                 if (ctx.apiUrl) {
-                    return { apiUrl: ctx.apiUrl, label: ctx.label, scopeType: ctx.scopeType, scopeId: ctx.scopeId, page: ctx.page, useDom: true };
-                }
-                let rs = String((cmd && cmd.scopeId) || '').trim();
-                let rt = String((cmd && cmd.scopeType) || '').trim().toLowerCase();
-                if (!rs) {
-                    const rawSc = String((cmd && cmd.scope) || '').trim();
-                    if (rawSc === 'all' || rawSc === '0') { rt = 'all'; rs = 'all'; }
-                    else if (rawSc.startsWith('inventory:')) { rt = 'inventory'; rs = rawSc.slice(10); }
-                    else if (rawSc.startsWith('smart_inventory:')) { rt = 'smart_inventory'; rs = rawSc.slice(16); }
-                    else if (rawSc.startsWith('constructed_inventory:')) { rt = 'constructed_inventory'; rs = rawSc.slice(22); }
-                    else if (rawSc.startsWith('group:')) { rt = 'group'; rs = rawSc.slice(6); }
-                    else if (rawSc) { rt = 'inventory'; rs = rawSc; }
-                }
-                if (rt === 'all') {
-                    return { apiUrl: '/api/v2/hosts/?page_size=200', label: '전체 호스트', scopeType: 'all', scopeId: 'all', page: 1, useDom: false };
-                }
-                if (rs) {
-                    if (!/^\d+$/.test(rs)) {
-                        const list = await ensureInvs(true);
-                        const lrs = rs.toLowerCase();
-                        let matched = list.find(x => x.name.toLowerCase() === lrs) || null;
-                        if (!matched) {
-                            const partial = list.filter(x => x.name.toLowerCase().includes(lrs));
-                            if (partial.length === 1) matched = partial[0];
-                        }
-                        if (!matched) throw new Error(`인벤토리 "${rs}"를 찾을 수 없습니다.`);
-                        rs = String(matched.id);
-                        rt = matched.kind === 'smart' ? 'smart_inventory' : (matched.kind === 'constructed' ? 'constructed_inventory' : 'inventory');
-                    }
-                    if (rt === 'group') {
-                        return { apiUrl: `/api/v2/groups/${rs}/all_hosts/?page_size=200`, label: `그룹 #${rs}`, scopeType: 'group', scopeId: rs, page: 1, useDom: false };
-                    }
-                    return { apiUrl: `/api/v2/inventories/${rs}/hosts/?page_size=200`, label: formatAwxScopeLabel(`${rt || 'inventory'}:${rs}`), scopeType: rt || 'inventory', scopeId: rs, page: 1, useDom: false };
+                    return { apiUrl: ctx.apiUrl, label: ctx.label, scopeType: ctx.scopeType, scopeId: ctx.scopeId, page: reqPage > 0 ? reqPage : ctx.page, useDom: !(reqPage > 0 && reqPage !== ctx.page) };
                 }
                 throw new Error('AWX가 인벤토리 목록 화면입니다. [환경설정] 목록에서 인벤토리를 선택하거나 AWX에서 대상 인벤토리 -> 호스트로 이동하세요.');
             };
@@ -3479,8 +3746,7 @@
                             sendWS('POST', '/api/awx/bridge/result', { requestId: reqId, ok: true, hosts: domHosts, rawCount: domHosts.length, label: tgt.label, scopeType: tgt.scopeType, scopeId: tgt.scopeId, page: tgt.page });
                             return;
                         }
-                        const pUrl = tgt.apiUrl.replace(/page_size=\d+/, 'page_size=20') + `&page=${tgt.page}`;
-                        const pd = await fetchBridgeJson(pUrl);
+                        const pd = await fetchBridgeJson(withPageSizeAndNum(tgt.apiUrl, 20, tgt.page));
                         const ph = (pd.results || []).map(x => String(x.name || '').trim().toLowerCase()).filter(Boolean);
                         sendWS('POST', '/api/awx/bridge/result', { requestId: reqId, ok: true, hosts: ph, rawCount: ph.length, label: tgt.label, scopeType: tgt.scopeType, scopeId: tgt.scopeId, page: tgt.page });
                         return;

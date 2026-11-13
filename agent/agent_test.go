@@ -2054,6 +2054,201 @@ func TestAwxInventoryListingAndNameResolution(t *testing.T) {
 	}
 }
 
+// TestAwxBridgeCollectScopeEnforcement verifies that selected scope & page override
+// a bridged tab on #/hosts (all), reject stale mismatched bridge responses, guard
+// HTTP cache scope leaks, and resolve inventory names when opening AWX console URLs.
+func TestAwxBridgeCollectScopeEnforcement(t *testing.T) {
+	srv, ts := setupTestServer(t)
+	defer ts.Close()
+	defer srv.Stop()
+
+	// 1. Seed HTTP bridge state sitting on #/hosts (all) with bridge inventories list
+	stateBody, _ := json.Marshal(map[string]interface{}{
+		"connected":     true,
+		"bridgeVersion": 2,
+		"url":           "https://awxhost/#/hosts",
+		"origin":        "https://awxhost",
+		"label":         "전체 호스트",
+		"scopeType":     "all",
+		"scopeId":       "all",
+		"page":          1,
+		"pageHosts":     []string{"all-leak-01", "all-leak-02"},
+		"inventories": []AwxInventorySummary{
+			{ID: 3, Name: "Test 1000 Hosts Inventory", TotalHosts: 1000},
+			{ID: 7, Name: "Demo Inventory", TotalHosts: 2},
+		},
+	})
+	respSt, err := http.Post(ts.URL+"/api/awx/bridge/state", "application/json", bytes.NewReader(stateBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respSt.Body.Close()
+
+	// Verify HTTP-only page cache does NOT leak #/hosts when inventory:7 is requested
+	respLeak, err := http.Post(ts.URL+"/api/awx/bridge/collect", "application/json", strings.NewReader(`{"mode":"page","scope":"inventory:7","page":1}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respLeak.Body.Close()
+	if respLeak.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("Expected 503 instead of leaking all-hosts cache for inventory:7, got %d", respLeak.StatusCode)
+	}
+
+	// Verify resolveScopeFromBridgeOrAPI + buildAwxConsoleURL resolves Demo Inventory -> #/inventories/inventory/7/hosts
+	_, _, resolvedKey := srv.resolveScopeFromBridgeOrAPI("Demo Inventory", "3")
+	if resolvedKey != "inventory:7" {
+		t.Fatalf("Expected bridge cache name resolution -> inventory:7, got %q", resolvedKey)
+	}
+	consoleURL := buildAwxConsoleURL("https://awxhost", resolvedKey, "")
+	if consoleURL != "https://awxhost/#/inventories/inventory/7/hosts" {
+		t.Fatalf("Expected resolved console URL for Demo Inventory, got %q", consoleURL)
+	}
+
+	// 2. Connect WebSocket bridge
+	u, _ := url.Parse(ts.URL)
+	conn, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	wsReq := "GET /ws?role=bridge HTTP/1.1\r\n" +
+		"Host: " + u.Host + "\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+		"Sec-WebSocket-Version: 13\r\n\r\n"
+	if _, err := conn.Write([]byte(wsReq)); err != nil {
+		t.Fatal(err)
+	}
+	bufr := bufio.NewReader(conn)
+	statusLine, err := bufr.ReadString('\n')
+	if err != nil || !strings.Contains(statusLine, "101") {
+		t.Fatalf("Expected 101 Switching Protocols for bridge WS, got: %s", statusLine)
+	}
+	for {
+		line, err := bufr.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	readBridgeCmd := func() (reqID, scope, scopeType, scopeId, mode string, page int) {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			_ = conn.SetReadDeadline(deadline)
+			op, payload, rErr := wsReadMessage(bufr)
+			if rErr != nil {
+				t.Fatalf("Failed reading WS command frame: %v", rErr)
+			}
+			if op != 0x01 {
+				continue
+			}
+			var ev struct {
+				Event string `json:"event"`
+				Data  struct {
+					RequestID string `json:"requestId"`
+					Mode      string `json:"mode"`
+					Scope     string `json:"scope"`
+					ScopeType string `json:"scopeType"`
+					ScopeID   string `json:"scopeId"`
+					Page      int    `json:"page"`
+				} `json:"data"`
+			}
+			if json.Unmarshal(payload, &ev) == nil && ev.Event == "AWX_BRIDGE_COMMAND" {
+				return ev.Data.RequestID, ev.Data.Scope, ev.Data.ScopeType, ev.Data.ScopeID, ev.Data.Mode, ev.Data.Page
+			}
+		}
+		t.Fatalf("Did not receive AWX_BRIDGE_COMMAND")
+		return
+	}
+
+	sendBridgeResult := func(body map[string]interface{}) {
+		rpcRes, _ := json.Marshal(map[string]interface{}{
+			"id":     "res-" + fmt.Sprint(time.Now().UnixNano()),
+			"method": "POST",
+			"path":   "/api/awx/bridge/result",
+			"body":   body,
+		})
+		if _, err := conn.Write(makeWSClientFrame(0x01, rpcRes)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 2a. Request Demo Inventory collect while stale bookmarklet tries to return scopeType="all" -> MUST reject with 502!
+	type colResp struct {
+		Status int
+		Body   map[string]interface{}
+		Err    error
+	}
+	staleCh := make(chan colResp, 1)
+	go func() {
+		r, e := http.Post(ts.URL+"/api/awx/bridge/collect", "application/json", strings.NewReader(`{"mode":"all","scope":"Demo Inventory"}`))
+		if e != nil {
+			staleCh <- colResp{Err: e}
+			return
+		}
+		defer r.Body.Close()
+		var m map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		staleCh <- colResp{Status: r.StatusCode, Body: m}
+	}()
+
+	reqID, sc, st, sid, _, _ := readBridgeCmd()
+	if sc != "inventory:7" || st != "inventory" || sid != "7" {
+		t.Fatalf("Expected resolved command scope=inventory:7, got scope=%q type=%q id=%q", sc, st, sid)
+	}
+	sendBridgeResult(map[string]interface{}{
+		"requestId": reqID,
+		"ok":        true,
+		"hosts":     []string{"all-leak-01"},
+		"rawCount":  1,
+		"label":     "전체 호스트",
+		"scopeType": "all",
+		"scopeId":   "all",
+	})
+	staleRes := <-staleCh
+	if staleRes.Err != nil || staleRes.Status != http.StatusBadGateway {
+		t.Fatalf("Expected 502 rejection for mismatched stale bridge result, got: %+v", staleRes)
+	}
+
+	// 2b. Request mode="page", scope="inventory:7", page=1 -> command carries page=1 and valid result succeeds
+	pageCh := make(chan colResp, 1)
+	go func() {
+		r, e := http.Post(ts.URL+"/api/awx/bridge/collect", "application/json", strings.NewReader(`{"mode":"page","scope":"inventory:7","page":1}`))
+		if e != nil {
+			pageCh <- colResp{Err: e}
+			return
+		}
+		defer r.Body.Close()
+		var m map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		pageCh <- colResp{Status: r.StatusCode, Body: m}
+	}()
+
+	reqID2, sc2, _, sid2, mode2, pg2 := readBridgeCmd()
+	if sc2 != "inventory:7" || sid2 != "7" || mode2 != "page" || pg2 != 1 {
+		t.Fatalf("Expected page=1 command for inventory:7, got scope=%q id=%q mode=%q page=%d", sc2, sid2, mode2, pg2)
+	}
+	sendBridgeResult(map[string]interface{}{
+		"requestId": reqID2,
+		"ok":        true,
+		"hosts":     []string{"demo-web-01", "demo-db-01"},
+		"rawCount":  2,
+		"label":     "인벤토리 #7 (Demo Inventory)",
+		"scopeType": "inventory",
+		"scopeId":   "7",
+		"page":      1,
+	})
+	pageRes := <-pageCh
+	if pageRes.Err != nil || pageRes.Status != http.StatusOK {
+		t.Fatalf("Expected 200 OK for valid scoped page collect, got: %+v", pageRes)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

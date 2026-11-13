@@ -64,18 +64,19 @@ type AwxInventorySummary struct {
 
 // AwxBridgeState tracks the active open Edge/Chrome AWX tab connected via WebSocket bridge.
 type AwxBridgeState struct {
-	Connected   bool                  `json:"connected"`
-	Source      string                `json:"source,omitempty"`
-	URL         string                `json:"url,omitempty"`
-	Origin      string                `json:"origin,omitempty"`
-	Hash        string                `json:"hash,omitempty"`
-	Label       string                `json:"label,omitempty"`
-	ScopeType   string                `json:"scopeType,omitempty"`
-	ScopeID     string                `json:"scopeId,omitempty"`
-	Page        int                   `json:"page,omitempty"`
-	PageHosts   []string              `json:"pageHosts,omitempty"`
-	Inventories []AwxInventorySummary `json:"inventories,omitempty"`
-	UpdatedAt   time.Time             `json:"updatedAt,omitempty"`
+	Connected     bool                  `json:"connected"`
+	BridgeVersion int                   `json:"bridgeVersion,omitempty"`
+	Source        string                `json:"source,omitempty"`
+	URL           string                `json:"url,omitempty"`
+	Origin        string                `json:"origin,omitempty"`
+	Hash          string                `json:"hash,omitempty"`
+	Label         string                `json:"label,omitempty"`
+	ScopeType     string                `json:"scopeType,omitempty"`
+	ScopeID       string                `json:"scopeId,omitempty"`
+	Page          int                   `json:"page,omitempty"`
+	PageHosts     []string              `json:"pageHosts,omitempty"`
+	Inventories   []AwxInventorySummary `json:"inventories,omitempty"`
+	UpdatedAt     time.Time             `json:"updatedAt,omitempty"`
 }
 
 // AwxBridgeResult holds async collection results returned from a bridged AWX browser tab.
@@ -1629,6 +1630,61 @@ func (s *AgentServer) resolveAwxScopeWithCreds(baseURL, user, pass, tok string, 
 	return resolvedType, idStr, resolvedType + ":" + idStr, invs, nil
 }
 
+// resolveScopeFromBridgeOrAPI resolves an inventory name or scope expression using
+// the active bridge inventory cache first, falling back to direct AWX API resolution.
+func (s *AgentServer) resolveScopeFromBridgeOrAPI(rawScope, fallback string) (scopeType, scopeID, normKey string) {
+	scopeType, scopeID, normKey = normalizeAwxScope(rawScope, fallback)
+	if scopeType == "all" || scopeType == "group" || scopeID == "" || isDigitsOnly(scopeID) {
+		return scopeType, scopeID, normKey
+	}
+	s.bridgeMu.RLock()
+	cachedInvs := make([]AwxInventorySummary, len(s.bridgeState.Inventories))
+	copy(cachedInvs, s.bridgeState.Inventories)
+	s.bridgeMu.RUnlock()
+
+	if len(cachedInvs) > 0 {
+		var matched *AwxInventorySummary
+		for i := range cachedInvs {
+			if strings.EqualFold(strings.TrimSpace(cachedInvs[i].Name), scopeID) {
+				matched = &cachedInvs[i]
+				break
+			}
+		}
+		if matched == nil {
+			var partial []*AwxInventorySummary
+			needle := strings.ToLower(scopeID)
+			for i := range cachedInvs {
+				if strings.Contains(strings.ToLower(cachedInvs[i].Name), needle) {
+					partial = append(partial, &cachedInvs[i])
+				}
+			}
+			if len(partial) == 1 {
+				matched = partial[0]
+			}
+		}
+		if matched != nil {
+			rt := scopeType
+			if strings.EqualFold(matched.Kind, "smart") {
+				rt = "smart_inventory"
+			} else if strings.EqualFold(matched.Kind, "constructed") {
+				rt = "constructed_inventory"
+			} else if rt != "smart_inventory" && rt != "constructed_inventory" {
+				rt = "inventory"
+			}
+			idStr := strconv.Itoa(matched.ID)
+			return rt, idStr, rt + ":" + idStr
+		}
+	}
+
+	baseURL, user, pass, tok, _, insecure, client := s.getAwxSnapshot()
+	if strings.TrimSpace(baseURL) != "" {
+		if rt, rid, nk, _, err := s.resolveAwxScopeWithCreds(baseURL, user, pass, tok, insecure, client, normKey, fallback); err == nil {
+			return rt, rid, nk
+		}
+	}
+	return scopeType, scopeID, normKey
+}
+
 func (s *AgentServer) getAwxSnapshot() (baseURL, username, password, token, defaultScope string, insecureTLS bool, client *http.Client) {
 	s.awxCfgMu.RLock()
 	defer s.awxCfgMu.RUnlock()
@@ -2787,18 +2843,19 @@ func (s *AgentServer) getBridgeSnapshot() map[string]interface{} {
 	}
 	connected := cnt > 0 || (st.Connected && !st.UpdatedAt.IsZero() && time.Since(st.UpdatedAt) < 2*time.Minute)
 	return map[string]interface{}{
-		"connected":   connected,
-		"bridgeCount": cnt,
-		"url":         st.URL,
-		"origin":      st.Origin,
-		"hash":        st.Hash,
-		"label":       st.Label,
-		"scopeType":   st.ScopeType,
-		"scopeId":     st.ScopeID,
-		"page":        st.Page,
-		"pageCount":   len(st.PageHosts),
-		"inventories": st.Inventories,
-		"updatedAt":   st.UpdatedAt,
+		"connected":     connected,
+		"bridgeVersion": st.BridgeVersion,
+		"bridgeCount":   cnt,
+		"url":           st.URL,
+		"origin":        st.Origin,
+		"hash":          st.Hash,
+		"label":         st.Label,
+		"scopeType":     st.ScopeType,
+		"scopeId":       st.ScopeID,
+		"page":          st.Page,
+		"pageCount":     len(st.PageHosts),
+		"inventories":   st.Inventories,
+		"updatedAt":     st.UpdatedAt,
 	}
 }
 
@@ -2902,6 +2959,9 @@ func (s *AgentServer) handleAwxConfig(w http.ResponseWriter, r *http.Request) {
 		"hasToken":     hasTok,
 		"defaultScope": normKey,
 		"insecureTls":  insecure,
+	}
+	if req.ClearAuth {
+		respPayload["reset"] = true
 	}
 	s.broadcastEvent("AWX_CONFIG_UPDATED", "", respPayload)
 	writeJSON(w, http.StatusOK, respPayload)
@@ -3092,6 +3152,7 @@ func (s *AgentServer) handleAwxOpenBrowser(w http.ResponseWriter, r *http.Reques
 	if req.InsecureTLS != nil {
 		insecure = *req.InsecureTLS
 	}
+	rawURLForConsole := req.URL
 	if strings.TrimSpace(req.URL) != "" {
 		b, sc, _ := parseAwxTargetInput(req.URL)
 		if b != "" {
@@ -3099,9 +3160,18 @@ func (s *AgentServer) handleAwxOpenBrowser(w http.ResponseWriter, r *http.Reques
 		}
 		if req.DefaultScope == "" && sc != "" {
 			defScope = sc
+		} else if strings.TrimSpace(req.DefaultScope) != "" && sc == "" {
+			// When raw URL has #/inventories or no scope, build URL from the explicitly selected defaultScope
+			rawURLForConsole = b
 		}
 	}
-	consoleURL := buildAwxConsoleURL(baseURL, defScope, req.URL)
+	if strings.TrimSpace(defScope) != "" {
+		_, _, resolvedKey := s.resolveScopeFromBridgeOrAPI(defScope, "3")
+		if resolvedKey != "" {
+			defScope = resolvedKey
+		}
+	}
+	consoleURL := buildAwxConsoleURL(baseURL, defScope, rawURLForConsole)
 	if consoleURL == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"ok":    false,
@@ -3200,18 +3270,26 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 		Mode    string `json:"mode"` // "page" or "all"
 		Exclude string `json:"exclude"`
 		Scope   string `json:"scope"`
+		Page    int    `json:"page,omitempty"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	if req.Mode == "" {
 		req.Mode = "all"
 	}
 
+	var wantType, wantID, wantKey string
+	if strings.TrimSpace(req.Scope) != "" {
+		wantType, wantID, wantKey = s.resolveScopeFromBridgeOrAPI(req.Scope, "")
+	}
+
 	if s.wsHub == nil || s.wsHub.BridgeCount() == 0 {
-		// If HTTP-only snapshot was pushed recently for page mode, still allow page collection cleanly
+		// If HTTP-only snapshot was pushed recently for page mode, only use it if scope/page match
 		s.bridgeMu.RLock()
 		st := s.bridgeState
 		s.bridgeMu.RUnlock()
-		if req.Mode == "page" && st.Connected && time.Since(st.UpdatedAt) < 2*time.Minute && len(st.PageHosts) > 0 {
+		scopeMatches := wantKey == "" || (strings.EqualFold(wantType, st.ScopeType) && (wantID == "" || strings.EqualFold(wantID, st.ScopeID)))
+		pageMatches := req.Page <= 0 || st.Page == req.Page
+		if req.Mode == "page" && st.Connected && time.Since(st.UpdatedAt) < 2*time.Minute && len(st.PageHosts) > 0 && scopeMatches && pageMatches {
 			filtered, excluded, results := filterHostList(st.PageHosts, req.Exclude)
 			writeJSON(w, http.StatusOK, map[string]interface{}{
 				"ok":            true,
@@ -3251,11 +3329,14 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 		"mode":      req.Mode,
 		"exclude":   req.Exclude,
 	}
-	if strings.TrimSpace(req.Scope) != "" {
-		st, sid, nk := normalizeAwxScope(req.Scope, "")
-		cmdData["scope"] = nk
-		cmdData["scopeType"] = st
-		cmdData["scopeId"] = sid
+	if wantKey != "" {
+		cmdData["scope"] = wantKey
+		cmdData["scopeType"] = wantType
+		cmdData["scopeId"] = wantID
+		cmdData["forceScope"] = true
+	}
+	if req.Page > 0 {
+		cmdData["page"] = req.Page
 	}
 	s.wsHub.BroadcastJSON(map[string]interface{}{
 		"event": "AWX_BRIDGE_COMMAND",
@@ -3276,6 +3357,19 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 			}
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": msg})
 			return
+		}
+		if wantKey != "" && wantType != "all" {
+			resType := strings.ToLower(strings.TrimSpace(res.ScopeType))
+			resID := strings.TrimSpace(res.ScopeID)
+			mismatch := resType == "all" || strings.EqualFold(resID, "all") ||
+				(wantType == "group" && resType != "group") ||
+				(wantID != "" && resID != "" && !strings.EqualFold(resID, wantID))
+			if mismatch {
+				writeJSON(w, http.StatusBadGateway, map[string]string{
+					"error": fmt.Sprintf("요청한 범위(%s)와 다른 범위(%s)가 반환되었습니다. [AWX 탭 연결] 북마크릿을 최신으로 다시 실행한 뒤 수집해 주세요.", wantKey, res.Label),
+				})
+				return
+			}
 		}
 		rawCount := res.RawCount
 		if rawCount < len(res.Hosts) {

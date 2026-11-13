@@ -740,6 +740,96 @@ async function runStandaloneAppTest() {
                 throw new Error(`Expected ONLY Demo Inventory hosts ['demo-only-01', 'demo-only-02'], got cnt=${demoCnt} hosts=${JSON.stringify(demoHosts)}`);
             }
             console.log("   Verified #/inventories screenshot scenario: 0 false scrapes, blocks global dump, and dropdown-selected Demo Inventory collects ONLY Demo Inventory hosts (2).");
+
+            // D) Navigate bridged AWX tab to #/hosts (Global All Hosts DOM) while Demo Inventory (#77) stays pinned from dropdown:
+            //    BOTH [현재 화면 수집] (first page of #77) and [현재 인벤토리 전체 수집] MUST stay strictly on #77!
+            await awxTabCdp.evaluate(`
+                (() => {
+                    document.body.innerHTML = '<table><tbody>' +
+                        '<tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/901/details">all-dom-leak-01</a></td></tr>' +
+                        '<tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/902/details">all-dom-leak-02</a></td></tr>' +
+                    '</tbody></table>';
+                    location.hash = '#/hosts';
+                })()
+            `);
+            let allTabSynced = false;
+            for (let i = 0; i < 25; i++) {
+                await sleep(150);
+                if (await cdp.evaluate(`window.awxValidatorState?.awxBridge?.scopeType === 'all' && window.awxValidatorState?.awxBridge?.bridgeVersion === 2`)) {
+                    allTabSynced = true;
+                    break;
+                }
+            }
+            if (!allTabSynced) {
+                throw new Error(`Bridged tab did not sync #/hosts state: ${await cdp.evaluate('JSON.stringify(window.awxValidatorState?.awxBridge)')}`);
+            }
+            const srcLabelOnAll = await cdp.evaluate(`document.getElementById('awx-vld-awx-source-label')?.innerText || ''`);
+            if (!srcLabelOnAll.includes('선택 대상') || !srcLabelOnAll.includes('77')) {
+                throw new Error(`Expected pinned #77 source label when tab sits on #/hosts, got: ${srcLabelOnAll}`);
+            }
+
+            // [현재 화면 수집] must collect page 1 of selected Demo Inventory (#77), NOT #/hosts DOM!
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-page').click()`);
+            await sleep(500);
+            const caseDPageHosts = await cdp.evaluate(`Array.from(window.awxValidatorState.collectedHosts).sort()`);
+            if (caseDPageHosts.length !== 2 || caseDPageHosts[0] !== 'demo-only-01' || caseDPageHosts[1] !== 'demo-only-02') {
+                throw new Error(`Case D [현재 화면 수집] leaked #/hosts instead of Demo Inventory page 1: ${JSON.stringify(caseDPageHosts)}`);
+            }
+
+            // [현재 인벤토리 전체 수집] must collect ONLY Demo Inventory (#77), NOT /api/v2/hosts/!
+            const caseDAllCnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            const caseDAllHosts = await cdp.evaluate(`Array.from(window.awxValidatorState.collectedHosts).sort()`);
+            if (caseDAllCnt !== 2 || caseDAllHosts[0] !== 'demo-only-01' || caseDAllHosts[1] !== 'demo-only-02') {
+                throw new Error(`Case D [현재 인벤토리 전체 수집] leaked /api/v2/hosts/: cnt=${caseDAllCnt}, hosts=${JSON.stringify(caseDAllHosts)}`);
+            }
+
+            // Also navigate bridged tab to a DIFFERENT specific inventory (#15 page 2), unpin naturally,
+            // then re-pick Demo Inventory (#77) in dropdown and verify BOTH [현재 화면 수집] & [전체 수집] obey #77 page 1!
+            await awxTabCdp.evaluate(`
+                (() => {
+                    document.body.innerHTML = '<table><tbody>' +
+                        '<tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/501/details">inv15-dom-leak</a></td></tr>' +
+                    '</tbody></table>';
+                    location.hash = '#/inventories/inventory/15/hosts?page=2';
+                })()
+            `);
+            let inv15Unpinned = false;
+            for (let i = 0; i < 25; i++) {
+                await sleep(150);
+                const lbl = await cdp.evaluate(`document.getElementById('awx-vld-awx-source-label')?.innerText || ''`);
+                if (lbl.includes('인벤토리 #15') && !(await cdp.evaluate(`window.awxValidatorState?.awxConfig?.scopePinned`))) {
+                    inv15Unpinned = true;
+                    break;
+                }
+            }
+            if (!inv15Unpinned) {
+                throw new Error(`Navigating bridged tab to #15 did not unpin previous dropdown override: ${await cdp.evaluate('document.getElementById("awx-vld-awx-source-label")?.innerText')}`);
+            }
+
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
+            await sleep(200);
+            await cdp.evaluate(`
+                (() => {
+                    const sel = document.getElementById('awx-vld-awx-inventory-select');
+                    sel.value = 'inventory:77';
+                    sel.dispatchEvent(new Event('change'));
+                })()
+            `);
+            await sleep(200);
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-close-settings').click()`);
+            await sleep(150);
+
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-page').click()`);
+            await sleep(500);
+            const overridePageHosts = await cdp.evaluate(`Array.from(window.awxValidatorState.collectedHosts).sort()`);
+            if (overridePageHosts.length !== 2 || overridePageHosts[0] !== 'demo-only-01' || overridePageHosts[1] !== 'demo-only-02') {
+                throw new Error(`Expected dropdown #77 to override #15 page 2 on [현재 화면 수집], got: ${JSON.stringify(overridePageHosts)}`);
+            }
+            const overrideAllCnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            if (overrideAllCnt !== 2) {
+                throw new Error(`Expected dropdown #77 to override #15 on [전체 수집], got cnt=${overrideAllCnt}`);
+            }
+            console.log("   Verified Case D: #/hosts & wrong-inventory (#15 p.2) tabs stay strictly isolated to dropdown-selected #77 for both [현재 화면 수집] (p.1) & [전체 수집].");
         } finally {
             if (awxTabCdp) awxTabCdp.close();
             if (awxTabTargetId) {
