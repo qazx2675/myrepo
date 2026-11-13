@@ -521,9 +521,25 @@ async function runStandaloneAppTest() {
         let awxTabCdp = null;
         let awxTabTargetId = null;
         try {
-            // A) Open Settings, paste AWX browser URL, verify auto-parse & Test/Save + Collect
+            // A) Open Settings, verify scheme-less URL parse + full pasted URL auto-parse & Test/Save + Collect
             await cdp.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
             await sleep(250);
+            await cdp.evaluate(`
+                (() => {
+                    const u = document.getElementById('awx-vld-awx-url');
+                    u.value = 'awxhost/#/inventories/inventory/33/hosts?page=3';
+                    u.dispatchEvent(new Event('input'));
+                })()
+            `);
+            await sleep(80);
+            const schemelessParsed = await cdp.evaluate(`({
+                scope: document.getElementById('awx-vld-awx-scope').value,
+                page: document.getElementById('awx-vld-awx-page').value,
+                hasOpenBtn: !!document.getElementById('awx-vld-btn-awx-open')
+            })`);
+            if (schemelessParsed.scope !== 'inventory:33' || schemelessParsed.page !== '3' || !schemelessParsed.hasOpenBtn) {
+                throw new Error(`AWX scheme-less parse or AWX open button check failed: ${JSON.stringify(schemelessParsed)}`);
+            }
             const pastedUrl = `${mockAwxBase}/#/inventories/inventory/15/hosts?page=2`;
             await cdp.evaluate(`
                 (() => {

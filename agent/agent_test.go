@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -16,6 +18,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"host-cross-checker/internal/launcher"
 )
 
 // setupTestServer creates an isolated AgentServer with a temp directory.
@@ -1384,6 +1388,283 @@ func TestAwxBridgeCollectFlow(t *testing.T) {
 	}
 	if int(gotCol.Body["count"].(float64)) != 2 || int(gotCol.Body["rawCount"].(float64)) != 3 {
 		t.Fatalf("Expected filtered count=2 & rawCount=3, got: %+v", gotCol.Body)
+	}
+}
+
+// TestAwxSessionLoginRedirectAndSchemeFallback verifies:
+// 1. Scheme-less URL parsing ("awxhost/#/inventories/inventory/33/hosts")
+// 2. HTTP->HTTPS redirect preserving Authorization
+// 3. Fallback from Basic Auth (401/WAF/disabled) to AWX Django /api/login/ Cookie+CSRF Session Login
+// 4. Automatic https -> http scheme fallback when protocol is omitted
+// 5. SPKI probe + launcher AWX certificate bypass CLI arguments
+func TestAwxSessionLoginRedirectAndSchemeFallback(t *testing.T) {
+	// 1. Scheme-less parsing
+	b, sc, pg, exp := parseAwxTargetInputEx("awxhost/#/inventories/inventory/33/hosts?page=2")
+	if b != "https://awxhost" || sc != "inventory:33" || pg != 2 || exp {
+		t.Fatalf("Unexpected parseAwxTargetInputEx result: base=%q scope=%q page=%d explicit=%v", b, sc, pg, exp)
+	}
+	b2, sc2, pg2, exp2 := parseAwxTargetInputEx("http://awxhost/#/inventories/smart_inventory/18/hosts")
+	if b2 != "http://awxhost" || sc2 != "smart_inventory:18" || pg2 != 0 || !exp2 {
+		t.Fatalf("Unexpected explicit parseAwxTargetInputEx result: base=%q scope=%q page=%d explicit=%v", b2, sc2, pg2, exp2)
+	}
+
+	// 2. Mock HTTPS AWX server requiring Web Session (/api/login/) + blocking Basic Auth & Go default UA
+	tlsSessionAWX := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.UserAgent(), "Go-http-client") {
+			http.Error(w, "WAF blocked Go UA", http.StatusForbidden)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/login/":
+			if r.Method == http.MethodGet {
+				http.SetCookie(w, &http.Cookie{Name: "csrftoken", Value: "csrf-cookie-123", Path: "/"})
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = io.WriteString(w, `<form method="post" action="/api/login/"><input type="hidden" name="csrfmiddlewaretoken" value="csrf-form-456"><input type="text" name="username"><input type="password" name="password"></form>`)
+				return
+			}
+			if r.Method == http.MethodPost {
+				c, err := r.Cookie("csrftoken")
+				if err != nil || c.Value != "csrf-cookie-123" {
+					http.Error(w, "CSRF cookie missing", http.StatusForbidden)
+					return
+				}
+				if !strings.HasPrefix(r.Header.Get("Referer"), "https://") || r.Header.Get("Origin") == "" {
+					http.Error(w, "CSRF Origin/Referer missing", http.StatusForbidden)
+					return
+				}
+				_ = r.ParseForm()
+				if r.FormValue("csrfmiddlewaretoken") != "csrf-form-456" {
+					http.Error(w, "CSRF form token mismatch", http.StatusForbidden)
+					return
+				}
+				if r.FormValue("username") != "corp.user" || r.FormValue("password") != "CorpPass!1" {
+					w.Header().Set("Content-Type", "text/html")
+					_, _ = io.WriteString(w, `<div>Please enter a correct username and password.</div>`)
+					return
+				}
+				http.SetCookie(w, &http.Cookie{Name: "awx_sessionid", Value: "sess-ok-999", Path: "/"})
+				http.Redirect(w, r, "/api/v2/", http.StatusFound)
+				return
+			}
+		case "/api/v2/inventories/33/hosts/":
+			// Reject Basic Auth to simulate enterprise AWX disabling Basic Auth
+			if r.Header.Get("Authorization") != "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, `{"detail":"HTTP Basic auth is disabled."}`)
+				return
+			}
+			sc, err := r.Cookie("awx_sessionid")
+			if err != nil || sc.Value != "sess-ok-999" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided."}`)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if r.URL.Query().Get("page") == "2" {
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"count": 4,
+					"next":  nil,
+					"results": []map[string]string{
+						{"name": "inv33-p2-01"}, {"name": "inv33-p2-02"},
+					},
+				})
+				return
+			}
+			next := "/api/v2/inventories/33/hosts/?page=2"
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"count": 4,
+				"next":  &next,
+				"results": []map[string]string{
+					{"name": "inv33-01"}, {"name": "inv33-02"},
+				},
+			})
+			return
+		case "/api/v2/":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"current_version":"24.0"}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer tlsSessionAWX.Close()
+
+	_, ts := setupTestServer(t)
+
+	// Save & test HTTPS session-only AWX
+	cfgBody, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":     tlsSessionAWX.URL + "/#/inventories/inventory/33/hosts",
+		"username":    "corp.user",
+		"password":    "CorpPass!1",
+		"insecureTls": true,
+	})
+	respCfg, err := http.Post(ts.URL+"/api/awx/config", "application/json", bytes.NewReader(cfgBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respCfg.Body.Close()
+
+	respTest, err := http.Post(ts.URL+"/api/awx/test", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respTest.Body.Close()
+	rawTest, _ := io.ReadAll(respTest.Body)
+	if respTest.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on session AWX test, got %d: %s", respTest.StatusCode, string(rawTest))
+	}
+	var testOut struct {
+		OK         bool   `json:"ok"`
+		Count      int    `json:"count"`
+		AuthMethod string `json:"authMethod"`
+	}
+	if err := json.Unmarshal(rawTest, &testOut); err != nil {
+		t.Fatal(err)
+	}
+	if !testOut.OK || testOut.Count != 4 || testOut.AuthMethod != "session" {
+		t.Fatalf("Expected ok=true count=4 authMethod=session, got: %+v", testOut)
+	}
+
+	// Collect all pages using cached session
+	respCollect, err := http.Get(ts.URL + "/api/awx/hosts?scope=inventory:33&refresh=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCollect.Body.Close()
+	if respCollect.StatusCode != http.StatusOK {
+		bErr, _ := io.ReadAll(respCollect.Body)
+		t.Fatalf("Expected 200 collecting multi-page session AWX hosts, got %d: %s", respCollect.StatusCode, string(bErr))
+	}
+	var collectOut struct {
+		Count int      `json:"count"`
+		Hosts []string `json:"hosts"`
+	}
+	if err := json.NewDecoder(respCollect.Body).Decode(&collectOut); err != nil {
+		t.Fatal(err)
+	}
+	if collectOut.Count != 4 {
+		t.Fatalf("Expected 4 collected hosts across 2 session pages, got %+v", collectOut)
+	}
+
+	// Verify changing scheme or IP/hostname retains saved non-default user password on config update
+	updBody, _ := json.Marshal(map[string]interface{}{
+		"baseUrl": tlsSessionAWX.URL + "/",
+	})
+	respUpd, err := http.Post(ts.URL+"/api/awx/config", "application/json", bytes.NewReader(updBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var updOut struct {
+		HasPassword bool `json:"hasPassword"`
+	}
+	_ = json.NewDecoder(respUpd.Body).Decode(&updOut)
+	respUpd.Body.Close()
+	if !updOut.HasPassword {
+		t.Fatalf("Expected saved custom password to remain preserved across URL re-test")
+	}
+
+	// 3. Test HTTP -> HTTPS 301 redirect preserving Basic Auth
+	redirectTarget := tlsSessionAWX.URL // reuse TLS listener or create TLS Basic server
+	_ = redirectTarget
+	tlsBasic := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != "redir.user" || p != "RedirPass!" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"count":1,"next":null,"results":[{"name":"redir-host-01"}]}`)
+	}))
+	defer tlsBasic.Close()
+
+	httpRedirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, tlsBasic.URL+r.RequestURI, http.StatusMovedPermanently)
+	}))
+	defer httpRedirector.Close()
+
+	cfgRedir, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":      httpRedirector.URL,
+		"defaultScope": "inventory:33",
+		"username":     "redir.user",
+		"password":     "RedirPass!",
+		"insecureTls":  true,
+	})
+	r1, _ := http.Post(ts.URL+"/api/awx/config", "application/json", bytes.NewReader(cfgRedir))
+	r1.Body.Close()
+	r2, err := http.Post(ts.URL+"/api/awx/test", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r2.Body.Close()
+	if r2.StatusCode != http.StatusOK {
+		rb, _ := io.ReadAll(r2.Body)
+		t.Fatalf("Expected HTTP->HTTPS redirect preserving Basic Auth to succeed, got %d: %s", r2.StatusCode, string(rb))
+	}
+
+	// 4. Test scheme-less rawUrl falling back from https:// to http:// when target is HTTP-only
+	httpOnlyAWX := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != "plain.user" || p != "PlainPass!" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"count":1,"next":null,"results":[{"name":"plain-host-01"}]}`)
+	}))
+	defer httpOnlyAWX.Close()
+	httpHostPort := strings.TrimPrefix(httpOnlyAWX.URL, "http://")
+
+	rawInput := httpHostPort + "/#/inventories/inventory/33/hosts"
+	cfgPlain, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":     rawInput,
+		"username":    "plain.user",
+		"password":    "PlainPass!",
+		"insecureTls": true,
+	})
+	rp1, _ := http.Post(ts.URL+"/api/awx/config", "application/json", bytes.NewReader(cfgPlain))
+	rp1.Body.Close()
+	testFallbackBody, _ := json.Marshal(map[string]interface{}{
+		"rawUrl":              rawInput,
+		"allowSchemeFallback": true,
+	})
+	rp2, err := http.Post(ts.URL+"/api/awx/test", "application/json", bytes.NewReader(testFallbackBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rp2.Body.Close()
+	rpBytes, _ := io.ReadAll(rp2.Body)
+	if rp2.StatusCode != http.StatusOK {
+		t.Fatalf("Expected https->http auto fallback to succeed, got %d: %s", rp2.StatusCode, string(rpBytes))
+	}
+	var rpOut struct {
+		BaseURL string `json:"baseUrl"`
+	}
+	_ = json.Unmarshal(rpBytes, &rpOut)
+	if rpOut.BaseURL != httpOnlyAWX.URL {
+		t.Fatalf("Expected resolved baseUrl=%q, got %q", httpOnlyAWX.URL, rpOut.BaseURL)
+	}
+
+	// 5. Verify SPKI probe & launcher AWX args
+	hashes := probeServerSPKIHashes(tlsSessionAWX.URL, 2*time.Second)
+	if len(hashes) == 0 {
+		t.Fatalf("Expected non-empty SPKI hashes from TLS test server")
+	}
+	sum := sha256.Sum256(tlsSessionAWX.Certificate().RawSubjectPublicKeyInfo)
+	expectedHash := base64.StdEncoding.EncodeToString(sum[:])
+	if hashes[0] != expectedHash {
+		t.Fatalf("SPKI hash mismatch: got %q, want %q", hashes[0], expectedHash)
+	}
+	argsSPKI := launcher.BuildAWXArgs("https://awxhost/#/inventories/inventory/33/hosts", "C:\\tmp\\awxprof", hashes, true)
+	joinedSPKI := strings.Join(argsSPKI, " ")
+	if !strings.Contains(joinedSPKI, "--ignore-certificate-errors-spki-list="+expectedHash) ||
+		!strings.Contains(joinedSPKI, "BlockInsecurePrivateNetworkRequests") ||
+		!strings.Contains(joinedSPKI, "--new-window") {
+		t.Fatalf("Unexpected BuildAWXArgs output: %v", argsSPKI)
+	}
+	argsFallback := launcher.BuildAWXArgs("https://awxhost", "C:\\tmp\\awxprof", nil, true)
+	if !strings.Contains(strings.Join(argsFallback, " "), "--ignore-certificate-errors") {
+		t.Fatalf("Expected --ignore-certificate-errors fallback when SPKI empty: %v", argsFallback)
 	}
 }
 

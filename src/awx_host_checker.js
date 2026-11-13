@@ -271,18 +271,23 @@
 
     function parseAwxWebUrl(raw) {
         const trimmed = String(raw || '').trim();
-        if (!trimmed) return { baseUrl: '', scope: '', page: '' };
+        if (!trimmed) return { baseUrl: '', scope: '', page: '', hasExplicitScheme: true };
+        const hasExplicitScheme = /^[a-z][a-z0-9+.-]*:[/][/]/i.test(trimmed);
+        const candidate = hasExplicitScheme ? trimmed : ('https://' + trimmed.replace(/^[/]+/, ''));
         try {
-            const u = new URL(trimmed);
+            const u = new URL(candidate);
             const baseUrl = `${u.protocol}//${u.host}`;
             const route = `${u.pathname || ''} ${u.hash || ''} ${u.search || ''}`;
             let scope = '';
             const grpMatch = route.match(/(?:^|\/)groups\/(\d+)\/(?:nested_hosts|all_hosts|hosts)/i);
             const invMatch = route.match(/\/inventories\/(smart_inventory|inventory)\/(\d+)/i);
+            const apiInvMatch = route.match(/\/inventories\/(\d+)\/(?:hosts|all_hosts)/i);
             if (grpMatch) {
                 scope = `group:${grpMatch[1]}`;
             } else if (invMatch) {
                 scope = `${invMatch[1].toLowerCase()}:${invMatch[2]}`;
+            } else if (apiInvMatch) {
+                scope = `inventory:${apiInvMatch[1]}`;
             } else if (/[/]hosts\b/i.test(route) && !route.toLowerCase().includes('/inventories/')) {
                 scope = 'all';
             }
@@ -292,9 +297,9 @@
                 const pm = route.slice(qIdx + 1).match(/(?:^|[&\s])(?:[\w.]+\.)?page=(\d+)/i);
                 if (pm && parseInt(pm[1], 10) > 0) page = pm[1];
             }
-            return { baseUrl, scope, page };
+            return { baseUrl, scope, page, hasExplicitScheme };
         } catch (e) {
-            return { baseUrl: trimmed.replace(/\/+$/, ''), scope: '', page: '' };
+            return { baseUrl: trimmed.replace(/\/+$/, ''), scope: '', page: '', hasExplicitScheme };
         }
     }
 
@@ -398,9 +403,12 @@
                     <span id="awx-vld-awx-bridge-status" style="font-size:10.5px; white-space:nowrap;">${bBadge}</span>
                 </div>
                 <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:6px 8px; margin-bottom:6px;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-                        <a id="awx-vld-btn-bridge-bookmark" href="#" draggable="true" title="Edge/Chrome 북마크 바에 드래그한 뒤 열린 AWX 화면에서 클릭하세요" style="display:inline-flex; align-items:center; gap:4px; background:#0284c7; color:#ffffff; text-decoration:none; font-weight:700; font-size:11px; padding:4px 9px; border-radius:4px; white-space:nowrap; cursor:grab;">AWX 탭 연결 (북마크 드래그)</a>
-                        <button id="awx-vld-btn-copy-bridge" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 8px; white-space:nowrap;">연결 코드 복사</button>
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:5px;">
+                        <a id="awx-vld-btn-bridge-bookmark" href="#" draggable="true" title="Edge/Chrome 북마크 바에 드래그한 뒤 열린 AWX 화면에서 클릭하세요" style="display:inline-flex; align-items:center; gap:4px; background:#0284c7; color:#ffffff; text-decoration:none; font-weight:700; font-size:11px; padding:4px 8px; border-radius:4px; white-space:nowrap; cursor:grab;">AWX 탭 연결 (북마크 드래그)</a>
+                        <div style="display:flex; gap:4px; flex-shrink:0;">
+                            <button id="awx-vld-btn-awx-open" type="button" title="인증서 경고 없이 전용 Edge 창으로 AWX 열기" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 7px; white-space:nowrap; border-color:#38bdf8; color:#bae6fd;">AWX 창 열기</button>
+                            <button id="awx-vld-btn-copy-bridge" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:4px 7px; white-space:nowrap;">연결 코드 복사</button>
+                        </div>
                     </div>
                     <div style="font-size:10px; color:#94a3b8; margin-top:4px; line-height:1.3;">Edge/Chrome에 열린 AWX 화면에서 위 북마크릿을 1회 실행하면 SSO 세션·필터 상태 그대로 즉시 수집합니다.</div>
                 </div>
@@ -1441,6 +1449,7 @@
         const btnTestSelf = getEl('awx-vld-btn-test-self');
         const awxBridgeStatus = getEl('awx-vld-awx-bridge-status');
         const btnBridgeBookmark = getEl('awx-vld-btn-bridge-bookmark');
+        const btnAwxOpen = getEl('awx-vld-btn-awx-open');
         const btnCopyBridge = getEl('awx-vld-btn-copy-bridge');
         const inputAwxUrl = getEl('awx-vld-awx-url');
         const inputAwxScope = getEl('awx-vld-awx-scope');
@@ -2255,15 +2264,28 @@
                     saveAwxDirectConfigLocal(state.awxConfig, true);
                     syncAwxSettingsUI();
 
-                    const testRes = await callAgentHttp('/api/awx/test', { method: 'POST', body: {} });
+                    const testRes = await callAgentHttp('/api/awx/test', {
+                        method: 'POST',
+                        body: {
+                            rawUrl,
+                            allowSchemeFallback: !parsed.hasExplicitScheme
+                        }
+                    });
                     const testData = await testRes.json();
                     if (!testRes.ok || !testData.ok) {
                         throw new Error(testData.error || 'AWX 테스트 실패');
                     }
+                    if (testData.baseUrl && testData.baseUrl !== state.awxConfig.baseUrl) {
+                        state.awxConfig.baseUrl = testData.baseUrl;
+                        if (inputAwxUrl) inputAwxUrl.value = testData.baseUrl;
+                        saveAwxDirectConfigLocal(state.awxConfig, true);
+                        syncAwxSettingsUI();
+                    }
+                    const authTag = testData.authMethod === 'session' ? ' [세션]' : '';
                     const sampleStr = (testData.samples && testData.samples.length) ? ` (예: ${testData.samples.slice(0, 2).join(', ')})` : '';
                     if (awxTestResult) {
                         awxTestResult.style.color = '#4ade80';
-                        awxTestResult.innerText = `연결 성공! 총 ${testData.count ?? 0}대 확인${sampleStr}`;
+                        awxTestResult.innerText = `연결 성공!${authTag} 총 ${testData.count ?? 0}대 확인${sampleStr}`;
                     }
                 } catch (err) {
                     if (awxTestResult) {
@@ -2273,6 +2295,34 @@
                 } finally {
                     btnAwxSave.disabled = false;
                     btnAwxSave.innerText = '연결 테스트 & 저장';
+                }
+            };
+        }
+        if (btnAwxOpen) {
+            btnAwxOpen.onclick = async () => {
+                const rawUrl = (inputAwxUrl ? inputAwxUrl.value.trim() : '') || state.awxConfig.baseUrl || '';
+                const parsed = parseAwxWebUrl(rawUrl);
+                const defaultScope = (inputAwxScope && inputAwxScope.value.trim()) || parsed.scope || state.awxConfig.defaultScope || 'inventory:3';
+                const insecureTls = chkAwxInsecure ? chkAwxInsecure.checked : true;
+                btnAwxOpen.disabled = true;
+                try {
+                    const res = await callAgentHttp('/api/awx/open-browser', {
+                        method: 'POST',
+                        body: { url: rawUrl, defaultScope, insecureTls }
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.error || 'AWX 창 열기 실패');
+                    if (awxTestResult) {
+                        awxTestResult.style.color = '#38bdf8';
+                        awxTestResult.innerText = `전용 창에서 AWX 열림 (인증서 경고 우회: ${data.bypassMethod || 'ok'})`;
+                    }
+                } catch (err) {
+                    if (awxTestResult) {
+                        awxTestResult.style.color = '#f87171';
+                        awxTestResult.innerText = `[오류] ${err.message || 'AWX 창 열기 실패'}`;
+                    }
+                } finally {
+                    btnAwxOpen.disabled = false;
                 }
             };
         }

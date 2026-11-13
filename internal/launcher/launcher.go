@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // Window size tuned for the 3-tab cross-checker panel.
@@ -95,6 +96,66 @@ func Args(appURL, profileDir string) []string {
 		args = append(args, "--remote-debugging-port="+dbgPort)
 	}
 	return args
+}
+
+// AWXProfileDir is the isolated browser profile used when opening the AWX
+// web console directly so TLS/PNA flags apply even if the main browser is running.
+func AWXProfileDir() string {
+	if custom := os.Getenv("CROSS_CHECKER_AWX_PROFILE_DIR"); custom != "" {
+		return custom
+	}
+	return filepath.Join(os.TempDir(), "host-cross-checker-awx-profile")
+}
+
+// BuildAWXArgs builds Edge/Chrome CLI flags for opening AWX without blocking cert prompts.
+func BuildAWXArgs(targetURL, profileDir string, spkiHashes []string, insecureTLS bool) []string {
+	args := []string{
+		"--new-window",
+		"--user-data-dir=" + profileDir,
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--disable-features=Translate,msEdgeSidebarV2,BlockInsecurePrivateNetworkRequests",
+		"--proxy-server=direct://",
+		"--proxy-bypass-list=<-loopback>",
+	}
+	if insecureTLS {
+		args = append(args, "--allow-insecure-localhost")
+		if len(spkiHashes) > 0 {
+			args = append(args, "--ignore-certificate-errors-spki-list="+strings.Join(spkiHashes, ","))
+		} else {
+			args = append(args, "--ignore-certificate-errors")
+		}
+	}
+	if dbgPort := os.Getenv("CROSS_CHECKER_AWX_DEBUG_PORT"); dbgPort != "" {
+		args = append(args, "--remote-debugging-port="+dbgPort)
+	}
+	args = append(args, targetURL)
+	return args
+}
+
+// OpenAWX launches the AWX console URL in a dedicated Edge/Chrome window with
+// certificate bypass and private-network bridge allowances enabled.
+func OpenAWX(targetURL string, spkiHashes []string, insecureTLS bool) (string, string, error) {
+	browser := FindBrowser()
+	if browser == "" {
+		return "default", "os-default", openDefault(targetURL)
+	}
+	profile := AWXProfileDir()
+	_ = os.MkdirAll(profile, 0o755)
+	bypassMethod := "none"
+	if insecureTLS {
+		if len(spkiHashes) > 0 {
+			bypassMethod = "spki"
+		} else {
+			bypassMethod = "ignore-cert-errors"
+		}
+	}
+	cmd := exec.Command(browser, BuildAWXArgs(targetURL, profile, spkiHashes, insecureTLS)...)
+	if err := cmd.Start(); err != nil {
+		return browser, "os-default", openDefault(targetURL)
+	}
+	go func() { _ = cmd.Wait() }()
+	return browser, bypassMethod, nil
 }
 
 // Open launches appURL in an Edge/Chrome app window.
