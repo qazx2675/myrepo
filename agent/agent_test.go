@@ -1837,6 +1837,81 @@ func TestAwxSessionEdgeCasesAndFailureDiagnostics(t *testing.T) {
 	if errCookie == nil || !strings.Contains(errCookie.Error(), "세션 쿠키가 저장되지 않았습니다") || !strings.Contains(errCookie.Error(), "other-internal.corp.local") {
 		t.Fatalf("Expected Set-Cookie Domain mismatch diagnostic, got: %v", errCookie)
 	}
+
+	// 5. Proxy strips ALL Authorization headers (Bearer/Token/Basic return 401 visit /api/login/.),
+	// yet Cookie session works -> Token + Password must fall back automatically to Session Login and succeed!
+	awxAuthStrippingProxy := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/inventories/33/hosts/":
+			// Simulate proxy stripping Authorization header: only cookie auth works
+			if c, err := r.Cookie("awx_sessionid"); err == nil && c.Value == "sess-cookie-only" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"count":1,"next":null,"results":[{"name":"proxy-cookie-host-01"}]}`)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided. To establish a login session, visit /api/login/."}`)
+		case "/api/login/":
+			if r.Method == http.MethodGet {
+				http.SetCookie(w, &http.Cookie{Name: "csrftoken", Value: "c-strip", Path: "/"})
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = io.WriteString(w, `<form method="post" action="/api/login/"><input type="hidden" name="csrfmiddlewaretoken" value="c-strip"><input type="text" name="username"><input type="password" name="password"></form>`)
+				return
+			}
+			_ = r.ParseForm()
+			if r.FormValue("username") == "proxyuser" && r.FormValue("password") == "ProxyPass!" {
+				http.SetCookie(w, &http.Cookie{Name: "awx_sessionid", Value: "sess-cookie-only", Path: "/", HttpOnly: true})
+				http.Redirect(w, r, "/api/v2/", http.StatusFound)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = io.WriteString(w, `<form method="post"><div class="error">Invalid credentials</div><input type="password" name="password"></form>`)
+		case "/api/v2/":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"description":"AWX API"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer awxAuthStrippingProxy.Close()
+
+	pgFallback, modeFallback, _, errFallback := srv.fetchAwxPageWithDetails(
+		awxAuthStrippingProxy.URL+"/api/v2/inventories/33/hosts/",
+		"proxyuser",
+		"ProxyPass!",
+		"valid-token-stripped-by-proxy",
+		true,
+		nil,
+	)
+	if errFallback != nil || modeFallback != "session" || len(pgFallback.Results) != 1 || pgFallback.Results[0].Name != "proxy-cookie-host-01" {
+		t.Fatalf("Expected Token 401 -> Session fallback to succeed, got pg=%+v mode=%q err=%v", pgFallback, modeFallback, errFallback)
+	}
+
+	// 6. Token pasted with accidental "Bearer " prefix must not become "Bearer Bearer ..."
+	awxBearerPrefixed := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer real-pat-999" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"count":1,"next":null,"results":[{"name":"pat-host-01"}]}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided. To establish a login session, visit /api/login/."}`)
+	}))
+	defer awxBearerPrefixed.Close()
+
+	pgPat, modePat, _, errPat := srv.fetchAwxPageWithDetails(
+		awxBearerPrefixed.URL+"/api/v2/inventories/33/hosts/",
+		"",
+		"",
+		` "Bearer real-pat-999" `,
+		true,
+		nil,
+	)
+	if errPat != nil || modePat != "bearer" || len(pgPat.Results) != 1 || pgPat.Results[0].Name != "pat-host-01" {
+		t.Fatalf("Expected prefixed Bearer token normalization to succeed, got pg=%+v mode=%q err=%v", pgPat, modePat, errPat)
+	}
 }
 
 func min(a, b int) int {

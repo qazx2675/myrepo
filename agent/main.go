@@ -1185,12 +1185,15 @@ func (s *AgentServer) handleAppRoot(w http.ResponseWriter, r *http.Request) {
 	webui.ServeIndex(w, r)
 }
 
+const agentBuildTag = "20261113-awx-auth-v4"
+
 // handleHealth: GET /api/health
 func (s *AgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status": "ok",
-		"port":   s.config.ListenPort,
-		"ip":     s.detectedIP,
+		"status":   "ok",
+		"port":     s.config.ListenPort,
+		"ip":       s.detectedIP,
+		"buildTag": agentBuildTag,
 	})
 }
 
@@ -1599,11 +1602,17 @@ func looksLikeSSOHtml(origURL, finalURL, htmlStr string) bool {
 
 func formatAwxHTTPError(status int, contentType, origURL, finalURL, snippet string) error {
 	trim := strings.TrimSpace(snippet)
+	redirNote := ""
+	if ou, oErr := url.Parse(origURL); oErr == nil {
+		if fu, fErr := url.Parse(finalURL); fErr == nil && fu.Host != "" && !strings.EqualFold(ou.Host, fu.Host) {
+			redirNote = fmt.Sprintf(" [리다이렉트: %s -> %s]", ou.Host, fu.Host)
+		}
+	}
 	var apiErr struct {
 		Detail string `json:"detail"`
 	}
 	if strings.HasPrefix(trim, "{") && json.Unmarshal([]byte(trim), &apiErr) == nil && strings.TrimSpace(apiErr.Detail) != "" {
-		return fmt.Errorf("HTTP %d (%s)", status, strings.TrimSpace(apiErr.Detail))
+		return fmt.Errorf("HTTP %d (%s)%s", status, strings.TrimSpace(apiErr.Detail), redirNote)
 	}
 	if looksLikeHTML(contentType, trim) {
 		if looksLikeSSOHtml(origURL, finalURL, trim) {
@@ -1617,12 +1626,12 @@ func formatAwxHTTPError(status int, contentType, origURL, finalURL, snippet stri
 			title = strings.TrimSpace(m[1])
 		}
 		if title != "" {
-			return fmt.Errorf("JSON 대신 HTML 반환 (HTTP %d, 제목: %s)", status, title)
+			return fmt.Errorf("JSON 대신 HTML 반환 (HTTP %d, 제목: %s)%s", status, title, redirNote)
 		}
-		return fmt.Errorf("JSON 대신 HTML 반환 (HTTP %d, URL: %s)", status, finalURL)
+		return fmt.Errorf("JSON 대신 HTML 반환 (HTTP %d, URL: %s)%s", status, finalURL, redirNote)
 	}
 	if status != http.StatusOK {
-		return fmt.Errorf("AWX API returned HTTP %d", status)
+		return fmt.Errorf("AWX API returned HTTP %d%s", status, redirNote)
 	}
 	return fmt.Errorf("AWX API 응답 파싱 실패")
 }
@@ -1704,8 +1713,12 @@ func extractAwxLoginForm(htmlStr, pageURL string) awxLoginFormInfo {
 		return info
 	}
 
-	if openEnd := strings.IndexByte(chosen, '>'); openEnd > 0 {
-		if m := reFormAction.FindStringSubmatch(chosen[:openEnd+1]); len(m) == 2 {
+	formSearch := chosen
+	if formIdx := strings.Index(strings.ToLower(chosen), "<form"); formIdx > 0 {
+		formSearch = chosen[formIdx:]
+	}
+	if openEnd := strings.IndexByte(formSearch, '>'); openEnd > 0 {
+		if m := reFormAction.FindStringSubmatch(formSearch[:openEnd+1]); len(m) == 2 {
 			act := strings.TrimSpace(html.UnescapeString(m[1]))
 			if act != "" && !strings.HasPrefix(strings.ToLower(act), "javascript:") {
 				if baseU, pErr := url.Parse(pageURL); pErr == nil {
@@ -1897,6 +1910,12 @@ func tryLoginAwxSession(baseOrigin, username, password string, insecureTLS bool)
 	sessionClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if req != nil && req.Response != nil {
 			observedSetCookies = append(observedSetCookies, req.Response.Header.Values("Set-Cookie")...)
+		}
+		if req != nil && req.URL != nil && len(via) > 0 && via[0] != nil && via[0].URL != nil {
+			// Keep HTTPS scheme across reverse-proxy Location dowgrades to avoid losing Secure session cookies.
+			if strings.EqualFold(via[0].URL.Scheme, "https") && strings.EqualFold(req.URL.Scheme, "http") && strings.EqualFold(req.URL.Hostname(), via[0].URL.Hostname()) {
+				req.URL.Scheme = "https"
+			}
 		}
 		if origCheckRedirect != nil {
 			return origCheckRedirect(req, via)
@@ -2167,6 +2186,31 @@ func isAwxRetryableAuthOrHTML(status int, ct, snippet string) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || looksLikeHTML(ct, snippet)
 }
 
+func buildAwxTokenAuthHeaders(rawToken string) []string {
+	t := strings.TrimSpace(rawToken)
+	t = strings.Trim(t, `"'`)
+	t = strings.TrimSpace(t)
+	if t == "" {
+		return nil
+	}
+	low := strings.ToLower(t)
+	preferToken := false
+	core := t
+	if strings.HasPrefix(low, "bearer ") {
+		core = strings.TrimSpace(t[len("bearer "):])
+	} else if strings.HasPrefix(low, "token ") {
+		core = strings.TrimSpace(t[len("token "):])
+		preferToken = true
+	}
+	if core == "" {
+		return nil
+	}
+	if preferToken {
+		return []string{"Token " + core, "Bearer " + core}
+	}
+	return []string{"Bearer " + core, "Token " + core}
+}
+
 func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token string, insecureTLS bool, client *http.Client) (*awxPageResponse, string, string, error) {
 	if client == nil {
 		client = newAwxHTTPClient(insecureTLS)
@@ -2195,29 +2239,40 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 		return pg, st, ct, finalURL, snip, err
 	}
 
-	if tok != "" {
-		pg, st, _, finalURL, _, err := tryWithControllerFallback(pageURL, "Bearer "+tok, client)
-		if err == nil {
-			return pg, "bearer", finalURL, nil
-		}
-		if st == http.StatusUnauthorized && !strings.Contains(tok, " ") {
-			pg2, _, _, f2, _, err2 := tryWithControllerFallback(pageURL, "Token "+tok, client)
-			if err2 == nil {
-				return pg2, "token", f2, nil
-			}
-			return nil, "", f2, err2
-		}
-		return nil, "", finalURL, err
-	}
-
 	sessionKey := awxSessionCacheKey(baseOrigin, user, password, insecureTLS)
-	if password != "" {
+	if user != "" && password != "" {
 		if cachedClient := s.getCachedAwxSession(sessionKey); cachedClient != nil {
 			pg, _, _, finalURL, _, err := tryWithControllerFallback(pageURL, "", cachedClient)
 			if err == nil {
 				return pg, "session", finalURL, nil
 			}
 			s.clearAwxSessionCacheKey(sessionKey)
+		}
+	}
+
+	var tokenErr error
+	var tokenFinalURL string
+	if tokHeaders := buildAwxTokenAuthHeaders(tok); len(tokHeaders) > 0 {
+		for idx, hdr := range tokHeaders {
+			pg, st, _, fURL, _, err := tryWithControllerFallback(pageURL, hdr, client)
+			if err == nil {
+				mode := "bearer"
+				if strings.HasPrefix(hdr, "Token ") {
+					mode = "token"
+				}
+				return pg, mode, fURL, nil
+			}
+			tokenErr = err
+			tokenFinalURL = fURL
+			if idx == 0 && (st == http.StatusUnauthorized || st == http.StatusForbidden) {
+				continue
+			}
+			break
+		}
+		// If Bearer/Token failed (e.g., proxy strips Authorization header or OAuth2 disabled)
+		// and user/password were also provided, fall through to Basic/Session login instead of failing early.
+		if user == "" || password == "" {
+			return nil, "", tokenFinalURL, fmt.Errorf("Token 인증 실패 (%w) - 프록시가 Authorization 헤더를 차단하는 경우 계정 ID/비밀번호 입력 또는 'AWX 창 열기' + 'AWX 탭 연결'을 사용하세요", tokenErr)
 		}
 	}
 
@@ -2245,6 +2300,13 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 		}
 	}
 
+	wrapTokenAndErr := func(detailErr error) error {
+		if tokenErr != nil {
+			return fmt.Errorf("Token 인증(%v) 및 %w", tokenErr, detailErr)
+		}
+		return detailErr
+	}
+
 	// Fallback to AWX web form cookie session login when Basic Auth returns 401/403/HTML
 	if password == "" && tok == "" && st == http.StatusUnauthorized {
 		return nil, "", finalURL, fmt.Errorf("%w (비밀번호 또는 Bearer Token이 비어 있어 세션 로그인을 시도할 수 없습니다)", err)
@@ -2252,7 +2314,7 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 	if password != "" && isAwxRetryableAuthOrHTML(st, ct, snip) && effectiveOrigin != "" {
 		sessClient, authTokHeader, loginErr := tryLoginAwxSession(effectiveOrigin, user, password, insecureTLS)
 		if loginErr != nil {
-			return nil, "", finalURL, loginErr
+			return nil, "", finalURL, wrapTokenAndErr(loginErr)
 		}
 		pgS, _, _, finalS, _, errS := tryWithControllerFallback(effectivePageURL, authTokHeader, sessClient)
 		if errS == nil {
@@ -2264,10 +2326,10 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 			}
 			return pgS, "session", finalS, nil
 		}
-		return nil, "", finalS, fmt.Errorf("세션 로그인 후 %w", errS)
+		return nil, "", finalS, wrapTokenAndErr(fmt.Errorf("세션 로그인 후 %w", errS))
 	}
 
-	return nil, "", finalURL, err
+	return nil, "", finalURL, wrapTokenAndErr(err)
 }
 
 func (s *AgentServer) fetchAwxPageWithCreds(pageURL, username, password, token string, client *http.Client) (*awxPageResponse, error) {
@@ -4435,17 +4497,40 @@ func main() {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		// If another instance is already running on this port, bring up the window and exit cleanly
-		client := &http.Client{Timeout: 500 * time.Millisecond, Transport: &http.Transport{Proxy: nil}}
+		// If another instance is already running on this port, check its build tag.
+		client := &http.Client{Timeout: 600 * time.Millisecond, Transport: &http.Transport{Proxy: nil}}
 		if resp, hErr := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/health", cfg.ListenPort)); hErr == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close()
-			log.Printf("이미 포트 %d에서 실행 중입니다. 기존 실행 중인 앱 창을 엽니다.\n", cfg.ListenPort)
-			if shouldOpenApp {
-				_, _ = launcher.Open(fmt.Sprintf("http://127.0.0.1:%d/", cfg.ListenPort))
+			var health struct {
+				Status   string `json:"status"`
+				BuildTag string `json:"buildTag"`
 			}
-			return
+			_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&health)
+			resp.Body.Close()
+			if health.BuildTag == agentBuildTag {
+				log.Printf("이미 포트 %d에서 최신 버전이 실행 중입니다. 기존 실행 중인 앱 창을 엽니다.\n", cfg.ListenPort)
+				if shouldOpenApp {
+					_, _ = launcher.Open(fmt.Sprintf("http://127.0.0.1:%d/", cfg.ListenPort))
+				}
+				return
+			}
+			if health.Status == "ok" {
+				log.Printf("기존 구버전 프로세스(buildTag=%q) 종료 후 최신 버전(%s)으로 재시작합니다...\n", health.BuildTag, agentBuildTag)
+				if byeResp, bErr := client.Post(fmt.Sprintf("http://127.0.0.1:%d/api/bye?force=true", cfg.ListenPort), "application/json", nil); bErr == nil {
+					byeResp.Body.Close()
+				}
+				for i := 0; i < 12; i++ {
+					time.Sleep(200 * time.Millisecond)
+					if newLn, lErr := net.Listen("tcp", addr); lErr == nil {
+						ln = newLn
+						err = nil
+						break
+					}
+				}
+			}
 		}
-		log.Fatalf("포트 바인딩 실패 (포트 %d 이미 사용 중): %v", cfg.ListenPort, err)
+		if err != nil {
+			log.Fatalf("포트 바인딩 실패 (포트 %d 이미 사용 중): %v", cfg.ListenPort, err)
+		}
 	}
 
 	httpServer := &http.Server{
