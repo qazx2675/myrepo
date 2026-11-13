@@ -1668,6 +1668,177 @@ func TestAwxSessionLoginRedirectAndSchemeFallback(t *testing.T) {
 	}
 }
 
+func TestAwxSessionEdgeCasesAndFailureDiagnostics(t *testing.T) {
+	srv := &AgentServer{}
+
+	// 1. Navbar <form action="/search/"> before real login form + missing csrftoken on GET /api/login/ seeded from /api/v2/
+	var sawTenant, sawResyncedCSRF string
+	awxMultiForm := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/inventories/33/hosts/" {
+			if c, err := r.Cookie("awx_sessionid"); err == nil && c.Value == "sess-edge-1" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"count":1,"next":null,"results":[{"name":"edge-host-01"}]}`)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided. To establish a login session, visit /api/login/."}`)
+			return
+		}
+		if r.URL.Path == "/api/v2/" && r.Method == http.MethodGet {
+			http.SetCookie(w, &http.Cookie{Name: "csrftoken", Value: "seeded-csrf-777", Path: "/"})
+			w.Header().Set("Content-Type", "application/json")
+			if c, err := r.Cookie("awx_sessionid"); err == nil && c.Value == "sess-edge-1" {
+				_, _ = io.WriteString(w, `{"description":"AWX REST API"}`)
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"detail":"seed csrftoken"}`)
+			return
+		}
+		if r.URL.Path == "/api/login/" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			tok := "stale-before-cookie"
+			if c, err := r.Cookie("csrftoken"); err == nil && c.Value == "seeded-csrf-777" {
+				tok = "synced-csrf-777"
+			}
+			_, _ = fmt.Fprintf(w, `<html><body>
+				<form action="/search/" method="get"><input type="text" name="q"></form>
+				<form action="/api/login/" method="post">
+					<input type="hidden" name="csrfmiddlewaretoken" value="%s">
+					<input type="hidden" name="tenant" value="prod-kr">
+					<input type="text" name="username">
+					<input type="password" name="password">
+				</form></body></html>`, tok)
+			return
+		}
+		if r.URL.Path == "/api/login/" && r.Method == http.MethodPost {
+			_ = r.ParseForm()
+			csrfCook, _ := r.Cookie("csrftoken")
+			sawTenant = r.FormValue("tenant")
+			sawResyncedCSRF = r.FormValue("csrfmiddlewaretoken")
+			if csrfCook == nil || csrfCook.Value != "seeded-csrf-777" || sawResyncedCSRF != "synced-csrf-777" || sawTenant != "prod-kr" {
+				http.Error(w, "CSRF or form mismatch", http.StatusForbidden)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "awx_sessionid", Value: "sess-edge-1", Path: "/", HttpOnly: true})
+			http.Redirect(w, r, "/api/v2/", http.StatusFound)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer awxMultiForm.Close()
+
+	pg, mode, _, err := srv.fetchAwxPageWithDetails(awxMultiForm.URL+"/api/v2/inventories/33/hosts/", "admin", "Secret!", "", true, nil)
+	if err != nil {
+		t.Fatalf("Expected multi-form/seeded-csrf login to succeed, got error: %v", err)
+	}
+	if mode != "session" || pg == nil || len(pg.Results) != 1 || pg.Results[0].Name != "edge-host-01" {
+		t.Fatalf("Unexpected result: mode=%q pg=%+v", mode, pg)
+	}
+	if sawTenant != "prod-kr" || sawResyncedCSRF != "synced-csrf-777" {
+		t.Fatalf("Expected hidden field and resynced CSRF token, got tenant=%q csrf=%q", sawTenant, sawResyncedCSRF)
+	}
+
+	// 2. SPA HTML on /api/login/ (no password input) falling through to JSON /api/gateway/v1/login/
+	awxGateway := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/inventories/33/hosts/":
+			if c, err := r.Cookie("awx_sessionid"); err == nil && c.Value == "gw-sess-9" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"count":1,"next":null,"results":[{"name":"gw-host-01"}]}`)
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided."}`)
+		case "/api/login/":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = io.WriteString(w, `<!doctype html><html><title>AWX UI</title><body><div id="root"></div></body></html>`)
+		case "/api/gateway/v1/login/":
+			if r.Method == http.MethodGet {
+				http.SetCookie(w, &http.Cookie{Name: "csrftoken", Value: "gw-csrf", Path: "/"})
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"detail":"POST username and password"}`)
+				return
+			}
+			var creds map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&creds)
+			if creds["username"] == "gwuser" && creds["password"] == "GwPass!" {
+				http.SetCookie(w, &http.Cookie{Name: "awx_sessionid", Value: "gw-sess-9", Path: "/"})
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"status":"ok"}`)
+				return
+			}
+			http.Error(w, `{"detail":"Bad credentials"}`, http.StatusUnauthorized)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer awxGateway.Close()
+
+	pgGW, modeGW, _, errGW := srv.fetchAwxPageWithDetails(awxGateway.URL+"/api/v2/inventories/33/hosts/", "gwuser", "GwPass!", "", true, nil)
+	if errGW != nil || modeGW != "session" || len(pgGW.Results) != 1 || pgGW.Results[0].Name != "gw-host-01" {
+		t.Fatalf("Expected gateway JSON fallback login to succeed, got pg=%+v mode=%q err=%v", pgGW, modeGW, errGW)
+	}
+
+	// 3. Re-rendered login form with custom error (no session cookie) must NOT mask behind subsequent HTTP 401
+	awxSilentFail := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/inventories/33/hosts/":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided. To establish a login session, visit /api/login/."}`)
+		case "/api/login/":
+			if r.Method == http.MethodGet {
+				http.SetCookie(w, &http.Cookie{Name: "csrftoken", Value: "c1", Path: "/"})
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = io.WriteString(w, `<form method="post" action="/api/login/"><input type="hidden" name="csrfmiddlewaretoken" value="c1"><input type="text" name="username"><input type="password" name="password"></form>`)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = io.WriteString(w, `<form method="post" action="/api/login/"><div class="error">LDAP bind failed for user</div><input type="text" name="username"><input type="password" name="password"></form>`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer awxSilentFail.Close()
+
+	_, _, _, errFail := srv.fetchAwxPageWithDetails(awxSilentFail.URL+"/api/v2/inventories/33/hosts/", "alice", "Wrong!", "", true, nil)
+	if errFail == nil || strings.Contains(errFail.Error(), "Authentication credentials were not provided") || !strings.Contains(errFail.Error(), "LDAP bind failed") {
+		t.Fatalf("Expected diagnostic login failure message containing LDAP error instead of masked 401, got: %v", errFail)
+	}
+
+	// 4. Reverse proxy Set-Cookie Domain mismatch causing CookieJar to drop session cookie must report Set-Cookie diagnostic
+	awxBadDomainCookie := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/inventories/33/hosts/":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided. To establish a login session, visit /api/login/."}`)
+		case "/api/login/":
+			if r.Method == http.MethodGet {
+				http.SetCookie(w, &http.Cookie{Name: "csrftoken", Value: "c1", Path: "/"})
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = io.WriteString(w, `<form method="post" action="/api/login/"><input type="hidden" name="csrfmiddlewaretoken" value="c1"><input type="text" name="username"><input type="password" name="password"></form>`)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "awx_sessionid", Value: "dropped", Domain: "other-internal.corp.local", Path: "/"})
+			http.Redirect(w, r, "/api/v2/", http.StatusFound)
+		case "/api/v2/":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"description":"AWX API"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer awxBadDomainCookie.Close()
+
+	_, _, _, errCookie := srv.fetchAwxPageWithDetails(awxBadDomainCookie.URL+"/api/v2/inventories/33/hosts/", "alice", "GoodPass!", "", true, nil)
+	if errCookie == nil || !strings.Contains(errCookie.Error(), "세션 쿠키가 저장되지 않았습니다") || !strings.Contains(errCookie.Error(), "other-internal.corp.local") {
+		t.Fatalf("Expected Set-Cookie Domain mismatch diagnostic, got: %v", errCookie)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

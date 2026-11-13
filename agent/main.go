@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -1304,9 +1305,17 @@ var (
 	reAwxScheme           = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://`)
 	reCSRFInputNameFirst  = regexp.MustCompile(`(?i)<input[^>]*name=["']csrfmiddlewaretoken["'][^>]*value=["']([^"']+)["']`)
 	reCSRFInputValueFirst = regexp.MustCompile(`(?i)<input[^>]*value=["']([^"']+)["'][^>]*name=["']csrfmiddlewaretoken["']`)
+	reMetaCSRF            = regexp.MustCompile(`(?is)<meta\b[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']`)
 	reHTMLTitle           = regexp.MustCompile(`(?is)<title[^>]*>([^<]+)</title>`)
 	rePasswordInput       = regexp.MustCompile(`(?i)<input[^>]*type=["']password["']`)
 	reFormAction          = regexp.MustCompile(`(?is)<form[^>]*action=["']([^"']+)["']`)
+	reHTMLFormBlock       = regexp.MustCompile(`(?is)<form\b[^>]*>.*?</form>`)
+	reHTMLInputTag        = regexp.MustCompile(`(?is)<input\b[^>]*>`)
+	reAttrName            = regexp.MustCompile(`(?is)\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
+	reAttrValue           = regexp.MustCompile(`(?is)\bvalue\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]*))`)
+	reAttrType            = regexp.MustCompile(`(?is)\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
+	reHTMLErrorItem       = regexp.MustCompile(`(?is)<(?:li|p|div|span)[^>]*class=["'][^"']*(?:error|alert|danger|help-block|pf-c-alert)[^"']*["'][^>]*>(.*?)</(?:li|p|div|span)>`)
+	reHTMLStripTag        = regexp.MustCompile(`(?is)<[^>]+>`)
 )
 
 // parseAwxTargetInputEx extracts origin baseURL, scope, page, and whether an explicit scheme was provided.
@@ -1538,12 +1547,25 @@ func extractCookieValue(jar http.CookieJar, rawURL, name string) string {
 	return ""
 }
 
+func extractAttrValue(re *regexp.Regexp, tag string) string {
+	m := re.FindStringSubmatch(tag)
+	for i := 1; i < len(m); i++ {
+		if m[i] != "" {
+			return strings.TrimSpace(html.UnescapeString(m[i]))
+		}
+	}
+	return ""
+}
+
 func extractCsrfFromHTML(htmlStr string) string {
 	if m := reCSRFInputNameFirst.FindStringSubmatch(htmlStr); len(m) == 2 {
-		return strings.TrimSpace(m[1])
+		return strings.TrimSpace(html.UnescapeString(m[1]))
 	}
 	if m := reCSRFInputValueFirst.FindStringSubmatch(htmlStr); len(m) == 2 {
-		return strings.TrimSpace(m[1])
+		return strings.TrimSpace(html.UnescapeString(m[1]))
+	}
+	if m := reMetaCSRF.FindStringSubmatch(htmlStr); len(m) == 2 {
+		return strings.TrimSpace(html.UnescapeString(m[1]))
 	}
 	return ""
 }
@@ -1648,8 +1670,240 @@ func doAwxGetJSON(pageURL, authHeader string, client *http.Client) (*awxPageResp
 	return &parsed, resp.StatusCode, ct, finalURL, snippet, nil
 }
 
+type awxLoginFormInfo struct {
+	hasPassword bool
+	actionURL   string
+	hidden      url.Values
+	csrfToken   string
+}
+
+func extractAwxLoginForm(htmlStr, pageURL string) awxLoginFormInfo {
+	info := awxLoginFormInfo{hidden: url.Values{}}
+	blocks := reHTMLFormBlock.FindAllString(htmlStr, -1)
+	chosen := ""
+	for _, blk := range blocks {
+		if rePasswordInput.MatchString(blk) {
+			chosen = blk
+			break
+		}
+	}
+	if chosen == "" {
+		for _, blk := range blocks {
+			if strings.Contains(strings.ToLower(blk), "username") {
+				chosen = blk
+				break
+			}
+		}
+	}
+	if chosen == "" && rePasswordInput.MatchString(htmlStr) {
+		chosen = htmlStr
+	}
+	info.hasPassword = rePasswordInput.MatchString(htmlStr)
+	if chosen == "" {
+		info.csrfToken = extractCsrfFromHTML(htmlStr)
+		return info
+	}
+
+	if openEnd := strings.IndexByte(chosen, '>'); openEnd > 0 {
+		if m := reFormAction.FindStringSubmatch(chosen[:openEnd+1]); len(m) == 2 {
+			act := strings.TrimSpace(html.UnescapeString(m[1]))
+			if act != "" && !strings.HasPrefix(strings.ToLower(act), "javascript:") {
+				if baseU, pErr := url.Parse(pageURL); pErr == nil {
+					if relU, rErr := baseU.Parse(act); rErr == nil {
+						lowPath := strings.ToLower(relU.Path)
+						if !strings.Contains(lowPath, "sso") && !strings.Contains(lowPath, "saml") && !strings.Contains(lowPath, "oidc") {
+							info.actionURL = relU.String()
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for _, inp := range reHTMLInputTag.FindAllString(chosen, -1) {
+		name := extractAttrValue(reAttrName, inp)
+		if name == "" {
+			continue
+		}
+		val := extractAttrValue(reAttrValue, inp)
+		typ := strings.ToLower(extractAttrValue(reAttrType, inp))
+		if typ == "password" {
+			info.hasPassword = true
+		}
+		if strings.EqualFold(name, "csrfmiddlewaretoken") && val != "" {
+			info.csrfToken = val
+		}
+		if typ == "hidden" {
+			info.hidden.Set(name, val)
+		}
+	}
+	if info.csrfToken == "" {
+		info.csrfToken = extractCsrfFromHTML(chosen)
+	}
+	if info.csrfToken == "" {
+		info.csrfToken = extractCsrfFromHTML(htmlStr)
+	}
+	return info
+}
+
+func findCSRFCookie(jar http.CookieJar, rawURLs ...string) string {
+	for _, raw := range rawURLs {
+		if val := extractCookieValue(jar, raw, "csrftoken"); val != "" {
+			return val
+		}
+	}
+	for _, raw := range rawURLs {
+		u, err := url.Parse(raw)
+		if err != nil || jar == nil {
+			continue
+		}
+		for _, c := range jar.Cookies(u) {
+			if strings.Contains(strings.ToLower(c.Name), "csrf") && c.Value != "" {
+				return c.Value
+			}
+		}
+	}
+	return ""
+}
+
+func findSessionCookieNames(jar http.CookieJar, rawURLs ...string) []string {
+	if jar == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var names []string
+	for _, raw := range rawURLs {
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err != nil {
+			continue
+		}
+		for _, c := range jar.Cookies(u) {
+			if strings.TrimSpace(c.Value) == "" {
+				continue
+			}
+			lowName := strings.ToLower(strings.TrimSpace(c.Name))
+			if lowName == "" || strings.Contains(lowName, "csrf") {
+				continue
+			}
+			if !seen[c.Name] {
+				seen[c.Name] = true
+				names = append(names, c.Name)
+			}
+		}
+	}
+	return names
+}
+
+func extractVisibleHTMLError(body string) string {
+	for _, m := range reHTMLErrorItem.FindAllStringSubmatch(body, -1) {
+		if len(m) < 2 {
+			continue
+		}
+		txt := strings.Join(strings.Fields(html.UnescapeString(reHTMLStripTag.ReplaceAllString(m[1], " "))), " ")
+		if txt != "" {
+			if len(txt) > 140 {
+				return txt[:140] + "..."
+			}
+			return txt
+		}
+	}
+	if m := reHTMLTitle.FindStringSubmatch(body); len(m) == 2 {
+		t := strings.Join(strings.Fields(html.UnescapeString(m[1])), " ")
+		if t != "" {
+			if len(t) > 140 {
+				return t[:140] + "..."
+			}
+			return t
+		}
+	}
+	return ""
+}
+
+func summarizeAwxLoginBody(body string) string {
+	trim := strings.TrimSpace(body)
+	if trim == "" {
+		return "empty body"
+	}
+	var payload map[string]interface{}
+	if json.Unmarshal([]byte(trim), &payload) == nil {
+		for _, key := range []string{"detail", "error", "message", "non_field_errors"} {
+			if v, ok := payload[key]; ok {
+				s := strings.TrimSpace(fmt.Sprintf("%v", v))
+				if s != "" && s != "<nil>" {
+					if len(s) > 140 {
+						return s[:140] + "..."
+					}
+					return s
+				}
+			}
+		}
+	}
+	if h := extractVisibleHTMLError(trim); h != "" {
+		return h
+	}
+	oneLine := strings.Join(strings.Fields(trim), " ")
+	if len(oneLine) > 140 {
+		return oneLine[:140] + "..."
+	}
+	return oneLine
+}
+
+func collectSetCookieHints(rawHeaders []string) string {
+	var hints []string
+	seen := make(map[string]bool)
+	for _, hdr := range rawHeaders {
+		parts := strings.Split(hdr, ";")
+		if len(parts) == 0 {
+			continue
+		}
+		nv := strings.SplitN(strings.TrimSpace(parts[0]), "=", 2)
+		if len(nv) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(nv[0])
+		if name == "" || strings.Contains(strings.ToLower(name), "csrf") {
+			continue
+		}
+		attrNote := ""
+		for _, attr := range parts[1:] {
+			a := strings.TrimSpace(attr)
+			lowA := strings.ToLower(a)
+			if strings.HasPrefix(lowA, "domain=") || lowA == "secure" {
+				if attrNote != "" {
+					attrNote += ","
+				}
+				attrNote += a
+			}
+		}
+		item := name
+		if attrNote != "" {
+			item += "(" + attrNote + ")"
+		}
+		if !seen[item] {
+			seen[item] = true
+			hints = append(hints, item)
+		}
+	}
+	return strings.Join(hints, ", ")
+}
+
 func tryLoginAwxSession(baseOrigin, username, password string, insecureTLS bool) (*http.Client, string, error) {
 	sessionClient := newAwxHTTPClient(insecureTLS)
+	var observedSetCookies []string
+	origCheckRedirect := sessionClient.CheckRedirect
+	sessionClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req != nil && req.Response != nil {
+			observedSetCookies = append(observedSetCookies, req.Response.Header.Values("Set-Cookie")...)
+		}
+		if origCheckRedirect != nil {
+			return origCheckRedirect(req, via)
+		}
+		return nil
+	}
+
 	loginCandidates := []string{
 		strings.TrimRight(baseOrigin, "/") + "/api/login/",
 		strings.TrimRight(baseOrigin, "/") + "/api/gateway/v1/login/",
@@ -1659,6 +1913,7 @@ func tryLoginAwxSession(baseOrigin, username, password string, insecureTLS bool)
 	var lastErr error
 	saw404Only := true
 	for _, loginPageURL := range loginCandidates {
+		observedSetCookies = nil
 		getReq, err := http.NewRequest(http.MethodGet, loginPageURL, nil)
 		if err != nil {
 			continue
@@ -1673,10 +1928,12 @@ func tryLoginAwxSession(baseOrigin, username, password string, insecureTLS bool)
 		}
 		htmlBytes, _ := io.ReadAll(io.LimitReader(getResp.Body, 256*1024))
 		getResp.Body.Close()
-		if getResp.StatusCode == http.StatusNotFound || getResp.StatusCode == http.StatusMethodNotAllowed {
+		observedSetCookies = append(observedSetCookies, getResp.Header.Values("Set-Cookie")...)
+		if getResp.StatusCode == http.StatusNotFound {
 			continue
 		}
 		saw404Only = false
+		getCT := getResp.Header.Get("Content-Type")
 		htmlStr := string(htmlBytes)
 		finalGetURL := loginPageURL
 		if getResp.Request != nil && getResp.Request.URL != nil {
@@ -1686,80 +1943,190 @@ func tryLoginAwxSession(baseOrigin, username, password string, insecureTLS bool)
 			return nil, "", fmt.Errorf("SSO(통합인증) 페이지로 이동됨 (%s) - 'AWX 창 열기'로 로그인 후 'AWX 탭 연결' 북마크릿 또는 Bearer Token을 사용하세요", finalGetURL)
 		}
 
-		postTarget := finalGetURL
-		if m := reFormAction.FindStringSubmatch(htmlStr); len(m) == 2 {
-			act := strings.TrimSpace(m[1])
-			if act != "" && !strings.HasPrefix(strings.ToLower(act), "javascript:") {
-				if baseU, pErr := url.Parse(finalGetURL); pErr == nil {
-					if relU, rErr := baseU.Parse(act); rErr == nil {
-						if !strings.Contains(strings.ToLower(relU.Path), "sso") {
-							postTarget = relU.String()
+		isJSONEndpoint := getResp.StatusCode == http.StatusMethodNotAllowed ||
+			(!looksLikeHTML(getCT, htmlStr) && strings.Contains(strings.ToLower(getCT), "application/json"))
+
+		formInfo := extractAwxLoginForm(htmlStr, finalGetURL)
+		if !isJSONEndpoint && looksLikeHTML(getCT, htmlStr) && !formInfo.hasPassword {
+			hint := summarizeAwxLoginBody(htmlStr)
+			lastErr = fmt.Errorf("로그인 폼을 찾지 못했습니다 (GET %s HTTP %d: %s)", finalGetURL, getResp.StatusCode, hint)
+			continue
+		}
+
+		csrfCookie := findCSRFCookie(sessionClient.Jar, finalGetURL, baseOrigin+"/", baseOrigin+"/api/v2/")
+		if csrfCookie == "" {
+			for _, seedPath := range []string{"/api/v2/", "/"} {
+				if tokReq, tErr := http.NewRequest(http.MethodGet, strings.TrimRight(baseOrigin, "/")+seedPath, nil); tErr == nil {
+					tokReq.Header.Set("User-Agent", awxRequestUserAgent)
+					if tokResp, doErr := sessionClient.Do(tokReq); doErr == nil {
+						_, _ = io.Copy(io.Discard, io.LimitReader(tokResp.Body, 4096))
+						tokResp.Body.Close()
+					}
+				}
+				csrfCookie = findCSRFCookie(sessionClient.Jar, finalGetURL, baseOrigin+"/", baseOrigin+"/api/v2/")
+				if csrfCookie != "" {
+					break
+				}
+			}
+			// Re-fetch HTML form once if CSRF cookie had to be seeded separately so form token and cookie match.
+			if csrfCookie != "" && !isJSONEndpoint {
+				if reReq, rErr := http.NewRequest(http.MethodGet, finalGetURL, nil); rErr == nil {
+					reReq.Header.Set("User-Agent", awxRequestUserAgent)
+					reReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
+					if reResp, doErr := sessionClient.Do(reReq); doErr == nil {
+						reBytes, _ := io.ReadAll(io.LimitReader(reResp.Body, 256*1024))
+						reResp.Body.Close()
+						reInfo := extractAwxLoginForm(string(reBytes), finalGetURL)
+						if reInfo.hasPassword {
+							formInfo = reInfo
+						}
+						if c := findCSRFCookie(sessionClient.Jar, finalGetURL, baseOrigin+"/", baseOrigin+"/api/v2/"); c != "" {
+							csrfCookie = c
 						}
 					}
 				}
 			}
 		}
 
-		csrfForm := extractCsrfFromHTML(htmlStr)
-		csrfCookie := extractCookieValue(sessionClient.Jar, finalGetURL, "csrftoken")
-		if csrfCookie == "" {
-			csrfCookie = extractCookieValue(sessionClient.Jar, baseOrigin+"/", "csrftoken")
+		postTarget := finalGetURL
+		if formInfo.actionURL != "" {
+			postTarget = formInfo.actionURL
 		}
-		if csrfForm == "" && csrfCookie == "" {
-			if tokReq, tErr := http.NewRequest(http.MethodGet, strings.TrimRight(baseOrigin, "/")+"/api/v2/", nil); tErr == nil {
-				tokReq.Header.Set("User-Agent", awxRequestUserAgent)
-				if tokResp, doErr := sessionClient.Do(tokReq); doErr == nil {
-					_, _ = io.Copy(io.Discard, io.LimitReader(tokResp.Body, 4096))
-					tokResp.Body.Close()
-				}
-				csrfCookie = extractCookieValue(sessionClient.Jar, baseOrigin+"/", "csrftoken")
-			}
-		}
+		csrfForm := formInfo.csrfToken
 		if csrfForm == "" {
 			csrfForm = csrfCookie
 		}
 
-		formVals := url.Values{}
-		formVals.Set("username", username)
-		formVals.Set("password", password)
-		formVals.Set("next", "/api/v2/")
-		if csrfForm != "" {
-			formVals.Set("csrfmiddlewaretoken", csrfForm)
-		}
-		postReq, err := http.NewRequest(http.MethodPost, postTarget, strings.NewReader(formVals.Encode()))
-		if err != nil {
-			continue
-		}
-		postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		postReq.Header.Set("User-Agent", awxRequestUserAgent)
-		postReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
-		postReq.Header.Set("Referer", finalGetURL)
-		if parsedPost, pErr := url.Parse(postTarget); pErr == nil && parsedPost.Scheme != "" && parsedPost.Host != "" {
-			postReq.Header.Set("Origin", parsedPost.Scheme+"://"+parsedPost.Host)
-		}
-		if csrfCookie != "" {
-			postReq.Header.Set("X-CSRFToken", csrfCookie)
-		} else if csrfForm != "" {
-			postReq.Header.Set("X-CSRFToken", csrfForm)
+		doLoginPost := func(useJSON bool) (*http.Response, string, string, string, error) {
+			var req *http.Request
+			var reqErr error
+			if useJSON {
+				payload, _ := json.Marshal(map[string]string{
+					"username": username,
+					"password": password,
+				})
+				req, reqErr = http.NewRequest(http.MethodPost, postTarget, bytes.NewReader(payload))
+				if reqErr == nil {
+					req.Header.Set("Content-Type", "application/json")
+				}
+			} else {
+				formVals := url.Values{}
+				for k, vs := range formInfo.hidden {
+					for _, v := range vs {
+						formVals.Add(k, v)
+					}
+				}
+				formVals.Set("username", username)
+				formVals.Set("password", password)
+				if strings.TrimSpace(formVals.Get("next")) == "" {
+					formVals.Set("next", "/api/v2/")
+				}
+				if csrfForm != "" {
+					formVals.Set("csrfmiddlewaretoken", csrfForm)
+				}
+				req, reqErr = http.NewRequest(http.MethodPost, postTarget, strings.NewReader(formVals.Encode()))
+				if reqErr == nil {
+					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				}
+			}
+			if reqErr != nil {
+				return nil, "", "", "", reqErr
+			}
+			req.Header.Set("User-Agent", awxRequestUserAgent)
+			req.Header.Set("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
+			req.Header.Set("Referer", finalGetURL)
+			if parsedPost, pErr := url.Parse(postTarget); pErr == nil && parsedPost.Scheme != "" && parsedPost.Host != "" {
+				req.Header.Set("Origin", parsedPost.Scheme+"://"+parsedPost.Host)
+			} else if baseOrigin != "" {
+				req.Header.Set("Origin", strings.TrimRight(baseOrigin, "/"))
+			}
+			if csrfCookie != "" {
+				req.Header.Set("X-CSRFToken", csrfCookie)
+			} else if csrfForm != "" {
+				req.Header.Set("X-CSRFToken", csrfForm)
+			}
+
+			resp, doErr := sessionClient.Do(req)
+			if doErr != nil {
+				return nil, "", "", "", doErr
+			}
+			rawBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
+			resp.Body.Close()
+			observedSetCookies = append(observedSetCookies, resp.Header.Values("Set-Cookie")...)
+			fURL := postTarget
+			if resp.Request != nil && resp.Request.URL != nil {
+				fURL = resp.Request.URL.String()
+			}
+			return resp, resp.Header.Get("Content-Type"), fURL, string(rawBytes), nil
 		}
 
-		postResp, err := sessionClient.Do(postReq)
+		postResp, postCT, postFinalURL, postBody, err := doLoginPost(isJSONEndpoint)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		postBytes, _ := io.ReadAll(io.LimitReader(postResp.Body, 128*1024))
-		postResp.Body.Close()
-		postBody := string(postBytes)
-		lowPostBody := strings.ToLower(postBody)
-
-		if postResp.StatusCode == http.StatusForbidden && strings.Contains(lowPostBody, "csrf") {
-			return nil, "", fmt.Errorf("AWX CSRF 검증 실패 (hosts 등록 DNS 예: https://awxhost 로 접속하거나 Bearer Token 사용 권장)")
+		if !isJSONEndpoint && postResp.StatusCode == http.StatusUnsupportedMediaType {
+			if r2, ct2, f2, b2, err2 := doLoginPost(true); err2 == nil {
+				postResp, postCT, postFinalURL, postBody = r2, ct2, f2, b2
+			}
 		}
-		if strings.Contains(lowPostBody, "please enter a correct username and password") ||
-			strings.Contains(lowPostBody, "invalid username or password") ||
-			strings.Contains(lowPostBody, "unable to log in with provided credentials") {
+
+		if looksLikeSSOHtml(postTarget, postFinalURL, postBody) {
+			return nil, "", fmt.Errorf("SSO(통합인증) 페이지로 이동됨 (%s) - 'AWX 창 열기'로 로그인 후 'AWX 탭 연결' 북마크릿 또는 Bearer Token을 사용하세요", postFinalURL)
+		}
+
+		unescapedLow := strings.ToLower(html.UnescapeString(postBody))
+		if strings.Contains(unescapedLow, "please enter a correct username and password") ||
+			strings.Contains(unescapedLow, "invalid username or password") ||
+			strings.Contains(unescapedLow, "unable to log in with provided credentials") ||
+			strings.Contains(unescapedLow, "invalid credentials") {
 			return nil, "", fmt.Errorf("AWX 로그인 실패 (계정 ID 또는 비밀번호가 올바르지 않습니다)")
+		}
+		if postResp.StatusCode == http.StatusForbidden && (strings.Contains(unescapedLow, "csrf") || csrfCookie == "") {
+			return nil, "", fmt.Errorf("AWX CSRF 검증 실패 (HTTP 403, cookie=%t, %s) - 'AWX 창 열기' + 'AWX 탭 연결' 또는 Bearer Token 사용 권장", csrfCookie != "", summarizeAwxLoginBody(postBody))
+		}
+		if postResp.StatusCode >= 400 {
+			lastErr = fmt.Errorf("AWX 로그인 실패 (POST %s HTTP %d: %s)", postTarget, postResp.StatusCode, summarizeAwxLoginBody(postBody))
+			continue
+		}
+
+		// JSON login responses may return an explicit token or key without setting a session cookie.
+		if strings.Contains(strings.ToLower(postCT), "application/json") || strings.HasPrefix(strings.TrimSpace(postBody), "{") {
+			var tokRes struct {
+				Token string `json:"token"`
+				Key   string `json:"key"`
+			}
+			if json.Unmarshal([]byte(postBody), &tokRes) == nil {
+				if t := strings.TrimSpace(tokRes.Token); t != "" {
+					return sessionClient, "Token " + t, nil
+				}
+				if k := strings.TrimSpace(tokRes.Key); k != "" {
+					return sessionClient, "Token " + k, nil
+				}
+			}
+		}
+
+		if looksLikeHTML(postCT, postBody) && rePasswordInput.MatchString(postBody) {
+			lastErr = fmt.Errorf("AWX 로그인 실패 (로그인 페이지 재표시 %s: %s)", postFinalURL, summarizeAwxLoginBody(postBody))
+			continue
+		}
+
+		sessCookies := findSessionCookieNames(
+			sessionClient.Jar,
+			baseOrigin+"/",
+			finalGetURL,
+			postTarget,
+			postFinalURL,
+			strings.TrimRight(baseOrigin, "/")+"/api/v2/",
+		)
+		if len(sessCookies) == 0 {
+			cookieHints := collectSetCookieHints(observedSetCookies)
+			if cookieHints != "" {
+				lastErr = fmt.Errorf("AWX 로그인 응답(HTTP %d) 후 세션 쿠키가 저장되지 않았습니다 (Set-Cookie: %s)", postResp.StatusCode, cookieHints)
+			} else {
+				lastErr = fmt.Errorf("AWX 로그인 응답(HTTP %d)에서 세션 쿠키를 받지 못했습니다 (%s)", postResp.StatusCode, summarizeAwxLoginBody(postBody))
+			}
+			continue
 		}
 		return sessionClient, "", nil
 	}
@@ -1879,6 +2246,9 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 	}
 
 	// Fallback to AWX web form cookie session login when Basic Auth returns 401/403/HTML
+	if password == "" && tok == "" && st == http.StatusUnauthorized {
+		return nil, "", finalURL, fmt.Errorf("%w (비밀번호 또는 Bearer Token이 비어 있어 세션 로그인을 시도할 수 없습니다)", err)
+	}
 	if password != "" && isAwxRetryableAuthOrHTML(st, ct, snip) && effectiveOrigin != "" {
 		sessClient, authTokHeader, loginErr := tryLoginAwxSession(effectiveOrigin, user, password, insecureTLS)
 		if loginErr != nil {
@@ -1894,7 +2264,7 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 			}
 			return pgS, "session", finalS, nil
 		}
-		return nil, "", finalS, errS
+		return nil, "", finalS, fmt.Errorf("세션 로그인 후 %w", errS)
 	}
 
 	return nil, "", finalURL, err
