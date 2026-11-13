@@ -5,6 +5,7 @@
 | `main.go` | gossh v2 전체: `-w` 파싱·범위 확장, 워커풀, DNS 선행 조회, SSH(키 우선), stdout/stderr 분리, 진행률, `-b` 그룹, 위험 명령 가드, autofs 가드, 재검증, 결과 파일 |
 | `tmplimit.go` | `-tmp`/`-limit`/`-tl`: 질문 수집, 비교서버 파일 읽기·가드, 원격 스크립트(base64) 생성 |
 | `rpmcmp.go` | `-rpm`: 비교서버 rpm 목록 읽기, 대상 목록 비교, 보고서·탭 구분 파일 저장 |
+| `survey.go` | `-sv` 조사: 명령어 수량·내용 질문, 미리보기 키(엔터·호스트명·`Ni`·`a`·`Nd`·`next`) 해석(`parsePreviewKey`), 호스트마다 SSH 1회·명령어마다 세션 1개로 `bash -s` 표준입력 실행(`surveyScript`, 명령어 글자 그대로), 표 만들기(`buildSurveyTable`), 2줄 이상 결과 경고·재입력, `_survey.tsv`/`_survey.txt` 저장. 접속·동시성·재검증은 `main.go` 의 `newSSHClientConfig`·`lookupHostWithRetry`·`autofsSafeConcurrency` 재사용. 단위 테스트는 `survey_test.go` |
 | `interactive.go` | `-i <호스트>` 대화형 접속(`runInteractive`): 키→`-p`→비밀번호 질문, pty·raw 모드·창 크기 전달. raw 모드·창 크기·비밀번호 입력은 `term_linux.go` |
 | `danger.go` | 위험 명령 판정(`isDangerousCommand`), 대상 호스트 재입력 읽기·펼치기·대조(`readConfirmLines`/`parseConfirmHosts`/`diffHostSets`). 단위 테스트는 `danger_test.go` |
 | `helpexample.go` | `gossh -h <옵션>`: 옵션 설명·사용법(옵션 강조)·출력 예시. 가짜 호스트 결과를 실제 출력 함수(`printCommandResult`·`printBunched`·`printSummary`·`writeRPMReport`·`askSpecial`·`confirmDanger` 등)에 넣어 만듦 — 출력 형식을 바꾸면 예시도 같이 바뀜. 단위 테스트는 `helpexample_test.go` |
@@ -19,6 +20,7 @@
 수정 요청별로 볼 곳 (모두 `main.go`):
 
 - **"옵션 추가"** → flag 정의 + README 4장 옵션 표 + `helpexample.go` 의 `helpExamples`(빠지면 `go test` 가 실패)
+- **"-sv 조사 동작 변경"** → `survey.go` (`main.go` 는 flag 정의와 `runSurvey` 호출만). 표 형식·키 해석은 `survey_test.go` 로 확인
 - **"접속불가 판정·재검증 조정"** → DNS 선행 조회 / 재검증 부분
 - **"결과 파일 추가"** → 결과 파일 기록·시작 시 정리 부분 (README 5장 표도 갱신)
 - gossh를 부르는 도구(`esxi-log-check`, `OS 환경설정 체크`, `ip_change`, `ldap_setting`, `조사`)가 출력 형식(`호스트: 줄`)에 의존하므로, 출력 형식을 바꾸면 그 도구들도 함께 확인하세요.

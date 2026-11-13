@@ -1362,6 +1362,14 @@ var optionDocs = []optionDoc{
 		"두 작업의 질문(설정값, 비교서버, 복사 여부)을 한꺼번에 먼저 물어본 뒤, 서버마다 두 작업을 이어서 진행합니다.",
 		"복사 여부에 n 을 답하면 limits.conf 복사만 건너뛰고 -tmp 작업은 진행합니다.",
 	}},
+	{"sv", "", "조사: 명령어 여러 개를 모든 서버에서 실행해 호스트|결과 표로 저장", []string{
+		"\"gossh -sv -w <호스트파일>\" 로 실행하며 명령어 인자는 쓰지 않습니다. 명령어 수량과 명령어를 차례로 물어봅니다.",
+		"명령어는 입력한 그대로(따옴표·$·|·역슬래시 포함) 서버의 bash 에 전달되어, 서버에서 직접 친 것과 같게 실행됩니다.",
+		"미리보기: 엔터=첫 호스트, 호스트명=그 호스트(목록에 없어도 됨)에서 실행해 결과 확인 / Ni=N번 수정(엔터=유지) / a=추가 / Nd=N번 삭제 / next=전체 실행.",
+		"결과가 2줄 이상이거나 비면 미리보기에서 바로 경고하고, 전체 실행 뒤 2줄 이상인 칸이 있으면 다시 입력할지 묻습니다(n 이면 줄바꿈을 / 로 이음).",
+		"표: 머리줄 hostname|명령1|명령2... 아래 호스트마다 한 줄(호스트 파일 순서). 접속불가는 모든 칸이 -, 결과가 빈 칸은 빈 칸. 진행·경고는 표준에러라 표준출력은 표만 나옵니다.",
+		"<호스트파일>_survey.tsv(탭 구분, 엑셀 붙여넣기용)와 <호스트파일>_survey.txt(| 구분)에도 같은 표를 저장합니다.",
+	}},
 }
 
 // optionLabel은 도움말에 쓰는 옵션 표기("-w <파일>", "-b")를 만든다(-h <옵션> 예시와 같이 씀).
@@ -1379,6 +1387,7 @@ func printUsage() {
 	fmt.Fprintf(&b, "사용법: %s -w <호스트파일> [옵션] \"명령어\"\n", name)
 	fmt.Fprintf(&b, "  예) %s -w hosts.txt \"cat /etc/os-release\"\n", name)
 	fmt.Fprintf(&b, "대화형 접속: %s -i <호스트>   (ssh <호스트> 와 같음)\n", name)
+	fmt.Fprintf(&b, "조사(-sv): %s -sv -w <호스트파일>   (명령어 여러 개를 물어본 뒤 호스트|결과 표로 저장)\n", name)
 	fmt.Fprintf(&b, "옵션별 사용법·출력 예시: %s -h <옵션> [<옵션> ...]   (예: %s -h -b)\n\n", name, name)
 
 	label := optionLabel
@@ -1599,6 +1608,7 @@ func main() {
 	limitMode := flag.Bool("limit", false, "비교서버의 /etc/security/limits.conf 를 대상 서버로 복사(.bak 백업, 동일 확인)")
 	tlMode := flag.Bool("tl", false, "-tmp 와 -limit 을 질문 한 번에 받아 함께 진행")
 	rpmMode := flag.Bool("rpm", false, "비교서버와 설치된 rpm 패키지(이름.아키텍처, 버전 무시) 비교 후 보고서 저장")
+	svMode := flag.Bool("sv", false, "조사: 명령어 여러 개를 대화형으로 입력받아 모든 서버에서 실행하고 호스트|결과 표로 저장")
 
 	// ★ "gossh -h <옵션> ..." 은 그 옵션의 설명·사용법·출력 예시를 보여준다(helpexample.go).
 	// "-h" 단독은 지금처럼 flag 패키지가 전체 도움말(printUsage)을 출력한다.
@@ -1626,16 +1636,20 @@ func main() {
 	doTmp := *tmpMode || *tlMode
 	doLimit := *limitMode || *tlMode
 	special := doTmp || doLimit
-	if *hostFile == "" || (!special && !*rpmMode && len(args) == 0) {
+	if *hostFile == "" || (!special && !*rpmMode && !*svMode && len(args) == 0) {
 		printUsage()
 		os.Exit(1)
 	}
-	if (special || *rpmMode) && len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "-tmp/-limit/-tl/-rpm 옵션은 명령어와 함께 쓸 수 없습니다.")
+	if (special || *rpmMode || *svMode) && len(args) > 0 {
+		fmt.Fprintln(os.Stderr, "-tmp/-limit/-tl/-rpm/-sv 옵션은 명령어와 함께 쓸 수 없습니다.")
 		os.Exit(1)
 	}
 	if special && *rpmMode {
 		fmt.Fprintln(os.Stderr, "-rpm 옵션은 -tmp/-limit/-tl 과 함께 쓸 수 없습니다.")
+		os.Exit(1)
+	}
+	if *svMode && (special || *rpmMode) {
+		fmt.Fprintln(os.Stderr, "-sv 옵션은 -tmp/-limit/-tl/-rpm 과 함께 쓸 수 없습니다.")
 		os.Exit(1)
 	}
 
@@ -1752,6 +1766,14 @@ func main() {
 	// ★ glibc 리졸버는 대량 동시 조회 시 내부 스레드풀 제약으로 간헐적 실패/지연이 날 수 있어,
 	// Go 자체 순수 구현 리졸버를 쓰도록 강제한다(시스템 리졸버 스레드풀 병목 회피).
 	net.DefaultResolver = &net.Resolver{PreferGo: true}
+
+	// ★ -sv: 조사 명령어를 대화형으로 받아 전체 호스트에서 실행하고 표로 저장한다(survey.go).
+	if *svMode {
+		os.Exit(runSurvey(hosts, cleanHostFile, surveyOpts{
+			user: *user, auth: authMethods, port: *port, timeout: time.Duration(*timeoutSec) * time.Second,
+			concurrency: *concurrency, forceConc: *forceConcurrency,
+		}))
+	}
 
 	// ★ -tmp/-limit/-tl: 질문을 한 번에 모두 받은 뒤, 원격에서 실행할 스크립트를 명령어로 삼는다.
 	if special {

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 17개 옵션 모두 설명·사용법·출력결과가 비어 있지 않고, 색상 없이 만들면 이스케이프 코드가 없어야 한다.
+// 18개 옵션 모두 설명·사용법·출력결과가 비어 있지 않고, 색상 없이 만들면 이스케이프 코드가 없어야 한다.
 func TestHelpExampleAllOptions(t *testing.T) {
 	cwd, _ := os.Getwd()
 	before, _ := os.ReadDir(".")
