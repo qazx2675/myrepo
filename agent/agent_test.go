@@ -15,8 +15,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -186,8 +188,8 @@ func TestSessionCreateAndPersistence(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if time.Since(start) > 3*time.Second {
-		t.Fatalf("Session create exceeded latency limit of 3000ms: %v", time.Since(start))
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("Session create exceeded latency limit of 5000ms: %v", time.Since(start))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -197,6 +199,9 @@ func TestSessionCreateAndPersistence(t *testing.T) {
 	var resData map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&resData); err != nil {
 		t.Fatal(err)
+	}
+	if resData["peerNotifyStatus"] != "failed" {
+		t.Errorf("Expected peerNotifyStatus=failed for unreachable peer, got %v", resData["peerNotifyStatus"])
 	}
 	sessionId, ok := resData["sessionId"].(string)
 	if !ok || !strings.HasPrefix(sessionId, "req_") {
@@ -561,9 +566,10 @@ func TestLatencyUnder3000ms(t *testing.T) {
 	start := time.Now()
 
 	// Create
+	// Use matching local peer IP so API workflow latency isn't masked by P3-2's 3s unreachable-peer timeout.
 	sessReq := Session{
 		Worker:  User{Name: "작업자A", IP: "192.168.1.10"},
-		Checker: User{Name: "확인자B", IP: "192.168.1.20"},
+		Checker: User{Name: "확인자B", IP: "192.168.1.10"},
 		WorkerData: WorkerData{
 			DetailHosts: []string{"web01", "web02"},
 		},
@@ -589,7 +595,7 @@ func TestLatencyUnder3000ms(t *testing.T) {
 	// Decision
 	decReq := map[string]interface{}{
 		"sessionId": sessionId,
-		"checkerIp": "192.168.1.20",
+		"checkerIp": "192.168.1.10",
 		"checkerData": map[string]interface{}{
 			"isAllMatch": true,
 			"decision":   "APPROVED",
@@ -975,7 +981,58 @@ func TestStandaloneEndpoints(t *testing.T) {
 
 // TestAwxInventoryHostsAPI verifies the Go backend AWX proxy and cache endpoint.
 func TestAwxInventoryHostsAPI(t *testing.T) {
+	mockAWX := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer tok-hosts-api" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"detail":"auth required"}`))
+			return
+		}
+		if r.URL.Path == "/api/v2/inventories/3/hosts/" {
+			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+			if page < 1 {
+				page = 1
+			}
+			const total = 1000
+			const perPage = 200
+			startIdx := (page-1)*perPage + 1
+			endIdx := startIdx + perPage - 1
+			if endIdx > total {
+				endIdx = total
+			}
+			results := make([]map[string]string, 0, perPage)
+			for i := startIdx; i <= endIdx; i++ {
+				results = append(results, map[string]string{"name": fmt.Sprintf("prd-db-%04d", i)})
+			}
+			var nextVal interface{}
+			if endIdx < total {
+				nextVal = fmt.Sprintf("/api/v2/inventories/3/hosts/?page_size=200&page=%d", page+1)
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"count":   total,
+				"next":    nextVal,
+				"results": results,
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer mockAWX.Close()
+
 	_, ts := setupTestServer(t)
+
+	cfgBody, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":      mockAWX.URL,
+		"defaultScope": "inventory:3",
+		"token":        "tok-hosts-api",
+	})
+	respCfg, err := http.Post(ts.URL+"/api/awx/config", "application/json", bytes.NewReader(cfgBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respCfg.Body.Close()
+	if respCfg.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on POST /api/awx/config, got %d", respCfg.StatusCode)
+	}
 
 	// Fetch AWX inventory #3 hosts
 	resp, err := http.Get(ts.URL + "/api/awx/hosts?inventory=3")
@@ -989,6 +1046,8 @@ func TestAwxInventoryHostsAPI(t *testing.T) {
 	}
 
 	var data struct {
+		Source        string              `json:"source"`
+		AuthMethod    string              `json:"authMethod"`
 		Count         int                 `json:"count"`
 		RawCount      int                 `json:"rawCount"`
 		InventoryId   string              `json:"inventoryId"`
@@ -1000,6 +1059,9 @@ func TestAwxInventoryHostsAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if data.Source != "api" || data.AuthMethod == "" {
+		t.Errorf("Expected source=api and non-empty authMethod, got source=%q authMethod=%q", data.Source, data.AuthMethod)
+	}
 	if data.Count != 1000 || data.RawCount != 1000 {
 		t.Errorf("Expected 1000 hosts from inventory 3, got count=%d raw=%d", data.Count, data.RawCount)
 	}
@@ -2246,6 +2308,789 @@ func TestAwxBridgeCollectScopeEnforcement(t *testing.T) {
 	pageRes := <-pageCh
 	if pageRes.Err != nil || pageRes.Status != http.StatusOK {
 		t.Fatalf("Expected 200 OK for valid scoped page collect, got: %+v", pageRes)
+	}
+}
+
+// TestP12MultiBridgeFanIn verifies P1-2: when multiple bridges are connected,
+// an early 401 from an unauthenticated tab does not defeat a 200 OK from an authenticated tab,
+// and when all bridges fail, all failed tab origins are reported.
+func TestP12MultiBridgeFanIn(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := Config{
+		ListenPort:     0,
+		SharedDir:      tmpDir,
+		PollIntervalMs: 1000,
+		BindIP:         "192.168.0.23",
+	}
+	srv, err := NewAgentServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Stop()
+
+	ts := httptest.NewServer(srv.Routes())
+	defer ts.Close()
+
+	dialBridge := func() (*bufio.Reader, net.Conn) {
+		u, _ := url.Parse(ts.URL)
+		conn, dErr := net.Dial("tcp", u.Host)
+		if dErr != nil {
+			t.Fatal(dErr)
+		}
+		wsReq := "GET /ws?role=bridge HTTP/1.1\r\n" +
+			"Host: " + u.Host + "\r\n" +
+			"Upgrade: websocket\r\n" +
+			"Connection: Upgrade\r\n" +
+			"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+			"Sec-WebSocket-Version: 13\r\n\r\n"
+		if _, wErr := conn.Write([]byte(wsReq)); wErr != nil {
+			t.Fatal(wErr)
+		}
+		bufr := bufio.NewReader(conn)
+		statusLine, rErr := bufr.ReadString('\n')
+		if rErr != nil || !strings.Contains(statusLine, "101") {
+			t.Fatalf("Expected 101 Switching Protocols, got: %s (%v)", statusLine, rErr)
+		}
+		for {
+			line, lErr := bufr.ReadString('\n')
+			if lErr != nil {
+				t.Fatal(lErr)
+			}
+			if line == "\r\n" || line == "\n" {
+				break
+			}
+		}
+		return bufr, conn
+	}
+
+	bufr1, conn1 := dialBridge()
+	defer conn1.Close()
+	bufr2, conn2 := dialBridge()
+	defer conn2.Close()
+
+	for i := 0; i < 40 && srv.wsHub.BridgeCount() != 2; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if cnt := srv.wsHub.BridgeCount(); cnt != 2 {
+		t.Fatalf("Expected BridgeCount=2, got %d", cnt)
+	}
+
+	// Verify /api/awx/config exposes bridgeCount=2
+	cfgResp, err := http.Get(ts.URL + "/api/awx/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfgMap map[string]interface{}
+	_ = json.NewDecoder(cfgResp.Body).Decode(&cfgMap)
+	cfgResp.Body.Close()
+	brgMap, _ := cfgMap["bridge"].(map[string]interface{})
+	if int(brgMap["bridgeCount"].(float64)) != 2 {
+		t.Fatalf("Expected bridge.bridgeCount=2, got %v", brgMap["bridgeCount"])
+	}
+
+	readCmd := func(conn net.Conn, bufr *bufio.Reader) string {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			_ = conn.SetReadDeadline(deadline)
+			op, payload, rErr := wsReadMessage(bufr)
+			if rErr != nil {
+				t.Fatalf("Failed reading WS command: %v", rErr)
+			}
+			if op != 0x01 {
+				continue
+			}
+			var ev struct {
+				Event string `json:"event"`
+				Data  struct {
+					RequestID string `json:"requestId"`
+				} `json:"data"`
+			}
+			if json.Unmarshal(payload, &ev) == nil && ev.Event == "AWX_BRIDGE_COMMAND" {
+				return ev.Data.RequestID
+			}
+		}
+		t.Fatalf("Did not receive AWX_BRIDGE_COMMAND")
+		return ""
+	}
+
+	sendRes := func(conn net.Conn, body map[string]interface{}) {
+		rpcRes, _ := json.Marshal(map[string]interface{}{
+			"id":     "res-" + fmt.Sprint(time.Now().UnixNano()),
+			"method": "POST",
+			"path":   "/api/awx/bridge/result",
+			"body":   body,
+		})
+		if _, wErr := conn.Write(makeWSClientFrame(0x01, rpcRes)); wErr != nil {
+			t.Fatal(wErr)
+		}
+	}
+
+	type colResp struct {
+		Status int
+		Body   map[string]interface{}
+		Err    error
+	}
+
+	// Case A: Bridge 1 fails 401 first, Bridge 2 succeeds 200 later -> 200 OK adopted
+	resChA := make(chan colResp, 1)
+	go func() {
+		r, e := http.Post(ts.URL+"/api/awx/bridge/collect", "application/json", strings.NewReader(`{"mode":"all","scope":"inventory:3"}`))
+		if e != nil {
+			resChA <- colResp{Err: e}
+			return
+		}
+		defer r.Body.Close()
+		var m map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		resChA <- colResp{Status: r.StatusCode, Body: m}
+	}()
+
+	reqIDA1 := readCmd(conn1, bufr1)
+	reqIDA2 := readCmd(conn2, bufr2)
+	if reqIDA1 != reqIDA2 {
+		t.Fatalf("Mismatched requestIDs: %q vs %q", reqIDA1, reqIDA2)
+	}
+
+	sendRes(conn1, map[string]interface{}{
+		"requestId": reqIDA1,
+		"origin":    "https://unauth.awx.local",
+		"ok":        false,
+		"error":     "AWX API HTTP 401",
+		"label":     "인벤토리 #3",
+	})
+	time.Sleep(50 * time.Millisecond)
+	sendRes(conn2, map[string]interface{}{
+		"requestId": reqIDA2,
+		"origin":    "https://auth.awx.local",
+		"ok":        true,
+		"hosts":     []string{"web-01", "web-02"},
+		"rawCount":  2,
+		"label":     "인벤토리 #3",
+		"scopeType": "inventory",
+		"scopeId":   "3",
+	})
+
+	gotA := <-resChA
+	if gotA.Err != nil || gotA.Status != http.StatusOK {
+		t.Fatalf("Case A expected 200 OK, got err=%v status=%d body=%+v", gotA.Err, gotA.Status, gotA.Body)
+	}
+	if int(gotA.Body["count"].(float64)) != 2 || gotA.Body["origin"] != "https://auth.awx.local" {
+		t.Fatalf("Case A unexpected payload: %+v", gotA.Body)
+	}
+
+	// Case B: Both bridges fail -> 502 with both failed tab origins
+	resChB := make(chan colResp, 1)
+	go func() {
+		r, e := http.Post(ts.URL+"/api/awx/bridge/collect", "application/json", strings.NewReader(`{"mode":"all","scope":"inventory:3"}`))
+		if e != nil {
+			resChB <- colResp{Err: e}
+			return
+		}
+		defer r.Body.Close()
+		var m map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&m)
+		resChB <- colResp{Status: r.StatusCode, Body: m}
+	}()
+
+	reqIDB1 := readCmd(conn1, bufr1)
+	reqIDB2 := readCmd(conn2, bufr2)
+	sendRes(conn1, map[string]interface{}{
+		"requestId": reqIDB1,
+		"origin":    "https://tab1.awx.local",
+		"ok":        false,
+		"error":     "AWX API HTTP 401",
+	})
+	sendRes(conn2, map[string]interface{}{
+		"requestId": reqIDB2,
+		"origin":    "https://tab2.awx.local",
+		"ok":        false,
+		"error":     "AWX API HTTP 403",
+	})
+
+	gotB := <-resChB
+	if gotB.Err != nil || gotB.Status != http.StatusBadGateway {
+		t.Fatalf("Case B expected 502, got err=%v status=%d body=%+v", gotB.Err, gotB.Status, gotB.Body)
+	}
+	errStrB, _ := gotB.Body["error"].(string)
+	if !strings.Contains(errStrB, "https://tab1.awx.local") || !strings.Contains(errStrB, "https://tab2.awx.local") {
+		t.Fatalf("Expected both failed tab origins in error, got: %q", errStrB)
+	}
+}
+
+// TestP13PreferredAuthMemoryAndSessionTokenHeader verifies P1-3:
+// 1) Invalid token + valid Basic: remembered Basic skips repeated 401 token probes on later requests.
+// 2) Session login returning "Token ..." header caches header+client so next request avoids re-login.
+func TestP13PreferredAuthMemoryAndSessionTokenHeader(t *testing.T) {
+	// Part 1: Invalid token + valid Basic -> remembers "basic" (and invalidation fallback works)
+	var tokenProbes int32
+	var basicHits int32
+	var forceTokenOnly int32
+	mockBasic := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if atomic.LoadInt32(&forceTokenOnly) == 1 {
+			if auth == "Token invalid-token-xyz" {
+				writeJSON(w, http.StatusOK, map[string]interface{}{
+					"count":   1,
+					"next":    nil,
+					"results": []map[string]string{{"name": "fallback-tok-host"}},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if strings.HasPrefix(auth, "Bearer ") || strings.HasPrefix(auth, "Token ") {
+			atomic.AddInt32(&tokenProbes, 1)
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"detail":"invalid token"}`))
+			return
+		}
+		expectedBasic := "Basic " + base64.StdEncoding.EncodeToString([]byte("user1:pass1"))
+		if auth == expectedBasic {
+			atomic.AddInt32(&basicHits, 1)
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"count":   1,
+				"next":    nil,
+				"results": []map[string]string{{"name": "basic-host-01"}},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer mockBasic.Close()
+
+	_, ts1 := setupTestServer(t)
+	cfg1, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":      mockBasic.URL,
+		"defaultScope": "inventory:3",
+		"username":     "user1",
+		"password":     "pass1",
+		"token":        "invalid-token-xyz",
+	})
+	resp, err := http.Post(ts1.URL+"/api/awx/config", "application/json", bytes.NewReader(cfg1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	// Request 1 discovers Basic after probing invalid Bearer/Token once
+	r1, err := http.Get(ts1.URL + "/api/awx/hosts?inventory=3&page=1")
+	if err != nil || r1.StatusCode != http.StatusOK {
+		t.Fatalf("Request 1 failed: err=%v resp=%v", err, r1)
+	}
+	var m1 map[string]interface{}
+	_ = json.NewDecoder(r1.Body).Decode(&m1)
+	r1.Body.Close()
+	if m1["authMethod"] != "basic" {
+		t.Fatalf("Expected authMethod=basic on request 1, got %v", m1["authMethod"])
+	}
+	probesAfterFirst := atomic.LoadInt32(&tokenProbes)
+	if probesAfterFirst == 0 {
+		t.Fatalf("Expected initial token probes before discovering basic")
+	}
+
+	// Requests 2 & 3 MUST hit Basic directly with zero extra 401 token probes
+	for _, p := range []int{2, 3} {
+		rp, e := http.Get(fmt.Sprintf("%s/api/awx/hosts?inventory=3&page=%d", ts1.URL, p))
+		if e != nil || rp.StatusCode != http.StatusOK {
+			t.Fatalf("Request %d failed: %v", p, e)
+		}
+		rp.Body.Close()
+	}
+	if gotProbes := atomic.LoadInt32(&tokenProbes); gotProbes != probesAfterFirst {
+		t.Fatalf("Expected zero additional token probes after basic remembered, probes grew %d -> %d", probesAfterFirst, gotProbes)
+	}
+	if atomic.LoadInt32(&basicHits) < 3 {
+		t.Fatalf("Expected >=3 Basic auth hits, got %d", atomic.LoadInt32(&basicHits))
+	}
+
+	// If remembered Basic subsequently fails, it forgets Basic and succeeds with Token fallback
+	atomic.StoreInt32(&forceTokenOnly, 1)
+	rFb, err := http.Get(ts1.URL + "/api/awx/hosts?inventory=3&page=4")
+	if err != nil || rFb.StatusCode != http.StatusOK {
+		t.Fatalf("Expected fallback after remembered auth failure, got err=%v resp=%v", err, rFb)
+	}
+	var mFb map[string]interface{}
+	_ = json.NewDecoder(rFb.Body).Decode(&mFb)
+	rFb.Body.Close()
+	if mFb["authMethod"] != "token" {
+		t.Fatalf("Expected remembered auth switch to token on fallback, got %v", mFb["authMethod"])
+	}
+
+	// Part 2: Session login returning {"token": "..."} caches Authorization: Token ... header
+	var loginCalls int32
+	mockSessTok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/authtoken/":
+			if r.Method == http.MethodPost {
+				atomic.AddInt32(&loginCalls, 1)
+				writeJSON(w, http.StatusOK, map[string]string{"token": "sess_hdr_tok_777"})
+				return
+			}
+		case "/api/v2/inventories/3/hosts/":
+			if r.Header.Get("Authorization") == "Token sess_hdr_tok_777" {
+				writeJSON(w, http.StatusOK, map[string]interface{}{
+					"count":   1,
+					"next":    nil,
+					"results": []map[string]string{{"name": "sess-tok-host-01"}},
+				})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"detail":"auth required"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer mockSessTok.Close()
+
+	_, ts2 := setupTestServer(t)
+	cfg2, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":      mockSessTok.URL,
+		"defaultScope": "inventory:3",
+		"username":     "sessuser",
+		"password":     "sesspass",
+	})
+	resp2Cfg, _ := http.Post(ts2.URL+"/api/awx/config", "application/json", bytes.NewReader(cfg2))
+	resp2Cfg.Body.Close()
+
+	rS1, err := http.Get(ts2.URL + "/api/awx/hosts?inventory=3&page=1")
+	if err != nil || rS1.StatusCode != http.StatusOK {
+		t.Fatalf("Session token req 1 failed: err=%v resp=%v", err, rS1)
+	}
+	var ms1 map[string]interface{}
+	_ = json.NewDecoder(rS1.Body).Decode(&ms1)
+	rS1.Body.Close()
+	if ms1["authMethod"] != "session" {
+		t.Fatalf("Expected authMethod=session, got %v", ms1["authMethod"])
+	}
+	if lc := atomic.LoadInt32(&loginCalls); lc != 1 {
+		t.Fatalf("Expected exactly 1 login call on first request, got %d", lc)
+	}
+
+	// Second request (page=2) must reuse cached session Token header without calling /api/v2/authtoken/ again
+	rS2, err := http.Get(ts2.URL + "/api/awx/hosts?inventory=3&page=2")
+	if err != nil || rS2.StatusCode != http.StatusOK {
+		t.Fatalf("Session token req 2 failed: err=%v resp=%v", err, rS2)
+	}
+	rS2.Body.Close()
+	if lc := atomic.LoadInt32(&loginCalls); lc != 1 {
+		t.Fatalf("Expected cached session Token header to avoid re-login, got loginCalls=%d", lc)
+	}
+}
+
+// TestP14ScopeChangePreservesAuthCache verifies P1-4: changing only defaultScope
+// does not clear AWX session cache, preferred auth cache, or host cache.
+func TestP14ScopeChangePreservesAuthCache(t *testing.T) {
+	var inv3Calls int32
+	mockAWX := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/login/" {
+			http.SetCookie(w, &http.Cookie{Name: "awx_sess", Value: "abc", Path: "/"})
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.URL.Path == "/api/v2/inventories/3/hosts/" {
+			c, err := r.Cookie("awx_sess")
+			if err != nil || c.Value != "abc" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			atomic.AddInt32(&inv3Calls, 1)
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"count":   1,
+				"next":    nil,
+				"results": []map[string]string{{"name": "inv3-host-01"}},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer mockAWX.Close()
+
+	srv, ts := setupTestServer(t)
+	cfg1, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":      mockAWX.URL,
+		"defaultScope": "inventory:3",
+		"username":     "u1",
+		"password":     "p1",
+	})
+	rp1, _ := http.Post(ts.URL+"/api/awx/config", "application/json", bytes.NewReader(cfg1))
+	rp1.Body.Close()
+
+	// Warm session + cache on inventory:3
+	r1, err := http.Get(ts.URL + "/api/awx/hosts?inventory=3")
+	if err != nil || r1.StatusCode != http.StatusOK {
+		t.Fatalf("Initial collect failed: %v", err)
+	}
+	r1.Body.Close()
+	if atomic.LoadInt32(&inv3Calls) != 1 {
+		t.Fatalf("Expected 1 call to inv3, got %d", atomic.LoadInt32(&inv3Calls))
+	}
+
+	// Update ONLY defaultScope (like selAwxInventory.onchange omitting baseUrl)
+	scopeOnly, _ := http.Post(ts.URL+"/api/awx/config", "application/json", strings.NewReader(`{"defaultScope":"inventory:7"}`))
+	if scopeOnly.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 on scope-only update, got %d", scopeOnly.StatusCode)
+	}
+	scopeOnly.Body.Close()
+
+	srv.awxSessionMu.Lock()
+	hasSess := srv.awxSessionClient != nil
+	hasPref := len(srv.awxPreferredAuth) > 0
+	srv.awxSessionMu.Unlock()
+	srv.awxCacheMu.RLock()
+	cacheLen := len(srv.awxCache)
+	srv.awxCacheMu.RUnlock()
+
+	if !hasSess || !hasPref || cacheLen == 0 {
+		t.Fatalf("Expected caches preserved on scope-only change, got hasSess=%v hasPref=%v cacheLen=%d", hasSess, hasPref, cacheLen)
+	}
+
+	// Changing username MUST invalidate session cache
+	userChange, _ := http.Post(ts.URL+"/api/awx/config", "application/json", strings.NewReader(`{"username":"u2"}`))
+	userChange.Body.Close()
+	srv.awxSessionMu.Lock()
+	stillHasSess := srv.awxSessionClient != nil
+	srv.awxSessionMu.Unlock()
+	if stillHasSess {
+		t.Fatalf("Expected session cache cleared when username changes")
+	}
+}
+
+// TestP23NoHardcodedDefaults verifies P2-3: starting with empty config & env has no hardcoded defaults.
+func TestP23NoHardcodedDefaults(t *testing.T) {
+	t.Setenv("AWX_BASE_URL", "")
+	t.Setenv("AWX_USERNAME", "")
+	t.Setenv("AWX_PASSWORD", "")
+	t.Setenv("AWX_TOKEN", "")
+	t.Setenv("AWX_DEFAULT_SCOPE", "")
+	t.Setenv("AWX_DEFAULT_INVENTORY", "")
+
+	_, ts := setupTestServer(t)
+	resp, err := http.Get(ts.URL + "/api/awx/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var cfg map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg["baseUrl"] != "" || cfg["username"] != "" || cfg["defaultScope"] != "" {
+		t.Fatalf("Expected empty baseUrl/username/defaultScope, got %+v", cfg)
+	}
+	if cfg["hasPassword"] != false || cfg["hasToken"] != false || cfg["needsReauth"] != false {
+		t.Fatalf("Expected hasPassword=false, hasToken=false, needsReauth=false, got %+v", cfg)
+	}
+}
+
+// TestP21DpapiConfigPersistenceAndMigration verifies P2-1: DPAPI config save, restart decryption,
+// zero plaintext secrets on disk, legacy plaintext migration, decrypt failure needsReauth, and resetConfig.
+func TestP21DpapiConfigPersistenceAndMigration(t *testing.T) {
+	t.Setenv("AWX_BASE_URL", "")
+	t.Setenv("AWX_USERNAME", "")
+	t.Setenv("AWX_PASSWORD", "")
+	t.Setenv("AWX_TOKEN", "")
+	t.Setenv("AWX_DEFAULT_SCOPE", "")
+
+	const secretPass = "S3cr3t!Pass#99"
+	const secretTok = "Tok!Val99"
+	mockAWX := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expectedBasic := "Basic " + base64.StdEncoding.EncodeToString([]byte("awx-admin:"+secretPass))
+		if r.Header.Get("Authorization") != expectedBasic && r.Header.Get("Authorization") != "Bearer "+secretTok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/api/v2/inventories/" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"count":   1,
+				"next":    nil,
+				"results": []map[string]interface{}{{"id": 3, "name": "Prod Inv", "kind": "", "total_hosts": 1}},
+			})
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v2/inventories/3/hosts/") {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"count":   1,
+				"next":    nil,
+				"results": []map[string]string{{"name": "dpapi-host-01"}},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer mockAWX.Close()
+
+	shareDir := t.TempDir()
+	cfgPath := filepath.Join(shareDir, "config.json")
+
+	// 1. Save via "연결 테스트 & 저장" (/api/awx/config + /api/awx/test)
+	srv1, err := NewAgentServer(Config{SharedDir: shareDir, ConfigPath: cfgPath, BindIP: "192.168.0.23"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts1 := httptest.NewServer(srv1.Routes())
+	postBody, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":      mockAWX.URL,
+		"defaultScope": "inventory:3",
+		"username":     "awx-admin",
+		"password":     secretPass,
+		"token":        secretTok,
+		"insecureTls":  true,
+	})
+	rc, err := http.Post(ts1.URL+"/api/awx/config", "application/json", bytes.NewReader(postBody))
+	if err != nil || rc.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/awx/config failed: %v", err)
+	}
+	rc.Body.Close()
+
+	rt, err := http.Post(ts1.URL+"/api/awx/test", "application/json", strings.NewReader(`{}`))
+	if err != nil || rt.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/awx/test failed: %v", err)
+	}
+	var testMap map[string]interface{}
+	_ = json.NewDecoder(rt.Body).Decode(&testMap)
+	rt.Body.Close()
+	if testMap["persisted"] != true {
+		t.Fatalf("Expected persisted=true after test success, got %+v", testMap)
+	}
+	ts1.Close()
+	srv1.Stop()
+
+	// 2. Verify config.json contains DPAPI fields and NO plaintext secrets
+	rawBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("Expected config.json created at %s: %v", cfgPath, err)
+	}
+	rawStr := string(rawBytes)
+	if strings.Contains(rawStr, secretPass) || strings.Contains(rawStr, secretTok) {
+		t.Fatalf("Plaintext secret leaked in config.json:\n%s", rawStr)
+	}
+	if !strings.Contains(rawStr, `"awxPasswordEnc"`) || !strings.Contains(rawStr, `"awxTokenEnc"`) {
+		t.Fatalf("Expected awxPasswordEnc & awxTokenEnc in config.json:\n%s", rawStr)
+	}
+	if strings.Contains(rawStr, `"awxPassword"`) || strings.Contains(rawStr, `"awxToken"`) {
+		t.Fatalf("Legacy plaintext keys must not exist in saved config.json:\n%s", rawStr)
+	}
+
+	// 3. Restart new server reading only ConfigPath -> restored & collects without re-entry
+	srv2, err := NewAgentServer(Config{SharedDir: shareDir, ConfigPath: cfgPath, BindIP: "192.168.0.23"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv2.Stop()
+	ts2 := httptest.NewServer(srv2.Routes())
+	defer ts2.Close()
+
+	rg, _ := http.Get(ts2.URL + "/api/awx/config")
+	var gMap map[string]interface{}
+	_ = json.NewDecoder(rg.Body).Decode(&gMap)
+	rg.Body.Close()
+	if gMap["hasPassword"] != true || gMap["hasToken"] != true || gMap["baseUrl"] != mockAWX.URL || gMap["defaultScope"] != "inventory:3" {
+		t.Fatalf("Restart did not restore AWX config cleanly: %+v", gMap)
+	}
+	rh, _ := http.Get(ts2.URL + "/api/awx/hosts?inventory=3")
+	if rh.StatusCode != http.StatusOK {
+		t.Fatalf("Expected restarted agent /api/awx/hosts=200 using DPAPI creds, got %d", rh.StatusCode)
+	}
+	rh.Body.Close()
+
+	// 4. Reset removes AWX fields from config.json
+	rr, _ := http.Post(ts2.URL+"/api/awx/config", "application/json", strings.NewReader(`{"clearAuth":true,"resetConfig":true}`))
+	rr.Body.Close()
+	afterResetBytes, _ := os.ReadFile(cfgPath)
+	if strings.Contains(string(afterResetBytes), "awxBaseUrl") || strings.Contains(string(afterResetBytes), "awxPasswordEnc") {
+		t.Fatalf("Expected resetConfig to clear AWX fields in config.json, got:\n%s", string(afterResetBytes))
+	}
+
+	// 5. Legacy plaintext migration -> rewritten to DPAPI encrypted keys
+	legacyCfg := filepath.Join(shareDir, "legacy_config.json")
+	_ = os.WriteFile(legacyCfg, []byte(`{"awxBaseUrl":"https://awx.local","awxUsername":"leg","awxPassword":"legacy-pass","awxToken":"legacy-tok"}`), 0644)
+	srv3, err := NewAgentServer(Config{SharedDir: shareDir, ConfigPath: legacyCfg, BindIP: "192.168.0.23"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv3.Stop()
+	if srv3.config.AwxPassword != "legacy-pass" || srv3.config.AwxToken != "legacy-tok" {
+		t.Fatalf("Legacy migration failed to load decrypted creds")
+	}
+	migratedBytes, _ := os.ReadFile(legacyCfg)
+	if strings.Contains(string(migratedBytes), "legacy-pass") || !strings.Contains(string(migratedBytes), `"awxPasswordEnc"`) {
+		t.Fatalf("Legacy plaintext not migrated on disk:\n%s", string(migratedBytes))
+	}
+
+	// 6. Corrupted DPAPI ciphertext -> empty password + needsReauth=true
+	badCfg := filepath.Join(shareDir, "bad_config.json")
+	_ = os.WriteFile(badCfg, []byte(`{"awxBaseUrl":"https://awx.local","awxUsername":"u","awxPasswordEnc":"invalid-dpapi-blob!!!"}`), 0644)
+	srv4, err := NewAgentServer(Config{SharedDir: shareDir, ConfigPath: badCfg, BindIP: "192.168.0.23"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv4.Stop()
+	if !srv4.awxNeedsReauth || srv4.config.AwxPassword != "" {
+		t.Fatalf("Expected awxNeedsReauth=true & empty password on decrypt failure, got reauth=%v pass=%q", srv4.awxNeedsReauth, srv4.config.AwxPassword)
+	}
+}
+
+// TestP51OversizedWSFrameReject verifies P5-1: oversized/negative WS frames are rejected
+// cleanly by closing the socket without panicking or crashing the server.
+func TestP51OversizedWSFrameReject(t *testing.T) {
+	buildHeaderOnlyFrame := func(payloadLen uint64) []byte {
+		var buf bytes.Buffer
+		buf.WriteByte(0x81) // FIN + text
+		buf.WriteByte(0x80 | 127)
+		var lenBytes [8]byte
+		binary.BigEndian.PutUint64(lenBytes[:], payloadLen)
+		buf.Write(lenBytes[:])
+		buf.Write([]byte{1, 2, 3, 4}) // mask key
+		return buf.Bytes()
+	}
+	if _, _, err := wsReadMessage(bufio.NewReader(bytes.NewReader(buildHeaderOnlyFrame(9 * 1024 * 1024)))); err == nil {
+		t.Fatalf("Expected error for >8MB WS frame")
+	}
+	if _, _, err := wsReadMessage(bufio.NewReader(bytes.NewReader(buildHeaderOnlyFrame(1 << 63)))); err == nil {
+		t.Fatalf("Expected error for overflow/negative uint64 WS frame length")
+	}
+
+	_, ts := setupTestServer(t)
+	u, _ := url.Parse(ts.URL)
+	conn, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	wsReq := "GET /ws?role=bridge HTTP/1.1\r\nHost: " + u.Host + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+	_, _ = conn.Write([]byte(wsReq))
+	bufr := bufio.NewReader(conn)
+	for {
+		line, lErr := bufr.ReadString('\n')
+		if lErr != nil {
+			t.Fatal(lErr)
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	// Send oversized 9MB frame header; server must close WS connection immediately without waiting for 9MB body
+	_, _ = conn.Write(buildHeaderOnlyFrame(9 * 1024 * 1024))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	tmp := make([]byte, 16)
+	_, rErr := bufr.Read(tmp)
+	if rErr == nil {
+		t.Fatalf("Expected server to close connection on oversized WS frame")
+	}
+
+	hResp, hErr := http.Get(ts.URL + "/api/health")
+	if hErr != nil || hResp.StatusCode != http.StatusOK {
+		t.Fatalf("Server unhealthy after oversized WS frame: err=%v resp=%v", hErr, hResp)
+	}
+	hResp.Body.Close()
+}
+
+// TestP15P32P53P54AdditionalContracts verifies P1-5 bridge apiError, P3-2 skipped status,
+// P5-3 session retention pruning & 100-file list cap, and P5-4 singleton Routes.
+func TestP15P32P53P54AdditionalContracts(t *testing.T) {
+	srv, ts := setupTestServer(t)
+
+	// P5-4: Routes() populates and reuses singleton routesHandler
+	_ = srv.Routes()
+	hPtr1 := srv.routesHandler
+	_ = srv.Routes()
+	hPtr2 := srv.routesHandler
+	if hPtr1 == nil || hPtr2 == nil {
+		t.Fatalf("Expected routesHandler populated via sync.Once")
+	}
+
+	// P1-5: Bridge fallback includes source=bridge and apiError when direct API fails
+	_, _ = http.Post(ts.URL+"/api/awx/config", "application/json", strings.NewReader(`{"baseUrl":"http://127.0.0.1:1","token":"t"}`))
+	srv.bridgeMu.Lock()
+	srv.bridgeState = AwxBridgeState{
+		Connected:   true,
+		UpdatedAt:   time.Now(),
+		Inventories: []AwxInventorySummary{{ID: 5, Name: "Bridge Inv", TotalHosts: 10}},
+	}
+	srv.bridgeMu.Unlock()
+	rInv, err := http.Get(ts.URL + "/api/awx/inventories")
+	if err != nil || rInv.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200 fallback inventories, got err=%v resp=%v", err, rInv)
+	}
+	var invMap map[string]interface{}
+	_ = json.NewDecoder(rInv.Body).Decode(&invMap)
+	rInv.Body.Close()
+	if invMap["source"] != "bridge" || strings.TrimSpace(fmt.Sprint(invMap["apiError"])) == "" {
+		t.Fatalf("Expected source=bridge & non-empty apiError, got %+v", invMap)
+	}
+
+	// P3-2: Same-PC session create returns peerNotifyStatus="skipped"
+	selfSess, _ := json.Marshal(Session{
+		Worker:       User{Name: "작업자", IP: "192.168.0.23", Role: "작업자"},
+		Checker:      User{Name: "작업자", IP: "192.168.0.23", Role: "확인자"},
+		Metadata:     Metadata{IncidentId: "INC-SELF"},
+		ActiveFields: ActiveFields{Detail: true},
+	})
+	rs, err := http.Post(ts.URL+"/api/session/create", "application/json", bytes.NewReader(selfSess))
+	if err != nil || rs.StatusCode != http.StatusOK {
+		t.Fatalf("Self session create failed: %v", err)
+	}
+	var rsMap map[string]interface{}
+	_ = json.NewDecoder(rs.Body).Decode(&rsMap)
+	rs.Body.Close()
+	if rsMap["peerNotifyStatus"] != "skipped" {
+		t.Fatalf("Expected peerNotifyStatus=skipped for same-PC session, got %v", rsMap["peerNotifyStatus"])
+	}
+
+	// P5-3: pruneExpiredSessionFiles deletes decided files older than retentionDays (keeping PENDING and recent)
+	sessionsDir := filepath.Join(srv.config.SharedDir, "sessions")
+	writeSessFile := func(id, status, tsStr string) string {
+		p := filepath.Join(sessionsDir, id+".json")
+		b, _ := json.Marshal(Session{
+			SessionId: id,
+			Status:    status,
+			CreatedAt: tsStr,
+			DecidedAt: tsStr,
+			Worker:    User{Name: "W", IP: "192.168.0.23"},
+			Checker:   User{Name: "C", IP: "192.168.0.23"},
+		})
+		_ = os.WriteFile(p, b, 0644)
+		return p
+	}
+	oldTS := time.Now().Add(-45 * 24 * time.Hour).Format(time.RFC3339)
+	recentTS := time.Now().Add(-5 * 24 * time.Hour).Format(time.RFC3339)
+	pOldApproved := writeSessFile("req_20200101_000001_oldapp", "APPROVED", oldTS)
+	pOldPending := writeSessFile("req_20200101_000002_oldpend", "PENDING", oldTS)
+	pRecApproved := writeSessFile("req_20261108_000003_recapp", "APPROVED", recentTS)
+
+	srv.pruneExpiredSessionFiles()
+
+	if _, err := os.Stat(pOldApproved); !os.IsNotExist(err) {
+		t.Fatalf("Expected old decided session file to be pruned")
+	}
+	if _, err := os.Stat(pOldPending); err != nil {
+		t.Fatalf("Expected old PENDING session file to be preserved: %v", err)
+	}
+	if _, err := os.Stat(pRecApproved); err != nil {
+		t.Fatalf("Expected recent decided session file to be preserved: %v", err)
+	}
+
+	// P5-3: handleSessionList caps returned sessions to latest 100 files
+	for i := 0; i < 105; i++ {
+		writeSessFile(fmt.Sprintf("req_20261110_120%03d_bulk", i), "PENDING", recentTS)
+	}
+	rl, err := http.Get(ts.URL + "/api/session/list?clientIp=192.168.0.23")
+	if err != nil || rl.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/session/list failed: %v", err)
+	}
+	var rlMap struct {
+		Sessions []interface{} `json:"sessions"`
+	}
+	_ = json.NewDecoder(rl.Body).Decode(&rlMap)
+	rl.Body.Close()
+	if len(rlMap.Sessions) > 100 {
+		t.Fatalf("Expected handleSessionList <= 100 items, got %d", len(rlMap.Sessions))
 	}
 }
 

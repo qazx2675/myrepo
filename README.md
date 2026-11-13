@@ -258,8 +258,8 @@ flowchart TD
 
 ```text
 ├── agent/
-│   ├── main.go                   # Go 백엔드 서버 소스 (RFC 6455 WebSocket, AWX 프록시, 하트비트 수명주기)
-│   └── agent_test.go             # Go 백엔드 유닛 테스트 스위트 (14개 테스트 전원 통과)
+│   ├── main.go                   # Go 백엔드 서버 소스 (RFC 6455 WebSocket, AWX 프록시, DPAPI 암호화 저장, 하트비트 수명주기)
+│   └── agent_test.go             # Go 백엔드 유닛 테스트 스위트 (28개 테스트 전원 통과)
 ├── internal/
 │   ├── launcher/
 │   │   └── launcher.go           # Edge/Chrome --app 독립 데스크톱 창 런처
@@ -294,11 +294,29 @@ flowchart TD
 
 ---
 
+## 6.5. v2 주요 개선 사항 (직접 API 우선 · 자격증명 영구 유지 · 안정성)
+
+- **직접 API 우선 수집 및 다중 AWX 탭 안정화**:
+  - 직접 API 자격증명이 설정되어 있으면 `/api/awx/hosts` 를 우선 사용하고, 실패 시에만 연결된 AWX 탭(브리지)으로 폴백합니다. (양쪽 모두 실패 시 `직접 API 실패: ... / AWX 탭 실패: ...` 두 오류를 모두 표시)
+  - 수집 요약에 실제 사용 경로(`직접 API(세션)` / `직접 API(토큰)` / `직접 API(Basic)` / `AWX 탭`)를 표시하며, 설정에서 **AWX 탭 우선** 체크박스를 켜면 브리지 탭 화면의 필터/검색 상태를 우선 수집합니다.
+  - 여러 AWX 탭이 연결된 환경에서 401 응답 탭이 먼저 응답하더라도 성공 응답이 오면 즉시 채택하고, 전부 실패한 경우 실패한 탭의 `origin`을 함께 표기합니다.
+  - 성공한 인증 방식(세션/Bearer/Token/Basic 및 JSON 로그인 `Token ...` 헤더)을 기억하며, 인벤토리 선택만으로는 인증/세션 캐시를 초기화하지 않습니다.
+- **자격증명 Windows DPAPI 영구 저장 (재실행 유지)**:
+  - **연결 테스트 & 저장** 성공 시 실행 파일 옆 `config.json`에 `awxPasswordEnc`, `awxTokenEnc` 를 Windows DPAPI(현재 사용자 범위)로 암호화 저장합니다. (다른 PC/사용자 등 복호화 실패 시 "다시 입력 필요" 안내, 기존 평문 키 자동 마이그레이션)
+  - 브라우저 `localStorage` 에는 비밀번호·토큰을 저장하지 않고 화면 설정만 유지하며, 하드코딩된 랩 기본값을 제거했습니다.
+- **자원 및 알림 수명주기 개선**:
+  - WebSocket 프레임 8MB 상한 및 RFC 6455 Close 프레임 응답, AWX HTTP Transport 유휴 연결 상한(`IdleConnTimeout 30s`, `MaxIdleConnsPerHost 4`), 결정 완료 30일 경과 `sessions/*.json` 자동 정리(`sessionRetentionDays`), `Routes()` 1회 초기화.
+  - 확인자 P2P 알림 타임아웃 3초 및 동일 PC 1인 테스트 시 `peerNotifyStatus: "skipped"` 구분 표시.
+
+---
+
 ## 7. 신뢰성 증명 및 테스트 스위트 검증 결과
 
-* **단독 데스크톱 앱 검증**: `node tests/test_standalone_app.js` -> **100% PASS**
+* **Go 백엔드 유닛 테스트**: `go test ./agent` -> **28개 테스트 전원 100% PASS**
+* **단독 데스크톱 앱 검증**: `node tests/test_standalone_app.js` -> **100% PASS (재실행 DPAPI 복원 포함)**
 * **1인 셀프 테스트 검증**: `node tests/test_self_request.js` -> **100% PASS**
 * **북마크릿 브라우저 검증**: `node tests/verify_built_bookmarklet.js` -> **100% PASS**
+* **자원/메모리/고루틴 프로파일링**: `node tests/bench_resource_profiling.js` -> **100% PASS**
 * **원테이크 24개 통합 테스트**: `node tests/run_all_tests.js` -> **24개 테스트케이스 전원 100% 통과 (One-Take Pass)**
 
 | 번호 | 테스트케이스 항목 | 검증 결과 | 상세 내역 |
@@ -325,5 +343,5 @@ flowchart TD
 | **TC-20** | 불일치([MISMATCH]) 검출 및 승인 잠금 | **PASS** | 확인자 오타/누락 입력 시 [MISMATCH] 정확히 적발, 승인 버튼 잠금 및 반려 활성화 |
 | **TC-21** | 확인자 [반려 / 재확인 요청] 실시간 수신 | **PASS** | 반려 사유 제출 시 세션 REJECTED 전이 및 작업자 화면 실시간 표시 |
 | **TC-22** | 전수 일치([MATCH]) 및 [승인] E2E | **PASS** | 30대 전수 일치 후 승인 클릭 시 작업자 화면에 [CROSS-CHECK APPROVED] 출력 |
-| **TC-23** | 실시간 연동 왕복 속도 (Latency) | **PASS** | 요청 -> 수신 -> 비교 -> 승인 -> 작업자 화면 반영 전체 왕복 속도: **65ms** (< 3,000ms 기준 통과) |
-| **TC-24** | 공유폴더 파일 폴백(Fallback) 동기화 | **PASS** | Direct 통신 차단 상태에서 공유폴더 파일 감시(500ms)로 **385ms** 만에 승인 상태 동기화 완료 |
+| **TC-23** | 실시간 연동 왕복 속도 (Latency) | **PASS** | 요청 -> 수신 -> 비교 -> 승인 -> 작업자 화면 반영 전체 왕복 속도: **91ms** (< 3,000ms 기준 통과) |
+| **TC-24** | 공유폴더 파일 폴백(Fallback) 동기화 | **PASS** | Direct 통신 차단 상태에서 공유폴더 파일 감시(500ms)로 **355ms** 만에 승인 상태 동기화 완료 |

@@ -69,12 +69,141 @@ class CDPClient {
     }
 }
 
+async function createMockAwxServer() {
+    let forceDirect401 = false;
+    const inv3Hosts = Array.from({ length: 1000 }, (_, i) => {
+        const num = i + 1;
+        if (num >= 295 && num <= 300) {
+            return { name: `prd-db-${String(num).padStart(4, '0')}` };
+        }
+        return { name: `prd-web-${String(num).padStart(4, '0')}` };
+    });
+    const validBasic = 'Basic ' + Buffer.from('uiuser:uipass123').toString('base64');
+    const server = http.createServer((req, res) => {
+        const u = new URL(req.url, 'http://127.0.0.1');
+        if (u.pathname.startsWith('/api/')) {
+            const ua = String(req.headers['user-agent'] || '');
+            if (forceDirect401 && ua.includes('Chrome/124.0.0.0') && !ua.includes('Edg/')) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ detail: 'Simulated Direct API 401 failure' }));
+                return;
+            }
+            const auth = req.headers.authorization || '';
+            if (auth && auth !== 'Bearer init-tok-1000' && auth !== validBasic) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ detail: 'Invalid credentials' }));
+                return;
+            }
+        }
+        if (u.pathname === '/api/v2/inventories/') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                count: 5,
+                next: null,
+                results: [
+                    { id: 1, name: 'DEFAULT', kind: '', total_hosts: 1 },
+                    { id: 3, name: 'Test 1000 Hosts Inventory', kind: '', total_hosts: 1000 },
+                    { id: 15, name: 'Default Inventory', kind: '', total_hosts: 25 },
+                    { id: 42, name: 'Smart Hosts', kind: 'smart', total_hosts: 4 },
+                    { id: 77, name: 'Demo Inventory', kind: '', total_hosts: 2 }
+                ]
+            }));
+            return;
+        }
+        if (u.pathname === '/api/v2/inventories/3/hosts/') {
+            const page = parseInt(u.searchParams.get('page') || '1', 10);
+            const pageSize = parseInt(u.searchParams.get('page_size') || '200', 10);
+            const start = (page - 1) * pageSize;
+            const slice = inv3Hosts.slice(start, start + pageSize);
+            const next = (start + pageSize) < inv3Hosts.length
+                ? `/api/v2/inventories/3/hosts/?page=${page + 1}&page_size=${pageSize}`
+                : null;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ count: inv3Hosts.length, next, results: slice }));
+            return;
+        }
+        if (u.pathname === '/api/v2/inventories/77/hosts/') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                count: 2,
+                next: null,
+                results: [{ name: 'demo-only-01' }, { name: 'demo-only-02' }]
+            }));
+            return;
+        }
+        if (u.pathname === '/api/v2/hosts/') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                count: 3,
+                next: null,
+                results: [{ name: 'all-inv-leak-01' }, { name: 'all-inv-leak-02' }, { name: 'demo-only-01' }]
+            }));
+            return;
+        }
+        if (u.pathname === '/api/v2/inventories/15/hosts/') {
+            const page = parseInt(u.searchParams.get('page') || '1', 10);
+            const pageSize = parseInt(u.searchParams.get('page_size') || '200', 10);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            if (pageSize === 5) {
+                res.end(JSON.stringify({ count: 25, next: null, results: [{ name: 'inv15-p1-01' }, { name: 'inv15-p1-02' }] }));
+                return;
+            }
+            if (page === 2 && pageSize === 20) {
+                const p2 = Array.from({ length: 20 }, (_, i) => ({ name: `inv15-p2-${String(i + 1).padStart(2, '0')}` }));
+                res.end(JSON.stringify({ count: 25, next: null, results: p2 }));
+                return;
+            }
+            if (page === 1) {
+                const p1 = Array.from({ length: 20 }, (_, i) => ({ name: `inv15-h-${String(i + 1).padStart(2, '0')}` }));
+                res.end(JSON.stringify({ count: 25, next: '/api/v2/inventories/15/hosts/?page=2&page_size=200', results: p1 }));
+                return;
+            }
+            const p2All = Array.from({ length: 5 }, (_, i) => ({ name: `inv15-h-${String(i + 21).padStart(2, '0')}` }));
+            res.end(JSON.stringify({ count: 25, next: null, results: p2All }));
+            return;
+        }
+        if (u.pathname === '/api/v2/inventories/42/hosts/') {
+            const page = parseInt(u.searchParams.get('page') || '1', 10);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            if (page === 1) {
+                res.end(JSON.stringify({
+                    count: 4,
+                    next: '/api/v2/inventories/42/hosts/?page=2',
+                    results: [{ name: 'sm42-api-01' }, { name: 'sm42-api-02' }]
+                }));
+            } else {
+                res.end(JSON.stringify({
+                    count: 4,
+                    next: null,
+                    results: [{ name: 'sm42-api-03' }, { name: 'prd-db-0296' }]
+                }));
+            }
+            return;
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<!doctype html><html><head><title>AWX Mock Console</title></head><body>
+            <table><tbody>
+                <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/1">sm42-dom-01</a></td></tr>
+                <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/2">sm42-dom-02</a></td></tr>
+                <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/3">prd-db-0295</a></td></tr>
+            </tbody></table>
+        </body></html>`);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    return {
+        server,
+        baseUrl: `http://127.0.0.1:${port}`,
+        setForceDirect401: (v) => { forceDirect401 = !!v; }
+    };
+}
+
 async function runStandaloneAppTest() {
     console.log("===============================================================================");
     console.log("  >>> Standalone Desktop App (host-cross-checker.exe) E2E Validation <<<");
     console.log("===============================================================================");
 
-    // 1. Cleanup old processes
+    // 1. Cleanup old processes and temporary dist/config.json
     try {
         execSync('taskkill /F /IM host-cross-checker.exe', { stdio: 'ignore' });
     } catch(e) {}
@@ -82,6 +211,15 @@ async function runStandaloneAppTest() {
         execSync('taskkill /F /IM cross-checker-agent.exe', { stdio: 'ignore' });
     } catch(e) {}
     await sleep(500);
+
+    const exePath = path.join(__dirname, '..', 'dist', 'host-cross-checker.exe');
+    const distConfigPath = path.join(path.dirname(exePath), 'config.json');
+    const hadDistConfig = fs.existsSync(distConfigPath);
+    const prevDistConfig = hadDistConfig ? fs.readFileSync(distConfigPath, 'utf8') : null;
+    if (hadDistConfig) fs.rmSync(distConfigPath, { force: true });
+
+    const mockAwx = await createMockAwxServer();
+    const mockAwxBase = mockAwx.baseUrl;
 
     const testShareDir = path.join(__dirname, '..', 'test_share');
     fs.rmSync(path.join(testShareDir, 'sessions'), { recursive: true, force: true });
@@ -102,7 +240,6 @@ async function runStandaloneAppTest() {
     fs.writeFileSync(path.join(testShareDir, 'users.json'), JSON.stringify(initialUsers, null, 2), 'utf8');
 
     // 2. Launch host-cross-checker.exe in normal mode (NO -headless!)
-    const exePath = path.join(__dirname, '..', 'dist', 'host-cross-checker.exe');
     if (!fs.existsSync(exePath)) {
         throw new Error(`Executable not found at ${exePath}. Run build.py first!`);
     }
@@ -110,7 +247,10 @@ async function runStandaloneAppTest() {
     console.log(`[1/7] Spawning ${path.basename(exePath)} with auto-launch app mode enabled...`);
     const appEnv = Object.assign({}, process.env, {
         CROSS_CHECKER_DEBUG_PORT: String(DEBUG_PORT),
-        CROSS_CHECKER_PROFILE_DIR: USER_DATA_DIR
+        CROSS_CHECKER_PROFILE_DIR: USER_DATA_DIR,
+        AWX_BASE_URL: mockAwxBase,
+        AWX_TOKEN: 'init-tok-1000',
+        AWX_DEFAULT_SCOPE: 'inventory:3'
     });
 
     const appProc = spawn(exePath, [
@@ -455,105 +595,18 @@ async function runStandaloneAppTest() {
         console.log(`   Collection finished: ${collectedCount} hosts collected.`);
         console.log(`   Summary text: "${summaryText.replace(/\n/g, ' ')}"`);
 
-        if (collectedCount !== 994 || !summaryText.includes("1000대 중 6대 제외됨")) {
+        if (collectedCount !== 994 || !summaryText.includes("1000대 중 6대 제외됨") || !summaryText.includes("직접 API")) {
             throw new Error(`AWX collection in standalone app failed. Count=${collectedCount}, summary=${summaryText}`);
         }
-        console.log("✓ One-click collection succeeded: 1,000 hosts from AWX inventory #3 parsed, 6 default excluded, 994 collected.");
+        console.log("✓ One-click collection succeeded: 1,000 hosts from AWX inventory #3 parsed, 6 default excluded, 994 collected via Direct API.");
 
-        // [4.5/7] Verify custom AWX Settings (URL paste + API collection) & Live Open AWX Browser Tab Bridge
-        console.log("[4.5/7] Testing Settings AWX URL/API configuration & Live Edge AWX Tab Bridge...");
-        const mockAwxServer = http.createServer((req, res) => {
-            const u = new URL(req.url, 'http://127.0.0.1');
-            if (u.pathname === '/api/v2/inventories/') {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({
-                    count: 4,
-                    next: null,
-                    results: [
-                        { id: 1, name: 'DEFAULT', kind: '', total_hosts: 1 },
-                        { id: 15, name: 'Default Inventory', kind: '', total_hosts: 25 },
-                        { id: 42, name: 'Smart Hosts', kind: 'smart', total_hosts: 4 },
-                        { id: 77, name: 'Demo Inventory', kind: '', total_hosts: 2 }
-                    ]
-                }));
-                return;
-            }
-            if (u.pathname === '/api/v2/inventories/77/hosts/') {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({
-                    count: 2,
-                    next: null,
-                    results: [{ name: 'demo-only-01' }, { name: 'demo-only-02' }]
-                }));
-                return;
-            }
-            if (u.pathname === '/api/v2/hosts/') {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({
-                    count: 3,
-                    next: null,
-                    results: [{ name: 'all-inv-leak-01' }, { name: 'all-inv-leak-02' }, { name: 'demo-only-01' }]
-                }));
-                return;
-            }
-            if (u.pathname === '/api/v2/inventories/15/hosts/') {
-                const page = parseInt(u.searchParams.get('page') || '1', 10);
-                const pageSize = parseInt(u.searchParams.get('page_size') || '200', 10);
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                if (pageSize === 5) {
-                    res.end(JSON.stringify({ count: 25, next: null, results: [{ name: 'inv15-p1-01' }, { name: 'inv15-p1-02' }] }));
-                    return;
-                }
-                if (page === 2 && pageSize === 20) {
-                    const p2 = Array.from({ length: 20 }, (_, i) => ({ name: `inv15-p2-${String(i + 1).padStart(2, '0')}` }));
-                    res.end(JSON.stringify({ count: 25, next: null, results: p2 }));
-                    return;
-                }
-                if (page === 1) {
-                    const p1 = Array.from({ length: 20 }, (_, i) => ({ name: `inv15-h-${String(i + 1).padStart(2, '0')}` }));
-                    res.end(JSON.stringify({ count: 25, next: '/api/v2/inventories/15/hosts/?page=2&page_size=200', results: p1 }));
-                    return;
-                }
-                const p2All = Array.from({ length: 5 }, (_, i) => ({ name: `inv15-h-${String(i + 21).padStart(2, '0')}` }));
-                res.end(JSON.stringify({ count: 25, next: null, results: p2All }));
-                return;
-            }
-            if (u.pathname === '/api/v2/inventories/42/hosts/') {
-                const page = parseInt(u.searchParams.get('page') || '1', 10);
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                if (page === 1) {
-                    res.end(JSON.stringify({
-                        count: 4,
-                        next: '/api/v2/inventories/42/hosts/?page=2',
-                        results: [{ name: 'sm42-api-01' }, { name: 'sm42-api-02' }]
-                    }));
-                } else {
-                    res.end(JSON.stringify({
-                        count: 4,
-                        next: null,
-                        results: [{ name: 'sm42-api-03' }, { name: 'prd-db-0296' }]
-                    }));
-                }
-                return;
-            }
-            // Mock open AWX browser console HTML page
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(`<!doctype html><html><head><title>AWX Mock Console</title></head><body>
-                <table><tbody>
-                    <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/1">sm42-dom-01</a></td></tr>
-                    <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/2">sm42-dom-02</a></td></tr>
-                    <tr><td><input type="checkbox"/></td><td data-label="Name"><a href="#/hosts/3">prd-db-0295</a></td></tr>
-                </tbody></table>
-            </body></html>`);
-        });
-        await new Promise(resolve => mockAwxServer.listen(0, '127.0.0.1', resolve));
-        const mockAwxPort = mockAwxServer.address().port;
-        const mockAwxBase = `http://127.0.0.1:${mockAwxPort}`;
+        // [4.5/7] Verify custom AWX Settings (URL paste + API collection + DPAPI + Fallback + Prefer Bridge) & Live Open AWX Browser Tab Bridge
+        console.log("[4.5/7] Testing Settings AWX URL/API configuration, P1-1..P2-2 & Live Edge AWX Tab Bridge...");
 
         let awxTabCdp = null;
         let awxTabTargetId = null;
         try {
-            // A) Open Settings, verify scheme-less URL parse + full pasted URL auto-parse & Test/Save + Collect
+            // A) Open Settings, verify scheme-less URL parse + full pasted URL auto-parse & Test/Save + Collect + DPAPI/no-localStorage secrets
             await cdp.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
             await sleep(250);
             await cdp.evaluate(`
@@ -578,6 +631,9 @@ async function runStandaloneAppTest() {
                     const u = document.getElementById('awx-vld-awx-url');
                     u.value = ${JSON.stringify(pastedUrl)};
                     u.dispatchEvent(new Event('input'));
+                    document.getElementById('awx-vld-awx-user').value = 'uiuser';
+                    document.getElementById('awx-vld-awx-pass').value = 'uipass123';
+                    document.getElementById('awx-vld-awx-token').value = '';
                 })()
             `);
             await sleep(100);
@@ -598,24 +654,43 @@ async function runStandaloneAppTest() {
             if (!saveTestMsg.includes('연결 성공')) {
                 throw new Error(`Settings AWX test & save failed: ${saveTestMsg}`);
             }
+            // P1-5: Inventory list source label check
+            const invSourceLabel = await cdp.evaluate(`document.getElementById('awx-vld-awx-inv-source')?.innerText || ''`);
+            if (!invSourceLabel.includes('직접 API')) {
+                throw new Error(`Expected P1-5 '직접 API' source label, got: ${invSourceLabel}`);
+            }
+            // P2-1 & P2-2: Ensure DPAPI ciphertext persisted on disk and NO plaintext secrets in config.json or localStorage
+            if (!fs.existsSync(distConfigPath)) {
+                throw new Error(`Expected DPAPI config file at ${distConfigPath}`);
+            }
+            const diskCfgTxt = fs.readFileSync(distConfigPath, 'utf8');
+            if (!diskCfgTxt.includes('"awxPasswordEnc"') || diskCfgTxt.includes('uipass123') || diskCfgTxt.includes('init-tok-1000')) {
+                throw new Error(`P2-1 config.json check failed: ${diskCfgTxt}`);
+            }
+            const lsRaw = await cdp.evaluate(`localStorage.getItem('awx_validator_direct_config_v1') || ''`);
+            if (lsRaw.includes('uipass123') || lsRaw.includes('"password"') || lsRaw.includes('"token"')) {
+                throw new Error(`P2-2 localStorage leaked secret fields: ${lsRaw}`);
+            }
+
             await assertNoLayoutClipping('Settings Modal AWX Configured');
             await cdp.evaluate(`document.getElementById('awx-vld-btn-close-settings').click()`);
             await sleep(150);
 
-            // Collect configured page 2 (20 hosts) via [현재 화면 수집]
+            // Collect configured page 2 (20 hosts) via [현재 화면 수집] (Direct API)
             await cdp.evaluate(`document.getElementById('awx-vld-btn-page').click()`);
             await sleep(400);
             const page2Cnt = await cdp.evaluate(`window.awxValidatorState.collectedHosts.size`);
-            if (page2Cnt !== 20) {
-                throw new Error(`Expected 20 hosts on configured AWX page 2, got ${page2Cnt}`);
+            const page2Summary = await cdp.evaluate(`document.getElementById('awx-vld-awx-summary')?.innerText || ''`);
+            if (page2Cnt !== 20 || !page2Summary.includes('직접 API')) {
+                throw new Error(`Expected 20 hosts via Direct API on page 2, got cnt=${page2Cnt} summary=${page2Summary}`);
             }
 
-            // Collect full inventory #15 (25 hosts across 2 pages) via [현재 인벤토리 전체 수집]
+            // Collect full inventory #15 (25 hosts across 2 pages) via [현재 인벤토리 전체 수집] (Direct API)
             const inv15Cnt = await cdp.evaluate(`window.awxRunCollectAll()`);
             if (inv15Cnt !== 25) {
                 throw new Error(`Expected 25 hosts from custom AWX inventory #15, got ${inv15Cnt}`);
             }
-            console.log("   Verified custom AWX URL paste auto-parse, test/save, page=2 (20), & full inventory #15 (25) collection.");
+            console.log("   Verified P1-1/P1-5/P2-1/P2-2: Direct API first, DPAPI config.json, zero localStorage secrets, page=2 (20) & inv #15 (25).");
 
             // B) Open a real second Edge tab with mock AWX console & run the generated bridge bookmarklet
             const bridgeHref = await cdp.evaluate(`document.getElementById('awx-vld-btn-bridge-bookmark')?.getAttribute('href') || ''`);
@@ -647,8 +722,12 @@ async function runStandaloneAppTest() {
             let bridgeConnectedUI = false;
             for (let i = 0; i < 25; i++) {
                 await sleep(150);
-                const srcTxt = await cdp.evaluate(`document.getElementById('awx-vld-awx-source-label')?.innerText || ''`);
-                if (srcTxt.includes('열린 AWX 탭 연결됨') && srcTxt.includes('스마트 인벤토리 #42')) {
+                const brgOk = await cdp.evaluate(`({
+                    src: document.getElementById('awx-vld-awx-source-label')?.innerText || '',
+                    conn: !!window.awxValidatorState?.awxBridge?.connected,
+                    sid: window.awxValidatorState?.awxBridge?.scopeId
+                })`);
+                if (brgOk.conn && brgOk.sid === '42' && brgOk.src.includes('AWX 탭 대기(1개)')) {
                     bridgeConnectedUI = true;
                     break;
                 }
@@ -658,15 +737,72 @@ async function runStandaloneAppTest() {
                 throw new Error(`Standalone app did not reflect live bridged AWX tab: ${dbg}`);
             }
 
+            // P1-2 & P1-1: Verify bridge count label, Direct->Bridge fallback on 401, P1-5 inventory list fallback label, and dual error display
+            const brCountTxt = await cdp.evaluate(`document.getElementById('awx-vld-awx-bridge-status')?.innerText || ''`);
+            if (!brCountTxt.includes('연결됨 1개')) {
+                throw new Error(`Expected P1-2 bridge count '연결됨 1개', got: ${brCountTxt}`);
+            }
+            mockAwx.setForceDirect401(true);
+            const fallbackCnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            const fallbackSummary = await cdp.evaluate(`document.getElementById('awx-vld-awx-summary')?.innerText || ''`);
+            if (fallbackCnt !== 3 || !fallbackSummary.includes('AWX 탭')) {
+                throw new Error(`Expected Direct 401 -> Bridge fallback with 3 hosts, got cnt=${fallbackCnt} summary=${fallbackSummary}`);
+            }
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
+            await sleep(200);
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-awx-refresh-inv').click()`);
+            await sleep(500);
+            const fallbackInvLabel = await cdp.evaluate(`document.getElementById('awx-vld-awx-inv-source')?.innerText || ''`);
+            if (!fallbackInvLabel.includes('목록: AWX 탭')) {
+                throw new Error(`Expected P1-5 '목록: AWX 탭' fallback label, got: ${fallbackInvLabel}`);
+            }
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-close-settings').click()`);
+            await sleep(150);
+
+            // Force bridged tab fetch to 401 too -> verify BOTH Direct & Bridge errors are displayed together
+            await awxTabCdp.evaluate(`
+                (() => {
+                    window.__origFetch = window.fetch;
+                    window.fetch = async (url, opts) => {
+                        if (String(url).includes('/hosts/')) {
+                            return new Response(JSON.stringify({ detail: 'Simulated Bridge 401' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+                        }
+                        return window.__origFetch(url, opts);
+                    };
+                })()
+            `);
+            const dualFailCnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            const dualFailSummary = await cdp.evaluate(`document.getElementById('awx-vld-awx-summary')?.innerText || ''`);
+            if (dualFailCnt !== 0 || !dualFailSummary.includes('직접 API 실패:') || !dualFailSummary.includes('AWX 탭 실패:')) {
+                throw new Error(`Expected P1-1 dual failure message with both Direct & Bridge errors, got cnt=${dualFailCnt} summary=${dualFailSummary}`);
+            }
+            await awxTabCdp.evaluate(`if (window.__origFetch) { window.fetch = window.__origFetch; delete window.__origFetch; }`);
+            mockAwx.setForceDirect401(false);
+
+            // Enable "AWX 탭 우선" (preferBridge) so Case B exercises live bridged AWX tab DOM/API with healthy Direct API present
+            await cdp.evaluate(`
+                (() => {
+                    const cb = document.getElementById('awx-vld-awx-prefer-bridge');
+                    cb.checked = true;
+                    cb.dispatchEvent(new Event('change'));
+                })()
+            `);
+            await sleep(200);
+            const preferBridgeSrc = await cdp.evaluate(`document.getElementById('awx-vld-awx-source-label')?.innerText || ''`);
+            if (!preferBridgeSrc.includes('열린 AWX 탭 연결됨') || !preferBridgeSrc.includes('스마트 인벤토리 #42')) {
+                throw new Error(`Expected '열린 AWX 탭 연결됨 · 스마트 인벤토리 #42' when preferBridge=true, got: ${preferBridgeSrc}`);
+            }
+
             // Collect visible DOM screen from bridged AWX tab -> 3 DOM hosts, 1 excluded ('prd-db-0295') => 2 collected
             await cdp.evaluate(`document.getElementById('awx-vld-btn-page').click()`);
             await sleep(500);
             const brgPageRes = await cdp.evaluate(`({
                 collected: Array.from(window.awxValidatorState.collectedHosts),
-                excluded: window.awxValidatorState.excludedHosts
+                excluded: window.awxValidatorState.excludedHosts,
+                summary: document.getElementById('awx-vld-awx-summary')?.innerText || ''
             })`);
-            if (brgPageRes.collected.length !== 2 || brgPageRes.excluded.length !== 1) {
-                throw new Error(`Expected 2 kept & 1 excluded from bridged AWX DOM, got: ${JSON.stringify(brgPageRes)}`);
+            if (brgPageRes.collected.length !== 2 || brgPageRes.excluded.length !== 1 || !brgPageRes.summary.includes('AWX 탭')) {
+                throw new Error(`Expected 2 kept & 1 excluded via AWX 탭 DOM, got: ${JSON.stringify(brgPageRes)}`);
             }
 
             // Collect full smart_inventory #42 from bridged AWX tab API -> 4 total, 1 excluded ('prd-db-0296') => 3 collected
@@ -675,6 +811,10 @@ async function runStandaloneAppTest() {
                 throw new Error(`Expected 3 kept hosts from bridged AWX full inventory #42, got ${brgAllCnt}`);
             }
             console.log("   Verified live open Edge AWX tab bridge: auto-detected smart_inventory #42, collected DOM screen (2/3) & full API (3/4).");
+
+            // Reset Direct API credentials before Case C/D so pure bridge mode (#/inventories & #/hosts guards) is verified without Direct fallback masking
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-awx-reset').click()`);
+            await sleep(300);
 
             // C) Switch bridged AWX tab to #/inventories list (screenshot case: DEFAULT, Default Inventory, Demo Inventory, Test 1000)
             //    Must NEVER scrape inventory names as hosts, must NEVER dump all inventories via /api/v2/hosts/,
@@ -714,8 +854,9 @@ async function runStandaloneAppTest() {
             }
 
             // Open Settings, verify Demo Inventory appears in <select> dropdown, pick inventory:77, close & collect ONLY Demo Inventory hosts!
-            await cdp.evaluate(`document.documentElement.dispatchEvent(new MouseEvent('mouseenter'))`);
-            await sleep(450);
+            await cdp.send('Page.bringToFront');
+            await cdp.evaluate(`window.focus(); document.documentElement.dispatchEvent(new MouseEvent('mouseenter'));`);
+            await sleep(500);
             await cdp.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
             await sleep(250);
             const dropOpts = await cdp.evaluate(`Array.from(document.querySelectorAll('#awx-vld-awx-inventory-select option')).map(o => o.value + '|' + o.textContent)`);
@@ -831,21 +972,39 @@ async function runStandaloneAppTest() {
             }
             console.log("   Verified Case D: #/hosts & wrong-inventory (#15 p.2) tabs stay strictly isolated to dropdown-selected #77 for both [현재 화면 수집] (p.1) & [전체 수집].");
         } finally {
+            mockAwx.setForceDirect401(false);
             if (awxTabCdp) awxTabCdp.close();
             if (awxTabTargetId) {
                 await cdp.send('Target.closeTarget', { targetId: awxTabTargetId }).catch(() => {});
             }
             await sleep(300);
+            // Persist inventory:77 (page 1) DPAPI config & disable preferBridge so [8/8] restart verifies passwordless Direct API collection
             await cdp.evaluate(`
                 (async () => {
-                    const r = document.getElementById('awx-vld-btn-awx-reset');
-                    if (r) r.click();
-                    const c = document.getElementById('awx-vld-btn-close-settings');
-                    if (c) c.click();
+                    const cb = document.getElementById('awx-vld-awx-prefer-bridge');
+                    if (cb) { cb.checked = false; cb.dispatchEvent(new Event('change')); }
+                    const u = document.getElementById('awx-vld-awx-url');
+                    const usr = document.getElementById('awx-vld-awx-user');
+                    const pwd = document.getElementById('awx-vld-awx-pass');
+                    const tok = document.getElementById('awx-vld-awx-token');
+                    if (u) {
+                        u.value = ${JSON.stringify(mockAwxBase + '/#/inventories/inventory/77/hosts?page=1')};
+                        u.dispatchEvent(new Event('input'));
+                    }
+                    if (usr) usr.value = 'uiuser';
+                    if (pwd) pwd.value = 'uipass123';
+                    if (tok) tok.value = '';
+                    const saveBtn = document.getElementById('awx-vld-btn-awx-save');
+                    if (saveBtn) saveBtn.click();
                 })()
             `).catch(() => {});
-            await sleep(300);
-            mockAwxServer.close();
+            for (let i = 0; i < 20; i++) {
+                await sleep(150);
+                const msg = await cdp.evaluate(`document.getElementById('awx-vld-awx-test-result')?.innerText || ''`).catch(() => '');
+                if (msg.includes('연결 성공')) break;
+            }
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-close-settings')?.click()`).catch(() => {});
+            await sleep(200);
         }
 
         // [5/7] Test Comparison in Tab 1
@@ -1035,14 +1194,13 @@ async function runStandaloneAppTest() {
 
         // [7/7] Test Window Close & Process Termination Lifecycle
         console.log("[7/7] Testing Window Close & Auto-Exit Lifecycle...");
-        // Simulate window close by sending beacon and closing page
-        await cdp.evaluate(`
-            try {
-                if (navigator.sendBeacon) navigator.sendBeacon('/api/bye', 'bye');
-            } catch(e) {}
-        `);
+        // Simulate window close: close page first so in-page ping/WS intervals stop, then send /api/bye if unload didn't already
         await cdp.send('Page.close');
         cdp.close();
+        await sleep(100);
+        try {
+            await fetch('http://127.0.0.1:18080/api/bye', { method: 'POST', body: 'bye' });
+        } catch(e) {}
 
         console.log("   Waiting for host-cross-checker.exe to terminate automatically...");
         for (let i = 0; i < 30; i++) {
@@ -1065,10 +1223,98 @@ async function runStandaloneAppTest() {
         }
         console.log("✓ Process auto-exit verified: host-cross-checker.exe terminated cleanly.");
 
+        // [8/8] Restart Acceptance Test: Relaunch WITHOUT AWX_* env vars and collect via BOTH buttons using DPAPI config.json
+        console.log("[8/8] Testing exe restart without AWX env vars (DPAPI persistence + both collect buttons)...");
+        const restartEnv = Object.assign({}, process.env, {
+            CROSS_CHECKER_DEBUG_PORT: String(DEBUG_PORT),
+            CROSS_CHECKER_PROFILE_DIR: USER_DATA_DIR
+        });
+        delete restartEnv.AWX_BASE_URL;
+        delete restartEnv.AWX_USERNAME;
+        delete restartEnv.AWX_PASSWORD;
+        delete restartEnv.AWX_TOKEN;
+        delete restartEnv.AWX_DEFAULT_SCOPE;
+
+        let restartExited = false;
+        const restartProc = spawn(exePath, [
+            '-port=18080',
+            `-share=${testShareDir}`,
+            '-bind-ip=192.168.0.23',
+            '-open-app'
+        ], { env: restartEnv, stdio: 'pipe' });
+        restartProc.on('exit', () => { restartExited = true; });
+        restartProc.stdout.on('data', d => console.log('   [RESTART STDOUT]', d.toString().trim()));
+        restartProc.stderr.on('data', d => console.log('   [RESTART STDERR]', d.toString().trim()));
+
+        let restartPageTarget = null;
+        for (let i = 0; i < 35; i++) {
+            await sleep(300);
+            try {
+                const res = await fetch(`http://127.0.0.1:${DEBUG_PORT}/json`);
+                if (res.ok) {
+                    const targets = await res.json();
+                    restartPageTarget = targets.find(t => t.type === 'page' && (t.url.includes('127.0.0.1:18080') || t.url.includes('localhost:18080')));
+                    if (restartPageTarget && restartPageTarget.webSocketDebuggerUrl) break;
+                }
+            } catch (e) {}
+        }
+        if (!restartPageTarget || !restartPageTarget.webSocketDebuggerUrl) {
+            if (!restartExited) try { restartProc.kill(); } catch (e) {}
+            throw new Error("Restarted standalone app failed to open CDP window");
+        }
+        const cdp2 = new CDPClient(restartPageTarget.webSocketDebuggerUrl);
+        await cdp2.connect();
+        await cdp2.send('Runtime.enable');
+        await cdp2.send('Page.enable');
+        for (let i = 0; i < 25; i++) {
+            await sleep(200);
+            const hasBtn = await cdp2.evaluate(`!!document.getElementById('awx-vld-btn-page')`).catch(() => false);
+            if (hasBtn) break;
+        }
+        try {
+            // Collect current page & full inventory WITHOUT touching Settings or entering password
+            await cdp2.evaluate(`document.getElementById('awx-vld-btn-page').click()`);
+            await sleep(500);
+            const restartPageHosts = await cdp2.evaluate(`Array.from(window.awxValidatorState.collectedHosts).sort()`);
+            if (restartPageHosts.length !== 2 || restartPageHosts[0] !== 'demo-only-01' || restartPageHosts[1] !== 'demo-only-02') {
+                throw new Error(`Restarted [현재 화면 수집] failed without password re-entry: ${JSON.stringify(restartPageHosts)}`);
+            }
+            const restartAllCnt = await cdp2.evaluate(`window.awxRunCollectAll()`);
+            const restartSummary = await cdp2.evaluate(`document.getElementById('awx-vld-awx-summary')?.innerText || ''`);
+            if (restartAllCnt !== 2 || !restartSummary.includes('직접 API')) {
+                throw new Error(`Restarted [현재 인벤토리 전체 수집] failed: cnt=${restartAllCnt}, summary=${restartSummary}`);
+            }
+
+            // Verify Reset clears config.json DPAPI secrets
+            await cdp2.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
+            await sleep(200);
+            await cdp2.evaluate(`document.getElementById('awx-vld-btn-awx-reset').click()`);
+            await sleep(400);
+            if (fs.existsSync(distConfigPath)) {
+                const afterResetCfg = fs.readFileSync(distConfigPath, 'utf8');
+                if (afterResetCfg.includes('awxPasswordEnc') || afterResetCfg.includes('awxTokenEnc')) {
+                    throw new Error(`Reset did not clear encrypted AWX credentials from config.json: ${afterResetCfg}`);
+                }
+            }
+            console.log("✓ P2-1 Restart Acceptance Verified: both collect buttons succeeded after exe restart without re-entering credentials, and Reset cleared config.json.");
+
+            await cdp2.evaluate(`try { if (navigator.sendBeacon) navigator.sendBeacon('/api/bye', 'bye'); } catch(e) {}`);
+            await cdp2.send('Page.close');
+        } finally {
+            cdp2.close();
+            for (let i = 0; i < 20; i++) {
+                await sleep(150);
+                if (restartExited) break;
+            }
+            if (!restartExited) {
+                try { restartProc.kill(); } catch (e) {}
+            }
+        }
+
         console.log("\n===============================================================================");
         console.log("  >>> SUCCESS: Standalone Desktop App (host-cross-checker.exe) 100% PASS <<<");
         console.log("===============================================================================");
-        process.exit(0);
+        process.exitCode = 0;
 
     } catch(err) {
         console.error("\n>>> TEST FAILED:", err);
@@ -1076,8 +1322,15 @@ async function runStandaloneAppTest() {
         if (!procExited) {
             try { appProc.kill(); } catch(e) {}
         }
-        process.exit(1);
+        process.exitCode = 1;
+    } finally {
+        try { mockAwx.server.close(); } catch (e) {}
+        if (hadDistConfig) {
+            fs.writeFileSync(distConfigPath, prevDistConfig, 'utf8');
+        } else {
+            fs.rmSync(distConfigPath, { force: true });
+        }
     }
 }
 
-runStandaloneAppTest();
+runStandaloneAppTest().then(() => process.exit(process.exitCode || 0));

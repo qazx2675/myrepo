@@ -186,5 +186,41 @@
 * **부하 종료 후 GC 안정화**: **25.50 MB** (지속 누수 0MB, 메모리 정상 수렴)
 * **종료 시 자원 회수**: 창 종료 신호 수신 후 **100ms** 내에 프로세스 완전 종료, OS에 메모리/CPU 100% 반환 완료
 
+---
+
+## 6. AWX 수집 401 해결 · 직접 API 우선 전환 · DPAPI 자격증명 유지 · 자원 안정화 (v2, 2026-11-13)
+
+### (1) 구현 요약 (`agent/main.go`, `src/awx_host_checker.js`, `agent/agent_test.go`)
+* **P1. AWX 수집 401 방지 및 직접 API 우선 전환**:
+  * **(P1-0 재현 확인 → P1-2 해결)** `handleAwxBridgeCollect` / `handleAwxBridgeResult` 를 다중 브리지 팬인(Connected Bridge 수만큼 대기, 첫 성공 응답 즉시 채택, 전부 실패/타임아웃 시 실패 탭의 `origin` 목록 포함 반환)으로 개선하고, 설정 모달에 연결 탭 수(`연결됨 N개`)를 표시했습니다.
+  * **(P1-1)** 독립 앱 모드(`btnPage.onclick`, `runCollectAll`)가 직접 API 자격증명 설정 시 `/api/awx/hosts` 를 우선 호출하고 실패 시에만 AWX 탭 브리지로 폴백하도록 전환했습니다. 양쪽 실패 시 `직접 API 실패: ... / AWX 탭 실패: ...` 두 오류를 모두 표기하며, 결과 요약에 경로(`직접 API(세션|토큰|Basic)` / `AWX 탭`)를 표시하고 **AWX 탭 우선** 체크박스(`preferBridge`, 기본 꺼짐)를 추가했습니다.
+  * **(P1-3)** `fetchAwxPageWithDetails` 가 성공한 인증 방식(`session`/`bearer`/`token`/`basic`) 및 JSON 로그인 `"Token ..."` 헤더를 기억해 다음 요청부터 재시도하며, 기억한 방식이 실패할 때만 전체 순서로 폴백합니다.
+  * **(P1-4)** `handleAwxConfig` 가 URL·계정·비밀번호·토큰·TLS 옵션이 실제로 바뀐 경우에만 인증/호스트 캐시를 초기화하며, `selAwxInventory.onchange` 는 동일한 `baseUrl` 을 재전송하지 않습니다.
+  * **(P1-5)** `handleAwxInventories` 브리지 폴백 시 `source` 와 `apiError` 를 응답에 포함하고 설정 UI에 `"목록: 직접 API"` / `"목록: AWX 탭(직접 API 실패: ...)"` 를 표시합니다.
+* **P2. 자격증명 영구 유지 및 평문·기본값 제거**:
+  * **(P2-1)** **연결 테스트 & 저장** 성공 및 설정 저장 시 실행 파일 옆 `config.json` 에 `awxPasswordEnc`, `awxTokenEnc` 를 Windows DPAPI(`CryptProtectData`, 현재 사용자 범위) base64 암호문으로 `safeWriteFile` 저장합니다. 재기동 시 복호화 실패 시 `"다시 입력 필요"` 를 안내하며, 기존 평문 키가 있으면 암호화 저장으로 마이그레이션하고, **초기화** 시 `config.json` 내 AWX 항목도 삭제합니다.
+  * **(P2-2)** `src/awx_host_checker.js` 의 `localStorage` 평문 비밀번호·토큰 저장을 제거하고 화면 설정만 유지하며, 이전 버전 평문이 남아 있으면 최초 1회 에이전트로 마이그레이션 후 삭제합니다.
+  * **(P2-3)** `NewAgentServer` 의 하드코딩된 랩 기본 주소/계정/비밀번호·인벤토리 기본값 및 `prevWasFactoryDefault` 분기를 완전히 제거했습니다.
+* **P3~P6 확정 항목 반영**:
+  * **(P3-2)** 확인자 P2P HTTP 알림 타임아웃을 1초 → 3초로 확대하고, 동일 PC 1인 테스트 생략 시 `peerNotifyStatus: "skipped"` 로 구분 표기합니다. (P3-1, P6-1 은 기본값 미적용)
+  * **(P4-1)** 템플릿에 존재하지 않는 데드 핸들러(`awx-vld-btn-close`, `awx-vld-btn-detach`)를 제거했습니다.
+* **P5. 메모리·자원 누수 방지 (`agent/main.go`)**:
+  * **(P5-1)** `wsReadMessage` 에 8MB(`maxWSFrameBytes`) 프레임 상한 및 `uint64` 오버플로 검증 적용, `WriteClose` 로 RFC 6455 정상 종료 핸드셰이크를 보완했습니다.
+  * **(P5-2)** AWX HTTP `Transport` 에 `IdleConnTimeout: 30s`, `MaxIdleConnsPerHost: 4`, `MaxIdleConns: 16` 적용 및 클라이언트 교체/종료 시 `CloseIdleConnections()` 를 호출합니다.
+  * **(P5-3)** 결정 완료(`APPROVED`/`REJECTED`) 후 30일(`sessionRetentionDays`) 지난 `sessions/*.json` 을 기동 시 및 24시간 주기로 정리하며 `handleSessionList` 는 최신 100개만 조회합니다.
+  * **(P5-4)** `Routes()` 핸들러를 `sync.Once` 로 1회 생성해 재사용합니다.
+
+### (2) v2 종합 검증 및 P5-5 자원 프로파일링 결과 (`bench_resource_profiling.js`)
+> 아래 표는 `agent/main.go` 최종 수정 및 `build.py` 빌드 완료 후 `tests/bench_resource_profiling.js` 실행으로 실측한 값입니다.
+
+* **P5-5 측정 결과 (`tests/bench_resource_profiling.js`)**:
+  * **초기 유휴 상태 (Phase 2, 4s)**: Working Set **16.88 MB**, Private Memory **52.88 MB**, HeapAlloc **3.00 MB**, Goroutines **9개** (기동 직후 **11개**), Idle CPU **0.000%**
+  * **세션 300회 연속 생성/조회 (Phase 3)**: Working Set **17.12 MB**, Goroutines **9개**
+  * **AWX 1,000호스트 수집 50회 (Phase 4)**: Working Set **16.84 MB**, HeapAlloc **2.35 MB**, Goroutines **9개**
+  * **WebSocket 브리지 연결/상태전송/해제 50회 (Phase 4.5)**: Working Set **16.98 MB**, HeapAlloc **1.37 MB**, Goroutines **9개**
+  * **부하 후 4초 GC·유휴 정리 안정화 (Phase 5)**: Working Set **17.27 MB** (피크 **17.12 MB**, 순증 **+0.39 MB**), HeapAlloc **2.36 MB**, Goroutines **9개 (delta +0)**
+  * **정상 종료 회수 (Phase 6)**: `/api/bye?force=true` 후 **100ms** 내 완전 종료
+
+
 
 

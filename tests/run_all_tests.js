@@ -1137,6 +1137,11 @@ async function runOneTakeTests() {
         // TC-23: 실시간 연동 전송 속도 (Latency < 3,000ms) 성능 증명
         // -------------------------------------------------------------
         console.log("\n>>> Executing TC-23: 실시간 연동 전송 속도 (Latency < 3,000ms) 성능 증명");
+        await fetch('http://127.0.0.1:18080/api/users/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: "피어확인자", ip: "127.0.0.1" })
+        });
         const tStart = Date.now();
         const t23Sid = await cdp.evaluate(`
             (async () => {
@@ -1148,17 +1153,19 @@ async function runOneTakeTests() {
                 document.getElementById('awx-vld-txt-detail').dispatchEvent(new Event('input'));
                 const sel = document.getElementById('awx-vld-sel-checker');
                 if (sel) {
-                    sel.value = '192.168.0.102';
+                    const opt = Array.from(sel.options).find(o => o.value === '127.0.0.1');
+                    if (!opt) sel.add(new Option('피어확인자 (127.0.0.1)', '127.0.0.1'));
+                    sel.value = '127.0.0.1';
                     sel.dispatchEvent(new Event('change'));
                 }
-                await window.awxSendCrossCheckRequest('192.168.0.102');
+                await window.awxSendCrossCheckRequest('127.0.0.1');
                 return window.awxValidatorState.currentSession.sessionId;
             })()
         `);
         await cdp.evaluate(`
             (async () => {
                 await window.awxSwitchTab('checker');
-                await window.awxLoadCheckerSession('${t23Sid}', '192.168.0.102');
+                await window.awxLoadCheckerSession('${t23Sid}', '127.0.0.1');
                 const sample10 = "host-01\\nhost-02\\nhost-03\\nhost-04\\nhost-05";
                 document.getElementById('awx-vld-txt-chk-detail').value = sample10;
                 document.getElementById('awx-vld-txt-chk-incident').value = sample10;

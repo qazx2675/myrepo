@@ -47,11 +47,15 @@ type Config struct {
 	BindIP                   string `json:"bindIp,omitempty"`
 	AwxBaseURL               string `json:"awxBaseUrl,omitempty"`
 	AwxUsername              string `json:"awxUsername,omitempty"`
-	AwxPassword              string `json:"awxPassword,omitempty"`
-	AwxToken                 string `json:"awxToken,omitempty"`
+	AwxPassword              string `json:"awxPassword,omitempty"`     // legacy plaintext read-only; migrated to awxPasswordEnc
+	AwxToken                 string `json:"awxToken,omitempty"`        // legacy plaintext read-only; migrated to awxTokenEnc
+	AwxPasswordEnc           string `json:"awxPasswordEnc,omitempty"`  // Windows DPAPI encrypted base64
+	AwxTokenEnc              string `json:"awxTokenEnc,omitempty"`     // Windows DPAPI encrypted base64
 	AwxDefaultScope          string `json:"awxDefaultScope,omitempty"`
 	AwxInsecureTLS           *bool  `json:"awxInsecureTls,omitempty"`
+	SessionRetentionDays     int    `json:"sessionRetentionDays,omitempty"`
 	Headless                 bool   `json:"headless,omitempty"`
+	ConfigPath               string `json:"-"`
 }
 
 // AwxInventorySummary represents a selectable AWX inventory entry.
@@ -84,6 +88,7 @@ type AwxBridgeResult struct {
 	RequestID string   `json:"requestId"`
 	OK        bool     `json:"ok"`
 	Error     string   `json:"error,omitempty"`
+	Origin    string   `json:"origin,omitempty"`
 	Hosts     []string `json:"hosts,omitempty"`
 	RawCount  int      `json:"rawCount,omitempty"`
 	Label     string   `json:"label,omitempty"`
@@ -254,11 +259,14 @@ func (c *WSClient) WriteText(payload []byte) error {
 	return nil
 }
 
-func (c *WSClient) WritePong(payload []byte) error {
+func (c *WSClient) writeControlFrame(finOpcode byte, payload []byte) error {
+	if len(payload) > 125 {
+		payload = payload[:125]
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-	header := []byte{0x8A, byte(len(payload))}
+	header := []byte{finOpcode, byte(len(payload))}
 	if _, err := c.conn.Write(header); err != nil {
 		return err
 	}
@@ -267,6 +275,19 @@ func (c *WSClient) WritePong(payload []byte) error {
 		return err
 	}
 	return nil
+}
+
+func (c *WSClient) WritePong(payload []byte) error {
+	return c.writeControlFrame(0x8A, payload)
+}
+
+func (c *WSClient) WriteClose(payload []byte) error {
+	if len(payload) >= 2 {
+		payload = payload[:2]
+	} else {
+		payload = nil
+	}
+	return c.writeControlFrame(0x88, payload)
 }
 
 // WSHub coordinates active WebSocket connections and broadcasting.
@@ -349,6 +370,8 @@ func wsUpgrade(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
 	return conn, nil
 }
 
+const maxWSFrameBytes = 8 * 1024 * 1024 // 8MB WebSocket frame payload cap
+
 func wsReadMessage(r io.Reader) (byte, []byte, error) {
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(r, header); err != nil {
@@ -369,7 +392,14 @@ func wsReadMessage(r io.Reader) (byte, []byte, error) {
 		if _, err := io.ReadFull(r, lenBytes); err != nil {
 			return 0, nil, err
 		}
-		payloadLen = int(binary.BigEndian.Uint64(lenBytes))
+		u64 := binary.BigEndian.Uint64(lenBytes)
+		if u64 > maxWSFrameBytes {
+			return 0, nil, fmt.Errorf("websocket frame too large: %d bytes (max %d)", u64, maxWSFrameBytes)
+		}
+		payloadLen = int(u64)
+	}
+	if payloadLen < 0 || payloadLen > maxWSFrameBytes {
+		return 0, nil, fmt.Errorf("invalid websocket frame length: %d", payloadLen)
 	}
 
 	var mask [4]byte
@@ -424,43 +454,55 @@ type WSResponseMsg struct {
 
 // awxCacheEntry stores cached inventory hosts from AWX.
 type awxCacheEntry struct {
-	hosts     []string
-	fetchedAt time.Time
+	hosts      []string
+	authMethod string
+	fetchedAt  time.Time
 }
 
 // AgentServer represents the main HTTP backend service.
 type AgentServer struct {
-	config           Config
-	awxCfgMu         sync.RWMutex
-	awxSessionMu     sync.Mutex
-	awxSessionKey    string
-	awxSessionClient *http.Client
-	usersMutex       sync.RWMutex
-	sessMutex        sync.RWMutex
-	sseBroker        *SSEBroker
-	wsHub            *WSHub
-	httpClient       *http.Client
-	awxHttpClient    *http.Client
-	awxCacheMu       sync.RWMutex
-	awxCache         map[string]awxCacheEntry
-	bridgeMu         sync.RWMutex
-	bridgeState      AwxBridgeState
-	bridgePending    map[string]chan AwxBridgeResult
-	stopChan         chan struct{}
-	fileModTime      map[string]time.Time
-	modMu            sync.Mutex
-	detectedIP       string
-	lifecycleMu      sync.Mutex
-	hasSeenClient    bool
-	lastPingTime     time.Time
-	byeReceived      bool
-	byeTime          time.Time
-	onShutdown       func()
-	lastUsersSync    time.Time
-	usersSource      string
+	config            Config
+	awxCfgMu          sync.RWMutex
+	awxSessionMu      sync.Mutex
+	awxSessionKey     string
+	awxSessionClient  *http.Client
+	awxSessionAuthHdr string
+	awxPreferredAuth  map[string]string
+	awxNeedsReauth    bool
+	usersMutex        sync.RWMutex
+	sessMutex         sync.RWMutex
+	sseBroker         *SSEBroker
+	wsHub             *WSHub
+	httpClient        *http.Client
+	awxHttpClient     *http.Client
+	awxCacheMu        sync.RWMutex
+	awxCache          map[string]awxCacheEntry
+	bridgeMu          sync.RWMutex
+	bridgeState       AwxBridgeState
+	bridgePending     map[string]chan AwxBridgeResult
+	routesOnce        sync.Once
+	routesHandler     http.Handler
+	stopChan          chan struct{}
+	fileModTime       map[string]time.Time
+	modMu             sync.Mutex
+	detectedIP        string
+	lifecycleMu       sync.Mutex
+	hasSeenClient     bool
+	lastPingTime      time.Time
+	byeReceived       bool
+	byeTime           time.Time
+	onShutdown        func()
+	lastUsersSync     time.Time
+	usersSource       string
 }
 
 const awxRequestUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+func closeHTTPClientIdle(c *http.Client) {
+	if c != nil {
+		c.CloseIdleConnections()
+	}
+}
 
 func newAwxHTTPClient(insecureTLS bool) *http.Client {
 	jar, _ := cookiejar.New(nil)
@@ -494,7 +536,10 @@ func newAwxHTTPClient(insecureTLS bool) *http.Client {
 			return nil
 		},
 		Transport: &http.Transport{
-			Proxy: nil,
+			Proxy:               nil,
+			MaxIdleConns:        16,
+			MaxIdleConnsPerHost: 4,
+			IdleConnTimeout:     30 * time.Second,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: insecureTLS,
 				MinVersion:         minTLS,
@@ -526,25 +571,35 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 	if cfg.PollIntervalMs == 0 {
 		cfg.PollIntervalMs = 500
 	}
+	if cfg.SessionRetentionDays == 0 {
+		if envRet := os.Getenv("AWX_SESSION_RETENTION_DAYS"); envRet != "" {
+			if n, err := strconv.Atoi(strings.TrimSpace(envRet)); err == nil && n != 0 {
+				cfg.SessionRetentionDays = n
+			}
+		}
+		if cfg.SessionRetentionDays == 0 {
+			cfg.SessionRetentionDays = 30
+		}
+	}
+
+	needsReauth := false
+	if cfg.ConfigPath != "" {
+		loadAwxConfigFromFile(&cfg, &needsReauth)
+	}
+
 	if cfg.AwxBaseURL == "" {
 		if envURL := os.Getenv("AWX_BASE_URL"); envURL != "" {
 			cfg.AwxBaseURL = strings.TrimRight(envURL, "/")
-		} else {
-			cfg.AwxBaseURL = "http://192.168.0.58:30080"
 		}
 	}
 	if cfg.AwxUsername == "" {
 		if envUser := os.Getenv("AWX_USERNAME"); envUser != "" {
 			cfg.AwxUsername = envUser
-		} else {
-			cfg.AwxUsername = "test.kim"
 		}
 	}
 	if cfg.AwxPassword == "" {
 		if envPass := os.Getenv("AWX_PASSWORD"); envPass != "" {
 			cfg.AwxPassword = envPass
-		} else {
-			cfg.AwxPassword = "11111111!"
 		}
 	}
 	if cfg.AwxToken == "" {
@@ -553,10 +608,10 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 		}
 	}
 	if cfg.AwxDefaultScope == "" {
-		if envScope := os.Getenv("AWX_DEFAULT_INVENTORY"); envScope != "" {
+		if envScope := os.Getenv("AWX_DEFAULT_SCOPE"); envScope != "" {
 			cfg.AwxDefaultScope = strings.TrimSpace(envScope)
-		} else {
-			cfg.AwxDefaultScope = "3"
+		} else if envInv := os.Getenv("AWX_DEFAULT_INVENTORY"); envInv != "" {
+			cfg.AwxDefaultScope = strings.TrimSpace(envInv)
 		}
 	}
 	insecureTLS := true
@@ -596,17 +651,22 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 	detectedIP := detectLocalIP(cfg.BindIP)
 
 	s := &AgentServer{
-		config:        cfg,
-		sseBroker:     newSSEBroker(),
-		wsHub:         newWSHub(),
-		httpClient:    &http.Client{Timeout: 1 * time.Second},
-		awxHttpClient: newAwxHTTPClient(insecureTLS),
-		awxCache:      make(map[string]awxCacheEntry),
-		bridgePending: make(map[string]chan AwxBridgeResult),
-		stopChan:      make(chan struct{}),
-		fileModTime:   make(map[string]time.Time),
-		detectedIP:    detectedIP,
+		config:           cfg,
+		awxPreferredAuth: make(map[string]string),
+		awxNeedsReauth:   needsReauth,
+		sseBroker:        newSSEBroker(),
+		wsHub:            newWSHub(),
+		httpClient:       &http.Client{Timeout: 3 * time.Second},
+		awxHttpClient:    newAwxHTTPClient(insecureTLS),
+		awxCache:         make(map[string]awxCacheEntry),
+		bridgePending:    make(map[string]chan AwxBridgeResult),
+		stopChan:         make(chan struct{}),
+		fileModTime:      make(map[string]time.Time),
+		detectedIP:       detectedIP,
 	}
+
+	// Prune decided sessions older than SessionRetentionDays on startup
+	s.pruneExpiredSessionFiles()
 
 	// Pre-populate existing session files modTime so we don't blast notifications for existing old files
 	initPattern := filepath.Join(cfg.SharedDir, "sessions", "*.json")
@@ -623,6 +683,265 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 	}
 
 	return s, nil
+}
+
+type dpapiBlob struct {
+	cbData uint32
+	pbData *byte
+}
+
+var (
+	modCrypt32DPAPI       = syscall.NewLazyDLL("crypt32.dll")
+	procCryptProtectData  = modCrypt32DPAPI.NewProc("CryptProtectData")
+	procCryptUnprotect    = modCrypt32DPAPI.NewProc("CryptUnprotectData")
+	modKernel32DPAPI      = syscall.NewLazyDLL("kernel32.dll")
+	procLocalFreeDPAPI    = modKernel32DPAPI.NewProc("LocalFree")
+)
+
+const cryptprotectUIForbidden = 0x1
+
+// dpapiEncrypt encrypts UTF-8 text with Windows DPAPI (current user scope) and returns base64.
+func dpapiEncrypt(plaintext string) (string, error) {
+	if plaintext == "" {
+		return "", nil
+	}
+	raw := []byte(plaintext)
+	inBlob := dpapiBlob{
+		cbData: uint32(len(raw)),
+		pbData: &raw[0],
+	}
+	var outBlob dpapiBlob
+	r1, _, callErr := procCryptProtectData.Call(
+		uintptr(unsafe.Pointer(&inBlob)),
+		0,
+		0,
+		0,
+		0,
+		cryptprotectUIForbidden,
+		uintptr(unsafe.Pointer(&outBlob)),
+	)
+	if r1 == 0 {
+		return "", fmt.Errorf("CryptProtectData failed: %w", callErr)
+	}
+	if outBlob.pbData != nil {
+		defer procLocalFreeDPAPI.Call(uintptr(unsafe.Pointer(outBlob.pbData)))
+	}
+	enc := make([]byte, outBlob.cbData)
+	if outBlob.cbData > 0 && outBlob.pbData != nil {
+		copy(enc, unsafe.Slice(outBlob.pbData, outBlob.cbData))
+	}
+	return base64.StdEncoding.EncodeToString(enc), nil
+}
+
+// dpapiDecrypt decodes base64 and decrypts it via Windows DPAPI (current user scope).
+func dpapiDecrypt(b64 string) (string, error) {
+	trimmed := strings.TrimSpace(b64)
+	if trimmed == "" {
+		return "", nil
+	}
+	raw, err := base64.StdEncoding.DecodeString(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("invalid dpapi base64: %w", err)
+	}
+	if len(raw) == 0 {
+		return "", nil
+	}
+	inBlob := dpapiBlob{
+		cbData: uint32(len(raw)),
+		pbData: &raw[0],
+	}
+	var outBlob dpapiBlob
+	r1, _, callErr := procCryptUnprotect.Call(
+		uintptr(unsafe.Pointer(&inBlob)),
+		0,
+		0,
+		0,
+		0,
+		cryptprotectUIForbidden,
+		uintptr(unsafe.Pointer(&outBlob)),
+	)
+	if r1 == 0 {
+		return "", fmt.Errorf("CryptUnprotectData failed: %w", callErr)
+	}
+	if outBlob.pbData != nil {
+		defer procLocalFreeDPAPI.Call(uintptr(unsafe.Pointer(outBlob.pbData)))
+	}
+	plain := make([]byte, outBlob.cbData)
+	if outBlob.cbData > 0 && outBlob.pbData != nil {
+		copy(plain, unsafe.Slice(outBlob.pbData, outBlob.cbData))
+	}
+	return string(plain), nil
+}
+
+func loadAwxConfigFromFile(cfg *Config, needsReauth *bool) {
+	if cfg == nil || cfg.ConfigPath == "" {
+		return
+	}
+	fileBytes, err := os.ReadFile(cfg.ConfigPath)
+	if err != nil {
+		return
+	}
+	var fileCfg Config
+	if err := json.Unmarshal(fileBytes, &fileCfg); err != nil {
+		log.Printf("[CONFIG 경고] %s 파싱 실패: %v\n", cfg.ConfigPath, err)
+		return
+	}
+	if cfg.SessionRetentionDays == 0 && fileCfg.SessionRetentionDays != 0 {
+		cfg.SessionRetentionDays = fileCfg.SessionRetentionDays
+	}
+	if cfg.AwxBaseURL == "" && fileCfg.AwxBaseURL != "" {
+		cfg.AwxBaseURL = strings.TrimRight(fileCfg.AwxBaseURL, "/")
+	}
+	if cfg.AwxUsername == "" && fileCfg.AwxUsername != "" {
+		cfg.AwxUsername = fileCfg.AwxUsername
+	}
+	if cfg.AwxDefaultScope == "" && fileCfg.AwxDefaultScope != "" {
+		cfg.AwxDefaultScope = fileCfg.AwxDefaultScope
+	}
+	if cfg.AwxInsecureTLS == nil && fileCfg.AwxInsecureTLS != nil {
+		val := *fileCfg.AwxInsecureTLS
+		cfg.AwxInsecureTLS = &val
+	}
+
+	if fileCfg.AwxPasswordEnc != "" {
+		dec, dErr := dpapiDecrypt(fileCfg.AwxPasswordEnc)
+		if dErr != nil {
+			log.Printf("[CONFIG 경고] 저장된 AWX 비밀번호 DPAPI 복호화 실패 (다시 입력 필요): %v\n", dErr)
+			if needsReauth != nil {
+				*needsReauth = true
+			}
+		} else if cfg.AwxPassword == "" {
+			cfg.AwxPassword = dec
+		}
+	}
+	if fileCfg.AwxTokenEnc != "" {
+		dec, dErr := dpapiDecrypt(fileCfg.AwxTokenEnc)
+		if dErr != nil {
+			log.Printf("[CONFIG 경고] 저장된 AWX Token DPAPI 복호화 실패 (다시 입력 필요): %v\n", dErr)
+			if needsReauth != nil {
+				*needsReauth = true
+			}
+		} else if cfg.AwxToken == "" {
+			cfg.AwxToken = dec
+		}
+	}
+
+	// Migrate legacy plaintext keys (awxPassword / awxToken) to DPAPI encrypted fields.
+	migrated := false
+	if fileCfg.AwxPassword != "" {
+		if cfg.AwxPassword == "" {
+			cfg.AwxPassword = fileCfg.AwxPassword
+		}
+		migrated = true
+	}
+	if fileCfg.AwxToken != "" {
+		if cfg.AwxToken == "" {
+			cfg.AwxToken = fileCfg.AwxToken
+		}
+		migrated = true
+	}
+	if migrated {
+		if err := persistAwxConfigFile(cfg.ConfigPath, *cfg); err != nil {
+			log.Printf("[CONFIG 경고] 평문 자격증명 암호화 마이그레이션 저장 실패: %v\n", err)
+		}
+	}
+}
+
+func readConfigJSONMap(configPath string) map[string]interface{} {
+	m := make(map[string]interface{})
+	if b, err := os.ReadFile(configPath); err == nil {
+		_ = json.Unmarshal(b, &m)
+	}
+	return m
+}
+
+func persistAwxConfigFile(configPath string, cfg Config) error {
+	if configPath == "" {
+		return nil
+	}
+	m := readConfigJSONMap(configPath)
+	delete(m, "awxPassword")
+	delete(m, "awxToken")
+
+	if cfg.AwxBaseURL != "" {
+		m["awxBaseUrl"] = strings.TrimRight(cfg.AwxBaseURL, "/")
+	} else {
+		delete(m, "awxBaseUrl")
+	}
+	if cfg.AwxDefaultScope != "" {
+		m["awxDefaultScope"] = cfg.AwxDefaultScope
+	} else {
+		delete(m, "awxDefaultScope")
+	}
+	if cfg.AwxUsername != "" {
+		m["awxUsername"] = cfg.AwxUsername
+	} else {
+		delete(m, "awxUsername")
+	}
+	if cfg.AwxInsecureTLS != nil {
+		m["awxInsecureTls"] = *cfg.AwxInsecureTLS
+	}
+	if cfg.AwxPassword != "" {
+		enc, err := dpapiEncrypt(cfg.AwxPassword)
+		if err != nil {
+			return err
+		}
+		m["awxPasswordEnc"] = enc
+	} else {
+		delete(m, "awxPasswordEnc")
+	}
+	if cfg.AwxToken != "" {
+		enc, err := dpapiEncrypt(cfg.AwxToken)
+		if err != nil {
+			return err
+		}
+		m["awxTokenEnc"] = enc
+	} else {
+		delete(m, "awxTokenEnc")
+	}
+
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	out = append(out, '\n')
+	return safeWriteFile(configPath, out)
+}
+
+func clearAwxConfigFile(configPath string) error {
+	if configPath == "" {
+		return nil
+	}
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil
+	}
+	m := readConfigJSONMap(configPath)
+	for _, k := range []string{
+		"awxBaseUrl", "awxDefaultScope", "awxUsername",
+		"awxPassword", "awxToken", "awxPasswordEnc", "awxTokenEnc", "awxInsecureTls",
+	} {
+		delete(m, k)
+	}
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	out = append(out, '\n')
+	return safeWriteFile(configPath, out)
+}
+
+func (s *AgentServer) saveAwxConfigToFile() error {
+	s.awxCfgMu.RLock()
+	cfgCopy := s.config
+	s.awxCfgMu.RUnlock()
+	return persistAwxConfigFile(cfgCopy.ConfigPath, cfgCopy)
+}
+
+func (s *AgentServer) clearAwxConfigInFile() error {
+	s.awxCfgMu.RLock()
+	cfgPath := s.config.ConfigPath
+	s.awxCfgMu.RUnlock()
+	return clearAwxConfigFile(cfgPath)
 }
 
 // detectLocalIP determines the host IP address.
@@ -945,33 +1264,90 @@ func (s *AgentServer) loadSession(sessionId string) (*Session, error) {
 	return &sess, nil
 }
 
-// StartBackgroundPolling starts the session directory watcher.
+// StartBackgroundPolling starts the session directory watcher and daily session retention pruner.
 func (s *AgentServer) StartBackgroundPolling() {
 	interval := time.Duration(s.config.PollIntervalMs) * time.Millisecond
 	if interval <= 0 {
 		interval = 500 * time.Millisecond
 	}
 	ticker := time.NewTicker(interval)
+	pruneTicker := time.NewTicker(24 * time.Hour)
 
 	go func() {
 		defer ticker.Stop()
+		defer pruneTicker.Stop()
 		for {
 			select {
 			case <-s.stopChan:
 				return
 			case <-ticker.C:
 				s.pollSessionsDir()
+			case <-pruneTicker.C:
+				s.pruneExpiredSessionFiles()
 			}
 		}
 	}()
 }
 
-// Stop stops the server background routines.
+// Stop stops the server background routines and closes idle HTTP connections.
 func (s *AgentServer) Stop() {
 	select {
 	case <-s.stopChan:
 	default:
 		close(s.stopChan)
+	}
+	s.clearAwxSessionCache()
+	s.awxCfgMu.Lock()
+	closeHTTPClientIdle(s.awxHttpClient)
+	s.awxCfgMu.Unlock()
+	closeHTTPClientIdle(s.httpClient)
+}
+
+// pruneExpiredSessionFiles deletes decided session JSON files older than config.SessionRetentionDays.
+func (s *AgentServer) pruneExpiredSessionFiles() {
+	days := s.config.SessionRetentionDays
+	if days == 0 {
+		days = 30
+	}
+	if days < 0 {
+		return
+	}
+	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	pattern := filepath.Join(s.config.SharedDir, "sessions", "*.json")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var sess Session
+		if err := json.Unmarshal(data, &sess); err != nil {
+			continue
+		}
+		if sess.Status != "APPROVED" && sess.Status != "REJECTED" {
+			continue
+		}
+		var refTime time.Time
+		if sess.DecidedAt != "" {
+			if parsed, pErr := time.Parse(time.RFC3339, sess.DecidedAt); pErr == nil {
+				refTime = parsed
+			}
+		}
+		if refTime.IsZero() {
+			if info, sErr := os.Stat(f); sErr == nil {
+				refTime = info.ModTime()
+			}
+		}
+		if !refTime.IsZero() && refTime.Before(cutoff) {
+			if rErr := os.Remove(f); rErr == nil {
+				s.modMu.Lock()
+				delete(s.fileModTime, f)
+				s.modMu.Unlock()
+			}
+		}
 	}
 }
 
@@ -1145,46 +1521,49 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	_ = json.NewEncoder(w).Encode(data)
 }
 
-// Routes sets up the HTTP handlers for the agent server.
+// Routes returns the singleton HTTP handler for the agent server.
 func (s *AgentServer) Routes() http.Handler {
-	mux := http.NewServeMux()
+	s.routesOnce.Do(func() {
+		mux := http.NewServeMux()
 
-	mux.HandleFunc("/", s.handleAppRoot)
-	mux.HandleFunc("/awx_host_checker.js", webui.ServeCheckerJS)
-	mux.HandleFunc("/api/health", s.handleHealth)
-	mux.HandleFunc("/api/ping", s.handlePing)
-	mux.HandleFunc("/api/bye", s.handleBye)
-	mux.HandleFunc("/api/awx/hosts", s.handleAwxHosts)
-	mux.HandleFunc("/api/awx/inventories", s.handleAwxInventories)
-	mux.HandleFunc("/api/awx/config", s.handleAwxConfig)
-	mux.HandleFunc("/api/awx/test", s.handleAwxTest)
-	mux.HandleFunc("/api/awx/open-browser", s.handleAwxOpenBrowser)
-	mux.HandleFunc("/api/awx/bridge/state", s.handleAwxBridgeState)
-	mux.HandleFunc("/api/awx/bridge/collect", s.handleAwxBridgeCollect)
-	mux.HandleFunc("/api/awx/bridge/result", s.handleAwxBridgeResult)
-	mux.HandleFunc("/api/me", s.handleMe)
-	mux.HandleFunc("/api/users", s.handleUsers)
-	mux.HandleFunc("/api/users/register", s.handleRegister)
-	mux.HandleFunc("/api/session/create", s.handleSessionCreate)
-	mux.HandleFunc("/api/session/status", s.handleSessionStatus)
-	mux.HandleFunc("/api/session/list", s.handleSessionList)
-	mux.HandleFunc("/api/session/reassign", s.handleSessionReassign)
-	mux.HandleFunc("/api/session/decision", s.handleSessionDecision)
-	mux.HandleFunc("/api/peer/notify", s.handlePeerNotify)
-	mux.HandleFunc("/api/peer/update", s.handlePeerUpdate)
-	mux.HandleFunc("/api/events", s.handleEvents)
-	mux.HandleFunc("/api/window/flash", s.handleWindowFlash)
-	mux.HandleFunc("/api/window/restore", s.handleWindowRestore)
-	mux.HandleFunc("/api/window/pin", s.handleWindowPin)
-	mux.HandleFunc("/checker", s.handleCheckerUI)
-	mux.HandleFunc("/ws", s.handleWebSocket)
+		mux.HandleFunc("/", s.handleAppRoot)
+		mux.HandleFunc("/awx_host_checker.js", webui.ServeCheckerJS)
+		mux.HandleFunc("/api/health", s.handleHealth)
+		mux.HandleFunc("/api/ping", s.handlePing)
+		mux.HandleFunc("/api/bye", s.handleBye)
+		mux.HandleFunc("/api/awx/hosts", s.handleAwxHosts)
+		mux.HandleFunc("/api/awx/inventories", s.handleAwxInventories)
+		mux.HandleFunc("/api/awx/config", s.handleAwxConfig)
+		mux.HandleFunc("/api/awx/test", s.handleAwxTest)
+		mux.HandleFunc("/api/awx/open-browser", s.handleAwxOpenBrowser)
+		mux.HandleFunc("/api/awx/bridge/state", s.handleAwxBridgeState)
+		mux.HandleFunc("/api/awx/bridge/collect", s.handleAwxBridgeCollect)
+		mux.HandleFunc("/api/awx/bridge/result", s.handleAwxBridgeResult)
+		mux.HandleFunc("/api/me", s.handleMe)
+		mux.HandleFunc("/api/users", s.handleUsers)
+		mux.HandleFunc("/api/users/register", s.handleRegister)
+		mux.HandleFunc("/api/session/create", s.handleSessionCreate)
+		mux.HandleFunc("/api/session/status", s.handleSessionStatus)
+		mux.HandleFunc("/api/session/list", s.handleSessionList)
+		mux.HandleFunc("/api/session/reassign", s.handleSessionReassign)
+		mux.HandleFunc("/api/session/decision", s.handleSessionDecision)
+		mux.HandleFunc("/api/peer/notify", s.handlePeerNotify)
+		mux.HandleFunc("/api/peer/update", s.handlePeerUpdate)
+		mux.HandleFunc("/api/events", s.handleEvents)
+		mux.HandleFunc("/api/window/flash", s.handleWindowFlash)
+		mux.HandleFunc("/api/window/restore", s.handleWindowRestore)
+		mux.HandleFunc("/api/window/pin", s.handleWindowPin)
+		mux.HandleFunc("/checker", s.handleCheckerUI)
+		mux.HandleFunc("/ws", s.handleWebSocket)
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if enableCORS(w, r) {
-			return
-		}
-		mux.ServeHTTP(w, r)
+		s.routesHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if enableCORS(w, r) {
+				return
+			}
+			mux.ServeHTTP(w, r)
+		})
 	})
+	return s.routesHandler
 }
 
 // handleAppRoot serves the standalone desktop application UI on GET /.
@@ -1196,15 +1575,19 @@ func (s *AgentServer) handleAppRoot(w http.ResponseWriter, r *http.Request) {
 	webui.ServeIndex(w, r)
 }
 
-const agentBuildTag = "20261113-awx-auth-v4"
+const agentBuildTag = "20261113-awx-v2-rel"
 
 // handleHealth: GET /api/health
 func (s *AgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":   "ok",
-		"port":     s.config.ListenPort,
-		"ip":       s.detectedIP,
-		"buildTag": agentBuildTag,
+		"status":      "ok",
+		"port":        s.config.ListenPort,
+		"ip":          s.detectedIP,
+		"buildTag":    agentBuildTag,
+		"goroutines":  runtime.NumGoroutine(),
+		"heapAllocMB": float64(memStats.HeapAlloc) / (1024.0 * 1024.0),
 	})
 }
 
@@ -1702,33 +2085,78 @@ func awxSessionCacheKey(baseURL, username, password string, insecureTLS bool) st
 
 func (s *AgentServer) clearAwxSessionCache() {
 	s.awxSessionMu.Lock()
+	oldClient := s.awxSessionClient
 	s.awxSessionKey = ""
 	s.awxSessionClient = nil
+	s.awxSessionAuthHdr = ""
+	s.awxPreferredAuth = make(map[string]string)
 	s.awxSessionMu.Unlock()
+	closeHTTPClientIdle(oldClient)
 }
 
 func (s *AgentServer) clearAwxSessionCacheKey(key string) {
 	s.awxSessionMu.Lock()
+	var oldClient *http.Client
 	if s.awxSessionKey == key {
+		oldClient = s.awxSessionClient
 		s.awxSessionKey = ""
 		s.awxSessionClient = nil
+		s.awxSessionAuthHdr = ""
 	}
 	s.awxSessionMu.Unlock()
+	closeHTTPClientIdle(oldClient)
 }
 
-func (s *AgentServer) getCachedAwxSession(key string) *http.Client {
+func (s *AgentServer) getCachedAwxSession(key string) (*http.Client, string) {
 	s.awxSessionMu.Lock()
 	defer s.awxSessionMu.Unlock()
 	if s.awxSessionKey == key && s.awxSessionClient != nil {
-		return s.awxSessionClient
+		return s.awxSessionClient, s.awxSessionAuthHdr
 	}
-	return nil
+	return nil, ""
 }
 
-func (s *AgentServer) setCachedAwxSession(key string, client *http.Client) {
+func (s *AgentServer) setCachedAwxSession(key string, client *http.Client, authHdr string) {
 	s.awxSessionMu.Lock()
+	oldClient := s.awxSessionClient
 	s.awxSessionKey = key
 	s.awxSessionClient = client
+	s.awxSessionAuthHdr = authHdr
+	s.awxSessionMu.Unlock()
+	if oldClient != nil && oldClient != client {
+		closeHTTPClientIdle(oldClient)
+	}
+}
+
+func awxPreferredAuthKey(origin, username, password, token string, insecureTLS bool) string {
+	h := sha256.Sum256([]byte(password + "\x00" + token))
+	return fmt.Sprintf("%s|%s|%v|%x", strings.ToLower(strings.TrimRight(origin, "/")), username, insecureTLS, h[:8])
+}
+
+func (s *AgentServer) getPreferredAwxAuth(key string) string {
+	s.awxSessionMu.Lock()
+	defer s.awxSessionMu.Unlock()
+	if s.awxPreferredAuth == nil {
+		return ""
+	}
+	return s.awxPreferredAuth[key]
+}
+
+func (s *AgentServer) setPreferredAwxAuth(key, method string) {
+	if key == "" || method == "" {
+		return
+	}
+	s.awxSessionMu.Lock()
+	if s.awxPreferredAuth == nil {
+		s.awxPreferredAuth = make(map[string]string)
+	}
+	s.awxPreferredAuth[key] = method
+	s.awxSessionMu.Unlock()
+}
+
+func (s *AgentServer) clearPreferredAwxAuth(key string) {
+	s.awxSessionMu.Lock()
+	delete(s.awxPreferredAuth, key)
 	s.awxSessionMu.Unlock()
 }
 
@@ -2157,6 +2585,7 @@ func tryLoginAwxSession(baseOrigin, username, password string, insecureTLS bool)
 			finalGetURL = getResp.Request.URL.String()
 		}
 		if looksLikeSSOHtml(loginPageURL, finalGetURL, htmlStr) {
+			closeHTTPClientIdle(sessionClient)
 			return nil, "", fmt.Errorf("SSO(통합인증) 페이지로 이동됨 (%s) - 'AWX 창 열기'로 로그인 후 'AWX 탭 연결' 북마크릿 또는 Bearer Token을 사용하세요", finalGetURL)
 		}
 
@@ -2374,6 +2803,7 @@ func tryLoginAwxSession(baseOrigin, username, password string, insecureTLS bool)
 			}
 		}
 	}
+	closeHTTPClientIdle(sessionClient)
 	if lastErr != nil {
 		return nil, "", lastErr
 	}
@@ -2412,6 +2842,7 @@ func buildAwxTokenAuthHeaders(rawToken string) []string {
 func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token string, insecureTLS bool, client *http.Client) (*awxPageResponse, string, string, error) {
 	if client == nil {
 		client = newAwxHTTPClient(insecureTLS)
+		defer closeHTTPClientIdle(client)
 	}
 	tok := strings.TrimSpace(token)
 	user := strings.TrimSpace(username)
@@ -2438,26 +2869,128 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 	}
 
 	sessionKey := awxSessionCacheKey(baseOrigin, user, password, insecureTLS)
-	if user != "" && password != "" {
-		if cachedClient := s.getCachedAwxSession(sessionKey); cachedClient != nil {
-			pg, _, _, finalURL, _, err := tryWithControllerFallback(pageURL, "", cachedClient)
-			if err == nil {
-				return pg, "session", finalURL, nil
-			}
-			s.clearAwxSessionCacheKey(sessionKey)
+	prefKey := awxPreferredAuthKey(baseOrigin, user, password, tok, insecureTLS)
+
+	cacheSessionSuccess := func(sessClient *http.Client, authHdr, originUsed string) {
+		s.setCachedAwxSession(sessionKey, sessClient, authHdr)
+		if originUsed != "" && !strings.EqualFold(originUsed, baseOrigin) {
+			altSessKey := awxSessionCacheKey(originUsed, user, password, insecureTLS)
+			s.setCachedAwxSession(altSessKey, sessClient, authHdr)
 		}
 	}
 
+	trySessionAuth := func(allowReLogin bool, targetURL, origin string) (*awxPageResponse, string, error) {
+		if user == "" || password == "" {
+			return nil, "", fmt.Errorf("missing user/password for session")
+		}
+		if cachedClient, cachedAuthHdr := s.getCachedAwxSession(sessionKey); cachedClient != nil {
+			pg, _, _, finalURL, _, err := tryWithControllerFallback(targetURL, cachedAuthHdr, cachedClient)
+			if err == nil {
+				return pg, finalURL, nil
+			}
+			s.clearAwxSessionCacheKey(sessionKey)
+		}
+		if !allowReLogin || origin == "" {
+			return nil, "", fmt.Errorf("no active session cache")
+		}
+		sessClient, authTokHeader, loginErr := tryLoginAwxSession(origin, user, password, insecureTLS)
+		if loginErr != nil {
+			return nil, "", loginErr
+		}
+		pgS, _, _, finalS, _, errS := tryWithControllerFallback(targetURL, authTokHeader, sessClient)
+		if errS == nil {
+			cacheSessionSuccess(sessClient, authTokHeader, origin)
+			return pgS, finalS, nil
+		}
+		closeHTTPClientIdle(sessClient)
+		return nil, finalS, fmt.Errorf("세션 로그인 후 %w", errS)
+	}
+
+	tryBasicAuth := func() (*awxPageResponse, int, string, string, string, string, string, error) {
+		if user == "" {
+			return nil, 0, "", pageURL, "", pageURL, baseOrigin, fmt.Errorf("username missing")
+		}
+		basicHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))
+		pg, st, ct, finalURL, snip, err := tryWithControllerFallback(pageURL, basicHeader, client)
+		if err == nil {
+			return pg, st, ct, finalURL, snip, pageURL, baseOrigin, nil
+		}
+		effectivePageURL := pageURL
+		effectiveOrigin := baseOrigin
+		if fu, fErr := url.Parse(finalURL); fErr == nil && strings.EqualFold(fu.Scheme, "https") && strings.HasPrefix(strings.ToLower(pageURL), "http://") {
+			if origU, oErr := url.Parse(pageURL); oErr == nil {
+				rebuilt := *origU
+				rebuilt.Scheme = "https"
+				if fu.Host != "" {
+					rebuilt.Host = fu.Host
+				}
+				effectivePageURL = rebuilt.String()
+				effectiveOrigin = "https://" + rebuilt.Host
+				if pgH, _, _, fH, _, errH := tryWithControllerFallback(effectivePageURL, basicHeader, client); errH == nil {
+					return pgH, http.StatusOK, "application/json", fH, "", effectivePageURL, effectiveOrigin, nil
+				}
+			}
+		}
+		return nil, st, ct, finalURL, snip, effectivePageURL, effectiveOrigin, err
+	}
+
+	// Step 1: Try remembered successful auth method first (eliminates repeated 401 probes).
+	failedPref := ""
+	if pref := s.getPreferredAwxAuth(prefKey); pref != "" {
+		switch pref {
+		case "session":
+			if pg, finalURL, err := trySessionAuth(true, pageURL, baseOrigin); err == nil {
+				return pg, "session", finalURL, nil
+			}
+			failedPref = "session"
+		case "bearer":
+			if tok != "" {
+				pg, _, _, fURL, _, err := tryWithControllerFallback(pageURL, "Bearer "+strings.TrimSpace(strings.Trim(tok, `"'`)), client)
+				if err == nil {
+					return pg, "bearer", fURL, nil
+				}
+			}
+			failedPref = "bearer"
+		case "token":
+			if tok != "" {
+				pg, _, _, fURL, _, err := tryWithControllerFallback(pageURL, "Token "+strings.TrimSpace(strings.Trim(tok, `"'`)), client)
+				if err == nil {
+					return pg, "token", fURL, nil
+				}
+			}
+			failedPref = "token"
+		case "basic":
+			if pg, _, _, finalURL, _, _, _, err := tryBasicAuth(); err == nil {
+				return pg, "basic", finalURL, nil
+			}
+			failedPref = "basic"
+		}
+		s.clearPreferredAwxAuth(prefKey)
+	}
+
+	// Step 2: Check cached session first before issuing any new token/basic HTTP calls.
+	if failedPref != "session" && user != "" && password != "" {
+		if pg, finalURL, err := trySessionAuth(false, pageURL, baseOrigin); err == nil {
+			s.setPreferredAwxAuth(prefKey, "session")
+			return pg, "session", finalURL, nil
+		}
+	}
+
+	// Step 3: Try token headers (Bearer / Token).
 	var tokenErr error
 	var tokenFinalURL string
 	if tokHeaders := buildAwxTokenAuthHeaders(tok); len(tokHeaders) > 0 {
 		for idx, hdr := range tokHeaders {
+			mode := "bearer"
+			if strings.HasPrefix(hdr, "Token ") {
+				mode = "token"
+			}
+			if mode == failedPref {
+				continue
+			}
 			pg, st, _, fURL, _, err := tryWithControllerFallback(pageURL, hdr, client)
 			if err == nil {
-				mode := "bearer"
-				if strings.HasPrefix(hdr, "Token ") {
-					mode = "token"
-				}
+				s.setPreferredAwxAuth(prefKey, mode)
 				return pg, mode, fURL, nil
 			}
 			tokenErr = err
@@ -2467,35 +3000,30 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 			}
 			break
 		}
-		// If Bearer/Token failed (e.g., proxy strips Authorization header or OAuth2 disabled)
-		// and user/password were also provided, fall through to Basic/Session login instead of failing early.
 		if user == "" || password == "" {
+			if tokenErr == nil {
+				tokenErr = fmt.Errorf("Token 인증 실패")
+			}
 			return nil, "", tokenFinalURL, fmt.Errorf("Token 인증 실패 (%w) - 프록시가 Authorization 헤더를 차단하는 경우 계정 ID/비밀번호 입력 또는 'AWX 창 열기' + 'AWX 탭 연결'을 사용하세요", tokenErr)
 		}
 	}
 
-	basicHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))
-	pg, st, ct, finalURL, snip, err := tryWithControllerFallback(pageURL, basicHeader, client)
-	if err == nil {
-		return pg, "basic", finalURL, nil
-	}
-
-	// If http:// redirected root/login to https:// while dropping /api/v2/..., promote to https:// target and retry
-	effectivePageURL := pageURL
-	effectiveOrigin := baseOrigin
-	if fu, fErr := url.Parse(finalURL); fErr == nil && strings.EqualFold(fu.Scheme, "https") && strings.HasPrefix(strings.ToLower(pageURL), "http://") {
-		if origU, oErr := url.Parse(pageURL); oErr == nil {
-			rebuilt := *origU
-			rebuilt.Scheme = "https"
-			if fu.Host != "" {
-				rebuilt.Host = fu.Host
-			}
-			effectivePageURL = rebuilt.String()
-			effectiveOrigin = "https://" + rebuilt.Host
-			if pgH, _, _, fH, _, errH := tryWithControllerFallback(effectivePageURL, basicHeader, client); errH == nil {
-				return pgH, "basic", fH, nil
-			}
+	// Step 4: Try Basic Auth (+ HTTPS redirect promotion).
+	var st int
+	var ct, finalURL, snip string
+	effectivePageURL, effectiveOrigin := pageURL, baseOrigin
+	var basicErr error
+	if failedPref != "basic" {
+		var pg *awxPageResponse
+		pg, st, ct, finalURL, snip, effectivePageURL, effectiveOrigin, basicErr = tryBasicAuth()
+		if basicErr == nil {
+			s.setPreferredAwxAuth(prefKey, "basic")
+			return pg, "basic", finalURL, nil
 		}
+	} else {
+		st = http.StatusUnauthorized
+		finalURL = pageURL
+		basicErr = fmt.Errorf("Basic 인증 실패")
 	}
 
 	wrapTokenAndErr := func(detailErr error) error {
@@ -2505,29 +3033,23 @@ func (s *AgentServer) fetchAwxPageWithDetails(pageURL, username, password, token
 		return detailErr
 	}
 
-	// Fallback to AWX web form cookie session login when Basic Auth returns 401/403/HTML
+	// Step 5: Fallback to AWX web form / authtoken cookie/token session login.
 	if password == "" && tok == "" && st == http.StatusUnauthorized {
-		return nil, "", finalURL, fmt.Errorf("%w (비밀번호 또는 Bearer Token이 비어 있어 세션 로그인을 시도할 수 없습니다)", err)
+		return nil, "", finalURL, fmt.Errorf("%w (비밀번호 또는 Bearer Token이 비어 있어 세션 로그인을 시도할 수 없습니다)", basicErr)
 	}
-	if password != "" && isAwxRetryableAuthOrHTML(st, ct, snip) && effectiveOrigin != "" {
-		sessClient, authTokHeader, loginErr := tryLoginAwxSession(effectiveOrigin, user, password, insecureTLS)
-		if loginErr != nil {
-			return nil, "", finalURL, wrapTokenAndErr(loginErr)
-		}
-		pgS, _, _, finalS, _, errS := tryWithControllerFallback(effectivePageURL, authTokHeader, sessClient)
+	if failedPref != "session" && password != "" && isAwxRetryableAuthOrHTML(st, ct, snip) && effectiveOrigin != "" {
+		pgS, finalS, errS := trySessionAuth(true, effectivePageURL, effectiveOrigin)
 		if errS == nil {
-			if authTokHeader == "" {
-				s.setCachedAwxSession(sessionKey, sessClient)
-				if effectiveOrigin != baseOrigin && baseOrigin != "" {
-					s.setCachedAwxSession(awxSessionCacheKey(effectiveOrigin, user, password, insecureTLS), sessClient)
-				}
-			}
+			s.setPreferredAwxAuth(prefKey, "session")
 			return pgS, "session", finalS, nil
 		}
-		return nil, "", finalS, wrapTokenAndErr(fmt.Errorf("세션 로그인 후 %w", errS))
+		if finalS != "" {
+			finalURL = finalS
+		}
+		return nil, "", finalURL, wrapTokenAndErr(errS)
 	}
 
-	return nil, "", finalURL, wrapTokenAndErr(err)
+	return nil, "", finalURL, wrapTokenAndErr(basicErr)
 }
 
 func (s *AgentServer) fetchAwxPageWithCreds(pageURL, username, password, token string, client *http.Client) (*awxPageResponse, error) {
@@ -2549,10 +3071,19 @@ func (s *AgentServer) fetchAwxPage(pageURL string) (*awxPageResponse, error) {
 
 // fetchAwxInventoryHosts retrieves and caches all hosts for an AWX scope.
 func (s *AgentServer) fetchAwxInventoryHosts(invID string, refresh bool) ([]string, error) {
+	hosts, _, err := s.fetchAwxInventoryHostsWithAuth(invID, refresh)
+	return hosts, err
+}
+
+// fetchAwxInventoryHostsWithAuth retrieves and caches all hosts for an AWX scope along with the auth method used.
+func (s *AgentServer) fetchAwxInventoryHostsWithAuth(invID string, refresh bool) ([]string, string, error) {
 	baseURL, user, pass, tok, defScope, insecure, client := s.getAwxSnapshot()
+	if strings.TrimSpace(baseURL) == "" {
+		return nil, "", fmt.Errorf("AWX 서버 주소가 설정되지 않았습니다")
+	}
 	scopeType, scopeID, normKey, _, err := s.resolveAwxScopeWithCreds(baseURL, user, pass, tok, insecure, client, invID, defScope)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	cacheKey := baseURL + "|" + normKey
 
@@ -2563,14 +3094,14 @@ func (s *AgentServer) fetchAwxInventoryHosts(invID string, refresh bool) ([]stri
 		if ok && time.Since(entry.fetchedAt) < 60*time.Second && len(entry.hosts) > 0 {
 			cp := make([]string, len(entry.hosts))
 			copy(cp, entry.hosts)
-			return cp, nil
+			return cp, entry.authMethod, nil
 		}
 	}
 
 	basePath := buildAwxEndpoint(baseURL, scopeType, scopeID, 200)
-	page1, _, resolvedPage1URL, err := s.fetchAwxPageWithDetails(basePath+"&page=1", user, pass, tok, insecure, client)
+	page1, authMethod, resolvedPage1URL, err := s.fetchAwxPageWithDetails(basePath+"&page=1", user, pass, tok, insecure, client)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if strings.HasSuffix(resolvedPage1URL, "&page=1") {
 		basePath = strings.TrimSuffix(resolvedPage1URL, "&page=1")
@@ -2637,7 +3168,7 @@ func (s *AgentServer) fetchAwxInventoryHosts(invID string, refresh bool) ([]stri
 		}
 		wg.Wait()
 		if firstErr != nil {
-			return nil, firstErr
+			return nil, "", firstErr
 		}
 	}
 
@@ -2655,18 +3186,23 @@ func (s *AgentServer) fetchAwxInventoryHosts(invID string, refresh bool) ([]stri
 
 	s.awxCacheMu.Lock()
 	s.awxCache[cacheKey] = awxCacheEntry{
-		hosts:     allHosts,
-		fetchedAt: time.Now(),
+		hosts:      allHosts,
+		authMethod: authMethod,
+		fetchedAt:  time.Now(),
 	}
 	s.awxCacheMu.Unlock()
 
 	cp := make([]string, len(allHosts))
 	copy(cp, allHosts)
-	return cp, nil
+	return cp, authMethod, nil
 }
 
 // WarmupAwxCache preloads the specified inventory into memory in the background.
 func (s *AgentServer) WarmupAwxCache(invID string) {
+	baseURL, _, _, _, _, _, _ := s.getAwxSnapshot()
+	if strings.TrimSpace(baseURL) == "" {
+		return
+	}
 	_, _ = s.fetchAwxInventoryHosts(invID, false)
 }
 
@@ -2726,6 +3262,10 @@ func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
 		rawScope = strings.TrimSpace(r.URL.Query().Get("inventory"))
 	}
 	baseURL, user, pass, tok, defScope, insecure, client := s.getAwxSnapshot()
+	if strings.TrimSpace(baseURL) == "" {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "AWX 호스트 수집 실패: AWX 서버 주소가 설정되지 않았습니다"})
+		return
+	}
 	scopeType, scopeID, normKey, _, rErr := s.resolveAwxScopeWithCreds(baseURL, user, pass, tok, insecure, client, rawScope, defScope)
 	if rErr != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("AWX 호스트 수집 실패: %v", rErr)})
@@ -2738,6 +3278,7 @@ func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
 	pageStr := strings.TrimSpace(r.URL.Query().Get("page"))
 
 	var rawHosts []string
+	var authMethod string
 	if pageStr != "" {
 		pageNum, pErr := strconv.Atoi(pageStr)
 		if pErr != nil || pageNum < 1 {
@@ -2749,11 +3290,12 @@ func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
 				pageSize = l
 			}
 		}
-		pg, err := s.fetchAwxPage(fmt.Sprintf("%s&page=%d", buildAwxEndpoint(baseURL, scopeType, scopeID, pageSize), pageNum))
+		pg, aMethod, _, err := s.fetchAwxPageWithDetails(fmt.Sprintf("%s&page=%d", buildAwxEndpoint(baseURL, scopeType, scopeID, pageSize), pageNum), user, pass, tok, insecure, client)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("AWX 호스트 수집 실패: %v", err)})
 			return
 		}
+		authMethod = aMethod
 		for _, item := range pg.Results {
 			h := strings.ToLower(strings.TrimSpace(item.Name))
 			if h != "" {
@@ -2761,11 +3303,12 @@ func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		all, err := s.fetchAwxInventoryHosts(normKey, refresh)
+		all, aMethod, err := s.fetchAwxInventoryHostsWithAuth(normKey, refresh)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("AWX 호스트 수집 실패: %v", err)})
 			return
 		}
+		authMethod = aMethod
 		rawHosts = all
 		if limitStr != "" {
 			if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit < len(rawHosts) {
@@ -2777,6 +3320,8 @@ func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
 	filteredHosts, excludedHosts, results := filterHostList(rawHosts, excludePattern)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"source":        "api",
+		"authMethod":    authMethod,
 		"count":         len(filteredHosts),
 		"rawCount":      len(rawHosts),
 		"next":          nil,
@@ -2814,9 +3359,14 @@ func (s *AgentServer) handleAwxInventories(w http.ResponseWriter, r *http.Reques
 	brg := s.bridgeState
 	s.bridgeMu.RUnlock()
 	if brg.Connected && !brg.UpdatedAt.IsZero() && time.Since(brg.UpdatedAt) < 2*time.Minute && len(brg.Inventories) > 0 {
+		apiErrStr := "AWX 서버 주소 미설정"
+		if apiErr != nil {
+			apiErrStr = apiErr.Error()
+		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok":          true,
 			"source":      "bridge",
+			"apiError":    apiErrStr,
 			"count":       len(brg.Inventories),
 			"inventories": brg.Inventories,
 		})
@@ -2863,12 +3413,19 @@ func (s *AgentServer) getBridgeSnapshot() map[string]interface{} {
 func (s *AgentServer) handleAwxConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		baseURL, user, pass, tok, defScope, insecure, _ := s.getAwxSnapshot()
-		_, _, normKey := normalizeAwxScope(defScope, "3")
+		normKey := ""
+		if strings.TrimSpace(defScope) != "" {
+			_, _, normKey = normalizeAwxScope(defScope, "")
+		}
+		s.awxCfgMu.RLock()
+		needsReauth := s.awxNeedsReauth
+		s.awxCfgMu.RUnlock()
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"baseUrl":      baseURL,
 			"username":     user,
 			"hasPassword":  pass != "",
 			"hasToken":     tok != "",
+			"needsReauth":  needsReauth,
 			"defaultScope": normKey,
 			"insecureTls":  insecure,
 			"bridge":       s.getBridgeSnapshot(),
@@ -2888,6 +3445,8 @@ func (s *AgentServer) handleAwxConfig(w http.ResponseWriter, r *http.Request) {
 		Token        *string `json:"token"`
 		InsecureTLS  *bool   `json:"insecureTls"`
 		ClearAuth    bool    `json:"clearAuth"`
+		Persist      bool    `json:"persist"`
+		ResetConfig  bool    `json:"resetConfig"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -2896,71 +3455,119 @@ func (s *AgentServer) handleAwxConfig(w http.ResponseWriter, r *http.Request) {
 
 	s.awxCfgMu.Lock()
 	var parsedScope string
-	serverChanged := false
 	prevBase := strings.TrimRight(s.config.AwxBaseURL, "/")
-	prevWasFactoryDefault := strings.EqualFold(prevBase, "http://192.168.0.58:30080") &&
-		s.config.AwxUsername == "test.kim" && s.config.AwxPassword == "11111111!"
-	if req.BaseURL != nil {
-		b, sc, _ := parseAwxTargetInput(*req.BaseURL)
-		if b != "" {
-			if !strings.EqualFold(b, prevBase) {
-				serverChanged = true
-			}
-			s.config.AwxBaseURL = b
-		}
-		parsedScope = sc
-	}
-	if req.DefaultScope != nil && strings.TrimSpace(*req.DefaultScope) != "" {
-		s.config.AwxDefaultScope = strings.TrimSpace(*req.DefaultScope)
-	} else if parsedScope != "" {
-		s.config.AwxDefaultScope = parsedScope
-	}
-	if req.ClearAuth || (serverChanged && prevWasFactoryDefault) {
+	prevUser := s.config.AwxUsername
+	prevPass := s.config.AwxPassword
+	prevTok := s.config.AwxToken
+	prevInsecure := s.config.AwxInsecureTLS == nil || *s.config.AwxInsecureTLS
+
+	if req.ResetConfig {
+		s.config.AwxBaseURL = ""
+		s.config.AwxDefaultScope = ""
 		s.config.AwxUsername = ""
 		s.config.AwxPassword = ""
 		s.config.AwxToken = ""
+		s.awxNeedsReauth = false
+	}
+
+	if req.BaseURL != nil {
+		b, sc, _ := parseAwxTargetInput(*req.BaseURL)
+		if b != "" {
+			s.config.AwxBaseURL = b
+		} else if req.ClearAuth && strings.TrimSpace(*req.BaseURL) == "" {
+			s.config.AwxBaseURL = ""
+		}
+		parsedScope = sc
+	}
+	if req.DefaultScope != nil {
+		if strings.TrimSpace(*req.DefaultScope) != "" {
+			s.config.AwxDefaultScope = strings.TrimSpace(*req.DefaultScope)
+		} else if parsedScope != "" {
+			s.config.AwxDefaultScope = parsedScope
+		} else if req.ClearAuth {
+			s.config.AwxDefaultScope = ""
+		}
+	} else if parsedScope != "" {
+		s.config.AwxDefaultScope = parsedScope
+	}
+	if req.ClearAuth {
+		s.config.AwxUsername = ""
+		s.config.AwxPassword = ""
+		s.config.AwxToken = ""
+		s.awxNeedsReauth = false
 	}
 	if req.Username != nil {
 		s.config.AwxUsername = strings.TrimSpace(*req.Username)
 	}
 	if req.Password != nil && *req.Password != "" {
 		s.config.AwxPassword = *req.Password
+		s.awxNeedsReauth = false
 	}
 	if req.Token != nil {
 		// Explicit token field updates only when non-empty unless ClearAuth is set
 		if strings.TrimSpace(*req.Token) != "" {
 			s.config.AwxToken = strings.TrimSpace(*req.Token)
+			s.awxNeedsReauth = false
 		}
 	}
+	var oldClient *http.Client
 	if req.InsecureTLS != nil {
 		val := *req.InsecureTLS
 		s.config.AwxInsecureTLS = &val
-		s.awxHttpClient = newAwxHTTPClient(val)
+		if val != prevInsecure {
+			oldClient = s.awxHttpClient
+			s.awxHttpClient = newAwxHTTPClient(val)
+		}
 	}
 	baseURL := s.config.AwxBaseURL
 	user := s.config.AwxUsername
 	hasPass := s.config.AwxPassword != ""
 	hasTok := s.config.AwxToken != ""
+	needsReauth := s.awxNeedsReauth
 	defScope := s.config.AwxDefaultScope
 	insecure := s.config.AwxInsecureTLS == nil || *s.config.AwxInsecureTLS
+	authOrConnChanged := req.ClearAuth || req.ResetConfig ||
+		!strings.EqualFold(strings.TrimRight(baseURL, "/"), prevBase) ||
+		user != prevUser ||
+		s.config.AwxPassword != prevPass ||
+		s.config.AwxToken != prevTok ||
+		insecure != prevInsecure
 	s.awxCfgMu.Unlock()
 
-	s.clearAwxSessionCache()
-	s.awxCacheMu.Lock()
-	s.awxCache = make(map[string]awxCacheEntry)
-	s.awxCacheMu.Unlock()
+	closeHTTPClientIdle(oldClient)
 
-	_, _, normKey := normalizeAwxScope(defScope, "3")
+	if req.ResetConfig {
+		if err := s.clearAwxConfigInFile(); err != nil {
+			log.Printf("[CONFIG 경고] config.json 초기화 실패: %v\n", err)
+		}
+	} else if req.Persist {
+		if err := s.saveAwxConfigToFile(); err != nil {
+			log.Printf("[CONFIG 경고] config.json 저장 실패: %v\n", err)
+		}
+	}
+
+	if authOrConnChanged {
+		s.clearAwxSessionCache()
+		s.awxCacheMu.Lock()
+		s.awxCache = make(map[string]awxCacheEntry)
+		s.awxCacheMu.Unlock()
+	}
+
+	normKey := ""
+	if strings.TrimSpace(defScope) != "" {
+		_, _, normKey = normalizeAwxScope(defScope, "")
+	}
 	respPayload := map[string]interface{}{
 		"ok":           true,
 		"baseUrl":      baseURL,
 		"username":     user,
 		"hasPassword":  hasPass,
 		"hasToken":     hasTok,
+		"needsReauth":  needsReauth,
 		"defaultScope": normKey,
 		"insecureTls":  insecure,
 	}
-	if req.ClearAuth {
+	if req.ClearAuth || req.ResetConfig {
 		respPayload["reset"] = true
 	}
 	s.broadcastEvent("AWX_CONFIG_UPDATED", "", respPayload)
@@ -3041,9 +3648,21 @@ func (s *AgentServer) handleAwxTest(w http.ResponseWriter, r *http.Request) {
 		insecure = *req.InsecureTLS
 	}
 
+	if strings.TrimSpace(baseURL) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok":    false,
+			"error": "AWX 서버 주소를 입력해 주세요",
+		})
+		return
+	}
+
+	explicitDefScope := strings.TrimSpace(defScope)
+	testScopeFallback := "all"
+
 	tryTestBase := func(candBase string) (string, string, string, []AwxInventorySummary, *awxPageResponse, string, string, string, error) {
 		c := newAwxHTTPClient(insecure)
-		st, sid, nk, invs, rErr := s.resolveAwxScopeWithCreds(candBase, user, pass, tok, insecure, c, defScope, "3")
+		defer closeHTTPClientIdle(c)
+		st, sid, nk, invs, rErr := s.resolveAwxScopeWithCreds(candBase, user, pass, tok, insecure, c, explicitDefScope, testScopeFallback)
 		ep := buildAwxEndpoint(candBase, st, sid, 5) + "&page=1"
 		if rErr != nil {
 			return st, sid, nk, invs, nil, "", "", ep, rErr
@@ -3080,26 +3699,53 @@ func (s *AgentServer) handleAwxTest(w http.ResponseWriter, r *http.Request) {
 	if ru, rErr := url.Parse(resolvedURL); rErr == nil && ru.Scheme != "" && ru.Host != "" {
 		effectiveBaseURL = strings.ToLower(ru.Scheme) + "://" + ru.Host
 	}
-	if strings.TrimSpace(req.BaseURL) == "" {
-		s.awxCfgMu.Lock()
-		changed := false
-		if effectiveBaseURL != "" && !strings.EqualFold(effectiveBaseURL, strings.TrimRight(s.config.AwxBaseURL, "/")) {
-			s.config.AwxBaseURL = effectiveBaseURL
-			changed = true
-		}
-		if normKey != "" && !strings.EqualFold(s.config.AwxDefaultScope, normKey) && strings.TrimSpace(req.DefaultScope) == "" {
-			s.config.AwxDefaultScope = normKey
-		}
-		s.awxCfgMu.Unlock()
-		if changed {
-			s.awxCacheMu.Lock()
-			s.awxCache = make(map[string]awxCacheEntry)
-			s.awxCacheMu.Unlock()
-		}
+
+	s.awxCfgMu.Lock()
+	prevBase := strings.TrimRight(s.config.AwxBaseURL, "/")
+	prevUser := s.config.AwxUsername
+	prevPass := s.config.AwxPassword
+	prevTok := s.config.AwxToken
+	prevInsecure := s.config.AwxInsecureTLS == nil || *s.config.AwxInsecureTLS
+
+	if effectiveBaseURL != "" {
+		s.config.AwxBaseURL = effectiveBaseURL
+	}
+	s.config.AwxUsername = user
+	s.config.AwxPassword = pass
+	s.config.AwxToken = tok
+	insVal := insecure
+	s.config.AwxInsecureTLS = &insVal
+	s.awxNeedsReauth = false
+	if explicitDefScope != "" && normKey != "" {
+		s.config.AwxDefaultScope = normKey
+	}
+	var oldClient *http.Client
+	if insecure != prevInsecure {
+		oldClient = s.awxHttpClient
+		s.awxHttpClient = newAwxHTTPClient(insecure)
+	}
+	connChanged := !strings.EqualFold(effectiveBaseURL, prevBase) ||
+		user != prevUser || pass != prevPass || tok != prevTok || insecure != prevInsecure
+	s.awxCfgMu.Unlock()
+
+	closeHTTPClientIdle(oldClient)
+	if connChanged {
+		s.clearAwxSessionCache()
+		s.awxCacheMu.Lock()
+		s.awxCache = make(map[string]awxCacheEntry)
+		s.awxCacheMu.Unlock()
+	}
+
+	persisted := true
+	if saveErr := s.saveAwxConfigToFile(); saveErr != nil {
+		persisted = false
+		log.Printf("[CONFIG 경고] 연결 테스트 후 config.json 저장 실패: %v\n", saveErr)
 	}
 
 	if len(preInvs) == 0 {
-		preInvs, _ = s.fetchAwxInventoriesWithDetails(effectiveBaseURL, user, pass, tok, insecure, newAwxHTTPClient(insecure))
+		invClient := newAwxHTTPClient(insecure)
+		preInvs, _ = s.fetchAwxInventoriesWithDetails(effectiveBaseURL, user, pass, tok, insecure, invClient)
+		closeHTTPClientIdle(invClient)
 	}
 	scopeLabel := ""
 	if scopeType != "all" && scopeType != "group" {
@@ -3117,11 +3763,16 @@ func (s *AgentServer) handleAwxTest(w http.ResponseWriter, r *http.Request) {
 			samples = append(samples, n)
 		}
 	}
+	respScope := normKey
+	if explicitDefScope == "" {
+		respScope = ""
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":           true,
+		"persisted":    persisted,
 		"url":          testURL,
 		"baseUrl":      effectiveBaseURL,
-		"defaultScope": normKey,
+		"defaultScope": respScope,
 		"scopeLabel":   scopeLabel,
 		"authMethod":   authMethod,
 		"count":        pg.Count,
@@ -3261,6 +3912,26 @@ func (s *AgentServer) handleAwxBridgeState(w http.ResponseWriter, r *http.Reques
 }
 
 // handleAwxBridgeCollect: POST /api/awx/bridge/collect asks connected AWX browser tabs to collect hosts live.
+func formatBridgeFailureErrors(failures []AwxBridgeResult) string {
+	if len(failures) == 0 {
+		return "열린 AWX 탭에서 수집에 실패했습니다"
+	}
+	parts := make([]string, 0, len(failures))
+	for _, f := range failures {
+		msg := strings.TrimSpace(f.Error)
+		if msg == "" {
+			msg = "열린 AWX 탭에서 수집에 실패했습니다"
+		}
+		orig := strings.TrimSpace(f.Origin)
+		if orig != "" {
+			parts = append(parts, fmt.Sprintf("[%s] %s", orig, msg))
+		} else {
+			parts = append(parts, msg)
+		}
+	}
+	return strings.Join(parts, " / ")
+}
+
 func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
@@ -3282,7 +3953,11 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 		wantType, wantID, wantKey = s.resolveScopeFromBridgeOrAPI(req.Scope, "")
 	}
 
-	if s.wsHub == nil || s.wsHub.BridgeCount() == 0 {
+	expectedCount := 0
+	if s.wsHub != nil {
+		expectedCount = s.wsHub.BridgeCount()
+	}
+	if s.wsHub == nil || expectedCount == 0 {
 		// If HTTP-only snapshot was pushed recently for page mode, only use it if scope/page match
 		s.bridgeMu.RLock()
 		st := s.bridgeState
@@ -3312,7 +3987,7 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	reqID := fmt.Sprintf("brg_%d_%s", time.Now().UnixNano(), hex.EncodeToString(b))
-	ch := make(chan AwxBridgeResult, 1)
+	ch := make(chan AwxBridgeResult, expectedCount+8)
 
 	s.bridgeMu.Lock()
 	s.bridgePending[reqID] = ch
@@ -3347,50 +4022,73 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 	if req.Mode == "page" {
 		waitTimeout = 7 * time.Second
 	}
+	timer := time.NewTimer(waitTimeout)
+	defer timer.Stop()
 
-	select {
-	case res := <-ch:
-		if !res.OK {
-			msg := res.Error
-			if msg == "" {
-				msg = "열린 AWX 탭에서 수집에 실패했습니다"
+	var failures []AwxBridgeResult
+	for {
+		select {
+		case res := <-ch:
+			if !res.OK {
+				failures = append(failures, res)
+				if len(failures) >= expectedCount {
+					writeJSON(w, http.StatusBadGateway, map[string]string{
+						"error": formatBridgeFailureErrors(failures),
+					})
+					return
+				}
+				continue
 			}
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": msg})
+			if wantKey != "" && wantType != "all" {
+				resType := strings.ToLower(strings.TrimSpace(res.ScopeType))
+				resID := strings.TrimSpace(res.ScopeID)
+				mismatch := resType == "all" || strings.EqualFold(resID, "all") ||
+					(wantType == "group" && resType != "group") ||
+					(wantID != "" && resID != "" && !strings.EqualFold(resID, wantID))
+				if mismatch {
+					failures = append(failures, AwxBridgeResult{
+						Origin: res.Origin,
+						Error:  fmt.Sprintf("요청한 범위(%s)와 다른 범위(%s)가 반환되었습니다. [AWX 탭 연결] 북마크릿을 최신으로 다시 실행한 뒤 수집해 주세요.", wantKey, res.Label),
+					})
+					if len(failures) >= expectedCount {
+						writeJSON(w, http.StatusBadGateway, map[string]string{
+							"error": formatBridgeFailureErrors(failures),
+						})
+						return
+					}
+					continue
+				}
+			}
+			rawCount := res.RawCount
+			if rawCount < len(res.Hosts) {
+				rawCount = len(res.Hosts)
+			}
+			filtered, excluded, results := filterHostList(res.Hosts, req.Exclude)
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"ok":            true,
+				"source":        "browser-bridge",
+				"origin":        res.Origin,
+				"label":         res.Label,
+				"scopeType":     res.ScopeType,
+				"scopeId":       res.ScopeID,
+				"page":          res.Page,
+				"rawCount":      rawCount,
+				"count":         len(filtered),
+				"hosts":         filtered,
+				"excludedHosts": excluded,
+				"results":       results,
+			})
 			return
-		}
-		if wantKey != "" && wantType != "all" {
-			resType := strings.ToLower(strings.TrimSpace(res.ScopeType))
-			resID := strings.TrimSpace(res.ScopeID)
-			mismatch := resType == "all" || strings.EqualFold(resID, "all") ||
-				(wantType == "group" && resType != "group") ||
-				(wantID != "" && resID != "" && !strings.EqualFold(resID, wantID))
-			if mismatch {
+		case <-timer.C:
+			if len(failures) > 0 {
 				writeJSON(w, http.StatusBadGateway, map[string]string{
-					"error": fmt.Sprintf("요청한 범위(%s)와 다른 범위(%s)가 반환되었습니다. [AWX 탭 연결] 북마크릿을 최신으로 다시 실행한 뒤 수집해 주세요.", wantKey, res.Label),
+					"error": formatBridgeFailureErrors(failures),
 				})
 				return
 			}
+			writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "AWX 브라우저 탭 응답 시간 초과"})
+			return
 		}
-		rawCount := res.RawCount
-		if rawCount < len(res.Hosts) {
-			rawCount = len(res.Hosts)
-		}
-		filtered, excluded, results := filterHostList(res.Hosts, req.Exclude)
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"ok":            true,
-			"source":        "browser-bridge",
-			"label":         res.Label,
-			"scopeType":     res.ScopeType,
-			"scopeId":       res.ScopeID,
-			"page":          res.Page,
-			"rawCount":      rawCount,
-			"count":         len(filtered),
-			"hosts":         filtered,
-			"excludedHosts": excluded,
-			"results":       results,
-		})
-	case <-time.After(waitTimeout):
-		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "AWX 브라우저 탭 응답 시간 초과"})
 	}
 }
 
@@ -3404,6 +4102,11 @@ func (s *AgentServer) handleAwxBridgeResult(w http.ResponseWriter, r *http.Reque
 	if err := json.NewDecoder(r.Body).Decode(&res); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
+	}
+	if strings.TrimSpace(res.Origin) == "" {
+		if orig := strings.TrimSpace(r.Header.Get("Origin")); orig != "" {
+			res.Origin = orig
+		}
 	}
 
 	s.bridgeMu.RLock()
@@ -3561,6 +4264,7 @@ func (s *AgentServer) handleSessionCreate(w http.ResponseWriter, r *http.Request
 	}
 
 	peerDelivered := true
+	peerNotifyStatus := "skipped"
 	var peerErrStr string
 
 	// Direct HTTP notification to checker (자기 자신 호출 방지)
@@ -3573,10 +4277,12 @@ func (s *AgentServer) handleSessionCreate(w http.ResponseWriter, r *http.Request
 		})
 		if err != nil {
 			peerDelivered = false
+			peerNotifyStatus = "failed"
 			peerErrStr = err.Error()
 			log.Printf("[PEER] Warning: Checker at %s could not be reached directly: %v\n", url, err)
 		} else {
 			peerDelivered = true
+			peerNotifyStatus = "sent"
 		}
 	}
 
@@ -3584,10 +4290,11 @@ func (s *AgentServer) handleSessionCreate(w http.ResponseWriter, r *http.Request
 	s.broadcastEvent("NEW_SESSION", sess.SessionId, sess)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"sessionId":     sess.SessionId,
-		"status":        sess.Status,
-		"peerDelivered": peerDelivered,
-		"peerError":     peerErrStr,
+		"sessionId":        sess.SessionId,
+		"status":           sess.Status,
+		"peerDelivered":    peerDelivered,
+		"peerNotifyStatus": peerNotifyStatus,
+		"peerError":        peerErrStr,
 	})
 }
 
@@ -3686,6 +4393,10 @@ func (s *AgentServer) handleSessionList(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"sessions": []interface{}{}})
 		return
+	}
+	sort.Strings(files)
+	if len(files) > 100 {
+		files = files[len(files)-100:]
 	}
 
 	var results []interface{}
@@ -4095,7 +4806,8 @@ func (s *AgentServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break
 		}
-		if opcode == 0x08 { // Close frame
+		if opcode == 0x08 { // Close frame: echo RFC 6455 close frame before closing TCP socket
+			_ = client.WriteClose(payload)
 			break
 		}
 		if opcode == 0x09 { // Ping frame
@@ -4734,55 +5446,58 @@ func main() {
 		}
 	}
 
-	// Try reading config.json from sharedDir or exeDir
-	configPath := filepath.Join(cfg.SharedDir, "config.json")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		configPath = filepath.Join(exeDir, "config.json")
-	}
-
-	if fileBytes, err := os.ReadFile(configPath); err == nil {
+	// Read shared config.json first if it differs from exeDir/config.json, then exeDir/config.json.
+	exeCfgPath := filepath.Clean(filepath.Join(exeDir, "config.json"))
+	sharedCfgPath := filepath.Clean(filepath.Join(cfg.SharedDir, "config.json"))
+	applyOperationalCfg := func(path string, includeSharedAwx bool) {
+		fileBytes, err := os.ReadFile(path)
+		if err != nil {
+			return
+		}
 		var fileCfg Config
-		if err := json.Unmarshal(fileBytes, &fileCfg); err == nil {
-			if !isFlagPassed("port") && fileCfg.ListenPort != 0 {
-				cfg.ListenPort = fileCfg.ListenPort
-			}
-			if !isFlagPassed("share") && fileCfg.SharedDir != "" {
-				cfg.SharedDir = fileCfg.SharedDir
-			}
-			if !isFlagPassed("auto-browser") {
-				cfg.AutoOpenBrowserOnRequest = fileCfg.AutoOpenBrowserOnRequest
-			}
-			if fileCfg.PollIntervalMs > 0 {
-				cfg.PollIntervalMs = fileCfg.PollIntervalMs
-			}
-			if !isFlagPassed("headless") && fileCfg.Headless {
-				cfg.Headless = fileCfg.Headless
-			}
-			if !isFlagPassed("bind-ip") && fileCfg.BindIP != "" {
-				cfg.BindIP = fileCfg.BindIP
-			}
-			if fileCfg.AwxBaseURL != "" {
+		if err := json.Unmarshal(fileBytes, &fileCfg); err != nil {
+			log.Printf("[CONFIG 경고] %s 파싱 실패 (JSON 문법 오류): %v\n", path, err)
+			return
+		}
+		if !isFlagPassed("port") && fileCfg.ListenPort != 0 {
+			cfg.ListenPort = fileCfg.ListenPort
+		}
+		if !isFlagPassed("share") && fileCfg.SharedDir != "" {
+			cfg.SharedDir = fileCfg.SharedDir
+		}
+		if !isFlagPassed("auto-browser") {
+			cfg.AutoOpenBrowserOnRequest = fileCfg.AutoOpenBrowserOnRequest
+		}
+		if fileCfg.PollIntervalMs > 0 {
+			cfg.PollIntervalMs = fileCfg.PollIntervalMs
+		}
+		if !isFlagPassed("headless") && fileCfg.Headless {
+			cfg.Headless = fileCfg.Headless
+		}
+		if !isFlagPassed("bind-ip") && fileCfg.BindIP != "" {
+			cfg.BindIP = fileCfg.BindIP
+		}
+		if fileCfg.SessionRetentionDays != 0 {
+			cfg.SessionRetentionDays = fileCfg.SessionRetentionDays
+		}
+		if includeSharedAwx {
+			if cfg.AwxBaseURL == "" && fileCfg.AwxBaseURL != "" {
 				cfg.AwxBaseURL = fileCfg.AwxBaseURL
 			}
-			if fileCfg.AwxUsername != "" {
-				cfg.AwxUsername = fileCfg.AwxUsername
-			}
-			if fileCfg.AwxPassword != "" {
-				cfg.AwxPassword = fileCfg.AwxPassword
-			}
-			if fileCfg.AwxToken != "" {
-				cfg.AwxToken = fileCfg.AwxToken
-			}
-			if fileCfg.AwxDefaultScope != "" {
+			if cfg.AwxDefaultScope == "" && fileCfg.AwxDefaultScope != "" {
 				cfg.AwxDefaultScope = fileCfg.AwxDefaultScope
 			}
-			if fileCfg.AwxInsecureTLS != nil {
-				cfg.AwxInsecureTLS = fileCfg.AwxInsecureTLS
+			if cfg.AwxInsecureTLS == nil && fileCfg.AwxInsecureTLS != nil {
+				val := *fileCfg.AwxInsecureTLS
+				cfg.AwxInsecureTLS = &val
 			}
-		} else {
-			log.Printf("[CONFIG 경고] %s 파싱 실패 (JSON 문법 오류): %v\n", configPath, err)
 		}
 	}
+	if sharedCfgPath != exeCfgPath {
+		applyOperationalCfg(sharedCfgPath, true)
+	}
+	applyOperationalCfg(exeCfgPath, false)
+	cfg.ConfigPath = exeCfgPath
 
 	// If cfg.SharedDir is still relative (e.g. "." or empty), resolve it relative to exeDir
 	if !filepath.IsAbs(cfg.SharedDir) && !strings.HasPrefix(cfg.SharedDir, `\\`) {
