@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1911,6 +1912,145 @@ func TestAwxSessionEdgeCasesAndFailureDiagnostics(t *testing.T) {
 	)
 	if errPat != nil || modePat != "bearer" || len(pgPat.Results) != 1 || pgPat.Results[0].Name != "pat-host-01" {
 		t.Fatalf("Expected prefixed Bearer token normalization to succeed, got pg=%+v mode=%q err=%v", pgPat, modePat, errPat)
+	}
+}
+
+func TestAwxInventoryListingAndNameResolution(t *testing.T) {
+	srv, ts := setupTestServer(t)
+	defer ts.Close()
+	defer srv.Stop()
+	var hitsMu sync.Mutex
+	var requestedPaths []string
+
+	mockAwx := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsMu.Lock()
+		requestedPaths = append(requestedPaths, r.URL.Path)
+		hitsMu.Unlock()
+
+		if r.Header.Get("Authorization") != "Bearer tok-inv-test" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"detail":"Authentication credentials were not provided."}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v2/inventories/":
+			_, _ = io.WriteString(w, `{
+				"count": 4,
+				"next": null,
+				"results": [
+					{"id": 1, "name": "DEFAULT", "kind": "", "total_hosts": 1},
+					{"id": 2, "name": "Default Inventory", "kind": "", "total_hosts": 2},
+					{"id": 3, "name": "Test 1000 Hosts Inventory", "kind": "", "total_hosts": 3},
+					{"id": 7, "name": "Demo Inventory", "kind": "", "total_hosts": 2}
+				]
+			}`)
+		case "/api/v2/inventories/7/hosts/":
+			_, _ = io.WriteString(w, `{"count": 2, "next": null, "results": [{"name": "demo-web-01"}, {"name": "demo-db-01"}]}`)
+		case "/api/v2/inventories/3/hosts/":
+			_, _ = io.WriteString(w, `{"count": 3, "next": null, "results": [{"name": "test1000-01"}, {"name": "test1000-02"}, {"name": "test1000-03"}]}`)
+		case "/api/v2/hosts/":
+			_, _ = io.WriteString(w, `{"count": 4, "next": null, "results": [{"name": "default-host-1"}, {"name": "demo-web-01"}, {"name": "demo-db-01"}, {"name": "test1000-01"}]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mockAwx.Close()
+
+	// 1. Verify AWX URL parsing rules (#/inventories must NEVER become "all", constructed_inventory supported)
+	if _, sc, _, _ := parseAwxTargetInputEx("https://awxhost/#/inventories"); sc != "" {
+		t.Fatalf("Expected empty scope for inventories list URL, got %q", sc)
+	}
+	if _, sc, _, _ := parseAwxTargetInputEx("https://awxhost/#/inventories/constructed_inventory/55/hosts"); sc != "constructed_inventory:55" {
+		t.Fatalf("Expected constructed_inventory:55, got %q", sc)
+	}
+	if _, sc, _, _ := parseAwxTargetInputEx("https://awxhost/#/hosts"); sc != "all" {
+		t.Fatalf("Expected 'all' for explicit #/hosts URL, got %q", sc)
+	}
+
+	// Configure server with Demo Inventory specified by name
+	cfgBody, _ := json.Marshal(map[string]interface{}{
+		"baseUrl":      mockAwx.URL,
+		"defaultScope": "Demo Inventory",
+		"token":        "tok-inv-test",
+		"insecureTls":  true,
+	})
+	recCfg := httptest.NewRecorder()
+	reqCfg := httptest.NewRequest(http.MethodPost, "/api/awx/config", bytes.NewReader(cfgBody))
+	srv.handleAwxConfig(recCfg, reqCfg)
+	if recCfg.Code != http.StatusOK {
+		t.Fatalf("handleAwxConfig failed: %d %s", recCfg.Code, recCfg.Body.String())
+	}
+
+	// 2. GET /api/awx/inventories lists all 4 inventories
+	recInvs := httptest.NewRecorder()
+	srv.handleAwxInventories(recInvs, httptest.NewRequest(http.MethodGet, "/api/awx/inventories", nil))
+	if recInvs.Code != http.StatusOK {
+		t.Fatalf("handleAwxInventories failed: %d %s", recInvs.Code, recInvs.Body.String())
+	}
+	var invResp struct {
+		OK          bool                  `json:"ok"`
+		Count       int                   `json:"count"`
+		Inventories []AwxInventorySummary `json:"inventories"`
+	}
+	if err := json.Unmarshal(recInvs.Body.Bytes(), &invResp); err != nil || !invResp.OK || invResp.Count != 4 {
+		t.Fatalf("Expected 4 inventories, got err=%v resp=%+v", err, invResp)
+	}
+
+	// 3. POST /api/awx/test resolves "Demo Inventory" -> inventory:7, returns scopeLabel & only Demo Inventory hosts
+	recTest := httptest.NewRecorder()
+	srv.handleAwxTest(recTest, httptest.NewRequest(http.MethodPost, "/api/awx/test", strings.NewReader(`{}`)))
+	if recTest.Code != http.StatusOK {
+		t.Fatalf("handleAwxTest failed: %d %s", recTest.Code, recTest.Body.String())
+	}
+	var testResp struct {
+		OK           bool                  `json:"ok"`
+		DefaultScope string                `json:"defaultScope"`
+		ScopeLabel   string                `json:"scopeLabel"`
+		Count        int                   `json:"count"`
+		Samples      []string              `json:"samples"`
+		Inventories  []AwxInventorySummary `json:"inventories"`
+	}
+	if err := json.Unmarshal(recTest.Body.Bytes(), &testResp); err != nil || !testResp.OK || testResp.DefaultScope != "inventory:7" || testResp.ScopeLabel != "Demo Inventory" || testResp.Count != 2 {
+		t.Fatalf("Expected resolved inventory:7 Demo Inventory count=2, got err=%v resp=%+v", err, testResp)
+	}
+
+	// 4. GET /api/awx/hosts?scope=Demo%20Inventory collects ONLY Demo Inventory hosts (never /api/v2/hosts/ or Test 1000)
+	hitsMu.Lock()
+	requestedPaths = nil
+	hitsMu.Unlock()
+
+	recHosts := httptest.NewRecorder()
+	srv.handleAwxHosts(recHosts, httptest.NewRequest(http.MethodGet, "/api/awx/hosts?scope=Demo%20Inventory", nil))
+	if recHosts.Code != http.StatusOK {
+		t.Fatalf("handleAwxHosts failed: %d %s", recHosts.Code, recHosts.Body.String())
+	}
+	var hostsResp struct {
+		InventoryID string   `json:"inventoryId"`
+		ScopeKey    string   `json:"scopeKey"`
+		Count       int      `json:"count"`
+		Hosts       []string `json:"hosts"`
+	}
+	if err := json.Unmarshal(recHosts.Body.Bytes(), &hostsResp); err != nil || hostsResp.InventoryID != "7" || hostsResp.ScopeKey != "inventory:7" || hostsResp.Count != 2 {
+		t.Fatalf("Expected only 2 Demo Inventory hosts, got err=%v resp=%+v", err, hostsResp)
+	}
+	if len(hostsResp.Hosts) != 2 || hostsResp.Hosts[0] != "demo-db-01" || hostsResp.Hosts[1] != "demo-web-01" {
+		t.Fatalf("Unexpected host list for Demo Inventory: %v", hostsResp.Hosts)
+	}
+	hitsMu.Lock()
+	for _, p := range requestedPaths {
+		if p == "/api/v2/hosts/" || p == "/api/v2/inventories/3/hosts/" {
+			hitsMu.Unlock()
+			t.Fatalf("Must not query /api/v2/hosts/ or unrelated inventory #3 when collecting Demo Inventory, paths=%v", requestedPaths)
+		}
+	}
+	hitsMu.Unlock()
+
+	// 5. Unknown inventory name returns clear 502 error instead of falling back to all
+	recBad := httptest.NewRecorder()
+	srv.handleAwxHosts(recBad, httptest.NewRequest(http.MethodGet, "/api/awx/hosts?scope=NoSuchInv", nil))
+	if recBad.Code != http.StatusBadGateway || !strings.Contains(recBad.Body.String(), "Demo Inventory") {
+		t.Fatalf("Expected 502 listing available inventories for unknown scope, got %d %s", recBad.Code, recBad.Body.String())
 	}
 }
 

@@ -464,6 +464,38 @@ async function runStandaloneAppTest() {
         console.log("[4.5/7] Testing Settings AWX URL/API configuration & Live Edge AWX Tab Bridge...");
         const mockAwxServer = http.createServer((req, res) => {
             const u = new URL(req.url, 'http://127.0.0.1');
+            if (u.pathname === '/api/v2/inventories/') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    count: 4,
+                    next: null,
+                    results: [
+                        { id: 1, name: 'DEFAULT', kind: '', total_hosts: 1 },
+                        { id: 15, name: 'Default Inventory', kind: '', total_hosts: 25 },
+                        { id: 42, name: 'Smart Hosts', kind: 'smart', total_hosts: 4 },
+                        { id: 77, name: 'Demo Inventory', kind: '', total_hosts: 2 }
+                    ]
+                }));
+                return;
+            }
+            if (u.pathname === '/api/v2/inventories/77/hosts/') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    count: 2,
+                    next: null,
+                    results: [{ name: 'demo-only-01' }, { name: 'demo-only-02' }]
+                }));
+                return;
+            }
+            if (u.pathname === '/api/v2/hosts/') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    count: 3,
+                    next: null,
+                    results: [{ name: 'all-inv-leak-01' }, { name: 'all-inv-leak-02' }, { name: 'demo-only-01' }]
+                }));
+                return;
+            }
             if (u.pathname === '/api/v2/inventories/15/hosts/') {
                 const page = parseInt(u.searchParams.get('page') || '1', 10);
                 const pageSize = parseInt(u.searchParams.get('page_size') || '200', 10);
@@ -643,6 +675,71 @@ async function runStandaloneAppTest() {
                 throw new Error(`Expected 3 kept hosts from bridged AWX full inventory #42, got ${brgAllCnt}`);
             }
             console.log("   Verified live open Edge AWX tab bridge: auto-detected smart_inventory #42, collected DOM screen (2/3) & full API (3/4).");
+
+            // C) Switch bridged AWX tab to #/inventories list (screenshot case: DEFAULT, Default Inventory, Demo Inventory, Test 1000)
+            //    Must NEVER scrape inventory names as hosts, must NEVER dump all inventories via /api/v2/hosts/,
+            //    and picking Demo Inventory (#77) from Settings dropdown must collect ONLY Demo Inventory's hosts!
+            await awxTabCdp.evaluate(`
+                (() => {
+                    document.body.innerHTML = '<table><tbody>' +
+                        '<tr><td><input type="checkbox"/></td><td data-label="이름"><a href="#/inventories/inventory/1/details">DEFAULT</a></td><td data-label="유형">인벤토리</td></tr>' +
+                        '<tr><td><input type="checkbox"/></td><td data-label="이름"><a href="#/inventories/inventory/15/details">Default Inventory</a></td><td data-label="유형">인벤토리</td></tr>' +
+                        '<tr><td><input type="checkbox"/></td><td data-label="이름"><a href="#/inventories/inventory/77/details">Demo Inventory</a></td><td data-label="유형">인벤토리</td></tr>' +
+                        '<tr><td><input type="checkbox"/></td><td data-label="이름"><a href="#/inventories/inventory/3/details">Test 1000 Hosts Inventory</a></td><td data-label="유형">인벤토리</td></tr>' +
+                    '</tbody></table>';
+                    location.hash = '#/inventories';
+                })()
+            `);
+            let invListSynced = false;
+            for (let i = 0; i < 25; i++) {
+                await sleep(150);
+                const sTxt = await cdp.evaluate(`document.getElementById('awx-vld-awx-source-label')?.innerText || ''`);
+                const pCount = await cdp.evaluate(`window.awxValidatorState?.awxBridge?.pageCount ?? -1`);
+                if (sTxt.includes('인벤토리') && pCount === 0 && await cdp.evaluate(`window.awxValidatorState?.awxBridge?.scopeType`) === 'inventories_list') {
+                    invListSynced = true;
+                    break;
+                }
+            }
+            if (!invListSynced) {
+                const dbg = await cdp.evaluate(`JSON.stringify(window.awxValidatorState?.awxBridge)`);
+                throw new Error(`Bridged tab on #/inventories did not report inventories_list with 0 scraped hosts: ${dbg}`);
+            }
+
+            // Clear userCustomized flag to prove unchosen inventories_list rejects /api/v2/hosts/ dump cleanly
+            await cdp.evaluate(`window.awxValidatorState.awxConfig.userCustomized = false;`);
+            const leakGuardCnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            const errBoxTxt = await cdp.evaluate(`document.getElementById('awx-vld-awx-summary')?.innerText || ''`);
+            if (leakGuardCnt !== 0 || !errBoxTxt.includes('인벤토리 목록')) {
+                throw new Error(`Expected #/inventories without selection to block full dump, got cnt=${leakGuardCnt}, summary=${errBoxTxt}`);
+            }
+
+            // Open Settings, verify Demo Inventory appears in <select> dropdown, pick inventory:77, close & collect ONLY Demo Inventory hosts!
+            await cdp.evaluate(`document.documentElement.dispatchEvent(new MouseEvent('mouseenter'))`);
+            await sleep(450);
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-open-awx-settings').click()`);
+            await sleep(250);
+            const dropOpts = await cdp.evaluate(`Array.from(document.querySelectorAll('#awx-vld-awx-inventory-select option')).map(o => o.value + '|' + o.textContent)`);
+            if (!dropOpts.some(t => t.includes('inventory:77|Demo Inventory'))) {
+                throw new Error(`Expected Demo Inventory (#77) in settings inventory dropdown, got: ${JSON.stringify(dropOpts)}`);
+            }
+            await cdp.evaluate(`
+                (() => {
+                    const sel = document.getElementById('awx-vld-awx-inventory-select');
+                    sel.value = 'inventory:77';
+                    sel.dispatchEvent(new Event('change'));
+                })()
+            `);
+            await sleep(150);
+            await assertNoLayoutClipping('Settings Modal Inventory Dropdown Selected');
+            await cdp.evaluate(`document.getElementById('awx-vld-btn-close-settings').click()`);
+            await sleep(150);
+
+            const demoCnt = await cdp.evaluate(`window.awxRunCollectAll()`);
+            const demoHosts = await cdp.evaluate(`Array.from(window.awxValidatorState.collectedHosts).sort()`);
+            if (demoCnt !== 2 || demoHosts[0] !== 'demo-only-01' || demoHosts[1] !== 'demo-only-02') {
+                throw new Error(`Expected ONLY Demo Inventory hosts ['demo-only-01', 'demo-only-02'], got cnt=${demoCnt} hosts=${JSON.stringify(demoHosts)}`);
+            }
+            console.log("   Verified #/inventories screenshot scenario: 0 false scrapes, blocks global dump, and dropdown-selected Demo Inventory collects ONLY Demo Inventory hosts (2).");
         } finally {
             if (awxTabCdp) awxTabCdp.close();
             if (awxTabTargetId) {

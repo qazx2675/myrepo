@@ -54,19 +54,28 @@ type Config struct {
 	Headless                 bool   `json:"headless,omitempty"`
 }
 
+// AwxInventorySummary represents a selectable AWX inventory entry.
+type AwxInventorySummary struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind,omitempty"`
+	TotalHosts int    `json:"totalHosts"`
+}
+
 // AwxBridgeState tracks the active open Edge/Chrome AWX tab connected via WebSocket bridge.
 type AwxBridgeState struct {
-	Connected bool      `json:"connected"`
-	Source    string    `json:"source,omitempty"`
-	URL       string    `json:"url,omitempty"`
-	Origin    string    `json:"origin,omitempty"`
-	Hash      string    `json:"hash,omitempty"`
-	Label     string    `json:"label,omitempty"`
-	ScopeType string    `json:"scopeType,omitempty"`
-	ScopeID   string    `json:"scopeId,omitempty"`
-	Page      int       `json:"page,omitempty"`
-	PageHosts []string  `json:"pageHosts,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt,omitempty"`
+	Connected   bool                  `json:"connected"`
+	Source      string                `json:"source,omitempty"`
+	URL         string                `json:"url,omitempty"`
+	Origin      string                `json:"origin,omitempty"`
+	Hash        string                `json:"hash,omitempty"`
+	Label       string                `json:"label,omitempty"`
+	ScopeType   string                `json:"scopeType,omitempty"`
+	ScopeID     string                `json:"scopeId,omitempty"`
+	Page        int                   `json:"page,omitempty"`
+	PageHosts   []string              `json:"pageHosts,omitempty"`
+	Inventories []AwxInventorySummary `json:"inventories,omitempty"`
+	UpdatedAt   time.Time             `json:"updatedAt,omitempty"`
 }
 
 // AwxBridgeResult holds async collection results returned from a bridged AWX browser tab.
@@ -1145,6 +1154,7 @@ func (s *AgentServer) Routes() http.Handler {
 	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/bye", s.handleBye)
 	mux.HandleFunc("/api/awx/hosts", s.handleAwxHosts)
+	mux.HandleFunc("/api/awx/inventories", s.handleAwxInventories)
 	mux.HandleFunc("/api/awx/config", s.handleAwxConfig)
 	mux.HandleFunc("/api/awx/test", s.handleAwxTest)
 	mux.HandleFunc("/api/awx/open-browser", s.handleAwxOpenBrowser)
@@ -1295,12 +1305,15 @@ type awxPageResponse struct {
 	Count   int     `json:"count"`
 	Next    *string `json:"next"`
 	Results []struct {
-		Name string `json:"name"`
+		ID         int    `json:"id"`
+		Name       string `json:"name"`
+		Kind       string `json:"kind"`
+		TotalHosts int    `json:"total_hosts"`
 	} `json:"results"`
 }
 
 var (
-	reAwxInvURL           = regexp.MustCompile(`(?i)/inventories/(smart_inventory|inventory)/(\d+)`)
+	reAwxInvURL           = regexp.MustCompile(`(?i)/inventories/(smart_inventory|constructed_inventory|inventory)/(\d+)`)
 	reAwxApiInvURL        = regexp.MustCompile(`(?i)/inventories/(\d+)/(?:hosts|all_hosts)`)
 	reAwxGroupURL         = regexp.MustCompile(`(?i)/groups/(\d+)/(?:nested_hosts|all_hosts|hosts)`)
 	reAwxHostsURL         = regexp.MustCompile(`(?i)/(?:hosts)(?:\b|\?)`)
@@ -1347,8 +1360,11 @@ func parseAwxTargetInputEx(raw string) (baseURL string, scope string, page int, 
 		scope = strings.ToLower(m[1]) + ":" + m[2]
 	} else if m := reAwxApiInvURL.FindStringSubmatch(route); len(m) == 2 {
 		scope = "inventory:" + m[1]
-	} else if reAwxHostsURL.MatchString(route) && !strings.Contains(strings.ToLower(route), "/inventories/") {
-		scope = "all"
+	} else {
+		lowerRoute := strings.ToLower(route)
+		if reAwxHostsURL.MatchString(route) && !strings.Contains(lowerRoute, "/inventories") && !strings.Contains(lowerRoute, "/groups") {
+			scope = "all"
+		}
 	}
 	if idx := strings.Index(route, "?"); idx >= 0 {
 		if pm := reAwxPageQ.FindStringSubmatch(route[idx+1:]); len(pm) == 2 {
@@ -1396,6 +1412,8 @@ func buildAwxConsoleURL(baseURL, defaultScope, rawURL string) string {
 		return fmt.Sprintf("%s/#/groups/%s/nested_hosts", base, scopeID)
 	case "smart_inventory":
 		return fmt.Sprintf("%s/#/inventories/smart_inventory/%s/hosts", base, scopeID)
+	case "constructed_inventory":
+		return fmt.Sprintf("%s/#/inventories/constructed_inventory/%s/hosts", base, scopeID)
 	default:
 		return fmt.Sprintf("%s/#/inventories/inventory/%s/hosts", base, scopeID)
 	}
@@ -1442,12 +1460,30 @@ func isExplicitScope(scope string) bool {
 	return s != "" && s != "3" && s != "inventory:3"
 }
 
+func isDigitsOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // normalizeAwxScope canonicalizes inventory/group/all specifiers into scopeType, scopeID, and normalized key.
 func normalizeAwxScope(raw string, fallback string) (scopeType string, scopeID string, normKey string) {
-	s := strings.ToLower(strings.TrimSpace(raw))
-	if s == "" {
-		s = strings.ToLower(strings.TrimSpace(fallback))
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		trimmed = strings.TrimSpace(fallback)
 	}
+	if strings.Contains(trimmed, "://") || strings.Contains(strings.ToLower(trimmed), "/inventories/") || strings.Contains(strings.ToLower(trimmed), "/groups/") {
+		if _, sc, _, _ := parseAwxTargetInputEx(trimmed); sc != "" {
+			trimmed = sc
+		}
+	}
+	s := strings.ToLower(trimmed)
 	if s == "" {
 		s = "3"
 	}
@@ -1464,6 +1500,12 @@ func normalizeAwxScope(raw string, fallback string) (scopeType string, scopeID s
 		id := strings.TrimSpace(strings.TrimPrefix(s, "smart_inventory:"))
 		if id != "" {
 			return "smart_inventory", id, "smart_inventory:" + id
+		}
+	}
+	if strings.HasPrefix(s, "constructed_inventory:") {
+		id := strings.TrimSpace(strings.TrimPrefix(s, "constructed_inventory:"))
+		if id != "" {
+			return "constructed_inventory", id, "constructed_inventory:" + id
 		}
 	}
 	if strings.HasPrefix(s, "inventory:") {
@@ -1485,6 +1527,106 @@ func buildAwxEndpoint(baseURL, scopeType, scopeID string, pageSize int) string {
 	default:
 		return fmt.Sprintf("%s/api/v2/inventories/%s/hosts/?page_size=%d", base, scopeID, pageSize)
 	}
+}
+
+func (s *AgentServer) fetchAwxInventoriesWithDetails(baseURL, user, pass, tok string, insecure bool, client *http.Client) ([]AwxInventorySummary, error) {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		return nil, fmt.Errorf("AWX 주소가 설정되지 않았습니다")
+	}
+	if client == nil {
+		client = s.awxHttpClient
+	}
+	var out []AwxInventorySummary
+	seenIDs := make(map[int]bool)
+	nextURL := fmt.Sprintf("%s/api/v2/inventories/?page_size=200&order_by=id", base)
+	seenURLs := make(map[string]bool)
+	for pageIdx := 0; nextURL != "" && pageIdx < 5; pageIdx++ {
+		if seenURLs[nextURL] {
+			break
+		}
+		seenURLs[nextURL] = true
+		pg, _, resolvedURL, err := s.fetchAwxPageWithDetails(nextURL, user, pass, tok, insecure, client)
+		if err != nil {
+			if pageIdx == 0 {
+				return nil, err
+			}
+			break
+		}
+		for _, it := range pg.Results {
+			name := strings.TrimSpace(it.Name)
+			if name == "" || seenIDs[it.ID] {
+				continue
+			}
+			seenIDs[it.ID] = true
+			out = append(out, AwxInventorySummary{
+				ID:         it.ID,
+				Name:       name,
+				Kind:       strings.TrimSpace(it.Kind),
+				TotalHosts: it.TotalHosts,
+			})
+		}
+		nextURL = ""
+		if pg.Next != nil && strings.TrimSpace(*pg.Next) != "" {
+			if resolvedNext, nErr := url.Parse(strings.TrimSpace(*pg.Next)); nErr == nil {
+				if refBase, bErr := url.Parse(resolvedURL); bErr == nil {
+					nextURL = refBase.ResolveReference(resolvedNext).String()
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s *AgentServer) resolveAwxScopeWithCreds(baseURL, user, pass, tok string, insecure bool, client *http.Client, rawScope, fallback string) (scopeType, scopeID, normKey string, inventories []AwxInventorySummary, err error) {
+	scopeType, scopeID, normKey = normalizeAwxScope(rawScope, fallback)
+	if scopeType == "all" || scopeType == "group" || scopeID == "" || isDigitsOnly(scopeID) {
+		return scopeType, scopeID, normKey, nil, nil
+	}
+	invs, iErr := s.fetchAwxInventoriesWithDetails(baseURL, user, pass, tok, insecure, client)
+	if iErr != nil {
+		return scopeType, scopeID, normKey, nil, fmt.Errorf("인벤토리 목록 조회 실패 (%s): %w", scopeID, iErr)
+	}
+	var matched *AwxInventorySummary
+	for i := range invs {
+		if strings.EqualFold(strings.TrimSpace(invs[i].Name), scopeID) {
+			matched = &invs[i]
+			break
+		}
+	}
+	if matched == nil {
+		var partial []*AwxInventorySummary
+		needle := strings.ToLower(scopeID)
+		for i := range invs {
+			if strings.Contains(strings.ToLower(invs[i].Name), needle) {
+				partial = append(partial, &invs[i])
+			}
+		}
+		if len(partial) == 1 {
+			matched = partial[0]
+		}
+	}
+	if matched == nil {
+		avail := make([]string, 0, len(invs))
+		for i, inv := range invs {
+			if i >= 8 {
+				avail = append(avail, "...")
+				break
+			}
+			avail = append(avail, fmt.Sprintf("%s(#%d)", inv.Name, inv.ID))
+		}
+		return scopeType, scopeID, normKey, invs, fmt.Errorf("인벤토리 '%s'를 찾을 수 없습니다 (사용 가능: %s)", scopeID, strings.Join(avail, ", "))
+	}
+	resolvedType := scopeType
+	if strings.EqualFold(matched.Kind, "smart") {
+		resolvedType = "smart_inventory"
+	} else if strings.EqualFold(matched.Kind, "constructed") {
+		resolvedType = "constructed_inventory"
+	} else if resolvedType != "smart_inventory" && resolvedType != "constructed_inventory" {
+		resolvedType = "inventory"
+	}
+	idStr := strconv.Itoa(matched.ID)
+	return resolvedType, idStr, resolvedType + ":" + idStr, invs, nil
 }
 
 func (s *AgentServer) getAwxSnapshot() (baseURL, username, password, token, defaultScope string, insecureTLS bool, client *http.Client) {
@@ -2352,7 +2494,10 @@ func (s *AgentServer) fetchAwxPage(pageURL string) (*awxPageResponse, error) {
 // fetchAwxInventoryHosts retrieves and caches all hosts for an AWX scope.
 func (s *AgentServer) fetchAwxInventoryHosts(invID string, refresh bool) ([]string, error) {
 	baseURL, user, pass, tok, defScope, insecure, client := s.getAwxSnapshot()
-	scopeType, scopeID, normKey := normalizeAwxScope(invID, defScope)
+	scopeType, scopeID, normKey, _, err := s.resolveAwxScopeWithCreds(baseURL, user, pass, tok, insecure, client, invID, defScope)
+	if err != nil {
+		return nil, err
+	}
 	cacheKey := baseURL + "|" + normKey
 
 	if !refresh {
@@ -2524,8 +2669,12 @@ func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
 	if rawScope == "" {
 		rawScope = strings.TrimSpace(r.URL.Query().Get("inventory"))
 	}
-	baseURL, _, _, _, defScope, _, _ := s.getAwxSnapshot()
-	scopeType, scopeID, normKey := normalizeAwxScope(rawScope, defScope)
+	baseURL, user, pass, tok, defScope, insecure, client := s.getAwxSnapshot()
+	scopeType, scopeID, normKey, _, rErr := s.resolveAwxScopeWithCreds(baseURL, user, pass, tok, insecure, client, rawScope, defScope)
+	if rErr != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("AWX 호스트 수집 실패: %v", rErr)})
+		return
+	}
 
 	refresh := r.URL.Query().Get("refresh") == "true"
 	excludePattern := strings.TrimSpace(r.URL.Query().Get("exclude"))
@@ -2584,6 +2733,50 @@ func (s *AgentServer) handleAwxHosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleAwxInventories: GET /api/awx/inventories lists selectable AWX inventories from API or active bridge.
+func (s *AgentServer) handleAwxInventories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	baseURL, user, pass, tok, _, insecure, client := s.getAwxSnapshot()
+	var apiErr error
+	if strings.TrimSpace(baseURL) != "" {
+		invs, err := s.fetchAwxInventoriesWithDetails(baseURL, user, pass, tok, insecure, client)
+		if err == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"ok":          true,
+				"source":      "api",
+				"count":       len(invs),
+				"inventories": invs,
+			})
+			return
+		}
+		apiErr = err
+	}
+	s.bridgeMu.RLock()
+	brg := s.bridgeState
+	s.bridgeMu.RUnlock()
+	if brg.Connected && !brg.UpdatedAt.IsZero() && time.Since(brg.UpdatedAt) < 2*time.Minute && len(brg.Inventories) > 0 {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":          true,
+			"source":      "bridge",
+			"count":       len(brg.Inventories),
+			"inventories": brg.Inventories,
+		})
+		return
+	}
+	errMsg := "AWX 서버 주소가 설정되지 않았습니다"
+	if apiErr != nil {
+		errMsg = fmt.Sprintf("인벤토리 목록 조회 실패: %v", apiErr)
+	}
+	writeJSON(w, http.StatusBadGateway, map[string]interface{}{
+		"ok":          false,
+		"error":       errMsg,
+		"inventories": []AwxInventorySummary{},
+	})
+}
+
 func (s *AgentServer) getBridgeSnapshot() map[string]interface{} {
 	s.bridgeMu.RLock()
 	st := s.bridgeState
@@ -2604,6 +2797,7 @@ func (s *AgentServer) getBridgeSnapshot() map[string]interface{} {
 		"scopeId":     st.ScopeID,
 		"page":        st.Page,
 		"pageCount":   len(st.PageHosts),
+		"inventories": st.Inventories,
 		"updatedAt":   st.UpdatedAt,
 	}
 }
@@ -2787,10 +2981,17 @@ func (s *AgentServer) handleAwxTest(w http.ResponseWriter, r *http.Request) {
 		insecure = *req.InsecureTLS
 	}
 
-	scopeType, scopeID, normKey := normalizeAwxScope(defScope, "3")
-	testURL := buildAwxEndpoint(baseURL, scopeType, scopeID, 5) + "&page=1"
-	client := newAwxHTTPClient(insecure)
-	pg, authMethod, resolvedURL, err := s.fetchAwxPageWithDetails(testURL, user, pass, tok, insecure, client)
+	tryTestBase := func(candBase string) (string, string, string, []AwxInventorySummary, *awxPageResponse, string, string, string, error) {
+		c := newAwxHTTPClient(insecure)
+		st, sid, nk, invs, rErr := s.resolveAwxScopeWithCreds(candBase, user, pass, tok, insecure, c, defScope, "3")
+		ep := buildAwxEndpoint(candBase, st, sid, 5) + "&page=1"
+		if rErr != nil {
+			return st, sid, nk, invs, nil, "", "", ep, rErr
+		}
+		pageData, aMethod, resURL, pErr := s.fetchAwxPageWithDetails(ep, user, pass, tok, insecure, c)
+		return st, sid, nk, invs, pageData, aMethod, resURL, ep, pErr
+	}
+	scopeType, scopeID, normKey, preInvs, pg, authMethod, resolvedURL, testURL, err := tryTestBase(baseURL)
 	if err != nil && !explicitScheme && isAwxTransportOrTLSError(err) {
 		altBase := ""
 		if strings.HasPrefix(strings.ToLower(baseURL), "https://") {
@@ -2799,22 +3000,18 @@ func (s *AgentServer) handleAwxTest(w http.ResponseWriter, r *http.Request) {
 			altBase = "https://" + baseURL[7:]
 		}
 		if altBase != "" {
-			altTestURL := buildAwxEndpoint(altBase, scopeType, scopeID, 5) + "&page=1"
-			if pgAlt, authAlt, resAlt, errAlt := s.fetchAwxPageWithDetails(altTestURL, user, pass, tok, insecure, newAwxHTTPClient(insecure)); errAlt == nil {
-				pg = pgAlt
-				authMethod = authAlt
-				resolvedURL = resAlt
-				baseURL = altBase
-				testURL = altTestURL
-				err = nil
+			if stAlt, sidAlt, nkAlt, invsAlt, pgAlt, authAlt, resAlt, testAlt, errAlt := tryTestBase(altBase); errAlt == nil {
+				scopeType, scopeID, normKey, preInvs = stAlt, sidAlt, nkAlt, invsAlt
+				pg, authMethod, resolvedURL, testURL, baseURL, err = pgAlt, authAlt, resAlt, testAlt, altBase, nil
 			}
 		}
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]interface{}{
-			"ok":    false,
-			"url":   testURL,
-			"error": fmt.Sprintf("AWX 연결 실패: %v", err),
+			"ok":          false,
+			"url":         testURL,
+			"inventories": preInvs,
+			"error":       fmt.Sprintf("AWX 연결 실패: %v", err),
 		})
 		return
 	}
@@ -2823,17 +3020,34 @@ func (s *AgentServer) handleAwxTest(w http.ResponseWriter, r *http.Request) {
 	if ru, rErr := url.Parse(resolvedURL); rErr == nil && ru.Scheme != "" && ru.Host != "" {
 		effectiveBaseURL = strings.ToLower(ru.Scheme) + "://" + ru.Host
 	}
-	if effectiveBaseURL != "" && strings.TrimSpace(req.BaseURL) == "" {
+	if strings.TrimSpace(req.BaseURL) == "" {
 		s.awxCfgMu.Lock()
-		changed := !strings.EqualFold(effectiveBaseURL, strings.TrimRight(s.config.AwxBaseURL, "/"))
-		if changed {
+		changed := false
+		if effectiveBaseURL != "" && !strings.EqualFold(effectiveBaseURL, strings.TrimRight(s.config.AwxBaseURL, "/")) {
 			s.config.AwxBaseURL = effectiveBaseURL
+			changed = true
+		}
+		if normKey != "" && !strings.EqualFold(s.config.AwxDefaultScope, normKey) && strings.TrimSpace(req.DefaultScope) == "" {
+			s.config.AwxDefaultScope = normKey
 		}
 		s.awxCfgMu.Unlock()
 		if changed {
 			s.awxCacheMu.Lock()
 			s.awxCache = make(map[string]awxCacheEntry)
 			s.awxCacheMu.Unlock()
+		}
+	}
+
+	if len(preInvs) == 0 {
+		preInvs, _ = s.fetchAwxInventoriesWithDetails(effectiveBaseURL, user, pass, tok, insecure, newAwxHTTPClient(insecure))
+	}
+	scopeLabel := ""
+	if scopeType != "all" && scopeType != "group" {
+		for _, inv := range preInvs {
+			if strconv.Itoa(inv.ID) == scopeID {
+				scopeLabel = inv.Name
+				break
+			}
 		}
 	}
 
@@ -2848,9 +3062,11 @@ func (s *AgentServer) handleAwxTest(w http.ResponseWriter, r *http.Request) {
 		"url":          testURL,
 		"baseUrl":      effectiveBaseURL,
 		"defaultScope": normKey,
+		"scopeLabel":   scopeLabel,
 		"authMethod":   authMethod,
 		"count":        pg.Count,
 		"samples":      samples,
+		"inventories":  preInvs,
 	})
 }
 
@@ -2963,6 +3179,9 @@ func (s *AgentServer) handleAwxBridgeState(w http.ResponseWriter, r *http.Reques
 	}
 
 	s.bridgeMu.Lock()
+	if len(req.Inventories) == 0 && strings.EqualFold(req.Origin, s.bridgeState.Origin) && len(s.bridgeState.Inventories) > 0 {
+		req.Inventories = s.bridgeState.Inventories
+	}
 	s.bridgeState = req
 	s.bridgeMu.Unlock()
 
@@ -2980,6 +3199,7 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 	var req struct {
 		Mode    string `json:"mode"` // "page" or "all"
 		Exclude string `json:"exclude"`
+		Scope   string `json:"scope"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	if req.Mode == "" {
@@ -3026,13 +3246,20 @@ func (s *AgentServer) handleAwxBridgeCollect(w http.ResponseWriter, r *http.Requ
 		s.bridgeMu.Unlock()
 	}()
 
+	cmdData := map[string]interface{}{
+		"requestId": reqID,
+		"mode":      req.Mode,
+		"exclude":   req.Exclude,
+	}
+	if strings.TrimSpace(req.Scope) != "" {
+		st, sid, nk := normalizeAwxScope(req.Scope, "")
+		cmdData["scope"] = nk
+		cmdData["scopeType"] = st
+		cmdData["scopeId"] = sid
+	}
 	s.wsHub.BroadcastJSON(map[string]interface{}{
 		"event": "AWX_BRIDGE_COMMAND",
-		"data": map[string]interface{}{
-			"requestId": reqID,
-			"mode":      req.Mode,
-			"exclude":   req.Exclude,
-		},
+		"data":  cmdData,
 	})
 
 	waitTimeout := 22 * time.Second
