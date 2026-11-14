@@ -2,8 +2,7 @@
   <ac:rich-text-body>
     <p><strong>도구명:</strong> ip_change (<code>bin/ip-change-engine</code> + <code>scripts/run_ip_change.sh</code>) — RHEL 노드 IP · 게이트웨이 일괄 변경 엔진</p>
     <p><strong>양식 유형:</strong> T3 (설정 변경 · 적용 엔진형)</p>
-    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/ip_change/</code></p>
-    <p><strong>동작 환경 및 의존성:</strong> 관리 노드 Go 1.26.5(외부 의존성 없음, 폐쇄망 <code>bin/ip-change-engine_os6</code> 내장) + <code>gossh</code> v2 필수 / 대상 노드 <code>bash</code> · <code>awk</code> · <code>sed</code> · <code>hostname -I</code>(또는 <code>ip</code>)</p>
+    <p><strong>동작 환경 및 의존성:</strong> 관리 노드 사전 빌드 바이너리(<code>bin/ip-change-engine</code> 또는 RHEL 6용 <code>bin/ip-change-engine_os6</code>) + <code>gossh</code> v2 필수 / 대상 노드 <code>bash</code> · <code>awk</code> · <code>sed</code> · <code>hostname -I</code>(또는 <code>ip</code>)</p>
     <p><strong>연계 도구:</strong> <code>gossh</code> v2 (원격 실행 전달), <code>auto_setup</code> (TUI <code>m</code> 변경 메뉴 <code>1 IP 변경</code> · <code>3 IP+LDAP 변경</code> · <code>4 원복</code>)</p>
     <p><strong>한 줄 요약:</strong> RHEL 대상 노드의 ifcfg 파일 전체를 덮어쓰지 않고 <code>IPADDR</code> · <code>GATEWAY</code> 두 키만 수술적으로 갱신·백업(<code>.bak.&lt;시각&gt;</code>)·롤백하는 병렬 IP 변경 도구입니다.</p>
   </ac:rich-text-body>
@@ -12,7 +11,7 @@
 <ac:structured-macro ac:name="toc"/>
 
 <h2>1. 개요 및 변경 대상 (실제 수정하는 파일·방식)</h2>
-<p><code>ip_change</code>는 Red Hat Enterprise Linux(RHEL) 다수 노드의 서비스 IP 및 게이트웨이 설정을 일괄 변경하기 위해 설계된 Go 기반 엔진과 Bash 래퍼 세트입니다. 관리 노드에서 대상 전체를 포함한 단일 <code>apply</code> 스크립트를 생성한 뒤 <code>gossh</code> v2를 통해 대상 노드에 base64 인코딩 형태로 전송·실행합니다.</p>
+<p><code>ip_change</code>는 Red Hat Enterprise Linux(RHEL) 다수 노드의 서비스 IP 및 게이트웨이 설정을 일괄 변경하기 위해 설계된 사전 빌드 실행 바이너리(<code>bin/ip-change-engine</code>)와 Bash 래퍼 세트입니다. 관리 노드에서 대상 전체를 포함한 단일 <code>apply</code> 스크립트를 생성한 뒤 <code>gossh</code> v2를 통해 대상 노드에 base64 인코딩 형태로 전송·실행합니다.</p>
 
 <h3>1.1 실제 수정 대상 및 동작 원칙</h3>
 <table>
@@ -59,34 +58,28 @@
 
 <ac:structured-macro ac:name="note">
   <ac:rich-text-body>
-    <p><strong>SSH 불통 VM과의 구분:</strong> <code>ip_change</code>는 대상 노드에 <code>gossh</code>(SSH)로 접속할 수 있어야 동작합니다. IP 오할당 등으로 네트워크 접속 자체가 불가능한 RHEL 8.10 VM의 IP를 변경할 때는 vCenter Guest Operations API 기반의 <code>vm-ip-change</code>(<code>.claude/VM/vCenter API IP 자동변경</code>)를 사용해야 합니다.</p>
+    <p><strong>SSH 불통 VM과의 구분:</strong> <code>ip_change</code>는 대상 노드에 <code>gossh</code>(SSH)로 접속할 수 있어야 동작합니다. IP 오할당 등으로 네트워크 접속 자체가 불가능한 RHEL 8.10 VM의 IP를 변경할 때는 vCenter Guest Operations API 기반의 <code>vm-ip-change</code>를 사용해야 합니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
-<h2>2. 사전 준비 · 빌드 · 입력 파일 구성</h2>
+<h2>2. 사전 준비 · 바이너리 배치 · 입력 파일 구성</h2>
 
-<h3>2.1 실행 환경 및 빌드 (폐쇄망 지원)</h3>
-<p>이 프로젝트는 Go 표준 라이브러리만 사용하며 외부 모듈 의존성이 없어 <code>vendor/</code> 디렉터리 없이도 폐쇄망에서 오프라인 빌드가 가능합니다. 또한 <code>CGO_ENABLED=0</code> 정적 빌드로 생성되어 구형 배포판에서도 glibc 버전과 무관하게 동작하며, 대상 노드에는 Go가 필요 없습니다.</p>
+<h3>2.1 실행 환경 및 사전 빌드 바이너리 배치</h3>
+<p><code>ip_change</code>는 사전 빌드된 정적 실행 바이너리로 제공되므로 관리 노드에 배치한 뒤 실행 권한을 부여해 바로 사용합니다. 대상 노드에는 추가 런타임이 필요하지 않으며, OS 환경에 맞는 바이너리를 선택합니다.</p>
 
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1) 저장소 다운로드 및 이동
-git clone https://github.com/qazx2675/myrepo.git
-cd "myrepo/.claude/HPC/ip_change"
+  <ac:plain-text-body><![CDATA[# 1) 작업 디렉터리 이동 및 사전 빌드 바이너리·래퍼 실행 권한 부여
+cd /경로/ip_change
+chmod +x bin/ip-change-engine bin/ip-change-engine_os6 scripts/*.sh
 
-# 2) 폐쇄망 오프라인 빌드 (GOPROXY=off, CGO_ENABLED=0) -> bin/ip-change-engine 생성 및 scripts/*.sh 권한 부여
-./setup.sh
-
-# (수동 빌드 시)
-CGO_ENABLED=0 go build -o bin/ip-change-engine ./cmd/ip-change-engine
-
-# 3) 단위 테스트 확인
-go test ./...]]></ac:plain-text-body>
+# 2) OS 버전에 맞는 바이너리 동작 확인 (RHEL 8+ -> ip-change-engine / RHEL 6 -> ip-change-engine_os6)
+./bin/ip-change-engine -h]]></ac:plain-text-body>
 </ac:structured-macro>
 
 <ul>
-  <li><strong>RHEL 6 사전 빌드 바이너리:</strong> 저장소의 <code>bin/ip-change-engine_os6</code>에 RHEL 6용 정적 바이너리가 커밋되어 있어 Go가 없는 RHEL 6 관리 서버에서도 그대로 실행할 수 있습니다.</li>
-  <li><strong><code>auto_setup</code> 통합 설치 시:</strong> <code>os8_mgmt</code>에서 <code>auto_setup</code>의 <code>bash setup.sh</code>를 실행하면 <code>ip-change-engine</code>이 함께 빌드되어 <code>/usr/local/bin/ip-change-engine</code>에 설치되고, <code>/etc/auto_setup/ip_change.conf</code> 샘플이(기존 파일이 없을 때만) 복사됩니다.</li>
+  <li><strong>RHEL 6 관리 노드:</strong> <code>bin/ip-change-engine_os6</code> 정적 바이너리를 그대로 실행할 수 있습니다.</li>
+  <li><strong><code>auto_setup</code> 연동 배치:</strong> <code>os8_mgmt</code>에서 <code>auto_setup</code>과 함께 사용할 때는 <code>/usr/local/bin/ip-change-engine</code>에 실행 바이너리를 배치하고 <code>/etc/auto_setup/ip_change.conf</code>를 준비합니다.</li>
 </ul>
 
 <h3>2.2 설정 파일 및 대상 목록 준비</h3>
@@ -108,7 +101,7 @@ hostname2 2.2.2.2]]></ac:plain-text-body>
 
 <ac:structured-macro ac:name="note">
   <ac:rich-text-body>
-    <p><strong>래퍼 사용 시 필수 수정 항목:</strong> <code>scripts/run_ip_change.sh</code>의 <code>select_user_context()</code> 함수는 의도적으로 비워져 있습니다(<code>:</code>). 래퍼로 실행하려면 이 함수 안에 계정 선택 로직을 채우고 전역 변수 <code>RUN_USER</code>에 계정명을 대입해야 <code>conf/${RUN_USER}.txt</code>를 정상 로드합니다. 실제 IP 목록 파일은 <code>.gitignore</code>로 커밋이 차단되어 있습니다.</p>
+    <p><strong>래퍼 사용 시 필수 수정 항목:</strong> <code>scripts/run_ip_change.sh</code>의 <code>select_user_context()</code> 함수는 의도적으로 비워져 있습니다(<code>:</code>). 래퍼로 실행하려면 이 함수 안에 계정 선택 로직을 채우고 전역 변수 <code>RUN_USER</code>에 계정명을 대입해야 <code>conf/${RUN_USER}.txt</code>를 정상 로드합니다. 실제 작업용 IP 목록 파일(<code>conf/&lt;계정명&gt;.txt</code>)은 운영 환경에 맞게 직접 작성해 사용하십시오.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 

@@ -2,10 +2,9 @@
   <ac:rich-text-body>
     <p><strong>도구명:</strong> setup_check (<code>new_setup</code> / <code>new_setup.sh</code>) — 신규 OS 배포 후 설치 상태 판정 및 <code>config_check</code> · <code>stress-test</code> 자동 연계 도구</p>
     <p><strong>양식 유형:</strong> T2 (설치 판정 · 파이프라인 연계형)</p>
-    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/setup_check/</code></p>
-    <p><strong>주요 파일:</strong> <code>bin/new_setup</code> (os8 정적 바이너리), <code>bin/new_setup_os6</code> (옛 RHEL6용), <code>new_setup.sh</code>, <code>setup.sh</code>, <code>troubleshoot.sh</code>, <code>new_setup.conf.sample</code></p>
+    <p><strong>주요 파일:</strong> <code>bin/new_setup</code> (os8 정적 바이너리), <code>bin/new_setup_os6</code> (옛 RHEL6용), <code>new_setup.sh</code>, <code>setup.sh</code> (설정 생성 마법사), <code>troubleshoot.sh</code>, <code>new_setup.conf.sample</code></p>
     <p><strong>연계 도구:</strong> <code>gossh</code> (1차/2차 원격 수집), <code>config_check</code> (<code>-auto-check</code> 점검 / <code>-auto</code> 설정수정), <code>stress-test</code> (<code>-batch</code> / <code>-yaml-state</code> 부하 실행)</p>
-    <p><strong>한 줄 요약:</strong> 신규 OS 배포 후 <code>gossh</code>로 장비별 설치 상태 5종(<code>완료</code>/<code>디스크미인식</code>/<code>설치정지</code>/<code>OS설치중</code>/<code>접속불가</code>)과 설정체크·CPU·stress-ng·H/T·OS 8열 표를 산출하고, <code>-run</code> 모드로 <code>config_check</code> 설정수정부터 <code>stress-test</code> 부하테스트까지 TUI/자동 진행으로 이어 주는 Go 도구입니다.</p>
+    <p><strong>한 줄 요약:</strong> 신규 OS 배포 후 <code>gossh</code>로 장비별 설치 상태 5종(<code>완료</code>/<code>디스크미인식</code>/<code>설치정지</code>/<code>OS설치중</code>/<code>접속불가</code>)과 설정체크·CPU·stress-ng·H/T·OS 8열 표를 산출하고, <code>-run</code> 모드로 <code>config_check</code> 설정수정부터 <code>stress-test</code> 부하테스트까지 TUI/자동 진행으로 이어 주는 CLI/TUI 도구입니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
@@ -50,10 +49,10 @@
          → [5 완료: ./<호스트파일>_run/result.txt 저장]]]></ac:plain-text-body>
 </ac:structured-macro>
 
-<h2>2. 사전 준비 및 폐쇄망 바이너리 / 대화형 설정</h2>
+<h2>2. 사전 준비 및 바이너리 배치 / 대화형 설정</h2>
 
-<h3>2.1 폐쇄망 환경: 사전 빌드 바이너리 사용</h3>
-<p>Go가 없는 폐쇄망 환경에서는 저장소에 함께 커밋된 바이너리를 사용합니다. 표준 라이브러리만 사용하므로 <code>vendor/</code>가 필요 없으며, 래퍼 스크립트 <code>new_setup.sh</code>가 <code>/etc/redhat-release</code>를 읽어 OS에 맞는 바이너리를 자동 선택합니다.</p>
+<h3>2.1 사전 빌드 바이너리 사용 (빌드 불필요)</h3>
+<p>사전 빌드된 정적 바이너리가 함께 제공되므로 <strong>별도 빌드 과정 없이</strong> 바로 배치하여 실행할 수 있습니다. 래퍼 스크립트 <code>new_setup.sh</code>가 <code>/etc/redhat-release</code>를 읽어 OS에 맞는 바이너리를 자동 선택합니다.</p>
 <table>
   <thead>
     <tr>
@@ -71,22 +70,18 @@
     <tr>
       <td><code>bin/new_setup_os6</code></td>
       <td><code>os6_mgmt</code> (RHEL 6)</td>
-      <td><strong>구버전(v2 시기, 2026-11-04부터 재빌드 중단).</strong> 탭 출력이며 제목줄·<code>NOTRUN</code>·AMD 규칙·<code>-run</code>·<code>-doctor</code> 미지원</td>
+      <td><strong>구버전(v2 시기, 2026-11-04부터 업데이트 중단).</strong> 탭 출력이며 제목줄·<code>NOTRUN</code>·AMD 규칙·<code>-run</code>·<code>-doctor</code> 미지원</td>
     </tr>
   </tbody>
 </table>
 
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 폐쇄망 배치 후 권한 확인
-cd ".claude/HPC/setup_check"
+  <ac:plain-text-body><![CDATA[# 배치 폴더에서 실행 권한 부여
 chmod +x new_setup.sh setup.sh troubleshoot.sh bin/new_setup bin/new_setup_os6
 
 # (선택) 전역 심볼릭 링크 — 복사 대신 링크 권장 (래퍼 위치 기준으로 bin/과 conf 탐색)
-ln -s "$(pwd)/new_setup.sh" /usr/local/bin/new_setup
-
-# (Go 환경에서 소스 수정 후 재빌드 시 — os8만 빌드해 커밋)
-bash build.sh]]></ac:plain-text-body>
+ln -s "$(pwd)/new_setup.sh" /usr/local/bin/new_setup]]></ac:plain-text-body>
 </ac:structured-macro>
 
 <h3>2.2 최초 대화형 설정 도우미 (<code>setup.sh</code>)</h3>

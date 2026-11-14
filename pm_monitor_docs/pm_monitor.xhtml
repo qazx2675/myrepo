@@ -2,7 +2,7 @@
   <ac:parameter ac:name="title">pm_monitor — 대규모 베어메탈 OS 설치 모니터링 TUI</ac:parameter>
   <ac:rich-text-body>
     <p><strong>요약</strong>: 폐쇄망 HPC 베어메탈 노드의 OS 설치 진행 상태를 최대 8,000대 규모까지 단일 TUI 화면에서 주기 추적하는 도구입니다. Raw ICMP Ping, TCP 22번 포트, <code>gossh -pm</code>, <code>/tmp/anaconda.log</code> 디스크 미인식 점검을 5단계로 수행하며, <code>c</code>(현황 코멘트)·<code>r</code>(지연 점검 요청)·<code>d</code>(DHCP 조회)·<code>l</code>(LDAP·DNS·NTP·autofs·H/T 점검) 패널을 제공합니다.</p>
-    <p><strong>저장소 기준</strong>: <code>origin/master</code> · <code>.claude/HPC/pm_monitor</code> (Go 1.20 정적 바이너리 <code>install_mn_os8</code> 포함)</p>
+    <p><strong>실행 구성</strong>: 사전 빌드된 정적 바이너리 <code>install_mn_os8</code> 및 래퍼 스크립트 <code>install_mn.sh</code> (RHEL 8+ <code>linux/amd64</code>, root 권한 필수)</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
@@ -74,7 +74,7 @@
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">text</ac:parameter>
   <ac:parameter ac:name="title">pm_monitor 수집 및 온디맨드 연동 경로</ac:parameter>
-  <ac:plain-text-body><![CDATA[[호스트 목록 파일] ──▶ pm_monitor (root, Go 1.20 정적 바이너리)
+  <ac:plain-text-body><![CDATA[[호스트 목록 파일] ──▶ pm_monitor (root, 정적 바이너리 install_mn_os8)
                           │
    ┌──────────────────────┴──────────────────────────────────────┐
    ▼ 주기 수집 (interval_sec, 중첩 실행 없음)                      ▼ 온디맨드 패널
@@ -87,9 +87,9 @@
 
 <hr/>
 
-<h2>2. 사전준비 · 폐쇄망 바이너리/빌드 · 권한 및 환경설정</h2>
+<h2>2. 사전준비 · 바이너리 배치 · 권한 및 환경설정</h2>
 
-<h3>2.1 실행 파일 구성 및 폐쇄망 바이너리</h3>
+<h3>2.1 실행 파일 및 설정 샘플 구성</h3>
 <table>
   <thead>
     <tr>
@@ -101,18 +101,13 @@
   <tbody>
     <tr>
       <td><code>install_mn_os8</code></td>
-      <td>OS8(RHEL8 계열 <code>linux/amd64</code>) 정적 빌드 바이너리</td>
-      <td>저장소에 사전 빌드 포함되어 커밋됨 (폐쇄망에서 Go 없이 즉시 실행 가능). OS6용 바이너리는 지원하지 않음</td>
+      <td>OS8(RHEL8 계열 <code>linux/amd64</code>) 실행 바이너리</td>
+      <td>사전 빌드된 정적 바이너리로 제공되어 별도 빌드 없이 즉시 실행 가능 (OS6 미지원)</td>
     </tr>
     <tr>
       <td><code>install_mn.sh</code></td>
       <td>실행 래퍼 스크립트</td>
-      <td>심볼릭 링크 실제 경로 추적. <code>install_mn_os8</code>이 없으면 <code>go</code> 명령어 탐색 후 <code>build.sh</code> 자동 실행, <code>go</code>도 없으면 종료 코드 <code>2</code> 반환</td>
-    </tr>
-    <tr>
-      <td><code>build.sh</code></td>
-      <td>빌드 및 검증 스크립트 (<code>go.mod</code>: <code>go 1.20</code>)</td>
-      <td>기본: <code>go vet</code> + <code>go test</code> + <code>install_mn_os8</code> 빌드. <code>-n</code> 옵션 시 <code>vet</code>/<code>test</code> 생략</td>
+      <td>심볼릭 링크의 실제 경로를 추적해 같은 디렉터리의 <code>install_mn_os8</code>을 실행 (바이너리 미존재 시 종료 코드 <code>2</code> 반환)</td>
     </tr>
     <tr>
       <td><code>pm_monitor.conf.sample</code></td>
@@ -131,16 +126,15 @@
 <p><code>install_mn.sh</code>는 <code>readlink -f</code>로 실제 디렉터리를 찾아 <code>install_mn_os8</code>을 실행하므로 파일 복사(<code>cp</code>)가 아니라 반드시 <strong>심볼릭 링크</strong>로 등록해야 합니다. 또한 root 권한이 필요합니다(Raw ICMP 소켓 생성 때문; 비-root 실행 시 종료 코드 <code>1</code>).</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:parameter ac:name="title">전역 명령 등록 및 설정 파일 준비</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1. 전역 명령 심볼릭 링크 생성 (복사 금지)
+  <ac:parameter ac:name="title">실행 권한 부여 · 전역 심볼릭 링크 등록 및 설정 준비</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. 실행 권한 부여
+chmod +x install_mn.sh install_mn_os8
+
+# 2. 전역 명령 심볼릭 링크 생성 (복사 금지)
 ln -s "$(pwd)/install_mn.sh" /usr/local/bin/install_mn
 
-# 2. 설정 파일 복사 (호스트 파일 실행 디렉터리에 두거나 -c 로 지정)
-cp pm_monitor.conf.sample pm_monitor.conf
-
-# 3. 필요 시 재빌드 (폐쇄망에서는 기본 포함된 install_mn_os8 그대로 사용 가능)
-bash build.sh
-# vet/test 생략 빌드: bash build.sh -n]]></ac:plain-text-body>
+# 3. 설정 파일 복사 (호스트 파일 실행 디렉터리에 두거나 -c 로 지정)
+cp pm_monitor.conf.sample pm_monitor.conf]]></ac:plain-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="note">
@@ -198,7 +192,7 @@ bash demo/demo.sh -n 8000 -name demo2]]></ac:plain-text-body>
     </tr>
     <tr>
       <td><code>2</code></td>
-      <td>필수 인자 누락·잘못된 옵션, 호스트 파일이 디렉터리이거나 접근 불가(사용법 출력), 또는 <code>install_mn.sh</code> 실행 시 <code>install_mn_os8</code>과 <code>go</code>가 모두 없음</td>
+      <td>필수 인자 누락·잘못된 옵션, 호스트 파일이 디렉터리이거나 접근 불가(사용법 출력), 또는 <code>install_mn.sh</code> 실행 시 같은 디렉터리에 실행 가능한 <code>install_mn_os8</code>이 없음</td>
     </tr>
   </tbody>
 </table>

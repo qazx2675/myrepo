@@ -2,9 +2,8 @@
   <ac:rich-text-body>
     <p><strong>도구명:</strong> survey (<code>survey</code> + <code>run_survey.sh</code>) — 표1 기반 자산 설정·인프라망·ESXi/VM 일괄 조사 도구</p>
     <p><strong>양식 유형:</strong> T2 (점검 · 수집형)</p>
-    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/조사/survey/</code></p>
     <p><strong>주요 파일:</strong> <code>dist/survey</code>, <code>dist/survey-rhel6</code>, <code>run_survey.sh</code>, <code>conf/conf.toml</code>, <code>scripts/infra_survey.sh</code>, <code>update.sh</code></p>
-    <p><strong>동작 환경 및 의존성:</strong> RHEL/Rocky (표준 라이브러리만 사용, <code>vendor</code> 불필요; RHEL 6 바이너리는 <strong>Go 1.20.x</strong> 필수), <code>gossh</code>, B→A 재조사 사용 시 패스워드리스 SSH + 공유 autofs 경로 + A 서버 <code>gossh</code></p>
+    <p><strong>동작 환경 및 의존성:</strong> RHEL/Rocky 6 이상 (사전 빌드 정적 바이너리 사용, 별도 빌드·외부 패키지 불필요), <code>gossh</code>, B→A 재조사 사용 시 패스워드리스 SSH + 공유 autofs 경로 + A 서버 <code>gossh</code></p>
     <p><strong>한 줄 요약:</strong> 표1(자산양식) 텍스트의 <code>hostname</code> 열 전체를 <code>gossh</code>로 병렬 조사하고 A/B 서버 재조사 및 ESXi/VM 2차 조사까지 결합해 엑셀 붙여넣기용 7열 TSV 파일(<code>result_*.tsv</code>, <code>_vm_</code>, <code>_sdc_</code>)로 저장합니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
@@ -37,15 +36,15 @@
   - result_sdc_YYYYMMDD_HHMM.tsv   (인프라망 == SDC 호스트가 있을 때만 분리)]]></ac:plain-text-body>
 </ac:structured-macro>
 
-<h2>2. 사전 준비 및 폐쇄망 바이너리 / 빌드</h2>
+<h2>2. 사전 준비 및 바이너리 배치</h2>
 
-<h3>2.1 폐쇄망 환경: 사전 빌드 바이너리 사용 및 배치</h3>
-<p>저장소에는 사전 빌드된 바이너리(<code>dist/survey</code>, <code>dist/survey-rhel6</code>)가 포함되어 있으며, 표준 라이브러리만 사용하므로 <code>go mod download</code>나 <code>vendor/</code> 없이도 폐쇄망에서 빌드할 수 있습니다.</p>
+<h3>2.1 사전 빌드 바이너리 확인 및 디렉터리 구조</h3>
+<p>사전 빌드된 정적 바이너리(<code>dist/survey</code>, RHEL 6용 <code>dist/survey-rhel6</code>)가 함께 제공되므로 <strong>별도 빌드 과정 없이</strong> 바로 배치하여 실행할 수 있습니다.</p>
 <p>설치 디렉터리에는 항상 실행 파일과 같은 위치 기준으로 아래 구조를 유지해 배치합니다(<code>survey</code>는 항상 실행 파일 옆의 <code>conf/conf.toml</code> 하나만 읽습니다).</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">text</ac:parameter>
   <ac:plain-text-body><![CDATA[설치폴더/
-├── survey                  (또는 dist/survey, A 서버용 dist/survey-rhel6)
+├── survey                  (dist/survey 복사본, A 서버가 RHEL 6인 경우 dist/survey-rhel6 → survey-rhel6)
 ├── run_survey.sh
 ├── conf/
 │   └── conf.toml           (유일한 설정 파일)
@@ -53,20 +52,22 @@
     └── infra_survey.sh     (조사 대상 호스트에 배포할 인프라망 판별 샘플 → 사내 규칙에 맞게 교체)]]></ac:plain-text-body>
 </ac:structured-macro>
 
-<h3>2.2 소스 빌드 및 폐쇄망 증분 업데이트 (<code>update.sh</code>)</h3>
+<h3>2.2 실행 권한 부여 · 바이너리 배치 및 증분 업데이트 (<code>update.sh</code>)</h3>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[cd ".claude/HPC/조사/survey"
+  <ac:plain-text-body><![CDATA[# 1) 설치 폴더에서 바이너리 배치 및 실행 권한 부여
+cd /경로/survey
+cp dist/survey ./survey
+cp dist/survey-rhel6 ./survey-rhel6   # A 서버가 RHEL 6인 경우
+chmod +x survey survey-rhel6 run_survey.sh scripts/infra_survey.sh update.sh
 
-# 일반 빌드 (Go 1.20+, 네트워크 불필요)
-go build -o survey ./cmd/survey
+# 2) 기존 설치 폴더(/root/HPC/조사)에 변경분만 증분 업데이트 (conf.toml, result_*.tsv, asset_list.txt, 기존 바이너리 보존)
+/tmp/survey-new/update.sh /root/HPC/조사
 
-# RHEL 6 대상 정적 빌드 (반드시 Go 1.20.x 사용 — Go 1.21+는 커널 3.2+ 요구로 RHEL 6 실행 불가)
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o survey-rhel6 ./cmd/survey
-
-# 폐쇄망 기존 설치 폴더(/root/HPC/조사)에 변경분만 증분 업데이트 (conf.toml, result_*.tsv, asset_list.txt 보존)
-/tmp/survey-new/.claude/HPC/조사/survey/update.sh /root/HPC/조사
-(cd /root/HPC/조사 && go build -o survey ./cmd/survey)]]></ac:plain-text-body>
+# update.sh는 기존 survey / survey-rhel6 바이너리를 보존하므로 바이너리 교체가 필요하면 dist/에서 복사
+cp /root/HPC/조사/dist/survey /root/HPC/조사/survey
+cp /root/HPC/조사/dist/survey-rhel6 /root/HPC/조사/survey-rhel6
+chmod +x /root/HPC/조사/survey /root/HPC/조사/survey-rhel6]]></ac:plain-text-body>
 </ac:structured-macro>
 
 <h3>2.3 A·B 서버 연동 사전 조건 (<code>run_survey.sh</code> 전용)</h3>
@@ -276,7 +277,7 @@ DEBUG=1 ./run_survey.sh
     <ul>
       <li><strong>참고용 보조 도구:</strong> 본 수집 도구는 100% 신뢰하기보다 참고용으로 활용하세요. 만약 설정 변경 스크립트를 함께 운용할 경우 변경 후 무작위로 몇 대의 서버에 직접 접속해 반영 여부를 검증해야 합니다.</li>
       <li><strong>원격 셸 <code>csh</code> 호환성:</strong> <code>infra_net</code>은 <code>bash &lt;경로&gt;</code>로 실행되고 <code>config_value</code>/<code>uname</code>/<code>binddn</code> 명령은 <code>csh</code>에서도 동작합니다. 인프라망 값이 비거나 이상할 때는 셸 문제보다 <code>infra_regex</code> 패턴이 실제 스크립트 출력과 맞는지 먼저 확인하세요.</li>
-      <li><strong><code>gossh</code> 출력 형식 의존:</strong> 결과 파싱은 pdsh 형식(<code>hostname: 결과</code>)을 전제로 하므로 <code>gossh</code> 출력 포맷이 바뀌면 <code>cmd/survey/collect.go</code>의 <code>parsePdshLine</code>을 확인해야 합니다.</li>
+      <li><strong><code>gossh</code> 출력 형식 의존:</strong> 결과 파싱은 pdsh 형식(<code>hostname: 결과</code>)을 전제로 하므로 <code>gossh</code> 출력 포맷을 임의로 변경하지 않도록 주의하세요.</li>
       <li><strong>엑셀 활용 팁:</strong> 생성된 TSV 파일 내용을 복사해 엑셀에 붙여넣으면 탭 구분으로 셀이 자동 분리됩니다.</li>
     </ul>
   </ac:rich-text-body>

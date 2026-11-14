@@ -2,8 +2,7 @@
   <ac:rich-text-body>
     <p><strong>도구명:</strong> ldap_setting (<code>bin/ldap-config-engine</code> + <code>scripts/deploy_ldap.sh</code> · <code>scripts/run.sh</code>) — LDAP · DNS · NTP · autofs 설정 일괄 적용 엔진</p>
     <p><strong>양식 유형:</strong> T3 (설정 변경 · 적용 엔진형)</p>
-    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/ldap_setting/</code></p>
-    <p><strong>동작 환경 및 의존성:</strong> 관리 노드 Go 1.26.5(외부 의존성 없음, 폐쇄망 <code>bin/ldap-config-engine_os6</code> 내장) + <code>gossh</code> v2 필수 / 대상 노드 <code>bash</code> · <code>awk</code> · <code>sed</code> (<code>jq</code> · Go 불필요)</p>
+    <p><strong>동작 환경 및 의존성:</strong> 관리 노드 사전 빌드 바이너리(<code>bin/ldap-config-engine</code> 또는 RHEL 6용 <code>bin/ldap-config-engine_os6</code>) + <code>gossh</code> v2 필수 / 대상 노드 <code>bash</code> · <code>awk</code> · <code>sed</code> (<code>jq</code> · 추가 런타임 불필요)</p>
     <p><strong>연계 도구:</strong> <code>ldap_check</code> (사후 3중 교차검증 짝), <code>gossh</code> v2 (base64 + spaceOut 전송), <code>auto_setup</code> (TUI <code>m</code> 변경 메뉴 <code>2 LDAP 변경</code> · <code>3 IP+LDAP 변경</code> · <code>4 원복</code> · <code>5 auto.appl 원복</code>)</p>
     <p><strong>한 줄 요약:</strong> 자산현황(<code>hostname&lt;TAB&gt;site</code>)을 기준으로 사이트별 스크립트를 생성해 7종 인증·이름해석·마운트 설정 파일을 키 단위로 갱신하고 <code>ldap_check</code>로 검증하는 엔진입니다.</p>
   </ac:rich-text-body>
@@ -78,29 +77,21 @@
   <li><strong><code>ldap_check</code>와 짝 구조:</strong> 적용 로직(<code>apply_body.sh</code>)과 검증 로직(<code>../ldap_check/ldap_check.sh</code>)이 동일한 <code>ldap_config.conf</code> 스키마를 공유합니다.</li>
 </ul>
 
-<h2>2. 사전 준비 · 빌드 · 입력 파일 · 보안 관리</h2>
+<h2>2. 사전 준비 · 바이너리 배치 · 입력 파일 · 보안 관리</h2>
 
-<h3>2.1 오프라인 빌드 및 코드 업데이트 (<code>setup.sh</code> · <code>update.sh</code>)</h3>
-<p>외부 의존성이 없는 순수 Go(<code>go.mod</code> 1.26.5, <code>CGO_ENABLED=0</code>) 프로젝트이므로 폐쇄망에서 인터넷 없이 빌드됩니다. RHEL 6 관리 노드를 위한 사전 빌드 바이너리 <code>bin/ldap-config-engine_os6</code>도 저장소에 포함되어 있습니다. <code>gossh</code>는 반드시 v2를 사용하십시오(<code>gossh -h</code>에 <code>-cf</code>, <code>-b</code> 확인).</p>
+<h3>2.1 실행 환경 및 사전 빌드 바이너리 배치</h3>
+<p><code>ldap_setting</code>은 사전 빌드된 정적 실행 바이너리(<code>bin/ldap-config-engine</code> 및 RHEL 6 관리 노드용 <code>bin/ldap-config-engine_os6</code>)로 제공되므로 관리 노드에 배치한 뒤 실행 권한만 부여하면 바로 사용할 수 있습니다. 원격 전송 엔진인 <code>gossh</code>는 반드시 v2를 사용하십시오(<code>gossh -h</code>에 <code>-cf</code>, <code>-b</code> 옵션 확인).</p>
 
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1) 최초 빌드
-git clone https://github.com/qazx2675/myrepo.git
-cd "myrepo/.claude/HPC/ldap_setting"
-./setup.sh                  # GOPROXY=off, CGO_ENABLED=0 -> bin/ldap-config-engine 생성
+  <ac:plain-text-body><![CDATA[# 1) 작업 디렉터리 이동 및 사전 빌드 바이너리·래퍼 실행 권한 부여
+cd /경로/ldap_setting
+chmod +x bin/ldap-config-engine bin/ldap-config-engine_os6 scripts/*.sh
 
-# (수동 빌드)
-CGO_ENABLED=0 go build -o bin/ldap-config-engine ./cmd/ldap-config-engine
-
-# 2) 단위 테스트 및 무장비 왕복 회귀 테스트 (../ldap_check/ldap_check.sh 함께 필요)
-go test ./...
-./test_all.sh               # 다른 경로에 두었다면 CHECK=/경로/ldap_check.sh ./test_all.sh
-
-# 3) 이미 배포된 실 서버(예: /root/ldap_setting)의 코드만 갱신할 때 (conf 파일 보존)
-cd /root/ldap_setting
-./update.sh /tmp/myrepo/.claude/HPC/ldap_setting
-./setup.sh                  # 갱신 후 재빌드 필수]]></ac:plain-text-body>
+# 2) OS 버전에 맞는 바이너리 및 gossh v2 확인 (RHEL 8+ -> ldap-config-engine / RHEL 6 -> ldap-config-engine_os6)
+./bin/ldap-config-engine -h
+./scripts/deploy_ldap.sh -h
+gossh -h | grep -E '\-cf|\-b']]></ac:plain-text-body>
 </ac:structured-macro>
 
 <h3>2.2 설정 파일과 자산현황 준비 (<code>ldap_config.conf</code> · <code>assets.txt</code>)</h3>
@@ -122,7 +113,7 @@ svr002	a3]]></ac:plain-text-body>
   <ac:rich-text-body>
     <p><strong>비밀번호(<code>bindpw</code>) 및 파일 혼동 주의:</strong></p>
     <ul>
-      <li><code>conf/ldap_config.conf</code>에는 <code>bindpw</code>가 <strong>평문</strong>으로 들어가므로 권한을 반드시 <code>600</code>으로 유지하고 Git에 커밋하지 마십시오(<code>.gitignore</code> 등록됨). 또한 이 파일은 <code>../ldap_check/ldap_config.conf</code>와 내용이 동일해야 합니다.</li>
+      <li><code>conf/ldap_config.conf</code>에는 <code>bindpw</code>가 <strong>평문</strong>으로 들어가므로 권한을 반드시 <code>600</code>으로 유지하고 외부 공유·노출을 차단하십시오. 또한 이 파일은 <code>../ldap_check/ldap_config.conf</code>와 내용이 동일해야 합니다.</li>
       <li>원격 실행 시 적용 스크립트(<code>/root/ldap_apply.sh</code>, 권한 <code>600</code>, 실행 후 삭제)에 <code>bindpw</code>가 포함되며, 전송 순간 관리 노드의 <code>ps</code>에 base64 문자열이 잠깐 보일 수 있습니다.</li>
       <li><strong><code>assets.txt</code> vs <code>{계정명}.txt</code>(<code>-host-file</code>):</strong> <code>{계정명}.txt</code>는 사이트 정보가 없는 순수 hostname 선별 목록이고, 실제 <code>site</code> 판정은 <strong>항상 <code>assets.txt</code>에서만 조회</strong>합니다(자산현황에 없는 VM은 <code>ev01~ev03</code> 접미사를 떼고 BM 재조회 후 없으면 <code>default_site</code> 적용, 모두 없으면 경고 후 건너뜀).</li>
     </ul>

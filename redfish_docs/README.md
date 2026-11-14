@@ -1,18 +1,15 @@
-# `redfish` (`biostool` v0.1.0) Confluence 업로드 안내
+# `redfish` (`biostool` v0.1.0) — 위키 문서 업로드 안내
 
-- **원본 경로 (`origin/master`)**: `.claude/HPC/redfish`
-- **대상 브랜치**: `confluence` 브랜치 / `redfish_docs/` 폴더
-- **양식 유형**: T3 (설정 변경 / 프로비저닝 엔진, Go + Bash 래퍼)
+- **양식 유형**: T3 (설정 변경 / 프로비저닝 엔진, 사전 빌드 바이너리 + Bash 래퍼)
 - **포함 파일**:
-  - [`redfish.xhtml`](redfish.xhtml): Confluence Storage Format 본문 (루트 래퍼 없음)
-  - [`README.md`](README.md): 업로드 및 활용 가이드
+  - [`redfish.xhtml`](redfish.xhtml): 위키 Storage Format 본문 프래그먼트 (루트 래퍼 없음)
+  - [`README.md`](README.md): 본 업로드 가이드
 
-> **주의**: v0.1.0은 실제 물리 BMC에 아직 연결 테스트되지 않았으며 모의 BMC 및 덤프 기반 검증만 완료되었습니다. 실장비 연결 전 반드시 원본 저장소의 `FIRST_RUN.md`를 확인하십시오.
+> **주의**: v0.1.0은 실제 물리 BMC에 아직 연결 테스트되지 않았으며 모의 BMC 및 덤프 기반 검증만 완료되었습니다. 실장비 연결 전 반드시 프로젝트 루트의 `FIRST_RUN.md`를 확인하십시오.
 
-## Confluence에 업로드(붙여넣기)하는 방법
+## 사내 위키에 업로드(붙여넣기)하는 방법
 
-1. Confluence에서 대상 문서를 열거나 **새 페이지 만들기**를 클릭합니다.
-2. 상단 우측 편집기 도구 모음에서 **소스 편집기(`< >` 또는 `Source Editor`)** 플러그인 아이콘을 엽니다. *(소스 편집기가 없는 경우 페이지 편집 시 Insert More Content → Markup 또는 Source Editor 앱 필요)*
-3. [`redfish.xhtml`](redfish.xhtml) 파일 전체 내용을 복사하여 소스 편집기에 그대로 붙여넣습니다.
-4. **적용(Apply)** 을 누른 뒤 매크로(`info`, `toc`, `code`, `warning`), 표(Table), 본문 한글이 정상 렌더링되는지 확인하고 저장합니다.
-5. 본 문서에는 최상위 `<root>` 래퍼가 제외되어 있으므로 별도 태그 삭제 없이 바로 붙여넣을 수 있습니다.
+1. [`redfish.xhtml`](redfish.xhtml) 파일의 전체 내용을 복사합니다. (외부 `<root>` 래퍼 없이 Storage Format 본문 프래그먼트만 저장되어 있습니다.)
+2. 사내 위키에서 새 페이지를 생성하거나 기존 페이지 **편집(Edit)** 화면으로 들어갑니다.
+3. 편집기 상단 툴바에서 **Source Editor(`<>`, 소스 편집기)** 또는 Storage Format 편집 창을 엽니다.
+4. 복사한 `.xhtml` 내용을 그대로 붙여넣고 **Apply / 적용** → 페이지 **저장**을 눌러 `info`, `toc`, `code`, `warning`, `note` 매크로와 표가 정상 렌더링되는지 확인합니다.

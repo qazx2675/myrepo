@@ -2,9 +2,8 @@
   <ac:rich-text-body>
     <p><strong>도구명:</strong> gossh (<code>gossh_os8</code> / <code>pdsh</code> 호환 병렬 SSH 실행 도구 v2)</p>
     <p><strong>양식 유형:</strong> T1 (단일 CLI 도구형)</p>
-    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/공통/gossh/</code></p>
-    <p><strong>주요 실행 파일:</strong> <code>gossh_os8</code> (RHEL/Rocky 8+ 정적 바이너리, Go 1.26, <code>CGO_ENABLED=0</code>), <code>setup.sh</code>, <code>update.sh</code></p>
-    <p><strong>연계 도구:</strong> <code>survey</code>(조사), <code>setup_check</code>, <code>stress-test</code>, <code>auto_setup</code>, <code>pm_monitor</code>, <code>config_check</code>, <code>OS 환경설정 체크</code>, <code>ip_change</code>, <code>ldap_setting</code>, <code>ldap_check</code>, <code>esxi-log-check</code> 등 저장소 내 다수 도구의 실행 엔진</p>
+    <p><strong>주요 실행 파일:</strong> <code>gossh_os8</code> (RHEL/Rocky 8+ 사전 빌드 정적 바이너리), <code>update.sh</code></p>
+    <p><strong>연계 도구:</strong> <code>survey</code>(조사), <code>setup_check</code>, <code>stress-test</code>, <code>auto_setup</code>, <code>pm_monitor</code>, <code>config_check</code>, <code>OS 환경설정 체크</code>, <code>ip_change</code>, <code>ldap_setting</code>, <code>ldap_check</code>, <code>esxi-log-check</code> 등 다수 운영·자동화 도구의 실행 엔진</p>
     <p><strong>한 줄 요약:</strong> <code>pdsh</code>·<code>clush</code> 스타일로 수천 대 서버에 병렬 SSH 명령 실행, 설정 변경(<code>-tmp</code>/<code>-limit</code>), 패키지 비교(<code>-rpm</code>), 다중 조사 표 생성(<code>-sv</code>), 대화형 접속(<code>-i</code>)까지 제공하는 고속 병렬 SSH CLI입니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
@@ -18,16 +17,16 @@
 </ac:structured-macro>
 
 <h2>1. 개요: 이게 뭐하는 도구인가요?</h2>
-<p><code>gossh</code>는 다수의 Linux 서버에 동시에 SSH 명령을 실행하고 결과를 <code>호스트명: 출력줄</code> 형태로 출력하는 Go 기반 병렬 SSH CLI 도구입니다. 저장소 내 여러 HPC·VM 자동화 도구(<code>조사</code>, <code>setup_check</code>, <code>stress-test</code>, <code>auto_setup</code>, <code>pm_monitor</code>, <code>config_check</code>, <code>ip_change</code>, <code>ldap_setting</code> 등)가 내부 서브프로세스로 호출하는 공통 기반 도구입니다.</p>
+<p><code>gossh</code>는 다수의 Linux 서버에 동시에 SSH 명령을 실행하고 결과를 <code>호스트명: 출력줄</code> 형태로 출력하는 병렬 SSH CLI 도구입니다. 여러 HPC·VM 자동화 도구(<code>조사</code>, <code>setup_check</code>, <code>stress-test</code>, <code>auto_setup</code>, <code>pm_monitor</code>, <code>config_check</code>, <code>ip_change</code>, <code>ldap_setting</code> 등)가 내부 서브프로세스로 호출하는 공통 기반 도구입니다.</p>
 <ul>
   <li><strong><code>pdsh</code>/<code>clush</code> 문법 호환:</strong> <code>-w hosts.txt</code>, <code>-whosts.txt</code>, <code>-w^hosts.txt</code> 및 NodeSet 범위 표기(<code>esxi[0001-0020]</code>, <code>qwer[2660,2671,2826-2829]</code>, 다차원 <code>hostname[0001-0002]ev[01-03]</code>)를 지원하며 <code>pdsh</code> 이름으로 심볼릭 링크해 사용할 수 있습니다.</li>
-  <li><strong>안정성 기능 내장:</strong> SSH 키 우선 인증 후 비밀번호 폴백, 순수 Go DNS 리졸버 선행 조회, 1차 접속불가 호스트 저동시성(최대 50) 재검증, <code>/user/</code> autofs 마운트 스톰 보호(동시성 450 제한), stdout/stderr 완전 분리, 원격 ANSI 제어코드 제거를 기본 제공합니다.</li>
+  <li><strong>안정성 기능 내장:</strong> SSH 키 우선 인증 후 비밀번호 폴백, 내장 DNS 리졸버 선행 조회, 1차 접속불가 호스트 저동시성(최대 50) 재검증, <code>/user/</code> autofs 마운트 스톰 보호(동시성 450 제한), stdout/stderr 완전 분리, 원격 ANSI 제어코드 제거를 기본 제공합니다.</li>
 </ul>
 
-<h2>2. 사전 준비 및 빌드 / 배포</h2>
+<h2>2. 사전 준비 및 바이너리 배치 / 배포</h2>
 
-<h3>2.1 폐쇄망 환경: 사전 빌드 바이너리(<code>gossh_os8</code>) 사용</h3>
-<p>이 저장소에는 <code>vendor/</code> 디렉터리가 없습니다. Go 컴파일러가 없는 폐쇄망에서는 소스를 빌드하지 않고 저장소에 포함된 정적 바이너리 <strong><code>gossh_os8</code></strong> (Go 1.26, <code>CGO_ENABLED=0</code>)을 그대로 복사해 사용합니다.</p>
+<h3>2.1 사전 빌드 바이너리(<code>gossh_os8</code>) 확인 및 권한 부여</h3>
+<p>별도의 빌드 과정 없이 함께 제공되는 정적 바이너리 <strong><code>gossh_os8</code></strong>에 실행 권한만 부여해 그대로 사용합니다.</p>
 <table>
   <thead>
     <tr>
@@ -40,7 +39,7 @@
     <tr>
       <td><code>gossh_os8</code></td>
       <td>RHEL 8 / Rocky 8 이상 (x86_64)</td>
-      <td>저장소 내 커밋된 정적 바이너리. OS8 관리 서버에서 구형 OS6 원격 서버로의 SSH 접속도 지원(3.6 참고)</td>
+      <td>사전 빌드 정적 바이너리. OS8 관리 서버에서 구형 OS6 원격 서버로의 SSH 접속도 지원(3.6 참고)</td>
     </tr>
     <tr>
       <td><em>(OS6용 바이너리)</em></td>
@@ -50,29 +49,17 @@
   </tbody>
 </table>
 
-<h3>2.2 온라인 환경 소스 빌드</h3>
-<p>소스를 수정한 경우 인터넷이 되는 환경에서 의존성(<code>golang.org/x/crypto</code>, <code>golang.org/x/sys</code>)을 내려받아 빌드한 뒤 <code>gossh_os8</code>을 갱신해 커밋해야 합니다.</p>
+<h3>2.2 시스템 전역 배포 (<code>update.sh</code> 또는 수동 복사)</h3>
+<p><code>update.sh</code> 상단의 <code>TARGET_SERVER</code>(대상서버 호스트명 또는 IP), <code>DEST1</code>(기본 <code>/usr/local/bin</code>), <code>DEST2</code>(기본 <code>/usr/bin/</code>)를 채운 뒤 해당 대상 서버 위에서 직접 실행하면 <code>gossh_os8</code>을 각각 <code>gossh</code>와 <code>pdsh</code>로 배포합니다.</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[cd ".claude/공통/gossh"
-
-# 1) 편의 스크립트로 빌드 (go mod download 후 go build -o gossh .)
-./setup.sh
-
-# 2) 또는 배포용 정적 바이너리 수동 빌드
-go mod download
-CGO_ENABLED=0 go build -o gossh_os8 .]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h3>2.3 시스템 전역 배포 (<code>update.sh</code> 또는 수동 복사)</h3>
-<p><code>update.sh</code> 상단의 <code>TARGET_SERVER</code>(대상서버 호스트명 또는 IP), <code>DEST1</code>(기본 <code>/usr/local/bin</code>), <code>DEST2</code>(기본 <code>/usr/bin/</code>)를 채운 뒤 해당 대상 서버 위에서 직접 실행하면 빌드는 하지 않고 <code>gossh_os8</code>을 각각 <code>gossh</code>와 <code>pdsh</code>로 배포합니다.</p>
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 방법 A: update.sh 사용 (TARGET_SERVER와 다른 서버에서 실행 시 거부됨)
+  <ac:plain-text-body><![CDATA[# 방법 A: 실행 권한 부여 후 update.sh 사용 (TARGET_SERVER와 다른 서버에서 실행 시 거부됨)
+chmod +x gossh_os8 update.sh
 vi update.sh     # TARGET_SERVER, DEST1, DEST2 확인
 ./update.sh      # 기존 파일 rm -f 후 복사 → 실행 중인 프로세스 Text file busy 방지
 
 # 방법 B: 수동 복사 및 pdsh 심볼릭 링크
+chmod +x gossh_os8
 sudo cp gossh_os8 /usr/local/bin/gossh
 sudo chmod 755 /usr/local/bin/gossh
 sudo ln -sf /usr/local/bin/gossh /usr/local/bin/pdsh]]></ac:plain-text-body>
@@ -171,7 +158,7 @@ sudo ln -sf /usr/local/bin/gossh /usr/local/bin/pdsh]]></ac:plain-text-body>
 </table>
 
 <h3>3.6 구형 SSH 서버 접속 지원 (RHEL 6 등)</h3>
-<p>옵션 없이 항상 최신 암호/키 교환을 먼저 제안하고 실패 시 구형 알고리즘(암호: <code>aes128-cbc</code>, <code>3des-cbc</code>, <code>arcfour256</code>, <code>arcfour128</code>, <code>arcfour</code> / 키 교환: <code>diffie-hellman-group16-sha512</code>, <code>group-exchange-sha256/sha1</code>, <code>group1-sha1</code>)으로 접속합니다. 단, Go SSH 라이브러리에 <code>blowfish-cbc</code>가 구현되어 있지 않아 <code>blowfish-cbc</code>만 제공하는 서버는 접속할 수 없습니다.</p>
+<p>옵션 없이 항상 최신 암호/키 교환을 먼저 제안하고 실패 시 구형 알고리즘(암호: <code>aes128-cbc</code>, <code>3des-cbc</code>, <code>arcfour256</code>, <code>arcfour128</code>, <code>arcfour</code> / 키 교환: <code>diffie-hellman-group16-sha512</code>, <code>group-exchange-sha256/sha1</code>, <code>group1-sha1</code>)으로 접속합니다. 단, 내장 SSH 라이브러리에 <code>blowfish-cbc</code>가 구현되어 있지 않아 <code>blowfish-cbc</code>만 제공하는 서버는 접속할 수 없습니다.</p>
 
 <h2>4. CLI 옵션 전체 표</h2>
 <table>

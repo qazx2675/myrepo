@@ -2,10 +2,9 @@
   <ac:rich-text-body>
     <p><strong>Suite 개요 및 메타 정보</strong></p>
     <ul>
-      <li><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/VM/V2</code></li>
-      <li><strong>대상 브랜치:</strong> <code>confluence</code> (<code>V2_docs/</code>)</li>
-      <li><strong>주요 구성:</strong> 통합 빌드/배치(<code>setup.sh</code>, <code>build_os6.sh</code>, <code>bin_os6/</code>, <code>bin_os8/</code>), 암호화(<code>passwd_update.sh</code>, <code>secret_lib.sh</code>), 공유 자산(<code>govendor/</code>, <code>SPEC_DIR/</code>), VM 생성·설정 오케스트레이터(<code>VMsetup/vm_setup.sh</code> + 12종 Go 도구 + 3종 보조 <code>.sh</code>), 통합 체크·교정(<code>vm-param-check-usability-improvement/vm-param-check</code>)</li>
-      <li><strong>동작 환경:</strong> OS8(Rocky/RHEL 8: Go 1.26.5+ &amp; Bash, 완전 오프라인 <code>govendor/</code> 빌드) / OS6(RHEL/CentOS 6: Go 불필요, <code>bin_os6/*.gz</code> Go 1.20 정적 바이너리 + Bash 4.1 + <code>openssl</code>)</li>
+      <li><strong>Suite 식별명:</strong> <code>V2</code> (<code>VMsetup</code> + <code>vm-param-check</code> 통합 구성)</li>
+      <li><strong>주요 구성:</strong> OS별 사전 빌드 바이너리 배치(<code>bin_os6/</code>, <code>bin_os8/</code>), 암호화(<code>passwd_update.sh</code>, <code>secret_lib.sh</code>), 공유 스펙(<code>SPEC_DIR/</code>), VM 생성·설정 오케스트레이터(<code>VMsetup/vm_setup.sh</code> + 12종 하위 CLI 바이너리 + 3종 보조 <code>.sh</code>), 통합 체크·교정(<code>vm-param-check-usability-improvement/vm-param-check</code>)</li>
+      <li><strong>동작 환경:</strong> OS8(Rocky/RHEL 8: Bash + 사전 빌드 바이너리) / OS6(RHEL/CentOS 6: <code>bin_os6/*.gz</code> 사전 빌드 바이너리 압축 해제 + Bash 4.1 + <code>openssl</code>)</li>
       <li><strong>한 줄 요약:</strong> BM당 <strong><code>ev01~ev99</code></strong> VM 생성·리소스·포트그룹·PCI 패스스루 설정(<code>VMsetup</code>)과 설정 검증·자동교정(<code>vm-param-check</code>)이 <strong>하나의 <code>SPEC_DIR</code></strong>을 공유하는 차세대 VM 자동화 통합 Suite</li>
     </ul>
   </ac:rich-text-body>
@@ -19,17 +18,17 @@
     <ul>
       <li><strong>변경 후 실검증:</strong> 본 Suite의 각 도구는 vCenter/ESXi 호스트 및 VM 설정(VM 생성, 포트그룹, CPU 토폴로지, affinity, HugePage, PCI 패스스루, 전원정책, 라이선스)을 실제로 변경합니다. 실행 완료 후 반드시 무작위로 VM·호스트 몇 대를 골라 vSphere Client 및 게스트 OS에서 실제 반영 여부를 직접 확인하십시오.</li>
       <li><strong><code>-fix -yes</code> 안전 설계:</strong> <code>vm-param-check</code>의 <code>-yes</code> 플래그는 <code>-specRoot</code> 스펙 매칭 확인만 생략하며, <code>-fix</code> 실제 설정 변경 직전의 <code>(y/N)</code> 승인은 생략할 수 없습니다.</li>
-      <li><strong>암호 키 보안:</strong> <code>secret/key</code> 파일이 있으면 누구나 <code>secret/*.enc</code>를 복호화할 수 있으므로 <code>root</code> 전용 권한을 유지하고 Git에 절대 커밋하지 마십시오.</li>
+      <li><strong>암호 키 보안:</strong> <code>secret/key</code> 파일이 있으면 누구나 <code>secret/*.enc</code>를 복호화할 수 있으므로 <code>root</code> 전용 권한(<code>600</code>)을 유지하고 외부에 유출·공유하지 마십시오.</li>
     </ul>
   </ac:rich-text-body>
 </ac:structured-macro>
 
 <h1>1. Suite 전체 개요 및 단계별 전체 흐름</h1>
-<p><strong>V2</strong>는 기존 V1(<code>.claude/VM/VM_setup</code>의 <code>ev01~ev03</code> 개별 도구 + <code>vm-param-fix</code>)을 대체·확장한 차세대 통합 Suite입니다. 핵심 설계는 <strong>단일 <code>SPEC_DIR</code> 공유</strong>와 <strong><code>ev01~ev99</code> 지원</strong>입니다. <code>VMsetup/vm_setup.sh</code>는 내부적으로 <code>vm-param-check -specExport</code>를 호출해 스펙을 해석하므로 생성 측과 체크 측의 파서가 한 벌로 통일됩니다.</p>
+<p><strong>V2</strong>는 기존 V1(<code>VM_setup</code>의 <code>ev01~ev03</code> 개별 도구 + <code>vm-param-fix</code>)을 대체·확장한 차세대 통합 Suite입니다. 핵심 설계는 <strong>단일 <code>SPEC_DIR</code> 공유</strong>와 <strong><code>ev01~ev99</code> 지원</strong>입니다. <code>VMsetup/vm_setup.sh</code>는 내부적으로 <code>vm-param-check -specExport</code>를 호출해 스펙을 해석하므로 생성 측과 체크 측의 파서가 한 벌로 통일됩니다.</p>
 
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">text</ac:parameter>
-  <ac:plain-text-body><![CDATA[[준비/빌드] V2 폴더 통째 배치 → bash setup.sh (OS8: govendor 빌드 / OS6: bin_os6/*.gz 해제)
+  <ac:plain-text-body><![CDATA[[사전 준비] V2 폴더 통째 배치 → 사전 빌드 바이너리 실행 권한(chmod +x) 확인 (OS6는 bin_os6/*.gz 압축 해제)
              → ./passwd_update.sh (vCenter/ESXi 암호 파일 등록)
              → (필요 시) bash VMsetup/vswitch_pgname.sh vswitch_<user>.txt (IP → <폴더명>-cae-a-b-c-0 변환)
       │
@@ -58,7 +57,7 @@
 
 <h1>2. 하위 도구 역할 매트릭스 표</h1>
 
-<h2>2.1 VMsetup Go 도구 12종 + 통합 오케스트레이터 + 보조 스크립트</h2>
+<h2>2.1 VMsetup CLI 바이너리 12종 + 통합 오케스트레이터 + 보조 스크립트</h2>
 <table>
   <thead>
     <tr>
@@ -182,7 +181,7 @@
   </thead>
   <tbody>
     <tr>
-      <td><code>vm-param-check</code> (Go 바이너리)</td>
+      <td><code>vm-param-check</code> (CLI 바이너리)</td>
       <td>통합 점검 + <code>-fix</code> 교정 + 스펙 파서</td>
       <td>vCenter 전체/<code>-f</code> 대상 점검, <code>-specRoot</code> 폴더명 자동매칭, <code>-specExport</code>, <code>-initFolder</code>/<code>-template</code>, <code>-fix</code> 게이트·교정·재검증, <code>-pci-evNN</code> 점검</td>
     </tr>
@@ -199,32 +198,40 @@
   </tbody>
 </table>
 
-<h1>3. 일괄 오프라인 빌드 · OS8/OS6 배치 · 공유 <code>SPEC_DIR</code> 및 암호 관리</h1>
+<h1>3. 바이너리 배치 · 공유 <code>SPEC_DIR</code> 및 암호 관리</h1>
 
-<h2>3.1 폴더 통째 배치 및 <code>setup.sh</code> 오프라인 빌드 (OS8 vs OS6)</h2>
-<p><code>V2</code> 폴더 내부 도구는 <strong>상대 경로(<code>../SPEC_DIR</code>, <code>../govendor</code>, <code>../secret_lib.sh</code> 등)</strong>로 서로를 참조하므로 V2 폴더를 통째로 복사해 배치해야 합니다. 의존성은 <code>govendor/govmomi-0.55.1-standard</code>(VMsetup 12종)와 <code>govendor/govmomi-0.39.0</code>(vm-param-check)에 들어 있으며, <code>setup.sh</code>는 <code>GOPROXY=off</code>, <code>GOFLAGS=-mod=vendor</code>, <code>GOTOOLCHAIN=local</code>, <code>GOSUMDB=off</code>, <code>CGO_ENABLED=0</code>을 강제합니다.</p>
+<h2>3.1 폴더 통째 배치 및 OS8/OS6 사전 빌드 바이너리 준비</h2>
+<p><code>V2</code> 폴더 내부 도구는 <strong>상대 경로(<code>../SPEC_DIR</code>, <code>../secret_lib.sh</code> 등)</strong>로 서로를 참조하므로 <code>V2</code> 폴더를 통째로 복사해 배치해야 합니다. <code>VMsetup/</code> 내 12종 하위 도구와 <code>vm-param-check</code>는 이미 컴파일된 바이너리로 제공되므로 별도 빌드 과정 없이 실행 권한 확인 및(OS6 환경의 경우) <code>bin_os6/*.gz</code> 압축 해제 후 바로 실행할 수 있습니다.</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[# 1. V2 폴더 통째 배치
 cp -r V2 /home/V2 && cd /home/V2
 
-# 2. 일괄 빌드/설치 (OS8: 13개 Go 오프라인 빌드 / OS6: bin_os6/*.gz 자동 해제)
-bash setup.sh
+# 2. [OS8 환경] 사전 빌드 바이너리 및 실행 스크립트 권한 부여
+chmod +x passwd_update.sh VMsetup/*.sh vm-param-check-usability-improvement/vm-param-check/*.sh
+for tool in vm_create vswitch_setting affinity_setting lpage_setting pci_passthrough nic_assign tag_setting numa_preferht_setting license_assign power_setting mac_info main_conn; do
+  [ -f "VMsetup/${tool}-source/${tool}" ] && chmod +x "VMsetup/${tool}-source/${tool}"
+done
+chmod +x vm-param-check-usability-improvement/vm-param-check/vm-param-check
 
-# setup.sh 주요 옵션
-bash setup.sh vm_create nic_assign       # 지정 도구만 빌드/설치
-bash setup.sh --os6                      # OS 자동판단과 무관하게 bin_os6/*.gz 설치
-OS6_hostname="old-node01|old-node02" bash setup.sh   # 호스트명 기준 OS6 강제
-bash setup.sh -l                         # 빌드 대상 및 바이너리 경로 13개 목록 출력
-bash setup.sh -c                         # 빌드된 바이너리 및 vendor 심볼릭 링크 정리]]></ac:plain-text-body>
+# 3. [OS6 환경] bin_os6/*.gz 정적 바이너리를 각 실행 경로에 압축 해제
+for f in bin_os6/*.gz; do
+  name="$(basename "$f" .gz)"
+  if [ "$name" = "vm-param-check" ]; then
+    dst="vm-param-check-usability-improvement/vm-param-check/vm-param-check"
+  else
+    dst="VMsetup/${name}-source/${name}"
+  fi
+  gzip -dc "$f" > "$dst" && chmod +x "$dst"
+done]]></ac:plain-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="note">
   <ac:rich-text-body>
-    <p><strong>Go 없는 OS8 서버 패치 (<code>bin_os8/</code>) 및 OS6 빌드 서버 (<code>build_os6.sh</code>):</strong></p>
+    <p><strong>OS별 패치 바이너리 보관 디렉터리 (<code>bin_os8/</code> 및 <code>bin_os6/</code>):</strong></p>
     <ul>
-      <li><strong><code>bin_os8/</code>:</strong> Go가 설치되지 않은 OS8 운영 서버에 PCI 패스스루 등 최근 변경분(<code>pci_passthrough</code>, <code>vm-param-check</code>, <code>affinity_setting</code>, <code>lpage_setting</code>)만 반영할 때 <code>gzip -dc</code>로 수동 해제합니다(<code>UPDATE_PCI_PASSTHROUGH.md</code> 참고). 주의: <code>setup.sh</code>는 <code>bin_os8/</code>을 읽지 않습니다.</li>
-      <li><strong><code>build_os6.sh</code>:</strong> RHEL6 커널(2.6.32)은 Go 1.21+ 실행파일을 구동할 수 없으므로 소스 수정 시 Go 1.20 빌드 서버에서 <code>bash build_os6.sh</code>로 <code>bin_os6/*.gz</code>를 재생성합니다.</li>
+      <li><strong><code>bin_os8/</code>:</strong> OS8 운영 서버에 PCI 패스스루 등 최근 변경분(<code>pci_passthrough</code>, <code>vm-param-check</code>, <code>affinity_setting</code>, <code>lpage_setting</code>) 바이너리만 수동 반영할 때 <code>gzip -dc</code>로 해당 실행 경로에 해제합니다(<code>UPDATE_PCI_PASSTHROUGH.md</code> 참고).</li>
+      <li><strong><code>bin_os6/</code>:</strong> RHEL/CentOS 6 커널 환경에서 바로 실행 가능한 정적 바이너리(<code>.gz</code>) 묶음입니다. OS6 서버 배치 시 위 압축 해제 절차로 제자리에 배치합니다.</li>
     </ul>
   </ac:rich-text-body>
 </ac:structured-macro>
@@ -242,7 +249,7 @@ bash setup.sh -c                         # 빌드된 바이너리 및 vendor 심
 
 <ac:structured-macro ac:name="note">
   <ac:rich-text-body>
-    <p><strong>환경변수 <code>unset</code> 동작 주의:</strong> <code>vm_setup.sh</code>는 이전 셸에 남아있던 잘못된 값으로 로그인 실패하는 사고를 막기 위해 시작 시 <code>VC_PASSWORD</code>, <code>VC_PASS</code>, <code>VCENTER_PASS</code>, <code>ESXI_PASSWORD</code> (및 <code>MAC_ARGSTR</code>, <code>MAC_ARG1</code>)를 모두 <code>unset</code>한 뒤 <strong>암호 파일 → 직접 입력</strong> 순으로 읽습니다. 반면 Go 도구를 단독으로 직접 실행할 때는 <code>VC_PASSWORD</code> 환경변수를 export하거나 <code>export VC_PASSWORD="$(. ../secret_lib.sh; secret_get vcenter lscsystems@vsphere.local)"</code>를 사용합니다.</p>
+    <p><strong>환경변수 <code>unset</code> 동작 주의:</strong> <code>vm_setup.sh</code>는 이전 셸에 남아있던 잘못된 값으로 로그인 실패하는 사고를 막기 위해 시작 시 <code>VC_PASSWORD</code>, <code>VC_PASS</code>, <code>VCENTER_PASS</code>, <code>ESXI_PASSWORD</code> (및 <code>MAC_ARGSTR</code>, <code>MAC_ARG1</code>)를 모두 <code>unset</code>한 뒤 <strong>암호 파일 → 직접 입력</strong> 순으로 읽습니다. 반면 개별 CLI 바이너리를 단독으로 직접 실행할 때는 <code>VC_PASSWORD</code> 환경변수를 export하거나 <code>export VC_PASSWORD="$(. ../secret_lib.sh; secret_get vcenter lscsystems@vsphere.local)"</code>를 사용합니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 

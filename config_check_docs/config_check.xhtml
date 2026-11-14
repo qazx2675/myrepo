@@ -2,8 +2,6 @@
   <ac:rich-text-body>
     <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (순수 Bash 스크립트 — <strong>빌드 불필요</strong>)</p>
     <p><strong>대상 프로젝트:</strong> <code>config_check</code> (<code>config_check.sh</code> 및 <code>apply_auto_mode.sh</code>)</p>
-    <p><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/config_check</code></p>
-    <p><strong>대상 브랜치:</strong> <code>confluence</code> (<code>config_check_docs/</code>)</p>
     <p><strong>필수/연계 도구:</strong> <code>gossh</code> v2 (<code>-pm</code>, <code>-script</code>, <code>-w</code>, 범위 압축 확장 <code>EXPAND_AWK</code>), <code>auto_setup</code> (<code>-auto</code> / <code>-auto-check</code>), <code>setup_check</code> / <code>new_setup</code> (<code>-run</code>)</p>
   </ac:rich-text-body>
 </ac:structured-macro>
@@ -73,11 +71,11 @@
 <h2>2. 사전준비 / 배치(빌드 불필요) · 입력파일 · 계정/암호화</h2>
 
 <h3>2.1 빌드 여부 및 배치 방법 (순수 Bash — 빌드 불필요)</h3>
-<p><code>config_check</code>는 <strong>순수 Bash 스크립트</strong>이므로 컴파일이나 Go 빌드가 전혀 필요하지 않습니다(<strong>빌드 불필요</strong>). 단, 원격 병렬 실행 엔진으로 반드시 <strong><code>gossh</code> v2</strong>(<code>-pm</code>, <code>-script</code>, <code>-w</code> 및 범위 압축 파일 출력 지원)가 설치되어 있어야 합니다.</p>
+<p><code>config_check</code>는 별도 바이너리나 설치 과정 없이 바로 실행하는 <strong>순수 Bash 스크립트</strong>이므로 <strong>빌드 불필요</strong>입니다. 단, 원격 병렬 실행 엔진으로 반드시 <strong><code>gossh</code> v2</strong>(<code>-pm</code>, <code>-script</code>, <code>-w</code> 및 범위 압축 파일 출력 지원)가 설치되어 있어야 합니다.</p>
 
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
-    <p><strong>사내 기존본 덮어쓰기 금지:</strong> 운영 중인 사내 <code>config_check.sh</code>를 이 저장소 파일로 직접 덮어쓰지 마십시오. 기존본에 사내 고유 주석·벤더 메시지가 있을 수 있으므로, 반드시 <code>apply_auto_mode.sh</code>를 사용해 코드 라인만 패치해야 합니다. 이 스크립트는 주석이나 벤더 메시지가 수정되면 즉시 중단하고, 적용 전 <code>&lt;대상&gt;.bak</code> 백업을 자동 생성합니다.</p>
+    <p><strong>사내 기존본 덮어쓰기 금지:</strong> 운영 중인 사내 <code>config_check.sh</code>를 새 배포 파일로 직접 덮어쓰지 마십시오. 기존본에 사내 고유 주석·벤더 메시지가 있을 수 있으므로, 반드시 <code>apply_auto_mode.sh</code>를 사용해 코드 라인만 패치해야 합니다. 이 스크립트는 주석이나 벤더 메시지가 수정되면 즉시 중단하고, 적용 전 <code>&lt;대상&gt;.bak</code> 백업을 자동 생성합니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 

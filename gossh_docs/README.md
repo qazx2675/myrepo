@@ -1,18 +1,16 @@
-# gossh — Confluence 업로드 안내
+# gossh 문서 안내
 
-- **원본 경로 (`origin/master`)**: `.claude/공통/gossh/`
-- **대상 브랜치**: `confluence` 브랜치 / `gossh_docs/` 폴더
+- **주요 파일**: `gossh_os8` (사전 빌드 정적 바이너리), `update.sh`
 - **양식 유형**: T1 (단일 CLI 도구형)
 - **포함 파일**:
-  - `gossh.xhtml`: Confluence Storage Format 본문 프래그먼트
-  - `README.md`: 본 업로드 가이드
+  - `gossh.xhtml`: 저장 형식(Storage Format) 본문 프래그먼트
+  - `README.md`: 본 문서 적용 안내
 
-## Confluence에 업로드(붙여넣기)하는 방법
+## 위키/문서 편집기 붙여넣기 방법
 
-1. `gossh.xhtml` 파일 전체 내용을 복사합니다. (외부 `<root>` 래퍼 없이 Confluence Storage Format 본문만 저장되어 있습니다.)
-2. Confluence에서 새 페이지를 만들거나 기존 페이지 편집 화면을 엽니다.
-3. 상단 툴바의 **Source Editor(`<>`)** 또는 저장 형식(Storage Format) 편집기를 엽니다.
-4. 복사한 `.xhtml` 내용을 그대로 붙여넣고 **Apply** / **저장**을 눌러 매크로(`info`, `toc`, `code`, `note`, `warning`)와 표가 정상 렌더링되는지 확인합니다.
+1. `gossh.xhtml` 파일 전체 내용을 복사합니다. (외부 `<root>` 래퍼 없이 본문 프래그먼트만 저장되어 있습니다.)
+2. 문서 편집 화면에서 상단 툴바의 **Source Editor(`<>`)** 또는 저장 형식(Storage Format) 편집기를 엽니다.
+3. 복사한 `.xhtml` 내용을 그대로 붙여넣고 **Apply** / **저장**을 눌러 매크로(`info`, `toc`, `code`, `note`, `warning`)와 표가 정상 렌더링되는지 확인합니다.
 
 ## XML 문법 검증 (선택)
 

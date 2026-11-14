@@ -2,7 +2,7 @@
   <ac:rich-text-body>
     <p><strong>도구명:</strong> dirmap (<code>dirmap.sh</code>) — 디렉터리 트리 및 폴더 설명 출력 스크립트</p>
     <p><strong>양식 유형:</strong> T1 (단일 스크립트형 · <strong>빌드 불필요</strong>)</p>
-    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/공통/dirmap/dirmap.sh</code></p>
+    <p><strong>주요 실행 파일:</strong> <code>dirmap.sh</code></p>
     <p><strong>동작 환경 및 의존성:</strong> Linux / RHEL 계열 (<code>bash</code> 4.0 이상 — <code>declare -A</code> 연관배열 사용, <code>find</code>, <code>sort</code>, <code>realpath</code>, <code>egrep</code>)</p>
     <p><strong>한 줄 요약:</strong> 자주 사용하는 디렉터리의 하위 폴더 구조를 <code>tree</code> 형태로 출력하면서, 스크립트에 등록한 경로별 한국어 설명(<code>└ : 설명</code>)을 함께 표시하는 단독 Bash 스크립트입니다.</p>
   </ac:rich-text-body>
@@ -32,9 +32,9 @@
     <ac:structured-macro ac:name="code">
       <ac:parameter ac:name="language">bash</ac:parameter>
       <ac:plain-text-body><![CDATA[# ===== 설정 (이곳에서 변수 수정) =====
-TARGET_PATH="/home/saccae"           # 탐색할 기본 경로
-MAX_DEPTH="2"                        # 탐색 깊이 (1 이상)
-EXCLUDE_PATTERN="\.git|\.cache"      # 제외할 폴더명 (정규식, egrep -E 형식)]]></ac:plain-text-body>
+TARGET_PATH="/home/saccae"                 # 탐색할 기본 경로
+MAX_DEPTH="2"                              # 탐색 깊이 (1 이상)
+EXCLUDE_PATTERN="^test_|source$|\.cache"   # 제외할 폴더명 (정규식, egrep -E 형식)]]></ac:plain-text-body>
     </ac:structured-macro>
   </li>
   <li><strong>폴더 설명 등록 (<code>FOLDER_DESC</code>)</strong> — <code>realpath</code>로 정규화된 절대경로를 키로, 한국어 설명을 값으로 추가합니다.
@@ -66,7 +66,7 @@ EXCLUDE_PATTERN="\.git|\.cache"      # 제외할 폴더명 (정규식, egrep -E 
 ./dirmap.sh /root/work 3
 
 # 3) 제외 패턴까지 지정해 실행 (정규식, egrep -E 형식)
-./dirmap.sh /root/work 3 "\.git|\.cache|^tmp_"
+./dirmap.sh /root/work 3 "\.cache|^tmp_|^test_"
 
 # 4) 제외 패턴 없이 모든 폴더 출력
 ./dirmap.sh /root/work 2 ""]]></ac:plain-text-body>
@@ -96,8 +96,8 @@ EXCLUDE_PATTERN="\.git|\.cache"      # 제외할 폴더명 (정규식, egrep -E 
     </tr>
     <tr>
       <td><code>EXCLUDE_PATTERN</code></td>
-      <td><code>\.git|\.cache</code></td>
-      <td>제외할 폴더 이름 정규식 (<code>egrep -E</code> 호환). 빈 문자열 <code>""</code>이면 제외 없음</td>
+      <td><code>\.cache</code> 및 숨김 메타 폴더 정규식</td>
+      <td>제외할 폴더 이름 정규식 (<code>egrep -E</code> 호환, 예: <code>^test_</code>, <code>source$</code>). 빈 문자열 <code>""</code>이면 제외 없음</td>
     </tr>
     <tr>
       <td><code>FOLDER_DESC</code></td>

@@ -2,7 +2,7 @@
   <ac:rich-text-body>
     <p><strong>도구명:</strong> ldap_check (<code>ldap_check.sh</code>) — 노드 로컬 LDAP · DNS · NTP · autofs 설정 정합성 검사 스크립트</p>
     <p><strong>양식 유형:</strong> T1 (단일 스크립트형 · <strong>빌드 불필요</strong>)</p>
-    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/ldap_check/</code> (<code>ldap_check.sh</code>, <code>ldap_config.conf.sample</code>, <code>test_check.sh</code>)</p>
+    <p><strong>주요 파일:</strong> <code>ldap_check.sh</code>, <code>ldap_config.conf.sample</code>, <code>test_check.sh</code></p>
     <p><strong>동작 환경 및 의존성:</strong> RHEL 6 ~ 10 (<code>bash</code>, <code>awk</code>, <code>sed</code> 기본 도구만 사용, <strong><code>jq</code> 불필요</strong>)</p>
     <p><strong>연계 도구:</strong> <code>ldap_setting</code> (설정 일괄 적용 짝), <code>pm_monitor</code> (<code>install_mn</code> TUI <code>l</code> 키 연계), <code>gossh</code> (전 노드 일괄 점검)</p>
     <p><strong>한 줄 요약:</strong> 대상 노드의 LDAP · DNS · NTP · autofs 설정 파일을 읽기 전용으로 3중 교차 검증해 인프라·사이트 정합성을 검사하는 단독 Bash 스크립트입니다.</p>
@@ -54,7 +54,7 @@
   </thead>
   <tbody>
     <tr>
-      <td><strong><code>ldap_setting</code></strong><br/>(<code>.claude/HPC/ldap_setting</code>)</td>
+      <td><strong><code>ldap_setting</code></strong></td>
       <td>설정을 실제로 바꾸는 적용 엔진과 검사 스크립트의 짝 구조</td>
       <td>
         <ul>
@@ -76,7 +76,7 @@
       </td>
     </tr>
     <tr>
-      <td><strong><code>gossh</code></strong><br/>(<code>.claude/공통/gossh</code>)</td>
+      <td><strong><code>gossh</code></strong></td>
       <td>수백 대 노드 동시 점검 실행기</td>
       <td><code>gossh -script -w hosts.txt "bash /user/asdf/ldap_check.sh"</code> 형태로 실행해 호스트별 1줄 결과를 수집합니다.</td>
     </tr>
@@ -90,7 +90,7 @@
   <li><strong>실행 권한 부여</strong>
     <ac:structured-macro ac:name="code">
       <ac:parameter ac:name="language">bash</ac:parameter>
-      <ac:plain-text-body><![CDATA[cd "myrepo/.claude/HPC/ldap_check"
+      <ac:plain-text-body><![CDATA[cd /경로/ldap_check   # ldap_check 파일이 배치된 디렉터리
 chmod +x ldap_check.sh test_check.sh]]></ac:plain-text-body>
     </ac:structured-macro>
   </li>
@@ -335,7 +335,7 @@ FAIL	LDAP	UNDEFINED]]></ac:plain-text-body>
   <ac:rich-text-body>
     <ul>
       <li><strong>참고용 도구 &amp; 실서비스 확인:</strong> 본 스크립트는 <strong>설정 파일의 텍스트 내용만</strong> 검사하며, <code>sssd</code>/<code>nslcd</code>/<code>autofs</code> 데몬이 실제로 기동 중인지 또는 LDAP 서버에 실제 바인드가 되는지까지는 확인하지 않습니다. 최종 확인은 대상 서버에서 <code>id &lt;계정&gt;</code>, <code>ls /appl</code>, <code>systemctl status sssd</code> 등으로 직접 검증하세요.</li>
-      <li><strong>평문 자격증명 보안:</strong> <code>ldap_config.conf</code>에는 <code>bindpw</code>가 평문으로 들어갑니다. 반드시 <code>chmod 600</code>을 유지하고 Git 저장소에 커밋하지 마세요(공유 경로 배치 시 접근 권한 확인 필수).</li>
+      <li><strong>평문 자격증명 보안:</strong> <code>ldap_config.conf</code>에는 <code>bindpw</code>가 평문으로 들어갑니다. 반드시 <code>chmod 600</code>을 유지하고 비밀번호가 포함된 설정 파일이 외부에 노출·공유되지 않도록 주의하세요(공유 경로 배치 시 접근 권한 확인 필수).</li>
       <li><strong>대량 FAIL 발생 시 원인 확인:</strong> 정상 노드까지 대거 FAIL로 나오면 <code>ldap_config.conf</code>의 기준값(특히 <code>../ldap_setting/conf/ldap_config.conf</code>와의 동기화 여부)이 실제 환경과 어긋나지 않았는지 먼저 점검하세요.</li>
       <li><strong><code>jq</code> 금지:</strong> 대상 노드에 <code>jq</code>가 없으므로 향후 유지보수 시에도 JSON 파서를 도입하지 마세요.</li>
     </ul>

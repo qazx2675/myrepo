@@ -2,8 +2,6 @@
   <ac:rich-text-body>
     <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (순수 Bash 스크립트 — <strong>빌드 불필요</strong>)</p>
     <p><strong>대상 프로젝트:</strong> OS 환경설정 체크 (<code>os_check_final_annotated.sh</code>)</p>
-    <p><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/OS 환경설정 체크</code></p>
-    <p><strong>대상 브랜치:</strong> <code>confluence</code> (<code>OS_환경설정_체크_docs/</code>)</p>
     <p><strong>연계 도구:</strong> <code>gossh</code> (원격 병렬 실행), <code>auto_setup</code> (<code>-auto</code> / <code>-auto-check</code> 비대화형 실행 및 <code>done/</code> 완료 마커 기록)</p>
   </ac:rich-text-body>
 </ac:structured-macro>
@@ -71,7 +69,7 @@
 <h2>2. 사전준비 / 배치(빌드 불필요) · 입력파일 · 계정/암호화</h2>
 
 <h3>2.1 빌드 여부 및 배치 방법 (순수 Bash — 빌드 불필요)</h3>
-<p>이 프로젝트는 Go/C 바이너리 컴파일이 없는 <strong>순수 Bash 스크립트</strong>이므로 <strong>별도 빌드가 전혀 불필요</strong>합니다.</p>
+<p>이 프로젝트는 별도 바이너리나 설치 과정 없이 실행하는 <strong>순수 Bash 스크립트</strong>이므로 <strong>별도 빌드가 전혀 불필요</strong>합니다.</p>
 <ul>
   <li><strong>원본 실행 파일:</strong> <code>os_check_final_annotated.sh</code> (또는 회사 표준 운영 파일명으로 복사 후 권한 부여)</li>
   <li><strong>필수 의존 도구:</strong> <code>gossh</code> (원격 접속 및 <code>-pm</code> 병렬 실행), <code>bash</code>, <code>sha256sum</code> (<code>auto_record_done</code> 완료 마커 해시 계산용)</li>

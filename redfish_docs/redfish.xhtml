@@ -1,10 +1,8 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
-    <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (Go CLI + Bash 래퍼)</p>
+    <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (사전 빌드 바이너리 CLI + Bash 래퍼)</p>
     <p><strong>대상 프로젝트:</strong> <code>redfish</code> (<code>biostool</code> — v0.1.0)</p>
-    <p><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/redfish</code></p>
-    <p><strong>대상 브랜치:</strong> <code>confluence</code> (<code>redfish_docs/</code>)</p>
-    <p><strong>커밋된 사전 빌드 바이너리:</strong> <code>bin/biostool</code> (RHEL8 / kernel &gt;= 3), <code>bin/biostool_os6</code> (RHEL6 / kernel 2.6.32용 — 실제 RHEL6 미검증)</p>
+    <p><strong>제공 바이너리:</strong> <code>bin/biostool</code> (RHEL8 / kernel &gt;= 3), <code>bin/biostool_os6</code> (RHEL6 / kernel 2.6.32용 — 실제 RHEL6 미검증)</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
@@ -13,7 +11,7 @@
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
     <p><strong>[중요 — v0.1.0 실장비 미연결 경고]</strong> 현재 <code>redfish</code>(<code>biostool</code> v0.1.0)는 <strong>실제 물리 BMC 하드웨어에 단 한 번도 연결·테스트된 적이 없습니다.</strong> 모든 동작 검증은 합성 <code>testdata/</code> 기반 모의 서버(<code>mockbmc.sh</code> / <code>Farm</code>) 및 <code>-from-dump</code> 로컬 덤프에서만 수행되었습니다.</p>
-    <p><strong>실제 BMC에 최초 연결하기 전에 반드시 저장소 루트의 <code>FIRST_RUN.md</code>를 정독</strong>하고, <code>FIRST_RUN.md</code> §B에 정리된 <strong>17개 미확인 항목</strong>과 9단계 1대 시범 절차를 먼저 검증하십시오. 또한 <code>bin/biostool_os6</code>는 CentOS 6 유저랜드 + kernel 4.18 환경에서만 확인되었으며 실제 RHEL6(kernel 2.6.32) 실기 검증은 완료되지 않았습니다.</p>
+    <p><strong>실제 BMC에 최초 연결하기 전에 반드시 프로젝트 루트의 <code>FIRST_RUN.md</code>를 정독</strong>하고, <code>FIRST_RUN.md</code> §B에 정리된 <strong>17개 미확인 항목</strong>과 9단계 1대 시범 절차를 먼저 검증하십시오. 또한 <code>bin/biostool_os6</code>는 CentOS 6 유저랜드 + kernel 4.18 환경에서만 확인되었으며 실제 RHEL6(kernel 2.6.32) 실기 검증은 완료되지 않았습니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
@@ -25,7 +23,7 @@
 
 <h2>1. 개요 및 변경 대상 (실제 조회/수정하는 Redfish 리소스 및 API)</h2>
 
-<p><code>redfish</code>(<code>biostool</code>)는 데이터센터 다수 서버의 BMC(Out-of-Band) Redfish REST API를 통해 <strong>BIOS 설정 일괄 점검 및 표준 프로필 기반 Pending 설정 적용(<code>check</code>)</strong>, <strong>참조 서버 대비 전체 BIOS 속성 비교(<code>allcheck</code>)</strong>, <strong>Redfish 트리 백업 덤프(<code>dump</code>)</strong>, <strong>비밀번호 암호화(<code>encrypt</code>)</strong>를 수행하는 Go 표준 라이브러리 기반 도구입니다.</p>
+<p><code>redfish</code>(<code>biostool</code>)는 데이터센터 다수 서버의 BMC(Out-of-Band) Redfish REST API를 통해 <strong>BIOS 설정 일괄 점검 및 표준 프로필 기반 Pending 설정 적용(<code>check</code>)</strong>, <strong>참조 서버 대비 전체 BIOS 속성 비교(<code>allcheck</code>)</strong>, <strong>Redfish 트리 백업 덤프(<code>dump</code>)</strong>, <strong>비밀번호 암호화(<code>encrypt</code>)</strong>를 수행하는 사전 빌드 정적 바이너리 기반 도구입니다.</p>
 
 <p>안전장치를 위해 쓰기 동작은 엄격히 제한되며, <strong>자동 재부팅(Reset)은 절대 수행하지 않고 Pending Settings만 예약</strong>합니다.</p>
 
@@ -62,27 +60,23 @@
   </tbody>
 </table>
 
-<h2>2. 사전준비 / 빌드 · 입력파일 · 계정/암호화</h2>
+<h2>2. 사전준비 / 바이너리 배치 · 입력파일 · 계정/암호화</h2>
 
-<h3>2.1 사전 빌드 바이너리 및 폐쇄망 빌드/업데이트</h3>
-<p>Go 표준 라이브러리만 사용(<code>go.mod</code> <code>go 1.20</code>, 외부 모듈/<code>vendor/</code> 불필요)하며, 저장소 <code>bin/</code>에 커밋된 정적 바이너리를 래퍼(<code>lib.sh</code>)가 <code>uname -r</code> 주 버전에 따라 자동 선택합니다.</p>
+<h3>2.1 사전 빌드 바이너리 배치 및 배포 업데이트</h3>
+<p>외부 의존성 없는 정적 바이너리가 이미 포함되어 있으므로 바로 배치·실행할 수 있습니다. 래퍼(<code>lib.sh</code>)가 실행 노드의 <code>uname -r</code> 주 버전을 확인해 알맞은 바이너리를 자동 선택합니다.</p>
 <ul>
-  <li><strong><code>bin/biostool</code>:</strong> RHEL8 이상 (kernel &gt;= 3, Go 1.25 정적 빌드)</li>
-  <li><strong><code>bin/biostool_os6</code>:</strong> RHEL6용 (kernel &lt; 3 / 2.6.32 타깃, Go 1.20.x 정적 빌드 — <em>단, 실제 RHEL6 2.6.32 미검증, CentOS 6 유저랜드 + kernel 4.18에서만 확인됨</em>)</li>
-  <li><strong>랩 재빌드 및 배포 업데이트:</strong> <code>bash setup.sh</code> 또는 <code>bash build.sh</code>(os8 전용), <code>bash build_os6.sh</code>(admin, <code>/opt/go1.20/bin</code> 필요). 사내 표준 경로 배포 시 <code>update.sh</code>가 고정 경로 <code>TARGET=/root/server_vm_python/redhfish/V2</code>를 업데이트하며, 기존본을 <code>/root/server_vm_python/redhfish/backup/V2_&lt;일시&gt;.tgz</code>로 백업하고 설정·암호화 키·결과·덤프를 보존하며 <code>profiles/*.tsv</code>가 로컬에서 수정된 경우 <code>*.new</code>로 병합합니다.</li>
+  <li><strong><code>bin/biostool</code>:</strong> RHEL8 이상 (kernel &gt;= 3)</li>
+  <li><strong><code>bin/biostool_os6</code>:</strong> RHEL6용 (kernel &lt; 3 / 2.6.32 타깃 — <em>단, 실제 RHEL6 2.6.32 미검증, CentOS 6 유저랜드 + kernel 4.18에서만 확인됨</em>)</li>
+  <li><strong>운영 배포 업데이트 (<code>update.sh</code>):</strong> 사내 표준 경로 배포 시 <code>update.sh</code>가 고정 경로 <code>TARGET=/root/server_vm_python/redhfish/V2</code>를 업데이트하며, 기존본을 <code>/root/server_vm_python/redhfish/backup/V2_&lt;일시&gt;.tgz</code>로 백업하고 설정·암호화 키·결과·덤프를 보존하며 <code>profiles/*.tsv</code>가 로컬에서 수정된 경우 <code>*.new</code>로 병합합니다.</li>
 </ul>
 
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1. 커밋된 바이너리 및 래퍼 실행 확인 (폐쇄망에서 Go 불필요)
+  <ac:plain-text-body><![CDATA[# 1. 사전 빌드 바이너리 및 래퍼 실행 권한 확인 (폐쇄망에서 별도 빌드 도구 불필요)
 ls -l bin/biostool bin/biostool_os6
-chmod +x bios_check.sh all_bios_check.sh xml.sh encrypt.sh mockbmc.sh
+chmod +x bin/biostool bin/biostool_os6 bios_check.sh all_bios_check.sh xml.sh encrypt.sh mockbmc.sh
 
-# 2. (개발/랩 환경 재빌드 시에만)
-bash build.sh         # os8 바이너리 재빌드
-bash build_os6.sh     # os6 바이너리 재빌드 (/opt/go1.20/bin 필요)
-
-# 3. 동시성 설정(concurrency 기본 100) 사용 시 파일 디스크립터 확인
+# 2. 동시성 설정(concurrency 기본 100) 사용 시 파일 디스크립터 확인
 ulimit -n]]></ac:plain-text-body>
 </ac:structured-macro>
 
@@ -90,7 +84,7 @@ ulimit -n]]></ac:plain-text-body>
 <p><code>bios.conf</code>에 평문 비밀번호 키(<code>pass</code>, <code>password</code>, <code>passwd</code>, <code>pw</code>)가 하나라도 존재하면 보안 오류로 즉시 실패합니다. 반드시 <code>encrypt.sh</code>로 암호화해야 합니다.</p>
 <ul>
   <li><strong><code>bios.conf</code>:</strong> <code>user=</code> 필수 지정, 비밀번호는 <code>pass_file=pass.enc</code> 및 <code>key_file=key.bin</code>으로 참조.</li>
-  <li><strong><code>encrypt.sh</code>:</strong> 대화형으로 비밀번호를 2회(에코 없음) 입력받아 표준입력(stdin)으로 <code>biostool encrypt</code>에 전달하고 AES-256-GCM 암호화 파일(<code>pass.enc</code>, <code>key.bin</code>)을 <code>0600</code> 권한(<code>.gitignore</code> 대상)으로 생성합니다.</li>
+  <li><strong><code>encrypt.sh</code>:</strong> 대화형으로 비밀번호를 2회(에코 없음) 입력받아 표준입력(stdin)으로 <code>biostool encrypt</code>에 전달하고 AES-256-GCM 암호화 파일(<code>pass.enc</code>, <code>key.bin</code>)을 <code>0600</code> 권한으로 생성합니다.</li>
   <li><strong><code>user.txt</code> / <code>/etc/hosts</code>:</strong> 대상 호스트 목록(기본 <code>user.txt</code>)과 BMC IP/호스트명 매핑(<code>/etc/hosts</code> 또는 <code>-hosts</code> 지정 파일).</li>
   <li><strong><code>profiles/*.tsv</code>:</strong> 탭 구분 프로필 테이블(컬럼: <code>vendor</code>, <code>model</code>, <code>std_name</code>, <code>attribute</code>, <code>value</code>, <code>verified</code>). 4개 표준 속성(<code>system_profile</code>, <code>hyper_threading</code>, <code>llc_prefetch</code>, <code>sub_numa_cluster</code>)은 프로필에 정의가 없더라도 항상 점검 대상에 포함되며(행이 없으면 <code>MAPPING_MISSING</code>으로 보고), <code>value</code>는 <code>A|B</code> 형식, 검증 여부는 <code>Y</code>/<code>N</code>으로 관리합니다.</li>
 </ul>
@@ -241,7 +235,7 @@ bash all_bios_check.sh]]></ac:plain-text-body>
     <tr>
       <td>Bash 래퍼 (<code>*.sh</code>)</td>
       <td><code>1</code> / <code>2</code></td>
-      <td><code>1</code>: 필수 파일 누락 / <code>2</code>: 바이너리 또는 Go 실행 환경 누락</td>
+      <td><code>1</code>: 필수 파일 누락 / <code>2</code>: 실행 바이너리 누락 또는 실행 불가</td>
     </tr>
     <tr>
       <td><code>biostool</code> 바이너리</td>

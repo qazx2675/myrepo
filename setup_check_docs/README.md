@@ -1,18 +1,16 @@
-# setup_check — Confluence 업로드 안내
+# setup_check 문서 안내
 
-- **원본 경로 (`origin/master`)**: `.claude/HPC/setup_check/`
-- **대상 브랜치**: `confluence` 브랜치 / `setup_check_docs/` 폴더
+- **주요 파일**: `bin/new_setup`, `bin/new_setup_os6`, `new_setup.sh`, `setup.sh`, `troubleshoot.sh`, `new_setup.conf.sample`
 - **양식 유형**: T2 (설치 판정 · 파이프라인 연계형, `config_check` · `stress-test` `-run` 통합 연계 포함)
 - **포함 파일**:
-  - `setup_check.xhtml`: Confluence Storage Format 본문 프래그먼트
-  - `README.md`: 본 업로드 가이드
+  - `setup_check.xhtml`: 저장 형식(Storage Format) 본문 프래그먼트
+  - `README.md`: 본 문서 적용 안내
 
-## Confluence에 업로드(붙여넣기)하는 방법
+## 위키/문서 편집기 붙여넣기 방법
 
-1. `setup_check.xhtml` 파일 전체 내용을 복사합니다. (외부 `<root>` 래퍼 없이 Confluence Storage Format 본문만 저장되어 있습니다.)
-2. Confluence에서 새 페이지를 만들거나 기존 페이지 편집 화면을 엽니다.
-3. 상단 툴바의 **Source Editor(`<>`)** 또는 저장 형식(Storage Format) 편집기를 엽니다.
-4. 복사한 `.xhtml` 내용을 그대로 붙여넣고 **Apply** / **저장**을 눌러 매크로(`info`, `toc`, `code`, `note`, `warning`)와 표가 정상 렌더링되는지 확인합니다.
+1. `setup_check.xhtml` 파일 전체 내용을 복사합니다. (외부 `<root>` 래퍼 없이 본문 프래그먼트만 저장되어 있습니다.)
+2. 문서 편집 화면에서 상단 툴바의 **Source Editor(`<>`)** 또는 저장 형식(Storage Format) 편집기를 엽니다.
+3. 복사한 `.xhtml` 내용을 그대로 붙여넣고 **Apply** / **저장**을 눌러 매크로(`info`, `toc`, `code`, `note`, `warning`)와 표가 정상 렌더링되는지 확인합니다.
 
 ## XML 문법 검증 (선택)
 

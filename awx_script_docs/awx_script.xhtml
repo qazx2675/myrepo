@@ -2,11 +2,10 @@
   <ac:rich-text-body>
     <p><strong>Suite 개요 및 메타 정보</strong></p>
     <ul>
-      <li><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/awx_script</code></li>
-      <li><strong>대상 브랜치:</strong> <code>confluence</code> (<code>awx_script_docs/</code>)</li>
-      <li><strong>주요 스크립트 및 구성요소:</strong> <code>01.AWX_nodeinfo_V2.sh</code> (메인 오케스트레이터), <code>02.source_dhcp_pxe.sh</code> (yml별 인벤토리/DHCP/PXE 등록), 내장 <code>awxkit/</code> (7종 Go 바이너리·래퍼), <code>setup/</code> (가이드·현장 사본 업데이트 스크립트), <code>test/</code> (검증 하네스 — 랩/CI 전용)</li>
+      <li><strong>Suite 식별명:</strong> <code>awx_script</code> (<code>01.AWX_nodeinfo_V2.sh</code> · <code>02.source_dhcp_pxe.sh</code> · 내장 <code>awxkit/</code>)</li>
+      <li><strong>주요 스크립트 및 구성요소:</strong> <code>01.AWX_nodeinfo_V2.sh</code> (메인 오케스트레이터), <code>02.source_dhcp_pxe.sh</code> (yml별 인벤토리/DHCP/PXE 등록), 내장 <code>awxkit/</code> (사전 빌드된 CLI 바이너리·래퍼 7종), <code>setup/</code> (가이드·현장 사본 업데이트 스크립트), <code>test/</code> (검증 하네스 — 랩/CI 전용)</li>
       <li><strong>동작 환경:</strong> RHEL 7+ / Bash 4.x (<code>gawk</code>/<code>awk</code>, <code>sed</code>, <code>ssh</code>/<code>scp</code>, <code>gossh</code>, <code>dig</code> 또는 <code>nslookup</code>, <code>xargs</code>, <code>mktemp</code>)</li>
-      <li><strong>한 줄 요약:</strong> HPC 서버 노드정보 수집·정규화·MAC 보정·DNS 점검·사양별 yml 분할·Git 업로드를 거쳐 AWX 인벤토리/DHCP/PXE 일괄 등록과 <code>auto_setup</code> 데몬 연계까지 수행하는 통합 Bash Suite</li>
+      <li><strong>한 줄 요약:</strong> HPC 서버 노드정보 수집·정규화·MAC 보정·DNS 점검·사양별 yml 분할·인벤토리 YAML 업로드(동기화)를 거쳐 AWX 인벤토리/DHCP/PXE 일괄 등록과 <code>auto_setup</code> 데몬 연계까지 수행하는 통합 Bash Suite</li>
     </ul>
   </ac:rich-text-body>
 </ac:structured-macro>
@@ -44,7 +43,7 @@
  │
  ▼ (Y)
 [7~11] inventory_delete(delhost_${user}) ─▶ split_files(분할 yml + _all) ─▶ dhcp_info(누적)
-       ─▶ gen_inventory(scp → custom_inventory.sh → svr_dir) ─▶ git_upload
+       ─▶ gen_inventory(scp → custom_inventory.sh → svr_dir) ─▶ 인벤토리 YAML 업로드(동기화)
  │
  ▼
 [12] check_servers (선택 [Y/n], AWX_CHECK 우선, auto 모드 기본 건너뜀)
@@ -82,7 +81,7 @@
     <tr>
       <td><code>01.AWX_nodeinfo_V2.sh</code></td>
       <td>Bash 메인 스크립트</td>
-      <td><code>[1]~[15]</code> 전체 전처리·검증·분할·Git 업로드·LDAP/LACP 점검·<code>02</code> 호출·<code>auto_setup</code> queue 전달·등록 후 확인</td>
+      <td><code>[1]~[15]</code> 전체 전처리·검증·분할·인벤토리 YAML 업로드(동기화)·LDAP/LACP 점검·<code>02</code> 호출·<code>auto_setup</code> queue 전달·등록 후 확인</td>
       <td>단독 실행 (<code>readlink -f</code> 기준 자기 위치로 자동 이동) 또는 <code>auto_setup</code> TUI <code>w</code>에서 호출</td>
     </tr>
     <tr>
@@ -93,9 +92,9 @@
     </tr>
     <tr>
       <td><code>awxkit/</code> (내장)</td>
-      <td>Go 바이너리 + Bash 래퍼 Suite</td>
-      <td><code>.claude/HPC/awxkit</code> 전체 사본. <code>nodeinfo.sh</code>, <code>invsync.sh</code>, <code>dhcp.sh</code>, <code>pxe.sh</code>를 통해 실제 AWX API 호출</td>
-      <td><code>01</code>과 <code>02</code>가 상대경로(<code>awxkit/*.sh</code>)로 호출 (<code>awxkit/setup.sh</code> 사전 빌드 필요)</td>
+      <td>사전 빌드 바이너리 + Bash 래퍼</td>
+      <td><code>awx_script</code>에 내장된 AWX API 실행 바이너리·래퍼 모음. <code>nodeinfo.sh</code>, <code>invsync.sh</code>, <code>dhcp.sh</code>, <code>pxe.sh</code>를 통해 실제 AWX API 호출</td>
+      <td><code>01</code>과 <code>02</code>가 상대경로(<code>awxkit/*.sh</code>)로 호출 (이미 빌드된 바이너리 포함, 별도 빌드 없이 설정 후 바로 실행)</td>
     </tr>
     <tr>
       <td><code>setup/</code></td>
@@ -118,16 +117,15 @@
   </tbody>
 </table>
 
-<h1>3. 사전 준비 · 파일 배치 (빌드 불필요) 및 변수 설정</h1>
-<p><code>01.AWX_nodeinfo_V2.sh</code>와 <code>02.source_dhcp_pxe.sh</code>는 <strong>순수 Bash 스크립트이므로 별도의 컴파일/빌드가 불필요</strong>합니다. 다만 함께 호출하는 내장 <code>awxkit/</code> 디렉터리는 Go 오프라인 빌드(<code>bash awxkit/setup.sh</code>)가 필요합니다.</p>
+<h1>3. 사전 준비 · 실행 환경 배치 (별도 빌드 불필요) 및 변수 설정</h1>
+<p><code>01.AWX_nodeinfo_V2.sh</code>와 <code>02.source_dhcp_pxe.sh</code>는 순수 Bash 스크립트이며, 함께 호출하는 내장 <code>awxkit/</code> 디렉터리에도 <strong>이미 빌드된 바이너리와 래퍼 스크립트(<code>nodeinfo.sh</code>, <code>invsync.sh</code>, <code>dhcp.sh</code>, <code>pxe.sh</code> 등)가 포함</strong>되어 있습니다. 따라서 별도의 컴파일 절차 없이 <code>awxkit/conf/${user}_setting.conf</code> 설정만 완료하면 바로 실행할 수 있습니다.</p>
 
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1. awx_script와 같은 디렉터리에 awxkit/ 통째로 배치 및 오프라인 빌드
+  <ac:plain-text-body><![CDATA[# 1. awx_script 작업 디렉터리 이동 및 내장 awxkit/ 실행 권한·설정 확인 (별도 빌드 불필요)
 cd /path/to/awx_script
-cp -r /path/to/.claude/HPC/awxkit ./awxkit
-bash awxkit/setup.sh
-# awxkit/conf/${user}_setting.conf 준비 및 chmod 600 도 함께 완료해야 함
+chmod +x 01.AWX_nodeinfo_V2.sh 02.source_dhcp_pxe.sh awxkit/*.sh
+# 내장 awxkit/ 내 사전 빌드 바이너리 실행 권한과 awxkit/conf/${user}_setting.conf 작성 (권한 600) 확인 후 바로 실행
 
 # 2. 가이드로 최상단 변수 채우기 (권장) 또는 직접 vi 편집
 bash setup/setup_guide.sh
@@ -207,7 +205,7 @@ bash test/run_tests.sh   # 108건 모두 통과 확인]]></ac:plain-text-body>
       <td><code>01</code></td>
       <td><code>auto_setup_host</code> / <code>auto_setup_gossh_pw</code></td>
       <td>선택 (<code>os6_mgmt</code>용)</td>
-      <td><code>auto_setup</code> 데몬 서버(<code>os8_mgmt</code>) 호스트명. 채우면 <code>gossh</code>(필요 시 <code>-p</code>)로 원격 queue에 원자 전송. 비밀번호 입력 시 파일 권한 <code>600</code>·커밋 금지</td>
+      <td><code>auto_setup</code> 데몬 서버(<code>os8_mgmt</code>) 호스트명. 채우면 <code>gossh</code>(필요 시 <code>-p</code>)로 원격 queue에 원자 전송. 비밀번호 입력 시 파일 권한 <code>600</code>·외부 공유 금지</td>
     </tr>
     <tr>
       <td><code>01</code></td>
