@@ -1,0 +1,325 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>도구명:</strong> gossh (<code>gossh_os8</code> / <code>pdsh</code> 호환 병렬 SSH 실행 도구 v2)</p>
+    <p><strong>양식 유형:</strong> T1 (단일 CLI 도구형)</p>
+    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/공통/gossh/</code></p>
+    <p><strong>주요 실행 파일:</strong> <code>gossh_os8</code> (RHEL/Rocky 8+ 정적 바이너리, Go 1.26, <code>CGO_ENABLED=0</code>), <code>setup.sh</code>, <code>update.sh</code></p>
+    <p><strong>연계 도구:</strong> <code>survey</code>(조사), <code>setup_check</code>, <code>stress-test</code>, <code>auto_setup</code>, <code>pm_monitor</code>, <code>config_check</code>, <code>OS 환경설정 체크</code>, <code>ip_change</code>, <code>ldap_setting</code>, <code>ldap_check</code>, <code>esxi-log-check</code> 등 저장소 내 다수 도구의 실행 엔진</p>
+    <p><strong>한 줄 요약:</strong> <code>pdsh</code>·<code>clush</code> 스타일로 수천 대 서버에 병렬 SSH 명령 실행, 설정 변경(<code>-tmp</code>/<code>-limit</code>), 패키지 비교(<code>-rpm</code>), 다중 조사 표 생성(<code>-sv</code>), 대화형 접속(<code>-i</code>)까지 제공하는 고속 병렬 SSH CLI입니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>위험 명령 가드 및 실서버 교차검증 필수:</strong> 본 도구는 보조 도구로 사용하시기 바랍니다. 재부팅·디스크 파괴·네트워크 단절 등 위험 명령은 기본 차단되며 강제 실행 시 <code>-dnlgjawkrdjqghkrdls</code> 플래그와 대상 호스트 재입력 대조가 필요합니다. 또한 <code>-tmp</code>·<code>-limit</code>·<code>-tl</code>이나 원격 설정 변경 명령 실행 후에는 출력 요약만 믿지 말고 <strong>무작위로 서버 몇 대에 직접 접속해 반영 여부를 확인</strong>하십시오.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>1. 개요: 이게 뭐하는 도구인가요?</h2>
+<p><code>gossh</code>는 다수의 Linux 서버에 동시에 SSH 명령을 실행하고 결과를 <code>호스트명: 출력줄</code> 형태로 출력하는 Go 기반 병렬 SSH CLI 도구입니다. 저장소 내 여러 HPC·VM 자동화 도구(<code>조사</code>, <code>setup_check</code>, <code>stress-test</code>, <code>auto_setup</code>, <code>pm_monitor</code>, <code>config_check</code>, <code>ip_change</code>, <code>ldap_setting</code> 등)가 내부 서브프로세스로 호출하는 공통 기반 도구입니다.</p>
+<ul>
+  <li><strong><code>pdsh</code>/<code>clush</code> 문법 호환:</strong> <code>-w hosts.txt</code>, <code>-whosts.txt</code>, <code>-w^hosts.txt</code> 및 NodeSet 범위 표기(<code>esxi[0001-0020]</code>, <code>qwer[2660,2671,2826-2829]</code>, 다차원 <code>hostname[0001-0002]ev[01-03]</code>)를 지원하며 <code>pdsh</code> 이름으로 심볼릭 링크해 사용할 수 있습니다.</li>
+  <li><strong>안정성 기능 내장:</strong> SSH 키 우선 인증 후 비밀번호 폴백, 순수 Go DNS 리졸버 선행 조회, 1차 접속불가 호스트 저동시성(최대 50) 재검증, <code>/user/</code> autofs 마운트 스톰 보호(동시성 450 제한), stdout/stderr 완전 분리, 원격 ANSI 제어코드 제거를 기본 제공합니다.</li>
+</ul>
+
+<h2>2. 사전 준비 및 빌드 / 배포</h2>
+
+<h3>2.1 폐쇄망 환경: 사전 빌드 바이너리(<code>gossh_os8</code>) 사용</h3>
+<p>이 저장소에는 <code>vendor/</code> 디렉터리가 없습니다. Go 컴파일러가 없는 폐쇄망에서는 소스를 빌드하지 않고 저장소에 포함된 정적 바이너리 <strong><code>gossh_os8</code></strong> (Go 1.26, <code>CGO_ENABLED=0</code>)을 그대로 복사해 사용합니다.</p>
+<table>
+  <thead>
+    <tr>
+      <th>바이너리</th>
+      <th>대상 서버 OS</th>
+      <th>비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>gossh_os8</code></td>
+      <td>RHEL 8 / Rocky 8 이상 (x86_64)</td>
+      <td>저장소 내 커밋된 정적 바이너리. OS8 관리 서버에서 구형 OS6 원격 서버로의 SSH 접속도 지원(3.6 참고)</td>
+    </tr>
+    <tr>
+      <td><em>(OS6용 바이너리)</em></td>
+      <td>RHEL 6</td>
+      <td><strong>2026-11-04부터 제공 중단</strong> (OS8 관리 서버에서 <code>gossh_os8</code>로 OS6 대상 접속 가능)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>2.2 온라인 환경 소스 빌드</h3>
+<p>소스를 수정한 경우 인터넷이 되는 환경에서 의존성(<code>golang.org/x/crypto</code>, <code>golang.org/x/sys</code>)을 내려받아 빌드한 뒤 <code>gossh_os8</code>을 갱신해 커밋해야 합니다.</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[cd ".claude/공통/gossh"
+
+# 1) 편의 스크립트로 빌드 (go mod download 후 go build -o gossh .)
+./setup.sh
+
+# 2) 또는 배포용 정적 바이너리 수동 빌드
+go mod download
+CGO_ENABLED=0 go build -o gossh_os8 .]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>2.3 시스템 전역 배포 (<code>update.sh</code> 또는 수동 복사)</h3>
+<p><code>update.sh</code> 상단의 <code>TARGET_SERVER</code>(대상서버 호스트명 또는 IP), <code>DEST1</code>(기본 <code>/usr/local/bin</code>), <code>DEST2</code>(기본 <code>/usr/bin/</code>)를 채운 뒤 해당 대상 서버 위에서 직접 실행하면 빌드는 하지 않고 <code>gossh_os8</code>을 각각 <code>gossh</code>와 <code>pdsh</code>로 배포합니다.</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 방법 A: update.sh 사용 (TARGET_SERVER와 다른 서버에서 실행 시 거부됨)
+vi update.sh     # TARGET_SERVER, DEST1, DEST2 확인
+./update.sh      # 기존 파일 rm -f 후 복사 → 실행 중인 프로세스 Text file busy 방지
+
+# 방법 B: 수동 복사 및 pdsh 심볼릭 링크
+sudo cp gossh_os8 /usr/local/bin/gossh
+sudo chmod 755 /usr/local/bin/gossh
+sudo ln -sf /usr/local/bin/gossh /usr/local/bin/pdsh]]></ac:plain-text-body>
+</ac:structured-macro>
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p>실행 파일 이름이 <code>pdsh</code>인 경우 기존 <code>pdsh</code>와의 호환성을 위해 진행률 출력이 자동으로 비활성화되고 <code>-script</code> 기본값이 <code>true</code>로 동작합니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>3. 빠른 시작 및 핵심 사용법</h2>
+
+<h3>3.1 기본 병렬 명령 실행</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 기본 실행 (명령어는 반드시 따옴표로 묶기)
+./gossh_os8 -w hosts.txt "cat /etc/os-release"
+
+# 다양한 pdsh 스타일 -w 문법 지원
+./gossh_os8 -w=hosts.txt "uptime"
+./gossh_os8 -w^hosts.txt "uptime"
+./gossh_os8 -whosts.txt "uptime"
+
+# stdout과 stderr 완전 분리 수집 (stderr에 출력되는 명령은 2>&1 붙이기)
+./gossh_os8 -w hosts.txt "uptime" > result.txt 2> error.log
+./gossh_os8 -w hosts.txt "java -version 2>&1" > java_ver.txt]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>3.2 인증 정책 (SSH 키 최우선) 및 autofs 보호</h3>
+<ul>
+  <li><strong>키 우선 폴백:</strong> <code>-p</code>로 비밀번호를 지정해도 항상 SSH 키 인증을 먼저 시도하며(<code>-i</code> 미지정 시 <code>~/.ssh/id_ed25519</code> → <code>id_ecdsa</code> → <code>id_rsa</code> 순 자동 탐색), 키 접속에 실패한 호스트만 비밀번호로 폴백합니다.</li>
+  <li><strong><code>/user/</code> autofs 가드:</strong> 명령 문자열에 <code>/user/</code>가 포함되면 마운트 스톰 방지를 위해 동시 접속 수(<code>-c</code>)가 자동으로 <strong><code>450</code></strong>으로 제한됩니다. 우회가 필요할 때만 <code>-cf &lt;N&gt;</code>을 사용하세요.</li>
+</ul>
+
+<h3>3.3 동일 결과 묶음(<code>-b</code>) · 행리스트(<code>-m</code>) · 대화형 접속(<code>-i &lt;호스트&gt;</code>)</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 동일 출력 호스트 그룹화 (접속불가 호스트 별도 그룹화, -script 와 병용 시 비활성화)
+./gossh_os8 -w hosts.txt -b "cat /etc/redhat-release"
+
+# 60초 이상 실행 중인 호스트 확인 (실행 중 Enter 로 행리스트 토글)
+./gossh_os8 -m -w hosts.txt "yum -y update"
+
+# 단일 호스트 대화형 SSH 접속 (-w 및 명령 없이 -i 만 지정, 구형 RHEL6 서버 접속 가능)
+./gossh_os8 -i node001
+./gossh_os8 -i node001:2222 -u admin -p '비밀번호']]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>3.4 설정 일괄 변경(<code>-tmp</code>/<code>-limit</code>/<code>-tl</code>) · 패키지 비교(<code>-rpm</code>) · 조사 표(<code>-sv</code>)</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) /etc/tmpfiles.d/custom-tmp.conf 의 /tmp 정리 시간(h) 변경 또는 삭제(d) (즉시 적용은 안 함)
+./gossh_os8 -w hosts.txt -tmp
+
+# 2) 비교서버의 /etc/security/limits.conf 복사 (.bak 백업, sha256 검증, 빈 파일/60000B 초과 시 중단)
+./gossh_os8 -w hosts.txt -limit
+
+# 3) -tmp 와 -limit 질문을 한 번에 받아 함께 진행
+./gossh_os8 -w hosts.txt -tl
+
+# 4) 비교서버와 설치 RPM(이름.아키텍처 기준, gpg-pubkey 제외) 비교
+./gossh_os8 -w hosts.txt -rpm
+
+# 5) 다중 조사 명령을 대화형 입력 → 호스트 1대 미리보기 → 전체 실행 → TSV/TXT 표 저장
+./gossh_os8 -sv -w hosts.txt
+
+# 6) 특정 옵션의 상세 사용법과 모의 출력결과 미리보기
+./gossh_os8 -h -b]]></ac:plain-text-body>
+</ac:structured-macro>
+<ul>
+  <li><strong><code>-sv</code> 미리보기 키:</strong> 엔터(첫 호스트 시험), <code>&lt;호스트명&gt;</code>(지정 호스트 시험), <code>Ni</code>(N번 명령 수정), <code>a</code>(명령 추가), <code>Nd</code>(N번 명령 삭제), <code>next</code>(전체 실행). 원격 <code>bash -s</code> 표준입력으로 그대로 전달되므로 <code>csh</code>/<code>tcsh</code>에서도 동작하며, 2줄 이상 결과가 나오면 재입력 또는 <code>/</code> 병합을 선택할 수 있습니다.</li>
+</ul>
+
+<h3>3.5 실행 중 Ctrl+C 제어 (pdsh 방식)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>연속 입력 횟수 (1초 이내)</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1회</td>
+      <td>현재 접속/명령 실행 중인 호스트 목록을 stderr에 표시하고 계속 진행</td>
+    </tr>
+    <tr>
+      <td>2회</td>
+      <td>현재 걸려 있는 호스트들만 취소(<code>&lt;hostfile&gt;_res_cancel</code> 기록)하고 대기열 호스트를 계속 진행</td>
+    </tr>
+    <tr>
+      <td>3회</td>
+      <td>전체 작업 중단 후 지금까지의 결과 요약 출력 및 결과 파일 저장 후 종료 (4회 입력 시 즉시 종료 <code>exit 130</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>3.6 구형 SSH 서버 접속 지원 (RHEL 6 등)</h3>
+<p>옵션 없이 항상 최신 암호/키 교환을 먼저 제안하고 실패 시 구형 알고리즘(암호: <code>aes128-cbc</code>, <code>3des-cbc</code>, <code>arcfour256</code>, <code>arcfour128</code>, <code>arcfour</code> / 키 교환: <code>diffie-hellman-group16-sha512</code>, <code>group-exchange-sha256/sha1</code>, <code>group1-sha1</code>)으로 접속합니다. 단, Go SSH 라이브러리에 <code>blowfish-cbc</code>가 구현되어 있지 않아 <code>blowfish-cbc</code>만 제공하는 서버는 접속할 수 없습니다.</p>
+
+<h2>4. CLI 옵션 전체 표</h2>
+<table>
+  <thead>
+    <tr>
+      <th>플래그</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>-w &lt;hostfile&gt;</code></td>
+      <td>(필수)</td>
+      <td>호스트 목록 파일 (<code>#</code> 주석, 공백/쉼표 구분, <code>esxi[0001-0020]</code> 등 NodeSet 범위 확장, 중복 제거). <code>-w^파일</code>·<code>-w파일</code> 지원</td>
+    </tr>
+    <tr>
+      <td><code>-u &lt;계정&gt;</code></td>
+      <td><code>root</code></td>
+      <td>SSH 접속 계정</td>
+    </tr>
+    <tr>
+      <td><code>-p &lt;비밀번호&gt;</code></td>
+      <td>(없음)</td>
+      <td>SSH 비밀번호 (키 인증 우선 시도 후 실패 시에만 폴백)</td>
+    </tr>
+    <tr>
+      <td><code>-i &lt;경로 또는 호스트&gt;</code></td>
+      <td>자동 탐색</td>
+      <td><code>-w</code>와 함께 쓰면 SSH 개인키 경로. <code>-w</code>·명령 없이 단독 사용 시 해당 호스트 대화형 SSH 접속(<code>호스트:포트</code> 허용, 종료코드 원격 셸 준수 / 실패 시 255)</td>
+    </tr>
+    <tr>
+      <td><code>-P &lt;포트&gt;</code></td>
+      <td><code>22</code></td>
+      <td>SSH 포트 번호</td>
+    </tr>
+    <tr>
+      <td><code>-c &lt;N&gt;</code></td>
+      <td><code>1000</code></td>
+      <td>동시 접속 수 (명령어에 <code>/user/</code> 감지 시 자동으로 <code>450</code> 제한)</td>
+    </tr>
+    <tr>
+      <td><code>-cf &lt;N&gt;</code></td>
+      <td><code>0</code></td>
+      <td><code>/user/</code> autofs 제한을 우회하여 강제 지정할 동시 접속 수</td>
+    </tr>
+    <tr>
+      <td><code>-b</code></td>
+      <td><code>false</code></td>
+      <td>동일 출력 호스트 묶음 출력 (<code>-script</code> 시 비활성화)</td>
+    </tr>
+    <tr>
+      <td><code>-m</code></td>
+      <td><code>false</code></td>
+      <td>60초 이상 실행 중/완료 호스트 행리스트 보기 (Enter 토글, 파이프/비터미널 시 무시)</td>
+    </tr>
+    <tr>
+      <td><code>-script</code></td>
+      <td><code>false</code>*</td>
+      <td>진행률/요약/ANSI 색상을 끄고 <code>호스트: 출력줄</code>만 출력 (<code>*</code>실행 파일명이 <code>pdsh</code>이면 기본 <code>true</code>)</td>
+    </tr>
+    <tr>
+      <td><code>-t &lt;초&gt;</code></td>
+      <td><code>15</code></td>
+      <td>SSH 접속(TCP+핸드셰이크+인증) 제한시간. 로그인 성공 후 명령 실행 시간에는 미적용 (재검증 로그인 제한은 최대 8초)</td>
+    </tr>
+    <tr>
+      <td><code>-pm</code></td>
+      <td><code>false</code></td>
+      <td>본 명령 전 <code>~/.profile</code> 내 <code>anaconda</code> 감지("OS 설치중" 제외) 및 특정 autofs 계정 접근 점검 (점검 10초 제한)</td>
+    </tr>
+    <tr>
+      <td><code>-dnlgjawkrdjqghkrdls</code></td>
+      <td><code>false</code></td>
+      <td>위험 명령 강제 실행 승인 플래그 (대상 호스트 재입력 완전일치 대조 + <code>y/N</code> 확인 필요)</td>
+    </tr>
+    <tr>
+      <td><code>-tmp</code> / <code>-limit</code> / <code>-tl</code></td>
+      <td><code>false</code></td>
+      <td><code>/etc/tmpfiles.d/custom-tmp.conf</code> 수정 / <code>/etc/security/limits.conf</code> 복사 / 두 작업 동시 실행 (명령 인자 없이 사용)</td>
+    </tr>
+    <tr>
+      <td><code>-rpm</code></td>
+      <td><code>false</code></td>
+      <td>비교서버와 RPM 패키지(<code>이름.아키텍처</code>) 차이 비교 및 보고서/TSV 저장 (명령 인자 없이 사용)</td>
+    </tr>
+    <tr>
+      <td><code>-sv</code></td>
+      <td><code>false</code></td>
+      <td>다중 조사 명령을 입력받아 표(표준출력 및 <code>_survey.tsv</code>/<code>_survey.txt</code>)로 수집 (명령 인자 없이 사용)</td>
+    </tr>
+    <tr>
+      <td><code>-h [옵션...]</code></td>
+      <td>—</td>
+      <td>옵션 요약·상세 출력. 옵션명을 함께 주면(예: <code>gossh -h -b</code>) 해당 옵션 설명 및 모의 출력 예시 표시 (모르는 옵션은 <code>exit 1</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 출력 형식 및 결과 파일 안내</h2>
+<p>실행이 끝나면 특이사항이 있는 호스트만 <code>-w</code>로 넘긴 파일명을 접두사로 사용해 <strong>압축 없이 한 줄에 호스트 하나씩</strong> 저장됩니다. 그대로 <code>-w</code> 인자로 넘겨 재실행할 수 있으며, 같은 위치에서 다시 실행할 때는 이번 실행이 생성할 수 있는 아래 5개 파일명만 시작 시 먼저 삭제합니다.</p>
+<table>
+  <thead>
+    <tr>
+      <th>생성 파일명</th>
+      <th>생성 조건 및 내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>&lt;hostfile&gt;_res_off</code></td>
+      <td>연결 타임아웃, DNS 조회 실패, 네트워크 불가 호스트 목록</td>
+    </tr>
+    <tr>
+      <td><code>&lt;hostfile&gt;_res_refsed</code></td>
+      <td>Connection Refused(포트 닫힘) 호스트 목록</td>
+    </tr>
+    <tr>
+      <td><code>&lt;hostfile&gt;_os_install</code></td>
+      <td><code>-pm</code> 사용 시 <code>~/.profile</code> 내 <code>anaconda</code>가 감지되어 OS 설치 중으로 분류된 호스트</td>
+    </tr>
+    <tr>
+      <td><code>&lt;hostfile&gt;_nosvrauto</code></td>
+      <td><code>-pm</code> 사용 시 특정 autofs 계정이 미마운트된 호스트</td>
+    </tr>
+    <tr>
+      <td><code>&lt;hostfile&gt;_res_cancel</code></td>
+      <td>실행 중 Ctrl+C 2회 입력으로 취소된 호스트</td>
+    </tr>
+    <tr>
+      <td><code>&lt;hostfile&gt;_rpm_report.txt</code><br/><code>&lt;hostfile&gt;_rpm_tab.txt</code><br/><code>&lt;hostfile&gt;_rpm_diff</code></td>
+      <td><code>-rpm</code> 실행 시 생성 (사람용 보고서 / UTF-8 BOM 탭 구분 표 / 차이 호스트 목록 — 차이 없을 시 <code>_rpm_diff</code> 미생성)</td>
+    </tr>
+    <tr>
+      <td><code>&lt;hostfile&gt;_survey.tsv</code><br/><code>&lt;hostfile&gt;_survey.txt</code></td>
+      <td><code>-sv</code> 실행 시 생성 (탭 구분 엑셀용 표 / <code>|</code> 구분 표)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>6. 위험 명령 가드 및 주의사항</h2>
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>위험 명령 차단 규칙 및 강제 실행 절차:</strong></p>
+    <ul>
+      <li><strong>부분일치 차단:</strong> <code>reboot</code>, <code>poweroff</code>, <code>shutdown</code>, <code>halt</code>, <code>init 0</code>, <code>init 6</code>, <code>ddc</code></li>
+      <li><strong>독립 명령 단어 차단:</strong> <code>kexec</code>, <code>systemctl kexec/rescue/emergency</code>, <code>isolate rescue/emergency.target</code>, <code>init 1</code>/<code>telinit 1</code>, <code>sysrq-trigger</code>, <code>ipmitool ... power off/reset/cycle</code>, <code>mkfs*</code>, <code>dd ... of=/dev/</code>, <code>wipefs</code>, <code>fdisk</code>(<code>fdisk -l</code> 포함), <code>parted</code>(<code>parted -l</code> 포함), <code>sgdisk</code>, <code>shred</code>, <code>rm -rf /</code>, <code>lvremove</code>/<code>vgremove</code>/<code>pvremove</code>, <code>ifdown</code>, <code>nmcli ... down</code>, <code>ip link set ... down</code>, <code>systemctl stop sshd/network/NetworkManager</code></li>
+      <li>차단 시 종료코드 <code>1</code>로 즉시 중단됩니다. 강제 실행이 필요하면 <code>-dnlgjawkrdjqghkrdls</code> 플래그를 추가한 뒤, 화면에 출력된 대상 호스트와 동일하게 호스트 목록을 재입력(빈 줄 Enter로 종료)해 완전 일치를 통과하고 <code>y</code>를 입력해야 실행됩니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

@@ -1,0 +1,373 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>도구명:</strong> setup_check (<code>new_setup</code> / <code>new_setup.sh</code>) — 신규 OS 배포 후 설치 상태 판정 및 <code>config_check</code> · <code>stress-test</code> 자동 연계 도구</p>
+    <p><strong>양식 유형:</strong> T2 (설치 판정 · 파이프라인 연계형)</p>
+    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/setup_check/</code></p>
+    <p><strong>주요 파일:</strong> <code>bin/new_setup</code> (os8 정적 바이너리), <code>bin/new_setup_os6</code> (옛 RHEL6용), <code>new_setup.sh</code>, <code>setup.sh</code>, <code>troubleshoot.sh</code>, <code>new_setup.conf.sample</code></p>
+    <p><strong>연계 도구:</strong> <code>gossh</code> (1차/2차 원격 수집), <code>config_check</code> (<code>-auto-check</code> 점검 / <code>-auto</code> 설정수정), <code>stress-test</code> (<code>-batch</code> / <code>-yaml-state</code> 부하 실행)</p>
+    <p><strong>한 줄 요약:</strong> 신규 OS 배포 후 <code>gossh</code>로 장비별 설치 상태 5종(<code>완료</code>/<code>디스크미인식</code>/<code>설치정지</code>/<code>OS설치중</code>/<code>접속불가</code>)과 설정체크·CPU·stress-ng·H/T·OS 8열 표를 산출하고, <code>-run</code> 모드로 <code>config_check</code> 설정수정부터 <code>stress-test</code> 부하테스트까지 TUI/자동 진행으로 이어 주는 Go 도구입니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>참고용 판정 한계 및 실서버 교차검증 필수:</strong></p>
+    <ul>
+      <li>본 도구는 100% 신뢰하기보다 참고용 보조 도구로 사용하세요. <code>OS설치중</code>·<code>디스크미인식</code>·<code>설치정지</code>·CPU/stress-ng 판정은 로그 문구와 접속 상태에 기댄 추정이므로, 중요한 장비는 무작위로 몇 대를 골라 직접 접속해 실제 상태를 확인하시기 바랍니다.</li>
+      <li><code>-run</code> 모드는 <code>config_check.sh -auto</code>(설정 변경) 및 <code>stress-test -batch</code>(AWX 부하 실행·템플릿 인벤토리 임시 변경)를 호출합니다. 또한 <code>-run</code> / <code>-auto</code> / <code>STRESS_REMOTE</code>의 상당 부분은 랩의 가짜(fake) 대역으로 검증되었으며, 실제 AWX·실장비 45분 CPU 테스트·실장비 재부팅 경로는 현장에서 직접 확인해야 합니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>1. 개요 및 전체 판정 · <code>-run</code> 파이프라인 흐름</h2>
+<p><code>new_setup</code>은 크게 두 가지 방식으로 사용합니다.</p>
+<ul>
+  <li><strong>기본 모드 (읽기 전용 8열 판정):</strong> <code>bash new_setup.sh &lt;호스트파일&gt;</code> — 2단계 <code>gossh</code> 호출과 <code>config_check.sh -auto-check</code>를 통해 장비별 설치 상태와 완료 항목을 파이프(<code>|</code>) 구분 8열 표로 출력합니다.</li>
+  <li><strong><code>-run</code> / <code>-run -auto</code> 모드 (원스톱 자동 진행 TUI):</strong> <code>bash new_setup.sh -run &lt;호스트파일&gt;</code> — 접속 가능한 <code>완료</code> 서버의 <strong>설정체크 / CPU테스트 / stress-ng</strong> 세 열이 모두 <code>O</code>가 될 때까지 <code>config_check.sh -auto</code>와 <code>stress-test -batch</code>를 순차(또는 <code>-auto</code> 무인 스케줄)로 실행하며 TUI로 제어합니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[[기본 판정 흐름]
+1차: gossh -w <호스트파일> -pm -script '<정보수집 명령>' (실행 전 잔여 _res_off 등 5종 삭제)
+  ├─ _res_off / _res_refsed / _res_cancel ──────────────→ 접속불가
+  ├─ _os_install (anaconda 감지) ─→ 2차 gossh (/tmp/anaconda.log 확인)
+  │     ├─ DISK_PATTERN 일치  ──→ 디스크미인식
+  │     ├─ ERROR_PATTERN 일치 ──→ 설치정지
+  │     └─ 그 외/로그없음/실패 → OS설치중
+  └─ 그 외 (명령 실행됨) ───────→ 완료
+        ├─ 설정체크 : 관리서버에서 config_check.sh -auto-check new_setup targets.txt
+        ├─ CPU테스트: vendor_id 별 CPU_INTEL_* / CPU_AMD_* 로그 기준 → O / X / NOTRUN
+        ├─ stress-ng: /var/log/messages* 내 'stress-ng' 유무 → O / NOTRUN
+        └─ H/T · OS : lscpu Thread(s) per core (ON/OFF) · uname -r (KERNEL_NAME 치환)
+
+[-run 통합 파이프라인 (config_check ↔ stress-test 연계)]
+[1 판정] → [2 설정수정: config_check.sh -auto <u> <목록>] → 재판정
+         → [3 부하: CPU X 재확인 → stress-test -steps a -batch / -steps b -end ... -batch] → CPU·btime 감시
+         → [4 stress-ng: 3단계에서 CPU O 된 호스트 → stress-test -steps b -end ... -batch]
+         → [5 완료: ./<호스트파일>_run/result.txt 저장]]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>2. 사전 준비 및 폐쇄망 바이너리 / 대화형 설정</h2>
+
+<h3>2.1 폐쇄망 환경: 사전 빌드 바이너리 사용</h3>
+<p>Go가 없는 폐쇄망 환경에서는 저장소에 함께 커밋된 바이너리를 사용합니다. 표준 라이브러리만 사용하므로 <code>vendor/</code>가 필요 없으며, 래퍼 스크립트 <code>new_setup.sh</code>가 <code>/etc/redhat-release</code>를 읽어 OS에 맞는 바이너리를 자동 선택합니다.</p>
+<table>
+  <thead>
+    <tr>
+      <th>파일</th>
+      <th>대상 서버</th>
+      <th>비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>bin/new_setup</code></td>
+      <td><code>os8_mgmt</code> (linux/amd64)</td>
+      <td>현행 메인 바이너리 (<code>-run</code>, <code>-run -auto</code>, <code>-doctor</code>, <code>p</code> 리포트 모두 지원)</td>
+    </tr>
+    <tr>
+      <td><code>bin/new_setup_os6</code></td>
+      <td><code>os6_mgmt</code> (RHEL 6)</td>
+      <td><strong>구버전(v2 시기, 2026-11-04부터 재빌드 중단).</strong> 탭 출력이며 제목줄·<code>NOTRUN</code>·AMD 규칙·<code>-run</code>·<code>-doctor</code> 미지원</td>
+    </tr>
+  </tbody>
+</table>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 폐쇄망 배치 후 권한 확인
+cd ".claude/HPC/setup_check"
+chmod +x new_setup.sh setup.sh troubleshoot.sh bin/new_setup bin/new_setup_os6
+
+# (선택) 전역 심볼릭 링크 — 복사 대신 링크 권장 (래퍼 위치 기준으로 bin/과 conf 탐색)
+ln -s "$(pwd)/new_setup.sh" /usr/local/bin/new_setup
+
+# (Go 환경에서 소스 수정 후 재빌드 시 — os8만 빌드해 커밋)
+bash build.sh]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>2.2 최초 대화형 설정 도우미 (<code>setup.sh</code>)</h3>
+<p>처음 사용할 때는 <code>new_setup.conf</code>를 수동 편집하는 대신 <code>bash setup.sh</code>를 실행하면 기본·부하(<code>-run</code>)·고급 항목을 순서대로 입력받아 <code>&lt;설정파일&gt;.bak</code> 백업 후 원자적으로 저장합니다(설정 파일 폴더 밖 <code>/etc</code> 등에는 아무것도 쓰지 않음). 또한 <code>new_setup.sh</code> 실행 시 설정 파일이 없고 터미널(tty)이면 자동으로 <code>setup.sh</code> 실행을 제안합니다(<code>NEW_SETUP_NO_PROMPT=1</code>로 끌 수 있음).</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[bash setup.sh                    # setup.sh 옆의 new_setup.conf 생성/수정 (Enter=유지, '-'=비우기)
+bash setup.sh -c /경로/my.conf   # 특정 설정 파일 지정
+bash setup.sh --yes              # 확인 질문 생략 (자동화용)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>3. 입력 파일 및 <code>new_setup.conf</code> 규격</h2>
+
+<h3>3.1 호스트파일 및 장애 목록 (<code>error_list.txt</code>)</h3>
+<ul>
+  <li><strong>호스트파일:</strong> <code>gossh -w</code>와 동일한 형식(공백/<code>#</code> 주석 무시, 쉼표·공백 분리, <code>node[01-10]</code> 범위 확장, 중복 제거). 단, 파일 파싱 시 쉼표 분리가 먼저 일어나므로 <code>a[1,3,5-7]</code> 같은 괄호 내 쉼표 표기는 사용하지 마세요.</li>
+  <li><strong>장애 목록(<code>-er &lt;파일&gt;</code>):</strong> 줄마다 <code>hostname&lt;TAB&gt;장애사유</code> 형식(탭으로만 구분, 사유 내 <code>|</code>는 <code>/</code>로 치환). 생략 시 현재 경로에 <code>error_list.txt</code>가 있으면 자동 사용됩니다.</li>
+</ul>
+
+<h3>3.2 <code>new_setup.conf</code> 주요 설정 키</h3>
+<p><code>-c</code> 생략 시 <code>./new_setup.conf</code> → 실행 파일 폴더 → <code>bin/</code> 상위 폴더 순으로 탐색합니다.</p>
+<table>
+  <thead>
+    <tr>
+      <th>키</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>GOSSH</code></td>
+      <td>빈 값 (PATH 탐색)</td>
+      <td><code>gossh</code> 실행 파일 또는 폴더 경로 (따옴표·<code>~/</code> 허용)</td>
+    </tr>
+    <tr>
+      <td><code>DISK_PATTERN</code></td>
+      <td><code>Disk "" given in clearpart command does not exist</code></td>
+      <td><code>/tmp/anaconda.log</code>에서 <code>디스크미인식</code>으로 판정할 고정 문자열 (여러 줄 가능)</td>
+    </tr>
+    <tr>
+      <td><code>ERROR_PATTERN</code></td>
+      <td>빈 값</td>
+      <td><code>설치정지</code>로 판정할 고정 문자열 (여러 줄 가능, 비우면 판정 안 함)</td>
+    </tr>
+    <tr>
+      <td><code>KERNEL_NAME</code></td>
+      <td>빈 값</td>
+      <td>OS 열 커널명 치환 규칙 (<code>KERNEL_NAME=&lt;uname -r&gt;=&lt;표시명&gt;</code>, 여러 줄 가능)</td>
+    </tr>
+    <tr>
+      <td><code>OS_CHECK_SH</code> / <code>OS_CHECK_EXCLUDE</code></td>
+      <td>빈 값</td>
+      <td><code>config_check.sh</code> 경로(<code>-auto-check</code> 지원 필수) 및 설정체크 FAIL 무시 문자열(<code>|</code> 구분)</td>
+    </tr>
+    <tr>
+      <td><code>CPU_INTEL_LOG</code> / <code>_OK</code> / <code>_LINE</code></td>
+      <td><code>/var/cpudiag/result.log</code> / <code>Completed successfully. No issues detected.</code> / 빈 값</td>
+      <td>Intel CPU 로그 경로(와일드카드 <code>*</code>/<code>?</code> 시 최신 파일), 성공 문구, 필터 줄 문자열</td>
+    </tr>
+    <tr>
+      <td><code>CPU_AMD_LOG</code> / <code>_OK</code> / <code>_LINE</code></td>
+      <td><code>/var/cpudiag/results.json</code> / <code>PASS</code> / <code>Result</code></td>
+      <td>AMD CPU 로그 경로 및 판정 규칙 (<code>Result</code> 줄이 1개 이상이고 모두 <code>PASS</code> 포함 시 <code>O</code>)</td>
+    </tr>
+    <tr>
+      <td><code>STRESS_TEST</code> / <code>STRESS_TEST_CONF</code></td>
+      <td>빈 값</td>
+      <td>(<code>-run</code>) <code>stress-test</code> 바이너리 및 <code>-conf</code> 경로 (<code>STRESS_TEST_CONF</code>는 비우면 선택 user에 맞춰 자동 탐색)</td>
+    </tr>
+    <tr>
+      <td><code>STRESS_REMOTE</code> / <code>STRESS_IGNORE_OFFLINE</code></td>
+      <td>빈 값 / <code>n</code></td>
+      <td>(<code>-run</code>) B서버 IP/호스트 지정 시 판정·감시는 A서버, <code>stress-test</code>는 B서버에서 SSH 실행(<code>STRESS_TEST</code>·<code>_CONF</code>는 B서버 절대경로 필수). <code>y</code>이면 <code>-ignore-offline</code> 전달</td>
+    </tr>
+    <tr>
+      <td><code>USER_ROUTE</code></td>
+      <td>빈 값 (<code>-user</code> → <code>$USER</code>)</td>
+      <td><code>info_mn.sh</code>/<code>info.sh</code> user 메뉴 스크립트 폴더</td>
+    </tr>
+    <tr>
+      <td><code>CPU_WAIT_START</code> / <code>_INTERVAL</code> / <code>_MAX</code></td>
+      <td><code>47m</code> / <code>2m</code> / <code>30m</code></td>
+      <td>(<code>-run</code>) CPU launch 후 결과 확인 시작 대기 / <code>btime</code>·응답 감시 간격 / 확인 시작 후 최대 대기</td>
+    </tr>
+    <tr>
+      <td><code>GOSSH_TIMEOUT</code> / <code>CHECK_TIMEOUT</code> / <code>STRESS_TIMEOUT</code></td>
+      <td><code>10m</code> / <code>40m</code> / <code>60m</code></td>
+      <td>외부 명령 제한시간 (초과 시 프로세스 그룹 <code>SIGTERM</code> → 5초 뒤 <code>SIGKILL</code>)</td>
+    </tr>
+    <tr>
+      <td><code>AUTO_LIMIT</code> / <code>_RECHECK</code> / <code>_CPU_WAIT</code> / <code>_CPU_INTERVAL</code> / <code>_CPU_MAX</code></td>
+      <td><code>12h</code> / <code>10m</code> / <code>50m</code> / <code>5m</code> / <code>30m</code></td>
+      <td>(<code>-run -auto</code>) 전체 제한시간 / 미완료 재판정 주기 / CPU 첫 판정 대기 / 재판정 주기 / 최대 추가 대기</td>
+    </tr>
+    <tr>
+      <td><code>VENDOR_&lt;이름&gt;</code> / <code>REPORT_ETA_DAYS</code></td>
+      <td>빈 값 / <code>2</code></td>
+      <td>(<code>-run</code> 리포트 <code>p</code> 키) hostname glob 벤더 매핑(예: <code>VENDOR_HPE=hpe*,dl3*</code>) 및 완료예정일 오프셋(일)</td>
+    </tr>
+  </tbody>
+</table>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>원격 실행(<code>STRESS_REMOTE</code>) 인증 방식:</strong> 지정 시 계정은 <code>root</code> 고정이며 비밀번호는 <code>new_setup</code> 바이너리에 내장되어 있어 SSH <code>SSH_ASKPASS</code>(환경변수 <code>NEW_SETUP_ASKPASS=1</code>, OpenSSH 8.0 호환 <code>SSH_ASKPASS_REQUIRE=force</code>)로만 전달되므로 명령줄·<code>ps</code>·<code>worker.log</code>·<code>-doctor</code> 출력에는 노출되지 않습니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>4. 실행 방법 · <code>-run</code> 파이프라인 및 <code>troubleshoot.sh</code></h2>
+
+<h3>4.1 기본 판정 및 <code>-run</code> / <code>-run -auto</code> 명령</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) 기본 8열 판정 및 결과 저장
+bash new_setup.sh hosts.txt
+bash new_setup.sh -c /경로/my.conf -er error_list.txt hosts.txt > result.txt
+
+# 2) 통합 자동 진행 TUI (-run): 설정수정 → CPU → stress-ng
+bash new_setup.sh -run [-new] [-c conf] [-er err] [-user u] hosts.txt
+# 같은 경로에서 다시 실행하면 백그라운드 워커에 재접속(터미널 끊김에도 작업 지속)
+# -new는 기존 ./<호스트파일>_run 폴더를 .old-<시각>으로 보관하고 새로 시작 (워커 생존 시 거부)
+
+# 3) 완전 무인 자동 진행 (-run -auto, 12시간 제한)
+bash new_setup.sh -run -auto [-new] [-user u] hosts.txt
+
+# 4) 읽기 전용 문제 진단 (troubleshoot.sh → new_setup -doctor)
+bash troubleshoot.sh [-c conf] [-user u]                  # 환경 점검
+bash troubleshoot.sh [-c conf] hosts.txt                   # 환경 + -run 작업 상태 진단
+bash troubleshoot.sh [-c conf] -host node01 [-check]       # 호스트 단건 판정 근거 점검]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>4.2 <code>-run</code> 연계 세부 규칙 (<code>config_check</code> + <code>stress-test</code>)</h3>
+<ul>
+  <li><strong>2단계 설정수정 (<code>config_check</code>):</strong> 1차 판정에서 상태가 <code>완료</code>이고 설정체크가 <code>O</code>가 아닌 호스트(<code>OS_CHECK_SH</code>가 지정됐는데 <code>-</code>인 실패 포함)를 대상으로 관리서버에서 <code>config_check.sh -auto &lt;user&gt; &lt;목록&gt;</code>을 실행한 뒤 <code>-auto-check</code>로 재판정합니다.</li>
+  <li><strong>3·4단계 부하테스트 (<code>stress-test</code>):</strong>
+    <ul>
+      <li><code>CPU</code> 대상: <code>설정체크 O</code> + <code>CPU NOTRUN</code> (단, 이전 실행 중단 등으로 <code>CPU X</code>인 완료 호스트가 있으면 시작 시 <code>cat /proc/loadavg</code>를 확인해 1분 로드 &lt; 3인 후보만 일괄 재실행 포함 여부 <code>y/n</code> 질문).</li>
+      <li><code>stress-ng</code> 대상: <code>설정체크 O</code> + <code>CPU O</code> + <code>stress-ng != O</code>. (3단계에서 CPU를 돌린 호스트는 CPU가 <code>O</code>가 된 뒤 4단계에서 실행.)</li>
+      <li>대화형 <code>-run</code>에서는 <code>stress-ng</code> 대상이 있을 때 종료 시각 5개 값(<code>end_year</code>~<code>end_min</code>)을 TUI에서 입력받거나 <code>k</code> 키로 <code>stress-ng</code>만 건너뛸 수 있습니다. <code>-run -auto</code>에서는 <strong>launch 당일 + 2일 00:00</strong>으로 자동 설정됩니다.</li>
+      <li>CPU/stress-ng 실행 중 <code>stress-test</code>가 <code>[인벤토리사용중]</code> 줄을 출력하면 TUI가 이를 가로채 <code>r</code>(다시 확인)/<code>x</code>(묶음 중단) 질문을 띄우며, 대기 중에는 <code>STRESS_TIMEOUT</code> 타이머가 일시정지됩니다.</li>
+    </ul>
+  </li>
+  <li><strong><code>-run -auto</code> 특이 동작:</strong> 환경 실패(<code>[job]</code> 생성 전 실패·설정수정 명령 오류·SSH 실패 등)는 호스트 시도 횟수(최대 3회 포기)에 세지 않고 5분 → 10분 → 20분 → 30분 간격으로 재시도합니다. 사용자가 답할 질문은 ① <code>-yaml-state</code> 불일치 시 덮어쓰기(<code>y</code>/<code>s</code>) ② <code>[인벤토리사용중]</code>(<code>r</code>/<code>x</code>) 두 가지뿐입니다.</li>
+</ul>
+
+<h3>4.3 <code>-run</code> TUI 주요 키</h3>
+<table>
+  <thead>
+    <tr>
+      <th>키</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>c</code> / <code>r</code> / <code>x</code> / <code>s</code> / <code>k</code></td>
+      <td>현재 단계 질문 응답 (계속 / 재시도 / O 아닌 호스트 제외 후 계속 / 작업 중지 / 종료 시각 질문 시 stress-ng 건너뛰기; 두벌식 한글 자모 지원)</td>
+    </tr>
+    <tr>
+      <td><code>y</code> / <code>n</code></td>
+      <td>CPU <code>X</code> 호스트 재실행 질문 응답 (또는 인벤토리 사용 중 시 <code>r</code>/<code>x</code>)</td>
+    </tr>
+    <tr>
+      <td><code>v</code> / <code>f</code></td>
+      <td><code>|</code> 구분 결과 판 켜기/끄기 · <code>O</code> 아닌 호스트만 보기 필터 토글</td>
+    </tr>
+    <tr>
+      <td><code>p</code></td>
+      <td>벤더별 진행 보고 글(리포트) 생성 및 조회 (<code>1</code> 전일 저장본 <code>report_YYYYMMDD.json</code> / <code>2</code> 전날 코멘트 붙여넣기 또는 <code>@파일</code>)</td>
+    </tr>
+    <tr>
+      <td><code>l</code> / <code>s</code>·<code>S</code>(질문 없음)</td>
+      <td>하단 <code>worker.log</code> 로그 창 켜기/끄기 / 작업 전체 중지 요청(<code>y/N</code>)</td>
+    </tr>
+    <tr>
+      <td><code>↑↓</code> <code>PgUp</code> <code>PgDn</code> <code>Home</code> <code>End</code> <code>g</code> <code>G</code> <code>Space</code> <code>b</code></td>
+      <td>호스트표 스크롤 및 화면 이동</td>
+    </tr>
+    <tr>
+      <td><code>q</code> / <code>?</code> / <code>Ctrl-L</code></td>
+      <td>TUI만 종료(백그라운드 워커는 계속 실행) / 도움말 / 화면 다시 그리기</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 출력 컬럼 · 상태 폴더 및 종료 코드</h2>
+
+<h3>5.1 8열 출력 표 및 각 열 값</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[hostname|상태|설정체크|CPU테스트|stress-ng|H/T|OS|비고
+node01|완료|O|O|O|ON|4.18.0-553.el8_10.x86_64|
+node02|완료|O|NOTRUN|X|ON|4.18.0-553.el8_10.x86_64|메모리 불량
+node03|OS설치중|-|-|-|-|-|
+node04|접속불가|-|-|-|-|-|전원 케이블 불량]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<table>
+  <thead>
+    <tr>
+      <th>열</th>
+      <th>가능한 값 및 의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1. <code>hostname</code></td>
+      <td>호스트파일의 이름 (입력 순서 유지)</td>
+    </tr>
+    <tr>
+      <td>2. <code>상태</code></td>
+      <td><code>완료</code> / <code>디스크미인식</code> / <code>설치정지</code> / <code>OS설치중</code> / <code>접속불가</code> (우선순위: <code>디스크미인식</code> &gt; <code>설치정지</code> &gt; <code>OS설치중</code>)</td>
+    </tr>
+    <tr>
+      <td>3. <code>설정체크</code></td>
+      <td><code>O</code> / <code>X</code> / <code>출력없음</code> / <code>-</code> (<code>완료</code>가 아닌 장비는 3~7열 모두 <code>-</code>)</td>
+    </tr>
+    <tr>
+      <td>4. <code>CPU테스트</code></td>
+      <td><code>O</code> / <code>X</code> / <code>NOTRUN</code> (해당 벤더 로그 파일 부재 시 <code>NOTRUN</code>)</td>
+    </tr>
+    <tr>
+      <td>5. <code>stress-ng</code></td>
+      <td><code>O</code> / <code>NOTRUN</code></td>
+    </tr>
+    <tr>
+      <td>6. <code>H/T</code></td>
+      <td><code>ON</code> / <code>OFF</code> / <code>-</code></td>
+    </tr>
+    <tr>
+      <td>7. <code>OS</code></td>
+      <td><code>uname -r</code> (또는 <code>KERNEL_NAME</code> 치환 이름) / <code>-</code></td>
+    </tr>
+    <tr>
+      <td>8. <code>비고</code></td>
+      <td><code>-er</code>/<code>error_list.txt</code> 사유 (없으면 빈칸)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.2 생성 파일 및 종료 코드</h3>
+<ul>
+  <li><strong>기본 모드 로그:</strong> <code>&lt;호스트파일&gt;_new_setup.log</code> (1·2차 <code>gossh</code> 원본 출력 기록, 실행 시작 시 초기화).</li>
+  <li><strong><code>-run</code> 상태 폴더 (<code>./&lt;호스트파일&gt;_run/</code>):</strong> <code>state.json</code>, <code>answer.json</code>, <code>stop.req</code>, <code>worker.pid</code>, <code>lock</code>, <code>worker.log</code>, <code>lists/</code>, <code>report_YYYYMMDD.json</code>/<code>.txt</code>/<code>_B.txt</code>, <code>result.txt</code>.</li>
+</ul>
+
+<table>
+  <thead>
+    <tr>
+      <th>종료 코드</th>
+      <th><code>new_setup.sh</code></th>
+      <th><code>setup.sh</code> / <code>troubleshoot.sh (-doctor)</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>0</code></td>
+      <td>판정 완료 (<code>접속불가</code> 호스트 포함 시에도 0)</td>
+      <td><code>setup.sh</code>: 저장 완료/변경 없음 · <code>-doctor</code>: 문제 없음</td>
+    </tr>
+    <tr>
+      <td><code>1</code></td>
+      <td>사용법 오류 (인자/호스트파일 없음 등)</td>
+      <td><code>setup.sh</code>: 사용자 중단 · <code>-doctor</code>: <code>[!]</code> 또는 <code>[X]</code> 발견</td>
+    </tr>
+    <tr>
+      <td><code>2</code></td>
+      <td>설정 오류, <code>gossh</code> 미발견, 위험어 포함, <code>-run -new</code> 시 기존 워커 생존</td>
+      <td>인자 또는 파일 오류</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>6. 해석상 한계 및 운영 주의사항</h2>
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <ul>
+      <li><strong><code>gossh</code> 위험어 검사:</strong> <code>DISK_PATTERN</code>/<code>ERROR_PATTERN</code> 등 설정 문구에 <code>reboot</code>, <code>poweroff</code>, <code>shutdown</code>, <code>halt</code>, <code>init 0</code>, <code>init 6</code>, <code>ddc</code>가 들어가면 <code>gossh</code> 가드에 의해 시작 시 오류(<code>exit 2</code>)로 차단됩니다.</li>
+      <li><strong>저장 파일 엑셀 열기 주의:</strong> <code>&gt; result.txt</code>로 저장한 파일을 엑셀에서 더블클릭하면 CP949로 열려 한글이 깨집니다. 반드시 <strong>데이터 &gt; 텍스트/CSV에서 가져오기</strong>에서 <strong>65001: 유니코드(UTF-8)</strong> 및 구분 기호 <strong><code>|</code></strong>를 지정해 여세요.</li>
+      <li><strong>검색 범위 제약:</strong> 기본 판정은 로드 에버리지를 사용하지 않으며, <code>stress-ng</code> 흔적은 <code>/var/log/messages*</code> 비압축 일반 파일만 검사합니다(<code>.gz</code> 제외). <code>설치정지</code>는 <code>ERROR_PATTERN</code>을 채워야만 판정됩니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

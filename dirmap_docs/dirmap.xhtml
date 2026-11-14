@@ -1,0 +1,181 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>도구명:</strong> dirmap (<code>dirmap.sh</code>) — 디렉터리 트리 및 폴더 설명 출력 스크립트</p>
+    <p><strong>양식 유형:</strong> T1 (단일 스크립트형 · <strong>빌드 불필요</strong>)</p>
+    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/공통/dirmap/dirmap.sh</code></p>
+    <p><strong>동작 환경 및 의존성:</strong> Linux / RHEL 계열 (<code>bash</code> 4.0 이상 — <code>declare -A</code> 연관배열 사용, <code>find</code>, <code>sort</code>, <code>realpath</code>, <code>egrep</code>)</p>
+    <p><strong>한 줄 요약:</strong> 자주 사용하는 디렉터리의 하위 폴더 구조를 <code>tree</code> 형태로 출력하면서, 스크립트에 등록한 경로별 한국어 설명(<code>└ : 설명</code>)을 함께 표시하는 단독 Bash 스크립트입니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<h2>1. 개요: 이게 뭐하는 도구인가요?</h2>
+<p><code>dirmap.sh</code>는 운영 서버나 공용 작업 디렉터리(예: <code>/home/saccae</code>)의 하위 폴더 구조를 깊이(<code>MAX_DEPTH</code>)와 제외 패턴(<code>EXCLUDE_PATTERN</code>) 조건에 맞춰 <code>tree</code> 형식으로 한눈에 출력하는 스크립트입니다.</p>
+<p>일반적인 <code>tree -d</code> 명령과 달리, 자주 확인하는 주요 폴더의 절대경로와 한국어 설명을 스크립트 내부 연관배열(<code>FOLDER_DESC</code>)에 등록해 두면 트리 출력 바로 아래에 <code>└ : 설명</code> 주석을 붙여 주므로 팀 내 폴더 용도 공유 및 온보딩에 유용합니다.</p>
+<ul>
+  <li><strong>탐색 대상:</strong> 파일은 제외하고 <strong>하위 디렉터리(<code>-type d</code>)</strong>만 알파벳 순(<code>sort</code>)으로 출력합니다.</li>
+  <li><strong>단독 동작:</strong> 다른 도구 의존성이나 외부 설정 파일 없이 <code>dirmap.sh</code> 파일 1개로 동작합니다.</li>
+</ul>
+
+<h2>2. 사전 준비 및 배치 (빌드 불필요)</h2>
+<p><code>dirmap.sh</code>는 순수 Bash 스크립트이므로 <strong>별도의 빌드 과정이 필요 없습니다(빌드 불필요)</strong>. 스크립트를 내려받은 뒤 상단 설정 변수와 폴더 설명 배열을 환경에 맞게 수정하고 실행 권한만 부여하면 즉시 사용할 수 있습니다.</p>
+
+<ol>
+  <li><strong>실행 권한 부여</strong>
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[chmod +x dirmap.sh]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li><strong>스크립트 상단 기본 변수 수정</strong> — <code>dirmap.sh</code>의 설정 블록에서 기본 경로·깊이·제외 패턴을 환경에 맞게 편집합니다.
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[# ===== 설정 (이곳에서 변수 수정) =====
+TARGET_PATH="/home/saccae"           # 탐색할 기본 경로
+MAX_DEPTH="2"                        # 탐색 깊이 (1 이상)
+EXCLUDE_PATTERN="\.git|\.cache"      # 제외할 폴더명 (정규식, egrep -E 형식)]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li><strong>폴더 설명 등록 (<code>FOLDER_DESC</code>)</strong> — <code>realpath</code>로 정규화된 절대경로를 키로, 한국어 설명을 값으로 추가합니다.
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[declare -A FOLDER_DESC=(
+    ["/home/saccae/VMsetup"]="VM 자동 구성 스크립트 모음"
+    ["/home/saccae/scripts"]="운영 자동화 스크립트"
+)]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+</ol>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p>어디서나 실행하려면 <code>PATH</code>에 포함된 디렉터리(예: <code>/usr/local/bin/dirmap</code>)로 심볼릭 링크하거나 복사해 두면 편리합니다. 단, <code>FOLDER_DESC</code> 키는 <code>realpath "$BASE_INPUT"</code>으로 변환된 <strong>실제 절대경로</strong>와 일치해야 설명이 표시되므로, 심볼릭 링크 경로 대신 실제 물리 경로를 키로 등록하세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>3. 빠른 시작 및 사용 방법</h2>
+<p>인자 없이 실행하면 스크립트 상단에 설정한 변수값으로 동작하며, 필요할 때 명령행 인자로 경로·깊이·제외 패턴을 순서대로 덮어쓸 수 있습니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) 스크립트 내부 기본 변수값으로 실행
+./dirmap.sh
+
+# 2) 명령행 인자로 경로와 탐색 깊이 덮어쓰기
+./dirmap.sh /root/work 3
+
+# 3) 제외 패턴까지 지정해 실행 (정규식, egrep -E 형식)
+./dirmap.sh /root/work 3 "\.git|\.cache|^tmp_"
+
+# 4) 제외 패턴 없이 모든 폴더 출력
+./dirmap.sh /root/work 2 ""]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>4. 설정 변수 및 명령행 인자 상세</h2>
+
+<h3>4.1 스크립트 내부 설정 변수</h3>
+<table>
+  <thead>
+    <tr>
+      <th>변수명</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>TARGET_PATH</code></td>
+      <td><code>/home/saccae</code></td>
+      <td>탐색을 시작할 기본 디렉터리 경로</td>
+    </tr>
+    <tr>
+      <td><code>MAX_DEPTH</code></td>
+      <td><code>2</code></td>
+      <td>탐색할 최대 하위 깊이 (<code>1</code> 이상의 정수만 허용)</td>
+    </tr>
+    <tr>
+      <td><code>EXCLUDE_PATTERN</code></td>
+      <td><code>\.git|\.cache</code></td>
+      <td>제외할 폴더 이름 정규식 (<code>egrep -E</code> 호환). 빈 문자열 <code>""</code>이면 제외 없음</td>
+    </tr>
+    <tr>
+      <td><code>FOLDER_DESC</code></td>
+      <td><code>["/home/saccae/VMsetup"]="VM 자동 구성 스크립트 모음"</code></td>
+      <td><code>declare -A</code> 연관배열. 키는 절대경로, 값은 트리 아래에 출력할 설명 문자열</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.2 명령행 인자 (선택)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>위치 인자</th>
+      <th>덮어쓰는 변수</th>
+      <th>처리 규칙 및 제약</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>$1</code> (<code>&lt;경로&gt;</code>)</td>
+      <td><code>TARGET_PATH</code></td>
+      <td>Windows CRLF(<code>\r</code>) 자동 제거 후 디렉터리 존재 여부 확인. 없으면 <code>exit 1</code></td>
+    </tr>
+    <tr>
+      <td><code>$2</code> (<code>&lt;깊이&gt;</code>)</td>
+      <td><code>MAX_DEPTH</code></td>
+      <td><code>\r</code> 자동 제거 후 <code>1</code> 이상의 정수(<code>^[0-9]+$</code>) 검증. 위반 시 <code>exit 1</code></td>
+    </tr>
+    <tr>
+      <td><code>$3</code> (<code>[제외패턴]</code>)</td>
+      <td><code>EXCLUDE_PATTERN</code></td>
+      <td><code>\r</code> 자동 제거. <code>basename</code>에 대해 <code>egrep -q "$EXCLUDE_PATTERN"</code> 적용</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 출력 형식 및 종료 코드</h2>
+<p>첫 줄에 <code>realpath</code>로 해석된 기준 절대경로가 출력되고, 그 아래로 디렉터리 트리와 등록된 설명이 이어집니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[/home/saccae
+├── VMsetup
+│   └ : VM 자동 구성 스크립트 모음
+│   ├── logs
+│   └── templates
+└── work
+    └── archive]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<table>
+  <thead>
+    <tr>
+      <th>종료 코드</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>0</code></td>
+      <td>정상 출력 완료</td>
+    </tr>
+    <tr>
+      <td><code>1</code></td>
+      <td>대상 경로가 존재하지 않거나(<code>에러: '...' 는 존재하지 않는 디렉토리입니다.</code>), 깊이가 1 이상의 정수가 아닌 경우</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>6. 주의사항</h2>
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <ul>
+      <li><strong>읽기 전용 안전:</strong> <code>dirmap.sh</code>는 <code>find</code>로 디렉터리 구조만 조회하며 파일이나 디렉터리를 변경하지 않습니다.</li>
+      <li><strong><code>FOLDER_DESC</code> 경로 일치:</strong> <code>realpath</code>로 변환된 실제 경로 기준으로 조회하므로, 심볼릭 링크를 탐색할 경우 원본 실제 경로를 <code>FOLDER_DESC</code>에 등록해야 설명이 출력됩니다.</li>
+      <li><strong>제외 패턴 매칭 범위:</strong> <code>EXCLUDE_PATTERN</code>은 전체 경로가 아닌 폴더명(<code>basename</code>)에 대해 부분 일치(<code>egrep -q</code>)로 동작합니다. 특정 접두사/접미사만 제외하려면 <code>^test_</code>, <code>source$</code>처럼 앵커를 명시하세요.</li>
+      <li><strong><code>set -euo pipefail</code> 동작:</strong> 스크립트에 <code>set -euo pipefail</code>이 활성화되어 있으므로 읽기 권한이 없는 하위 디렉터리가 포함되면 <code>find</code> 오류로 중간에 중단될 수 있습니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

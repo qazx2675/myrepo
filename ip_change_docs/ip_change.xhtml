@@ -1,0 +1,336 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>도구명:</strong> ip_change (<code>bin/ip-change-engine</code> + <code>scripts/run_ip_change.sh</code>) — RHEL 노드 IP · 게이트웨이 일괄 변경 엔진</p>
+    <p><strong>양식 유형:</strong> T3 (설정 변경 · 적용 엔진형)</p>
+    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/ip_change/</code></p>
+    <p><strong>동작 환경 및 의존성:</strong> 관리 노드 Go 1.26.5(외부 의존성 없음, 폐쇄망 <code>bin/ip-change-engine_os6</code> 내장) + <code>gossh</code> v2 필수 / 대상 노드 <code>bash</code> · <code>awk</code> · <code>sed</code> · <code>hostname -I</code>(또는 <code>ip</code>)</p>
+    <p><strong>연계 도구:</strong> <code>gossh</code> v2 (원격 실행 전달), <code>auto_setup</code> (TUI <code>m</code> 변경 메뉴 <code>1 IP 변경</code> · <code>3 IP+LDAP 변경</code> · <code>4 원복</code>)</p>
+    <p><strong>한 줄 요약:</strong> RHEL 대상 노드의 ifcfg 파일 전체를 덮어쓰지 않고 <code>IPADDR</code> · <code>GATEWAY</code> 두 키만 수술적으로 갱신·백업(<code>.bak.&lt;시각&gt;</code>)·롤백하는 병렬 IP 변경 도구입니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<h2>1. 개요 및 변경 대상 (실제 수정하는 파일·방식)</h2>
+<p><code>ip_change</code>는 Red Hat Enterprise Linux(RHEL) 다수 노드의 서비스 IP 및 게이트웨이 설정을 일괄 변경하기 위해 설계된 Go 기반 엔진과 Bash 래퍼 세트입니다. 관리 노드에서 대상 전체를 포함한 단일 <code>apply</code> 스크립트를 생성한 뒤 <code>gossh</code> v2를 통해 대상 노드에 base64 인코딩 형태로 전송·실행합니다.</p>
+
+<h3>1.1 실제 수정 대상 및 동작 원칙</h3>
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>세부 내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>수정 대상 파일</strong></td>
+      <td>대상 노드의 <code>network_scripts_dir</code>(기본 <code>/etc/sysconfig/network-scripts</code>) 또는 RHEL 9+ 환경에서 설정된 경우 <code>rhel9_path</code> 아래의 <code>ifcfg-*</code> 파일 중 현재 인터페이스 IPv4와 <code>IPADDR=&lt;현재 IP&gt;</code>가 일치하는 파일</td>
+    </tr>
+    <tr>
+      <td><strong>실제 변경 키</strong></td>
+      <td>파일을 통째로 덮어쓰지 않고 <strong><code>IPADDR</code>과 <code>GATEWAY</code> 두 키만</strong> 갱신 (<code>BOOTPROTO</code>, <code>DEVICE</code>, <code>DNS1</code> 등 운영자가 지정한 기존 지시자는 유지)</td>
+    </tr>
+    <tr>
+      <td><strong>현재 IP 판별 기준</strong></td>
+      <td><code>/etc/hosts</code>나 DNS에 의존하는 <code>getent hosts</code> 대신, 노드 인터페이스에 실제 할당된 주소를 읽는 <code>hostname -I</code>(실패 시 <code>ip -4 addr</code>) 사용</td>
+    </tr>
+    <tr>
+      <td><strong>게이트웨이 계산 규칙</strong></td>
+      <td>새 IP 주소의 마지막 옥텟을 <code>1</code>로 치환하여 고정 계산 (예: <code>3.3.3.3</code> → 게이트웨이 <code>3.3.3.1</code>, <code>/24</code> 서브넷 전제)</td>
+    </tr>
+    <tr>
+      <td><strong>서비스 재시작 여부</strong></td>
+      <td><strong>네트워크 서비스를 재시작하지 않음</strong> (설정 파일 변경·재읽기 검증에만 집중하며, 실제 네트워크 반영은 운영자가 네트워크 재시작 또는 재부팅 시 수행)</td>
+    </tr>
+    <tr>
+      <td><strong>미지원 형식</strong></td>
+      <td><code>rhel9_path</code>에서도 <code>ifcfg(KEY=VALUE)</code> 형식만 지원하며 NetworkManager keyfile(<code>.nmconnection</code>, <code>[ipv4]</code> 섹션) 형식은 미지원</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>1.2 관련 도구 연계 (<code>gossh</code> v2 및 <code>auto_setup</code> <code>m</code> 메뉴)</h3>
+<ul>
+  <li><strong><code>gossh</code> v2 연동 (필수):</strong> <code>ip-change-engine</code>은 <code>gossh</code>를 서브프로세스로 호출합니다. <code>gossh</code> v1(구버전)에는 명령 앞뒤 따옴표를 잘라내 원격 주입이 깨지는 버그가 있으므로 <strong>반드시 <code>gossh</code> v2</strong>(<code>gossh -h</code>에 <code>-cf</code>, <code>-b</code> 옵션이 표시되는 버전)를 사용해야 합니다.</li>
+  <li><strong><code>gossh</code> 위험어 가드 회피 인코딩:</strong> <code>internal/remote</code>는 생성된 스크립트를 base64로 인코딩한 뒤 <code>spaceOut</code>(두 글자마다 공백 삽입)으로 감싸 전송하고 원격에서 <code>tr -d ' '</code>로 복원합니다. 이는 긴 base64 문자열에 <code>reboot</code>/<code>halt</code>/<code>ddc</code> 같은 <code>gossh</code> 위험 키워드 조각이 우연히 섞여 실행이 차단되는 현상을 방지합니다.</li>
+  <li><strong><code>auto_setup</code> TUI <code>m</code> 메뉴 통합:</strong> <code>os8_mgmt</code>에서 실행 중인 <code>auto_setup</code>의 변경 메뉴(<code>m</code>)에서 <code>1 IP 변경</code>, <code>3 IP+LDAP 변경</code>(IP 먼저 실행하며 IP 실패 호스트는 LDAP 건너뜀), <code>4 원복</code>을 선택하면 <code>auto_setup</code>이 <code>ip-change-engine</code> 바이너리를 직접 호출합니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>SSH 불통 VM과의 구분:</strong> <code>ip_change</code>는 대상 노드에 <code>gossh</code>(SSH)로 접속할 수 있어야 동작합니다. IP 오할당 등으로 네트워크 접속 자체가 불가능한 RHEL 8.10 VM의 IP를 변경할 때는 vCenter Guest Operations API 기반의 <code>vm-ip-change</code>(<code>.claude/VM/vCenter API IP 자동변경</code>)를 사용해야 합니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>2. 사전 준비 · 빌드 · 입력 파일 구성</h2>
+
+<h3>2.1 실행 환경 및 빌드 (폐쇄망 지원)</h3>
+<p>이 프로젝트는 Go 표준 라이브러리만 사용하며 외부 모듈 의존성이 없어 <code>vendor/</code> 디렉터리 없이도 폐쇄망에서 오프라인 빌드가 가능합니다. 또한 <code>CGO_ENABLED=0</code> 정적 빌드로 생성되어 구형 배포판에서도 glibc 버전과 무관하게 동작하며, 대상 노드에는 Go가 필요 없습니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) 저장소 다운로드 및 이동
+git clone https://github.com/qazx2675/myrepo.git
+cd "myrepo/.claude/HPC/ip_change"
+
+# 2) 폐쇄망 오프라인 빌드 (GOPROXY=off, CGO_ENABLED=0) -> bin/ip-change-engine 생성 및 scripts/*.sh 권한 부여
+./setup.sh
+
+# (수동 빌드 시)
+CGO_ENABLED=0 go build -o bin/ip-change-engine ./cmd/ip-change-engine
+
+# 3) 단위 테스트 확인
+go test ./...]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ul>
+  <li><strong>RHEL 6 사전 빌드 바이너리:</strong> 저장소의 <code>bin/ip-change-engine_os6</code>에 RHEL 6용 정적 바이너리가 커밋되어 있어 Go가 없는 RHEL 6 관리 서버에서도 그대로 실행할 수 있습니다.</li>
+  <li><strong><code>auto_setup</code> 통합 설치 시:</strong> <code>os8_mgmt</code>에서 <code>auto_setup</code>의 <code>bash setup.sh</code>를 실행하면 <code>ip-change-engine</code>이 함께 빌드되어 <code>/usr/local/bin/ip-change-engine</code>에 설치되고, <code>/etc/auto_setup/ip_change.conf</code> 샘플이(기존 파일이 없을 때만) 복사됩니다.</li>
+</ul>
+
+<h3>2.2 설정 파일 및 대상 목록 준비</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) 설정 파일 복사 (선택 사항: 파일이 없어도 /etc/sysconfig/network-scripts 기본값으로 동작)
+cp conf/ip_change.conf.sample conf/ip_change.conf
+
+# 2) 작업 대상 목록 복사 및 편집 ("hostname 변경될ip" 공백 구분, 한 줄에 하나)
+cp conf/testuser.txt.sample conf/<계정명>.txt]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<p><strong>대상 목록 예시 (<code>conf/&lt;계정명&gt;.txt</code>):</strong></p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[hostname1 3.3.3.3
+hostname2 2.2.2.2]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>래퍼 사용 시 필수 수정 항목:</strong> <code>scripts/run_ip_change.sh</code>의 <code>select_user_context()</code> 함수는 의도적으로 비워져 있습니다(<code>:</code>). 래퍼로 실행하려면 이 함수 안에 계정 선택 로직을 채우고 전역 변수 <code>RUN_USER</code>에 계정명을 대입해야 <code>conf/${RUN_USER}.txt</code>를 정상 로드합니다. 실제 IP 목록 파일은 <code>.gitignore</code>로 커밋이 차단되어 있습니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>3. 표준 안전 절차 (사전 확인 → 소수 선행검증 → 전체 적용 → 사후 검증)</h2>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>Dry-run 플래그 안내:</strong> <code>ip-change-engine</code> CLI 자체에는 <code>-dry-run</code> 플래그가 없습니다. 따라서 실행 전 ① 대상 목록 및 계산된 게이트웨이 출력 확인, ② 소수(1~2대) 호스트 대상 파일로 선행 적용·검증, ③ 전체 적용, ④ 사후 직접 확인 순서를 반드시 지키십시오. <code>auto_setup</code> <code>m</code> 메뉴 사용 시에는 미리보기 화면에서 대상과 진행 중 작업 중복 경고를 확인한 뒤 정확히 <code>yes</code>를 입력해야 실행됩니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>단계 1: <code>gossh</code> v2 및 대상 목록 사전 점검</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# gossh v2 여부 확인 (-cf, -b 옵션 표시 확인)
+gossh -h | grep -E '\-cf|\-b'
+
+# 대상 호스트 접속 가능 여부 사전 확인
+gossh -w conf/canary_hosts.txt "hostname -I"]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>단계 2: 소수 노드 선행 검증 (Canary)</h3>
+<p>전체 목록을 넣기 전 1~2대만 담은 테스트 목록(<code>conf/canary.txt</code>)으로 먼저 실행하여 <code>ifcfg-*</code> 탐색, <code>.bak.&lt;시각&gt;</code> 백업, <code>IPADDR</code>/<code>GATEWAY</code> 갱신 결과를 확인합니다.</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[./bin/ip-change-engine -targets conf/canary.txt -u root -i ~/.ssh/id_rsa]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>단계 3: 전체 적용 (단독 실행 또는 <code>auto_setup</code> <code>m</code> 메뉴)</h3>
+<p><strong>방법 A — 엔진 단독 또는 래퍼 스크립트 실행:</strong></p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 래퍼 사용 시 (select_user_context 구현 후)
+cd scripts
+GOSSH_ARGS="-i ~/.ssh/id_rsa" ./run_ip_change.sh
+
+# 엔진 직접 호출 시
+./bin/ip-change-engine -config conf/ip_change.conf -targets conf/testuser.txt -u root -i ~/.ssh/id_rsa]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<p><strong>실행 출력 예시:</strong> (성공은 초록, 실패는 굵은 빨강으로 표시)</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[작업 대상:
+  hostname1             -> 3.3.3.3
+  hostname2             -> 2.2.2.2
+------------------------------------------------------------
+hostname1             192.168.1.10 -> 3.3.3.3   (GW 3.3.3.1)
+hostname2             192.168.1.11 -> 2.2.2.2   (GW 2.2.2.1)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<p><strong>방법 B — <code>auto_setup</code> TUI <code>m</code> 변경 메뉴 연계 실행 (<code>os8_mgmt</code> 전용):</strong></p>
+<ol>
+  <li><code>/etc/auto_setup/auto_setup.conf</code>에 <code>enable_ip_change=y</code>(및 필요 시 <code>ip_engine=/경로/ip-change-engine</code>)를 설정하거나 <code>auto_setup --admin</code>으로 TUI를 엽니다. (참고: <code>ip_change.conf</code>는 <code>auto_setup.conf</code>가 있는 디렉터리 또는 <code>/etc/auto_setup/ip_change.conf</code>에서 읽습니다.)</li>
+  <li>TUI에서 <code>m</code> 키 → 인라인 메뉴에서 <code>1 IP 변경</code>(또는 <code>3 IP+LDAP 변경</code>)을 선택합니다.</li>
+  <li>실행 user를 고른 뒤 <code>hostname 새IP</code> 목록(공백·탭·쉼표·<code>=</code>·<code>-&gt;</code> 구분 가능)을 붙여넣고 <code>Ctrl+D</code>를 누릅니다.</li>
+  <li>미리보기 화면에서 게이트웨이(<code>.1</code>)와 진행 중 <code>job</code> 중복 경고(겹치는 호스트는 IP 변경 시 추적이 끊길 수 있음)를 확인하고, 정확히 <code>yes</code>를 입력하여 적용합니다.</li>
+  <li><code>auto_setup</code>은 먼저 <code>os8_mgmt</code>에서 실행한 뒤 미응답 호스트만 <code>os6_mgmt</code> 경유 임시 래퍼(<code>-gossh</code> 지정, <code>-p</code> 미사용)로 한 번 더 시도하며, 실행 중 <code>-monitor</code> 화면과 <code>Ctrl+X → y</code> 중단 기능을 제공합니다. 결과는 <code>&lt;상태디렉터리&gt;/changes/&lt;user&gt;/&lt;YYYYmmddHHMMSS&gt;_ip.json</code>(0700/0600)에 저장됩니다.</li>
+</ol>
+
+<h3>단계 4: 사후 검증</h3>
+<p>네트워크 서비스를 재시작하지 않았으므로 적용 직후 SSH 연결은 유지됩니다. 무작위 표본 서버에 접속해 대상 <code>ifcfg-*</code> 파일의 <code>IPADDR</code>, <code>GATEWAY</code> 및 백업 파일 생성 여부를 확인한 뒤, 계획된 시점에 네트워크 재시작 또는 재부팅으로 실 IP를 반영하고 통신을 재확인합니다.</p>
+
+<h2>4. CLI 플래그 · 설정 키 · 입력 파일 상세 표</h2>
+
+<h3>4.1 <code>bin/ip-change-engine</code> CLI 플래그</h3>
+<table>
+  <thead>
+    <tr>
+      <th>플래그</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>-targets</code></td>
+      <td><em>(필수)</em></td>
+      <td>대상 목록 파일 경로 (<code>hostname 변경될ip</code> 형식, <code>-rollback</code> 시에는 <code>hostname</code> 1열만 있어도 동작)</td>
+    </tr>
+    <tr>
+      <td><code>-config</code></td>
+      <td><code>./ip_change.conf</code></td>
+      <td>설정 파일 경로 (파일이 없어도 기본값으로 동작)</td>
+    </tr>
+    <tr>
+      <td><code>-gossh</code></td>
+      <td><code>gossh</code></td>
+      <td><code>gossh</code> 실행 파일 경로</td>
+    </tr>
+    <tr>
+      <td><code>-u</code></td>
+      <td><code>root</code></td>
+      <td>SSH 접속 계정</td>
+    </tr>
+    <tr>
+      <td><code>-p</code></td>
+      <td><em>(없음)</em></td>
+      <td>SSH 접속 비밀번호</td>
+    </tr>
+    <tr>
+      <td><code>-i</code></td>
+      <td><em>(없음)</em></td>
+      <td>SSH 개인키 파일 경로</td>
+    </tr>
+    <tr>
+      <td><code>-P</code></td>
+      <td><code>22</code></td>
+      <td>SSH 포트 번호</td>
+    </tr>
+    <tr>
+      <td><code>-c</code></td>
+      <td><code>0</code> (gossh 기본값)</td>
+      <td><code>gossh</code> 동시 접속 수</td>
+    </tr>
+    <tr>
+      <td><code>-t</code></td>
+      <td><code>0</code> (gossh 기본값)</td>
+      <td><code>gossh</code> 접속 타임아웃(초)</td>
+    </tr>
+    <tr>
+      <td><code>-remote-path</code></td>
+      <td><code>/root/ip_change_apply.sh</code></td>
+      <td>원격 노드에 일시 생성할 스크립트 경로 (실행 완료 후 삭제됨)</td>
+    </tr>
+    <tr>
+      <td><code>-rollback</code></td>
+      <td><code>false</code></td>
+      <td>IP 변경을 되돌림 (각 노드의 <code>&lt;ifcfg&gt;.bak.&lt;STAMP&gt;</code> 복원)</td>
+    </tr>
+    <tr>
+      <td><code>-rollback-to</code></td>
+      <td><em>(없음)</em></td>
+      <td>복원할 백업 STAMP 지정 (미지정 시 가장 최근 백업 복원)</td>
+    </tr>
+    <tr>
+      <td><code>-monitor</code></td>
+      <td><code>false</code></td>
+      <td>60초 초과 시 <code>/dev/tty</code>에 호스트별 진행 화면(<code>↑/↓</code> · <code>←/→</code> · <code>Enter</code>) 표시, Ctrl+C는 5초 안에 3회 입력 시 종료(종료코드 <code>130</code>, 롤백 없음). 통합 스크립트(<code>change.sh</code>) 및 <code>auto_setup</code>이 활성화</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.2 설정 파일(<code>ip_change.conf</code>) · 래퍼 · <code>auto_setup</code> 연계 키</h3>
+<table>
+  <thead>
+    <tr>
+      <th>파일 / 대상</th>
+      <th>키 / 옵션 / 환경변수</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>conf/ip_change.conf</code></td>
+      <td><code>network_scripts_dir</code></td>
+      <td><code>/etc/sysconfig/network-scripts</code></td>
+      <td><code>ifcfg-*</code> 파일을 탐색할 기본 디렉터리</td>
+    </tr>
+    <tr>
+      <td><code>conf/ip_change.conf</code></td>
+      <td><code>rhel9_path</code></td>
+      <td><em>(비움)</em></td>
+      <td>값을 채우면 노드 OS 메이저 버전이 9 이상일 때만 대신 사용 (<code>ifcfg</code> <code>KEY=VALUE</code> 형식만 가정, <code>.nmconnection</code> 미지원)</td>
+    </tr>
+    <tr>
+      <td><code>scripts/run_ip_change.sh</code></td>
+      <td><code>-config &lt;경로&gt;</code> / <code>CONFIG</code></td>
+      <td><code>../conf/ip_change.conf</code></td>
+      <td>래퍼가 엔진에 넘길 설정 파일 지정</td>
+    </tr>
+    <tr>
+      <td><code>scripts/run_ip_change.sh</code></td>
+      <td><code>GOSSH_ARGS</code> (환경변수)</td>
+      <td><em>(없음)</em></td>
+      <td>엔진에 그대로 전달할 <code>gossh</code> 관련 인자 (예: <code>GOSSH_ARGS="-i ~/.ssh/id_rsa"</code>)</td>
+    </tr>
+    <tr>
+      <td><code>auto_setup.conf</code></td>
+      <td><code>enable_ip_change</code></td>
+      <td><em>(비움=꺼짐)</em></td>
+      <td><code>y</code> · <code>yes</code> · <code>1</code> · <code>true</code> 설정 시 <code>auto_setup</code> <code>m</code> 메뉴에 IP 변경/원복 표시</td>
+    </tr>
+    <tr>
+      <td><code>auto_setup.conf</code></td>
+      <td><code>ip_engine</code></td>
+      <td><em>(비움)</em></td>
+      <td><code>ip-change-engine</code> 전체 경로 (비우면 <code>auto_setup</code> 동일 디렉터리 → <code>PATH</code> 순 탐색)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 백업 및 롤백 방법</h2>
+<p><code>ip-change-engine</code>은 파일을 수정하기 직전 한 실행당 한 번 원본 <code>ifcfg</code> 파일을 <code>&lt;ifcfg파일경로&gt;.bak.&lt;STAMP&gt;</code> 형태로 백업합니다. 잘못된 IP/GW가 기록된 경우 수동 편집 대신 내장 롤백 기능(<code>internal/render/rollback_body.sh</code>)으로 원복하십시오.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) 가장 최근 백업으로 되돌리기 (-targets에는 hostname 한 컬럼만 있어도 됨)
+./bin/ip-change-engine -targets conf/rollback_hosts.txt -rollback -u root -i ~/.ssh/id_rsa
+
+# 2) 특정 백업 시점(STAMP) 지정하여 되돌리기
+./bin/ip-change-engine -targets conf/rollback_hosts.txt -rollback -rollback-to <STAMP> -u root -i ~/.ssh/id_rsa]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ul>
+  <li><strong>특정 STAMP 지정이 필요한 경우:</strong> 한 노드 안에 최신 STAMP 백업을 가진 <code>ifcfg</code> 파일이 둘 이상 발견되면 <code>-rollback-to</code>로 대상을 명확히 지정해야 합니다.</li>
+  <li><strong>백업 보존 정책:</strong> 롤백 후에도 <code>.bak.*</code> 백업 파일은 삭제하지 않고 남깁니다.</li>
+  <li><strong><code>auto_setup</code> <code>m</code> 메뉴 원복 (<code>4 원복</code>):</strong> <code>auto_setup</code>은 user의 이전 IP 변경 기록을 자동으로 채워 가장 최근 백업 기준으로 <code>-rollback</code>을 호출합니다. 특정 과거 STAMP를 고르려면 엔진을 단독으로 실행하십시오. 원복 성공 시 기록 파일에 <code>ip_rolled_back</code>이 표시되어 다음 원복 목록에서 제외됩니다.</li>
+</ul>
+
+<h2>6. 주의사항 및 랜덤 서버 실접속 교차검증 필수</h2>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>[필수 경고 — 설정 변경 도구 · 랜덤 서버 실접속 교차검증]</strong></p>
+    <ul>
+      <li><strong>100% 신뢰 금지 (보조 도구로 사용):</strong> 엔진의 성공 출력(초록색 <code>OK</code>)만 믿지 말고, <strong>적용 및 롤백 후 반드시 대상 서버 중 무작위로 몇 대를 직접 접속해 실제 <code>ifcfg-*</code> 파일의 <code>IPADDR</code> · <code>GATEWAY</code>와 백업 파일을 눈으로 확인</strong>하십시오.</li>
+      <li><strong><code>/24</code> 게이트웨이 고정 전제:</strong> 게이트웨이는 항상 새 IP의 마지막 옥텟을 <code>1</code>로 고정 계산합니다(넷마스크 미검증). <code>/24</code>가 아닌 서브넷 환경에서는 그대로 사용하면 잘못된 게이트웨이가 기록됩니다.</li>
+      <li><strong>네트워크 서비스 미재시작:</strong> 이 도구는 설정 파일만 수정하고 네트워크를 재시작하지 않습니다. 재부팅이나 네트워크 재기동 전까지는 기존 IP가 유지되며, 재기동 후 실제 통신이 되는지 추가 확인이 필요합니다.</li>
+      <li><strong>RHEL 9+ NetworkManager keyfile 미지원:</strong> <code>.nmconnection</code> 형식만 사용하는 환경에서는 <code>ifcfg</code> 파일을 찾지 못해 실패하거나 누락될 수 있습니다.</li>
+      <li><strong>진행 중 <code>auto_setup</code> 작업 주의:</strong> OS 설치 감시 중인 호스트의 IP를 변경하면 이후 상태 추적이 끊길 수 있습니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

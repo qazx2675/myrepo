@@ -1,0 +1,267 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (Go CLI/TUI, 폐쇄망 <code>vendor/</code> 빌드)</p>
+    <p><strong>대상 프로젝트:</strong> <code>vm_ip_change</code> (<code>bin/vm-ip-change</code>, 모의 서버 <code>bin/fake-vcenter</code>)</p>
+    <p><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/VM/vCenter API IP 자동변경</code> (Go 소스 루트: <code>project/</code>)</p>
+    <p><strong>대상 브랜치:</strong> <code>confluence</code> (<code>vCenter_API_IP_자동변경_docs/</code>)</p>
+    <p><strong>대상 OS / 통신 경로:</strong> RHEL 8.10 VM / vCenter API → ESXi → VMware Tools(<code>vmtoolsd</code>) Guest Operations API → 게스트 내 <code>nmcli</code></p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<h2>1. 개요 및 변경 대상 (SSH 기반 <code>ip_change</code>와의 명확한 대조)</h2>
+
+<p><code>vm-ip-change</code>는 초기 IP 오할당이나 네트워크 설정 오류로 인해 <strong>SSH·네트워크 통신 자체가 완전히 불가능한 RHEL 8.10 가상머신(VM)</strong>에 대하여, 네트워크 연결 없이도 vCenter 및 ESXi를 경유해 VMware Tools(<code>vmtoolsd</code>)의 Guest Operations API로 게스트 내부 <code>nmcli</code> 명령을 직접 실행해 IP를 재설정하는 도구입니다.</p>
+
+<h3>1.1 SSH 기반 <code>ip_change</code> vs vCenter API 기반 <code>vm_ip_change</code> 비교</h3>
+<table>
+  <thead>
+    <tr>
+      <th>비교 항목</th>
+      <th><code>ip_change</code> (<code>.claude/HPC/ip_change</code>)</th>
+      <th><code>vm_ip_change</code> (<code>.claude/VM/vCenter API IP 자동변경</code>)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>핵심 사용 시나리오</td>
+      <td>현재 SSH 접속이 가능한 HPC 물리/가상 서버의 운영 IP·게이트웨이 일괄 전환</td>
+      <td>IP 오할당 등으로 <strong>SSH·네트워크 접속이 불가한 RHEL 8.10 VM</strong>의 IP 복구·자동 변경</td>
+    </tr>
+    <tr>
+      <td>실행 경로 / 프로토콜</td>
+      <td>관리서버 → <code>gossh</code> (SSH)로 대상 호스트 접속</td>
+      <td>관리서버 → vCenter API → ESXi → VMware Tools(<code>vmtoolsd</code>) Guest Operations API</td>
+    </tr>
+    <tr>
+      <td>실제 수정 대상 및 방법</td>
+      <td><code>/etc/sysconfig/network-scripts/ifcfg-*</code>의 <code>IPADDR</code>, <code>GATEWAY</code> 등 텍스트 편집</td>
+      <td>게스트 내 첫 번째 비-<code>lo</code> 활성 연결(<code>nmcli con show --active</code>) 대상 <code>nmcli</code>로 수정 후 해당 연결만 <code>nmcli con up</code> 재기동</td>
+    </tr>
+    <tr>
+      <td>대상 식별 기준</td>
+      <td>SSH 접속 호스트명(<code>targets.txt</code>)</td>
+      <td><strong>vCenter 인벤토리 VM 표시 이름</strong> (<code>list.txt</code> — 게스트 OS 호스트명·도메인 아님)</td>
+    </tr>
+    <tr>
+      <td>공통 규칙</td>
+      <td><code>/24</code> (<code>255.255.255.0</code>) 넷마스크 및 게이트웨이 <code>.1</code> 자동 산출, 전체 network 서비스 재시작 미수행</td>
+      <td>동일하게 <code>/24</code> 및 <code>.1</code> 게이트웨이 산출, 전체 네트워크 서비스 재시작 대신 해당 활성 NIC 연결만 재기동</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>1.2 게스트 내부 3단계 실행 및 실제 변경 파일</h3>
+<ol>
+  <li><strong>1단계 (연결 확인 및 백업 스크립트 생성):</strong> <code>nmcli con show --active</code>에서 <code>lo</code>가 아닌 첫 번째 활성 연결을 조회하고, 변경 전 기존 네트워크 설정을 게스트 내부 <strong><code>/tmp/vm-ip-change/&lt;호스트네임&gt;.revert.sh</code></strong>로 저장합니다.</li>
+  <li><strong>2단계 (IP 설정 적용):</strong> 해당 활성 연결(다중 NIC 환경에서도 첫 번째 활성 NIC만 대상)에 <code>ipv4.addresses</code>(<code>&lt;새IP&gt;/24</code>), <code>ipv4.gateway</code>(<code>&lt;대역&gt;.1</code>), <code>ipv4.method manual</code>을 설정합니다.</li>
+  <li><strong>3단계 (연결 재기동):</strong> 대상 연결에 대해서만 <code>nmcli con up</code>을 실행해 새 IP를 즉시 활성화합니다.</li>
+</ol>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong><code>ev02</code> 페어 부하 분산 스케줄링:</strong> VM 이름이 <code>...ev02</code>로 끝나는 경우 짝(pair)인 <code>...ev01</code> VM 및 BM ESXi 호스트명(<code>ev01</code>/<code>ev02</code> 접미 제외)을 판별합니다. 워커 슬롯(최대 16개)을 점유하기 전에 <code>ev01</code>의 1분 <code>uptime</code> 부하 평균과 BM 물리 코어 수를 비교하여 <code>load &gt;= cores</code>이면 슬롯을 잡지 않고 대기(<strong>2분 간격 재확인</strong>)하며, <code>ev01</code> 또는 BM 코어 수를 확인할 수 없으면 즉시 진행합니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>2. 사전준비 / 폐쇄망 빌드 · 입력파일 · 환경변수 계정</h2>
+
+<h3>2.1 오프라인(폐쇄망) 빌드 방법</h3>
+<p>이 저장소의 <code>project/</code> 디렉터리에는 사전 빌드된 바이너리가 커밋되어 있지 않지만, 모든 Go 의존성(<code>govmomi</code>, <code>uuid</code>, <code>x/term</code>, <code>x/sys</code>)이 <code>project/vendor/</code>에 포함되어 있으므로 <strong>Go 1.25+가 설치된 폐쇄망 환경에서도 인터넷 없이 즉시 빌드</strong>할 수 있습니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# .claude/VM/vCenter API IP 자동변경/project 디렉터리에서 실행
+cd project
+./setup.sh
+
+# setup.sh 내부 동작: GOPROXY=off GOFLAGS=-mod=vendor go build ...
+# 생성 결과: bin/vm-ip-change, bin/fake-vcenter]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>2.2 필수 입력 파일 및 4개 환경변수 (계정/비밀번호)</h3>
+<p><code>vm-ip-change</code>는 비밀번호를 설정 파일이나 CLI 플래그로 받지 않고 <strong>4개의 필수 환경변수</strong>로만 입력받습니다. 어느 하나라도 비어 있으면 종료 코드 <code>1</code>로 즉시 중단됩니다.</p>
+<ul>
+  <li><strong><code>vcenter.txt</code> (<code>-vcenter</code>, 기본 <code>vcenter.txt</code>):</strong> 한 줄에 하나씩 접속·검색할 vCenter 주소를 기입합니다(<code>#</code> 주석 및 빈 줄 무시, 나열 순서대로 탐색, TLS 인증서 검증 생략).</li>
+  <li><strong><code>list.txt</code> (<code>-list</code>, 기본 <code>list.txt</code>):</strong> 공백으로 구분된 <code>VM호스트네임 새IP</code> 목록입니다. <strong>반드시 vCenter 인벤토리상의 VM 표시 이름</strong>이어야 하며 게스트 내부 호스트명이나 도메인 접미사를 붙이지 마십시오.</li>
+  <li><strong>필수 환경변수 (모두 필수):</strong> <code>VC_USER</code>, <code>VC_PASSWORD</code> (vCenter 계정), <code>GUEST_USER</code>, <code>GUEST_PASSWORD</code> (RHEL 8.10 게스트 OS 내부 계정).</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# vcenter.txt 예시
+# vCenter 주소 목록 (순서대로 조회)
+vcenter01.example.local
+vcenter02.example.local
+
+# list.txt 예시 (vCenter 인벤토리 VM 이름  새IP)
+bm01ev02 10.20.30.42
+bm02ev01 10.20.30.43
+
+# 환경변수 설정 (히스토리 노출 방지를 위해 read -s 권장)
+export VC_USER="administrator@vsphere.local"
+read -rs -p "VC_PASSWORD: " VC_PASSWORD; echo; export VC_PASSWORD
+export GUEST_USER="root"
+read -rs -p "GUEST_PASSWORD: " GUEST_PASSWORD; echo; export GUEST_PASSWORD]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>3. 표준 안전 절차 (모의 E2E 검증 → 1대 카나리 적용 → 대량 실행/TUI → 사후 검증)</h2>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>CLI <code>-dry-run</code> 플래그 부재 안내:</strong> <code>vm-ip-change</code> 바이너리는 <code>-vcenter</code>와 <code>-list</code> 2개 플래그만 제공하며 별도의 <code>-dry-run</code> 모드가 없습니다. 따라서 실행 전 반드시 <strong>모의 vCenter(<code>e2e-test.sh</code> / <code>fake-vcenter.sh</code>) 사전 테스트 → 실제 VM 1대 카나리 <code>list.txt</code> 검증</strong> 순서를 밟아야 합니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ol>
+  <li>
+    <strong>1단계 — 모의 vCenter 오프라인 연습 (<code>e2e-test.sh</code> / <code>fake-vcenter.sh</code>):</strong>
+    <p>실제 vCenter 연결 전 로컬 모의 서버로 페어 스케줄링(<code>both</code>, <code>ev02-only</code>, <code>ev01-only</code>) 및 TUI·실패 처리를 먼저 검증합니다. <em>(단, <code>fake-vcenter</code>는 실제 <code>nmcli</code> 동작과 연속 <code>uptime</code> 변화를 시뮬레이션하지 않습니다.)</em></p>
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[# 기본 통합 E2E 모의 테스트 (~1분 소요: both, ev02-only, ev01-only)
+./e2e-test.sh
+
+# 수동 모의 서버 기동 예 (테스트용 기본 계정: administrator@vsphere.local / VMware1!, root / guestpass)
+# -busy-ev01 은 짝 중 과부하 ev01 비율(%)을 지정 (예: 20%)
+./fake-vcenter.sh -vms 40 -cores 16 -busy-ev01 20 -pair-mode both]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li>
+    <strong>2단계 — 소수 선행검증 (실제 VM 1대 카나리):</strong>
+    <p>전원 상태(Powered ON)와 VMware Tools 실행(Running)이 확인된 테스트/카나리 VM 1대만 <code>canary_list.txt</code>에 넣어 실행합니다. 전원 꺼짐이나 Tools 미동작 시 <code>[FAIL]</code> 처리됩니다.</p>
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[./bin/vm-ip-change -vcenter vcenter.txt -list canary_list.txt]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li>
+    <strong>3단계 — 전체 적용 및 60초 초과 시 대화형 TUI 조작:</strong>
+    <p>워커는 최대 <strong>16개 동시 실행</strong>(고정값)되며, 게스트 명령 자체에는 별도 타임아웃이 없습니다.</p>
+    <ul>
+      <li><strong>초기 60초:</strong> 단일 라인 진행률(<code>진행: 12/40 (30%)</code>) 표시</li>
+      <li><strong>60초 초과:</strong> Alternate screen buffer 기반 TUI로 자동 전환 (<code>↑/↓</code> 이동, <code>←/→</code> 또는 <code>PgUp/PgDn</code> 페이지 이동, <code>Enter</code> 단계별 상세 조회)</li>
+      <li><strong>목록 파일 즉시 저장:</strong> TUI에서 <code>s</code>(완료 → <code>vm-ip-change-done-&lt;TS&gt;.txt</code>), <code>f</code>(실패 → <code>vm-ip-change-failed-&lt;TS&gt;.txt</code>), <code>l</code>(실행중 → <code>vm-ip-change-running-&lt;TS&gt;.txt</code>) 키 입력 가능. 특히 <code>-failed-</code> 파일은 <code>호스트 IP # 사유</code> 형식이라 그대로 다음 <code>-list</code> 입력으로 재투입할 수 있습니다.</li>
+    </ul>
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[./bin/vm-ip-change -vcenter vcenter.txt -list list.txt]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li>
+    <strong>4단계 — 사후 검증:</strong>
+    <p>종료 코드(<code>0</code>: 전원 성공, <code>1</code>: 1대 이상 실패 또는 설정/환경변수 오류, <code>130</code>: 5초 내 Ctrl+C 3회 중단)를 확인하고, 새 IP 대역으로 ICMP/SSH 접속 가능 여부 및 TUI <code>f</code>로 저장한 실패 목록을 확인합니다.</p>
+  </li>
+</ol>
+
+<h2>4. CLI 플래그 · 환경변수 · 모의 테스트 옵션 표</h2>
+
+<h3>4.1 <code>vm-ip-change</code> CLI 플래그 및 환경변수</h3>
+<table>
+  <thead>
+    <tr>
+      <th>구분 / 이름</th>
+      <th>기본값 / 필수 여부</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>-vcenter</code></td>
+      <td><code>vcenter.txt</code></td>
+      <td>vCenter 주소 목록 파일 경로 (줄당 1개, <code>#</code> 주석 및 빈 줄 무시)</td>
+    </tr>
+    <tr>
+      <td><code>-list</code></td>
+      <td><code>list.txt</code></td>
+      <td><code>VM호스트네임 새IP</code> 공백 구분 목록 파일 (vCenter VM 표시 이름 기준)</td>
+    </tr>
+    <tr>
+      <td><code>VC_USER</code> / <code>VC_PASSWORD</code></td>
+      <td>필수 환경변수</td>
+      <td>vCenter API 인증 계정 및 비밀번호 (누락 시 종료 코드 <code>1</code>)</td>
+    </tr>
+    <tr>
+      <td><code>GUEST_USER</code> / <code>GUEST_PASSWORD</code></td>
+      <td>필수 환경변수</td>
+      <td>RHEL 8.10 게스트 OS 내부 Guest Operations API 실행 계정 및 비밀번호 (누락 시 종료 코드 <code>1</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.2 내부 동작 상수 및 모의 서버(<code>fake-vcenter.sh</code>) 플래그</h3>
+<table>
+  <thead>
+    <tr>
+      <th>항목 / 플래그</th>
+      <th>값 / 용도</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>내부 고정 제약 (<code>main.go</code>)</td>
+      <td><code>maxConcurrent = 16</code> / <code>pairRecheckInterval = 2분</code></td>
+      <td>최대 동시 VM 변경 수 16개, <code>ev02</code> 페어 과부하 시 슬롯 미점유 대기 후 2분마다 재확인, 게스트 명령 타임아웃 없음</td>
+    </tr>
+    <tr>
+      <td><code>fake-vcenter.sh</code> 크기/페어</td>
+      <td><code>-vms</code>, <code>-cores</code>, <code>-busy-ev01</code>, <code>-busy-ev01-for</code>, <code>-pair-mode</code></td>
+      <td>가상 VM 수, BM 코어 수, 바쁜 <code>ev01</code> 비율(%)·지속시간, 페어 모드(<code>both</code>/<code>ev02-only</code>/<code>ev01-only</code>) 시뮬레이션</td>
+    </tr>
+    <tr>
+      <td><code>fake-vcenter.sh</code> 지연/장애</td>
+      <td><code>-min</code>, <code>-max</code>, <code>-slow</code>, <code>-slow-delay</code>, <code>-fail</code>, <code>-off</code>, <code>-missing</code></td>
+      <td>응답 지연 범위, 저속/실패/전원 꺼짐 VM 비율(%), 미존재 VM 수 시나리오 주입</td>
+    </tr>
+    <tr>
+      <td><code>fake-vcenter.sh</code> 기타</td>
+      <td><code>-seed</code>, <code>-addr</code>, <code>-out</code></td>
+      <td>난수 시드, 바인드 주소, 생성된 테스트 입력 출력 경로</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 백업 및 롤백 방법</h2>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>자동 롤백 미지원 및 Ctrl+C 중단 주의:</strong> <code>vm-ip-change</code>는 중단이나 실패 시 <strong>이전 IP로 자동 롤백하지 않습니다.</strong> 작업 중 5초 이내에 <strong><code>Ctrl+C</code>를 3회</strong> 누르면 종료 코드 <code>130</code>으로 중단되며, 이미 진행 중(in-flight)이던 VM 목록과 <strong>게스트 내부 <code>/tmp/vm-ip-change/&lt;호스트네임&gt;.revert.sh</code></strong> 복구 안내만 출력합니다. 반면 <code>SIGTERM</code>이나 <code>pkill</code>로 강제 종료하면 요약·복구 안내조차 출력되지 않고 즉시 종료되므로 강제 시그널 전송을 피하십시오.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ul>
+  <li><strong>자동 생성되는 게스트 내 백업 스크립트:</strong> 1단계(<code>연결 확인</code>)에서 기존 IP/게이트웨이 설정을 게스트 OS 내부의 <code>/tmp/vm-ip-change/&lt;호스트네임&gt;.revert.sh</code>에 자동 기록합니다.</li>
+  <li><strong>단일/소수 VM 롤백 방법:</strong>
+    <ol>
+      <li>새 IP로도 통신이 안 되거나 이전 IP로 복구해야 할 경우, vCenter Web Client의 <strong>VM 콘솔(VMRC)</strong>로 접속하거나 아직 새 IP로 SSH가 가능하면 SSH로 접속합니다.</li>
+      <li>게스트 내부에 생성된 <code>/tmp/vm-ip-change/&lt;호스트네임&gt;.revert.sh</code> 내용을 확인한 뒤 실행하여 기존 <code>nmcli</code> 설정을 복원합니다.</li>
+    </ol>
+  </li>
+  <li><strong>실패 목록 기반 재시도:</strong> TUI에서 <code>f</code> 키로 저장한 <code>vm-ip-change-failed-&lt;TS&gt;.txt</code>는 <code>호스트 IP # 사유</code> 포맷이므로 원인 조치 후 곧바로 <code>-list</code> 인자로 넘겨 실패분만 재실행할 수 있습니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 게스트 OS 내부 (VMRC 콘솔 또는 SSH 접속 후) 롤백 스크립트 확인 및 실행
+cat /tmp/vm-ip-change/$(hostname -s).revert.sh
+bash /tmp/vm-ip-change/$(hostname -s).revert.sh
+
+# TUI에서 저장한 실패 목록 파일로 실패 VM만 재시도
+./bin/vm-ip-change -vcenter vcenter.txt -list vm-ip-change-failed-20261114_120000.txt]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>6. 작업 완료 후 랜덤 서버 실접속 교차검증 필수</h2>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>[필수 검증 경고] 작업 완료 후 반드시 랜덤 VM 실접속 교차검증을 수행하십시오.</strong></p>
+    <p><code>vm-ip-change</code>가 종료 코드 <code>0</code>을 반환하더라도 다중 NIC 환경에서 첫 번째 활성 연결 외 다른 NIC 영향, 외부 방화벽/VLAN/ARP 캐시 불일치, 또는 게스트 내부 <code>nmcli</code> 영구 프로필 적용 상태를 완전히 보장하지는 않습니다. 배치 작업 완료 후에는 반드시 <strong>완료된 VM(<code>ev01</code>/<code>ev02</code> 포함) 중 랜덤 1~3대에 새 IP로 직접 SSH(또는 콘솔) 접속</strong>하여 아래 항목을 교차검증하십시오.</p>
+    <ul>
+      <li><code>ip -4 addr show</code> 및 <code>ip route</code>로 새 IP(<code>/24</code>)와 기본 게이트웨이(<code>.1</code>)가 실제 적용되었는지 확인</li>
+      <li><code>nmcli con show --active</code> 및 <code>nmcli con show &lt;연결명&gt;</code>에서 <code>ipv4.method manual</code> 영구 저장 여부 확인 (재부팅 시 초기화 방지)</li>
+      <li><code>ev02</code> 작업 대상의 짝 서버(<code>ev01</code>) 서비스·부하 상태 및 인접 VM 통신 정상 여부 확인</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

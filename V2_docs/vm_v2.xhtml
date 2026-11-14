@@ -1,0 +1,429 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>Suite 개요 및 메타 정보</strong></p>
+    <ul>
+      <li><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/VM/V2</code></li>
+      <li><strong>대상 브랜치:</strong> <code>confluence</code> (<code>V2_docs/</code>)</li>
+      <li><strong>주요 구성:</strong> 통합 빌드/배치(<code>setup.sh</code>, <code>build_os6.sh</code>, <code>bin_os6/</code>, <code>bin_os8/</code>), 암호화(<code>passwd_update.sh</code>, <code>secret_lib.sh</code>), 공유 자산(<code>govendor/</code>, <code>SPEC_DIR/</code>), VM 생성·설정 오케스트레이터(<code>VMsetup/vm_setup.sh</code> + 12종 Go 도구 + 3종 보조 <code>.sh</code>), 통합 체크·교정(<code>vm-param-check-usability-improvement/vm-param-check</code>)</li>
+      <li><strong>동작 환경:</strong> OS8(Rocky/RHEL 8: Go 1.26.5+ &amp; Bash, 완전 오프라인 <code>govendor/</code> 빌드) / OS6(RHEL/CentOS 6: Go 불필요, <code>bin_os6/*.gz</code> Go 1.20 정적 바이너리 + Bash 4.1 + <code>openssl</code>)</li>
+      <li><strong>한 줄 요약:</strong> BM당 <strong><code>ev01~ev99</code></strong> VM 생성·리소스·포트그룹·PCI 패스스루 설정(<code>VMsetup</code>)과 설정 검증·자동교정(<code>vm-param-check</code>)이 <strong>하나의 <code>SPEC_DIR</code></strong>을 공유하는 차세대 VM 자동화 통합 Suite</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<p><ac:structured-macro ac:name="toc"/></p>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>주의사항 (Disclaimer) — vCenter 실제 변경 및 무작위 실검증 필수</strong></p>
+    <ul>
+      <li><strong>변경 후 실검증:</strong> 본 Suite의 각 도구는 vCenter/ESXi 호스트 및 VM 설정(VM 생성, 포트그룹, CPU 토폴로지, affinity, HugePage, PCI 패스스루, 전원정책, 라이선스)을 실제로 변경합니다. 실행 완료 후 반드시 무작위로 VM·호스트 몇 대를 골라 vSphere Client 및 게스트 OS에서 실제 반영 여부를 직접 확인하십시오.</li>
+      <li><strong><code>-fix -yes</code> 안전 설계:</strong> <code>vm-param-check</code>의 <code>-yes</code> 플래그는 <code>-specRoot</code> 스펙 매칭 확인만 생략하며, <code>-fix</code> 실제 설정 변경 직전의 <code>(y/N)</code> 승인은 생략할 수 없습니다.</li>
+      <li><strong>암호 키 보안:</strong> <code>secret/key</code> 파일이 있으면 누구나 <code>secret/*.enc</code>를 복호화할 수 있으므로 <code>root</code> 전용 권한을 유지하고 Git에 절대 커밋하지 마십시오.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h1>1. Suite 전체 개요 및 단계별 전체 흐름</h1>
+<p><strong>V2</strong>는 기존 V1(<code>.claude/VM/VM_setup</code>의 <code>ev01~ev03</code> 개별 도구 + <code>vm-param-fix</code>)을 대체·확장한 차세대 통합 Suite입니다. 핵심 설계는 <strong>단일 <code>SPEC_DIR</code> 공유</strong>와 <strong><code>ev01~ev99</code> 지원</strong>입니다. <code>VMsetup/vm_setup.sh</code>는 내부적으로 <code>vm-param-check -specExport</code>를 호출해 스펙을 해석하므로 생성 측과 체크 측의 파서가 한 벌로 통일됩니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[[준비/빌드] V2 폴더 통째 배치 → bash setup.sh (OS8: govendor 빌드 / OS6: bin_os6/*.gz 해제)
+             → ./passwd_update.sh (vCenter/ESXi 암호 파일 등록)
+             → (필요 시) bash VMsetup/vswitch_pgname.sh vswitch_<user>.txt (IP → <폴더명>-cae-a-b-c-0 변환)
+      │
+      ▼
+[통합 실행] cd VMsetup && ./vm_setup.sh [-u <user>] [-v <vCenter>] [-n]
+  ├─ 1. user 선택 (-u 없으면 <user>.txt 번호 메뉴)
+  ├─ 2. SPEC_DIR 자동매칭 (포트그룹 폴더명의 CAE 차수 무시, 미매칭 시 번호/vim 새 스펙 + ev별 affinity)
+  ├─ 3. VM별 네트워크 어댑터 1 포트그룹 할당 & VM-스펙 표 y/n 확인
+  ├─ 4. CAE 번호 변경(선택) → vCenter 선택 (Enter = run_<user>/last_vcenter)
+  ├─ 5. 실행 계획 확인 (-n 이면 여기서 vCenter 변경 없이 종료)
+  └─ 6. 진행 모니터 실행 (스펙별 단계 순차/병렬):
+        main_conn(Task 등록) ─▶ vswitch_setting ─▶ [스펙별] vm_create ─▶ mac_info ─▶ power_setting
+        ─▶ affinity_setting ─▶ lpage_setting ─▶ pci_passthrough(pci-evNN 있을 때만)
+        ─▶ license_assign(BM 전체 1회) ─▶ tag_setting(스펙별 tag-* 있을 때만)
+      │
+      ▼
+[자동 체크] vm-param-check -specFolder (생성 VM 대상 스펙 일치 여부 검증 → [일치]/[차이])
+      │
+      ├─ PCI 재부팅 필요(종료코드 3) ─▶ 호스트 재부팅 후 bash run_<user>/pci_resume_<번호>.sh 실행
+      │
+      └─ FAIL 발견 시 ─▶ vm-param-check -fix (게이트[동질성+전원OFF] → dry-run → y/N → Reconfigure → 재검증)
+      │
+      ▼
+[사후 검증] 무작위 VM/ESXi 호스트 실접속 및 vSphere Client 직접 확인]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h1>2. 하위 도구 역할 매트릭스 표</h1>
+
+<h2>2.1 VMsetup Go 도구 12종 + 통합 오케스트레이터 + 보조 스크립트</h2>
+<table>
+  <thead>
+    <tr>
+      <th>도구 / 스크립트</th>
+      <th>폴더 / 위치</th>
+      <th>역할 및 변경 대상</th>
+      <th>지원 범위</th>
+      <th><code>vm_setup.sh</code> 호출 시점 / 비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>vm_setup.sh</code></td>
+      <td><code>VMsetup/</code></td>
+      <td>전체 통합 오케스트레이터 (스펙/PG 할당, TUI 진행 모니터, 로그, 재실행 이어하기)</td>
+      <td><code>ev01~ev99</code></td>
+      <td>원스톱 진입점 (<code>run_&lt;user&gt;/</code> 로그·계획·<code>mac_all.txt</code> 생성)</td>
+    </tr>
+    <tr>
+      <td><code>main_conn</code></td>
+      <td><code>VMsetup/main_conn-source/</code></td>
+      <td>ESXi 호스트들을 vCenter 폴더/클러스터에 병렬 등록 (SSL Thumbprint 자동 재시도)</td>
+      <td>BM 호스트</td>
+      <td>최초 등록 단계 (기본 <code>-folderName=Task</code>, <code>ESXI_PASSWORD</code> 사용)</td>
+    </tr>
+    <tr>
+      <td><code>vswitch_setting</code></td>
+      <td><code>VMsetup/vswitch_setting-source/</code></td>
+      <td>ESXi 표준 vSwitch(기본 <code>vSwitch0</code>)에 포트그룹/VLAN 일괄 생성</td>
+      <td>BM 호스트</td>
+      <td>호스트 병렬 (<code>AlreadyExists</code> 스킵)</td>
+    </tr>
+    <tr>
+      <td><code>vm_create</code></td>
+      <td><code>VMsetup/vm_create-source/</code></td>
+      <td>호스트별 <code>ev01~ev99</code> VM 생성 (ParaVirtual SCSI, Thick, vmxnet3, 메모리 100% 예약, EFI, 부팅순서)</td>
+      <td><code>-vmCount</code> 1~99</td>
+      <td>스펙별 생성 (이미 있는 VM은 스킵)</td>
+    </tr>
+    <tr>
+      <td><code>mac_info</code></td>
+      <td><code>VMsetup/mac_info-source/</code></td>
+      <td>생성 VM의 MAC 조회 → Kickstart 프로비저닝 목록 생성 (읽기 전용)</td>
+      <td><code>ev\d+</code></td>
+      <td>스펙별 <code>vm_create</code> 직후 실행 + IP/디스크 보정 후 <code>awx_route/&lt;user&gt;.txt</code> 복사</td>
+    </tr>
+    <tr>
+      <td><code>power_setting</code></td>
+      <td><code>VMsetup/power_setting-source/</code></td>
+      <td>BM(ESXi 호스트) 전원 관리 정책을 <strong>고성능(<code>static</code>)</strong>으로 변경</td>
+      <td>BM 호스트</td>
+      <td>스펙별 <code>mac_info</code> 다음 실행 (이미 고성능이면 스킵)</td>
+    </tr>
+    <tr>
+      <td><code>affinity_setting</code></td>
+      <td><code>VMsetup/affinity_setting-source/</code></td>
+      <td><code>ev01~ev99</code> vCPU affinity 파일 일괄 적용 또는 <code>-del_affinity</code> 삭제</td>
+      <td><code>-vm_cnt</code> 1~99</td>
+      <td>V2는 <strong>ev마다 파일 필수</strong> (<code>AUTO</code> 1:1 계산 폐지)</td>
+    </tr>
+    <tr>
+      <td><code>lpage_setting</code></td>
+      <td><code>VMsetup/lpage_setting-source/</code></td>
+      <td>HugePage 4개(+pin) 및 CPU 토폴로지(<code>cores</code>/<code>sockets</code>/<code>numa</code>) 설정 또는 <code>-del_lpage</code> 삭제</td>
+      <td><code>ev01~ev99</code></td>
+      <td>HugePage 삭제 시에도 CPU 토폴로지는 정상 적용</td>
+    </tr>
+    <tr>
+      <td><code>pci_passthrough</code></td>
+      <td><code>VMsetup/pci_passthrough-source/</code></td>
+      <td>PCI 패스스루 활성화·VM 연결(<code>QueryConfigTarget</code> <code>SystemId</code>)·메모리예약·NVIDIA 64bit MMIO·전원 ON</td>
+      <td><code>-ev01~99Pci</code></td>
+      <td>스펙에 <code>pci-evNN</code> 있을 때만 실행 (종료코드 0/3/1)</td>
+    </tr>
+    <tr>
+      <td><code>nic_assign</code></td>
+      <td><code>VMsetup/nic_assign-source/</code></td>
+      <td>기존 VM의 네트워크 어댑터 1 포트그룹 교체 + <code>연결됨</code>/<code>전원을 켤 때 연결</code> 확인</td>
+      <td>단독/할당표</td>
+      <td>단독 보정용 (<code>vm_create</code> <code>-mapFile</code>과 별도로 사후 포트그룹 교체 시)</td>
+    </tr>
+    <tr>
+      <td><code>license_assign</code></td>
+      <td><code>VMsetup/license_assign-source/</code></td>
+      <td>평가판(<code>eval</code>/<code>00000</code>) 호스트 탐지 → 대화형 라이선스 할당</td>
+      <td>BM 호스트</td>
+      <td>스펙 단계 종료 후 BM 전체 1회 실행 (<code>q</code>로 건너뛰기 가능)</td>
+    </tr>
+    <tr>
+      <td><code>tag_setting</code></td>
+      <td><code>VMsetup/tag_setting-source/</code></td>
+      <td>vCenter 사용자 지정 특성(<code>DEPT_NAME</code>, <code>PURPOSE</code>, <code>VM_TYPE</code>) 일괄 설정</td>
+      <td><code>-vmCount</code> 1~99</td>
+      <td>스펙에 <code>tag-*</code> 있을 때 실행 (vCenter에 특성 사전 생성 필요)</td>
+    </tr>
+    <tr>
+      <td><code>numa_preferht_setting</code></td>
+      <td><code>VMsetup/numa_preferht_setting-source/</code></td>
+      <td>전원 OFF VM 대상 <code>numa.vcpu.preferHT=TRUE</code> 병렬 적용 및 재조회 검증</td>
+      <td>단독(전체 동일)</td>
+      <td>단독 도구 (<code>vm-param-check -preferHT</code>로 검증)</td>
+    </tr>
+    <tr>
+      <td><code>vswitch_pgname.sh</code> / <code>lpage_from_spec.sh</code> / <code>mac_ip_resolve.sh</code></td>
+      <td><code>VMsetup/</code></td>
+      <td>IP→포트그룹명 변환 / 스펙 기반 <code>-del_lpage</code> 단독 적용 / <code>mac_all.txt</code> DNS IP 치환</td>
+      <td>보조 스크립트</td>
+      <td><code>vm_setup.sh</code>는 IP 형식 발견 시 <code>vswitch_pgname.sh</code> 자동 호출</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>2.2 vm-param-check-usability-improvement 구성요소</h2>
+<table>
+  <thead>
+    <tr>
+      <th>파일 / 도구</th>
+      <th>역할</th>
+      <th>주요 기능</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>vm-param-check</code> (Go 바이너리)</td>
+      <td>통합 점검 + <code>-fix</code> 교정 + 스펙 파서</td>
+      <td>vCenter 전체/<code>-f</code> 대상 점검, <code>-specRoot</code> 폴더명 자동매칭, <code>-specExport</code>, <code>-initFolder</code>/<code>-template</code>, <code>-fix</code> 게이트·교정·재검증, <code>-pci-evNN</code> 점검</td>
+    </tr>
+    <tr>
+      <td><code>folder_setup.sh</code></td>
+      <td>대화형 스펙 생성 보조</td>
+      <td>폴더명·스펙 값을 대화형으로 입력받아 <code>SPEC_DIR</code> 아래 스펙 파일 생성 (ev01~ev03 중심, ev04+는 <code>vm_setup.sh</code> vim 또는 직접 편집)</td>
+    </tr>
+    <tr>
+      <td><code>01.vm_setting_check_insert.sh</code></td>
+      <td>체크+교정 실행 래퍼</td>
+      <td>user 선택 메뉴로 <code>-f</code>/<code>-out</code> 자동 구성, <code>-fromSetup</code>으로 직전 <code>vm_setup.sh</code> 대상 연계(<code>check_del_*</code> 있으면 <code>-expectNo*</code> 자동 추가)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1>3. 일괄 오프라인 빌드 · OS8/OS6 배치 · 공유 <code>SPEC_DIR</code> 및 암호 관리</h1>
+
+<h2>3.1 폴더 통째 배치 및 <code>setup.sh</code> 오프라인 빌드 (OS8 vs OS6)</h2>
+<p><code>V2</code> 폴더 내부 도구는 <strong>상대 경로(<code>../SPEC_DIR</code>, <code>../govendor</code>, <code>../secret_lib.sh</code> 등)</strong>로 서로를 참조하므로 V2 폴더를 통째로 복사해 배치해야 합니다. 의존성은 <code>govendor/govmomi-0.55.1-standard</code>(VMsetup 12종)와 <code>govendor/govmomi-0.39.0</code>(vm-param-check)에 들어 있으며, <code>setup.sh</code>는 <code>GOPROXY=off</code>, <code>GOFLAGS=-mod=vendor</code>, <code>GOTOOLCHAIN=local</code>, <code>GOSUMDB=off</code>, <code>CGO_ENABLED=0</code>을 강제합니다.</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. V2 폴더 통째 배치
+cp -r V2 /home/V2 && cd /home/V2
+
+# 2. 일괄 빌드/설치 (OS8: 13개 Go 오프라인 빌드 / OS6: bin_os6/*.gz 자동 해제)
+bash setup.sh
+
+# setup.sh 주요 옵션
+bash setup.sh vm_create nic_assign       # 지정 도구만 빌드/설치
+bash setup.sh --os6                      # OS 자동판단과 무관하게 bin_os6/*.gz 설치
+OS6_hostname="old-node01|old-node02" bash setup.sh   # 호스트명 기준 OS6 강제
+bash setup.sh -l                         # 빌드 대상 및 바이너리 경로 13개 목록 출력
+bash setup.sh -c                         # 빌드된 바이너리 및 vendor 심볼릭 링크 정리]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>Go 없는 OS8 서버 패치 (<code>bin_os8/</code>) 및 OS6 빌드 서버 (<code>build_os6.sh</code>):</strong></p>
+    <ul>
+      <li><strong><code>bin_os8/</code>:</strong> Go가 설치되지 않은 OS8 운영 서버에 PCI 패스스루 등 최근 변경분(<code>pci_passthrough</code>, <code>vm-param-check</code>, <code>affinity_setting</code>, <code>lpage_setting</code>)만 반영할 때 <code>gzip -dc</code>로 수동 해제합니다(<code>UPDATE_PCI_PASSTHROUGH.md</code> 참고). 주의: <code>setup.sh</code>는 <code>bin_os8/</code>을 읽지 않습니다.</li>
+      <li><strong><code>build_os6.sh</code>:</strong> RHEL6 커널(2.6.32)은 Go 1.21+ 실행파일을 구동할 수 없으므로 소스 수정 시 Go 1.20 빌드 서버에서 <code>bash build_os6.sh</code>로 <code>bin_os6/*.gz</code>를 재생성합니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>3.2 비밀번호 암호화 (<code>passwd_update.sh</code>)</h2>
+<p><code>./passwd_update.sh</code>는 <code>openssl enc -aes-256-cbc -md sha256</code>과 <code>secret/key</code>(권한 600)로 암호 파일을 생성하며, OS6(OpenSSL 1.0.1)과 OS8(OpenSSL 1.1.1) 간 호환됩니다.</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[./passwd_update.sh                  # vCenter 계정(기본 lscsystems@vsphere.local) 등록/갱신
+./passwd_update.sh -id <계정>       # 다른 vCenter 계정 등록
+./passwd_update.sh -esxi            # ESXi root 비밀번호 등록
+./passwd_update.sh -esxi -id <계정> # 다른 ESXi 계정 등록
+./passwd_update.sh -list            # 저장된 항목 및 복호화 가능 여부 확인]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>환경변수 <code>unset</code> 동작 주의:</strong> <code>vm_setup.sh</code>는 이전 셸에 남아있던 잘못된 값으로 로그인 실패하는 사고를 막기 위해 시작 시 <code>VC_PASSWORD</code>, <code>VC_PASS</code>, <code>VCENTER_PASS</code>, <code>ESXI_PASSWORD</code> (및 <code>MAC_ARGSTR</code>, <code>MAC_ARG1</code>)를 모두 <code>unset</code>한 뒤 <strong>암호 파일 → 직접 입력</strong> 순으로 읽습니다. 반면 Go 도구를 단독으로 직접 실행할 때는 <code>VC_PASSWORD</code> 환경변수를 export하거나 <code>export VC_PASSWORD="$(. ../secret_lib.sh; secret_get vcenter lscsystems@vsphere.local)"</code>를 사용합니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>3.3 공유 <code>SPEC_DIR</code> 규칙 및 스펙 매칭</h2>
+<ul>
+  <li><strong>탐색 순서:</strong> <code>SPEC_DIR</code>은 <code>-s &lt;dir&gt;</code> → <code>vm-param-check/SPEC_DIR</code>(있으면 우선) → <code>V2/SPEC_DIR</code> 순으로 찾습니다. <code>vcenter.txt</code>는 <code>V2/vcenter.txt</code> → <code>vm-param-check/vcenter.txt</code> 순입니다.</li>
+  <li><strong>4분할 폴더명 매칭 규칙:</strong> <code>&lt;1&gt;-&lt;2&gt;-&lt;3&gt;-&lt;4&gt;</code>(하이픈 4조각) 중 <strong>1·3·4번째 조각이 완전 일치</strong>하고 <strong>2번째 조각의 접두어(<code>CAE</code> 또는 <code>LSI</code>) 뒤 숫자(차수)만 다른 경우</strong> 동일 스펙으로 인정합니다(예: <code>TST-CAE001-SAMP48c-QRST</code> ↔ <code>TST-CAE003-SAMP48c-QRST</code>; 단 <code>CAE</code> vs <code>LSI</code>는 다른 스펙).</li>
+  <li><strong><code>_spec.txt</code> 주요 키:</strong> <code>ht</code>, <code>cpu</code>/<code>mem</code>/<code>disk</code>/<code>shares-ev01</code>(쉼표 허용 예: <code>disk=1024,1026</code>, <code>shares-ev01=4000,normal</code>), <code>cores</code>, <code>numa</code>, <code>affinity-ev01</code>(파일명, ev마다 필수), <code>cpu-ev02~99</code>/..., <code>pci-ev01~99</code>(<code>mellanox</code>|<code>nvidia</code>|VendorId|장치이름일부), <code>tag-DEPT_NAME</code>/<code>tag-PURPOSE</code>/<code>tag-VM_TYPE</code>(<code>값</code>, <code>evNN:값</code>, <code>evNN-evMM:값</code>), <code>evNN_del_affinity=y</code>/<code>evNN_del_lpage=y</code>/<code>all_del_affinity=y</code>/<code>all_del_lpage=y</code>.</li>
+</ul>
+
+<h1>4. 통합 실행(<code>vm_setup.sh</code> · <code>vm-param-check</code>) vs 단독 실행법</h1>
+
+<h2>4.1 통합 원스톱 실행 (<code>VMsetup/vm_setup.sh</code>)</h2>
+<p>준비 파일: <code>VMsetup/${user}.txt</code>(BM 목록), <code>VMsetup/vswitch_${user}.txt</code>(<code>BM  포트그룹  VLAN</code>), <code>vcenter.txt</code>(선택).</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[cd /home/V2/VMsetup
+# (필요 시) 포트그룹 컬럼이 IP로 적힌 경우 사전 변환 (vm_setup.sh가 시작 시 자동 호출하기도 함)
+bash vswitch_pgname.sh vswitch_hong.txt
+
+# 대화형 통합 실행
+./vm_setup.sh
+./vm_setup.sh -u hong -v 192.168.0.50 -n   # 계획만 확인 (vCenter 미변경)
+./vm_setup.sh -u hong -id other@vsphere.local -c 20
+./vm_setup.sh -u hong -del_affinity         # affinity 키 전체 삭제 (체크도 -expectNoAffinity 자동 적용)
+./vm_setup.sh -u hong -del_lpage            # HugePage 5개 키 삭제, 토폴로지는 적용 (-expectNoLpage 자동 적용)]]></ac:plain-text-body>
+</ac:structured-macro>
+<ul>
+  <li><strong>진행 모니터(TUI):</strong> <code>↑↓</code>(<code>k/j</code>) 단계 이동, <code>Enter</code> 단계 로그 보기, 완료 후 <code>[종료]</code>에서 <code>Enter</code> 2회 종료, 5초 내 <code>Ctrl+C</code> 3회 중단. (파이프/<code>nohup</code> 또는 <code>VMSETUP_MONITOR=0</code> 시 일반 로그 출력).</li>
+  <li><strong>PCI 재부팅 이어하기:</strong> <code>pci_passthrough</code>에서 호스트 재부팅이 필요하면(종료코드 3) <code>run_&lt;user&gt;/pci_resume_&lt;스펙번호&gt;.sh</code>가 생성됩니다. 해당 호스트 재부팅 후 <code>bash run_&lt;user&gt;/pci_resume_&lt;번호&gt;.sh</code>를 실행하면 이어서 연결·전원 ON 됩니다.</li>
+</ul>
+
+<h2>4.2 체크 및 <code>-fix</code> 교정 실행 (<code>vm-param-check</code>)</h2>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[cd /home/V2/vm-param-check-usability-improvement/vm-param-check
+export VC_USER='administrator@vsphere.local'
+export VC_PASS='...'
+
+# 1. 스펙 내보내기 미리보기 (vCenter 미연결)
+./vm-param-check -specRoot=../../SPEC_DIR -specExport=TST-CAE001-SAMP48c-QRST
+
+# 2. 새 스펙 폴더 생성 (vCenter 미연결)
+./vm-param-check -specRoot=../../SPEC_DIR -initFolder="TST-CAE002-SAMP48c-WXYZ" -template="TST-CAE001-SAMP48c-QRST"
+
+# 3. SPEC_DIR 기반 자동매칭 체크만 실행
+./vm-param-check -vcenterList=../../vcenter.txt -f=kdh.txt -specRoot=../../SPEC_DIR -out=result.csv -user=kdh
+
+# 4. 체크 후 자동교정 (-fix: 게이트[동질성 + 전원 OFF] -> dry-run -> y/N -> Reconfigure -> 재검증 CSV)
+./vm-param-check -vcenterList=../../vcenter.txt -f=kdh.txt -specRoot=../../SPEC_DIR -out=result.csv -fix -yes
+# 주의: -yes는 -specRoot 스펙 확인만 생략하며, -fix 실제 변경 전 y/N 확인은 항상 물어봄
+
+# 5. 보조 래퍼로 체크+교정 (직전 vm_setup.sh 대상 연계 시 -fromSetup)
+bash 01.vm_setting_check_insert.sh -u hong -fromSetup]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>4.3 하위 도구 단독 실행 공통 규칙</h2>
+<p><code>VMsetup/*-source/</code> 도구를 단독 실행할 때는 <code>-vcTargetIP</code>, <code>-id</code>(기본 <code>lscsystems@vsphere.local</code>), <code>-worklistFile</code>(또는 도구별 입력 파일)과 환경변수 <code>VC_PASSWORD</code>를 사용합니다.</p>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[export VC_PASSWORD="$(. /home/V2/secret_lib.sh; secret_get vcenter lscsystems@vsphere.local)"
+cd /home/V2/VMsetup
+./nic_assign-source/nic_assign -vcTargetIP=192.168.0.50 -mapFile=nic_map.txt -concurrency=20
+./power_setting-source/power_setting -vcTargetIP=192.168.0.50 -worklistFile=hong.txt
+./pci_passthrough-source/pci_passthrough -vcTargetIP=192.168.0.50 -worklistFile=hong.txt -ev01Pci=mellanox -ev02Pci=nvidia
+./numa_preferht_setting-source/numa_preferht_setting -vc=192.168.0.50 -f=targets.txt]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h1>5. 하위 도구별 핵심 옵션 · 입력 파일 · 출력 요약</h1>
+<table>
+  <thead>
+    <tr>
+      <th>도구</th>
+      <th>핵심 플래그 (기본값)</th>
+      <th>입력 파일 / 환경변수</th>
+      <th>주요 출력 / 종료코드 / 특수 동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>vm_setup.sh</code></td>
+      <td><code>-u</code>, <code>-v</code>, <code>-id</code>(<code>-i</code>), <code>-s</code>, <code>-w</code>(<code>vSwitch0</code>), <code>-c</code>, <code>-del_affinity</code>, <code>-del_lpage</code>, <code>-n</code>, <code>-h</code></td>
+      <td><code>${user}.txt</code>, <code>vswitch_${user}.txt</code>, <code>vcenter.txt</code>, <code>SPEC_DIR</code>, <code>secret/*.enc</code></td>
+      <td><code>run_&lt;user&gt;/logs/</code>, <code>run.log</code>, <code>plan.txt</code>, <code>mac_all.txt</code>, <code>check_*.csv</code>, <code>pci_resume_*.sh</code></td>
+    </tr>
+    <tr>
+      <td><code>vm_create</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-mapFile</code>(<code>hostgroup.txt</code>), <code>-vmCount</code>(<code>2</code>, 1~99), <code>-firmware</code>(<code>efi</code>), <code>-guestId</code>(<code>rhel8_64Guest</code>), <code>-datacenter</code>, <code>-prepConcurrency</code>(<code>16</code>), <code>-taskConcurrency</code>(<code>24</code>), <code>-ev01~99Cpu/Mem/Disk/Share</code></td>
+      <td><code>VC_PASSWORD</code>, BM 목록, 포트그룹 매핑(<code>BM PG</code> 또는 <code>VM PG</code>)</td>
+      <td>Task 1회로 VM 생성+메모리 예약+<code>sched.mem.*</code> 설정 후 부팅순서(디스크→NIC) 지정. <code>nomal</code>/<code>normal</code> 또는 정수 Share 허용</td>
+    </tr>
+    <tr>
+      <td><code>vswitch_setting</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code>, <code>-targetVSwitch</code>(<code>vSwitch0</code>), <code>-concurrency</code>(<code>20</code>)</td>
+      <td><code>VC_PASSWORD</code>, <code>BM 포트그룹 VLAN</code></td>
+      <td>호스트별 표준 vSwitch 포트그룹 생성 (기존 존재 시 스킵)</td>
+    </tr>
+    <tr>
+      <td><code>nic_assign</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-mapFile</code>(<code>nic_map.txt</code>), <code>-concurrency</code>(<code>20</code>)</td>
+      <td><code>VC_PASSWORD</code>, <code>VM이름 포트그룹</code></td>
+      <td>어댑터 1 포트그룹 교체 + <code>Connected</code>/<code>StartConnected</code> 확인·보정 (실패 시 1)</td>
+    </tr>
+    <tr>
+      <td><code>affinity_setting</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code>, <code>-vm_cnt</code>(<code>2</code>, 1~99), <code>-affinityFile01~99</code>, <code>-concurrency</code>(<code>20</code>), <code>-del_affinity</code>, <code>-del_affinity_evs</code></td>
+      <td><code>VC_PASSWORD</code>, BM 목록, ev별 affinity 파일 (<code>-ht</code>는 호환용으로 받되 무시)</td>
+      <td>ev별 <code>sched.vcpuN.affinity</code> 적용 또는 삭제 (<code>AUTO</code> 기능 삭제됨)</td>
+    </tr>
+    <tr>
+      <td><code>lpage_setting</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code>, <code>-ev01~99Cores/Sockets/Numa</code>, <code>-applyTopology</code>(<code>true</code>), <code>-concurrency</code>(<code>20</code>), <code>-del_lpage</code>, <code>-del_lpage_evs</code></td>
+      <td><code>VC_PASSWORD</code>, BM 목록</td>
+      <td>HugePage + CPU 토폴로지 설정. 삭제 플래그 시 HugePage 5개 키만 제거(토폴로지 유지)</td>
+    </tr>
+    <tr>
+      <td><code>pci_passthrough</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code>, <code>-ev01~99Pci</code>, <code>-concurrency</code>(<code>20</code>), <code>-mmioSizeGB</code>(<code>0</code>=자동)</td>
+      <td><code>VC_PASSWORD</code>, BM 목록</td>
+      <td><code>OK</code>/<code>SKIP</code>/<code>REBOOT</code>/<code>FAIL</code> 요약. 종료코드: <code>0</code>(성공), <code>3</code>(재부팅 필요만), <code>1</code>(실패)</td>
+    </tr>
+    <tr>
+      <td><code>power_setting</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code>, <code>-concurrency</code>(<code>20</code>)</td>
+      <td><code>VC_PASSWORD</code>, BM 목록</td>
+      <td>ESXi 호스트 전원 정책 고성능(<code>static</code>) 설정, 실패 1건+ 시 종료코드 <code>1</code></td>
+    </tr>
+    <tr>
+      <td><code>tag_setting</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-hostListFile</code>(<code>hostlist.txt</code>), <code>-vmCount</code>(<code>1</code>, 1~99), <code>-deptNames</code>, <code>-purposes</code>, <code>-vmTypes</code></td>
+      <td><code>VC_PASSWORD</code>, BM 목록</td>
+      <td>빈 칸 건너뜀, 일부 실패 시 1 (주의: 동시성 세마포어 없음)</td>
+    </tr>
+    <tr>
+      <td><code>numa_preferht_setting</code></td>
+      <td><code>-vc</code>, <code>-id</code>, <code>-f</code>, <code>-concurrency</code>(<code>20</code>)</td>
+      <td><code>VC_PASSWORD</code>, VM 이름 목록</td>
+      <td>전원 OFF VM만 적용 + 재조회 검증 (문제 시 종료코드 <code>2</code>)</td>
+    </tr>
+    <tr>
+      <td><code>license_assign</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code></td>
+      <td><code>VC_PASSWORD</code>, BM 목록, 대화형 stdin</td>
+      <td>평가판 호스트 탐지 및 라이선스 할당 (<code>q</code> 중단)</td>
+    </tr>
+    <tr>
+      <td><code>mac_info</code></td>
+      <td><code>-vcTargetIP</code>, <code>-id</code>, <code>-worklistFile</code>, <code>-arg1</code>, <code>-argInt</code>(<code>0</code>), <code>-argStr</code></td>
+      <td><code>VC_PASSWORD</code>, BM 목록</td>
+      <td><code>Provisioning_List_&lt;vCenterIP&gt;.txt</code> (단독 시 IP는 <code>_DNS_AND_TOOLS_NOT_FOUND</code>)</td>
+    </tr>
+    <tr>
+      <td><code>main_conn</code></td>
+      <td><code>-vcTargetIP</code>, <code>-folderName</code>, <code>-worklistFile</code>, <code>-id</code>, <code>-datacenter</code>, <code>-concurrency</code>(<code>20</code>), <code>-domain</code>(<code>saccae.com</code>)</td>
+      <td><code>VC_PASSWORD</code>, <code>ESXI_PASSWORD</code>, 호스트 목록</td>
+      <td>지정 폴더/클러스터에 ESXi 등록 (SSL Thumbprint 자동 재시도)</td>
+    </tr>
+    <tr>
+      <td><code>vm-param-check</code></td>
+      <td><code>-vcenterList</code>, <code>-f</code>, <code>-specRoot</code>, <code>-specFolder</code>, <code>-specExport</code>, <code>-initFolder</code>, <code>-template</code>, <code>-ht</code>, <code>-preferHT</code>, <code>-cores</code>/<code>-numa</code>/<code>-cpu</code>/<code>-mem</code>/<code>-disk</code>/<code>-shares-ev01</code>(<code>ev01</code>·기본) 및 <code>-cores</code>/<code>-numa</code>/<code>-cpu</code>/<code>-mem</code>/<code>-disk</code>/<code>-shares-ev02~99</code>, <code>-affinity-ev01~99</code>, <code>-pci-ev01~99</code>, <code>-expectNoLpage</code>, <code>-expectNoAffinity</code>, <code>-fix</code>, <code>-yes</code>, <code>-fixConcurrency</code>(<code>20</code>), <code>-fixOut</code>, <code>-out</code>, <code>-user</code>, <code>-onlyFail</code>, <code>-noColor</code>, <code>-demo</code>, <code>-scale</code></td>
+      <td><code>VC_USER</code>/<code>VC_PASS</code> 또는 <code>VCENTER_USER</code>/<code>VCENTER_PASS</code>, <code>SPEC_DIR</code></td>
+      <td>상세 CSV + <code>_summary.csv</code> + (<code>-fix</code> 시) <code>_recheck_*.csv</code>. 판정 5종: <code>OK</code>/<code>FAIL</code>/<code>설정없음</code>/<code>미지원</code>/<code>정보</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3><code>vm-param-check -fix</code> 자동교정 대상 vs 수동조치 대상</h3>
+<ul>
+  <li><strong>자동교정 (VM 1대당 <code>Reconfigure</code> 1회):</strong> HugePage 4개(<code>sched.mem.lpage.enable1GPage</code>, <code>prealloc</code>, <code>prealloc.pinnedMainMem</code>, <code>sched.swap.vmxSwapEnabled</code>), <code>cpuid.coresPerSocket</code>, <code>hardware.numCoresPerSocket</code>, <code>numa.vcpu.maxPerVirtualNode</code>, <code>numa.vcpu.preferHT</code>(<code>-preferHT</code> 지정 시), <code>config.numaInfo.coresPerNumaNode</code>(vSphere API 8.0.0.1+ 필요), <code>sched.vcpuN.affinity</code>, <code>config.hardware.numCPU</code>.</li>
+  <li><strong>수동조치 (체크만 수행, <code>-fix</code> 미변경):</strong> 메모리 크기, 디스크 용량, CPU/메모리 Shares, 호스트 전원정책, 메모리 100% 예약(<code>memoryReservationLockedToMax</code>), 네트워크 포트그룹, PCI 패스스루(<code>-pci-evNN</code>은 <code>pci_passthrough</code>로 처리).</li>
+</ul>
+
+<h1>6. 통합 주의사항 · 알려진 한계 및 V1 대비 대체 관계</h1>
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <ul>
+      <li><strong><code>ev</code> 상한 99대:</strong> VM 이름이 <code>ev%02d</code> 두 자리 규칙이므로 최대 <code>ev01~ev99</code>까지만 지원됩니다(<code>ev100</code> 이상 불가).</li>
+      <li><strong><code>pci_passthrough</code> BIOS 펌웨어 및 <code>QueryConfigTarget</code> 제약:</strong> NVIDIA GPU 등 큰 BAR 장치는 EFI 펌웨어 필수(BIOS면 실패). vCenter 클러스터 환경에서 호스트 지정 <code>QueryConfigTarget</code>이 거부될 경우 4단계 폴백 조회를 시도하며, 모두 실패 시 ESXi 직접 접속(<code>-vcTargetIP &lt;ESXi&gt; -id root</code>)이 필요합니다.</li>
+      <li><strong><code>lpage_setting</code> 한계:</strong> <code>numa.vcpu.maxPerVirtualNode</code>는 코어 수 기준으로 기록되므로 <code>vm-param-check</code>에서 FAIL 시 <code>-fix</code>로 교정하십시오.</li>
+      <li><strong><code>mac_info</code> 단독 실행:</strong> 단독 실행 시 IP가 <code>_DNS_AND_TOOLS_NOT_FOUND</code>로 채워지므로 필요 시 <code>mac_ip_resolve.sh</code>를 사용하십시오(<code>vm_setup.sh</code>는 자동 해석 수행).</li>
+      <li><strong>V1(<code>VM_setup</code>) 대비 변경 요약:</strong> ① <code>ev01~ev03</code> → <code>ev01~ev99</code> 확장 ② <code>affinity_setting</code>의 <code>AUTO</code> 1:1 계산 폐지(ev별 파일 필수) ③ <code>vm-param-fix/</code>(외부 바이너리 오케스트레이터) 제거 및 <code>vm-param-check -fix</code> 단일 바이너리 통합 ④ <code>vm_setup.sh</code>·<code>SPEC_DIR</code> 공유·<code>passwd_update.sh</code>·<code>nic_assign</code>·<code>pci_passthrough</code>·<code>bin_os6/</code> 신설.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

@@ -1,0 +1,365 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (순수 Bash 스크립트 — <strong>빌드 불필요</strong>)</p>
+    <p><strong>대상 프로젝트:</strong> OS 환경설정 체크 (<code>os_check_final_annotated.sh</code>)</p>
+    <p><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/OS 환경설정 체크</code></p>
+    <p><strong>대상 브랜치:</strong> <code>confluence</code> (<code>OS_환경설정_체크_docs/</code>)</p>
+    <p><strong>연계 도구:</strong> <code>gossh</code> (원격 병렬 실행), <code>auto_setup</code> (<code>-auto</code> / <code>-auto-check</code> 비대화형 실행 및 <code>done/</code> 완료 마커 기록)</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>미구현 TODO 및 문서-코드 불일치 주의:</strong> <code>os_check_final_annotated.sh</code>는 회사 환경 이관 전 주석 기반 템플릿 상태를 포함하고 있어 상단 <code>[수정필요]</code> 변수 설정과 일부 미구현 TODO(<code>select_user()</code>, <code>check_ev_extra()</code> 등) 확인 없이 그대로 운영 서버에 실행하면 중단되거나 일부 점검이 생략됩니다. 4절의 <strong>미구현 TODO 및 문서-스크립트 차이 현황</strong>을 먼저 반드시 확인하십시오.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>1. 개요 및 변경 대상 (실제 수정하는 파일 및 실행 스크립트)</h2>
+
+<p><strong>OS 환경설정 체크</strong>(<code>os_check_final_annotated.sh</code>)는 신규 구축되거나 재설치된 다수의 HPC 리눅스 서버에 대해 OS 기본 환경설정을 원격 일괄 점검하고, 필요 시 설정 스크립트를 원격 적용한 뒤 사후 재점검 및 요약 리포트를 출력하는 <strong>순수 Bash 오케스트레이션 스크립트</strong>입니다.</p>
+
+<p>이 스크립트는 자체적으로 <code>/etc/*</code> 설정 파일을 직접 파싱·편집하지 않고, <code>gossh</code>를 통해 각 대상 호스트에 설치되어 있거나 지정된 점검/적용 스크립트를 원격 호출하여 상태를 판정하고 구성을 반영합니다.</p>
+
+<h3>1.1 실제 실행 및 변경 대상</h3>
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>호출 위치 / 대상 스크립트</th>
+      <th>실제 수행 내용 및 변경 영향</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>원격 OS 사전·사후 점검</td>
+      <td>대상 서버: <code>${RUN_SH_DIR}/run.sh</code>, <code>${INFO_CHECK_SH}</code>, <code>${CLASSIFY_CMD}</code> (기본 <code>hostname</code>), <code>${KERNEL_CMD}</code> (기본 <code>uname -r</code>)</td>
+      <td>읽기 전용 점검(<code>gossh -pm</code> 병렬 실행)을 수행하고 로컬 작업 디렉터리에 <code>check.res_${user}*</code>, <code>ldap_case*_${user}</code> 결과 파일을 생성</td>
+    </tr>
+    <tr>
+      <td>원격 OS 설정 적용 (<code>y</code> 선택 시)</td>
+      <td>대상 서버: <code>${SETTING_DIR}/setting_insert.sh</code>, <code>${RCLOCAL_SH}</code>, <code>${SETTING_DIR}/appl_change.sh</code></td>
+      <td><code>gossh</code>를 통해 대상 서버의 OS 환경설정, <code>rc.local</code> 관련 설정, 애플리케이션 구성을 실제로 수정 (쓰기 작업)</td>
+    </tr>
+    <tr>
+      <td>원격 OS 설정 전체 적용 (<code>set</code> 선택 시)</td>
+      <td>대상 서버: 위 <code>y</code> 대상 + <code>${SETTING_DIR}/setting.sh</code></td>
+      <td>호스트 목록에 <code>p</code> 또는 <code>d</code>로 시작하는 호스트가 포함된 경우(<code>-auto</code> 기준) 또는 사용자가 <code>set</code> 입력 시 기본 <code>setting.sh</code>까지 추가 적용 (쓰기 작업)</td>
+    </tr>
+    <tr>
+      <td>로컬 DHCP 조회 (v21 기준)</td>
+      <td>로컬 관리서버: <code>${DHCP_SH}</code> (기본 <code>./dhcp.sh</code>)</td>
+      <td><code>PINGX_HOSTS</code>(핑 미응답 호스트) 대상에 한해 로컬에서 DHCP 정보를 조회 (단, <code>README.md</code> 및 구 주석에는 TODO로 남아 있음)</td>
+    </tr>
+    <tr>
+      <td><code>auto_setup</code> 완료 마커</td>
+      <td>로컬 <code>${auto_done_dir}</code> 또는 원격 <code>${auto_done_host}</code>의 <code>${AUTO_SETUP_DIR:-/tmp/auto_setup}/done/</code></td>
+      <td><code>-auto</code> 정상 완료 시 대상 호스트별 완료 기록 생성 (500대 단위 배치 <code>gossh</code> 원샷 전송, <code>sha256sum</code> 필요). <code>-auto-check</code> 시에는 기록하지 않음</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>1.2 주석 태그 규약</h3>
+<p>스크립트 내부 주석은 운영 환경 이관 시 수정 가능 여부를 명확히 구분하기 위해 아래 3가지 태그로 관리됩니다.</p>
+<ul>
+  <li><code>[수정필요]</code>: 회사 내부 실제 경로, 명령어, <code>user</code> 선택 방식, FAIL 판정 기준, TODO 함수를 배포 전 반드시 확인·수정해야 하는 구간</li>
+  <li><code>[수정금지]</code>: <code>-auto</code> / <code>-auto-check</code> 인자 파싱 및 자동 프롬프트 제어 등 <code>auto_setup</code> 연동 프로토콜을 유지하기 위해 변경하면 안 되는 구간</li>
+  <li><code>[연계]</code>: <code>auto_setup</code> 완료 마커 기록(<code>auto_record_done</code>) 등 외부 자동화 파이프라인과 맞물리는 구간</li>
+</ul>
+
+<h2>2. 사전준비 / 배치(빌드 불필요) · 입력파일 · 계정/암호화</h2>
+
+<h3>2.1 빌드 여부 및 배치 방법 (순수 Bash — 빌드 불필요)</h3>
+<p>이 프로젝트는 Go/C 바이너리 컴파일이 없는 <strong>순수 Bash 스크립트</strong>이므로 <strong>별도 빌드가 전혀 불필요</strong>합니다.</p>
+<ul>
+  <li><strong>원본 실행 파일:</strong> <code>os_check_final_annotated.sh</code> (또는 회사 표준 운영 파일명으로 복사 후 권한 부여)</li>
+  <li><strong>필수 의존 도구:</strong> <code>gossh</code> (원격 접속 및 <code>-pm</code> 병렬 실행), <code>bash</code>, <code>sha256sum</code> (<code>auto_record_done</code> 완료 마커 해시 계산용)</li>
+  <li><strong>autofs 공유 배포 시 주의:</strong> 여러 관리서버가 autofs 공유 경로의 스크립트를 함께 쓰는 경우, <code>auto_done_dir</code>는 반드시 비워 두고(<code>auto_done_dir=""</code>) <code>auto_done_host</code>에만 <code>os8_mgmt</code> 호스트명을 지정해야 합니다. <code>auto_done_dir</code>에 로컬 경로를 넣으면 다른 서버에서 실행 시 원격 <code>os8_mgmt</code>가 아닌 실행 서버 로컬에 기록됩니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. 스크립트 실행 권한 부여 (빌드 불필요)
+chmod +x os_check_final_annotated.sh
+
+# 2. 상단 [수정필요] 변수 점검 (실제 사내 경로 및 os8_mgmt 설정)
+grep -n '\[수정필요\]' os_check_final_annotated.sh
+
+# 예시 확인 항목:
+# RUN_SH_DIR="/path/to/check"
+# SETTING_DIR="/path/to/setting"
+# RCLOCAL_SH="/path/to/setting/rclocal.sh"
+# INFO_CHECK_SH="/path/to/check/info_check.sh"
+# DHCP_SH="./dhcp.sh"
+# auto_done_dir=""
+# auto_done_host="os8_mgmt"   # autofs 공유 시 호스트명만 지정]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>2.2 입력 파일 및 인증/암호화 정책</h3>
+<ul>
+  <li><strong>대화형 호스트 목록 파일 (<code>${user}.txt</code>):</strong> 스크립트 실행 작업 디렉터리에 위치한 대상 호스트 목록 파일입니다. <code>select_user()</code> 구현을 통해 결정된 <code>user</code> 값으로 <code>${user}.txt</code>를 읽습니다(현재 <code>select_user()</code>는 <code>user=""</code> 미구현 상태이므로 4.3절 참고).</li>
+  <li><strong>비대화형 호스트 목록 파일 (<code>&lt;호스트목록파일&gt;</code>):</strong> <code>-auto &lt;user&gt; &lt;호스트목록파일&gt;</code> 또는 <code>-auto-check &lt;user&gt; &lt;호스트목록파일&gt;</code> 실행 시 3번째 인자로 직접 전달되는 파일입니다.</li>
+  <li><strong>계정 및 암호화:</strong> 스크립트 자체에 평문 비밀번호를 저장하거나 입력받지 않으며, 모든 원격 인증은 사전에 구성된 <code>gossh</code> 세션·인증 체계(예: 키 기반 인증 또는 <code>svrauto</code> 계정 컨텍스트)에 위임합니다.</li>
+</ul>
+
+<h2>3. 표준 안전 절차 (사전 점검 → 소수 선행검증 → 전체 적용 → 사후 검증)</h2>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p>이 스크립트는 별도의 <code>-dry-run</code> 플래그를 제공하지 않는 대신, <strong>대화형 단계별 프롬프트</strong>(체크 진행 여부 <code>y/n</code> → 결과 확인 후 설정 수정 여부 <code>y/n/set</code>)와 <strong>읽기 전용 모드인 <code>-auto-check</code></strong>를 통해 변경 전 미리보기/검증 절차를 수행합니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>3.1 단계별 표준 운영 절차</h3>
+<ol>
+  <li>
+    <strong>1단계 — 사전 점검 및 미리보기 (읽기 전용 / Dry-run 성격 검증):</strong>
+    <p>설정 변경을 전혀 수행하지 않는 <code>-auto-check</code> 모드로 대상 호스트의 현재 OS 상태, 커널, LDAP/SPLUNK 상태, 핑/SSH 접속 상태를 먼저 확인합니다. (<code>auto_setup</code>의 <code>t</code> 테스트 모드, <code>request manual-run ... check</code>, <code>x</code> 옵션이 이 모드를 호출합니다.)</p>
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[# 비대화형 읽기 전용 사전 점검 (설정 적용 및 done 기록 모두 생략)
+./os_check_final_annotated.sh -auto-check testuser ./canary_hosts.txt
+
+# 점검 결과 파일 확인
+ls -la check.res_testuser* ldap_case*_testuser]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li>
+    <strong>2단계 — 소수 선행검증 (Canary 1~2대):</strong>
+    <p>선별한 소수 테스트/카나리 호스트 목록(1~2대)에 대해 먼저 적용을 수행합니다. 적용 스크립트(<code>setting_insert.sh</code>, <code>rclocal.sh</code>, <code>appl_change.sh</code>, 필요 시 <code>setting.sh</code>)가 의도한 대로 동작하는지, <code>GOSSH_SAFETY_FILTER</code>(<code>\[안전장치\]|autofs 마운트</code>) 관련 오탐/차단이 없는지 확인합니다.</p>
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[# 방법 A: 대화형으로 진행하며 중간 프롬프트에서 y / set 직접 통제
+# (사전에 select_user() TODO가 구현되어 있어야 함)
+./os_check_final_annotated.sh
+# 프롬프트 1: OS 체크를 진행하시겠습니까? (y/n) -> y
+# 프롬프트 2: OS 환경설정을 수정하시겠습니까? (y/n/set) -> y (또는 p/d 호스트 포함 시 set)
+
+# 방법 B: 카나리 호스트 파일로 -auto 실행 검증
+./os_check_final_annotated.sh -auto canary_op ./canary_hosts.txt]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li>
+    <strong>3단계 — 전체 적용 (대화형 또는 <code>auto_setup</code> 연계 <code>-auto</code>):</strong>
+    <p>카나리 검증이 통과되면 전체 대상 목록에 적용합니다. <code>-auto &lt;user&gt; &lt;호스트목록파일&gt;</code> 모드에서는 <code>OS 체크를 진행하시겠습니까?</code>에 자동으로 <code>y</code>가 선택되며, <strong>목록 내 앞 공백 제거 후 호스트명이 대소문자 구분 없이 <code>p</code> 또는 <code>d</code>로 시작하는 호스트가 하나라도 있으면 <code>set</code></strong>, 그렇지 않으면 <code>y</code>가 자동 선택됩니다.</p>
+    <ac:structured-macro ac:name="code">
+      <ac:parameter ac:name="language">bash</ac:parameter>
+      <ac:plain-text-body><![CDATA[# 전체 호스트 일괄 자동 적용 (p/d 시작 호스트 포함 시 자동으로 'set', 그 외 'y')
+./os_check_final_annotated.sh -auto admin ./all_hosts.txt]]></ac:plain-text-body>
+    </ac:structured-macro>
+  </li>
+  <li>
+    <strong>4단계 — 사후 검증 및 결과 리포트 확인:</strong>
+    <p>설정 적용 후 스크립트는 <code>SETTING_TARGET_LIST</code>를 대상으로 <code>run_post_apply_check</code>를 자동 재실행하여 <code>check.res_${user}_postapply</code>에 저장하고 <code>FAIL</code> 항목만 추려 출력한 뒤, <code>############### 결과 리포트 ###############</code> 블록에 LDAP case 6~9, DHCP(<code>PINGX_HOSTS</code>), <code>usb0</code>, PCIe(<code>pice</code>) BIOS, <code>ev</code> 호스트 상태를 요약합니다. <code>-auto</code> 모드에서는 완료 후 <code>auto_record_done</code>을 호출하여 <code>done/</code> 마커를 기록합니다.</p>
+  </li>
+</ol>
+
+<h2>4. CLI 플래그 · 설정 변수 · 입출력 파일 · TODO 현황 표</h2>
+
+<h3>4.1 CLI 실행 모드 및 <code>auto_setup</code> 연계 규칙</h3>
+<table>
+  <thead>
+    <tr>
+      <th>호출 형태</th>
+      <th>적용 대상 / 연계 조건</th>
+      <th>자동 프롬프트 응답 및 동작</th>
+      <th><code>auto_record_done</code> 실행 여부</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>./os_check_final_annotated.sh</code></td>
+      <td>일반 대화형 실행 (<code>${user}.txt</code> 사용)</td>
+      <td><code>OS 체크를 진행하시겠습니까? (y/n)</code> 및 <code>OS 환경설정을 수정하시겠습니까? (y/n/set)</code> 수동 입력</td>
+      <td>실행 안 함</td>
+    </tr>
+    <tr>
+      <td><code>-auto &lt;user&gt; &lt;호스트목록파일&gt;</code></td>
+      <td><code>auto_setup</code> 표준 자동 연동 (<code>[수정금지]</code>)</td>
+      <td>OS 체크=<code>y</code> / 설정 수정=호스트 중 <code>^[pPdD]</code> 존재 시 <code>set</code>, 없으면 <code>y</code> / 사후 재점검 및 결과 리포트 수행</td>
+      <td>실행함 (<code>auto_done_dir</code> 또는 <code>auto_done_host</code> 기록)</td>
+    </tr>
+    <tr>
+      <td><code>-auto-check &lt;user&gt; &lt;호스트목록파일&gt;</code></td>
+      <td><code>auto_setup</code>의 <code>t</code>, <code>request manual-run ... check</code>, <code>x</code> 연동 (<code>[수정금지]</code>)</td>
+      <td>OS 체크=<code>y</code> / 설정 수정=<code>n</code> / 적용·사후점검 건너뛰고 점검 결과 리포트만 출력 (미지원 시 <code>auto_setup</code>이 <code>t</code> 차단)</td>
+      <td>실행 안 함 (읽기 전용 검증)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.2 상단 주요 설정 변수 (<code>[수정필요]</code> 및 <code>[연계]</code>)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>변수명</th>
+      <th>스크립트 기본값</th>
+      <th>설명 및 운영 반영 사항</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>RUN_SH_DIR</code></td>
+      <td><code>"/path/to/check"</code></td>
+      <td>원격 대상 서버 내 기본 OS 체크 <code>run.sh</code>가 위치한 디렉터리 (<code>[수정필요]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>SETTING_DIR</code></td>
+      <td><code>"/path/to/setting"</code></td>
+      <td>원격 대상 서버 내 <code>setting_insert.sh</code>, <code>appl_change.sh</code>, <code>setting.sh</code> 디렉터리 (<code>[수정필요]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>RCLOCAL_SH</code></td>
+      <td><code>"/path/to/setting/rclocal.sh"</code></td>
+      <td>원격 적용 시 함께 실행하는 <code>rclocal.sh</code> 전체 경로 (<code>[수정필요]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>INFO_CHECK_SH</code></td>
+      <td><code>"/path/to/check/info_check.sh"</code></td>
+      <td><code>check.res_${user}_info</code> 수집용 보조 스크립트 경로 (<code>[수정필요]</code>, 133~138행 주석 참고)</td>
+    </tr>
+    <tr>
+      <td><code>DHCP_SH</code></td>
+      <td><code>"./dhcp.sh"</code></td>
+      <td><code>PINGX_HOSTS</code> 대상 DHCP 조회에 실행하는 로컬 스크립트 경로 (<code>[수정필요]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>GOSSH_SAFETY_FILTER</code></td>
+      <td><code>'\[안전장치\]|autofs 마운트'</code></td>
+      <td><code>gossh</code> 출력 필터링 정규식 (<code>[수정필요]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>CLASSIFY_CMD</code></td>
+      <td><code>"hostname"</code></td>
+      <td>호스트 분류 명령어 (<code>[수정필요]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>KERNEL_CMD</code></td>
+      <td><code>"uname -r"</code></td>
+      <td>커널 버전 수집 명령어 (<code>[수정필요]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>auto_done_dir</code></td>
+      <td><code>""</code></td>
+      <td><code>os8_mgmt</code> 로컬 직접 실행 시 완료 마커 저장 경로. <strong>autofs 공유 본에서는 반드시 빈 값 유지</strong> (<code>[연계]</code>)</td>
+    </tr>
+    <tr>
+      <td><code>auto_done_host</code></td>
+      <td><code>""</code></td>
+      <td><code>os8_mgmt</code> 호스트명 지정 시 <code>gossh</code> 원샷(500대 배치)으로 <code>${AUTO_SETUP_DIR:-/tmp/auto_setup}/done/</code>에 마커 기록 (<code>[연계]</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.3 생성되는 점검 결과 파일</h3>
+<table>
+  <thead>
+    <tr>
+      <th>파일명 패턴</th>
+      <th>생성 시점</th>
+      <th>비고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>check.res_${user}</code></td>
+      <td>초기 OS 체크 시</td>
+      <td>대상 호스트 기본 OS 체크 결과 저장</td>
+    </tr>
+    <tr>
+      <td><code>check.res_${user}_info</code></td>
+      <td>정보 체크(<code>INFO_CHECK_SH</code>) 시</td>
+      <td>호스트 상세 정보 수집 결과</td>
+    </tr>
+    <tr>
+      <td><code>check.res_${user}_kernel</code></td>
+      <td>커널 체크(<code>KERNEL_CMD</code>) 시</td>
+      <td>커널 버전 수집 결과</td>
+    </tr>
+    <tr>
+      <td><code>check.res_${user}_postapply</code></td>
+      <td>설정 적용 후 사후 점검 시</td>
+      <td>임시 파일명 기준(<code>[수정필요]</code> 423행/441행 확인 필요)</td>
+    </tr>
+    <tr>
+      <td><code>ldap_case{N}_${user}</code></td>
+      <td>LDAP 상태 분류 시 (case 6~9 포함)</td>
+      <td>임시 파일명 기준(<code>[수정필요]</code> 504행 확인 필요)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.4 미구현 TODO 및 문서-코드 불일치 현황 (중요)</h3>
+<p>운영 이관 전 아래 <strong>실제 코드 상태</strong>를 반드시 확인하십시오. 일부 항목은 <code>README.md</code> 설명과 실제 <code>os_check_final_annotated.sh</code> 동작이 다릅니다.</p>
+<table>
+  <thead>
+    <tr>
+      <th>항목 / 위치</th>
+      <th>현재 스크립트(<code>os_check_final_annotated.sh</code>) 실제 상태</th>
+      <th>주의사항 및 조치 필요 내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>select_user()</code> (~149행)</td>
+      <td><strong>미구현 TODO</strong> (<code>user=""</code> 빈 값)</td>
+      <td>구현하지 않고 대화형 모드 실행 시 <code>[ERROR] user 값이 비어 있습니다.</code>를 출력하며 즉시 종료됨. (<code>-auto</code> / <code>-auto-check</code>는 인자로 <code>user</code>를 받으므로 우회 가능)</td>
+    </tr>
+    <tr>
+      <td><code>check_ev_extra()</code> (865행)</td>
+      <td><strong>미구현 TODO</strong> (<code>:</code> no-op 처리)</td>
+      <td><code>[수정필요] ev 호스트 추가 점검 로직 미구현 (TODO)</code> 상태. <code>ev</code> 호스트 추가 점검이 필요하면 사내 기준 로직을 직접 작성해야 함</td>
+    </tr>
+    <tr>
+      <td><code>get_dhcp_info()</code> (65~67행, 853~861행, 921행)</td>
+      <td><strong>README/구 주석과 불일치:</strong> v21 이력에서 <code>bash "${DHCP_SH}" "${dhcp_target_file}"</code> 로컬 실행으로 실제 구현됨</td>
+      <td><code>README.md</code>와 921행 주석에는 여전히 TODO로 표기되어 있으나 코드상으로는 <code>PINGX_HOSTS</code> 대상 <code>DHCP_SH</code> 실행이 구현되어 있으므로 사내 <code>dhcp.sh</code> 인터페이스 일치 여부를 검증해야 함</td>
+    </tr>
+    <tr>
+      <td>LACP 점검 (<code>check_lacp</code> / <code>report_lacp_info</code>)</td>
+      <td><strong>README와 불일치:</strong> 스크립트 이력 #15에서 이미 제거됨</td>
+      <td><code>README.md</code> 4.4절 및 4.6절에는 남아 있으나 실제 <code>os_check_final_annotated.sh</code>에는 LACP 점검 및 리포트 기능이 없음</td>
+    </tr>
+    <tr>
+      <td><code>INFO_CHECK_SH</code> 경로, 임시 파일명, FAIL grep 기준 (133~138, 423, 441, 504, 739행)</td>
+      <td><strong><code>[수정필요]</code> 주석 존재</strong></td>
+      <td>133~138행 <code>INFO_CHECK_SH</code> 경로, 423/441/504행 임시 파일명(<code>check.res_${user}_postapply</code>, <code>ldap_case{N}_${user}</code>), 739행 FAIL grep 기준이 사내 표준과 일치하는지 이관 시 점검 필요</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 백업 및 롤백 방법</h2>
+
+<p><code>os_check_final_annotated.sh</code>는 원격 서버의 개별 설정 파일을 직접 수정하는 것이 아니라 사내 적용 스크립트(<code>setting_insert.sh</code>, <code>rclocal.sh</code>, <code>appl_change.sh</code>, <code>setting.sh</code>)를 일괄 호출하는 구조이므로, 롤백은 <strong>로컬 오케스트레이션 스크립트/마커</strong>와 <strong>원격 OS 설정</strong> 두 계층으로 구분해 관리해야 합니다.</p>
+
+<ul>
+  <li><strong>스크립트 수정 전 로컬 백업:</strong> <code>[수정필요]</code> 항목을 편집하기 전에 반드시 원본을 타임스탬프 백업한 뒤 차분만 확인하십시오.</li>
+  <li><strong>원격 설정 백업 및 원복:</strong> 이 스크립트는 원격 호스트의 기존 <code>/etc/*</code> 설정을 자동 백업하거나 자동 롤백하는 옵션을 제공하지 않습니다. 따라서 카나리 서버 적용 전 원격 설정 파일(<code>/etc/rc.d/rc.local</code> 및 <code>setting*.sh</code>가 변경하는 대상 파일)의 사본을 확보하고, 이상 발생 시 해당 서버에서 수동 원복 또는 역적용 스크립트를 실행해야 합니다.</li>
+  <li><strong>작업 증거 보존:</strong> 작업 전후 생성된 <code>check.res_${user}*</code> 및 <code>ldap_case*_${user}</code> 파일을 삭제하지 말고 보관하여 적용 전/후 상태(<code>postapply</code>)를 대조하십시오.</li>
+  <li><strong><code>auto_setup</code> 완료 마커 정정:</strong> <code>-auto</code> 실행으로 잘못된 완료 마커가 <code>${AUTO_SETUP_DIR:-/tmp/auto_setup}/done/</code>에 기록된 경우 <code>os8_mgmt</code>에서 해당 호스트의 마커 정리 여부를 <code>auto_setup</code> 운영 절차에 따라 확인해야 합니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. [수정필요] 편집 전 로컬 스크립트 백업
+cp -p os_check_final_annotated.sh "os_check_final_annotated.sh.bak.$(date +%Y%m%d_%H%M%S)"
+
+# 2. 적용 전/후 결과 파일 아카이브 보관 (롤백 판단 근거)
+mkdir -p "./backup_results/$(date +%Y%m%d_%H%M%S)"
+cp -p check.res_* ldap_case*_* "./backup_results/$(date +%Y%m%d_%H%M%S)/" 2>/dev/null || true]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>6. 작업 완료 후 랜덤 서버 실접속 교차검증 필수</h2>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>[필수 검증 경고] 작업 완료 후 반드시 랜덤 서버 실접속 교차검증을 수행하십시오.</strong></p>
+    <p><code>check.res_${user}_postapply</code> 또는 <code>결과 리포트</code> 출력에서 모든 항목이 정상으로 보이더라도 자동화 스크립트의 파싱 누락·미구현 TODO(<code>check_ev_extra</code> 등)·사내 경로 불일치 가능성을 배제할 수 없습니다. 전체 적용 또는 <code>-auto</code> 실행이 완료된 직후에는 반드시 <strong>대상 그룹(<code>y</code> 적용 서버, <code>set</code> 적용된 <code>p</code>/<code>d</code> 서버, <code>ev</code> 서버 등)에서 최소 1~3대의 랜덤 서버에 직접 SSH 접속</strong>하여 아래 항목을 수동 교차검증하십시오.</p>
+    <ul>
+      <li><code>uname -r</code>, <code>hostname</code>, <code>rc.local</code> 및 <code>setting_insert.sh</code> / <code>appl_change.sh</code> / <code>setting.sh</code>가 수정하는 실제 OS 파일 내용 확인</li>
+      <li>LDAP 및 Splunk 에이전트 서비스 실제 기동 상태 및 인증 동작 확인</li>
+      <li><code>run.sh</code>를 원격 서버 내부에서 직접 수동 1회 실행했을 때의 출력과 <code>check.res_${user}_postapply</code> 결과가 일치하는지 대조</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

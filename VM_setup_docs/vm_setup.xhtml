@@ -1,0 +1,403 @@
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">Suite 요약 및 문서 기준</ac:parameter>
+  <ac:rich-text-body>
+    <p><strong>VM_setup (V1)</strong>은 vSphere / ESXi 초기 호스트 연결부터 라이선스 할당, vSwitch, VM 생성(<code>ev01</code>~<code>ev03</code>), 성능/토폴로지 파라미터 설정, MAC/프로비저닝 정보 수집 및 CSV 기반 사후 보정까지 수행하는 <strong>레거시 V1 CLI 도구 모음</strong>입니다.</p>
+    <ul>
+      <li><strong>원본 저장소 경로 (<code>origin/master</code> 기준)</strong>: <code>.claude/VM/VM_setup</code></li>
+      <li><strong>문서 대상 브랜치</strong>: <code>confluence</code> (<code>VM_setup_docs/</code>)</li>
+      <li><strong>구성 요소</strong>: Go 소스 기반 하위 도구 9종(<code>*-source</code>), CSV 기반 보정 오케스트레이터(<code>vm-param-fix</code>), 소스 미보유 단독 바이너리(<code>vm-param-fix/power_setting</code>)</li>
+      <li><strong>후속 버전 안내</strong>: 신규 구축에는 <strong>V2 Suite</strong>(<code>.claude/VM/V2</code>)를, 파라미터 점검 및 보정에는 단일 바이너리 <strong><code>vm-param-check -fix</code></strong>를 사용하는 것이 권장됩니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<h2>1. Suite 전체 개요 및 단계별 전체 흐름</h2>
+<p><code>VM_setup</code>은 V2와 달리 원스톱 통합 구축 스크립트(<code>vm_setup.sh</code>), 중앙 스펙 디렉터리(<code>SPEC_DIR</code>), 암호화된 비밀번호 관리(<code>passwd_update.sh</code>)가 없는 <strong>V1 수동 실행 체계</strong>입니다. 운영자가 <code>worklist.txt</code> 등의 입력 파일과 환경변수(<code>VC_PASSWORD</code>)를 직접 준비하여 각 하위 도구를 단계별로 실행합니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:parameter ac:name="title">V1 전체 수동 프로비저닝 및 사후 보정 흐름</ac:parameter>
+  <ac:plain-text-body><![CDATA[[사전 준비] 각 *-source 및 vm-param-fix 오프라인 빌드 (단, power_setting 바이너리 보존)
+   │
+   ▼  1단계: 호스트 등록 (CLI 플래그 없음 - main.go 직접 수정 후 재빌드)
+main_conn  ──▶ ESXi 호스트를 vCenter 클러스터에 등록 (동시성 5, 타임아웃 10분)
+   │
+   ▼  2단계: 라이선스 및 네트워크 기반 구성
+license_assign ──▶ ESXi 라이선스 할당 (00000-... / eval 감지, stdin 'q' 중단)
+vswitch_setting ─▶ 대상 vSwitch 설정 (기본 vSwitch0, 순차 실행)
+   │
+   ▼  3단계: VM 생성 및 파라미터 튜닝 (호스트당 ev01 ~ ev03, 최대 3대 제한)
+vm_create              ──▶ 호스트 그룹 매핑 기반 VM 생성 (Prep 16 / Task 24)
+affinity_setting       ──▶ vCPU Affinity 설정 (파일 또는 AUTO/생략 시 1:1 자동 계산)
+lpage_setting          ──▶ HugePage 및 CPU 토폴로지 파라미터 적용
+numa_preferht_setting  ──▶ PoweredOff VM 대상 numa.vcpu.preferHT=TRUE 적용 및 일괄 검증
+   │
+   ▼  4단계: 메타데이터 태깅 및 프로비저닝 정보 수집
+tag_setting ──▶ Custom Attributes(DEPT_NAME, PURPOSE, VM_TYPE) 일괄 태깅
+mac_info    ──▶ 읽기 전용 조회 ─▶ Provisioning_List_<vCenterIP>.txt 생성
+   │
+   ▼  5단계 (레거시 사후 보정): 상세 점검 CSV 기반 일괄 수정
+vm-param-fix ─▶ (사전 게이트 확인: 동질성 / ev01~03 수량 / 전원 OFF)
+                ├─ sched.vcpuN.affinity ──▶ affinity_setting 호출
+                ├─ HugePage/토폴로지 8키 ─▶ lpage_setting 호출
+                ├─ host power policy    ──▶ power_setting (바이너리 전용) 호출
+                ├─ 기타 항목             ──▶ manual 분류 (수동 조치)
+                └─ 보정 완료 후          ──▶ vm-param-check 재검증]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>2. 하위 도구 역할 매트릭스</h2>
+<p><code>.claude/VM/VM_setup</code> 하위에 포함된 9개 Go 소스 도구, <code>vm-param-fix</code> 오케스트레이터, 그리고 <code>power_setting</code> 바이너리의 역할과 V2/후속 도구 대체 관계는 다음과 같습니다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>도구 / 디렉터리</th>
+      <th>유형</th>
+      <th>주요 역할</th>
+      <th>대상 범위</th>
+      <th>동시성 및 V1 특징</th>
+      <th>후속 대체 (V2 / vm-param-check)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>main_conn-source/main_conn</code></td>
+      <td>Go 소스</td>
+      <td>ESXi 호스트를 vCenter 클러스터에 등록 (SSL thumbprint 재시도 포함)</td>
+      <td>vCenter / ESXi</td>
+      <td>CLI 플래그 없음 (<code>main.go</code> 수정 후 재빌드), 세마포어 <code>5</code>, 타임아웃 10분</td>
+      <td>V2 <code>main_conn</code> (CLI 기반 동적 입력)</td>
+    </tr>
+    <tr>
+      <td><code>license_assign-source/license_assign</code></td>
+      <td>Go 소스</td>
+      <td>ESXi 호스트 라이선스 할당 및 <code>00000-...</code> / <code>eval</code> 상태 감지</td>
+      <td>ESXi 호스트</td>
+      <td>표준 입력(stdin) 대화형 진행 (<code>q</code> 입력 시 중단)</td>
+      <td>V2 <code>license_assign</code></td>
+    </tr>
+    <tr>
+      <td><code>vswitch_setting-source/vswitch_setting</code></td>
+      <td>Go 소스</td>
+      <td>ESXi 호스트 대상 vSwitch 설정</td>
+      <td>ESXi 호스트</td>
+      <td>기본 <code>vSwitch0</code>, <code>-concurrency</code> 없음(순차 실행)</td>
+      <td>V2 <code>vswitch_setting</code></td>
+    </tr>
+    <tr>
+      <td><code>vm_create-source/vm_create</code></td>
+      <td>Go 소스</td>
+      <td>호스트별 VM 일괄 생성 (<code>ev01</code>~<code>ev03</code>)</td>
+      <td>VM (최대 3대)</td>
+      <td><code>vmCount</code> 1~3 제한, Prep <code>16</code> / Task <code>24</code>, Share <code>nomal</code>/<code>normal</code> 허용</td>
+      <td>V2 <code>vm_create</code> (<code>ev01</code>~<code>ev99</code> 확장)</td>
+    </tr>
+    <tr>
+      <td><code>affinity_setting-source/affinity_setting</code></td>
+      <td>Go 소스</td>
+      <td>VM별 CPU Affinity 및 HT 기반 1:1 자동 계산 설정</td>
+      <td>VM (<code>vm_cnt</code> 1~3)</td>
+      <td>파일 생략 또는 파일 내 <code>AUTO</code> 시 <code>-ht</code> 기반 자동 계산, 동시성 <code>20</code></td>
+      <td>V2 <code>affinity_setting</code> (<code>AUTO</code> 제거, 1~99 지원)</td>
+    </tr>
+    <tr>
+      <td><code>lpage_setting-source/lpage_setting</code></td>
+      <td>Go 소스</td>
+      <td>HugePage 및 CPU 토폴로지 파라미터 적용</td>
+      <td>VM (<code>ev01</code>~<code>ev03</code>)</td>
+      <td><code>-applyTopology</code> 기본 <code>true</code>, 동시성 <code>20</code></td>
+      <td>V2 <code>lpage_setting</code> (<code>ev01</code>~<code>ev99</code> 확장)</td>
+    </tr>
+    <tr>
+      <td><code>tag_setting-source/tag_setting</code></td>
+      <td>Go 소스</td>
+      <td>Custom Attributes(<code>DEPT_NAME</code>, <code>PURPOSE</code>, <code>VM_TYPE</code>) 태깅</td>
+      <td>VM</td>
+      <td><strong>동시성 제한(세마포어) 없음</strong> (무제한 고루틴 실행)</td>
+      <td>V2 <code>tag_setting</code></td>
+    </tr>
+    <tr>
+      <td><code>numa_preferht_setting-source/numa_preferht_setting</code></td>
+      <td>Go 소스</td>
+      <td>PoweredOff VM에 <code>numa.vcpu.preferHT=TRUE</code> 적용 및 일괄 검증</td>
+      <td>VM (PoweredOff)</td>
+      <td>동시성 <code>20</code>, 불일치/오류 시 종료 코드 <code>2</code> 반환</td>
+      <td>V2 <code>numa_preferht_setting</code></td>
+    </tr>
+    <tr>
+      <td><code>mac_info-source/mac_info</code></td>
+      <td>Go 소스</td>
+      <td>VM MAC/네트워크/IP 정보 수집 (읽기 전용)</td>
+      <td>VM (읽기 전용)</td>
+      <td><code>Provisioning_List_&lt;vCenterIP&gt;.txt</code> 출력</td>
+      <td>V2 <code>mac_info</code></td>
+    </tr>
+    <tr>
+      <td><code>vm-param-fix/vm-param-fix</code></td>
+      <td>Go 소스</td>
+      <td>상세 점검 CSV를 읽어 외부 도구를 호출해 일괄 보정 및 재검증</td>
+      <td>ESXi / VM</td>
+      <td>사전 게이트 검사, <code>ev03</code> 레거시 외부 도구 제약 존재, Mock 테스트 지원</td>
+      <td><code>vm-param-check -fix</code> (단일 바이너리 통합 대체)</td>
+    </tr>
+    <tr>
+      <td><code>vm-param-fix/power_setting</code></td>
+      <td><strong>바이너리 전용</strong></td>
+      <td>호스트 전원 정책 보정 (<code>vm-param-fix</code>에서 호출)</td>
+      <td>ESXi 호스트</td>
+      <td><strong>Go 소스 미확인</strong> (<code>-vcTargetIP</code>, <code>-worklistFile</code>, 기본 <code>-worklistBmFile</code>)</td>
+      <td>점검만 <code>vm-param-check</code> (V2에는 별도 <code>power_setting-source</code> 존재)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. 일괄 오프라인 빌드 및 배치</h2>
+<p>V1 저장소에는 루트 통합 <code>setup.sh</code>나 공유 <code>govendor/</code> 디렉터리가 없습니다. 대신 <strong>9개의 <code>*-source/</code> 디렉터리와 <code>vm-param-fix/</code> 디렉터리 각각에 독립적인 <code>vendor/</code> 및 <code>setup.sh</code>가 포함</strong>되어 있어 폐쇄망에서 <code>GOFLAGS=-mod=vendor</code> 방식으로 개별 오프라인 빌드를 수행합니다.</p>
+
+<ac:structured-macro ac:name="warning">
+  <ac:parameter ac:name="title">절대 삭제/덮어쓰기 금지: power_setting 바이너리 전용 보존 경고</ac:parameter>
+  <ac:rich-text-body>
+    <p><code>vm-param-fix/power_setting</code> 파일은 <strong>컴파일된 바이너리 형태로만 보관</strong>되어 있으며, Rocky Linux 원본 빌드 환경(<code>/root/pro/main.go</code> 등)을 전수 확인한 결과에서도 해당 플래그(<code>-vcTargetIP</code>, <code>-worklistFile</code>, 기본값 <code>-worklistBmFile</code>)와 일치하는 Go 소스를 확인할 수 없었습니다.</p>
+    <ul>
+      <li>이 바이너리는 재빌드가 불가능한 <strong>유일한 원본 사본</strong>이므로 <strong>절대 삭제하거나 덮어쓰지 마십시오.</strong></li>
+      <li>후속 도구인 <code>vm-param-check</code>는 호스트 전원 정책을 <strong>점검만</strong> 수행하며 자동 수정 기능은 제공하지 않습니다. 따라서 CSV 기반 전원 정책 자동 보정이 다시 필요하다면 기존 <code>power_setting</code> 바이너리를 <code>vm-param-fix</code>를 통해 재사용하거나 신규 구현해야 합니다. (참고: V2의 <code>VMsetup/power_setting-source</code>는 High Performance 전원 정책을 단독으로 일괄 적용하는 별도 도구입니다.)</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>3.1 전체 하위 도구 일괄 오프라인 빌드 예시</h3>
+<p>각 디렉터리의 <code>setup.sh</code>를 순회 실행해 바이너리를 생성한 뒤, <code>vm-param-fix</code> 실행 작업 디렉터리(<code>-workDir</code>)에 <code>affinity_setting</code>, <code>lpage_setting</code>, <code>power_setting</code>(기존 바이너리 유지), <code>vm-param-check</code>를 함께 배치합니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:parameter ac:name="title">각 *-source 및 vm-param-fix 개별 오프라인 빌드 스크립트 예시</ac:parameter>
+  <ac:plain-text-body><![CDATA[cd .claude/VM/VM_setup
+
+# 1. main_conn 사용 시 빌드 전 main.go 내부 변수(vcenterURL, clusterName, hosts) 먼저 수정 필요
+# vi main_conn-source/main.go
+
+# 2. 9개 *-source 및 vm-param-fix 오프라인 빌드 (각 폴더 내 vendor/ 사용)
+for d in *-source vm-param-fix; do
+  if [ -f "$d/setup.sh" ]; then
+    echo "=== Building $d ==="
+    (cd "$d" && bash setup.sh)
+  fi
+done
+
+# 3. power_setting 바이너리 존재 및 실행 권한 확인 (삭제/덮어쓰기 절대 금지)
+ls -lh vm-param-fix/power_setting]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>4. 통합 보정(<code>vm-param-fix</code>) vs 하위 도구 단독 실행법</h2>
+<p><code>VM_setup</code>에는 V2의 <code>vm_setup.sh</code>와 같은 구축 단계 통합 실행기가 없으므로, 초기 구축 시 각 <code>*-source</code> 바이너리를 순서대로 단독 실행해야 합니다. 반면 구축/점검 이후 발생한 파라미터 불일치 보정은 레거시 오케스트레이터인 <code>vm-param-fix</code>로 일괄 수행합니다.</p>
+
+<h3>4.1 <code>vm-param-fix</code> 기반 일괄 보정 동작 구조</h3>
+<ul>
+  <li><strong>사전 안전 게이트(Safety Gates)</strong>: 입력된 상세 점검 CSV(<code>-checkResult</code>)를 기반으로 ① 호스트 간 하드웨어/구성 동질성(Homogeneity) 검사, ② 호스트별 <code>ev01</code>/<code>ev02</code>/<code>ev03</code> VM 수량 일치 검사, ③ 보정 대상 VM 전원 OFF 상태를 먼저 검증합니다.</li>
+  <li><strong>점검 항목 태그 분류(Tag Mapping)</strong>:
+    <ul>
+      <li><code>sched.vcpuN.affinity</code> → <code>affinity</code> 그룹 (<code>-affinityTool</code>, 기본값 <code>./affinity_setting</code> 호출)</li>
+      <li>HugePage 및 CPU 토폴로지 관련 8개 키 → <code>lpage</code> 그룹 (<code>-lpageTool</code>, 기본값 <code>./lpage_setting</code> 호출)</li>
+      <li><code>host power policy</code> → <code>power</code> 그룹 (<code>-powerTool</code>, 기본값 <code>./power_setting</code> 바이너리 호출)</li>
+      <li>그 외 모든 불일치 항목 → <code>manual</code> 분류 (자동 수정 제외, 운영자 수동 조치)</li>
+    </ul>
+  </li>
+  <li><strong>모의 테스트(Mock) 및 재검증</strong>: 외부 도구 경로 플래그(<code>-affinityTool</code>, <code>-lpageTool</code>, <code>-powerTool</code>, <code>-recheckTool</code>)를 Mock 스크립트로 대체해 동작 검증이 가능하며, 보정 완료 후 <code>-recheckTool</code>(기본 <code>./vm-param-check</code>)을 호출해 결과를 <code>-out</code>으로 기록합니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:parameter ac:name="title">단독 실행 vs vm-param-fix 일괄 보정 실행 예시</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 공통: vCenter 비밀번호 환경변수 설정
+export VC_PASSWORD='<vCenter_비밀번호>'
+
+# [단독 실행 1] 호스트 등록 (플래그 없음 - main.go 수정 및 빌드 완료 후 실행)
+./main_conn-source/main_conn
+
+# [단독 실행 2] 라이선스 및 vSwitch 설정
+./license_assign-source/license_assign -vcTargetIP 10.0.0.10 -worklistFile worklist.txt
+./vswitch_setting-source/vswitch_setting -vcTargetIP 10.0.0.10 -worklistFile worklist.txt -targetVSwitch vSwitch0
+
+# [단독 실행 3] VM 생성 및 성능 파라미터 설정 (V1은 ev01~ev03만 지원)
+./vm_create-source/vm_create -vcTargetIP 10.0.0.10 -worklistFile worklist.txt -mapFile hostgroup.txt -vmCount 2
+./affinity_setting-source/affinity_setting -vcTargetIP 10.0.0.10 -worklistFile worklist.txt -vm_cnt 2 -ht ON
+./lpage_setting-source/lpage_setting -vcTargetIP 10.0.0.10 -worklistFile worklist.txt
+# targets.txt 예: 한 줄에 대상 VM 이름 하나씩(예: 192ev01)
+./numa_preferht_setting-source/numa_preferht_setting -vc 10.0.0.10 -id lscsystems@vsphere.local -f targets.txt
+
+# [단독 실행 4] 태깅 및 프로비저닝 MAC 정보 수집
+./tag_setting-source/tag_setting -vcTargetIP 10.0.0.10 -hostListFile hostlist.txt -vmCount 2 \
+  -deptNames <부서명> -purposes <용도> -vmTypes <VM유형>
+./mac_info-source/mac_info -vcTargetIP 10.0.0.10 -worklistFile worklist.txt -arg1 <arg1> -argStr <argStr>
+
+# [통합 보정 (레거시)] vm-param-fix를 통한 CSV 기반 일괄 수정 및 재검증
+cd vm-param-fix
+./vm-param-fix \
+  -checkResult /path/to/check_detail.csv \
+  -vcTargetIP 10.0.0.10 \
+  -id lscsystems@vsphere.local \
+  -workDir . \
+  -affinityTool ./affinity_setting \
+  -lpageTool ./lpage_setting \
+  -powerTool ./power_setting \
+  -recheckTool ./vm-param-check \
+  -out ./fix_result.csv]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>5. 하위 도구별 핵심 옵션 / 입력 파일 / 출력 요약</h2>
+<p>V1 하위 도구는 도구마다 플래그 이름(예: <code>-vcTargetIP</code> vs <code>-vc</code>, <code>-worklistFile</code> vs <code>-hostListFile</code> vs <code>-f</code>)과 기본값이 다르므로 실행 전 반드시 아래 표를 확인하십시오.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>도구</th>
+      <th>핵심 CLI 옵션 및 기본값</th>
+      <th>입력 파일 / 환경변수</th>
+      <th>출력 및 종료/동작 특성</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>main_conn</code></td>
+      <td><strong>CLI 플래그 없음</strong> (소스 내 <code>vcenterURL</code>, <code>clusterName</code>, <code>hosts</code> 직접 수정 후 재빌드)</td>
+      <td>하드코딩 소스 편집 (<code>main.go</code>)</td>
+      <td>최대 동시성 <code>5</code>, 타임아웃 <code>10m</code>, SSL thumbprint 자동 재시도 연결</td>
+    </tr>
+    <tr>
+      <td><code>license_assign</code></td>
+      <td><code>-vcTargetIP</code>(필수), <code>-id</code>(<code>lscsystems@vsphere.local</code>), <code>-worklistFile</code>(<code>worklist.txt</code>)</td>
+      <td><code>worklist.txt</code>, <code>VC_PASSWORD</code>, stdin 대화형 입력</td>
+      <td><code>00000-...</code> 또는 <code>eval</code> 에디션 감지, stdin에서 <code>q</code> 입력 시 중단</td>
+    </tr>
+    <tr>
+      <td><code>vswitch_setting</code></td>
+      <td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-targetVSwitch</code>(<code>vSwitch0</code>)</td>
+      <td><code>worklist.txt</code>, <code>VC_PASSWORD</code></td>
+      <td>대상 호스트의 지정된 vSwitch 순차 설정 적용</td>
+    </tr>
+    <tr>
+      <td><code>vm_create</code></td>
+      <td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-mapFile</code>(<code>hostgroup.txt</code>), <code>-vmCount</code>(<code>2</code>, <strong>1~3 범위만 허용</strong>), <code>-firmware</code>(<code>efi</code>), <code>-guestId</code>(<code>rhel8_64Guest</code>), <code>-datacenter</code>, <code>-prepConcurrency</code>(<code>16</code>), <code>-taskConcurrency</code>(<code>24</code>), <code>-ev01Cpu/Mem/Disk/Share</code>(<code>0/0/0/&quot;0&quot;</code>), <code>-ev02Cpu/Mem/Disk/Share</code>(<code>0/0/0/&quot;0&quot;</code>), <code>-ev03Cpu/Mem/Disk/Share</code>(<code>1/1/20/&quot;1000&quot;</code>)</td>
+      <td><code>worklist.txt</code>, <code>hostgroup.txt</code>, <code>VC_PASSWORD</code></td>
+      <td>Share 옵션은 정수 또는 <code>nomal</code> / <code>normal</code> 문자열 허용</td>
+    </tr>
+    <tr>
+      <td><code>affinity_setting</code></td>
+      <td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-vm_cnt</code>(<code>2</code>, <strong>1~3 범위</strong>), <code>-affinityFile01</code>, <code>-affinityFile02</code>, <code>-affinityFile03</code>, <code>-affinityFile</code>(레거시 ev02용), <code>-ht</code>(<code>ON</code>, <code>ON</code>/<code>OFF</code>), <code>-concurrency</code>(<code>20</code>)</td>
+      <td><code>worklist.txt</code>, 선택적 Affinity 파일(내부 <code>AUTO</code> 키워드 가능), <code>VC_PASSWORD</code></td>
+      <td>파일 생략 또는 파일 내용 <code>AUTO</code>일 때 <code>-ht</code> 설정 기반 1:1 자동 계산 적용</td>
+    </tr>
+    <tr>
+      <td><code>lpage_setting</code></td>
+      <td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-ev01Cores</code>/<code>Sockets</code>/<code>Numa</code> ~ <code>-ev03Cores</code>/<code>Sockets</code>/<code>Numa</code>, <code>-applyTopology</code>(<code>true</code>), <code>-concurrency</code>(<code>20</code>)</td>
+      <td><code>worklist.txt</code>, <code>VC_PASSWORD</code></td>
+      <td><code>ev01</code>~<code>ev03</code> VM 대상 HugePage 및 CPU 토폴로지 파라미터 적용</td>
+    </tr>
+    <tr>
+      <td><code>tag_setting</code></td>
+      <td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-hostListFile</code>(<code>hostlist.txt</code>), <code>-vmCount</code>(<code>1</code>), <code>-deptNames</code>(필수), <code>-purposes</code>(필수), <code>-vmTypes</code>(필수)</td>
+      <td><code>hostlist.txt</code>, vCenter 내 사전 생성된 Custom Attributes, <code>VC_PASSWORD</code></td>
+      <td><code>DEPT_NAME</code>, <code>PURPOSE</code>, <code>VM_TYPE</code> 속성 기록 (세마포어 없이 병렬 실행)</td>
+    </tr>
+    <tr>
+      <td><code>numa_preferht_setting</code></td>
+      <td><code>-vc</code>(필수), <code>-id</code>, <code>-f</code>(필수), <code>-concurrency</code>(<code>20</code>)</td>
+      <td><code>-f</code> 대상 VM 이름 목록 파일(<code>targets.txt</code>, 예: <code>192ev01</code>), <code>VC_PASSWORD</code></td>
+      <td>PoweredOff VM만 <code>numa.vcpu.preferHT=TRUE</code> 설정 후 일괄 검증 (불일치/오류 시 exit code <code>2</code>)</td>
+    </tr>
+    <tr>
+      <td><code>mac_info</code></td>
+      <td><code>-vcTargetIP</code>(필수), <code>-id</code>, <code>-worklistFile</code>(<code>worklist.txt</code>), <code>-arg1</code>(필수), <code>-argInt</code>(<code>0</code>), <code>-argStr</code>(필수)</td>
+      <td><code>worklist.txt</code>, <code>VC_PASSWORD</code></td>
+      <td><code>Provisioning_List_&lt;vCenterIP 점(.)을 밑줄(_)로 치환&gt;.txt</code> 생성 (IP 미탐지 시 <code>&lt;VM&gt;_DNS_AND_TOOLS_NOT_FOUND</code> 기록)</td>
+    </tr>
+    <tr>
+      <td><code>vm-param-fix</code></td>
+      <td><code>-checkResult</code>(상세 CSV, 필수), <code>-vcTargetIP</code>(필수), <code>-id</code>(<code>lscsystems@vsphere.local</code>), <code>-affinityTool</code>(<code>./affinity_setting</code>), <code>-lpageTool</code>(<code>./lpage_setting</code>), <code>-powerTool</code>(<code>./power_setting</code>), <code>-recheckTool</code>(<code>./vm-param-check</code>), <code>-affinityFile</code>, <code>-workDir</code>(<code>.</code>), <code>-out</code>, <code>-scale</code>(<code>0</code>), <code>-scaleMismatch</code>(<code>false</code>)</td>
+      <td><code>vm-param-check</code> 상세 CSV, 외부 도구 바이너리들, <code>VC_PASSWORD</code></td>
+      <td>태그별 외부 보정 실행 후 재검증 결과 출력 (<code>-out</code>)</td>
+    </tr>
+    <tr>
+      <td><code>power_setting</code> (바이너리)</td>
+      <td>확인된 플래그: <code>-vcTargetIP</code>, <code>-worklistFile</code>, <code>-worklistBmFile</code>(기본값)</td>
+      <td><code>worklist</code> 파일 (또는 <code>vm-param-fix</code>가 임시 생성해 전달)</td>
+      <td>소스 미확인 바이너리; <code>vm-param-fix</code>의 <code>power</code> 태그 보정 시 호출</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>6. 통합 주의사항, 롤백/실서버 확인 및 레거시/대체 관계</h2>
+
+<ac:structured-macro ac:name="warning">
+  <ac:parameter ac:name="title">운영 실서버 무작위 표본 검증 및 롤백 불가 주의</ac:parameter>
+  <ac:rich-text-body>
+    <ul>
+      <li><strong>면책 및 실서버 확인 필수</strong>: 본 문서의 절차와 자동 실행 도구는 편의와 반복 작업 절감을 위해 작성되었으나, 대상 인프라 상태에 따라 의도치 않은 장애를 유발할 수 있습니다. 작업 완료 후에는 반드시 <strong>무작위로 선정한 실서버(ESXi 호스트 및 VM)에 직접 접속</strong>하여 호스트 등록, vSwitch, VM 스펙, Affinity/HugePage/NUMA 값, 전원/라이선스 상태를 육안 및 명령어로 재확인하십시오.</li>
+      <li><strong>자동 롤백 미지원</strong>: <code>VM_setup</code>의 모든 도구는 실패 시 이전 상태로 되돌리는 롤백(Rollback) 기능을 제공하지 않습니다. 실행 전 <code>worklist.txt</code> 대상 범위를 최소화해 검증하고 기존 vCenter/VM 설정을 백업하십시오.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:parameter ac:name="title">V1 개별 도구 운용 시 주의사항 및 제약 사항</ac:parameter>
+  <ac:rich-text-body>
+    <ul>
+      <li><strong><code>tag_setting</code> 병렬 폭주 위험</strong>: 동시성 제어 세마포어가 구현되어 있지 않으므로 대량 호스트/VM에 한 번에 실행하면 vCenter API 부하가 급증할 수 있습니다. 또한 vCenter에 <code>DEPT_NAME</code>, <code>PURPOSE</code>, <code>VM_TYPE</code> Custom Attributes가 미리 존재해야 오류가 발생하지 않습니다.</li>
+      <li><strong><code>vm-param-fix</code>의 <code>ev03</code> 한계</strong>: 레거시 외부 도구 호출 구조상 <code>ev03</code> 관련 자동 보정에 제약이 있습니다.</li>
+      <li><strong><code>numa_preferht_setting</code> 전원 상태 조건</strong>: 전원이 꺼진(PoweredOff) VM만 변경하며, 일괄 검증에서 단 1건이라도 불일치하거나 오류가 발생하면 종료 코드 <code>2</code>를 반환합니다.</li>
+      <li><strong><code>mac_info</code> 출력 식별자 주의</strong>: VMware Tools 또는 DNS 정보가 조회되지 않는 VM은 출력 파일(<code>Provisioning_List_*.txt</code>)의 IP 자리에 <code>&lt;VM&gt;_DNS_AND_TOOLS_NOT_FOUND</code> 문자열이 기록되므로 후속 자동화 파싱 전 확인이 필요합니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>6.1 레거시 V1(<code>VM_setup</code>) vs V2(<code>.claude/VM/V2</code>) 및 <code>vm-param-check -fix</code> 전환 비교</h3>
+<p><code>VM_setup</code>은 초기 V1 도구 모음이며, 이후 유지보수성·보안·다중 VM 확장을 위해 <strong>V2</strong> 및 <strong><code>vm-param-check -fix</code></strong>로 대체되었습니다.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>비교 항목</th>
+      <th>V1 (<code>.claude/VM/VM_setup</code>)</th>
+      <th>후속 버전 (<code>.claude/VM/V2</code> &amp; <code>vm-param-check -fix</code>)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>실행 방식 및 모니터링</td>
+      <td>개별 바이너리 수동 순차 실행 (통합 구축기 없음)</td>
+      <td><code>VMsetup/vm_setup.sh</code> 원스톱 오케스트레이터 + 실시간 TUI 상태 모니터</td>
+    </tr>
+    <tr>
+      <td>VM 개수 지원 범위</td>
+      <td><code>ev01</code>~<code>ev03</code> (최대 3대 제한: <code>vm_create</code>, <code>affinity_setting</code>, <code>lpage_setting</code>)</td>
+      <td><code>ev01</code>~<code>ev99</code> (최대 99대 지원으로 확장)</td>
+    </tr>
+    <tr>
+      <td>파라미터 점검 및 보정</td>
+      <td>레거시 <code>vm-param-fix</code>가 외부 도구 4개(<code>affinity_setting</code>, <code>lpage_setting</code>, <code>power_setting</code>, <code>vm-param-check</code>)를 프로세스로 호출</td>
+      <td><strong><code>vm-param-check -fix</code> 단일 바이너리</strong>로 통합 대체 (단, 호스트 전원 정책은 점검만 수행하며 자동 수정 미지원)</td>
+    </tr>
+    <tr>
+      <td><code>main_conn</code> 대상 지정</td>
+      <td>CLI 플래그 없음 (<code>main.go</code> 코드 수정 후 재빌드 필수)</td>
+      <td>CLI 인자 및 스펙 연동으로 재빌드 없이 실행</td>
+    </tr>
+    <tr>
+      <td><code>affinity_setting</code> 자동 계산</td>
+      <td>파일 생략 또는 <code>AUTO</code> 키워드 지정 시 <code>-ht</code> 기반 1:1 자동 계산 지원</td>
+      <td>V2에서는 <code>AUTO</code> 계산 기능 제거 (명시적 매핑 파일 기반 운용)</td>
+    </tr>
+    <tr>
+      <td>비밀번호 및 스펙 관리</td>
+      <td>평문 <code>VC_PASSWORD</code> 환경변수 직접 내보내기, 작업 디렉터리별 파일 산재</td>
+      <td><code>passwd_update.sh</code>(AES-256-CBC 암호화) + 공유 <code>SPEC_DIR</code> + <code>setup.sh</code>(OS8/OS6) + <code>bin_os6/*.gz</code></td>
+    </tr>
+    <tr>
+      <td>추가된 네트워크/장치 도구</td>
+      <td>없음 (수동 작업 필요)</td>
+      <td>V2에 <code>nic_assign</code>, <code>pci_passthrough</code>, 독립형 <code>power_setting-source</code> 추가</td>
+    </tr>
+  </tbody>
+</table>

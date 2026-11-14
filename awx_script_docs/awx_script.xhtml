@@ -1,0 +1,373 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>Suite 개요 및 메타 정보</strong></p>
+    <ul>
+      <li><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/awx_script</code></li>
+      <li><strong>대상 브랜치:</strong> <code>confluence</code> (<code>awx_script_docs/</code>)</li>
+      <li><strong>주요 스크립트 및 구성요소:</strong> <code>01.AWX_nodeinfo_V2.sh</code> (메인 오케스트레이터), <code>02.source_dhcp_pxe.sh</code> (yml별 인벤토리/DHCP/PXE 등록), 내장 <code>awxkit/</code> (7종 Go 바이너리·래퍼), <code>setup/</code> (가이드·현장 사본 업데이트 스크립트), <code>test/</code> (검증 하네스 — 랩/CI 전용)</li>
+      <li><strong>동작 환경:</strong> RHEL 7+ / Bash 4.x (<code>gawk</code>/<code>awk</code>, <code>sed</code>, <code>ssh</code>/<code>scp</code>, <code>gossh</code>, <code>dig</code> 또는 <code>nslookup</code>, <code>xargs</code>, <code>mktemp</code>)</li>
+      <li><strong>한 줄 요약:</strong> HPC 서버 노드정보 수집·정규화·MAC 보정·DNS 점검·사양별 yml 분할·Git 업로드를 거쳐 AWX 인벤토리/DHCP/PXE 일괄 등록과 <code>auto_setup</code> 데몬 연계까지 수행하는 통합 Bash Suite</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<p><ac:structured-macro ac:name="toc"/></p>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>주의사항 (Disclaimer) — 파괴적 삭제 작업 및 실서버 확인 필수</strong></p>
+    <ul>
+      <li><strong><code>inventory_delete</code> 되돌리기 불가:</strong> <code>01</code>에서 <code>작업진행여부 (Y|N) : y</code>를 입력한 직후 <code>ssh &lt;inventory_delete_host&gt; "bash /root/server/delhost_${user}"</code>가 실행되어 원격 호스트 레코드를 삭제합니다. 삭제는 되돌릴 수 없으므로 대상 목록을 반드시 사전 확인하십시오.</li>
+      <li><strong>실서버 교차 검증 필수:</strong> 로그 분석 및 자동화 출력만 100% 신뢰하지 말고, 등록 완료 후 무작위 서버 몇 대를 골라 DHCP/PXE/인벤토리·파티션 상태를 직접 확인하십시오.</li>
+      <li><strong><code>test/fake_dns.py</code> 운영 배치 금지:</strong> 가짜 UDP DNS 서버는 랩/CI 테스트(케이스 23) 전용이므로 운영 서버에 절대 배치하지 마십시오.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h1>1. Suite 전체 개요 및 단계별 전체 흐름</h1>
+<p><code>awx_script</code>는 HPC 서버 대량 OS 배포 전처리를 위해 노드정보 수집 및 검증(<code>01.AWX_nodeinfo_V2.sh</code>), AWX 인벤토리 동기화 및 DHCP/PXE 등록(<code>02.source_dhcp_pxe.sh</code>), 실제 AWX API 호출(내장 <code>awxkit/</code>), 그리고 OS 설치 완료 후 자동 감시(<code>auto_setup</code> queue 전달)를 하나로 묶은 파이프라인 Suite입니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[[1] user() 사용자 선택 ──▶ LOG/${user}.log 열기
+ │
+ ▼
+[2] download_txt (Y/N)
+ ├─ Y ─▶ awxkit/nodeinfo.sh -hosts <경로> ─▶ ${user}.txt 덮어쓰기
+ └─ N ─▶ 기존 ${user}.txt 사용 (msg 또는 12필드 + 선택 13번째 분류 태그)
+ │
+ ▼
+[3~4-1] parse_msg ─▶ apply_infra_alias ─▶ fix_mac(짝수 보정) ─▶ dns_check(resolv.conf 직접 A 질의 + PTR 중복경고)
+ │
+ ▼
+[5~6] show_targets (20개 세로 다단 또는 day_print) ─▶ 작업진행여부 (Y/N) + 필수 최상단 변수 검사
+ │
+ ▼ (Y)
+[7~11] inventory_delete(delhost_${user}) ─▶ split_files(분할 yml + _all) ─▶ dhcp_info(누적)
+       ─▶ gen_inventory(scp → custom_inventory.sh → svr_dir) ─▶ git_upload
+ │
+ ▼
+[12] check_servers (선택 [Y/n], AWX_CHECK 우선, auto 모드 기본 건너뜀)
+     └─▶ gossh LDAP URI·LACP 점검 (+ os8 불가 호스트는 os6_mgmt 재조사) ─▶ tmp/all_${user}
+ │
+ ▼
+[13] 메뉴 루프 (su / exit / ls / <yml 파일명>)
+ │
+ ▼ (su)
+[14] 02.source_dhcp_pxe.sh 호출
+     ├─ OS 버전 선택 (1~5 / AWX_AUTO_OS) + 옵션 확인표 (Y/N 수정, 13번째 태그 열 표시)
+     ├─ yml별 순차: invsync.sh ─▶ (dhcp.sh ∥ pxe.sh 백그라운드 동시 실행)
+     ├─ 그룹 yml 2개+ 전부 성공 시: --all yml로 invsync.sh 1회 실행
+     ├─ 최종 수량 합산 (On-premise=HPC, Cloud=SDS)
+     └─ 파티션 표준 확인 (선택 [Y/n], gossh lsblk 점검)
+ │
+ ▼ (02 성공 직후)
+[14-1] auto_setup 전달 ──▶ /tmp/auto_setup/queue/<epoch>_<user>_<pid>.job 기록 (또는 auto_setup_host로 gossh 원자 전송)
+ │
+ ▼
+[15] verify_hosts ──▶ 등록 대상 서버 목록 붙여넣기 검증 (AWX_VERIFY_FILE 지원)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h1>2. 하위 도구 및 구성요소 역할 매트릭스 표</h1>
+<table>
+  <thead>
+    <tr>
+      <th>구성요소</th>
+      <th>유형</th>
+      <th>역할 및 주요 기능</th>
+      <th>실행 방식 / 호출 관계</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>01.AWX_nodeinfo_V2.sh</code></td>
+      <td>Bash 메인 스크립트</td>
+      <td><code>[1]~[15]</code> 전체 전처리·검증·분할·Git 업로드·LDAP/LACP 점검·<code>02</code> 호출·<code>auto_setup</code> queue 전달·등록 후 확인</td>
+      <td>단독 실행 (<code>readlink -f</code> 기준 자기 위치로 자동 이동) 또는 <code>auto_setup</code> TUI <code>w</code>에서 호출</td>
+    </tr>
+    <tr>
+      <td><code>02.source_dhcp_pxe.sh</code></td>
+      <td>Bash 보조/등록 스크립트</td>
+      <td>OS 버전 선택, 옵션 확인표 검토, yml별 <code>invsync</code> → <code>dhcp ∥ pxe</code> 동시 실행, <code>_all</code> invsync, 최종 대수 집계, <code>lsblk</code> 파티션 확인</td>
+      <td><code>01</code>의 <code>[14]</code>에서 배치 인자로 자동 호출 또는 수동 단독 실행(배치/대화형 호환)</td>
+    </tr>
+    <tr>
+      <td><code>awxkit/</code> (내장)</td>
+      <td>Go 바이너리 + Bash 래퍼 Suite</td>
+      <td><code>.claude/HPC/awxkit</code> 전체 사본. <code>nodeinfo.sh</code>, <code>invsync.sh</code>, <code>dhcp.sh</code>, <code>pxe.sh</code>를 통해 실제 AWX API 호출</td>
+      <td><code>01</code>과 <code>02</code>가 상대경로(<code>awxkit/*.sh</code>)로 호출 (<code>awxkit/setup.sh</code> 사전 빌드 필요)</td>
+    </tr>
+    <tr>
+      <td><code>setup/</code></td>
+      <td>변수 가이드 · 증분 업데이터</td>
+      <td><code>setup_guide.sh</code>, <code>vars.manifest</code>, <code>update_v0.6.0.sh</code>, <code>update_v0.6.1.sh</code>, <code>update_unreleased_dns.sh</code>, <code>update_unreleased_tmp_01.sh</code>·<code>_02.sh</code></td>
+      <td>현장 변수 입력 및 사본 업데이트(<code>--dry</code>, <code>--undo</code>). 생성물이므로 직접 수정 금지</td>
+    </tr>
+    <tr>
+      <td><code>test/run_tests.sh</code> &amp; <code>fake_dns.py</code></td>
+      <td>테스트 하네스 (랩/CI 전용)</td>
+      <td>목업 E2E 108건(스텁 awxkit/ssh/scp/gossh + 케이스 21~23 DNS 점검 및 가짜 UDP DNS 서버)</td>
+      <td>배포 전 랩 검증 전용 (<code>fake_dns.py</code>는 운영 서버 배치 금지)</td>
+    </tr>
+    <tr>
+      <td><code>.power_limit_setting.txt</code></td>
+      <td>안내 텍스트</td>
+      <td><code>ai_server_list</code>와 일치하는 호스트가 등록 대상에 있을 때 <code>[12]</code> 단계에서 함께 출력하는 AI GPU 서버 전력 제한 가이드</td>
+      <td><code>01</code> 내부에서 자동 참조</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1>3. 사전 준비 · 파일 배치 (빌드 불필요) 및 변수 설정</h1>
+<p><code>01.AWX_nodeinfo_V2.sh</code>와 <code>02.source_dhcp_pxe.sh</code>는 <strong>순수 Bash 스크립트이므로 별도의 컴파일/빌드가 불필요</strong>합니다. 다만 함께 호출하는 내장 <code>awxkit/</code> 디렉터리는 Go 오프라인 빌드(<code>bash awxkit/setup.sh</code>)가 필요합니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. awx_script와 같은 디렉터리에 awxkit/ 통째로 배치 및 오프라인 빌드
+cd /path/to/awx_script
+cp -r /path/to/.claude/HPC/awxkit ./awxkit
+bash awxkit/setup.sh
+# awxkit/conf/${user}_setting.conf 준비 및 chmod 600 도 함께 완료해야 함
+
+# 2. 가이드로 최상단 변수 채우기 (권장) 또는 직접 vi 편집
+bash setup/setup_guide.sh
+
+# 3. 문법·정적 검사 및 랩 목업 E2E 검증
+bash -n 01.AWX_nodeinfo_V2.sh && bash -n 02.source_dhcp_pxe.sh
+shellcheck -S warning 01.AWX_nodeinfo_V2.sh 02.source_dhcp_pxe.sh
+bash test/run_tests.sh   # 108건 모두 통과 확인]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>전역 실행 및 경로 주의:</strong> <code>01</code>은 시작 시 <code>readlink -f</code> 기준으로 자기 디렉터리로 이동(<code>cd</code>)하므로 <code>bash /path/to/awx_script/01.AWX_nodeinfo_V2.sh</code>처럼 다른 경로에서도 실행할 수 있습니다. 단, 심볼릭 링크를 <code>/usr/local/bin</code>에 두면 <code>awxkit/</code>, <code>LOG/</code>, <code>02</code> 위치를 찾지 못하므로 <code>~/.bashrc</code>에 <code>alias awx-nodeinfo='cd /path/to/awx_script &amp;&amp; bash 01.AWX_nodeinfo_V2.sh'</code> 형태로 등록해 사용하십시오.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>3.1 상단 변수 및 현장 <code>user()</code> 함수 설정 (<code>setup/vars.manifest</code> 기준)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>파일</th>
+      <th>변수명 / 함수</th>
+      <th>필수 여부</th>
+      <th>의미 및 작성 규칙</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>repohost</code></td>
+      <td>필수 (Y 후 검사)</td>
+      <td><code>custom_inventory.sh</code>가 있는 서버. 입력 파일을 <code>/root/Inventory/</code>로 <code>scp</code> 후 <code>ssh</code> 실행</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>svr_dir</code></td>
+      <td>필수 (Y 후 검사)</td>
+      <td><code>custom_inventory.sh</code>가 yml을 쓰는 공유 디렉터리(로컬에서 보이는 autofs/NFS 경로)</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>lacp_comment</code></td>
+      <td>필수 (Y 후 검사)</td>
+      <td>LACP(802.3ad) 호스트 발견 시 노란색으로 함께 출력할 안내 문구</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>inventory_delete_host</code></td>
+      <td>필수 (Y 후 검사)</td>
+      <td>작업진행 Y 이후 <code>ssh &lt;host&gt; "bash /root/server/delhost_${user}"</code>를 실행할 서버 (<code>user@host</code> 가능)</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>user()</code> 내 <code>user_route</code></td>
+      <td>필수</td>
+      <td><code>info_mn.sh</code>(메뉴)와 <code>info.sh</code>(번호→user 변환)가 위치한 디렉터리. 비어 있으면 <code>[X] user 값이 없습니다</code> 종료</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>ai_server_list</code></td>
+      <td>선택</td>
+      <td>AI GPU 서버 호스트명 (<code>"host01|host02"</code> 파이프 구분, 완전 일치). 일치 시 <code>.power_limit_setting.txt</code> 안내</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>day_print</code></td>
+      <td>선택</td>
+      <td>목록에 포함된 user(공백·쉼표·<code>|</code> 구분)로 실행 시 작업 대상을 <code>날짜 tmp tmp infra hostname ...</code> 형식으로 출력</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>infra_alias</code></td>
+      <td>선택</td>
+      <td>미등록 infra 이름 치환 (<code>"adjfg:infra1 foo:infra2"</code>, 공백/쉼표 구분, 3번째 필드에 적용 → yml 파일명까지 반영)</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>auto_setup_host</code> / <code>auto_setup_gossh_pw</code></td>
+      <td>선택 (<code>os6_mgmt</code>용)</td>
+      <td><code>auto_setup</code> 데몬 서버(<code>os8_mgmt</code>) 호스트명. 채우면 <code>gossh</code>(필요 시 <code>-p</code>)로 원격 queue에 원자 전송. 비밀번호 입력 시 파일 권한 <code>600</code>·커밋 금지</td>
+    </tr>
+    <tr>
+      <td><code>01</code></td>
+      <td><code>os6_host</code>, <code>os6_user</code>, <code>os6_dir</code>, <code>os6_gossh</code></td>
+      <td>선택 (<code>os8_mgmt</code>용)</td>
+      <td><strong>4개 모두 채울 때만 동작.</strong> <code>os8_mgmt</code>에서 응답 없는 호스트를 공유 경로(<code>os6_dir</code>) 경유 <code>os6_mgmt</code>에서 재조사(<code>02</code>로 자동 export)</td>
+    </tr>
+    <tr>
+      <td><code>02</code></td>
+      <td><code>dhcp_infra_alias</code> / <code>pxe_infra_alias</code></td>
+      <td>선택</td>
+      <td><code>dhcp</code>와 <code>pxe</code>가 요구하는 infra 이름이 yml과 다를 때만 <code>"표시infra:넘길값"</code> 형태로 각각 치환</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3.2 폐쇄망 현장 사본 증분 업데이트 (<code>setup/update_*.sh</code>)</h2>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 0.6.1 누적 업데이트 (0.6.0 포함, 현장 값·주석 보존)
+bash setup/update_v0.6.1.sh --dry
+bash setup/update_v0.6.1.sh
+# 되돌리기: bash setup/update_v0.6.1.sh --undo
+
+# [Unreleased] 01 DNS 점검([4-1]) · AWX_AUTO_NODEINFO 반영 (0.6.1 이상 위 증분)
+bash setup/update_unreleased_dns.sh --dry
+bash setup/update_unreleased_dns.sh
+
+# [Unreleased] gossh 결과 파일(_res_off 등) 정리 및 /tmp/auto_setup/tmp 사용 (01·02 각각)
+bash setup/update_unreleased_tmp_01.sh
+bash setup/update_unreleased_tmp_02.sh]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h1>4. 통합 실행(<code>01</code> · <code>AWX_AUTO</code>) vs <code>02</code> 단독 실행법</h1>
+
+<h2>4.1 입력 파일 (<code>${user}.txt</code>) 준비 및 13번째 분류 태그</h2>
+<ul>
+  <li><strong><code>Y</code> (nodeinfo 사용):</strong> <code>${user}.txt</code>에 호스트명을 한 줄에 하나씩 작성합니다. <code>awxkit/nodeinfo.sh</code> 성공 시 결과가 <code>${user}.txt</code>를 덮어씁니다(실패 시 기존 파일 보호).</li>
+  <li><strong><code>N</code> (nodeinfo 미사용):</strong> <code>"msg": "..."</code> 형식 또는 12필드(<code>vendor model infra hostname ip mac nic disk part 용량 os boot</code>)여야 합니다.</li>
+  <li><strong>13번째 필드 (분류 태그, 선택):</strong> 12필드 뒤에 공백 없는 한 단어(예: <code>... os boot rhel810(TEST/SR)</code>)를 붙이면 <strong>yml 그룹 분할 키</strong>로만 사용됩니다(검사·치환 없이 원형 유지, <code>repohost</code> 전송 시 12필드만 전송). 먼저 <code>Y</code>로 실행해 정렬된 <code>${user}.txt</code>가 생성되면 <code>Ctrl+C</code>로 중단 후 줄 끝에 태그를 붙이고 <code>N</code>으로 재실행하는 방식을 사용합니다(12 또는 13필드만 허용).</li>
+</ul>
+
+<h2>4.2 대화형 통합 실행 및 <code>AWX_AUTO</code> 비대화형 연동</h2>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. 표준 대화형 실행
+bash 01.AWX_nodeinfo_V2.sh
+
+# 2. AWX_AUTO 비대화형 실행 (접속확인·파티션확인은 기본 건너뜀 — 돌리려면 AWX_CHECK=y 추가)
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 bash 01.AWX_nodeinfo_V2.sh
+
+# 3. auto_setup TUI (w) 연동 방식: user 메뉴·등록후확인까지 파일/환경변수로 자동 입력
+AWX_AUTO=1 AWX_AUTO_NODEINFO=n AWX_AUTO_OS=2025 \
+  AWX_USER=hong AWX_VERIFY_FILE=/tmp/targets.txt AWX_DNS_CHECKED=1 \
+  bash 01.AWX_nodeinfo_V2.sh < /dev/null]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>4.3 <code>02.source_dhcp_pxe.sh</code> 단독 실행 (배치 모드 vs 대화형 호환)</h2>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 배치 모드 (인자 형식: <yml>=<infra>,<os>,<boot>,<splunk>[,<tag>])
+bash 02.source_dhcp_pxe.sh hong \
+  INFRA-A_inventory-1234_5ea.yml=INFRA-A,RHEL8,UEFI,On-premise \
+  INFRA-B_inventory-1234_3ea.yml=INFRA-B,RHEL9,legacy,Cloud
+
+# 배치 모드에서 파티션 확인 건너뛰기
+AWX_CHECK=n bash 02.source_dhcp_pxe.sh hong INFRA-A_inventory-1234_5ea.yml=INFRA-A,RHEL8,UEFI,On-premise
+
+# 대화형 호환 모드 (인자 0개 → ls -1 *.yml 후 1개 yml에 대해 invsync/dhcp/pxe 실행)
+bash 02.source_dhcp_pxe.sh hong]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h1>5. 핵심 규칙 · 옵션 및 연계 상세</h1>
+
+<h2>5.1 yml 분할 키 및 <code>splunk</code> 값 자동 결정 규칙</h2>
+<table>
+  <thead>
+    <tr>
+      <th>규칙 구분</th>
+      <th>기준 / 조합</th>
+      <th>적용 규칙 및 치환 사항</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>yml 분할 키 (7+1)</strong></td>
+      <td><code>infra</code> + <code>nic</code> + <code>disk</code> + <code>용량</code> + <code>os</code> + <code>boot</code> + <code>splunk</code> + (선택)<code>13번째 태그</code></td>
+      <td><code>part</code>(9번째 필드)는 분할 키에서 제외. 1~12필드에 <code>1.1T</code>→<code>1200</code>, <code>7T</code>→<code>7600</code>, <code>test1234</code>→<code>offchip</code>, boot <code>레거시</code>→<code>legacy</code> 치환. 모든 줄을 담은 <code>_all</code> yml도 생성되나 <code>02</code>의 DHCP/PXE에서는 제외됨</td>
+    </tr>
+    <tr>
+      <td><strong><code>splunk</code> 자동 결정</strong></td>
+      <td>호스트명 패턴 우선순위</td>
+      <td>① 호스트명에 <code>ev</code> 포함 → <code>no</code> (최우선) / ② <code>s</code>로 시작 → <code>Cloud</code> / ③ 그 외 → <code>On-premise</code> (예: <code>spice01ev02</code>→<code>no</code>, <code>spice01</code>→<code>Cloud</code>, <code>node01</code>→<code>On-premise</code>)</td>
+    </tr>
+    <tr>
+      <td><strong><code>02</code> OS 버전 및 번호 변환</strong></td>
+      <td><code>1) 2024</code>, <code>2) 2025</code>, <code>3) 2026</code>, <code>4) 2026-OPC_MDP</code>, <code>5) 2026-ECAD_TCAD</code>(기본)</td>
+      <td><code>01</code>이 넘긴 <code>os</code> 값은 무시하고 <code>02</code>에서 다시 선택(또는 <code>AWX_AUTO_OS</code>). 숫자형(<code>2024</code> 등)은 <code>awxkit</code>이 번호로 오인하므로 <code>s4_osver_choices</code> 순번으로 자동 변환해 전달</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5.2 <code>[4-1]</code> DNS 점검 · <code>[12]</code> 접속 확인 · <code>02</code> 파티션 확인 · <code>auto_setup</code> 연계</h2>
+<ul>
+  <li><strong><code>[4-1] dns_check</code>:</strong> <code>/etc/resolv.conf</code>의 nameserver(최대 3)에 직접 A 레코드 질의(<code>dig +short +time=2 +tries=1</code> 우선 → <code>nslookup</code>, <code>xargs -P 32</code>). 일치/불일치/판단 불가/미등록/조회 실패 5종 판정 + PTR 역조회 중복 경고 출력. 대화형은 <code>a/n/s/q</code> 선택(IP 교체 시 5번째 필드만 갱신, <code>LOG/${user}.log</code>에 <code>[DNS]</code> 기록), <code>AWX_AUTO=1</code>은 <code>/dev/tty</code>로 <code>[y/N]</code> 확인, <code>AWX_DNS_CHECKED=1</code>이면 표만 출력 후 자동 진행.</li>
+  <li><strong><code>[12]</code> LDAP/LACP &amp; <code>02</code> 파티션 확인:</strong> 실행 전 <code>[Y/n]</code> 확인(<code>AWX_CHECK=y|n</code> 우선, <code>AWX_AUTO=1</code>에서는 기본 건너뜀). 파티션 표준(<code>lsblk</code>): 물리 파티션(LVM 금지), OS 디스크(<code>/</code>)가 <code>sda</code> 또는 <code>nvme0n1</code>, <code>/boot</code>(또는 <code>/boot/efi</code>) <code>500M~512M</code>, <code>/</code> <code>30G</code>, <code>/var</code> <code>20G</code>, <code>swap</code> 및 <code>/tmp</code>(나머지) 존재.</li>
+  <li><strong><code>[14-1] auto_setup</code> queue 전달:</strong> <code>02</code> 성공 직후 프롬프트 없이 <code>${AUTO_SETUP_DIR:-/tmp/auto_setup}/queue/&lt;epoch&gt;_&lt;user&gt;_&lt;pid&gt;.job</code> 작성(그룹 yml 2개 이상 시 <code>yml=...</code>, <code>all=...</code> 포함). <code>auto_setup_host</code> 설정 시 <code>gossh</code>로 원격 원자 전송. 실패해도 경고 1줄만 내고 등록 종료코드엔 영향 없음.</li>
+</ul>
+
+<h2>5.3 주요 환경변수 요약</h2>
+<table>
+  <thead>
+    <tr>
+      <th>환경변수</th>
+      <th>허용 값</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>AWX_AUTO</code></td>
+      <td><code>1</code></td>
+      <td>비대화형 auto 모드 켜기 (<code>01</code>: nodeinfo/진행Y/<code>su</code>, <code>02</code>: OS/옵션확인Y 자동 응답)</td>
+    </tr>
+    <tr>
+      <td><code>AWX_AUTO_NODEINFO</code></td>
+      <td><code>y</code> | <code>n</code></td>
+      <td><code>01</code> nodeinfo 사용 여부 자동 답변 (<code>AWX_AUTO</code> 없이 단독 지정 가능 — <code>auto_setup newhost</code> 연동용)</td>
+    </tr>
+    <tr>
+      <td><code>AWX_AUTO_OS</code></td>
+      <td><code>2024</code> | <code>2025</code> | <code>2026</code> | <code>2026-OPC_MDP</code> | <code>2026-ECAD_TCAD</code> | <code>default</code></td>
+      <td><code>02</code> OS 버전 일괄 지정 (목록 외 값이면 auto 끄고 직접 질문)</td>
+    </tr>
+    <tr>
+      <td><code>AWX_CHECK</code></td>
+      <td><code>y</code> | <code>n</code></td>
+      <td><code>01 [12]</code> 접속 확인 및 <code>02</code> 파티션 확인 실행 여부 (<code>AWX_AUTO=1</code> 기본값은 건너뜀)</td>
+    </tr>
+    <tr>
+      <td><code>AWX_USER</code> / <code>AWX_VERIFY_FILE</code> / <code>AWX_DNS_CHECKED</code></td>
+      <td><code>[A-Za-z0-9._-]+</code> / 파일경로 / <code>1</code></td>
+      <td>user 메뉴 생략 / <code>[15]</code> 등록 후 확인 목록 파일 대체 / DNS 점검 질문 생략</td>
+    </tr>
+    <tr>
+      <td><code>NO_COLOR</code> / <code>AWX_COLOR</code></td>
+      <td><code>1</code></td>
+      <td>터미널 색상 출력 끄기 / 강제 켜기 (로그 파일에는 색 코드 미기록)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1>6. 통합 주의사항 · 롤백 및 알려진 한계</h1>
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <ul>
+      <li><strong><code>sed 's/7T/7600/g'</code> 부작용:</strong> 용량 치환 시 <code>17T</code> 등 <code>7T</code>가 포함된 문자열도 치환될 수 있음(원문 동작 유지).</li>
+      <li><strong><code>custom_inventory.sh</code> 동시 실행 충돌:</strong> 같은 초에 동일 infra 그룹을 생성하면 덮어쓸 수 있으므로(<code>sleep 1</code>로 완화), 생성 전후 차이를 확인하십시오.</li>
+      <li><strong>대소문자/선택지 불일치:</strong> <code>02</code>는 <code>infra</code>를 소문자로 변환해 전달하므로 <code>awxkit</code> conf의 <code>*_choices</code>와 일치해야 하며, 차이가 있으면 <code>02</code> 확인표(<code>N</code>) 또는 <code>dhcp_infra_alias</code>/<code>pxe_infra_alias</code>로 맞추십시오.</li>
+      <li><strong>임시/결과 파일 정리:</strong> 종료 시 <code>trap cleanup EXIT</code>로 임시 디렉터리 및 <code>gossh</code> 결과 파일(<code>_res_off</code> 등)을 삭제하며, 임시 파일은 <code>/tmp/auto_setup/tmp</code>(권한 <code>1777</code>) 하위를 우선 사용합니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

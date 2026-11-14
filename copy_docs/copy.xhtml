@@ -1,0 +1,266 @@
+<ac:structured-macro ac:name="info">
+  <ac:parameter ac:name="title">copy — ETX · AWX · Windows 단방향 클립보드 브릿지</ac:parameter>
+  <ac:rich-text-body>
+    <p><strong>요약</strong>: ETX 리눅스 환경과 로컬 Windows PC 간 직접 SSH/네트워크 연결이 없는 망분리 환경에서, 양쪽이 공통으로 접근 가능한 <strong>AWX Job Template의 <code>description</code> 필드</strong>를 중계 버퍼로 삼아 텍스트를 Windows 클립보드로 안전하게 전달하는 경량 Go 도구 세트(<code>copy-send</code> + <code>copy-widget.exe</code>)입니다.</p>
+    <p><strong>저장소 기준</strong>: <code>origin/master</code> · <code>.claude/HPC/copy</code> (외부 의존성 0개 · Go 표준 라이브러리 전용)</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<p><ac:structured-macro ac:name="toc"/></p>
+
+<ac:structured-macro ac:name="warning">
+  <ac:parameter ac:name="title">전용 더미 템플릿 및 보안 주의사항</ac:parameter>
+  <ac:rich-text-body>
+    <ul>
+      <li><strong>전용 더미 Job Template만 사용</strong>: AWX Job Template의 <code>description</code> 필드를 덮어쓰고(PATCH), 수신 즉시 비웁니다. 실제 운영 설명이 들어 있는 템플릿을 지정하면 기존 설명이 유실됩니다.</li>
+      <li><strong>기밀·개인정보 전송 금지</strong>: AWX에서 해당 템플릿 읽기 권한이 있는 사용자는 모두 <code>description</code>을 열람할 수 있으므로 비밀번호·토큰·개인정보를 절대 전송하지 마세요.</li>
+      <li><strong>설정 파일 권한</strong>: <code>conf/copy_setting.conf</code>에는 AWX 계정의 평문 <code>password</code>가 저장됩니다. Git 커밋 제외 대상(<code>.gitignore</code>)이며 Linux는 <code>chmod 600</code>, Windows는 본인만 읽기 권한을 설정하세요.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<hr/>
+
+<h2>1. 개요 및 아키텍처 · 통신 경로</h2>
+<p><code>copy</code>는 ETX 측 CLI 송신기(<code>copy-send</code> / <code>send.sh</code>)와 Windows 측 Win32 항상-위 미니 위젯(<code>copy-widget.exe</code>)으로 구성됩니다. 두 지점은 서로 직접 통신하지 않고, 양쪽에서 모두 HTTP/HTTPS Basic Auth로 접근 가능한 AWX REST API(Job Template <code>description</code>)만 경유합니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:parameter ac:name="title">ETX → AWX Job Template description → Windows 클립보드 릴레이 경로</ac:parameter>
+  <ac:plain-text-body><![CDATA[[ETX 작업자]
+   │  vi {user}_copy.txt  (또는 -file 지정)
+   ▼
+copy-send (./send.sh)
+   │  1) AWX GET Job Template description 확인 (비어 있지 않으면 -force 없이 덮어쓰기 거부)
+   │  2) max_lines 검사 (기본 200줄)
+   │  3) HTTPS/HTTP Basic Auth PATCH (HTTP 타임아웃 30s)
+   ▼
+[AWX Job Template.description] ◀── 양쪽이 공유하는 중계 버퍼 (전용 더미 템플릿)
+   ▲
+   │  4) 좌클릭 시 GET 조회 (HTTP 타임아웃 15s)
+   │  5) Win32 SetClipboardData (CF_UNICODETEXT, 원본 그대로 복사)
+   │  6) 클립보드 복사 성공 이후에만 PATCH로 description 비우기 (ClearDescription)
+   ▼
+[Windows: copy-widget.exe] (110x90 Always-On-Top "📋 불러오기")
+   │
+   ▼  Ctrl+V 붙여넣기 + 미리보기 다이얼로그(화면 표시는 2000바이트 이후 생략)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>1.1 안전한 전송/정리 순서 보장</h3>
+<ul>
+  <li><strong>송신 측 보호 (<code>-force</code> 기본 <code>false</code>)</strong>: <code>copy-send</code>는 PATCH 전 AWX 템플릿 <code>description</code>을 조회하여 공백 제외 기존 내용(<code>strings.TrimSpace(tpl.Description) != ""</code>)이 남아 있으면 Windows에서 아직 수거하지 않은 데이터로 간주하고 덮어쓰기를 거부합니다(종료 코드 <code>1</code>).</li>
+  <li><strong>수신 측 원자적 순서</strong>: <code>copy-widget.exe</code>는 <code>setClipboardText</code>가 <code>CF_UNICODETEXT</code> 기록에 성공한 <strong>이후에만</strong> <code>ClearDescription</code>(PATCH 빈 문자열)을 호출합니다. 클립보드 복사가 실패하면 AWX 데이터를 비우지 않고, 반대로 복사는 성공했으나 비우기에 실패한 경우 <code>"경고"</code> 다이얼로그를 띄워 운영자가 인지할 수 있게 합니다.</li>
+</ul>
+
+<hr/>
+
+<h2>2. 사전준비 · 폐쇄망 빌드 · 권한 및 환경설정</h2>
+
+<h3>2.1 Go 버전 및 표준 라이브러리 전용 구조</h3>
+<p>이 프로젝트는 Go 표준 라이브러리만 사용하며 외부 패키지 의존성(<code>require</code>)과 <code>vendor/</code>가 전혀 없습니다. 따라서 ETX 폐쇄망에서도 인터넷·모듈 프록시 없이 빌드됩니다(<code>go.mod</code> 기준 <code>go 1.26.5</code>, 저장소 README 표기 <code>1.27.0</code>). Windows 위젯은 <code>//go:build windows</code> 태그와 <code>syscall</code> Win32 DLL(<code>user32.dll</code>, <code>kernel32.dll</code>, <code>gdi32.dll</code>)을 직접 호출하며, 비-Windows 빌드용 스텁(<code>main_other.go</code>)이 분리되어 있습니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:parameter ac:name="title">ETX(Linux) 폐쇄망 빌드 및 검증 (setup.sh)</ac:parameter>
+  <ac:plain-text-body><![CDATA[# ETX 빌드 (GOPROXY=off, GOTOOLCHAIN=local, CGO_ENABLED=0)
+./setup.sh
+# 내부 실행 내용:
+#   CGO_ENABLED=0 go build -o bin/copy-send ./cmd/copy-send
+#   chmod +x send.sh
+
+# 설정 파일 배치 (sample 복사 후 AWX 정보 입력)
+cp conf/copy_setting.conf.sample conf/copy_setting.conf
+chmod 600 conf/copy_setting.conf
+
+# 단위 테스트 및 정적 검사 (Linux CI / ETX)
+go test ./...
+go vet ./cmd/copy-send/... ./internal/...]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">powershell</ac:parameter>
+  <ac:parameter ac:name="title">Windows(amd64) 위젯 빌드 (build.bat)</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 사전 요구: Windows용 Go 설치 (https://go.dev/dl/ 또는 winget install GoLang.Go)
+.\build.bat
+# 내부 실행 내용:
+#   set GOTOOLCHAIN=local
+#   go build -o dist\copy-widget.exe .\cmd\copy-widget
+
+# 실행용 conf 배치 (ETX의 conf/copy_setting.conf 와 동일한 내용)
+copy conf\copy_setting.conf.sample conf\copy_setting.conf]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:parameter ac:name="title">Windows에서 go vet ./... 실행 시 오탐 참고</ac:parameter>
+  <ac:rich-text-body>
+    <p>Windows 환경에서 <code>go vet ./...</code> 전체를 실행할 경우 <code>cmd/copy-widget/main_windows.go</code>의 Win32 <code>GlobalLock</code> 포인터 변환부에서 Go vet의 <code>possible misuse of unsafe.Pointer</code> 오탐 경고가 발생할 수 있습니다. ETX/Linux용 정적 검사 시에는 <code>go vet ./cmd/copy-send/... ./internal/...</code> 경로를 사용하세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>2.2 설정 파일 탐색 순서 (<code>ResolvePath</code>)</h3>
+<p><code>copy-send</code>와 <code>copy-widget.exe</code>는 아래 4단계 우선순위로 <code>copy_setting.conf</code>를 자동 탐색하며, ETX와 Windows 양쪽에 동일한 설정 내용을 둡니다.</p>
+<ol>
+  <li>명령줄 <code>-conf &lt;경로&gt;</code> 플래그로 직접 지정한 경로</li>
+  <li>현재 작업 디렉터리 기준 <code>./conf/copy_setting.conf</code></li>
+  <li>실행 바이너리 위치 기준 <code>&lt;exe_dir&gt;/conf/copy_setting.conf</code></li>
+  <li>사용자 홈 디렉터리 <code>~/.copy-bridge/copy_setting.conf</code></li>
+</ol>
+
+<hr/>
+
+<h2>3. 기동 및 표준 사용 흐름</h2>
+
+<h3>3.1 ETX 송신 → Windows 수신 표준 절차</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:parameter ac:name="title">ETX 표준 전송 명령</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. 본인 계정명 기반 기본 파일 작성
+vi ${USER}_copy.txt
+
+# 2. 래퍼 스크립트로 전송 (bin/copy-send 미존재 시 setup.sh 자동 실행)
+./send.sh
+
+# 3. 다른 파일 지정 전송
+./bin/copy-send -file result.log
+
+# 4. 다른 사용자명 파일 지정 (-file 미지정 시 {user}_copy.txt 사용)
+./bin/copy-send -user alice
+
+# 5. AWX description에 미수신 데이터가 있어도 강제 덮어쓰기
+./send.sh -force]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ol>
+  <li><strong>ETX 텍스트 작성 및 전송</strong>: <code>${USER}_copy.txt</code>를 작성한 뒤 <code>./send.sh</code>를 실행하면 <code>copy-send</code>가 줄 수(<code>max_lines</code>)와 기존 템플릿 잔여 데이터를 검증한 후 AWX <code>description</code>에 업로드합니다.</li>
+  <li><strong>Windows 위젯 실행 및 수신</strong>: PC에서 <code>dist\copy-widget.exe</code>를 실행하면 우상단 등 원하는 위치로 드래그할 수 있는 <code>110×90</code> 크기의 항상-위 창(제목: <code>"복사 브릿지"</code>, 버튼 라벨: <code>"📋 불러오기"</code>)이 뜹니다.</li>
+  <li><strong>클립보드 로드 및 확인</strong>: 위젯을 <strong>좌클릭</strong>하면 AWX에서 텍스트를 가져와(<code>CF_UNICODETEXT</code>, <code>TrimSpace</code> 없이 원본 그대로) Windows 클립보드에 넣고 AWX <code>description</code>을 비운 뒤 미리보기 메시지 창을 띄웁니다.</li>
+  <li><strong>첫 붙여넣기 육안 검증</strong>: 첫 사용 시 또는 특수문자·탭·다중 줄이 포함된 경우 메모장 등에 <code>Ctrl+V</code>로 붙여넣어 줄바꿈과 인코딩을 육안으로 확인하세요.</li>
+</ol>
+
+<hr/>
+
+<h2>4. CLI · 위젯 조작 · 설정키 표</h2>
+
+<h3>4.1 <code>copy-send</code> CLI 플래그 및 종료 코드</h3>
+<table>
+  <thead>
+    <tr>
+      <th>플래그</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>-conf</code></td>
+      <td>자동 탐색 (<code>ResolvePath</code>)</td>
+      <td>사용할 <code>copy_setting.conf</code> 경로 지정</td>
+    </tr>
+    <tr>
+      <td><code>-file</code></td>
+      <td><code>{user}_copy.txt</code></td>
+      <td>전송할 텍스트 파일 경로. 미지정 시 <code>-user</code>(또는 <code>$USER</code>) 기반 파일명 사용</td>
+    </tr>
+    <tr>
+      <td><code>-user</code></td>
+      <td><code>$USER</code></td>
+      <td><code>-file</code> 미지정 시 <code>{user}_copy.txt</code> 파일명을 결정하는 사용자명</td>
+    </tr>
+    <tr>
+      <td><code>-force</code></td>
+      <td><code>false</code></td>
+      <td>AWX Job Template <code>description</code>에 아직 비워지지 않은 데이터가 있어도 덮어쓰기 허용</td>
+    </tr>
+  </tbody>
+</table>
+<p><strong>종료 코드</strong>: 성공 시 <code>0</code>, 설정 로드 실패·파일 읽기 실패·<code>max_lines</code> 초과·미수신 데이터 잔존(<code>-force</code> 미사용)·AWX HTTP API 오류 시 <code>1</code>.</p>
+
+<h3>4.2 <code>copy-widget.exe</code> 플래그 및 마우스 조작</h3>
+<p><code>copy-widget.exe</code>는 CLI 플래그로 <code>-conf &lt;경로&gt;</code>(<code>copy-send</code>와 동일한 <code>ResolvePath</code> 순서)만 지원합니다.</p>
+<table>
+  <thead>
+    <tr>
+      <th>마우스 조작</th>
+      <th>판정 조건</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>좌클릭</strong></td>
+      <td>이동 거리 <code>abs(dx) &lt;= 3 &amp;&amp; abs(dy) &lt;= 3</code></td>
+      <td>AWX GET(15s 타임아웃) → 비어 있으면 <code>"새로 등록된 데이터가 없습니다."</code> 안내 → <code>CF_UNICODETEXT</code> 클립보드 기록 → <code>ClearDescription</code> 호출 → 미리보기 MessageBox 표시</td>
+    </tr>
+    <tr>
+      <td><strong>드래그</strong></td>
+      <td>좌클릭 이동 거리 초과 드래그</td>
+      <td>항상 위(<code>WS_EX_TOPMOST | WS_EX_TOOLWINDOW</code>) 상태를 유지한 채 위젯 창 위치 이동</td>
+    </tr>
+    <tr>
+      <td><strong>우클릭</strong></td>
+      <td>창 위에서 마우스 오른쪽 클릭</td>
+      <td>위젯 즉시 종료 (<code>DestroyWindow</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.3 <code>copy_setting.conf</code> 설정 키 (6개)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>키 이름</th>
+      <th>필수 여부</th>
+      <th>기본값 / 형식</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>awx_url</code></td>
+      <td>필수</td>
+      <td>URL (예: <code>https://awx.example.local</code>)</td>
+      <td>ETX와 Windows가 공통으로 접근 가능한 AWX 서버 주소</td>
+    </tr>
+    <tr>
+      <td><code>username</code></td>
+      <td>필수</td>
+      <td>문자열</td>
+      <td>AWX HTTP Basic Auth 사용자명</td>
+    </tr>
+    <tr>
+      <td><code>password</code></td>
+      <td>선택(실사용 권장)</td>
+      <td>문자열</td>
+      <td>AWX HTTP Basic Auth 비밀번호 (평문 저장 주의)</td>
+    </tr>
+    <tr>
+      <td><code>insecure_tls</code></td>
+      <td>선택</td>
+      <td><code>false</code></td>
+      <td><code>true</code> / <code>yes</code> / <code>y</code> / <code>1</code> / <code>on</code>(대소문자 무관) 설정 시 사설 인증서 TLS 검증 생략</td>
+    </tr>
+    <tr>
+      <td><code>template</code></td>
+      <td>필수</td>
+      <td>ID(숫자) 또는 Job Template 이름</td>
+      <td>데이터 중계 버퍼로 사용할 AWX 전용 더미 Job Template</td>
+    </tr>
+    <tr>
+      <td><code>max_lines</code></td>
+      <td>선택</td>
+      <td><code>200</code></td>
+      <td>1회 전송 허용 최대 줄 수 (<code>strings.Count(text, "\n") + 1</code>). <code>0</code> 이하 지정 시 줄 수 제한 비활성화</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr/>
+
+<h2>5. 장애/로그 확인 및 운영 제약사항 · 주의사항</h2>
+<ul>
+  <li><strong>미리보기 다이얼로그 잘림 현상</strong>: 수신 텍스트가 <strong>2,000바이트</strong>를 초과하면 Windows MessageBox 화면에는 <code>...(이하 생략, 클립보드에는 전체가 복사됨)</code>으로 요약 표시됩니다. 실제 클립보드(<code>CF_UNICODETEXT</code>)에는 원본 전체가 손실 없이 들어가므로 그대로 <code>Ctrl+V</code> 하면 됩니다.</li>
+  <li><strong><code>description</code> 잔존 오류로 송신 실패</strong>: 이전 데이터를 Windows에서 아직 불러오지 않았거나 이전 위젯 비우기(PATCH)가 권한 부족으로 실패한 경우 <code>copy-send</code>가 종료 코드 <code>1</code>로 중단됩니다. Windows에서 먼저 불러오기를 수행하거나 <code>./send.sh -force</code>로 강제 덮어씁니다.</li>
+  <li><strong>AWX <code>ClearDescription</code> 경고 창</strong>: 클립보드 복사는 성공했으나 AWX API로 <code>description</code> 비우기에 실패하면 <code>"경고"</code> 다이얼로그가 표시됩니다. AWX 계정에 해당 Job Template 수정(PATCH) 권한이 있는지 확인하세요.</li>
+  <li><strong>대용량 텍스트 분할 전송</strong>: 기본 <code>max_lines = 200</code> 초과 시 <code>copy-send</code>가 업로드를 거부합니다. 대용량 로그는 200줄 단위로 나누어 전송하거나, 불가피한 경우에만 ETX·Windows 설정의 <code>max_lines</code>를 조정(또는 <code>0</code>)하세요.</li>
+  <li><strong>줄바꿈·인코딩 보존</strong>: 위젯은 수신 본문을 <code>TrimSpace</code>로 가공하지 않고 원형 그대로 <code>UTF-16(CF_UNICODETEXT)</code> 클립보드에 넣으므로 앞뒤 공백과 빈 줄도 유지됩니다. 첫 운영 시 <code>Ctrl+V</code> 결과를 반드시 육안 확인하세요.</li>
+</ul>

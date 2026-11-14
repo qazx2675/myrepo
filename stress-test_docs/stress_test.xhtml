@@ -1,0 +1,370 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>도구명:</strong> stress-test (<code>stress-test</code> + <code>stress_run.sh</code>) — AWX 부하테스트 자동 실행 및 1분 로드 감시 도구</p>
+    <p><strong>양식 유형:</strong> T2 (부하판정 · 실행형)</p>
+    <p><strong>원본 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/stress-test/</code></p>
+    <p><strong>주요 파일:</strong> <code>stress-test</code> (os8 정적 바이너리, 커밋 포함), <code>stress_run.sh</code>, <code>setup.sh</code>, <code>build.sh</code>, <code>conf/sample_setting.conf</code></p>
+    <p><strong>연계 도구:</strong> <code>setup_check</code> (<code>new_setup -run</code> / <code>-run -auto</code> 비대화형 호출), <code>gossh</code> (접속체크·벤더 확인·1분 로드 감시), AWX 서버, <code>repohost</code> (<code>custom_inventory.sh</code>)</p>
+    <p><strong>한 줄 요약:</strong> AWX 인벤토리 등록 후 <code>a) cpu</code> 및 <code>b) stress-ng</code> 부하테스트 템플릿을 실행하고, <code>gossh</code>로 대상 서버의 <code>/proc/loadavg</code> 1분 로드를 감시해 실제 부하 인가 여부(<code>실행</code>/<code>미실행</code>)를 판정하는 Go CLI/래퍼 도구입니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>AWX 인벤토리 임시 변경/복원 및 실서버 부하 확인 필수:</strong></p>
+    <ul>
+      <li>이 도구는 대상 서버에 <strong>실제 CPU/stress-ng 부하를 인가</strong>하며, <code>cpu</code> 단계 실행 시 <strong>AWX CPU 템플릿의 인벤토리를 <code>DEFAULT</code> → conf <code>username</code> 인벤토리로 바꿨다가 launch 직후 <code>DEFAULT</code>로 되돌립니다</strong>(<code>stress-ng</code> 템플릿은 개인 인벤토리를 그대로 사용).</li>
+      <li>만약 복원(<code>PATCH</code>)에 실패하면 화면에 <code>✗✗✗</code> 경고, 이력에 <code>action=restore status=fail</code>, 결과표 비고에 <code>인벤토리 복원 실패 — 수동으로 DEFAULT 로</code>가 남으므로 <strong>즉시 AWX UI/API에서 해당 템플릿의 인벤토리를 수동으로 <code>DEFAULT</code>로 복구</strong>해야 합니다.</li>
+      <li><code>실행</code>/<code>미실행</code> 판정은 1분 로드(<code>load_threshold</code>)에 기반한 추정이므로, 작업 후 무작위로 몇 대의 서버에 직접 접속해 <code>uptime</code>, <code>top</code>, <code>stress-ng</code>/부하 프로세스 동작 여부를 반드시 확인하세요.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>1. 개요 및 전체 판정 · 실행 흐름</h2>
+<p><code>stress-test</code>는 HPC 장비 개통 후 부하테스트(<code>a) cpu</code>, <code>b) stress-ng</code>)를 AWX Job Template으로 실행하고, 대상 서버에 실제로 부하가 올라왔는지 <code>gossh</code>로 <code>/proc/loadavg</code>를 주기적으로 감시해 판정하는 도구입니다.</p>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[[0] AWX 사전 확인: cpu_template / stress_template, username · default_inventory 인벤토리 존재 확인
+  ↓
+[1] 접속체크 + CPU 벤더 확인 (DNS실패 제외)
+    gossh -script 'grep -m1 vendor_id /proc/cpuinfo' → Intel / AMD / unknown / 접속불가
+  ↓
+[2] 선택한 단계 순서대로 실행 (a: cpu, b: stress-ng — 앞 단계 감시 종료 후 다음 단계)
+    (선택) 첫 등록 전 inventory_delete_host 에서 delhost_<user> 1회 실행 및 삭제 확인
+    ├─ 등록: yaml 생성 → scp → ssh custom_inventory.sh → svr_dir 새 *.yml 1개 확인
+    │        → (git_dir 설정 시) .git_upload.sh → invsync → 대상 호스트 완전일치 검증
+    ├─ (cpu 만) 템플릿 인벤토리가 default_inventory 인지 확인(사용 중이면 질문)
+    │           → username 인벤토리로 PATCH → 확인 GET → launch → 즉시 DEFAULT 복원 PATCH
+    ├─ AWX job 완료(successful) 대기 (부하 프로세스를 백그라운드로 띄운 뒤 job 종료)
+    └─ 부하 감시: monitor_interval 마다 gossh 'cat /proc/loadavg'
+                  1분 로드 >= load_threshold 면 '실행' 확정(목록 제거, 비면 조기 완료)
+                  monitor_sec 만료 시 남은 호스트 = '미실행' (재실행 y/N 또는 -retry N)
+  ↓
+[3] 결과표 출력 및 <output_dir>/${user}_stress_result.txt 저장 (hostname|CPU벤더|cpu|stress-ng|비고)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>1.1 <code>setup_check -run</code> 과의 통합 연계</h3>
+<p><code>setup_check</code>(<code>new_setup -run</code> 및 <code>-run -auto</code>)는 내부적으로 <code>stress-test -batch</code>와 <code>-yaml-state</code>를 호출하여 부하테스트 단계를 자동 조율합니다(<code>stress-test</code> 소스를 수정하지 않고 표준입출력 프로토콜로 연계).</p>
+<table>
+  <thead>
+    <tr>
+      <th>연계 인터페이스</th>
+      <th>동작 및 프로토콜</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>-batch</code> 비대화형 호출</td>
+      <td><code>setup_check</code>가 <code>stress-test -user &lt;u&gt; -hosts &lt;목록&gt; -steps a|b -batch [-end y,m,d,h,min] [-conf &lt;파일&gt;] [-ignore-offline]</code>를 호출. 감시 화면 대신 회차별 <code>[감시] ...</code> 한 줄 요약을 출력하며, <code>setup_check</code>는 이 <code>[감시]</code> 줄을 등록·launch 완료 신호로 인식합니다.</td>
+    </tr>
+    <tr>
+      <td><code>[인벤토리사용중]</code> stdin 프로토콜</td>
+      <td>CPU 템플릿의 현재 인벤토리가 <code>default_inventory</code>가 아니면 <code>stress-test</code>가 <code>[인벤토리사용중] ...</code> 한 줄을 출력하고 stdin 한 줄을 대기합니다. <code>setup_check</code> TUI가 이를 감지해 사용자에게 질문(<code>r</code> 다시 확인 / <code>x</code> 묶음 중단)을 띄워 입력값을 stdin으로 전달하며, 대기 중에는 <code>STRESS_TIMEOUT</code>을 일시정지합니다.</td>
+    </tr>
+    <tr>
+      <td><code>-yaml-state</code> 및 이벤트 줄</td>
+      <td><code>new_setup -run -auto</code>는 launch 직전 <code>-yaml-state</code>를 호출해 <code>[yaml상태] yml=... / hosts=...</code>로 다른 사용자의 yml 덮어쓰기 여부를 검사하며, <code>-batch</code> 실행 중 출력되는 <code>[제외]</code>, <code>[job]</code>, <code>[결과]</code>, <code>[삭제확인]</code>, <code>[등록]</code> 줄을 파싱해 시도 횟수와 <code>O</code>/<code>미실행</code> 상태를 정밀 추적합니다.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>2. 사전 준비 및 폐쇄망 바이너리 / 설정</h2>
+
+<h3>2.1 폐쇄망 환경: 사전 빌드 바이너리 사용 (빌드 불필요)</h3>
+<p>Go가 없는 폐쇄망 환경에서는 저장소에 함께 커밋된 <strong><code>stress-test</code></strong> 정적 바이너리(Rocky 8 / <code>CGO_ENABLED=0</code> linux/amd64, <code>vendor/</code> 없음, OS6 빌드 없음)를 그대로 사용합니다. 소스를 수정한 경우 Go 1.20 문법 규칙에 맞춰 <code>bash build.sh</code>(<code>CGO_ENABLED=0 go build -o stress-test .</code>)로 재빌드해 함께 커밋해야 합니다.</p>
+
+<p><strong>사전 필수 요건:</strong></p>
+<ul>
+  <li><code>gossh</code> 설치 (PATH, <code>stress_run.sh</code>의 <code>GOSSH</code>, 또는 conf <code>gossh</code> 키)</li>
+  <li>실행 서버에서 <code>repohost</code>(<code>custom_inventory.sh</code> 위치) 및 설정 시 <code>inventory_delete_host</code>로 <strong>비밀번호 없이</strong> SSH/SCP 접속 가능해야 함 (<code>BatchMode=yes</code>)</li>
+  <li>AWX 서버에 <code>cpu_template</code>(단일 템플릿 — Intel/AMD는 템플릿 내부에서 구분), <code>stress_template</code>, <code>default_inventory</code>(기본 <code>DEFAULT</code>), 그리고 conf <code>username</code>(또는 이름에 <code>username</code>이 포함된 단일) 인벤토리 존재</li>
+  <li><code>git_dir</code> 사용 시 해당 폴더에 <code>.git_upload.sh</code> 존재</li>
+</ul>
+
+<h3>2.2 대화형 설정 생성(<code>setup.sh</code>) 및 <code>-inspect</code> 검증</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) 권한 확인 (필요 시)
+chmod +x stress_run.sh build.sh setup.sh stress-test
+
+# 2) 대화형 설정 생성/갱신 (conf/${user}_setting.conf 생성, chmod 600, 기존 파일 .bak 백업)
+bash setup.sh [--user <사용자>] [--conf <설정파일>]
+
+# 3) 읽기 전용 AWX survey/인벤토리 점검 (conf 키 검증 및 추천 값 제안)
+./stress-test -inspect [-user <u> | -conf <설정파일>] [템플릿 ID/이름 ...]]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>구버전 설정 키 주의:</strong> 예전 <code>cpu_intel_*</code> / <code>cpu_amd_*</code> 키가 설정 파일에 남아 있으면 <code>stress-test</code>가 종료코드 <code>2</code>로 실행을 거부합니다. <code>bash setup.sh</code>를 실행하면 기존 값을 단일 <code>cpu_template</code> / <code>cpu_hostname_key</code> / <code>cpu_extra_vars</code>로 자동 이전해 줍니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>3. 입력 파일 및 설정 파일 규격</h2>
+
+<h3>3.1 호스트 입력 파일 (<code>user.txt</code>)</h3>
+<p>줄 단위로 형식을 판정하므로 혼합 작성이 가능하며, 빈 줄·<code>#</code> 주석 무시 및 대소문자 무관 중복 제거(첫 줄 유지)가 적용됩니다.</p>
+<table>
+  <thead>
+    <tr>
+      <th>필드 수</th>
+      <th>형식</th>
+      <th>처리 방식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1개</td>
+      <td><code>hostname</code> 한 줄</td>
+      <td>DNS 첫 IPv4 조회(실패 시 <code>DNS실패</code>로 제외) + 줄 번호 순번 MAC(<code>02:00:00:xx:xx:xx</code>) 생성해 <code>tmp tmp tmp &lt;host&gt; &lt;IP&gt; &lt;MAC&gt; eth0 sda sda5 100 8.10 uefi</code> 변환</td>
+    </tr>
+    <tr>
+      <td>12개</td>
+      <td>AWX 설치양식 레코드</td>
+      <td>4번째 필드를 hostname으로 사용하고 12필드 그대로 yaml에 기록</td>
+    </tr>
+    <tr>
+      <td>13개</td>
+      <td>설치양식 + 13번째 분류 필드</td>
+      <td>4번째 필드를 hostname으로 사용하고 yaml에는 앞 12필드만 기록</td>
+    </tr>
+    <tr>
+      <td>그 외</td>
+      <td>형식 오류</td>
+      <td>오류 줄 번호 목록 출력 후 종료코드 <code>2</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>3.2 장애 목록 (<code>-er &lt;파일&gt;</code> / <code>error_list.txt</code>)</h3>
+<p>줄마다 <code>hostname&lt;TAB&gt;장애사유</code> 형식으로 작성합니다(탭으로만 구분, 사유 내 <code>|</code>는 <code>/</code>로 치환). <code>-er</code> 생략 시 현재 경로에 <code>error_list.txt</code>가 있으면 자동 적용되며, <strong>장애 호스트도 실행 대상에 포함</strong>되어 결과표 마지막 <code>비고</code> 열에 사유가 추가됩니다.</p>
+
+<h3>3.3 주요 설정 키 (<code>conf/${user}_setting.conf</code>)</h3>
+<p>탐색 순서: <code>-conf</code> 지정 경로 → <code>./conf/${user}_setting.conf</code> → <code>~/.stress-test/${user}_setting.conf</code> → <code>&lt;바이너리 위치&gt;/conf/${user}_setting.conf</code>.</p>
+<table>
+  <thead>
+    <tr>
+      <th>키</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>awx_url</code>, <code>username</code>, <code>password</code>, <code>insecure_tls</code></td>
+      <td>(필수) / <code>false</code></td>
+      <td>AWX 접속 정보. <code>username</code>과 일치(또는 포함)하는 AWX 인벤토리 필수</td>
+    </tr>
+    <tr>
+      <td><code>gossh</code></td>
+      <td>빈 값</td>
+      <td><code>gossh</code> 경로 (비우면 환경변수 <code>GOSSH</code> → <code>PATH</code>)</td>
+    </tr>
+    <tr>
+      <td><code>repohost</code>, <code>repo_dir</code>, <code>svr_dir</code>, <code>git_dir</code></td>
+      <td>(필수) / <code>/root/Inventory</code> / (필수) / 빈 값</td>
+      <td><code>custom_inventory.sh</code> 서버·경로, 새 <code>*.yml</code> 감시 폴더, <code>.git_upload.sh</code> 폴더(<code>${user}</code> 치환)</td>
+    </tr>
+    <tr>
+      <td><code>inventory_delete_host</code>, <code>inventory_match_exclude</code></td>
+      <td>빈 값</td>
+      <td>첫 등록 전 <code>delhost_${user}</code> 실행 대상 서버(삭제 전후 호스트 동일 시 최대 30초 재확인 후 <code>exit 2</code>) 및 완전일치 검증 제외 호스트(<code>a|b</code>)</td>
+    </tr>
+    <tr>
+      <td><code>inventory_source</code>, <code>inventory</code>, <code>source_field</code></td>
+      <td>빈 값 / 빈 값 / <code>source_path</code></td>
+      <td>인벤토리 소스 ID(미지정 시 <code>inventory</code>의 첫 소스) 및 yml 저장 필드명</td>
+    </tr>
+    <tr>
+      <td><code>cpu_template</code>, <code>cpu_hostname_key</code>, <code>cpu_extra_vars</code></td>
+      <td>빈 값</td>
+      <td><code>a</code> 단계 템플릿 ID/이름, hostname 목록 survey 변수명(비우면 미전달), 추가 <code>k=v</code></td>
+    </tr>
+    <tr>
+      <td><code>stress_template</code>, <code>stress_hostname_key</code>, <code>stress_extra_vars</code>, <code>stress_end_keys</code></td>
+      <td><code>end_year,end_month,end_day,end_hour,end_min</code></td>
+      <td><code>b</code> 단계 템플릿·변수명 및 종료 시각 5개 survey 키(정확히 5개 필수)</td>
+    </tr>
+    <tr>
+      <td><code>default_inventory</code></td>
+      <td><code>DEFAULT</code></td>
+      <td>CPU 템플릿의 평상시 인벤토리 이름 (launch 직전 확인 및 launch 후 복원 대상)</td>
+    </tr>
+    <tr>
+      <td><code>monitor_sec</code>, <code>monitor_interval</code>, <code>load_threshold</code></td>
+      <td><code>120</code> / <code>10</code> / <code>3</code></td>
+      <td>job 완료 후 최대 감시 초, 1분 로드 확인 주기 초, 부하 실행 판정 임계값(이상)</td>
+    </tr>
+    <tr>
+      <td><code>output_dir</code>, <code>poll_interval</code>, <code>history_file</code></td>
+      <td><code>./output</code> / <code>3</code> / <code>./stress-test_history.log</code></td>
+      <td>결과표·gossh 로그 저장 폴더, AWX 조회 주기 초, 이력 파일 경로</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>4. 실행 방법 및 CLI 옵션</h2>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1) 대화형 실행 (user 선택 메뉴 → a/b/ab/ba 선택 → stress-ng 종료 시각 입력 → 감시 화면 → 재실행 y/N)
+bash stress_run.sh user.txt
+bash stress_run.sh user.txt -retry 2
+
+# 2) 비대화형 실행 (setup_check -run 등이 호출하는 방식)
+./stress-test -user hong -hosts user.txt -steps ab -end 2026,11,07,18,30 -retry 1 -batch
+
+# 3) 관리망 분리 등으로 일부 호스트 접속불가 시에도 AWX launch 포함
+./stress-test -user hong -hosts user.txt -steps a -ignore-offline -batch
+
+# 4) 읽기 전용 AWX/인벤토리 조사
+./stress-test -inspect -user hong
+./stress-test -yaml-state -user hong]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<table>
+  <thead>
+    <tr>
+      <th>CLI 플래그</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>-user &lt;u&gt;</code></td>
+      <td>사용자 식별자 (생략 시 <code>STRESS_USER</code> → <code>$USER</code>)</td>
+    </tr>
+    <tr>
+      <td><code>-hosts &lt;파일&gt;</code></td>
+      <td>(실행 시 필수) 입력 호스트/설치양식 파일</td>
+    </tr>
+    <tr>
+      <td><code>-steps &lt;ab&gt;</code></td>
+      <td>(실행 시 필수) 실행할 단계 및 순서 (<code>a</code>, <code>b</code>, <code>ab</code>, <code>ba</code>만 허용)</td>
+    </tr>
+    <tr>
+      <td><code>-end &lt;연,월,일,시,분&gt;</code></td>
+      <td><code>stress-ng</code> 종료 시각. <code>b</code> 단계 포함 시 비대화형에서 필수(현재 시각 이후의 유효한 날짜여야 함)</td>
+    </tr>
+    <tr>
+      <td><code>-retry N</code></td>
+      <td>비대화형에서 <code>미실행</code> 호스트 자동 재실행 횟수 (기본 <code>0</code>)</td>
+    </tr>
+    <tr>
+      <td><code>-er &lt;파일&gt;</code></td>
+      <td>장애 목록 파일 경로 (생략 시 현재 경로 <code>error_list.txt</code> 자동 사용)</td>
+    </tr>
+    <tr>
+      <td><code>-conf &lt;파일&gt;</code></td>
+      <td>설정 파일 직접 지정</td>
+    </tr>
+    <tr>
+      <td><code>-batch</code></td>
+      <td>비대화형 모드 강제 (한 줄 요약, 템플릿 사용 중 시 <code>[인벤토리사용중]</code> + stdin 1줄 응답)</td>
+    </tr>
+    <tr>
+      <td><code>-ignore-offline</code></td>
+      <td>gossh 접속체크에 응답 없는 <code>접속불가</code> 호스트도 제외하지 않고 launch (결과 <code>실행(감시불가)</code>; <code>DNS실패</code>는 계속 제외)</td>
+    </tr>
+    <tr>
+      <td><code>-inspect [템플릿 ...]</code></td>
+      <td>AWX 템플릿 survey·인벤토리·소스를 읽기 전용으로 점검 (<code>exit 0/1/2</code>)</td>
+    </tr>
+    <tr>
+      <td><code>-yaml-state</code></td>
+      <td>인벤토리 소스의 현재 yml 및 호스트 목록 읽기 전용 조회 (<code>[yaml상태]</code> 출력)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 출력 결과표 · 생성 파일 및 종료 코드</h2>
+
+<h3>5.1 결과표 컬럼 및 단계 판정 값 (<code>&lt;output_dir&gt;/${user}_stress_result.txt</code>)</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">text</ac:parameter>
+  <ac:plain-text-body><![CDATA[hostname|CPU벤더|cpu|stress-ng|비고
+node0001|Intel|실행|실행|
+node0002|AMD|미실행|실행|메모리 불량
+node0003|-|접속불가|접속불가|전원 케이블 불량
+node0004|-|DNS실패|DNS실패|]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<table>
+  <thead>
+    <tr>
+      <th>상태 값</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>실행</code></td>
+      <td>감시 중 1분 로드가 <code>load_threshold</code> 이상으로 확인됨</td>
+    </tr>
+    <tr>
+      <td><code>실행(감시불가)</code></td>
+      <td><code>-ignore-offline</code>로 launch 성공(job <code>successful</code>)했으나 부하 감시는 생략된 호스트</td>
+    </tr>
+    <tr>
+      <td><code>미실행</code></td>
+      <td><code>monitor_sec</code> 동안 1분 로드가 <code>load_threshold</code> 미만으로 남음</td>
+    </tr>
+    <tr>
+      <td><code>실패</code></td>
+      <td>등록·survey·인벤토리 사용 중 중단·종료 시각 경과·launch·job 중 하나가 실패 (<code>비고</code>에 사유 기록)</td>
+    </tr>
+    <tr>
+      <td><code>접속불가</code></td>
+      <td>1차 <code>gossh</code> 접속체크 응답 없음</td>
+    </tr>
+    <tr>
+      <td><code>DNS실패</code></td>
+      <td>1필드 hostname 양식에서 DNS IP 조회 실패</td>
+    </tr>
+    <tr>
+      <td><code>-</code></td>
+      <td>선택하지 않은 단계</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.2 종료 코드</h3>
+<table>
+  <thead>
+    <tr>
+      <th>종료 코드</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>0</code></td>
+      <td><code>미실행</code>·<code>실패</code> 없음 (<code>접속불가</code>·<code>DNS실패</code>·<code>실행(감시불가)</code>만 있어도 0)</td>
+    </tr>
+    <tr>
+      <td><code>1</code></td>
+      <td><code>미실행</code> 또는 <code>실패</code> 호스트가 1대 이상 있음 (또는 <code>-inspect</code> 불일치/경고)</td>
+    </tr>
+    <tr>
+      <td><code>2</code></td>
+      <td>설정·입력·인자 오류, AWX 사전 확인 실패, 인벤토리 삭제 후 동일, <code>gossh</code> 미발견/실행 실패</td>
+    </tr>
+    <tr>
+      <td><code>130</code> / <code>143</code></td>
+      <td>실행 중 <code>SIGINT</code> / <code>SIGTERM</code> 수신 (바꿔 둔 템플릿 인벤토리를 <code>DEFAULT</code>로 복원 시도 후 종료)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>6. 해석상 한계 · 미검증 항목 및 주의사항</h2>
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <ul>
+      <li><strong>가짜 AWX 기반 검증 (실 AWX·AMD 실장비 미검증):</strong> 현재 <code>stress-test</code>는 Go <code>httptest</code> 기반 가짜 AWX 및 랩 테스트 위주로 검증되었으며, 실제 운영 AWX의 <code>survey_spec</code> 필드 구조, 템플릿 인벤토리 PATCH 권한 및 launch 직후 복원 경합, <code>custom_inventory.sh</code> 실파일명 규칙, AMD 장비의 실제 <code>vendor_id</code> 응답은 현장에서 확인이 필요합니다.</li>
+      <li><strong>부하 지연 오판 가능성:</strong> 1분 로드는 서서히 상승하므로 실제 템플릿이 부하를 늦게 띄울 경우 <code>monitor_sec</code>(기본 120초) 안에 기준에 못 미쳐 <code>미실행</code>으로 분류될 수 있습니다. 장비 특성에 맞게 <code>load_threshold</code>와 <code>monitor_sec</code>를 조정하세요.</li>
+      <li><strong>부하 종료 및 인벤토리 소스 경합 미지원:</strong> 실행 중인 부하 프로세스 강제 종료·정리 기능은 범위 밖이며, 여러 사용자가 동일 인벤토리 소스를 동시에 PATCH할 경우 마지막 값으로 덮어써질 수 있습니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>

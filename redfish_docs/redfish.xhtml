@@ -1,0 +1,365 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (Go CLI + Bash 래퍼)</p>
+    <p><strong>대상 프로젝트:</strong> <code>redfish</code> (<code>biostool</code> — v0.1.0)</p>
+    <p><strong>원본 저장소 경로 (<code>origin/master</code>):</strong> <code>.claude/HPC/redfish</code></p>
+    <p><strong>대상 브랜치:</strong> <code>confluence</code> (<code>redfish_docs/</code>)</p>
+    <p><strong>커밋된 사전 빌드 바이너리:</strong> <code>bin/biostool</code> (RHEL8 / kernel &gt;= 3), <code>bin/biostool_os6</code> (RHEL6 / kernel 2.6.32용 — 실제 RHEL6 미검증)</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>[중요 — v0.1.0 실장비 미연결 경고]</strong> 현재 <code>redfish</code>(<code>biostool</code> v0.1.0)는 <strong>실제 물리 BMC 하드웨어에 단 한 번도 연결·테스트된 적이 없습니다.</strong> 모든 동작 검증은 합성 <code>testdata/</code> 기반 모의 서버(<code>mockbmc.sh</code> / <code>Farm</code>) 및 <code>-from-dump</code> 로컬 덤프에서만 수행되었습니다.</p>
+    <p><strong>실제 BMC에 최초 연결하기 전에 반드시 저장소 루트의 <code>FIRST_RUN.md</code>를 정독</strong>하고, <code>FIRST_RUN.md</code> §B에 정리된 <strong>17개 미확인 항목</strong>과 9단계 1대 시범 절차를 먼저 검증하십시오. 또한 <code>bin/biostool_os6</code>는 CentOS 6 유저랜드 + kernel 4.18 환경에서만 확인되었으며 실제 RHEL6(kernel 2.6.32) 실기 검증은 완료되지 않았습니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>안전 설계 원칙:</strong> <code>biostool</code>은 어떤 경우에도 서버를 자동 재부팅(Reset)하거나 즉시(Immediate) 적용하지 않고 <strong>Pending Settings만 예약</strong>하며, <code>profiles/*.tsv</code>에서 <strong>특정 모델 행에 <code>verified=Y</code>가 명시된 항목(Dell, HPE, Lenovo 한정)</strong>에만 쓰기를 허용합니다. 와일드카드(<code>*</code>) 행에 <code>verified=Y</code>를 설정하면 프로필 로드 자체가 차단됩니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h2>1. 개요 및 변경 대상 (실제 조회/수정하는 Redfish 리소스 및 API)</h2>
+
+<p><code>redfish</code>(<code>biostool</code>)는 데이터센터 다수 서버의 BMC(Out-of-Band) Redfish REST API를 통해 <strong>BIOS 설정 일괄 점검 및 표준 프로필 기반 Pending 설정 적용(<code>check</code>)</strong>, <strong>참조 서버 대비 전체 BIOS 속성 비교(<code>allcheck</code>)</strong>, <strong>Redfish 트리 백업 덤프(<code>dump</code>)</strong>, <strong>비밀번호 암호화(<code>encrypt</code>)</strong>를 수행하는 Go 표준 라이브러리 기반 도구입니다.</p>
+
+<p>안전장치를 위해 쓰기 동작은 엄격히 제한되며, <strong>자동 재부팅(Reset)은 절대 수행하지 않고 Pending Settings만 예약</strong>합니다.</p>
+
+<h3>1.1 벤더별 지원 범위 및 실제 API 변경 대상</h3>
+<table>
+  <thead>
+    <tr>
+      <th>기능 / 벤더</th>
+      <th>대상 모델 / 조건</th>
+      <th>실제 호출·변경 범위 및 안전장치</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BIOS 점검 (읽기 전용)</td>
+      <td>Dell, HPE, Lenovo, Cisco, Supermicro (5개 벤더)</td>
+      <td>Redfish GET으로 시스템·모델·현재 BIOS 속성·Pending Settings 조회 (<code>ModeReadOnly</code>). 프록시 우회, 리다이렉트 차단, BMC당 요청 간격 100ms, 호스트당 로그인 세션 1개(<code>auth=session</code>, 실패 시 Basic 폴백)</td>
+    </tr>
+    <tr>
+      <td>BIOS Pending 설정 적용 (쓰기)</td>
+      <td><strong>Dell, HPE, Lenovo</strong>만 쓰기 지원 (Cisco, Supermicro는 읽기 전용)</td>
+      <td><code>profiles/&lt;profile&gt;.tsv</code>에서 <strong>특정 모델 행의 <code>verified=Y</code>가 확인된 항목만</strong> Pending Settings PATCH 및 설정 Job 생성(<code>ModeSet</code>). 와일드카드(<code>*</code>) 행에 <code>verified=Y</code>가 있으면 프로필 로드 자체가 에러로 차단됨</td>
+    </tr>
+    <tr>
+      <td>위험 경로·속성 차단</td>
+      <td>모든 Redfish 요청 (<code>checkAllowed</code>)</td>
+      <td>화이트리스트 <code>checkAllowed</code>가 <code>LogServices</code>, <code>ClearLog</code>, <code>Reset</code>, <code>Immediate</code> 등 시스템 재기동/로그 삭제/즉시 반영 경로 호출을 차단</td>
+    </tr>
+    <tr>
+      <td>로컬 결과·덤프 생성</td>
+      <td>관리서버 로컬 디스크</td>
+      <td><code>results/&lt;YYYYMMDD_HHMMSS&gt;/</code> 하위에 <code>0600</code> 권한으로 결과 파일 저장, <code>dumps/</code> 하위에 <code>xml.sh</code>(<code>dump</code>) JSON 트리 저장</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>2. 사전준비 / 빌드 · 입력파일 · 계정/암호화</h2>
+
+<h3>2.1 사전 빌드 바이너리 및 폐쇄망 빌드/업데이트</h3>
+<p>Go 표준 라이브러리만 사용(<code>go.mod</code> <code>go 1.20</code>, 외부 모듈/<code>vendor/</code> 불필요)하며, 저장소 <code>bin/</code>에 커밋된 정적 바이너리를 래퍼(<code>lib.sh</code>)가 <code>uname -r</code> 주 버전에 따라 자동 선택합니다.</p>
+<ul>
+  <li><strong><code>bin/biostool</code>:</strong> RHEL8 이상 (kernel &gt;= 3, Go 1.25 정적 빌드)</li>
+  <li><strong><code>bin/biostool_os6</code>:</strong> RHEL6용 (kernel &lt; 3 / 2.6.32 타깃, Go 1.20.x 정적 빌드 — <em>단, 실제 RHEL6 2.6.32 미검증, CentOS 6 유저랜드 + kernel 4.18에서만 확인됨</em>)</li>
+  <li><strong>랩 재빌드 및 배포 업데이트:</strong> <code>bash setup.sh</code> 또는 <code>bash build.sh</code>(os8 전용), <code>bash build_os6.sh</code>(admin, <code>/opt/go1.20/bin</code> 필요). 사내 표준 경로 배포 시 <code>update.sh</code>가 고정 경로 <code>TARGET=/root/server_vm_python/redhfish/V2</code>를 업데이트하며, 기존본을 <code>/root/server_vm_python/redhfish/backup/V2_&lt;일시&gt;.tgz</code>로 백업하고 설정·암호화 키·결과·덤프를 보존하며 <code>profiles/*.tsv</code>가 로컬에서 수정된 경우 <code>*.new</code>로 병합합니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. 커밋된 바이너리 및 래퍼 실행 확인 (폐쇄망에서 Go 불필요)
+ls -l bin/biostool bin/biostool_os6
+chmod +x bios_check.sh all_bios_check.sh xml.sh encrypt.sh mockbmc.sh
+
+# 2. (개발/랩 환경 재빌드 시에만)
+bash build.sh         # os8 바이너리 재빌드
+bash build_os6.sh     # os6 바이너리 재빌드 (/opt/go1.20/bin 필요)
+
+# 3. 동시성 설정(concurrency 기본 100) 사용 시 파일 디스크립터 확인
+ulimit -n]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>2.2 입력 파일 및 계정/암호화 (AES-256-GCM)</h3>
+<p><code>bios.conf</code>에 평문 비밀번호 키(<code>pass</code>, <code>password</code>, <code>passwd</code>, <code>pw</code>)가 하나라도 존재하면 보안 오류로 즉시 실패합니다. 반드시 <code>encrypt.sh</code>로 암호화해야 합니다.</p>
+<ul>
+  <li><strong><code>bios.conf</code>:</strong> <code>user=</code> 필수 지정, 비밀번호는 <code>pass_file=pass.enc</code> 및 <code>key_file=key.bin</code>으로 참조.</li>
+  <li><strong><code>encrypt.sh</code>:</strong> 대화형으로 비밀번호를 2회(에코 없음) 입력받아 표준입력(stdin)으로 <code>biostool encrypt</code>에 전달하고 AES-256-GCM 암호화 파일(<code>pass.enc</code>, <code>key.bin</code>)을 <code>0600</code> 권한(<code>.gitignore</code> 대상)으로 생성합니다.</li>
+  <li><strong><code>user.txt</code> / <code>/etc/hosts</code>:</strong> 대상 호스트 목록(기본 <code>user.txt</code>)과 BMC IP/호스트명 매핑(<code>/etc/hosts</code> 또는 <code>-hosts</code> 지정 파일).</li>
+  <li><strong><code>profiles/*.tsv</code>:</strong> 탭 구분 프로필 테이블(컬럼: <code>vendor</code>, <code>model</code>, <code>std_name</code>, <code>attribute</code>, <code>value</code>, <code>verified</code>). 4개 표준 속성(<code>system_profile</code>, <code>hyper_threading</code>, <code>llc_prefetch</code>, <code>sub_numa_cluster</code>)은 프로필에 정의가 없더라도 항상 점검 대상에 포함되며(행이 없으면 <code>MAPPING_MISSING</code>으로 보고), <code>value</code>는 <code>A|B</code> 형식, 검증 여부는 <code>Y</code>/<code>N</code>으로 관리합니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# BMC 비밀번호 암호화 (평문은 bios.conf에 절대 기입 금지)
+bash encrypt.sh
+# 생성 확인: pass.enc, key.bin (권한 0600)]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>3. 표준 안전 절차 (모의검증 → <code>FIRST_RUN.md</code> 1대 덤프·검증 → <code>-dry-run</code> → 카나리 적용 → 전체/사후검증)</h2>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>실제 BMC 연결 전 필수 확인:</strong> 아래 3.1절의 <strong>모의 BMC 사전 연습</strong>과 3.2절의 <strong><code>FIRST_RUN.md</code> 9단계 실장비 최초 검증 절차</strong>를 거치지 않고 대량 서버에 <code>bios_check.sh</code>를 실행하지 마십시오. 특히 <code>auth_fail_stop</code>(기본 <code>3</code>)을 <code>0</code>으로 끄면 BMC 계정 잠금(lockout) 위험이 있습니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<h3>3.1 사전 모의 테스트 (<code>mockbmc.sh</code> / <code>-from-dump</code>)</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 모의 BMC 실행 예 (첫 인자에 트리명 지정 시 testdata/<트리명> 으로 자동 매핑, 기본 포트 8443)
+MOCKBMC_PASS="testpass" bash mockbmc.sh dell-r660 8443
+# 또는 -dir / -listen 플래그 직접 전달:
+# MOCKBMC_PASS="testpass" bash mockbmc.sh -dir testdata/dell-r660 -listen 127.0.0.1:8443
+
+# 또는 기존 덤프 디렉터리 대상 오프라인 점검/드라이런 검증
+bash bios_check.sh --profile VM -from-dump dumps/ -dry-run]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h3>3.2 <code>FIRST_RUN.md</code> 기반 실 BMC 최초 검증 9단계 및 표준 적용 절차</h3>
+<ol>
+  <li><strong>1단계 (인증 사전 확인):</strong> <code>bios.conf</code>의 <code>user</code>와 <code>encrypt.sh</code>로 생성한 <code>pass.enc</code>/<code>key.bin</code>이 1대 테스트 BMC 인증에 정상 동작하는지 확인합니다. (웜업 직렬 인증 체크 후 병렬 진입, 연속 인증 실패 <code>auth_fail_stop=3</code> 도달 시 <code>SKIPPED_AUTH_STOP</code>으로 즉시 중단)</li>
+  <li><strong>2단계 (1대 GET 덤프 채집):</strong> <code>bash xml.sh</code>로 실제 테스트 서버 1대의 Redfish 트리를 읽기 전용 GET으로 덤프합니다. (<em>주의: <code>xml.sh</code>는 항상 현재 디렉터리의 <code>./bios.conf</code>를 읽으며 <code>-conf</code> 등의 옵션을 거부함</em>)</li>
+  <li><strong>3단계 (실제 트리/스펙 대조 기록):</strong> 덤프 결과에서 실제 Model명, BIOS 버전, 인증 방식(Session/Basic), Settings 경로, 4개 표준 속성(<code>system_profile</code>, <code>hyper_threading</code>, <code>llc_prefetch</code>, <code>sub_numa_cluster</code>), Pending 경로, Attribute Registry 및 <strong><code>FIRST_RUN.md</code> §B의 17개 미확인 항목</strong>을 직접 대조·기록합니다.</li>
+  <li><strong>4단계 (프로필 미검증 등록):</strong> <code>profiles/&lt;프로필&gt;.tsv</code>(예: <code>profiles/VM.tsv</code>)에 해당 특정 모델 행을 추가하되 초기에는 반드시 <strong><code>verified=N</code></strong>으로 둡니다. (읽기 점검만 가능, 쓰기 차단 상태)</li>
+  <li><strong>5단계 (<code>-dry-run</code> 미리보기):</strong> <code>bash bios_check.sh --profile VM -dry-run</code>을 실행해 생성될 PATCH 대상과 Job 동작을 육안으로 검증합니다.</li>
+  <li><strong>6단계 (수동 BMC 변경 교차검증):</strong> 테스트 서버 BMC 웹 UI/CLI에서 해당 설정을 수동으로 적용·재부팅한 뒤, <code>-no-prompt</code> 읽기 전용 검증이 <code>OK</code>로 판정하는지 및 실제 BIOS 화면 값을 대조 확인합니다.</li>
+  <li><strong>7단계 (특정 모델 <code>verified=Y</code> 승격):</strong> 검증이 끝난 <strong>해당 특정 모델 행만</strong> <code>verified=Y</code>로 승격합니다. (와일드카드 <code>*</code> 행은 절대 <code>Y</code>로 두지 마십시오.)</li>
+  <li><strong>8단계 (단일 서버 툴 실적용 및 재부팅 후 재확인):</strong> 1대 대상 <code>bash bios_check.sh --profile &lt;프로필&gt;</code> 실행 → <code>APPLIED</code> 확인 → 수동 재부팅 → 재점검 실행해 <code>OK</code> 판정 및 BMC/BIOS 실제 화면 수동 확인을 완료합니다. (참고: 비TTY 환경에서 <code>-stdin-ok</code> 없이 실행 시 Y/N 확인은 기본 <code>N</code>으로 안전 취소됨)</li>
+  <li><strong>9단계 (점진적 대수 확대 및 사후 비교):</strong> 소수 카나리 그룹부터 대수를 단계적으로 늘려 적용하며, <code>all_bios_check.sh</code>로 기준(<code>REFERENCE</code>) 서버 대비 전 서버 일관성(<code>SAME</code> vs <code>DIFF</code>)을 최종 검증합니다.</li>
+</ol>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1대 Redfish 트리 덤프 (xml.sh는 ./bios.conf 고정 사용)
+bash xml.sh target_bmc_host
+
+# Dry-run으로 변경 예정 항목/PATCH 미리보기
+bash bios_check.sh --profile VM -dry-run
+
+# 실제 적용 실행 (대화형 Y/N 확인 후 Pending 반영; 재부팅은 수동 수행)
+bash bios_check.sh --profile VM
+
+# 실패/미완료 호스트만 재시도 (-retry-from은 -user와 동시 사용 불가)
+bash bios_check.sh --profile VM -retry-from results/20261114_120000
+
+# 기준 서버 대비 전체 BIOS 속성 일괄 비교
+bash all_bios_check.sh]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>4. CLI 플래그 · 설정 키 · 상태 코드 · 파일 표</h2>
+
+<h3>4.1 래퍼 스크립트 및 <code>biostool</code> CLI 플래그</h3>
+<table>
+  <thead>
+    <tr>
+      <th>명령 / 플래그</th>
+      <th>기본값 / 적용 서브커맨드</th>
+      <th>설명 및 주의사항</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>bios_check.sh [--profile &lt;name&gt;] [opts]</code></td>
+      <td><code>check</code> (<code>--profile</code> 필수)</td>
+      <td>프로필 기준 BIOS 점검 및 <code>verified=Y</code> 항목 Pending 설정 적용</td>
+    </tr>
+    <tr>
+      <td><code>all_bios_check.sh [opts]</code></td>
+      <td><code>allcheck</code></td>
+      <td>기준 서버 대비 모든 BIOS 속성 일괄 비교(<code>diff.txt</code>, <code>ignore_attrs.txt</code>)</td>
+    </tr>
+    <tr>
+      <td><code>xml.sh [--compact] [targets...]</code></td>
+      <td><code>dump</code></td>
+      <td>대상 서버 Redfish 트리 JSON 덤프. <strong><code>./bios.conf</code> 고정, <code>-conf</code> 등 옵션 거부</strong></td>
+    </tr>
+    <tr>
+      <td><code>encrypt.sh</code> (<code>-key</code>, <code>-out</code>)</td>
+      <td><code>encrypt</code></td>
+      <td>비밀번호 AES-256-GCM 암호화(<code>key.bin</code>, <code>pass.enc</code> 생성)</td>
+    </tr>
+    <tr>
+      <td><code>mockbmc.sh</code> (<code>&lt;tree&gt; [port]</code> 또는 <code>-dir</code>, <code>-listen</code>, <code>-user</code>, <code>-v</code>)</td>
+      <td>로컬 모의 BMC 서버</td>
+      <td>환경변수 <code>MOCKBMC_PASS</code> 기반 로컬 모의 테스트용</td>
+    </tr>
+    <tr>
+      <td><code>-conf</code> / <code>-user</code> / <code>-hosts</code></td>
+      <td><code>bios.conf</code> / <code>user.txt</code> / <code>/etc/hosts</code></td>
+      <td>설정 파일, 대상 호스트 목록, 호스트-IP 매핑 파일 지정</td>
+    </tr>
+    <tr>
+      <td><code>-profile</code> (래퍼: <code>--profile</code>)</td>
+      <td>필수 (<code>check</code>)</td>
+      <td><code>profiles/&lt;name&gt;.tsv</code> 프로필 지정</td>
+    </tr>
+    <tr>
+      <td><code>-from-dump</code> / <code>-retry-from</code></td>
+      <td><code>check</code>, <code>allcheck</code></td>
+      <td>덤프 오프라인 점검 / 이전 결과 디렉터리 기반 재시도(<code>merged_retry.txt</code> 우선, <code>-user</code>와 병용 불가)</td>
+    </tr>
+    <tr>
+      <td><code>-dry-run</code> / <code>-no-prompt</code> / <code>-stdin-ok</code></td>
+      <td><code>check</code> 전용</td>
+      <td><code>-dry-run</code>: 쓰기 없이 미리보기 / <code>-no-prompt</code>: 확인 생략 / <code>-stdin-ok</code>: 비TTY 파이프 Y/N 허용(미지정 시 기본 <code>N</code>)</td>
+    </tr>
+    <tr>
+      <td><code>-list-max</code> / <code>-fail-max</code></td>
+      <td><code>check</code> 100, <code>allcheck</code> 20 / 200</td>
+      <td>화면 출력 목록 및 FAIL 상세 최대 표시 건수</td>
+    </tr>
+    <tr>
+      <td><code>-diff</code> / <code>-ignore</code> / <code>-diff-max</code></td>
+      <td><code>diff.txt</code> / <code>ignore_attrs.txt</code> / 30</td>
+      <td><code>allcheck</code> 차이 출력, 무시 속성 목록, 최대 차이 표시 건수</td>
+    </tr>
+    <tr>
+      <td><code>-targets</code> / <code>-out</code> / <code>-compact</code> / <code>-key</code></td>
+      <td><code>dump_dir</code>, <code>pass.enc</code>, <code>key.bin</code></td>
+      <td><code>dump</code> 대상·출력경로·압축 여부 및 <code>encrypt</code> 출력·키 경로</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.2 종료 코드 (Exit Codes)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>실행 주체</th>
+      <th>코드</th>
+      <th>의미</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Bash 래퍼 (<code>*.sh</code>)</td>
+      <td><code>1</code> / <code>2</code></td>
+      <td><code>1</code>: 필수 파일 누락 / <code>2</code>: 바이너리 또는 Go 실행 환경 누락</td>
+    </tr>
+    <tr>
+      <td><code>biostool</code> 바이너리</td>
+      <td><code>0</code> / <code>1</code></td>
+      <td><code>0</code>: 정상 종료(<code>check</code> 내 개별 호스트/항목 <code>FAIL</code>이 있어도 0) / <code>1</code>: 설정·실행 오류 또는 <code>dump</code> 일부 호스트 실패</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.3 <code>bios.conf</code> 11개 설정 키</h3>
+<table>
+  <thead>
+    <tr>
+      <th>키 이름</th>
+      <th>기본값</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>user</code></td>
+      <td>(필수 입력)</td>
+      <td>BMC 로그인 사용자 ID (<code>pass</code>/<code>password</code>/<code>passwd</code>/<code>pw</code> 평문 키 기입 시 에러)</td>
+    </tr>
+    <tr>
+      <td><code>pass_file</code> / <code>key_file</code></td>
+      <td><code>pass.enc</code> / <code>key.bin</code></td>
+      <td><code>encrypt.sh</code>로 생성한 AES-256-GCM 암호문 및 키 경로</td>
+    </tr>
+    <tr>
+      <td><code>concurrency</code></td>
+      <td><code>100</code></td>
+      <td>병렬 처리 워커 수 (호스트 수에 맞춰 <code>ulimit -n</code> 점검 필수)</td>
+    </tr>
+    <tr>
+      <td><code>timeout</code></td>
+      <td><code>20</code></td>
+      <td>HTTP 요청 타임아웃(초)</td>
+    </tr>
+    <tr>
+      <td><code>insecure</code></td>
+      <td><code>true</code></td>
+      <td>BMC 자체서명 TLS 인증서 검증 생략 여부</td>
+    </tr>
+    <tr>
+      <td><code>retries</code></td>
+      <td><code>2</code> (상한 <code>5</code>)</td>
+      <td>재시도 횟수. <strong>GET 및 session 생성에만 적용</strong>(PATCH/Job/401은 절대 재시도 안 함)</td>
+    </tr>
+    <tr>
+      <td><code>auth_fail_stop</code></td>
+      <td><code>3</code></td>
+      <td>연속 인증 실패 시 안전 정지 임계치(<code>0</code> 설정 시 비활성화되며 계정 잠금 위험 증가)</td>
+    </tr>
+    <tr>
+      <td><code>result_dir</code> / <code>dump_dir</code> / <code>profile_dir</code></td>
+      <td><code>results</code> / <code>dumps</code> / <code>profiles</code></td>
+      <td>실행 결과(<code>0600</code> 저장), Redfish 덤프, 프로필 TSV 디렉터리</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.4 주요 판정 상태 코드 요약</h3>
+<table>
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>상태 코드 목록</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>항목 점검 (Item)</td>
+      <td><code>OK</code>, <code>PENDING_OK</code>, <code>FAIL</code>, <code>UNVERIFIED</code>, <code>PENDING_EXISTS</code>, <code>PENDING_NO_JOB</code>, <code>MAPPING_MISSING</code></td>
+    </tr>
+    <tr>
+      <td>호스트 연결 (Host)</td>
+      <td><code>UNREACHABLE</code>, <code>TIMEOUT</code>, <code>BMC_ERROR</code>, <code>AUTH_FAIL</code>, <code>SKIPPED_AUTH_STOP</code>, <code>UNSUPPORTED</code>, <code>HTTP_ERROR</code>, <code>NO_HOSTS_ENTRY</code>, <code>NO_DUMP</code></td>
+    </tr>
+    <tr>
+      <td>설정 적용 (Apply, 자동 재시도 없음)</td>
+      <td><code>APPLIED</code>, <code>APPLY_UNCONFIRMED</code>, <code>ALREADY_OK</code>, <code>CHANGED</code>, <code>PENDING_EXISTS</code>, <code>UNVERIFIED</code>, <code>SKIPPED_READONLY</code>, <code>INVALID_VALUE</code>, <code>DEPENDS_ON_PROFILE</code>, <code>SET_NOT_SUPPORTED_VENDOR</code>, <code>DUPLICATE_TARGET</code>, <code>REJECTED</code>, <code>SET_UNSUPPORTED</code>, <code>SET_ERROR</code>, <code>AUTH_FAIL</code> 등</td>
+    </tr>
+    <tr>
+      <td>전체 비교 / 덤프</td>
+      <td><code>allcheck</code>: <code>SAME</code>, <code>DIFF</code>, <code>REFERENCE</code>, <code>NO_REFERENCE</code>, <code>REF_UNREACHABLE</code> / <code>dump</code>: <code>OK</code>, <code>PARTIAL</code>(경로 120개 상한), <code>SAVE_FAIL</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>5. 백업 및 롤백 방법</h2>
+
+<ul>
+  <li><strong>작업 전 Redfish 트리 백업(필수):</strong> BIOS Pending 설정을 적용하기 전에 반드시 <code>bash xml.sh [targets...]</code>로 대상 BMC의 현재 Redfish 설정 트리를 <code>dumps/</code>에 저장해 두십시오.</li>
+  <li><strong>Pending 설정 취소(재부팅 전 롤백):</strong> <code>biostool</code>은 자동 재부팅을 하지 않으므로 <code>APPLIED</code> 직후(재부팅 전)에 잘못된 변경이 발견되면 해당 서버 BMC 웹 콘솔이나 벤더 CLI(iDRAC/iLO/XCC)에서 <strong>Pending BIOS Settings / BIOS Job Queue를 수동 삭제</strong>해 반영을 막을 수 있습니다.</li>
+  <li><strong>재부팅 후 BIOS 값 원복:</strong> 이미 재부팅되어 BIOS 값이 실제 반영된 경우, 사전에 채집한 <code>dumps/</code> JSON 스냅샷을 대조하여 <code>profiles/&lt;원복프로필&gt;.tsv</code>를 구성해 재적용하거나 BMC 콘솔에서 수동 원복 후 재부팅하십시오.</li>
+  <li><strong>배포본 롤백(<code>update.sh</code> 백업 활용):</strong> <code>update.sh</code> 실행 시 <code>/root/server_vm_python/redhfish/backup/V2_&lt;일시&gt;.tgz</code>가 생성되므로 툴 자체 버전 장애 시 해당 아카이브로 복원할 수 있습니다.</li>
+</ul>
+
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[# 1. 작업 전 대상 서버 Redfish 트리 JSON 스냅샷 백업
+bash xml.sh server01_bmc server02_bmc
+
+# 2. 결과 파일(권한 0600) 및 재시도 목록 확인
+ls -la results/]]></ac:plain-text-body>
+</ac:structured-macro>
+
+<h2>6. 작업 완료 후 랜덤 서버 실접속 교차검증 필수</h2>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>[필수 검증 경고] 작업 완료 후 반드시 랜덤 서버 실접속 교차검증을 수행하십시오.</strong></p>
+    <p>특히 v0.1.0은 실제 BMC 실장비 테스트 없이 모의 환경에서만 검증되었으므로, <code>biostool</code>이 <code>APPLIED</code> 또는 재부팅 후 <code>OK</code> / <code>SAME</code>을 보고하더라도 벤더 펌웨어별 Pending 반영 지연, Job 미생성, 속성 의존성(<code>DEPENDS_ON_PROFILE</code>) 등으로 실제 하드웨어 BIOS가 달라질 수 있습니다. 작업 완료 후 반드시 <strong>벤더·모델별 랜덤 1~3대 서버의 실제 BMC 콘솔/웹 UI 및 OS 쉘에 직접 접속</strong>하여 아래를 교차검증하십시오.</p>
+    <ul>
+      <li>실제 BMC BIOS 화면에서 <code>system_profile</code>, <code>hyper_threading</code>, <code>llc_prefetch</code>, <code>sub_numa_cluster</code> 적용 값과 Job Queue 잔여 상태 육안 확인</li>
+      <li><code>FIRST_RUN.md</code> 및 <code>dumps/</code> 기준의 원복 가능 상태 및 정상 POST/OS 부팅 여부 확인</li>
+      <li>RHEL6 환경에서 <code>bin/biostool_os6</code> 사용 시 실제 2.6.32 커널 환경에서의 TLS·세션·결과 저장 정상 동작 재확인</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
