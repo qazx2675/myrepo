@@ -265,7 +265,7 @@ func TestKeyFilterAndHostCursor(t *testing.T) {
 	src := &fakeSrc{snap: sampleStuck(), local: true}
 	r := runKeys(t, src, "\rjjf")
 	f := lastFrame(r)
-	if !strings.Contains(f, "[필터: 정체·실패만]") || strings.Contains(f, "web001") || !strings.Contains(f, "> web002") {
+	if !strings.Contains(f, "[필터: 정체·보류·실패만]") || strings.Contains(f, "web001") || !strings.Contains(f, "> web002") {
 		t.Errorf("필터 후 마지막 화면:\n%s", f)
 	}
 }

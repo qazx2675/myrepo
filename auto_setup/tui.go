@@ -414,7 +414,7 @@ func (st *tuiState) clamp() {
 	if st.sel.Detail {
 		_, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
 		if g == nil {
-			st.sel.Detail, st.sel.Confirm, st.done = false, false, nil
+			st.sel.Detail, st.sel.Confirm, st.sel.Release, st.done = false, false, false, nil
 			if st.menu != nil && st.menu.Open == 'h' { // 호스트 작업 메뉴도 함께 닫기 (w 메뉴는 화면 1 에서도 열리므로 유지)
 				st.menu = nil
 			}
@@ -525,6 +525,15 @@ func (st *tuiState) handle(ev keyEv) bool {
 		st.sel.Confirm = false
 		if ev.k == kRune && (ev.r == 'y' || ev.r == 'Y') {
 			st.requestManual()
+		} else {
+			st.sel.Msg = "취소했습니다"
+		}
+		return false
+	}
+	if st.sel.Release {
+		st.sel.Release = false
+		if ev.k == kRune && (ev.r == 'y' || ev.r == 'Y') {
+			st.requestRelease()
 		} else {
 			st.sel.Msg = "취소했습니다"
 		}
@@ -690,7 +699,36 @@ func (st *tuiState) handleDetail(ev keyEv) {
 		st.requestRecheck()
 	case ev.k == kRune && (ev.r == 'd' || ev.r == 'D'):
 		st.startDone()
+	case ev.k == kRune && (ev.r == 'u' || ev.r == 'U'):
+		st.startRelease(g)
 	}
+}
+
+// startRelease: h→u — 늦은 READY 보류 호스트가 있으면 y/n 확인 단계로 (없으면 안내)
+func (st *tuiState) startRelease(g *SnapGroup) {
+	j, _ := findGroup(st.snap, st.sel.JobID, st.sel.Yml)
+	switch {
+	case j == nil || j.Closed:
+		st.sel.Msg = "종료된 작업에는 보류 호스트가 없습니다"
+	case g.Counts.Held == 0:
+		st.sel.Msg = "보류된 호스트가 없습니다"
+	default:
+		st.sel.Release = true
+	}
+}
+
+// requestRelease: y 확인 후 release 요청 (그룹, 전체 보기면 job 전체 "*"). 결과는 다음 갱신에 단계로 보인다
+// (os6_mgmt 원격 클라이언트는 os8_mgmt 의 `auto_setup request release` 로 중계)
+func (st *tuiState) requestRelease() {
+	yml := st.sel.Yml
+	if yml == allView {
+		yml = "*"
+	}
+	if err := st.src.Request(ReqRelease, map[string]string{"jobid": st.sel.JobID, "yml": yml}); err != nil {
+		st.sel.Msg = "[X] 보류 해제 요청 실패: " + err.Error()
+		return
+	}
+	st.sel.Msg = "보류 해제를 요청했습니다 - 데몬이 수거하면 LDAP 복원 후 자동 설정체크+설정수정이 진행됩니다"
 }
 
 // requestRecheck: g 키 — 이 그룹(전체 보기면 job 전체)의 완료 제외 호스트를 데몬이 지금 직접 재확인 (os8 → os6_mgmt → 접속불가).

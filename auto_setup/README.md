@@ -117,6 +117,7 @@ vi conf/auto_setup.conf        # 예: os8_mgmt=<os8_mgmt 호스트>
 | `closed_keep_days` | (선택) **종료된 작업(`jobs/done`)을 화면·`status` 에 보여 주는 기간(일)**. 1 이상의 정수. 지난 작업은 파일이 지워지는 게 아니라 화면에서만 빠지며, 값을 늘리면 그 기간의 작업이 날짜별 보기(`←` `→`)에 다시 나옵니다. 종료 후 수동 run·`g` 재확인도 이 기간 안의 작업만 화면에서 고를 수 있습니다 | `1` (24시간, 비우거나 숫자가 아니면 1) |
 | `max_runs` | (선택) **동시에 돌 수 있는 run(os_check 실행) 수**. 1 이상의 정수. 서로 다른 작업·같은 작업의 늦은 배치·수동 `c`/`t` run 이 같은 풀을 나눠 쓰며, 한 호스트는 두 run 에 동시에 들어가지 않습니다. 1 이면 종전처럼 한 번에 하나. 멈춘 run 은 슬롯 하나만 차지합니다. 데몬 재시작 필요 | `4` (비우거나 숫자가 아니면 4) |
 | `hang_min` | (선택) **gossh 멈춤(hang) 감지 시간(분)**. run 안의 gossh 호출(체크·적용·재확인) 하나가 이 시간을 넘으면 gossh 에 Ctrl+C 를 두 번 보내 아직 실행 중인 호스트만 취소하고(접속 실패·`ping X` 로 기록, 실패로 세어 다음 배치에서 재시도) 나머지는 계속 진행합니다. 1분 뒤에도 살아 있으면 SIGTERM. os6_mgmt 경유 호스트·2차 체크도 같습니다. 로그 `gossh hang 감지`. 0 이면 끔. 예: `hang_min=10`. 데몬 재시작 필요 | `7` (비우거나 숫자가 아니면 7) |
+| `stuck_hold_hours` | (선택) **늦은 READY 보류 기준(시간)**. 설치 시작(처음 `ping X`, READY 뒤 재부팅이면 그 재부팅. **`ping X` 를 보지 못한 호스트(빠른 재부팅·ping 정보 없음)는 작업 전달 시각**)부터 이 시간을 넘겨 READY 가 된 호스트 — 며칠 정체되다 갑자기 켜진 서버 등 — 는 READY 는 기록하되 **LDAP 복원·자동 설정체크+설정수정을 하지 않고 `보류`** 로 둡니다(로그 `늦은 READY 보류: <호스트> (정체 N시간, 기준 stuck_hold_hours=24, …) — h 메뉴에서 해제 또는 h→c 수동 실행`). 화면 2 의 `h`→`u` 로 해제하면 즉시 준비확인을 다시 해 응답하면 방금 READY 가 된 것처럼 자동 흐름(LDAP 복원 → bootWait/lateWait 뒤 run)으로 진행합니다(실행 중인 run·os6 직접 실행에 든 호스트는 해제하지 않고 로그 `[!] 보류 해제 보류`). `h`→`c` 수동 실행(실행 직전 LDAP 비교·복원을 한 번 함)·`d` 수동 완료는 보류 중에도 그대로 됩니다. 보류는 job 파일에 저장되어 데몬을 재시작해도 유지되고, 보류 중 재부팅돼 다시 READY 가 되어도 풀리지 않습니다. 보류 호스트가 있는 작업은 끝나지 않습니다(`jobs/done` 으로 가지 않음). 0 이면 끔(이전 동작). 데몬 재시작 필요 | `24` (비우거나 음수·숫자가 아니면 24) |
 | `ssh_timeout` | (선택) **os6_mgmt 로 ssh 접속할 때의 접속 제한(초)** — 모든 ssh 의 `ConnectTimeout`. 5 이상의 정수(5 미만은 5), 비우거나 숫자가 아니면 30(이전 고정값은 10). 접속 시간이 들어가는 호출의 전체 상한(준비확인 60초, LDAP 백업 90초·적용 45초)은 접속 제한이 10초를 넘는 만큼의 2배가 더해진다(기본 30초면 100초·130초·85초). os6_mgmt 를 RHEL8 로 올린 뒤 ssh 로그인이 느려졌을 때 늘린다. 원인 점검: `os6_truble.sh` |
 
 #### os_check 2개, 01 1개
@@ -303,6 +304,7 @@ codes/<code>.txt 생성 (wall 알림은 v0.4.3 부터 끔 — 결과는 TUI·`au
 | `request cancel <jobid>` | 작업 종료 요청 | [cli_request_other](docs/svg/cli_request_other.svg) |
 | `request refresh` | 데몬에 즉시 ping·준비확인 요청 (TUI `r` 키와 같음, 5초 안에 수거) | [cli_request_other](docs/svg/cli_request_other.svg) |
 | `request recheck <jobid> <yml 또는 *>` | 완료 제외 호스트를 os8_mgmt → 안 되면 os6_mgmt 순으로 직접 재확인 (TUI `h`→`g` 와 같음, 5초 안에 수거) | [cli_request_recheck](docs/svg/cli_request_recheck.svg) |
+| `request release <jobid> <yml 또는 *>` | 늦은 READY `보류` 호스트(그룹, `*` 면 job 전체)를 자동 흐름(LDAP 복원·설정체크+설정수정)으로 되돌림 (TUI `h`→`u` 와 같음). 보류 호스트가 없으면 거부 (`requests/rejected/`) | |
 | `daemon` | 포그라운드 데몬 루프 (보통 ensure 가 백그라운드로 기동) — os8_mgmt 에서만 | [cli_ensure_daemon](docs/svg/cli_ensure_daemon.svg) |
 | `ensure` | 데몬이 없으면 백그라운드 기동 (cron 매분) — os8_mgmt 에서만 | [cli_ensure_daemon](docs/svg/cli_ensure_daemon.svg) |
 | `probe [-i 10s]` | (os6_mgmt 쪽) stdin 호스트 목록을 받고 ping 상태 출력 (`host up\|down`) | [cli_probe](docs/svg/cli_probe.svg) |
@@ -333,7 +335,7 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 | 1 | q / Esc | 종료 | |
 | 2 (호스트표) | ↑ ↓ (k j) · `PgUp`/`PgDn` | 호스트 행 이동 (`PgUp`/`PgDn` 은 한 화면씩) | [PgUp/PgDn](docs/svg/tui_pgupdn.svg) |
 | 2 | ← / Esc / q | 화면 1 로 복귀 | |
-| 2 | f | 정체·실패 호스트만 보기 (토글) | [f](docs/svg/tui_f.svg) |
+| 2 | f | 정체·보류·실패 호스트만 보기 (토글) | [f](docs/svg/tui_f.svg) |
 | 2 | a | 그룹별 화면 ↔ 전체 보기 전환 (전체 보기에서 a 는 화면 1 로) | [a](docs/svg/tui_a.svg) |
 | 2 | **h** | **호스트 작업 메뉴** — 안내 줄 아래에 인라인으로 열림 (` 호스트 작업 ▶ c 체크+수정  t 체크만  g 재확인  d 수동 완료  v 결과`). 글자 또는 번호(1~5)로 선택, `Esc`/`q`/`h` 로 메뉴만 닫음, 그 밖의 키는 무시. 전체 보기(`a`)에서는 `g`·`d` 만 표시 | [h](docs/svg/tui_h_menu.svg) |
 | 2 | h → **c** (1) | OS 체크 수동 실행(이중체크): **설정체크 + 설정수정**. **완료 여부와 상관없이** 그룹 전체를 시도, y/n 확인 후 요청 (접속불가·미응답 호스트는 결과 wall 에 따로 표시) | [h→c](docs/svg/tui_h_c.svg) |
@@ -341,6 +343,7 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 | 2 | h → **g** (3) | 서버 상태 재확인 — 완료 제외 호스트를 os8 → os6_mgmt → 접속불가 순으로 직접 확인, 진행 창 표시 (「os8_mgmt 에서 접속이 안 되는 호스트」 참고) | [h→g](docs/svg/tui_h_g.svg) |
 | 2 | h → **d** (4) | (v0.7.1) 수동 완료. 안내 줄 아래에서 `1` 이 호스트 / `2` 그룹 미완료 전체 선택 → `y` 확인 (`Esc` 취소). 부팅 시각 검증 없이 완료로 인정하고 체크스크립트는 실행하지 않음 (CLI `auto_setup done` 과 같음). 전체 보기에서는 `1` 만 | [h→d](docs/svg/tui_h_d.svg) |
 | 2 | h → **v** (5) | 이 그룹의 가장 최근 수동 실행 결과 다시 보기 | [h→v](docs/svg/tui_h_v.svg) |
+| 2 | h → **u** (6) | 보류 해제 — **`보류` 호스트가 있을 때만 메뉴에 보임**. y/n 확인 후 이 그룹(전체 보기면 job 전체)의 보류 호스트를 즉시 준비확인 → 자동 흐름(LDAP 복원 → bootWait/lateWait 뒤 설정체크+설정수정)으로 되돌림. 실행 중인 run 의 호스트는 건드리지 않음 (CLI `auto_setup request release`, conf `stuck_hold_hours` 참고) | |
 | 공통 | r | 바로 새로고침 + 데몬에 즉시 ping·준비확인 요청 (자동 갱신: 로컬 2초, 원격 10초. 연타는 5초에 1회만 요청) | [r](docs/svg/tui_r.svg) |
 | 공통 | **w** | **AWX 메뉴** — ` AWX ▶ 1 AWX 실행  2 신규 설치 양식`. `w` 를 한 번 더(`ww`)·`Enter`·`1` 이 예전의 AWX 실행, `2` 가 신규 설치 양식. `Esc`/`q` 로 메뉴만 닫음 | [w](docs/svg/tui_w_menu.svg) |
 | 공통 | w → **1** | AWX 실행 (awx_dir 의 01 을 이 터미널에서 실행, 프로파일 선택) — 「체크스크립트 단독 실행(x) · AWX 실행(w)」 참고 | [w→1](docs/svg/tui_w_1.svg) |
@@ -358,6 +361,7 @@ NO_COLOR=1 auto_setup # 색 없는 TUI
 - 집합(행 단위) = 01 이 전달한 **그룹 yml** 입니다. 그룹 줄이 없는(구버전 01 또는 그룹 1개) 작업은 `(all)` 한 행이며, 어느 그룹에도 없는 호스트는 `(기타)` 로 모읍니다. 전체 yml(`all=`)은 작업 제목에 표시됩니다. 화면 상단에 진행 중 작업 합계(총계)가 나옵니다.
 - **색**: 완료 초록 / 진행 청록 / 대기 회색 / 경고 노랑 / 정체·실패 빨강(굵게). `NO_COLOR` 설정, tty 가 아님(파이프), `--plain` 이면 색을 쓰지 않습니다.
 - **정체 기준**: seen_down(설치 시작) 후 **60분까지는 "설치중"**(RHEL7 은 1시간 걸림), 그 이후에도 READY 가 안 되면 빨간 "정체"(`installStuck` = 60분, 경계값은 아직 설치중). 화면 표시만 하며 wall 알림은 없습니다.
+- **늦은 READY 보류**: 정체가 `stuck_hold_hours`(기본 24시간) 넘게 이어지다 READY 가 되면 노란 `보류` 단계가 됩니다(비고 `보류(정체 N시간, h→u 해제)`, 상단 합계 `보류 N`, 막대 `!`). 설정이 자동으로 들어가지 않으니 서버 상태를 확인한 뒤 `h`→`u`(자동 흐름으로) 또는 `h`→`c`(지금 수동 실행)·`d`(수동 완료)로 처리하세요.
 - os6_mgmt 에서도 동일하게 열리며 gossh 로 snapshot 을 10초 간격으로 폴링합니다 (v0.6.0 부터, 이전 5초). 키 입력(수동 실행)은 요청 파일을 os8_mgmt 에 남깁니다(데몬이 5초 주기로 수거).
 - 수동 실행은 데몬 run 큐에서 실행됩니다(동시 1개 유지, code·wall 동일). 거부되면 `requests/rejected/<파일>` 의 마지막 `reason=` 줄에 사유가 남습니다.
 - **정체 호스트 수동 재시도**: 정체 상태인데 실제로는 접속 가능한 호스트는 `r` 을 누르면 ping 상태와 무관하게 즉시 다시 확인합니다 (로컬 무응답이면 os6_mgmt 경유로도 확인).
@@ -860,7 +864,7 @@ bash ../awx_script/test/run_tests.sh
 
 ### 호스트 단계(stage)
 
-`대기(queued)` → `배포중(deploying)` → `설치중(installing)` → `부팅확인(booting)` → `READY` → `LDAP확인(ldap)` → `체크중(checking)` → `2차체크(second)` → `완료(done)`. 부가: `정체(stuck)`, `실패(failed)` = os_check 비정상 종료 연속 3회(`maxFails`).
+`대기(queued)` → `배포중(deploying)` → `설치중(installing)` → `부팅확인(booting)` → `READY` → `LDAP확인(ldap)` → `체크중(checking)` → `2차체크(second)` → `완료(done)`. 부가: `정체(stuck)`, `보류(held)` = down_at 뒤 `stuck_hold_hours` 를 넘겨 READY — LDAP 복원·자동 run 안 함(`h`→`u` 해제), `실패(failed)` = os_check 비정상 종료 연속 3회(`maxFails`).
 
 ### 환경변수
 

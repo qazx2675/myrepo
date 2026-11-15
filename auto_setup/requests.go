@@ -20,6 +20,7 @@ const (
 	ReqCancel    = "cancel"     // payload: jobid=<id>            → auto_setup cancel 과 동일
 	ReqRefresh   = "refresh"    // payload: 없음                  → 다음 step 에서 ping·준비확인 즉시 수행 (TUI r 키)
 	ReqRecheck   = "recheck"    // payload: jobid=<id> yml=<그룹|*> → 완료 제외 호스트를 os8 → os6_mgmt 순으로 직접 재확인 (TUI g 키)
+	ReqRelease   = "release"    // payload: jobid=<id> yml=<그룹|*> → 늦은 READY 보류 호스트를 자동 흐름(LDAP 복원·자동 run)으로 되돌림 (TUI h→u)
 )
 
 // 디렉터리: requests/ (새 요청) → claimed/ (데몬이 선점해 처리 중, 처리 후 삭제) → active/ (수락된 manual-run, 끝나면 삭제) | rejected/ (거부, 끝에 reason= 줄)
@@ -176,10 +177,78 @@ func (d *Daemon) collectRequests(now time.Time) {
 				continue
 			}
 			os.Remove(p)
+		case ReqRelease:
+			if reason := d.releaseHold(pl["jobid"], pl["yml"], now); reason != "" {
+				rejectRequest(p, name, b, reason)
+				continue
+			}
+			os.Remove(p)
 		default:
 			rejectRequest(p, name, b, "알 수 없는 요청 종류")
 		}
 	}
+}
+
+// releaseHold: 보류 해제(h→u) — job(yml=* 이면 전체, 아니면 그 그룹)의 늦은 READY 보류 호스트를 자동 흐름으로 되돌린다.
+// 보류를 풀고 down_at 을 지금으로(다음 READY 에서 다시 보류되지 않게), READY 를 풀어(부팅확인) 같은 step 의 준비확인에 강제로 넣는다
+// → 응답하면 applyCheck 가 종전 READY 흐름(FirstReady/LateFirstReady → LDAP 비교·복원 → bootWait/lateWait 뒤 run)을 그대로 탄다.
+// LDAP 은 해제 요청 처리 중이 아니라 준비확인의 READY 처리에서 한다. 실행 중인 run(수동 포함)·os6 직접 실행에 들어 있는 호스트는
+// 건드리지 않고 사유를 로그에 남긴다. 수락이면 "", 거부면 사유.
+func (d *Daemon) releaseHold(id, yml string, now time.Time) string {
+	if id == "" || yml == "" {
+		return "jobid/yml 없음"
+	}
+	j := d.jobs[id]
+	if j == nil && validID(id) {
+		j = d.adoptJobFile(id)
+	}
+	if j == nil {
+		return "진행 중인 job 없음"
+	}
+	var hosts []string
+	if yml == "*" {
+		for n := range j.Hosts {
+			hosts = append(hosts, n)
+		}
+	} else {
+		var ok bool
+		if hosts, ok = groupHosts(j, yml); !ok {
+			return "그룹 없음"
+		}
+	}
+	sort.Strings(hosts)
+	t := now.Unix()
+	busy := d.busyHosts()
+	var done, skipped []string
+	for _, n := range hosts {
+		h := j.Hosts[n]
+		if h == nil || !held(h) {
+			continue
+		}
+		if busy[n] != nil || d.os6Hold[n] != "" { // 수동 run·os6 직접 실행 중 — 끝난 뒤 다시 해제
+			skipped = append(skipped, n)
+			continue
+		}
+		h.Hold, h.HoldAt = "", 0
+		h.SeenDown, h.DownAt, h.ReadyAt = true, t, 0
+		d.dirty[j.ID] = true
+		d.setStage(j, n, StageBooting, t)
+		d.forceCheck[n] = true
+		done = append(done, n)
+	}
+	if len(skipped) > 0 {
+		logf("[!] 보류 해제 보류: job %s %d대는 실행 중인 run(수동 포함)·os6 직접 실행에 들어 있어 그대로 둠 — 끝난 뒤 다시 해제하세요 (%s)",
+			j.ID, len(skipped), strings.Join(skipped, " "))
+	}
+	if len(done) == 0 {
+		if len(skipped) > 0 {
+			return "보류 호스트가 모두 실행 중인 run·os6 직접 실행에 들어 있음 (끝난 뒤 다시 해제)"
+		}
+		return "보류된 호스트 없음"
+	}
+	d.lastCheck = time.Time{} // 이번 step 에서 바로 준비확인 → READY·LDAP·스케줄은 종전 흐름
+	logf("보류 해제: job %s 그룹 %s %d대 (%s) → 준비확인 뒤 자동 흐름(LDAP 복원·설정체크+설정수정)으로 진행", j.ID, yml, len(done), strings.Join(done, " "))
+	return ""
 }
 
 // claimRequest: requests/<name> 을 requests/claimed/<name> 으로 rename 해 이 데몬이 독점한다.
@@ -343,6 +412,14 @@ func (d *Daemon) startManual(name string, now time.Time) {
 		_ = os.Rename(p+".tmp", p)
 	}
 	d.refreshManualRoutes(j, hosts, closed)
+	// 늦은 READY 보류 호스트는 READY 때 LDAP 비교·복원을 건너뛰었다 — 설정수정이 들어가는 수동 run(c) 직전에 종전 규칙으로 한 번 한다
+	if !closed && pl["mode"] != ModeCheck {
+		for _, n := range hosts {
+			if h := j.Hosts[n]; h != nil && held(h) && h.ReadyAt > 0 {
+				d.ldapApplyNow(j, n, now.Unix())
+			}
+		}
+	}
 	hasOS6 := false
 	ready := map[string]bool{}
 	for _, n := range hosts {
