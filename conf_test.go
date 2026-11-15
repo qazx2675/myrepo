@@ -109,22 +109,10 @@ func TestBadValues(t *testing.T) {
 }
 
 func TestParseArgsAndHosts(t *testing.T) {
-	if _, _, ok := parseArgs(nil); ok {
-		t.Error("인자 없음은 실패")
-	}
-	if _, _, ok := parseArgs([]string{"-c"}); ok {
-		t.Error("-c 값 없음은 실패")
-	}
-	if _, _, ok := parseArgs([]string{"-x", "f"}); ok {
-		t.Error("모르는 옵션은 실패")
-	}
-	c, h, ok := parseArgs([]string{"-c", "my.conf", "hosts.txt"})
-	if !ok || c != "my.conf" || h != "hosts.txt" {
-		t.Errorf("parseArgs: %q %q %v", c, h, ok)
-	}
-	c, h, ok = parseArgs([]string{"hosts.txt"})
-	if !ok || c != "" || h != "hosts.txt" {
-		t.Errorf("parseArgs: %q %q %v", c, h, ok)
+	// 인자 해석은 main_test.go 의 TestParseArgs 가 본다
+	o, ok := parseArgs([]string{"-c", "my.conf", "hosts.txt"})
+	if !ok || o.conf != "my.conf" || o.hostfile != "hosts.txt" || o.mode != modeAttach {
+		t.Errorf("parseArgs: %+v %v", o, ok)
 	}
 
 	p := filepath.Join(t.TempDir(), "hosts")

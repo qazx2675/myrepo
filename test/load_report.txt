@@ -1,29 +1,28 @@
-# pm_monitor v0.2.0 부하 시험: 8000대 (계획서 7.5 기준, test/load_run.sh 600 8000)
-# 환경: 랩 .58 (Rocky 8.10, 2코어), 호스트 8000대(127.1.x.y 실제 ICMP·TCP, gossh 스텁), interval_sec=60 ping_pps=500 tcp_parallel=100
-# 주의: 측정 중 사용자의 27대 소형 데모(demo.sh, install_mn 1개)가 같은 서버에서 함께 돌고 있었다(부하는 작음).
-# 참고: 첫 시도(GC 기본값)는 RSS 최대 54.4 MB 로 50MB 기준 FAIL(나머지 PASS). main.go 에 debug.SetGCPercent(25) 를 넣은 뒤 아래 결과로 전부 PASS.
-
-load_check: pid=1474822 표본 577초(요청 600초)
-CPU(1코어 기준 %): 평균 3.30  최고 16.5  p50 1.9
-CPU idle(회차 사이, 꼬리 3초 제외) 표본 49초: 평균 0.30  최고 1.9   [참고] busy 아닌 모든 초 135초 평균 0.31
-RSS 최대 38.9 MB (39792 kB)
-fd 최대 106
-threads: 처음 8, 마지막 10, 최소 8, 최대 10, 처음 120초 최대 10, 마지막 120초 최대 10
-동시 자식(gossh) 최대 1, 본 nice 값: 10 
-ICMP echo 송신 속도(InEchos 증가분/초) 최고 513  (OutEchos 최고 516), 5초 평균 최고 504, ping_pps 상한 500
-TCP: 연결 시도 속도 최고 910/초, 22번 SYN-SENT+ESTAB 동시 최대 100 (tcp_parallel 상한 100)
+# v0.3.0 백그라운드 수집(데몬 프로세스 기준) 8000대 부하 측정 - 랩 .58, 10분
+load_check: pid=3155223(install_mn --daemon) 표본 575초(요청 600초)
+CPU(1코어 기준 %): 평균 3.03  최고 19.1  p50 1.9
+CPU idle(회차 사이, 꼬리 3초 제외) 표본 109초: 평균 0.02  최고 1.0   [참고] busy 아닌 모든 초 161초 평균 0.41
+RSS 최대 30.8 MB (31540 kB)
+fd 최대 110
+threads: 처음 7, 마지막 9, 최소 7, 최대 9, 처음 120초 최대 9, 마지막 120초 최대 9
+동시 자식(gossh) 최대 1, 본 nice 값: 10
+ICMP echo 송신 속도(InEchos 증가분/초) 최고 513  (OutEchos 최고 513), 5초 평균 최고 502, ping_pps 상한 500
+TCP: 연결 시도 속도 최고 802/초, 22번 SYN-SENT+ESTAB 동시 최대 101 (tcp_parallel 상한 100)
 --- 판정 (계획서 7.5) ---
-PASS CPU 10분 평균 < 5%   : 3.30
-PASS CPU 최고 < 30%       : 16.5
-PASS CPU idle 평균 < 1%   : 0.30 (idle 49초)
-PASS RSS < 50MB           : 38.9 MB
-PASS fd < 200             : 106
-PASS threads 늘지 않음    : 처음 구간 최대 10, 마지막 구간 최대 10
+PASS CPU 10분 평균 < 5%   : 3.03
+PASS CPU 최고 < 30%       : 19.1
+PASS CPU idle 평균 < 1%   : 0.02 (idle 109초)
+PASS RSS < 50MB           : 30.8 MB
+PASS fd < 200             : 110
+PASS threads 늘지 않음    : 처음 구간 최대 9, 마지막 구간 최대 9
 PASS ICMP 송신 <= ping_pps : 513/초 (상한 500, 1초 표본 경계 오차 10% 허용)
-PASS TCP 동시 <= tcp_parallel: 100 (상한 100)
+FAIL(측정 잡음) TCP 동시 <= tcp_parallel: 101 (상한 100)
 PASS gossh 동시 <= 1       : 1
-PASS nice = 10            : 10 
-총 0 항목 FAIL
+PASS nice = 10            : 10
 
-수집 회차: 마지막 본 회차 10 (interval_sec=60)
-세부: load_report.txt.csv(1초 표본), load_drive.log(키별 반응 시간)
+TCP 101 에 대한 설명: 측정한 랩에는 시험과 무관한 22번 연결(192.168.0.58 -> 192.168.0.58:22, 다른 세션의 ssh) 이
+시험 내내 하나 남아 있었고 load_check.sh 의 `ss` 계수에 항상 +1 로 들어갔다(시험 뒤 4분 재측정에서도 같은 101,
+`ss -tn state established "( dport = :22 )"` 로 그 연결 1개 확인). install_mn 이 연 연결은 100개다.
+동시 연결 상한 자체는 단위 테스트 TestPortParallelLimit 가 증명하고, port22.go 는 v0.2.1 과 달라진 것이 없다.
+v0.2.0 측정(수집이 화면 프로세스에서 돌 때)은 CPU 평균 3.30 · RSS 38.9MB · TCP 100 이었다.
+데몬 방식은 화면 프로세스가 수집을 하지 않아 RSS 가 줄었다(30.8MB).

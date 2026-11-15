@@ -139,9 +139,12 @@ type ViewState struct {
 	Scroll      int    // 표의 첫 줄(필터 결과 기준)
 	Panel       rune   // 열린 패널(0 = 표)
 	PanelScroll int
-	Busy        bool   // c: 완료 서버 ping 확인 중
-	CheckErr    string // c 의 ping 확인이 실패했을 때 이유(다음 확인 때까지 표시)
-	Warning     string // cfg.Warning
+	Busy        bool      // c: 완료 서버 ping 확인 중
+	CheckErr    string    // c 의 ping 확인이 실패했을 때 이유(다음 확인 때까지 표시)
+	Warning     string    // cfg.Warning
+	Detach      bool      // 백그라운드 수집에 붙은 화면(q = 화면만 나가기, Q = 수집 종료)
+	ConfirmStop bool      // Q 를 눌러 수집 종료 확인을 기다리는 중
+	Expires     time.Time // 수집 자동 종료 시각(백그라운드 수집일 때만)
 	Now         time.Time
 	Color       bool
 	W, H        int // 마지막 화면 크기(handleKey 의 쪽 크기 계산용)
@@ -364,7 +367,11 @@ func (v *ViewState) headerLines(snap Snapshot, w int) []string {
 		i := int(v.Now.Unix() & 3)
 		run = "수집중 " + "|/-\\"[i:i+1]
 	}
-	out = append(out, truncW(fmt.Sprintf(" %s · 회차 %d · %s", upd, snap.Round, run), w))
+	line := fmt.Sprintf(" %s · 회차 %d · %s", upd, snap.Round, run)
+	if !v.Expires.IsZero() {
+		line += " · 자동 종료 " + v.Expires.Format("15:04")
+	}
+	out = append(out, truncW(line, w))
 	if v.Warning != "" {
 		out = append(out, paint(v.Color, stYellow, truncW(" 경고: "+cleanText(v.Warning), w)))
 	}
@@ -379,6 +386,8 @@ func (v *ViewState) headerLines(snap Snapshot, w int) []string {
 func (v *ViewState) footerLines(w int) []string {
 	var items []string
 	switch {
+	case v.ConfirmStop:
+		items = []string{"수집을 완전히 종료할까요?", "y 종료", "다른 키 취소"}
 	case v.Searching:
 		items = []string{"Enter 적용", "Esc 취소", "Backspace 지움"}
 	case v.Panel != 0:
@@ -386,6 +395,10 @@ func (v *ViewState) footerLines(w int) []string {
 	default:
 		items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~7 필터", "0 해제",
 			"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "q 종료"}
+		if v.Detach {
+			items[len(items)-1] = "q 나가기(수집 계속)"
+			items = append(items, "Q 수집 종료")
+		}
 	}
 	var out []string
 	for _, l := range wrapItems(items, w) {

@@ -130,7 +130,7 @@ def main():
     sh("ip addr del %s/32 dev lo" % FAKE)
     sh("ip addr add %s/32 dev lo" % FAKE)
     env = {"STUB_GOSSH_STATE": WD + "/fstate.txt"}
-    s = Session(["-c", "fpm.conf", "fhosts.txt"], env=env)
+    s = Session(["-f", "-c", "fpm.conf", "fhosts.txt"], env=env)
     try:
         ok = s.wait_for(r"회차 1 · 대기중", 40)
         f = s.frame()
@@ -209,7 +209,7 @@ def main():
 
     # ---- Ctrl+C / SIGTERM / SIGHUP ----
     for name, how in (("Ctrl+C", b"\x03"), ("SIGTERM", signal.SIGTERM), ("SIGHUP", signal.SIGHUP)):
-        s = Session(["-c", "fpm.conf", "fhosts.txt"], env=env)
+        s = Session(["-f", "-c", "fpm.conf", "fhosts.txt"], env=env)
         try:
             s.wait_for(r"회차 1", 20)
             if isinstance(how, bytes):
@@ -222,7 +222,7 @@ def main():
             s.kill()
 
     # ---- state 유지: 다시 실행하면 이력이 남는다 ----
-    s = Session(["-c", "fpm.conf", "fhosts.txt"], env=env)
+    s = Session(["-f", "-c", "fpm.conf", "fhosts.txt"], env=env)
     try:
         s.pump(0.5)
         check("4 다시 실행해도 state.json 이력 유지(첫 화면부터 설치완료 표시)", bool(re.search(r"4 설치완료 [1-9]", s.frame())), re.search(r"4 설치완료 \d+", s.frame()) and re.search(r"4 설치완료 \d+", s.frame()).group(0) or "")
