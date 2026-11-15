@@ -77,6 +77,9 @@ func confVars() map[string]*string {
 		"max_runs": &max_runs,
 		"hang_min": &hang_min,
 
+		// 늦은 READY 보류(시간)
+		"stuck_hold_hours": &stuck_hold_hours,
+
 		// os6_mgmt ssh 접속 제한(초)
 		"ssh_timeout": &ssh_timeout,
 	}
@@ -175,6 +178,19 @@ func hangLimit() time.Duration {
 		return hangMinDefault * time.Minute
 	}
 	return time.Duration(v) * time.Minute
+}
+
+// stuckHoldDefault: stuck_hold_hours 가 비었거나 음수·숫자가 아닐 때 쓰는 값(시간)
+const stuckHoldDefault = 24
+
+// stuckHold: 늦은 READY 보류 기준 — conf stuck_hold_hours(시간, 0 이상의 정수). 0 이면 끔(0 반환),
+// 비우거나 음수·숫자가 아니면 24시간. 설치 시작(down_at) 뒤 이 시간을 넘겨 READY 가 된 호스트는 보류된다 (applyCheck).
+func stuckHold() time.Duration {
+	v, err := strconv.Atoi(strings.TrimSpace(stuck_hold_hours))
+	if err != nil || v < 0 {
+		return stuckHoldDefault * time.Hour
+	}
+	return time.Duration(v) * time.Hour
 }
 
 // ipChangeEnabled: IP 변경 메뉴 가시성 = --admin 이거나 conf enable_ip_change 가 켜짐

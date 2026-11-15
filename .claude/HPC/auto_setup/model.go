@@ -26,11 +26,12 @@ const (
 	StageDone       Stage = "done"       // 완료: processed (run / 완료기록 / 수동)
 	StageStuck      Stage = "stuck"      // 정체: seen_down 후 installStuck 을 넘겨도 READY 안 됨
 	StageFailed     Stage = "failed"     // 실패: os_check 비정상 종료 연속 maxFails 회
+	StageHeld       Stage = "held"       // 보류: down_at 뒤 stuck_hold_hours 를 넘겨 READY — LDAP 복원·자동 run 안 함 (h→u 해제, h→c·d 수동)
 )
 
 // StageOrder: 화면·집계 표시 순서
 var StageOrder = []Stage{StageQueued, StageDeploying, StageInstalling, StageBooting, StageReady,
-	StageLdap, StageChecking, StageSecond, StageDone, StageStuck, StageFailed}
+	StageLdap, StageChecking, StageSecond, StageDone, StageStuck, StageHeld, StageFailed}
 
 var stageLabels = map[Stage]string{
 	StageQueued:     "대기",
@@ -44,6 +45,7 @@ var stageLabels = map[Stage]string{
 	StageDone:       "완료",
 	StageStuck:      "정체",
 	StageFailed:     "실패",
+	StageHeld:       "보류",
 }
 
 // Label: 한글 라벨 (알 수 없는 값은 그대로)
@@ -90,8 +92,11 @@ func effectiveStage(h *Host, now int64) Stage {
 	if h.Fails >= maxFails {
 		return StageFailed
 	}
+	if h.Hold != "" && h.ReadyAt > 0 { // 늦은 READY 보류 (보류 중 재부팅으로 READY 가 풀리면 설치 단계로 보이고 보류는 유지)
+		return StageHeld
+	}
 	s := Stage(h.Stage)
-	if _, ok := stageLabels[s]; !ok || s == StageDone || s == StageFailed {
+	if _, ok := stageLabels[s]; !ok || s == StageDone || s == StageFailed || s == StageHeld {
 		s = baseStage(h)
 	}
 	if s.installPhase() {
@@ -198,6 +203,7 @@ type StageCounts struct {
 	Done       int `json:"done"`
 	Stuck      int `json:"stuck"`
 	Failed     int `json:"failed"`
+	Held       int `json:"held,omitempty"` // 늦은 READY 보류 (없으면 생략 — 구버전 스냅샷 읽기와 호환)
 }
 
 func (c *StageCounts) field(s Stage) *int {
@@ -224,6 +230,8 @@ func (c *StageCounts) field(s Stage) *int {
 		return &c.Stuck
 	case StageFailed:
 		return &c.Failed
+	case StageHeld:
+		return &c.Held
 	}
 	return nil
 }
@@ -306,6 +314,7 @@ type SnapHost struct {
 	Ldap    *LdapState `json:"ldap,omitempty"`
 	Second  string     `json:"second"`
 	DoneSrc string     `json:"done_src"`
+	Hold    string     `json:"hold,omitempty"`
 	Yml     string     `json:"-"` // 전체 보기(allView)에서만 채움: 이 호스트가 속한 그룹 yml
 }
 
@@ -425,6 +434,9 @@ func snapHost(name string, h *Host, now int64) SnapHost {
 	st := effectiveStage(h, now)
 	sh := SnapHost{Host: name, Stage: st, Label: st.Label(), StageAt: h.StageAt, DownAt: h.DownAt,
 		Route: h.Route, Done: h.Processed, Note: hostNote(h), Second: h.Second, DoneSrc: h.DoneSrc}
+	if held(h) { // hold: 늦은 READY 보류 사유 (보류 중일 때만, omitempty)
+		sh.Hold = h.Hold
+	}
 	if h.StageAt > 0 && now > h.StageAt {
 		sh.Elapsed = now - h.StageAt
 	}
@@ -491,6 +503,9 @@ func hostNote(h *Host) string {
 	}
 	if h.Fails > 0 && h.Processed == "" {
 		p = append(p, "실패 "+strconv.Itoa(h.Fails)+"회")
+	}
+	if held(h) {
+		p = append(p, "보류("+h.Hold+", h→u 해제)")
 	}
 	return strings.Join(p, ", ")
 }

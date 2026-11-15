@@ -362,6 +362,8 @@ func stageStyle(st Stage) string {
 		return stGray
 	case StageStuck, StageFailed:
 		return stRed
+	case StageHeld:
+		return stYellow
 	}
 	return stCyan
 }
@@ -411,6 +413,7 @@ type selection struct {
 	Change     bool     // 안내 줄에 `m 변경` 표시 (v0.7.0 변경 메뉴가 켜져 있고 로컬 데몬일 때만 TUI 가 켠다)
 	Inline     []string // 키 안내 줄 바로 아래에 붙는 줄들 (v0.7.1: m 변경 메뉴, d 수동 완료 프롬프트). 비면 화면은 종전과 같다
 	Direct     bool     // os6_mgmt(원격 클라이언트): c/t/g 를 이 서버에서 직접 실행 — 확인 질문에 표시
+	Release    bool     // h→u 보류 해제 y/n 확인 중
 }
 
 type grpRef struct{ Job, Grp int }
@@ -536,14 +539,14 @@ func findGroup(s Snapshot, jobID, yml string) (*SnapJob, *SnapGroup) {
 	return nil, nil
 }
 
-// visibleHosts: 화면 2 에 보이는 호스트 (filter 면 정체·실패만)
+// visibleHosts: 화면 2 에 보이는 호스트 (filter 면 정체·보류·실패만)
 func visibleHosts(g *SnapGroup, filter bool) []SnapHost {
 	if !filter {
 		return g.Hosts
 	}
 	var out []SnapHost
 	for _, h := range g.Hosts {
-		if h.Stage == StageStuck || h.Stage == StageFailed {
+		if h.Stage == StageStuck || h.Stage == StageHeld || h.Stage == StageFailed {
 			out = append(out, h)
 		}
 	}
@@ -581,7 +584,7 @@ func barSegs(c StageCounts, w int) []seg {
 	if c.Total <= 0 || w <= 0 {
 		return []seg{{strings.Repeat(" ", rMax(w, 0)), ""}}
 	}
-	n := [4]int{c.Done, progressCount(c), c.Queued, c.Stuck + c.Failed}
+	n := [4]int{c.Done, progressCount(c), c.Queued, c.Stuck + c.Held + c.Failed}
 	chars := [4]string{"#", "+", ".", "!"}
 	sty := [4]string{stGreen, stCyan, stGray, stRed}
 	total := n[0] + n[1] + n[2] + n[3]
@@ -676,6 +679,9 @@ func titleLines(s Snapshot, width int, color bool) []string {
 		{fmt.Sprintf("완료 %d", t.Done), stGreen}, {"  ", ""},
 		{fmt.Sprintf("진행 %d", progressCount(t)), stCyan}, {"  ", ""},
 		{fmt.Sprintf("대기 %d", t.Queued), stGray}, {"  ", ""}, stuck, {"  ", ""}, fail}
+	if t.Held > 0 { // 늦은 READY 보류 — 있을 때만 (없으면 종전 화면 그대로)
+		l2 = append(l2, seg{"  ", ""}, seg{fmt.Sprintf("보류 %d", t.Held), stYellow})
+	}
 	var out []string
 	if strWidth(segsText(left))+2+strWidth(segsText(right)) <= width {
 		out = append(out, segLine(color, width, l1...))
@@ -820,7 +826,7 @@ func renderOverview(s Snapshot, sel selection, width, height int, color bool) st
 			ps := stCyan
 			if g.Complete {
 				ps = stGreen
-			} else if g.Counts.Stuck+g.Counts.Failed > 0 {
+			} else if g.Counts.Stuck+g.Counts.Held+g.Counts.Failed > 0 {
 				ps = stRed
 			}
 			tail = append(tail, seg{padL(fmt.Sprintf("%d%%", pct(g.Counts)), 5), ps})
@@ -901,6 +907,8 @@ func hostNoteText(h SnapHost, now int64) string {
 		p = append(p, "READY 대기")
 	case StageStuck:
 		p = append(p, "READY 안 됨")
+	case StageHeld:
+		p = append(p, "늦은 READY - 자동 설정 안 함")
 	}
 	if h.Stage.installPhase() && h.DownAt > 0 && now > h.DownAt {
 		p = append(p, "설치 "+fmtDur(now-h.DownAt))
@@ -1040,7 +1048,7 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 		cs = append(cs, seg{"호스트 없음", stGray})
 	}
 	if sel.Filter {
-		cs = append(cs, seg{"[필터: 정체·실패만]", stYellow})
+		cs = append(cs, seg{"[필터: 정체·보류·실패만]", stYellow})
 	}
 	head = append(head, wrapSegs(color, width, 2, " ", cs...)...)
 	head = append(head, sepLine(width))
@@ -1050,7 +1058,7 @@ func renderDetail(s Snapshot, sel selection, width, height int, color bool) stri
 	cursor := 0
 	if len(hosts) == 0 {
 		if sel.Filter {
-			body = [][]string{{" (정체·실패 호스트 없음)"}}
+			body = [][]string{{" (정체·보류·실패 호스트 없음)"}}
 		} else {
 			body = [][]string{{" (호스트 없음)"}}
 		}
@@ -1111,6 +1119,10 @@ func wrapLine(color bool, width int, segs ...seg) string {
 // manualLine: [c] OS 체크 수동 실행 — 완료 여부와 상관없이 활성(그룹 전체 시도, 접속불가는 wall 에 표시), 확인 중이면 y/n 질문.
 // 좁으면 여러 줄("\n")이 된다.
 func manualLine(sel selection, g *SnapGroup, width int, color bool) string {
+	if sel.Release {
+		return wrapLine(color, width, seg{fmt.Sprintf(" 보류 %d대를 해제 → LDAP 복원·'설정체크 + ", g.Counts.Held), stYellow},
+			seg{"설정수정", stRed}, seg{"' 자동 흐름으로 진행. 계속? [y/n]", stYellow})
+	}
 	if g.Yml == allView {
 		return wrapLine(color, width, seg{" 전체 보기 - 수동 실행(c)은 그룹별 화면에서 하세요 (a 로 돌아가 그룹 선택)", stGray})
 	}
@@ -1174,7 +1186,7 @@ func renderHelp(width, height int, color bool) string {
 		" 화면 2 (호스트표)",
 		"   ↑ ↓ (k j)   호스트 행 이동 (PgUp/PgDn 한 화면씩)",
 		"   ← / Esc / q 화면 1 로 복귀",
-		"   f           정체·실패 호스트만 보기 (토글)",
+		"   f           정체·보류·실패 호스트만 보기 (토글)",
 		" 항목별 메뉴 (v0.8.0) - 키 안내 줄 아래에 열리고 화면은 바뀌지 않습니다. 글자 또는 번호로 선택, Esc/q 로 메뉴만 닫기",
 		"   h           호스트 작업 메뉴 (화면 2 에서만) - 선택한 그룹에 대한 작업. 전체 보기에서는 g·d 만",
 		"               c (1) 체크+수정 - 설정체크 + 설정수정 (환경설정을 수정함). 완료 여부와 상관없이 그룹 전체 시도, y/n 확인",
@@ -1183,6 +1195,7 @@ func renderHelp(width, height int, color bool) string {
 		"               g (3) 재확인 - 서버 상태 수동 재확인. 완료 제외 모든 호스트를 os8 → 안 되면 os6_mgmt → 둘 다 안 되면 접속불가. 진행 과정·실패 지점·최종 결과가 화면에 실시간 표시",
 		"               d (4) 수동 완료 - 안내 줄 아래에서 1 이 호스트 / 2 그룹 미완료 전체 선택 → y 확인. 부팅 시각 검증 없이 완료로 인정, 체크스크립트는 실행 안 함 (CLI: auto_setup done)",
 		"               v (5) 결과 - 이 그룹의 가장 최근 수동 실행 결과 보기",
+		"               u (6) 보류 해제 - 보류 호스트가 있을 때만 보임. 늦은 READY 로 보류된 호스트(전체 보기면 job 전체)를 y 확인 후 자동 흐름(LDAP 복원·설정체크+설정수정)으로 되돌림 (CLI: auto_setup request release)",
 		"               * 배포 → 완료까지의 자동 흐름은 항상 '설정체크 + 설정수정' 입니다 (설정체크만은 수동 t 로만)",
 		"   w           AWX 메뉴 (화면 1·2 어디서나)",
 		"               1 AWX 실행 - w / Enter / 1 중 아무 키 (그래서 ww 가 예전의 w). (auto 여부·프로파일) → user → 작업 대상 서버 목록(Ctrl+D) → awx_dir 의 01 을 이 터미널에서 실행 (취소: Ctrl+X 즉시)",

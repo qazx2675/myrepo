@@ -64,6 +64,10 @@ func (st *tuiState) openMenu(open rune) {
 	case 'h':
 		if st.sel.Detail {
 			st.menu = hostMenu(st.sel.Yml == allView)
+			// 늦은 READY 보류 호스트가 있을 때만 u(보류 해제)를 붙인다 — 없으면 메뉴는 종전과 같다
+			if _, g := findGroup(st.snap, st.sel.JobID, st.sel.Yml); g != nil && g.Counts.Held > 0 {
+				st.menu.Items = append(st.menu.Items, hostKey('u', '6', "보류 해제"))
+			}
 		}
 	case 'w':
 		st.menu = awxMenu()
