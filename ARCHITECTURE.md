@@ -192,13 +192,14 @@
 | 체크중 / 2차체크 | `checking` / `second` | os_check run / 2차 체크 진행 중 |
 | 완료 | `done` | processed (run / 완료기록 / 수동) |
 | 정체 | `stuck` | seen_down 후 `installStuck`(60분)을 넘겨도 READY 안 됨 (`effectiveStage`, 데몬이 없어도 계산) |
+| 보류 | `held` | READY 시점에 now − down_at(0 이면 job 전달 시각) > `stuck_hold_hours`(conf, 기본 24시간, 0=끔) → `host.hold`·`hold_at` 저장(재기동 유지). `held()` 호스트는 `ldapApply`·`schedule`(1차 대기·1차 목록·늦은 묶음)·`finishRun` 의 늦은 묶음 기준에서 빠지고 FirstReady/LateFirstReady 도 잡지 않는다. 보류 중 재부팅 뒤 다시 READY 여도 유지. 해제 = `release` 요청(`releaseHold`: 실행 중 run·os6Hold 호스트 제외, hold 지움·down_at=지금·ReadyAt=0·forceCheck → 같은 step 준비확인의 `applyCheck` 가 종전 READY 흐름) / 수동 run(`startManual` 이 설정수정 모드면 `ldapApplyNow` 먼저)·수동 완료(processed). 미처리라 `closeFinished` 는 job 을 닫지 않음 |
 | 실패 | `failed` | os_check 비정상 종료 연속 `maxFails`(3)회 |
 
 `snapshot` JSON 은 같은 디렉터리 내용 + 같은 시각이면 같은 바이트(정렬·시각 형식 고정). 로컬 실행과 원격 클라이언트 출력이 같음을 E2E(a)가 검증한다.
 
 ### 요청 채널 (requests.go)
 
-`writeRequest()` 가 `requests/<epoch>_<kind>.req`(key=value 줄)를 임시파일 → link 로 원자 기록 → 데몬이 `collectRequests()` 로 수거. `manual-run` 은 완료 여부와 상관없이 수락(접속불가는 wall 에 표시)(→ `requests/active/`, run 큐에서 `scheduleManual()` 이 자동 run 이 없을 때 실행), 거부는 `requests/rejected/<같은 이름>` + 마지막 `reason=` 줄. `cancel` 은 `auto_setup cancel` 과 동일.
+`writeRequest()` 가 `requests/<epoch>_<kind>.req`(key=value 줄)를 임시파일 → link 로 원자 기록 → 데몬이 `collectRequests()` 로 수거. `manual-run` 은 완료 여부와 상관없이 수락(접속불가는 wall 에 표시)(→ `requests/active/`, run 큐에서 `scheduleManual()` 이 자동 run 이 없을 때 실행), 거부는 `requests/rejected/<같은 이름>` + 마지막 `reason=` 줄. `cancel` 은 `auto_setup cancel` 과 동일. `release`(jobid, yml|`*`)는 늦은 READY 보류 해제(`releaseHold`, 보류 호스트가 없으면 거부) — TUI `h`→`u`, CLI·원격 중계 `request release`.
 
 ### 완료기록 (done.go ↔ os_check)
 

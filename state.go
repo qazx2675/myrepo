@@ -34,6 +34,11 @@ type Host struct {
 	Second  string     `json:"second,omitempty"`   // 2차 체크: "" | running | ok | fail
 	DoneSrc string     `json:"done_src,omitempty"` // 완료 출처: run | external | manual
 	NoPing  int64      `json:"no_ping,omitempty"`  // ping 정보 없음(Known=false)이 시작된 시각, 정보가 오면 0 — 비고 표시용
+
+	// 늦은 READY 보류 (conf stuck_hold_hours) — 설치 시작(down_at) 뒤 너무 오래 지나 READY 된 호스트는 LDAP 복원·자동 run 을 하지 않는다.
+	// h 메뉴 u(보류 해제)·수동 run(c)·수동 완료(d) 로만 풀린다. 재기동해도 유지되도록 저장. omitempty → 구버전 JSON 과 양방향 호환
+	Hold   string `json:"hold,omitempty"`    // 보류 사유 (예: "정체 72시간"), 비면 보류 아님
+	HoldAt int64  `json:"hold_at,omitempty"` // 보류 시각(epoch)
 }
 
 // LdapState: 호스트별 LDAP 백업·비교 상태. 비교 기준은 binddn 의 uid 값이며 bindpw·uid 값 자체는 저장·출력하지 않는다.

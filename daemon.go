@@ -411,6 +411,26 @@ func (d *Daemon) hrt(name string) *hostRT {
 
 func active(h *Host) bool { return h.Processed == "" && h.Fails < maxFails }
 
+// held: 늦은 READY 보류 중인 미처리 호스트 — LDAP 복원·자동 run(1차·늦은 묶음)에서 뺀다. 수동 run·수동 완료는 그대로 된다.
+func held(h *Host) bool { return h.Hold != "" && h.Processed == "" }
+
+// holdRef: 늦은 READY 보류 기준 시각 — down_at(설치 시작으로 본 첫 ping X, READY 뒤 재부팅이면 그 재부팅, 보류 해제 시각).
+// ping X 를 보지 못한 호스트(빠른 재부팅·ping 정보 없음 경로)는 down_at 이 0 이라 job 전달 시각을 쓴다 (안전 쪽)
+func holdRef(j *Job, h *Host) int64 {
+	if h.DownAt > 0 {
+		return h.DownAt
+	}
+	return j.Submitted
+}
+
+// holdHit: 지금(t) READY 가 되는 호스트를 보류할지 — stuck_hold_hours 가 켜져 있고 기준 시각(holdRef)에서 그 시간을 넘겼으면 true
+// (경계값은 보류 아님, 정체 판정과 같은 규칙)
+func holdHit(j *Job, h *Host, t int64) bool {
+	lim := stuckHold()
+	ref := holdRef(j, h)
+	return lim > 0 && ref > 0 && t-ref > secs(lim)
+}
+
 func jobFile(id string) string { return filepath.Join(jobsDir(), id+".json") }
 
 func secs(t time.Duration) int64 { return int64(t / time.Second) }
@@ -631,8 +651,16 @@ func (d *Daemon) ldapBackup() {
 	}
 }
 
-// ldapApply: READY 직후 LDAP 비교·적용 (os_check run 전). stage=ldap 를 저장해 두고 호출.
+// ldapApply: READY 직후 LDAP 비교·적용 (os_check run 전). stage=ldap 를 저장해 두고 호출. 늦은 READY 보류 호스트는 하지 않는다.
 func (d *Daemon) ldapApply(j *Job, name string, t int64) {
+	if held(j.Hosts[name]) {
+		return
+	}
+	d.ldapApplyNow(j, name, t)
+}
+
+// ldapApplyNow: ldapApply 의 본체 (보류 여부와 무관) — 보류 호스트의 수동 run(h→c) 직전에도 쓴다 (startManual)
+func (d *Daemon) ldapApplyNow(j *Job, name string, t int64) {
 	h := j.Hosts[name]
 	if !d.ldapOn() || h.Ldap == nil || h.Ldap.Backup != LdapBackupOK || h.Ldap.Bindpw != "" {
 		return
@@ -1004,6 +1032,18 @@ func (d *Daemon) applyCheck(j *Job, name string, cr CheckResult, t int64) {
 	h.ReadyAt = t
 	d.dirty[j.ID] = true
 	logf("READY: %s (job %s, uptime %.0fs)", name, j.ID, cr.Uptime)
+	// 늦은 READY 보류: 며칠 정체되다 갑자기 켜진 서버에 설정이 자동으로 들어가지 않게 LDAP 복원·자동 run 을 하지 않는다.
+	// 이미 보류 중인 호스트(보류 중 재부팅 → 다시 READY)는 down_at 이 새로 잡혔어도 보류를 유지한다 (해제는 h→u·수동 run·수동 완료)
+	if h.Hold == "" && holdHit(j, h, t) {
+		h.Hold = fmt.Sprintf("정체 %d시간", (t-holdRef(j, h))/3600)
+		h.HoldAt = t
+		logf("늦은 READY 보류: %s (%s, 기준 stuck_hold_hours=%d, job %s) — h 메뉴에서 해제 또는 h→c 수동 실행",
+			name, h.Hold, int64(stuckHold()/time.Hour), j.ID)
+	}
+	if held(h) { // 1차 기준(FirstReady)·늦은 묶음 기준(LateFirstReady)도 잡지 않는다 — 다른 호스트의 대기 시간이 이 호스트로 당겨지지 않게
+		d.setStage(j, name, StageReady, t)
+		return
+	}
 	if !j.FirstRunDone {
 		if j.FirstReady == 0 {
 			j.FirstReady = t
@@ -1063,7 +1103,7 @@ func (d *Daemon) schedule(now time.Time) {
 		pending := 0
 		var ready []string
 		for name, h := range j.Hosts {
-			if !active(h) || busy[name] != nil || d.os6Hold[name] != "" {
+			if !active(h) || held(h) || busy[name] != nil || d.os6Hold[name] != "" { // 늦은 READY 보류 호스트는 1차 대기 대상에서도 뺀다
 				continue
 			}
 			pending++
@@ -1086,7 +1126,7 @@ func (d *Daemon) schedule(now time.Time) {
 			}
 			all := make([]string, 0, len(j.Hosts))
 			for name, h := range j.Hosts {
-				if h.Processed == "" && busy[name] == nil && d.os6Hold[name] == "" { // 완료기록으로 이미 처리된 호스트·다른 run·os6 직접 실행의 호스트는 제외
+				if h.Processed == "" && !held(h) && busy[name] == nil && d.os6Hold[name] == "" { // 완료기록으로 이미 처리된 호스트·늦은 READY 보류·다른 run·os6 직접 실행의 호스트는 제외
 					all = append(all, name)
 				}
 			}
@@ -1252,7 +1292,7 @@ func (d *Daemon) finishRun(r runDone, now time.Time) {
 		var late int64
 		busy := d.busyHosts()
 		for name, h := range j.Hosts {
-			if !active(h) || h.ReadyAt == 0 || busy[name] != nil {
+			if !active(h) || held(h) || h.ReadyAt == 0 || busy[name] != nil {
 				continue
 			}
 			t := h.ReadyAt
