@@ -1,6 +1,7 @@
 #!/bin/bash
 # install_mn.sh - install_mn 실행 래퍼 (OS 설치 진행 모니터링 TUI)
-# 사용법: install_mn.sh [-c <설정파일>] <호스트파일>
+# 사용법: install_mn.sh [-c <설정파일>] <호스트파일>      수집을 백그라운드로 돌리고 화면을 붙인다(12시간 뒤 자동 종료)
+#         install_mn.sh --status [<호스트파일>] / --stop <호스트파일> / -f <호스트파일>(백그라운드 없이)
 # 같은 폴더의 install_mn_os8 을 실행한다. 없으면 go 가 있을 때 build.sh 로 만든다.
 # /usr/local/bin/install_mn 으로 심볼릭 링크해서 써도 된다.
 

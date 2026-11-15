@@ -118,6 +118,7 @@ const (
 	actQuit          // 종료
 	actCheck         // c 패널을 열었다: 완료 서버 ping 확인을 시작해야 한다
 	actReport        // d·l 패널을 열었다: 조회를 시작해야 한다(ViewState.reportReq 가 패널)
+	actStop          // Q 확인(y)을 받았다: 수집까지 완전히 끝내야 한다(백그라운드 수집일 때만)
 )
 
 // scrollTarget 은 지금 스크롤되는 대상(열린 패널 또는 표)의 위치·전체 줄 수·한 쪽 줄 수다.
@@ -164,6 +165,13 @@ func (v *ViewState) handleKey(k Key, snap Snapshot) action {
 	if k.Kind == kEOF || (k.Kind == kRune && k.R == runeCtrlC) {
 		return actQuit
 	}
+	if v.ConfirmStop { // Q 다음 키: y 만 종료, 나머지는 취소
+		v.ConfirmStop = false
+		if k.Kind == kRune && (k.R == 'y' || k.R == 'Y') {
+			return actStop
+		}
+		return actNone
+	}
 	if v.Searching {
 		v.searchKey(k)
 		return actNone
@@ -181,6 +189,8 @@ func (v *ViewState) handleKey(k Key, snap Snapshot) action {
 
 func (v *ViewState) runeKey(r rune) action {
 	switch {
+	case r == 'Q' && v.Detach: // 백그라운드 수집을 끝낸다(한 번 더 확인)
+		v.ConfirmStop = true
 	case r == 'q':
 		if v.Panel != 0 { // 패널에서는 뒤로가기(기본 화면), 기본 화면에서는 종료
 			v.Panel = 0
@@ -314,6 +324,16 @@ func realTUIEnv(in, out *os.File) (tuiEnv, func()) {
 	return env, cleanup
 }
 
+// stopper 는 백그라운드 수집을 끝낼 수 있는 source 다(*remoteSource). 이 source 는 화면을 닫아도 수집이 계속된다.
+type stopper interface {
+	Stop() error
+}
+
+// expirer 는 수집의 자동 종료 시각을 아는 source 다(*remoteSource).
+type expirer interface {
+	Expires() time.Time
+}
+
 // source 는 TUI 가 쓰는 수집기 쪽 동작이다(*Collector 가 구현한다).
 type source interface {
 	Snapshot() *Snapshot
@@ -400,6 +420,10 @@ func runTUILoop(src source, env tuiEnv, warning string, panelText func(kind rune
 	}()
 
 	v := &ViewState{Warning: warning, Color: env.Color, PanelText: panelText}
+	_, v.Detach = src.(stopper)
+	if e, ok := src.(expirer); ok {
+		v.Expires = e.Expires()
+	}
 	snap := *src.Snapshot()
 	checkDone := make(chan error, 1)
 	reportCh := make(chan reportRes, 2) // d·l 조회 결과(패널마다 하나씩만 진행)
@@ -435,6 +459,11 @@ func runTUILoop(src source, env tuiEnv, warning string, panelText func(kind rune
 			handle := func(k Key) bool {
 				switch v.handleKey(k, snap) {
 				case actQuit:
+					return true
+				case actStop:
+					if st, ok := src.(stopper); ok {
+						st.Stop()
+					}
 					return true
 				case actCheck:
 					go func() {
@@ -484,4 +513,49 @@ func runTUILoop(src source, env tuiEnv, warning string, panelText func(kind rune
 		}
 		draw(force)
 	}
+}
+
+// runTUIRemote 는 백그라운드 수집에 화면을 붙인다. 화면을 닫아도(q, Ctrl+C, 연결 끊김) 수집은 계속된다.
+// 수집이 12시간이 지나 끝나거나 다른 곳에서 --stop 하면 화면도 닫힌다.
+func runTUIRemote(rs *remoteSource, cfg *Config, notice, hostfile string) int {
+	in, out := os.Stdin, os.Stdout
+	env, cleanup := realTUIEnv(in, out)
+	defer cleanup()
+	merged := make(chan os.Signal, 2) // 종료 신호 + 수집 쪽 연결 끊김
+	sigs := env.Signals               // env.Signals 를 바꾸기 전에 원래 채널을 잡아 둔다
+	go func() {
+		for {
+			select {
+			case s := <-sigs:
+				select {
+				case merged <- s:
+				default:
+				}
+			case <-rs.Gone():
+				merged <- syscall.SIGTERM
+				return
+			}
+		}
+	}()
+	env.Signals = merged
+	warn := cfg.Warning
+	if notice != "" {
+		if warn != "" {
+			warn += " / "
+		}
+		warn += notice
+	}
+	code := runTUILoop(rs, env, warn, nil)
+	rs.conn.Close()
+	switch {
+	case rs.WasStopped():
+		fmt.Println("수집을 종료했습니다. (상태 기록은 유지됩니다)")
+	case rs.isGone():
+		fmt.Println("수집이 끝나 화면을 닫았습니다(12시간이 지났거나 다른 곳에서 중지함). 다시 시작: install_mn", hostfile)
+	default:
+		fmt.Printf("화면만 닫았습니다. 수집은 백그라운드에서 계속됩니다. (자동 종료 %s, 남은 %s)\n",
+			rs.Expires().Format("01-02 15:04"), fmtDur(time.Until(rs.Expires())))
+		fmt.Println("  다시 보기: install_mn", hostfile, "  /  수집 끝내기: install_mn --stop", hostfile)
+	}
+	return code
 }

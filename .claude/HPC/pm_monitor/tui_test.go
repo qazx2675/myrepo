@@ -747,3 +747,57 @@ func TestLoopReportPanels(t *testing.T) {
 		t.Fatalf("조회 %d 번", c)
 	}
 }
+
+// 백그라운드 수집에 붙은 화면: q 는 화면만 나가기, Q 는 확인 뒤 수집 종료, 머리줄에 자동 종료 시각.
+func TestDetachKeys(t *testing.T) {
+	snap := tuiSnap()
+	v := newTestView(120, 24)
+	v.Detach = true
+	if press(v, snap, "q") != actQuit {
+		t.Fatal("q 로 화면 나가기 안 됨")
+	}
+	if got := press(v, snap, "Q"); got != actNone || !v.ConfirmStop {
+		t.Fatalf("Q 는 확인을 기다려야 함: act=%v confirm=%v", got, v.ConfirmStop)
+	}
+	if !strings.Contains(strings.Join(v.footerLines(120), "\n"), "y 종료") {
+		t.Fatal("확인 안내가 푸터에 없음")
+	}
+	if press(v, snap, "n") != actNone || v.ConfirmStop {
+		t.Fatal("y 가 아닌 키는 취소여야 함")
+	}
+	press(v, snap, "Q")
+	if press(v, snap, "y") != actStop {
+		t.Fatal("Q 다음 y 로 수집 종료 안 됨")
+	}
+	press(v, snap, "Q")
+	if press(v, snap, "\x03") != actQuit {
+		t.Fatal("확인 중 Ctrl+C 는 화면 나가기여야 함")
+	}
+	foot := strings.Join(newDetachView().footerLines(120), "\n")
+	if !strings.Contains(foot, "q 나가기(수집 계속)") || !strings.Contains(foot, "Q 수집 종료") {
+		t.Fatalf("푸터 안내 없음: %q", foot)
+	}
+	// 포그라운드(-f) 화면에서는 Q 가 아무것도 하지 않고 푸터도 그대로다
+	fg := newTestView(120, 24)
+	if press(fg, snap, "Q") != actNone || fg.ConfirmStop {
+		t.Fatal("포그라운드에서 Q 가 동작함")
+	}
+	if strings.Contains(strings.Join(fg.footerLines(120), "\n"), "수집 계속") {
+		t.Fatal("포그라운드 푸터에 백그라운드 안내가 보임")
+	}
+	// 머리줄: 자동 종료 시각은 붙은 화면에만
+	v2 := newDetachView()
+	v2.Expires = time.Date(2026, 11, 15, 23, 5, 0, 0, time.Local)
+	if !strings.Contains(strings.Join(v2.headerLines(snap, 120), "\n"), "자동 종료 23:05") {
+		t.Fatal("머리줄에 자동 종료 시각이 없음")
+	}
+	if strings.Contains(strings.Join(fg.headerLines(snap, 120), "\n"), "자동 종료") {
+		t.Fatal("포그라운드 머리줄에 자동 종료가 보임")
+	}
+}
+
+func newDetachView() *ViewState {
+	v := newTestView(120, 24)
+	v.Detach = true
+	return v
+}

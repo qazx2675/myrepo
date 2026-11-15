@@ -43,8 +43,18 @@ vi hosts.txt
 # 인자 없이 실행하면 사용법을 출력하고 종료 코드 2
 bash install_mn.sh
 
-# 실행 (root)
+# 실행 (root). 수집은 백그라운드로 돌고 화면이 붙는다. 이미 돌고 있으면 이어서 붙는다
 bash install_mn.sh hosts.txt
+
+# 실행 중인 수집 보기 (호스트파일을 빼면 서버 전체). 자동 종료 시각·남은 시간도 나온다
+bash install_mn.sh --status
+bash install_mn.sh --status hosts.txt
+
+# 수집 끝내기 (화면에서 Q 후 y 와 같다). 상태 파일은 남는다
+bash install_mn.sh --stop hosts.txt
+
+# 백그라운드 없이 화면과 함께 실행(디버깅용, 화면을 닫으면 수집도 끝)
+bash install_mn.sh -f hosts.txt
 
 # 다른 설정 파일 지정
 bash install_mn.sh -c /경로/pm_monitor.conf hosts.txt
@@ -63,8 +73,10 @@ install_mn hosts.txt
 # r  : 지연 서버 벤더별 점검요청 코멘트
 # d  : DHCP 조회 (dhcp_server 설정 필요)
 # l  : 완료 서버 LDAP·DNS·NTP·autofs·H/T 점검 (ldap_check_sh 설정 필요)
-# q : 패널에서는 뒤로(기본 화면), 기본 화면에서는 종료
-# Ctrl+C : 어디서든 바로 종료
+# q : 패널에서는 뒤로(기본 화면), 기본 화면에서는 화면만 나가기 (수집은 계속)
+# Q : 수집까지 종료 (확인 문구에서 y)
+# Ctrl+C : 어디서든 화면만 나가기 (ssh 연결이 끊겨도 같다)
+# 수집은 시작 12시간 뒤 스스로 끝난다 (시작 시각 기준, 다시 붙어도 연장 안 됨)
 
 # ===== 5. 상태 파일 =====
 

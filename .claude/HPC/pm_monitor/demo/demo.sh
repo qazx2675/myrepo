@@ -13,7 +13,7 @@
 #   1. /tmp/pm_demo 에 가짜 gossh·ssh, 설정 파일, 호스트 파일(26대)을 만든다.
 #   2. /etc/hosts 에 데모 호스트 이름을 잠깐 넣는다(127.77.x = ping O, 192.0.2.x = ping X).
 #   3. 시나리오를 백그라운드로 돌려 시간에 따라 상태를 바꾼다(설치완료·지연·완료후꺼짐·재부팅됨).
-#   4. install_mn 을 실행한다. 종료(q)하면 /etc/hosts·lo 주소·임시 폴더를 모두 원래대로 되돌린다.
+#   4. install_mn 을 실행한다. 데모를 끝내면 백그라운드 수집을 멈추고 /etc/hosts·lo 주소·임시 폴더를 모두 원래대로 되돌린다.
 set -u
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -82,6 +82,7 @@ fi
 SCEN_PID=""
 cleanup() {
   [ -n "$SCEN_PID" ] && kill "$SCEN_PID" 2>/dev/null
+  [ -d "$WORK" ] && [ -x "$BIN" ] && (cd "$WORK" && "$BIN" --stop hosts.txt >/dev/null 2>&1)   # 백그라운드 수집이 남지 않게
   sed -i "/^$MARK_BEGIN\$/,/^$MARK_END\$/d" /etc/hosts
   ip addr del "$OFF_IP/32" dev lo 2>/dev/null
   rm -rf "$WORK"
@@ -259,16 +260,31 @@ cat <<EOF
    c  설치현황 코멘트      r  지연 서버 점검요청 코멘트
    d  DHCP 조회(ping X)    l  LDAP·H/T 점검(완료 서버, FAIL·OFF·DNS·autofs 다름 예시 포함. 27대: p002 FAIL·d001 OFF)
    /  hostname 검색        1~7 상태 필터, 0 해제
-   ↑↓ PgUp PgDn 스크롤     같은 키를 다시 누르면 닫힘, q 종료
+   ↑↓ PgUp PgDn 스크롤     같은 키를 다시 누르면 닫힘
 
- 종료하면 /etc/hosts, lo 주소, $WORK 를 원래대로 되돌립니다.
+ 백그라운드 수집 (v0.3.0)
+   q  화면만 나가기 - 수집은 계속됩니다. 아래에서 Enter 로 다시 붙으면 이어서 보입니다.
+   Q  수집까지 종료(확인에서 y)
+   수집은 시작 12시간 뒤 스스로 끝납니다(데모는 안전하게 1시간으로 줄여 둠).
+
+ 끝내면 /etc/hosts, lo 주소, $WORK 를 원래대로 되돌립니다.
 EOF
 if [ "$YES" = "0" ]; then
   printf '\n Enter 를 누르면 시작합니다...'
   read -r _
 fi
 
+export PM_MAX_RUN_SEC=3600          # 데모 수집 데몬은 최대 1시간(남았을 때를 대비한 안전장치)
 cd "$WORK" && "$BIN" hosts.txt
 rc=$?
+# q 로 화면만 나가면 수집은 계속된다: Enter 로 다시 붙거나 e 로 데모를 끝낸다(-y 이면 바로 끝냄)
+while [ "$YES" = "0" ] && "$BIN" --status hosts.txt 2>/dev/null | grep -q "pid "; do
+  printf '\n 수집이 백그라운드에서 계속 돌고 있습니다. Enter = 다시 붙기, e = 수집 종료하고 데모 정리: '
+  read -r ans
+  [ "$ans" = "e" ] && break
+  "$BIN" hosts.txt
+  rc=$?
+done
+"$BIN" --stop hosts.txt >/dev/null 2>&1
 echo "데모 종료 (종료 코드 $rc). 정리했습니다."
 exit $rc
