@@ -19,6 +19,7 @@ package main
 //	      compareRef{Hosts: []string{"host"}}  비교서버 hostname — 대상 목록에 있으면 그 스냅샷을 쓰고, 없으면 그 서버만 1회 조회
 //	      compareRef{JSONPath: "refs/x.json"}  bios_export / allcheck -export-attrs 로 저장한 속성 JSON
 //	      compareRef{DiffFile: "diff.txt"}     모델별 기준 목록 (allcheck 와 같은 선택 규칙)
+//	      compareRef{Auto: true}               대표서버 자동 지정 — 읽은 스냅샷에서 태그·모델 묶음마다 1대 (autoref.go, 접속 없음)
 //	    같은 모델(벤더|normalizeModel)끼리만 비교, BIOS 버전이 달라도 비교하고 BIOS_VER_DIFF 특이사항(allHost.Notes).
 //	    제외 = ignore_attrs.txt(없으면 내장 기본 목록) ∪ bios.conf exclude_attrs (unifiedRun.Ignore).
 //	(*unifiedRun).CompareCancel(ref, st, cancel)       Compare + 취소 (cancel 이 닫히면 남은 비교서버는 조회 안 함 → 대상 REF_CANCELED)
@@ -90,7 +91,7 @@ func runUnified(rc *runContext, o unifiedOpts) (*unifiedRun, error) {
 		ign = newIgnoreSet(defaultIgnore, "내장 기본 목록")
 	}
 	u := &unifiedRun{
-		Snaps: make([]*biosSnap, len(rc.Targets)), Ignore: mergeExclude(ign, rc.Conf.ExcludeAttrs),
+		Snaps: make([]*biosSnap, len(rc.Targets)), Ignore: withUnique(mergeExclude(ign, rc.Conf.ExcludeAttrs)),
 		rc: rc, hostsPath: o.HostsPath, fromDump: o.FromDump,
 	}
 	o.Collect.start(len(rc.Targets))
@@ -179,11 +180,15 @@ type compareRef struct {
 	Hosts    []string // 비교서버 hostname (여러 대면 모델별로 맞는 것을 고름)
 	JSONPath string   // 기준 속성 JSON 파일
 	DiffFile string   // diff.txt (모델별 기준 hostname 목록)
+	// Auto 는 대표서버 자동 지정입니다: 이미 읽은 스냅샷에서 묶음(태그+모델)마다 1대를 골라 기준으로 씁니다 (autoref.go, 접속 없음).
+	Auto bool
+	// AutoPick 은 Auto 일 때 사람이 직접 고른 대표입니다 (묶음 ID → 호스트 targetID). 기준 종류를 세지 않는 보조 값.
+	AutoPick map[string]string
 }
 
 func (r compareRef) count() int {
 	n := 0
-	for _, set := range []bool{len(r.Hosts) > 0, r.JSONPath != "", r.DiffFile != ""} {
+	for _, set := range []bool{len(r.Hosts) > 0, r.JSONPath != "", r.DiffFile != "", r.Auto} {
 		if set {
 			n++
 		}
@@ -205,6 +210,8 @@ type compareResult struct {
 	TagMode bool
 	// RefCanceled 는 취소(Ctrl+X)로 조회하지 않은 비교서버 수입니다. 그 기준이 필요한 대상은 REF_CANCELED (N/A, 설정 제외).
 	RefCanceled int
+	// Auto 는 대표서버 자동 지정(compareRef.Auto)으로 비교했을 때의 묶음·대표 선정 결과입니다 (아니면 nil).
+	Auto *autoPlan
 }
 
 // sameAttrNames 는 단계 7 설정 관문입니다: 같은 모델의 기준과 비교했고(SAME/DIFF) 제외 속성을 뺀 속성 이름 목록이
@@ -222,7 +229,7 @@ func (u *unifiedRun) Compare(ref compareRef, st progStage) (*compareResult, erro
 // CompareCancel 은 Compare 에 취소를 더한 것입니다 (TUI Ctrl+X). cancel 이 닫히면 아직 시작하지 않은 비교서버는 접속하지
 // 않고(CANCELED), 그 기준이 필요한 대상은 REF_CANCELED 로 남긴 채 나머지는 그대로 비교합니다. nil 이면 취소 없음.
 func (u *unifiedRun) CompareCancel(ref compareRef, st progStage, cancel <-chan struct{}) (*compareResult, error) {
-	refs, label, err := u.compareRefs(ref, st, cancel)
+	refs, label, auto, err := u.compareRefs(ref, st, cancel)
 	if err != nil {
 		return nil, err
 	}
@@ -230,11 +237,14 @@ func (u *unifiedRun) CompareCancel(ref compareRef, st progStage, cancel <-chan s
 	// 태그를 따지지 않는다 (JSON 에는 태그가 없고, 태그 있는 대상도 그 기준과 비교할 수 있어야 하므로).
 	tagMode := u.tagMode() && ref.JSONPath == ""
 	env := &allEnv{ign: u.Ignore, refByID: map[string]*allRef{}, byKey: map[string][]*allRef{}, tagMode: tagMode, refLabel: refLabelFor(len(ref.Hosts) > 0)}
+	if ref.Auto {
+		env.refLabel = "대표서버 자동"
+	}
 	for _, r := range refs {
 		env.refByID[r.ID] = r
 	}
 	env.indexRefs(refs)
-	res := &compareResult{Ref: ref, Label: label, Ignore: u.Ignore, Refs: refs, TagMode: tagMode}
+	res := &compareResult{Ref: ref, Label: label, Ignore: u.Ignore, Refs: refs, TagMode: tagMode, Auto: auto}
 	for _, r := range refs {
 		if r.Snap != nil && r.Snap.Status == StatusCanceled {
 			res.RefCanceled++
@@ -262,17 +272,26 @@ func (u *unifiedRun) tagMode() bool {
 }
 
 // compareRefs 는 기준을 준비합니다: JSON 은 파일에서, 비교서버·diff.txt 는 대상 스냅샷을 재사용하거나 새로 읽습니다.
-func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan struct{}) ([]*allRef, string, error) {
+// 대표서버 자동(ref.Auto)은 이미 읽은 스냅샷에서 묶음마다 1대를 골라 기준을 직접 만들고 (접속 없음) 선정 결과(*autoPlan)도 돌려줍니다.
+func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan struct{}) ([]*allRef, string, *autoPlan, error) {
 	if ref.count() != 1 {
-		return nil, "", fmt.Errorf("전체비교 기준은 비교서버(-ref)·기준 JSON(-ref-json)·diff.txt(-diff) 중 하나만 지정하십시오")
+		return nil, "", nil, fmt.Errorf("전체비교 기준은 비교서버(-ref)·기준 JSON(-ref-json)·diff.txt(-diff) 중 하나만 지정하십시오")
+	}
+	if ref.Auto {
+		p := u.autoPlanFor(ref.AutoPick)
+		if len(p.Bundles) == 0 {
+			return nil, "", nil, fmt.Errorf("대표서버를 고를 수 있는 서버가 없습니다 (읽기에 성공한 Redfish 대상이 없음)")
+		}
+		st.start(0)
+		return p.autoRefs(), fmt.Sprintf("대표서버 자동 (%d대)", len(p.Bundles)), p, nil
 	}
 	if ref.JSONPath != "" {
 		r, err := refFromJSON(ref.JSONPath)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		st.start(0)
-		return []*allRef{r}, "refs JSON " + filepath.Base(ref.JSONPath), nil
+		return []*allRef{r}, "refs JSON " + filepath.Base(ref.JSONPath), nil, nil
 	}
 	var entries []refEntry
 	var label string
@@ -285,10 +304,10 @@ func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan str
 		}
 		var perr error
 		if entries, perr = parseRefList(rep.Replace(strings.Join(ref.Hosts, "\n"))); perr != nil {
-			return nil, "", perr
+			return nil, "", nil, perr
 		}
 		if len(entries) == 0 {
-			return nil, "", fmt.Errorf("비교서버 hostname 이 없습니다")
+			return nil, "", nil, fmt.Errorf("비교서버 hostname 이 없습니다")
 		}
 		names := make([]string, len(entries))
 		for i, e := range entries {
@@ -298,16 +317,16 @@ func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan str
 	} else {
 		var err error
 		if entries, err = loadRefList(ref.DiffFile); err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		label = ref.DiffFile
 	}
 	if err := refTagCheck(entries, u.tagMode()); err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	refs, err := newAllRefs(entries, u.hostsPath)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	// 대상 목록에 있는 기준은 이미 읽은 스냅샷을 쓴다 (같은 BMC 에 다시 로그인하지 않음).
 	byID := map[string]*biosSnap{}
@@ -326,14 +345,14 @@ func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan str
 	}
 	st.start(len(todo))
 	if len(todo) == 0 {
-		return refs, label, nil
+		return refs, label, nil, nil
 	}
 	env := &allEnv{conf: u.rc.Conf, password: u.rc.Password, fallback: u.rc.Fallback, offline: u.fromDump != "", cancel: cancel}
 	authStop := u.rc.Conf.AuthFailStop
 	if env.offline {
 		authStop = 0 // 덤프 읽기는 BMC 에 로그인하지 않는다
 		if env.dumps, err = indexDumpHosts(u.fromDump); err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 	}
 	ts := make([]Target, len(todo))
@@ -351,7 +370,7 @@ func (u *unifiedRun) compareRefs(ref compareRef, st progStage, cancel <-chan str
 			st.add(progTagErr)
 		}
 	})
-	return refs, label, nil
+	return refs, label, nil, nil
 }
 
 // ---- 기준 속성 JSON (refs/) ----

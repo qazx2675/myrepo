@@ -7,6 +7,7 @@
 //	biostool allcheck [-diff diff.txt] [-ignore ignore_attrs.txt] [-conf bios.conf] [-user user.txt] [-from-dump 디렉터리] [-list-max N] [-diff-max N] [-hosts /etc/hosts] [-retry-from 이전결과폴더]
 //	biostool bios    -profile VM [-ref 호스트 | -ref-json refs/x.json | -diff diff.txt] [-ignore ignore_attrs.txt] [-plain] [공통 옵션]
 //	biostool bios    -auto-check|-auto <user> <targets.txt> [-profile VM] [공통 옵션]
+//	biostool profile add -profile VM (-tag 태그 | -model "벤더/모델") -set "속성=값" [-set ...] [-user user.txt] [-force] [-dry-run]
 //	biostool dump    [-targets 대상,대상...] [-conf bios.conf] [-user user.txt] [-hosts /etc/hosts] [-out dumps] [-compact]
 //	printf '%s' "$pw" | biostool encrypt [-key key.bin] [-out pass.enc]
 //	biostool encrypt -rf <벤더> [-key key.bin] [-out rf.enc]
@@ -44,6 +45,8 @@ const usageText = `사용법:
   biostool encrypt [-key key.bin] [-out pass.enc]  표준입력의 비밀번호를 암호화
   biostool encrypt -rf <벤더> [-key key.bin] [-out rf.enc]  2순위 계정 비밀번호를 rf.enc 의 그 벤더 항목에만 저장 (bash encrypt.sh rf)
   biostool account create|change [옵션]          1순위 계정 생성 / 비밀번호 변경 (biostool account -h)
+  biostool profile add -profile <이름> (-tag <태그> | -model "벤더/모델") -set "속성=값" [-set "std_name:속성=값" ...] [-force] [-dry-run]
+                                                 프로파일에 태그·모델별 설정 행 추가 (verified 는 항상 N, 충돌은 -force 없으면 중단, -tag 는 읽기 전용 1회 접속)
   biostool trs     [-targets 대상,...] [-path 경로,...] [공통 옵션]  BMC 접속 장애(403 등) 단계별 진단 (읽기 전용, 인증 시도 최소)
   biostool trs-cisco [-targets 대상,...] [-path 경로,...] [공통 옵션]  Cisco(UCSX 등) UNSUPPORTED·XML 실패 원인 진단 (Redfish Bios 구조 + XML API, 읽기 전용)
 
@@ -89,6 +92,8 @@ func main() {
 		err = cmdUcsm(os.Args[2:])
 	case "account":
 		err = cmdAccount(os.Args[2:])
+	case "profile":
+		err = cmdProfile(os.Args[2:])
 	case "trs":
 		err = cmdTrs(os.Args[2:])
 	case "trs-cisco":

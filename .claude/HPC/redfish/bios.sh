@@ -8,7 +8,7 @@
 #   bash bios.sh -plain -profile VM -ref <비교서버> # 평문 + 비교서버와 BIOS 전체 값 비교
 #   bash bios.sh -auto-check <user> targets.txt   # 비대화형 점검 → 호출한 폴더에 check.res_<user>
 #   bash bios.sh -auto       <user> targets.txt   # 위와 같음 + check.res_<user>_postapply (auto_setup 용)
-#   bash bios.sh <명령> [옵션...]                 # 기능별 명령 (account, passwd, trs, dump, export, ucsm, check, allcheck, encrypt, update)
+#   bash bios.sh <명령> [옵션...]                 # 기능별 명령 (account, passwd, profile, trs, dump, export, ucsm, check, allcheck, encrypt, update)
 #
 # 하는 일: 스크립트 위치로 이동 → OS 에 맞는 바이너리 선택(없으면 빌드 시도) → 필요한 파일 확인 →
 #          bin/biostool bios 실행. 재부팅은 하지 않으며, 설정(TUI 에서만)은 BMC 의 Pending 까지만 합니다.
@@ -41,6 +41,16 @@ if [ "${1:-}" = "passwd" ]; then
   select_bin || exit 2
   echo "※ 이 도구는 참고용(보조 도구)입니다. 비밀번호를 바꾼 뒤에는 랜덤한 서버 몇 대를 직접 골라 실제로 로그인되는지 확인하십시오."
   exec "$BIN" account change "$@"
+fi
+
+# profile: 래퍼 없이 바이너리를 바로 쓴다 (bash bios.sh profile add ... → biostool profile add ...).
+# -conf -user -hosts -from-dump 의 상대경로는 호출한 폴더에 있으면 그 기준으로 바꿔 넘긴다 (lib.sh fix_path_args).
+if [ "${1:-}" = "profile" ]; then
+  shift
+  args=("$@")
+  fix_path_args "$caller_pwd"
+  select_bin || exit 2
+  exec "$BIN" profile ${args[@]+"${args[@]}"}
 fi
 
 usage() {
@@ -78,6 +88,8 @@ usage() {
 기능별 명령 (bash bios.sh <명령> [옵션...], 옵션은 각 명령의 -h 참고):
   account   [-dry-run] [-ucsm] ...     1순위(+ user2) 계정 생성        = bash account_create.sh
   passwd    [-dry-run] [-ucsm] ...     1순위 계정 비밀번호 변경         = bin/biostool account change
+  profile add -profile VM (-tag 태그 | -model "벤더/모델") -set "속성=값" [-set ...] [-force]
+                                       프로파일에 태그·모델별 설정 행 추가 (verified=N, 충돌은 -force 없으면 중단) = bin/biostool profile add
   trs       [-targets IP,...] ...      BMC 접속 장애(403 등) 진단        = bash trs.sh
   trs-cisco [-targets IP,...] ...      Cisco UNSUPPORTED·XML 실패 원인 진단 = bash trs_cisco.sh
   dump      [대상...] [--compact]      사전조사 덤프 (GET 전용)          = bash xml.sh

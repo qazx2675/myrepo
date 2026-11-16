@@ -32,14 +32,14 @@ func TestBiosFlowRecheckAfterSetMergesSentHosts(t *testing.T) {
 	})
 	script := []flowStep{
 		{"profile-result", "\t"}, // 전체 설정 비교를 먼저 해 둔다 (재점검 뒤 비워지는지)
-		{"ref", "1"},
+		{"ref", "2"},
 		{"ref-host", ua + "\x04"},
 		{"compare-result", "e"},
-		{"edit-menu", "1"},
+		{"edit-menu", "2"},
 		{"ask-set", "y"},
 		{"set-result", "q"},
 		{"profile-result", "e"}, // 7: 재점검을 마쳤으니 다시 수정 단계로 들어갈 수 있다
-		{"edit-menu", "1"},
+		{"edit-menu", "2"},
 		{"ask-set", "n"},
 		{"profile-result", "qq"},
 	}
@@ -128,7 +128,7 @@ func TestBiosFlowRecheckCancelKeepsOldResult(t *testing.T) {
 	})
 	script := []flowStep{
 		{"profile-result", "e"},
-		{"edit-menu", "1"},
+		{"edit-menu", "2"},
 		{"ask-set", "y"},
 		{"set-result", "q\x18"}, // 설정 결과를 닫자마자 재점검 진행 화면에서 Ctrl+X (첫 호스트 b 는 로그인 400ms 지연)
 		{"profile-result", "e"}, // c 를 재점검하지 못했으므로 막힘

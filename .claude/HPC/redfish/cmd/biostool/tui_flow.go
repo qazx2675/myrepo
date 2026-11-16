@@ -7,7 +7,8 @@ package main
 //	  r (전체 설정 비교 화면) → 기준 다시 선택 → 다시 비교
 //	  -ref/-ref-json/-diff 를 줬으면 수집 직후 바로 전체 설정 비교까지 (Tab 을 기다리지 않음)
 //	  q 는 한 단계 뒤로 (관리망 그룹 줄 → 벤더 줄, 미리보기·설정 결과 → 결과 보기, 프로파일 고르기 → 대상 입력)
-//	  벤더 줄에서 q 두 번 → 묻지 않고 끝. e → 어디서든 수정 단계 (수정 방법: 점검 결과 기준 수정 / BIOS 값 직접 입력)
+//	  벤더 줄에서 q 두 번 → 묻지 않고 끝. e → 어디서든 수정 단계 (수정 방법: 대표서버 기준으로 맞추기 / 점검 결과 기준 수정 / BIOS 값 직접 입력)
+//	→ (대표서버 기준으로 맞추기면 전체비교(안 했으면 대표서버 자동 지정)의 대표서버와 다른 속성을 묶음(태그·모델)별로 체크 → 아래 확인 1·2부터 같음, setalign.go)
 //	→ (BIOS 값 직접 입력이면 "속성 이름 설정값" 붙여넣기 → 점검한 Redfish 호스트별 미리보기·확인 → 아래 Pending 질문부터 같음, setdirect.go)
 //	→ 수정 확인 1: 차이 항목 전부를 "현재값 -> 변경값 (수정대상)" / "(수정제외: 사유)" 로 보이고
 //	  "위 수정대상을 적용할까요?" (프로파일 + 전체비교(했으면) difference 를 함께)
@@ -69,12 +70,19 @@ type biosFlow struct {
 	applied  bool   // 설정 적용을 시도함 → 종료 때 요약의 "설정:" 줄을 settable() 로 덮어쓰지 않음
 	// unchecked 는 설정을 보냈지만 재점검 결과를 아직 합치지 못한 호스트(점검 결과 순번)입니다. 있으면 결과가 적용 전 값이라 다시 설정하지 않음.
 	unchecked map[int]bool
+	// alignBack 은 대표서버 기준 맞추기 체크 목록에서 Esc 를 눌렀음을 editStep 에 알립니다 (수정 방법 선택으로 한 단계 뒤).
+	alignBack bool
 	// 대상 입력에서 마지막으로 친 내용 (오류·뒤로 가기 뒤 다시 열 때 미리 채워 둔다).
 	lastPaste, lastXMLPaste []string
 	lastFile                string
 	// 전체비교 뒤 모델이 다른 대상의 참고용 비교 계획 (x 키로 CSV 를 만들면 만든 계획은 뺀다).
 	xplans []*xmodelPlan
 	xdone  bool // x 로 한 번이라도 만들었음 (남은 계획이 없을 때 "이미 만들었습니다" 안내용)
+	// autoPick 은 대표서버 자동 지정 뒤 c 키로 직접 고른 대표입니다 (묶음 ID → 호스트 targetID). 같은 비교 세션 동안 유지하고,
+	// 기준 메뉴에서 "대표서버 자동 지정"을 다시 고르면 비웁니다 (처음부터 자동 선정).
+	autoPick map[string]string
+	// profNote 는 p 키로 프로파일에 행을 더한 기록입니다 (요약의 "프로파일 변경:" 줄, tui_profadd.go).
+	profNote []string
 }
 
 // runBiosTUI 는 열린 TUI 로 대화형 흐름을 돌리고, TUI 를 닫은 뒤 out 에 요약을 찍습니다.
@@ -163,6 +171,7 @@ func (f *biosFlow) run() error {
 		return nil
 	})
 	ui.SetTabs(flowTabs)
+	ui.SetProfileKey(true) // p: 프로파일 점검 화면에서 프로파일에 태그·모델별 설정 행 추가 (tui_profadd.go)
 	ui.SetResults("BIOS 점검 결과 — 프로파일 "+f.profName, groupLines(plines))
 	ui.SetStage(4)
 	// -ref/-ref-json/-diff 를 줬으면 기다리지 않고 바로 전체 설정 비교까지 한다 (두 화면 모두 준비, 첫 화면은 프로파일 점검).
@@ -252,6 +261,12 @@ func (f *biosFlow) browse() TUIAction {
 			}
 		case TUIXModel:
 			f.xmodelKey()
+		case TUIPick:
+			if !f.repickKey() && ui.TakeTabOut() { // 고르다 Tab 이면 프로파일 화면으로 (앞의 비교 결과는 그대로)
+				ui.SwitchTab(0)
+			}
+		case TUIProfAdd:
+			f.profAddKey()
 		default:
 			return act
 		}
@@ -524,6 +539,14 @@ func (f *biosFlow) compareStep(again bool) bool {
 		}
 		return false
 	}
+	f.autoPick = nil // 기준을 (다시) 골랐으면 앞의 대표 직접 고르기는 버린다 — c 키 재비교는 compareWith 를 바로 부른다
+	return f.compareWith(ref)
+}
+
+// compareWith 는 정해진 기준으로 비교 → CSV → 전체 설정 비교 화면에 결과를 넣습니다 (compareStep 의 뒷부분, c 키 재비교도 씀).
+// 실패면 안내 줄만 남기고 false (앞 결과는 그대로).
+func (f *biosFlow) compareWith(ref compareRef) bool {
+	ui := f.ui
 	var cmp *compareResult
 	// Ctrl+X 면 아직 조회하지 않은 비교서버는 접속하지 않고, 그 기준이 필요한 대상은 REF_CANCELED(N/A, 설정 제외)로 남긴다.
 	err := ui.Progress("비교서버 조회", func(j *TUIJob) error {
@@ -550,7 +573,22 @@ func (f *biosFlow) compareStep(again bool) bool {
 	ui.SetResults("전체비교 — 기준 "+cmp.Label, groupLines(cmp.Lines))
 	ui.SetRefKey(true)
 	xmsg := f.xmodelNote(cmp)
-	if cmp.RefCanceled > 0 {
+	if cmp.Auto != nil { // 대표서버 자동 지정: 선정 결과를 compare_refs.tsv 에 남기고 대표를 안내 (c 키로 묶음별 재선택)
+		if path, err := writeAutoRefs(f.u.Check.Dir, cmp.Auto); err != nil {
+			f.warns = append(f.warns, "compare_refs.tsv 기록 오류: "+err.Error())
+		} else if !inList(f.csvs, path) {
+			f.csvs = append(f.csvs, path)
+		}
+		ui.SetPickKey(cmp.Auto.Choosable())
+		msg := cmp.Auto.Announce()
+		if cmp.Auto.Choosable() {
+			msg += " (c: 묶음별 대표 바꾸기)"
+		}
+		if xmsg != "" {
+			msg += " / " + xmsg
+		}
+		ui.SetMessage(msg)
+	} else if cmp.RefCanceled > 0 {
 		msg := fmt.Sprintf("취소했습니다 — 비교서버 %d대 조회 안 함 (비교하지 못한 대상 %d대는 %s, 설정 제외)",
 			cmp.RefCanceled, f.countCmp(StatusRefCanceled), StatusRefCanceled)
 		if xmsg != "" {
@@ -561,6 +599,73 @@ func (f *biosFlow) compareStep(again bool) bool {
 		ui.SetMessage(xmsg)
 	}
 	return true
+}
+
+// repickKey 는 c 키입니다 (대표서버 자동 지정으로 비교한 결과 화면): 묶음을 고르고 그 묶음의 다른 서버를 대표로 골라
+// 같은 스냅샷으로 다시 비교합니다 (BMC 에 다시 접속하지 않음). 고른 대표는 f.autoPick 에 남아 다음 c 재비교에도 유지됩니다.
+// 고르기를 끝까지 마치고 다시 비교했으면 true, 취소·할 일 없음·비교 실패면 false (Tab 으로 나왔으면 부르는 쪽이 TakeTabOut).
+func (f *biosFlow) repickKey() bool {
+	ui := f.ui
+	if f.cmp == nil || f.cmp.Auto == nil {
+		ui.SetMessage("대표서버 자동 지정으로 비교한 결과가 아닙니다 (r 로 \"" + flowAutoRefItem + "\" 를 고르십시오)")
+		return false
+	}
+	p := f.cmp.Auto
+	var bs []*autoBundle
+	var items []string
+	for _, b := range p.Bundles {
+		if len(b.Idx) < 2 { // 1대뿐인 묶음은 바꿀 서버가 없다
+			continue
+		}
+		bs = append(bs, b)
+		mark := ""
+		if b.Manual {
+			mark = " (직접 지정)"
+		}
+		items = append(items, fmt.Sprintf("%s %d대 — 대표 %s%s · %s", b.Name, len(b.Idx), p.RepSnap(b).Target.Hostname, mark, b.Reason))
+	}
+	if len(bs) == 0 {
+		ui.SetMessage("대표서버를 바꿀 수 있는 묶음이 없습니다 (모든 묶음이 1대뿐)")
+		return false
+	}
+	f.wait("repick-bundle")
+	i, ok := ui.Choose("대표서버를 바꿀 묶음 (태그·모델)", items)
+	if !ok {
+		return false
+	}
+	b := bs[i]
+	hosts := make([]string, len(b.Idx))
+	for k, si := range b.Idx {
+		s := f.u.Snaps[si]
+		hosts[k] = fmt.Sprintf("%s  BIOS %s · 다수결 일치 %d/%d", s.Target.Hostname, dash(strings.TrimSpace(s.BiosVersion)), b.Scores[k], b.Total)
+		switch {
+		case si == b.Rep:
+			hosts[k] += "  ← 지금 대표"
+		case si == b.AutoRep:
+			hosts[k] += "  (자동 선정)"
+		}
+	}
+	f.wait("repick-host")
+	j, ok := ui.Choose(fmt.Sprintf("%s 대표서버 선택 — 지금 %s: %s", b.Name, p.RepSnap(b).Target.Hostname, b.Reason), hosts)
+	if !ok {
+		return false
+	}
+	si := b.Idx[j]
+	if si == b.Rep {
+		ui.SetMessage(f.u.Snaps[si].Target.Hostname + " 이(가) 이미 " + b.Name + " 의 대표서버입니다")
+		return false
+	}
+	pick := map[string]string{}
+	for k, v := range f.autoPick {
+		pick[k] = v
+	}
+	if id := b.ID(p.TagMode); si == b.AutoRep {
+		delete(pick, id) // 자동 선정으로 되돌림
+	} else {
+		pick[id] = targetID(f.u.Snaps[si].Target)
+	}
+	f.autoPick = pick
+	return f.compareWith(compareRef{Auto: true, AutoPick: pick})
 }
 
 // xmodelNote 는 전체비교 직후 모델이 다른 대상 계획을 잡아 두고(f.xplans) x 키를 켭니다. 묻지 않는다 — 안내 문구만 돌려줍니다 (계획이 없으면 "").
@@ -650,8 +755,11 @@ func (f *biosFlow) writeXModel(p *xmodelPlan, cancel <-chan struct{}) (string, b
 	return strings.Join(parts, " / "), true
 }
 
+// flowAutoRefItem 은 기준 메뉴 맨 위 항목입니다.
+const flowAutoRefItem = "대표서버 자동 지정 (태그·모델별 1대)"
+
 // chooseRef 는 전체비교 기준입니다: -ref/-ref-json/-diff 를 줬으면 그것(again 이면 무시하고 메뉴), 아니면 메뉴
-// (비교서버 hostname 입력 / refs_dir 의 JSON / diff.txt). hostname 을 비워 두면 diff.txt.
+// (1 대표서버 자동 지정 / 2 비교서버 hostname 입력 / refs_dir 의 JSON / 마지막 diff.txt). hostname 을 비워 두면 diff.txt.
 func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 	if f.a.Ref.count() > 0 && !again {
 		return f.a.Ref, true
@@ -660,7 +768,7 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 	if err != nil {
 		f.ui.SetMessage(err.Error())
 	}
-	items := []string{"비교서버 hostname 입력"}
+	items := []string{flowAutoRefItem, "비교서버 hostname 입력"}
 	var good []refFile
 	for _, r := range refs {
 		if r.Err != "" { // 기준으로 쓸 수 없는 파일은 고르지 못하게 뺀다
@@ -676,6 +784,8 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 	case !ok:
 		return compareRef{}, false
 	case i == 0:
+		return compareRef{Auto: true}, true
+	case i == 1:
 		f.wait("ref-host")
 		// 태그 모드(대상에 태그가 있음)면 한 줄이 "hostname 태그" 라 공백으로 쪼개지 않는다 (compareRefs 가 줄마다 parseRefList).
 		tagMode := f.u.tagMode()
@@ -698,14 +808,15 @@ func (f *biosFlow) chooseRef(again bool) (compareRef, bool) {
 			return compareRef{Hosts: h}, true
 		}
 		return compareRef{DiffFile: flowDiffFile}, true
-	case i <= len(good):
-		return compareRef{JSONPath: good[i-1].Path}, true
+	case i <= len(good)+1:
+		return compareRef{JSONPath: good[i-2].Path}, true
 	}
 	return compareRef{DiffFile: flowDiffFile}, true
 }
 
-// flowEditMenu 는 수정 단계(e)의 수정 방법입니다: 0 점검 결과 기준 수정(setStep), 1 BIOS 값 직접 입력(directStep).
-var flowEditMenu = []string{"점검 결과 기준 수정", "BIOS 값 직접 입력"}
+// flowEditMenu 는 수정 단계(e)의 수정 방법입니다: 0 대표서버 기준으로 맞추기(alignStep), 1 점검 결과 기준 수정(setStep),
+// 2 BIOS 값 직접 입력(directStep).
+var flowEditMenu = []string{"대표서버 기준으로 맞추기", "점검 결과 기준 수정", "BIOS 값 직접 입력"}
 
 // editStep 은 수정 단계 입구입니다: 수정 방법을 고른다. 덤프 읽기면 고르지 않고 false, 고르기 취소면 false (결과 보기로).
 func (f *biosFlow) editStep() bool {
@@ -715,16 +826,168 @@ func (f *biosFlow) editStep() bool {
 		f.setNote = "덤프 읽기 모드라 설정하지 않았습니다"
 		return false
 	}
-	f.wait("edit-menu")
-	i, ok := f.ui.Choose("수정 방법 선택", flowEditMenu)
-	if !ok {
-		f.ui.TakeTabOut() // Tab 으로 접었어도 결과 보기로 (화면 탭은 그대로)
+	for {
+		f.wait("edit-menu")
+		i, ok := f.ui.Choose("수정 방법 선택", flowEditMenu)
+		if !ok {
+			f.ui.TakeTabOut() // Tab 으로 접었어도 결과 보기로 (화면 탭은 그대로)
+			return false
+		}
+		switch i {
+		case 0:
+			tried := f.alignStep()
+			if f.alignBack { // 체크 목록에서 Esc: 한 단계 뒤인 수정 방법 선택으로
+				f.alignBack = false
+				continue
+			}
+			return tried
+		case 2:
+			return f.directStep()
+		}
+		return f.setStep()
+	}
+}
+
+// flowAlignHelp 는 대표서버 기준 맞추기 체크 목록 위의 안내입니다.
+var flowAlignHelp = []string{
+	"한 줄 = 그 묶음에서 대표서버와 값이 다른 서버 전부에 그 속성을 대표서버 값으로 맞춤. 처음엔 아무것도 체크되어 있지 않습니다.",
+	alignNote,
+	"[-] 줄은 자동 제외 (보호 속성·고유값·한쪽에만 있는 속성 등). BMC Pending 까지만 설정, 재부팅 없음.",
+}
+
+// alignStep 은 "대표서버 기준으로 맞추기" 입니다: (전체비교를 아직 안 했으면 대표서버 자동 지정으로 먼저 비교) → 묶음별 체크 목록 →
+// 확인 1·2 → applyStep(Pending 질문·적용·결과·재점검) → 고른 속성이 대표서버 값이 됐는지 확인(alignCheck).
+// true 면 적용을 시도함, false 면 취소·거절·고른 항목 없음·할 일 없음. 취소는 어느 단계에서든 아무것도 쓰지 않는다.
+func (f *biosFlow) alignStep() bool {
+	ui := f.ui
+	switch {
+	case f.a.O.fromDump != "":
+		f.setNote = "덤프 읽기 모드라 설정하지 않았습니다"
+		return false
+	case len(f.unchecked) > 0:
+		f.setNote = fmt.Sprintf("설정을 보낸 %d대를 재점검하지 못했습니다 — 결과가 적용 전 값이라 다시 점검한 뒤 설정하십시오", len(f.unchecked))
 		return false
 	}
-	if i == 1 {
-		return f.directStep()
+	prev := ui.Tab()
+	defer func() { // 비교를 새로 했어도 수정 단계에서 돌아오면 있던 화면으로 (재점검이 비교를 비웠으면 그 화면 그대로)
+		if f.cmp != nil && ui.Tab() != prev {
+			ui.SwitchTab(prev)
+		}
+	}()
+	if f.cmp == nil { // 전체비교를 아직 안 했으면 대표서버 자동 지정으로 먼저 비교 (읽은 스냅샷만 씀, 접속 없음)
+		ui.SwitchTab(1)
+		f.autoPick = nil
+		if !f.compareWith(compareRef{Auto: true}) {
+			f.setNote = "대표서버 자동 지정 비교를 하지 못해 맞추지 않았습니다"
+			return false
+		}
 	}
-	return f.setStep()
+	cands := buildAlignCands(f.rc.Conf, f.u, f.cmp)
+	if cands.Msg != "" {
+		f.setNote = cands.Msg
+		ui.SetText("대표서버 기준으로 맞추기", append([]string{cands.Msg}, cands.base.notes...))
+		ui.SetMessage(cands.Msg + " — q 를 누르면 결과 보기로 돌아갑니다")
+		f.wait("align-empty")
+		ui.Browse()
+		return false
+	}
+	f.wait("align-pick")
+	picked, ok := ui.ChooseMulti("대표서버 기준으로 맞추기 — 바꿀 항목 선택", cands.Rows(), TUIMultiOpt{Help: flowAlignHelp})
+	if !ok { // Esc 는 한 단계 뒤(수정 방법 선택), Ctrl+X 는 전체 취소, Tab 은 접기 — 모두 아무것도 쓰지 않음
+		abort, tabOut := ui.TakeAbort(), ui.TakeTabOut()
+		if !abort && !tabOut {
+			f.alignBack = true
+			return false
+		}
+		f.setNote = "설정하지 않았습니다"
+		return false
+	}
+	if len(picked) == 0 {
+		f.setNote = "고른 항목이 없습니다 — 설정하지 않았습니다"
+		return false
+	}
+	plan := alignPlan(cands, picked)
+	if plan.Empty() { // 고른 줄이 호스트 관문에서 모두 빠짐 — 사유를 보여 준다
+		f.setNote = "설정할 항목이 없습니다"
+		if cl := plan.ConfirmLines(); len(cl) > 0 {
+			ui.SetText("수정 미리보기", cl)
+			ui.SetMessage("설정할 항목이 없습니다 — q 를 누르면 결과 보기로 돌아갑니다")
+			f.wait("preview-empty")
+			ui.Browse()
+		}
+		return false
+	}
+	ui.SetText("수정 미리보기", plan.ConfirmLines())
+	f.wait("ask-set")
+	if ui.Ask("위 수정대상을 적용할까요?") != TUIYes {
+		f.setNote = "설정하지 않았습니다"
+		return false
+	}
+	if ex := plan.ExcludedLines(); len(ex) > 0 {
+		ui.SetText("수정제외 확인", ex)
+		f.wait("ask-excluded")
+		if ui.Ask("수정제외 항목을 확인했습니다. 진행할까요?") != TUIYes {
+			f.setNote = "설정하지 않았습니다 (수정제외 확인에서 멈춤)"
+			return false
+		}
+	}
+	res, ok := f.applyStep(plan)
+	if !ok {
+		return false
+	}
+	f.alignCheck(plan, res)
+	return true
+}
+
+// alignCheck 는 재점검을 마친 호스트의 고른 속성 현재값·Pending 이 대표서버 값인지 보입니다 (directCheck 와 같은 모양).
+// 재점검하지 못한 호스트(f.unchecked)는 처음 값이라 빼고, 보일 줄이 없으면 아무것도 하지 않습니다.
+// 비교 결과는 적용 전 값이라 비웠으므로 다시 맞추려면 전체 설정 비교 화면에서 r 로 다시 비교해야 합니다.
+func (f *biosFlow) alignCheck(plan *setPlan, res *setOutcome) {
+	if res == nil || f.ui.Quit() {
+		return
+	}
+	done := map[int]bool{}
+	for _, i := range res.Tried {
+		done[i] = !f.unchecked[i]
+	}
+	var lines []string
+	n, good := 0, 0
+	for _, it := range plan.Items {
+		if !done[it.hostIdx] {
+			continue
+		}
+		n++
+		hc, s := f.u.Check.Hosts[it.hostIdx], f.u.Snaps[it.hostIdx]
+		if hc == nil || hc.Status != "" || s == nil {
+			st := "결과 없음"
+			if hc != nil {
+				st = hc.Status
+			}
+			lines = append(lines, fmt.Sprintf("%s  %s: 재점검 오류 (%s)", it.Host, sanitizeDetail(it.Attr), st))
+			continue
+		}
+		cur := s.Attrs[it.Attr]
+		pend, hasP := hc.pendDiff[it.Attr]
+		tag := "대표서버 값 아님"
+		switch {
+		case hasP && directSame(pend, it.To):
+			tag, good = "Pending 이 대표서버 값, 재부팅 대기", good+1
+		case !hasP && directSame(cur, it.To):
+			tag, good = "현재값이 대표서버 값", good+1
+		}
+		if !hasP {
+			pend = "-"
+		}
+		lines = append(lines, fmt.Sprintf("%s  %s: 현재값 %s · Pending %s · 대표서버 %s (%s)", it.Host, sanitizeDetail(it.Attr), fullVal(cur), fullVal(pend), fullVal(it.To), tag))
+	}
+	if n == 0 {
+		return
+	}
+	f.setNote += fmt.Sprintf(" · 맞추기 재점검 대표서버 값 %d/%d건", good, n)
+	head := fmt.Sprintf("맞추기 확인 (재점검): 대표서버 값이 된 항목 %d/%d건 — %s", good, n, flowNoReboot)
+	f.ui.SetText("맞추기 확인", append([]string{head, "※ 비교 결과는 적용 전 값이라 비웠습니다 — 다시 맞추려면 전체 설정 비교 화면에서 r 로 다시 비교하십시오"}, lines...))
+	f.wait("align-check")
+	f.ui.Browse()
 }
 
 // setStep 은 마지막 수정 단계입니다: 프로파일 + 전체비교 difference 를 한 계획으로 미리 보이고 한 번만 묻는다.
@@ -942,7 +1205,11 @@ func (f *biosFlow) directCheck(plan *setPlan, res *setOutcome) {
 //     (남아 있는 동안 다시 설정하지 않음). 요약 줄은 f.setNote 에 붙입니다.
 //
 // 설정을 보내는 다른 경로(값 직접 입력)도 보낸 호스트 순번으로 이 함수를 부릅니다.
-func (f *biosFlow) recheckHosts(idx []int) {
+func (f *biosFlow) recheckHosts(idx []int) { f.recheckHostsFor(idx, false) }
+
+// recheckHostsFor 는 recheckHosts 의 본체입니다. profileOnly 는 프로파일 행만 바뀐 뒤의 재점검입니다 (profAdd): 설정을 보내지
+// 않았으므로 f.unchecked 에 올리지 않고(취소해도 e 가 막히지 않음), BIOS 전체 값은 그대로라 전체 설정 비교(f.cmp)도 비우지 않습니다.
+func (f *biosFlow) recheckHostsFor(idx []int, profileOnly bool) {
 	ui := f.ui
 	if len(idx) == 0 || f.u == nil || f.u.Check == nil || f.u.Check.prof == nil || f.a.O.fromDump != "" || ui.Quit() {
 		return
@@ -954,7 +1221,9 @@ func (f *biosFlow) recheckHosts(idx []int) {
 	sub.Targets = make([]Target, len(idx))
 	for k, i := range idx {
 		sub.Targets[k] = f.rc.Targets[i]
-		f.unchecked[i] = true
+		if !profileOnly {
+			f.unchecked[i] = true
+		}
 	}
 	var re *unifiedRun
 	var err error
@@ -991,7 +1260,7 @@ func (f *biosFlow) recheckHosts(idx []int) {
 	if done == 0 {
 		return
 	}
-	if f.cmp != nil {
+	if f.cmp != nil && !profileOnly {
 		f.cmp = nil
 		f.xplans, f.xdone = nil, false
 		ui.SwitchTab(1)
@@ -1057,6 +1326,9 @@ func (f *biosFlow) summary(w io.Writer) {
 			}
 		}
 		fmt.Fprintf(w, "전체비교: 기준 %s — 차이 있는 호스트 %d대\n", f.cmp.Label, diff)
+		if f.cmp.Auto != nil {
+			fmt.Fprintf(w, "%s (선정 사유: %s)\n", f.cmp.Auto.Announce(), autoRefsFile)
+		}
 		if f.cmp.RefCanceled > 0 {
 			fmt.Fprintf(w, "전체비교 취소: 비교서버 %d대 조회 안 함 — 대상 %d대 %s (N/A, 설정 제외)\n",
 				f.cmp.RefCanceled, f.countCmp(StatusRefCanceled), StatusRefCanceled)
@@ -1064,6 +1336,9 @@ func (f *biosFlow) summary(w io.Writer) {
 	}
 	if f.setNote != "" {
 		fmt.Fprintf(w, "설정: %s\n", f.setNote)
+	}
+	for _, n := range f.profNote {
+		fmt.Fprintf(w, "프로파일 변경: %s\n", n)
 	}
 	dir := filepath.ToSlash(f.u.Check.Dir)
 	fmt.Fprintf(w, "결과 폴더: %s/ (result.tsv, CSV %d개)\n", dir, len(f.csvs))

@@ -484,3 +484,167 @@ func TestSetPlanPreviewFullValues(t *testing.T) {
 		t.Errorf("확인 줄:\n%s\n%s", strings.Join(p.ConfirmLines(), "\n"), strings.Join(p.ExcludedLines(), "\n"))
 	}
 }
+
+// ---- 서버 고유값 비교 제외 (uniqueAttrs·looksUnique) ----
+
+// diffMaps 는 이름마다 기준·대상 값이 다른 속성 지도 한 쌍입니다.
+func diffMaps(names ...string) (map[string]string, map[string]string) {
+	ref, host := map[string]string{}, map[string]string{}
+	for _, n := range names {
+		ref[n], host[n] = "R-"+n, "H-"+n
+	}
+	return ref, host
+}
+
+func TestUniqueAttrsExcludedFromCompare(t *testing.T) {
+	names := []string{"SerialNumber00", "SerialNumber23", "NvdimmSerialNum0", "SystemInfo_AssetTag", "IscsiInitiatorName",
+		"Ipv4Address", "Ipv6Duid", "HttpDev1Ip", "AdminName", "NvmeofHostId", "TpmChipId"}
+	ign := withUnique(newIgnoreSet([]string{"onlythis"}, "파일"))
+	for _, n := range names {
+		if !ign.match(n) {
+			t.Errorf("%s 가 고유값 목록에 걸리지 않음", n)
+		}
+	}
+	ref, host := diffMaps(names...)
+	ref["ProcTurbo"], host["ProcTurbo"] = "Enabled", "Disabled"
+	h := &allHost{}
+	compareAttrs(h, ref, host, ign)
+	if h.Ignored != len(names) || h.Compared != 1 || h.NDiff != 1 || len(h.Diffs) != 1 || h.Diffs[0].Attr != "ProcTurbo" {
+		t.Errorf("개수 = %+v, Diffs = %v", *h, diffKeys(h))
+	}
+}
+
+func TestUniqueAttrsKeepPerfAttrs(t *testing.T) {
+	ign := withUnique(nil)
+	for _, n := range []string{"SubNumaCluster", "LogicalProc", "SysProfile", "ProcessorUuidControl", "BootSeqRetry",
+		"ProcTurbo", "ProcHyperthreading", "WorkloadProfile", "MemoryRefreshRate", "NodeInterleave", "PcieAspmL1"} {
+		if ign.match(n) {
+			t.Errorf("성능 속성 %s 가 고유값으로 제외됨", n)
+		}
+	}
+	// 프로파일 파일의 속성도 고유값 목록에 걸리지 않는다.
+	var files []string
+	for _, g := range []string{"../../profiles/*.tsv", "../../testdata/profiles-test/*.tsv", "../../reference/*.tsv"} {
+		m, err := filepath.Glob(g)
+		must(t, err)
+		files = append(files, m...)
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		must(t, err)
+		for i, line := range strings.Split(strings.ReplaceAll(string(b), "\r", ""), "\n") {
+			fs := strings.Split(line, "\t")
+			if i == 0 || strings.HasPrefix(line, "#") || len(fs) < 4 || fs[3] == "attribute" || fs[3] == "" {
+				continue
+			}
+			if ign.match(fs[3]) {
+				t.Errorf("%s: 프로파일 속성 %q 가 고유값 목록에 걸림", filepath.Base(f), fs[3])
+			}
+		}
+	}
+}
+
+func TestLooksUniqueValue(t *testing.T) {
+	yes := []string{"00:1A:2b:3C:4d:5E", "00-1a-2b-3c-4d-5e", "123e4567-e89b-12d3-a456-426614174000",
+		"192.168.0.58", "0.0.0.0", "fe80::1", "2001:db8::8a2e:370:7334", "::1",
+		"iqn.1993-08.org.debian:01:abc", "IQN.2000-01.com.x:y", "nqn.2014-08.org.nvmexpress:uuid:1"}
+	for _, v := range yes {
+		if !looksUnique(v) {
+			t.Errorf("%q 는 고유값 모양이어야 함", v)
+		}
+	}
+	no := []string{"", "Enabled", "Disabled", "0", "10", "10.5", "1.8.2", "1.2.3", "null", "00:1A:2B:3C:4D", "00:1A:2B:3C:4D:5E:6F",
+		"00:1A-2B:3C:4D:5E", "12:30:45", "123e4567-e89b-12d3-a456", "Custom", "Balanced Performance", "iqnx.abc"}
+	for _, v := range no {
+		if looksUnique(v) {
+			t.Errorf("%q 는 고유값 모양이 아니어야 함", v)
+		}
+	}
+	// 이름은 평범해도 양쪽 값이 모두 고유값 모양이면 비교에서 제외 (ignored 로만 셈).
+	// 한쪽만 고유값 모양(x vs 10.0.0.1)이면 진짜 차이일 수 있어 그대로 보인다.
+	h := &allHost{}
+	compareAttrs(h, map[string]string{"Foo": "00:11:22:33:44:55", "Bar": "Enabled", "Baz": "x"},
+		map[string]string{"Foo": "00:11:22:33:44:66", "Bar": "Disabled", "Baz": "10.0.0.1"}, newIgnoreSet(nil, ""))
+	if h.Ignored != 1 || h.Compared != 2 || h.NDiff != 2 || len(h.Diffs) != 2 {
+		t.Errorf("값 모양 제외: %+v %v", *h, diffKeys(h))
+	}
+	// 한쪽에만 있는 속성은 있는 쪽 값 모양으로 판단
+	h = &allHost{}
+	compareAttrs(h, map[string]string{"OnlyIp": "10.1.1.1", "OnlyOk": "Enabled"}, map[string]string{}, newIgnoreSet(nil, ""))
+	if h.Ignored != 1 || h.NOnlyRef != 1 || h.Diffs[0].Attr != "OnlyOk" {
+		t.Errorf("한쪽에만 있는 값 모양: %+v %v", *h, diffKeys(h))
+	}
+}
+
+// 4칸 숫자 버전(4.1.4.54)은 IP 로 보지 않고 비교에 남는다: 이름이 버전이면 모양이 IP 여도, 옥텟이 0~255 를 넘으면 모양부터 아님.
+func TestVersionStringsNotUnique(t *testing.T) {
+	if looksUnique("4.1.4.804") || looksUnique("1.2.3.256") {
+		t.Error("옥텟이 255 를 넘는 값은 IP 가 아님")
+	}
+	if !looksUnique("4.1.4.54") || looksUniqueAttr("FirmwareVersion", "4.1.4.54") || looksUniqueAttr("BiosRevision", "10.0.0.1") ||
+		looksUniqueAttr("NicFwVer", "1.2.3.4") || !looksUniqueAttr("ServerAddr", "1.2.3.4") {
+		t.Error("이름이 버전이면 IP 모양을 고유값으로 보지 않음 (Server 의 ver 는 버전 이름이 아님)")
+	}
+	h := &allHost{}
+	compareAttrs(h, map[string]string{"FwVersion": "4.1.4.54", "OtherFw": "4.1.4.54"}, map[string]string{"FwVersion": "4.1.4.80", "OtherFw": "4.1.4.804"}, newIgnoreSet(nil, ""))
+	if h.Ignored != 0 || h.NDiff != 2 {
+		t.Errorf("버전 값이 비교에서 빠짐: %+v %v", *h, diffKeys(h))
+	}
+}
+
+// 켜고 끄는 속성(iSCSI·PXE·VLAN·DHCP·IPv4)은 고유값이 아니라 비교에 남는다 (쓰기는 보호 속성이 계속 막음).
+func TestUniqueAttrsKeepToggles(t *testing.T) {
+	ign := withUnique(nil)
+	toggles := []string{"IscsiDev1EnDis", "PxeDev1VlanEnDis", "Dhcpv4", "IPv4PXESupport", "SubNumaCluster", "LogicalProc",
+		"PxeDev1VlanId", "IscsiDev1Con1Auth", "Ipv4Mode"}
+	for _, n := range toggles {
+		if ign.match(n) {
+			t.Errorf("%s 는 고유값 식별자가 아닌데 비교에서 제외됨", n)
+		}
+	}
+	for _, n := range []string{"IscsiDev1EnDis", "PxeDev1VlanEnDis", "Dhcpv4", "IPv4PXESupport"} {
+		if builtinProtectSet.match(n) == "" {
+			t.Errorf("%s 는 설정 보호 목록에는 그대로 있어야 함", n)
+		}
+	}
+	for _, n := range []string{"IscsiDev1Con1Ip", "Ipv4Gateway", "Ipv4SubnetMask", "Ipv4PrimaryDNS", "NvmeofHostNqn", "ServiceTag", "SysMacAddress"} {
+		if !ign.match(n) {
+			t.Errorf("%s 는 서버 고유 식별자라 비교에서 제외되어야 함", n)
+		}
+	}
+	ref, host := map[string]string{}, map[string]string{}
+	for i, n := range toggles {
+		ref[n], host[n] = "Enabled", fmt.Sprintf("D%d", i)
+	}
+	h := &allHost{}
+	compareAttrs(h, ref, host, ign)
+	if h.Ignored != 0 || h.NDiff != len(toggles) {
+		t.Errorf("비교 = %+v", *h)
+	}
+}
+
+// ignore_attrs.txt 가 내장 목록을 대체해도 고유값은 비교에서 빠진다 (파일에는 한 줄만 있어도).
+func TestIgnoreFileDoesNotDropUnique(t *testing.T) {
+	file := parseIgnore("OnlyThis\n", "ignore_attrs.txt")
+	if file.match("SerialNumber01") || file.match("SystemUuid") {
+		t.Fatal("시험 전제: 파일 목록에는 고유값이 없어야 함")
+	}
+	ign := withUnique(file)
+	if !strings.Contains(ign.Source, "ignore_attrs.txt") || !ign.match("onlythis") {
+		t.Errorf("파일 패턴이 사라짐: %+v", ign)
+	}
+	ref, host := diffMaps("SerialNumber01", "Ipv4Address", "IscsiInitiatorName", "OnlyThis", "ProcTurbo")
+	h := &allHost{}
+	compareAttrs(h, ref, host, ign)
+	if h.Ignored != 4 || h.Compared != 1 || len(h.Diffs) != 1 || h.Diffs[0].Attr != "ProcTurbo" {
+		t.Errorf("개수 = %+v, Diffs = %v", *h, diffKeys(h))
+	}
+	// 파일이 있어도 runUnified 가 쓰는 합침과 같은 결과: nil 이어도 고유값은 들어간다.
+	if !withUnique(nil).match("SerialNumber01") {
+		t.Error("nil 에서도 고유값 목록이 있어야 함")
+	}
+	// 원본 파일 집합은 바뀌지 않는다.
+	if file.match("SerialNumber01") {
+		t.Error("withUnique 가 원본 집합을 바꿈")
+	}
+}

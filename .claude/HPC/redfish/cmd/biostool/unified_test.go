@@ -186,8 +186,8 @@ func TestUnifiedExternalRefAndExclude(t *testing.T) {
 	}
 	assertClean(t, r)
 	h := cmpHostOf(t, res, ua)
-	if h.Status != StatusSame || !h.sameAttrNames() || h.Ignored != 2 {
-		t.Errorf("a = %s ignored %d diffs %v, 기대 SAME (ProcTurbo·ServerName 제외)", h.Status, h.Ignored, diffKeys(h))
+	if h.Status != StatusSame || !h.sameAttrNames() || h.Ignored != 3 {
+		t.Errorf("a = %s ignored %d diffs %v, 기대 SAME (ProcTurbo·ServerName·SerialNumber(고유값 내장) 제외, ignored 3)", h.Status, h.Ignored, diffKeys(h))
 	}
 	al := linesOf(res.Lines, ua)
 	if _, ok := al["ProcTurbo"]; ok {

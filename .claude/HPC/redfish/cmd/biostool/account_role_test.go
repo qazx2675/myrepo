@@ -53,13 +53,20 @@ func TestParseConfUser2VendorRoles(t *testing.T) {
 		{"모르는 벤더", "user=a\nuser2=b\nuser2_role=Operator\nuser2_role_ibm=Operator\n", "bios.conf:4: user2_role_ibm 의 벤더는 dell, hpe, lenovo, supermicro, cisco, cray 중 하나"},
 		{"벤더 빈칸", "user=a\nuser2_role_=Operator\n", "bios.conf:2: user2_role_ 의 벤더는"},
 		{"권한 값", "user=a\nuser2=b\nuser2_role=Operator\nuser2_role_hpe=root\n", "bios.conf:4: user2_role_hpe 은 Administrator, Operator, ReadOnly 중 하나"},
-		{"기본 권한 필수", "user=a\nuser2=b\nuser2_role_hpe=Operator\n", "user2 를 쓰려면 user2_role"},
 	}
 	for _, tc := range cases {
 		_, err := parseConf(tc.text, "bios.conf")
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: 오류 %v 에 %q 없음", tc.name, err, tc.want)
 		}
+	}
+	// user2_role 이 없어도 오류가 아니다 (계정 생성 때 권한을 묻는다, account_role_ask.go).
+	c2, err := parseConf("user=a\nuser2=b\nuser2_role_hpe=Operator\n", "bios.conf")
+	if err != nil || c2.User2Role != "" || c2.user2RoleFor("dell") != "" || c2.user2RoleFor("hpe") != roleOperator {
+		t.Errorf("user2_role 없는 conf: %v %+v", err, c2)
+	}
+	if got := c2.user2RolesText(); got != "미지정, hpe=Operator" {
+		t.Errorf("user2RolesText %q", got)
 	}
 }
 

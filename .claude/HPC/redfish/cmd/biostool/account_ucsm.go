@@ -132,6 +132,10 @@ func (e *acctEnv) ucsmCreateOne(c *ucsmxml.Client, h *acctHost) {
 	t := h.Target
 	sp := e.specOf(h)
 	h.User = sp.User
+	if sp.Role == "" { // ucsmRole("") 은 관리자 역할이라 권한이 정해지지 않은 채로는 만들지 않는다
+		h.Status, h.Detail = acctRejected, noRoleDetail(sp.User)
+		return
+	}
 	role := ucsmRole(sp.Role)
 	users, err := c.ListUsers()
 	if err != nil {
@@ -270,6 +274,11 @@ func ucsmAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir strin
 		path, werr := writeAcctResult(dir, hosts)
 		fmt.Printf("\n생성할 UCSM 이 없습니다. 결과: %s\n", path)
 		return werr
+	}
+	if err := env.askUser2Roles(os.Stdin, os.Stdout, need, af); err != nil {
+		path, _ := writeAcctResult(dir, hosts)
+		fmt.Printf("생성하지 않고 종료합니다. 점검 결과: %s\n", path)
+		return err
 	}
 	what := createWhat(need)
 	fmt.Printf("만들 UCSM 계정: %s\n", what)

@@ -139,10 +139,10 @@ func TestBiosFlowHappyPathPasteCompareNoSet(t *testing.T) {
 		{"targets-xml-paste", "\x04"}, // IP 대상이라 Cisco(XML) 대상을 더 묻는다 (없음)
 		{"profile", "2"},              // OTHER, VM
 		{"profile-result", "\t"},
-		{"ref", "1"},
+		{"ref", "2"}, // 1 대표서버 자동, 2 비교서버 hostname 입력
 		{"ref-host", ua + "\x04"},
 		{"compare-result", "e"},
-		{"edit-menu", "1"}, // 점검 결과 기준 수정
+		{"edit-menu", "2"}, // 1 대표서버 기준으로 맞추기, 2 점검 결과 기준 수정, 3 BIOS 값 직접 입력
 		{"ask-set", "n"},
 		{"compare-result", "qq"}, // 거절하면 결과 보기로 돌아오고, 다시 q 두 번이면 묻지 않고 끝
 	}
@@ -209,15 +209,15 @@ func TestBiosFlowViewTabsAndReRef(t *testing.T) {
 		{"targets-paste", ua + "\n" + ub + "\x04"},
 		{"profile", "2"},
 		{"profile-result", "f\t"}, // 3: 프로파일 화면 difference 필터 → Tab
-		{"ref", "1"},
+		{"ref", "2"},
 		{"ref-host", ua + "\x04"},
 		{"compare-result", "o\t"}, // 6
 		{"profile-result", "\t"},  // 7: 필터 유지
 		{"compare-result", "r"},   // 8: 기준을 묻지 않고 비교 화면 (필터 유지)
-		{"ref", "1"},
+		{"ref", "2"},
 		{"ref-host", ub + "\x04"},
 		{"compare-result", "e"}, // 11
-		{"edit-menu", "1"},
+		{"edit-menu", "2"},
 		{"ask-set", "n"},
 		{"compare-result", "qq"},
 	}
@@ -298,7 +298,7 @@ func TestBiosFlowViewTabRefCanceled(t *testing.T) {
 		{"profile-result", "\t"},
 		{"ref", "\x1b"},
 		{"profile-result", "\t"},
-		{"ref", "1"},
+		{"ref", "2"},
 		{"ref-host", ua + "\x04"},
 		{"compare-result", "qq"},
 	}
@@ -325,7 +325,7 @@ func TestBiosFlowViewTabOutOfRefChooser(t *testing.T) {
 		{"profile-result", "\t"},  // 0: 기준 목록이 뜬다
 		{"ref", "\t"},             // 1: 목록에서 Tab → 프로파일 화면
 		{"profile-result", "\t"},  // 2: 다시 Tab → 목록
-		{"ref", "1"},              // 3: 비교서버 hostname 입력 (Tab 은 붙여넣기용이라 화면 전환이 아님)
+		{"ref", "2"},              // 3: 비교서버 hostname 입력 (Tab 은 붙여넣기용이라 화면 전환이 아님)
 		{"ref-host", ua + "\x04"}, // 4: 비교 실행
 		{"compare-result", "r"},   // 5: 기준 다시 고르기
 		{"ref", "\t"},             // 6: 목록에서 Tab → 프로파일 화면 (비교 결과 유지)
@@ -388,7 +388,7 @@ func TestBiosFlowFileTargetRefJSON(t *testing.T) {
 		{"targets-xml-file", "\r"}, // IP 대상이라 Cisco(XML) 대상 파일을 더 묻는다 (비움 = 없음)
 		{"profile", "2"},
 		{"profile-result", "\t"},
-		{"ref", "2"}, // 1 hostname, 2 golden.json, 3 diff.txt
+		{"ref", "3"}, // 1 대표서버 자동, 2 hostname, 3 golden.json, 4 diff.txt
 		{"compare-result", "qq"},
 	}
 	fr, err := runFlowT(t, biosTUIArgs{O: o}, "", script, map[string]string{"preview-empty": "q"})
@@ -441,7 +441,7 @@ func TestBiosFlowEditPendingBranches(t *testing.T) {
 				report(ua, "Pending 설정")
 				return &setOutcome{Lines: []string{ua + ": 설정 확인 OK"}, OK: 1}, nil
 			})
-			script := []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"ask-set", "y"}, {"ask-pending", c.key}}
+			script := []flowStep{{"profile-result", "e"}, {"edit-menu", "2"}, {"ask-set", "y"}, {"ask-pending", c.key}}
 			if c.applied {
 				script = append(script, flowStep{"set-result", "q"}) // 설정 결과 q → 결과 보기로
 			}
@@ -606,7 +606,7 @@ func TestBiosFlowOneShotOptionsAutoCompare(t *testing.T) {
 		{"compare-auto", ""},
 		{"profile-result", "\t"}, // 1
 		{"compare-result", "e"},  // 2
-		{"edit-menu", "1"},
+		{"edit-menu", "2"},
 		{"ask-set", "n"},
 		{"compare-result", "qq"},
 	}
@@ -671,7 +671,7 @@ func TestBiosFlowQuitBackAndSetLoop(t *testing.T) {
 				{"targets-xml-paste", "\x04"},
 				{"profile", "2"},
 				{"profile-result", c.first},
-				{"edit-menu", "1"},
+				{"edit-menu", "2"},
 				{"ask-set", "\x18"}, // 10: 수정 단계 취소 → 결과 보기로
 				{"profile-result", "qq"},
 			}
@@ -935,7 +935,7 @@ func TestBiosFlowRefSplitAndQuitWithoutAsking(t *testing.T) {
 		{"targets-xml-paste", "\x04"},
 		{"profile", "2"},
 		{"profile-result", "\t"},
-		{"ref", "1"},
+		{"ref", "2"},
 		{"ref-host", ua + "\n" + ub + "\x04"},
 		{"compare-result", "qq"}, // 설정할 항목이 있어도 묻지 않고 끝 (ask-set 단계가 없어야 함)
 	}
@@ -960,7 +960,7 @@ func TestBiosFlowTagRefPasteTab(t *testing.T) {
 	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
 	script := []flowStep{
 		{"profile-result", "\t"},
-		{"ref", "1"},
+		{"ref", "2"},
 		{"ref-host", ua + "\tt1\x04"}, // Tab 이 화면 전환이면 다음 단계가 profile-result 가 되어 어긋난다
 		{"compare-result", "qq"},
 	}
@@ -1090,7 +1090,7 @@ func TestBiosFlowRefPasteTabNoTagMode(t *testing.T) {
 	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
 	script := []flowStep{
 		{"profile-result", "\t"},
-		{"ref", "1"},
+		{"ref", "2"},
 		{"ref-host", ua + "\t메모\x04"},
 		{"compare-result", "qq"},
 	}
@@ -1103,5 +1103,291 @@ func TestBiosFlowRefPasteTabNoTagMode(t *testing.T) {
 	}
 	if h := pasteRefHosts([]string{"a\t메모, b;c x", "# 주석"}); fmt.Sprint(h) != "[a b c]" {
 		t.Errorf("pasteRefHosts = %v", h)
+	}
+}
+
+// 기준 메뉴 맨 위는 "대표서버 자동 지정" (hostname 입력은 2번). 1번을 고르면 태그·모델 묶음마다 대표 1대를 읽은 스냅샷에서
+// 골라 비교하고 (BMC 에 다시 접속하지 않음) 대표를 안내 줄·요약·compare_refs.tsv 에 남긴다.
+func TestFlowRefMenuAutoFirst(t *testing.T) {
+	a, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	b, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"ProcHyperthreading": "Disabled"})
+	})
+	c, uc := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua+" gold\n"+ub+" gold\n"+uc+" silver\n"), "VM"
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+	script := []flowStep{
+		{"profile-result", "\t"},
+		{"ref", "1"},
+		{"compare-result", "qq"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"}, func(i int, f *biosFlow) {
+		if i != 2 {
+			return
+		}
+		ui := f.ui
+		if f.cmp == nil || f.cmp.Auto == nil || f.cmp.Label != "대표서버 자동 (2대)" || ui.Tab() != 1 || !ui.refKey || !ui.cKey || ui.xKey {
+			t.Fatalf("자동 비교 결과: cmp=%+v tab=%d ref=%v c=%v x=%v", f.cmp, ui.Tab(), ui.refKey, ui.cKey, ui.xKey)
+		}
+		model := f.cmp.Auto.Bundles[0].Name[len("[gold] "):]
+		for _, want := range []string{"대표서버: [gold] " + model + " → " + ua, "[silver] " + model + " → " + uc, "(c: 묶음별 대표 바꾸기)"} {
+			if !strings.Contains(ui.msg, want) {
+				t.Errorf("안내 줄에 %q 없음: %q", want, ui.msg)
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	sc := fr.screen()
+	i1, i2, i3 := strings.Index(sc, " 1) 대표서버 자동 지정 (태그·모델별 1대)"), strings.Index(sc, " 2) 비교서버 hostname 입력"), strings.Index(sc, " 3) diff.txt (모델별 기준)")
+	if i1 < 0 || i2 < i1 || i3 < i2 {
+		t.Errorf("기준 메뉴 순서 (자동 / hostname / diff.txt): %d %d %d\n%s", i1, i2, i3, sc)
+	}
+	if !strings.Contains(sc, "c 대표서버 바꾸기") {
+		t.Errorf("c 키 안내가 없음")
+	}
+	if out := fr.out.String(); !strings.Contains(out, "전체비교: 기준 대표서버 자동 (2대) — 차이 있는 호스트 1대") || !strings.Contains(out, "대표서버: [gold] ") ||
+		!strings.Contains(out, autoRefsFile) {
+		t.Errorf("요약:\n%s", out)
+	}
+	tsv, err := os.ReadFile(filepath.Join(fr.f.u.Check.Dir, autoRefsFile))
+	if err != nil || !strings.Contains(string(tsv), "\t"+ua+"\t2\t") || !strings.Contains(string(tsv), "\t"+uc+"\t1\t") {
+		t.Errorf("%s = %q (%v)", autoRefsFile, tsv, err)
+	}
+	for _, s := range []*mockbmc.Server{a, b, c} { // 대표서버 자동은 대상에 다시 접속하지 않음
+		assertOneSession(t, s)
+		assertClean(t, s)
+	}
+}
+
+// c 키: 묶음을 고르고 그 묶음의 다른 서버를 대표로 고르면 같은 스냅샷으로 다시 비교한다 (접속 없음). 고른 대표는 유지된다.
+func TestFlowRepickBundleRepresentative(t *testing.T) {
+	a, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	b, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"ProcHyperthreading": "Disabled"})
+	})
+	c, uc := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua+" gold\n"+ub+" gold\n"+uc+" silver\n"), "VM"
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+	script := []flowStep{
+		{"profile-result", "\t"},
+		{"ref", "1"},
+		{"compare-result", "c"},
+		{"repick-bundle", "1"}, // 대표를 바꿀 수 있는 묶음은 [gold] 하나뿐 (silver 는 1대)
+		{"repick-host", "2"},   // ub 를 대표로
+		{"compare-result", "qq"},
+	}
+	var before []int
+	fr, err := runFlowTC(t, biosTUIArgs{O: o, UserSet: true}, "", script, map[string]string{"preview-empty": "q"}, func(i int, f *biosFlow) {
+		switch i {
+		case 2:
+			if rep := f.cmp.Auto.RepSnap(f.cmp.Auto.Bundles[0]).Target.Hostname; rep != ua {
+				t.Errorf("자동 대표 = %s, 기대 %s", rep, ua)
+			}
+			before = callCounts(a, b, c)
+		case 5:
+			bd := f.cmp.Auto.Bundles[0]
+			if !bd.Manual || f.cmp.Auto.RepSnap(bd).Target.Hostname != ub || len(f.autoPick) != 1 || !f.ui.cKey {
+				t.Errorf("직접 지정 결과: manual=%v rep=%s pick=%v c=%v", bd.Manual, f.cmp.Auto.RepSnap(bd).Target.Hostname, f.autoPick, f.ui.cKey)
+			}
+			if !strings.Contains(f.ui.msg, "[gold] ") || !strings.Contains(f.ui.msg, "→ "+ub) {
+				t.Errorf("재비교 안내 줄: %q", f.ui.msg)
+			}
+			for _, h := range f.cmp.Hosts {
+				if h.Target.Hostname == ub && h.Status != StatusIsReference {
+					t.Errorf("ub = %s, 기대 REFERENCE", h.Status)
+				}
+				if h.Target.Hostname == ua && (h.Status != StatusDiff || h.Ref.Target.Hostname != ub) {
+					t.Errorf("ua = %s ref %v", h.Status, h.Ref)
+				}
+			}
+			if after := callCounts(a, b, c); fmt.Sprint(after) != fmt.Sprint(before) {
+				t.Errorf("재비교가 대상에 다시 접속함: %v → %v", before, after)
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	sc := fr.screen() // 고르기 상자: 현재 대표·사유와 구성원별 일치 수
+	for _, want := range []string{"대표서버를 바꿀 묶음 (태그·모델)", "대표 " + ua + " · BIOS ", "지금 " + ua + ": BIOS ", ua + "  BIOS ", "← 지금 대표"} {
+		if !strings.Contains(sc, want) {
+			t.Errorf("재선택 화면에 %q 없음", want)
+		}
+	}
+	tsv, _ := os.ReadFile(filepath.Join(fr.f.u.Check.Dir, autoRefsFile))
+	if !strings.Contains(string(tsv), "\t"+ub+"\t2\t") || !strings.Contains(string(tsv), "직접 지정") {
+		t.Errorf("재선택 뒤 %s = %q", autoRefsFile, tsv)
+	}
+	for _, s := range []*mockbmc.Server{a, b, c} {
+		assertOneSession(t, s)
+		assertClean(t, s)
+	}
+}
+
+// 대표서버 기준 맞추기 시험 준비: 같은 태그(gold) 3대, a·c 가 같고 b 만 MinProcIdlePower·ProcTurbo 가 다름 → 대표는 a (다수결·입력 순서).
+// 두 속성 모두 VM 프로파일에 없는 속성이라 비교서버 값(compare)으로만 맞출 수 있다.
+func alignFlowRig(t *testing.T) (srv []*mockbmc.Server, ua, ub, uc string, o *commonOpts) {
+	t.Helper()
+	a, ua := startAllSrv(t, "hpe-dl360gen11", nil)
+	b, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
+		setAttrs(t, s, map[string]interface{}{"MinProcIdlePower": "NoCStates", "ProcTurbo": "Disabled"})
+	})
+	c, uc := startAllSrv(t, "hpe-dl360gen11", nil)
+	e, o := flowEnv(t, "")
+	o.user, o.profile = e.writeFile("targets.txt", ua+" gold\n"+ub+" gold\n"+uc+" gold\n"), "VM"
+	return []*mockbmc.Server{a, b, c}, ua, ub, uc, o
+}
+
+// 흐름: e → 1 대표서버 기준으로 맞추기 (전체비교 전이라 대표서버 자동 지정으로 먼저 비교, 접속 없음) → 체크 목록에서 한 줄만 체크 →
+// 확인 → 설정 → 재점검 → 맞추기 확인. mock 의 PATCH 본문에는 고른 속성만 있고 고르지 않은 ProcTurbo 는 없다.
+func TestFlowAlignApplySelectedOnly(t *testing.T) {
+	srv, ua, ub, uc, o := alignFlowRig(t)
+	a, b, c := srv[0], srv[1], srv[2]
+	swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, applySetPlan)
+	script := []flowStep{
+		{"profile-result", "e"},
+		{"edit-menu", "1"},
+		{"align-pick", " \r"}, // 첫 줄(MinProcIdlePower)만 체크 → Enter
+		{"ask-set", "y"},      // 3
+		{"set-result", "q"},
+		{"align-check", "q"}, // 5
+		{"profile-result", "qq"},
+	}
+	fr, err := runFlowTC(t, biosTUIArgs{O: o, UserSet: true}, "", script, nil, func(i int, f *biosFlow) {
+		text := strings.Join(f.ui.text, "\n")
+		switch i {
+		case 2:
+			if f.cmp == nil || f.cmp.Auto == nil || f.cmp.Auto.RepSnap(f.cmp.Auto.Bundles[0]).Target.Hostname != ua {
+				t.Errorf("대표서버 자동 지정으로 먼저 비교하고 대표는 %s 여야 함: %+v", ua, f.cmp)
+			}
+		case 3:
+			for _, w := range []string{"수정대상 1건", ub + "  MinProcIdlePower  NoCStates -> C6 (수정대상)"} {
+				if !strings.Contains(text, w) {
+					t.Errorf("확인 1 에 %q 없음:\n%s", w, text)
+				}
+			}
+			if strings.Contains(text, "ProcTurbo") {
+				t.Errorf("고르지 않은 ProcTurbo 가 확인 화면에 나옴 (버려져야 함):\n%s", text)
+			}
+		case 5:
+			for _, w := range []string{"대표서버 값이 된 항목 1/1건", ub + "  MinProcIdlePower: 현재값 NoCStates · Pending C6 · 대표서버 C6 (Pending 이 대표서버 값", "r 로 다시 비교"} {
+				if !strings.Contains(text, w) {
+					t.Errorf("맞추기 확인에 %q 없음:\n%s", w, text)
+				}
+			}
+			if strings.Contains(text, ua) || strings.Contains(text, uc) {
+				t.Error("보내지 않은 호스트는 맞추기 확인에 없어야 함")
+			}
+		}
+	})
+	if err != nil {
+		t.Fatalf("흐름 오류: %v", err)
+	}
+	if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+		t.Errorf("단계 = %v", fr.steps)
+	}
+	sc := fr.screen()
+	for _, w := range []string{"== [gold] ", "대표서버 " + ua, "[ ] MinProcIdlePower   NoCStates -> C6   (1대)", "[ ] ProcTurbo   Disabled -> Enabled   (1대)", "고른 항목 0 / 후보 2"} {
+		if !strings.Contains(sc, w) {
+			t.Errorf("체크 목록 화면에 %q 없음", w)
+		}
+	}
+	pb := patchBodies(b)
+	if len(pb) != 1 || fmt.Sprint(patchAttrs(t, pb[0])) != "map[MinProcIdlePower:C6]" {
+		t.Errorf("b PATCH = %v, 기대 고른 속성 하나만", pb)
+	}
+	assertSetSafe(t, b)
+	for _, s := range []*mockbmc.Server{a, c} {
+		if len(patchBodies(s)) != 0 {
+			t.Errorf("대표서버·같은 값 서버에 PATCH 가 감: %v", patchBodies(s))
+		}
+		assertOneSession(t, s)
+		assertClean(t, s)
+	}
+	if ss := b.Sessions(); ss.Created != 3 || ss.Deleted != 3 { // 점검 · 설정 · 재점검
+		t.Errorf("b 세션 = %+v, 기대 3", ss)
+	}
+	if out := fr.out.String(); !strings.Contains(out, "설정: Pending 확인 1대") || !strings.Contains(out, "맞추기 재점검 대표서버 값 1/1건") {
+		t.Errorf("요약:\n%s", out)
+	}
+}
+
+// 아무것도 체크하지 않고 Enter / 확인 1 에서 n → 쓰기 0회 (적용이 불리면 실패).
+func TestFlowAlignDeclineWritesNothing(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		script []flowStep
+		note   string
+	}{
+		{"선택 없음", []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"align-pick", "\r"}, {"profile-result", "qq"}}, "설정: 고른 항목이 없습니다"},
+		{"확인 n", []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"align-pick", " a\r"}, {"ask-set", "n"}, {"profile-result", "qq"}}, "설정: 설정하지 않았습니다"},
+		{"확인 Ctrl+X", []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"align-pick", "a\r"}, {"ask-set", "\x18"}, {"profile-result", "qq"}}, "설정: 설정하지 않았습니다"},
+		// 체크 목록에서 Esc 는 한 단계 뒤(수정 방법 선택), Ctrl+X 는 전체 취소(결과 보기)
+		{"체크 목록 Esc", []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"align-pick", "\x1b"}, {"edit-menu", "\x1b"}, {"profile-result", "qq"}}, ""},
+		{"체크 목록 Ctrl+X", []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"align-pick", "\x18"}, {"profile-result", "qq"}}, "설정: 설정하지 않았습니다"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv, _, _, _, o := alignFlowRig(t)
+			swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+			fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "", c.script, nil)
+			if err != nil {
+				t.Fatalf("흐름 오류: %v", err)
+			}
+			if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(c.script)) {
+				t.Errorf("단계 = %v", fr.steps)
+			}
+			if out := fr.out.String(); !strings.Contains(out, c.note) {
+				t.Errorf("요약:\n%s\n기대 %q", out, c.note)
+			}
+			for _, s := range srv {
+				if len(patchBodies(s)) != 0 {
+					t.Errorf("PATCH 가 감: %v", patchBodies(s))
+				}
+				assertOneSession(t, s)
+				assertClean(t, s)
+			}
+		})
+	}
+}
+
+// 체크 목록에서 Ctrl+X·Tab 으로 나오면 아무것도 쓰지 않고 결과 보기(있던 화면)로 돌아온다.
+// Esc 는 한 단계 뒤인 수정 방법 선택으로 가고, 거기서 Esc 를 한 번 더 눌러야 결과 보기로 돌아온다 (도움말대로).
+func TestFlowAlignCancelWritesNothing(t *testing.T) {
+	for _, key := range []string{"\x1b", "\x18", "\t"} {
+		t.Run(fmt.Sprintf("%q", key), func(t *testing.T) {
+			srv, _, _, _, o := alignFlowRig(t)
+			swapFlowPlan(t, func(*Config, *unifiedRun, *compareResult) *setPlan { return &setPlan{} }, nil)
+			script := []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"align-pick", " " + key}, {"profile-result", "qq"}}
+			if key == "\x1b" {
+				script = []flowStep{{"profile-result", "e"}, {"edit-menu", "1"}, {"align-pick", " " + key}, {"edit-menu", "\x1b"}, {"profile-result", "qq"}}
+			}
+			fr, err := runFlowT(t, biosTUIArgs{O: o, UserSet: true}, "", script, nil)
+			if err != nil {
+				t.Fatalf("흐름 오류: %v", err)
+			}
+			if fmt.Sprint(fr.steps) != fmt.Sprint(flowNames(script)) {
+				t.Errorf("단계 = %v", fr.steps)
+			}
+			if out := fr.out.String(); key != "\x1b" && !strings.Contains(out, "설정: 설정하지 않았습니다") {
+				t.Errorf("요약:\n%s", out)
+			}
+			for _, s := range srv {
+				if len(patchBodies(s)) != 0 {
+					t.Errorf("PATCH 가 감: %v", patchBodies(s))
+				}
+				assertOneSession(t, s)
+				assertClean(t, s)
+			}
+		})
 	}
 }

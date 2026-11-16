@@ -71,7 +71,6 @@ func TestParseConfErrors(t *testing.T) {
 		{"= 없음", "user=a\nfoo\n", "key=value"},
 		{"비밀번호 키", "user=a\npassword=s3cret-value\n", "비밀번호는 conf 에 둘 수 없습니다"},
 		{"allcheck_set 값", "user=a\nallcheck_set=yes\n", "on 또는 off"},
-		{"user2 권한 없음", "user=a\nuser2=b\n", "user2_role"},
 		{"user2 권한 값", "user=a\nuser2=b\nuser2_role=root\n", "Administrator, Operator, ReadOnly"},
 		{"user2 같은 id", "user=a\nuser2=a\nuser2_role=ReadOnly\n", "user 와 달라야"},
 	}
@@ -84,6 +83,14 @@ func TestParseConfErrors(t *testing.T) {
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: 메시지 %q 에 %q 없음", tc.name, err.Error(), tc.want)
 		}
+	}
+}
+
+// user2 만 있고 권한 줄이 없는 conf 는 오류가 아니다 (account create 가 그 벤더에 한해 터미널에서 묻는다).
+func TestParseConfUser2WithoutRole(t *testing.T) {
+	c, err := parseConf("user=a\nuser2=b\n", "bios.conf")
+	if err != nil || c.User2 != "b" || c.User2Role != "" || c.user2RoleFor("hpe") != "" {
+		t.Errorf("user2 권한 없음: %v %+v", err, c)
 	}
 }
 

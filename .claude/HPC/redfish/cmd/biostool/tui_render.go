@@ -592,12 +592,12 @@ func tuiHelpLines() []string {
 		"   q q           벤더 줄(맨 위)에서 두 번 — 종료 (설정할 항목이 있으면 먼저 수정 단계, 거기서 취소하면 결과 화면으로)",
 		"   Esc           q 와 같이 뒤로, 벤더 줄에서는 종료 확인만 취소 (끝내지 않음)",
 		"   r             전체 설정 비교 기준 다시 선택 (전체 설정 비교 화면에서)",
-		"   x             (전체 설정 비교 화면) 모델이 다른 대상을 참고용으로 비교해 CSV 로 저장",
+		"   x / c         (전체 설정 비교 화면) x 모델이 다른 대상 참고용 비교 CSV / c 대표서버 자동 지정 뒤 묶음별 대표 다시 고르기",
 		"   ↑ ↓ (k j)     한 줄 위/아래",
 		"   PgUp / PgDn   한 페이지 위/아래",
 		"   Home / End (g G)  맨 위 / 맨 아래",
 		"   a o f n s     보기: 전체 / OK 만 / difference 만 / N/A 만(접속·조회 실패 포함) / 요약(호스트마다 한 줄 건수)",
-		"   e             수정 메뉴 (어디서든, 취소하면 결과 화면으로)",
+		"   e / p         e 수정 메뉴 (어디서든, 취소하면 결과 화면으로) / p (프로파일 점검 화면) 프로파일에 태그·모델별 설정 행 추가",
 		"   Ctrl+X        진행 중 작업 취소 (결과 화면에서는 끝내지 않음)",
 		"   ?             이 도움말   (Ctrl+C / Ctrl+Z 는 무시됩니다)",
 		"",
@@ -607,6 +607,118 @@ func tuiHelpLines() []string {
 		"",
 		" 아무 키나 누르면 닫힙니다",
 	}
+}
+
+// ---- 체크 목록 (ChooseMulti) ----
+
+// tuiMultiView 는 체크 목록 화면 한 장을 그리는 데 필요한 모든 것입니다 (순수 함수 입력).
+type tuiMultiView struct {
+	Title string
+	Help  []string // 제목·상태 줄 아래 회색 안내
+	Rows  []TUIMultiRow
+	Cur   int      // 커서 줄
+	Top   int      // 본문 첫 줄 (커서가 보이게 tuiMultiFrame 이 조정해 돌려줌)
+	Hints []string // 키 안내 항목 (tuiWrapItems 형식)
+	Msg   string   // 맨 아래 안내 줄 (이미 그려진 한 줄, 없으면 "")
+}
+
+// tuiMultiStats 는 체크한 수 · 후보(고를 수 있는 줄) 수 · 자동 제외(Disabled) 수입니다. 묶음 머리 줄은 세지 않는다.
+func tuiMultiStats(rows []TUIMultiRow) (checked, cand, excluded int) {
+	for _, r := range rows {
+		switch {
+		case r.Group:
+		case r.Disabled:
+			excluded++
+		default:
+			cand++
+			if r.Checked {
+				checked++
+			}
+		}
+	}
+	return
+}
+
+// tuiMultiStatusLine 은 늘 보이는 맨 위 상태 줄 " 고른 항목 3 / 후보 41 · 자동 제외 17" 입니다.
+func tuiMultiStatusLine(color bool, width int, rows []TUIMultiRow) string {
+	c, n, x := tuiMultiStats(rows)
+	return tuiSegLine(color, width,
+		tuiSeg{" 고른 항목 ", ""}, tuiSeg{strconv.Itoa(c), tuiStGreen + ";1"},
+		tuiSeg{fmt.Sprintf(" / 후보 %d · 자동 제외 %d", n, x), ""})
+}
+
+// tuiMultiRowLine 은 체크 목록 한 줄입니다: "[ ] 이름" · "[x] 이름" · "[-] 이름 (제외: 사유)" · 묶음 머리 "== 이름 ==".
+// cur 면 색이 있을 땐 반전, 없으면 앞에 '>' (Choose 와 같은 방식).
+func tuiMultiRowLine(color bool, width int, r TUIMultiRow, cur bool) string {
+	var text, st string
+	switch {
+	case r.Group:
+		text, st = "== "+r.Label+" ==", tuiStCyan
+	case r.Disabled:
+		text, st = "[-] "+r.Label, tuiStGray
+		if r.Reason != "" {
+			text += " (제외: " + r.Reason + ")"
+		} else {
+			text += " (제외)"
+		}
+	case r.Checked:
+		text, st = "[x] "+r.Label, tuiStGreen
+	default:
+		text = "[ ] " + r.Label
+	}
+	switch {
+	case cur && color:
+		return tuiSegLine(color, width, tuiSeg{"   ", ""}, tuiSeg{text, tuiStRev})
+	case cur:
+		return tuiSegLine(color, width, tuiSeg{" > " + text, ""})
+	}
+	return tuiSegLine(color, width, tuiSeg{"   ", ""}, tuiSeg{text, st})
+}
+
+// tuiMultiFrame 은 체크 목록 화면 한 장(줄 목록, 높이 h 이하)과 본문 높이·조정된 첫 줄을 돌려줍니다:
+// 제목 줄(오른쪽에 줄 위치) · 상태 줄 · 안내 · 본문(스크롤) · 구분선 · 키 안내 · 안내 줄.
+func tuiMultiFrame(color bool, w, h int, v tuiMultiView) (lines []string, bodyH, top int) {
+	var help []string
+	for _, l := range v.Help {
+		help = append(help, tuiSegLine(color, w, tuiSeg{"   " + l, tuiStGray}))
+	}
+	foot := append([]string{tuiRule(color, w)}, tuiWrapItems(color, w, v.Hints)...)
+	foot = append(foot, tuiMaxStr(v.Msg, " "))
+	n := len(v.Rows)
+	bodyH = tuiMaxInt(h-2-len(help)-len(foot), 1)
+	top = tuiMaxInt(tuiMinInt(v.Top, n-bodyH), 0)
+	if v.Cur < top {
+		top = v.Cur
+	}
+	if v.Cur >= top+bodyH {
+		top = v.Cur - bodyH + 1
+	}
+	top = tuiMaxInt(top, 0)
+	end := tuiMinInt(top+bodyH, n)
+	title := []tuiSeg{{" " + v.Title, tuiStBold}}
+	if n > 0 {
+		title = append(title, tuiSeg{fmt.Sprintf("   줄 %d-%d/%d", top+1, end, n), tuiStGray})
+	}
+	lines = append(lines, tuiSegLine(color, w, title...), tuiMultiStatusLine(color, w, v.Rows))
+	lines = append(lines, help...)
+	for i := top; i < end; i++ {
+		lines = append(lines, tuiMultiRowLine(color, w, v.Rows[i], i == v.Cur))
+	}
+	for i := end - top; i < bodyH; i++ {
+		lines = append(lines, "")
+	}
+	lines = append(lines, foot...)
+	if len(lines) > h {
+		lines = lines[:h]
+	}
+	return lines, bodyH, top
+}
+
+func tuiMaxStr(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
 }
 
 // ---- 비 tty 평문 ----

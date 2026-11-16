@@ -19,17 +19,114 @@ package main
 //   예) *Ocp* 는 ProcPwrPerf(Dell CPU 전원 관리)·EnhancedProcPerf 에 걸려 Ocp* / *_Ocp* 로,
 //       *Tcm* 은 SataPortCModel 에 걸려 Tcm* 로, *Sas* 는 AMD SEV ASID 속성에 걸려 EmbSas* / IntegratedSas* 로.
 
-import "strings"
+import (
+	"net"
+	"regexp"
+	"strings"
+)
+
+// 서버마다 값이 달라야 정상인 식별자 세 묶음. builtinProtect(설정 금지)와 uniqueAttrs(비교 제외)가 같이 가리킨다.
+var (
+	// iSCSI·NVMe-oF 식별자
+	protIscsi = []string{"*Iscsi*", "*Iqn*", "*Initiator*", "*Nqn*"}
+	// IP·네트워크 주소
+	protNet = []string{"*Ipv4*", "*Ipv6*", "*IpAddress*", "*Ip4*", "*Ip6*", "*Subnet*", "*Gateway*", "*Dns*", "*Dhcp*", "*Vlan*", "*MacAddr*"}
+	// 서버 이름·식별 정보 (*Uuid* 는 ProcessorUuidControl 같은 성능 속성에 걸려 이 묶음에 넣지 않고 builtinProtect 에만 더함)
+	protIdent = []string{"ServerName", "*HostName*", "*ServerAsset*", "*AssetTag*", "*ServiceTag*", "*SerialNumber*", "*SerialNum*",
+		"Admin*", "ServerOtherInfo", "ServerPrimaryOs", "ServerConfigLock*", "*ContactInfo*"}
+)
+
+// uniqueAttrs 는 서버마다 값이 다른 "식별자" 속성 이름 패턴입니다. ignore_attrs.txt 가 내장 목록을 대체해도
+// 전체비교에서는 항상 제외합니다 (runUnified·doAllCheck 에서 합침). 설정 보호(builtinProtect)보다 좁습니다:
+// 부팅·보안·RAID·NIC 은 물론 iSCSI·PXE·VLAN·DHCP·IPv4 사용 여부 같은 켜고 끄는 속성(IscsiDev1EnDis·PxeDev1VlanEnDis·
+// Dhcpv4·IPv4PXESupport 등)도 고유값이 아니므로 넣지 않아 비교에는 그대로 나옵니다 (쓰기만 보호 속성으로 막힘).
+// HTTP·iSCSI 장치의 IP 는 "HttpDev1Ip"·"IscsiDev1Con1Ip" 처럼 끝이 Ip 입니다.
+var uniqueAttrs = []string{
+	// iSCSI·NVMe-oF 식별자
+	"*Iqn*", "*Initiator*", "*Nqn*", "*HostId*",
+	// IP·네트워크 주소 (이름에 주소·마스크·게이트웨이·DNS 가 들어간 것)
+	"*Ipv4*Address*", "*Ipv6*Address*", "*IpAddress*", "*Ipv4*Gateway*", "*Ipv6*Gateway*", "*Ipv4*Mask*", "*Subnet*", "*Gateway*",
+	"*Ipv4*Dns*", "*Ipv6*Dns*", "*MacAddr*", "Http*Ip", "Iscsi*Con*Ip",
+	// 서버 이름·식별 정보
+	"ServerName", "*HostName*", "*ServerAsset*", "*AssetTag*", "*ServiceTag*", "*SerialNumber*", "*SerialNum*",
+	"AdminName", "AdminOtherInfo", "ServerOtherInfo", "ServerPrimaryOs", "ServiceName", "ServiceOtherInfo", "*ContactInfo*",
+	// 장치 고유 번호
+	"*Duid*", "*ChipId*", "*Wwn*", "*Guid*",
+}
+
+func concatPats(lists ...[]string) []string {
+	var out []string
+	for _, l := range lists {
+		out = append(out, l...)
+	}
+	return out
+}
+
+// withUnique 는 비교 제외 패턴에 uniqueAttrs 를 더한 새 집합입니다 (ign 이 nil 이어도 고유값 목록은 항상 들어감).
+func withUnique(ign *ignoreSet) *ignoreSet {
+	if ign == nil {
+		return newIgnoreSet(uniqueAttrs, "고유값 내장 목록")
+	}
+	return newIgnoreSet(append(append([]string(nil), ign.Pats...), uniqueAttrs...), ign.Source+" + 고유값 내장 목록")
+}
+
+var (
+	reMACValue  = regexp.MustCompile(`^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}$|^[0-9A-Fa-f]{2}(?:-[0-9A-Fa-f]{2}){5}$`)
+	reUUIDValue = regexp.MustCompile(`^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$`)
+)
+
+// looksUnique 는 값이 서버 고유값 모양인지 봅니다: MAC(6쌍, : 또는 -), UUID(8-4-4-4-12), IPv4·IPv6, iqn.·nqn. 시작.
+// Enabled·0·10.5 같은 열거형·숫자는 아닙니다. 비교·맞추기에서 이름과 상관없이 값만 보고 제외할 때 씁니다.
+func looksUnique(v string) bool {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return false
+	}
+	l := strings.ToLower(v)
+	if strings.HasPrefix(l, "iqn.") || strings.HasPrefix(l, "nqn.") {
+		return true
+	}
+	if reUUIDValue.MatchString(v) {
+		return true
+	}
+	if reMACValue.MatchString(v) {
+		return true
+	}
+	if ip := net.ParseIP(v); ip != nil {
+		return strings.Contains(v, ":") || strings.Count(v, ".") == 3
+	}
+	return false
+}
+
+// reVersionName 은 버전을 뜻하는 속성 이름입니다 (Version·Revision·Firmware·BiosVer·FwVer; "Server" 의 ver 는 아님).
+var reVersionName = regexp.MustCompile(`(?i:version|revision|firmware)|Ver(?:[A-Z0-9_]|$)`)
+
+// looksUniqueAttr 는 이름까지 보고 값이 고유값 모양인지 봅니다. 이름이 버전을 뜻하면 4칸 숫자(4.1.4.54)를 IP 로 보지 않습니다.
+func looksUniqueAttr(name, v string) bool {
+	if ip := net.ParseIP(strings.TrimSpace(v)); ip != nil && !strings.Contains(v, ":") && reVersionName.MatchString(name) {
+		return false
+	}
+	return looksUnique(v)
+}
+
+// uniquePair 는 비교 한 줄(기준값·대상값)을 값 모양만으로 제외할지 정합니다. 양쪽에 값이 있으면 두 값이 모두 고유값 모양일 때만
+// 제외하고(한쪽만 모양이 같으면 진짜 차이일 수 있음), 한쪽에만 있는 속성은 있는 쪽 값으로 봅니다.
+func uniquePair(name, rv string, rok bool, hv string, hok bool) bool {
+	switch {
+	case rok && hok:
+		return looksUniqueAttr(name, rv) && looksUniqueAttr(name, hv)
+	case rok:
+		return looksUniqueAttr(name, rv)
+	case hok:
+		return looksUniqueAttr(name, hv)
+	}
+	return false
+}
 
 // builtinProtect 는 코드에 고정된 보호 속성 패턴입니다 (bios.conf·ignore_attrs.txt 로 끌 수 없음).
-var builtinProtect = []string{
-	// iSCSI·NVMe-oF 식별자
-	"*Iscsi*", "*Iqn*", "*Initiator*", "*Nqn*",
-	// IP·네트워크 주소
-	"*Ipv4*", "*Ipv6*", "*IpAddress*", "*Ip4*", "*Ip6*", "*Subnet*", "*Gateway*", "*Dns*", "*Dhcp*", "*Vlan*", "*MacAddr*",
-	// 서버 이름·식별 정보
-	"ServerName", "*HostName*", "*ServerAsset*", "*AssetTag*", "*ServiceTag*", "*SerialNumber*", "*SerialNum*", "*Uuid*",
-	"Admin*", "ServerOtherInfo", "ServerPrimaryOs", "ServerConfigLock*", "*ContactInfo*",
+var builtinProtect = concatPats(protIscsi, protNet, protIdent, []string{"*Uuid*"}, builtinProtectRest)
+
+var builtinProtectRest = []string{
 	// 부팅 (부팅 모드·순서·옵션·PXE·HTTP/URL 부팅·iPXE)
 	"BootMode", "*Boot*", "*BootSeq*", "*BootOrder*", "*BootOption*", "UefiBoot*", "LegacyBoot*", "*BootFile*", "*UrlBoot*",
 	"*Url*", "OneTimeBoot*", "*Pxe*", "*NetworkBoot*", "*HttpBoot*", "*Ipxe*", "*Http*", "*Network*", "*Hdd*",

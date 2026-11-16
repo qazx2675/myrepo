@@ -100,13 +100,13 @@ func compareLines(h *allHost, ign *ignoreSet) []ResultLine {
 	sort.Strings(names)
 	out := make([]ResultLine, 0, len(names))
 	for _, n := range names {
-		if ign.match(n) {
+		rv, rok := ref[n]
+		hv, hok := host[n]
+		if ign.match(n) || uniquePair(n, rv, rok, hv, hok) {
 			continue
 		}
 		l := base
 		l.Attr = n
-		rv, rok := ref[n]
-		hv, hok := host[n]
 		switch {
 		case rok && hok:
 			l.Expected, l.Current, l.Note = showValue(rv), showValue(hv), StatusSame
@@ -129,7 +129,7 @@ func compareLines(h *allHost, ign *ignoreSet) []ResultLine {
 func referenceLines(base ResultLine, attrs map[string]string, ign *ignoreSet) []ResultLine {
 	names := make([]string, 0, len(attrs))
 	for n := range attrs {
-		if !ign.match(n) {
+		if !ign.match(n) && !looksUniqueAttr(n, attrs[n]) {
 			names = append(names, n)
 		}
 	}

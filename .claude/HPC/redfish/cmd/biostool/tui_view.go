@@ -31,6 +31,8 @@ package main
 //   - Ask(q) TUIAnswer          y → TUIYes, n → TUINo, Ctrl+X/Esc → TUIAbort (↑↓ PgUp/PgDn ←→ Enter 로 결과는 계속 볼 수 있음).
 //     묻기 전에 이미 들어와 쌓인 키(미리 친 키)는 버린다 — 확인 질문이 앞서 친 y 로 넘어가지 않게
 //   - InputLine(prompt, init) (string, bool), InputLines(title) ([]string, bool), Choose(title, items) (int, bool)
+//   - ChooseMulti(title, rows, opt...) ([]int, bool) 체크 목록 (화면 전체): Space 체크 · a/n 묶음 전체 선택/해제 · Enter 확정(체크한 rows 번호) ·
+//     Esc/q 한 단계 뒤로 · Ctrl+X 전체 취소(TakeAbort) · Tab 접기(TakeTabOut). 맨 위 "고른 항목 N / 후보 M · 자동 제외 K". 그리기는 tuiMultiFrame
 //   - Progress(title, fn) error 진행 줄을 띄우고 fn 이 끝날 때까지 결과 보기 키를 받는다. Ctrl+X → j.Canceled() 닫힘.
 //     q/Esc 는 무시("작업 중"). fn 이 패닉하면 화면을 되돌릴 수 있게 호출한 goroutine 에서 다시 패닉한다.
 //   - Quit() bool               SIGTERM/SIGHUP/SIGINT 를 받았거나 입력이 끝났음 — 이후 모든 메서드는 곧바로
@@ -87,11 +89,13 @@ const tuiQuitConfirm = "종료하려면 q 를 한 번 더 누르세요 (Esc: 계
 type TUIAction int
 
 const (
-	TUIQuit   TUIAction = iota // 벤더 줄에서 q 두 번(종료 확인), 글 보기에서 q/Esc(돌아가기), 시그널, 입력 끝
-	TUIEdit                    // e 수정 메뉴
-	TUITab                     // Tab/Shift+Tab 보기 탭 전환 (탭이 2개라 방향은 따로 없음)
-	TUIRef                     // r 기준 다시 선택 (SetRefKey 로 켠 보기에서만)
-	TUIXModel                  // x 모델이 다른 대상 참고용 비교 (SetXKey 로 켠 보기에서만)
+	TUIQuit    TUIAction = iota // 벤더 줄에서 q 두 번(종료 확인), 글 보기에서 q/Esc(돌아가기), 시그널, 입력 끝
+	TUIEdit                     // e 수정 메뉴
+	TUITab                      // Tab/Shift+Tab 보기 탭 전환 (탭이 2개라 방향은 따로 없음)
+	TUIRef                      // r 기준 다시 선택 (SetRefKey 로 켠 보기에서만)
+	TUIXModel                   // x 모델이 다른 대상 참고용 비교 (SetXKey 로 켠 보기에서만)
+	TUIPick                     // c 대표서버를 묶음별로 다시 고르기 (SetPickKey 로 켠 보기에서만)
+	TUIProfAdd                  // p 프로파일에 태그·모델별 설정 추가 (SetProfileKey 로 켠 뒤 0번 보기 탭(프로파일 점검)에서만)
 )
 
 // TUIAnswer 는 Ask 의 답입니다. 0 값이 TUIAbort 라서 모르면 "취소" 로 다룬다.
@@ -110,6 +114,7 @@ const (
 	tpLine
 	tpLines
 	tpChoose
+	tpMulti // 체크 목록 (ChooseMulti) — 화면 전체를 쓴다
 )
 
 // tuiPrompt 는 화면 아래쪽(키 안내 줄 위)에 뜨는 질문·입력 상자입니다.
@@ -122,6 +127,24 @@ type tuiPrompt struct {
 	cur   int      // 고르기 커서
 	num   string   // 숫자로 고르는 중
 	help  []string // 제목 줄 바로 아래 회색 안내 (한 줄·여러 줄 입력)
+
+	multi []TUIMultiRow // 체크 목록 줄 (ChooseMulti 가 복사해 둔 것 — 체크 상태는 여기서 바뀜)
+	top   int           // 체크 목록 본문 첫 줄
+	pageH int           // 체크 목록 마지막 본문 높이 (PgUp/PgDn 단위)
+}
+
+// TUIMultiRow 는 체크 목록(ChooseMulti)의 한 줄입니다.
+type TUIMultiRow struct {
+	Group    bool   // 묶음 머리 줄 (고를 수 없음 — 커서는 지나간다)
+	Label    string // 줄 글
+	Disabled bool   // 자동 제외 — "[-] 글 (제외: 사유)" 로 보이고 체크되지 않는다
+	Reason   string // Disabled 일 때 제외 사유
+	Checked  bool   // 체크 상태 (ChooseMulti 는 모두 해제로 시작 — 넘긴 값은 쓰지 않는다)
+}
+
+// TUIMultiOpt 는 ChooseMulti 의 선택 사항입니다.
+type TUIMultiOpt struct {
+	Help []string // 제목·상태 줄 아래 회색 안내
 }
 
 // TUIJob 은 Progress 로 돌리는 작업에 주는 손잡이입니다 (작업 goroutine 에서 불러도 된다).
@@ -184,8 +207,11 @@ type TUI struct {
 	top      int  // 본문 첫 줄 위치
 	refKey   bool // r 키(기준 다시 선택)를 받음
 	xKey     bool // x 키(모델이 다른 비교)를 받음
+	cKey     bool // c 키(대표서버 묶음별 다시 고르기)를 받음
+	pKey     bool // p 키(프로파일에 설정 추가)를 받음 — 탭 상태가 아니라 전체 설정, 0번 보기 탭에서만 동작
 	quitArm  bool // 벤더 줄에서 q 를 한 번 눌러 종료 확인 중 (다음 q 면 종료, 다른 키면 취소)
 	tabOut   bool // 기준 고르기·입력 중 Tab 으로 빠져나옴 (TakeTabOut 으로 읽고 지움)
+	abortKey bool // 체크 목록에서 Ctrl+X 로 나옴 (TakeAbort 로 읽고 지움 — Esc 는 한 단계 뒤로라 켜지지 않음)
 	bodyH    int  // 마지막으로 그린 본문 높이 (PgUp/PgDn 단위)
 	help     bool
 	msg      string
@@ -230,6 +256,7 @@ type tuiResState struct {
 	filter      rune
 	refKey      bool
 	xKey        bool
+	cKey        bool
 }
 
 // tuiOpen 은 raw 모드·대체 화면으로 들어가고 키 읽기를 시작합니다. raw 모드 실패면 아무것도 쓰지 않고 오류.
@@ -357,7 +384,7 @@ func (u *TUI) SetResults(title string, vgs []VendorGroups) {
 		ptop = u.resTop
 	}
 	u.title, u.vgs, u.text, u.textMode = title, vgs, nil, false
-	u.vi, u.gi, u.top, u.filter, u.inGroup, u.refKey, u.xKey = 0, 0, 0, tuiFilterAll, false, false, false
+	u.vi, u.gi, u.top, u.filter, u.inGroup, u.refKey, u.xKey, u.cKey = 0, 0, 0, tuiFilterAll, false, false, false, false
 	if keep {
 		u.filter = pf
 		for i, vg := range vgs {
@@ -401,6 +428,15 @@ func (u *TUI) SetRefKey(on bool) { u.refKey = on }
 // SetXKey 는 지금 보기 탭에서 x 키(Browse → TUIXModel)를 받을지 정합니다.
 func (u *TUI) SetXKey(on bool) { u.xKey = on }
 
+// SetPickKey 는 지금 보기 탭에서 c 키(Browse → TUIPick, 대표서버를 묶음별로 다시 고르기)를 받을지 정합니다.
+func (u *TUI) SetPickKey(on bool) { u.cKey = on }
+
+// SetProfileKey 는 0번 보기 탭(프로파일 점검)의 결과 보기에서 p 키(Browse → TUIProfAdd)를 받을지 정합니다.
+func (u *TUI) SetProfileKey(on bool) { u.pKey = on }
+
+// profKeyActive 는 지금 p 키(프로파일에 설정 추가)를 받는 화면인지입니다.
+func (u *TUI) profKeyActive() bool { return u.pKey && u.ti == 0 && !u.textMode }
+
 // SetTabs 는 결과 보기 위의 보기 탭입니다 (지금 내용은 0번 탭, 다른 탭은 빈 결과 보기로 시작).
 func (u *TUI) SetTabs(names []string) {
 	u.tabs, u.ti, u.saved = names, 0, make([]tuiResState, len(names))
@@ -416,6 +452,16 @@ func (u *TUI) TakeTabOut() bool {
 	return t
 }
 
+// TakeAbort 는 직전 ChooseMulti 가 Ctrl+X(전체 취소)로 끝났는지 알려 주고 표시를 지웁니다 (Esc 는 한 단계 뒤로 — false).
+func (u *TUI) TakeAbort() bool {
+	if u == nil {
+		return false
+	}
+	a := u.abortKey
+	u.abortKey = false
+	return a
+}
+
 // SwitchTab 은 지금 결과 보기 상태를 저장하고 i 번 보기 탭의 상태로 바꿉니다 (글 보기였어도 결과 보기로 돌아감).
 func (u *TUI) SwitchTab(i int) {
 	if i < 0 || i >= len(u.tabs) {
@@ -425,13 +471,13 @@ func (u *TUI) SwitchTab(i int) {
 		u.title, u.top = u.resTitle, u.resTop
 	}
 	if i != u.ti {
-		u.saved[u.ti] = tuiResState{u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey, u.xKey}
+		u.saved[u.ti] = tuiResState{u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey, u.xKey, u.cKey}
 		s := u.saved[i]
 		if s.title == "" {
 			s.title, s.filter = u.tabs[i], tuiFilterAll
 		}
 		u.ti = i
-		u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey, u.xKey = s.title, s.vgs, s.vi, s.gi, s.top, s.inGroup, s.filter, s.refKey, s.xKey
+		u.title, u.vgs, u.vi, u.gi, u.top, u.inGroup, u.filter, u.refKey, u.xKey, u.cKey = s.title, s.vgs, s.vi, s.gi, s.top, s.inGroup, s.filter, s.refKey, s.xKey, s.cKey
 		u.gen++
 	}
 	u.text, u.textMode = nil, false
@@ -579,6 +625,12 @@ func (u *TUI) Browse() TUIAction {
 			return true
 		case k.isRune('x', 'X') && !u.textMode && u.xKey:
 			act = TUIXModel
+			return true
+		case k.isRune('c', 'C') && !u.textMode && u.cKey:
+			act = TUIPick
+			return true
+		case k.isRune('p', 'P') && u.profKeyActive():
+			act = TUIProfAdd
 			return true
 		}
 		u.navKey(k) // Ctrl+X 등 나머지는 무시
@@ -852,6 +904,110 @@ func (u *TUI) Choose(title string, items []string) (int, bool) {
 	return pick, pick >= 0
 }
 
+// ChooseMulti 는 체크 목록 고르기입니다 (화면 전체를 씀 — 수백 줄이어도 스크롤만 한다, 검색·필터 없음).
+// 체크는 모두 해제로 시작한다 (rows 의 Checked 는 쓰지 않음). 키: ↑↓(k j) PgUp/PgDn Home/End 이동 (묶음 머리·제외 줄 위도 지나감),
+// Space 체크/해제 (머리·제외 줄은 체크되지 않음), a 지금 묶음 모두 선택, n 지금 묶음 모두 해제 (묶음 머리가 없으면 전체가 한 묶음),
+// Enter 확정 (체크한 줄의 rows 번호를 돌려줌 — 하나도 안 골랐으면 빈 목록과 true), Esc/q 한 단계 뒤로 (nil, false),
+// Ctrl+X 전체 취소 (nil, false, 직후 TakeAbort 가 true), Tab/Shift+Tab 은 화면 탭이 있으면 접고 TakeTabOut 이 true.
+// rows 가 비었거나 u 가 nil 이면 바로 (nil, false).
+func (u *TUI) ChooseMulti(title string, rows []TUIMultiRow, opt ...TUIMultiOpt) ([]int, bool) {
+	if u == nil || len(rows) == 0 {
+		return nil, false
+	}
+	var o TUIMultiOpt
+	if len(opt) > 0 {
+		o = opt[0]
+	}
+	rs := append([]TUIMultiRow(nil), rows...)
+	first := 0
+	for i := len(rs) - 1; i >= 0; i-- {
+		rs[i].Checked = false
+		if !rs[i].Group {
+			first = i
+		}
+	}
+	p := &tuiPrompt{kind: tpMulti, title: title, multi: rs, help: o.Help, cur: first, pageH: tuiMaxInt(len(rs), 1)}
+	u.prompt = p
+	u.abortKey = false
+	defer func() { u.prompt = nil }()
+	var picked []int
+	ok := false
+	u.run(func(k tuiKey) bool {
+		switch {
+		case k.k == tkUp || k.isRune('k'):
+			p.cur = tuiMaxInt(p.cur-1, 0)
+		case k.k == tkDown || k.isRune('j'):
+			p.cur = tuiMinInt(p.cur+1, len(rs)-1)
+		case k.k == tkPgUp:
+			p.cur = tuiMaxInt(p.cur-tuiMaxInt(p.pageH, 1), 0)
+		case k.k == tkPgDn:
+			p.cur = tuiMinInt(p.cur+tuiMaxInt(p.pageH, 1), len(rs)-1)
+		case k.k == tkHome:
+			p.cur = 0
+		case k.k == tkEnd:
+			p.cur = len(rs) - 1
+		case k.isRune(' '):
+			switch r := &rs[p.cur]; {
+			case r.Group:
+				u.msg = "묶음 머리 줄은 체크하지 않습니다 (a 묶음 전체 선택)"
+			case r.Disabled:
+				u.msg = "자동 제외된 항목은 고를 수 없습니다: " + tuiMaxStr(r.Reason, "제외")
+			default:
+				r.Checked = !r.Checked
+			}
+		case k.isRune('a', 'A', 'n', 'N'):
+			lo, hi := tuiMultiGroupRange(rs, p.cur)
+			on := k.isRune('a', 'A')
+			for i := lo; i < hi; i++ {
+				if !rs[i].Group && !rs[i].Disabled {
+					rs[i].Checked = on
+				}
+			}
+		case k.k == tkEnter:
+			picked = []int{}
+			for i, r := range rs {
+				if r.Checked {
+					picked = append(picked, i)
+				}
+			}
+			ok = true
+			return true
+		case k.isRune(tuiCtrlX):
+			u.abortKey = true
+			return true
+		case k.k == tkEsc || k.isRune('q', 'Q'):
+			return true
+		case (k.isRune(tuiTab) || k.k == tkBackTab) && len(u.tabs) > 1: // 화면 탭이 있으면 Tab 은 접고 다른 화면으로
+			u.tabOut = true
+			return true
+		}
+		return false
+	}, nil, nil, nil)
+	if !ok {
+		return nil, false
+	}
+	return picked, true
+}
+
+// tuiMultiGroupRange 는 cur 줄이 속한 묶음의 줄 범위 [lo, hi) 입니다: 가장 가까운 위쪽 묶음 머리 줄(cur 자신 포함)부터 다음 머리 줄 앞까지.
+// 머리 줄이 없으면 전체가 한 묶음.
+func tuiMultiGroupRange(rows []TUIMultiRow, cur int) (lo, hi int) {
+	for i := cur; i >= 0; i-- {
+		if rows[i].Group {
+			lo = i
+			break
+		}
+	}
+	hi = len(rows)
+	for i := lo + 1; i < len(rows); i++ {
+		if rows[i].Group {
+			hi = i
+			break
+		}
+	}
+	return
+}
+
 // edit 은 한 줄 편집 키입니다 (Backspace, 보이는 문자 추가).
 func (p *tuiPrompt) edit(k tuiKey) {
 	switch {
@@ -1001,6 +1157,12 @@ func (u *TUI) draw() {
 // frame 은 화면 한 장(줄 목록)입니다: 머리(제목·탭·표 머리) + 본문(스크롤) + 꼬리(진행·질문·키 안내·안내 줄).
 func (u *TUI) frame(w, h int) []string {
 	color := u.env.Color
+	if p := u.prompt; p != nil && p.kind == tpMulti { // 체크 목록은 결과 화면을 덮고 전체를 쓴다
+		lines, bodyH, top := tuiMultiFrame(color, w, h, tuiMultiView{Title: p.title, Help: p.help, Rows: p.multi, Cur: p.cur, Top: p.top,
+			Hints: u.hintItems(), Msg: u.msgLine(w)})
+		p.pageH, p.top = bodyH, top
+		return lines
+	}
 	if u.help {
 		var out []string
 		for i, l := range tuiHelpLines() {
@@ -1156,6 +1318,13 @@ func (u *TUI) hintItems() []string {
 				h = append(h, "Tab 다른 화면")
 			}
 		}
+		if p.kind == tpMulti { // 결과 보기와 같은 [이동] [작업] 이름 표시
+			h = []string{"[이동]", "↑↓ 한 줄", "PgUp/PgDn 페이지", "Home/End 처음·끝"}
+			if len(u.tabs) > 1 {
+				h = append(h, "Tab 다른 화면")
+			}
+			return append(h, "[작업]", "Space 체크", "a 묶음 전체 선택", "n 묶음 전체 해제", "Enter 확정", "Esc 뒤로", "Ctrl+X 전체 취소")
+		}
 		if h != nil {
 			return append([]string{"[입력]"}, h...)
 		}
@@ -1199,6 +1368,12 @@ func (u *TUI) hintItems() []string {
 		}
 		if u.xKey {
 			out = append(out, "x 모델 다른 비교")
+		}
+		if u.cKey {
+			out = append(out, "c 대표서버 바꾸기")
+		}
+		if u.profKeyActive() {
+			out = append(out, "p 프로파일 추가")
 		}
 		out = append(out, "e 수정 메뉴")
 	}

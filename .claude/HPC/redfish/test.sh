@@ -2,12 +2,14 @@
 # test.sh — biostool TUI 를 mock BMC 로 바로 시험해 보는 원클릭 데모 (실제 BMC 에는 접속하지 않음).
 #
 # 사용법:
-#   bash test.sh           mock BMC 7대를 띄우고 TUI(biostool bios)를 바로 실행
+#   bash test.sh           mock BMC 8대를 띄우고 TUI(biostool bios)를 바로 실행
 #   bash test.sh --check   TUI 없이 같은 환경에서 점검+전체비교(-plain)를 돌려 OK/FAIL 출력
 #   bash test.sh --clean   .testenv/ 와 .testbin/ 삭제
 #
-# 하는 일: 새로 빌드(.testbin/, bin/ 은 건드리지 않음) -> mock BMC 7대(127.0.0.1:18441~18447) 기동
+# 하는 일: 새로 빌드(.testbin/, bin/ 은 건드리지 않음) -> mock BMC 8대(127.0.0.1:18441~18448) 기동
 #          -> 시험용 작업 폴더 .testenv/ 생성 (실제 user.txt·diff.txt·results 는 건드리지 않음) -> 실행 -> 종료 시 mock 정리.
+# mock 8번째(18448) = gold 태그의 변형 R660: testdata/dell-r660 사본(.testenv/trees/dell-r660-b)에서 속성 3개 값이 다르고
+#          1개가 빠졌으며 고유값 이름(NvdimmSerialNum0, 이름 패턴 *SerialNum* 으로 제외)이 더해져 있다 — 대표서버 자동 지정·맞추기·고유값 제외 시험용 (testdata/ 는 그대로).
 set -euo pipefail
 cd "$(dirname "$0")"
 root="$PWD"
@@ -17,7 +19,7 @@ base_port=18441
 
 case "${1:-}" in
   -h | --help)
-    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
     ;;
   --clean)
@@ -69,19 +71,40 @@ mocks=(
   "4 hpe-dl360gen10 silver"
   "5 lenovo-sr650v3 -"
   "6 dell-r660 -"
+  "7 dell-r660-b gold"
 )
 pass="mock-demo-pass" # mock 전용 값 (실제 BMC 비밀번호 아님)
 echo "[2/4] mock BMC ${#mocks[@]}대 기동"
 mkdir -p "$env_dir"
 : >"$env_dir/user.txt"
+# 변형 R660 트리: testdata/dell-r660 을 .testenv/trees/ 로 복사해 고친다 (testdata/ 는 수정하지 않음).
+#  - 값이 다른 속성 3개: ProcCStates Enabled→Disabled, LlcPrefetch Enabled→Disabled, SubNumaCluster Disabled→Enabled
+#  - 빠진 속성 1개: MemTest (대표서버에는 있고 이 서버에는 없음)
+#  - 고유값 이름 속성 NvdimmSerialNum0 (값 모양이 아니라 이름 패턴 *SerialNum* 으로 제외됨)을 더하고 ServiceTag·AssetTag·SerialNumber 도 다르게 — 비교에서는 빠져야 한다
+variant="$env_dir/trees/dell-r660-b"
+rm -rf "$variant"
+mkdir -p "$env_dir/trees"
+cp -r testdata/dell-r660 "$variant"
+vbios="$variant/redfish/v1/Systems/System.Embedded.1/Bios.json"
+sed -i \
+  -e 's/"ProcCStates": "Enabled"/"ProcCStates": "Disabled"/' \
+  -e 's/"LlcPrefetch": "Enabled"/"LlcPrefetch": "Disabled"/' \
+  -e 's/"SubNumaCluster": "Disabled"/"SubNumaCluster": "Enabled"/' \
+  -e '/"MemTest"/d' \
+  -e 's/"AssetTag": "MOCK-ASSET-0001"/"NvdimmSerialNum0": "MOCK-NVDIMM-0002",\n    "AssetTag": "MOCK-ASSET-0002"/' \
+  -e 's/"ServiceTag": "MOCKSV1"/"ServiceTag": "MOCKSV2"/' \
+  "$vbios"
+sed -i 's/"SerialNumber": "MOCK-SN-DELL-0001"/"SerialNumber": "MOCK-SN-DELL-0002"/' "$variant/redfish/v1/Systems/System.Embedded.1.json"
 for m in "${mocks[@]}"; do
   set -- $m
   port=$((base_port + $1))
+  tree="testdata/$2"
+  [ -d "$env_dir/trees/$2" ] && tree="$env_dir/trees/$2"
   if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
     echo "오류: 127.0.0.1:$port 가 이미 사용 중입니다 (이전 mock 이 남아 있으면 pkill mockbmc)." >&2
     exit 3
   fi
-  MOCKBMC_PASS="$pass" "$bindir/mockbmc" -dir "testdata/$2" -listen "127.0.0.1:$port" -user admin >"$env_dir/mock_$port.log" 2>&1 &
+  MOCKBMC_PASS="$pass" "$bindir/mockbmc" -dir "$tree" -listen "127.0.0.1:$port" -user admin >"$env_dir/mock_$port.log" 2>&1 &
   pids+=("$!")
   if [ "$3" = "-" ]; then
     echo "127.0.0.1:$port" >>"$env_dir/user.txt"
@@ -154,17 +177,36 @@ if [ "$mode" = "--check" ]; then
     echo "FAIL: 접속 오류 (AUTH_FAIL/UNREACHABLE/TIMEOUT) 가 있음"
     exit 1
   fi
-  echo "OK: mock ${#mocks[@]}대 점검·전체비교 완료 (결과: .testenv/results/)"
+  # 변형 R660(18448): 값이 다른 속성 3개는 difference, 빠진 속성(MemTest)은 비교 불가, 고유값 이름(NvdimmSerialNum0·ServiceTag 등, 이름 패턴으로 제외)은 비교하지 않아야 한다.
+  longcsv="$(ls -d results/*/ | tail -n 1)compare_long.csv"
+  if [ ! -f "$longcsv" ]; then
+    echo "FAIL: 전체비교 결과 CSV(compare_long.csv)가 없음"
+    exit 1
+  fi
+  ndiff=$(grep '127\.0\.0\.1:18448' "$longcsv" | grep -c 'difference' || true)
+  if [ "$ndiff" -ne 3 ]; then
+    echo "FAIL: 변형 R660(18448)의 difference 가 3건이어야 하는데 ${ndiff}건"
+    exit 1
+  fi
+  if grep -q 'NvdimmSerialNum0\|ServiceTag\|SerialNumber' "$longcsv"; then
+    echo "FAIL: 고유값(NvdimmSerialNum0·ServiceTag·SerialNumber)이 비교에 포함됨"
+    exit 1
+  fi
+  echo "OK: mock ${#mocks[@]}대 점검·전체비교 완료 — 변형 R660 차이 3건, 고유값 제외 확인 (결과: .testenv/results/)"
   exit 0
 fi
 
 cat <<'GUIDE'
-[4/4] TUI 시작 — 시험 대상 7대 (127.0.0.1:18441~18447, 모두 mock)
+[4/4] TUI 시작 — 시험 대상 8대 (127.0.0.1:18441~18448, 모두 mock)
    18441 Dell R660      태그 gold      18444 HPE DL360 Gen11  태그 silver
    18442 Dell R660      태그 gold      18445 HPE DL360 Gen10  태그 silver
    18443 HPE DL360 Gen11 태그 gold      18446 Lenovo SR650 V3  (태그 없음)
-                                        18447 Dell R660        (태그 없음)
+   18448 Dell R660 변형 태그 gold      18447 Dell R660        (태그 없음)
+        (18448: 속성 3개 값이 다르고 1개가 빠짐, NvdimmSerialNum0·서비스태그 등 고유값도 다름 — 고유값은 비교에서 빠져야 함)
  시험해 볼 것
+  - 기준 메뉴 1번 "대표서버 자동 지정": gold·R660 묶음에서 대표 1대(REFERENCE)와 나머지 1대가 비교됨, c: 대표 다시 고르기
+  - e → 1. 대표서버 기준으로 맞추기: 값이 다른 속성만 체크 목록에 나오고 빠진 속성은 [-] 제외, 고유값은 목록에 없음
+  - p: 프로파일 점검 화면에서 태그·모델 범위로 프로파일에 설정 행 추가 (.testenv/profiles/VM.tsv 에만 씀)
   - 대상 붙여넣기: 엑셀 식 "IP<Tab>태그" 여러 줄 붙여넣기 (예: 127.0.0.1:18441 <Tab> gold), 끝낼 때 빈 줄에서 Enter
   - Tab: 화면 전환 / ←→: 태그 이동 / r: 기준(비교서버) 다시 고르기
   - x: 모델이 달라도 비교 (gold 태그의 Dell 기준 vs HPE 대상 = 모델 불일치 비교)

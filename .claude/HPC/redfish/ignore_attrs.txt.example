@@ -25,3 +25,29 @@ Date
 *DateTime*
 RtcTime
 RtcDate
+
+# --- 참고: 서버 고유값은 이 파일에 없어도 항상 비교에서 빠집니다 ---
+# 서비스태그·시리얼 번호(SerialNumber00, NvdimmSerialNum0 …)·MAC·IP 주소류(Ipv4Address 등)·iSCSI/NVMe-oF 식별자·서버 이름·관리자 정보·
+# *Duid*·*ChipId*·*HostId*·*Wwn*·*Guid*·Http*Ip 는 이 파일이 있어도 내장 목록(protect.go uniqueAttrs)으로 제외하고,
+# 양쪽 값이 모두 MAC·UUID·IP·iqn.·nqn. 모양이면 이름과 상관없이 제외합니다(버전 이름의 4칸 숫자는 IP 로 보지 않음). 따로 적을 필요가 없습니다.
+# 단 IscsiDev1EnDis·PxeDev1VlanEnDis·Dhcpv4 같은 켜고 끄기 속성은 고유값이 아니라서 비교에 나옵니다 (필요하면 위에 직접 적어 빼십시오).
+#
+# --- 참고: 장비마다 달라서 'difference 로 보이는' 정보성 속성 (자동으로 빼지 않음 — 가릴지는 운영 판단) ---
+# 모델·펌웨어·장착 부품의 차이를 알려 주는 값이라 기본으로는 비교합니다. 여러 대에서 계속 차이로 나오고 설정과 상관없다고 판단되면
+# 아래 줄 앞의 # 를 지워 제외를 고려하십시오 (너무 넓은 패턴은 실제 설정까지 가립니다).
+# DimmInfo*
+# FirmwareVersion*
+# PmControllerRevisionID*
+# NvdimmLocation*
+# Proc1Id
+# Proc2Id
+# Proc3Id
+# Proc4Id
+# SystemBiosVersion
+# SystemCpldVersion
+# SystemMeVersion
+# AgesaVersion
+# SystemModelName
+# ProductId
+# ServiceName
+# ServiceOtherInfo

@@ -227,7 +227,7 @@ func TestDirectPlanApplyMock(t *testing.T) {
 	}
 }
 
-// 흐름: e → 수정 방법 2 → 붙여넣기(# 줄·탭 구분) → 미리보기(건너뜀 사유) → y → 설정 결과 → 보낸 호스트만 재점검 → 직접 입력 확인.
+// 흐름: e → 수정 방법 3 → 붙여넣기(# 줄·탭 구분) → 미리보기(건너뜀 사유) → y → 설정 결과 → 보낸 호스트만 재점검 → 직접 입력 확인.
 // 모든 항목이 건너뛰어지는 b 는 접속하지 않는다.
 func TestBiosFlowDirectInput(t *testing.T) {
 	a, ua := startAllSrv(t, "hpe-dl360gen11", nil)
@@ -242,7 +242,7 @@ func TestBiosFlowDirectInput(t *testing.T) {
 	}, applySetPlan)
 	script := []flowStep{
 		{"profile-result", "e"},
-		{"edit-menu", "2"},
+		{"edit-menu", "3"},
 		{"direct-input", "# comment\nprocturbo disabled\nminprocidlepower\tnocstates\nBootMode LegacyBios\nNoSuchAttr 1\x04"},
 		{"direct-ask", "y"}, // 3
 		{"set-result", "q"},
@@ -313,11 +313,11 @@ func TestBiosFlowDirectInputCancelErrorsEmpty(t *testing.T) {
 		{"profile-result", "e"},
 		{"edit-menu", "\x1b"}, // 고르기 취소
 		{"profile-result", "e"},
-		{"edit-menu", "2"},
+		{"edit-menu", "3"},
 		{"direct-input", "NoValueLine\x04"},
 		{"direct-input", "\x18"}, // 5: 오류를 보고 Ctrl+X
 		{"profile-result", "e"},
-		{"edit-menu", "2"},
+		{"edit-menu", "3"},
 		{"direct-input", "BootMode LegacyBios\nprocturbo enabled\x04"},
 		{"direct-empty", "q"}, // 9
 		{"profile-result", "qq"},

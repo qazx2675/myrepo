@@ -21,7 +21,7 @@ type Config struct {
 	User2        string        // 두 번째 공용 계정 ID (선택). 계정 생성에서만 쓰고 점검 접속에는 쓰지 않는다
 	Pass2File    string        // 두 번째 계정의 암호화된 비밀번호 파일 (기본 pass2.enc, key_file 로 복호화)
 	RFEncFile    string        // 2순위(rf.conf 벤더 admin) 계정의 암호화된 비밀번호 파일 (기본 rf.enc, key_file 로 복호화)
-	User2Role    string        // 두 번째 계정 권한: Administrator | Operator | ReadOnly (user2 가 있으면 필수, 벤더별 값이 없을 때의 기본)
+	User2Role    string        // 두 번째 계정 권한: Administrator | Operator | ReadOnly (벤더별 값이 없을 때의 기본. 비면 계정 생성 때 터미널에서 묻는다)
 	Concurrency  int           // 동시 접속 호스트 수
 	Timeout      time.Duration // 요청 1건당 타임아웃
 	Insecure     bool          // true 면 TLS 인증서 검증 생략 (자체서명 BMC)
@@ -167,9 +167,8 @@ func parseConf(text, name string) (*Config, error) {
 		if c.User2 == c.User {
 			return nil, fmt.Errorf("%s: user2 는 user 와 달라야 합니다", name)
 		}
-		if c.User2Role == "" {
-			return nil, fmt.Errorf("%s: user2 를 쓰려면 user2_role (Administrator, Operator, ReadOnly 중 하나) 이 필요합니다", name)
-		}
+		// user2_role / user2_role_<vendor> 가 없어도 오류가 아닙니다: 권한이 정해지지 않은 벤더는 계정 생성 때 묻습니다
+		// (account_role_ask.go, 터미널이 아니면 설정하라는 안내와 함께 만들지 않음).
 	}
 	return &c, nil
 }
@@ -200,7 +199,7 @@ func (c *Config) setUser2VendorRole(name string, lineNo int, key, vendor, val st
 }
 
 // user2RoleFor 는 벤더(아무 표기, fallbackVendorKey 로 바꿈)에 적용할 두 번째 계정 권한입니다:
-// user2_role_<vendor> 가 있으면 그 값, 없거나 모르는 벤더면 user2_role.
+// user2_role_<vendor> 가 있으면 그 값, 없거나 모르는 벤더면 user2_role (그것도 없으면 "" — 계정 생성 때 묻는다).
 func (c *Config) user2RoleFor(vendor string) string {
 	if r := c.User2Roles[fallbackVendorKey(vendor)]; r != "" {
 		return r
@@ -210,7 +209,7 @@ func (c *Config) user2RoleFor(vendor string) string {
 
 // user2RolesText 는 설정 요약용 "기본권한, 벤더=권한 ..." 입니다 (벤더별 값이 없으면 기본 권한만).
 func (c *Config) user2RolesText() string {
-	parts := []string{c.User2Role}
+	parts := []string{orDefault(c.User2Role, "미지정")}
 	for _, v := range fallbackVendors {
 		if r := c.User2Roles[v]; r != "" {
 			parts = append(parts, v+"="+r)

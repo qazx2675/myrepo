@@ -81,6 +81,11 @@ type acctHost struct {
 	// Role 은 이 호스트에 적용할 권한입니다 (setRoles: user2 는 벤더별 user2_role_<vendor>, 비면 spec 권한).
 	Role    string
 	curRole string // 이미 있는 user2 의 BMC RoleId (점검에서 읽은 값, 표시용)
+	// vkey 는 setRoles 가 권한을 정할 때 쓴 벤더 키(fallbackVendorKey, 모르면 "")입니다. 권한을 묻는 질문의 묶음 기준.
+	vkey string
+	// roleAsked 는 Role 이 설정(user2_role*)이 아니라 운영자 답(askUser2Roles)에서 왔다는 표시입니다.
+	// 설정에 없는 권한으로는 이미 있는 계정의 권한을 바꾸지 않습니다 (updateRole).
+	roleAsked bool
 }
 
 func newAcctHost(t Target, op string) *acctHost { return &acctHost{Target: t, Op: op, Rollback: "-"} }
@@ -98,12 +103,17 @@ func (h *acctHost) acctRole() string {
 
 // roleFor 는 계정 sp 를 벤더 vendor(아무 표기) 호스트에 만들 때의 권한입니다. 1순위 계정은 늘 sp.Role(관리자),
 // 두 번째 계정은 user2_role_<vendor> 가 있으면 그 값, 없거나 벤더를 모르면 sp.Role(user2_role).
+// 설정에 둘 다 없으면 운영자가 이번 실행에서 답한 값(askUser2Roles), 그것도 없으면 "" 입니다.
 func (e *acctEnv) roleFor(sp acctSpec, vendor string) string {
 	if !sp.Second || e.conf == nil {
 		return sp.Role
 	}
-	if r := e.conf.User2Roles[fallbackVendorKey(vendor)]; r != "" {
+	key := fallbackVendorKey(vendor)
+	if r := e.conf.User2Roles[key]; r != "" {
 		return r
+	}
+	if sp.Role == "" {
+		return e.asked[key]
 	}
 	return sp.Role
 }
@@ -113,6 +123,8 @@ func (e *acctEnv) setRoles(hs []*acctHost, vendor string) {
 	for _, h := range hs {
 		if h.spec != nil {
 			h.Role = e.roleFor(*h.spec, vendor)
+			h.vkey = fallbackVendorKey(vendor)
+			h.roleAsked = e.roleIsAsked(*h.spec, h.vkey, h.Role)
 		}
 	}
 }
@@ -165,12 +177,15 @@ type acctEnv struct {
 	specs    []acctSpec    // create 로 만들 계정 (비면 1순위 계정 하나, newAcctEnv 가 채움)
 	// admin 이 있으면 create 가 rf.conf 대신 이 계정으로 로그인합니다 (점검 끝: 1순위 계정 또는 운영자가 직접 입력한 관리자 계정).
 	admin *fallbackAcct
+	// asked 는 설정에 user2 권한이 없는 벤더(키 fallbackVendorKey, 모르는 벤더는 "")에 운영자가 이번 실행에서 답한 권한입니다
+	// (askUser2Roles. 파일에는 쓰지 않음). createHosts 가 env 를 복사해도 같은 map 을 씁니다.
+	asked map[string]string
 }
 
 // newAcctEnv 는 계정 작업 환경을 만듭니다. bios.conf 에 user2 가 있으면 pass2_file 을 key_file 로 복호화해
 // 두 번째 계정으로 넣습니다 (없거나 복호화하지 못하면 오류 — 만들 계정의 비밀번호를 모르는 채로 진행하지 않음).
 func newAcctEnv(rc *runContext, dryRun bool) (*acctEnv, error) {
-	e := &acctEnv{conf: rc.Conf, password: rc.Password, fb: rc.Fallback, dryRun: dryRun}
+	e := &acctEnv{conf: rc.Conf, password: rc.Password, fb: rc.Fallback, dryRun: dryRun, asked: map[string]string{}}
 	e.specs = []acctSpec{{User: rc.Conf.User, Pass: rc.Password, Role: roleAdministrator}}
 	if rc.Conf.User2 != "" {
 		p2, err := readPassword(rc.Conf.Pass2File, rc.Conf.KeyFile)
@@ -463,7 +478,7 @@ func (e *acctEnv) probeCreateAll(t Target) []*acctHost {
 // user2RoleDiffers 는 이미 있는 user2 멤버 m(이름이 정확히 같은 것, 없으면 nil)의 권한이 want 와 달라 바꿀 대상인지 봅니다.
 // 현재 RoleId 가 허용 범위(acctRoleIDs) 밖이거나 모르면 바꾸지 않습니다 (되돌릴 값도 허용 범위여야 하므로).
 func user2RoleDiffers(m *acctMember, want string) bool {
-	if m == nil {
+	if m == nil || want == "" { // 설정에 권한이 없으면(want "") 비교할 기준이 없어 바꾸지 않는다
 		return false
 	}
 	cur := acctRoleOf(m.RoleID)
@@ -533,6 +548,10 @@ func (e *acctEnv) createOne(c *Client, h *acctHost, vendor, coll string) {
 	t := h.Target
 	sp := e.specOf(h)
 	h.User = sp.User
+	if sp.Role == "" { // 권한이 정해지지 않은 채로는 보내지 않는다 (askUser2Roles 가 먼저 채움)
+		h.Status, h.Detail = acctRejected, noRoleDetail(sp.User)
+		return
+	}
 	members, err := listAccounts(c, coll)
 	if err != nil {
 		h.setErr(err)
@@ -602,6 +621,10 @@ func (e *acctEnv) createOne(c *Client, h *acctHost, vendor, coll string) {
 // 그 멤버를 AllowAccountRoleTarget 로 등록해 {"RoleId": R} PATCH 만 보내고 (비밀번호·Enabled·잠금은 건드리지 않음),
 // 다시 읽어 권한 계열이 맞는지 확인합니다. 맞지 않으면 이전 RoleId 로 되돌리고 다시 읽어 확인합니다. dry-run 이면 계획만.
 func (e *acctEnv) updateRole(c *Client, h *acctHost, m *acctMember, sp acctSpec, vendor string) {
+	if h.roleAsked { // 권한이 설정에 없어 운영자가 이번에 고른 값이므로 이미 있는 계정의 권한은 바꾸지 않는다
+		h.Detail += " — 권한이 설정(user2_role*)에 없어 이미 있는 계정의 권한은 바꾸지 않음"
+		return
+	}
 	if m == nil {
 		if h.curRole != "" && acctRoleOf(h.curRole) != sp.Role {
 			h.Detail += " — 이름의 대소문자가 달라 권한을 바꾸지 않음"
@@ -1234,6 +1257,7 @@ const accountUsage = `사용법:
   biostool account create [옵션]   1순위 계정이 없는 BMC 에 계정 생성 (점검 → 목록 → Y/n → 생성·검증·롤백)
                                    bios.conf 에 user2(+pass2.enc, user2_role)가 있으면 두 번째 계정도 없는 곳에 만든다
                                    (벤더별 user2_role_<vendor> 우선, 이미 있는 user2 의 권한이 다르면 권한만 바꾼다)
+                                   user2 권한이 설정에 없으면 터미널에서 벤더마다 한 번 묻는다 (터미널이 아니면 만들지 않음)
   biostool account change [옵션]   1순위 계정의 비밀번호 변경 (새 비밀번호는 터미널에서 직접 2번 입력)
 
 옵션:
@@ -1367,6 +1391,11 @@ func runAccountCreate(rc *runContext, env *acctEnv, af *accountFlags, dir string
 		fmt.Printf("\n생성할 호스트가 없습니다. 결과: %s\n", path)
 		return werr
 	}
+	if err := env.askUser2Roles(os.Stdin, os.Stdout, need, af); err != nil {
+		path, _ := writeAcctResult(dir, hosts)
+		fmt.Printf("\n생성하지 않고 종료합니다. 점검 결과: %s\n", path)
+		return err
+	}
 	what := createWhat(need)
 	fmt.Printf("\n만들 계정: %s\n", what)
 	printAcctTargets(os.Stdout, flattenAcct(need), af.listMax)
@@ -1441,7 +1470,7 @@ func createWhat(groups [][]*acctHost) string {
 func acctSpecsText(specs []acctSpec) string {
 	parts := make([]string, 0, len(specs))
 	for _, s := range specs {
-		parts = append(parts, s.User+"("+s.Role+")")
+		parts = append(parts, s.User+"("+orDefault(s.Role, "미지정")+")")
 	}
 	return strings.Join(parts, ", ")
 }
@@ -1481,7 +1510,7 @@ func (h *acctHost) planText() string {
 	if h.Status == acctNeedRoleUpdate {
 		return "권한 변경 " + orDefault(sanitizeDetail(h.curRole), "-") + " → " + h.acctRole()
 	}
-	return "권한 " + h.acctRole()
+	return "권한 " + orDefault(h.acctRole(), "미정")
 }
 
 // confirmCreate 는 생성 여부를 묻습니다 (기본 Y: 빈 입력도 생성). 터미널이 아니면 -stdin-ok 없이는 묻지 않고 N.

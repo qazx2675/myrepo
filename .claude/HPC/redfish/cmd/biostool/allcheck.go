@@ -582,6 +582,7 @@ func doAllCheck(rc *runContext, o allOpts) (*allRun, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
+	o.Ignore = withUnique(o.Ignore) // 서버 고유값 이름은 ignore_attrs.txt 가 대체해도 항상 비교 제외
 	env := &allEnv{
 		conf: rc.Conf, password: rc.Password, fallback: rc.Fallback, ign: o.Ignore, offline: o.FromDump != "",
 		refByID: map[string]*allRef{}, byKey: map[string][]*allRef{},
@@ -842,13 +843,13 @@ func compareAttrs(h *allHost, ref, host map[string]string, ign *ignoreSet) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		if ign.match(n) {
+		rv, rok := ref[n]
+		hv, hok := host[n]
+		if ign.match(n) || uniquePair(n, rv, rok, hv, hok) { // 이름이 고유값 목록이거나 양쪽 값이 모두 서버 고유값 모양
 			h.Ignored++
 			continue
 		}
 		h.Compared++
-		rv, rok := ref[n]
-		hv, hok := host[n]
 		switch {
 		case rok && hok:
 			if rv != hv {

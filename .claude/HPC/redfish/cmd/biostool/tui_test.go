@@ -252,6 +252,46 @@ func TestTUIViewTabs(t *testing.T) {
 	}
 }
 
+// c 키(TUIPick, 대표서버 묶음별 다시 고르기)는 SetPickKey 로 켠 탭의 결과 보기에서만 받고 힌트([작업])에도 그때만 나온다.
+func TestTUIPickKey(t *testing.T) {
+	u, _ := newTUIRig(t, "c")
+	u.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+	u.SetResults("전체비교 — 기준 x", tuiSampleVGs())
+	if act := u.Browse(); act == TUIPick {
+		t.Errorf("cKey 꺼짐인데 c → %v", act)
+	}
+	u, r := newTUIRig(t, "c")
+	u.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+	u.SwitchTab(1)
+	u.SetResults("전체비교 — 기준 x", tuiSampleVGs())
+	u.SetRefKey(true)
+	u.SetPickKey(true)
+	if act := u.Browse(); act != TUIPick {
+		t.Errorf("c → %v", act)
+	}
+	if f := tuiLastFrame(r); !strings.Contains(f, "r 기준 다시 선택  c 대표서버 바꾸기  e 수정 메뉴") {
+		t.Errorf("cKey 힌트가 없음:\n%s", f)
+	}
+	u.SwitchTab(0)
+	if u.cKey {
+		t.Errorf("다른 탭으로 가면 cKey 는 그 탭 것")
+	}
+	u.SwitchTab(1)
+	if !u.cKey {
+		t.Errorf("탭에 돌아오면 cKey 복원")
+	}
+	u.SetResults("전체비교 — 기준 y", tuiSampleVGs())
+	if u.cKey {
+		t.Errorf("SetResults 는 cKey 를 끈다")
+	}
+	u, _ = newTUIRig(t, "c")
+	u.SetPickKey(true)
+	u.SetText("수정 미리보기", []string{"x"})
+	if act := u.Browse(); act == TUIPick {
+		t.Errorf("글 보기에서는 c 를 받지 않음: %v", act)
+	}
+}
+
 // x 키(TUIXModel)는 SetXKey 로 켠 탭의 결과 보기에서만 받고 힌트에도 그때만 나온다. 글 보기에서는 Enter 도 q/Esc 처럼 계속 (힌트 "Enter/q 계속").
 // 결과 보기의 Enter 는 그대로 벤더 안으로 들어간다.
 func TestTUIXKeyAndTextEnter(t *testing.T) {
@@ -639,6 +679,263 @@ func TestTUIChooseInputTabOut(t *testing.T) {
 	u, _ := newTUIRig(t, "\t\r")
 	if i, ok := u.Choose("프로파일 선택", []string{"VM", "HPC"}); i != 0 || !ok || u.TakeTabOut() {
 		t.Errorf("탭 없음: %d %v", i, ok)
+	}
+}
+
+// ---- 체크 목록 (ChooseMulti) ----
+
+const (
+	kDown = "\x1b[B" // 아래 방향키
+	kPgDn = "\x1b[6~"
+	kEnd  = "\x1b[F"
+	kHome = "\x1b[H"
+)
+
+// multiSample: 0 머리 gold · 1·2 고를 수 있음 · 3 자동 제외 · 4 머리 silver · 5·6 고를 수 있음. 처음 커서는 1.
+func multiSample() []TUIMultiRow {
+	return []TUIMultiRow{
+		{Group: true, Label: "gold"},
+		{Label: "LogicalProc   Disabled -> Enabled   (12대)"},
+		{Label: "BootMode"},
+		{Label: "IscsiInitiatorName", Disabled: true, Reason: "보호 속성"},
+		{Group: true, Label: "silver"},
+		{Label: "SriovGlobalEnable"},
+		{Label: "MemTest"},
+	}
+}
+
+func multiPick(t *testing.T, keys string, rows []TUIMultiRow) ([]int, bool, *TUI, *tuiRig) {
+	t.Helper()
+	u, r := newTUIRig(t, keys)
+	got, ok := u.ChooseMulti("대표서버 기준으로 맞출 속성", rows)
+	return got, ok, u, r
+}
+
+func sameInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// a 는 지금 묶음 전체 선택, n 은 지금 묶음 전체 해제 — 다른 묶음·제외 줄은 건드리지 않는다. Space 로 하나씩, Enter 로 확정.
+func TestChooseMultiToggleAllNone(t *testing.T) {
+	down := strings.Repeat(kDown, 4) // 커서 1 -> 5 (silver 묶음)
+	for _, c := range []struct {
+		keys string
+		want []int
+	}{
+		{"\r", []int{}},                   // 처음엔 모두 해제 — 빈 목록이지만 확정(ok)
+		{"a\r", []int{1, 2}},              // gold 묶음 (제외 줄 3 은 빠짐)
+		{"an\r", []int{}},                 // 전체 선택 뒤 전체 해제
+		{"a" + down + "n\r", []int{1, 2}}, // silver 에서 n 은 gold 를 건드리지 않음
+		{down + "a\r", []int{5, 6}},       // silver 묶음만
+		{"a" + down + "a\r", []int{1, 2, 5, 6}},
+		{kHome + "a\r", []int{1, 2}}, // 묶음 머리 줄에서도 그 묶음
+		{" \r", []int{1}},            // Space 하나
+		{"  \r", []int{}},            // 두 번이면 되돌림
+		{" j \r", []int{1, 2}},       // j 로 내려가 하나씩
+	} {
+		got, ok, _, _ := multiPick(t, c.keys, multiSample())
+		if !ok || !sameInts(got, c.want) {
+			t.Errorf("%q: %v %v want %v", c.keys, got, ok, c.want)
+		}
+	}
+	// 묶음 머리가 없으면 전체가 한 묶음
+	flat := []TUIMultiRow{{Label: "A"}, {Label: "B", Disabled: true}, {Label: "C"}}
+	if got, ok, _, _ := multiPick(t, "a\r", flat); !ok || !sameInts(got, []int{0, 2}) {
+		t.Errorf("머리 없음 a: %v %v", got, ok)
+	}
+	// rows 의 Checked 는 쓰지 않고 넘긴 슬라이스도 바꾸지 않는다
+	pre := []TUIMultiRow{{Label: "A", Checked: true}, {Label: "B"}}
+	if got, ok, _, _ := multiPick(t, "\r", pre); !ok || len(got) != 0 || !pre[0].Checked {
+		t.Errorf("미리 체크: %v %v %v", got, ok, pre)
+	}
+}
+
+// 제외 줄·묶음 머리 줄은 커서가 지나가도 체크되지 않고 안내만 나온다.
+func TestChooseMultiDisabledRowNotToggled(t *testing.T) {
+	// 커서 1 -> 3(제외 줄): Space 는 안내만
+	got, ok, _, r := multiPick(t, kDown+kDown+" ", multiSample())
+	if ok || got != nil {
+		t.Errorf("입력 끝은 취소여야 함: %v %v", got, ok)
+	}
+	f := tuiLastFrame(r)
+	if !strings.Contains(f, "[-] IscsiInitiatorName (제외: 보호 속성)") || !strings.Contains(f, "자동 제외된 항목은 고를 수 없습니다: 보호 속성") {
+		t.Errorf("제외 줄 안내:\n%s", f)
+	}
+	if !strings.Contains(f, " > [-] IscsiInitiatorName") || strings.Contains(f, "[x]") {
+		t.Errorf("커서는 제외 줄에 있고 체크는 없어야 함:\n%s", f)
+	}
+	if got, ok, _, _ := multiPick(t, kDown+kDown+" \r", multiSample()); !ok || len(got) != 0 {
+		t.Errorf("제외 줄 Space 뒤 Enter: %v %v", got, ok)
+	}
+	// 묶음 머리 줄에서 Space (Home) / 끝(End)에서도 머리·제외 줄은 선택되지 않음
+	if got, ok, _, _ := multiPick(t, kHome+" \r", multiSample()); !ok || len(got) != 0 {
+		t.Errorf("머리 줄 Space: %v %v", got, ok)
+	}
+	// 모든 줄이 제외여도 화면은 뜨고 Enter 는 빈 목록
+	allOff := []TUIMultiRow{{Group: true, Label: "g"}, {Label: "x", Disabled: true, Reason: "r"}}
+	if got, ok, _, _ := multiPick(t, "a \r", allOff); !ok || len(got) != 0 {
+		t.Errorf("전부 제외: %v %v", got, ok)
+	}
+}
+
+// Esc = 한 단계 뒤로(결과 없음), Ctrl+X = 전체 취소(TakeAbort), Tab = 화면 탭이 있을 때만 접기(TakeTabOut). nil·빈 목록은 바로 취소.
+func TestChooseMultiEscTabCancel(t *testing.T) {
+	for _, k := range []string{"a\x1b", "aq"} {
+		got, ok, u, _ := multiPick(t, k, multiSample())
+		if ok || got != nil || u.TakeAbort() || u.TakeTabOut() {
+			t.Errorf("%q: %v %v", k, got, ok)
+		}
+	}
+	got, ok, u, _ := multiPick(t, "a\x18", multiSample())
+	if ok || got != nil || !u.TakeAbort() || u.TakeAbort() {
+		t.Errorf("Ctrl+X: %v %v", got, ok)
+	}
+	for _, k := range []string{"a\t", "a\x1b[Z"} {
+		u, _ := newTUIRig(t, k)
+		u.SetTabs([]string{"프로파일 점검", "전체 설정 비교"})
+		got, ok := u.ChooseMulti("t", multiSample())
+		if ok || got != nil || !u.TakeTabOut() || u.TakeTabOut() || u.TakeAbort() {
+			t.Errorf("Tab %q: %v %v", k, got, ok)
+		}
+	}
+	// 화면 탭이 없으면 Tab 은 무시 — 이어서 Space·Enter
+	if got, ok, _, _ := multiPick(t, "\t \r", multiSample()); !ok || !sameInts(got, []int{1}) {
+		t.Errorf("탭 없음: %v %v", got, ok)
+	}
+	var nilUI *TUI
+	if got, ok := nilUI.ChooseMulti("x", multiSample()); ok || got != nil || nilUI.TakeAbort() {
+		t.Error("nil TUI")
+	}
+	if got, ok, _, _ := multiPick(t, "\r", nil); ok || got != nil {
+		t.Error("빈 목록")
+	}
+	// 화면 탭이 있으면 안내 줄에 Tab 이 나온다
+	u2, r2 := newTUIRig(t, "")
+	u2.SetTabs([]string{"a", "b"})
+	u2.ChooseMulti("t", multiSample())
+	if f := tuiLastFrame(r2); !strings.Contains(f, "Tab 다른 화면") {
+		t.Errorf("Tab 안내:\n%s", f)
+	}
+}
+
+// 수백 줄이어도 화면 높이를 넘지 않고 커서를 따라 스크롤하며, PgDn/End 가 동작한다.
+func TestChooseMultiScrollManyRows(t *testing.T) {
+	var rows []TUIMultiRow
+	n := 0
+	for g := 0; g < 3; g++ {
+		rows = append(rows, TUIMultiRow{Group: true, Label: fmt.Sprintf("묶음%d", g+1)})
+		for i := 0; i < 100; i++ {
+			n++
+			rows = append(rows, TUIMultiRow{Label: fmt.Sprintf("항목%03d", n)})
+		}
+	}
+	// 처음: 머리·첫 항목이 보이고 끝은 안 보임, 상태 줄은 늘 있음
+	_, _, _, r := multiPick(t, kDown, rows)
+	f := tuiLastFrame(r)
+	if !strings.Contains(f, "고른 항목 0 / 후보 300 · 자동 제외 0") || !strings.Contains(f, "묶음1") || strings.Contains(f, "항목300") {
+		t.Errorf("처음 화면:\n%s", f)
+	}
+	if got := len(strings.Split(strings.TrimRight(f, "\n"), "\n")); got > 24 {
+		t.Errorf("화면 높이 %d > 24", got)
+	}
+	// End: 마지막 줄이 보이고 처음 쪽은 사라짐, 상태 줄 유지
+	_, _, _, r = multiPick(t, kEnd, rows)
+	f = tuiLastFrame(r)
+	if !strings.Contains(f, " > [ ] 항목300") || strings.Contains(f, "항목001") || !strings.Contains(f, "고른 항목 0 / 후보 300") || !strings.Contains(f, "-303/303") {
+		t.Errorf("End 화면:\n%s", f)
+	}
+	// PgDn 두 번 + Space: 한 줄만 체크, 인덱스는 한 페이지씩(수십 줄) 내려간 곳
+	got, ok, _, _ := multiPick(t, kPgDn+kPgDn+" \r", rows)
+	if !ok || len(got) != 1 || got[0] < 20 || got[0] > 60 {
+		t.Errorf("PgDn 두 번 Space: %v %v", got, ok)
+	}
+	// 끝에서 a: 마지막 묶음 100개만, PgUp/Home 으로 처음으로 돌아옴
+	got, ok, _, _ = multiPick(t, kEnd+"a\r", rows)
+	if !ok || len(got) != 100 || got[0] != 203 || got[99] != 302 {
+		t.Errorf("End a: %d개 %v", len(got), ok)
+	}
+	_, _, _, r = multiPick(t, kEnd+kHome, rows)
+	if f = tuiLastFrame(r); !strings.Contains(f, " > ") || !strings.Contains(f, "묶음1") || !strings.Contains(f, "줄 1-") {
+		t.Errorf("Home 화면:\n%s", f)
+	}
+	// 좁고 낮은 화면에서도 높이·폭을 지킨다 (한글 폭 2칸)
+	u, r2 := newTUIRigReader(t, strings.NewReader(kEnd), func(e *tuiEnv, rr *tuiRig) { rr.w, rr.h = 30, 8 })
+	u.ChooseMulti("대표서버 기준으로 맞출 속성 목록", rows)
+	lines := strings.Split(strings.TrimRight(tuiLastFrame(r2), "\n"), "\n")
+	if len(lines) > 8 {
+		t.Errorf("낮은 화면 높이 %d:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+	for _, l := range lines {
+		if tuiStrWidth(l) > 30 {
+			t.Errorf("폭 초과 %d: %q", tuiStrWidth(l), l)
+		}
+	}
+}
+
+// 순수 그리기: 맨 위 상태 줄, [ ]/[x]/[-] 표시, 묶음 머리, 커서, 키 안내 이름, 색 있음/없음, 한글 폭.
+func TestTUIMultiFrameRender(t *testing.T) {
+	rows := multiSample()
+	rows[1].Checked = true
+	hints := []string{"[이동]", "↑↓ 한 줄", "[작업]", "Space 체크", "Enter 확정"}
+	v := tuiMultiView{Title: "맞출 속성 고르기", Rows: rows, Cur: 2, Hints: hints, Help: []string{"값이 다른 속성만 나옵니다"}}
+	lines, bodyH, top := tuiMultiFrame(false, 70, 14, v)
+	f := strings.Join(lines, "\n")
+	if bodyH < 1 || top != 0 || len(lines) > 14 {
+		t.Fatalf("bodyH %d top %d 줄 %d", bodyH, top, len(lines))
+	}
+	if !strings.Contains(lines[0], "맞출 속성 고르기") || lines[1] != " 고른 항목 1 / 후보 4 · 자동 제외 1" {
+		t.Errorf("제목·상태 줄: %q %q", lines[0], lines[1])
+	}
+	for _, want := range []string{"   [x] LogicalProc   Disabled -> Enabled   (12대)", " > [ ] BootMode", "   [-] IscsiInitiatorName (제외: 보호 속성)",
+		"   == gold ==", "   == silver ==", "   [ ] MemTest", "값이 다른 속성만 나옵니다", "[이동]", "[작업]", "Space 체크", "Enter 확정"} {
+		if !strings.Contains(f, want) {
+			t.Errorf("%q 없음:\n%s", want, f)
+		}
+	}
+	// 색 있음: 커서 줄 반전, 체크 줄 초록, 제외 줄 회색 — 색을 지우면 같은 글자
+	cl, _, _ := tuiMultiFrame(true, 70, 14, v)
+	cf := strings.Join(cl, "\n")
+	if !strings.Contains(cf, "\x1b[7m[ ] BootMode") || !strings.Contains(cf, "\x1b[32m[x] LogicalProc") || !strings.Contains(cf, "\x1b[90m[-] IscsiInitiatorName") {
+		t.Errorf("색:\n%q", cf)
+	}
+	if cl[1] != " 고른 항목 1 / 후보 4 · 자동 제외 1" && tuiStripANSI(cl[1]) != " 고른 항목 1 / 후보 4 · 자동 제외 1" {
+		t.Errorf("색 상태 줄: %q", cl[1])
+	}
+	// 사유가 없는 제외 줄
+	if l := tuiMultiRowLine(false, 40, TUIMultiRow{Label: "X", Disabled: true}, false); l != "   [-] X (제외)" {
+		t.Errorf("사유 없음: %q", l)
+	}
+	// 폭·높이를 지킨다: 좁은 화면, 긴 한글 줄
+	long := []TUIMultiRow{{Group: true, Label: "삼성 서버 묶음 이름이 아주 긴 경우"}, {Label: "프로세서 가상화 설정 사용 안 함 -> 사용 (열두 대)"}}
+	for _, w := range []int{12, 25, 40} {
+		for _, color := range []bool{false, true} {
+			ls, _, _ := tuiMultiFrame(color, w, 9, tuiMultiView{Title: "아주 긴 한글 제목입니다 제목", Rows: long, Cur: 1, Hints: hints})
+			if len(ls) > 9 {
+				t.Errorf("w=%d 높이 %d", w, len(ls))
+			}
+			for _, l := range ls {
+				if pw := tuiStrWidth(tuiStripANSI(l)); pw > w {
+					t.Errorf("w=%d 폭 %d: %q", w, pw, l)
+				}
+			}
+		}
+	}
+	// 커서가 보이도록 첫 줄을 조정하고 줄 위치를 제목 줄에 보인다
+	many := make([]TUIMultiRow, 100)
+	for i := range many {
+		many[i].Label = fmt.Sprintf("r%02d", i)
+	}
+	ls, bh, top := tuiMultiFrame(false, 60, 12, tuiMultiView{Title: "t", Rows: many, Cur: 50, Hints: hints})
+	if top > 50 || top+bh <= 50 || !strings.Contains(ls[0], fmt.Sprintf("줄 %d-%d/100", top+1, top+bh)) || !strings.Contains(strings.Join(ls, "\n"), " > [ ] r50") {
+		t.Errorf("스크롤 top=%d bodyH=%d:\n%s", top, bh, strings.Join(ls, "\n"))
 	}
 }
 

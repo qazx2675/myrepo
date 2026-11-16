@@ -149,6 +149,12 @@ func offerAccountCreate(rc *runContext, run *checkRun, dryRun, noPrompt, stdinOK
 		if len(needFB) > 0 && len(specs) > 1 {
 			fmt.Fprintf(w, "두 번째 계정 %s(%s)도 같은 호스트에 함께 만듭니다 (이미 있으면 건너뜀, 권한이 다르면 권한만 바꿈).\n", specs[1].User, rc.Conf.user2RolesText())
 		}
+		if !noPrompt { // -no-prompt 는 만들지 않으므로 묻지 않는다
+			if err := env.askUser2Roles(in, w, both, af); err != nil {
+				fmt.Fprintln(w, "계정을 만들지 않습니다: "+err.Error())
+				return nil
+			}
+		}
 		printAcctTargets(w, flattenAcct(both), 10)
 		proceed := true
 		switch {
@@ -287,6 +293,10 @@ func manualCreate(env *acctEnv, hs []*hostCheck, af *accountFlags, dryRun bool, 
 			env.setRoles(groups[k], hostVendor(hs[i])) // 로그인 뒤 확인한 벤더로 다시 정함 (createGroup)
 		}
 		fmt.Fprintf(w, "관리자 계정 %s 로 %d대에 로그인해 없는 계정만 만듭니다 (이미 있는 계정은 건너뜀).\n", sanitizeDetail(id), len(remain))
+		if err := env.askUser2Roles(in, w, groups, af); err != nil {
+			fmt.Fprintln(w, "관리자 계정으로 만들지 않습니다: "+err.Error())
+			break
+		}
 		ok, err := confirmCreate(in, w, createWhat(groups), af)
 		if err != nil || !ok {
 			fmt.Fprintln(w, "관리자 계정으로 만들지 않습니다.")

@@ -155,11 +155,11 @@ func TestSetPlanProfileOnly(t *testing.T) {
 func TestSetPlanCompareGateConflictDedupe(t *testing.T) {
 	a, ua := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
 		setAttrs(t, s, map[string]interface{}{"LlcPrefetch": "Disabled", "SubNumaClustering": "Auto",
-			"AdminPassword": "x", "ExclMe": "1", "MyUuidX": "u1"})
+			"TpmState": "x", "ExclMe": "1", "MyUuidX": "u1"})
 	})
 	b, ub := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
 		setAttrs(t, s, map[string]interface{}{"ProcHyperthreading": "Disabled", "ProcTurbo": "Disabled", "SubNumaClustering": "Enabled",
-			"AdminPassword": "y", "ExclMe": "2", "MyUuidX": "u2"})
+			"TpmState": "y", "ExclMe": "2", "MyUuidX": "u2"})
 	})
 	c, uc := startAllSrv(t, "hpe-dl360gen11", func(s *mockbmc.Server) {
 		setAttrs(t, s, map[string]interface{}{"ProcTurbo": "Disabled", "NewAttrX1": "v"})
@@ -204,7 +204,7 @@ func TestSetPlanCompareGateConflictDedupe(t *testing.T) {
 	if fmt.Sprint(p.Conflicts) != fmt.Sprint(wantC) {
 		t.Errorf("충돌 = %v", p.Conflicts)
 	}
-	if !hasItem(p.Protected, ub, "AdminPassword") || !hasLine(p.Skipped, uc, "속성 목록이 비교서버와 달라 설정 제외") || hasLine(p.Skipped, "allcheck_set") {
+	if !hasItem(p.Protected, ub, "TpmState") || !hasLine(p.Skipped, uc, "속성 목록이 비교서버와 달라 설정 제외") || hasLine(p.Skipped, "allcheck_set") {
 		t.Errorf("제외 = %v", p.Skipped)
 	}
 	pre := strings.Join(p.Preview(), "\n")

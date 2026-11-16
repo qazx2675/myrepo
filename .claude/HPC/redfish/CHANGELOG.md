@@ -4,6 +4,29 @@
 
 `bash bios.sh` 한 번에 Redfish 장비와 Cisco 장비(UCSM 블레이드·CIMC 랙서버)를 섞어 점검합니다. Cisco 는 XML API(읽기 전용)로 읽습니다. 아래 v0.3.0 항목과 sha256 표는 그대로 두었습니다(이 변경분의 바이너리 sha256 은 이 절 끝 표).
 
+### 변경 (user2 권한 질문) - 2026-11-12
+
+- **`user2` 권한이 설정에 없으면 계정 생성 때 묻습니다**(`account_role_ask.go`, `conf.go`, `account.go` `roleFor`, `account_check.go`, `account_ucsm.go`): `bios.conf` 에 `user2` 만 있고 호스트 벤더에 맞는 `user2_role_<벤더>` 도 `user2_role` 도 없으면 확인 질문 앞에서 `1 Administrator` / `2 Operator` / `3 직접 입력`을 묻습니다. 벤더마다 한 번만 묻고(벤더·호스트 수 표시) 같은 실행의 같은 벤더에 그 답을 씁니다. 답은 `bios.conf` 에 쓰지 않습니다. 설정이 있으면 해석 순서(벤더별 → `user2_role`)도 동작도 그대로입니다.
+  - 답은 설정 값과 같은 칸(`Role`)에 들어가 같은 생성 경로를 지납니다. 직접 입력은 설정과 같은 검증(`Administrator` / `Operator` / `ReadOnly`, RoleId 별칭 허용)을 하고 그 밖의 값은 다시 묻습니다(계정 쓰기 관문이 다른 권한은 보내지 않음). 질문으로 고른 권한은 이미 있는 user2 의 권한을 바꾸지 않습니다.
+  - 터미널이 아니거나 `-no-prompt` 면 만들지 않고 `user2_role_<벤더>` / `user2_role` 을 적으라는 오류로 끝납니다. 권한이 비어 있는 계정은 쓰기 단계(`createOne`·`ucsmCreateOne`)에서도 거부합니다.
+  - 호환성: `user2` 만 있고 권한이 없는 `bios.conf` 가 더는 `parseConf` 오류가 아닙니다(예전에는 모든 명령이 시작 전에 실패). 해당 시험(`TestParseConfErrors`, `TestParseConfUser2VendorRoles`)의 “권한 필수” 기대를 “오류 아님”으로 바꿨습니다.
+  - 시험: `account_role_ask_test.go`(권한 해석·1/2/3 선택·빈 입력 재질문·벤더별 기억·비대화형·빈 권한 거부·점검 끝 제안 전체 흐름), 랩 pty + mockbmc 로 선택 2·3(ReadOnly)·거절 후 1·설정 있음(질문 없음)·비대화형을 확인했습니다.
+  - `bin/biostool`(os8) 다시 빌드: go1.26.5, 8339618 바이트, sha256 `1cdcb59bf2218580016c46eb85db63734a2fa9de26f45c1755153c81f8e58c19`. os6 바이너리는 다시 빌드하지 않았습니다(2026-11-04 이후 os6 빌드 중단).
+
+### 추가·변경 (대표서버 자동 지정 · 대표서버 기준 맞추기 · 프로파일 추가) - 2026-11-17
+
+설계·결정은 [수정계획서_대표서버_기준맞추기.md](수정계획서_대표서버_기준맞추기.md)(인터뷰 확정 사항 포함).
+
+- **대표서버 자동 지정**(`autoref.go`, `unified.go` `compareRef.Auto`): 기준 메뉴 **1번**이 `대표서버 자동 지정`입니다(기존 메뉴는 2번부터: 2 비교서버 hostname 입력, 3.. refs JSON, 마지막 diff.txt). 읽기에 성공한 스냅샷을 태그+모델(태그가 없으면 모델) 묶음으로 나누고 묶음마다 1대를 고릅니다 — 다수결(묶음에서 가장 흔한 값과 가장 많이 일치하는 서버, 동점이면 다수 BIOS 버전 → 프로파일 OK → 입력 순서). 이미 읽은 값만 쓰므로 **추가 접속은 없습니다**. 대표 자신은 `REFERENCE`, 대표 1대뿐인 묶음도 `REFERENCE` 로만 나옵니다. 선정 결과는 안내 줄과 결과 폴더 `compare_refs.tsv`(묶음·대표·대수·BIOS 버전·선정 사유)에 남고, 비교 화면에서 **`c` 키로 묶음별 대표를 다시 고를 수 있습니다**. 비대화형(`-plain`)에는 자동 지정 플래그를 넣지 않았습니다(`-ref`·`-ref-json`·`-diff` 는 지금처럼 메뉴를 건너뜀). `x`(모델이 다른 참고 CSV)는 자동 지정에서는 켜지지 않습니다.
+- **수정 방법 3종, 1번 = 대표서버 기준으로 맞추기**(`setalign.go`, `tui_flow.go` `alignStep`, `tui_view.go` `ChooseMulti`): `e` 의 수정 방법이 1 대표서버 기준으로 맞추기 · 2 점검 결과 기준 수정 · 3 BIOS 값 직접 입력 입니다. 맞추기는 태그·모델 묶음별로 대표와 값이 다른 속성만 체크 목록에 보여 주고(처음에는 모두 해제), 체크한 것만 계획에 넣어 **기존 쓰기 경로(`applySetPlan` → `runHost`)** 로 적용합니다. 대표에만 있고 대상에 없는 속성은 강제로 넣지 않고 `[-] (제외: 대표서버에만 있음…)` 로 사유와 함께 제외하며, 보호 속성·고유값은 목록에서 고를 수 없습니다. 대표와 BIOS 버전이 다른 서버는 경고를 붙여 고를 수 있게 하되 기본은 해제입니다. 이 메뉴는 `allcheck_set` 과 무관하게 동작합니다(메뉴 선택 · 체크 · 확인 2번이 명시적 동의). 아무것도 체크하지 않거나 확인에서 n 이면 쓰기는 0회입니다.
+- **프로파일 설정 행 추가**(`profile_add.go`, `tui_profadd.go`, `profile_add_cmd.go`, `main.go`, `bios.sh`): `[프로파일 점검]` 화면의 **`p` 키**와 CLI `bash bios.sh profile add`(= `biostool profile add`) 가 프로파일 TSV 의 `[redfish]` 구역 끝에 **모델 지정 행**을 더합니다. 범위는 `-tag`(그 태그 서버가 보고한 모델마다 같은 행, 읽기 전용 1회 접속 또는 `-from-dump`) 또는 `-model "벤더/모델"`(접속 안 함). `-set "속성=값"` 또는 `"std_name:속성=값"`(여러 번). **`verified` 는 항상 `N`**(쓰기 허가 `Y` 는 사람이 파일에서 직접), 보호 속성은 거절, 그 모델에 없는 속성은 그 모델만 건너뜀. 같은 행이 같은 값이면 `이미 있음`, 다른 값이면 충돌 — TUI 는 덮어쓸지 묻고 CLI 는 `-force` 가 없으면 **아무것도 쓰지 않고 종료코드 1** 입니다. 쓰기 전 `<이름>.tsv.bak.<일시>` 백업 + 결과 재검증 + 임시 파일 rename. 모델 지정 행이 생기면 그 std_name 의 `*` 행은 그 모델에 더 쓰이지 않습니다(미리보기에 안내). `-dry-run` 은 미리보기만 합니다.
+- **고유값 비교 제외**(`protect.go` `uniqueAttrs`·`looksUnique`, `allcheck.go`): 서버마다 달라야 하는 고유값(서비스태그·시리얼·MAC 주소·IP 등 네트워크 주소·iSCSI/NVMe-oF 식별자·서버 이름 등 — `*SerialNum*`·`*Duid*`·`*ChipId*`·`*HostId*`·`*Wwn*`·`*Guid*`·`Http*Ip` 변형 포함, `*Uuid*` 이름은 성능 속성과 겹쳐 값 모양으로만 거름)은 **`ignore_attrs.txt` 가 있어도 비교에서 항상 제외**하고, 값이 MAC·UUID·IP·`iqn.`/`nqn.` 모양이면 이름과 무관하게 제외합니다(**양쪽 값이 모두** 그 모양일 때만, 한쪽에만 있는 속성은 있는 쪽 값으로; 이름이 `Version`·`Revision`·`Firmware`·`…Ver` 면 `4.1.4.54` 같은 4칸 숫자를 IP 로 보지 않음). 이름 목록은 서버 고유 **식별자**만 담아 설정 보호 목록보다 좁습니다 — iSCSI·PXE·VLAN·DHCP·IPv4 켜고 끄기(`IscsiDev1EnDis`·`PxeDev1VlanEnDis`·`Dhcpv4`·`IPv4PXESupport` 등)는 설정은 보호 속성으로 막히지만 비교에는 다시 나옵니다. 제외된 수는 `ignored` 로만 남습니다. 속성 이름이 고유값인데 이전에는 파일 목록에서 빠져 difference 로 보이던 것들이 사라집니다.
+  - **이전 결과와 difference 건수를 비교할 때 주의**: 같은 장비·같은 설정이라도 이 변경 뒤의 `compare_*` CSV 는 difference 건수가 줄어들 수 있습니다(고유값 제외). 건수 차이가 곧 설정 변화는 아닙니다.
+  - 제외도 보호도 아닌 장비별 정보성 속성(`DimmInfo*`, `FirmwareVersion*`, `Proc*Id`, `SystemBiosVersion` 등)은 운영 판단이라 목록에 넣지 않았고, `ignore_attrs.txt.example` 에 주석으로 후보만 적었습니다.
+- **`test.sh`**: mock BMC 8대(127.0.0.1:18441~18448). 18448 은 gold 태그의 변형 R660 로 `testdata/dell-r660` 사본(`.testenv/trees/dell-r660-b`, `testdata/` 는 그대로)에서 속성 3개 값이 다르고 1개가 빠졌으며 고유값 모양(`NvdimmSerialNum0`)·서비스태그가 다릅니다. `--check` 가 18448 의 difference 3건과 고유값 제외를 확인합니다.
+- 시험: `autoref_test.go`·`setalign_test.go`·`profile_add_test.go` 와 `protect_test.go`·`tui_test.go`·`tui_flow_test.go` 갱신(메뉴 번호). 랩 go1.26.5 `gofmt -l`(빈 출력)·`go vet ./...`·`go test ./...` 통과, `bash test.sh --check` 통과, `profile add` CLI 를 임시 프로파일 폴더에서 확인(추가·dry-run·이미 있음·충돌 종료코드 1·`-force`·보호 속성 거절). **TUI 키 시나리오(`c`·`e`→맞추기·`p`)는 사람이 직접 확인해야 하며 이 기록에는 포함하지 않았습니다.** 실장비는 확인하지 않았습니다(mock 만).
+- `bin/biostool`(os8) 다시 빌드(`CGO_ENABLED=0 go build -trimpath -ldflags "-s -w"`, go1.26.5): 8532130 바이트, sha256 `5f3a99f0a66b8a2fa8168aa9dd2c4b925c3097b0c3e9d97677c6bea1922a14d3`(바이너리 표 참고). **같은 패키지에서 함께 컴파일되는 다른 작업(계정 생성 user2 권한 질문 등 아직 커밋되지 않은 변경)도 이 바이너리에 포함되어 있으므로 위 `user2` 항목의 sha256 은 이 값으로 대체됩니다.** os6 바이너리는 다시 빌드하지 않았습니다.
+
 ### 추가
 - **호스트 태그**(`user.txt` 두 번째 칸): `호스트명` 또는 `호스트명 태그`(공백/탭, 태그는 한 단어, 3칸 이상은 오류, 중복 호스트는 처음 줄). 태그가 있는 호스트는 벤더·BMC 모델과 상관없이 태그끼리만 묶여 결과·TUI 에서 최상위 탭 “태그” 아래 태그별 하위 탭으로 나오고(합치지 않음), 태그 없는 호스트는 기존 벤더 → BMC 모델 탭입니다. CSV 는 `*_wide_hosts_tag_<태그>.csv`·`*_wide_attrs_tag_<태그>.csv`(한글 유지, 못 쓰는 글자 `_`, 겹치면 `_2`), `summary`·`long` CSV 는 태그가 있을 때만 끝에 `호스트태그` 열을 붙입니다. `retry.txt`·`merged_retry.txt` 는 태그를 유지하고 `-targets`·`-ref` 에는 태그가 없습니다.
   - **전체비교 태그 모드**(대상 중 태그가 하나라도 있을 때): `diff.txt` 두 번째 칸 = 태그. 태그 대상은 같은 태그의 기준만, 태그 없는 대상은 태그 없는 기준만 쓰고 모델 키는 여전히 같아야 합니다(BIOS 버전 우선 규칙 그대로). 기준이 없거나 모델이 다르면 `NO_REFERENCE`(N/A, 설정 제외) + 특이사항 `태그 <태그> 의 기준이 <diff.txt|비교서버 입력> 에 없음` / `태그 <태그> 기준과 모델이 다름 (대상 모델 키 <키>)`. TUI 비교서버 직접 입력은 한 줄에 `호스트명 태그`(쉼표·세미콜론도 구분). refs JSON 은 기준 한 대를 모든 대상에 쓰며 태그를 무시합니다. 모델이 다른 대상끼리 비교는 그 태그의 읽을 수 있는 기준이 정확히 1대일 때 태그마다 `[태그 X]` 안내 후 x 키로 `compare_xmodel_<태그>_<A>_vs_<B>.csv` 를 씁니다(`-auto` 는 만들지 않음). TUI·`bios.sh` CLI·`all_bios_check.sh`(`-diff`)·`-auto`/`-auto-check` 모두 적용. `user.txt.example`·`diff.txt.example`·README·사용법.txt 에 설명 추가.
@@ -105,7 +128,7 @@
 
 | 파일 | Go | 크기 | sha256 |
 |---|---|---|---|
-| bin/biostool | go1.26.5 | 8323234 | 7e1e2f8c5c0dbcc1218a84a9c45a2a7cedb3e5d41bbbc0e1cb5e0d08a25b4b22 |
+| bin/biostool | go1.26.5 | 8532130 | 5f3a99f0a66b8a2fa8168aa9dd2c4b925c3097b0c3e9d97677c6bea1922a14d3 |
 | bin/biostool_os6 | go1.20.14 | 6885376 | 37e8de9de182e06893b30305a455de25005f1b6d804f5979cb926c5e36fc3923 |
 | bin/mockucsm | go1.26.5 | 6631586 | 58b4b98814a8afb35e9252abe61a62496fdc0053ee5daf1546acc8509146db6e |
 | bin/mockucsm_os6 | go1.20.14 | 5197824 | 4c81551e5cfeba14da930d8538d34ad199a80f81629ef078f9bdae5d4b90e55d |
