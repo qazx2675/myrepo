@@ -1,0 +1,191 @@
+#!/bin/bash
+# stub_gossh.sh - 가짜 gossh (실제 gossh -script 출력 형식을 그대로 흉내냄)
+#
+# 환경변수
+#   STUB_GOSSH_STATE  "호스트 상태" 줄 파일. 상태: done | installing | disk | down (없는 호스트는 down)
+#   STUB_GOSSH_NICE   (선택) 이 파일에 자기 nice 값을 덧붙임
+#   STUB_GOSSH_LOCK   (선택) 이 폴더를 mkdir 로 잡고 실행(이미 있으면 $STUB_GOSSH_LOCK.overlap 파일 생성)
+#   STUB_GOSSH_SLEEP  (선택) 동시 실행 검사용 지연 초
+#
+# 출력 (실제 gossh 와 같음)
+#   -pm : done       -> stdout "host: PM_OK"
+#         installing -> stderr "host: OS 설치중 (~/.profile anaconda 감지)" + <목록>_os_install 파일
+#         disk       -> (installing 과 같음)
+#         down       -> stderr "host: SSH 접속 실패: ..." + <목록>_res_off 파일
+#   -pm 없음 + 명령에 NS_DISK 가 있으면(디스크 확인):
+#         done       -> stdout "host: NS_NOLOG" "host: NS_DONE"
+#         installing -> stdout "host: NS_DONE"
+#         disk       -> stdout "host: NS_DISK" "host: NS_DONE"
+#         down       -> stderr 접속 실패
+#   명령에 ldap_check 가 있으면(LDAP 점검, 상태 done/installing/disk 모두 응답):
+#         파일별 OK 줄 7개(README 형식, STUB_LDAP_FAIL 이면 ldap.conf 가 FAIL) + "host: Thread(s) per core:    2"
+#         STUB_LDAP_FAIL    공백 구분 호스트: ldap.conf 줄을 FAIL 로(ONELINE 이면 FAIL LDAP UNDEFINED)
+#         STUB_LDAP_UNKNOWN 공백 구분 호스트: /unknown infra-mismatch 줄
+#         STUB_LDAP_ONELINE 1 이면 현재 ldap_check.sh 처럼 한 줄 요약(INFO LDAP infra site)
+#         STUB_HT_OFF       공백 구분 호스트: Thread(s) per core 를 1 로
+#         STUB_DNS_DIFF     공백 구분 호스트: NTP 집합을 DNS 와 다르게(10.10.2.20)
+#         STUB_APPL_DIFF    공백 구분 호스트: auto.appl 의 wappl 값을 appl 과 다르게
+#         (모든 호스트에 PM_DNS/PM_CHRONY/PM_NTPC/PM_APPL 줄도 낸다: DNS 10.10.1.10 10.10.1.11, NTP 같은 집합 다른 순서(하나는 이름 ntp01.demo 를 PM_NTPRC 로 IP 풀이), appl=wappl=nas01:/export/appl)
+#   명령에 NS_YUM 이 있으면(yum 커널·부팅 시각 조회, down 이 아닌 모든 상태가 응답):
+#         stdout "host: NS_YUM" "host: <커널>" "host: <부팅 시각>"
+#         상태 파일 줄 형식(yum 서버, 칸은 공백 구분):
+#           <호스트> <상태> <커널> <부팅일> <부팅시각> [<바뀐 커널> <바뀐 부팅일> <바뀐 부팅시각> <전환 epoch>]
+#           예) svr1 done 4.18.0-513.el8 2026-11-17 09:00:00
+#               svr2 done 4.18.0-513.el8 2026-11-17 09:00:00 4.18.0-553.el8 2026-11-17 14:20:00 1763380000
+#         - 3~5번째 칸: 기본(전환 전) 커널·부팅 시각. 없으면 4.18.0-513.el8.x86_64 / 2026-11-17 09:00:00
+#         - 6~9번째 칸(전부 있어야 함): 현재 시각(epoch 초)이 9번째 칸 이상이 되면 바뀐 커널·부팅 시각을 낸다.
+#           재부팅한 것처럼 보이는 시험용이다: 바뀐 커널이 기본과 같으면 "재부팅은 됐고 커널은 그대로",
+#           다르면 "재부팅 + 커널 변경". 상태 파일은 호출마다 새로 읽으므로 파일을 고쳐 써도 반영된다.
+#         STUB_NOW (선택) 현재 시각(epoch 초)을 이 값으로 고정(단위 시험용). 없으면 date +%s
+#         칸이 3~5개뿐인 줄은 시간이 지나도 변하지 않는다. OS 서버 줄(2칸)과 yum 이 아닌 명령은 이 칸을 쓰지 않는다.
+#   명령에 PM_KERN 이 있으면(v0.5.0 설정 조사, 계획서 4.9; down 이 아닌 모든 상태가 응답):
+#         원격 명령이 grep 으로 골라 낸 것과 같은 줄을 낸다(ldap.conf 는 URI·binddn 줄만, bindpw 는 내지 않음)
+#           "host: PM_KERN <커널>" "host: PM_HT Thread(s) per core:    <n>" "host: PM_DNS nameserver <ip>"(적힌 순서)
+#           "host: PM_APPL /appl	-rw,soft	<마운트>" "host: PM_LDC URI <값...>"(줄마다) "host: PM_LDC binddn <값>"
+#           명령에 PM_LC 가 있으면(ldap_check_sh 설정) "host: PM_LC" + ldap_check 줄들 + "host: PM_LCE", 끝에 "host: PM_END"
+#         STUB_CFG (선택) 호스트별 값 파일. 한 줄에 탭 구분 8칸(없는 호스트는 기본값):
+#           <호스트> <커널> <appl 마운트> <dns(공백 구분, 순서대로)> <URI 줄(여러 줄은 | 로 구분)> <binddn> <threads per core> <ldap_check 줄(| 로 구분)>
+#           칸 값이 "-" 이면 그 줄을 내지 않는다(파일에 없는 것처럼). 예)
+#           c001	4.18.0-553.el8.x86_64	nas01:/export/appl	10.10.1.10 10.10.1.11	ldap://ldap02.demo/ ldap://ldap01.demo/	uid=pm,dc=cae	2	INFO LDAP zxcv a1
+#         기본값: 커널 4.18.0-553.el8.x86_64, appl nas01:/export/appl, dns 10.10.1.10 10.10.1.11,
+#                 URI ldap://ldap01.demo/ ldap://ldap02.demo/, binddn uid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com,
+#                 threads per core 2, ldap_check "INFO<탭>LDAP<탭>zxcv<탭>a1"
+#         STUB_HT_OFF·STUB_LDAP_FAIL(공백 구분 호스트)도 그대로 쓴다: threads per core 1 / ldap_check "ERROR: FAIL<탭>LDAP<탭>UNDEFINED"
+#   STUB_GOSSH_LOG (선택) 이 파일에 호출마다 명령 줄(인자)을 한 줄 덧붙임
+# 호스트 5천 대도 awk 한 번으로 처리한다(호스트별 프로세스 없음).
+[ -n "$STUB_GOSSH_LOG" ] && echo "$*" >> "$STUB_GOSSH_LOG"
+pm=0
+list=""
+cmd=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -pm) pm=1 ;;
+    -w) shift; list="${1#^}" ;;
+    -t|-c|-cf|-u|-p|-i|-P) shift ;;
+    -*) ;;
+    *) cmd="$cmd${cmd:+ }$1" ;;
+  esac
+  shift
+done
+
+[ -n "$STUB_GOSSH_NICE" ] && nice >> "$STUB_GOSSH_NICE"
+if [ -n "$STUB_GOSSH_LOCK" ]; then
+  mkdir "$STUB_GOSSH_LOCK" 2>/dev/null || : > "$STUB_GOSSH_LOCK.overlap"
+  [ -n "$STUB_GOSSH_SLEEP" ] && sleep "$STUB_GOSSH_SLEEP"
+  trap 'rmdir "$STUB_GOSSH_LOCK" 2>/dev/null' EXIT
+fi
+
+disk=0
+case "$cmd" in *NS_DISK*) disk=1 ;; esac
+ldap=0
+case "$cmd" in *ldap_check*) ldap=1 ;; esac
+cfgm=0
+case "$cmd" in *PM_KERN*) cfgm=1; ldap=0 ;; esac
+lcon=0
+case "$cmd" in *PM_LC*) lcon=1 ;; esac
+yum=0
+case "$cmd" in *NS_YUM*) yum=1 ;; esac
+now=0
+[ "$yum" = 1 ] && now="${STUB_NOW:-$(date +%s)}"
+
+awk -v pm="$pm" -v disk="$disk" -v ldap="$ldap" -v yum="$yum" -v now="$now" -v cfgm="$cfgm" -v lcon="$lcon" -v cfgf="$STUB_CFG" -v lfail=" $STUB_LDAP_FAIL " -v lunk=" $STUB_LDAP_UNKNOWN " -v lone="${STUB_LDAP_ONELINE:-0}" -v htoff=" $STUB_HT_OFF " -v dnsdiff=" $STUB_DNS_DIFF " -v appldiff=" $STUB_APPL_DIFF " -v inst="${list}_os_install" -v off="${list}_res_off" '
+BEGIN {
+  if (cfgm && cfgf != "") {
+    while ((getline line < cfgf) > 0) {
+      n = split(line, a, "\t")
+      if (n < 8 || a[1] == "") continue
+      cf[a[1]] = 1; ck[a[1]] = a[2]; ca[a[1]] = a[3]; cd[a[1]] = a[4]; cu[a[1]] = a[5]; cb[a[1]] = a[6]; ct[a[1]] = a[7]; cl[a[1]] = a[8]
+    }
+    close(cfgf)
+  }
+}
+NR == FNR {
+  st[$1] = $2
+  if (NF >= 3) kern[$1] = $3
+  if (NF >= 5) boot[$1] = $4 " " $5
+  if (NF >= 9) { kern2[$1] = $6; boot2[$1] = $7 " " $8; at[$1] = $9 + 0 }
+  next
+}
+{
+  h = $1
+  if (h == "") next
+  s = (h in st) ? st[h] : "down"
+  if (s == "down") {
+    print h ": SSH 접속 실패: dial tcp " h ":22: i/o timeout" > "/dev/stderr"
+    if (pm) print h > off
+    next
+  }
+  if (yum) {
+    k = (h in kern) ? kern[h] : "4.18.0-513.el8.x86_64"
+    b = (h in boot) ? boot[h] : "2026-11-17 09:00:00"
+    if ((h in at) && now + 0 >= at[h]) { k = kern2[h]; b = boot2[h] }
+    print h ": NS_YUM"
+    print h ": " k
+    print h ": " b
+    next
+  }
+  if (cfgm) {
+    key = " " h " "
+    if (h in cf) { k = ck[h]; ap = ca[h]; dn = cd[h]; ur = cu[h]; bd = cb[h]; tp = ct[h]; lc = cl[h] }
+    else {
+      k = "4.18.0-553.el8.x86_64"; ap = "nas01:/export/appl"; dn = "10.10.1.10 10.10.1.11"
+      ur = "ldap://ldap01.demo/ ldap://ldap02.demo/"; bd = "uid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com"; tp = "2"
+      lc = "INFO\tLDAP\tzxcv\ta1"
+    }
+    if (index(htoff, key)) tp = "1"
+    if (index(lfail, key)) lc = "ERROR: FAIL\tLDAP\tUNDEFINED"
+    if (k != "-") print h ": PM_KERN " k
+    if (tp != "-") print h ": PM_HT Thread(s) per core:    " tp
+    if (dn != "-") { n = split(dn, d, " "); for (i = 1; i <= n; i++) print h ": PM_DNS nameserver " d[i] }
+    if (ap != "-") print h ": PM_APPL /appl\t-rw,soft\t" ap
+    if (ur != "-") { n = split(ur, u, "|"); for (i = 1; i <= n; i++) if (u[i] != "") print h ": PM_LDC URI " u[i] }
+    if (bd != "-") print h ": PM_LDC binddn " bd
+    if (lcon) {
+      print h ": PM_LC"
+      if (lc != "-") { n = split(lc, l, "|"); for (i = 1; i <= n; i++) print h ": " l[i] }
+      print h ": PM_LCE"
+    }
+    print h ": PM_END"
+    next
+  }
+  if (ldap) {
+    key = " " h " "
+    if (index(lunk, key)) {
+      print h ": FAIL\t/unknown\tinfra-mismatch\tdns+ntp=zxcv ldap=zxcv appl=qwer"
+      print h ": FAIL\t/unknown\tresolv.conf"
+    } else if (lone == "1") {
+      if (index(lfail, key)) print h ": ERROR: FAIL\tLDAP\tUNDEFINED"
+      else print h ": INFO\tLDAP\tzxcv\ta1"
+    } else {
+      print h ": OK\t/zxcv\tresolv.conf"
+      print h ": OK\t/zxcv\tchrony.conf\tchrony"
+      print h ": " (index(lfail, key) ? "FAIL" : "OK") "\t/zxcv\tldap.conf\ta1"
+      print h ": OK\t/zxcv\tautofs.conf"
+      print h ": OK\t/zxcv\tautofs_ldap_auth.conf"
+      print h ": OK\t/zxcv\tsssd.conf"
+      print h ": OK\t/zxcv\tauto.appl\ta1"
+    }
+    print h ": Thread(s) per core:    " (index(htoff, key) ? "1" : "2")
+    print h ": PM_DNS nameserver 10.10.1.10"
+    print h ": PM_DNS nameserver 10.10.1.11"
+    print h ": PM_CHRONY"
+    print h ": PM_NTPC server " (index(dnsdiff, key) ? "10.10.2.20" : "10.10.1.11") " iburst"
+    print h ": PM_NTPC server ntp01.demo iburst"
+    print h ": PM_NTPRC " (index(dnsdiff, key) ? "10.10.2.20 10.10.2.20" : "10.10.1.11 10.10.1.11")
+    print h ": PM_NTPRC 10.10.1.10 ntp01.demo"
+    print h ": PM_APPL appl	-rw,soft	nas01:/export/appl"
+    print h ": PM_APPL /wappl	-rw,soft	" (index(appldiff, key) ? "nas02:/export/wappl" : "nas01:/export/appl")
+    next
+  }
+  if (pm) {
+    if (s == "done") print h ": PM_OK"
+    else { print h ": OS 설치중 (~/.profile anaconda 감지)" > "/dev/stderr"; print h > inst }
+  } else if (disk) {
+    if (s == "done") print h ": NS_NOLOG"
+    if (s == "disk") print h ": NS_DISK"
+    print h ": NS_DONE"
+  } else {
+    print h ": ok"
+  }
+}' "${STUB_GOSSH_STATE:-/dev/null}" "$list"
+exit 0

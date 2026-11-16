@@ -1,0 +1,24 @@
+ install_mn  OS 설치 현황  전체 40대
+ 1 설치중 10  2 지연 4  3 디스크미인식 3  4 설치완료 12
+ 5 ping X 6  6 재부팅됨 2  7 완료후꺼짐 3
+ 갱신 11:58:25 (1m 전) · 회차 3 · 수집중 |
+ 경고: 설정 파일 pm_monitor.conf 없음 - 기본값 사용
+------------------------------------------------------------
+ 표시 1-6/6대  필터: 없음  검색: s1
+ 호스트명       벤더   상태         경과    비고
+ s1001          sds    ping X               ping 응답 없음
+ s1002          sds    ping X               ping 응답 없음
+ s1003          sds    ping X               ping 응답 없음
+ s1004          sds    ping X               ping 응답 없음
+ s1005          sds    ping X               ping 응답 없음
+ s1006          sds    ping X               ping 응답 없음
+
+
+
+
+
+
+
+
+ ↑↓ PgUp PgDn Home End 이동  / 검색  1~7 필터  0 해제
+ c 설치현황  r 점검요청  d DHCP  l LDAP  q 종료

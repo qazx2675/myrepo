@@ -1,0 +1,16 @@
+﻿{
+    "Enabled":  true,
+    "OffTime":  "23:30",
+    "OnTime":  "06:55",
+    "IdleMinutes":  5,
+    "BlockProcesses":  [
+
+                       ],
+    "BusyProcesses":  [
+                          "claude",
+                          "Antigravity IDE"
+                      ],
+    "BusyCpuPercent":  35,
+    "PowerMode":  "Sleep",
+    "SuspendVMs":  true
+}

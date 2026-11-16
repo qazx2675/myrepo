@@ -1,0 +1,152 @@
+# pm_monitor (install_mn) - 직접 칠 명령어 모음 (각 명령 위에 설명)
+#
+# 주의: 관리서버에서 root 로 실행한다(raw ICMP). 호스트파일은 한 줄에 hostname 하나. oklist.txt(선택)는 v0.5.0 의 서버 설정 기준표.
+
+# ===== 0. 코드 받기 =====
+
+# 저장소 폴더로 이동 (예: os8_mgmt)
+cd /root/saccae-src
+
+# 최신 코드로 맞추기 (브랜치 이름은 상황에 맞게)
+git fetch && git reset --hard origin/master
+
+# master 가 sparse-checkout 이면 pm_monitor 경로를 추가 (처음 한 번)
+git sparse-checkout add .claude/HPC/pm_monitor
+
+# 배포용 orphan 브랜치 pm_monitor 를 받을 때는 파일이 저장소 루트에 있다
+git fetch && git reset --hard origin/pm_monitor
+
+# 작업 폴더로 이동 (master 기준)
+cd /root/saccae-src/.claude/HPC/pm_monitor
+
+# ===== 1. 빌드 (Go 가 있을 때만, 평소엔 커밋된 install_mn_os8 사용) =====
+
+# vet + test 후 빌드
+bash build.sh
+
+# vet·test 없이 빌드만
+bash build.sh -n
+
+# ===== 2. 설정 =====
+
+# 설정 샘플 복사 (실행한 디렉터리의 pm_monitor.conf 를 읽는다)
+cp pm_monitor.conf.sample pm_monitor.conf
+
+# 필요한 줄만 # 을 지우고 수정 (gossh, dhcp_server, ldap_check_sh 등)
+vi pm_monitor.conf
+
+# 호스트파일 만들기 (한 줄에 hostname 하나)
+vi hosts.txt
+
+# yum update 후 커널 변경을 지켜볼 서버는 hostname 뒤에 yum 을 붙인다 (v0.4.0).
+# 두 번째 칸이 yum(대소문자 무시, 공백·탭 여러 개 가능)이면 yum 모드, 그 밖의 값이나 없으면 OS 설치로 본다. 세 번째 칸부터는 무시한다.
+#   svr001            <- OS 설치(기존 그대로)
+#   svr002 yum        <- yum update 모드
+#   svr003  YUM       <- 이것도 yum 모드
+#   svr004 kickstart  <- yum 이 아니므로 OS 설치
+# OS 가 이미 올라와 있는 상태에서 pm_monitor 를 시작해야 한다(처음 ssh 가 성공한 때의 uname -r 가 기준 커널로 한 번 기록된다).
+# yum update 를 돌리는 일은 pm_monitor 가 하지 않는다. 사람이 따로 실행한다.
+# 같은 호스트파일에서 서버의 모드(OS 설치 <-> yum)를 바꾸고 다시 실행하면 그 서버의 기록은 새로 시작한다.
+
+# oklist.txt (선택, v0.5.0): 서버 설정 기준표. 엑셀에서 아래 7칸을 복사해 붙여 넣은 탭 구분 텍스트
+#   hostname  OS커널  appl  dns  ldap_URI  binddn  h/t
+#   svr001    4.18.0-553.el8.x86_64    nas01:/export/appl    10.10.1.10 10.10.1.11    ldap01 ldap02    uid=pmuser,ou=user,dc=cae,dc=com    ON
+#   - 첫 칸이 hostname 인 머리줄·빈 줄·# 줄은 무시, 8번째 칸부터 무시, CRLF 가능
+#   - 칸이 7개 미만이거나 hostname 이 중복된 줄은 무시하고 경고 줄로 센다(l 패널 머리에 "경고 N줄")
+#   - 값이 여럿인 칸(dns·ldap_URI)은 공백 구분, 비교는 대소문자·순서까지 구분한다(ldap_URI 는 호스트 이름만 적는다)
+vi oklist.txt
+
+# ===== 3. 실행 =====
+
+# 인자 없이 실행하면 사용법을 출력하고 종료 코드 2
+bash install_mn.sh
+
+# 실행 (root). 수집은 백그라운드로 돌고 화면이 붙는다. 이미 돌고 있으면 이어서 붙는다
+bash install_mn.sh hosts.txt
+
+# oklist 와 함께 실행 (v0.5.0). l 표에서 다른 칸이 빨간색, hosts.txt.res 에 설정동일여부 O/X 가 생긴다.
+# oklist 를 읽을 수 없으면 시작 전에 오류로 끝난다(코드 1). oklist 를 바꾸고 다시 실행하면 수집을 다시 시작한다
+bash install_mn.sh hosts.txt oklist.txt
+
+# 실행 중인 수집 보기 (호스트파일을 빼면 서버 전체). 자동 종료 시각·남은 시간도 나온다
+bash install_mn.sh --status
+bash install_mn.sh --status hosts.txt
+
+# 수집 끝내기 (화면에서 Q 후 y 와 같다). 상태 파일은 남는다
+bash install_mn.sh --stop hosts.txt
+
+# 백그라운드 없이 화면과 함께 실행(디버깅용, 화면을 닫으면 수집도 끝)
+bash install_mn.sh -f hosts.txt [oklist.txt]
+
+# 다른 설정 파일 지정
+bash install_mn.sh -c /경로/pm_monitor.conf hosts.txt [oklist.txt]
+
+# 전역 명령어로 연결 (선택)
+ln -s "$(pwd)/install_mn.sh" /usr/local/bin/install_mn
+
+# 어디서든 실행
+install_mn hosts.txt
+
+# ===== 4. 화면 키 =====
+# 화살표 PgUp PgDn Home End : 표 스크롤
+# /  : hostname 검색
+# 1~9 : 상태 필터 (1 설치중 2 지연 3 디스크미인식 4 설치완료 5 ping X 6 재부팅됨 7 완료후꺼짐
+#       8 접속가능 9 yum_update/접속가능 -- 8·9 는 yum 서버 전용), 0 : 해제
+# c  : 설치현황 코멘트 (완료 서버에 ping 해서 완료후꺼짐·재부팅됨 판정). yum 서버가 있으면 yum 요약 줄·목록이 따로 붙는다
+# r  : 지연 서버 벤더별 점검요청 코멘트. yum 지연 서버는 OS 블록 뒤에 yum 블록(재부팅 미확인 / 커널 동일 / 재부팅 뒤 접속 안 됨)이 붙는다
+# d  : DHCP 조회 (dhcp_server 설정 필요). yum 서버는 제외
+# l  : (v0.5.0) 서버 설정 표 LDAP·설정: hostname | OS커널 | appl | dns | ldap_URI | binddn | h/t | ldap_check결과 (호스트파일 순서, 조사 전은 빈 칸).
+#      누르면 대상 전체를 다시 조사한다(응답 없는 서버는 이전 값 유지). 대상: yum 서버는 yum_update/접속가능, OS 설치 서버는 상태 무관 전부.
+#      l 을 누르지 않아도 ping 이 닿는 서버는 회차마다(최대 100대) 자동으로 첫 조사를 한다. oklist 와 다른 칸은 빨간색, (없음) = 조사값이 빈 칸
+# m  : (l 패널 안에서, oklist 가 있을 때만) oklist 와 다른 서버만 보기 켜기/끄기. 패널을 다시 열면 꺼진다
+# y  : yum 커널 표 (기준 커널·현재 커널·재부팅·비고). 스냅샷만 보여 주며 ssh·ping 을 하지 않는다. yum 서버가 없으면 "yum 서버가 없습니다."
+#      맨 아래 안내 줄의 "1~9 필터"·"y yum" 은 yum 서버가 있을 때만 나온다 (없으면 1~7 필터)
+# q : 패널(c r d l y)에서는 뒤로(기본 화면), 기본 화면에서는 화면만 나가기 (수집은 계속)
+# Q : 수집까지 종료 (확인 문구에서 y)
+# Ctrl+C : 어디서든 화면만 나가기 (ssh 연결이 끊겨도 같다)
+# 수집은 시작 12시간 뒤 스스로 끝난다 (시작 시각 기준, 다시 붙어도 연장 안 됨)
+
+# ===== 4-1. yum 모드 (v0.4.0) =====
+# 상태: 접속가능(기준 커널 기록, 변화 없음) -> 재부팅됨(ping X 또는 부팅 시각 60초 넘게 변경, 커널은 기준과 같음) -> yum_update/접속가능(커널이 기준과 다름 = 완료)
+# 재부팅했는데 커널이 같으면 완료가 아니라 재부팅됨에 머문다 (비고: "재부팅됨, 커널 동일 <커널>")
+# 기준 커널은 pm_monitor 에서 ssh 가 처음 성공한 때 한 번만 기록된다(state.json 에 저장). yum update 를 돌리기 전에 시작할 것
+# yum 지연: 기준 시각부터 yum_delay_min(기본 60분)이 지나도 완료가 아니면 지연. r·c·y 에만 나오고 상태 이름은 그대로
+# 숫자 8·9 필터는 yum 서버가 있을 때만 쓸 일이 있다. 화면 머리줄은 "전체 N대 (yum M대)" 로 바뀐다
+# install_mn --status 줄: yum 서버가 있으면 "서버 N대 중 설치완료 M · yum D/T · 회차 R" (N·M 은 OS 서버 기준, D/T = yum 완료 / yum 서버 수)
+# 새 버전 바이너리로 교체한 뒤 다시 실행하면 옛 수집을 멈추고 새로 시작한다 (프로그램 버전이 지문에 들어감. 화면 문구는
+#   "호스트파일·설정이 바뀌어 수집을 다시 시작했습니다" 로 나오지만 실제 원인은 바이너리 교체일 수 있다)
+# 데모로 보기: bash demo/demo.sh   (OS 27대 + yum 6대, 약 90초 뒤 yum 서버 상태가 바뀜)
+
+# ===== 4-1b. 서버 설정 조사·oklist·res (v0.5.0) =====
+# 조사값: OS커널(uname -r), appl(/etc/auto.appl 의 /appl 마운트), dns(resolv.conf nameserver 적힌 순서), ldap_URI(ldap.conf 의 URI 줄, 호스트 이름만),
+#         binddn(ldap.conf), h/t(lscpu: ON/OFF), ldap_check결과(ldap_check_sh 출력, 비교 안 함). bindpw 는 읽지 않는다
+# 결과 파일은 실행한 디렉터리에 <호스트파일 이름>.res 로 생긴다(탭 구분 UTF-8). 엑셀에 붙여 넣거나 터미널에서 본다
+cat hosts.txt.res
+column -t -s$'\t' hosts.txt.res | less -S
+# 열: hostname OS커널 appl dns ldap_URI binddn h/t 설치/yumupdate여부 설정동일여부
+#   설치/yumupdate여부: 한 번이라도 설치완료(OS)·yum_update/접속가능(yum)이면 O, 끝까지 유지. OS 설치를 안 하는 이번 작업의 OS 서버는 X 가 정상
+#   설정동일여부: oklist 가 있고 서버가 oklist 에 있고 조사 결과가 있을 때만 O(여섯 값 모두 같음)/X, 아니면 빈 칸
+# 처음부터 다시 하려면 상태 파일과 함께 삭제
+rm -f hosts.txt.res
+
+# ===== 4-2. 시험 (랩에서) =====
+
+# 스텁 gossh 로 yum 시나리오 시험 (root, 랩에서. 실제 서버·실제 yum update 로는 확인하지 못했다)
+# 인자: <install_mn 바이너리> <스텁 gossh> <작업폴더> (각 스크립트 머리말 참고)
+python3 test/daemon_check.py <install_mn_os8 경로> test/stub_gossh.sh <작업폴더>
+python3 test/func_check.py <install_mn_os8 경로> test/stub_gossh.sh <작업폴더>
+
+# 데모 스크립트를 가상 터미널에서 돌려 yum 시나리오를 확인 (대수 27 약 4분)
+python3 test/demo_yum_check.py demo/demo.sh
+
+# 부하 시험: [초] [호스트수] [yum 비율(%)] -- 작업·결과 폴더는 환경변수 LOAD_DIR (기본 /root/pm_load)
+LOAD_DIR=/root/pm_load_yum bash test/load_run.sh 600 8000 5
+# (v0.5.0: oklist 도 같이 주고, 끝에 gossh 호출 수·조사 대수·.res 행 수 확인이 보고서에 붙는다)
+
+# ===== 5. 상태 파일 =====
+
+# 이력 확인 (호스트파일 이름 뒤에 .pm_state.json, 실행한 디렉터리. 서버 설정 결과표는 .res)
+ls -l hosts.txt.pm_state.json hosts.txt.res
+
+# 처음부터 다시 하려면 상태 파일 삭제
+rm -f hosts.txt.pm_state.json hosts.txt.res
