@@ -415,6 +415,9 @@ func (a *guiApp) selectUser(user string) error {
 	}
 	if !cfg.PasswordEnc { // 평문 password → DPAPI 암호문으로 바꿔 저장
 		if werr := writeConfFile(p, cfg.URL, cfg.Username, cfg.Password, cfg.InventoryID, cfg.ChunkSize, int(cfg.Timeout/time.Second)); werr == nil {
+			if cfg.VerifyTLS {
+				appendConfLine(p, "verify_tls = true")
+			}
 			a.logf("%s: 평문 password 를 password_enc(DPAPI)로 바꿨습니다", p)
 		} else {
 			a.logf("%s: 암호화 저장 실패: %v", p, werr)
@@ -441,7 +444,7 @@ type newConfReq struct {
 }
 
 func (r newConfReq) config() (*Config, error) {
-	u := strings.TrimRight(strings.TrimSpace(r.URL), "/")
+	u, uinv := parseAwxURL(r.URL)
 	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
 		return nil, errors.New("url 은 http:// 또는 https:// 로 시작해야 합니다")
 	}
@@ -452,6 +455,9 @@ func (r newConfReq) config() (*Config, error) {
 		return nil, errors.New("password 가 필요합니다")
 	}
 	id, err := strconv.Atoi(strings.TrimSpace(r.InventoryID))
+	if (err != nil || id <= 0) && uinv > 0 {
+		id, err = uinv, nil
+	}
 	if err != nil || id <= 0 {
 		return nil, errors.New("inventory_id 는 양의 정수여야 합니다")
 	}

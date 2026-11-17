@@ -28,6 +28,7 @@ type Config struct {
 	InventoryID int
 	ChunkSize   int
 	Timeout     time.Duration
+	VerifyTLS   bool // true 면 https 인증서를 검증한다. 기본 false: 사내 AWX 자체서명 인증서(x509 오류) 허용
 }
 
 // String 은 비밀번호를 가린 요약을 돌려준다.
@@ -108,7 +109,11 @@ func loadConfig(path string) (*Config, error) {
 		}
 		switch key {
 		case "url":
-			cfg.URL = strings.TrimRight(val, "/")
+			var uinv int
+			cfg.URL, uinv = parseAwxURL(val)
+			if uinv > 0 && cfg.InventoryID == 0 {
+				cfg.InventoryID = uinv
+			}
 		case "username":
 			cfg.Username = val
 		case "password":
@@ -127,6 +132,8 @@ func loadConfig(path string) (*Config, error) {
 				return nil, fmt.Errorf("%s:%d: inventory_id 는 양의 정수여야 합니다", path, ln)
 			}
 			cfg.InventoryID = n
+		case "verify_tls":
+			cfg.VerifyTLS = val == "true" || val == "1" || val == "yes"
 		case "chunk_size":
 			n, err := strconv.Atoi(val)
 			if err != nil || n < minChunkSize {
@@ -163,4 +170,35 @@ func loadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("설정파일 %s 에 값이 없습니다: %s", path, strings.Join(miss, ", "))
 	}
 	return cfg, nil
+}
+
+// parseAwxURL 은 사용자가 브라우저 주소를 그대로 붙여 넣은 경우를 처리한다.
+// 예: https://host/awx/#/inventories/inventory/33/details → base https://host/awx, 인벤토리 33.
+// '#' 뒤(화면 경로)는 버리고, 끝의 /api, /api/v2 도 걷어 낸다.
+func parseAwxURL(u string) (string, int) {
+	u = strings.TrimSpace(u)
+	inv := 0
+	if i := strings.Index(u, "#"); i >= 0 {
+		frag := u[i+1:]
+		u = u[:i]
+		if j := strings.Index(frag, "inventor"); j >= 0 {
+			parts := strings.Split(frag[j:], "/")
+			for k := 0; k+1 < len(parts); k++ {
+				if strings.HasPrefix(parts[k], "inventor") {
+					if n, err := strconv.Atoi(parts[k+1]); err == nil && n > 0 {
+						inv = n
+						break
+					}
+				}
+			}
+		}
+	}
+	if i := strings.Index(u, "?"); i >= 0 {
+		u = u[:i]
+	}
+	u = strings.TrimRight(u, "/")
+	for _, suf := range []string{"/api/v2", "/api"} {
+		u = strings.TrimSuffix(u, suf)
+	}
+	return strings.TrimRight(u, "/"), inv
 }

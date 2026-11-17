@@ -7,3 +7,7 @@
 - 윈도우 창 앱 `awx_fetch.exe` (받은 파일 관리, 기록, 자동 감시, DPAPI).
 - 사용 목적 주석 추가: 서버 설정값 비교용, 텍스트 기록 목적 전용.
 - 폐쇄망 빌드(`setup.sh`), CI, 문서 정리.
+
+## 2.0.1 (2026-11-18)
+- https 자체서명 인증서에서 "x509: certificate signed by unknown authority" 로 연결 테스트가 실패하던 문제 수정. 기본은 인증서 검증 안 함, conf 의 verify_tls = true 로 검증 가능.
+- url 에 브라우저 주소(#/inventories/inventory/N/details)를 그대로 붙여 넣어도 동작. 주소에서 inventory_id 를 읽는다.

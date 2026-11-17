@@ -8,3 +8,5 @@ password =
 inventory_id = 5
 chunk_size = 1048576
 timeout = 300
+# https 인증서를 검증하려면 true (기본 false: 자체서명 인증서 허용)
+# verify_tls = false

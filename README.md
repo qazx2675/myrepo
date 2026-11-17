@@ -116,12 +116,13 @@ awx_copy --help
 
 | 키 | 뜻 | 기본값 |
 |---|---|---|
-| url | AWX 주소 | (필수) |
+| url | AWX 주소. 브라우저 주소(`https://host/awx/#/inventories/inventory/33/details`)를 그대로 붙여 넣어도 되며, 이때 inventory_id(33)도 주소에서 읽는다 | (필수) |
 | username | AWX 사용자 | (필수) |
 | password | 비밀번호 | (필수) |
 | inventory_id | 중계 인벤토리 ID (사용자마다 다름) | (필수) |
 | chunk_size | 조각 하나의 최대 문자 수 (본문 추정 3 MiB 상한도 적용) | 1048576 |
 | timeout | 상대측 응답 대기와 HTTP 요청의 최대 시간(초) | 300 |
+| verify_tls | true 면 https 인증서를 검증한다. 기본값은 검증 안 함(사내 AWX 자체서명 인증서의 `x509` 오류 방지) | false |
 
 - 권한이 600 이 아니거나 소유자가 실행 사용자와 다르면 거부한다. root 는 소유자 검사를 건너뛴다(600 은 필요).
 - `-u {user}` 는 `/etc/awx_copy/{user}.conf` 를 쓴다. `~/.awx_copy/` 탐색과 "OS 사용자 이름이면 바로 실행" 동작은 없앴다.

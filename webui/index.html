@@ -36,10 +36,10 @@
   <section class="card" id="viewNew" hidden>
     <div class="card-head"><h2>새 설정 만들기</h2><span class="muted">conf\{username}.conf 로 저장. 비밀번호는 Windows DPAPI 로 암호화.</span></div>
     <form id="newForm" autocomplete="off">
-      <label>AWX 주소<input name="url" placeholder="http://192.168.0.58:30080" required></label>
+      <label>AWX 주소<input name="url" placeholder="https://서버 (브라우저 주소를 붙여 넣어도 됨)" required></label>
       <label>username<input name="username" required></label>
       <label>password<input name="password" type="password" required></label>
-      <label>inventory_id<input name="inventory_id" inputmode="numeric" required></label>
+      <label>inventory_id<input name="inventory_id" inputmode="numeric" placeholder="주소에 포함되어 있으면 비워도 됨"></label>
       <label class="check"><input type="checkbox" name="overwrite"> 같은 이름이 있으면 덮어쓰기</label>
       <div class="row gap">
         <button type="button" class="btn btn-ghost" data-act="new-test">연결 테스트</button>

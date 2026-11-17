@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ func newClient(cfg *Config) *Client {
 		MaxIdleConns:        4,
 		MaxIdleConnsPerHost: 4,
 		IdleConnTimeout:     90 * time.Second,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: !cfg.VerifyTLS, MinVersion: tls.VersionTLS10},
 	}
 	return &Client{
 		base: cfg.URL, user: cfg.Username, pass: cfg.Password, inv: cfg.InventoryID,

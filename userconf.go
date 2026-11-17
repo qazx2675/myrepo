@@ -376,3 +376,13 @@ func (s *selector) listUsers(w io.Writer) {
 	fmt.Fprintf(w, "설정 폴더: %s (현재 OS 사용자: %s, 읽을 수 있는 파일만 표시)\n", s.Dir, s.OSUser)
 	s.printCandidates(w, cands)
 }
+
+// appendConfLine 은 설정파일 끝에 한 줄을 붙인다(권한 유지).
+func appendConfLine(path, line string) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.WriteString(line + "\n")
+}
