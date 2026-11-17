@@ -1,0 +1,32 @@
+#!/bin/bash
+# awx_copy 래퍼 (업로더, 리눅스)
+#   ./awx_copy <파일> [csv|txt] [--config 경로]
+#   ./awx_copy --restore | --measure-limits | --snapshot | --help
+set -u
+SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+DIR="$(cd "$(dirname "$SELF")" && pwd)"
+BIN="${AWX_COPY_BIN:-$DIR/bin/awx_copy}"
+if [ ! -x "$BIN" ]; then
+    echo "오류: 실행파일이 없습니다: $BIN (./build.sh 로 빌드하세요)" >&2
+    exit 2
+fi
+if [ $# -eq 0 ]; then
+    exec "$BIN" --help
+fi
+case "$1" in
+    -*) exec "$BIN" "$@" ;;
+esac
+FILE="$1"; shift
+TYPE="txt"
+if [ $# -gt 0 ]; then
+    case "$1" in -*) ;; *) TYPE="$1"; shift ;; esac
+fi
+if [ ! -f "$FILE" ]; then
+    echo "오류: 파일이 없습니다: $FILE" >&2
+    exit 2
+fi
+case "$TYPE" in
+    csv|txt) ;;
+    *) echo "오류: type 은 csv 또는 txt 입니다: $TYPE" >&2; exit 2 ;;
+esac
+exec "$BIN" "$@" "$FILE" "$TYPE"

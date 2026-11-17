@@ -1,0 +1,10 @@
+# 실제 설정파일(비밀번호 포함)은 커밋하지 않는다
+awx_copy.conf
+*.conf
+!awx_copy.conf.example
+.awx_copy.conf
+# 테스트 산출물
+downloads/
+test/work/
+test/results/*.local
+*.part
