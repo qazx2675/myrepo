@@ -1,87 +1,168 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 760" font-family="'Malgun Gothic','Noto Sans KR',sans-serif">
-  <style>
-    .bg{fill:#ffffff}.t{fill:#0f172a}.s{fill:#475569}.box{fill:#f1f5f9;stroke:#64748b}
-    .col{fill:#e0f2fe;stroke:#0284c7}.st{fill:#fef3c7;stroke:#d97706}.tui{fill:#ede9fe;stroke:#7c3aed}
-    .ln{stroke:#64748b;fill:none;stroke-width:1.5}
-    @media (prefers-color-scheme: dark){
-      .bg{fill:#0f172a}.t{fill:#e2e8f0}.s{fill:#94a3b8}.box{fill:#1e293b;stroke:#94a3b8}
-      .col{fill:#0c4a6e;stroke:#38bdf8}.st{fill:#451a03;stroke:#fbbf24}.tui{fill:#2e1065;stroke:#a78bfa}
-      .ln{stroke:#94a3b8}
-    }
-  </style>
-  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#64748b"/></marker></defs>
-  <rect class="bg" width="960" height="760"/>
-  <text class="t" x="480" y="34" text-anchor="middle" font-size="20" font-weight="bold">pm_monitor (install_mn) 흐름</text>
-  <text class="s" x="480" y="56" text-anchor="middle" font-size="12">install_mn &lt;호스트파일&gt; · 설정: ./pm_monitor.conf · 상태: &lt;호스트파일&gt;.pm_state.json</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1590" font-family="Malgun Gothic, Noto Sans KR, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#444"/></marker>
+    <style>
+      .box{fill:#f4f7fb;stroke:#4a6fa5;stroke-width:1.5}
+      .dec{fill:#fff8e6;stroke:#c08a00;stroke-width:1.5}
+      .ask{fill:#fdecec;stroke:#c0392b;stroke-width:1.8}
+      .ok{fill:#eaf7ea;stroke:#2e8b57;stroke-width:1.5}
+      .side{fill:#f2f2f2;stroke:#888;stroke-width:1;stroke-dasharray:4 3}
+      .t{font-weight:bold;font-size:15}
+      .s{font-size:12.5;fill:#333}
+      .l{stroke:#444;stroke-width:1.5;fill:none;marker-end:url(#a)}
+      .lab{font-size:12;fill:#a33;font-weight:bold}
+      .h{font-size:22;font-weight:bold}
+    </style>
+  </defs>
+  <rect width="1200" height="1590" fill="#fff"/>
+  <text x="30" y="40" class="h">install_mn (pm_monitor) 흐름 (v0.4.0)</text>
+  <text x="30" y="64" class="s">호스트파일 한 줄 = "hostname [yum]". 두 번째 칸이 yum 이면 yum update 후 커널 변경을 보는 yum 서버, 아니면 OS 설치 서버(기존 동작 그대로).</text>
 
-  <!-- 수집 고루틴 -->
-  <rect class="col" x="30" y="80" width="420" height="420" rx="10"/>
-  <text class="t" x="240" y="104" text-anchor="middle" font-size="15" font-weight="bold">수집 고루틴 (interval_sec=60, 겹치지 않음)</text>
-  <rect class="box" x="55" y="120" width="370" height="54" rx="6"/>
-  <text class="t" x="240" y="142" text-anchor="middle" font-size="13">① raw ICMP ping (완료·완료후꺼짐 제외)</text>
-  <text class="s" x="240" y="161" text-anchor="middle" font-size="11">무응답 → ping X(접속불가)</text>
-  <rect class="box" x="55" y="190" width="370" height="54" rx="6"/>
-  <text class="t" x="240" y="212" text-anchor="middle" font-size="13">② 22번 포트 TCP 연결 (ping O 미완료)</text>
-  <text class="s" x="240" y="231" text-anchor="middle" font-size="11">refused → 설치중</text>
-  <rect class="box" x="55" y="260" width="370" height="54" rx="6"/>
-  <text class="t" x="240" y="282" text-anchor="middle" font-size="13">③ gossh -pm "echo PM_OK"</text>
-  <text class="s" x="240" y="301" text-anchor="middle" font-size="11">PM_OK → 설치완료 · anaconda → 설치중</text>
-  <rect class="box" x="55" y="330" width="370" height="54" rx="6"/>
-  <text class="t" x="240" y="352" text-anchor="middle" font-size="13">④ gossh: /tmp/anaconda.log 에서 DISK_PATTERN</text>
-  <text class="s" x="240" y="371" text-anchor="middle" font-size="11">문구 있음 → 디스크미인식 (setup_check 방식)</text>
-  <rect class="box" x="55" y="400" width="370" height="80" rx="6"/>
-  <text class="t" x="240" y="422" text-anchor="middle" font-size="13">⑤ 상태기계 갱신 · 저장</text>
-  <text class="s" x="240" y="441" text-anchor="middle" font-size="11">처음 본 뒤 delay_min(60분) 넘으면 지연</text>
-  <text class="s" x="240" y="458" text-anchor="middle" font-size="11">이력 → pm_state.json · 스냅샷 → TUI</text>
-  <text class="s" x="240" y="494" text-anchor="middle" font-size="11">관리서버 부하 제한: ICMP 500pps · TCP 동시 100 · gossh 1개씩 · nice 10</text>
-  <line class="ln" x1="240" y1="174"x2="240" y2="188" marker-end="url(#a)"/>
-  <line class="ln" x1="240" y1="244" x2="240" y2="258" marker-end="url(#a)"/>
-  <line class="ln" x1="240" y1="314" x2="240" y2="328" marker-end="url(#a)"/>
-  <line class="ln" x1="240" y1="384" x2="240" y2="398" marker-end="url(#a)"/>
+  <!-- start -->
+  <rect x="390" y="85" width="420" height="62" rx="10" class="box"/>
+  <text x="600" y="110" text-anchor="middle" class="t">시작: install_mn &lt;호스트파일&gt;</text>
+  <text x="600" y="132" text-anchor="middle" class="s">root 로 실행 (raw ICMP) · 설정 ./pm_monitor.conf</text>
+  <path d="M600,147 V180" class="l"/>
 
-  <!-- 상태 -->
-  <rect class="st" x="480" y="80" width="450" height="200" rx="10"/>
-  <text class="t" x="705" y="104" text-anchor="middle" font-size="15" font-weight="bold">상태 (우선순위: 디스크미인식 &gt; 지연 &gt; 설치중)</text>
-  <text class="t" x="500" y="132" font-size="12">설치중 · 지연 ── 벤더 안 나눔</text>
-  <text class="t" x="500" y="156" font-size="12">디스크미인식 · ping X(접속불가) ── 벤더별</text>
-  <text class="t" x="500" y="180" font-size="12">설치완료 ── 평소엔 ping·ssh 안 함</text>
-  <text class="t" x="500" y="204" font-size="12">완료후꺼짐 ── c 누를 때 완료 서버 ping X</text>
-  <text class="t" x="500" y="228" font-size="12">재부팅됨 ── 완료후꺼짐이 다시 ping O (완료에 포함)</text>
-  <text class="s" x="500" y="258" font-size="11">벤더: 설정 vendor=정규식=이름, 위에서부터 처음 맞는 줄, 없으면 기타</text>
+  <!-- daemon -->
+  <rect x="390" y="180" width="420" height="100" rx="6" class="box"/>
+  <text x="600" y="205" text-anchor="middle" class="t">① 수집 데몬 확인·시작</text>
+  <text x="600" y="227" text-anchor="middle" class="s">같은 호스트파일 수집이 있으면 화면만 붙임</text>
+  <text x="600" y="247" text-anchor="middle" class="s">바이너리·설정·호스트파일이 바뀌었으면 교체</text>
+  <text x="600" y="267" text-anchor="middle" class="s">12시간은 시작 시각 고정, 끝나면 자동 종료</text>
+  <path d="M600,280 V310" class="l"/>
+
+  <rect x="850" y="180" width="320" height="100" rx="6" class="side"/>
+  <text x="1010" y="205" text-anchor="middle" class="t">화면과 수집은 따로</text>
+  <text x="1010" y="228" text-anchor="middle" class="s">q · Ctrl+C: 화면만 종료 (수집 계속)</text>
+  <text x="1010" y="248" text-anchor="middle" class="s">Q 다음 y · --stop: 수집 종료</text>
+  <text x="1010" y="268" text-anchor="middle" class="s">--status: 돌고 있는 수집 확인</text>
+  <path d="M850,230 H810" class="l"/>
+
+  <!-- round -->
+  <rect x="390" y="310" width="420" height="100" rx="6" class="box"/>
+  <text x="600" y="335" text-anchor="middle" class="t">② 수집 회차 (interval_sec=60, 겹치지 않음)</text>
+  <text x="600" y="357" text-anchor="middle" class="s">raw ICMP ping (완료·완료후꺼짐 제외)</text>
+  <text x="600" y="377" text-anchor="middle" class="s">무응답 → ping X(접속불가) · 응답 → 22번 포트 TCP</text>
+  <text x="600" y="397" text-anchor="middle" class="s">OS·yum 서버 모두 같은 ping·포트 확인을 거침</text>
+  <path d="M600,410 V440" class="l"/>
+
+  <!-- kind -->
+  <polygon points="600,440 790,490 600,540 410,490" class="dec"/>
+  <text x="600" y="485" text-anchor="middle" class="t">호스트파일 2번째 칸이</text>
+  <text x="600" y="505" text-anchor="middle" class="t">yum 인가?</text>
+  <path d="M410,490 H270 V590" class="l"/>
+  <text x="300" y="481" class="lab">아님 = OS 설치</text>
+  <path d="M790,490 H930 V590" class="l"/>
+  <text x="810" y="481" class="lab">yum</text>
+
+  <!-- OS lane -->
+  <text x="270" y="575" text-anchor="middle" class="t">OS 설치 서버</text>
+  <rect x="70" y="590" width="400" height="76" rx="6" class="box"/>
+  <text x="270" y="615" text-anchor="middle" class="t">③ gossh -pm "echo PM_OK"</text>
+  <text x="270" y="637" text-anchor="middle" class="s">PM_OK → 설치완료 · anaconda → 설치중</text>
+  <text x="270" y="655" text-anchor="middle" class="s">(ping O · 22번 포트 열린 서버만)</text>
+  <path d="M270,666 V696" class="l"/>
+
+  <rect x="70" y="696" width="400" height="66" rx="6" class="box"/>
+  <text x="270" y="721" text-anchor="middle" class="t">④ gossh: /tmp/anaconda.log 확인</text>
+  <text x="270" y="743" text-anchor="middle" class="s">DISK_PATTERN 문구 있음 → 디스크미인식</text>
+  <path d="M270,762 V792" class="l"/>
+
+  <rect x="70" y="792" width="400" height="100" rx="6" class="box"/>
+  <text x="270" y="817" text-anchor="middle" class="t">⑤ 상태 갱신 · 저장</text>
+  <text x="270" y="839" text-anchor="middle" class="s">처음 본 뒤 delay_min(60분) 넘으면 지연</text>
+  <text x="270" y="859" text-anchor="middle" class="s">우선순위: 디스크미인식 &gt; 지연 &gt; 설치중</text>
+  <text x="270" y="879" text-anchor="middle" class="s">벤더: 설정 vendor=정규식=이름 (없으면 기타)</text>
+  <path d="M270,892 V922" class="l"/>
+
+  <rect x="70" y="922" width="400" height="112" rx="10" class="ok"/>
+  <text x="270" y="947" text-anchor="middle" class="t">설치완료 (OS)</text>
+  <text x="270" y="969" text-anchor="middle" class="s">평소엔 ping·ssh 안 함</text>
+  <text x="270" y="989" text-anchor="middle" class="s">c 키: 완료 서버 ping X → 완료후꺼짐</text>
+  <text x="270" y="1009" text-anchor="middle" class="s">다시 ping O → 재부팅됨 (완료에 포함)</text>
+  <text x="270" y="1026" text-anchor="middle" class="s">종료 판정(Done)은 OS 서버만 센다</text>
+
+  <!-- yum lane -->
+  <text x="930" y="575" text-anchor="middle" class="t">yum 서버 (v0.4.0)</text>
+  <rect x="730" y="590" width="400" height="76" rx="6" class="box"/>
+  <text x="930" y="615" text-anchor="middle" class="t">③ gossh 한 번에 모아서 조회</text>
+  <text x="930" y="637" text-anchor="middle" class="s">echo NS_YUM; uname -r; uptime -s</text>
+  <text x="930" y="655" text-anchor="middle" class="s">yum 서버가 있으면 회차당 gossh 1번 추가</text>
+  <path d="M930,666 V696" class="l"/>
+
+  <rect x="730" y="696" width="400" height="76" rx="6" class="box"/>
+  <text x="930" y="721" text-anchor="middle" class="t">④ 기준 기록 (첫 ssh 성공 때 1회)</text>
+  <text x="930" y="743" text-anchor="middle" class="s">uname -r · uptime -s 저장 → 접속가능</text>
+  <text x="930" y="761" text-anchor="middle" class="s">pm_state.json 에 남아 다시 실행해도 유지</text>
+  <path d="M930,772 V802" class="l"/>
+
+  <polygon points="930,802 1090,845 930,888 770,845" class="dec"/>
+  <text x="930" y="836" text-anchor="middle" class="t">재부팅 감지?</text>
+  <text x="930" y="855" text-anchor="middle" class="s">ping X · 부팅시각 변화</text>
+  <text x="1098" y="826" class="lab">아니오</text>
+  <text x="1098" y="844" class="s">접속가능</text>
+  <text x="1098" y="860" class="s">유지</text>
+  <path d="M930,888 V918" class="l"/>
+  <text x="940" y="908" class="lab">예</text>
+
+  <rect x="730" y="918" width="400" height="56" rx="6" class="box"/>
+  <text x="930" y="941" text-anchor="middle" class="t">재부팅됨</text>
+  <text x="930" y="961" text-anchor="middle" class="s">내려가 있어도 ping X 가 아니라 재부팅됨</text>
+  <path d="M930,974 V1004" class="l"/>
+
+  <polygon points="930,1004 1090,1047 930,1090 770,1047" class="dec"/>
+  <text x="930" y="1042" text-anchor="middle" class="t">ssh 되고 커널이</text>
+  <text x="930" y="1061" text-anchor="middle" class="t">기준과 다른가?</text>
+  <text x="1098" y="1028" class="lab">아니오</text>
+  <text x="1098" y="1046" class="s">재부팅됨</text>
+  <text x="1098" y="1062" class="s">유지, 코멘트에</text>
+  <text x="1098" y="1078" class="s">'커널 동일'</text>
+  <path d="M930,1090 V1120" class="l"/>
+  <text x="940" y="1110" class="lab">다름</text>
+
+  <rect x="730" y="1120" width="400" height="124" rx="10" class="ok"/>
+  <text x="930" y="1145" text-anchor="middle" class="t">yum_update/접속가능 = 완료</text>
+  <text x="930" y="1167" text-anchor="middle" class="s">기준 커널과 다른 커널로 올라옴</text>
+  <text x="930" y="1187" text-anchor="middle" class="s">c 키: ping X → 완료후꺼짐, 다시 O → 복귀</text>
+  <text x="930" y="1207" text-anchor="middle" class="s">yum 지연: 첫 기록 뒤 yum_delay_min(60분)이</text>
+  <text x="930" y="1225" text-anchor="middle" class="s">지나도 이 상태가 아니면 r · c · y 에만 표시</text>
+
+  <!-- merge -->
+  <path d="M270,1034 V1290 H390" class="l"/>
+  <path d="M930,1244 V1290 H810" class="l"/>
+  <rect x="390" y="1260" width="420" height="60" rx="6" class="box"/>
+  <text x="600" y="1285" text-anchor="middle" class="t">⑥ 스냅샷 공개 · pm_state.json 저장</text>
+  <text x="600" y="1307" text-anchor="middle" class="s">OS 개수와 yum 개수는 따로 센다</text>
+  <path d="M600,1320 V1352" class="l"/>
 
   <!-- TUI -->
-  <rect class="tui" x="480" y="300" width="450" height="200" rx="10"/>
-  <text class="t" x="705" y="324" text-anchor="middle" font-size="15" font-weight="bold">TUI (raw tty · 순수 렌더 · 가상 스크롤)</text>
-  <text class="t" x="500" y="350" font-size="12">기본: 상태별 개수 + hostname·벤더·상태·경과 표</text>
-  <text class="t" x="500" y="372" font-size="12">↑↓ PgUp/PgDn 스크롤 · / 검색 · 1~7 필터 · 0 해제</text>
-  <text class="t" x="500" y="396" font-size="12">c 설치현황 코멘트 (켤 때 완료 서버 ping)</text>
-  <text class="t" x="500" y="418" font-size="12">r 지연 서버 벤더별 점검요청 코멘트</text>
-  <text class="t" x="500" y="440" font-size="12">d DHCP 조회 (ping X → dhcp_server a.sh)</text>
-  <text class="t" x="500" y="462" font-size="12">l LDAP · DNS·NTP · autofs · H/T (미조사 완료 서버만)</text>
-  <text class="s" x="500" y="486" font-size="11">같은 키를 한 번 더 누르면 닫힘 · q 종료</text>
+  <rect x="330" y="1352" width="540" height="150" rx="6" class="box"/>
+  <text x="600" y="1377" text-anchor="middle" class="t">화면 (raw tty · 순수 렌더 · 가상 스크롤)</text>
+  <text x="600" y="1400" text-anchor="middle" class="s">↑↓ PgUp/PgDn · / 검색 · 1~9 상태 필터 · 0 해제</text>
+  <text x="600" y="1420" text-anchor="middle" class="s">c 설치현황 (yum 별도 줄) · r 지연 점검요청 (yum A·B·C)</text>
+  <text x="600" y="1440" text-anchor="middle" class="s">y yum 커널 표 (조회 없이 화면 자료만 사용)</text>
+  <text x="600" y="1460" text-anchor="middle" class="s">d DHCP 조회 (OS 서버만) · l LDAP·DNS·NTP·autofs</text>
+  <text x="600" y="1480" text-anchor="middle" class="s">같은 키를 한 번 더 누르면 닫힘 · q 화면 종료</text>
 
-  <line class="ln" x1="450" y1="440" x2="478" y2="400" marker-end="url(#a)"/>
-  <line class="ln" x1="450" y1="200" x2="478" y2="180" marker-end="url(#a)"/>
+  <rect x="20" y="1352" width="280" height="150" rx="6" class="side"/>
+  <text x="160" y="1377" text-anchor="middle" class="t">12시간 제한</text>
+  <text x="160" y="1402" text-anchor="middle" class="s">시작 시각부터 12시간 (고정)</text>
+  <text x="160" y="1424" text-anchor="middle" class="s">지나면 수집이 자동 종료</text>
+  <text x="160" y="1446" text-anchor="middle" class="s">화면을 껐다 붙여도 시각은</text>
+  <text x="160" y="1468" text-anchor="middle" class="s">바뀌지 않음</text>
+  <path d="M300,1427 H330" class="l"/>
 
-  <!-- 코멘트 예시 -->
-  <rect class="box" x="30" y="525" width="900" height="210" rx="10"/>
-  <text class="t" x="50" y="550" font-size="14" font-weight="bold">c 코멘트 예시</text>
-  <g font-family="Consolas,'D2Coding',monospace" font-size="12" class="t">
-    <text x="50" y="575">설치현황</text>
-    <text x="50" y="593">300대 중 30대 설치완료, 265대 설치중, 3대 디스크 미인식, ping X 2대</text>
-    <text x="50" y="611">sds</text>
-    <text x="50" y="629">디스크 미인식 3대</text>
-    <text x="50" y="647">svr1 svr2 svr3</text>
-    <text x="50" y="665">접속불가 2대</text>
-    <text x="50" y="683">svr5 svr7</text>
-  </g>
-  <text class="s" x="560" y="575" font-size="12">r 점검요청 예시</text>
-  <g font-family="Consolas,'D2Coding',monospace" font-size="12" class="t">
-    <text x="560" y="595">안녕하세요 D 담당자님</text>
-    <text x="560" y="613">하기서버 2대는 OS 설치가 지연되고 있습니다.</text>
-    <text x="560" y="631">점검부탁드립니다.</text>
-    <text x="560" y="649">감사합니다.</text>
-    <text x="560" y="667">h001 c014</text>
-  </g>
-  <text class="s" x="560" y="710" font-size="11">코드: comment.go · tui.go · render.go · state.go</text>
+  <rect x="900" y="1352" width="280" height="150" rx="6" class="side"/>
+  <text x="1040" y="1377" text-anchor="middle" class="t">관리서버 부하 제한</text>
+  <text x="1040" y="1402" text-anchor="middle" class="s">ICMP 500pps · TCP 동시 100</text>
+  <text x="1040" y="1424" text-anchor="middle" class="s">gossh 한 번에 1개 · nice 10</text>
+  <text x="1040" y="1446" text-anchor="middle" class="s">8000대(yum 400) 10분 시험:</text>
+  <text x="1040" y="1468" text-anchor="middle" class="s">CPU 평균 3.5% · RSS 36MB</text>
+  <path d="M900,1427 H870" class="l"/>
+
+  <!-- assumptions -->
+  <rect x="20" y="1520" width="1160" height="55" rx="6" class="side"/>
+  <text x="35" y="1543" class="s">yum 서버가 하나도 없는 호스트파일은 v0.3.0 과 같은 동작·같은 화면 · 호스트의 모드(OS ↔ yum)가 바뀌면 그 호스트 기록은 새로 시작</text>
+  <text x="35" y="1563" class="s">· 실장비의 실제 yum update·재부팅은 아직 확인 전(스텁 gossh 로만 시험) · 코드: state.go · gossh.go · comment.go · tui.go · render.go · daemon.go</text>
 </svg>
