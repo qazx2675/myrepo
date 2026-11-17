@@ -1,0 +1,46 @@
+# 빌드 (폐쇄망, Go 1.20 이상)
+bash setup.sh
+
+# 리눅스 설치 (root)
+sudo ./install.sh
+
+# 사용자 설정 배포 (관리자)
+cp conf.example/user.conf.example /etc/awx_copy/test.kim.conf
+vi /etc/awx_copy/test.kim.conf
+chown test.kim /etc/awx_copy/test.kim.conf
+chmod 600 /etc/awx_copy/test.kim.conf
+
+# 업로드 (txt)
+awx_copy -u test.kim /경로/파일.txt
+
+# 업로드 (csv 로 기록)
+awx_copy -u test.kim /경로/파일.csv -csv
+
+# 내 업로드 기록 보기
+awx_copy -u test.kim
+
+# 설정 선택 화면
+awx_copy
+
+# 전체 사용자 기록 (root 비밀번호 입력)
+awx_copy -u root
+
+# variables 상태 확인 (GET 만)
+awx_copy -u test.kim --status
+
+# 남은 블록 원복
+awx_copy -u test.kim --restore
+
+# 작업 템플릿/인벤토리 소스 변경 여부 확인용 스냅샷 (전후 비교)
+awx_copy -u test.kim --snapshot
+
+# 윈도우: 창 앱 실행 (더블클릭 또는)
+awx_fetch.exe
+
+# 윈도우: 창 없이 1건 수신
+awx_fetch.exe --cli --user test.kim
+
+# 테스트
+go vet ./... && go test ./...
+
+# 주의: 설정 변경 뒤에는 랜덤한 서버 몇 대를 직접 확인해 실제로 변경되었는지 확인한다.

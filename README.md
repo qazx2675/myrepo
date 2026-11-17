@@ -7,28 +7,33 @@ AWX 인벤토리 `variables` 를 중계로 써서 레드햇(ETX) 터미널의 **
 - 인벤토리 `variables` 만 PATCH 한다. 작업 템플릿, 인벤토리 소스는 호출·변경하지 않는다.
 - 표준 라이브러리만 쓴다. go 1.20 이상에서 빌드된다.
 
-## 사용법 (리눅스)
+
+> **용도**: 업무에 필요한 서버 설정값 비교를 위해 사용되는 툴로, 업무 시 텍스트 기록을 위한 목적으로 가져오는 데만 사용됩니다.
+
+## 1) 빌드 및 설치
+
+### 폐쇄망(오프라인) 빌드
+
+이 저장소를 **통째로 내려받아(ZIP 또는 `git clone`)** 폐쇄망 PC로 옮긴다. 외부 의존성이 없다(Go 표준 라이브러리만 사용, `go.mod` 에 `require` 없음).
+그래서 `vendor/` 폴더가 비어 있어도 되고, 인터넷 접속 없이 **Go 1.20 이상 툴체인만 있으면** 빌드된다.
 
 ```bash
-awx_copy -u {user} {filename}        # 업로드 (type txt). 끝나면 기록 화면
-awx_copy -u {user} {filename} -csv   # 업로드 (type csv)
-awx_copy -u {user}                   # 내 업로드 기록 화면
-awx_copy                             # 설정 선택 화면(읽을 수 있는 /etc/awx_copy/*.conf) → 기록 화면
-awx_copy -u root                     # root 비밀번호 확인 뒤 전체 사용자 기록 (AWX 계정 아님, 조회 전용)
-awx_copy --root-passwd               # root 기록 조회 비밀번호 변경 (root 만)
-awx_copy --help
+bash setup.sh          # 리눅스: bin/awx_copy 빌드 (GOPROXY=off, -mod=vendor)
 ```
 
-- 어느 경로에서든 실행한다. 파일 경로는 상대/절대 모두 된다.
-- 두 번째 위치 인자 `-csv` 가 없으면 type 은 txt 다. (호환: `csv`, `txt` 도 받는다)
-- 업로드 중에는 한 줄 진행 화면을 갱신한다: `[k/N] 전송 중 [####----] 45.0%  12.3초  120.4 KiB/s  파일명`.
-  표준 출력이 터미널이 아니면 `[k/N] 전송 중 (n bytes)` 한 줄 로그로 대신한다.
-- Ctrl+C 는 variables 를 원복하고 종료한다(종료 코드 130). 기록에 "중단"이 남는다.
-- 기록 화면: 최근 순 표. 위/아래, PgUp/PgDn, Home/End 로 이동, q 로 닫는다. 터미널이 아니면 표를 그대로 출력한다.
+```bat
+build.bat              :: 윈도우: distwx_fetch.exe 빌드 (-H windowsgui)
+```
 
-유지한 옵션: `--user`(= `-u`), `--config <경로>`, `--list-users`, `--status`, `--snapshot`, `--measure-limits`, `--restore`, `--fetch`, `--out`, `--no-pause`.
+빌드된 실행파일이 이미 들어 있다. Go 가 없는 PC 는 그대로 쓰면 된다.
 
-## 설치 (리눅스, root)
+| 실행파일 | 대상 |
+|---|---|
+| `bin/awx_copy` | 리눅스 amd64 정적 바이너리 (go 1.20.14) |
+| `dist/awx_fetch.exe` | 윈도우 amd64 창 앱 |
+
+### 리눅스 설치 (root)
+
 
 ```bash
 ./build.sh            # bin/awx_copy (CGO_ENABLED=0 정적 빌드. RHEL6 은 go 1.20 으로 빌드)
@@ -58,7 +63,49 @@ conf 파일은 600(소유자=해당 사용자)이라 다른 사용자는 내용�
 대신 폴더 목록으로 **사용자 이름(파일명)은 모든 사용자에게 보인다**. 선택 목록에는 읽을 수 있는 파일만 나온다.
 `root.conf` 는 root 소유 600 그대로다.
 
-## /etc 구조와 설정파일
+## 2) 사용 방법
+
+
+```bash
+awx_copy -u {user} {filename}        # 업로드 (type txt). 끝나면 기록 화면
+awx_copy -u {user} {filename} -csv   # 업로드 (type csv)
+awx_copy -u {user}                   # 내 업로드 기록 화면
+awx_copy                             # 설정 선택 화면(읽을 수 있는 /etc/awx_copy/*.conf) → 기록 화면
+awx_copy -u root                     # root 비밀번호 확인 뒤 전체 사용자 기록 (AWX 계정 아님, 조회 전용)
+awx_copy --root-passwd               # root 기록 조회 비밀번호 변경 (root 만)
+awx_copy --help
+```
+
+- 어느 경로에서든 실행한다. 파일 경로는 상대/절대 모두 된다.
+- 두 번째 위치 인자 `-csv` 가 없으면 type 은 txt 다. (호환: `csv`, `txt` 도 받는다)
+- 업로드 중에는 한 줄 진행 화면을 갱신한다: `[k/N] 전송 중 [####----] 45.0%  12.3초  120.4 KiB/s  파일명`.
+  표준 출력이 터미널이 아니면 `[k/N] 전송 중 (n bytes)` 한 줄 로그로 대신한다.
+- Ctrl+C 는 variables 를 원복하고 종료한다(종료 코드 130). 기록에 "중단"이 남는다.
+- 기록 화면: 최근 순 표. 위/아래, PgUp/PgDn, Home/End 로 이동, q 로 닫는다. 터미널이 아니면 표를 그대로 출력한다.
+
+유지한 옵션: `--user`(= `-u`), `--config <경로>`, `--list-users`, `--status`, `--snapshot`, `--measure-limits`, `--restore`, `--fetch`, `--out`, `--no-pause`.
+
+
+윈도우: `awx_fetch.exe` 를 더블클릭해 창에서 사용자 선택 → `[지금 가져오기]` 또는 `[자동 감시]`. 자세한 내용은 아래 "윈도우" 절.
+
+## 3) 옵션별 상세 설명
+
+| 옵션 | 뜻 |
+|---|---|
+| `-u, --user <이름>` | `/etc/awx_copy/<이름>.conf` 사용. 없으면 선택 화면 |
+| `--config <경로>` | 그 설정파일만 사용 |
+| `--list-users` | 읽을 수 있는 설정파일 목록 |
+| `-csv` | 두 번째 위치 인자. type 을 csv 로 기록 (기본 txt). 전송 방식은 같다 |
+| `--restore` | 남은 awx_copy 블록을 원본 variables 로 복구 |
+| `--status` | variables 길이/SHA-256/블록 여부 (GET 만) |
+| `--snapshot` | 작업 템플릿/인벤토리 소스 modified 출력 (GET 만, 변경 0건 확인용) |
+| `--measure-limits [--measure-max-mib N]` | variables 본문 한도 측정 (끝나면 원복) |
+| `--root-passwd` | root 기록 조회 비밀번호 변경 (root 만) |
+| `--fetch`, `--out`, `--no-pause` | 리눅스 바이너리로 수신할 때의 옵션 |
+| `--cli`, `--no-browser` | 윈도우 창 앱: 창 없이 1건 수신, 브라우저를 열지 않음 |
+| `--version`, `-h` | 버전, 도움말 |
+
+### /etc 구조와 설정파일
 
 ```
 /etc/awx_copy/
@@ -82,7 +129,7 @@ conf 파일은 600(소유자=해당 사용자)이라 다른 사용자는 내용�
 - 같은 사용자 conf(같은 inventory_id)를 쓰는 업로더와 다운로더가 서로 만난다.
 - 윈도우 다운로더는 exe 옆 `conf\{user}.conf` 를 쓴다 (아래 "윈도우" 절).
 
-## 업로드 기록
+### 업로드 기록
 
 - 위치: `/tmp/.awx_copy/{user}.history.jsonl` (폴더 1777, 파일 600). `/tmp` 는 재부팅 때 지워질 수 있다.
 - 한 줄(JSON): `ts, user, file, type, size, chunks, seconds, result(성공|실패|중단), message`.
@@ -91,7 +138,7 @@ conf 파일은 600(소유자=해당 사용자)이라 다른 사용자는 내용�
   3회 틀리면 종료 코드 1. 맞으면 `/tmp/.awx_copy/*.history.jsonl` 전체를 사용자 열과 함께 보여 준다.
   `root.conf` 와 다른 사용자 기록 파일을 읽어야 하므로 root 권한이 필요하다. 비밀번호는 로그·오류·기록에 남지 않는다.
 
-## 전송 프로토콜 (v2, 평문 텍스트)
+### 전송 프로토콜 (v2, 평문 텍스트)
 
 1. 업로더가 파일을 읽어 문자 수 기준으로 나눈다(멀티바이트·CRLF 중간에서 자르지 않음).
 2. 시작 전 `variables` 원문을 `~/.awx_copy/backup/`(실행 사용자 홈)과 블록의 `backup_b64` 에 둔다.
@@ -129,7 +176,7 @@ awx_copy:
 - v2 수신기는 정의되지 않은 키(`chunk_raw` 등)가 있으면 거부한다.
 - `variables` 에 이미 `awx_copy:` 블록이 있으면 다른 세션으로 보고 거부한다.
 
-### 원복 책임
+#### 원복 책임
 
 | 상황 | 원복하는 쪽 | 업로더 결과 |
 |---|---|---|
@@ -142,7 +189,7 @@ awx_copy:
 
 원복은 현재 블록이 자기 세션일 때만 한다. 결과(`done`) 없이 원본으로 돌아온 경우 업로더는 성공으로 보지 않는다.
 
-## 윈도우 (다운로더 창 앱 `awx_fetch.exe`)
+### 윈도우 (다운로더 창 앱 `awx_fetch.exe`)
 
 `awx_fetch.exe` 를 더블클릭하면 Edge(없으면 Chrome)의 `--app` 창이 열린다. 주소창과 탭이 없다. cmd 창은 뜨지 않는다(`-H windowsgui` 빌드).
 Go 단일 exe 이며 화면(HTML/JS/CSS)은 `go:embed` 로 들어 있다. 서버는 `127.0.0.1` 에만 바인딩한다.
@@ -158,7 +205,7 @@ awx_fetch.exe --restore --user test.kim     :: 남은 블록 복구
 `--cli`, `--status`, `--restore` 의 출력: 콘솔이 없는 빌드라서 **exe 옆 `awx_fetch.log`(UTF-8)에 항상 남기고**, 부모 콘솔이 있으면 `AttachConsole` 로 거기에도 쓴다.
 cmd 는 GUI exe 를 기다리지 않으므로 종료 코드가 필요하면 `start /wait` 또는 `Start-Process -Wait -PassThru` 로 실행한다.
 
-### 폴더
+#### 폴더
 
 ```
 awx_fetch.exe
@@ -173,7 +220,7 @@ awx_fetch.log         동작 로그 (UTF-8, 5 MiB 넘으면 .1 로 돌림). 비�
 - 평문 `password` 도 읽는다. 화면에서 그 사용자를 고르면(연결 확인 성공 시) `password_enc` 로 바꿔 저장한다.
 - 실제 conf 와 받은 파일, 로그는 `.gitignore` 에 있다.
 
-### 화면
+#### 화면
 
 | 화면 | 내용 |
 |---|---|
@@ -186,14 +233,14 @@ awx_fetch.log         동작 로그 (UTF-8, 5 MiB 넘으면 .1 로 돌림). 비�
 - 해시 불일치(텍스트가 아닌 바이트, 섞인 줄바꿈 등)면 저장하지 않고 기록에 "실패"로 남긴다. 업로더에도 `result: fail` 이 전달된다.
 - 변경 대상은 인벤토리 variables 뿐이다. 작업 템플릿·인벤토리 소스는 호출하지 않는다.
 
-### 수명 관리
+#### 수명 관리
 
 - 창은 2초마다 `/api/ping` 을 보내고, 닫힐 때 `/api/bye` 비콘을 보낸다. 마지막 창이 bye 를 보내고 1초 안에 새 ping 이 없으면 종료한다(새로고침은 종료 아님).
 - 비콘 없이 창이 죽으면 ping 이 15초 끊긴 뒤 종료한다. 창이 60초 안에 한 번도 붙지 않으면 종료한다.
 - 종료할 때 진행 중 수신을 멈추고, variables 가 자기 세션 블록이면 원복한다.
 - 이미 실행 중이면(이름 있는 뮤텍스 `Local\AWX_copy_awx_fetch`) 새 실행은 기존 창을 앞으로 가져오고 바로 끝난다.
 
-### host-cross-checker 제작 중 문제와 대책
+#### host-cross-checker 제작 중 문제와 대책
 
 | 문제 | 대책 (이 앱) |
 |---|---|
@@ -209,7 +256,7 @@ awx_fetch.log         동작 로그 (UTF-8, 5 MiB 넘으면 .1 로 돌림). 비�
 | 브라우저 프로필 충돌 | 독립 프로필 `%TEMP%\awx-copy-profile`. 20초 안에 창이 붙지 않으면 새 프로필로 한 번 더 연다. |
 | 다른 사이트의 요청(CSRF) | Host 는 127.0.0.1/localhost:{포트} 만, Origin 은 같은 출처만, 상태 변경 POST 는 `X-AWX-Fetch` 헤더 필수. |
 
-### 자원 실측 (2026-11-17, Windows 11, Edge)
+#### 자원 실측 (2026-11-17, Windows 11, Edge)
 
 | 항목 | 값 |
 |---|---|
@@ -221,14 +268,14 @@ awx_fetch.log         동작 로그 (UTF-8, 5 MiB 넘으면 .1 로 돌림). 비�
 
 화면: `docs/screens/fetch_main.png`, `fetch_users.png`, `fetch_new.png`.
 
-## 한도
+### 한도
 
 자세한 표는 `docs/limits.md`. 실제 AWX(v24.6.1) 측정.
 
 - 최대 성공 본문 4.94 MiB. 5 MiB 부터 nginx 413.
 - AWX 는 저장할 때 variables 끝의 공백/줄바꿈을 제거한다. `chunk_text` 뒤에 항상 다른 키를 두어 영향이 없다.
 
-## 테스트
+### 테스트
 
 ```bash
 go vet ./... && go test ./...                 # 단위·통합 테스트 (가짜 AWX)
@@ -237,7 +284,8 @@ test/make_files.sh /root/awx_e2e/files 1048576
 test/e2e_send.sh <conf> /root/awx_e2e/files   # 설치본 awx_copy 사용
 ```
 
-## 파일
+## 4) 문서별 설명
+
 
 | 파일 | 내용 |
 |---|---|
@@ -253,7 +301,37 @@ test/e2e_send.sh <conf> /root/awx_e2e/files   # 설치본 awx_copy 사용
 | `test/` | E2E 스크립트, PyYAML 검증 |
 | `internal/fakeawx`, `cmd/fakeawx` | 테스트용 가짜 AWX |
 
-### 정리한 잔여물
 
-- bash 래퍼 `awx_copy` 를 삭제했다.
-- VM 의 테스트 잔여물(`/root/AWX_copy/bin/awx_copy_new`, `/tmp/awx_copy_v2` 등)을 지웠다.
+| 문서 | 내용 |
+|---|---|
+| `README.md` | 이 문서 |
+| `ARCHITECTURE.md` | 폴더/파일별 역할 표 |
+| `WORKFLOW.md`, `workflow.svg` | 업로드·수신 흐름도 |
+| `CHANGELOG.md` | 변경 이력 |
+| `PR_CHECKLIST.md` | 배포·수정 전 점검표 |
+| `사용법.txt` | 수동 테스트용 명령어 모음 |
+| `setup.sh` | 폐쇄망 빌드 스크립트 |
+| `.github/workflows/ci.yml` | 커밋마다 빌드/정적분석/테스트 |
+
+## 주의사항 (Disclaimer)
+
+- 본 로그 분석 관련 스크립트 및 툴은 100% 신뢰하기보다는 **참고용(보조 도구)** 으로 사용하는 것을 권장합니다.
+- 설정 변경 스크립트를 쓴 뒤에는 **랜덤한 서버 몇 대를 직접 확인해서 실제로 변경되었는지** 확인하십시오.
+- 이 도구는 **텍스트 파일 전용**입니다. 제어문자, 잘못된 UTF-8, BOM, CRLF 와 LF 가 섞인 파일은 복원되지 않고 수신이 실패합니다(저장되지 않고 variables 는 원복).
+- 이 도구는 AWX 인벤토리 `variables` 만 바꿉니다. 비정상 종료가 겹치면 `awx_copy` 블록이 남을 수 있으니 `--status` 로 확인하고 `--restore` 로 복구하십시오.
+- 설정파일(`*.conf`)에는 비밀번호가 들어 있습니다. 저장소에 커밋하지 마십시오. (`.gitignore` 로 제외됨)
+
+## 5) 전역 명령어로 사용하기 (선택 사항)
+
+어느 경로에서든 `awx_copy` 로 실행하려면 실행파일을 `PATH` 에 있는 폴더에 둔다. `install.sh` 가 `/usr/local/bin/awx_copy` 로 설치하므로 별도 작업이 필요 없다.
+
+```bash
+sudo ./install.sh
+awx_copy --version      # 어느 경로에서든 실행되는지 확인
+```
+
+root 권한이 없으면 개인 폴더에 두고 `PATH` 에 추가한다.
+
+```bash
+mkdir -p ~/bin && cp bin/awx_copy ~/bin/ && echo 'export PATH=$HOME/bin:$PATH' >> ~/.bashrc
+```

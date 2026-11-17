@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 700" font-family="sans-serif" font-size="14">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#333"/></marker></defs>
+<g fill="#eef3fb" stroke="#2b5797" stroke-width="1.5">
+<rect x="130" y="10" width="300" height="40" rx="6"/><rect x="130" y="80" width="300" height="40" rx="6"/>
+<rect x="130" y="150" width="300" height="40" rx="6"/><rect x="130" y="220" width="300" height="40" rx="6"/>
+<rect x="130" y="290" width="300" height="40" rx="6"/><rect x="130" y="440" width="300" height="40" rx="6"/>
+<rect x="130" y="510" width="300" height="40" rx="6"/><rect x="130" y="580" width="300" height="40" rx="6"/>
+<rect x="130" y="650" width="300" height="40" rx="6"/></g>
+<polygon points="280,360 400,395 280,430 160,395" fill="#fff6e0" stroke="#b7791f" stroke-width="1.5"/>
+<g fill="#222" text-anchor="middle">
+<text x="280" y="35">레드햇: awx_copy -u user file</text><text x="280" y="105">conf 읽기 /etc/awx_copy/user.conf</text>
+<text x="280" y="175">variables 백업 (원본 보관)</text><text x="280" y="245">조각 k 를 awx_copy 블록으로 PATCH</text>
+<text x="280" y="315">윈도우: 폴링 감지, GET, SHA-256 확인, ack k</text><text x="280" y="400">마지막 조각?</text>
+<text x="280" y="465">전체 SHA-256 확인, 파일 저장</text><text x="280" y="535">state done, result ok|fail 기록</text>
+<text x="280" y="605">레드햇: 결과 읽고 variables 원복</text><text x="280" y="675">기록 화면 (성공/실패)</text>
+<text x="470" y="390" fill="#b7791f">아니오 → 다음 조각</text><text x="290" y="438">예</text></g>
+<g stroke="#333" stroke-width="1.5" fill="none" marker-end="url(#a)">
+<path d="M280,50 V80"/><path d="M280,120 V150"/><path d="M280,190 V220"/><path d="M280,260 V290"/><path d="M280,330 V360"/>
+<path d="M280,430 V440"/><path d="M280,480 V510"/><path d="M280,550 V580"/><path d="M280,620 V650"/>
+<path d="M400,395 H500 V240 H430"/></g>
+</svg>

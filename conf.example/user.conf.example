@@ -1,7 +1,6 @@
 # 사용자별 설정 예시. 이 파일을 <이름>.conf 로 복사해 채운다.
-# 리눅스: ~/.awx_copy/<이름>.conf (chmod 600)
+# 리눅스: /etc/awx_copy/<이름>.conf (소유자=해당 사용자, chmod 600)
 # 윈도우: awx_fetch.exe 옆 conf\<이름>.conf
-# 파일명이 OS 로그인 사용자명(또는 username 이 같은 파일)이면 인자 없이 즉시 실행된다.
 # 업로더와 다운로더는 같은 inventory_id 를 써야 서로 만난다.
 url = http://192.168.0.58:30080
 username = user
