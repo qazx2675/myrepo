@@ -63,7 +63,7 @@ copy awx_copy.conf.example dist\awx_copy.conf
 notepad dist\awx_copy.conf
 ```
 
-설정파일 기본 위치: 실행파일 옆 `awx_copy.conf`. `--config` 로 바꿀 수 있다.
+설정파일 위치는 위 "사용자별 설정파일" 을 본다. (호환: exe 옆 `awx_copy.conf`)
 
 ## 설정파일
 
@@ -77,6 +77,50 @@ notepad dist\awx_copy.conf
 | timeout | 상대측 응답 대기와 HTTP 요청의 최대 시간(초) | 300 |
 
 비밀번호는 로그와 오류 메시지에 나오지 않는다. 실제 설정파일은 `.gitignore` 에 있다.
+
+## 사용자별 설정파일
+
+사용자마다 `<이름>.conf` 를 따로 둔다. 키는 위 표와 같다. `username` 값이 그 파일의 user 레코드다.
+예시: `conf.example/user.conf.example`.
+
+```
+리눅스: ~/.awx_copy/
+          ├─ kim.conf        (chmod 600)
+          └─ test.kim.conf
+윈도우: awx_fetch.exe 옆 conf\
+          ├─ kim.conf
+          └─ test.kim.conf
+```
+
+설정을 고르는 순서 (업로더와 다운로더 공통):
+
+1. `--config <경로>` 가 있으면 그 파일만 쓴다.
+2. `--user <이름>` 이 있으면 `<설정폴더>/<이름>.conf` 를 쓴다. 파일이 없으면 username 이 같은 파일을 찾는다.
+3. 아무 옵션이 없으면 OS 로그인 사용자명으로 `<사용자명>.conf` 를 찾는다.
+   파일이 있고 username 이 비어 있지 않으면 **묻지 않고 바로 실행**한다.
+   파일명이 달라도 username 이 OS 사용자명과 같은 파일이 있으면 그 파일을 쓴다.
+4. 해당 파일이 없으면 선택 메뉴를 보여준다. 호환용으로 `~/.awx_copy.conf`(리눅스), exe 옆 `awx_copy.conf`(윈도우)도 목록에 들어간다.
+5. 터미널이 아니면(표준 입력이 TTY 가 아님) 메뉴를 띄우지 않는다. 후보 목록과 사용법을 알리고 종료 코드 2 로 끝난다.
+
+```
+사용할 설정을 고르세요.
+  1) kim.conf                 kim              http://192.168.0.58:30080
+  2) test.kim.conf            test.kim         http://192.168.0.58:30080
+  3) 새 설정 만들기
+번호:
+```
+
+비밀번호는 메뉴에 나오지 않는다. "새 설정 만들기" 는 url, username, password(화면에 보이지 않음), inventory_id 를 묻고
+`<username>.conf` 로 저장한다(리눅스 권한 600). 같은 이름이 있으면 덮어쓰기 전에 묻는다. 저장한 뒤 바로 실행한다.
+
+```bash
+./awx_copy /data/a.csv csv                  # OS 사용자 파일이 있으면 즉시 실행
+./awx_copy --user test.kim /data/a.csv csv  # ~/.awx_copy/test.kim.conf
+./awx_copy --list-users                     # 목록만 출력하고 종료
+```
+
+업로더와 다운로더는 **같은 inventory_id** 를 써야 서로 만난다. (같은 사용자 conf 를 양쪽에서 써도 된다.)
+리눅스 conf 의 권한이 600 이 아니면 거부한다.
 
 ## 사용
 
@@ -110,6 +154,7 @@ awx_fetch.exe --config D:\conf\awx_copy.conf --out D:\받은파일
 | `--status` | variables 길이, SHA-256, 블록 여부 (GET 만) |
 | `--snapshot` | 작업 템플릿/인벤토리 소스의 id, modified (GET 만) |
 | `--measure-limits` | variables 최대 크기 측정 후 원복 |
+| `--user <이름>` / `--list-users` | 사용자 설정 지정 / 목록 출력 |
 | `--no-pause` | 윈도우에서 끝난 뒤 Enter 대기를 하지 않음 |
 
 ## 복구
@@ -157,7 +202,7 @@ test\compare.ps1 -Orig <원본폴더> -Got <받은폴더>                       
 | `awx_copy` | bash 래퍼 (업로더 실행용) |
 | `main.go` 외 `*.go` | Go 본체 (업로더/다운로더/복원/측정) |
 | `build.sh`, `build.bat` | 리눅스/윈도우 빌드 |
-| `awx_copy.conf.example` | 설정 예시 (비밀번호 비움) |
+| `awx_copy.conf.example`, `conf.example/user.conf.example` | 설정 예시 (비밀번호 비움) |
 | `bin/awx_copy` | 리눅스 amd64 실행파일 (go 1.20.14) |
 | `dist/awx_fetch.exe` | 윈도우 amd64 실행파일 |
 | `docs/limits.md` | 한도 측정 결과 |

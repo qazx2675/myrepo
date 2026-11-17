@@ -8,3 +8,7 @@ downloads/
 test/work/
 test/results/*.local
 *.part
+
+# 사용자별 설정 폴더
+conf/
+conf.local/

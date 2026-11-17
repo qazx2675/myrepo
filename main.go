@@ -21,7 +21,9 @@ const version = "1.0.0"
 
 type options struct {
 	cfgPath       string
-	outDir        string
+	userName      string
+	listUsers     bool
+	outDir       string
 	fetch         bool
 	restore       bool
 	measure       bool
@@ -45,7 +47,13 @@ func usage() {
   안전확인: awx_copy --snapshot   (작업 템플릿/인벤토리 소스 modified 출력, GET 만 함)
   상태확인: awx_copy --status     (variables 길이/SHA-256/블록 여부, GET 만 함)
 
-설정파일 기본 경로: 리눅스 ~/.awx_copy.conf (권한 600), 윈도우 실행파일 옆 awx_copy.conf
+설정파일 선택 (공통 옵션):
+  --config <경로>   그 파일만 사용
+  --user <이름>     <설정폴더>/<이름>.conf 사용
+  --list-users      설정파일 목록만 출력
+  아무것도 없으면 OS 사용자명.conf 를 즉시 사용, 없으면 선택 메뉴.
+설정 폴더: 리눅스 ~/.awx_copy/ , 윈도우 실행파일 옆 conf\
+호환: 리눅스 ~/.awx_copy.conf (권한 600), 윈도우 실행파일 옆 awx_copy.conf
 `)
 }
 
@@ -76,6 +84,10 @@ func parseArgs(args []string) (options, error) {
 		switch name {
 		case "config":
 			o.cfgPath, err = need()
+		case "user":
+			o.userName, err = need()
+		case "list-users":
+			o.listUsers = true
 		case "out":
 			o.outDir, err = need()
 		case "fetch":
@@ -138,10 +150,15 @@ func run(argv []string) int {
 		}()
 	}
 
-	cfg, err := loadConfig(o.cfgPath)
+	sel := newSelector()
+	if o.listUsers {
+		sel.listUsers(os.Stdout)
+		return 0
+	}
+	cfg, code, err := sel.resolveConfig(o.cfgPath, o.userName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "오류:", err)
-		return 2
+		return code
 	}
 	c := newClient(cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
