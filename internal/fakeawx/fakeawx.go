@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 )
 
 type Server struct {
 	User, Pass string
 	MaxBody    int64 // 0 이면 무제한. 넘으면 413
+	// TrimRight 가 true 이면 실제 AWX 처럼 PATCH 로 저장할 때 끝의 공백/줄바꿈을 지운다.
+	TrimRight bool
 
 	mu      sync.Mutex
 	vars    map[int]string
@@ -104,6 +107,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !ok || len(in) != 1 {
 			writeJSON(w, 400, map[string]string{"detail": "fake accepts only variables"})
 			return
+		}
+		if s.TrimRight {
+			v = strings.TrimRight(v, " \t\r\n")
 		}
 		s.SetVars(id, v)
 		writeJSON(w, 200, map[string]interface{}{"id": id, "variables": v})

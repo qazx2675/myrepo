@@ -120,12 +120,23 @@ func (c *Client) PatchVars(ctx context.Context, vars string) error {
 
 // PatchVarsCode 는 HTTP 코드도 돌려준다 (한도 측정용).
 func (c *Client) PatchVarsCode(ctx context.Context, vars string) (int, error) {
-	body, err := json.Marshal(map[string]string{"variables": vars})
+	body, err := varsBody(vars)
 	if err != nil {
 		return 0, err
 	}
 	_, code, err := c.do(ctx, http.MethodPatch, c.invPath(), body)
 	return code, err
+}
+
+// varsBody 는 PATCH 본문 JSON 이다. < > & 를 < 로 바꾸지 않아 본문이 커지지 않는다.
+func varsBody(vars string) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(map[string]string{"variables": vars}); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // listModified 는 목록 API 를 끝까지 읽어 "id modified" 줄 목록을 만든다 (GET 만 한다).

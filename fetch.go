@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -22,7 +22,7 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 		meta     Block
 		n        int
 		expected = 1
-		parts    []string
+		parts    [][]byte
 	)
 	defer func() {
 		if err != nil && haveOrig {
@@ -53,7 +53,7 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 				return "", fmt.Errorf("업로더가 세션을 중단했습니다 (%d/%d 조각 수신 후)", expected-1, n)
 			}
 			if ok && session == "" {
-				if b["version"] != protoVersion {
+				if b["version"] != protoVersion && b["version"] != protoVersionV1 {
 					return "", fmt.Errorf("지원하지 않는 양식 version %q", b["version"])
 				}
 				if b["state"] == stateSending && b.int("chunk_index") != 1 {
@@ -74,15 +74,24 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 				return "", fmt.Errorf("다른 세션(%s)이 끼어들었습니다", b["session"])
 			}
 			if ok && b["state"] == stateSending && b.int("chunk_index") == expected {
-				chunk := b["chunk_data"]
-				if sha256Hex([]byte(chunk)) != b["chunk_sha256"] {
+				var chunk []byte
+				if meta["encoding"] == encText {
+					var derr error
+					if chunk, derr = decodeChunk(b["chunk_text"], b["chunk_raw"], meta["eol"]); derr != nil {
+						return "", fmt.Errorf("[%d/%d] %v", expected, n, derr)
+					}
+				} else {
+					chunk = []byte(b["chunk_data"]) // v1 base64
+				}
+				if sha256Hex(chunk) != b["chunk_sha256"] {
 					return "", fmt.Errorf("[%d/%d] 조각 SHA-256 불일치", expected, n)
 				}
 				parts = append(parts, chunk)
-				fmt.Fprintf(log, "[%d/%d] 수신 중 (%d자)\n", expected, n, len(chunk))
+				fmt.Fprintf(log, "[%d/%d] 수신 중 (%d bytes)\n", expected, n, len(chunk))
 				if expected < n {
 					ack := b.clone()
 					ack["state"], ack["chunk_data"], ack["chunk_sha256"] = stateAck, "", ""
+					ack["chunk_text"], ack["chunk_raw"] = "", ""
 					ack["ack"] = strconv.Itoa(expected)
 					ack["updated_at"] = nowStamp()
 					if err := c.PatchVars(ctx, ack.Render()); err != nil {
@@ -93,7 +102,7 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 					deadline = time.Now().Add(cfg.Timeout)
 					continue
 				}
-				saved, err = finishFetch(meta, strings.Join(parts, ""), outDir)
+				saved, err = finishFetch(meta, parts, outDir)
 				if err != nil {
 					return "", err
 				}
@@ -121,10 +130,15 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 	}
 }
 
-func finishFetch(meta Block, b64, outDir string) (string, error) {
-	data, err := decodePayload(b64, meta["encoding"])
-	if err != nil {
-		return "", err
+func finishFetch(meta Block, parts [][]byte, outDir string) (string, error) {
+	var data []byte
+	if meta["encoding"] == encText {
+		data = assembleText(meta, parts)
+	} else {
+		var err error
+		if data, err = decodePayload(string(bytes.Join(parts, nil)), meta["encoding"]); err != nil {
+			return "", err
+		}
 	}
 	if strconv.Itoa(len(data)) != meta["total_bytes"] {
 		return "", fmt.Errorf("크기 불일치: 받은 %d bytes, 기대 %s bytes", len(data), meta["total_bytes"])

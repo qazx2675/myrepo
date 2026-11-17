@@ -50,9 +50,8 @@ func sendFile(ctx context.Context, c *Client, cfg *Config, path, typ string, log
 	if err != nil {
 		return fmt.Errorf("파일을 읽을 수 없습니다: %v", err)
 	}
-	payload, enc := encodePayload(data)
-	b64 := base64.StdEncoding.EncodeToString(payload)
-	chunks := splitChunks(b64, cfg.ChunkSize)
+	eol := detectEOL(data)
+	chunks := splitText(data, eol, cfg.ChunkSize, maxChunkBytes)
 	n := len(chunks)
 
 	orig, err := c.GetVars(ctx)
@@ -67,8 +66,8 @@ func sendFile(ctx context.Context, c *Client, cfg *Config, path, typ string, log
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(log, "파일 %s (%d bytes, %s, %s %d자) 를 조각 %d개로 보냅니다. 세션 %s\n",
-		filepath.Base(path), len(data), typ, enc, len(b64), n, session)
+	fmt.Fprintf(log, "파일 %s (%d bytes, %s, text eol=%s) 를 조각 %d개로 보냅니다. 세션 %s\n",
+		filepath.Base(path), len(data), typ, eol, n, session)
 	fmt.Fprintf(log, "원본 variables 백업: %s (%d자)\n", bp, len(orig))
 
 	touched := false
@@ -82,24 +81,30 @@ func sendFile(ctx context.Context, c *Client, cfg *Config, path, typ string, log
 
 	base := Block{
 		"version": protoVersion, "session": session, "state": stateSending,
-		"file_name": filepath.Base(path), "type": typ, "encoding": enc,
+		"file_name": filepath.Base(path), "type": typ, "encoding": encText,
+		"eol": eol, "final_newline": strconv.FormatBool(hasFinalNewline(data)),
 		"total_bytes": strconv.Itoa(len(data)), "sha256": sha256Hex(data),
 		"chunk_total": strconv.Itoa(n), "backup_b64": base64.StdEncoding.EncodeToString([]byte(orig)),
 	}
-	if est := len(base["backup_b64"]) + len(chunks[0]) + 2048; est > nginxBodyLimit {
-		fmt.Fprintf(log, "경고: PATCH 본문이 약 %d bytes 로 AWX nginx 한도(%d bytes, docs/limits.md)를 넘을 수 있습니다. chunk_size 를 줄이세요.\n", est, nginxBodyLimit)
-	}
 	start := time.Now()
+	warned := false
 	for k := 1; k <= n; k++ {
+		text, esc := encodeChunk(chunks[k-1], eol)
 		blk := base.clone()
 		blk["chunk_index"] = strconv.Itoa(k)
-		blk["chunk_data"] = chunks[k-1]
-		blk["chunk_sha256"] = sha256Hex([]byte(chunks[k-1]))
+		blk["chunk_text"] = text
+		blk["chunk_raw"] = esc
+		blk["chunk_sha256"] = sha256Hex(chunks[k-1])
 		blk["ack"] = strconv.Itoa(k - 1)
 		blk["updated_at"] = nowStamp()
-		fmt.Fprintf(log, "[%d/%d] 전송 중 (%d자)\n", k, n, len(chunks[k-1]))
+		vars := blk.Render()
+		if body, _ := varsBody(vars); len(body) > nginxBodyLimit && !warned {
+			warned = true
+			fmt.Fprintf(log, "경고: PATCH 본문이 %d bytes 로 AWX nginx 한도(%d bytes, docs/limits.md)를 넘을 수 있습니다. chunk_size 를 줄이세요.\n", len(body), nginxBodyLimit)
+		}
+		fmt.Fprintf(log, "[%d/%d] 전송 중 (%d bytes)\n", k, n, len(chunks[k-1]))
 		touched = true
-		if err = c.PatchVars(ctx, blk.Render()); err != nil {
+		if err = c.PatchVars(ctx, vars); err != nil {
 			return err
 		}
 		var done bool

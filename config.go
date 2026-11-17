@@ -13,7 +13,7 @@ import (
 
 // 기본값. chunk_size 기본값은 docs/limits.md 측정 한도 x 0.5 이하로 정한다.
 const (
-	defaultChunkSize = 1048576 // base64 문자 수 (1 MiB)
+	defaultChunkSize = 1048576 // 조각당 문자 수 (1 MiB). 본문 추정 3 MiB 상한도 함께 적용된다 (maxChunkBytes)
 	defaultTimeout   = 300     // 초
 	minChunkSize     = 4
 )
@@ -110,7 +110,7 @@ func loadConfig(path string) (*Config, error) {
 			if err != nil || n < minChunkSize {
 				return nil, fmt.Errorf("%s:%d: chunk_size 는 %d 이상 정수여야 합니다", path, ln, minChunkSize)
 			}
-			cfg.ChunkSize = n - n%4 // base64 4문자 단위로 맞춘다
+			cfg.ChunkSize = n // 평문 문자 수 (v2)
 		case "timeout":
 			n, err := strconv.Atoi(val)
 			if err != nil || n <= 0 {

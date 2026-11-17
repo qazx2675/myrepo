@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	protoVersion = "1"
-	blockKey     = "awx_copy"
+	protoVersion   = "2" // 평문 텍스트 (textproto.go)
+	protoVersionV1 = "1" // gzip+base64 (읽기만 지원)
+	blockKey       = "awx_copy"
 
 	stateSending = "sending"
 	stateAck     = "ack"
@@ -28,9 +29,12 @@ const (
 )
 
 // blockKeys 는 variables 블록에 쓰는 키 순서다.
+// chunk_text(리터럴 블록) 뒤에 항상 다른 키 줄이 오게 한다. AWX 는 variables 끝 공백/줄바꿈을 지운다.
+// chunk_data 는 v1 전용이며 값이 있을 때만 쓴다.
 var blockKeys = []string{
-	"version", "session", "state", "file_name", "type", "encoding", "total_bytes", "sha256",
-	"chunk_total", "chunk_index", "chunk_sha256", "chunk_data", "ack", "backup_b64", "updated_at",
+	"version", "session", "state", "file_name", "type", "encoding", "eol", "final_newline",
+	"total_bytes", "sha256", "chunk_total", "chunk_index", "chunk_sha256", "chunk_raw", "chunk_data",
+	"chunk_text", "ack", "backup_b64", "updated_at",
 }
 
 // Block 은 variables 의 awx_copy 블록이다. 값은 모두 문자열이다.
@@ -66,9 +70,16 @@ func (b Block) Render() string {
 	var sb strings.Builder
 	sb.WriteString(blockKey + ":\n")
 	for _, k := range blockKeys {
+		if k == "chunk_data" && b[k] == "" {
+			continue
+		}
 		sb.WriteString("  ")
 		sb.WriteString(k)
 		sb.WriteString(": ")
+		if k == "chunk_text" {
+			renderLiteral(&sb, b[k])
+			continue
+		}
 		sb.WriteString(yamlQuote(b[k]))
 		sb.WriteString("\n")
 	}
@@ -106,21 +117,35 @@ func parseBlock(vars string) (Block, bool) {
 		return nil, false
 	}
 	b := Block{}
-	for _, line := range strings.Split(vars[loc[1]:], "\n") {
-		line = strings.TrimRight(line, "\r")
-		if line == "" {
+	lines := strings.Split(vars[loc[1]:], "\n")
+	for li := 0; li < len(lines); li++ {
+		line := strings.TrimRight(lines[li], "\r")
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		if !strings.HasPrefix(line, " ") {
 			break
 		}
+		ind := len(line) - len(strings.TrimLeft(line, " "))
 		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
 		i := strings.Index(line, ": ")
 		if i < 0 {
 			continue
 		}
 		k, raw := line[:i], strings.TrimSpace(line[i+2:])
 		var v string
+		if strings.HasPrefix(raw, "|") {
+			val, next, err := parseLiteral(lines, li+1, ind, raw)
+			if err != nil {
+				return nil, false
+			}
+			b[k] = val
+			li = next - 1
+			continue
+		}
 		if strings.HasPrefix(raw, "\"") {
 			if err := json.Unmarshal([]byte(raw), &v); err != nil {
 				return nil, false

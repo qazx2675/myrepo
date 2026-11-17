@@ -48,7 +48,10 @@ func transfer(t *testing.T, cfg *Config, name string, data []byte, typ string) (
 	var saved string
 	var slog, flog bytes.Buffer
 	wg.Add(2)
-	go func() { defer wg.Done(); sendErr = sendFile(context.Background(), newClient(cfg), cfg, src, typ, &slog) }()
+	go func() {
+		defer wg.Done()
+		sendErr = sendFile(context.Background(), newClient(cfg), cfg, src, typ, &slog)
+	}()
 	go func() {
 		defer wg.Done()
 		saved, fetchErr = fetchFile(context.Background(), newClient(cfg), cfg, out, &flog)
@@ -64,10 +67,11 @@ func transfer(t *testing.T, cfg *Config, name string, data []byte, typ string) (
 }
 
 func TestRoundTrip(t *testing.T) {
-	const cs = 4096 // base64 4096자 = 원본 3072 bytes (비압축)
+	const cs = 4096 // 문자 수
 	text := "a\tb\tc\r\nline2\n한글 줄: 값 # 주석 - 'single' \"double\" {a: 1} [x, y]\n" +
 		"key: value\n- item\n? q\n& * ! | > % @ `\n마지막 줄바꿈 없음"
 	csv := "id,이름,메모\r\n1,\"홍길동\",\"a, b\"\r\n2,김철수,\"say \"\"hi\"\"\"\r\n3,탭\t포함,\"줄\n바꿈\"\r\n"
+	big := repeatTo("  들여쓰기\t탭: 값 # - '\" {}[]|>&*!%\r\n끝 공백   \r\n\r\n", 10<<20)
 	cases := []struct {
 		name string
 		data []byte
@@ -76,48 +80,72 @@ func TestRoundTrip(t *testing.T) {
 	}{
 		{"empty.txt", nil, "txt", cs},
 		{"one.txt", []byte("x"), "txt", cs},
-		{"edge_minus1.bin", randBytes(3071), "txt", cs},
-		{"edge_exact.bin", randBytes(3072), "txt", cs},
-		{"edge_plus1.bin", randBytes(3073), "txt", cs},
-		{"times5.bin", randBytes(3072 * 5), "txt", cs},
+		{"edge_minus1.txt", bytes.Repeat([]byte("a"), cs-1), "txt", cs},
+		{"edge_exact.txt", bytes.Repeat([]byte("a"), cs), "txt", cs},
+		{"edge_plus1.txt", bytes.Repeat([]byte("a"), cs+1), "txt", cs},
+		{"times5_korean.txt", bytes.Repeat([]byte("가나 \n"), cs*5/4), "txt", cs},
 		{"special: #-'\"{}[] 한글.txt", []byte(text), "txt", cs},
 		{"data.csv", []byte(csv), "csv", cs},
+		{"trailing_ws.txt", []byte("  첫 줄 공백\n끝 공백  \n\n \t\n\n\n   "), "txt", 16},
 		{"crlf_tabs_big.txt", bytes.Repeat([]byte("col1\tcol2\t한글\r\n"), 20000), "txt", cs},
-		{"ten_mib.bin", randBytes(10 << 20), "txt", 1 << 20},
+		{"binary.bin", randBytes(20000), "txt", cs},
+		{"ten_mib.txt", big, "txt", 1 << 20},
 	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			fs, cfg := setup(t, tc.cs)
-			orig := "# 원본 주석\nfoo: \"bar\"\nlist: [1, 2]\n"
-			fs.SetVars(5, orig)
-			saved, _ := transfer(t, cfg, tc.name, tc.data, tc.typ)
-			got, err := os.ReadFile(saved)
-			if err != nil {
-				t.Fatal(err)
+	for _, trim := range []bool{false, true} {
+		for _, tc := range cases {
+			tc, trim := tc, trim
+			name := tc.name
+			if trim {
+				name = "awxtrim/" + name
 			}
-			if !bytes.Equal(got, tc.data) || sha256Hex(got) != sha256Hex(tc.data) {
-				t.Fatalf("내용 불일치: %d vs %d bytes", len(got), len(tc.data))
-			}
-			if v := fs.Vars(5); v != orig {
-				t.Fatalf("원복 안 됨: %q", v)
-			}
-			for p := range fs.Patches() {
-				if p != "/api/v2/inventories/5/" {
-					t.Fatalf("허용되지 않은 PATCH: %s", p)
+			t.Run(name, func(t *testing.T) {
+				fs, cfg := setup(t, tc.cs)
+				fs.TrimRight = trim
+				orig := "# 원본 주석\nfoo: \"bar\"\nlist: [1, 2]\n"
+				if trim {
+					orig = strings.TrimRight(orig, "\n") // 실제 AWX 는 저장 값 끝 줄바꿈이 없다
 				}
-			}
-		})
+				fs.SetVars(5, orig)
+				saved, _ := transfer(t, cfg, tc.name, tc.data, tc.typ)
+				got, err := os.ReadFile(saved)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, tc.data) || sha256Hex(got) != sha256Hex(tc.data) {
+					t.Fatalf("내용 불일치: %d vs %d bytes", len(got), len(tc.data))
+				}
+				if v := fs.Vars(5); v != orig {
+					t.Fatalf("원복 안 됨: %q", v)
+				}
+				for p := range fs.Patches() {
+					if p != "/api/v2/inventories/5/" {
+						t.Fatalf("허용되지 않은 PATCH: %s", p)
+					}
+				}
+			})
+		}
 	}
 }
 
 func TestChunkCounts(t *testing.T) {
-	for _, c := range []struct{ raw, want int }{{0, 1}, {1, 1}, {3071, 1}, {3072, 1}, {3073, 2}, {3072 * 5, 5}} {
-		p, _ := encodePayload(randBytes(c.raw))
-		got := len(splitChunks(base64.StdEncoding.EncodeToString(p), 4096))
+	for _, c := range []struct{ n, want int }{{0, 1}, {1, 1}, {4095, 1}, {4096, 1}, {4097, 2}, {4096 * 5, 5}} {
+		got := len(splitText(bytes.Repeat([]byte("a"), c.n), eolLF, 4096, maxChunkBytes))
 		if got != c.want {
-			t.Errorf("raw %d: 조각 %d, 기대 %d", c.raw, got, c.want)
+			t.Errorf("문자 %d: 조각 %d, 기대 %d", c.n, got, c.want)
 		}
+	}
+}
+
+// v1(gzip+base64) 함수는 지우지 않았다. 계속 왕복되는지만 본다.
+func TestV1PayloadStillWorks(t *testing.T) {
+	data := randBytes(5000)
+	p, enc := encodePayload(data)
+	got, err := decodePayload(base64.StdEncoding.EncodeToString(p), enc)
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("v1 왕복 실패: %v", err)
+	}
+	if n := len(splitChunks("abcdefgh", 4)); n != 2 {
+		t.Fatalf("splitChunks %d", n)
 	}
 }
 
@@ -132,8 +160,14 @@ func TestDuplicateName(t *testing.T) {
 		var saved string
 		var e1, e2 error
 		wg.Add(2)
-		go func() { defer wg.Done(); e1 = sendFile(context.Background(), newClient(cfg), cfg, src, "txt", io.Discard) }()
-		go func() { defer wg.Done(); saved, e2 = fetchFile(context.Background(), newClient(cfg), cfg, out, io.Discard) }()
+		go func() {
+			defer wg.Done()
+			e1 = sendFile(context.Background(), newClient(cfg), cfg, src, "txt", io.Discard)
+		}()
+		go func() {
+			defer wg.Done()
+			saved, e2 = fetchFile(context.Background(), newClient(cfg), cfg, out, io.Discard)
+		}()
 		wg.Wait()
 		if e1 != nil || e2 != nil {
 			t.Fatal(e1, e2)
@@ -219,7 +253,10 @@ func TestFetcherAbortStopsSender(t *testing.T) {
 	var sendErr error
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go func() { defer wg.Done(); sendErr = sendFile(context.Background(), newClient(cfg), cfg, src, "txt", io.Discard) }()
+	go func() {
+		defer wg.Done()
+		sendErr = sendFile(context.Background(), newClient(cfg), cfg, src, "txt", io.Discard)
+	}()
 	go func() { time.Sleep(900 * time.Millisecond); cancel() }()
 	_, ferr := fetchFile(ctx, newClient(cfg), cfg, t.TempDir(), io.Discard)
 	wg.Wait()
@@ -247,7 +284,7 @@ func TestConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.URL != "http://x:1" || c.Password != "p w" || c.ChunkSize != 1000 || c.Timeout != 7*time.Second {
+	if c.URL != "http://x:1" || c.Password != "p w" || c.ChunkSize != 1001 || c.Timeout != 7*time.Second {
 		t.Fatalf("%+v", c)
 	}
 	if strings.Contains(c.String(), "p w") {
