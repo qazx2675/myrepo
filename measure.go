@@ -66,7 +66,8 @@ func probe(ctx context.Context, c *Client, size int) probeRow {
 		r.Note = "PATCH 성공, GET 실패: " + err.Error()
 		return r
 	}
-	if got != vars {
+	// AWX는 저장 시 끝의 공백/줄바꿈을 제거하므로 비교에서 제외한다.
+	if strings.TrimRight(got, " \t\r\n") != strings.TrimRight(vars, " \t\r\n") {
 		r.Note = fmt.Sprintf("저장값 불일치 (보낸 %d자, 받은 %d자)", len(vars), len(got))
 		return r
 	}

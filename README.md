@@ -126,11 +126,14 @@ awx_fetch.exe --config D:\conf\awx_copy.conf --out D:\받은파일
 
 ## 한도
 
-자세한 표는 `docs/limits.md`.
+자세한 표는 `docs/limits.md`. 실제 AWX(v24.6.1)에서 인증 후 PATCH 로 측정했다.
 
-- nginx 본문 한도: **5,242,880 bytes (5 MiB)**. 넘으면 413. (무인증 PATCH 로 측정, 변경 없음)
-- 인증 후 Django 계층 한도: **미측정** (비밀번호 미전달).
-- `chunk_size` 기본값 1 MiB = nginx 한도 × 0.5 이하.
+- 최대 성공: **4.94 MiB (5,177,344자)**. 5 MiB 부터 nginx 413 (`client_max_body_size 5m`). timeout 없음.
+- 1 MiB 조각 PATCH 는 0.42초, 4.94 MiB 는 1.64초.
+- AWX 는 저장할 때 variables 끝의 공백/줄바꿈을 제거한다 (내용과 탭은 그대로).
+- `chunk_size` 기본값 1 MiB 는 최대 성공 크기의 약 0.2배다.
+- 실측 전송 속도: 1 MiB 파일 약 4초, 10 MiB 파일 약 19초 (업로더 기준, 조각 14개). 약 0.5 MiB/s.
+- 실제 AWX E2E 11개 파일(0B ~ 10MiB, 조각 경계, 탭/CRLF/한글/CSV) 모두 SHA-256 과 바이트 일치.
 
 ## 테스트
 
