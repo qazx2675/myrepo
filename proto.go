@@ -33,7 +33,7 @@ const (
 // chunk_data 는 v1 전용이며 값이 있을 때만 쓴다.
 var blockKeys = []string{
 	"version", "session", "state", "file_name", "type", "encoding", "eol", "final_newline",
-	"total_bytes", "sha256", "chunk_total", "chunk_index", "chunk_sha256", "chunk_raw", "chunk_data",
+	"total_bytes", "sha256", "chunk_total", "chunk_index", "chunk_sha256", "chunk_data",
 	"chunk_text", "ack", "backup_b64", "updated_at",
 }
 

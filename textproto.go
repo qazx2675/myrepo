@@ -15,19 +15,22 @@ package main
 //   - 들여쓰기 지시자 2 를 항상 쓴다. 첫 줄이 공백으로 시작해도 된다.
 //   - 조각 끝이 줄바꿈이면 keep(+), 아니면 strip(-) 을 쓴다. YAML 의미도 원문과 같다.
 //   - eol: lf(CR 없음) | crlf(모든 줄바꿈이 CRLF) | cr(모든 줄바꿈이 CR) | mixed.
-//     crlf/cr 은 블록 안에서 LF 로 바꾸고 받을 때 되돌린다. mixed 는 LF 는 그대로, CR 은 chunk_raw 로 보낸다.
-//   - YAML 에 넣을 수 없는 바이트(제어문자, 잘못된 UTF-8, NEL, U+2028/2029, BOM 등)는 블록에서 빼고
-//     chunk_raw 에 "오프셋:16진수" 로 적는다. 오프셋은 chunk_text(UTF-8 바이트) 기준 삽입 위치다.
+//     crlf/cr 은 블록 안에서 LF 로 바꾸고 받을 때 되돌린다.
+//     mixed 는 모든 CR(CRLF 의 CR, 단독 CR)을 LF 로 정규화한다. 원문으로 복원할 수 없다.
+//   - 텍스트만 보낸다. YAML 블록에 넣을 수 없는 바이트(제어문자, DEL, 잘못된 UTF-8, NEL,
+//     U+2028/2029, BOM)는 U+FFFD 로 바꿔 보낸다. 원문으로 복원하는 경로는 두지 않는다.
 //   - chunk_sha256 은 조각의 원본 파일 바이트 해시다. sha256 은 전체 파일 해시다.
+//     위 두 경우는 받은 조각의 해시가 달라 수신 쪽이 실패 처리하고 파일을 저장하지 않는다.
+//   - 거부 기능(확장자, 바이너리 검사)은 두지 않는다(사용자 지시).
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 )
+
+const replacementChar = "�"
 
 const (
 	encText = "text"
@@ -117,26 +120,21 @@ func isCleanText(s string) bool {
 
 // unit 은 data[i:] 에서 쪼갤 수 없는 단위의 길이와 비용(문자 수, 본문 바이트 추정)을 돌려준다.
 func unit(data []byte, i int, eol string) (size, chars, cost int) {
-	b := data[i]
-	if b == '\r' {
-		if eol == eolCRLF && i+1 < len(data) && data[i+1] == '\n' {
+	if data[i] == '\r' && eol != eolLF {
+		if i+1 < len(data) && data[i+1] == '\n' {
 			return 2, 1, 2 + len(litIndent) // JSON "\n" + 들여쓰기
 		}
-		if eol == eolCR {
-			return 1, 1, 2 + len(litIndent)
-		}
+		return 1, 1, 2 + len(litIndent)
 	}
 	r, n := utf8.DecodeRune(data[i:])
 	if (r == utf8.RuneError && n <= 1) || !textRuneOK(r) {
-		return n, 2 * n, 2*n + 12 // 16진수 + 오프셋 몫
+		return n, 1, len(replacementChar) // U+FFFD 로 바뀐다
 	}
 	switch r {
 	case '\n':
 		return 1, 1, 2 + len(litIndent)
 	case '\t', '"', '\\':
 		return 1, 1, 2
-	case '<', '>', '&':
-		return 1, 1, 1
 	}
 	return n, 1, n
 }
@@ -166,85 +164,63 @@ func splitText(data []byte, eol string, maxChars, maxBytes int) [][]byte {
 	return out
 }
 
-// encodeChunk 는 조각 바이트를 chunk_text 와 chunk_raw 로 바꾼다.
-func encodeChunk(raw []byte, eol string) (text, esc string) {
+// encodeChunk 는 조각 바이트를 chunk_text 로 바꾼다.
+// eol 이 lf 가 아니면 CRLF/CR 을 LF 로 쓴다. 블록에 넣을 수 없는 바이트는 U+FFFD 로 바꾸고 그 수를 센다.
+func encodeChunk(raw []byte, eol string) (text string, replaced int) {
 	var tb strings.Builder
 	tb.Grow(len(raw))
-	var entries []string
-	var pend []byte
-	off := 0
-	flush := func() {
-		if len(pend) > 0 {
-			entries = append(entries, strconv.Itoa(off)+":"+hex.EncodeToString(pend))
-			pend = pend[:0]
-		}
-	}
 	for i := 0; i < len(raw); {
-		if raw[i] == '\r' {
-			if eol == eolCRLF && i+1 < len(raw) && raw[i+1] == '\n' {
-				flush()
-				tb.WriteByte('\n')
+		if raw[i] == '\r' && eol != eolLF {
+			tb.WriteByte('\n')
+			if i+1 < len(raw) && raw[i+1] == '\n' {
 				i += 2
-				continue
-			}
-			if eol == eolCR {
-				flush()
-				tb.WriteByte('\n')
+			} else {
 				i++
-				continue
 			}
+			continue
 		}
 		r, n := utf8.DecodeRune(raw[i:])
 		if (r == utf8.RuneError && n <= 1) || !textRuneOK(r) {
-			if len(pend) == 0 {
-				off = tb.Len()
-			}
-			pend = append(pend, raw[i:i+n]...)
+			tb.WriteString(replacementChar)
+			replaced++
 			i += n
 			continue
 		}
-		flush()
 		tb.Write(raw[i : i+n])
 		i += n
 	}
-	flush()
-	return tb.String(), strings.Join(entries, " ")
+	return tb.String(), replaced
 }
 
-// decodeChunk 는 encodeChunk 의 역이다.
-func decodeChunk(text, esc, eol string) ([]byte, error) {
-	conv := func(dst *bytes.Buffer, s string) {
-		switch eol {
-		case eolCRLF:
-			dst.WriteString(strings.ReplaceAll(s, "\n", "\r\n"))
-		case eolCR:
-			dst.WriteString(strings.ReplaceAll(s, "\n", "\r"))
-		default:
-			dst.WriteString(s)
+// decodeChunk 는 chunk_text 를 파일 바이트로 되돌린다. crlf/cr 만 줄바꿈을 되돌린다.
+// mixed 와 U+FFFD 로 바뀐 바이트는 원문으로 돌아오지 않으므로 해시 검사에서 실패한다.
+func decodeChunk(text, eol string) []byte {
+	switch eol {
+	case eolCRLF:
+		return []byte(strings.ReplaceAll(text, "\n", "\r\n"))
+	case eolCR:
+		return []byte(strings.ReplaceAll(text, "\n", "\r"))
+	}
+	return []byte(text)
+}
+
+// checkV2Keys 는 v2 블록에 정의되지 않은 키가 있으면 거부한다 (chunk_raw, chunk_data 포함).
+func checkV2Keys(b Block) error {
+	for k := range b {
+		if k == "chunk_data" || !isBlockKey(k) {
+			return fmt.Errorf("지원하지 않는 키 %q (version %s)", k, protoVersion)
 		}
 	}
-	var out bytes.Buffer
-	out.Grow(len(text) + len(text)/16)
-	pos := 0
-	for _, e := range strings.Fields(esc) {
-		i := strings.IndexByte(e, ':')
-		if i < 0 {
-			return nil, fmt.Errorf("chunk_raw 항목 형식 오류: %q", e)
+	return nil
+}
+
+func isBlockKey(k string) bool {
+	for _, x := range blockKeys {
+		if x == k {
+			return true
 		}
-		off, err := strconv.Atoi(e[:i])
-		if err != nil || off < pos || off > len(text) {
-			return nil, fmt.Errorf("chunk_raw 오프셋 오류: %q", e)
-		}
-		raw, err := hex.DecodeString(e[i+1:])
-		if err != nil || len(raw) == 0 {
-			return nil, fmt.Errorf("chunk_raw 16진수 오류: %q", e)
-		}
-		conv(&out, text[pos:off])
-		out.Write(raw)
-		pos = off
 	}
-	conv(&out, text[pos:])
-	return out.Bytes(), nil
+	return false
 }
 
 // assembleText 는 받은 조각을 합친다. final_newline 이 true 인데 끝 줄바꿈이 없으면 eol 로 채운다.

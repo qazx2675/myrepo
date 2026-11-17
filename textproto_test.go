@@ -36,7 +36,6 @@ func protoCases() []protoCase {
 		{"crlf", []byte("a\r\nb\r\n\r\nc\r\n"), cs},
 		{"crlf_no_final", []byte("a\r\nb"), cs},
 		{"cr_only", []byte("a\rb\r\rc\r"), cs},
-		{"mixed_eol", []byte("a\r\nb\nc\rd\r\n\n\r"), cs},
 		{"no_final_newline", []byte("line1\nline2"), cs},
 		{"trailing_ws_many", []byte("text\n\n\n   \n\t\n  \t  \n\n\n"), cs},
 		{"trailing_spaces_eof", []byte("text   "), cs},
@@ -48,11 +47,22 @@ func protoCases() []protoCase {
 		{"danger_chars", []byte(danger), cs},
 		{"yaml_like_indent", []byte("awx_copy:\n  session: x\n    chunk_text: |\n  ack: \"9\"\n"), cs},
 		{"cut_at_trailing_ws", []byte("aaa   \n   bbb   \n\n   "), 4},
+		{"replacement_char_text", []byte("a" + string(rune(0xfffd)) + "b\n"), cs},
+		{"big_10mib", big, 1 << 20},
+	}
+}
+
+// badCases 는 평문 블록에 그대로 넣을 수 없어 복원되지 않아야 하는 입력이다.
+func badCases() []protoCase {
+	const cs = 64
+	return []protoCase{
+		{"mixed_eol", []byte("a\r\nb\nc\rd\r\n\n\r"), cs},
+		{"mixed_crlf_lf", []byte("a\r\nb\n"), cs},
 		{"control_chars", []byte("a\x00b\x01c\x1b[31mred\x1b[0m\x7f\x0c"), cs},
-		{"unicode_breaks", []byte("a" + string(rune(0x85)) + "b" + string(rune(0x2028)) + "c" + string(rune(0x2029)) + "d" + string(rune(0xfeff)) + "e" + string(rune(0xfffd)) + "f"), cs},
+		{"unicode_breaks", []byte("a" + string(rune(0x85)) + "b" + string(rune(0x2028)) + "c" + string(rune(0x2029)) + "d" + string(rune(0xfeff)) + "e"), cs},
 		{"invalid_utf8", []byte{'a', 0xff, 0xfe, 'b', 0xe3, 0x81, '\n', 0xc0, 0x80, 0xed, 0xa0, 0x80}, cs},
 		{"binary", randBytes(3000), 100},
-		{"big_10mib", big, 1 << 20},
+		{"binary_1mib", randBytes(1 << 20), 1 << 20},
 	}
 }
 
@@ -62,7 +72,8 @@ func repeatTo(p string, n int) []byte {
 }
 
 // protoRoundTrip 은 직렬화 → (AWX 저장 흉내) → 파싱 → 복원을 한다.
-func protoRoundTrip(t *testing.T, data []byte, cs int, trim bool, dump func(k int, vars, text string)) []byte {
+// 복원 결과와 조각 SHA-256 이 틀린 조각 수를 돌려준다.
+func protoRoundTrip(t *testing.T, data []byte, cs int, trim bool, dump func(k int, vars, text string)) ([]byte, int) {
 	t.Helper()
 	eol := detectEOL(data)
 	chunks := splitText(data, eol, cs, maxChunkBytes)
@@ -73,14 +84,18 @@ func protoRoundTrip(t *testing.T, data []byte, cs int, trim bool, dump func(k in
 		"chunk_total": strconv.Itoa(len(chunks)), "backup_b64": "", "ack": "0", "updated_at": nowStamp(),
 	}
 	var parts [][]byte
+	bad := 0
 	for k, c := range chunks {
-		text, esc := encodeChunk(c, eol)
+		text, _ := encodeChunk(c, eol)
 		if !isCleanText(text) || strings.ContainsRune(text, '\r') {
 			t.Fatalf("조각 %d: 블록에 넣을 수 없는 문자가 남았습니다", k+1)
 		}
 		b := meta.clone()
 		b["chunk_index"] = strconv.Itoa(k + 1)
-		b["chunk_text"], b["chunk_raw"], b["chunk_sha256"] = text, esc, sha256Hex(c)
+		b["chunk_text"], b["chunk_sha256"] = text, sha256Hex(c)
+		if strings.Contains(b.Render(), "chunk_raw") {
+			t.Fatal("chunk_raw 키가 나왔습니다")
+		}
 		vars := b.Render()
 		if !isCleanText(vars) {
 			t.Fatalf("조각 %d: Render 결과에 YAML 금지 문자", k+1)
@@ -100,16 +115,13 @@ func protoRoundTrip(t *testing.T, data []byte, cs int, trim bool, dump func(k in
 				t.Fatalf("조각 %d: 키 %s 불일치: %q != %q", k+1, key, got[key], b[key])
 			}
 		}
-		raw, err := decodeChunk(got["chunk_text"], got["chunk_raw"], got["eol"])
-		if err != nil {
-			t.Fatalf("조각 %d: %v", k+1, err)
-		}
+		raw := decodeChunk(got["chunk_text"], got["eol"])
 		if sha256Hex(raw) != got["chunk_sha256"] {
-			t.Fatalf("조각 %d: 조각 SHA-256 불일치 %q != %q", k+1, raw, c)
+			bad++
 		}
 		parts = append(parts, raw)
 	}
-	return assembleText(meta, parts)
+	return assembleText(meta, parts), bad
 }
 
 func TestTextProtoRoundTrip(t *testing.T) {
@@ -120,12 +132,47 @@ func TestTextProtoRoundTrip(t *testing.T) {
 				name = "awxtrim/" + name
 			}
 			t.Run(name, func(t *testing.T) {
-				got := protoRoundTrip(t, tc.data, tc.cs, trim, nil)
-				if !bytes.Equal(got, tc.data) || sha256Hex(got) != sha256Hex(tc.data) {
-					t.Fatalf("복원 불일치: %d bytes vs %d bytes", len(got), len(tc.data))
+				got, bad := protoRoundTrip(t, tc.data, tc.cs, trim, nil)
+				if bad != 0 || !bytes.Equal(got, tc.data) || sha256Hex(got) != sha256Hex(tc.data) {
+					t.Fatalf("복원 불일치: 조각 해시 불일치 %d, %d bytes vs %d bytes", bad, len(got), len(tc.data))
 				}
 			})
 		}
+	}
+}
+
+// TestNonTextNotRestored 는 텍스트가 아닌 입력이 패닉 없이 처리되고,
+// 원본으로 복원되지 않으며, 해시 검사로 실패가 드러나는지 본다.
+func TestNonTextNotRestored(t *testing.T) {
+	for _, tc := range badCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			got, bad := protoRoundTrip(t, tc.data, tc.cs, true, nil)
+			if bad == 0 || sha256Hex(got) == sha256Hex(tc.data) {
+				t.Fatalf("복원되면 안 됩니다 (조각 해시 불일치 %d)", bad)
+			}
+		})
+	}
+}
+
+// TestRejectChunkRaw 는 v2 수신기가 chunk_raw 같은 정의되지 않은 키를 거부하는지 본다.
+func TestRejectChunkRaw(t *testing.T) {
+	ok := Block{"version": protoVersion, "session": "s", "encoding": encText, "chunk_text": "a"}
+	if err := checkV2Keys(ok); err != nil {
+		t.Fatal(err)
+	}
+	vars := ok.Render() // chunk_raw 를 손으로 넣는다
+	vars = strings.Replace(vars, "  chunk_text:", "  chunk_raw: \"0:00\"\n  chunk_text:", 1)
+	b, parsed := parseBlock(vars)
+	if !parsed {
+		t.Fatal("파싱 실패")
+	}
+	if err := checkV2Keys(b); err == nil || !strings.Contains(err.Error(), "chunk_raw") {
+		t.Fatalf("chunk_raw 를 거부해야 합니다: %v", err)
+	}
+	b2 := ok.clone()
+	b2["chunk_data"] = "QUJD"
+	if err := checkV2Keys(b2); err == nil {
+		t.Fatal("v2 에서 chunk_data 를 거부해야 합니다")
 	}
 }
 
@@ -175,7 +222,7 @@ func TestRenderLayout(t *testing.T) {
 		t.Fatalf("블록 형식:\n%s", b.Render())
 	}
 	// 블록에 넣을 수 없는 값은 큰따옴표로 대신 쓴다.
-	b["chunk_text"] = "a\rb\x01"
+	b["chunk_text"] = "a\rb\x01" // encodeChunk 를 거치지 않은 값
 	got, ok := parseBlock(b.Render())
 	if !ok || got["chunk_text"] != "a\rb\x01" {
 		t.Fatalf("따옴표 대체 실패: %q", got["chunk_text"])
@@ -203,11 +250,11 @@ func TestDumpForPyYAML(t *testing.T) {
 	if dir == "" {
 		t.Skip("AWX_COPY_DUMP 없음")
 	}
-	for _, tc := range protoCases() {
+	for _, tc := range append(protoCases(), badCases()...) {
 		if len(tc.data) > 1<<20 {
 			continue
 		}
-		protoRoundTrip(t, tc.data, tc.cs, true, func(k int, vars, text string) {
+		_, _ = protoRoundTrip(t, tc.data, tc.cs, true, func(k int, vars, text string) {
 			base := filepath.Join(dir, tc.name+"_"+strconv.Itoa(k))
 			_ = os.WriteFile(base+".yaml", []byte(vars), 0o600)
 			exp, _ := json.Marshal(text)

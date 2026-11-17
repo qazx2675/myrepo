@@ -53,6 +53,9 @@ func sendFile(ctx context.Context, c *Client, cfg *Config, path, typ string, log
 	eol := detectEOL(data)
 	chunks := splitText(data, eol, cfg.ChunkSize, maxChunkBytes)
 	n := len(chunks)
+	if eol == eolMixed {
+		fmt.Fprintln(log, "경고: LF 와 CR 이 섞인 파일입니다(eol=mixed). CR 을 LF 로 정규화해 보내므로 수신 쪽 해시 검사에서 실패합니다.")
+	}
 
 	orig, err := c.GetVars(ctx)
 	if err != nil {
@@ -89,11 +92,13 @@ func sendFile(ctx context.Context, c *Client, cfg *Config, path, typ string, log
 	start := time.Now()
 	warned := false
 	for k := 1; k <= n; k++ {
-		text, esc := encodeChunk(chunks[k-1], eol)
+		text, replaced := encodeChunk(chunks[k-1], eol)
+		if replaced > 0 {
+			fmt.Fprintf(log, "경고: [%d/%d] 텍스트가 아닌 바이트 %d곳을 U+FFFD 로 바꿨습니다. 원본과 달라 수신 쪽 해시 검사에서 실패합니다.\n", k, n, replaced)
+		}
 		blk := base.clone()
 		blk["chunk_index"] = strconv.Itoa(k)
 		blk["chunk_text"] = text
-		blk["chunk_raw"] = esc
 		blk["chunk_sha256"] = sha256Hex(chunks[k-1])
 		blk["ack"] = strconv.Itoa(k - 1)
 		blk["updated_at"] = nowStamp()

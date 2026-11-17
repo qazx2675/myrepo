@@ -74,12 +74,17 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 				return "", fmt.Errorf("다른 세션(%s)이 끼어들었습니다", b["session"])
 			}
 			if ok && b["state"] == stateSending && b.int("chunk_index") == expected {
+				if b["version"] == protoVersion {
+					if kerr := checkV2Keys(b); kerr != nil {
+						return "", fmt.Errorf("[%d/%d] %v", expected, n, kerr)
+					}
+					if b["encoding"] != encText {
+						return "", fmt.Errorf("[%d/%d] version %s 는 encoding %q 만 지원합니다: %q", expected, n, protoVersion, encText, b["encoding"])
+					}
+				}
 				var chunk []byte
 				if meta["encoding"] == encText {
-					var derr error
-					if chunk, derr = decodeChunk(b["chunk_text"], b["chunk_raw"], meta["eol"]); derr != nil {
-						return "", fmt.Errorf("[%d/%d] %v", expected, n, derr)
-					}
+					chunk = decodeChunk(b["chunk_text"], meta["eol"])
 				} else {
 					chunk = []byte(b["chunk_data"]) // v1 base64
 				}
@@ -91,7 +96,7 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 				if expected < n {
 					ack := b.clone()
 					ack["state"], ack["chunk_data"], ack["chunk_sha256"] = stateAck, "", ""
-					ack["chunk_text"], ack["chunk_raw"] = "", ""
+					ack["chunk_text"] = ""
 					ack["ack"] = strconv.Itoa(expected)
 					ack["updated_at"] = nowStamp()
 					if err := c.PatchVars(ctx, ack.Render()); err != nil {
