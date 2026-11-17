@@ -306,10 +306,11 @@ func TestYumTable(t *testing.T) {
 	}
 }
 
+// 계획서 4.9: OS 모드 서버는 상태와 관계없이 l 재조사 대상, yum 서버는 yum_update/접속가능만.
 func TestLdapTargetYum(t *testing.T) {
-	yes := []Record{orec("a", "D", StatusDone), orec("b", "D", StatusRebooted), yrec("c", "D", StatusYumDone, 100)}
-	no := []Record{orec("d", "D", StatusOff), orec("e", "D", StatusInstalling), orec("f", "D", StatusPingX),
-		yrec("g", "D", StatusAlive, 100), yrec("h", "D", StatusRebooted, 100), yrec("i", "D", StatusOff, 100),
+	yes := []Record{orec("a", "D", StatusDone), orec("b", "D", StatusRebooted), yrec("c", "D", StatusYumDone, 100),
+		orec("d", "D", StatusOff), orec("e", "D", StatusInstalling), orec("f", "D", StatusPingX), orec("n", "D", StatusNone)}
+	no := []Record{yrec("g", "D", StatusAlive, 100), yrec("h", "D", StatusRebooted, 100), yrec("i", "D", StatusOff, 100),
 		yrec("j", "D", StatusPingX, 0), yrec("k", "D", StatusNone, 0)}
 	for _, r := range yes {
 		if !ldapTarget(r) {
@@ -324,6 +325,21 @@ func TestLdapTargetYum(t *testing.T) {
 	// 같은 상태 이름이라도 모드로 갈린다: OS 서버의 재부팅됨은 대상, yum 서버의 재부팅됨은 아님
 	if !ldapTarget(orec("x", "D", StatusRebooted)) || ldapTarget(yrec("x", "D", StatusRebooted, 1)) {
 		t.Errorf("재부팅됨 모드 구분 실패")
+	}
+	// 자동 첫 조사: OS 서버는 ping 이 닿는 상태(확인전·ping X·완료후꺼짐 제외), yum 서버는 yum_update/접속가능만
+	autoYes := []Record{orec("a", "D", StatusDone), orec("b", "D", StatusInstalling), orec("c", "D", StatusDelayed),
+		orec("d", "D", StatusDisk), orec("e", "D", StatusRebooted), yrec("f", "D", StatusYumDone, 100)}
+	autoNo := []Record{orec("g", "D", StatusPingX), orec("h", "D", StatusOff), orec("i", "D", StatusNone),
+		yrec("j", "D", StatusAlive, 100), yrec("k", "D", StatusRebooted, 100)}
+	for _, r := range autoYes {
+		if !autoTarget(r) {
+			t.Errorf("자동: %s(%v) 는 대상이어야 함", r.Name, r.Status)
+		}
+	}
+	for _, r := range autoNo {
+		if autoTarget(r) {
+			t.Errorf("자동: %s(%v) 는 대상이 아니어야 함", r.Name, r.Status)
+		}
 	}
 }
 
@@ -353,30 +369,28 @@ func TestLdapTargetsAndTableWithYum(t *testing.T) {
 	set("y3", StatusRebooted)
 	set("y4", StatusOff)
 	col.publish(false)
-	if got := strings.Join(col.ldapTargets(), ","); got != "os1,os2,y1" {
-		t.Errorf("대상=%s, want os1,os2,y1", got)
+	if got := strings.Join(col.ldapTargets(), ","); got != "os1,os2,os3,y1" {
+		t.Errorf("대상=%s, want os1,os2,os3,y1", got)
 	}
-	if col.LDAPPending() != 3 {
+	if col.LDAPPending() != 4 {
 		t.Errorf("pending=%d", col.LDAPPending())
 	}
-	// 결과를 채우면 표에는 대상만 나온다(yum 완료 포함, yum 재부팅됨·접속가능 제외)
-	ck := Check{Ver: ldapCmdVer, LDAP: "zxcv", DNSNTP: "-", Autofs: "-", HT: "ON"}
-	if err := col.SetChecks(map[string]Check{"os1": ck, "os2": ck, "y1": ck, "y2": ck, "y3": ck}); err != nil {
+	// 표에는 모든 서버가 호스트파일 순서로 나오고, 결과가 있는 서버만 값이 찬다
+	ck := Check{Ver: ldapCmdVer, Kernel: "k", HT: "ON", LdapCheck: "INFO LDAP zxcv"}
+	if err := col.SetChecks(map[string]Check{"os1": ck, "y1": ck}); err != nil {
 		t.Fatal(err)
 	}
 	tbl := ldapTable(col.Snapshot())
-	for _, h := range []string{"os1", "os2", "y1"} {
-		if !strings.Contains(tbl, "\n"+h+"\tzxcv\t") {
-			t.Errorf("%s 가 표에 없음:\n%s", h, tbl)
-		}
-	}
-	for _, h := range []string{"os3", "y2", "y3", "y4"} {
-		if strings.Contains(tbl, "\n"+h+"\t") {
-			t.Errorf("%s 는 표에 나오면 안 됨:\n%s", h, tbl)
-		}
-	}
-	if col.LDAPPending() != 0 || strings.Contains(tbl, "점검 결과 없음") {
-		t.Errorf("pending=%d\n%s", col.LDAPPending(), tbl)
+	want := "hostname\tOS커널\tappl\tdns\tldap_URI\tbinddn\th/t\tldap_check결과\n" +
+		"os1\tk\t\t\t\t\tON\tINFO LDAP zxcv\n" +
+		"os2\t\t\t\t\t\t\t(조사 전)\n" +
+		"os3\t\t\t\t\t\t\t(조사 전)\n" +
+		"y1\tk\t\t\t\t\tON\tINFO LDAP zxcv\n" +
+		"y2\t\t\t\t\t\t\t(조사 전)\n" +
+		"y3\t\t\t\t\t\t\t(조사 전)\n" +
+		"y4\t\t\t\t\t\t\t(조사 전)"
+	if tbl != want {
+		t.Errorf("표:\n%q\nwant\n%q", tbl, want)
 	}
 }
 

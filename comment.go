@@ -143,7 +143,7 @@ func DelayComment(s Snapshot) string {
 
 // YumTable 은 `y` 패널 본문이다(계획서 4.8). yum 서버의 탭 구분 표이며 ssh·ping 없이 스냅샷만 쓴다.
 // 줄 순서는 스냅샷 순서(상태 번호 -> hostname)이고, 비고는 상태 이유에 지연이 있으면 `지연 N분`(기준 시각부터 now 까지)을 잇는다.
-// ldapTable 과 같이 머리줄에 비고 칸이 항상 있고, 비고가 없는 줄은 빈 칸으로 둔다. now 는 지연 판정 기준 시각이다.
+// 머리줄에 비고 칸이 항상 있고, 비고가 없는 줄은 빈 칸으로 둔다. now 는 지연 판정 기준 시각이다.
 func YumTable(s Snapshot, now time.Time) string {
 	delay := time.Duration(s.Yum.DelayMin) * time.Minute
 	var sb strings.Builder

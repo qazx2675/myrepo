@@ -2,7 +2,7 @@
 # pty_drive.py - install_mn 을 가상 터미널(120x40, TERM=xterm)에서 실행하고 키를 보내는 시험 도구 (랩 부하 시험용)
 #
 # 사용법: pty_drive.py <초> <로그> <pid파일> <키 모드> -- <명령> [인자...]
-#   키 모드 load : 30초마다 스크롤·검색·필터·c·r·d·l 을 돌려 가며 누르고 끝에 q
+#   키 모드 load : 30초마다 스크롤·검색·필터·c·r·d·l 을 돌려 가며 누르고 끝에 q (환경변수 LOAD_L_MAX=N 이면 l 은 처음 N 사이클만 누름, 0 이면 안 누름)
 #   키 모드 none : 키 없이 <초> 동안만 둔 뒤 q
 # 로그: 화면 출력 전체(<로그>.raw), 키별 반응 시간과 요약(<로그>)
 import os
@@ -81,6 +81,7 @@ def send(label, data, wait=1.0):
 
 DOWN, UP, PGDN, HOME, END = b"\x1b[B", b"\x1b[A", b"\x1b[6~", b"\x1b[H", b"\x1b[F"
 cycle = 0
+LOAD_L_MAX = int(os.environ.get("LOAD_L_MAX", "1000000"))  # 기본: 매 사이클(30초마다) l 을 눌러 본다. 0 이면 l 을 누르지 않는다
 drain(3)
 while alive and time.time() - start < secs - (65 if mode == "load" else 5):  # 사이클 하나가 약 60초
     if mode == "load":
@@ -109,9 +110,10 @@ while alive and time.time() - start < secs - (65 if mode == "load" else 5):  # �
         send("r", b"r", 0.5)
         send("d", b"d", 0.8)
         send("d", b"d", 0.5)
-        send("l", b"l", 0.8)
-        drain(8)  # 첫 사이클은 gossh 점검이 있다
-        send("l", b"l", 0.8)
+        if cycle <= LOAD_L_MAX:  # v0.5.0: l 은 열 때마다 대상 전체를 다시 조사한다(환경변수 LOAD_L_MAX 로 몇 사이클까지 누를지 정함)
+            send("l", b"l", 0.8)
+            drain(8)  # 첫 사이클은 gossh 점검이 있다
+            send("l", b"l", 0.8)
         rest = 30 - (time.time() - c0)
         if rest > 0:
             drain(min(rest, max(secs - 5 - (time.time() - start), 0)))

@@ -25,7 +25,14 @@ func TestParseArgs(t *testing.T) {
 		{[]string{"-f", "--stop", "h"}, options{}, false}, // 방식은 하나만
 		{[]string{"-c"}, options{}, false},
 		{[]string{"-x", "hosts"}, options{}, false},
-		{[]string{"a", "b"}, options{}, false},
+		// 계획서 4.9: 두 번째 위치 인자는 oklist. 세 번째는 오류, --status·--stop 에는 쓸 수 없다
+		{[]string{"a", "b"}, options{hostfile: "a", oklist: "b"}, true},
+		{[]string{"-c", "x.conf", "hosts", "ok.txt"}, options{conf: "x.conf", hostfile: "hosts", oklist: "ok.txt"}, true},
+		{[]string{"-f", "hosts", "ok.txt"}, options{mode: modeFG, hostfile: "hosts", oklist: "ok.txt"}, true},
+		{[]string{"--daemon", "-c", "/a/b.conf", "/h", "/o"}, options{mode: modeDaemon, conf: "/a/b.conf", hostfile: "/h", oklist: "/o"}, true},
+		{[]string{"a", "b", "c"}, options{}, false},
+		{[]string{"--status", "hosts", "ok.txt"}, options{}, false},
+		{[]string{"--stop", "hosts", "ok.txt"}, options{}, false},
 		{[]string{"--status", "-c", "x"}, options{}, false},
 	}
 	for _, c := range cases {

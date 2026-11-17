@@ -127,7 +127,7 @@ func (v *ViewState) scrollTarget(snap Snapshot) (cur *int, total, page int) {
 	v.prepare(snap, w)
 	body := v.bodySize(snap, w, h)
 	if v.Panel != 0 {
-		return &v.PanelScroll, len(v.pLines), maxInt(body-1, 1)
+		return &v.PanelScroll, v.panelLen(), maxInt(body-1, 1)
 	}
 	return &v.Scroll, len(v.rows), maxInt(body-2, 1)
 }
@@ -182,6 +182,7 @@ func (v *ViewState) handleKey(k Key, snap Snapshot) action {
 	case kEsc:
 		v.Panel = 0
 	case kRune:
+		v.hasOK = snap.Cfg.HasOK
 		return v.runeKey(k.R)
 	}
 	return actNone
@@ -202,7 +203,7 @@ func (v *ViewState) runeKey(r rune) action {
 			v.Panel = 0
 			return actNone
 		}
-		v.Panel, v.PanelScroll, v.pOK = r, 0, false
+		v.Panel, v.PanelScroll, v.pOK, v.OnlyDiff = r, 0, false, false
 		if (r == panelDHCP || r == panelLDAP) && !v.reportBusy[r] { // 조회는 패널마다 하나만
 			v.reportReq = r
 			return actReport
@@ -211,6 +212,8 @@ func (v *ViewState) runeKey(r rune) action {
 			v.Busy, v.CheckErr = true, ""
 			return actCheck
 		}
+	case r == 'm' && v.Panel == panelLDAP && v.hasOK: // l 패널에서만: oklist 와 다른 서버만 보기 켜기·끄기
+		v.OnlyDiff, v.PanelScroll, v.pOK = !v.OnlyDiff, 0, false
 	case r == '/':
 		v.Panel, v.Searching, v.SearchBuf = 0, true, v.Search
 	case r >= '0' && r <= '9': // 8·9 는 yum 서버 상태(접속가능·yum_update/접속가능)

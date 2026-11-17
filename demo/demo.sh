@@ -16,7 +16,8 @@
 #      yum update 서버(호스트 파일 두 번째 칸 yum, v0.4.0)도 들어 있다: -n 27 이면 6대를 더하고, 더 큰 -n 은 약 5%(최소 6대)를 yum 으로 바꾼다.
 #      시작 90초(8000대처럼 큰 데모는 첫 회차가 길어 기준 커널 기록이 늦으므로 240초) 뒤 일부가 새 커널로 재부팅(yum_update/접속가능), 일부는 같은 커널로 재부팅(재부팅됨), 한 대는 ping 이 끊김(재부팅 중),
 #      나머지는 그대로 남아 1분(yum_delay_min=1) 뒤 yum 지연이 된다. 시나리오 시계는 Enter 로 시작한 뒤부터 센다.
-#   4. install_mn 을 실행한다. 데모를 끝내면 백그라운드 수집을 멈추고 /etc/hosts·lo 주소·임시 폴더를 모두 원래대로 되돌린다.
+#   4. oklist.txt(v0.5.0, 거의 모두 같고 몇 대만 일부러 다름)를 만들어 install_mn hosts.txt oklist.txt 로 실행한다(결과 파일 hosts.txt.res).
+#      install_mn 을 실행한다. 데모를 끝내면 백그라운드 수집을 멈추고 /etc/hosts·lo 주소·임시 폴더를 모두 원래대로 되돌린다.
 set -u
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -105,14 +106,20 @@ mkdir -p "$WORK/bin"
 echo $$ > "$WORK/demo.pid"
 
 # ---- 호스트 ----
+# oklist 기준값(스텁 gossh 기본값과 같음, 탭 구분 6칸: OS커널 appl dns ldap_URI binddn h/t)
+OKROW=$'4.18.0-553.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\tldap01.demo ldap02.demo\tuid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com\tON'
+OKDIFF=""
 SUMMARY="설치중 13대, 디스크미인식 2대, 설치완료 9대, ping X 3대, yum 6대"
 if [ "$N" -gt 27 ]; then
 # N>27: 한 번의 awk 로 hosts.txt, hosts.block, state, yum.plan, demo.env 를 만든다(호스트마다 프로세스를 띄우지 않음)
 # yum 서버: 전체의 약 5%(최소 6대), i % ystride == 3 번째 호스트. state 에는 기준 커널·부팅 시각만 두고,
 # 시나리오(시작 시각 기준)가 yum.plan 의 종류대로 $YSW초 뒤 바뀌는 칸을 덧붙인다: idle 그대로 · newk 새 커널 · samek 같은 커널 · ping 주소 끊김
-awk -v n="$N" -v off_ip="$OFF_IP" -v yoff_ip="$YOFF_IP" -v W="$WORK" '
+awk -v n="$N" -v off_ip="$OFF_IP" -v yoff_ip="$YOFF_IP" -v W="$WORK" -v okrow="$OKROW" '
 BEGIN {
   srand(7)
+  okf = W "/oklist.txt"
+  print "hostname\tOS커널\tappl\tdns\tldap_URI\tbinddn\th/t" > okf
+  split(okrow, ov, "\t")
   ynum = int(n * 5 / 100); if (ynum < 6) ynum = 6
   ystride = int(n / ynum); if (ystride < 4) ystride = 4
   split("s s s s h h h c c c p p p l l d d m m x", pf, " ")
@@ -129,6 +136,18 @@ BEGIN {
     if (isy) st = "yum"
     print nm (isy ? " yum" : "") > (W "/hosts.txt")
     cnt[st]++
+    # oklist(계획서 4.9): 거의 모든 서버는 스텁 기본값과 같게. 설치완료 서버 중 몇 대만 일부러 다르게:
+    #   1번째 URI 순서 다름(스텁 STUB_CFG 쪽), 2번째 binddn 다름(oklist 쪽), d%700==11 h/t OFF(STUB_HT_OFF), d%600==13 oklist 에 없음
+    okb = ov[5]; skip = 0
+    if (st == "done") {
+      d++
+      if (d == 1) { ua = ua " " nm; printf "%s\t%s\t%s\t%s\tldap://ldap02.demo/ ldap://ldap01.demo/\t%s\t2\tINFO LDAP zxcv a1\n", nm, ov[1], ov[2], ov[3], ov[5] > (W "/cfg.txt") }
+      if (d == 2) { bd = bd " " nm; okb = "uid=old,ou=user,ou=ldap_user,dc=cae,dc=com" }
+      if (d % 600 == 13) { no = no " " nm; skip = 1 }
+      if (d % 500 == 7) lf = lf " " nm
+      if (d % 700 == 11) ht = ht " " nm
+    }
+    if (!skip) print nm "\t" ov[1] "\t" ov[2] "\t" ov[3] "\t" ov[4] "\t" okb "\t" ov[6] > okf
     if (st == "pingx") {
       k = ++px
       if (k % 50 != 0) print tn[int((k - 1) / 254) % 3 + 1] "." ((k - 1) % 254 + 1) " " nm > (W "/hosts.block")
@@ -145,9 +164,9 @@ BEGIN {
     print ip " " nm > (W "/hosts.block")
     if (isy) print nm " done 4.18.0-513.el8.x86_64 2026-11-17 09:00:00" > (W "/state")
     else print nm " " st > (W "/state")
-    if (st == "done") { d++; if (d % 500 == 7) lf = lf " " nm; if (d % 700 == 11) ht = ht " " nm; if (d % 600 == 13) dn = dn " " nm; if (d % 900 == 17) ap = ap " " nm }
   }
-  printf "export STUB_LDAP_FAIL=\"%s\" STUB_HT_OFF=\"%s\" STUB_DNS_DIFF=\"%s\" STUB_APPL_DIFF=\"%s\"\n", lf, ht, dn, ap > (W "/demo.env")
+  printf "export STUB_LDAP_FAIL=\"%s\" STUB_HT_OFF=\"%s\"\n", lf, ht > (W "/demo.env")
+  printf "OKDIFF=\"URI 순서:%s · binddn:%s · h/t OFF:%s · oklist 에 없음:%s\"\n", ua, bd, ht, no > (W "/demo.env")
   printf "설치중 %d대, 디스크미인식 %d대, 설치완료 %d대, ping X %d대, yum %d대", cnt["installing"], cnt["disk"], cnt["done"], cnt["pingx"], cnt["yum"] > (W "/summary.txt")
 }'
 SUMMARY="$(cat "$WORK/summary.txt")"
@@ -221,6 +240,21 @@ p005 done 4.18.0-513.el8.x86_64 2026-11-17 09:00:00
 l004 done 4.18.0-513.el8.x86_64 2026-11-17 09:00:00
 d003 done 4.18.0-513.el8.x86_64 2026-11-17 09:00:00
 EOF
+
+# ---- oklist(계획서 4.9): l002 는 oklist 에 없음, p001 은 binddn 이 oklist 와 다름(oklist 쪽 값),
+#      c001 은 URI 순서가 다름(스텁 쪽 값, cfg.txt), d001 은 h/t OFF(STUB_HT_OFF). 나머지는 모두 같음 ----
+OKDIFF="URI 순서: c001 · binddn: p001 · h/t OFF: d001 · oklist 에 없음: l002"
+{
+  printf 'hostname\tOS커널\tappl\tdns\tldap_URI\tbinddn\th/t\n'
+  for h in $ALL; do
+    case "$h" in
+      l002) ;;
+      p001) printf '%s\t%s\n' "$h" "$(printf '%s' "$OKROW" | awk -F'\t' -v OFS='\t' '{ $5 = "uid=old,ou=user,ou=ldap_user,dc=cae,dc=com"; print }')" ;;
+      *) printf '%s\t%s\n' "$h" "$OKROW" ;;
+    esac
+  done
+} > "$WORK/oklist.txt"
+printf 'c001\t4.18.0-553.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\tldap://ldap02.demo/ ldap://ldap01.demo/\tuid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com\t2\tINFO LDAP zxcv a1\n' > "$WORK/cfg.txt"
 fi
 
 cp "$TOP/test/stub_gossh.sh" "$WORK/bin/gossh"
@@ -251,9 +285,9 @@ yum_delay_min=1
 EOF
 
 export STUB_GOSSH_STATE="$WORK/state"
-export STUB_LDAP_ONELINE=1          # 현재 ldap_check.sh 처럼 한 줄 요약
+export STUB_CFG="$WORK/cfg.txt"     # 서버별 설정값(없는 서버는 스텁 기본값 = oklist 기준값)
 if [ "$N" -gt 27 ]; then
-  . "$WORK/demo.env"                # LDAP FAIL·H/T OFF·DNS 다름·autofs 다름 예시(완료 서버 중 몇 대)
+  . "$WORK/demo.env"                # ldap_check FAIL·H/T OFF 예시(완료 서버 중 몇 대)와 oklist 다름 안내
 else
   export STUB_LDAP_FAIL="p002"      # LDAP FAIL 예시
   export STUB_HT_OFF="d001"         # H/T OFF 예시
@@ -323,9 +357,16 @@ cat <<EOF
 
  키
    c  설치현황 코멘트      r  지연 서버 점검요청 코멘트
-   d  DHCP 조회(ping X)    l  LDAP·H/T 점검(완료 서버, FAIL·OFF·DNS·autofs 다름 예시 포함. 27대: p002 FAIL·d001 OFF)
+   d  DHCP 조회(ping X)    l  서버 설정 표(OS커널·appl·dns·ldap_URI·binddn·h/t·ldap_check결과) 다시 조사
    y  yum 커널 표          /  hostname 검색        1~9 상태 필터(8 접속가능·9 yum_update/접속가능), 0 해제
    ↑↓ PgUp PgDn 스크롤     같은 키를 다시 누르면 닫힘
+
+ 서버 설정과 oklist (v0.5.0)
+   l 을 누르지 않아도 ping 이 닿는 서버는 회차마다 설정을 자동으로 처음 조사합니다(조사 전 서버는 빈 칸).
+   이 데모는 oklist($WORK/oklist.txt)를 두 번째 인자로 줍니다: l 표에서 oklist 와 다른 칸은 빨간색,
+   l 화면에서 m 을 누르면 oklist 와 다른 서버만 봅니다(다시 m 이면 전체). 위 머리줄에 oklist·조사·다름 대수.
+   일부러 다르게 만든 서버: $OKDIFF
+   결과 파일: $WORK/hosts.txt.res  (탭 구분, 엑셀에 붙여 넣기용: 설정 6칸 + 설치/yumupdate여부 O/X + 설정동일여부 O/X)
 
  백그라운드 수집 (v0.3.0)
    q  화면만 나가기 - 수집은 계속됩니다. 아래에서 Enter 로 다시 붙으면 이어서 보입니다.
@@ -341,14 +382,14 @@ fi
 
 start_scenario
 export PM_MAX_RUN_SEC=3600          # 데모 수집 데몬은 최대 1시간(남았을 때를 대비한 안전장치)
-cd "$WORK" && "$BIN" hosts.txt
+cd "$WORK" && "$BIN" hosts.txt oklist.txt
 rc=$?
 # q 로 화면만 나가면 수집은 계속된다: Enter 로 다시 붙거나 e 로 데모를 끝낸다(-y 이면 바로 끝냄)
 while [ "$YES" = "0" ] && "$BIN" --status hosts.txt 2>/dev/null | grep -q "pid "; do
   printf '\n 수집이 백그라운드에서 계속 돌고 있습니다. Enter = 다시 붙기, e = 수집 종료하고 데모 정리: '
   read -r ans
   [ "$ans" = "e" ] && break
-  "$BIN" hosts.txt
+  "$BIN" hosts.txt oklist.txt
   rc=$?
 done
 "$BIN" --stop hosts.txt >/dev/null 2>&1

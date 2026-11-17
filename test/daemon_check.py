@@ -11,6 +11,9 @@
 #     바이너리(프로그램 버전)가 바뀌면 옛 데몬을 멈추고 새로 시작(기록 유지). 스텁 gossh 의 yum 시나리오(test/stub_gossh.sh 머리말)를 쓴다.
 #     (h)용 두 번째 바이너리는 소스 폴더(기본: 이 파일의 상위 폴더, 4번째 인자로 바꿈)에서 -X main.programVersion=... 로 임시 빌드한다
 #     (소스 폴더는 건드리지 않음. go 는 PATH 나 /opt/go1.20/bin).
+#   - (v0.5.0, 12번대, 계획서 4.9) l 을 누르지 않아도 설정 자동 첫 조사(설치중 OS 서버 포함), <호스트파일>.res(머리줄·호스트파일 순서·
+#     0644·LF), 완료 뒤 꺼져도 설치/yumupdate여부 O 유지, oklist 를 두 번째 인자로 주면 데몬 교체·설정동일여부 O/X·l 집계 줄·빨간 칸·m 필터,
+#     oklist 내용이 바뀌면 교체·같으면 그대로 붙음, 없는 oklist 파일은 오류. 스텁 gossh 의 STUB_CFG(test/stub_gossh.sh 머리말)를 쓴다.
 # 결과는 PASS/FAIL 줄로 출력한다.
 import fcntl
 import os
@@ -171,7 +174,7 @@ def build_alt_binary(out):
     """소스 폴더를 건드리지 않고 프로그램 버전만 다른 임시 바이너리를 만든다(-X 는 var 문자열에 쓸 수 있다)."""
     go = shutil.which("go") or "/opt/go1.20/bin/go"
     e = dict(os.environ, CGO_ENABLED="0")
-    r = subprocess.run([go, "build", "-trimpath", "-ldflags", "-s -w -X main.programVersion=0.4.0-dcheck", "-o", out, "."],
+    r = subprocess.run([go, "build", "-trimpath", "-ldflags", "-s -w -X main.programVersion=0.5.0-dcheck", "-o", out, "."],
                        cwd=SRC, env=e, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
     return r.returncode == 0 and os.path.exists(out), (r.stderr.decode()[:200] if r.returncode else "")
 
@@ -342,6 +345,149 @@ def yum_checks():
         HOSTS = old_hosts
 
 
+CHOSTS = "chosts.txt"
+CADDR = "172.31.79.15"  # lo 에 붙였다 떼는 주소(완료 뒤 꺼진 서버용)
+RES_HEAD = "hostname\tOS커널\tappl\tdns\tldap_URI\tbinddn\th/t\t설치/yumupdate여부\t설정동일여부"
+OKROW = "4.18.0-553.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\tldap01.demo ldap02.demo\tuid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com\tON"
+
+
+def read_res(path=None):
+    """<호스트파일>.res 를 {hostname: [칸...]} 와 줄 목록으로 읽는다(없으면 빈 것)."""
+    try:
+        raw = open(path or (CHOSTS + ".res"), "rb").read()
+    except (IOError, OSError):
+        return {}, [], b""
+    lines = raw.decode("utf-8").split("\n")
+    rows = dict((l.split("\t")[0], l.split("\t")) for l in lines[1:] if l)
+    return rows, lines, raw
+
+
+def wait_res(cond, timeout=40):
+    end = time.time() + timeout
+    while time.time() < end:
+        rows, lines, raw = read_res()
+        if rows and cond(rows):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def cfg_checks():
+    """12번대(v0.5.0, 계획서 4.9): 설정 자동 첫 조사, <호스트파일>.res, 설치/yumupdate여부 유지, oklist 인자·비교·교체."""
+    global HOSTS
+    old_hosts = HOSTS
+    HOSTS = CHOSTS
+    hs = ["127.3.4.1", "127.3.4.2", "127.3.4.3", "127.3.4.4", CADDR]
+    sessions = []
+
+    def new(args, **kw):
+        s = Session(args, **kw)
+        sessions.append(s)
+        return s
+
+    def addr(op):
+        subprocess.run(["ip", "addr", op, CADDR + "/32", "dev", "lo"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    addr("del")
+    addr("add")
+    try:
+        # .1 .2 .3 설치완료, .4 설치중(OS 모드라 ping 이 닿으면 설치완료 전이어도 조사), CADDR 설치완료(뒤에 꺼짐)
+        open(CHOSTS, "w").write("\n".join(hs) + "\n")
+        open("cstate.txt", "w").write("127.3.4.1 done\n127.3.4.2 done\n127.3.4.3 done\n127.3.4.4 installing\n%s done\n" % CADDR)
+        # 스텁 값: .2 는 URI 순서가 다름, 나머지는 기본값
+        open("ccfg.txt", "w").write("127.3.4.2\t4.18.0-553.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\t"
+                                    "ldap://ldap02.demo/ ldap://ldap01.demo/\tuid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com\t2\tINFO LDAP zxcv a1\n")
+        for f in (CHOSTS + ".pm_state.json", CHOSTS + ".res", "cgossh.log"):
+            if os.path.exists(f):
+                os.remove(f)
+        run(["--stop", CHOSTS])
+        env = {"STUB_GOSSH_STATE": WD + "/cstate.txt", "STUB_CFG": WD + "/ccfg.txt", "STUB_GOSSH_LOG": WD + "/cgossh.log", "PM_MAX_RUN_SEC": "300"}
+        args = ["-c", "dpm.conf", CHOSTS]
+
+        # ---- (a) oklist 없이: 시작하면 res 생성, l 을 누르지 않아도 첫 조사로 설정 칸이 참 ----
+        s = new(args, env=env, cols=200)
+        ok = s.wait_for(r"회차 1 ", 40)
+        filled = wait_res(lambda r: all(len(r.get(h, [])) == 9 and r[h][1] for h in hs), 40)
+        rows, lines, raw = read_res()
+        check("12a res 파일이 호스트파일 옆에 생김(머리줄·모든 서버·호스트파일 순서·LF·BOM 없음)",
+              ok and lines[0] == RES_HEAD and [l.split("\t")[0] for l in lines[1:] if l] == hs and b"\r" not in raw and not raw.startswith(b"\xef\xbb\xbf"),
+              repr(raw[:160]))
+        check("12a l 을 누르지 않아도 자동 첫 조사로 설정 칸이 참(설치중 OS 서버 포함)",
+              filled and rows["127.3.4.1"][1:7] == OKROW.split("\t") and rows["127.3.4.4"][1] == "4.18.0-553.el8.x86_64", repr(rows.get("127.3.4.4")))
+        check("12a 설치/yumupdate여부: 설치완료 O, 설치중 X / oklist 없음 -> 9번째 칸 비어 있음",
+              filled and rows["127.3.4.1"][7] == "O" and rows["127.3.4.4"][7] == "X" and all(rows[h][8] == "" for h in hs), "")
+        check("12a res 파일 권한 0644", oct(os.stat(CHOSTS + ".res").st_mode & 0o777) == "0o644", oct(os.stat(CHOSTS + ".res").st_mode & 0o777))
+        s.send(b"l", 1.0)
+        ok = s.wait_for(r"점검 완료 .* 응답 5대", 20)
+        fr = s.frame()
+        check("12a l: 8칸 표(머리줄)·재조사 안내·oklist 없으면 집계 줄 없음",
+              ok and "hostname" in fr and "OS커널" in fr and "ldap_check결과" in fr and "oklist" not in fr, fr[-600:].replace("\n", " | "))
+        s.send(b"l", 0.3)
+        # ---- (b) 완료 뒤 꺼져도(완료후꺼짐) 설치/yumupdate여부는 O 유지 ----
+        addr("del")
+        s.send(b"c", 1.0)
+        off = s.wait_for(r"7 완료후꺼짐 1", 20)
+        time.sleep(1.0)
+        rows, _, _ = read_res()
+        check("12b 완료 서버가 꺼져도(완료후꺼짐) 설치/yumupdate여부 O·설정 칸 유지",
+              off and rows.get(CADDR, [""] * 9)[7] == "O" and rows[CADDR][1] == "4.18.0-553.el8.x86_64", repr(rows.get(CADDR)))
+        s.send(b"c", 0.3)
+        s.send(b"q", 0.3)
+        s.wait_exit()
+        pid1 = daemon_pid()
+
+        # ---- (c) oklist 를 두 번째 인자로: 데몬 교체, 설정동일여부 O/X ----
+        open("oklist.txt", "w").write("hostname\tOS커널\tappl\tdns\tldap_URI\tbinddn\th/t\r\n"
+                                      "127.3.4.1\t%s\r\n127.3.4.2\t%s\r\n%s\t%s\r\nshort\tline\r\n" % (OKROW, OKROW, CADDR, OKROW))
+        r = run(args + ["/no/such/oklist.txt"], env)
+        check("12e 없는 oklist 파일: 오류 안내·종료코드 1·데몬 그대로", r.returncode == 1 and "oklist 파일을 읽을 수 없음" in r.stderr.decode() and daemon_pid() == pid1,
+              r.stderr.decode()[:120])
+        s2 = new(args + ["oklist.txt"], env=env, cols=200)
+        ok = s2.wait_for(r"다시 시작했습니다", 25)
+        pid2 = daemon_pid()
+        check("12c oklist 를 주면 수집을 다시 시작(새 pid·안내 문구)", ok and pid2 is not None and pid2 != pid1, "pid %s -> %s" % (pid1, pid2))
+        same = wait_res(lambda r: r.get("127.3.4.1", [""] * 9)[8] == "O" and r.get("127.3.4.2", [""] * 9)[8] == "X", 30)
+        rows, _, _ = read_res()
+        check("12c 설정동일여부: 같은 서버 O·URI 순서가 다른 서버 X·oklist 에 없는 서버 빈 칸·꺼진 서버도 마지막 값으로 O",
+              same and rows["127.3.4.3"][8] == "" and rows["127.3.4.4"][8] == "" and rows[CADDR][8] == "O", repr([rows.get(h, [""] * 9)[8] for h in hs]))
+        s2.send(b"l", 1.0)
+        ok = s2.wait_for(r"oklist 3대 · 조사 5대 · 다름 1대 · 경고 1줄", 25)
+        check("12c l: oklist 집계 줄·m 안내", ok and "m 다른 서버만" in s2.frame(), s2.frame()[-400:].replace("\n", " | "))
+        has_red = b"\x1b[1;31mldap02.demo ldap01.demo" in s2.buf
+        s2.send(b"m", 0.8)
+        fr = s2.frame()
+        body = fr.split("hostname", 1)[-1]
+        check("12c l: 다른 칸은 빨간색, m 은 다른 서버만(127.3.4.2)", has_red and "oklist 와 다른 서버만 보기" in fr and "127.3.4.2" in body and "127.3.4.1 " not in body, "")
+        s2.send(b"q", 0.3)
+        s2.send(b"q", 0.3)
+        s2.wait_exit()
+
+        # ---- (d) oklist 내용이 바뀌면 데몬 교체, 같으면 그대로 붙음 ----
+        s3 = new(args + ["oklist.txt"], env=env)
+        s3.pump(1.0)
+        check("12d oklist 가 그대로면 같은 데몬에 붙음", daemon_pid() == pid2 and "다시 시작했습니다" not in s3.frame(), "")
+        s3.send(b"q", 0.3)
+        s3.wait_exit()
+        open("oklist.txt", "a").write("127.3.4.2\tdup\tx\tx\tx\tx\tx\n127.3.4.3\t%s\n" % OKROW)
+        s4 = new(args + ["oklist.txt"], env=env)
+        ok = s4.wait_for(r"다시 시작했습니다", 25)
+        pid3 = daemon_pid()
+        same = wait_res(lambda r: r.get("127.3.4.3", [""] * 9)[8] == "O", 30)
+        check("12d oklist 내용이 바뀌면 데몬 교체·새 비교 반영(127.3.4.3 -> O)", ok and pid3 is not None and pid3 != pid2 and same, "pid %s -> %s" % (pid2, pid3))
+        s4.send(b"Q", 0.3)
+        s4.send(b"y", 0.5)
+        s4.wait_exit(15)
+        st = load_state(CHOSTS + ".pm_state.json")
+        check("12 state.json: install_done 기록·bindpw 없음·정리(데몬 종료)",
+              st.get(CADDR, {}).get("install_done") is True and "bindpw" not in open(CHOSTS + ".pm_state.json").read() and daemon_pid() is None, "")
+    finally:
+        for x in sessions:
+            x.kill()
+        run(["--stop", CHOSTS])
+        addr("del")
+        HOSTS = old_hosts
+
+
 def main():
     os.makedirs(WD, exist_ok=True)
     os.chdir(WD)
@@ -503,6 +649,7 @@ def main():
     finally:
         s.kill()
     yum_checks()
+    cfg_checks()
     n = len([x for x in results if not x])
     print("총 %d 항목 중 FAIL %d" % (len(results), n))
     return 1 if n else 0

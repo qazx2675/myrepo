@@ -4,21 +4,21 @@
  갱신 11:58:25 (1m 전) · 회차 3 · 수집중 |
  경고: 설정 파일 pm_monitor.conf 없음 - 기본값 사용
 --------------------------------------------------------------------------------
- [l] LDAP·H/T  1-13/13줄
- hostname  LDAP  DNS · NTP            autofs              H/T  비고
- c1001     zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
- c1002     zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
- c1003     FAIL  다름                 nas01:/export/appl  -    ldap_check UNDEF…
- c1005     zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
- c1006     zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
- c1007     FAIL  다름                 nas01:/export/appl  -    ldap_check UNDEF…
- d001      zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
- d002      zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
- l001      zxcv  10.1.1.10/10.1.1.11  nas01:/export/appl  ON   
- l002      zxcv  10.1.1.10/10.1.1.11  다름                OFF  /appl nas01:/exp…
- l003      FAIL  다름                 nas01:/export/appl  -    ldap_check UNDEF…
- (점검 결과 없음 3대 - ssh 실패 등, 다시 열면 재시도)
-
-
-
+ [l] LDAP·설정  1-16/42줄
+ 점검 완료 11:59:00 · 응답 13대 · 무응답 1대(이전 값 유지): s1001
+ hostname  OS커널                 appl                dns                  ldap…
+ c001      4.18.0-553.el8.x86_64  nas01:/export/appl  10.1.1.10 10.1.1.11  ldap…
+ c002
+ c003
+ c004
+ c005
+ c006
+ h001
+ h002
+ h003
+ h004
+ s001
+ s002
+ s003
+ s004
  ↑↓ PgUp PgDn Home End 스크롤  l 닫기  c r d l 전환  q 뒤로

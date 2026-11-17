@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# demo_yum_check.py - demo/demo.sh 를 가상 터미널(120x40)에서 실제로 돌려 v0.4.0 yum 시나리오와 정리(cleanup)를 확인한다 (랩 .58, root)
+# demo_yum_check.py - demo/demo.sh 를 가상 터미널(120x40)에서 실제로 돌려 v0.4.0 yum 시나리오, v0.5.0 oklist·res 파일과 정리(cleanup)를 확인한다 (랩 .58, root)
 #   사용법: python3 demo_yum_check.py <demo.sh 경로> [-n 대수=27]       (소요: 대수 27 약 4분, 8000 약 6분)
 #   안내 화면 -> Enter -> 첫 화면(접속가능 기준 커널) -> y 표 -> (시작 100초 뒤) r 의 yum 지연 블록 3종·y 표의 새 커널·재부팅됨 ->
 #   8·9 필터 -> q(화면만 나감, 수집 계속) -> 다시 붙기(Enter) -> e(수집 종료·정리) 순으로 가며 PASS/FAIL 을 출력한다.
@@ -145,6 +145,22 @@ def main():
         st = sh("cat %s/state | grep -c '^[^ ]* done 4.18.0-513.el8.x86_64 2026-11-17 09:00:00 4.18.0-553' ; true" % WORK).strip()
         check("2 스텁 상태에 새 커널 전환 칸이 덧붙음(전환 epoch)", st.isdigit() and int(st) >= 1, "새 커널 %s대" % st)
 
+        # ---- v0.5.0: oklist 인자·res 파일(계획서 4.9). 27대: c001 URI 순서·p001 binddn·d001 h/t OFF 는 X, l002 는 oklist 에 없음(빈 칸) ----
+        res = {}
+        for _ in range(120):
+            try:
+                lines = open(WORK + "/hosts.txt.res", encoding="utf-8").read().split("\n")
+                res = dict((l.split("\t")[0], l.split("\t")) for l in lines[1:] if l)
+            except (IOError, OSError):
+                lines = []
+            if n > 27 or (res.get("c001", [""] * 9)[8] == "X" and res.get("s001", [""] * 9)[8] == "O"):
+                break
+            p.pump(1.0)
+        ok = bool(lines) and lines[0].startswith("hostname\tOS커널\t") and len(res) == len([x for x in open(WORK + "/hosts.txt").read().split(chr(10)) if x.strip()])
+        if n == 27:
+            ok = ok and [res.get(h, [""] * 9)[8] for h in ("c001", "p001", "d001", "l002", "s001")] == ["X", "X", "X", "", "O"]
+        check("2 안내에 oklist·m·res 경로, res 파일(머리줄·모든 서버, 27대는 일부러 다른 서버 X·oklist 에 없는 서버 빈 칸)",
+              ok and "hosts.txt.res" in g and "m 을 누르면" in g, str([res.get(h) for h in ("c001", "l002")])[:200])
         # ---- y 표(처음: 전부 접속가능) ----
         p.send(b"y", 1.0)
         fr = p.frame()

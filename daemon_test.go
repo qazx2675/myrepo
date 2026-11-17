@@ -151,7 +151,7 @@ func TestRunDaemonLockAndExpire(t *testing.T) {
 	cfg := testCfg()
 
 	res := make(chan int, 1)
-	go func() { res <- runDaemon(cfg, "hosts.txt", []string{"127.0.0.1"}) }()
+	go func() { res <- runDaemon(cfg, "hosts.txt", "", []string{"127.0.0.1"}) }()
 	st, _ := stateAbs("hosts.txt")
 	sock := sockPath(daemonID(st))
 	waitUntil(t, "데몬 소켓", 3*time.Second, func() bool { _, err := queryInfo(sock); return err == nil })
@@ -159,13 +159,13 @@ func TestRunDaemonLockAndExpire(t *testing.T) {
 	if got := in.Expires.Sub(in.Started); got != maxRun {
 		t.Fatalf("만료까지 = %v, 기대 %v", got, maxRun)
 	}
-	if in.FP != fingerprint("hosts.txt", cfg.Path) {
+	if in.FP != fingerprint("hosts.txt", cfg.Path, "") {
 		t.Fatal("지문이 다름")
 	}
 
 	// 같은 호스트파일 두 번째 데몬: 잠금 때문에 바로 0 으로 끝나고 첫 데몬은 멀쩡하다
 	second := make(chan int, 1)
-	go func() { second <- runDaemon(cfg, "hosts.txt", []string{"127.0.0.1"}) }()
+	go func() { second <- runDaemon(cfg, "hosts.txt", "", []string{"127.0.0.1"}) }()
 	select {
 	case c := <-second:
 		if c != 0 {
@@ -213,7 +213,7 @@ func TestRunDaemonStopRequest(t *testing.T) {
 	stopWait = 500 * time.Millisecond
 	defer func() { stopWait = oldWait }()
 	res := make(chan int, 1)
-	go func() { res <- runDaemon(testCfg(), "h.txt", []string{"127.0.0.1"}) }()
+	go func() { res <- runDaemon(testCfg(), "h.txt", "", []string{"127.0.0.1"}) }()
 	st, _ := stateAbs("h.txt")
 	sock := sockPath(daemonID(st))
 	waitUntil(t, "데몬 소켓", 3*time.Second, func() bool { _, err := queryInfo(sock); return err == nil })
@@ -235,20 +235,20 @@ func TestFingerprintChanges(t *testing.T) {
 	h, c := filepath.Join(dir, "hosts"), filepath.Join(dir, "conf")
 	os.WriteFile(h, []byte("a\nb\n"), 0o644)
 	os.WriteFile(c, []byte("interval_sec=30\n"), 0o644)
-	base := fingerprint(h, c)
-	if base != fingerprint(h, c) {
+	base := fingerprint(h, c, "")
+	if base != fingerprint(h, c, "") {
 		t.Fatal("같은 내용인데 지문이 다름")
 	}
 	os.WriteFile(h, []byte("a\nb\nc\n"), 0o644)
-	if fingerprint(h, c) == base {
+	if fingerprint(h, c, "") == base {
 		t.Fatal("호스트파일이 바뀌었는데 지문이 같음")
 	}
 	os.WriteFile(h, []byte("a\nb\n"), 0o644)
 	os.WriteFile(c, []byte("interval_sec=45\n"), 0o644)
-	if fingerprint(h, c) == base {
+	if fingerprint(h, c, "") == base {
 		t.Fatal("설정이 바뀌었는데 지문이 같음")
 	}
-	if fingerprint(h, "") == base {
+	if fingerprint(h, "", "") == base {
 		t.Fatal("설정 파일 유무가 지문에 안 들어감")
 	}
 }
@@ -266,14 +266,44 @@ func TestDaemonIDPerStateFile(t *testing.T) {
 func TestFingerprintChangesOnYumMode(t *testing.T) {
 	h := filepath.Join(t.TempDir(), "hosts")
 	os.WriteFile(h, []byte("a\nb\n"), 0o644)
-	base := fingerprint(h, "")
+	base := fingerprint(h, "", "")
 	os.WriteFile(h, []byte("a yum\nb\n"), 0o644)
-	withYum := fingerprint(h, "")
+	withYum := fingerprint(h, "", "")
 	if withYum == base {
 		t.Fatal("OS -> yum 으로 바뀌었는데 지문이 같음")
 	}
 	os.WriteFile(h, []byte("a\nb\n"), 0o644)
-	if fingerprint(h, "") != base {
+	if fingerprint(h, "", "") != base {
 		t.Fatal("원래대로 돌리면 지문도 같아야 함")
+	}
+}
+
+// 계획서 4.9: oklist 의 경로·내용이 지문에 들어가 바꾸면 데몬이 다시 시작한다. 내용이 같으면 상대·절대 경로가 같은 지문이다.
+func TestFingerprintOklist(t *testing.T) {
+	dir := t.TempDir()
+	withCwd(t, dir)
+	h, ok := filepath.Join(dir, "hosts"), filepath.Join(dir, "ok.txt")
+	os.WriteFile(h, []byte("a\nb\n"), 0o644)
+	os.WriteFile(ok, []byte("a\tk\tap\td\tu\tb\tON\n"), 0o644)
+	none := fingerprint(h, "", "")
+	base := fingerprint(h, "", ok)
+	if base == none {
+		t.Fatal("oklist 유무가 지문에 안 들어감")
+	}
+	if fingerprint(h, "", "ok.txt") != base {
+		t.Fatal("상대 경로와 절대 경로의 지문이 다름")
+	}
+	os.WriteFile(ok, []byte("a\tk\tap\td\tu\tb\tOFF\n"), 0o644)
+	if fingerprint(h, "", ok) == base {
+		t.Fatal("oklist 내용이 바뀌었는데 지문이 같음")
+	}
+	os.WriteFile(ok, []byte("a\tk\tap\td\tu\tb\tON\n"), 0o644)
+	if fingerprint(h, "", ok) != base {
+		t.Fatal("원래 내용으로 돌리면 지문도 같아야 함")
+	}
+	other := filepath.Join(dir, "ok2.txt")
+	os.WriteFile(other, []byte("a\tk\tap\td\tu\tb\tON\n"), 0o644)
+	if fingerprint(h, "", other) == base {
+		t.Fatal("다른 oklist 파일인데 지문이 같음")
 	}
 }

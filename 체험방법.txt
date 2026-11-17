@@ -1,8 +1,8 @@
-# pm_monitor (install_mn) v0.4.0 - 테스트 서버에서 체험하는 방법
+# pm_monitor (install_mn) v0.5.0 - 테스트 서버에서 체험하는 방법
 #
 # 두 가지 방법이 있다.
-#   A. 가짜 서버로 체험 (권장, 5분)  - 실제 서버에 접속하지 않는다. 화면·키·yum 모드를 전부 볼 수 있다.
-#   B. 실제 테스트 서버 1~2대로 체험  - 진짜 yum update 와 재부팅을 보고 싶을 때.
+#   A. 가짜 서버로 체험 (권장, 5분)  - 실제 서버에 접속하지 않는다. 화면·키·yum 모드·서버 설정 표(oklist 비교)·결과 파일(.res)을 전부 볼 수 있다.
+#   B. 실제 테스트 서버 1~2대로 체험  - 진짜 yum update 와 재부팅, 실제 서버 설정 조사를 보고 싶을 때.
 # 각 명령 위의 # 줄은 설명이다. 그대로 복사해서 붙여 넣으면 된다.
 # 조건: x86_64 리눅스(RHEL/Rocky 8 계열), root, 패키지 설치 없음(Go 도 필요 없음). 바이너리는 이미 들어 있다.
 
@@ -32,15 +32,37 @@ bash demo/demo.sh
 #          일부는 같은 커널로 재부팅 -> '재부팅됨', 한 대는 ping 이 끊겼다가 돌아와도 '재부팅됨'
 #
 # 눌러 볼 키 (같은 키를 다시 누르면 닫힘)
-#   y   yum 커널 표 (기준 커널 / 현재 커널 / 재부팅 시각 / 비고)  <- 이번에 새로 생긴 화면
+#   y   yum 커널 표 (기준 커널 / 현재 커널 / 재부팅 시각 / 비고)
 #   c   설치현황 코멘트 (yum 별도 줄 + yum 목록)
 #   r   지연 서버 점검요청 코멘트 (yum: 재부팅 미확인 / 커널 변경 없음 / 접속 불가 블록)
 #   8   '접속가능' 서버만 보기        9   'yum_update/접속가능' 서버만 보기        0   필터 해제
-#   l   LDAP·DNS·NTP·autofs 점검      d   DHCP 조회(ping X)       /   hostname 검색
+#   l   서버 설정 표(v0.5.0)           d   DHCP 조회(ping X)       /   hostname 검색
+#       열: hostname | OS커널 | appl | dns | ldap_URI | binddn | h/t | ldap_check결과, 33대 전부를 호스트파일 순서로 보여 준다.
+#       l 을 누르지 않아도 ping 이 닿는 서버는 회차(10초)마다 자동으로 첫 조사를 하므로 처음에는 칸이 비어 있다가 채워진다.
+#       l 을 열 때마다(닫았다가 다시 l) 대상 서버 전체를 다시 조사한다. 응답 없는 서버는 이전 값을 그대로 둔다.
+#   m   (l 표 안에서) oklist 와 다른 서버만 보기, 다시 누르면 전체. 이 데모는 oklist 를 같이 주므로 쓸 수 있다.
 #   q   화면만 나가기 (수집은 계속)   -> 안내 줄에서 Enter 로 다시 붙으면 이어서 보인다
 #   Q   수집까지 종료 (확인에서 y)
 #
 # 데모를 끝내려면: 화면에서 q 로 나온 뒤 e 를 입력한다. (Ctrl+C 로 끊어도 정리된다)
+#
+# --- l 표와 oklist 비교 보기 (v0.5.0) ---
+# 데모는 /tmp/pm_demo/oklist.txt 를 두 번째 인자로 줘서 실행한다(install_mn hosts.txt oklist.txt).
+# oklist 는 거의 모든 서버가 조사값과 같고, 일부러 다른 서버가 몇 대 있다. 시작 안내 화면의 "일부러 다르게 만든 서버" 줄에도 나온다.
+#   c001  ldap_URI 순서가 다름(ldap02.demo ldap01.demo)      -> ldap_URI 칸이 빨간색
+#   p001  binddn 이 oklist 와 다름                             -> binddn 칸이 빨간색
+#   d001  h/t 가 OFF 임(oklist 는 ON)                         -> h/t 칸이 빨간색
+#   l002  oklist 에 없음                                      -> 빨간색 없음(비교 대상이 아님)
+# 화면에서 l 을 누르면 머리에 "oklist N대 · 조사 M대 · 다름 K대" 가 보이고, m 을 누르면 다른 서버만 남는다.
+# 긴 값(binddn)은 24칸을 넘으면 … 로 줄여 보이고 전체 값은 결과 파일에 있다.
+#
+# --- 결과 파일 .res 보기 (데모가 도는 동안 다른 터미널에서) ---
+#   cat /tmp/pm_demo/hosts.txt.res                              # 탭 구분 그대로(엑셀에 붙여 넣는 용도)
+#   column -t -s$'\t' /tmp/pm_demo/hosts.txt.res | less -S     # 열을 맞춰서 보기
+# 열: hostname OS커널 appl dns ldap_URI binddn h/t 설치/yumupdate여부 설정동일여부
+#   설치/yumupdate여부  한 번이라도 설치완료(OS 서버)·yum_update/접속가능(yum 서버)이 되면 O, 이후 ping X·꺼짐이 돼도 O 로 남는다
+#   설정동일여부        oklist 와 여섯 값이 모두 같으면 O, 하나라도 다르면 X, oklist 에 없거나 아직 조사 전이면 빈 칸
+# 시간이 지나 상태가 바뀌면(30초 설치완료 등) 설치/yumupdate여부 열이 O 로 바뀌는 것을 같은 명령으로 다시 확인해 본다.
 
 # --- 4. 옵션 (선택) ---
 #   bash demo/demo.sh -y            안내 화면에서 Enter 기다리지 않음
@@ -52,44 +74,71 @@ bash demo/demo.sh
 #   "이름 'pm_demo' 데모가 이미 실행 중" -> 다른 터미널에서 돌고 있는 데모를 먼저 끝낸다
 #   데모가 비정상 종료돼 흔적이 남았을 때 -> 그냥 다시 bash demo/demo.sh (시작할 때 지난 흔적을 먼저 정리한다)
 #   수집 확인/종료  -> ./install_mn_os8 --status    ./install_mn_os8 --stop /tmp/pm_demo/hosts.txt
+#   결과 파일이 없다 -> 첫 회차(10초) 뒤에 생긴다. /tmp/pm_demo 아래에서 ls -l hosts.txt.res
 
 # ============================================================
-# B. 실제 테스트 서버로 체험 (OS 가 올라와 있는 서버에서 yum update)
+# B. 실제 테스트 서버로 체험 (yum update 와 서버 설정 조사)
 # ============================================================
 # 준비: 관리서버(root)에서 gossh 로 테스트 서버에 접속되어야 한다(평소 쓰는 방식 그대로).
 #       테스트 서버는 OS 가 올라와 있고 ssh 가 되는 상태, yum 저장소를 쓸 수 있는 상태.
+#       이번 작업(yum update 와 설정 변경)에는 OS 설치가 없으므로, yum 칸이 없는 서버도 설치완료가 아니어도 설정 조사 대상이다.
 
-# --- 1. 호스트파일: 두 번째 칸에 yum 을 적는다 (yum 이 아니거나 없으면 OS 설치 서버로 본다) ---
+# --- 1. 호스트파일: yum update 를 볼 서버는 두 번째 칸에 yum, 설정만 볼 서버는 hostname 만 적는다 ---
 cat > /root/hosts_yum.txt <<'EOF'
 test-yum01 yum
 test-yum02 yum
+test-os01
 EOF
+#   * test-yum01·02: yum update 후 재부팅·커널 변경을 지켜본다. 설정 조사는 yum_update/접속가능(커널이 바뀐 뒤)이 되어야 시작한다.
+#   * test-os01(yum 없음): OS 설치 서버로 보지만 이번 작업에서는 설치완료가 아니어도 ping 이 닿으면 자동으로 설정을 조사한다
+#     (ping X 인 서버는 자동 조사하지 않고, l 키로만 조사한다).
 
-# --- 2. 설정(선택): yum 지연 기준을 짧게 (기본 60분) ---
+# --- 2. oklist(선택): 서버별 기준 설정표. 엑셀에서 7칸(hostname OS커널 appl dns ldap_URI binddn h/t)을 복사해 붙여 넣은 탭 구분 텍스트 ---
+#   (아래는 탭을 확실히 넣기 위해 printf 를 쓴다. 엑셀에서 복사한 내용을 vi 에 붙여 넣어도 된다. 머리줄은 있어도 없어도 된다)
+printf 'hostname\tOS커널\tappl\tdns\tldap_URI\tbinddn\th/t\n' > /root/oklist.txt
+printf 'test-yum01\t4.18.0-553.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\tldap01 ldap02\tuid=pmuser,ou=user,dc=cae,dc=com\tON\n' >> /root/oklist.txt
+printf 'test-yum02\t4.18.0-553.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\tldap01 ldap02\tuid=pmuser,ou=user,dc=cae,dc=com\tON\n' >> /root/oklist.txt
+printf 'test-os01\t4.18.0-513.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\tldap01 ldap02\tuid=pmuser,ou=user,dc=cae,dc=com\tON\n' >> /root/oklist.txt
+#   * 값은 실제 서버에 맞게 고친다. dns·ldap_URI 처럼 값이 여럿인 칸은 공백으로 구분하고 순서까지 비교한다. ldap_URI 는 호스트 이름만 적는다.
+#   * 대소문자도 구분해서 비교한다. 칸이 모자란 줄·중복 hostname 은 무시하고 l 표 머리에 "경고 N줄" 로 센다.
+
+# --- 3. 설정(선택): yum 지연 기준을 짧게 (기본 60분), ldap_check.sh 가 있으면 경로도 ---
 cat > /root/pm_monitor.conf <<'EOF'
 yum_delay_min=10
+#ldap_check_sh=/root/ldap_check.sh
 EOF
 
-# --- 3. 실행 (OS 가 올라온 상태에서 먼저 켠다. 첫 접속에서 기준 커널이 기록되어 '접속가능' 이 된다) ---
+# --- 4. 실행 (OS 가 올라온 상태에서 먼저 켠다. 첫 접속에서 기준 커널이 기록되어 '접속가능' 이 된다) ---
 cd /root/pm_monitor_demo
-./install_mn_os8 /root/hosts_yum.txt
-#   (설정 파일을 현재 폴더가 아닌 곳에 두었다면: ./install_mn_os8 -c /root/pm_monitor.conf /root/hosts_yum.txt)
+./install_mn_os8 /root/hosts_yum.txt /root/oklist.txt
+#   (설정 파일을 현재 폴더가 아닌 곳에 두었다면: ./install_mn_os8 -c /root/pm_monitor.conf /root/hosts_yum.txt /root/oklist.txt)
+#   oklist 를 주지 않아도 된다(그러면 l 표에 빨간색과 m 이 없고 결과 파일의 설정동일여부 열이 비어 있다).
 
-# --- 4. 다른 터미널에서 테스트 서버에 yum update 후 재부팅 ---
+# --- 5. 다른 터미널에서 테스트 서버에 yum update 후 재부팅 ---
 ssh test-yum01 'yum -y update && reboot'
 #   * 커널 패키지가 갱신되면 재부팅 뒤 커널이 바뀐다 -> 화면 상태가 접속가능 -> 재부팅됨 -> yum_update/접속가능
 #   * 커널 갱신이 없는 update 라면 재부팅 뒤에도 '재부팅됨' 에 머물고 y·r 에 '커널 동일' 로 표시된다
 #   * 단순 재부팅만 시험하려면: ssh test-yum02 reboot   (커널이 같으니 '재부팅됨' 에 머문다)
 
-# --- 5. 화면에서 확인할 것 ---
+# --- 6. 화면에서 확인할 것 ---
 #   y 키   기준 커널 / 현재 커널 / 재부팅 시각
 #   c 키   yum 별도 줄 ("yum update N대 중 M대 커널 변경 완료(...)")
 #   r 키   yum_delay_min 이 지나도 안 바뀐 서버 -> 점검요청 문구
-#   q 로 나가도 수집은 계속된다. 다시 붙기: ./install_mn_os8 /root/hosts_yum.txt
+#   l 키   서버 설정 표. test-os01 은 첫 회차(1분 이내)에 자동으로 채워진다. test-yum* 는 yum_update/접속가능 이 된 뒤에 채워진다.
+#          (바로 보고 싶으면 l 을 열면 대상 전체를 다시 조사한다. 응답 없는 서버는 이전 값을 그대로 두고 비고에 실패 이유만 남는다)
+#          oklist 와 다른 칸은 빨간색, 조사값이 비었는데 oklist 에 값이 있으면 빨간 (없음). 머리줄에 "oklist N대 · 조사 M대 · 다름 K대"
+#   m 키   (l 표 안에서) oklist 와 다른 서버만 보기, 다시 누르면 전체
+#   결과 파일  다른 터미널에서 cat /root/pm_monitor_demo/hosts_yum.txt.res   (실행한 폴더에 <호스트파일 이름>.res)
+#          - 호스트파일의 모든 서버가 호스트파일 순서로 나오고, 조사 전 서버는 설정 칸이 비어 있다
+#          - 설치/yumupdate여부: yum 서버는 yum_update/접속가능 이 되면 O. test-os01 처럼 yum 칸이 없는 서버는 이번 작업에 OS 설치가 없으니 X 가 정상
+#          - 설정동일여부: oklist 와 여섯 값이 같으면 O, 다르면 X
+#   q 로 나가도 수집은 계속된다. 다시 붙기: ./install_mn_os8 /root/hosts_yum.txt /root/oklist.txt (oklist 를 바꿔 주면 수집을 다시 시작한다)
 #   끝내기: ./install_mn_os8 --stop /root/hosts_yum.txt     (안 끝내도 시작 12시간 뒤 자동 종료)
 
 # 주의
-#   * 이 도구는 서버에 아무것도 설치·변경하지 않는다. 읽기만 한다(ping, 22번 포트, uname -r, uptime -s).
+#   * 이 도구는 서버에 아무것도 설치·변경하지 않는다. 읽기만 한다(ping, 22번 포트, uname -r, uptime -s, 설정 파일 몇 개와 lscpu).
 #     yum update 와 재부팅은 사람이 직접 하는 것이다.
-#   * 관리서버를 여럿이 쓰므로 부하를 제한해 둔다(ICMP 500/초, gossh 한 번에 1개, nice 10).
-#   * 상태 파일은 호스트파일 옆에 <호스트파일>.pm_state.json 으로 생긴다. 처음부터 다시 하려면 지우고 시작한다.
+#   * 서버 설정 조사는 ldap.conf 에서 URI·binddn 줄만 읽고 bindpw 는 읽지 않는다.
+#   * 관리서버를 여럿이 쓰므로 부하를 제한해 둔다(ICMP 500/초, gossh 한 번에 1개, nice 10, 자동 설정 조사는 회차당 100대까지).
+#   * 상태 파일(<호스트파일>.pm_state.json)과 결과 파일(<호스트파일>.res)은 실행한 폴더에 생긴다. 처음부터 다시 하려면 둘 다 지우고 시작한다.
+#   * 서버 설정 조사는 스텁으로만 시험했다. 실제 서버의 ldap.conf·auto.appl 모양이 다르면 칸이 비어 보일 수 있으니 처음에는 서버 한두 대로 확인한다.

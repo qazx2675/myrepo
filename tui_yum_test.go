@@ -413,23 +413,23 @@ func TestFingerprintIncludesProgramVersion(t *testing.T) {
 	os.WriteFile(c, []byte("interval_sec=30\n"), 0o644)
 	old := programVersion
 	defer func() { programVersion = old }()
-	if programVersion != "0.4.0" {
+	if programVersion != "0.5.0" {
 		t.Errorf("programVersion=%q", programVersion)
 	}
-	programVersion = "0.4.0"
-	base := fingerprint(h, c)
-	programVersion = "0.4.1"
-	if fingerprint(h, c) == base {
+	programVersion = "0.5.0"
+	base := fingerprint(h, c, "")
+	programVersion = "0.5.1"
+	if fingerprint(h, c, "") == base {
 		t.Fatal("버전이 달라졌는데 지문이 같음")
 	}
-	programVersion = "0.4.0"
-	if fingerprint(h, c) != base {
+	programVersion = "0.5.0"
+	if fingerprint(h, c, "") != base {
 		t.Fatal("같은 버전·내용인데 지문이 다름")
 	}
 	// 버전 문자열과 호스트파일 내용이 경계에서 섞이지 않는다
-	programVersion = "0.4.0"
+	programVersion = "0.5.0"
 	os.WriteFile(h, []byte("0\na\nb yum\n"), 0o644)
-	if fingerprint(h, c) == base {
+	if fingerprint(h, c, "") == base {
 		t.Fatal("내용이 달라졌는데 지문이 같음")
 	}
 }
