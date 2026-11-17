@@ -11,6 +11,9 @@
 # 지연 기준(분): 설치중으로 처음 본 뒤 이 시간이 지나도 완료가 아니면 지연
 #delay_min=60
 
+# yum 지연 기준(분): 호스트파일 두 번째 칸이 yum 인 서버가 기준 커널을 기록한 뒤 이 시간이 지나도 커널이 안 바뀌면 yum 지연
+#yum_delay_min=60
+
 # 디스크미인식 판정 문구 (/tmp/anaconda.log 에서 찾음). 여러 줄 가능(첫 줄이 기본값을 대체, 이후 줄은 추가)
 #disk_pattern=Disk "" given in clearpart command does not exist
 

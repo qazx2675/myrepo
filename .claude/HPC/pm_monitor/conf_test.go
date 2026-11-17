@@ -122,3 +122,37 @@ func TestParseArgsAndHosts(t *testing.T) {
 		t.Errorf("readHosts: %v %v", got, err)
 	}
 }
+
+func TestYumDelayMin(t *testing.T) {
+	if got := defaultConfig().YumDelayMin; got != 60 {
+		t.Errorf("yum_delay_min 기본값=%d, want 60", got)
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "c.conf")
+	writeFile(t, p, "# yum\n yum_delay_min = 30 \ndelay_min=90\n")
+	cfg, err := LoadConfig(p)
+	if err != nil || cfg.YumDelayMin != 30 || cfg.DelayMin != 90 {
+		t.Fatalf("yum_delay_min 읽기: %v %+v", err, cfg)
+	}
+	// 설정 파일에 없으면 기본값, delay_min 과 따로 움직인다
+	writeFile(t, p, "delay_min=15\n")
+	cfg, err = LoadConfig(p)
+	if err != nil || cfg.YumDelayMin != 60 || cfg.DelayMin != 15 {
+		t.Fatalf("yum_delay_min 기본값 유지: %v %+v", err, cfg)
+	}
+	for _, line := range []string{"yum_delay_min=0", "yum_delay_min=-3", "yum_delay_min=abc", "yum_delay_min="} {
+		writeFile(t, p, line+"\n")
+		_, err := LoadConfig(p)
+		if err == nil || !strings.Contains(err.Error(), "yum_delay_min 는 1 이상의 정수여야 함") {
+			t.Errorf("%q 는 한글 오류여야 함: %v", line, err)
+		}
+	}
+	// 견본 설정 파일은 주석을 풀어도 읽혀야 한다
+	b, err := os.ReadFile("pm_monitor.conf.sample")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "#yum_delay_min=60") {
+		t.Error("pm_monitor.conf.sample 에 yum_delay_min 예시가 없음")
+	}
+}

@@ -163,7 +163,8 @@ def main():
         check("1 d: dhcp_server 미설정 표시", "dhcp_server 미설정" in s.frame())
         s.send(b"d")
         s.send(b"l")
-        check("1 l: LDAP 점검 표(OK/ON)", s.wait_for(r"127\.2\.2\.2\s+OK\s+OK\s+OK\s+ON", 20), "")
+        # v0.2.0 부터 l 표는 hostname · LDAP(infra) · DNS·NTP · autofs · H/T 열이다(계획서 4.6). 옛 OK/OK/OK 열 검사를 새 형식으로 고침
+        check("1 l: LDAP 점검 표(LDAP infra·DNS·NTP·autofs·ON)", s.wait_for(r"127\.2\.2\.2\s+zxcv\s+10\.10\.1\.10/10\.10\.1\.11\s+nas01:/export/appl\s+ON", 20), "")
         s.send(b"l")
         # 지연 (delay_min=1): 설치중으로 처음 본 뒤 60초
         t_wait = 80

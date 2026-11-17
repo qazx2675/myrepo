@@ -20,6 +20,7 @@ type Config struct {
 	Gossh         string       // gossh 경로 (기본 "gossh", PATH 에서 찾음)
 	IntervalSec   int          // 갱신 주기(초)
 	DelayMin      int          // 지연 기준(분)
+	YumDelayMin   int          // yum 지연 기준(분): yum 기준 커널을 기록한 뒤 이 시간이 지나도 커널이 안 바뀌면 yum 지연
 	DiskPatterns  []string     // 디스크미인식 문구(여러 줄)
 	Vendors       []VendorRule // 벤더 규칙(순서대로)
 	VendorOther   string       // 어느 규칙에도 안 맞을 때 이름
@@ -39,6 +40,7 @@ func defaultConfig() *Config {
 		Gossh:         "gossh",
 		IntervalSec:   60,
 		DelayMin:      60,
+		YumDelayMin:   60,
 		DiskPatterns:  []string{defaultDiskPattern},
 		Vendors:       defaultVendorRules(),
 		VendorOther:   "기타",
@@ -103,6 +105,8 @@ func (c *Config) set(key, val string, diskSet, vendorSet *bool) error {
 		return posInt(key, val, &c.IntervalSec)
 	case "delay_min":
 		return posInt(key, val, &c.DelayMin)
+	case "yum_delay_min":
+		return posInt(key, val, &c.YumDelayMin)
 	case "ping_timeout_ms":
 		return posInt(key, val, &c.PingTimeoutMs)
 	case "ping_pps":

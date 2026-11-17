@@ -76,11 +76,11 @@ func DHCPQuery(cfg *Config, hosts []string) (string, error) {
 	return out, nil
 }
 
-// pingXHosts 는 스냅샷에서 ping X 서버를 이름 순으로 돌려준다.
+// pingXHosts 는 스냅샷에서 ping X 서버를 이름 순으로 돌려준다. yum 서버는 뺀다(계획서 4.8).
 func pingXHosts(snap *Snapshot) []string {
 	var out []string
 	for _, r := range snap.Records {
-		if r.Status == StatusPingX {
+		if r.Status == StatusPingX && !r.IsYum() {
 			out = append(out, r.Name)
 		}
 	}

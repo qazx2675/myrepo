@@ -106,13 +106,13 @@ func paint(color bool, st, t string) string {
 
 func statusStyle(s Status) string {
 	switch s {
-	case StatusInstalling:
+	case StatusInstalling, StatusAlive:
 		return stCyan
 	case StatusDelayed, StatusOff:
 		return stYellow
 	case StatusDisk, StatusPingX:
 		return stRed
-	case StatusDone, StatusRebooted:
+	case StatusDone, StatusRebooted, StatusYumDone:
 		return stGreen
 	}
 	return stGray
@@ -126,13 +126,18 @@ const (
 	panelDelay   = 'r'
 	panelDHCP    = 'd'
 	panelLDAP    = 'l'
+	panelYum     = 'y' // yum update 모드의 커널 표(계획서 4.8). 스냅샷만 쓰므로 조회·ssh 가 없다
 )
+
+// yumStatusW 는 yum_update/접속가능(표시 폭 19)이 한 줄에 다 들어가는 상태 칸 폭이다.
+// 이 상태가 화면에 있을 때만 쓰고, 없으면 기존 폭(colWidths)을 그대로 써서 OS 서버만의 화면은 v0.3.0 과 같다.
+const yumStatusW = 19
 
 const busyText = "완료 서버 ping 확인중..."
 
 // ViewState 는 TUI 화면 상태다. 렌더 입력이자 키 처리기(handleKey)의 대상이다.
 type ViewState struct {
-	Filter      Status // 0 = 필터 없음, 1~7 = 그 상태만
+	Filter      Status // 0 = 필터 없음, 1~9 = 그 상태만(8·9 는 yum 서버)
 	Search      string // 적용된 hostname 검색어(부분 문자열, 대소문자 무시)
 	Searching   bool   // 검색어 입력 중
 	SearchBuf   string // 입력 중인 검색어
@@ -162,6 +167,7 @@ type ViewState struct {
 	pLines []string // 패널 본문을 폭에 맞춰 나눈 줄
 	pW     int
 	pOK    bool
+	hasYum bool // 스냅샷에 yum 서버가 있다(prepare 가 정한다). 푸터에 y 키·1~9 필터를 보인다
 }
 
 // invalidate 는 새 스냅샷이 왔거나 필터·검색이 바뀌었을 때 캐시를 버린다.
@@ -188,11 +194,16 @@ func panelTitle(kind rune) string {
 		return "DHCP"
 	case panelLDAP:
 		return "LDAP·H/T"
+	case panelYum:
+		return "yum 커널"
 	}
 	return ""
 }
 
 func (v *ViewState) panelBody(snap Snapshot) string {
+	if v.Panel == panelYum { // 스냅샷만으로 만든다: 포그라운드 수집기·데몬 화면에서 똑같다
+		return YumTable(snap, v.Now)
+	}
 	if v.Panel == panelInstall && v.Busy {
 		return busyText
 	}
@@ -207,6 +218,7 @@ func (v *ViewState) panelBody(snap Snapshot) string {
 
 // prepare 는 비어 있는 캐시(필터 결과, 패널 줄)를 채운다. 값 복사본에서 불러도 안전하다.
 func (v *ViewState) prepare(snap Snapshot, w int) {
+	v.hasYum = snap.Yum.Total > 0
 	if !v.rowsOK {
 		rows := make([]int, 0, len(snap.Records))
 		needle := strings.ToLower(v.Search)
@@ -340,9 +352,16 @@ func wrapItems(items []string, width int) []string {
 // headerLines 는 맨 위 줄들이다(제목, 상태별 개수, 갱신 시각·회차, 경고, 구분선).
 func (v *ViewState) headerLines(snap Snapshot, w int) []string {
 	var out []string
-	out = append(out, paint(v.Color, stBold, truncW(fmt.Sprintf(" install_mn  OS 설치 현황  전체 %d대", snap.Total), w)))
+	title := fmt.Sprintf(" install_mn  OS 설치 현황  전체 %d대", snap.Total)
+	if snap.Yum.Total > 0 { // 전체 수에는 yum 서버도 들어 있으니 몇 대인지 밝힌다(OS 설치완료 수와 섞어 읽지 않게)
+		title += fmt.Sprintf(" (yum %d대)", snap.Yum.Total)
+	}
+	out = append(out, paint(v.Color, stBold, truncW(title, w)))
 	var items []string
 	for st := StatusInstalling; st < statusCount; st++ {
+		if st > StatusOff && snap.Counts[st] == 0 { // yum 전용 8·9 는 있을 때만 보인다(OS 서버만 있으면 v0.3.0 화면 그대로)
+			continue
+		}
 		it := fmt.Sprintf("%d %s %d", int(st), st, snap.Counts[st])
 		if v.Filter == st {
 			it = "[" + it + "]"
@@ -391,10 +410,19 @@ func (v *ViewState) footerLines(w int) []string {
 	case v.Searching:
 		items = []string{"Enter 적용", "Esc 취소", "Backspace 지움"}
 	case v.Panel != 0:
-		items = []string{"↑↓ PgUp PgDn Home End 스크롤", fmt.Sprintf("%c 닫기", v.Panel), "c r d l 전환", "q 뒤로"}
+		sw := "c r d l 전환"
+		if v.hasYum {
+			sw = "c r d l y 전환"
+		}
+		items = []string{"↑↓ PgUp PgDn Home End 스크롤", fmt.Sprintf("%c 닫기", v.Panel), sw, "q 뒤로"}
 	default:
-		items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~7 필터", "0 해제",
-			"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "q 종료"}
+		if v.hasYum { // yum 서버가 있을 때만 8·9 필터와 y 키를 안내한다(OS 서버만이면 v0.3.0 푸터 그대로)
+			items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~9 필터", "0 해제",
+				"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "y yum", "q 종료"}
+		} else {
+			items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~7 필터", "0 해제",
+				"c 설치현황", "r 점검요청", "d DHCP", "l LDAP", "q 종료"}
+		}
 		if v.Detach {
 			items[len(items)-1] = "q 나가기(수집 계속)"
 			items = append(items, "Q 수집 종료")
@@ -527,6 +555,9 @@ func (v *ViewState) tableLines(snap Snapshot, w, body int) []string {
 	}
 	out := []string{paint(v.Color, stBold, truncW(st, w))}
 	c := colWidths(w)
+	if snap.Counts[StatusYumDone] > 0 && c.status < yumStatusW { // 긴 라벨 yum_update/접속가능 은 잘리지 않게 상태 칸을 넓힌다
+		c.status = yumStatusW
+	}
 	note := w - 1 - c.host - c.vendor - c.status - c.elapsed - 4
 	if note < 4 {
 		note = 4

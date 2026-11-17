@@ -56,10 +56,13 @@ type daemonInfo struct {
 	Hostfile string    `json:"hostfile"`
 	Started  time.Time `json:"started"`
 	Expires  time.Time `json:"expires"`
-	FP       string    `json:"fp"` // 호스트파일·설정 파일 지문. 바뀌면 다시 시작한다
-	Total    int       `json:"total"`
-	Done     int       `json:"done"`
+	FP       string    `json:"fp"`    // 호스트파일·설정 파일 지문. 바뀌면 다시 시작한다
+	Total    int       `json:"total"` // OS 서버 수(yum 서버는 YumTotal 에 따로)
+	Done     int       `json:"done"`  // OS 설치완료 수
 	Round    int       `json:"round"`
+	// yum update 모드 서버(계획서 4.8). yum 서버가 없으면 json 에 나오지 않아 v0.3.0 과 같다.
+	YumTotal int `json:"yum_total,omitempty"`
+	YumDone  int `json:"yum_done,omitempty"` // yum_update/접속가능(커널 변경 완료) 수
 }
 
 type response struct {
@@ -86,9 +89,15 @@ func stateAbs(hostfile string) (string, error) {
 	return filepath.Abs(stateFileName(hostfile))
 }
 
-// fingerprint 는 호스트파일과 설정 파일 내용의 지문이다. 둘 중 하나가 바뀌면 달라진다.
+// programVersion 은 프로그램 버전이다. 지문에 들어가므로 바이너리를 교체한 뒤 다시 실행하면
+// 옛 데몬을 멈추고 새로 시작한다(스냅샷 필드가 늘어도 화면과 데몬이 어긋나지 않게). 테스트가 바꿀 수 있게 변수로 둔다.
+var programVersion = "0.4.0"
+
+// fingerprint 는 프로그램 버전과 호스트파일·설정 파일 내용의 지문이다. 셋 중 하나가 바뀌면 달라진다.
 func fingerprint(hostfile, conf string) string {
 	h := sha256.New()
+	h.Write([]byte(programVersion))
+	h.Write([]byte{0})
 	for _, p := range []string{hostfile, conf} {
 		if p != "" {
 			if b, err := os.ReadFile(p); err == nil {
@@ -171,7 +180,8 @@ func (s *daemonServer) closeConns() {
 func (s *daemonServer) liveInfo() *daemonInfo {
 	in := s.info
 	if sn := s.col.Snapshot(); sn != nil {
-		in.Total, in.Done, in.Round = sn.Total, sn.Done(), sn.Round
+		in.Total, in.Done, in.Round = sn.Total-sn.Yum.Total, sn.Done(), sn.Round
+		in.YumTotal, in.YumDone = sn.Yum.Total, sn.Yum.Done
 	}
 	return &in
 }
@@ -259,7 +269,7 @@ func (s *daemonServer) watch(c net.Conn, reply func(response)) {
 }
 
 // runDaemon 은 `--daemon` 으로 시작된 프로세스의 본체다. 시작 12시간 뒤, 중지 요청, 종료 신호 중 먼저 오는 때 끝난다.
-func runDaemon(cfg *Config, hostfile string, hosts []string) int {
+func runDaemon(cfg *Config, hostfile string, hosts []string, opts ...CollectorOpt) int {
 	st, err := stateAbs(hostfile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -275,7 +285,7 @@ func runDaemon(cfg *Config, hostfile string, hosts []string) int {
 		return 0 // 같은 호스트파일의 데몬이 이미 있다
 	}
 	defer release()
-	col, err := NewCollector(cfg, hosts, stateFileName(hostfile), defaultDeps())
+	col, err := NewCollector(cfg, hosts, stateFileName(hostfile), defaultDeps(), opts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -603,8 +613,12 @@ func describeDaemon(in daemonInfo, now time.Time) string {
 	if left < 0 {
 		left = 0
 	}
-	return fmt.Sprintf("%s\n  pid %d · 서버 %d대 중 설치완료 %d · 회차 %d\n  시작 %s · 자동 종료 %s (남은 %s)",
-		in.Hostfile, in.PID, in.Total, in.Done, in.Round,
+	yum := ""
+	if in.YumTotal > 0 { // OS 설치완료 수와 섞이지 않게 yum 서버는 따로 센다(없으면 v0.3.0 출력 그대로)
+		yum = fmt.Sprintf(" · yum %d/%d", in.YumDone, in.YumTotal)
+	}
+	return fmt.Sprintf("%s\n  pid %d · 서버 %d대 중 설치완료 %d%s · 회차 %d\n  시작 %s · 자동 종료 %s (남은 %s)",
+		in.Hostfile, in.PID, in.Total, in.Done, yum, in.Round,
 		in.Started.Format("01-02 15:04"), in.Expires.Format("01-02 15:04"), fmtDur(left))
 }
 
