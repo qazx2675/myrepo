@@ -160,8 +160,10 @@ func TestNonTextFailsSafely(t *testing.T) {
 			if fetchErr == nil || !strings.Contains(fetchErr.Error(), "SHA-256") {
 				t.Fatalf("해시 불일치로 실패해야 합니다: fetch=%v", fetchErr)
 			}
-			// 마지막 조각에서 실패하면 업로더는 원복만 보고 성공으로 끝난다(알려진 한계, Step 3 에서 다룬다).
-			_ = sendErr
+			// 다운로더가 result=fail 을 남기므로 조각이 1개여도 업로더가 실패를 안다.
+			if sendErr == nil || !strings.Contains(sendErr.Error(), "수신 실패") {
+				t.Fatalf("업로더가 수신 실패를 알아야 합니다: %v", sendErr)
+			}
 			if !strings.Contains(slog.String(), "경고") {
 				t.Fatalf("업로더 경고가 없습니다:\n%s", slog.String())
 			}

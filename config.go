@@ -46,15 +46,26 @@ func exeDir() string {
 	return filepath.Dir(exe)
 }
 
+// etcDir 은 리눅스 설정 폴더다. histDir 은 업로드 기록 폴더다. 테스트에서 바꾼다.
+var (
+	etcDir  = "/etc/awx_copy"
+	histDir = defaultHistDir()
+)
+
+func defaultHistDir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.TempDir(), ".awx_copy")
+	}
+	return "/tmp/.awx_copy" // 모든 사용자가 같은 곳을 본다 (TMPDIR 무시)
+}
+
+// defaultConfigPath 는 호환용 단일 설정파일이다. 윈도우만 쓴다(실행파일 옆 awx_copy.conf).
+// 리눅스는 /etc/awx_copy/{user}.conf 만 쓴다.
 func defaultConfigPath() string {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(exeDir(), "awx_copy.conf")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".awx_copy.conf"
-	}
-	return filepath.Join(home, ".awx_copy.conf")
+	return ""
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -65,8 +76,10 @@ func loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("설정파일을 열 수 없습니다: %s (%v). awx_copy.conf.example 을 참고해 만드세요", path, err)
 	}
-	if runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf("설정파일 권한이 너무 넓습니다: %s (%o). 'chmod 600 %s' 를 실행하세요", path, st.Mode().Perm(), path)
+	if runtime.GOOS != "windows" {
+		if err := checkOwnerPerm(path, st, false); err != nil {
+			return nil, fmt.Errorf("설정파일 %s 을(를) 쓸 수 없습니다: %v", path, err)
+		}
 	}
 	f, err := os.Open(path)
 	if err != nil {

@@ -1,7 +1,6 @@
 * text=auto
 *.go text eol=lf
 *.sh text eol=lf
-awx_copy text eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
 bin/awx_copy binary

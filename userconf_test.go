@@ -27,7 +27,9 @@ func newSel(t *testing.T, osUser string, tty bool, input string) (*selector, *by
 	var out, errb bytes.Buffer
 	d := t.TempDir()
 	return &selector{
+		// 윈도우 규칙(OS 사용자 자동 선택, 새 설정 만들기). 리눅스 규칙은 cli_test.go.
 		Dir: filepath.Join(d, "conf"), Legacy: filepath.Join(d, "legacy.conf"), OSUser: osUser, IsTTY: tty,
+		AutoOSUser: true, AllowCreate: true,
 		In: bufio.NewReader(strings.NewReader(input)), Out: &out, Err: &errb,
 		ReadPassword: func(in *bufio.Reader, _ io.Writer) (string, error) {
 			l, err := in.ReadString('\n')

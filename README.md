@@ -1,210 +1,183 @@
 # AWX_copy
 
-AWX 인벤토리 `variables` 를 중계로 써서 레드햇(ETX) 터미널의 파일을 윈도우로 가져온다.
+AWX 인벤토리 `variables` 를 중계로 써서 레드햇(ETX) 터미널의 **텍스트 파일**을 윈도우로 가져온다.
 
-- 업로더(리눅스): `awx_copy` (bash 래퍼) → `bin/awx_copy` (Go)
-- 다운로더(윈도우): `dist/awx_fetch.exe` (같은 Go 코드)
+- 업로더(리눅스): `/usr/local/bin/awx_copy` (Go 단일 바이너리. bash 래퍼 없음)
+- 다운로더(윈도우): `dist/awx_fetch.exe` (같은 Go 코드. 창 앱은 Step 4)
 - 인벤토리 `variables` 만 PATCH 한다. 작업 템플릿, 인벤토리 소스는 호출·변경하지 않는다.
 - 표준 라이브러리만 쓴다. go 1.20 이상에서 빌드된다.
 
-## 동작 방식
-
-1. 업로더가 파일을 읽는다. gzip 이 이득이면 압축한다. base64 로 바꾸고 `chunk_size` 문자씩 나눈다.
-2. 시작 전 `variables` 원문을 로컬 `~/.awx_copy/backup/` 와 블록의 `backup_b64` 에 둔다.
-3. 조각 k 를 `variables` 에 PATCH 한다. 다운로더가 받아 `ack: "k"` 를 PATCH 하면 다음 조각을 보낸다.
-4. 다운로더는 조각을 합치고 SHA-256 을 검증해 `downloads\<원래 파일명>` 에 저장한다. 같은 이름이 있으면 `_1`, `_2` 를 붙인다.
-5. 다운로더가 `variables` 를 시작 전 원문으로 복원한다.
-6. SIGINT(Ctrl+C), 오류, 시간 초과 때도 원복한다. 강제 종료(kill -9) 뒤에는 `--restore` 로 원복한다.
-
-양식 (YAML 로 읽힌다. 값은 모두 큰따옴표 문자열):
-
-```yaml
-awx_copy:
-  version: "1"
-  session: "20261117T025748-4ceb84cc9f1fadad"
-  state: "sending"          # sending | ack
-  file_name: "data.csv"
-  type: "csv"               # csv | txt (메타데이터. 바이트는 그대로 보존)
-  encoding: "gzip+base64"   # gzip+base64 | base64
-  total_bytes: "93"
-  sha256: "..."
-  chunk_total: "1"
-  chunk_index: "1"
-  chunk_sha256: "..."       # chunk_data 문자열의 SHA-256
-  chunk_data: "H4sI..."     # 한 줄 base64
-  ack: "0"
-  backup_b64: ""            # 시작 전 variables 원문의 base64
-  updated_at: "2026-11-17T02:57:48Z"
-```
-
-`variables` 에 이미 `awx_copy:` 블록이 있으면 다른 세션으로 보고 거부한다.
-폴링은 200ms 에서 시작해 2배씩 늘려 최대 2초다. HTTP keep-alive 를 쓴다. 병렬 PATCH 는 쓰지 않는다.
-
-## 설치
-
-### 리눅스 (업로더)
+## 사용법 (리눅스)
 
 ```bash
-# 소스 폴더에서
-./build.sh            # bin/awx_copy 생성 (RHEL6 은 go 1.20 으로 빌드)
-cp awx_copy.conf.example ~/.awx_copy.conf
-vi ~/.awx_copy.conf   # password 입력
-chmod 600 ~/.awx_copy.conf   # 600 이 아니면 실행을 거부한다
+awx_copy -u {user} {filename}        # 업로드 (type txt). 끝나면 기록 화면
+awx_copy -u {user} {filename} -csv   # 업로드 (type csv)
+awx_copy -u {user}                   # 내 업로드 기록 화면
+awx_copy                             # 설정 선택 화면(읽을 수 있는 /etc/awx_copy/*.conf) → 기록 화면
+awx_copy -u root                     # root 비밀번호 확인 뒤 전체 사용자 기록 (AWX 계정 아님, 조회 전용)
+awx_copy --root-passwd               # root 기록 조회 비밀번호 변경 (root 만)
+awx_copy --help
 ```
 
-빌드 없이 쓰려면 `awx_copy` 와 `bin/awx_copy` 를 같은 구조로 복사한다.
-`bin/awx_copy` 는 go 1.20.14 정적 빌드라 RHEL6(커널 2.6.32)에서도 돈다.
+- 어느 경로에서든 실행한다. 파일 경로는 상대/절대 모두 된다.
+- 두 번째 위치 인자 `-csv` 가 없으면 type 은 txt 다. (호환: `csv`, `txt` 도 받는다)
+- 업로드 중에는 한 줄 진행 화면을 갱신한다: `[k/N] 전송 중 [####----] 45.0%  12.3초  120.4 KiB/s  파일명`.
+  표준 출력이 터미널이 아니면 `[k/N] 전송 중 (n bytes)` 한 줄 로그로 대신한다.
+- Ctrl+C 는 variables 를 원복하고 종료한다(종료 코드 130). 기록에 "중단"이 남는다.
+- 기록 화면: 최근 순 표. 위/아래, PgUp/PgDn, Home/End 로 이동, q 로 닫는다. 터미널이 아니면 표를 그대로 출력한다.
 
-### 윈도우 (다운로더)
+유지한 옵션: `--user`(= `-u`), `--config <경로>`, `--list-users`, `--status`, `--snapshot`, `--measure-limits`, `--restore`, `--fetch`, `--out`, `--no-pause`.
 
-```bat
-build.bat             :: dist\awx_fetch.exe 생성
-copy awx_copy.conf.example dist\awx_copy.conf
-notepad dist\awx_copy.conf
+## 설치 (리눅스, root)
+
+```bash
+./build.sh            # bin/awx_copy (CGO_ENABLED=0 정적 빌드. RHEL6 은 go 1.20 으로 빌드)
+sudo ./install.sh     # 또는: ./install.sh <바이너리 경로>
 ```
 
-설정파일 위치는 위 "사용자별 설정파일" 을 본다. (호환: exe 옆 `awx_copy.conf`)
+`install.sh` 가 하는 일:
 
-## 설정파일
+| 대상 | 권한 | 내용 |
+|---|---|---|
+| `/usr/local/bin/awx_copy` | root:root 755 | 바이너리 |
+| `/etc/awx_copy/` | root:root 700 | 설정 폴더 |
+| `/etc/awx_copy/root.conf` | root:root 600 | 없을 때만 생성. 기본 root 기록 조회 비밀번호의 **SHA-256 해시만** 저장 (`password_sha256 = ...`). 평문은 스크립트·바이너리·파일 어디에도 없다. 설치 뒤 `awx_copy --root-passwd` 로 바꾼다. |
+| `/tmp/.awx_copy/` | 1777 | 업로드 기록 폴더 |
+
+사용자 설정은 관리자가 배포한다:
+
+```bash
+cp conf.example/user.conf.example /etc/awx_copy/test.kim.conf
+vi /etc/awx_copy/test.kim.conf               # url, username, password, inventory_id
+chown test.kim /etc/awx_copy/test.kim.conf   # 소유자 = 해당 OS 사용자
+chmod 600 /etc/awx_copy/test.kim.conf
+```
+
+주의: 요구사항대로 `/etc/awx_copy` 는 700(root) 이다. 이 상태에서는 root 만 안의 설정을 읽는다.
+일반 사용자가 직접 실행하려면 관리자가 폴더를 711(목록 숨김, 자기 파일만 접근) 또는 755 로 바꿔야 한다.
+
+## /etc 구조와 설정파일
+
+```
+/etc/awx_copy/
+  ├─ root.conf        root 600   password_sha256 = <hex>   (기록 조회용, AWX 계정 아님)
+  ├─ test.kim.conf    test.kim 600
+  └─ kim.conf         kim 600
+```
 
 | 키 | 뜻 | 기본값 |
 |---|---|---|
 | url | AWX 주소 | (필수) |
 | username | AWX 사용자 | (필수) |
-| password | 비밀번호 (직접 적음, 토큰 아님) | (필수) |
-| inventory_id | 중계 인벤토리 ID | (필수) |
-| chunk_size | 조각 하나의 base64 문자 수 (4의 배수로 내림) | 1048576 |
+| password | 비밀번호 | (필수) |
+| inventory_id | 중계 인벤토리 ID (사용자마다 다름) | (필수) |
+| chunk_size | 조각 하나의 최대 문자 수 (본문 추정 3 MiB 상한도 적용) | 1048576 |
 | timeout | 상대측 응답 대기와 HTTP 요청의 최대 시간(초) | 300 |
 
-비밀번호는 로그와 오류 메시지에 나오지 않는다. 실제 설정파일은 `.gitignore` 에 있다.
+- 권한이 600 이 아니거나 소유자가 실행 사용자와 다르면 거부한다. root 는 소유자 검사를 건너뛴다(600 은 필요).
+- `-u {user}` 는 `/etc/awx_copy/{user}.conf` 를 쓴다. `~/.awx_copy/` 탐색과 "OS 사용자 이름이면 바로 실행" 동작은 없앴다.
+- `-u` 없이 실행하면 읽을 수 있는 `*.conf`(root.conf 제외) 목록을 user, url, inventory_id 로 보여 주고 화살표/숫자로 고른다. 비밀번호는 읽거나 표시하지 않는다.
+- 같은 사용자 conf(같은 inventory_id)를 쓰는 업로더와 다운로더가 서로 만난다.
+- 윈도우 다운로더의 conf 규칙(exe 옆 `conf\`)은 Step 4 전까지 v1 그대로다.
 
-## 사용자별 설정파일
+## 업로드 기록
 
-사용자마다 `<이름>.conf` 를 따로 둔다. 키는 위 표와 같다. `username` 값이 그 파일의 user 레코드다.
-예시: `conf.example/user.conf.example`.
+- 위치: `/tmp/.awx_copy/{user}.history.jsonl` (폴더 1777, 파일 600). `/tmp` 는 재부팅 때 지워질 수 있다.
+- 한 줄(JSON): `ts, user, file, type, size, chunks, seconds, result(성공|실패|중단), message`.
+- 심볼릭 링크나 다른 사용자 소유 파일에는 쓰지 않는다(root 제외).
+- `-u root`: 비밀번호를 숨김 입력으로 받아 SHA-256 을 `root.conf` 해시와 상수 시간 비교한다.
+  3회 틀리면 종료 코드 1. 맞으면 `/tmp/.awx_copy/*.history.jsonl` 전체를 사용자 열과 함께 보여 준다.
+  `root.conf` 와 다른 사용자 기록 파일을 읽어야 하므로 root 권한이 필요하다. 비밀번호는 로그·오류·기록에 남지 않는다.
 
-```
-리눅스: ~/.awx_copy/
-          ├─ kim.conf        (chmod 600)
-          └─ test.kim.conf
-윈도우: awx_fetch.exe 옆 conf\
-          ├─ kim.conf
-          └─ test.kim.conf
-```
+## 전송 프로토콜 (v2, 평문 텍스트)
 
-설정을 고르는 순서 (업로더와 다운로더 공통):
+1. 업로더가 파일을 읽어 문자 수 기준으로 나눈다(멀티바이트·CRLF 중간에서 자르지 않음).
+2. 시작 전 `variables` 원문을 `~/.awx_copy/backup/`(실행 사용자 홈)과 블록의 `backup_b64` 에 둔다.
+3. 조각 k 를 `chunk_text: |2-`(또는 `|2+`) YAML 리터럴 블록으로 PATCH 한다. 다운로더가 받아 `state: ack`, `ack: k` 를 PATCH 하면 다음 조각을 보낸다.
+4. 다운로더는 조각마다 SHA-256 을, 끝에 전체 SHA-256 을 검증하고 저장한다.
+5. **결과 전달**: 다운로더가 마지막 조각(또는 실패한 조각)에서 `state: done`, `result: ok|fail`, `message`, `ack` 를 남긴다.
+   업로더는 그것을 읽어 성공/실패를 정하고 기록에 남긴 뒤 `variables` 를 원복한다. 조각이 1개여도 같다.
 
-1. `--config <경로>` 가 있으면 그 파일만 쓴다.
-2. `--user <이름>` 이 있으면 `<설정폴더>/<이름>.conf` 를 쓴다. 파일이 없으면 username 이 같은 파일을 찾는다.
-3. 아무 옵션이 없으면 OS 로그인 사용자명으로 `<사용자명>.conf` 를 찾는다.
-   파일이 있고 username 이 비어 있지 않으면 **묻지 않고 바로 실행**한다.
-   파일명이 달라도 username 이 OS 사용자명과 같은 파일이 있으면 그 파일을 쓴다.
-4. 해당 파일이 없으면 선택 메뉴를 보여준다. 호환용으로 `~/.awx_copy.conf`(리눅스), exe 옆 `awx_copy.conf`(윈도우)도 목록에 들어간다.
-5. 터미널이 아니면(표준 입력이 TTY 가 아님) 메뉴를 띄우지 않는다. 후보 목록과 사용법을 알리고 종료 코드 2 로 끝난다.
-
-```
-사용할 설정을 고르세요.
-  1) kim.conf                 kim              http://192.168.0.58:30080
-  2) test.kim.conf            test.kim         http://192.168.0.58:30080
-  3) 새 설정 만들기
-번호:
-```
-
-비밀번호는 메뉴에 나오지 않는다. "새 설정 만들기" 는 url, username, password(화면에 보이지 않음), inventory_id 를 묻고
-`<username>.conf` 로 저장한다(리눅스 권한 600). 같은 이름이 있으면 덮어쓰기 전에 묻는다. 저장한 뒤 바로 실행한다.
-
-```bash
-./awx_copy /data/a.csv csv                  # OS 사용자 파일이 있으면 즉시 실행
-./awx_copy --user test.kim /data/a.csv csv  # ~/.awx_copy/test.kim.conf
-./awx_copy --list-users                     # 목록만 출력하고 종료
-```
-
-업로더와 다운로더는 **같은 inventory_id** 를 써야 서로 만난다. (같은 사용자 conf 를 양쪽에서 써도 된다.)
-리눅스 conf 의 권한이 600 이 아니면 거부한다.
-
-## 사용
-
-```bash
-# 리눅스: 보내기 (type 기본 txt)
-./awx_copy /data/report.csv csv
-./awx_copy /var/log/app.log
-./awx_copy /data/x.txt txt --config /root/other.conf
+```yaml
+awx_copy:
+  version: "2"
+  session: "20261117T025748-4ceb84cc9f1fadad"
+  state: "sending"          # sending | ack | done
+  file_name: "data.csv"
+  type: "csv"
+  encoding: "text"
+  eol: "crlf"               # lf | crlf | cr | mixed
+  final_newline: "true"
+  total_bytes: "93"
+  sha256: "..."
+  chunk_total: "1"
+  chunk_index: "1"
+  chunk_sha256: "..."       # 조각 원본 바이트의 SHA-256
+  chunk_text: |2+
+    id,이름
+    1,홍길동
+  ack: "0"
+  result: ""                # done 일 때 ok | fail
+  message: ""               # 실패 이유
+  backup_b64: ""
+  updated_at: "..."
 ```
 
-```
-[1/3] 전송 중 (1048576자)
-[2/3] 전송 중 (1048576자)
-[3/3] 전송 중 (1048576자)
-완료: 2359296 bytes, 조각 3개, 1.90초 ...
-```
+- 텍스트만 보낸다. 제어문자·잘못된 UTF-8·NEL·U+2028/2029·BOM 은 U+FFFD 로 바뀌고, LF 와 CR 이 섞인 파일(mixed)은 CR 이 LF 로 바뀐다. 둘 다 해시 불일치로 실패하고 저장하지 않는다. 확장자·바이너리 검사로 거부하지는 않는다.
+- v2 수신기는 정의되지 않은 키(`chunk_raw` 등)가 있으면 거부한다.
+- `variables` 에 이미 `awx_copy:` 블록이 있으면 다른 세션으로 보고 거부한다.
 
-윈도우: `awx_fetch.exe` 를 더블클릭하거나 명령창에서 실행한다. 순서는 상관없다.
-먼저 실행한 쪽이 상대를 `timeout` 초까지 기다린다.
+### 원복 책임
+
+| 상황 | 원복하는 쪽 | 업로더 결과 |
+|---|---|---|
+| 정상 수신 (`done/ok`) | 업로더 (결과를 읽은 뒤) | 성공 |
+| 수신 실패 (`done/fail`, 해시 불일치 등) | 업로더 (결과를 읽은 뒤) | 실패 (message 표시) |
+| `done` 을 남겼는데 업로더가 timeout 안에 원복하지 않음 | 다운로더 | (업로더 없음) |
+| 업로더 Ctrl+C, 오류, ack 시간 초과 | 업로더 (자기 세션 블록일 때만) | 중단/실패 |
+| 다운로더 Ctrl+C 등 결과 없이 종료 | 다운로더 | 실패 ("수신 결과 없이 원복") |
+| kill -9, 전원 차단 | 없음 → `awx_copy -u {user} --restore` | - |
+
+원복은 현재 블록이 자기 세션일 때만 한다. 결과(`done`) 없이 원본으로 돌아온 경우 업로더는 성공으로 보지 않는다.
+
+## 윈도우 (다운로더, Step 4 전)
 
 ```bat
-awx_fetch.exe
-awx_fetch.exe --config D:\conf\awx_copy.conf --out D:\받은파일
+build.bat             :: dist\awx_fetch.exe
+awx_fetch.exe --config D:\conf\test.kim.conf --out D:\받은파일
 ```
-
-기타 명령 (리눅스, 윈도우 공통):
-
-| 명령 | 하는 일 |
-|---|---|
-| `--restore` | 남은 블록을 지우고 시작 전 원문으로 복원. 블록의 backup_b64 우선, 깨졌으면 최신 로컬 백업 |
-| `--status` | variables 길이, SHA-256, 블록 여부 (GET 만) |
-| `--snapshot` | 작업 템플릿/인벤토리 소스의 id, modified (GET 만) |
-| `--measure-limits` | variables 최대 크기 측정 후 원복 |
-| `--user <이름>` / `--list-users` | 사용자 설정 지정 / 목록 출력 |
-| `--no-pause` | 윈도우에서 끝난 뒤 Enter 대기를 하지 않음 |
-
-## 복구
-
-| 상황 | 결과 / 할 일 |
-|---|---|
-| 업로더 Ctrl+C | 업로더가 원복. 다운로더는 "업로더가 세션을 중단" 오류로 끝남 |
-| 다운로더 Ctrl+C, SHA 불일치 | 다운로더가 원복. 업로더는 "다운로더가 세션을 중단" 오류로 끝남 |
-| ack 시간 초과 | 업로더가 원복 |
-| kill -9, 전원 차단 | 블록이 남음 → `./awx_copy --restore` |
-| "다른 세션이 사용 중" | 진짜 다른 사용자면 기다린다. 남은 블록이면 `--restore` |
-
-원복은 현재 블록이 자기 세션일 때만 한다. 다른 세션 블록은 건드리지 않는다.
 
 ## 한도
 
-자세한 표는 `docs/limits.md`. 실제 AWX(v24.6.1)에서 인증 후 PATCH 로 측정했다.
+자세한 표는 `docs/limits.md`. 실제 AWX(v24.6.1) 측정.
 
-- 최대 성공: **4.94 MiB (5,177,344자)**. 5 MiB 부터 nginx 413 (`client_max_body_size 5m`). timeout 없음.
-- 1 MiB 조각 PATCH 는 0.42초, 4.94 MiB 는 1.64초.
-- AWX 는 저장할 때 variables 끝의 공백/줄바꿈을 제거한다 (내용과 탭은 그대로).
-- `chunk_size` 기본값 1 MiB 는 최대 성공 크기의 약 0.2배다.
-- 실측 전송 속도: 1 MiB 파일 약 4초, 10 MiB 파일 약 19초 (업로더 기준, 조각 14개). 약 0.5 MiB/s.
-- 실제 AWX E2E 11개 파일(0B ~ 10MiB, 조각 경계, 탭/CRLF/한글/CSV) 모두 SHA-256 과 바이트 일치.
+- 최대 성공 본문 4.94 MiB. 5 MiB 부터 nginx 413.
+- AWX 는 저장할 때 variables 끝의 공백/줄바꿈을 제거한다. `chunk_text` 뒤에 항상 다른 키를 두어 영향이 없다.
 
 ## 테스트
 
 ```bash
-go test ./...                                   # 단위·통합 테스트 (가짜 AWX)
-test/make_files.sh /root/awx_e2e/files 1048576  # E2E 파일 생성
-test/e2e_send.sh <conf> /root/awx_e2e/files     # VM 업로더
+go vet ./... && go test ./...                 # 단위·통합 테스트 (가짜 AWX)
+GOOS=windows go vet ./...                     # 윈도우 빌드 확인
+test/make_files.sh /root/awx_e2e/files 1048576
+test/e2e_send.sh <conf> /root/awx_e2e/files   # 설치본 awx_copy 사용
 ```
-
-```powershell
-test\e2e_fetch.ps1 -Exe dist\awx_fetch.exe -Config <conf> -Out <폴더> -Count 11   # 윈도우 다운로더
-test\compare.ps1 -Orig <원본폴더> -Got <받은폴더>                                 # SHA-256 + 바이트 비교
-```
-
-`cmd/fakeawx` 는 테스트용 가짜 AWX 서버다 (인벤토리 GET/PATCH 만 흉내).
 
 ## 파일
 
 | 파일 | 내용 |
 |---|---|
-| `awx_copy` | bash 래퍼 (업로더 실행용) |
-| `main.go` 외 `*.go` | Go 본체 (업로더/다운로더/복원/측정) |
+| `main.go` 외 `*.go` | Go 본체 (업로더/다운로더/기록/TUI/복원/측정) |
 | `build.sh`, `build.bat` | 리눅스/윈도우 빌드 |
-| `awx_copy.conf.example`, `conf.example/user.conf.example` | 설정 예시 (비밀번호 비움) |
-| `bin/awx_copy` | 리눅스 amd64 실행파일 (go 1.20.14) |
+| `install.sh` | 리눅스 설치 (root) |
+| `conf.example/user.conf.example`, `awx_copy.conf.example` | 설정 예시 (비밀번호 비움) |
+| `bin/awx_copy` | 리눅스 amd64 정적 실행파일 (go 1.20.14) |
 | `dist/awx_fetch.exe` | 윈도우 amd64 실행파일 |
-| `docs/limits.md` | 한도 측정 결과 |
-| `test/` | E2E 스크립트 |
+| `docs/PLAN_v2.md`, `docs/limits.md` | 계획서, 한도 측정 |
+| `test/` | E2E 스크립트, PyYAML 검증 |
 | `internal/fakeawx`, `cmd/fakeawx` | 테스트용 가짜 AWX |
+
+### 정리한 잔여물
+
+- bash 래퍼 `awx_copy` 를 삭제했다.
+- VM 의 테스트 잔여물(`/root/AWX_copy/bin/awx_copy_new`, `/tmp/awx_copy_v2` 등)을 지웠다.

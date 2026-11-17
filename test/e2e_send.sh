@@ -1,18 +1,18 @@
 #!/bin/bash
 # 업로더 E2E: test/e2e_send.sh <config> <파일폴더>
-# 파일마다 ./awx_copy 를 실행하고 시간, 전후 variables 상태를 기록한다.
+# 파일마다 awx_copy(설치본 /usr/local/bin, 없으면 bin/awx_copy)를 실행하고 시간, 전후 variables 상태를 기록한다.
 # 다운로더(awx_fetch.exe)는 윈도우에서 같은 수만큼 반복 실행해 둔다.
 set -u
 CONF="$1"; DIR="$2"
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-AC="$ROOT/awx_copy"
+AC="$(command -v awx_copy || echo "$ROOT/bin/awx_copy")"
 BEFORE=$("$AC" --status --config "$CONF")
 echo "시작 전: $BEFORE"
 fail=0
 for f in "$DIR"/*; do
-    typ=txt; case "$f" in *.csv) typ=csv ;; esac
+    typ=; case "$f" in *.csv) typ=-csv ;; esac
     t0=$(date +%s.%N)
-    if "$AC" "$f" "$typ" --config "$CONF" > /tmp/awx_e2e_send.log 2>&1; then rc=0; else rc=$?; fail=1; fi
+    if "$AC" --config "$CONF" "$f" $typ > /tmp/awx_e2e_send.log 2>&1; then rc=0; else rc=$?; fail=1; fi
     t1=$(date +%s.%N)
     st=$("$AC" --status --config "$CONF")
     same=NO; [ "$st" = "$BEFORE" ] && same=YES

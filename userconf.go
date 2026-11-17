@@ -14,17 +14,16 @@ import (
 	"strings"
 )
 
-// confDir 은 사용자별 설정파일 폴더다. 리눅스 ~/.awx_copy/, 윈도우 실행파일 옆 conf\.
+// confDir 은 사용자별 설정파일 폴더다. 리눅스 /etc/awx_copy/, 윈도우 실행파일 옆 conf\.
 func confDir() string {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(exeDir(), "conf")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".awx_copy"
-	}
-	return filepath.Join(home, ".awx_copy")
+	return etcDir
 }
+
+// rootConfName 은 root 기록 조회용 해시 파일이다. AWX 설정 목록에서 뺀다.
+const rootConfName = "root.conf"
 
 // osUserName 은 현재 OS 로그인 사용자 이름이다.
 func osUserName() string {
@@ -45,17 +44,27 @@ func osUserName() string {
 
 // confCandidate 는 발견된 설정파일 한 개다. 비밀번호는 읽지 않는다.
 type confCandidate struct {
-	Path     string
-	Name     string // 파일명
-	Username string
-	URL      string
+	Path        string
+	Name        string // 파일명
+	Username    string
+	URL         string
+	InventoryID string
 }
+
+// User 는 설정 이름(파일명에서 .conf 를 뺀 것)이다.
+func (c confCandidate) User() string { return strings.TrimSuffix(c.Name, ".conf") }
 
 // peekConfig 는 username, url 만 느슨하게 읽는다 (비밀번호는 읽지 않는다).
 func peekConfig(path string) (username, url string, err error) {
+	u, l, _, err := peekConfigInv(path)
+	return u, l, err
+}
+
+// peekConfigInv 는 username, url, inventory_id 를 읽는다. 읽을 수 없으면 오류다.
+func peekConfigInv(path string) (username, url, inv string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
@@ -78,12 +87,14 @@ func peekConfig(path string) (username, url string, err error) {
 			username = val
 		case "url":
 			url = strings.TrimRight(val, "/")
+		case "inventory_id":
+			inv = val
 		}
 	}
-	return username, url, sc.Err()
+	return username, url, inv, sc.Err()
 }
 
-// listCandidates 는 dir 의 *.conf 와 호환용 legacy 파일을 모은다.
+// listCandidates 는 dir 의 *.conf 와 호환용 legacy 파일 중 읽을 수 있는 것을 모은다. root.conf 는 뺀다.
 func listCandidates(dir, legacy string) []confCandidate {
 	var out []confCandidate
 	seen := map[string]bool{}
@@ -95,12 +106,15 @@ func listCandidates(dir, legacy string) []confCandidate {
 			return
 		}
 		st, err := os.Stat(p)
-		if err != nil || st.IsDir() {
+		if err != nil || st.IsDir() || filepath.Base(p) == rootConfName {
 			return
 		}
 		seen[p] = true
-		u, url, _ := peekConfig(p)
-		out = append(out, confCandidate{Path: p, Name: filepath.Base(p), Username: u, URL: url})
+		u, url, inv, err := peekConfigInv(p)
+		if err != nil { // 읽을 수 없는 파일(다른 사용자 소유 등)은 목록에 넣지 않는다
+			return
+		}
+		out = append(out, confCandidate{Path: p, Name: filepath.Base(p), Username: u, URL: url, InventoryID: inv})
 	}
 	if m, err := filepath.Glob(filepath.Join(dir, "*.conf")); err == nil {
 		sort.Strings(m)
@@ -119,18 +133,27 @@ type selector struct {
 	Dir          string
 	Legacy       string
 	OSUser       string
+	AutoOSUser   bool // OS 사용자 이름과 같은 설정을 바로 쓴다 (윈도우만)
+	AllowCreate  bool // 메뉴에서 새 설정을 만든다 (윈도우만. 리눅스는 관리자가 배포)
 	IsTTY        bool
 	In           *bufio.Reader
 	Out          io.Writer
 	Err          io.Writer
 	ReadPassword func(in *bufio.Reader, out io.Writer) (string, error)
+	// Choose 가 있으면 번호 입력 대신 이것으로 고른다 (리눅스 TUI). -1 이면 취소.
+	Choose func(title string, items []string) (int, error)
 }
 
 func newSelector() *selector {
-	return &selector{
-		Dir: confDir(), Legacy: defaultConfigPath(), OSUser: osUserName(),
-		IsTTY: stdinIsTerminal(), In: bufio.NewReader(os.Stdin), Out: os.Stdout, Err: os.Stderr, ReadPassword: readPassword,
+	win := runtime.GOOS == "windows"
+	s := &selector{
+		Dir: confDir(), Legacy: defaultConfigPath(), OSUser: osUserName(), AutoOSUser: win, AllowCreate: win,
+		IsTTY: stdinIsTerminal(), In: stdinR, Out: os.Stdout, Err: os.Stderr, ReadPassword: readPassword,
 	}
+	if !win && s.IsTTY && stdoutIsTerminal() {
+		s.Choose = func(title string, items []string) (int, error) { return ttyChoose(stdinR, os.Stdout, title, items) }
+	}
+	return s
 }
 
 func (s *selector) load(path string) (*Config, int, error) {
@@ -162,7 +185,7 @@ func (s *selector) resolveConfig(cfgPath, userName string) (*Config, int, error)
 		return nil, 2, fmt.Errorf("사용자 %q 의 설정파일이 없습니다 (%s)", userName, p)
 	}
 	cands := listCandidates(s.Dir, s.Legacy)
-	if s.OSUser != "" && validConfName(s.OSUser) {
+	if s.AutoOSUser && s.OSUser != "" && validConfName(s.OSUser) {
 		p, _ := filepath.Abs(filepath.Join(s.Dir, s.OSUser+".conf"))
 		for _, c := range cands {
 			if c.Path == p && c.Username != "" {
@@ -178,10 +201,42 @@ func (s *selector) resolveConfig(cfgPath, userName string) (*Config, int, error)
 	if !s.IsTTY {
 		fmt.Fprintln(s.Err, "설정파일을 자동으로 고를 수 없고 터미널이 아니라 메뉴를 띄울 수 없습니다.")
 		s.printCandidates(s.Err, cands)
-		fmt.Fprintf(s.Err, "--config <경로> 또는 --user <이름> 으로 지정하세요. (설정 폴더: %s)\n", s.Dir)
+		fmt.Fprintf(s.Err, "-u <이름>, --config <경로> 또는 --user <이름> 으로 지정하세요. (설정 폴더: %s)\n", s.Dir)
 		return nil, 2, errors.New("설정파일 선택 불가")
 	}
+	if s.Choose != nil {
+		if len(cands) == 0 {
+			return nil, 2, fmt.Errorf("읽을 수 있는 설정파일이 없습니다 (설정 폴더: %s). 관리자에게 {사용자}.conf 배포를 요청하세요", s.Dir)
+		}
+		items := make([]string, len(cands))
+		for i, c := range cands {
+			items[i] = tuiCandLine(c)
+		}
+		n, err := s.Choose("사용할 설정을 고르세요 ("+s.Dir+")", items)
+		if err != nil {
+			return nil, 2, err
+		}
+		if n < 0 || n >= len(cands) {
+			return nil, 2, errors.New("선택을 취소했습니다")
+		}
+		return s.load(cands[n].Path)
+	}
 	return s.menu(cands)
+}
+
+// tuiCandLine 은 TUI 목록 한 줄이다: user, url, inventory_id. 비밀번호는 읽지 않는다.
+func tuiCandLine(c confCandidate) string {
+	return fmt.Sprintf("%-20s %-36s inventory_id=%s", c.User(), c.URL, c.InventoryID)
+}
+
+// confUser 는 기록에 쓰는 사용자 이름이다 (설정 파일명에서 .conf 를 뺀 것).
+func confUser(cfg *Config) string {
+	if cfg.Path != "" {
+		if n := strings.TrimSuffix(filepath.Base(cfg.Path), ".conf"); n != "" {
+			return n
+		}
+	}
+	return cfg.Username
 }
 
 func (s *selector) printCandidates(w io.Writer, cands []confCandidate) {
@@ -218,7 +273,14 @@ func (s *selector) menu(cands []confCandidate) (*Config, int, error) {
 		fmt.Fprintln(s.Out, candLine(i+1, c))
 	}
 	newN := len(cands) + 1
-	fmt.Fprintf(s.Out, "  %d) 새 설정 만들기\n", newN)
+	if s.AllowCreate {
+		fmt.Fprintf(s.Out, "  %d) 새 설정 만들기\n", newN)
+	} else {
+		if len(cands) == 0 {
+			return nil, 2, fmt.Errorf("읽을 수 있는 설정파일이 없습니다 (설정 폴더: %s)", s.Dir)
+		}
+		newN = len(cands)
+	}
 	for try := 0; try < 5; try++ {
 		in, err := s.ask("번호: ")
 		if err != nil {
@@ -229,7 +291,7 @@ func (s *selector) menu(cands []confCandidate) (*Config, int, error) {
 			fmt.Fprintf(s.Out, "1 ~ %d 사이의 번호를 입력하세요.\n", newN)
 			continue
 		}
-		if n == newN {
+		if s.AllowCreate && n == newN {
 			return s.create()
 		}
 		return s.load(cands[n-1].Path)
@@ -288,6 +350,6 @@ func (s *selector) listUsers(w io.Writer) {
 		fmt.Fprintf(w, "설정파일이 없습니다 (설정 폴더: %s)\n", s.Dir)
 		return
 	}
-	fmt.Fprintf(w, "설정 폴더: %s (현재 OS 사용자: %s)\n", s.Dir, s.OSUser)
+	fmt.Fprintf(w, "설정 폴더: %s (현재 OS 사용자: %s, 읽을 수 있는 파일만 표시)\n", s.Dir, s.OSUser)
 	s.printCandidates(w, cands)
 }

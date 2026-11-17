@@ -23,6 +23,10 @@ const (
 
 	stateSending = "sending"
 	stateAck     = "ack"
+	stateDone    = "done" // 다운로더가 수신 결과(result)를 남긴 상태. 업로더가 읽고 원복한다.
+
+	recvOK   = "ok"
+	recvFail = "fail"
 
 	encPlain = "base64"
 	encGzip  = "gzip+base64"
@@ -34,7 +38,7 @@ const (
 var blockKeys = []string{
 	"version", "session", "state", "file_name", "type", "encoding", "eol", "final_newline",
 	"total_bytes", "sha256", "chunk_total", "chunk_index", "chunk_sha256", "chunk_data",
-	"chunk_text", "ack", "backup_b64", "updated_at",
+	"chunk_text", "ack", "result", "message", "backup_b64", "updated_at",
 }
 
 // Block 은 variables 의 awx_copy 블록이다. 값은 모두 문자열이다.

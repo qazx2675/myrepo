@@ -14,4 +14,5 @@ if [ "${1:-}" = "all" ]; then
     GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDF" -o dist/awx_fetch.exe .
     echo "빌드: dist/awx_fetch.exe"
 fi
-chmod 755 awx_copy bin/awx_copy
+chmod 755 bin/awx_copy
+echo "설치: sudo ./install.sh  (→ /usr/local/bin/awx_copy)"
