@@ -17,6 +17,8 @@
 #           (동시 연결 상한은 단위 테스트 TestPortParallelLimit 가 증명한다)
 #   busy    1 이면 그 초에 일을 한 것: ICMP 송신, TCP 연결 시도(초당 10개 초과. ActiveOpens 는 호스트 전체
 #           카운터라 다른 프로그램의 잡음을 거른다), 자식 프로세스 중 하나라도 있음
+# 환경변수 LOAD_DIR 가 있으면(load_run.sh 가 준다) 판정 뒤에 v0.5.0 항목을 보고서에 덧붙인다: gossh 호출 수(종류별, gossh_calls.log),
+#   hosts.txt.res 행 수 = 호스트 수 + 머리줄, 조사된 호스트 수(OS커널 칸이 찬 줄), 설정동일여부 O/X/빈 칸 수, 설치/yumupdate여부 O 수
 # SUMMARY_ONLY=1 이면 표본을 새로 뜨지 않고 기존 CSV 로 요약·판정만 다시 한다.
 #
 # 판정 정의
@@ -150,5 +152,32 @@ END {
 	exit (f > 0)
 }' "$CSV"
 rc=$?
+if [ -n "${LOAD_DIR:-}" ] && [ -f "$LOAD_DIR/gossh_calls.log" ]; then
+	sleep 3 # 데몬이 마지막 회차를 끝내고 --stop 되는 것을 잠깐 기다린다
+	L=$LOAD_DIR/gossh_calls.log
+	RES=$LOAD_DIR/hosts.txt.res
+	{
+		echo "--- v0.5.0 설정 조사·res 확인 ---"
+		echo "gossh 호출 수: -pm $(grep -c -e '-pm' "$L") · 디스크(NS_DISK) $(grep -c NS_DISK "$L") · yum 조회(NS_YUM) $(grep -c NS_YUM "$L") · 설정 조사(PM_KERN) $(grep -c PM_KERN "$L") · 그 밖에 $(grep -vc -e '-pm' -e NS_DISK -e NS_YUM -e PM_KERN "$L")"
+		if [ -f "$RES" ]; then
+			nh=$(wc -l <"$LOAD_DIR/hosts.txt")
+			nr=$(wc -l <"$RES")
+			inv=$(awk -F'\t' 'NR > 1 && $2 != "" { n++ } END { print n + 0 }' "$RES")
+			o=$(awk -F'\t' 'NR > 1 && $9 == "O" { n++ } END { print n + 0 }' "$RES")
+			x=$(awk -F'\t' 'NR > 1 && $9 == "X" { n++ } END { print n + 0 }' "$RES")
+			e=$(awk -F'\t' 'NR > 1 && $9 == "" { n++ } END { print n + 0 }' "$RES")
+			io=$(awk -F'\t' 'NR > 1 && $8 == "O" { n++ } END { print n + 0 }' "$RES")
+			cols=$(awk -F'\t' 'NR > 1 && NF != 9 { n++ } END { print n + 0 }' "$RES")
+			if [ "$nr" -eq $((nh + 1)) ]; then rr=PASS; else rr=FAIL; rc=1; fi
+			echo "$rr res 파일 행 수 = 호스트 수 + 머리줄: $nr (호스트 $nh), 9칸이 아닌 줄 $cols"
+			echo "조사된 호스트(OS커널 칸이 참) $inv 대 / 설정동일여부 O $o · X $x · 빈 칸 $e / 설치/yumupdate여부 O $io"
+			echo "res 머리줄: $(head -1 "$RES")"
+			[ -f "$LOAD_DIR/hosts.txt.res.tmp" ] && echo "[!] 임시 파일이 남아 있음"
+		else
+			echo "FAIL res 파일 없음: $RES"
+			rc=1
+		fi
+	} >>"$OUT"
+fi
 cat "$OUT"
 exit $rc

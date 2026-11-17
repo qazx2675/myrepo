@@ -38,6 +38,19 @@
 #           다르면 "재부팅 + 커널 변경". 상태 파일은 호출마다 새로 읽으므로 파일을 고쳐 써도 반영된다.
 #         STUB_NOW (선택) 현재 시각(epoch 초)을 이 값으로 고정(단위 시험용). 없으면 date +%s
 #         칸이 3~5개뿐인 줄은 시간이 지나도 변하지 않는다. OS 서버 줄(2칸)과 yum 이 아닌 명령은 이 칸을 쓰지 않는다.
+#   명령에 PM_KERN 이 있으면(v0.5.0 설정 조사, 계획서 4.9; down 이 아닌 모든 상태가 응답):
+#         원격 명령이 grep 으로 골라 낸 것과 같은 줄을 낸다(ldap.conf 는 URI·binddn 줄만, bindpw 는 내지 않음)
+#           "host: PM_KERN <커널>" "host: PM_HT Thread(s) per core:    <n>" "host: PM_DNS nameserver <ip>"(적힌 순서)
+#           "host: PM_APPL /appl	-rw,soft	<마운트>" "host: PM_LDC URI <값...>"(줄마다) "host: PM_LDC binddn <값>"
+#           명령에 PM_LC 가 있으면(ldap_check_sh 설정) "host: PM_LC" + ldap_check 줄들 + "host: PM_LCE", 끝에 "host: PM_END"
+#         STUB_CFG (선택) 호스트별 값 파일. 한 줄에 탭 구분 8칸(없는 호스트는 기본값):
+#           <호스트> <커널> <appl 마운트> <dns(공백 구분, 순서대로)> <URI 줄(여러 줄은 | 로 구분)> <binddn> <threads per core> <ldap_check 줄(| 로 구분)>
+#           칸 값이 "-" 이면 그 줄을 내지 않는다(파일에 없는 것처럼). 예)
+#           c001	4.18.0-553.el8.x86_64	nas01:/export/appl	10.10.1.10 10.10.1.11	ldap://ldap02.demo/ ldap://ldap01.demo/	uid=pm,dc=cae	2	INFO LDAP zxcv a1
+#         기본값: 커널 4.18.0-553.el8.x86_64, appl nas01:/export/appl, dns 10.10.1.10 10.10.1.11,
+#                 URI ldap://ldap01.demo/ ldap://ldap02.demo/, binddn uid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com,
+#                 threads per core 2, ldap_check "INFO<탭>LDAP<탭>zxcv<탭>a1"
+#         STUB_HT_OFF·STUB_LDAP_FAIL(공백 구분 호스트)도 그대로 쓴다: threads per core 1 / ldap_check "ERROR: FAIL<탭>LDAP<탭>UNDEFINED"
 #   STUB_GOSSH_LOG (선택) 이 파일에 호출마다 명령 줄(인자)을 한 줄 덧붙임
 # 호스트 5천 대도 awk 한 번으로 처리한다(호스트별 프로세스 없음).
 [ -n "$STUB_GOSSH_LOG" ] && echo "$*" >> "$STUB_GOSSH_LOG"
@@ -66,12 +79,26 @@ disk=0
 case "$cmd" in *NS_DISK*) disk=1 ;; esac
 ldap=0
 case "$cmd" in *ldap_check*) ldap=1 ;; esac
+cfgm=0
+case "$cmd" in *PM_KERN*) cfgm=1; ldap=0 ;; esac
+lcon=0
+case "$cmd" in *PM_LC*) lcon=1 ;; esac
 yum=0
 case "$cmd" in *NS_YUM*) yum=1 ;; esac
 now=0
 [ "$yum" = 1 ] && now="${STUB_NOW:-$(date +%s)}"
 
-awk -v pm="$pm" -v disk="$disk" -v ldap="$ldap" -v yum="$yum" -v now="$now" -v lfail=" $STUB_LDAP_FAIL " -v lunk=" $STUB_LDAP_UNKNOWN " -v lone="${STUB_LDAP_ONELINE:-0}" -v htoff=" $STUB_HT_OFF " -v dnsdiff=" $STUB_DNS_DIFF " -v appldiff=" $STUB_APPL_DIFF " -v inst="${list}_os_install" -v off="${list}_res_off" '
+awk -v pm="$pm" -v disk="$disk" -v ldap="$ldap" -v yum="$yum" -v now="$now" -v cfgm="$cfgm" -v lcon="$lcon" -v cfgf="$STUB_CFG" -v lfail=" $STUB_LDAP_FAIL " -v lunk=" $STUB_LDAP_UNKNOWN " -v lone="${STUB_LDAP_ONELINE:-0}" -v htoff=" $STUB_HT_OFF " -v dnsdiff=" $STUB_DNS_DIFF " -v appldiff=" $STUB_APPL_DIFF " -v inst="${list}_os_install" -v off="${list}_res_off" '
+BEGIN {
+  if (cfgm && cfgf != "") {
+    while ((getline line < cfgf) > 0) {
+      n = split(line, a, "\t")
+      if (n < 8 || a[1] == "") continue
+      cf[a[1]] = 1; ck[a[1]] = a[2]; ca[a[1]] = a[3]; cd[a[1]] = a[4]; cu[a[1]] = a[5]; cb[a[1]] = a[6]; ct[a[1]] = a[7]; cl[a[1]] = a[8]
+    }
+    close(cfgf)
+  }
+}
 NR == FNR {
   st[$1] = $2
   if (NF >= 3) kern[$1] = $3
@@ -95,6 +122,30 @@ NR == FNR {
     print h ": NS_YUM"
     print h ": " k
     print h ": " b
+    next
+  }
+  if (cfgm) {
+    key = " " h " "
+    if (h in cf) { k = ck[h]; ap = ca[h]; dn = cd[h]; ur = cu[h]; bd = cb[h]; tp = ct[h]; lc = cl[h] }
+    else {
+      k = "4.18.0-553.el8.x86_64"; ap = "nas01:/export/appl"; dn = "10.10.1.10 10.10.1.11"
+      ur = "ldap://ldap01.demo/ ldap://ldap02.demo/"; bd = "uid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com"; tp = "2"
+      lc = "INFO\tLDAP\tzxcv\ta1"
+    }
+    if (index(htoff, key)) tp = "1"
+    if (index(lfail, key)) lc = "ERROR: FAIL\tLDAP\tUNDEFINED"
+    if (k != "-") print h ": PM_KERN " k
+    if (tp != "-") print h ": PM_HT Thread(s) per core:    " tp
+    if (dn != "-") { n = split(dn, d, " "); for (i = 1; i <= n; i++) print h ": PM_DNS nameserver " d[i] }
+    if (ap != "-") print h ": PM_APPL /appl\t-rw,soft\t" ap
+    if (ur != "-") { n = split(ur, u, "|"); for (i = 1; i <= n; i++) if (u[i] != "") print h ": PM_LDC URI " u[i] }
+    if (bd != "-") print h ": PM_LDC binddn " bd
+    if (lcon) {
+      print h ": PM_LC"
+      if (lc != "-") { n = split(lc, l, "|"); for (i = 1; i <= n; i++) print h ": " l[i] }
+      print h ": PM_LCE"
+    }
+    print h ": PM_END"
     next
   }
   if (ldap) {

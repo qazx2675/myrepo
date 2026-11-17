@@ -180,8 +180,13 @@ func TestModeChangeResetsRecord(t *testing.T) {
 	}
 	// OS -> yum: 초기화(상태·이력·점검 결과 모두), 새 모드만 남는다
 	if r := recOf(col, "os_to_yum"); r.Status != StatusNone || !r.DoneAt.IsZero() || !r.FirstInstallingAt.IsZero() ||
-		r.Reason != "" || r.Check.LDAP != "" || r.Mode != ModeYum {
+		r.Reason != "" || r.Check != (Check{}) || r.Mode != ModeYum || r.InstallDone {
 		t.Errorf("os_to_yum: %+v", r)
+	}
+	// 계획서 4.9: v0.4.0 state(install_done 없음)는 읽을 때 상태로 정한다. 모드가 바뀐 서버는 꺼진다
+	if !recOf(col, "os_same").InstallDone || !recOf(col, "yum_same").InstallDone || recOf(col, "yum_to_os").InstallDone {
+		t.Errorf("install_done 이행: os_same=%v yum_same=%v yum_to_os=%v",
+			recOf(col, "os_same").InstallDone, recOf(col, "yum_same").InstallDone, recOf(col, "yum_to_os").InstallDone)
 	}
 	// yum -> OS: yum 필드까지 모두 초기화
 	if r := recOf(col, "yum_to_os"); r.Status != StatusNone || r.Mode != "" || r.YumKernel != "" || r.YumBoot != "" ||

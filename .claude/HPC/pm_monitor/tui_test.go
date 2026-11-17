@@ -17,7 +17,12 @@ var tNow = time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 
 // tuiSnap 은 골든·키 테스트용 표본이다: 설치중 14(지연 포함 4), 디스크 3, 설치완료 12, ping X 6, 재부팅됨 2, 완료후꺼짐 3.
 func tuiSnap() Snapshot {
-	cfg := defaultConfig()
+	s := buildSnapshot(defaultConfig(), tuiRecs(), 3, true, tNow.Add(-95*time.Second), "")
+	return *s
+}
+
+// tuiRecs 는 tuiSnap 의 서버들(호스트파일 순서 = 만든 순서)이다.
+func tuiRecs() []Record {
 	var recs []Record
 	add := func(prefix string, vendor string, n int, st Status, reason string, startMin int) {
 		for i := 0; i < n; i++ {
@@ -37,8 +42,7 @@ func tuiSnap() Snapshot {
 	add("s1", "sds", 6, StatusPingX, "ping 응답 없음", 0)
 	add("d", "t", 2, StatusRebooted, "완료 후 꺼졌다가 다시 켜짐", 0)
 	add("m", "W", 3, StatusOff, "완료 후 ping 응답 없음", 0)
-	s := buildSnapshot(cfg, recs, 3, true, tNow.Add(-95*time.Second), "")
-	return *s
+	return recs
 }
 
 func newTestView(w, h int) *ViewState {
@@ -75,10 +79,6 @@ func TestTUIGolden(t *testing.T) {
 		{"d_result", func(v *ViewState, s Snapshot) {
 			press(v, s, "d")
 			v.setReport('d', "host=s1001 mac=aa:bb:cc:00:00:01 ip=10.0.0.1 lease=active\nhost=s1002 mac=aa:bb:cc:00:00:02 ip=10.0.0.2 lease=expired\n(없는 서버: s1003)", false)
-		}},
-		{"l_result", func(v *ViewState, s Snapshot) {
-			press(v, s, "l")
-			v.setReport('l', ldapTable(withChecks(s)), false)
 		}},
 		{"scroll_end", func(v *ViewState, s Snapshot) { press(v, s, "\x1b[F") }},
 		{"c_panel_end", func(v *ViewState, s Snapshot) { press(v, s, "c"); v.checkDone(nil); press(v, s, "\x1b[F") }},
@@ -678,29 +678,6 @@ func TestLoopSkipsIdenticalFrame(t *testing.T) {
 	}
 	le.in.Write([]byte("q"))
 	wait(t, res)
-}
-
-// withChecks 는 완료 서버 일부에 점검 결과를 채운 스냅샷 복사본이다(l 패널 골든용).
-func withChecks(s Snapshot) *Snapshot {
-	recs := append([]Record(nil), s.Records...)
-	n := 0
-	for i := range recs {
-		if !ldapDone(recs[i].Status) {
-			continue
-		}
-		switch n % 4 {
-		case 0:
-			recs[i].Check = Check{Ver: ldapCmdVer, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "nas01:/export/appl", HT: "ON"}
-		case 1:
-			recs[i].Check = Check{Ver: ldapCmdVer, LDAP: "zxcv", DNSNTP: "10.1.1.10/10.1.1.11", Autofs: "다름", HT: "OFF", Note: "/appl nas01:/export/appl /wappl nas02:/export/wappl"}
-		case 2:
-			recs[i].Check = Check{Ver: ldapCmdVer, LDAP: "FAIL", DNSNTP: "다름", Autofs: "nas01:/export/appl", HT: "-", Note: "ldap_check UNDEFINED; DNS 10.1.1.10/10.1.1.11 NTP 10.1.2.20"}
-		}
-		n++
-	}
-	out := s
-	out.Records = recs
-	return &out
 }
 
 // reportSrc 는 reportSource 를 구현한 가짜 source 다.

@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## [0.5.0] - 2026-11-17
+
+### 추가
+- **서버 설정 자동 조사**: 서버마다 OS커널(`uname -r`)·appl(`/etc/auto.appl` 의 `/appl` 마운트 위치)·dns(`resolv.conf` nameserver, 적힌 순서)·ldap_URI(`/etc/openldap/ldap.conf` 의 `URI` 줄, 호스트 이름만)·binddn·h/t(`lscpu`, ON/OFF)·ldap_check 결과(스크립트 출력, 여러 줄은 ` ; ` 로 이음)를 gossh 한 줄 명령으로 조사한다. **`bindpw` 는 읽지도 저장하지도 보여 주지도 않는다.** 수집 회차 안에서 서버당 한 번 자동으로 조사하고(회차당 최대 100대, 실패한 서버는 다음 회차에 다시 시도), `l` 을 누르면 대상 전체를 다시 조사한다(응답 없는 서버는 이전 값 유지).
+- **조사 대상**: yum 서버는 `yum_update/접속가능`, **OS 설치 서버는 상태와 무관하게 전부**(이번 작업은 OS 설치 없이 yum update 와 설정 변경만 하기 때문). 자동 첫 조사는 OS 서버가 ping 이 닿는 동안만(확인전·ping X·완료후꺼짐 제외)이고 ping X 서버는 `l` 로만 조사한다.
+- **oklist.txt**: `install_mn [-c conf] [-f] <호스트파일> [oklist.txt]` 의 두 번째 위치 인자(선택). 엑셀에서 붙여 넣은 탭 구분 7칸 `hostname OS커널 appl dns ldap_URI binddn h/t`. 머리줄(첫 칸 `hostname`)·빈 줄·`#` 줄 무시, 칸이 7개 미만이거나 hostname 이 중복인 줄은 무시하고 경고 줄로 센다. 비교는 대소문자·순서까지 구분한다(여러 값은 공백 구분). 읽을 수 없으면 시작 전에 한글 오류로 끝난다(코드 1). 데몬 지문에 oklist 의 절대 경로와 내용 해시가 들어가 oklist 를 바꾸면 수집을 다시 시작한다.
+- **`l` 표 교체**: 제목 `LDAP·설정`, 열 `hostname | OS커널 | appl | dns | ldap_URI | binddn | h/t | ldap_check결과`, 호스트파일의 모든 서버를 호스트파일 순서로(조사 전은 빈 칸, 24칸 넘는 설정 값은 `…` 로 줄임). oklist 가 있으면 다른 칸을 **빨간색**(조사값이 비었는데 oklist 에 값이 있으면 `(없음)`), 머리줄에 `oklist N대 · 조사 M대 · 다름 K대 · 경고 W줄`, 패널 안의 **`m`** 으로 oklist 와 다른 서버만 보기(패널을 다시 열면 꺼짐).
+- **res 파일** `<호스트파일 이름>.res`(실행한 디렉터리, 탭 구분 UTF-8 LF, `.gitignore` 에 `*.res`): 열 `hostname OS커널 appl dns ldap_URI binddn h/t 설치/yumupdate여부 설정동일여부`, 모든 서버를 호스트파일 순서로. 수집기가 시작할 때와 회차·조사가 끝날 때마다 내용이 바뀐 경우에만 임시 파일 → 이름 변경으로 쓴다. 엑셀에 붙여 넣는 용도이며 ldap_check 열은 없다. 쓰기 실패는 수집을 멈추지 않고 화면 오류 줄에 보인다.
+  - `설치/yumupdate여부`: 한 번이라도 설치완료(OS)·`yum_update/접속가능`(yum)이었으면 `O`, 이후 ping X·완료후꺼짐·재부팅됨이 되어도 유지(`state.json` 의 `install_done`). yum 서버가 재부팅만 했다면 `X`. 이번 작업처럼 OS 설치를 하지 않는 OS 설치 서버는 `X` 가 정상이다.
+  - `설정동일여부`: oklist 가 있고 서버가 oklist 에 있고 조사 결과가 있을 때만 `O`(여섯 값 모두 같음)/`X`, 아니면 빈 칸. 마지막으로 성공한 조사값 기준이다.
+- 시험: 단위 테스트(`ldap_test.go`·`oklist_test.go`·`lpanel_test.go` 등, `l` 골든 폭 60/80/120), `test/daemon_check.py` 12번대(res 생성·자동 첫 조사·완료 뒤 꺼져도 O·oklist O/X·oklist 교체·없는 oklist 오류), `test/demo_yum_check.py`(oklist·res), `test/stub_gossh.sh` 의 `STUB_CFG`(호스트별 설정 값 파일), `test/load_run.sh`(oklist 를 같이 주고 끝에 gossh 호출 수·조사 대수·`.res` 행 수 확인, `LOAD_L_MAX`(`test/pty_drive.py`)로 `l` 을 누르는 횟수 조절).
+- `demo/demo.sh`: oklist 를 만들어(거의 같고 4대만 일부러 다름) `install_mn hosts.txt oklist.txt` 로 실행하고 결과 파일 `/tmp/pm_demo/hosts.txt.res` 를 안내한다.
+
+### 변경
+- **`l` 의 동작이 바뀌었다**: v0.4.0 까지는 결과가 비어 있는 서버만 조사했지만 이제 열 때마다 대상 전체를 다시 조사한다. 자동 첫 조사 덕분에 평소에는 누를 필요가 없다. 대상 서버가 많을 때(8000대) `l` 을 자주 열면 데몬 CPU·메모리 순간 부하가 크다(아래 비고).
+- **NTP·autofs 열과 NTP 비교를 없앴다**(NTP 는 DNS 와 같은 설정). `l` 표는 위 8열로 바뀌었고 옛 chrony·getent·wappl 조사는 하지 않는다.
+- **`state.json` 형식 번호 2**(v0.4.0 은 1). v0.4.0 파일은 읽을 때 자동으로 옮기며 `설치/yumupdate여부` 를 OS 서버 설치완료·완료후꺼짐·재부팅됨, yum 서버 `yum_update/접속가능`(또는 완료 기록)으로 채운다. `Check` 에 새 필드가 늘었고 옛 형식의 조사 결과는 자동으로 다시 조사한다.
+- **데몬 지문**: 프로그램 버전 `0.5.0` + 호스트파일·설정 내용 + oklist 절대 경로·내용 해시. 바이너리를 교체한 뒤 다시 실행하면 옛 데몬을 멈추고 새로 시작한다(상태 기록 유지).
+- 스냅샷에 `HostOrder`(호스트파일 순서)·`Cmp`(서버별 비교 비트)·`Cfg`(집계)가 늘었다. oklist 도 res 도 없는 호스트파일의 `l` 이외 화면·코멘트는 v0.4.0 과 같다(기존 골든 그대로).
+
+### 제거
+- `l` 표의 NTP·autofs 열, NTP 비교(chrony·ntp.conf·getent), `/wappl` 비교.
+
+### 비고
+- 8000대(yum 400, 호스트 전부가 든 oklist 포함)를 랩(.58)에서 10분씩 세 번 측정(`test/load_report.txt`). **`l` 을 누르지 않을 때**(자동 조사 + res 쓰기)는 CPU 평균 3.31 / 3.46%, 최고 25.1 / 26.8%, 회차 사이 대기 평균 0.00 / 0.01%, RSS 42.7 / 45.0MB, fd 110, ICMP 송신 최고 초당 511(상한 500, 1초 표본 경계 오차 10% 허용), gossh 동시 1·nice 10 으로 기준을 모두 지켰다(2회차의 스레드 수 8→9 한 줄은 경계였고 3회차는 8 로 같았다). TCP 22번 동시 101 은 시험과 무관하게 랩에 남아 있던 연결 1개가 더해진 것(이전 측정과 같은 원인, install_mn 은 100).
+- **`l` 을 30초마다 누른 측정(1회차)은 CPU 최고 53.0%·RSS 67.8MB 로 기준(30%, 50MB)을 넘었다**(CPU 평균 4.62%). 새 `l` 이 열 때마다 대상 서버 전체(약 7600대)를 다시 조사해 gossh 출력 파싱·기록 갱신·state.json(약 4.7MB)·res 쓰기·스냅샷 전송이 한꺼번에 일어나기 때문이다. 코드는 바꾸지 않았다. 대상이 많을 때는 `l` 을 자주 열지 말 것. 전체 재조사를 나누는 개선은 다음 과제다.
+- 자동 첫 조사는 회차당 최대 100대라 8000대 전체가 채워지려면 80회차 이상 걸린다(10분 시험 끝에 698대). 화면 반응은 키 입력 최대 36ms 이하였다.
+- 시험 결과: 단위 테스트 146개, `test/daemon_check.py` 65 PASS(이전 51 + 12번대 14), `test/func_check.py` 26 PASS, `test/demo_yum_check.py` 21 PASS, `gofmt`·`go vet` 깨끗.
+- os8 바이너리 `install_mn_os8` 를 랩에서 다시 빌드했다: sha256 `01eb08c2bff7e4389e8db08620eb5c94d34bd19d5f03caf0d8b41865a11125e9`. os6 빌드는 2026-11-04 부터 하지 않는다.
+- **확인하지 못한 것**: 실제 서버의 실제 `ldap.conf`·`auto.appl`·`resolv.conf`·실제 `ldap_check.sh` 출력으로는 시험하지 못했다(모두 스텁). 실제 서버에서 `yum update` 후 재부팅과 설정 조사가 함께 도는 것도 확인 전이다.
+- **알려진 한계**: 호스트파일과 다른 폴더에서 실행해도 state·res 파일은 호스트파일 옆이 아니라 **실행한 디렉터리**에 생긴다. `l` 은 대상 전체를 한 번에 다시 조사하므로 서버가 아주 많을 때는 느리다(응답 없는 서버는 이전 값 유지).
+
 ## [0.4.0] - 2026-11-17
 
 ### 추가

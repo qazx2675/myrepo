@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1590" font-family="Malgun Gothic, Noto Sans KR, sans-serif" font-size="14">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 2100" font-family="Malgun Gothic, Noto Sans KR, sans-serif" font-size="14">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#444"/></marker>
     <style>
@@ -14,13 +14,13 @@
       .h{font-size:22;font-weight:bold}
     </style>
   </defs>
-  <rect width="1200" height="1590" fill="#fff"/>
-  <text x="30" y="40" class="h">install_mn (pm_monitor) 흐름 (v0.4.0)</text>
-  <text x="30" y="64" class="s">호스트파일 한 줄 = "hostname [yum]". 두 번째 칸이 yum 이면 yum update 후 커널 변경을 보는 yum 서버, 아니면 OS 설치 서버(기존 동작 그대로).</text>
+  <rect width="1200" height="2100" fill="#fff"/>
+  <text x="30" y="40" class="h">install_mn (pm_monitor) 흐름 (v0.5.0)</text>
+  <text x="30" y="64" class="s">호스트파일 한 줄 = "hostname [yum]" (yum = yum update 후 커널 변경 확인, 아니면 OS 설치 서버) · v0.5.0 추가: 설정 조사 · oklist 비교 · res 파일</text>
 
   <!-- start -->
   <rect x="390" y="85" width="420" height="62" rx="10" class="box"/>
-  <text x="600" y="110" text-anchor="middle" class="t">시작: install_mn &lt;호스트파일&gt;</text>
+  <text x="600" y="110" text-anchor="middle" class="t">시작: install_mn &lt;호스트파일&gt; [oklist.txt]</text>
   <text x="600" y="132" text-anchor="middle" class="s">root 로 실행 (raw ICMP) · 설정 ./pm_monitor.conf</text>
   <path d="M600,147 V180" class="l"/>
 
@@ -28,7 +28,7 @@
   <rect x="390" y="180" width="420" height="100" rx="6" class="box"/>
   <text x="600" y="205" text-anchor="middle" class="t">① 수집 데몬 확인·시작</text>
   <text x="600" y="227" text-anchor="middle" class="s">같은 호스트파일 수집이 있으면 화면만 붙임</text>
-  <text x="600" y="247" text-anchor="middle" class="s">바이너리·설정·호스트파일이 바뀌었으면 교체</text>
+  <text x="600" y="247" text-anchor="middle" class="s">바이너리·설정·호스트파일·oklist 내용이 바뀌면 교체</text>
   <text x="600" y="267" text-anchor="middle" class="s">12시간은 시작 시각 고정, 끝나면 자동 종료</text>
   <path d="M600,280 V310" class="l"/>
 
@@ -132,37 +132,95 @@
   <path d="M270,1034 V1290 H390" class="l"/>
   <path d="M930,1244 V1290 H810" class="l"/>
   <rect x="390" y="1260" width="420" height="60" rx="6" class="box"/>
-  <text x="600" y="1285" text-anchor="middle" class="t">⑥ 스냅샷 공개 · pm_state.json 저장</text>
-  <text x="600" y="1307" text-anchor="middle" class="s">OS 개수와 yum 개수는 따로 센다</text>
-  <path d="M600,1320 V1352" class="l"/>
+  <text x="600" y="1285" text-anchor="middle" class="t">⑥ 상태 갱신 결과 확정 · 저장</text>
+  <text x="600" y="1307" text-anchor="middle" class="s">pm_state.json 저장 (형식 2) · OS·yum 개수는 따로</text>
+  <path d="M600,1320 V1350" class="l"/>
+
+  <!-- config stage (v0.5.0) -->
+  <polygon points="600,1350 780,1400 600,1450 420,1400" class="dec"/>
+  <text x="600" y="1396" text-anchor="middle" class="t">⑦ 조사 대상?</text>
+  <text x="600" y="1416" text-anchor="middle" class="s">회차마다 최대 100대</text>
+  <path d="M420,1400 H330" class="l"/>
+  <text x="338" y="1392" class="lab">아니오</text>
+  <rect x="20" y="1350" width="310" height="100" rx="6" class="side"/>
+  <text x="175" y="1375" text-anchor="middle" class="t">건너뜀</text>
+  <text x="175" y="1397" text-anchor="middle" class="s">다음 회차에 다시 판단</text>
+  <text x="175" y="1417" text-anchor="middle" class="s">ping X·확인전·완료후꺼짐 서버는</text>
+  <text x="175" y="1437" text-anchor="middle" class="s">자동 조사 안 함 (l 키로만)</text>
+
+  <rect x="850" y="1340" width="330" height="130" rx="6" class="side"/>
+  <text x="1015" y="1363" text-anchor="middle" class="t">조사 대상 규칙</text>
+  <text x="1015" y="1386" text-anchor="middle" class="s">yum 서버: yum_update/접속가능</text>
+  <text x="1015" y="1406" text-anchor="middle" class="s">OS 서버: 상태 무관 (설치 없는 작업)</text>
+  <text x="1015" y="1426" text-anchor="middle" class="s">자동: ping 이 닿을 때만 · 실패는 재시도</text>
+  <text x="1015" y="1446" text-anchor="middle" class="s">l 키: 대상 전체를 다시 조사 (이전 값 유지)</text>
+  <path d="M850,1400 H780" class="l"/>
+
+  <path d="M600,1450 V1490" class="l"/>
+  <text x="610" y="1475" class="lab">예</text>
+  <rect x="380" y="1490" width="440" height="122" rx="6" class="box"/>
+  <text x="600" y="1515" text-anchor="middle" class="t">⑧ 서버 설정 조사 (gossh 한 줄 명령)</text>
+  <text x="600" y="1537" text-anchor="middle" class="s">OS커널 · appl · dns · ldap_URI · binddn · h/t</text>
+  <text x="600" y="1557" text-anchor="middle" class="s">ldap_check 결과 (bindpw 는 읽지 않음)</text>
+  <text x="600" y="1577" text-anchor="middle" class="s">한 번에 하나 · nice 10 · csh 에서도 동작</text>
+  <text x="600" y="1597" text-anchor="middle" class="s">실패하면 이전 값 유지 · 다음 회차에 다시 시도</text>
+  <path d="M600,1612 V1650" class="l"/>
+
+  <rect x="20" y="1650" width="290" height="132" rx="6" class="side"/>
+  <text x="165" y="1674" text-anchor="middle" class="t">oklist.txt (선택)</text>
+  <text x="165" y="1696" text-anchor="middle" class="s">install_mn &lt;호스트파일&gt; oklist.txt</text>
+  <text x="165" y="1716" text-anchor="middle" class="s">탭 7칸 기준표, 시작 때 읽음</text>
+  <text x="165" y="1736" text-anchor="middle" class="s">경로·내용은 데몬 지문에 포함</text>
+  <text x="165" y="1756" text-anchor="middle" class="s">바꾸면 수집을 다시 시작</text>
+  <path d="M310,1716 H350" class="l"/>
+
+  <rect x="350" y="1650" width="500" height="132" rx="6" class="ok"/>
+  <text x="600" y="1675" text-anchor="middle" class="t">⑨ oklist 비교 · res 파일 기록</text>
+  <text x="600" y="1697" text-anchor="middle" class="s">여섯 값 비교(대소문자·순서 구분, ldap_check 제외)</text>
+  <text x="600" y="1717" text-anchor="middle" class="s">&lt;호스트파일&gt;.res: 호스트파일 순서로 전부</text>
+  <text x="600" y="1737" text-anchor="middle" class="s">설치/yumupdate여부: 한 번이라도 완료면 O (유지)</text>
+  <text x="600" y="1757" text-anchor="middle" class="s">설정동일여부: 같으면 O · 다르면 X · 비교 불가는 빈 칸</text>
+
+  <rect x="890" y="1650" width="290" height="132" rx="6" class="side"/>
+  <text x="1035" y="1674" text-anchor="middle" class="t">res 파일</text>
+  <text x="1035" y="1696" text-anchor="middle" class="s">탭 구분 · UTF-8 · 엑셀에 붙여넣기</text>
+  <text x="1035" y="1716" text-anchor="middle" class="s">바뀔 때만 임시 파일 → 이름 변경</text>
+  <text x="1035" y="1736" text-anchor="middle" class="s">조사 전 서버는 설정 칸이 빈 칸</text>
+  <text x="1035" y="1756" text-anchor="middle" class="s">쓰기 실패해도 수집은 계속</text>
+  <path d="M890,1716 H850" class="l"/>
+  <path d="M600,1782 V1820" class="l"/>
 
   <!-- TUI -->
-  <rect x="330" y="1352" width="540" height="150" rx="6" class="box"/>
-  <text x="600" y="1377" text-anchor="middle" class="t">화면 (raw tty · 순수 렌더 · 가상 스크롤)</text>
-  <text x="600" y="1400" text-anchor="middle" class="s">↑↓ PgUp/PgDn · / 검색 · 1~9 상태 필터 · 0 해제</text>
-  <text x="600" y="1420" text-anchor="middle" class="s">c 설치현황 (yum 별도 줄) · r 지연 점검요청 (yum A·B·C)</text>
-  <text x="600" y="1440" text-anchor="middle" class="s">y yum 커널 표 (조회 없이 화면 자료만 사용)</text>
-  <text x="600" y="1460" text-anchor="middle" class="s">d DHCP 조회 (OS 서버만) · l LDAP·DNS·NTP·autofs</text>
-  <text x="600" y="1480" text-anchor="middle" class="s">같은 키를 한 번 더 누르면 닫힘 · q 화면 종료</text>
+  <rect x="330" y="1820" width="540" height="190" rx="6" class="box"/>
+  <text x="600" y="1845" text-anchor="middle" class="t">화면 (raw tty · 순수 렌더 · 가상 스크롤)</text>
+  <text x="600" y="1868" text-anchor="middle" class="s">↑↓ PgUp/PgDn · / 검색 · 1~9 상태 필터 · 0 해제</text>
+  <text x="600" y="1888" text-anchor="middle" class="s">c 설치현황 (yum 별도 줄) · r 지연 점검요청 (yum A·B·C)</text>
+  <text x="600" y="1908" text-anchor="middle" class="s">y yum 커널 표 · d DHCP 조회 (OS 서버만)</text>
+  <text x="600" y="1928" text-anchor="middle" class="s">l 설정 표: hostname|OS커널|appl|dns|ldap_URI|binddn|h/t|ldap_check</text>
+  <text x="600" y="1948" text-anchor="middle" class="s">빨간 칸 = oklist 와 다름 · m = 다른 서버만 (패널 안에서)</text>
+  <text x="600" y="1968" text-anchor="middle" class="s">l 은 열 때 대상 전체를 다시 조사</text>
+  <text x="600" y="1988" text-anchor="middle" class="s">같은 키를 한 번 더 누르면 닫힘 · q 화면 종료</text>
 
-  <rect x="20" y="1352" width="280" height="150" rx="6" class="side"/>
-  <text x="160" y="1377" text-anchor="middle" class="t">12시간 제한</text>
-  <text x="160" y="1402" text-anchor="middle" class="s">시작 시각부터 12시간 (고정)</text>
-  <text x="160" y="1424" text-anchor="middle" class="s">지나면 수집이 자동 종료</text>
-  <text x="160" y="1446" text-anchor="middle" class="s">화면을 껐다 붙여도 시각은</text>
-  <text x="160" y="1468" text-anchor="middle" class="s">바뀌지 않음</text>
-  <path d="M300,1427 H330" class="l"/>
+  <rect x="20" y="1820" width="280" height="190" rx="6" class="side"/>
+  <text x="160" y="1845" text-anchor="middle" class="t">12시간 제한</text>
+  <text x="160" y="1875" text-anchor="middle" class="s">시작 시각부터 12시간 (고정)</text>
+  <text x="160" y="1900" text-anchor="middle" class="s">지나면 수집이 자동 종료</text>
+  <text x="160" y="1925" text-anchor="middle" class="s">화면을 껐다 붙여도 시각은</text>
+  <text x="160" y="1950" text-anchor="middle" class="s">바뀌지 않음</text>
+  <path d="M300,1915 H330" class="l"/>
 
-  <rect x="900" y="1352" width="280" height="150" rx="6" class="side"/>
-  <text x="1040" y="1377" text-anchor="middle" class="t">관리서버 부하 제한</text>
-  <text x="1040" y="1402" text-anchor="middle" class="s">ICMP 500pps · TCP 동시 100</text>
-  <text x="1040" y="1424" text-anchor="middle" class="s">gossh 한 번에 1개 · nice 10</text>
-  <text x="1040" y="1446" text-anchor="middle" class="s">8000대(yum 400) 10분 시험:</text>
-  <text x="1040" y="1468" text-anchor="middle" class="s">CPU 평균 3.5% · RSS 36MB</text>
-  <path d="M900,1427 H870" class="l"/>
+  <rect x="900" y="1820" width="280" height="190" rx="6" class="side"/>
+  <text x="1040" y="1845" text-anchor="middle" class="t">관리서버 부하 제한</text>
+  <text x="1040" y="1872" text-anchor="middle" class="s">ICMP 500pps · TCP 동시 100</text>
+  <text x="1040" y="1894" text-anchor="middle" class="s">gossh 한 번에 1개 · nice 10</text>
+  <text x="1040" y="1916" text-anchor="middle" class="s">자동 설정 조사는 회차당 100대</text>
+  <text x="1040" y="1938" text-anchor="middle" class="s">8000대(yum 400) 10분 시험:</text>
+  <text x="1040" y="1960" text-anchor="middle" class="s">CPU 평균 3.3~3.5% · RSS 43~45MB</text>
+  <text x="1040" y="1982" text-anchor="middle" class="s">l 을 30초마다 누르면 최고 53% · 68MB</text>
+  <path d="M900,1915 H870" class="l"/>
 
   <!-- assumptions -->
-  <rect x="20" y="1520" width="1160" height="55" rx="6" class="side"/>
-  <text x="35" y="1543" class="s">yum 서버가 하나도 없는 호스트파일은 v0.3.0 과 같은 동작·같은 화면 · 호스트의 모드(OS ↔ yum)가 바뀌면 그 호스트 기록은 새로 시작</text>
-  <text x="35" y="1563" class="s">· 실장비의 실제 yum update·재부팅은 아직 확인 전(스텁 gossh 로만 시험) · 코드: state.go · gossh.go · comment.go · tui.go · render.go · daemon.go</text>
+  <rect x="20" y="2030" width="1160" height="55" rx="6" class="side"/>
+  <text x="35" y="2053" class="s">yum 서버·oklist 가 없는 호스트파일의 l 이외 화면은 v0.4.0 과 같음 · 호스트의 모드(OS ↔ yum)가 바뀌면 그 호스트 기록은 새로 시작</text>
+  <text x="35" y="2073" class="s">· 실장비의 실제 yum update·재부팅·설정 조사는 아직 확인 전(스텁 gossh 로만 시험) · 코드: state.go · gossh.go · ldap.go · oklist.go · lpanel.go · tui.go · render.go · daemon.go</text>
 </svg>

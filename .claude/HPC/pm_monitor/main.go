@@ -8,14 +8,16 @@ import (
 	"strings"
 )
 
-const usageText = `사용법: install_mn [-c <설정파일>] <호스트파일>
+const usageText = `사용법: install_mn [-c <설정파일>] <호스트파일> [oklist.txt]
   호스트파일   한 줄에 hostname 하나 (빈 줄과 # 줄은 무시)
+  oklist.txt   (선택) 서버별 기준 설정표. 탭 구분 7칸: hostname OS커널 appl dns ldap_URI binddn h/t
+               l 화면에서 다른 칸을 빨간색으로, <호스트파일>.res 의 설정동일여부에 O/X 로 보여 줍니다
   -c           설정 파일 지정 (기본: 실행한 디렉터리의 pm_monitor.conf)
   수집은 백그라운드에서 돌고 화면은 붙었다 떼었다 합니다. q 로 화면만 나가면 수집은 계속되고,
   같은 호스트파일로 다시 실행하면 이어서 붙습니다. 수집은 시작 12시간 뒤 스스로 끝납니다.
        install_mn --status [<호스트파일>]   실행 중인 수집 보기(호스트파일을 빼면 전부)
        install_mn --stop <호스트파일>       수집 끝내기(화면에서는 Q 후 y)
-       install_mn -f [-c <설정파일>] <호스트파일>   백그라운드 없이 화면과 함께 실행·종료(옛 방식)
+       install_mn -f [-c <설정파일>] <호스트파일> [oklist.txt]   백그라운드 없이 화면과 함께 실행·종료(옛 방식)
 `
 
 func usage() {
@@ -34,6 +36,7 @@ const (
 
 type options struct {
 	conf, hostfile, mode string
+	oklist               string // 두 번째 위치 인자(선택, 계획서 4.9). --status·--stop 에는 쓸 수 없다
 }
 
 // parseArgs 는 인자에서 실행 방식, 설정 파일 경로, 호스트파일 경로를 뽑는다.
@@ -72,11 +75,18 @@ func parseArgs(args []string) (o options, ok bool) {
 		case strings.HasPrefix(a, "-") && a != "-":
 			return options{}, false
 		default:
-			if o.hostfile != "" {
+			switch {
+			case o.hostfile == "":
+				o.hostfile = a
+			case o.oklist == "":
+				o.oklist = a
+			default:
 				return options{}, false
 			}
-			o.hostfile = a
 		}
+	}
+	if o.oklist != "" && (o.mode == modeStatus || o.mode == modeStop) {
+		return options{}, false
 	}
 	if o.mode == modeStatus {
 		return o, o.conf == ""
@@ -146,6 +156,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "호스트파일 읽기 실패: %v\n", err)
 		os.Exit(1)
 	}
+	var okl *Oklist
+	if opt.oklist != "" {
+		if okl, err = loadOklist(opt.oklist); err != nil {
+			fmt.Fprintf(os.Stderr, "oklist 파일을 읽을 수 없음: %s (%v)\n", opt.oklist, err)
+			os.Exit(1)
+		}
+	}
 	cfg, err := LoadConfig(opt.conf)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "설정 오류: %v\n", err)
@@ -155,15 +172,16 @@ func main() {
 	debug.SetGCPercent(25)
 	switch opt.mode {
 	case modeDaemon:
-		os.Exit(runDaemon(cfg, opt.hostfile, hosts, WithYum(yum)))
+		os.Exit(runDaemon(cfg, opt.hostfile, opt.oklist, hosts, WithYum(yum), WithOklist(okl)))
 	case modeFG:
-		os.Exit(runForeground(cfg, opt.hostfile, hosts, WithYum(yum)))
+		os.Exit(runForeground(cfg, opt.hostfile, hosts, WithYum(yum), WithOklist(okl)))
 	}
 	os.Exit(runAttach(opt, cfg))
 }
 
 // runForeground 는 데몬 없이 수집기를 만들어 TUI 로 넘긴다. 화면을 닫으면 수집도 끝난다. 종료 코드를 돌려준다.
 func runForeground(cfg *Config, hostfile string, hosts []string, opts ...CollectorOpt) int {
+	opts = append(opts, WithResFile(resFileName(hostfile), nil)) // 실패는 화면 오류 줄에 보인다
 	col, err := NewCollector(cfg, hosts, stateFileName(hostfile), defaultDeps(), opts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -178,7 +196,7 @@ func runAttach(opt options, cfg *Config) int {
 		fmt.Fprintln(os.Stderr, "install_mn 은 터미널(tty)에서 실행해야 합니다.")
 		return 1
 	}
-	sock, notice, err := ensureDaemon(opt.conf, opt.hostfile, cfg)
+	sock, notice, err := ensureDaemon(opt.conf, opt.hostfile, opt.oklist, cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

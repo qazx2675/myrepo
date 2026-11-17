@@ -91,10 +91,11 @@ func stateAbs(hostfile string) (string, error) {
 
 // programVersion 은 프로그램 버전이다. 지문에 들어가므로 바이너리를 교체한 뒤 다시 실행하면
 // 옛 데몬을 멈추고 새로 시작한다(스냅샷 필드가 늘어도 화면과 데몬이 어긋나지 않게). 테스트가 바꿀 수 있게 변수로 둔다.
-var programVersion = "0.4.0"
+var programVersion = "0.5.0"
 
-// fingerprint 는 프로그램 버전과 호스트파일·설정 파일 내용의 지문이다. 셋 중 하나가 바뀌면 달라진다.
-func fingerprint(hostfile, conf string) string {
+// fingerprint 는 프로그램 버전과 호스트파일·설정 파일 내용, oklist(절대 경로·내용)의 지문이다. 하나라도 바뀌면 달라진다.
+// oklist 가 없으면("") oklist 부분은 넣지 않는다.
+func fingerprint(hostfile, conf, oklist string) string {
 	h := sha256.New()
 	h.Write([]byte(programVersion))
 	h.Write([]byte{0})
@@ -105,6 +106,16 @@ func fingerprint(hostfile, conf string) string {
 			}
 		}
 		h.Write([]byte{0})
+	}
+	if oklist != "" {
+		if abs, err := filepath.Abs(oklist); err == nil {
+			oklist = abs
+		}
+		h.Write([]byte("oklist\x00" + oklist + "\x00"))
+		if b, err := os.ReadFile(oklist); err == nil {
+			s := sha256.Sum256(b)
+			h.Write(s[:])
+		}
 	}
 	return hex.EncodeToString(h.Sum(nil)[:8])
 }
@@ -269,7 +280,7 @@ func (s *daemonServer) watch(c net.Conn, reply func(response)) {
 }
 
 // runDaemon 은 `--daemon` 으로 시작된 프로세스의 본체다. 시작 12시간 뒤, 중지 요청, 종료 신호 중 먼저 오는 때 끝난다.
-func runDaemon(cfg *Config, hostfile string, hosts []string, opts ...CollectorOpt) int {
+func runDaemon(cfg *Config, hostfile, oklist string, hosts []string, opts ...CollectorOpt) int {
 	st, err := stateAbs(hostfile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -285,6 +296,12 @@ func runDaemon(cfg *Config, hostfile string, hosts []string, opts ...CollectorOp
 		return 0 // 같은 호스트파일의 데몬이 이미 있다
 	}
 	defer release()
+	if oklist != "" {
+		if ok, err := loadOklist(oklist); err == nil {
+			fmt.Fprintf(os.Stderr, "oklist %s: 서버 %d대, 경고(무시한 줄) %d줄\n", oklist, ok.Count, ok.Warn)
+		}
+	}
+	opts = append(opts, WithResFile(resFileName(hostfile), func(msg string) { fmt.Fprintln(os.Stderr, msg) }))
 	col, err := NewCollector(cfg, hosts, stateFileName(hostfile), defaultDeps(), opts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -310,7 +327,7 @@ func runDaemon(cfg *Config, hostfile string, hosts []string, opts ...CollectorOp
 	defer cancel()
 	srv := newDaemonServer(ctx, col, daemonInfo{
 		PID: os.Getpid(), Hostfile: hostAbs, Started: now, Expires: now.Add(limit),
-		FP: fingerprint(hostfile, cfg.Path),
+		FP: fingerprint(hostfile, cfg.Path, oklist),
 	})
 	go srv.serve(ln)
 	runDone := make(chan struct{})
@@ -395,7 +412,7 @@ func waitGone(sock string, d time.Duration) bool {
 }
 
 // startDaemon 은 자기 자신을 `--daemon` 으로 다시 실행해 터미널과 분리한다.
-func startDaemon(conf, hostfile string, id string) error {
+func startDaemon(conf, hostfile, oklist string, id string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -411,6 +428,12 @@ func startDaemon(conf, hostfile string, id string) error {
 		args = append(args, "-c", conf)
 	}
 	args = append(args, hostfile)
+	if oklist != "" {
+		if abs, err := filepath.Abs(oklist); err == nil {
+			oklist = abs
+		}
+		args = append(args, oklist)
+	}
 	lf, err := os.OpenFile(logPath(id), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
@@ -427,7 +450,7 @@ func startDaemon(conf, hostfile string, id string) error {
 
 // ensureDaemon 은 수집 데몬이 돌고 있게 한다. 이미 있으면 그대로 두고, 호스트파일·설정이 바뀌었으면 다시 시작한다.
 // 다시 시작했으면 notice 에 안내 문구를 돌려준다.
-func ensureDaemon(conf, hostfile string, cfg *Config) (sock, notice string, err error) {
+func ensureDaemon(conf, hostfile, oklist string, cfg *Config) (sock, notice string, err error) {
 	hostAbs, err := filepath.Abs(hostfile)
 	if err != nil {
 		return "", "", err
@@ -438,7 +461,7 @@ func ensureDaemon(conf, hostfile string, cfg *Config) (sock, notice string, err 
 	}
 	id := daemonID(st)
 	sock = sockPath(id)
-	fp := fingerprint(hostfile, cfg.Path)
+	fp := fingerprint(hostfile, cfg.Path, oklist)
 	if info, qerr := queryInfo(sock); qerr == nil {
 		if info.FP == fp {
 			return sock, "", nil
@@ -449,9 +472,9 @@ func ensureDaemon(conf, hostfile string, cfg *Config) (sock, notice string, err 
 		if !waitGone(sock, stopWait+10*time.Second) {
 			return "", "", errors.New("실행 중인 수집이 멈추지 않음")
 		}
-		notice = "호스트파일·설정이 바뀌어 수집을 다시 시작했습니다(자동 종료 12시간도 새로 셈)"
+		notice = "호스트파일·설정·oklist 가 바뀌어 수집을 다시 시작했습니다(자동 종료 12시간도 새로 셈)"
 	}
-	if err := startDaemon(conf, hostAbs, id); err != nil {
+	if err := startDaemon(conf, hostAbs, oklist, id); err != nil {
 		return "", "", fmt.Errorf("수집을 시작하지 못함: %v", err)
 	}
 	end := time.Now().Add(startupWait)

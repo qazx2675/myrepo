@@ -111,7 +111,7 @@ func (c *Collector) Report(kind rune) string {
 // ReportBusy 는 조회 중에 패널에 보일 안내다(reportSource).
 func (c *Collector) ReportBusy(kind rune) string {
 	if kind == panelLDAP {
-		return fmt.Sprintf("LDAP 점검중... (%d대)", c.LDAPPending())
+		return fmt.Sprintf("LDAP·설정 점검중... (%d대)", c.LDAPPending())
 	}
 	return "DHCP 조회중..."
 }

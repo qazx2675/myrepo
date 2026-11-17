@@ -395,14 +395,16 @@ func TestCheckFieldsPersist(t *testing.T) {
 	col.Round(context.Background())
 	col.mu.Lock()
 	r := col.recs["a"]
-	r.Check = Check{LDAP: "OK", DNSNTP: "FAIL", Autofs: "OK", HT: "ON", Note: "n"}
+	r.Check = Check{Ver: ldapCmdVer, Kernel: "k1", Appl: "nas:/a", DNS: "10.0.0.2 10.0.0.1", LdapURI: "s1 s2",
+		BindDN: "uid=x,dc=cae", HT: "ON", LdapCheck: "INFO LDAP zxcv", Note: "n"}
 	col.recs["a"] = r
 	col.mu.Unlock()
 	if err := col.save(); err != nil {
 		t.Fatal(err)
 	}
 	col2, _ := NewCollector(testCfg(), []string{"a"}, path, f.deps())
-	if got := col2.Snapshot().Records[0].Check; got != (Check{LDAP: "OK", DNSNTP: "FAIL", Autofs: "OK", HT: "ON", Note: "n"}) {
+	if got := col2.Snapshot().Records[0].Check; got != (Check{Ver: ldapCmdVer, Kernel: "k1", Appl: "nas:/a", DNS: "10.0.0.2 10.0.0.1",
+		LdapURI: "s1 s2", BindDN: "uid=x,dc=cae", HT: "ON", LdapCheck: "INFO LDAP zxcv", Note: "n"}) {
 		t.Errorf("check lost: %+v", got)
 	}
 }

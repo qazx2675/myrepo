@@ -63,14 +63,18 @@ func (s Status) IsCompleted() bool {
 // CountsAsDone 은 "N대 설치완료" 수에 들어가는 상태인지 알려준다(재부팅됨 포함).
 func (s Status) CountsAsDone() bool { return s == StatusDone || s == StatusRebooted }
 
-// Check 는 LDAP·DNS·NTP·autofs·H/T 점검 결과다(7단계에서 채운다). state.json 에 같이 저장한다.
+// Check 는 서버 설정 조사 결과다(계획서 4.9). state.json 에 같이 저장한다.
+// v0.4.0 이하의 필드(ldap·dns_ntp·autofs)는 읽을 때 버려지고, Ver 가 낮아 다시 조사된다.
 type Check struct {
-	Ver    int    `json:"ver,omitempty"` // 형식 버전. ldapCmdVer 보다 작으면 다시 조사한다
-	LDAP   string `json:"ldap,omitempty"`
-	DNSNTP string `json:"dns_ntp,omitempty"`
-	Autofs string `json:"autofs,omitempty"`
-	HT     string `json:"ht,omitempty"`
-	Note   string `json:"note,omitempty"`
+	Ver       int    `json:"ver,omitempty"`        // 형식 버전. ldapCmdVer 보다 작으면 다시 조사한다
+	Kernel    string `json:"kernel,omitempty"`     // uname -r
+	Appl      string `json:"appl,omitempty"`       // /etc/auto.appl 의 /appl 마운트 위치
+	DNS       string `json:"dns,omitempty"`        // resolv.conf nameserver(파일 순서, 공백 구분)
+	LdapURI   string `json:"ldap_uri,omitempty"`   // ldap.conf URI 의 호스트 이름(파일 순서, 공백 구분)
+	BindDN    string `json:"binddn,omitempty"`     // ldap.conf binddn 값
+	HT        string `json:"ht,omitempty"`         // ON / OFF / ""(모름)
+	LdapCheck string `json:"ldap_check,omitempty"` // ldap_check 출력(사람용, 비교에 쓰지 않음)
+	Note      string `json:"note,omitempty"`       // 최근 조사 실패 이유 등
 }
 
 // current 는 현재 형식으로 채워진 결과인지 알려준다(v0.1.x 로 저장된 값은 false).
@@ -90,6 +94,9 @@ type Record struct {
 	RebootedAt        time.Time `json:"rebooted_at"`         // 재부팅됨 판정 시각
 	Reason            string    `json:"reason"`              // 현재 상태의 이유(표시용)
 	Check             Check     `json:"check"`
+	// InstallDone 은 설치완료(OS)·yum_update/접속가능(yum)을 한 번이라도 본 서버다(계획서 4.9). 한 번 켜지면
+	// ping X·완료후꺼짐·재부팅됨이 되어도 꺼지지 않고, 모드(OS<->yum)가 바뀌어 기록을 새로 시작할 때만 꺼진다.
+	InstallDone bool `json:"install_done,omitempty"`
 
 	// yum update 모드 전용(계획서 4.8). 모두 비어 있으면 json 에 나오지 않아 OS 서버의 state.json 은 v0.3.0 과 같다.
 	Mode      string    `json:"mode,omitempty"`        // ""=OS 설치, "yum"=yum update
@@ -392,6 +399,12 @@ type Snapshot struct {
 	Updated time.Time      // 마지막으로 회차가 끝난 시각(없으면 zero)
 	LastErr string
 	Yum     YumSummary // yum 서버 집계(계획서 4.8)
+
+	// 계획서 4.9: HostOrder 는 Records 를 호스트파일 순서로 가리키는 인덱스(l 표·res 파일 줄 순서),
+	// Cmp 는 Records 와 같은 순서의 oklist 비교 비트(cmpOn, 다른 칸 비트; oklist 가 없으면 nil), Cfg 는 그 집계다.
+	HostOrder []int
+	Cmp       []uint8
+	Cfg       CfgSummary
 }
 
 // Done 은 설치완료 수(재부팅됨 포함)다. OS 서버만 센다(yum 서버의 재부팅됨은 완료가 아니다).
@@ -431,14 +444,36 @@ type Deps struct {
 	Now  func() time.Time
 	// Yum 은 yum 서버의 커널·부팅 시각 조회다. nil 이면 YumCheck 를 쓴다(yum 서버가 없는 테스트의 Deps 는 비워 둬도 된다).
 	Yum func(cfg *Config, hosts []string) (map[string]YumObs, error)
+	// Cfg 는 설정 조사(계획서 4.9)다: 응답한 서버의 Check 와 응답하지 않은 서버의 이유.
+	// nil 이면 회차의 자동 첫 조사를 하지 않고, `l` 재조사는 LdapQuery 를 쓴다.
+	Cfg func(cfg *Config, hosts []string) (map[string]Check, map[string]string, error)
 }
 
 func defaultDeps() Deps {
-	return Deps{Ping: PingAll, Port: CheckPort22, Pm: PmCheck, Disk: DiskCheck, Now: time.Now, Yum: YumCheck}
+	return Deps{Ping: PingAll, Port: CheckPort22, Pm: PmCheck, Disk: DiskCheck, Now: time.Now, Yum: YumCheck, Cfg: LdapQuery}
 }
 
-// stateVersion 은 state.json 형식 번호다.
-const stateVersion = 1
+// stateVersion 은 state.json 형식 번호다. 2(v0.5.0): install_done 추가. 1 로 저장된 파일은 읽을 때 install_done 을 상태로 정한다.
+const stateVersion = 2
+
+// stickDone 은 지금 상태가 완료면 InstallDone 을 켠다(끄지는 않는다).
+func stickDone(r Record) Record {
+	if doneNow(r) {
+		r.InstallDone = true
+	}
+	return r
+}
+
+// migrateDone 은 install_done 이 없던 state.json(v0.4.0 이하)의 서버에 InstallDone 을 정한다(계획서 4.9).
+// OS 서버: 설치완료·완료후꺼짐·재부팅됨. yum 서버: yum_update/접속가능이거나 YumDoneAt 이 있음(재부팅됨만으로는 아님).
+func migrateDone(r Record) Record {
+	if r.IsYum() {
+		r.InstallDone = r.Status == StatusYumDone || !r.YumDoneAt.IsZero()
+	} else {
+		r.InstallDone = r.Status == StatusDone || r.Status == StatusOff || r.Status == StatusRebooted
+	}
+	return r
+}
 
 type stateFile struct {
 	Version int      `json:"version"`
@@ -472,6 +507,16 @@ type Collector struct {
 	notify chan struct{}
 
 	yum map[string]bool // yum update 모드 서버의 hostname(호스트파일 두 번째 칸이 yum). nil 이면 모두 OS 설치
+
+	ok *Oklist // 기준 설정표(계획서 4.9). nil 이면 비교하지 않는다
+
+	// res 파일(계획서 4.9). resPath 가 비어 있으면 쓰지 않는다. resErr·resLogged 는 mu 로 보호한다.
+	resPath   string
+	resLog    func(string) // 쓰기 실패를 한 번 남길 곳(데몬 로그). nil 이면 남기지 않는다
+	resMu     sync.Mutex   // res 쓰기끼리 겹치지 않게 막는다(resLast 보호)
+	resLast   []byte
+	resErr    string
+	resLogged bool
 }
 
 // CollectorOpt 는 NewCollector 의 선택 설정이다.
@@ -480,6 +525,16 @@ type CollectorOpt func(*Collector)
 // WithYum 은 yum update 모드인 hostname 집합을 정한다(readHostSpecs 의 두 번째 반환값).
 func WithYum(set map[string]bool) CollectorOpt {
 	return func(c *Collector) { c.yum = set }
+}
+
+// WithOklist 는 기준 설정표를 정한다(nil 이면 비교 없음).
+func WithOklist(ok *Oklist) CollectorOpt {
+	return func(c *Collector) { c.ok = ok }
+}
+
+// WithResFile 은 res 파일 경로와 쓰기 실패를 남길 곳(nil 가능)을 정한다.
+func WithResFile(path string, log func(string)) CollectorOpt {
+	return func(c *Collector) { c.resPath, c.resLog = path, log }
 }
 
 // NewCollector 는 state 파일을 읽어(이력 유지) 수집기를 만든다. 호스트파일에서 빠진 서버는 버린다.
@@ -501,6 +556,9 @@ func NewCollector(cfg *Config, hosts []string, statePath string, deps Deps, opts
 			return nil, fmt.Errorf("%s 읽기 실패: %v", statePath, err)
 		}
 		for _, r := range sf.Hosts {
+			if sf.Version < 2 { // install_done 이 없던 형식
+				r = migrateDone(r)
+			}
 			old[r.Name] = r
 		}
 		c.lastSaved = b
@@ -537,12 +595,20 @@ func (c *Collector) publish(running bool) {
 		recs = append(recs, c.recs[h])
 	}
 	round, updated, lastErr := c.round, c.updated, c.lastErr
+	if c.resErr != "" { // res 파일 쓰기 실패는 수집을 멈추지 않고 오류 줄에만 보인다
+		if lastErr != "" {
+			lastErr += "; "
+		}
+		lastErr += c.resErr
+	}
 	c.mu.Unlock()
 	var now time.Time // yum 지연 판정 기준 시각(Now 가 없는 테스트의 Deps 도 허용)
 	if c.deps.Now != nil {
 		now = c.deps.Now()
 	}
-	c.snap.Store(buildSnapshot(c.cfg, recs, round, running, updated, lastErr, withYumNow(now)))
+	s := buildSnapshot(c.cfg, recs, round, running, updated, lastErr, withYumNow(now), withOklist(c.ok))
+	c.snap.Store(s)
+	c.writeRes(s)
 	select {
 	case c.notify <- struct{}{}:
 	default:
@@ -552,25 +618,64 @@ func (c *Collector) publish(running bool) {
 // snapOpt 는 buildSnapshot 의 선택 설정이다(기존 호출은 그대로 컴파일된다).
 type snapOpt func(*snapParams)
 
-type snapParams struct{ now time.Time }
+type snapParams struct {
+	now time.Time
+	ok  *Oklist
+}
 
 // withYumNow 는 yum 지연(계획서 4.8)을 판정할 기준 시각을 정한다. 주지 않으면 지연을 세지 않는다.
 func withYumNow(now time.Time) snapOpt { return func(p *snapParams) { p.now = now } }
 
-func buildSnapshot(cfg *Config, recs []Record, round int, running bool, updated time.Time, lastErr string, opts ...snapOpt) *Snapshot {
+// withOklist 는 비교할 기준 설정표를 정한다(계획서 4.9). nil 이면 비교하지 않는다.
+func withOklist(ok *Oklist) snapOpt { return func(p *snapParams) { p.ok = ok } }
+
+// buildSnapshot 은 recs(호스트파일 순서)로 스냅샷을 만든다. recs 는 고치지 않는다.
+func buildSnapshot(cfg *Config, in []Record, round int, running bool, updated time.Time, lastErr string, opts ...snapOpt) *Snapshot {
 	var sp snapParams
 	for _, o := range opts {
 		o(&sp)
 	}
-	sort.Slice(recs, func(i, j int) bool {
-		a, b := recs[i], recs[j]
+	// 상태 순서 -> hostname 순으로 늘어놓고, 원래(호스트파일) 순서는 HostOrder 로 남긴다
+	idx := make([]int, len(in))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.Slice(idx, func(i, j int) bool {
+		a, b := &in[idx[i]], &in[idx[j]]
 		if ra, rb := statusRank(a.Status), statusRank(b.Status); ra != rb {
 			return ra < rb
 		}
 		return a.Name < b.Name
 	})
+	recs := make([]Record, len(in))
+	hostOrd := make([]int, len(in))
+	for k, i := range idx {
+		recs[k] = in[i]
+		hostOrd[i] = k
+	}
 	s := &Snapshot{Records: recs, Counts: map[Status]int{}, Total: len(recs),
-		Round: round, Running: running, Updated: updated, LastErr: lastErr}
+		Round: round, Running: running, Updated: updated, LastErr: lastErr, HostOrder: hostOrd}
+	if sp.ok != nil {
+		s.Cfg.HasOK, s.Cfg.OK, s.Cfg.Warn = true, sp.ok.Count, sp.ok.Warn
+		s.Cmp = make([]uint8, len(recs))
+	}
+	for k := range recs {
+		r := &recs[k]
+		if !r.Check.current() {
+			continue
+		}
+		s.Cfg.Checked++
+		if sp.ok == nil {
+			continue
+		}
+		if row, ok := sp.ok.Rows[r.Name]; ok {
+			m := cfgDiff(r.Check, row)
+			s.Cmp[k] = cmpOn | m
+			if m != 0 {
+				s.Cfg.Diff++
+			}
+		}
+	}
 	groups := map[string]*VendorGroup{}
 	order := cfg.VendorOrder()
 	for _, v := range order {
@@ -818,14 +923,29 @@ func (c *Collector) round1(ctx context.Context) error {
 	for _, h := range pending {
 		if isYum[h] {
 			o := obs[h]
-			c.recs[h] = applyYum(c.recs[h], o.Ping, o.Port, yumObs[h], now)
+			c.recs[h] = stickDone(applyYum(c.recs[h], o.Ping, o.Port, yumObs[h], now))
 			continue
 		}
-		c.recs[h] = apply(c.recs[h], *obs[h], now, delay)
+		c.recs[h] = stickDone(apply(c.recs[h], *obs[h], now, delay))
 	}
 	c.mu.Unlock()
 	if err := c.save(); err != nil {
 		errs = append(errs, "state 저장: "+err.Error())
+	}
+	// 6. 설정 자동 첫 조사(계획서 4.9): 상태 갱신 뒤, 아직 결과가 없는 대상 서버를 회차마다 최대 cfgAutoMax 대씩.
+	// 실패한 서버는 결과가 비어 있으니 다음 회차에 다시 대상이 되고, 성공한 서버는 자동으로 다시 조사하지 않는다.
+	if c.deps.Cfg != nil && ctx.Err() == nil {
+		if t := c.autoTargets(cfgAutoMax); len(t) > 0 {
+			res, fails, err := c.deps.Cfg(c.cfg, t)
+			if err != nil {
+				errs = append(errs, "설정 조사: "+err.Error())
+			} else {
+				c.applyChecks(res, fails)
+				if err := c.save(); err != nil {
+					errs = append(errs, "state 저장: "+err.Error())
+				}
+			}
+		}
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
@@ -855,7 +975,7 @@ func (c *Collector) CheckCompleted(ctx context.Context) error {
 	now := c.deps.Now()
 	c.mu.Lock()
 	for _, h := range targets {
-		c.recs[h] = ApplyCompletedPing(c.recs[h], res[h], now)
+		c.recs[h] = stickDone(ApplyCompletedPing(c.recs[h], res[h], now))
 	}
 	c.mu.Unlock()
 	serr := c.save()
@@ -890,11 +1010,23 @@ func (c *Collector) save() error {
 }
 
 func writeFileAtomic(path string, data []byte) error {
+	return writeFileAtomicMode(path, data, 0)
+}
+
+// writeFileAtomicMode 는 같은 폴더의 임시 파일에 쓰고 이름을 바꾼다. mode 가 0 이 아니면 그 권한으로 바꾼다.
+func writeFileAtomicMode(path string, data []byte, mode os.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".pm_state_*.tmp")
 	if err != nil {
 		return err
 	}
 	name := tmp.Name()
+	if mode != 0 {
+		if err := tmp.Chmod(mode); err != nil {
+			tmp.Close()
+			os.Remove(name)
+			return err
+		}
+	}
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		os.Remove(name)

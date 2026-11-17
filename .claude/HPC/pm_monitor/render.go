@@ -168,6 +168,12 @@ type ViewState struct {
 	pW     int
 	pOK    bool
 	hasYum bool // 스냅샷에 yum 서버가 있다(prepare 가 정한다). 푸터에 y 키·1~9 필터를 보인다
+
+	// l 패널(계획서 4.9)
+	OnlyDiff bool   // m: oklist 와 다른 서버만 보기(l 패널을 열 때마다 꺼진다)
+	hasOK    bool   // 스냅샷에 oklist 가 있다(prepare 가 정한다). m 키·푸터 안내
+	lRows    []int  // 표 줄(snap.Records 인덱스, 호스트파일 순서, m 필터 적용)
+	lW       [8]int // 칸 폭
 }
 
 // invalidate 는 새 스냅샷이 왔거나 필터·검색이 바뀌었을 때 캐시를 버린다.
@@ -193,7 +199,7 @@ func panelTitle(kind rune) string {
 	case panelDHCP:
 		return "DHCP"
 	case panelLDAP:
-		return "LDAP·H/T"
+		return "LDAP·설정"
 	case panelYum:
 		return "yum 커널"
 	}
@@ -219,6 +225,7 @@ func (v *ViewState) panelBody(snap Snapshot) string {
 // prepare 는 비어 있는 캐시(필터 결과, 패널 줄)를 채운다. 값 복사본에서 불러도 안전하다.
 func (v *ViewState) prepare(snap Snapshot, w int) {
 	v.hasYum = snap.Yum.Total > 0
+	v.hasOK = snap.Cfg.HasOK
 	if !v.rowsOK {
 		rows := make([]int, 0, len(snap.Records))
 		needle := strings.ToLower(v.Search)
@@ -235,7 +242,11 @@ func (v *ViewState) prepare(snap Snapshot, w int) {
 		v.rows, v.rowsOK = rows, true
 	}
 	if v.Panel != 0 && (!v.pOK || v.pW != w) {
-		v.pLines = wrapText(v.panelBody(snap), w-1)
+		if v.Panel == panelLDAP {
+			v.prepareLDAP(snap, w)
+		} else {
+			v.pLines = wrapText(v.panelBody(snap), w-1)
+		}
 		v.pW, v.pOK = w, true
 	}
 }
@@ -415,6 +426,9 @@ func (v *ViewState) footerLines(w int) []string {
 			sw = "c r d l y 전환"
 		}
 		items = []string{"↑↓ PgUp PgDn Home End 스크롤", fmt.Sprintf("%c 닫기", v.Panel), sw, "q 뒤로"}
+		if v.Panel == panelLDAP && v.hasOK { // oklist 가 있을 때만 m 을 안내한다
+			items = append(items[:3:3], "m 다른 서버만", "q 뒤로")
+		}
 	default:
 		if v.hasYum { // yum 서버가 있을 때만 8·9 필터와 y 키를 안내한다(OS 서버만이면 v0.3.0 푸터 그대로)
 			items = []string{"↑↓ PgUp PgDn Home End 이동", "/ 검색", "1~9 필터", "0 해제",
@@ -480,7 +494,7 @@ func render(view ViewState, snap Snapshot, w, h int) string {
 		body = 2
 	}
 	if view.Panel != 0 {
-		lines = append(lines, view.panelLines(w, body)...)
+		lines = append(lines, view.panelLines(snap, w, body)...)
 	} else {
 		lines = append(lines, view.tableLines(snap, w, body)...)
 	}
@@ -509,17 +523,18 @@ func minInt(a, b int) int {
 }
 
 // panelLines 는 열린 패널의 본문(첫 줄은 상태 줄)이다. body 줄로 맞춘다.
-func (v *ViewState) panelLines(w, body int) []string {
+func (v *ViewState) panelLines(snap Snapshot, w, body int) []string {
 	rows := body - 1
-	top := clampInt(v.PanelScroll, 0, len(v.pLines)-rows)
-	end := minInt(top+rows, len(v.pLines))
-	status := fmt.Sprintf(" [%c] %s  %d-%d/%d줄", v.Panel, panelTitle(v.Panel), minInt(top+1, end), end, len(v.pLines))
+	n := v.panelLen()
+	top := clampInt(v.PanelScroll, 0, n-rows)
+	end := minInt(top+rows, n)
+	status := fmt.Sprintf(" [%c] %s  %d-%d/%d줄", v.Panel, panelTitle(v.Panel), minInt(top+1, end), end, n)
 	if v.CheckErr != "" && v.Panel == panelInstall {
 		status += "  ping 확인 실패: " + cleanText(v.CheckErr)
 	}
 	out := []string{paint(v.Color, stBold, truncW(status, w))}
-	for _, l := range v.pLines[top:end] {
-		out = append(out, truncW(l, w))
+	for i := top; i < end; i++ {
+		out = append(out, v.panelLine(snap, i, w))
 	}
 	for len(out) < body {
 		out = append(out, "")

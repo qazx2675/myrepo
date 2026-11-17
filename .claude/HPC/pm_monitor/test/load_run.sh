@@ -6,6 +6,7 @@
 #   작업 폴더는 환경변수 LOAD_DIR(기본 /root/pm_load). 다른 세션의 폴더와 겹치지 않게 바꿀 수 있다.
 #   작업 폴더에 호스트(127.1.x.y N개, 모두 ping 응답·로컬 sshd 22번 열림)·설정·스텁을 만들고
 #   pty_drive.py(가상 터미널 120x40 + 키 입력)로 화면을 붙이고, 수집 데몬 프로세스를 load_check.sh 로 잰다(v0.3.0 부터 수집은 데몬).
+#   v0.5.0: 호스트 전부가 든 oklist.txt 를 같이 넘기고, 끝에 load_check.sh 가 gossh 호출 수·조사 대수·hosts.txt.res 행 수를 보고서에 덧붙인다.
 #   끝나면 /root/pm_load/load_report.txt, drive.log 를 보면 된다. 정리: rm -rf /root/pm_load
 set -eu
 DUR=${1:-600}
@@ -41,6 +42,10 @@ if [ "$YUMPCT" -gt 0 ]; then
 	mv state.new stub_state.txt
 	echo "yum 서버 $(grep -c ' yum$' hosts.txt)대(전체 $(wc -l <hosts.txt)대 중)"
 fi
+# v0.5.0: oklist(스텁 기본 조사값과 같은 값, 호스트 전부) -> 자동 조사·설정동일여부 O 판정·res 쓰기(8000줄)까지 부하에 들어간다
+awk '{ printf "%s\t4.18.0-553.el8.x86_64\tnas01:/export/appl\t10.10.1.10 10.10.1.11\tldap01.demo ldap02.demo\tuid=pmuser,ou=user,ou=ldap_user,dc=cae,dc=com\tON\n", $1 }' hosts.txt >oklist_body.txt
+{ printf 'hostname\tOS커널\tappl\tdns\tldap_URI\tbinddn\th/t\n'; cat oklist_body.txt; } >oklist.txt
+rm -f oklist_body.txt
 echo '#!/bin/bash' >ldap_check.sh # 이름만 필요(스텁이 명령에 ldap_check 가 있으면 응답)
 cat >pm_monitor.conf <<EOF
 gossh=$D/stub_gossh.sh
@@ -54,7 +59,7 @@ echo "호스트 $(wc -l <hosts.txt)대, 상태: $(awk '{c[$2]++} END {for (k in 
 
 export STUB_GOSSH_STATE=$D/stub_state.txt STUB_GOSSH_NICE=$D/nice.log STUB_GOSSH_LOCK=$D/lock STUB_GOSSH_SLEEP=2 STUB_GOSSH_LOG=$D/gossh_calls.log
 # 화면(pty_drive)은 데몬에 붙었다 q 로 떨어지고, 수집은 데몬이 한다 -> 부하는 데몬 프로세스 기준으로 잰다. 끝나면 --stop
-setsid nohup bash -c "python3 pty_drive.py $DUR drive.log pm.pid load -- ./install_mn -c pm_monitor.conf hosts.txt; ./install_mn --stop hosts.txt" >drive.out 2>&1 </dev/null &
+setsid nohup bash -c "python3 pty_drive.py $DUR drive.log pm.pid load -- ./install_mn -c pm_monitor.conf hosts.txt oklist.txt; ./install_mn --stop hosts.txt" >drive.out 2>&1 </dev/null &
 PID=""
 for _ in $(seq 1 100); do
 	PID=$(./install_mn --status hosts.txt 2>/dev/null | sed -n 's/.*pid \([0-9]*\) .*/\1/p')
@@ -62,5 +67,5 @@ for _ in $(seq 1 100); do
 	sleep 0.2
 done
 [ -n "$PID" ] || { echo "수집 데몬이 시작되지 않음" >&2; exit 1; }
-setsid nohup env PING_PPS=500 TCP_PARALLEL=100 bash load_check.sh "$PID" "$DUR" "$D/load_report.txt" >check.out 2>&1 </dev/null &
+setsid nohup env PING_PPS=500 TCP_PARALLEL=100 LOAD_DIR="$D" bash load_check.sh "$PID" "$DUR" "$D/load_report.txt" >check.out 2>&1 </dev/null &
 echo "시작: 수집 데몬 pid=$PID, ${DUR}초. 결과: $D/load_report.txt, $D/drive.log (끝나면 데몬은 자동으로 --stop)"
