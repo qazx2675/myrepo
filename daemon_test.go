@@ -261,3 +261,19 @@ func TestDaemonIDPerStateFile(t *testing.T) {
 		t.Fatal("같은 상태 파일은 같은 데몬이어야 함")
 	}
 }
+
+// 호스트파일 두 번째 칸(yum)이 바뀌면 지문이 달라져 데몬이 재시작한다(계획서 4.8).
+func TestFingerprintChangesOnYumMode(t *testing.T) {
+	h := filepath.Join(t.TempDir(), "hosts")
+	os.WriteFile(h, []byte("a\nb\n"), 0o644)
+	base := fingerprint(h, "")
+	os.WriteFile(h, []byte("a yum\nb\n"), 0o644)
+	withYum := fingerprint(h, "")
+	if withYum == base {
+		t.Fatal("OS -> yum 으로 바뀌었는데 지문이 같음")
+	}
+	os.WriteFile(h, []byte("a\nb\n"), 0o644)
+	if fingerprint(h, "") != base {
+		t.Fatal("원래대로 돌리면 지문도 같아야 함")
+	}
+}

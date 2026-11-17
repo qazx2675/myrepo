@@ -84,26 +84,42 @@ func parseArgs(args []string) (o options, ok bool) {
 	return o, o.hostfile != ""
 }
 
-// readHosts 는 호스트파일을 읽는다. 공백 제거, 빈 줄·# 줄 제외, 중복은 처음 것만 남긴다.
-func readHosts(path string) ([]string, error) {
+// yumWord 는 호스트파일 두 번째 칸에서 yum update 모드를 뜻하는 글자다(대소문자 무시, 계획서 4.8).
+const yumWord = "yum"
+
+// readHostSpecs 는 호스트파일을 읽는다(계획서 4.8). 한 줄은 공백·탭으로 나눈 칸이고,
+// 첫 칸이 hostname, 두 번째 칸이 yum(대소문자 무시)이면 yum update 모드, 그 밖의 값이나 칸 없음은 OS 설치다.
+// 세 번째 칸부터는 무시한다. 빈 줄·# 줄은 건너뛰고, 같은 hostname 은 처음 줄만 쓴다.
+// yum 은 yum 모드인 hostname 의 집합이다(없으면 빈 맵).
+func readHostSpecs(path string) (hosts []string, yum map[string]bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer f.Close()
 	seen := map[string]bool{}
-	var hosts []string
+	yum = map[string]bool{}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
-		h := strings.TrimSpace(sc.Text())
-		if h == "" || strings.HasPrefix(h, "#") || seen[h] {
+		fs := strings.Fields(sc.Text())
+		if len(fs) == 0 || strings.HasPrefix(fs[0], "#") || seen[fs[0]] {
 			continue
 		}
+		h := fs[0]
 		seen[h] = true
 		hosts = append(hosts, h)
+		if len(fs) >= 2 && strings.EqualFold(fs[1], yumWord) {
+			yum[h] = true
+		}
 	}
-	return hosts, sc.Err()
+	return hosts, yum, sc.Err()
+}
+
+// readHosts 는 호스트 이름만 필요할 때 쓴다(모드는 버린다).
+func readHosts(path string) ([]string, error) {
+	hosts, _, err := readHostSpecs(path)
+	return hosts, err
 }
 
 func main() {
@@ -125,7 +141,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "호스트파일을 읽을 수 없음: %s\n", opt.hostfile)
 		usage()
 	}
-	hosts, err := readHosts(opt.hostfile)
+	hosts, yum, err := readHostSpecs(opt.hostfile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "호스트파일 읽기 실패: %v\n", err)
 		os.Exit(1)
@@ -139,16 +155,16 @@ func main() {
 	debug.SetGCPercent(25)
 	switch opt.mode {
 	case modeDaemon:
-		os.Exit(runDaemon(cfg, opt.hostfile, hosts))
+		os.Exit(runDaemon(cfg, opt.hostfile, hosts, WithYum(yum)))
 	case modeFG:
-		os.Exit(runForeground(cfg, opt.hostfile, hosts))
+		os.Exit(runForeground(cfg, opt.hostfile, hosts, WithYum(yum)))
 	}
 	os.Exit(runAttach(opt, cfg))
 }
 
 // runForeground 는 데몬 없이 수집기를 만들어 TUI 로 넘긴다. 화면을 닫으면 수집도 끝난다. 종료 코드를 돌려준다.
-func runForeground(cfg *Config, hostfile string, hosts []string) int {
-	col, err := NewCollector(cfg, hosts, stateFileName(hostfile), defaultDeps())
+func runForeground(cfg *Config, hostfile string, hosts []string, opts ...CollectorOpt) int {
+	col, err := NewCollector(cfg, hosts, stateFileName(hostfile), defaultDeps(), opts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

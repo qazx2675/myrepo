@@ -197,7 +197,7 @@ func (v *ViewState) runeKey(r rune) action {
 			return actNone
 		}
 		return actQuit
-	case r == panelInstall || r == panelDelay || r == panelDHCP || r == panelLDAP:
+	case r == panelInstall || r == panelDelay || r == panelDHCP || r == panelLDAP || r == panelYum:
 		if v.Panel == r { // 같은 키를 다시 누르면 닫는다
 			v.Panel = 0
 			return actNone
@@ -213,7 +213,7 @@ func (v *ViewState) runeKey(r rune) action {
 		}
 	case r == '/':
 		v.Panel, v.Searching, v.SearchBuf = 0, true, v.Search
-	case r >= '0' && r <= '7':
+	case r >= '0' && r <= '9': // 8·9 는 yum 서버 상태(접속가능·yum_update/접속가능)
 		v.Panel, v.Filter, v.Scroll = 0, Status(r-'0'), 0
 		v.invalidate()
 	}

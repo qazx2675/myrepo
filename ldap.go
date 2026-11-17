@@ -321,13 +321,22 @@ func LdapQuery(cfg *Config, hosts []string) (map[string]Check, error) {
 // ldapDone 은 점검 대상이 될 수 있는 상태(설치완료·재부팅됨)인지 알려준다. 완료후꺼짐은 응답이 없으므로 제외한다.
 func ldapDone(s Status) bool { return s == StatusDone || s == StatusRebooted }
 
-// ldapTargets 는 설치완료·재부팅됨이면서 결과가 비어 있는 서버(호스트파일 순서)다.
+// ldapTarget 은 서버 하나가 점검 대상이 될 수 있는지 알려준다(계획서 4.8).
+// OS 서버는 설치완료·재부팅됨, yum 서버는 yum_update/접속가능만이다(yum 서버의 재부팅됨·접속가능·완료후꺼짐은 아니다).
+func ldapTarget(r Record) bool {
+	if r.IsYum() {
+		return r.Status == StatusYumDone
+	}
+	return ldapDone(r.Status)
+}
+
+// ldapTargets 는 점검 대상(ldapTarget)이면서 결과가 비어 있는 서버(호스트파일 순서)다.
 func (c *Collector) ldapTargets() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var out []string
 	for _, h := range c.hosts {
-		if r := c.recs[h]; ldapDone(r.Status) && !r.Check.current() {
+		if r := c.recs[h]; ldapTarget(r) && !r.Check.current() {
 			out = append(out, h)
 		}
 	}
@@ -377,13 +386,13 @@ func (c *Collector) LDAPReport() string {
 	return out
 }
 
-// ldapTable 은 완료 서버(설치완료·재부팅됨) 중 결과가 있는 서버의 탭 구분 표다(hostname 순).
+// ldapTable 은 완료 서버(설치완료·재부팅됨, yum 서버는 yum_update/접속가능) 중 결과가 있는 서버의 탭 구분 표다(hostname 순).
 // 머리줄에 비고 칸이 항상 있고, 비고가 없는 줄은 빈 칸으로 둔다.
 func ldapTable(snap *Snapshot) string {
 	var recs []Record
 	n, empty := 0, 0
 	for _, r := range snap.Records {
-		if !ldapDone(r.Status) {
+		if !ldapTarget(r) {
 			continue
 		}
 		n++

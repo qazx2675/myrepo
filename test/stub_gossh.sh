@@ -26,6 +26,18 @@
 #         STUB_DNS_DIFF     공백 구분 호스트: NTP 집합을 DNS 와 다르게(10.10.2.20)
 #         STUB_APPL_DIFF    공백 구분 호스트: auto.appl 의 wappl 값을 appl 과 다르게
 #         (모든 호스트에 PM_DNS/PM_CHRONY/PM_NTPC/PM_APPL 줄도 낸다: DNS 10.10.1.10 10.10.1.11, NTP 같은 집합 다른 순서(하나는 이름 ntp01.demo 를 PM_NTPRC 로 IP 풀이), appl=wappl=nas01:/export/appl)
+#   명령에 NS_YUM 이 있으면(yum 커널·부팅 시각 조회, down 이 아닌 모든 상태가 응답):
+#         stdout "host: NS_YUM" "host: <커널>" "host: <부팅 시각>"
+#         상태 파일 줄 형식(yum 서버, 칸은 공백 구분):
+#           <호스트> <상태> <커널> <부팅일> <부팅시각> [<바뀐 커널> <바뀐 부팅일> <바뀐 부팅시각> <전환 epoch>]
+#           예) svr1 done 4.18.0-513.el8 2026-11-17 09:00:00
+#               svr2 done 4.18.0-513.el8 2026-11-17 09:00:00 4.18.0-553.el8 2026-11-17 14:20:00 1763380000
+#         - 3~5번째 칸: 기본(전환 전) 커널·부팅 시각. 없으면 4.18.0-513.el8.x86_64 / 2026-11-17 09:00:00
+#         - 6~9번째 칸(전부 있어야 함): 현재 시각(epoch 초)이 9번째 칸 이상이 되면 바뀐 커널·부팅 시각을 낸다.
+#           재부팅한 것처럼 보이는 시험용이다: 바뀐 커널이 기본과 같으면 "재부팅은 됐고 커널은 그대로",
+#           다르면 "재부팅 + 커널 변경". 상태 파일은 호출마다 새로 읽으므로 파일을 고쳐 써도 반영된다.
+#         STUB_NOW (선택) 현재 시각(epoch 초)을 이 값으로 고정(단위 시험용). 없으면 date +%s
+#         칸이 3~5개뿐인 줄은 시간이 지나도 변하지 않는다. OS 서버 줄(2칸)과 yum 이 아닌 명령은 이 칸을 쓰지 않는다.
 #   STUB_GOSSH_LOG (선택) 이 파일에 호출마다 명령 줄(인자)을 한 줄 덧붙임
 # 호스트 5천 대도 awk 한 번으로 처리한다(호스트별 프로세스 없음).
 [ -n "$STUB_GOSSH_LOG" ] && echo "$*" >> "$STUB_GOSSH_LOG"
@@ -54,9 +66,19 @@ disk=0
 case "$cmd" in *NS_DISK*) disk=1 ;; esac
 ldap=0
 case "$cmd" in *ldap_check*) ldap=1 ;; esac
+yum=0
+case "$cmd" in *NS_YUM*) yum=1 ;; esac
+now=0
+[ "$yum" = 1 ] && now="${STUB_NOW:-$(date +%s)}"
 
-awk -v pm="$pm" -v disk="$disk" -v ldap="$ldap" -v lfail=" $STUB_LDAP_FAIL " -v lunk=" $STUB_LDAP_UNKNOWN " -v lone="${STUB_LDAP_ONELINE:-0}" -v htoff=" $STUB_HT_OFF " -v dnsdiff=" $STUB_DNS_DIFF " -v appldiff=" $STUB_APPL_DIFF " -v inst="${list}_os_install" -v off="${list}_res_off" '
-NR == FNR { st[$1] = $2; next }
+awk -v pm="$pm" -v disk="$disk" -v ldap="$ldap" -v yum="$yum" -v now="$now" -v lfail=" $STUB_LDAP_FAIL " -v lunk=" $STUB_LDAP_UNKNOWN " -v lone="${STUB_LDAP_ONELINE:-0}" -v htoff=" $STUB_HT_OFF " -v dnsdiff=" $STUB_DNS_DIFF " -v appldiff=" $STUB_APPL_DIFF " -v inst="${list}_os_install" -v off="${list}_res_off" '
+NR == FNR {
+  st[$1] = $2
+  if (NF >= 3) kern[$1] = $3
+  if (NF >= 5) boot[$1] = $4 " " $5
+  if (NF >= 9) { kern2[$1] = $6; boot2[$1] = $7 " " $8; at[$1] = $9 + 0 }
+  next
+}
 {
   h = $1
   if (h == "") next
@@ -64,6 +86,15 @@ NR == FNR { st[$1] = $2; next }
   if (s == "down") {
     print h ": SSH 접속 실패: dial tcp " h ":22: i/o timeout" > "/dev/stderr"
     if (pm) print h > off
+    next
+  }
+  if (yum) {
+    k = (h in kern) ? kern[h] : "4.18.0-513.el8.x86_64"
+    b = (h in boot) ? boot[h] : "2026-11-17 09:00:00"
+    if ((h in at) && now + 0 >= at[h]) { k = kern2[h]; b = boot2[h] }
+    print h ": NS_YUM"
+    print h ": " k
+    print h ": " b
     next
   }
   if (ldap) {

@@ -1,4 +1,4 @@
-// gossh.go - gossh 연동 (-pm 설치완료/설치중 확인, anaconda.log 디스크 확인, 출력 파싱)
+// gossh.go - gossh 연동 (-pm 설치완료/설치중 확인, anaconda.log 디스크 확인, yum 커널·부팅 시각 조회, 출력 파싱)
 package main
 
 import (
@@ -173,6 +173,97 @@ func DiskCheck(cfg *Config, hosts []string) (diskFail []string, err error) {
 		return nil, err
 	}
 	return parseDiskOutput(string(so)), nil
+}
+
+// yum update 모드(계획서 4.8) 커널·부팅 시각 조회.
+const (
+	mkYum = "NS_YUM"
+	// yumCmd 는 yum 서버에 보내는 한 줄 명령이다. root 셸이 csh/tcsh 여도 돌도록 변수·중괄호·$()·따옴표 없이 쓰고,
+	// 랩 gossh 가 끝의 작은따옴표를 잘라 먹으므로 따옴표로 끝내지 않는다.
+	yumCmd = "echo " + mkYum + "; uname -r; uptime -s"
+	// yumBootLayout 은 `uptime -s` 출력 형식이다.
+	yumBootLayout = "2006-01-02 15:04:05"
+)
+
+// YumObs 는 yum 서버 하나에서 읽은 커널·부팅 시각이다. Err 가 비어 있지 않으면 읽지 못한 것이다(ssh 실패 등).
+type YumObs struct {
+	Kernel string // uname -r
+	Boot   string // uptime -s (YYYY-MM-DD HH:MM:SS), 읽지 못했으면 ""
+	Err    string
+}
+
+// YumCheck 는 hosts(ping O·22번 열린 yum 서버)에 gossh 를 한 번 실행해 커널·부팅 시각을 읽는다.
+// 결과에는 hosts 의 모든 호스트가 들어간다(읽지 못한 호스트는 Err).
+func YumCheck(cfg *Config, hosts []string) (map[string]YumObs, error) {
+	if len(hosts) == 0 {
+		return map[string]YumObs{}, nil
+	}
+	so, se, err := runGosshList(cfg, hosts, nil, yumCmd)
+	if err != nil {
+		return nil, err
+	}
+	return parseYumOutput(string(so), string(se), hosts), nil
+}
+
+// looksLikeKernel 은 `uname -r` 결과처럼 보이는지 알려준다(숫자로 시작하고 점이 있으며 공백이 없음).
+func looksLikeKernel(s string) bool {
+	return s != "" && s[0] >= '0' && s[0] <= '9' && strings.Contains(s, ".") && !strings.ContainsAny(s, " \t")
+}
+
+// parseYumOutput 은 gossh -script 의 "host: 내용" 줄을 호스트별로 읽는다(결과는 hosts 의 모든 호스트).
+// NS_YUM 표식 뒤에 처음 나오는 커널 모양의 줄이 Kernel, 바로 다음 줄이 `uptime -s` 형식이면 Boot 다.
+// 표식이나 커널 줄이 없으면 Err 에 그 호스트의 첫 stderr 줄(없으면 "응답 없음")을 넣는다.
+// gossh 가 종료코드 != 0 일 때 붙이는 `ERROR: ` 접두사는 떼고 읽는다.
+func parseYumOutput(stdout, stderr string, hosts []string) map[string]YumObs {
+	lines := map[string][]string{} // 표식 뒤의 줄
+	marked := map[string]bool{}
+	for _, l := range strings.Split(stdout, "\n") {
+		h, v, ok := splitHostLine(l)
+		if !ok {
+			continue
+		}
+		v = strings.TrimSpace(strings.TrimPrefix(v, "ERROR: "))
+		if v == mkYum {
+			marked[h] = true
+			lines[h] = nil
+			continue
+		}
+		if marked[h] {
+			lines[h] = append(lines[h], v)
+		}
+	}
+	reason := map[string]string{}
+	for _, l := range strings.Split(stderr, "\n") {
+		if h, v, ok := splitHostLine(l); ok && v != "" {
+			if _, seen := reason[h]; !seen {
+				reason[h] = v
+			}
+		}
+	}
+	res := make(map[string]YumObs, len(hosts))
+	for _, h := range hosts {
+		var o YumObs
+		ls := lines[h]
+		for i, v := range ls {
+			if looksLikeKernel(v) {
+				o.Kernel = v
+				if i+1 < len(ls) {
+					if _, err := time.Parse(yumBootLayout, ls[i+1]); err == nil {
+						o.Boot = ls[i+1]
+					}
+				}
+				break
+			}
+		}
+		if !marked[h] || o.Kernel == "" {
+			o = YumObs{Err: reason[h]}
+			if o.Err == "" {
+				o.Err = "응답 없음"
+			}
+		}
+		res[h] = o
+	}
+	return res
 }
 
 // parseDiskOutput 은 gossh stdout 에서 "host: NS_DISK" 인 호스트를 나타난 순서대로 돌려준다.
