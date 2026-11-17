@@ -1,3 +1,4 @@
+// [용도] 업무에 필요한 서버 설정값 비교를 위해 사용되는 툴로, 업무 시 텍스트 기록을 위한 목적으로 가져오는 데만 사용됩니다.
 // awx_copy: AWX 인벤토리 variables 를 중계로 써서 텍스트 파일을 옮기는 도구.
 // 업로더(리눅스): awx_copy -u {user} [filename] [-csv]
 // 다운로더(윈도우): awx_fetch.exe [옵션]   (또는 awx_copy --fetch)
