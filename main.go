@@ -33,6 +33,8 @@ type options struct {
 	status        bool
 	noPause       bool
 	rootPasswd    bool
+	cli           bool
+	noBrowser     bool
 	version       bool
 	help          bool
 	positional    []string
@@ -53,7 +55,8 @@ func usage() {
   --status           variables 길이/SHA-256/블록 여부 (GET 만)
   --snapshot         작업 템플릿/인벤토리 소스 modified 출력 (GET 만)
   --measure-limits [--measure-max-mib 64]   본문 한도 측정
-  다운로더: awx_fetch.exe [--config 경로] [--out 폴더] (또는 awx_copy --fetch)
+  다운로더(윈도우): awx_fetch.exe            창 앱 (conf\{user}.conf, 받은 파일 관리)
+                   awx_fetch.exe --cli [--user 이름] [--out 폴더]   창 없이 1건 수신 (출력: awx_fetch.log)
 
 설정파일 선택:
   -u, --user <이름>  설정 폴더의 <이름>.conf
@@ -131,6 +134,10 @@ func parseArgs(args []string) (options, error) {
 			o.noPause = true
 		case "root-passwd":
 			o.rootPasswd = true
+		case "cli":
+			o.cli = true
+		case "no-browser":
+			o.noBrowser = true
 		case "version":
 			o.version = true
 		default:
@@ -174,8 +181,19 @@ func main() {
 }
 
 func run(argv []string) int {
-	setupConsole()
 	o, err := parseArgs(argv[1:])
+	exe := strings.ToLower(filepath.Base(argv[0]))
+	fetchMode := o.fetch || strings.Contains(exe, "fetch")
+	if runtime.GOOS == "windows" && err == nil && fetchMode && !o.cli && !o.help && !o.version && !o.restore &&
+		!o.status && !o.snapshot && !o.measure && !o.listUsers {
+		return runGUI(o.noBrowser) // 창 앱
+	}
+	if runtime.GOOS == "windows" && !hasConsoleWindow() {
+		// -H windowsgui 빌드의 CLI 모드: 부모 콘솔에 붙이고, 출력은 awx_fetch.log(UTF-8)에도 남긴다.
+		finish := teeCLIOutput(filepath.Join(exeDir(), "awx_fetch.log"))
+		defer finish()
+	}
+	setupConsole()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "오류:", err)
 		fmt.Fprintln(os.Stderr, "도움말: awx_copy --help")
@@ -189,9 +207,7 @@ func run(argv []string) int {
 		fmt.Println("awx_copy", version, runtime.GOOS+"/"+runtime.GOARCH, runtime.Version())
 		return 0
 	}
-	exe := strings.ToLower(filepath.Base(argv[0]))
-	fetchMode := o.fetch || strings.Contains(exe, "fetch")
-	pause := runtime.GOOS == "windows" && fetchMode && len(argv) == 1 && !o.noPause
+	pause := false // 창 앱이 기본이라 Enter 대기는 쓰지 않는다 (--no-pause 는 호환용으로 받는다)
 	if pause {
 		defer func() {
 			fmt.Print("\nEnter 키를 누르면 창을 닫습니다...")
@@ -281,6 +297,35 @@ func run(argv []string) int {
 		return 1
 	}
 	return 0
+}
+
+// teeCLIOutput 은 표준 출력/오류를 파이프로 바꿔 부모 콘솔(있으면)과 로그 파일에 함께 쓴다.
+// 돌려준 함수를 종료 전에 불러 남은 출력을 비운다.
+func teeCLIOutput(logPath string) func() {
+	console := attachParentConsole()
+	var outs []io.Writer
+	if console {
+		outs = append(outs, os.Stdout)
+	}
+	lf := &fileLog{path: logPath}
+	outs = append(outs, lf)
+	r, w, err := os.Pipe()
+	if err != nil {
+		return func() {}
+	}
+	os.Stdout, os.Stderr = w, w
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = io.Copy(io.MultiWriter(outs...), r)
+	}()
+	return func() {
+		_ = w.Close()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 // doUpload 는 업로드하고 기록 한 줄을 만든다. tty 면 진행 막대를 쓴다.

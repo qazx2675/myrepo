@@ -330,17 +330,40 @@ func (s *selector) create() (*Config, int, error) {
 			return nil, 2, errors.New("저장하지 않고 종료합니다")
 		}
 	}
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+	if err := writeConfFile(path, url, name, pw, id, defaultChunkSize, defaultTimeout); err != nil {
 		return nil, 2, err
 	}
-	body := fmt.Sprintf("url = %s\nusername = %s\npassword = %s\ninventory_id = %d\nchunk_size = %d\ntimeout = %d\n",
-		url, name, pw, id, defaultChunkSize, defaultTimeout)
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		return nil, 2, err
-	}
-	_ = os.Chmod(path, 0o600)
 	fmt.Fprintf(s.Out, "저장했습니다: %s\n", path)
 	return s.load(path)
+}
+
+// writeConfFile 은 설정파일을 쓴다. 윈도우에서는 비밀번호를 DPAPI 로 암호화해 password_enc 로 쓴다.
+// 암호화할 수 없는 OS 에서는 평문 password 로 쓴다(권한 600).
+func writeConfFile(path, url, username, pw string, inv, chunk, timeoutSec int) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	pwLine := "password = " + pw
+	if enc, err := dpapiEncrypt(pw); err == nil {
+		pwLine = "password_enc = " + enc
+	} else if runtime.GOOS == "windows" {
+		return fmt.Errorf("비밀번호 암호화 실패: %v", err)
+	}
+	if chunk <= 0 {
+		chunk = defaultChunkSize
+	}
+	if timeoutSec <= 0 {
+		timeoutSec = defaultTimeout
+	}
+	body := fmt.Sprintf("# awx_copy 설정 (비밀번호는 %s)\nurl = %s\nusername = %s\n%s\ninventory_id = %d\nchunk_size = %d\ntimeout = %d\n",
+		map[bool]string{true: "DPAPI 암호문", false: "평문, 권한 600"}[strings.HasPrefix(pwLine, "password_enc")],
+		strings.TrimRight(url, "/"), username, pwLine, inv, chunk, timeoutSec)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
+		return err
+	}
+	_ = os.Chmod(tmp, 0o600)
+	return os.Rename(tmp, path)
 }
 
 // listUsers 는 --list-users 출력이다.

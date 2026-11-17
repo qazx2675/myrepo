@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -96,6 +97,9 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 				}
 				start = time.Now()
 				fmt.Fprintf(log, "세션 %s: %s (%s bytes, %s, 조각 %d개)\n", session, b["file_name"], b["total_bytes"], b["encoding"], n)
+				if obs := obsFrom(ctx); obs != nil {
+					obs.start(meta)
+				}
 			}
 			if ok && b["session"] != session {
 				return "", fmt.Errorf("다른 세션(%s)이 끼어들었습니다", b["session"])
@@ -121,6 +125,9 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 				}
 				parts = append(parts, chunk)
 				fmt.Fprintf(log, "[%d/%d] 수신 중 (%d bytes)\n", expected, n, len(chunk))
+				if obs := obsFrom(ctx); obs != nil {
+					obs.chunk(expected, n, int64(len(chunk)))
+				}
 				if expected < n {
 					ack := b.clone()
 					ack["state"], ack["chunk_data"], ack["chunk_sha256"] = stateAck, "", ""
@@ -158,6 +165,58 @@ func fetchFile(ctx context.Context, c *Client, cfg *Config, outDir string, log i
 		}
 		d = nextPoll(d)
 	}
+}
+
+// fetchObs 는 수신 진행을 지켜보는 쪽(창 앱)이다. context 로 전달한다. 프로토콜과 무관하다.
+type fetchObs struct {
+	mu       sync.Mutex
+	Session  string
+	FileName string
+	Total    int64
+	K, N     int
+	Bytes    int64
+	Started  time.Time
+}
+
+type obsKey struct{}
+
+func withFetchObs(ctx context.Context, o *fetchObs) context.Context {
+	return context.WithValue(ctx, obsKey{}, o)
+}
+
+func obsFrom(ctx context.Context) *fetchObs {
+	o, _ := ctx.Value(obsKey{}).(*fetchObs)
+	return o
+}
+
+func (o *fetchObs) start(meta Block) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.Session, o.FileName = meta["session"], meta["file_name"]
+	o.Total, _ = strconv.ParseInt(meta["total_bytes"], 10, 64)
+	o.N, o.K, o.Bytes, o.Started = meta.int("chunk_total"), 0, 0, time.Now()
+}
+
+func (o *fetchObs) chunk(k, n int, b int64) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.K, o.N = k, n
+	o.Bytes += b
+}
+
+// obsSnap 은 진행 값 복사본이다.
+type obsSnap struct {
+	Session, FileName string
+	Total, Bytes      int64
+	K, N              int
+	Started           time.Time
+}
+
+// snapshot 은 현재 진행 값을 복사한다.
+func (o *fetchObs) snapshot() obsSnap {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return obsSnap{Session: o.Session, FileName: o.FileName, Total: o.Total, K: o.K, N: o.N, Bytes: o.Bytes, Started: o.Started}
 }
 
 // waitRestored 는 업로더가 결과를 읽고 원복하기를 기다린다. cfg.Timeout 이 지나면 직접 원복한다.

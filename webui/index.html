@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWX_copy 수신기</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="bar">
+  <div class="bar-title">AWX_copy 수신기</div>
+  <div class="bar-user" id="barUser">사용자 없음</div>
+  <div class="bar-actions">
+    <button type="button" class="btn btn-ghost" data-act="show-users">사용자 변경</button>
+  </div>
+</header>
+
+<main>
+  <!-- 사용자 선택 -->
+  <section class="card" id="viewUsers" hidden>
+    <div class="card-head">
+      <h2>사용자 선택</h2>
+      <span class="muted" id="confDir"></span>
+    </div>
+    <table class="grid" id="userTable">
+      <thead><tr><th>사용자</th><th>AWX 주소</th><th>인벤토리</th><th>비밀번호 저장</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="row gap">
+      <button type="button" class="btn" data-act="show-new">새 설정 만들기</button>
+      <span class="msg" id="userMsg"></span>
+    </div>
+  </section>
+
+  <!-- 새 설정 -->
+  <section class="card" id="viewNew" hidden>
+    <div class="card-head"><h2>새 설정 만들기</h2><span class="muted">conf\{username}.conf 로 저장. 비밀번호는 Windows DPAPI 로 암호화.</span></div>
+    <form id="newForm" autocomplete="off">
+      <label>AWX 주소<input name="url" placeholder="http://192.168.0.58:30080" required></label>
+      <label>username<input name="username" required></label>
+      <label>password<input name="password" type="password" required></label>
+      <label>inventory_id<input name="inventory_id" inputmode="numeric" required></label>
+      <label class="check"><input type="checkbox" name="overwrite"> 같은 이름이 있으면 덮어쓰기</label>
+      <div class="row gap">
+        <button type="button" class="btn btn-ghost" data-act="new-test">연결 테스트</button>
+        <button type="submit" class="btn btn-primary">연결 테스트 후 저장</button>
+        <button type="button" class="btn btn-ghost" data-act="show-users">취소</button>
+        <span class="msg" id="newMsg"></span>
+      </div>
+    </form>
+  </section>
+
+  <!-- 수신 -->
+  <section class="card" id="viewMain" hidden>
+    <div class="card-head">
+      <h2>수신</h2>
+      <span class="muted" id="mainInfo"></span>
+    </div>
+    <div class="row gap">
+      <button type="button" class="btn btn-primary" data-act="fetch" id="btnFetch">지금 가져오기</button>
+      <button type="button" class="btn btn-danger" data-act="stop" id="btnStop" disabled>수신 중단</button>
+      <label class="toggle"><input type="checkbox" id="watchToggle"><span>자동 감시 (2초 간격)</span></label>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress"><div class="progress-fill" id="progFill"></div></div>
+      <div class="progress-text mono" id="progText">대기</div>
+    </div>
+    <div class="status" id="statusLine"></div>
+  </section>
+
+  <!-- 관리 공간 -->
+  <section class="card" id="viewStore" hidden>
+    <div class="card-head">
+      <h2>받은 파일</h2>
+      <span class="muted" id="histInfo"></span>
+    </div>
+    <div class="row gap">
+      <label class="grow">저장 폴더<input id="saveDir" class="mono"></label>
+      <button type="button" class="btn btn-ghost" data-act="save-dir">폴더 변경</button>
+      <button type="button" class="btn btn-ghost" data-act="open-save-dir">폴더 열기</button>
+      <span class="msg" id="storeMsg"></span>
+    </div>
+    <div class="table-scroll">
+      <table class="grid" id="histTable">
+        <thead><tr><th>시각</th><th>원본 파일명</th><th>크기</th><th>조각</th><th>SHA-256</th><th>저장 경로</th><th>사용자</th><th>작업</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="confirmBox" hidden>
+  <div class="modal-body">
+    <div id="confirmText"></div>
+    <div class="row gap end">
+      <button type="button" class="btn btn-danger" data-act="confirm-yes">삭제</button>
+      <button type="button" class="btn btn-ghost" data-act="confirm-no">취소</button>
+    </div>
+  </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

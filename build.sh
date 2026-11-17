@@ -11,7 +11,7 @@ go vet ./...
 go build -trimpath -ldflags "$LDF" -o bin/awx_copy .
 echo "빌드: bin/awx_copy"
 if [ "${1:-}" = "all" ]; then
-    GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDF" -o dist/awx_fetch.exe .
+    GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDF -H windowsgui" -o dist/awx_fetch.exe .  # cmd 창 없음
     echo "빌드: dist/awx_fetch.exe"
 fi
 chmod 755 bin/awx_copy

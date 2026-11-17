@@ -24,6 +24,7 @@ type Config struct {
 	URL         string
 	Username    string
 	Password    string
+	PasswordEnc bool // password_enc(DPAPI)에서 읽었다
 	InventoryID int
 	ChunkSize   int
 	Timeout     time.Duration
@@ -111,7 +112,15 @@ func loadConfig(path string) (*Config, error) {
 		case "username":
 			cfg.Username = val
 		case "password":
-			cfg.Password = val
+			if cfg.Password == "" || !cfg.PasswordEnc {
+				cfg.Password = val
+			}
+		case "password_enc": // 윈도우 DPAPI(현재 사용자) 암호문. 평문 password 보다 우선한다.
+			pw, err := dpapiDecrypt(val)
+			if err != nil {
+				return nil, fmt.Errorf("%s:%d: password_enc 를 풀 수 없습니다 (다른 PC/사용자가 만든 값이면 설정을 다시 저장하세요): %v", path, ln, err)
+			}
+			cfg.Password, cfg.PasswordEnc = pw, true
 		case "inventory_id":
 			n, err := strconv.Atoi(val)
 			if err != nil || n <= 0 {

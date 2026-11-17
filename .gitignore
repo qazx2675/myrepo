@@ -12,3 +12,10 @@ test/results/*.local
 # 사용자별 설정 폴더
 conf/
 conf.local/
+
+# 창 앱 실행 산출물 (받은 파일, 기록, 로그, 설정)
+received/
+awx_fetch.log
+awx_fetch.log.1
+awx_fetch.json
+*.conf.tmp

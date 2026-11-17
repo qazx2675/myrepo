@@ -3,7 +3,7 @@
 AWX 인벤토리 `variables` 를 중계로 써서 레드햇(ETX) 터미널의 **텍스트 파일**을 윈도우로 가져온다.
 
 - 업로더(리눅스): `/usr/local/bin/awx_copy` (Go 단일 바이너리. bash 래퍼 없음)
-- 다운로더(윈도우): `dist/awx_fetch.exe` (같은 Go 코드. 창 앱은 Step 4)
+- 다운로더(윈도우): `dist/awx_fetch.exe` (같은 Go 코드. Edge/Chrome 앱 창, cmd 창 없음)
 - 인벤토리 `variables` 만 PATCH 한다. 작업 템플릿, 인벤토리 소스는 호출·변경하지 않는다.
 - 표준 라이브러리만 쓴다. go 1.20 이상에서 빌드된다.
 
@@ -40,7 +40,7 @@ sudo ./install.sh     # 또는: ./install.sh <바이너리 경로>
 | 대상 | 권한 | 내용 |
 |---|---|---|
 | `/usr/local/bin/awx_copy` | root:root 755 | 바이너리 |
-| `/etc/awx_copy/` | root:root 700 | 설정 폴더 |
+| `/etc/awx_copy/` | root:root 755 | 설정 폴더 |
 | `/etc/awx_copy/root.conf` | root:root 600 | 없을 때만 생성. 기본 root 기록 조회 비밀번호의 **SHA-256 해시만** 저장 (`password_sha256 = ...`). 평문은 스크립트·바이너리·파일 어디에도 없다. 설치 뒤 `awx_copy --root-passwd` 로 바꾼다. |
 | `/tmp/.awx_copy/` | 1777 | 업로드 기록 폴더 |
 
@@ -53,8 +53,10 @@ chown test.kim /etc/awx_copy/test.kim.conf   # 소유자 = 해당 OS 사용자
 chmod 600 /etc/awx_copy/test.kim.conf
 ```
 
-주의: 요구사항대로 `/etc/awx_copy` 는 700(root) 이다. 이 상태에서는 root 만 안의 설정을 읽는다.
-일반 사용자가 직접 실행하려면 관리자가 폴더를 711(목록 숨김, 자기 파일만 접근) 또는 755 로 바꿔야 한다.
+`/etc/awx_copy` 는 755 다. 일반 사용자가 자기 `{user}.conf` 를 읽고 선택 목록을 보려면 폴더 탐색·목록 권한이 필요하기 때문이다.
+conf 파일은 600(소유자=해당 사용자)이라 다른 사용자는 내용을 읽지 못한다.
+대신 폴더 목록으로 **사용자 이름(파일명)은 모든 사용자에게 보인다**. 선택 목록에는 읽을 수 있는 파일만 나온다.
+`root.conf` 는 root 소유 600 그대로다.
 
 ## /etc 구조와 설정파일
 
@@ -78,7 +80,7 @@ chmod 600 /etc/awx_copy/test.kim.conf
 - `-u {user}` 는 `/etc/awx_copy/{user}.conf` 를 쓴다. `~/.awx_copy/` 탐색과 "OS 사용자 이름이면 바로 실행" 동작은 없앴다.
 - `-u` 없이 실행하면 읽을 수 있는 `*.conf`(root.conf 제외) 목록을 user, url, inventory_id 로 보여 주고 화살표/숫자로 고른다. 비밀번호는 읽거나 표시하지 않는다.
 - 같은 사용자 conf(같은 inventory_id)를 쓰는 업로더와 다운로더가 서로 만난다.
-- 윈도우 다운로더의 conf 규칙(exe 옆 `conf\`)은 Step 4 전까지 v1 그대로다.
+- 윈도우 다운로더는 exe 옆 `conf\{user}.conf` 를 쓴다 (아래 "윈도우" 절).
 
 ## 업로드 기록
 
@@ -140,12 +142,84 @@ awx_copy:
 
 원복은 현재 블록이 자기 세션일 때만 한다. 결과(`done`) 없이 원본으로 돌아온 경우 업로더는 성공으로 보지 않는다.
 
-## 윈도우 (다운로더, Step 4 전)
+## 윈도우 (다운로더 창 앱 `awx_fetch.exe`)
+
+`awx_fetch.exe` 를 더블클릭하면 Edge(없으면 Chrome)의 `--app` 창이 열린다. 주소창과 탭이 없다. cmd 창은 뜨지 않는다(`-H windowsgui` 빌드).
+Go 단일 exe 이며 화면(HTML/JS/CSS)은 `go:embed` 로 들어 있다. 서버는 `127.0.0.1` 에만 바인딩한다.
 
 ```bat
-build.bat             :: dist\awx_fetch.exe
-awx_fetch.exe --config D:\conf\test.kim.conf --out D:\받은파일
+build.bat                                   :: dist\awx_fetch.exe (-H windowsgui)
+awx_fetch.exe                               :: 창 앱
+awx_fetch.exe --cli --user test.kim [--out D:\받은파일]   :: 창 없이 1건 수신 (시험용)
+awx_fetch.exe --status --user test.kim      :: variables 상태 (GET 만)
+awx_fetch.exe --restore --user test.kim     :: 남은 블록 복구
 ```
+
+`--cli`, `--status`, `--restore` 의 출력: 콘솔이 없는 빌드라서 **exe 옆 `awx_fetch.log`(UTF-8)에 항상 남기고**, 부모 콘솔이 있으면 `AttachConsole` 로 거기에도 쓴다.
+cmd 는 GUI exe 를 기다리지 않으므로 종료 코드가 필요하면 `start /wait` 또는 `Start-Process -Wait -PassThru` 로 실행한다.
+
+### 폴더
+
+```
+awx_fetch.exe
+conf\                 {user}.conf (여러 개). url, username, password_enc(또는 password), inventory_id, chunk_size, timeout
+received\             받은 파일 (기본 저장 폴더, 화면에서 바꿀 수 있음)
+received\history.jsonl  받은 파일 기록 (UTF-8, 영구). 저장 폴더를 바꿔도 기록은 여기에 남는다
+awx_fetch.json        화면 설정 (저장 폴더)
+awx_fetch.log         동작 로그 (UTF-8, 5 MiB 넘으면 .1 로 돌림). 비밀번호는 쓰지 않는다
+```
+
+- 비밀번호는 Windows DPAPI(현재 사용자) 암호문 `password_enc` 로 저장한다. 다른 PC/사용자에서는 풀리지 않는다.
+- 평문 `password` 도 읽는다. 화면에서 그 사용자를 고르면(연결 확인 성공 시) `password_enc` 로 바꿔 저장한다.
+- 실제 conf 와 받은 파일, 로그는 `.gitignore` 에 있다.
+
+### 화면
+
+| 화면 | 내용 |
+|---|---|
+| 사용자 선택 | `conf\*.conf` 목록(user, url, inventory_id, 암호화 여부). 비밀번호는 표시하지 않는다. 설정이 1개면 바로 선택한다. 선택할 때 인벤토리 GET 으로 연결을 확인한다. |
+| 새 설정 만들기 | url, username, password, inventory_id 입력 → [연결 테스트] → [연결 테스트 후 저장] (`conf\{username}.conf`, password_enc). 같은 이름은 "덮어쓰기"를 체크해야 한다. |
+| 수신 | [지금 가져오기]: 업로드를 timeout 까지 기다려 1건 받는다. [수신 중단]: 멈추고 자기 세션이면 variables 원복. [자동 감시]: 2초마다 GET 해서 새 업로드(1번 조각)를 보면 자동으로 받는다. 진행 막대에 `[k/N]`, 바이트, 경과 초, KiB/s 를 보여 준다. |
+| 받은 파일 (관리 공간) | 저장 폴더(변경, 폴더 열기). 기록 표: 시각, 원본 파일명, 크기, 조각 수, SHA-256(정상/실패), 저장 경로, 사용자. 버튼: 열기, 폴더 열기, 경로 복사, 삭제(확인 창 뒤 파일만 삭제, 기록은 "삭제됨"). 최근 200건만 표시한다. |
+
+- 같은 이름은 `_1`, `_2` 를 붙인다. 윈도우에서 쓸 수 없는 문자(`<>:"/\|?*`, 제어문자)는 `_` 로, 예약 이름(CON 등)은 앞에 `_` 를 붙인다.
+- 해시 불일치(텍스트가 아닌 바이트, 섞인 줄바꿈 등)면 저장하지 않고 기록에 "실패"로 남긴다. 업로더에도 `result: fail` 이 전달된다.
+- 변경 대상은 인벤토리 variables 뿐이다. 작업 템플릿·인벤토리 소스는 호출하지 않는다.
+
+### 수명 관리
+
+- 창은 2초마다 `/api/ping` 을 보내고, 닫힐 때 `/api/bye` 비콘을 보낸다. 마지막 창이 bye 를 보내고 1초 안에 새 ping 이 없으면 종료한다(새로고침은 종료 아님).
+- 비콘 없이 창이 죽으면 ping 이 15초 끊긴 뒤 종료한다. 창이 60초 안에 한 번도 붙지 않으면 종료한다.
+- 종료할 때 진행 중 수신을 멈추고, variables 가 자기 세션 블록이면 원복한다.
+- 이미 실행 중이면(이름 있는 뮤텍스 `Local\AWX_copy_awx_fetch`) 새 실행은 기존 창을 앞으로 가져오고 바로 끝난다.
+
+### host-cross-checker 제작 중 문제와 대책
+
+| 문제 | 대책 (이 앱) |
+|---|---|
+| cmd 창 표시 | `-H windowsgui` 빌드(PE subsystem 2). 브라우저는 `CREATE_NO_WINDOW` 로 실행. 파일/폴더 열기는 `ShellExecuteW`(자식 콘솔 없음). |
+| 창 닫은 뒤 프로세스 잔존 | `/api/bye` 비콘 + `/api/ping` 감시. 실측 창 닫기 후 1.1초에 종료, 잔존 0. |
+| HTTP 응답 Body 미닫힘 | 모든 AWX 요청은 한 헬퍼(`Client.do`)에서 `defer resp.Body.Close()`. 앞으로 가져오기 요청도 Body 를 비우고 닫는다. |
+| 요청 무기한 블록 | AWX HTTP 클라이언트 timeout, 연결 확인 15초, 감시 GET 10초. 서버 `ReadHeaderTimeout/ReadTimeout/WriteTimeout/IdleTimeout`. 화면 fetch 는 `AbortController` 타임아웃. |
+| 이벤트 리스너 중복 등록 | `window.__awxFetchInit` 초기화 가드. 버튼은 문서 하나의 click 위임 리스너. 폴링은 `setTimeout` 사슬(겹치지 않음). |
+| 폴링 부하 | 상태는 수신 중 0.5초, 평소 2초. 기록은 `hist_rev` 가 바뀔 때만, 최근 200건만 읽는다. 자동 감시는 2초 간격 GET 1회. |
+| AWX 401 | 선택·저장 때 인벤토리 GET 으로 인증을 먼저 확인하고 오류를 화면에 보여 준다. 비밀번호는 DPAPI 로 저장. |
+| 한글 깨짐 | `<meta charset="utf-8">`, 폰트 스택 Pretendard / Malgun Gothic / Consolas. 로그·기록 파일은 UTF-8. |
+| 포트 충돌 | 기본 18780 이 쓰이면 빈 포트에 바인딩. 포트는 `%TEMP%\awx_fetch.port` 에 쓴다. |
+| 브라우저 프로필 충돌 | 독립 프로필 `%TEMP%\awx-copy-profile`. 20초 안에 창이 붙지 않으면 새 프로필로 한 번 더 연다. |
+| 다른 사이트의 요청(CSRF) | Host 는 127.0.0.1/localhost:{포트} 만, Origin 은 같은 출처만, 상태 변경 POST 는 `X-AWX-Fetch` 헤더 필수. |
+
+### 자원 실측 (2026-11-17, Windows 11, Edge)
+
+| 항목 | 값 |
+|---|---|
+| 유휴 CPU (30초) | 0.007% |
+| 3.7 MiB 파일 수신 뒤 | WS 61.1 MB, Private 72.5 MB |
+| 수신 25회 뒤 / 50회 뒤 / 15초 뒤 | WS 38.6 / 39.5 / 39.5 MB, 핸들 423 / 440 / 438, 스레드 14 / 19 / 16 |
+| 수신 50회 결과 | 50/50 정상 (자동 감시) |
+| 창 닫기 → 종료 | 1.1초 (수신 중 닫기 1.6초, variables 원복) |
+
+화면: `docs/screens/fetch_main.png`, `fetch_users.png`, `fetch_new.png`.
 
 ## 한도
 
@@ -172,7 +246,9 @@ test/e2e_send.sh <conf> /root/awx_e2e/files   # 설치본 awx_copy 사용
 | `install.sh` | 리눅스 설치 (root) |
 | `conf.example/user.conf.example`, `awx_copy.conf.example` | 설정 예시 (비밀번호 비움) |
 | `bin/awx_copy` | 리눅스 amd64 정적 실행파일 (go 1.20.14) |
-| `dist/awx_fetch.exe` | 윈도우 amd64 실행파일 |
+| `dist/awx_fetch.exe` | 윈도우 amd64 창 앱 (-H windowsgui) |
+| `gui.go`, `gui_windows.go`, `webui/` | 창 앱 서버, 윈도우 API(DPAPI, 뮤텍스, ShellExecute), 화면 |
+| `docs/screens/` | 창 앱 스크린샷 |
 | `docs/PLAN_v2.md`, `docs/limits.md` | 계획서, 한도 측정 |
 | `test/` | E2E 스크립트, PyYAML 검증 |
 | `internal/fakeawx`, `cmd/fakeawx` | 테스트용 가짜 AWX |

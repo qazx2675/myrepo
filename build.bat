@@ -8,7 +8,8 @@ go version || goto :err
 go vet ./... || goto :err
 set GOOS=windows
 set GOARCH=amd64
-go build -trimpath -ldflags "-s -w" -o dist\awx_fetch.exe . || goto :err
+rem -H windowsgui: GUI subsystem, no cmd window. --cli output: awx_fetch.log (UTF-8) and parent console.
+go build -trimpath -ldflags "-s -w -H windowsgui" -o dist\awx_fetch.exe . || goto :err
 echo built: dist\awx_fetch.exe
 exit /b 0
 :err

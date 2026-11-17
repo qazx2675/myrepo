@@ -4,7 +4,10 @@
 #
 # 하는 일:
 #   1) 바이너리를 /usr/local/bin/awx_copy (root:root 755) 로 복사
-#   2) /etc/awx_copy (root:root 700) 생성
+#   2) /etc/awx_copy (root:root 755) 생성
+#      755 이유: 일반 사용자가 자기 {user}.conf 를 읽고 선택 목록을 보려면 폴더 탐색·목록 권한이 필요하다.
+#      conf 파일은 600(소유자=해당 사용자)이라 다른 사용자는 내용을 읽지 못한다.
+#      대신 폴더 목록으로 사용자 이름(파일명)은 모두에게 보인다. root.conf 는 root 600 그대로다.
 #   3) /etc/awx_copy/root.conf 가 없으면 기본 root 기록 조회 비밀번호의 SHA-256 해시로 생성 (600)
 #      평문은 이 스크립트에도 없다. 설치 뒤 'awx_copy --root-passwd' 로 바꾼다.
 #   4) /tmp/.awx_copy (1777) 생성 (업로드 기록)
@@ -28,8 +31,9 @@ install -m 755 -o root -g root "$BIN" /usr/local/bin/awx_copy.new
 mv -f /usr/local/bin/awx_copy.new /usr/local/bin/awx_copy
 echo "설치: /usr/local/bin/awx_copy ($(/usr/local/bin/awx_copy --version))"
 
-install -d -m 700 -o root -g root "$ETC"
-echo "폴더: $ETC (700)"
+install -d -m 755 -o root -g root "$ETC"
+chmod 755 "$ETC"
+echo "폴더: $ETC (755, 파일명=사용자 이름은 모두에게 보임)"
 
 if [ ! -e "$ETC/root.conf" ]; then
     umask 077
