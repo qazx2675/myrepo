@@ -1,301 +1,196 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
-    <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (사전 빌드 바이너리 CLI/TUI + Bash 래퍼)</p>
-    <p><strong>대상 프로젝트:</strong> <code>redfish</code> (<code>biostool</code>) — BMC Redfish 기반 BIOS 점검·전체 비교·Pending 설정, BMC 계정 생성·비밀번호 변경</p>
-    <p><strong>실행 진입점:</strong> <strong><code>bash bios.sh</code> 하나</strong> — BIOS 점검·전체비교·수정, 계정 생성, 비밀번호 변경, 프로파일 추가, 암호화, 사전조사, 업데이트까지 모두 <code>bios.sh &lt;명령&gt;</code> 으로 실행합니다. (<code>bios_check.sh</code>·<code>all_bios_check.sh</code>·<code>xml.sh</code> 등을 직접 호출하지 않습니다.)</p>
-    <p><strong>제공 바이너리:</strong> <code>bin/biostool</code> (RHEL8 / 커널 3 이상, 정적 링크). 래퍼가 알맞은 바이너리를 자동 선택하므로 별도 빌드가 필요 없습니다. RHEL6용 <code>bin/biostool_os6</code> 는 더 이상 갱신하지 않으며 이 문서의 범위가 아닙니다.</p>
-    <p><strong>사내 설치 경로:</strong> <code>/root/server_vm_python/redhfish/V2</code></p>
+    <p><strong>이 문서는 질문-답변(Q&amp;A) 형식으로 읽도록 구성되어 있습니다.</strong> 각 절은 앞뒤 절을 읽지 않아도 이해되도록 도구 이름·명령·파일 이름을 반복해서 적었습니다. 모든 실행은 <code>bash bios.sh</code> 하나로 합니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="toc"/>
 
+<h2>0. 도구 요약 (핵심 사실)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>도구 이름</td><td><code>redfish</code> (실행 파일 이름 <code>biostool</code>)</td></tr>
+    <tr><td>하는 일</td><td>서버 BMC 에 Redfish API 로 접속해 BIOS 설정을 <strong>점검</strong>하고, 같은 모델끼리 BIOS 전체 속성을 <strong>비교</strong>하고, 사람이 확인(y)한 항목만 <strong>Pending(예약) 설정</strong>합니다. BMC 계정 생성·비밀번호 변경도 합니다.</td></tr>
+    <tr><td>유일한 실행 진입점</td><td><code>bash bios.sh</code> — 모든 기능을 <code>bash bios.sh &lt;명령&gt;</code> 형태로 실행합니다. BIOS 체크는 <code>bios.sh</code> 만 사용합니다.</td></tr>
+    <tr><td>실행 위치</td><td>도구 폴더 <code>/root/server_vm_python/redhfish/V2</code> 에서 <code>bash bios.sh</code> 실행</td></tr>
+    <tr><td>지원 벤더</td><td>Dell(iDRAC), HPE(iLO), Lenovo(XCC), Supermicro — Redfish / Cisco(CIMC·UCSM) — XML API</td></tr>
+    <tr><td>설정(쓰기) 가능 벤더</td><td>Dell, HPE, Lenovo 만. 프로파일에서 모델을 지정한 <code>verified=Y</code> 행만 설정 가능. Cisco·Supermicro 는 점검 전용</td></tr>
+    <tr><td>재부팅</td><td>하지 않습니다. 설정은 BMC 의 Pending(다음 재부팅 때 반영)까지만 예약합니다.</td></tr>
+    <tr><td>비밀번호 보관</td><td>평문 저장 없음. AES-256-GCM 암호화 파일 <code>pass.enc</code>·<code>pass2.enc</code>·<code>rf.enc</code> 와 키 파일 <code>key.bin</code></td></tr>
+    <tr><td>현재 검증 상태</td><td>실제 물리 BMC 에서는 검증되지 않음 (모의 환경에서만 검증)</td></tr>
+  </tbody>
+</table>
+
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
-    <p><strong>[중요 — 실제 BMC 미검증]</strong> <code>redfish</code>(<code>biostool</code>)는 <strong>실제 물리 BMC 하드웨어에 접속해 검증된 적이 없습니다.</strong> 모든 동작 검증은 합성 <code>testdata/</code> 기반 모의 BMC(<code>mockbmc</code>)와 <code>-from-dump</code> 덤프에서만 수행되었습니다. 속성 이름·허용값·Settings 경로·Dell Job 동작은 실제 응답으로 확정해야 합니다.</p>
-    <p>모델을 처음 만나면 <strong>1대부터</strong> 5장의 절차(프로젝트 루트의 <code>FIRST_RUN.md</code> 요약)를 따르십시오. 본 도구는 100% 신뢰하기보다 참고용(보조 도구)으로 사용하고, <strong>설정 변경·계정 생성·비밀번호 변경 뒤에는 랜덤한 서버 몇 대를 직접 골라 실제로 반영되었는지 확인</strong>하십시오 (9장).</p>
+    <p><strong>실제 BMC 미검증 + 사후 확인 필수.</strong> 이 도구는 실제 BMC 하드웨어에서 검증된 적이 없으므로 100% 신뢰하지 말고 참고용(보조 도구)으로 사용하십시오. 설정 변경·계정 생성·비밀번호 변경을 한 뒤에는 <strong>벤더·모델별 랜덤 1~3대 서버에 직접 접속</strong>해 실제로 반영되었는지 확인해야 합니다. 모델을 처음 만나면 <strong>1대부터</strong> 진행합니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="note">
   <ac:rich-text-body>
-    <p><strong>안전 설계 원칙:</strong></p>
+    <p><strong>안전 설계 원칙</strong></p>
     <ul>
-      <li><strong>재부팅(Reset)·즉시(Immediate) 적용을 하지 않습니다.</strong> 설정은 BMC의 <strong>Pending Settings</strong>(다음 재부팅 때 반영)까지만 예약합니다. 로그 조회·<code>ClearLog</code>·<code>Reset</code> 같은 경로는 전송 전에 코드가 차단합니다.</li>
-      <li>쓰기는 <strong>Dell·HPE·Lenovo</strong> 에 한하고, 프로파일에서 <strong>모델을 지정한 <code>verified=Y</code> 행</strong>에만 허용합니다. Cisco·Supermicro 는 점검 전용입니다. 와일드카드(<code>*</code>) 행에 <code>verified=Y</code> 를 쓰면 프로파일 로드가 막힙니다.</li>
-      <li>서버 고유값·부팅·보안·RAID·PXE·NIC 속성(IQN, IP, ServerName, BootMode, SecureBoot 등)은 <strong>어떤 경우에도 설정하지 않습니다</strong>(코드에 고정된 보호 목록, 설정 파일로 해제 불가).</li>
-      <li>TUI 의 수정 단계는 <strong>미리보기 → 확인(y) → 적용</strong> 순서이고, <code>n</code>·<code>Esc</code>·<code>Ctrl+X</code> 면 아무것도 쓰지 않습니다. <code>-plain</code>·<code>-auto</code>·<code>-from-dump</code> 는 읽기 전용입니다.</li>
-      <li>BMC 비밀번호는 평문으로 디스크·명령행·로그에 남지 않습니다(AES-256-GCM 암호화 파일).</li>
+      <li>재부팅(Reset)·즉시(Immediate) 적용을 하지 않습니다. 로그 조회·ClearLog·Reset 경로는 전송 전에 코드가 차단합니다.</li>
+      <li>서버 고유값·부팅·보안·RAID·PXE·NIC 속성(IQN, IP, ServerName, BootMode, SecureBoot 등)은 어떤 경우에도 설정하지 않습니다 (설정 파일로 해제 불가).</li>
+      <li>TUI 의 수정 단계는 미리보기 → 확인(y) → 적용 순서이며, <code>n</code>·<code>Esc</code>·<code>Ctrl+X</code> 면 아무것도 쓰지 않습니다. <code>-plain</code>·<code>-auto</code> 는 읽기 전용입니다.</li>
+      <li>같은 BMC 에 인증을 반복하면 계정이 잠길 수 있어 인증 실패(<code>AUTH_FAIL</code>)는 자동 재시도하지 않고, 연속 실패가 3회(<code>auth_fail_stop</code>)에 이르면 나머지 호스트 접속을 멈춥니다.</li>
     </ul>
   </ac:rich-text-body>
 </ac:structured-macro>
 
-<h2>1. 개요 및 실행 방법 한눈에 보기 (<code>bios.sh</code>)</h2>
-
-<p><code>redfish</code>(<code>biostool</code>)는 관리망의 BMC 에 <strong>Redfish REST API</strong> 로 접속해 서버 BIOS 설정이 표준값(프로파일)과 같은지 <strong>점검</strong>하고, 같은 모델끼리 <strong>BIOS 전체 속성을 비교</strong>하며, 사람이 승인한 항목만 <strong>Pending 으로 설정</strong>하는 도구입니다. 수천 대를 한 번에 처리하며(동시 접속 기본 100), 호스트당 로그인은 1회입니다.</p>
-
-<p><strong>BIOS 체크는 <code>bash bios.sh</code> 만 사용합니다.</strong> 처음 사용할 때 기억할 명령은 아래 한 줄입니다.</p>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[cd /root/server_vm_python/redhfish/V2
-bash bios.sh          # 터미널 TUI: 대상 입력 → 프로파일 선택 → 점검 → 전체비교 → 수정
-bash bios.sh -h       # 전체 사용법(도움말)]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h3>1.1 하고 싶은 일 → 실행할 <code>bios.sh</code> 명령</h3>
+<h2>1. 어떤 일을 하려면 어떤 명령을 실행하나? (명령 찾기)</h2>
 <table>
   <thead>
     <tr>
       <th>하고 싶은 일</th>
       <th>실행 명령</th>
-      <th>BMC 쓰기</th>
+      <th>BMC 쓰기 여부</th>
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <td>BIOS 점검 → 전체 설정 비교 → 수정 (표준 사용 방법)</td>
-      <td><code>bash bios.sh</code> (프로파일·대상을 미리 주려면 <code>-profile VM -user user.txt</code>)</td>
-      <td>TUI 에서 확인(y)했을 때만 Pending</td>
-    </tr>
-    <tr>
-      <td>화면(TUI) 없이 평문 점검 (읽기 전용)</td>
-      <td><code>bash bios.sh -plain -profile VM -user user.txt</code></td>
-      <td>없음</td>
-    </tr>
-    <tr>
-      <td>평문 점검 + 비교서버와 BIOS 전체 값 비교</td>
-      <td><code>bash bios.sh -plain -profile VM -ref &lt;비교서버&gt;</code></td>
-      <td>없음</td>
-    </tr>
-    <tr>
-      <td>자동화(auto_setup 등) 비대화형 점검</td>
-      <td><code>bash bios.sh -auto-check &lt;user&gt; targets.txt</code> / <code>bash bios.sh -auto &lt;user&gt; targets.txt</code></td>
-      <td>없음 (점검 전용)</td>
-    </tr>
-    <tr>
-      <td>BMC 계정(1순위·두 번째 계정) 생성</td>
-      <td><code>bash bios.sh account [-dry-run]</code></td>
-      <td>계정 경로만</td>
-    </tr>
-    <tr>
-      <td><strong>BMC 계정 비밀번호 변경</strong></td>
-      <td><code>bash bios.sh passwd [-dry-run]</code></td>
-      <td>계정 경로만</td>
-    </tr>
-    <tr>
-      <td><strong>비밀번호·벤더 계정 암호화(키 생성)</strong></td>
-      <td><code>bash bios.sh encrypt</code> / <code>encrypt 2</code> / <code>encrypt rf [벤더]</code></td>
-      <td>없음 (로컬 파일 생성)</td>
-    </tr>
-    <tr>
-      <td>프로파일에 태그·모델별 설정 행 추가</td>
-      <td><code>bash bios.sh profile add -profile VM (-tag 태그 | -model "벤더/모델") -set "속성=값"</code> (TUI 에서는 <code>p</code> 키)</td>
-      <td>없음 (프로파일 파일만 수정)</td>
-    </tr>
-    <tr>
-      <td>사전조사 덤프(GET 전용), 오프라인 검증용</td>
-      <td><code>bash bios.sh dump [대상...]</code> → <code>bash bios.sh -from-dump dumps/ -profile VM</code></td>
-      <td>없음</td>
-    </tr>
-    <tr>
-      <td>비교 기준용 BIOS 설정값 JSON 추출</td>
-      <td><code>bash bios.sh export &lt;비교서버&gt; [대상...]</code></td>
-      <td>없음</td>
-    </tr>
-    <tr>
-      <td>실패 건만 재시도 / 옛 방식 dry-run</td>
-      <td><code>bash bios.sh check -retry-from results/&lt;일시&gt;</code> / <code>bash bios.sh check -dry-run ...</code></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td>Cisco UCSM(XML API) BIOS 점검</td>
-      <td><code>bash bios.sh ucsm [-user ucsm.txt]</code></td>
-      <td>없음</td>
-    </tr>
-    <tr>
-      <td>BMC 접속 장애(403 등) / Cisco UNSUPPORTED 진단</td>
-      <td><code>bash bios.sh trs [-targets IP,...]</code> / <code>bash bios.sh trs-cisco [-targets IP,...]</code></td>
-      <td>없음</td>
-    </tr>
-    <tr>
-      <td>새 버전으로 설치 폴더 갱신</td>
-      <td><code>bash bios.sh update [ZIP 경로]</code></td>
-      <td>-</td>
-    </tr>
+    <tr><td>BIOS 점검 → 전체 설정 비교 → 수정 (표준 방법)</td><td><code>bash bios.sh</code></td><td>TUI 에서 확인(y)했을 때만 Pending</td></tr>
+    <tr><td>프로파일·대상 파일을 미리 지정해서 실행</td><td><code>bash bios.sh -profile VM -user user.txt</code></td><td>TUI 확인(y) 시에만</td></tr>
+    <tr><td>화면(TUI) 없이 평문으로 점검 (읽기 전용)</td><td><code>bash bios.sh -plain -profile VM -user user.txt</code></td><td>없음</td></tr>
+    <tr><td>비교서버와 BIOS 전체 값 비교 (평문)</td><td><code>bash bios.sh -plain -profile VM -ref &lt;비교서버&gt;</code></td><td>없음</td></tr>
+    <tr><td>auto_setup 등 자동화에서 비대화형 점검</td><td><code>bash bios.sh -auto-check &lt;user&gt; targets.txt</code> 또는 <code>bash bios.sh -auto &lt;user&gt; targets.txt</code></td><td>없음</td></tr>
+    <tr><td>BMC 계정 생성</td><td><code>bash bios.sh account</code> (먼저 <code>-dry-run</code>)</td><td>계정 경로만</td></tr>
+    <tr><td>BMC 계정 비밀번호 변경</td><td><code>bash bios.sh passwd</code> (먼저 <code>-dry-run</code>)</td><td>계정 경로만</td></tr>
+    <tr><td>1순위 계정 비밀번호 암호화 (<code>pass.enc</code>, <code>key.bin</code> 생성)</td><td><code>bash bios.sh encrypt</code></td><td>없음 (로컬 파일)</td></tr>
+    <tr><td>두 번째 계정 비밀번호 암호화 (<code>pass2.enc</code>)</td><td><code>bash bios.sh encrypt 2</code></td><td>없음</td></tr>
+    <tr><td>벤더 암호화 키 생성 (벤더 admin 계정 비밀번호 → <code>rf.enc</code>)</td><td><code>bash bios.sh encrypt rf</code> 또는 <code>bash bios.sh encrypt rf &lt;벤더&gt;</code></td><td>없음</td></tr>
+    <tr><td>프로파일에 태그·모델별 설정 행 추가</td><td><code>bash bios.sh profile add -profile VM (-tag 태그 | -model "벤더/모델") -set "속성=값"</code></td><td>없음 (프로파일 파일만 수정)</td></tr>
+    <tr><td>사전조사 덤프 (GET 전용, 모델 처음 만날 때)</td><td><code>bash bios.sh dump &lt;대상&gt;</code></td><td>없음</td></tr>
+    <tr><td>비교 기준용 BIOS 설정값 JSON 추출</td><td><code>bash bios.sh export &lt;비교서버&gt; [대상...]</code></td><td>없음</td></tr>
+    <tr><td>실패한 호스트만 재시도</td><td><code>bash bios.sh check -retry-from results/&lt;일시&gt;</code></td><td>-</td></tr>
+    <tr><td>Pending PATCH 본문 미리보기 (옛 방식 dry-run)</td><td><code>bash bios.sh check -profile VM -dry-run</code></td><td>없음</td></tr>
+    <tr><td>Cisco UCSM(XML API) BIOS 점검</td><td><code>bash bios.sh ucsm [-user ucsm.txt]</code></td><td>없음</td></tr>
+    <tr><td>BMC 접속 장애(403 등) 진단</td><td><code>bash bios.sh trs -targets &lt;BMC IP&gt;</code></td><td>없음</td></tr>
+    <tr><td>Cisco UNSUPPORTED·XML 실패 진단</td><td><code>bash bios.sh trs-cisco -targets &lt;IP&gt;</code></td><td>없음</td></tr>
+    <tr><td>전체 사용법 보기</td><td><code>bash bios.sh -h</code></td><td>-</td></tr>
   </tbody>
 </table>
 
-<h3>1.2 벤더별 지원 범위</h3>
-<table>
-  <thead>
-    <tr>
-      <th>기능 / 벤더</th>
-      <th>대상</th>
-      <th>실제 호출·변경 범위 및 안전장치</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>BIOS 점검·전체비교 (읽기)</td>
-      <td>Dell(iDRAC), HPE(iLO), Lenovo(XCC), Supermicro — Redfish / <strong>Cisco(CIMC·UCSM) — XML API</strong></td>
-      <td>Redfish GET 으로 시스템·모델·BIOS 속성·Pending 조회. 프록시 우회, 리다이렉트 차단, BMC 당 요청 간격 100ms, 호스트당 세션 로그인 1회(세션 실패 시 Basic 폴백). Cisco 는 <code>aaaLogin</code>·<code>configResolveClass</code>·<code>aaaLogout</code> 만 사용</td>
-    </tr>
-    <tr>
-      <td>BIOS Pending 설정 (쓰기)</td>
-      <td><strong>Dell, HPE, Lenovo</strong> 만</td>
-      <td>모델을 지정한 <code>verified=Y</code> 프로파일 행 + 확인(y)한 항목만 Pending PATCH(Dell 은 설정 Job 포함). 재부팅 없음</td>
-    </tr>
-    <tr>
-      <td>계정 생성·비밀번호 변경</td>
-      <td>Dell, HPE, Lenovo, Supermicro, Cisco(CIMC/UCSM), Cray</td>
-      <td>계정 컬렉션 경로만. 같은 id 가 있으면 덮어쓰지 않고, 만든 뒤 새 계정 로그인 1회로 검증하며 실패하면 이번에 만든 계정만 롤백 (4장)</td>
-    </tr>
-    <tr>
-      <td>로컬 결과·덤프 생성</td>
-      <td>관리서버 로컬 디스크</td>
-      <td><code>results/&lt;YYYYMMDD_HHMMSS&gt;/</code> 하위에 <code>0600</code> 권한으로 결과 저장, 사전조사 덤프는 <code>dumps/</code></td>
-    </tr>
-  </tbody>
-</table>
+<h2>2. 처음 사용하기 전에 무엇을 준비하나?</h2>
 
-<h2>2. 사전 준비 — 배치 · 입력 파일 · 암호화 키 생성</h2>
-
-<h3>2.1 사전 빌드 바이너리 배치</h3>
-<p>외부 의존성 없는 정적 바이너리(<code>bin/biostool</code>)가 이미 포함되어 있으므로 폐쇄망에서도 별도 빌드 없이 바로 실행합니다. <code>bios.sh</code> 가 <code>uname -r</code> 를 보고 알맞은 바이너리를 자동 선택하며, 실행 권한이 없으면 <code>chmod +x</code> 를 시도합니다. 바이너리가 없으면 안내 후 종료코드 2 로 끝납니다.</p>
-
+<h3>2.1 처음 한 번 준비하는 파일</h3>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[cd /root/server_vm_python/redhfish/V2
-ls -l bin/biostool                         # 바이너리 존재 확인
-chmod +x bin/biostool *.sh                 # 실행 권한이 없을 때 (없어도 'bash bios.sh' 형태로는 실행 가능)
-ulimit -n                                  # 동시 접속(concurrency) 수 + 수십 이상이어야 함 (기본 100 이면 1024 로 충분)]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h3>2.2 처음 한 번 준비할 것</h3>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[cp bios.conf.example bios.conf          # user= 에 BMC 공용 계정 ID 입력 (나머지는 기본값으로 시작)
+cp bios.conf.example bios.conf          # user= 에 BMC 공용 계정 ID 입력 (나머지는 기본값)
 bash bios.sh encrypt                    # 공용 계정 비밀번호 입력(2회) → pass.enc + key.bin 생성 (권한 600)
-cp user.txt.example user.txt            # 점검할 대상을 한 줄에 하나씩 (TUI 에서는 화면에서 붙여넣어도 됨)
-
-# 선택
-cp diff.txt.example diff.txt            # 모델별 기준(정상) 호스트 목록
-cp ignore_attrs.txt.example ignore_attrs.txt   # 전체비교에서 뺄 속성
-mkdir -p refs                           # 전체비교 기준으로 고를 JSON 폴더 (bash bios.sh export 결과)]]></ac:plain-text-body>
+cp user.txt.example user.txt            # 점검할 대상을 한 줄에 하나씩 (TUI 에서는 화면에 붙여넣어도 됨)
+ulimit -n                               # 동시 접속 수(concurrency) + 수십 이상이어야 함 (기본 100 이면 1024 로 충분)]]></ac:plain-text-body>
 </ac:structured-macro>
+<p>선택 파일: <code>diff.txt</code>(모델별 기준 호스트 목록), <code>ignore_attrs.txt</code>(전체비교에서 뺄 속성), <code>refs/</code>(전체비교 기준 JSON 폴더).</p>
 
-<ul>
-  <li><strong><code>bios.conf</code>:</strong> <code>user=</code> 필수. 비밀번호 키(<code>pass</code>·<code>password</code>·<code>passwd</code>·<code>pw</code>)가 하나라도 있으면 보안 오류로 즉시 실패합니다 — 비밀번호는 반드시 <code>bash bios.sh encrypt</code> 로 암호화합니다. 알 수 없는 키도 오류입니다 (키 전체는 6.2절).</li>
-  <li><strong><code>user.txt</code>:</strong> 한 줄에 대상 하나. <code>IP</code> / <code>hostname-m</code> / <code>hostname</code>(+ 선택 <code>:포트</code>). <code>hostname</code> 은 <code>/etc/hosts</code> 에서 <code>hostname-m</code> 의 IP 를 찾습니다. 빈 줄·<code>#</code> 주석은 무시, 중복은 한 번만 처리합니다.</li>
-  <li><strong>호스트 태그(선택):</strong> 호스트 뒤에 공백(또는 탭) + 한 단어를 적으면 태그입니다(예: <code>192.168.1.1 gold</code>). 태그가 있는 호스트는 결과 화면에서 태그별로 묶이고, 전체비교에서는 같은 태그끼리만 비교합니다. 엑셀의 <code>IP&lt;Tab&gt;태그</code> 를 그대로 붙여넣어도 됩니다.</li>
-  <li><strong><code>profiles/*.tsv</code>:</strong> 탭 구분 프로파일(컬럼: <code>vendor</code> <code>model</code> <code>std_name</code> <code>attribute</code> <code>value</code> <code>verified</code>). 표준 4항목(<code>system_profile</code>, <code>hyper_threading</code>, <code>llc_prefetch</code>, <code>sub_numa_cluster</code>)은 행이 없어도 항상 점검 대상이며, 행이 없으면 <code>MAPPING_MISSING</code> 입니다. <code>value</code> 는 <code>A|B</code> 형식의 허용 표기 여러 개를 쓸 수 있고, <code>verified</code> 는 <code>Y</code>/<code>N</code> 입니다.</li>
-  <li><code>bios.conf</code>, <code>pass.enc</code>, <code>key.bin</code>, <code>user.txt</code>, <code>results/</code>, <code>dumps/</code> 에는 실제 호스트·계정 정보가 들어갑니다. 저장소 커밋·메신저 공유를 하지 마십시오.</li>
-</ul>
+<h3>2.2 입력 파일 형식은 어떻게 되나?</h3>
+<table>
+  <thead>
+    <tr>
+      <th>파일</th>
+      <th>형식</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>bios.conf</code></td><td><code>key=value</code> 한 줄씩. <code>user=</code> 필수. 비밀번호 키(<code>pass</code>·<code>password</code>·<code>passwd</code>·<code>pw</code>)가 있으면 보안 오류로 즉시 실패. 알 수 없는 키도 오류. 줄 끝 주석 불가</td></tr>
+    <tr><td><code>user.txt</code></td><td>한 줄에 대상 하나: <code>IP</code>, <code>hostname-m</code>, <code>hostname</code>(+ 선택 <code>:포트</code>). <code>hostname</code> 은 <code>/etc/hosts</code> 에서 <code>hostname-m</code> 의 IP 를 찾음. 빈 줄·<code>#</code> 주석 무시, 중복은 한 번만 처리</td></tr>
+    <tr><td>호스트 태그 (<code>user.txt</code>)</td><td>호스트 뒤에 공백(또는 탭) + 한 단어. 예: <code>192.168.1.1 gold</code>. 태그가 있는 호스트는 결과 화면에서 태그별로 묶이고 전체비교는 같은 태그끼리만 비교. 엑셀의 <code>IP&lt;Tab&gt;태그</code> 를 그대로 붙여넣어도 됨</td></tr>
+    <tr><td><code>profiles/*.tsv</code></td><td>탭 구분. 컬럼 <code>vendor</code> <code>model</code> <code>std_name</code> <code>attribute</code> <code>value</code> <code>verified</code>. <code>value</code> 는 <code>A|B</code> 로 허용 표기 여러 개 가능. <code>verified</code> 는 <code>Y</code>/<code>N</code>. 표준 4항목(<code>system_profile</code>, <code>hyper_threading</code>, <code>llc_prefetch</code>, <code>sub_numa_cluster</code>)은 행이 없어도 항상 점검하며 행이 없으면 <code>MAPPING_MISSING</code></td></tr>
+    <tr><td><code>diff.txt</code></td><td>한 줄에 기준 호스트 하나. 두 번째 칸은 태그(같은 태그의 대상과만 비교)</td></tr>
+    <tr><td><code>ignore_attrs.txt</code></td><td>한 줄에 속성 패턴 하나, <code>#</code> 주석, 대소문자 무시, <code>*</code> 만 와일드카드</td></tr>
+  </tbody>
+</table>
+<p>보안 주의: <code>bios.conf</code>, <code>pass.enc</code>, <code>pass2.enc</code>, <code>rf.enc</code>, <code>key.bin</code>, <code>user.txt</code>, <code>results/</code>, <code>dumps/</code> 에는 실제 호스트·계정 정보가 들어 있으므로 저장소 커밋이나 메신저 공유를 하지 않습니다.</p>
 
-<h3>2.3 암호화 파일 3종과 <code>key.bin</code> (벤더 암호화 키 포함)</h3>
-<p>비밀번호는 모두 <code>bash bios.sh encrypt</code> 로 암호화합니다. 비밀번호는 명령행 인자로 받지 않고 화면에도 표시하지 않으므로 <code>ps</code>·쉘 히스토리에 남지 않습니다. <strong>세 암호화 파일은 하나의 <code>key.bin</code>(AES-256 키)을 공유</strong>합니다.</p>
+<h2>3. 비밀번호 암호화와 벤더 암호화 키는 어떻게 만드나?</h2>
+<p>모든 BMC 비밀번호는 <code>bash bios.sh encrypt</code> 로 암호화합니다. 비밀번호는 명령행 인자로 받지 않고 화면에 표시하지 않으므로 <code>ps</code>·쉘 히스토리에 남지 않습니다. 세 암호화 파일은 <strong>하나의 <code>key.bin</code>(AES-256 키)을 공유</strong>합니다.</p>
 
 <table>
   <thead>
     <tr>
       <th>명령</th>
       <th>만드는 파일</th>
-      <th>무슨 비밀번호인가</th>
+      <th>어떤 비밀번호인가</th>
       <th>입력 방식</th>
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <td><code>bash bios.sh encrypt</code></td>
-      <td><code>pass.enc</code> (+ <code>key.bin</code>)</td>
-      <td>1순위 공용 BMC 계정(<code>bios.conf</code> 의 <code>user</code>)의 비밀번호. 점검·설정 접속에 사용</td>
-      <td>숨김 입력 2회, 같을 때만 저장</td>
-    </tr>
-    <tr>
-      <td><code>bash bios.sh encrypt 2</code></td>
-      <td><code>pass2.enc</code></td>
-      <td>두 번째 공용 계정(<code>user2</code>)의 비밀번호. <strong>계정 생성에서만</strong> 사용</td>
-      <td>숨김 입력 2회</td>
-    </tr>
-    <tr>
-      <td><code>bash bios.sh encrypt rf</code><br/><code>bash bios.sh encrypt rf &lt;벤더&gt;</code></td>
-      <td><code>rf.enc</code> (벤더별 한 줄)</td>
-      <td><strong>벤더 admin(2순위) 계정</strong>의 비밀번호. 1순위 계정이 BMC 에 없을 때 접속·계정 생성에 사용</td>
-      <td>글자마다 <code>*</code> 표시, 붙여넣기 거부, 터미널에서 직접 입력 2회</td>
-    </tr>
+    <tr><td><code>bash bios.sh encrypt</code></td><td><code>pass.enc</code> (+ <code>key.bin</code>)</td><td>1순위 공용 BMC 계정(<code>bios.conf</code> 의 <code>user</code>) 비밀번호. 점검·설정 접속에 사용</td><td>숨김 입력 2회, 같을 때만 저장</td></tr>
+    <tr><td><code>bash bios.sh encrypt 2</code></td><td><code>pass2.enc</code></td><td>두 번째 공용 계정(<code>user2</code>) 비밀번호. 계정 생성에서만 사용</td><td>숨김 입력 2회</td></tr>
+    <tr><td><code>bash bios.sh encrypt rf</code> / <code>bash bios.sh encrypt rf &lt;벤더&gt;</code></td><td><code>rf.enc</code> (벤더별 한 줄)</td><td><strong>벤더 admin(2순위) 계정</strong> 비밀번호. 1순위 계정이 BMC 에 없을 때 접속·계정 생성에 사용</td><td>글자마다 <code>*</code> 표시, 붙여넣기 거부, 터미널에서 직접 입력 2회</td></tr>
   </tbody>
 </table>
 
-<h4>2.3.1 벤더 암호화 키(<code>rf.enc</code>) 생성 절차</h4>
-<p>벤더: <code>dell</code> <code>hpe</code> <code>lenovo</code> <code>supermicro</code> <code>cisco</code> <code>cray</code>. 계정명은 <code>/etc/rf_tool/rf.conf</code> 에 적고, 비밀번호는 <code>rf.enc</code> 에 벤더별로 암호화해 둡니다.</p>
+<h3>3.1 벤더 암호화 키(<code>rf.enc</code>)를 만드는 절차</h3>
+<p>벤더 값: <code>dell</code> <code>hpe</code> <code>lenovo</code> <code>supermicro</code> <code>cisco</code> <code>cray</code>. 계정명은 <code>/etc/rf_tool/rf.conf</code> 에 적고, 비밀번호는 <code>rf.enc</code> 에 벤더별로 암호화합니다.</p>
 <ol>
-  <li><strong>계정명 파일 작성(루트만 읽도록):</strong> 비밀번호는 적지 않고 계정명만 적습니다.</li>
-  <li><strong>벤더별 비밀번호 암호화:</strong> <code>bash bios.sh encrypt rf</code> 는 <code>rf.conf</code> 에 <code>&lt;vendor&gt;_user</code> 가 있는 벤더를 차례로 묻고, <code>bash bios.sh encrypt rf dell</code> 처럼 벤더를 주면 그 벤더 항목만 갱신합니다 (<code>rf.enc</code> 의 다른 벤더 항목은 그대로 남습니다).</li>
-  <li><strong>생성 확인:</strong> <code>rf.enc</code>·<code>key.bin</code> 의 권한이 600 인지 확인합니다. 아니면 도구가 600 으로 보정하고 안내를 출력합니다.</li>
-  <li><strong>평문 줄 제거:</strong> <code>rf.conf</code> 에 예전 형식의 평문 <code>&lt;vendor&gt;_pass=</code> 줄이 남아 있으면 경고가 나옵니다. <code>rf.enc</code> 가 우선하지만 평문 줄은 지우십시오.</li>
+  <li><code>/etc/rf_tool/rf.conf</code> 에 <code>&lt;벤더&gt;_user=계정명</code> 을 적고 권한을 600 으로 합니다 (비밀번호는 적지 않음).</li>
+  <li><code>bash bios.sh encrypt rf</code> 를 실행하면 <code>rf.conf</code> 에 계정명이 있는 벤더를 차례로 묻고 비밀번호를 받습니다. 한 벤더만 만들거나 갱신하려면 <code>bash bios.sh encrypt rf dell</code> 처럼 벤더를 줍니다 (<code>rf.enc</code> 의 다른 벤더 항목은 그대로 남음).</li>
+  <li><code>key.bin</code> 이 없으면 이때 AES-256 키가 새로 만들어지고, 있으면 그 키를 그대로 씁니다.</li>
+  <li><code>rf.enc</code>·<code>key.bin</code> 권한이 600 인지 확인합니다 (아니면 도구가 600 으로 보정하고 안내).</li>
+  <li><code>rf.conf</code> 에 예전 형식의 평문 <code>&lt;벤더&gt;_pass=</code> 줄이 있으면 경고가 나옵니다. <code>rf.enc</code> 가 우선하지만 평문 줄은 지웁니다.</li>
 </ol>
-
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[# 1. 벤더 계정명 파일 (비밀번호는 적지 않음)
 sudo mkdir -p /etc/rf_tool
-sudo vi /etc/rf_tool/rf.conf
-#   dell_user=...
-#   hpe_user=...
-#   lenovo_user=...
-#   # supermicro_user / cisco_user / cray_user 도 같은 형식
+sudo vi /etc/rf_tool/rf.conf        # dell_user=...  hpe_user=...  lenovo_user=...  (supermicro_user / cisco_user / cray_user 도 같은 형식)
 sudo chmod 600 /etc/rf_tool/rf.conf
 
-# 2. 벤더 비밀번호 암호화 → rf.enc (key.bin 이 없으면 이때 AES-256 키가 새로 만들어짐)
+# 2. 벤더 비밀번호 암호화 → rf.enc
 cd /root/server_vm_python/redhfish/V2
-bash bios.sh encrypt rf                 # rf.conf 에 계정명이 있는 벤더를 차례로 묻는다
-bash bios.sh encrypt rf dell            # Dell 비밀번호만 갱신
-bash bios.sh encrypt rf hpe             # HPE 비밀번호만 갱신
+bash bios.sh encrypt rf             # rf.conf 에 계정명이 있는 벤더를 차례로 묻는다
+bash bios.sh encrypt rf dell        # Dell 만 갱신
+bash bios.sh encrypt rf hpe         # HPE 만 갱신
 
-# 3. 권한·존재 확인 (모두 -rw-------)
+# 3. 권한 확인 (모두 -rw-------)
 ls -l pass.enc pass2.enc rf.enc key.bin]]></ac:plain-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
     <ul>
-      <li><strong><code>key.bin</code> 과 <code>pass.enc</code>/<code>pass2.enc</code>/<code>rf.enc</code> 는 짝입니다.</strong> <code>key.bin</code> 이 이미 있으면 그 키를 그대로 씁니다. <code>key.bin</code> 을 지우거나 바꾸면 기존 암호화 파일을 풀 수 없어(키 불일치 오류) 모두 다시 만들어야 합니다. 업데이트(<code>bios.sh update</code>)는 이 파일들을 지우지 않습니다.</li>
-      <li>둘이 함께 유출되면 비밀번호가 풀리므로 둘 다 권한 600 을 유지하고 저장소·백업·티켓·메신저에 올리지 마십시오. 벤더별 예비 비밀번호는 서로 다르게 두고, 예비 계정은 가능한 한 권한이 낮은 계정(BIOS 설정만 가능)으로 만드십시오.</li>
-      <li>2순위 계정은 1순위 로그인이 <strong>401 인증 실패일 때만</strong> 호스트당 1회 시도합니다. 벤더는 인증 전 ServiceRoot 응답으로 식별하므로 신뢰하는 관리망에서만 쓰십시오.</li>
+      <li><code>key.bin</code> 과 <code>pass.enc</code>/<code>pass2.enc</code>/<code>rf.enc</code> 는 <strong>짝</strong>입니다. <code>key.bin</code> 을 지우거나 바꾸면 기존 암호화 파일을 풀 수 없어(키 불일치 오류) 모두 다시 만들어야 합니다.</li>
+      <li>둘이 함께 유출되면 비밀번호가 풀립니다. 권한 600 을 유지하고 저장소·백업·티켓·메신저에 올리지 마십시오. 벤더별 예비 비밀번호는 서로 다르게 두고, 예비 계정은 권한이 낮은 계정(BIOS 설정만 가능)으로 만드십시오.</li>
+      <li>2순위(벤더 admin) 계정은 1순위 로그인이 <strong>401 인증 실패일 때만</strong> 호스트당 1회 시도합니다. 벤더는 인증 전 ServiceRoot 응답으로 식별하므로 신뢰하는 관리망에서만 쓰십시오.</li>
     </ul>
   </ac:rich-text-body>
 </ac:structured-macro>
 
-<h2>3. BIOS 점검·전체비교·수정 — <code>bash bios.sh</code></h2>
+<h2>4. BIOS 점검·전체비교·수정은 어떻게 실행하나? (<code>bash bios.sh</code>)</h2>
 
-<h3>3.1 실행 형태</h3>
+<h3>4.1 실행 형태</h3>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[bash bios.sh                                   # (터미널) TUI: 대상 입력 → 프로파일 선택 → 점검 → 전체비교 → 수정
 bash bios.sh -profile VM -user user.txt        # 프로파일·대상 파일을 미리 지정 (화면에서 묻지 않음)
-bash bios.sh -plain -profile VM                # TUI 없이 색 없는 평문 출력 (읽기 전용, 설정 질문 없음)
+bash bios.sh -plain -profile VM                # TUI 없이 색 없는 평문 출력 (읽기 전용)
 bash bios.sh -plain -profile VM -ref <비교서버> # 평문 + 비교서버와 BIOS 전체 값 비교
 bash bios.sh -profile VM -user user.txt -user-xml user_xml.txt   # Redfish + Cisco(XML) 대상 혼합
-bash bios.sh -profile VM -from-dump dumps/     # 접속 대신 저장된 덤프를 읽음 (오프라인 연습·검증)
 bash bios.sh -auto-check <user> targets.txt    # 비대화형 점검만 → 호출한 폴더에 check.res_<user>
 bash bios.sh -auto       <user> targets.txt    # 위와 같음 + check.res_<user>_postapply (auto_setup 용)]]></ac:plain-text-body>
 </ac:structured-macro>
 
-<h3>3.2 TUI 진행 순서</h3>
+<h3>4.2 TUI 는 어떤 순서로 진행되나?</h3>
 <ol>
-  <li><strong>대상 입력</strong> — 대상 파일을 지정하거나 hostname / hostname-m / IP 를 붙여넣습니다(한 줄에 <code>hostname</code> 또는 <code>hostname 태그</code>, Ctrl+D 완료, Ctrl+X 취소). <code>-user</code> 를 주면 묻지 않습니다. 대상에 IP 가 있으면 이어서 Cisco(XML) 대상을 따로 묻습니다(비워 두면 없음).</li>
-  <li><strong>프로파일 선택</strong> — <code>profiles/*.tsv</code> 중에서 고릅니다(<code>-profile</code> 로 지정하면 생략).</li>
-  <li><strong>접속·조회</strong> — 호스트당 로그인 1회로 BIOS 전체 속성을 읽어 프로파일 판정과 전체비교에 함께 씁니다. <strong>Ctrl+X</strong> 로 중단할 수 있습니다.</li>
-  <li><strong>[프로파일 점검]</strong> — 프로파일 항목의 결과를 색상 줄로 보여 줍니다. <code>Tab</code> 으로 <code>[전체 설정 비교]</code> 와 오갑니다.</li>
-  <li><strong>[전체 설정 비교]</strong> — 처음 <code>Tab</code> 을 누르면 비교 기준을 고릅니다(3.4절). 같은 모델끼리만 비교합니다.</li>
-  <li><strong>수정</strong> — <code>e</code> 키로 들어가 수정 방법을 고르고(3.5절), 미리보기 → 확인(y) 후 BMC Pending 까지만 설정합니다. 설정을 보낸 호스트는 자동으로 재점검해 결과 화면에 반영합니다.</li>
-  <li><strong>요약</strong> — <code>q</code> 를 두 번 눌러 종료하면 OK / difference / N/A / 오류 건수, 결과 폴더, CSV 목록을 출력합니다.</li>
-  <li><strong>계정 생성 질문</strong> — 1순위 계정이 거부되어 2순위(<code>rf.conf</code>)로 점검한 호스트가 있으면 <code>계정을 만들까요? [Y/n]</code> 을 묻습니다(4장).</li>
+  <li><strong>대상 입력</strong>: 대상 파일을 지정하거나 hostname / hostname-m / IP 를 붙여넣습니다 (한 줄에 <code>hostname</code> 또는 <code>hostname 태그</code>, Ctrl+D 완료, Ctrl+X 취소). <code>-user</code> 를 주면 묻지 않습니다.</li>
+  <li><strong>프로파일 선택</strong>: <code>profiles/*.tsv</code> 중에서 고릅니다 (<code>-profile</code> 로 지정하면 생략).</li>
+  <li><strong>접속·조회</strong>: 호스트당 로그인 1회로 BIOS 전체 속성을 읽어 프로파일 판정과 전체비교에 함께 씁니다. Ctrl+X 로 중단할 수 있습니다.</li>
+  <li><strong>[프로파일 점검] 화면</strong>: 프로파일 항목 결과를 색상 줄로 보여 줍니다. Tab 으로 [전체 설정 비교] 화면과 오갑니다.</li>
+  <li><strong>[전체 설정 비교] 화면</strong>: 처음 Tab 을 누르면 비교 기준을 고릅니다 (4.4 참고). 같은 모델끼리만 비교합니다.</li>
+  <li><strong>수정</strong>: <code>e</code> 키로 들어가 수정 방법을 고르고, 미리보기 → 확인(y) 후 BMC Pending 까지만 설정합니다. 설정을 보낸 호스트는 자동 재점검해 화면에 반영합니다.</li>
+  <li><strong>요약</strong>: <code>q</code> 를 두 번 눌러 종료하면 OK / difference / N/A / 오류 건수, 결과 폴더, CSV 목록을 출력합니다.</li>
+  <li><strong>계정 생성 질문</strong>: 1순위 계정이 거부되어 2순위(<code>rf.conf</code>)로 점검한 호스트가 있으면 <code>계정을 만들까요? [Y/n]</code> 을 묻습니다 (빈 입력 = Y).</li>
 </ol>
 
-<h3>3.3 TUI 키</h3>
+<h3>4.3 TUI 키는 무엇인가?</h3>
 <table>
   <thead>
     <tr>
@@ -304,15 +199,15 @@ bash bios.sh -auto       <user> targets.txt    # 위와 같음 + check.res_<user
     </tr>
   </thead>
   <tbody>
-    <tr><td><code>Tab</code> / <code>Shift+Tab</code></td><td>화면 전환 <code>[프로파일 점검]</code> ↔ <code>[전체 설정 비교]</code></td></tr>
-    <tr><td><code>←</code> <code>→</code>, <code>Enter</code></td><td>벤더 이동 / <code>Enter</code> 로 벤더 안으로 들어가 관리망 그룹·태그 이동</td></tr>
+    <tr><td><code>Tab</code> / <code>Shift+Tab</code></td><td>[프로파일 점검] ↔ [전체 설정 비교] 화면 전환</td></tr>
+    <tr><td><code>←</code> <code>→</code>, <code>Enter</code></td><td>벤더 이동 / Enter 로 벤더 안으로 들어가 관리망 그룹·태그 이동</td></tr>
     <tr><td><code>↑</code> <code>↓</code>, <code>PgUp</code> <code>PgDn</code>, <code>Home</code> <code>End</code></td><td>스크롤</td></tr>
     <tr><td><code>a</code> <code>o</code> <code>f</code> <code>n</code></td><td>필터: 전체 / OK / difference / N/A (접속·조회 실패 포함)</td></tr>
     <tr><td><code>s</code></td><td>요약: 호스트마다 한 줄</td></tr>
     <tr><td><code>e</code></td><td>수정 단계로 이동 (어디서든)</td></tr>
-    <tr><td><code>r</code></td><td><code>[전체 설정 비교]</code> 에서 기준 다시 선택·재비교</td></tr>
-    <tr><td><code>c</code></td><td><code>[전체 설정 비교]</code>(대표서버 자동 지정일 때): 묶음(태그·모델)별 대표서버 다시 고름</td></tr>
-    <tr><td><code>p</code></td><td><code>[프로파일 점검]</code> 에서 프로파일에 태그·모델별 설정 행 추가 (3.6절)</td></tr>
+    <tr><td><code>r</code></td><td>[전체 설정 비교] 에서 기준 다시 선택·재비교</td></tr>
+    <tr><td><code>c</code></td><td>[전체 설정 비교] 에서 (대표서버 자동 지정일 때) 묶음(태그·모델)별 대표서버 다시 고름</td></tr>
+    <tr><td><code>p</code></td><td>[프로파일 점검] 에서 프로파일에 태그·모델별 설정 행 추가</td></tr>
     <tr><td><code>q</code> / <code>Esc</code></td><td>한 단계 뒤로. 맨 위(벤더 줄)에서 <code>q</code> 를 두 번 누르면 종료</td></tr>
     <tr><td><code>?</code></td><td>도움말</td></tr>
     <tr><td><code>Ctrl+X</code></td><td>진행 중 작업 취소 (접속·조회, 기준 조회, 설정 적용, 입력)</td></tr>
@@ -320,65 +215,59 @@ bash bios.sh -auto       <user> targets.txt    # 위와 같음 + check.res_<user
   </tbody>
 </table>
 
-<h3>3.4 전체비교 기준 (TUI 메뉴 순서)</h3>
+<h3>4.4 전체비교의 기준 서버는 어떻게 정하나?</h3>
+<p>[전체 설정 비교] 화면에서 기준 메뉴가 아래 순서로 나옵니다. <code>-ref</code>·<code>-ref-json</code>·<code>-diff</code> 옵션을 주면 메뉴를 건너뜁니다 (셋 중 하나만 가능).</p>
 <table>
   <thead>
     <tr>
-      <th>번호</th>
+      <th>메뉴 번호</th>
       <th>기준</th>
       <th>설명</th>
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <td>1</td>
-      <td><strong>대표서버 자동 지정 (태그·모델별 1대)</strong></td>
-      <td>읽기에 성공한 호스트를 태그+모델(태그가 없으면 모델) 묶음으로 나누고, 묶음마다 <strong>가장 흔한 값들과 가장 많이 일치하는 서버</strong>(다수결)를 대표로 고릅니다. 동점이면 다수 BIOS 버전 → 프로파일 OK → 입력 순서. <strong>추가 접속 0회</strong>. 대표·대수·선정 사유는 결과 폴더 <code>compare_refs.tsv</code>. 대표가 마음에 들지 않으면 <code>c</code> 로 묶음별 재선택</td>
-    </tr>
-    <tr>
-      <td>2</td>
-      <td>비교서버 hostname 입력</td>
-      <td>직접 지정 (<code>-ref &lt;hostname&gt;</code> 와 같음). 대상 목록에 없으면 그 서버만 추가 조회</td>
-    </tr>
-    <tr>
-      <td>3…</td>
-      <td><code>refs/</code> 폴더의 JSON</td>
-      <td><code>bash bios.sh export</code> 로 뽑은 속성 JSON (<code>-ref-json &lt;파일&gt;</code>)</td>
-    </tr>
-    <tr>
-      <td>마지막</td>
-      <td><code>diff.txt</code> (모델별 기준)</td>
-      <td>모델별 기준 호스트 목록 (<code>-diff &lt;파일&gt;</code>)</td>
-    </tr>
+    <tr><td>1</td><td><strong>대표서버 자동 지정 (태그·모델별 1대)</strong></td><td>읽기에 성공한 호스트를 태그+모델(태그가 없으면 모델) 묶음으로 나누고, 묶음마다 <strong>가장 흔한 값들과 가장 많이 일치하는 서버</strong>(다수결)를 대표로 고릅니다. 동점이면 다수 BIOS 버전 → 프로파일 OK → 입력 순서. 추가 접속은 하지 않습니다. 대표·대수·선정 사유는 결과 폴더의 <code>compare_refs.tsv</code>. 대표가 마음에 들지 않으면 <code>c</code> 키로 묶음별로 다시 고릅니다.</td></tr>
+    <tr><td>2</td><td>비교서버 hostname 입력</td><td>직접 지정 (<code>-ref &lt;hostname&gt;</code> 와 같음). 대상 목록에 없으면 그 서버만 추가 조회</td></tr>
+    <tr><td>3 이후</td><td><code>refs/</code> 폴더의 JSON</td><td><code>bash bios.sh export</code> 로 뽑은 속성 JSON (<code>-ref-json &lt;파일&gt;</code>)</td></tr>
+    <tr><td>마지막</td><td><code>diff.txt</code> (모델별 기준)</td><td>모델별 기준 호스트 목록 (<code>-diff &lt;파일&gt;</code>)</td></tr>
   </tbody>
 </table>
 <ul>
   <li><strong>같은 모델끼리만</strong> 비교합니다. 비교서버와 BIOS 버전이 다른 호스트의 차이는 비교서버 값으로 설정하지 않고 수정제외로 표시합니다.</li>
-  <li><strong>고유값은 항상 비교에서 제외</strong>합니다 — 서비스태그·시리얼·MAC·IP/게이트웨이/DNS·iSCSI/NVMe-oF 식별자·서버 이름 등은 <code>ignore_attrs.txt</code> 가 있어도 제외되고, 값이 MAC·UUID·IP·<code>iqn.</code>/<code>nqn.</code> 모양이어도 제외됩니다. 비교에서 더 빼려면 <code>ignore_attrs.txt</code> 또는 <code>bios.conf</code> 의 <code>exclude_attrs</code> 에 적습니다.</li>
-  <li>결과 태그 3종: <code>[OK]</code>(초록) / <code>[difference]</code>(노랑) / <code>[N/A]</code>(회색 — 판정할 수 없음. <strong>“문제 없음”이 아닙니다</strong>. 접속 실패도 N/A 로 나오므로 비고의 원래 상태명을 확인).</li>
+  <li><strong>고유값은 항상 비교에서 제외</strong>합니다. 서비스태그·시리얼·MAC·IP/게이트웨이/DNS·iSCSI/NVMe-oF 식별자·서버 이름 등은 <code>ignore_attrs.txt</code> 가 있어도 제외되고, 값이 MAC·UUID·IP·<code>iqn.</code>/<code>nqn.</code> 모양이어도 제외됩니다. 더 빼려면 <code>ignore_attrs.txt</code> 나 <code>bios.conf</code> 의 <code>exclude_attrs</code> 에 적습니다.</li>
+  <li>결과 태그 3종: <code>[OK]</code>(초록), <code>[difference]</code>(노랑), <code>[N/A]</code>(회색 — 판정할 수 없다는 뜻이며 “문제 없음”이 아님. 접속 실패도 N/A 로 나오므로 비고의 원래 상태명을 확인).</li>
 </ul>
 
-<h3>3.5 수정 단계 (<code>e</code> 키) — 3가지 방법</h3>
+<h3>4.5 BIOS 값을 수정하려면? (<code>e</code> 키, 3가지 방법)</h3>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">text</ac:parameter>
-  <ac:plain-text-body><![CDATA[e  →  수정 방법 선택
+  <ac:plain-text-body><![CDATA[e 키 → 수정 방법 선택
      1. 대표서버 기준으로 맞추기
      2. 점검 결과 기준 수정
      3. BIOS 값 직접 입력
-  →  수정 전 확인(현재값 -> 변경값 목록) → "위 수정대상을 적용할까요?" [y/N]
-  →  (수정제외 항목이 있으면) "수정제외 항목을 확인했습니다. 진행할까요?" [y/N]
-  →  (남의 Pending 이 있으면) 포함 여부 질문
-  →  BMC Pending 까지만 설정 (재부팅 없음) → 설정 보낸 호스트 자동 재점검]]></ac:plain-text-body>
+  → 수정 전 확인 (현재값 -> 변경값 목록)
+  → "위 수정대상을 적용할까요?" [y/N]
+  → (수정제외 항목이 있으면) "수정제외 항목을 확인했습니다. 진행할까요?" [y/N]
+  → (남의 Pending 이 있으면) 포함 여부 질문
+  → BMC Pending 까지만 설정 (재부팅 없음) → 설정 보낸 호스트 자동 재점검]]></ac:plain-text-body>
 </ac:structured-macro>
-<ul>
-  <li><strong>1. 대표서버 기준으로 맞추기:</strong> <code>[전체 설정 비교]</code> 의 묶음(태그·모델)마다 대표와 <strong>값이 다른 속성</strong>만 체크 목록으로 보여 줍니다(처음에는 모두 해제). <strong>체크한 속성만</strong> 같은 확인 질문을 거쳐 적용합니다. 대표에만 있고 대상에 없는 속성(또는 그 반대)은 Redfish 로 BIOS 속성을 새로 만들거나 지울 수 없어 <strong>사유와 함께 자동 제외</strong>되고, 보호 속성·고유값은 고를 수 없습니다. BIOS 버전이 다른 호스트는 별도 경고 행으로 표시됩니다. <code>allcheck_set</code> 과 상관없이 동작하며 적용 후에는 <code>r</code> 로 다시 비교합니다.</li>
-  <li><strong>2. 점검 결과 기준 수정:</strong> 프로파일 점검에서 <code>FAIL</code>(<code>verified=Y</code> 행)인 항목을 호스트별로 보여 주고 확인 후 적용합니다. <code>bios.conf</code> 의 <code>allcheck_set=on</code> 이면 전체비교 difference 도 대상에 포함합니다(기본 off).</li>
-  <li><strong>3. BIOS 값 직접 입력:</strong> <code>&lt;Redfish 속성 이름&gt;&lt;공백 또는 탭&gt;&lt;설정값&gt;</code> 을 한 줄에 하나씩 붙여넣고 Ctrl+D 로 끝냅니다. 이미 같은 값·없는 속성·보호 속성·맞지 않는 값은 건너뛰고 나머지를 미리보기 → 확인 후 같은 방식으로 설정합니다(허용값·ReadOnly 는 적용 때 레지스트리로 다시 확인).</li>
-  <li>설정을 한 번 <strong>적용한 뒤에는 같은 세션에서 같은 호스트를 다시 설정할 수 없습니다</strong>(화면 값이 적용 전 값이므로). 재부팅 후 다시 점검하십시오.</li>
-</ul>
+<table>
+  <thead>
+    <tr>
+      <th>수정 방법</th>
+      <th>동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>1. 대표서버 기준으로 맞추기</td><td>[전체 설정 비교] 의 묶음(태그·모델)마다 대표서버와 <strong>값이 다른 속성</strong>만 체크 목록으로 보여 줍니다 (처음에는 모두 해제). <strong>체크한 속성만</strong> 확인 질문을 거쳐 적용합니다. 한쪽에만 있는 속성(대표에만 있고 대상에 없는 경우 또는 반대)은 Redfish 로 BIOS 속성을 새로 만들거나 지울 수 없으므로 <strong>사유와 함께 자동 제외</strong>됩니다. 보호 속성·고유값은 고를 수 없고, BIOS 버전이 다른 호스트는 별도 경고 행으로 표시됩니다. <code>allcheck_set</code> 설정과 상관없이 동작하며, 적용 후에는 <code>r</code> 키로 다시 비교합니다.</td></tr>
+    <tr><td>2. 점검 결과 기준 수정</td><td>프로파일 점검에서 <code>FAIL</code> 이면서 <code>verified=Y</code> 인 항목을 호스트별로 보여 주고 확인 후 적용합니다. <code>bios.conf</code> 의 <code>allcheck_set=on</code> 이면 전체비교 difference 도 대상에 포함합니다 (기본 off).</td></tr>
+    <tr><td>3. BIOS 값 직접 입력</td><td><code>&lt;Redfish 속성 이름&gt;&lt;공백 또는 탭&gt;&lt;설정값&gt;</code> 을 한 줄에 하나씩 붙여넣고 Ctrl+D 로 끝냅니다. 이미 같은 값·없는 속성·보호 속성·맞지 않는 값은 건너뛰고 나머지를 미리보기 → 확인 후 설정합니다 (허용값·ReadOnly 는 적용 때 BMC 속성 레지스트리로 다시 확인).</td></tr>
+  </tbody>
+</table>
+<p>한 번 적용한 뒤에는 같은 세션에서 같은 호스트를 다시 설정할 수 없습니다 (화면 값이 적용 전 값이므로). 재부팅 후 다시 점검합니다.</p>
 
-<h3>3.6 프로파일에 설정 행 추가 — <code>profile add</code> (TUI <code>p</code> 키)</h3>
-<p>프로파일을 편집기로 고치지 않고 태그·모델별 설정 행을 추가합니다. 태그를 주면 <strong>그 태그 서버들이 보고한 모델마다</strong> 같은 행이 만들어지고, 모델을 주면 그 모델 1종에만 추가됩니다.</p>
+<h3>4.6 프로파일에 설정 행을 추가하려면? (<code>profile add</code>, TUI <code>p</code> 키)</h3>
+<p>프로파일 파일을 편집기로 고치지 않고 태그·모델별 설정 행을 추가합니다. <strong>태그</strong>를 주면 그 태그가 붙은 서버들이 보고한 <strong>모델마다</strong> 같은 행이 만들어지고, <strong>모델</strong>을 주면 그 모델 1종에만 추가됩니다.</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[# 태그 gold 서버들의 모델마다 같은 행 추가 (그 서버들에 읽기 전용으로 1회 접속)
@@ -391,41 +280,41 @@ bash bios.sh profile add -profile VM -model "DELL/R660" -set "hyper_threading:Lo
 bash bios.sh profile add -profile VM -model "DELL/R660" -set "ProcCStates=Disabled" -dry-run]]></ac:plain-text-body>
 </ac:structured-macro>
 <ul>
-  <li>행은 프로파일의 <code># [redfish]</code> 구역 끝에 추가되며 쓰기 전에 <code>&lt;이름&gt;.tsv.bak.&lt;일시&gt;</code> 로 백업합니다. 결과를 다시 읽어 검증한 뒤 교체합니다.</li>
-  <li><strong><code>verified</code> 는 항상 <code>N</code></strong> 입니다. 쓰기 허가(<code>Y</code>)는 첫 실장비에서 dry-run 본문을 사람이 확인한 뒤 직접 올립니다(5장 7단계).</li>
-  <li>보호 속성은 거절하고, 해당 모델에 없는 속성은 그 모델만 건너뜁니다. 같은 값이 이미 있으면 <code>이미 있음</code>, 다른 값으로 이미 있으면 <code>-force</code> 없이는 아무것도 쓰지 않고 종료코드 1 입니다.</li>
+  <li>행은 프로파일의 <code># [redfish]</code> 구역 끝에 추가되며, 쓰기 전에 <code>&lt;이름&gt;.tsv.bak.&lt;일시&gt;</code> 로 백업합니다.</li>
+  <li><strong><code>verified</code> 는 항상 <code>N</code></strong> 입니다. 쓰기 허가(<code>Y</code>)는 사람이 실제 장비에서 확인한 뒤 프로파일 파일을 직접 고쳐 올립니다.</li>
+  <li>보호 속성은 거절하고, 해당 모델에 없는 속성은 그 모델만 건너뜁니다. 같은 행이 다른 값으로 이미 있으면 <code>-force</code> 없이는 아무것도 쓰지 않고 종료코드 1 로 끝납니다.</li>
 </ul>
 
-<h3>3.7 비대화형 자동화 (<code>-auto</code> / <code>-auto-check</code>)</h3>
+<h3>4.7 자동화에서 쓰는 비대화형 실행 (<code>-auto</code>, <code>-auto-check</code>)</h3>
 <ul>
-  <li>묻지 않고 점검만 합니다(설정 없음). 프로파일은 <code>-profile</code> 또는 <code>bios.conf</code> 의 <code>auto_profile</code> 입니다.</li>
-  <li><code>targets.txt</code> 와 <code>check.res_&lt;user&gt;</code>(<code>-auto</code> 는 <code>_postapply</code> 도)는 <strong>호출한 폴더</strong> 기준입니다.</li>
-  <li>점검을 끝냈다면 <code>FAIL</code> 이 있어도 종료코드 0 입니다. <code>conf</code> 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닙니다.</li>
+  <li>묻지 않고 점검만 합니다 (설정 없음). 프로파일은 <code>-profile</code> 또는 <code>bios.conf</code> 의 <code>auto_profile</code> 입니다.</li>
+  <li><code>targets.txt</code> 와 결과 파일 <code>check.res_&lt;user&gt;</code>(<code>-auto</code> 는 <code>check.res_&lt;user&gt;_postapply</code> 도)는 <strong>호출한 폴더</strong> 기준입니다.</li>
+  <li>점검을 끝냈으면 <code>FAIL</code> 이 있어도 종료코드 0 입니다. conf 오류·대상 없음·프로파일 없음 같은 치명적 오류만 0 이 아닙니다.</li>
 </ul>
 
-<h3>3.8 Cisco(XML) 혼합 대상</h3>
-<p>hostname 이 <code>bios.conf</code> 의 <code>xml_host_prefix</code>(기본 <code>c</code>)로 시작하는 대상과 <code>-user-xml</code> 목록은 Cisco UCSM/CIMC <strong>XML API(읽기 전용)</strong> 로 점검하고 나머지는 Redfish 로 점검합니다. XML 대상은 프로파일 점검만 하고 전체비교·설정에서는 빠집니다. 기대값은 프로파일의 <code># [xml]</code> 구역입니다.</p>
+<h3>4.8 Cisco 장비는 어떻게 점검하나?</h3>
+<p>hostname 이 <code>bios.conf</code> 의 <code>xml_host_prefix</code>(기본 <code>c</code>)로 시작하는 대상과 <code>-user-xml</code> 목록은 Cisco UCSM/CIMC <strong>XML API(읽기 전용)</strong> 로 점검하고 나머지는 Redfish 로 점검합니다. Cisco 는 프로파일 점검만 하고 전체비교·설정에서는 빠집니다. 기대값은 프로파일의 <code># [xml]</code> 구역입니다.</p>
 
-<h2>4. BMC 계정 생성과 비밀번호 변경</h2>
+<h2>5. BMC 계정은 어떻게 만들고 비밀번호는 어떻게 바꾸나?</h2>
 
-<h3>4.1 계정 생성 — <code>bash bios.sh account</code></h3>
-<p>1순위 계정(<code>bios.conf</code> 의 <code>user</code> + <code>pass.enc</code>)이 일부 BMC 에 없을 때, 벤더 admin(2순위, <code>rf.enc</code>)으로 접속해 같은 id/pw 의 관리자 계정을 만듭니다. <code>bios.conf</code> 에 <code>user2</code> 가 있으면 권한이 다른 두 번째 계정도 같은 호스트에 만듭니다(권한은 <code>user2_role</code> / <code>user2_role_&lt;벤더&gt;</code>, 없으면 생성 직전에 <code>Administrator</code> / <code>Operator</code> / 직접 입력 중 고르라고 묻습니다).</p>
+<h3>5.1 계정 생성 — <code>bash bios.sh account</code></h3>
+<p>1순위 계정(<code>bios.conf</code> 의 <code>user</code> + <code>pass.enc</code>)이 일부 BMC 에 없을 때, 벤더 admin(2순위, <code>rf.enc</code>)으로 접속해 같은 id/pw 의 관리자 계정을 만듭니다. <code>bios.conf</code> 에 <code>user2</code> 가 있으면 권한이 다른 두 번째 계정도 같은 호스트에 만듭니다. 권한은 <code>user2_role</code> 또는 <code>user2_role_&lt;벤더&gt;</code> (<code>Administrator</code> / <code>Operator</code> / <code>ReadOnly</code>)이고, 둘 다 없으면 생성 직전에 고르라고 묻습니다.</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[bash bios.sh encrypt rf              # (선행) 벤더 admin 비밀번호 → rf.enc  (2.3.1절)
+  <ac:plain-text-body><![CDATA[bash bios.sh encrypt rf              # (선행) 벤더 admin 비밀번호 → rf.enc
 bash bios.sh encrypt 2                # (user2 를 쓸 때) 두 번째 계정 비밀번호 → pass2.enc
 bash bios.sh account -dry-run         # 대상·요청 본문만 확인 (BMC 에 쓰지 않음) ← 항상 먼저
 bash bios.sh account                  # 점검 → 대상 목록 → [Y/n] (빈 입력 = Y) → 생성·로그인 검증·롤백
 bash bios.sh account -ucsm            # 대상이 Cisco UCSM(XML API)일 때]]></ac:plain-text-body>
 </ac:structured-macro>
 <ul>
-  <li><code>bash bios.sh</code>(TUI·<code>-plain</code>) 도 점검 끝에 같은 질문을 합니다(1순위가 거부되어 2순위로 접속한 호스트가 있을 때. 기본 Y). 만든 뒤에는 1순위 계정을 만든 호스트만 1순위 계정으로 자동 재점검해 결과를 합쳐 보여 줍니다.</li>
-  <li>같은 id 가 이미 있으면 덮어쓰지 않고(<code>SKIP_EXISTS</code>), 만든 뒤 새 계정으로 로그인 1회 검증합니다. 인증 거부면 <strong>이번 실행이 만든 계정만</strong> 롤백합니다(<code>VERIFY_FAIL_ROLLED_BACK</code>). 통신 오류로 확인하지 못하면 롤백하지 않고 <code>VERIFY_UNKNOWN</code>(수동 확인), 롤백도 실패하면 <code>ROLLBACK_FAILED</code>(수동 조치)입니다.</li>
-  <li>결과는 <code>results/&lt;일시&gt;/account_result.tsv</code>(0600, 비밀번호 없음), 생성 대상은 <code>account_targets.txt</code>, 만들 수 없는 호스트는 <code>account_unfixable.txt</code> 입니다.</li>
+  <li><code>bash bios.sh</code>(TUI·<code>-plain</code>)도 점검 끝에 같은 질문을 합니다. 만든 뒤에는 1순위 계정을 만든 호스트만 자동 재점검해 결과를 합쳐 보여 줍니다.</li>
+  <li>같은 id 가 이미 있으면 덮어쓰지 않습니다 (<code>SKIP_EXISTS</code>). 만든 뒤 새 계정으로 로그인 1회 검증하고, 인증 거부면 <strong>이번 실행이 만든 계정만</strong> 롤백합니다 (<code>VERIFY_FAIL_ROLLED_BACK</code>). 통신 오류로 확인하지 못하면 롤백하지 않고 <code>VERIFY_UNKNOWN</code>(수동 확인), 롤백도 실패하면 <code>ROLLBACK_FAILED</code>(수동 조치)입니다.</li>
+  <li>결과는 <code>results/&lt;일시&gt;/account_result.tsv</code>(권한 0600, 비밀번호 없음), 생성 대상은 <code>account_targets.txt</code>, 만들 수 없는 호스트는 <code>account_unfixable.txt</code> 에 남습니다.</li>
 </ul>
 
-<h3>4.2 비밀번호 변경 — <code>bash bios.sh passwd</code></h3>
-<p>BMC 공용 계정(<code>bios.conf</code> 의 <code>user</code>)의 <strong>비밀번호를 바꾸는 명령</strong>입니다. 1순위 계정으로 <strong>로그인되는 호스트에서만</strong> 바꿉니다(admin 세션으로 남의 계정 비밀번호를 바꾸지 않음). <code>bash bios.sh passwd</code> 는 <code>bin/biostool account change</code> 를 바로 실행합니다.</p>
+<h3>5.2 비밀번호 변경 — <code>bash bios.sh passwd</code></h3>
+<p>BMC 공용 계정(<code>bios.conf</code> 의 <code>user</code>)의 <strong>비밀번호를 바꾸는 명령</strong>입니다. 1순위 계정으로 <strong>로그인되는 호스트에서만</strong> 바꿉니다 (admin 세션으로 남의 계정 비밀번호를 바꾸지 않음).</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[bash bios.sh passwd -dry-run     # 대상·요청 형태만 확인 (새 비밀번호 입력 없음, 쓰기 없음) ← 항상 먼저
@@ -433,85 +322,61 @@ bash bios.sh passwd             # 새 비밀번호 입력(2회, * 표시) → [y
 bash bios.sh passwd -ucsm       # 대상이 Cisco UCSM 일 때]]></ac:plain-text-body>
 </ac:structured-macro>
 <ol>
-  <li><strong>새 비밀번호 입력:</strong> 터미널에서만 받습니다(파이프·파일 거부). 글자마다 <code>*</code> 로 보이며 <strong>붙여넣기는 거부</strong>되므로 키보드로 직접 입력합니다. <code>@ ! # $ &lt; &amp; "</code> 같은 특수문자도 그대로 전송합니다.</li>
-  <li><strong>확인:</strong> 기본이 <code>N</code> 입니다(명시적 <code>y</code> 필요).</li>
-  <li><strong>검증·롤백:</strong> 새 비밀번호로 1회 로그인하고, 인증 거부면 열려 있는 세션으로 이전 비밀번호를 되돌립니다(<code>VERIFY_FAIL_ROLLED_BACK</code>). 되돌리기도 실패하면 <code>ROLLBACK_FAILED</code>.</li>
-  <li><strong><code>pass.enc</code> 는 자동으로 바뀌지 않습니다.</strong> 모든 호스트가 성공한 것을 확인한 뒤, 도구가 안내하는 대로 <code>bash bios.sh encrypt</code> 로 새 비밀번호를 다시 암호화합니다. 일부 호스트가 변경되지 않았다면 그 호스트는 이전 비밀번호가 유지되므로, 모두 성공한 뒤에 <code>pass.enc</code> 를 바꾸는 것이 안전합니다.</li>
+  <li><strong>새 비밀번호 입력</strong>: 터미널에서만 받습니다 (파이프·파일 거부). 글자마다 <code>*</code> 로 보이며 <strong>붙여넣기는 거부</strong>되므로 키보드로 직접 입력합니다. <code>@ ! # $ &lt; &amp; "</code> 같은 특수문자도 그대로 전송합니다.</li>
+  <li><strong>확인</strong>: 기본이 <code>N</code> 이므로 명시적으로 <code>y</code> 를 입력해야 변경됩니다.</li>
+  <li><strong>검증·롤백</strong>: 새 비밀번호로 1회 로그인하고, 인증 거부면 열려 있는 세션으로 이전 비밀번호를 되돌립니다 (<code>VERIFY_FAIL_ROLLED_BACK</code>). 되돌리기도 실패하면 <code>ROLLBACK_FAILED</code>.</li>
+  <li><strong><code>pass.enc</code> 는 자동으로 바뀌지 않습니다.</strong> 모든 호스트가 성공한 것을 확인한 뒤 <code>bash bios.sh encrypt</code> 로 새 비밀번호를 다시 암호화합니다. 일부 호스트가 변경되지 않았다면 그 호스트는 이전 비밀번호가 유지되므로, 모두 성공한 뒤에 <code>pass.enc</code> 를 바꾸는 것이 안전합니다.</li>
 </ol>
 <ac:structured-macro ac:name="note">
   <ac:rich-text-body>
-    <p>이 명령은 <strong>BMC 계정</strong>의 비밀번호만 다룹니다. 서버 OS(SSH root) 비밀번호 변경은 별도의 비밀번호 변경 스크립트(<code>pwreset</code>)가 담당하며 이 도구와 무관합니다. 변경 후에는 <code>bash bios.sh -plain -profile VM -user user.txt</code> 로 1~2대를 점검해 새 비밀번호로 로그인되는지 확인하십시오.</p>
+    <p>이 명령은 <strong>BMC 계정</strong> 비밀번호만 다룹니다. 서버 OS(SSH root) 비밀번호 변경은 별도의 비밀번호 변경 스크립트(<code>pwreset</code>)가 담당하며 이 도구와 무관합니다. 변경 후에는 <code>bash bios.sh -plain -profile VM -user user.txt</code> 로 1~2대를 점검해 새 비밀번호로 로그인되는지 확인합니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
-<h2>5. 표준 안전 절차 (모의 → 1대 검증 → 미리보기 → 카나리 → 확대 → 사후검증)</h2>
-
+<h2>6. 실제 장비에 처음 적용할 때는 어떤 순서로 하나? (표준 안전 절차)</h2>
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
-    <p><strong>대량 서버에 곧바로 실행하지 마십시오.</strong> 처음 만나는 모델은 아래 9단계로 <strong>1대부터</strong> 확인합니다. <code>auth_fail_stop</code>(기본 <code>3</code>)을 <code>0</code> 으로 끄면 BMC 계정 잠금 위험이 있습니다. 계정(비밀번호)이 틀린 채 같은 서버에 반복 접속하지 마십시오(<code>AUTH_FAIL</code> 은 자동 재시도하지 않습니다).</p>
+    <p>처음 만나는 모델은 대량 서버에 바로 실행하지 말고 아래 9단계로 <strong>1대부터</strong> 확인합니다. <code>auth_fail_stop</code> 을 <code>0</code> 으로 끄면 BMC 계정 잠금 위험이 있습니다. 계정(비밀번호)이 틀린 채 같은 서버에 반복 접속하지 마십시오.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
-
-<h3>5.1 사전 모의 연습 (실서버 아님)</h3>
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 합성 Redfish 트리를 서빙하는 모의 BMC (개발·연습용, 실제 장비 아님)
-MOCKBMC_PASS="testpass" bash mockbmc.sh dell-r660 8443
-
-# 기존 덤프를 대상으로 접속 없이 점검 흐름 연습 (설정 질문 없음)
-bash bios.sh -plain -profile VM -from-dump dumps/]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h3>5.2 실장비 최초 검증 9단계 (모델당 1대)</h3>
 <ol>
-  <li><strong>인증 확인:</strong> <code>bios.conf</code> 의 <code>user</code> 와 <code>bash bios.sh encrypt</code> 로 만든 <code>pass.enc</code>/<code>key.bin</code> 이 1대 테스트 BMC 에 맞는지 확인합니다. <code>user.txt</code> 에 1대만 넣고 <code>bash bios.sh -plain -profile VM -user user.txt</code> 로 읽기 전용 점검을 합니다(<code>AUTH_FAIL</code> 이면 중단하고 계정부터 확인).</li>
-  <li><strong>1대 GET 덤프:</strong> <code>bash bios.sh dump &lt;BMC 주소 또는 hostname-m&gt;</code> — GET 만 보내며 <code>dumps/</code> 에 저장하고 요약(Vendor/Model/BIOS 버전, <code>auth=</code>, <code>settings=</code> 경로, 표준 4항목 후보 속성·허용값·ReadOnly, <code>pending=</code>, <code>registry=</code>)을 출력합니다.</li>
-  <li><strong>실제 응답 대조:</strong> 요약의 실제 모델명·속성 이름·허용값·Settings 경로·Pending 상태를 프로젝트의 <code>FIRST_RUN.md</code> §B “확인 필요” 항목과 대조해 기록합니다.</li>
-  <li><strong>프로파일에 미검증 행 추가:</strong> 확인한 <strong>실제 속성 이름·허용값 그대로</strong> <code>verified=N</code> 으로 추가합니다. <code>bash bios.sh profile add -profile VM -model "벤더/모델" -set "속성=값"</code> (<code>verified</code> 는 항상 <code>N</code>). 읽기 점검만 가능하고 쓰기는 차단된 상태입니다.</li>
-  <li><strong>미리보기:</strong> <code>bash bios.sh -profile VM -user user.txt</code> 로 TUI 를 열어 <code>e</code> → 수정 전 확인 화면에서 <code>현재값 -&gt; 변경값</code> 을 눈으로 확인하고 <code>n</code> 으로 취소합니다(쓰기 없음). Pending PATCH 본문·Job 까지 보려면 <code>bash bios.sh check -profile VM -dry-run</code>(옛 방식 dry-run)을 사용합니다.</li>
-  <li><strong>수동 변경 교차검증:</strong> 테스트 서버 BMC 웹 UI/CLI 에서 같은 값을 수동으로 적용·재부팅한 뒤 읽기 점검이 <code>OK</code> 로 판정하는지, 실제 BIOS 화면 값과 같은지 확인합니다.</li>
-  <li><strong><code>verified=Y</code> 승격:</strong> 검증이 끝난 <strong>그 모델 행만</strong> 사람이 <code>profiles/&lt;프로파일&gt;.tsv</code> 에서 <code>verified=Y</code> 로 바꿉니다(<code>*</code> 행은 <code>Y</code> 불가).</li>
-  <li><strong>같은 모델 1대 실적용:</strong> <code>bash bios.sh -profile VM -user user.txt</code> → <code>e</code> → 확인 y → Pending 설정(<code>APPLIED</code>) → <strong>수동 재부팅</strong> → 재점검 <code>OK</code> → BMC/BIOS 화면 직접 확인. Dell 은 iDRAC Job Queue 에 BIOS 설정 Job 이 있었는지도 봅니다.</li>
-  <li><strong>점진적 확대·전체 비교:</strong> 1대 → 소수 대 → 수십 대 → 전체로 대수를 늘리며 단계마다 랜덤 서버를 직접 확인합니다. 이후 <code>[전체 설정 비교]</code> 의 <strong>1번 대표서버 자동 지정</strong>으로 묶음 안의 일관성을 확인합니다.</li>
+  <li><strong>인증 확인</strong>: <code>user.txt</code> 에 1대만 넣고 <code>bash bios.sh -plain -profile VM -user user.txt</code> 로 읽기 전용 점검을 합니다. <code>AUTH_FAIL</code> 이면 중단하고 계정·비밀번호부터 확인합니다.</li>
+  <li><strong>1대 GET 덤프</strong>: <code>bash bios.sh dump &lt;BMC 주소 또는 hostname-m&gt;</code>. GET 만 보내며 <code>dumps/</code> 에 저장하고 요약(Vendor/Model/BIOS 버전, 인증 방식, Settings 경로, 표준 4항목 후보 속성·허용값·ReadOnly, Pending, 속성 레지스트리)을 출력합니다.</li>
+  <li><strong>실제 응답 대조</strong>: 요약의 실제 모델명·속성 이름·허용값·Settings 경로·Pending 상태를 기록합니다 (프로젝트 폴더의 <code>FIRST_RUN.md</code> “확인 필요” 항목 참고).</li>
+  <li><strong>프로파일에 미검증 행 추가</strong>: 확인한 실제 속성 이름·허용값 그대로 추가합니다. <code>bash bios.sh profile add -profile VM -model "벤더/모델" -set "속성=값"</code> (<code>verified</code> 는 항상 <code>N</code>). 이 상태에서는 읽기 점검만 되고 쓰기는 차단됩니다.</li>
+  <li><strong>미리보기</strong>: <code>bash bios.sh -profile VM -user user.txt</code> 로 TUI 를 열어 <code>e</code> → 수정 전 확인 화면의 <code>현재값 -&gt; 변경값</code> 을 확인하고 <code>n</code> 으로 취소합니다 (쓰기 없음). Pending PATCH 본문·Job 까지 보려면 <code>bash bios.sh check -profile VM -dry-run</code> 을 사용합니다.</li>
+  <li><strong>수동 변경 교차검증</strong>: 테스트 서버 BMC 웹 UI 에서 같은 값을 수동 적용·재부팅한 뒤, 읽기 점검이 <code>OK</code> 로 판정하는지와 실제 BIOS 화면 값이 같은지 확인합니다.</li>
+  <li><strong><code>verified=Y</code> 승격</strong>: 검증이 끝난 <strong>그 모델 행만</strong> 사람이 프로파일 파일에서 <code>verified=Y</code> 로 바꿉니다 (<code>*</code> 와일드카드 행은 <code>Y</code> 불가).</li>
+  <li><strong>같은 모델 1대 실적용</strong>: <code>bash bios.sh -profile VM -user user.txt</code> → <code>e</code> → 확인 y → Pending 설정(<code>APPLIED</code>) → <strong>수동 재부팅</strong> → 재점검 <code>OK</code> → BMC/BIOS 화면 직접 확인. Dell 은 iDRAC Job Queue 에 BIOS 설정 Job 이 있었는지도 봅니다.</li>
+  <li><strong>점진적 확대·전체 비교</strong>: 1대 → 소수 대 → 수십 대 → 전체로 늘리며 단계마다 랜덤 서버를 직접 확인합니다. 이후 [전체 설정 비교] 의 1번 <strong>대표서버 자동 지정</strong>으로 묶음 안의 일관성을 확인합니다.</li>
 </ol>
-<p>중단 기준: <code>AUTH_FAIL</code>(계정부터 확인), 예상 밖의 <code>REJECTED</code>/<code>SET_ERROR</code>/<code>APPLY_UNCONFIRMED</code>, <code>PENDING_EXISTS</code> 다수(남의 Pending 을 건드리지 않고 멈춘 것이므로 원인 확인), 한 모델에서 <code>MAPPING_MISSING</code>.</p>
+<p>중단 기준: <code>AUTH_FAIL</code>(계정부터 확인), 예상 밖의 <code>REJECTED</code>/<code>SET_ERROR</code>/<code>APPLY_UNCONFIRMED</code>, <code>PENDING_EXISTS</code> 다수 (남의 Pending 을 건드리지 않고 멈춘 것이므로 원인 확인), 한 모델에서 <code>MAPPING_MISSING</code>.</p>
 
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 요약: 1대 시범 → 확대 (모두 bios.sh)
-bash bios.sh dump <BMC>                                  # 2) 사전조사 덤프
-bash bios.sh profile add -profile VM -model "벤더/모델" -set "속성=값"   # 4) 미검증(N) 행 추가
-bash bios.sh -profile VM -user user.txt                  # 5)·8) TUI 점검·미리보기·(확인 후) 적용
-bash bios.sh check -retry-from results/<일시>            # 실패·미완료 호스트만 재시도
-bash bios.sh                                             # 9) 전체 대상 점검 → 전체 설정 비교 → 대표서버 기준 확인]]></ac:plain-text-body>
-</ac:structured-macro>
+<h2>7. 설정·옵션·결과 파일·상태 코드 참고표</h2>
 
-<h2>6. 옵션 · 설정 키 · 결과 파일 · 상태 코드 표</h2>
-
-<h3>6.1 <code>bios.sh</code> 주요 옵션</h3>
+<h3>7.1 <code>bios.sh</code> 주요 옵션</h3>
 <table>
   <thead>
     <tr>
       <th>옵션</th>
       <th>기본값</th>
-      <th>설명 및 주의사항</th>
+      <th>설명</th>
     </tr>
   </thead>
   <tbody>
     <tr><td><code>-profile &lt;이름&gt;</code> (<code>--profile</code>)</td><td>화면에서 선택</td><td><code>profiles/&lt;이름&gt;.tsv</code>. 경로 문자(<code>/</code> <code>\</code> <code>..</code>)는 쓸 수 없음</td></tr>
     <tr><td><code>-user &lt;파일&gt;</code></td><td>화면에서 입력 (<code>-plain</code> 이면 <code>user.txt</code>)</td><td>점검 대상 목록</td></tr>
-    <tr><td><code>-user-xml &lt;파일&gt;</code></td><td>-</td><td>Cisco(XML API, 읽기 전용) 대상 목록 — 점검만</td></tr>
-    <tr><td><code>-plain</code></td><td>-</td><td>TUI 없이 색 없는 평문 출력 (읽기 전용)</td></tr>
-    <tr><td><code>-ref &lt;hostname&gt;</code> / <code>-ref-json &lt;파일&gt;</code> / <code>-diff &lt;파일&gt;</code></td><td>-</td><td>전체비교 기준(하나만). 주면 기준 메뉴를 건너뜀</td></tr>
+    <tr><td><code>-user-xml &lt;파일&gt;</code></td><td>없음</td><td>Cisco(XML API, 읽기 전용) 대상 목록 — 점검만</td></tr>
+    <tr><td><code>-plain</code></td><td>없음</td><td>TUI 없이 색 없는 평문 출력 (읽기 전용)</td></tr>
+    <tr><td><code>-ref &lt;hostname&gt;</code> / <code>-ref-json &lt;파일&gt;</code> / <code>-diff &lt;파일&gt;</code></td><td>없음</td><td>전체비교 기준 (하나만). 주면 기준 메뉴를 건너뜀</td></tr>
     <tr><td><code>-ignore &lt;파일&gt;</code></td><td><code>ignore_attrs.txt</code></td><td>전체비교에서 뺄 속성 목록</td></tr>
-    <tr><td><code>-from-dump &lt;디렉터리&gt;</code></td><td>-</td><td>접속 대신 <code>bios.sh dump</code> 로 저장한 덤프를 읽음 (쓰기 없음)</td></tr>
-    <tr><td><code>-conf</code> / <code>-hosts</code></td><td><code>bios.conf</code> / <code>/etc/hosts</code></td><td>설정 파일 / 이름 해석용 hosts. 상대경로는 호출한 폴더에 있으면 그 기준, 없으면 설치 폴더 기준</td></tr>
-    <tr><td><code>-auto-check &lt;user&gt; &lt;targets&gt;</code> / <code>-auto ...</code></td><td>-</td><td>비대화형 점검 (3.7절)</td></tr>
-    <tr><td><code>-dry-run</code></td><td>-</td><td><code>account</code>·<code>passwd</code>·<code>profile add</code>·<code>check</code> 에서 쓰기 없이 계획만 표시</td></tr>
+    <tr><td><code>-conf</code> / <code>-hosts</code></td><td><code>bios.conf</code> / <code>/etc/hosts</code></td><td>설정 파일 / 이름 해석용 hosts</td></tr>
+    <tr><td><code>-auto-check &lt;user&gt; &lt;targets&gt;</code> / <code>-auto ...</code></td><td>없음</td><td>비대화형 점검</td></tr>
+    <tr><td><code>-dry-run</code></td><td>없음</td><td><code>account</code>·<code>passwd</code>·<code>profile add</code>·<code>check</code> 에서 쓰기 없이 계획만 표시</td></tr>
   </tbody>
 </table>
 
-<h3>6.2 <code>bios.conf</code> 설정 키</h3>
+<h3>7.2 <code>bios.conf</code> 설정 키</h3>
 <table>
   <thead>
     <tr>
@@ -521,26 +386,26 @@ bash bios.sh                                             # 9) 전체 대상 점�
     </tr>
   </thead>
   <tbody>
-    <tr><td><code>user</code></td><td>(필수)</td><td>1순위 BMC 공용 계정 ID. 평문 비밀번호 키(<code>pass</code>·<code>password</code>·<code>passwd</code>·<code>pw</code>)가 있으면 오류</td></tr>
+    <tr><td><code>user</code></td><td>(필수)</td><td>1순위 BMC 공용 계정 ID</td></tr>
     <tr><td><code>pass_file</code> / <code>key_file</code></td><td><code>pass.enc</code> / <code>key.bin</code></td><td>암호문 / AES-256 키 경로</td></tr>
-    <tr><td><code>user2</code> / <code>user2_role</code> / <code>user2_role_&lt;벤더&gt;</code> / <code>pass2_file</code></td><td>(없음) / - / - / <code>pass2.enc</code></td><td>두 번째 공용 계정(계정 생성에서만 사용). 권한 <code>Administrator</code>/<code>Operator</code>/<code>ReadOnly</code>, 벤더별 지정은 해당 벤더만 덮어씀. 둘 다 없으면 생성 때 묻는 방식</td></tr>
+    <tr><td><code>user2</code>, <code>user2_role</code>, <code>user2_role_&lt;벤더&gt;</code>, <code>pass2_file</code></td><td>없음 / 없음 / 없음 / <code>pass2.enc</code></td><td>두 번째 공용 계정 (계정 생성에서만 사용). 권한 <code>Administrator</code>/<code>Operator</code>/<code>ReadOnly</code>, 벤더별 지정은 해당 벤더만 덮어씀</td></tr>
     <tr><td><code>rf_enc_file</code></td><td><code>rf.enc</code></td><td>벤더 admin(2순위) 비밀번호 암호문 (계정명은 <code>/etc/rf_tool/rf.conf</code>)</td></tr>
     <tr><td><code>concurrency</code></td><td><code>100</code></td><td>동시 접속 호스트 수 (<code>ulimit -n</code> 점검 필수)</td></tr>
     <tr><td><code>timeout</code></td><td><code>20</code></td><td>요청 1건 타임아웃(초)</td></tr>
     <tr><td><code>insecure</code></td><td><code>true</code></td><td>BMC 자체서명 인증서 검증 생략</td></tr>
-    <tr><td><code>retries</code></td><td><code>2</code> (상한 5)</td><td>일시 오류 재시도. <strong>GET·세션 생성에만 적용</strong> (PATCH/Job/401 은 재시도 안 함)</td></tr>
+    <tr><td><code>retries</code></td><td><code>2</code> (상한 5)</td><td>일시 오류 재시도. GET·세션 생성에만 적용 (PATCH/Job/401 은 재시도 안 함)</td></tr>
     <tr><td><code>auth_fail_stop</code></td><td><code>3</code></td><td>연속 인증 실패 안전 정지 임계치 (<code>0</code> = 끔 → 계정 잠금 위험)</td></tr>
     <tr><td><code>result_dir</code> / <code>dump_dir</code> / <code>profile_dir</code></td><td><code>results</code> / <code>dumps</code> / <code>profiles</code></td><td>결과(0600) / 덤프 / 프로파일 폴더</td></tr>
-    <tr><td><code>exclude_attrs</code></td><td>(없음)</td><td>점검·전체비교에서 뺄 속성 패턴 (<code>|</code> 구분, <code>*</code> 와일드카드)</td></tr>
+    <tr><td><code>exclude_attrs</code></td><td>없음</td><td>점검·전체비교에서 뺄 속성 패턴 (<code>|</code> 구분, <code>*</code> 와일드카드)</td></tr>
     <tr><td><code>allcheck_set</code></td><td><code>off</code></td><td><code>on</code> 이면 전체비교 difference 도 수정 대상에 포함</td></tr>
-    <tr><td><code>protect_attrs</code></td><td>(없음)</td><td>절대 바꾸지 않을 속성 패턴 추가 (내장 보호 목록은 끌 수 없음)</td></tr>
+    <tr><td><code>protect_attrs</code></td><td>없음</td><td>절대 바꾸지 않을 속성 패턴 추가 (내장 보호 목록은 끌 수 없음)</td></tr>
     <tr><td><code>refs_dir</code></td><td><code>refs</code></td><td>기준 속성 JSON 폴더</td></tr>
-    <tr><td><code>auto_profile</code></td><td>(없음)</td><td><code>-auto</code>/<code>-auto-check</code> 에서 <code>-profile</code> 을 주지 않았을 때 쓸 프로파일</td></tr>
+    <tr><td><code>auto_profile</code></td><td>없음</td><td><code>-auto</code>/<code>-auto-check</code> 에서 <code>-profile</code> 을 주지 않았을 때 쓸 프로파일</td></tr>
     <tr><td><code>xml_host_prefix</code></td><td><code>c</code></td><td>이 접두어로 시작하는 hostname 은 Cisco XML API 로 점검</td></tr>
   </tbody>
 </table>
 
-<h3>6.3 결과 파일 (<code>results/&lt;YYYYMMDD_HHMMSS&gt;/</code>, 모두 0600·비밀번호 없음)</h3>
+<h3>7.3 결과 파일 (<code>results/&lt;YYYYMMDD_HHMMSS&gt;/</code>, 권한 0600, 비밀번호 없음)</h3>
 <table>
   <thead>
     <tr>
@@ -549,19 +414,19 @@ bash bios.sh                                             # 9) 전체 대상 점�
     </tr>
   </thead>
   <tbody>
-    <tr><td><code>profile_summary.csv</code>, <code>profile_wide_*.csv</code>, <code>profile_long.csv</code></td><td>프로파일 점검 결과 CSV (UTF-8 BOM)</td></tr>
-    <tr><td><code>compare_*.csv</code>, <code>compare_refs.tsv</code></td><td>전체비교 결과 CSV와 묶음별 대표서버·선정 사유 (대표서버 자동 지정일 때)</td></tr>
+    <tr><td><code>profile_summary.csv</code>, <code>profile_wide_*.csv</code>, <code>profile_long.csv</code></td><td>프로파일 점검 결과 CSV</td></tr>
+    <tr><td><code>compare_*.csv</code>, <code>compare_refs.tsv</code></td><td>전체비교 결과 CSV, 묶음별 대표서버·선정 사유 (대표서버 자동 지정일 때)</td></tr>
     <tr><td><code>run_info.txt</code>, <code>retry.txt</code></td><td>실행 요약 / 재시도 대상 원문 (<code>bash bios.sh check -retry-from</code> 에 사용)</td></tr>
-    <tr><td><code>apply_result.tsv</code>, <code>applied.txt</code>, <code>apply_failed.txt</code>, <code>apply_requests.txt</code></td><td>설정(Y) 결과 / Pending 반영 확인(APPLIED) 호스트 / 실패 / 실제 보낸 PATCH·Job 요청</td></tr>
+    <tr><td><code>apply_result.tsv</code>, <code>applied.txt</code>, <code>apply_failed.txt</code>, <code>apply_requests.txt</code></td><td>설정 결과 / Pending 반영 확인(<code>APPLIED</code>) 호스트 / 실패 / 실제 보낸 PATCH·Job 요청</td></tr>
     <tr><td><code>recheck/&lt;일시&gt;/</code></td><td>설정·계정 생성 후 자동 재점검 결과와 합친 결과</td></tr>
     <tr><td><code>account_result.tsv</code>, <code>account_targets.txt</code>, <code>account_unfixable.txt</code></td><td>계정 생성·변경 결과 / 생성 대상 / 생성 불가 호스트</td></tr>
     <tr><td><code>fallback_login.txt</code></td><td>1순위 계정이 거부되어 2순위(<code>rf.conf</code>)로 접속한 호스트 (이름만)</td></tr>
     <tr><td><code>check.res_&lt;user&gt;</code> (호출한 폴더)</td><td><code>-auto</code>/<code>-auto-check</code> 의 호스트별 한 줄 결과 (auto_setup 이 읽음)</td></tr>
-    <tr><td><code>dumps/index.tsv</code>, <code>dumps/&lt;vendor&gt;/…</code></td><td><code>bios.sh dump</code> 덤프 목록과 JSON</td></tr>
+    <tr><td><code>dumps/index.tsv</code>, <code>dumps/&lt;vendor&gt;/…</code></td><td><code>bash bios.sh dump</code> 덤프 목록과 JSON</td></tr>
   </tbody>
 </table>
 
-<h3>6.4 종료 코드</h3>
+<h3>7.4 종료 코드</h3>
 <table>
   <thead>
     <tr>
@@ -571,78 +436,96 @@ bash bios.sh                                             # 9) 전체 대상 점�
     </tr>
   </thead>
   <tbody>
-    <tr><td>Bash 래퍼 (<code>bios.sh</code> 등)</td><td><code>1</code> / <code>2</code></td><td><code>1</code>: 필수 파일 누락 / <code>2</code>: 실행 바이너리 누락 또는 실행 불가</td></tr>
-    <tr><td><code>biostool</code> 바이너리</td><td><code>0</code> / <code>1</code></td><td><code>0</code>: 정상 종료 (개별 호스트·항목 <code>FAIL</code> 이 있어도 0) / <code>1</code>: 설정·실행 오류 (예: <code>profile add</code> 충돌)</td></tr>
+    <tr><td>Bash 래퍼 (<code>bios.sh</code>)</td><td><code>1</code> / <code>2</code></td><td><code>1</code>: 필수 파일 누락 / <code>2</code>: 실행 바이너리 누락 또는 실행 불가</td></tr>
+    <tr><td>실행 바이너리 (<code>biostool</code>)</td><td><code>0</code> / <code>1</code></td><td><code>0</code>: 정상 종료 (개별 호스트·항목 <code>FAIL</code> 이 있어도 0) / <code>1</code>: 설정·실행 오류 (예: <code>profile add</code> 충돌)</td></tr>
   </tbody>
 </table>
 
-<h3>6.5 주요 상태 코드 요약</h3>
+<h3>7.5 상태 코드 뜻</h3>
 <table>
   <thead>
     <tr>
       <th>구분</th>
-      <th>상태 코드</th>
+      <th>상태 코드와 뜻</th>
     </tr>
   </thead>
   <tbody>
-    <tr><td>항목 점검 (Item)</td><td><code>OK</code>, <code>PENDING_OK</code>, <code>FAIL</code>, <code>UNVERIFIED</code>(<code>verified=N</code> 이라 점검만), <code>PENDING_EXISTS</code>(남의 Pending — 건드리지 않음), <code>PENDING_NO_JOB</code>(Dell Job 없음), <code>MAPPING_MISSING</code></td></tr>
-    <tr><td>호스트 연결 (Host)</td><td><code>UNREACHABLE</code>, <code>TIMEOUT</code>, <code>BMC_ERROR</code>, <code>AUTH_FAIL</code>(재시도 금지), <code>SKIPPED_AUTH_STOP</code>, <code>UNSUPPORTED</code>, <code>HTTP_ERROR</code>, <code>NO_HOSTS_ENTRY</code>, <code>NO_DUMP</code>, <code>CANCELED</code></td></tr>
-    <tr><td>설정 적용 (Apply, 자동 재시도 없음)</td><td><code>APPLIED</code>, <code>APPLY_UNCONFIRMED</code>, <code>ALREADY_OK</code>, <code>CHANGED</code>, <code>SKIPPED_READONLY</code>, <code>INVALID_VALUE</code>, <code>DEPENDS_ON_PROFILE</code>, <code>SET_NOT_SUPPORTED_VENDOR</code>, <code>PROTECTED_ATTR</code>, <code>DUPLICATE_TARGET</code>, <code>REJECTED</code>, <code>SET_UNSUPPORTED</code>, <code>SET_ERROR</code></td></tr>
-    <tr><td>전체 비교</td><td><code>SAME</code>, <code>DIFF</code>, <code>ONLY_REF</code>, <code>ONLY_HOST</code>, <code>REFERENCE</code>, <code>NO_REFERENCE</code>, <code>REF_UNREACHABLE</code>, <code>BIOS_VER_DIFF</code></td></tr>
-    <tr><td>계정 생성·변경</td><td><code>CREATED</code>, <code>CHANGED</code>, <code>WOULD_CREATE</code>, <code>WOULD_CHANGE</code>, <code>PRIMARY_OK</code>, <code>PRESENT</code>, <code>SKIP_EXISTS</code>, <code>NO_ADMIN</code>, <code>NO_ACCOUNT</code>, <code>REJECTED</code>, <code>NO_FREE_SLOT</code>, <code>VERIFY_FAIL_ROLLED_BACK</code>, <code>ROLLBACK_FAILED</code>, <code>VERIFY_UNKNOWN</code></td></tr>
+    <tr><td>항목 점검</td><td><code>OK</code>(현재값 = 기대값), <code>PENDING_OK</code>(Pending 이 기대값, 재부팅 대기), <code>FAIL</code>(불일치, <code>verified=Y</code> 행), <code>UNVERIFIED</code>(불일치지만 <code>verified=N</code> 이라 점검만), <code>PENDING_EXISTS</code>(남의 Pending 이 있어 건드리지 않음), <code>PENDING_NO_JOB</code>(Dell Job 없음), <code>MAPPING_MISSING</code>(프로파일에 이 모델 행 없음)</td></tr>
+    <tr><td>호스트 연결</td><td><code>UNREACHABLE</code>(연결 불가), <code>TIMEOUT</code>, <code>BMC_ERROR</code>(5xx), <code>AUTH_FAIL</code>(계정 거부, 재시도 금지), <code>SKIPPED_AUTH_STOP</code>(연속 인증 실패로 건너뜀), <code>UNSUPPORTED</code>, <code>HTTP_ERROR</code>, <code>NO_HOSTS_ENTRY</code>, <code>CANCELED</code></td></tr>
+    <tr><td>설정 적용</td><td><code>APPLIED</code>(Pending 에 기대값이 들어간 것을 재조회로 확인 — BIOS 반영 완료가 아님), <code>APPLY_UNCONFIRMED</code>, <code>ALREADY_OK</code>, <code>CHANGED</code>, <code>SKIPPED_READONLY</code>, <code>INVALID_VALUE</code>, <code>DEPENDS_ON_PROFILE</code>, <code>SET_NOT_SUPPORTED_VENDOR</code>, <code>PROTECTED_ATTR</code>, <code>DUPLICATE_TARGET</code>, <code>REJECTED</code>, <code>SET_UNSUPPORTED</code>, <code>SET_ERROR</code></td></tr>
+    <tr><td>전체 비교</td><td><code>SAME</code>, <code>DIFF</code>(값이 다름), <code>ONLY_REF</code>(기준에만 있음), <code>ONLY_HOST</code>(대상에만 있음), <code>REFERENCE</code>(기준 서버 자신), <code>NO_REFERENCE</code>, <code>REF_UNREACHABLE</code>, <code>BIOS_VER_DIFF</code></td></tr>
+    <tr><td>계정 생성·변경</td><td><code>CREATED</code>, <code>CHANGED</code>, <code>WOULD_CREATE</code>/<code>WOULD_CHANGE</code>(dry-run), <code>PRIMARY_OK</code>, <code>PRESENT</code>, <code>SKIP_EXISTS</code>, <code>NO_ADMIN</code>(rf.conf 에 이 벤더 admin 없음), <code>NO_ACCOUNT</code>, <code>REJECTED</code>, <code>NO_FREE_SLOT</code>, <code>VERIFY_FAIL_ROLLED_BACK</code>, <code>ROLLBACK_FAILED</code>, <code>VERIFY_UNKNOWN</code></td></tr>
   </tbody>
 </table>
 
-<h2>7. 업데이트 및 접속 장애 진단</h2>
+<h2>8. 문제가 생기면? (진단·백업·롤백)</h2>
 
-<h3>7.1 새 버전 반영 — <code>bash bios.sh update</code></h3>
-<p>설치 폴더는 <code>/root/server_vm_python/redhfish/V2</code> 로 고정입니다. 새 버전 ZIP 을 <code>/tmp</code> 에 두고 설치 폴더에서 실행합니다(회사에서는 <strong>os8 바이너리 <code>bin/biostool</code> 교체</strong>가 핵심입니다).</p>
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[cd /root/server_vm_python/redhfish/V2
-bash bios.sh update                  # /tmp 의 가장 최근 redfish ZIP 사용 (ZIP 경로·압축 푼 폴더를 인자로 줘도 됨)]]></ac:plain-text-body>
-</ac:structured-macro>
-<ul>
-  <li><strong>그대로 둠:</strong> <code>bios.conf</code> <code>pass.enc</code> <code>pass2.enc</code> <code>rf.enc</code> <code>key.bin</code> <code>user.txt</code> <code>diff.txt</code> <code>ignore_attrs.txt</code> <code>refs/</code> <code>results/</code> <code>dumps/</code> (현장에서만 만드는 파일).</li>
-  <li><strong><code>profiles/</code>:</strong> 현장에서 고치지 않은 파일은 새 버전으로 교체, 고친 파일(<code>verified=Y</code>, <code>profile add</code> 로 추가한 행 등)은 그대로 두고 새 버전을 <code>&lt;이름&gt;.new</code> 로 둡니다 → <code>diff profiles/VM.tsv profiles/VM.tsv.new</code> 로 비교해 필요한 줄만 옮깁니다. <code>profile add</code> 로 고친 프로파일은 업데이트 전에 따로 백업하십시오.</li>
-  <li>바꾸기 전에 <code>results/</code>·<code>dumps/</code> 를 뺀 설치 폴더 전체를 <code>/root/server_vm_python/redhfish/backup/V2_&lt;일시&gt;.tgz</code> 로 백업합니다. 되돌리려면 설치 폴더를 지우고 <code>tar xzf &lt;백업&gt; -C /root/server_vm_python/redhfish</code>.</li>
-  <li>끝나면 <code>bios.conf</code> 에 없는 새 설정 키를 알려 줍니다(없으면 기본값으로 동작).</li>
-</ul>
-
-<h3>7.2 접속 장애 진단</h3>
+<h3>8.1 BMC 에 접속이 안 될 때</h3>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[bash bios.sh trs -targets <BMC IP>         # 403·로그인 실패 등 BMC 접속 장애 진단 (읽기 전용)
 bash bios.sh trs-cisco -targets <IP>        # Cisco UNSUPPORTED·XML 실패 원인 진단]]></ac:plain-text-body>
 </ac:structured-macro>
-<p><code>[접속불가]</code> 는 포트 닫힘·응답 없음(네트워크), <code>[계정 오류 AUTH_FAIL]</code> 는 계정 거부로 구분해 표시하므로 “계정 문제처럼 보이지만 사실은 네트워크”인 경우를 가릴 수 있습니다.</p>
+<p>결과 화면은 포트 닫힘·응답 없음은 <code>[접속불가]</code>, 계정 거부는 <code>[계정 오류 AUTH_FAIL]</code> 로 구분해 보여 주므로 계정 문제처럼 보이지만 실제로는 네트워크 문제인 경우를 가릴 수 있습니다.</p>
 
-<h2>8. 백업 및 롤백 방법</h2>
-<ul>
-  <li><strong>작업 전 Redfish 트리 백업(권장):</strong> 설정 전에 <code>bash bios.sh dump &lt;대상...&gt;</code> 로 현재 BIOS 상태를 <code>dumps/</code> 에 저장해 두십시오. 재부팅 후 원복이 필요할 때 값 대조의 근거가 됩니다.</li>
-  <li><strong>Pending 설정 취소(재부팅 전 롤백):</strong> 도구는 자동 재부팅을 하지 않으므로 <code>APPLIED</code> 직후(재부팅 전)에 잘못된 변경이 발견되면 해당 서버 BMC 웹 콘솔·벤더 CLI(iDRAC/iLO/XCC)에서 <strong>Pending BIOS Settings / BIOS Job Queue 를 수동 삭제</strong>해 반영을 막습니다.</li>
-  <li><strong>재부팅 후 값 원복:</strong> 이미 반영된 경우, 사전에 채집한 덤프를 대조해 되돌릴 값을 정하고 <code>bash bios.sh</code> 의 <code>e</code> → “BIOS 값 직접 입력”으로 다시 Pending 설정하거나 BMC 콘솔에서 수동 원복한 뒤 재부팅합니다.</li>
-  <li><strong>프로파일 롤백:</strong> <code>profile add</code> 는 쓰기 전에 <code>profiles/&lt;이름&gt;.tsv.bak.&lt;일시&gt;</code> 를 만들므로 그 파일로 되돌립니다.</li>
-  <li><strong>계정 생성·변경 롤백:</strong> 도구가 검증에 실패한 서버에서 자동으로 롤백합니다. <code>ROLLBACK_FAILED</code> 는 결과 파일 detail 의 안내대로 수동 조치합니다.</li>
-  <li><strong>배포본 롤백:</strong> <code>bios.sh update</code> 가 만든 <code>backup/V2_&lt;일시&gt;.tgz</code> 로 복원합니다.</li>
-</ul>
-
-<h2>9. 작업 완료 후 랜덤 서버 실접속 교차검증 필수</h2>
-
-<ac:structured-macro ac:name="warning">
-  <ac:rich-text-body>
-    <p><strong>[필수 검증] BIOS 설정·계정 생성·비밀번호 변경을 한 뒤에는 반드시 랜덤 서버를 직접 확인하십시오.</strong></p>
-    <p>이 도구는 실제 BMC 로 검증되지 않았고, <code>APPLIED</code> 는 “BMC 의 Pending 에 기대값이 들어간 것을 재조회로 확인했다”는 뜻일 뿐 BIOS 에 실제로 반영되었다는 뜻이 아닙니다. 펌웨어별 Pending 반영 지연, Job 미생성, 속성 의존성(<code>DEPENDS_ON_PROFILE</code>) 등으로 실제 값이 다를 수 있습니다. 벤더·모델별 <strong>랜덤 1~3대</strong> 에 직접 접속해 다음을 확인하십시오.</p>
-    <ul>
-      <li>BMC 웹 UI / BIOS 화면에서 <code>system_profile</code>, <code>hyper_threading</code>, <code>llc_prefetch</code>, <code>sub_numa_cluster</code> 등 적용 값과 Job Queue 잔여 상태 (재부팅 후에는 <code>bash bios.sh</code> 재점검 <code>OK</code> 와 정상 POST/OS 부팅 여부)</li>
-      <li>계정을 만들었거나 비밀번호를 바꿨다면 해당 BMC 에 <strong>실제로 로그인되는지</strong> (벤더별 계정 생성·권한 방식은 문서 근거이며 실제 장비 미확인)</li>
-      <li><code>bash bios.sh account</code>·<code>passwd</code> 는 항상 <code>-dry-run</code> 으로 대상과 요청 본문을 먼저 확인</li>
-    </ul>
-  </ac:rich-text-body>
-</ac:structured-macro>
-
+<h3>8.2 잘못 설정했을 때 되돌리는 방법</h3>
+<table>
+  <thead>
+    <tr>
+      <th>상황</th>
+      <th>되돌리는 방법</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Pending 을 보냈고 아직 재부팅 전</td><td>도구는 재부팅하지 않으므로 해당 서버 BMC 웹 콘솔·벤더 CLI(iDRAC/iLO/XCC)에서 <strong>Pending BIOS Settings / BIOS Job Queue 를 수동 삭제</strong>하면 반영되지 않습니다.</td></tr>
+    <tr><td>이미 재부팅되어 BIOS 에 반영됨</td><td>설정 전에 <code>bash bios.sh dump &lt;대상&gt;</code> 으로 저장해 둔 덤프를 대조해 되돌릴 값을 정하고, <code>bash bios.sh</code> 의 <code>e</code> → “BIOS 값 직접 입력”으로 다시 Pending 설정하거나 BMC 콘솔에서 수동 원복한 뒤 재부팅합니다.</td></tr>
+    <tr><td>프로파일을 잘못 고쳤을 때</td><td><code>profile add</code> 가 쓰기 전에 만든 <code>profiles/&lt;이름&gt;.tsv.bak.&lt;일시&gt;</code> 로 되돌립니다.</td></tr>
+    <tr><td>계정 생성·비밀번호 변경 실패</td><td>도구가 검증에 실패한 서버에서 자동 롤백합니다. <code>ROLLBACK_FAILED</code> 는 <code>account_result.tsv</code> 의 detail 안내대로 수동 조치합니다.</td></tr>
+  </tbody>
+</table>
 <ac:structured-macro ac:name="note">
   <ac:rich-text-body>
-    <p>결과(<code>results/</code>)에는 호스트 이름·모델·BIOS 설정값이 들어 있고 <code>pass.enc</code>·<code>pass2.enc</code>·<code>rf.enc</code>·<code>key.bin</code> 은 비밀번호와 직결됩니다. 저장소 커밋·공유를 금지하고 필요 없으면 직접 삭제하십시오. 입력 목록에 같은 서버를 다른 표기(<code>host</code> 와 <code>host-m</code>)로 중복해 넣지 마십시오(<code>DUPLICATE_TARGET</code>).</p>
+    <p>설정을 되돌린 뒤에도, 계정을 만들거나 비밀번호를 바꾼 뒤에도 <strong>랜덤 1~3대에 직접 접속해 실제 값(BIOS 화면·BMC 로그인)을 확인</strong>합니다. 점검·설정 결과(<code>results/</code>)와 <code>pass.enc</code>·<code>pass2.enc</code>·<code>rf.enc</code>·<code>key.bin</code> 은 커밋·공유하지 않습니다. 같은 서버를 다른 표기(<code>host</code> 와 <code>host-m</code>)로 중복 입력하지 마십시오 (<code>DUPLICATE_TARGET</code>).</p>
   </ac:rich-text-body>
 </ac:structured-macro>
+
+<h2>9. 자주 묻는 질문 (FAQ)</h2>
+
+<p><strong>Q. BIOS 점검은 어떤 명령으로 실행하나요?</strong><br/>
+A. <code>bash bios.sh</code> 하나로 실행합니다. 화면 없이 읽기 전용으로 하려면 <code>bash bios.sh -plain -profile VM -user user.txt</code> 입니다.</p>
+
+<p><strong>Q. BIOS 설정을 바꾸면 서버가 재부팅되나요?</strong><br/>
+A. 아니요. BMC 의 Pending(예약)까지만 설정하고 재부팅은 하지 않습니다. 다음 재부팅 때 반영됩니다. 재부팅 전에는 <code>PENDING_OK</code> 로 보입니다.</p>
+
+<p><strong>Q. BMC 계정 비밀번호를 바꾸려면?</strong><br/>
+A. <code>bash bios.sh passwd -dry-run</code> 으로 대상을 확인한 뒤 <code>bash bios.sh passwd</code> 를 실행하고 새 비밀번호를 키보드로 직접 2회 입력(붙여넣기 불가)합니다. 모든 호스트 변경이 성공한 것을 확인한 뒤 <code>bash bios.sh encrypt</code> 로 <code>pass.enc</code> 를 새 비밀번호로 다시 만듭니다.</p>
+
+<p><strong>Q. 벤더(2순위) 계정 비밀번호를 암호화하려면?</strong><br/>
+A. <code>/etc/rf_tool/rf.conf</code> 에 <code>&lt;벤더&gt;_user=계정명</code> 을 적고 <code>bash bios.sh encrypt rf</code> (또는 <code>bash bios.sh encrypt rf dell</code>)를 실행합니다. 결과는 <code>rf.enc</code> 이고 <code>key.bin</code> 을 <code>pass.enc</code> 와 공유합니다.</p>
+
+<p><strong>Q. 1순위 계정이 없는 BMC 는 어떻게 하나요?</strong><br/>
+A. 벤더 admin(<code>rf.enc</code>)으로 접속해 점검되고, 점검 끝에 <code>계정을 만들까요? [Y/n]</code> 질문이 나옵니다. 직접 하려면 <code>bash bios.sh account -dry-run</code> 후 <code>bash bios.sh account</code> 를 실행합니다.</p>
+
+<p><strong>Q. 대표서버 기준으로 BIOS 를 똑같이 맞추려면?</strong><br/>
+A. <code>bash bios.sh</code> 로 점검 → Tab 으로 [전체 설정 비교] → 기준 메뉴 1번(대표서버 자동 지정) → <code>e</code> → “1. 대표서버 기준으로 맞추기” 에서 맞출 속성만 체크하고 확인합니다. 한쪽에만 있는 속성은 자동 제외됩니다.</p>
+
+<p><strong>Q. 서버마다 다른 값(시리얼·MAC·IP)도 비교되나요?</strong><br/>
+A. 아니요. 서비스태그·시리얼·MAC·IP·iSCSI 식별자 등 고유값은 항상 비교에서 제외되고 설정도 막혀 있습니다.</p>
+
+<p><strong>Q. 특정 태그·모델에 대한 표준 설정을 프로파일에 추가하려면?</strong><br/>
+A. <code>bash bios.sh profile add -profile VM -tag gold -set "속성=값"</code> (태그의 모델별 행 생성) 또는 <code>-model "DELL/R660"</code> 입니다. <code>verified</code> 는 항상 <code>N</code> 으로 들어가며, 실제 장비 확인 후 사람이 <code>Y</code> 로 바꿉니다.</p>
+
+<p><strong>Q. <code>APPLIED</code> 이면 BIOS 에 반영된 건가요?</strong><br/>
+A. 아니요. BMC 의 Pending 에 기대값이 들어간 것을 재조회로 확인했다는 뜻입니다. 재부팅 후 재점검(<code>OK</code>)과 BMC/BIOS 화면 직접 확인이 필요합니다.</p>
+
+<p><strong>Q. <code>AUTH_FAIL</code> 이 나오면?</strong><br/>
+A. 계정·비밀번호를 먼저 확인합니다. 자동 재시도하지 않으며, 연속 3회(<code>auth_fail_stop</code>)면 나머지 호스트 접속을 멈춰 계정 잠금을 막습니다. 접속 자체가 안 되는 것인지는 <code>bash bios.sh trs -targets &lt;BMC IP&gt;</code> 로 진단합니다.</p>
+
+<p><strong>Q. 실패한 호스트만 다시 하려면?</strong><br/>
+A. <code>bash bios.sh check -retry-from results/&lt;일시&gt;</code> 를 실행합니다 (결과 폴더의 <code>retry.txt</code> 사용).</p>
+
+<p><strong>Q. 쓰기는 어떤 벤더에서 되나요?</strong><br/>
+A. Dell, HPE, Lenovo 만, 프로파일에서 모델을 지정한 <code>verified=Y</code> 행에 한해 됩니다. Cisco·Supermicro 는 점검만 합니다.</p>
+
+<p><strong>Q. 이 도구 결과를 그대로 믿어도 되나요?</strong><br/>
+A. 아니요. 실제 BMC 에서 검증되지 않았고 참고용 보조 도구입니다. 설정 변경·계정 생성·비밀번호 변경 뒤에는 랜덤 서버 몇 대를 직접 확인하십시오.</p>

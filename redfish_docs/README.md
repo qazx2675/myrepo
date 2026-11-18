@@ -1,7 +1,7 @@
 # `redfish` (`biostool`) — 위키 문서 업로드 안내
 
 - **양식 유형**: T3 (설정 변경 / 프로비저닝 엔진, 사전 빌드 바이너리 + Bash 래퍼)
-- **실행 기준**: BIOS 점검·전체비교·수정, 계정 생성(`account`), 비밀번호 변경(`passwd`), 암호화·벤더 암호화 키(`encrypt`), 프로파일 추가(`profile add`), 덤프·업데이트까지 모두 **`bash bios.sh <명령>` 하나**로 안내합니다 (옛 개별 래퍼 직접 호출 안내 없음)
+- **실행 기준**: BIOS 점검·전체비교·수정, 계정 생성(`account`), 비밀번호 변경(`passwd`), 암호화·벤더 암호화 키(`encrypt`), 프로파일 추가(`profile add`), 덤프까지 모두 **`bash bios.sh <명령>` 하나**로 안내합니다 (옛 개별 래퍼 직접 호출 안내 없음)
 - **포함 파일**:
   - [`redfish.xhtml`](redfish.xhtml): 위키 Storage Format 본문 프래그먼트 (루트 래퍼 없음)
   - [`README.md`](README.md): 본 업로드 가이드
