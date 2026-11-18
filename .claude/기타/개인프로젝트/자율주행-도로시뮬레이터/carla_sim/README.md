@@ -54,8 +54,12 @@ HDD 는 맵 로딩이 1분 이상 걸리고 도심 맵에서 끊길 수 있어 �
    GPU 가 약하면 `-quality-level=Low`. 서버 창은 관전용이라 최소화해 둬도 됩니다.
 
 ### 실행 시 "DirectX runtime" 오류가 나면
-언리얼 엔진 필수 런타임이 없어서입니다. `D:\CARLA_0.9.16\Engine\Extras\Redist\en-us\UE4PrereqSetup_x64.exe` 를 실행해 설치하십시오
-(최신 `install_carla.bat` 은 자동으로 확인·설치합니다).
+언리얼 엔진이 쓰는 DirectX 9 런타임(June 2010)이 없어서입니다 (CARLA 0.9.16 패키지에는 들어 있지 않음). 터미널에서:
+```bat
+winget install --id Microsoft.DirectX -e
+winget install --id Microsoft.VCRedist.2015+.x64 -e
+```
+또는 microsoft.com 의 "DirectX End-User Runtime Web Installer". 최신 `install_carla.bat` 은 이것도 자동으로 확인·설치합니다.
 
 ## 2) 실행
 

@@ -71,8 +71,13 @@ if (-not (Test-Path "$env:WINDIR\System32\XINPUT1_3.dll") -or -not (Test-Path "$
         Write-Host "DirectX/VC++ 런타임 설치 중 (관리자 권한 확인 창이 뜹니다)..."
         $p = Start-Process -FilePath $prereq -ArgumentList "/quiet", "/norestart" -Verb RunAs -Wait -PassThru
         if ($p.ExitCode -ne 0) { Write-Host "런타임 설치 종료 코드 $($p.ExitCode). 오류가 계속되면 $prereq 를 직접 실행하십시오." -ForegroundColor Yellow }
-    } else {
-        Write-Host "경고: $prereq 가 없습니다. DirectX End-User Runtime(June 2010) 을 설치하십시오." -ForegroundColor Yellow
+    } else {   # CARLA 0.9.16 패키지에는 UE4Prereq 가 없음 -> winget 으로 설치
+        Write-Host "DirectX End-User Runtime(June 2010) + VC++ 설치 중 (관리자 권한 확인 창이 뜹니다)..."
+        & winget install --id Microsoft.DirectX -e --accept-package-agreements --accept-source-agreements
+        & winget install --id Microsoft.VCRedist.2015+.x64 -e --accept-package-agreements --accept-source-agreements
+        if (-not (Test-Path "$env:WINDIR\System32\d3dx9_43.dll")) {
+            Write-Host "경고: DirectX 런타임 설치를 확인하지 못했습니다. microsoft.com 의 'DirectX End-User Runtime Web Installer' 를 직접 설치하십시오." -ForegroundColor Yellow
+        }
     }
 }
 
