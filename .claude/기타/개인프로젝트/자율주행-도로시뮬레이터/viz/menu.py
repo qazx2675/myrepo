@@ -21,6 +21,8 @@ PT_NAME = {"auto": "Engine - automatic", "manual": "Engine - manual", "ev": "Ele
 SPEC_ITEMS = [
     ("Engine power [hp]", ("power_hp",), 30, 2000, "{:.0f}"),
     ("Engine torque [Nm]", ("torque_nm",), 50, 6000, "{:.0f}"),
+    ("Redline [rpm]", ("redline_rpm",), 2000, 12000, "{:.0f}"),
+    ("Final drive (lower=faster)", ("final_drive",), 1.5, 8.0, "{:.2f}"),
     ("Brake force [N]", ("brake_force_n",), 2000, 300000, "{:.0f}"),
     ("Mass [kg]", ("mass",), 500, 40000, "{:.0f}"),
     ("Tire grip mu", ("tire_mu",), 0.3, 1.6, "{:.2f}"),
@@ -28,6 +30,7 @@ SPEC_ITEMS = [
     ("Speed limiter [km/h] (0=off)", ("speed_limiter_kmh",), 0, 400, "{:.0f}"),
     ("EV motor power [kW]", ("ev", "motor_power_kw"), 20, 2000, "{:.0f}"),
     ("EV motor torque [Nm]", ("ev", "motor_torque_nm"), 50, 8000, "{:.0f}"),
+    ("EV reduction (lower=faster)", ("ev", "reduction"), 2.0, 15.0, "{:.2f}"),
     ("EV battery [kWh]", ("ev", "battery_kwh"), 5, 1000, "{:.0f}"),
     ("Hybrid engine power [hp]", ("hybrid", "engine_hp"), 30, 1500, "{:.0f}"),
     ("Hybrid motor power [hp]", ("hybrid", "motor_hp"), 10, 1000, "{:.0f}"),
@@ -141,7 +144,12 @@ class SettingsMenu:
                 nv = v + step * (50 if big else 10)
             elif isinstance(v, int) or fmt == "{:.0f}":
                 nv = round(nv) if abs(nv - v) >= 1 else v + step
+            else:
+                nv = round(nv, 2)
             nv = max(lo, min(hi, nv))
+            if path == ("redline_rpm",):     # 변속 시점도 같은 비율로
+                for k in ("shift_up_rpm", "shift_down_rpm"):
+                    spec[k] = round(spec[k] * nv / v)
             _set(spec, path, nv)
             a.world.set_vehicle()          # 현재 위치에서 새 제원으로
         elif key == "view":
@@ -186,7 +194,7 @@ class SettingsMenu:
         sel = self._selectable()
         if self.sel not in sel:
             self.sel = sel[0]
-        x0, y0, lh = W // 2 - 330, 40, 20
+        x0, y0, lh = W // 2 - 330, 40, 17
         surf.blit(self.f_title.render("SETTINGS", True, (255, 210, 60)), (x0, y0 - 30))
         hint = "Up/Down select   Left/Right change (Shift = big step)   Enter = run   Tab/Esc = close"
         surf.blit(self.f.render(hint, True, (160, 170, 180)), (x0, H - 34))
