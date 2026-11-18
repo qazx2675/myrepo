@@ -38,6 +38,15 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | [`ip_change`](./HPC/ip_change/) | Red Hat Enterprise Linux(RHEL) 대상 노드들의 IP·게이트웨이 설정을 ifcfg 파일 전체를 덮어쓰지 않고 `IPADDR`/`GATEWAY` 키만 수술적으로 갱신하여 `gossh`로 일괄 배포하는 Go 도구(`ip-change-engine`). 원본 파일 자동 백업 및 표준 라이브러리 기반 오프라인 정적 빌드 지원. |
 | [`awxkit`](./HPC/awxkit/) | Ansible AWX 서버 조작 및 상태 점검을 위한 Go 도구 7종(`awxkit-doctor`, `awxkit-nodeinfo`, `awxkit-ls`, `awxkit-survey`, `awxkit-invsync`, `awxkit-dhcp`, `awxkit-pxe`)과 자동 빌드/실행 bash 래퍼 스크립트 모음. 폐쇄망 환경 오프라인 빌드(`vendor/`) 지원. |
 | [`조사`](./HPC/조사/) | 리눅스(RHEL) 서버 목록(표1 자산양식)을 입력받아 `gossh`로 병렬 접속하여 자산대장 항목을 자동 수집하고, 엑셀에 바로 붙여넣을 수 있는 탭 구분(TSV) 결과 파일로 저장하는 자산 조사 도구(`survey` 및 `run_survey.sh`). |
+| [`auto_setup`](./HPC/auto_setup/) | AWX OS 설치(`01.AWX_nodeinfo_V2.sh`) 완료 후 ping·준비확인을 상시 감시해 READY 가 되면 LDAP 백업 비교·복원 → `config_check.sh` 자동 실행(설정체크+설정수정) → os6_mgmt 2차 체크 → 4자리 결과 code 공유까지 처리하는 데몬 + CLI/TUI 도구(os8_mgmt 단일 원본, os6_mgmt 원격 클라이언트). TUI 에서 체크스크립트 단독 실행(`x`), AWX 실행·신규 설치 양식(`w`), gossh 작업 기록(`s`), IP/LDAP 변경 메뉴(`m`) 제공. 늦게 READY 된 호스트(`stuck_hold_hours`, 기본 24h)는 `보류` 후 `h`→`u` 로 해제. |
+| [`awx_script`](./HPC/awx_script/) | HPC 서버 노드정보를 수집·가공해 AWX 인벤토리/DHCP/PXE 를 일괄 등록하는 배시 스크립트 세트(`01.AWX_nodeinfo_V2.sh` → `02.source_dhcp_pxe.sh`). 02 성공 시 `auto_setup` 에 작업을 자동 전달. |
+| [`config_check`](./HPC/config_check/) | `bash config_check.sh` 한 번으로 user 선택 → OS 체크 → (선택) 환경설정 적용 → 재체크 → 벤더 담당자 코멘트 생성까지 처리하는 bash 스크립트(`-auto`/`-auto-check` 비대화형 모드, `auto_setup`·`setup_check` 연계). |
+| [`pm_monitor`](./HPC/pm_monitor/) | (v0.5.0, `install_mn`) 호스트 목록을 1분마다 ping·22포트·`gossh -pm` 으로 판정해 OS 설치 상태(`설치중`/`지연`/`디스크미인식`/`설치완료` 등)를 보여 주는 TUI. yum update 모드(커널 변경 감시), 서버 설정 조사(OS커널·appl·dns·ldap_URI·binddn·h/t, `oklist.txt` 기준 비교·`.res` 저장), 설치현황/점검요청 코멘트, DHCP 조회. 12시간 백그라운드 수집. |
+| [`redfish`](./HPC/redfish/) | BMC **Redfish** 로 BIOS 설정을 표준값(프로파일)과 비교·점검하고, 승인(Y)한 항목만 BIOS Pending 으로 설정하는 도구(`biostool`, `bash bios.sh`). 같은 모델 BIOS 전체 비교, BMC 계정 생성·비밀번호 변경, 벤더 암호화 키 생성. 재부팅은 하지 않음. |
+| [`setup_check`](./HPC/setup_check/) | (`new_setup`) 신규 OS 배포 후 대상 전체를 `gossh` 로 점검해 장비마다 `완료`/`디스크미인식`/`설치정지`/`OS설치중`/`접속불가` 를 판정하고 8열 표로 출력. `-run` 으로 `config_check`(설정수정)·`stress-test`(부하테스트)까지 연계. |
+| [`stress-test`](./HPC/stress-test/) | AWX 로 부하테스트(`a) cpu`, `b) stress-ng`)를 실행하고 `gossh` 로 `/proc/loadavg` 1분 로드를 감시해 실제 부하 여부(실행/미실행)를 판정하는 도구(`stress_run.sh`). |
+| [`copy`](./HPC/copy/) | 폐쇄망 단방향 텍스트 전송 브릿지. ETX(RedHat)에서 Windows 로 클립보드 복사가 안 될 때 AWX 를 중계소로 써서 텍스트를 옮김. |
+| [`GPU 체크스크립트`](./HPC/GPU%20체크스크립트/) | GPU power capping(최대 전력의 75%) 적용 여부를 일회성으로 점검하는 스크립트(`check-gpu-power-limit.sh`). `gossh` 일괄 실행용. |
 
 ## 공통/
 
@@ -46,6 +55,7 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | 폴더 | 설명 |
 |---|---|
 | [`gossh`](./공통/gossh/) | `pdsh` 스타일 고속 병렬 SSH 실행 도구. 실시간 진행률 표시, 표준출력/에러 분리, SSH 키 우선 인증, `-b` 그룹 출력, autofs 마운트 스톰 방지(동시 350 안전가드 및 `-cf` 옵션), 위험 명령(재부팅 등) 가드 및 OS6 정적 바이너리(`gossh_os6`) 내장. `esxi-log-check`, `OS 환경설정 체크`, `ip_change`, `조사` 등 다수 도구의 기반 바이너리 (구버전은 `old/`에 보존). |
+| [`dirmap`](./공통/dirmap/) | 자주 쓰는 디렉터리 트리를 `FOLDER_DESC` 한글 설명과 함께 출력하는 bash 스크립트(`dirmap.sh [경로] [깊이] [제외패턴]`, 기본 제외 `\.git|\.cache`). |
 
 ## 디렉토리 구조
 
@@ -76,9 +86,18 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 │   ├── ip_change                        # RHEL 노드 IP/게이트웨이 설정 일괄 변경 도구
 │   ├── awxkit                           # Ansible AWX 조작 및 상태 점검 Go 도구 7종
 │   ├── 조사                             # RHEL 서버 자산대장 항목 자동 수집 도구 (survey)
-│   └── GPU 체크스크립트                  # GPU power capping 점검 스크립트 (목록 제외, 실제 디렉터리 유지)
+│   ├── auto_setup                       # OS 설치 → LDAP 복원 → config_check 자동 연계 데몬 + TUI
+│   ├── awx_script                       # AWX 노드정보·DHCP·PXE 일괄 등록 스크립트 (01/02)
+│   ├── config_check                     # OS 체크 + 환경설정 적용 + 재체크 bash 스크립트
+│   ├── pm_monitor                       # PM OS 설치·yum update·설정 감시 TUI (install_mn, v0.5.0)
+│   ├── redfish                          # BMC Redfish BIOS 점검·설정 도구 (biostool)
+│   ├── setup_check                      # 신규 OS 설치 상태 판정 + 설정수정·부하테스트 연계 (new_setup)
+│   ├── stress-test                      # AWX 부하테스트 실행 + loadavg 판정 도구
+│   ├── copy                             # 폐쇄망 단방향 텍스트 전송 브릿지 (AWX 중계)
+│   └── GPU 체크스크립트                  # GPU power capping 점검 스크립트
 ├── 공통/                                 # 여러 도구가 같이 쓰는 기반 도구 (gossh 등)
-│   └── gossh                            # pdsh 스타일 병렬 SSH 실행 도구 (v2 통합, old/ 아카이브)
+│   ├── gossh                            # pdsh 스타일 병렬 SSH 실행 도구 (v2 통합, old/ 아카이브)
+│   └── dirmap                           # 디렉터리 트리 + 한글 설명 출력 스크립트
 ├── LDAP 인프라 선택 방식 전환/             # Network_Change_Integration_Script 작업기록 문서
 ├── update_readme.py                     # 하위 폴더 README.md들의 빌드 안내 문구를 일괄 치환하는 보조 스크립트
 ├── 바이너리셋업.sh                         # VM/ 하위 Go 도구들을 빌드해서 지정 경로(기본 /usr/local/bin)에 한 번에 설치하는 스크립트
