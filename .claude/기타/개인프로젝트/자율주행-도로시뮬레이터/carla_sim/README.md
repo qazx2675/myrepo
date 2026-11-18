@@ -53,6 +53,10 @@ HDD 는 맵 로딩이 1분 이상 걸리고 도심 맵에서 끊길 수 있어 �
    ```
    GPU 가 약하면 `-quality-level=Low`. 서버 창은 관전용이라 최소화해 둬도 됩니다.
 
+### 실행 시 "DirectX runtime" 오류가 나면
+언리얼 엔진 필수 런타임이 없어서입니다. `D:\CARLA_0.9.16\Engine\Extras\Redist\en-us\UE4PrereqSetup_x64.exe` 를 실행해 설치하십시오
+(최신 `install_carla.bat` 은 자동으로 확인·설치합니다).
+
 ## 2) 실행
 
 `run_carla.bat` (서버 자동 시작) 또는, 서버를 켠 상태에서 이 프로젝트 폴더에서:
