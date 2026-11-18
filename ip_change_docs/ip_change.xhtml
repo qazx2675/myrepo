@@ -1,5 +1,17 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>표준 프로세스(AWX) 우선 권장:</strong> <code>ip_change</code>는 표준 프로세스(AWX 등)를 우선적으로 사용하는 것을 권장합니다. <strong>너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만</strong> 예외적으로 본 도구를 사용하시기 바랍니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>도구명:</strong> ip_change (<code>bin/ip-change-engine</code> + <code>scripts/run_ip_change.sh</code>) — RHEL 노드 IP · 게이트웨이 일괄 변경 엔진</p>
     <p><strong>양식 유형:</strong> T3 (설정 변경 · 적용 엔진형)</p>
     <p><strong>동작 환경 및 의존성:</strong> 관리 노드 사전 빌드 바이너리(<code>bin/ip-change-engine</code> 또는 RHEL 6용 <code>bin/ip-change-engine_os6</code>) + <code>gossh</code> v2 필수 / 대상 노드 <code>bash</code> · <code>awk</code> · <code>sed</code> · <code>hostname -I</code>(또는 <code>ip</code>)</p>

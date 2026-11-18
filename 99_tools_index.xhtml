@@ -1,0 +1,144 @@
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장 (작업 툴 찾기)</strong></p>
+    <p>어떤 도구를 써야 할지 모르겠다면, <strong>Confluence Intelligence</strong>에게 먼저 <em>"내가 하려는 작업"</em>을 물어보세요!</p>
+    <ul>
+      <li>예시: <em>"서버 50대에 같은 명령어를 한 번에 실행하고 싶어. 어떤 툴을 써야 해?"</em></li>
+      <li>예시: <em>"서버 IP를 변경해야 하는데 어떤 문서를 봐야 해?"</em></li>
+    </ul>
+    <p>Intelligence가 아래 목차에서 알맞은 툴을 안내해 주면, <strong>해당 툴 페이지로 이동한 뒤 다시 질문</strong>하여 구체적인 사용법을 확인하세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="toc"/>
+
+<h2>99. 툴 (운영·점검 도구 목차)</h2>
+
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <ul>
+      <li>이 목차에는 <strong>서버 운영 및 점검용 툴(01~15)</strong>만 등록되어 있습니다.</li>
+      <li>VM 생성·설정 관련 스크립트(<code>VM_setup_docs</code>, <code>vCenter_API_IP_자동변경_docs</code>)는 본 목차에서 제외됩니다.</li>
+      <li>모든 툴 문서는 <strong>이미 준비된 툴을 바로 실행하는 방법</strong>만 안내합니다.</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<table>
+  <thead>
+    <tr>
+      <th>번호</th>
+      <th>툴 이름 (문서 폴더)</th>
+      <th>한 줄 목적 (언제 쓰는가)</th>
+      <th>Intelligence 질문 예시</th>
+      <th>주의사항</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>01</strong></td>
+      <td><code>OS_환경설정_체크_docs</code></td>
+      <td>서버의 기본 OS 환경설정이 기준에 맞게 되어 있는지 점검할 때</td>
+      <td><em>"OS 환경설정 체크 툴은 어떻게 실행해?"</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>02</strong></td>
+      <td><code>V2_docs</code></td>
+      <td>V2 버전 운영·점검 스크립트/도구를 사용할 때</td>
+      <td><em>"V2 툴은 언제, 어떻게 사용하는 거야?"</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>03</strong></td>
+      <td><code>auto_setup_docs</code></td>
+      <td>서버 초기 자동 설정 작업을 일괄 수행할 때</td>
+      <td><em>"서버 초기 자동 설정(auto_setup) 방법 알려줘."</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>04</strong></td>
+      <td><code>awx_script_docs</code></td>
+      <td>표준 자동화 플랫폼(AWX) 연동 스크립트를 실행할 때</td>
+      <td><em>"AWX 스크립트 실행 방법이 궁금해."</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>05</strong></td>
+      <td><code>config_check_docs</code></td>
+      <td>서버 주요 설정 파일 상태를 점검하고 확인할 때</td>
+      <td><em>"서버 설정 파일 점검(config_check) 어떻게 해?"</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>06</strong></td>
+      <td><code>dirmap_docs</code></td>
+      <td>디렉토리 구조 및 경로 매핑 상태를 확인/정리할 때</td>
+      <td><em>"dirmap 툴은 어떤 용도이고 어떻게 써?"</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>07</strong></td>
+      <td><code>gossh_docs</code></td>
+      <td>수백 대 서버에 SSH 명령을 동시에 실행하고 결과를 비교할 때</td>
+      <td><em>"여러 서버에 명령어를 한 번에 실행하려면?"</em></td>
+      <td>파일 전송(SCP) 미지원, 위험 명령 기본 차단</td>
+    </tr>
+    <tr>
+      <td><strong>08</strong></td>
+      <td><code>ip_change_docs</code></td>
+      <td>서버의 IP 주소를 변경해야 할 때</td>
+      <td><em>"서버 IP 변경 툴 사용법 알려줘."</em></td>
+      <td><strong>표준 프로세스(AWX) 우선 권장.</strong> 너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만 사용</td>
+    </tr>
+    <tr>
+      <td><strong>09</strong></td>
+      <td><code>ldap_check_docs</code></td>
+      <td>서버의 LDAP 연동 상태를 점검할 때</td>
+      <td><em>"서버 LDAP 연동 상태 확인하는 방법 알려줘."</em></td>
+      <td><strong>표준 프로세스(AWX) 우선 권장.</strong> 너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만 사용</td>
+    </tr>
+    <tr>
+      <td><strong>10</strong></td>
+      <td><code>ldap_setting_docs</code></td>
+      <td>서버에 LDAP 인증 설정을 적용할 때</td>
+      <td><em>"서버에 LDAP 설정하는 툴 사용법 알려줘."</em></td>
+      <td><strong>표준 프로세스(AWX) 우선 권장.</strong> 너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만 사용</td>
+    </tr>
+    <tr>
+      <td><strong>11</strong></td>
+      <td><code>pm_monitor_docs</code></td>
+      <td>물리 서버(PM) 상태 및 이상 여부를 모니터링할 때</td>
+      <td><em>"물리 서버 모니터링(pm_monitor) 어떻게 해?"</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>12</strong></td>
+      <td><code>redfish_docs</code></td>
+      <td>서버 BMC/iDRAC 등 원격 관리(Redfish API)를 제어할 때</td>
+      <td><em>"Redfish로 서버 원격 상태 확인하는 법 알려줘."</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>13</strong></td>
+      <td><code>setup_check_docs</code></td>
+      <td>서버 셋업 완료 후 정상 구성 여부를 최종 점검할 때</td>
+      <td><em>"셋업 완료 후 점검(setup_check) 방법 알려줘."</em></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><strong>14</strong></td>
+      <td><code>stress-test_docs</code></td>
+      <td>서버 CPU/메모리 등 부하(스트레스) 테스트를 수행할 때</td>
+      <td><em>"서버 부하 테스트(stress-test) 어떻게 실행해?"</em></td>
+      <td>운영 중인 서비스 서버에서는 실행 주의</td>
+    </tr>
+    <tr>
+      <td><strong>15</strong></td>
+      <td><code>조사_docs</code></td>
+      <td>여러 서버에서 필요한 현황 정보를 일괄 조사·수집할 때</td>
+      <td><em>"서버 현황 조사 툴은 어떻게 사용해?"</em></td>
+      <td>-</td>
+    </tr>
+  </tbody>
+</table>

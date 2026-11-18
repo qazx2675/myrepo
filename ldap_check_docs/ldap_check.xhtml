@@ -1,5 +1,17 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="warning">
+  <ac:rich-text-body>
+    <p><strong>표준 프로세스(AWX) 우선 권장:</strong> <code>ldap_check</code>는 표준 프로세스(AWX 등)를 우선적으로 사용하는 것을 권장합니다. <strong>너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만</strong> 예외적으로 본 도구를 사용하시기 바랍니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>도구명:</strong> ldap_check (<code>ldap_check.sh</code>) — 노드 로컬 LDAP · DNS · NTP · autofs 설정 정합성 검사 스크립트</p>
     <p><strong>양식 유형:</strong> T1 (단일 스크립트형 · <strong>빌드 불필요</strong>)</p>
     <p><strong>주요 파일:</strong> <code>ldap_check.sh</code>, <code>ldap_config.conf.sample</code>, <code>test_check.sh</code></p>

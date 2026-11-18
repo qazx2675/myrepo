@@ -1,132 +1,91 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
-    <p><strong>문서명:</strong> <code>gossh</code> 사용 가이드</p>
-    <p><strong>한 줄 요약:</strong> 수백 대의 서버에 한 번에 같은 명령을 내리고, 그 결과를 한눈에 모아서 정상/이상을 자동으로 분류해 주는 병렬 SSH 일괄 작업 도구(<code>pdsh</code> 스타일 출력 <code>호스트명: 출력줄</code> 지원)입니다.</p>
+    <p><strong>Confluence Intelligence 사용 권장</strong></p>
+    <p>이 문서는 Confluence Intelligence에게 질문하여 원하는 작업을 빠르게 찾을 수 있도록 작성되었습니다. 직접 문서를 처음부터 읽지 않아도, 우측 상단 또는 하단의 <strong>Confluence Intelligence</strong>에게 아래처럼 질문해 보세요:</p>
+    <ul>
+      <li><em>"서버 100대 디스크 용량을 한 번에 확인하려면 어떻게 해?"</em></li>
+      <li><em>"특정 서버만 패키지가 다르게 설치된 것 같은데 비교하는 방법 알려줘."</em></li>
+      <li><em>"gossh로 서버 재부팅 명령어를 실행할 수 있어?"</em></li>
+    </ul>
   </ac:rich-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="toc"/>
 
-<h2>1. <code>gossh</code> 개요: 이게 무엇이고 왜 쓰는가?</h2>
-<p><code>gossh</code>는 <strong>수백 대의 서버에 한 번에 같은 명령을 내리고, 그 결과를 한눈에 모아서 정상/이상을 자동으로 분류해 주는 병렬 SSH 일괄 작업 도구</strong>입니다. (<code>pdsh</code> 스타일의 출력 형식인 <code>호스트명: 출력줄</code>을 지원합니다.)</p>
-
-<h3>비운영 담당자(PM·기획·타부서)를 위한 직관적 이해</h3>
+<h2>1. <code>gossh</code>란 무엇인가요?</h2>
+<p><code>gossh</code>는 <strong>수백 대의 서버에 한 번에 같은 명령을 내리고, 그 결과를 한눈에 모아서 정상/이상을 자동으로 분류해 주는 일괄 작업 도구</strong>입니다.</p>
 <ul>
   <li><strong>일괄 점검:</strong> 서버 200대의 디스크 용량이나 서비스 상태를 1대씩 접속해 확인하면 몇 시간이 걸리지만, <code>gossh</code>를 쓰면 한 번에 조회하고 정상 서버는 하나로 묶어(<code>-b</code>) <strong>문제가 있는 2~3대만 즉시 골라낼 수 있습니다.</strong></li>
-  <li><strong>기준 비교:</strong> 기준이 되는 서버(Golden Image)와 다른 서버들의 설치 패키지(<code>-rpm</code>)나 시스템 설정(<code>-tmp</code>, <code>-limit</code>)이 다른지 자동으로 대조해 차이점만 리포트로 뽑아냅니다.</li>
+  <li><strong>기준 비교:</strong> 기준 서버와 다른 서버들의 설치 패키지(<code>-rpm</code>)나 시스템 설정(<code>-tmp</code>, <code>-limit</code>)이 다른지 자동으로 대조해 차이점만 리포트로 뽑아냅니다.</li>
   <li><strong>사고 방지 안전장치:</strong> 실수로 전체 서버를 재부팅(<code>reboot</code> 등)하는 대형 사고를 막기 위해 위험 명령어는 기본적으로 차단되어 있습니다.</li>
 </ul>
 
 <hr/>
 
-<h2>2. 설치 및 기본 사용법</h2>
-
-<h3>2.1 설치 및 배포</h3>
-<ul>
-  <li><strong>오프라인 빌드:</strong> 폐쇄망 환경에서도 <code>vendor/</code> 디렉토리를 포함해 바로 빌드할 수 있습니다.
-    <ac:structured-macro ac:name="code">
-      <ac:parameter ac:name="language">bash</ac:parameter>
-      <ac:plain-text-body><![CDATA[./setup.sh
-# 내부 실행: go build -mod=vendor -o gossh .]]></ac:plain-text-body>
-    </ac:structured-macro>
-  </li>
-  <li><strong>RHEL / CentOS 구버전·신버전 지원:</strong> 로컬 저장소에는 RHEL/CentOS 6용 정적 빌드 바이너리 <code>gossh_os6</code>가, <code>gossh-standalone</code> 브랜치에는 <code>gossh_os8</code> 바이너리가 함께 제공됩니다.</li>
-  <li><strong>배포/업데이트 (<code>update.sh</code>):</strong> 스크립트 상단의 <code>TARGET_SERVER</code>, <code>DEST1</code>, <code>DEST2</code>, <code>DEST3</code> 변수를 설정한 뒤 대상 서버에서 실행하면, 일반 빌드 및 <code>gossh_os6</code> 바이너리를 지정된 경로에 <code>gossh</code> / <code>pdsh</code> 이름으로 복사합니다.</li>
-</ul>
-
-<h3>2.2 기본 실행 형식</h3>
+<h2>2. 기본 사용법 (바로 실행하기)</h2>
+<p>이미 서버에 설치되어 있는 <code>gossh</code> 명령어를 바로 실행합니다.</p>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[gossh -w <호스트_목록_또는_패턴> [옵션] "<실행할_명령어>"]]></ac:plain-text-body>
 </ac:structured-macro>
 <ul>
-  <li><strong>호스트 지정 (<code>-w</code>, 필수):</strong>
+  <li><strong>대상 서버 지정 (<code>-w</code>, 필수)</strong>
     <ul>
-      <li>파일 지정: <code>-w hosts.txt</code> (또는 <code>-w^hosts.txt</code>, <code>-whosts.txt</code>)</li>
-      <li>범위(NodeSet) 지정: <code>-w esxi[0001-0020]</code> 또는 <code>-w web[01-20]</code> (중복 호스트는 자동 제거)</li>
+      <li>파일로 지정: <code>-w hosts.txt</code></li>
+      <li>범위 패턴으로 지정: <code>-w esxi[0001-0020]</code> 또는 <code>-w web[01-20]</code> (중복 호스트는 자동 제거)</li>
     </ul>
   </li>
 </ul>
 
-<h3>2.3 주요 옵션 (플래그)</h3>
+<h3>자주 쓰는 옵션 한눈에 보기</h3>
 <table>
   <thead>
     <tr>
       <th>옵션</th>
-      <th>설명</th>
-      <th>기본값 / 비고</th>
+      <th>무엇을 할 때 쓰나요?</th>
+      <th>비고</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td><code>-w &lt;대상&gt;</code></td>
-      <td>대상 호스트 파일 또는 NodeSet 범위</td>
+      <td>명령을 실행할 서버 목록이나 패턴 지정</td>
       <td><strong>필수</strong></td>
     </tr>
     <tr>
       <td><code>-u &lt;계정&gt;</code></td>
-      <td>SSH 접속 계정</td>
-      <td><code>root</code></td>
+      <td>접속할 사용자 계정 지정</td>
+      <td>기본값: <code>root</code></td>
     </tr>
     <tr>
       <td><code>-p &lt;비밀번호&gt;</code></td>
-      <td>SSH 비밀번호</td>
-      <td>키 인증 우선 시도 후 실패 시 사용</td>
+      <td>비밀번호로 접속할 때 지정</td>
+      <td>키 인증 우선 시도 후 사용</td>
     </tr>
     <tr>
       <td><code>-i &lt;키경로&gt;</code></td>
-      <td>SSH 개인키 경로</td>
-      <td>미지정 시 <code>~/.ssh/id_ed25519</code> → <code>id_ecdsa</code> → <code>id_rsa</code> 순 자동 탐색</td>
+      <td>특정 SSH 개인키 파일 지정</td>
+      <td>미지정 시 기본 키 자동 탐색</td>
     </tr>
     <tr>
       <td><code>-P &lt;포트&gt;</code></td>
-      <td>SSH 포트</td>
-      <td><code>22</code></td>
-    </tr>
-    <tr>
-      <td><code>-c &lt;개수&gt;</code></td>
-      <td>동시 접속(병렬) 수</td>
-      <td><code>1000</code> (단, <code>/user/</code> 경로 감지 시 <code>450</code>으로 자동 제한)</td>
-    </tr>
-    <tr>
-      <td><code>-cf &lt;개수&gt;</code></td>
-      <td>동시성 제한을 무시하고 강제 지정</td>
-      <td>autofs 부하 주의</td>
-    </tr>
-    <tr>
-      <td><code>-t &lt;초&gt;</code></td>
-      <td>로그인 타임아웃</td>
-      <td><code>15</code>초</td>
+      <td>SSH 접속 포트 지정</td>
+      <td>기본값: <code>22</code></td>
     </tr>
     <tr>
       <td><code>-b</code></td>
-      <td>동일한 실행 결과를 하나로 묶어 출력 (그룹화)</td>
-      <td>이상 서버 식별에 유용</td>
-    </tr>
-    <tr>
-      <td><code>-m</code></td>
-      <td>60초 이상 응답 없는 행(Hang) 호스트 실시간 확인</td>
-      <td><strong>Linux 전용</strong></td>
-    </tr>
-    <tr>
-      <td><code>-pm</code></td>
-      <td>작업 전 OS 설치 중/autofs 이상 호스트 사전 점검</td>
-      <td><code>_os_install</code>, <code>_nosvrauto</code> 생성</td>
-    </tr>
-    <tr>
-      <td><code>-script</code></td>
-      <td>요약 및 색상 출력 숨김 (자동화 스크립트용)</td>
-      <td>실행 파일명이 <code>pdsh</code>면 기본 활성화</td>
-    </tr>
-    <tr>
-      <td><code>-rpm</code></td>
-      <td>기준 서버와 대상 서버 간 설치된 RPM 패키지 비교</td>
-      <td>명령어 없이 실행</td>
+      <td><strong>결과가 같은 서버들을 하나로 묶어서 출력</strong></td>
+      <td>이상 서버만 빠르게 찾을 때 유용</td>
     </tr>
     <tr>
       <td><code>-sv</code></td>
-      <td>여러 명령어를 대화형으로 입력받아 실행 후 <code>호스트|결과</code> 표로 저장</td>
-      <td><code>gossh-standalone</code> 브랜치 전용</td>
+      <td><strong>여러 명령어를 대화형으로 입력받아 <code>호스트|결과</code> 표로 저장</strong></td>
+      <td><code>gossh-standalone</code> 버전 전용</td>
+    </tr>
+    <tr>
+      <td><code>-rpm</code></td>
+      <td>기준 서버와 대상 서버의 설치 패키지(RPM) 차이 비교</td>
+      <td>명령어 없이 실행</td>
     </tr>
     <tr>
       <td><code>-tmp</code>, <code>-limit</code>, <code>-tl</code></td>
@@ -134,83 +93,95 @@
       <td>명령어 없이 실행</td>
     </tr>
     <tr>
+      <td><code>-pm</code></td>
+      <td>작업 전 OS 설치 중이거나 마운트 이상이 있는 서버 사전 확인</td>
+      <td><code>_os_install</code>, <code>_nosvrauto</code> 생성</td>
+    </tr>
+    <tr>
+      <td><code>-m</code></td>
+      <td>60초 이상 응답 없는(멈춘) 서버 실시간 확인</td>
+      <td><strong>Linux 전용</strong></td>
+    </tr>
+    <tr>
+      <td><code>-script</code></td>
+      <td>자동화 스크립트에서 결과만 깔끔하게 파싱할 때 사용</td>
+      <td>색상 및 요약 숨김</td>
+    </tr>
+    <tr>
+      <td><code>-c &lt;개수&gt;</code></td>
+      <td>동시에 접속할 서버 수 조절</td>
+      <td>기본 <code>1000</code> (<code>/user/</code> 경로 시 <code>450</code> 제한)</td>
+    </tr>
+    <tr>
+      <td><code>-t &lt;초&gt;</code></td>
+      <td>로그인 대기 시간 제한</td>
+      <td>기본값: <code>15</code>초</td>
+    </tr>
+    <tr>
       <td><code>-dnlgjawkrdjqghkrdls</code></td>
-      <td>차단된 위험 명령어(<code>reboot</code> 등) 강제 실행 확인</td>
-      <td>오타/실수 방지용</td>
+      <td>차단된 위험 명령어(<code>reboot</code> 등)를 정말 실행할 때만 추가</td>
+      <td>오타/실수 방지용 안전장치</td>
     </tr>
   </tbody>
 </table>
 
 <hr/>
 
-<h2>3. 직급별 실무 활용 사례</h2>
+<h2>3. 상황별 실무 활용 예시 (Q&amp;A)</h2>
 
-<h3>3.1 주니어 실무자 (사원~대리): 일상 점검 및 1차 장애 확인</h3>
+<h3>Q1. 수십~수백 대 서버의 상태(디스크, 메모리, 서비스)를 한 번에 확인하고 싶어요.</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[gossh -w web[01-20] -b "df -h"]]></ac:plain-text-body>
+</ac:structured-macro>
 <ul>
-  <li><strong>다수 서버 일일/수시 상태 점검 (<code>-w</code>, <code>-b</code>, <code>-sv</code>)</strong>
-    <ul>
-      <li><code>gossh -w web[01-20] -b "uptime"</code> 또는 <code>df -h</code>, <code>free -m</code>, <code>systemctl is-active &lt;서비스&gt;</code> 등을 일괄 실행합니다.</li>
-      <li><code>-b</code> 옵션으로 정상 응답을 하나로 묶어 수십~수백 대 중 이상 징후가 있는 서버만 빠르게 식별합니다.</li>
-      <li>여러 항목을 한꺼번에 조사해 보고서용 표로 정리해야 할 때는 <code>-sv</code> 옵션(<code>gossh-standalone</code> 브랜치)으로 명령어를 대화형 입력받아 <code>호스트|결과</code> 표로 저장할 수 있습니다.</li>
-    </ul>
-  </li>
-  <li><strong>장애 시 로그 일괄 조회 및 미응답 서버 파악 (<code>_res_off</code>, <code>_res_refsed</code>)</strong>
-    <ul>
-      <li><code>gossh -w web.txt "grep -i error /var/log/messages | tail -n 10"</code>으로 여러 서버의 로그를 동시에 확인합니다.</li>
-      <li>접속 불가(<code>_res_off</code>) 및 접속 거부(<code>_res_refsed</code>) 서버는 별도 파일로 자동 분리되므로, 장애 보고 시 미응답 호스트 목록을 즉시 추려낼 수 있습니다.</li>
-    </ul>
-  </li>
+  <li><code>-b</code> 옵션을 붙이면 정상적으로 같은 결과를 낸 서버들은 하나로 묶어 보여주고, <strong>다른 결과를 낸 이상 서버만 따로 돋보이게 출력</strong>해 줍니다.</li>
 </ul>
 
-<h3>3.2 시니어 실무자 (과장~차장): 형상 표준화 및 대규모 배치 작업</h3>
+<h3>Q2. 장애가 났을 때 여러 서버의 에러 로그를 한 번에 보고 싶어요.</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[gossh -w web.txt "grep -i error /var/log/messages | tail -n 10"]]></ac:plain-text-body>
+</ac:structured-macro>
 <ul>
-  <li><strong>패키지 표준화 감사 (<code>-rpm</code>)</strong>
-    <ul>
-      <li>기준 서버(Golden Image) 대비 대상 서버들의 <code>rpm -qa</code> 차이를 비교해 <code>_rpm_report.txt</code>, <code>_rpm_tab.txt</code>, <code>_rpm_diff</code> 파일을 생성하고, 패치 누락이나 임의 설치된 패키지를 감사합니다.</li>
-    </ul>
-  </li>
-  <li><strong>표준 시스템 설정 일괄 적용 (<code>-tmp</code>, <code>-limit</code>, <code>-tl</code>)</strong>
-    <ul>
-      <li><code>/etc/tmpfiles.d/custom-tmp.conf</code> 설정 및 기준 서버의 <code>/etc/security/limits.conf</code> 백업·복사·무결성 검증을 한 번에 처리합니다.</li>
-    </ul>
-  </li>
-  <li><strong>작업 전 사전 필터링 (<code>-pm</code>)</strong>
-    <ul>
-      <li>대규모 작업 전 <code>-pm</code>으로 OS 설치 중인 호스트(<code>_os_install</code>)나 autofs 접근 불가 호스트(<code>_nosvrauto</code>)를 먼저 걸러내어 본 작업의 실패율을 줄입니다.</li>
-    </ul>
-  </li>
-  <li><strong>행(Hang) 모니터링 및 단계별 중단 (<code>-m</code>, <code>Ctrl+C</code>)</strong>
-    <ul>
-      <li>Linux 환경에서 <code>-m</code>으로 60초 이상 응답이 없는 호스트를 실시간으로 확인합니다. 필요 시 <code>Ctrl+C</code>(1·2·3회 단계별 중단)로 작업을 멈춘 뒤 <code>_res_cancel</code> 파일로 미완료 호스트만 재추적합니다.</li>
-    </ul>
-  </li>
-  <li><strong>자동화 파이프라인 연동 (<code>-script</code>)</strong>
-    <ul>
-      <li>쉘 스크립트나 배치 파이프라인에 연동할 때는 <code>-script</code> 옵션(또는 <code>pdsh</code> 심볼릭 링크)으로 색상과 요약을 끄고 <code>호스트: 결과</code> 형식만 깔끔하게 파싱합니다.</li>
-    </ul>
-  </li>
+  <li>접속이 안 되거나 거부된 서버는 자동으로 <code>_res_off</code>(접속 불가), <code>_res_refsed</code>(접속 거부) 파일로 따로 저장되므로, 미응답 서버 목록을 즉시 파악할 수 있습니다.</li>
+</ul>
+
+<h3>Q3. 여러 명령어를 순서대로 실행해서 보고서용 표(<code>호스트|결과</code>)로 뽑고 싶어요.</h3>
+<ac:structured-macro ac:name="code">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[gossh -w hosts.txt -sv]]></ac:plain-text-body>
+</ac:structured-macro>
+<ul>
+  <li>(<code>gossh-standalone</code> 버전 지원) 실행 후 안내에 따라 명령어를 여러 개 입력하면 모든 서버에서 실행한 뒤 결과를 표 형태로 저장해 줍니다.</li>
+</ul>
+
+<h3>Q4. 기준 서버와 다른 서버의 설치 패키지나 시스템 설정이 같은지 비교·적용하고 싶어요.</h3>
+<ul>
+  <li><strong>패키지 비교:</strong> <code>gossh -w hosts.txt -rpm</code> (차이점을 <code>_rpm_report.txt</code>, <code>_rpm_diff</code>로 저장)</li>
+  <li><strong>표준 설정 적용:</strong> <code>gossh -w hosts.txt -tmp</code> 또는 <code>-limit</code>, <code>-tl</code></li>
+</ul>
+
+<h3>Q5. 작업 중에 일부 서버가 응답 없이 멈춰 있을 때는 어떻게 하나요?</h3>
+<ul>
+  <li>Linux 환경에서는 <code>-m</code> 옵션을 함께 써서 60초 이상 응답 없는 서버를 확인할 수 있습니다.</li>
+  <li><code>Ctrl+C</code>를 눌러 작업을 중단하면 미완료된 서버 목록이 <code>_res_cancel</code> 파일에 저장됩니다.</li>
 </ul>
 
 <hr/>
 
-<h2>4. 주의사항 및 팁</h2>
+<h2>4. 꼭 알아둘 주의사항</h2>
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
     <ol>
-      <li><strong>일반 파일 전송(SCP/SFTP) 기능은 없습니다.</strong>
-        <p><code>gossh</code>는 원격 명령 실행 및 전용 설정 동기화(<code>-limit</code> 등) 도구입니다. 일반 파일이나 바이너리 배포는 <code>scp</code>, <code>rsync</code> 등 별도 도구를 사용하세요.</p>
+      <li><strong>파일 전송(SCP/SFTP) 기능은 없습니다.</strong>
+        <p><code>gossh</code>는 명령어 일괄 실행 도구입니다. 일반 파일이나 프로그램을 서버로 복사할 때는 <code>scp</code>나 <code>rsync</code> 등 다른 도구를 사용하세요.</p>
       </li>
-      <li><strong>위험 명령어는 기본 차단됩니다.</strong>
-        <p><code>reboot</code>, <code>poweroff</code>, <code>shutdown</code>, <code>halt</code>, <code>init 0</code>, <code>init 6</code>, <code>ddc</code> 명령은 실수 방지를 위해 기본 차단됩니다. 정말 필요한 경우에만 <code>-dnlgjawkrdjqghkrdls</code> 플래그를 명시해 실행하세요.</p>
+      <li><strong>재부팅/종료 같은 위험한 명령어는 기본 차단됩니다.</strong>
+        <p><code>reboot</code>, <code>poweroff</code>, <code>shutdown</code>, <code>halt</code>, <code>init 0</code>, <code>init 6</code>, <code>ddc</code> 명령은 실수 방지를 위해 실행이 막혀 있습니다.</p>
       </li>
-      <li><strong>행(Hang) 모니터링(<code>-m</code>)은 Linux 전용입니다.</strong>
-        <p>Linux 외의 OS에서는 <code>-m</code> 옵션의 터미널 제어 기능이 동작하지 않습니다.</p>
-      </li>
-      <li><strong>동시성 제한(<code>-c</code>)을 무리하게 우회하지 마세요.</strong>
-        <p>기본 동시성은 <code>1000</code>이지만, 경로에 <code>/user/</code>가 감지되면 autofs 부하 방지를 위해 자동으로 <code>450</code>으로 제한됩니다. 특별한 사유가 없다면 <code>-cf</code>로 강제 상향하지 않는 것을 권장합니다.</p>
-      </li>
-      <li><strong>실행 후 생성되는 결과 파일을 적극 활용하세요.</strong>
-        <p>실행 결과에 따라 <code>_res_off</code>(접속 불가), <code>_res_refsed</code>(접속 거부), <code>_res_cancel</code>(중단된 호스트) 등의 파일이 생성되므로, 후속 점검이나 재작업 대상으로 바로 활용할 수 있습니다.</p>
+      <li><strong>동시 접속 수(<code>-c</code>)는 가급적 기본값을 유지하세요.</strong>
+        <p>경로에 <code>/user/</code>가 포함된 경우 시스템 부하를 막기 위해 자동으로 동시 접속 수를 <code>450</code>으로 제한합니다.</p>
       </li>
     </ol>
   </ac:rich-text-body>
