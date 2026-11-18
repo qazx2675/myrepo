@@ -1,5 +1,11 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>도구명:</strong> survey (<code>survey</code> + <code>run_survey.sh</code>) — 표1 기반 자산 설정·인프라망·ESXi/VM 일괄 조사 도구</p>
     <p><strong>양식 유형:</strong> T2 (점검 · 수집형)</p>
     <p><strong>주요 파일:</strong> <code>dist/survey</code>, <code>dist/survey-rhel6</code>, <code>run_survey.sh</code>, <code>conf/conf.toml</code>, <code>scripts/infra_survey.sh</code>, <code>update.sh</code></p>
@@ -178,6 +184,15 @@ A-002	db01	운영	부산 B센터]]></ac:plain-text-body>
 </table>
 
 <h2>4. 실행 방법 및 디버그 모드</h2>
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>정기 자동 실행(크론탭) 안내</strong></p>
+    <ul>
+      <li><strong>매월 01일 00시에 자동 실행되도록 크론탭(crontab)에 등록되어 있으므로, 그전에 필터된 파일만 등록해 주면 됩니다.</strong></li>
+      <li><strong>만약 업데이트 일시를 놓쳤다면</strong>, 아래 수동 실행 방법(<code>./run_survey.sh</code> 또는 <code>./survey</code>)을 참고하여 직접 실행해 주세요. (다중 명령어 조사가 필요할 때는 <code>gossh -sv</code> 옵션도 함께 활용할 수 있습니다.)</li>
+    </ul>
+  </ac:rich-text-body>
+</ac:structured-macro>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">bash</ac:parameter>
   <ac:plain-text-body><![CDATA[# 1) 표준 통합 실행 (자산 필터링 → B 조사 → A 재조사 → 병합)
