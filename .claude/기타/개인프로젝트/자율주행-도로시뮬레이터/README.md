@@ -6,7 +6,7 @@ CUDA 컨트롤러가 꽂힐 자리(관측값 API, 화면 프레임 캡처, 행�
 - 다차선 순환 고속도로(직선 + 곡선 + S자), 진출로(IC) 와 목적지 내비게이션
 - AI 트래픽: 차간거리 유지(IDM) + 차선 변경(MOBIL), 승용차/트럭/버스, 앞차 급제동 이벤트
 - 내 차: 승용차/버스/트럭 × 내연기관 자동/수동, 전기, 하이브리드 — 마력·토크·브레이크·질량·타이어 설정 가능
-- 난이도 초급/중급/고급, 8 km 직선 코스(제로백 0-100/200/300 측정), 주차장(직각/평행 주차)
+- 난이도 초급/중급/고급, 26 km 직선 코스(제로백 0-100/200/300 측정), 주차장(직각/평행 주차)
 - 1인칭 운전석 / 3인칭 추적 / 위에서 보기, HUD(속도계, RPM/기어, 제한속도, 미니맵, 경로 안내)
 - 운전 감각 연출(시야각, 카메라 쏠림, 코너 시선, 진동, 차체 롤) + 코드로 만든 엔진/타이어/바람 소리
 
@@ -46,7 +46,7 @@ pip install -r requirements.txt
 ```bash
 python main.py                                        # 중급 코스, 승용차, 직접 운전
 python main.py --level hard --vehicle bus --powertrain hybrid
-python main.py --level long --cars 0                  # 8 km 직선, 트래픽 없이 제로백 측정
+python main.py --level long --cars 0                  # 26 km 직선, 트래픽 없이 제로백 측정
 python main.py --level parking                        # 주차장
 python main.py --controller examples/nav_follow.py    # 외부 컨트롤러(내비 방식)가 운전
 python main.py --controller examples/vision_lane.py   # 외부 컨트롤러(화면 캡처 방식)가 운전
@@ -71,10 +71,11 @@ python tests/test_sim.py                              # 기능 테스트 (pytest
 | T | 차종: 승용차 → 버스 → 트럭 |
 | P | 파워트레인: 자동 → 수동 → 전기 → 하이브리드 |
 | V | 시점: 운전석 → 추적 → 위에서 |
-| F1~F5 | 초급 / 중급 / 고급 / 8 km 직선 / 주차장 |
+| F1~F5 | 초급 / 중급 / 고급 / 26 km 직선 / 주차장 |
 | C | 카메라 연출 on/off · O 소리 on/off |
 | K | 외부 컨트롤러 on/off · Backspace 차 위치 초기화 |
-| H 도움말 · Space 일시정지 · Esc 종료 | |
+| Tab / Esc | **설정 메뉴** (코스·난이도·트래픽·차로·차종·파워트레인·마력/토크/브레이크/무게/타이어/조향/리미터·EV/하이브리드 제원·시점·소리). ↑↓ 선택, ←→ 변경(Shift 크게), Enter 실행, 메뉴의 Save 로 `config/vehicles.json` 저장. 열려 있는 동안 일시정지 |
+| H 도움말 · Space 일시정지 | 종료는 설정 메뉴의 Quit 또는 창 닫기 |
 
 ---
 
@@ -84,7 +85,7 @@ python tests/test_sim.py                              # 기능 테스트 (pytest
 
 | 옵션 | 기본값 | 설명 |
 |---|---|---|
-| `--level` | normal | `easy` 초급, `normal` 중급, `hard` 고급, `long` 8 km 직선 코스, `parking` 주차장 |
+| `--level` | normal | `easy` 초급, `normal` 중급, `hard` 고급, `long` 26 km 직선 코스, `parking` 주차장 |
 | `--vehicle` | car | `car` 승용차, `bus` 버스, `truck` 트럭 |
 | `--powertrain` | auto | `auto` 내연기관 자동, `manual` 내연기관 수동, `ev` 전기, `hybrid` 하이브리드 |
 | `--cars` | 난이도별 | AI 트래픽 차량 수 (0 이면 빈 도로) |
@@ -95,6 +96,8 @@ python tests/test_sim.py                              # 기능 테스트 (pytest
 | `--screenshot` | - | `--seconds` 만큼 자동주행 후 PNG 한 장 저장 |
 | `--dest` | - | 헤드리스/스크린샷에서 목적지 번호 |
 | `--seed` | 0 | 트래픽 배치 난수 |
+| `--renderer` | gl | `gl` OpenGL 3D(조명·그림자·안개), `classic` 예전 2D 폴리곤. OpenGL 이 안 되면 자동으로 classic |
+| `--menu` | - | 스크린샷에 설정 메뉴를 띄운 상태로 저장 |
 
 ### 난이도
 

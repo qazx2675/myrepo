@@ -102,9 +102,9 @@ class ParkingLot:
 class ParkingWorld:
     """주차 시나리오. 렌더러/HUD 가 쓰는 배열 이름은 World 와 같다."""
 
-    def __init__(self, vehicle="car", powertrain="auto", seed=0):
+    def __init__(self, vehicle="car", powertrain="auto", seed=0, specs=None):
         self.rng = np.random.default_rng(seed)
-        self.specs = load_specs()
+        self.specs = specs or load_specs()
         self.level = dict(label="PARKING", name="parking")
         self.fog_dist = 900.0
         self.ego_mode = "manual"
@@ -229,9 +229,17 @@ class ParkingWorld:
 
     def cycle_powertrain(self):
         pts = POWERTRAINS
+        self.set_vehicle(powertrain=pts[(pts.index(self.ego.powertrain) + 1) % len(pts)])
+
+    def set_vehicle(self, kind=None, powertrain=None):
+        """차종/파워트레인/제원 변경. 차종이 바뀌면 주차칸 크기가 달라지므로 주차장을 다시 만든다."""
         e = self.ego
-        nv = Vehicle(e.spec, e.kind, pts[(pts.index(e.powertrain) + 1) % len(pts)], e.x, e.y, e.yaw)
+        if kind and kind != e.kind:
+            self._build(kind, powertrain or e.powertrain)
+            return
+        nv = Vehicle(self.specs[e.kind], e.kind, powertrain or e.powertrain, e.x, e.y, e.yaw)
         self.ego = nv
+        self.length[0], self.width[0], self.height[0] = nv.length, nv.width, nv.height
 
     def draw_hud(self, hud, surf, fps, paused, view):
         st = self.status()

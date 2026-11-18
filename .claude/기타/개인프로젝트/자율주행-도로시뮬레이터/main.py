@@ -2,7 +2,7 @@
 
   python main.py                                   # 창 띄워서 직접 운전 (중급)
   python main.py --level hard --vehicle bus --powertrain hybrid
-  python main.py --level long --cars 0             # 8 km 직선 코스, 제로백 측정
+  python main.py --level long --cars 0             # 26 km 직선 코스, 제로백 측정
   python main.py --level parking                   # 주차장
   python main.py --controller examples/nav_follow.py    # 외부 컨트롤러가 운전 (K 로 on/off)
   python main.py --headless --seconds 600          # 화면 없이 자동주행 + 통계
@@ -16,6 +16,7 @@ import time
 
 from env import LEVELS as LEVEL_KEYS
 from env import make_world
+from sim.vehicle import load_specs
 
 DT = 1.0 / 60.0
 VIEWS = ("cockpit", "chase", "top")
@@ -65,59 +66,91 @@ def run_headless(world, seconds):
     return 0 if (world.collisions == 0 and max_overlap == 0) else 1
 
 
+class App:
+    """창 모드 상태: 월드, 설정값, 렌더러, HUD, 메뉴."""
+
+    def __init__(self, args, controller, size):
+        from viz.hud import Hud
+        from viz.menu import SettingsMenu
+        from viz.render3d import CameraFX
+        from viz.scene import make_scene_renderer
+        from viz.sound import Sound
+
+        self.cfg = dict(level=args.level, cars=args.cars, lanes=args.lanes, seed=args.seed)
+        self.specs = load_specs()
+        self.view = args.view
+        self.world = make_world(args.level, args.vehicle, args.powertrain, args.cars, args.seed, args.lanes,
+                                specs=self.specs)
+        self.hud = Hud(self.world)
+        self.fx = CameraFX()
+        self.sound = Sound() if not args.screenshot else None
+        self.scene = make_scene_renderer(args.renderer, size)
+        self.menu = SettingsMenu(self)
+        self.controller = controller
+        self.env = None
+        if controller is not None:
+            from env import DrivingEnv
+            self.env = DrivingEnv()
+            self.env.world = self.world
+
+    def rebuild(self):
+        """코스/난이도/트래픽 설정이 바뀌면 월드를 새로 만든다 (차종·파워트레인·제원 유지)."""
+        e = self.world.ego
+        c = self.cfg
+        self.world = make_world(c["level"], e.kind, e.powertrain, c["cars"], c["seed"], c["lanes"], specs=self.specs)
+        self.hud.set_world(self.world)
+        if self.env is not None:
+            self.env.world = self.world
+
+    def render(self, screen, fps, paused):
+        from viz.topdown import draw_topdown
+        if self.view == "top":
+            draw_topdown(screen, self.world)
+        else:
+            self.scene.draw(screen, self.world, self.view, self.fx)
+        self.hud.draw(screen, self.world, fps, paused, self.view)
+        if self.menu.open:
+            self.menu.draw(screen)
+
+    def ext_action(self):
+        c = self.controller
+        frame = self.env.render_frame() if getattr(c, "needs_frame", False) else None
+        self.world.ego_mode = "manual"
+        self.world.mode_label = "EXTERNAL"
+        return c(self.env.observe(), frame)
+
+
 def run_window(args, controller=None, size=(1280, 720)):
     if args.screenshot:
         os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
     import pygame
-    from viz.hud import Hud
-    from viz.render3d import CameraFX, draw_scene
-    from viz.sound import Sound
-    from viz.topdown import draw_topdown
-
     pygame.init()
     screen = pygame.display.set_mode(size)
-    pygame.display.set_caption("Autodrive road sim (base)")
+    pygame.display.set_caption("Autodrive road sim")
     clock = pygame.time.Clock()
-    level, view = args.level, args.view
-    world = make_world(level, args.vehicle, args.powertrain, args.cars, args.seed, args.lanes)
-    hud = Hud(world)
-    fx = CameraFX()
-    sound = Sound() if not args.screenshot else None
+    app = App(args, controller, size)
     gas, brk_pedal = Pedal(0.7, 1.8), Pedal(0.35, 1.4)
     paused = False
-    env = None
-    if controller is not None:
-        from env import DrivingEnv
-        env = DrivingEnv()
-        env.world = world
     ext_on = controller is not None
 
-    def render(fps):
-        if view == "top":
-            draw_topdown(screen, world)
-        else:
-            draw_scene(screen, world, view, fx)
-        hud.draw(screen, world, fps, paused, view)
-
     if args.screenshot:  # 자동주행(또는 외부 컨트롤러)으로 seconds 만큼 진행 후 한 장 저장
-        if hasattr(world, "track"):
-            world.ego_mode = "auto"
+        w = app.world
+        if hasattr(w, "track"):
+            w.ego_mode = "auto"
             if args.dest is not None:
-                world.nav.set_destination(args.dest)
+                w.nav.set_destination(args.dest)
         for _ in range(int(args.seconds / DT)):
             if controller is not None:
-                frame = env.render_frame() if getattr(controller, "needs_frame", False) else None
-                world.ego_mode = "manual"
-                world.mode_label = "EXTERNAL"
-                world.step(DT, *controller(env.observe(), frame))
-            elif hasattr(world, "track"):
-                world.step(DT)
+                w.step(DT, *app.ext_action())
+            elif hasattr(w, "track"):
+                w.step(DT)
             else:
-                world.step(DT, 0.3, 0.0, 0.0)
-            fx.update(world.ego, DT)
-        hud.show_help = False
-        render(60.0)
+                w.step(DT, 0.3, 0.0, 0.0)
+            app.fx.update(w.ego, DT)
+        app.hud.show_help = False
+        app.menu.open = args.menu
+        app.render(screen, 60.0, False)
         pygame.image.save(screen, args.screenshot)
         print("saved", args.screenshot)
         return 0
@@ -128,74 +161,74 @@ def run_window(args, controller=None, size=(1280, 720)):
                 return 0
             if ev.type != pygame.KEYDOWN:
                 continue
+            if app.menu.open:
+                if app.menu.handle(ev) == "quit":
+                    return 0
+                continue
             k = ev.key
-            road = hasattr(world, "track")
-            if k == pygame.K_ESCAPE:
-                return 0
+            w = app.world
+            road = hasattr(w, "track")
+            if k in (pygame.K_TAB, pygame.K_ESCAPE):
+                app.menu.open = True
             elif k == pygame.K_v:
-                view = VIEWS[(VIEWS.index(view) + 1) % len(VIEWS)]
+                app.view = VIEWS[(VIEWS.index(app.view) + 1) % len(VIEWS)]
             elif k == pygame.K_g:
-                world.ego.toggle_reverse()
+                w.ego.toggle_reverse()
             elif k == pygame.K_z:
-                world.ego.shift(-1)
+                w.ego.shift(-1)
             elif k == pygame.K_x:
-                world.ego.shift(+1)
+                w.ego.shift(+1)
             elif k == pygame.K_t:
-                world.cycle_vehicle()
+                w.cycle_vehicle()
             elif k == pygame.K_p:
-                world.cycle_powertrain()
+                w.cycle_powertrain()
             elif k == pygame.K_BACKSPACE:
-                world.reset_ego()
+                w.reset_ego()
             elif k == pygame.K_h:
-                hud.show_help = not hud.show_help
+                app.hud.show_help = not app.hud.show_help
             elif k == pygame.K_c:
-                fx.enabled = not fx.enabled
-            elif k == pygame.K_o and sound:
-                sound.enabled = not sound.enabled
+                app.fx.enabled = not app.fx.enabled
+            elif k == pygame.K_o and app.sound:
+                app.sound.enabled = not app.sound.enabled
             elif k == pygame.K_SPACE:
                 paused = not paused
             elif k == pygame.K_k and controller is not None:
                 ext_on = not ext_on
             elif pygame.K_F1 <= k <= pygame.K_F5:
-                level = LEVEL_KEYS[k - pygame.K_F1]
-                e = world.ego
-                world = make_world(level, e.kind, e.powertrain, None, args.seed, args.lanes)
-                hud.set_world(world)
-                if env is not None:
-                    env.world = world
+                app.cfg["level"] = LEVEL_KEYS[k - pygame.K_F1]
+                app.rebuild()
             elif k == pygame.K_n:
                 if road:
-                    world.next_destination()
+                    w.next_destination()
                 else:
-                    world.next_target()
+                    w.next_target()
             elif road and k == pygame.K_m:
-                world.cycle_mode()
+                w.cycle_mode()
             elif road and k == pygame.K_q:
-                world.change_lane(-1)
+                w.change_lane(-1)
             elif road and k == pygame.K_e:
-                world.change_lane(+1)
+                w.change_lane(+1)
             elif road and k in (pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET):
-                cur = world.ego_set_speed or world.track.limit_at(world.ego.s) / 3.6
+                cur = w.ego_set_speed or w.track.limit_at(w.ego.s) / 3.6
                 d = 10 / 3.6 if k == pygame.K_RIGHTBRACKET else -10 / 3.6
-                world.ego_set_speed = min(250 / 3.6, max(10 / 3.6, cur + d))
+                w.ego_set_speed = min(250 / 3.6, max(10 / 3.6, cur + d))
 
+        w = app.world
         keys = pygame.key.get_pressed()
         throttle = gas.update(keys[pygame.K_w] or keys[pygame.K_UP], DT)
         brake = brk_pedal.update(keys[pygame.K_s] or keys[pygame.K_DOWN], DT)
         steer = (1.0 if (keys[pygame.K_a] or keys[pygame.K_LEFT]) else 0.0) - \
                 (1.0 if (keys[pygame.K_d] or keys[pygame.K_RIGHT]) else 0.0)
-        world.mode_label = None
-        if ext_on and not paused:
-            frame = env.render_frame() if getattr(controller, "needs_frame", False) else None
-            throttle, brake, steer = controller(env.observe(), frame)
-            world.ego_mode = "manual"
-            world.mode_label = "EXTERNAL"
-        if not paused:
-            world.step(DT, throttle, brake, steer)
-            fx.update(world.ego, DT)
-        if sound:
-            sound.update(world.ego, getattr(world, "pedals", (throttle, 0.0))[0])
-        render(clock.get_fps())
+        running = not paused and not app.menu.open
+        w.mode_label = None
+        if ext_on and running:
+            throttle, brake, steer = app.ext_action()
+        if running:
+            w.step(DT, throttle, brake, steer)
+            app.fx.update(w.ego, DT)
+        if app.sound:
+            app.sound.update(w.ego, getattr(w, "pedals", (throttle, 0.0))[0] if running else 0.0)
+        app.render(screen, clock.get_fps(), paused)
         pygame.display.flip()
         clock.tick(60)
 
@@ -203,7 +236,7 @@ def run_window(args, controller=None, size=(1280, 720)):
 def main():
     ap = argparse.ArgumentParser(description="자율주행 베이스 도로 시뮬레이터")
     ap.add_argument("--level", choices=LEVEL_KEYS, default="normal",
-                    help="easy/normal/hard = 초급/중급/고급, long = 8 km 직선 코스, parking = 주차장")
+                    help="easy/normal/hard = 초급/중급/고급, long = 26 km 직선 코스, parking = 주차장")
     ap.add_argument("--vehicle", choices=("car", "bus", "truck"), default="car")
     ap.add_argument("--powertrain", choices=("auto", "manual", "ev", "hybrid"), default="auto")
     ap.add_argument("--cars", type=int, default=None, help="AI 트래픽 차량 수 (기본: 난이도별)")
@@ -215,6 +248,9 @@ def main():
     ap.add_argument("--seconds", type=float, default=300.0, help="headless/screenshot 시뮬레이션 시간")
     ap.add_argument("--screenshot", help="자동주행 후 한 프레임을 PNG로 저장")
     ap.add_argument("--controller", help="외부 컨트롤러 파이썬 파일 (Controller 클래스 포함)")
+    ap.add_argument("--renderer", choices=("gl", "classic"), default="gl",
+                    help="gl = OpenGL 3D (조명/그림자), classic = 예전 2D 폴리곤 (OpenGL 안 될 때)")
+    ap.add_argument("--menu", action="store_true", help="스크린샷에 설정 메뉴를 띄운 상태로 저장")
     a = ap.parse_args()
 
     if a.headless:

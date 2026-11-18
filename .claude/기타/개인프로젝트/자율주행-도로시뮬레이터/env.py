@@ -29,13 +29,14 @@ DT = 1.0 / 60.0
 LEVELS = ("easy", "normal", "hard", "long", "parking")
 
 
-def make_world(level="normal", vehicle="car", powertrain="auto", cars=None, seed=0, lanes=3):
-    """level: easy/normal/hard(초/중/고급), long(8 km 직선 코스), parking(주차장)."""
+def make_world(level="normal", vehicle="car", powertrain="auto", cars=None, seed=0, lanes=3, specs=None):
+    """level: easy/normal/hard(초/중/고급), long(26 km 직선 코스), parking(주차장).
+    specs: 차종별 제원 dict (없으면 config/vehicles.json)."""
     if level == "parking":
-        return ParkingWorld(vehicle, powertrain, seed)
+        return ParkingWorld(vehicle, powertrain, seed, specs=specs)
     if level == "long":   # 장거리 직선 코스는 중급 트래픽 설정 사용
-        return World("normal", vehicle, powertrain, cars, seed, lanes, track="long")
-    return World(level, vehicle, powertrain, cars, seed, lanes)
+        return World("normal", vehicle, powertrain, cars, seed, lanes, track="long", specs=specs)
+    return World(level, vehicle, powertrain, cars, seed, lanes, specs=specs)
 
 
 class DrivingEnv:

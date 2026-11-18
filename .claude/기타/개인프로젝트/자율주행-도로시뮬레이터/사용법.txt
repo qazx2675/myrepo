@@ -14,7 +14,7 @@ bash setup.sh
 .venv/bin/python main.py --vehicle bus --powertrain hybrid
 # 트럭 + 수동 변속 (Z/X 로 기어 변경)
 .venv/bin/python main.py --vehicle truck --powertrain manual
-# 8 km 직선 코스, 트래픽 없이 제로백(0-100/200/300) 측정
+# 26 km 직선 코스, 트래픽 없이 제로백(0-100/200/300) 측정
 .venv/bin/python main.py --level long --cars 0
 # 주차장 (G 로 후진, N 으로 다음 주차칸)
 .venv/bin/python main.py --level parking

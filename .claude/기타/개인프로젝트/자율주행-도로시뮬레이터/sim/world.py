@@ -35,13 +35,13 @@ FAR = -1000.0   # 본선 밖(진출로 깊숙이)에 있는 내 차의 d 값
 
 class World:
     def __init__(self, level="normal", vehicle="car", powertrain="auto", n_cars=None,
-                 seed=0, n_lanes=3, track=None, ai_controller=None):
+                 seed=0, n_lanes=3, track=None, ai_controller=None, specs=None):
         self.level = get_level(level)
         lv = self.level
         self.track = t = Track(n_lanes=n_lanes, level=track or lv["track"])
         self.rng = rng = np.random.default_rng(seed)
         self.ai_controller = ai_controller or IDMController()
-        self.specs = load_specs()
+        self.specs = specs or load_specs()   # 설정 메뉴에서 바꾼 제원을 넘겨받을 수 있음
         n_ai = lv["n_cars"] if n_cars is None else n_cars
         if n_cars is None and track:      # 코스 길이에 맞춰 밀도 유지
             n_ai = int(round(n_ai * t.L / 4230.0))
