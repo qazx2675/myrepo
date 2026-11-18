@@ -1,6 +1,6 @@
 # .claude
 
-vCenter/ESXi/VM 인프라 자동화 도구 모음. 폴더별로 독립된 Go 모듈(자체 `go.mod`/`vendor/`)이거나
+vCenter/ESXi/VM 인프라 자동화(`VM/`)와 HPC 서버 OS 설치·점검·설정 도구(`HPC/`), 공통 기반 도구(`공통/`) 모음. 폴더별로 독립된 Go 모듈(자체 `go.mod`/`vendor/`)이거나
 독립 셸 스크립트라서, 필요한 폴더 하나만 떼어가도 그대로 빌드·실행됩니다. 각 폴더의 상세 사용법은
 그 폴더 안의 `README.md`(필요하면 `PLAN.md`/`계획서.md`)를, 작업 흐름은 `WORKFLOW.md`를 참고하세요.
 
@@ -18,6 +18,10 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 | [`lpage_search`](./VM/lpage_search/) | ESXi 호스트 총 메모리, ev01 VM에 기할당된 메모리, vCPU 수를 기반으로 ev02 VM에 안전하게 할당 가능한 메모리(2MB Large Page 정렬, ESXi High-State 유지 버퍼 포함) 크기를 계산해 주는 순수 Go 계산 도구(외부 의존성 및 네트워크 접속 불필요). |
 | [`VM_setup`](./VM/VM_setup/) | VM/ESXi/vCenter의 개별 설정(affinity, lpage/HugePage, 전원정책, 태그, vSwitch, 라이선스 할당, VM 생성 등)을 적용하는 도구 소스 및 바이너리 모음 폴더. (오케스트레이터인 `vm-param-fix/`는 `vm-param-check-usability-improvement`로 통합 대체됨). ev01~ev99 확장판은 [`V2/VMsetup`](./VM/V2/VMsetup/)에 있습니다. |
 | [`esxi-log-check`](./VM/esxi-log-check/) | 다중 ESXi 호스트 로그를 패턴 레지스트리로 매칭해서 CRITICAL/HIGH 하드웨어 장애 이벤트를 뽑아내는 도구(`esxi-log-check`). |
+| [`vc_password_update`](./VM/vc_password_update/) | 여러 vCenter 를 순회하며 admin 권한으로 대상 계정(기본 `lscsystems@vsphere.local`)의 비밀번호를 **같은 값으로 강제 재설정**해 만료 타이머만 리셋하는 도구(Go `vc_password_update` + `run.sh`/`cron_wrapper.sh`). |
+| [`vcenter-통합관리`](./VM/vcenter-통합관리/) | 여러 vCenter(약 15대, VM 13,000대+)의 호스트/VM 을 한 화면에서 검색·트리 탐색하는 조회 전용 포털(`vcenter-portal`). 수집기 `vcportal-collector.exe` 가 매일 `data\*.js` 를 만들고, 웹 서버 없이 공유폴더의 정적 `index.html` 로 조회. |
+| [`인수인계`](./VM/인수인계/) | VM 도구 인수인계 문서 묶음(빠른시작·기초지식·실행환경·도구별 문서·트러블슈팅 FAQ·용어집)과 HTML 핸드북(`VM_인수인계_핸드북.html`, `build_handbook.py` 로 생성). |
+| [`passthrough`](./VM/passthrough/) | PCI 패스스루 스크립트 기록용 보관 폴더. 통합·관리 버전은 [`V2/VMsetup/pci_passthrough-source`](./VM/V2/VMsetup/pci_passthrough-source/). |
 | [`vCenter API IP 자동변경`](./VM/vCenter%20API%20IP%20자동변경/) | IP 오할당으로 네트워크 접속이 끊긴 RHEL 8.10 VM 을, SSH가 아니라 **vCenter Guest Operations API**(VMware Tools 채널)로 게스트 내부에서 `nmcli` 를 실행해 IP/게이트웨이를 재설정하는 Go 도구(`vm-ip-change`). `vcenter.txt`(대상 vCenter 목록) + `list.txt`(호스트네임/새IP)를 입력으로 받으며, 네트워크로 접속 불가능한 VM 전용이라는 점에서 `ip_change`(gossh/SSH 기반)와 다릅니다. |
 | ~~[`powershell`](./VM/powershell/)~~ | 폐쇄망 환경에서 일반 업무용 PowerShell 7 바이너리 및 VMware PowerCLI 모듈(`.nupkg`)을 오프라인으로 자동 설치·배치하는 스크립트(`setup_폐쇄망pwsh.sh`). 자동완성 및 순차조회 권고 등 실습용 오버헤드 프로필을 제외한 순수 업무용 구성. |
 | ~~[`vm-network-migration`](./VM/vm-network-migration/)~~ | `Network_Change_Integration_Script`에 통합되어 있으므로 별도 내용 작성 제외 (`Network_Change_Integration_Script/projects/vm-network-migration`에 포함). |
@@ -56,6 +60,16 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 |---|---|
 | [`gossh`](./공통/gossh/) | `pdsh` 스타일 고속 병렬 SSH 실행 도구. 실시간 진행률 표시, 표준출력/에러 분리, SSH 키 우선 인증, `-b` 그룹 출력, autofs 마운트 스톰 방지(동시 350 안전가드 및 `-cf` 옵션), 위험 명령(재부팅 등) 가드 및 OS6 정적 바이너리(`gossh_os6`) 내장. `esxi-log-check`, `OS 환경설정 체크`, `ip_change`, `조사` 등 다수 도구의 기반 바이너리 (구버전은 `old/`에 보존). |
 | [`dirmap`](./공통/dirmap/) | 자주 쓰는 디렉터리 트리를 `FOLDER_DESC` 한글 설명과 함께 출력하는 bash 스크립트(`dirmap.sh [경로] [깊이] [제외패턴]`, 기본 제외 `\.git|\.cache`). |
+| [`govendor`](./공통/govendor/) | 오프라인 빌드용 govmomi 의존성 모음(0.39.0, 0.55.1 용도별 사본). |
+
+## 작업 기록·보관 폴더
+
+| 폴더 | 설명 |
+|---|---|
+| `VM-PCI-패스스루-통합/`, `VM-스펙-제외옵션-ev별/`, `VM-체크-제외항목-부재확인/`, `VM-태그-설정-단계-추가/` | V2 기능 추가 작업의 계획서·작업기록 |
+| [`기타`](./기타/) | 지난 작업 기록 문서(LDAP 인프라 선택 방식 전환, VM 10대 확장·SPEC_DIR 공유, VMsetup 진행 모니터, 인수인계 문서 작성 등) |
+| [`보관폴더_삭제X`](./보관폴더_삭제X/) | 삭제하지 않고 유지하는 구버전 도구·스크립트 보관 (2026-10-04 생성) |
+| `skills/` | Claude Code 모델별 스킬(`haiku`, `sonnet`, `opus`) |
 
 ## 디렉토리 구조
 
@@ -78,7 +92,11 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 │   ├── vm-network-migration             # VM 네트워크 포트그룹 이관 도구 (Network_Change_Integration_Script에 내장)
 │   ├── vm-param-setting-check           # 점검 전용 레거시 도구 (통합폴더에 존재)
 │   ├── vm-setting-go-lang               # VM 설정 개별 도구 4종 (통합폴더에 존재)
-│   └── vcenter-test-env-vcsim           # vcsim 기반 테스트 도구 (실사용 부적합, 테스트용 유지)
+│   ├── vcenter-test-env-vcsim           # vcsim 기반 테스트 도구 (실사용 부적합, 테스트용 유지)
+│   ├── vc_password_update               # vCenter 계정 비밀번호 같은 값 재설정 (만료 리셋)
+│   ├── vcenter-통합관리                   # 다중 vCenter 조회 전용 포털 (vcenter-portal)
+│   ├── 인수인계                           # VM 도구 인수인계 문서 + HTML 핸드북
+│   └── passthrough                      # PCI 패스스루 스크립트 기록용 (통합본은 V2/VMsetup)
 ├── HPC/                                 # HPC 서버 OS/IP/자산 레벨 점검·설정 도구 모음 (위 표 참고)
 │   ├── OS 환경설정 체크                   # gossh 기반 OS 환경 점검 및 설정 자동화 스크립트
 │   ├── ldap_setting                     # 인프라·사이트별 LDAP/DNS/NTP/autofs 일괄 설정 Go 엔진
@@ -97,8 +115,12 @@ vCenter/ESXi VM 관련 점검·설정·테스트 도구.
 │   └── GPU 체크스크립트                  # GPU power capping 점검 스크립트
 ├── 공통/                                 # 여러 도구가 같이 쓰는 기반 도구 (gossh 등)
 │   ├── gossh                            # pdsh 스타일 병렬 SSH 실행 도구 (v2 통합, old/ 아카이브)
-│   └── dirmap                           # 디렉터리 트리 + 한글 설명 출력 스크립트
-├── LDAP 인프라 선택 방식 전환/             # Network_Change_Integration_Script 작업기록 문서
+│   ├── dirmap                           # 디렉터리 트리 + 한글 설명 출력 스크립트
+│   └── govendor                         # 오프라인 빌드용 govmomi 의존성
+├── VM-*/                                # V2 기능 추가 계획서·작업기록 (4개)
+├── 기타/                                 # 지난 작업 기록 문서 (LDAP 인프라 선택 방식 전환 등)
+├── 보관폴더_삭제X/                        # 유지해야 할 구버전 도구 보관
+├── skills/                              # Claude Code 모델별 스킬 (haiku/sonnet/opus)
 ├── update_readme.py                     # 하위 폴더 README.md들의 빌드 안내 문구를 일괄 치환하는 보조 스크립트
 ├── 바이너리셋업.sh                         # VM/ 하위 Go 도구들을 빌드해서 지정 경로(기본 /usr/local/bin)에 한 번에 설치하는 스크립트
 └── settings.local.json                  # Claude Code 로컬 설정 파일
