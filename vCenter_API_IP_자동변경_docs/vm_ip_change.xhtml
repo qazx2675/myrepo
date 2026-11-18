@@ -1,5 +1,11 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (사전 빌드 바이너리 CLI/TUI)</p>
     <p><strong>대상 프로젝트:</strong> <code>vm_ip_change</code> (<code>bin/vm-ip-change</code>, 모의 서버 <code>bin/fake-vcenter</code>)</p>
     <p><strong>대상 OS / 통신 경로:</strong> RHEL 8.10 VM / vCenter API → ESXi → VMware Tools(<code>vmtoolsd</code>) Guest Operations API → 게스트 내 <code>nmcli</code></p>
@@ -64,16 +70,6 @@
 </ac:structured-macro>
 
 <h2>2. 사전준비 / 바이너리 배치 · 입력파일 · 환경변수 계정</h2>
-
-<h3>2.1 사전 빌드 바이너리 배치 및 실행 권한 부여</h3>
-<p>사전 빌드된 실행 바이너리(<code>bin/vm-ip-change</code> 및 모의 테스트용 <code>bin/fake-vcenter</code>)가 제공되므로 별도 빌드 과정 없이 실행 권한을 부여한 뒤 입력 파일·환경변수를 설정해 즉시 실행할 수 있습니다.</p>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 작업 디렉터리에서 바이너리 및 테스트 래퍼 실행 권한 부여
-chmod +x bin/vm-ip-change bin/fake-vcenter e2e-test.sh fake-vcenter.sh
-./bin/vm-ip-change -h]]></ac:plain-text-body>
-</ac:structured-macro>
 
 <h3>2.2 필수 입력 파일 및 4개 환경변수 (계정/비밀번호)</h3>
 <p><code>vm-ip-change</code>는 비밀번호를 설정 파일이나 CLI 플래그로 받지 않고 <strong>4개의 필수 환경변수</strong>로만 입력받습니다. 어느 하나라도 비어 있으면 종료 코드 <code>1</code>로 즉시 중단됩니다.</p>

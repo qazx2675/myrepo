@@ -1,4 +1,10 @@
 <ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
   <ac:parameter ac:name="title">Suite 요약 및 문서 기준</ac:parameter>
   <ac:rich-text-body>
     <p><strong>VM_setup (V1)</strong>은 vSphere / ESXi 초기 호스트 연결부터 라이선스 할당, vSwitch, VM 생성(<code>ev01</code>~<code>ev03</code>), 성능/토폴로지 파라미터 설정, MAC/프로비저닝 정보 수집 및 CSV 기반 사후 보정까지 수행하는 <strong>레거시 V1 CLI 도구 모음</strong>입니다.</p>
@@ -151,40 +157,6 @@ vm-param-fix ─▶ (사전 게이트 확인: 동질성 / ev01~03 수량 / 전�
     </tr>
   </tbody>
 </table>
-
-<h2>3. 사전 빌드된 바이너리 배치 및 주의사항</h2>
-<p><code>VM_setup</code>은 루트 통합 실행기나 중앙 설정 파일이 없는 V1 도구 모음이며, 9종의 하위 도구와 <code>vm-param-fix</code> / <code>power_setting</code>이 각각 사전 빌드된 실행 바이너리로 제공됩니다. 운영 환경에 배치한 뒤 실행 권한(<code>chmod +x</code>)을 부여하고, <code>vm-param-fix</code> 실행 작업 디렉터리(<code>-workDir</code>)에 연계 바이너리를 함께 배치해 사용합니다.</p>
-
-<ac:structured-macro ac:name="warning">
-  <ac:parameter ac:name="title">절대 삭제/덮어쓰기 금지: power_setting 바이너리 전용 보존 경고</ac:parameter>
-  <ac:rich-text-body>
-    <p><code>vm-param-fix/power_setting</code> 파일은 <strong>컴파일된 바이너리 형태로만 보관</strong>되어 있으며, 해당 플래그(<code>-vcTargetIP</code>, <code>-worklistFile</code>, 기본값 <code>-worklistBmFile</code>)와 일치하는 원본 소스가 확인되지 않았습니다.</p>
-    <ul>
-      <li>이 바이너리는 재생성이 불가능한 <strong>유일한 원본 사본</strong>이므로 <strong>절대 삭제하거나 덮어쓰지 마십시오.</strong></li>
-      <li>후속 도구인 <code>vm-param-check</code>는 호스트 전원 정책을 <strong>점검만</strong> 수행하며 자동 수정 기능은 제공하지 않습니다. 따라서 CSV 기반 전원 정책 자동 보정이 다시 필요하다면 기존 <code>power_setting</code> 바이너리를 <code>vm-param-fix</code>를 통해 재사용해야 합니다. (참고: <code>V2</code>의 <code>power_setting</code>은 High Performance 전원 정책을 단독으로 일괄 적용하는 별도 도구입니다.)</li>
-    </ul>
-  </ac:rich-text-body>
-</ac:structured-macro>
-
-<h3>3.1 사전 빌드 바이너리 권한 설정 및 배치 예시</h3>
-<p>사전 빌드된 각 도구 바이너리에 실행 권한을 부여하고, <code>vm-param-fix</code> 작업 디렉터리(<code>-workDir</code>)에 <code>affinity_setting</code>, <code>lpage_setting</code>, <code>power_setting</code>(기존 바이너리 보존), <code>vm-param-check</code>를 함께 배치합니다.</p>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:parameter ac:name="title">VM_setup 사전 빌드 바이너리 배치 및 실행 권한 부여 예시</ac:parameter>
-  <ac:plain-text-body><![CDATA[cd /path/to/VM_setup
-
-# 1. 사전 빌드된 9개 하위 도구 바이너리 실행 권한 부여
-for tool in main_conn license_assign vswitch_setting vm_create affinity_setting lpage_setting tag_setting numa_preferht_setting mac_info; do
-  [ -f "${tool}-source/${tool}" ] && chmod +x "${tool}-source/${tool}"
-done
-chmod +x vm-param-fix/vm-param-fix vm-param-fix/power_setting
-
-# 2. vm-param-fix 작업 디렉터리(-workDir)에 연계 바이너리 함께 배치 예시
-cp -f affinity_setting-source/affinity_setting lpage_setting-source/lpage_setting vm-param-fix/
-# power_setting 바이너리는 vm-param-fix/ 내 기존 사본을 그대로 보존 (삭제/덮어쓰기 절대 금지)
-ls -lh vm-param-fix/vm-param-fix vm-param-fix/power_setting vm-param-fix/affinity_setting vm-param-fix/lpage_setting]]></ac:plain-text-body>
-</ac:structured-macro>
 
 <h2>4. 통합 보정(<code>vm-param-fix</code>) vs 하위 도구 단독 실행법</h2>
 <p><code>VM_setup</code>에는 <code>V2</code>의 <code>vm_setup.sh</code>와 같은 구축 단계 통합 실행기가 없으므로, 초기 구축 시 사전 빌드된 각 CLI 바이너리를 순서대로 단독 실행해야 합니다. 반면 구축/점검 이후 발생한 파라미터 불일치 보정은 레거시 오케스트레이터인 <code>vm-param-fix</code>로 일괄 수행합니다.</p>

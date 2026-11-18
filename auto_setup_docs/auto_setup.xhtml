@@ -1,5 +1,11 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>한 줄 요약:</strong> AWX OS 설치(<code>01.AWX_nodeinfo_V2.sh</code>) 완료 후 ping·준비확인을 상시 감시해 <code>config_check.sh</code>를 자동 실행하고, TUI 상태판·단독체크(<code>x</code>)·AWX/신규설치양식(<code>w</code>)·<code>gossh</code> 작업기록(<code>s</code>)·IP/LDAP 변경메뉴(<code>m</code>)까지 제공하는 데몬 + CLI/TUI 통합 도구입니다. (v0.8.8 기준)</p>
     <ul>
       <li><strong>실행 바이너리 / 스크립트:</strong> <code>auto_setup_os8</code> (사전 빌드 정적 바이너리, RHEL 8+ 공용), <code>os6_truble.sh</code>, <code>conf/setup_guide.sh</code>, <code>conf/update_v0.4.0.sh</code> ~ <code>update_v0.8.0.sh</code> (<code>auto_setup_os6</code>는 2026-11-04 이후 갱신 중단)</li>
@@ -96,41 +102,6 @@ codes/<code>.txt 생성 (결과 리포트 + FAIL/NO FAIL + 요약 + 원본경로
 <p>각 호스트는 상태에 따라 <code>대기(queued)</code> → <code>배포중(deploying)</code> → <code>설치중(installing)</code> → <code>부팅확인(booting)</code> → <code>READY(ready)</code> → <code>LDAP확인(ldap)</code> → <code>체크중(checking)</code> → <code>2차체크(second)</code> → <code>완료(done)</code> 순으로 전이합니다. 부가 상태로 <code>정체(stuck)</code>(<code>seen_down</code> 후 <code>installStuck</code> 60분 초과, 화면 표시만)와 <code>실패(failed)</code>(<code>config_check.sh</code> 비정상 종료 연속 <code>maxFails</code> 3회)가 있습니다.</p>
 
 <h1>2. 사전준비 · 바이너리 배치 · 권한/cron/환경설정</h1>
-
-<h2>2.1 사전 빌드 바이너리 배치 · 권한 · cron · tmpfiles 등록</h2>
-
-<ac:structured-macro ac:name="note">
-  <ac:rich-text-body>
-    <p><strong>RHEL 8+ 공용 정적 바이너리 안내:</strong> 현재 <code>os8_mgmt</code>와 <code>os6_mgmt</code> 모두 RHEL 8 이상 기반이므로, 제공된 사전 빌드 정적 바이너리 <code>auto_setup_os8</code>를 양쪽 서버에서 공용으로 사용합니다. <code>auto_setup_os6</code>는 구버전 보관용이며 2026-11-04 이후 갱신 중단되었습니다. 모든 현장 설정 값은 <code>conf/auto_setup.conf</code> 또는 <code>/etc/auto_setup/auto_setup.conf</code>에서 읽어 적용합니다.</p>
-  </ac:rich-text-body>
-</ac:structured-macro>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1) os8_mgmt (데몬 서버, root 권한 필수): 바이너리 배치 + 설정 + cron + tmpfiles
-install -m 0755 auto_setup_os8 /usr/local/bin/auto_setup
-mkdir -p /etc/auto_setup
-cp -n conf/auto_setup.conf.example conf/auto_setup.conf
-# (conf/auto_setup.conf 편집 후 0600 권한으로 /etc/auto_setup에 배치)
-install -m 0600 conf/auto_setup.conf /etc/auto_setup/auto_setup.conf
-
-# cron 등록 (매분 ensure 실행으로 데몬 상태 보장)
-(crontab -l 2>/dev/null | grep -vF '/usr/local/bin/auto_setup ensure'; \
- echo '* * * * * /usr/local/bin/auto_setup ensure >/dev/null 2>&1') | crontab -
-
-# systemd tmpfiles 정리 제외 등록 (10일 /tmp 자동 정리 시 /tmp/auto_setup 보호)
-mkdir -p /etc/tmpfiles.d
-printf '%s\n' 'x /tmp/auto_setup' > /etc/tmpfiles.d/auto_setup.conf
-
-# (선택) TUI 변경 메뉴(m) 사용 시: 사전 빌드된 변경 엔진 2종 및 conf 배치
-install -m 0755 ip-change-engine /usr/local/bin/ip-change-engine
-install -m 0755 ldap-config-engine /usr/local/bin/ldap-config-engine
-# /etc/auto_setup/ip_change.conf (0644), ldap_config.conf (0600), assets.txt (0644) 배치
-
-# 2) os6_mgmt (원격 클라이언트 전용): os6_autosetup 경로에 'auto_setup' 이름으로 복사
-# (주의: os6_mgmt에는 상주 데몬과 cron을 등록하지 않음)
-install -m 0755 auto_setup_os8 <os6_autosetup 경로>/auto_setup]]></ac:plain-text-body>
-</ac:structured-macro>
 
 <h2>2.2 설정 파일(<code>auto_setup.conf</code>) 작성 및 현장 사본 업데이트</h2>
 

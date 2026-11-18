@@ -1,5 +1,11 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>Suite 개요 및 메타 정보</strong></p>
     <ul>
       <li><strong>Suite 식별명:</strong> <code>V2</code> (<code>VMsetup</code> + <code>vm-param-check</code> 통합 구성)</li>
@@ -199,42 +205,6 @@
 </table>
 
 <h1>3. 바이너리 배치 · 공유 <code>SPEC_DIR</code> 및 암호 관리</h1>
-
-<h2>3.1 폴더 통째 배치 및 OS8/OS6 사전 빌드 바이너리 준비</h2>
-<p><code>V2</code> 폴더 내부 도구는 <strong>상대 경로(<code>../SPEC_DIR</code>, <code>../secret_lib.sh</code> 등)</strong>로 서로를 참조하므로 <code>V2</code> 폴더를 통째로 복사해 배치해야 합니다. <code>VMsetup/</code> 내 12종 하위 도구와 <code>vm-param-check</code>는 이미 컴파일된 바이너리로 제공되므로 별도 빌드 과정 없이 실행 권한 확인 및(OS6 환경의 경우) <code>bin_os6/*.gz</code> 압축 해제 후 바로 실행할 수 있습니다.</p>
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1. V2 폴더 통째 배치
-cp -r V2 /home/V2 && cd /home/V2
-
-# 2. [OS8 환경] 사전 빌드 바이너리 및 실행 스크립트 권한 부여
-chmod +x passwd_update.sh VMsetup/*.sh vm-param-check-usability-improvement/vm-param-check/*.sh
-for tool in vm_create vswitch_setting affinity_setting lpage_setting pci_passthrough nic_assign tag_setting numa_preferht_setting license_assign power_setting mac_info main_conn; do
-  [ -f "VMsetup/${tool}-source/${tool}" ] && chmod +x "VMsetup/${tool}-source/${tool}"
-done
-chmod +x vm-param-check-usability-improvement/vm-param-check/vm-param-check
-
-# 3. [OS6 환경] bin_os6/*.gz 정적 바이너리를 각 실행 경로에 압축 해제
-for f in bin_os6/*.gz; do
-  name="$(basename "$f" .gz)"
-  if [ "$name" = "vm-param-check" ]; then
-    dst="vm-param-check-usability-improvement/vm-param-check/vm-param-check"
-  else
-    dst="VMsetup/${name}-source/${name}"
-  fi
-  gzip -dc "$f" > "$dst" && chmod +x "$dst"
-done]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<ac:structured-macro ac:name="note">
-  <ac:rich-text-body>
-    <p><strong>OS별 패치 바이너리 보관 디렉터리 (<code>bin_os8/</code> 및 <code>bin_os6/</code>):</strong></p>
-    <ul>
-      <li><strong><code>bin_os8/</code>:</strong> OS8 운영 서버에 PCI 패스스루 등 최근 변경분(<code>pci_passthrough</code>, <code>vm-param-check</code>, <code>affinity_setting</code>, <code>lpage_setting</code>) 바이너리만 수동 반영할 때 <code>gzip -dc</code>로 해당 실행 경로에 해제합니다(<code>UPDATE_PCI_PASSTHROUGH.md</code> 참고).</li>
-      <li><strong><code>bin_os6/</code>:</strong> RHEL/CentOS 6 커널 환경에서 바로 실행 가능한 정적 바이너리(<code>.gz</code>) 묶음입니다. OS6 서버 배치 시 위 압축 해제 절차로 제자리에 배치합니다.</li>
-    </ul>
-  </ac:rich-text-body>
-</ac:structured-macro>
 
 <h2>3.2 비밀번호 암호화 (<code>passwd_update.sh</code>)</h2>
 <p><code>./passwd_update.sh</code>는 <code>openssl enc -aes-256-cbc -md sha256</code>과 <code>secret/key</code>(권한 600)로 암호 파일을 생성하며, OS6(OpenSSL 1.0.1)과 OS8(OpenSSL 1.1.1) 간 호환됩니다.</p>

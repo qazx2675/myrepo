@@ -1,5 +1,11 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>문서 분류:</strong> T3. 설정 변경 / 프로비저닝 엔진 (순수 Bash 스크립트 — <strong>빌드 불필요</strong>)</p>
     <p><strong>대상 프로젝트:</strong> OS 환경설정 체크 (<code>os_check_final_annotated.sh</code>)</p>
     <p><strong>연계 도구:</strong> <code>gossh</code> (원격 병렬 실행), <code>auto_setup</code> (<code>-auto</code> / <code>-auto-check</code> 비대화형 실행 및 <code>done/</code> 완료 마커 기록)</p>
@@ -64,41 +70,6 @@
   <li><code>[수정필요]</code>: 회사 내부 실제 경로, 명령어, <code>user</code> 선택 방식, FAIL 판정 기준, TODO 함수를 배포 전 반드시 확인·수정해야 하는 구간</li>
   <li><code>[수정금지]</code>: <code>-auto</code> / <code>-auto-check</code> 인자 파싱 및 자동 프롬프트 제어 등 <code>auto_setup</code> 연동 프로토콜을 유지하기 위해 변경하면 안 되는 구간</li>
   <li><code>[연계]</code>: <code>auto_setup</code> 완료 마커 기록(<code>auto_record_done</code>) 등 외부 자동화 파이프라인과 맞물리는 구간</li>
-</ul>
-
-<h2>2. 사전준비 / 배치(빌드 불필요) · 입력파일 · 계정/암호화</h2>
-
-<h3>2.1 빌드 여부 및 배치 방법 (순수 Bash — 빌드 불필요)</h3>
-<p>이 프로젝트는 별도 바이너리나 설치 과정 없이 실행하는 <strong>순수 Bash 스크립트</strong>이므로 <strong>별도 빌드가 전혀 불필요</strong>합니다.</p>
-<ul>
-  <li><strong>원본 실행 파일:</strong> <code>os_check_final_annotated.sh</code> (또는 회사 표준 운영 파일명으로 복사 후 권한 부여)</li>
-  <li><strong>필수 의존 도구:</strong> <code>gossh</code> (원격 접속 및 <code>-pm</code> 병렬 실행), <code>bash</code>, <code>sha256sum</code> (<code>auto_record_done</code> 완료 마커 해시 계산용)</li>
-  <li><strong>autofs 공유 배포 시 주의:</strong> 여러 관리서버가 autofs 공유 경로의 스크립트를 함께 쓰는 경우, <code>auto_done_dir</code>는 반드시 비워 두고(<code>auto_done_dir=""</code>) <code>auto_done_host</code>에만 <code>os8_mgmt</code> 호스트명을 지정해야 합니다. <code>auto_done_dir</code>에 로컬 경로를 넣으면 다른 서버에서 실행 시 원격 <code>os8_mgmt</code>가 아닌 실행 서버 로컬에 기록됩니다.</li>
-</ul>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1. 스크립트 실행 권한 부여 (빌드 불필요)
-chmod +x os_check_final_annotated.sh
-
-# 2. 상단 [수정필요] 변수 점검 (실제 사내 경로 및 os8_mgmt 설정)
-grep -n '\[수정필요\]' os_check_final_annotated.sh
-
-# 예시 확인 항목:
-# RUN_SH_DIR="/path/to/check"
-# SETTING_DIR="/path/to/setting"
-# RCLOCAL_SH="/path/to/setting/rclocal.sh"
-# INFO_CHECK_SH="/path/to/check/info_check.sh"
-# DHCP_SH="./dhcp.sh"
-# auto_done_dir=""
-# auto_done_host="os8_mgmt"   # autofs 공유 시 호스트명만 지정]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h3>2.2 입력 파일 및 인증/암호화 정책</h3>
-<ul>
-  <li><strong>대화형 호스트 목록 파일 (<code>${user}.txt</code>):</strong> 스크립트 실행 작업 디렉터리에 위치한 대상 호스트 목록 파일입니다. <code>select_user()</code> 구현을 통해 결정된 <code>user</code> 값으로 <code>${user}.txt</code>를 읽습니다(현재 <code>select_user()</code>는 <code>user=""</code> 미구현 상태이므로 4.3절 참고).</li>
-  <li><strong>비대화형 호스트 목록 파일 (<code>&lt;호스트목록파일&gt;</code>):</strong> <code>-auto &lt;user&gt; &lt;호스트목록파일&gt;</code> 또는 <code>-auto-check &lt;user&gt; &lt;호스트목록파일&gt;</code> 실행 시 3번째 인자로 직접 전달되는 파일입니다.</li>
-  <li><strong>계정 및 암호화:</strong> 스크립트 자체에 평문 비밀번호를 저장하거나 입력받지 않으며, 모든 원격 인증은 사전에 구성된 <code>gossh</code> 세션·인증 체계(예: 키 기반 인증 또는 <code>svrauto</code> 계정 컨텍스트)에 위임합니다.</li>
 </ul>
 
 <h2>3. 표준 안전 절차 (사전 점검 → 소수 선행검증 → 전체 적용 → 사후 검증)</h2>

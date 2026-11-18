@@ -1,5 +1,11 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>도구명:</strong> dirmap (<code>dirmap.sh</code>) — 디렉터리 트리 및 폴더 설명 출력 스크립트</p>
     <p><strong>양식 유형:</strong> T1 (단일 스크립트형 · <strong>빌드 불필요</strong>)</p>
     <p><strong>주요 실행 파일:</strong> <code>dirmap.sh</code></p>
@@ -17,42 +23,6 @@
   <li><strong>탐색 대상:</strong> 파일은 제외하고 <strong>하위 디렉터리(<code>-type d</code>)</strong>만 알파벳 순(<code>sort</code>)으로 출력합니다.</li>
   <li><strong>단독 동작:</strong> 다른 도구 의존성이나 외부 설정 파일 없이 <code>dirmap.sh</code> 파일 1개로 동작합니다.</li>
 </ul>
-
-<h2>2. 사전 준비 및 배치 (빌드 불필요)</h2>
-<p><code>dirmap.sh</code>는 순수 Bash 스크립트이므로 <strong>별도의 빌드 과정이 필요 없습니다(빌드 불필요)</strong>. 스크립트를 내려받은 뒤 상단 설정 변수와 폴더 설명 배열을 환경에 맞게 수정하고 실행 권한만 부여하면 즉시 사용할 수 있습니다.</p>
-
-<ol>
-  <li><strong>실행 권한 부여</strong>
-    <ac:structured-macro ac:name="code">
-      <ac:parameter ac:name="language">bash</ac:parameter>
-      <ac:plain-text-body><![CDATA[chmod +x dirmap.sh]]></ac:plain-text-body>
-    </ac:structured-macro>
-  </li>
-  <li><strong>스크립트 상단 기본 변수 수정</strong> — <code>dirmap.sh</code>의 설정 블록에서 기본 경로·깊이·제외 패턴을 환경에 맞게 편집합니다.
-    <ac:structured-macro ac:name="code">
-      <ac:parameter ac:name="language">bash</ac:parameter>
-      <ac:plain-text-body><![CDATA[# ===== 설정 (이곳에서 변수 수정) =====
-TARGET_PATH="/home/saccae"                 # 탐색할 기본 경로
-MAX_DEPTH="2"                              # 탐색 깊이 (1 이상)
-EXCLUDE_PATTERN="^test_|source$|\.cache"   # 제외할 폴더명 (정규식, egrep -E 형식)]]></ac:plain-text-body>
-    </ac:structured-macro>
-  </li>
-  <li><strong>폴더 설명 등록 (<code>FOLDER_DESC</code>)</strong> — <code>realpath</code>로 정규화된 절대경로를 키로, 한국어 설명을 값으로 추가합니다.
-    <ac:structured-macro ac:name="code">
-      <ac:parameter ac:name="language">bash</ac:parameter>
-      <ac:plain-text-body><![CDATA[declare -A FOLDER_DESC=(
-    ["/home/saccae/VMsetup"]="VM 자동 구성 스크립트 모음"
-    ["/home/saccae/scripts"]="운영 자동화 스크립트"
-)]]></ac:plain-text-body>
-    </ac:structured-macro>
-  </li>
-</ol>
-
-<ac:structured-macro ac:name="note">
-  <ac:rich-text-body>
-    <p>어디서나 실행하려면 <code>PATH</code>에 포함된 디렉터리(예: <code>/usr/local/bin/dirmap</code>)로 심볼릭 링크하거나 복사해 두면 편리합니다. 단, <code>FOLDER_DESC</code> 키는 <code>realpath "$BASE_INPUT"</code>으로 변환된 <strong>실제 절대경로</strong>와 일치해야 설명이 표시되므로, 심볼릭 링크 경로 대신 실제 물리 경로를 키로 등록하세요.</p>
-  </ac:rich-text-body>
-</ac:structured-macro>
 
 <h2>3. 빠른 시작 및 사용 방법</h2>
 <p>인자 없이 실행하면 스크립트 상단에 설정한 변수값으로 동작하며, 필요할 때 명령행 인자로 경로·깊이·제외 패턴을 순서대로 덮어쓸 수 있습니다.</p>

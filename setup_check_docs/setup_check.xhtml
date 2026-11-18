@@ -1,5 +1,11 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
     <p><strong>도구명:</strong> setup_check (<code>new_setup</code> / <code>new_setup.sh</code>) — 신규 OS 배포 후 설치 상태 판정 및 <code>config_check</code> · <code>stress-test</code> 자동 연계 도구</p>
     <p><strong>양식 유형:</strong> T2 (설치 판정 · 파이프라인 연계형)</p>
     <p><strong>주요 파일:</strong> <code>bin/new_setup</code> (os8 정적 바이너리), <code>bin/new_setup_os6</code> (옛 RHEL6용), <code>new_setup.sh</code>, <code>setup.sh</code> (설정 생성 마법사), <code>troubleshoot.sh</code>, <code>new_setup.conf.sample</code></p>
@@ -50,39 +56,6 @@
 </ac:structured-macro>
 
 <h2>2. 사전 준비 및 바이너리 배치 / 대화형 설정</h2>
-
-<h3>2.1 사전 빌드 바이너리 사용 (빌드 불필요)</h3>
-<p>사전 빌드된 정적 바이너리가 함께 제공되므로 <strong>별도 빌드 과정 없이</strong> 바로 배치하여 실행할 수 있습니다. 래퍼 스크립트 <code>new_setup.sh</code>가 <code>/etc/redhat-release</code>를 읽어 OS에 맞는 바이너리를 자동 선택합니다.</p>
-<table>
-  <thead>
-    <tr>
-      <th>파일</th>
-      <th>대상 서버</th>
-      <th>비고</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>bin/new_setup</code></td>
-      <td><code>os8_mgmt</code> (linux/amd64)</td>
-      <td>현행 메인 바이너리 (<code>-run</code>, <code>-run -auto</code>, <code>-doctor</code>, <code>p</code> 리포트 모두 지원)</td>
-    </tr>
-    <tr>
-      <td><code>bin/new_setup_os6</code></td>
-      <td><code>os6_mgmt</code> (RHEL 6)</td>
-      <td><strong>구버전(v2 시기, 2026-11-04부터 업데이트 중단).</strong> 탭 출력이며 제목줄·<code>NOTRUN</code>·AMD 규칙·<code>-run</code>·<code>-doctor</code> 미지원</td>
-    </tr>
-  </tbody>
-</table>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 배치 폴더에서 실행 권한 부여
-chmod +x new_setup.sh setup.sh troubleshoot.sh bin/new_setup bin/new_setup_os6
-
-# (선택) 전역 심볼릭 링크 — 복사 대신 링크 권장 (래퍼 위치 기준으로 bin/과 conf 탐색)
-ln -s "$(pwd)/new_setup.sh" /usr/local/bin/new_setup]]></ac:plain-text-body>
-</ac:structured-macro>
 
 <h3>2.2 최초 대화형 설정 도우미 (<code>setup.sh</code>)</h3>
 <p>처음 사용할 때는 <code>new_setup.conf</code>를 수동 편집하는 대신 <code>bash setup.sh</code>를 실행하면 기본·부하(<code>-run</code>)·고급 항목을 순서대로 입력받아 <code>&lt;설정파일&gt;.bak</code> 백업 후 원자적으로 저장합니다(설정 파일 폴더 밖 <code>/etc</code> 등에는 아무것도 쓰지 않음). 또한 <code>new_setup.sh</code> 실행 시 설정 파일이 없고 터미널(tty)이면 자동으로 <code>setup.sh</code> 실행을 제안합니다(<code>NEW_SETUP_NO_PROMPT=1</code>로 끌 수 있음).</p>
