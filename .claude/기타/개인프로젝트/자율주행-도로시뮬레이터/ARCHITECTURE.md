@@ -15,6 +15,8 @@
 | viz/render3d.py | 운전석/추적 시점 원근 렌더러 + 카메라·차체 연출 + 풍경 |
 | viz/gl3d.py | OpenGL(ModernGL) 3D 렌더러: 조명·그림자·안개·하늘, 차량 인스턴싱 |
 | viz/scene.py | 렌더러 선택(gl / classic), OpenGL 불가 시 classic 대체 |
+| install_carla.bat / .ps1 | CARLA 자동 설치 (D 드라이브 기본) + 파이썬 패키지 |
+| run_carla.bat | CARLA 서버 시작 + carla_sim/run.py 실행 |
 | carla_sim/run.py | CARLA 버전 실행 파일: 창, 키 입력, HUD, 미니맵, 설정 메뉴 연결 |
 | carla_sim/sim.py | CARLA 월드 래퍼: 맵/날씨/Traffic Manager/내 차/카메라/주차/내비/관측값 |
 | carla_sim/physics.py | vehicles.json 제원 → CARLA VehiclePhysicsControl |

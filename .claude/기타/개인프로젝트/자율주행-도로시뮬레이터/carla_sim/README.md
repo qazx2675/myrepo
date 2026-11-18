@@ -23,7 +23,22 @@
 DirectX 12/Vulkan 을 지원하는 최신 NVIDIA 드라이버를 설치해 두세요. 나중에 CUDA 를 같은 PC 에서 돌릴 거라면
 GPU 메모리를 CARLA 와 나눠 쓰므로 VRAM 8 GB 이상이 편합니다.
 
-### 순서
+### 자동 설치 (권장)
+프로젝트 폴더에서 더블클릭 또는:
+```bat
+install_carla.bat                                   :: D:\CARLA_0.9.16 에 설치
+install_carla.bat -InstallDir E:\CARLA_0.9.16        :: 다른 위치
+install_carla.bat -ZipPath C:\Down\CARLA_0.9.16.zip   :: 이미 받은 zip 으로 (다운로드 생략)
+```
+드라이브 여유 공간 확인(40 GB) → CARLA zip 다운로드(약 15 GB, 끊기면 다시 실행해 이어받기) → 압축 해제 → zip 삭제
+→ `.venv` 에 numpy/pygame/moderngl/carla 설치(`wheels\` 에서, 인터넷 불필요) → `CARLA_ROOT` 환경변수 등록까지 합니다.
+그 뒤에는 `run_carla.bat` 하나로 서버를 켜고 시뮬레이터까지 실행합니다 (`run_carla.bat --level long --cars 0` 처럼 옵션 전달).
+다운로드 주소가 바뀌어 실패하면 아래 1번 링크에서 zip 을 직접 받아 `-ZipPath` 로 넘기면 됩니다.
+
+**NVMe 와 SATA SSD 차이:** 맵 불러오기(시작, F1~F5)가 몇 초 빨라지는 정도이고, 주행 중 FPS 는 GPU 가 정하므로 체감 차이는 거의 없습니다.
+HDD 는 맵 로딩이 1분 이상 걸리고 도심 맵에서 끊길 수 있어 피하는 게 좋습니다. 그래서 기본 설치 위치를 D 드라이브로 했습니다.
+
+### 수동 설치 순서
 1. CARLA **0.9.16** Windows 패키지 다운로드: <https://github.com/carla-simulator/carla/releases/tag/0.9.16>
    → `CARLA_0.9.16.zip` 을 `C:\CARLA_0.9.16` 같은 경로(한글·공백 없는 곳)에 압축 해제.
    Town04/Town05/Town10HD 는 기본 패키지에 들어 있습니다 (AdditionalMaps 는 필요 없음).
@@ -40,7 +55,7 @@ GPU 메모리를 CARLA 와 나눠 쓰므로 VRAM 8 GB 이상이 편합니다.
 
 ## 2) 실행
 
-서버를 켠 상태에서, 이 프로젝트 폴더에서:
+`run_carla.bat` (서버 자동 시작) 또는, 서버를 켠 상태에서 이 프로젝트 폴더에서:
 ```bat
 .venv\Scripts\python carla_sim\run.py                                  :: Town04 고속도로, 중급
 .venv\Scripts\python carla_sim\run.py --level long --cars 0            :: 30 km 직선, 제로백

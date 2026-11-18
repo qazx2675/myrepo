@@ -10,7 +10,7 @@ CUDA 컨트롤러가 꽂힐 자리(관측값 API, 화면 프레임 캡처, 행�
 - 1인칭 운전석 / 3인칭 추적 / 위에서 보기, HUD(속도계, RPM/기어, 제한속도, 미니맵, 경로 안내)
 - 운전 감각 연출(시야각, 카메라 쏠림, 코너 시선, 진동, 차체 롤) + 코드로 만든 엔진/타이어/바람 소리
 
-**사실적인 그래픽 버전(CARLA)** 은 [carla_sim/README.md](carla_sim/README.md) — Windows + NVIDIA GPU 필요, 설치·실행·이식 현황 정리.
+**사실적인 그래픽 버전(CARLA)** 은 [carla_sim/README.md](carla_sim/README.md) — Windows + NVIDIA GPU 필요. `install_carla.bat` 이 D 드라이브에 자동 설치하고 `run_carla.bat` 으로 실행.
 
 작업 흐름도는 [WORKFLOW.md](WORKFLOW.md), 파일별 역할은 [ARCHITECTURE.md](ARCHITECTURE.md) 참고.
 
