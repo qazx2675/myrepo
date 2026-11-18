@@ -36,7 +36,7 @@
 | `H9` | `T3` | [`ldap_setting_docs/`](./ldap_setting_docs/README.md) | [`ldap_setting.xhtml`](./ldap_setting_docs/ldap_setting.xhtml) | 사이트별 LDAP·DNS·NTP·autofs 설정 키 갱신 및 서비스 재시작/롤백 실행 바이너리 |
 | `H10` | `T3` | [`OS_환경설정_체크_docs/`](./OS_환경설정_체크_docs/README.md) | [`os_config_check.xhtml`](./OS_환경설정_체크_docs/os_config_check.xhtml) | OS 배포 후 상태 점검·환경설정 적용·재점검 일괄 Bash |
 | `H11` | `T4` | [`pm_monitor_docs/`](./pm_monitor_docs/README.md) | [`pm_monitor.xhtml`](./pm_monitor_docs/pm_monitor.xhtml) | 1분 주기 ping·22포트·`gossh -pm` 기반 OS 설치 7종 상태 판정 PM 전용 경량 TUI |
-| `H12` | `T3` | [`redfish_docs/`](./redfish_docs/README.md) | [`redfish.xhtml`](./redfish_docs/redfish.xhtml) | BMC Redfish API 기반 5개 벤더 BIOS 표준값 점검 및 Pending 설정 바이너리+래퍼 |
+| `H12` | `T3` | [`redfish_docs/`](./redfish_docs/README.md) | [`redfish.xhtml`](./redfish_docs/redfish.xhtml) | BMC Redfish API 기반 BIOS 표준값 점검·전체비교·Pending 설정, BMC 계정 생성·비밀번호 변경·벤더 암호화 키 생성을 `bash bios.sh` 하나로 실행하는 바이너리+래퍼 |
 | `H13` | `T2` | [`setup_check_docs/`](./setup_check_docs/README.md) | [`setup_check.xhtml`](./setup_check_docs/setup_check.xhtml) | 신규 OS 설치 5상태 일괄 판정 및 `config_check`·`stress-test`(`-run`) 자동 연계 도구 |
 | `H14` | `T2` | [`stress-test_docs/`](./stress-test_docs/README.md) | [`stress_test.xhtml`](./stress-test_docs/stress_test.xhtml) | AWX `cpu`/`stress-ng` 부하 실행 및 `gossh` `/proc/loadavg` 1분 로드 감시·실행 판정 바이너리 |
 | `H15` | `T2` | [`조사_docs/`](./조사_docs/README.md) | [`survey.xhtml`](./조사_docs/survey.xhtml) | 표1 자산 목록을 `gossh`로 병렬 수집해 엑셀 붙여넣기용 TSV로 생성하는 자산 조사 도구 |
