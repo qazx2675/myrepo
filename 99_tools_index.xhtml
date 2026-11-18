@@ -1,144 +1,132 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
-    <p><strong>Confluence Intelligence 사용 권장 (작업 툴 찾기)</strong></p>
-    <p>어떤 도구를 써야 할지 모르겠다면, <strong>Confluence Intelligence</strong>에게 먼저 <em>"내가 하려는 작업"</em>을 물어보세요!</p>
-    <ul>
-      <li>예시: <em>"서버 50대에 같은 명령어를 한 번에 실행하고 싶어. 어떤 툴을 써야 해?"</em></li>
-      <li>예시: <em>"서버 IP를 변경해야 하는데 어떤 문서를 봐야 해?"</em></li>
-    </ul>
-    <p>Intelligence가 아래 목차에서 알맞은 툴을 안내해 주면, <strong>해당 툴 페이지로 이동한 뒤 다시 질문</strong>하여 구체적인 사용법을 확인하세요.</p>
+    <p><strong>Confluence Intelligence 사용 권장 (도구 찾기):</strong> 이 페이지는 Confluence Intelligence(질문형 AI)가 "어떤 도구를 써야 하는지" 안내하도록 작성했습니다. 하려는 일을 Confluence Intelligence 에게 질문하십시오.</p>
+    <p>질문 예: "서버 50대에 같은 명령을 한 번에 실행하고 싶어. 어떤 도구를 써?" / "서버 IP 를 바꾸려면 어떤 도구를 써?" / "OS 설치가 끝났는지 확인하는 도구는?"</p>
+    <p>Confluence Intelligence 가 도구 이름을 알려 주면, 그 도구의 문서 페이지로 이동해서 사용 방법을 다시 질문하십시오.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+
+<ac:structured-macro ac:name="info">
+  <ac:rich-text-body>
+    <p><strong>이 페이지의 규칙:</strong> 이 페이지는 도구를 이름으로 안내합니다. 각 도구의 이름, 실행 명령, 문서 이름을 함께 적었습니다. 이 페이지에는 사용 방법의 상세 내용이 없습니다. 상세 내용은 각 도구의 문서에 있습니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="toc"/>
 
-<h2>99. 툴 (운영·점검 도구 목차)</h2>
+<h2>1. 하려는 일로 도구 찾기 (가장 먼저 보십시오)</h2>
+<table>
+  <thead>
+    <tr><th>하려는 일</th><th>사용할 도구</th><th>실행 명령</th><th>참고</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>여러 서버에 같은 명령을 한 번에 실행하고 결과를 비교한다</td><td><code>gossh</code></td><td><code>gossh -w hosts.txt "명령"</code></td><td>처음이면 "gossh 사용 가이드(초보자용)" 문서를 먼저 보십시오.</td></tr>
+    <tr><td>gossh 를 처음 쓴다 (기초 사용법)</td><td><code>gossh</code> 사용 가이드</td><td>-</td><td>초보자용 문서입니다. 상세 옵션은 <code>gossh</code> 문서를 보십시오.</td></tr>
+    <tr><td>AWX 로 서버 OS 설치를 등록한다 (노드정보·DHCP·PXE)</td><td><code>awx_script</code></td><td><code>bash 01.AWX_nodeinfo_V2.sh</code></td><td>OS 설치의 시작점입니다.</td></tr>
+    <tr><td>OS 설치 뒤 LDAP 복원과 설정체크를 자동으로 진행한다</td><td><code>auto_setup</code></td><td><code>auto_setup</code> (상태 화면)</td><td>awx_script 의 02 등록이 성공하면 작업이 자동으로 전달됩니다.</td></tr>
+    <tr><td>PM(물리 서버) OS 설치 진행을 화면으로 감시한다</td><td><code>pm_monitor</code></td><td><code>bash install_mn.sh hosts.txt</code></td><td>yum update 뒤 커널 변경 감시, 설정 기준표 비교도 합니다.</td></tr>
+    <tr><td>yum update 뒤 커널이 바뀌었는지 확인한다</td><td><code>pm_monitor</code> (yum 모드)</td><td>호스트파일에서 서버 이름 뒤에 <code>yum</code></td><td>-</td></tr>
+    <tr><td>새로 설치한 서버의 상태를 한 번에 판정하고 설정수정·부하테스트까지 진행한다</td><td><code>setup_check</code></td><td><code>bash new_setup.sh hosts.txt</code> (이어서 진행: <code>-run</code>)</td><td>config_check 와 stress-test 를 이어서 실행합니다.</td></tr>
+    <tr><td>서버 OS 설정을 체크하고 기준과 다르면 수정한다</td><td><code>config_check</code></td><td><code>bash config_check.sh</code></td><td>auto_setup·setup_check 가 내부에서 사용합니다.</td></tr>
+    <tr><td>OS 배포 뒤 상태 점검 → 설정 적용 → 재점검을 단독 스크립트로 한다</td><td><code>OS 환경설정 체크</code></td><td><code>./os_check_final_annotated.sh</code></td><td>config_check 와 연계가 없는 단독 스크립트입니다.</td></tr>
+    <tr><td>서버에 CPU 부하테스트를 하고 결과를 판정한다</td><td><code>stress-test</code></td><td><code>bash stress_run.sh user.txt</code></td><td>운영 중인 서버에서는 실행하지 마십시오.</td></tr>
+    <tr><td>서버 IP·게이트웨이를 바꾼다 (SSH 접속이 되는 서버)</td><td><code>ip_change</code></td><td><code>./bin/ip-change-engine -targets conf/&lt;계정명&gt;.txt</code></td><td>AWX 표준 절차를 먼저 쓰십시오. AWX 로 실행할 수 없을 때만 씁니다.</td></tr>
+    <tr><td>VM IP 를 바꾼다 (SSH 접속이 안 되는 RHEL 8.10 VM)</td><td><code>vm-ip-change</code></td><td><code>./bin/vm-ip-change -vcenter vcenter.txt -list list.txt</code></td><td>vCenter API 와 VMware Tools 로 바꿉니다.</td></tr>
+    <tr><td>서버에 LDAP·DNS·NTP·autofs 설정을 적용한다</td><td><code>ldap_setting</code></td><td><code>./scripts/deploy_ldap.sh -infra &lt;인프라&gt;</code></td><td>AWX 표준 절차를 먼저 쓰십시오. AWX 로 실행할 수 없을 때만 씁니다.</td></tr>
+    <tr><td>서버의 LDAP·DNS·NTP·autofs 설정이 맞는지 확인한다 (읽기 전용)</td><td><code>ldap_check</code></td><td><code>bash ldap_check.sh</code> (여러 서버: <code>gossh -script -w hosts.txt</code>)</td><td>AWX 표준 절차를 먼저 쓰십시오. AWX 로 실행할 수 없을 때만 씁니다.</td></tr>
+    <tr><td>BIOS 설정을 표준값과 비교하거나 바꾼다, BMC 계정을 만든다</td><td><code>redfish</code></td><td><code>bash bios.sh</code></td><td>BMC Redfish API 를 사용합니다.</td></tr>
+    <tr><td>여러 서버의 자산 정보(모델, CPU, 메모리 등)를 조사해 엑셀로 만든다</td><td><code>survey</code> (조사)</td><td><code>./run_survey.sh</code></td><td>결과는 엑셀에 붙여 넣는 TSV 입니다.</td></tr>
+    <tr><td>자주 쓰는 디렉터리 구조를 설명과 함께 본다</td><td><code>dirmap</code></td><td><code>./dirmap.sh</code></td><td>-</td></tr>
+    <tr><td>ESXi 에 VM 을 만들고 CPU·HugePage·affinity·PCI 를 설정한다</td><td><code>V2</code> (VM 자동화 V2)</td><td><code>cd VMsetup &amp;&amp; ./vm_setup.sh</code></td><td>BM 당 ev01 ~ ev99. 새 작업에는 V2 를 씁니다.</td></tr>
+    <tr><td>VM 설정이 스펙과 같은지 체크하고 교정한다</td><td><code>V2</code> 의 <code>vm-param-check</code></td><td><code>vm-param-check ... -fix</code></td><td>V2 문서에 있습니다.</td></tr>
+    <tr><td>예전 V1 VM 도구(ev01 ~ ev03, vm-param-fix)를 쓴다</td><td><code>VM_setup</code> (V1, 레거시)</td><td>하위 도구를 하나씩 실행</td><td>새 작업에는 V2 를 쓰십시오.</td></tr>
+  </tbody>
+</table>
 
-<ac:structured-macro ac:name="note">
+<h2>2. 비슷한 도구는 어떻게 고르나?</h2>
+<table>
+  <thead>
+    <tr><th>헷갈리는 도구</th><th>고르는 기준</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>ip_change</code> 와 <code>vm-ip-change</code></td><td>서버에 SSH 로 접속되면 <code>ip_change</code>. VM 에 SSH 로 접속되지 않으면 <code>vm-ip-change</code>.</td></tr>
+    <tr><td><code>ldap_setting</code> 과 <code>ldap_check</code></td><td>설정을 바꾸면 <code>ldap_setting</code>. 설정을 확인만 하면 <code>ldap_check</code>.</td></tr>
+    <tr><td><code>config_check</code> 와 <code>OS 환경설정 체크</code></td><td>auto_setup·setup_check 와 연계하거나 벤더 코멘트가 필요하면 <code>config_check</code>. 연계 없이 단독으로 쓰면 <code>OS 환경설정 체크</code>.</td></tr>
+    <tr><td><code>auto_setup</code> 과 <code>pm_monitor</code> 와 <code>setup_check</code></td><td>AWX 작업을 받아 자동으로 끝까지 진행하면 <code>auto_setup</code>. 설치 진행을 화면으로 감시만 하면 <code>pm_monitor</code>. 사용자가 원할 때 한 번 판정하고 설정수정·부하테스트로 이어가면 <code>setup_check</code>.</td></tr>
+    <tr><td><code>V2</code> 와 <code>VM_setup</code></td><td>새 작업은 <code>V2</code>(ev01 ~ ev99). 예전 V1 작업을 유지할 때만 <code>VM_setup</code>(ev01 ~ ev03).</td></tr>
+    <tr><td><code>gossh</code> 와 다른 도구</td><td>정해진 도구가 없는 일반 명령은 <code>gossh</code>. 대부분의 도구가 내부에서 <code>gossh</code> 를 사용합니다.</td></tr>
+  </tbody>
+</table>
+
+<h2>3. 작업 순서로 도구 찾기 (서버 OS 설치부터 인계까지)</h2>
+<ol>
+  <li><code>awx_script</code>: AWX 에 노드정보·DHCP·PXE 를 등록해 OS 설치를 시작합니다.</li>
+  <li><code>auto_setup</code> 또는 <code>pm_monitor</code>: 설치 진행을 감시합니다. <code>auto_setup</code> 은 READY 뒤 LDAP 복원과 <code>config_check</code> 를 자동으로 실행합니다.</li>
+  <li><code>setup_check</code>: 설치 결과를 판정하고, 필요하면 <code>config_check</code>(설정수정)와 <code>stress-test</code>(부하테스트)를 이어서 실행합니다.</li>
+  <li><code>ldap_check</code>: LDAP·DNS·NTP·autofs 설정을 확인합니다.</li>
+  <li><code>survey</code>: 자산 정보를 조사해 엑셀로 정리합니다.</li>
+</ol>
+
+<h2>4. 전체 도구 목록 (도구 이름순)</h2>
+<table>
+  <thead>
+    <tr><th>도구 이름</th><th>분류</th><th>한 줄 설명</th><th>서버 변경</th><th>주의</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>auto_setup</code></td><td>HPC</td><td>AWX OS 설치 뒤 ping·준비확인을 감시해 LDAP 복원과 config_check 를 자동 실행하는 데몬 + TUI</td><td>함</td><td>늦게 READY 된 서버(기본 24시간)는 <code>보류</code> 로 둡니다.</td></tr>
+    <tr><td><code>awx_script</code></td><td>HPC</td><td>노드정보 수집·가공 후 AWX 인벤토리·DHCP·PXE 를 등록하는 스크립트 묶음</td><td>함</td><td>-</td></tr>
+    <tr><td><code>config_check</code></td><td>HPC</td><td>OS 설정 체크 → 설정 적용 → 재체크 → 벤더 코멘트 생성</td><td>함</td><td>-</td></tr>
+    <tr><td><code>dirmap</code></td><td>공통</td><td>자주 쓰는 디렉터리 트리를 한글 설명과 함께 출력</td><td>안 함</td><td>-</td></tr>
+    <tr><td><code>gossh</code></td><td>공통</td><td>여러 서버에 SSH 명령을 병렬 실행하고 결과를 묶어 보여 줌 (<code>pdsh</code> 이름으로도 실행)</td><td>명령에 따라 다름</td><td>위험 명령은 기본으로 막습니다. 파일 전송(SCP)은 지원하지 않습니다.</td></tr>
+    <tr><td><code>ip_change</code></td><td>HPC</td><td>ifcfg 의 <code>IPADDR</code>·<code>GATEWAY</code> 만 바꾸는 일괄 IP 변경</td><td>함</td><td>AWX 표준 절차를 먼저 쓰십시오.</td></tr>
+    <tr><td><code>ldap_check</code></td><td>HPC</td><td>LDAP·DNS·NTP·autofs 설정 7종을 읽기 전용으로 확인</td><td>안 함</td><td>AWX 표준 절차를 먼저 쓰십시오.</td></tr>
+    <tr><td><code>ldap_setting</code></td><td>HPC</td><td>사이트별 LDAP·DNS·NTP·autofs 설정을 적용하고 필요한 서비스만 재시작</td><td>함</td><td>AWX 표준 절차를 먼저 쓰십시오.</td></tr>
+    <tr><td><code>OS 환경설정 체크</code></td><td>HPC</td><td>OS 배포 뒤 점검 → 설정 적용 → 재점검을 하는 단독 스크립트</td><td>함</td><td>-</td></tr>
+    <tr><td><code>pm_monitor</code></td><td>HPC</td><td>PM 서버 OS 설치·yum 커널 변경·설정을 1분마다 감시하는 TUI (v0.5.0)</td><td>안 함</td><td>-</td></tr>
+    <tr><td><code>redfish</code></td><td>HPC</td><td>BMC Redfish API 로 BIOS 점검·비교·설정, BMC 계정 생성·비밀번호 변경</td><td>함</td><td>-</td></tr>
+    <tr><td><code>setup_check</code></td><td>HPC</td><td>신규 OS 설치 상태 일괄 판정, <code>-run</code> 으로 config_check·stress-test 연계</td><td><code>-run</code> 일 때 함</td><td>-</td></tr>
+    <tr><td><code>stress-test</code></td><td>HPC</td><td>AWX 로 CPU 부하를 실행하고 <code>/proc/loadavg</code> 로 실행 여부를 판정</td><td>부하 발생</td><td>운영 중인 서버에서는 실행하지 마십시오.</td></tr>
+    <tr><td><code>survey</code> (조사)</td><td>HPC</td><td>자산 목록을 gossh 로 병렬 조사해 엑셀용 TSV 생성</td><td>안 함</td><td>-</td></tr>
+    <tr><td><code>V2</code></td><td>VM</td><td>BM 당 VM ev01 ~ ev99 생성·설정(<code>vm_setup.sh</code>) + 체크·교정(<code>vm-param-check</code>)</td><td>함</td><td>먼저 <code>-n</code>(계획만 보기)으로 확인하십시오.</td></tr>
+    <tr><td><code>VM_setup</code></td><td>VM</td><td>V1 레거시 VM 도구 모음 (ev01 ~ ev03, vm-param-fix)</td><td>함</td><td>새 작업에는 V2 를 쓰십시오.</td></tr>
+    <tr><td><code>vm-ip-change</code></td><td>VM</td><td>SSH 가 안 되는 RHEL 8.10 VM 의 IP 를 vCenter API 로 변경</td><td>함</td><td>dry-run 이 없습니다. VM 1대로 먼저 확인하십시오.</td></tr>
+  </tbody>
+</table>
+
+<ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
-    <ul>
-      <li>이 목차에는 <strong>서버 운영 및 점검용 툴(01~15)</strong>만 등록되어 있습니다.</li>
-      <li>VM 생성·설정 관련 스크립트(<code>VM_setup_docs</code>, <code>vCenter_API_IP_자동변경_docs</code>)는 본 목차에서 제외됩니다.</li>
-      <li>모든 툴 문서는 <strong>이미 준비된 툴을 바로 실행하는 방법</strong>만 안내합니다.</li>
-    </ul>
+    <p><strong>모든 도구는 참고용 보조 도구입니다.</strong> 서버를 바꾸는 도구를 실행한 뒤에는 서버 몇 대를 골라 직접 접속해 결과를 확인하십시오.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
-<table>
-  <thead>
-    <tr>
-      <th>번호</th>
-      <th>툴 이름 (문서 폴더)</th>
-      <th>한 줄 목적 (언제 쓰는가)</th>
-      <th>Intelligence 질문 예시</th>
-      <th>주의사항</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>01</strong></td>
-      <td><code>OS_환경설정_체크_docs</code></td>
-      <td>서버의 기본 OS 환경설정이 기준에 맞게 되어 있는지 점검할 때</td>
-      <td><em>"OS 환경설정 체크 툴은 어떻게 실행해?"</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>02</strong></td>
-      <td><code>V2_docs</code></td>
-      <td>V2 버전 운영·점검 스크립트/도구를 사용할 때</td>
-      <td><em>"V2 툴은 언제, 어떻게 사용하는 거야?"</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>03</strong></td>
-      <td><code>auto_setup_docs</code></td>
-      <td>서버 초기 자동 설정 작업을 일괄 수행할 때</td>
-      <td><em>"서버 초기 자동 설정(auto_setup) 방법 알려줘."</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>04</strong></td>
-      <td><code>awx_script_docs</code></td>
-      <td>표준 자동화 플랫폼(AWX) 연동 스크립트를 실행할 때</td>
-      <td><em>"AWX 스크립트 실행 방법이 궁금해."</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>05</strong></td>
-      <td><code>config_check_docs</code></td>
-      <td>서버 주요 설정 파일 상태를 점검하고 확인할 때</td>
-      <td><em>"서버 설정 파일 점검(config_check) 어떻게 해?"</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>06</strong></td>
-      <td><code>dirmap_docs</code></td>
-      <td>디렉토리 구조 및 경로 매핑 상태를 확인/정리할 때</td>
-      <td><em>"dirmap 툴은 어떤 용도이고 어떻게 써?"</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>07</strong></td>
-      <td><code>gossh_docs</code></td>
-      <td>수백 대 서버에 SSH 명령을 동시에 실행하고 결과를 비교할 때</td>
-      <td><em>"여러 서버에 명령어를 한 번에 실행하려면?"</em></td>
-      <td>파일 전송(SCP) 미지원, 위험 명령 기본 차단</td>
-    </tr>
-    <tr>
-      <td><strong>08</strong></td>
-      <td><code>ip_change_docs</code></td>
-      <td>서버의 IP 주소를 변경해야 할 때</td>
-      <td><em>"서버 IP 변경 툴 사용법 알려줘."</em></td>
-      <td><strong>표준 프로세스(AWX) 우선 권장.</strong> 너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만 사용</td>
-    </tr>
-    <tr>
-      <td><strong>09</strong></td>
-      <td><code>ldap_check_docs</code></td>
-      <td>서버의 LDAP 연동 상태를 점검할 때</td>
-      <td><em>"서버 LDAP 연동 상태 확인하는 방법 알려줘."</em></td>
-      <td><strong>표준 프로세스(AWX) 우선 권장.</strong> 너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만 사용</td>
-    </tr>
-    <tr>
-      <td><strong>10</strong></td>
-      <td><code>ldap_setting_docs</code></td>
-      <td>서버에 LDAP 인증 설정을 적용할 때</td>
-      <td><em>"서버에 LDAP 설정하는 툴 사용법 알려줘."</em></td>
-      <td><strong>표준 프로세스(AWX) 우선 권장.</strong> 너무 바쁘거나 AWX로 실행이 불가한 서버에 대해서만 사용</td>
-    </tr>
-    <tr>
-      <td><strong>11</strong></td>
-      <td><code>pm_monitor_docs</code></td>
-      <td>물리 서버(PM) 상태 및 이상 여부를 모니터링할 때</td>
-      <td><em>"물리 서버 모니터링(pm_monitor) 어떻게 해?"</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>12</strong></td>
-      <td><code>redfish_docs</code></td>
-      <td>서버 BMC/iDRAC 등 원격 관리(Redfish API)를 제어할 때</td>
-      <td><em>"Redfish로 서버 원격 상태 확인하는 법 알려줘."</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>13</strong></td>
-      <td><code>setup_check_docs</code></td>
-      <td>서버 셋업 완료 후 정상 구성 여부를 최종 점검할 때</td>
-      <td><em>"셋업 완료 후 점검(setup_check) 방법 알려줘."</em></td>
-      <td>-</td>
-    </tr>
-    <tr>
-      <td><strong>14</strong></td>
-      <td><code>stress-test_docs</code></td>
-      <td>서버 CPU/메모리 등 부하(스트레스) 테스트를 수행할 때</td>
-      <td><em>"서버 부하 테스트(stress-test) 어떻게 실행해?"</em></td>
-      <td>운영 중인 서비스 서버에서는 실행 주의</td>
-    </tr>
-    <tr>
-      <td><strong>15</strong></td>
-      <td><code>조사_docs</code></td>
-      <td>여러 서버에서 필요한 현황 정보를 일괄 조사·수집할 때</td>
-      <td><em>"서버 현황 조사 툴은 어떻게 사용해?"</em></td>
-      <td>-</td>
-    </tr>
-  </tbody>
-</table>
+<h2>5. 자주 묻는 질문 (FAQ)</h2>
+
+<p><strong>Q. 어떤 도구를 써야 할지 모르겠습니다.</strong><br/>
+A. 1절 "하려는 일로 도구 찾기" 표에서 하려는 일을 찾으십시오. 도구 이름의 문서로 이동해 사용 방법을 확인하십시오.</p>
+
+<p><strong>Q. 여러 서버에 명령을 한 번에 실행하려면 어떤 도구를 쓰나요?</strong><br/>
+A. <code>gossh</code> 를 쓰십시오. 처음이면 "gossh 사용 가이드(초보자용)" 문서를 먼저 보십시오.</p>
+
+<p><strong>Q. 서버 IP 를 바꾸려면 어떤 도구를 쓰나요?</strong><br/>
+A. SSH 로 접속되는 서버는 <code>ip_change</code> 를 쓰십시오 (AWX 표준 절차를 먼저 쓰십시오). SSH 로 접속되지 않는 RHEL 8.10 VM 은 <code>vm-ip-change</code> 를 쓰십시오.</p>
+
+<p><strong>Q. LDAP 설정을 확인하거나 바꾸려면?</strong><br/>
+A. 확인만 하면 <code>ldap_check</code>, 바꾸면 <code>ldap_setting</code> 을 쓰십시오. 두 도구 모두 AWX 표준 절차를 먼저 쓰십시오.</p>
+
+<p><strong>Q. OS 설치가 끝났는지 확인하려면?</strong><br/>
+A. AWX(<code>awx_script</code>)로 등록한 작업은 <code>auto_setup</code> 화면에서 확인하십시오. 호스트파일로 직접 감시하려면 <code>pm_monitor</code> 를 쓰십시오. 한 번에 판정하려면 <code>setup_check</code> 를 쓰십시오.</p>
+
+<p><strong>Q. 서버 OS 설정이 기준과 맞는지 확인하고 수정하려면?</strong><br/>
+A. <code>config_check</code> 를 쓰십시오. 연계 없이 단독으로 쓰려면 <code>OS 환경설정 체크</code> 를 쓰십시오.</p>
+
+<p><strong>Q. 부하테스트를 하려면?</strong><br/>
+A. <code>stress-test</code> 를 쓰십시오. <code>setup_check -run</code> 으로 이어서 실행할 수도 있습니다.</p>
+
+<p><strong>Q. BIOS 설정을 확인하거나 바꾸려면?</strong><br/>
+A. <code>redfish</code> 를 쓰십시오. 실행 명령은 <code>bash bios.sh</code> 입니다.</p>
+
+<p><strong>Q. 서버 자산 정보를 엑셀로 정리하려면?</strong><br/>
+A. <code>survey</code>(조사)를 쓰십시오. 실행 명령은 <code>./run_survey.sh</code> 입니다.</p>
+
+<p><strong>Q. VM 을 만들려면?</strong><br/>
+A. <code>V2</code> 의 <code>vm_setup.sh</code> 를 쓰십시오. 예전 V1 도구 <code>VM_setup</code> 은 새 작업에 쓰지 마십시오.</p>

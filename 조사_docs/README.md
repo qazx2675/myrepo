@@ -1,19 +1,26 @@
 # survey 문서 안내
 
-- **주요 파일**: `dist/survey`, `dist/survey-rhel6`, `run_survey.sh`, `conf/conf.toml`, `scripts/infra_survey.sh`, `update.sh`
-- **양식 유형**: T2 (점검 · 수집형)
-- **포함 파일**:
-  - `survey.xhtml`: 저장 형식(Storage Format) 본문 프래그먼트
-  - `README.md`: 본 문서 적용 안내
+- **도구 이름**: survey (자산 조사 도구. 폴더 이름 "조사")
+- **하는 일**: 표1(자산양식)의 모든 hostname 에 gossh 로 병렬 접속합니다. /appl 설정값과 인프라망을 조사합니다. 결과를 엑셀에 바로 붙여 넣을 수 있는 7열 TSV 파일로 저장합니다.
+- **본문 파일**: [`survey.xhtml`](./survey.xhtml)
+- **작성 방식**: ASD-STE100 규칙(짧은 문장, 한 단계에 한 동작, 도구 이름 반복)의 질문-답변 형식. Confluence Intelligence 가 각 절만 읽어도 답할 수 있도록 작성했습니다.
 
-## 위키/문서 편집기 붙여넣기 방법
+## Confluence 에 붙여 넣는 방법
 
-1. `survey.xhtml` 파일 전체 내용을 복사합니다. (외부 `<root>` 래퍼 없이 본문 프래그먼트만 저장되어 있습니다.)
-2. 문서 편집 화면에서 상단 툴바의 **Source Editor(`<>`)** 또는 저장 형식(Storage Format) 편집기를 엽니다.
-3. 복사한 `.xhtml` 내용을 그대로 붙여넣고 **Apply** / **저장**을 눌러 매크로(`info`, `toc`, `code`, `note`, `warning`)와 표가 정상 렌더링되는지 확인합니다.
+1. `.xhtml` 파일 전체 내용을 복사합니다. `<root>` 래퍼가 없는 Storage Format 본문 조각입니다.
+2. Confluence 페이지를 편집 모드로 열고 **Source Editor (`<>`)** 를 엽니다.
+3. 복사한 내용을 붙여 넣고 **Apply** 를 누릅니다.
+4. `info`·`warning`·`note`·`code`·`toc` 매크로와 표가 정상인지 확인하고 저장합니다.
 
-## XML 문법 검증 (선택)
+## 본문 구성
 
-```bash
-C:/Users/qazx2/AppData/Local/Programs/Python/Python312/python.exe -c "import xml.etree.ElementTree as ET; s=open('survey.xhtml', encoding='utf-8').read(); ET.fromstring('<root xmlns:ac=\"http://atlassian.com/content\" xmlns:ri=\"http://atlassian.com/resource/identifier\">'+s+'</root>'); print('OK')"
-```
+`survey.xhtml`:
+
+- 0. 도구 요약 (핵심 사실)
+- 1. 어떤 일을 하려면 어떤 명령을 실행하나? (명령 찾기)
+- 2. 처음 사용하기 전에 무엇을 준비하나?
+- 3. survey 는 어떤 순서로 조사하나?
+- 4. 결과 파일은 어떻게 읽나?
+- 5. 설정 파일(conf/conf.toml)의 키는 무엇인가?
+- 6. 문제가 생기면?
+- 7. 자주 묻는 질문 (FAQ)

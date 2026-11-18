@@ -1,19 +1,26 @@
 # dirmap 문서 안내
 
-- **주요 실행 파일**: `dirmap.sh`
-- **양식 유형**: T1 (단일 스크립트형 · 빌드 불필요)
-- **포함 파일**:
-  - `dirmap.xhtml`: 저장 형식(Storage Format) 본문 프래그먼트
-  - `README.md`: 본 문서 적용 안내
+- **도구 이름**: dirmap (실행 파일 dirmap.sh)
+- **하는 일**: 디렉터리의 하위 폴더 구조를 tree 모양으로 출력합니다. 등록한 폴더 아래에는 한국어 설명(└ : 설명)을 함께 출력합니다.
+- **실행**: ./dirmap.sh 또는 ./dirmap.sh <경로> <깊이> [제외패턴]
+- **본문 파일**: [`dirmap.xhtml`](./dirmap.xhtml)
+- **작성 방식**: ASD-STE100 규칙(짧은 문장, 한 단계에 한 동작, 도구 이름 반복)의 질문-답변 형식. Confluence Intelligence 가 각 절만 읽어도 답할 수 있도록 작성했습니다.
 
-## 위키/문서 편집기 붙여넣기 방법
+## Confluence 에 붙여 넣는 방법
 
-1. `dirmap.xhtml` 파일 전체 내용을 복사합니다. (외부 `<root>` 래퍼 없이 본문 프래그먼트만 저장되어 있습니다.)
-2. 문서 편집 화면에서 상단 툴바의 **Source Editor(`<>`)** 또는 저장 형식(Storage Format) 편집기를 엽니다.
-3. 복사한 `.xhtml` 내용을 그대로 붙여넣고 **Apply** / **저장**을 눌러 매크로(`info`, `toc`, `code`, `note`, `warning`)와 표가 정상 렌더링되는지 확인합니다.
+1. `.xhtml` 파일 전체 내용을 복사합니다. `<root>` 래퍼가 없는 Storage Format 본문 조각입니다.
+2. Confluence 페이지를 편집 모드로 열고 **Source Editor (`<>`)** 를 엽니다.
+3. 복사한 내용을 붙여 넣고 **Apply** 를 누릅니다.
+4. `info`·`warning`·`note`·`code`·`toc` 매크로와 표가 정상인지 확인하고 저장합니다.
 
-## XML 문법 검증 (선택)
+## 본문 구성
 
-```bash
-C:/Users/qazx2/AppData/Local/Programs/Python/Python312/python.exe -c "import xml.etree.ElementTree as ET; s=open('dirmap.xhtml', encoding='utf-8').read(); ET.fromstring('<root xmlns:ac=\"http://atlassian.com/content\" xmlns:ri=\"http://atlassian.com/resource/identifier\">'+s+'</root>'); print('OK')"
-```
+`dirmap.xhtml`:
+
+- 0. 도구 요약 (핵심 사실)
+- 1. 어떤 일을 하려면 어떤 명령을 실행하나? (명령 찾기)
+- 2. 처음 사용하기 전에 무엇을 준비하나?
+- 3. 설정 변수와 명령행 인자는 무엇인가?
+- 4. 출력은 어떤 모양인가?
+- 5. 문제가 생기면?
+- 6. 자주 묻는 질문 (FAQ)

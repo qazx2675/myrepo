@@ -1,22 +1,30 @@
-# pm_monitor 운영 문서 안내
+# pm_monitor 문서 안내
 
-## 1. 개요 및 실행 구성
+- **도구 이름**: pm_monitor (프로그램 install_mn, 버전 v0.5.0)
+- **하는 일**: PM(물리 서버) 의 OS 설치 진행, yum update 후 커널 변경, 서버 설정을 1분마다 감시해 화면(TUI)으로 보여 줍니다.
+- **실행**: bash install_mn.sh <호스트파일> [oklist.txt] (root 로 실행)
+- **본문 파일**: [`pm_monitor.xhtml`](./pm_monitor.xhtml)
+- **작성 방식**: ASD-STE100 규칙(짧은 문장, 한 단계에 한 동작, 도구 이름 반복)의 질문-답변 형식. Confluence Intelligence 가 각 절만 읽어도 답할 수 있도록 작성했습니다.
 
-- **대상 도구**: `pm_monitor` (대규모 베어메탈 OS 설치 모니터링 TUI)
-- **실행 파일**: 사전 빌드된 정적 바이너리 `install_mn_os8` 및 실행 래퍼 `install_mn.sh` (`/usr/local/bin/install_mn` 심볼릭 링크 등록, root 권한 필수)
-- **주요 연계 도구**: `gossh -pm`, `ldap_check.sh`, `dhcp_server` (`/root/a.sh`)
-- **본문 문서 파일**: [`pm_monitor.xhtml`](./pm_monitor.xhtml) (Storage Format XML 본문 조각)
+## Confluence 에 붙여 넣는 방법
 
-## 2. 사내 위키 소스 편집기 붙여넣기 방법
+1. `.xhtml` 파일 전체 내용을 복사합니다. `<root>` 래퍼가 없는 Storage Format 본문 조각입니다.
+2. Confluence 페이지를 편집 모드로 열고 **Source Editor (`<>`)** 를 엽니다.
+3. 복사한 내용을 붙여 넣고 **Apply** 를 누릅니다.
+4. `info`·`warning`·`note`·`code`·`toc` 매크로와 표가 정상인지 확인하고 저장합니다.
 
-1. 사내 위키에서 문서를 등록할 대상 페이지로 이동한 뒤 **편집(Edit)** 모드로 전환합니다.
-2. 상단 툴바의 **`<>` (Source Editor / 소스 편집기)** 버튼을 엽니다.
-3. [`pm_monitor.xhtml`](./pm_monitor.xhtml) 파일 전체 내용을 복사하여 소스 편집기 창에 그대로 붙여넣습니다.
-   - `<root>` 래퍼 태그 없는 Storage Format 본문 조각이므로 앞뒤에 별도 루트 태그를 추가하지 마세요.
-4. **Apply / 적용**을 누른 뒤 상단 목차(`toc`), `info`·`warning`·`note` 매크로, 코드 블록(`code`), 표(`table`) 렌더링을 확인하고 저장합니다.
+## 본문 구성
 
-## 3. 수록 내용 요약
+`pm_monitor.xhtml`:
 
-- 5단계 수집 파이프라인(Raw ICMP Ping → TCP 22 → `gossh -pm` → `/tmp/anaconda.log` 디스크 미인식 → 지연/상태 저장) 및 `ldap_check.sh` / `dhcp_server` 연동 경로
-- 사전 빌드 바이너리(`install_mn_os8`) 및 `install_mn.sh` 심볼릭 링크 전역 등록, `pm_monitor.conf` 준비, `demo/demo.sh` 시연
-- CLI 사용법, 종료 코드(`0`/`1`/`2`), TUI 키 조작(`c`/`r`/`d`/`l`/`1`~`7`/`/`), 7종 상태 판정 표, `l` 패널 열 규칙, `pm_monitor.conf` 전체 11개 설정 키 및 실서버 교차 검증 주의사항
+- 0. 도구 요약 (핵심 사실)
+- 1. 어떤 일을 하려면 어떤 명령이나 키를 쓰나? (명령 찾기)
+- 2. 처음 사용하기 전에 무엇을 준비하나?
+- 3. OS 설치 상태는 어떻게 판정하나?
+- 4. 화면 키는 무엇인가?
+- 5. 백그라운드 수집은 어떻게 동작하나?
+- 6. 서버 설정 조사(l), 기준표(oklist), res 파일은 어떻게 쓰나? (v0.5.0)
+- 7. yum update 모드는 어떻게 쓰나? (v0.4.0)
+- 8. 설정 파일(pm_monitor.conf)의 키는 무엇인가?
+- 9. 문제가 생기면?
+- 10. 자주 묻는 질문 (FAQ)

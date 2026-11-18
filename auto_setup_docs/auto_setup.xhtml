@@ -1,506 +1,378 @@
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
-    <p><strong>Confluence Intelligence 사용 권장:</strong> 본 문서는 일반 사용자와 Confluence Intelligence(질문형 AI)가 쉽게 이해하고 답할 수 있도록 정리되어 있습니다. 궁금한 점은 페이지 상단 또는 우측의 Confluence Intelligence에게 바로 질문해 보세요.</p>
+    <p><strong>Confluence Intelligence 사용 권장:</strong> 이 문서는 Confluence Intelligence(질문형 AI)가 정확하게 답하도록 작성했습니다. 궁금한 점은 Confluence Intelligence 에게 질문하십시오.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="info">
   <ac:rich-text-body>
-    <p><strong>한 줄 요약:</strong> AWX OS 설치(<code>01.AWX_nodeinfo_V2.sh</code>) 완료 후 ping·준비확인을 상시 감시해 <code>config_check.sh</code>를 자동 실행하고, TUI 상태판·단독체크(<code>x</code>)·AWX/신규설치양식(<code>w</code>)·<code>gossh</code> 작업기록(<code>s</code>)·IP/LDAP 변경메뉴(<code>m</code>)까지 제공하는 데몬 + CLI/TUI 통합 도구입니다. (v0.8.8 기준)</p>
-    <ul>
-      <li><strong>실행 바이너리 / 스크립트:</strong> <code>auto_setup_os8</code> (사전 빌드 정적 바이너리, RHEL 8+ 공용), <code>os6_truble.sh</code>, <code>conf/setup_guide.sh</code>, <code>conf/update_v0.4.0.sh</code> ~ <code>update_v0.8.0.sh</code> (<code>auto_setup_os6</code>는 2026-11-04 이후 갱신 중단)</li>
-      <li><strong>동작 환경 및 권한:</strong> RHEL 8+ (<code>os8_mgmt</code> 데몬 서버 및 RHEL 8로 올라간 <code>os6_mgmt</code> 원격 클라이언트 공용), <strong>root 권한 필수</strong>(raw ICMP ping, <code>/usr/local/bin</code>, cron 등록)</li>
-      <li><strong>필수 의존성:</strong> <code>bash</code>, <code>gossh</code>, <code>ssh</code>, <code>script</code>·<code>less</code>(<code>s</code> 작업 기록 사용)</li>
-      <li><strong>연계 도구:</strong> <code>01.AWX_nodeinfo_V2.sh</code>(<code>awx_script</code>), <code>config_check.sh</code>(<code>os_check_sh</code> / <code>os6_os_check_sh</code>), <code>ip-change-engine</code>(<code>ip_change</code>), <code>ldap-config-engine</code>(<code>ldap_setting</code>), <code>gossh</code></li>
-    </ul>
+    <p><strong>이 문서는 질문-답변(Q&amp;A) 형식입니다.</strong> 각 절은 다른 절을 읽지 않아도 이해되도록 도구 이름·명령·파일 이름을 반복해서 적었습니다. 도구 이름은 <code>auto_setup</code> 입니다. 실행 파일은 <code>auto_setup</code>(<code>/usr/local/bin/auto_setup</code>, 원본 바이너리 <code>auto_setup_os8</code>) 입니다. 진단 스크립트는 <code>os6_truble.sh</code> 입니다. 이 문서는 v0.8.8 과 2026-11-15 의 "늦은 READY 보류" 기능 기준입니다.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
 <ac:structured-macro ac:name="toc"/>
 
-<h1>1. 개요 및 아키텍처 · 연계 통신 경로</h1>
-
-<p><code>auto_setup</code>은 HPC/서버 OS 배포 직후 수동으로 수행하던 설치 완료 확인, LDAP 설정 백업/복원, <code>config_check.sh</code> 일괄 점검·설정 적용, 결과 공유(<code>code</code>) 과정을 하나의 데몬과 양방향 TUI/CLI로 자동화합니다. 추가로 TUI 안에서 <code>01</code> AWX 실행·신규 설치 양식 작성(<code>w</code>), <code>gossh</code> 일괄 작업 이력 관리(<code>s</code>), IP/LDAP 변경·원복(<code>m</code>)까지 연계합니다.</p>
-
-<h2>1.1 엔드투엔드 연계 흐름도 (01 → 데몬 → LDAP → config_check.sh → 2차 체크)</h2>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">text</ac:parameter>
-  <ac:plain-text-body><![CDATA[[os8_mgmt] 01.AWX_nodeinfo_V2.sh ──(02 성공)──> 로컬 queue/<epoch>_<user>_<pid>.job 기록
-[os6_mgmt] 01.AWX_nodeinfo_V2.sh (auto_setup_host 채움) ──(gossh 원샷 base64)──> os8_mgmt queue/
-        │
-        ▼ (cron 매분 ensure → 데몬 5초 주기 queue 수거 → jobs/<jobid>.json)
-전달 시점 LDAP 백업 (ping O 호스트, ldapbak/<jobid>/<host>/, 0700/0600)
-        │
-        ▼ (ping 10s: local=raw ICMP / os6=probe 장기 ssh 세션; 무응답 2회 → seen_down)
-준비확인 30s (gossh -pm uptime; anaconda-ks.cfg 48h 기준 기존 OS 오판 방지; 60s 상한)
-        │
-        ▼ (READY 직후)
-LDAP binddn uid 비교 → 불일치(diff) 시 ldap_share_dir 공유경로 경유 복원 (bindpw 미노출)
-        │
-        ▼ (bootWait 7분 / lateWait 3분 스케줄; max_runs 기본 4병렬, hang_min 기본 7분)
-config_check.sh -auto <user> targets.txt 실행 (os6 서버는 os6 래퍼로 동시 분기)
-        │
-        ├──> 2차(이중) 체크: route=local 의 접속불가·FAIL 호스트만 os6_mgmt 경유 재실행
-        ▼
-codes/<code>.txt 생성 (결과 리포트 + FAIL/NO FAIL + 요약 + 원본경로 + 2차 체크)
-        │
-        └──> 타 경로 config_check.sh 정상 종료 시 done/<host> 완료기록 인정 → 모든 호스트 완료 시 jobs/done/]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h2>1.2 <code>os8_mgmt</code> vs <code>os6_mgmt</code> 양방향 구조 및 연계 도구 역할</h2>
-
+<h2>0. 도구 요약 (핵심 사실)</h2>
 <table>
   <thead>
-    <tr>
-      <th>구성요소 / 연계 도구</th>
-      <th>위치 / 모드</th>
-      <th>통신 경로 및 연계 동작</th>
-    </tr>
+    <tr><th>항목</th><th>내용</th></tr>
   </thead>
   <tbody>
-    <tr>
-      <td><code>auto_setup</code> 데몬</td>
-      <td><code>os8_mgmt</code> 전용 (단일 원본)</td>
-      <td><code>/tmp/auto_setup</code>(또는 <code>$AUTO_SETUP_DIR</code>) 상태 관리, raw ICMP ping, 준비확인, LDAP 백업/복원, <code>config_check.sh</code> 실행, 2차 체크, <code>requests/*.req</code> 수거를 전담합니다.</td>
-    </tr>
-    <tr>
-      <td><code>auto_setup</code> 원격 클라이언트</td>
-      <td><code>os6_mgmt</code> (<code>os8_mgmt</code> 설정 시)</td>
-      <td><strong>상주 데몬 금지.</strong> <code>status</code>·<code>snapshot</code>·<code>code</code>·<code>cancel</code>·<code>done</code>·<code>request</code>·TUI는 <code>gossh -pm -script</code> 원샷으로 <code>os8_mgmt</code>에 요청합니다(RHEL6 ssh 호환 문제 및 세션 부담 방지, TUI는 10초 폴링). 단, 화면 2의 <code>g</code>·<code>c</code>·<code>t</code>와 <code>s</code>(gossh 작업)는 <code>os6_mgmt</code>에서 직접 실행합니다.</td>
-    </tr>
-    <tr>
-      <td><code>os8_mgmt</code> → <code>os6_mgmt</code> 경로 전환</td>
-      <td>데몬 자동 전환 (단방향)</td>
-      <td>첫 ping 무응답 또는 설치 중 무응답 시 <code>ssh -o BatchMode=yes</code>로 <code>os6_autosetup/auto_setup probe -i 10s</code> 장기 세션 및 <code>os6_gossh</code> 경유로 전환합니다(<code>local → os6</code>). 원격 명령은 모두 <code>remoteBash</code>(<code>bash -c</code>, <code>!</code> 포함 시 base64)와 <code>shq</code>로 감싸 <code>csh</code>/<code>tcsh</code> 로그인 셸에서도 동작합니다.</td>
-    </tr>
-    <tr>
-      <td><code>01.AWX_nodeinfo_V2.sh</code> (<code>awx_script</code>)</td>
-      <td><code>os8_mgmt</code> 또는 <code>os6_mgmt</code></td>
-      <td>02 성공 직후 프롬프트 없이 <code>queue/*.job</code>(user, time, 호스트, 그룹 yml 메타)을 자동 전달합니다. 반대로 <code>auto_setup</code> TUI의 <code>w→1</code>/<code>w→2</code>에서 <code>AWX_AUTO*</code>·<code>AWX_USER</code>·<code>AWX_VERIFY_FILE</code>·<code>AWX_DNS_CHECKED</code> 환경변수를 넘겨 01을 직접 기동할 수 있으며, 내장 DNS 점검은 01의 <code>[4-1] dns_check</code>와 동일 규칙을 공유합니다.</td>
-    </tr>
-    <tr>
-      <td><code>config_check.sh</code></td>
-      <td><code>os_check_sh</code> · <code>os6_os_check_sh</code></td>
-      <td>자동 흐름과 수동 <code>c</code>는 <code>-auto &lt;user&gt; &lt;목록&gt;</code>으로 실행하고, 수동 <code>t</code>는 <code>-auto-check &lt;user&gt; &lt;목록&gt;</code>으로 점검만 수행합니다. <code>############### 결과 리포트 ###############</code> 블록을 발췌해 <code>codes/&lt;code&gt;.txt</code>를 만들고, 정상 종료 시 <code>auto_done_dir</code>/<code>auto_done_host</code>로 완료기록(<code>done/&lt;host&gt;</code>)을 남깁니다.</td>
-    </tr>
-    <tr>
-      <td><code>ip_change</code> · <code>ldap_setting</code></td>
-      <td><code>os8_mgmt</code> TUI <code>m</code> 메뉴</td>
-      <td><code>ip-change-engine</code>·<code>ldap-config-engine</code> 바이너리를 호출해 일괄 변경/원복을 수행합니다. LDAP 호출(dry-run·적용·원복)은 항상 <code>-no-restart</code>를 강제하고, 무응답 호스트는 임시 래퍼를 <code>-gossh</code>로 넘겨 <code>os6_mgmt</code>를 경유합니다.</td>
-    </tr>
-    <tr>
-      <td><code>gossh</code></td>
-      <td><code>os8_mgmt</code> 및 <code>os6_gossh</code></td>
-      <td>원격 클라이언트 중계, <code>-pm uptime</code> 준비확인, LDAP 백업/복원, <code>os6</code> <code>config_check.sh</code> 래퍼, <code>s</code> gossh 작업 기록(<code>script -q -f -c</code>)의 기반 전송 계층입니다. 출력 해석은 <code>parseGossh</code>로 통일되어 FQDN과 짧은 이름을 함께 매칭합니다.</td>
-    </tr>
-  </tbody>
-</table>
-
-<h2>1.3 호스트 단계(Stage) 전이</h2>
-
-<p>각 호스트는 상태에 따라 <code>대기(queued)</code> → <code>배포중(deploying)</code> → <code>설치중(installing)</code> → <code>부팅확인(booting)</code> → <code>READY(ready)</code> → <code>LDAP확인(ldap)</code> → <code>체크중(checking)</code> → <code>2차체크(second)</code> → <code>완료(done)</code> 순으로 전이합니다. 부가 상태로 <code>정체(stuck)</code>(<code>seen_down</code> 후 <code>installStuck</code> 60분 초과, 화면 표시만)와 <code>실패(failed)</code>(<code>config_check.sh</code> 비정상 종료 연속 <code>maxFails</code> 3회)가 있습니다.</p>
-
-<h1>2. 사전준비 · 바이너리 배치 · 권한/cron/환경설정</h1>
-
-<h2>2.2 설정 파일(<code>auto_setup.conf</code>) 작성 및 현장 사본 업데이트</h2>
-
-<p>설정 파일은 ① <code>$AUTO_SETUP_CONF/auto_setup.conf</code> → ② <code>&lt;실행파일 디렉터리&gt;/conf/auto_setup.conf</code> → ③ <code>/etc/auto_setup/auto_setup.conf</code> 순으로 처음 발견된 하나만 읽습니다.</p>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1) 가이드 스크립트로 초기 설정 작성 (--no-setup으로 conf 생성만 수행)
-cp -n conf/auto_setup.conf.example conf/auto_setup.conf
-bash conf/setup_guide.sh --no-setup
-# - os8_mgmt: 역할 os8 선택 → 변수 입력 → /etc/auto_setup/auto_setup.conf 로 0600 복사
-# - os6_mgmt: 역할 os6 선택 → 변수 입력 (실행 경로의 conf/auto_setup.conf 에 os8_mgmt 등 반영)
-
-# 2) 현장 설정 업그레이드 (기존 값·주석을 유지한 채 신규 키만 추가)
-# 반드시 버전 순서대로(v0.4.0 → v0.6.0 → v0.7.0 → v0.8.0) 적용
-bash conf/update_v0.8.0.sh --dry    # 미리보기 (파일 불변)
-bash conf/update_v0.8.0.sh          # 적용 (v0.7.0 마지막 줄 ldap_engine= 앵커 필요, --undo 지원)
-install -m 0600 conf/auto_setup.conf /etc/auto_setup/auto_setup.conf
-install -m 0755 auto_setup_os8 /usr/local/bin/auto_setup
-auto_setup --restart
-# os6_mgmt 쪽 auto_setup 바이너리도 새 auto_setup_os8 로 교체 필수
-# awx_script 서버가 분리된 경우 01 DNS 점검 증분 패치도 적용:
-bash <awx_script>/setup/update_unreleased_dns.sh --dry
-bash <awx_script>/setup/update_unreleased_dns.sh]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h2>2.3 연계 스크립트 측 필수 변수 (<code>01</code> 1개 · <code>config_check.sh</code> 2개)</h2>
-
-<table>
-  <thead>
-    <tr>
-      <th>파일</th>
-      <th>변수명</th>
-      <th>역할 및 설정 위치</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>awx_script/01.AWX_nodeinfo_V2.sh</code></td>
-      <td><code>auto_setup_host</code></td>
-      <td><code>os6_mgmt</code> 등에서 채우는 <code>os8_mgmt</code> 호스트명. 비어 있으면 로컬 queue에 기록합니다. (참고: 키 인증이 안 되는 환경에서 쓰는 선택 변수 <code>auto_setup_gossh_pw</code>도 초기 배포 파일에서는 빈 값을 유지하고 필요 시 현장에서 채워 사용)</td>
-    </tr>
-    <tr>
-      <td><code>config_check.sh</code></td>
-      <td><code>auto_done_dir</code></td>
-      <td>완료기록(<code>done/&lt;host&gt;</code>)을 쓸 <strong>로컬</strong> 디렉터리(<code>os8_mgmt</code> 전용 사본에서만 채움, 보통 <code>/tmp/auto_setup/done</code>).</td>
-    </tr>
-    <tr>
-      <td><code>config_check.sh</code></td>
-      <td><code>auto_done_host</code></td>
-      <td><code>os8_mgmt</code> 호스트명(다른 서버에서 <code>gossh</code> 원샷으로 <code>done/</code> 기록 전송).</td>
-    </tr>
+    <tr><td>도구 이름</td><td><code>auto_setup</code> (데몬 + CLI + TUI 상태판)</td></tr>
+    <tr><td>하는 일</td><td>AWX 로 OS 를 설치한 서버를 자동으로 감시합니다. 서버가 READY 가 되면 LDAP 설정을 복원하고 <code>config_check.sh</code>(설정체크 + 설정수정)를 자동으로 실행합니다. 결과를 4자리 code 로 저장합니다.</td></tr>
+    <tr><td>작업 시작 방법</td><td><code>01.AWX_nodeinfo_V2.sh</code>(awx_script) 의 02 등록이 성공하면 작업이 자동으로 <code>auto_setup</code> 에 전달됩니다. 사용자가 따로 등록하지 않습니다.</td></tr>
+    <tr><td>상태 보기</td><td><code>auto_setup</code> (인자 없이 실행하면 TUI 상태판)</td></tr>
+    <tr><td>데몬 위치</td><td><code>os8_mgmt</code> 서버에서만 실행합니다. 데몬은 항상 1개입니다. cron 이 매분 <code>auto_setup ensure</code> 로 데몬을 살립니다.</td></tr>
+    <tr><td>os6_mgmt 에서 사용</td><td><code>os6_mgmt</code> 에서도 같은 TUI 를 엽니다. os6_mgmt 는 원격 클라이언트입니다. 데몬을 실행하지 않습니다.</td></tr>
+    <tr><td>추가 기능 (TUI 키)</td><td><code>x</code> 체크스크립트 단독 실행, <code>w</code> AWX 실행·신규 설치 양식, <code>s</code> gossh 작업 기록, <code>m</code> IP/LDAP 변경 메뉴, <code>h</code> 호스트 작업 메뉴</td></tr>
+    <tr><td>늦은 READY 보류</td><td>설치 시작부터 <code>stuck_hold_hours</code>(기본 24시간)를 넘겨 READY 가 된 서버는 <code>보류</code> 단계가 됩니다. LDAP 복원과 자동 run 을 하지 않습니다. <code>h</code> → <code>u</code> 로 해제합니다.</td></tr>
+    <tr><td>필요 조건</td><td>RHEL 8 이상, root 권한(raw ICMP ping, cron), <code>gossh</code>, <code>ssh</code>, <code>bash</code>, (<code>s</code> 사용 시) <code>script</code>·<code>less</code></td></tr>
+    <tr><td>연계 도구</td><td><code>01.AWX_nodeinfo_V2.sh</code>(awx_script), <code>config_check.sh</code>(config_check), <code>ip-change-engine</code>(ip_change), <code>ldap-config-engine</code>(ldap_setting), <code>gossh</code></td></tr>
+    <tr><td>상태 저장 위치</td><td><code>/tmp/auto_setup</code> (환경변수 <code>AUTO_SETUP_DIR</code> 로 바꿀 수 있습니다)</td></tr>
   </tbody>
 </table>
 
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
-    <p><strong>autofs로 <code>config_check.sh</code>를 공유하는 경우:</strong> <code>os8_mgmt</code>와 <code>os6_mgmt</code>가 같은 파일을 공유하므로 서버별로 다른 값을 둘 수 없습니다. 반드시 <strong><code>auto_done_host</code>만 채우고 <code>auto_done_dir</code>은 비워 두십시오.</strong> <code>auto_done_dir</code>을 채운 채 <code>os6_mgmt</code>에서 실행하면 <code>os6_mgmt</code> 로컬에만 기록되어 <code>os8_mgmt</code> 데몬이 완료기록을 읽지 못합니다.</p>
+    <p><strong>참고용 보조 도구입니다.</strong> <code>auto_setup</code> 이 설정수정·LDAP 복원·2차 체크·<code>m</code> 변경을 한 뒤에는 서버 몇 대를 골라 직접 접속해 실제 반영을 확인하십시오.</p>
   </ac:rich-text-body>
 </ac:structured-macro>
 
-<h2>2.4 <code>auto_setup.conf</code> 설정 키 전체 (<code>vars.manifest</code> 32개 + <code>conf</code> 전용 4개 = 36개) 및 환경변수 표</h2>
-
+<h2>1. 어떤 일을 하려면 어떤 명령이나 키를 쓰나? (명령 찾기)</h2>
 <table>
   <thead>
-    <tr>
-      <th>설정 키</th>
-      <th>기본값 (비울 때)</th>
-      <th>설명</th>
-    </tr>
+    <tr><th>하고 싶은 일</th><th>명령 또는 키</th></tr>
   </thead>
   <tbody>
-    <tr>
-      <td><code>os6_mgmt</code></td>
-      <td>비움 (os6 경로·2차 체크 미사용)</td>
-      <td>모든 대역에 접근 가능한 <code>os6_mgmt</code> 서버(<code>user@host</code> 가능)</td>
-    </tr>
-    <tr>
-      <td><code>os6_gossh</code></td>
-      <td>비움</td>
-      <td><code>os6_mgmt</code> 위 <code>gossh</code> 실행 파일 전체 경로</td>
-    </tr>
-    <tr>
-      <td><code>os6_autosetup</code></td>
-      <td>비움 (PATH의 <code>auto_setup</code>)</td>
-      <td><code>os6_mgmt</code> 위 <code>auto_setup</code> 디렉터리(v0.8.7부터 실행 파일 경로도 허용). 아래 <code>os6_run/</code> 공유 기록 기준 경로로도 사용(autofs 공유 필요)</td>
-    </tr>
-    <tr>
-      <td><code>os_check_sh</code></td>
-      <td>비움</td>
-      <td>이 서버의 <code>config_check.sh</code> 전체 경로 (OS 환경설정 체크 스크립트)</td>
-    </tr>
-    <tr>
-      <td><code>awx_dir</code></td>
-      <td><code>os_check_sh</code> 디렉터리의 <code>dhcp.sh</code>만 후보</td>
-      <td><code>awxkit/dhcp.sh</code> 및 <code>01.AWX_nodeinfo_V2.sh</code>가 있는 <code>awx_script</code> 디렉터리</td>
-    </tr>
-    <tr>
-      <td><code>os8_mgmt</code></td>
-      <td>비움 (로컬 데몬 모드)</td>
-      <td><code>os8_mgmt</code> 호스트명. <strong>비어 있지 않으면 원격 클라이언트 모드</strong>로 동작(<code>os8_mgmt</code> 자신에서는 반드시 비움)</td>
-    </tr>
-    <tr>
-      <td><code>os8_autosetup</code></td>
-      <td><code>/usr/local/bin/auto_setup</code></td>
-      <td><code>os8_mgmt</code> 위 <code>auto_setup</code> 실행 파일 경로</td>
-    </tr>
-    <tr>
-      <td><code>os6_os_check_sh</code></td>
-      <td><code>os_check_sh</code>로 폴백</td>
-      <td><code>os6_mgmt</code> 위 2차 체크용 스크립트 경로. <code>"-"</code> 입력 시 2차 체크 끄기</td>
-    </tr>
-    <tr>
-      <td><code>ldap_share_dir</code></td>
-      <td>비움 (자동 복원 안 함)</td>
-      <td>LDAP 복원용 autofs 공유 디렉터리. 대상 서버 root가 읽을 수 있어야 함(<code>no_root_squash</code>). 비면 diff 시 <code>수동 복원 필요</code> 표시</td>
-    </tr>
-    <tr>
-      <td><code>awx_profile_1</code> ~ <code>9</code></td>
-      <td>비움 (<code>w</code> 질문 없이 일반 실행)</td>
-      <td><code>w→1</code> AWX 실행 프로파일. 형식: <code>nodeinfo(y/n)|OS값|설명</code> (OS값: <code>2024</code>, <code>2025</code>, <code>2026</code>, <code>2026-OPC_MDP</code>, <code>2026-ECAD_TCAD</code>, <code>default</code>)</td>
-    </tr>
-    <tr>
-      <td><code>enable_ip_change</code> / <code>enable_ldap_change</code></td>
-      <td>비움 (꺼짐)</td>
-      <td>TUI 변경 메뉴(<code>m</code>) IP/LDAP 항목 활성화(<code>y</code>·<code>yes</code>·<code>1</code>·<code>true</code>만 켜짐; <code>--admin</code> 플래그는 conf와 무관하게 켬)</td>
-    </tr>
-    <tr>
-      <td><code>ip_engine</code> / <code>ldap_engine</code></td>
-      <td>실행파일 디렉터리 → PATH</td>
-      <td><code>ip-change-engine</code> / <code>ldap-config-engine</code> 전체 경로</td>
-    </tr>
-    <tr>
-      <td><code>newhost_template_1</code> ~ <code>9</code></td>
-      <td>비움 (user 템플릿만 사용)</td>
-      <td>신규 설치 양식 공용 템플릿. 형식: <code>별칭|infra nic disk 용량 os boot</code> (<code>disk</code>는 <code>sda</code>/<code>nvme0n1</code>, root 파티션 <code>sda5</code>/<code>nvme0n1p8</code> 자동 유도)</td>
-    </tr>
-    <tr>
-      <td><code>work_os6_over</code></td>
-      <td><code>1000</code></td>
-      <td><code>s</code>(gossh 작업)를 <code>os8</code> gossh로 실행할 최대 대수(초과 시 전량 <code>os6_mgmt</code> 경유)</td>
-    </tr>
-    <tr>
-      <td><code>closed_keep_days</code></td>
-      <td><code>1</code> (24시간)</td>
-      <td>종료된 작업(<code>jobs/done</code>)을 화면·<code>status</code>에 표시할 기간(일, 1 이상 정수)</td>
-    </tr>
-    <tr>
-      <td><code>max_runs</code></td>
-      <td><code>4</code></td>
-      <td>동시에 실행 가능한 <code>run</code>(<code>config_check.sh</code>) 최대 개수(1 이상 정수, 데몬 재시작 필요)</td>
-    </tr>
-    <tr>
-      <td><code>hang_min</code></td>
-      <td><code>7</code> (분)</td>
-      <td>run 내 <code>gossh</code> 호출 멈춤 감지 시간(분, 0이면 끔). 초과 시 <code>SIGINT</code>×2로 멈춘 호스트만 취소(+1분 후 <code>SIGTERM</code>, 데몬 재시작 필요)</td>
-    </tr>
-    <tr>
-      <td><code>ssh_timeout</code></td>
-      <td><code>30</code> (초, 최소 5)</td>
-      <td><code>os6_mgmt</code> SSH 접속 <code>ConnectTimeout</code>(초). 10초 초과분의 2배가 준비확인(60s)·LDAP 백업(90s)·적용(45s) 전체 상한에 가산됨</td>
-    </tr>
+    <tr><td>작업 진행 상태를 화면으로 본다</td><td><code>auto_setup</code></td></tr>
+    <tr><td>내 작업만 본다</td><td><code>auto_setup -user &lt;이름&gt;</code></td></tr>
+    <tr><td>색 없이 텍스트 표로 본다</td><td><code>auto_setup --plain</code> 또는 <code>NO_COLOR=1 auto_setup</code></td></tr>
+    <tr><td>작업별 진행 요약을 본다</td><td><code>auto_setup status</code></td></tr>
+    <tr><td>결과 code(4자리)의 내용을 본다</td><td><code>auto_setup code &lt;4자리&gt;</code> 또는 화면 2 에서 <code>h</code> → <code>v</code></td></tr>
+    <tr><td>데몬이 실행 중인지 확인한다</td><td><code>pgrep -af 'auto_setup daemon'</code> (1줄만 나와야 합니다)</td></tr>
+    <tr><td>데몬을 시작·재시작·종료한다</td><td><code>auto_setup --start</code> / <code>--restart</code> / <code>--stop</code> (os8_mgmt 에서만)</td></tr>
+    <tr><td>그룹에 설정체크 + 설정수정을 수동으로 실행한다</td><td>화면 2 에서 <code>h</code> → <code>c</code>, 또는 <code>auto_setup request manual-run &lt;jobid&gt; &lt;yml&gt;</code></td></tr>
+    <tr><td>그룹에 설정체크만 수동으로 실행한다</td><td>화면 2 에서 <code>h</code> → <code>t</code>, 또는 <code>auto_setup request manual-run &lt;jobid&gt; &lt;yml&gt; check</code></td></tr>
+    <tr><td>완료되지 않은 서버의 상태를 다시 확인한다</td><td>화면 2 에서 <code>h</code> → <code>g</code>, 또는 <code>auto_setup request recheck &lt;jobid&gt; &lt;yml 또는 *&gt;</code></td></tr>
+    <tr><td>서버를 수동으로 완료 처리한다</td><td>화면 2 에서 <code>h</code> → <code>d</code>, 또는 <code>auto_setup done &lt;host...&gt;</code></td></tr>
+    <tr><td><code>보류</code> 서버를 자동 흐름으로 되돌린다</td><td>화면 2 에서 <code>h</code> → <code>u</code>, 또는 <code>auto_setup request release &lt;jobid&gt; &lt;yml 또는 *&gt;</code></td></tr>
+    <tr><td>작업을 끝낸다(감시 중지)</td><td><code>auto_setup cancel &lt;jobid&gt;</code></td></tr>
+    <tr><td>즉시 ping·준비확인을 요청한다</td><td>화면에서 <code>r</code>, 또는 <code>auto_setup request refresh</code></td></tr>
+    <tr><td>임의의 서버에 config_check.sh 를 한 번 실행한다</td><td>화면에서 <code>x</code></td></tr>
+    <tr><td>AWX(01.AWX_nodeinfo_V2.sh)를 실행한다</td><td>화면에서 <code>w</code> → <code>1</code> (또는 <code>ww</code>)</td></tr>
+    <tr><td>신규 설치 양식(hostname ip mac)을 작성한다</td><td>화면에서 <code>w</code> → <code>2</code>, 또는 <code>auto_setup newhost</code> (os8_mgmt 에서만)</td></tr>
+    <tr><td>여러 서버에 gossh 명령을 실행하고 기록을 남긴다</td><td>화면에서 <code>s</code>, 또는 <code>auto_setup s</code></td></tr>
+    <tr><td>IP 또는 LDAP 설정을 변경·원복한다</td><td>화면에서 <code>m</code> (os8_mgmt 에서만, conf 에서 켜거나 <code>--admin</code>)</td></tr>
+    <tr><td>os6_mgmt 경유가 느린 원인을 찾는다</td><td><code>./os6_truble.sh</code> (os8_mgmt 에서 root 로 실행)</td></tr>
   </tbody>
 </table>
 
+<h2>2. 처음 사용하기 전에 무엇을 준비하나?</h2>
+<ol>
+  <li>os8_mgmt 에 <code>auto_setup</code> 실행 파일을 <code>/usr/local/bin/auto_setup</code> 으로 둡니다.</li>
+  <li>설정 파일 <code>auto_setup.conf</code> 를 만듭니다. 가이드 스크립트 <code>bash conf/setup_guide.sh --no-setup</code> 을 사용하면 쉽습니다.</li>
+  <li>os8_mgmt 에서는 설정 키 <code>os8_mgmt</code> 를 비웁니다. os6_mgmt 에서는 <code>os8_mgmt=&lt;os8_mgmt 호스트명&gt;</code> 을 씁니다.</li>
+  <li>cron 에 매분 <code>auto_setup ensure</code> 를 등록합니다. cron 이 데몬을 자동으로 시작합니다.</li>
+  <li><code>01.AWX_nodeinfo_V2.sh</code> 와 <code>config_check.sh</code> 에 연계 변수를 씁니다 (아래 표).</li>
+</ol>
+
+<h3>2.1 설정 파일은 어디에서 읽나?</h3>
+<p><code>auto_setup</code> 은 아래 순서로 처음 찾은 파일 1개만 읽습니다.</p>
+<ol>
+  <li><code>$AUTO_SETUP_CONF/auto_setup.conf</code></li>
+  <li><code>&lt;실행 파일 디렉터리&gt;/conf/auto_setup.conf</code></li>
+  <li><code>/etc/auto_setup/auto_setup.conf</code></li>
+</ol>
+
+<h3>2.2 연계 스크립트에 어떤 변수를 쓰나?</h3>
 <table>
   <thead>
-    <tr>
-      <th>환경변수</th>
-      <th>기본값</th>
-      <th>설명</th>
-    </tr>
+    <tr><th>파일</th><th>변수</th><th>내용</th></tr>
   </thead>
   <tbody>
-    <tr>
-      <td><code>AUTO_SETUP_DIR</code></td>
-      <td><code>/tmp/auto_setup</code></td>
-      <td>작업 상태·로그·백업·기록 저장 디렉터리 (테스트 격리 시 오버라이드)</td>
-    </tr>
-    <tr>
-      <td><code>TMPDIR</code></td>
-      <td><code>&lt;AUTO_SETUP_DIR&gt;/tmp</code></td>
-      <td><code>auto_setup</code> 시작 시 자동 설정되어 하위 프로세스(<code>gossh</code>·<code>01</code>·<code>config_check.sh</code>) 임시 파일을 격리(48시간 경과 시 데몬이 하루 1회 정리)</td>
-    </tr>
-    <tr>
-      <td><code>AUTO_SETUP_CONF</code></td>
-      <td>(없음)</td>
-      <td><code>auto_setup.conf</code> 최우선 탐색 디렉터리</td>
-    </tr>
-    <tr>
-      <td><code>AUTO_SETUP_LDAP_S4_PREFIX</code> / <code>_SERVICES</code></td>
-      <td>(꺼짐) / <code>nslcd,ntp</code></td>
-      <td>OS 8+에서도 <code>nslcd</code>·<code>ntp</code> 구형 설정을 적용/복원하는 s4 호스트 접두사 및 서비스 지정</td>
-    </tr>
-    <tr>
-      <td><code>NO_COLOR</code> / <code>COLUMNS</code></td>
-      <td>(꺼짐) / <code>120</code></td>
-      <td>TUI·메시지 색상 끄기 / <code>--plain</code> 출력 폭 지정</td>
-    </tr>
-    <tr>
-      <td><code>AUTO_SETUP_NOW</code></td>
-      <td>(없음)</td>
-      <td><strong>테스트 전용</strong> 스냅샷 기준 epoch 초. <strong>운영 환경에서 절대 설정 금지</strong></td>
-    </tr>
+    <tr><td><code>01.AWX_nodeinfo_V2.sh</code></td><td><code>auto_setup_host</code></td><td>os6_mgmt 에서 01 을 실행할 때 os8_mgmt 호스트명을 씁니다. 비어 있으면 로컬 queue 에 작업을 씁니다.</td></tr>
+    <tr><td><code>config_check.sh</code></td><td><code>auto_done_dir</code></td><td>완료 기록(<code>done/&lt;host&gt;</code>)을 쓰는 로컬 디렉터리입니다. 보통 <code>/tmp/auto_setup/done</code> 입니다. os8_mgmt 전용 사본에서만 씁니다.</td></tr>
+    <tr><td><code>config_check.sh</code></td><td><code>auto_done_host</code></td><td>os8_mgmt 호스트명입니다. 다른 서버에서 실행해도 완료 기록을 os8_mgmt 로 보냅니다.</td></tr>
   </tbody>
 </table>
 
-<h1>3. 기동 및 표준 사용 흐름</h1>
-
-<h2>3.1 데몬 기동 확인 및 TUI 실행</h2>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# os8_mgmt: 데몬 상태 확인 및 제어 (보통 cron 매분 ensure가 자동 기동)
-pgrep -af 'auto_setup daemon'   # 반드시 1줄만 떠 있어야 함
-auto_setup --start              # 데몬 기동
-auto_setup --restart            # 데몬 재기동 (진행 중 작업은 jobs/*.json에서 자동 복원)
-auto_setup --stop               # 데몬 종료 (cron이 매분 다시 살리므로 완전 중단은 cron 제거 필요)
-
-# 상태 TUI 열기 (os8_mgmt / os6_mgmt 양쪽에서 동일 화면)
-auto_setup                      # tty면 TUI, 파이프면 텍스트 표
-auto_setup -user alice          # alice의 job만 표시하고 x·w·m·s·newhost user 선택 생략
-auto_setup --admin              # conf와 무관하게 TUI m 변경 메뉴 활성화 (os8_mgmt 전용)
-auto_setup --plain              # 색 없는 텍스트 표 출력]]></ac:plain-text-body>
+<ac:structured-macro ac:name="note">
+  <ac:rich-text-body>
+    <p><strong>autofs 로 config_check.sh 를 공유할 때:</strong> os8_mgmt 와 os6_mgmt 가 같은 파일을 씁니다. <code>auto_done_host</code> 만 쓰고 <code>auto_done_dir</code> 은 비우십시오. <code>auto_done_dir</code> 을 쓰면 os6_mgmt 에서 실행한 완료 기록이 os6_mgmt 에만 남습니다. 그러면 os8_mgmt 데몬이 완료를 알지 못합니다.</p>
+  </ac:rich-text-body>
 </ac:structured-macro>
 
-<h2>3.2 표준 자동 연계 및 주요 대화형 기능 흐름</h2>
+<h2>3. auto_setup 은 어떤 순서로 자동 진행하나?</h2>
+<ol>
+  <li><code>01.AWX_nodeinfo_V2.sh</code> 의 02 등록이 성공하면 작업 파일(<code>queue/*.job</code>)이 os8_mgmt 에 전달됩니다.</li>
+  <li>데몬이 5초마다 queue 를 읽어 작업(<code>jobs/*.json</code>)을 만듭니다. 이때 ping 이 되는 서버의 LDAP 설정을 백업합니다 (<code>ldapbak/</code>).</li>
+  <li>데몬이 10초마다 ping 을 보냅니다. 2회 연속 응답이 없으면 설치 시작(<code>seen_down</code>)으로 판정합니다.</li>
+  <li>데몬이 30초마다 준비확인(<code>gossh -pm uptime</code>)을 합니다. 응답하면 <code>READY</code> 입니다. 기존 OS 를 새 OS 로 잘못 판정하지 않도록 <code>anaconda-ks.cfg</code> 시각(48시간)을 확인합니다.</li>
+  <li>READY 직후 LDAP binddn uid 를 백업과 비교합니다. 다르면 <code>ldap_share_dir</code> 공유 경로로 LDAP 설정을 복원합니다.</li>
+  <li>첫 READY 뒤 7분(<code>bootWait</code>), 늦게 READY 된 서버는 3분(<code>lateWait</code>) 기다립니다. 그 다음 <code>config_check.sh -auto</code>(설정체크 + 설정수정)를 실행합니다.</li>
+  <li>접속불가·FAIL 서버는 os6_mgmt 를 경유해 2차 체크를 실행합니다.</li>
+  <li>결과를 <code>codes/&lt;4자리&gt;.txt</code> 로 저장합니다. 모든 서버가 완료되면 작업을 <code>jobs/done/</code> 으로 옮깁니다.</li>
+</ol>
 
+<h3>3.1 서버(호스트) 단계는 무엇이 있나?</h3>
+<table>
+  <thead>
+    <tr><th>단계</th><th>뜻</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>대기</code> (queued)</td><td>작업을 받았습니다. 아직 설치가 시작되지 않았습니다.</td></tr>
+    <tr><td><code>배포중</code> (deploying)</td><td>AWX 배포를 진행합니다.</td></tr>
+    <tr><td><code>설치중</code> (installing)</td><td>ping 이 끊겼습니다. OS 를 설치하고 있습니다. 60분까지는 설치중입니다 (RHEL7 은 약 1시간 걸립니다).</td></tr>
+    <tr><td><code>부팅확인</code> (booting)</td><td>ping 이 다시 됩니다. 준비확인을 기다립니다.</td></tr>
+    <tr><td><code>READY</code></td><td>준비확인(<code>uptime</code>)이 응답합니다.</td></tr>
+    <tr><td><code>LDAP확인</code> (ldap)</td><td>LDAP 백업과 비교하고 필요하면 복원합니다.</td></tr>
+    <tr><td><code>체크중</code> (checking)</td><td><code>config_check.sh</code> 를 실행합니다.</td></tr>
+    <tr><td><code>2차체크</code> (second)</td><td>os6_mgmt 경유로 다시 실행합니다.</td></tr>
+    <tr><td><code>완료</code> (done)</td><td>끝났습니다.</td></tr>
+    <tr><td><code>정체</code> (stuck, 빨강)</td><td>설치 시작 뒤 60분이 지나도 READY 가 아닙니다. 화면 표시만 합니다.</td></tr>
+    <tr><td><code>보류</code> (held, 노랑)</td><td>설치 시작 뒤 <code>stuck_hold_hours</code>(기본 24시간)를 넘겨 READY 가 되었습니다. LDAP 복원과 자동 run 을 하지 않습니다. 4절을 보십시오.</td></tr>
+    <tr><td><code>실패</code> (failed)</td><td><code>config_check.sh</code> 가 3회 연속 비정상 종료했습니다.</td></tr>
+  </tbody>
+</table>
+
+<h2>4. "보류" 서버는 무엇이고 어떻게 처리하나? (늦은 READY 보류)</h2>
+<p>며칠 동안 정체되다가 갑자기 켜진 서버는 상태를 알 수 없습니다. 그래서 <code>auto_setup</code> 은 이런 서버에 설정을 자동으로 넣지 않고 <code>보류</code> 로 둡니다.</p>
 <ul>
-  <li><strong>자동 배포 → 체크 흐름:</strong> <code>01.AWX_nodeinfo_V2.sh</code>가 02 등록 성공 시 <code>queue/*.job</code>을 전달하면 데몬이 <code>ping</code> 감시 → <code>READY</code> 판별 → LDAP 백업 비교/복원 → <code>config_check.sh -auto</code> 실행 → (필요 시) <code>os6_mgmt</code> 2차 체크 → <code>codes/&lt;code&gt;.txt</code> 생성까지 무인 진행합니다. 결과 확인은 TUI <code>h→v</code>(최근 결과) 또는 <code>auto_setup code &lt;4자리&gt;</code>를 사용합니다.</li>
-  <li><strong>체크스크립트(<code>config_check.sh</code>) 단독 실행 (<code>x</code>):</strong> TUI 어디서나 <code>x</code> 입력 → user 선택 → 호스트 붙여넣기(<code>Ctrl+D</code>) → <code>t</code>(체크만, <code>-auto-check</code>) 또는 <code>c</code>(체크+수정, <code>-auto</code>) 즉시 실행. 임시 디렉터리에서 실행 후 삭제하며 <code>auto_setup.log</code>·<code>codes</code>·<code>runs</code>에 기록을 남기지 않습니다.</li>
-  <li><strong>AWX 실행 (<code>w→1</code> / <code>ww</code>) 및 신규 설치 양식 (<code>w→2</code> / <code>auto_setup newhost</code>):</strong>
-    <ul>
-      <li><code>w→1</code>(또는 <code>ww</code>·<code>w</code> <code>Enter</code>): 프로파일(<code>awx_profile_N</code>)이 있으면 <code>AWX auto 실행? [y/n]</code> 질문(yml마다 OS 버전이 다르면 <code>n</code>) → user 및 서버 목록 붙여넣기(<code>awx_dir/&lt;user&gt;.txt</code> 덮어씀) → <code>01.AWX_nodeinfo_V2.sh</code> 실행(<code>Ctrl+X</code>로 즉시 <code>SIGINT</code> 취소).</li>
-      <li><code>w→2</code> / <code>auto_setup newhost</code>(<code>os8_mgmt</code> 전용): 5단계(<code>hostname ip mac [템플릿] [13번째태그]</code> 붙여넣기 → 템플릿/미니언어 지정 및 이력 추천 → 내장 DNS 점검 5종 판정 → 미리보기 → <code>awx_dir/&lt;user&gt;.txt</code> 저장 및 백업) 후 AWX 연동. 프로파일을 고른(<code>y</code>) 경우에만 <code>AWX_AUTO_NODEINFO=n</code>을 강제하고, 고르지 않으면(<code>n</code> 또는 프로파일 없음) 일반 실행으로 01 질문에 직접 답합니다.</li>
-    </ul>
-  </li>
-  <li><strong><code>gossh</code> 작업 기록 (<code>s</code> / <code>auto_setup s</code>):</strong> <code>n</code>으로 호스트 붙여넣기(<code>Ctrl+D</code>로만 종료, 빈 줄 무시) → 목록 파일 <code>/tmp/auto_setup/lists/&lt;3자리&gt;</code> 생성 → <code>script -q -f -c</code>로 실제 tty 유지 실행. 대상 대수가 <code>work_os6_over</code>(기본 1000) 이하면 <code>os8</code> 실행 후 접속불가만 <code>os6_mgmt</code> 자동 재실행, 초과면 전량 <code>os6_mgmt</code> 경유 실행. 요약은 <code>work/&lt;user&gt;/index.jsonl</code>(영구), 출력은 <code>out/&lt;id&gt;.log.gz</code>(7일·200MB)에 보관됩니다.</li>
-  <li><strong>IP/LDAP 변경 메뉴 (<code>m</code>, <code>os8_mgmt</code> 전용):</strong> <code>1</code> IP 변경 / <code>2</code> LDAP 변경 / <code>3</code> IP+LDAP / <code>4</code> 원복 / <code>5</code> <code>auto.appl</code> 원복. 대상 입력(<code>Ctrl+D</code>) → (LDAP 시) dry-run 미리보기 → 정확히 <code>yes</code> 입력 시만 실행(<code>ip-change-engine</code>, <code>ldap-config-engine -no-restart</code>). 무응답 호스트는 <code>os6_mgmt</code> 경유 재시도하며 실행 기록을 <code>changes/&lt;user&gt;/&lt;시각&gt;_&lt;kind&gt;.json</code>(0600)에 저장합니다.</li>
-  <li><strong><code>os6_mgmt</code> 직접 실행 (<code>g</code>·<code>c</code>·<code>t</code>):</strong> <code>os6_mgmt</code> 원격 TUI 화면 2에서 <code>g</code>·<code>c</code>·<code>t</code>를 누르면 데몬에 요청을 보내지 않고 <code>os6_mgmt</code>에서 직접 1회 실행하며, <code>&lt;os6_autosetup&gt;/os6_run/</code>의 잠금(<code>active/*.lock</code>, 3분 미갱신 시 무시)·완료기록(<code>done/&lt;host&gt;</code>)으로 <code>os8_mgmt</code> 데몬과 중복을 방지합니다.</li>
-  <li><strong>모의 테스트 (실서버 미사용):</strong> <code>bash test/demo_flow.sh</code>(체크/AWX 모의), <code>bash test/demo_change.sh</code>(변경 메뉴 모의), <code>bash test/manual_check.sh</code>(1~17단계 점검).</li>
+  <li><strong>기준:</strong> 설치 시작(처음 <code>ping X</code>, READY 뒤 재부팅이면 그 재부팅)부터 <code>stuck_hold_hours</code> 시간(기본 24)을 넘겨 READY 가 된 서버입니다. <code>ping X</code> 를 보지 못한 서버는 작업 전달 시각부터 셉니다.</li>
+  <li><strong>화면 표시:</strong> 노란 <code>보류</code> 단계, 비고 <code>보류(정체 N시간, h→u 해제)</code>, 상단 합계 <code>보류 N</code>, 막대 <code>!</code></li>
+  <li><strong>로그:</strong> <code>늦은 READY 보류: &lt;호스트&gt; (정체 N시간, 기준 stuck_hold_hours=24, …)</code></li>
+  <li><strong>보류 서버만 보기:</strong> 화면 2 에서 <code>f</code> (정체·보류·실패 서버만 표시)</li>
+</ul>
+<p>서버 상태를 직접 확인한 뒤 아래 중 하나를 고르십시오.</p>
+<table>
+  <thead>
+    <tr><th>방법</th><th>키 또는 명령</th><th>결과</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>보류 해제 (자동 흐름으로)</td><td>화면 2 에서 <code>h</code> → <code>u</code> → <code>y</code>, 또는 <code>auto_setup request release &lt;jobid&gt; &lt;yml 또는 *&gt;</code></td><td>즉시 준비확인을 다시 합니다. 응답하면 LDAP 복원 → bootWait/lateWait 대기 → 설정체크 + 설정수정을 자동으로 진행합니다.</td></tr>
+    <tr><td>지금 수동 실행</td><td>화면 2 에서 <code>h</code> → <code>c</code></td><td>실행 직전에 LDAP 비교·복원을 1회 하고 설정체크 + 설정수정을 실행합니다.</td></tr>
+    <tr><td>수동 완료</td><td>화면 2 에서 <code>h</code> → <code>d</code></td><td>체크 없이 완료로 처리합니다.</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><code>h</code> → <code>u</code> 메뉴는 <code>보류</code> 서버가 있을 때만 보입니다.</li>
+  <li>실행 중인 run 이나 os6 직접 실행에 든 서버는 해제하지 않습니다. 로그 <code>[!] 보류 해제 보류</code> 가 남습니다.</li>
+  <li>보류는 job 파일에 저장됩니다. 데몬을 재시작해도 유지됩니다. 보류 중 재부팅되어 다시 READY 가 되어도 풀리지 않습니다.</li>
+  <li>보류 서버가 있는 작업은 끝나지 않습니다(<code>jobs/done</code> 으로 가지 않습니다).</li>
+  <li><code>stuck_hold_hours=0</code> 이면 보류 기능을 끕니다(이전 동작). 값을 바꾸면 데몬을 재시작하십시오.</li>
 </ul>
 
-<h1>4. CLI 명령 · TUI 키 조작 · 주요 상수 표</h1>
-
-<h2>4.1 CLI 하위명령 표</h2>
-
+<h2>5. TUI 상태판은 어떻게 사용하나?</h2>
+<p><code>auto_setup</code> 을 실행하면 화면 1(작업·그룹 목록)이 열립니다. <code>Enter</code> 를 누르면 화면 2(호스트 표)가 열립니다. os8_mgmt 와 os6_mgmt 에서 같은 화면이 열립니다. 화면은 로컬 2초, 원격 10초마다 갱신합니다.</p>
 <table>
   <thead>
-    <tr>
-      <th>명령</th>
-      <th>동작 및 제한</th>
-    </tr>
+    <tr><th>화면</th><th>키</th><th>동작</th></tr>
   </thead>
   <tbody>
-    <tr>
-      <td><code>auto_setup</code> (인자 없음) / <code>--plain</code> / <code>--admin</code> / <code>-user &lt;이름&gt;</code></td>
-      <td>현재 상태 리포트(tty면 TUI, 아니면 텍스트 표). <code>--plain</code> 색 없음, <code>--admin</code> TUI 전용 <code>m</code> 메뉴 활성화, <code>-user</code> 해당 user job만 필터 및 입력 생략(<code>.</code>·<code>..</code> 거부)</td>
-    </tr>
-    <tr>
-      <td><code>--start</code> | <code>--stop</code> | <code>--restart</code> | <code>daemon</code> | <code>ensure</code></td>
-      <td>데몬 기동·종료·재기동·포그라운드·cron 1회 확인(<code>os8_mgmt</code> 전용, 원격 클라이언트에서는 거부)</td>
-    </tr>
-    <tr>
-      <td><code>status</code> / <code>snapshot</code> / <code>code NNNN</code> / <code>cancel &lt;jobid&gt;</code></td>
-      <td>작업별 진행 요약 / 스냅샷 JSON 출력 / 4자리 code 결과 출력 / 무기한 감시 작업 종료</td>
-    </tr>
-    <tr>
-      <td><code>done &lt;host...&gt;</code> / <code>done --job &lt;jobid&gt; [--yml &lt;그룹&gt;]</code></td>
-      <td>호스트 또는 미완료 전체 수동 완료 처리(부팅 시각 검증 없음, 출처 <code>manual</code>)</td>
-    </tr>
-    <tr>
-      <td><code>request manual-run &lt;jobid&gt; &lt;yml&gt; [check]</code></td>
-      <td>수동 <code>config_check.sh</code> 실행 요청(기본=체크+수정 <code>c</code>, <code>check</code>=체크만 <code>t</code>; 데몬 5초 주기 수거)</td>
-    </tr>
-    <tr>
-      <td><code>request cancel &lt;jobid&gt;</code> / <code>refresh</code> / <code>recheck &lt;jobid&gt; &lt;yml|*&gt;</code></td>
-      <td>작업 종료 요청 / 즉시 ping·준비확인 요청(<code>r</code>) / <code>os8→os6</code> 직접 재확인(<code>g</code>)</td>
-    </tr>
-    <tr>
-      <td><code>newhost [-user &lt;이름&gt;]</code> / <code>s [-user &lt;이름&gt;]</code></td>
-      <td>신규 설치 양식(<code>os8_mgmt</code>·tty 전용, 저장 시 종료코드 0) / <code>gossh</code> 작업 기록(tty 전용)</td>
-    </tr>
-    <tr>
-      <td><code>probe [-i 10s]</code></td>
-      <td>(내부/<code>os6_mgmt</code>용) stdin 호스트 목록을 받아 ping 상태(<code>host up|down</code>) 출력 (<code>work-relay</code>는 내부 중계용)</td>
-    </tr>
+    <tr><td>화면 1</td><td><code>↑</code> <code>↓</code> (<code>k</code> <code>j</code>), <code>PgUp</code>/<code>PgDn</code></td><td>그룹을 이동합니다.</td></tr>
+    <tr><td>화면 1</td><td><code>←</code> <code>→</code></td><td>이전·다음 작업으로 이동합니다. 맨 위 날짜 줄에서는 전날·다음날로 이동합니다.</td></tr>
+    <tr><td>화면 1</td><td><code>Enter</code></td><td>화면 2 를 엽니다.</td></tr>
+    <tr><td>화면 1</td><td><code>q</code> / <code>Esc</code></td><td>종료합니다.</td></tr>
+    <tr><td>화면 2</td><td><code>f</code></td><td>정체·보류·실패 서버만 봅니다 (토글).</td></tr>
+    <tr><td>화면 2</td><td><code>a</code></td><td>그룹별 보기 ↔ 전체 보기를 바꿉니다.</td></tr>
+    <tr><td>화면 2</td><td><code>←</code> / <code>Esc</code> / <code>q</code></td><td>화면 1 로 돌아갑니다.</td></tr>
+    <tr><td>화면 2</td><td><code>h</code> → <code>c</code> (1)</td><td>설정체크 + 설정수정을 그룹 전체에 수동 실행합니다. 완료 여부와 상관없이 실행합니다. <code>y</code> 로 확인합니다.</td></tr>
+    <tr><td>화면 2</td><td><code>h</code> → <code>t</code> (2)</td><td>설정체크만 수동 실행합니다.</td></tr>
+    <tr><td>화면 2</td><td><code>h</code> → <code>g</code> (3)</td><td>완료되지 않은 서버를 os8 → os6_mgmt 순서로 직접 다시 확인합니다.</td></tr>
+    <tr><td>화면 2</td><td><code>h</code> → <code>d</code> (4)</td><td>수동 완료. <code>1</code> 은 선택한 서버, <code>2</code> 는 그룹의 미완료 전체입니다. <code>y</code> 로 확인합니다.</td></tr>
+    <tr><td>화면 2</td><td><code>h</code> → <code>v</code> (5)</td><td>이 그룹의 가장 최근 수동 실행 결과를 다시 봅니다.</td></tr>
+    <tr><td>화면 2</td><td><code>h</code> → <code>u</code> (6)</td><td>보류 해제. <code>보류</code> 서버가 있을 때만 보입니다.</td></tr>
+    <tr><td>공통</td><td><code>r</code></td><td>즉시 새로고침하고 데몬에 ping·준비확인을 요청합니다 (5초에 1회).</td></tr>
+    <tr><td>공통</td><td><code>w</code></td><td>AWX 메뉴: <code>1</code> AWX 실행, <code>2</code> 신규 설치 양식</td></tr>
+    <tr><td>공통</td><td><code>x</code></td><td>체크스크립트 단독 실행</td></tr>
+    <tr><td>공통</td><td><code>s</code></td><td>gossh 작업 기록</td></tr>
+    <tr><td>공통</td><td><code>m</code></td><td>IP/LDAP 변경 메뉴 (os8_mgmt 전용)</td></tr>
+    <tr><td>공통</td><td><code>?</code></td><td>도움말</td></tr>
+  </tbody>
+</table>
+<p>색: 완료 초록 / 진행 청록 / 대기 회색 / 경고·보류 노랑 / 정체·실패 빨강</p>
+
+<h2>6. 추가 기능은 어떻게 사용하나?</h2>
+
+<h3>6.1 임의의 서버에 config_check.sh 를 한 번 실행하려면? (x)</h3>
+<ol>
+  <li>TUI 에서 <code>x</code> 를 누릅니다.</li>
+  <li>user 를 고릅니다.</li>
+  <li>서버 목록을 붙여 넣고 <code>Ctrl+D</code> 를 누릅니다.</li>
+  <li><code>t</code>(설정체크만, <code>-auto-check</code>) 또는 <code>c</code>(설정체크 + 설정수정, <code>-auto</code>)를 고릅니다.</li>
+</ol>
+<p><code>x</code> 는 작업 기록(<code>auto_setup.log</code>, <code>codes</code>, <code>runs</code>)을 남기지 않습니다.</p>
+
+<h3>6.2 AWX 를 실행하려면? (w → 1)</h3>
+<ol>
+  <li>TUI 에서 <code>w</code> → <code>1</code> (또는 <code>ww</code>)를 누릅니다.</li>
+  <li>설정에 프로파일(<code>awx_profile_N</code>)이 있으면 "AWX auto 실행? [y/n]" 질문이 나옵니다. yml 마다 OS 버전이 다르면 <code>n</code> 을 고르십시오.</li>
+  <li>user 와 서버 목록을 붙여 넣습니다. 목록은 <code>awx_dir/&lt;user&gt;.txt</code> 에 덮어씁니다.</li>
+  <li><code>01.AWX_nodeinfo_V2.sh</code> 가 실행됩니다. <code>Ctrl+X</code> 로 즉시 취소합니다.</li>
+</ol>
+
+<h3>6.3 신규 설치 양식을 작성하려면? (w → 2, auto_setup newhost)</h3>
+<ol>
+  <li>TUI 에서 <code>w</code> → <code>2</code> 를 누르거나 <code>auto_setup newhost</code> 를 실행합니다 (os8_mgmt 에서만).</li>
+  <li><code>hostname ip mac [템플릿] [13번째]</code> 형식으로 붙여 넣습니다.</li>
+  <li>템플릿을 고릅니다. 공용 템플릿은 설정 키 <code>newhost_template_1</code> ~ <code>9</code> 입니다.</li>
+  <li>내장 DNS 점검 결과를 확인합니다.</li>
+  <li>미리보기를 확인하면 <code>awx_dir/&lt;user&gt;.txt</code> 에 저장하고 AWX 실행으로 이어집니다.</li>
+</ol>
+
+<h3>6.4 여러 서버에 gossh 명령을 실행하고 기록을 남기려면? (s)</h3>
+<ol>
+  <li>TUI 에서 <code>s</code> 를 누르거나 <code>auto_setup s</code> 를 실행합니다.</li>
+  <li><code>n</code> 을 누르고 서버 목록을 붙여 넣습니다. <code>Ctrl+D</code> 로만 끝납니다.</li>
+  <li>목록 파일 <code>/tmp/auto_setup/lists/&lt;3자리&gt;</code> 가 생깁니다. 이 목록으로 gossh 를 실행합니다.</li>
+</ol>
+<ul>
+  <li>서버 수가 <code>work_os6_over</code>(기본 1000) 이하이면 os8_mgmt 에서 실행하고, 접속불가 서버만 os6_mgmt 에서 다시 실행합니다. 초과하면 전부 os6_mgmt 에서 실행합니다.</li>
+  <li>요약은 <code>work/&lt;user&gt;/index.jsonl</code> 에 영구 저장합니다. 출력은 <code>out/&lt;id&gt;.log.gz</code> 에 7일(user 당 200MB) 보관합니다.</li>
+</ul>
+
+<h3>6.5 IP 또는 LDAP 설정을 변경·원복하려면? (m)</h3>
+<ul>
+  <li>os8_mgmt 에서만 사용합니다. 설정 키 <code>enable_ip_change</code> / <code>enable_ldap_change</code> 를 켜거나 <code>auto_setup --admin</code> 으로 엽니다.</li>
+  <li>메뉴: <code>1</code> IP 변경 / <code>2</code> LDAP 변경 / <code>3</code> IP+LDAP / <code>4</code> 원복 / <code>5</code> auto.appl 원복</li>
+  <li>대상 서버를 입력하고(<code>Ctrl+D</code>), LDAP 이면 dry-run 미리보기를 확인합니다. 정확히 <code>yes</code> 를 입력해야 실행합니다.</li>
+  <li>IP 변경은 <code>ip-change-engine</code>(ip_change) 으로 ifcfg 만 수정합니다. 네트워크를 재시작하지 않습니다.</li>
+  <li>LDAP 변경은 <code>ldap-config-engine</code>(ldap_setting) 을 항상 <code>-no-restart</code> 로 실행합니다. auto.appl 은 메뉴 <code>5</code> 를 실행해야 반영됩니다.</li>
+  <li>실행 기록은 <code>changes/&lt;user&gt;/&lt;시각&gt;_&lt;kind&gt;.json</code> 에 저장합니다.</li>
+</ul>
+
+<h2>7. os8_mgmt 와 os6_mgmt 는 어떻게 다르게 동작하나?</h2>
+<table>
+  <thead>
+    <tr><th>구분</th><th>os8_mgmt</th><th>os6_mgmt</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>역할</td><td>데몬 실행(유일한 원본). 상태 관리, ping, 준비확인, LDAP 백업/복원, config_check.sh 실행, 2차 체크</td><td>원격 클라이언트. 데몬을 실행하지 않습니다.</td></tr>
+    <tr><td>설정 키 <code>os8_mgmt</code></td><td>비웁니다</td><td>os8_mgmt 호스트명을 씁니다</td></tr>
+    <tr><td>TUI</td><td>로컬 2초 갱신</td><td><code>gossh</code> 로 os8_mgmt 에 물어 10초마다 갱신</td></tr>
+    <tr><td>화면 2 의 <code>g</code> <code>c</code> <code>t</code></td><td>데몬에 요청</td><td>os6_mgmt 에서 직접 1회 실행. <code>os6_run/</code> 잠금과 완료 기록으로 os8_mgmt 와 중복을 막습니다.</td></tr>
+    <tr><td><code>m</code>, <code>newhost</code>, <code>--start</code> 등</td><td>사용 가능</td><td>사용 불가</td></tr>
+  </tbody>
+</table>
+<p>os8_mgmt 에서 ping 이 안 되는 서버는 데몬이 자동으로 os6_mgmt 경유(<code>auto_setup probe</code> 장기 ssh 세션, os6 gossh)로 감시합니다.</p>
+
+<h2>8. 설정 키(auto_setup.conf)는 무엇이 있나?</h2>
+<table>
+  <thead>
+    <tr><th>설정 키</th><th>기본값</th><th>설명</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>os8_mgmt</code></td><td>비움</td><td>os8_mgmt 호스트명. 비어 있지 않으면 원격 클라이언트입니다. os8_mgmt 자신에서는 비웁니다.</td></tr>
+    <tr><td><code>os8_autosetup</code></td><td><code>/usr/local/bin/auto_setup</code></td><td>os8_mgmt 의 auto_setup 실행 파일 경로</td></tr>
+    <tr><td><code>os6_mgmt</code></td><td>비움</td><td>모든 대역에 접근하는 os6_mgmt 서버. 비면 os6 경로·2차 체크를 쓰지 않습니다.</td></tr>
+    <tr><td><code>os6_gossh</code></td><td>비움</td><td>os6_mgmt 의 gossh 경로</td></tr>
+    <tr><td><code>os6_autosetup</code></td><td>비움 (PATH)</td><td>os6_mgmt 의 auto_setup 디렉터리 또는 실행 파일 경로</td></tr>
+    <tr><td><code>os_check_sh</code></td><td>비움</td><td>이 서버의 <code>config_check.sh</code> 경로</td></tr>
+    <tr><td><code>os6_os_check_sh</code></td><td><code>os_check_sh</code> 값</td><td>os6_mgmt 의 2차 체크 스크립트 경로. <code>-</code> 이면 2차 체크를 끕니다.</td></tr>
+    <tr><td><code>awx_dir</code></td><td>-</td><td><code>01.AWX_nodeinfo_V2.sh</code> 가 있는 awx_script 디렉터리</td></tr>
+    <tr><td><code>ldap_share_dir</code></td><td>비움</td><td>LDAP 복원용 autofs 공유 디렉터리. 비면 자동 복원하지 않고 "수동 복원 필요" 를 표시합니다.</td></tr>
+    <tr><td><code>awx_profile_1</code> ~ <code>9</code></td><td>비움</td><td><code>w</code> → <code>1</code> 프로파일. 형식 <code>nodeinfo(y/n)|OS값|설명</code></td></tr>
+    <tr><td><code>newhost_template_1</code> ~ <code>9</code></td><td>비움</td><td>신규 설치 양식 공용 템플릿. 형식 <code>별칭|infra nic disk 용량 os boot</code></td></tr>
+    <tr><td><code>enable_ip_change</code> / <code>enable_ldap_change</code></td><td>꺼짐</td><td><code>m</code> 메뉴의 IP/LDAP 항목을 켭니다 (<code>y</code>·<code>yes</code>·<code>1</code>·<code>true</code>).</td></tr>
+    <tr><td><code>ip_engine</code> / <code>ldap_engine</code></td><td>실행 파일 디렉터리 → PATH</td><td><code>ip-change-engine</code> / <code>ldap-config-engine</code> 경로</td></tr>
+    <tr><td><code>work_os6_over</code></td><td><code>1000</code></td><td><code>s</code> 를 os8_mgmt 에서 실행하는 최대 서버 수</td></tr>
+    <tr><td><code>closed_keep_days</code></td><td><code>1</code></td><td>끝난 작업을 화면·status 에 보여 주는 기간(일). 파일은 지우지 않습니다.</td></tr>
+    <tr><td><code>max_runs</code></td><td><code>4</code></td><td>동시에 실행하는 run(config_check.sh) 수. 데몬 재시작 필요</td></tr>
+    <tr><td><code>hang_min</code></td><td><code>7</code></td><td>gossh 멈춤 감지 시간(분). 넘으면 멈춘 서버만 취소합니다. <code>0</code> 이면 끔. 데몬 재시작 필요</td></tr>
+    <tr><td><code>stuck_hold_hours</code></td><td><code>24</code></td><td>늦은 READY 보류 기준(시간). <code>0</code> 이면 끔. 데몬 재시작 필요 (4절)</td></tr>
+    <tr><td><code>ssh_timeout</code></td><td><code>30</code></td><td>os6_mgmt ssh 접속 제한(초, 최소 5). os6_mgmt ssh 로그인이 느리면 늘립니다.</td></tr>
   </tbody>
 </table>
 
-<h2>4.2 TUI 키 조작 표 (v0.8.0+)</h2>
-
+<h3>8.1 환경변수</h3>
 <table>
   <thead>
-    <tr>
-      <th>화면</th>
-      <th>키</th>
-      <th>동작</th>
-    </tr>
+    <tr><th>환경변수</th><th>기본값</th><th>설명</th></tr>
   </thead>
   <tbody>
-    <tr>
-      <td>화면 1 (작업·그룹)</td>
-      <td><code>↑↓</code>(<code>k</code> <code>j</code>), <code>PgUp</code>/<code>PgDn</code>, <code>←→</code>, <code>Enter</code>, <code>a</code>, <code>q</code>/<code>Esc</code></td>
-      <td>그룹 이동 / 한 화면 스크롤 / 이전·다음 job(맨 위 날짜 줄에서 전날·다음날) / 화면 2 진입 / <code>a</code>(<code>-user</code> 모드 시 전체↔내 job 토글 또는 전체 그룹 한 표 보기) / 종료</td>
-    </tr>
-    <tr>
-      <td>화면 2 (호스트표)</td>
-      <td><code>↑↓</code>, <code>PgUp</code>/<code>PgDn</code>, <code>←</code>/<code>Esc</code>/<code>q</code>, <code>f</code>, <code>a</code></td>
-      <td>호스트 이동 / 화면 1 복귀 / 정체·실패만 필터 토글 / 그룹별↔전체 보기 전환</td>
-    </tr>
-    <tr>
-      <td>화면 2 (호스트 작업)</td>
-      <td><code>h</code> → <code>c</code>(1) / <code>t</code>(2) / <code>g</code>(3) / <code>d</code>(4) / <code>v</code>(5)</td>
-      <td>인라인 호스트 작업 메뉴(기존 <code>c t g d v</code> 숨은 단축키도 그대로 동작): <code>c</code> 체크+수정(전체 시도), <code>t</code> 체크만, <code>g</code> 상태 재확인(<code>os8→os6</code> 진행창), <code>d</code> 수동 완료(<code>1</code> 호스트/<code>2</code> 그룹 미완료), <code>v</code> 최근 수동 결과 보기</td>
-    </tr>
-    <tr>
-      <td>공통 메뉴·기능</td>
-      <td><code>r</code>, <code>w</code>(→<code>1</code>/<code>ww</code>, <code>2</code>), <code>m</code>, <code>s</code>, <code>x</code>, <code>?</code>, <code>Ctrl+C</code>/<code>Ctrl+Z</code></td>
-      <td>즉시 새로고침+데몬 refresh / AWX 메뉴(1 AWX 실행, 2 신규 설치 양식) / 변경 메뉴 / gossh 작업 / 체크스크립트 단독 실행 / 도움말 / 무시(종료는 <code>q</code>)</td>
-    </tr>
+    <tr><td><code>AUTO_SETUP_DIR</code></td><td><code>/tmp/auto_setup</code></td><td>상태·로그·백업 저장 디렉터리</td></tr>
+    <tr><td><code>AUTO_SETUP_CONF</code></td><td>없음</td><td>설정 파일을 가장 먼저 찾는 디렉터리</td></tr>
+    <tr><td><code>NO_COLOR</code> / <code>COLUMNS</code></td><td>꺼짐 / 120</td><td>색 끄기 / <code>--plain</code> 출력 폭</td></tr>
   </tbody>
 </table>
 
-<h2>4.3 주요 동작 상수 및 타임아웃 기준</h2>
-
+<h2>9. 주요 시간 기준은 무엇인가?</h2>
 <table>
   <thead>
-    <tr>
-      <th>상수명</th>
-      <th>기본값</th>
-      <th>역할</th>
-    </tr>
+    <tr><th>기준</th><th>값</th><th>뜻</th></tr>
   </thead>
   <tbody>
-    <tr>
-      <td><code>pingInterval</code> / <code>downMisses</code> / <code>checkInterval</code></td>
-      <td><code>10s</code> / <code>2</code>회 / <code>30s</code></td>
-      <td>ICMP ping 송신 주기 / 연속 무응답 시 <code>seen_down</code> 판정 / 준비확인 체크 주기</td>
-    </tr>
-    <tr>
-      <td><code>bootWait</code> / <code>lateWait</code> / <code>queuePoll</code></td>
-      <td><code>7분</code> / <code>3분</code> / <code>5s</code></td>
-      <td>1차 READY 후 대기 / 늦은 호스트 묶음 대기 / queue·requests·done 수거 주기</td>
-    </tr>
-    <tr>
-      <td><code>installStuck</code> / <code>maxFails</code></td>
-      <td><code>60분</code> / <code>3</code>회</td>
-      <td><code>seen_down</code> 후 정체 표시 임계치 / <code>config_check.sh</code> 연속 비정상 종료 시 <code>failed</code> 처리</td>
-    </tr>
-    <tr>
-      <td><code>checkTimeout</code></td>
-      <td><code>60초</code> (+<code>ssh_timeout</code> 보정)</td>
-      <td>준비확인·<code>g</code>의 <code>gossh</code>/<code>ssh</code> 1회 호출 상한(초과 시 프로세스 그룹 종료, 사유 <code>시간 초과(60초)</code>)</td>
-    </tr>
-    <tr>
-      <td><code>workKeep</code> / <code>workUserCap</code></td>
-      <td><code>7일</code> / <code>200MB</code></td>
-      <td><code>s</code>(gossh 작업) 압축 출력·<code>/tmp/auto_setup/lists/</code> 보관 기간 및 user당 출력 상한</td>
-    </tr>
-    <tr>
-      <td><code>dnsQueryTimeout</code> / <code>dnsAttempts</code> / <code>dnsConcurrency</code> / <code>dnsMaxServers</code></td>
-      <td><code>2초</code> / <code>2회</code> / <code>32</code> / <code>3</code></td>
-      <td><code>dnscheck</code> DNS A 레코드 직접 질의 시간·횟수(최초1+재시도1)·동시성·nameserver 상한</td>
-    </tr>
+    <tr><td>ping 주기 / 설치 시작 판정</td><td>10초 / 2회 연속 무응답</td><td>ping 이 2회 연속 실패하면 설치 시작(<code>seen_down</code>)입니다.</td></tr>
+    <tr><td>준비확인 주기 / 상한</td><td>30초 / 60초</td><td><code>gossh -pm uptime</code> 1회 호출의 상한은 60초입니다 (<code>ssh_timeout</code> 보정).</td></tr>
+    <tr><td><code>bootWait</code> / <code>lateWait</code></td><td>7분 / 3분</td><td>첫 READY 뒤 대기 / 늦은 서버 묶음 대기</td></tr>
+    <tr><td>정체 표시</td><td>60분</td><td>설치 시작 뒤 60분이 지나도 READY 가 아니면 <code>정체</code></td></tr>
+    <tr><td>보류 기준</td><td>24시간 (<code>stuck_hold_hours</code>)</td><td>이 시간을 넘겨 READY 가 되면 <code>보류</code></td></tr>
+    <tr><td>실패 판정</td><td>3회</td><td>config_check.sh 가 연속 3회 비정상 종료하면 <code>실패</code></td></tr>
+    <tr><td>요청 수거 주기</td><td>5초</td><td>queue·requests·done 을 5초마다 읽습니다.</td></tr>
   </tbody>
 </table>
 
-<h1>5. 장애/로그 확인 및 운영 제약사항 · 주의사항</h1>
-
-<h2>5.1 로그 · 상태 디렉터리 및 <code>os6_truble.sh</code> 장애 진단</h2>
-
-<ac:structured-macro ac:name="code">
-  <ac:parameter ac:name="language">bash</ac:parameter>
-  <ac:plain-text-body><![CDATA[# 1) 데몬 로그 및 거부된 요청·결과 code 확인
-tail -f /tmp/auto_setup/auto_setup.log
-grep -E '경로 전환|os6 probe|준비확인 실패|gossh hang|호스트 키 변경' /tmp/auto_setup/auto_setup.log | tail -30
-cat /tmp/auto_setup/requests/rejected/*.req
-auto_setup code <4자리>
-
-# 2) os6_mgmt 경유가 느리거나 진행되지 않을 때 (os8_mgmt에서 root로 읽기 전용 9단계 점검)
-./os6_truble.sh
-./os6_truble.sh /etc/auto_setup/auto_setup.conf -t <대상호스트> -p 8
-
-# 3) 가장 흔한 원인 조치: os6_mgmt 재설치 후 호스트 키 변경으로 BatchMode 접속이 조용히 거부될 때
-ssh-keygen -R <os6_mgmt>
-ssh <os6_mgmt> true]]></ac:plain-text-body>
-</ac:structured-macro>
-
-<h2>5.2 운영 제약사항 및 주의사항</h2>
+<h2>10. 문제가 생기면?</h2>
+<ul>
+  <li><strong>진행 상황과 오류를 보려면:</strong> <code>tail -f /tmp/auto_setup/auto_setup.log</code></li>
+  <li><strong>중요한 로그만 보려면:</strong> <code>grep -E '경로 전환|os6 probe|준비확인 실패|gossh hang|호스트 키 변경|늦은 READY 보류' /tmp/auto_setup/auto_setup.log | tail -30</code></li>
+  <li><strong>수동 요청이 거부되었다:</strong> <code>/tmp/auto_setup/requests/rejected/</code> 파일의 마지막 <code>reason=</code> 줄을 보십시오.</li>
+  <li><strong>데몬이 2개 이상 떠 있다:</strong> <code>pgrep -af 'auto_setup daemon'</code> 이 1줄이어야 합니다. 1개만 남기십시오.</li>
+  <li><strong>데몬을 완전히 멈추고 싶다:</strong> <code>auto_setup --stop</code> 만으로는 cron 이 1분 안에 다시 시작합니다. cron 의 <code>auto_setup ensure</code> 를 지우십시오.</li>
+  <li><strong>서버가 READY 인데 아무것도 진행되지 않는다:</strong> 단계가 <code>보류</code> 인지 확인하십시오. 보류이면 4절의 방법으로 처리합니다.</li>
+  <li><strong>정체 서버가 실제로는 접속된다:</strong> <code>r</code> 을 누르십시오. ping 과 상관없이 즉시 다시 확인합니다.</li>
+  <li><strong>os6_mgmt 경유가 느리거나 진행되지 않는다:</strong> os8_mgmt 에서 root 로 <code>./os6_truble.sh</code> 를 실행하십시오 (읽기 전용 9단계 점검).</li>
+  <li><strong>os6_mgmt 재설치 뒤 os6 경유가 조용히 실패한다:</strong> 호스트 키가 바뀌었습니다. <code>ssh-keygen -R &lt;os6_mgmt&gt;</code> 를 실행하고 <code>ssh &lt;os6_mgmt&gt; true</code> 로 한 번 접속하십시오.</li>
+  <li><strong>완료 기록이 os8_mgmt 에 오지 않는다:</strong> <code>config_check.sh</code> 의 <code>auto_done_host</code> 를 확인하십시오 (2.2절).</li>
+</ul>
 
 <ac:structured-macro ac:name="warning">
   <ac:rich-text-body>
+    <p><strong>주의:</strong></p>
     <ul>
-      <li><strong>보조 도구(Disclaimer) &amp; 실서버 교차 검증 필수:</strong> 본 도구는 100% 신뢰하기보다 참고용으로 사용하십시오. <code>config_check.sh</code> 설정 변경, LDAP 복원, 2차 체크, <code>m</code> 변경 메뉴 실행 후에는 반드시 <strong>무작위 서버 몇 대에 직접 접속해 실제 반영 여부</strong>를 확인하십시오.</li>
-      <li><strong>2차 체크(이중 체크) 설정 재적용 주의:</strong> <code>config_check.sh</code>의 <code>set</code> 단계가 포함된 경우 2차 체크가 같은 호스트에 설정을 한 번 더 적용할 수 있습니다. 원치 않으면 <code>os6_os_check_sh="-"</code>로 비활성화하십시오.</li>
-      <li><strong><code>m</code> 변경 메뉴 제약:</strong> IP 변경은 <code>ifcfg</code>만 수정하며 네트워크 재시작을 하지 않습니다. LDAP는 항상 <code>-no-restart</code>로 동작하고 <code>auto.appl</code>은 메뉴 <code>5</code>를 실행해야 반영됩니다(반영 전 <code>ldap_check</code> FAIL 가능). 또한 LDAP 엔진 호출 시 <code>gossh</code> 명령줄에 base64 스크립트(<code>bindpw</code> 포함)가 실리므로 <code>ps</code>에 잠깐 보일 수 있습니다.</li>
-      <li><strong>자동 삭제되지 않는 민감/누적 디렉터리:</strong> <code>/tmp/auto_setup/ldapbak/</code>(평문 <code>bindpw</code> 포함 원본), <code>requests/rejected/</code>, <code>jobs/done/</code>, <code>runs/*/second/</code>는 자동 삭제되지 않으므로 작업 완료 후 <code>ldapbak/</code> 등은 수동 정리하십시오.</li>
-      <li><strong>운영 제약사항 요약:</strong> ① <code>/tmp/auto_setup</code> 소유자 검증이 없으므로 root 전용 환경에서 운영, ② <code>AUTO_SETUP_NOW</code>는 테스트 전용(운영 설정 금지), ③ 원격 클라이언트(<code>os6_mgmt</code>)의 <code>os8_mgmt</code> 조회 gossh에는 타임아웃 제한 없음, ④ <code>os6_mgmt</code> 원격 인자 128KB 상한(수만 대 작업 시 실패 가능) 및 <code>os6_mgmt</code> 직접 실행 시 autofs 공유 경로·양 서버 간 NTP 5분 이내 동기화 필수, ⑤ 데몬은 항상 <code>os8_mgmt</code>에 1개만 실행(<code>pgrep -af 'auto_setup daemon'</code>).</li>
+      <li>2차 체크는 같은 서버에 설정을 한 번 더 적용할 수 있습니다. 원하지 않으면 <code>os6_os_check_sh=-</code> 로 끄십시오.</li>
+      <li><code>/tmp/auto_setup/ldapbak/</code> 에는 bindpw 원본이 있습니다. 자동으로 지우지 않습니다. 작업이 끝나면 직접 정리하십시오.</li>
+      <li><code>requests/rejected/</code>, <code>jobs/done/</code>, <code>runs/*/second/</code> 도 자동으로 지우지 않습니다.</li>
+      <li><code>/tmp/auto_setup</code> 의 소유자를 검사하지 않습니다. root 전용 환경에서 운영하십시오.</li>
+      <li>os6_mgmt 직접 실행을 쓰려면 autofs 공유 경로가 필요하고, 두 서버의 시간 차이가 5분 이내여야 합니다.</li>
     </ul>
   </ac:rich-text-body>
 </ac:structured-macro>
+
+<h2>11. 자주 묻는 질문 (FAQ)</h2>
+
+<p><strong>Q. auto_setup 은 무엇을 하는 도구인가요?</strong><br/>
+A. AWX 로 OS 를 설치한 서버를 감시하다가, READY 가 되면 LDAP 복원과 <code>config_check.sh</code>(설정체크 + 설정수정)를 자동으로 실행하는 도구입니다. 진행 상황은 <code>auto_setup</code> 명령의 TUI 로 봅니다.</p>
+
+<p><strong>Q. 작업은 어떻게 등록하나요?</strong><br/>
+A. 따로 등록하지 않습니다. <code>01.AWX_nodeinfo_V2.sh</code> 의 02 등록이 성공하면 작업이 자동으로 전달됩니다.</p>
+
+<p><strong>Q. 설치가 끝났는지 어떻게 확인하나요?</strong><br/>
+A. <code>auto_setup</code> 을 실행하고 그룹에서 <code>Enter</code> 를 누릅니다. 서버마다 단계(설치중, READY, 체크중, 완료 등)가 보입니다.</p>
+
+<p><strong>Q. 서버가 READY 인데 설정체크가 실행되지 않습니다.</strong><br/>
+A. 단계가 <code>보류</code> 인지 확인하십시오. 설치 시작부터 24시간(<code>stuck_hold_hours</code>)을 넘겨 READY 가 된 서버는 자동으로 진행하지 않습니다. 서버 상태를 확인한 뒤 화면 2 에서 <code>h</code> → <code>u</code> 로 해제하거나 <code>h</code> → <code>c</code> 로 수동 실행합니다.</p>
+
+<p><strong>Q. 보류 기능을 끄려면?</strong><br/>
+A. <code>auto_setup.conf</code> 에 <code>stuck_hold_hours=0</code> 을 쓰고 <code>auto_setup --restart</code> 로 데몬을 재시작합니다.</p>
+
+<p><strong>Q. 결과 code 를 받았습니다. 내용을 어떻게 보나요?</strong><br/>
+A. <code>auto_setup code &lt;4자리&gt;</code> 를 실행합니다. 화면 2 에서 <code>h</code> → <code>v</code> 로 최근 수동 실행 결과를 볼 수도 있습니다.</p>
+
+<p><strong>Q. 특정 그룹에 설정체크를 다시 실행하려면?</strong><br/>
+A. 화면 2 에서 <code>h</code> → <code>c</code>(체크 + 수정) 또는 <code>h</code> → <code>t</code>(체크만)를 누르고 <code>y</code> 로 확인합니다.</p>
+
+<p><strong>Q. 작업과 관계없는 서버에 config_check.sh 를 실행하려면?</strong><br/>
+A. TUI 에서 <code>x</code> 를 누르고 서버 목록을 붙여 넣습니다. 이 실행은 작업 기록을 남기지 않습니다.</p>
+
+<p><strong>Q. 설치하지 못한 서버를 완료로 처리하려면?</strong><br/>
+A. 화면 2 에서 <code>h</code> → <code>d</code> 를 누르거나 <code>auto_setup done &lt;host&gt;</code> 를 실행합니다. 체크스크립트는 실행하지 않습니다.</p>
+
+<p><strong>Q. os6_mgmt 에서도 사용할 수 있나요?</strong><br/>
+A. 네. os6_mgmt 의 설정에 <code>os8_mgmt=&lt;호스트명&gt;</code> 을 쓰면 같은 TUI 가 열립니다. 데몬은 os8_mgmt 에서만 실행합니다.</p>
+
+<p><strong>Q. auto_setup 과 pm_monitor 는 무엇이 다른가요?</strong><br/>
+A. <code>auto_setup</code> 은 AWX 작업을 자동으로 받아 설치 감시부터 LDAP 복원·설정체크까지 자동으로 진행합니다. <code>pm_monitor</code> 는 호스트파일로 PM 서버의 설치 진행을 감시만 하는 화면입니다.</p>
+
+<p><strong>Q. auto_setup 과 setup_check 는 무엇이 다른가요?</strong><br/>
+A. <code>auto_setup</code> 은 상시 실행되는 데몬입니다. <code>setup_check</code> 는 사용자가 실행할 때 한 번 판정하고 필요하면 설정수정·부하테스트까지 진행합니다.</p>

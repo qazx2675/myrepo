@@ -11,6 +11,17 @@
   - `T4` 데몬 · TUI형 (2개)
   - `T5` 복합 Suite · 파이프라인형 (3개)
 
+- **작성 방식**: 모든 `.xhtml` 은 ASD-STE100 규칙(짧은 문장, 한 단계에 한 동작, 도구 이름 반복)으로 쓴 **질문-답변 형식**입니다. 공통 구성: `0. 도구 요약` → `1. 명령 찾기` → `2. 준비` → 기능별 질문 → `문제가 생기면?` → `FAQ`. Confluence Intelligence(질문형 AI)가 각 절만 읽어도 정확히 답하도록 했습니다. 모의 테스트·배포(빌드/업데이트) 내용은 넣지 않았습니다.
+
+## 도구 찾기 목차 (`99_tools_index.xhtml`)
+
+[`99_tools_index.xhtml`](./99_tools_index.xhtml) 은 사용자가 어떤 도구를 써야 할지 모를 때 Confluence Intelligence 가 **도구 이름**으로 안내하도록 만든 목차 페이지입니다.
+
+- 하려는 일 → 도구 이름 · 실행 명령 표 (17개 도구 전체, `gossh` 사용 가이드 포함)
+- 비슷한 도구 고르는 기준 (`ip_change` vs `vm-ip-change`, `ldap_setting` vs `ldap_check`, `auto_setup` vs `pm_monitor` vs `setup_check` 등)
+- 서버 OS 설치부터 인계까지 작업 순서별 도구
+- 도구 이름순 전체 목록과 FAQ
+
 ---
 
 ## 사내 Confluence 업로드 방법
@@ -28,14 +39,14 @@
 
 | ID | 양식 | 문서 폴더 | `.xhtml` 문서 | 한 줄 요약 |
 |---|---|---|---|---|
-| `H1` | `T4` | [`auto_setup_docs/`](./auto_setup_docs/README.md) | [`auto_setup.xhtml`](./auto_setup_docs/auto_setup.xhtml) | AWX OS 설치 완료 후 ping·준비확인을 감시해 `config_check.sh` 실행 및 TUI 상태판/변경 메뉴 제공 |
+| `H1` | `T4` | [`auto_setup_docs/`](./auto_setup_docs/README.md) | [`auto_setup.xhtml`](./auto_setup_docs/auto_setup.xhtml) | AWX OS 설치 완료 후 ping·준비확인을 감시해 LDAP 복원·`config_check.sh` 자동 실행, TUI 상태판/변경 메뉴 제공. 늦게 READY 된 서버(`stuck_hold_hours`, 기본 24h)는 `보류` 후 `h`→`u` 로 해제 |
 | `H2` | `T5` | [`awx_script_docs/`](./awx_script_docs/README.md) | [`awx_script.xhtml`](./awx_script_docs/awx_script.xhtml) | HPC 노드정보 수집·가공 → AWX 인벤토리/DHCP/PXE 일괄 등록 Bash Suite |
 | `H4` | `T3` | [`config_check_docs/`](./config_check_docs/README.md) | [`config_check.xhtml`](./config_check_docs/config_check.xhtml) | OS 체크 → `y`/`n`/`set` 환경설정 적용 → 재체크 → 벤더 코멘트 생성 Bash 도구 |
 | `H7` | `T3` | [`ip_change_docs/`](./ip_change_docs/README.md) | [`ip_change.xhtml`](./ip_change_docs/ip_change.xhtml) | RHEL ifcfg 파일 내 `IPADDR`·`GATEWAY` 키만 안전하게 갱신하는 일괄 IP/GW 변경 바이너리 |
 | `H8` | `T1` | [`ldap_check_docs/`](./ldap_check_docs/README.md) | [`ldap_check.xhtml`](./ldap_check_docs/ldap_check.xhtml) | LDAP·DNS·NTP·autofs 7종 설정 정합성을 읽기 전용으로 검증하는 단독 Bash(RHEL 6~10) |
 | `H9` | `T3` | [`ldap_setting_docs/`](./ldap_setting_docs/README.md) | [`ldap_setting.xhtml`](./ldap_setting_docs/ldap_setting.xhtml) | 사이트별 LDAP·DNS·NTP·autofs 설정 키 갱신 및 서비스 재시작/롤백 실행 바이너리 |
 | `H10` | `T3` | [`OS_환경설정_체크_docs/`](./OS_환경설정_체크_docs/README.md) | [`os_config_check.xhtml`](./OS_환경설정_체크_docs/os_config_check.xhtml) | OS 배포 후 상태 점검·환경설정 적용·재점검 일괄 Bash |
-| `H11` | `T4` | [`pm_monitor_docs/`](./pm_monitor_docs/README.md) | [`pm_monitor.xhtml`](./pm_monitor_docs/pm_monitor.xhtml) | 1분 주기 ping·22포트·`gossh -pm` 기반 OS 설치 7종 상태 판정 PM 전용 경량 TUI |
+| `H11` | `T4` | [`pm_monitor_docs/`](./pm_monitor_docs/README.md) | [`pm_monitor.xhtml`](./pm_monitor_docs/pm_monitor.xhtml) | (v0.5.0) 1분 주기 ping·22포트·`gossh -pm` 기반 OS 설치 상태 판정 TUI. yum 모드(`yum update` 후 커널 변경 감시), 설정 조사(`oklist.txt` 기준 비교, `.res` 저장), 12시간 백그라운드 수집 |
 | `H12` | `T3` | [`redfish_docs/`](./redfish_docs/README.md) | [`redfish.xhtml`](./redfish_docs/redfish.xhtml) | BMC Redfish API 기반 BIOS 표준값 점검·전체비교·Pending 설정, BMC 계정 생성·비밀번호 변경·벤더 암호화 키 생성을 `bash bios.sh` 하나로 실행하는 바이너리+래퍼 |
 | `H13` | `T2` | [`setup_check_docs/`](./setup_check_docs/README.md) | [`setup_check.xhtml`](./setup_check_docs/setup_check.xhtml) | 신규 OS 설치 5상태 일괄 판정 및 `config_check`·`stress-test`(`-run`) 자동 연계 도구 |
 | `H14` | `T2` | [`stress-test_docs/`](./stress-test_docs/README.md) | [`stress_test.xhtml`](./stress-test_docs/stress_test.xhtml) | AWX `cpu`/`stress-ng` 부하 실행 및 `gossh` `/proc/loadavg` 1분 로드 감시·실행 판정 바이너리 |
@@ -53,5 +64,5 @@
 
 | ID | 양식 | 문서 폴더 | `.xhtml` 문서 | 한 줄 요약 |
 |---|---|---|---|---|
-| `C1` | `T1` | [`gossh_docs/`](./gossh_docs/README.md) | [`gossh.xhtml`](./gossh_docs/gossh.xhtml) | `pdsh` 스타일 고속 병렬 SSH 실행 바이너리(다수 HPC·VM 도구의 공통 실행 기반) |
+| `C1` | `T1` | [`gossh_docs/`](./gossh_docs/README.md) | [`gossh.xhtml`](./gossh_docs/gossh.xhtml), [`gossh_usage_guide.xhtml`](./gossh_docs/gossh_usage_guide.xhtml) | `pdsh` 스타일 고속 병렬 SSH 실행 바이너리(다수 HPC·VM 도구의 공통 실행 기반) |
 | `C2` | `T1` | [`dirmap_docs/`](./dirmap_docs/README.md) | [`dirmap.xhtml`](./dirmap_docs/dirmap.xhtml) | 자주 쓰는 디렉터리 트리 및 `FOLDER_DESC` 한글 주석을 함께 출력하는 Bash 스크립트 |

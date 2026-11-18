@@ -1,19 +1,28 @@
-# VM_setup 운영 문서 업로드 가이드
+# VM_setup 문서 안내
 
-## 대상 정보
-- **대상 도구**: `VM_setup` (V1 CLI 도구 9종 + `vm-param-fix` + `power_setting` 바이너리)
-- **문서 본문 파일**: `vm_setup.xhtml` (위키 Source Editor 붙여넣기용 XHTML 본문 프래그먼트, `<root>` 래퍼 없음, Template T5)
+- **도구 이름**: VM_setup (VM 자동화 V1, 레거시 CLI 도구 모음)
+- **하는 일**: ESXi 호스트를 vCenter 에 등록하고, 라이선스·vSwitch 를 설정하고, VM ev01 ~ ev03 을 만들고, affinity·HugePage·NUMA·태그를 설정하고, MAC 목록을 만듭니다. vm-param-fix 로 체크 CSV 를 읽어 설정을 보정합니다.
+- **실행**: 통합 실행 스크립트가 없습니다. 하위 도구를 순서대로 하나씩 실행합니다.
+- **본문 파일**: [`vm_setup.xhtml`](./vm_setup.xhtml)
+- **작성 방식**: ASD-STE100 규칙(짧은 문장, 한 단계에 한 동작, 도구 이름 반복)의 질문-답변 형식. Confluence Intelligence 가 각 절만 읽어도 답할 수 있도록 작성했습니다.
 
-## 포함 내용 요약
-1. **Suite 전체 개요 및 단계별 흐름**: 사전 빌드 바이너리 9종 + `vm-param-fix` + `power_setting` 바이너리 수동 구축 및 보정 흐름
-2. **하위 도구 역할 매트릭스**: `main_conn`, `license_assign`, `vswitch_setting`, `vm_create`, `affinity_setting`, `lpage_setting`, `tag_setting`, `numa_preferht_setting`, `mac_info`, `vm-param-fix`, `power_setting`
-3. **사전 빌드 바이너리 배치 및 주의사항**: 실행 권한(`chmod +x`) 설정, `vm-param-fix` 연계 배치 및 `power_setting` 바이너리 전용 보존 경고
-4. **통합 보정(`vm-param-fix`) vs 단독 실행법**: 사전 게이트, CSV 태그 분류, CLI 실행 예시
-5. **하위 도구별 핵심 옵션/입력 파일/출력 요약**
-6. **통합 주의사항, 롤백/실서버 표본 확인 및 V2 / `vm-param-check -fix` 전환 비교**
+## Confluence 에 붙여 넣는 방법
 
-## 위키(Source Editor) 붙여넣기 방법
-1. 대상 위키 페이지를 편집 모드로 엽니다.
-2. 우측 상단(또는 에디터 툴바)의 **`<>` (Source Editor)** 버튼을 클릭하여 Storage Format 소스 편집창을 엽니다.
-3. `vm_setup.xhtml` 파일의 전체 내용을 복사해 Source Editor에 그대로 붙여넣고 **Apply**를 누릅니다.
-4. 미리보기에서 `info`, `toc`, `warning`, `note`, `code` 매크로와 HTML `<table>` 렌더링이 정상인지 확인한 뒤 페이지를 **저장(Publish)**합니다.
+1. `.xhtml` 파일 전체 내용을 복사합니다. `<root>` 래퍼가 없는 Storage Format 본문 조각입니다.
+2. Confluence 페이지를 편집 모드로 열고 **Source Editor (`<>`)** 를 엽니다.
+3. 복사한 내용을 붙여 넣고 **Apply** 를 누릅니다.
+4. `info`·`warning`·`note`·`code`·`toc` 매크로와 표가 정상인지 확인하고 저장합니다.
+
+## 본문 구성
+
+`vm_setup.xhtml`:
+
+- 0. 도구 요약 (핵심 사실)
+- 1. 어떤 일을 하려면 어떤 도구를 실행하나? (명령 찾기)
+- 2. 처음 사용하기 전에 무엇을 준비하나?
+- 3. 어떤 순서로 실행하나?
+- 4. vm-param-fix 는 어떻게 보정하나?
+- 5. 하위 도구의 옵션은 무엇인가?
+- 6. VM_setup(V1) 과 V2 는 무엇이 다른가?
+- 7. 문제가 생기면?
+- 8. 자주 묻는 질문 (FAQ)

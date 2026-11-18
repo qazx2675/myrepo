@@ -1,22 +1,30 @@
-# auto_setup 운영 문서 안내
+# auto_setup 문서 안내
 
-## 1. 개요 및 실행 구성
+- **도구 이름**: auto_setup (데몬 + CLI + TUI 상태판)
+- **하는 일**: AWX 로 OS 를 설치한 서버를 자동으로 감시합니다. 서버가 READY 가 되면 LDAP 설정을 복원하고 config_check.sh(설정체크 + 설정수정)를 자동으로 실행합니다. 결과를 4자리 code 로 저장합니다.
+- **본문 파일**: [`auto_setup.xhtml`](./auto_setup.xhtml)
+- **작성 방식**: ASD-STE100 규칙(짧은 문장, 한 단계에 한 동작, 도구 이름 반복)의 질문-답변 형식. Confluence Intelligence 가 각 절만 읽어도 답할 수 있도록 작성했습니다.
 
-- **대상 도구**: `auto_setup` (데몬 + CLI/TUI 통합 자동화 도구, v0.8.8 기준)
-- **실행 바이너리**: 사전 빌드된 정적 바이너리 `auto_setup_os8` (`/usr/local/bin/auto_setup`으로 복사·권한 부여 후 실행)
-- **주요 연계 도구**: `01.AWX_nodeinfo_V2.sh`, `config_check.sh` (`os_check_sh` / `os6_os_check_sh`), `ip-change-engine`, `ldap-config-engine`, `gossh`
-- **본문 문서 파일**: [`auto_setup.xhtml`](./auto_setup.xhtml) (Storage Format XML 본문 조각)
+## Confluence 에 붙여 넣는 방법
 
-## 2. 사내 위키 소스 편집기 붙여넣기 방법
+1. `.xhtml` 파일 전체 내용을 복사합니다. `<root>` 래퍼가 없는 Storage Format 본문 조각입니다.
+2. Confluence 페이지를 편집 모드로 열고 **Source Editor (`<>`)** 를 엽니다.
+3. 복사한 내용을 붙여 넣고 **Apply** 를 누릅니다.
+4. `info`·`warning`·`note`·`code`·`toc` 매크로와 표가 정상인지 확인하고 저장합니다.
 
-1. 사내 위키에서 새 페이지를 만들거나 기존 문서를 **편집(Edit)** 모드로 엽니다.
-2. 상단 에디터 툴바에서 **Source Editor (`<>`)** 또는 Storage Format 소스 편집 창을 엽니다.
-3. [`auto_setup.xhtml`](./auto_setup.xhtml) 파일 전체 내용을 복사하여 소스 편집기에 그대로 붙여넣습니다.
-   - `<root>` 래퍼 태그 없이 `<ac:structured-macro ...>`와 HTML 태그로 바로 시작하는 본문 조각입니다.
-4. **Apply / 적용**을 눌러 상단 `info` 박스, 목차(`toc`), 아키텍처·명령어 `code` 매크로, 설정/TUI 표(`table`), 주의사항 `warning`·`note` 매크로 렌더링을 확인한 뒤 저장합니다.
+## 본문 구성
 
-## 3. 수록 내용 요약
+`auto_setup.xhtml`:
 
-- `01.AWX_nodeinfo_V2.sh` → 데몬 → LDAP 백업/복원 → `config_check.sh` (`-auto` / `-auto-check`) → 2차 체크 → `codes/` 결과 공유까지의 엔드투엔드 흐름
-- `os8_mgmt` 데몬 서버와 `os6_mgmt` 원격 클라이언트 공용 바이너리(`auto_setup_os8`) 배치, `/etc/auto_setup/auto_setup.conf` 작성, `cron`(`ensure`)·`/etc/tmpfiles.d/auto_setup.conf` 등록 절차
-- `auto_setup.conf` 36개 설정 키(`vars.manifest` 32개 + `conf` 전용 4개) 및 환경변수, 데몬/CLI/TUI 조작, `x`·`w`·`s`·`m`·`os6_truble.sh` 장애 진단 및 실서버 교차 검증 주의사항
+- 0. 도구 요약 (핵심 사실)
+- 1. 어떤 일을 하려면 어떤 명령이나 키를 쓰나? (명령 찾기)
+- 2. 처음 사용하기 전에 무엇을 준비하나?
+- 3. auto_setup 은 어떤 순서로 자동 진행하나?
+- 4. "보류" 서버는 무엇이고 어떻게 처리하나? (늦은 READY 보류)
+- 5. TUI 상태판은 어떻게 사용하나?
+- 6. 추가 기능은 어떻게 사용하나?
+- 7. os8_mgmt 와 os6_mgmt 는 어떻게 다르게 동작하나?
+- 8. 설정 키(auto_setup.conf)는 무엇이 있나?
+- 9. 주요 시간 기준은 무엇인가?
+- 10. 문제가 생기면?
+- 11. 자주 묻는 질문 (FAQ)
