@@ -4,7 +4,7 @@
 |---|---|
 | main.py | 실행 진입점: 옵션 파싱, 창/키보드 루프, 헤드리스·스크린샷 모드 |
 | env.py | 외부(CUDA) 컨트롤러 인터페이스 `DrivingEnv`: 관측값(obs) + 화면 프레임 + 행동 입력, `make_world` |
-| sim/track.py | 도로 기하: 본선(`Track`), 진출로(`Ramp`), Frenet 변환, 제한속도/권장속도, 나무·건물·표지판 배치, 코스 형태(난이도별, 26 km 직선) |
+| sim/track.py | 도로 기하: 본선(`Track`), 진출로(`Ramp`), Frenet 변환, 제한속도/권장속도, 나무·건물·표지판 배치, 코스 형태(난이도별, 30 km 직선) |
 | sim/world.py | 시뮬레이션 상태(SoA numpy 배열) + 한 스텝 진행: AI 트래픽, 차선 변경, 내 차 본선/진출로 판정, 가드레일, 충돌, 급제동 이벤트 |
 | sim/vehicle.py | 내 차 동역학: 엔진/변속기/전기/하이브리드, 브레이크, 타이어, 후진, 제로백 타이머 |
 | sim/controllers.py | 선행차 탐색 + IDM (N대 배열 연산, CUDA 이식 대상), 순수추종 조향 |
@@ -15,6 +15,12 @@
 | viz/render3d.py | 운전석/추적 시점 원근 렌더러 + 카메라·차체 연출 + 풍경 |
 | viz/gl3d.py | OpenGL(ModernGL) 3D 렌더러: 조명·그림자·안개·하늘, 차량 인스턴싱 |
 | viz/scene.py | 렌더러 선택(gl / classic), OpenGL 불가 시 classic 대체 |
+| carla_sim/run.py | CARLA 버전 실행 파일: 창, 키 입력, HUD, 미니맵, 설정 메뉴 연결 |
+| carla_sim/sim.py | CARLA 월드 래퍼: 맵/날씨/Traffic Manager/내 차/카메라/주차/내비/관측값 |
+| carla_sim/physics.py | vehicles.json 제원 → CARLA VehiclePhysicsControl |
+| carla_sim/route.py | 맵 토폴로지 경로 탐색 + 안내 문구 |
+| carla_sim/xodr.py | 30 km 직선 OpenDRIVE 생성 |
+| carla_sim/env.py | CARLA 버전 CUDA 연결 API |
 | viz/menu.py | 시뮬레이터 안 설정 메뉴(Tab/Esc) |
 | viz/topdown.py | 위에서 보는 2D 뷰 |
 | viz/hud.py | 속도계/RPM/기어, 제한속도, 미니맵, 내비 배너, 정보창, 제로백 기록 |

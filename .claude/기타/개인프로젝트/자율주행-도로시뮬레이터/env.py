@@ -30,7 +30,7 @@ LEVELS = ("easy", "normal", "hard", "long", "parking")
 
 
 def make_world(level="normal", vehicle="car", powertrain="auto", cars=None, seed=0, lanes=3, specs=None):
-    """level: easy/normal/hard(초/중/고급), long(26 km 직선 코스), parking(주차장).
+    """level: easy/normal/hard(초/중/고급), long(30 km 직선 코스), parking(주차장).
     specs: 차종별 제원 dict (없으면 config/vehicles.json)."""
     if level == "parking":
         return ParkingWorld(vehicle, powertrain, seed, specs=specs)

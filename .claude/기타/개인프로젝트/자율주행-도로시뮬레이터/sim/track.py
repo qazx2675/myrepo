@@ -34,7 +34,7 @@ def arc(radius, deg):
 def layout_for(level="normal"):
     """코스 형태 (모두 좌회전 순환, 끝점이 정확히 닫히도록 대칭 구성)."""
     if level == "long":      # 장거리 직선: 약 8.3 km 직선 x2 (100 km/h 로 5분) - 제로백/최고속 측정용
-        return [straight(26000), arc(400, 180), straight(26000), arc(400, 180)]
+        return [straight(30000), arc(400, 180), straight(30000), arc(400, 180)]
     if level == "easy":      # 큰 타원: 반경 400 m (100 km/h)
         return [straight(800), arc(400, 180), straight(800), arc(400, 180)]
     if level == "hard":      # 급곡선: 반경 120~180 m (50~60 km/h), 큰 S자

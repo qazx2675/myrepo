@@ -2,7 +2,7 @@
 
   python main.py                                   # 창 띄워서 직접 운전 (중급)
   python main.py --level hard --vehicle bus --powertrain hybrid
-  python main.py --level long --cars 0             # 26 km 직선 코스, 제로백 측정
+  python main.py --level long --cars 0             # 30 km 직선 코스, 제로백 측정
   python main.py --level parking                   # 주차장
   python main.py --controller examples/nav_follow.py    # 외부 컨트롤러가 운전 (K 로 on/off)
   python main.py --headless --seconds 600          # 화면 없이 자동주행 + 통계
@@ -236,7 +236,7 @@ def run_window(args, controller=None, size=(1280, 720)):
 def main():
     ap = argparse.ArgumentParser(description="자율주행 베이스 도로 시뮬레이터")
     ap.add_argument("--level", choices=LEVEL_KEYS, default="normal",
-                    help="easy/normal/hard = 초급/중급/고급, long = 26 km 직선 코스, parking = 주차장")
+                    help="easy/normal/hard = 초급/중급/고급, long = 30 km 직선 코스, parking = 주차장")
     ap.add_argument("--vehicle", choices=("car", "bus", "truck"), default="car")
     ap.add_argument("--powertrain", choices=("auto", "manual", "ev", "hybrid"), default="auto")
     ap.add_argument("--cars", type=int, default=None, help="AI 트래픽 차량 수 (기본: 난이도별)")

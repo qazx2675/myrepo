@@ -13,7 +13,7 @@ from sim.vehicle import CONFIG, POWERTRAINS, load_specs
 
 LEVELS = ("easy", "normal", "hard", "long", "parking")
 LEVEL_NAME = {"easy": "Easy (beginner)", "normal": "Normal", "hard": "Hard (expert)",
-              "long": "Long straight 26 km", "parking": "Parking lot"}
+              "long": "Long straight 30 km", "parking": "Parking lot"}
 KINDS = ("car", "bus", "truck")
 PT_NAME = {"auto": "Engine - automatic", "manual": "Engine - manual", "ev": "Electric", "hybrid": "Hybrid"}
 
