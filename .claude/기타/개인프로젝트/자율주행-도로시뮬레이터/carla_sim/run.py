@@ -39,7 +39,7 @@ class CarlaApp:
         self.loading("Connecting to CARLA server ...")
         self.client = carla.Client(args.host, args.port)
         self.client.set_timeout(120.0)
-        self.client.get_server_version()          # 서버가 없으면 여기서 RuntimeError
+        self.background("Connecting to CARLA server ...", self.client.get_server_version)  # 서버 없으면 RuntimeError
         self.cfg = dict(level=args.level, cars=args.cars, lanes=args.lanes, seed=args.seed)
         self.specs = load_specs()
         self._view = args.view
@@ -70,9 +70,36 @@ class CarlaApp:
         if self.world is not None:
             self.world.destroy()
         c = self.cfg
-        self.loading(f"Loading course: {c['level']} ...")
-        self.world = CarlaSim(self.client, c["level"], kind, powertrain, c["cars"], c["seed"], c["lanes"],
-                              self.specs, view=self._view, frame_size=self.size)
+        self.world = self.background(
+            f"Loading course: {c['level']} ...",
+            lambda: CarlaSim(self.client, c["level"], kind, powertrain, c["cars"], c["seed"], c["lanes"],
+                             self.specs, view=self._view, frame_size=self.size))
+
+    def background(self, msg, fn):
+        """오래 걸리는 CARLA 호출(맵 로딩 등)을 별도 스레드에서 돌리고, 그동안 창 이벤트를 계속 처리해
+        Windows 의 '응답 없음' 을 막는다."""
+        import threading
+        import time
+        box = {}
+
+        def run():
+            try:
+                box["v"] = fn()
+            except BaseException as ex:  # noqa: BLE001 - 메인 스레드에서 다시 던짐
+                box["e"] = ex
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        t0 = time.time()
+        while t.is_alive():
+            for ev in pygame.event.get():
+                if ev.type == pygame.QUIT:
+                    os._exit(0)
+            dots = "." * (1 + int(time.time() - t0) % 3)
+            self.loading(f"{msg} {time.time() - t0:4.0f} s {dots}")
+            t.join(0.1)
+        if "e" in box:
+            raise box["e"]
+        return box.get("v")
 
     def rebuild(self):
         """코스/트래픽 변경: 새 프로세스로 다시 시작한다 (한 프로세스에서 맵을 여러 번 바꾸면 CARLA
