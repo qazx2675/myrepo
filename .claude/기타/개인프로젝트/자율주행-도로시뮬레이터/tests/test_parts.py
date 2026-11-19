@@ -82,3 +82,21 @@ def test_engine_sound_is_continuous_between_chunks():
     assert np.abs(w).max() <= 1.0
     jumps = np.abs(np.diff(w))[s.n - 1::s.n]
     assert jumps.max() < np.percentile(np.abs(np.diff(w)), 99.9)   # 조각 경계에서 튀지 않음
+
+
+def test_fine_tuning_applies_per_powertrain_and_survives_save(tmp_path):
+    base = load_specs()["car"]
+    inst = {"turbo": 3, "tune": {"auto": {"power": 1.05, "final": 0.9, "gear1": 1.1, "redline": 500},
+                                 "ev": {"final": 1.2}}}
+    a = P.apply_parts(base, inst, "auto")
+    b = P.apply_parts(base, {"turbo": 3}, "auto")
+    assert abs(a["power_hp"] - b["power_hp"] * 1.05) < 1e-6
+    assert abs(a["final_drive"] - base["final_drive"] * 0.9) < 1e-9 and abs(a["gears"][0] - base["gears"][0] * 1.1) < 1e-9
+    assert a["redline_rpm"] == base["redline_rpm"] + 500
+    ev = P.apply_parts(base, inst, "ev")
+    assert abs(ev["ev"]["reduction"] - base["ev"]["reduction"] * 1.2) < 1e-9 and ev["final_drive"] == base["final_drive"]
+    path = tmp_path / "garage.json"
+    P.save_parts({"car": inst}, path)
+    assert P.load_parts(path) == {"car": inst}
+    assert set(P.tune_keys(base, "auto")) >= {"power", "final", "gear6", "grip", "brake"}
+    assert "gear1" not in P.tune_keys(base, "ev") and "motor_rpm" in P.tune_keys(base, "ev")

@@ -2,12 +2,18 @@
 
 실제 CARLA 차를 카메라가 천천히 돌며 비추고, 그 위에 메뉴를 띄운다.
   - 출발 / 엔진 튜닝(파츠 장착) / 차량 선택 / 코스 선택 / 설정 / 종료
+  - 세부 조정: 출력·토크·레드라인·종감속비·기어비·접지·브레이크를 0.5% 단위로 (Shift = 5%)
+  - 다이노 테스트: CARLA 에 들어가는 토크 곡선 그대로 출력/토크 그래프, Enter 로 엔진을 돌려 측정
   - 오른쪽 성능 표: 최고출력, 최대토크, 최고속도, 0-100, 0-200 (튜닝 화면에서는 장착 전 미리보기)
 파츠 내용과 계산은 sim/parts.py, 장착 상태는 config/garage.json (차종별, 장착 즉시 저장).
 """
+import copy
+import math
 import time
 
 import pygame
+
+from carla_sim.physics import curve_for
 
 from sim import i18n
 from sim import parts as P
@@ -17,6 +23,8 @@ from viz.menu import KINDS, LEVEL_NAME, LEVELS, PT_NAME
 
 MAIN = [("drive", "Start driving", "Drive on the selected course"),
         ("tune", "Engine tuning", "Install intake, exhaust, turbo, ECU, motor and tire parts"),
+        ("fine", "Fine tuning", "Adjust power, gearing, grip and brakes in fine steps"),
+        ("dyno", "Dyno test", "Power and torque curves, run the engine on the dyno"),
         ("vehicle", "Choose vehicle", "Change body type and powertrain"),
         ("course", "Choose course", "Pick a course and difficulty"),
         ("settings", "Settings", "Traffic, detailed specs, camera, sound, language"),
@@ -26,11 +34,25 @@ COURSE_DESC = {"easy": "Town04 highway, light traffic, clear",
                "hard": "Town05 city, heavy traffic, wet sunset",
                "long": "30 km straight, 0-100/200/300 timing",
                "parking": "Parallel and perpendicular parking"}
+TUNE_LABEL = {"power": "Engine power", "torque": "Engine torque", "redline": "Redline", "motor_power": "Motor power",
+              "motor_torque": "Motor torque", "motor_rpm": "Motor max rpm", "final": "Final drive", "grip": "Tire grip",
+              "brake": "Brake force"}
+DYNO_SWEEP = 4.0                                      # 다이노: 공회전 → 최고 회전까지 걸리는 시간(초)
+POWER_COL, TORQUE_COL = (255, 150, 40), (90, 180, 255)
 TIER_COL = [(150, 155, 165), (90, 200, 120), (80, 160, 255), (255, 110, 70)]   # 순정/스트리트/스포츠/레이스
 ACCENT = (255, 196, 0)
 TEXT = (230, 235, 240)
 DIM = (150, 160, 172)
 GOOD, BAD = (110, 235, 140), (255, 110, 90)
+
+
+def _interp(curve, rpm, col):
+    """곡선 [(rpm, ...)] 에서 rpm 위치의 col 번째 값 (직선 보간, CARLA 와 같은 방식)."""
+    for (r0, *a), (r1, *b) in zip(curve, curve[1:]):
+        if rpm <= r1:
+            f = 0.0 if r1 == r0 else (rpm - r0) / (r1 - r0)
+            return a[col - 1] + (b[col - 1] - a[col - 1]) * f
+    return curve[-1][col]
 
 
 def _effects(fx, spec, powertrain):
@@ -55,6 +77,9 @@ class Garage:
         self.page, self.sel = "main", 0
         self.part_i, self.level_i, self.veh_row = 0, 0, 0
         self.course_i = LEVELS.index(app.cfg["level"])
+        self.fine_i, self._tune_before = 0, {}
+        self.dyno_t = None                     # 다이노 측정 중 경과 시간 (None = 멈춤)
+        self.dyno_sound = None                 # 측정 중 엔진음용 {rpm, vx, power_kw}
         self.angle = 210.0
         self.msg, self.msg_until = "", 0.0
         self.f_title = i18n.font(40, bold=True)
@@ -84,6 +109,7 @@ class Garage:
         if w.view != "showroom":          # 설정 메뉴에서 시점을 바꿨거나 차를 새로 만든 경우
             w.set_view("showroom")
         self.angle = (self.angle + 10.0 * dt) % 360
+        self._dyno_tick(dt)
         w.orbit(self.angle)
         w.step(0.0, 1.0, 0.0)              # 차는 브레이크로 세워 두고 화면만 갱신
 
@@ -98,10 +124,13 @@ class Garage:
     def _installed(self):
         return self.app.parts.get(self._kind_pt()[0], {})
 
+    def _spec(self, installed=None):
+        kind, pt = self._kind_pt()
+        return P.apply_parts(self.app.specs[kind], self._installed() if installed is None else installed, pt)
+
     def _perf(self, installed=None):
         kind, pt = self._kind_pt()
-        spec = P.apply_parts(self.app.specs[kind], self._installed() if installed is None else installed, pt)
-        return P.performance(spec, kind, pt)
+        return P.performance(self._spec(installed), kind, pt)
 
     def _say(self, msg):
         self.msg, self.msg_until = msg, time.time() + 2.5
@@ -134,6 +163,22 @@ class Garage:
                 self._install(parts[self.part_i])
             elif back:
                 self.page = "main"
+        elif self.page == "fine":
+            keys = self._tune_keys()
+            shift = bool(getattr(ev, "mod", 0) & pygame.KMOD_SHIFT)
+            if up or down:
+                self.fine_i = (self.fine_i + (1 if down else -1)) % len(keys)
+            elif left or right:
+                self._adjust(keys[self.fine_i], (1 if right else -1) * (10 if shift else 1))
+            elif k == pygame.K_r:
+                self._tune().pop(keys[self.fine_i], None)
+            elif back or enter:
+                self._leave_fine()
+        elif self.page == "dyno":
+            if enter:
+                self.dyno_t = 0.0
+            elif back:
+                self.dyno_t, self.dyno_sound, self.page = None, None, "main"
         elif self.page == "vehicle":
             w, (kind, pt) = self.app.world, self._kind_pt()
             if up or down:
@@ -166,6 +211,12 @@ class Garage:
         elif key == "tune":
             self.page, self.part_i = "tune", 0
             self.level_i = self._installed().get(self._parts()[0][0], 0)
+        elif key == "fine":
+            self.page, self.fine_i = "fine", 0
+            self._tune_before = copy.deepcopy(self._installed())
+            pygame.key.set_repeat(300, 80)        # 누르고 있으면 계속 조절
+        elif key == "dyno":
+            self.page, self.dyno_t = "dyno", None
         elif key == "vehicle":
             self.page, self.veh_row = "vehicle", 0
         elif key == "course":
@@ -175,6 +226,67 @@ class Garage:
         elif key == "quit":
             return "quit"
         return None
+
+    # ------------------------------------------------------------------ 세부 조정
+    def _tune_keys(self):
+        kind, pt = self._kind_pt()
+        return P.tune_keys(self.app.specs[kind], pt)
+
+    def _tune(self):
+        """지금 차종·파워트레인의 정밀 튜닝 dict (없으면 만들어서)."""
+        kind, pt = self._kind_pt()
+        return self.app.parts.setdefault(kind, {}).setdefault("tune", {}).setdefault(pt, {})
+
+    def _adjust(self, key, steps):
+        t = self._tune()
+        if key == "redline":
+            lo, hi = P.TUNE_REDLINE
+            v = max(lo, min(hi, t.get(key, 0) + 50 * steps))
+            t[key] = v
+            if v == 0:
+                t.pop(key)
+            return
+        lo, hi = P.TUNE_MUL
+        v = round(max(lo, min(hi, t.get(key, 1.0) + 0.005 * steps)), 3)
+        t[key] = v
+        if v == 1.0:
+            t.pop(key)
+
+    def _leave_fine(self):
+        """세부 조정을 마치면 저장하고 차에 적용."""
+        pygame.key.set_repeat(0)
+        self.page = "main"
+        if self._installed() != self._tune_before:
+            P.save_parts(self.app.parts)
+            self.app.world.set_vehicle()
+            self._say(tr("Fine tuning saved"))
+
+    # ------------------------------------------------------------------ 다이노
+    def _dyno_curve(self, spec, pt):
+        """[(rpm, Nm, hp)] — CARLA 에 넣는 토크 곡선 그대로 (carla_sim/physics.py)."""
+        curve, max_rpm = curve_for(spec, pt)[:2]
+        return [(r, t, t * r * 2 * math.pi / 60 / 745.7) for r, t in curve], max_rpm
+
+    def _dyno_rpm(self, spec, pt, max_rpm):
+        lo = 0.0 if pt == "ev" else spec["idle_rpm"]
+        return lo + (max_rpm - lo) * min(1.0, self.dyno_t / DYNO_SWEEP)
+
+    def _dyno_tick(self, dt):
+        """측정 중이면 회전수를 올리고 엔진음용 값을 만든다. 레드라인 + 1초 뒤 곡선은 남긴 채 멈춘다."""
+        self.dyno_sound = None
+        if self.dyno_t is None or self.dyno_t >= DYNO_SWEEP + 1.0:
+            return
+        self.dyno_t = min(DYNO_SWEEP + 1.0, self.dyno_t + dt)
+        if self.dyno_t > DYNO_SWEEP:               # 최고 회전 찍고 페달 뗌
+            return
+        spec, pt = self._spec(), self._kind_pt()[1]
+        curve, max_rpm = self._dyno_curve(spec, pt)
+        rpm = self._dyno_rpm(spec, pt, max_rpm)
+        nm = _interp(curve, rpm, 1)
+        ratio = spec["ev"]["reduction"] if pt == "ev" else spec["gears"][-1] * spec["final_drive"]
+        v = rpm / ratio * 2 * math.pi / 60 * spec["wheel_radius"] if pt == "ev" else 0.0   # 모터음 높이용 (엔진차는 바람 소리 없게 0)
+        self.dyno_sound = dict(rpm=rpm, vx=v,
+                               power_kw=nm * rpm * 2 * math.pi / 60 / 1000)
 
     def _install(self, part):
         kind = self._kind_pt()[0]
@@ -225,7 +337,9 @@ class Garage:
         hints = {"main": "Up/Down select   Enter OK   Esc back to driving",
                  "tune": "Up/Down part   Left/Right level   Enter install   Esc back",
                  "vehicle": "Up/Down row   Left/Right change   Esc back",
-                 "course": "Up/Down course   Enter go   Esc back"}
+                 "course": "Up/Down course   Enter go   Esc back",
+                 "fine": "Up/Down item   Left/Right adjust (Shift = x10)   R reset   Esc save and back",
+                 "dyno": "Enter run the dyno   Esc back"}
         self._text(surf, tr(hints[self.page]), (24, H - 28), DIM, self.f_sm)
         if self.msg and time.time() < self.msg_until:
             img = self.f_big.render(self.msg, True, GOOD)
@@ -284,6 +398,89 @@ class Garage:
             elif on:
                 self._text(surf, tr("Enter: install"), (x + 10, y0 + 114), ACCENT, self.f_sm)
 
+    def _page_fine(self, surf, W, H, LW):
+        self._text(surf, tr("Fine tuning"), (24, 96), ACCENT, self.f_big)
+        pt = self._kind_pt()[1]
+        spec, t = self._spec(), self._tune()
+        y = 136
+        for i, key in enumerate(self._tune_keys()):
+            on = i == self.fine_i
+            self._row(surf, y, 30, on, LW)
+            label = (tr("Gear {n}", n=key[4:]) if key.startswith("gear") else
+                     tr("Reduction ratio") if key == "final" and pt == "ev" else tr(TUNE_LABEL[key]))
+            self._text(surf, label, (24, y + 5), TEXT if on else (205, 210, 216), self.f_sm)
+            val = P.tune_value(spec, pt, key)
+            self._text(surf, f"<  {val}  >" if on else val, (LW - 92, y + 4), ACCENT if on else TEXT, self.f_sm,
+                       right=True)
+            if key in t:
+                d = t[key]
+                txt = f"{d:+.0f}" if key == "redline" else f"{(d - 1) * 100:+.1f}%"
+                ratio = key == "final" or key.startswith("gear")      # 기어비는 좋고 나쁨이 없음
+                col = TORQUE_COL if ratio else GOOD if (d > 0 if key == "redline" else d > 1) else BAD
+                self._text(surf, txt, (LW - 14, y + 5), col, self.f_sm, right=True)
+            y += 32
+        self._text(surf, tr("Left/Right 0.5%   Shift 5%   R reset"), (24, y + 8), DIM, self.f_sm)
+
+    def _page_dyno(self, surf, W, H, LW):
+        self._text(surf, tr("Dyno test"), (24, 96), ACCENT, self.f_big)
+        kind, pt = self._kind_pt()
+        spec = self._spec()
+        curve, max_rpm = self._dyno_curve(spec, pt)
+        stock, stock_max = self._dyno_curve(P.apply_parts(self.app.specs[kind], {}, pt), pt)
+        top = max(max_rpm, stock_max)
+        pk_hp = max(curve, key=lambda c: c[2])
+        pk_nm = max(curve, key=lambda c: c[1])
+        rows = [("Peak power", f"{pk_hp[2]:.0f} hp @ {pk_hp[0]:.0f} rpm"),
+                ("Peak torque", f"{pk_nm[1]:.0f} Nm @ {pk_nm[0]:.0f} rpm"),
+                ("Wheel power", f"{pk_hp[2] * spec['drivetrain_eff']:.0f} hp"),
+                ("Max rpm", f"{max_rpm:.0f} rpm")]
+        running = self.dyno_t is not None and self.dyno_t <= DYNO_SWEEP
+        rpm = self._dyno_rpm(spec, pt, max_rpm) if self.dyno_t is not None else None
+        if running:
+            rows = [("Now", f"{rpm:.0f} rpm"), ("", f"{_interp(curve, rpm, 2):.0f} hp   {_interp(curve, rpm, 1):.0f} Nm")] + rows
+        y = 140
+        for label, val in rows:
+            self._text(surf, tr(label), (24, y), DIM, self.f_sm)
+            self._text(surf, val, (24, y + 18), TEXT, self.f)
+            y += 50
+        self._text(surf, tr("Measuring...") if running else tr("Enter: run the dyno"), (24, y + 6),
+                   POWER_COL if running else ACCENT, self.f)
+        # 그래프 (가운데 아래): 주황 = 출력(hp), 파랑 = 토크(Nm), 흐린 선 = 순정
+        gx, gw = LW + 8, W - LW - 390 - 16
+        gy, gh = H - 34 - 250, 236
+        self._shade(surf, (gx, gy, gw, gh), 225, (10, 12, 16))
+        px, py, pw, ph = gx + 44, gy + 30, gw - 92, gh - 58
+        hp_top = max(max(c[2] for c in curve), max(c[2] for c in stock)) * 1.1
+        nm_top = max(max(c[1] for c in curve), max(c[1] for c in stock)) * 1.1
+        for f in (0.25, 0.5, 0.75, 1.0):
+            pygame.draw.line(surf, (40, 44, 52), (px, py + ph * (1 - f)), (px + pw, py + ph * (1 - f)))
+        self._text(surf, "hp", (gx + 8, gy + 8), POWER_COL, self.f_sm)
+        self._text(surf, "Nm", (gx + gw - 8, gy + 8), TORQUE_COL, self.f_sm, right=True)
+        self._text(surf, f"{hp_top:.0f}", (px - 4, py - 8), POWER_COL, self.f_sm, right=True)
+        self._text(surf, f"{nm_top:.0f}", (px + pw + 4, py - 8), TORQUE_COL, self.f_sm)
+        for f in (0.0, 0.5, 1.0):
+            self._text(surf, f"{top * f:.0f}", (px + pw * f - 16, py + ph + 4), DIM, self.f_sm)
+        self._text(surf, "rpm", (px + pw // 2 + 40, py + ph + 4), DIM, self.f_sm)
+
+        def line(c, col, top_v, color, upto=None, width=1):
+            p_ = [(px + pw * x[0] / top, py + ph * (1 - x[col] / top_v)) for x in c if upto is None or x[0] <= upto]
+            if upto is not None and upto < c[-1][0]:
+                p_.append((px + pw * upto / top, py + ph * (1 - _interp(c, upto, col) / top_v)))
+            if len(p_) > 1:
+                pygame.draw.lines(surf, color, False, p_, width)
+
+        line(stock, 2, hp_top, (110, 80, 50))
+        line(stock, 1, nm_top, (50, 80, 110))
+        if self.dyno_t is None:                     # 측정 전: 계산된 곡선을 얇게
+            line(curve, 2, hp_top, POWER_COL)
+            line(curve, 1, nm_top, TORQUE_COL)
+        else:                                       # 측정 중: 지금 회전수까지 굵게 그려 나감
+            line(curve, 2, hp_top, POWER_COL, rpm, 3)
+            line(curve, 1, nm_top, TORQUE_COL, rpm, 3)
+            x = px + pw * rpm / top
+            pygame.draw.line(surf, (235, 235, 235), (x, py), (x, py + ph), 1)
+        self._text(surf, tr("faint = stock"), (gx + gw // 2, gy + 8), DIM, self.f_sm)
+
     def _page_vehicle(self, surf, W, H, LW):
         self._text(surf, tr("Choose vehicle"), (24, 96), ACCENT, self.f_big)
         kind, pt = self._kind_pt()
@@ -324,6 +521,8 @@ class Garage:
             cand = dict(self._installed())
             cand[p[0]] = self.level_i
             new = self._perf(cand)
+        elif self.page == "fine":                    # 세부 조정 전 값과 비교
+            cur = self._perf(self._tune_before)
         self._text(surf, tr("PERFORMANCE"), (x, 96), ACCENT, self.f_big)
         n = len([1 for p in self._parts() if self._installed().get(p[0], 0)])
         look = P.tier(self._installed(), pt)
