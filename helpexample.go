@@ -470,6 +470,11 @@ func helpExamples() map[string][]helpExample {
 			note: "명령어 3개를 입력하고, 엔터(첫 호스트로 확인) → next(전체 실행) → n(2줄 결과를 / 로 이음)을 입력한 예시입니다(svr4 는 응답 없는 서버).",
 			run:  svExample,
 		}},
+		"lu": {{
+			args: []string{"-lu", "-w", exampleHostFile},
+			note: "시작 2026111900, 끝 2026111923 을 입력한 예시입니다(svr4 는 응답 없는 서버, svr5 는 /var/log/secure* 를 못 읽는 서버).",
+			run:  luExample,
+		}},
 		"tl": {{
 			args: []string{"-w", exampleHostFile, "-tl"},
 			note: "설정값 24, 비교서버 ref01, 복사 진행 y 를 입력한 예시입니다.",
@@ -530,6 +535,49 @@ func svExample() {
 		cmds, res, join := surveyFlow(hosts, fake)
 		fmt.Fprintln(os.Stderr, "\n※ 아래부터 표준출력(표)입니다:")
 		printSurveyDone(cmds, hosts, res, join, exampleHostFile)
+	})
+}
+
+// luExample은 -lu 예시다: 실제 질문·표 출력 함수에 가짜 원격 결과를 넣는다
+// (svr4 는 응답 없는 서버, svr5 는 로그를 못 읽는 서버, svr3 은 범위 안 로그인 없음). 결과 파일은 임시 폴더에 만들고 지운다.
+func luExample() {
+	hosts := exampleHosts(5)
+	fakeOut := map[string]string{
+		"svr1": "kim 1119_0901\nlee 1119_1432\npark 1119_2250\n",
+		"svr2": "kim 1119_1020\n",
+		"svr3": "",
+		"svr5": luNoReadMark + "\n",
+	}
+	fake := func(hs, cmds []string, full bool) map[string]surveyHost {
+		res := map[string]surveyHost{}
+		for _, h := range hs {
+			out, up := fakeOut[h]
+			if !up {
+				res[h] = surveyHost{err: connectFailErr(exampleTimeoutErr).Error()}
+				continue
+			}
+			res[h] = surveyHost{reachable: true, cells: []surveyCell{{out: out, ok: true}}}
+		}
+		return res
+	}
+
+	dir, err := os.MkdirTemp("", "gossh-help-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "(예시용 임시 폴더를 만들 수 없습니다: %v)\n", err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	cwd, err := os.Getwd()
+	if err != nil || os.Chdir(dir) != nil {
+		fmt.Fprintln(os.Stderr, "(예시용 임시 폴더로 이동할 수 없습니다)")
+		return
+	}
+	defer os.Chdir(cwd)
+
+	withInput([]string{"2026111900", "2026111923"}, func() {
+		res := loginUserFlow(hosts, fake, "")
+		fmt.Fprintln(os.Stderr, "\n※ 아래부터 표준출력(표)입니다:")
+		printLoginUserDone(hosts, res, exampleHostFile)
 	})
 }
 
