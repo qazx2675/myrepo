@@ -18,7 +18,7 @@ sys.path.insert(0, ROOT)
 import carla  # noqa: E402
 import pygame  # noqa: E402
 
-from carla_sim.sim import LEVELS, CarlaSim  # noqa: E402
+from carla_sim.sim import DT, LEVELS, CarlaSim  # noqa: E402
 from sim import i18n  # noqa: E402
 from sim.i18n import tr  # noqa: E402
 from sim.parts import load_parts  # noqa: E402
@@ -371,8 +371,8 @@ def main():
                     app.rebuild()
             w = app.world
             keys = pygame.key.get_pressed()
-            throttle = gas.update(keys[pygame.K_w] or keys[pygame.K_UP], 1 / 30)
-            brake = brk.update(keys[pygame.K_s] or keys[pygame.K_DOWN], 1 / 30)
+            throttle = gas.update(keys[pygame.K_w] or keys[pygame.K_UP], DT)
+            brake = brk.update(keys[pygame.K_s] or keys[pygame.K_DOWN], DT)
             steer = float(keys[pygame.K_a] or keys[pygame.K_LEFT]) - float(keys[pygame.K_d] or keys[pygame.K_RIGHT])
             obs = w.observe()
             w.mode_label = None
@@ -384,7 +384,7 @@ def main():
                 throttle, brake, steer = controller(obs, w.frame if getattr(controller, "needs_frame", False) else None)
             running = not paused and not app.menu.open and not app.garage.open
             if app.garage.open and not app.menu.open:
-                app.garage.update(1 / 30)
+                app.garage.update(DT)
             elif running:
                 w.fx_enabled = app.fx.enabled
                 w.step(throttle, brake, steer)
@@ -404,7 +404,7 @@ def main():
             if app.menu.open:
                 app.menu.draw(screen)
             pygame.display.flip()
-            clock.tick(30)
+            clock.tick(round(1 / DT))
     finally:
         app.world.destroy()
 

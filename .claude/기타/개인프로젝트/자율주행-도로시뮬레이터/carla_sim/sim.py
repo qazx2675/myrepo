@@ -1,6 +1,6 @@
 """CARLA 월드 래퍼: 맵/트래픽/내 차/카메라/내비/주차/제로백을 한 곳에서 관리.
 
-CARLA 서버(CarlaUE4.exe)가 먼저 떠 있어야 한다. 동기 모드(고정 1/30초)로 돌려서
+CARLA 서버(CarlaUE4.exe)가 먼저 떠 있어야 한다. 동기 모드(고정 1/60초)로 돌려서
 step() 한 번 = 물리 한 스텝 = 카메라 한 프레임이 정확히 맞는다 (CUDA 학습/평가에 필요).
 """
 import math
@@ -18,7 +18,7 @@ from sim.i18n import tr
 from sim.parts import PAINT, apply_parts, tier
 from sim.vehicle import AccelTimer
 
-DT = 1.0 / 30.0
+DT = 1.0 / 60.0                 # 동기 모드 한 스텝 = 화면 한 프레임 (60 FPS)
 ROLE = "autodrive"          # 다른 차/주차된 차 role_name (강제 종료 후 남은 차 정리용, 내 차는 "hero")
 
 # 난이도/코스 → 맵, 트래픽, Traffic Manager 성향, 날씨
