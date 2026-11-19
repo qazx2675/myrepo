@@ -20,6 +20,7 @@ from sim.vehicle import AccelTimer
 
 DT = 1.0 / 30.0
 ROLE = "autodrive"          # 다른 차/주차된 차 role_name (강제 종료 후 남은 차 정리용, 내 차는 "hero")
+STUDIO_UP = 400.0           # 정비소: 내 차를 이만큼 위로 올려 둔다 (주변 차·가로등·가드레일에 가리지 않게)
 
 # 난이도/코스 → 맵, 트래픽, Traffic Manager 성향, 날씨
 LEVELS = {
@@ -78,6 +79,7 @@ class CarlaSim:
         self.mode_label = None
         self.fx_enabled = True
         self._fx = dict(ax=0.0, ay=0.0, look=0.0, t=0.0)
+        self._studio, self._floor_t = None, -1.0    # 정비소에 들어오기 전 위치, 바닥 격자 다시 그린 시각
         self.v_prev, self.ax, self.vy, self.power_kw, self.rpm = 0.0, 0.0, 0.0, 0.0, 0.0
         self.sliding = False
         self.ego = None
@@ -208,6 +210,8 @@ class CarlaSim:
             self._spawn_ego(kind, powertrain, t)
             if self.mode == "auto":
                 self._apply_auto()
+        if self._studio is not None:              # 정비소 안에서 바꾼 차도 공중에 고정
+            self._hold_in_studio()
         if new_pt:
             self.soc = self._full_soc()
 
@@ -268,6 +272,71 @@ class CarlaSim:
         self._frames = queue.Queue()
         self.camera.listen(self._frames.put)
 
+    # ------------------------------------------------------------------ 정비소 (차를 공중 작업대로)
+    def enter_studio(self):
+        """정비소 동안 내 차를 원래 자리 위 STUDIO_UP m 로 올려 고정한다. 도로에 세워 두면 뒤에 차가 줄을 서고
+        가로등·가드레일·표지판이 카메라를 가리기 때문. leave_studio() 가 원래 자리로 돌려놓는다."""
+        if self._studio is None:
+            self._studio = self.ego.actor.get_transform()
+            self._floor_t = -1.0
+        self._hold_in_studio()
+
+    def _hold_in_studio(self):
+        s = self._studio
+        a = self.ego.actor
+        a.set_simulate_physics(False)
+        a.set_transform(carla.Transform(s.location + carla.Location(z=STUDIO_UP), carla.Rotation(yaw=s.rotation.yaw)))
+        self._floor_t = -1.0
+
+    def leave_studio(self):
+        if self._studio is None:
+            return
+        back, self._studio = self._free_spot(self._studio), None
+        a = self.ego.actor
+        a.set_transform(back)
+        a.set_simulate_physics(True)
+        a.set_target_velocity(carla.Vector3D())
+
+    def _free_spot(self, t):
+        """원래 자리에 다른 차가 와 있으면 같은 차로 앞쪽 빈 곳."""
+        others = [v.get_location() for v in self.traffic if v.is_alive]
+        clear = lambda loc: all(o.distance(loc) > 8.0 for o in others)  # noqa: E731
+        if clear(t.location):
+            return t
+        wp = self.map.get_waypoint(t.location)
+        for k in range(1, 30):
+            nxt = wp.next(8.0 * k) if wp is not None else []
+            if nxt and clear(nxt[0].transform.location):
+                c = nxt[0].transform
+                c.location.z += 0.3
+                return c
+        return t
+
+    def _studio_floor(self):
+        """작업대 바닥: 회색 격자 + 노란 정비 구역 표시 (디버그 선, 1초마다 다시 그림)."""
+        if self.time - self._floor_t < 0.8:
+            return
+        self._floor_t = self.time
+        tr = self.ego.actor.get_transform()
+        ext = self.ego.actor.bounding_box.extent
+        f, r = _yaw_vectors(tr.rotation.yaw)
+        o = tr.location
+
+        def at(x, y):
+            return carla.Location(o.x + f[0] * x + r[0] * y, o.y + f[1] * x + r[1] * y, o.z + 0.02)
+
+        dbg = self.world.debug
+        R, n = max(ext.x, ext.y) * 3.0 + 2.0, 12
+        grey, yellow = carla.Color(70, 76, 86), carla.Color(255, 196, 0)
+        for k in range(-n, n + 1):
+            c = R * k / n
+            dbg.draw_line(at(c, -R), at(c, R), thickness=0.03, color=grey, life_time=1.0)
+            dbg.draw_line(at(-R, c), at(R, c), thickness=0.03, color=grey, life_time=1.0)
+        bx, by = ext.x + 0.8, ext.y + 0.8
+        box = [at(bx, by), at(bx, -by), at(-bx, -by), at(-bx, by), at(bx, by)]
+        for p0, p1 in zip(box, box[1:]):
+            dbg.draw_line(p0, p1, thickness=0.12, color=yellow, life_time=1.0)
+
     def orbit(self, angle_deg):
         """정비소 카메라를 차 둘레 angle_deg 위치로 (0 = 차 뒤, 90 = 왼쪽). 차 크기에 맞춰 거리를 잡는다."""
         if self.camera is None or self.view != "showroom":
@@ -280,6 +349,8 @@ class CarlaSim:
         loc = carla.Location(x=r * math.cos(a), y=r * math.sin(a), z=z)
         pitch = -(math.degrees(math.atan2(z - ext.z, r)) + 3.0)   # 차 중심을 살짝 위에 (아래는 파츠 카드 자리)
         self.camera.set_transform(carla.Transform(loc, carla.Rotation(pitch=pitch, yaw=angle_deg)))
+        if self._studio is not None:
+            self._studio_floor()
 
     def _grab_frame(self, frame_id):
         while True:

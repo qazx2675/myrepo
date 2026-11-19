@@ -69,11 +69,13 @@ class Garage:
         if w.mode != "manual":
             w.mode = "manual"
             w._apply_auto()
+        w.enter_studio()                  # 차를 공중 작업대로 (주변 차·가로등에 가리지 않게)
         w.set_view("showroom")
 
     def leave(self):
         """출발: 원래 시점(운전석 등)으로 돌아가 운전한다."""
         self.open = False
+        self.app.world.leave_studio()     # 도로 위 원래 자리로
         self.app.view = self.app.view
 
     def update(self, dt):
