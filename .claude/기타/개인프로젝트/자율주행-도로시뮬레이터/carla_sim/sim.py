@@ -18,6 +18,7 @@ from sim.i18n import tr
 from sim.vehicle import AccelTimer
 
 DT = 1.0 / 30.0
+ROLE = "autodrive"          # 다른 차/주차된 차 role_name (강제 종료 후 남은 차 정리용, 내 차는 "hero")
 
 # 난이도/코스 → 맵, 트래픽, Traffic Manager 성향, 날씨
 LEVELS = {
@@ -116,6 +117,7 @@ class CarlaSim:
             if not world.get_map().name.endswith(self.cfg["map"]):
                 world = self.client.load_world(self.cfg["map"])
         world.wait_for_tick(60.0)
+        self._clear_leftovers(world)
         self.tm = self.client.get_trafficmanager()
         self.tm_port = self.tm.get_port()
         s = world.get_settings()
@@ -129,6 +131,16 @@ class CarlaSim:
         self.tm.set_hybrid_physics_radius(120.0)
         world.set_weather(getattr(carla.WeatherParameters, self.cfg["weather"]))
         return world
+
+    def _clear_leftovers(self, world):
+        """이전 실행이 강제 종료돼 서버에 남은 이 시뮬레이터의 차(+붙어 있던 센서)를 지운다.
+        그대로 두면 같은 자리에 차를 만들 때 'Spawn failed because of collision' 이 난다."""
+        actors = world.get_actors()
+        ours = {a.id for a in actors.filter("vehicle.*") if a.attributes.get("role_name") in ("hero", ROLE)}
+        if ours:
+            sensors = [a.id for a in actors.filter("sensor.*") if a.parent is not None and a.parent.id in ours]
+            self.client.apply_batch_sync([carla.command.DestroyActor(x) for x in sensors + list(ours)])
+            world.wait_for_tick(10.0)
 
     def _start_transform(self):
         if self.cfg["map"] == "lot":     # 주차장: 통로 입구
@@ -277,6 +289,7 @@ class CarlaSim:
         for t in spots[:self.n_cars]:
             t.location.z += 0.5
             bp = self.rng.choice(lib)
+            bp.set_attribute("role_name", ROLE)
             if bp.has_attribute("color"):
                 bp.set_attribute("color", self.rng.choice(bp.get_attribute("color").recommended_values))
             batch.append(carla.command.SpawnActor(bp, t).then(
@@ -307,6 +320,7 @@ class CarlaSim:
 
         def park(x, y, yaw):
             bp = self.rng.choice(lib)
+            bp.set_attribute("role_name", ROLE)
             a = self.world.try_spawn_actor(bp, carla.Transform(carla.Location(x, y, 0.3), carla.Rotation(yaw=yaw)))
             if a is not None:
                 a.set_simulate_physics(False)
