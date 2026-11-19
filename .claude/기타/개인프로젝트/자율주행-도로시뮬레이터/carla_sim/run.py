@@ -28,6 +28,7 @@ from sim.vehicle import load_specs  # noqa: E402
 
 LEVEL_KEYS = tuple(LEVELS)
 VIEWS = ("cockpit", "chase", "top")
+FULL = pygame.FULLSCREEN | pygame.SCALED          # 전체화면: 게임 해상도 그대로 모니터에 맞춰 늘림 (GPU 확대)
 ARROW = {"left": "<-", "right": "->", "change_left": "<<", "change_right": ">>", "straight": "^", "arrive": "*"}
 
 
@@ -131,6 +132,8 @@ class CarlaApp:
                "--width", str(a.width), "--height", str(a.height)]
         if a.controller:
             cmd += ["--controller", a.controller]
+        if a.fullscreen:
+            cmd.append("--fullscreen")
         self.world.destroy()
         pygame.quit()
         subprocess.Popen(cmd)
@@ -199,6 +202,9 @@ class CarlaApp:
         self.box(surf, (W // 2 - 300, 10, 600, 46))
         self.text(surf, f"{ARROW.get(g['arrow'], '')}  {g['instruction']}", (W // 2 - 285, 22),
                   (120, 255, 150) if g["arrived"] else (255, 255, 255))
+        if w.time < w.flip_notice:                       # 전복 → 자동으로 다시 세움
+            self.box(surf, (W // 2 - 300, 62, 600, 40))
+            self.text(surf, tr("Vehicle flipped - set back upright on the road"), (W // 2 - 285, 72), (255, 230, 120))
         # 제로백
         t = w.accel_timer
         if t.results or t.best:
@@ -242,7 +248,7 @@ class CarlaApp:
     def _help(self, surf, W):
         keys = ["W/S gas/brake  A/D steer", "G D<->R  Z/X gear (manual)", "M manual -> ACC -> AUTO",
                 "N next destination", "[ ] AUTO set speed", "T vehicle  P powertrain", "V camera",
-                "F1-F5 level  Tab settings  Esc garage", "K external controller", "Backspace reset  H help"]
+                "F1-F5 level  Tab settings  Esc garage", "K external controller", "Backspace reset  H help", "F11 fullscreen"]
         self.box(surf, (10, 160, 300, 22 * len(keys) + 10))
         for i, s in enumerate(keys):
             self.text(surf, tr(s), (20, 166 + 22 * i), (200, 210, 220))
@@ -281,6 +287,7 @@ def main():
     ap.add_argument("--port", type=int, default=2000)
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720)
+    ap.add_argument("--fullscreen", action="store_true", help="전체화면으로 시작 (F11 로 전환)")
     ap.add_argument("--state", help=argparse.SUPPRESS)
     a = ap.parse_args()
     lock = single_instance(wait=bool(a.state))
@@ -290,7 +297,7 @@ def main():
 
     pygame.init()
     size = (a.width, a.height)
-    screen = pygame.display.set_mode(size)
+    screen = pygame.display.set_mode(size, FULL if a.fullscreen else 0)
     pygame.display.set_caption("Autodrive road sim - CARLA")
     clock = pygame.time.Clock()
     try:
@@ -317,6 +324,10 @@ def main():
                 if ev.type == pygame.QUIT:
                     return 0
                 if ev.type != pygame.KEYDOWN:
+                    continue
+                if ev.key == pygame.K_F11:                # 전체화면 ↔ 창 (어느 화면에서나)
+                    a.fullscreen = not a.fullscreen
+                    pygame.display.set_mode(size, FULL if a.fullscreen else 0)
                     continue
                 if app.menu.open:
                     if app.menu.handle(ev) == "quit":

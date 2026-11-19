@@ -96,6 +96,8 @@ KO = {
     "F1-F5 level  Tab settings  Esc garage": "F1-F5 코스  Tab 설정  Esc 정비소",
     "K external controller": "K 외부 컨트롤러",
     "Backspace reset  H help": "Backspace 처음 위치  H 도움말",
+    "F11 fullscreen": "F11 전체화면",
+    "Vehicle flipped - set back upright on the road": "차가 뒤집혀서 근처 도로에 다시 세웠어요",
     # 정비소 (carla_sim/garage.py)
     "GARAGE": "정비소",
     "Course: {name}": "코스: {name}",
@@ -121,6 +123,7 @@ KO = {
     "Turbocharger": "터보차저", "ECU tuning": "ECU 튜닝",
     "Electric motor": "전기 모터", "Inverter": "인버터", "Battery pack": "배터리 팩",
     "Tires (grip)": "타이어 (접지력)", "Grip": "접지력",
+    "Suction fan kit": "흡입 팬 키트 (다운포스)",
     "Power": "출력", "Torque": "토크", "Motor power": "모터 출력", "Motor torque": "모터 토크",
     "Motor rpm": "모터 회전수", "Battery": "배터리",
     "Redline +{rpm}": "레드라인 +{rpm}", "Weight +{kg:.0f} kg": "무게 +{kg:.0f} kg",

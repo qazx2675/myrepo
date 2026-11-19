@@ -43,6 +43,11 @@ PARTS = [
      [{}, {"battery": 1.2}, {"battery": 1.4}, {"battery": 1.7}]),
     ("tires", "Tires (grip)", ALL,
      [{}, {"grip": 1.10}, {"grip": 1.22}, {"grip": 1.35}]),
+    # 팬카(바닥 공기를 빨아들여 차를 노면에 붙이는 다운포스 팬) + 추가 모터. 전기 모터·인버터·타이어·팬을
+    # 모두 레이스로 달면 전기 승용차 0-100 약 1.5초 (추정).
+    ("fan", "Suction fan kit", ELEC,
+     [{}, {"grip": 1.4, "motor_power": 1.3, "motor_torque": 1.3}, {"grip": 1.9, "motor_power": 1.7, "motor_torque": 1.6},
+      {"grip": 2.6, "motor_power": 2.2, "motor_torque": 2.0}]),
 ]
 BY_KEY = {p[0]: p for p in PARTS}
 

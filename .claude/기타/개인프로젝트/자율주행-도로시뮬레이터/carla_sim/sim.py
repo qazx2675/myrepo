@@ -81,6 +81,7 @@ class CarlaSim:
         self._studio, self._hidden = None, []      # 정비소에 들어오기 전 위치, 정비소 동안 숨긴 주변 구조물
         self.v_prev, self.ax, self.vy, self.power_kw, self.rpm = 0.0, 0.0, 0.0, 0.0, 0.0
         self.sliding = False
+        self._flip_t, self.flip_notice = 0.0, -1.0       # 전복 지속 시간 / 다시 세운 안내를 보일 때까지(시뮬 시각)
         self.ego = None
         self._spawn_ego(vehicle, powertrain, self._start_transform())
         self.soc = self._full_soc()
@@ -239,10 +240,21 @@ class CarlaSim:
             self.gear = max(1, min(len(self.ego.spec["gears"]), self.gear + d))
 
     def reset_ego(self):
+        """가까운 차로 가운데에 똑바로 세운다 (그 자리에 다른 차가 있으면 같은 차로 앞쪽 빈 곳)."""
         t = self.map.get_waypoint(self.ego.actor.get_location()).transform
         t.location.z += 0.5
-        self.ego.actor.set_transform(t)
+        self.ego.actor.set_transform(self._free_spot(t))
         self.ego.actor.set_target_velocity(carla.Vector3D())
+        self.ego.actor.set_target_angular_velocity(carla.Vector3D())
+
+    def _check_flip(self):
+        """뒤집히거나 옆으로 누운 채 2초가 지나면 근처 도로에 다시 세운다."""
+        r = self.ego.actor.get_transform().rotation
+        self._flip_t = self._flip_t + DT if abs(r.roll) > 60 or abs(r.pitch) > 60 else 0.0
+        if self._flip_t > 2.0:
+            self._flip_t = 0.0
+            self.reset_ego()
+            self.flip_notice = self.time + 3.0
 
     def _destroy_ego(self):
         for a in (self.camera, self._col_sensor):
@@ -599,6 +611,7 @@ class CarlaSim:
         self.odometer += v * DT
         self.accel_timer.update(v * 3.6, self.time)
         self._update_vehicle_state(v)
+        self._check_flip()
         self._track_route()
         if self.camera is not None:
             self._grab_frame(frame_id)

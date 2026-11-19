@@ -57,3 +57,28 @@ def test_tires_raise_grip_for_every_powertrain():
     a = P.performance(base, "car", "auto")
     b = P.performance(P.apply_parts(base, {"tires": 3}, "auto"), "car", "auto")
     assert b["t100"] < a["t100"]                              # 접지가 좋아지면 출발 가속이 빨라짐
+
+
+def test_fan_kit_reaches_about_1_5s_on_ev():
+    base = load_specs()["car"]
+    assert P.apply_parts(base, {"fan": 3}, "auto") == base               # 엔진차에는 달 수 없음
+    full = P.apply_parts(base, {"motor": 3, "inverter": 3, "tires": 3, "fan": 3}, "ev")
+    perf = P.performance(full, "car", "ev")
+    assert perf["t100"] is not None and perf["t100"] <= 1.6
+
+
+def test_engine_sound_is_continuous_between_chunks():
+    import numpy as np
+    from viz import sound as S
+    s = S.Sound.__new__(S.Sound)                    # 오디오 장치 없이 합성만
+    s.n, s.ph, s.prev, s.rng = int(S.SR * S.CHUNK), {"eng": 0.0, "ev": 0.0, "turbo": 0.0}, None, np.random.default_rng(0)
+    s._arr = lambda w: w
+    tgt = dict(eng_vol=0.6, eng_f=30.0, load=0.0, rumble=0.2, ev_vol=0.0, ev_f=200.0, tb_vol=0.0, tb_f=900.0)
+    w = []
+    for i in range(40):                              # 공회전 → 레드라인까지 올리기
+        tgt = dict(tgt, eng_f=27 + 5 * i, load=1.0)
+        w.append(s._chunk(tgt))
+    w = np.concatenate(w)
+    assert np.abs(w).max() <= 1.0
+    jumps = np.abs(np.diff(w))[s.n - 1::s.n]
+    assert jumps.max() < np.percentile(np.abs(np.diff(w)), 99.9)   # 조각 경계에서 튀지 않음

@@ -1,36 +1,23 @@
 """절차적 사운드 (음원 파일 없이 numpy 로 생성).
 
-- 엔진음: RPM 에 따른 음높이(구간별 미리 생성한 루프) + 가속 페달 부하에 따라 거친 저음 섞임
+- 엔진·전기모터·터보 휘슬은 매 프레임 짧은 조각(CHUNK)을 실시간으로 합성해 이어 붙인다.
+  위상과 음높이·볼륨이 조각 사이에서 끊기지 않고 이어져서, RPM 이 바뀔 때 계단식으로 튀거나
+  딸깍거리지 않는다.
+- 엔진음: 폭발(배기 펄스) 주파수의 배음 합. 가속 페달 부하가 클수록 높은 배음이 살아나 밝아지고,
+  0.5·1.5 차 배음(실린더마다 조금씩 다른 폭발)이 "부르릉" 하는 질감, 폭발에 맞춘 연소 잡음이 거친 맛을 낸다.
 - 전기모터음: 모터 회전수에 비례하는 고음 윙~
-- 타이어 스키드음: 미끄러짐 정도에 비례
-- 풍절음: 속도 제곱에 비례
-- 튜닝 파츠(ego.parts): 배기 = 엔진음 크고 거칠게, 흡기 = 흡입음, 터보 = 휘슬 + 페달 뗄 때 블로오프,
-  전기 모터 = 모터음 크고 높게
+- 타이어 스키드음: 미끄러짐 정도에 비례 / 풍절음: 속도 제곱에 비례
+- 튜닝 파츠(ego.parts): 배기 = 엔진음 크고 저음 부르릉 강하게, 흡기 = 흡입음, 터보 = 휘슬 + 페달 뗄 때
+  블로오프, 전기 모터 = 모터음 크고 높게
 오디오 장치가 없으면 조용히 꺼진다.
 """
 
 import numpy as np
 
 SR = 22050
-
-
-def _loop(freq, dur, fn):
-    cycles = max(1, round(freq * dur))
-    n = int(SR * cycles / freq)
-    t = np.arange(n) / SR
-    return fn(t, freq)
-
-
-def _engine_wave(load):
-    def fn(t, f):
-        w = np.zeros_like(t)
-        for h, a in ((1, 1.0), (2, 0.6), (3, 0.35), (4, 0.25), (6, 0.12)):
-            w += a * np.sin(2 * np.pi * f * h * t)
-        if load:   # 부하: 저음 강조 + 거친 질감
-            w += 0.8 * np.sign(np.sin(2 * np.pi * f * 0.5 * t)) * 0.4
-            w += 0.25 * np.random.default_rng(1).standard_normal(len(t))
-        return w
-    return fn
+CHUNK = 0.06                                  # 실시간 합성 조각 길이(초). 2조각까지 미리 넣어 둔다.
+# (배음 차수, 세기) — 0.5·1.5 차는 배기 튜닝에 따라 세짐
+ORDERS = ((0.5, 0.0), (1, 1.0), (1.5, 0.0), (2, 0.55), (3, 0.35), (4, 0.22), (5, 0.12), (6, 0.08), (8, 0.04))
 
 
 def _noise(dur, smooth, seed):
@@ -63,24 +50,18 @@ class Sound:
     def _build(self):
         pygame = self.pg
         mk = self._mk
-        self.eng_freqs = np.geomspace(18, 260, 26)
-        self.eng = [(mk(_loop(f, 0.4, _engine_wave(False))), mk(_loop(f, 0.4, _engine_wave(True))))
-                    for f in self.eng_freqs]
-        self.ev_freqs = np.geomspace(150, 2200, 18)
-        self.ev = [mk(_loop(f, 0.3, lambda t, f: np.sin(2 * np.pi * f * t) + 0.3 * np.sin(4 * np.pi * f * t)))
-                   for f in self.ev_freqs]
         tire = _noise(1.0, 3, 2) + 0.5 * np.sin(2 * np.pi * 1300 * np.arange(SR) / SR)
         self.tire = mk(tire)
         self.wind = mk(_noise(2.0, 25, 3))
-        self.turbo_freqs = np.geomspace(900, 7000, 18)
-        self.turbo = [mk(_loop(f, 0.3, lambda t, f: np.sin(2 * np.pi * f * t) + 0.15 * np.sin(6 * np.pi * f * t)))
-                      for f in self.turbo_freqs]
         n = int(SR * 0.45)
         self.bov = mk(_noise(0.45, 2, 5) * np.exp(-np.arange(n) / (SR * 0.12)))   # 블로오프 "치익"
         self.intake = mk(_noise(1.5, 6, 7))
-        names = ("eng", "ev", "tire", "wind", "turbo", "bov", "intake")
+        names = ("stream", "tire", "wind", "bov", "intake")
         self.ch = {k: pygame.mixer.Channel(i) for i, k in enumerate(names)}
-        self.cur = {"eng": None, "ev": None, "turbo": None}
+        self.n = int(SR * CHUNK)
+        self.ph = {"eng": 0.0, "ev": 0.0, "turbo": 0.0}       # 발진기 위상 (주기 단위)
+        self.prev = None                                      # 지난 조각 끝의 목표값
+        self.rng = np.random.default_rng(4)
         self._thr = 0.0
         self.ch["tire"].play(self.tire, loops=-1)
         self.ch["wind"].play(self.wind, loops=-1)
@@ -89,19 +70,60 @@ class Sound:
             c.set_volume(0.0)
         self.ok = True
 
-    def _mk(self, w):
-        w = w / (np.abs(w).max() + 1e-9) * 0.6
-        a = (w * 32767).astype(np.int16)
+    def _arr(self, w):
+        a = (np.clip(w, -1.0, 1.0) * 32767).astype(np.int16)
         ch = self.pg.mixer.get_init()[2]          # pygame.init() 이 이미 스테레오로 열었을 수 있음
         if ch > 1:
             a = np.ascontiguousarray(np.repeat(a[:, None], ch, axis=1))
         return self.pg.sndarray.make_sound(a)
 
-    def _set(self, name, snd, vol):
-        if self.cur[name] is not snd:
-            self.ch[name].play(snd, loops=-1)
-            self.cur[name] = snd
-        self.ch[name].set_volume(vol)
+    def _mk(self, w):
+        return self._arr(w / (np.abs(w).max() + 1e-9) * 0.6)
+
+    def _osc(self, name, f):
+        """위상이 이어지는 발진기: 주파수 배열 f(Hz) → 위상 배열(주기). 0.5 차 배음 때문에 2주기마다 되돌린다."""
+        ph = self.ph[name] + np.cumsum(f) / SR
+        self.ph[name] = float(ph[-1] % 2.0)
+        return ph
+
+    def _chunk(self, tgt):
+        """목표값(지난 조각 끝 → 이번 목표로 선형 보간)으로 CHUNK 길이 소리 합성."""
+        p = self.prev or tgt
+        self.prev = tgt
+        r = np.arange(1, self.n + 1) / self.n
+        lerp = lambda k: p[k] + (tgt[k] - p[k]) * r   # noqa: E731
+        out = np.zeros(self.n)
+        vol = lerp("eng_vol")
+        if vol.max() > 1e-4:
+            f, load, rumble = lerp("eng_f"), lerp("load"), lerp("rumble")
+            ph = self._osc("eng", f)
+            cut = 350 + 1100 * load                       # 저역 통과(배기관 공명) — 부하가 크면 밝아짐
+            w = np.zeros(self.n)
+            for h, a in ORDERS:
+                amp = a if a else rumble
+                w += amp / (1 + (f * h / cut) ** 2) * np.sin(2 * np.pi * h * ph)
+            pulse = (0.5 + 0.5 * np.cos(2 * np.pi * ph)) ** 6   # 폭발 순간에만 연소 잡음
+            w += (0.12 + 0.35 * load) * pulse * self.rng.standard_normal(self.n)
+            out += vol * 0.38 * w
+        vol = lerp("ev_vol")
+        if vol.max() > 1e-4:
+            ph = self._osc("ev", lerp("ev_f"))
+            out += vol * (np.sin(2 * np.pi * ph) + 0.3 * np.sin(4 * np.pi * ph)) * 0.45
+        vol = lerp("tb_vol")
+        if vol.max() > 1e-4:
+            ph = self._osc("turbo", lerp("tb_f"))
+            out += vol * (np.sin(2 * np.pi * ph) + 0.15 * np.sin(6 * np.pi * ph)) * 0.5
+        return self._arr(out)
+
+    def _stream(self, tgt):
+        """재생 중 1조각 + 대기 1조각을 유지 (모자라면 채운다)."""
+        ch = self.ch["stream"]
+        ch.set_volume(1.0)
+        for _ in range(2):
+            if not ch.get_busy():
+                ch.play(self._chunk(tgt))
+            elif ch.get_queue() is None:
+                ch.queue(self._chunk(tgt))
 
     def update(self, ego, throttle):
         if not self.ok:
@@ -113,32 +135,29 @@ class Sound:
         v = abs(ego.vx)
         parts = getattr(ego, "parts", None) or {}
         ex, tb, ik, mo = (parts.get(k, 0) for k in ("exhaust", "turbo", "intake", "motor"))
+        tgt = dict(eng_vol=0.0, eng_f=30.0, load=0.0, rumble=0.0, ev_vol=0.0, ev_f=200.0, tb_vol=0.0, tb_f=900.0)
+        if self.prev:                               # 꺼진 소리도 음높이는 그대로 두고 볼륨만 줄인다
+            tgt.update(eng_f=self.prev["eng_f"], ev_f=self.prev["ev_f"], tb_f=self.prev["tb_f"])
         engine_running = ego.powertrain != "ev" and getattr(ego, "engine_on", True)
         if engine_running:
-            cyl_f = max(ego.rpm, 1.0) / 60.0 * 2.0   # 4기통: 회전당 2번 폭발
-            k = int(np.argmin(np.abs(self.eng_freqs - cyl_f)))
-            loaded = throttle > (0.5 - 0.12 * ex)     # 배기 튜닝일수록 거친 소리가 일찍 섞임
-            self._set("eng", self.eng[k][1 if loaded else 0], min(1.0, (0.18 + 0.3 * throttle) * (1 + 0.22 * ex)))
+            tgt["eng_f"] = max(ego.rpm, 1.0) / 60.0 * 2.0    # 4기통: 회전당 2번 폭발
+            tgt["load"] = min(1.0, throttle * (1 + 0.15 * ex))
+            tgt["rumble"] = 0.18 + 0.1 * ex                   # 배기 튜닝일수록 부르릉
+            tgt["eng_vol"] = min(1.0, (0.22 + 0.35 * throttle) * (1 + 0.22 * ex))
             spool = min(1.0, ego.rpm / getattr(ego, "redline", 6500)) * throttle
             if tb:
-                k = int(np.argmin(np.abs(self.turbo_freqs - (900 + 5500 * spool))))
-                self._set("turbo", self.turbo[k], 0.05 * tb * spool)
+                tgt["tb_f"], tgt["tb_vol"] = 900 + 5500 * spool, 0.05 * tb * spool
                 if self._thr > 0.6 and throttle < 0.1 and ego.rpm > 2500:
                     self.ch["bov"].play(self.bov)
                     self.ch["bov"].set_volume(0.12 * tb)
-            else:
-                self.ch["turbo"].set_volume(0.0)
             self.ch["intake"].set_volume(0.06 * ik * throttle)
         else:
-            for c in ("eng", "turbo", "intake"):
-                self.ch[c].set_volume(0.0)
+            self.ch["intake"].set_volume(0.0)
         self._thr = throttle
         if ego.powertrain in ("ev", "hybrid"):
-            f = (150 + v * 45) * (1 + 0.12 * mo)
-            k = int(np.argmin(np.abs(self.ev_freqs - f)))
-            self._set("ev", self.ev[k], min(0.4, (0.02 + abs(ego.power_kw) / 800 + v / 400) * (1 + 0.35 * mo)))
-        else:
-            self.ch["ev"].set_volume(0.0)
+            tgt["ev_f"] = (150 + v * 45) * (1 + 0.12 * mo)
+            tgt["ev_vol"] = min(0.4, (0.02 + abs(ego.power_kw) / 800 + v / 400) * (1 + 0.35 * mo))
+        self._stream(tgt)
         slip = 0.0
         if ego.sliding or ego.abs_active or ego.wheelspin:
             slip = 0.5
