@@ -64,6 +64,7 @@ class SettingsMenu:
         e = a.world.ego
         cars = "auto" if a.cfg["cars"] is None else str(a.cfg["cars"])
         rows = [
+            ("resume", ">>> START / RESUME DRIVING  (Enter)  <<<", ""),
             ("header", "SCENARIO", None),
             ("level", "Course / difficulty", LEVEL_NAME[a.cfg["level"]]),
             ("cars", "Traffic cars", cars),
@@ -84,7 +85,6 @@ class SettingsMenu:
             ("header", "", None),
             ("save", "> Save vehicle settings to config/vehicles.json", ""),
             ("defaults", "> Reload settings from file", ""),
-            ("resume", "> Resume  (Tab / Esc)", ""),
             ("quit", "> Quit simulator", ""),
         ]
         return rows

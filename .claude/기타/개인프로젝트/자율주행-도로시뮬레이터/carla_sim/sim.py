@@ -12,7 +12,8 @@ import numpy as np
 
 from carla_sim.physics import apply_specs
 from carla_sim.route import STEP, RoutePlanner, guidance
-from carla_sim.xodr import long_straight_xodr
+from carla_sim.xodr import long_straight_xodr, parking_lot_xodr
+from sim.controllers import idm_accel
 from sim.vehicle import AccelTimer
 
 DT = 1.0 / 30.0
@@ -23,7 +24,7 @@ LEVELS = {
     "normal":  dict(map="Town04", cars=70, speed_diff=0, gap=2.5, lane_change=5, weather="CloudyNoon"),
     "hard":    dict(map="Town05", cars=110, speed_diff=-20, gap=1.2, lane_change=20, weather="WetCloudySunset"),
     "long":    dict(map=None, cars=20, speed_diff=0, gap=3.0, lane_change=3, weather="ClearNoon"),
-    "parking": dict(map="Town10HD_Opt", cars=0, speed_diff=0, gap=3.0, lane_change=0, weather="ClearNoon"),
+    "parking": dict(map="lot", cars=0, speed_diff=0, gap=3.0, lane_change=0, weather="ClearNoon"),
 }
 LONG_LENGTH = 30000.0
 
@@ -58,22 +59,28 @@ class CarlaSim:
         self.rng = random.Random(seed)
         self.tm = client.get_trafficmanager()
         self.tm_port = self.tm.get_port()
+        self.lot = self._lot_dims(specs[vehicle])
         self.world = self._load_world()
         self.map = self.world.get_map()
         self.planner = RoutePlanner(self.map)
         self.traffic, self.parked = [], []
         self.camera, self.frame, self._frames = None, None, queue.Queue()
         self.want_camera = camera
-        self.mode = "manual"                # manual / auto (Traffic Manager 가 운전)
+        self.mode = "manual"                # manual / acc(속도·차간만 자동) / auto (Traffic Manager 가 운전)
         self.gear, self.reverse = 1, False
         self.set_speed = None               # AUTO 목표 속도 [m/s]
         self.collisions, self.time, self.odometer = 0, 0.0, 0.0
         self.accel_timer = AccelTimer()
         self.route, self.route_idx, self.dest_name, self.dest_i = [], 0, None, -1
-        self.parking_target = None
+        self.parking_target, self.parking_targets, self.parking_i = None, [], 0
         self.mode_label = None
+        self.fx_enabled = True
+        self._fx = dict(ax=0.0, ay=0.0, look=0.0, t=0.0)
+        self.v_prev, self.ax, self.vy, self.power_kw, self.rpm = 0.0, 0.0, 0.0, 0.0, 0.0
+        self.sliding = False
         self.ego = None
         self._spawn_ego(vehicle, powertrain, self._start_transform())
+        self.soc = self._full_soc()
         if level == "parking":
             self._setup_parking()
         self._spawn_traffic()
@@ -81,12 +88,22 @@ class CarlaSim:
         self.world.tick()
 
     # ------------------------------------------------------------------ 맵/월드
+    @staticmethod
+    def _lot_dims(spec):
+        """주차칸 크기를 내 차에 맞춘다 (버스/트럭도 들어가게)."""
+        return dict(perp_w=spec["width"] + 0.9, perp_d=max(6.0, spec["length"] + 1.0),
+                    par_w=max(2.6, spec["width"] + 0.7), par_l=spec["length"] + 2.5,
+                    aisle=max(3.6, spec["width"] + 1.6))
+
     def _load_world(self):
-        if self.cfg["map"] is None:
+        if self.cfg["map"] in (None, "lot"):
             params = carla.OpendriveGenerationParameters(
                 vertex_distance=2.0, max_road_length=500.0, wall_height=1.0, additional_width=0.6,
                 smooth_junctions=True, enable_mesh_visibility=True)
-            world = self.client.generate_opendrive_world(long_straight_xodr(LONG_LENGTH, self.lanes), params)
+            L = self.lot
+            xodr = long_straight_xodr(LONG_LENGTH, self.lanes) if self.cfg["map"] is None else \
+                parking_lot_xodr(160.0, L["aisle"], L["par_w"], L["perp_d"])
+            world = self.client.generate_opendrive_world(xodr, params)
         else:
             world = self.client.get_world()
             if not world.get_map().name.endswith(self.cfg["map"]):
@@ -104,7 +121,9 @@ class CarlaSim:
         return world
 
     def _start_transform(self):
-        if self.cfg["map"] is None:     # 긴 직선: 시작점, 가운데 차로
+        if self.cfg["map"] == "lot":     # 주차장: 통로 입구
+            wp = self.map.get_waypoint_xodr(0, -1, 8.0)
+        elif self.cfg["map"] is None:     # 긴 직선: 시작점, 가운데 차로
             wp = self.map.get_waypoint_xodr(0, -max(1, (self.lanes + 1) // 2), 30.0)
         else:
             pts = self.map.get_spawn_points()
@@ -150,14 +169,19 @@ class CarlaSim:
         """설정 메뉴에서 호출: 같은 자리에서 차종/파워트레인/제원을 바꾼다."""
         e = self.ego
         kind, powertrain = kind or e.kind, powertrain or e.powertrain
+        new_pt = powertrain != e.powertrain
         if self._blueprint(kind, powertrain).id == e.actor.type_id:
             e.kind, e.powertrain, e.spec = kind, powertrain, self.specs[kind]
             apply_specs(e.actor, e.spec, powertrain)
-            return
-        t = e.actor.get_transform()
-        t.location.z += 0.3
-        self._destroy_ego()
-        self._spawn_ego(kind, powertrain, t)
+        else:
+            t = e.actor.get_transform()
+            t.location.z += 0.3
+            self._destroy_ego()
+            self._spawn_ego(kind, powertrain, t)
+            if self.mode == "auto":
+                self._apply_auto()
+        if new_pt:
+            self.soc = self._full_soc()
 
     def cycle_vehicle(self):
         kinds = ("car", "bus", "truck")
@@ -209,6 +233,7 @@ class CarlaSim:
         bp.set_attribute("image_size_x", str(self.frame_size[0]))
         bp.set_attribute("image_size_y", str(self.frame_size[1]))
         bp.set_attribute("fov", "90" if view != "cockpit" else "80")
+        self._cam_base = tr
         self.camera = self.world.spawn_actor(bp, tr, attach_to=self.ego.actor)
         self._frames = queue.Queue()
         self.camera.listen(self._frames.put)
@@ -255,43 +280,64 @@ class CarlaSim:
             if self.cfg["map"] is None:
                 self.tm.set_desired_speed(v, self.rng.uniform(100, 160))
 
-    # ------------------------------------------------------------------ 주차 (평행 주차)
+    # ------------------------------------------------------------------ 주차장 (직각 + 평행)
     def _setup_parking(self):
-        """맨 오른쪽 차로 직선 구간에 주차된 차를 줄지어 세우고, 그 사이 빈칸을 목표로 한다."""
+        """생성한 주차장 맵에 주차된 차를 채우고 빈칸 몇 개를 목표로 남긴다. N = 다음 빈칸."""
+        L = self.lot
         lib = [b for b in self.world.get_blueprint_library().filter("vehicle.*")
                if b.has_attribute("base_type") and b.get_attribute("base_type").as_str() == "car"]
-        base = None
-        for p in self.map.get_spawn_points():
-            wp = self.map.get_waypoint(p.location)
-            while _driving(wp.get_right_lane()) and wp.get_right_lane().lane_id * wp.lane_id > 0:
-                wp = wp.get_right_lane()
-            ahead = wp.next(70.0)
-            if ahead and not any(w.is_junction for w in [wp] + wp.next_until_lane_end(5.0)[:14]) \
-                    and abs((ahead[0].transform.rotation.yaw - wp.transform.rotation.yaw + 180) % 360 - 180) < 3:
-                base = wp
-                break
-        if base is None:
-            return
-        ego_len = self.ego.actor.bounding_box.extent.x * 2
-        space = ego_len + 2.5
-        s = 0.0
-        for k in range(6):
-            if k == 3:                                       # 4번째 자리를 비운다
-                self.parking_target = (base.next(s + space / 2)[0].transform, space)
-                s += space
-                continue
+        y_par = L["aisle"] + L["par_w"] / 2           # 오른쪽 평행 주차 줄 중심 (CARLA y, 오른쪽 +)
+        y_perp = -(L["aisle"] + L["perp_d"] / 2)      # 왼쪽 직각 주차 줄 중심
+        dbg = self.world.debug
+        white = carla.Color(230, 230, 230)
+
+        def line(x0, y0, x1, y1, col=white):
+            dbg.draw_line(carla.Location(x0, y0, 0.05), carla.Location(x1, y1, 0.05), thickness=0.12,
+                          color=col, life_time=0.0, persistent_lines=True)
+
+        def park(x, y, yaw):
             bp = self.rng.choice(lib)
-            t = base.next(s + 2.4)[0].transform
-            t.location.z += 0.3
-            a = self.world.try_spawn_actor(bp, t)
+            a = self.world.try_spawn_actor(bp, carla.Transform(carla.Location(x, y, 0.3), carla.Rotation(yaw=yaw)))
             if a is not None:
                 a.set_simulate_physics(False)
                 self.parked.append(a)
-            s += 5.6
-        left = base.get_left_lane()
-        start = (left if _driving(left) else base).next(s + 8.0)[0].transform
-        start.location.z += 0.5
-        self.ego.actor.set_transform(start)
+
+        empty_perp, empty_par = {3, 8, 12}, {2, 5}
+        x0 = 30.0
+        for k in range(16):                           # 직각 주차칸 (앞머리를 바깥쪽으로)
+            xc = x0 + (k + 0.5) * L["perp_w"]
+            line(x0 + k * L["perp_w"], -L["aisle"], x0 + k * L["perp_w"], -(L["aisle"] + L["perp_d"]))
+            if k in empty_perp:
+                self.parking_targets.append(("perpendicular", carla.Transform(
+                    carla.Location(xc, y_perp, 0.0), carla.Rotation(yaw=-90)), L["perp_d"], L["perp_w"]))
+            else:
+                park(xc, y_perp, -90)
+        line(x0 + 16 * L["perp_w"], -L["aisle"], x0 + 16 * L["perp_w"], -(L["aisle"] + L["perp_d"]))
+        for k in range(8):                            # 평행 주차칸
+            xs = x0 + k * L["par_l"]
+            line(xs, L["aisle"], xs, L["aisle"] + L["par_w"])
+            xc = xs + L["par_l"] / 2
+            if k in empty_par:
+                self.parking_targets.append(("parallel", carla.Transform(
+                    carla.Location(xc, y_par, 0.0), carla.Rotation(yaw=0)), L["par_l"], L["par_w"]))
+            else:
+                park(xc, y_par, 0)
+        self.set_parking_target(0)
+
+    def set_parking_target(self, i):
+        if not self.parking_targets:
+            return
+        self.parking_i = i % len(self.parking_targets)
+        kind, t, length, width = self.parking_targets[self.parking_i]
+        self.parking_target = (t, length)
+        f, r = _yaw_vectors(t.rotation.yaw)
+        c = t.location
+        pts = [carla.Location(c.x + f[0] * a * length / 2 + r[0] * b * width / 2,
+                              c.y + f[1] * a * length / 2 + r[1] * b * width / 2, 0.08)
+               for a, b in ((1, 1), (1, -1), (-1, -1), (-1, 1), (1, 1))]
+        for p0, p1 in zip(pts, pts[1:]):              # 목표 칸을 초록색으로 (10분 유지)
+            self.world.debug.draw_line(p0, p1, thickness=0.15, color=carla.Color(40, 220, 60), life_time=600.0)
+        self.dest_name = f"Parking space {self.parking_i + 1}/{len(self.parking_targets)} ({kind})"
 
     def parking_status(self):
         if self.parking_target is None:
@@ -303,10 +349,14 @@ class CarlaSim:
         yaw_err = abs((self.ego.actor.get_transform().rotation.yaw - t.rotation.yaw + 90) % 180 - 90)
         ok = abs(along) < (space - self.ego.actor.bounding_box.extent.x * 2) / 2 + 0.3 and abs(lat) < 0.5 \
             and yaw_err < 8 and self.speed() < 0.3
-        return dict(target_along=along, target_lateral=-lat, yaw_error_deg=yaw_err, parked=ok, space_length=space)
+        kind = self.parking_targets[self.parking_i][0] if self.parking_targets else "parallel"
+        return dict(target_along=along, target_lateral=-lat, yaw_error_deg=yaw_err, parked=ok, space_length=space,
+                    kind=kind)
 
     # ------------------------------------------------------------------ 내비게이션
     def _destinations(self):
+        if self.cfg["map"] == "lot":
+            return [("Lot exit", self.map.get_waypoint_xodr(0, -1, 150.0).transform.location)]
         if self.cfg["map"] is None:
             wp = self.map.get_waypoint_xodr(0, -self.lanes, LONG_LENGTH - 300)
             return [("End of straight", wp.transform.location)]
@@ -325,6 +375,9 @@ class CarlaSim:
             self._apply_auto()
 
     def next_destination(self):
+        if self.parking_targets:
+            self.set_parking_target(self.parking_i + 1)
+            return
         self.set_destination(self.dest_i + 1)
 
     def _track_route(self):
@@ -339,11 +392,17 @@ class CarlaSim:
         self.route_idx = k
 
     def guidance(self):
+        if self.parking_targets:
+            ok = self.parking_status()["parked"]
+            return dict(active=True, destination=self.dest_name, distance=None, distance_to_exit=None,
+                        instruction=("Parked! N = next space" if ok else f"Park in: {self.dest_name}"),
+                        arrow="arrive" if ok else None, arrived=ok, required_lane=None)
         return guidance(self.route, self.route_idx, self.dest_name)
 
     # ------------------------------------------------------------------ 모드 / 한 스텝
     def cycle_mode(self):
-        self.mode = "auto" if self.mode == "manual" else "manual"
+        modes = ("manual", "acc", "auto")
+        self.mode = modes[(modes.index(self.mode) + 1) % 3]
         self._apply_auto()
 
     def _apply_auto(self):
@@ -367,30 +426,114 @@ class CarlaSim:
         if self.mode == "auto":
             self.tm.set_desired_speed(self.ego.actor, self.set_speed * 3.6)
 
+    def _full_soc(self):
+        return {"ev": 0.9, "hybrid": 0.6}.get(self.ego.powertrain, 1.0)
+
+    def _lead(self):
+        """같은 차로 앞차 (간격 m, 속도 m/s). 없으면 (inf, 0)."""
+        a = self.ego.actor
+        tr = a.get_transform()
+        f, r = _yaw_vectors(tr.rotation.yaw)
+        half = self.map.get_waypoint(tr.location).lane_width / 2
+        best = (math.inf, 0.0)
+        for v in self.traffic + self.parked:
+            d = v.get_location() - tr.location
+            lx, ly = d.x * f[0] + d.y * f[1], d.x * r[0] + d.y * r[1]
+            if 0 < lx < 200 and abs(ly) < half:
+                gap = lx - v.bounding_box.extent.x - a.bounding_box.extent.x
+                if gap < best[0]:
+                    vel = v.get_velocity()
+                    best = (gap, math.hypot(vel.x, vel.y))
+        return best
+
     def speed(self):
         v = self.ego.actor.get_velocity()
         return math.hypot(v.x, v.y)
 
     def step(self, throttle=0.0, brake=0.0, steer=0.0):
-        """steer: +는 왼쪽 (기존 시뮬레이터와 같음). AUTO 모드에서는 입력 무시."""
-        a, spec = self.ego.actor, self.ego.spec
+        """steer: +는 왼쪽 (기존 시뮬레이터와 같음). AUTO 모드에서는 입력 무시, ACC 는 조향만 사람이."""
+        a, spec, pt = self.ego.actor, self.ego.spec, self.ego.powertrain
         v = self.speed()
-        if self.mode == "manual":
+        if self.mode == "acc":                       # 속도·차간거리 자동 (IDM), 브레이크를 밟으면 즉시 사람 우선
+            gap, lead_v = self._lead()
+            target = self.set_speed or max(a.get_speed_limit() / 3.6, 5.0)
+            acc = float(idm_accel(v, target, gap, lead_v, 2.0, 3.0, 1.5, 4.0))
+            if brake < 0.05:
+                throttle, brake = max(0.0, acc / 2.5), max(0.0, -acc / 7.0)
+        if self.mode != "auto":
             lim = spec.get("speed_limiter_kmh", 0)
             if lim and v * 3.6 > lim:
                 throttle = 0.0
+            if pt == "ev" and self.soc <= 0.0:
+                throttle = 0.0
+            if pt in ("ev", "hybrid") and throttle < 0.02 and v > 2.0 and not self.reverse:   # 회생 (엔진브레이크처럼)
+                regen = spec[pt]["coast_regen_n"] / spec["brake_force_n"]
+                brake = min(1.0, brake + regen)
             c = carla.VehicleControl(throttle=float(throttle), brake=float(brake), steer=float(-steer),
                                      reverse=self.reverse)
-            if self.ego.powertrain == "manual":
+            if pt == "manual":
                 c.manual_gear_shift, c.gear = True, (-1 if self.reverse else self.gear)
             a.apply_control(c)
+        if self.camera is not None and self.view == "cockpit":
+            self._camera_fx(steer)
         frame_id = self.world.tick()
         self.time += DT
         self.odometer += v * DT
         self.accel_timer.update(v * 3.6, self.time)
+        self._update_vehicle_state(v)
         self._track_route()
         if self.camera is not None:
             self._grab_frame(frame_id)
+
+    def _update_vehicle_state(self, v_before):
+        """RPM, 가속도, 미끄러짐, 출력[kW], 배터리 잔량(EV/하이브리드)."""
+        a, spec, pt = self.ego.actor, self.ego.spec, self.ego.powertrain
+        v = self.speed()
+        self.ax = (v - v_before) / DT
+        vel, tr = a.get_velocity(), a.get_transform()
+        f, r = _yaw_vectors(tr.rotation.yaw)
+        self.vy = vel.x * r[0] + vel.y * r[1]
+        self.sliding = v > 3 and abs(self.vy) > 1.5
+        w_wheel = v / spec["wheel_radius"]
+        if pt == "ev":
+            self.rpm = w_wheel * spec["ev"]["reduction"] * 60 / (2 * math.pi)
+        else:
+            g = max(1, a.get_control().gear)
+            g = min(g, len(spec["gears"]))
+            self.rpm = max(spec["idle_rpm"], w_wheel * spec["gears"][g - 1] * spec["final_drive"] * 60 / (2 * math.pi))
+        p = (spec["mass"] * self.ax + 0.6 * spec["cd_a"] * v * v + spec["c_roll"] * spec["mass"] * 9.81) * v
+        self.power_kw = p / 1000
+        if pt in ("ev", "hybrid"):
+            e = spec[pt]
+            cap = e["battery_kwh"] * 3.6e6
+            if p > 0:
+                share = 1.0 if pt == "ev" else (1.0 if v * 3.6 < e["ev_only_below_kmh"] else 0.3)
+                self.soc -= p * share / 0.9 * DT / cap
+            else:
+                self.soc += min(-p, e["regen_force_n"] * v) * 0.7 * DT / cap
+            if pt == "hybrid" and self.soc < 0.3:       # 엔진이 발전해서 충전
+                self.soc += 8000 * DT / cap
+            self.soc = min(1.0, max(0.0, self.soc))
+
+    def _camera_fx(self, steer):
+        """운전석 카메라 연출: 가감속 피칭, 코너 롤, 코너 안쪽 바라보기, 속도에 따른 미세 진동."""
+        fx = self._fx
+        k = 1 - math.exp(-DT / 0.25)
+        v = self.speed()
+        ay = v * math.radians(self.ego.actor.get_angular_velocity().z)
+        fx["ax"] += (max(-9, min(9, self.ax)) - fx["ax"]) * k
+        fx["ay"] += (max(-9, min(9, ay)) - fx["ay"]) * k
+        fx["look"] += (max(-8, min(8, steer * 6 * min(1, v / 10))) - fx["look"]) * (1 - math.exp(-DT / 0.4))
+        fx["t"] += DT
+        base = self._cam_base
+        if not self.fx_enabled:
+            self.camera.set_transform(base)
+            return
+        shake = min(1.0, v / 40) * 0.12
+        rot = carla.Rotation(pitch=base.rotation.pitch - fx["ax"] * 0.35 + shake * math.sin(fx["t"] * 23),
+                             yaw=base.rotation.yaw - fx["look"],
+                             roll=base.rotation.roll + fx["ay"] * 0.4 + shake * math.sin(fx["t"] * 31))
+        self.camera.set_transform(carla.Transform(base.location, rot))
 
     # ------------------------------------------------------------------ 관측값 (CUDA 내비 방식)
     def observe(self, preview=100.0, step=5.0, radius=150.0):
@@ -475,6 +618,7 @@ class CarlaSim:
             lead_gap=np.float32(lead_gap), lead_speed=np.float32(lead_v),
             vehicles=np.array(others, np.float32).reshape(-1, 6),   # x, y, speed, lane_id, length, width
             gear=ctl.gear, reverse=self.reverse, powertrain=self.ego.powertrain, vehicle_kind=self.ego.kind,
+            rpm=np.float32(self.rpm), power_kw=np.float32(self.power_kw), battery_soc=np.float32(self.soc),
             collisions=self.collisions, time=np.float32(self.time),
         )
         if self.parking_target is not None:
