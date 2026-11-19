@@ -135,7 +135,7 @@ class CarlaSim:
         self.tm.set_global_distance_to_leading_vehicle(self.cfg["gap"])
         self.tm.global_percentage_speed_difference(self.cfg["speed_diff"])
         self.tm.set_hybrid_physics_mode(True)
-        self.tm.set_hybrid_physics_radius(120.0)
+        self.tm.set_hybrid_physics_radius(50.0)      # 내 차 50 m 밖 차는 물리 계산 생략 (서버 메인 스레드 부담 ↓, 60 FPS 용)
         world.set_weather(getattr(carla.WeatherParameters, self.cfg["weather"]))
         return world
 
