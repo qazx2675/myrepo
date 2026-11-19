@@ -108,7 +108,8 @@ class CarlaSim:
             L = self.lot
             xodr = long_straight_xodr(LONG_LENGTH, self.lanes) if self.cfg["map"] is None else \
                 parking_lot_xodr(160.0, L["aisle"], L["par_w"], L["perp_d"])
-            world = self.client.generate_opendrive_world(xodr, params)
+            same = cur.get_map().to_opendrive().strip() == xodr.strip()   # 같은 코스면 다시 만들지 않음
+            world = cur if same else self.client.generate_opendrive_world(xodr, params)
         else:
             world = self.client.get_world()
             if not world.get_map().name.endswith(self.cfg["map"]):

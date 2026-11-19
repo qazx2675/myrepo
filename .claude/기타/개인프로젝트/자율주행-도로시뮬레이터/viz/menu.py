@@ -188,7 +188,7 @@ class SettingsMenu:
     def draw(self, surf):
         W, H = surf.get_size()
         shade = pygame.Surface((W, H), pygame.SRCALPHA)
-        shade.fill((5, 8, 12, 200))
+        shade.fill((5, 8, 12, 245))
         surf.blit(shade, (0, 0))
         rows = self.items()
         sel = self._selectable()
