@@ -48,3 +48,12 @@ def test_look_tier_follows_parts():
     assert P.tier({"turbo": 1}, "auto") == 1
     assert P.tier({p[0]: 3 for p in P.PARTS}, "auto") == 3
     assert P.tier({"turbo": 3}, "ev") == 0                     # 엔진 파츠는 전기차 외관에 영향 없음
+
+
+def test_tires_raise_grip_for_every_powertrain():
+    base = load_specs()["car"]
+    for pt in ("auto", "manual", "ev", "hybrid"):
+        assert P.apply_parts(base, {"tires": 3}, pt)["tire_mu"] > base["tire_mu"]
+    a = P.performance(base, "car", "auto")
+    b = P.performance(P.apply_parts(base, {"tires": 3}, "auto"), "car", "auto")
+    assert b["t100"] < a["t100"]                              # 접지가 좋아지면 출발 가속이 빨라짐

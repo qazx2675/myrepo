@@ -15,6 +15,7 @@ CONFIG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
 LEVELS = ("Stock", "Street", "Sport", "Race")          # 순정 / 스트리트 / 스포츠 / 레이스
 ICE = ("auto", "manual", "hybrid")
 ELEC = ("ev", "hybrid")
+ALL = ("auto", "manual", "ev", "hybrid")
 KG_PER_KWH = 6.0                                       # 배터리 팩 무게 (늘린 용량만큼 차가 무거워짐)
 
 # (키, 이름, 적용 파워트레인, 단계별 효과) — power/torque/motor_* /battery 는 배수, redline 은 rpm 더하기
@@ -40,6 +41,8 @@ PARTS = [
       {"motor_power": 1.15, "motor_rpm": 1.30}]),
     ("battery", "Battery pack", ELEC,
      [{}, {"battery": 1.2}, {"battery": 1.4}, {"battery": 1.7}]),
+    ("tires", "Tires (grip)", ALL,
+     [{}, {"grip": 1.10}, {"grip": 1.22}, {"grip": 1.35}]),
 ]
 BY_KEY = {p[0]: p for p in PARTS}
 
@@ -102,6 +105,8 @@ def apply_parts(spec, installed, powertrain):
         if "motor_rpm" in fx:
             s["ev"]["max_motor_rpm"] *= fx["motor_rpm"]
             s["hybrid"]["max_motor_rpm"] *= fx["motor_rpm"]
+        if "grip" in fx:
+            s["tire_mu"] *= fx["grip"]
         if "battery" in fx:
             b = s[powertrain]["battery_kwh"]
             s[powertrain]["battery_kwh"] = b * fx["battery"]

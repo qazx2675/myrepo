@@ -16,7 +16,7 @@ from sim.vehicle import POWERTRAINS
 from viz.menu import KINDS, LEVEL_NAME, LEVELS, PT_NAME
 
 MAIN = [("drive", "Start driving", "Drive on the selected course"),
-        ("tune", "Engine tuning", "Install intake, exhaust, turbo, ECU and motor parts"),
+        ("tune", "Engine tuning", "Install intake, exhaust, turbo, ECU, motor and tire parts"),
         ("vehicle", "Choose vehicle", "Change body type and powertrain"),
         ("course", "Choose course", "Pick a course and difficulty"),
         ("settings", "Settings", "Traffic, detailed specs, camera, sound, language"),
@@ -37,7 +37,8 @@ def _effects(fx, spec, powertrain):
     """파츠 한 단계의 효과를 화면용 짧은 문구로."""
     out = []
     for key, label in (("power", "Power"), ("torque", "Torque"), ("motor_power", "Motor power"),
-                       ("motor_torque", "Motor torque"), ("motor_rpm", "Motor rpm"), ("battery", "Battery")):
+                       ("motor_torque", "Motor torque"), ("motor_rpm", "Motor rpm"), ("battery", "Battery"),
+                       ("grip", "Grip")):
         if key in fx:
             out.append(tr("{what} +{p:.0f}%", what=tr(label), p=(fx[key] - 1) * 100))
     if "redline" in fx:
