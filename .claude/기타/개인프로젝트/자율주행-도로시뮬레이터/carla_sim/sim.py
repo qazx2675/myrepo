@@ -81,6 +81,7 @@ class CarlaSim:
         self._studio, self._hidden = None, []      # 정비소에 들어오기 전 위치, 정비소 동안 숨긴 주변 구조물
         self.v_prev, self.ax, self.vy, self.power_kw, self.rpm = 0.0, 0.0, 0.0, 0.0, 0.0
         self.sliding = False
+        self._last_gear = 1
         self._timer_reset = False                         # 리셋 직후 0-100 측정을 정지 상태부터 다시
         self._flip_t, self.flip_notice = 0.0, -1.0       # 전복 지속 시간 / 다시 세운 안내를 보일 때까지(시뮬 시각)
         self.ego = None
@@ -633,8 +634,10 @@ class CarlaSim:
         if pt == "ev":
             self.rpm = w_wheel * spec["ev"]["reduction"] * 60 / (2 * math.pi)
         else:
-            g = max(1, a.get_control().gear)
-            g = min(g, len(spec["gears"]))
+            g = a.get_control().gear
+            if g >= 1:                              # 변속 중(0 = 중립)에는 직전 기어로 계산 (rpm 이 튀지 않게)
+                self._last_gear = g
+            g = min(self._last_gear, len(spec["gears"]))
             self.rpm = max(spec["idle_rpm"], w_wheel * spec["gears"][g - 1] * spec["final_drive"] * 60 / (2 * math.pi))
         p = (spec["mass"] * self.ax + 0.6 * spec["cd_a"] * v * v + spec["c_roll"] * spec["mass"] * 9.81) * v
         self.power_kw = p / 1000

@@ -296,13 +296,14 @@ class Garage:
             self.d_rpm = min(target, self.d_rpm + span / DYNO_SWEEP * nm / max(c[1] for c in curve) * dt)
         else:
             self.d_rpm = max(target, self.d_rpm - span / DYNO_FALL * dt)
+        nm = _interp(curve, self.d_rpm, 1)
+        if self.d_thr > 0.98:                        # 풀스로틀 구간 기록 (최고 회전까지)
+            b = int(self.d_rpm // 100)
+            self.d_trace[b] = (self.d_rpm, nm, nm * self.d_rpm * 2 * math.pi / 60 / 745.7)
         if self.d_rpm >= max_rpm - 1:
             self.d_rpm = max_rpm - span * 0.03                                   # 회전 제한: 연료 차단
             self.d_auto = False                                                    # 풀스로틀 측정 끝
-        nm = _interp(curve, self.d_rpm, 1)
-        if self.d_thr > 0.98:
-            b = int(self.d_rpm // 100)
-            self.d_trace[b] = (self.d_rpm, nm, nm * self.d_rpm * 2 * math.pi / 60 / 745.7)
+            nm = _interp(curve, self.d_rpm, 1)
         ratio = spec["ev"]["reduction"] if pt == "ev" else spec["gears"][-1] * spec["final_drive"]
         v = self.d_rpm / ratio * 2 * math.pi / 60 * spec["wheel_radius"] if pt == "ev" else 0.0   # 모터음 높이용
         self.dyno_sound = dict(rpm=max(self.d_rpm, 1.0), vx=v, throttle=self.d_thr,
