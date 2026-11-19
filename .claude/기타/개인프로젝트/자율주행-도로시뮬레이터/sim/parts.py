@@ -47,7 +47,7 @@ PARTS = [
     # 모두 레이스로 달면 전기 승용차 0-100 약 1.5초 (추정).
     ("fan", "Suction fan kit", ELEC,
      [{}, {"grip": 1.4, "motor_power": 1.3, "motor_torque": 1.3}, {"grip": 1.9, "motor_power": 1.7, "motor_torque": 1.6},
-      {"grip": 2.6, "motor_power": 2.2, "motor_torque": 2.0}]),
+      {"grip": 2.6, "motor_power": 2.65, "motor_torque": 2.4}]),
 ]
 BY_KEY = {p[0]: p for p in PARTS}
 
