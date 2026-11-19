@@ -14,6 +14,7 @@ from carla_sim.physics import apply_specs
 from carla_sim.route import STEP, RoutePlanner, guidance
 from carla_sim.xodr import long_straight_xodr, parking_lot_xodr
 from sim.controllers import idm_accel
+from sim.i18n import tr
 from sim.vehicle import AccelTimer
 
 DT = 1.0 / 30.0
@@ -401,12 +402,15 @@ class CarlaSim:
         self.route_idx = k
 
     def guidance(self):
+        name = tr(self.dest_name) if self.dest_name else self.dest_name      # 화면 언어로 (설정 메뉴에서 바뀜)
         if self.parking_targets:
             ok = self.parking_status()["parked"]
-            return dict(active=True, destination=self.dest_name, distance=None, distance_to_exit=None,
-                        instruction=("Parked! N = next space" if ok else f"Park in: {self.dest_name}"),
+            name = tr("Parking space {i}/{n} ({kind})", i=self.parking_i + 1, n=len(self.parking_targets),
+                      kind=tr(self.parking_targets[self.parking_i][0]))
+            return dict(active=True, destination=name, distance=None, distance_to_exit=None,
+                        instruction=(tr("Parked! N = next space") if ok else tr("Park in: {dest}", dest=name)),
                         arrow="arrive" if ok else None, arrived=ok, required_lane=None)
-        return guidance(self.route, self.route_idx, self.dest_name)
+        return guidance(self.route, self.route_idx, name)
 
     # ------------------------------------------------------------------ 모드 / 한 스텝
     def cycle_mode(self):

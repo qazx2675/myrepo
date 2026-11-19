@@ -1,6 +1,7 @@
 """시뮬레이터 안 설정 메뉴 (Tab / Esc 로 열기).
 
 ↑↓ 항목 선택, ←→ 값 변경(Shift 를 누르면 크게), Enter 실행. 메뉴가 열려 있는 동안은 일시정지.
+화면 글자는 sim/i18n.py 로 한국어(기본)/영어 전환 ('언어' 항목).
 코스/난이도/트래픽/차로 변경은 월드를 새로 만들고, 차량 제원 변경은 현재 위치에서 차만 바꾼다.
 "Save" 는 차량 제원을 config/vehicles.json 에 저장한다.
 """
@@ -9,6 +10,8 @@ import json
 
 import pygame
 
+from sim import i18n
+from sim.i18n import tr
 from sim.vehicle import CONFIG, POWERTRAINS, load_specs
 
 LEVELS = ("easy", "normal", "hard", "long", "parking")
@@ -55,39 +58,41 @@ class SettingsMenu:
         self.open = False
         self.sel = 0
         self.msg = ""
-        self.f_title = pygame.font.SysFont("arial", 28, bold=True)
-        self.f = pygame.font.SysFont("consolas,dejavusansmono,monospace", 18)
+        self.f_title = i18n.font(28, bold=True)       # 한글 글꼴
+        self.f = i18n.font(15)
 
     # ------------------------------------------------------------------
     def items(self):
         a = self.app
         e = a.world.ego
-        cars = "auto" if a.cfg["cars"] is None else str(a.cfg["cars"])
+        cars = tr("auto") if a.cfg["cars"] is None else str(a.cfg["cars"])
+        onoff = lambda b: tr("on") if b else tr("off")  # noqa: E731
         rows = [
             ("resume", ">>> START / RESUME DRIVING  (Enter)  <<<", ""),
             ("header", "SCENARIO", None),
-            ("level", "Course / difficulty", LEVEL_NAME[a.cfg["level"]]),
+            ("level", "Course / difficulty", tr(LEVEL_NAME[a.cfg["level"]])),
             ("cars", "Traffic cars", cars),
             ("lanes", "Lanes", str(a.cfg["lanes"])),
             ("seed", "Random seed", str(a.cfg["seed"])),
             ("header", "VEHICLE", None),
-            ("kind", "Vehicle type", e.spec["name"]),
-            ("powertrain", "Powertrain", PT_NAME[e.powertrain]),
+            ("kind", "Vehicle type", tr(e.spec["name"])),
+            ("powertrain", "Powertrain", tr(PT_NAME[e.powertrain])),
         ]
         for k, (label, path, lo, hi, fmt) in enumerate(SPEC_ITEMS):
             rows.append((("spec", k), label, fmt.format(_get(a.specs[e.kind], path))))
         rows += [
             ("header", "DISPLAY / SOUND", None),
-            ("view", "Camera view", a.view),
-            ("fx", "Camera effects", "on" if a.fx.enabled else "off"),
-            ("sound", "Sound", "on" if (a.sound and a.sound.enabled) else "off"),
-            ("help", "Key help overlay", "on" if a.hud.show_help else "off"),
+            ("lang", "Language", i18n.LANG_NAME[i18n.LANG]),
+            ("view", "Camera view", tr(a.view)),
+            ("fx", "Camera effects", onoff(a.fx.enabled)),
+            ("sound", "Sound", onoff(a.sound and a.sound.enabled)),
+            ("help", "Key help overlay", onoff(a.hud.show_help)),
             ("header", "", None),
             ("save", "> Save vehicle settings to config/vehicles.json", ""),
             ("defaults", "> Reload settings from file", ""),
             ("quit", "> Quit simulator", ""),
         ]
-        return rows
+        return [(k, tr(label), val) for k, label, val in rows]   # 라벨은 화면 언어로
 
     def _selectable(self):
         return [i for i, r in enumerate(self.items()) if r[0] != "header"]
@@ -152,6 +157,8 @@ class SettingsMenu:
                     spec[k] = round(spec[k] * nv / v)
             _set(spec, path, nv)
             a.world.set_vehicle()          # 현재 위치에서 새 제원으로
+        elif key == "lang":
+            i18n.set_lang(i18n.LANGS[(i18n.LANGS.index(i18n.LANG) + step) % len(i18n.LANGS)])
         elif key == "view":
             views = ("cockpit", "chase", "top")
             a.view = views[(views.index(a.view) + step) % len(views)]
@@ -168,7 +175,7 @@ class SettingsMenu:
             a.specs.update(load_specs())
             a.world.specs = a.specs
             a.world.set_vehicle()
-            self.msg = "Reloaded from config/vehicles.json"
+            self.msg = tr("Reloaded from config/vehicles.json")
         elif key == "resume" and enter:
             self.open = False
         elif key == "quit" and enter:
@@ -182,7 +189,7 @@ class SettingsMenu:
             data[kind] = copy.deepcopy(spec)
         with open(CONFIG, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        self.msg = "Saved to config/vehicles.json"
+        self.msg = tr("Saved to config/vehicles.json")
 
     # ------------------------------------------------------------------
     def draw(self, surf):
@@ -195,8 +202,8 @@ class SettingsMenu:
         if self.sel not in sel:
             self.sel = sel[0]
         x0, y0, lh = W // 2 - 330, 40, 17
-        surf.blit(self.f_title.render("SETTINGS", True, (255, 210, 60)), (x0, y0 - 30))
-        hint = "Up/Down select   Left/Right change (Shift = big step)   Enter = run   Tab/Esc = close"
+        surf.blit(self.f_title.render(tr("SETTINGS"), True, (255, 210, 60)), (x0, y0 - 30))
+        hint = tr("Up/Down select   Left/Right change (Shift = big step)   Enter = run   Tab/Esc = close")
         surf.blit(self.f.render(hint, True, (160, 170, 180)), (x0, H - 34))
         y = y0 + 10
         for i, (key, label, val) in enumerate(rows):

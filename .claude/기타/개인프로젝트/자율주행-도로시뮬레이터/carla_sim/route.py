@@ -7,6 +7,8 @@ CARLA 의 agents/GlobalRoutePlanner 대신 직접 구현: networkx/shapely 없�
 import heapq
 import math
 
+from sim.i18n import tr
+
 STEP = 2.0
 LANE_CHANGE_COST = 25.0
 
@@ -142,19 +144,19 @@ TEXT = {"left": "Turn left", "right": "Turn right", "change_left": "Move to left
 def guidance(route, idx, dest_name):
     """route[idx] 에 있는 내 차 기준 안내 dict (기존 sim/nav.py guidance 와 같은 키)."""
     if not route:
-        return dict(active=False, destination=None, distance=None, instruction="No destination (press N)",
+        return dict(active=False, destination=None, distance=None, instruction=tr("No destination (press N)"),
                     arrow=None, arrived=False, required_lane=None, distance_to_exit=None)
     remain = (len(route) - 1 - idx) * STEP
     if remain < 15:
-        return dict(active=True, destination=dest_name, distance=0.0, instruction=f"Arrived: {dest_name}",
+        return dict(active=True, destination=dest_name, distance=0.0, instruction=tr("Arrived: {dest}", dest=dest_name),
                     arrow="arrive", arrived=True, required_lane=None, distance_to_exit=0.0)
     for k in range(idx, len(route)):
         what = route[k][1]
         if what != "straight":
             d = (k - idx) * STEP
             return dict(active=True, destination=dest_name, distance=remain, distance_to_exit=d,
-                        instruction=f"{TEXT[what]} in {d:.0f} m", arrow=what, arrived=False,
+                        instruction=tr("{what} in {d:.0f} m", what=tr(TEXT[what]), d=d), arrow=what, arrived=False,
                         required_lane=route[min(k + 1, len(route) - 1)][0].lane_id)
     return dict(active=True, destination=dest_name, distance=remain, distance_to_exit=None,
-                instruction=f"Go straight  {remain / 1000:.1f} km to {dest_name}", arrow="straight",
+                instruction=tr("Go straight  {km:.1f} km to {dest}", km=remain / 1000, dest=dest_name), arrow="straight",
                 arrived=False, required_lane=None)

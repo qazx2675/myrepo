@@ -19,6 +19,9 @@ import carla  # noqa: E402
 import pygame  # noqa: E402
 
 from carla_sim.sim import LEVELS, CarlaSim  # noqa: E402
+from sim import i18n  # noqa: E402
+from sim.i18n import tr  # noqa: E402
+from viz.menu import LEVEL_NAME, PT_NAME  # noqa: E402
 from main import Pedal, load_controller  # noqa: E402
 from sim.vehicle import load_specs  # noqa: E402
 
@@ -34,12 +37,12 @@ class CarlaApp:
         from viz.menu import SettingsMenu
         from viz.sound import Sound
         self.args, self.size, self.screen = args, size, screen
-        self.f_big = pygame.font.SysFont("arial", 46, bold=True)
-        self.f = pygame.font.SysFont("consolas,dejavusansmono,monospace", 18)
-        self.loading("Connecting to CARLA server ...")
+        self.f_big = i18n.font(42, bold=True)        # 한글 글꼴
+        self.f = i18n.font(17)
+        self.loading(tr("Connecting to CARLA server ..."))
         self.client = carla.Client(args.host, args.port)
         self.client.set_timeout(120.0)
-        self.background("Connecting to CARLA server ...", self.client.get_server_version)  # 서버 없으면 RuntimeError
+        self.background(tr("Connecting to CARLA server ..."), self.client.get_server_version)  # 서버 없으면 RuntimeError
         self.cfg = dict(level=args.level, cars=args.cars, lanes=args.lanes, seed=args.seed)
         self.specs = load_specs()
         self._view = args.view
@@ -49,6 +52,7 @@ class CarlaApp:
                 st = json.load(f)
             os.remove(args.state)
             self.cfg, self.specs, self._view = st["cfg"], st["specs"], st["view"]
+            i18n.set_lang(st.get("lang", "ko"))
             args.vehicle, args.powertrain = st["kind"], st["powertrain"]
         self.fx = types.SimpleNamespace(enabled=True)
         self.sound = Sound()
@@ -60,9 +64,9 @@ class CarlaApp:
 
     def loading(self, msg):
         self.screen.fill((12, 16, 22))
-        self.text(self.screen, "AUTODRIVE ROAD SIM - CARLA", (60, 60), (255, 210, 60), self.f_big)
+        self.text(self.screen, tr("AUTODRIVE ROAD SIM - CARLA"), (60, 60), (255, 210, 60), self.f_big)
         self.text(self.screen, msg, (60, 140))
-        self.text(self.screen, "(first map load can take 10-60 s)", (60, 170), (150, 160, 170))
+        self.text(self.screen, tr("(first map load can take 10-60 s)"), (60, 170), (150, 160, 170))
         pygame.display.flip()
         pygame.event.pump()
 
@@ -71,7 +75,7 @@ class CarlaApp:
             self.world.destroy()
         c = self.cfg
         self.world = self.background(
-            f"Loading course: {c['level']} ...",
+            tr("Loading course: {name} ...", name=tr(LEVEL_NAME[c["level"]])),
             lambda: CarlaSim(self.client, c["level"], kind, powertrain, c["cars"], c["seed"], c["lanes"],
                              self.specs, view=self._view, frame_size=self.size))
 
@@ -108,11 +112,12 @@ class CarlaApp:
         import subprocess
         import tempfile
         e = self.world.ego
-        state = dict(cfg=self.cfg, kind=e.kind, powertrain=e.powertrain, view=self._view, specs=self.specs)
+        state = dict(cfg=self.cfg, kind=e.kind, powertrain=e.powertrain, view=self._view, specs=self.specs,
+                     lang=i18n.LANG)
         fd, path = tempfile.mkstemp(suffix=".json", prefix="autodrive_")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(state, f)
-        self.loading(f"Switching to: {self.cfg['level']} ...")
+        self.loading(tr("Switching to: {name} ...", name=tr(LEVEL_NAME[self.cfg["level"]])))
         a = self.args
         cmd = [sys.executable, os.path.abspath(__file__), "--state", path, "--host", a.host, "--port", str(a.port),
                "--width", str(a.width), "--height", str(a.height)]
@@ -151,7 +156,7 @@ class CarlaApp:
         ctl = e.actor.get_control()
         gear = "R" if w.reverse else ("N" if ctl.gear == 0 else str(ctl.gear))
         # 속도/기어/RPM/배터리
-        self.box(surf, (20, H - 130, 380, 110))
+        self.box(surf, (20, H - 130, 400, 110))
         if e.powertrain == "ev":
             frac, lab = min(1.0, abs(w.power_kw) / e.spec["ev"]["motor_power_kw"]), f"{w.power_kw:+.0f} kW"
         else:
@@ -161,21 +166,24 @@ class CarlaApp:
         pygame.draw.rect(surf, col, (290, H - 30 - int(90 * frac), 14, int(90 * frac)))
         self.text(surf, lab, (312, H - 120))
         if e.powertrain in ("ev", "hybrid"):
-            self.text(surf, f"BAT {w.soc * 100:4.0f}%", (312, H - 96), (120, 255, 150) if w.soc > 0.15 else (255, 90, 70))
+            self.text(surf, tr("BAT {p:4.0f}%", p=w.soc * 100), (312, H - 96), (120, 255, 150) if w.soc > 0.15 else (255, 90, 70))
         self.text(surf, f"{v:5.0f}", (30, H - 125), font=self.f_big)
         self.text(surf, "km/h", (190, H - 100))
-        self.text(surf, f"{'M' if e.powertrain == 'manual' else 'D'}{gear}  {e.spec['name']} {e.powertrain}",
-                  (30, H - 60))
+        self.text(surf, f"{'M' if e.powertrain == 'manual' else 'D'}{gear}  {tr(e.spec['name'])} "
+                        f"{tr(PT_NAME[e.powertrain])}", (30, H - 60))
         lim = obs["speed_limit"] * 3.6
-        self.text(surf, f"limit {lim:.0f}" + (f"  set {w.set_speed * 3.6:.0f}" if w.set_speed else ""), (30, H - 38))
+        self.text(surf, tr("limit {v:.0f}", v=lim) + (tr("  set {v:.0f}", v=w.set_speed * 3.6) if w.set_speed else ""),
+                  (30, H - 38))
         # 상태
-        self.box(surf, (10, 10, 330, 140))
-        lines = [f"MODE  {w.mode_label or w.mode.upper()}   [{self.cfg['level'].upper()}]",
-                 f"MAP   {w.map.name.split('/')[-1]}   VIEW {self.view}",
-                 f"LANE  {obs['lane'] + 1} / {obs['n_lanes']}   offset {obs['lateral_offset']:+.2f} m",
-                 f"LEAD  {obs['lead_gap']:.0f} m" if math.isfinite(obs["lead_gap"]) else "LEAD  -",
-                 f"COLLISION {w.collisions}   TRAFFIC {len(w.traffic)}",
-                 f"ODO {w.odometer / 1000:.2f} km   {fps:.0f} FPS" + ("   PAUSED" if paused else "")]
+        self.box(surf, (10, 10, 370, 140))
+        lines = [tr("MODE  {mode}   [{level}]", mode=tr(w.mode_label or w.mode.upper()),
+                    level=tr(LEVEL_NAME[self.cfg["level"]])),
+                 tr("MAP   {map}   VIEW {view}", map=w.map.name.split("/")[-1], view=tr(self.view)),
+                 tr("LANE  {lane} / {n}   offset {off:+.2f} m", lane=obs["lane"] + 1, n=obs["n_lanes"],
+                    off=obs["lateral_offset"]),
+                 tr("LEAD  {gap:.0f} m", gap=obs["lead_gap"]) if math.isfinite(obs["lead_gap"]) else tr("LEAD  -"),
+                 tr("COLLISION {c}   TRAFFIC {t}", c=w.collisions, t=len(w.traffic)),
+                 tr("ODO {km:.2f} km   {fps:.0f} FPS", km=w.odometer / 1000, fps=fps) + (tr("   PAUSED") if paused else "")]
         for i, s in enumerate(lines):
             self.text(surf, s, (20, 18 + 21 * i))
         # 내비 배너
@@ -187,18 +195,20 @@ class CarlaApp:
         t = w.accel_timer
         if t.results or t.best:
             self.box(surf, (W - 320, 10, 310, 90))
-            self.text(surf, "0-100 / 200 / 300 km/h", (W - 310, 16), (255, 210, 60))
-            fmt = lambda d: "  ".join(f"{d[m]:5.2f}" if m in d else "  -  " for m in t.MARKS)  # noqa: E731
-            self.text(surf, "now  " + fmt(t.results), (W - 310, 42))
-            self.text(surf, "best " + fmt(t.best), (W - 310, 66))
+            self.text(surf, tr("0-100 / 200 / 300 km/h"), (W - 310, 16), (255, 210, 60))
+            for i, (name, d) in enumerate((("now", t.results), ("best", t.best))):   # 숫자는 칸 맞춰 따로
+                self.text(surf, tr(name), (W - 310, 42 + 24 * i))
+                for j, m in enumerate(t.MARKS):
+                    self.text(surf, f"{d[m]:.2f}" if m in d else "-", (W - 250 + 75 * j, 42 + 24 * i))
         # 주차
         p = obs.get("parking")
         if p:
             self.box(surf, (W - 420, 110, 410, 70))
-            self.text(surf, "PARKED!" if p["parked"] else f"{p['kind'].capitalize()} parking (N = next)", (W - 410, 118),
+            self.text(surf, tr("PARKED!") if p["parked"] else tr("{kind} parking (N = next)", kind=tr(p["kind"]).capitalize()),
+                      (W - 410, 118),
                       (120, 255, 150) if p["parked"] else (255, 230, 120))
-            self.text(surf, f"along {p['target_along']:+.1f} m  side {p['target_lateral']:+.2f} m  "
-                            f"yaw {p['yaw_error_deg']:.0f}", (W - 410, 146))
+            self.text(surf, tr("along {a:+.1f} m  side {s:+.2f} m  yaw {y:.0f}", a=p["target_along"],
+                               s=p["target_lateral"], y=p["yaw_error_deg"]), (W - 410, 146))
         self._minimap(surf, obs, W, H)
         if self.hud.show_help:
             self._help(surf, W)
@@ -227,7 +237,7 @@ class CarlaApp:
                 "F1-F5 level  Tab/Esc settings", "K external controller", "Backspace reset  H help"]
         self.box(surf, (10, 160, 300, 22 * len(keys) + 10))
         for i, s in enumerate(keys):
-            self.text(surf, s, (20, 166 + 22 * i), (200, 210, 220))
+            self.text(surf, tr(s), (20, 166 + 22 * i), (200, 210, 220))
 
 
 def single_instance(wait):
@@ -279,10 +289,11 @@ def main():
         app = CarlaApp(a, size, screen)
     except RuntimeError as ex:                     # 서버 미실행 / 시간 초과
         screen.fill((40, 10, 10))
-        f = pygame.font.SysFont("consolas,dejavusansmono,monospace", 18)
-        for i, s in enumerate(["Cannot connect to CARLA server at %s:%d" % (a.host, a.port), str(ex)[:120],
-                               "Start D:\\CARLA_0.9.16\\CarlaUE4.exe (or run_carla.bat) and try again.",
-                               "Press any key to close."]):
+        f = i18n.font(18)
+        for i, s in enumerate([tr("Cannot connect to CARLA server at {host}:{port}", host=a.host, port=a.port),
+                               str(ex)[:120],
+                               tr("Start D:\\CARLA_0.9.16\\CarlaUE4.exe (or run_carla.bat) and try again."),
+                               tr("Press any key to close.")]):
             screen.blit(f.render(s, True, (255, 230, 230)), (40, 60 + 30 * i))
         pygame.display.flip()
         while pygame.event.wait().type not in (pygame.KEYDOWN, pygame.QUIT):

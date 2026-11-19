@@ -6,6 +6,7 @@
 - CARLA 버전 `carla_sim/`: 사실적 그래픽, 차종·파워트레인·제원→CARLA 물리, 난이도별 Traffic Manager, 경로 탐색·안내, 30 km 직선(OpenDRIVE), 평행 주차, 제로백, 설정 메뉴, CUDA용 env API
 - `install_carla.bat`: CARLA 자동 설치(기본 D:\CARLA_0.9.16, 공간 확인·이어받기), `run_carla.bat`: 서버 시작 + 실행
 - 실행 개선: 바탕화면 바로가기, CARLA 서버를 창 없이 실행(게임 창 하나만 보임, 끄기 `stop_carla.bat`), 게임 창 중복 실행 방지, 로딩 중 '응답 없음' 방지
+- 한국어 화면: 설정 메뉴·CARLA 주행 화면·로딩/오류 화면·내비/주차 안내 한글화 (기본 한국어, 메뉴 '언어'에서 English 전환, 맑은 고딕)
 - 직선 코스 8 km → 30 km (300 km/h 로 5분 = 25 km + 가속·감속 여유)
 
 ## 2026-11-18 — v0.1.0

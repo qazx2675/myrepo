@@ -56,7 +56,7 @@ def test_route_across_roads_with_lane_change():
     r = RoutePlanner(m).trace(m.get_waypoint_xodr(0, -1, 10.0).transform.location, g)
     assert r[-1][0].transform.location.distance(g) < 1.0
     assert {w.road_id for w, _ in r} == {0, 1}
-    assert "Move to right lane" in guidance(r, 0, "G")["instruction"]
+    assert "오른쪽 차로로 이동" in guidance(r, 0, "G")["instruction"]   # 기본 화면 언어 = 한국어
 
 
 def test_powertrain_curves():
