@@ -1824,7 +1824,7 @@
             <div id="awx-vld-pane-dashboard" style="display:${state.activeTab === 'dashboard' ? 'flex' : 'none'}; flex-direction:column; gap:10px;">
                 <div class="awx-vld-card" style="display:flex; flex-direction:column; gap:8px; padding:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
-                        <div class="awx-vld-section-title">작업 기록 대시보드</div>
+                        <div class="awx-vld-section-title">작업 기록 대시보드 <span id="awx-vld-dash-admin-badge" class="awx-vld-dash-tag no" style="display:none;" title="users.json 역할이 관리자인 사용자: 기록 삭제 가능">관리자</span></div>
                         <button id="awx-vld-dash-refresh" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:3px 8px;">새로고침</button>
                     </div>
                     <div id="awx-vld-dash-summary" class="awx-vld-dash-summary"></div>
@@ -4420,6 +4420,11 @@
                 const noteListHtml = notes.length
                     ? notes.map(n => `<div class="awx-vld-dash-note"><b>${escapeHTML(dashFmtDateTime(n.createdAt))} ${escapeHTML(n.author?.name || n.author?.ip || '-')}(${escapeHTML(n.authorRole || '')})</b>\n${escapeHTML(n.text)}</div>`).join('')
                     : '<div style="font-size:11.5px; color:#94a3b8;">메모 없음</div>';
+                const adminDelete = dash.isAdmin ? `
+                    <div style="border-top:1px dashed #fca5a5; padding-top:8px; display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                        <span style="font-size:11px; color:#991b1b;">관리자 전용: 삭제한 기록은 대시보드에서 사라지며 삭제자·시각·사유와 함께 공유폴더 records/deleted 에 보관됩니다.</span>
+                        <button type="button" class="awx-vld-btn awx-vld-btn-sm" data-act="delete-record" data-sid="${sidAttr}" style="font-size:11px; padding:3px 8px; background:#dc2626; color:#ffffff; border:1px solid #b91c1c; flex-shrink:0;">기록 삭제</button>
+                    </div>` : '';
                 const noteForm = r.myRole ? `
                     <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
                         <textarea class="awx-vld-textarea" data-note-input="${sidAttr}" maxlength="1000" placeholder="메모 입력 (${escapeHTML(r.myRole)}로 기록됩니다)" style="height:52px; resize:vertical; font-size:12px;">${escapeHTML(dash.noteDraft[sid] || '')}</textarea>
@@ -4456,6 +4461,7 @@
                             <div style="display:flex; flex-direction:column; gap:4px;">${noteListHtml}</div>
                             ${noteForm}
                         </div>
+                        ${adminDelete}
                     </div>`;
             }
 
@@ -4482,6 +4488,8 @@
 
         function renderDashboard() {
             if (!dashListEl) return;
+            const adminBadge = getEl('awx-vld-dash-admin-badge');
+            if (adminBadge) adminBadge.style.display = dash.isAdmin ? 'inline-block' : 'none';
             const derived = computeDashDerived(dash.records);
             renderDashSummary(derived);
             let rows = getDashFiltered(derived);
@@ -4538,6 +4546,7 @@
                 dash.records = Array.isArray(data.records) ? data.records : [];
                 dash.fastSec = Number(data.fastApprovalSeconds) > 0 ? Number(data.fastApprovalSeconds) : 60;
                 dash.me = data.me || {};
+                dash.isAdmin = !!data.isAdmin;
                 dash.recordsDir = data.recordsDir || '';
                 dash.loadedAt = Date.now();
                 if (Array.isArray(dash.randomIds)) {
@@ -4627,6 +4636,30 @@
                     const resultEl = Array.from(dashListEl.querySelectorAll('[data-copy-result]')).find(x => x.getAttribute('data-copy-result') === sid);
                     const ok = await copyHostsWithResult(rec.targetHosts || [], resultEl);
                     dash.copyResult[sid] = buildCopyResultHtml(rec.targetHosts || [], ok);
+                } else if (act === 'delete-record') {
+                    if (!dash.isAdmin) return;
+                    const label = `${rec.incidentId || '-'} / ${dashFmtDateTime(rec.decidedAt)} / 작업자 ${dashActor(rec.worker)}`;
+                    const reason = prompt(`[관리자] 기록을 삭제합니다.\n${label}\n\n삭제 사유를 입력하세요 (필수):`, '');
+                    if (reason === null) return;
+                    if (!String(reason).trim()) { alert('삭제 사유를 입력해야 삭제할 수 있습니다.'); return; }
+                    if (!confirm(`정말 삭제할까요?\n${label}\n사유: ${String(reason).trim()}\n\n삭제한 기록은 대시보드에서 사라집니다.`)) return;
+                    actEl.disabled = true;
+                    try {
+                        const res = await agentFetch(`${AGENT_BASE}/api/records/delete`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionId: sid, reason: String(reason).trim() })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+                        dash.records = dash.records.filter(r => r.sessionId !== sid);
+                        delete dash.expanded[sid];
+                        if (Array.isArray(dash.randomIds)) dash.randomIds = dash.randomIds.filter(id => id !== sid);
+                        renderDashboard();
+                    } catch (err) {
+                        alert('기록 삭제 실패: ' + ((err && err.message) || err));
+                        actEl.disabled = false;
+                    }
                 } else if (act === 'add-note') {
                     const input = Array.from(dashListEl.querySelectorAll('[data-note-input]')).find(x => x.getAttribute('data-note-input') === sid);
                     const text = String(input ? input.value : '').trim();
@@ -5150,7 +5183,7 @@
                 checkAndNotifySessionDecided(ev);
                 if (typeof window.awxRefreshApprovalLogs === 'function') window.awxRefreshApprovalLogs();
                 scheduleDashboardReload();
-            } else if (ev.type === 'RECORD_NOTE_ADDED') {
+            } else if (ev.type === 'RECORD_NOTE_ADDED' || ev.type === 'RECORD_DELETED') {
                 scheduleDashboardReload();
             } else if (ev.type === 'SESSION_REASSIGNED') {
                 // 1. 작업자의 화면이면 확인자 정보 즉시 갱신 (확인자 변경 시 작업자에게 실시간 업데이트)

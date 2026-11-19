@@ -55,6 +55,19 @@ type RecordNote struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
+// RecordDeletion describes who removed a record from the dashboard (관리자 전용).
+type RecordDeletion struct {
+	DeletedBy User   `json:"deletedBy"`
+	DeletedAt string `json:"deletedAt"`
+	Reason    string `json:"reason"`
+}
+
+// DeletedWorkRecord is stored under records/deleted/<세션ID>.json: the original record plus deletion info.
+type DeletedWorkRecord struct {
+	WorkRecord
+	Deletion RecordDeletion `json:"deletion"`
+}
+
 // WorkRecordView is a record plus its notes as returned by GET /api/records.
 type WorkRecordView struct {
 	WorkRecord
@@ -67,6 +80,9 @@ const (
 	defaultFastApprovalSeconds  = 60
 	workRecordMonthDirLayout    = "2006-01"
 	workRecordNotesDirName      = "notes"
+	workRecordDeletedDirName    = "deleted"
+	maxRecordDeleteReasonRunes  = 500
+	adminRoleName               = "관리자"
 	workRecordSessionIDMaxBytes = 128
 )
 
@@ -82,6 +98,16 @@ func (s *AgentServer) recordsDirPath() string {
 
 func (s *AgentServer) recordNotesDirPath(sessionId string) string {
 	return filepath.Join(s.recordsDirPath(), workRecordNotesDirName, filepath.Base(sessionId))
+}
+
+func (s *AgentServer) deletedRecordPath(sessionId string) string {
+	return filepath.Join(s.recordsDirPath(), workRecordDeletedDirName, filepath.Base(sessionId)+".json")
+}
+
+// isAdminRole reports whether a users.json role grants dashboard record deletion.
+func isAdminRole(role string) bool {
+	r := strings.TrimSpace(role)
+	return r == adminRoleName || strings.EqualFold(r, "admin")
 }
 
 func isValidRecordSessionID(id string) bool {
@@ -228,6 +254,10 @@ func (s *AgentServer) createWorkRecord(sess *Session, source string) (bool, erro
 	s.recordsMu.Lock()
 	defer s.recordsMu.Unlock()
 	if s.findWorkRecordFile(rec.SessionId) != "" {
+		return false, nil
+	}
+	// 관리자가 삭제한 기록은 세션 파일이 남아 있어도 다시 만들지 않는다
+	if _, err := os.Stat(s.deletedRecordPath(rec.SessionId)); err == nil {
 		return false, nil
 	}
 	data, err := json.MarshalIndent(rec, "", "  ")
@@ -402,6 +432,7 @@ func (s *AgentServer) currentIdentity() User {
 			if isLocalHostIP(u.IP, s.detectedIP) {
 				me.Name = u.Name
 				me.IP = u.IP
+				me.Role = u.Role
 				break
 			}
 		}
@@ -487,6 +518,7 @@ func (s *AgentServer) handleWorkRecords(w http.ResponseWriter, r *http.Request) 
 		"records":             out,
 		"count":               len(out),
 		"me":                  me,
+		"isAdmin":             isAdminRole(me.Role),
 		"recordsDir":          s.recordsDirPath(),
 		"fastApprovalSeconds": fastApprovalSeconds(s.config),
 	})
@@ -546,7 +578,7 @@ func (s *AgentServer) handleWorkRecordNote(w http.ResponseWriter, r *http.Reques
 	note := RecordNote{
 		NoteId:     fmt.Sprintf("%s_%09d_%s", now.Format("20060102_150405"), now.Nanosecond(), randomNoteSuffix()),
 		SessionId:  rec.SessionId,
-		Author:     me,
+		Author:     User{Name: me.Name, IP: me.IP},
 		AuthorRole: role,
 		Text:       text,
 		CreatedAt:  now.Format(time.RFC3339),
@@ -574,4 +606,95 @@ func randomNoteSuffix() string {
 		return fmt.Sprintf("%06x", time.Now().UnixNano()&0xffffff)
 	}
 	return hex.EncodeToString(b)
+}
+
+// handleWorkRecordDelete: POST /api/records/delete {sessionId, reason}
+// users.json 에서 역할이 "관리자"인 사용자만 기록을 삭제할 수 있다.
+// 삭제된 기록은 대시보드에서 사라지며, 원본과 삭제 정보(삭제자·시각·사유)는 records/deleted/ 에 보관된다.
+func (s *AgentServer) handleWorkRecordDelete(w http.ResponseWriter, r *http.Request) {
+	if enableCORS(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST 만 허용됩니다"})
+		return
+	}
+	var req struct {
+		SessionId string `json:"sessionId"`
+		Reason    string `json:"reason"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+	req.SessionId = strings.TrimSpace(req.SessionId)
+	reason := strings.TrimSpace(strings.ReplaceAll(req.Reason, "\r\n", "\n"))
+	if !isValidRecordSessionID(req.SessionId) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid sessionId"})
+		return
+	}
+	me := s.currentIdentity()
+	if !isAdminRole(me.Role) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "기록 삭제는 users.json 에서 역할이 관리자인 사용자만 할 수 있습니다"})
+		return
+	}
+	if reason == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "삭제 사유를 입력하세요"})
+		return
+	}
+	if utf8.RuneCountInString(reason) > maxRecordDeleteReasonRunes {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("삭제 사유는 %d자 이내로 입력하세요", maxRecordDeleteReasonRunes)})
+		return
+	}
+
+	s.recordsMu.Lock()
+	defer s.recordsMu.Unlock()
+
+	recPath := s.findWorkRecordFile(req.SessionId)
+	if recPath == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "작업 기록을 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)"})
+		return
+	}
+	rec, err := readWorkRecordFile(recPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "작업 기록을 읽을 수 없습니다: " + err.Error()})
+		return
+	}
+	deleted := DeletedWorkRecord{
+		WorkRecord: rec,
+		Deletion: RecordDeletion{
+			DeletedBy: User{Name: me.Name, IP: me.IP, Role: me.Role},
+			DeletedAt: time.Now().Format(time.RFC3339),
+			Reason:    reason,
+		},
+	}
+	data, err := json.MarshalIndent(deleted, "", "  ")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := writeFileExclusive(s.deletedRecordPath(rec.SessionId), data); err != nil && !errors.Is(err, os.ErrExist) {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "삭제 보관 파일 저장 실패: " + err.Error()})
+		return
+	}
+	if err := os.Remove(recPath); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "기록 삭제 실패: " + err.Error()})
+		return
+	}
+	// 메모도 함께 보관 위치로 이동 (대시보드에서 사라짐)
+	notesDir := s.recordNotesDirPath(rec.SessionId)
+	if _, statErr := os.Stat(notesDir); statErr == nil {
+		dst := filepath.Join(s.recordsDirPath(), workRecordDeletedDirName, workRecordNotesDirName, filepath.Base(rec.SessionId))
+		if mkErr := os.MkdirAll(filepath.Dir(dst), 0755); mkErr == nil {
+			if mvErr := os.Rename(notesDir, dst); mvErr != nil {
+				log.Printf("[RECORD] notes move failed for %s: %v\n", rec.SessionId, mvErr)
+			}
+		}
+	}
+	log.Printf("[RECORD] deleted %s by %s(%s): %s\n", rec.SessionId, me.Name, me.IP, reason)
+	s.broadcastEvent("RECORD_DELETED", rec.SessionId, deleted.Deletion)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"deletion": deleted.Deletion,
+	})
 }

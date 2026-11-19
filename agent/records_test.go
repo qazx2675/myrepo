@@ -381,3 +381,157 @@ func TestSelectFinalTargetHostsPriority(t *testing.T) {
 		}
 	}
 }
+
+func recordsTestPostDelete(t *testing.T, tsURL, sid, reason string) (int, map[string]interface{}) {
+	t.Helper()
+	b, _ := json.Marshal(map[string]string{"sessionId": sid, "reason": reason})
+	resp, err := http.Post(tsURL+"/api/records/delete", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]interface{}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+func recordsTestSetMyRole(t *testing.T, server *AgentServer, role string) {
+	t.Helper()
+	if err := server.writeUsers(UsersFile{Users: []User{
+		{Name: "나", IP: "192.168.0.23", Role: role},
+		{Name: "확인자B", IP: "192.168.1.20", Role: "확인자"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	server.usersMutex.Lock()
+	server.lastUsersSync = time.Time{}
+	server.usersMutex.Unlock()
+}
+
+// users.json 역할이 관리자인 사용자만 기록을 삭제할 수 있고, 삭제 내역은 보관되며 다시 생성되지 않는다
+func TestWorkRecordAdminDelete(t *testing.T) {
+	server, ts := setupTestServer(t)
+	recordsTestSetMyRole(t, server, "작업자")
+
+	sid := recordsTestCreateSession(t, ts.URL, Session{
+		Worker:     User{Name: "나", IP: "192.168.0.23"},
+		Checker:    User{Name: "확인자B", IP: "192.168.1.20"},
+		Metadata:   Metadata{IncidentId: "INC-DEL"},
+		WorkerData: WorkerData{DetailHosts: []string{"x1", "x2"}},
+	})
+	recordsTestDecide(t, ts.URL, sid, "192.168.1.20", "APPROVED", "")
+	if code, _ := recordsTestPostNote(t, ts.URL, sid, "삭제 전 메모"); code != http.StatusOK {
+		t.Fatalf("note should succeed, got %d", code)
+	}
+
+	// 관리자가 아니면 403, isAdmin=false
+	if out := recordsTestGet(t, ts.URL+"/api/records"); out.Count != 1 {
+		t.Fatalf("expected 1 record, got %d", out.Count)
+	}
+	var adminFlag struct {
+		IsAdmin bool `json:"isAdmin"`
+	}
+	getAdmin := func() bool {
+		resp, err := http.Get(ts.URL + "/api/records")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		_ = json.NewDecoder(resp.Body).Decode(&adminFlag)
+		return adminFlag.IsAdmin
+	}
+	if getAdmin() {
+		t.Fatal("non-admin must have isAdmin=false")
+	}
+	if code, _ := recordsTestPostDelete(t, ts.URL, sid, "중복 건"); code != http.StatusForbidden {
+		t.Fatalf("non-admin delete must be 403, got %d", code)
+	}
+
+	// 등록 API 로 관리자 권한 상승 불가
+	regBody, _ := json.Marshal(User{Name: "나", IP: "192.168.0.23", Role: "관리자"})
+	resp, err := http.Post(ts.URL+"/api/users/register", "application/json", bytes.NewReader(regBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("register as 관리자 must be 403, got %d", resp.StatusCode)
+	}
+
+	// users.json 에서 관리자로 지정
+	recordsTestSetMyRole(t, server, "관리자")
+	if !getAdmin() {
+		t.Fatal("admin must have isAdmin=true")
+	}
+	// 이름 변경 등록 시에도 관리자 역할 유지
+	regBody, _ = json.Marshal(User{Name: "나(이름변경)", IP: "192.168.0.23"})
+	resp, err = http.Post(ts.URL+"/api/users/register", "application/json", bytes.NewReader(regBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	server.usersMutex.Lock()
+	server.lastUsersSync = time.Time{}
+	server.usersMutex.Unlock()
+	if !getAdmin() {
+		t.Fatal("admin role must be kept after name re-registration")
+	}
+
+	if code, _ := recordsTestPostDelete(t, ts.URL, sid, "  "); code != http.StatusBadRequest {
+		t.Fatalf("empty reason must be 400, got %d", code)
+	}
+	if code, _ := recordsTestPostDelete(t, ts.URL, "req_missing", "x"); code != http.StatusNotFound {
+		t.Fatalf("missing record must be 404, got %d", code)
+	}
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/records/delete", nil)
+	if r2, err := http.DefaultClient.Do(req); err == nil {
+		r2.Body.Close()
+		if r2.StatusCode != http.StatusMethodNotAllowed {
+			t.Fatalf("DELETE method must be 405, got %d", r2.StatusCode)
+		}
+	}
+
+	code, out := recordsTestPostDelete(t, ts.URL, sid, "테스트로 잘못 생성된 건")
+	if code != http.StatusOK {
+		t.Fatalf("admin delete should succeed, got %d %v", code, out)
+	}
+	if list := recordsTestGet(t, ts.URL+"/api/records"); list.Count != 0 {
+		t.Fatalf("deleted record must disappear from dashboard, got %d", list.Count)
+	}
+
+	// 삭제 내역 보관 확인
+	raw, err := os.ReadFile(filepath.Join(server.config.SharedDir, "records", "deleted", sid+".json"))
+	if err != nil {
+		t.Fatalf("deleted archive missing: %v", err)
+	}
+	var arch DeletedWorkRecord
+	if err := json.Unmarshal(raw, &arch); err != nil {
+		t.Fatal(err)
+	}
+	if arch.SessionId != sid || arch.IncidentId != "INC-DEL" || arch.Deletion.Reason != "테스트로 잘못 생성된 건" ||
+		arch.Deletion.DeletedBy.IP != "192.168.0.23" || arch.Deletion.DeletedAt == "" {
+		t.Fatalf("deleted archive wrong: %+v", arch)
+	}
+	if notes, _ := filepath.Glob(filepath.Join(server.config.SharedDir, "records", "deleted", "notes", sid, "*.json")); len(notes) != 1 {
+		t.Fatalf("notes should be moved to deleted/notes, got %d", len(notes))
+	}
+
+	// 세션 파일이 남아 있어도 다시 생성되지 않음, 메모/재삭제 불가
+	if n := server.backfillWorkRecords(); n != 0 {
+		t.Fatalf("backfill must not recreate deleted record, created %d", n)
+	}
+	if list := recordsTestGet(t, ts.URL+"/api/records"); list.Count != 0 {
+		t.Fatalf("deleted record reappeared: %d", list.Count)
+	}
+	if code, _ := recordsTestPostNote(t, ts.URL, sid, "삭제 후 메모"); code != http.StatusNotFound {
+		t.Fatalf("note on deleted record must be 404, got %d", code)
+	}
+	if code, _ := recordsTestPostDelete(t, ts.URL, sid, "again"); code != http.StatusNotFound {
+		t.Fatalf("second delete must be 404, got %d", code)
+	}
+	// 기존 승인 로그는 그대로 유지
+	today := time.Now().Format("2006-01-02")
+	if logRaw, err := os.ReadFile(filepath.Join(server.config.SharedDir, "logs", today+".log")); err != nil || !strings.Contains(string(logRaw), "INC-DEL") {
+		t.Fatalf("approval log must be untouched (err=%v)", err)
+	}
+}

@@ -274,3 +274,10 @@
 * **브라우저 E2E (Playwright, Linux 에이전트)**: 탭 이름 4개, MATCH 복사(클립보드 37줄 · 첫/마지막 호스트 확인), MISMATCH 복사 비활성, 작업자 승인 화면 복사, 대시보드 요약/검색/필터/무작위/대조/메모 권한, 콘솔 오류 0건 확인.
 * **PC 용 E2E 스크립트 기대값 갱신**: `tests/run_all_tests.js`(TC-09), `tests/test_self_request.js`, `tests/test_standalone_app.js`(탭 4개·번호 없음) — PC 에서 재실행 필요.
 * **가이드**: `docs/mail_guide` fig3·fig4 재캡처, fig8(대시보드)·fig9(상세) 추가, 본문/Outlook/Confluence XHTML 갱신. fig1·fig2·fig5·fig6·fig7 은 탭 바에 이전 번호가 보이므로 PC 에서 재캡처 권장.
+
+### (3) 추가: 관리자 기록 삭제 (2026-11-19)
+* `users.json` 역할이 `관리자`(또는 `admin`)인 사용자만 `POST /api/records/delete {sessionId, reason}` 로 기록 삭제 가능. 삭제 사유 필수(500자 이내), 그 외 403.
+* 삭제 시 원본 기록 + 삭제 정보(삭제자·시각·사유)를 `records/deleted/<세션ID>.json` 에 보관하고 메모는 `records/deleted/notes/` 로 이동. 대시보드에서 사라지며 backfill 로 다시 생성되지 않음. 승인 로그(`logs/*.log`)는 유지.
+* 권한 상승 방지: `/api/users/register` 로 `관리자` 역할 지정 불가(403), 기존 관리자가 이름을 바꿔 재등록해도 역할 유지.
+* UI: 관리자에게만 대시보드 제목 옆 `관리자` 표시 + 펼친 기록의 `[기록 삭제]` (사유 입력 → 확인). 비관리자에게는 버튼 미표시.
+* 검증: `TestWorkRecordAdminDelete` 추가(비관리자 403, 등록 API 권한 상승 차단, 사유 필수, 보관 파일 내용, 메모 이동, 재생성 없음, 승인 로그 유지) 및 Playwright 로 관리자/비관리자 화면 확인.

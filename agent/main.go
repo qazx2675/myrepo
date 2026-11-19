@@ -1562,6 +1562,7 @@ func (s *AgentServer) Routes() http.Handler {
 		mux.HandleFunc("/api/logs", s.handleApprovalLogs)
 		mux.HandleFunc("/api/records", s.handleWorkRecords)
 		mux.HandleFunc("/api/records/note", s.handleWorkRecordNote)
+		mux.HandleFunc("/api/records/delete", s.handleWorkRecordDelete)
 		mux.HandleFunc("/api/peer/notify", s.handlePeerNotify)
 		mux.HandleFunc("/api/peer/update", s.handlePeerUpdate)
 		mux.HandleFunc("/api/events", s.handleEvents)
@@ -1590,7 +1591,7 @@ func (s *AgentServer) handleAppRoot(w http.ResponseWriter, r *http.Request) {
 	webui.ServeIndex(w, r)
 }
 
-const agentBuildTag = "20261119-dashboard-rel"
+const agentBuildTag = "20261119-dashboard-admin-rel"
 
 // handleHealth: GET /api/health
 func (s *AgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -4224,6 +4225,11 @@ func (s *AgentServer) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if req.Role == "" {
 		req.Role = "작업자"
 	}
+	// 관리자 역할은 users.json 을 직접 편집해서만 지정/해제할 수 있다 (등록 API 로 자기 권한 상승 방지)
+	if isAdminRole(req.Role) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "관리자 역할은 users.json 에서만 지정할 수 있습니다"})
+		return
+	}
 
 	uf, err := s.readUsers()
 	if err != nil {
@@ -4234,7 +4240,7 @@ func (s *AgentServer) handleRegister(w http.ResponseWriter, r *http.Request) {
 	for i, u := range uf.Users {
 		if ipMatches(u.IP, req.IP) {
 			uf.Users[i].Name = req.Name
-			if req.Role != "" {
+			if req.Role != "" && !isAdminRole(u.Role) {
 				uf.Users[i].Role = req.Role
 			}
 			updated = true
