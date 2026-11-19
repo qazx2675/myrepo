@@ -59,7 +59,7 @@ class SettingsMenu:
         self.sel = 0
         self.msg = ""
         self.f_title = i18n.font(28, bold=True)       # 한글 글꼴
-        self.f = i18n.font(15)
+        self.f = i18n.font(18)                        # 작으면 일부 한글 받침이 뭉개짐
 
     # ------------------------------------------------------------------
     def items(self):
@@ -77,10 +77,6 @@ class SettingsMenu:
             ("header", "VEHICLE", None),
             ("kind", "Vehicle type", tr(e.spec["name"])),
             ("powertrain", "Powertrain", tr(PT_NAME[e.powertrain])),
-        ]
-        for k, (label, path, lo, hi, fmt) in enumerate(SPEC_ITEMS):
-            rows.append((("spec", k), label, fmt.format(_get(a.specs[e.kind], path))))
-        rows += [
             ("header", "DISPLAY / SOUND", None),
             ("lang", "Language", i18n.LANG_NAME[i18n.LANG]),
             ("view", "Camera view", tr(a.view)),
@@ -91,11 +87,15 @@ class SettingsMenu:
             ("save", "> Save vehicle settings to config/vehicles.json", ""),
             ("defaults", "> Reload settings from file", ""),
             ("quit", "> Quit simulator", ""),
+            ("column", "", None),                    # 여기부터 오른쪽 칸
+            ("header", "VEHICLE SPECS", None),
         ]
+        for k, (label, path, lo, hi, fmt) in enumerate(SPEC_ITEMS):
+            rows.append((("spec", k), label, fmt.format(_get(a.specs[e.kind], path))))
         return [(k, tr(label), val) for k, label, val in rows]   # 라벨은 화면 언어로
 
     def _selectable(self):
-        return [i for i, r in enumerate(self.items()) if r[0] != "header"]
+        return [i for i, r in enumerate(self.items()) if r[0] not in ("header", "column")]
 
     # ------------------------------------------------------------------
     def handle(self, ev):
@@ -201,24 +201,28 @@ class SettingsMenu:
         sel = self._selectable()
         if self.sel not in sel:
             self.sel = sel[0]
-        x0, y0, lh = W // 2 - 330, 40, 17
-        surf.blit(self.f_title.render(tr("SETTINGS"), True, (255, 210, 60)), (x0, y0 - 30))
+        cw = min(600, (W - 60) // 2)                 # 두 칸: 왼쪽 코스·차량·화면, 오른쪽 차량 제원
+        x0, y0, lh, vx = W // 2 - cw - 10, 50, 24, int(cw * 0.56)
+        surf.blit(self.f_title.render(tr("SETTINGS"), True, (255, 210, 60)), (x0, y0 - 40))
         hint = tr("Up/Down select   Left/Right change (Shift = big step)   Enter = run   Tab/Esc = close")
-        surf.blit(self.f.render(hint, True, (160, 170, 180)), (x0, H - 34))
-        y = y0 + 10
+        surf.blit(self.f.render(hint, True, (160, 170, 180)), (x0, H - 36))
+        hx, y = x0, y0 + 10
         for i, (key, label, val) in enumerate(rows):
+            if key == "column":
+                x0, y = W // 2 + 10, y0 + 10
+                continue
             if key == "header":
                 y += 6
                 surf.blit(self.f.render(label, True, (120, 200, 255)), (x0, y))
             else:
                 on = i == self.sel
                 if on:
-                    pygame.draw.rect(surf, (40, 70, 110), (x0 - 6, y - 2, 660, lh))
+                    pygame.draw.rect(surf, (40, 70, 110), (x0 - 6, y - 1, cw, lh))
                 col = (255, 255, 255) if on else (205, 210, 215)
                 surf.blit(self.f.render(label, True, col), (x0 + 12, y))
                 if val:
                     txt = f"<  {val}  >" if on else val
-                    surf.blit(self.f.render(txt, True, (255, 230, 120) if on else col), (x0 + 400, y))
+                    surf.blit(self.f.render(txt, True, (255, 230, 120) if on else col), (x0 + vx, y))
             y += lh
         if self.msg:
-            surf.blit(self.f.render(self.msg, True, (120, 240, 140)), (x0, H - 60))
+            surf.blit(self.f.render(self.msg, True, (120, 240, 140)), (hx, H - 64))
