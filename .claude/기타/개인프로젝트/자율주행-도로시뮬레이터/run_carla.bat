@@ -8,7 +8,8 @@ if not exist "%CARLA_ROOT%\CarlaUE4.exe" (echo 오류: %CARLA_ROOT%\CarlaUE4.exe
 tasklist /fi "imagename eq CarlaUE4-Win64-Shipping.exe" | find /i "CarlaUE4" >nul
 if errorlevel 1 (
   echo CARLA 서버 시작 중... 처음엔 1~2분 걸립니다.
-  start "" "%CARLA_ROOT%\CarlaUE4.exe" -quality-level=Epic
+  REM -RenderOffScreen: 서버 창 없이 뒤에서만 렌더링 (게임 창 하나만 보임). 끄기: stop_carla.bat
+  start "" "%CARLA_ROOT%\CarlaUE4.exe" -quality-level=Epic -RenderOffScreen
   timeout /t 40 /nobreak >nul
 )
 .venv\Scripts\python carla_sim\run.py %*

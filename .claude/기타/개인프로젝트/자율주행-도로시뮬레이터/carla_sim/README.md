@@ -33,6 +33,7 @@ install_carla.bat -ZipPath C:\Down\CARLA_0.9.16.zip   :: 이미 받은 zip 으�
 드라이브 여유 공간 확인(40 GB) → CARLA zip 다운로드(약 15 GB, 끊기면 다시 실행해 이어받기) → 압축 해제 → zip 삭제
 → `.venv` 에 numpy/pygame/moderngl/carla 설치(`wheels\` 에서, 인터넷 불필요) → `CARLA_ROOT` 환경변수 등록까지 합니다.
 그 뒤에는 `run_carla.bat` 하나로 서버를 켜고 시뮬레이터까지 실행합니다 (`run_carla.bat --level long --cars 0` 처럼 옵션 전달).
+서버는 창 없이(`-RenderOffScreen`) 뒤에서 돌기 때문에 게임 창 하나만 보입니다. 게임을 닫아도 서버는 남아 있어 다음 실행이 빠르고, 완전히 끄려면 `stop_carla.bat` 을 실행합니다.
 다운로드 주소가 바뀌어 실패하면 아래 1번 링크에서 zip 을 직접 받아 `-ZipPath` 로 넘기면 됩니다.
 
 **NVMe 와 SATA SSD 차이:** 맵 불러오기(시작, F1~F5)가 몇 초 빨라지는 정도이고, 주행 중 FPS 는 GPU 가 정하므로 체감 차이는 거의 없습니다.

@@ -230,6 +230,25 @@ class CarlaApp:
             self.text(surf, s, (20, 166 + 22 * i), (200, 210, 220))
 
 
+def single_instance(wait):
+    """같은 PC 에서 게임 창이 두 개 뜨지 않게 한다 (같은 CARLA 서버에 클라이언트 둘이 붙으면 서로 충돌).
+    로컬 포트 하나를 잡아 두는 방식. 코스 전환으로 다시 뜬 프로세스(wait=True)는 이전 프로세스가 끝날 때까지 기다린다."""
+    import socket
+    import time
+    t0 = time.time()
+    while True:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind(("127.0.0.1", 47913))
+            s.listen(1)
+            return s
+        except OSError:
+            s.close()
+            if not wait or time.time() - t0 > 15:
+                return None
+            time.sleep(0.2)
+
+
 def main():
     ap = argparse.ArgumentParser(description="자율주행 도로 시뮬레이터 - CARLA 버전")
     ap.add_argument("--level", choices=LEVEL_KEYS, default="normal")
@@ -246,6 +265,10 @@ def main():
     ap.add_argument("--height", type=int, default=720)
     ap.add_argument("--state", help=argparse.SUPPRESS)
     a = ap.parse_args()
+    lock = single_instance(wait=bool(a.state))
+    if lock is None:
+        print("이미 실행 중입니다 (게임 창은 하나만 띄웁니다).")
+        return 0
 
     pygame.init()
     size = (a.width, a.height)
