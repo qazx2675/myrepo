@@ -273,10 +273,13 @@ class CarlaSim:
         if self.camera is None or self.view != "showroom":
             return
         ext = self.ego.actor.bounding_box.extent
-        r = max(ext.x, ext.y) * 2.4 + 2.5
+        # 시야각 60° 에서 차 길이가 가로 약 22° 안에 들도록 (정비소 화면 가운데 칸 = 왼쪽·오른쪽 판 사이)
+        r = max(ext.x, ext.y) * 5.0 + 1.0
+        z = ext.z * 2.0 + 1.0
         a = math.radians(angle_deg + 180)
-        loc = carla.Location(x=r * math.cos(a), y=r * math.sin(a), z=ext.z * 1.2 + 0.8)
-        self.camera.set_transform(carla.Transform(loc, carla.Rotation(pitch=-12, yaw=angle_deg)))
+        loc = carla.Location(x=r * math.cos(a), y=r * math.sin(a), z=z)
+        pitch = -(math.degrees(math.atan2(z - ext.z, r)) + 3.0)   # 차 중심을 살짝 위에 (아래는 파츠 카드 자리)
+        self.camera.set_transform(carla.Transform(loc, carla.Rotation(pitch=pitch, yaw=angle_deg)))
 
     def _grab_frame(self, frame_id):
         while True:

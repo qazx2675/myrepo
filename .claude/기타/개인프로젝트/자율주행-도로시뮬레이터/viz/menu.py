@@ -88,7 +88,7 @@ class SettingsMenu:
             ("defaults", "> Reload settings from file", ""),
             ("quit", "> Quit simulator", ""),
             ("column", "", None),                    # 여기부터 오른쪽 칸
-            ("header", "VEHICLE SPECS", None),
+            ("header", "VEHICLE SPECS (stock, parts in garage)", None),
         ]
         for k, (label, path, lo, hi, fmt) in enumerate(SPEC_ITEMS):
             rows.append((("spec", k), label, fmt.format(_get(a.specs[e.kind], path))))

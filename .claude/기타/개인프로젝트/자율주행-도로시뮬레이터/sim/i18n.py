@@ -13,7 +13,7 @@ KO = {
     ">>> START / RESUME DRIVING  (Enter)  <<<": ">>> 운전 시작 / 계속하기  (Enter)  <<<",
     "SCENARIO": "주행 코스",
     "VEHICLE": "차량",
-    "VEHICLE SPECS": "차량 제원 (현재 차종)",
+    "VEHICLE SPECS (stock, parts in garage)": "차량 제원 (순정 값 · 튜닝 파츠는 정비소에서)",
     "DISPLAY / SOUND": "화면 / 소리",
     "Course / difficulty": "코스 / 난이도",
     "Traffic cars": "다른 차량 수",
