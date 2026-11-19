@@ -83,6 +83,7 @@ class CarlaSim:
         self.sliding = False
         self._last_gear = 1
         self._timer_reset = False                         # 리셋 직후 0-100 측정을 정지 상태부터 다시
+        self.dt, self._dt_changed = DT, 0.0              # 한 스텝 시간 (서버가 60 FPS 를 못 내면 늘려서 실시간 유지)
         self._flip_t, self.flip_notice = 0.0, -1.0       # 전복 지속 시간 / 다시 세운 안내를 보일 때까지(시뮬 시각)
         self.ego = None
         self._spawn_ego(vehicle, powertrain, self._start_transform())
@@ -127,7 +128,7 @@ class CarlaSim:
         self.tm = self.client.get_trafficmanager()
         self.tm_port = self.tm.get_port()
         s = world.get_settings()
-        s.synchronous_mode, s.fixed_delta_seconds = True, DT
+        s.synchronous_mode, s.fixed_delta_seconds = True, DT        # 처음엔 60 FPS 목표 (self.dt 와 같음)
         world.apply_settings(s)
         self.tm.set_synchronous_mode(True)
         self.tm.set_random_device_seed(self.seed)
@@ -250,10 +251,25 @@ class CarlaSim:
         self.ego.actor.set_target_angular_velocity(carla.Vector3D())
         self._timer_reset = True
 
+    def adapt_dt(self, fps, now):
+        """화면 FPS 가 목표(1/dt)를 못 따라가면 한 스텝 시간을 그만큼 늘려 게임이 슬로모션이 되지 않게 하고,
+        여유가 생기면 10초마다 5 FPS 씩 다시 올려 본다 (최대 60, 최소 20)."""
+        cap = round(1 / self.dt)
+        if fps < cap * 0.93:
+            new = max(20, int(fps))
+        elif fps > cap * 0.98 and cap < 60 and now - self._dt_changed > 10.0:
+            new = min(60, cap + 5)
+        else:
+            return
+        self.dt, self._dt_changed = 1.0 / new, now
+        s = self.world.get_settings()
+        s.fixed_delta_seconds = self.dt
+        self.world.apply_settings(s)
+
     def _check_flip(self):
         """뒤집히거나 옆으로 누운 채 2초가 지나면 근처 도로에 다시 세운다."""
         r = self.ego.actor.get_transform().rotation
-        self._flip_t = self._flip_t + DT if abs(r.roll) > 60 or abs(r.pitch) > 60 else 0.0
+        self._flip_t = self._flip_t + self.dt if abs(r.roll) > 60 or abs(r.pitch) > 60 else 0.0
         if self._flip_t > 2.0:
             self._flip_t = 0.0
             self.reset_ego()
@@ -610,8 +626,8 @@ class CarlaSim:
         if self.camera is not None and self.view == "cockpit":
             self._camera_fx(steer)
         frame_id = self.world.tick()
-        self.time += DT
-        self.odometer += v * DT
+        self.time += self.dt
+        self.odometer += v * self.dt
         creeping = a.get_control().throttle < 0.05 and v * 3.6 < 3.0   # 페달 없이 살살 구르는 정도면 아직 정지로 봄
         self.accel_timer.update(0.0 if self._timer_reset or creeping else v * 3.6, self.time)
         self._timer_reset = False
@@ -625,7 +641,7 @@ class CarlaSim:
         """RPM, 가속도, 미끄러짐, 출력[kW], 배터리 잔량(EV/하이브리드)."""
         a, spec, pt = self.ego.actor, self.ego.spec, self.ego.powertrain
         v = self.speed()
-        self.ax = (v - v_before) / DT
+        self.ax = (v - v_before) / self.dt
         vel, tr = a.get_velocity(), a.get_transform()
         f, r = _yaw_vectors(tr.rotation.yaw)
         self.vy = vel.x * r[0] + vel.y * r[1]
@@ -646,23 +662,23 @@ class CarlaSim:
             cap = e["battery_kwh"] * 3.6e6
             if p > 0:
                 share = 1.0 if pt == "ev" else (1.0 if v * 3.6 < e["ev_only_below_kmh"] else 0.3)
-                self.soc -= p * share / 0.9 * DT / cap
+                self.soc -= p * share / 0.9 * self.dt / cap
             else:
-                self.soc += min(-p, e["regen_force_n"] * v) * 0.7 * DT / cap
+                self.soc += min(-p, e["regen_force_n"] * v) * 0.7 * self.dt / cap
             if pt == "hybrid" and self.soc < 0.3:       # 엔진이 발전해서 충전
-                self.soc += 8000 * DT / cap
+                self.soc += 8000 * self.dt / cap
             self.soc = min(1.0, max(0.0, self.soc))
 
     def _camera_fx(self, steer):
         """운전석 카메라 연출: 가감속 피칭, 코너 롤, 코너 안쪽 바라보기, 속도에 따른 미세 진동."""
         fx = self._fx
-        k = 1 - math.exp(-DT / 0.25)
+        k = 1 - math.exp(-self.dt / 0.25)
         v = self.speed()
         ay = v * math.radians(self.ego.actor.get_angular_velocity().z)
         fx["ax"] += (max(-9, min(9, self.ax)) - fx["ax"]) * k
         fx["ay"] += (max(-9, min(9, ay)) - fx["ay"]) * k
-        fx["look"] += (max(-8, min(8, steer * 6 * min(1, v / 10))) - fx["look"]) * (1 - math.exp(-DT / 0.4))
-        fx["t"] += DT
+        fx["look"] += (max(-8, min(8, steer * 6 * min(1, v / 10))) - fx["look"]) * (1 - math.exp(-self.dt / 0.4))
+        fx["t"] += self.dt
         base = self._cam_base
         if not self.fx_enabled:
             self.camera.set_transform(base)

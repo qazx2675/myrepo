@@ -169,7 +169,7 @@ env.sim.set_destination(0)        # 내비 방식: obs["route"], obs["nav"]
 obs, frame = env.step((0.5, 0.0, 0.0))
 env.close()
 ```
-동기 모드(1/60초 고정, 60 FPS)라 `step()` 1번 = 물리 1스텝 = 카메라 1프레임이 정확히 맞습니다.
+동기 모드(기본 1/60초 = 60 FPS. `run.py` 화면에서는 서버가 60 을 못 내면 스텝 시간을 늘려 실시간 유지, `env.py` 는 고정)라 `step()` 1번 = 물리 1스텝 = 카메라 1프레임이 정확히 맞습니다.
 `obs` 키: speed, steer_angle, max_steer, lane, lane_id, n_lanes, lane_width, lateral_offset, heading_error,
 speed_limit, recommended_speed, lane_center / lane_left / lane_right (P,2), route (P,2), nav, curvature,
 lead_gap, lead_speed, vehicles (K,6), gear, reverse, powertrain, vehicle_kind, collisions, time

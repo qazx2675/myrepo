@@ -10,6 +10,7 @@ import argparse
 import math
 import os
 import sys
+import time
 import types
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,7 +19,7 @@ sys.path.insert(0, ROOT)
 import carla  # noqa: E402
 import pygame  # noqa: E402
 
-from carla_sim.sim import DT, LEVELS, CarlaSim  # noqa: E402
+from carla_sim.sim import LEVELS, CarlaSim  # noqa: E402
 from sim import i18n  # noqa: E402
 from sim.i18n import tr  # noqa: E402
 from sim.parts import load_parts  # noqa: E402
@@ -318,6 +319,7 @@ def main():
     ext_on = controller is not None
     gas, brk = Pedal(0.7, 1.8), Pedal(0.35, 1.4)
     paused = False
+    next_adapt = time.time() + 5.0
     try:
         while True:
             for ev in pygame.event.get():
@@ -371,8 +373,8 @@ def main():
                     app.rebuild()
             w = app.world
             keys = pygame.key.get_pressed()
-            throttle = gas.update(keys[pygame.K_w] or keys[pygame.K_UP], DT)
-            brake = brk.update(keys[pygame.K_s] or keys[pygame.K_DOWN], DT)
+            throttle = gas.update(keys[pygame.K_w] or keys[pygame.K_UP], w.dt)
+            brake = brk.update(keys[pygame.K_s] or keys[pygame.K_DOWN], w.dt)
             steer = float(keys[pygame.K_a] or keys[pygame.K_LEFT]) - float(keys[pygame.K_d] or keys[pygame.K_RIGHT])
             obs = w.observe()
             w.mode_label = None
@@ -384,7 +386,7 @@ def main():
                 throttle, brake, steer = controller(obs, w.frame if getattr(controller, "needs_frame", False) else None)
             running = not paused and not app.menu.open and not app.garage.open
             if app.garage.open and not app.menu.open:
-                app.garage.update(DT)
+                app.garage.update(w.dt)
             elif running:
                 w.fx_enabled = app.fx.enabled
                 w.step(throttle, brake, steer)
@@ -404,7 +406,10 @@ def main():
             if app.menu.open:
                 app.menu.draw(screen)
             pygame.display.flip()
-            clock.tick(round(1 / DT))
+            clock.tick(round(1 / w.dt))                 # 목표 60 FPS, 서버가 못 따라가면 w.dt 가 늘어남
+            if time.time() > next_adapt:                 # 2초마다: 느리면 스텝 시간을 늘려 실시간 유지
+                w.adapt_dt(clock.get_fps(), time.time())
+                next_adapt = time.time() + 2.0
     finally:
         app.world.destroy()
 
