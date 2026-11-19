@@ -453,7 +453,6 @@ async function runOneTakeTests() {
             throw new Error(`TC-09 FAILED (MISMATCH guide check): ${JSON.stringify(mismatchGuideCheck)}`);
         }
 
-        const expectedMatchComment = "인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -> esc -> :set paste 입력(붙여넣기 모드) -> 붙여넣기";
         const matchGuideCheck = await cdp.evaluate(`
             (() => {
                 document.getElementById('awx-vld-btn-reset-awx').click();
@@ -464,14 +463,22 @@ async function runOneTakeTests() {
                 window.awxDoCompare();
                 const guideBtns = document.querySelectorAll('#awx-vld-btn-guide-toggle');
                 const msgEl = document.getElementById('awx-vld-guide-msg');
+                const copyBtn = document.getElementById('awx-vld-btn-guide-copy');
+                const box = document.getElementById('awx-vld-guide-targets');
+                const cnt = document.getElementById('awx-vld-guide-target-count');
                 return {
                     guideBoxCount: guideBtns.length,
-                    matchMsg: msgEl ? msgEl.innerText.trim() : ''
+                    matchMsg: msgEl ? msgEl.innerText.trim() : '',
+                    copyEnabled: !!copyBtn && !copyBtn.disabled,
+                    collapsed: box ? box.style.display === 'none' : false,
+                    targetCount: cnt ? cnt.innerText : '',
+                    hasVim: document.getElementById('awx-vld-result-box').innerText.includes('set paste')
                 };
             })()
         `);
 
-        if (matchGuideCheck.guideBoxCount !== 1 || !matchGuideCheck.matchMsg.includes(expectedMatchComment)) {
+        if (matchGuideCheck.guideBoxCount !== 1 || !matchGuideCheck.matchMsg.includes('[대상 복사]') ||
+            !matchGuideCheck.copyEnabled || !matchGuideCheck.collapsed || matchGuideCheck.targetCount !== '3' || matchGuideCheck.hasVim) {
             throw new Error(`TC-09 FAILED (MATCH guide check): ${JSON.stringify(matchGuideCheck)}`);
         }
 
@@ -480,7 +487,7 @@ async function runOneTakeTests() {
         const hasEmoji = emojiRegex.test(panelText);
 
         if (!hasEmoji && !panelText.includes("v2.2")) {
-            recordLog('TC-09', 'MISMATCH/MATCH 안내문구 분기 & 중복 제거 & 펼치기', 'PASS', `중복 박스 제거(단일 출력), MISMATCH 시 재확인 문구 / MATCH 시 vim 붙여넣기 문구 분기 및 [펼치기] 정상 확인`);
+            recordLog('TC-09', 'MISMATCH/MATCH 안내문구 분기 & 중복 제거 & 펼치기', 'PASS', `중복 박스 제거(단일 출력), MISMATCH 시 재확인 문구+복사 비활성 / MATCH 시 접힌 최종 작업대상+[대상 복사] 활성 및 [펼치기] 정상 확인`);
         } else {
             throw new Error(`TC-09 FAILED: hasEmoji=${hasEmoji}`);
         }

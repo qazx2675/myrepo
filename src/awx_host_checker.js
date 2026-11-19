@@ -222,6 +222,7 @@
     if (typeof state.activeTab !== 'string') state.activeTab = 'single';
     if (typeof state.incidentNo !== 'string') state.incidentNo = '';
     if (typeof state.specialNotes !== 'string') state.specialNotes = '';
+    if (typeof state.workDescription !== 'string') state.workDescription = '';
     if (typeof state.selectedCheckerIp !== 'string') state.selectedCheckerIp = '';
     if (!state.agentInfo) state.agentInfo = { connected: false, ip: '', name: '', registered: false };
     if (!Array.isArray(state.usersList)) state.usersList = [];
@@ -1117,6 +1118,130 @@
             border-radius: 8px;
             margin-left: 4px;
         }
+        /* 작업대상 가로 나열 (복사 블록 / 대시보드 공용) */
+        .awx-vld-host-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            max-height: 160px;
+            overflow-y: auto;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 6px;
+        }
+        .awx-vld-host-chip {
+            display: inline-block;
+            padding: 1px 7px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            background: #f8fafc;
+            color: #0f172a;
+            font-size: 11.5px;
+            line-height: 1.6;
+            white-space: nowrap;
+        }
+        .awx-vld-host-chip.hit {
+            background: #fef08a;
+            border-color: #eab308;
+            font-weight: 700;
+        }
+        .awx-vld-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        /* 대시보드 */
+        .awx-vld-dash-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            font-size: 11.5px;
+        }
+        .awx-vld-dash-stat {
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+        }
+        .awx-vld-dash-stat b {
+            color: #0f172a;
+        }
+        .awx-vld-dash-item {
+            position: relative;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 9px 11px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .awx-vld-dash-item.has-notes::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 0;
+            height: 0;
+            border-top: 11px solid #dc2626;
+            border-left: 11px solid transparent;
+            border-top-right-radius: 5px;
+        }
+        .awx-vld-dash-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+            cursor: pointer;
+        }
+        .awx-vld-dash-tag {
+            display: inline-block;
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 0 6px;
+            border-radius: 4px;
+            margin-left: 4px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+        .awx-vld-dash-tag.ok { background: #dcfce7; color: #166534; border-color: #86efac; }
+        .awx-vld-dash-tag.no { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .awx-vld-dash-tag.warn { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+        .awx-vld-dash-tag.info { background: #e0f2fe; color: #075985; border-color: #7dd3fc; }
+        .awx-vld-dash-tag.memo { background: #fff1f2; color: #be123c; border-color: #fda4af; }
+        .awx-vld-dash-detail {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #cbd5e1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .awx-vld-dash-sub {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #334155;
+            margin-bottom: 3px;
+        }
+        .awx-vld-dash-kv {
+            display: grid;
+            grid-template-columns: 92px 1fr;
+            gap: 2px 8px;
+            font-size: 11.5px;
+            color: #334155;
+        }
+        .awx-vld-dash-kv > span:nth-child(odd) {
+            color: #64748b;
+        }
+        .awx-vld-dash-note {
+            font-size: 11.5px;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 4px;
+            padding: 5px 7px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
         `;
     }
 
@@ -1189,7 +1314,7 @@
   <g transform="translate(430, 246)">
     <rect width="180" height="52" fill="#15803d" stroke="#166534" rx="8"/>
     <text x="90" y="22" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">4. 안전 작업 착수</text>
-    <text x="90" y="39" font-size="10" fill="#bbf7d0" text-anchor="middle">vim 일괄 복사 가이드 출력</text>
+    <text x="90" y="39" font-size="10" fill="#bbf7d0" text-anchor="middle">최종 작업대상 복사 버튼 표시</text>
   </g>
   <line x1="520" y1="226" x2="520" y2="244" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow)"/>
 
@@ -1384,15 +1509,18 @@
 
         <!-- 3개 모드 탭 바 (가이드 안내형 명칭 및 [?] 워크플로우 팝오버) -->
         <div id="awx-vld-tab-bar" class="awx-vld-tab-bar">
-            <button id="awx-vld-tab-single" class="awx-vld-tab-btn ${state.activeTab === 'single' ? 'active' : ''}">1. 작업 전 자체확인</button>
+            <button id="awx-vld-tab-single" class="awx-vld-tab-btn ${state.activeTab === 'single' ? 'active' : ''}">작업 전 자체확인</button>
             <button id="awx-vld-tab-worker" class="awx-vld-tab-btn ${state.activeTab === 'worker' ? 'active' : ''}">
-                <span>2. 작업자 요청/승인대기</span>
+                <span>작업자 요청/승인대기</span>
                 <span class="awx-vld-tab-help" data-help="worker" title="작업자 프로세스 가이드 보기">?</span>
             </button>
             <button id="awx-vld-tab-checker" class="awx-vld-tab-btn ${state.activeTab === 'checker' ? 'active' : ''}">
-                <span>3. 확인자 검증/승인</span>
+                <span>확인자 검증/승인</span>
                 <span id="awx-vld-badge-pending-count" class="awx-vld-tab-badge" style="display:${state.pendingSessions.length > 0 ? 'inline-block' : 'none'};">${state.pendingSessions.length}</span>
                 <span class="awx-vld-tab-help" data-help="checker" title="확인자 프로세스 가이드 보기">?</span>
+            </button>
+            <button id="awx-vld-tab-dashboard" class="awx-vld-tab-btn ${state.activeTab === 'dashboard' ? 'active' : ''}">
+                <span>대시보드</span>
             </button>
         </div>
 
@@ -1533,6 +1661,14 @@
                         </label>
                         <input id="awx-vld-worker-incident-no" class="awx-vld-input awx-vld-mono" type="text" value="${state.incidentNo}" placeholder="예: INC-2026-00123">
                         <div id="awx-vld-worker-incident-hint" style="font-size:11.5px; color:#6b7280; margin-top:3px; ${state.incidentNo ? 'display:none;' : ''}">인시던트 진행 시 번호 입력을 권장합니다</div>
+                    </div>
+
+                    <!-- 작업 내용 [선택] (대시보드 표시용) -->
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:700; color:#111827; margin-bottom:4px;">
+                            작업 내용 <span class="awx-vld-badge-opt">[선택]</span>
+                        </label>
+                        <input id="awx-vld-worker-work-desc" class="awx-vld-input" type="text" maxlength="200" value="${escapeHTML(state.workDescription)}" placeholder="예: 커널 보안 패치 적용 (대시보드에 표시됩니다)">
                     </div>
 
                     <!-- 특이사항 전달 메모 [선택] -->
@@ -1684,6 +1820,57 @@
                 </div>
             </div>
 
+            <!-- [대시보드] 작업 기록 조회 (모든 사용자 조회 가능, 수정/삭제 불가) -->
+            <div id="awx-vld-pane-dashboard" style="display:${state.activeTab === 'dashboard' ? 'flex' : 'none'}; flex-direction:column; gap:10px;">
+                <div class="awx-vld-card" style="display:flex; flex-direction:column; gap:8px; padding:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                        <div class="awx-vld-section-title">작업 기록 대시보드</div>
+                        <button id="awx-vld-dash-refresh" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:3px 8px;">새로고침</button>
+                    </div>
+                    <div id="awx-vld-dash-summary" class="awx-vld-dash-summary"></div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                        <select id="awx-vld-dash-period" class="awx-vld-input" style="width:auto; padding:4px 6px; font-size:11.5px; cursor:pointer;">
+                            <option value="today">오늘</option>
+                            <option value="7d">최근 7일</option>
+                            <option value="30d">최근 30일</option>
+                            <option value="month">이번 달</option>
+                            <option value="all">전체 기간</option>
+                            <option value="custom">기간 지정</option>
+                        </select>
+                        <span id="awx-vld-dash-range" style="display:none; align-items:center; gap:4px; font-size:11.5px;">
+                            <input id="awx-vld-dash-from" type="date" style="padding:3px 6px; font-size:11.5px; border:1px solid #cbd5e1; border-radius:5px;">
+                            <span>~</span>
+                            <input id="awx-vld-dash-to" type="date" style="padding:3px 6px; font-size:11.5px; border:1px solid #cbd5e1; border-radius:5px;">
+                        </span>
+                        <select id="awx-vld-dash-status" class="awx-vld-input" style="width:auto; padding:4px 6px; font-size:11.5px; cursor:pointer;">
+                            <option value="all">승인 + 반려</option>
+                            <option value="APPROVED">승인만</option>
+                            <option value="REJECTED">반려만</option>
+                        </select>
+                    </div>
+                    <input id="awx-vld-dash-search" class="awx-vld-input" type="text" placeholder="인시던트 번호 · 작업자 · 확인자 · 작업 내용 · 호스트명 검색" style="font-size:12px;">
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                        <div style="font-size:12px; font-weight:700; color:#0f172a;">대조 확인</div>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; font-size:11.5px;">
+                            <span>무작위</span>
+                            <input id="awx-vld-dash-random-n" type="number" min="1" max="50" value="5" style="width:52px; padding:3px 5px; font-size:11.5px; border:1px solid #cbd5e1; border-radius:4px;">
+                            <span>건</span>
+                            <button id="awx-vld-dash-random" type="button" class="awx-vld-btn awx-vld-btn-primary awx-vld-btn-sm" style="font-size:11px; padding:3px 8px;">무작위 보기</button>
+                            <button id="awx-vld-dash-show-all" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="font-size:11px; padding:3px 8px;">전체 보기</button>
+                        </div>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:11.5px; color:#334155;">
+                            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;"><input id="awx-vld-dash-f-notes" type="checkbox">메모 있는 건</label>
+                            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;"><input id="awx-vld-dash-f-fast" type="checkbox">빠른 승인</label>
+                            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;"><input id="awx-vld-dash-f-same" type="checkbox">작업자·확인자 동일</label>
+                            <label style="display:flex; align-items:center; gap:3px; cursor:pointer;"><input id="awx-vld-dash-f-rereq" type="checkbox">재요청 있는 건</label>
+                        </div>
+                        <div style="font-size:11px; color:#64748b;">건을 펼친 뒤 인시던트 화면의 작업대상을 붙여넣으면 기록과 자동으로 대조합니다. 대조 결과는 저장되지 않습니다.</div>
+                    </div>
+                </div>
+                <div id="awx-vld-dash-info" style="font-size:11.5px; color:#475569;"></div>
+                <div id="awx-vld-dash-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
         </div>
 
         <!-- 하단 6시 방향 상시 크로스체크 승인/반려 상태바 (어느 탭에서나 실시간 확인 가능) -->
@@ -1828,6 +2015,8 @@
         const paneSingle = getEl('awx-vld-pane-single');
         const paneWorker = getEl('awx-vld-pane-worker');
         const paneChecker = getEl('awx-vld-pane-checker');
+        const paneDashboard = getEl('awx-vld-pane-dashboard');
+        const tabDashboard = getEl('awx-vld-tab-dashboard');
         const badgePendingCount = getEl('awx-vld-badge-pending-count');
 
         // 상단 환경설정(알림 톱니바퀴) 엘리먼트
@@ -1889,6 +2078,7 @@
         const workerIncidentNo = getEl('awx-vld-worker-incident-no');
         const workerIncidentHint = getEl('awx-vld-worker-incident-hint');
         const workerNotes = getEl('awx-vld-worker-notes');
+        const workerWorkDesc = getEl('awx-vld-worker-work-desc');
         const selChecker = getEl('awx-vld-sel-checker');
         const btnSendRequest = getEl('awx-vld-btn-send-request');
         const wCntAwx = getEl('awx-vld-w-cnt-awx');
@@ -1933,22 +2123,27 @@
             if (tabSingle) tabSingle.classList.toggle('active', tabName === 'single');
             if (tabWorker) tabWorker.classList.toggle('active', tabName === 'worker');
             if (tabChecker) tabChecker.classList.toggle('active', tabName === 'checker');
+            if (tabDashboard) tabDashboard.classList.toggle('active', tabName === 'dashboard');
 
             if (paneSingle) paneSingle.style.display = tabName === 'single' ? 'flex' : 'none';
             if (paneWorker) paneWorker.style.display = tabName === 'worker' ? 'flex' : 'none';
             if (paneChecker) paneChecker.style.display = tabName === 'checker' ? 'flex' : 'none';
+            if (paneDashboard) paneDashboard.style.display = tabName === 'dashboard' ? 'flex' : 'none';
 
             if (tabName === 'worker') {
                 updateWorkerTabSync();
                 await fetchUsersAndStatus();
             } else if (tabName === 'checker') {
                 await fetchPendingSessions();
+            } else if (tabName === 'dashboard') {
+                await loadDashboard();
             }
         }
 
         if (tabSingle) tabSingle.onclick = () => switchTab('single');
         if (tabWorker) tabWorker.onclick = () => switchTab('worker');
         if (tabChecker) tabChecker.onclick = () => switchTab('checker');
+        if (tabDashboard) tabDashboard.onclick = () => switchTab('dashboard');
         window.awxSwitchTab = switchTab;
 
         // 독립 창(Popup) 및 단독 실행 앱(Standalone EXE) 물리적 창 크기 축소 상태 관리
@@ -3847,28 +4042,20 @@
 
             resultBox.style.display = 'block';
             const guideHosts = getGuideTargetHosts(txtIncident.value, txtTarget.value, txtDetail.value);
-            const guideMessage = isAllMatch
-                ? '인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기'
-                : '소스 간 불일치가 감지되었습니다. 작업대상을 다시 확인하고 일치시킨 후 작업을 진행하시기 바랍니다.';
-            const guideTextColor = isAllMatch ? '#0f172a' : '#b91c1c';
-            const guideBorderColor = isAllMatch ? '#cbd5e1' : '#fca5a5';
-            const guideBgColor = isAllMatch ? '#f8fafc' : '#fff1f2';
-
-            const mandatoryCommentHtml = `
-                <div style="margin-top:10px; padding:9px 11px; background:${guideBgColor}; border:1px solid ${guideBorderColor}; border-radius:5px; color:${guideTextColor};">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <span style="font-size:11.5px; font-weight:700; color:${isAllMatch ? '#334155' : '#991b1b'};">작업 권장 안내</span>
-                        <button id="awx-vld-btn-guide-toggle" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:2px 7px; font-size:11px;">펼치기</button>
-                    </div>
-                    <div id="awx-vld-guide-msg" class="awx-vld-mono" style="font-size:11.5px; font-weight:${isAllMatch ? '500' : '700'}; word-break:break-all;">
-                        ${guideMessage}
-                    </div>
-                    <div id="awx-vld-guide-targets" style="display:none; margin-top:7px; padding-top:7px; border-top:1px dashed ${guideBorderColor};">
-                        <div style="font-size:11px; font-weight:700; color:#334155; margin-bottom:4px;">작업대상 호스트 명단 (<span id="awx-vld-guide-target-count">${guideHosts.length}</span>대)</div>
-                        <div id="awx-vld-guide-target-list" class="awx-vld-mono" style="max-height:120px; overflow-y:auto; background:#ffffff; border:1px solid #cbd5e1; border-radius:4px; padding:7px; font-size:11.5px; color:#111827; white-space:pre-wrap; word-break:break-all;">${guideHosts.join('\n')}</div>
-                    </div>
-                </div>
-            `;
+            const guideCopyIds = {
+                base: 'awx-vld-guide',
+                toggle: 'awx-vld-btn-guide-toggle',
+                msg: 'awx-vld-guide-msg',
+                targets: 'awx-vld-guide-targets',
+                count: 'awx-vld-guide-target-count',
+                list: 'awx-vld-guide-target-list',
+                copy: 'awx-vld-btn-guide-copy',
+                result: 'awx-vld-guide-copy-result'
+            };
+            const mandatoryCommentHtml = buildTargetCopyBlockHtml(guideCopyIds, guideHosts, isAllMatch,
+                isAllMatch
+                    ? '전수 일치 확인된 작업대상입니다. 펼치지 않아도 [대상 복사]로 클립보드에 복사할 수 있습니다.'
+                    : '소스 간 불일치가 감지되었습니다. 작업대상을 다시 확인하고 일치시킨 후 작업을 진행하시기 바랍니다.');
 
             if (isAllMatch) {
                 resultBox.style.background = '#f0fdf4';
@@ -3928,19 +4115,575 @@
                 };
             });
 
-            const btnGuideToggleEl = getEl('awx-vld-btn-guide-toggle');
-            const guideTargetsEl = getEl('awx-vld-guide-targets');
-            if (btnGuideToggleEl && guideTargetsEl) {
-                btnGuideToggleEl.onclick = () => {
-                    const isHidden = guideTargetsEl.style.display === 'none';
-                    guideTargetsEl.style.display = isHidden ? 'block' : 'none';
-                    btnGuideToggleEl.innerText = isHidden ? '접기' : '펼치기';
-                };
-            }
+            bindTargetCopyBlock(guideCopyIds, guideHosts, isAllMatch);
         }
 
         btnCompare.onclick = doCompare;
         window.awxDoCompare = doCompare;
+
+        // =========================================================================
+        // 최종 작업대상 표시 + 클립보드 복사 (vim 붙여넣기 안내 대체)
+        //  - 접힘 상태 유지, 펼치면 가로 나열
+        //  - [대상 복사]: 한 줄에 호스트 하나로 복사, "첫호스트 등 N대 복사 완료" + 복사 확인 경고 표시
+        //  - 불일치 상태에서는 복사 버튼 비활성
+        // =========================================================================
+        function renderHostChipsHtml(hosts, hitQuery) {
+            const q = String(hitQuery || '').trim().toLowerCase();
+            return hosts.map(h => {
+                const hit = q && String(h).toLowerCase().includes(q);
+                return `<span class="awx-vld-host-chip awx-vld-mono${hit ? ' hit' : ''}">${escapeHTML(h)}</span>`;
+            }).join('');
+        }
+
+        function buildTargetCopyBlockHtml(ids, hosts, enabled, message) {
+            const list = Array.isArray(hosts) ? hosts : [];
+            const canCopy = !!enabled && list.length > 0;
+            const tone = enabled
+                ? { bg: '#f8fafc', border: '#cbd5e1', text: '#0f172a', title: '#334155', weight: '500' }
+                : { bg: '#fff1f2', border: '#fca5a5', text: '#b91c1c', title: '#991b1b', weight: '700' };
+            const disabledTitle = !enabled ? '불일치 상태에서는 복사할 수 없습니다' : (list.length === 0 ? '복사할 작업대상이 없습니다' : '작업대상을 클립보드로 복사');
+            return `
+                <div style="margin-top:10px; padding:9px 11px; background:${tone.bg}; border:1px solid ${tone.border}; border-radius:5px; color:${tone.text};">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
+                        <span style="font-size:12px; font-weight:700; color:${tone.title};">최종 작업대상 <span id="${ids.count}" class="awx-vld-mono">${list.length}</span>대</span>
+                        <div style="display:flex; gap:5px;">
+                            <button id="${ids.toggle}" type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" style="padding:2px 8px; font-size:11px;">펼치기</button>
+                            <button id="${ids.copy}" type="button" class="awx-vld-btn awx-vld-btn-primary awx-vld-btn-sm" style="padding:2px 8px; font-size:11px;" ${canCopy ? '' : 'disabled'} title="${disabledTitle}">대상 복사</button>
+                        </div>
+                    </div>
+                    <div id="${ids.msg}" style="font-size:11.5px; font-weight:${tone.weight}; word-break:break-all;">${escapeHTML(message || '')}</div>
+                    <div id="${ids.targets}" style="display:none; margin-top:7px; padding-top:7px; border-top:1px dashed ${tone.border};">
+                        <div id="${ids.list}" class="awx-vld-host-list">${renderHostChipsHtml(list)}</div>
+                    </div>
+                    <div id="${ids.result}" style="display:none; margin-top:8px;"></div>
+                </div>
+            `;
+        }
+
+        async function writeClipboardText(text) {
+            const navs = [];
+            try { if (rootDoc.defaultView && rootDoc.defaultView.navigator) navs.push(rootDoc.defaultView.navigator); } catch (e) {}
+            if (!navs.includes(navigator)) navs.push(navigator);
+            for (const nav of navs) {
+                try {
+                    if (nav.clipboard && nav.clipboard.writeText) {
+                        await nav.clipboard.writeText(text);
+                        return true;
+                    }
+                } catch (e) {}
+            }
+            try {
+                const ta = rootDoc.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                ta.style.top = '0';
+                rootDoc.body.appendChild(ta);
+                ta.select();
+                const ok = rootDoc.execCommand('copy');
+                ta.remove();
+                return !!ok;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function buildCopyResultHtml(hosts, ok) {
+            if (!ok) {
+                return `<div style="padding:8px 10px; background:#fef2f2; border:1px solid #fca5a5; border-radius:5px; color:#b91c1c; font-weight:700; font-size:12.5px;">복사 실패 - 다시 시도하세요</div>`;
+            }
+            const n = hosts.length;
+            const first = hosts[0] || '';
+            const last = hosts[n - 1] || '';
+            const head = n > 1 ? `${first} 등 ${n}대 복사 완료` : `${first} 1대 복사 완료`;
+            return `
+                <div style="padding:8px 10px; background:#f0fdf4; border:1px solid #86efac; border-radius:5px; color:#166534; font-weight:700; font-size:12.5px; word-break:break-all;">${escapeHTML(head)}</div>
+                <div style="margin-top:6px; padding:8px 10px; background:#fffbeb; border:1px solid #fcd34d; border-radius:5px; color:#92400e; font-size:12px; font-weight:600; line-height:1.5; word-break:break-all;">
+                    주의: 붙여넣은 작업대상이 정확하게 복사되었는지 반드시 확인하세요.<br>
+                    총 <b>${n}</b>대 / 첫 호스트 <b>${escapeHTML(first)}</b> / 마지막 호스트 <b>${escapeHTML(last)}</b>
+                </div>
+            `;
+        }
+
+        async function copyHostsWithResult(hosts, resultEl) {
+            const ok = hosts.length > 0 && await writeClipboardText(hosts.join('\n'));
+            if (resultEl) {
+                resultEl.innerHTML = buildCopyResultHtml(hosts, ok);
+                resultEl.style.display = 'block';
+            }
+            return ok;
+        }
+
+        function bindTargetCopyBlock(ids, hosts, enabled) {
+            const list = Array.isArray(hosts) ? hosts : [];
+            const btnToggle = getEl(ids.toggle);
+            const targetsEl = getEl(ids.targets);
+            const btnCopy = getEl(ids.copy);
+            const resultEl = getEl(ids.result);
+            if (btnToggle && targetsEl) {
+                btnToggle.onclick = () => {
+                    const isHidden = targetsEl.style.display === 'none';
+                    targetsEl.style.display = isHidden ? 'block' : 'none';
+                    btnToggle.innerText = isHidden ? '접기' : '펼치기';
+                };
+            }
+            if (btnCopy) {
+                btnCopy.onclick = async () => {
+                    if (!enabled || list.length === 0) return;
+                    btnCopy.disabled = true;
+                    try {
+                        await copyHostsWithResult(list, resultEl);
+                    } finally {
+                        btnCopy.disabled = false;
+                    }
+                };
+            }
+        }
+        window.awxCopyTargetHosts = copyHostsWithResult;
+
+        // =========================================================================
+        // 대시보드: 작업 기록 조회 (모든 사용자 조회 가능, 수정/삭제 불가)
+        //  - 메모: 해당 건의 작업자/확인자만 추가 가능 (엑셀 F2 메모처럼 덧붙임, 수정/삭제 불가)
+        //  - 대조 확인: 붙여넣어 대조 / 호스트명 검색 / 무작위 보기 / 빠른 승인 / 동일인 / 재요청 표시
+        // =========================================================================
+        const dash = state.dashboard || (state.dashboard = {
+            records: [], fastSec: 60, me: {}, recordsDir: '', loading: false, error: '', loadedAt: 0,
+            period: '30d', from: '', to: '', status: 'all', search: '',
+            flags: { notes: false, fast: false, same: false, rereq: false },
+            randomIds: null, randomN: 5,
+            expanded: {}, compareText: {}, noteDraft: {}, copyResult: {}
+        });
+        const dashSummaryEl = getEl('awx-vld-dash-summary');
+        const dashInfoEl = getEl('awx-vld-dash-info');
+        const dashListEl = getEl('awx-vld-dash-list');
+        const dashPeriodEl = getEl('awx-vld-dash-period');
+        const dashRangeEl = getEl('awx-vld-dash-range');
+        const dashFromEl = getEl('awx-vld-dash-from');
+        const dashToEl = getEl('awx-vld-dash-to');
+        const dashStatusEl = getEl('awx-vld-dash-status');
+        const dashSearchEl = getEl('awx-vld-dash-search');
+        const dashRandomNEl = getEl('awx-vld-dash-random-n');
+        const dashFlagEls = {
+            notes: getEl('awx-vld-dash-f-notes'),
+            fast: getEl('awx-vld-dash-f-fast'),
+            same: getEl('awx-vld-dash-f-same'),
+            rereq: getEl('awx-vld-dash-f-rereq')
+        };
+
+        function dashDateStr(d) {
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+        }
+
+        function getDashRange() {
+            const now = new Date();
+            const today = dashDateStr(now);
+            switch (dash.period) {
+                case 'today': return { from: today, to: today };
+                case '7d': return { from: dashDateStr(new Date(now.getTime() - 6 * 86400000)), to: today };
+                case 'month': return { from: dashDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
+                case 'all': return { from: '', to: '' };
+                case 'custom': return { from: dash.from || '', to: dash.to || '' };
+                case '30d':
+                default: return { from: dashDateStr(new Date(now.getTime() - 29 * 86400000)), to: today };
+            }
+        }
+
+        function dashFmtDateTime(v) {
+            if (!v) return '-';
+            const d = new Date(v);
+            if (isNaN(d.getTime())) return String(v);
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+
+        function dashFmtDuration(sec) {
+            if (sec == null || !isFinite(sec) || sec < 0) return '-';
+            sec = Math.round(sec);
+            if (sec < 60) return `${sec}초`;
+            if (sec < 3600) return `${Math.floor(sec / 60)}분 ${sec % 60}초`;
+            const h = Math.floor(sec / 3600);
+            return `${h}시간 ${Math.floor((sec % 3600) / 60)}분`;
+        }
+
+        function dashActor(u) {
+            if (!u) return '-';
+            const name = String(u.name || '').trim();
+            const ip = String(u.ip || '').trim();
+            if (name && ip) return `${name}(${ip})`;
+            return name || ip || '-';
+        }
+
+        function dashNormName(n) {
+            return String(n || '').replace(/\s*\(테스트\)\s*$/, '').trim().toLowerCase();
+        }
+
+        function computeDashDerived(records) {
+            const byIncident = {};
+            records.forEach(r => {
+                const inc = String(r.incidentId || '').trim();
+                if (!inc || inc === '-') return;
+                (byIncident[inc] = byIncident[inc] || []).push(r);
+            });
+            const derived = {};
+            records.forEach(r => {
+                const c = new Date(r.createdAt).getTime();
+                const d = new Date(r.decidedAt).getTime();
+                const durationSec = (isFinite(c) && isFinite(d) && d >= c) ? (d - c) / 1000 : null;
+                const wIp = String(r.worker?.ip || '').trim();
+                const cIp = String(r.checker?.ip || '').trim();
+                const wName = dashNormName(r.worker?.name);
+                const cName = dashNormName(r.checker?.name);
+                const same = (wIp && cIp && wIp === cIp) || (wName && cName && wName === cName);
+                const inc = String(r.incidentId || '').trim();
+                const group = (inc && inc !== '-') ? (byIncident[inc] || []) : [];
+                derived[r.sessionId] = {
+                    durationSec,
+                    fast: r.status === 'APPROVED' && durationSec != null && durationSec < dash.fastSec,
+                    same: !!same,
+                    rereq: group.length > 1 ? group.length - 1 : 0,
+                    groupRejected: group.filter(x => x.status === 'REJECTED').length
+                };
+            });
+            return derived;
+        }
+
+        function dashRecordMatchesSearch(r, q) {
+            if (!q) return true;
+            const hay = [
+                r.incidentId, r.worker?.name, r.worker?.ip, r.checker?.name, r.checker?.ip,
+                r.workDescription, r.specialNotes, r.decisionComment, r.awxContextLabel,
+                ...(r.notes || []).map(n => n.text)
+            ].join(' ').toLowerCase();
+            if (hay.includes(q)) return true;
+            return (r.targetHosts || []).some(h => String(h).toLowerCase().includes(q));
+        }
+
+        function getDashFiltered(derived) {
+            const q = String(dash.search || '').trim().toLowerCase();
+            return dash.records.filter(r => {
+                if (dash.status !== 'all' && r.status !== dash.status) return false;
+                const dv = derived[r.sessionId] || {};
+                if (dash.flags.notes && !(r.notes && r.notes.length)) return false;
+                if (dash.flags.fast && !dv.fast) return false;
+                if (dash.flags.same && !dv.same) return false;
+                if (dash.flags.rereq && !dv.rereq) return false;
+                return dashRecordMatchesSearch(r, q);
+            });
+        }
+
+        function renderDashCompareResult(r) {
+            const raw = dash.compareText[r.sessionId] || '';
+            if (!raw.trim()) return '';
+            const pasted = parseHostText(raw);
+            const recHosts = (r.targetHosts || []).map(h => String(h).toLowerCase());
+            const recSet = new Set(recHosts);
+            const pastedSet = new Set(pasted);
+            const onlyRecord = recHosts.filter(h => !pastedSet.has(h));
+            const onlyPasted = pasted.filter(h => !recSet.has(h));
+            if (pasted.length > 0 && onlyRecord.length === 0 && onlyPasted.length === 0) {
+                return `<div style="padding:9px 11px; background:#f0fdf4; border:2px solid #22c55e; border-radius:6px; color:#166534;">
+                    <div style="font-size:15px; font-weight:800;">일치 ${recHosts.length}/${recHosts.length}대</div>
+                    <div style="font-size:11.5px; margin-top:2px;">기록된 작업대상과 붙여넣은 목록이 정확히 같습니다.</div>
+                </div>`;
+            }
+            const part = (title, list) => list.length ? `<div style="margin-top:5px;"><div style="font-size:11.5px; font-weight:700;">${title} ${list.length}대</div><div class="awx-vld-host-list" style="margin-top:3px; border-color:#fca5a5;">${renderHostChipsHtml(list)}</div></div>` : '';
+            return `<div style="padding:9px 11px; background:#fef2f2; border:2px solid #ef4444; border-radius:6px; color:#991b1b;">
+                <div style="font-size:15px; font-weight:800;">불일치</div>
+                <div style="font-size:11.5px; margin-top:2px;">기록 ${recHosts.length}대 / 붙여넣은 목록 ${pasted.length}대 (같은 호스트 ${recHosts.length - onlyRecord.length}대)</div>
+                ${part('기록에만 있음', onlyRecord)}
+                ${part('붙여넣은 목록에만 있음', onlyPasted)}
+            </div>`;
+        }
+
+        function renderDashItem(r, dv) {
+            const sid = r.sessionId;
+            const sidAttr = escapeHTML(sid);
+            const open = !!dash.expanded[sid];
+            const hosts = r.targetHosts || [];
+            const notes = r.notes || [];
+            const q = String(dash.search || '').trim().toLowerCase();
+            const tags = [];
+            tags.push(r.status === 'APPROVED'
+                ? '<span class="awx-vld-dash-tag ok">승인</span>'
+                : '<span class="awx-vld-dash-tag no">반려</span>');
+            if (dv.fast) tags.push(`<span class="awx-vld-dash-tag warn" title="요청부터 승인까지 ${dash.fastSec}초 미만">빠른 승인 ${escapeHTML(dashFmtDuration(dv.durationSec))}</span>`);
+            if (dv.same) tags.push('<span class="awx-vld-dash-tag warn" title="작업자와 확인자가 같은 사람(이름 또는 IP)">작업자·확인자 동일</span>');
+            if (dv.rereq) tags.push(`<span class="awx-vld-dash-tag info" title="같은 인시던트 기록 ${dv.rereq + 1}건 (반려 ${dv.groupRejected}건)">재요청 ${dv.rereq}회</span>`);
+            const memoTitle = notes.length ? escapeHTML(notes.map(n => `${dashFmtDateTime(n.createdAt)} ${n.author?.name || n.author?.ip || ''}: ${n.text}`).join('\n')) : '';
+            if (notes.length) tags.push(`<span class="awx-vld-dash-tag memo" title="${memoTitle}">메모 ${notes.length}</span>`);
+            const sourceLabel = { incident: '인시던트 호스트', target: '작업대상 입력', detail: '상세목록현황', awx: 'AWX 수집', none: '-' }[r.targetSource] || '-';
+
+            let detail = '';
+            if (open) {
+                const noteListHtml = notes.length
+                    ? notes.map(n => `<div class="awx-vld-dash-note"><b>${escapeHTML(dashFmtDateTime(n.createdAt))} ${escapeHTML(n.author?.name || n.author?.ip || '-')}(${escapeHTML(n.authorRole || '')})</b>\n${escapeHTML(n.text)}</div>`).join('')
+                    : '<div style="font-size:11.5px; color:#94a3b8;">메모 없음</div>';
+                const noteForm = r.myRole ? `
+                    <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+                        <textarea class="awx-vld-textarea" data-note-input="${sidAttr}" maxlength="1000" placeholder="메모 입력 (${escapeHTML(r.myRole)}로 기록됩니다)" style="height:52px; resize:vertical; font-size:12px;">${escapeHTML(dash.noteDraft[sid] || '')}</textarea>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                            <span style="font-size:11px; color:#b45309;">추가한 메모는 수정하거나 삭제할 수 없습니다.</span>
+                            <button type="button" class="awx-vld-btn awx-vld-btn-primary awx-vld-btn-sm" data-act="add-note" data-sid="${sidAttr}" style="font-size:11px; padding:3px 8px;">메모 추가</button>
+                        </div>
+                    </div>` : '';
+                detail = `
+                    <div class="awx-vld-dash-detail">
+                        <div class="awx-vld-dash-kv">
+                            <span>요청 시각</span><span>${escapeHTML(dashFmtDateTime(r.createdAt))}</span>
+                            <span>${r.status === 'APPROVED' ? '승인' : '반려'} 시각</span><span>${escapeHTML(dashFmtDateTime(r.decidedAt))}</span>
+                            <span>소요 시간</span><span>${escapeHTML(dashFmtDuration(dv.durationSec))}</span>
+                            <span>작업 내용</span><span>${escapeHTML(r.workDescription || '-')}</span>
+                            <span>전달 특이사항</span><span style="white-space:pre-wrap;">${escapeHTML(r.specialNotes || '-')}</span>
+                            ${r.status === 'REJECTED' ? `<span>반려 사유</span><span>${escapeHTML(r.decisionComment || '-')}</span>` : ''}
+                        </div>
+                        <div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:3px;">
+                                <span class="awx-vld-dash-sub">작업대상 ${hosts.length}대 <span style="font-weight:500; color:#64748b;">(기준: ${escapeHTML(sourceLabel)})</span></span>
+                                <button type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" data-act="copy" data-sid="${sidAttr}" style="font-size:11px; padding:2px 8px;" ${hosts.length ? '' : 'disabled'}>대상 복사</button>
+                            </div>
+                            ${hosts.length ? `<div class="awx-vld-host-list">${renderHostChipsHtml(hosts, q)}</div>` : '<div style="font-size:11.5px; color:#94a3b8;">작업대상 정보 없음</div>'}
+                            <div data-copy-result="${sidAttr}" style="display:${dash.copyResult[sid] ? 'block' : 'none'}; margin-top:6px;">${dash.copyResult[sid] || ''}</div>
+                        </div>
+                        <div>
+                            <div class="awx-vld-dash-sub">붙여넣어 대조</div>
+                            <textarea class="awx-vld-textarea awx-vld-mono" data-compare-input="${sidAttr}" placeholder="인시던트 화면의 작업대상을 붙여넣으세요 (개행/공백/콤마/탭 자동 분리)" style="height:56px; resize:vertical; font-size:12px;">${escapeHTML(dash.compareText[sid] || '')}</textarea>
+                            <div data-compare-result="${sidAttr}" style="margin-top:6px;">${renderDashCompareResult(r)}</div>
+                        </div>
+                        <div>
+                            <div class="awx-vld-dash-sub">메모 ${notes.length}건</div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">${noteListHtml}</div>
+                            ${noteForm}
+                        </div>
+                    </div>`;
+            }
+
+            return `
+                <div class="awx-vld-dash-item${notes.length ? ' has-notes' : ''}" data-sid="${sidAttr}">
+                    <div class="awx-vld-dash-head" data-act="toggle" data-sid="${sidAttr}">
+                        <div style="min-width:0;">
+                            <div>
+                                <span class="awx-vld-mono" style="color:#475569;">${escapeHTML(dashFmtDateTime(r.decidedAt))}</span>
+                                <b class="awx-vld-mono" style="margin-left:6px; color:#0f172a;">${escapeHTML(r.incidentId || '-')}</b>
+                                ${tags.join('')}
+                            </div>
+                            <div style="color:#334155; margin-top:2px; word-break:break-all;">
+                                작업자 <b>${escapeHTML(dashActor(r.worker))}</b> → 확인자 <b>${escapeHTML(dashActor(r.checker))}</b>
+                            </div>
+                            <div style="color:#475569; margin-top:1px; word-break:break-all;">작업 내용: ${escapeHTML(r.workDescription || '-')}</div>
+                        </div>
+                        <button type="button" class="awx-vld-btn awx-vld-btn-secondary awx-vld-btn-sm" data-act="toggle" data-sid="${sidAttr}" style="font-size:11px; padding:3px 8px; flex-shrink:0;">대상 ${hosts.length}대 ${open ? '접기' : '펼치기'}</button>
+                    </div>
+                    ${detail}
+                </div>
+            `;
+        }
+
+        function renderDashboard() {
+            if (!dashListEl) return;
+            const derived = computeDashDerived(dash.records);
+            renderDashSummary(derived);
+            let rows = getDashFiltered(derived);
+            const filteredCount = rows.length;
+            let randomNote = '';
+            if (Array.isArray(dash.randomIds)) {
+                const pick = new Set(dash.randomIds);
+                rows = rows.filter(r => pick.has(r.sessionId));
+                randomNote = ` · 무작위 ${rows.length}건 표시 중`;
+            }
+            const MAX_ROWS = 200;
+            const overflow = rows.length > MAX_ROWS;
+            if (overflow) rows = rows.slice(0, MAX_ROWS);
+            if (dashInfoEl) {
+                if (dash.loading) {
+                    dashInfoEl.innerText = '작업 기록을 불러오는 중...';
+                } else if (dash.error) {
+                    dashInfoEl.innerHTML = `<span style="color:#b91c1c; font-weight:700;">작업 기록 조회 실패: ${escapeHTML(dash.error)}</span>`;
+                } else {
+                    const searchHint = (dash.search && filteredCount === 0 && dash.period !== 'all') ? ' · 찾는 건이 없으면 기간을 [전체 기간]으로 바꿔 보세요' : '';
+                    dashInfoEl.innerText = `기간 내 ${dash.records.length}건 중 ${filteredCount}건${randomNote}${overflow ? ` · 처음 ${MAX_ROWS}건만 표시 (검색으로 좁혀 주세요)` : ''}${searchHint}`;
+                }
+            }
+            if (!rows.length) {
+                dashListEl.innerHTML = dash.loading ? '' : '<div style="font-size:12px; color:#94a3b8; text-align:center; padding:18px 0;">표시할 작업 기록이 없습니다.</div>';
+                return;
+            }
+            dashListEl.innerHTML = rows.map(r => renderDashItem(r, derived[r.sessionId] || {})).join('');
+        }
+
+        function rerenderDashItem(sid) {
+            if (!dashListEl) return;
+            const rec = dash.records.find(r => r.sessionId === sid);
+            const el = Array.from(dashListEl.querySelectorAll('.awx-vld-dash-item')).find(x => x.getAttribute('data-sid') === sid);
+            if (!rec || !el) { renderDashboard(); return; }
+            const derived = computeDashDerived(dash.records);
+            const wrap = rootDoc.createElement('div');
+            wrap.innerHTML = renderDashItem(rec, derived[sid] || {});
+            const fresh = wrap.firstElementChild;
+            if (fresh) el.replaceWith(fresh);
+        }
+
+        async function loadDashboard() {
+            if (!dashListEl) return;
+            const range = getDashRange();
+            dash.loading = true;
+            dash.error = '';
+            renderDashboard();
+            try {
+                const qs = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+                const res = await agentFetch(`${AGENT_BASE}/api/records?${qs}`, { cache: 'no-store', timeoutMs: 15000 });
+                const data = await res.json();
+                if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+                dash.records = Array.isArray(data.records) ? data.records : [];
+                dash.fastSec = Number(data.fastApprovalSeconds) > 0 ? Number(data.fastApprovalSeconds) : 60;
+                dash.me = data.me || {};
+                dash.recordsDir = data.recordsDir || '';
+                dash.loadedAt = Date.now();
+                if (Array.isArray(dash.randomIds)) {
+                    const ids = new Set(dash.records.map(r => r.sessionId));
+                    dash.randomIds = dash.randomIds.filter(id => ids.has(id));
+                }
+            } catch (err) {
+                dash.error = (err && err.message) || String(err);
+            } finally {
+                dash.loading = false;
+                renderDashboard();
+            }
+        }
+        window.awxLoadDashboard = loadDashboard;
+
+        let dashReloadTimer = null;
+        function scheduleDashboardReload() {
+            if (state.activeTab !== 'dashboard') return;
+            clearTimeout(dashReloadTimer);
+            dashReloadTimer = setTimeout(() => { loadDashboard(); }, 400);
+        }
+
+        function syncDashControls() {
+            if (dashPeriodEl) dashPeriodEl.value = dash.period;
+            if (dashRangeEl) dashRangeEl.style.display = dash.period === 'custom' ? 'inline-flex' : 'none';
+            if (dashFromEl) dashFromEl.value = dash.from || '';
+            if (dashToEl) dashToEl.value = dash.to || '';
+            if (dashStatusEl) dashStatusEl.value = dash.status;
+            if (dashSearchEl) dashSearchEl.value = dash.search || '';
+            if (dashRandomNEl) dashRandomNEl.value = String(dash.randomN || 5);
+            Object.keys(dashFlagEls).forEach(k => { if (dashFlagEls[k]) dashFlagEls[k].checked = !!dash.flags[k]; });
+        }
+        syncDashControls();
+        if (state.activeTab === 'dashboard') setTimeout(() => { loadDashboard(); }, 0);
+
+        if (dashPeriodEl) dashPeriodEl.onchange = () => {
+            dash.period = dashPeriodEl.value;
+            if (dash.period === 'custom' && !dash.from && !dash.to) {
+                dash.from = dashDateStr(new Date(Date.now() - 29 * 86400000));
+                dash.to = dashDateStr(new Date());
+            }
+            dash.randomIds = null;
+            syncDashControls();
+            loadDashboard();
+        };
+        if (dashFromEl) dashFromEl.onchange = () => { dash.from = dashFromEl.value; dash.randomIds = null; loadDashboard(); };
+        if (dashToEl) dashToEl.onchange = () => { dash.to = dashToEl.value; dash.randomIds = null; loadDashboard(); };
+        if (dashStatusEl) dashStatusEl.onchange = () => { dash.status = dashStatusEl.value; dash.randomIds = null; renderDashboard(); };
+        if (dashSearchEl) dashSearchEl.oninput = () => { dash.search = dashSearchEl.value; dash.randomIds = null; renderDashboard(); };
+        Object.keys(dashFlagEls).forEach(k => {
+            const el = dashFlagEls[k];
+            if (el) el.onchange = () => { dash.flags[k] = el.checked; dash.randomIds = null; renderDashboard(); };
+        });
+        const btnDashRefresh = getEl('awx-vld-dash-refresh');
+        if (btnDashRefresh) btnDashRefresh.onclick = () => loadDashboard();
+        const btnDashRandom = getEl('awx-vld-dash-random');
+        if (btnDashRandom) btnDashRandom.onclick = () => {
+            let n = parseInt(dashRandomNEl ? dashRandomNEl.value : '5', 10);
+            if (!isFinite(n) || n < 1) n = 5;
+            n = Math.min(n, 50);
+            dash.randomN = n;
+            const pool = getDashFiltered(computeDashDerived(dash.records)).map(r => r.sessionId);
+            for (let i = pool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+            dash.randomIds = pool.slice(0, n);
+            renderDashboard();
+        };
+        const btnDashShowAll = getEl('awx-vld-dash-show-all');
+        if (btnDashShowAll) btnDashShowAll.onclick = () => { dash.randomIds = null; renderDashboard(); };
+
+        if (dashListEl) {
+            dashListEl.addEventListener('click', async (e) => {
+                const actEl = e.target.closest('[data-act]');
+                if (!actEl || !dashListEl.contains(actEl)) return;
+                const sid = actEl.getAttribute('data-sid');
+                const act = actEl.getAttribute('data-act');
+                const rec = dash.records.find(r => r.sessionId === sid);
+                if (!rec) return;
+                if (act === 'toggle') {
+                    if (actEl.tagName !== 'BUTTON' && e.target.closest('button')) return;
+                    e.stopPropagation();
+                    dash.expanded[sid] = !dash.expanded[sid];
+                    rerenderDashItem(sid);
+                } else if (act === 'copy') {
+                    const resultEl = Array.from(dashListEl.querySelectorAll('[data-copy-result]')).find(x => x.getAttribute('data-copy-result') === sid);
+                    const ok = await copyHostsWithResult(rec.targetHosts || [], resultEl);
+                    dash.copyResult[sid] = buildCopyResultHtml(rec.targetHosts || [], ok);
+                } else if (act === 'add-note') {
+                    const input = Array.from(dashListEl.querySelectorAll('[data-note-input]')).find(x => x.getAttribute('data-note-input') === sid);
+                    const text = String(input ? input.value : '').trim();
+                    if (!text) { alert('메모 내용을 입력하세요.'); return; }
+                    if (!confirm('추가한 메모는 수정하거나 삭제할 수 없습니다. 메모를 추가할까요?')) return;
+                    actEl.disabled = true;
+                    try {
+                        const res = await agentFetch(`${AGENT_BASE}/api/records/note`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionId: sid, text })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+                        rec.notes = Array.isArray(data.notes) ? data.notes : [...(rec.notes || []), data.note];
+                        dash.noteDraft[sid] = '';
+                        rerenderDashItem(sid);
+                        renderDashSummary();
+                    } catch (err) {
+                        alert('메모 추가 실패: ' + ((err && err.message) || err));
+                        actEl.disabled = false;
+                    }
+                }
+            });
+            dashListEl.addEventListener('input', (e) => {
+                const t = e.target;
+                if (!t || !t.getAttribute) return;
+                const cmpSid = t.getAttribute('data-compare-input');
+                if (cmpSid) {
+                    dash.compareText[cmpSid] = t.value;
+                    const rec = dash.records.find(r => r.sessionId === cmpSid);
+                    const out = Array.from(dashListEl.querySelectorAll('[data-compare-result]')).find(x => x.getAttribute('data-compare-result') === cmpSid);
+                    if (rec && out) out.innerHTML = renderDashCompareResult(rec);
+                    return;
+                }
+                const noteSid = t.getAttribute('data-note-input');
+                if (noteSid) dash.noteDraft[noteSid] = t.value;
+            });
+        }
+
+        function renderDashSummary(derived) {
+            if (!dashSummaryEl) return;
+            const dv = derived || computeDashDerived(dash.records);
+            const approved = dash.records.filter(r => r.status === 'APPROVED').length;
+            const rejected = dash.records.length - approved;
+            const withNotes = dash.records.filter(r => r.notes && r.notes.length).length;
+            const vals = Object.values(dv);
+            const stat = (label, n, warn) => `<span class="awx-vld-dash-stat"${warn && n > 0 ? ' style="background:#fef3c7; border-color:#fcd34d;"' : ''}>${label} <b>${n}</b></span>`;
+            dashSummaryEl.innerHTML = [
+                stat('승인', approved),
+                stat('반려', rejected),
+                stat('메모 있는 건', withNotes),
+                stat('빠른 승인', vals.filter(v => v.fast).length, true),
+                stat('작업자·확인자 동일', vals.filter(v => v.same).length, true),
+                stat('재요청', vals.filter(v => v.rereq).length)
+            ].join('');
+        }
 
         // =========================================================================
         // 비침해형(Non-intrusive) 알림 & 작업표시줄/타이틀 깜빡임 시스템
@@ -4406,6 +5149,9 @@
                 fetchPendingSessions();
                 checkAndNotifySessionDecided(ev);
                 if (typeof window.awxRefreshApprovalLogs === 'function') window.awxRefreshApprovalLogs();
+                scheduleDashboardReload();
+            } else if (ev.type === 'RECORD_NOTE_ADDED') {
+                scheduleDashboardReload();
             } else if (ev.type === 'SESSION_REASSIGNED') {
                 // 1. 작업자의 화면이면 확인자 정보 즉시 갱신 (확인자 변경 시 작업자에게 실시간 업데이트)
                 if (state.currentSession && (state.currentSession.sessionId === ev.sessionId || ev.data?.sessionId === state.currentSession.sessionId)) {
@@ -4432,6 +5178,11 @@
                 state.specialNotes = workerNotes.value.trim();
             };
         }
+        if (workerWorkDesc) {
+            workerWorkDesc.oninput = () => {
+                state.workDescription = workerWorkDesc.value.trim();
+            };
+        }
         if (selChecker) {
             selChecker.onchange = () => {
                 state.selectedCheckerIp = selChecker.value;
@@ -4447,7 +5198,7 @@
 
             if (detailList.length === 0 || incidentList.length === 0) {
                 console.warn("[awxCrossCheck] detail or incident is empty");
-                alert("상세목록현황과 인시던트 호스트는 필수 입력 대상입니다. 1번 탭 또는 입력란에 호스트를 입력해주세요.");
+                alert("상세목록현황과 인시던트 호스트는 필수 입력 대상입니다. [작업 전 자체확인] 탭 또는 입력란에 호스트를 입력해주세요.");
                 return null;
             }
 
@@ -4499,6 +5250,7 @@
                 metadata: {
                     incidentId: workerIncidentNo ? workerIncidentNo.value.trim() : '',
                     specialNotes: workerNotes ? workerNotes.value.trim() : '',
+                    workDescription: workerWorkDesc ? workerWorkDesc.value.trim() : '',
                     awxContextLabel: ctx.label,
                     excludePattern: state.excludePattern
                 },
@@ -4534,7 +5286,8 @@
                     status: resData.status || "PENDING",
                     peerDelivered: resData.peerDelivered,
                     peerNotifyStatus: resData.peerNotifyStatus || '',
-                    peerError: resData.peerError
+                    peerError: resData.peerError,
+                    finalTargetHosts: incidentList.length > 0 ? incidentList : (targetList.length > 0 ? targetList : detailList)
                 };
 
                 renderWorkerSessionCard();
@@ -4564,8 +5317,24 @@
                 wSessionStatus.style.color = (st === 'APPROVED') ? '#16a34a' : (st === 'REJECTED') ? '#dc2626' : '#2563eb';
             }
 
+            if (wResultReport && state.currentSession.status !== 'APPROVED') delete wResultReport.dataset.renderKey;
             if (state.currentSession.status === 'APPROVED') {
-                if (wResultReport) {
+                const approvedRenderKey = `${state.currentSession.sessionId}:APPROVED`;
+                if (wResultReport && wResultReport.dataset.renderKey !== approvedRenderKey) {
+                    const finalHosts = Array.isArray(state.currentSession.finalTargetHosts) && state.currentSession.finalTargetHosts.length > 0
+                        ? state.currentSession.finalTargetHosts
+                        : getGuideTargetHosts(state.incidentText, state.targetText, state.detailText);
+                    const workerCopyIds = {
+                        base: 'awx-vld-w-final',
+                        toggle: 'awx-vld-w-final-toggle',
+                        msg: 'awx-vld-w-final-msg',
+                        targets: 'awx-vld-w-final-targets',
+                        count: 'awx-vld-w-final-count',
+                        list: 'awx-vld-w-final-list',
+                        copy: 'awx-vld-w-final-copy',
+                        result: 'awx-vld-w-final-copy-result'
+                    };
+                    wResultReport.dataset.renderKey = approvedRenderKey;
                     wResultReport.style.display = 'block';
                     wResultReport.style.background = '#f0fdf4';
                     wResultReport.style.border = '1px solid #86efac';
@@ -4578,10 +5347,9 @@
                         <div style="color:#166534; font-size:11.5px; margin-bottom:8px;">
                             확인자: <b>${state.currentSession.checkerName} (${state.currentSession.checkerIp})</b> | 상태: 전수 일치 승인
                         </div>
-                        <div class="awx-vld-mono" style="background:#ffffff; border:1px solid #bbf7d0; padding:8px; border-radius:4px; color:#14532d; font-size:11.5px; word-break:break-all;">
-                            인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
-                        </div>
+                        ${buildTargetCopyBlockHtml(workerCopyIds, finalHosts, true, '확인자가 승인한 작업대상입니다. 펼치지 않아도 [대상 복사]로 클립보드에 복사할 수 있습니다.')}
                     `;
+                    bindTargetCopyBlock(workerCopyIds, finalHosts, true);
                 }
             } else if (state.currentSession.status === 'REJECTED') {
                 if (wResultReport) {
@@ -4612,7 +5380,7 @@
                         </div>
                         <div style="color:#1e40af; font-size:11.5px; line-height:1.5;">
                             나 자신에게 발송된 테스트 요청입니다. (확인자 외부 호출 없이 로컬 세션 생성 완료)<br>
-                            상단 탭에서 <b>[3. 확인자 검증/승인]</b> 탭을 클릭하여 확인자 화면에서 직접 검증 및 승인/반려를 진행하세요.
+                            상단 탭에서 <b>[확인자 검증/승인]</b> 탭을 클릭하여 확인자 화면에서 직접 검증 및 승인/반려를 진행하세요.
                         </div>
                     `;
                 }

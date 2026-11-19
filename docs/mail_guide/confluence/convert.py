@@ -22,6 +22,8 @@ DEFAULT_FILES = [
     "fig5_tab3_checker.png",
     "fig6_help_popover.png",
     "fig7_logs_modal.png",
+    "fig8_dashboard.png",
+    "fig9_dashboard_detail.png",
 ]
 
 

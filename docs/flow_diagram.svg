@@ -131,8 +131,8 @@
 
   <!-- Mandatory Output Footer -->
   <rect x="40" y="602" width="900" height="44" fill="#f8fafc" stroke="#64748b" stroke-width="1.2" rx="4"/>
-  <text x="56" y="620" fill="#475569" font-size="10" font-weight="700">비교 완료 시 고정 출력 문구</text>
+  <text x="56" y="620" fill="#475569" font-size="10" font-weight="700">전수 일치 시 출력</text>
   <text x="56" y="636" fill="#0f172a" font-size="11" font-weight="600" font-family="Consolas, monospace">
-    인시던트의 작업대상을 복사해서 붙여넣기를 권장합니다.vim [작업대상 파일] -&gt; esc -&gt; :set paste 입력(붙여넣기 모드) -&gt; 붙여넣기
+    최종 작업대상 N대 (접힘) + [대상 복사] -&gt; "svr01 등 N대 복사 완료" + 붙여넣은 작업대상 확인 경고 (총 대수 / 첫 호스트 / 마지막 호스트)
   </text>
 </svg>

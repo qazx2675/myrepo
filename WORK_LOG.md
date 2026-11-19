@@ -249,3 +249,28 @@
 
 
 
+
+---
+
+## 8. 관리자 대시보드 · 최종 작업대상 복사 · 탭 번호 제거 (2026-11-19)
+
+### (1) 구현 내역 (`agent/records.go`(신규), `agent/main.go`, `src/awx_host_checker.js`, `agent/records_test.go`(신규))
+1. **작업 기록(records) 저장 — 수정/삭제 불가, 영구 보관**:
+   * `handleSessionDecision`(승인/반려) 및 `handlePeerUpdate`(결정 수신) 시 `sharedDir/records/YYYY-MM/<세션ID>.json` 을 `O_EXCL` 로 1회 생성. 이미 있으면 아무것도 바꾸지 않음.
+   * 최종 작업대상은 화면 규칙과 동일하게 인시던트 → 작업대상 → 상세목록(→ AWX) 순으로 선택.
+   * 기동 시(세션 30일 정리 **이전**)와 24시간 주기, `/api/records` 조회 시(60초 간격) 결정 완료 세션을 기록으로 이관(backfill). 구버전 exe 가 결정한 건도 채워짐.
+2. **메모(notes)**: `POST /api/records/note` — 해당 건 작업자/확인자(에이전트 IP 기준)만 추가, 1,000자 제한, 메모 1개 = 파일 1개(`records/notes/<세션ID>/*.json`), 수정/삭제 API 없음(405).
+3. **조회 API**: `GET /api/records?from&to` — 기간 내 기록 + 메모 + 내 역할(`myRole`) + `fastApprovalSeconds`(config, 기본 60).
+4. **UI**:
+   * 탭 이름 번호 제거, `대시보드` 탭 추가 (요약 · 기간/상태/검색 · 대조 확인 · 목록/상세 · 메모).
+   * 대조 확인: 붙여넣어 대조(일치 N/N대 / 불일치 명단), 호스트명 검색(칩 강조), 무작위 N건, 빠른 승인 · 작업자·확인자 동일 · 재요청 표시 및 필터. 결과 저장 안 함.
+   * vim 안내 폐기 → 최종 작업대상(접힘, 가로 나열) + `[대상 복사]` (한 줄에 하나), `첫호스트 등 N대 복사 완료` + 복사 확인 경고(총 대수/첫/마지막 호스트). 불일치 시 복사 비활성. 작업 전 자체확인 결과와 작업자 승인 완료 화면 두 곳에 적용.
+   * 작업자 요청 화면 `작업 내용 [선택]` 입력칸 추가 → 세션 `metadata.workDescription`.
+5. `agentBuildTag` 를 `20261119-dashboard-rel` 로 올려, 새 exe 실행 시 구버전 에이전트 프로세스를 교체하도록 함.
+
+### (2) 검증 결과
+* **Go 유닛 테스트**: 신규 6개(`TestWorkRecord*`, `TestSelectFinalTargetHostsPriority`) 포함 전체 PASS. (클라우드 Linux 환경에서는 Windows 전용 호출을 대체해 실행했으며, 이 환경에서 원래 실행 불가한 `TestP21DpapiConfigPersistenceAndMigration` 1개만 제외 — PC 에서 `go test ./agent` 재확인 필요)
+* **Windows 빌드**: `GOOS=windows go vet ./...`, 테스트 바이너리 컴파일, `build.py` 로 `dist/*.exe` 재빌드 완료.
+* **브라우저 E2E (Playwright, Linux 에이전트)**: 탭 이름 4개, MATCH 복사(클립보드 37줄 · 첫/마지막 호스트 확인), MISMATCH 복사 비활성, 작업자 승인 화면 복사, 대시보드 요약/검색/필터/무작위/대조/메모 권한, 콘솔 오류 0건 확인.
+* **PC 용 E2E 스크립트 기대값 갱신**: `tests/run_all_tests.js`(TC-09), `tests/test_self_request.js`, `tests/test_standalone_app.js`(탭 4개·번호 없음) — PC 에서 재실행 필요.
+* **가이드**: `docs/mail_guide` fig3·fig4 재캡처, fig8(대시보드)·fig9(상세) 추가, 본문/Outlook/Confluence XHTML 갱신. fig1·fig2·fig5·fig6·fig7 은 탭 바에 이전 번호가 보이므로 PC 에서 재캡처 권장.

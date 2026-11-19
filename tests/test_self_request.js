@@ -323,7 +323,8 @@ async function runSelfRequestTest() {
             (() => {
                 const status = document.getElementById('awx-vld-w-session-status')?.innerText;
                 const report = document.getElementById('awx-vld-w-result-report')?.innerText;
-                return { status, report };
+                const copyBtn = document.getElementById('awx-vld-w-final-copy');
+                return { status, report, hasCopyBtn: !!copyBtn && !copyBtn.disabled };
             })()
         `);
         console.log("✓ Worker final status:", workerFinal);
@@ -331,8 +332,11 @@ async function runSelfRequestTest() {
         if (workerFinal.status !== 'APPROVED' || !workerFinal.report.includes('CROSS-CHECK APPROVED')) {
             throw new Error(`Worker tab did not receive approval: ${JSON.stringify(workerFinal)}`);
         }
-        if (!workerFinal.report.includes(':set paste')) {
-            throw new Error("Worker tab missing vim paste command in approved state");
+        if (workerFinal.report.includes(':set paste')) {
+            throw new Error("Worker tab must not show the retired vim paste guide in approved state");
+        }
+        if (!workerFinal.report.includes('최종 작업대상') || !workerFinal.hasCopyBtn) {
+            throw new Error("Worker tab missing final target copy block in approved state");
         }
 
         console.log("\n========================================================");

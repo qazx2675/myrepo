@@ -54,6 +54,7 @@ type Config struct {
 	AwxDefaultScope          string `json:"awxDefaultScope,omitempty"`
 	AwxInsecureTLS           *bool  `json:"awxInsecureTls,omitempty"`
 	SessionRetentionDays     int    `json:"sessionRetentionDays,omitempty"`
+	FastApprovalSeconds      int    `json:"fastApprovalSeconds,omitempty"` // 대시보드 "빠른 승인" 표시 기준(초), 기본 60
 	Headless                 bool   `json:"headless,omitempty"`
 	ConfigPath               string `json:"-"`
 }
@@ -116,6 +117,7 @@ type Metadata struct {
 	SpecialNotes    string `json:"specialNotes"`
 	AwxContextLabel string `json:"awxContextLabel"`
 	ExcludePattern  string `json:"excludePattern"`
+	WorkDescription string `json:"workDescription,omitempty"` // 작업 내용 (선택 입력)
 }
 
 // ActiveFields indicates which fields are checked.
@@ -495,6 +497,8 @@ type AgentServer struct {
 	onShutdown        func()
 	lastUsersSync     time.Time
 	usersSource       string
+	recordsMu         sync.Mutex
+	recordBackfillAt  time.Time
 }
 
 const awxRequestUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -666,6 +670,9 @@ func NewAgentServer(cfg Config) (*AgentServer, error) {
 		detectedIP:       detectedIP,
 	}
 
+	// 대시보드 작업 기록: 세션 파일이 정리되기 전에 결정 완료 세션을 기록으로 이관
+	s.backfillWorkRecords()
+
 	// Prune decided sessions older than SessionRetentionDays on startup
 	s.pruneExpiredSessionFiles()
 
@@ -789,6 +796,9 @@ func loadAwxConfigFromFile(cfg *Config, needsReauth *bool) {
 	}
 	if cfg.SessionRetentionDays == 0 && fileCfg.SessionRetentionDays != 0 {
 		cfg.SessionRetentionDays = fileCfg.SessionRetentionDays
+	}
+	if cfg.FastApprovalSeconds == 0 && fileCfg.FastApprovalSeconds != 0 {
+		cfg.FastApprovalSeconds = fileCfg.FastApprovalSeconds
 	}
 	if cfg.AwxBaseURL == "" && fileCfg.AwxBaseURL != "" {
 		cfg.AwxBaseURL = strings.TrimRight(fileCfg.AwxBaseURL, "/")
@@ -1284,6 +1294,7 @@ func (s *AgentServer) StartBackgroundPolling() {
 			case <-ticker.C:
 				s.pollSessionsDir()
 			case <-pruneTicker.C:
+				s.backfillWorkRecords()
 				s.pruneExpiredSessionFiles()
 			}
 		}
@@ -1549,6 +1560,8 @@ func (s *AgentServer) Routes() http.Handler {
 		mux.HandleFunc("/api/session/reassign", s.handleSessionReassign)
 		mux.HandleFunc("/api/session/decision", s.handleSessionDecision)
 		mux.HandleFunc("/api/logs", s.handleApprovalLogs)
+		mux.HandleFunc("/api/records", s.handleWorkRecords)
+		mux.HandleFunc("/api/records/note", s.handleWorkRecordNote)
 		mux.HandleFunc("/api/peer/notify", s.handlePeerNotify)
 		mux.HandleFunc("/api/peer/update", s.handlePeerUpdate)
 		mux.HandleFunc("/api/events", s.handleEvents)
@@ -1577,7 +1590,7 @@ func (s *AgentServer) handleAppRoot(w http.ResponseWriter, r *http.Request) {
 	webui.ServeIndex(w, r)
 }
 
-const agentBuildTag = "20261113-awx-v2-rel"
+const agentBuildTag = "20261119-dashboard-rel"
 
 // handleHealth: GET /api/health
 func (s *AgentServer) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -4613,6 +4626,9 @@ func (s *AgentServer) handleSessionDecision(w http.ResponseWriter, r *http.Reque
 			log.Printf("[LOG] Warning: failed to append approval log for session %s: %v\n", sess.SessionId, logErr)
 		}
 	}
+	if _, recErr := s.createWorkRecord(sess, "decision"); recErr != nil {
+		log.Printf("[RECORD] Warning: failed to create work record for session %s: %v\n", sess.SessionId, recErr)
+	}
 
 	// Direct HTTP POST update to worker
 	if sess.Worker.IP != "" {
@@ -4893,6 +4909,11 @@ func (s *AgentServer) handlePeerUpdate(w http.ResponseWriter, r *http.Request) {
 				sess.DecidedAt = time.Now().Format(time.RFC3339)
 			}
 			_ = s.saveSession(sess)
+			if sess.Status == "APPROVED" || sess.Status == "REJECTED" {
+				if _, recErr := s.createWorkRecord(sess, "peer"); recErr != nil {
+					log.Printf("[RECORD] Warning: failed to create work record for session %s: %v\n", sess.SessionId, recErr)
+				}
+			}
 			log.Printf("[PEER] Updated local session %s on disk (type=%s, status=%s, checker=%s)\n", payload.SessionId, payload.Type, payload.Status, sess.Checker.Name)
 		}
 		eventType := "PEER_UPDATE"
@@ -5662,6 +5683,9 @@ func main() {
 		}
 		if fileCfg.SessionRetentionDays != 0 {
 			cfg.SessionRetentionDays = fileCfg.SessionRetentionDays
+		}
+		if fileCfg.FastApprovalSeconds != 0 {
+			cfg.FastApprovalSeconds = fileCfg.FastApprovalSeconds
 		}
 		if includeSharedAwx {
 			if cfg.AwxBaseURL == "" && fileCfg.AwxBaseURL != "" {

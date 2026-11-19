@@ -375,15 +375,17 @@ async function runStandaloneAppTest() {
         if (!envInfo.hasGlobalStatusBar) {
             throw new Error("Global 6 o'clock status bar element missing");
         }
-        if (envInfo.tabCount !== 3) {
-            throw new Error(`Expected 3 tabs, got: ${envInfo.tabCount}`);
+        if (envInfo.tabCount !== 4) {
+            throw new Error(`Expected 4 tabs, got: ${envInfo.tabCount}`);
         }
-        if (!envInfo.tabs[0].includes('1. 작업 전 자체확인') ||
-            !envInfo.tabs[1].includes('2. 작업자 요청/승인대기') ||
-            !envInfo.tabs[2].includes('3. 확인자 검증/승인')) {
+        if (!envInfo.tabs[0].startsWith('작업 전 자체확인') ||
+            !envInfo.tabs[1].startsWith('작업자 요청/승인대기') ||
+            !envInfo.tabs[2].startsWith('확인자 검증/승인') ||
+            !envInfo.tabs[3].startsWith('대시보드') ||
+            envInfo.tabs.some(t => /^\d+\./.test(t))) {
             throw new Error(`Tab labels do not match expected guide names: ${JSON.stringify(envInfo.tabs)}`);
         }
-        console.log("✓ Standalone UI validated: clean header with live user badge, 3 guide tabs with [?] icons, responsive layout, global status bar.");
+        console.log("✓ Standalone UI validated: clean header with live user badge, 4 tabs (no step numbers) with [?] icons, responsive layout, global status bar.");
 
         // [3.5/7] Verify standalone window auto-collapse delay (default 5s, 0s+, mouseleave/blur + mouseenter/focus cancel)
         console.log("   Testing standalone window physical resizing (resizeTo) & collapse delay (5s -> 1s -> 0s)...");
