@@ -313,7 +313,12 @@ class CarlaSim:
         if self._hidden:
             self.world.enable_environment_objects(set(self._hidden), True)
         self._hidden = []
-        back, self._studio = self._free_spot(self._studio), None
+        back = self._studio
+        wp = self.map.get_waypoint(back.location)          # 출발은 차로 가운데·차로 방향으로 (가드레일에 붙어 있었어도)
+        if wp is not None:
+            back = wp.transform
+            back.location.z += 0.3
+        back, self._studio = self._free_spot(back), None
         a = self.ego.actor
         a.set_transform(back)
         a.set_target_velocity(carla.Vector3D())
