@@ -53,6 +53,13 @@ class Sound:
             pygame.mixer.set_num_channels(8)
         except Exception:
             return
+        try:
+            self._build()
+        except Exception:          # 소리 생성 실패는 시뮬레이터를 멈추지 않는다
+            self.ok = False
+
+    def _build(self):
+        pygame = self.pg
         mk = self._mk
         self.eng_freqs = np.geomspace(18, 260, 26)
         self.eng = [(mk(_loop(f, 0.4, _engine_wave(False))), mk(_loop(f, 0.4, _engine_wave(True))))
@@ -73,7 +80,11 @@ class Sound:
 
     def _mk(self, w):
         w = w / (np.abs(w).max() + 1e-9) * 0.6
-        return self.pg.sndarray.make_sound((w * 32767).astype(np.int16))
+        a = (w * 32767).astype(np.int16)
+        ch = self.pg.mixer.get_init()[2]          # pygame.init() 이 이미 스테레오로 열었을 수 있음
+        if ch > 1:
+            a = np.ascontiguousarray(np.repeat(a[:, None], ch, axis=1))
+        return self.pg.sndarray.make_sound(a)
 
     def _set(self, name, snd, vol):
         if self.cur[name] is not snd:

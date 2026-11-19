@@ -43,6 +43,13 @@ class CarlaApp:
         self.cfg = dict(level=args.level, cars=args.cars, lanes=args.lanes, seed=args.seed)
         self.specs = load_specs()
         self._view = args.view
+        if args.state:                            # rebuild() 가 넘긴 상태 (코스 전환)
+            import json
+            with open(args.state, encoding="utf-8") as f:
+                st = json.load(f)
+            os.remove(args.state)
+            self.cfg, self.specs, self._view = st["cfg"], st["specs"], st["view"]
+            args.vehicle, args.powertrain = st["kind"], st["powertrain"]
         self.fx = types.SimpleNamespace(enabled=True)
         self.sound = Sound()
         self.hud = types.SimpleNamespace(show_help=True)
@@ -68,7 +75,26 @@ class CarlaApp:
                               self.specs, view=self._view, frame_size=self.size)
 
     def rebuild(self):
-        self._build(self.world.ego.kind, self.world.ego.powertrain)
+        """코스/트래픽 변경: 새 프로세스로 다시 시작한다 (한 프로세스에서 맵을 여러 번 바꾸면 CARLA
+        클라이언트가 가끔 비정상 종료하므로). 설정 메뉴에서 바꾼 제원은 임시 파일로 넘긴다."""
+        import json
+        import subprocess
+        import tempfile
+        e = self.world.ego
+        state = dict(cfg=self.cfg, kind=e.kind, powertrain=e.powertrain, view=self._view, specs=self.specs)
+        fd, path = tempfile.mkstemp(suffix=".json", prefix="autodrive_")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        self.loading(f"Switching to: {self.cfg['level']} ...")
+        a = self.args
+        cmd = [sys.executable, os.path.abspath(__file__), "--state", path, "--host", a.host, "--port", str(a.port),
+               "--width", str(a.width), "--height", str(a.height)]
+        if a.controller:
+            cmd += ["--controller", a.controller]
+        self.world.destroy()
+        pygame.quit()
+        subprocess.Popen(cmd)
+        os._exit(0)
 
     @property
     def view(self):
@@ -191,6 +217,7 @@ def main():
     ap.add_argument("--port", type=int, default=2000)
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720)
+    ap.add_argument("--state", help=argparse.SUPPRESS)
     a = ap.parse_args()
 
     pygame.init()

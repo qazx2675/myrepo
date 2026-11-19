@@ -57,8 +57,6 @@ class CarlaSim:
         self.n_cars = self.cfg["cars"] if cars is None else cars
         self.seed, self.lanes, self.frame_size, self.view = seed, lanes, frame_size, view
         self.rng = random.Random(seed)
-        self.tm = client.get_trafficmanager()
-        self.tm_port = self.tm.get_port()
         self.lot = self._lot_dims(specs[vehicle])
         self.world = self._load_world()
         self.map = self.world.get_map()
@@ -96,6 +94,13 @@ class CarlaSim:
                     aisle=max(3.6, spec["width"] + 1.6))
 
     def _load_world(self):
+        # 맵 전환 전 동기 모드를 끈다 (동기 모드 + Traffic Manager 상태에서 load_world 하면 CARLA 클라이언트가
+        # "_episode != nullptr" 로 비정상 종료하는 경우가 있음). TM 은 맵을 불러온 뒤에 가져온다.
+        cur = self.client.get_world()
+        s = cur.get_settings()
+        if s.synchronous_mode:
+            s.synchronous_mode, s.fixed_delta_seconds = False, None
+            cur.apply_settings(s)
         if self.cfg["map"] in (None, "lot"):
             params = carla.OpendriveGenerationParameters(
                 vertex_distance=2.0, max_road_length=500.0, wall_height=1.0, additional_width=0.6,
@@ -108,6 +113,9 @@ class CarlaSim:
             world = self.client.get_world()
             if not world.get_map().name.endswith(self.cfg["map"]):
                 world = self.client.load_world(self.cfg["map"])
+        world.wait_for_tick(60.0)
+        self.tm = self.client.get_trafficmanager()
+        self.tm_port = self.tm.get_port()
         s = world.get_settings()
         s.synchronous_mode, s.fixed_delta_seconds = True, DT
         world.apply_settings(s)
