@@ -56,7 +56,7 @@ HDD 는 맵 로딩이 1분 이상 걸리고 도심 맵에서 끊길 수 있어 �
 ### 실행 시 "DirectX runtime" 오류가 나면
 언리얼 엔진이 쓰는 DirectX 9 런타임(June 2010)이 없어서입니다 (CARLA 0.9.16 패키지에는 들어 있지 않음). 터미널에서:
 ```bat
-winget install --id Microsoft.DirectX -e
+winget install --id Microsoft.DirectX -e --force
 winget install --id Microsoft.VCRedist.2015+.x64 -e
 ```
 또는 microsoft.com 의 "DirectX End-User Runtime Web Installer". 최신 `install_carla.bat` 은 이것도 자동으로 확인·설치합니다.
