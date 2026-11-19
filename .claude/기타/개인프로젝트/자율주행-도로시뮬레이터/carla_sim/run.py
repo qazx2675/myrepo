@@ -380,7 +380,8 @@ def main():
             if app.sound:
                 app.sound.update(types.SimpleNamespace(
                     vx=w.speed(), vy=w.vy, rpm=w.rpm, powertrain=w.ego.powertrain, engine_on=True,
-                    power_kw=w.power_kw, sliding=w.sliding, abs_active=False, wheelspin=False),
+                    power_kw=w.power_kw, sliding=w.sliding, abs_active=False, wheelspin=False,
+                    parts=app.parts.get(w.ego.kind, {}), redline=w.ego.spec["redline_rpm"]),
                     throttle if running else 0.0)
             if app.garage.open:
                 app.garage.draw(screen)

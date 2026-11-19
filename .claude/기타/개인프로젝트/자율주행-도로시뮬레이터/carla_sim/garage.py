@@ -325,7 +325,9 @@ class Garage:
             new = self._perf(cand)
         self._text(surf, tr("PERFORMANCE"), (x, 96), ACCENT, self.f_big)
         n = len([1 for p in self._parts() if self._installed().get(p[0], 0)])
-        self._text(surf, tr("{n} tuning parts installed", n=n), (x, 130), DIM, self.f_sm)
+        look = P.tier(self._installed(), pt)
+        self._text(surf, tr("{n} tuning parts installed", n=n) + "   " + tr("Look: {tier}", tier=tr(P.LEVELS[look])),
+                   (x, 130), TIER_COL[look] if look else DIM, self.f_sm)
 
         def t_txt(t):
             return "-" if t is None else f"{t:.1f} s"

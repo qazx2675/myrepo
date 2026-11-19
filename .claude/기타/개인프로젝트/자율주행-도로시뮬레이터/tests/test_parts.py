@@ -41,3 +41,10 @@ def test_save_and_load(tmp_path):
     P.save_parts({"car": {"turbo": 2, "nope": 1}}, path)
     assert P.load_parts(path) == {"car": {"turbo": 2}}
     assert P.load_parts(tmp_path / "missing.json") == {}
+
+
+def test_look_tier_follows_parts():
+    assert P.tier({}, "auto") == 0
+    assert P.tier({"turbo": 1}, "auto") == 1
+    assert P.tier({p[0]: 3 for p in P.PARTS}, "auto") == 3
+    assert P.tier({"turbo": 3}, "ev") == 0                     # 엔진 파츠는 전기차 외관에 영향 없음

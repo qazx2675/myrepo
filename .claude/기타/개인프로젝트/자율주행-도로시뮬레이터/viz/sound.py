@@ -4,6 +4,8 @@
 - 전기모터음: 모터 회전수에 비례하는 고음 윙~
 - 타이어 스키드음: 미끄러짐 정도에 비례
 - 풍절음: 속도 제곱에 비례
+- 튜닝 파츠(ego.parts): 배기 = 엔진음 크고 거칠게, 흡기 = 흡입음, 터보 = 휘슬 + 페달 뗄 때 블로오프,
+  전기 모터 = 모터음 크고 높게
 오디오 장치가 없으면 조용히 꺼진다.
 """
 
@@ -70,10 +72,19 @@ class Sound:
         tire = _noise(1.0, 3, 2) + 0.5 * np.sin(2 * np.pi * 1300 * np.arange(SR) / SR)
         self.tire = mk(tire)
         self.wind = mk(_noise(2.0, 25, 3))
-        self.ch = {k: pygame.mixer.Channel(i) for i, k in enumerate(("eng", "ev", "tire", "wind"))}
-        self.cur = {"eng": None, "ev": None}
+        self.turbo_freqs = np.geomspace(900, 7000, 18)
+        self.turbo = [mk(_loop(f, 0.3, lambda t, f: np.sin(2 * np.pi * f * t) + 0.15 * np.sin(6 * np.pi * f * t)))
+                      for f in self.turbo_freqs]
+        n = int(SR * 0.45)
+        self.bov = mk(_noise(0.45, 2, 5) * np.exp(-np.arange(n) / (SR * 0.12)))   # 블로오프 "치익"
+        self.intake = mk(_noise(1.5, 6, 7))
+        names = ("eng", "ev", "tire", "wind", "turbo", "bov", "intake")
+        self.ch = {k: pygame.mixer.Channel(i) for i, k in enumerate(names)}
+        self.cur = {"eng": None, "ev": None, "turbo": None}
+        self._thr = 0.0
         self.ch["tire"].play(self.tire, loops=-1)
         self.ch["wind"].play(self.wind, loops=-1)
+        self.ch["intake"].play(self.intake, loops=-1)
         for c in self.ch.values():
             c.set_volume(0.0)
         self.ok = True
@@ -100,18 +111,32 @@ class Sound:
                 c.set_volume(0.0)
             return
         v = abs(ego.vx)
+        parts = getattr(ego, "parts", None) or {}
+        ex, tb, ik, mo = (parts.get(k, 0) for k in ("exhaust", "turbo", "intake", "motor"))
         engine_running = ego.powertrain != "ev" and getattr(ego, "engine_on", True)
         if engine_running:
             cyl_f = max(ego.rpm, 1.0) / 60.0 * 2.0   # 4기통: 회전당 2번 폭발
             k = int(np.argmin(np.abs(self.eng_freqs - cyl_f)))
-            loaded = throttle > 0.5
-            self._set("eng", self.eng[k][1 if loaded else 0], 0.18 + 0.3 * throttle)
+            loaded = throttle > (0.5 - 0.12 * ex)     # 배기 튜닝일수록 거친 소리가 일찍 섞임
+            self._set("eng", self.eng[k][1 if loaded else 0], min(1.0, (0.18 + 0.3 * throttle) * (1 + 0.22 * ex)))
+            spool = min(1.0, ego.rpm / getattr(ego, "redline", 6500)) * throttle
+            if tb:
+                k = int(np.argmin(np.abs(self.turbo_freqs - (900 + 5500 * spool))))
+                self._set("turbo", self.turbo[k], 0.05 * tb * spool)
+                if self._thr > 0.6 and throttle < 0.1 and ego.rpm > 2500:
+                    self.ch["bov"].play(self.bov)
+                    self.ch["bov"].set_volume(0.12 * tb)
+            else:
+                self.ch["turbo"].set_volume(0.0)
+            self.ch["intake"].set_volume(0.06 * ik * throttle)
         else:
-            self.ch["eng"].set_volume(0.0)
+            for c in ("eng", "turbo", "intake"):
+                self.ch[c].set_volume(0.0)
+        self._thr = throttle
         if ego.powertrain in ("ev", "hybrid"):
-            f = 150 + v * 45
+            f = (150 + v * 45) * (1 + 0.12 * mo)
             k = int(np.argmin(np.abs(self.ev_freqs - f)))
-            self._set("ev", self.ev[k], min(0.25, 0.02 + abs(ego.power_kw) / 800 + v / 400))
+            self._set("ev", self.ev[k], min(0.4, (0.02 + abs(ego.power_kw) / 800 + v / 400) * (1 + 0.35 * mo)))
         else:
             self.ch["ev"].set_volume(0.0)
         slip = 0.0

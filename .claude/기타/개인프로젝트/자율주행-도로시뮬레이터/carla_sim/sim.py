@@ -15,7 +15,7 @@ from carla_sim.route import STEP, RoutePlanner, guidance
 from carla_sim.xodr import long_straight_xodr, parking_lot_xodr
 from sim.controllers import idm_accel
 from sim.i18n import tr
-from sim.parts import apply_parts
+from sim.parts import PAINT, apply_parts, tier
 from sim.vehicle import AccelTimer
 
 DT = 1.0 / 30.0
@@ -173,11 +173,15 @@ class CarlaSim:
     def _spawn_ego(self, kind, powertrain, transform):
         bp = self._blueprint(kind, powertrain)
         bp.set_attribute("role_name", "hero")
+        paint = self._paint(kind, powertrain)
+        if paint and bp.has_attribute("color"):    # 튜닝 단계별 도색 (외관)
+            bp.set_attribute("color", paint)
         actor = self.world.try_spawn_actor(bp, transform)
         if actor is None:      # 자리가 막혀 있으면 살짝 위/앞에서 다시
             transform.location.z += 1.0
             actor = self.world.spawn_actor(bp, transform)
         self.ego = Ego(kind, powertrain, self.spec_for(kind, powertrain), actor)
+        self.ego.paint = paint
         apply_specs(actor, self.ego.spec, powertrain)
         col = self.world.spawn_actor(self.world.get_blueprint_library().find("sensor.other.collision"),
                                      carla.Transform(), attach_to=actor)
@@ -190,6 +194,9 @@ class CarlaSim:
         """원래 제원 + 정비소 파츠 = 실제로 달리는 제원."""
         return apply_parts(self.specs[kind], self.parts.get(kind, {}), powertrain)
 
+    def _paint(self, kind, powertrain):
+        return PAINT.get(tier(self.parts.get(kind, {}), powertrain))
+
     def _on_collision(self, ev):
         if ev.timestamp - self._last_hit > 1.0:
             self.collisions += 1
@@ -200,7 +207,7 @@ class CarlaSim:
         e = self.ego
         kind, powertrain = kind or e.kind, powertrain or e.powertrain
         new_pt = powertrain != e.powertrain
-        if self._blueprint(kind, powertrain).id == e.actor.type_id:
+        if self._blueprint(kind, powertrain).id == e.actor.type_id and self._paint(kind, powertrain) == e.paint:
             e.kind, e.powertrain, e.spec = kind, powertrain, self.spec_for(kind, powertrain)
             apply_specs(e.actor, e.spec, powertrain)
         else:

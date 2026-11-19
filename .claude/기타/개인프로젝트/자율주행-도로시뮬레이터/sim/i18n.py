@@ -133,6 +133,7 @@ KO = {
     " (limiter)": " (제한 장치)", "0-100 km/h (est.)": "0-100 km/h (예상)", "0-200 km/h (est.)": "0-200 km/h (예상)",
     "Weight": "무게", "Weight per hp": "마력당 무게",
     "  (current)": "  (현재)",
+    "Look: {tier}": "외관: {tier}",
     "Estimated with the simple car model.": "예상값은 간이 차량 모델로 계산했습니다.",
     "Measure real times on the 30 km straight.": "실제 기록은 30 km 직선 코스에서 재 보세요.",
     # 내비게이션

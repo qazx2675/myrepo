@@ -49,6 +49,18 @@ def applicable(powertrain):
     return [p for p in PARTS if powertrain in p[2]]
 
 
+PAINT = {1: "30,150,80", 2: "20,80,200", 3: "200,20,20"}   # 외관 단계별 도색 (스트리트 초록 / 스포츠 파랑 / 레이스 빨강)
+
+
+def tier(installed, powertrain):
+    """장착 파츠 합계로 외관 단계 0(순정)~3(레이스). 달 수 있는 파츠를 1/3 이상 올리면 한 단계씩."""
+    parts = applicable(powertrain)
+    score = sum((installed or {}).get(p[0], 0) for p in parts)
+    if score == 0:
+        return 0
+    return min(3, 1 + int(3 * score / (3 * len(parts) + 1)))
+
+
 def load_parts(path=CONFIG):
     """{차종: {파츠키: 단계}}. 파일이 없거나 깨졌으면 모두 순정."""
     try:
