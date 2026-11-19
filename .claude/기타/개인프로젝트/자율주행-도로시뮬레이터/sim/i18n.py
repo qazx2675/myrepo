@@ -126,5 +126,8 @@ FONTS = "malgungothic,applegothic,nanumgothic,notosanscjkkr,notosanscjk,wenquany
 
 
 def font(size, bold=False):
+    """맑은 고딕 기본체(malgun.ttf)는 pygame(SDL_ttf)에서 32px 미만일 때 '닫'·'낮' 같은 받침 글자가 뭉개진다.
+    그래서 작은 글자는 맑은 고딕 Semilight(malgunsl.ttf)를 먼저 쓰고, 32px 이상 굵은 제목만 기본체를 쓴다."""
     import pygame
-    return pygame.font.SysFont(FONTS, size, bold=bold)
+    names = FONTS if bold and size >= 32 else "malgungothicsemilight," + FONTS
+    return pygame.font.SysFont(names, size, bold=bold)
