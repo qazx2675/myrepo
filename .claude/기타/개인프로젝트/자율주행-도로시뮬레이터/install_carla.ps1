@@ -99,5 +99,5 @@ if ($LASTEXITCODE -ne 0) { Fail "패키지 설치 실패" }
 [Environment]::SetEnvironmentVariable("CARLA_ROOT", $InstallDir, "User")
 Write-Host ""
 Write-Host "설치 완료. CARLA_ROOT=$InstallDir" -ForegroundColor Green
-Write-Host "실행: run_carla.bat                (서버를 켜고 시뮬레이터 실행)"
-Write-Host "      run_carla.bat --level long --cars 0"
+& (Join-Path $Project "make_shortcut.ps1")
+Write-Host "실행: 바탕화면 'Autodrive CARLA' 바로가기 (또는 run_carla.bat). 코스·난이도·차량은 게임 안 시작 메뉴에서 선택."
