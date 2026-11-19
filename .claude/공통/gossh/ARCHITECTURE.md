@@ -6,6 +6,7 @@
 | `tmplimit.go` | `-tmp`/`-limit`/`-tl`: 질문 수집, 비교서버 파일 읽기·가드, 원격 스크립트(base64) 생성 |
 | `rpmcmp.go` | `-rpm`: 비교서버 rpm 목록 읽기, 대상 목록 비교, 보고서·탭 구분 파일 저장 |
 | `survey.go` | `-sv` 조사: 명령어 수량·내용 질문, 미리보기 키(엔터·호스트명·`Ni`·`a`·`Nd`·`next`) 해석(`parsePreviewKey`), 호스트마다 SSH 1회·명령어마다 세션 1개로 `bash -s` 표준입력 실행(`surveyScript`, 명령어 글자 그대로), 표 만들기(`buildSurveyTable`), 2줄 이상 결과 경고·재입력, `_survey.tsv`/`_survey.txt` 저장. 접속·동시성·재검증은 `main.go` 의 `newSSHClientConfig`·`lookupHostWithRetry`·`autofsSafeConcurrency` 재사용. 단위 테스트는 `survey_test.go` |
+| `loginuser.go` | `-lu` 접속 user 조회: 시작·끝 시간(`YYYYMMDDHH`) 검사·질문(`parseLUTime`·`askLURange`), 연말을 넘는 범위 판정(`luRange.wrap`), 원격 조회 스크립트 생성(`luScript`, awk 로 `/var/log/secure*` 의 성공한 SSH 로그인을 계정별 마지막 시각으로 집계), 출력 해석·`호스트\|접속성공시간\|계정` 표 만들기(`parseLUOutput`·`buildLoginUserTable`), `_loginuser.txt` 저장. 원격 실행은 `survey.go` 의 `surveyOpts.run` 재사용. |
 | `interactive.go` | `-i <호스트>` 대화형 접속(`runInteractive`): 키→`-p`→비밀번호 질문, pty·raw 모드·창 크기 전달. raw 모드·창 크기·비밀번호 입력은 `term_linux.go` |
 | `danger.go` | 위험 명령 판정(`isDangerousCommand`), 대상 호스트 재입력 읽기·펼치기·대조(`readConfirmLines`/`parseConfirmHosts`/`diffHostSets`). 단위 테스트는 `danger_test.go` |
 | `helpexample.go` | `gossh -h <옵션>`: 옵션 설명·사용법(옵션 강조)·출력 예시. 가짜 호스트 결과를 실제 출력 함수(`printCommandResult`·`printBunched`·`printSummary`·`writeRPMReport`·`askSpecial`·`confirmDanger` 등)에 넣어 만듦 — 출력 형식을 바꾸면 예시도 같이 바뀜. 단위 테스트는 `helpexample_test.go` |
@@ -21,6 +22,7 @@
 
 - **"옵션 추가"** → flag 정의 + README 4장 옵션 표 + `helpexample.go` 의 `helpExamples`(빠지면 `go test` 가 실패)
 - **"-sv 조사 동작 변경"** → `survey.go` (`main.go` 는 flag 정의와 `runSurvey` 호출만). 표 형식·키 해석은 `survey_test.go` 로 확인
+- **"-lu 접속 user 조회 동작 변경"** → `loginuser.go` (`main.go` 는 flag 정의와 `runLoginUser` 호출만). 시간 검사·스크립트·표 형식은 `loginuser_test.go` 로 확인 (스크립트는 가짜 로그 폴더 + `bash` 로 실행).
 - **"접속불가 판정·재검증 조정"** → DNS 선행 조회 / 재검증 부분
 - **"결과 파일 추가"** → 결과 파일 기록·시작 시 정리 부분 (README 5장 표도 갱신)
 - gossh를 부르는 도구(`esxi-log-check`, `OS 환경설정 체크`, `ip_change`, `ldap_setting`, `조사`)가 출력 형식(`호스트: 줄`)에 의존하므로, 출력 형식을 바꾸면 그 도구들도 함께 확인하세요.
