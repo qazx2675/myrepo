@@ -99,7 +99,7 @@
     "c_roll": 0.008,
     "max_steer_deg": 40,
     "steer_rate_deg": 45,
-    "speed_limiter_kmh": 110,
+    "speed_limiter_kmh": 0,
     "eye_height": 2.4,
     "ev": {
       "motor_power_kw": 300,
@@ -163,7 +163,7 @@
     "c_roll": 0.007,
     "max_steer_deg": 40,
     "steer_rate_deg": 40,
-    "speed_limiter_kmh": 90,
+    "speed_limiter_kmh": 0,
     "eye_height": 2.6,
     "ev": {
       "motor_power_kw": 400,

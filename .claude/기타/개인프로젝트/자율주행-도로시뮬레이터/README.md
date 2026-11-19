@@ -127,7 +127,7 @@ python tests/test_sim.py                              # 기능 테스트 (pytest
 | tire_mu, cornering_front/rear | 타이어 마찰계수, 코너링 강성 (작을수록 잘 미끄러짐) |
 | cd_a, c_roll | 공기저항(Cd×면적), 구름저항 |
 | max_steer_deg, steer_rate_deg | 최대 조향각, 조향 속도 |
-| speed_limiter_kmh | 속도 제한장치 (0 = 없음, 버스 110 / 트럭 90) |
+| speed_limiter_kmh | 속도 제한장치 (0 = 없음, 기본은 모든 차종 0) |
 | ev.* | 전기: 모터 kW/토크, 감속비, 회생제동 힘, 배터리 kWh |
 | hybrid.* | 하이브리드: **engine_hp, motor_hp 각각**, 모터 토크, EV 전용 속도, 배터리 |
 
