@@ -611,7 +611,8 @@ class CarlaSim:
         frame_id = self.world.tick()
         self.time += DT
         self.odometer += v * DT
-        self.accel_timer.update(0.0 if self._timer_reset else v * 3.6, self.time)
+        creeping = a.get_control().throttle < 0.05 and v * 3.6 < 3.0   # 페달 없이 살살 구르는 정도면 아직 정지로 봄
+        self.accel_timer.update(0.0 if self._timer_reset or creeping else v * 3.6, self.time)
         self._timer_reset = False
         self._update_vehicle_state(v)
         self._check_flip()
