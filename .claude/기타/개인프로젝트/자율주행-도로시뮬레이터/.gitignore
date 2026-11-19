@@ -3,3 +3,4 @@ __pycache__/
 .venv/
 *.png
 !workflow.svg
+config/garage.json

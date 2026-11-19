@@ -11,6 +11,7 @@
 | sim/nav.py | 내비게이션: 목적지, 안내 문구, 경로 좌표 |
 | sim/scenario.py | 난이도(초/중/고급) 설정값 |
 | sim/parking.py | 주차장 시나리오: 주차칸/주차된 차, 충돌, 성공 판정, 주차 관측값 |
+| sim/parts.py | 정비소 튜닝 파츠(9종 × 4단계) → 제원 반영, 장착 상태 저장(config/garage.json), 성능 예상(0-100·0-200·최고속도) |
 | sim/i18n.py | 화면 문구 한국어/영어 전환(`tr`), 한글 글꼴(맑은 고딕) |
 | config/vehicles.json | 차종별 제원 (마력, 토크, 브레이크, 질량, 타이어, 전기/하이브리드) |
 | viz/render3d.py | 운전석/추적 시점 원근 렌더러 + 카메라·차체 연출 + 풍경 |
@@ -19,6 +20,7 @@
 | install_carla.bat / .ps1 | CARLA 자동 설치 (D 드라이브 기본) + 파이썬 패키지 |
 | run_carla.bat | CARLA 서버(창 없이) 시작 + carla_sim/run.py 실행. stop_carla.bat 으로 서버 끄기 |
 | carla_sim/run.py | CARLA 버전 실행 파일: 창, 키 입력, HUD, 미니맵, 설정 메뉴 연결 |
+| carla_sim/garage.py | 정비소 메인 화면: 차 둘레 카메라, 출발·엔진 튜닝·차량·코스·설정 메뉴, 성능 표 |
 | carla_sim/sim.py | CARLA 월드 래퍼: 맵/날씨/Traffic Manager/내 차/카메라/주차/내비/관측값 |
 | carla_sim/physics.py | vehicles.json 제원 → CARLA VehiclePhysicsControl |
 | carla_sim/route.py | 맵 토폴로지 경로 탐색 + 안내 문구 |

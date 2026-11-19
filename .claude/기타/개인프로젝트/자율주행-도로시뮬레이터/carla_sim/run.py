@@ -21,6 +21,7 @@ import pygame  # noqa: E402
 from carla_sim.sim import LEVELS, CarlaSim  # noqa: E402
 from sim import i18n  # noqa: E402
 from sim.i18n import tr  # noqa: E402
+from sim.parts import load_parts  # noqa: E402
 from viz.menu import LEVEL_NAME, PT_NAME  # noqa: E402
 from main import Pedal, load_controller  # noqa: E402
 from sim.vehicle import load_specs  # noqa: E402
@@ -34,6 +35,7 @@ class CarlaApp:
     """viz/menu.py 설정 메뉴가 기대하는 속성(cfg, specs, world, view, fx, sound, hud, rebuild)을 갖춘 앱."""
 
     def __init__(self, args, size, screen):
+        from carla_sim.garage import Garage
         from viz.menu import SettingsMenu
         from viz.sound import Sound
         self.args, self.size, self.screen = args, size, screen
@@ -45,7 +47,9 @@ class CarlaApp:
         self.background(tr("Connecting to CARLA server ..."), self.client.get_server_version)  # 서버 없으면 RuntimeError
         self.cfg = dict(level=args.level, cars=args.cars, lanes=args.lanes, seed=args.seed)
         self.specs = load_specs()
+        self.parts = load_parts()                 # 정비소 파츠 (config/garage.json)
         self._view = args.view
+        screen_state = dict(garage=True, menu=False)   # 시작 화면 = 정비소
         if args.state:                            # rebuild() 가 넘긴 상태 (코스 전환)
             import json
             with open(args.state, encoding="utf-8") as f:
@@ -53,6 +57,7 @@ class CarlaApp:
             os.remove(args.state)
             self.cfg, self.specs, self._view = st["cfg"], st["specs"], st["view"]
             i18n.set_lang(st.get("lang", "ko"))
+            screen_state = st.get("screen", screen_state)
             args.vehicle, args.powertrain = st["kind"], st["powertrain"]
         self.fx = types.SimpleNamespace(enabled=True)
         self.sound = Sound()
@@ -60,7 +65,10 @@ class CarlaApp:
         self.world = None
         self._build(args.vehicle, args.powertrain)
         self.menu = SettingsMenu(self)
-        self.menu.open = True                     # 시작 화면 = 설정 메뉴 (Enter 로 Start driving)
+        self.garage = Garage(self)
+        if screen_state["garage"]:
+            self.garage.show()
+        self.menu.open = screen_state["menu"]
 
     def loading(self, msg):
         self.screen.fill((12, 16, 22))
@@ -77,7 +85,7 @@ class CarlaApp:
         self.world = self.background(
             tr("Loading course: {name} ...", name=tr(LEVEL_NAME[c["level"]])),
             lambda: CarlaSim(self.client, c["level"], kind, powertrain, c["cars"], c["seed"], c["lanes"],
-                             self.specs, view=self._view, frame_size=self.size))
+                             self.specs, view=self._view, frame_size=self.size, parts=self.parts))
 
     def background(self, msg, fn):
         """오래 걸리는 CARLA 호출(맵 로딩 등)을 별도 스레드에서 돌리고, 그동안 창 이벤트를 계속 처리해
@@ -113,7 +121,7 @@ class CarlaApp:
         import tempfile
         e = self.world.ego
         state = dict(cfg=self.cfg, kind=e.kind, powertrain=e.powertrain, view=self._view, specs=self.specs,
-                     lang=i18n.LANG)
+                     lang=i18n.LANG, screen=dict(garage=self.garage.open, menu=self.menu.open))
         fd, path = tempfile.mkstemp(suffix=".json", prefix="autodrive_")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(state, f)
@@ -234,7 +242,7 @@ class CarlaApp:
     def _help(self, surf, W):
         keys = ["W/S gas/brake  A/D steer", "G D<->R  Z/X gear (manual)", "M manual -> ACC -> AUTO",
                 "N next destination", "[ ] AUTO set speed", "T vehicle  P powertrain", "V camera",
-                "F1-F5 level  Tab/Esc settings", "K external controller", "Backspace reset  H help"]
+                "F1-F5 level  Tab settings  Esc garage", "K external controller", "Backspace reset  H help"]
         self.box(surf, (10, 160, 300, 22 * len(keys) + 10))
         for i, s in enumerate(keys):
             self.text(surf, tr(s), (20, 166 + 22 * i), (200, 210, 220))
@@ -314,9 +322,15 @@ def main():
                     if app.menu.handle(ev) == "quit":
                         return 0
                     continue
+                if app.garage.open:
+                    if app.garage.handle(ev) == "quit":
+                        return 0
+                    continue
                 k, w = ev.key, app.world
-                if k in (pygame.K_TAB, pygame.K_ESCAPE):
+                if k == pygame.K_TAB:
                     app.menu.open = True
+                elif k == pygame.K_ESCAPE:
+                    app.garage.show()
                 elif k == pygame.K_v:
                     app.view = VIEWS[(VIEWS.index(app.view) + 1) % 3]
                 elif k == pygame.K_g:
@@ -351,14 +365,16 @@ def main():
             steer = float(keys[pygame.K_a] or keys[pygame.K_LEFT]) - float(keys[pygame.K_d] or keys[pygame.K_RIGHT])
             obs = w.observe()
             w.mode_label = None
-            if ext_on and not paused and not app.menu.open:
+            if ext_on and not paused and not app.menu.open and not app.garage.open:
                 if w.mode != "manual":
                     w.mode = "manual"
                     w._apply_auto()
                 w.mode_label = "EXTERNAL"
                 throttle, brake, steer = controller(obs, w.frame if getattr(controller, "needs_frame", False) else None)
-            running = not paused and not app.menu.open
-            if running:
+            running = not paused and not app.menu.open and not app.garage.open
+            if app.garage.open and not app.menu.open:
+                app.garage.update(1 / 30)
+            elif running:
                 w.fx_enabled = app.fx.enabled
                 w.step(throttle, brake, steer)
             if app.sound:
@@ -366,7 +382,10 @@ def main():
                     vx=w.speed(), vy=w.vy, rpm=w.rpm, powertrain=w.ego.powertrain, engine_on=True,
                     power_kw=w.power_kw, sliding=w.sliding, abs_active=False, wheelspin=False),
                     throttle if running else 0.0)
-            app.draw(screen, clock.get_fps(), paused, obs)
+            if app.garage.open:
+                app.garage.draw(screen)
+            else:
+                app.draw(screen, clock.get_fps(), paused, obs)
             if app.menu.open:
                 app.menu.draw(screen)
             pygame.display.flip()

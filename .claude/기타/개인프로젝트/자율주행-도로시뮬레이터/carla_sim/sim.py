@@ -15,6 +15,7 @@ from carla_sim.route import STEP, RoutePlanner, guidance
 from carla_sim.xodr import long_straight_xodr, parking_lot_xodr
 from sim.controllers import idm_accel
 from sim.i18n import tr
+from sim.parts import apply_parts
 from sim.vehicle import AccelTimer
 
 DT = 1.0 / 30.0
@@ -53,8 +54,9 @@ def _yaw_vectors(yaw_deg):
 
 class CarlaSim:
     def __init__(self, client, level, vehicle, powertrain, cars, seed, lanes, specs,
-                 view="cockpit", frame_size=(1280, 720), camera=True):
+                 view="cockpit", frame_size=(1280, 720), camera=True, parts=None):
         self.client, self.level_key, self.specs = client, level, specs
+        self.parts = parts if parts is not None else {}      # 정비소 장착 파츠 {차종: {파츠: 단계}}
         self.cfg = LEVELS[level]
         self.n_cars = self.cfg["cars"] if cars is None else cars
         self.seed, self.lanes, self.frame_size, self.view = seed, lanes, frame_size, view
@@ -173,7 +175,7 @@ class CarlaSim:
         if actor is None:      # 자리가 막혀 있으면 살짝 위/앞에서 다시
             transform.location.z += 1.0
             actor = self.world.spawn_actor(bp, transform)
-        self.ego = Ego(kind, powertrain, self.specs[kind], actor)
+        self.ego = Ego(kind, powertrain, self.spec_for(kind, powertrain), actor)
         apply_specs(actor, self.ego.spec, powertrain)
         col = self.world.spawn_actor(self.world.get_blueprint_library().find("sensor.other.collision"),
                                      carla.Transform(), attach_to=actor)
@@ -181,6 +183,10 @@ class CarlaSim:
         self._col_sensor, self._last_hit = col, -10.0
         if self.want_camera:
             self.set_view(self.view)
+
+    def spec_for(self, kind, powertrain):
+        """원래 제원 + 정비소 파츠 = 실제로 달리는 제원."""
+        return apply_parts(self.specs[kind], self.parts.get(kind, {}), powertrain)
 
     def _on_collision(self, ev):
         if ev.timestamp - self._last_hit > 1.0:
@@ -193,7 +199,7 @@ class CarlaSim:
         kind, powertrain = kind or e.kind, powertrain or e.powertrain
         new_pt = powertrain != e.powertrain
         if self._blueprint(kind, powertrain).id == e.actor.type_id:
-            e.kind, e.powertrain, e.spec = kind, powertrain, self.specs[kind]
+            e.kind, e.powertrain, e.spec = kind, powertrain, self.spec_for(kind, powertrain)
             apply_specs(e.actor, e.spec, powertrain)
         else:
             t = e.actor.get_transform()
@@ -247,6 +253,8 @@ class CarlaSim:
             tr = carla.Transform(carla.Location(x=ext.x * (0.05 if self.ego.kind == "car" else 0.85),
                                                 y=-0.35 if self.ego.kind == "car" else -0.6,
                                                 z=spec["eye_height"]), carla.Rotation(pitch=-3))
+        elif view == "showroom":           # 정비소: 차 둘레를 도는 카메라 (orbit() 이 위치를 정함)
+            tr = carla.Transform(carla.Location(x=-ext.x * 2.6, z=ext.z * 2), carla.Rotation(pitch=-10))
         elif view == "chase":
             tr = carla.Transform(carla.Location(x=-ext.x - 6.0, z=ext.z * 2 + 2.0), carla.Rotation(pitch=-12))
         else:
@@ -254,11 +262,21 @@ class CarlaSim:
         bp = self.world.get_blueprint_library().find("sensor.camera.rgb")
         bp.set_attribute("image_size_x", str(self.frame_size[0]))
         bp.set_attribute("image_size_y", str(self.frame_size[1]))
-        bp.set_attribute("fov", "90" if view != "cockpit" else "80")
+        bp.set_attribute("fov", {"cockpit": "80", "showroom": "60"}.get(view, "90"))
         self._cam_base = tr
         self.camera = self.world.spawn_actor(bp, tr, attach_to=self.ego.actor)
         self._frames = queue.Queue()
         self.camera.listen(self._frames.put)
+
+    def orbit(self, angle_deg):
+        """정비소 카메라를 차 둘레 angle_deg 위치로 (0 = 차 뒤, 90 = 왼쪽). 차 크기에 맞춰 거리를 잡는다."""
+        if self.camera is None or self.view != "showroom":
+            return
+        ext = self.ego.actor.bounding_box.extent
+        r = max(ext.x, ext.y) * 2.4 + 2.5
+        a = math.radians(angle_deg + 180)
+        loc = carla.Location(x=r * math.cos(a), y=r * math.sin(a), z=ext.z * 1.2 + 0.8)
+        self.camera.set_transform(carla.Transform(loc, carla.Rotation(pitch=-12, yaw=angle_deg)))
 
     def _grab_frame(self, frame_id):
         while True:

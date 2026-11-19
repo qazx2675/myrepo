@@ -178,6 +178,8 @@ class SettingsMenu:
             self.msg = tr("Reloaded from config/vehicles.json")
         elif key == "resume" and enter:
             self.open = False
+            if getattr(a, "garage", None) is not None and a.garage.open:   # CARLA: 정비소에서 열었으면 바로 출발
+                a.garage.leave()
         elif key == "quit" and enter:
             return "quit"
         return None
