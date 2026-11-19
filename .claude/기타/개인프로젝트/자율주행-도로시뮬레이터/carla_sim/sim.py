@@ -81,6 +81,7 @@ class CarlaSim:
         self._studio, self._hidden = None, []      # 정비소에 들어오기 전 위치, 정비소 동안 숨긴 주변 구조물
         self.v_prev, self.ax, self.vy, self.power_kw, self.rpm = 0.0, 0.0, 0.0, 0.0, 0.0
         self.sliding = False
+        self._timer_reset = False                         # 리셋 직후 0-100 측정을 정지 상태부터 다시
         self._flip_t, self.flip_notice = 0.0, -1.0       # 전복 지속 시간 / 다시 세운 안내를 보일 때까지(시뮬 시각)
         self.ego = None
         self._spawn_ego(vehicle, powertrain, self._start_transform())
@@ -246,6 +247,7 @@ class CarlaSim:
         self.ego.actor.set_transform(self._free_spot(t))
         self.ego.actor.set_target_velocity(carla.Vector3D())
         self.ego.actor.set_target_angular_velocity(carla.Vector3D())
+        self._timer_reset = True
 
     def _check_flip(self):
         """뒤집히거나 옆으로 누운 채 2초가 지나면 근처 도로에 다시 세운다."""
@@ -609,7 +611,8 @@ class CarlaSim:
         frame_id = self.world.tick()
         self.time += DT
         self.odometer += v * DT
-        self.accel_timer.update(v * 3.6, self.time)
+        self.accel_timer.update(0.0 if self._timer_reset else v * 3.6, self.time)
+        self._timer_reset = False
         self._update_vehicle_state(v)
         self._check_flip()
         self._track_route()

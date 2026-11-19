@@ -59,6 +59,14 @@ def apply_specs(vehicle, spec, powertrain):
     pc.forward_gears = [carla.GearPhysicsControl(ratio=float(g), down_ratio=down, up_ratio=up) for g in gears]
     pc.final_ratio = float(final)
     pc.use_gear_autobox = powertrain != "manual"
+    if powertrain == "ev":
+        # 전기 모터는 회전 관성이 작고 엔진브레이크가 없다. CARLA 기본값(관성 1.0, 페달 뗄 때 감쇠 2.0)을
+        # 감속비 9 로 바퀴에 걸면 차가 약 800 kg 무거운 것처럼 굼뜨고, 페달을 떼면 급제동처럼 선다.
+        # (페달 뗄 때 감속은 sim.py 의 회생제동이 따로 맡음)
+        pc.moi = 0.1
+        pc.damping_rate_full_throttle = 0.02
+        pc.damping_rate_zero_throttle_clutch_engaged = 0.05
+        pc.damping_rate_zero_throttle_clutch_disengaged = 0.05
     pc.mass = float(spec["mass"])
     pc.drag_coefficient = float(spec["cd_a"] / (0.85 * spec["width"] * spec["height"]))
     wheels = pc.wheels
